@@ -821,15 +821,27 @@ fn count_params(s: str, pos: [i64]) -> i64 {
   if has == 1 then count + 1 else 0
 }
 
-// Prologue: stp x29,x30,[sp,#-16]! ; mov x29,sp.
+// Prologue: stp x29,x30,[sp,#-16]! ; mov x29,sp ; save x19..x28 (callee-saved
+// locals). The ABI requires callees to preserve x19-x28, so recursion and
+// cross-function `bl` don't corrupt the caller's `let`-bound registers.
 fn emit_prologue(insns: [i64], n: [i64]) -> i64 {
   let _ = em(insns, n, 2847898621);
   let _ = em(insns, n, 2432697341);
+  let _ = em(insns, n, 2847888371);
+  let _ = em(insns, n, 2847890421);
+  let _ = em(insns, n, 2847892471);
+  let _ = em(insns, n, 2847894521);
+  let _ = em(insns, n, 2847896571);
   n[0]
 }
 
-// Epilogue: ldp x29,x30,[sp],#16 ; ret.
+// Epilogue: restore x27..x28, ..., x19..x20, then ldp x29,x30,[sp],#16 ; ret.
 fn emit_epilogue(insns: [i64], n: [i64]) -> i64 {
+  let _ = em(insns, n, 2831250427);
+  let _ = em(insns, n, 2831248377);
+  let _ = em(insns, n, 2831246327);
+  let _ = em(insns, n, 2831244277);
+  let _ = em(insns, n, 2831242227);
   let _ = em(insns, n, 2831252477);
   let _ = em(insns, n, 3596551104);
   n[0]
@@ -1093,9 +1105,7 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
 // 1-word size, so a placeholder-target pass yields correct sizes), compute
 // start offsets by prefix sums, then re-emit with a full name->start table so
 // every bl (self, backward, and forward cross-call) resolves to a real offset.
-fn compile_program(s: str) -> i64 {
-  let insns = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
-  let n = [0];
+fn compile_program_to(s: str, insns: [i64], n: [i64]) -> i64 {
   let fnames = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
   let fpos = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
   let cnt = [0];
@@ -1145,6 +1155,23 @@ fn compile_program(s: str) -> i64 {
   sum_words(insns, n[0])
 }
 
+// Convenience wrapper: compile a whole program to a fresh buffer and return the
+// checksum of its words (kept for self_check regression tests).
+fn compile_program(s: str) -> i64 {
+  let insns = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+  let n = [0];
+  compile_program_to(s, insns, n)
+}
+
+// Compile a whole program and execute it with a single i64 argument (self-host
+// bridge: .bp source -> AArch64 words -> exec -> result). Returns the result.
+fn run_program(s: str, arg: i64) -> i64 {
+  let insns = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+  let n = [0];
+  let _ = compile_program_to(s, insns, n);
+  exec(insns, n[0], arg)
+}
+
 
 // Verify the emitted machine code against known-good checksums (computed from
 // the native emitter's exact AArch64 encodings). 0 = pass.
@@ -1158,32 +1185,38 @@ fn self_check() -> i64 {
   let c7 = if compile("if 0 then 10 else 20") == 56260325278 then 0 else 1;
   let c8 = if compile("1 + if 2 then 3 else 4") == 90720865435 then 0 else 1;
   let c9 = if compile("if 1 then 1+2 else 3*4") == 125449873794 then 0 else 1;
-  let c10 = if compile_fn("fn f(a) { a + 1 }") == 66172860133 then 0 else 1;
-  let c11 = if compile_fn("fn f(a,b) { a + b }") == 68346887833 then 0 else 1;
+  let c10 = if compile_fn("fn f(a) { a + 1 }") == 94568554123 then 0 else 1;
+  let c11 = if compile_fn("fn f(a,b) { a + b }") == 96742581823 then 0 else 1;
   let c12 = if compile("1<2") == 60091882330 then 0 else 1;
   let c13 = if compile("3==3") == 60091845562 then 0 else 1;
   let c14 = if compile("2>3") == 60091894682 then 0 else 1;
   let c15 = if compile("1+2<4") == 94552423255 then 0 else 1;
   let c16 = if compile("5==2+3") == 94552386487 then 0 else 1;
-  let c17 = if compile_fn("fn f() { let a = 1; a + 2 }") == 84002883299 then 0 else 1;
-  let c18 = if compile_fn("fn f(a) { let b = a + 1; b * 2 }") == 120905853492 then 0 else 1;
-  let c19 = if compile_fn("fn main() { f(41) } fn f(a) { a + 1 }") == 84002884547 then 0 else 1;
-  let c20 = if compile_fn("fn main() { s(6) } fn s(a) { a * a }") == 83593119523 then 0 else 1;
-  let c21 = if compile_fn("fn main() { g(3,4) } fn g(a,b) { a + b }") == 104006868725 then 0 else 1;
-  let c22 = if compile_fn("fn main() { foo(41) } fn foo(x) { x + 1 }") == 84002884547 then 0 else 1;
-  let c23 = if compile_fn("fn main() { let acc = 10; let delta = 5; acc + delta }") == 104006868981 then 0 else 1;
-  let c24 = if compile_fn("fn main() { foo(3,4) } fn foo(a,b) { a + b }") == 104006868725 then 0 else 1;
-  let c25 = if compile_fn("fn main() { let total = 0; let extra = 7; total + extra * 2 }") == 138735876786 then 0 else 1;
-  let c26 = if compile_fn("fn main() { let p = pt { x: 1, y: 2 }; p.x + p.y } struct pt { x: i64, y: i64 }") == 166054189801 then 0 else 1;
-  let c27 = if compile_fn("fn main() { pt { x: 1, y: 2 } } struct pt { x: i64, y: i64 }") == 75307678847 then 0 else 1;
-  let c28 = if compile_fn("fn main(p) { p.x + p.y } struct pt { x: i64, y: i64 }") == 102454910497 then 0 else 1;
-  let c29 = if compile_fn("fn main() { some(5) } enum opt { none, some }") == 61009259809 then 0 else 1;
-  let c30 = if compile_fn("fn main() { none } enum opt { none, some }") == 39001708259 then 0 else 1;
-  let c31 = if compile_fn("fn main() { match some(5) { none => 0, some(x) => x + 1 } } enum opt { none, some }") == 84002883395 then 0 else 1;
-  let c32 = if compile_fn("fn main() { match none { none => 0, some(x) => x + 1 } } enum opt { none, some }") == 29538422645 then 0 else 1;
-  let c33 = if compile_fn("fn fact(n) { if n <= 1 then 1 else n * fact(n-1) }") == 190966770154 then 0 else 1;
-  let c34 = if compile_fn("fn main() { let i = 0; let acc = 0; while i < 5 { let acc = acc + i; let i = i + 1; 0 }; acc }") == 257977687317 then 0 else 1;
-  let c35 = if compile_program("fn main() { helper(41) } fn helper(x) { x + 1 }") == 112492731199 then 0 else 1;
-  let c36 = if compile_program("fn main() { add(3,4) } fn add(a,b) { a + b }") == 132496780914 then 0 else 1;
-  c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10 + c11 + c12 + c13 + c14 + c15 + c16 + c17 + c18 + c19 + c20 + c21 + c22 + c23 + c24 + c25 + c26 + c27 + c28 + c29 + c30 + c31 + c32 + c33 + c34 + c35 + c36
+  let c17 = if compile_fn("fn f() { let a = 1; a + 2 }") == 112398577289 then 0 else 1;
+  let c18 = if compile_fn("fn f(a) { let b = a + 1; b * 2 }") == 149301547482 then 0 else 1;
+  let c19 = if compile_fn("fn main() { f(41) } fn f(a) { a + 1 }") == 112398578537 then 0 else 1;
+  let c20 = if compile_fn("fn main() { s(6) } fn s(a) { a * a }") == 111988813513 then 0 else 1;
+  let c21 = if compile_fn("fn main() { g(3,4) } fn g(a,b) { a + b }") == 132402562715 then 0 else 1;
+  let c22 = if compile_fn("fn main() { foo(41) } fn foo(x) { x + 1 }") == 112398578537 then 0 else 1;
+  let c23 = if compile_fn("fn main() { let acc = 10; let delta = 5; acc + delta }") == 132402562971 then 0 else 1;
+  let c24 = if compile_fn("fn main() { foo(3,4) } fn foo(a,b) { a + b }") == 132402562715 then 0 else 1;
+  let c25 = if compile_fn("fn main() { let total = 0; let extra = 7; total + extra * 2 }") == 167131570776 then 0 else 1;
+  let c26 = if compile_fn("fn main() { let p = pt { x: 1, y: 2 }; p.x + p.y } struct pt { x: i64, y: i64 }") == 194449883791 then 0 else 1;
+  let c27 = if compile_fn("fn main() { pt { x: 1, y: 2 } } struct pt { x: i64, y: i64 }") == 103703372837 then 0 else 1;
+  let c28 = if compile_fn("fn main(p) { p.x + p.y } struct pt { x: i64, y: i64 }") == 130850604487 then 0 else 1;
+  let c29 = if compile_fn("fn main() { some(5) } enum opt { none, some }") == 89404953799 then 0 else 1;
+  let c30 = if compile_fn("fn main() { none } enum opt { none, some }") == 67397402249 then 0 else 1;
+  let c31 = if compile_fn("fn main() { match some(5) { none => 0, some(x) => x + 1 } } enum opt { none, some }") == 112398577385 then 0 else 1;
+  let c32 = if compile_fn("fn main() { match none { none => 0, some(x) => x + 1 } } enum opt { none, some }") == 57934116635 then 0 else 1;
+  let c33 = if compile_fn("fn fact(n) { if n <= 1 then 1 else n * fact(n-1) }") == 219362464139 then 0 else 1;
+  let c34 = if compile_fn("fn main() { let i = 0; let acc = 0; while i < 5 { let acc = acc + i; let i = i + 1; 0 }; acc }") == 286373381307 then 0 else 1;
+  let c35 = if compile_program("fn main() { helper(41) } fn helper(x) { x + 1 }") == 169284119184 then 0 else 1;
+  let c36 = if compile_program("fn main() { add(3,4) } fn add(a,b) { a + b }") == 189288168899 then 0 else 1;
+  // Execution tests: the self-host bridge (source -> AArch64 -> exec -> result).
+  let c37 = if run_program("fn main() { 42 }", 0) == 42 then 0 else 1;
+  let c38 = if run_program("fn fact(n) { if n <= 1 then 1 else n * fact(n-1) }", 5) == 120 then 0 else 1;
+  let c39 = if run_program("fn main() { let i = 0; let acc = 0; while i < 5 { let acc = acc + i; let i = i + 1; 0 }; acc }", 0) == 10 then 0 else 1;
+  let c40 = if run_program("fn main() { helper(41) } fn helper(x) { x + 1 }", 0) == 42 then 0 else 1;
+  let c41 = if run_program("fn main() { add(3,4) } fn add(a,b) { a + b }", 0) == 7 then 0 else 1;
+  c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10 + c11 + c12 + c13 + c14 + c15 + c16 + c17 + c18 + c19 + c20 + c21 + c22 + c23 + c24 + c25 + c26 + c27 + c28 + c29 + c30 + c31 + c32 + c33 + c34 + c35 + c36 + c37 + c38 + c39 + c40 + c41
 }

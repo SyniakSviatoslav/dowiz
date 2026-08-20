@@ -517,7 +517,7 @@ static void cmd_run(const char *path, const char *fn_name, const char *arg) {
         }
     }
     /* Collect all fns so later fns can call earlier ones (closures). */
-    enum { MAX_FNS = 64 };
+    enum { MAX_FNS = 256 };
     const char *fn_names[MAX_FNS];
     const Ty *fn_tys[MAX_FNS];
     Term *fn_terms[MAX_FNS];

@@ -67,6 +67,10 @@ int qtt_termination_check(const Term *t, char *err, size_t cap) {
         case TERM_LET:
             return qtt_termination_check(t->a, err, cap) ||
                    qtt_termination_check(t->b, err, cap);
+        case TERM_EXEC:
+            return qtt_termination_check(t->a, err, cap) ||
+                   qtt_termination_check(t->b, err, cap) ||
+                   qtt_termination_check(t->c, err, cap);
         case TERM_IF:
             return qtt_termination_check(t->a, err, cap) ||
                    qtt_termination_check(t->b, err, cap) ||

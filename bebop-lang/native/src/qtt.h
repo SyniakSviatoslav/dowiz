@@ -125,6 +125,7 @@ typedef enum {
     TERM_AWAIT,   /* await expr: t->a = expr (must be spawn handle, i64) */
     TERM_ADDR_OF, /* &e: t->a = expr, returns pointer-to-type-of-e */
     TERM_DEREF_PTR, /* *e: t->a = pointer expr, returns pointee */
+    TERM_EXEC,    /* exec(words, count, arg0): mmap+run array of AArch64 words; t->a=words, t->b=count, t->c=arg0 */
 } TermKind;
 
 typedef enum {

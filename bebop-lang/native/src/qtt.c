@@ -6,6 +6,8 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+#include <sys/mman.h>
 
 Quantity qtt_add(Quantity a, Quantity b) {
     if (a == Q_MANY || b == Q_MANY) {
@@ -831,6 +833,11 @@ static Term *subst_p(const Term *t, const char *name, const Term *v) {
         case TERM_SYSCALL:
             o->a = subst_p(t->a, name, v);
             return o;
+        case TERM_EXEC:
+            o->a = subst_p(t->a, name, v);
+            o->b = subst_p(t->b, name, v);
+            o->c = subst_p(t->c, name, v);
+            return o;
     }
     return o;
 }
@@ -1041,6 +1048,13 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
             return 0;
         case TERM_SYSCALL:
             *out = &I64_TY;  /* syscall returns i64 (or -errno) */
+            return 0;
+        case TERM_EXEC:
+            /* exec(words, count, arg0): words : Vec i64, count/arg0 : i64 -> i64 */
+            if (infer(c, t->a, out, err, cap) != 0) return -1;
+            if (t->b && check(c, t->b, &I64_TY, err, cap) != 0) return -1;
+            if (t->c && check(c, t->c, &I64_TY, err, cap) != 0) return -1;
+            *out = &I64_TY;
             return 0;
         case TERM_WHILE:
             /* accept bool or i64 as condition (C semantics: 0=false, !=0=true) */
@@ -1571,6 +1585,12 @@ static int in_while = 0;
  * created them (curried application). Stack-allocated Env would dangle. */
 static Env env_pool[262144];
 static int env_i = 0;
+/* Array-value arena: a flat bump allocator for TERM_ARRAY field values. Arrays
+ * are mutable and passed by reference, so their backing storage must stay valid
+ * for the whole evaluation; bump-allocate (never reuse) and reset per top-level
+ * eval. Sized for the self-host compiler's many small temporaries. */
+static FieldValue afv_arena[1 << 20];
+static size_t afv_pos = 0;
 static Env *env_new(const char *name, Value val, Env *next) {
     if (env_i >= (int)(sizeof env_pool / sizeof env_pool[0])) {
         return NULL; /* pool exhausted (bounded eval) */
@@ -1585,8 +1605,6 @@ static Env *env_new(const char *name, Value val, Env *next) {
 static Value eval(const Term *t, Env *env) {
     Value v;
     memset(&v, 0, sizeof v);
-    static FieldValue afv_pool[128][512];
-    static int afv_i = 0;
     switch (t->kind) {
         case TERM_LIT:
             v.kind = t->bval ? 1 : 0;
@@ -1694,14 +1712,18 @@ static Value eval(const Term *t, Env *env) {
             return eval(t->b, e);
         }
         case TERM_STRUCT: {
-            static FieldValue fv_pool[128][256];
-            static int fv_i = 0;
-            FieldValue *fvs = fv_pool[fv_i++ % 128];
+            int n = t->nfields;
+            if (n < 0 || n > 4096) { v.kind = -1; return v; }
+            if (afv_pos + (size_t)n > sizeof afv_arena / sizeof afv_arena[0]) {
+                v.kind = -1; return v;
+            }
+            FieldValue *fvs = &afv_arena[afv_pos];
+            afv_pos += (size_t)n;
             v.kind = 3;
             v.sty = t->ty;
             v.fv = fvs;
-            v.nfv = t->nfields;
-            for (int i = 0; i < t->nfields; i++) {
+            v.nfv = n;
+            for (int i = 0; i < n; i++) {
                 fvs[i].name = t->fields[i].name;
                 fvs[i].val = eval(t->fields[i].val, env);
             }
@@ -1857,12 +1879,52 @@ static Value eval(const Term *t, Env *env) {
             }
             return v;
         }
+        case TERM_EXEC: {
+            /* exec(words, count, arg0): mmap + run AArch64 words (self-hosting bridge).
+             * t->a = array of instruction words (i64), t->b = word count, t->c = x0 arg. */
+            Value arr = eval(t->a, env);
+            Value cntv = t->b ? eval(t->b, env) : (Value){0};
+            Value arg = t->c ? eval(t->c, env) : (Value){0};
+            if (arr.kind != 6 || !arr.fv || arr.nfv <= 0) { v.kind = -1; return v; }
+            int n = (int)cntv.i;
+            if (n <= 0 || n > arr.nfv || n > 4096) { v.kind = -1; return v; }
+            size_t sz = (size_t)n * 4u;
+            unsigned int *code = malloc(sz);
+            if (!code) { v.kind = -1; return v; }
+            for (int i = 0; i < n; i++) {
+                code[i] = (unsigned int)(arr.fv[i].val.i & 0xFFFFFFFFu);
+            }
+            void *mem = mmap(NULL, sz, PROT_READ | PROT_WRITE,
+                             MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+            if (mem == MAP_FAILED) { free(code); v.kind = -1; return v; }
+            memcpy(mem, code, sz);
+            free(code);
+            __builtin___clear_cache((char *)mem, (char *)mem + sz);
+            if (mprotect(mem, sz, PROT_READ | PROT_EXEC) != 0) {
+                munmap(mem, sz);
+                v.kind = -1;
+                return v;
+            }
+            long (*fn)(long);
+            memcpy(&fn, &mem, sizeof(fn));
+            long r = fn(arg.i);
+            munmap(mem, sz);
+            v.kind = 0;
+            v.i = r;
+            return v;
+        }
         case TERM_ARRAY: {
-            FieldValue *fvs = afv_pool[afv_i++ % 128];
+            int n = t->nfields;
+            if (n < 0 || n > 4096) { v.kind = -1; return v; }
+            if (afv_pos + (size_t)n > sizeof afv_arena / sizeof afv_arena[0]) {
+                v.kind = -1; return v; /* arena exhausted */
+            }
+            FieldValue *fvs = &afv_arena[afv_pos];
+            afv_pos += (size_t)n;
             v.kind = 6; /* array value */
             v.fv = fvs;
-            v.nfv = t->nfields;
-            for (int i = 0; i < t->nfields && i < 512; i++) {
+            v.nfv = n;
+            for (int i = 0; i < n; i++) {
                 fvs[i].name = NULL;
                 fvs[i].val = eval(t->fields[i].val, env);
             }
@@ -1892,6 +1954,7 @@ static Value eval(const Term *t, Env *env) {
 
 int qtt_eval(const Term *t, int *out_kind, long *out_i, int *out_b, char *err, size_t cap) {
     env_i = 0;
+    afv_pos = 0;
     Value v = eval(t, NULL);
     if (v.kind < 0) {
         snprintf(err, cap, "evaluation error");
@@ -1907,8 +1970,9 @@ int qtt_eval_binds(const Term *t, const char **names, Term *const *lams, int n,
                    int *out_kind, long *out_i, int *out_b, double *out_f,
                    char *err, size_t cap) {
     env_i = 0;
-    Env fb[64];
-    int cnt = n < 64 ? n : 64;
+    afv_pos = 0;
+    Env fb[256];
+    int cnt = n < 256 ? n : 256;
     for (int i = 0; i < cnt; i++) {
         fb[i].name = names[i];
         fb[i].val.kind = 2;
@@ -1935,6 +1999,7 @@ int qtt_eval_binds(const Term *t, const char **names, Term *const *lams, int n,
 int qtt_eval_bound(const Term *t, const QttBind *binds, int n, int *out_kind,
                    long *out_i, int *out_b, char *err, size_t cap) {
     env_i = 0;
+    afv_pos = 0;
     Env stack[64];
     for (int i = 0; i < n && i < 64; i++) {
         stack[i].name = binds[n - 1 - i].name;
@@ -2225,6 +2290,11 @@ Term *qtt_subst(const Term *t, const char *name, const Term *v) {
         case TERM_SYSCALL:
             o->a = qtt_subst(t->a, name, v);
             return o;
+        case TERM_EXEC:
+            o->a = qtt_subst(t->a, name, v);
+            o->b = qtt_subst(t->b, name, v);
+            o->c = qtt_subst(t->c, name, v);
+            return o;
     }
     return o;
 }
@@ -2350,6 +2420,11 @@ static Term *norm_rec(const Term *t) {
             return o;
         case TERM_SYSCALL:
             o->a = norm_rec(t->a);
+            return o;
+        case TERM_EXEC:
+            o->a = norm_rec(t->a);
+            o->b = norm_rec(t->b);
+            o->c = norm_rec(t->c);
             return o;
         case TERM_NAT_REC: {
             /* definitional reduction of the recursor:
@@ -2530,6 +2605,9 @@ static int conv_rec(const Term *a, const Term *b) {
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b) && conv_rec(a->c, b->c);
         case TERM_SYSCALL:
             return a->ival == b->ival && conv_rec(a->a, b->a);
+        case TERM_EXEC:
+            return conv_rec(a->a, b->a) && conv_rec(a->b, b->b) &&
+                   conv_rec(a->c, b->c);
         case TERM_LAM:
             return a->name && b->name && strcmp(a->name, b->name) == 0 &&
                    conv_rec(a->a, b->a);
