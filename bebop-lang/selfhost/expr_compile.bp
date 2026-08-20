@@ -124,8 +124,141 @@ fn emit_ident(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64]) -> i64 {
   let strn = str_len(s);
   let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
   let is_lp = if ch == 40 then 1 else 0;
+  let is_br = if ch == 123 then 1 else 0;
   if is_lp == 1 then emit_call(s, name, pos, insns, n, stab)
+  else if is_br == 1 then emit_struct_lit(s, pos, insns, n, stab)
   else emit_var(insns, n, sym_lookup(stab, name))
+}
+
+
+// Skip over a struct field's type annotation up to the next ',' or '}'.
+fn skip_to_field_delim(s: str, pos: [i64]) -> i64 {
+  let strn = str_len(s);
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_comma = if ch == 44 then 1 else 0;
+    let is_rb = if ch == 125 then 1 else 0;
+    let is_delim = is_comma + is_rb;
+    let _ = pos[0] = pos[0] + (1 - is_delim);
+    let done = if is_delim == 1 then 1 else 0;
+    0
+  };
+  0
+}
+
+// Scan for the first struct declaration ("struct "); record pos in out[0].
+fn find_struct(s: str, out: [i64]) -> i64 {
+  let strn = str_len(s);
+  let j = 0;
+  let found = 0;
+  let best = 0;
+  while j + 6 < strn {
+    let c0 = char(s, j);
+    let c1 = char(s, j + 1);
+    let c2 = char(s, j + 2);
+    let c3 = char(s, j + 3);
+    let c4 = char(s, j + 4);
+    let c5 = char(s, j + 5);
+    let c6 = char(s, j + 6);
+    let is_s = if c0 == 115 then 1 else 0;
+    let is_t1 = if c1 == 116 then 1 else 0;
+    let is_r = if c2 == 114 then 1 else 0;
+    let is_u = if c3 == 117 then 1 else 0;
+    let is_c = if c4 == 99 then 1 else 0;
+    let is_t2 = if c5 == 116 then 1 else 0;
+    let is_sp = if c6 == 32 then 1 else 0;
+    let hit = is_s * is_t1 * is_r * is_u * is_c * is_t2 * is_sp;
+    let best = if hit == 1 then j else best;
+    let found = if hit == 1 then 1 else found;
+    let j = j + 1;
+    0
+  };
+  let _ = out[0] = best;
+  found
+}
+
+// 0-based index of field fname in the struct decl at spos ("struct "), -1 if absent.
+fn field_index(s: str, spos: i64, fname: i64) -> i64 {
+  let strn = str_len(s);
+  let pos = [spos + 7];
+  let _ = read_ident(s, pos);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let i = 0;
+  let idx = 0 - 1;
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_rb = if ch == 125 then 1 else 0;
+    let name = read_ident(s, pos);
+    let is_match = if name == fname then 1 else 0;
+    let idx = if is_match == 1 then i else idx;
+    let i = i + 1;
+    let _ = skip_to_field_delim(s, pos);
+    let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_comma = if ch2 == 44 then 1 else 0;
+    let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let done = if is_rb == 1 then 1 else 0;
+    0
+  };
+  idx
+}
+
+// Emit one struct-literal field: read name, skip ':', emit value, str at fcnt*8.
+fn emit_struct_field(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], fcnt: i64) -> i64 {
+  let _ = read_ident(s, pos);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab);
+  let _ = pop(insns, n, 0);
+  let _ = em(insns, n, 4177527232 + fcnt * 1024);
+  n[0]
+}
+
+// Emit a struct literal { f: v, ... }: store fields in order at [x14+i*8],
+// then mov x0,x14; add x14,#8n; push the pointer.
+fn emit_struct_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64]) -> i64 {
+  let strn = str_len(s);
+  let _ = pos[0] = pos[0] + 1;
+  let fcnt = 0;
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_rb = if ch == 125 then 1 else 0;
+    let _ = if is_rb == 0 then emit_struct_field(s, pos, insns, n, stab, fcnt) else 0;
+    let fcnt = if is_rb == 0 then fcnt + 1 else fcnt;
+    let _ = skip_ws(s, pos);
+    let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_comma = if ch2 == 44 then 1 else 0;
+    let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let done = if is_rb == 1 then 1 else 0;
+    0
+  };
+  let _ = pos[0] = pos[0] + 1;
+  let _ = em(insns, n, 2853045216);
+  let _ = em(insns, n, 2432696320 + fcnt * 8192 + 462);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// Emit a field access .f: pop the base pointer, ldr x0,[x0,#idx*8], push.
+fn emit_field_access(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = skip_ws(s, pos);
+  let fname = read_ident(s, pos);
+  let spos = [0];
+  let _ = find_struct(s, spos);
+  let idx = field_index(s, spos[0], fname);
+  let _ = pop(insns, n, 0);
+  let _ = em(insns, n, 4181721088 + idx * 1024);
+  let _ = push(insns, n);
+  n[0]
 }
 
 fn skip_ws(s: str, pos: [i64]) -> i64 {
@@ -356,11 +489,23 @@ fn emit_factor(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64]) -> i64 {
   let is_f = if ch1 == 102 then 1 else 0;
   let is_ifkw = is_i * is_f;
   let is_letter = is_alpha(ch);
-  if is_lparen == 1 then emit_paren(s, pos, insns, n, stab)
-  else if is_ifkw == 1 then emit_cond(s, pos, insns, n, stab)
-  else if is_letter == 1 then emit_ident(s, pos, insns, n, stab)
-  else emit_num(s, pos, insns, n)
+  let _ = if is_lparen == 1 then emit_paren(s, pos, insns, n, stab)
+    else if is_ifkw == 1 then emit_cond(s, pos, insns, n, stab)
+    else if is_letter == 1 then emit_ident(s, pos, insns, n, stab)
+    else emit_num(s, pos, insns, n);
+  let fd = 0;
+  while fd == 0 {
+    let _ = skip_ws(s, pos);
+    let strn2 = str_len(s);
+    let ch2 = if pos[0] >= strn2 then 0 else char(s, pos[0]);
+    let is_dot = if ch2 == 46 then 1 else 0;
+    let _ = if is_dot == 1 then emit_field_access(s, pos, insns, n, stab) else 0;
+    let fd = if is_dot == 1 then 0 else 1;
+    0
+  };
+  n[0]
 }
+
 
 
 // Checksum of the emitted buffer (Bebop has no bitwise xor).
@@ -623,5 +768,8 @@ fn self_check() -> i64 {
   let c23 = if compile_fn("fn main() { let acc = 10; let delta = 5; acc + delta }") == 104006868981 then 0 else 1;
   let c24 = if compile_fn("fn main() { foo(3,4) } fn foo(a,b) { a + b }") == 104006868725 then 0 else 1;
   let c25 = if compile_fn("fn main() { let total = 0; let extra = 7; total + extra * 2 }") == 138735876786 then 0 else 1;
-  c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10 + c11 + c12 + c13 + c14 + c15 + c16 + c17 + c18 + c19 + c20 + c21 + c22 + c23 + c24 + c25
+  let c26 = if compile_fn("fn main() { let p = pt { x: 1, y: 2 }; p.x + p.y } struct pt { x: i64, y: i64 }") == 166054189801 then 0 else 1;
+  let c27 = if compile_fn("fn main() { pt { x: 1, y: 2 } } struct pt { x: i64, y: i64 }") == 75307678847 then 0 else 1;
+  let c28 = if compile_fn("fn main(p) { p.x + p.y } struct pt { x: i64, y: i64 }") == 102454910497 then 0 else 1;
+  c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10 + c11 + c12 + c13 + c14 + c15 + c16 + c17 + c18 + c19 + c20 + c21 + c22 + c23 + c24 + c25 + c26 + c27 + c28
 }
