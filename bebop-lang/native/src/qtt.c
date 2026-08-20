@@ -1585,7 +1585,7 @@ static Env *env_new(const char *name, Value val, Env *next) {
 static Value eval(const Term *t, Env *env) {
     Value v;
     memset(&v, 0, sizeof v);
-    static FieldValue afv_pool[64][64];
+    static FieldValue afv_pool[128][512];
     static int afv_i = 0;
     switch (t->kind) {
         case TERM_LIT:
@@ -1694,9 +1694,9 @@ static Value eval(const Term *t, Env *env) {
             return eval(t->b, e);
         }
         case TERM_STRUCT: {
-            static FieldValue fv_pool[64][64];
+            static FieldValue fv_pool[128][256];
             static int fv_i = 0;
-            FieldValue *fvs = fv_pool[fv_i++ % 64];
+            FieldValue *fvs = fv_pool[fv_i++ % 128];
             v.kind = 3;
             v.sty = t->ty;
             v.fv = fvs;
@@ -1858,11 +1858,11 @@ static Value eval(const Term *t, Env *env) {
             return v;
         }
         case TERM_ARRAY: {
-            FieldValue *fvs = afv_pool[afv_i++ % 64];
+            FieldValue *fvs = afv_pool[afv_i++ % 128];
             v.kind = 6; /* array value */
             v.fv = fvs;
             v.nfv = t->nfields;
-            for (int i = 0; i < t->nfields && i < 64; i++) {
+            for (int i = 0; i < t->nfields && i < 512; i++) {
                 fvs[i].name = NULL;
                 fvs[i].val = eval(t->fields[i].val, env);
             }
