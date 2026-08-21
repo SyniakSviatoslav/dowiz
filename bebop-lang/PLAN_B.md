@@ -104,6 +104,7 @@ FILE (write/extend): `selfhost/typecheck.bp` (EXISTS — 24 fns, NOT a stub; als
 REFERENCE: `native/src/qtt.h` (Ty/TyKind/Quantity) + `native/src/qtt.c` infer()
 (~line 858) + check() (~1412).
 GOAL: QTT type inference/checking over the flat term IR from B1-3.
+STATUS (2026-08-21 sweep): typecheck.bp — check FAIL, strict FAIL (nested-if violations). This is the 1/136 strict straggler. Fix needed before Phase 0 gate clears.
 CONTRACT: Quantity Q_ZERO(0)/Q_ONE(1)/Q_MANY(2); semiring qtt_add/qtt_mul
 (0+p=p, 1+1=ω, ω+p=ω; 0·p=0, 1·p=p, ω·0=0, ω·1=ω, ω·ω=ω). TyKind: I64/U8/U32/
 U64/F64/BOOL/VOID/FN/PI/FIELD/HYPERVEC/VEC/STRUCT/ENUM/TYPE/VAR/EQ/NAT/STR/PTR.
@@ -378,15 +379,18 @@ VERIFY: `./build/bebopc selfcompile ../selfhost/<full>.bp` stable; bit-match.
 
 ## Swarm B3-2: port ALL native self-tests to .bp selftests
 GOAL: 100% of native self-test modules have a .bp selftest twin.
+STATUS (2026-08-21): 134/136 selftest PASS; 2 files block (expr_compile.bp, selftest_exec.bp — unbound emit_call).
 STEPS: enumerate native/src/*_self_test/_test functions; port each to a .bp
 self_check in the matching module; assert every one returns 0.
 VERIFY: a sweep script runs every selftest; all green.
 
 ## Swarm B3-3: typecheck sweep — 136/136 clean + strict PASS
 GOAL: every .bp file typechecks AND passes strict.
+SWEEP RESULT (2026-08-21): 134/136 self_check PASS; 0/136 check PASS; 0/136 strict PASS.
+  FAILED: all 136 check, typecheck.bp strict (1), expr_compile.bp+selftest_exec.bp unbound emit_call.
 STEPS: run check+strict over all 136 files; fix the stragglers (esp.
-typecheck.bp strict + any parser-limit files by splitting modules).
-VERIFY: sweep script reports 136/136 clean + strict PASS.
+  typecheck.bp strict + any parser-limit files by splitting modules).
+  VERIFY: sweep script reports 136/136 clean + strict PASS.
 
 ## Swarm B3-4: fuzz — 300k inputs achieved, extend toward 1M no crash
 GOAL: extend the A-3 fuzzer to the full front-end; target 1M generated/mutated inputs

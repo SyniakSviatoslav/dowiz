@@ -10,16 +10,23 @@ Snapshot table — read this first; everything below is the detailed derivation.
 - .bp corpus: 136 files (61 top-level + 73 std + 2 samples), ~675 fn decls.
   Largest: expr_compile.bp (71 fn), selftest_exec.bp (63 fn), wasm.bp (21 fn),
   codegen.bp (23 fn), typecheck.bp (24 fn), parser.bp (18 fn), lexer.bp (10 fn).
-- Strict sweep: expr_compile.bp PASS. typecheck.bp FAIL (1/136). Full sweep not run.
-- Fuzzing: 300k inputs, 0 crashes/hangs/signal-aborts. Gap to 1M target.
-  Current fuzz.c covers lexer+parser+AST destructor ONLY.
+- Strict sweep: FULL 136-file sweep run 2026-08-21: 134 files pass self_check()
+  (compile+exec+self_check returns 0). However check subcommand returns FAIL on
+  ALL 136 files — root cause under investigation (check path symbol resolution
+  differs from run path). Typecheck.bp strict FAIL (1/136) — fix needed.
+- Critical: expr_compile.bp has `unbound variable 'emit_call'` type error —
+  blocking full compile. selftest_exec.bp has same issue.
+- std/*.bp strict: many nested-if violations (branchless law): base64(5),
+  decimal(7), money(7), hex(3), radix(6), set(6), strutil(4), interval(2),
+  heap(2), event(1), fmath_trig(2), morse(1), sort(1), rle(1), string(1).
+- Fuzzing: 300k inputs, 0 crashes. Gap to 1M. Covers lexer+parser+AST only.
 - Verification: 3 machine-checked theorems (all refl). 0 enforced contracts.
   Verifier NOT wired. Coverage ~0.4% proven, 0.0% auto-verified.
-- Working .bp backends: NONE at full parity yet. expr_compile.bp (71 fn)
-  single-expression → AArch64 + exec-tested. aarch64.bp (4 fn) stub. wasm.bp
-  (21 fn) partial. codegen.bp (23 fn) skeleton.
-- Not started backends: vir.bp (NEON), gpu_fpga.bp (GPU/FPGA contract) — files
-  do NOT exist yet (PLAN_B §B2-5/B2-6 spec only).
+- Working .bp backends: expr_compile.bp single-expression AArch64 (exec-tested).
+  aarch64.bp (4 fn) stub. wasm.bp (21 fn) partial. codegen.bp (23 fn) skeleton.
+- Not started: vir.bp (NEON), gpu_fpga.bp — files do NOT exist yet.
+- Self-compile: HALTS >550s. Root cause: seed input + tiny corpus + no
+  tactic/judgement opcode table → deterministic infinite eval loop. BLOCKED.
 
 Phases:
 - Phase 0 (gate, BLOCKING): fix selfcompile hang (P0.1), fix typecheck.bp strict
