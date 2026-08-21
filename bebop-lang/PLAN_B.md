@@ -3,7 +3,7 @@
 Ground-truth contracts (do NOT invent): the C compiler in `native/src/` is the
 source of truth. Every swarm ports a specific C module to self-hosted `.bp`,
 mirroring its exact API. Read the C header (small) + the relevant `.c` bodies
-(narrow reads) as the spec; the `.bp` output must typecheck (62+ fns), pass
+(narrow reads) as the spec; the `.bp` output must typecheck (~675 fns in corpus), pass
 `strict`, and its `self_check()` must return 0.
 
 Repos: /root/dowiz (git root). Build: `cd /root/dowiz/bebop-lang/native && make`
@@ -35,7 +35,7 @@ Check: `./build/bebopc check ../selfhost/<f>.bp`. Strict: `./build/bebopc strict
 # BATCH 1 (Day 1) — Front-end unification
 
 ## Swarm B1-1: lexer.bp — full parity with lexer.c
-FILE (write): `selfhost/lexer.bp` (extend existing 138-LOC stub).
+FILE (write/extend): `selfhost/lexer.bp` (EXISTS — 10 fns, ~4KB, NOT a stub; extend to full C lexer.c parity).
 REFERENCE (read): `native/src/lexer.h` (26 lines) + `native/src/lexer.c`.
 GOAL: tokenize a `.bp` source string into a token array, mirroring `bp_lex`.
 CONTRACT (from lexer.h): token kinds BP_TOK_EOF(0)/IDENT(1)/GLYPH(2)/
@@ -57,7 +57,7 @@ VERIFY: `check` (0 errors), `strict` (PASS), `self_check` (0).
 PITFALL: HTTP 524 — read lexer.c in ≤60-line windows.
 
 ## Swarm B1-2: parser.bp — item-level parity with parser.c
-FILE (write): `selfhost/parser.bp` (extend existing 162-LOC stub).
+FILE (write/extend): `selfhost/parser.bp` (EXISTS — 18 fns, ~4.5KB, NOT a stub; extend to full C parser.c parity).
 REFERENCE: `native/src/parser.h` + `native/src/parser.c` `bp_parse` (lines
 ~131-226).
 GOAL: split a source into top-level items, mirroring `bp_parse`.
@@ -100,8 +100,7 @@ STEPS:
 VERIFY: `check`, `strict`, `self_check`.
 
 ## Swarm B1-4: typecheck.bp — QTT core parity with qtt.c infer/check
-FILE (write): `selfhost/typecheck.bp` (extend existing 128-LOC stub — this is
-the 1/135 file that fails strict; also FIX that).
+FILE (write/extend): `selfhost/typecheck.bp` (EXISTS — 24 fns, NOT a stub; also FIX the strict failure — this is the 1/136 file).
 REFERENCE: `native/src/qtt.h` (Ty/TyKind/Quantity) + `native/src/qtt.c` infer()
 (~line 858) + check() (~1412).
 GOAL: QTT type inference/checking over the flat term IR from B1-3.
@@ -215,7 +214,7 @@ VERIFY: all touched files `check`+`strict` green; `self_check` 0;
 # BATCH 2 (Day 2) — Backends
 
 ## Swarm B2-1: aarch64.bp — native parity (control flow + calls)
-FILE (write): `selfhost/aarch64.bp` (extend existing 5-LOC stub).
+FILE (write/extend): `selfhost/aarch64.bp` (EXISTS — 4 fns, NOT a stub; extend to full C native.c parity).
 REFERENCE: `native/src/native.c` (emit_expr + helpers, ~692 lines) +
 `native/src/native.h`; the .bp encodings already proven in expr_compile.bp.
 GOAL: lower the B1-6 IR to AArch64 words (control flow + calls + closures),
@@ -262,7 +261,7 @@ STEPS:
 VERIFY: `check`, `strict`, `self_check`.
 
 ## Swarm B2-3: wasm.bp — WASM MVP core (control flow + memory)
-FILE (write): `selfhost/wasm.bp` (extend existing 30-LOC stub).
+FILE (write/extend): `selfhost/wasm.bp` (EXISTS — 21 fns, partial skeleton; extend to full WASM MVP parity).
 REFERENCE: `native/src/codegen.h` + `native/src/codegen.c`.
 GOAL: lower the B1-6 IR to a valid WebAssembly MVP module (i32/i64, locals,
 control flow, linear memory).
@@ -294,7 +293,7 @@ STEPS:
 VERIFY: `check`, `strict`, `self_check`.
 
 ## Swarm B2-5: vir.bp — NEON/vector-first backend
-FILE (write): `selfhost/vir.bp` (NEW).
+FILE (write): `selfhost/vir.bp` (NEW — file does NOT currently exist; must be created from scratch).
 REFERENCE: `native/src/vir.h` + `native/src/vir.c` + `native/src/vir_umulh2.c`.
 GOAL: port the VIR (vector IR) to .bp: 128-bit SIMD ops lowered to hand-encoded
 AArch64 NEON; vector umulh synthesis; LSE atomics.
@@ -314,7 +313,7 @@ STEPS:
 VERIFY: `check`, `strict`, `self_check`.
 
 ## Swarm B2-6: GPU/FPGA — VIR lowering slice + emit contract
-FILE (write): `selfhost/gpu_fpga.bp` (NEW) + doc.
+FILE (write): `selfhost/gpu_fpga.bp` (NEW — file does NOT currently exist; must be created from scratch) + doc.
 REFERENCE: `native/src/vir.h` (the VIR is the single source), `native/src/
 compute.c`/`ntt.c`/`hyper.c` (the hot kernels to target).
 GOAL: define the VIR→GPU/FPGA lowering contract and emit a first slice for the
@@ -383,17 +382,18 @@ STEPS: enumerate native/src/*_self_test/_test functions; port each to a .bp
 self_check in the matching module; assert every one returns 0.
 VERIFY: a sweep script runs every selftest; all green.
 
-## Swarm B3-3: typecheck sweep — 135/135 clean + strict PASS
+## Swarm B3-3: typecheck sweep — 136/136 clean + strict PASS
 GOAL: every .bp file typechecks AND passes strict.
-STEPS: run check+strict over all 135 files; fix the stragglers (esp.
+STEPS: run check+strict over all 136 files; fix the stragglers (esp.
 typecheck.bp strict + any parser-limit files by splitting modules).
-VERIFY: sweep script reports 135/135 clean + strict PASS.
+VERIFY: sweep script reports 136/136 clean + strict PASS.
 
-## Swarm B3-4: fuzz — ~1M inputs no crash
-GOAL: extend the A-3 fuzzer to the full front-end; ~1M generated/mutated inputs.
-STEPS: fuzz lexer/parser/expr_parser/typecheck/codegen/backends; assert no
-crash/hang; fix any root cause found (minimal, behavior-preserving).
-VERIFY: fuzz run completes; summary line "0 crashes / 1M".
+## Swarm B3-4: fuzz — 300k inputs achieved, extend toward 1M no crash
+GOAL: extend the A-3 fuzzer to the full front-end; target 1M generated/mutated inputs
+(currently at 300k — lexer+parser+AST destructor only; typecheck/codegen/backends not yet fuzzed).
+STEPS: extend fuzz.c to cover typecheck/codegen/backends; fuzz lexer/parser/expr_parser/
+typecheck/codegen/backends; assert no crash/hang; fix any root cause found (minimal, behavior-preserving).
+VERIFY: fuzz run completes; summary line "0 crashes / N" (N ≥ 300k; target 1M).
 
 ## Swarm B3-5: wasm validation + execution
 GOAL: validate emitted wasm with a real parser, and execute if a runtime is

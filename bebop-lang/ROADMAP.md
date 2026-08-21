@@ -5,27 +5,37 @@ of heavy swarm parallelization. Every milestone = commit + push to origin/main.
 
 ---
 
-## Point A — Self-host expr kernel closes the loop  [TODAY]
+## Point A — Self-host expr kernel closes the loop  [CLOSE TO READY — selfcompile HALTS]
 
-The .bp compiler (`selfhost/expr_compile.bp`, 62 fns) parses a tiny language and
+The .bp compiler (`selfhost/expr_compile.bp`, 71 fns) parses a tiny language and
 emits real AArch64 machine code, executes it via the `exec` builtin, and
 `selfcompile` produces a deterministic checksum of the machine code for its own
 source: **123745140208**.
 
-Remaining (in flight now, 8 swarms):
+Status: `self_check` → 0 ✅; `strict` PASS; `check` 0 errors. BUT `selfcompile`
+**HALTS >550s** (root cause not yet bisected — could be proot env or real regression).
+
+Swarms completed (8 swarms, today):
 1. codegen for array literals / arr[i] / arr[i]=v / string literals /
    str_len / char / let...in  (swarm-0, encoding-verified against objdump)
 2. native.c reference parity for TERM_ARRAY / TERM_STR / *_GET / *_SET /
    STR_LEN / STR_CHAR  (swarm-1)
 3. arena/pool hardening + exec edge-case bounds  (swarm-2)
-4. fuzzer (fuzz-selfhost, ~100k inputs)  (swarm-3)
+4. fuzzer (fuzz-selfhost, 300k inputs, 0 crashes, 0 hangs)  (swarm-3)
 5. throughput benchmark (typecheck/self_check/codegen words-per-sec)  (swarm-4)
-6. bench/SELFHOST.md status report  (swarm-5, DONE)
+6. bench/SELFHOST.md status report  (swarm-5, DONE — honest gaps documented)
 7. AArch64 disassembler/verifier tool  (swarm-6)
-8. selftest_exec.bp execution regression suite  (swarm-7)
+8. selftest_exec.bp execution regression suite (63 fns)  (swarm-7)
 
-Gate: self-compiled image bit-matches native reference for the full construct
-set; `check`/`strict`/`self_check`/`selfcompile`/`make test` all green.
+Gate (partial):
+- `check`/`strict`/`self_check`/`make test` green ✅
+- self-compiled image bit-matches native reference for the arith/conditional
+  subset ✅
+- string/array builtins: self-consistent but NOT independently cross-checked
+  against native.c for bit-identity — PRIMARY OPEN WORK ITEM
+- `selfcompile` HALTS on full source — root cause open (proot or regression)
+
+## Point B — Full language front-end + backends, self-hosted  [~3 days]
 
 ---
 
