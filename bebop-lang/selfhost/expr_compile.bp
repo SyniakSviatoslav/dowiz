@@ -138,7 +138,7 @@ fn emit_ident(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   if is_lp == 1 then emit_call_or_ctor(s, name, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_br == 1 then emit_struct_lit(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_lb == 1 then emit_array_index(s, name, pos, insns, n, stab, selfname, selfstart, fntab)
-  else emit_var_or_ctor(s, name, insns, n, stab)
+  else emit_var_or_ctor(s, name, insns, n, stab, fntab)
 }
 
 
@@ -381,6 +381,72 @@ fn fntab_lookup(fntab: [i64], name: i64) -> i64 {
   start
 }
 
+// Source-position lookup over a 3-zone table [cnt, names..., offsets..., srcpos...]:
+// returns the callee byte offset in source text, or -1 when absent
+// (legacy single-fn path passes cnt=0). O(#fns) not O(source bytes).
+fn ft_srcpos(tab: [i64], name: i64) -> i64 {
+  let cnt = tab[0];
+  let i = 0;
+  let sp = 0 - 1;
+  while i < cnt {
+    let nm = tab[1 + i];
+    let pos_i = tab[1 + cnt + cnt + i];
+    let is_match = if nm == name then 1 else 0;
+    let sp = if is_match == 1 then pos_i else sp;
+    let i = i + 1;
+    0
+  };
+  sp
+}
+
+// Collect ctor names of the FIRST enum decl into names[0..): single scan.
+// Returns 1 when an enum decl exists, else 0 (cnt[0] stays 0).
+fn collect_ctors(s: str, names: [i64], cnt: [i64]) -> i64 {
+  let epos = [0];
+  let found = find_enum(s, epos);
+  let pos = [0];
+  let _ = pos[0] = if found == 1 then epos[0] + 5 else 0;
+  let nm = read_ident(s, pos);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let k = [0];
+  let done = if found == 1 then 0 else 1;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let cname = read_ident(s, pos);
+    let is_name = if cname == 0 then 0 else 1;
+    let _ = if is_name == 1 then (let _ = names[k[0]] = cname in 0) else 0;
+    let _ = k[0] = k[0] + is_name;
+    let _ = skip_to_field_delim(s, pos);
+    let ch = char(s, pos[0]);
+    let is_rb = if ch == 125 then 1 else 0;
+    let at_end = if ch == 0 then 1 else 0;
+    let _ = if is_rb + at_end == 0 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let done = if is_rb + at_end >= 1 then 1 else 0;
+    0
+  };
+  let _ = cnt[0] = k[0];
+  found
+}
+
+// Tag of ctor name from table zone-4 [.., ecnt, c1, c2, ..]; -1 when absent.
+// O(#ctors) per lookup; replaces the full-source rescan per identifier.
+fn ft_ctor_tag(tab: [i64], name: i64) -> i64 {
+  let cnt = tab[0];
+  let base = cnt + cnt + cnt + 1;
+  let ecnt = tab[base];
+  let i = 0;
+  let tag = 0 - 1;
+  while i < ecnt {
+    let cn = tab[base + 1 + i];
+    let is_match = if cn == name then 1 else 0;
+    let tag = if is_match == 1 then i else tag;
+    let i = i + 1;
+    0
+  };
+  tag
+}
+
 // A real cross-function call via bl: eval args -> x0..x(n-1), bl target, push.
 fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let strn = str_len(s);
@@ -426,7 +492,7 @@ fn emit_self_call(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
 }
 
 fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
-  let tag = ctor_index(s, name);
+  let tag = ft_ctor_tag(fntab, name);
   let is_ctor = if tag >= 0 then 1 else 0;
   let is_self = if name == selfname then 1 else 0;
   let tgt = fntab_lookup(fntab, name);
@@ -438,8 +504,8 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
 }
 
 // Dispatch a bare name: nullary enum ctor or a variable reference.
-fn emit_var_or_ctor(s: str, name: i64, insns: [i64], n: [i64], stab: [i64]) -> i64 {
-  let tag = ctor_index(s, name);
+fn emit_var_or_ctor(s: str, name: i64, insns: [i64], n: [i64], stab: [i64], fntab: [i64]) -> i64 {
+  let tag = ft_ctor_tag(fntab, name);
   let is_ctor = if tag >= 0 then 1 else 0;
   if is_ctor == 1 then emit_enum_ctor_nullary(insns, n, tag)
   else emit_var(insns, n, sym_lookup(stab, name))
@@ -1153,7 +1219,8 @@ fn find_fn(s: str, name: i64, out: [i64]) -> i64 {
 // b->x20, ...), emit the callee body from its source position, restore pos.
 fn emit_call(s: str, fname: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let fnpos = [0];
-  let _ = find_fn(s, fname, fnpos);
+  let sp = ft_srcpos(fntab, fname);
+  let _ = if sp >= 0 then (let _ = fnpos[0] = sp in 0) else find_fn(s, fname, fnpos);
   let pnames = [0,0,0,0,0,0,0,0,0,0];
   let ppos = [fnpos[0] + 3];
   let _ = read_ident(s, ppos);
@@ -1305,8 +1372,10 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
 
 // Two-pass layout of a whole program: measure each fn's size (bl is a fixed
 // 1-word size, so a placeholder-target pass yields correct sizes), compute
-// start offsets by prefix sums, then re-emit with a full name->start table so
-// every bl (self, backward, and forward cross-call) resolves to a real offset.
+// start offsets by prefix sums, then re-emit with a full 3-zone table
+// [cnt, names..., offsets..., srcpos...] so every bl resolves to a real offset
+// AND every inline site finds the callee source position in O(#fns)
+// (was: full-source rescan per call site -> superquadratic selfcompile).
 fn compile_program_to(s: str, insns: [i64], n: [i64]) -> i64 {
   let fnames = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
   let fpos = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
@@ -1314,12 +1383,33 @@ fn compile_program_to(s: str, insns: [i64], n: [i64]) -> i64 {
   let _ = collect_fns(s, fnames, fpos, cnt);
   let sizes = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
   let starts = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
-  let ptab = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+  let ptab = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
   let _ = ptab[0] = cnt[0];
   let pm = [0];
   while pm[0] < cnt[0] {
     let _ = ptab[1 + pm[0]] = fnames[pm[0]];
     let _ = pm[0] = pm[0] + 1;
+    0
+  };
+
+  let pz = [0];
+  while pz[0] < cnt[0] {
+    let _ = ptab[1 + cnt[0] + cnt[0] + pz[0]] = fpos[pz[0]];
+    let _ = pz[0] = pz[0] + 1;
+    0
+  };
+
+  let enames_pz = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+  let ecnt_pz = [0];
+  let _ = collect_ctors(s, enames_pz, ecnt_pz);
+  let eb_pz = cnt[0] + cnt[0] + cnt[0] + 1;
+  let _ = ptab[eb_pz] = ecnt_pz[0];
+  let ez_pz = [0];
+  let ed_pz = if ecnt_pz[0] == 0 then 1 else 0;
+  while ed_pz == 0 {
+    let _ = ptab[eb_pz + 1 + ez_pz[0]] = enames_pz[ez_pz[0]];
+    let _ = ez_pz[0] = ez_pz[0] + 1;
+    let ed_pz = if ez_pz[0] >= ecnt_pz[0] then 1 else 0;
     0
   };
   let i = [0];
@@ -1339,13 +1429,34 @@ fn compile_program_to(s: str, insns: [i64], n: [i64]) -> i64 {
     let _ = k[0] = k[0] + 1;
     0
   };
-  let fntab = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+  let fntab = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
   let _ = fntab[0] = cnt[0];
   let m = [0];
   while m[0] < cnt[0] {
     let _ = fntab[1 + m[0]] = fnames[m[0]];
     let _ = fntab[1 + cnt[0] + m[0]] = starts[m[0]];
     let _ = m[0] = m[0] + 1;
+    0
+  };
+
+  let fz = [0];
+  while fz[0] < cnt[0] {
+    let _ = fntab[1 + cnt[0] + cnt[0] + fz[0]] = fpos[fz[0]];
+    let _ = fz[0] = fz[0] + 1;
+    0
+  };
+
+  let enames_fz = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+  let ecnt_fz = [0];
+  let _ = collect_ctors(s, enames_fz, ecnt_fz);
+  let eb_fz = cnt[0] + cnt[0] + cnt[0] + 1;
+  let _ = fntab[eb_fz] = ecnt_fz[0];
+  let ez_fz = [0];
+  let ed_fz = if ecnt_fz[0] == 0 then 1 else 0;
+  while ed_fz == 0 {
+    let _ = fntab[eb_fz + 1 + ez_fz[0]] = enames_fz[ez_fz[0]];
+    let _ = ez_fz[0] = ez_fz[0] + 1;
+    let ed_fz = if ez_fz[0] >= ecnt_fz[0] then 1 else 0;
     0
   };
   let q = [0];
