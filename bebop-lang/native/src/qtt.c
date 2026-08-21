@@ -1605,6 +1605,14 @@ static Env *env_new(const char *name, Value val, Env *next) {
     return e;
 }
 
+static Value eval(const Term *t, Env *env);
+/* True if a Value is a plain scalar (int/bool/string/float) holding no closure
+ * or container that could reference a captured env — safe to reclaim env after. */
+static int is_scalar_value(const Value *v) {
+    return v->kind == 0 || v->kind == 1 || v->kind == 5 ||
+           (v->kind == 6 && v->fv == NULL);
+}
+
 static Value eval(const Term *t, Env *env) {
     Value v;
     memset(&v, 0, sizeof v);
@@ -1643,9 +1651,16 @@ static Value eval(const Term *t, Env *env) {
                 return eval(f.lam, f.env);
             }
             if (!f.lam->name) { v.kind = -1; return v; }
+            /* Reclaim env nodes when the call yields a VALUE (not a closure):
+             * currying returns a closure that captures the param env chain, so
+             * keep it; a plain value means the param env is dead. This bounds
+             * env-pool growth to call depth instead of total calls. */
+            int saved_env_i = env_i;
             Env *e = env_new(f.lam->name, arg, f.env);
             if (!e) { v.kind = -1; return v; }
-            return eval(f.lam->a, e);
+            Value r = eval(f.lam->a, e);
+            if (is_scalar_value(&r)) env_i = saved_env_i;
+            return r;
         }
         case TERM_BIN: {
             Value l = eval(t->a, env);
@@ -1716,9 +1731,12 @@ static Value eval(const Term *t, Env *env) {
                 }
                 /* not pre-bound: create a scoped binding (won't persist) */
             }
+            int saved_env_i = env_i;
             Env *e = env_new(t->name, x, env);
             if (!e) { v.kind = -1; return v; }
-            return eval(t->b, e);
+            Value r = eval(t->b, e);
+            if (is_scalar_value(&r)) env_i = saved_env_i;
+            return r;
         }
         case TERM_STRUCT: {
             int n = t->nfields;
