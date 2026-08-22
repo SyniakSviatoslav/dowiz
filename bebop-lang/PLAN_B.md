@@ -255,6 +255,9 @@ FILE (write): `selfhost/aarch64_data.bp` (NEW, to stay under fn-count).
 REFERENCE: `native/src/native.c` TERM_STRUCT/FIELD/ENUM_CTOR/MATCH/ARRAY/STR/
 SYSCALL cases (search + read ~20 lines each).
 GOAL: lower data-heavy IR ops to AArch64, matching native.c.
+STATUS (2026-08-22): SLICE DONE — 4/4 exec-verified (struct fields, array
+  reg-offset roundtrip, enum/match via cbz-branch, loop sweep i*i sum=30).
+  Arena window reserved with sub sp so writes never hit live C stack.
 CONTRACT: struct = bump-allocate on x14 arena (add x14,sp,#256 base), ST_FIELD
 into slots; enum = tag byte + payload; array = bump-allocate N×8 + ST_ARR;
 string = trailing data section + adr; SYSCALL = svc #0 (nr in x8, arg x0).
@@ -273,6 +276,8 @@ FILE (write/extend): `selfhost/wasm.bp` (EXISTS — 21 fns, partial skeleton; ex
 REFERENCE: `native/src/codegen.h` + `native/src/codegen.c`.
 GOAL: lower the B1-6 IR to a valid WebAssembly MVP module (i32/i64, locals,
 control flow, linear memory).
+STATUS (2026-08-22): SLICE DONE — valid module (magic/type/func/export/code
+  sections, real ULEB128 sizes) + built-in body interpreter; self_check 0.
 CONTRACT (wasm): module = magic `\0asm` + version 1; type section, function
 section, export section, code section, memory section. Stack-machine, typed.
 STEPS:
@@ -312,6 +317,8 @@ STEPS:
    ret. Emit via the exec bridge. Encode: ld1 64b=0x4C007000|(rn<<5)|rt (single
    lane 8B→Vn), add 2D=0x4EE08400|... (derive EXACT encodings with objdump like
    swarm A-0 did — verify every encoding against `objdump -d`).
+STATUS (2026-08-22): SLICE DONE — ADD/SUB 2D and MUL 4S exec-verified
+  (311 / 30 / 10) through self-contained stack-window programs.
 2. vir_umulh2: synthesize 2×64 multiply-high from UMULL decomposition (no
    native vector umulh).
 3. Atomics: hand-encoded LSE (ldaddal/ldadd, casal) — verify with objdump.
