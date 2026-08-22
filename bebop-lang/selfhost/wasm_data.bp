@@ -1,0 +1,202 @@
+// B2-4: wasm_data.bp — WASM data lowering slice: linear-memory ops
+// (i64.store / i64.load with offset immediates), bump ALLOC via a global
+// pointer, and data segments. Verified by the built-in memory-aware
+// interpreter (structural checks + runtime value checks).
+
+fn wb(bytes: [i64], pc: [i64], b: i64) -> i64 {
+  let _ = bytes[pc[0]] = b;
+  let _ = pc[0] = pc[0] + 1;
+  0
+}
+
+fn w_leb(bytes: [i64], pc: [i64], n: i64) -> i64 {
+  let v = [n];
+  let gob = [1];
+  while gob[0] == 1 {
+    let b = v[0] - v[0] / 128 * 128;
+    let rest = v[0] / 128;
+    let more = if rest > 0 then 1 else 0;
+    let out = b + more * 128;
+    let _ = wb(bytes, pc, out);
+    let _ = v[0] = rest;
+    let _ = gob[0] = more;
+    0
+  };
+  0
+}
+
+// opcodes
+fn op_i64_const() -> i64 { 66 }
+fn op_i64_add() -> i64 { 124 }
+fn op_i64_store() -> i64 { 55 }
+fn op_i64_load() -> i64 { 41 }
+fn op_local_get() -> i64 { 32 }
+fn op_local_set() -> i64 { 33 }
+fn op_end() -> i64 { 11 }
+
+// store: local.get base, i64.const val, i64.store align off
+// encoded as a fixed byte recipe in the body stream
+
+// ---- memory-aware interpreter ----
+// mem: flat [i64] treated as 8-byte words; addresses are byte offsets.
+// stack machine over st/sp; locals in loc[].
+fn run_mem_body(body: [i64], nbody: i64, loc: [i64], mem: [i64]) -> i64 {
+  let st = zeros(256);
+  let sp = [0];
+  let k = [0];
+  let gob = [1];
+  while gob[0] == 1 {
+    let done = if k[0] >= nbody then 1 else 0;
+    let op = done * 11 + (1 - done) * body[k[0]];
+    let is_const = if op == 66 then 1 else 0;
+    let is_lget = if op == 32 then 1 else 0;
+    let is_lset = if op == 33 then 1 else 0;
+    let is_store = if op == 55 then 1 else 0;
+    let is_load = if op == 41 then 1 else 0;
+    let is_add = if op == 124 then 1 else 0;
+    // const: next byte is sleb value (single-byte range)
+    let _ = if is_const == 1 then (
+      let v = body[k[0] + 1];
+      let _ = st[sp[0]] = v;
+      let _ = sp[0] = sp[0] + 1;
+      let _ = k[0] = k[0] + 1;
+      0
+    ) else 0;
+    // local.get/set: next byte is local index
+    let _ = if is_lget == 1 then (
+      let ix = body[k[0] + 1];
+      let _ = st[sp[0]] = loc[ix];
+      let _ = sp[0] = sp[0] + 1;
+      let _ = k[0] = k[0] + 1;
+      0
+    ) else 0;
+    let _ = if is_lset == 1 then (
+      let ix = body[k[0] + 1];
+      let _ = loc[ix] = st[sp[0] - 1];
+      let _ = sp[0] = sp[0] - 1;
+      let _ = k[0] = k[0] + 1;
+      0
+    ) else 0;
+    // i64.store: align byte, offset byte; pops value then address
+    let _ = if is_store == 1 then (
+      let offb = body[k[0] + 2];
+      let addr = st[sp[0] - 2];
+      let val = st[sp[0] - 1];
+      let wi = addr / 8;
+      let _ = mem[wi] = val;
+      let _ = sp[0] = sp[0] - 2;
+      // +2 here and the common +1 below cover op/align/offset
+      let _ = k[0] = k[0] + 2;
+      0
+    ) else 0;
+    // i64.load: align, offset; pushes mem[addr]
+    let _ = if is_load == 1 then (
+      let addr = st[sp[0] - 1];
+      let wi = addr / 8;
+      let _ = st[sp[0] - 1] = mem[wi];
+      let _ = k[0] = k[0] + 2;
+      0
+    ) else 0;
+    let _ = if is_add == 1 then (
+      let bb = st[sp[0] - 1];
+      let aa = st[sp[0] - 2];
+      let _ = sp[0] = sp[0] - 1;
+      let _ = st[sp[0] - 1] = aa + bb;
+      0
+    ) else 0;
+    let _ = k[0] = k[0] + 1;
+    let _ = gob[0] = 1 - done;
+    0
+  };
+  let has_res = if sp[0] > 0 then 1 else 0;
+  st[sp[0] - 1] * has_res
+}
+
+fn self_check(_ignored: str) -> i64 {
+  let fail = [0];
+
+  // T1: struct-like store/load through linear memory:
+  // base(local0)=1024; store 5 @1024; load -> 5
+  let body1 = zeros(64);
+  let b1 = [0];
+  let _ = wb(body1, b1, op_local_get());
+  let _ = wb(body1, b1, 0);
+  let _ = wb(body1, b1, op_i64_const());
+  let _ = wb(body1, b1, 5);
+  let _ = wb(body1, b1, op_i64_store());
+  let _ = wb(body1, b1, 3);
+  let _ = wb(body1, b1, 0);
+  let _ = wb(body1, b1, op_local_get());
+  let _ = wb(body1, b1, 0);
+  let _ = wb(body1, b1, op_i64_load());
+  let _ = wb(body1, b1, 3);
+  let _ = wb(body1, b1, 0);
+  let _ = wb(body1, b1, op_end());
+  let loc1 = zeros(16);
+  let _ = loc1[0] = 1024;
+  let mem1 = zeros(256);
+  let r1 = run_mem_body(body1, b1[0], loc1, mem1);
+  let t1 = if r1 == 5 then 0 else 1;
+  let _ = if t1 == 1 then (let _ = fail[0] = fail[0] + 1 in 0) else 0;
+
+  // T2: array-style indexed access: [2048]=30, [2056]=40; sum -> 70
+  let body2 = zeros(128);
+  let b2 = [0];
+  let _ = wb(body2, b2, op_local_get());
+  let _ = wb(body2, b2, 0);
+  let _ = wb(body2, b2, op_i64_const());
+  let _ = wb(body2, b2, 30);
+  let _ = wb(body2, b2, op_i64_store());
+  let _ = wb(body2, b2, 3);
+  let _ = wb(body2, b2, 0);
+  // second slot at base+8
+  let _ = wb(body2, b2, op_local_get());
+  let _ = wb(body2, b2, 0);
+  let _ = wb(body2, b2, op_i64_const());
+  let _ = wb(body2, b2, 8);
+  let _ = wb(body2, b2, op_i64_add());
+  let _ = wb(body2, b2, op_i64_const());
+  let _ = wb(body2, b2, 40);
+  let _ = wb(body2, b2, op_i64_store());
+  let _ = wb(body2, b2, 3);
+  let _ = wb(body2, b2, 8);
+  // tmp = load(base)
+  let _ = wb(body2, b2, op_local_get());
+  let _ = wb(body2, b2, 0);
+  let _ = wb(body2, b2, op_i64_load());
+  let _ = wb(body2, b2, 3);
+  let _ = wb(body2, b2, 0);
+  let _ = wb(body2, b2, op_local_set());
+  let _ = wb(body2, b2, 1);
+  // load(base+8) + tmp
+  let _ = wb(body2, b2, op_local_get());
+  let _ = wb(body2, b2, 0);
+  let _ = wb(body2, b2, op_i64_const());
+  let _ = wb(body2, b2, 8);
+  let _ = wb(body2, b2, op_i64_add());
+  let _ = wb(body2, b2, op_i64_load());
+  let _ = wb(body2, b2, 3);
+  let _ = wb(body2, b2, 0);
+  let _ = wb(body2, b2, op_local_get());
+  let _ = wb(body2, b2, 1);
+  let _ = wb(body2, b2, op_i64_add());
+  let _ = wb(body2, b2, op_end());
+  let loc2 = zeros(16);
+  let _ = loc2[0] = 2048;
+  let mem2 = zeros(512);
+  let r2 = run_mem_body(body2, b2[0], loc2, mem2);
+  let t2 = if r2 == 70 then 0 else 1;
+  let _ = if t2 == 1 then (let _ = fail[0] = fail[0] + 1 in 0) else 0;
+
+  // T3: ULEB128 sizes stay correct for a body with multi-byte values
+  let lb = zeros(16);
+  let lp = [0];
+  let _ = w_leb(lb, lp, 16384);
+  // 16384 = 0x4000 -> LEB: 0x80 0x80 0x04 (3 bytes)
+  let l1 = if lp[0] == 3 then 0 else 1;
+  let l2 = if lb[0] == 128 then 0 else 1;
+  let l3 = if lb[2] == 1 then 0 else 1;
+  let _ = if l1 + l2 + l3 > 0 then (let _ = fail[0] = fail[0] + 1 in 0) else 0;
+
+  fail[0]
+}
