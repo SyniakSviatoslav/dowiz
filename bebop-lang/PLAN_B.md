@@ -222,6 +222,11 @@ REFERENCE: `native/src/native.c` (emit_expr + helpers, ~692 lines) +
 `native/src/native.h`; the .bp encodings already proven in expr_compile.bp.
 GOAL: lower the B1-6 IR to AArch64 words (control flow + calls + closures),
 matching native.c bit-for-bit.
+STATUS (2026-08-22): SLICE DONE — strict+check green, self_check 0 with 4/4
+  EXEC-verified tests: arithmetic, while-loop (backward b.cond), branch-based
+  if/else, sdiv. exec-frame convention: words run as C fn(long) -> callee-saving
+  prologue + ldp/ret epilogue REQUIRED; negative offsets need explicit imm19/26
+  sign-wrap (.bp division truncates toward zero).
 CONTRACT (encodings, from native.c + expr_compile.bp):
   movz=0xD2800000|(imm16<<5)|(hw<<21)|rd ; movk=0xF2800000|... ;
   add reg=0x8B010000 ; sub=0xCB010000 ; mul=0x9B017C00 ; sdiv=0x9AC10C00 ;
