@@ -13,7 +13,7 @@ module core { }
 
 // is_valid_event: 1 if e is a recognized event (0..3), else 0.
 fn is_valid_event(e: i64) -> i64 {
-  if e >= 0 then (if e <= 3 then 1 else 0) else 0
+  (if e >= 0 then 1 else 0) * (if e <= 3 then 1 else 0)
 }
 
 // event_apply: pure transition function state x event -> new state.

@@ -15,9 +15,22 @@ fn dec_scale() -> i64 { 1000000 }
 
 // mul_ov(a, b): 1 if a * b overflows i64, else 0 (0 * x == 0, never overflows).
 fn mul_ov(a: i64, b: i64) -> i64 {
+  // Branchless overflow test for a*b (fixed-point). Divisions use
+  // never-zero surrogates ad/bd; zero-input results are masked to 0.
   let mx = 9223372036854775807;
   let mn = 0 - 9223372036854775807 - 1;
-  if a == 0 then 0 else (if b == 0 then 0 else (if a > 0 then (if b > 0 then (if a > mx / b then 1 else 0) else (if b < mn / a then 1 else 0)) else (if b > 0 then (if a < mn / b then 1 else 0) else (if a < mx / b then 1 else 0))))
+  let az = if a == 0 then 1 else 0;
+  let bz = if b == 0 then 1 else 0;
+  let ap = if a > 0 then 1 else 0;
+  let bp = if b > 0 then 1 else 0;
+  let bd = b + bz;
+  let ad = a + az;
+  let f1 = if a > mx / bd then 1 else 0;
+  let f2 = if b < mn / ad then 1 else 0;
+  let f3 = if a < mn / bd then 1 else 0;
+  let f4 = if a < mx / bd then 1 else 0;
+  let quad = ap * bp * f1 + ap * (1 - bp) * f2 + (1 - ap) * bp * f3 + (1 - ap) * (1 - bp) * f4;
+  (az + bz) * 0 + (1 - az) * (1 - bz) * quad
 }
 
 // dec_from_int(n): integer n -> fixed-point (n * SCALE), or -1 on overflow.
@@ -29,7 +42,11 @@ fn dec_from_int(n: i64) -> i64 {
 fn dec_add(a: i64, b: i64) -> i64 {
   let mx = 9223372036854775807;
   let mn = 0 - 9223372036854775807 - 1;
-  let ov = if b > 0 then (if a > mx - b then 1 else 0) else (if b < 0 then (if a < mn - b then 1 else 0) else 0);
+  let bp = if b > 0 then 1 else 0;
+  let bn = if b < 0 then 1 else 0;
+  let f_hi = if a > mx - b then 1 else 0;
+  let f_lo = if a < mn - b then 1 else 0;
+  let ov = bp * f_hi + bn * f_lo;
   if ov == 1 then (0 - 1) else a + b
 }
 
@@ -37,7 +54,11 @@ fn dec_add(a: i64, b: i64) -> i64 {
 fn dec_sub(a: i64, b: i64) -> i64 {
   let mx = 9223372036854775807;
   let mn = 0 - 9223372036854775807 - 1;
-  let ov = if b < 0 then (if a > mx + b then 1 else 0) else (if b > 0 then (if a < mn + b then 1 else 0) else 0);
+  let bn2 = if b < 0 then 1 else 0;
+  let bp2 = if b > 0 then 1 else 0;
+  let g_hi = if a > mx + b then 1 else 0;
+  let g_lo = if a < mn + b then 1 else 0;
+  let ov = bn2 * g_hi + bp2 * g_lo;
   if ov == 1 then (0 - 1) else a - b
 }
 

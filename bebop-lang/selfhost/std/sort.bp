@@ -65,7 +65,8 @@ fn insertion_sort(a: [i64], n: i64) -> i64 {
     let inner = 0;
     while inner == 0 {
       let can = if j >= 0 then 1 else 0;
-      let gt = if can == 1 then (if a[j] > key then 1 else 0) else 0;
+      let jj = j * can;
+      let gt = can * (if a[jj] > key then 1 else 0);
       let _ = if gt == 1 then (let _ = a[j + 1] = a[j] in 0) else 0;
       let moves = moves + gt;
       let j = j - gt;

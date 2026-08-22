@@ -7,12 +7,17 @@ module core { }
 
 // hex_val: map an ASCII char code to its nibble value (0-15), or -1 if not hex.
 fn hex_val(c: i64) -> i64 {
-  let is_digit = if c >= 48 then (if c <= 57 then 1 else 0) else 0;
-  let is_lower = if c >= 97 then (if c <= 102 then 1 else 0) else 0;
-  let is_upper = if c >= 65 then (if c <= 70 then 1 else 0) else 0;
-  if is_digit == 1 then (c - 48)
-  else (if is_lower == 1 then (c - 97 + 10)
-  else (if is_upper == 1 then (c - 65 + 10) else (0 - 1)))
+  let d_lo = if c >= 48 then 1 else 0;
+  let d_hi = if c <= 57 then 1 else 0;
+  let is_digit = d_lo * d_hi;
+  let l_lo = if c >= 97 then 1 else 0;
+  let l_hi = if c <= 102 then 1 else 0;
+  let is_lower = l_lo * l_hi;
+  let u_lo = if c >= 65 then 1 else 0;
+  let u_hi = if c <= 70 then 1 else 0;
+  let is_upper = u_lo * u_hi;
+  let none = (1 - is_digit) * (1 - is_lower) * (1 - is_upper);
+  is_digit * (c - 48) + is_lower * (c - 97 + 10) + is_upper * (c - 65 + 10) + none * (0 - 1)
 }
 
 // nibble_to_hex: map a nibble (0-15) to its lowercase hex ASCII code.

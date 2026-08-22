@@ -116,7 +116,19 @@ fn atan2(y: f64, x: f64) -> f64 {
   let y_nneg = y >= 0.0;
   let result = 0.0;
   let result = if x_pos then atan_pos(y / x) else result;
-  let result = if x_neg then (if y_nneg then atan_pos(y / x) + 3.141592653589793 else atan_pos(y / x) - 3.141592653589793) else result;
-  let result = if x == 0.0 then (if y > 0.0 then 1.5707963267948966 else (if y < 0.0 then 0.0 - 1.5707963267948966 else 0.0)) else result;
+  let pi = 3.141592653589793;
+  let half = 1.5707963267948966;
+  let xnegf = if x_neg then 1.0 else 0.0;
+  let ynnegf = if y_nneg then 1.0 else 0.0;
+  let base = atan_pos(y / x);
+  let neg_add = xnegf * ynnegf;
+  let neg_sub = xnegf * (1.0 - ynnegf);
+  let keep_old = 1.0 - xnegf;
+  let result = neg_add * (base + pi) + neg_sub * (base - pi) + keep_old * result;
+  let is_axf = if x == 0.0 then 1.0 else 0.0;
+  let yupf = if y > 0.0 then 1.0 else 0.0;
+  let ydnf = if y < 0.0 then 1.0 else 0.0;
+  let axis = is_axf * yupf * half + is_axf * ydnf * (0.0 - half) + is_axf * (1.0 - yupf) * (1.0 - ydnf) * 0.0;
+  let result = is_axf * axis + (1.0 - is_axf) * result;
   result
 }

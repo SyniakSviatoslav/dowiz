@@ -11,13 +11,13 @@ fn strlen(s: str) -> i64 {
 
 // is_digit_char: 1 if c is an ASCII digit '0'(48)..'9'(57), else 0.
 fn is_digit_char(c: i64) -> i64 {
-  if c >= 48 then (if c <= 57 then 1 else 0) else 0
+  (if c >= 48 then 1 else 0) * (if c <= 57 then 1 else 0)
 }
 
 // is_alpha_char: 1 if c is 'a'(97)..'z'(122) or 'A'(65)..'Z'(90), else 0.
 fn is_alpha_char(c: i64) -> i64 {
-  let lower = if c >= 97 then (if c <= 122 then 1 else 0) else 0;
-  let upper = if c >= 65 then (if c <= 90 then 1 else 0) else 0;
+  let lower = (if c >= 97 then 1 else 0) * (if c <= 122 then 1 else 0);
+  let upper = (if c >= 65 then 1 else 0) * (if c <= 90 then 1 else 0);
   lower + upper
 }
 
@@ -64,7 +64,7 @@ fn str_to_int(s: str) -> i64 {
     let at_end = if i >= n then 1 else 0;
     let ch = if at_end == 1 then 0 else char(s, i);
     let minus = if ch == 45 then 1 else 0;
-    let dg = if ch >= 48 then (if ch <= 57 then 1 else 0) else 0;
+    let dg = (if ch >= 48 then 1 else 0) * (if ch <= 57 then 1 else 0);
     let sign = if i == 0 then minus else 0;
     let neg = if sign == 1 then 1 else neg;
     let val = if dg == 1 then (val * 10 + (ch - 48)) else val;

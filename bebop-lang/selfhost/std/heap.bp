@@ -45,8 +45,10 @@ fn heap_pop(a: [i64], n: i64) -> i64 {
       let has_l = if l < m then 1 else 0;
       let has_r = if r < m then 1 else 0;
       let s = if has_l == 1 then l else i;
-      let s = if has_r == 1 then (if a[r] < a[s] then r else s) else s;
-      let swap = if has_l == 1 then (if a[s] < a[i] then 1 else 0) else 0;
+      let rr = r * has_r;
+      let pick_r = has_r * (if a[rr] < a[s] then r else s);
+      let s = pick_r + (1 - has_r) * s;
+      let swap = has_l * (if a[s] < a[i] then 1 else 0);
       let tmp = a[i];
       let _ = if swap == 1 then (let _ = a[i] = a[s] in 0) else 0;
       let _ = if swap == 1 then (let _ = a[s] = tmp in 0) else 0;

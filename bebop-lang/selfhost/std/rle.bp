@@ -43,7 +43,8 @@ fn rle_encode(src: [i64], n: i64, out: [i64]) -> i64 {
     let scanning = 0;
     while scanning == 0 {
       let inb = if j < n then 1 else 0;
-      let same = if inb == 1 then (if src[j] == v then 1 else 0) else 0;
+      let jj = j * inb;
+      let same = inb * (if src[jj] == v then 1 else 0);
       let count = count + same;
       let j = j + same;
       let scanning = if same == 1 then 0 else 1;

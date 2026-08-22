@@ -33,11 +33,18 @@ fn union_size(a: [i64], na: i64, b: [i64], nb: i64) -> i64 {
   let done = if (ia * jb) == 1 then 1 else 0;
   while done == 0 {
     let both = if (ia + jb) == 0 then 1 else 0;
-    let lt = if both == 1 then (if a[i] < b[j] then 1 else 0) else 0;
-    let gt = if both == 1 then (if a[i] > b[j] then 1 else 0) else 0;
-    let eq = if both == 1 then (if lt == 0 then (if gt == 0 then 1 else 0) else 0) else 0;
-    let adv_i = if jb == 1 then 1 else (if lt == 1 then 1 else (if eq == 1 then 1 else 0));
-    let adv_j = if ia == 1 then 1 else (if gt == 1 then 1 else (if eq == 1 then 1 else 0));
+    let ii = i * both;
+    let jj = j * both;
+    let lt_raw = if a[ii] < b[jj] then 1 else 0;
+    let gt_raw = if a[ii] > b[jj] then 1 else 0;
+    let eq_raw = 1 - lt_raw - gt_raw;
+    let lt = both * lt_raw;
+    let gt = both * gt_raw;
+    let eq = both * eq_raw;
+    let not_jb = 1 - jb;
+    let not_ia = 1 - ia;
+    let adv_i = jb + not_jb * lt + not_jb * (1 - lt) * eq;
+    let adv_j = ia + not_ia * gt + not_ia * (1 - gt) * eq;
     let i = if adv_i == 1 then i + 1 else i;
     let j = if adv_j == 1 then j + 1 else j;
     let count = count + 1;
@@ -60,10 +67,10 @@ fn intersection_size(a: [i64], na: i64, b: [i64], nb: i64) -> i64 {
   while done == 0 {
     let lt = if a[i] < b[j] then 1 else 0;
     let gt = if a[i] > b[j] then 1 else 0;
-    let eq = if lt == 0 then (if gt == 0 then 1 else 0) else 0;
-    let i = if lt == 1 then i + 1 else (if eq == 1 then i + 1 else i);
-    let j = if gt == 1 then j + 1 else (if eq == 1 then j + 1 else j);
-    let count = if eq == 1 then count + 1 else count;
+    let eq = (1 - lt) * (1 - gt);
+    let i = i + lt + eq;
+    let j = j + gt + eq;
+    let count = count + eq;
     let ia = if i >= na then 1 else 0;
     let jb = if j >= nb then 1 else 0;
     let done = if (ia + jb) > 0 then 1 else 0;
@@ -83,13 +90,16 @@ fn is_subset(a: [i64], na: i64, b: [i64], nb: i64) -> i64 {
   while done == 0 {
     let lt = if a[i] < b[j] then 1 else 0;
     let gt = if a[i] > b[j] then 1 else 0;
-    let eq = if lt == 0 then (if gt == 0 then 1 else 0) else 0;
-    let fail = if lt == 1 then 1 else fail;
-    let i = if eq == 1 then i + 1 else (if lt == 1 then i + 1 else i);
-    let j = if gt == 1 then j + 1 else (if eq == 1 then j + 1 else j);
+    let eq = (1 - lt) * (1 - gt);
+    let fail = lt + (1 - lt) * fail;
+    let i = i + eq + (1 - eq) * lt;
+    let j = j + gt + eq;
     let ia = if i >= na then 1 else 0;
     let jb = if j >= nb then 1 else 0;
-    let done = if fail == 1 then 1 else (if ia == 1 then 1 else (if jb == 1 then 1 else 0));
+    let d2 = if fail == 1 then 1 else 0;
+    let d3 = if ia == 1 then 1 else 0;
+    let d4 = if jb == 1 then 1 else 0;
+    let done = d2 + (1 - d2) * d3 + (1 - d2) * (1 - d3) * d4;
     0
   };
   if fail == 1 then 0 else (if ia == 1 then 1 else 0)

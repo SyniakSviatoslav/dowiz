@@ -51,16 +51,30 @@ fn node_val(n: i64) -> i64 { n / 16 }
 
 // ---- binary operator result type -----------------------------------------
 fn binop_type(op: i64, l: i64, r: i64) -> i64 {
+  // Branchless law: flags via sequential single ifs, result = sum of
+  // weighted conditions. Semantics identical to the nested-if original:
+  //   cmp(op): op>=4; eq(op): op==4|5; nat(t): t==0|1; str(t): t==3
+  //   both(nat l, nat r); seq(eq op and both str)
+  //   both -> cmp?2 : (l nat?1 : r nat?1 : 0);  seq -> 2;  else -1
+  let is_eq4 = if op == 4 then 1 else 0;
+  let is_eq5 = if op == 5 then 1 else 0;
+  let eq = is_eq4 + is_eq5;
   let cmp = if op >= 4 then 1 else 0;
-  let eq = if op == 4 then 1 else (if op == 5 then 1 else 0);
-  let ln = if l == 0 then 1 else (if l == 1 then 1 else 0);
-  let rn = if r == 0 then 1 else (if r == 1 then 1 else 0);
-  let both = if ln == 1 then (if rn == 1 then 1 else 0) else 0;
-  let seq = if eq == 1 then (if l == 3 then (if r == 3 then 1 else 0) else 0) else 0;
-  if both == 1 then
-    (if cmp == 1 then 2 else (if l == 1 then 1 else (if r == 1 then 1 else 0)))
-  else
-    (if seq == 1 then 2 else 0 - 1)
+  let l0 = if l == 0 then 1 else 0;
+  let l1 = if l == 1 then 1 else 0;
+  let ln = l0 + l1;
+  let r0 = if r == 0 then 1 else 0;
+  let r1 = if r == 1 then 1 else 0;
+  let rn = r0 + r1;
+  let l3 = if l == 3 then 1 else 0;
+  let r3 = if r == 3 then 1 else 0;
+  let both = ln * rn;
+  let seq = eq * l3 * r3;
+  let pick_l = l1 * (1 - cmp);
+  let pick_r = r1 * (1 - cmp) * (1 - l1);
+  let res_both = cmp * 2 + pick_l + pick_r;
+  let res = both * res_both + (1 - both) * seq * 2 + (1 - both) * (1 - seq) * (0 - 1);
+  res
 }
 
 // ---- unify the element types of an array literal -------------------------
@@ -71,30 +85,87 @@ fn array_elems(ast: [i64], p: [i64], env: [i64], depth: [i64], count: i64) -> i6
   let bad = 0;
   while i[0] < count {
     let e = infer(ast, p, env, depth);
-    let elem = if seen == 0 then e else elem;
-    let bad = if seen == 0 then 0 else (if e == elem then 0 else 1);
+    let is_first = if seen == 0 then 1 else 0;
+    let elem = is_first * e + (1 - is_first) * elem;
+    let same = if e == elem then 1 else 0;
+    let bad = (1 - is_first) * (1 - same);
     let seen = 1;
     let _ = i[0] = i[0] + 1;
     0
   };
-  if seen == 0 then 0 - 1 else (if bad == 1 then 0 - 1 else elem)
+  let no_elems = if seen == 0 then 1 else 0;
+  let has_bad = if bad == 1 then 1 else 0;
+  no_elems * (0 - 1) + (1 - no_elems) * has_bad * (0 - 1) + (1 - no_elems) * (1 - has_bad) * elem
 }
 
 // ---- infer: recursive type propagation over the tagged tree --------------
+// Arm helpers: each holds only single-level ifs / branchless arithmetic.
+fn arm1(vl: i64, env: [i64], depth: [i64]) -> i64 {
+  let in_scope = if vl < depth[0] then 1 else 0;
+  in_scope * env[depth[0] - 1 - vl] + (1 - in_scope) * (0 - 1)
+}
+fn arm2(vl: i64, ast: [i64], p: [i64], env: [i64], depth: [i64]) -> i64 {
+  let lt = infer(ast, p, env, depth);
+  let rt = infer(ast, p, env, depth);
+  binop_type(vl, lt, rt)
+}
+fn arm3(vl: i64, ast: [i64], p: [i64], env: [i64], depth: [i64]) -> i64 {
+  let vt = infer(ast, p, env, depth);
+  let _ = env[depth[0]] = vt;
+  let _ = depth[0] = depth[0] + 1;
+  let bt = infer(ast, p, env, depth);
+  let _ = depth[0] = depth[0] - 1;
+  bt
+}
+fn arm4(ast: [i64], p: [i64], env: [i64], depth: [i64]) -> i64 {
+  let ct = infer(ast, p, env, depth);
+  let th = infer(ast, p, env, depth);
+  let el = infer(ast, p, env, depth);
+  let is_ct2 = if ct == 2 then 1 else 0;
+  let same = if th == el then 1 else 0;
+  is_ct2 * same * th + is_ct2 * (1 - same) * (0 - 1) + (1 - is_ct2) * (0 - 1)
+}
+fn arm5(ast: [i64], p: [i64], env: [i64], depth: [i64]) -> i64 {
+  let ct = infer(ast, p, env, depth);
+  let bt = infer(ast, p, env, depth);
+  let is_ct2 = if ct == 2 then 1 else 0;
+  is_ct2 * 4 + (1 - is_ct2) * (0 - 1)
+}
+fn arm6(vl: i64, ast: [i64], p: [i64], env: [i64], depth: [i64]) -> i64 {
+  let et = array_elems(ast, p, env, depth, vl);
+  let bad = if et == 0 - 1 then 1 else 0;
+  bad * (0 - 1) + (1 - bad) * (et * 8 + 6)
+}
+fn arm7(ast: [i64], p: [i64], env: [i64], depth: [i64]) -> i64 {
+  let at = infer(ast, p, env, depth);
+  let it = infer(ast, p, env, depth);
+  let t6 = if ty_tag(at) == 6 then 1 else 0;
+  let i0 = if it == 0 then 1 else 0;
+  t6 * i0 * arr_elem(at) + t6 * i0 * (1 - i0) * (0 - 1) + t6 * (1 - i0) * (0 - 1) + (1 - t6) * (0 - 1)
+}
+fn arm8(ast: [i64], p: [i64], env: [i64], depth: [i64]) -> i64 {
+  let at = infer(ast, p, env, depth);
+  let it = infer(ast, p, env, depth);
+  let vt = infer(ast, p, env, depth);
+  let t6 = if ty_tag(at) == 6 then 1 else 0;
+  let i0 = if it == 0 then 1 else 0;
+  let veq = if vt == arr_elem(at) then 1 else 0;
+  t6 * i0 * veq * 4 + t6 * i0 * (1 - veq) * (0 - 1) + t6 * (1 - i0) * (0 - 1) + (1 - t6) * (0 - 1)
+}
 fn infer(ast: [i64], p: [i64], env: [i64], depth: [i64]) -> i64 {
   let node = ast[p[0]];
   let _ = p[0] = p[0] + 1;
   let tg = node_tag(node);
   let vl = node_val(node);
   if tg == 0 then vl
-  else if tg == 1 then (if vl < depth[0] then env[depth[0] - 1 - vl] else 0 - 1)
-  else if tg == 2 then (let lt = infer(ast, p, env, depth) in (let rt = infer(ast, p, env, depth) in binop_type(vl, lt, rt)))
-  else if tg == 3 then (let vt = infer(ast, p, env, depth) in (let _ = env[depth[0]] = vt in (let _ = depth[0] = depth[0] + 1 in (let bt = infer(ast, p, env, depth) in (let _ = depth[0] = depth[0] - 1 in bt)))))
-  else if tg == 4 then (let ct = infer(ast, p, env, depth) in (let th = infer(ast, p, env, depth) in (let el = infer(ast, p, env, depth) in (if ct == 2 then (if th == el then th else 0 - 1) else 0 - 1))))
-  else if tg == 5 then (let ct = infer(ast, p, env, depth) in (let bt = infer(ast, p, env, depth) in (if ct == 2 then 4 else 0 - 1)))
-  else if tg == 6 then (let et = array_elems(ast, p, env, depth, vl) in (if et == 0 - 1 then 0 - 1 else et * 8 + 6))
-  else if tg == 7 then (let at = infer(ast, p, env, depth) in (let it = infer(ast, p, env, depth) in (if ty_tag(at) == 6 then (if it == 0 then arr_elem(at) else 0 - 1) else 0 - 1)))
-  else if tg == 8 then (let at = infer(ast, p, env, depth) in (let it = infer(ast, p, env, depth) in (let vt = infer(ast, p, env, depth) in (if ty_tag(at) == 6 then (if it == 0 then (if vt == arr_elem(at) then 4 else 0 - 1) else 0 - 1) else 0 - 1))))
+  else if tg == 1 then arm1(vl, env, depth)
+  else if tg == 2 then arm2(vl, ast, p, env, depth)
+  else if tg == 3 then arm3(vl, ast, p, env, depth)
+  else if tg == 4 then arm4(ast, p, env, depth)
+  else if tg == 5 then arm5(ast, p, env, depth)
+  else if tg == 6 then arm6(vl, ast, p, env, depth)
+  else if tg == 7 then arm7(ast, p, env, depth)
+  else if tg == 8 then arm8(ast, p, env, depth)
   else 0 - 1
 }
 

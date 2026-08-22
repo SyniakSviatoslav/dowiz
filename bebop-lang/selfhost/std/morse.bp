@@ -26,7 +26,10 @@ fn morse_dash() -> i64 { 3 }
 
 // morse_code: internal — normalize to lowercase, return value*8 + len.
 fn morse_code(c: i64) -> i64 {
-  let c = if c >= 65 then (if c <= 90 then c + 32 else c) else c;
+  let is_up = if c >= 65 then 1 else 0;
+  let is_up2 = if c <= 90 then 1 else 0;
+  let fold = is_up * is_up2;
+  let c = fold * (c + 32) + (1 - fold) * c;
   let v = 0;
   let v = if c == 97  then 58   else v;
   let v = if c == 98  then 1708 else v;

@@ -12,9 +12,18 @@ module core { }
 // Uses sequential let-override pattern to avoid deeply nested if/else.
 fn b64_val(c: i64) -> i64 {
   let v = 0 - 1;
-  let v = if c >= 65 then (if c <= 90 then (c - 65) else v) else v;
-  let v = if c >= 97 then (if c <= 122 then (c - 97 + 26) else v) else v;
-  let v = if c >= 48 then (if c <= 57 then (c - 48 + 52) else v) else v;
+  let u_lo = if c >= 65 then 1 else 0;
+  let u_hi = if c <= 90 then 1 else 0;
+  let uhit = u_lo * u_hi;
+  let v = uhit * (c - 65) + (1 - uhit) * v;
+  let l_lo = if c >= 97 then 1 else 0;
+  let l_hi = if c <= 122 then 1 else 0;
+  let lhit = l_lo * l_hi;
+  let v = lhit * (c - 97 + 26) + (1 - lhit) * v;
+  let d_lo = if c >= 48 then 1 else 0;
+  let d_hi = if c <= 57 then 1 else 0;
+  let dhit = d_lo * d_hi;
+  let v = dhit * (c - 48 + 52) + (1 - dhit) * v;
   let v = if c == 43 then 62 else v;
   let v = if c == 47 then 63 else v;
   v
@@ -23,9 +32,16 @@ fn b64_val(c: i64) -> i64 {
 // b64_char: map a 6-bit value (0-63) to its base64 ASCII char code.
 fn b64_char(v: i64) -> i64 {
   let out = 0 - 1;
-  let out = if v < 26 then (v + 65) else out;
-  let out = if v >= 26 then (if v < 52 then (v - 26 + 97) else out) else out;
-  let out = if v >= 52 then (if v < 62 then (v - 52 + 48) else out) else out;
+  let a_hit = if v < 26 then 1 else 0;
+  let out = a_hit * (v + 65) + (1 - a_hit) * out;
+  let b_lo = if v >= 26 then 1 else 0;
+  let b_hi = if v < 52 then 1 else 0;
+  let b_hit = b_lo * b_hi;
+  let out = b_hit * (v - 26 + 97) + (1 - b_hit) * out;
+  let c_lo = if v >= 52 then 1 else 0;
+  let c_hi = if v < 62 then 1 else 0;
+  let c_hit = c_lo * c_hi;
+  let out = c_hit * (v - 52 + 48) + (1 - c_hit) * out;
   let out = if v == 62 then 43 else out;
   let out = if v == 63 then 47 else out;
   out

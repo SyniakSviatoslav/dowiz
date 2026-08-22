@@ -14,7 +14,11 @@ module core { }
 fn checked_add(a: i64, b: i64) -> i64 {
   let mx = 9223372036854775807;
   let mn = 0 - 9223372036854775807 - 1;
-  let ov = if b > 0 then (if a > mx - b then 1 else 0) else (if b < 0 then (if a < mn - b then 1 else 0) else 0);
+  let bp = if b > 0 then 1 else 0;
+  let bn = if b < 0 then 1 else 0;
+  let f_hi = if a > mx - b then 1 else 0;
+  let f_lo = if a < mn - b then 1 else 0;
+  let ov = bp * f_hi + bn * f_lo;
   if ov == 1 then (0 - 1) else a + b
 }
 
@@ -22,7 +26,11 @@ fn checked_add(a: i64, b: i64) -> i64 {
 fn checked_sub(a: i64, b: i64) -> i64 {
   let mx = 9223372036854775807;
   let mn = 0 - 9223372036854775807 - 1;
-  let ov = if b < 0 then (if a > mx + b then 1 else 0) else (if b > 0 then (if a < mn + b then 1 else 0) else 0);
+  let bn2 = if b < 0 then 1 else 0;
+  let bp2 = if b > 0 then 1 else 0;
+  let g_hi = if a > mx + b then 1 else 0;
+  let g_lo = if a < mn + b then 1 else 0;
+  let ov = bn2 * g_hi + bp2 * g_lo;
   if ov == 1 then (0 - 1) else a - b
 }
 
@@ -30,7 +38,18 @@ fn checked_sub(a: i64, b: i64) -> i64 {
 fn checked_mul(a: i64, b: i64) -> i64 {
   let mx = 9223372036854775807;
   let mn = 0 - 9223372036854775807 - 1;
-  let ov = if a == 0 then 0 else (if b == 0 then 0 else (if a > 0 then (if b > 0 then (if a > mx / b then 1 else 0) else (if b < mn / a then 1 else 0)) else (if b > 0 then (if a < mn / b then 1 else 0) else (if a < mx / b then 1 else 0))));
+  let az = if a == 0 then 1 else 0;
+  let bz = if b == 0 then 1 else 0;
+  let ap = if a > 0 then 1 else 0;
+  let bp = if b > 0 then 1 else 0;
+  let bd = b + bz;
+  let ad = a + az;
+  let f1 = if a > mx / bd then 1 else 0;
+  let f2 = if b < mn / ad then 1 else 0;
+  let f3 = if a < mn / bd then 1 else 0;
+  let f4 = if a < mx / bd then 1 else 0;
+  let quad = ap * bp * f1 + ap * (1 - bp) * f2 + (1 - ap) * bp * f3 + (1 - ap) * (1 - bp) * f4;
+  let ov = (az + bz) * 0 + (1 - az) * (1 - bz) * quad;
   if ov == 1 then (0 - 1) else a * b
 }
 
