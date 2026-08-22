@@ -104,7 +104,9 @@ FILE (write/extend): `selfhost/typecheck.bp` (EXISTS — 24 fns, NOT a stub; als
 REFERENCE: `native/src/qtt.h` (Ty/TyKind/Quantity) + `native/src/qtt.c` infer()
 (~line 858) + check() (~1412).
 GOAL: QTT type inference/checking over the flat term IR from B1-3.
-STATUS (2026-08-21 sweep): typecheck.bp — check FAIL, strict FAIL (nested-if violations). This is the 1/136 strict straggler. Fix needed before Phase 0 gate clears.
+STATUS (2026-08-22): DONE — strict PASS, check PASS, self_check 0.
+  Front-end chain lexer.bp -> parser.bp -> expr_parser.bp all green (B1-1/2/3);
+  codegen/compile_pipeline/compiler_main/driver/bebopc also SC-green on re-sweep.
 CONTRACT: Quantity Q_ZERO(0)/Q_ONE(1)/Q_MANY(2); semiring qtt_add/qtt_mul
 (0+p=p, 1+1=ω, ω+p=ω; 0·p=0, 1·p=p, ω·0=0, ω·1=ω, ω·ω=ω). TyKind: I64/U8/U32/
 U64/F64/BOOL/VOID/FN/PI/FIELD/HYPERVEC/VEC/STRUCT/ENUM/TYPE/VAR/EQ/NAT/STR/PTR.
