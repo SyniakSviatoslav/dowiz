@@ -1297,9 +1297,12 @@ fn emit_call(s: str, fname: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64]
   let v = if cached > 0 then cached - 1 else 0 - cached - 2;
   let _ = if is_hit == 1 then (let _ = fnpos[0] = v in 0) else 0;
   // Resolution budget: cap total source scans; runaway repeats degrade.
-  let _ = if is_hit == 1 then 0 else fntab[791] = fntab[791] + 1;
+  let _ = if is_hit == 1 then (let _ = fntab[791] = fntab[791] + 1 in 0) else 0;
   let mbudget = fntab[0] + fntab[0] + 8;
-  let _ = if fntab[791] < mbudget then (let _ = if is_hit == 1 then 0 else find_fn(s, fname, fnpos) in 0) else 0;
+  // Branchless-law form of: scan only when unresolved AND under budget.
+  let want_scan = if is_hit == 1 then 0 else 1;
+  let under_budget = if fntab[791] < mbudget then 1 else 0;
+  let _ = if want_scan * under_budget == 1 then find_fn(s, fname, fnpos) else 0;
   let _ = if sp >= 0 then (let _ = fnpos[0] = sp in 0) else 0;
   let sv = if sp >= 0 then sp + 1 else 0 - fnpos[0] - 2;
   let _ = if is_hit == 1 then 0 else ft_cache_set(fntab, fname, sv);

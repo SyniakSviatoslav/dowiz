@@ -826,6 +826,9 @@ static Term *subst_p(const Term *t, const char *name, const Term *v) {
                 o->fields[i].val = subst_p(t->fields[i].val, name, v);
             }
             return o;
+        case TERM_ZEROS:
+            o->a = subst_p(t->a, name, v);
+            return o;
         case TERM_ARRAY_GET:
             o->a = subst_p(t->a, name, v);
             o->b = subst_p(t->b, name, v);
@@ -1071,6 +1074,16 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
             }
             *out = &VOID_TY;
             return 0;
+        case TERM_ZEROS: {
+            /* zeros(n) : Vector<0,i64> - dynamic length, elem i64 */
+            if (t->a && check(c, t->a, &I64_TY, err, cap) != 0) return -1;
+            Ty *arr = ty_alloc(TY_VEC);
+            if (!arr) { snprintf(err, cap, "type pool exhausted"); return -1; }
+            arr->elem = &I64_TY;
+            arr->n = 0;
+            *out = arr;
+            return 0;
+        }
         case TERM_ARRAY:
             if (t->nfields == 0) {
                 snprintf(err, cap, "empty array literal needs type annotation");

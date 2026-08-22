@@ -854,7 +854,7 @@ static void cmd_check(const char *path) {
     int fns = 0;
     expr_pool_reset();
     /* First pass: parse all fns and collect their types for cross-fn binding. */
-    enum { MAX_FNS = 64 };
+    enum { MAX_FNS = 256 };
     const char *fn_names[MAX_FNS];
     const Ty *fn_tys[MAX_FNS];
     Term *fn_terms[MAX_FNS];
@@ -895,6 +895,9 @@ static void cmd_check(const char *path) {
         /* Bind all fns (including self) so cross-references resolve. */
         if (qtt_check_binds(fn_term, fn_names, fn_tys, fn_count,
                             ty, sizeof ty, err, sizeof err) != 0) {
+            int fnd = -1;
+            for (int q = 0; q < fn_count; q++) if (strcmp(fn_names[q], "emit_call") == 0) fnd = q;
+            fprintf(stderr, "[dbg] fc=%d emit_call_at=%d ty=%p\n", fn_count, fnd, (void*)(fnd>=0?fn_tys[fnd]:NULL));
             fprintf(stderr, "fn '%s' type error: %s\n", fname, err);
             bp_program_free(&prog);
             free(src);
