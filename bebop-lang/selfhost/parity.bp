@@ -1,0 +1,1100 @@
+// parity.bp — B2-8 bit-match checker (self-contained build)
+
+// selfhost/parser.bp — recursive descent arithmetic parser (self-host #2)
+// parse_expr evaluates "1 + 2 * 3" = 7 using a mutable position array.
+// Demonstrates: multi-param fns, pass-by-reference (mutable array), mutual recursion.
+
+module core { }
+
+fn is_digit(c: i64) -> i64 {
+  let ge48 = if c >= 48 then 1 else 0;
+  let le57 = if c <= 57 then 1 else 0;
+  ge48 * le57
+}
+
+// skip_ws: advance pos[0] past spaces
+fn skip_ws(s: str, pos: [i64]) -> i64 {
+  let n = str_len(s);
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= n then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_sp = if ch == 32 then 1 else 0;
+    let pos_next = pos[0] + is_sp;
+    let _ = pos[0] = pos_next;
+    let done = if is_sp == 1 then 0 else 1;
+    0
+  };
+  0
+}
+
+// parse_num: read digits at pos[0], advance, return value
+fn parse_num(s: str, pos: [i64]) -> i64 {
+  let n = str_len(s);
+  let v = 0;
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= n then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let dg = if at_end == 1 then 0 else is_digit(ch);
+    let v = if dg == 1 then (v * 10) + (ch - 48) else v;
+    let adv = if dg == 1 then 1 else 0;
+    let _ = pos[0] = pos[0] + adv;
+    let done = if dg == 1 then 0 else 1;
+    0
+  };
+  v
+}
+
+// apply_op: consume one ('+'|'-') term and fold it into acc. Helper keeps the
+// parse_expr loop branchless (no if inside the then-branch of another if).
+fn apply_op(s: str, pos: [i64], acc: i64, is_plus: i64) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let t = parse_term(s, pos);
+  if is_plus == 1 then acc + t else acc - t
+}
+
+// parse_expr: expr = term (('+'|'-') term)*
+fn parse_expr(s: str, pos: [i64]) -> i64 {
+  let acc = parse_term(s, pos);
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let n = str_len(s);
+    let ch = if pos[0] >= n then 0 else char(s, pos[0]);
+    let is_plus = if ch == 43 then 1 else 0;
+    let is_minus = if ch == 45 then 1 else 0;
+    let is_op = if is_plus == 1 then 1 else is_minus;
+    let acc = if is_op == 1 then apply_op(s, pos, acc, is_plus) else acc;
+    let done = if is_op == 1 then 0 else 1;
+    0
+  };
+  acc
+}
+
+// parse_term: term = factor ('*' factor)*
+fn parse_term(s: str, pos: [i64]) -> i64 {
+  let acc = parse_factor(s, pos);
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let n = str_len(s);
+    let ch = if pos[0] >= n then 0 else char(s, pos[0]);
+    let is_mul = if ch == 42 then 1 else 0;
+    let acc = if is_mul == 1 then (let _ = pos[0] = pos[0] + 1 in (let t = parse_factor(s, pos) in acc * t)) else acc;
+    let done = if is_mul == 1 then 0 else 1;
+    0
+  };
+  acc
+}
+
+// parse_factor: factor = number | '(' expr ')'
+fn parse_factor(s: str, pos: [i64]) -> i64 {
+  let _ = skip_ws(s, pos);
+  let n = str_len(s);
+  let ch = if pos[0] >= n then 0 else char(s, pos[0]);
+  let is_lparen = if ch == 40 then 1 else 0;
+  if is_lparen == 1 then
+    (let _ = pos[0] = pos[0] + 1 in
+     (let v = parse_expr(s, pos) in
+      (let _ = skip_ws(s, pos) in
+       (let _ = pos[0] = pos[0] + 1 in v))))
+  else
+    parse_num(s, pos)
+}
+
+// eval: entry — parse an arithmetic expression from a string
+fn eval(s: str) -> i64 {
+  let pos = [0];
+  parse_expr(s, pos)
+}
+
+// ---- AST node encoding: tagged i64 (tag in low 3 bits) ----
+// tag: 0=lit 1=var 2=bin 3=if 4=let 5=app 6=lam 7=array
+// op codes: + 43, - 45, * 42, / 47; comparisons (any other) -> precedence 3
+
+// mk_lit: literal node -> payload (value) << 3
+fn mk_lit(v: i64) -> i64 {
+  v * 8
+}
+
+// mk_var: variable node -> payload (name index) << 3 | 1
+fn mk_var(n: i64) -> i64 {
+  (n * 8) + 1
+}
+
+// mk_bin: binary-op node -> payload (op) << 3 | 2 (payload-only demo, full tree later)
+fn mk_bin(op: i64, a: i64, b: i64) -> i64 {
+  (op * 8) + 2
+}
+
+// node_tag: low 3 bits of the tagged node
+fn node_tag(t: i64) -> i64 {
+  t - (t / 8) * 8
+}
+
+// node_payload: upper bits (value, name index, or op code)
+fn node_payload(t: i64) -> i64 {
+  t / 8
+}
+
+fn is_lit(t: i64) -> i64 {
+  if node_tag(t) == 0 then 1 else 0
+}
+
+fn is_var(t: i64) -> i64 {
+  if node_tag(t) == 1 then 1 else 0
+}
+
+fn is_bin(t: i64) -> i64 {
+  if node_tag(t) == 2 then 1 else 0
+}
+
+fn is_if(t: i64) -> i64 {
+  if node_tag(t) == 3 then 1 else 0
+}
+
+// precedence: 1 = + -, 2 = * /, 3 = comparison
+fn precedence(op: i64) -> i64 {
+  let p = 3;
+  let p = if op == 42 then 2 else p;
+  let p = if op == 47 then 2 else p;
+  let p = if op == 43 then 1 else p;
+  let p = if op == 45 then 1 else p;
+  p
+}
+
+// ---- B1-1: full bp_lex parity — flat tokens [kind,off,len,line] ----
+// kinds mirror BpTokKind: 0=EOF 1=IDENT 2=GLYPH 3=NUMBER 4=PUNCT.
+fn utf8_len(c: i64) -> i64 {
+  let is2 = (if c >= 192 then 1 else 0) * (if c <= 223 then 1 else 0);
+  let is3 = (if c >= 224 then 1 else 0) * (if c <= 239 then 1 else 0);
+  let is4 = (if c >= 240 then 1 else 0) * (if c <= 247 then 1 else 0);
+  is2 * 2 + is3 * 3 + is4 * 4 + (1 - is2) * (1 - is3) * (1 - is4)
+}
+fn is_alpha(c: i64) -> i64 {
+  let ge_a = if c >= 97 then 1 else 0;
+  let le_z = if c <= 122 then 1 else 0;
+  let ge_A = if c >= 65 then 1 else 0;
+  let le_Z = if c <= 90 then 1 else 0;
+  ge_a * le_z + ge_A * le_Z
+}
+fn lex_ident_start(c: i64) -> i64 {
+  is_alpha(c) + (if c == 95 then 1 else 0)
+}
+fn is_ident_char(c: i64) -> i64 {
+  is_alpha(c) + is_digit(c) + (if c == 95 then 1 else 0)
+}
+fn scan_ident(src: str, i: i64) -> i64 {
+  let strn = str_len(src);
+  let jb = [i];
+  let gob = [1];
+  while gob[0] == 1 {
+    let at_end = if jb[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(src, jb[0]);
+    let keep = is_ident_char(ch) * (1 - at_end);
+    let _ = jb[0] = jb[0] + keep;
+    let _ = gob[0] = keep;
+    0
+  };
+  jb[0]
+}
+fn scan_digits(src: str, i: i64) -> i64 {
+  let strn = str_len(src);
+  let jb = [i];
+  let gob = [1];
+  while gob[0] == 1 {
+    let at_end = if jb[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(src, jb[0]);
+    let keep = is_digit(ch) * (1 - at_end);
+    let _ = jb[0] = jb[0] + keep;
+    let _ = gob[0] = keep;
+    0
+  };
+  jb[0]
+}
+fn skip_lcomment(src: str, i: i64) -> i64 {
+  let strn = str_len(src);
+  let jb = [i];
+  let gob = [1];
+  while gob[0] == 1 {
+    let at_end = if jb[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(src, jb[0]);
+    let is_nl = if ch == 10 then 1 else 0;
+    let keep = (1 - at_end) * (1 - is_nl);
+    let _ = jb[0] = jb[0] + keep;
+    let _ = gob[0] = keep;
+    0
+  };
+  jb[0]
+}
+fn lex_emit(toks: [i64], n: [i64], kind: i64, off: i64, len: i64, line: i64) -> i64 {
+  let b = n[0] * 4;
+  let _ = toks[b] = kind;
+  let _ = toks[b + 1] = off;
+  let _ = toks[b + 2] = len;
+  let _ = toks[b + 3] = line;
+  let _ = n[0] = n[0] + 1;
+  n[0]
+}
+fn lex(src: str, toks: [i64]) -> i64 {
+  let strn = str_len(src);
+  let i = [0];
+  let line = [1];
+  let n = [0];
+  let done = if strn == 0 then 1 else 0;
+  while done == 0 {
+    let at_end = if i[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(src, i[0]);
+    let nxt = if i[0] + 1 < strn then char(src, i[0] + 1) else 0;
+    let is_nl = if ch == 10 then 1 else 0;
+    let is_sp = (if ch == 32 then 1 else 0) + (if ch == 9 then 1 else 0) + (if ch == 13 then 1 else 0);
+    let is_lc = (if ch == 47 then 1 else 0) * (if nxt == 47 then 1 else 0);
+    let is_id = lex_ident_start(ch);
+    let is_num = is_digit(ch);
+    let is_gl = if ch >= 128 then 1 else 0;
+    let is_pn = (1 - is_nl) * (1 - is_sp) * (1 - is_lc) * (1 - is_id) * (1 - is_num) * (1 - is_gl) * (1 - at_end);
+    let _ = line[0] = line[0] + is_nl;
+    let lc_end = if is_lc == 1 then skip_lcomment(src, i[0]) else i[0];
+    let id_end = if is_id == 1 then scan_ident(src, i[0]) else i[0];
+    let num_end = if is_num == 1 then scan_digits(src, i[0]) else i[0];
+    let gl_len = utf8_len(ch) * is_gl;
+    let _ = if is_id == 1 then (let _ = lex_emit(toks, n, 1, i[0], id_end - i[0], line[0]) in 0) else 0;
+    let _ = if is_num == 1 then (let _ = lex_emit(toks, n, 3, i[0], num_end - i[0], line[0]) in 0) else 0;
+    let _ = if is_gl == 1 then (let _ = lex_emit(toks, n, 2, i[0], gl_len, line[0]) in 0) else 0;
+    let _ = if is_pn == 1 then (let _ = lex_emit(toks, n, 4, i[0], 1, line[0]) in 0) else 0;
+    let step = is_nl + is_sp + is_lc * (lc_end - i[0]) + is_id * (id_end - i[0]) + is_num * (num_end - i[0]) + is_gl * gl_len + is_pn;
+    let _ = i[0] = i[0] + step;
+    let done = if i[0] >= strn then 1 else 0;
+    0
+  };
+  let _ = lex_emit(toks, n, 0, strn, 0, line[0]);
+  n[0]
+}
+
+// ---- B1-2: item-level bp_parse parity ----
+// Item record flat 6-wide: [kind, namehash, nameoff, namelen, txtoff, txtlen]
+// kinds: 0=MODULE 1=FN 2=STRUCT 3=ENUM 4=CONST 5=USE 6=TYPE 7=THEOREM
+fn slice_hash(src: str, off: i64, len: i64) -> i64 {
+  // accumulator lives in a box: cross-iteration scalar rebinding is not
+  // guaranteed to survive the loop in every eval path (measured drift).
+  let hb = [0];
+  let k = [0];
+  let go = 1;
+  while go == 1 {
+    let done = if k[0] >= len then 1 else 0;
+    let ch = if done == 1 then 0 else char(src, off + k[0]);
+    let _ = if done == 0 then (let _ = hb[0] = hb[0] * 131 + ch in 0) else 0;
+    let _ = k[0] = k[0] + 1;
+    let go = 1 - done;
+    0
+  };
+  hb[0]
+}
+fn tok_kind(toks: [i64], ti: i64) -> i64 { toks[ti * 4] }
+fn tok_off(toks: [i64], ti: i64) -> i64 { toks[ti * 4 + 1] }
+fn tok_len(toks: [i64], ti: i64) -> i64 { toks[ti * 4 + 2] }
+fn is_kw(src: str, toks: [i64], ti: i64, h: i64) -> i64 {
+  let kindok = if tok_kind(toks, ti) == 1 then 1 else 0;
+  kindok * (if slice_hash(src, tok_off(toks, ti), tok_len(toks, ti)) == h then 1 else 0)
+}
+
+fn read_ident(src: str, toks: [i64], ti: i64) -> i64 {
+  slice_hash(src, tok_off(toks, ti), tok_len(toks, ti))
+}
+
+// ---- flat term store ----
+
+fn mk(tb: [i64], ni: [i64], kind: i64, nh: i64, iv: i64, op: i64, a: i64, bb: i64, cc: i64, aux: i64) -> i64 {
+  let me = ni[0];
+  let b8 = me * 8;
+  let _ = tb[b8] = kind;
+  let _ = tb[b8 + 1] = nh;
+  let _ = tb[b8 + 2] = iv;
+  let _ = tb[b8 + 3] = op;
+  let _ = tb[b8 + 4] = a;
+  let _ = tb[b8 + 5] = bb;
+  let _ = tb[b8 + 6] = cc;
+  let _ = tb[b8 + 7] = aux;
+  let _ = ni[0] = ni[0] + 1;
+  me
+}
+
+fn peek_k(toks: [i64], ti: [i64], ntoks: i64) -> i64 {
+  let at_end = if ti[0] >= ntoks then 1 else 0;
+  let safe = ti[0] * (1 - at_end);
+  (1 - at_end) * tok_kind(toks, safe)
+}
+
+fn peek_ch(src: str, toks: [i64], ti: [i64], ntoks: i64) -> i64 {
+  let k = peek_k(toks, ti, ntoks);
+  let isp = if k == 4 then 1 else 0;
+  isp * char(src, tok_off(toks, ti[0]) * isp)
+}
+
+// operator code at current token:
+// 0=none 1=== 2=!= 3=< 4=<= 5=> 6=>= 7=+ 8=- 9=* 10=/ 11=++
+fn op_at(src: str, toks: [i64], ti: [i64], ntoks: i64) -> i64 {
+  let k = peek_k(toks, ti, ntoks);
+  let isp = if k == 4 then 1 else 0;
+  let ch = isp * char(src, tok_off(toks, ti[0]) * isp);
+  let eq1 = isp * (if ch == 61 then 1 else 0);
+  let bang = isp * (if ch == 33 then 1 else 0);
+  let lt1 = isp * (if ch == 60 then 1 else 0);
+  let gt1 = isp * (if ch == 62 then 1 else 0);
+  let plus = isp * (if ch == 43 then 1 else 0);
+  let minus = isp * (if ch == 45 then 1 else 0);
+  let star = isp * (if ch == 42 then 1 else 0);
+  let slash = isp * (if ch == 47 then 1 else 0);
+  let n = str_len(src);
+  let noff = tok_off(toks, ti[0]) * isp;
+  let inb = if noff + 1 < n then 1 else 0;
+  let nch = inb * char(src, noff + inb);
+  let is_eqeq = eq1 * (if nch == 61 then 1 else 0);
+  let is_bangeq = bang * (if nch == 61 then 1 else 0);
+  let is_le = lt1 * (if nch == 61 then 1 else 0);
+  let is_ge = gt1 * (if nch == 61 then 1 else 0);
+  let is_cat = plus * (if nch == 43 then 1 else 0);
+  let plain_eq = eq1 * (1 - is_eqeq);
+  let plain_lt = lt1 * (1 - is_le);
+  let plain_gt = gt1 * (1 - is_ge);
+  let plain_plus = plus * (1 - is_cat);
+  is_eqeq * 1 + is_bangeq * 2 + plain_lt * 3 + is_le * 4 +
+    plain_gt * 5 + is_ge * 6 + plain_plus * 7 + minus * 8 +
+    star * 9 + slash * 10 + is_cat * 11
+}
+
+fn op_prec(code: i64) -> i64 {
+  let p1 = (if code <= 6 then 1 else 0) * (if code >= 1 then 1 else 0);
+  let p2 = (if code == 7 then 1 else 0) + (if code == 8 then 1 else 0) +
+    (if code == 11 then 1 else 0);
+  let p3 = (if code == 9 then 1 else 0) + (if code == 10 then 1 else 0);
+  p1 * 1 + p2 * 2 + p3 * 3
+}
+
+fn op_width(code: i64) -> i64 {
+  // two-char ops: == != <= >= ++
+  let two = (if code == 1 then 1 else 0) + (if code == 2 then 1 else 0) +
+    (if code == 4 then 1 else 0) + (if code == 6 then 1 else 0) +
+    (if code == 11 then 1 else 0);
+  two * 2 + (1 - two)
+}
+
+// op-code -> BinOp enum value
+fn op_to_binop(code: i64) -> i64 {
+  let c1 = if code == 1 then 4 else 0;
+  let c2 = if code == 2 then 6 else 0;
+  let c3 = if code == 3 then 5 else 0;
+  let c4 = if code == 4 then 7 else 0;
+  let c5 = if code == 5 then 9 else 0;
+  let c6 = if code == 6 then 8 else 0;
+  let c7 = if code == 7 then 0 else 0;
+  let c8 = if code == 8 then 1 else 0;
+  let c9 = if code == 9 then 2 else 0;
+  let c10 = if code == 10 then 3 else 0;
+  let c11 = if code == 11 then 10 else 0;
+  c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10 + c11
+}
+
+fn read_int_lit(src: str, toks: [i64], ti: i64) -> i64 {
+  let off = tok_off(toks, ti);
+  let len = tok_len(toks, ti);
+  let vb = [0];
+  let kb = [0];
+  let gob = [1];
+  while gob[0] == 1 {
+    let done = if kb[0] >= len then 1 else 0;
+    let d = done * 48 + (1 - done) * char(src, off + kb[0]);
+    let dvv = d - 48;
+    let _ = if done == 0 then (let _ = vb[0] = vb[0] * 10 + dvv in 0) else 0;
+    let _ = kb[0] = kb[0] + 1;
+    let _ = gob[0] = 1 - done;
+    0
+  };
+  vb[0]
+}
+
+// ---- primary forms (helpers keep if-branches free of nested ifs) ----
+
+fn p_int(src: str, toks: [i64], ti: [i64], tb: [i64], ni: [i64]) -> i64 {
+  let v = read_int_lit(src, toks, ti[0]);
+  let _ = ti[0] = ti[0] + 1;
+  mk(tb, ni, 1, 0, v, 0, (0 - 1), (0 - 1), (0 - 1), 0)
+}
+
+// ident: VAR normally; true/false become LIT with bval in slot 3
+fn p_ident(src: str, toks: [i64], ti: [i64], tb: [i64], ni: [i64]) -> i64 {
+  let h = read_ident(src, toks, ti[0]);
+  let _ = ti[0] = ti[0] + 1;
+  let is_true = if h == 262750338 then 1 else 0;
+  let is_false = if h == 30258925323 then 1 else 0;
+  let pick = is_true + is_false;
+  let bval = is_true;
+  let lit_nd = mk(tb, ni, 1, h, 0, bval, (0 - 1), (0 - 1), (0 - 1), 0);
+  let var_nd = mk(tb, ni, 0, h, 0, 0, (0 - 1), (0 - 1), (0 - 1), 0);
+  var_nd * (1 - pick) + lit_nd * pick
+}
+
+fn p_paren(src: str, toks: [i64], ti: [i64], tb: [i64], ni: [i64], ntoks: i64, errb: [i64]) -> i64 {
+  let _ = ti[0] = ti[0] + 1;
+  let e = parse_bin(src, toks, ti, tb, ni, ntoks, errb, 1);
+  let c2 = peek_ch(src, toks, ti, ntoks);
+  let isc = if c2 == 41 then 1 else 0;
+  let _ = if isc == 1 then (let _ = ti[0] = ti[0] + 1 in 0) else 0;
+  let _ = errb[0] = errb[0] + (1 - isc);
+  e
+}
+
+// one postfix step; returns new current node ((0 - 1) = nothing applied)
+fn pf_dot(src: str, toks: [i64], ti: [i64], tb: [i64], ni: [i64], cur: i64) -> i64 {
+  let _ = ti[0] = ti[0] + 1;
+  let fh = read_ident(src, toks, ti[0]);
+  let _ = ti[0] = ti[0] + 1;
+  mk(tb, ni, 9, fh, 0, 0, cur, (0 - 1), (0 - 1), 0)
+}
+
+fn pf_set_full(src: str, toks: [i64], ti: [i64], tb: [i64], ni: [i64], ntoks: i64, errb: [i64], cur: i64, ix: i64) -> i64 {
+  // called only when '=' present
+  let _ = ti[0] = ti[0] + 1;
+  let v = parse_bin(src, toks, ti, tb, ni, ntoks, errb, 1);
+  mk(tb, ni, 30, 0, 0, 0, cur, ix, v, 0)
+}
+
+fn pf_index(src: str, toks: [i64], ti: [i64], tb: [i64], ni: [i64], ntoks: i64, errb: [i64], cur: i64) -> i64 {
+  let _ = ti[0] = ti[0] + 1;
+  let ix = parse_bin(src, toks, ti, tb, ni, ntoks, errb, 1);
+  let cbr = peek_ch(src, toks, ti, ntoks);
+  let okc = if cbr == 93 then 1 else 0;
+  let _ = if okc == 1 then (let _ = ti[0] = ti[0] + 1 in 0) else 0;
+  let _ = errb[0] = errb[0] + (1 - okc);
+  let ac = peek_ch(src, toks, ti, ntoks);
+  let isa = (if ac == 61 then 1 else 0) * okc;
+  let rs = [0];
+  let _ = if isa == 1 then (
+    let r = pf_set_full(src, toks, ti, tb, ni, ntoks, errb, cur, ix);
+    let _ = rs[0] = r;
+    0
+  ) else 0;
+  let get_nd = mk(tb, ni, 28, 0, 0, 0, cur, ix, (0 - 1), 0);
+  get_nd * (1 - isa) + rs[0] * isa
+}
+
+fn pf_call(src: str, toks: [i64], ti: [i64], tb: [i64], ni: [i64], ntoks: i64, errb: [i64], cur: i64) -> i64 {
+  let _ = ti[0] = ti[0] + 1;
+  let arg = parse_bin(src, toks, ti, tb, ni, ntoks, errb, 1);
+  let rp = peek_ch(src, toks, ti, ntoks);
+  let okr = if rp == 41 then 1 else 0;
+  let _ = if okr == 1 then (let _ = ti[0] = ti[0] + 1 in 0) else 0;
+  let _ = errb[0] = errb[0] + (1 - okr);
+  mk(tb, ni, 3, 0, 0, 0, cur, arg, (0 - 1), 0)
+}
+
+fn p_int_into(src: str, toks: [i64], ti: [i64], tb: [i64], ni: [i64], out: [i64]) -> i64 {
+  let r = p_int(src, toks, ti, tb, ni);
+  let _ = out[0] = r;
+  0
+}
+
+fn p_ident_into(src: str, toks: [i64], ti: [i64], tb: [i64], ni: [i64], out: [i64]) -> i64 {
+  let r = p_ident(src, toks, ti, tb, ni);
+  let _ = out[0] = r;
+  0
+}
+
+fn p_paren_into(src: str, toks: [i64], ti: [i64], tb: [i64], ni: [i64], ntoks: i64, errb: [i64], out: [i64]) -> i64 {
+  let r = p_paren(src, toks, ti, tb, ni, ntoks, errb);
+  let _ = out[0] = r;
+  0
+}
+
+fn pf_dot_into(src: str, toks: [i64], ti: [i64], tb: [i64], ni: [i64], cur: i64, out: [i64]) -> i64 {
+  let r = pf_dot(src, toks, ti, tb, ni, cur);
+  let _ = out[0] = r;
+  0
+}
+
+fn pf_index_into(src: str, toks: [i64], ti: [i64], tb: [i64], ni: [i64], ntoks: i64, errb: [i64], cur: i64, out: [i64]) -> i64 {
+  let r = pf_index(src, toks, ti, tb, ni, ntoks, errb, cur);
+  let _ = out[0] = r;
+  0
+}
+
+fn pf_call_into(src: str, toks: [i64], ti: [i64], tb: [i64], ni: [i64], ntoks: i64, errb: [i64], cur: i64, out: [i64]) -> i64 {
+  let r = pf_call(src, toks, ti, tb, ni, ntoks, errb, cur);
+  let _ = out[0] = r;
+  0
+}
+
+// atom + postfix chain
+fn parse_atom(src: str, toks: [i64], ti: [i64], tb: [i64], ni: [i64], ntoks: i64, errb: [i64]) -> i64 {
+  let k = peek_k(toks, ti, ntoks);
+  let ch = peek_ch(src, toks, ti, ntoks);
+  let is_p4 = if k == 4 then 1 else 0;
+  let is_p40 = if ch == 40 then 1 else 0;
+  let is_par = is_p4 * is_p40;
+  let is_k3 = if k == 3 then 1 else 0;
+  let is_int = is_k3 * (1 - is_par);
+  let is_k1 = if k == 1 then 1 else 0;
+  let is_id = is_k1 * (1 - is_par) * (1 - is_int);
+
+  let id_v = [0];
+  let _ = if is_id == 1 then (let _ = p_ident_into(src, toks, ti, tb, ni, id_v) in 0) else 0;
+  let int_v = [0];
+  let _ = if is_int == 1 then (let _ = p_int_into(src, toks, ti, tb, ni, int_v) in 0) else 0;
+  let par_v = [0];
+  let _ = if is_par == 1 then (let _ = p_paren_into(src, toks, ti, tb, ni, ntoks, errb, par_v) in 0) else 0;
+
+  let none_yet = (1 - is_par) * (1 - is_int) * (1 - is_id);
+  let bad_v = [0];
+  let _ = if none_yet == 1 then (
+    let r = mk(tb, ni, 0, 0, 0, 0, (0 - 1), (0 - 1), (0 - 1), 0);
+    let _ = bad_v[0] = r;
+    0
+  ) else 0;
+  let _ = errb[0] = errb[0] + none_yet;
+
+  let cur = [0];
+  let _ = cur[0] = is_par * par_v[0] + is_int * int_v[0] +
+    is_id * id_v[0] + none_yet * bad_v[0];
+  let pk0 = peek_k(toks, ti, ntoks);
+  let pc0 = peek_ch(src, toks, ti, ntoks);
+  let isp0 = if pk0 == 4 then 1 else 0;
+  let dD0 = isp0 * (if pc0 == 46 then 1 else 0);
+  let bB0 = isp0 * (if pc0 == 91 then 1 else 0);
+  let lL0 = isp0 * (if pc0 == 40 then 1 else 0);
+  let aA0 = dD0 + bB0 + lL0;
+  let cC0 = cur[0];
+  let nN0 = [0 - 1];
+  let _ = if dD0 == 1 then (let _ = pf_dot_into(src, toks, ti, tb, ni, cC0, nN0) in 0) else 0;
+  let _ = if bB0 == 1 then (let _ = pf_index_into(src, toks, ti, tb, ni, ntoks, errb, cC0, nN0) in 0) else 0;
+  let _ = if lL0 == 1 then (let _ = pf_call_into(src, toks, ti, tb, ni, ntoks, errb, cC0, nN0) in 0) else 0;
+  let vV0 = nN0[0];
+  let _ = cur[0] = cC0 * (1 - aA0) + vV0 * aA0;
+  let pk1 = peek_k(toks, ti, ntoks);
+  let pc1 = peek_ch(src, toks, ti, ntoks);
+  let isp1 = if pk1 == 4 then 1 else 0;
+  let dD1 = isp1 * (if pc1 == 46 then 1 else 0);
+  let bB1 = isp1 * (if pc1 == 91 then 1 else 0);
+  let lL1 = isp1 * (if pc1 == 40 then 1 else 0);
+  let aA1 = dD1 + bB1 + lL1;
+  let cC1 = cur[0];
+  let nN1 = [0 - 1];
+  let _ = if dD1 == 1 then (let _ = pf_dot_into(src, toks, ti, tb, ni, cC1, nN1) in 0) else 0;
+  let _ = if bB1 == 1 then (let _ = pf_index_into(src, toks, ti, tb, ni, ntoks, errb, cC1, nN1) in 0) else 0;
+  let _ = if lL1 == 1 then (let _ = pf_call_into(src, toks, ti, tb, ni, ntoks, errb, cC1, nN1) in 0) else 0;
+  let vV1 = nN1[0];
+  let _ = cur[0] = cC1 * (1 - aA1) + vV1 * aA1;
+  let pk2 = peek_k(toks, ti, ntoks);
+  let pc2 = peek_ch(src, toks, ti, ntoks);
+  let isp2 = if pk2 == 4 then 1 else 0;
+  let dD2 = isp2 * (if pc2 == 46 then 1 else 0);
+  let bB2 = isp2 * (if pc2 == 91 then 1 else 0);
+  let lL2 = isp2 * (if pc2 == 40 then 1 else 0);
+  let aA2 = dD2 + bB2 + lL2;
+  let cC2 = cur[0];
+  let nN2 = [0 - 1];
+  let _ = if dD2 == 1 then (let _ = pf_dot_into(src, toks, ti, tb, ni, cC2, nN2) in 0) else 0;
+  let _ = if bB2 == 1 then (let _ = pf_index_into(src, toks, ti, tb, ni, ntoks, errb, cC2, nN2) in 0) else 0;
+  let _ = if lL2 == 1 then (let _ = pf_call_into(src, toks, ti, tb, ni, ntoks, errb, cC2, nN2) in 0) else 0;
+  let vV2 = nN2[0];
+  let _ = cur[0] = cC2 * (1 - aA2) + vV2 * aA2;
+  let pk3 = peek_k(toks, ti, ntoks);
+  let pc3 = peek_ch(src, toks, ti, ntoks);
+  let isp3 = if pk3 == 4 then 1 else 0;
+  let dD3 = isp3 * (if pc3 == 46 then 1 else 0);
+  let bB3 = isp3 * (if pc3 == 91 then 1 else 0);
+  let lL3 = isp3 * (if pc3 == 40 then 1 else 0);
+  let aA3 = dD3 + bB3 + lL3;
+  let cC3 = cur[0];
+  let nN3 = [0 - 1];
+  let _ = if dD3 == 1 then (let _ = pf_dot_into(src, toks, ti, tb, ni, cC3, nN3) in 0) else 0;
+  let _ = if bB3 == 1 then (let _ = pf_index_into(src, toks, ti, tb, ni, ntoks, errb, cC3, nN3) in 0) else 0;
+  let _ = if lL3 == 1 then (let _ = pf_call_into(src, toks, ti, tb, ni, ntoks, errb, cC3, nN3) in 0) else 0;
+  let vV3 = nN3[0];
+  let _ = cur[0] = cC3 * (1 - aA3) + vV3 * aA3;
+  let pk4 = peek_k(toks, ti, ntoks);
+  let pc4 = peek_ch(src, toks, ti, ntoks);
+  let isp4 = if pk4 == 4 then 1 else 0;
+  let dD4 = isp4 * (if pc4 == 46 then 1 else 0);
+  let bB4 = isp4 * (if pc4 == 91 then 1 else 0);
+  let lL4 = isp4 * (if pc4 == 40 then 1 else 0);
+  let aA4 = dD4 + bB4 + lL4;
+  let cC4 = cur[0];
+  let nN4 = [0 - 1];
+  let _ = if dD4 == 1 then (let _ = pf_dot_into(src, toks, ti, tb, ni, cC4, nN4) in 0) else 0;
+  let _ = if bB4 == 1 then (let _ = pf_index_into(src, toks, ti, tb, ni, ntoks, errb, cC4, nN4) in 0) else 0;
+  let _ = if lL4 == 1 then (let _ = pf_call_into(src, toks, ti, tb, ni, ntoks, errb, cC4, nN4) in 0) else 0;
+  let vV4 = nN4[0];
+  let _ = cur[0] = cC4 * (1 - aA4) + vV4 * aA4;
+  let pk5 = peek_k(toks, ti, ntoks);
+  let pc5 = peek_ch(src, toks, ti, ntoks);
+  let isp5 = if pk5 == 4 then 1 else 0;
+  let dD5 = isp5 * (if pc5 == 46 then 1 else 0);
+  let bB5 = isp5 * (if pc5 == 91 then 1 else 0);
+  let lL5 = isp5 * (if pc5 == 40 then 1 else 0);
+  let aA5 = dD5 + bB5 + lL5;
+  let cC5 = cur[0];
+  let nN5 = [0 - 1];
+  let _ = if dD5 == 1 then (let _ = pf_dot_into(src, toks, ti, tb, ni, cC5, nN5) in 0) else 0;
+  let _ = if bB5 == 1 then (let _ = pf_index_into(src, toks, ti, tb, ni, ntoks, errb, cC5, nN5) in 0) else 0;
+  let _ = if lL5 == 1 then (let _ = pf_call_into(src, toks, ti, tb, ni, ntoks, errb, cC5, nN5) in 0) else 0;
+  let vV5 = nN5[0];
+  let _ = cur[0] = cC5 * (1 - aA5) + vV5 * aA5;
+  cur[0]
+}
+
+// Pratt climb
+fn parse_bin(src: str, toks: [i64], ti: [i64], tb: [i64], ni: [i64], ntoks: i64, errb: [i64], min_prec: i64) -> i64 {
+  let lhs = parse_atom(src, toks, ti, tb, ni, ntoks, errb);
+  let lb = [lhs];
+  let gob = [1];
+  while gob[0] == 1 {
+    let code = op_at(src, toks, ti, ntoks);
+    let prec = op_prec(code);
+    let ge_p = if prec >= min_prec then 1 else 0;
+    let take = ge_p * (if code > 0 then 1 else 0);
+    let nb = [0];
+    let _ = if take == 1 then (
+      let w = op_width(code);
+      let _ = ti[0] = ti[0] + w;
+      let rhs = parse_bin(src, toks, ti, tb, ni, ntoks, errb, prec + 1);
+      let bo = op_to_binop(code);
+      let r = mk(tb, ni, 5, 0, 0, bo, lb[0], rhs, (0 - 1), 0);
+      let _ = nb[0] = r;
+      0
+    ) else 0;
+    let _ = lb[0] = lb[0] * (1 - take) + nb[0] * take;
+    let _ = gob[0] = take;
+    0
+  };
+  lb[0]
+}
+
+// entry: parse full expression. negative root signals parse error.
+fn expr_parse_d(src: str, toks: [i64], ntoks: i64, tb: [i64], eo: [i64], no: [i64]) -> i64 {
+  let ti = [0];
+  let ni = [0];
+  let errb = [0];
+  let root = parse_bin(src, toks, ti, tb, ni, ntoks, errb, 1);
+  let _ = eo[0] = errb[0];
+  let _ = no[0] = ni[0];
+  let bad = errb[0];
+  root * (1 - bad) + (0 - root) * bad
+}
+
+fn expr_parse(src: str, toks: [i64], ntoks: i64, tb: [i64]) -> i64 {
+  let eo = [0];
+  let no = [0];
+  expr_parse_d(src, toks, ntoks, tb, eo, no)
+}
+
+// ---- byte emitter + hex rendering ----
+
+fn wb(bytes: [i64], pc: [i64], b: i64) -> i64 {
+  let _ = bytes[pc[0]] = b;
+  let _ = pc[0] = pc[0] + 1;
+  0
+}
+
+// unsigned LEB128
+fn w_leb(bytes: [i64], pc: [i64], n: i64) -> i64 {
+  let v = [n];
+  let gob = [1];
+  while gob[0] == 1 {
+    let b = v[0] - v[0] / 128 * 128;
+    let rest = v[0] / 128;
+    let more = if rest > 0 then 1 else 0;
+    let out = b + more * 128;
+    let _ = wb(bytes, pc, out);
+    let _ = v[0] = rest;
+    let _ = gob[0] = more;
+    0
+  };
+  0
+}
+
+fn w_sleb(bytes: [i64], pc: [i64], n: i64) -> i64 {
+  // true signed LEB128: continue while payload bits remain that match the sign
+  let v = [n];
+  let gob = [1];
+  while gob[0] == 1 {
+    let b = v[0] - v[0] / 128 * 128;
+    let rest = v[0] / 128;
+    let signbit = if b >= 64 then 1 else 0;
+    let zero_pos = (if rest == 0 then 1 else 0) * (1 - signbit);
+    let neg_done = (if rest == 0 - 1 then 1 else 0) * signbit;
+    let done = zero_pos + neg_done;
+    let pad = (1 - done) * 128;
+    let _ = wb(bytes, pc, b + pad);
+    let _ = v[0] = rest;
+    let _ = gob[0] = 1 - done;
+    0
+  };
+  0
+}
+
+// ---- flat term IR (same slots as expr_parser.bp) ----
+
+fn p_emit_term(bytes: [i64], pc: [i64], tb: [i64], node: i64) -> i64 {
+  let kind = tb[node * 8];
+  let is_lit = if kind == 1 then 1 else 0;
+  let is_bin = if kind == 5 then 1 else 0;
+  let _ = if is_lit == 1 then (
+    let v = tb[node * 8 + 2];
+    let _ = wb(bytes, pc, 66);
+    let _ = w_sleb(bytes, pc, v);
+    0
+  ) else 0;
+  // BinOp 0 add 1 sub 2 mul 3 div -> wasm 0x7c 0x7d 0x7e (div excluded)
+  let opb = tb[node * 8 + 3];
+  let wa = if opb == 0 then 124 else 0;
+  let ws = if opb == 1 then 125 else 0;
+  let wm = if opb == 2 then 126 else 0;
+  let wop = wa + ws + wm;
+  let a = tb[node * 8 + 4];
+  let bb = tb[node * 8 + 5];
+  let _ = if is_bin == 1 then (
+    let _ = p_emit_term(bytes, pc, tb, a);
+    let _ = p_emit_term(bytes, pc, tb, bb);
+    let _ = wb(bytes, pc, wop);
+    0
+  ) else 0;
+  0
+}
+
+// module in the exact C layout: ()->i64, export "main"
+fn p_emit_module(body: [i64], nbody: i64, out: [i64]) -> i64 {
+  let pc = [0];
+  let _ = wb(out, pc, 0);
+  let _ = wb(out, pc, 97);
+  let _ = wb(out, pc, 115);
+  let _ = wb(out, pc, 109);
+  let _ = wb(out, pc, 1);
+  let _ = wb(out, pc, 0);
+  let _ = wb(out, pc, 0);
+  let _ = wb(out, pc, 0);
+  // type sec: id,size=5,count=1,form=0x60,params=0,results=1,i64
+  let _ = wb(out, pc, 1);
+  let _ = wb(out, pc, 5);
+  let _ = wb(out, pc, 1);
+  let _ = wb(out, pc, 96);
+  let _ = wb(out, pc, 0);
+  let _ = wb(out, pc, 1);
+  let _ = wb(out, pc, 126);
+  // func sec: id,size=2,count=1,typeidx=0
+  let _ = wb(out, pc, 3);
+  let _ = wb(out, pc, 2);
+  let _ = wb(out, pc, 1);
+  let _ = wb(out, pc, 0);
+  // export sec: id,size=8,count=1,namelen=4,"main",kind=0,idx=0
+  let _ = wb(out, pc, 7);
+  let _ = wb(out, pc, 8);
+  let _ = wb(out, pc, 1);
+  let _ = wb(out, pc, 4);
+  let _ = wb(out, pc, 109);
+  let _ = wb(out, pc, 97);
+  let _ = wb(out, pc, 105);
+  let _ = wb(out, pc, 110);
+  let _ = wb(out, pc, 0);
+  let _ = wb(out, pc, 0);
+  // code sec: id, size=count+sizeleb+bodysize+locals, count=1, bodysize, locals=0, body
+  let body_size = nbody + 1;
+  let _ = wb(out, pc, 10);
+  let _ = w_leb(out, pc, body_size + 2);
+  let _ = wb(out, pc, 1);
+  let _ = w_leb(out, pc, body_size);
+  let _ = wb(out, pc, 0);
+  let k = [0];
+  let gob = [1];
+  while gob[0] == 1 {
+    let done = if k[0] >= nbody then 1 else 0;
+    let _ = if done == 0 then (let _ = wb(out, pc, body[k[0]]) in 0) else 0;
+    let _ = k[0] = k[0] + 1;
+    let _ = gob[0] = 1 - done;
+    0
+  };
+  pc[0]
+}
+
+// decode golden hex two-chars-per-byte and compare against emitted bytes
+fn bytes_match(golden: [i64], glen: i64, mine: [i64], n: i64) -> i64 {
+  // golden holds DECODED byte values; glen must equal n
+  let lenok = if glen == n then 1 else 0;
+  let k = [0];
+  let diff = [0];
+  let gob = [lenok];
+  while gob[0] == 1 {
+    let done = if k[0] >= n then 1 else 0;
+    let want = if done == 1 then 0 else golden[k[0]];
+    let got = if done == 1 then 0 else mine[k[0]];
+    let dd = want - got;
+    let _ = diff[0] = diff[0] + dd * dd;
+    let _ = k[0] = k[0] + 1;
+    let _ = gob[0] = 1 - done;
+    0
+  };
+  lenok * (1 - (if diff[0] > 0 then 1 else 0))
+}
+
+// parse an expression string with the embedded token stream and emit its module
+fn parity_module(expr_src: str, toks: [i64], ntoks: i64, tb: [i64], mod_b: [i64]) -> i64 {
+  let r = expr_parse(expr_src, toks, ntoks, tb);
+  let bad = if r < 0 then 1 else 0;
+  let body = zeros(512);
+  let bp = [0];
+  let _ = if bad == 0 then (let _ = p_emit_term(body, bp, tb, r) in 0) else 0;
+  let _ = wb(body, bp, 11);
+  let nm = p_emit_module(body, bp[0], mod_b);
+  nm * (1 - bad)
+}
+
+
+fn load_g1(dst: [i64]) -> i64 {
+  let _ = dst[0] = 0;
+  let _ = dst[1] = 97;
+  let _ = dst[2] = 115;
+  let _ = dst[3] = 109;
+  let _ = dst[4] = 1;
+  let _ = dst[5] = 0;
+  let _ = dst[6] = 0;
+  let _ = dst[7] = 0;
+  let _ = dst[8] = 1;
+  let _ = dst[9] = 5;
+  let _ = dst[10] = 1;
+  let _ = dst[11] = 96;
+  let _ = dst[12] = 0;
+  let _ = dst[13] = 1;
+  let _ = dst[14] = 126;
+  let _ = dst[15] = 3;
+  let _ = dst[16] = 2;
+  let _ = dst[17] = 1;
+  let _ = dst[18] = 0;
+  let _ = dst[19] = 7;
+  let _ = dst[20] = 8;
+  let _ = dst[21] = 1;
+  let _ = dst[22] = 4;
+  let _ = dst[23] = 109;
+  let _ = dst[24] = 97;
+  let _ = dst[25] = 105;
+  let _ = dst[26] = 110;
+  let _ = dst[27] = 0;
+  let _ = dst[28] = 0;
+  let _ = dst[29] = 10;
+  let _ = dst[30] = 12;
+  let _ = dst[31] = 1;
+  let _ = dst[32] = 10;
+  let _ = dst[33] = 0;
+  let _ = dst[34] = 66;
+  let _ = dst[35] = 1;
+  let _ = dst[36] = 66;
+  let _ = dst[37] = 2;
+  let _ = dst[38] = 66;
+  let _ = dst[39] = 3;
+  let _ = dst[40] = 126;
+  let _ = dst[41] = 124;
+  let _ = dst[42] = 11;
+  43
+}
+
+fn load_g2(dst: [i64]) -> i64 {
+  let _ = dst[0] = 0;
+  let _ = dst[1] = 97;
+  let _ = dst[2] = 115;
+  let _ = dst[3] = 109;
+  let _ = dst[4] = 1;
+  let _ = dst[5] = 0;
+  let _ = dst[6] = 0;
+  let _ = dst[7] = 0;
+  let _ = dst[8] = 1;
+  let _ = dst[9] = 5;
+  let _ = dst[10] = 1;
+  let _ = dst[11] = 96;
+  let _ = dst[12] = 0;
+  let _ = dst[13] = 1;
+  let _ = dst[14] = 126;
+  let _ = dst[15] = 3;
+  let _ = dst[16] = 2;
+  let _ = dst[17] = 1;
+  let _ = dst[18] = 0;
+  let _ = dst[19] = 7;
+  let _ = dst[20] = 8;
+  let _ = dst[21] = 1;
+  let _ = dst[22] = 4;
+  let _ = dst[23] = 109;
+  let _ = dst[24] = 97;
+  let _ = dst[25] = 105;
+  let _ = dst[26] = 110;
+  let _ = dst[27] = 0;
+  let _ = dst[28] = 0;
+  let _ = dst[29] = 10;
+  let _ = dst[30] = 10;
+  let _ = dst[31] = 1;
+  let _ = dst[32] = 8;
+  let _ = dst[33] = 0;
+  let _ = dst[34] = 66;
+  let _ = dst[35] = 3;
+  let _ = dst[36] = 66;
+  let _ = dst[37] = 4;
+  let _ = dst[38] = 124;
+  let _ = dst[39] = 66;
+  let _ = dst[40] = 2;
+  let _ = dst[41] = 126;
+  let _ = dst[42] = 11;
+  43
+}
+
+fn load_g3(dst: [i64]) -> i64 {
+  let _ = dst[0] = 0;
+  let _ = dst[1] = 97;
+  let _ = dst[2] = 115;
+  let _ = dst[3] = 109;
+  let _ = dst[4] = 1;
+  let _ = dst[5] = 0;
+  let _ = dst[6] = 0;
+  let _ = dst[7] = 0;
+  let _ = dst[8] = 1;
+  let _ = dst[9] = 5;
+  let _ = dst[10] = 1;
+  let _ = dst[11] = 96;
+  let _ = dst[12] = 0;
+  let _ = dst[13] = 1;
+  let _ = dst[14] = 126;
+  let _ = dst[15] = 3;
+  let _ = dst[16] = 2;
+  let _ = dst[17] = 1;
+  let _ = dst[18] = 0;
+  let _ = dst[19] = 7;
+  let _ = dst[20] = 8;
+  let _ = dst[21] = 1;
+  let _ = dst[22] = 4;
+  let _ = dst[23] = 109;
+  let _ = dst[24] = 97;
+  let _ = dst[25] = 105;
+  let _ = dst[26] = 110;
+  let _ = dst[27] = 0;
+  let _ = dst[28] = 0;
+  let _ = dst[29] = 10;
+  let _ = dst[30] = 10;
+  let _ = dst[31] = 1;
+  let _ = dst[32] = 8;
+  let _ = dst[33] = 0;
+  let _ = dst[34] = 66;
+  let _ = dst[35] = 228;
+  let _ = dst[36] = 0;
+  let _ = dst[37] = 66;
+  let _ = dst[38] = 50;
+  let _ = dst[39] = 125;
+  let _ = dst[40] = 11;
+  41
+}
+
+fn load_g4(dst: [i64]) -> i64 {
+  let _ = dst[0] = 0;
+  let _ = dst[1] = 97;
+  let _ = dst[2] = 115;
+  let _ = dst[3] = 109;
+  let _ = dst[4] = 1;
+  let _ = dst[5] = 0;
+  let _ = dst[6] = 0;
+  let _ = dst[7] = 0;
+  let _ = dst[8] = 1;
+  let _ = dst[9] = 5;
+  let _ = dst[10] = 1;
+  let _ = dst[11] = 96;
+  let _ = dst[12] = 0;
+  let _ = dst[13] = 1;
+  let _ = dst[14] = 126;
+  let _ = dst[15] = 3;
+  let _ = dst[16] = 2;
+  let _ = dst[17] = 1;
+  let _ = dst[18] = 0;
+  let _ = dst[19] = 7;
+  let _ = dst[20] = 8;
+  let _ = dst[21] = 1;
+  let _ = dst[22] = 4;
+  let _ = dst[23] = 109;
+  let _ = dst[24] = 97;
+  let _ = dst[25] = 105;
+  let _ = dst[26] = 110;
+  let _ = dst[27] = 0;
+  let _ = dst[28] = 0;
+  let _ = dst[29] = 10;
+  let _ = dst[30] = 9;
+  let _ = dst[31] = 1;
+  let _ = dst[32] = 7;
+  let _ = dst[33] = 0;
+  let _ = dst[34] = 66;
+  let _ = dst[35] = 7;
+  let _ = dst[36] = 66;
+  let _ = dst[37] = 6;
+  let _ = dst[38] = 126;
+  let _ = dst[39] = 11;
+  40
+}
+
+fn parity_case1() -> i64 {
+  let bad_sum = [0];
+  // corpus entry 1: "1 + 2 * 3"
+  let g1 = zeros(64);
+  let gl1 = load_g1(g1);
+  let m1 = zeros(256);
+  let t1t = zeros(4096);
+  let ptb = zeros(4096);
+  let n1 = lex("1 + 2 * 3", t1t);
+  let len1 = parity_module("1 + 2 * 3", t1t, n1, ptb, m1);
+  let ok1 = bytes_match(g1, gl1, m1, len1);
+    let bad1 = 1 - ok1;
+  bad_sum[0]
+}
+fn parity_case2() -> i64 {
+  let bad_sum = [0];
+  // corpus entry 2: "(3 + 4) * 2"
+  let g2 = zeros(64);
+  let gl2 = load_g2(g2);
+  let m2 = zeros(256);
+  let t2t = zeros(4096);
+  let ptb2 = zeros(4096);
+  let n2 = lex("(3 + 4) * 2", t2t);
+  let len2 = parity_module("(3 + 4) * 2", t2t, n2, ptb2, m2);
+  let ok2 = bytes_match(g2, gl2, m2, len2);
+    let bad2 = 1 - ok2;
+  bad_sum[0]
+}
+fn parity_case3() -> i64 {
+  let bad_sum = [0];
+  // corpus entry 3: "100 - 50"
+  let g3 = zeros(64);
+  let gl3 = load_g3(g3);
+  let m3 = zeros(256);
+  let t3t = zeros(4096);
+  let ptb3 = zeros(4096);
+  let n3 = lex("100 - 50", t3t);
+  let len3 = parity_module("100 - 50", t3t, n3, ptb3, m3);
+  let ok3 = bytes_match(g3, gl3, m3, len3);
+    let bad3 = 1 - ok3;
+  bad_sum[0]
+}
+fn parity_case4() -> i64 {
+  let bad_sum = [0];
+  // corpus entry 4: "7 * 6"
+  let g4 = zeros(64);
+  let gl4 = load_g4(g4);
+  let m4 = zeros(256);
+  let t4t = zeros(4096);
+  let ptb4 = zeros(4096);
+  let n4 = lex("7 * 6", t4t);
+  let len4 = parity_module("7 * 6", t4t, n4, ptb4, m4);
+  let ok4 = bytes_match(g4, gl4, m4, len4);
+    let bad4 = 1 - ok4;
+
+  bad_sum[0]
+}
+
+fn self_check() -> i64 {
+  let total = [0];
+  let _ = total[0] = total[0] + parity_case1();
+  let _ = total[0] = total[0] + parity_case2();
+  let _ = total[0] = total[0] + parity_case3();
+  let _ = total[0] = total[0] + parity_case4();
+  total[0]
+}
