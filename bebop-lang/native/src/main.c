@@ -85,6 +85,7 @@
 #include "energy.h"
 
 
+
 static void usage(void) {
     fprintf(stderr,
             "usage: bebopc version | glyphs | glyph NAME | tokens FILE\n"
@@ -531,7 +532,7 @@ static void cmd_run(const char *path, const char *fn_name, const char *arg) {
             Term *fn_term = NULL;
             Ty *fn_ty = NULL;
             if (bp_parse_fn_decl(txt, &reg, &fn_term, &fn_ty, err, sizeof err) != 0) {
-                fprintf(stderr, "fn parse error: %s\n", err);
+                fprintf(stderr, "fn parse error [%s] len=%zu at441=[%.40s]: %s\n", it->name ? it->name : "?", it->text_len, it->text ? it->text + 425 : "", err);
                 free(txt); bp_program_free(&prog); free(src); exit(1);
             }
             free(txt);
@@ -599,6 +600,7 @@ static void cmd_run(const char *path, const char *fn_name, const char *arg) {
 /* selfcompile: read a .bp file, load its functions, then feed the file's own
  * source text to its `compile_program` (self-hosting: the compiler compiles
  * itself). Prints the emitted-machine-code checksum. */
+
 static void cmd_selfcompile(const char *path) {
     FILE *f = fopen(path, "rb");
     if (!f) { fprintf(stderr, "cannot open %s\n", path); exit(1); }

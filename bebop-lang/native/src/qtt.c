@@ -1590,7 +1590,7 @@ static int env_i = 0;
  * are mutable and passed by reference, so their backing storage must stay valid
  * for the whole evaluation; bump-allocate (never reuse) and reset per top-level
  * eval. Sized for the self-host compiler's many small temporaries. */
-static FieldValue afv_arena[1 << 20];
+static FieldValue afv_arena[1 << 22]; /* 4M slots: selfcompile allocates >1M boxes/run */
 static size_t afv_pos = 0;
 static Env *env_new(const char *name, Value val, Env *next) {
     if (env_i >= (int)(sizeof env_pool / sizeof env_pool[0])) {
@@ -1605,6 +1605,25 @@ static Env *env_new(const char *name, Value val, Env *next) {
     return e;
 }
 
+/* BP_PROF diagnostic: dump per-kind eval counts to stderr, sorted desc. */
+static unsigned long prof_cnt[96];
+static void prof_dump(void) {
+    unsigned long tot = 0;
+    for (int i = 0; i < 96; i++) { tot += prof_cnt[i]; }
+    fprintf(stderr, "[bp-prof] total evals=%lu\n", tot);
+    for (int r = 0; r < 96; r++) {
+        unsigned long best = 0; int bi = -1;
+        for (int i = 0; i < 96; i++) {
+            if (prof_cnt[i] > best) { best = prof_cnt[i]; bi = i; }
+        }
+        if (bi < 0 || best == 0) { break; }
+        fprintf(stderr, "[bp-prof] kind=%2u n=%lu (%lu.%02lu%%)\n",
+                (unsigned)bi, best, best * 100 / (tot ? tot : 1),
+                (best * 10000 / (tot ? tot : 1)) % 100);
+        prof_cnt[bi] = 0;
+    }
+}
+
 static Value eval(const Term *t, Env *env);
 /* True if a Value is a plain scalar (int/bool/string/float) holding no closure
  * or container that could reference a captured env — safe to reclaim env after. */
@@ -1616,6 +1635,17 @@ static int is_scalar_value(const Value *v) {
 static Value eval(const Term *t, Env *env) {
     Value v;
     memset(&v, 0, sizeof v);
+    /* BP_PROF=1: per-kind eval counters (diagnostic; printed at exit). */
+    static int prof_on = -1;
+    if (prof_on < 0) { prof_on = getenv("BP_PROF") != NULL; }
+    if (prof_on) {
+        static int prof_reg = 0;
+        prof_cnt[t->kind & 95]++;
+        if (!prof_reg) {
+            prof_reg = 1;
+            atexit(prof_dump);
+        }
+    }
     switch (t->kind) {
         case TERM_LIT:
             v.kind = t->bval ? 1 : 0;
@@ -1742,6 +1772,7 @@ static Value eval(const Term *t, Env *env) {
             int n = t->nfields;
             if (n < 0 || n > 4096) { v.kind = -1; return v; }
             if (afv_pos + (size_t)n > sizeof afv_arena / sizeof afv_arena[0]) {
+                static int ax = 0; if (ax++ < 3) fprintf(stderr, "[arena] exhausted pos=%zu need=%d\n", afv_pos, n);
                 v.kind = -1; return v;
             }
             FieldValue *fvs = &afv_arena[afv_pos];
@@ -1912,6 +1943,23 @@ static Value eval(const Term *t, Env *env) {
             }
             return v;
         }
+        case TERM_ZEROS: {
+            Value nv2 = t->a ? eval(t->a, env) : (Value){0};
+            if (nv2.kind != 0 || nv2.i < 0 || nv2.i > 10000000) { v.kind = -1; return v; }
+            long zn = nv2.i;
+            if ((size_t)zn > sizeof afv_arena / sizeof afv_arena[0] - afv_pos) {
+                static int zx = 0;
+                if (zx++ < 3) fprintf(stderr, "[arena] zeros(%ld) exhausted pos=%zu\n", zn, afv_pos);
+                v.kind = -1; return v;
+            }
+            FieldValue *fvs = &afv_arena[afv_pos];
+            afv_pos += (size_t)zn;
+            for (long q = 0; q < zn; q++) { fvs[q].name = NULL; fvs[q].val.kind = 0; fvs[q].val.i = 0; }
+            v.kind = 6;
+            v.fv = fvs;
+            v.nfv = (int)zn;
+            return v;
+        }
         case TERM_EXEC: {
             /* exec(words, count, arg0): mmap + run AArch64 words (self-hosting bridge).
              * t->a = array of instruction words (i64), t->b = word count, t->c = x0 arg. */
@@ -1952,6 +2000,7 @@ static Value eval(const Term *t, Env *env) {
             int n = t->nfields;
             if (n < 0 || n > 16384) { v.kind = -1; return v; }
             if (afv_pos + (size_t)n > sizeof afv_arena / sizeof afv_arena[0]) {
+                static int ax = 0; if (ax++ < 3) fprintf(stderr, "[arena] exhausted pos=%zu need=%d\n", afv_pos, n);
                 v.kind = -1; return v; /* arena exhausted */
             }
             FieldValue *fvs = &afv_arena[afv_pos];

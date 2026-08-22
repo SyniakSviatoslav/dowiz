@@ -329,6 +329,8 @@ static Term *parse_primary(P *p) {
             t->kind = TERM_CHR; /* placeholder: one arg parsed in postfix */
         } else if (strcmp(buf, "str_len") == 0) {
             t->kind = TERM_STR_LEN; /* placeholder: one arg parsed in postfix */
+        } else if (strcmp(buf, "zeros") == 0) {
+            t->kind = TERM_ZEROS; /* placeholder: one arg parsed in postfix: zeros(n) -> fresh [n]i64 */
         } else if (strcmp(buf, "exec") == 0) {
             t->kind = TERM_EXEC; /* placeholder: two args parsed in postfix */
         } else if (g_reg && enum_ctor_lookup(buf)) {
@@ -405,6 +407,16 @@ static Term *parse_primary(P *p) {
     }
     /* postfix: application atom(arg) and indexing atom[i] */
     while (p->s[p->pos] == '(' || p->s[p->pos] == '[') {
+        if (atom->kind == TERM_ZEROS && p->s[p->pos] == '(') {
+            p->pos++;
+            Term *sa = parse_expr(p);
+            if (!sa) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ')') { err(p, "expected ')'"); return NULL; }
+            p->pos++;
+            atom->a = sa;
+            continue;
+        }
         if (atom->kind == TERM_STR_LEN && p->s[p->pos] == '(') {
             p->pos++;
             Term *sa = parse_expr(p);
