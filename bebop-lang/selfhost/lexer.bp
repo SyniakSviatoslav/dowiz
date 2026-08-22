@@ -136,3 +136,129 @@ fn keyword_tag(s: str) -> i64 {
   let tag = if s == "theorem" then 9 else tag;
   tag
 }
+
+
+// ---- B1-1: full bp_lex parity — flat tokens [kind,off,len,line] ----
+// kinds mirror BpTokKind: 0=EOF 1=IDENT 2=GLYPH 3=NUMBER 4=PUNCT.
+fn utf8_len(c: i64) -> i64 {
+  let is2 = (if c >= 192 then 1 else 0) * (if c <= 223 then 1 else 0);
+  let is3 = (if c >= 224 then 1 else 0) * (if c <= 239 then 1 else 0);
+  let is4 = (if c >= 240 then 1 else 0) * (if c <= 247 then 1 else 0);
+  is2 * 2 + is3 * 3 + is4 * 4 + (1 - is2) * (1 - is3) * (1 - is4)
+}
+fn scan_ident(src: str, i: i64) -> i64 {
+  let strn = str_len(src);
+  let j = i;
+  let go = 1;
+  while go == 1 {
+    let at_end = if j >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(src, j);
+    let keep = is_ident_char(ch) * (1 - at_end);
+    let j = j + keep;
+    let go = keep;
+    0
+  };
+  j
+}
+fn scan_digits(src: str, i: i64) -> i64 {
+  let strn = str_len(src);
+  let j = i;
+  let go = 1;
+  while go == 1 {
+    let at_end = if j >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(src, j);
+    let keep = is_digit(ch) * (1 - at_end);
+    let j = j + keep;
+    let go = keep;
+    0
+  };
+  j
+}
+fn skip_lcomment(src: str, i: i64) -> i64 {
+  let strn = str_len(src);
+  let j = i;
+  let go = 1;
+  while go == 1 {
+    let at_end = if j >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(src, j);
+    let is_nl = if ch == 10 then 1 else 0;
+    let keep = (1 - at_end) * (1 - is_nl);
+    let j = j + keep;
+    let go = keep;
+    0
+  };
+  j
+}
+fn lex_emit(toks: [i64], n: [i64], kind: i64, off: i64, len: i64, line: i64) -> i64 {
+  let b = n[0] * 4;
+  let _ = toks[b] = kind;
+  let _ = toks[b + 1] = off;
+  let _ = toks[b + 2] = len;
+  let _ = toks[b + 3] = line;
+  let _ = n[0] = n[0] + 1;
+  n[0]
+}
+fn lex(src: str, toks: [i64]) -> i64 {
+  let strn = str_len(src);
+  let i = [0];
+  let line = [1];
+  let n = [0];
+  let done = if strn == 0 then 1 else 0;
+  while done == 0 {
+    let at_end = if i[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(src, i[0]);
+    let nxt = if i[0] + 1 < strn then char(src, i[0] + 1) else 0;
+    let is_nl = if ch == 10 then 1 else 0;
+    let is_sp = (if ch == 32 then 1 else 0) + (if ch == 9 then 1 else 0) + (if ch == 13 then 1 else 0);
+    let is_lc = (if ch == 47 then 1 else 0) * (if nxt == 47 then 1 else 0);
+    let is_id = lex_ident_start(ch);
+    let is_num = is_digit(ch);
+    let is_gl = if ch >= 128 then 1 else 0;
+    let is_pn = (1 - is_nl) * (1 - is_sp) * (1 - is_lc) * (1 - is_id) * (1 - is_num) * (1 - is_gl) * (1 - at_end);
+    let _ = line[0] = line[0] + is_nl;
+    let lc_end = if is_lc == 1 then skip_lcomment(src, i[0]) else i[0];
+    let id_end = if is_id == 1 then scan_ident(src, i[0]) else i[0];
+    let num_end = if is_num == 1 then scan_digits(src, i[0]) else i[0];
+    let gl_len = utf8_len(ch) * is_gl;
+    let _ = if is_id == 1 then (let _ = lex_emit(toks, n, 1, i[0], id_end - i[0], line[0]) in 0) else 0;
+    let _ = if is_num == 1 then (let _ = lex_emit(toks, n, 3, i[0], num_end - i[0], line[0]) in 0) else 0;
+    let _ = if is_gl == 1 then (let _ = lex_emit(toks, n, 2, i[0], gl_len, line[0]) in 0) else 0;
+    let _ = if is_pn == 1 then (let _ = lex_emit(toks, n, 4, i[0], 1, line[0]) in 0) else 0;
+    let step = is_nl + is_sp + is_lc * (lc_end - i[0]) + is_id * (id_end - i[0]) + is_num * (num_end - i[0]) + is_gl * gl_len + is_pn;
+    let _ = i[0] = i[0] + step;
+    let done = if i[0] >= strn then 1 else 0;
+    0
+  };
+  let _ = lex_emit(toks, n, 0, strn, 0, line[0]);
+  n[0]
+}
+
+fn self_check() -> i64 {
+  let src = "ab 12 //hey\né€ x_1 77z";
+  let toks = zeros(64);
+  let cnt = lex(src, toks);
+  let f1 = if cnt == 8 then 0 else 1;
+  let f2 = if toks[0] == 1 then 0 else 1;
+  let f3 = if toks[1] == 0 then 0 else 1;
+  let f4 = if toks[2] == 2 then 0 else 1;
+  let f5 = if toks[4] == 3 then 0 else 1;
+  let f6 = if toks[5] == 3 then 0 else 1;
+  let f7 = if toks[6] == 2 then 0 else 1;
+  let f8 = if toks[8] == 2 then 0 else 1;
+  let f9 = if toks[9] == 12 then 0 else 1;
+  let f10 = if toks[10] == 2 then 0 else 1;
+  let f11 = if toks[11] == 2 then 0 else 1;
+  let f12 = if toks[12] == 2 then 0 else 1;
+  let f13 = if toks[13] == 14 then 0 else 1;
+  let f14 = if toks[14] == 3 then 0 else 1;
+  let f15 = if toks[15] == 2 then 0 else 1;
+  let f16 = if toks[16] == 1 then 0 else 1;
+  let f17 = if toks[17] == 18 then 0 else 1;
+  let f18 = if toks[20] == 3 then 0 else 1;
+  let f19 = if toks[21] == 22 then 0 else 1;
+  let f20 = if toks[24] == 1 then 0 else 1;
+  let f21 = if toks[25] == 24 then 0 else 1;
+  let f22 = if toks[26] == 1 then 0 else 1;
+  let f23 = if toks[28] == 0 then 0 else 1;
+  f1 + f2 + f3 + f4 + f5 + f6 + f7 + f8 + f9 + f10 + f11 + f12 + f13 + f14 + f15 + f16 + f17 + f18 + f19 + f20 + f21 + f22 + f23
+}
