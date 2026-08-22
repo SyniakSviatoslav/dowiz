@@ -660,7 +660,7 @@ static void cmd_selfcompile(const char *path) {
             Term *fn_term = NULL;
             Ty *fn_ty = NULL;
             if (bp_parse_fn_decl(txt, &reg, &fn_term, &fn_ty, err, sizeof err) != 0) {
-                fprintf(stderr, "fn parse error: %s\n", err);
+                fprintf(stderr, "fn parse error [%s len=%zu]: %s\n", it->name ? it->name : "?", it->text_len, err);
                 free(txt); bp_program_free(&prog); free(src); exit(1);
             }
             free(txt);
@@ -868,7 +868,9 @@ static void cmd_check(const char *path) {
             Term *fn_term = NULL;
             Ty *fn_ty = NULL;
             if (bp_parse_fn_decl(txt, &reg, &fn_term, &fn_ty, err, sizeof err) != 0) {
-                fprintf(stderr, "fn parse error: %s\n", err);
+                fprintf(stderr, "fn parse error [%s len=%zu] head80=[%.80s]: %s\n",
+                        it->name ? it->name : "?", it->text_len,
+                        it->text ? it->text : "", err);
                 free(txt);
                 bp_program_free(&prog);
                 free(src);

@@ -499,7 +499,11 @@ int bp_parse_fn_decl(const char *src, TyRegistry *reg, Term **out,
     size_t bl = (size_t)(be - bt);
     char *bs = malloc(bl + 1); memcpy(bs, bt, bl); bs[bl] = '\0';
     Term *body = NULL;
-    if (expr_parse(bs, &body, err, cap) != 0) { free(bs); return -1; }
+    if (expr_parse(bs, &body, err, cap) != 0) {
+        FILE *df = fopen("/tmp/failbody.txt", "wb");
+        if (df) { fputs(bs, df); fclose(df); }
+        free(bs); return -1;
+    }
     free(bs);
     /* build nested lambdas (currying) */
     static Term lam_pool[1024];
