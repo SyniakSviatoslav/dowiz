@@ -379,7 +379,11 @@ VERIFY: `./build/bebopc selfcompile ../selfhost/<full>.bp` stable; bit-match.
 
 ## Swarm B3-2: port ALL native self-tests to .bp selftests
 GOAL: 100% of native self-test modules have a .bp selftest twin.
-STATUS (2026-08-21): 134/136 selftest PASS; 2 files block (expr_compile.bp, selftest_exec.bp — unbound emit_call).
+STATUS (2026-08-22): B1-1 lexer.bp DONE — full bp_lex parity, self_check 0.
+  B1-2 parser.bp DONE — item-level bp_parse parity: items_parse(src,toks,n,out)
+  flat records [kind,namehash,nameoff,namelen,txtoff,txtlen], self_check 0,
+  strict+check green. STATE RULE: loop control state must live in [i64] boxes
+  (scalar let-rebinding inside while bodies unreliable).
 STEPS: enumerate native/src/*_self_test/_test functions; port each to a .bp
 self_check in the matching module; assert every one returns 0.
 VERIFY: a sweep script runs every selftest; all green.
