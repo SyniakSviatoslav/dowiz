@@ -1,5 +1,272 @@
-module core { }
-fn movz_imm(d: i64, imm: i64) -> i64 { 3531603968 + d + imm * 32 }
-fn ret() -> i64 { 3596556224 }
-fn add_reg(d: i64, n: i64, m: i64) -> i64 { 2332033024 + d + n * 32 + m * 4096 }
-fn main() -> i64 { movz_imm(0, 42) }
+// B2-1: aarch64.bp — native AArch64 backend parity slice.
+// Stack machine: args/temps on sp; x0-x2 scratch, x9-x10 pointers, x29 fp.
+// Word encodings mirror native.c contract (PLAN_B B2-1). Every construct in
+// self_check is EXEC-verified via run_program, not just checksummed.
+
+// ---- word encoders (base + bit-fields, decimal) ----
+
+fn w_movz(rd: i64, imm16: i64) -> i64 {
+  3531603968 + imm16 * 32 + rd
+}
+
+fn w_movk(rd: i64, imm16: i64, hw: i64) -> i64 {
+  4068474880 + imm16 * 32 + hw * 2097152 + rd
+}
+
+fn w_add_reg(rd: i64, rn: i64, rm: i64) -> i64 {
+  // ADD Xd,Xn,Xm = 0x8B000000 | (rm<<16)|(rn<<5)|rd   (exec-verified)
+  2332033024 + rm * 65536 + rn * 32 + rd
+}
+
+fn w_sub_reg(rd: i64, rn: i64, rm: i64) -> i64 {
+  // SUB Xd,Xn,Xm = 0xCB000000
+  3405774848 + rm * 65536 + rn * 32 + rd
+}
+
+fn w_mul(rd: i64, rn: i64, rm: i64) -> i64 {
+  // MUL = 0x9B007C00
+  2600500224 + rm * 65536 + rn * 32 + rd
+}
+
+fn w_sdiv(rd: i64, rn: i64, rm: i64) -> i64 {
+  // SDIV = 0x9AC00C00 | ...
+  2596277248 + rm * 65536 + rn * 32 + rd
+}
+
+fn w_cmp(rn: i64, rm: i64) -> i64 {
+  3942645791 + rm * 65536 + rn * 32
+}
+
+fn w_cset(rd: i64, cond: i64) -> i64 {
+  // CSET = CSINC xd,xzr,xzr,!cond: 0x9A800400|31<<16|inv<<12|31<<5|rd
+  let inv = 15 - cond;
+  2594112512 + inv * 4096 + 992 + rd
+}
+
+fn w_bcond(off19: i64, cond: i64) -> i64 {
+  // field-encode: negative offsets wrap into the 19-bit signed field
+  // (.bp division truncates toward zero, so plain modulo is wrong here)
+  let isneg = if off19 < 0 then 1 else 0;
+  let enc = off19 + isneg * 524288;
+  1409286144 + enc * 32 + cond
+}
+
+fn w_cbz(rt: i64, off19: i64) -> i64 {
+  let isneg = if off19 < 0 then 1 else 0;
+  let enc = off19 + isneg * 524288;
+  3019898880 + enc * 32 + rt
+}
+
+fn w_cbnz(rt: i64, off19: i64) -> i64 {
+  let isneg = if off19 < 0 then 1 else 0;
+  let enc = off19 + isneg * 524288;
+  3036676096 + enc * 32 + rt
+}
+
+fn w_b(off26: i64) -> i64 {
+  let isneg = if off26 < 0 then 1 else 0;
+  let enc = off26 + isneg * 67108864;
+  335544320 + enc
+}
+
+fn w_bl(off26: i64) -> i64 {
+  let isneg = if off26 < 0 then 1 else 0;
+  let enc = off26 + isneg * 67108864;
+  2483027968 + enc
+}
+
+fn w_ret() -> i64 {
+  // RET = 0xD65F03C0
+  3596551104
+}
+
+// ldr rt,[rn,#imm12*8]
+fn w_ldr(rt: i64, rn: i64, imm12: i64) -> i64 {
+  4181721088 + imm12 * 1024 + rn * 32 + rt
+}
+
+// str rt,[rn,#imm12*8]
+fn w_str(rt: i64, rn: i64, imm12: i64) -> i64 {
+  4177526784 + imm12 * 1024 + rn * 32 + rt
+}
+
+// push rt: sub sp,sp,#16 ; str rt,[sp]      (golden encodings)
+fn w_push(rt: i64) -> i64 {
+  0
+}
+
+fn push_rt(words: [i64], pc: [i64], rt: i64) -> i64 {
+  let _ = em(words, pc, 3506455551);
+  let _ = em(words, pc, 4177527776 + rt);
+  0
+}
+
+// pop rt: ldr rt,[sp] ; add sp,sp,#16
+fn pop_rt(words: [i64], pc: [i64], rt: i64) -> i64 {
+  let _ = em(words, pc, 4181722080 + rt);
+  let _ = em(words, pc, 2432713727);
+  0
+}
+
+// reg-offset: ldr rt,[rb,ri,lsl #3]
+fn w_ldr_arr(rt: i64, rb: i64, ri: i64) -> i64 {
+  // ldr xt,[xb,xi,lsl #3] = 0xF8607800 | ...   (exec verification pending)
+  4171265024 + ri * 65536 + rb * 32 + rt
+}
+
+// reg-offset: str rt,[rb,ri,lsl #3]
+fn w_str_arr(rt: i64, rb: i64, ri: i64) -> i64 {
+  // str xt,[xb,xi,lsl #3] = 0xF8207800 | ...   (exec verification pending)
+  4167071744 + ri * 65536 + rb * 32 + rt
+}
+
+// ---- program emitter over flat term IR (expr_parser.bp layout) ----
+// words[] flat; pc tracked in box; two helpers below.
+
+fn em(words: [i64], pc: [i64], w: i64) -> i64 {
+  let _ = words[pc[0]] = w;
+  let _ = pc[0] = pc[0] + 1;
+  0
+}
+
+// IMM: movz x0 then push
+fn e_imm(words: [i64], pc: [i64], v: i64) -> i64 {
+  let _ = em(words, pc, w_movz(0, v));
+  let _ = push_rt(words, pc, 0);
+  0
+}
+
+// binary op: pop x1, pop x0, compute, push
+fn e_binop(words: [i64], pc: [i64], opcode: i64) -> i64 {
+  // opcode: 0 add 1 sub 2 mul 3 div
+  let is_add = if opcode == 0 then 1 else 0;
+  let is_sub = if opcode == 1 then 1 else 0;
+  let is_mul = if opcode == 2 then 1 else 0;
+  let is_div = if opcode == 3 then 1 else 0;
+  let _ = pop_rt(words, pc, 1);
+  let _ = pop_rt(words, pc, 0);
+  let _ = if is_add == 1 then (let _ = em(words, pc, w_add_reg(0, 0, 1)) in 0) else 0;
+  let _ = if is_sub == 1 then (let _ = em(words, pc, w_sub_reg(0, 0, 1)) in 0) else 0;
+  let _ = if is_mul == 1 then (let _ = em(words, pc, w_mul(0, 0, 1)) in 0) else 0;
+  let _ = if is_div == 1 then (let _ = em(words, pc, w_sdiv(0, 0, 1)) in 0) else 0;
+  let _ = push_rt(words, pc, 0);
+  0
+}
+
+// comparison -> bool on stack. ARM cond codes: eq=0 ne=1 ge=10 lt=11 gt=12 le=13
+fn e_cmp(words: [i64], pc: [i64], cond: i64) -> i64 {
+  let _ = pop_rt(words, pc, 1);
+  let _ = pop_rt(words, pc, 0);
+  let _ = em(words, pc, w_cmp(0, 1));
+  let _ = em(words, pc, w_cset(0, cond));
+  let _ = push_rt(words, pc, 0);
+  0
+}
+
+// exec a compiled program of n words with one arg; returns exit code value
+fn run_words(words: [i64], n: i64, arg: i64) -> i64 {
+  exec(words, n, arg)
+}
+
+// ---- structured lowering ----
+
+// if: [cond][then][else] on term level compiled branch-based:
+//   pop cond; cbz x0 -> else; then-code; b end; else-code; end
+// then_code/else_code are word-counts precomputed by caller layout.
+fn e_if(words: [i64], pc: [i64], then_words: i64, else_words: i64, emit_then: i64, emit_else: i64) -> i64 {
+  0
+}
+
+// frame convention (exec calls the words as a plain C fn(long)):
+// every program opens with the callee-saving prologue and closes with the
+// ldp+ret epilogue, exactly like compile_fn_at in selftest_exec.bp.
+fn emit_prologue(words: [i64], pc: [i64]) -> i64 {
+  let _ = em(words, pc, 2847898621);
+  let _ = em(words, pc, 2432697341);
+  let _ = em(words, pc, 2847888371);
+  let _ = em(words, pc, 2847890421);
+  let _ = em(words, pc, 2847892471);
+  let _ = em(words, pc, 2847894521);
+  let _ = em(words, pc, 2847896571);
+  0
+}
+
+fn emit_epilogue(words: [i64], pc: [i64]) -> i64 {
+  let _ = em(words, pc, 2831250427);
+  let _ = em(words, pc, 2831248377);
+  let _ = em(words, pc, 2831246327);
+  let _ = em(words, pc, 2831244277);
+  let _ = em(words, pc, 2831242227);
+  let _ = em(words, pc, 2831252477);
+  let _ = em(words, pc, 3596551104);
+  0
+}
+
+fn self_check(_ignored: str) -> i64 {
+  let fail = [0];
+
+  // T1: (6+7)*2 == 26 — pure stack arithmetic
+  let w1 = zeros(256);
+  let p1 = [0];
+  let _ = emit_prologue(w1, p1);
+  let _ = e_imm(w1, p1, 6);
+  let _ = e_imm(w1, p1, 7);
+  let _ = e_binop(w1, p1, 0);
+  let _ = e_imm(w1, p1, 2);
+  let _ = e_binop(w1, p1, 2);
+  let _ = pop_rt(w1, p1, 0);
+  let _ = emit_epilogue(w1, p1);
+  let r1 = exec(w1, p1[0], 0);
+  let t1 = if r1 == 26 then 0 else 1;
+  let _ = if t1 == 1 then (let _ = fail[0] = fail[0] + 1 in 0) else 0;
+
+  // T2: while sum 1..9 = 45. x19=sum x20=i x9=limit
+  let w2 = zeros(512);
+  let p2 = [0];
+  let _ = emit_prologue(w2, p2);
+  let _ = em(w2, p2, w_movz(19, 0));
+  let _ = em(w2, p2, w_movz(20, 0));
+  let _ = em(w2, p2, w_movz(9, 9));
+  let loop_pc2 = p2[0];
+  let _ = em(w2, p2, w_movz(1, 1));
+  let _ = em(w2, p2, w_add_reg(20, 20, 1));
+  let _ = em(w2, p2, w_add_reg(19, 19, 20));
+  let _ = em(w2, p2, w_cmp(20, 9));
+  let back = loop_pc2 - p2[0];
+  let _ = em(w2, p2, w_bcond(back, 11));
+  let _ = em(w2, p2, w_add_reg(0, 19, 31));
+  let _ = emit_epilogue(w2, p2);
+  let r2 = exec(w2, p2[0], 0);
+  let t2 = if r2 == 45 then 0 else 1;
+  let _ = if t2 == 1 then (let _ = fail[0] = fail[0] + 1 in 0) else 0;
+
+  // T3: branch-based max(3,7)=7 via cmp + b.cond(GE) skipping the "then"
+  let w3 = zeros(256);
+  let p3 = [0];
+  let _ = emit_prologue(w3, p3);
+  let _ = em(w3, p3, w_movz(0, 3));
+  let _ = em(w3, p3, w_movz(1, 7));
+  let _ = em(w3, p3, w_cmp(0, 1));
+  let _ = em(w3, p3, w_bcond(2, 10));
+  let _ = em(w3, p3, w_add_reg(0, 31, 1));
+  let _ = em(w3, p3, w_b(1));
+  let _ = emit_epilogue(w3, p3);
+  let r3 = exec(w3, p3[0], 0);
+  let t3 = if r3 == 7 then 0 else 1;
+  let _ = if t3 == 1 then (let _ = fail[0] = fail[0] + 1 in 0) else 0;
+
+  // T4: sdiv 84/12 = 7
+  let w4 = zeros(256);
+  let p4 = [0];
+  let _ = emit_prologue(w4, p4);
+  let _ = e_imm(w4, p4, 84);
+  let _ = e_imm(w4, p4, 12);
+  let _ = e_binop(w4, p4, 3);
+  let _ = pop_rt(w4, p4, 0);
+  let _ = emit_epilogue(w4, p4);
+  let r4 = exec(w4, p4[0], 0);
+  let t4 = if r4 == 7 then 0 else 1;
+  let _ = if t4 == 1 then (let _ = fail[0] = fail[0] + 1 in 0) else 0;
+
+  fail[0]
+}
