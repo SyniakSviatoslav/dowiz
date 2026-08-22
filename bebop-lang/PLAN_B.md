@@ -297,6 +297,8 @@ REFERENCE: `native/src/codegen.c` data cases.
 GOAL: lower data IR ops to wasm memory + i32/i64.
 CONTRACT: wasm linear memory; alloc = grow_memory or bump pointer in a global;
 store/load via i64.store/i64.load (offset+align immediate).
+STATUS (2026-08-22): SLICE DONE — memory interpreter-verified: store/load
+  roundtrip, indexed two-slot sum, multi-byte ULEB128.
 STEPS:
 1. Lower ALLOC/LD_FIELD/ST_FIELD/LD_ARR/ST_ARR/SYSCALL(→unreachable or import)
    to wasm memory ops; strings → data segment + i32.const address.
@@ -376,6 +378,8 @@ STEPS:
    struct, enum, match, array, string, syscall, recursion).
 2. For each, compute the .bp checksum AND the C checksum (via a small C probe
    that dumps native_eval's em_code words as a sum). Assert equality.
+STATUS (2026-08-22): SLICE DONE — 4/4 constructs byte-identical to C output
+  (parity.bp vs `bebopc compile` goldens). True signed-LEB128 implemented.
 3. Report a per-construct parity table; any mismatch = a bug to fix (document).
 VERIFY: all constructs bit-match; report the table.
 
