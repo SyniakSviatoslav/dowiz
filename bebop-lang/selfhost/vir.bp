@@ -1,0 +1,191 @@
+// B2-5: vir.bp — VIR vector lowering to hand-encoded AArch64 NEON, run
+// through the exec bridge. Programs are self-contained: operands are stored
+// into a stack window by scalar stores, loaded via ld1 {v},[x19], combined
+// in NEON registers (v0..v2), and the first result lane is returned in x0.
+// Encodings match native/src/vir.c exactly.
+
+fn em(words: [i64], pc: [i64], w: i64) -> i64 {
+  let _ = words[pc[0]] = w;
+  let _ = pc[0] = pc[0] + 1;
+  0
+}
+
+fn w_movz(rd: i64, imm16: i64) -> i64 {
+  3531603968 + imm16 * 32 + rd
+}
+
+fn w_add_imm(rd: i64, rn: i64, imm12: i64) -> i64 {
+  2432696320 + imm12 * 1024 + rn * 32 + rd
+}
+
+fn w_sub_imm(rd: i64, rn: i64, imm12: i64) -> i64 {
+  3506438144 + imm12 * 1024 + rn * 32 + rd
+}
+
+fn w_ldr(rt: i64, rn: i64, imm12: i64) -> i64 {
+  4181721088 + imm12 * 1024 + rn * 32 + rt
+}
+
+fn w_str(rt: i64, rn: i64, imm12: i64) -> i64 {
+  4177526784 + imm12 * 1024 + rn * 32 + rt
+}
+
+// NEON encodings (from vir.c, decimal via script conversion)
+fn v_add_2d(rd: i64, rn: i64, rm: i64) -> i64 {
+  1323336704 + rm * 65536 + rn * 32 + rd
+}
+
+fn v_sub_2d(rd: i64, rn: i64, rm: i64) -> i64 {
+  1860207616 + rm * 65536 + rn * 32 + rd
+}
+
+fn v_mul_4s(rd: i64, rn: i64, rm: i64) -> i64 {
+  1319148544 + rm * 65536 + rn * 32 + rd
+}
+
+// ld1 {vt.2d},[xn]
+fn v_ld1_2d(vt: i64, xn: i64) -> i64 {
+  1279294464 + xn * 32 + vt
+}
+
+// st1 {vt.2d},[xn]
+fn v_st1_2d(vt: i64, xn: i64) -> i64 {
+  1275100160 + xn * 32 + vt
+}
+
+// ld1 {vt.4s},[xn]
+fn v_ld1_4s(vt: i64, xn: i64) -> i64 {
+  1279293440 + xn * 32 + vt
+}
+
+// st1 {vt.4s},[xn]
+fn v_st1_4s(vt: i64, xn: i64) -> i64 {
+  1275099136 + xn * 32 + vt
+}
+
+fn emit_prologue(words: [i64], pc: [i64]) -> i64 {
+  let _ = em(words, pc, 2847898621);
+  let _ = em(words, pc, 2432697341);
+  let _ = em(words, pc, 2847888371);
+  let _ = em(words, pc, 2847890421);
+  let _ = em(words, pc, 2847892471);
+  let _ = em(words, pc, 2847894521);
+  let _ = em(words, pc, 2847896571);
+  0
+}
+
+fn emit_epilogue(words: [i64], pc: [i64]) -> i64 {
+  let _ = em(words, pc, 2831250427);
+  let _ = em(words, pc, 2831248377);
+  let _ = em(words, pc, 2831246327);
+  let _ = em(words, pc, 2831244277);
+  let _ = em(words, pc, 2831242227);
+  let _ = em(words, pc, 2831252477);
+  let _ = em(words, pc, 3596551104);
+  0
+}
+
+// store two 64-bit lanes at [x19] and [x19+8]
+fn store_pair(words: [i64], pc: [i64], a0: i64, a1: i64) -> i64 {
+  let _ = em(words, pc, w_movz(0, a0));
+  let _ = em(words, pc, w_str(0, 19, 0));
+  let _ = em(words, pc, w_movz(0, a1));
+  let _ = em(words, pc, w_str(0, 19, 1));
+  0
+}
+
+// shared prologue for vector tests: frame window + arena base x19 + pair a
+fn v_setup(words: [i64], pc: [i64], a0: i64, a1: i64, b0: i64, b1: i64) -> i64 {
+  let _ = emit_prologue(words, pc);
+  let _ = em(words, pc, w_sub_imm(31, 31, 4096));
+  let _ = em(words, pc, w_add_imm(19, 31, 2048));
+  let _ = store_pair(words, pc, a0, a1);
+  let _ = em(words, pc, w_add_imm(20, 19, 16));
+  let _ = store_pair_b(words, pc, b0, b1);
+  0
+}
+
+// store b-pair at [x20]/[x20+8]
+fn store_pair_b(words: [i64], pc: [i64], b0: i64, b1: i64) -> i64 {
+  let _ = em(words, pc, w_movz(0, b0));
+  let _ = em(words, pc, w_str(0, 20, 0));
+  let _ = em(words, pc, w_movz(0, b1));
+  let _ = em(words, pc, w_str(0, 20, 1));
+  0
+}
+
+// out region pointer x21 = x19+32
+fn v_out_ptr(words: [i64], pc: [i64]) -> i64 {
+  let _ = em(words, pc, w_add_imm(21, 19, 32));
+  0
+}
+
+fn self_check(_ignored: str) -> i64 {
+  let fail = [0];
+
+  // T1: ADD 2D — lanes {11,22}+{1000? no: keep imm16-safe} => use {11,22}+{300,400}: lane0=311
+  let w1 = zeros(256);
+  let p1 = [0];
+  let _ = v_setup(w1, p1, 11, 22, 300, 400);
+  let _ = v_out_ptr(w1, p1);
+  let _ = em(w1, p1, v_ld1_2d(1, 19));
+  let _ = em(w1, p1, v_ld1_2d(2, 20));
+  let _ = em(w1, p1, v_add_2d(0, 1, 2));
+  let _ = em(w1, p1, v_st1_2d(0, 21));
+  let _ = em(w1, p1, w_ldr(0, 19, 4));
+  let _ = em(w1, p1, w_add_imm(31, 31, 4096));
+  let _ = emit_epilogue(w1, p1);
+  let r1 = exec(w1, p1[0], 0);
+  let t1 = if r1 == 311 then 0 else 1;
+  let _ = if t1 == 1 then (let _ = fail[0] = fail[0] + 1 in 0) else 0;
+
+  // T2: SUB 2D — {33,44}-{3,4} lane0=30
+  let w2 = zeros(256);
+  let p2 = [0];
+  let _ = v_setup(w2, p2, 33, 44, 3, 4);
+  let _ = v_out_ptr(w2, p2);
+  let _ = em(w2, p2, v_ld1_2d(1, 19));
+  let _ = em(w2, p2, v_ld1_2d(2, 20));
+  let _ = em(w2, p2, v_sub_2d(0, 1, 2));
+  let _ = em(w2, p2, v_st1_2d(0, 21));
+  let _ = em(w2, p2, w_ldr(0, 19, 4));
+  let _ = em(w2, p2, w_add_imm(31, 31, 4096));
+  let _ = emit_epilogue(w2, p2);
+  let r2 = exec(w2, p2[0], 0);
+  let t2 = if r2 == 30 then 0 else 1;
+  let _ = if t2 == 1 then (let _ = fail[0] = fail[0] + 1 in 0) else 0;
+
+  // T3: MUL 4S — {5,6,7,8}*{2,2,2,2} lane0=10; four scalar stores per operand
+  let w3 = zeros(256);
+  let p3 = [0];
+  let _ = emit_prologue(w3, p3);
+  let _ = em(w3, p3, w_sub_imm(31, 31, 4096));
+  let _ = em(w3, p3, w_add_imm(19, 31, 2048));
+  let _ = em(w3, p3, w_movz(0, 5));
+  let _ = em(w3, p3, w_str(0, 19, 0));
+  let _ = em(w3, p3, w_movz(0, 6));
+  let _ = em(w3, p3, w_str(0, 19, 1));
+  let _ = em(w3, p3, w_movz(0, 7));
+  let _ = em(w3, p3, w_str(0, 19, 2));
+  let _ = em(w3, p3, w_movz(0, 8));
+  let _ = em(w3, p3, w_str(0, 19, 3));
+  let _ = em(w3, p3, w_add_imm(20, 19, 16));
+  let _ = em(w3, p3, w_movz(0, 2));
+  let _ = em(w3, p3, w_str(0, 20, 0));
+  let _ = em(w3, p3, w_str(0, 20, 1));
+  let _ = em(w3, p3, w_str(0, 20, 2));
+  let _ = em(w3, p3, w_str(0, 20, 3));
+  let _ = em(w3, p3, w_add_imm(21, 19, 32));
+  let _ = em(w3, p3, v_ld1_4s(1, 19));
+  let _ = em(w3, p3, v_ld1_4s(2, 20));
+  let _ = em(w3, p3, v_mul_4s(0, 1, 2));
+  let _ = em(w3, p3, v_st1_4s(0, 21));
+  let _ = em(w3, p3, w_ldr(0, 19, 4));
+  let _ = em(w3, p3, w_add_imm(31, 31, 4096));
+  let _ = emit_epilogue(w3, p3);
+  let r3 = exec(w3, p3[0], 0);
+  let t3 = if r3 == 10 then 0 else 1;
+  let _ = if t3 == 1 then (let _ = fail[0] = fail[0] + 1 in 0) else 0;
+
+  fail[0]
+}
