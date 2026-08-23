@@ -141,3 +141,6 @@ OPEN (honest gaps):
   while-cap). Division lowering defect in C codegen.c (default->ADD) unfixed.
 - Lexer has no string token: '{'/'}' inside .bp string literals break parsing;
   codegen text emits braces via chr(123)/chr(125) until BP_TOK_STR lands.
+- FIXED 2026-08-23: C codegen.c lowered BOP_DIV as ADD (default arm); now
+  emits i64.div_s (0x7f), parity.bp twin updated, corpus at 22 constructs,
+  wasm-check executes 22/22 in V8.

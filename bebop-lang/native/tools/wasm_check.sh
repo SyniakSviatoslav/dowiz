@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # wasm_check.sh — B3-5 release-gate slice: regenerate the parity corpus with
 # `bebopc compile`, then validate AND execute each module in a real wasm
-# runtime (node/V8) via wasm_check.mjs. Division expressions are excluded:
-# C-side codegen currently lowers BOP_DIV via default->ADD (documented defect,
-# see PLAN_B); execution would "pass" against wrong semantics.
+# runtime (node/V8) via wasm_check.mjs. Division cases are included since
+# codegen.c now emits i64.div_s (0x7f); they trap on /0, so all divisors are
+# nonzero constants.
 set -u
 cd "$(dirname "$0")/.."
 BIN=build/bebopc
@@ -42,6 +42,8 @@ done <<'CASES'
 9 - 8 + 7 - 6 + 5|7
 2 * (30000 + 777)|61554
 500 - 250 * 2|0
+84 / 12 - 6|1
+(200 / 8) * 3|75
 CASES
 echo "wasm-check: $pass executed OK, $fail failed (runtime: node/$(node --version))"
 [ "$fail" -eq 0 ]

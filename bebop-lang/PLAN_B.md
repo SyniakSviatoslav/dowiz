@@ -490,9 +490,10 @@ STATUS (2026-08-23): DONE — `make wasm-check` (native/tools/wasm_check.sh +
 wasm_check.mjs): regenerates the 20-construct parity corpus via
 `bebopc compile`, then validates AND executes each module in node/V8,
 asserting main() == expected i64 (incl. negatives and 80,779,853,376-magnitude
-values). Result: 20/20 executed OK on node v26.7.0. Division excluded:
-C codegen lowers BOP_DIV via default->ADD (documented defect above); execution
-would silently "pass" against wrong semantics — fix before adding div cases.
+values). Result: 20/20 executed OK on node v26.7.0.
+UPDATE 2026-08-23b: BOP_DIV default->ADD defect FIXED in codegen.c (now emits
+i64.div_s 0x7f; parity.bp twin updated); corpus extended to 22 constructs incl
+division — wasm-check 22/22 executed OK in V8.
 
 ## Swarm B3-6: NEON correctness + performance verify
 GOAL: verify vir.bp NEON output is bit-correct vs scalar reference AND measure

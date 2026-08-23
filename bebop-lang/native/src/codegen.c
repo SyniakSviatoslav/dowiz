@@ -90,6 +90,7 @@ static int emit_expr(unsigned char *out, const Term *t, int want_i64,
                 case BOP_ADD: op = 0x7c; break;
                 case BOP_SUB: op = 0x7d; break;
                 case BOP_MUL: op = 0x7e; break;
+                case BOP_DIV: op = 0x7f; break; /* i64.div_s (traps on /0) */
                 case BOP_EQ:  op = 0x51; break;
                 case BOP_NE:  op = 0x52; break;
                 case BOP_LT:  op = 0x53; break;

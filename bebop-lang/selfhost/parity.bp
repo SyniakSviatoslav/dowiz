@@ -750,7 +750,9 @@ fn p_emit_term(bytes: [i64], pc: [i64], tb: [i64], node: i64) -> i64 {
   let wa = if opb == 0 then 124 else 0;
   let ws = if opb == 1 then 125 else 0;
   let wm = if opb == 2 then 126 else 0;
-  let wop = wa + ws + wm;
+  // i64.div_s = 127, matches C codegen.c BOP_DIV
+  let wd = if opb == 3 then 127 else 0;
+  let wop = wa + ws + wm + wd;
   let a = tb[node * 8 + 4];
   let bb = tb[node * 8 + 5];
   let _ = if is_bin == 1 then (
@@ -848,7 +850,7 @@ fn parity_module(expr_src: str, toks: [i64], ntoks: i64, tb: [i64], mod_b: [i64]
   nm * (1 - bad)
 }
 
-// ---- B2-8 corpus: 20 constructs, goldens = live `bebopc compile` output ----
+// ---- B2-8 corpus: 22 constructs, goldens = live `bebopc compile` output ----
 // Per-case UNIQUE local names: the bootstrap interpreter's env-pool reuse
 // lets same-named locals of sequentially-called fns alias (see PLAN_B
 // "env aliasing" note); unique names keep every case independent.
@@ -1113,6 +1115,31 @@ fn pc20() -> i64 {
   bytes_match(want_20, wlen_20, mb_20, mlen_20)
 }
 
+// C21: "84 / 12 - 6" (44 bytes)
+fn pc21() -> i64 {
+  let esrc_21 = "84 / 12 - 6";
+  let wlen_21 = 44;
+  let mb_21 = zeros(256);
+  let tk_21 = zeros(4096);
+  let tb_21 = zeros(4096);
+  let nt_21 = lex(esrc_21, tk_21);
+  let mlen_21 = parity_module(esrc_21, tk_21, nt_21, tb_21, mb_21);
+  let want_21 = [0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 126, 3, 2, 1, 0, 7, 8, 1, 4, 109, 97, 105, 110, 0, 0, 10, 13, 1, 11, 0, 66, 212, 0, 66, 12, 127, 66, 6, 125, 11];
+  bytes_match(want_21, wlen_21, mb_21, mlen_21)
+}
+
+// C22: "(200 / 8) * 3" (44 bytes)
+fn pc22() -> i64 {
+  let esrc_22 = "(200 / 8) * 3";
+  let wlen_22 = 44;
+  let mb_22 = zeros(256);
+  let tk_22 = zeros(4096);
+  let tb_22 = zeros(4096);
+  let nt_22 = lex(esrc_22, tk_22);
+  let mlen_22 = parity_module(esrc_22, tk_22, nt_22, tb_22, mb_22);
+  let want_22 = [0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 126, 3, 2, 1, 0, 7, 8, 1, 4, 109, 97, 105, 110, 0, 0, 10, 13, 1, 11, 0, 66, 200, 1, 66, 8, 127, 66, 3, 126, 11];
+  bytes_match(want_22, wlen_22, mb_22, mlen_22)
+}
 
 fn self_check() -> i64 {
   let total = [0];
@@ -1136,5 +1163,7 @@ fn self_check() -> i64 {
   let _ = total[0] = total[0] + (1 - pc18());
   let _ = total[0] = total[0] + (1 - pc19());
   let _ = total[0] = total[0] + (1 - pc20());
+  let _ = total[0] = total[0] + (1 - pc21());
+  let _ = total[0] = total[0] + (1 - pc22());
   total[0]
 }
