@@ -21,6 +21,10 @@ fuzz: $(FUZZ_BIN)
 
 fuzz-selfhost: $(FUZZ_SELF_BIN)
 
+# B3-5: validate + execute emitted wasm in a real runtime (node/V8).
+wasm-check: $(BIN)
+	bash tools/wasm_check.sh
+
 $(FUZZ_BIN): src/fuzz.c $(FUZZ_SRC)
 	@mkdir -p $(BUILD)
 	$(CC) $(CFLAGS) -o $@ src/fuzz.c $(FUZZ_SRC) $(LDLIBS)

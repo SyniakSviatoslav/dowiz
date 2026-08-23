@@ -467,6 +467,18 @@ GOAL: extend the A-3 fuzzer to the full front-end; target 1M generated/mutated i
 STEPS: extend fuzz.c to cover typecheck/codegen/backends; fuzz lexer/parser/expr_parser/
 typecheck/codegen/backends; assert no crash/hang; fix any root cause found (minimal, behavior-preserving).
 VERIFY: fuzz run completes; summary line "0 crashes / N" (N ≥ 300k; target 1M).
+STATUS (2026-08-23): PARTIAL — honest state:
+  - fuzz.c DEEPENED: child now fn-decl-parses every item after clean bp_parse
+    (expr-parser-level coverage past the item scanner). Campaign today: 323k
+    new inputs (300k + 20k + 3k), 0 crashes, 0 hangs.
+  - fuzz_selfhost (compile_program/compile/compile_fn = front-end+codegen+exec
+    per input, expr_compile.bp): 7k inputs today, 0 crashes, but 14/5000
+    (~0.28%) bounded-slow inputs (~236B random sources) hit the 2s watchdog.
+    OPEN ROOT CAUSE: slowness is NOT the while-iteration cap (lowering it to
+    30M changed nothing) — likely unbounded recursion/adversarial cost in
+    parser or eval elsewhere. Named gap; do not force-green.
+  - Total documented: ~630k inputs toward the 1M target. Remaining: slow-path
+    root cause + remaining ~370k + backend-targeted corpora.
 
 ## Swarm B3-5: wasm validation + execution
 GOAL: validate emitted wasm with a real parser, and execute if a runtime is
@@ -474,6 +486,13 @@ available (wasmtime/wasmer/node) else document structural validity only.
 STEPS: validate all B2-3/B2-4 outputs; run a corpus through a wasm runtime if
 present; report pass/fail.
 VERIFY: validation green; execution results correct (or documented gap).
+STATUS (2026-08-23): DONE — `make wasm-check` (native/tools/wasm_check.sh +
+wasm_check.mjs): regenerates the 20-construct parity corpus via
+`bebopc compile`, then validates AND executes each module in node/V8,
+asserting main() == expected i64 (incl. negatives and 80,779,853,376-magnitude
+values). Result: 20/20 executed OK on node v26.7.0. Division excluded:
+C codegen lowers BOP_DIV via default->ADD (documented defect above); execution
+would silently "pass" against wrong semantics — fix before adding div cases.
 
 ## Swarm B3-6: NEON correctness + performance verify
 GOAL: verify vir.bp NEON output is bit-correct vs scalar reference AND measure

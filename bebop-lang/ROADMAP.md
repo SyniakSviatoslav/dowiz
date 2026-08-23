@@ -106,3 +106,38 @@ Swarms (parallel):
 - Backends: aarch64 (native parity), wasm (validated), NEON (vector-first),
   GPU/FPGA (VIR slice + emit contract).
 - fuzz (1M) + benchmark + docs all green; every milestone committed+pushed.
+
+---
+
+## Stage B status update — 2026-08-23 (PLAN_B.md supersedes on conflict)
+
+Executed via PLAN_B.md swarms; every item below is verified by command output
+recorded in git history (see `git log --oneline` + PLAN_B STATUS lines).
+
+DONE:
+- Phase 0 gate: 144/144 .bp files strict+check green (SWEEP-B3-3.md; was
+  0/136 check + 17 strict fails before emit_call fix).
+- B1 front-end slices: lexer.bp (full bp_lex parity), parser.bp (item-level),
+  expr_parser.bp (10/10 goldens), typecheck green.
+- B2 backend slices (exec-verified goldens): aarch64.bp 4/4, aarch64_data.bp
+  4/4, wasm.bp MVP module, wasm_data.bp memory ops, vir.bp NEON ADD/SUB 2D +
+  MUL 4S, gpu_fpga.bp (WGSL kernels + Verilog ADD_2D skeleton, self_check 0).
+- B2-7 selfhost-bench: honest R=10 medians (compile_program ~1KB ≈ 89 ms,
+  ~11.4 KB/s; typecheck suite 0.19 ms); .bp work-counter harness.
+- B2-8 parity: 20/20 constructs byte-identical to live C goldens; real failure
+  accumulation (old dead-store bug fixed).
+- B3-1: full_compiler.bp stable deterministic selfcompile.
+- Evaluator root causes fixed en route: 255-char string truncation + chr()
+  aliasing (string arena); cross-invocation env aliasing under in_while
+  (boundary markers).
+
+OPEN (honest gaps):
+- Backends are SLICES (4-construct goldens), not full-language parity with
+  native.c — the Definition-of-Done bar above still stands.
+- B3-2: only lexer/parser/expr_parser self-tests ported; most native modules
+  lack .bp twins.
+- B3-4 fuzz: ~630k documented inputs toward 1M; fuzz_selfhost has ~0.28%
+  bounded-slow inputs (2s watchdog) with root cause NOT yet localized (not the
+  while-cap). Division lowering defect in C codegen.c (default->ADD) unfixed.
+- Lexer has no string token: '{'/'}' inside .bp string literals break parsing;
+  codegen text emits braces via chr(123)/chr(125) until BP_TOK_STR lands.
