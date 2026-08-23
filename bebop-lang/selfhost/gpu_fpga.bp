@@ -125,21 +125,18 @@ fn gpu_load_block(op: i64) -> str {
 }
 
 // gpu_store_block: lane-wise stores for one op (closes the kernel body).
-// innovate: braces are emitted via chr(125) because the native lexer has no
-// string token — a '}' inside a literal terminates fn-body parsing
-// (lexer.c/parser.c gap); upgrade trigger: string-aware bp_lex (B1 backlog).
+// Braces are plain string literals since BP_TOK_STR landed in the lexer.
 fn gpu_store_block(op: i64, sy: str) -> str {
-  let cb = chr(125);
   if op == 2 then
     ("  o[i] = (va " ++ sy ++ " vb).x;\n"
     ++ "  o[i + 1u] = (va " ++ sy ++ " vb).y;\n"
     ++ "  o[i + 2u] = (va " ++ sy ++ " vb).z;\n"
     ++ "  o[i + 3u] = (va " ++ sy ++ " vb).w;\n"
-    ++ cb ++ "\n")
+    ++ "}\n")
   else
     ("  o[i] = (va " ++ sy ++ " vb).x;\n"
     ++ "  o[i + 1u] = (va " ++ sy ++ " vb).y;\n"
-    ++ cb ++ "\n")
+    ++ "}\n")
 }
 
 // gpu_kernel: emit the full WGSL compute shader for one element-wise VIR op.
@@ -154,8 +151,7 @@ fn gpu_kernel(op: i64) -> str {
     ++ "@group(0) @binding(1) var<storage, read> b: array<f32>;\n"
     ++ "@group(0) @binding(2) var<storage, read_write> o: array<f32>;\n\n";
   let sig = "@compute @workgroup_size(64)\n"
-    ++ "fn vir_" ++ nm ++ "(@builtin(global_invocation_id) gid: vec3<u32>) "
-    ++ chr(123) ++ "\n";
+    ++ "fn vir_" ++ nm ++ "(@builtin(global_invocation_id) gid: vec3<u32>) {\n";
   let idx = "  let i = gid.x * " ++ stride ++ ";\n";
   let load = gpu_load_block(op);
   let store = gpu_store_block(op, sy);

@@ -96,6 +96,34 @@ int bp_lex(const char *src, BpToken *out, size_t cap) {
             p += l;
             continue;
         }
+        if (c == '"') {
+            /* String literal: one opaque token spanning both quotes. Without
+             * this, '{'/'}' inside a literal leaked into the token stream as
+             * real PUNCT and broke parser.c brace balancing (fn bodies were
+             * cut at the first '}' inside a string). Escapes stay raw: the
+             * expression layer unescapes when it copies into str_arena. */
+            const char *s = p;
+            p++;
+            while (*p && *p != '"') {
+                if (*p == '\\' && p[1]) {
+                    p += 2;
+                    continue;
+                }
+                p++;
+            }
+            if (*p == '"') {
+                p++;
+            }
+            if (n >= cap) {
+                return -1;
+            }
+            out[n].kind = BP_TOK_STR;
+            out[n].start = s;
+            out[n].len = (size_t)(p - s);
+            out[n].line = line;
+            n++;
+            continue;
+        }
         /* ASCII punctuation / operator */
         if (n >= cap) {
             return -1;

@@ -10,6 +10,7 @@ typedef enum {
     BP_TOK_GLYPH, /* glyph (non-ASCII UTF-8 sequence) */
     BP_TOK_NUMBER,
     BP_TOK_PUNCT, /* ASCII operator / delimiter */
+    BP_TOK_STR,   /* string literal incl. quotes; escapes left raw for expr */
 } BpTokKind;
 
 typedef struct {

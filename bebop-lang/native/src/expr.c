@@ -268,7 +268,13 @@ static Term *parse_primary(P *p) {
         atom = arr;
     } else if (p->s[p->pos] == '\"') {
         int start_pos = ++p->pos;
-        while (p->s[p->pos] && p->s[p->pos] != '\"') p->pos++;
+        while (p->s[p->pos] && p->s[p->pos] != '"') {
+            if (p->s[p->pos] == '\\' && p->s[p->pos + 1]) {
+                p->pos += 2; /* escaped char: never terminates the literal */
+            } else {
+                p->pos++;
+            }
+        }
         int slen = p->pos - start_pos;
         /* Reject before writing: escaped output is at most `slen` bytes (escapes
          * only shrink), plus one NUL. Pre-check avoids overflowing the arena. */
