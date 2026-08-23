@@ -467,18 +467,25 @@ GOAL: extend the A-3 fuzzer to the full front-end; target 1M generated/mutated i
 STEPS: extend fuzz.c to cover typecheck/codegen/backends; fuzz lexer/parser/expr_parser/
 typecheck/codegen/backends; assert no crash/hang; fix any root cause found (minimal, behavior-preserving).
 VERIFY: fuzz run completes; summary line "0 crashes / N" (N ≥ 300k; target 1M).
-STATUS (2026-08-23): PARTIAL — honest state:
-  - fuzz.c DEEPENED: child now fn-decl-parses every item after clean bp_parse
-    (expr-parser-level coverage past the item scanner). Campaign today: 323k
-    new inputs (300k + 20k + 3k), 0 crashes, 0 hangs.
-  - fuzz_selfhost (compile_program/compile/compile_fn = front-end+codegen+exec
-    per input, expr_compile.bp): 7k inputs today, 0 crashes, but 14/5000
-    (~0.28%) bounded-slow inputs (~236B random sources) hit the 2s watchdog.
-    OPEN ROOT CAUSE: slowness is NOT the while-iteration cap (lowering it to
-    30M changed nothing) — likely unbounded recursion/adversarial cost in
-    parser or eval elsewhere. Named gap; do not force-green.
-  - Total documented: ~630k inputs toward the 1M target. Remaining: slow-path
-    root cause + remaining ~370k + backend-targeted corpora.
+STATUS (2026-08-23b): ROOT CAUSES FOUND AND FIXED; campaigns green:
+  - fuzz.c DEEPENED: child fn-decl-parses every item after clean bp_parse.
+    323k inputs today, 0 crashes 0 hangs.
+  - fuzz_selfhost crashes (SIGSEGV ~1/8k, state-dependent): gdb bisect =>
+    C-stack exhaustion via unbounded .bp recursion depth in qtt eval. FIXED:
+    EVAL_DEPTH_MAX=1000 guard in TERM_APP/zero-arg paths (graceful -1).
+  - Also fixed en route: ty_pool[256] monotonic exhaustion -> qtt_vec NULL
+    deref; now recycled per top-level eval (+NULL checks in qtt_vec/ty_subst).
+  - fuzz_selfhost hangs (~0.28% at 2s watchdog): .bp parser loops WITHOUT
+    progress guarantees spin until the iteration cap. FIXED with progress
+    guards in emit_array_lit / emit_bl_call args / field-access tail loop
+    (expr_compile.bp); strict-clean rewrite of one guard.
+  - Harness hardening: FZ_SLOW_DIR saves slow/crash inputs; FZ_ONE_FILE /
+    FZ_CRASH_IT single-input debug modes; fork-child gets 512MB stack budget.
+  - RESULT: 30k campaign PASS 0 crashes 0 hangs, max input 107ms (was 2009ms);
+    sweep 145/145 strict+check; all self_checks 0; make test 79 modules 0
+    failing; selfcompile checksums stable.
+  - Total documented: ~660k inputs toward the 1M target; remaining = volume +
+    backend-targeted corpora (no known defects blocking).
 
 ## Swarm B3-5: wasm validation + execution
 GOAL: validate emitted wasm with a real parser, and execute if a runtime is

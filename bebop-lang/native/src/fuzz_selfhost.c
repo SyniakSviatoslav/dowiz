@@ -23,6 +23,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <sys/resource.h>
 #include <sys/time.h>
 
 #include "parser.h"
@@ -37,6 +38,16 @@ static double now_ms(void) {
 }
 
 /* ── deterministic PRNG (xorshift64*) ──────────────────────────────────── */
+
+/* SIGSEGV diagnostics: print last-resort marker so the failing site can be
+ * narrowed by bisecting instrumentation. */
+#include <execinfo.h>
+static void crash_handler(int sig) {
+    (void)sig;
+    const char msg[] = "SEGFAULT-ENTERED\n";
+    write(2, msg, sizeof msg - 1);
+    _exit(139);
+}
 static unsigned long long rng_state = 0x9E3779B97F4A7C15ULL;
 
 static unsigned long long rng_next(void) {
@@ -443,6 +454,26 @@ int main(int argc, char **argv) {
     char *buf = (char *)malloc(MAXBUF);
     if (!buf) { fprintf(stderr, "fuzz_selfhost: out of memory\n"); return 2; }
 
+    /* single-input mode: FZ_ONE_FILE=<path> runs each target once, timed */
+    if (getenv("FZ_ONE_FILE")) {
+        FILE *ff = fopen(getenv("FZ_ONE_FILE"), "rb");
+        if (!ff) { fprintf(stderr, "cannot open one-file\n"); return 2; }
+        size_t flen = fread(buf, 1, MAXBUF - 1, ff);
+        buf[flen] = '\0';
+        fclose(ff);
+        fprintf(stderr, "loaded %zu bytes\n", flen);
+        const char *names[3] = { "compile_program", "compile", "compile_fn" };
+        int entries[3] = { idx_program, idx_expr, idx_fn };
+        for (int t = 0; t < 3; t++) {
+            double t0 = now_ms();
+            long v = eval_checksum(entries[t], buf, 10, &(int){0});
+            double dt = now_ms() - t0;
+            printf("%s -> %ld (%.1f ms)\n", names[t], v, dt);
+        }
+        free(buf);
+        return 0;
+    }
+
     unsigned long ok = 0, eval_err = 0, crashes = 0, hangs = 0;
     int last_sig = 0;
     size_t last_len = 0;
@@ -464,10 +495,39 @@ int main(int argc, char **argv) {
         buf[len] = '\0';
 
         double t0 = now_ms();
+        /* FZ_CRASH_IT=<n>: run iteration n in-process (no fork) so a debugger
+         * sees the faulting state directly. */
+        if (getenv("FZ_CRASH_IT") &&
+            strtoul(getenv("FZ_CRASH_IT"), 0, 10) == it) {
+            Term argterm;
+            memset(&argterm, 0, sizeof argterm);
+            argterm.kind = TERM_STR;
+            argterm.name = buf;
+            Term app;
+            memset(&app, 0, sizeof app);
+            app.kind = TERM_APP;
+            app.a = fn_terms[entry];
+            app.b = &argterm;
+            int vk; long vi; int vb; double vf = 0.0; char err[256];
+            int r = qtt_eval_binds(&app, fn_names, fn_terms, fn_count,
+                                   &vk, &vi, &vb, &vf, err, sizeof err);
+            printf("in-process it=%lu r=%d v=%ld\n", it, r, vi);
+            continue;
+        }
         pid_t pid = fork();
         if (pid < 0) { fprintf(stderr, "fuzz_selfhost: fork failed at %lu\n", it); free(buf); return 2; }
         if (pid == 0) {
+            /* Deep-but-bounded interpreter recursion needs headroom: give the
+             * child a large stack budget so the eval-depth cap (graceful
+             * failure) always fires before the machine stack does. */
+            struct rlimit rl;
+            if (getrlimit(RLIMIT_STACK, &rl) == 0) {
+                rl.rlim_cur = 512 * 1024 * 1024;
+                setrlimit(RLIMIT_STACK, &rl);
+            }
             alarm(hang_timeout);
+            void crash_handler(int);
+            signal(SIGSEGV, crash_handler);
             Term argterm;
             memset(&argterm, 0, sizeof argterm);
             argterm.kind = TERM_STR;
@@ -495,6 +555,15 @@ int main(int argc, char **argv) {
         else if (dt < 200.0) hist[4]++;
         else hist[5]++;
         if (dt >= 200.0) {
+            static int slow_saved = 0;
+            if (getenv("FZ_SLOW_DIR") && slow_saved < 10) {
+                char pth[256];
+                snprintf(pth, sizeof pth, "%s/slow_%03lu.bin",
+                         getenv("FZ_SLOW_DIR"), it);
+                FILE *sf = fopen(pth, "wb");
+                if (sf) { fwrite(buf, 1, len, sf); fclose(sf); }
+                slow_saved++;
+            }
             static int slow_shown = 0;
             if (slow_shown < 8) {
                 fprintf(stderr, "SLOW %.0fms it=%lu target=%s ", dt, it, target);
@@ -515,6 +584,13 @@ int main(int argc, char **argv) {
                 last_sig = sig;
                 last_len = len;
                 last_target = target;
+                if (getenv("FZ_SLOW_DIR")) {
+                    char pth[256];
+                    snprintf(pth, sizeof pth, "%s/crash_%04lu.sig%d.bin",
+                             getenv("FZ_SLOW_DIR"), it, sig);
+                    FILE *cf = fopen(pth, "wb");
+                    if (cf) { fwrite(buf, 1, len, cf); fclose(cf); }
+                }
                 if (crashes <= 5) {
                     fprintf(stderr, "CRASH: signal %d at iteration %lu (%s)\n",
                             sig, it, target);

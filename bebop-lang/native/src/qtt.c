@@ -568,6 +568,9 @@ static Ty *ty_alloc(TyKind kind) {
 
 Ty *qtt_vec(Ty *elem) {
     Ty *v = ty_alloc(TY_VEC);
+    if (!v) {
+        return NULL; /* type pool exhausted */
+    }
     v->n = 0; /* dynamic size — compatible with any fixed-size array literal */
     v->elem = elem;
     return v;
@@ -592,6 +595,9 @@ static Ty *ty_subst(Ty *t, const char *var, Ty *repl) {
                 return t;
             }
             Ty *r = ty_alloc(t->kind);
+            if (!r) {
+                return NULL; /* type pool exhausted */
+            }
             r->n = t->n;
             r->q = t->q;
             r->x = t->x;
@@ -605,6 +611,9 @@ static Ty *ty_subst(Ty *t, const char *var, Ty *repl) {
                 return t;
             }
             Ty *r = ty_alloc(TY_VEC);
+            if (!r) {
+                return NULL; /* type pool exhausted */
+            }
             r->n = t->n;
             r->elem = e;
             return r;
@@ -1645,6 +1654,15 @@ static int in_while = 0;
 /* Env pool: closures capture Env nodes, which must outlive the eval frame that
  * created them (curried application). Stack-allocated Env would dangle. */
 static Env env_pool[262144];
+/* Recursion-depth bound for the evaluator. Every .bp-level call nests
+ * several C eval() frames; without a cap, adversarial or runaway recursion
+ * exhausts the machine stack and dies by SIGSEGV instead of failing
+ * gracefully.
+ * innovate: flat cap of 1000 nested calls — measured against unoptimized
+ * (-O0) builds whose eval() frames are largest (~2 MB worst case there);
+ * raise only together with a stack-size contract for embeddings. */
+#define EVAL_DEPTH_MAX 1000
+static int eval_depth = 0;
 static int env_i = 0;
 /* Array-value arena: a flat bump allocator for TERM_ARRAY field values. Arrays
  * are mutable and passed by reference, so their backing storage must stay valid
@@ -1741,9 +1759,16 @@ static Value eval(const Term *t, Env *env) {
             if (f.lam->kind != TERM_LAM) {
                 /* zero-arg fn: evaluate body under its own boundary marker so
                  * in_while lets cannot leak into the caller's chain either. */
+                if (eval_depth >= EVAL_DEPTH_MAX) {
+                    v.kind = -1; /* recursion too deep */
+                    return v;
+                }
                 Env *mark = env_new(NULL, v, f.env);
                 if (!mark) { v.kind = -1; return v; }
-                return eval(f.lam, mark);
+                eval_depth++;
+                Value r0 = eval(f.lam, mark);
+                eval_depth--;
+                return r0;
             }
             if (!f.lam->name) { v.kind = -1; return v; }
             /* Reclaim env nodes when the call yields a VALUE (not a closure):
@@ -1751,13 +1776,19 @@ static Value eval(const Term *t, Env *env) {
              * keep it; a plain value means the param env is dead. This bounds
              * env-pool growth to call depth instead of total calls. */
             int saved_env_i = env_i;
+            if (eval_depth >= EVAL_DEPTH_MAX) {
+                v.kind = -1; /* recursion too deep */
+                return v;
+            }
             /* boundary marker: a NULL-name slot separating this invocation's
              * bindings from the caller's chain (see TERM_LET in_while walk). */
             Env *mark = env_new(NULL, arg, f.env);
             if (!mark) { v.kind = -1; return v; }
             Env *e = env_new(f.lam->name, arg, mark);
             if (!e) { v.kind = -1; return v; }
+            eval_depth++;
             Value r = eval(f.lam->a, e);
+            eval_depth--;
             if (is_scalar_value(&r)) env_i = saved_env_i;
             return r;
         }
@@ -2135,6 +2166,8 @@ int qtt_eval_binds(const Term *t, const char **names, Term *const *lams, int n,
                    char *err, size_t cap) {
     env_i = 0;
     afv_pos = 0;
+    eval_depth = 0;
+    int ty_mark = ty_len; /* types made during this eval die with it */
     str_arena_reset();
     Env fb[256];
     int cnt = n < 256 ? n : 256;
@@ -2152,12 +2185,14 @@ int qtt_eval_binds(const Term *t, const char **names, Term *const *lams, int n,
     Value v = eval(t, head);
     if (v.kind < 0) {
         snprintf(err, cap, "evaluation error");
+        ty_len = ty_mark;
         return -1;
     }
     if (out_kind) *out_kind = v.kind;
     if (out_i) *out_i = v.i;
     if (out_b) *out_b = v.b;
     if (out_f) *out_f = v.f;
+    ty_len = ty_mark;
     return 0;
 }
 
@@ -2165,6 +2200,7 @@ int qtt_eval_bound(const Term *t, const QttBind *binds, int n, int *out_kind,
                    long *out_i, int *out_b, char *err, size_t cap) {
     env_i = 0;
     afv_pos = 0;
+    int ty_mark = ty_len;
     str_arena_reset();
     Env stack[64];
     for (int i = 0; i < n && i < 64; i++) {
@@ -2178,11 +2214,13 @@ int qtt_eval_bound(const Term *t, const QttBind *binds, int n, int *out_kind,
     Value v = eval(t, env);
     if (v.kind < 0) {
         snprintf(err, cap, "evaluation error (unbound variable?)");
+        ty_len = ty_mark;
         return -1;
     }
     *out_kind = v.kind;
     *out_i = v.i;
     *out_b = v.b;
+    ty_len = ty_mark;
     return 0;
 }
 
