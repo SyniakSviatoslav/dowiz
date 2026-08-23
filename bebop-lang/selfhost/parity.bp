@@ -848,253 +848,293 @@ fn parity_module(expr_src: str, toks: [i64], ntoks: i64, tb: [i64], mod_b: [i64]
   nm * (1 - bad)
 }
 
+// ---- B2-8 corpus: 20 constructs, goldens = live `bebopc compile` output ----
+// Per-case UNIQUE local names: the bootstrap interpreter's env-pool reuse
+// lets same-named locals of sequentially-called fns alias (see PLAN_B
+// "env aliasing" note); unique names keep every case independent.
 
-fn load_g1(dst: [i64]) -> i64 {
-  let _ = dst[0] = 0;
-  let _ = dst[1] = 97;
-  let _ = dst[2] = 115;
-  let _ = dst[3] = 109;
-  let _ = dst[4] = 1;
-  let _ = dst[5] = 0;
-  let _ = dst[6] = 0;
-  let _ = dst[7] = 0;
-  let _ = dst[8] = 1;
-  let _ = dst[9] = 5;
-  let _ = dst[10] = 1;
-  let _ = dst[11] = 96;
-  let _ = dst[12] = 0;
-  let _ = dst[13] = 1;
-  let _ = dst[14] = 126;
-  let _ = dst[15] = 3;
-  let _ = dst[16] = 2;
-  let _ = dst[17] = 1;
-  let _ = dst[18] = 0;
-  let _ = dst[19] = 7;
-  let _ = dst[20] = 8;
-  let _ = dst[21] = 1;
-  let _ = dst[22] = 4;
-  let _ = dst[23] = 109;
-  let _ = dst[24] = 97;
-  let _ = dst[25] = 105;
-  let _ = dst[26] = 110;
-  let _ = dst[27] = 0;
-  let _ = dst[28] = 0;
-  let _ = dst[29] = 10;
-  let _ = dst[30] = 12;
-  let _ = dst[31] = 1;
-  let _ = dst[32] = 10;
-  let _ = dst[33] = 0;
-  let _ = dst[34] = 66;
-  let _ = dst[35] = 1;
-  let _ = dst[36] = 66;
-  let _ = dst[37] = 2;
-  let _ = dst[38] = 66;
-  let _ = dst[39] = 3;
-  let _ = dst[40] = 126;
-  let _ = dst[41] = 124;
-  let _ = dst[42] = 11;
-  43
+// C1: "1 + 2 * 3" (43 bytes)
+fn pc1() -> i64 {
+  let esrc_1 = "1 + 2 * 3";
+  let wlen_1 = 43;
+  let mb_1 = zeros(256);
+  let tk_1 = zeros(4096);
+  let tb_1 = zeros(4096);
+  let nt_1 = lex(esrc_1, tk_1);
+  let mlen_1 = parity_module(esrc_1, tk_1, nt_1, tb_1, mb_1);
+  let want_1 = [0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 126, 3, 2, 1, 0, 7, 8, 1, 4, 109, 97, 105, 110, 0, 0, 10, 12, 1, 10, 0, 66, 1, 66, 2, 66, 3, 126, 124, 11];
+  bytes_match(want_1, wlen_1, mb_1, mlen_1)
 }
 
-fn load_g2(dst: [i64]) -> i64 {
-  let _ = dst[0] = 0;
-  let _ = dst[1] = 97;
-  let _ = dst[2] = 115;
-  let _ = dst[3] = 109;
-  let _ = dst[4] = 1;
-  let _ = dst[5] = 0;
-  let _ = dst[6] = 0;
-  let _ = dst[7] = 0;
-  let _ = dst[8] = 1;
-  let _ = dst[9] = 5;
-  let _ = dst[10] = 1;
-  let _ = dst[11] = 96;
-  let _ = dst[12] = 0;
-  let _ = dst[13] = 1;
-  let _ = dst[14] = 126;
-  let _ = dst[15] = 3;
-  let _ = dst[16] = 2;
-  let _ = dst[17] = 1;
-  let _ = dst[18] = 0;
-  let _ = dst[19] = 7;
-  let _ = dst[20] = 8;
-  let _ = dst[21] = 1;
-  let _ = dst[22] = 4;
-  let _ = dst[23] = 109;
-  let _ = dst[24] = 97;
-  let _ = dst[25] = 105;
-  let _ = dst[26] = 110;
-  let _ = dst[27] = 0;
-  let _ = dst[28] = 0;
-  let _ = dst[29] = 10;
-  let _ = dst[30] = 10;
-  let _ = dst[31] = 1;
-  let _ = dst[32] = 8;
-  let _ = dst[33] = 0;
-  let _ = dst[34] = 66;
-  let _ = dst[35] = 3;
-  let _ = dst[36] = 66;
-  let _ = dst[37] = 4;
-  let _ = dst[38] = 124;
-  let _ = dst[39] = 66;
-  let _ = dst[40] = 2;
-  let _ = dst[41] = 126;
-  let _ = dst[42] = 11;
-  43
+// C2: "(3 + 4) * 2" (43 bytes)
+fn pc2() -> i64 {
+  let esrc_2 = "(3 + 4) * 2";
+  let wlen_2 = 43;
+  let mb_2 = zeros(256);
+  let tk_2 = zeros(4096);
+  let tb_2 = zeros(4096);
+  let nt_2 = lex(esrc_2, tk_2);
+  let mlen_2 = parity_module(esrc_2, tk_2, nt_2, tb_2, mb_2);
+  let want_2 = [0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 126, 3, 2, 1, 0, 7, 8, 1, 4, 109, 97, 105, 110, 0, 0, 10, 12, 1, 10, 0, 66, 3, 66, 4, 124, 66, 2, 126, 11];
+  bytes_match(want_2, wlen_2, mb_2, mlen_2)
 }
 
-fn load_g3(dst: [i64]) -> i64 {
-  let _ = dst[0] = 0;
-  let _ = dst[1] = 97;
-  let _ = dst[2] = 115;
-  let _ = dst[3] = 109;
-  let _ = dst[4] = 1;
-  let _ = dst[5] = 0;
-  let _ = dst[6] = 0;
-  let _ = dst[7] = 0;
-  let _ = dst[8] = 1;
-  let _ = dst[9] = 5;
-  let _ = dst[10] = 1;
-  let _ = dst[11] = 96;
-  let _ = dst[12] = 0;
-  let _ = dst[13] = 1;
-  let _ = dst[14] = 126;
-  let _ = dst[15] = 3;
-  let _ = dst[16] = 2;
-  let _ = dst[17] = 1;
-  let _ = dst[18] = 0;
-  let _ = dst[19] = 7;
-  let _ = dst[20] = 8;
-  let _ = dst[21] = 1;
-  let _ = dst[22] = 4;
-  let _ = dst[23] = 109;
-  let _ = dst[24] = 97;
-  let _ = dst[25] = 105;
-  let _ = dst[26] = 110;
-  let _ = dst[27] = 0;
-  let _ = dst[28] = 0;
-  let _ = dst[29] = 10;
-  let _ = dst[30] = 10;
-  let _ = dst[31] = 1;
-  let _ = dst[32] = 8;
-  let _ = dst[33] = 0;
-  let _ = dst[34] = 66;
-  let _ = dst[35] = 228;
-  let _ = dst[36] = 0;
-  let _ = dst[37] = 66;
-  let _ = dst[38] = 50;
-  let _ = dst[39] = 125;
-  let _ = dst[40] = 11;
-  41
+// C3: "100 - 50" (41 bytes)
+fn pc3() -> i64 {
+  let esrc_3 = "100 - 50";
+  let wlen_3 = 41;
+  let mb_3 = zeros(256);
+  let tk_3 = zeros(4096);
+  let tb_3 = zeros(4096);
+  let nt_3 = lex(esrc_3, tk_3);
+  let mlen_3 = parity_module(esrc_3, tk_3, nt_3, tb_3, mb_3);
+  let want_3 = [0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 126, 3, 2, 1, 0, 7, 8, 1, 4, 109, 97, 105, 110, 0, 0, 10, 10, 1, 8, 0, 66, 228, 0, 66, 50, 125, 11];
+  bytes_match(want_3, wlen_3, mb_3, mlen_3)
 }
 
-fn load_g4(dst: [i64]) -> i64 {
-  let _ = dst[0] = 0;
-  let _ = dst[1] = 97;
-  let _ = dst[2] = 115;
-  let _ = dst[3] = 109;
-  let _ = dst[4] = 1;
-  let _ = dst[5] = 0;
-  let _ = dst[6] = 0;
-  let _ = dst[7] = 0;
-  let _ = dst[8] = 1;
-  let _ = dst[9] = 5;
-  let _ = dst[10] = 1;
-  let _ = dst[11] = 96;
-  let _ = dst[12] = 0;
-  let _ = dst[13] = 1;
-  let _ = dst[14] = 126;
-  let _ = dst[15] = 3;
-  let _ = dst[16] = 2;
-  let _ = dst[17] = 1;
-  let _ = dst[18] = 0;
-  let _ = dst[19] = 7;
-  let _ = dst[20] = 8;
-  let _ = dst[21] = 1;
-  let _ = dst[22] = 4;
-  let _ = dst[23] = 109;
-  let _ = dst[24] = 97;
-  let _ = dst[25] = 105;
-  let _ = dst[26] = 110;
-  let _ = dst[27] = 0;
-  let _ = dst[28] = 0;
-  let _ = dst[29] = 10;
-  let _ = dst[30] = 9;
-  let _ = dst[31] = 1;
-  let _ = dst[32] = 7;
-  let _ = dst[33] = 0;
-  let _ = dst[34] = 66;
-  let _ = dst[35] = 7;
-  let _ = dst[36] = 66;
-  let _ = dst[37] = 6;
-  let _ = dst[38] = 126;
-  let _ = dst[39] = 11;
-  40
+// C4: "7 * 6" (40 bytes)
+fn pc4() -> i64 {
+  let esrc_4 = "7 * 6";
+  let wlen_4 = 40;
+  let mb_4 = zeros(256);
+  let tk_4 = zeros(4096);
+  let tb_4 = zeros(4096);
+  let nt_4 = lex(esrc_4, tk_4);
+  let mlen_4 = parity_module(esrc_4, tk_4, nt_4, tb_4, mb_4);
+  let want_4 = [0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 126, 3, 2, 1, 0, 7, 8, 1, 4, 109, 97, 105, 110, 0, 0, 10, 9, 1, 7, 0, 66, 7, 66, 6, 126, 11];
+  bytes_match(want_4, wlen_4, mb_4, mlen_4)
 }
 
-fn parity_case1() -> i64 {
-  let bad_sum = [0];
-  // corpus entry 1: "1 + 2 * 3"
-  let g1 = zeros(64);
-  let gl1 = load_g1(g1);
-  let m1 = zeros(256);
-  let t1t = zeros(4096);
-  let ptb = zeros(4096);
-  let n1 = lex("1 + 2 * 3", t1t);
-  let len1 = parity_module("1 + 2 * 3", t1t, n1, ptb, m1);
-  let ok1 = bytes_match(g1, gl1, m1, len1);
-    let bad1 = 1 - ok1;
-  bad_sum[0]
+// C5: "42" (37 bytes)
+fn pc5() -> i64 {
+  let esrc_5 = "42";
+  let wlen_5 = 37;
+  let mb_5 = zeros(256);
+  let tk_5 = zeros(4096);
+  let tb_5 = zeros(4096);
+  let nt_5 = lex(esrc_5, tk_5);
+  let mlen_5 = parity_module(esrc_5, tk_5, nt_5, tb_5, mb_5);
+  let want_5 = [0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 126, 3, 2, 1, 0, 7, 8, 1, 4, 109, 97, 105, 110, 0, 0, 10, 6, 1, 4, 0, 66, 42, 11];
+  bytes_match(want_5, wlen_5, mb_5, mlen_5)
 }
-fn parity_case2() -> i64 {
-  let bad_sum = [0];
-  // corpus entry 2: "(3 + 4) * 2"
-  let g2 = zeros(64);
-  let gl2 = load_g2(g2);
-  let m2 = zeros(256);
-  let t2t = zeros(4096);
-  let ptb2 = zeros(4096);
-  let n2 = lex("(3 + 4) * 2", t2t);
-  let len2 = parity_module("(3 + 4) * 2", t2t, n2, ptb2, m2);
-  let ok2 = bytes_match(g2, gl2, m2, len2);
-    let bad2 = 1 - ok2;
-  bad_sum[0]
-}
-fn parity_case3() -> i64 {
-  let bad_sum = [0];
-  // corpus entry 3: "100 - 50"
-  let g3 = zeros(64);
-  let gl3 = load_g3(g3);
-  let m3 = zeros(256);
-  let t3t = zeros(4096);
-  let ptb3 = zeros(4096);
-  let n3 = lex("100 - 50", t3t);
-  let len3 = parity_module("100 - 50", t3t, n3, ptb3, m3);
-  let ok3 = bytes_match(g3, gl3, m3, len3);
-    let bad3 = 1 - ok3;
-  bad_sum[0]
-}
-fn parity_case4() -> i64 {
-  let bad_sum = [0];
-  // corpus entry 4: "7 * 6"
-  let g4 = zeros(64);
-  let gl4 = load_g4(g4);
-  let m4 = zeros(256);
-  let t4t = zeros(4096);
-  let ptb4 = zeros(4096);
-  let n4 = lex("7 * 6", t4t);
-  let len4 = parity_module("7 * 6", t4t, n4, ptb4, m4);
-  let ok4 = bytes_match(g4, gl4, m4, len4);
-    let bad4 = 1 - ok4;
 
-  bad_sum[0]
+// C6: "0" (37 bytes)
+fn pc6() -> i64 {
+  let esrc_6 = "0";
+  let wlen_6 = 37;
+  let mb_6 = zeros(256);
+  let tk_6 = zeros(4096);
+  let tb_6 = zeros(4096);
+  let nt_6 = lex(esrc_6, tk_6);
+  let mlen_6 = parity_module(esrc_6, tk_6, nt_6, tb_6, mb_6);
+  let want_6 = [0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 126, 3, 2, 1, 0, 7, 8, 1, 4, 109, 97, 105, 110, 0, 0, 10, 6, 1, 4, 0, 66, 0, 11];
+  bytes_match(want_6, wlen_6, mb_6, mlen_6)
 }
+
+// C7: "300" (38 bytes)
+fn pc7() -> i64 {
+  let esrc_7 = "300";
+  let wlen_7 = 38;
+  let mb_7 = zeros(256);
+  let tk_7 = zeros(4096);
+  let tb_7 = zeros(4096);
+  let nt_7 = lex(esrc_7, tk_7);
+  let mlen_7 = parity_module(esrc_7, tk_7, nt_7, tb_7, mb_7);
+  let want_7 = [0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 126, 3, 2, 1, 0, 7, 8, 1, 4, 109, 97, 105, 110, 0, 0, 10, 7, 1, 5, 0, 66, 172, 2, 11];
+  bytes_match(want_7, wlen_7, mb_7, mlen_7)
+}
+
+// C8: "70000" (39 bytes)
+fn pc8() -> i64 {
+  let esrc_8 = "70000";
+  let wlen_8 = 39;
+  let mb_8 = zeros(256);
+  let tk_8 = zeros(4096);
+  let tb_8 = zeros(4096);
+  let nt_8 = lex(esrc_8, tk_8);
+  let mlen_8 = parity_module(esrc_8, tk_8, nt_8, tb_8, mb_8);
+  let want_8 = [0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 126, 3, 2, 1, 0, 7, 8, 1, 4, 109, 97, 105, 110, 0, 0, 10, 8, 1, 6, 0, 66, 240, 162, 4, 11];
+  bytes_match(want_8, wlen_8, mb_8, mlen_8)
+}
+
+// C9: "1 - 2 - 3" (43 bytes)
+fn pc9() -> i64 {
+  let esrc_9 = "1 - 2 - 3";
+  let wlen_9 = 43;
+  let mb_9 = zeros(256);
+  let tk_9 = zeros(4096);
+  let tb_9 = zeros(4096);
+  let nt_9 = lex(esrc_9, tk_9);
+  let mlen_9 = parity_module(esrc_9, tk_9, nt_9, tb_9, mb_9);
+  let want_9 = [0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 126, 3, 2, 1, 0, 7, 8, 1, 4, 109, 97, 105, 110, 0, 0, 10, 12, 1, 10, 0, 66, 1, 66, 2, 125, 66, 3, 125, 11];
+  bytes_match(want_9, wlen_9, mb_9, mlen_9)
+}
+
+// C10: "(1 + 2) * (3 + 4)" (46 bytes)
+fn pc10() -> i64 {
+  let esrc_10 = "(1 + 2) * (3 + 4)";
+  let wlen_10 = 46;
+  let mb_10 = zeros(256);
+  let tk_10 = zeros(4096);
+  let tb_10 = zeros(4096);
+  let nt_10 = lex(esrc_10, tk_10);
+  let mlen_10 = parity_module(esrc_10, tk_10, nt_10, tb_10, mb_10);
+  let want_10 = [0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 126, 3, 2, 1, 0, 7, 8, 1, 4, 109, 97, 105, 110, 0, 0, 10, 15, 1, 13, 0, 66, 1, 66, 2, 124, 66, 3, 66, 4, 124, 126, 11];
+  bytes_match(want_10, wlen_10, mb_10, mlen_10)
+}
+
+// C11: "((7))" (37 bytes)
+fn pc11() -> i64 {
+  let esrc_11 = "((7))";
+  let wlen_11 = 37;
+  let mb_11 = zeros(256);
+  let tk_11 = zeros(4096);
+  let tb_11 = zeros(4096);
+  let nt_11 = lex(esrc_11, tk_11);
+  let mlen_11 = parity_module(esrc_11, tk_11, nt_11, tb_11, mb_11);
+  let want_11 = [0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 126, 3, 2, 1, 0, 7, 8, 1, 4, 109, 97, 105, 110, 0, 0, 10, 6, 1, 4, 0, 66, 7, 11];
+  bytes_match(want_11, wlen_11, mb_11, mlen_11)
+}
+
+// C12: "2 * 3 + 4 * 5" (46 bytes)
+fn pc12() -> i64 {
+  let esrc_12 = "2 * 3 + 4 * 5";
+  let wlen_12 = 46;
+  let mb_12 = zeros(256);
+  let tk_12 = zeros(4096);
+  let tb_12 = zeros(4096);
+  let nt_12 = lex(esrc_12, tk_12);
+  let mlen_12 = parity_module(esrc_12, tk_12, nt_12, tb_12, mb_12);
+  let want_12 = [0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 126, 3, 2, 1, 0, 7, 8, 1, 4, 109, 97, 105, 110, 0, 0, 10, 15, 1, 13, 0, 66, 2, 66, 3, 126, 66, 4, 66, 5, 126, 124, 11];
+  bytes_match(want_12, wlen_12, mb_12, mlen_12)
+}
+
+// C13: "100 - (20 + 30)" (44 bytes)
+fn pc13() -> i64 {
+  let esrc_13 = "100 - (20 + 30)";
+  let wlen_13 = 44;
+  let mb_13 = zeros(256);
+  let tk_13 = zeros(4096);
+  let tb_13 = zeros(4096);
+  let nt_13 = lex(esrc_13, tk_13);
+  let mlen_13 = parity_module(esrc_13, tk_13, nt_13, tb_13, mb_13);
+  let want_13 = [0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 126, 3, 2, 1, 0, 7, 8, 1, 4, 109, 97, 105, 110, 0, 0, 10, 13, 1, 11, 0, 66, 228, 0, 66, 20, 66, 30, 124, 125, 11];
+  bytes_match(want_13, wlen_13, mb_13, mlen_13)
+}
+
+// C14: "123456 * 654321" (44 bytes)
+fn pc14() -> i64 {
+  let esrc_14 = "123456 * 654321";
+  let wlen_14 = 44;
+  let mb_14 = zeros(256);
+  let tk_14 = zeros(4096);
+  let tb_14 = zeros(4096);
+  let nt_14 = lex(esrc_14, tk_14);
+  let mlen_14 = parity_module(esrc_14, tk_14, nt_14, tb_14, mb_14);
+  let want_14 = [0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 126, 3, 2, 1, 0, 7, 8, 1, 4, 109, 97, 105, 110, 0, 0, 10, 13, 1, 11, 0, 66, 192, 196, 7, 66, 241, 247, 39, 126, 11];
+  bytes_match(want_14, wlen_14, mb_14, mlen_14)
+}
+
+// C15: "1 + 1 + 1 + 1 + 1 + 1" (52 bytes)
+fn pc15() -> i64 {
+  let esrc_15 = "1 + 1 + 1 + 1 + 1 + 1";
+  let wlen_15 = 52;
+  let mb_15 = zeros(256);
+  let tk_15 = zeros(4096);
+  let tb_15 = zeros(4096);
+  let nt_15 = lex(esrc_15, tk_15);
+  let mlen_15 = parity_module(esrc_15, tk_15, nt_15, tb_15, mb_15);
+  let want_15 = [0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 126, 3, 2, 1, 0, 7, 8, 1, 4, 109, 97, 105, 110, 0, 0, 10, 21, 1, 19, 0, 66, 1, 66, 1, 124, 66, 1, 124, 66, 1, 124, 66, 1, 124, 66, 1, 124, 11];
+  bytes_match(want_15, wlen_15, mb_15, mlen_15)
+}
+
+// C16: "(5)" (37 bytes)
+fn pc16() -> i64 {
+  let esrc_16 = "(5)";
+  let wlen_16 = 37;
+  let mb_16 = zeros(256);
+  let tk_16 = zeros(4096);
+  let tb_16 = zeros(4096);
+  let nt_16 = lex(esrc_16, tk_16);
+  let mlen_16 = parity_module(esrc_16, tk_16, nt_16, tb_16, mb_16);
+  let want_16 = [0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 126, 3, 2, 1, 0, 7, 8, 1, 4, 109, 97, 105, 110, 0, 0, 10, 6, 1, 4, 0, 66, 5, 11];
+  bytes_match(want_16, wlen_16, mb_16, mlen_16)
+}
+
+// C17: "8 * 1000000" (42 bytes)
+fn pc17() -> i64 {
+  let esrc_17 = "8 * 1000000";
+  let wlen_17 = 42;
+  let mb_17 = zeros(256);
+  let tk_17 = zeros(4096);
+  let tb_17 = zeros(4096);
+  let nt_17 = lex(esrc_17, tk_17);
+  let mlen_17 = parity_module(esrc_17, tk_17, nt_17, tb_17, mb_17);
+  let want_17 = [0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 126, 3, 2, 1, 0, 7, 8, 1, 4, 109, 97, 105, 110, 0, 0, 10, 11, 1, 9, 0, 66, 8, 66, 192, 132, 61, 126, 11];
+  bytes_match(want_17, wlen_17, mb_17, mlen_17)
+}
+
+// C18: "9 - 8 + 7 - 6 + 5" (49 bytes)
+fn pc18() -> i64 {
+  let esrc_18 = "9 - 8 + 7 - 6 + 5";
+  let wlen_18 = 49;
+  let mb_18 = zeros(256);
+  let tk_18 = zeros(4096);
+  let tb_18 = zeros(4096);
+  let nt_18 = lex(esrc_18, tk_18);
+  let mlen_18 = parity_module(esrc_18, tk_18, nt_18, tb_18, mb_18);
+  let want_18 = [0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 126, 3, 2, 1, 0, 7, 8, 1, 4, 109, 97, 105, 110, 0, 0, 10, 18, 1, 16, 0, 66, 9, 66, 8, 125, 66, 7, 124, 66, 6, 125, 66, 5, 124, 11];
+  bytes_match(want_18, wlen_18, mb_18, mlen_18)
+}
+
+// C19: "2 * (30000 + 777)" (46 bytes)
+fn pc19() -> i64 {
+  let esrc_19 = "2 * (30000 + 777)";
+  let wlen_19 = 46;
+  let mb_19 = zeros(256);
+  let tk_19 = zeros(4096);
+  let tb_19 = zeros(4096);
+  let nt_19 = lex(esrc_19, tk_19);
+  let mlen_19 = parity_module(esrc_19, tk_19, nt_19, tb_19, mb_19);
+  let want_19 = [0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 126, 3, 2, 1, 0, 7, 8, 1, 4, 109, 97, 105, 110, 0, 0, 10, 15, 1, 13, 0, 66, 2, 66, 176, 234, 1, 66, 137, 6, 124, 126, 11];
+  bytes_match(want_19, wlen_19, mb_19, mlen_19)
+}
+
+// C20: "500 - 250 * 2" (45 bytes)
+fn pc20() -> i64 {
+  let esrc_20 = "500 - 250 * 2";
+  let wlen_20 = 45;
+  let mb_20 = zeros(256);
+  let tk_20 = zeros(4096);
+  let tb_20 = zeros(4096);
+  let nt_20 = lex(esrc_20, tk_20);
+  let mlen_20 = parity_module(esrc_20, tk_20, nt_20, tb_20, mb_20);
+  let want_20 = [0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 126, 3, 2, 1, 0, 7, 8, 1, 4, 109, 97, 105, 110, 0, 0, 10, 14, 1, 12, 0, 66, 244, 3, 66, 250, 1, 66, 2, 126, 125, 11];
+  bytes_match(want_20, wlen_20, mb_20, mlen_20)
+}
+
 
 fn self_check() -> i64 {
   let total = [0];
-  let _ = total[0] = total[0] + parity_case1();
-  let _ = total[0] = total[0] + parity_case2();
-  let _ = total[0] = total[0] + parity_case3();
-  let _ = total[0] = total[0] + parity_case4();
+  let _ = total[0] = total[0] + (1 - pc1());
+  let _ = total[0] = total[0] + (1 - pc2());
+  let _ = total[0] = total[0] + (1 - pc3());
+  let _ = total[0] = total[0] + (1 - pc4());
+  let _ = total[0] = total[0] + (1 - pc5());
+  let _ = total[0] = total[0] + (1 - pc6());
+  let _ = total[0] = total[0] + (1 - pc7());
+  let _ = total[0] = total[0] + (1 - pc8());
+  let _ = total[0] = total[0] + (1 - pc9());
+  let _ = total[0] = total[0] + (1 - pc10());
+  let _ = total[0] = total[0] + (1 - pc11());
+  let _ = total[0] = total[0] + (1 - pc12());
+  let _ = total[0] = total[0] + (1 - pc13());
+  let _ = total[0] = total[0] + (1 - pc14());
+  let _ = total[0] = total[0] + (1 - pc15());
+  let _ = total[0] = total[0] + (1 - pc16());
+  let _ = total[0] = total[0] + (1 - pc17());
+  let _ = total[0] = total[0] + (1 - pc18());
+  let _ = total[0] = total[0] + (1 - pc19());
+  let _ = total[0] = total[0] + (1 - pc20());
   total[0]
 }

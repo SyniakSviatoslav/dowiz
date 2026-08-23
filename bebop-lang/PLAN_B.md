@@ -402,6 +402,32 @@ STEPS:
 STATUS (2026-08-22): SLICE DONE — 4/4 constructs byte-identical to C output
   (parity.bp vs `bebopc compile` goldens). True signed-LEB128 implemented.
 3. Report a per-construct parity table; any mismatch = a bug to fix (document).
+STATUS (2026-08-23): DONE — 20/20 constructs byte-identical to live
+  `bebopc compile` goldens (arith, parens/nesting, precedence mixes, LEB128
+  multi-byte consts 300/70000/123456*654321, chains, single consts). parity.bp
+  rewritten data-driven: each pcN is self-contained (zero-arg, per-case UNIQUE
+  local names), self_check accumulates REAL failure counts (the old slice's
+  bad_sum was never updated — dead store; fixed).
+VERIFY: all constructs bit-match; report the table.
+
+## Swarm B2-8b (found during B2-8): evaluator env-pool aliasing — FIXED
+ROOT CAUSE (qtt.c): TERM_LET under the global `in_while` flag mutated the
+FIRST same-named binding up the ENTIRE env chain — including parameter frames
+of OTHER function invocations on the chain. Any helper called from inside a
+while loop could clobber a caller/sibling frame sharing a param/local name;
+symptoms ranged from silent wrong bytes to out-of-range char() reads, and
+depended on call-tree shape (solo vs sequence differed).
+FIX: every invocation now pushes a NULL-name boundary marker under its frame
+(TERM_APP curried path + zero-arg path); the in_while let-walk stops at the
+marker; TERM_VAR lookup skips markers transparently. Loop-variable persistence
+within one invocation is preserved (loop slots sit below the marker).
+EVIDENCE: minimal repro (pc1();pc2() with shared local names) errored before,
+passes after; make test 79 modules 0 failing; 144/144 strict+check sweep green;
+17 self_check modules return 0; selfcompile full_compiler.bp checksum stable
+across 3 runs (-8016180527218382004).
+NOTE: .bp convention "loop state lives in boxes" was an empirical workaround
+for this exact bug class; scalar let-rebinding inside while bodies is now safe
+within an invocation, but the box rule stays as style.
 VERIFY: all constructs bit-match; report the table.
 
 ---

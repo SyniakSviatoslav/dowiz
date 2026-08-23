@@ -1718,6 +1718,7 @@ static Value eval(const Term *t, Env *env) {
             return v;
         case TERM_VAR:
             for (Env *e = env; e; e = e->next) {
+                if (!e->name) continue; /* call-boundary marker: transparent */
                 if (strcmp(e->name, t->name) == 0) {
                     return e->val;
                 }
@@ -1738,7 +1739,11 @@ static Value eval(const Term *t, Env *env) {
             }
             /* zero-arg fn: the "closure" holds the body directly (not a lambda) */
             if (f.lam->kind != TERM_LAM) {
-                return eval(f.lam, f.env);
+                /* zero-arg fn: evaluate body under its own boundary marker so
+                 * in_while lets cannot leak into the caller's chain either. */
+                Env *mark = env_new(NULL, v, f.env);
+                if (!mark) { v.kind = -1; return v; }
+                return eval(f.lam, mark);
             }
             if (!f.lam->name) { v.kind = -1; return v; }
             /* Reclaim env nodes when the call yields a VALUE (not a closure):
@@ -1746,7 +1751,11 @@ static Value eval(const Term *t, Env *env) {
              * keep it; a plain value means the param env is dead. This bounds
              * env-pool growth to call depth instead of total calls. */
             int saved_env_i = env_i;
-            Env *e = env_new(f.lam->name, arg, f.env);
+            /* boundary marker: a NULL-name slot separating this invocation's
+             * bindings from the caller's chain (see TERM_LET in_while walk). */
+            Env *mark = env_new(NULL, arg, f.env);
+            if (!mark) { v.kind = -1; return v; }
+            Env *e = env_new(f.lam->name, arg, mark);
             if (!e) { v.kind = -1; return v; }
             Value r = eval(f.lam->a, e);
             if (is_scalar_value(&r)) env_i = saved_env_i;
@@ -1811,10 +1820,15 @@ static Value eval(const Term *t, Env *env) {
                 return eval(t->b, env);
             }
             if (in_while) {
-                /* mutate the FIRST matching binding in place so the loop
-                 * variable persists across iterations. */
+                /* mutate the matching binding in place so the loop variable
+                 * persists across iterations. The walk stops at the current
+                 * invocation's boundary marker (a NULL-name env slot pushed
+                 * by TERM_APP), so a callee can never mutate a caller's or a
+                 * sibling invocation's same-named binding through the shared
+                 * pool. */
                 for (Env *e = env; e; e = e->next) {
-                    if (e->name && strcmp(e->name, t->name) == 0) {
+                    if (!e->name) break; /* call boundary: stop here */
+                    if (strcmp(e->name, t->name) == 0) {
                         e->val = x;
                         return eval(t->b, env);
                     }
