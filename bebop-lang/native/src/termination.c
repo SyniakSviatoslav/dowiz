@@ -44,6 +44,7 @@ int qtt_termination_check(const Term *t, char *err, size_t cap) {
         case TERM_ANN:
         case TERM_REFL:
         case TERM_STR_LEN:
+        case TERM_ZEROS: /* zeros(n): array allocation, no recursion */
             return qtt_termination_check(t->a, err, cap);
         case TERM_APP:
         case TERM_BIN:

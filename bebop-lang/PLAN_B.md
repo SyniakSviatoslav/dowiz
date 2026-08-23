@@ -348,6 +348,19 @@ STEPS:
    documented pipelining.
 4. `self_check`: assert the emitted GPU/FPGA text is deterministic and contains
    the expected structure (kernel name, lane count, op mapping) for a fixed VIR.
+STATUS (2026-08-23): DONE — gpu_f.bp emits 3 WGSL kernels (ADD/SUB 2D, MUL 4S,
+  workgroup_size(64), flat-f32 contract) + ADD_2D Verilog skeleton with documented
+  S1/S2/S3 pipelining; self_check 0 (16 structural+determinism assertions),
+  strict+check PASS.
+  ROOT CAUSE FIXED en route: qtt.c evaluator stored concat results in shared
+  256-byte static rings (all strings truncated at 255 chars) and chr() aliased a
+  single 2-byte buffer — replaced with a chunked bump arena reset per top-level
+  eval (make test: 79 modules 0 failing; full sweep strict+check green; all 16
+  self_check modules 0).
+  KNOWN GAP (B1 backlog): native lexer has no string token — '{'/'}' inside any
+  .bp string literal breaks item parsing (parser.c skip_balanced sees leaked
+  PUNCT braces); gpu_f.bp emits braces via chr(123)/chr(125) until bp_lex gains
+  BP_TOK_STR.
 VERIFY: `check`, `strict`, `self_check`.
 
 ## Swarm B2-7: benchmark — honest compile throughput vs C

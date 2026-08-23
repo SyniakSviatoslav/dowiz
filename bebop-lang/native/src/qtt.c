@@ -212,6 +212,53 @@ Ty *qtt_f64(void) {
     return &F64_TY;
 }
 
+/* ─── Runtime string arena ───
+ * TERM_STR_CAT / TERM_CHR results previously lived in shared 256-byte static
+ * rings: every concatenation was truncated at 255 chars and two chr() calls in
+ * one expression aliased the same 2-byte buffer. Codegen-text backends (WGSL,
+ * Verilog, wasm) need long, simultaneously-live strings, so results now bump-
+ * allocate from a linked chunk list. Chunks are reused (usage counters reset
+ * at top-level eval entry) but never moved or freed mid-eval, so held string
+ * pointers stay valid.
+ * innovate: chunks persist for the process lifetime — a long-lived embedding
+ * running millions of string-heavy evals should add periodic compaction
+ * (upgrade trigger: measured RSS growth in fuzz/CI). */
+typedef struct StrChunk {
+    struct StrChunk *next;
+    size_t used, cap;
+} StrChunk;
+
+static StrChunk *str_chunks = NULL;
+
+static void str_arena_reset(void) {
+    for (StrChunk *c = str_chunks; c; c = c->next) {
+        c->used = 0;
+    }
+}
+
+static char *str_arena_alloc(size_t n) {
+    for (StrChunk *c = str_chunks; c; c = c->next) {
+        if (c->cap - c->used >= n) {
+            char *p = (char *)(c + 1) + c->used;
+            c->used += n;
+            return p;
+        }
+    }
+    size_t cap = 1u << 16;
+    if (cap < n) {
+        cap = n;
+    }
+    StrChunk *c = malloc(sizeof *c + cap);
+    if (!c) {
+        return NULL;
+    }
+    c->next = str_chunks;
+    c->used = n;
+    c->cap = cap;
+    str_chunks = c;
+    return (char *)(c + 1);
+}
+
 /* ─── Struct (record) self-test ─── */
 int qtt_struct_test(char *out, size_t cap) {
     size_t pos = 0;
@@ -1862,13 +1909,16 @@ static Value eval(const Term *t, Env *env) {
             Value a = eval(t->a, env);
             Value b = eval(t->b, env);
             if (a.kind != 5 || b.kind != 5) { v.kind = -1; return v; }
-            static char catbuf[4][256];
-            static int ci = 0;
-            char *buf = catbuf[ci++ & 3];
-            snprintf(buf, 256, "%s%s", a.ctor, b.ctor);
+            size_t la = strlen(a.ctor);
+            size_t lb = strlen(b.ctor);
+            char *buf = str_arena_alloc(la + lb + 1);
+            if (!buf) { v.kind = -1; return v; }
+            memcpy(buf, a.ctor, la);
+            memcpy(buf + la, b.ctor, lb);
+            buf[la + lb] = '\0';
             v.kind = 5;
             v.ctor = buf;
-            v.slen = (long)strlen(buf);
+            v.slen = (long)(la + lb);
             return v;
         }
         case TERM_STR_CHAR: {
@@ -1885,11 +1935,12 @@ static Value eval(const Term *t, Env *env) {
         case TERM_SPAWN:
         case TERM_AWAIT: {
             Value i = eval(t->a, env);
-            static char cbuf[2];
-            cbuf[0] = (char)(i.i & 0xFF);
-            cbuf[1] = '\0';
+            char *cb = str_arena_alloc(2);
+            if (!cb) { v.kind = -1; return v; }
+            cb[0] = (char)(i.i & 0xFF);
+            cb[1] = '\0';
             v.kind = 5;
-            v.ctor = cbuf;
+            v.ctor = cb;
             v.slen = 1;
             return v;
         }
@@ -2070,6 +2121,7 @@ int qtt_eval_binds(const Term *t, const char **names, Term *const *lams, int n,
                    char *err, size_t cap) {
     env_i = 0;
     afv_pos = 0;
+    str_arena_reset();
     Env fb[256];
     int cnt = n < 256 ? n : 256;
     for (int i = 0; i < cnt; i++) {
@@ -2099,6 +2151,7 @@ int qtt_eval_bound(const Term *t, const QttBind *binds, int n, int *out_kind,
                    long *out_i, int *out_b, char *err, size_t cap) {
     env_i = 0;
     afv_pos = 0;
+    str_arena_reset();
     Env stack[64];
     for (int i = 0; i < n && i < 64; i++) {
         stack[i].name = binds[n - 1 - i].name;
@@ -2329,6 +2382,7 @@ Term *qtt_subst(const Term *t, const char *name, const Term *v) {
             return o;
         case TERM_NAT_Z:
             return o;
+        case TERM_ZEROS: /* substitute into the size expression */
         case TERM_NAT_S:
             o->a = qtt_subst(t->a, name, v);
             return o;
@@ -2414,6 +2468,9 @@ static Term *norm_rec(const Term *t) {
         case TERM_REFL:
             o->a = norm_rec(t->a);
             return o;
+        case TERM_ZEROS: /* normalize the size expression */
+            o->a = norm_rec(t->a);
+            return o;
         case TERM_SUBST:
             o->a = norm_rec(t->a);
             o->b = norm_rec(t->b);
@@ -2459,10 +2516,13 @@ static Term *norm_rec(const Term *t) {
             Term *sb = norm_rec(t->b);
             if (!sa || !sb) return NULL;
             if (sa->kind == TERM_STR && sa->name && sb->kind == TERM_STR && sb->name) {
-                static char catnorm[4][256];
-                static int cni = 0;
-                char *buf = catnorm[cni++ & 3];
-                snprintf(buf, 256, "%s%s", sa->name, sb->name);
+                size_t la = strlen(sa->name);
+                size_t lb = strlen(sb->name);
+                char *buf = str_arena_alloc(la + lb + 1);
+                if (!buf) return NULL;
+                memcpy(buf, sa->name, la);
+                memcpy(buf + la, sb->name, lb);
+                buf[la + lb] = '\0';
                 o->kind = TERM_STR;
                 o->name = buf;
                 o->op = 0;
@@ -2666,6 +2726,8 @@ static int conv_rec(const Term *a, const Term *b) {
         case TERM_NAT_Z:
             return 1;
         case TERM_NAT_S:
+            return conv_rec(a->a, b->a);
+        case TERM_ZEROS: /* convertible iff sizes normalize equal */
             return conv_rec(a->a, b->a);
         case TERM_NAT_REC:
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b) &&

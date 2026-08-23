@@ -1,0 +1,290 @@
+// B2-6: gpu_fpga.bp — VIR→GPU/FPGA lowering contract + first emit slice.
+//
+// EMIT CONTRACT (VIR = the single portable layer; native/src/vir.h is source):
+// Data layout: every VIR buffer lowers to a flat f32 array on both targets;
+//   lane i of vector operand n lives at buf_n[base + i] (stride 1 = coalesced).
+// Lane mapping: ADD_2D / SUB_2D are 2-lane ops (WGSL vec2 / 2-wide FPGA lane
+//   group); MUL_4S is a 4-lane op (WGSL vec4 / 4-wide lane group).
+// Memory pattern: linear coalesced scan per stage; NTT butterflies lower as
+//   repeated element-wise passes over strided half-views (this slice emits the
+//   plain element-wise kernels; butterfly addressing = follow-up slice).
+//
+// VirOp    GPU (WGSL)                              FPGA (Verilog skeleton)
+// -------  --------------------------------------  --------------------------------
+// ADD_2D   @compute @workgroup_size(64), loads     module vir_add2d, 3 stages:
+//          vec2 a,b -> lane-wise add -> store      S1 fetch, S2 add, S3 writeback
+// SUB_2D   same shape as ADD_2D, op '-'            same 3 stages, sub unit
+// MUL_4S   @workgroup_size(64), loads vec4 a,b ->  4-lane pipeline, mult pipe S2
+//          lane-wise mul -> store vec4
+
+module core { }
+
+// ---- text helpers -----------------------------------------------------------
+
+// str_eq: 1 if s and t are identical, else 0 (box accumulators per state rule)
+fn str_eq(s: str, t: str) -> i64 {
+  let n = str_len(s);
+  let m = str_len(t);
+  let lenok = if n == m then 1 else 0;
+  let k = [0];
+  let diff = [0];
+  let gob = [lenok];
+  while gob[0] == 1 {
+    let done = if k[0] >= n then 1 else 0;
+    let want = if done == 1 then 0 else char(s, k[0]);
+    let got = if done == 1 then 0 else char(t, k[0]);
+    let dd = want - got;
+    let _ = diff[0] = diff[0] + dd * dd;
+    let _ = k[0] = k[0] + 1;
+    let _ = gob[0] = 1 - done;
+    0
+  };
+  let clean = if diff[0] > 0 then 0 else 1;
+  lenok * clean
+}
+
+// match_at: 1 if needle occurs in s at offset at (caller bounds at), else 0
+fn match_at(s: str, needle: str, at: i64) -> i64 {
+  let m = str_len(needle);
+  let j = [0];
+  let bad = [0];
+  let gob = [1];
+  while gob[0] == 1 {
+    let done = if j[0] >= m then 1 else 0;
+    let cs = if done == 1 then 0 else char(s, at + j[0]);
+    let ct = if done == 1 then 0 else char(needle, j[0]);
+    let mm = (cs - ct) * (cs - ct);
+    let _ = bad[0] = bad[0] + mm;
+    let _ = j[0] = j[0] + 1;
+    let _ = gob[0] = 1 - done;
+    0
+  };
+  let clean = if bad[0] > 0 then 0 else 1;
+  clean
+}
+
+// contains: 1 if needle occurs anywhere in s, else 0 (first-hit stop)
+fn contains(s: str, needle: str) -> i64 {
+  let n = str_len(s);
+  let m = str_len(needle);
+  let lim = n - m;
+  let nz = if lim >= 0 then 1 else 0;
+  let found = [0];
+  let i = [0];
+  let gob = [nz];
+  while gob[0] == 1 {
+    let done = if i[0] > lim then 1 else 0;
+    let hit = if done == 1 then 0 else match_at(s, needle, i[0]);
+    let _ = found[0] = found[0] + hit;
+    let stop = if found[0] > 0 then 1 else 0;
+    let adv = if done == 1 then 0 else 1;
+    let _ = i[0] = i[0] + adv;
+    let _ = gob[0] = (1 - done) * (1 - stop);
+    0
+  };
+  let have = if found[0] > 0 then 1 else 0;
+  have
+}
+
+// ---- GPU (WGSL) emission ----------------------------------------------------
+
+// wgsl_name: VIR op -> kernel name suffix (closed set: 0=add_2d 1=sub_2d 2=mul_4s)
+fn wgsl_name(op: i64) -> str {
+  let nm = "";
+  let nm = if op == 0 then "add_2d" else nm;
+  let nm = if op == 1 then "sub_2d" else nm;
+  let nm = if op == 2 then "mul_4s" else nm;
+  nm
+}
+
+// wgsl_sym: VIR op -> lane arithmetic symbol
+fn wgsl_sym(op: i64) -> str {
+  let sy = "";
+  let sy = if op == 0 then "+" else sy;
+  let sy = if op == 1 then "-" else sy;
+  let sy = if op == 2 then "*" else sy;
+  sy
+}
+
+// wgsl_stride: lane-group width as a WGSL u32 literal (index step per invocation)
+fn wgsl_stride(op: i64) -> str {
+  let st = "";
+  let st = if op == 2 then "4u" else st;
+  let st = if op < 2 then "2u" else st;
+  st
+}
+
+// gpu_load_block: vector loads for one op (2-lane vs 4-lane contract layout)
+fn gpu_load_block(op: i64) -> str {
+  if op == 2 then
+    ("  let va = vec4<f32>(a[i], a[i + 1u], a[i + 2u], a[i + 3u]);\n"
+    ++ "  let vb = vec4<f32>(b[i], b[i + 1u], b[i + 2u], b[i + 3u]);\n")
+  else
+    ("  let va = vec2<f32>(a[i], a[i + 1u]);\n"
+    ++ "  let vb = vec2<f32>(b[i], b[i + 1u]);\n")
+}
+
+// gpu_store_block: lane-wise stores for one op (closes the kernel body).
+// innovate: braces are emitted via chr(125) because the native lexer has no
+// string token — a '}' inside a literal terminates fn-body parsing
+// (lexer.c/parser.c gap); upgrade trigger: string-aware bp_lex (B1 backlog).
+fn gpu_store_block(op: i64, sy: str) -> str {
+  let cb = chr(125);
+  if op == 2 then
+    ("  o[i] = (va " ++ sy ++ " vb).x;\n"
+    ++ "  o[i + 1u] = (va " ++ sy ++ " vb).y;\n"
+    ++ "  o[i + 2u] = (va " ++ sy ++ " vb).z;\n"
+    ++ "  o[i + 3u] = (va " ++ sy ++ " vb).w;\n"
+    ++ cb ++ "\n")
+  else
+    ("  o[i] = (va " ++ sy ++ " vb).x;\n"
+    ++ "  o[i + 1u] = (va " ++ sy ++ " vb).y;\n"
+    ++ cb ++ "\n")
+}
+
+// gpu_kernel: emit the full WGSL compute shader for one element-wise VIR op.
+// One invocation handles one lane group; workgroup_size(64) => 128 lanes per
+// 2D dispatch, 256 lanes per 4S dispatch. Pure fn of (op) => deterministic.
+fn gpu_kernel(op: i64) -> str {
+  let nm = wgsl_name(op);
+  let sy = wgsl_sym(op);
+  let stride = wgsl_stride(op);
+
+  let head = "@group(0) @binding(0) var<storage, read> a: array<f32>;\n"
+    ++ "@group(0) @binding(1) var<storage, read> b: array<f32>;\n"
+    ++ "@group(0) @binding(2) var<storage, read_write> o: array<f32>;\n\n";
+  let sig = "@compute @workgroup_size(64)\n"
+    ++ "fn vir_" ++ nm ++ "(@builtin(global_invocation_id) gid: vec3<u32>) "
+    ++ chr(123) ++ "\n";
+  let idx = "  let i = gid.x * " ++ stride ++ ";\n";
+  let load = gpu_load_block(op);
+  let store = gpu_store_block(op, sy);
+
+  head ++ sig ++ idx ++ load ++ store
+}
+
+// ---- FPGA (Verilog) emission ------------------------------------------------
+
+// verilog_add2d: emit the ADD_2D pipeline skeleton. Documented pipelining:
+//   S1 fetch     — operand pairs latched, in_valid delayed by 1
+//   S2 add       — lane adds computed, valid delayed by 2
+//   S3 writeback — outputs registered, out_valid aligns with S3
+// innovate: S2 uses behavioral '+' as a stand-in for an IEEE754 fp64 core —
+// upgrade trigger: a real synthesis flow or bit-exact FP KATs gets wired.
+fn verilog_add2d() -> str {
+  let ports = "// vir_add2d — ADD_2D lowering skeleton (see contract header)\n"
+    ++ "// Pipeline: S1 fetch -> S2 add -> S3 writeback; valid line in lockstep.\n"
+    ++ "module vir_add2d(\n"
+    ++ "  input  wire        clk,\n"
+    ++ "  input  wire        rst_n,\n"
+    ++ "  input  wire        in_valid,\n"
+    ++ "  input  wire [63:0] a_lane0,\n"
+    ++ "  input  wire [63:0] a_lane1,\n"
+    ++ "  input  wire [63:0] b_lane0,\n"
+    ++ "  input  wire [63:0] b_lane1,\n"
+    ++ "  output reg         out_valid,\n"
+    ++ "  output reg  [63:0] o_lane0,\n"
+    ++ "  output reg  [63:0] o_lane1\n"
+    ++ ");\n\n";
+  let s1 = "  // S1 fetch: latch operands + valid\n"
+    ++ "  reg [63:0] s1_a0, s1_a1, s1_b0, s1_b1;\n"
+    ++ "  reg        s1_vld;\n"
+    ++ "  always @(posedge clk) begin\n"
+    ++ "    if (!rst_n) s1_vld <= 1'b0;\n"
+    ++ "    else begin\n"
+    ++ "      s1_a0 <= a_lane0; s1_a1 <= a_lane1;\n"
+    ++ "      s1_b0 <= b_lane0; s1_b1 <= b_lane1;\n"
+    ++ "      s1_vld <= in_valid;\n"
+    ++ "    end\n"
+    ++ "  end\n\n";
+  let s2 = "  // S2 add: lane adds (behavioral; swap in FP core at synth time)\n"
+    ++ "  reg [63:0] s2_r0, s2_r1;\n"
+    ++ "  reg        s2_vld;\n"
+    ++ "  always @(posedge clk) begin\n"
+    ++ "    if (!rst_n) s2_vld <= 1'b0;\n"
+    ++ "    else begin\n"
+    ++ "      s2_r0 <= s1_a0 + s1_b0;\n"
+    ++ "      s2_r1 <= s1_a1 + s1_b1;\n"
+    ++ "      s2_vld <= s1_vld;\n"
+    ++ "    end\n"
+    ++ "  end\n\n";
+  let s3 = "  // S3 writeback: registered outputs + aligned valid\n"
+    ++ "  always @(posedge clk) begin\n"
+    ++ "    if (!rst_n) begin\n"
+    ++ "      out_valid <= 1'b0; o_lane0 <= 64'd0; o_lane1 <= 64'd0;\n"
+    ++ "    end else begin\n"
+    ++ "      o_lane0 <= s2_r0; o_lane1 <= s2_r1;\n"
+    ++ "      out_valid <= s2_vld;\n"
+    ++ "    end\n"
+    ++ "  end\n"
+    ++ "endmodule\n";
+  ports ++ s1 ++ s2 ++ s3
+}
+
+// ---- self_check -------------------------------------------------------------
+
+// fail-add helper keeps the self_check body branchless one-deep
+fn bump(fail: [i64], cond: i64) -> i64 {
+  let _ = if cond == 1 then (let _ = fail[0] = fail[0] + cond in 0) else 0;
+  0
+}
+
+fn self_check() -> i64 {
+  let fail = [0];
+
+  // T1 determinism: two builds of the same kernel are byte-identical
+  let d1 = str_eq(gpu_kernel(0), gpu_kernel(0));
+  let _ = bump(fail, 1 - d1);
+
+  // T2 GPU structure: workgroup size + storage bindings present
+  let k0 = gpu_kernel(0);
+  let ws = contains(k0, "@workgroup_size(64)");
+  let bd = contains(k0, "var<storage, read> a: array<f32>");
+  let _ = bump(fail, 1 - ws);
+  let _ = bump(fail, 1 - bd);
+
+  // T3 kernel name carries the VIR op mapping
+  let kn = contains(k0, "fn vir_add_2d(");
+  let _ = bump(fail, 1 - kn);
+
+  // T4 MUL_4S is the 4-lane vec4 variant
+  let k2 = gpu_kernel(2);
+  let v4 = contains(k2, "vec4<f32>");
+  let st4 = contains(k2, "gid.x * 4u");
+  let _ = bump(fail, 1 - v4);
+  let _ = bump(fail, 1 - st4);
+
+  // T5 op texts pairwise distinct (op mapping is injective on this set)
+  let k1 = gpu_kernel(1);
+  let ne01 = 1 - str_eq(k0, k1);
+  let ne02 = 1 - str_eq(k0, k2);
+  let ne12 = 1 - str_eq(k1, k2);
+  let _ = bump(fail, 1 - ne01);
+  let _ = bump(fail, 1 - ne02);
+  let _ = bump(fail, 1 - ne12);
+
+  // T6 symbols: sub lowers '-', mul lowers '*'
+  let ms = contains(k1, "(va - vb)");
+  let mm = contains(k2, "(va * vb)");
+  let _ = bump(fail, 1 - ms);
+  let _ = bump(fail, 1 - mm);
+
+  // T7 FPGA skeleton: module/endmodule + all three pipeline stages marked
+  let vg = verilog_add2d();
+  let vm = contains(vg, "module vir_add2d(");
+  let ve = contains(vg, "endmodule");
+  let vs1 = contains(vg, "S1 fetch");
+  let vs2 = contains(vg, "S2 add");
+  let vs3 = contains(vg, "S3 writeback");
+  let _ = bump(fail, 1 - vm);
+  let _ = bump(fail, 1 - ve);
+  let _ = bump(fail, 1 - vs1);
+  let _ = bump(fail, 1 - vs2);
+  let _ = bump(fail, 1 - vs3);
+
+  // T8 FPGA skeleton deterministic across builds
+  let vd = str_eq(vg, verilog_add2d());
+  let _ = bump(fail, 1 - vd);
+
+  fail[0]
+}
