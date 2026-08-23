@@ -559,7 +559,13 @@ VERIFY: full gate green; pushed to origin/main.
 - After each batch: parent runs full verify gate, resolves merge conflicts,
   commits + pushes. Then next batch.
 - Every swarm reports: files changed, what implemented, exact test output,
-  design decisions. No commit/push by swarms.- PARITY-FUZZ (2026-08-23): differential testing bootstrap-interpreter vs self-hosted
+  design decisions. No commit/push by swarms.- CODEGEN-OPT (2026-08-23): OPT-A landed (unused callee-save pairs NOP-patched;
+  fib 2.1x faster). OPT-B/C/D (vregs/folding/direct-branches) fully built but
+  GATED OFF: blocked by newly found bootstrap-evaluator bug - str parameter
+  binds to garbage several call frames deep (str_len(s) wrong inside
+  fp_expr_step while correct one frame up). Next session: root-cause that
+  binding bug in qtt.c env handling, then flip FP_DISABLED() to 1.
+- PARITY-FUZZ (2026-08-23): differential testing bootstrap-interpreter vs self-hosted
   compiled-native execution - 340/340 random programs bit-exact (40 + 300 corpora,
   gen: diff_fuzz gen; driver: bench/vs_rust/parity_driver.sh). Zero mismatches/crashes.
 
