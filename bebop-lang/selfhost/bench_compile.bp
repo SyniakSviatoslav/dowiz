@@ -1,0 +1,160 @@
+// bench_compile.bp — B2-7 self-host WORK-metrics harness (.bp side).
+//
+// innovate: .bp has no monotonic-clock primitive wired in the bootstrap (only
+// write/exit syscalls), so wall-time benchmarking lives in the C harness
+// (`bebopc selfhost-bench`, native/src/bench_selfhost.c). This module reports
+// deterministic WORK counters for the same pipeline stages — source size,
+// token count, item count — so throughput numbers have an in-language,
+// platform-independent counterpart. Upgrade trigger: a clock builtin lands.
+//
+// Work contract for a fixed input of U units ("1 + 2 * 3 - " repeated):
+//   bytes(U)   = 12*U + 1        (unit is 12 chars; trailing '7')
+//   tokens(U)  = counted by the embedded B1-1-parity lexer
+
+module core { }
+
+// ---- deterministic ~1KB source generator ----
+
+fn gen_source(units: i64) -> str {
+  let out = "";
+  let i = [0];
+  let gob = [1];
+  while gob[0] == 1 {
+    let done = if i[0] >= units then 1 else 0;
+    let chunk = if done == 1 then "" else "1 + 2 * 3 - ";
+    let _ = if done == 0 then (let _ = i[0] = i[0] + 1 in 0) else 0;
+    let out = out ++ chunk;
+    let _ = gob[0] = 1 - done;
+    0
+  };
+  out ++ "7"
+}
+
+// ---- embedded lexer (B1-1 bp_lex parity subset, flat 4-wide records) ----
+
+fn is_digit(c: i64) -> i64 {
+  let ge48 = if c >= 48 then 1 else 0;
+  let le57 = if c <= 57 then 1 else 0;
+  ge48 * le57
+}
+
+fn is_alpha(c: i64) -> i64 {
+  let ge_a = if c >= 97 then 1 else 0;
+  let le_z = if c <= 122 then 1 else 0;
+  let ge_A = if c >= 65 then 1 else 0;
+  let le_Z = if c <= 90 then 1 else 0;
+  ge_a * le_z + ge_A * le_Z
+}
+
+fn lex_ident_start(c: i64) -> i64 {
+  is_alpha(c) + (if c == 95 then 1 else 0)
+}
+
+fn is_ident_char(c: i64) -> i64 {
+  is_alpha(c) + is_digit(c) + (if c == 95 then 1 else 0)
+}
+
+fn scan_ident(src: str, i: i64) -> i64 {
+  let strn = str_len(src);
+  let jb = [i];
+  let gob = [1];
+  while gob[0] == 1 {
+    let at_end = if jb[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(src, jb[0]);
+    let keep = is_ident_char(ch) * (1 - at_end);
+    let _ = jb[0] = jb[0] + keep;
+    let _ = gob[0] = keep;
+    0
+  };
+  jb[0]
+}
+
+fn scan_digits(src: str, i: i64) -> i64 {
+  let strn = str_len(src);
+  let jb = [i];
+  let gob = [1];
+  while gob[0] == 1 {
+    let at_end = if jb[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(src, jb[0]);
+    let keep = is_digit(ch) * (1 - at_end);
+    let _ = jb[0] = jb[0] + keep;
+    let _ = gob[0] = keep;
+    0
+  };
+  jb[0]
+}
+
+fn lex_emit(toks: [i64], n: [i64], kind: i64, off: i64, len: i64) -> i64 {
+  let b = n[0] * 4;
+  let _ = toks[b] = kind;
+  let _ = tokos_off_store(toks, b, off);
+  let _ = toks[b + 2] = len;
+  let _ = n[0] = n[0] + 1;
+  n[0]
+}
+
+fn tokos_off_store(toks: [i64], b: i64, off: i64) -> i64 {
+  let _ = toks[b + 1] = off;
+  0
+}
+
+fn lex(src: str, toks: [i64]) -> i64 {
+  let strn = str_len(src);
+  let i = [0];
+  let n = [0];
+  let done = if strn == 0 then 1 else 0;
+  while done == 0 {
+    let at_end = if i[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(src, i[0]);
+    let is_sp = (if ch == 32 then 1 else 0) + (if ch == 9 then 1 else 0);
+    let is_id = lex_ident_start(ch);
+    let is_num = is_digit(ch);
+    let is_pn = (1 - is_sp) * (1 - is_id) * (1 - is_num) * (1 - at_end);
+    let id_end = if is_id == 1 then scan_ident(src, i[0]) else i[0];
+    let num_end = if is_num == 1 then scan_digits(src, i[0]) else i[0];
+    let _ = if is_id == 1 then (let _ = lex_emit(toks, n, 1, i[0], id_end - i[0]) in 0) else 0;
+    let _ = if is_num == 1 then (let _ = lex_emit(toks, n, 3, i[0], num_end - i[0]) in 0) else 0;
+    let _ = if is_pn == 1 then (let _ = lex_emit(toks, n, 4, i[0], 1) in 0) else 0;
+    let step = is_sp + is_id * (id_end - i[0]) + is_num * (num_end - i[0]) + is_pn;
+    let _ = i[0] = i[0] + step;
+    let done = if i[0] >= strn then 1 else 0;
+    0
+  };
+  let _ = lex_emit(toks, n, 0, strn, 0);
+  n[0]
+}
+
+// ---- work report: tokens for the standard bench input ----
+
+fn work_tokens(units: i64) -> i64 {
+  let src = gen_source(units);
+  let toks = zeros(8192);
+  lex(src, toks)
+}
+
+fn self_check() -> i64 {
+  let fail = [0];
+
+  // W1: generated source has the contracted byte size (12*U + 1)
+  let l = str_len(gen_source(84));
+  let w1 = if l == 1009 then 1 else 0;
+  let _ = fail[0] = fail[0] + (1 - w1);
+
+  // W2: generation is deterministic across calls
+  let d = if str_len(gen_source(84)) == l then 1 else 0;
+  let _ = fail[0] = fail[0] + (1 - d);
+
+  // W3: token count matches the closed-form contract for U=84
+  //     per unit "1 + 2 * 3 - ": 3 nums + 3 ops = 6 tokens;
+  //     final "7" adds 1 num; lexer appends 1 EOF record
+  let nt = work_tokens(84);
+  let w3 = if nt == 6 * 84 + 2 then 1 else 0;
+  let _ = fail[0] = fail[0] + (1 - w3);
+
+  // W4: lexer work is repeatable
+  let nt2 = work_tokens(84);
+  let w4 = if nt2 == nt then 1 else 0;
+  let _ = fail[0] = fail[0] + (1 - w4);
+
+  fail[0]
+}

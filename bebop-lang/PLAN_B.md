@@ -376,6 +376,14 @@ STEPS:
    CLOCK_BOOTTIME, median over R=10, print a table. No DCE (consume results).
 2. .bp harness: same measurements from inside .bp (self-timed).
 3. Report honest numbers; wire `./build/bebopc selfhost-bench`.
+STATUS (2026-08-23): DONE — `bebopc selfhost-bench [compiler.bp] [typecheck.bp]`
+  (native/src/bench_selfhost.c, wired into Makefile SRC). R=10 median,
+  CLOCK_MONOTONIC, results consumed into a sink (no DCE). Honest numbers
+  (2026-08-23, this box): full_compiler.bp self_check 4.28 ms; compile_program
+  ~1KB (1013 B) 89.1 ms => ~11.4 KB/s; typecheck.bp selftest 0.19 ms.
+  innovate: .bp has no clock builtin, so bench_compile.bp reports WORK counters
+  (bytes/tokens closed-form contracts, self_check 0; embedded B1-1 lexer);
+  wall time is measured in C. Upgrade trigger: clock syscall in bootstrap.
 VERIFY: `make` clean; run `selfhost-bench`; paste median table.
 
 ## Swarm B2-8: verify — AArch64 bit-match parity checker

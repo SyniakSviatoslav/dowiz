@@ -597,6 +597,9 @@ static void cmd_run(const char *path, const char *fn_name, const char *arg) {
     free(src);
 }
 
+/* selfhost-bench: honest self-host compile throughput (B2-7), bench_selfhost.c */
+int cmd_selfhost_bench(int argc, char **argv);
+
 /* selfcompile: read a .bp file, load its functions, then feed the file's own
  * source text to its `compile_program` (self-hosting: the compiler compiles
  * itself). Prints the emitted-machine-code checksum. */
@@ -1412,6 +1415,9 @@ int main(int argc, char **argv) {
         if (argc < 3) { usage(); return 2; }
         cmd_selfcompile(argv[2]);
         return 0;
+    }
+    if (strcmp(argv[1], "selfhost-bench") == 0) {
+        return cmd_selfhost_bench(argc, argv);
     }
     if (strcmp(argv[1], "x86_64") == 0) {
         char buf[4096];
