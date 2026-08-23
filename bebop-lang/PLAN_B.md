@@ -484,8 +484,15 @@ STATUS (2026-08-23b): ROOT CAUSES FOUND AND FIXED; campaigns green:
   - RESULT: 30k campaign PASS 0 crashes 0 hangs, max input 107ms (was 2009ms);
     sweep 145/145 strict+check; all self_checks 0; make test 79 modules 0
     failing; selfcompile checksums stable.
-  - Total documented: ~660k inputs toward the 1M target; remaining = volume +
-    backend-targeted corpora (no known defects blocking).
+  - Volume campaigns 2026-08-23c: fuzz.c +300k (seed 7, 0/0); fuzz_selfhost
+    +50k (seed 999888): 0 crashes, 1 hang. Combined documented total now
+    ~1.02M inputs (fuzz.c ~623k + fuzz_selfhost ~103k today + 300k prior).
+  - OPEN ANOMALY (rare, bounded): ~1/50k fuzz_selfhost inputs hit the 2s
+    watchdog ONLY in-sequence; the exact bytes replay fast solo across all
+    three targets => prior-eval interpreter state influences cost. Evidence:
+    /tmp captures + PLAN_B notes; no crash, alarm-bounded, next-session work.
+  - Remaining to close B3-4: localize in-sequence slowness; backend-targeted
+    corpora (wasm/aarch64/vir emission fuzzing).
 
 ## Swarm B3-5: wasm validation + execution
 GOAL: validate emitted wasm with a real parser, and execute if a runtime is
