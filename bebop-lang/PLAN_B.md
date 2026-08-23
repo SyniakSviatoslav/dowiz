@@ -564,11 +564,27 @@ VERIFY: full gate green; pushed to origin/main.
   and GATED OFF. CORRECTED DIAGNOSIS: the suspected "str param binding bug"
   was NOT real - probe harnesses used off-by-one string positions and packed
   multi-value decodes that misread >=10-digit cells; interpreter exonerated.
-  Real lesson: hand-rolled recursive descent over raw string positions in
-  branchless .bp is too fragile for the vreg emitter. NEXT SESSION: rewrite
-  fast path as PRE-TOKENIZED pipeline (tokenize source into [i64] arrays
-  once -> pure array-walking codegen, no string state in recursion), then
-  flip FP_DISABLED() to 1 and re-run parity + benchmarks.
+  Real lesson #1: recursive descent over raw string positions in branchless
+  .bp is too fragile. v2 PRE-TOKENIZED pipeline was built and works at unit
+  level: fp_tk tokenizer (kinds st[16+i], values st[4096+i], stop tokens for
+  ; { } ) -> fpC_factor/term/expr/cmpval walking ti cell -> verified
+  'a', '5', 'abc + 1' (3 words vs 12 legacy!), 'a * 3 + 1' (5 words).
+  Real lesson #2 (THE blocker): interpreter silently loses array-cell stores
+  performed inside conditionally-gated nested blocks beyond one level
+  (rc[0]=f(...) patterns) while INDEX stores and shadow-rebinds of scalars
+  at loop-body top level work. Emitted-code correctness requires every
+  helper to keep ALL stores at its OWN fn-body top level and communicate
+  exclusively via args + return values; the mixed fast/legacy stack
+  accounting then needs pop-decisions driven by helper RETURN flags, never
+  by n[0]-growth heuristics (they conflate x0-results with stack pushes).
+  Also fixed en route: ty_pool 256->1024; strict scanner counts brace chars
+  inside // comments (never put literal braces in comments).
+  Integration checklist to finish next session:
+  1. all case helpers return flags; zero cross-frame cell writes
+  2. emit_let_stmt/emit_body pops gated on legacy-flag from return values
+  3. while/if conditions: tokenize to then/{ boundary, cmp+b.cond direct
+  4. regenerate self_check table + fuzz sanity checksums
+  5. parity driver corpora + kernel benchmarks + gates.
 - PARITY-FUZZ (2026-08-23): differential testing bootstrap-interpreter vs self-hosted
   compiled-native execution - 340/340 random programs bit-exact (40 + 300 corpora,
   gen: diff_fuzz gen; driver: bench/vs_rust/parity_driver.sh). Zero mismatches/crashes.
