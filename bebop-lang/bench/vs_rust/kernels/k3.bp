@@ -1,0 +1,16 @@
+// K3: nested loops 300x300 with mult-add accumulator
+fn main() -> i64 {
+  let a = 0;
+  let x = 300;
+  while x > 0 {
+    let y = 300;
+    while y > 0 {
+      let a = a + x * 2 + y * 3;
+      let y = y - 1;
+      0
+    };
+    let x = x - 1;
+    0
+  };
+  a
+}

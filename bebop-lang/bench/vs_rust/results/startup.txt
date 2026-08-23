@@ -1,0 +1,3 @@
+bebop_exec_words 21228772
+c_binary 27357893
+rust_binary 42686210

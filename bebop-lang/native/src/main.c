@@ -1505,6 +1505,30 @@ int main(int argc, char **argv) {
         if (!arr || wn < 1) { fprintf(stderr, "no words\n"); return 2; }
         printf("%ld\n", qtt_last_arr_elem(0));
         for (int k = 1; k < wn; k++) printf("%ld\n", qtt_last_arr_elem(k));
+
+        /* Second pass: per-fn word offsets (source order) so tooling can
+         * locate `main` (always the LAST fn in a .bp program). */
+        int mi = -1;
+        for (int k = 0; k < cn_count; k++)
+            if (strcmp(cn[k], "emit_offsets") == 0) { mi = k; break; }
+        if (mi >= 0) {
+            static Term mapp;
+            memset(&mapp, 0, sizeof mapp);
+            mapp.kind = TERM_APP;
+            mapp.a = ct[mi];
+            mapp.b = &carg;
+            if (qtt_eval_binds(&mapp, cn, (Term *const *)ct, cn_count,
+                               &cvk, &cvi, &cvb, &cvf, cerr, sizeof cerr) == 0) {
+                int mn = 0;
+                void *marr = qtt_last_arr(&mn);
+                if (marr && mn > 0) {
+                    printf("OFF");
+                    for (int k = 0; k < mn; k++)
+                        printf(" %ld", qtt_last_arr_elem(k));
+                    printf("\n");
+                }
+            }
+        }
         return 0;
     }
     if (strcmp(argv[1], "x86_64") == 0) {

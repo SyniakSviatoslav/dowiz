@@ -38,14 +38,45 @@ int main(int argc, char **argv) {
     }
     fclose(f);
 
+    /* optional third arg: entry word offset (default 0) */
+    int entry = 0;
+    if (argc > 3) {
+        char *line = NULL; size_t lc = 0;
+        FILE *mf = fopen(argv[3], "r");
+        if (!mf) { perror("manifest"); return 2; }
+        while (getline(&line, &lc, mf) != -1)
+            if (strncmp(line, "OFF", 3) == 0) {
+                int cnt = 0; unsigned long off = 0;
+                char *p = line + 3, *ne;
+                while (*p == ' ') p++;
+                cnt = (int)strtol(p, &ne, 10);
+                for (int k = 0; k < cnt; k++) {
+                    off = strtoul(ne, &ne, 10);
+                }
+                entry = (int)off;
+            }
+        fclose(mf);
+        free(line);
+    }
+
     int iters = argc > 2 ? atoi(argv[2]) : 100;
-    fn1 fp = (fn1)code;
-    volatile long sink = 0;
-    uint64_t t0 = now_ns();
-    for (int i = 0; i < iters; i++)
-        sink += fp();
-    uint64_t t1 = now_ns();
-    printf("result=%ld iters=%d total_ns=%llu\n",
-           sink, iters, (unsigned long long)(t1 - t0));
+    fn1 fp = (fn1)((char *)code + (size_t)entry * 4);
+
+    /* warmup + reference result (calls are pure) */
+    volatile long sink = fp();
+    long ref = fp();
+
+    static uint64_t runs[4096];
+    if (iters > 4096) iters = 4096;
+    long acc = 0;
+    for (int i = 0; i < iters; i++) {
+        uint64_t t0 = now_ns();
+        acc += fp();
+        runs[i] = now_ns() - t0;
+    }
+    printf("result=%ld\n", ref);
+    printf("ns");
+    for (int i = 0; i < iters; i++) printf(" %llu", (unsigned long long)runs[i]);
+    printf("\n");
     return 0;
 }
