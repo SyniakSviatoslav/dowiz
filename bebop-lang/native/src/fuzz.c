@@ -18,6 +18,8 @@
 #include <signal.h>
 
 #include "parser.h"
+#include "expr.h"
+#include "qtt.h"
 
 /* ── deterministic PRNG (xorshift64*) ──────────────────────────────────── */
 static unsigned long long rng_state = 0x9E3779B97F4A7C15ULL;
@@ -282,11 +284,36 @@ int main(int argc, char **argv) {
             return 2;
         }
         if (pid == 0) {
-            /* child: bound runtime, parse, then report status via _exit */
+            /* child: bound runtime, parse, then report status via _exit.
+             * B3-4 deepening: on a clean item-parse, ALSO fn-decl-parse every
+             * function body (expr-parser level), so the fuzzer exercises past
+             * the item scanner into declaration parsing. */
             alarm(hang_timeout);
             AstProgram prog;
             BpParseError err;
             int r = bp_parse(buf, &prog, &err);
+            if (r == 0) {
+                static TyRegistry fz_reg;
+                typereg_init(&fz_reg);
+                expr_set_registry(&fz_reg);
+                char ferr[256];
+                for (size_t qi = 0; qi < prog.len && r == 0; qi++) {
+                    const AstItem *fnitem = &prog.items[qi];
+                    if (fnitem->kind == AST_ITEM_FN && fnitem->text && fnitem->text_len > 0) {
+                        char *txt = (char *)malloc(fnitem->text_len + 1);
+                        if (!txt) { _exit(3); }
+                        memcpy(txt, fnitem->text, fnitem->text_len);
+                        txt[fnitem->text_len] = '\0';
+                        Term *ft = NULL;
+                        Ty *fty = NULL;
+                        if (bp_parse_fn_decl(txt, &fz_reg, &ft, &fty,
+                                             ferr, sizeof ferr) != 0) {
+                            r = 2; /* decl-level failure: counted as parse_err */
+                        }
+                        free(txt);
+                    }
+                }
+            }
             bp_program_free(&prog);
             _exit(r == 0 ? 0 : 1);
         }
