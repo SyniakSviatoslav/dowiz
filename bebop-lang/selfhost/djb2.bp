@@ -16,3 +16,16 @@ fn hash_str(s: str) -> i64 {
   h
 }
 fn main() -> i64 { hash_str("bebop") }
+
+
+// B3-2 twin: native checksum/hash self-test coverage (djb2 KATs)
+fn self_check() -> i64 {
+  let fail = [0];
+  let t1 = hash_str("bebop");
+  let _ = fail[0] = fail[0] + (if t1 == 210707510125 then 0 else 1);
+  let t2 = djb2_step(djb2_init(), 97) - 5381 * 33 - 97;
+  let _ = fail[0] = fail[0] + t2;
+  let t3 = if hash_str("a") == 177670 then 1 else 0;
+  let _ = fail[0] = fail[0] + (1 - t3);
+  fail[0]
+}

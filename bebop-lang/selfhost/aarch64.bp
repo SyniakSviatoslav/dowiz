@@ -108,16 +108,25 @@ fn pop_rt(words: [i64], pc: [i64], rt: i64) -> i64 {
   0
 }
 
-// reg-offset: ldr rt,[rb,ri,lsl #3]
-fn w_ldr_arr(rt: i64, rb: i64, ri: i64) -> i64 {
-  // ldr xt,[xb,xi,lsl #3] = 0xF8607800 | ...   (exec verification pending)
-  4171265024 + ri * 65536 + rb * 32 + rt
+// sub/add immediate (stack + arena setup): same encodings as vir.bp
+fn w_sub_imm(rd: i64, rn: i64, imm12: i64) -> i64 {
+  3506438144 + imm12 * 1024 + rn * 32 + rd
 }
 
-// reg-offset: str rt,[rb,ri,lsl #3]
-fn w_str_arr(rt: i64, rb: i64, ri: i64) -> i64 {
-  // str xt,[xb,xi,lsl #3] = 0xF8207800 | ...   (exec verification pending)
+fn w_add_imm(rd: i64, rn: i64, imm12: i64) -> i64 {
+  2432696320 + imm12 * 1024 + rn * 32 + rd
+}
+
+// reg-offset: ldr rt,[rb,ri,lsl #3] = 0xF8607800 | Ri<<16 | Rb<<5 | Rt
+// (matches native.c TERM_ARRAY_GET; exec-verified by self_check T6)
+fn w_ldr_arr(rt: i64, rb: i64, ri: i64) -> i64 {
   4167071744 + ri * 65536 + rb * 32 + rt
+}
+
+// reg-offset: str rt,[rb,ri,lsl #3] = 0xF8207800 | Ri<<16 | Rb<<5 | Rt
+// (matches native.c TERM_ARRAY_SET; exec-verified by self_check T6)
+fn w_str_arr(rt: i64, rb: i64, ri: i64) -> i64 {
+  4162877440 + ri * 65536 + rb * 32 + rt
 }
 
 // ---- program emitter over flat term IR (expr_parser.bp layout) ----

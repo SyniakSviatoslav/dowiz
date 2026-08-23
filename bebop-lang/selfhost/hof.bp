@@ -3,3 +3,14 @@ fn apply2(f: i64, x: i64) -> i64 { if f == 1 then x + x else x * x }
 fn double(x: i64) -> i64 { apply2(1, x) }
 fn square(x: i64) -> i64 { apply2(2, x) }
 fn main() -> i64 { double(5) + square(3) }
+
+
+// B3-2 twin: higher-order dispatch goldens
+fn self_check() -> i64 {
+  let fail = [0];
+  let h1 = double(5) + square(3);
+  let _ = fail[0] = fail[0] + (if h1 == 19 then 0 else 1);
+  let h2 = apply2(1, 0 - 4);
+  let _ = fail[0] = fail[0] + (if h2 == 0 - 8 then 0 else 1);
+  fail[0]
+}

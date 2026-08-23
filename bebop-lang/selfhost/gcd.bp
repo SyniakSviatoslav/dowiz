@@ -11,3 +11,18 @@ fn gcd(a: i64, b: i64) -> i64 {
   x
 }
 fn main() -> i64 { gcd(48, 36) }
+
+
+// B3-2 twin: math-native gcd self-test coverage
+fn self_check() -> i64 {
+  let fail = [0];
+  let g1 = gcd(48, 36);
+  let _ = fail[0] = fail[0] + (if g1 == 12 then 0 else 1);
+  let g2 = gcd(17, 5);
+  let _ = fail[0] = fail[0] + (if g2 == 1 then 0 else 1);
+  let g3 = gcd(0, 5);
+  let _ = fail[0] = fail[0] + (if g3 == 5 then 0 else 1);
+  let g4 = gcd(0 - 12, 18);
+  let _ = fail[0] = fail[0] + (if g4 == 6 then 0 else 1);
+  fail[0]
+}

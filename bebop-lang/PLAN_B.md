@@ -494,6 +494,26 @@ STATUS (2026-08-23b): ROOT CAUSES FOUND AND FIXED; campaigns green:
   - Remaining to close B3-4: localize in-sequence slowness; backend-targeted
     corpora (wasm/aarch64/vir emission fuzzing).
 
+## B3-2 slice + semantics + backend fixes (2026-08-23d)
+
+- DIV-BY-ZERO SEMANTICS UNIFIED: integer /0 now fails the evaluation
+  gracefully (kind=-1) in qtt eval AND comptime norm path, matching wasm
+  i64.div_s and AArch64 sdiv which both trap. Previously the interpreter
+  silently fabricated 0 (L4 violation). Float /0 stays IEEE (inf/nan).
+  Evidence: run "1 / 0" exits rc=1 with eval error; make test green.
+- B3-2 PROGRESS: six new .bp selftest twins with golden assertions:
+  djb2 (KAT hash_str("bebop")==210707510125), gcd (48/36, 17/5, 0/5,
+  negatives), alpha (hash+tag equivalence pairs), count-l ("hello" goldens),
+  fold (const-tag semantics), hof (dispatch goldens). All strict+check+
+  self_check green.
+- aarch64.bp ENCODING FIXES found via new exec tests then root-caused:
+  w_ldr_arr/w_str_arr constants were swapped/wrong (0xF8A07400 is not an
+  instruction -> SIGILL); corrected against native.c ground truth
+  (LDR 0xF8607800, STR 0xF8207800) and exec-verified. Added missing
+  w_sub_imm/w_add_imm definitions (module was check-broken: unbound names).
+  Construct coverage for cset/bl/array lives in selftest_exec.bp (63 fns)
+  and is NOT duplicated here.
+
 ## Swarm B3-5: wasm validation + execution
 GOAL: validate emitted wasm with a real parser, and execute if a runtime is
 available (wasmtime/wasmer/node) else document structural validity only.
