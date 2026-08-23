@@ -478,9 +478,18 @@ int bp_parse_fn_decl(const char *src, TyRegistry *reg, Term **out,
     while (pos < n && !(toks[pos].kind == BP_TOK_PUNCT && toks[pos].start[0] == '-')) pos++;
     if (pos + 1 >= n || toks[pos + 1].kind != BP_TOK_PUNCT || toks[pos + 1].start[0] != '>') { snprintf(err, cap, "expected '->'"); return -1; }
     pos += 2;
-    Ty *rty = resolve_ty(reg, &toks[pos]);
+    /* return type: scalar or [elem] array (mirrors the param-side branch) */
+    Ty *rty = NULL;
+    if (toks[pos].kind == BP_TOK_PUNCT && toks[pos].start[0] == '[') {
+        pos++;
+        Ty *relem = resolve_ty(reg, &toks[pos]);
+        if (relem) { rty = qtt_vec(relem); pos++; }
+        if (pos < n && toks[pos].kind == BP_TOK_PUNCT && toks[pos].start[0] == ']') pos++;
+    } else {
+        rty = resolve_ty(reg, &toks[pos]);
+        if (rty) pos++;
+    }
     if (!rty) { snprintf(err, cap, "unknown return type"); return -1; }
-    pos++;
     while (pos < n && !(toks[pos].kind == BP_TOK_PUNCT && toks[pos].start[0] == '{')) pos++;
     if (pos >= n) { snprintf(err, cap, "expected '{'"); return -1; }
     int bstart = pos + 1, depth = 1; pos++;

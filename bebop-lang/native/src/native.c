@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <sys/mman.h>
 
 #include "expr.h"
@@ -35,6 +36,11 @@ static struct {
     int slot; /* frame offset from x15 if spilled, else -1 */
 } vars[64];
 static int nvars = 0;
+/* While-loop nesting during compilation. A let inside a loop must REUSE the
+ * existing binding (interpreter in_while semantics): allocating a fresh
+ * register/slot per textual occurrence makes the loop condition read the
+ * original binding forever - the emitted loop never terminates. */
+static int in_while = 0;
 static int nregs = 0;  /* registers allocated so far (0..N_LOCAL_REGS) */
 static int nspill = 0; /* spilled locals so far */
 
@@ -149,7 +155,26 @@ static int emit_expr(const Term *t) {
             if (nvars >= 64) {
                 return -1;
             }
-            if (nregs < N_LOCAL_REGS) {
+            int reg0 = -1, slot0 = -1;
+            if (in_while) {
+                var_lookup(t->name, &reg0, &slot0);
+            }
+            if (reg0 >= 0) {
+                /* loop-carried update: write through to the existing register
+                 * ORR x<reg>, xzr, x0 -> rd=reg0 in bits[4:0] */
+                em(0xAA0003E0u | (unsigned)reg0);
+                vars[nvars].name = t->name;
+                vars[nvars].reg = reg0;
+                vars[nvars].slot = -1;
+                nvars++;
+            } else if (slot0 >= 0) {
+                /* loop-carried update: store through to the existing spill slot */
+                em(0xF9000000u | ((unsigned)(slot0 >> 3) << 10) | (15u << 5) | 0u);
+                vars[nvars].name = t->name;
+                vars[nvars].reg = -1;
+                vars[nvars].slot = slot0;
+                nvars++;
+            } else if (nregs < N_LOCAL_REGS) {
                 int reg = 19 + nregs;
                 nregs++;
                 vars[nvars].reg = reg;
@@ -471,6 +496,7 @@ static int emit_expr(const Term *t) {
         case TERM_WHILE: {
             /* Label-based while loop: evaluate cond, cbz to exit, eval body,
              * jump back. Uses 4 labels: start, body_after_cond, end, cbz_patch */
+            in_while++;
             size_t start = em_len;  /* top of loop */
             if (emit_expr(t->a) != 0) return -1; /* cond → x0 (pushed) */
             emit_pop(0);                          /* x0 = cond */
@@ -489,11 +515,53 @@ static int emit_expr(const Term *t) {
             /* while evaluates to void → push 0 */
             em(0xD2800000u);                      /* mov x0, #0 */
             emit_push();
+            in_while--;
             return 0;
         }
         default:
             return -1;
     }
+}
+
+/* Compile a closed term to AArch64 words WITHOUT mmap/run (benchmarking and
+ * parity tooling). Returns word count or -1. */
+int native_compile_words(const Term *t, unsigned int *out, size_t cap,
+                         char *err, size_t cerr) {
+    em_len = 0;
+    nvars = 0;
+    nregs = 0;
+    nspill = 0;
+    em_strlen = 0;
+    em_adr_n = 0;
+    qtt_term_pool_reset();
+    if (pac_available()) em(PAC_PACIASP);
+    em(0xD10803FFu);
+    emit_stp_sp(19, 20, 0);
+    emit_stp_sp(21, 22, 16);
+    emit_stp_sp(23, 24, 32);
+    emit_stp_sp(25, 26, 48);
+    emit_stp_sp(27, 28, 64);
+    em(0x910143EFu);
+    em(0x910403EEu);
+    if (emit_expr(t) != 0) {
+        snprintf(err, cerr, "native: unsupported term");
+        return -1;
+    }
+    emit_pop(0);
+    emit_ldp_sp(19, 20, 0);
+    emit_ldp_sp(21, 22, 16);
+    emit_ldp_sp(23, 24, 32);
+    emit_ldp_sp(25, 26, 48);
+    emit_ldp_sp(27, 28, 64);
+    em(0x910803FFu);
+    if (pac_available()) em(PAC_AUTIASP);
+    em(0xD65F03C0u);
+    if (em_len > cap) {
+        snprintf(err, cerr, "native: code too large");
+        return -1;
+    }
+    memcpy(out, em_code, em_len * sizeof(unsigned int));
+    return (int)em_len;
 }
 
 long native_eval(const Term *t, char *err, size_t cap) {

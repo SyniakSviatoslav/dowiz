@@ -41,13 +41,6 @@ static double now_ms(void) {
 
 /* SIGSEGV diagnostics: print last-resort marker so the failing site can be
  * narrowed by bisecting instrumentation. */
-#include <execinfo.h>
-static void crash_handler(int sig) {
-    (void)sig;
-    const char msg[] = "SEGFAULT-ENTERED\n";
-    write(2, msg, sizeof msg - 1);
-    _exit(139);
-}
 static unsigned long long rng_state = 0x9E3779B97F4A7C15ULL;
 
 static unsigned long long rng_next(void) {
@@ -526,8 +519,6 @@ int main(int argc, char **argv) {
                 setrlimit(RLIMIT_STACK, &rl);
             }
             alarm(hang_timeout);
-            void crash_handler(int);
-            signal(SIGSEGV, crash_handler);
             Term argterm;
             memset(&argterm, 0, sizeof argterm);
             argterm.kind = TERM_STR;

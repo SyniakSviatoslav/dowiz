@@ -680,9 +680,25 @@ fn pop(insns: [i64], n: [i64], rd: i64) -> i64 {
   n[0]
 }
 
-// Emit a literal (movz x0,#imm ; push).
+// Emit one movk half-slice for hw>=1 if non-zero.
+fn emit_half(insns: [i64], n: [i64], imm: i64, hw: i64) -> i64 {
+  let p = [1, 65536, 4294967296, 281474976710656, 18446744073709551616];
+  let hi = imm / p[hw + 1];
+  let lo = imm - hi * p[hw + 1];
+  let sl = lo / p[hw];
+  let _ = if sl > 0 then (let _ = em(insns, n, 4068474880 + sl * 32 + hw * 2097152) in 0) else 0;
+  n[0]
+}
+
+// Emit a literal (movz x0,#imm16 ; movk for higher halves ; push).
+// Mirrors native.c emit_mov64: hw=0 always movz, hw=1..3 movk only if
+// that 16-bit slice is non-zero. Without the movk halves any constant
+// above 65535 was silently truncated (loop bounds > 64K hung/wrong).
 fn emit_lit(insns: [i64], n: [i64], imm: i64) -> i64 {
-  let _ = em(insns, n, 3531603968 + imm * 32);
+  let _ = em(insns, n, 3531603968 + (imm - (imm / 65536) * 65536) * 32);
+  let _ = emit_half(insns, n, imm, 1);
+  let _ = emit_half(insns, n, imm, 2);
+  let _ = emit_half(insns, n, imm, 3);
   let _ = push(insns, n);
   n[0]
 }
@@ -1677,3 +1693,74 @@ fn self_check() -> i64 {
   c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10 + c11 + c12 + c13 + c14 + c15 + c16 + c17 + c18 + c19 + c20 + c21 + c22 + c23 + c24 + c25 + c26 + c27 + c28 + c29 + c30 + c31 + c32 + c33 + c34 + c35 + c36 + c37 + c38 + c39 + c40 + c41
 }
 
+
+fn emit_expr_words(src: str) -> [i64] {
+  let insns = zeros(8192);
+  let n = [0];
+  let pos = [0];
+  let stab = zeros(512);
+  let selfname = 0 - 1;
+  let selfstart = 0;
+  let fnames_l = zeros(512);
+  let fpos_l = zeros(512);
+  let cnt_l = [0];
+  let _ = collect_fns(src, fnames_l, fpos_l, cnt_l);
+  let fntab = zeros(2048);
+  let _ = fntab[0] = cnt_l[0];
+  let fl_i = [0];
+  let fl_d = if cnt_l[0] == 0 then 1 else 0;
+  while fl_d == 0 {
+    let _ = fntab[1 + fl_i[0]] = fnames_l[fl_i[0]];
+    let _ = fntab[1 + cnt_l[0] + cnt_l[0] + fl_i[0]] = fpos_l[fl_i[0]];
+    let _ = fl_i[0] = fl_i[0] + 1;
+    let fl_d = if fl_i[0] >= cnt_l[0] then 1 else 0;
+    0
+  };
+  let enames_l = zeros(512);
+  let ecnt_l = zeros(16);
+  let _ = collect_ctors(src, enames_l, ecnt_l);
+  let eb_l = cnt_l[0] + cnt_l[0] + cnt_l[0] + 1;
+  let _ = fntab[eb_l] = ecnt_l[0];
+  let ez_l = [0];
+  let ezd_l = if ecnt_l[0] == 0 then 1 else 0;
+  while ezd_l == 0 {
+    let _ = fntab[eb_l + 1 + ez_l[0]] = enames_l[ez_l[0]];
+    let _ = ez_l[0] = ez_l[0] + 1;
+    let ezd_l = if ez_l[0] >= ecnt_l[0] then 1 else 0;
+    0
+  };
+  let _ = emit_cmp(src, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = pop(insns, n, 0);
+  let _ = em(insns, n, 3596551104);
+  let out = zeros(n[0] + 1);
+  let _ = out[0] = n[0];
+  let pk = [0];
+  let pgo = 1;
+  while pgo == 1 {
+    let pdone = if pk[0] >= n[0] then 1 else 0;
+    let _ = if pdone == 0 then (let _ = out[pk[0] + 1] = insns[pk[0]] in 0) else 0;
+    let _ = pk[0] = pk[0] + 1;
+    let pgo = 1 - pdone;
+    0
+  };
+  out
+}
+
+// BENCH: two-pass compile of a whole fn-main program; returns [count, words...]
+fn emit_words(src: str) -> [i64] {
+  let insns = zeros(65536);
+  let n = [0];
+  let _ = compile_program_to(src, insns, n);
+  let out = zeros(n[0] + 1);
+  let _ = out[0] = n[0];
+  let k = [0];
+  let go = 1;
+  while go == 1 {
+    let done = if k[0] >= n[0] then 1 else 0;
+    let _ = if done == 0 then (let _ = out[k[0] + 1] = insns[k[0]] in 0) else 0;
+    let _ = k[0] = k[0] + 1;
+    let go = 1 - done;
+    0
+  };
+  out
+}

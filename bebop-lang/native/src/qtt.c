@@ -2161,6 +2161,19 @@ int qtt_eval(const Term *t, int *out_kind, long *out_i, int *out_b, char *err, s
     return 0;
 }
 
+/* Last array-valued top-level eval result (tooling: compiled-word buffers).
+ * The pointer aliases the interpreter arena: copy before the next eval. */
+static FieldValue *g_last_arr = NULL;
+static int g_last_arr_n = 0;
+void *qtt_last_arr(int *n) {
+    if (n) *n = g_last_arr_n;
+    return g_last_arr;
+}
+long qtt_last_arr_elem(int idx) {
+    if (!g_last_arr || idx < 0 || idx >= g_last_arr_n) return 0;
+    return g_last_arr[idx].val.i;
+}
+
 int qtt_eval_binds(const Term *t, const char **names, Term *const *lams, int n,
                    int *out_kind, long *out_i, int *out_b, double *out_f,
                    char *err, size_t cap) {
@@ -2192,6 +2205,10 @@ int qtt_eval_binds(const Term *t, const char **names, Term *const *lams, int n,
     if (out_i) *out_i = v.i;
     if (out_b) *out_b = v.b;
     if (out_f) *out_f = v.f;
+    if (v.kind == 6 && v.fv) {
+        g_last_arr = v.fv;
+        g_last_arr_n = v.nfv;
+    }
     ty_len = ty_mark;
     return 0;
 }

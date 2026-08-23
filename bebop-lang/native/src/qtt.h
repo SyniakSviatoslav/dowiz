@@ -186,6 +186,15 @@ int qtt_eval_binds(const Term *t, const char **names, Term *const *lams, int n,
                    int *out_kind, long *out_i, int *out_b, double *out_f,
                    char *err, size_t cap);
 
+/* Last array-valued top-level eval result (benchmark tooling). The pointer
+ * aliases the interpreter arena: copy before the next eval. */
+/* Fills out with a pointer to the interpreter's array field values and the
+ * element count (void* to avoid exposing the internal type). The pointer
+ * aliases the arena: copy before the next eval. Returns NULL if the last
+ * top-level eval did not produce an array. */
+void *qtt_last_arr(int *n);
+long qtt_last_arr_elem(int idx);
+
 /* Run the typechecker self-test. Returns 0 on success, -1 on failure. */
 int qtt_check_test(char *out, size_t cap);
 

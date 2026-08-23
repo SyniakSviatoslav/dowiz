@@ -123,6 +123,8 @@ static const char *kind_name(BpTokKind k) {
             return "number";
         case BP_TOK_PUNCT:
             return "punct";
+        case BP_TOK_STR:
+            return "str";
         case BP_TOK_EOF:
             return "eof";
     }
@@ -1418,6 +1420,92 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "selfhost-bench") == 0) {
         return cmd_selfhost_bench(argc, argv);
+    }
+    if (strcmp(argv[1], "compilewords") == 0) {
+        if (argc < 4) { usage(); return 2; }
+        /* usage: compilewords <compiler.bp> <kernel.bp>
+         * Loads the self-hosted compiler, feeds it the kernel SOURCE, prints
+         * its compiled AArch64 words: line 1 = count, then one word/line. */
+        char *csrc = malloc(1 << 20);   /* compiler module */
+        FILE *cf = fopen(argv[2], "rb");
+        if (!cf) { fprintf(stderr, "cannot open %s\n", argv[2]); return 2; }
+        size_t clen = fread(csrc, 1, (1 << 20) - 1, cf);
+        csrc[clen] = '\0';
+        fclose(cf);
+        char *ksrc = malloc(1 << 20);   /* kernel source */
+        FILE *kf = fopen(argv[3], "rb");
+        if (!kf) { fprintf(stderr, "cannot open %s\n", argv[3]); return 2; }
+        size_t klen = fread(ksrc, 1, (1 << 20) - 1, kf);
+        ksrc[klen] = '\0';
+        fclose(kf);
+
+        AstProgram cprog;
+        BpParseError cperr;
+        if (bp_parse(csrc, &cprog, &cperr) != 0) {
+            fprintf(stderr, "parse error: %s\n", cperr.msg);
+            return 2;
+        }
+        TyRegistry creg;
+        typereg_init(&creg);
+        expr_set_registry(&creg);
+        char cerr[256];
+        expr_pool_reset();
+        enum { CW_MAX = 256 };
+        const char *cn[CW_MAX];
+        Term *ct[CW_MAX];
+        int cn_count = 0;
+        static char cbf[CW_MAX][64];
+        for (size_t ci = 0; ci < cprog.len && cn_count < CW_MAX; ci++) {
+            const AstItem *cit = &cprog.items[ci];
+            if (cit->kind == AST_ITEM_FN && cit->text && cit->text_len > 0) {
+                char *ctxt = malloc(cit->text_len + 1);
+                memcpy(ctxt, cit->text, cit->text_len);
+                ctxt[cit->text_len] = '\0';
+                Term *fterm = NULL; Ty *fty2 = NULL;
+                if (bp_parse_fn_decl(ctxt, &creg, &fterm, &fty2, cerr, sizeof cerr) != 0) {
+                    fprintf(stderr, "fn parse error [%s]: %s\n",
+                            cit->name ? cit->name : "?", cerr);
+                    return 2;
+                }
+                free(ctxt);
+                size_t fl2 = cit->name_len < 63 ? cit->name_len : 63;
+                memcpy(cbf[cn_count], cit->name ? cit->name : "?", fl2);
+                cbf[cn_count][fl2] = '\0';
+                cn[cn_count] = cbf[cn_count];
+                ct[cn_count] = fterm;
+                cn_count++;
+            }
+        }
+        int ei2 = -1;
+        for (int k = 0; k < cn_count; k++)
+            if (strcmp(cn[k], "emit_words") == 0) { ei2 = k; break; }
+        if (ei2 < 0) {
+            fprintf(stderr, "no emit_words fn; loaded %d fns:", cn_count);
+            for (int k = 0; k < cn_count; k++) fprintf(stderr, " %s", cn[k]);
+            fprintf(stderr, "\n");
+            return 2;
+        }
+        static Term carg;
+        memset(&carg, 0, sizeof carg);
+        carg.kind = TERM_STR;
+        carg.name = ksrc;
+        static Term capp;
+        memset(&capp, 0, sizeof capp);
+        capp.kind = TERM_APP;
+        capp.a = ct[ei2];
+        capp.b = &carg;
+        int cvk; long cvi; int cvb; double cvf;
+        if (qtt_eval_binds(&capp, cn, (Term *const *)ct, cn_count,
+                           &cvk, &cvi, &cvb, &cvf, cerr, sizeof cerr) != 0) {
+            fprintf(stderr, "eval error: %s\n", cerr);
+            return 2;
+        }
+        int wn = 0;
+        void *arr = qtt_last_arr(&wn);
+        if (!arr || wn < 1) { fprintf(stderr, "no words\n"); return 2; }
+        printf("%ld\n", qtt_last_arr_elem(0));
+        for (int k = 1; k < wn; k++) printf("%ld\n", qtt_last_arr_elem(k));
+        return 0;
     }
     if (strcmp(argv[1], "x86_64") == 0) {
         char buf[4096];
