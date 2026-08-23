@@ -559,4 +559,7 @@ VERIFY: full gate green; pushed to origin/main.
 - After each batch: parent runs full verify gate, resolves merge conflicts,
   commits + pushes. Then next batch.
 - Every swarm reports: files changed, what implemented, exact test output,
-  design decisions. No commit/push by swarms.
+  design decisions. No commit/push by swarms.- PARITY-FUZZ (2026-08-23): differential testing bootstrap-interpreter vs self-hosted
+  compiled-native execution - 340/340 random programs bit-exact (40 + 300 corpora,
+  gen: diff_fuzz gen; driver: bench/vs_rust/parity_driver.sh). Zero mismatches/crashes.
+
