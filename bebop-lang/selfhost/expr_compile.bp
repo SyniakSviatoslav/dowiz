@@ -1239,12 +1239,22 @@ fn emit_let_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
 
 // Emit a function body: zero or more 'let x = v;' statements, then the result
 // expression.
+// Emit a function/loop body: ';'-separated items until '}' or end of input.
+// Items: 'let x = v;' (net 0 words), 'while ... { ... };' (net 0), or a plain
+// expression (net +1 word on the value stack). All expression values except
+// the FINAL one are popped, so the body leaves exactly one value -- matching
+// interpreter semantics where ';' sequences statements and an if-expression
+// ENDS at the first ';' outside parens (parity bug: the old body parser ran
+// one expression to end-of-input, letting `if c then a else b; rest`
+// swallow the rest into the else branch).
 fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let done = 0;
   while done == 0 {
+    let before = pos[0];
     let _ = skip_ws(s, pos);
     let strn = str_len(s);
-    let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let at_end0 = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end0 == 1 then 0 else char(s, pos[0]);
     let e1 = if pos[0] + 1 >= strn then 1 else 0;
     let ch1 = if e1 == 1 then 0 else char(s, pos[0] + 1);
     let e2 = if pos[0] + 2 >= strn then 1 else 0;
@@ -1256,19 +1266,44 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     let is_l = if ch == 108 then 1 else 0;
     let is_e = if ch1 == 101 then 1 else 0;
     let is_t = if ch2 == 116 then 1 else 0;
-    let is_let = is_l * is_e * is_t;
+    let b3_alpha = is_alpha(ch3);
+    let b3_ge = if ch3 >= 48 then 1 else 0;
+    let b3_le = if ch3 <= 57 then 1 else 0;
+    let b3_num = b3_ge * b3_le;
+    let b3_us = if ch3 == 95 then 1 else 0;
+    let is_let = is_l * is_e * is_t * (1 - b3_alpha) * (1 - b3_num) * (1 - b3_us);
     let is_w = if ch == 119 then 1 else 0;
     let is_h = if ch1 == 104 then 1 else 0;
     let is_i = if ch2 == 105 then 1 else 0;
     let is_l2 = if ch3 == 108 then 1 else 0;
     let is_e2 = if ch4 == 101 then 1 else 0;
     let is_while = is_w * is_h * is_i * is_l2 * is_e2;
-    let _ = if is_let == 1 then emit_let_stmt(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
-    let _ = if is_while == 1 then emit_while_stmt(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
-    let done = if is_let + is_while >= 1 then 0 else 1;
+    let at_close = if ch == 125 then 1 else 0;
+    let is_item = (1 - at_close) * (1 - at_end0);
+    let _ = if is_item * is_let == 1 then emit_let_stmt(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
+    let _ = if is_item * is_while == 1 then emit_while_stmt(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
+    let is_expr = is_item * (1 - is_let) * (1 - is_while);
+    let _ = if is_expr == 1 then emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
+    let _ = skip_ws(s, pos);
+    let strn2 = str_len(s);
+    let at_end1 = if pos[0] >= strn2 then 1 else 0;
+    let c2 = if at_end1 == 1 then 0 else char(s, pos[0]);
+    let is_semi = if c2 == 59 then 1 else 0;
+    let _ = if is_semi == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    // An expression item followed by more items (';' then non-close) is not
+    // the final value: pop it so the stack stays balanced across iterations.
+    let _ = skip_ws(s, pos);
+    let strn3 = str_len(s);
+    let c3 = if pos[0] >= strn3 then 0 else char(s, pos[0]);
+    let more_after_expr = is_expr * is_semi * (1 - (if c3 == 125 then 1 else 0)) * (1 - (if pos[0] >= strn3 then 1 else 0));
+    let _ = if more_after_expr == 1 then pop(insns, n, 0) else 0;
+    // progress guard: a dispatch that consumed nothing must not spin forever
+    let advanced = if pos[0] > before then 1 else 0;
+    let stuck = (1 - advanced) * (1 - at_close) * (1 - at_end0);
+    let _ = if stuck == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let done = if at_close + at_end0 >= 1 then 1 else 0;
     0
   };
-  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   n[0]
 }
 
