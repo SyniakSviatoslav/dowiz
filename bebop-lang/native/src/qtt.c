@@ -548,7 +548,9 @@ int qtt_dep_test(char *out, size_t cap) {
 }
 
 /* Bump-allocated type pool (types live for the self-test lifetime). */
-static Ty ty_pool[256];
+/* 1024 entries: each fn signature allocates Ty nodes per param; large
+ * self-hosted modules (expr_compile.bp fast-path emitters) need headroom. */
+static Ty ty_pool[1024];
 static int ty_len = 0;
 static int ty_floor = 0;
 

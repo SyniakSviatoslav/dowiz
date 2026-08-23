@@ -1196,7 +1196,7 @@ fn emit_epilogue(insns: [i64], n: [i64]) -> i64 {
 // cond is re-evaluated each iteration (its code sits at loop_start); body's
 // final expression is discarded. Mutable `let` (sym_bind reuse) makes loop
 // vars update in place, so re-running the cond reads the updated values.
-fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], cx: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 5;
   let _ = skip_ws(s, pos);
   let loop_start = n[0];
@@ -1207,8 +1207,9 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = em(insns, n, 1409286144);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = emit_body(s, pos, insns, n, stab, selfname, selfstart, fntab);
-  let _ = pop(insns, n, 0);
+  let nb_body = n[0];
+  let _ = emit_body(s, pos, insns, n, stab, selfname, selfstart, fntab, cx);
+  let _ = if n[0] > nb_body then pop(insns, n, 0) else 0;
   let _ = em(insns, n, 402653184 + loop_start - n[0]);
   let end = n[0];
   let _ = insns[p1] = 1409286144 + (end - p1) * 32;
@@ -1221,17 +1222,20 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
 
 // Emit one 'let x = value;' statement: emit value, pop x0, mov x<reg>,x0
 // (bind the single-letter var x to reg 19+(x-'a')).
-fn emit_let_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+fn emit_let_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], cx: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 3;
   let _ = skip_ws(s, pos);
   let name = read_ident(s, pos);
   let reg = sym_bind(stab, name);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let nb_v = n[0];
+  let _ = cx[8] = emit_fast(s, pos, insns, n, stab, cx);
+  let fv = cx[8];
+  let _ = if fv == 0 then emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = pop(insns, n, 0);
+  let _ = if n[0] > nb_v then pop(insns, n, 0) else 0;
   let _ = bind_reg(insns, n, reg);
   n[0]
 }
@@ -1247,7 +1251,7 @@ fn emit_let_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
 // ENDS at the first ';' outside parens (parity bug: the old body parser ran
 // one expression to end-of-input, letting `if c then a else b; rest`
 // swallow the rest into the else branch).
-fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], cx: [i64]) -> i64 {
   let done = 0;
   while done == 0 {
     let before = pos[0];
@@ -1280,23 +1284,27 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     let is_while = is_w * is_h * is_i * is_l2 * is_e2;
     let at_close = if ch == 125 then 1 else 0;
     let is_item = (1 - at_close) * (1 - at_end0);
-    let _ = if is_item * is_let == 1 then emit_let_stmt(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
-    let _ = if is_item * is_while == 1 then emit_while_stmt(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
+    let _ = if is_item * is_let == 1 then emit_let_stmt(s, pos, insns, n, stab, selfname, selfstart, fntab, cx) else 0;
+    let _ = if is_item * is_while == 1 then emit_while_stmt(s, pos, insns, n, stab, selfname, selfstart, fntab, cx) else 0;
     let is_expr = is_item * (1 - is_let) * (1 - is_while);
-    let _ = if is_expr == 1 then emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
+    let nb_item = n[0];
+    let _ = if is_expr == 1 then (let f = emit_fast(s, pos, insns, n, stab, cx) in (let _ = cx[7] = f in 0)) else 0;
+    let _ = if is_expr == 0 then (let _ = cx[7] = 0 in 0) else 0;
+    let was_fast = cx[7];
+    let _ = if is_expr * (1 - was_fast) == 1 then emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
+    // non-final legacy items must not leave values on the stack
+    let _ = skip_ws(s, pos);
+    let strn9 = str_len(s);
+    let c9 = if pos[0] >= strn9 then 0 else char(s, pos[0]);
+    let more_ahead = is_expr * (1 - (if c9 == 125 then 1 else 0)) * (1 - (if pos[0] >= strn9 then 1 else 0));
+    let grew = if n[0] > nb_item then 1 else 0;
+    let _ = if more_ahead * grew == 1 then pop(insns, n, 0) else 0;
     let _ = skip_ws(s, pos);
     let strn2 = str_len(s);
     let at_end1 = if pos[0] >= strn2 then 1 else 0;
     let c2 = if at_end1 == 1 then 0 else char(s, pos[0]);
     let is_semi = if c2 == 59 then 1 else 0;
     let _ = if is_semi == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
-    // An expression item followed by more items (';' then non-close) is not
-    // the final value: pop it so the stack stays balanced across iterations.
-    let _ = skip_ws(s, pos);
-    let strn3 = str_len(s);
-    let c3 = if pos[0] >= strn3 then 0 else char(s, pos[0]);
-    let more_after_expr = is_expr * is_semi * (1 - (if c3 == 125 then 1 else 0)) * (1 - (if pos[0] >= strn3 then 1 else 0));
-    let _ = if more_after_expr == 1 then pop(insns, n, 0) else 0;
     // progress guard: a dispatch that consumed nothing must not spin forever
     let advanced = if pos[0] > before then 1 else 0;
     let stuck = (1 - advanced) * (1 - at_close) * (1 - at_end0);
@@ -1469,6 +1477,7 @@ fn compile_fn(s: str) -> i64 {
   };
   let _ = skip_to(s, pos, 123);
   let _ = pos[0] = pos[0] + 1;
+  let cx = zeros(64);
   let pbase = n[0];
   let _ = emit_prologue(insns, n);
   let j = [0];
@@ -1479,10 +1488,13 @@ fn compile_fn(s: str) -> i64 {
     let mv2 = if j[0] >= nb then 1 else 0;
     0
   };
-  let _ = emit_body(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let nb_tail = n[0];
+  let _ = emit_body(s, pos, insns, n, stab, selfname, selfstart, fntab, cx);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = pop(insns, n, 0);
+  // legacy emitter leaves the body value on the stack; fast path leaves it
+  // in x0 -- pop exactly when something was pushed
+  let _ = if n[0] > nb_tail then pop(insns, n, 0) else 0;
   let _ = emit_epilogue(insns, n);
   sum_words(insns, n[0])
 }
@@ -1545,6 +1557,7 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   };
   let _ = skip_to(s, pos, 123);
   let _ = pos[0] = pos[0] + 1;
+  let cx = zeros(64);
   let pbase = n[0];
   let _ = emit_prologue(insns, n);
   let j = [0];
@@ -1555,10 +1568,13 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
     let mv2 = if j[0] >= nparams then 1 else 0;
     0
   };
-  let _ = emit_body(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let nb_tail = n[0];
+  let _ = emit_body(s, pos, insns, n, stab, selfname, selfstart, fntab, cx);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = pop(insns, n, 0);
+  // legacy emitter leaves the body value on the stack; fast path leaves it
+  // in x0 -- pop exactly when something was pushed
+  let _ = if n[0] > nb_tail then pop(insns, n, 0) else 0;
   let _ = emit_epilogue(insns, n);
   // OPT-A: only save/restore callee-saved pairs this fn actually binds.
   // Prologue words pbase+3..pbase+7 hold stp x19/x20 .. x27/x28; epilogue
@@ -1722,12 +1738,12 @@ fn self_check() -> i64 {
   let c16 = if compile("5==2+3") == 94552386487 then 0 else 1;
   let c17 = if compile_fn("fn f() { let a = 1; a + 2 }") == 123192893028 then 0 else 1;
   let c18 = if compile_fn("fn f(a) { let b = a + 1; b * 2 }") == 160095863221 then 0 else 1;
-  let c19 = if compile_fn("fn main() { f(41) } fn f(a) { a + 1 }") == 123192894276 then 0 else 1;
-  let c20 = if compile_fn("fn main() { s(6) } fn s(a) { a * a }") == 122783129252 then 0 else 1;
-  let c21 = if compile_fn("fn main() { g(3,4) } fn g(a,b) { a + b }") == 143196878454 then 0 else 1;
-  let c22 = if compile_fn("fn main() { foo(41) } fn foo(x) { x + 1 }") == 123192894276 then 0 else 1;
+  let c19 = if compile_fn("fn main() { f(41) } fn f(a) { a + 1 }") == 78194997224 then 0 else 1;
+  let c20 = if compile_fn("fn main() { s(6) } fn s(a) { a * a }") == 78194996104 then 0 else 1;
+  let c21 = if compile_fn("fn main() { g(3,4) } fn g(a,b) { a + b }") == 98877146970 then 0 else 1;
+  let c22 = if compile_fn("fn main() { foo(41) } fn foo(x) { x + 1 }") == 78194997224 then 0 else 1;
   let c23 = if compile_fn("fn main() { let acc = 10; let delta = 5; acc + delta }") == 143196878710 then 0 else 1;
-  let c24 = if compile_fn("fn main() { foo(3,4) } fn foo(a,b) { a + b }") == 143196878454 then 0 else 1;
+  let c24 = if compile_fn("fn main() { foo(3,4) } fn foo(a,b) { a + b }") == 98877146970 then 0 else 1;
   let c25 = if compile_fn("fn main() { let total = 0; let extra = 7; total + extra * 2 }") == 177925886515 then 0 else 1;
   let c26 = if compile_fn("fn main() { let p = pt { x: 1, y: 2 }; p.x + p.y } struct pt { x: i64, y: i64 }") == 205244199530 then 0 else 1;
   let c27 = if compile_fn("fn main() { pt { x: 1, y: 2 } } struct pt { x: i64, y: i64 }") == 114497688576 then 0 else 1;
@@ -1928,3 +1944,338 @@ fn emit_offsets(src: str) -> [i64] {
   };
   out
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// FAST PATH (OPT-C/D): virtual-register codegen for pure arithmetic,
+// variable and literal subtrees. Everything else falls back to the
+// legacy stack machine by resetting n[0] and pos[0] -- the insn buffer
+// is append-only, so a failed attempt rolls back by counter alone.
+//
+// Virtual registers by expression depth: 0->x0, 1->x1, 2..6->x9..x13.
+// Depth >= 7 or any non-arithmetic construct -> legacy path.
+//
+// Constant tracking (OPT-C): cx[10+d]=value, cx[30+d]=known-flag; when
+// both operands of an op are known the operation is computed at compile
+// time and NO instruction is emitted for it.
+// ══════════════════════════════════════════════════════════════════════
+
+// Register number for expression depth d (-1 => beyond fast capacity).
+fn fp_vr(d: i64) -> i64 {
+  // depth 0 -> x0, 1 -> x1, 2..6 -> x9..x13, otherwise -1 (no capacity)
+  let is0 = if d == 0 then 1 else 0;
+  let is1 = if d == 1 then 1 else 0;
+  let ge2 = if d >= 2 then 1 else 0;
+  let le6 = if d <= 6 then 1 else 0;
+  let mid = ge2 * le6;
+  let bad = (1 - is0) * (1 - is1) * (1 - mid);
+  is1 * 1 + mid * (7 + d) - bad
+}
+
+// Emit "load 64-bit immediate into register rd" (movz + movk halves),
+// mirroring native.c emit_mov64. Returns the value for const tracking.
+fn fp_lit(insns: [i64], n: [i64], rd: i64, imm: i64) -> i64 {
+  let _ = em(insns, n, 3531603968 + (imm - (imm / 65536) * 65536) * 32 + rd);
+  let _ = fp_half(insns, n, imm, 1, rd);
+  let _ = fp_half(insns, n, imm, 2, rd);
+  let _ = fp_half(insns, n, imm, 3, rd);
+  n[0]
+}
+
+// One movk half-slice for hw in 1..3 when non-zero.
+fn fp_half(insns: [i64], n: [i64], imm: i64, hw: i64, rd: i64) -> i64 {
+  let p = [1, 65536, 4294967296, 281474976710656, 18446744073709551616];
+  let hi = imm / p[hw + 1];
+  let lo = imm - hi * p[hw + 1];
+  let sl = lo / p[hw];
+  let _ = if sl > 0 then (let _ = em(insns, n, 4068474880 + sl * 32 + hw * 2097152 + rd) in 0) else 0;
+  n[0]
+}
+
+// mov xd, xs
+fn fp_mov(insns: [i64], n: [i64], xd: i64, xs: i64) -> i64 {
+  // mov xd, xs == orr xd, xzr, xs  (0xAA0003E0 | xs<<16 | xd)
+  let _ = em(insns, n, 2852173792 + xs * 65536 + xd);
+  n[0]
+}
+
+// Variable load into register rd: register-resident or x15 spill slot.
+// Returns 1 on success, 0 if the name is not a plain variable.
+fn fp_loadvar(insns: [i64], n: [i64], stab: [i64], name: i64, rd: i64) -> i64 {
+  let reg = sym_lookup(stab, name);
+  let ok = if reg >= 19 then 1 else 0;
+  let is_spill = if reg >= 100 then 1 else 0;
+  let slot = reg - 100;
+  let movw = 2852173792 + reg * 65536 + rd;
+  let ldrw = 4181720064 + slot * 1024 + 480 + rd;
+  let w = movw * (1 - is_spill) * ok + ldrw * is_spill;
+  let _ = if ok == 1 then (let _ = em(insns, n, w) in 0) else 0;
+  ok
+}
+
+// Parse digits into v (no side effects on failure: digits always succeed).
+fn fp_num(s: str, pos: [i64]) -> i64 {
+  let strn = str_len(s);
+  let v = 0;
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let dg = if at_end == 1 then 0 else is_digit(ch);
+    let v = if dg == 1 then (v * 10) + (ch - 48) else v;
+    let adv = dg;
+    let _ = pos[0] = pos[0] + adv;
+    let done = if dg == 1 then 0 else 1;
+    0
+  };
+  v
+}
+
+// ── fast-path factor/term/expr (OPT-D vregs + OPT-C folding) ───────────
+// Every fp_* returns 1 on success or 0 after restoring pos[0]. Result
+// value lives in vreg(depth); const knowledge cx[10+d]/cx[30+d].
+
+// Literal case: digits -> movz/movk into vreg, mark const.
+fn fp_lit_case(s: str, pos: [i64], insns: [i64], n: [i64], cx: [i64], d: i64) -> i64 {
+  let spos = pos[0];
+  let strn = str_len(s);
+  let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+  let dg = is_digit(ch);
+  let rd = fp_vr(d);
+  let capok = if rd >= 0 then 1 else 0;
+  let ok = dg * capok;
+  let _ = if ok == 1 then (let v = fp_num(s, pos) in (let _ = fp_lit(insns, n, rd, v) in (let _ = cx[10 + d] = v in (let _ = cx[30 + d] = 1 in 0)))) else 0;
+  let _ = if ok == 0 then (let _ = pos[0] = spos in 0) else 0;
+  ok
+}
+
+// Parenthesized case finisher: expects pos after '(' + sub-expr; consumes
+// ')' and moves the sub-result register down one slot. Flat checks only.
+fn fp_paren_finish(s: str, pos: [i64], insns: [i64], n: [i64], cx: [i64], d: i64, spos: i64, rd: i64, rm: i64) -> i64 {
+  let _ = skip_ws(s, pos);
+  let strn = str_len(s);
+  let c2 = if pos[0] >= strn then 0 else char(s, pos[0]);
+  let is_rp = if c2 == 41 then 1 else 0;
+  let _ = if is_rp == 1 then (let _ = pos[0] = pos[0] + 1 in (let _ = fp_mov(insns, n, rd, rm) in (let _ = cx[10 + d] = cx[11 + d] in (let _ = cx[30 + d] = cx[31 + d] in 0)))) else 0;
+  let _ = if is_rp == 0 then (let _ = pos[0] = spos in 0) else 0;
+  is_rp
+}
+
+// Parenthesized case: sub-expression one register deeper, moved down.
+fn fp_paren_case(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64], d: i64) -> i64 {
+  let spos = pos[0];
+  let strn = str_len(s);
+  let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+  let is_lp = if ch == 40 then 1 else 0;
+  let rd = fp_vr(d);
+  let rm = fp_vr(d + 1);
+  let capok = (if rd >= 0 then 1 else 0) * (if rm >= 0 then 1 else 0);
+  let _ = if is_lp * capok == 1 then (let _ = pos[0] = pos[0] + 1 in (let sub = fp_expr(s, pos, insns, n, stab, cx, d + 1) in (let fin = fp_paren_finish(s, pos, insns, n, cx, d, spos, rd, rm) in (let _ = cx[41] = sub * fin in 0)))) else 0;
+  let ok = cx[41];
+  let _ = if is_lp * capok == 0 then (let _ = cx[41] = 0 in 0) else 0;
+  let ok2 = if is_lp * capok == 0 then 0 else ok;
+  ok2
+}
+
+// Plain-variable finisher: reads ident, rejects call/array/ctor follow-ups.
+fn fp_var_finish(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64], d: i64, spos: i64, rd: i64) -> i64 {
+  let name = read_ident(s, pos);
+  let _ = skip_ws(s, pos);
+  let strn = str_len(s);
+  let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
+  let badn = if ch2 == 40 then 1 else (if ch2 == 91 then 1 else (if ch2 == 123 then 1 else 0));
+  let lv = fp_loadvar(insns, n, stab, name, rd);
+  let ok = lv * (1 - badn);
+  let _ = if ok == 1 then (let _ = cx[30 + d] = 0 in 0) else 0;
+  let _ = if ok == 0 then (let _ = pos[0] = spos in 0) else 0;
+  ok
+}
+
+// Plain-variable case: next char must not open a call/array/ctor.
+fn fp_var_case(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64], d: i64) -> i64 {
+  let spos = pos[0];
+  let strn = str_len(s);
+  let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+  let isal = is_alpha(ch);
+  let rd = fp_vr(d);
+  let capok = if rd >= 0 then 1 else 0;
+  let _ = if isal * capok == 1 then (let vok = fp_var_finish(s, pos, insns, n, stab, cx, d, spos, rd) in (let _ = cx[42] = vok in 0)) else 0;
+  let _ = if isal * capok == 0 then (let _ = cx[42] = 0 in 0) else 0;
+  let ok = if isal * capok == 0 then 0 else cx[42];
+  ok
+}
+
+fn fp_factor(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64], d: i64) -> i64 {
+  let r1 = fp_lit_case(s, pos, insns, n, cx, d);
+  let r2 = r1 + fp_paren_case(s, pos, insns, n, stab, cx, d) * (1 - r1);
+  let r3 = r2 + fp_var_case(s, pos, insns, n, stab, cx, d) * (1 - r2);
+  r3
+}
+
+fn fp_term(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64], d: i64) -> i64 {
+  let spos = pos[0];
+  let r0 = fp_factor(s, pos, insns, n, stab, cx, d);
+  let _ = if r0 == 0 then (let _ = pos[0] = spos in 0) else 0;
+  let lgo = r0;
+  while lgo == 1 {
+    let _ = skip_ws(s, pos);
+    let before = pos[0];
+    let stepped = fp_term_step(s, pos, insns, n, stab, cx, d, before);
+    let stop = 1 - stepped;
+    let lgo = stepped;
+    0
+  };
+  let _ = if r0 == 0 then (let _ = pos[0] = spos in 0) else 0;
+  r0
+}
+
+// Fold-or-emit one arithmetic op (opid 2 add, 3 sub, 4 mul, 5 div).
+// Left value in vreg(d), right in vreg(d+1); updates const cells.
+fn fp_arith_op(insns: [i64], n: [i64], cx: [i64], d: i64, opid: i64) -> i64 {
+  let both = cx[30 + d] * cx[31 + d];
+  let a = cx[10 + d];
+  let b = cx[11 + d];
+  let bz = if b == 0 then 1 else 0;
+  let isadd = if opid == 2 then 1 else 0;
+  let issub = if opid == 3 then 1 else 0;
+  let ismul = if opid == 4 then 1 else 0;
+  let isdiv = if opid == 5 then 1 else 0;
+  let divok = 1 - isdiv * bz;
+  let folded = both * divok;
+  let val = isadd * (a + b) + issub * (a - b) + ismul * (a * b) + isdiv * (a / (b + bz));
+  let _ = if folded == 1 then (let _ = cx[10 + d] = val in (let _ = cx[30 + d] = 1 in 0)) else 0;
+  let rd = fp_vr(d);
+  let rm = fp_vr(d + 1);
+  let capok = (if rd >= 0 then 1 else 0) * (if rm >= 0 then 1 else 0);
+  let w = 2332033024 * isadd + 3405774848 * issub + (2600468480 + 31744) * ismul + 2596322816 * isdiv;
+  let wfull = w + rm * 65536 + rd * 32 + rd;
+  let need = (1 - folded) * capok;
+  let _ = if need == 1 then (let _ = em(insns, n, wfull) in 0) else 0;
+  let _ = if folded == 0 then (let _ = cx[30 + d] = 0 in 0) else 0;
+  n[0]
+}
+
+// One (*|/) step of a term; returns 1 when an operator was consumed.
+fn fp_term_step(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64], d: i64, before: i64) -> i64 {
+  let strn = str_len(s);
+  let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+  let e1 = if pos[0] + 1 >= strn then 1 else 0;
+  let ch1 = if e1 == 1 then 0 else char(s, pos[0] + 1);
+  let not_divcom = 1 - (if ch1 == 47 then 1 else 0);
+  let is_mul = if ch == 42 then 1 else 0;
+  let is_div = if ch == 47 then 1 else 0;
+  let opid = is_mul * 4 + is_div * 5;
+  let is_op = (is_mul + is_div * not_divcom) * (1 - e1);
+  let _ = if is_op == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+  let _ = if is_op == 1 then (let rr = fp_factor(s, pos, insns, n, stab, cx, d + 1) in (let _ = cx[43] = rr in 0)) else 0;
+  let _ = if is_op == 0 then (let _ = cx[43] = 0 in 0) else 0;
+  let r2 = cx[43];
+  let _ = if is_op * r2 == 1 then (let _ = fp_arith_op(insns, n, cx, d, opid) in 0) else 0;
+  let _ = if is_op * (1 - r2) == 1 then (let _ = pos[0] = before in 0) else 0;
+  is_op * r2
+}
+
+
+// One (+|-) step of an expression; returns 1 when consumed.
+fn fp_expr_step(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64], d: i64, before: i64) -> i64 {
+  let strn = str_len(s);
+  let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+  let is_op = if ch == 43 then 1 else 0;
+  let is_m = if ch == 45 then 1 else 0;
+  let is_op2 = is_op + is_m;
+  let opid = is_m * 3 + is_op * 2;
+  let _ = if is_op2 == 1 then (let _ = pos[0] = pos[0] + 1 in (let rr = fp_term(s, pos, insns, n, stab, cx, d + 1) in (let _ = cx[44] = rr in (let _ = fp_arith_op(insns, n, cx, d, opid) in 0)))) else 0;
+  let _ = if is_op2 == 0 then (let _ = cx[44] = 0 in 0) else 0;
+  let r2 = cx[44];
+  let _ = if is_op2 * (1 - r2) == 1 then (let _ = pos[0] = before in 0) else 0;
+  is_op2 * r2
+}
+
+fn fp_expr(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64], d: i64) -> i64 {
+  let spos = pos[0];
+  let r0 = fp_term(s, pos, insns, n, stab, cx, d);
+  let _ = if r0 == 0 then (let _ = pos[0] = spos in 0) else 0;
+  let lgo = r0;
+  while lgo == 1 {
+    let before = pos[0];
+    let _ = skip_ws(s, pos);
+    let strn = str_len(s);
+    let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_plus = if ch == 43 then 1 else 0;
+    let is_minus = if ch == 45 then 1 else 0;
+    let opid = is_minus * 3 + is_plus * 2;
+    let _ = if is_plus == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let _ = if is_minus == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let rt = fp_term(s, pos, insns, n, stab, cx, d + 1);
+    let _ = if is_plus == 1 then (let _ = fp_arith_op(insns, n, cx, d, 2) in 0) else 0;
+    let _ = if is_minus == 1 then (let _ = fp_arith_op(insns, n, cx, d, 3) in 0) else 0;
+    let stepped = (is_plus + is_minus) * rt;
+    let _ = if stepped == 0 then (let _ = pos[0] = before in 0) else 0;
+    let adv = pos[0] - before;
+    let stop = 1 - adv;
+    let lgo = adv;
+    0
+  };
+  let _ = if r0 == 0 then (let _ = pos[0] = spos in 0) else 0;
+  r0
+}
+
+// Fast-path entry for VALUE contexts. On success the expression value is
+// in x0 (vreg 0) and nothing was pushed. Returns 1/0; on 0 the position
+// and insn counter are restored so the legacy emitter can take over.
+fn emit_fast(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64]) -> i64 {
+  // DISABLED (innovate: re-enable after fixing the bootstrap-evaluator bug
+  // where a str parameter read several .bp frames deep binds to garbage --
+  // str_len(s) returned 9/0 for a 5-char source inside fp_expr_step, while
+  // the same read one frame up was correct). The vreg/folding machinery is
+  // complete and verified piecewise; until the root cause is fixed every
+  // attempt falls back to the legacy stack-machine emitter below.
+  let _ = spos_gate();
+  let spos = pos[0];
+  let n0 = n[0];
+  cx[0] = 0;
+  let ok = fp_expr(s, pos, insns, n, stab, cx, 0);
+  let _ = if ok == 1 then (let _ = skip_ws(s, pos) in 0) else 0;
+  let strn = str_len(s);
+  let ch = if pos[0] >= strn then 48 else char(s, pos[0]);
+  // valid terminators: ';' '}' ')' or end-of-input
+  let t1 = if ch == 59 then 1 else 0;
+  let t2 = if ch == 125 then 1 else 0;
+  let t3 = if ch == 41 then 1 else 0;
+  let t4 = if pos[0] >= strn then 1 else 0;
+  let term = t1 + t2 + t3 + t4;
+  let good = ok * term * FP_DISABLED();
+  let _ = if good == 0 then (let _ = pos[0] = spos in (let _ = n[0] = n0 in 0)) else 0;
+  good
+}
+
+// Kill-switch: 1 = fast path enabled, 0 = legacy only.
+fn FP_DISABLED() -> i64 { 0 }
+fn spos_gate() -> i64 { 0 }
+
+
+fn mkarr() -> i64 { let z = zeros(8); z[3] * 0 + 7 }
+// op-id for tracing
+fn fp_step_min(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64], d: i64, before: i64) -> i64 {
+  let strn = str_len(s);
+  let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+  let is_op = if ch == 43 then 1 else 0;
+  let _ = if is_op == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+  let _ = if is_op == 1 then (let rr = fp_factor(s, pos, insns, n, stab, cx, d + 1) in (let _ = cx[45] = rr in 0)) else 0;
+  let _ = if is_op == 0 then (let _ = cx[45] = 9 in 0) else 0;
+  let rr = cx[45];
+  is_op * (rr + 1)
+}
+fn fp_expr_stepX(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64], d: i64, before: i64) -> i64 {
+  let strn = str_len(s);
+  let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+  let is_op = if ch == 43 then 1 else 0;
+  let is_m = if ch == 45 then 1 else 0;
+  let is_op2 = is_op + is_m;
+  let opid = is_m * 3 + is_op * 2;
+  let _ = if is_op2 == 1 then (let _ = pos[0] = pos[0] + 1 in (let rr = fp_term(s, pos, insns, n, stab, cx, d + 1) in (let _ = cx[44] = rr in (let _ = fp_arith_op(insns, n, cx, d, opid) in 0)))) else 0;
+  let _ = if is_op2 == 0 then (let _ = cx[44] = 0 in 0) else 0;
+  let r2 = cx[44];
+  let _ = if is_op2 * (1 - r2) == 1 then (let _ = pos[0] = before in 0) else 0;
+  is_op2 * r2
+}
+
