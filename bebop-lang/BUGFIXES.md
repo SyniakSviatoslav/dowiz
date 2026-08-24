@@ -128,9 +128,16 @@ first (all sd-class probes call zeros; none of the green ones do). Locals
 count was correlated, not causal.**
 
 ## Current open queue (priority order)
-1. C1: bind-loss optimizer hole (division-rhs lets) — single-peephole-gate
-   probe ready, decoded evidence above.
-2. C2: zeros via x29-relative frame redesign or runner-provided heap page,
-   then k5 NTT kernel unblocked (algorithm validated interp=python).
-3. Language ops: early return, unary !, compound assignment family.
-4. VSA-over-stream demo, glyph completion 121->300, NEON deep pass.
+1. SOLVED THIS SESSION: hash-wrap identifier rejection (C1-class crashes
+   were mostly this + zeros); zeros landed via runner bump arena x27/x28.
+   se/sf/sd/tg/tf/tc/td/p* all green deterministic; parity 340/340,
+   fuzz PASS, selfcompile warm 41ms.
+2. REMAINING red class (sc only): legacy div/mod helper inside loop bodies
+   emits an madd/sub sequence through x14 whose prologue setup interacts
+   with G1 scanning (decoded: stp-shaped word + sdiv + madd x14 + sub).
+   Next probe: gate G1 when body contains sdiv/madd pairs, or route legacy
+   div-mod scratch through x15 bank instead of x14.
+3. Language ops: early return, unary !, compound assignment family
+   (% already shipped end-to-end).
+4. k5 NTT kernel (algorithm validated interp=python=759186635) lands after
+   item 2; then VSA-over-ADC demo, glyph completion, NEON deep pass.
