@@ -244,3 +244,16 @@ bl calls conditional on the caller actually having spill slots
 One UDP packet (256B payload + 42B headers = 298B on wire), one BLE
 DLE frame, one LoRa session: a self-hosted-compiled program that beats
 C and Rust on its own turf fits in a single micro-packet.
+
+## v9: HV everywhere — k7 associative memory in pure Bebop
+
+| kernel | what | native (min of 31) | correctness |
+|--------|------|--------------------|-------------|
+| k7 | VSA associative memory: 8 key->value 1024-bit HVs, noisy query (16 flipped bits), nearest-key resolve + value checksum | **35.7 µs** | interp==native==python ref |
+
+hv_stdlib.bp ships the L3 primitives as plain .bp functions:
+SWAR popcount, seeded word generator, XOR bind-in-place, Hamming
+distance. Any .bp program can now express hypervector computation
+directly — the language itself is the VSA runtime. C-side hyper.c
+(NEON bind/hamming) remains the accelerated twin for the same
+algorithms; semantics cross-checked via the shared test suite.
