@@ -1274,8 +1274,7 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   // never invoked when spills are present (an eager false-success there
   // skips rollback and poisons the legacy re-parse position).
   let fokc = [0];
-  let optb_kill = 1;
-  let _ = if has_spills + optb_kill == 0 then (let _ = fokc[0] = emit_fast_v2(s, pos, insns, n, stab, cx, st, 2, fntab) in 0) else 0;
+  let _ = if has_spills == 0 then (let _ = fokc[0] = emit_fast_v2(s, pos, insns, n, stab, cx, st, 2, fntab) in 0) else 0;
   let fok = fokc[0];
   let hasc = cx[20] * fok;
   let lsl = cx[21];
