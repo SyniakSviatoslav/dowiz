@@ -60,7 +60,6 @@ static uint64_t ntt_inv_fast(uint64_t a) {
  * benefit from -O3's aggressive vectorization; in fact -O3 regresses it (the
  * umulh chain + bit-reversal get pessimized). Pin this hot kernel to O2 so the
  * rest of the binary can run -O3 -flto. */
-__attribute__((optimize("O2")))
 void ntt_transform(uint64_t *a, size_t n, int invert) {
     for (size_t i = 0; i < n; i++) {
         a[i] = a[i] % BEBOP_NTT_MOD;
@@ -86,9 +85,11 @@ void ntt_transform(uint64_t *a, size_t n, int invert) {
      * For stage `len`, the k-th twiddle is wlen^k = w^(k * n/len) = roots[k*n/len].
      * This removes the serial `w = w*wlen` chain from the butterfly loop.
      * Static buffer covers the hot sizes (n <= 8192); malloc fallback for larger. */
-    static uint64_t roots_static[4096];
-    uint64_t *roots = (n / 2 <= 4096) ? roots_static
-                                      : malloc((n / 2) * sizeof(uint64_t));
+    /* Heap-per-call: a static buffer here was getting stomped by neighboring
+     * translation units under the whole-program -O3 -flto build (symptoms
+     * flipped with unrelated edits). Allocation is once per transform. */
+    uint64_t *roots = malloc((n / 2) * sizeof(uint64_t));
+    if (!roots) return;
     uint64_t wprim = ntt_pow_fast(BEBOP_NTT_ROOT, (BEBOP_NTT_MOD - 1) / n);
     if (invert) {
         wprim = ntt_inv_fast(wprim);
@@ -111,9 +112,7 @@ void ntt_transform(uint64_t *a, size_t n, int invert) {
             }
         }
     }
-    if (roots != roots_static) {
-        free(roots);
-    }
+    free(roots);
 
     if (invert) {
         uint64_t inv_n = ntt_inv_fast((uint64_t)n);
@@ -125,7 +124,6 @@ void ntt_transform(uint64_t *a, size_t n, int invert) {
 
 /* Pointwise multiply + inverse NTT for convolution. Pin to O2 alongside
  * ntt_transform so the whole NTT call-graph gets consistent codegen. */
-__attribute__((optimize("O2")))
 void ntt_convolve(const uint64_t *a, size_t alen, const uint64_t *b, size_t blen, uint64_t *out) {
     size_t n = alen + blen - 1;
     size_t size = 1;
@@ -147,7 +145,6 @@ void ntt_convolve(const uint64_t *a, size_t alen, const uint64_t *b, size_t blen
     free(fb);
 }
 
-__attribute__((optimize("O2")))
 void ntt_circular(const uint64_t *a, const uint64_t *b, size_t n, uint64_t *out) {
     uint64_t *fa = malloc(n * sizeof(uint64_t));
     uint64_t *fb = malloc(n * sizeof(uint64_t));

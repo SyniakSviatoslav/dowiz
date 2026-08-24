@@ -21,6 +21,7 @@ void ntt_transform(uint64_t *a, size_t n, int invert);
 void ntt_convolve(const uint64_t *a, size_t alen, const uint64_t *b, size_t blen, uint64_t *out);
 
 /* Circular convolution of two equal-length (power-of-two) sequences. */
+/* Both inputs are read at full length n: zero-pad shorter kernels. */
 void ntt_circular(const uint64_t *a, const uint64_t *b, size_t n, uint64_t *out);
 
 /* Map a value back to the signed range (−MOD/2, MOD/2]. */

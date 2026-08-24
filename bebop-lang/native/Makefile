@@ -47,6 +47,8 @@ test: $(BIN)
 	$(BIN) token_bucket
 	$(BIN) typereg
 	$(BIN) vir_atomic
+	$(BIN) hv_stream
+	$(BIN) ntt_filter
 	$(BIN) strict ../selfhost/std/dp.bp
 	@echo "--- tokenize sample ---"
 	$(BIN) tokens ../samples/hello.bp

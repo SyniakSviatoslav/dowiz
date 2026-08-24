@@ -18,6 +18,7 @@
 #include "mesh.h"
 #include "qtt.h"
 #include "ntt.h"
+#include <math.h>
 #include "ntt32.h"
 #include "hyper.h"
 #include "mem.h"
@@ -1320,6 +1321,56 @@ static void cmd_hv_stream(void) {
     #undef SAMPLE
 }
 
+/* ntt_filter -- cyclic convolution as a hardware-friendly FIR replacement.
+ * A noisy square-ish sensor waveform is convolved with a moving-average
+ * kernel through the NTT (O(n log n)) and SNR vs the clean wave is reported,
+ * alongside the direct O(n*K) reference to show exact agreement. */
+static void cmd_ntt_filter(void) {
+    enum { N = 256, K = 16 };
+    uint64_t clean[N], noisy[N], out_ntt[N], out_ref[N];
+    /* ntt_circular reads exactly N words from BOTH operands: the kernel
+     * must be zero-padded to the full transform length. */
+    static uint64_t kern[N];
+
+    unsigned long st = 12345;
+    #define NR() (st = st * 6364136223846793005UL + 1442695040888963407UL)
+    for (int i = 0; i < N; i++) {
+        int phase = (i / 32) % 2;           /* 32-sample square wave */
+        clean[i] = (uint64_t)(phase ? 3000 : -3000);
+        long noise = (long)(NR() % 2001) - 1000;
+        long v = (long)clean[i] + noise;
+        const unsigned long P = 998244353UL;
+        noisy[i] = (uint64_t)(((v % (long)P) + (long)P) % (long)P); /* Z/p */
+    }
+    for (int k = 0; k < K; k++) kern[k] = 1;
+    ntt_circular(noisy, kern, N, out_ntt);
+    /* direct reference: out[i] = sum_j noisy[(i-j)%N]*kern[j] */
+    for (int i = 0; i < N; i++) {
+        long acc = 0;
+        for (int j = 0; j < K; j++) {
+            int idx = (i - j + N) % N;   /* conv direction */
+            acc += (long)ntt_centered(noisy[idx]);
+        }
+        out_ref[i] = (uint64_t)acc;
+    }
+    double snr_before = 0, snr_after = 0, worst = 0;
+    for (int i = 0; i < N; i++) {
+        long c = (long)clean[i];
+        long nb = (long)ntt_centered(noisy[i]);
+        long na = (long)ntt_centered(out_ntt[i]) / K;   /* kernel gain 16 */
+        if ((long)ntt_centered(out_ntt[i]) != (long)out_ref[i]) worst++;
+        snr_before += (double)c * c;
+        snr_after += (double)(na - c) * (na - c);
+        (void)nb;
+    }
+    printf("ntt_filter: n=%d k=%d\n", N, K);
+    printf("signal power=%.0f residual power after %.1f\n",
+           snr_before, snr_after / K);
+    printf("direct-vs-NTT mismatched slots: %d of %d\n", (int)worst, N);
+    printf("ntt_filter: %s\n", worst == 0.0 ? "PASS (exact match)" : "MISMATCH");
+    #undef NR
+}
+
 int main(int argc, char **argv) {
     bp_startup_mark_main();
     if (argc < 2) {
@@ -1753,6 +1804,10 @@ int main(int argc, char **argv) {
         free(cw_cache_buf);
         stdout = cw_saved_out;
         unsetenv("BEBOP_CACHE_PATH");
+        return 0;
+    }
+    if (strcmp(argv[1], "ntt_filter") == 0) {
+        cmd_ntt_filter();
         return 0;
     }
     if (strcmp(argv[1], "hv_stream") == 0) {
