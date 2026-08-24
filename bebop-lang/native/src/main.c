@@ -1095,6 +1095,124 @@ static void cmd_bench(void) {
     bench_all_run();
 }
 
+/* ---- self-hosted compilation core (shared by compilewords/compilemany) ---- */
+#define CW_MAX 256
+static char *cw_csrc;
+static size_t cw_clen;
+static AstProgram cw_prog;
+static TyRegistry cw_reg;
+static const char *cw_cn[CW_MAX];
+static Term *cw_ct[CW_MAX];
+static int cw_cn_count;
+static Term cw_carg;
+static FILE *cw_saved_out;
+static char *cw_cache_buf;
+static size_t cw_cache_len;
+
+/* Load and parse a compiler module once. 0 = ok. */
+static int cw_load(const char *path) {
+    cw_csrc = malloc(1 << 20);
+    FILE *cf = fopen(path, "rb");
+    if (!cf) { fprintf(stderr, "cannot open %s\n", path); return 2; }
+    cw_clen = fread(cw_csrc, 1, (1 << 20) - 1, cf);
+    cw_csrc[cw_clen] = '\0';
+    fclose(cf);
+    BpParseError cperr;
+    if (bp_parse(cw_csrc, &cw_prog, &cperr) != 0) {
+        fprintf(stderr, "parse error: %s\n", cperr.msg);
+        return 2;
+    }
+    typereg_init(&cw_reg);
+    expr_set_registry(&cw_reg);
+    expr_pool_reset();
+    static char cbf[CW_MAX][64];
+    cw_cn_count = 0;
+    for (size_t ci = 0; ci < cw_prog.len && cw_cn_count < CW_MAX; ci++) {
+        const AstItem *cit = &cw_prog.items[ci];
+        if (cit->kind == AST_ITEM_FN && cit->text && cit->text_len > 0) {
+            char *ctxt = malloc(cit->text_len + 1);
+            memcpy(ctxt, cit->text, cit->text_len);
+            ctxt[cit->text_len] = '\0';
+            Term *fterm = NULL; Ty *fty2 = NULL;
+            char cerr[256];
+            if (bp_parse_fn_decl(ctxt, &cw_reg, &fterm, &fty2, cerr, sizeof cerr) != 0) {
+                fprintf(stderr, "fn parse error [%s]: %s\n",
+                        cit->name ? cit->name : "?", cerr);
+                return 2;
+            }
+            free(ctxt);
+            size_t fl2 = cit->name_len < 63 ? cit->name_len : 63;
+            memcpy(cbf[cw_cn_count], cit->name ? cit->name : "?", fl2);
+            cbf[cw_cn_count][fl2] = '\0';
+            cw_cn[cw_cn_count] = cbf[cw_cn_count];
+            cw_ct[cw_cn_count] = fterm;
+            cw_cn_count++;
+        }
+    }
+    int ei2 = -1;
+    for (int k = 0; k < cw_cn_count; k++)
+        if (strcmp(cw_cn[k], "emit_words") == 0) { ei2 = k; break; }
+    if (ei2 < 0) {
+        fprintf(stderr, "no emit_words fn; loaded %d fns\n", cw_cn_count);
+        return 2;
+    }
+    return 0;
+}
+
+/* Compile one kernel source through the loaded compiler, artifact -> out.
+ * 0 = ok, nonzero = failure (message on stderr). */
+static int cw_emit_src(const char *ksrc, FILE *out) {
+    memset(&cw_carg, 0, sizeof cw_carg);
+    cw_carg.kind = TERM_STR;
+    cw_carg.name = ksrc;
+    int ei2 = -1, mi = -1;
+    for (int k = 0; k < cw_cn_count; k++) {
+        if (strcmp(cw_cn[k], "emit_words") == 0) ei2 = k;
+        if (strcmp(cw_cn[k], "emit_offsets") == 0) mi = k;
+    }
+    static Term capp;
+    memset(&capp, 0, sizeof capp);
+    capp.kind = TERM_APP;
+    capp.a = cw_ct[ei2];
+    capp.b = &cw_carg;
+    int cvk; long cvi; int cvb; double cvf;
+    char cerr[256];
+    if (qtt_eval_binds(&capp, cw_cn, (Term *const *)cw_ct, cw_cn_count,
+                       &cvk, &cvi, &cvb, &cvf, cerr, sizeof cerr) != 0) {
+        fprintf(stderr, "eval error: %s\n", cerr);
+        return 2;
+    }
+    int wn = 0;
+    void *arr = qtt_last_arr(&wn);
+    if (!arr || wn < 1) { fprintf(stderr, "no words\n"); return 2; }
+    fprintf(out, "%ld\n", qtt_last_arr_elem(0));
+    for (int k = 1; k < wn; k++) fprintf(out, "%ld\n", qtt_last_arr_elem(k));
+    if (mi >= 0) {
+        memset(&capp, 0, sizeof capp);
+        capp.kind = TERM_APP;
+        capp.a = cw_ct[mi];
+        capp.b = &cw_carg;
+        if (qtt_eval_binds(&capp, cw_cn, (Term *const *)cw_ct, cw_cn_count,
+                           &cvk, &cvi, &cvb, &cvf, cerr, sizeof cerr) == 0) {
+            int mn = 0;
+            void *marr = qtt_last_arr(&mn);
+            if (marr && mn > 0) {
+                fprintf(out, "OFF");
+                for (int k = 0; k < mn; k++)
+                    fprintf(out, " %ld", qtt_last_arr_elem(k));
+                fprintf(out, "\n");
+            }
+        }
+    }
+    return 0;
+}
+
+static void cw_cache_path(char *dst, size_t cap, const char *ksrc, size_t klen) {
+    uint32_t h1 = zlib_crc32(0u, (const unsigned char *)cw_csrc, cw_clen);
+    uint32_t h2 = zlib_crc32(0u, (const unsigned char *)ksrc, klen);
+    snprintf(dst, cap, ".becache/%08x%08x.full", h1, h2);
+}
+
 int main(int argc, char **argv) {
     bp_startup_mark_main();
     if (argc < 2) {
@@ -1423,149 +1541,79 @@ int main(int argc, char **argv) {
     if (strcmp(argv[1], "selfhost-bench") == 0) {
         return cmd_selfhost_bench(argc, argv);
     }
+    if (strcmp(argv[1], "compilemany") == 0) {
+        if (argc < 3) { usage(); return 2; }
+        /* usage: compilemany <compiler.bp> <file.bp> [more.bp ...]
+         * Loads the compiler ONCE, compiles every listed source, persists
+         * each artifact under .becache/. One interpreter load amortized
+         * across N compilations (batch hot path for parity/bench runs). */
+        int rc = cw_load(argv[2]);
+        if (rc != 0) return rc;
+        mkdir(".becache", 0755);
+        int ncold = 0, nhit = 0, nfail = 0;
+        for (int fi = 3; fi < argc; fi++) {
+            char *ksrc = malloc(1 << 20);
+            FILE *kf = fopen(argv[fi], "rb");
+            if (!kf) { fprintf(stderr, "cannot open %s\n", argv[fi]); nfail++; continue; }
+            size_t klen = fread(ksrc, 1, (1 << 20) - 1, kf);
+            ksrc[klen] = '\0';
+            fclose(kf);
+            char cpath[256];
+            cw_cache_path(cpath, sizeof cpath, ksrc, klen);
+            FILE *probe = fopen(cpath, "rb");
+            if (probe) { fclose(probe); nhit++; continue; }
+            char *buf = NULL; size_t blen = 0;
+            cw_saved_out = stdout;
+            stdout = open_memstream(&buf, &blen);
+            int rc2 = cw_emit_src(ksrc, stdout);
+            fflush(stdout);
+            fclose(stdout);
+            stdout = cw_saved_out;
+            if (rc2 != 0) { free(buf); nfail++; continue; }
+            FILE *of = fopen(cpath, "wb");
+            if (of) { fwrite(buf, 1, blen, of); fclose(of); }
+            free(buf);
+            ncold++;
+        }
+        printf("compilemany: cold=%d hit=%d fail=%d\n", ncold, nhit, nfail);
+        return nfail != 0 ? 1 : 0;
+    }
     if (strcmp(argv[1], "compilewords") == 0) {
         if (argc < 4) { usage(); return 2; }
         /* usage: compilewords <compiler.bp> <kernel.bp>
-         * Loads the self-hosted compiler, feeds it the kernel SOURCE, prints
-         * its compiled AArch64 words: line 1 = count, then one word/line. */
-        static FILE *saved_out;
-        static char *cache_buf;
-        static size_t cache_len;
-        char *csrc = malloc(1 << 20);   /* compiler module */
-        FILE *cf = fopen(argv[2], "rb");
-        if (!cf) { fprintf(stderr, "cannot open %s\n", argv[2]); return 2; }
-        size_t clen = fread(csrc, 1, (1 << 20) - 1, cf);
-        csrc[clen] = '\0';
-        fclose(cf);
+         * Cache-hit replays .becache/<key>.full; miss compiles through the
+         * interpreted compiler, persists the artifact, prints it. */
+        int rc = cw_load(argv[2]);
+        if (rc != 0) return rc;
         char *ksrc = malloc(1 << 20);   /* kernel source */
         FILE *kf = fopen(argv[3], "rb");
         if (!kf) { fprintf(stderr, "cannot open %s\n", argv[3]); return 2; }
         size_t klen = fread(ksrc, 1, (1 << 20) - 1, kf);
         ksrc[klen] = '\0';
         fclose(kf);
-        /* compile-once cache: unchanged (compiler, source) pairs replay the
-         * verified artifact instead of re-invoking the interpreted compiler */
-        {
-            uint32_t h1 = zlib_crc32(0u, (const unsigned char *)csrc, clen);
-            uint32_t h2 = zlib_crc32(0u, (const unsigned char *)ksrc, klen);
-            static char cpath[256];
-            snprintf(cpath, sizeof cpath, ".becache/%08x%08x.full", h1, h2);
-            FILE *cf2 = fopen(cpath, "rb");
-            if (cf2) {
-                int ch;
-                while ((ch = fgetc(cf2)) != EOF) putchar(ch);
-                fclose(cf2);
-                return 0;
-            }
-            setenv("BEBOP_CACHE_PATH", cpath, 1);
-            saved_out = stdout;
-            stdout = open_memstream(&cache_buf, &cache_len);
+        static char cpath[256];
+        cw_cache_path(cpath, sizeof cpath, ksrc, klen);
+        FILE *cf2 = fopen(cpath, "rb");
+        if (cf2) {
+            int ch;
+            while ((ch = fgetc(cf2)) != EOF) putchar(ch);
+            fclose(cf2);
+            return 0;
         }
-
-        AstProgram cprog;
-        BpParseError cperr;
-        if (bp_parse(csrc, &cprog, &cperr) != 0) {
-            fprintf(stderr, "parse error: %s\n", cperr.msg);
-            return 2;
-        }
-        TyRegistry creg;
-        typereg_init(&creg);
-        expr_set_registry(&creg);
-        char cerr[256];
-        expr_pool_reset();
-        enum { CW_MAX = 256 };
-        const char *cn[CW_MAX];
-        Term *ct[CW_MAX];
-        int cn_count = 0;
-        static char cbf[CW_MAX][64];
-        for (size_t ci = 0; ci < cprog.len && cn_count < CW_MAX; ci++) {
-            const AstItem *cit = &cprog.items[ci];
-            if (cit->kind == AST_ITEM_FN && cit->text && cit->text_len > 0) {
-                char *ctxt = malloc(cit->text_len + 1);
-                memcpy(ctxt, cit->text, cit->text_len);
-                ctxt[cit->text_len] = '\0';
-                Term *fterm = NULL; Ty *fty2 = NULL;
-                if (bp_parse_fn_decl(ctxt, &creg, &fterm, &fty2, cerr, sizeof cerr) != 0) {
-                    fprintf(stderr, "fn parse error [%s]: %s\n",
-                            cit->name ? cit->name : "?", cerr);
-                    return 2;
-                }
-                free(ctxt);
-                size_t fl2 = cit->name_len < 63 ? cit->name_len : 63;
-                memcpy(cbf[cn_count], cit->name ? cit->name : "?", fl2);
-                cbf[cn_count][fl2] = '\0';
-                cn[cn_count] = cbf[cn_count];
-                ct[cn_count] = fterm;
-                cn_count++;
-            }
-        }
-        int ei2 = -1;
-        for (int k = 0; k < cn_count; k++)
-            if (strcmp(cn[k], "emit_words") == 0) { ei2 = k; break; }
-        if (ei2 < 0) {
-            fprintf(stderr, "no emit_words fn; loaded %d fns:", cn_count);
-            for (int k = 0; k < cn_count; k++) fprintf(stderr, " %s", cn[k]);
-            fprintf(stderr, "\n");
-            return 2;
-        }
-        static Term carg;
-        memset(&carg, 0, sizeof carg);
-        carg.kind = TERM_STR;
-        carg.name = ksrc;
-        static Term capp;
-        memset(&capp, 0, sizeof capp);
-        capp.kind = TERM_APP;
-        capp.a = ct[ei2];
-        capp.b = &carg;
-        int cvk; long cvi; int cvb; double cvf;
-        if (qtt_eval_binds(&capp, cn, (Term *const *)ct, cn_count,
-                           &cvk, &cvi, &cvb, &cvf, cerr, sizeof cerr) != 0) {
-            fprintf(stderr, "eval error: %s\n", cerr);
-            return 2;
-        }
-        int wn = 0;
-        void *arr = qtt_last_arr(&wn);
-        if (!arr || wn < 1) { fprintf(stderr, "no words\n"); return 2; }
-        printf("%ld\n", qtt_last_arr_elem(0));
-        for (int k = 1; k < wn; k++) printf("%ld\n", qtt_last_arr_elem(k));
-
-        /* Second pass: per-fn word offsets (source order) so tooling can
-         * locate `main` (always the LAST fn in a .bp program). */
-        int mi = -1;
-        for (int k = 0; k < cn_count; k++)
-            if (strcmp(cn[k], "emit_offsets") == 0) { mi = k; break; }
-        if (mi >= 0) {
-            static Term mapp;
-            memset(&mapp, 0, sizeof mapp);
-            mapp.kind = TERM_APP;
-            mapp.a = ct[mi];
-            mapp.b = &carg;
-            if (qtt_eval_binds(&mapp, cn, (Term *const *)ct, cn_count,
-                               &cvk, &cvi, &cvb, &cvf, cerr, sizeof cerr) == 0) {
-                int mn = 0;
-                void *marr = qtt_last_arr(&mn);
-                if (marr && mn > 0) {
-                    printf("OFF");
-                    for (int k = 0; k < mn; k++)
-                        printf(" %ld", qtt_last_arr_elem(k));
-                    printf("\n");
-                }
-            }
-        }
-        {
-            const char *cp = getenv("BEBOP_CACHE_PATH");
-            if (cp) {
-                fflush(stdout);
-                mkdir(".becache", 0755);
-                FILE *cf3 = fopen(cp, "wb");
-                if (cf3) { fwrite(cache_buf, 1, cache_len, cf3); fclose(cf3); }
-                fflush(stdout);
-                fwrite(cache_buf, 1, cache_len, saved_out);
-                fflush(saved_out);
-            }
-            free(cache_buf);
-            stdout = saved_out;
-        }
+        setenv("BEBOP_CACHE_PATH", cpath, 1);
+        cw_saved_out = stdout;
+        stdout = open_memstream(&cw_cache_buf, &cw_cache_len);
+        int rc3 = cw_emit_src(ksrc, stdout);
+        if (rc3 != 0) return rc3;
+        fflush(stdout);
+        mkdir(".becache", 0755);
+        FILE *cf3 = fopen(cpath, "wb");
+        if (cf3) { fwrite(cw_cache_buf, 1, cw_cache_len, cf3); fclose(cf3); }
+        fwrite(cw_cache_buf, 1, cw_cache_len, cw_saved_out);
+        fflush(cw_saved_out);
+        free(cw_cache_buf);
+        stdout = cw_saved_out;
+        unsetenv("BEBOP_CACHE_PATH");
         return 0;
     }
     if (strcmp(argv[1], "x86_64") == 0) {

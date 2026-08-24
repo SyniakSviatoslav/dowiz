@@ -354,6 +354,7 @@ static int run_case(const char *src) {
                                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (mem == MAP_FAILED) return 6;
     memcpy(mem, code, (size_t)wc * 4);
+    __builtin___clear_cache((char *)mem, (char *)mem + (size_t)wc * 4);
     g_code_base = mem;
     g_code_words = wc;
     struct sigaction sa;

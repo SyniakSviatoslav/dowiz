@@ -37,9 +37,30 @@ int main(int argc, char **argv) {
         memcpy((char *)code + (size_t)i * 4, &w, 4);
     }
     fclose(f);
+    __builtin___clear_cache((char *)code, (char *)code + (size_t)n * 4);
 
-    /* optional third arg: entry word offset (default 0) */
+    /* optional third arg: entry word offset (default 0).
+     * If input ends in .full and no manifest arg is given, parse the OFF
+     * line from the same file (last offset = main). */
     int entry = 0;
+    if (argc <= 3) {
+        size_t fl = strlen(argv[1]);
+        if (fl > 5 && strcmp(argv[1] + fl - 5, ".full") == 0) {
+            FILE *mf = fopen(argv[1], "r");
+            if (mf) {
+                char *line = NULL; size_t lc = 0;
+                while (getline(&line, &lc, mf) != -1)
+                    if (strncmp(line, "OFF", 3) == 0) {
+                        int cnt = 0; unsigned long off = 0;
+                        char *q = line + 3, *ne;
+                        cnt = (int)strtol(q, &ne, 10);
+                        for (int k = 0; k < cnt; k++) off = strtoul(ne, &ne, 10);
+                        entry = (int)off;
+                    }
+                free(line); fclose(mf);
+            }
+        }
+    }
     if (argc > 3) {
         char *line = NULL; size_t lc = 0;
         FILE *mf = fopen(argv[3], "r");
@@ -63,7 +84,7 @@ int main(int argc, char **argv) {
     fn1 fp = (fn1)((char *)code + (size_t)entry * 4);
 
     /* warmup + reference result (calls are pure) */
-    volatile long sink = fp();
+    volatile long sink = fp(); (void)sink;
     long ref = fp();
 
     static uint64_t runs[4096];
