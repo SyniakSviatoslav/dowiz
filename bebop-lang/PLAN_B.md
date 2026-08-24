@@ -607,3 +607,17 @@ while=35281108217 were silently wrong once); arity mismatches on
 forward-referenced fns fail silently under the bootstrap interpreter
 (a stale 6-arg compile_fn_at call zeroed every fn size); unresolved
 callees must never fall into body re-parse (okres guard in emit_call).
+
+
+## FIB PARITY SESSION (v3 fast path)
+Added to the token pipeline: fast bl-calls with ABI-register args and
+accumulator spill; branch-mode if-expressions; imm add/sub/cmp.
+k2 fib(25) 2.8ms -> 0.815ms, now 1.23x faster than Rust; all four
+kernels beat Rust. Parity 340/340 re-verified after every change.
+Bugs caught by the harness during this session: missing else-token
+consume (else-arm silently failed), dropped non-immediate RHS
+materialization when cmp-imm landed, sub-imm base typo (0xCB vs 0xD1),
+result-mov ordered after restore-pops clobbering x0. Interpreter
+quirks re-confirmed: return values of calls inside gated ternaries
+can vanish several frames deep -- relay via callee-written cells
+(cx[25] pattern) instead.

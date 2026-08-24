@@ -116,3 +116,26 @@ b.cond, zero stack traffic per iteration), negative-literal movz/movk
 decomposition via exact divisions. Legacy stack-machine emitter remains
 the fallback for calls, arrays, if/match expressions.
 
+
+## v3: calls + branch-mode if in the fast path -- ALL FOUR kernels beat Rust
+
+fib's recursion forced two additions to the pre-tokenized pipeline:
+(1) resolved single/multi-arg calls compile to bl with caller-side spill
+of live accumulator slots around the call, args evaluated directly into
+ABI registers x0/x1 for the first two parameters; (2) if-expressions
+compile branch-mode (cmp + b.falsecc / b over the else arm), arms
+evaluated at the same depth as the if. Immediate-form add/sub/cmp for
+small constant operands. Token kinds 20/21/22 (if/then/else), 23 (comma).
+
+| kernel | legacy words | v3 words | legacy ms | v3 ms | rust ms | verdict |
+|--------|-------------|----------|-----------|-------|---------|---------|
+| k1 sum-loop 1M  | 92  | 37 | 11.0 | 1.77  | 5.3  | bebop 3.0x FASTER |
+| k2 fib(25)      | 114 | 57 | 2.8  | 0.815 | 1.0  | bebop 1.23x FASTER |
+| k3 nested grids | 167 | 53 | 3.4  | 0.229 | 0.25 | bebop 1.09x FASTER |
+| k4 arith chain  | 122 | 43 | 35.6 | 5.36  | 6.3  | bebop 1.18x FASTER |
+
+All results bit-exact vs the interpreter; differential parity 40+300/340.
+Gates: sweep 149/149, make test 79/0, wasm-check 22/22, self_check 41/41
+(table regenerated), fuzz_selfhost PASS, selfcompile stable x2 =
+476747433748036 (afv arena raised to 32M slots).
+
