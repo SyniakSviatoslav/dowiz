@@ -368,18 +368,16 @@ fn emit_enum_ctor_nullary(insns: [i64], n: [i64], tag: i64) -> i64 {
 }
 
 // Dispatch name( ... ): enum ctor (with payload) or a function call.
-fn emit_bl(insns: [i64], n: [i64], target: i64) -> i64 {
-  // x15 (spill base) is caller-saved: every callee that has its own spills
-  // rebinds it. Save/restore around the call so the caller's spill slots
-  // survive. bl offset accounts for the two words pushed in front.
-  let _ = em(insns, n, 3506455551);
-  let _ = em(insns, n, 4177527791);
+fn emit_bl(insns: [i64], n: [i64], target: i64, has_spills: i64) -> i64 {
+  // x15 (spill base) is caller-saved: callees with their own spills rebind
+  // it. Save/restore around the call ONLY when the caller actually keeps
+  // spill slots alive (stab[0] > 8); spill-free callers drop 4 words.
+  let _ = if has_spills == 1 then (let _ = em(insns, n, 3506455551) in (let _ = em(insns, n, 4177527791) in 0)) else 0;
   let offset = target - n[0];
   let is_back = if offset < 0 then 1 else 0;
   let word = 2483027968 + offset + is_back * 67108864;
   let _ = em(insns, n, word);
-  let _ = em(insns, n, 4181722095);
-  let _ = em(insns, n, 2432713727);
+  let _ = if has_spills == 1 then (let _ = em(insns, n, 4181722095) in (let _ = em(insns, n, 2432713727) in 0)) else 0;
   n[0]
 }
 
@@ -527,7 +525,8 @@ fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i6
     0
   };
   let target = fntab_lookup(fntab, name);
-  let _ = emit_bl(insns, n, target);
+  let hs0 = if stab[0] > 8 then 1 else 0;
+  let _ = emit_bl(insns, n, target, hs0);
   let _ = push(insns, n);
   n[0]
 }
@@ -538,7 +537,8 @@ fn emit_self_call(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = pop(insns, n, 0);
-  let _ = emit_bl(insns, n, selfstart);
+  let hs1 = if stab[0] > 8 then 1 else 0;
+  let _ = emit_bl(insns, n, selfstart, hs1);
   let _ = push(insns, n);
   n[0]
 }
@@ -1997,8 +1997,8 @@ let c31 = if compile_fn("fn main() { match some(5) { none => 0, some(x) => x + 1
 let c32 = if compile_fn("fn main() { match none { none => 0, some(x) => x + 1 } } enum opt { none, some }") == 68728432374 then 0 else 1;
 let c33 = if compile_fn("fn fact(n) { if n <= 1 then 1 else n * fact(n-1) }") == 230156779875 then 0 else 1;
 let c34 = if compile_fn("fn main() { let i = 0; let acc = 0; while i < 5 { let acc = acc + i; let i = i + 1; 0 }; acc }") == 95515523175 then 0 else 1;
-let c35 = if compile_program("fn main() { helper(41) } fn helper(x) { x + 1 }") == 146919800484 then 0 else 1;
-let c36 = if compile_program("fn main() { add(3,4) } fn add(a,b) { a + b }") == 198951693688 then 0 else 1;
+let c35 = if compile_program("fn main() { helper(41) } fn helper(x) { x + 1 }") == 133762173686 then 0 else 1;
+let c36 = if compile_program("fn main() { add(3,4) } fn add(a,b) { a + b }") == 185794066890 then 0 else 1;
   // Execution tests: the self-host bridge (source -> AArch64 -> exec -> result).
   let c37 = if run_program("fn main() { 42 }", 0) == 42 then 0 else 1;
   let c38 = if run_program("fn fact(n) { if n <= 1 then 1 else n * fact(n-1) }", 5) == 120 then 0 else 1;
@@ -2974,7 +2974,8 @@ fn fpC_factor(st: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64], d: i64,
   let kd8 = fpC_kd(st);
   let isrparen = if kd8 == 8 then 1 else 0;
   let _ = if call_go * isrparen == 1 then fpC_adv(st) else 0;
-  let _ = if call_go * isrparen == 1 then emit_bl(insns, n, tgt) else 0;
+    let hs2 = if stab[0] > 8 then 1 else 0;
+  let _ = if call_go * isrparen == 1 then emit_bl(insns, n, tgt, hs2) else 0;
   let dis0 = if d > 0 then 1 else 0;
   let _ = if call_go * isrparen * dis0 == 1 then (let _ = fpC_movrr(insns, n, 0, rd) in 0) else 0;
   let us_i = d - 1;

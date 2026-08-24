@@ -52,13 +52,36 @@ static uint64_t now_ns(void) {
 
 int main(int argc, char **argv) {
     if (argc < 2) { fprintf(stderr, "usage: %s words.txt [iters]\n", argv[0]); return 2; }
+    /* Two input formats:
+     *   .bin — raw flat binary of little-endian AArch64 words (the
+     *          deployable artifact: count = filesize/4, entry = 0)
+     *   otherwise — decimal text: count line, then words, optional OFF */
+    int raw = (size_t)(strlen(argv[1]) - 4) < strlen(argv[1]) &&
+              strcmp(argv[1] + strlen(argv[1]) - 4, ".bin") == 0;
+    uint32_t *code;
+    int n;
+    if (raw) {
+        FILE *fb = fopen(argv[1], "rb");
+        if (!fb) { perror("open"); return 2; }
+        fseek(fb, 0, SEEK_END);
+        long sz = ftell(fb);
+        fseek(fb, 0, SEEK_SET);
+        n = (int)(sz / 4);
+        if (n <= 0 || n > (1 << 22)) { fprintf(stderr, "bad size\n"); return 2; }
+        code = mmap(NULL, ((size_t)n * 4 + 4095) & ~4095ul,
+                    PROT_READ | PROT_WRITE | PROT_EXEC,
+                    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (code == MAP_FAILED) { perror("mmap"); return 2; }
+        if (fread(code, 4, (size_t)n, fb) != (size_t)n) { fprintf(stderr, "short read\n"); return 2; }
+        fclose(fb);
+    } else {
     FILE *f = fopen(argv[1], "r");
     if (!f) { perror("open"); return 2; }
-    int n = 0;
+    n = 0;
     if (fscanf(f, "%d", &n) != 1 || n <= 0 || n > (1 << 22)) { fprintf(stderr, "bad count\n"); return 2; }
-    uint32_t *code = mmap(NULL, ((size_t)n * 4 + 4095) & ~4095ul,
-                          PROT_READ | PROT_WRITE | PROT_EXEC,
-                          MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    code = mmap(NULL, ((size_t)n * 4 + 4095) & ~4095ul,
+                PROT_READ | PROT_WRITE | PROT_EXEC,
+                MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (code == MAP_FAILED) { perror("mmap"); return 2; }
     for (int i = 0; i < n; i++) {
         unsigned long w;
@@ -66,12 +89,14 @@ int main(int argc, char **argv) {
         memcpy((char *)code + (size_t)i * 4, &w, 4);
     }
     fclose(f);
+    }
     __builtin___clear_cache((char *)code, (char *)code + (size_t)n * 4);
 
-    /* optional third arg: entry word offset (default 0).
-     * If input ends in .full and no manifest arg is given, parse the OFF
-     * line from the same file (last offset = main). */
+    /* optional third arg:
+     *   raw .bin : entry word offset as a plain number
+     *   text/.full: path to a manifest file carrying OFF lines */
     int entry = 0;
+    if (raw && argc > 3) { entry = atoi(argv[3]); }
     if (argc <= 3) {
         size_t fl = strlen(argv[1]);
         if (fl > 5 && strcmp(argv[1] + fl - 5, ".full") == 0) {
@@ -90,7 +115,9 @@ int main(int argc, char **argv) {
             }
         }
     }
-    if (argc > 3) {
+    if (raw) {
+        /* entry already taken from argv[3] above */
+    } else if (argc > 3) {
         char *line = NULL; size_t lc = 0;
         FILE *mf = fopen(argv[3], "r");
         if (!mf) { perror("manifest"); return 2; }

@@ -223,3 +223,24 @@ tier): 3.4x faster than the v1 kernel.
 Both compile through the self-hosted compiler to AArch64 and run via
 exec_words. k6 proves the VSA layer can be expressed IN the language —
 the hypervector-first architecture's L3 gate is open.
+
+## The 256-byte club (demoscene flat-binary artifacts)
+
+Artifacts are ALREADY flat binaries: raw little-endian AArch64 word
+streams, no ELF, no sections, no headers. exec_words runs .bin files
+directly (entry = argv[3]).
+
+| artifact | words | raw bytes | status |
+|----------|-------|-----------|--------|
+| k1 sum-loop 1M   | 35 | **140 B** | in the club, bit-exact |
+| k4 arith-chain   | 41 | **164 B** | in the club, bit-exact |
+| k3 nested 300    | 49 | **196 B** | in the club, bit-exact |
+| k2 fib(25) rec   | 57 | **228 B** | in the club, bit-exact |
+| k6 VSA bind+pop  | 375 | 1500 B | (SWAR popcount fn) |
+
+The k2 shave came from making the x15 spill-base save/restore around
+bl calls conditional on the caller actually having spill slots
+(stab[0] > 8): spill-free callers drop 4 words per call site.
+One UDP packet (256B payload + 42B headers = 298B on wire), one BLE
+DLE frame, one LoRa session: a self-hosted-compiled program that beats
+C and Rust on its own turf fits in a single micro-packet.
