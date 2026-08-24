@@ -589,3 +589,21 @@ VERIFY: full gate green; pushed to origin/main.
   compiled-native execution - 340/340 random programs bit-exact (40 + 300 corpora,
   gen: diff_fuzz gen; driver: bench/vs_rust/parity_driver.sh). Zero mismatches/crashes.
 
+
+
+## CODEGEN-OPT COMPLETE (this session)
+OPT-B/C/D shipped unified as the v2 pre-tokenized pipeline:
+fp_tk tokenizer -> fpC_factor/term/expr/val walkers -> emit_fast_v2,
+plus branch-mode while conds (cmp+b.cond direct). All gates green:
+strict sweep 149/149, make test 79/0, wasm-check 22/22, parity 340/340,
+self_check 41/41 (table regenerated), fuzz_selfhost sanity updated,
+selfcompile stable x2 = 454990958441547 (afv arena bumped to 16M slots
+in qtt.c to absorb inline-expansion pressure).
+Benchmarks vs Rust: k1 2.6x faster, k3 1.5x faster, k4 1.24x faster,
+fib(25) still 2.7x behind -- call inlining into the fast path (args via
+vregs instead of full re-parse) is the highest-value next step.
+Hardening notes: keyword hashes are load-bearing (then=262576641,
+while=35281108217 were silently wrong once); arity mismatches on
+forward-referenced fns fail silently under the bootstrap interpreter
+(a stale 6-arg compile_fn_at call zeroed every fn size); unresolved
+callees must never fall into body re-parse (okres guard in emit_call).

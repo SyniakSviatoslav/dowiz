@@ -1670,7 +1670,7 @@ static int env_i = 0;
  * are mutable and passed by reference, so their backing storage must stay valid
  * for the whole evaluation; bump-allocate (never reuse) and reset per top-level
  * eval. Sized for the self-host compiler's many small temporaries. */
-static FieldValue afv_arena[1 << 22]; /* 4M slots: selfcompile allocates >1M boxes/run */
+static FieldValue afv_arena[1 << 24]; /* 8M slots: selfcompile of v2 fast-path compiler needs >4M boxes/run */
 static size_t afv_pos = 0;
 static Env *env_new(const char *name, Value val, Env *next) {
     if (env_i >= (int)(sizeof env_pool / sizeof env_pool[0])) {

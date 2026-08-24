@@ -1196,33 +1196,78 @@ fn emit_epilogue(insns: [i64], n: [i64]) -> i64 {
 // cond is re-evaluated each iteration (its code sits at loop_start); body's
 // final expression is discarded. Mutable `let` (sym_bind reuse) makes loop
 // vars update in place, so re-running the cond reads the updated values.
-fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], cx: [i64]) -> i64 {
+fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], cx: [i64], st: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 5;
   let _ = skip_ws(s, pos);
+  let pcond = pos[0];
   let loop_start = n[0];
-  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
-  let _ = pop(insns, n, 0);
-  let _ = em(insns, n, 4043309087);
+  // ---- OPT-B: branch-mode condition (cmp + direct b.cond, no stack) ----
+  let fok = if 1 == 1 then emit_fast_v2(s, pos, insns, n, stab, cx, st, 2) else 0;
+  let hasc = cx[20] * fok;
+  let lsl = cx[21];
+  let rsl = cx[22];
+  let ccv = cx[23];
+  let nsl = cx[24];
+  let lreg = fpC_slot2reg(lsl);
+  let rreg = fpC_slot2reg(rsl);
+  let nreg = fpC_slot2reg(nsl);
+  let x12 = if ccv == 12 then 1 else 0;
+  let x14 = if ccv == 14 then 1 else 0;
+  let x15 = if ccv == 15 then 1 else 0;
+  let x16 = if ccv == 16 then 1 else 0;
+  let x17 = if ccv == 17 then 1 else 0;
+  let xcc = x12 * 1 + x14 * 10 + x15 * 13 + x16 * 12 + x17 * 11;
+  let exitcc = hasc * xcc;
+  let clc2 = cx[40 + lsl] * hasc;
+  let crc2 = cx[40 + rsl] * hasc;
+  let cns = cx[40 + nsl] * fok * (1 - hasc);
+  let _ = if clc2 == 1 then (let _ = fpC_lit(insns, n, cx[50 + lsl], lreg) in 0) else 0;
+  let _ = if crc2 == 1 then (let _ = fpC_lit(insns, n, cx[50 + rsl], rreg) in 0) else 0;
+  let _ = if hasc == 1 then (let _ = em(insns, n, 3942645760 + 31 + rreg * 65536 + lreg * 32) in 0) else 0;
+  let _ = if cns == 1 then (let _ = fpC_lit(insns, n, cx[50 + nsl], nreg) in 0) else 0;
+  let _ = if fok * (1 - hasc) == 1 then (let _ = em(insns, n, 3942645760 + 31 + 992 + nreg * 32) in 0) else 0;
+  let _ = if fok == 1 then (let _ = em(insns, n, 1409286144 + exitcc) in 0) else 0;
+  let pbf = n[0] - 1;
+  // tokenizer leaves pos ON the lbrace; consume it like legacy does
+  let _ = if fok == 1 then (let _ = skip_ws(s, pos) in (let _ = pos[0] = pos[0] + 1 in 0)) else 0;
+  let nbb = n[0];
+  let bresf = if fok == 1 then emit_body(s, pos, insns, n, stab, selfname, selfstart, fntab, cx, st) else 0;
+  let blastf = bresf - (bresf / 2) * 2;
+  let grewf_raw = if n[0] > nbb then 1 else 0;
+  let bgrewf = fok * grewf_raw;
+  let legbf = fok * bgrewf * (1 - blastf);
+  let _ = if legbf == 1 then pop(insns, n, 0) else 0;
+  let _ = if fok == 1 then (let _ = em(insns, n, 402653184 + loop_start - n[0]) in 0) else 0;
+  let endf = n[0];
+  let _ = if fok == 1 then (let _ = insns[pbf] = 1409286144 + exitcc + (endf - pbf) * 32 in 0) else 0;
+  let _ = if fok == 1 then (let _ = skip_ws(s, pos) in (let _ = pos[0] = pos[0] + 1 in 0)) else 0;
+  let _ = if fok == 1 then (let _ = skip_ws(s, pos) in (let _ = pos[0] = pos[0] + 1 in 0)) else 0;
+  // ---- legacy fallback ----
+  let _ = if fok == 0 then (let _ = pos[0] = pcond in 0) else 0;
+  let _ = if fok == 0 then (let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) in 0) else 0;
+  let _ = if fok == 0 then (let _ = pop(insns, n, 0) in 0) else 0;
+  let _ = if fok == 0 then (let _ = em(insns, n, 4043309087) in 0) else 0;
   let p1 = n[0];
-  let _ = em(insns, n, 1409286144);
-  let _ = skip_ws(s, pos);
-  let _ = pos[0] = pos[0] + 1;
+  let _ = if fok == 0 then (let _ = em(insns, n, 1409286144) in 0) else 0;
+  let _ = if fok == 0 then (let _ = skip_ws(s, pos) in (let _ = pos[0] = pos[0] + 1 in 0)) else 0;
   let nb_body = n[0];
-  let _ = emit_body(s, pos, insns, n, stab, selfname, selfstart, fntab, cx);
-  let _ = if n[0] > nb_body then pop(insns, n, 0) else 0;
-  let _ = em(insns, n, 402653184 + loop_start - n[0]);
-  let end = n[0];
-  let _ = insns[p1] = 1409286144 + (end - p1) * 32;
-  let _ = skip_ws(s, pos);
-  let _ = pos[0] = pos[0] + 1;
-  let _ = skip_ws(s, pos);
-  let _ = pos[0] = pos[0] + 1;
+  let bresl = if fok == 0 then emit_body(s, pos, insns, n, stab, selfname, selfstart, fntab, cx, st) else 0;
+  let blastl = bresl - (bresl / 2) * 2;
+  let grewl_raw = if n[0] > nb_body then 1 else 0;
+  let bgrewl = (1 - fok) * grewl_raw;
+  let legbl = (1 - fok) * bgrewl * (1 - blastl);
+  let _ = if legbl == 1 then pop(insns, n, 0) else 0;
+  let _ = if fok == 0 then (let _ = em(insns, n, 402653184 + loop_start - n[0]) in 0) else 0;
+  let endl = n[0];
+  let _ = if fok == 0 then (let _ = insns[p1] = 1409286144 + (endl - p1) * 32 in 0) else 0;
+  let _ = if fok == 0 then (let _ = skip_ws(s, pos) in (let _ = pos[0] = pos[0] + 1 in 0)) else 0;
+  let _ = if fok == 0 then (let _ = skip_ws(s, pos) in (let _ = pos[0] = pos[0] + 1 in 0)) else 0;
   n[0]
 }
 
 // Emit one 'let x = value;' statement: emit value, pop x0, mov x<reg>,x0
 // (bind the single-letter var x to reg 19+(x-'a')).
-fn emit_let_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], cx: [i64]) -> i64 {
+fn emit_let_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], cx: [i64], st: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 3;
   let _ = skip_ws(s, pos);
   let name = read_ident(s, pos);
@@ -1230,12 +1275,13 @@ fn emit_let_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let nb_v = n[0];
-  let _ = cx[8] = emit_fast(s, pos, insns, n, stab, cx);
-  let fv = cx[8];
+  let fv = if 1 == 1 then emit_fast_v2(s, pos, insns, n, stab, cx, st, 1) else 0;
   let _ = if fv == 0 then emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = if n[0] > nb_v then pop(insns, n, 0) else 0;
+  let grew_v = if n[0] > nb_v then 1 else 0;
+  let leg_pop = (1 - fv) * grew_v;
+  let _ = if leg_pop == 1 then pop(insns, n, 0) else 0;
   let _ = bind_reg(insns, n, reg);
   n[0]
 }
@@ -1251,8 +1297,9 @@ fn emit_let_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
 // ENDS at the first ';' outside parens (parity bug: the old body parser ran
 // one expression to end-of-input, letting `if c then a else b; rest`
 // swallow the rest into the else branch).
-fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], cx: [i64]) -> i64 {
+fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], cx: [i64], st: [i64]) -> i64 {
   let done = 0;
+  let lastf = 0;
   while done == 0 {
     let before = pos[0];
     let _ = skip_ws(s, pos);
@@ -1284,13 +1331,13 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     let is_while = is_w * is_h * is_i * is_l2 * is_e2;
     let at_close = if ch == 125 then 1 else 0;
     let is_item = (1 - at_close) * (1 - at_end0);
-    let _ = if is_item * is_let == 1 then emit_let_stmt(s, pos, insns, n, stab, selfname, selfstart, fntab, cx) else 0;
-    let _ = if is_item * is_while == 1 then emit_while_stmt(s, pos, insns, n, stab, selfname, selfstart, fntab, cx) else 0;
+    let _ = if is_item * is_let == 1 then emit_let_stmt(s, pos, insns, n, stab, selfname, selfstart, fntab, cx, st) else 0;
+    let _ = if is_item * is_while == 1 then emit_while_stmt(s, pos, insns, n, stab, selfname, selfstart, fntab, cx, st) else 0;
     let is_expr = is_item * (1 - is_let) * (1 - is_while);
     let nb_item = n[0];
-    let _ = if is_expr == 1 then (let f = emit_fast(s, pos, insns, n, stab, cx) in (let _ = cx[7] = f in 0)) else 0;
-    let _ = if is_expr == 0 then (let _ = cx[7] = 0 in 0) else 0;
-    let was_fast = cx[7];
+    let fvv = if is_expr == 1 then emit_fast_v2(s, pos, insns, n, stab, cx, st, 1) else 0;
+    let was_fast = fvv;
+    let lastf = was_fast * is_expr + lastf * (1 - is_expr);
     let _ = if is_expr * (1 - was_fast) == 1 then emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
     // non-final legacy items must not leave values on the stack
     let _ = skip_ws(s, pos);
@@ -1298,7 +1345,8 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     let c9 = if pos[0] >= strn9 then 0 else char(s, pos[0]);
     let more_ahead = is_expr * (1 - (if c9 == 125 then 1 else 0)) * (1 - (if pos[0] >= strn9 then 1 else 0));
     let grew = if n[0] > nb_item then 1 else 0;
-    let _ = if more_ahead * grew == 1 then pop(insns, n, 0) else 0;
+    let leg_item = (1 - was_fast) * grew;
+    let _ = if more_ahead * leg_item == 1 then pop(insns, n, 0) else 0;
     let _ = skip_ws(s, pos);
     let strn2 = str_len(s);
     let at_end1 = if pos[0] >= strn2 then 1 else 0;
@@ -1312,7 +1360,7 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     let done = if at_close + at_end0 >= 1 then 1 else 0;
     0
   };
-  n[0]
+  n[0] * 2 + lastf
 }
 
 // Scan s for the definition "fn <fname>(" (single-letter fn name); record the
@@ -1375,12 +1423,18 @@ fn emit_call(s: str, fname: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64]
   let _ = if sp >= 0 then (let _ = fnpos[0] = sp in 0) else 0;
   let sv = if sp >= 0 then sp + 1 else 0 - fnpos[0] - 2;
   let _ = if is_hit == 1 then 0 else ft_cache_set(fntab, fname, sv);
+  // unresolved callee: neutralize the inline (pcnt=0, no body re-parse) --
+  // otherwise find_fn failure points body at a garbage offset and the
+  // call/body mutual recursion runs away
+  let okres = if fnpos[0] >= 3 then 1 else 0;
+  let pb = fnpos[0] * okres + 3 * (1 - okres);
   let pnames = [0,0,0,0,0,0,0,0,0,0];
-  let ppos = [fnpos[0] + 3];
+  let ppos = [pb];
   let _ = read_ident(s, ppos);
   let _ = skip_ws(s, ppos);
   let pcnt0 = parse_params(s, ppos, pnames);
-  let pcnt = if pcnt0 > 10 then 10 else pcnt0;
+  let pcnt1 = if pcnt0 > 10 then 10 else pcnt0;
+  let pcnt = pcnt1 * okres;
   let _ = skip_to(s, ppos, 123);
   let body = ppos[0] + 1;
   let _ = pos[0] = pos[0] + 1;
@@ -1401,8 +1455,10 @@ fn emit_call(s: str, fname: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64]
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let after = pos[0];
-  let _ = pos[0] = body;
-  let _ = emit_body(s, pos, insns, n, stab, fname, selfstart, fntab);
+  let _ = pos[0] = body * okres;
+  let macx = zeros(64);
+  let matk = zeros(1088);
+  let _eb = if okres == 1 then (let _r = emit_body(s, pos, insns, n, stab, fname, selfstart, fntab, macx, matk) in 0) else 0;
   let _ = pos[0] = after;
   n[0]
 }
@@ -1478,6 +1534,7 @@ fn compile_fn(s: str) -> i64 {
   let _ = skip_to(s, pos, 123);
   let _ = pos[0] = pos[0] + 1;
   let cx = zeros(64);
+  let tkbuf = zeros(1088);
   let pbase = n[0];
   let _ = emit_prologue(insns, n);
   let j = [0];
@@ -1489,12 +1546,15 @@ fn compile_fn(s: str) -> i64 {
     0
   };
   let nb_tail = n[0];
-  let _ = emit_body(s, pos, insns, n, stab, selfname, selfstart, fntab, cx);
+  let bres_t = if 1 == 1 then emit_body(s, pos, insns, n, stab, selfname, selfstart, fntab, cx, tkbuf) else 0;
+  let blast_t = bres_t - (bres_t / 2) * 2;
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   // legacy emitter leaves the body value on the stack; fast path leaves it
-  // in x0 -- pop exactly when something was pushed
-  let _ = if n[0] > nb_tail then pop(insns, n, 0) else 0;
+  // in x0 -- pop exactly when something was pushed by a LEGACY final item
+  let grew_t = if n[0] > nb_tail then 1 else 0;
+  let leg_tail = grew_t * (1 - blast_t);
+  let _ = if leg_tail == 1 then pop(insns, n, 0) else 0;
   let _ = emit_epilogue(insns, n);
   sum_words(insns, n[0])
 }
@@ -1536,7 +1596,7 @@ fn collect_fns(s: str, fnames: [i64], fpos: [i64], cnt: [i64]) -> i64 {
 // Compile one function whose "fn" keyword is at source offset fpos, appending
 // into the shared insns/n buffer. selfstart = its absolute word offset (0 in a
 // single-fn compile); fntab = full name->start layout (for cross-call bl).
-fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], n: [i64]) -> i64 {
+fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], n: [i64], tkb: [i64]) -> i64 {
   let pos = [fpos];
   let stab = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
   let _ = skip_ws(s, pos);
@@ -1558,6 +1618,7 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   let _ = skip_to(s, pos, 123);
   let _ = pos[0] = pos[0] + 1;
   let cx = zeros(64);
+  let tkbuf = tkb;
   let pbase = n[0];
   let _ = emit_prologue(insns, n);
   let j = [0];
@@ -1569,12 +1630,15 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
     0
   };
   let nb_tail = n[0];
-  let _ = emit_body(s, pos, insns, n, stab, selfname, selfstart, fntab, cx);
+  let bres_t = if 1 == 1 then emit_body(s, pos, insns, n, stab, selfname, selfstart, fntab, cx, tkbuf) else 0;
+  let blast_t = bres_t - (bres_t / 2) * 2;
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   // legacy emitter leaves the body value on the stack; fast path leaves it
-  // in x0 -- pop exactly when something was pushed
-  let _ = if n[0] > nb_tail then pop(insns, n, 0) else 0;
+  // in x0 -- pop exactly when something was pushed by a LEGACY final item
+  let grew_t = if n[0] > nb_tail then 1 else 0;
+  let leg_tail = grew_t * (1 - blast_t);
+  let _ = if leg_tail == 1 then pop(insns, n, 0) else 0;
   let _ = emit_epilogue(insns, n);
   // OPT-A: only save/restore callee-saved pairs this fn actually binds.
   // Prologue words pbase+3..pbase+7 hold stp x19/x20 .. x27/x28; epilogue
@@ -1640,11 +1704,12 @@ fn compile_program_to(s: str, insns: [i64], n: [i64]) -> i64 {
     let ed_pz = if ez_pz[0] >= ecnt_pz[0] then 1 else 0;
     0
   };
+  let stk_a = zeros(1088);
+    let tmp = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
   let i = [0];
   while i[0] < cnt[0] {
-    let tmp = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
     let tn = [0];
-    let _ = compile_fn_at(s, fpos[i[0]], 0, ptab, tmp, tn);
+    let _ = compile_fn_at(s, fpos[i[0]], 0, ptab, tmp, tn, stk_a);
     let _ = sizes[i[0]] = tn[0];
     let _ = i[0] = i[0] + 1;
     0
@@ -1687,9 +1752,10 @@ fn compile_program_to(s: str, insns: [i64], n: [i64]) -> i64 {
     let ed_fz = if ez_fz[0] >= ecnt_fz[0] then 1 else 0;
     0
   };
+  let stk_b = zeros(1088);
   let q = [0];
   while q[0] < cnt[0] {
-    let _ = compile_fn_at(s, fpos[q[0]], starts[q[0]], fntab, insns, n);
+    let _ = compile_fn_at(s, fpos[q[0]], starts[q[0]], fntab, insns, n, stk_b);
     let _ = q[0] = q[0] + 1;
     0
   };
@@ -1720,42 +1786,42 @@ fn run_program(s: str, arg: i64) -> i64 {
 // Verify the emitted machine code against known-good checksums (computed from
 // the native emitter's exact AArch64 encodings). 0 = pass.
 fn self_check() -> i64 {
-  let c1 = if compile("42") == 21426575550 then 0 else 1;
-  let c2 = if compile("1+2") == 55887115099 then 0 else 1;
-  let c3 = if compile("1+2*3") == 90616123192 then 0 else 1;
-  let c4 = if compile("2*(3+4)") == 90616123288 then 0 else 1;
-  let c5 = if compile("8/2-1") == 91685642200 then 0 else 1;
-  let c6 = if compile("if 1 then 10 else 20") == 56260325310 then 0 else 1;
-  let c7 = if compile("if 0 then 10 else 20") == 56260325278 then 0 else 1;
-  let c8 = if compile("1 + if 2 then 3 else 4") == 90720865435 then 0 else 1;
-  let c9 = if compile("if 1 then 1+2 else 3*4") == 125449873794 then 0 else 1;
-  let c10 = if compile_fn("fn f(a) { a + 1 }") == 105362869862 then 0 else 1;
-  let c11 = if compile_fn("fn f(a,b) { a + b }") == 107536897562 then 0 else 1;
-  let c12 = if compile("1<2") == 60091882330 then 0 else 1;
-  let c13 = if compile("3==3") == 60091845562 then 0 else 1;
-  let c14 = if compile("2>3") == 60091894682 then 0 else 1;
-  let c15 = if compile("1+2<4") == 94552423255 then 0 else 1;
-  let c16 = if compile("5==2+3") == 94552386487 then 0 else 1;
-  let c17 = if compile_fn("fn f() { let a = 1; a + 2 }") == 123192893028 then 0 else 1;
-  let c18 = if compile_fn("fn f(a) { let b = a + 1; b * 2 }") == 160095863221 then 0 else 1;
-  let c19 = if compile_fn("fn main() { f(41) } fn f(a) { a + 1 }") == 78194997224 then 0 else 1;
-  let c20 = if compile_fn("fn main() { s(6) } fn s(a) { a * a }") == 78194996104 then 0 else 1;
-  let c21 = if compile_fn("fn main() { g(3,4) } fn g(a,b) { a + b }") == 98877146970 then 0 else 1;
-  let c22 = if compile_fn("fn main() { foo(41) } fn foo(x) { x + 1 }") == 78194997224 then 0 else 1;
-  let c23 = if compile_fn("fn main() { let acc = 10; let delta = 5; acc + delta }") == 143196878710 then 0 else 1;
-  let c24 = if compile_fn("fn main() { foo(3,4) } fn foo(a,b) { a + b }") == 98877146970 then 0 else 1;
-  let c25 = if compile_fn("fn main() { let total = 0; let extra = 7; total + extra * 2 }") == 177925886515 then 0 else 1;
-  let c26 = if compile_fn("fn main() { let p = pt { x: 1, y: 2 }; p.x + p.y } struct pt { x: i64, y: i64 }") == 205244199530 then 0 else 1;
-  let c27 = if compile_fn("fn main() { pt { x: 1, y: 2 } } struct pt { x: i64, y: i64 }") == 114497688576 then 0 else 1;
-  let c28 = if compile_fn("fn main(p) { p.x + p.y } struct pt { x: i64, y: i64 }") == 141644920226 then 0 else 1;
-  let c29 = if compile_fn("fn main() { some(5) } enum opt { none, some }") == 100199269538 then 0 else 1;
-  let c30 = if compile_fn("fn main() { none } enum opt { none, some }") == 78191717988 then 0 else 1;
-  let c31 = if compile_fn("fn main() { match some(5) { none => 0, some(x) => x + 1 } } enum opt { none, some }") == 123192893124 then 0 else 1;
-  let c32 = if compile_fn("fn main() { match none { none => 0, some(x) => x + 1 } } enum opt { none, some }") == 68728432374 then 0 else 1;
-  let c33 = if compile_fn("fn fact(n) { if n <= 1 then 1 else n * fact(n-1) }") == 230156779875 then 0 else 1;
-  let c34 = if compile_fn("fn main() { let i = 0; let acc = 0; while i < 5 { let acc = acc + i; let i = i + 1; 0 }; acc }") == 297167697046 then 0 else 1;
-  let c35 = if compile_program("fn main() { helper(41) } fn helper(x) { x + 1 }") == 204123153679 then 0 else 1;
-  let c36 = if compile_program("fn main() { add(3,4) } fn add(a,b) { a + b }") == 224127203394 then 0 else 1;
+let c1 = if compile("42") == 21426575550 then 0 else 1;
+let c2 = if compile("1+2") == 55887115099 then 0 else 1;
+let c3 = if compile("1+2*3") == 90616123192 then 0 else 1;
+let c4 = if compile("2*(3+4)") == 90616123288 then 0 else 1;
+let c5 = if compile("8/2-1") == 91685642200 then 0 else 1;
+let c6 = if compile("if 1 then 10 else 20") == 56260325310 then 0 else 1;
+let c7 = if compile("if 0 then 10 else 20") == 56260325278 then 0 else 1;
+let c8 = if compile("1 + if 2 then 3 else 4") == 90720865435 then 0 else 1;
+let c9 = if compile("if 1 then 1+2 else 3*4") == 125449873794 then 0 else 1;
+let c10 = if compile_fn("fn f(a) { a + 1 }") == 62467612460 then 0 else 1;
+let c11 = if compile_fn("fn f(a,b) { a + b }") == 64641640160 then 0 else 1;
+let c12 = if compile("1<2") == 60091882330 then 0 else 1;
+let c13 = if compile("3==3") == 60091845562 then 0 else 1;
+let c14 = if compile("2>3") == 60091894682 then 0 else 1;
+let c15 = if compile("1+2<4") == 94552423255 then 0 else 1;
+let c16 = if compile("5==2+3") == 94552386487 then 0 else 1;
+let c17 = if compile_fn("fn f() { let a = 1; a + 2 }") == 65999216492 then 0 else 1;
+let c18 = if compile_fn("fn f(a) { let b = a + 1; b * 2 }") == 74305348417 then 0 else 1;
+let c19 = if compile_fn("fn main() { f(41) } fn f(a) { a + 1 }") == 144783913454 then 0 else 1;
+let c20 = if compile_fn("fn main() { s(6) } fn s(a) { a * a }") == 126542815696 then 0 else 1;
+let c21 = if compile_fn("fn main() { g(3,4) } fn g(a,b) { a + b }") == 146957810145 then 0 else 1;
+let c22 = if compile_fn("fn main() { foo(41) } fn foo(x) { x + 1 }") == 123191583556 then 0 else 1;
+let c23 = if compile_fn("fn main() { let acc = 10; let delta = 5; acc + delta }") == 71704783040 then 0 else 1;
+let c24 = if compile_fn("fn main() { foo(3,4) } fn foo(a,b) { a + b }") == 143195567734 then 0 else 1;
+let c25 = if compile_fn("fn main() { let total = 0; let extra = 7; total + extra * 2 }") == 77837542443 then 0 else 1;
+let c26 = if compile_fn("fn main() { let p = pt { x: 1, y: 2 }; p.x + p.y } struct pt { x: i64, y: i64 }") == 205244199530 then 0 else 1;
+let c27 = if compile_fn("fn main() { pt { x: 1, y: 2 } } struct pt { x: i64, y: i64 }") == 114497688576 then 0 else 1;
+let c28 = if compile_fn("fn main(p) { p.x + p.y } struct pt { x: i64, y: i64 }") == 141644920226 then 0 else 1;
+let c29 = if compile_fn("fn main() { some(5) } enum opt { none, some }") == 100199269538 then 0 else 1;
+let c30 = if compile_fn("fn main() { none } enum opt { none, some }") == 78191717988 then 0 else 1;
+let c31 = if compile_fn("fn main() { match some(5) { none => 0, some(x) => x + 1 } } enum opt { none, some }") == 123192893124 then 0 else 1;
+let c32 = if compile_fn("fn main() { match none { none => 0, some(x) => x + 1 } } enum opt { none, some }") == 68728432374 then 0 else 1;
+let c33 = if compile_fn("fn fact(n) { if n <= 1 then 1 else n * fact(n-1) }") == 230156779875 then 0 else 1;
+let c34 = if compile_fn("fn main() { let i = 0; let acc = 0; while i < 5 { let acc = acc + i; let i = i + 1; 0 }; acc }") == 104650783909 then 0 else 1;
+let c35 = if compile_program("fn main() { helper(41) } fn helper(x) { x + 1 }") == 161227896277 then 0 else 1;
+let c36 = if compile_program("fn main() { add(3,4) } fn add(a,b) { a + b }") == 181231945992 then 0 else 1;
   // Execution tests: the self-host bridge (source -> AArch64 -> exec -> result).
   let c37 = if run_program("fn main() { 42 }", 0) == 42 then 0 else 1;
   let c38 = if run_program("fn fact(n) { if n <= 1 then 1 else n * fact(n-1) }", 5) == 120 then 0 else 1;
@@ -1820,7 +1886,7 @@ fn emit_expr_words(src: str) -> [i64] {
 
 // BENCH: two-pass compile of a whole fn-main program; returns [count, words...]
 fn emit_words(src: str) -> [i64] {
-  let insns = zeros(65536);
+  let insns = zeros(262144);
   let n = [0];
   let _ = compile_program_to(src, insns, n);
   let out = zeros(n[0] + 1);
@@ -1840,7 +1906,7 @@ fn emit_words(src: str) -> [i64] {
 // BENCH: offsets of each fn (source order) within the compiled word stream.
 fn emit_offsets(src: str) -> [i64] {
   let offs = zeros(256);
-  let insns = zeros(65536);
+  let insns = zeros(262144);
   let n = [0];
   let fnames = zeros(512);
   let fpos = zeros(512);
@@ -1924,10 +1990,11 @@ fn emit_offsets(src: str) -> [i64] {
     let ed_fz = if ez_fz[0] >= ecnt_fz[0] then 1 else 0;
     0
   };
+  let stk_p = zeros(1088);
   let q = zeros(1024);
   while q[0] < cnt[0] {
     let _ = offs[q[0]] = n[0];
-    let _ = compile_fn_at(src, fpos[q[0]], starts[q[0]], fntab, insns, n);
+    let _ = compile_fn_at(src, fpos[q[0]], starts[q[0]], fntab, insns, n, stk_p);
     let _ = q[0] = q[0] + 1;
     0
   };
@@ -2279,3 +2346,476 @@ fn fp_expr_stepX(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i
   is_op2 * r2
 }
 
+
+
+// ======================================================================
+// FAST PATH v2 -- pre-tokenized pipeline (OPT-B/C/D unified).
+// The source slice is tokenized ONCE into a scratch buffer, then compact
+// register-based codegen walks the token arrays. No string access during
+// codegen, no push/pop pairs around subexpressions, constant folding for
+// literal subtrees (guarded to 2^31 so folded results match both the
+// interpreter and native wrap-around), and branch-mode while conditions
+// (compare plus direct b.cond, zero stack traffic per iteration).
+// Token buffer layout (st, 1088 cells): st[0]=count, st[1]=ok,
+// st[16+i]=kind of token i (cap 512), st[528+i]=value, st[1040]=cursor.
+// Kinds: 0=end 1=num 2=ident 3=plus 4=minus 5=star 6=slash 7=lparen
+//        8=rparen 9=semi 10=lbrace 11=rbrace 12=eqeq 13=bangeq
+//        14=lt 15=gt 16=le 17=ge
+// Stop-bit masks passed to the tokenizer: semi=1 lbrace=2 rbrace=4 rpar=8.
+// Const tracking per result slot s (s in 0..5): cx[40+s]=known-flag,
+// cx[50+s]=value. Branch-info relay cells: cx[20]=has-cmp, cx[21]=lhs
+// slot, cx[22]=rhs slot, cx[23]=cmp kind, cx[24]=truthiness slot.
+// ======================================================================
+
+fn fpC_bit(v: i64, b: i64) -> i64 {
+  let q = v / b;
+  let q2 = q / 2;
+  q - q2 * 2
+}
+
+fn fpC_kd(st: [i64]) -> i64 { st[16 + st[1040]] }
+fn fpC_vl(st: [i64]) -> i64 { st[528 + st[1040]] }
+fn fpC_adv(st: [i64]) -> i64 { let _ = st[1040] = st[1040] + 1; 0 }
+
+// Register number for slot s: 0->x0, 1->x1, 2..5->x10..x13; -1 past capacity.
+fn fpC_reg(d: i64) -> i64 {
+  let r1 = if d == 1 then 1 else 0;
+  let rh = if d >= 2 then d + 8 else r1;
+  let ok = if d <= 5 then 1 else 0;
+  rh * ok - (1 - ok)
+}
+
+fn fpC_slot2reg(sl: i64) -> i64 {
+  let s1 = if sl == 1 then 1 else 0;
+  let s2 = if sl == 2 then 1 else 0;
+  let s3 = if sl == 3 then 1 else 0;
+  let s4 = if sl == 4 then 1 else 0;
+  let s5 = if sl == 5 then 1 else 0;
+  s1 + s2 * 10 + s3 * 11 + s4 * 12 + s5 * 13
+}
+
+// mov xd, xs
+fn fpC_movrr(insns: [i64], n: [i64], xs: i64, xd: i64) -> i64 {
+  // ORR xd, xzr, xs == mov xd,xs : 0xAA0003E0 | xs<<16 | xd
+  let _ = em(insns, n, 2852127712 + xs * 65536 + xd);
+  n[0]
+}
+
+// op into rd: 2=add 3=sub 4=mul(madd xzr) 5=sdiv
+fn fpC_binop(insns: [i64], n: [i64], op: i64, rn: i64, rm: i64, rd: i64) -> i64 {
+  let wa = 2332033024 + rm * 65536 + rn * 32 + rd;
+  let ws = 3405774848 + rm * 65536 + rn * 32 + rd;
+  let wm = 2600468480 + 31744 + rm * 65536 + rn * 32 + rd;
+  let wd = 2596277248 + rm * 65536 + rn * 32 + rd;
+  let w = if op == 2 then wa else 0;
+  let w2 = if op == 3 then ws else w;
+  let w3 = if op == 4 then wm else w2;
+  let w4 = if op == 5 then wd else w3;
+  let _ = em(insns, n, w4);
+  n[0]
+}
+
+// movz/movk chain into rd (no push).
+fn fpC_half(insns: [i64], n: [i64], imm: i64, hw: i64, rd: i64) -> i64 {
+  let p = [1, 65536, 4294967296, 281474976710656, 18446744073709551616];
+  let div = p[hw];
+  let nxt = p[hw + 1];
+  let hi = imm / nxt;
+  let lo = imm - hi * nxt;
+  let sl = lo / div;
+  let _ = if sl > 0 then (let _ = em(insns, n, 4068474880 + sl * 32 + hw * 2097152 + rd) in 0) else 0;
+  n[0]
+}
+
+// v mod m with result in [0,m): exact divisions keep negative imm safe
+fn fpC_md(v: i64, m: i64) -> i64 {
+  let t = v - (v / m) * m;
+  let t2 = if t < 0 then t + m else t;
+  t2
+}
+
+fn fpC_lit(insns: [i64], n: [i64], imm: i64, rd: i64) -> i64 {
+  let l0 = fpC_md(imm, 65536);
+  let r1 = (imm - l0) / 65536;
+  let l1 = fpC_md(r1, 65536);
+  let r2 = (r1 - l1) / 65536;
+  let l2 = fpC_md(r2, 65536);
+  let l3 = fpC_md((r2 - l2) / 65536, 65536);
+  let _ = em(insns, n, 3531603968 + l0 * 32 + rd);
+  let _ = if l1 > 0 then (let _ = em(insns, n, 4068474880 + l1 * 32 + 2097152 + rd) in 0) else 0;
+  let _ = if l2 > 0 then (let _ = em(insns, n, 4068474880 + l2 * 32 + 4194304 + rd) in 0) else 0;
+  let _ = if l3 > 0 then (let _ = em(insns, n, 4068474880 + l3 * 32 + 6291456 + rd) in 0) else 0;
+  n[0]
+}
+
+// Tokenize from pos until a stop char (per mask), end-of-input, or error.
+// Appends the stop token itself (walker consumes it as terminator); EOI
+// appends a kind-0 sentinel. Returns st[1] (1 ok / 0 bad).
+fn fp_tk(s: str, pos: [i64], stops: i64, st: [i64]) -> i64 {
+  let _ = st[0] = 0;
+  let _ = st[1] = 1;
+  let _ = st[1040] = 0;
+  let fin = 0;
+  while fin == 0 {
+    let _ = skip_ws(s, pos);
+    let strn = str_len(s);
+    let atend = if pos[0] >= strn then 1 else 0;
+    let ch = if atend == 1 then 32 else char(s, pos[0]);
+    let c1p = pos[0] + 1;
+    let c1e = if c1p >= strn then 1 else 0;
+    let ch1 = if c1e == 1 then 32 else char(s, c1p);
+
+    let dg0 = if ch >= 48 then 1 else 0;
+    let dg9 = if ch <= 57 then 1 else 0;
+    let isnum = dg0 * dg9;
+
+    let ida = is_alpha(ch);
+    let idu = if ch == 95 then 1 else 0;
+    let isid0 = ida + idu;
+
+    let ise = if ch == 61 then 1 else 0;
+    let is_eqeq = ise * (if ch1 == 61 then 1 else 0);
+    let isb = if ch == 33 then 1 else 0;
+    let is_neq = isb * (if ch1 == 61 then 1 else 0);
+    let isl = if ch == 60 then 1 else 0;
+    let is_le = isl * (if ch1 == 61 then 1 else 0);
+    let isg = if ch == 62 then 1 else 0;
+    let is_ge = isg * (if ch1 == 61 then 1 else 0);
+    let is_two = is_eqeq + is_neq + is_le + is_ge;
+
+    let t3 = if ch == 43 then 1 else 0;
+    let t4 = if ch == 45 then 1 else 0;
+    let t5 = if ch == 42 then 1 else 0;
+    let t6 = if ch == 47 then 1 else 0;
+    let t7 = if ch == 40 then 1 else 0;
+    let t8 = if ch == 41 then 1 else 0;
+    let t9 = if ch == 59 then 1 else 0;
+    let t10 = if ch == 123 then 1 else 0;
+    let t11 = if ch == 125 then 1 else 0;
+    let t14 = isl;
+    let t15 = isg;
+    let is_one = t3 + t4 + t5 + t6 + t7 + t8 + t9 + t10 + t11 + t14 + t15;
+
+    let kind = isnum + isid0 * 2 + is_eqeq * 12 + is_neq * 13 + is_le * 16 + is_ge * 17
+      + t3 * 3 + t4 * 4 + t5 * 5 + t6 * 6 + t7 * 7 + t8 * 8 + t9 * 9
+      + t10 * 10 + t11 * 11 + t14 * 14 + t15 * 15;
+
+    // number scan
+    let numv = 0;
+    let ndone = 0;
+    while ndone == 0 {
+      let sn = str_len(s);
+      let ae = if pos[0] >= sn then 1 else 0;
+      let c = if ae == 1 then 32 else char(s, pos[0]);
+      let g = if c >= 48 then 1 else 0;
+      let l = if c <= 57 then 1 else 0;
+      let dgc = g * l;
+      let numv = if dgc == 1 then numv * 10 + (c - 48) else numv;
+      let _ = pos[0] = pos[0] + dgc;
+      let ndone = 1 - dgc;
+      0
+    };
+
+    // ident scan (hash identical to read_ident)
+    let idh = 0;
+    let idone = 0;
+    while idone == 0 {
+      let sn = str_len(s);
+      let ae = if pos[0] >= sn then 1 else 0;
+      let c = if ae == 1 then 32 else char(s, pos[0]);
+      let au = is_alpha(c) + (if c == 95 then 1 else 0);
+      let gd = if c >= 48 then 1 else 0;
+      let ld = if c <= 57 then 1 else 0;
+      let isc = au + gd * ld;
+      let idh = if isc == 1 then (idh * 131 + c) else idh;
+      let _ = pos[0] = pos[0] + isc;
+      let idone = 1 - isc;
+      0
+    };
+
+    // keywords: an ident whose hash matches a language keyword poisons the
+    // whole tokenization so the construct falls back to the legacy parser
+    let g1 = if idh == 13857 then 1 else 0;
+    let g2 = if idh == 262576641 then 1 else 0;
+    let g3 = if idh == 228925745 then 1 else 0;
+    let g4 = if idh == 35281108217 then 1 else 0;
+    let g5 = if idh == 1866735 then 1 else 0;
+    let g6 = if idh == 13472 then 1 else 0;
+    let badw = g1 + g2 + g3 + g4 + g5 + g6;
+    let _ = st[1] = st[1] * (1 - badw);
+
+    let idx = st[0];
+    let over = if idx >= 512 then 1 else 0;
+    let _ = st[1] = st[1] * (1 - over);
+    let _ = st[16 + idx] = kind;
+    let _ = st[528 + idx] = numv + idh;
+    let _ = st[0] = idx + 1 - over;
+
+    let hit_semi = t9 * (1 - is_two) * fpC_bit(stops, 1);
+    let hit_lbr = t10 * (1 - is_two) * fpC_bit(stops, 2);
+    let hit_rbr = t11 * (1 - is_two) * fpC_bit(stops, 4);
+    let hit_rpa = t8 * (1 - is_two) * fpC_bit(stops, 8);
+    let stophit = hit_semi + hit_lbr + hit_rbr + hit_rpa;
+
+    let adv2 = is_two * 2;
+    // num/ident scans already advanced pos themselves; only operator chars
+    // need an explicit step here
+    let adv1 = is_one * (1 - is_two) * (1 - stophit);
+    let _ = pos[0] = pos[0] + adv1 + adv2;
+
+    let tot = isnum + isid0 + is_two + is_one;
+    let unk = (1 - atend) * (1 - tot);
+    let _ = st[1] = st[1] * (1 - unk);
+
+    let eoi = atend;
+    let _ = if eoi == 1 then (let _ = st[16 + idx + 1 - over] = 0 in (let _ = st[528 + idx + 1 - over] = 0 in (let _ = st[0] = idx + 2 - over in 0))) else 0;
+
+    let fin = eoi + hit_semi + hit_lbr + hit_rbr + hit_rpa + over + unk;
+    0
+  };
+  st[1]
+}
+
+
+// ---- codegen walkers over tokens ----
+// Each returns ok*8 + slot; the result value always lands in the register
+// for slot d (fpC_reg(d)). Const tracking: cx[40+s] flag / cx[50+s] value.
+
+fn fpC_factor(st: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64], d: i64) -> i64 {
+  let k = fpC_kd(st);
+  let isnum = if k == 1 then 1 else 0;
+  let isidn = if k == 2 then 1 else 0;
+  let islpar = if k == 7 then 1 else 0;
+  let isneg = if k == 4 then 1 else 0;
+  let rd = fpC_reg(d);
+  let capok = if rd >= 0 then 1 else 0;
+  let parcap = if d <= 4 then 1 else 0;
+
+  // numeric literal -> const known, value rides in cx cells until a consumer
+  // materializes it (lazy folding: fully-constant subtrees emit ZERO words)
+  let nv = fpC_vl(st);
+  let _ = if isnum * capok == 1 then fpC_adv(st) else 0;
+  let num_ok = isnum * capok;
+
+  // identifier -> reg copy; bail on call-ahead ident+lparen
+  let nid_next = st[16 + st[1040] + 1];
+  let call_ahead = isidn * (if nid_next == 7 then 1 else 0);
+  let iv = fpC_vl(st);
+  let ireg = sym_lookup(stab, iv);
+  let ge19 = if ireg >= 19 then 1 else 0;
+  let le28 = if ireg <= 28 then 1 else 0;
+  let id_ok = isidn * ge19 * le28 * (1 - call_ahead) * capok;
+  let _ = if id_ok == 1 then (let _ = fpC_movrr(insns, n, ireg, rd) in 0) else 0;
+  let _ = if id_ok == 1 then fpC_adv(st) else 0;
+
+  // parenthesized subexpression
+  let _ = if islpar * capok * parcap == 1 then fpC_adv(st) else 0;
+  let inner = if islpar * capok * parcap == 1 then fpC_expr(st, insns, n, stab, cx, d + 1) else 0;
+  let iok = inner / 8;
+  let closek = fpC_kd(st);
+  let closed = if closek == 8 then 1 else 0;
+  let _ = if islpar * capok * parcap * iok * closed == 1 then fpC_adv(st) else 0;
+  let par_ok = islpar * capok * parcap * iok * closed;
+  let isrc = fpC_reg(d + 1);
+  // pure-constant inner expression: value rides in cx cells, no reg move
+  let pin = cx[40 + d + 1];
+  let _ = if par_ok * (1 - pin) == 1 then (let _ = fpC_movrr(insns, n, isrc, rd) in 0) else 0;
+
+  // unary minus
+  let _ = if isneg * capok == 1 then fpC_adv(st) else 0;
+  let sub = if isneg * capok == 1 then fpC_factor(st, insns, n, stab, cx, d) else 0;
+  let sok = sub / 8;
+  let neg_ok = isneg * capok * sok;
+  let sreg = fpC_reg(d);
+  let opconst = cx[40 + d];
+  let _ = if neg_ok * (1 - opconst) == 1 then (let _ = em(insns, n, 3405774848 + sreg * 65536 + 992 + sreg) in 0) else 0;
+
+  // combine const flags/values (cases are mutually exclusive)
+  let pf = cx[40 + d + 1];
+  let pv = cx[50 + d + 1];
+  let nf = cx[40 + d];
+  let nv2 = cx[50 + d];
+  let fflag = num_ok + id_ok * 0 + par_ok * pf + neg_ok * nf;
+  let fval = num_ok * nv + par_ok * pv - neg_ok * nv2 * nf;
+  let _ = cx[40 + d] = fflag;
+  let _ = cx[50 + d] = fval;
+  (num_ok + id_ok + par_ok + neg_ok) * 8 + d
+}
+
+fn fpC_term(st: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64], d: i64) -> i64 {
+  let left = fpC_factor(st, insns, n, stab, cx, d);
+  let lok = left / 8;
+  let cont = lok;
+  while cont == 1 {
+    let k = fpC_kd(st);
+    let ismul = if k == 5 then 1 else 0;
+    let isdiv = if k == 6 then 1 else 0;
+    let isop = ismul + isdiv;
+    let op = ismul * 4 + isdiv * 5;
+    let _ = if cont * isop == 1 then fpC_adv(st) else 0;
+    let right = if cont * isop == 1 then fpC_factor(st, insns, n, stab, cx, d + 1) else 0;
+    let rok = right / 8;
+    let lreg = fpC_reg(d);
+    let rreg = fpC_reg(d + 1);
+    let lc = cx[40 + d];
+    let rc2 = cx[40 + d + 1];
+    let lv2 = cx[50 + d];
+    let rv2 = cx[50 + d + 1];
+    let bothc = lc * rc2;
+    let magl = if lv2 < 0 then 0 - lv2 else lv2;
+    let magr = if rv2 < 0 then 0 - rv2 else rv2;
+    let mokl = if magl < 2147483648 then 1 else 0;
+    let mokr = if magr < 2147483648 then 1 else 0;
+    let divz = isdiv * (if rv2 == 0 then 1 else 0);
+    let foldable = bothc * (1 - divz) * mokl * mokr;
+    let fadd = lv2 + rv2;
+    let fsub = lv2 - rv2;
+    let fmul = lv2 * rv2;
+    let fdiv = if rv2 == 0 then 0 else lv2 / rv2;
+    let fv1 = if op == 4 then fmul else 0;
+    let fv2 = if op == 5 then fdiv else fv1;
+    let fv3 = if op == 2 then fadd else fv2;
+    let fv = if op == 3 then fsub else fv3;
+    let _ = if cont * isop * rok * foldable == 1 then (let _ = cx[50 + d] = fv in 0) else 0;
+    let _ = if cont * isop * rok * (1 - foldable) * rc2 == 1 then (let _ = fpC_lit(insns, n, rv2, rreg) in 0) else 0;
+    let _ = if cont * isop * rok * (1 - foldable) * lc == 1 then (let _ = fpC_lit(insns, n, lv2, lreg) in 0) else 0;
+    let _ = if cont * isop * rok * (1 - foldable) == 1 then (let _ = fpC_binop(insns, n, op, lreg, rreg, lreg) in 0) else 0;
+    let _ = if cont * isop * rok * (1 - foldable) == 1 then (let _ = cx[40 + d] = 0 in 0) else 0;
+    let cont = cont * isop * rok;
+    0
+  };
+  lok * 8 + d
+}
+
+fn fpC_expr(st: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64], d: i64) -> i64 {
+  let left = fpC_term(st, insns, n, stab, cx, d);
+  let lok = left / 8;
+  let cont = lok;
+  while cont == 1 {
+    let k = fpC_kd(st);
+    let isp = if k == 3 then 1 else 0;
+    let ism = if k == 4 then 1 else 0;
+    let isop = isp + ism;
+    let op = isp * 2 + ism * 3;
+    let _ = if cont * isop == 1 then fpC_adv(st) else 0;
+    let right = if cont * isop == 1 then fpC_term(st, insns, n, stab, cx, d + 1) else 0;
+    let rok = right / 8;
+    let lreg = fpC_reg(d);
+    let rreg = fpC_reg(d + 1);
+    let lc = cx[40 + d];
+    let rc2 = cx[40 + d + 1];
+    let lv2 = cx[50 + d];
+    let rv2 = cx[50 + d + 1];
+    let foldable = lc * rc2;
+    let magl = if lv2 < 0 then 0 - lv2 else lv2;
+    let magr = if rv2 < 0 then 0 - rv2 else rv2;
+    let mokl = if magl < 2147483648 then 1 else 0;
+    let mokr = if magr < 2147483648 then 1 else 0;
+    let foldok = foldable * mokl * mokr;
+    let fva = if op == 2 then lv2 + rv2 else 0;
+    let fv = if op == 3 then lv2 - rv2 else fva;
+    let _ = if cont * isop * rok * foldok == 1 then (let _ = cx[50 + d] = fv in 0) else 0;
+    let _ = if cont * isop * rok * (1 - foldok) * rc2 == 1 then (let _ = fpC_lit(insns, n, rv2, rreg) in 0) else 0;
+    let _ = if cont * isop * rok * (1 - foldok) * lc == 1 then (let _ = fpC_lit(insns, n, lv2, lreg) in 0) else 0;
+    let _ = if cont * isop * rok * (1 - foldok) == 1 then (let _ = fpC_binop(insns, n, op, lreg, rreg, lreg) in 0) else 0;
+    let _ = if cont * isop * rok * (1 - foldok) == 1 then (let _ = cx[40 + d] = 0 in 0) else 0;
+    let cont = cont * isop * rok;
+    0
+  };
+  lok * 8 + d
+}
+
+// Full value expression: comparisons materialize as booleans (cmp+csinc).
+fn fpC_val(st: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64], d: i64) -> i64 {
+  let e = fpC_expr(st, insns, n, stab, cx, d);
+  let eok = e / 8;
+  let k = fpC_kd(st);
+  let c12 = if k == 12 then 1 else 0;
+  let c13 = if k == 13 then 1 else 0;
+  let c14 = if k == 14 then 1 else 0;
+  let c15 = if k == 15 then 1 else 0;
+  let c16 = if k == 16 then 1 else 0;
+  let c17 = if k == 17 then 1 else 0;
+  let iscmp = c12 + c13 + c14 + c15 + c16 + c17;
+  let cc = c12 * 12 + c13 * 13 + c14 * 14 + c15 * 15 + c16 * 16 + c17 * 17;
+  let _ = if eok * iscmp == 1 then fpC_adv(st) else 0;
+  let rhs = if eok * iscmp == 1 then fpC_expr(st, insns, n, stab, cx, d + 1) else 0;
+  let rok = rhs / 8;
+  let rn = fpC_reg(d);
+  let rm = fpC_reg(d + 1);
+  let clc = cx[40 + d];
+  let crc = cx[40 + d + 1];
+  let _ = if eok * iscmp * rok * crc == 1 then (let _ = fpC_lit(insns, n, cx[50 + d + 1], rm) in 0) else 0;
+  let _ = if eok * iscmp * rok * clc == 1 then (let _ = fpC_lit(insns, n, cx[50 + d], rn) in 0) else 0;
+  let _ = if eok * iscmp * rok == 1 then (let _ = em(insns, n, 3942645760 + 31 + rm * 65536 + rn * 32) in 0) else 0;
+  let fcc = c12 * 1 + c13 * 0 + c14 * 10 + c15 * 13 + c16 * 12 + c17 * 11;
+  let _ = if eok * iscmp * rok == 1 then (let _ = em(insns, n, 2594113504 + fcc * 4096 + rn) in 0) else 0;
+  // constant-fold comparison when both sides known
+  let lc = cx[40 + d];
+  let rc2 = cx[40 + d + 1];
+  let lv2 = cx[50 + d];
+  let rv2 = cx[50 + d + 1];
+  let eqb = if lv2 == rv2 then 1 else 0;
+  let ltb = if lv2 < rv2 then 1 else 0;
+  let gtb = if lv2 > rv2 then 1 else 0;
+  let boolv = c12 * eqb + c13 * (1 - eqb) + c14 * ltb + c15 * gtb + c16 * (1 - gtb) + c17 * (1 - ltb);
+  let foldable = lc * rc2;
+  let _ = if eok * iscmp * rok * foldable == 1 then (let _ = fpC_lit(insns, n, boolv, rn) in 0) else 0;
+  let _ = if eok * iscmp * rok == 1 then (let _ = cx[40 + d] = foldable in 0) else 0;
+  let _ = if eok * iscmp * rok * foldable == 1 then (let _ = cx[50 + d] = boolv in 0) else 0;
+  (eok * (iscmp * rok + (1 - iscmp))) * 8 + d
+}
+
+// Condition expression for branch-mode: no boolean materialization; relays
+// compare info via cells cx[20..24] (written at THIS fn top level).
+fn fpC_cond(st: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64], d: i64) -> i64 {
+  let e = fpC_expr(st, insns, n, stab, cx, d);
+  let eok = e / 8;
+  let k = fpC_kd(st);
+  let c12 = if k == 12 then 1 else 0;
+  let c13 = if k == 13 then 1 else 0;
+  let c14 = if k == 14 then 1 else 0;
+  let c15 = if k == 15 then 1 else 0;
+  let c16 = if k == 16 then 1 else 0;
+  let c17 = if k == 17 then 1 else 0;
+  let iscmp = c12 + c13 + c14 + c15 + c16 + c17;
+  let cc = c12 * 12 + c13 * 13 + c14 * 14 + c15 * 15 + c16 * 16 + c17 * 17;
+  let _ = if eok * iscmp == 1 then fpC_adv(st) else 0;
+  let rhs = if eok * iscmp == 1 then fpC_expr(st, insns, n, stab, cx, d + 1) else 0;
+  let rok = rhs / 8;
+  let hasc = eok * iscmp * rok;
+  let _ = cx[20] = hasc;
+  let _ = cx[21] = d;
+  let _ = cx[22] = d + 1;
+  let _ = cx[23] = cc;
+  let _ = cx[24] = d;
+  hasc * 8 + d
+}
+
+// mode 1 = value (stops semi/rbrace), mode 2 = condition (stop lbrace).
+// On failure restores pos and n so the legacy emitter re-parses cleanly.
+fn emit_fast_v2(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64], st: [i64], mode: i64) -> i64 {
+  let psave = pos[0];
+  let nsave = n[0];
+  let stops = if mode == 2 then 2 else 5;
+  let tok = fp_tk(s, pos, stops, st);
+  let _ = st[1040] = 0;
+  let isc = if mode == 2 then 1 else 0;
+  let resc = if tok * isc == 1 then fpC_cond(st, insns, n, stab, cx, 0) else 0;
+  let resv = if tok * (1 - isc) == 1 then fpC_val(st, insns, n, stab, cx, 0) else 0;
+  let res = resc + resv;
+  let rok = res / 8;
+  let curk = fpC_kd(st);
+  let t9 = if curk == 9 then 1 else 0;
+  let t10 = if curk == 10 then 1 else 0;
+  let t11 = if curk == 11 then 1 else 0;
+  let term_ok = (2 - mode) * (t9 + t11) + (mode - 1) * t10;
+  let good = tok * rok * term_ok;
+  // fully-folded constant expression: no word was emitted, materialize now
+  let em0 = if n[0] == nsave then 1 else 0;
+  let _ = if good * (1 - isc) * em0 * cx[40] == 1 then (let _ = fpC_lit(insns, n, cx[50], 0) in 0) else 0;
+  let bad = 1 - good;
+  let _ = if bad == 1 then (let _ = pos[0] = psave in 0) else 0;
+  let _ = if bad == 1 then (let _ = n[0] = nsave in 0) else 0;
+  good
+}

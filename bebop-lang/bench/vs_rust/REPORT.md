@@ -96,3 +96,23 @@ cd bench/vs_rust
 ./run_bench.sh        # compiles kernels, runs R=31 per stack, collects metrics
 python3 aggregate.py  # prints the tables above
 ```
+
+## v2 pre-tokenized fast path (post-parity regression suite)
+
+Compiled-stream sizes and steady-state timings (exec_words, 31 runs, median
+tail; results bit-exact vs interpreter; differential parity 340/340):
+
+| kernel | legacy words | v2 words | legacy ms | v2 ms | rust ms | verdict |
+|--------|-------------|----------|-----------|-------|---------|---------|
+| k1 sum-loop 1M  | 92  | 38 | 11.0 | 2.00  | 5.3  | bebop 2.6x FASTER |
+| k2 fib(25)      | 114 | 114 (calls bail) | 2.8 | 2.72 | 1.0 | rust leads |
+| k3 nested grids | 167 | 55 | 3.4  | 0.167 | 0.25 | bebop 1.5x FASTER |
+| k4 arith chain  | 122 | 45 | 35.6 | 5.03  | 6.3  | bebop 1.24x FASTER |
+
+Fast-path mechanics: single tokenization pass per expression slice, register
+codegen (x0/x1/x10-x13 by depth), lazy constant folding (fully-constant
+subtrees emit ZERO words), branch-mode while conditions (cmp + direct
+b.cond, zero stack traffic per iteration), negative-literal movz/movk
+decomposition via exact divisions. Legacy stack-machine emitter remains
+the fallback for calls, arrays, if/match expressions.
+
