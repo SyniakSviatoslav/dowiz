@@ -259,3 +259,18 @@ Still open, narrowed hard:
   fp_expr_step, emit_fast, mkarr (5 fns, 129 -> 124). emit_offsets and
   self_check are called by name from the C host and stay. One variant
   (fp_expr_stepX) flagged for the next pass.
+
+## Next-session scope notes (compound assignment +=)
+
+Three parser surfaces must agree; touch points mapped:
+1. run/interp path: lexer.c + qtt.c (AstProgram/TERM_*) — statement
+   dispatch lives where TERM_LET is built; desugar `x op= e` to
+   LET(x, BIN(op, VAR x, e), rest); scalar form only.
+2. selfhost compiler: emit_body item dispatch (is_let/is_while/...):
+   add is_compound = ident-start && after-ident ws one of +-*/% followed
+   by '='; emitter order: sym_bind(name) EARLY -> emit_var(reg) ->
+   emit_cmp(rhs) -> binop -> bind_reg(reg); consume ';'.
+3. fuzz corpus: extend with x+=/-=/(*=)//=/%= scalar loops.
+Array-element compound (a[i] += e) stays out of scope until scalars are
+proven. C-host expr.c parse_seq experiment reverted (run path does not
+use it).
