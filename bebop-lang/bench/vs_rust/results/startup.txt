@@ -1,3 +1,3 @@
-bebop_exec_words 21228772
-c_binary 27357893
-rust_binary 42686210
+bebop_exec_words 20231928
+c_binary 25785423
+rust_binary 33490033

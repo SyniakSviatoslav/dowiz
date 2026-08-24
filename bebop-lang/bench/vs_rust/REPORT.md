@@ -214,7 +214,11 @@ fuzz(500) PASS.
 | kernel | what | native (min of 51) | correctness |
 |--------|------|--------------------|-------------|
 | k5 | 512-pt NTT over Z/998244353, DIF butterflies + modpow | ~2.03 ms | interp==native==python ref (759186635) |
-| k6 | 1024-bit hypervector XOR-bind + popcount (pure .bp) | ~20 µs | interp==native (236) |
+| k6 | 1024-bit hypervector XOR-bind + popcount (pure .bp, SWAR) | ~5.8 µs | interp==native (236) |
+
+k6 v2 replaces the division-ladder bit loop with a branch-free SWAR
+popcount written in pure Bebop (shifts + masks on the new bitwise
+tier): 3.4x faster than the v1 kernel.
 
 Both compile through the self-hosted compiler to AArch64 and run via
 exec_words. k6 proves the VSA layer can be expressed IN the language —

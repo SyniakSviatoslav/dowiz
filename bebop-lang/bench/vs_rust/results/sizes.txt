@@ -1,4 +1,4 @@
-bebop_wordstream_file 1014
-exec_words_tool 71144
+bebop_wordstream_file 387
+exec_words_tool 71736
 c_kernels_bin 71128
 rust_kernels_bin 404896
