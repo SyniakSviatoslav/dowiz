@@ -247,3 +247,15 @@ Still open, narrowed hard:
   reasons not isolated this session (cell-guard did not change it) —
   reverted from selfhost to keep streams honest; native !x currently
   yields 0 silently. Queued with the double-emission trace notes.
+
+## Wave-2 audit complete
+
+- CLI modes vs self-tests: 105 modes / 69 self-tests; ZERO orphaned
+  self-tests (wave-1 wired the four isolated modules; re-inventory
+  confirms full coverage). The 36 test-less modes are tooling/demo
+  surfaces (compilewords, run, size, hv_stream, ntt_filter, ...), not
+  library modules.
+- Selfhost compiler dead code: removed ctor_index, count_params,
+  fp_expr_step, emit_fast, mkarr (5 fns, 129 -> 124). emit_offsets and
+  self_check are called by name from the C host and stay. One variant
+  (fp_expr_stepX) flagged for the next pass.

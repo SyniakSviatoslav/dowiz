@@ -312,35 +312,6 @@ fn find_enum(s: str, out: [i64]) -> i64 {
 }
 
 // Tag (0-based) of ctor name in the enum decl, or -1 if absent / no enum.
-fn ctor_index(s: str, name: i64) -> i64 {
-  let strn = str_len(s);
-  let epos = [0];
-  let found = find_enum(s, epos);
-  let pos = [epos[0] + 5];
-  let _ = read_ident(s, pos);
-  let _ = skip_ws(s, pos);
-  let _ = pos[0] = pos[0] + 1;
-  let i = 0;
-  let tag = 0 - 1;
-  let done = 0;
-  while done == 0 {
-    let _ = skip_ws(s, pos);
-    let at_end = if pos[0] >= strn then 1 else 0;
-    let ch = if at_end == 1 then 0 else char(s, pos[0]);
-    let is_rb = if ch == 125 then 1 else 0;
-    let cname = read_ident(s, pos);
-    let is_match = if cname == name then 1 else 0;
-    let tag = if is_match == 1 then i else tag;
-    let i = i + 1;
-    let _ = skip_ws(s, pos);
-    let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
-    let is_comma = if ch2 == 44 then 1 else 0;
-    let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
-    let done = if is_rb + at_end >= 1 then 1 else 0;
-    0
-  };
-  if found == 1 then tag else (0 - 1)
-}
 
 // Emit an enum ctor with a payload: ctor(expr) -> [tag, payload] block.
 fn emit_enum_ctor(s: str, tag: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
@@ -1215,29 +1186,6 @@ fn skip_to(s: str, pos: [i64], target: i64) -> i64 {
 }
 
 // Count params in the ( ... ) list (commas + 1); advances pos past ')'.
-fn count_params(s: str, pos: [i64]) -> i64 {
-  let strn = str_len(s);
-  let _ = pos[0] = pos[0] + 1;
-  let count = 0;
-  let has = 0;
-  let done = 0;
-  while done == 0 {
-    let _ = skip_ws(s, pos);
-    let at_end = if pos[0] >= strn then 1 else 0;
-    let ch = if at_end == 1 then 0 else char(s, pos[0]);
-    let is_rp = if ch == 41 then 1 else 0;
-    let is_comma = if ch == 44 then 1 else 0;
-    let ge97 = if ch >= 97 then 1 else 0;
-    let le122 = if ch <= 122 then 1 else 0;
-    let is_letter = ge97 * le122;
-    let count = if is_comma == 1 then count + 1 else count;
-    let has = if is_letter == 1 then 1 else has;
-    let _ = pos[0] = pos[0] + 1;
-    let done = if is_rp + at_end >= 1 then 1 else 0;
-    0
-  };
-  if has == 1 then count + 1 else 0
-}
 
 // Prologue: save FP+LR, allocate a frame (spill slots + heap), save callee-saved
 // x19..x28, then set x15 (spill base) and x14 (heap bump pointer). The frame is
@@ -2420,19 +2368,6 @@ fn fp_term_step(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i6
 
 
 // One (+|-) step of an expression; returns 1 when consumed.
-fn fp_expr_step(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64], d: i64, before: i64) -> i64 {
-  let strn = str_len(s);
-  let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
-  let is_op = if ch == 43 then 1 else 0;
-  let is_m = if ch == 45 then 1 else 0;
-  let is_op2 = is_op + is_m;
-  let opid = is_m * 3 + is_op * 2;
-  let _ = if is_op2 == 1 then (let _ = pos[0] = pos[0] + 1 in (let rr = fp_term(s, pos, insns, n, stab, cx, d + 1) in (let _ = cx[44] = rr in (let _ = fp_arith_op(insns, n, cx, d, opid) in 0)))) else 0;
-  let _ = if is_op2 == 0 then (let _ = cx[44] = 0 in 0) else 0;
-  let r2 = cx[44];
-  let _ = if is_op2 * (1 - r2) == 1 then (let _ = pos[0] = before in 0) else 0;
-  is_op2 * r2
-}
 
 fn fp_expr(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64], d: i64) -> i64 {
   let spos = pos[0];
@@ -2466,49 +2401,12 @@ fn fp_expr(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64], d
 // Fast-path entry for VALUE contexts. On success the expression value is
 // in x0 (vreg 0) and nothing was pushed. Returns 1/0; on 0 the position
 // and insn counter are restored so the legacy emitter can take over.
-fn emit_fast(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64]) -> i64 {
-  // DISABLED (innovate: re-enable after fixing the bootstrap-evaluator bug
-  // where a str parameter read several .bp frames deep binds to garbage --
-  // str_len(s) returned 9/0 for a 5-char source inside fp_expr_step, while
-  // the same read one frame up was correct). The vreg/folding machinery is
-  // complete and verified piecewise; until the root cause is fixed every
-  // attempt falls back to the legacy stack-machine emitter below.
-  let _ = spos_gate();
-  let spos = pos[0];
-  let n0 = n[0];
-  cx[0] = 0;
-  let ok = fp_expr(s, pos, insns, n, stab, cx, 0);
-  let _ = if ok == 1 then (let _ = skip_ws(s, pos) in 0) else 0;
-  let strn = str_len(s);
-  let ch = if pos[0] >= strn then 48 else char(s, pos[0]);
-  // valid terminators: ';' '}' ')' or end-of-input
-  let t1 = if ch == 59 then 1 else 0;
-  let t2 = if ch == 125 then 1 else 0;
-  let t3 = if ch == 41 then 1 else 0;
-  let t4 = if pos[0] >= strn then 1 else 0;
-  let term = t1 + t2 + t3 + t4;
-  let good = ok * term * FP_DISABLED();
-  let _ = if good == 0 then (let _ = pos[0] = spos in (let _ = n[0] = n0 in 0)) else 0;
-  good
-}
 
 // Kill-switch: 1 = fast path enabled, 0 = legacy only.
 fn FP_DISABLED() -> i64 { 0 }
 fn spos_gate() -> i64 { 0 }
 
 
-fn mkarr() -> i64 { let z = zeros(8); z[3] * 0 + 7 }
-// op-id for tracing
-fn fp_step_min(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64], d: i64, before: i64) -> i64 {
-  let strn = str_len(s);
-  let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
-  let is_op = if ch == 43 then 1 else 0;
-  let _ = if is_op == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
-  let _ = if is_op == 1 then (let rr = fp_factor(s, pos, insns, n, stab, cx, d + 1) in (let _ = cx[45] = rr in 0)) else 0;
-  let _ = if is_op == 0 then (let _ = cx[45] = 9 in 0) else 0;
-  let rr = cx[45];
-  is_op * (rr + 1)
-}
 fn fp_expr_stepX(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64], d: i64, before: i64) -> i64 {
   let strn = str_len(s);
   let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
