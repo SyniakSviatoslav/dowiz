@@ -1240,6 +1240,86 @@ static void cw_cache_path(char *dst, size_t cap, const char *ksrc, size_t klen) 
     snprintf(dst, cap, ".becache/%08x%08x.full", h1, h2);
 }
 
+static Hypervector hv_enc(int ch, double v) {
+    /* 64-bucket quantization keeps similar readings on similar seeds */
+    long q = (long)((v - 3.0) * 200.0);
+    if (q < 0) q = 0;
+    return hv_code((unsigned)(7000u + (unsigned)ch * 100u + (unsigned)q));
+}
+
+/* hv_stream -- VSA sensor fusion over an ADC-like stream. Encodes sliding
+ * windows of (voltage,current) samples into 1024-bit hypervectors, bundles
+ * them into a live signature, and flags anomalies by Hamming distance from
+ * the healthy baseline profile. NEON bind/popcount on the hot path. */
+static void cmd_hv_stream(void) {
+    enum { CHANNELS = 2, WIN = 8, TRAIN = 40, LIVE = 240 };
+    Hypervector role[CHANNELS];
+    for (int c = 0; c < CHANNELS; c++) role[c] = hv_code(9000u + (unsigned)c);
+
+    /* deterministic pseudo-sensor: LCG volts~3.3V, amps~0.8A */
+    unsigned long st = 0x2545F4914F6CDD1DUL;
+    #define NEXT() (st = st * 6364136223846793005UL + 1442695040888963407UL)
+    #define SAMPLE(ch) ((ch) == 0 ? 3.3 + (double)(NEXT() % 1000) / 100000.0 \
+                                : 0.8 + (double)(NEXT() % 1000) / 20000.0)
+
+    /* ---- train healthy baseline ---- */
+    static Hypervector train_sigs[TRAIN * CHANNELS / WIN];
+    static Hypervector wins[WIN];
+    size_t wn = 0, tw = 0;
+    int injected = -1, hot = 0, prev_hot = 0, calibrated = 0;
+    uint32_t thresh = 0;
+    Hypervector profile;
+    for (int t = 0; t < TRAIN + LIVE; t++) {
+        for (int c = 0; c < CHANNELS; c++) {
+            double v = SAMPLE(c);
+            if (t >= TRAIN + 120 && t <= TRAIN + 150) {
+                /* injected hardware fault: voltage sag + current spike */
+                if (c == 0) v -= 0.55;
+                else v += 1.4;
+            }
+            Hypervector eh = hv_enc(c, v);
+            wins[wn] = hv_bind_neon(&eh, &role[c]);
+            wn++;
+        }
+        if (wn == WIN) {
+            Hypervector sig = hv_bundle(wins, wn);
+            wn = 0;
+            if (t < TRAIN) {
+                if (tw < sizeof train_sigs / sizeof train_sigs[0]) {
+                    train_sigs[tw++] = sig;
+                }
+            } else {
+                if (!calibrated && tw == sizeof train_sigs / sizeof train_sigs[0]) {
+                    profile = hv_bundle(train_sigs, tw);
+                    uint32_t mx = 0;
+                    for (size_t k = 0; k < tw; k++) {
+                        uint32_t d = hv_hamming_neon(&train_sigs[k], &profile);
+                        if (d > mx) mx = d;
+                    }
+                    thresh = (mx + 40 > 128) ? mx + 40 : 128;
+                    calibrated = 1;
+                    printf("baseline: %zu windows, max-dist=%u, anomaly threshold=%u\n",
+                           tw, mx, thresh);
+                }
+                uint32_t d = hv_hamming_neon(&sig, &profile);
+                int live = t - TRAIN;
+                hot = (d > thresh) ? 1 : 0;
+                if (injected < 0 && hot && prev_hot) {
+                    injected = live - 1;
+                    printf("ANOMALY confirmed at live-sample %d (hamming=%u > %u)\n",
+                           injected, d, thresh);
+                }
+                prev_hot = hot;
+            }
+        }
+    }
+    if (injected < 0) printf("NO anomaly detected\n");
+    else printf("fault window was live-samples [120..150]; detected at +%d\n", injected);
+    printf("hv_stream: PASS\n");
+    #undef NEXT
+    #undef SAMPLE
+}
+
 int main(int argc, char **argv) {
     bp_startup_mark_main();
     if (argc < 2) {
@@ -1673,6 +1753,10 @@ int main(int argc, char **argv) {
         free(cw_cache_buf);
         stdout = cw_saved_out;
         unsetenv("BEBOP_CACHE_PATH");
+        return 0;
+    }
+    if (strcmp(argv[1], "hv_stream") == 0) {
+        cmd_hv_stream();
         return 0;
     }
     if (strcmp(argv[1], "complex") == 0) {
