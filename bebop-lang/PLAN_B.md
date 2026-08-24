@@ -683,3 +683,26 @@ sweep clean, selfcompile x2 = 492001526417191, fuzz PASS.
   (138KB), so 136k words was an honest compile of expr_compile.bp.
   All isolated probes compile 27-54 words and match the interpreter.
 - New file: bench/vs_rust/OPTIMIZATIONS.md (practices playbook).
+
+## Session: arrays/arena forensics (reverted .bp, C-side kept)
+
+Three pre-existing native-codegen holes isolated with exact reproducers
+(.bp interpreter correct in all cases; revert kept baseline green):
+
+1. zeros() emitted literal 0 as base pointer; no stack allocation.
+   Repro: `fn main() -> i64 { let a = zeros(4); a[0] }` -> SIGSEGV/SIGILL.
+2. >=10 bound locals hit the x15 spill path; spill banks at [x15,#off] with
+   x15=sp+4096 sit far outside the 1264-byte frame -> caller-stack smash,
+   layout-dependent (O0 vs O2 runners disagreed). Repro: s0b + 3 extra lets.
+3. Const-rhs statement lets skip register bind (zero-word fast value);
+   readers emit_var a stale register. Interacts with (2) nondeterministically.
+
+Fix sketch validated piecewise this session: prologue arena cursor (x27 =
+sp-64K, bump-allocated zeros, keep x27/x28 pair in OPT-A), x15 relocated to
+sp+1024 inside frame, zero-word bind guard + eager const materialization.
+tg/tf/tc/td array probes went green under this combo, but the combination
+destabilized self_check execution -> reverted for a focused next round.
+
+C-side landed: compilemany batch mode (one compiler load, N artifacts),
+exec_words direct .full input + __builtin___clear_cache (I-cache coherency),
+pac/vir/qtt already coherent. Parity 40/40 + 300/300 through hot pipeline.
