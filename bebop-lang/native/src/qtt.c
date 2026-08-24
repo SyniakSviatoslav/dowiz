@@ -1808,12 +1808,12 @@ static Value eval(const Term *t, Env *env) {
                     case BOP_SUB: v.f = lf - rf; break;
                     case BOP_MUL: v.f = lf * rf; break;
                     case BOP_DIV: v.f = (rf != 0.0) ? lf / rf : 0.0; break;
-                    case BOP_EQ:  v.kind = 1; v.b = (lf == rf); break;
-                    case BOP_NE:  v.kind = 1; v.b = (lf != rf); break;
-                    case BOP_LT:  v.kind = 1; v.b = (lf < rf); break;
-                    case BOP_GT:  v.kind = 1; v.b = (lf > rf); break;
-                    case BOP_LE:  v.kind = 1; v.b = (lf <= rf); break;
-                    case BOP_GE:  v.kind = 1; v.b = (lf >= rf); break;
+                    case BOP_EQ:  v.kind = 1; v.b = (lf == rf); v.i = v.b; break;
+                    case BOP_NE:  v.kind = 1; v.b = (lf != rf); v.i = v.b; break;
+                    case BOP_LT:  v.kind = 1; v.b = (lf < rf);  v.i = v.b; break;
+                    case BOP_GT:  v.kind = 1; v.b = (lf > rf);  v.i = v.b; break;
+                    case BOP_LE:  v.kind = 1; v.b = (lf <= rf); v.i = v.b; break;
+                    case BOP_GE:  v.kind = 1; v.b = (lf >= rf); v.i = v.b; break;
                     default: v.kind = -1; break;
                 }
                 return v;
@@ -1836,12 +1836,13 @@ static Value eval(const Term *t, Env *env) {
                     } else {
                         v.kind = 1; v.b = (l.i == r.i);
                     }
+                    v.i = v.b;
                     break;
-                case BOP_NE:  v.kind = 1; v.b = (l.i != r.i); break;
-                case BOP_LT:  v.kind = 1; v.b = (l.i < r.i); break;
-                case BOP_LE:  v.kind = 1; v.b = (l.i <= r.i); break;
-                case BOP_GT:  v.kind = 1; v.b = (l.i > r.i); break;
-                case BOP_GE:  v.kind = 1; v.b = (l.i >= r.i); break;
+                case BOP_NE:  v.kind = 1; v.b = (l.i != r.i); v.i = v.b; break;
+                case BOP_LT:  v.kind = 1; v.b = (l.i < r.i); v.i = v.b; break;
+                case BOP_LE:  v.kind = 1; v.b = (l.i <= r.i); v.i = v.b; break;
+                case BOP_GT:  v.kind = 1; v.b = (l.i > r.i); v.i = v.b; break;
+                case BOP_GE:  v.kind = 1; v.b = (l.i >= r.i); v.i = v.b; break;
                 case BOP_CAT: break; /* handled as TERM_STR_CAT, not TERM_BIN */
             }
             return v;
@@ -2739,12 +2740,12 @@ static Term *norm_rec(const Term *t) {
                     case BOP_BAND: o->ival = l & r; return o;
                     case BOP_BXOR: o->ival = l ^ r; return o;
                     case BOP_BOR:  o->ival = l | r; return o;
-                    case BOP_EQ:  o->bval = (l == r); return o; /* i64 path; str eq handled by norm */
-                    case BOP_NE:  o->bval = (l != r); return o;
-                    case BOP_LT:  o->bval = (l < r);  return o;
-                    case BOP_LE:  o->bval = (l <= r); return o;
-                    case BOP_GT:  o->bval = (l > r);  return o;
-                    case BOP_GE:  o->bval = (l >= r); return o;
+                    case BOP_EQ:  o->ival = o->bval = (l == r); return o; /* i64 path; str eq handled by norm */
+                    case BOP_NE:  o->ival = o->bval = (l != r); return o;
+                    case BOP_LT:  o->ival = o->bval = (l < r);  return o;
+                    case BOP_LE:  o->ival = o->bval = (l <= r); return o;
+                    case BOP_GT:  o->ival = o->bval = (l > r);  return o;
+                    case BOP_GE:  o->ival = o->bval = (l >= r); return o;
                     case BOP_CAT: break; /* not a TERM_BIN op */
                 }
             }

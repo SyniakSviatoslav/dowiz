@@ -1080,6 +1080,16 @@ fn emit_factor(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
   let _ = skip_ws(s, pos);
   let strn = str_len(s);
   let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+  // unary not: !e desugars to (e == 0). The '!=' two-char token is left
+  // alone for the comparison tier.
+  let _ = if is_not == 1 then (
+    let _ = pos[0] = pos[0] + 1;
+    let _ = skip_ws(s, pos);
+    let _ = emit_factor(s, pos, insns, n, stab, selfname, selfstart, fntab) in
+    (let _ = em(insns, n, 3531603968) in
+    (let _ = push(insns, n) in
+    (let _ = emit_cmp_op(insns, n, 1) in 0))))
+    else 0;
   let e1 = if pos[0] + 1 >= strn then 1 else 0;
   let ch1 = if e1 == 1 then 0 else char(s, pos[0] + 1);
   let is_lparen = if ch == 40 then 1 else 0;

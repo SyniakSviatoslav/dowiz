@@ -167,7 +167,23 @@ static Term *parse_lambda(P *p) {
 static Term *parse_primary(P *p) {
     skip_ws(p);
     Term *atom = NULL;
-    if (p->s[p->pos] == '(') {
+    if (p->s[p->pos] == '!' && p->s[p->pos + 1] != '=') {
+        /* unary not: !e  desugars to  (e == 0) */
+        p->pos++;
+        Term *inner = parse_primary(p);
+        if (!inner) return NULL;
+        Term *zero = tnew();
+        if (!zero) { err(p, "term pool exhausted"); return NULL; }
+        zero->kind = TERM_LIT;
+        zero->ival = 0;
+        Term *t = tnew();
+        if (!t) { err(p, "term pool exhausted"); return NULL; }
+        t->kind = TERM_BIN;
+        t->op = BOP_EQ;
+        t->a = inner;
+        t->b = zero;
+        atom = t;
+    } else if (p->s[p->pos] == '(') {
         p->pos++;
         atom = parse_expr(p);
         skip_ws(p);

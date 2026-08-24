@@ -232,3 +232,18 @@ Still open, narrowed hard:
   single-purpose harness, not reuse lv.full-style scratch files.
 - k5 stays green through all of this; make test 79/0; parity 40/40;
   fuzz_selfhost PASS with new sanity checksums.
+
+## Round: SWAR popcount lands; unary ! in C host; cmp-value bug fixed
+
+- [DONE] popcount() as a pure-.bp stdlib function (branch-free SWAR via
+  the bitwise tier): k6 v2, 20us -> 5.8us (3.4x). Parity
+  interp==native==python on 0/255/2^32/2^62/0x5555...
+- [FIXED] C-host comparison evals (three sites) set only .b/.bval and
+  left .ival=0 — any comparison USED AS A VALUE (not just in if/while
+  conds) silently read as zero. All six now set both fields.
+- [PARTIAL] unary ! : C host desugars !e to (e == 0) in parse_primary
+  (guarded against !=); works in interp. Selfhost emitter attempted
+  (emit_apply_not chain branch) but the branch fired TWICE per use for
+  reasons not isolated this session (cell-guard did not change it) —
+  reverted from selfhost to keep streams honest; native !x currently
+  yields 0 silently. Queued with the double-emission trace notes.
