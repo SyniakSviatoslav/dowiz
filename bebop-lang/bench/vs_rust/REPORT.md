@@ -208,3 +208,14 @@ compiled-native agree bit-exact on probe `17%5 + 100*(9%4) + (123%10)*2`
 = 108 on both stacks. self_check table unchanged (0/34 streams touched),
 selfcompile x2 stable = 499604861147695, parity 340/340, make test 79/0,
 fuzz(500) PASS.
+
+## v7: L3 kernels land (k5 NTT, k6 VSA)
+
+| kernel | what | native (min of 51) | correctness |
+|--------|------|--------------------|-------------|
+| k5 | 512-pt NTT over Z/998244353, DIF butterflies + modpow | ~2.03 ms | interp==native==python ref (759186635) |
+| k6 | 1024-bit hypervector XOR-bind + popcount (pure .bp) | ~20 µs | interp==native (236) |
+
+Both compile through the self-hosted compiler to AArch64 and run via
+exec_words. k6 proves the VSA layer can be expressed IN the language —
+the hypervector-first architecture's L3 gate is open.
