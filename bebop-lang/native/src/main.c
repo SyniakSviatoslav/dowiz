@@ -77,6 +77,9 @@
 #include "gt.h"
 #include "pq.h"
 #include "zlib.h"
+#include "complex.h"
+#include "token_bucket.h"
+#include "typereg.h"
 #include "sha256.h"
 #include "x25519.h"
 #include "aes_gcm.h"
@@ -1671,6 +1674,34 @@ int main(int argc, char **argv) {
         stdout = cw_saved_out;
         unsetenv("BEBOP_CACHE_PATH");
         return 0;
+    }
+    if (strcmp(argv[1], "complex") == 0) {
+        char b4096_[4096];
+        int okc = complex_self_test(b4096_, sizeof b4096_);
+        fputs(b4096_, stdout);
+        printf("Complex (polar/rect) self-test: %s\n", okc == 0 ? "PASS" : "FAIL");
+        return okc == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "token_bucket") == 0) {
+        char btb[4096];
+        int oktb = token_bucket_self_test(btb, sizeof btb);
+        fputs(btb, stdout);
+        printf("TokenBucket (rate limit) self-test: %s\n", oktb == 0 ? "PASS" : "FAIL");
+        return oktb == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "typereg") == 0) {
+        char btr[4096];
+        int oktr = typereg_self_test(btr, sizeof btr);
+        fputs(btr, stdout);
+        printf("TypeRegistry self-test: %s\n", oktr == 0 ? "PASS" : "FAIL");
+        return oktr == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "vir_atomic") == 0) {
+        char bva[4096];
+        int okva = vir_atomic_self_test(bva, sizeof bva);
+        fputs(bva, stdout);
+        printf("VIR atomics (LSE W^X) self-test: %s\n", okva == 0 ? "PASS" : "FAIL");
+        return okva == 0 ? 0 : 1;
     }
     if (strcmp(argv[1], "x86_64") == 0) {
         char buf[4096];

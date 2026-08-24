@@ -43,6 +43,10 @@ test: $(BIN)
 	$(BIN) glyph fn
 	$(BIN) glyph struct
 	$(BIN) metatest
+	$(BIN) complex
+	$(BIN) token_bucket
+	$(BIN) typereg
+	$(BIN) vir_atomic
 	$(BIN) strict ../selfhost/std/dp.bp
 	@echo "--- tokenize sample ---"
 	$(BIN) tokens ../samples/hello.bp
