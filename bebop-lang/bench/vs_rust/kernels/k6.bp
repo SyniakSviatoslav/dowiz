@@ -1,0 +1,39 @@
+// K6: hypervector bind+popcount on a 1024-bit VSA (16 x 64-bit words).
+// Pure Bebop: XOR via native ^, population count by shift-free division
+// ladder (the meta-language way), one word per outer iteration.
+fn main() -> i64 {
+  let n = 16;
+  let a = zeros(n);
+  let b = zeros(n);
+  let i = 0;
+  while i < n {
+    let ta = (i + 1) * 2654435761;
+    let _ = a[i] = ta - (ta / 2147483647) * 2147483647;
+    let tb = (i + 7) * 40503;
+    let _ = b[i] = tb - (tb / 65521) * 65521;
+    let i = i + 1;
+    0
+  };
+  let i = 0;
+  while i < n {
+    let _ = a[i] = a[i] ^ b[i];
+    let i = i + 1;
+    0
+  };
+  let acc = 0;
+  let i = 0;
+  while i < n {
+    let w = a[i];
+    let bit = 0;
+    while bit < 64 {
+      let q = w / 2;
+      let acc = acc + w - q * 2;
+      let w = q;
+      let bit = bit + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  acc
+}

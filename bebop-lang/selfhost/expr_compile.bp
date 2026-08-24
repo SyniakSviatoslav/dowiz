@@ -714,7 +714,13 @@ fn emit_binop(insns: [i64], n: [i64], op: i64) -> i64 {
   let wsub = if op == 3 then 3405840384 else 0;
   let wmul = if op == 4 then 2600565760 else 0;
   let wdiv = if op == 5 then 2596342784 else 0;
-  let _ = em(insns, n, wadd + wsub + wmul + wdiv);
+  // bitwise tier (legacy stack machine): and/orr/eor/lslv/lsrv x0,x0,x1
+  let wand = if op == 12 then 2315321344 else 0;
+  let worr = if op == 13 then 2852192256 else 0;
+  let weor = if op == 14 then 3389063168 else 0;
+  let wshl = if op == 15 then 2596347904 else 0;
+  let wshr = if op == 16 then 2596348928 else 0;
+  let _ = em(insns, n, wadd + wsub + wmul + wdiv + wand + worr + weor + wshl + wshr);
   let _ = push(insns, n);
   n[0]
 }
@@ -792,6 +798,45 @@ fn emit_cmp_op(insns: [i64], n: [i64], cond: i64) -> i64 {
   n[0]
 }
 
+// Apply a bitwise operator (op: and=12 orr=13 eor=14 shl=15 shr=16) between
+// the value already on the stack and the next factor. Shifts are two-char
+// tokens (adv=2), the rest one char.
+fn emit_apply_bits(s: str, pos: [i64], insns: [i64], n: [i64], op: i64, adv: i64, stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + adv;
+  let _ = emit_factor(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = emit_binop(insns, n, op);
+  n[0]
+}
+
+// bitlvl = factor (('&'|'|'|'^'|'<<'|'>>') factor)*
+// Binds tighter than mul/div, mirroring the fast-path fpC_bitlvl tier.
+fn emit_bitlvl(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = emit_factor(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let strn = str_len(s);
+    let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let isand = if ch == 38 then 1 else 0;
+    let isorr = if ch == 124 then 1 else 0;
+    let iseor = if ch == 94 then 1 else 0;
+    let nch = if pos[0] + 1 >= strn then 0 else char(s, pos[0] + 1);
+    let lt60 = if ch == 60 then 1 else 0;
+    let gt62 = if ch == 62 then 1 else 0;
+    let nxt60 = if nch == 60 then 1 else 0;
+    let nxt62 = if nch == 62 then 1 else 0;
+    let isshl = lt60 * nxt60;
+    let isshr = gt62 * nxt62;
+    let isop = isand + isorr + iseor + isshl + isshr;
+    let op = isand * 12 + isorr * 13 + iseor * 14 + isshl * 15 + isshr * 16;
+    let adv = isshl + isshr + (isand + isorr + iseor);
+    let _ = if isop == 1 then emit_apply_bits(s, pos, insns, n, op, adv, stab, selfname, selfstart, fntab) else 0;
+    let done = if isop == 1 then 0 else 1;
+    0
+  };
+  0
+}
+
 // Consume one comparison operator + right operand, then fold (branchless).
 fn emit_apply_cmp(s: str, pos: [i64], insns: [i64], n: [i64], cond: i64, adv: i64, stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + adv;
@@ -852,7 +897,7 @@ fn emit_expr(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
 
 // term = factor ((*|/) factor)*
 fn emit_term(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
-  let _ = emit_factor(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = emit_bitlvl(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let done = 0;
   while done == 0 {
     let _ = skip_ws(s, pos);
