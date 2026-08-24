@@ -141,6 +141,11 @@ typedef enum {
     BOP_GE,
     BOP_GT,
     BOP_CAT, /* string concatenation (++) */
+    BOP_SHL,
+    BOP_SHR,
+    BOP_BAND,
+    BOP_BXOR,
+    BOP_BOR,
 } BinOp;
 
 typedef struct Term Term;

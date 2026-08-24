@@ -579,8 +579,13 @@ static int binop(P *p, BinOp *op, int *adv) {
     if (c == '!' && d == '=') { *op = BOP_NE; *adv = 2; return 1; }
     if (c == '>' && d == '=') { *op = BOP_GE; *adv = 2; return 1; }
     if (c == '<' && d == '=') { *op = BOP_LE; *adv = 2; return 1; }
+    if (c == '<' && d == '<') { *op = BOP_SHL; *adv = 2; return 4; }
+    if (c == '>' && d == '>') { *op = BOP_SHR; *adv = 2; return 4; }
     if (c == '>') { *op = BOP_GT; return 1; }
     if (c == '<') { *op = BOP_LT; return 1; }
+    if (c == '&') { *op = BOP_BAND; return 5; }
+    if (c == '^') { *op = BOP_BXOR; return 6; }
+    if (c == '|') { *op = BOP_BOR; return 7; }
     if (c == '+' && d == '+') { *op = BOP_CAT; *adv = 2; return 2; }
     if (c == '+') { *op = BOP_ADD; return 2; }
     if (c == '-') { *op = BOP_SUB; return 2; }

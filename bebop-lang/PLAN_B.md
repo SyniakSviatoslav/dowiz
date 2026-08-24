@@ -621,3 +621,27 @@ result-mov ordered after restore-pops clobbering x0. Interpreter
 quirks re-confirmed: return values of calls inside gated ternaries
 can vanish several frames deep -- relay via callee-written cells
 (cx[25] pattern) instead.
+
+
+## LANGUAGE-EXTENSION SESSION (bitwise ops + peephole + metal tooling)
+1. Bitwise operators end-to-end: & | ^ << >> added to the bootstrap host
+   (lexer/parser precedence 4..7, interpreter eval incl. constant folder,
+   native AArch64 stack-emitter) AND to the self-hosted .bp compiler
+   (token kinds 24..28, fpC_bitlvl tier between mul and factor, register
+   emitters, lazy-fold disabled for bit ops -- arbitrary-precision vs
+   two's-complement shift semantics diverge on negatives).
+   Gotcha: single-char < > tokens must be made exclusive of << >> or the
+   kind sum yields garbage and the fast path silently bails to legacy.
+2. Let-binding register peephole (pure-arithmetic, no bitwise ops in the
+   meta-language): case A fuses [mov xT,xS][op xT,xT] into op-on-var when
+   S is the bound variable and the window is exactly 2 words; case B
+   retargets the final chain op's dst from x0 to the var. k1 1.77->1.08ms,
+   k3 0.229->0.139ms, k4 5.36->4.51ms; parity re-verified 340/340.
+3. mkimage (seed-side tooling): wraps word streams into flat aarch64
+   images (-M virt conventions: sp setup, bl main, result store @0x47fff000,
+   UART 'B' beacon, wfe park). Bare-metal bring-up IN PROGRESS: image
+   executes under QEMU without faults on raspi3b park-loop timing, virt
+   execution + result observability pending (linux-image load-offset and
+   PL011 bring-up are the open questions). No OS dependency in the target
+   artifact itself.
+4. selfcompile stable x2 = 485990027763031; all gates green after regen.
