@@ -192,19 +192,20 @@ Still open, narrowed hard:
   4181722095/2432713727). k5 = 759186635 native, bit-exact with interp
   and the python reference. Sanity checksums resynced (helper-program
   stream grew by 4 words/call site): c35=146919800484, c36=198951693688.
-- [OPEN] k6 family (two arrays + fill loops + reads): minimal repro
-  /tmp/opencode/y4.bp and y9.bp (pre = b - a computed before the loop).
-  Symptom: reading a[] yields b[] content; address delta b-a computes
-  as 0 in native. Word-level decode of the y9 stream shows: bindings
-  n->x19, a->x20, b->x21, pre->x22 land honestly; but the value chain
-  for `let pre = b - a` emits mov x0,x23(b) / mov x1,x22(pre-slot!)
-  / SUBreg — i.e. sym_lookup('a') resolved to the LATER-bound 'pre'
-  register. Leading suspect: early sym_bind in one let-emitter plus the
-  fast-value path binding later names early corrupts stab slot order;
-  two let emitters exist (emit_let_in legacy + the OPT-D fast one at
-  ~line 1375) and interleaving them loses name->reg consistency.
-  Isolated pieces (single array, literal sizes, no loops) all pass;
-  only the combination fails.
+- [FIXED — THE ACTUAL ROOT OF THE WHOLE FAMILY] emit_zeros ladder word
+  #1 was 3548187681 which disassembles to `ubfiz x1,x1,#3,#4` — a
+  4-bit field extract, NOT `lsl x1,x1,#3`. For array sizes <=15 words
+  the truncation accidentally rounded correctly; for >=16 words the
+  cursor advance COLLAPSED, so consecutive zeros() blocks overlapped:
+  b aliased a, reads returned the other array's data ("b reads a",
+  address deltas of 0), k6 popcount = 0. Assembler-verified true LSL#3
+  = 3548246049 now emitted. k6 = 236 native == interp; k1..k5 re-verified.
+  The earlier "stab ordering" suspicion was wrong — it was built on
+  misread register maps from scratch-file index shifts (see RULES).
+- [INFRA] exec_words runner: call_jit loads x27/x28 with inline asm in
+  the same block as blr + -ffixed-x27/-ffixed-x28 build flags (GCC
+  keeps global register-asm vars in memory otherwise). Protocol proven
+  by magic stream (mov x0,x27 -> arena base).
 - [NOTED] interpreter zeros() handle semantics: `c - a` on two zeros()
   handles returns 0 in interp while native gives honest pointer delta
   (64 for two 4-element blocks). Harmless for kernels; audit before

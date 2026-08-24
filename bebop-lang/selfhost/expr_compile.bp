@@ -2626,7 +2626,9 @@ fn emit_zeros(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = pop(insns, n, 1);
-  let _ = em(insns, n, 3548187681);
+  // lsl x1,x1,#3 (bytes): assembler-verified 0xD37DF421? no —
+  // 0xD3400000-family UBFM alias; 3548246049 == true LSL #3.
+  let _ = em(insns, n, 3548246049);
   let _ = em(insns, n, 2432711713);
   let _ = em(insns, n, 3544513569);
   let _ = em(insns, n, 3548179489);
