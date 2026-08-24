@@ -1258,7 +1258,13 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let pcond = pos[0];
   let loop_start = n[0];
   // ---- OPT-B: branch-mode condition (cmp + direct b.cond, no stack) ----
-  let fok = if 1 == 1 then emit_fast_v2(s, pos, insns, n, stab, cx, st, 2, fntab) else 0;
+  // Spilled symbols make the branch-mode compiler mis-decide success on
+  // some identifier-vs-identifier conds, and the fallback then re-parses
+  // from a stale position (eating the '{' as a struct literal). Until the
+  // bail protocol is exact, any spill presence forces the stack-machine
+  // condition, which is always correct.
+  let has_spills = if stab[0] > 8 then 1 else 0;
+  let fok = if has_spills == 1 then 0 else emit_fast_v2(s, pos, insns, n, stab, cx, st, 2, fntab);
   let hasc = cx[20] * fok;
   let lsl = cx[21];
   let rsl = cx[22];

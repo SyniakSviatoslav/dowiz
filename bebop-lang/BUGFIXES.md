@@ -170,10 +170,18 @@ Still open, narrowed hard:
   still crashes), OPT-G1 prologue elision (disabled: still crashes),
   stream corruption (full word-level decode shows clean instruction
   stream), stale patch indices in A/B fusA/fusB (patterns verified).
-- Leading suspicion: fast-path while-cond bail (emit_fast_v2 rollback
-  restores pos/n but maybe not tokenizer/cx state), poisoning the
-  legacy retry of the SAME condition — symptom is sym_lookup(name)
-  returning -1 mid-condition for names bound at top level.
+- [NARROWED FURTHER] Not the fast-path bail: forcing legacy-only conds
+  (spill gate) still crashes. The minefield is the STACK-MACHINE
+  comparison of two BARE identifiers (`j < n`) when >=2 symbols are
+  spilled: the cond compiles to a single bogus word instead of the full
+  load/load/cmp/cset sequence, and later heap-style words
+  (str [x14], mov x0,x14, add x14,#24 = struct-literal shape) appear.
+  Rewrites that give the RHS a non-atom shape DO pass:
+    while j < n * 1   -> correct results
+    while j - n < 0   -> correct results
+    while n > j       -> still crashes
+  Workaround until fixed: write loop conditions in one of the passing
+  forms; keep live-name counts <= 8 to avoid spills entirely.
 - Reproducers: /tmp/opencode/mi3.bp (11 syms + write-loop),
   /tmp/opencode/spill2.bp (2 spills, NO arrays -> PASSES, isolating
   arrays+spills interaction). mi2 (1 spill) passes.
