@@ -69,8 +69,9 @@ fn sym_lookup(stab: [i64], name: i64) -> i64 {
 //   19..28      -> register-resident (mov x<reg>, x0 / mov x0, x<reg>)
 //   100..100+S  -> spilled to slot S (str x0,[x15,#S*8] / ldr x0,[x15,#S*8])
 fn sym_bind(stab: [i64], name: i64) -> i64 {
-  // name < 1 means an error/empty hash flowed in: never store it.
-  let ok = if name >= 1 then 1 else 0;
+  // Identifiers are 131-rolling hashes; on 64-bit hosts long names wrap
+  // NEGATIVE. Only an exact zero (empty ident) is invalid.
+  let ok = if name == 0 then 0 else 1;
   let existing = sym_lookup(stab, name) * ok - (1 - ok);
   let cnt = stab[0];
   let is_spill = if cnt >= 10 then 1 else 0;
@@ -533,7 +534,9 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   let is_self = if name == selfname then 1 else 0;
   let tgt = fntab_lookup(fntab, name);
   let is_fn = if tgt >= 0 then 1 else 0;
-  if is_ctor == 1 then emit_enum_ctor(s, tag, pos, insns, n, stab, selfname, selfstart, fntab)
+  let is_zw = if name == 36158018563 then 1 else 0;
+  if is_zw == 1 then emit_zeros(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_ctor == 1 then emit_enum_ctor(s, tag, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_self == 1 then emit_self_call(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_fn == 1 then emit_bl_call(s, name, pos, insns, n, stab, selfname, selfstart, fntab)
   else emit_call(s, name, pos, insns, n, stab, selfname, selfstart, fntab)
@@ -2535,6 +2538,25 @@ fn fpC_pow2(v: i64) -> i64 {
 // lsl xd, xn, #e : UBFM alias, base verified against objdump + exec_words
 fn fpC_lsli(e: i64, rn: i64) -> i64 {
   3544186880 + (64 - e) * 65536 + (63 - e) * 1024 + rn * 32 + rn
+}
+
+// Native zeros(n): bytes rounded to 16, carved from the runner-provided
+// bump arena whose cursor/end live in x27/x28 (set by exec_words before
+// entry; monotonic within a run, never reset across nested calls).
+fn emit_zeros(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 1);
+  let _ = em(insns, n, 3548187681);
+  let _ = em(insns, n, 2432711713);
+  let _ = em(insns, n, 3544513569);
+  let _ = em(insns, n, 3548179489);
+  let _ = em(insns, n, 2334065504);
+  let _ = em(insns, n, 2332099451);
+  let _ = push(insns, n);
+  n[0]
 }
 
 // movz/movk chain into rd (no push).

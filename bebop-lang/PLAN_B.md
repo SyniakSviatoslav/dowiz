@@ -716,3 +716,23 @@ pac/vir/qtt already coherent. Parity 40/40 + 300/300 through hot pipeline.
   parity 40+300/300, fuzz(500) PASS, make test 79/0.
 - Queued language ops (user mandate, Rust-parity): early return, unary !,
   compound assignment += -= *= /= %= &= |= ^= <<= >>=. % done this round.
+
+## Session: hash-wrap root cause + runner arena (arrays land natively!)
+
+- ROOT CAUSE of the entire "long-name/spill" bug class: read_ident's
+  131-rolling hash exceeds 2^63 for names >=~9 chars; the C-hosted
+  interpreter (int64 Values) wraps it NEGATIVE; sym_bind's `name >= 1`
+  guard classified it invalid -> reg=-1 -> emit_var(mov x0,x[-1]).
+  half_total (raw 9.5e18) crashed; half_totl (9.08e18) worked.
+  FIX: only name==0 is invalid.
+- zeros() now carves from a RUNNER-PROVIDED bump arena: exec_words mmaps
+  64MB and passes cursor/end in x27/x28 before entry (global asm register
+  vars). emit_zeros bumps monotonically; no per-frame reserve, no prologue
+  changes, nested calls share the arena safely.
+- Ladder green deterministic x2: se/sf/sd (10-local!), tg/tf/tc/td (arrays),
+  p10/p12/p19/p2/p9. Gates: self_check table unchanged, sc=0, fuzz(500)
+  PASS, make test 79/0, parity 340/340, selfcompile x2 = 501839159529013,
+  selfcompile warm 41ms (was 59s).
+- Remaining red: sc-class only -- compound array-write rhs with NAMED const
+  divisor (`a[i] = t - (t/m)*m`, m a const-let) SIGILLs; literal-divisor
+  variant passes. Next single-hypothesis probe ready.

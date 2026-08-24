@@ -15,6 +15,11 @@
 
 typedef long (*fn1)(void);
 
+/* Bump-arena cursor/end handed to native zeros() via fixed registers.
+ * Global asm register variables: GCC reserves x27/x28 for the whole unit. */
+register unsigned long g_x27 asm("x27");
+register unsigned long g_x28 asm("x28");
+
 static uint64_t now_ns(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -79,6 +84,16 @@ int main(int argc, char **argv) {
         fclose(mf);
         free(line);
     }
+
+    /* Bump arena for native zeros(): cursor in x27, end in x28. Monotonic
+     * for the whole process run; never reset across nested calls. */
+    enum { ARENA_BYTES = 64 << 20 };
+    static char *arena_base;
+    arena_base = mmap(NULL, ARENA_BYTES, PROT_READ | PROT_WRITE,
+                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (arena_base == MAP_FAILED) { perror("arena"); return 2; }
+    g_x27 = (unsigned long)arena_base;
+    g_x28 = (unsigned long)arena_base + ARENA_BYTES;
 
     int iters = argc > 2 ? atoi(argv[2]) : 100;
     fn1 fp = (fn1)((char *)code + (size_t)entry * 4);
