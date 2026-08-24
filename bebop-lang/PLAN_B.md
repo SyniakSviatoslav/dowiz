@@ -706,3 +706,13 @@ destabilized self_check execution -> reverted for a focused next round.
 C-side landed: compilemany batch mode (one compiler load, N artifacts),
 exec_words direct .full input + __builtin___clear_cache (I-cache coherency),
 pac/vir/qtt already coherent. Parity 40/40 + 300/300 through hot pipeline.
+
+## Session: modulo round (v6) + arrays forensics wrap
+
+- BOP_MOD through bootstrap (expr.c prec3, qtt eval+fold, native msub idiom
+  with dividend saved x2; encodings from objdump ref7). Mirrored into .bp:
+  kind29 '%', fpC_term op11, fold lv-(lv/rv)*rv, triple-word emission.
+- Gates: selfcheck table 0-changed, sc=0, selfcompile x2 499604861147695,
+  parity 40+300/300, fuzz(500) PASS, make test 79/0.
+- Queued language ops (user mandate, Rust-parity): early return, unary !,
+  compound assignment += -= *= /= %= &= |= ^= <<= >>=. % done this round.

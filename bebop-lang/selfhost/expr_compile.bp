@@ -2621,13 +2621,14 @@ fn fp_tk(s: str, pos: [i64], stops: i64, st: [i64]) -> i64 {
     let t24 = if ch == 38 then 1 else 0;
     let t25 = if ch == 124 then 1 else 0;
     let t26 = if ch == 94 then 1 else 0;
-    let is_one = t3 + t4 + t5 + t6 + t7 + t8 + t9 + t10 + t11 + t14 + t15 + t24 + t25 + t26;
+    let t29 = if ch == 37 then 1 else 0;
+    let is_one = t3 + t4 + t5 + t6 + t7 + t8 + t9 + t10 + t11 + t14 + t15 + t24 + t25 + t26 + t29;
 
     let kind = isnum + isid0 * 2 + is_eqeq * 12 + is_neq * 13 + is_le * 16 + is_ge * 17
       + is_shl * 27 + is_shr * 28
       + t3 * 3 + t4 * 4 + t5 * 5 + t6 * 6 + t7 * 7 + t8 * 8 + t9 * 9
       + t10 * 10 + t11 * 11 + t14 * 14 + t15 * 15
-      + t24 * 24 + t25 * 25 + t26 * 26;
+      + t24 * 24 + t25 * 25 + t26 * 26 + t29 * 29;
 
     // number scan
     let numv = 0;
@@ -2957,8 +2958,9 @@ fn fpC_term(st: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64], d: i64, f
     let k = fpC_kd(st);
     let ismul = if k == 5 then 1 else 0;
     let isdiv = if k == 6 then 1 else 0;
-    let isop = ismul + isdiv;
-    let op = ismul * 4 + isdiv * 5;
+    let ismod = if k == 29 then 1 else 0;
+    let isop = ismul + isdiv + ismod;
+    let op = ismul * 4 + isdiv * 5 + ismod * 11;
     let _ = if cont * isop == 1 then fpC_adv(st) else 0;
     let right = if cont * isop == 1 then fpC_bitlvl(st, insns, n, stab, cx, d + 1, fntab) else 0;
     let rok = right / 8;
@@ -2979,10 +2981,13 @@ fn fpC_term(st: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64], d: i64, f
     let fsub = lv2 - rv2;
     let fmul = lv2 * rv2;
     let fdiv = if rv2 == 0 then 0 else lv2 / rv2;
+    let fq = if rv2 == 0 then 0 else lv2 / rv2;
+    let fmodv = lv2 - fq * rv2;
     let fv1 = if op == 4 then fmul else 0;
     let fv2 = if op == 5 then fdiv else fv1;
+    let fv2b = if op == 11 then fmodv else fv2;
     let fv3 = if op == 2 then fadd else fv2;
-    let fv = if op == 3 then fsub else fv3;
+    let fv = if op == 3 then fsub else fv2b;
     let _ = if cont * isop * rok * foldable == 1 then (let _ = cx[50 + d] = fv in 0) else 0;
     let p2raw = ismul * rc2 * fpC_pow2(rv2);
     let p2ok = if p2raw >= 1 then 1 else 0;
@@ -2991,7 +2996,12 @@ fn fpC_term(st: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64], d: i64, f
     let nomat = (1 - foldable) * (1 - lsh);
     let _ = if cont * isop * rok * nomat * rc2 == 1 then (let _ = fpC_lit(insns, n, rv2, rreg) in 0) else 0;
     let _ = if cont * isop * rok * nomat * lc == 1 then (let _ = fpC_lit(insns, n, lv2, lreg) in 0) else 0;
-    let _ = if cont * isop * rok * nomat == 1 then (let _ = fpC_binop(insns, n, op, lreg, rreg, lreg) in 0) else 0;
+    let ism = cont * isop * rok * nomat * ismod;
+    let _ = if ism == 1 then (let _ = em(insns, n, 2852127712 + lreg * 65536 + 2) in 0) else 0;
+    let _ = if ism == 1 then (let _ = em(insns, n, 2596277248 + rreg * 65536 + lreg * 32) in 0) else 0;
+    let _ = if ism == 1 then (let _ = em(insns, n, 2600468480 + 2097152 + rreg * 65536 + 2048 + lreg) in 0) else 0;
+    let nbinn = (1 - ism);
+    let _ = if cont * isop * rok * nomat * nbinn == 1 then (let _ = fpC_binop(insns, n, op, lreg, rreg, lreg) in 0) else 0;
     let _ = if cont * isop * rok * (1 - foldable) == 1 then (let _ = cx[40 + d] = 0 in 0) else 0;
     let cont = cont * isop * rok;
     0

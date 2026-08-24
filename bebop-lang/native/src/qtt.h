@@ -134,6 +134,7 @@ typedef enum {
     BOP_SUB,
     BOP_MUL,
     BOP_DIV,
+    BOP_MOD,
     BOP_EQ,
     BOP_LT,
     BOP_NE,

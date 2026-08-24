@@ -197,3 +197,14 @@ v5 timings (min-of-51, results bit-exact vs interpreter):
 
 k3 improved (137 -> 133 us); others within run-to-run noise of v4.
 Optimization playbook distilled into bench/vs_rust/OPTIMIZATIONS.md.
+
+## v6: modulo operator end-to-end (bootstrap + self-hosted)
+
+`%` added at both compiler layers: bootstrap lexer/eval/fold/native (sdiv +
+msub idiom, dividend preserved in x2, encoding assembler-verified), and the
+self-hosted .bp compiler (token kind 29, mul/div precedence tier, constant
+folding via division identity, mov/sdiv/msub emission). Interpreter and
+compiled-native agree bit-exact on probe `17%5 + 100*(9%4) + (123%10)*2`
+= 108 on both stacks. self_check table unchanged (0/34 streams touched),
+selfcompile x2 stable = 499604861147695, parity 340/340, make test 79/0,
+fuzz(500) PASS.

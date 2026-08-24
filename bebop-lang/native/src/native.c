@@ -119,6 +119,11 @@ static void emit_arith(BinOp op) {
         case BOP_SUB: em(0xCB010000u); break;
         case BOP_MUL: em(0x9B017C00u); break;
         case BOP_DIV: em(0x9AC10C00u); break; /* sdiv x0,x0,x1 (÷0 traps) */
+        case BOP_MOD:
+            em(0xAA0003E2u);        /* mov x2,x0: keep dividend */
+            em(0x9AC10C00u);        /* sdiv x0,x0,x1 -> quotient */
+            em(0x9B018800u);        /* msub x0,x0,x1,x2 -> a - q*b */
+            break;
         case BOP_BAND: em(0x8A010000u); break; /* and  x0,x0,x1 */
         case BOP_BOR: em(0xAA010000u); break; /* orr  x0,x0,x1 */
         case BOP_BXOR: em(0xCA010000u); break; /* eor  x0,x0,x1 */

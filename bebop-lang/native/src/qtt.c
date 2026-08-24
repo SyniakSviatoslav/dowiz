@@ -1823,6 +1823,7 @@ static Value eval(const Term *t, Env *env) {
                 case BOP_SUB: v.i = l.i - r.i; break;
                 case BOP_MUL: v.i = l.i * r.i; break;
                 case BOP_DIV: v.i = (r.i != 0) ? l.i / r.i : 0; break;
+                case BOP_MOD: v.i = (r.i != 0) ? l.i % r.i : 0; break;
                 case BOP_SHL: v.i = (long)((unsigned long)l.i << ((unsigned long)r.i & 63)); break;
                 case BOP_SHR: v.i = (long)((unsigned long)l.i >> ((unsigned long)r.i & 63)); break;
                 case BOP_BAND: v.i = l.i & r.i; break;
@@ -2732,6 +2733,7 @@ static Term *norm_rec(const Term *t) {
                     case BOP_SUB: o->ival = l - r; return o;
                     case BOP_MUL: o->ival = l * r; return o;
                     case BOP_DIV: o->ival = (r != 0) ? l / r : 0; return o;
+                    case BOP_MOD: o->ival = (r != 0) ? l % r : 0; return o;
                     case BOP_SHL: o->ival = (long)((unsigned long)l << ((unsigned long)r & 63)); return o;
                     case BOP_SHR: o->ival = (long)((unsigned long)l >> ((unsigned long)r & 63)); return o;
                     case BOP_BAND: o->ival = l & r; return o;
