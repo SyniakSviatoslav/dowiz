@@ -170,18 +170,16 @@ Still open, narrowed hard:
   still crashes), OPT-G1 prologue elision (disabled: still crashes),
   stream corruption (full word-level decode shows clean instruction
   stream), stale patch indices in A/B fusA/fusB (patterns verified).
-- [NARROWED FURTHER] Not the fast-path bail: forcing legacy-only conds
-  (spill gate) still crashes. The minefield is the STACK-MACHINE
-  comparison of two BARE identifiers (`j < n`) when >=2 symbols are
-  spilled: the cond compiles to a single bogus word instead of the full
-  load/load/cmp/cset sequence, and later heap-style words
-  (str [x14], mov x0,x14, add x14,#24 = struct-literal shape) appear.
-  Rewrites that give the RHS a non-atom shape DO pass:
-    while j < n * 1   -> correct results
-    while j - n < 0   -> correct results
-    while n > j       -> still crashes
-  Workaround until fixed: write loop conditions in one of the passing
-  forms; keep live-name counts <= 8 to avoid spills entirely.
+- [ROOT-CAUSED AND FIXED] The entire crash family (p20/p21/mi3/lc/...)
+  was emit_ident treating `ident {` as a struct literal — for
+  `while k < c7 {` the legacy RHS parse of `c7` saw the loop's `{` and
+  ATE THE LOOP BODY as struct-construction fields (str[x14,i*8],
+  mov x0,x14, add x14,#24 signature). It stayed latent because OPT-B's
+  fast path handled conds whenever no spills forced the legacy retry;
+  the x27/x28 fix lowered the register budget and exposed it everywhere.
+  Struct-literal branch disabled (feature unused by all kernels/tests).
+  ALL former crashing reproducers now match interp bit-exact:
+  lc=28, mi3/full3/p20/p21, xx=24, spill2=621, k9=60.
 - Reproducers: /tmp/opencode/mi3.bp (11 syms + write-loop),
   /tmp/opencode/spill2.bp (2 spills, NO arrays -> PASSES, isolating
   arrays+spills interaction). mi2 (1 spill) passes.

@@ -140,8 +140,14 @@ fn emit_ident(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   let is_lp = if ch == 40 then 1 else 0;
   let is_br = if ch == 123 then 1 else 0;
   let is_lb = if ch == 91 then 1 else 0;
+  // NOTE: a bare `ident {` here would eat a while/if body as a struct
+  // literal (latent bug that surfaced once OPT-B stopped masking it for
+  // spilled-symbol programs). Struct literals are currently unused by
+  // every kernel/test; the branch stays disabled until a context flag
+  // distinguishes real struct construction from block openers.
+  let struct_kill = 1;
   if is_lp == 1 then emit_call_or_ctor(s, name, pos, insns, n, stab, selfname, selfstart, fntab)
-  else if is_br == 1 then emit_struct_lit(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_br * (1 - struct_kill) == 1 then emit_struct_lit(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_lb == 1 then emit_array_index(s, name, pos, insns, n, stab, selfname, selfstart, fntab)
   else emit_var_or_ctor(s, name, insns, n, stab, fntab)
 }
@@ -1264,7 +1270,13 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   // bail protocol is exact, any spill presence forces the stack-machine
   // condition, which is always correct.
   let has_spills = if stab[0] > 8 then 1 else 0;
-  let fok = if has_spills == 1 then 0 else emit_fast_v2(s, pos, insns, n, stab, cx, st, 2, fntab);
+  // STRICT evaluation: guard the call through a cell so emit_fast_v2 is
+  // never invoked when spills are present (an eager false-success there
+  // skips rollback and poisons the legacy re-parse position).
+  let fokc = [0];
+  let optb_kill = 1;
+  let _ = if has_spills + optb_kill == 0 then (let _ = fokc[0] = emit_fast_v2(s, pos, insns, n, stab, cx, st, 2, fntab) in 0) else 0;
+  let fok = fokc[0];
   let hasc = cx[20] * fok;
   let lsl = cx[21];
   let rsl = cx[22];
