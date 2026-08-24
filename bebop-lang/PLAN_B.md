@@ -659,3 +659,12 @@ hoist to scalars first.
 Final min-of-51 timings vs Rust: k1 0.974ms/5.3 (5.4x), k2 0.759ms/1.0
 (1.3x), k3 0.137ms/0.25 (1.8x), k4 4.078ms/6.3 (1.5x). Parity 340/340,
 sweep clean, selfcompile x2 = 492001526417191, fuzz PASS.
+
+## Session: compile-once cache (v4 wrap)
+
+- cmd_compilewords: crc32(compiler)+crc32(kernel) key -> .becache/<key>.full;
+  hit = replay artifact, interpreted compiler skipped; miss = memstream capture,
+  persist, copy back to real stdout. Cold 106ms -> warm 9ms (k2), byte-identical
+  artifacts, cached stream executes fib(25)=75025 @754us; mutation -> new key.
+- Gates after wiring: parity 40/40, make test 79/0, selfcompile x2 stable
+  (492001526417191). REPORT.md v4 table added.

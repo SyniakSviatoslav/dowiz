@@ -139,3 +139,34 @@ Gates: sweep 149/149, make test 79/0, wasm-check 22/22, self_check 41/41
 (table regenerated), fuzz_selfhost PASS, selfcompile stable x2 =
 476747433748036 (afv arena raised to 32M slots).
 
+
+## v4: dead-hardware elimination + compile-once artifact cache
+
+Peephole round (commit fb99fcc) removed redundant register traffic from every
+stream: A/B let-binding peephole, G1/G2 NOPed x15/x14 prologues when unreferenced,
+while-cond `[mov x0,xR][cmp x0,#imm]` -> `[cmp xR,#imm]`, F3 per-item trailing
+const suppression. Final word counts: k1 35, k2 57, k3 48-50, k4 40-41.
+
+Final timings (min-of-51, results bit-exact vs interpreter):
+
+| kernel | bebop compiled | rust | speedup |
+|--------|---------------|------|---------|
+| k1 sum-loop | 0.974 ms | 5.3 ms | **5.4x** |
+| k2 fib(25)  | 0.759 ms | 1.0 ms | **1.3x** |
+| k3 nested   | 0.137 ms | 0.25 ms | **1.8x** |
+| k4 matrix   | 4.078 ms | 6.3 ms | **1.5x** |
+
+### Compile-once cache: cold start abolished for unchanged modules
+
+`bebopc compilewords` now keys an artifact on crc32(compiler source) +
+crc32(kernel source), persisted under `.becache/<key>.full` (count + words +
+OFF manifest). Unchanged (compiler, source) pairs replay the verified artifact;
+the interpreted compiler never runs.
+
+Measured (k2): cold 106 ms -> warm **9 ms** (12x), artifacts byte-identical,
+cached stream executes fib(25)=75025 at 754 us via exec_words. Mutating the
+kernel source yields a new key and a fresh compile; the old artifact remains.
+
+Cache-correctness gates after wiring: parity 40/40 bit-exact through the warm
+path, make test 79 modules / 0 failing, selfcompile x2 stable =
+492001526417191.

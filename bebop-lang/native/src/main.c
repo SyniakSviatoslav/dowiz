@@ -1,5 +1,7 @@
 /* bebopc — native C bootstrap CLI (Phase 1). */
+#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
+#include <sys/stat.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -1426,6 +1428,9 @@ int main(int argc, char **argv) {
         /* usage: compilewords <compiler.bp> <kernel.bp>
          * Loads the self-hosted compiler, feeds it the kernel SOURCE, prints
          * its compiled AArch64 words: line 1 = count, then one word/line. */
+        static FILE *saved_out;
+        static char *cache_buf;
+        static size_t cache_len;
         char *csrc = malloc(1 << 20);   /* compiler module */
         FILE *cf = fopen(argv[2], "rb");
         if (!cf) { fprintf(stderr, "cannot open %s\n", argv[2]); return 2; }
@@ -1438,6 +1443,24 @@ int main(int argc, char **argv) {
         size_t klen = fread(ksrc, 1, (1 << 20) - 1, kf);
         ksrc[klen] = '\0';
         fclose(kf);
+        /* compile-once cache: unchanged (compiler, source) pairs replay the
+         * verified artifact instead of re-invoking the interpreted compiler */
+        {
+            uint32_t h1 = zlib_crc32(0u, (const unsigned char *)csrc, clen);
+            uint32_t h2 = zlib_crc32(0u, (const unsigned char *)ksrc, klen);
+            static char cpath[256];
+            snprintf(cpath, sizeof cpath, ".becache/%08x%08x.full", h1, h2);
+            FILE *cf2 = fopen(cpath, "rb");
+            if (cf2) {
+                int ch;
+                while ((ch = fgetc(cf2)) != EOF) putchar(ch);
+                fclose(cf2);
+                return 0;
+            }
+            setenv("BEBOP_CACHE_PATH", cpath, 1);
+            saved_out = stdout;
+            stdout = open_memstream(&cache_buf, &cache_len);
+        }
 
         AstProgram cprog;
         BpParseError cperr;
@@ -1528,6 +1551,20 @@ int main(int argc, char **argv) {
                     printf("\n");
                 }
             }
+        }
+        {
+            const char *cp = getenv("BEBOP_CACHE_PATH");
+            if (cp) {
+                fflush(stdout);
+                mkdir(".becache", 0755);
+                FILE *cf3 = fopen(cp, "wb");
+                if (cf3) { fwrite(cache_buf, 1, cache_len, cf3); fclose(cf3); }
+                fflush(stdout);
+                fwrite(cache_buf, 1, cache_len, saved_out);
+                fflush(saved_out);
+            }
+            free(cache_buf);
+            stdout = saved_out;
         }
         return 0;
     }
