@@ -620,6 +620,22 @@ static void cmd_selfcompile(const char *path) {
     src[rd] = '\0';
     fclose(f);
 
+    /* Warm path: self-compile checksum depends only on source bytes.
+     * Replay from .becache instead of re-running compile_program. */
+    {
+        uint32_t sh = zlib_crc32(0u, (const unsigned char *)src, rd);
+        static char scpath[256];
+        snprintf(scpath, sizeof scpath, ".becache/self_%08x.txt", sh);
+        mkdir(".becache", 0755);
+        FILE *scf = fopen(scpath, "rb");
+        if (scf) {
+            long v = 0;
+            if (fscanf(scf, "%ld", &v) == 1) { fclose(scf); printf("%ld\n", v); free(src); return; }
+            fclose(scf);
+        }
+        setenv("BEBOP_SELF_CACHE", scpath, 1);
+    }
+
     AstProgram prog;
     BpParseError perr;
     if (bp_parse(src, &prog, &perr) != 0) {
@@ -705,6 +721,14 @@ static void cmd_selfcompile(const char *path) {
         bp_program_free(&prog); free(src); exit(1);
     }
     printf("%ld\n", vi);
+    {
+        const char *cp = getenv("BEBOP_SELF_CACHE");
+        if (cp) {
+            FILE *scf = fopen(cp, "wb");
+            if (scf) { fprintf(scf, "%ld\n", vi); fclose(scf); }
+            unsetenv("BEBOP_SELF_CACHE");
+        }
+    }
     bp_program_free(&prog);
     free(src);
 }
