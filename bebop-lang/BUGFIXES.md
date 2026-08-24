@@ -135,8 +135,15 @@ count was correlated, not causal.**
 2. REMAINING red class (sc only): legacy div/mod helper inside loop bodies
    emits an madd/sub sequence through x14 whose prologue setup interacts
    with G1 scanning (decoded: stp-shaped word + sdiv + madd x14 + sub).
-   Next probe: gate G1 when body contains sdiv/madd pairs, or route legacy
-   div-mod scratch through x15 bank instead of x14.
+   PROGRESS: G1-gate probe (count sdiv/madd shapes in scan) applied - no
+   effect, rule out scratch-setup theory. gdb ground truth: the faulting
+   word is 0xa9ff03e0 (LDP x0,x0,[sp],#writeback) appearing mid-stream;
+   objdump confirms shape, grep confirms NO source line emits any matching
+   constant -> the word is WRITTEN BY A PATCHER through a stale index
+   (prime suspect: two-pass program layout re-emission overlapping windows,
+   or A/B-peephole wl2+reg rewrite reading across a truncated boundary).
+   Next probe: checksum every insn[] word after pass-1 vs pass-2 in
+   compile_program_to; diverging index = corrupting writer.
 3. Language ops: early return, unary !, compound assignment family
    (% already shipped end-to-end).
 4. k5 NTT kernel (algorithm validated interp=python=759186635) lands after
