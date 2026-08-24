@@ -183,3 +183,29 @@ Still open, narrowed hard:
 - Reproducers: /tmp/opencode/mi3.bp (11 syms + write-loop),
   /tmp/opencode/spill2.bp (2 spills, NO arrays -> PASSES, isolating
   arrays+spills interaction). mi2 (1 spill) passes.
+
+## Round: x15 call-save closes k5; k6 narrowed to let-chain stab ordering
+
+- [FIXED] k5 NTT kernel: root cause was caller-saved x15 (spill base)
+  clobbered by callee prologues across bl. emit_bl now wraps every call
+  in push/pop of x15 (assembler-verified words 3506455551/4177527791/
+  4181722095/2432713727). k5 = 759186635 native, bit-exact with interp
+  and the python reference. Sanity checksums resynced (helper-program
+  stream grew by 4 words/call site): c35=146919800484, c36=198951693688.
+- [OPEN] k6 family (two arrays + fill loops + reads): minimal repro
+  /tmp/opencode/y4.bp and y9.bp (pre = b - a computed before the loop).
+  Symptom: reading a[] yields b[] content; address delta b-a computes
+  as 0 in native. Word-level decode of the y9 stream shows: bindings
+  n->x19, a->x20, b->x21, pre->x22 land honestly; but the value chain
+  for `let pre = b - a` emits mov x0,x23(b) / mov x1,x22(pre-slot!)
+  / SUBreg — i.e. sym_lookup('a') resolved to the LATER-bound 'pre'
+  register. Leading suspect: early sym_bind in one let-emitter plus the
+  fast-value path binding later names early corrupts stab slot order;
+  two let emitters exist (emit_let_in legacy + the OPT-D fast one at
+  ~line 1375) and interleaving them loses name->reg consistency.
+  Isolated pieces (single array, literal sizes, no loops) all pass;
+  only the combination fails.
+- [NOTED] interpreter zeros() handle semantics: `c - a` on two zeros()
+  handles returns 0 in interp while native gives honest pointer delta
+  (64 for two 4-element blocks). Harmless for kernels; audit before
+  ever relying on handle identity.
