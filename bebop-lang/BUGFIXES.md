@@ -274,3 +274,13 @@ Three parser surfaces must agree; touch points mapped:
 Array-element compound (a[i] += e) stays out of scope until scalars are
 proven. C-host expr.c parse_seq experiment reverted (run path does not
 use it).
+
+## Compound-assign root cause found (for next session)
+
+C-host seq-level desugar worked for FINAL statements but broke
+mid-sequence: TERM_LET's scalar-value env rollback (`env_i =
+saved_env_i` after eval of t->b) erases the shadow-rebind when the LET
+is used as an EXPRESSION VALUE inside the seq wrap chain. Correct
+design: compound stmt must lower to a MUTATING form (the in_while
+in-place mutation branch) or seq must not wrap value-position LETs.
+Until then: no += in the parity corpus (both backends must agree).
