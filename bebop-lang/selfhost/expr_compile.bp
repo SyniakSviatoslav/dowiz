@@ -64,8 +64,8 @@ fn sym_lookup(stab: [i64], name: i64) -> i64 {
 }
 
 // Bind name to the next free register (x19+cnt) or a spill slot. Registers
-// x19..x28 (10 callee-saved) hold the first 10 bindings; the 11th+ spill to a
-// frame slot [x15 + slot*8]. The returned value encodes the location:
+// x19..x26 hold the first 8 bindings (x27/x28 reserved for the runner's
+// bump-arena cursor/end); the 9th+ spill to a frame slot [x15 + slot*8]. The returned value encodes the location:
 //   19..28      -> register-resident (mov x<reg>, x0 / mov x0, x<reg>)
 //   100..100+S  -> spilled to slot S (str x0,[x15,#S*8] / ldr x0,[x15,#S*8])
 fn sym_bind(stab: [i64], name: i64) -> i64 {
@@ -74,9 +74,11 @@ fn sym_bind(stab: [i64], name: i64) -> i64 {
   let ok = if name == 0 then 0 else 1;
   let existing = sym_lookup(stab, name) * ok - (1 - ok);
   let cnt = stab[0];
-  let is_spill = if cnt >= 10 then 1 else 0;
+  // x27/x28 are RESERVED: exec_words runner keeps its bump-arena cursor/end
+  // there (global asm register vars). Symbols may occupy x19..x26 only.
+  let is_spill = if cnt >= 8 then 1 else 0;
   let reg_register = 19 + cnt;
-  let reg_spill = 100 + cnt - 10;
+  let reg_spill = 100 + cnt - 8;
   let newreg = reg_register * (1 - is_spill) + reg_spill * is_spill;
   let is_new = if existing < 0 then 1 else 0;
   let reg = if is_new == 1 then newreg else existing;
@@ -728,11 +730,16 @@ fn emit_binop(insns: [i64], n: [i64], op: i64) -> i64 {
 // Emit a variable load: mov x0, x<reg> (register) or ldr x0,[x15,#slot*8]
 // (spilled); push.
 fn emit_var(insns: [i64], n: [i64], reg: i64) -> i64 {
+  let is_neg = if reg < 0 then 1 else 0;
   let is_spill = if reg >= 100 then 1 else 0;
   let slot = reg - 100;
   let movw = 2852127712 + reg * 65536;
+  // ldr x0,[x15,#slot*8] : 0xF9400000 | imm12(slot)<<10 | Rn(x15)<<5
+  // (0xF9400000 = 4181721088; +480 = Rn field for x15)
   let ldrw = 4181721568 + slot * 1024;
-  let w = movw * (1 - is_spill) + ldrw * is_spill;
+  // unknown name: load xzr instead of encoding a garbage register
+  let zerow = 2852127712;
+  let w = zerow * is_neg + (movw * (1 - is_spill) + ldrw * is_spill) * (1 - is_neg);
   let _ = em(insns, n, w);
   let _ = push(insns, n);
   n[0]
@@ -747,6 +754,7 @@ fn bind_reg(insns: [i64], n: [i64], reg: i64) -> i64 {
   let strw = 4177527264 + slot * 1024;
   let w = movw * (1 - is_spill) + strw * is_spill;
   let _ = em(insns, n, w);
+  let _ = if reg < 0 then 0 else 0;
   n[0]
 }
 
@@ -2208,7 +2216,7 @@ fn fp_loadvar(insns: [i64], n: [i64], stab: [i64], name: i64, rd: i64) -> i64 {
   let is_spill = if reg >= 100 then 1 else 0;
   let slot = reg - 100;
   let movw = 2852173792 + reg * 65536 + rd;
-  let ldrw = 4181720064 + slot * 1024 + 480 + rd;
+  let ldrw = 4181721088 + slot * 1024 + 480 + rd;
   let w = movw * (1 - is_spill) * ok + ldrw * is_spill;
   let _ = if ok == 1 then (let _ = em(insns, n, w) in 0) else 0;
   ok

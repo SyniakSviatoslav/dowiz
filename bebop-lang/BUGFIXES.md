@@ -148,3 +148,32 @@ count was correlated, not causal.**
    (% already shipped end-to-end).
 4. k5 NTT kernel (algorithm validated interp=python=759186635) lands after
    item 2; then VSA-over-ADC demo, glyph completion, NEON deep pass.
+
+## Session: spill-forensics (sc-class reopened and narrowed again)
+
+Fixed this round:
+- [FIXED] x27/x28 collision: sym_bind handed symbols the runner's arena
+  cursor/end registers. Symbols now occupy x19..x26 only; 9th+ binding
+  spills to frame slots. This was a REAL latent killer for any program
+  with >8 live names using zeros().
+- [HARDENED] emit_var/bind_reg now load xzr / no-op on reg<0 instead of
+  encoding garbage registers (the historic 0xa9ff03e0 = mov x0,x[-1]).
+- [FIXED] fp_loadvar LDR base was off by one imm12 step
+  (4181720064 -> 4181721088); fast-path spilled loads were malformed.
+
+Still open, narrowed hard:
+- Programs with >=2 spilled symbols AND an array-write loop crash
+  (SIGSEGV; at fault x14 holds garbage despite prologue add x14,sp,#768
+  executing — proven by marker-injection: a movz x14,#0xabcd inserted
+  after the prologue survives to the faulting instruction).
+- Forensics ruled out: enum-ctor mis-dispatch of zeros (disabled:
+  still crashes), OPT-G1 prologue elision (disabled: still crashes),
+  stream corruption (full word-level decode shows clean instruction
+  stream), stale patch indices in A/B fusA/fusB (patterns verified).
+- Leading suspicion: fast-path while-cond bail (emit_fast_v2 rollback
+  restores pos/n but maybe not tokenizer/cx state), poisoning the
+  legacy retry of the SAME condition — symptom is sym_lookup(name)
+  returning -1 mid-condition for names bound at top level.
+- Reproducers: /tmp/opencode/mi3.bp (11 syms + write-loop),
+  /tmp/opencode/spill2.bp (2 spills, NO arrays -> PASSES, isolating
+  arrays+spills interaction). mi2 (1 spill) passes.
