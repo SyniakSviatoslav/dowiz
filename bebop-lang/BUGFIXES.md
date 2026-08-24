@@ -284,3 +284,11 @@ is used as an EXPRESSION VALUE inside the seq wrap chain. Correct
 design: compound stmt must lower to a MUTATING form (the in_while
 in-place mutation branch) or seq must not wrap value-position LETs.
 Until then: no += in the parity corpus (both backends must agree).
+
+## HV-everywhere infrastructure
+
+- BEBOP_PRELUDE=<file>: compilewords prepends the prelude source to any
+  kernel (both single-source and batch paths) — hv_stdlib.bp ships
+  SWAR popcount, seeded generator, XOR bind, Hamming as plain .bp.
+- k7 VSA associative memory: 8 key->value 1024-bit HVs, noisy query,
+  nearest-key resolve; interp==native==python; 35.7us native.

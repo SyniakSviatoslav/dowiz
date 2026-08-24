@@ -1138,6 +1138,29 @@ static char *cw_cache_buf;
 static size_t cw_cache_len;
 
 /* Load and parse a compiler module once. 0 = ok. */
+/* Load kernel source; if BEBOP_PRELUDE names a file, prepend it so the
+ * combined program sees the prelude's functions first (hv_stdlib etc.). */
+static char *cw_kernel_text(const char *path, size_t *out_len) {
+    FILE *kf = fopen(path, "rb");
+    if (!kf) return NULL;
+    static char body[1 << 20];
+    size_t blen = fread(body, 1, (1 << 20) - 2, kf);
+    body[blen] = '\0';
+    fclose(kf);
+    const char *pre = getenv("BEBOP_PRELUDE");
+    if (!pre || !pre[0]) { *out_len = blen; return body; }
+    FILE *pf = fopen(pre, "rb");
+    if (!pf) { fprintf(stderr, "cannot open prelude %s\n", pre); *out_len = 0; return body; }
+    static char pre_buf[1 << 18];
+    size_t plen = fread(pre_buf, 1, (1 << 18) - 2, pf);
+    pre_buf[plen] = '\0';
+    fclose(pf);
+    static char comb[1 << 21];
+    snprintf(comb, sizeof comb, "%s\n%s", pre_buf, body);
+    *out_len = strlen(comb);
+    return comb;
+}
+
 static int cw_load(const char *path) {
     cw_csrc = malloc(1 << 20);
     FILE *cf = fopen(path, "rb");
@@ -1749,12 +1772,9 @@ int main(int argc, char **argv) {
             mkdir(".becache", 0755);
             int ncold = 0, nhit = 0, nfail = 0;
             for (int fi = 3; fi < argc; fi++) {
-                char *ksrc = malloc(1 << 20);
-                FILE *kf = fopen(argv[fi], "rb");
-                if (!kf) { fprintf(stderr, "cannot open %s\n", argv[fi]); nfail++; continue; }
-                size_t klen = fread(ksrc, 1, (1 << 20) - 1, kf);
-                ksrc[klen] = '\0';
-                fclose(kf);
+                size_t klen = 0;
+                char *ksrc = cw_kernel_text(argv[fi], &klen);
+                if (!ksrc) { fprintf(stderr, "cannot open %s\n", argv[fi]); nfail++; continue; }
                 char cpath[256];
                 cw_cache_path(cpath, sizeof cpath, ksrc, klen);
                 FILE *probe = fopen(cpath, "rb");
@@ -1775,12 +1795,9 @@ int main(int argc, char **argv) {
             printf("compilewords: cold=%d hit=%d fail=%d\n", ncold, nhit, nfail);
             return nfail != 0 ? 1 : 0;
         }
-        char *ksrc = malloc(1 << 20);   /* kernel source */
-        FILE *kf = fopen(argv[3], "rb");
-        if (!kf) { fprintf(stderr, "cannot open %s\n", argv[3]); return 2; }
-        size_t klen = fread(ksrc, 1, (1 << 20) - 1, kf);
-        ksrc[klen] = '\0';
-        fclose(kf);
+        size_t klen = 0;
+        char *ksrc = cw_kernel_text(argv[3], &klen);
+        if (!ksrc) { fprintf(stderr, "cannot open %s\n", argv[3]); return 2; }
         static char cpath[256];
         cw_cache_path(cpath, sizeof cpath, ksrc, klen);
         FILE *cf2 = fopen(cpath, "rb");
