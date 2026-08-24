@@ -645,3 +645,17 @@ can vanish several frames deep -- relay via callee-written cells
    PL011 bring-up are the open questions). No OS dependency in the target
    artifact itself.
 4. selfcompile stable x2 = 485990027763031; all gates green after regen.
+
+
+## G-ROUND (post-bitwise): dead-hardware elimination
+G1: x15/x14 prologue setups NOPed when the fn body never touches those
+registers (conservative rn/rd/rm scan). G2: while-cond copy-compare pair
+folded into a direct cmp-imm on the variable register. F3 refined:
+dead trailing-const suppression scoped to the FINAL expr item only via
+lookahead (the coarse whole-body flag broke nested-loop accumulators --
+k3 regression caught by kernel result check, root-caused via stream diff).
+Strict-law violations from hoisted ternaries inside gated statements --
+hoist to scalars first.
+Final min-of-51 timings vs Rust: k1 0.974ms/5.3 (5.4x), k2 0.759ms/1.0
+(1.3x), k3 0.137ms/0.25 (1.8x), k4 4.078ms/6.3 (1.5x). Parity 340/340,
+sweep clean, selfcompile x2 = 492001526417191, fuzz PASS.

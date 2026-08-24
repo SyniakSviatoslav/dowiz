@@ -1226,6 +1226,21 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = if hasc == 1 then (let _ = em(insns, n, 3942645760 + 31 + rreg * 65536 + lreg * 32) in 0) else 0;
   let _ = if cns == 1 then (let _ = fpC_lit(insns, n, cx[50 + nsl], nreg) in 0) else 0;
   let _ = if fok * (1 - hasc) == 1 then (let _ = em(insns, n, 3942645760 + 31 + 992 + nreg * 32) in 0) else 0;
+  // G2 peephole: cond lhs was copied to x0 just to be compared -- retarget
+  // the immediate compare at the variable register and drop the copy
+  let cw1 = insns[n[0] - 2];
+  let cw2 = insns[n[0] - 1];
+  let c_mhi = cw1 / 16777216;
+  let c_mlo = cw1 - (cw1 / 65536) * 65536;
+  let c_is_mov = (if c_mhi == 170 then 1 else 0) * (if c_mlo == 992 then 1 else 0);
+  let c_src = (cw1 / 65536) - (cw1 / 16777216) * 256;
+  let c_dst = cw1 - (cw1 / 32) * 32;
+  let c_h2 = cw2 / 16777216;
+  let c_imm = (cw2 / 1024) - (cw2 / 1048576) * 4096;
+  let c_rn = (cw2 / 32) - (cw2 / 1024) * 32;
+  let c_is_cmpi = (if c_h2 == 241 then 1 else 0) * (if c_rn == 0 then 1 else 0) * (if c_dst == 0 then 1 else 0);
+  let g2 = fok * c_is_mov * c_is_cmpi;
+  let _ = if g2 == 1 then (let _ = n[0] = n[0] - 1 in (let _ = insns[n[0]] = 4043309056 + c_imm * 1024 + c_src * 32 + 31 in 0)) else 0;
   let _ = if fok == 1 then (let _ = em(insns, n, 1409286144 + exitcc) in 0) else 0;
   let pbf = n[0] - 1;
   // tokenizer leaves pos ON the lbrace; consume it like legacy does
@@ -1364,7 +1379,16 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     let _ = if is_item * is_while == 1 then emit_while_stmt(s, pos, insns, n, stab, selfname, selfstart, fntab, cx, st) else 0;
     let is_expr = is_item * (1 - is_let) * (1 - is_while);
     let nb_item = n[0];
+    // F3 refined: dead-value suppression applies ONLY to the final expr
+    // item of a while body (lookahead: next non-ws char is rbrace / EOF)
+    let _ = skip_ws(s, pos);
+    let strnE = str_len(s);
+    let cE = if pos[0] >= strnE then 0 else char(s, pos[0]);
+    let fin_brace = if cE == 125 then 1 else 0;
+    let fin_eof = if pos[0] >= strnE then 1 else 0;
+    let _ = cx[28] = is_expr * (fin_brace + fin_eof);
     let fvv = if is_expr == 1 then emit_fast_v2(s, pos, insns, n, stab, cx, st, 1, fntab) else 0;
+    let _ = cx[28] = 0;
     let was_fast = fvv;
     let lastf = was_fast * is_expr + lastf * (1 - is_expr);
     let _ = if is_expr * (1 - was_fast) == 1 then emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
@@ -1692,6 +1716,29 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
     let pkgo = 1 - kdone;
     0
   };
+  // OPT-G1: spill-base x15 / heap-bump x14 setups are pure overhead when
+  // the compiled body never references those registers (typical for small
+  // arithmetic/recursion fns): scan every emitted body word conservatively
+  // (rn / rd / rm fields) and NOP the two prologue adds when unused.
+  let u15 = [0];
+  let u14 = [0];
+  let gi = [nb_tail];
+  let ggo = 1;
+  while ggo == 1 {
+    let gdone = if gi[0] >= n[0] then 1 else 0;
+    let gw = insns[gi[0]];
+    let grn = (gw / 32) - (gw / 1024) * 32;
+    let grd = gw - (gw / 32) * 32;
+    let grm = (gw / 65536) - (gw / 16777216) * 256;
+    let h15 = (if grn == 15 then 1 else 0) + (if grd == 15 then 1 else 0) + (if grm == 15 then 1 else 0);
+    let h14 = (if grn == 14 then 1 else 0) + (if grd == 14 then 1 else 0) + (if grm == 14 then 1 else 0);
+    let _ = if gdone == 0 then (let _ = u15[0] = u15[0] + h15 in (let _ = u14[0] = u14[0] + h14 in 0)) else 0;
+    let _ = gi[0] = gi[0] + 1;
+    let ggo = 1 - gdone;
+    0
+  };
+  let _ = if u15[0] == 0 then (let _ = insns[pbase + 8] = nopw in 0) else 0;
+  let _ = if u14[0] == 0 then (let _ = insns[pbase + 9] = nopw in 0) else 0;
   n[0]
 }
 
@@ -1853,8 +1900,8 @@ let c31 = if compile_fn("fn main() { match some(5) { none => 0, some(x) => x + 1
 let c32 = if compile_fn("fn main() { match none { none => 0, some(x) => x + 1 } } enum opt { none, some }") == 68728432374 then 0 else 1;
 let c33 = if compile_fn("fn fact(n) { if n <= 1 then 1 else n * fact(n-1) }") == 230156779875 then 0 else 1;
 let c34 = if compile_fn("fn main() { let i = 0; let acc = 0; while i < 5 { let acc = acc + i; let i = i + 1; 0 }; acc }") == 95515523175 then 0 else 1;
-let c35 = if compile_program("fn main() { helper(41) } fn helper(x) { x + 1 }") == 129200052788 then 0 else 1;
-let c36 = if compile_program("fn main() { add(3,4) } fn add(a,b) { a + b }") == 181231945992 then 0 else 1;
+let c35 = if compile_program("fn main() { helper(41) } fn helper(x) { x + 1 }") == 133762173686 then 0 else 1;
+let c36 = if compile_program("fn main() { add(3,4) } fn add(a,b) { a + b }") == 185794066890 then 0 else 1;
   // Execution tests: the self-host bridge (source -> AArch64 -> exec -> result).
   let c37 = if run_program("fn main() { 42 }", 0) == 42 then 0 else 1;
   let c38 = if run_program("fn fact(n) { if n <= 1 then 1 else n * fact(n-1) }", 5) == 120 then 0 else 1;
@@ -3042,9 +3089,10 @@ fn emit_fast_v2(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i6
   let t11 = if curk == 11 then 1 else 0;
   let term_ok = (2 - mode) * (t9 + t11) + (mode - 1) * t10;
   let good = tok * rok * term_ok;
-  // fully-folded constant expression: no word was emitted, materialize now
+  // fully-folded constant expression: no word was emitted; materialize --
+  // unless the enclosing context discards values (while-body void slot)
   let em0 = if n[0] == nsave then 1 else 0;
-  let _ = if good * (1 - isc) * em0 * cx[40] == 1 then (let _ = fpC_lit(insns, n, cx[50], 0) in 0) else 0;
+  let _ = if good * (1 - isc) * em0 * cx[40] * (1 - cx[28]) == 1 then (let _ = fpC_lit(insns, n, cx[50], 0) in 0) else 0;
   let bad = 1 - good;
   let _ = if bad == 1 then (let _ = pos[0] = psave in 0) else 0;
   let _ = if bad == 1 then (let _ = n[0] = nsave in 0) else 0;
