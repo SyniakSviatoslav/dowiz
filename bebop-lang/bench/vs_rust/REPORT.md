@@ -170,3 +170,30 @@ kernel source yields a new key and a fresh compile; the old artifact remains.
 Cache-correctness gates after wiring: parity 40/40 bit-exact through the warm
 path, make test 79 modules / 0 failing, selfcompile x2 stable =
 492001526417191.
+
+## v5: strength-reduction round -- pow2-mul -> LSL, zero-compare -> cbz/cbnz
+
+Two new sound codegen paths in the self-hosted compiler (encodings verified on
+silicon via exec_words before insertion):
+
+- multiply by power-of-two constant -> single UBFM-encoded `lsl` (was
+  movz+madd): k3's inner-loop `x * 2` shrinks its loop body;
+- `== 0` / `!= 0` conditions emit direct `cbz`/`cbnz` instead of cmp+b.cond,
+  in both branch-mode ifs and while headers.
+
+Selectivity proof: of 34 self_check stream checksums only the two containing
+pow2 multiplies changed (c18, c25); table regenerated, self_check 41/41 = 0.
+Gates after: parity 340/340 bit-exact, make test 79/0, wasm-check 22/22,
+fuzz_selfhost(1000) PASS, selfcompile x2 stable = 496112949837003.
+
+v5 timings (min-of-51, results bit-exact vs interpreter):
+
+| kernel | words | bebop | rust | speedup |
+|--------|-------|-------|------|---------|
+| k1 | 35 | 1.002 ms | 5.3 ms | **5.3x** |
+| k2 | 57 | 752 us | 1.0 ms | **1.33x** |
+| k3 | 49 | 132.9 us | 0.25 ms | **1.88x** |
+| k4 | 41 | 4.633 ms | 6.3 ms | **1.36x** |
+
+k3 improved (137 -> 133 us); others within run-to-run noise of v4.
+Optimization playbook distilled into bench/vs_rust/OPTIMIZATIONS.md.

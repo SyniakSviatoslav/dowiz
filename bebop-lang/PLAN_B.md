@@ -668,3 +668,17 @@ sweep clean, selfcompile x2 = 492001526417191, fuzz PASS.
   artifacts, cached stream executes fib(25)=75025 @754us; mutation -> new key.
 - Gates after wiring: parity 40/40, make test 79/0, selfcompile x2 stable
   (492001526417191). REPORT.md v4 table added.
+
+## Session: strength-reduction round (v5)
+
+- fpC_pow2/fpC_lsli helpers (division-loop pow2 detect; UBFM lsl base
+  3544186880 verified vs objdump+exec_words). fpC_term: rhs-const pow2 mul ->
+  single lsl. fpC_ifcore + while fast path: ==0/!=0 conds -> cbz/cbnz with
+  same patch-slot discipline; G2 guarded off on those shapes.
+- Gates: self_check regen (2/34 changed - selectivity), parity 340/340,
+  make test 79/0, wasm 22/22, fuzz(1000) PASS, selfcompile x2 =
+  496112949837003. Timings v5 in REPORT.md; k3 137->133us.
+- Known pre-existing limit documented: some while+top-level-let mixes bail
+  fast path to legacy (~136k words on synthetic probe); not a regression
+  (old compiler: 136914 words on same probe).
+- New file: bench/vs_rust/OPTIMIZATIONS.md (practices playbook).
