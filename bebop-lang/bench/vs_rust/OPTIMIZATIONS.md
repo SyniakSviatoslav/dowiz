@@ -67,7 +67,3 @@ Host noise under proot swamps small kernels; medians lie, minimum converges.
 Interleave A/B when comparing toolchains. Never chase sub-10% deltas between
 runs.
 
-## Known limits
-Certain top-level let sequences after while-loops bail the fast path to the
-legacy walker (correct, larger streams). Probe: mixed shadowed lets + ifs
-compile ~136k words instead of ~60. Hunt: fpC_val/fpC_factor guard chain.

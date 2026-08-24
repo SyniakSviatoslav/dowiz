@@ -678,7 +678,8 @@ sweep clean, selfcompile x2 = 492001526417191, fuzz PASS.
 - Gates: self_check regen (2/34 changed - selectivity), parity 340/340,
   make test 79/0, wasm 22/22, fuzz(1000) PASS, selfcompile x2 =
   496112949837003. Timings v5 in REPORT.md; k3 137->133us.
-- Known pre-existing limit documented: some while+top-level-let mixes bail
-  fast path to legacy (~136k words on synthetic probe); not a regression
-  (old compiler: 136914 words on same probe).
+- RETRACTION: the "fast-path bail" was a phantom - probe.bp had been
+  accidentally overwritten with a copy of the compiler source itself
+  (138KB), so 136k words was an honest compile of expr_compile.bp.
+  All isolated probes compile 27-54 words and match the interpreter.
 - New file: bench/vs_rust/OPTIMIZATIONS.md (practices playbook).
