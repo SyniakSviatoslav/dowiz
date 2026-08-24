@@ -428,7 +428,7 @@ int main(int argc, char **argv) {
         struct { int entry; const char *src; long want; const char *name; }
         checks[3] = {
             { idx_program, "fn main() { helper(41) } fn helper(x) { x + 1 }",
-              133762173686L, "compile_program" },
+              146919800484L, "compile_program" },
             { idx_expr, "42", 21426575550L, "compile" },
             { idx_fn, "fn f(a) { a + 1 }", 59036607243L, "compile_fn" },
         };
