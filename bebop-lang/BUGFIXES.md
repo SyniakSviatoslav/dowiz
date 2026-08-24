@@ -209,3 +209,25 @@ Still open, narrowed hard:
   handles returns 0 in interp while native gives honest pointer delta
   (64 for two 4-element blocks). Harmless for kernels; audit before
   ever relying on handle identity.
+
+## Round: register protocol PROVEN; runner hardening
+
+- [PROVEN] The x27/x28 register contract WORKS end-to-end: a hand-made
+  stream returning mov x0,x27 gives the arena base back through
+  call_jit. GCC on aarch64 keeps global register-asm vars in MEMORY and
+  ignores them as registers, so exec_words now loads x27/x28 with inline
+  asm in the SAME block as blr (call_jit), built with -ffixed-x27
+  -ffixed-x28. Build command for the runner is now:
+    gcc -O2 -Wall -Wextra -ffixed-x27 -ffixed-x28 -o build/exec_words bench/exec_words.c
+  (JITBASE printed to stderr for gdb work; under gdb ASLR-off the base
+  was stable at 0x7ff7ffc000.)
+- [OPEN, narrowed to absurdity] yj/yb/xr family: two zeros(n) blocks +
+  address delta returns 0 natively while the emitted stream disassembles
+  textbook-perfect (objdump-verified: two ladders, two cursor-adds,
+  sub). gdb at the cursor-add shows x27=0 despite magic-stream proof.
+  Contradictory evidence across runs suggests my probe tooling (stale
+  binaries, count-line index shifts in hand decodes) is itself part of
+  the noise — per BUGFIXES rules, next session must start from a FRESH
+  single-purpose harness, not reuse lv.full-style scratch files.
+- k5 stays green through all of this; make test 79/0; parity 40/40;
+  fuzz_selfhost PASS with new sanity checksums.

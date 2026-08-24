@@ -20,6 +20,30 @@ typedef long (*fn1)(void);
 register unsigned long g_x27 asm("x27");
 register unsigned long g_x28 asm("x28");
 
+/* Invoke JIT code with the bump-arena contract: x27 = cursor, x28 = end.
+ * Local register vars inside ONE asm that also issues blr guarantee the
+ * values are in the physical registers at call time no matter what -O
+ * level or libc calls happen around us. Caller-saved regs are clobbered
+ * per AAPCS; x27/x28 survive because the callee saves/restores them. */
+static long call_jit(fn1 fp) {
+    unsigned long c27 = g_x27;
+    unsigned long c28 = g_x28;
+    register long ret __asm__("x0");
+    /* movs + blr in ONE asm block: nothing (libc, GCC itself) can touch
+     * x27/x28 between loading them and entering JIT code. */
+    __asm__ volatile(
+        "mov x27, %1\n\t"
+        "mov x28, %2\n\t"
+        "blr %3\n\t"
+        "mov %0, x0"
+        : "=r"(ret)
+        : "r"(c27), "r"(c28), "r"(fp)
+        : "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8",
+          "x9", "x10", "x11", "x12", "x13", "x14", "x15",
+          "x16", "x17", "x18", "x30", "cc", "memory");
+    return ret;
+}
+
 static uint64_t now_ns(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -92,22 +116,22 @@ int main(int argc, char **argv) {
     arena_base = mmap(NULL, ARENA_BYTES, PROT_READ | PROT_WRITE,
                       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (arena_base == MAP_FAILED) { perror("arena"); return 2; }
+    int iters = argc > 2 ? atoi(argv[2]) : 100;
+    fn1 fp = (fn1)((char *)code + (size_t)entry * 4);
+    fprintf(stderr, "JITBASE=%p entry=%d\n", (void*)code, entry);
     g_x27 = (unsigned long)arena_base;
     g_x28 = (unsigned long)arena_base + ARENA_BYTES;
 
-    int iters = argc > 2 ? atoi(argv[2]) : 100;
-    fn1 fp = (fn1)((char *)code + (size_t)entry * 4);
-
     /* warmup + reference result (calls are pure) */
-    volatile long sink = fp(); (void)sink;
-    long ref = fp();
+    volatile long sink = call_jit(fp); (void)sink;
+    long ref = call_jit(fp);
 
     static uint64_t runs[4096];
     if (iters > 4096) iters = 4096;
     long acc = 0;
     for (int i = 0; i < iters; i++) {
         uint64_t t0 = now_ns();
-        acc += fp();
+        acc += call_jit(fp);
         runs[i] = now_ns() - t0;
     }
     printf("result=%ld\n", ref);
