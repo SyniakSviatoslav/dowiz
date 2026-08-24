@@ -1580,11 +1580,43 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "compilewords") == 0) {
         if (argc < 4) { usage(); return 2; }
-        /* usage: compilewords <compiler.bp> <kernel.bp>
-         * Cache-hit replays .becache/<key>.full; miss compiles through the
-         * interpreted compiler, persists the artifact, prints it. */
+        /* usage: compilewords <compiler.bp> <src.bp> [more.bp ...]
+         * One compiler load serves every source. With a single source this is
+         * the classic stream-to-stdout mode; with several sources it batches
+         * like compilemany (artifacts persisted, per-file status line).
+         * Cache-hit replays .becache/<key>.full; miss compiles and persists. */
         int rc = cw_load(argv[2]);
         if (rc != 0) return rc;
+        if (argc > 4) {
+            mkdir(".becache", 0755);
+            int ncold = 0, nhit = 0, nfail = 0;
+            for (int fi = 3; fi < argc; fi++) {
+                char *ksrc = malloc(1 << 20);
+                FILE *kf = fopen(argv[fi], "rb");
+                if (!kf) { fprintf(stderr, "cannot open %s\n", argv[fi]); nfail++; continue; }
+                size_t klen = fread(ksrc, 1, (1 << 20) - 1, kf);
+                ksrc[klen] = '\0';
+                fclose(kf);
+                char cpath[256];
+                cw_cache_path(cpath, sizeof cpath, ksrc, klen);
+                FILE *probe = fopen(cpath, "rb");
+                if (probe) { fclose(probe); nhit++; continue; }
+                char *buf = NULL; size_t blen = 0;
+                cw_saved_out = stdout;
+                stdout = open_memstream(&buf, &blen);
+                int rc2 = cw_emit_src(ksrc, stdout);
+                fflush(stdout);
+                fclose(stdout);
+                stdout = cw_saved_out;
+                if (rc2 != 0) { free(buf); nfail++; continue; }
+                FILE *of = fopen(cpath, "wb");
+                if (of) { fwrite(buf, 1, blen, of); fclose(of); }
+                free(buf);
+                ncold++;
+            }
+            printf("compilewords: cold=%d hit=%d fail=%d\n", ncold, nhit, nfail);
+            return nfail != 0 ? 1 : 0;
+        }
         char *ksrc = malloc(1 << 20);   /* kernel source */
         FILE *kf = fopen(argv[3], "rb");
         if (!kf) { fprintf(stderr, "cannot open %s\n", argv[3]); return 2; }

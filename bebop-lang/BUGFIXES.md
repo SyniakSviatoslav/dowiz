@@ -94,9 +94,43 @@ message due to interrupted flow.
 **[RULE] git log --oneline -3 before every push; amend-or-rebase duplicates
 away locally before they reach origin.**
 
+## Session-2 forensics (post-retrospective round)
+
+**C1 root cause RECLASSIFIED.** The >=10-local crashes are NOT spill-bank
+corruption: stream decoding shows the optimizer rewriting a `[movz][sdiv]`
+window so that `let half_total = n / 2` loses its `bind_reg` (the sdiv
+writes the target register directly, the bind word disappears; next let's
+bind then aliases the slot). Spill encodings themselves verified correct
+against assembler (`str/ldr [x15,#slot*8]`). Next single-hypothesis probe:
+disable the A/B window peephole when the window contains a division, or
+make bind_reg fire after any op-with-rd==target-reg.
+
+**C2 scope correction.** se/sf ("9 vs 10 locals") were red herrings: every
+crashing probe called zeros(); locals count was incidental. Validated-green
+state exists: zeros-trio (arena cursor init past NOP window + x27/x28 pair
+keep + emit_zeros bump sequence) turned tg/tf/tc/td AND se/sf green
+deterministically. It was reverted only because:
+
+**C2a. Arena-in-frame cannot hold the compiler's own buffers.** 64KB reserve
+< insns[262144]=2MB -> SIGSEGV inside self_check; raising reserve to 16MB
+puts the cursor below the 8MB stack mapping -> immediate fault. Correct
+design (next round): x29-relative callee-saved saves + sp-dynamic alloca +
+epilogue `mov sp,x29` restructure, or a process-lifetime heap page obtained
+once via mmap-less .bss anchor in the runner.
+
+**[RULE] A per-call reservation can never exceed one frame; anything sized
+by the PROGRAM (compiler buffers, big arrays) needs storage whose lifetime
+and address range outlive the frame — decide this per feature before wiring
+allocation.**
+
+**[RULE] When three probes flip color together, list their shared feature
+first (all sd-class probes call zeros; none of the green ones do). Locals
+count was correlated, not causal.**
+
 ## Current open queue (priority order)
-1. C1+C2+B2 combined round: spill-in-frame + arena zeros + const-bind guard,
-   with the full probe ladder matrix (≤9/>=10 locals × arrays × calls ×
-   nesting), self_check/fuzz/parity gates, then k5 NTT kernel unblocked.
-2. Language ops: early return, unary !, compound assignment family.
-3. VSA-over-stream demo, glyph completion 121→300, NEON deep pass.
+1. C1: bind-loss optimizer hole (division-rhs lets) — single-peephole-gate
+   probe ready, decoded evidence above.
+2. C2: zeros via x29-relative frame redesign or runner-provided heap page,
+   then k5 NTT kernel unblocked (algorithm validated interp=python).
+3. Language ops: early return, unary !, compound assignment family.
+4. VSA-over-stream demo, glyph completion 121->300, NEON deep pass.
