@@ -377,3 +377,16 @@ were interp==native before today's spiral; re-verify after re-land.
   use that shape until fixed; parity corpus deliberately excludes it.
 - Also fixed en route: legacy binop emitted a ZERO word for any op not
   in its table (SIGILL source).
+
+## Compound ops status correction (C host)
+
+Differential probe exposed: the C-host recursive-seq compound desugar
+is SEMANTICALLY WRONG mid-program — a scalar compound chain followed by
+a while loop loses earlier rebinds (interp returned 10,100,400 where
+native/selfhost returned the correct 44,064,256). Root mechanism:
+env_i rollback on nested scalar LETs unwinds bindings that value-
+position compounds rely on; in_while mutation only covers while bodies.
+Decision: C-host compound support REVERTED (silently-wrong reference is
+the worst class). Selfhost emitter stays (its semantics are correct —
+proven against python). Rule: no += shapes into the parity corpus until
+the interpreter's env model gets real frame-scoped mutation.
