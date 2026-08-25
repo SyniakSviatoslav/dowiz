@@ -57,7 +57,7 @@ _start:
     /* arena x27/x28 = mmap(64MB, RW, PRIVATE|ANON) */
     mov     x0, #0
     mov     x1, #4096
-    movk   x1, #1024, lsl #16  /* 64 MB */
+    movk   x1, #4096, lsl #16  /* 256 MB */
     mov     x2, #3
     mov     x3, #34
     mov     x4, #-1

@@ -4,3 +4,13 @@
 1787661488 v2 stack-limit ulimit-unlimited-still-segv
 1787661498 v2 stack-limit ulimit-512MB-still-segv-stack-hypothesis-weakened
 1787663678 v1 test1 some note
+1787670264 H:probe(/tmp/opencode/m2/X1.bp) DID:runx GOT:9 WANT:9 VERDICT:confirmed
+1787670264 H:probe(/tmp/opencode/m2/Y1.bp) DID:runx GOT:3 WANT:3 VERDICT:confirmed
+1787678876 H:probe(/tmp/opencode/m2/X1.bp) DID:runx GOT:9 WANT:9 VERDICT:confirmed
+1787678876 H:probe(/tmp/opencode/m2/Y1.bp) DID:runx GOT:3 WANT:3 VERDICT:confirmed
+1787712000 H:caps128-vs139fns DID:bump-zeros(256)/fntab(4096)+budget791→4000 GOT:bad-bl 89→0 VERDICT:confirmed
+1787712100 H:pack-entry-is-bytes DID:reread-agent.c argv4 GOT:word-entry-jumps-midfn VERDICT:confirmed (L11-class harness error; F6/F7 'corruption' was artifact)
+1787712200 H:interp-oracle DID:bebopc-run FILE FNNAME GOT:X1=9 self_bootstrap=93580 VERDICT:confirmed (usage=(file,fn); syscalls unsupported in interp eval)
+1787712300 H:param9-spill-unwritten DID:P9/P10/Q2 ladder GOT:p9-reads-0 jit-only VERDICT:confirmed
+1787712400 H:prologue-mov-x27-x8-clobbers-arena DID:patch both prologue loops str-xj-[x15-slot] enc-from-objdump GOT:P9=22 P10=10 P11=21 Q1=2 Q2=9 P13=4 all==interp VERDICT:confirmed
+1787712500 H:full-chain-still-segv-at-collect_ctors-kslot DID:rebuild A.full bad-bl=0 P-ladder green; segv persists GOT:same-site w7532 ldr[x2+x1lsl3] slot0=0 VERDICT:inconclusive (next: correct SP-balance verifier incl pre/post-index push/pop; suspect epilogue leak overlapping sibling frames)

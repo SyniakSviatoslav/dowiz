@@ -450,3 +450,40 @@ Symptom→Tier index, Rules-about-rules (incident+trigger+action+cost or it
 doesn't exist), Laws vs heuristics split. Historical strict/lazy flip-flop
 corrected in this file above — the canonical example of OBSERVED recorded
 as PROVEN. All agent work in this repo starts by reading AGENTS.md.
+
+## [FIXED] fn-table capacity overflow at >128 fns (2026-08-25)
+
+collect_fns wrote into zeros(128) name/pos arrays while expr_compile.bp
+grew to 139 fns (self_bootstrap included). Overflow misaligned the fntab
+name<->start pairing: fntab_lookup returned MID-BODY word offsets and 89
+bl targets in the self-compiled stream were wild. Corpus never caught it
+(every corpus file <=128 fn occurrences). Fix: caps 256, tables 4096,
+budget counter moved 791->4000 (would collide with cache zone at larger
+cnt). Gate: bl-target sweep = 0 bad on full selfsrc compile.
+
+## [FIXED] params >=9 unwritten spill slot + x27 clobber (2026-08-25)
+
+compile_fn_at prologue emitted `mov x(19+j), x(j)` for ALL params. For
+j>=8 that is `mov x27,x8` / `mov x28,x9`: CLOBBERS the reserved arena
+registers and leaves the param's spill slot (sym_bind maps cnt>=8 to
+100+slot) forever zero -> late params read as 0 under JIT only (interp
+correct), heap corruption downstream. Repro ladder P9/P10/Q2/P13 in
+/tmp/opencode/m3/p9. Fix: j>=8 emits `str xj,[x15,#slot*8]` (word =
+4177526784+(j-8)*1024+480+j, objdump-verified). Both prologue loops
+patched (compile_fn_at + the nb-bound twin).
+
+## [OPEN] M3 chain still SIGSEGVs at collect_ctors k-slot (2026-08-25)
+
+After both fixes: bad-bl=0, P-ladder green, interp runs self_bootstrap
+to the exact expected count (93580), but seed-executing the compiled
+beboSelf still faults at `names[k[0]]`: base popped from spill slot0
+reads 0 between bind (str'd correctly) and use, with calls save/restoring
+x15 properly and all bl targets on boundaries. gdb watchpoint saw 1/0
+writes attributed inside skip_ws' span -> prime suspect is a SP-BALANCE
+leak (epilogue over/under-restore) letting sibling frames overlap live
+slots; first checker draft was too naive (missed pre/post-index push/pop
+forms). NEXT: correct ARM64 sp-balance verifier over every emitted span;
+then diff epilogue of the leaking fn against its prologue shape.
+Harness notes: agent pack entry arg is BYTES (word*4); bebopc run usage
+is (file.bp, fn_name); interp has no syscall builtins (slurp probes must
+go through JIT/seed).

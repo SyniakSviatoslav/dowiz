@@ -133,6 +133,9 @@ Isolation rules (hard-won):
 | Words look right but behave wrong | T3 execution ground truth; T2.5 protocol |
 | Entry/jump lands somewhere weird | T0 paired-count asserts (OFF table) |
 | Everything breaks after a "small" emitter edit | T2.6 chain links; T3 diff |
+| Silent SMALL wrong number (e.g. 7 vs 14M) | L11 entry identity FIRST; then spills |
+| Crash site moves between fns across builds | name-map off-by-one: verify attribution (fnmap), don't trust it |
+| Garbage array BASE from stack (x2=0/29) | T2.1 spills: check bind-store slot vs lookup-read slot in disasm |
 
 ## RULES ABOUT RULES (meta)
 
@@ -200,6 +203,21 @@ L5. Both engines (interp + JIT) verified for any new builtin/emitter; a
 L6. Before touching a subsystem: load its living-memory nodes and read the
     causal map (who calls whom, which contracts bind). Debugging without
     the map repeats solved bugs (rule/map-before-work node).
+L8. NO allocations inside while bodies (cells `[..]`, ctors, zeros): the
+    frame-heap bump never resets per iteration -> monotonic escape -> SIGSEGV
+    (collect_fns 3.9MB climb). Enforced mechanically: agentd `lint` must be
+    clean before every M3+ build.
+L9. Runtime self-source is a GENERATED artifact: always regenerate
+    /tmp scratch .bp from selfhost/ in-repo in the SAME commit; hand-copied
+    sources drift silently and poison entire debug ladders (2026-08-25:
+    stale 158B K1 file read all day). Generator: tools/gen_selfsrc.sh.
+L10. Every probe run states its expected value AT ISSUE TIME (agentd `runx`,
+     auto-verdict+journal). A run without expectation is noise, not evidence.
+L11. ENTRY IDENTITY for packed binaries: entry=0 means FIRST fn IN THE FILE,
+     not "the interesting one". Before interpreting ANY result, confirm which
+     fn executes (fnmap w<entry>). Incident class: probes returning callee's
+     value for hours.
+
 L7. str-vs-int comparisons in any analysis mirror of .bp code are banned:
     char() returns ints in Bebop; python mirrors must compare ord()s. The
     138-names=0 bug was exactly this class.

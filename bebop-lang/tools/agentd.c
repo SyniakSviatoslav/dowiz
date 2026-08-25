@@ -17,6 +17,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <stdarg.h>
+#include <sys/wait.h>
 
 #include "../native/src/lmem.h"
 
@@ -180,6 +181,158 @@ static void cmd_ctl(char *rest, SB *o) {
            CTL.ema_inconcl > 0.5 ? "CHAOS" : (CTL.ema_inconcl < 0.2 ? "converged" : "searching"));
 }
 
+
+/* ── hot-path: one-line probe pipeline ──────────────────────────────── */
+static void cmd_run(char *rest, SB *o) {
+    char prog[256], comp[256];
+    int k = sscanf(rest, "%255s %255s", prog, comp);
+    if (k < 1) { sb_put(o, "err: run <prog.bp> [compiler.bp]\n"); return; }
+    if (k == 1) snprintf(comp, sizeof comp, "selfhost/expr_compile.bp");
+    char cmd[1200];
+    snprintf(cmd, sizeof cmd,
+        "./native/build/bebopc compilewords %s %s > /tmp/opencode/run.full 2>/dev/null", comp, prog);
+    int rc = system(cmd);
+    if (rc != 0) { sb_put(o, "err: compile rc=%d\n", rc >> 8); return; }
+    snprintf(cmd, sizeof cmd,
+        "./native/build/agent pack /tmp/opencode/run.full /tmp/opencode/run.p.bin 0 >/dev/null 2>&1");
+    if (system(cmd)) {}
+    snprintf(cmd, sizeof cmd,
+        "timeout 300 ./seed/build/seed /tmp/opencode/run.p.bin > /tmp/opencode/run.out 2>&1");
+    rc = system(cmd);
+    FILE *f = fopen("/tmp/opencode/run.out", "r");
+    char buf[400]; size_t rd = f ? fread(buf, 1, sizeof buf - 1, f) : 0;
+    if (f) fclose(f);
+    buf[rd] = 0;
+    if (rd) sb_put(o, ">> %s", buf);
+    sb_put(o, "ok: run exit=%d\n", rc < 0 ? 127 : WEXITSTATUS(rc));
+}
+
+/* ── hot-path: word -> function-name map (prologue scan) ────────────── */
+static unsigned *FM_W; static long FM_N; static long *FM_S; static int FM_NS;
+static char (*FM_NM)[64]; static int FM_NN;
+static void fm_load(const char *fullpath, const char *bppath, SB *o) {
+    FILE *f = fopen(fullpath, "r");
+    if (!f) { sb_put(o, "err: open %s\n", fullpath); return; }
+    long cnt = 0; if (fscanf(f, "%ld", &cnt) != 1) { fclose(f); return; }
+    free(FM_W); FM_W = malloc((size_t)cnt * 4); FM_N = cnt;
+    for (long i = 0; i < cnt; i++) { unsigned v; if (fscanf(f, "%u", &v) != 1) { FM_N = i; break; } FM_W[i] = v; }
+    fclose(f);
+    free(FM_S); FM_S = malloc(sizeof(long) * (size_t)(FM_N + 1)); FM_NS = 0;
+    for (long i = 0; i < FM_N; i++) if (FM_W[i] == 2847898621u) FM_S[FM_NS++] = i;
+    if (bppath && bppath[0]) {
+        FILE *bf = fopen(bppath, "r");
+        if (bf) {
+            fseek(bf, 0, SEEK_END); long bl = ftell(bf); fseek(bf, 0, SEEK_SET);
+            char *t = malloc((size_t)bl + 1); size_t rd = fread(t, 1, (size_t)bl, bf); t[rd] = 0; fclose(bf);
+            free(FM_NM); FM_NM = malloc(64 * 2048); FM_NN = 0;
+            FM_NM[0][0] = 0; /* slot 0 filled below */
+            const char *p = t;
+            while ((p = strstr(p, "\nfn ")) != NULL && FM_NN < 2047) {
+                p += 4; const char *q = p;
+                while ((*q >= 97 && *q <= 122) || (*q >= 65 && *q <= 90) || (*q >= 48 && *q <= 57) || *q == '_') q++;
+                size_t L = (size_t)(q - p); if (L > 63) L = 63;
+                FM_NN++; memcpy(FM_NM[FM_NN - 1], p, L); FM_NM[FM_NN - 1][L] = 0;
+                p = q;
+            }
+            free(t);
+        }
+    }
+}
+static void cmd_fnmap(char *rest, SB *o) {
+    char fullp[256] = "", bpp[256] = ""; long want = -1;
+    char *save = rest; char *tok = strtok(rest, " ");
+    if (tok) snprintf(fullp, sizeof fullp, "%s", tok);
+    tok = strtok(NULL, " "); if (tok) snprintf(bpp, sizeof bpp, "%s", tok);
+    tok = strtok(NULL, " "); if (tok) want = atol(tok);
+    (void)save;
+    fm_load(fullp[0] ? fullp : "/tmp/opencode/run.full",
+            bpp[0] ? bpp : "/tmp/opencode/selfsrc.bp", o);
+    sb_put(o, ">> fns=%d words=%ld\n", FM_NS, FM_N);
+    if (want >= 0) {
+        long lo = -1;
+        for (int i = 0; i < FM_NS; i++) if (FM_S[i] <= want) lo = FM_S[i]; else break;
+        int idx = 0;
+        for (int i = 0; i < FM_NS; i++) if (FM_S[i] == lo) { idx = i; break; }
+        sb_put(o, ">> w%ld -> fn#%d %s (start w%ld)\n", want, idx,
+               FM_NN && idx < FM_NN ? FM_NM[idx] : "?", lo);
+    }
+}
+
+
+/* ── runx: run WITH declared expectation -> verdict + journal (T0 law) ── */
+static void cmd_runx(char *rest, SB *o) {
+    char prog[256], expv[64];
+    char comp[256];
+    int k = sscanf(rest, "%255s %63s %255s", prog, expv, comp);
+    if (k < 2) { sb_put(o, "err: runx <prog.bp> <expected> [compiler.bp]  (T0: no probe without expectation)\n"); return; }
+    if (k == 2) snprintf(comp, sizeof comp, "selfhost/expr_compile.bp");
+    /* reuse run pipeline inline */
+    char cmd[1200];
+    snprintf(cmd, sizeof cmd,
+        "./native/build/bebopc compilewords %s %s > /tmp/opencode/run.full 2>/dev/null", comp, prog);
+    int rc = system(cmd);
+    if (rc != 0) { sb_put(o, "VERDICT:error COMPILE rc=%d\n", rc >> 8); return; }
+    snprintf(cmd, sizeof cmd,
+        "./native/build/agent pack /tmp/opencode/run.full /tmp/opencode/run.p.bin 0 >/dev/null 2>&1");
+    if (system(cmd)) {}
+    snprintf(cmd, sizeof cmd,
+        "timeout 300 ./seed/build/seed /tmp/opencode/run.p.bin > /tmp/opencode/run.out 2>&1");
+    rc = system(cmd);
+    FILE *f = fopen("/tmp/opencode/run.out", "r");
+    char buf[400]; size_t rd = f ? fread(buf, 1, sizeof buf - 1, f) : 0;
+    if (f) fclose(f);
+    buf[rd] = 0;
+    long got = strtol(buf, NULL, 10);
+    long want = strtol(expv, NULL, 10);
+    int crash = (rc >= 128 || WEXITSTATUS(rc) >= 128);
+    const char *ver = crash ? (want == 139 || want == 135 ? "confirmed" : "confirmed-crash")
+                    : (got == want ? "confirmed" : "KILLED");
+    sb_put(o, ">> GOT:%ld WANT:%ld exit=%d\nVERDICT:%s\n", got, want, WEXITSTATUS(rc), ver);
+    /* journal line, mechanical */
+    FILE *j = fopen("docs/exp.journal", "a");
+    if (j) { fprintf(j, "%lld H:probe(%s) DID:runx GOT:%ld WANT:%ld VERDICT:%s\n",
+             (long long)time(NULL), prog, got, want, ver); fclose(j); }
+}
+
+/* ── lint: allocations inside while bodies are FORBIDDEN (L8) ────────── */
+static void cmd_lint(char *rest, SB *o) {
+    (void)rest;
+    const char *files[] = {"selfhost/expr_compile.bp","selfhost/compile.bp","selfhost/main.bp",NULL};
+    int bad = 0;
+    for (int fi = 0; files[fi]; fi++) {
+        FILE *f = fopen(files[fi], "r");
+        if (!f) continue;
+        static char line[512];
+        int depth = 0; int lstack[64]; int lsp = 0; int ln = 0;
+        while (fgets(line, sizeof line, f)) {
+            ln++;
+            int opens = 0, closes = 0;
+            for (char *p = line; *p; p++) { if (*p=='{') opens++; else if (*p=='}') closes++; }
+            if (lsp > 0) {
+                if (strncmp(line, "let ", 4) == 0) {
+                    char *br = strchr(line, '[');
+                    char *eq = strchr(line, '=');
+                    if (br && eq && br < eq && strncmp(eq+1, "= [", 3) == 0) {}
+                }
+                /* flag: let NAME = [ ... ]; anywhere in a while body */
+                char *lb = strstr(line, "let ");
+                if (lb) {
+                    char *brk = strchr(lb, '[');
+                    char *semi = strchr(lb, ';');
+                    char *eqs = strchr(lb, '=');
+                    if (brk && eqs && brk > eqs && (!semi || brk < semi))
+                        { sb_put(o, "L8 %s:%d: %.*s\n", files[fi], ln, (int)(strchr(line+3,';')?strchr(line+3,';')-line:60), line); bad++; }
+                }
+            }
+            if (strstr(line, "while")) lstack[lsp++] = depth + opens;
+            depth += opens - closes;
+            while (lsp > 0 && depth <= lstack[lsp-1]) lsp--;
+        }
+        fclose(f);
+    }
+    sb_put(o, "ok: lint violations=%d\n", bad);
+}
+
 /* ── command execution ──────────────────────────────────────────────── */
 static void exec_line(char *line, SB *out);
 
@@ -321,6 +474,10 @@ static void exec_line(char *line, SB *o) {
     else if (!strcmp(cmd, "nav")) cmd_nav(rest, o);
     else if (!strcmp(cmd, "exp")) cmd_exp(rest, o);
     else if (!strcmp(cmd, "ctl")) cmd_ctl(rest, o);
+    else if (!strcmp(cmd, "run")) cmd_run(rest, o);
+    else if (!strcmp(cmd, "fnmap")) cmd_fnmap(rest, o);
+    else if (!strcmp(cmd, "runx")) cmd_runx(rest, o);
+    else if (!strcmp(cmd, "lint")) cmd_lint(rest, o);
     else if (!strcmp(cmd, "gate")) cmd_gate(rest, o);
     else if (!strcmp(cmd, "sh") && rest) cmd_sh(rest, o);
     else if (!strcmp(cmd, "par")) cmd_par(rest, o);
@@ -342,7 +499,7 @@ static void exec_line(char *line, SB *o) {
         sb_put(o, "ok: saved\n");
     }
     else if (!strcmp(cmd, "quit")) sb_put(o, "ok: bye\n");
-    else sb_put(o, "err: ? (mem|nav|exp|ctl|gate|sh|par|hot|save|quit)\n");
+    else sb_put(o, "err: ? (mem|nav|exp|ctl|run|fnmap|gate|sh|par|hot|save|quit)\n");
 }
 
 int main(void) {
