@@ -20,3 +20,6 @@
 1787718300 H:fpC-cluster-sp-violations DID:symbolic-depth-sim over all spans GOT:10 fns flagged incl emit_while_stmt(merge x3)+run_program(ret -1,visually verified str-push+double-pop) VERDICT:confirmed
 1787718400 H:fastpath-isolate DID:kill-switch 3 sites has_spills==999/1==999/is_expr==999 GOT:different failure(Bus err,SP~exhausted,PC-in-heap); legacy too recursion-deep for env VERDICT:inconclusive
 1787718500 H:nested-if-in-mul-idiom DID:T1/T2 hoisted-vs-nested GOT:both 29 correct both engines VERDICT:killed (idiom itself clean; real emitter-side merge bug still unfound)
+1787722000 H:emit-cond-symmetric DID:read emit_cond GOT:both arms push exactly once, no merge pop VERDICT:confirmed (asymmetric shape NOT from emit_cond)
+1787722100 H:fall-arm-jumps-into-middle DID:disasm WS merge@1100 arrivals (1096,d)(1099,d+1) GOT:fall path binds slot directly then b JUMPS INTO else-arm's push/ldr/add idiom mid-sequence VERDICT:confirmed-mechanism (underflow -1 on fall path when outer temps live; benign in tiny probes = why corpus passes)
+1787722200 H:singles-all-flag DID:per-statement bisect of emit_while_stmt GOT:85/90 statements flag standalone VERDICT:inconclusive (systematic idiom, not one bad line; suspect statement-if discard-pop path in emit_body or wbrw/G2 peephole patch sites)

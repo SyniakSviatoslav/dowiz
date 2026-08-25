@@ -521,3 +521,24 @@ Harness facts (burned cycles this session):
   artifact-vs-artifact (compilewords stream vs beboSelf stream).
 - gen_selfsrc.sh embeds a SOURCE SNAPSHOT: regenerate after every
   expr_compile.bp edit or you debug stale code (L9).
+
+## [OPEN] session-2 findings on the wild-ret (2026-08-25, evening)
+
+Mechanism CONFIRMED via predecessor-tracing depth sim on emit_while_stmt:
+the asymmetric idiom is [cmp; b.cond; FALL{bind slot directly}; b;
+ELSE{push}; MERGE{ldr+add}] -- the fall path jumps INTO the middle of the
+else arm's scratch idiom, skipping its push: underflow -1 whenever any
+outer temp is live across the statement (always true at >8 symbols).
+Tiny probes pass because nothing else is live -- explains corpus green.
+
+emit_cond itself is symmetric (both arms push once). So the generator of
+the asymmetric shape is elsewhere: candidates are (a) emit_body's
+statement-if discard-pop path, (b) the wbrw/G2 peephole patch sites in
+emit_while_stmt, (c) fpC_* templates. Per-statement bisection flags 85/90
+statements STANDALONE -> systematic idiom, not a single bad line.
+
+Next session: trace which emitter function OWNS the b-into-middle jump
+(find the em() call whose word lands at the merge target), fix it to emit
+a balanced pair on BOTH paths, then sim->zero, regen, rebuild, M3 gate.
+All tooling in place: tools/depth_sim.py, kill-switch already in, ladder
+probes P9..R14 in /tmp/opencode/m3/{p9,r}.
