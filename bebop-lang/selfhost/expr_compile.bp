@@ -2418,9 +2418,35 @@ fn emit_expr_words(src: str) -> [i64] {
 // THIS compiler (emit_words over a raw pointer), returns word checksum.
 // Entry for beboSelf.bin: the frozen compiler compiling other programs.
 fn self_bootstrap() -> i64 {
-  42
+  let p = zeros(22);
+  let _ = p[0] = 47;
+  let _ = p[1] = 116;
+  let _ = p[2] = 109;
+  let _ = p[3] = 112;
+  let _ = p[4] = 47;
+  let _ = p[5] = 98;
+  let _ = p[6] = 101;
+  let _ = p[7] = 98;
+  let _ = p[8] = 111;
+  let _ = p[9] = 112;
+  let _ = p[10] = 95;
+  let _ = p[11] = 115;
+  let _ = p[12] = 101;
+  let _ = p[13] = 108;
+  let _ = p[14] = 102;
+  let _ = p[15] = 95;
+  let _ = p[16] = 115;
+  let _ = p[17] = 114;
+  let _ = p[18] = 99;
+  let _ = p[19] = 46;
+  let _ = p[20] = 98;
+  let _ = p[21] = 112;
+  let fd = sys_open(p, 22, 0);
+  let src = sys_slurp(fd, 400000);
+  let _ = sys_close(fd);
+  let words = emit_words(src);
+  sum_words(words, words[0] + 1)
 }
-
 // BENCH: two-pass compile of a whole fn-main program; returns [count, words...]
 fn emit_words(src: str) -> [i64] {
   let insns = zeros(262144);

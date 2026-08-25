@@ -74,6 +74,99 @@ int lmem_neighbors(const LmGraph *g, int idx, int *out, int max) {
     return n;
 }
 
+/* ─── v2: text→vector, remember, persistence ───────────────────────────── */
+
+void lmem_vec_from_text(const char *text, uint64_t *vec) {
+    /* FNV-1a over every 4-gram; byte i lands in word (i & 15) after a
+     * rotate — spreads correlated texts across the 1024-bit space while
+     * staying fully deterministic. */
+    for (int w = 0; w < LMEM_VEC_WORDS; w++) vec[w] = 0;
+    size_t n = strlen(text);
+    uint64_t h = 14695981039346656037ULL;
+    for (size_t i = 0; i + 4 <= n; i++) {
+        for (int b = 0; b < 4; b++) {
+            h ^= (unsigned char)text[i + b];
+            h *= 1099511628211ULL;
+        }
+        int w = (int)(i % LMEM_VEC_WORDS);
+        vec[w] ^= h;
+        vec[w] = (vec[w] << 7) | (vec[w] >> 57); /* rotate to decorrelate */
+    }
+    if (n == 0) vec[0] = h;
+}
+
+int lmem_remember(LmGraph *g, const char *name, int kind,
+                  const char *note, uint64_t stamp) {
+    char buf[LMEM_NAME_MAX + LMEM_NOTE_MAX];
+    snprintf(buf, sizeof buf, "%s|%s", name, note ? note : "");
+    uint64_t vec[LMEM_VEC_WORDS];
+    lmem_vec_from_text(buf, vec);
+    int idx = lmem_upsert(g, name, vec);
+    if (idx < 0) return -1;
+    g->syms[idx].kind = (uint8_t)kind;
+    g->syms[idx].stamp = stamp;
+    if (note) {
+        size_t nl = strlen(note);
+        if (nl >= LMEM_NOTE_MAX) nl = LMEM_NOTE_MAX - 1;
+        memcpy(g->syms[idx].note, note, nl);
+        g->syms[idx].note[nl] = 0;
+    }
+    return idx;
+}
+
+#define LMEM_MAGIC 0x324D454CUL /* "LEML" little-endian: LMEM2 */
+
+int lmem_save(const LmGraph *g, const char *path) {
+    FILE *f = fopen(path, "wb");
+    if (!f) return -1;
+    uint32_t magic = LMEM_MAGIC, ver = 2, cnt = (uint32_t)g->n_syms;
+    fwrite(&magic, 4, 1, f);
+    fwrite(&ver, 4, 1, f);
+    fwrite(&cnt, 4, 1, f);
+    for (int i = 0; i < g->n_syms; i++) {
+        const LmSymbol *s = &g->syms[i];
+        fwrite(s->name, 1, LMEM_NAME_MAX, f);
+        fwrite(s->vec, 8, LMEM_VEC_WORDS, f);
+        fwrite(s->edges, sizeof(int), 8, f);
+        fwrite(&s->n_edges, sizeof(int), 1, f);
+        fwrite(&s->kind, 1, 1, f);
+        fwrite(&s->stamp, 8, 1, f);
+        fwrite(s->note, 1, LMEM_NOTE_MAX, f);
+    }
+    fclose(f);
+    return 0;
+}
+
+int lmem_load(LmGraph *g, const char *path) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return -1;
+    uint32_t magic = 0, ver = 0, cnt = 0;
+    if (fread(&magic, 4, 1, f) != 1 || magic != LMEM_MAGIC ||
+        fread(&ver, 4, 1, f) != 1 || ver != 2 ||
+        fread(&cnt, 4, 1, f) != 1 || cnt > LMEM_MAX_SYMBOLS) {
+        fclose(f); return -1;
+    }
+    lmem_init(g);
+    g->n_syms = (int)cnt;
+    for (int i = 0; i < (int)cnt; i++) {
+        LmSymbol *s = &g->syms[i];
+        if (fread(s->name, 1, LMEM_NAME_MAX, f) != LMEM_NAME_MAX ||
+            fread(s->vec, 8, LMEM_VEC_WORDS, f) != LMEM_VEC_WORDS ||
+            fread(s->edges, sizeof(int), 8, f) != 8 ||
+            fread(&s->n_edges, sizeof(int), 1, f) != 1 ||
+            fread(&s->kind, 1, 1, f) != 1 ||
+            fread(&s->stamp, 8, 1, f) != 1 ||
+            fread(s->note, 1, LMEM_NOTE_MAX, f) != LMEM_NOTE_MAX) {
+            fclose(f); lmem_init(g); return -1;
+        }
+        s->name[LMEM_NAME_MAX-1] = 0;
+        s->note[LMEM_NOTE_MAX-1] = 0;
+        if (s->n_edges < 0 || s->n_edges > 8) s->n_edges = 0;
+    }
+    fclose(f);
+    return 0;
+}
+
 int lmem_self_test(char *out, size_t cap) {
     int ok = 0, fail = 0;
 #define T(cond, msg) do { ok++; if (!(cond)) { fail++; int n = snprintf(out, cap, "[FAIL] %s\\n", msg); out += n > 0 ? n : 0; cap -= n > 0 ? (size_t)n : 0; } else { int n = snprintf(out, cap, "[ok] %s\\n", msg); out += n > 0 ? n : 0; cap -= n > 0 ? (size_t)n : 0; } } while(0)
@@ -98,6 +191,37 @@ int lmem_self_test(char *out, size_t cap) {
 
     T(lmem_find(&g, "gamma") == 2, "find gamma at index 2");
     T(lmem_find(&g, "delta") == -1, "delta not found");
+
+    /* v2: deterministic text vectors */
+    uint64_t t1[16], t2[16], t3[16];
+    lmem_vec_from_text("seed loader contract", t1);
+    lmem_vec_from_text("seed loader contract", t2);
+    lmem_vec_from_text("hydra PID control", t3);
+    T(memcmp(t1, t2, sizeof t1) == 0, "vec_from_text deterministic");
+    T(lmem_hamming_dist(t1, t3, 16) > 200, "unrelated texts far apart");
+
+    /* v2: remember payload */
+    LmGraph g2; lmem_init(&g2);
+    int ri = lmem_remember(&g2, "state/m3", LEM_STATE,
+                           "beboSelf entry=0 path works", 1700000000);
+    T(ri == 0 && g2.n_syms == 1, "remember inserts one symbol");
+    T(g2.syms[0].kind == LEM_STATE && g2.syms[0].stamp == 1700000000,
+      "kind and stamp stored");
+    T(strlen(g2.syms[0].note) > 0, "note stored");
+
+    /* v2: persistence round-trip */
+    const char *tmp_path = "/tmp/opencode/lmem_roundtrip.bin";
+    T(lmem_save(&g2, tmp_path) == 0, "save ok");
+    LmGraph g3; lmem_init(&g3);
+    T(lmem_load(&g3, tmp_path) == 0, "load ok");
+    T(g3.n_syms == 1 && strcmp(g3.syms[0].name, "state/m3") == 0,
+      "roundtrip name");
+    T(memcmp(g3.syms[0].vec, g2.syms[0].vec, sizeof t1) == 0,
+      "roundtrip vector");
+    T(strcmp(g3.syms[0].note, "beboSelf entry=0 path works") == 0,
+      "roundtrip note");
+    T(g3.syms[0].kind == LEM_STATE && g3.syms[0].stamp == 1700000000,
+      "roundtrip kind+stamp");
 
 #undef T
     return fail;

@@ -2005,6 +2005,64 @@ int main(int argc, char **argv) {
         printf("Math self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
+    if (strcmp(argv[1], "memory") == 0) {
+        /* living_memory agent CLI: memory add|link|query|dump */
+        const char *gpath = getenv("BEBOP_MEMORY");
+        static char gdef[256];
+        if (!gpath || !gpath[0]) {
+            snprintf(gdef, sizeof gdef, "docs/memory.lmem");
+            gpath = gdef;
+        }
+        if (argc < 3) { fprintf(stderr, "usage: bebopc memory add|link|query|dump\n"); return 2; }
+        LmGraph g;
+        if (lmem_load(&g, gpath) != 0) lmem_init(&g);
+        if (strcmp(argv[2], "add") == 0) {
+            if (argc < 6) { fprintf(stderr, "usage: memory add <name> <kind0-5> <stamp> <note...>\n"); return 2; }
+            int idx = lmem_remember(&g, argv[3], atoi(argv[4]),
+                                    (const char *)argv[6], (uint64_t)atoll(argv[5]));
+            if (idx < 0) { fprintf(stderr, "graph full\n"); return 1; }
+            printf("remembered %s -> #%d (%d symbols)\n", argv[3], idx, g.n_syms);
+        } else if (strcmp(argv[2], "link") == 0) {
+            if (argc < 5) { fprintf(stderr, "usage: memory link <name-a> <name-b>\n"); return 2; }
+            int a = lmem_find(&g, argv[3]), b = lmem_find(&g, argv[4]);
+            if (a < 0 || b < 0) { fprintf(stderr, "unknown symbol(s)\n"); return 1; }
+            lmem_link(&g, a, b);
+            printf("linked %s <-> %s\n", argv[3], argv[4]);
+        } else if (strcmp(argv[2], "query") == 0) {
+            char q[1024] = {0};
+            for (int i = 3; i < argc; i++) {
+                strncat(q, argv[i], sizeof q - strlen(q) - 2);
+                strncat(q, " ", sizeof q - strlen(q) - 2);
+            }
+            uint64_t qv[16];
+            lmem_vec_from_text(q, qv);
+            int hits[8];
+            int nh = lmem_search(&g, qv, 5, hits);
+            printf("query: %s\n", q);
+            for (int i = 0; i < nh; i++) {
+                LmSymbol *s = &g.syms[hits[i]];
+                printf("  [%d] d=%d %s (kind=%u stamp=%llu) %s\n",
+                       i, lmem_hamming_dist(qv, s->vec, 16), s->name,
+                       s->kind, (unsigned long long)s->stamp, s->note);
+                for (int e = 0; e < s->n_edges && e < 8; e++)
+                    printf("      -> %s\n", g.syms[s->edges[e]].name);
+            }
+        } else if (strcmp(argv[2], "dump") == 0) {
+            printf("graph %s: %d symbols\n", gpath, g.n_syms);
+            for (int i = 0; i < g.n_syms; i++) {
+                LmSymbol *s = &g.syms[i];
+                printf("#%d %s kind=%u stamp=%llu :: %s\n",
+                       i, s->name, s->kind, (unsigned long long)s->stamp, s->note);
+                for (int e = 0; e < s->n_edges && e < 8; e++)
+                    printf("   -> %s\n", g.syms[s->edges[e]].name);
+            }
+        } else {
+            fprintf(stderr, "unknown mem subcommand\n");
+            return 2;
+        }
+        mkdir("docs", 0755);
+        return lmem_save(&g, gpath);
+    }
     if (strcmp(argv[1], "lmem") == 0) {
         char buf[8192];
         int ok = lmem_self_test(buf, sizeof buf);

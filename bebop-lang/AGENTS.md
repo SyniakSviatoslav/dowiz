@@ -148,6 +148,43 @@ Isolation rules (hard-won):
   same commit that discovers it. Keep the index short enough to recall at
   the decision moment.
 
+## AGENTD — hot-path daemon (no cold starts)
+
+`native/build/agentd` (build: `gcc -O2 -Wall -Wextra -pthread -I native/src
+-o native/build/agentd tools/agentd.c native/src/lmem.c`) is a RESIDENT
+process: memory graph loaded once, navigation indexes cached by mtime,
+gates run as one-liners, `par N` fans out N jobs on threads. Line protocol
+on stdin: mem add|link|query · nav fns|find · gate parity|fuzz|test|
+selfcompile · sh <cmd> · par N (+N lines) · exp <slug> <0|1|2> <secs>
+[journal+auto-memory] · ctl · hot · save · quit.
+
+- Hydra-borrowed controller: EMA(α=0.3) of inconclusive-verdict ratio =
+  entropy; PID-ish gain turns entropy + mean duration into an adaptive
+  timebox; >0.5 entropy prints a forced re-enumeration nudge (metacognition
+  enforced mechanically); <0.2 = converged. Every experiment goes through
+  `exp` so the journal (docs/exp.journal) and memory graph grow together.
+- Evolution loop: usage counters persist (docs/memory.stats), `hot` shows
+  what the workflow actually uses — new recurring shapes become agentd
+  subcommands, dead ones retire.
+- Cold-start rule: anything executed repeatedly lives in the daemon or in
+  compiled subcommands; python/bash one-offs are for single use only.
+
+## TOOLING & NAVIGATION (agent work only — runtime stays zero-C)
+
+- **Navigation is AST-level, not grep**: `bebopc parse FILE` lists items,
+  `tokens FILE` gives line-numbered token stream, `fmt` canonicalizes,
+  `glyphs` shows language constructs. grep/cat are last resort for raw
+  text hunts only.
+- **Recurring agent operations become compiled subcommands** in
+  `tools/agent.c` (build: `gcc -O2 -Wall -Wextra -o native/build/agent
+  tools/agent.c`): `pack`, `sum`, `prolog`, `entryfind`. Compiled tools
+  replace python one-offs after their SECOND use — scripts that ran twice
+  already paid for formalization (LAW L3 applied to tooling).
+- Living memory CLI: `bebopc memory add|link|query|dump` over
+  docs/memory.lmem (committed). Session start = query topic; postmortems =
+  pat-bad nodes; distilled wins = pat-ok nodes; milestone shifts = state/*.
+  (There is also an unrelated legacy `mem` command — don't confuse them.)
+
 ## LAWS (condensed, zero-tolerance)
 
 L1. Words: asm → objdump → script → LE int → scripted insert → **disassembly
@@ -160,6 +197,12 @@ L4. Buffers handed to the kernel are explicitly terminated every call.
 L5. Both engines (interp + JIT) verified for any new builtin/emitter; a
     silently-wrong reference is reverted, not documented-and-kept
     (compound-ops precedent).
+L6. Before touching a subsystem: load its living-memory nodes and read the
+    causal map (who calls whom, which contracts bind). Debugging without
+    the map repeats solved bugs (rule/map-before-work node).
+L7. str-vs-int comparisons in any analysis mirror of .bp code are banned:
+    char() returns ints in Bebop; python mirrors must compare ord()s. The
+    138-names=0 bug was exactly this class.
 
 ## KEEP (positive patterns, session-proven)
 
