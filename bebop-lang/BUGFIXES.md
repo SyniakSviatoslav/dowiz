@@ -325,3 +325,37 @@ Status: hh=12, hh2=8, disc=16, hz2=8 all interp==native; parity corpus
 +1 (hvham_neon). k7neon variant uses the builtin (same checksum;
 bounce-copy of rows currently caps the win at ~20% — direct row-slice
 args are the follow-up).
+
+## hvham2 session: emitter built, strict-branch trap CONFIRMED mechanically
+
+Built hvham2(a,ao,b,bo,n) — offset-args NEON hamming (removes k7's
+bounce copy). C-host side COMPLETE and correct (symmetric pair nodes
+ARRAY[arr,off] in slots a/b; eval with bounds). Selfhost emitter:
+single-chunk proofs passed, then a crash spiral produced the decisive
+mechanical proof of the branch-evaluation law:
+
+  While emit_hvham2/emit_hvham sat as if-branches in the SHARED
+  emit_call_or_ctor dispatch, EVERY zeros() call in ANY program
+  strictly evaluated BOTH emitters: their argument parsers consumed
+  source text past the zeros ')' and emitted garbage words. k6 — which
+  never calls hvham* — broke. Diff vs HEAD showed wholesale register
+  remapping of its stream.
+
+CONSEQUENCE LAW (now binding): in this meta-language an if-chain
+selects VALUES but every branch's function CALLS execute. Any builtin
+dispatcher must therefore keep at most ONE call-capable branch per
+dispatch site, or route through flag-multiplied word emission (OPT-G1
+style) — never side-effecting parser calls in untaken branches.
+
+Correct hvham2 selfhost strategy for next attempt (no dispatcher edit):
+parse args via the SAME single generic emitter by extending emit_zeros
+pattern into one parameterized fn emit_hv_neon(argcount, layout-id)
+selected BEFORE any call site exists (hash->fn pointer table is not
+available; instead generate per-builtin wrapper fns each containing its
+OWN full body, dispatched from separate let-bound cells evaluated
+unconditionally but parsing NOTHING unless their hash matches — guard
+with early 'if name != HASH then 0 else <full body>' where the full
+body sits INSIDE the then-arm and contains no competing call).
+
+C-host hvham2 + selfhost hvham(3-arg) remain green: hh/hh2/hz2/disc
+were interp==native before today's spiral; re-verify after re-land.
