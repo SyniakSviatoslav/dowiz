@@ -319,14 +319,23 @@ and shipped. TWO real bugs found past the rollback point:
    (not #3/3544448068). The "x2=n-8" theory was wrong; a two-marker
    discriminating probe (markers in chunk1 AND chunk2) separated the
    hypotheses in one run.
-2. STRICT BRANCHES confirmed again: both tail variants always emit;
-   never dispatch emitters through if/else — use single-path forms.
+2. [CORRECTED 2026-08-25] Branch evaluation was later PROVEN LAZY by the
+   lazy2 micro-test (heavy untaken expression skipped, 57@307ms). This
+   entry recorded an OBSERVED correlation from a malformed merged dispatch
+   chain, not a proven mechanism — rules derived from broken states inherit
+   the brokenness (AGENTS.md, Hypothesis Discipline).
 Status: hh=12, hh2=8, disc=16, hz2=8 all interp==native; parity corpus
 +1 (hvham_neon). k7neon variant uses the builtin (same checksum;
 bounce-copy of rows currently caps the win at ~20% — direct row-slice
 args are the follow-up).
 
-## hvham2 session: emitter built, strict-branch trap CONFIRMED mechanically
+## hvham2 session: emitter built; "strict-branch" conclusion later CORRECTED to lazy
+
+> [2026-08-25] The CONSEQUENCE LAW below was derived while the dispatch
+> chain was corrupted (dangling duplicate links). The lazy2 micro-test
+> proved if-branches ARE lazy on a canonical chain. The real law is:
+> never leave dangling/duplicate else-if links when patching shared
+> dispatch chains. Kept as case study per AGENTS.md.
 
 Built hvham2(a,ao,b,bo,n) — offset-args NEON hamming (removes k7's
 bounce copy). C-host side COMPLETE and correct (symmetric pair nodes
@@ -428,14 +437,16 @@ is written with exactly 8 live bindings (p fdw msg w buf nr v live,
 with shadow rebind of fdw for the read pass). Root-causing the spill
 interaction is queued; until then keep syscall-heavy programs flat.
 
-## Agent debugging rules (metacognitive audit 2026-08-25)
+## Agent debugging rules (metacognitive audits 2026-08-25, v1 and v2)
 
-Session audit produced AGENTS.md — ten process laws distilled from this
-stretch's failures: zero hand-typed words + post-insert disassembly diff;
-syscall register tables written before emission (x2-len forgotten twice);
-harness execution model read before differential debugging (exec_words
-warmup+ref); ordered divergence checklist with spills(>8 syms) FIRST;
-two-strikes axis pivot rule; equality asserts on paired lists (the ignored
-176≠138); gdb-on-JIT recipe (__clear_cache anchor, mappings→word#); cache
-trust; evidence hygiene (decompose results arithmetically, expected vs got).
-All future agent work in this repo: read AGENTS.md first.
+v2 audit spans the FULL session (ntt_filter → sc-class → M1 seed → M2
+syscalls → M3 self-bootstrap) and restructured AGENTS.md into:
+THE OCCAM LADDER (T0 evidence hygiene → T5 deep tools, never skip tiers),
+Hypothesis Discipline (declare space ≥3 candidates ranked simplest-first,
+pre-declared falsifiers, two-strike timebox, one-line journal,
+OBSERVED≠PROVEN marking), Parallel Agent Protocol (fan-out on independent
+hypotheses/gates; per-agent scratch namespaces; structured verdicts only),
+Symptom→Tier index, Rules-about-rules (incident+trigger+action+cost or it
+doesn't exist), Laws vs heuristics split. Historical strict/lazy flip-flop
+corrected in this file above — the canonical example of OBSERVED recorded
+as PROVEN. All agent work in this repo starts by reading AGENTS.md.

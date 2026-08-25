@@ -1,120 +1,170 @@
-# Agent Process Rules
+# AGENTS.md — Debugging & Process Laws (v2)
 
-Written after a metacognitive audit of the M1–M3 session (2026-08-25).
-Each rule cites the incident that bought it. These are process laws —
-they exist because violating them cost real cycles in practice.
+Supersedes v1 (same day, same author, more scars). Provenance: historical
+audit of the FULL session — from ntt_filter and the sc-class hunt through
+M1 seed, M2 syscalls, M3 self-bootstrap. Aggregate finding: **dozens of
+avoidable cycles (hours) went to process failures, while genuinely hard
+root causes fell fast whenever the method was disciplined.** The bottleneck
+is procedure, not difficulty.
 
-## 1. Zero hand-typed instruction words
-Incident: 6+ wasted compile/run cycles on transcription errors — `382d695f`
-typed as `3b0d695f`; hex read as big-endian int (`int('382d695f',16)` =
-942415199 instead of LE 942500191); `mov x13,x0` embedded where `mov x0,x13`
-was dumped; an entire emitter block pasted from memory instead of from
-objdump output.
+v1 rules survive here, re-homed: #1,#2,#6 → LAWS; #3,#4,#5,#7,#8 → LADDER/
+HEURISTICS; #9,#10 → JOURNAL/KEEP. New in v2: the Occam Ladder protocol,
+hypothesis discipline, parallel-agent protocol, symptom index, and rules
+about rules themselves.
 
-Rules:
-- Never type or copy words manually. Pipeline: `.s` → objdump → script
-  parses hex column → `int.from_bytes(bytes.fromhex(h),'little')` → insert
-  into target via one script run. Hex→word is ALWAYS little-endian.
-- After inserting words into any emitter, re-disassemble the generated
-  stream at the insertion site and diff against the reference block.
-  One command (~10 s) catches what otherwise costs minutes per cycle.
-- If you already dumped correct words, embedding them is a mechanical
-  step. The moment you "remember" a constant, stop and re-dump.
+---
 
-## 2. Syscall wrapper register contract
-Incidents: sys_readbuf clobbered len(x1) with the scratch address leaving
-x2 garbage; sys_slurp shipped with the SAME missing-x2 bug hours later.
-Both passed review because nothing forced enumeration.
+## 0. THE OCCAM LADDER — mandatory ordered protocol
 
-Rule: before emitting any svc/bl sequence, write the register table as a
-comment FIRST and give every argument register an explicit producer:
-```
-// x0=fd(pop0)  x1=scratch(mov x10)  x2=len(mov x2,x1!)  x8=63
-```
-If a table cannot be written cleanly, the emitter is wrong. Interp mirrors
-hide this class (C variables don't clobber) — only JIT executes the contract.
+Debug bottom-up. Never jump tiers; every skip in history cost hours.
+Each tier lists its check and its typical cost.
 
-## 3. Harness semantics before differential debugging
-Incident: fd=-2 appeared only outside gdb; burned several cycles on
-instrument-vs-clean differences before reading exec_words main loop —
-which revealed warmup+ref double invocation, i.e., state leaks across
-calls (scratch pollution, open fds).
+**T0 · Evidence hygiene (seconds, always first)**
+- Every printed value gets an explicit expected-vs-got comparison IN THE
+  SAME BREATH. A diagnostic you don't check against an expectation is noise.
+- Decompose suspicious results arithmetically ("which w,nr,ok produce this
+  number?") before running anything new.
+- Paired structures (names↔offsets, counts↔counts) get `assert len(a)==len(b)`
+  and diff prints. Incident: 176 vs 138 both printed, mismatch ignored →
+  entry jumped mid-function → SIGSEGV hunt that the assert would have ended.
 
-Rule: when behavior differs across runs/instruments/invocations, read the
-runner's execution model first (how many calls, what resets). Any global
-state — IO scratch zone, arena cursor, fds, buffers handed to the kernel —
-must be re-initialized or explicitly terminated EVERY call, never rely on
-fresh mmap zeros.
+**T1 · Identity (seconds)**
+- Is the executed artifact the one just built? (timestamp, word count,
+  path). Incident class: stale binaries and stale /tmp scratch files
+  (y9/y8/z8.full) produced phantom mismatches repeatedly, historically.
+- Scratch files are content-addressed or regenerated immediately before
+  any comparison. Never reuse yesterday's .full.
+- Cache model known (.becache key = crc32(compiler)+crc32(kernel)) — trust
+  it without positive evidence of staleness; suspect your pipeline first.
 
-## 4. Divergence checklist (interp ≠ native/JIT) — ordered by frequency
-Check in this order before inventing new theories:
-1. Live symbols > 8 → spill machinery active? Shrink the probe to ≤8
-   bindings FIRST (syscall builtins × spills is a known-broken combo).
-2. Fast-path bail-outs: if-with-call-in-condition (fpC retargets literal
-   branches into `mov x0,x0` copies of the condition value).
-3. Scratch-zone overlap: anything writing near x28-8192 vs live data.
-4. Wrong/stale artifact being executed (verify timestamp + word count).
-5. Register protocol violations (x19–x26 symbols; x15 spill base; x27/x28
-   arena cursor/end; caller-saved x0–x14 across bl).
-The project's own BUGFIXES.md lore predicts most divergences — consult it
-before hypothesizing. Writing probe variants that isolate ONE hypothesis
-each (A/B/C/D/E style) beats patching the probe six times toward luck.
+**T2 · Known classes (minutes — consult BUGFIXES.md + this file)**
+Ordered by historical hit rate for interp≠native/JIT divergence:
+1. >8 live symbols → spill machinery. Shrink probe to ≤8 bindings FIRST.
+   (syscall builtins × spills broke twice before this was tested.)
+2. Fast-path bail-outs: if-with-call-in-condition retargets literal
+   branches into `mov x0,x0` copies of the condition value (fpC).
+3. IO scratch zone (x28-8192) overlap with live data; NUL termination of
+   every buffer handed to the kernel, EVERY call (never trust fresh mmap).
+4. Harness execution model: exec_words runs JIT TWICE (warmup+ref); state
+   leaks between calls (scratch, arena cursor, fds).
+5. Register protocol: x19–x26 symbols; x15 spill base; x27/x28 arena;
+   caller-saved x0–x14 across bl; pop() already emits ldr+addSP.
+6. Meta-language traps: nested `if` inside expressions segfaults the
+   interpreted compiler; dangling/duplicate else-if links remap registers.
 
-## 5. Two strikes ⇒ change axis, not magnitude
-Incident: seed buffer — 64 KB limit hit by beboSelf (480 KB), then
-mmap(16 MB)+read → ENOMEM, then mmap(1MB)+read → ENOMEM again. Only
-after three failures did the design pivot to file-backed mmap, which
-worked immediately.
+**T3 · Mechanical verification of artifacts (minutes)**
+- Inserted words: re-disassemble the generated stream at the insertion
+  site and diff against the reference block. Always. (~10 s.)
+- Syscall wrappers: register table comment must exist and be complete
+  (x0..x5,x8 each traced to a producer word). Missing x2=len shipped twice.
+- Interp mirror present and semantically equal? One engine green proves
+  nothing about the other.
 
-Rule: two consecutive failures along one axis falsify the axis. Stop
-tuning sizes/constants; enumerate alternative designs and pick the one
-that eliminates the failing constraint entirely.
+**T4 · Bisection & minimal repro (minutes)**
+- Shrink until the delta isolates ONE mechanism (p2/p4/p5 ladder style;
+  io_probe variants A–E). Five tiny programs beat one accreting program.
+- When several features flip behavior together, suspect the shared feature
+  first (historical: shared dispatch chain corruption).
+- Two consecutive failures along one design axis ⇒ STOP tuning it, pivot
+  to a design that eliminates the constraint entirely (64K→16M→1M ENOMEM
+  failures; file-mmap worked instantly).
 
-## 6. Paired structures get equality asserts, not eyeballs
-Incident: fn-name list (regex, 176 entries) vs OFF offsets (138) were BOTH
-printed and their mismatch ignored → entry offset pointed mid-function →
-SIGSEGV → another debug cycle. The offline mirror tool itself then died on
-an unimported module — an unverified tool driving decisions.
+**T5 · Deep tools (last resort)**
+- gdb-on-JIT: anchor break on `__clear_cache` (post-mmap); never fixed
+  addresses pre-run. Crash triage: `info proc mappings` → rwx map base →
+  offset=pc−base → word#=offset/4 → disassemble that range of the .bin.
+  exec_words is stripped — no symbol breaks.
+- Single-stepping / instrumented builds only after T0–T4 exhausted.
 
-Rule: any analysis whose conclusion depends on two lists aligning must
-`assert len(a)==len(b)` and print diffs. Run the tool to completion once,
-sanity-check its output counts, THEN consume it. A diagnostic you print
-but do not check against an expectation is noise, not evidence.
+---
 
-## 7. gdb-on-JIT recipe (do not improvise)
-- Fixed-address breakpoints fail before the JIT mapping exists ("Cannot
-  insert breakpoint"). Anchor on `__clear_cache` (runs post-mmap), then
-  set base+offset breakpoints computed from THAT run.
-- Crash triage: `info proc mappings` → find the rwx mapping →
-  offset = pc − map_base → word# = offset/4 → disassemble that word range
-  of the .bin. Two commands locate any JIT crash precisely.
-- exec_words is stripped: no function symbols. Don't try symbol breaks;
-  use `break __clear_cache`, `file:line` won't resolve either.
+## HYPOTHESIS DISCIPLINE (metacognition during the hunt)
 
-## 8. Cache model is known — trust it
-.becache keys are crc32(compiler)+crc32(kernel); edits invalidate
-automatically. Do not spend cycles suspecting staleness without positive
-evidence (print the keys if unsure). When output doesn't change after an
-edit, the edit didn't reach the executed path — verify insertion site,
-not the cache.
+- **Declare the space before probing.** Write down ≥3 candidate causes,
+  ranked simplest-first, BEFORE the first experiment. If you cannot name
+  three, you haven't understood the symptom yet — go read code.
+- **Falsifiability per experiment.** Before running, state what result
+  would KILL the hypothesis. An experiment that can't fail proves nothing.
+- **Timebox per hypothesis:** two failed falsification attempts ⇒ drop it,
+  move to next candidate (or fan out agents — see below). Historical cost:
+  io_probe spiraled ~10 iterations because the spills candidate was tested
+  last despite being documented lore.
+- **One-line journal per experiment:** `H:<hyp> | DID:<action> | GOT:<x> |
+  VERDICT:<confirmed/killed/inconclusive>`. This is the record later audits
+  reconstruct from; it also enforces T0 hygiene mechanically.
+- **Observed ≠ proven.** A rule derived while the system was in a broken
+  state inherits the brokenness. Incident: "[RULE] STRICT branch evaluation
+  confirmed mechanically" was written from a mangled dispatch-chain
+  experiment; the lazy2 micro-test later proved branches ARE lazy. Mark
+  conclusions OBSERVED (correlation) until reproduced on a clean state
+  (mechanism).
 
-## 9. Evidence hygiene
-Most bugs above printed their smoking gun at least one cycle before
-detection (the 176≠138; interp len=12 vs jit=13 pointing straight at the
-missing terminator; result values decomposing exactly into w/nr/ok parts).
-Rule: every printed diagnostic gets an explicit expected-value comparison
-in the same breath. Decompose suspicious results arithmetically (what w,
-nr, ok would produce this?) before running more experiments.
+## PARALLEL AGENT PROTOCOL
 
-## 10. Keep what works (positive patterns from this session)
-- Distinct exit codes per failure branch in seed (90 open / 91 read /
-  92 mmap) plus errno propagation (`neg x0`) — failure localized instantly.
-- Minimal repro ladder: p2 (open alone), p4 (+zeros), p5 (+read) — each
-  delta isolates one mechanism.
-- Variant bisection A–E of a misbehaving probe: five tiny programs beat
-  one accreting program.
-- `assert old.count==1` on every scripted source patch — saved silent
-  misapplication repeatedly; make it universal.
-- Execution-first verification through the real runtime path (seed) —
-  assembler-correct words can still be context-wrong; only execution is
-  ground truth.
+Single-threaded hunts through independent checks wasted wall-clock all
+session. Fan out when:
+
+- **≥2 independent hypotheses at the same tier** → one agent per hypothesis,
+  each builds its own probe and returns a verdict. Example split for an
+  interp≠JIT mismatch: agent A tests ≤8-symbol version (spills?), agent B
+  greps BUGFIXES/docs for matching symptom classes, main thread runs the
+  T1 identity checks.
+- **Independent gates** (parity driver, fuzz_selfhost, make test,
+  selfcompile ×2) → run concurrently, integrate verdicts.
+- **Artifact prep**: reference-word extraction (asm→objdump→words) can run
+  while another agent writes the emitter skeleton / interp mirror.
+
+Isolation rules (hard-won):
+- Each agent works in ITS OWN scratch namespace (`/tmp/opencode/<agent>-<topic>/`);
+  shared mutable scratch caused real phantom bugs historically.
+- Agents return structured verdicts ONLY: `VERDICT: <killed|confirmed|error>
+  EVIDENCE: <exact command output lines>`. No narratives to re-read.
+- Main thread integrates and owns all writes to the repo; agents never edit
+  shared source concurrently.
+
+## SYMPTOM → START-TIER INDEX (quick lookup)
+
+| Symptom | Start at |
+|---|---|
+| Result decomposes into correct parts + garbage tail | T2.1 spills; T2.3 scratch |
+| Works in interp, wrong in JIT | T2.1, T3 register table, T2.4 |
+| Works outside gdb, crashes inside (or vice versa) | T2.4 harness model |
+| Worked on first run, fails on second | T2.4 (warmup+ref) + T2.3 NUL |
+| Words look right but behave wrong | T3 execution ground truth; T2.5 protocol |
+| Entry/jump lands somewhere weird | T0 paired-count asserts (OFF table) |
+| Everything breaks after a "small" emitter edit | T2.6 chain links; T3 diff |
+
+## RULES ABOUT RULES (meta)
+
+- A rule exists only WITH: incident link, trigger (when it applies),
+  action, and rough cost of compliance. Narrative-only rules die unused —
+  v1's "objdump-only constants" predates the very transcription errors it
+  forbids, because it had no trigger attached to the moment of typing.
+- Laws (mechanical, zero-tolerance: word pipeline, register tables,
+  equality asserts, post-insert diff) are separated from heuristics
+  (ladder order, pivots). Violating a law is a bug in the work; violating
+  a heuristic is a judgment call to log.
+- Sunset clause: if a rule fires false twice, rewrite or retire it in the
+  same commit that discovers it. Keep the index short enough to recall at
+  the decision moment.
+
+## LAWS (condensed, zero-tolerance)
+
+L1. Words: asm → objdump → script → LE int → scripted insert → **disassembly
+    diff at insertion site**. Hand-typing a constant is a defect.
+L2. Syscall/bl wrappers: full register table comment before emission;
+    every argument register has a producer.
+L3. Scripted source patches carry `assert old.count==1`; analysis tools
+    run to completion and their outputs are sanity-checked before use.
+L4. Buffers handed to the kernel are explicitly terminated every call.
+L5. Both engines (interp + JIT) verified for any new builtin/emitter; a
+    silently-wrong reference is reverted, not documented-and-kept
+    (compound-ops precedent).
+
+## KEEP (positive patterns, session-proven)
+
+Distinct exit codes per failure branch + errno propagation (`neg x0`);
+minimal-repro ladders; variant bisection A–E; `info proc mappings` crash
+triage; execution-first verification through the real runtime path (seed)
+— assembler-correct words can still be context-wrong; reverting silently-
+wrong features instead of documenting around them.
