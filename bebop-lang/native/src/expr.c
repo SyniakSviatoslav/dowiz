@@ -716,27 +716,107 @@ static Term *parse_bin(P *p, int min_prec) {
     return lhs;
 }
 
-/* Sequence: expr (';' expr)*  — desugars to nested let (_sN = e in rest).
- * This is the statement-level surface for multi-line fn bodies. */
+/* Sequence: expr (';' expr)*  — recursive: LET(_sN, e1, rest) chains the
+ * environment forward so every later item sees earlier bindings.
+ * Compound statements IDENT (+|-|*|/|%)= expr lower to
+ *   LET(IDENT, IDENT OP expr, rest)
+ * whose env node persists through the rest of the sequence (mutation). */
+static int seq_compound_peek(P *p, char *name, size_t cap, BinOp *op, long *after_op) {
+    long save = p->pos;
+    skip_ws(p);
+    if (!(isalpha((unsigned char)p->s[p->pos]) || p->s[p->pos] == '_')) return 0;
+    long q = p->pos;
+    while (is_ident_cont(p->s[q])) q++;
+    long len = q - p->pos;
+    if (len <= 0 || (size_t)len >= cap) { p->pos = save; return 0; }
+    long q2 = q;
+    while (p->s[q2] == ' ' || p->s[q2] == '\t') q2++;
+    char c0 = p->s[q2], c1 = p->s[q2 + 1];
+    if (c1 != '=') { p->pos = save; return 0; }
+    switch (c0) {
+        case '+': *op = BOP_ADD; break;
+        case '-': *op = BOP_SUB; break;
+        case '*': *op = BOP_MUL; break;
+        case '/': *op = BOP_DIV; break;
+        case '%': *op = BOP_MOD; break;
+        default: p->pos = save; return 0;
+    }
+    for (long i = 0; i < len; i++) name[i] = p->s[p->pos + i];
+    name[len] = '\0';
+    /* reject '==' style accidents: op char cannot be '=' */
+    *after_op = q2 + 2;
+    return 1;
+}
+
 static Term *parse_seq(P *p) {
+    {
+        char cname[64];
+        BinOp cop;
+        long after_op = 0;
+        if (seq_compound_peek(p, cname, sizeof cname, &cop, &after_op)) {
+            p->pos = after_op;
+            Term *rhs = parse_expr(p);
+            if (!rhs) return NULL;
+            static char cn0[8][64];
+            static int ci0 = 0;
+            snprintf(cn0[ci0], sizeof cn0[0], "%s", cname);
+            Term *vx = tnew();
+            Term *b = tnew();
+            if (!vx || !b) { err(p, "term pool exhausted"); return NULL; }
+            vx->kind = TERM_VAR;
+            vx->name = cn0[ci0];
+            b->kind = TERM_BIN;
+            b->op = cop;
+            b->a = vx;
+            b->b = rhs;
+            skip_ws(p);
+            Term *rest;
+            int final1 = 0;
+            if (p->s[p->pos] == ';') {
+                p->pos++;
+                skip_ws(p);
+                if (p->s[p->pos] == '}' || p->s[p->pos] == '\0') final1 = 1;
+                else rest = parse_seq(p);
+            } else {
+                /* no separator: end of body */
+                final1 = 1;
+            }
+            if (final1) {
+                Term *selfr = tnew();
+                if (!selfr) { err(p, "term pool exhausted"); return NULL; }
+                selfr->kind = TERM_VAR;
+                selfr->name = cname;
+                rest = selfr;
+            }
+            int ci = ci0;
+            char (*cn)[64] = cn0;
+            Term *l = tnew();
+            if (!l) { err(p, "term pool exhausted"); return NULL; }
+            l->kind = TERM_LET;
+            l->name = cn[ci];
+            l->a = b;
+            l->b = rest;
+            ci = (ci + 1) & 7;
+            return l;
+        }
+    }
     Term *first = parse_expr(p);
     if (!first) return NULL;
     skip_ws(p);
-    while (p->s[p->pos] == ';') {
+    if (p->s[p->pos] == ';') {
         p->pos++;
-        Term *next = parse_expr(p);
-        if (!next) return NULL;
-        Term *l = tnew();
-        if (!l) { err(p, "term pool exhausted"); return NULL; }
+        Term *rest = parse_seq(p);
+        if (!rest) return NULL;
         static char tmp[24];
         static int ti = 0;
+        Term *l = tnew();
+        if (!l) { err(p, "term pool exhausted"); return NULL; }
         snprintf(tmp, sizeof tmp, "_s%d", ti++);
         l->kind = TERM_LET;
         l->name = tmp;
         l->a = first;
-        l->b = next;
+        l->b = rest;
         first = l;
-        skip_ws(p);
     }
     return first;
 }

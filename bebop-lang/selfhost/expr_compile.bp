@@ -793,7 +793,10 @@ fn emit_binop(insns: [i64], n: [i64], op: i64) -> i64 {
   let weor = if op == 14 then 3389063168 else 0;
   let wshl = if op == 15 then 2596347904 else 0;
   let wshr = if op == 16 then 2596348928 else 0;
-  let _ = em(insns, n, wadd + wsub + wmul + wdiv + wand + worr + weor + wshl + wshr);
+  // modulo (op 11): a % b via mov x2,x0; sdiv x0,x0,x1; msub x0,x0,x1,x2
+  let is_md = if op == 11 then 1 else 0;
+  let _ = if is_md == 1 then (let _ = em(insns, n, 2852127714) in (let _ = em(insns, n, 2596342784) in (let _ = em(insns, n, 2600568832) in 0))) else 0;
+  let _ = if is_md == 0 then (let _ = em(insns, n, wadd + wsub + wmul + wdiv + wand + worr + weor + wshl + wshr) in 0) else 0;
   let _ = push(insns, n);
   n[0]
 }
@@ -1473,6 +1476,31 @@ fn emit_let_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
 // ENDS at the first ';' outside parens (parity bug: the old body parser ran
 // one expression to end-of-input, letting `if c then a else b; rest`
 // swallow the rest into the else branch).
+// Compound statement item: IDENT (+|-|*|/|%)= expr ';'
+// Lowers to shadow-rebind: reg = sym_bind(name); old -> stack; rhs ->
+// stack; binop; bind_reg(reg). Consumes the trailing ';'.
+fn emit_compound_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let name = read_ident(s, pos);
+  let reg0 = sym_lookup(stab, name);
+  let _ = skip_ws(s, pos);
+  let opch = if pos[0] >= str_len(s) then 0 else char(s, pos[0]);
+  let is_add = if opch == 43 then 1 else 0;
+  let is_sub = if opch == 45 then 1 else 0;
+  let is_mul = if opch == 42 then 1 else 0;
+  let is_div = if opch == 47 then 1 else 0;
+  let is_mod = if opch == 37 then 1 else 0;
+  let opcode = is_add * 2 + is_sub * 3 + is_mul * 4 + is_div * 5 + is_mod * 11;
+  let _ = pos[0] = pos[0] + 2;
+  let _ = emit_var(insns, n, reg0);
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = emit_binop(insns, n, opcode);
+  let _ = pop(insns, n, 0);
+  let _ = bind_reg(insns, n, reg0);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  n[0]
+}
+
 fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], cx: [i64], st: [i64]) -> i64 {
   let done = 0;
   let lastf = 0;
@@ -1509,7 +1537,27 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     let is_item = (1 - at_close) * (1 - at_end0);
     let _ = if is_item * is_let == 1 then emit_let_stmt(s, pos, insns, n, stab, selfname, selfstart, fntab, cx, st) else 0;
     let _ = if is_item * is_while == 1 then emit_while_stmt(s, pos, insns, n, stab, selfname, selfstart, fntab, cx, st) else 0;
-    let is_expr = is_item * (1 - is_let) * (1 - is_while);
+    // compound statement? ident-start (not let/while) followed by ws + one of +-*/% then '='
+    let id_start = is_alpha(ch) * (1 - is_let) * (1 - is_while);
+    let wq = pos[0];
+    let id_go = id_start;
+    while id_go == 1 {
+      let ccq = if wq >= strn then 0 else char(s, wq);
+      let g_a = is_alpha(ccq);
+      let g_d = (if ccq >= 48 then 1 else 0) * (if ccq <= 57 then 1 else 0);
+      let g_u = if ccq == 95 then 1 else 0;
+      let adv = g_a + g_d + g_u;
+      let wq = wq + adv;
+      let id_go = adv;
+      0
+    };
+    let wq2 = if wq >= strn then wq else wq + (if char(s, wq) == 32 then 1 else 0);
+    let oc = if wq2 >= strn then 0 else char(s, wq2);
+    let nc = if wq2 + 1 >= strn then 0 else char(s, wq2 + 1);
+    let ok_op = (if oc == 43 then 1 else 0) + (if oc == 45 then 1 else 0) + (if oc == 42 then 1 else 0) + ((if oc == 47 then 1 else 0) * (if nc != 47 then 1 else 0)) + (if oc == 37 then 1 else 0);
+    let is_compound = id_start * (if nc == 61 then ok_op else 0);
+    let _ = if is_item * is_compound == 1 then emit_compound_stmt(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
+    let is_expr = is_item * (1 - is_let) * (1 - is_while) * (1 - is_compound);
     let nb_item = n[0];
     // F3 refined: dead-value suppression applies ONLY to the final expr
     // item of a while body (lookahead: next non-ws char is rbrace / EOF)

@@ -359,3 +359,21 @@ body sits INSIDE the then-arm and contains no competing call).
 
 C-host hvham2 + selfhost hvham(3-arg) remain green: hh/hh2/hz2/disc
 were interp==native before today's spiral; re-verify after re-land.
+
+## Compound assignment operators (+= -= *= /= %=) — LANDED with limits
+
+- C host: recursive parse_seq + seq_compound_peek; compound lowers to
+  LET(name, BIN(VAR name, rhs), rest) — the env chain carries the rebind
+  forward. Name-lifetime fixed via ring buffer (stack cname was dangling).
+- Selfhost: emit_compound_stmt in emit_body item dispatch (ident-start,
+  not let/while, ws + op pair). Legacy binop extended with MOD (op 11):
+  mov x2,x0 / sdiv x0,x0,x1 / msub x0,x0,x1,x2 — assembler-verified
+  2852127714/2596342784/2600568832.
+- VERIFIED green: scalar chains outside loops (c1=44), all five ops
+  (c2=32187), single compound per while-body (t5=40), while+let-mix.
+- KNOWN LIMIT: TWO OR MORE compounds inside one while body break eval
+  (acc reads as 0 / eval error) — env in_while mutation interacts badly
+  with consecutive value-position LETs under the recursive seq. Do NOT
+  use that shape until fixed; parity corpus deliberately excludes it.
+- Also fixed en route: legacy binop emitted a ZERO word for any op not
+  in its table (SIGILL source).
