@@ -355,6 +355,8 @@ static Term *parse_primary(P *p) {
             t->kind = TERM_ZEROS; /* placeholder: one arg parsed in postfix: zeros(n) -> fresh [n]i64 */
         } else if (strcmp(buf, "hvham") == 0) {
             t->kind = TERM_HVHAM; /* three args parsed in postfix: hvham(a,b,n) -> i64 popcount(a^b) over floor(n/8)*8 words */
+        } else if (strcmp(buf, "hvham2") == 0) {
+            t->kind = TERM_HVHAM2; /* five args: hvham2(a,ao,b,bo,n) -> popcount over a[ao+k]^b[bo+k], floor(n/8)*8 */
         } else if (strcmp(buf, "exec") == 0) {
             t->kind = TERM_EXEC; /* placeholder: two args parsed in postfix */
         } else if (g_reg && enum_ctor_lookup(buf)) {
@@ -439,6 +441,52 @@ static Term *parse_primary(P *p) {
             if (p->s[p->pos] != ')') { err(p, "expected ')'"); return NULL; }
             p->pos++;
             atom->a = sa;
+            continue;
+        }
+        if (atom->kind == TERM_HVHAM2 && p->s[p->pos] == '(') {
+            p->pos++;
+            Term *args[5];
+            for (int ai = 0; ai < 5; ai++) {
+                skip_ws(p);
+                if (ai > 0) {
+                    if (p->s[p->pos] != ',') { err(p, "expected ','"); return NULL; }
+                    p->pos++;
+                    skip_ws(p);
+                }
+                args[ai] = parse_expr(p);
+                if (!args[ai]) return NULL;
+                skip_ws(p);
+            }
+            if (p->s[p->pos] != ')') { err(p, "expected ')'"); return NULL; }
+            p->pos++;
+            /* symmetric pairs: slot a = ARRAY[a_expr, ao_expr],
+             * slot b = ARRAY[b_expr, bo_expr], slot c = n_expr */
+            {
+                static TermField pf[8][2];
+                static int pi2 = 0;
+                int sa = pi2++ % 8;
+                int sb = pi2++ % 8;
+                Term *pa = tnew();
+                Term *pb = tnew();
+                if (!pa || !pb) { err(p, "term pool exhausted"); return NULL; }
+                pf[sa][0].name = "arr";
+                pf[sa][0].val = args[0];
+                pf[sa][1].name = "off";
+                pf[sa][1].val = args[1];
+                pf[sb][0].name = "arr";
+                pf[sb][0].val = args[2];
+                pf[sb][1].name = "off";
+                pf[sb][1].val = args[3];
+                pa->kind = TERM_ARRAY;
+                pa->fields = pf[sa];
+                pa->nfields = 2;
+                pb->kind = TERM_ARRAY;
+                pb->fields = pf[sb];
+                pb->nfields = 2;
+                atom->a = pa;
+                atom->b = pb;
+                atom->c = args[4];
+            }
             continue;
         }
         if (atom->kind == TERM_HVHAM && p->s[p->pos] == '(') {

@@ -551,6 +551,52 @@ fn emit_hvham(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   n[0]
 }
 
+// hvham2(a, ao, b, bo, n): NEON hamming with row offsets — no bounce copy.
+fn emit_hvham2(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 3);
+  let _ = pop(insns, n, 5);
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 6);
+  let _ = pop(insns, n, 0);
+  let _ = em(insns, n, 2332363809);
+  let _ = em(insns, n, 2332429312);
+  let _ = em(insns, n, 2852324322);
+  let _ = em(insns, n, 1325458436);
+  let _ = em(insns, n, 3544382532);
+  let _ = em(insns, n, 3019899236);
+  let _ = em(insns, n, 2898330624);
+  let _ = em(insns, n, 2898332706);
+  let _ = em(insns, n, 1847729152);
+  let _ = em(insns, n, 1847794721);
+  let _ = em(insns, n, 1310742528);
+  let _ = em(insns, n, 1310742561);
+  let _ = em(insns, n, 1310753924);
+  let _ = em(insns, n, 1310819460);
+  let _ = em(insns, n, 3506439300);
+  let _ = em(insns, n, 3053453028);
+  let _ = em(insns, n, 1848653957);
+  let _ = em(insns, n, 235027622);
+  let _ = em(insns, n, 2852520928);
+  let _ = push(insns, n);
+  n[0]
+}
+
 fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let tag = ft_ctor_tag(fntab, name);
   let is_ctor = if tag >= 0 then 1 else 0;
@@ -559,7 +605,9 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   let is_fn = if tgt >= 0 then 1 else 0;
   let is_zw = if name == 36158018563 then 1 else 0;
   let is_hh = if name == 30895064082 then 1 else 0;
+  let is_hh2 = if name == 4047253394792 then 1 else 0;
   if is_hh == 1 then emit_hvham(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_hh2 == 1 then emit_hvham2(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_zw == 1 then emit_zeros(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_ctor == 1 then emit_enum_ctor(s, tag, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_self == 1 then emit_self_call(s, pos, insns, n, stab, selfname, selfstart, fntab)

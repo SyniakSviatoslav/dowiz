@@ -57,17 +57,8 @@ fn main() -> i64 {
   let bestd = 1073741824;
   let i2 = 0;
   while i2 < kk {
-    // NEON hamming over the whole key row in one builtin call.
-    // Row pointer arithmetic is done by the array itself: pass rows via a
-    // small bounce copy so hvham sees contiguous [16] words.
-    let row = zeros(n);
-    let j2 = 0;
-    while j2 < n {
-      let _ = row[j2] = mem[i2 * n + j2];
-      let j2 = j2 + 1;
-      0
-    };
-    let d = hvham(row, q, n);
+    // NEON hamming straight over the mem slice: no bounce copy.
+    let d = hvham2(mem, i2 * n, q, 0, n);
     let take = if d < bestd then 1 else 0;
     let best = if take == 1 then i2 else best;
     let bestd = if take == 1 then d else bestd;

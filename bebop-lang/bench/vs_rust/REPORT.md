@@ -249,7 +249,14 @@ C and Rust on its own turf fits in a single micro-packet.
 
 | kernel | what | native (min of 31) | correctness |
 |--------|------|--------------------|-------------|
-| k7 | VSA associative memory: 8 key->value 1024-bit HVs, noisy query (16 flipped bits), nearest-key resolve + value checksum | **35.7 µs** | interp==native==python ref |
+| k7 (SWAR) | VSA associative memory: 8 key->value 1024-bit HVs, noisy query, nearest-key resolve | 35.7 µs | interp==native==python |
+| k7neon2 | same, NEON hvham2 with row-offset args (no bounce copy) | **23.0 µs** | interp==native==python |
+
+hvham/hvham2 are now LANGUAGE BUILTINS: the self-hosted compiler emits
+the verified NEON sequence (ldp q-pairs, eor, cnt, uaddlv) inline;
+the C-host interpreter mirrors semantics via __builtin_popcountll.
+hvham2 takes row offsets directly — zero-copy Hamming over slices of a
+flat memory block.
 
 hv_stdlib.bp ships the L3 primitives as plain .bp functions:
 SWAR popcount, seeded word generator, XOR bind-in-place, Hamming
