@@ -542,3 +542,24 @@ Next session: trace which emitter function OWNS the b-into-middle jump
 a balanced pair on BOTH paths, then sim->zero, regen, rebuild, M3 gate.
 All tooling in place: tools/depth_sim.py, kill-switch already in, ladder
 probes P9..R14 in /tmp/opencode/m3/{p9,r}.
+
+## [OPEN->MINIMAL] 10-line repro of the wild-ret emitter bug (2026-08-25)
+
+MIN3.bp (repo root of scratch /tmp/opencode/m3/r/, copied to tools/repro/):
+9-param fn, body =
+  let _ = if fok == 0 then (let _ = skip_ws(s,pos) in (let _ = pos[0]=pos[0]+1 in 0)) else 0;
+  n[0]
+depth_sim flags merge@90 (2 vs 1). Disasm shows duplicated base-push and a
+branch landing mid-sequence. Discrimination matrix:
+- named vars instead of _: CLEAN (V1)
+- 8 params (no spill): CLEAN (MIN4)
+- no if (paren-wrapped same chain): CLEAN (V2)
+- same-name twice (not thrice): CLEAN (V3,V4)
+- single nesting level: CLEAN (V6,V7)
+=> trigger = if-arm + TRIPLE rebind of one spill-slot name through nested
+   let-in chain whose innermost body is an array assignment.
+Suspect: emit_cond arm emission interacting with emit_let_in when
+sym_bind REUSES an existing spilled binding (existing<0 path skipped),
+possibly double-evaluating or mis-ordering the arm's push. Fix hint:
+audit emit_cond's then/else emission when inner lets rebind an existing
+spill symbol; compare word streams MIN3 (broken) vs V1 (clean).
