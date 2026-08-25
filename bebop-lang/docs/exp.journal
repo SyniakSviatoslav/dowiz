@@ -25,3 +25,5 @@
 1787722200 H:singles-all-flag DID:per-statement bisect of emit_while_stmt GOT:85/90 statements flag standalone VERDICT:inconclusive (systematic idiom, not one bad line; suspect statement-if discard-pop path in emit_body or wbrw/G2 peephole patch sites)
 1787726000 H:minimal-statement-if-spill DID:ddmin over emit_while_stmt statements GOT:single-statement repro MIN3.bp VERDICT:confirmed
 1787726100 H:spill-bind-discriminator DID:V1-V7 matrix GOT:dirty ONLY when if-arm holds DOUBLE-nested let-_ chain w/ array-assign (triple bind to same spill slot); named vars / 8params / no-if / single-level all CLEAN VERDICT:confirmed
+1787729000 H:rename-discard-binds DID:zz-rewrite 58 sites GOT:violations IDENTICAL (10 fns, same offsets) VERDICT:killed (discriminator is NOT the bind name; suspect sym_bind REUSE order/count on spilled slots inside emit_cond arms)
+1787729100 H:next-session-plan DID:n/a GOT:instrument sym_bind trace (name,hash,new/existing,reg) during compilewords of MIN3 vs V1; diff bind sequences; the first divergence = bug site VERDICT:planned
