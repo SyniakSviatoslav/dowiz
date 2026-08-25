@@ -14,3 +14,9 @@
 1787712300 H:param9-spill-unwritten DID:P9/P10/Q2 ladder GOT:p9-reads-0 jit-only VERDICT:confirmed
 1787712400 H:prologue-mov-x27-x8-clobbers-arena DID:patch both prologue loops str-xj-[x15-slot] enc-from-objdump GOT:P9=22 P10=10 P11=21 Q1=2 Q2=9 P13=4 all==interp VERDICT:confirmed
 1787712500 H:full-chain-still-segv-at-collect_ctors-kslot DID:rebuild A.full bad-bl=0 P-ladder green; segv persists GOT:same-site w7532 ldr[x2+x1lsl3] slot0=0 VERDICT:inconclusive (next: correct SP-balance verifier incl pre/post-index push/pop; suspect epilogue leak overlapping sibling frames)
+1787718000 H:find_enum-no-comment-skip DID:lexical-fix-like-find_fn GOT:selfsrc-contains-'enum '-in-comments/strings->phantom VERDICT:confirmed
+1787718100 H:stale-selfsrc-snapshot DID:regen-after-edit(L9) GOT:stream-93580→94388 VERDICT:confirmed (gen_selfsrc embeds source snapshot; ALWAYS regen)
+1787718200 H:char-on-zeros-outside-interp-model DID:R14/R15 probes GOT:'eval error' VERDICT:confirmed (interp oracle invalid for char/syscall programs; artifact-vs-artifact only)
+1787718300 H:fpC-cluster-sp-violations DID:symbolic-depth-sim over all spans GOT:10 fns flagged incl emit_while_stmt(merge x3)+run_program(ret -1,visually verified str-push+double-pop) VERDICT:confirmed
+1787718400 H:fastpath-isolate DID:kill-switch 3 sites has_spills==999/1==999/is_expr==999 GOT:different failure(Bus err,SP~exhausted,PC-in-heap); legacy too recursion-deep for env VERDICT:inconclusive
+1787718500 H:nested-if-in-mul-idiom DID:T1/T2 hoisted-vs-nested GOT:both 29 correct both engines VERDICT:killed (idiom itself clean; real emitter-side merge bug still unfound)

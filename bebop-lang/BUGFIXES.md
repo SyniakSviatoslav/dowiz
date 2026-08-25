@@ -487,3 +487,37 @@ then diff epilogue of the leaking fn against its prologue shape.
 Harness notes: agent pack entry arg is BYTES (word*4); bebopc run usage
 is (file.bp, fn_name); interp has no syscall builtins (slurp probes must
 go through JIT/seed).
+
+## [OPEN→TOOLING] SP-depth simulator + isolated offender set (2026-08-25)
+
+tools/depth_sim.py symbolically tracks the 16B temp-slot stack through
+every emitted fn (b/b.cond/cbz/cbnz/bl/ret, add/sub-imm on sp, stp/ldp
+pre/post). On the current selfsrc stream it flags exactly 10 fns:
+emit_while_stmt (3 merge conflicts, ACTIVE on every compiled while),
+run_program (ret depth -1; visually confirmed str-push + double-pop at
+exit), and the fpC fast-path cluster fpC_pushr/ifcore/factor/bitlvl/
+term/expr/val/cond (ret deltas -2..-12).
+
+Fastpath kill-switch (3 emit_fast_v2 sites gated to never fire) moves
+the failure to stack-exhaustion Bus error: legacy path recurses too deep
+for the proot env. So neither path completes M3 today.
+
+Next-session ladder:
+1. Fix emit_while_stmt source first (active on all while loops): use the
+   sim offsets to find the asymmetric arm; hoist side-expressions into
+   lets (T1/T2 proved hoisting is semantics-preserving on both engines).
+2. Re-run sim after each fix; expect flag count to shrink.
+3. run_program + fpC cluster follow. Then re-enable fastpath OR keep the
+   kill-switch until frame sizes shrink (16KB/frame is the recursion
+   budget eater).
+4. M3 gate: beboSelf(selfsrc) == compilewords(selfsrc) word-for-word,
+   then beboSelf(k1..k7) byte-identical vs toolchain.
+
+Harness facts (burned cycles this session):
+- agent pack argv4 = entry BYTE offset (word*4), not word index.
+- bebopc run <file.bp> <fn_name> — interp has NO syscall builtins and
+  char() on zeros()-arrays raises "eval error": interp oracle is only
+  valid for pure-compute probes. Differential testing must be
+  artifact-vs-artifact (compilewords stream vs beboSelf stream).
+- gen_selfsrc.sh embeds a SOURCE SNAPSHOT: regenerate after every
+  expr_compile.bp edit or you debug stale code (L9).

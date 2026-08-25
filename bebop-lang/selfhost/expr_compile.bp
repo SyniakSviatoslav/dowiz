@@ -286,25 +286,41 @@ fn emit_field_access(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64]) ->
 
 // Scan for the first enum declaration ("enum "); record pos in out[0].
 fn find_enum(s: str, out: [i64]) -> i64 {
+  // Lexical scan: skips strings/comments (same discipline as find_fn).
+  // Raw scanning matched "enum " inside comments and string literals of
+  // the compiler's own source -> phantom decl -> collect_ctors loop over
+  // garbage with names[] overrun. Self-source is the first input that
+  // actually contains those tokens.
   let strn = str_len(s);
   let j = 0;
   let found = 0;
   let best = strn;
+  let spc = [0];
+  let cpc = [0];
   while j + 4 < strn {
     let c0 = char(s, j);
     let c1 = char(s, j + 1);
     let c2 = char(s, j + 2);
     let c3 = char(s, j + 3);
     let c4 = char(s, j + 4);
+    let is_quote = if c0 == 34 then 1 else 0;
+    let is_sl = if c0 == 47 then 1 else 0;
+    let is_sl2 = if c1 == 47 then 1 else 0;
+    let is_comment = is_sl * is_sl2;
     let is_e = if c0 == 101 then 1 else 0;
     let is_n = if c1 == 110 then 1 else 0;
     let is_u = if c2 == 117 then 1 else 0;
     let is_m = if c3 == 109 then 1 else 0;
     let is_sp = if c4 == 32 then 1 else 0;
-    let hit = is_e * is_n * is_u * is_m * is_sp;
+    let hit = is_e * is_n * is_u * is_m * is_sp * (1 - is_quote) * (1 - is_comment);
     let best = if hit == 1 then j else best;
     let found = if hit == 1 then 1 else found;
-    let j = j + 1;
+    let _ = spc[0] = j;
+    let _ = cpc[0] = j;
+    let _ = if is_quote == 1 then skip_string(s, spc) else 0;
+    let _ = if is_comment == 1 then skip_line_comment(s, cpc) else 0;
+    let jnext = (j + 1) * (1 - is_quote - is_comment - hit) + spc[0] * is_quote + cpc[0] * is_comment;
+    let j = if hit == 1 then j + 5 else jnext;
     0
   };
   let _ = out[0] = best;
@@ -1610,7 +1626,7 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   // never invoked when spills are present (an eager false-success there
   // skips rollback and poisons the legacy re-parse position).
   let fokc = [0];
-  let _ = if has_spills == 0 then (let _ = fokc[0] = emit_fast_v2(s, pos, insns, n, stab, cx, st, 2, fntab) in 0) else 0;
+  let _ = if has_spills == 999 then (let _ = fokc[0] = emit_fast_v2(s, pos, insns, n, stab, cx, st, 2, fntab) in 0) else 0;
   let fok = fokc[0];
   let hasc = cx[20] * fok;
   let lsl = cx[21];
@@ -1706,7 +1722,7 @@ fn emit_let_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let nb_v = n[0];
-  let fv = if 1 == 1 then emit_fast_v2(s, pos, insns, n, stab, cx, st, 1, fntab) else 0;
+  let fv = if 1 == 999 then emit_fast_v2(s, pos, insns, n, stab, cx, st, 1, fntab) else 0;
   let _ = if fv == 0 then emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
@@ -1848,7 +1864,7 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     let fin_brace = if cE == 125 then 1 else 0;
     let fin_eof = if pos[0] >= strnE then 1 else 0;
     let _ = cx[28] = is_expr * (fin_brace + fin_eof);
-    let fvv = if is_expr == 1 then emit_fast_v2(s, pos, insns, n, stab, cx, st, 1, fntab) else 0;
+    let fvv = if is_expr == 999 then emit_fast_v2(s, pos, insns, n, stab, cx, st, 1, fntab) else 0;
     let _ = cx[28] = 0;
     let was_fast = fvv;
     let lastf = was_fast * is_expr + lastf * (1 - is_expr);
