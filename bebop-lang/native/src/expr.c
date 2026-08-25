@@ -353,6 +353,8 @@ static Term *parse_primary(P *p) {
             t->kind = TERM_STR_LEN; /* placeholder: one arg parsed in postfix */
         } else if (strcmp(buf, "zeros") == 0) {
             t->kind = TERM_ZEROS; /* placeholder: one arg parsed in postfix: zeros(n) -> fresh [n]i64 */
+        } else if (strcmp(buf, "hvham") == 0) {
+            t->kind = TERM_HVHAM; /* three args parsed in postfix: hvham(a,b,n) -> i64 popcount(a^b) over floor(n/8)*8 words */
         } else if (strcmp(buf, "exec") == 0) {
             t->kind = TERM_EXEC; /* placeholder: two args parsed in postfix */
         } else if (g_reg && enum_ctor_lookup(buf)) {
@@ -437,6 +439,28 @@ static Term *parse_primary(P *p) {
             if (p->s[p->pos] != ')') { err(p, "expected ')'"); return NULL; }
             p->pos++;
             atom->a = sa;
+            continue;
+        }
+        if (atom->kind == TERM_HVHAM && p->s[p->pos] == '(') {
+            p->pos++;
+            Term *aa = parse_expr(p);
+            if (!aa) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ',') { err(p, "expected ','"); return NULL; }
+            p->pos++;
+            Term *ab = parse_expr(p);
+            if (!ab) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ',') { err(p, "expected ','"); return NULL; }
+            p->pos++;
+            Term *an = parse_expr(p);
+            if (!an) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ')') { err(p, "expected ')'"); return NULL; }
+            p->pos++;
+            atom->a = aa;
+            atom->b = ab;
+            atom->c = an;
             continue;
         }
         if (atom->kind == TERM_STR_LEN && p->s[p->pos] == '(') {

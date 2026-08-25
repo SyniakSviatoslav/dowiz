@@ -312,12 +312,16 @@ Assembler-verified AArch64 sequence (objdump-checked), 15 distinct words:
   uaddlv h5,v4.16b    = 1848653957
   umov w6,v5.h[0]     = 235027622
   mov x0,x6           = 2852520928   (NOT 2852520704 — that decodes to orr x0,x24,x6!)
-Single-chunk n=8 PROVEN working end-to-end (result=8). Multi-chunk hit a
-wall: strict branch evaluation in the meta-language emits BOTH tails;
-done-cell guard did not help; root cause of the residual SIGILL not
-isolated before budget ran out. C-host interp side is DONE (lexer,
-postfix 3-arg parse, typecheck, subst/norm/conv/termination switches,
-eval via __builtin_popcountll, floor(n/8)*8 contract). Next session:
-single-path loop form only (no literal/var branching — the var layout
-above handles every n), wire emit_hvham(s,pos,...) with args-parse +
-pops + this block + push; then parity probes.
+[RESOLVED SAME SESSION] Single-path emitter restored from this table
+and shipped. TWO real bugs found past the rollback point:
+1. CHUNK SIZE: `ldp q0,q1` covers 32 BYTES = 4 WORDS per iteration,
+   not 8 — the chunk counter must be `lsr x4,x2,#2` = 3544382532
+   (not #3/3544448068). The "x2=n-8" theory was wrong; a two-marker
+   discriminating probe (markers in chunk1 AND chunk2) separated the
+   hypotheses in one run.
+2. STRICT BRANCHES confirmed again: both tail variants always emit;
+   never dispatch emitters through if/else — use single-path forms.
+Status: hh=12, hh2=8, disc=16, hz2=8 all interp==native; parity corpus
++1 (hvham_neon). k7neon variant uses the builtin (same checksum;
+bounce-copy of rows currently caps the win at ~20% — direct row-slice
+args are the follow-up).

@@ -127,6 +127,7 @@ typedef enum {
     TERM_DEREF_PTR, /* *e: t->a = pointer expr, returns pointee */
     TERM_EXEC,    /* exec(words, count, arg0): mmap+run array of AArch64 words; t->a=words, t->b=count, t->c=arg0 */
     TERM_ZEROS,   /* zeros(n): fresh zeroed [n]i64 array (heap-backed via arena) */
+    TERM_HVHAM,   /* hvham(a,b,n): popcount(a^b) over floor(n/8)*8 words (NEON in codegen) */
 } TermKind;
 
 typedef enum {

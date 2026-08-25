@@ -514,6 +514,43 @@ fn emit_self_call(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   n[0]
 }
 
+// hvham(a, b, n): NEON popcount of a^b over floor(n/8)*8 words.
+// Single-path loop form (works for any n%8==0). Dossier: BUGFIXES.md.
+fn emit_hvham(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 2);
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 0);
+  // ldp q0,q1 covers 32 BYTES = 4 words per iteration -> divide by 4
+  let _ = em(insns, n, 3544382532);
+  let _ = em(insns, n, 3019899236);
+  let _ = em(insns, n, 1325458436);
+  let _ = em(insns, n, 2898330624);
+  let _ = em(insns, n, 2898332706);
+  let _ = em(insns, n, 1847729152);
+  let _ = em(insns, n, 1847794721);
+  let _ = em(insns, n, 1310742528);
+  let _ = em(insns, n, 1310742561);
+  let _ = em(insns, n, 1310753924);
+  let _ = em(insns, n, 1310819460);
+  let _ = em(insns, n, 3506439300);
+  let _ = em(insns, n, 3053453028);
+  let _ = em(insns, n, 1848653957);
+  let _ = em(insns, n, 235027622);
+  let _ = em(insns, n, 2852520928);
+  let _ = push(insns, n);
+  n[0]
+}
+
 fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let tag = ft_ctor_tag(fntab, name);
   let is_ctor = if tag >= 0 then 1 else 0;
@@ -521,7 +558,9 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   let tgt = fntab_lookup(fntab, name);
   let is_fn = if tgt >= 0 then 1 else 0;
   let is_zw = if name == 36158018563 then 1 else 0;
-  if is_zw == 1 then emit_zeros(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  let is_hh = if name == 30895064082 then 1 else 0;
+  if is_hh == 1 then emit_hvham(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_zw == 1 then emit_zeros(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_ctor == 1 then emit_enum_ctor(s, tag, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_self == 1 then emit_self_call(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_fn == 1 then emit_bl_call(s, name, pos, insns, n, stab, selfname, selfstart, fntab)

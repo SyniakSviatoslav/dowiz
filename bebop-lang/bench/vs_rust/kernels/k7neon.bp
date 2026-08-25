@@ -1,0 +1,87 @@
+// K7: VSA associative memory. K key->value pairs stored as 1024-bit HVs;
+// a noisy query resolves to the nearest key (Hamming) and returns the
+// bound value's checksum. Pure Bebop, self-hosted compile, native run.
+fn hv_pop1(w: i64) -> i64 {
+  let m1 = 6148914691236517205;
+  let m2 = 3689348814741910323;
+  let mh = 1085102592571150095;
+  let x = w - ((w >> 1) & m1);
+  let x = (x & m2) + ((x >> 2) & m2);
+  let x = (x + (x >> 4)) & mh;
+  let x = x + (x >> 8);
+  let x = x + (x >> 16);
+  let x = x + (x >> 32);
+  x - (x / 128) * 128
+}
+fn hv_word(seed: i64, i: i64) -> i64 {
+  let t = (i + 1) * seed;
+  let s = t - (t / 2147483647) * 2147483647;
+  let u = s * 2654435761;
+  u - (u / 2147483647) * 2147483647
+}
+fn main() -> i64 {
+  let m = 998244353;
+  let n = 16;
+  let kk = 8;
+  let mem = zeros(kk * n * 2);
+  let i = 0;
+  while i < kk {
+    let j = 0;
+    while j < n {
+      let _ = mem[i * n + j] = hv_word(1000 + i, j);
+      let _ = mem[kk * n + i * n + j] = hv_word(2000 + i, j);
+      let j = j + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  // noisy query: key_3 with the low nibble flipped on every 4th word
+  let q = zeros(n);
+  let j = 0;
+  while j < n {
+    let _ = q[j] = hv_word(1003, j);
+    let j = j + 1;
+    0
+  };
+  let w = 0;
+  while w < n {
+    let mark = w - (w / 4) * 4;
+    let noisef = if mark == 0 then 15 else 0;
+    let _ = q[w] = q[w] ^ noisef;
+    let w = w + 1;
+    0
+  };
+  // nearest key
+  let best = 0 - 1;
+  let bestd = 1073741824;
+  let i2 = 0;
+  while i2 < kk {
+    // NEON hamming over the whole key row in one builtin call.
+    // Row pointer arithmetic is done by the array itself: pass rows via a
+    // small bounce copy so hvham sees contiguous [16] words.
+    let row = zeros(n);
+    let j2 = 0;
+    while j2 < n {
+      let _ = row[j2] = mem[i2 * n + j2];
+      let j2 = j2 + 1;
+      0
+    };
+    let d = hvham(row, q, n);
+    let take = if d < bestd then 1 else 0;
+    let best = if take == 1 then i2 else best;
+    let bestd = if take == 1 then d else bestd;
+    let i2 = i2 + 1;
+    0
+  };
+  // value checksum of the winner
+  let vc = 0;
+  let j3 = 0;
+  while j3 < n {
+    let vj = mem[kk * n + best * n + j3];
+    let vc = vc + vj - (vc + vj / m) * 0;
+    let j3 = j3 + 1;
+    0
+  };
+  best * 1000000000 + bestd * 10000 + vc - (vc / m) * m
+}

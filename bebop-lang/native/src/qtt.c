@@ -887,6 +887,11 @@ static Term *subst_p(const Term *t, const char *name, const Term *v) {
         case TERM_ZEROS:
             o->a = subst_p(t->a, name, v);
             return o;
+        case TERM_HVHAM:
+            o->a = subst_p(t->a, name, v);
+            o->b = subst_p(t->b, name, v);
+            o->c = subst_p(t->c, name, v);
+            return o;
         case TERM_ARRAY_GET:
             o->a = subst_p(t->a, name, v);
             o->b = subst_p(t->b, name, v);
@@ -1132,6 +1137,12 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
             }
             *out = &VOID_TY;
             return 0;
+        case TERM_HVHAM: {
+            /* hvham(a,b,n) : i64 — a,b arrays (untyped here), n i64 */
+            if (t->c && check(c, t->c, &I64_TY, err, cap) != 0) return -1;
+            *out = &I64_TY;
+            return 0;
+        }
         case TERM_ZEROS: {
             /* zeros(n) : Vector<0,i64> - dynamic length, elem i64 */
             if (t->a && check(c, t->a, &I64_TY, err, cap) != 0) return -1;
@@ -2132,6 +2143,22 @@ static Value eval(const Term *t, Env *env) {
             }
             return v;
         }
+        case TERM_HVHAM: {
+            Value va = eval(t->a, env);
+            Value vb = eval(t->b, env);
+            Value vn = eval(t->c, env);
+            if (va.kind != 6 || vb.kind != 6 || vn.kind != 0) { v.kind = -1; return v; }
+            long words = vn.i / 8 * 8; /* NEON contract: full 16-byte chunks */
+            if (words < 0) words = 0;
+            if (words > va.nfv || words > vb.nfv) { v.kind = -1; return v; }
+            long dd = 0;
+            for (long q3 = 0; q3 < words; q3++) {
+                dd += __builtin_popcountll((unsigned long)(va.fv[q3].val.i ^ vb.fv[q3].val.i));
+            }
+            v.kind = 0;
+            v.i = dd;
+            return v;
+        }
         case TERM_ARRAY_GET: {
             Value arr = eval(t->a, env);
             Value idx = eval(t->b, env);
@@ -2460,6 +2487,11 @@ Term *qtt_subst(const Term *t, const char *name, const Term *v) {
             return o;
         case TERM_NAT_Z:
             return o;
+        case TERM_HVHAM: /* substitute a,b,c */
+            o->a = qtt_subst(t->a, name, v);
+            o->b = qtt_subst(t->b, name, v);
+            o->c = qtt_subst(t->c, name, v);
+            return o;
         case TERM_ZEROS: /* substitute into the size expression */
         case TERM_NAT_S:
             o->a = qtt_subst(t->a, name, v);
@@ -2545,6 +2577,11 @@ static Term *norm_rec(const Term *t) {
             return o;
         case TERM_REFL:
             o->a = norm_rec(t->a);
+            return o;
+        case TERM_HVHAM: /* normalize all three */
+            o->a = norm_rec(t->a);
+            o->b = norm_rec(t->b);
+            o->c = norm_rec(t->c);
             return o;
         case TERM_ZEROS: /* normalize the size expression */
             o->a = norm_rec(t->a);
@@ -2793,6 +2830,8 @@ static int conv_rec(const Term *a, const Term *b) {
     if (!a || !b) return a == b;
     if (a->kind != b->kind) return 0;
     switch (a->kind) {
+        case TERM_HVHAM:
+            return conv_rec(a->a, b->a) && conv_rec(a->b, b->b) && conv_rec(a->c, b->c);
         case TERM_LIT:
             return a->ival == b->ival && a->bval == b->bval;
         case TERM_FLIT:
