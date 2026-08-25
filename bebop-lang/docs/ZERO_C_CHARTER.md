@@ -24,9 +24,15 @@ pattern already does.
 
 ## Milestones (acceptance criteria)
 
-M1 seed loader          seed.bin runs k1.bin on bare syscalls, prints
-                        result, exits. NO C executed at runtime. [gate:
-                        output == exec_words output]
+M1 seed loader          DONE. seed/seed.S (1.5 KB asm, frozen):
+                        openat/read/mmap/mprotect via raw svc; arms the
+                        x27/x28 arena contract; prints signed decimal.
+                        ALL SEVEN KERNELS run through it with outputs
+                        identical to the interpreter:
+                        k1=500000500000 k2=75025(entry 148B)
+                        k3=67725000 k4=-7260594028850897471
+                        k5=759186635(entry 572B) k6=236(360B)
+                        k7=3939697352(556B). ZERO C executed at runtime.
 M2 syscall I/O builtins open/read/write/close/exit + clock available to
                         .bp programs (emitter words + interp mirror);
                         std/file_io.bp wrappers.
