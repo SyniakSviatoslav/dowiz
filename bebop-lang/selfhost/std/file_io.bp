@@ -1,0 +1,13 @@
+// file_io.bp — syscall I/O builtins (M2). Byte-per-element buffers.
+// All ops mirror the raw svc contract used by seed/runtime exactly.
+// O_RDONLY=0 O_WRONLY=1 O_CREAT=64 O_TRUNC=512 (aarch64 linux).
+
+fn open_path(p: [i64], n: i64, flags: i64) -> i64 { sys_open(p, n, flags) }
+
+fn read_bytes(fd: i64, buf: [i64], n: i64) -> i64 { sys_read(fd, buf, n) }
+
+fn write_bytes(fd: i64, buf: [i64], n: i64) -> i64 { sys_write(fd, buf, n) }
+
+fn close_fd(fd: i64) -> i64 { sys_close(fd) }
+
+fn now_ms() -> i64 { clock_ms() }

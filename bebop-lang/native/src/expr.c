@@ -357,6 +357,18 @@ static Term *parse_primary(P *p) {
             t->kind = TERM_HVHAM; /* three args parsed in postfix: hvham(a,b,n) -> i64 popcount(a^b) over floor(n/8)*8 words */
         } else if (strcmp(buf, "hvham2") == 0) {
             t->kind = TERM_HVHAM2; /* five args: hvham2(a,ao,b,bo,n) -> popcount over a[ao+k]^b[bo+k], floor(n/8)*8 */
+        } else if (strcmp(buf, "sys_open") == 0) {
+            t->kind = TERM_SYSOPEN; /* (p,n,flags): byte-per-element path buffer */
+        } else if (strcmp(buf, "sys_read") == 0) {
+            t->kind = TERM_SYSREAD; /* (fd,buf,len) */
+        } else if (strcmp(buf, "sys_write") == 0) {
+            t->kind = TERM_SYSWRITE; /* (fd,buf,len) */
+        } else if (strcmp(buf, "sys_close") == 0) {
+            t->kind = TERM_SYSCLOSE; /* (fd) */
+        } else if (strcmp(buf, "sys_exit") == 0) {
+            t->kind = TERM_SYSEXIT; /* (code) noreturn */
+        } else if (strcmp(buf, "clock_ms") == 0) {
+            t->kind = TERM_CLOCKMS; /* () monotonic ms */
         } else if (strcmp(buf, "exec") == 0) {
             t->kind = TERM_EXEC; /* placeholder: two args parsed in postfix */
         } else if (g_reg && enum_ctor_lookup(buf)) {
@@ -509,6 +521,46 @@ static Term *parse_primary(P *p) {
             atom->a = aa;
             atom->b = ab;
             atom->c = an;
+            continue;
+        }
+        if ((atom->kind == TERM_SYSOPEN || atom->kind == TERM_SYSREAD ||
+             atom->kind == TERM_SYSWRITE) && p->s[p->pos] == '(') {
+            p->pos++;
+            Term *aa = parse_expr(p);
+            if (!aa) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ',') { err(p, "expected ','"); return NULL; }
+            p->pos++;
+            Term *ab = parse_expr(p);
+            if (!ab) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ',') { err(p, "expected ','"); return NULL; }
+            p->pos++;
+            Term *an = parse_expr(p);
+            if (!an) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ')') { err(p, "expected ')'"); return NULL; }
+            p->pos++;
+            atom->a = aa;
+            atom->b = ab;
+            atom->c = an;
+            continue;
+        }
+        if ((atom->kind == TERM_SYSCLOSE || atom->kind == TERM_SYSEXIT) && p->s[p->pos] == '(') {
+            p->pos++;
+            Term *sa = parse_expr(p);
+            if (!sa) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ')') { err(p, "expected ')'"); return NULL; }
+            p->pos++;
+            atom->a = sa;
+            continue;
+        }
+        if (atom->kind == TERM_CLOCKMS && p->s[p->pos] == '(') {
+            p->pos++;
+            skip_ws(p);
+            if (p->s[p->pos] != ')') { err(p, "expected ')'"); return NULL; }
+            p->pos++;
             continue;
         }
         if (atom->kind == TERM_STR_LEN && p->s[p->pos] == '(') {

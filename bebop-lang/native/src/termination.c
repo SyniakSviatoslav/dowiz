@@ -17,9 +17,17 @@ int qtt_termination_check(const Term *t, char *err, size_t cap) {
     switch (t->kind) {
         case TERM_HVHAM:
         case TERM_HVHAM2:
+        case TERM_SYSOPEN:
+        case TERM_SYSREAD:
+        case TERM_SYSWRITE:
             return qtt_termination_check(t->a, err, cap) == 0 &&
                    qtt_termination_check(t->b, err, cap) == 0 &&
                    qtt_termination_check(t->c, err, cap) == 0 ? 0 : -1;
+        case TERM_SYSCLOSE:
+        case TERM_SYSEXIT:
+            return qtt_termination_check(t->a, err, cap);
+        case TERM_CLOCKMS:
+            return 0;
         case TERM_VAR:
         case TERM_LIT:
         case TERM_FLIT:

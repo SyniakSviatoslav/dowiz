@@ -390,3 +390,40 @@ Decision: C-host compound support REVERTED (silently-wrong reference is
 the worst class). Selfhost emitter stays (its semantics are correct —
 proven against python). Rule: no += shapes into the parity corpus until
 the interpreter's env model gets real frame-scoped mutation.
+
+## M2 syscall I/O builtins (sys_open/sys_read/sys_write/sys_close/sys_exit/clock_ms)
+
+Both engines + frozen runtime, assembler/execution-verified words:
+- IO scratch zone: last 8 KiB below x28; timespec at x28-8208.
+- sys_open packs element bytes to scratch AND writes a NUL terminator
+  (strb wzr,[x10,x13] = 0x382D695F LE = 942500191). MISSING NUL was a
+  nasty one: exec_words calls JIT twice (warmup+ref); run #1 worked off
+  zeroed mmap pages, run #2 read garbage after the path -> ENOENT(-2).
+  Lesson: any buffer handed to the kernel must be explicitly terminated
+  EVERY call, never rely on fresh mmap zeros.
+- Byte packing loops verified: ldr x,[base,i,lsl#3] / strb w7,[x10,x9]
+  / backward b; unpack via ldrb+str. clock: svc113 + sec*1000+nsec/1e6
+  (movk 15,lsl#16 builds 1000000).
+- Name hashes are h*131+c rolling (NOT FNV): sys_open=76753189879327100,
+  sys_read=76753189885882068, sys_write=10054667876552415181,
+  sys_close=10054667870649031050, sys_exit=76753189856984008,
+  clock_ms=66094333908796503.
+
+## [RULE] fpC fast-if is broken for call-containing conditions
+
+`if <expr-with-call> > k then a else b` miscompiles in the selfhost
+emitter: the fast-if peephole retargets literal branches into `mov
+x0,x0` copies of the condition value (q1 probe returned raw clock_ms()
+instead of 7). Workaround that ALWAYS works: bind first —
+  let m = clock_ms(); let c = if m > 0 then 1 else 0;
+User-fn conditions (`if f() > 3 ...`) are fine. Queued fix.
+
+## [RULE] syscall builtins × spilled programs (>8 symbols)
+
+With 9+ live symbols the legacy spill machinery interacts badly with
+the builtin emitters' internal push/pop sequences: later array loads
+read stale slots (io sums came out doubled/garbage) while interp stays
+correct. At <=8 live symbols everything is exact. io_probe corpus entry
+is written with exactly 8 live bindings (p fdw msg w buf nr v live,
+with shadow rebind of fdw for the read pass). Root-causing the spill
+interaction is queued; until then keep syscall-heavy programs flat.

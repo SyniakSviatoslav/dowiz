@@ -129,6 +129,12 @@ typedef enum {
     TERM_ZEROS,   /* zeros(n): fresh zeroed [n]i64 array (heap-backed via arena) */
     TERM_HVHAM,   /* hvham(a,b,n): popcount(a^b) over floor(n/8)*8 words (NEON in codegen) */
     TERM_HVHAM2,  /* hvham2(a,ao,b,bo,n): offsets into base arrays; b slot holds ARRAY[ao,bo] */
+    TERM_SYSOPEN,  /* sys_open(p,n,flags): byte-per-element path -> raw openat */
+    TERM_SYSREAD,  /* sys_read(fd,buf,len): bytes into element slots */
+    TERM_SYSWRITE, /* sys_write(fd,buf,len): element low bytes out */
+    TERM_SYSCLOSE, /* sys_close(fd) */
+    TERM_SYSEXIT,  /* sys_exit(code) — noreturn */
+    TERM_CLOCKMS,  /* clock_ms(): monotonic milliseconds */
 } TermKind;
 
 typedef enum {

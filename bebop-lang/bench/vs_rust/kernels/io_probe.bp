@@ -1,0 +1,43 @@
+fn main() -> i64 {
+  let p = zeros(20);
+  let _ = p[0] = 47;
+  let _ = p[1] = 116;
+  let _ = p[2] = 109;
+  let _ = p[3] = 112;
+  let _ = p[4] = 47;
+  let _ = p[5] = 98;
+  let _ = p[6] = 101;
+  let _ = p[7] = 98;
+  let _ = p[8] = 111;
+  let _ = p[9] = 112;
+  let _ = p[10] = 95;
+  let _ = p[11] = 109;
+  let _ = p[12] = 50;
+  let _ = p[13] = 95;
+  let _ = p[14] = 105;
+  let _ = p[15] = 111;
+  let _ = p[16] = 46;
+  let _ = p[17] = 98;
+  let _ = p[18] = 105;
+  let _ = p[19] = 110;
+  let fdw = sys_open(p, 20, 577);
+  let msg = zeros(10);
+  let _ = msg[0] = 90;
+  let _ = msg[1] = 69;
+  let _ = msg[2] = 82;
+  let _ = msg[3] = 79;
+  let _ = msg[4] = 95;
+  let _ = msg[5] = 67;
+  let _ = msg[6] = 95;
+  let _ = msg[7] = 79;
+  let _ = msg[8] = 75;
+  let _ = msg[9] = 10;
+  let w = sys_write(fdw, msg, 10);
+  let _ = sys_close(fdw);
+  let fdw = sys_open(p, 20, 0);
+  let buf = zeros(16);
+  let nr = sys_read(fdw, buf, 16);
+  let _ = sys_close(fdw);
+  let v = buf[0] + buf[1] + buf[2] + buf[3] + buf[4] + buf[5] + buf[6] + buf[7] + buf[8] + buf[9];
+  w * 10000000 + nr * 1000000 + v * 1000 + buf[9] * 10 + (v - v + 1)
+}
