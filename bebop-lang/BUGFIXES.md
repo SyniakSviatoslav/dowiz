@@ -292,3 +292,32 @@ Until then: no += in the parity corpus (both backends must agree).
   SWAR popcount, seeded generator, XOR bind, Hamming as plain .bp.
 - k7 VSA associative memory: 8 key->value 1024-bit HVs, noisy query,
   nearest-key resolve; interp==native==python; 35.7us native.
+
+## NEON hvham — verified words + emitter half-built (next session's first task)
+
+Assembler-verified AArch64 sequence (objdump-checked), 15 distinct words:
+  lsr x4,x2,#3        = 3544448068
+  cbz x4,+tail        = 3019899236   (offset for layout: [lsr][cbz][movi][body8][sub][cbnz][uaddlv][umov][mov])
+  movi v4.16b,0       = 1325458436
+  ldp q0,q1,[x0],#32  = 2898330624
+  ldp q2,q3,[x1],#32  = 2898332706
+  eor v0,v2           = 1847729152
+  eor v1,v3           = 1847794721
+  cnt v0              = 1310742528
+  cnt v1              = 1310742561
+  add v4,v0           = 1310753924
+  add v4,v1           = 1310819460
+  sub x4,#1           = 3506439300
+  cbnz x4,-9          = 3053453028   (target: first ldp)
+  uaddlv h5,v4.16b    = 1848653957
+  umov w6,v5.h[0]     = 235027622
+  mov x0,x6           = 2852520928   (NOT 2852520704 — that decodes to orr x0,x24,x6!)
+Single-chunk n=8 PROVEN working end-to-end (result=8). Multi-chunk hit a
+wall: strict branch evaluation in the meta-language emits BOTH tails;
+done-cell guard did not help; root cause of the residual SIGILL not
+isolated before budget ran out. C-host interp side is DONE (lexer,
+postfix 3-arg parse, typecheck, subst/norm/conv/termination switches,
+eval via __builtin_popcountll, floor(n/8)*8 contract). Next session:
+single-path loop form only (no literal/var branching — the var layout
+above handles every n), wire emit_hvham(s,pos,...) with args-parse +
+pops + this block + push; then parity probes.
