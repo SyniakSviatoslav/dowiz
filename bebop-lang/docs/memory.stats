@@ -1,8 +1,10 @@
-exp 3
+exp 6
 ctl 2
 mem 1
 hot 1
-quit 3
+quit 6
 nav 1
 par 2
 sh 4
+echo 1
+exit 1

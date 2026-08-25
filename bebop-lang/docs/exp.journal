@@ -1,3 +1,6 @@
 1787661395 v2 h1 probe inconclusive
 1787661395 v1 h2 spills confirmed
 1787661395 v0 h3 fastpath killed
+1787661488 v2 stack-limit ulimit-unlimited-still-segv
+1787661498 v2 stack-limit ulimit-512MB-still-segv-stack-hypothesis-weakened
+1787663678 v1 test1 some note
