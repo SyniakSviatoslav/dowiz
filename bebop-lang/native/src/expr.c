@@ -369,6 +369,10 @@ static Term *parse_primary(P *p) {
             t->kind = TERM_SYSEXIT; /* (code) noreturn */
         } else if (strcmp(buf, "clock_ms") == 0) {
             t->kind = TERM_CLOCKMS; /* () monotonic ms */
+        } else if (strcmp(buf, "sys_readbuf") == 0) {
+            t->kind = TERM_SYSREADBUF; /* (fd,len): read into scratch, return its address */
+        } else if (strcmp(buf, "sys_slurp") == 0) {
+            t->kind = TERM_SYSREADBUF; /* same shape, arena buffer */
         } else if (strcmp(buf, "exec") == 0) {
             t->kind = TERM_EXEC; /* placeholder: two args parsed in postfix */
         } else if (g_reg && enum_ctor_lookup(buf)) {
@@ -544,6 +548,22 @@ static Term *parse_primary(P *p) {
             atom->a = aa;
             atom->b = ab;
             atom->c = an;
+            continue;
+        }
+        if (atom->kind == TERM_SYSREADBUF && p->s[p->pos] == '(') {
+            p->pos++;
+            Term *aa = parse_expr(p);
+            if (!aa) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ',') { err(p, "expected ','"); return NULL; }
+            p->pos++;
+            Term *ab = parse_expr(p);
+            if (!ab) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ')') { err(p, "expected ')'"); return NULL; }
+            p->pos++;
+            atom->a = aa;
+            atom->b = ab;
             continue;
         }
         if ((atom->kind == TERM_SYSCLOSE || atom->kind == TERM_SYSEXIT) && p->s[p->pos] == '(') {

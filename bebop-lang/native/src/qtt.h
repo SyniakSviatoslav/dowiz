@@ -135,6 +135,7 @@ typedef enum {
     TERM_SYSCLOSE, /* sys_close(fd) */
     TERM_SYSEXIT,  /* sys_exit(code) — noreturn */
     TERM_CLOCKMS,  /* clock_ms(): monotonic milliseconds */
+    TERM_SYSREADBUF, /* sys_readbuf(fd,len): raw read -> scratch addr */
 } TermKind;
 
 typedef enum {

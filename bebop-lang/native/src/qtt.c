@@ -8,6 +8,29 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/mman.h>
+#include <sys/mman.h>
+
+/* Interp-side IO scratch zone mirroring the JIT contract (x28-8192). */
+static char *io_scratch_big(size_t need) {
+    static char *z2 = NULL;
+    static size_t z2cap = 0;
+    if (!z2 || z2cap < need) {
+        if (z2) munmap(z2, z2cap);
+        z2cap = need < 8192 ? 8192 : need;
+        z2 = mmap(NULL, z2cap, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (z2 == MAP_FAILED) { z2 = NULL; z2cap = 0; }
+    }
+    return z2;
+}
+/* kept for future small-zone users; slurp path uses io_scratch_big */
+__attribute__((unused)) static char *io_scratch(void) {
+    static char *z = NULL;
+    if (!z) {
+        z = mmap(NULL, 8192, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (z == MAP_FAILED) z = NULL;
+    }
+    return z;
+}
 
 Quantity qtt_add(Quantity a, Quantity b) {
     if (a == Q_MANY || b == Q_MANY) {
@@ -896,6 +919,10 @@ static Term *subst_p(const Term *t, const char *name, const Term *v) {
             o->b = subst_p(t->b, name, v);
             o->c = subst_p(t->c, name, v);
             return o;
+        case TERM_SYSREADBUF:
+            o->a = subst_p(t->a, name, v);
+            o->b = subst_p(t->b, name, v);
+            return o;
         case TERM_SYSCLOSE:
         case TERM_SYSEXIT:
             o->a = subst_p(t->a, name, v);
@@ -1160,7 +1187,8 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
         }
         case TERM_SYSOPEN:
         case TERM_SYSREAD:
-        case TERM_SYSWRITE: {
+        case TERM_SYSWRITE:
+        case TERM_SYSREADBUF: {
             /* (array-ish, i64..., i64) : i64 */
             if (t->b && check(c, t->b, &I64_TY, err, cap) != 0) return -1;
             if (t->c && check(c, t->c, &I64_TY, err, cap) != 0) return -1;
@@ -1999,6 +2027,12 @@ static Value eval(const Term *t, Env *env) {
             return v;
         case TERM_STR_LEN: {
             Value s = eval(t->a, env);
+            if (s.kind == 0 && s.i != 0) {
+                const char *bp3 = (const char *)s.i;
+                v.kind = 0;
+                v.i = (long)strlen(bp3);
+                return v;
+            }
             if (s.kind != 5) { v.kind = -1; return v; }
             v.kind = 0;
             v.i = s.slen;
@@ -2023,7 +2057,19 @@ static Value eval(const Term *t, Env *env) {
         case TERM_STR_CHAR: {
             Value s = eval(t->a, env);
             Value i = eval(t->b, env);
-            if (s.kind != 5 || i.kind != 0) { v.kind = -1; return v; }
+            if (i.kind != 0) { v.kind = -1; return v; }
+            /* raw-pointer strings (JIT contract: NUL-terminated bytes) */
+            if (s.kind == 0) {
+                if (s.i == 0 || i.i < 0) { v.kind = -1; return v; }
+                const unsigned char *bp2 = (const unsigned char *)s.i;
+                long n2 = 0;
+                while (bp2[n2]) n2++;
+                if (i.i >= n2) { v.kind = -1; return v; }
+                v.kind = 0;
+                v.i = bp2[i.i];
+                return v;
+            }
+            if (s.kind != 5) { v.kind = -1; return v; }
             long idx = i.i;
             if (idx < 0 || (unsigned long)idx >= (unsigned long)s.slen) { v.kind = -1; return v; }
             v.kind = 0;
@@ -2258,6 +2304,20 @@ static Value eval(const Term *t, Env *env) {
             for (long q3 = 0; q3 < len; q3++) tmp[q3] = (char)(vb.fv[q3].val.i & 0xFF);
             v.kind = 0;
             v.i = bp_syscall3(64, vf.i, (long)tmp, len);
+            return v;
+        }
+        case TERM_SYSREADBUF: {
+            Value vf = eval(t->a, env);
+            Value vn = eval(t->b, env);
+            if (vf.kind != 0 || vn.kind != 0) { v.kind = -1; return v; }
+            long len = vn.i;
+            if (len < 0 || len > (1 << 22)) { v.kind = -1; return v; }
+            char *scratch = io_scratch_big((size_t)((len + 15) / 16 * 16));
+            long r = bp_syscall3(63, vf.i, (long)scratch, len);
+            if (r < 0) r = 0;
+            scratch[r] = 0;
+            v.kind = 0;
+            v.i = (long)scratch;
             return v;
         }
         case TERM_SYSCLOSE: {
@@ -2616,6 +2676,10 @@ Term *qtt_subst(const Term *t, const char *name, const Term *v) {
             o->b = qtt_subst(t->b, name, v);
             o->c = qtt_subst(t->c, name, v);
             return o;
+        case TERM_SYSREADBUF:
+            o->a = qtt_subst(t->a, name, v);
+            o->b = qtt_subst(t->b, name, v);
+            return o;
         case TERM_SYSCLOSE:
         case TERM_SYSEXIT:
             o->a = qtt_subst(t->a, name, v);
@@ -2716,6 +2780,10 @@ static Term *norm_rec(const Term *t) {
             o->a = norm_rec(t->a);
             o->b = norm_rec(t->b);
             o->c = norm_rec(t->c);
+            return o;
+        case TERM_SYSREADBUF:
+            o->a = norm_rec(t->a);
+            o->b = norm_rec(t->b);
             return o;
         case TERM_SYSCLOSE:
         case TERM_SYSEXIT:
@@ -2976,6 +3044,8 @@ static int conv_rec(const Term *a, const Term *b) {
         case TERM_SYSREAD:
         case TERM_SYSWRITE:
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b) && conv_rec(a->c, b->c);
+        case TERM_SYSREADBUF:
+            return conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
         case TERM_SYSCLOSE:
         case TERM_SYSEXIT:
             return conv_rec(a->a, b->a);

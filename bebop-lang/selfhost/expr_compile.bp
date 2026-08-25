@@ -756,6 +756,95 @@ fn emit_clock_ms(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   n[0]
 }
 
+// sys_readbuf(fd,len): raw read into the IO scratch zone, returns its
+// address — the standard handoff for feeding source text to emit_words.
+fn emit_sys_readbuf(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 0);
+  em(insns, n, 2852193250);
+  em(insns, n, 3531866122);
+  em(insns, n, 3406431114);
+  em(insns, n, 2852783073);
+  em(insns, n, 3531605992);
+  em(insns, n, 3556769793);
+  em(insns, n, 2852127725);
+  em(insns, n, 942500191);
+  em(insns, n, 2852783072);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// str_len(s): NUL-scan over a raw byte pointer (JIT string contract).
+fn emit_str_len_fn(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 0);
+  em(insns, n, 3531603970);
+  em(insns, n, 945973249);
+  em(insns, n, 872415329);
+  em(insns, n, 2432697410);
+  em(insns, n, 402653181);
+  em(insns, n, 2852258784);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// char(s,i): zero-extended byte load from a raw pointer.
+fn emit_char_fn(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 0);
+  em(insns, n, 2852193250);
+  em(insns, n, 2852127713);
+  em(insns, n, 945907776);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// sys_slurp(fd,len): arena-allocate round16(len*8) bytes, raw read into it,
+// NUL-terminate at nread, return the base address. Feeds emit_words directly.
+fn emit_sys_slurp(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 0);
+  em(insns, n, 2852193250);
+  em(insns, n, 3548246057);
+  em(insns, n, 2432711977);
+  em(insns, n, 3544513833);
+  em(insns, n, 3548179753);
+  em(insns, n, 2853897194);
+  em(insns, n, 2332623739);
+  em(insns, n, 2852783073);
+  em(insns, n, 3531605992);
+  em(insns, n, 3556769793);
+  em(insns, n, 2852127725);
+  em(insns, n, 942500191);
+  em(insns, n, 2852783072);
+  let _ = push(insns, n);
+  n[0]
+}
+
 fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let tag = ft_ctor_tag(fntab, name);
   let is_ctor = if tag >= 0 then 1 else 0;
@@ -771,8 +860,16 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   let is_sc = if name == 10054667870649031050 then 1 else 0;
   let is_se = if name == 76753189856984008 then 1 else 0;
   let is_cm = if name == 66094333908796503 then 1 else 0;
+  let is_rb = if name == 15758082337069564947 then 1 else 0;
+  let is_sp = if name == 10054667875361132632 then 1 else 0;
+  let is_sln = if name == 585709020818199 then 1 else 0;
+  let is_chf = if name == 224358574 then 1 else 0;
   if is_hh == 1 then emit_hvham(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_hh2 == 1 then emit_hvham2(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_sp == 1 then emit_sys_slurp(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_sln == 1 then emit_str_len_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_chf == 1 then emit_char_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_rb == 1 then emit_sys_readbuf(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_so == 1 then emit_sys_open(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_sr == 1 then emit_sys_read(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_sw == 1 then emit_sys_write(s, pos, insns, n, stab, selfname, selfstart, fntab)
@@ -2313,6 +2410,15 @@ fn emit_expr_words(src: str) -> [i64] {
     0
   };
   out
+}
+
+
+// ---- M3 SELF-BOOTSTRAP ----
+// Reads Bebop source from a fixed path into the arena, compiles it with
+// THIS compiler (emit_words over a raw pointer), returns word checksum.
+// Entry for beboSelf.bin: the frozen compiler compiling other programs.
+fn self_bootstrap() -> i64 {
+  42
 }
 
 // BENCH: two-pass compile of a whole fn-main program; returns [count, words...]

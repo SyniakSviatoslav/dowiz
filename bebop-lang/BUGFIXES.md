@@ -427,3 +427,15 @@ correct. At <=8 live symbols everything is exact. io_probe corpus entry
 is written with exactly 8 live bindings (p fdw msg w buf nr v live,
 with shadow rebind of fdw for the read pass). Root-causing the spill
 interaction is queued; until then keep syscall-heavy programs flat.
+
+## Agent debugging rules (metacognitive audit 2026-08-25)
+
+Session audit produced AGENTS.md — ten process laws distilled from this
+stretch's failures: zero hand-typed words + post-insert disassembly diff;
+syscall register tables written before emission (x2-len forgotten twice);
+harness execution model read before differential debugging (exec_words
+warmup+ref); ordered divergence checklist with spills(>8 syms) FIRST;
+two-strikes axis pivot rule; equality asserts on paired lists (the ignored
+176≠138); gdb-on-JIT recipe (__clear_cache anchor, mappings→word#); cache
+trust; evidence hygiene (decompose results arithmetically, expected vs got).
+All future agent work in this repo: read AGENTS.md first.
