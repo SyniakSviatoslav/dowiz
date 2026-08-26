@@ -33,3 +33,4 @@
 1787732100 H:m3-closure-plan DID:n/a GOT:fix neutral-path balance OR lift budget; then sim->0; regen; beboSelf gate VERDICT:planned
 1787734000 H:neutral-push-fix DID:emit_call okres==0 emits mov#0+push GOT:MIN3 CLEAN; full-chain flags 10->1 (only run_program ret -1); X1/Y1 green; stream 99776==interp VERDICT:confirmed
 1787734100 H:last-holdout-run_program DID:tail disasm GOT:final-expr pushed+loaded but no drop before ret (upward 16B/call creep) VERDICT:located-unfixed
+1787735000 H:last-holdout-source DID:read run_program GOT:tiny fn: zeros(262144) + n=[0] cell + compile_program_to stmt-call + tail exec(insns,n[0],arg). Suspect: exec unresolved-at-runtime OR n[0]-get/arg push interplay leaves -1. Fix path: instrument via depth_sim on standalone copy w/ stub deps (resolved!) to split static-vs-runtime cause VERDICT:spec'd
