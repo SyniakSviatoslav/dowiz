@@ -1970,6 +1970,7 @@ fn emit_call(s: str, fname: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64]
   let pcnt = pcnt1 * okres;
   let _ = skip_to(s, ppos, 123);
   let body = ppos[0] + 1;
+  let _ = if okres == 0 then (let _ = em(insns, n, 3531603968) in (let _ = push(insns, n) in 0)) else 0;
   let _ = pos[0] = pos[0] + 1;
   let i = 0;
   while i < pcnt {

@@ -31,3 +31,5 @@
 1787731000 H:min3-anomaly-resolved DID:inspect MIN3.bp head GOT:no skip_ws def (ddmin overwrote file): single 10-param emit_while_stmt w/ UNRESOLVED skip_ws call; V1 has real skip_ws VERDICT:confirmed (dirty repro exercises unresolved-callee neutral-inline path; V-matrix must be rerun with resolved deps before trusting 'name/spill' discriminators)
 1787732000 H:unresolved-callee-discriminator DID:MIN7=MIN3+real-skip_ws GOT:CLEAN vs MIN3 dirty VERDICT:confirmed (bug lives in emit_call okres==0 neutral-inline path; full-chain poison = mbudget scan-cap turning late calls unresolved mid-selfcompile)
 1787732100 H:m3-closure-plan DID:n/a GOT:fix neutral-path balance OR lift budget; then sim->0; regen; beboSelf gate VERDICT:planned
+1787734000 H:neutral-push-fix DID:emit_call okres==0 emits mov#0+push GOT:MIN3 CLEAN; full-chain flags 10->1 (only run_program ret -1); X1/Y1 green; stream 99776==interp VERDICT:confirmed
+1787734100 H:last-holdout-run_program DID:tail disasm GOT:final-expr pushed+loaded but no drop before ret (upward 16B/call creep) VERDICT:located-unfixed
