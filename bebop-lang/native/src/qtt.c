@@ -1185,10 +1185,15 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
             *out = &I64_TY;
             return 0;
         }
+        case TERM_SYSREADBUF: {
+            if (t->b && check(c, t->b, &I64_TY, err, cap) != 0) return -1;
+            if (t->c && check(c, t->c, &I64_TY, err, cap) != 0) return -1;
+            *out = &STR_TY;
+            return 0;
+        }
         case TERM_SYSOPEN:
         case TERM_SYSREAD:
-        case TERM_SYSWRITE:
-        case TERM_SYSREADBUF: {
+        case TERM_SYSWRITE: {
             /* (array-ish, i64..., i64) : i64 */
             if (t->b && check(c, t->b, &I64_TY, err, cap) != 0) return -1;
             if (t->c && check(c, t->c, &I64_TY, err, cap) != 0) return -1;
@@ -1588,7 +1593,10 @@ static int check(Ctx *c, const Term *t, const Ty *want, char *err, size_t cap) {
         return -1;
     }
     if (!ty_leq(got, want)) {
-        snprintf(err, cap, "type mismatch");
+        char gbuf[128], wbuf[128];
+        qtt_ty_print(got, gbuf, sizeof gbuf);
+        qtt_ty_print(want, wbuf, sizeof wbuf);
+        snprintf(err, cap, "type mismatch: got %s want %s", gbuf, wbuf);
         return -1;
     }
     return 0;

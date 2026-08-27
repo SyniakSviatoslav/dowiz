@@ -422,15 +422,15 @@ int main(int argc, char **argv) {
     fprintf(stderr, "loaded %s: %d functions (program=%d expr=%d fn=%d)\n",
             path, fn_count, idx_program, idx_expr, idx_fn);
 
-    /* sanity: reproduce three known-good checksums from expr_compile.bp's
+    /* sanity: reproduce known-good checksums from expr_compile.bp's
      * self_check table to prove the harness exercises the compiler. */
     {
         struct { int entry; const char *src; long want; const char *name; }
         checks[3] = {
             { idx_program, "fn main() { helper(41) } fn helper(x) { x + 1 }",
-              133762173686L, "compile_program" },
+              237421204746L, "compile_program" },
             { idx_expr, "42", 21426575550L, "compile" },
-            { idx_fn, "fn f(a) { a + 1 }", 59036607243L, "compile_fn" },
+            { idx_fn, "fn f(a) { a + 1 }", 105362869862L, "compile_fn" },
         };
         for (int i = 0; i < 3; i++) {
             int ok = 0;

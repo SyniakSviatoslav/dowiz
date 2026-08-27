@@ -357,14 +357,14 @@ fn emit_enum_ctor_nullary(insns: [i64], n: [i64], tag: i64) -> i64 {
 // Dispatch name( ... ): enum ctor (with payload) or a function call.
 fn emit_bl(insns: [i64], n: [i64], target: i64, has_spills: i64) -> i64 {
   // x15 (spill base) is caller-saved: callees with their own spills rebind
-  // it. Save/restore around the call ONLY when the caller actually keeps
-  // spill slots alive (stab[0] > 8); spill-free callers drop 4 words.
-  let _ = if has_spills == 1 then (let _ = em(insns, n, 3506471935) in (let _ = em(insns, n, 4177527791) in (let _ = em(insns, n, 4177528814) in 0))) else 0;
+  // it. Save/restore x14+x15 around the call when caller has spill slots.
+  // Frame: 48 bytes [fp @0, x14 @8, x15 @16].
+  let _ = if has_spills == 1 then (let _ = em(insns, n, 3506488319) in (let _ = em(insns, n, 4177527791) in (let _ = em(insns, n, 4177528814) in (let _ = em(insns, n, 4177529839) in 0)))) else 0;
   let offset = target - n[0];
   let is_back = if offset < 0 then 1 else 0;
   let word = 2483027968 + offset + is_back * 67108864;
   let _ = em(insns, n, word);
-  let _ = if has_spills == 1 then (let _ = em(insns, n, 4181722095) in (let _ = em(insns, n, 4181723118) in (let _ = em(insns, n, 2432730111) in 0))) else 0;
+  let _ = if has_spills == 1 then (let _ = em(insns, n, 4181722095) in (let _ = em(insns, n, 4181723118) in (let _ = em(insns, n, 4181724143) in (let _ = em(insns, n, 2432746495) in 0)))) else 0;
   n[0]
 }
 
@@ -515,8 +515,7 @@ fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i6
     0
   };
   let target = fntab_lookup(fntab, name);
-  let hs0 = if stab[0] > 8 then 1 else 0;
-  let _ = emit_bl(insns, n, target, hs0);
+  let _ = emit_bl(insns, n, target, 1);
   let _ = push(insns, n);
   n[0]
 }
@@ -527,8 +526,7 @@ fn emit_self_call(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = pop(insns, n, 0);
-  let hs1 = if stab[0] > 8 then 1 else 0;
-  let _ = emit_bl(insns, n, selfstart, hs1);
+  let _ = emit_bl(insns, n, selfstart, 1);
   let _ = push(insns, n);
   n[0]
 }
@@ -1440,7 +1438,7 @@ fn emit_factor(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
   let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
   // unary not: !e desugars to (e == 0). The '!=' two-char token is left
   // alone for the comparison tier.
-  let _ = if is_not == 1 then (
+  let _ = if (if ch == 33 then 1 else 0) == 1 then (
     let _ = pos[0] = pos[0] + 1;
     let _ = skip_ws(s, pos);
     let _ = emit_factor(s, pos, insns, n, stab, selfname, selfstart, fntab) in
@@ -1722,6 +1720,43 @@ fn emit_let_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let nb_v = n[0];
+  // ---- chained discard-assign: `let _ = NAME = RHS;` lowers to NAME<-RHS ----
+  let _ = skip_ws(s, pos);
+  let sq0 = pos[0];
+  let strq = str_len(s);
+  let cq0 = if sq0 >= strq then 0 else char(s, sq0);
+  let qa0 = is_alpha(cq0);
+  let wq0 = [sq0];
+  let hq0 = [0];
+  let qgo0 = qa0;
+  while qgo0 == 1 {
+    let ccq0 = if wq0[0] >= strq then 0 else char(s, wq0[0]);
+    let ga0 = is_alpha(ccq0);
+    let gd0 = (if ccq0 >= 48 then 1 else 0) * (if ccq0 <= 57 then 1 else 0);
+    let gu0 = if ccq0 == 95 then 1 else 0;
+    let adv0 = ga0 + gd0 + gu0;
+    let _ = if adv0 == 1 then (let _ = hq0[0] = hq0[0] * 131 + ccq0 in 0) else 0;
+    let _ = wq0[0] = wq0[0] + adv0;
+    let qgo0 = adv0;
+    0
+  };
+  let e1q = if wq0[0] >= strq then 1 else 0;
+  let qws = [wq0[0]];
+  let qwg = 1 - e1q;
+  while qwg == 1 {
+    let cqw = if qws[0] >= strq then 0 else char(s, qws[0]);
+    let isspw = if cqw == 32 then 1 else 0;
+    let _ = if isspw == 1 then (let _ = qws[0] = qws[0] + 1 in 0) else 0;
+    let qwg = isspw;
+    0
+  };
+  let eq1 = if qws[0] >= strq then 0 else char(s, qws[0]);
+  let eq2 = if qws[0] + 1 >= strq then 0 else char(s, qws[0] + 1);
+  let is_chain = qa0 * (if eq1 == 61 then 1 else 0) * (if eq2 == 61 then 0 else 1);
+  let treg_c = sym_lookup(stab, hq0[0]);
+
+  let treg_i = if is_chain == 1 then (if treg_c >= 19 then treg_c else reg) else reg;
+  let _ = if is_chain == 1 then (let _ = pos[0] = qws[0] + 1 in (let _ = skip_ws(s, pos) in 0)) else 0;
   let fv = if 1 == 999 then emit_fast_v2(s, pos, insns, n, stab, cx, st, 1, fntab) else 0;
   let _ = if fv == 0 then emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
   let _ = skip_ws(s, pos);
@@ -1756,8 +1791,8 @@ fn emit_let_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   let bis0 = if b2d == 0 then 1 else 0;
   let fusB = fv * treg * reg28 * (1 - fusA) * sh2 * bis0;
   let _ = if fusB == 1 then (let _ = insns[n[0] - 1] = wl2 + reg in 0) else 0;
-  let _ = if fv * (1 - fusA) * (1 - fusB) == 1 then bind_reg(insns, n, reg) else 0;
-  let _ = if fv == 0 then bind_reg(insns, n, reg) else 0;
+  let _ = if fv * (1 - fusA) * (1 - fusB) == 1 then bind_reg(insns, n, treg_i) else 0;
+  let _ = if fv == 0 then bind_reg(insns, n, treg_i) else 0;
   n[0]
 }
 
@@ -1787,10 +1822,9 @@ fn emit_compound_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], s
   let is_div = if opch == 47 then 1 else 0;
   let is_mod = if opch == 37 then 1 else 0;
   let opcode = is_add * 2 + is_sub * 3 + is_mul * 4 + is_div * 5 + is_mod * 11;
+  let is_plain = if opch == 61 then 1 else 0;
   let _ = pos[0] = pos[0] + 2;
-  let _ = emit_var(insns, n, reg0);
-  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
-  let _ = emit_binop(insns, n, opcode);
+  let _ = if is_plain == 1 then (let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) in 0) else (let _ = emit_var(insns, n, reg0) in (let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) in (let _ = emit_binop(insns, n, opcode) in 0)));
   let _ = pop(insns, n, 0);
   let _ = bind_reg(insns, n, reg0);
   let _ = skip_ws(s, pos);
@@ -2139,6 +2173,10 @@ fn collect_fns(s: str, fnames: [i64], fpos: [i64], cnt: [i64]) -> i64 {
 // into the shared insns/n buffer. selfstart = its absolute word offset (0 in a
 // single-fn compile); fntab = full name->start layout (for cross-call bl).
 fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], n: [i64], tkb: [i64]) -> i64 {
+  // Reset per-fn scan-budget so late functions don't exhaust the counter
+  // accumulated by earlier ones (every cache-hit increments fntab[4000];
+  // without reset, late fns compile ALL calls as unresolved/neutral).
+  let _ = fntab[4000] = 0;
   let pos = [fpos];
   let stab = zeros(129);
   let _ = skip_ws(s, pos);
@@ -2370,33 +2408,33 @@ let c6 = if compile("if 1 then 10 else 20") == 56260325310 then 0 else 1;
 let c7 = if compile("if 0 then 10 else 20") == 56260325278 then 0 else 1;
 let c8 = if compile("1 + if 2 then 3 else 4") == 90720865435 then 0 else 1;
 let c9 = if compile("if 1 then 1+2 else 3*4") == 125449873794 then 0 else 1;
-let c10 = if compile_fn("fn f(a) { a + 1 }") == 59036607243 then 0 else 1;
-let c11 = if compile_fn("fn f(a,b) { a + b }") == 64641640160 then 0 else 1;
+let c10 = if compile_fn("fn f(a) { a + 1 }") == 105362869862 then 0 else 1;
+let c11 = if compile_fn("fn f(a,b) { a + b }") == 107536897562 then 0 else 1;
 let c12 = if compile("1<2") == 60091882330 then 0 else 1;
 let c13 = if compile("3==3") == 60091845562 then 0 else 1;
 let c14 = if compile("2>3") == 60091894682 then 0 else 1;
 let c15 = if compile("1+2<4") == 94552423255 then 0 else 1;
 let c16 = if compile("5==2+3") == 94552386487 then 0 else 1;
-let c17 = if compile_fn("fn f() { let a = 1; a + 2 }") == 62568212267 then 0 else 1;
-let c18 = if compile_fn("fn f(a) { let b = a + 1; b * 2 }") == 65438424831 then 0 else 1;
-let c19 = if compile_fn("fn main() { f(41) } fn f(a) { a + 1 }") == 144783913454 then 0 else 1;
-let c20 = if compile_fn("fn main() { s(6) } fn s(a) { a * a }") == 126542815696 then 0 else 1;
-let c21 = if compile_fn("fn main() { g(3,4) } fn g(a,b) { a + b }") == 146957810145 then 0 else 1;
-let c22 = if compile_fn("fn main() { foo(41) } fn foo(x) { x + 1 }") == 123191583556 then 0 else 1;
-let c23 = if compile_fn("fn main() { let acc = 10; let delta = 5; acc + delta }") == 71704783040 then 0 else 1;
-let c24 = if compile_fn("fn main() { foo(3,4) } fn foo(a,b) { a + b }") == 143195567734 then 0 else 1;
-let c25 = if compile_fn("fn main() { let total = 0; let extra = 7; total + extra * 2 }") == 75253161953 then 0 else 1;
-let c26 = if compile_fn("fn main() { let p = pt { x: 1, y: 2 }; p.x + p.y } struct pt { x: i64, y: i64 }") == 205244199530 then 0 else 1;
-let c27 = if compile_fn("fn main() { pt { x: 1, y: 2 } } struct pt { x: i64, y: i64 }") == 114497688576 then 0 else 1;
+let c17 = if compile_fn("fn f() { let a = 1; a + 2 }") == 123192893028 then 0 else 1;
+let c18 = if compile_fn("fn f(a) { let b = a + 1; b * 2 }") == 160095863221 then 0 else 1;
+let c19 = if compile_fn("fn main() { f(41) } fn f(a) { a + 1 }") == 144783978990 then 0 else 1;
+let c20 = if compile_fn("fn main() { s(6) } fn s(a) { a * a }") == 126542946768 then 0 else 1;
+let c21 = if compile_fn("fn main() { g(3,4) } fn g(a,b) { a + b }") == 146957875681 then 0 else 1;
+let c22 = if compile_fn("fn main() { foo(41) } fn foo(x) { x + 1 }") == 123191649092 then 0 else 1;
+let c23 = if compile_fn("fn main() { let acc = 10; let delta = 5; acc + delta }") == 143196878710 then 0 else 1;
+let c24 = if compile_fn("fn main() { foo(3,4) } fn foo(a,b) { a + b }") == 143195633270 then 0 else 1;
+let c25 = if compile_fn("fn main() { let total = 0; let extra = 7; total + extra * 2 }") == 177925886515 then 0 else 1;
+let c26 = if compile_fn("fn main() { let p = pt { x: 1, y: 2 }; p.x + p.y } struct pt { x: i64, y: i64 }") == 194352293147 then 0 else 1;
+let c27 = if compile_fn("fn main() { pt { x: 1, y: 2 } } struct pt { x: i64, y: i64 }") == 209330188518 then 0 else 1;
 let c28 = if compile_fn("fn main(p) { p.x + p.y } struct pt { x: i64, y: i64 }") == 141644920226 then 0 else 1;
 let c29 = if compile_fn("fn main() { some(5) } enum opt { none, some }") == 100199269538 then 0 else 1;
 let c30 = if compile_fn("fn main() { none } enum opt { none, some }") == 78191717988 then 0 else 1;
 let c31 = if compile_fn("fn main() { match some(5) { none => 0, some(x) => x + 1 } } enum opt { none, some }") == 123192893124 then 0 else 1;
 let c32 = if compile_fn("fn main() { match none { none => 0, some(x) => x + 1 } } enum opt { none, some }") == 68728432374 then 0 else 1;
-let c33 = if compile_fn("fn fact(n) { if n <= 1 then 1 else n * fact(n-1) }") == 230156779875 then 0 else 1;
-let c34 = if compile_fn("fn main() { let i = 0; let acc = 0; while i < 5 { let acc = acc + i; let i = i + 1; 0 }; acc }") == 95515523175 then 0 else 1;
-let c35 = if compile_program("fn main() { helper(41) } fn helper(x) { x + 1 }") == 133762173686 then 0 else 1;
-let c36 = if compile_program("fn main() { add(3,4) } fn add(a,b) { a + b }") == 185794066890 then 0 else 1;
+let c33 = if compile_fn("fn fact(n) { if n <= 1 then 1 else n * fact(n-1) }") == 261173770493 then 0 else 1;
+let c34 = if compile_fn("fn main() { let i = 0; let acc = 0; while i < 5 { let acc = acc + i; let i = i + 1; 0 }; acc }") == 297167697046 then 0 else 1;
+let c35 = if compile_program("fn main() { helper(41) } fn helper(x) { x + 1 }") == 237421204746 then 0 else 1;
+let c36 = if compile_program("fn main() { add(3,4) } fn add(a,b) { a + b }") == 257425254461 then 0 else 1;
   // Execution tests: the self-host bridge (source -> AArch64 -> exec -> result).
   let c37 = if run_program("fn main() { 42 }", 0) == 42 then 0 else 1;
   let c38 = if run_program("fn fact(n) { if n <= 1 then 1 else n * fact(n-1) }", 5) == 120 then 0 else 1;
@@ -3357,8 +3395,7 @@ fn fpC_factor(st: [i64], insns: [i64], n: [i64], stab: [i64], cx: [i64], d: i64,
   let kd8 = fpC_kd(st);
   let isrparen = if kd8 == 8 then 1 else 0;
   let _ = if call_go * isrparen == 1 then fpC_adv(st) else 0;
-    let hs2 = if stab[0] > 8 then 1 else 0;
-  let _ = if call_go * isrparen == 1 then emit_bl(insns, n, tgt, hs2) else 0;
+  let _ = if call_go * isrparen == 1 then emit_bl(insns, n, tgt, 1) else 0;
   let dis0 = if d > 0 then 1 else 0;
   let _ = if call_go * isrparen * dis0 == 1 then (let _ = fpC_movrr(insns, n, 0, rd) in 0) else 0;
   let us_i = d - 1;

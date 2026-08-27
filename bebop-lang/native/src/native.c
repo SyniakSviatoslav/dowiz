@@ -218,19 +218,26 @@ static int emit_expr(const Term *t) {
             emit_push();
             return 0;
         case TERM_IF: {
-            /* Branchless ⤫ (#30, spec ⤫): evaluate cond + BOTH branches, then
-             * csel picks the result. All native terms are pure (no IO), so
-             * speculating both branches is always sound and removes a
-             * mispredictable cbz/b branch. */
+            /* Real branches: evaluate cond, skip then-branch if false (B.EQ),
+             * skip else-branch if true (B). Matches emit_cond in the Bebop
+             * compiler so self-hosted and C-interp outputs agree. */
             if (emit_expr(t->a) != 0) return -1; /* cond pushed */
-            if (emit_expr(t->b) != 0) return -1; /* then pushed */
-            if (emit_expr(t->c) != 0) return -1; /* else pushed */
-            emit_pop(2);   /* else -> x2 */
-            emit_pop(1);   /* then -> x1 */
             emit_pop(0);   /* cond -> x0 */
             em(0xF100001Fu); /* cmp x0, #0 */
-            em(0x9A821020u); /* csel x0, x1, x2, ne — x0 = (x0!=0) ? x1 : x2 */
-            emit_push();
+            /* B.EQ placeholder (to else branch) */
+            unsigned eq_at = em_len;
+            em(0x54000000u); /* B.EQ #0 */
+            if (emit_expr(t->b) != 0) return -1; /* then pushed */
+            /* B end placeholder */
+            unsigned b_at = em_len;
+            em(0x14000000u); /* B #0 */
+            /* Patch B.EQ to else branch */
+            int eq_fwd = (int)(em_len - eq_at);
+            em_code[eq_at] = 0x54000000u | (((unsigned)eq_fwd & 0x7FFFFu) << 5);
+            if (emit_expr(t->c) != 0) return -1; /* else pushed */
+            /* Patch B to end */
+            int b_fwd = (int)(em_len - b_at);
+            em_code[b_at] = 0x14000000u | ((unsigned)b_fwd & 0x3FFFFFFu);
             return 0;
         }
         case TERM_APP: {
