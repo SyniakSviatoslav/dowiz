@@ -176,6 +176,24 @@ test: $(BIN)
 	$(BIN) energytest
 	@echo "--- zlib (deflate/inflate + crc32/adler32) ---"
 	$(BIN) zlib
+	@echo "--- L0: selfhost strict 139/139 ---"
+	$(BIN) check ../selfhost/expr_compile.bp
+	@test $$($(BIN) check ../selfhost/expr_compile.bp 2>&1 | grep -c " ok") -eq 139 || (echo "L0 FAIL: expected 139 ok fns"; exit 1)
+	@echo "--- L0: fuzz_selfhost 100 ---"
+	$(MAKE) fuzz-selfhost
+	./$(FUZZ_SELF_BIN) 100
+	@echo "--- L0: diff_fuzz 100 ---"
+	$(MAKE) fuzz
+	./$(BUILD)/fuzz 100
+	@echo "--- L0: diff_fuzz selfhost 20 ---"
+	./$(BUILD)/diff_fuzz 20
+	@echo "--- L0: depth_sim 0 flags (allow run_program:-1) ---"
+	@bash ../tools/gen_selfsrc.sh /tmp/bebop_self_src.bp /tmp/bebop_self_src.bp
+	@$(BIN) compilewords ../selfhost/expr_compile.bp /tmp/bebop_self_src.bp > /tmp/l0_self.full
+	@python3 ../tools/depth_sim.py /tmp/l0_self.full > /tmp/l0_depth.out || true
+	@cat /tmp/l0_depth.out
+	@test $$(grep -v "run_program" /tmp/l0_depth.out | wc -l) -eq 0 || (echo "L0 FAIL: depth_sim flags unexpected"; cat /tmp/l0_depth.out; exit 1)
+	@echo "L0: all gates PASS"
 
 clean:
 	rm -rf $(BUILD)
