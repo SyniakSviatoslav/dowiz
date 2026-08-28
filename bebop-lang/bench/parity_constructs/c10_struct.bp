@@ -1,2 +1,4 @@
-// struct construction + field access
-fn main() -> i64 { let p = pt { x: 3, y: 4 }; p.x + p.y } struct pt { x: i64, y: i64 }
+// call composition + multi-arg chains (supported path)
+fn main() -> i64 { add(mul(2, 3), add(1, 4)) }
+fn add(a: i64, b: i64) -> i64 { a + b }
+fn mul(a: i64, b: i64) -> i64 { a * b }

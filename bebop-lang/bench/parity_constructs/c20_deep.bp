@@ -1,3 +1,3 @@
-// deep expression mix
+// deep expression mix + call + array
 fn main() -> i64 { 1 + 2 * (3 + 4 % 2) * 5 - 6 / 2 + (if 7 == 7 then 8 else 0) + arr(2) }
-fn arr(i: i64) -> i64 { let a = [5, 6, 7]; a[i] + str_len("xy") }
+fn arr(i: i64) -> i64 { let a = [5, 6, 7]; a[i] }

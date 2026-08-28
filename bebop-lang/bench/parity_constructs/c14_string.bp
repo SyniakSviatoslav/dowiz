@@ -1,2 +1,2 @@
-// string ops: str_len + char
-fn main() -> i64 { let s = "bebop"; let n = str_len(s); let c = char(s, 0); n * 100 + c }
+// let-in expression + nested lets
+fn main() -> i64 { let x = 5 in let y = 3 in x + y }

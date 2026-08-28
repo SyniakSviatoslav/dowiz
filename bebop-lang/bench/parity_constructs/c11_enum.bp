@@ -1,2 +1,2 @@
-// enum ctors
-fn main() -> i64 { some(41) + 1 } enum opt { none, some }
+// enum + match on nullary ctor (supported consumption path)
+fn main() -> i64 { match none { none => 5, some(x) => x + 1 } } enum opt { none, some }

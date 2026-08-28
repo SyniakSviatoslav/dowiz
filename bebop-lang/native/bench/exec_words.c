@@ -180,6 +180,16 @@ int main(int argc, char **argv) {
     if (raw) {
         /* entry already taken from argv[3] above */
     } else if (argc > 3) {
+        /* numeric third arg = explicit entry word offset (drivers compute
+         * fn main's offset from the source); otherwise argv[3] is a
+         * manifest path whose LAST offset is the entry (kernel convention:
+         * helpers first, main last). */
+        const char *a3 = argv[3];
+        int isnum = 1;
+        for (const char *q = a3; *q; q++) if (*q < '0' || *q > '9') { isnum = 0; break; }
+        if (isnum) {
+            entry = atoi(a3);
+        } else {
         char *line = NULL; size_t lc = 0;
         FILE *mf = fopen(argv[3], "r");
         if (!mf) { perror("manifest"); return 2; }
@@ -196,6 +206,7 @@ int main(int argc, char **argv) {
             }
         fclose(mf);
         free(line);
+        }
     }
 
     /* Bump arena for native zeros(): cursor in x27, end in x28. Monotonic

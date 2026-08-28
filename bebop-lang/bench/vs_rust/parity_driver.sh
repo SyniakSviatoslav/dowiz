@@ -18,7 +18,11 @@ for f in "$DIR"/*.bp; do
   if ! timeout 90 $BEBOPC compilewords selfhost/expr_compile.bp "$f" > /tmp/opencode/pd.full 2>/dev/null; then
     echo "COMPILEFAIL $f"; FAIL=$((FAIL+1)); continue
   fi
-  N=$(timeout 30 $EXECW /tmp/opencode/pd.full 1 2>/dev/null | grep "^result=" | cut -d= -f2)
+  # entry = fn main's word offset: idx of ^fn main( among ^fn lines,
+  # then the idx-th offset of the OFF manifest (source order)
+  IDX=$(awk '/^fn /{ if (/^fn main\(/) exit; c++ } END{ print c+0 }' "$f")
+  ENTRY=$(grep "^OFF" /tmp/opencode/pd.full | awk -v i="$IDX" '{ print $(i+3) }')
+  N=$(timeout 30 $EXECW /tmp/opencode/pd.full 1 "$ENTRY" 2>/dev/null | grep "^result=" | cut -d= -f2)
   if [ "$I" = "$N" ]; then PASS=$((PASS+1));
   elif [ -z "$N" ]; then echo "NATIVESTALL $f"; CRASH=$((CRASH+1));
   else echo "MISMATCH $f interp=$I native=$N"; FAIL=$((FAIL+1)); fi

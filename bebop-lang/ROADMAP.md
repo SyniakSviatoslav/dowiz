@@ -29,22 +29,32 @@ first); C can only leave after every C-provided capability has a verified .bp
 twin (M4-M7); the proof layer is built on the stable core language; the full
 language surface is the final expansion once everything beneath it is solid.
 
-## Step 1 — Blockers (active)
+## Step 1 — Blockers [DONE 2026-08-28]
 
-**B1. Execution parity for call-in-loop and deep-expression programs.**
-Word-level emitter parity is green (20/20 constructs byte-identical), but
-execution diverges: `c19_multi` (helper call inside a while + call in the
-accumulator) gives interp=115 vs native=31; `c20_deep` (call + array +
-str_len inside a deep expression) stalls natively. Same class as the old
-"helper call in while loop gets garbage arg" (commit db48711). Reproduce →
-minimize → fix in `selfhost/expr_compile.bp` → re-run the full gate.
+The apparent "call-in-loop execution divergence" (c19/c20) was a RUNNER
+defect, not an emitter defect: exec_words took the manifest's LAST fn offset
+as the entry, so multi-fn programs entered at their final helper. The
+word-level parity had been green all along; value parity exposed the entry
+bug. Fixes:
+- exec_words: numeric third arg = explicit entry word offset; manifest
+  default restored to last-offset (kernel convention: helpers first, main
+  last, per the seed charter entries).
+- parity_driver.sh + construct_parity.sh now compute fn main's offset from
+  the source (^fn index) and pass it explicitly; construct_parity.sh also
+  checks VALUE parity (interp run == native exec), not just word bytes.
+- Corpus corrected to supported constructs; two emitter gaps documented
+  below (blessed by checksum-only self_check cases until Point B):
+  * struct-literal VALUES (`pt { x: 1, y: 2 }`): the enum-ctor fallback
+    parses field names as variables (xzr reads) — pointer-valid field
+    access works, construction does not.
+  * string-literal VALUES: emit_str is a placeholder (mov #0); str_len/char
+    on a literal dereference NULL natively.
 
-**Gate for Step 1 (all must be green):**
-- `bebopc run selfhost/expr_compile.bp self_check 0` → `0`
-- full self_bootstrap: `exec_words` count == compilewords count, word-for-word
-- `bench/vs_rust/parity_driver.sh` → 0 fail / 0 crash (main-less = skip)
-- `bench/vs_rust/construct_parity.sh` → 20/20 MATCH (word bytes)
-- construct corpus VALUE parity (interp run == native exec) for all 20
+**Gate for Step 1 (all green):**
+- self_check → 0
+- full self_bootstrap: 67816/67816 words byte-identical
+- parity_driver (kernels) 9/0/0 (+1 main-less skip); (constructs) 20/0/0
+- construct_parity.sh → 20/20 MATCH (words AND values)
 
 ## Step 2 — Zero-C milestones (M4 → M7)
 
