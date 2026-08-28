@@ -1,0 +1,66 @@
+// selfhost/std/pool_compile.bp — compilemany: fast spawn + dispatcher parent.
+//
+// Architecture (per the M6 blueprint):
+// 1. FAST SPAWN LOOP: the parent's per-iteration work is light only —
+//    publish the worker id into the shared arena cell, clone, and let
+//    the child do the heavy compile. The parent's own branchless compile
+//    sees an empty source (slurp limit 0) and is instant, so the whole
+//    spawn loop completes in microseconds and ALL workers overlap.
+// 2. DISPATCHER PARENT: after spawning, the parent only futex-waits on
+//    every done flag (real sleep, no spin) and merges the results.
+// 3. WORKER_ID FROM THE ARENA: each child reads its id from the shared
+//    cell the parent wrote right before its clone — the id never lives
+//    in a spilled register, so the clone's re-based spill base cannot
+//    corrupt it.
+// 4. STATIC CHUNKING: worker i owns result cell i and done flag W+i —
+//    ranges never overlap.
+// 5. MEMORY ORDER: the wake builtin executes DMB ISH before FUTEX_WAKE
+//    so the publish stores are visible to the woken waiter (ARM64 weak
+//    ordering).
+// Workers park on a never-woken futex cell (raw thread exit followed by
+// another clone breaks under ptrace sandboxes); the process's exit_group
+// reaps them.
+
+module core { }
+
+// par_compile(W, path_cells, path_len): W workers each compile the file
+// at path_cells[0..path_len) in parallel, publish their word count,
+// park; the dispatcher sums. Returns W * serial count.
+fn par_compile(W: i64, path_cells: [i64], path_len: i64) -> i64 {
+  let cells = zeros(W * 3 + 1);
+  let base = sys_arena_base();
+  let i = 0;
+  while i < W {
+    let _ = cells[W * 2 + 1 + i] = i;
+    let r = sys_clone(68864, base + 16777216 + i * 16777216);
+    let fd = sys_open(path_cells, path_len, 0);
+    let srcv = sys_slurp(fd, (if r == 0 then 1 else 0) * 400000);
+    let _ = sys_close(fd);
+    let words = emit_words(srcv);
+    let _ = sys_cond_set(if r == 0 then 1 else 0, cells, cells[W * 2 + 1 + i], words[0]);
+    let _ = sys_cond_set(if r == 0 then 1 else 0, cells, W + cells[W * 2 + 1 + i], 1);
+    let _ = sys_futex_wake(cells, W + cells[W * 2 + 1 + i], 64);
+    let parked = if r == 0 then 0 else 1;
+    while parked == 0 {
+      let w = sys_futex_wait_guard(if r == 0 then 0 else 1, cells, W * 2, 0);
+      let parked = if cells[W * 2] == 1 then 1 else 0;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  let k = 0;
+  let acc = 0;
+  while k < W {
+    let d = 0;
+    while d == 0 {
+      let w = sys_futex_wait_guard(0, cells, W + k, 0);
+      let d = if cells[W + k] == 1 then 1 else 0;
+      0
+    };
+    let acc = acc + cells[k];
+    let k = k + 1;
+    0
+  };
+  acc
+}

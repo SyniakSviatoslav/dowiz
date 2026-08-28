@@ -63,3 +63,78 @@ fn par_sum(W: i64, per: i64) -> i64 {
   };
   acc
 }
+
+// par_merge(W, per): same work-split as par_sum, but workers publish into
+// ONE shared sum cell via sys_atomic_add (LDADDAL fetch-and-add) instead
+// of private result cells; per-worker done flags + park cell as in
+// par_sum. Real threads race on cells[W] — the atomic merge must not lose
+// updates; the interp runs the child paths sequentially (sys_clone==0) and
+// must reach the same total. Layout: sum=W, flags=W+1..2W, park=2W+1.
+fn par_merge(W: i64, per: i64) -> i64 {
+  let cells = zeros(W * 2 + 2);
+  let base = sys_arena_base();
+  let i = 0;
+  while i < W {
+    let r = sys_clone(68864, base + 131072 + i * 65536);
+    let is_child = if r == 0 then 1 else 0;
+    let part = is_child * (i + 1) * per;
+    let _ = sys_atomic_add(cells, W, part);
+    let _ = sys_cond_set(is_child, cells, W + 1 + i, 1);
+    let _ = sys_futex_wake(cells, W + 1 + i, 64);
+    let parked = if is_child == 0 then 1 else 0;
+    while parked == 0 {
+      let w = sys_futex_wait_guard(1 - is_child, cells, W * 2 + 1, 0);
+      let parked = if cells[W * 2 + 1] == 1 then 1 else 0;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  let k = 0;
+  while k < W {
+    let d = 0;
+    while d == 0 {
+      let w = sys_futex_wait_guard(0, cells, W + 1 + k, 0);
+      let d = if cells[W + 1 + k] == 1 then 1 else 0;
+      0
+    };
+    let k = k + 1;
+    0
+  };
+  cells[W]
+}
+
+// par_tids(W): real-thread evidence without /proc. sys_clone returns the
+// child tid in the PARENT (0 in the child) — the parent records each r
+// into cells[W+i] via sys_cond_set(1 - is_child, ...), the dispatcher
+// counts nonzero entries. Real threads (seed): every iteration's clone
+// produces a kernel tid -> count == W. Sequential emulation (interp):
+// sys_clone always returns 0, the parent path never runs -> count == 0.
+// No done flags needed: the parent writes the tids inline during the
+// spawn loop, before the dispatcher counts.
+fn par_tids(W: i64) -> i64 {
+  let cells = zeros(W * 2 + 1);
+  let base = sys_arena_base();
+  let i = 0;
+  while i < W {
+    let r = sys_clone(68864, base + 131072 + i * 65536);
+    let is_child = if r == 0 then 1 else 0;
+    let _ = sys_cond_set(1 - is_child, cells, W + i, r);
+    let parked = if is_child == 0 then 1 else 0;
+    while parked == 0 {
+      let w = sys_futex_wait_guard(1 - is_child, cells, W * 2, 0);
+      let parked = if cells[W * 2] == 1 then 1 else 0;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  let k = 0;
+  let cnt = 0;
+  while k < W {
+    let cnt = cnt + (if cells[W + k] != 0 then 1 else 0);
+    let k = k + 1;
+    0
+  };
+  cnt
+}

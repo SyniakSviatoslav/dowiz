@@ -92,7 +92,11 @@ _start:
     mov     x27, x25           /* bump arena past the string */
     add     x23, x23, #1
     b       1b
-2:  mov     x0, x19             /* argc */
+2:  add     x27, x27, #7
+    and     x27, x27, #-8        /* 8-align the arena cursor: argv strings are
+                                  * copied byte-wise; LSE atomics (LDADDAL) and
+                                  * 16-byte allocs need aligned bases. */
+    mov     x0, x19             /* argc */
     mov     x1, x22             /* argv pointer array */
     add     x15, x21, x12      /* entry */
     blr     x15

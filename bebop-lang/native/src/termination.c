@@ -36,6 +36,7 @@ int qtt_termination_check(const Term *t, char *err, size_t cap) {
                    qtt_termination_check(t->c, err, cap) == 0 &&
                    qtt_termination_check(t->d, err, cap) == 0 ? 0 : -1;
         case TERM_SYSFUTEXWAKE:
+        case TERM_SYSATOMICADD:
             return qtt_termination_check(t->a, err, cap) == 0 &&
                    qtt_termination_check(t->b, err, cap) == 0 &&
                    qtt_termination_check(t->c, err, cap) == 0 ? 0 : -1;

@@ -935,6 +935,7 @@ static Term *subst_p(const Term *t, const char *name, const Term *v) {
             o->d = subst_p(t->d, name, v);
             return o;
         case TERM_SYSFUTEXWAKE:
+        case TERM_SYSATOMICADD:
             o->a = subst_p(t->a, name, v);
             o->b = subst_p(t->b, name, v);
             o->c = subst_p(t->c, name, v);
@@ -1243,7 +1244,8 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
             *out = &I64_TY;
             return 0;
         }
-        case TERM_SYSFUTEXWAKE: {
+        case TERM_SYSFUTEXWAKE:
+        case TERM_SYSATOMICADD: {
             if (t->b && check(c, t->b, &I64_TY, err, cap) != 0) return -1;
             if (t->c && check(c, t->c, &I64_TY, err, cap) != 0) return -1;
             *out = &I64_TY;
@@ -2446,6 +2448,16 @@ static Value eval(const Term *t, Env *env) {
                               vn.i, 0L, 0L, 0L);
             return v;
         }
+        case TERM_SYSATOMICADD: {
+            Value va = eval(t->a, env);
+            Value vi = eval(t->b, env);
+            Value vv = eval(t->c, env);
+            if (va.kind != 6 || vi.kind != 0 || vv.kind != 0 ||
+                vi.i < 0 || vi.i >= va.nfv) { v.kind = -1; return v; }
+            v.kind = 0;
+            v.i = __sync_fetch_and_add(&va.fv[vi.i].val.i, vv.i);
+            return v;
+        }
         case TERM_SYSARENABASE:
         case TERM_SYSARENAEND: {
             /* The interpreter has no seed-arena; the only consumer is the
@@ -2815,6 +2827,7 @@ Term *qtt_subst(const Term *t, const char *name, const Term *v) {
             o->d = qtt_subst(t->d, name, v);
             return o;
         case TERM_SYSFUTEXWAKE:
+        case TERM_SYSATOMICADD:
             o->a = qtt_subst(t->a, name, v);
             o->b = qtt_subst(t->b, name, v);
             o->c = qtt_subst(t->c, name, v);
@@ -2942,6 +2955,7 @@ static Term *norm_rec(const Term *t) {
             o->d = norm_rec(t->d);
             return o;
         case TERM_SYSFUTEXWAKE:
+        case TERM_SYSATOMICADD:
             o->a = norm_rec(t->a);
             o->b = norm_rec(t->b);
             o->c = norm_rec(t->c);
@@ -3220,6 +3234,7 @@ static int conv_rec(const Term *a, const Term *b) {
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b) &&
                    conv_rec(a->c, b->c) && conv_rec(a->d, b->d);
         case TERM_SYSFUTEXWAKE:
+        case TERM_SYSATOMICADD:
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b) &&
                    conv_rec(a->c, b->c);
         case TERM_SYSEXITTHREAD:

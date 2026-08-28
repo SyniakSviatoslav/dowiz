@@ -383,6 +383,8 @@ static Term *parse_primary(P *p) {
             t->kind = TERM_SYSFUTEXWAIT; /* (cond,arr,idx,val) guarded WAIT */
         } else if (strcmp(buf, "sys_futex_wake") == 0) {
             t->kind = TERM_SYSFUTEXWAKE; /* (arr,idx,n) */
+        } else if (strcmp(buf, "sys_atomic_add") == 0) {
+            t->kind = TERM_SYSATOMICADD; /* (arr,idx,val) */
         } else if (strcmp(buf, "sys_arena_base") == 0) {
             t->kind = TERM_SYSARENABASE; /* () */
         } else if (strcmp(buf, "sys_arena_end") == 0) {
@@ -570,7 +572,8 @@ static Term *parse_primary(P *p) {
             atom->d = ad;
             continue;
         }
-        if (atom->kind == TERM_SYSFUTEXWAKE && p->s[p->pos] == '(') {
+        if ((atom->kind == TERM_SYSFUTEXWAKE || atom->kind == TERM_SYSATOMICADD) &&
+            p->s[p->pos] == '(') {
             p->pos++;
             Term *aa = parse_expr(p);
             if (!aa) return NULL;

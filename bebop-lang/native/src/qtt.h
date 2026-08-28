@@ -145,6 +145,7 @@ typedef enum {
     TERM_SYSFUTEXWAKE,  /* sys_futex_wake(arr,idx,n): FUTEX_WAKE n waiters */
     TERM_SYSCONDSET,    /* sys_cond_set(cond,arr,idx,val): *arr[idx]=val iff
                      *   cond — real branch, no speculation lost-updates */
+    TERM_SYSATOMICADD,  /* sys_atomic_add(arr,idx,val): atomic +=, returns old */
     TERM_SYSARENABASE,  /* sys_arena_base(): seed loader x27 arena cursor */
     TERM_SYSARENAEND,   /* sys_arena_end(): seed loader x28 arena limit */
 } TermKind;
