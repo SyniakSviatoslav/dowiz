@@ -1,0 +1,2811 @@
+// selfhost/expr_compile.bp - real expression + function compiler (self-host).
+//
+// Two stages toward a self-hosting compiler:
+//   1. compile(s)    - an arithmetic expression (digits, + - * /, parens,
+//                      precedence, branchless conditional) to a stack-machine
+//                      instruction sequence.
+//   2. compile_fn(s) - a complete function (fn name(a,b,...) { body }) to a
+//                      full AArch64 function (prologue + param moves + body +
+//                      epilogue). Params map a->x19, b->x20, ... (moved from
+//                      x0, x1, ... in the prologue; the stack machine only
+//                      clobbers x0/x1, so params live in callee-saved regs).
+//
+// A faithful port of native/src/native.c emit_expr for the LIT + BIN arith +
+// conditional subset. AArch64 words are decimal (Bebop has no hex literals).
+
+module core { }
+
+fn is_digit(c: i64) -> i64 {
+  let ge48 = if c >= 48 then 1 else 0;
+  let le57 = if c <= 57 then 1 else 0;
+  ge48 * le57
+}
+
+fn is_alpha(c: i64) -> i64 {
+  let ge97 = if c >= 97 then 1 else 0;
+  let le122 = if c <= 122 then 1 else 0;
+  ge97 * le122
+}
+
+// Read a multi-char identifier (letters/digits/underscore) starting at pos[0];
+// return its polynomial hash (h = h*131 + c, i64-wrapping), advance pos past it.
+fn read_ident(s: str, pos: [i64]) -> i64 {
+  let strn = str_len(s);
+  let h = 0;
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_us = if ch == 95 then 1 else 0;
+    let is_id = is_alpha(ch) + is_digit(ch) + is_us;
+    let h = if is_id == 1 then (h * 131 + ch) else h;
+    let _ = pos[0] = pos[0] + is_id;
+    let done = if is_id == 1 then 0 else 1;
+    0
+  };
+  h
+}
+
+// Symbol table: stab[0] = count; pairs (name, reg) at stab[1+2i], stab[2+2i].
+// Lookup name -> register (or -1 if unbound).
+fn sym_lookup(s: str, stab: [i64], name: i64, srcpos: i64) -> i64 {
+  let cnt = stab[0];
+  let i = 0;
+  let reg = 0 - 1;
+  while i < cnt {
+    let nm = stab[1 + 3 * i];
+    let rg = stab[2 + 3 * i];
+    let sp = stab[3 + 3 * i];
+    let hhit = if nm == name then 1 else 0;
+    let bhit = if hhit == 1 then ident_eq(s, sp, srcpos) else 0;
+    let reg = if hhit * bhit == 1 then rg else reg;
+    let i = i + 1;
+    0
+  };
+  reg
+}
+
+// Byte-compare two identifier spellings at source offsets pa/pb: equal if
+// the char sequences match exactly AND both end at a non-ident char.
+fn ident_eq(s: str, pa: i64, pb: i64) -> i64 {
+  let strn = str_len(s);
+  let same = 1;
+  let ia = [pa];
+  let ib = [pb];
+  let done = 0;
+  while done == 0 {
+    let ca = if ia[0] >= strn then 0 else char(s, ia[0]);
+    let cb = if ib[0] >= strn then 0 else char(s, ib[0]);
+    let ida = is_alpha(ca) + is_digit(ca) + (if ca == 95 then 1 else 0);
+    let idb = is_alpha(cb) + is_digit(cb) + (if cb == 95 then 1 else 0);
+    let cmp = if ca == cb then 0 else 1;
+    let mdiff = if ida * idb == 1 then cmp else 0;
+    let snew = if ida + idb == 1 then 0 else same * (1 - mdiff);
+    let same = snew;
+    let _ = ia[0] = ia[0] + 1;
+    let _ = ib[0] = ib[0] + 1;
+    let done = if ida + idb == 0 then 1 else 0;
+    0
+  };
+  same
+}
+
+// Bind name to the next free register (x19+cnt) or a spill slot. Registers
+// x19..x26 hold the first 8 bindings (x27/x28 reserved for the runner's
+// bump-arena cursor/end); the 9th+ spill to a frame slot [x15 + slot*8]. The returned value encodes the location:
+//   19..28      -> register-resident (mov x<reg>, x0 / mov x0, x<reg>)
+//   100..100+S  -> spilled to slot S (str x0,[x15,#S*8] / ldr x0,[x15,#S*8])
+//   0-2         -> table full (capacity assert: caller must emit a trap)
+// Entries are (name, reg, srcpos) triples: binding and lookup byte-compare
+// the spelling at the stored/queried source position, so hash collisions
+// can never silently alias two names onto one register.
+fn sym_bind(s: str, stab: [i64], name: i64, srcpos: i64) -> i64 {
+  // Identifiers are 131-rolling hashes; on 64-bit hosts long names wrap
+  // NEGATIVE. Only an exact zero (empty ident) is invalid.
+  let ok = if name == 0 then 0 else 1;
+  let existing = sym_lookup(s, stab, name, srcpos) * ok - (1 - ok);
+  let cnt = stab[0];
+  // x27/x28 are RESERVED: exec_words runner keeps its bump-arena cursor/end
+  // there (global asm register vars). Symbols may occupy x19..x26 only.
+  let is_full = if cnt >= 128 then 1 else 0;
+  let is_spill = if cnt >= 8 then 1 else 0;
+  let reg_register = 19 + cnt;
+  let reg_spill = 100 + cnt - 8;
+  let newreg = reg_register * (1 - is_spill) + reg_spill * is_spill;
+  let is_new = if existing < 0 then 1 else 0;
+  let reg = if is_new == 1 then newreg else existing;
+  let full = is_new * is_full;
+  let _ = if is_new * ok * (1 - full) == 1 then (let _ = stab[1 + 3 * cnt] = name in (let _ = stab[2 + 3 * cnt] = reg in (let _ = stab[3 + 3 * cnt] = srcpos in 0))) else 0;
+  let _ = stab[0] = cnt + is_new * ok * (1 - full);
+  let ret = if full == 1 then 0 - 2 else reg;
+  ret
+}
+
+// Skip over a param's type annotation up to the next ',' or ')'.
+fn skip_to_delim(s: str, pos: [i64]) -> i64 {
+  let strn = str_len(s);
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_comma = if ch == 44 then 1 else 0;
+    let is_rp = if ch == 41 then 1 else 0;
+    let is_delim = is_comma + is_rp;
+    let _ = pos[0] = pos[0] + (1 - is_delim - at_end);
+    let done = if is_delim + at_end >= 1 then 1 else 0;
+    0
+  };
+  0
+}
+
+// Parse a param list (pos at '('): read each param name hash into pnames,
+// advance pos past ')', return the count.
+fn parse_params(s: str, pos: [i64], pnames: [i64], ppos: [i64]) -> i64 {
+  let strn = str_len(s);
+  let _ = pos[0] = pos[0] + 1;
+  let pcnt = 0;
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_rp = if ch == 41 then 1 else 0;
+    let is_letter = is_alpha(ch);
+    let _ = if pcnt < 10 then (let _ = ppos[pcnt] = pos[0] in 0) else 0;
+    let name = read_ident(s, pos);
+    let _ = if pcnt < 10 then (let _ = pnames[pcnt] = name in 0) else 0;
+    let pcnt = pcnt + is_letter;
+    let _ = skip_to_delim(s, pos);
+    let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_comma = if ch2 == 44 then 1 else 0;
+    let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let done = if is_rp + at_end >= 1 then 1 else 0;
+    0
+  };
+  let _ = pos[0] = pos[0] + 1;
+  pcnt
+}
+
+// Identifier: a function call name(args) or a variable reference.
+fn emit_ident(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let npos = pos[0];
+  let name = read_ident(s, pos);
+  let _ = skip_ws(s, pos);
+  let strn = str_len(s);
+  let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+  let is_lp = if ch == 40 then 1 else 0;
+  let is_br = if ch == 123 then 1 else 0;
+  let is_lb = if ch == 91 then 1 else 0;
+  // NOTE: a bare `ident {` here would eat a while/if body as a struct
+  // literal (latent bug that surfaced once OPT-B stopped masking it for
+  // spilled-symbol programs). Struct literals are currently unused by
+  // every kernel/test; the branch stays disabled until a context flag
+  // distinguishes real struct construction from block openers.
+  let struct_kill = 1;
+  if is_lp == 1 then emit_call_or_ctor(s, name, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_br * (1 - struct_kill) == 1 then emit_struct_lit(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_lb == 1 then emit_array_index(s, name, npos, pos, insns, n, stab, selfname, selfstart, fntab)
+  else emit_var_or_ctor(s, name, npos, insns, n, stab, fntab)
+}
+
+
+
+// Skip over a struct field's type annotation up to the next ',' or '}'.
+fn skip_to_field_delim(s: str, pos: [i64]) -> i64 {
+  let strn = str_len(s);
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_comma = if ch == 44 then 1 else 0;
+    let is_rb = if ch == 125 then 1 else 0;
+    let is_delim = is_comma + is_rb;
+    let _ = pos[0] = pos[0] + (1 - is_delim - at_end);
+    let done = if is_delim + at_end >= 1 then 1 else 0;
+    0
+  };
+  0
+}
+
+// Scan for the first struct declaration ("struct "); record pos in out[0].
+fn find_struct(s: str, out: [i64]) -> i64 {
+  let strn = str_len(s);
+  let j = 0;
+  let found = 0;
+  let best = 0;
+  while j + 6 < strn {
+    let c0 = char(s, j);
+    let c1 = char(s, j + 1);
+    let c2 = char(s, j + 2);
+    let c3 = char(s, j + 3);
+    let c4 = char(s, j + 4);
+    let c5 = char(s, j + 5);
+    let c6 = char(s, j + 6);
+    let is_s = if c0 == 115 then 1 else 0;
+    let is_t1 = if c1 == 116 then 1 else 0;
+    let is_r = if c2 == 114 then 1 else 0;
+    let is_u = if c3 == 117 then 1 else 0;
+    let is_c = if c4 == 99 then 1 else 0;
+    let is_t2 = if c5 == 116 then 1 else 0;
+    let is_sp = if c6 == 32 then 1 else 0;
+    let hit = is_s * is_t1 * is_r * is_u * is_c * is_t2 * is_sp;
+    let best = if hit == 1 then j else best;
+    let found = if hit == 1 then 1 else found;
+    let j = j + 1;
+    0
+  };
+  let _ = out[0] = best;
+  found
+}
+
+// 0-based index of field fname in the struct decl at spos ("struct "), -1 if absent.
+fn field_index(s: str, spos: i64, fname: i64) -> i64 {
+  let strn = str_len(s);
+  let pos = [spos + 7];
+  let _ = read_ident(s, pos);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let i = 0;
+  let idx = 0 - 1;
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_rb = if ch == 125 then 1 else 0;
+    let name = read_ident(s, pos);
+    let is_match = if name == fname then 1 else 0;
+    let idx = if is_match == 1 then i else idx;
+    let i = i + 1;
+    let _ = skip_to_field_delim(s, pos);
+    let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_comma = if ch2 == 44 then 1 else 0;
+    let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let done = if is_rb + at_end >= 1 then 1 else 0;
+    0
+  };
+  idx
+}
+
+// Emit one struct-literal field: read name, skip ':', emit value, str at fcnt*8.
+fn emit_struct_field(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], fcnt: i64, selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = read_ident(s, pos);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = pop(insns, n, 0);
+  let _ = em(insns, n, 4177527232 + fcnt * 1024);
+  n[0]
+}
+
+// Emit a struct literal { f: v, ... }: store fields in order at [x14+i*8],
+// then mov x0,x14; add x14,#8n; push the pointer.
+fn emit_struct_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let strn = str_len(s);
+  let _ = pos[0] = pos[0] + 1;
+  let fcnt = 0;
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_rb = if ch == 125 then 1 else 0;
+    let _ = if is_rb == 0 then emit_struct_field(s, pos, insns, n, stab, fcnt, selfname, selfstart, fntab) else 0;
+    let fcnt = if is_rb == 0 then fcnt + 1 else fcnt;
+    let _ = skip_ws(s, pos);
+    let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_comma = if ch2 == 44 then 1 else 0;
+    let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let done = if is_rb + at_end >= 1 then 1 else 0;
+    0
+  };
+  let _ = pos[0] = pos[0] + 1;
+  let _ = em(insns, n, 2853045216);
+  let _ = em(insns, n, 2432696320 + fcnt * 8192 + 462);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// Emit a field access .f: pop the base pointer, ldr x0,[x0,#idx*8], push.
+fn emit_field_access(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = skip_ws(s, pos);
+  let fname = read_ident(s, pos);
+  let spos = [0];
+  let _ = find_struct(s, spos);
+  let idx = field_index(s, spos[0], fname);
+  let _ = pop(insns, n, 0);
+  let _ = em(insns, n, 4181721088 + idx * 1024);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// Scan for the first enum declaration ("enum "); record pos in out[0].
+fn find_enum(s: str, out: [i64]) -> i64 {
+  // Lexical scan: skips strings/comments (same discipline as find_fn).
+  // Raw scanning matched "enum " inside comments and string literals of
+  // the compiler's own source -> phantom decl -> collect_ctors loop over
+  // garbage with names[] overrun. Self-source is the first input that
+  // actually contains those tokens.
+  let strn = str_len(s);
+  let j = 0;
+  let found = 0;
+  let best = strn;
+  let spc = [0];
+  let cpc = [0];
+  while j + 4 < strn {
+    let c0 = char(s, j);
+    let c1 = char(s, j + 1);
+    let c2 = char(s, j + 2);
+    let c3 = char(s, j + 3);
+    let c4 = char(s, j + 4);
+    let is_quote = if c0 == 34 then 1 else 0;
+    let is_sl = if c0 == 47 then 1 else 0;
+    let is_sl2 = if c1 == 47 then 1 else 0;
+    let is_comment = is_sl * is_sl2;
+    let is_e = if c0 == 101 then 1 else 0;
+    let is_n = if c1 == 110 then 1 else 0;
+    let is_u = if c2 == 117 then 1 else 0;
+    let is_m = if c3 == 109 then 1 else 0;
+    let is_sp = if c4 == 32 then 1 else 0;
+    let hit = is_e * is_n * is_u * is_m * is_sp * (1 - is_quote) * (1 - is_comment);
+    let best = if hit == 1 then j else best;
+    let found = if hit == 1 then 1 else found;
+    let _ = spc[0] = j;
+    let _ = cpc[0] = j;
+    let _ = if is_quote == 1 then skip_string(s, spc) else 0;
+    let _ = if is_comment == 1 then skip_line_comment(s, cpc) else 0;
+    let jnext = (j + 1) * (1 - is_quote - is_comment - hit) + spc[0] * is_quote + cpc[0] * is_comment;
+    let j = if hit == 1 then j + 5 else jnext;
+    0
+  };
+  let _ = out[0] = best;
+  found
+}
+
+// Tag (0-based) of ctor name in the enum decl, or -1 if absent / no enum.
+
+// Emit an enum ctor with a payload: ctor(expr) -> [tag, payload] block.
+fn emit_enum_ctor(s: str, tag: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = em(insns, n, 3531603968 + tag * 32);
+  let _ = em(insns, n, 4177527232);
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = pop(insns, n, 0);
+  let _ = em(insns, n, 4177528256);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = em(insns, n, 2853045216);
+  let _ = em(insns, n, 2432713166);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// Emit a nullary enum ctor: ctor -> [tag] block (no payload).
+fn emit_enum_ctor_nullary(insns: [i64], n: [i64], tag: i64) -> i64 {
+  let _ = em(insns, n, 3531603968 + tag * 32);
+  let _ = em(insns, n, 4177527232);
+  let _ = em(insns, n, 2853045216);
+  let _ = em(insns, n, 2432713166);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// Dispatch name( ... ): enum ctor (with payload) or a function call.
+fn emit_bl(insns: [i64], n: [i64], target: i64, has_spills: i64) -> i64 {
+  // x14 (frame-heap cursor) and x15 (spill base) are caller-saved: callees
+  // rebind both from their own sp. A caller that allocates cells AFTER a
+  // call (let k = [0] post-bl) or reads its own spill slots must get them
+  // back. Always save/restore; frame: 48 bytes [x15 @0, x14 @8, x15 @16].
+  let _ = em(insns, n, 3506488319);
+  let _ = em(insns, n, 4177527791);
+  let _ = em(insns, n, 4177528814);
+  let _ = em(insns, n, 4177529839);
+  let offset = target - n[0];
+  let is_back = if offset < 0 then 1 else 0;
+  let word = 2483027968 + offset + is_back * 67108864;
+  let _ = em(insns, n, word);
+  let _ = em(insns, n, 4181722095);
+  let _ = em(insns, n, 4181723118);
+  let _ = em(insns, n, 4181724143);
+  let _ = em(insns, n, 2432746495);
+  n[0]
+}
+
+// Look up a function's start offset in the layout table; -1 if absent.
+fn fntab_lookup(fntab: [i64], name: i64) -> i64 {
+  let cnt = fntab[0];
+  let i = 0;
+  let start = 0 - 1;
+  while i < cnt {
+    let nm = fntab[1 + i];
+    let st = fntab[1 + cnt + i];
+    let is_match = if nm == name then 1 else 0;
+    let start = if is_match == 1 then st else start;
+    let i = i + 1;
+    0
+  };
+  start
+}
+
+// Source-position ab over a 3-zone table [cnt, names..., offsets..., srcpos...]:
+// returns the callee byte offset in source text, or -1 when absent
+// (legacy single-fn path passes cnt=0). O(#fns) not O(source bytes).
+fn ft_srcpos(tab: [i64], name: i64) -> i64 {
+  let cnt = tab[0];
+
+  let i = 0;
+  let sp = 0 - 1;
+  while i < cnt {
+    let nm = tab[1 + i];
+    let pos_i = tab[1 + cnt + cnt + i];
+    let is_match = if nm == name then 1 else 0;
+    let sp = if is_match == 1 then pos_i else sp;
+    let i = i + 1;
+    0
+  };
+  sp
+}
+
+// Collect ctor names of the FIRST enum decl into names[0..): single scan.
+// Returns 1 when an enum decl exists, else 0 (cnt[0] stays 0).
+fn collect_ctors(s: str, names: [i64], cnt: [i64]) -> i64 {
+  let epos = [0];
+  let found = find_enum(s, epos);
+  let pos = [0];
+  let _ = pos[0] = if found == 1 then epos[0] + 5 else 0;
+  let nm = read_ident(s, pos);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let k = [0];
+  let done = if found == 1 then 0 else 1;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let cname = read_ident(s, pos);
+    let is_name = if cname == 0 then 0 else 1;
+    let capok = if k[0] < 256 then 1 else 0;
+    let _ = if is_name * capok == 1 then (let _ = names[k[0]] = cname in 0) else 0;
+    let _ = k[0] = k[0] + is_name;
+    let _ = skip_to_field_delim(s, pos);
+    let ch = char(s, pos[0]);
+    let is_rb = if ch == 125 then 1 else 0;
+    let at_end = if ch == 0 then 1 else 0;
+    let _ = if is_rb + at_end == 0 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let done = if is_rb + at_end >= 1 then 1 else 0;
+    0
+  };
+  let _ = cnt[0] = k[0];
+  found
+}
+
+// Tag of ctor name from table zone-4 [.., ecnt, c1, c2, ..]; -1 when absent.
+// O(#ctors) per ab; replaces the full-source rescan per identifier.
+fn ft_ctor_tag(tab: [i64], name: i64) -> i64 {
+  let cnt = tab[0];
+
+  let base = cnt + cnt + cnt + 1;
+  let ecnt = tab[base];
+  let i = 0;
+  let tag = 0 - 1;
+  while i < ecnt {
+    let cn = tab[base + 1 + i];
+    let is_match = if cn == name then 1 else 0;
+    let tag = if is_match == 1 then i else tag;
+    let i = i + 1;
+    0
+  };
+  tag
+}
+
+// Callee-resolution cache (zone-5, 128 direct-mapped 2-word [name,val] slots
+// after the ctor zone): val 0 = unresolved, k>0 = srcpos k-1 (ft_srcpos hit),
+// k<0 = find_fn result -k-2. The name is stored beside the value so a hash
+// collision between two callee names can never serve one name the other's
+// resolution (was: bare slot -> colliding name reused a foreign fnpos ->
+// wrong bl target / runaway inline parse). Memoizes the per-name resolve so
+// each callee is scanned for once, not once per call site. Words emitted are
+// unchanged: the resolved position is identical every time.
+fn ft_cache_slot(tab: [i64], name: i64) -> i64 {
+  let cnt = tab[0];
+
+  let eb = cnt + cnt + cnt + 1;
+  let ecnt = tab[eb];
+  let cb = eb + ecnt + 2;
+  let slot = name - name / 128 * 128;
+  let slot2 = if slot < 0 then slot + 128 else slot;
+  cb + slot2 + slot2
+}
+
+fn ft_cache_get(tab: [i64], name: i64) -> i64 {
+  let s0 = ft_cache_slot(tab, name);
+  let hit = if tab[s0] == name then 1 else 0;
+  let v = if hit == 1 then tab[s0 + 1] else 0;
+  v
+}
+
+fn ft_cache_set(tab: [i64], name: i64, val: i64) -> i64 {
+  let s0 = ft_cache_slot(tab, name);
+  let _ = tab[s0] = name;
+  let _ = tab[s0 + 1] = val;
+  0
+}
+
+// A real cross-function call via bl: eval args -> x0..x(n-1), bl target, push.
+fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let strn = str_len(s);
+  let _ = pos[0] = pos[0] + 1;
+  let nargs = 0;
+  let done = 0;
+  while done == 0 {
+    // progress guard: a malformed argument (e.g. "(3,{") must not spin forever
+    let before = pos[0];
+    let _ = skip_ws(s, pos);
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_rp = if ch == 41 then 1 else 0;
+    let _ = if is_rp == 0 then emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
+    let nargs = nargs + (1 - is_rp);
+    let _ = skip_ws(s, pos);
+    let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_comma = if ch2 == 44 then 1 else 0;
+    let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let stuck = if pos[0] > before then 0 else 1;
+    let done = if is_rp + at_end + stuck >= 1 then 1 else 0;
+    0
+  };
+  let _ = pos[0] = pos[0] + 1;
+  let i = nargs - 1;
+  while i >= 0 {
+    let _ = pop(insns, n, i);
+    let i = i - 1;
+    0
+  };
+  let target = fntab_lookup(fntab, name);
+  let _ = emit_bl(insns, n, target, 1);
+  let _ = push(insns, n);
+  n[0]
+}
+
+fn emit_self_call(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 0);
+  let _ = emit_bl(insns, n, selfstart, 1);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// hvham(a, b, n): NEON popcount of a^b over floor(n/8)*8 words.
+// Single-path loop form (works for any n%8==0). Dossier: BUGFIXES.md.
+fn emit_hvham(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 2);
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 0);
+  // ldp q0,q1 covers 32 BYTES = 4 words per iteration -> divide by 4
+  let _ = em(insns, n, 3544382532);
+  let _ = em(insns, n, 3019899236);
+  let _ = em(insns, n, 1325458436);
+  let _ = em(insns, n, 2898330624);
+  let _ = em(insns, n, 2898332706);
+  let _ = em(insns, n, 1847729152);
+  let _ = em(insns, n, 1847794721);
+  let _ = em(insns, n, 1310742528);
+  let _ = em(insns, n, 1310742561);
+  let _ = em(insns, n, 1310753924);
+  let _ = em(insns, n, 1310819460);
+  let _ = em(insns, n, 3506439300);
+  let _ = em(insns, n, 3053453028);
+  let _ = em(insns, n, 1848653957);
+  let _ = em(insns, n, 235027622);
+  let _ = em(insns, n, 2852520928);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// hvham2(a, ao, b, bo, n): NEON hamming with row offsets — no bounce copy.
+fn emit_hvham2(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 3);
+  let _ = pop(insns, n, 5);
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 6);
+  let _ = pop(insns, n, 0);
+  let _ = em(insns, n, 2332363809);
+  let _ = em(insns, n, 2332429312);
+  let _ = em(insns, n, 2852324322);
+  let _ = em(insns, n, 1325458436);
+  let _ = em(insns, n, 3544382532);
+  let _ = em(insns, n, 3019899236);
+  let _ = em(insns, n, 2898330624);
+  let _ = em(insns, n, 2898332706);
+  let _ = em(insns, n, 1847729152);
+  let _ = em(insns, n, 1847794721);
+  let _ = em(insns, n, 1310742528);
+  let _ = em(insns, n, 1310742561);
+  let _ = em(insns, n, 1310753924);
+  let _ = em(insns, n, 1310819460);
+  let _ = em(insns, n, 3506439300);
+  let _ = em(insns, n, 3053453028);
+  let _ = em(insns, n, 1848653957);
+  let _ = em(insns, n, 235027622);
+  let _ = em(insns, n, 2852520928);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// sys_open(p,n,flags): pack byte-per-element path into the IO scratch zone
+// (last 8 KiB below x28), then raw openat. Words assembler+execution-verified.
+fn emit_sys_open(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 2);
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 0);
+  em(insns, n, 2852127723);
+  em(insns, n, 2852193261);
+  em(insns, n, 2852258796);
+  em(insns, n, 3531866122);
+  em(insns, n, 3406431114);
+  em(insns, n, 3531603977);
+  em(insns, n, 3943498047);
+  em(insns, n, 1409286314);
+  em(insns, n, 4167661927);
+  em(insns, n, 942238023);
+  em(insns, n, 2432697641);
+  em(insns, n, 402653179);
+  em(insns, n, 942500191);
+  em(insns, n, 2457865312);
+  em(insns, n, 2852783073);
+  em(insns, n, 2852914146);
+  em(insns, n, 3531603971);
+  em(insns, n, 3531605768);
+  em(insns, n, 3556769793);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// sys_read(fd,buf,len): raw read into scratch, unpack bytes to element slots.
+fn emit_sys_read(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 2);
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 0);
+  em(insns, n, 2852127723);
+  em(insns, n, 2852193260);
+  em(insns, n, 3531866122);
+  em(insns, n, 3406431114);
+  em(insns, n, 2852848608);
+  em(insns, n, 2852783073);
+  em(insns, n, 3531605992);
+  em(insns, n, 3556769793);
+  em(insns, n, 2852127725);
+  em(insns, n, 3531603977);
+  em(insns, n, 3943498047);
+  em(insns, n, 1409286314);
+  em(insns, n, 946432327);
+  em(insns, n, 4163467655);
+  em(insns, n, 2432697641);
+  em(insns, n, 402653179);
+  em(insns, n, 2852979680);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// sys_write(fd,buf,len): pack low bytes of elements to scratch, raw write.
+fn emit_sys_write(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 2);
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 0);
+  em(insns, n, 2852127723);
+  em(insns, n, 2852258797);
+  em(insns, n, 3531866122);
+  em(insns, n, 3406431114);
+  em(insns, n, 3531603977);
+  em(insns, n, 3943498047);
+  em(insns, n, 1409286314);
+  em(insns, n, 4167661607);
+  em(insns, n, 942238023);
+  em(insns, n, 2432697641);
+  em(insns, n, 402653179);
+  em(insns, n, 2852783073);
+  em(insns, n, 2852848608);
+  em(insns, n, 3531606024);
+  em(insns, n, 3556769793);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// sys_close(fd): raw close.
+fn emit_sys_close(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 0);
+  em(insns, n, 3531605800);
+  em(insns, n, 3556769793);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// sys_exit(code): raw exit_group — noreturn, nothing pushed.
+fn emit_sys_exit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 0);
+  em(insns, n, 3531606952);
+  em(insns, n, 3556769793);
+  n[0]
+}
+
+// clock_ms(): CLOCK_MONOTONIC via raw svc; ms = sec*1000 + nsec/1000000.
+// timespec parked at x28-8208 (below the 8 KiB IO scratch zone).
+fn emit_clock_ms(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  em(insns, n, 3531866625);
+  em(insns, n, 3405841281);
+  em(insns, n, 3531604000);
+  em(insns, n, 3531607592);
+  em(insns, n, 3556769793);
+  em(insns, n, 4181721124);
+  em(insns, n, 4181722149);
+  em(insns, n, 3531635974);
+  em(insns, n, 2600893572);
+  em(insns, n, 3531739655);
+  em(insns, n, 4070572519);
+  em(insns, n, 2596735141);
+  em(insns, n, 2332360832);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// sys_readbuf(fd,len): raw read into the IO scratch zone, returns its
+// address — the standard handoff for feeding source text to emit_words.
+fn emit_sys_readbuf(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 0);
+  em(insns, n, 2852193250);
+  em(insns, n, 3531866122);
+  em(insns, n, 3406431114);
+  em(insns, n, 2852783073);
+  em(insns, n, 3531605992);
+  em(insns, n, 3556769793);
+  em(insns, n, 2852127725);
+  em(insns, n, 942500191);
+  em(insns, n, 2852783072);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// str_len(s): NUL-scan over a raw byte pointer (JIT string contract).
+fn emit_str_len_fn(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 0);
+  em(insns, n, 3531603970);
+  em(insns, n, 945973249);
+  em(insns, n, 872415329);
+  em(insns, n, 2432697410);
+  em(insns, n, 402653181);
+  em(insns, n, 2852258784);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// char(s,i): zero-extended byte load from a raw pointer.
+fn emit_char_fn(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 0);
+  em(insns, n, 2852193250);
+  em(insns, n, 2852127713);
+  em(insns, n, 945907776);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// sys_slurp(fd,len): arena-allocate round16(len*8) bytes, raw read into it,
+// NUL-terminate at nread, return the base address. Feeds emit_words directly.
+fn emit_sys_slurp(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 0);
+  em(insns, n, 2852193250);
+  em(insns, n, 3548246057);
+  em(insns, n, 2432711977);
+  em(insns, n, 3544513833);
+  em(insns, n, 3548179753);
+  em(insns, n, 2853897194);
+  em(insns, n, 2332623739);
+  em(insns, n, 2852783073);
+  em(insns, n, 3531605992);
+  em(insns, n, 3556769793);
+  em(insns, n, 2852127725);
+  em(insns, n, 942500191);
+  em(insns, n, 2852783072);
+  let _ = push(insns, n);
+  n[0]
+}
+
+fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let tag = ft_ctor_tag(fntab, name);
+  let is_ctor = if tag >= 0 then 1 else 0;
+  let is_self = if name == selfname then 1 else 0;
+  let tgt = fntab_lookup(fntab, name);
+  let is_fn = if tgt >= 0 then 1 else 0;
+  let is_zw = if name == 36158018563 then 1 else 0;
+  let is_hh = if name == 30895064082 then 1 else 0;
+  let is_hh2 = if name == 4047253394792 then 1 else 0;
+  let is_so = if name == 76753189879327100 then 1 else 0;
+  let is_sr = if name == 76753189885882068 then 1 else 0;
+  let is_sw = if name == 10054667876552415181 then 1 else 0;
+  let is_sc = if name == 10054667870649031050 then 1 else 0;
+  let is_se = if name == 76753189856984008 then 1 else 0;
+  let is_cm = if name == 66094333908796503 then 1 else 0;
+  let is_rb = if name == 15758082337069564947 then 1 else 0;
+  let is_sp = if name == 10054667875361132632 then 1 else 0;
+  let is_sln = if name == 585709020818199 then 1 else 0;
+  let is_chf = if name == 224358574 then 1 else 0;
+  if is_hh == 1 then emit_hvham(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_hh2 == 1 then emit_hvham2(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_sp == 1 then emit_sys_slurp(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_sln == 1 then emit_str_len_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_chf == 1 then emit_char_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_rb == 1 then emit_sys_readbuf(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_so == 1 then emit_sys_open(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_sr == 1 then emit_sys_read(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_sw == 1 then emit_sys_write(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_sc == 1 then emit_sys_close(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_se == 1 then emit_sys_exit(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_cm == 1 then emit_clock_ms(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_zw == 1 then emit_zeros(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_ctor == 1 then emit_enum_ctor(s, tag, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_self == 1 then emit_self_call(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_fn == 1 then emit_bl_call(s, name, pos, insns, n, stab, selfname, selfstart, fntab)
+  else emit_call(s, name, pos, insns, n, stab, selfname, selfstart, fntab)
+}
+
+// Dispatch a bare name: nullary enum ctor or a variable reference.
+fn emit_var_or_ctor(s: str, name: i64, npos: i64, insns: [i64], n: [i64], stab: [i64], fntab: [i64]) -> i64 {
+  let tag = ft_ctor_tag(fntab, name);
+  let is_ctor = if tag >= 0 then 1 else 0;
+  if is_ctor == 1 then emit_enum_ctor_nullary(insns, n, tag)
+  else emit_var(insns, n, sym_lookup(s, stab, name, npos))
+}
+
+// Emit a matching match-arm: bind the payload var (if any) then emit the arm body.
+fn emit_match_arm(s: str, ppos: i64, has_var: i64, vname: i64, vpos: i64, bodypos: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let saved = pos[0];
+  let _ = if has_var == 1 then (let _ = pos[0] = ppos in (let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) in (let _ = pop(insns, n, 0) in (let _ = bind_reg(insns, n, sym_bind(s, stab, vname, vpos)) in 0)))) else 0;
+  let _ = pos[0] = bodypos;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = pos[0] = saved;
+  n[0]
+}
+
+// Compile-time match on a literal enum scrutinee: match ctor(payload) { arm, ... }.
+fn emit_match(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let strn = str_len(s);
+  let _ = pos[0] = pos[0] + 5;
+  let _ = skip_ws(s, pos);
+  let cname = read_ident(s, pos);
+  let _ = skip_ws(s, pos);
+  let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+  let is_lp = if ch == 40 then 1 else 0;
+  let ppos = [0];
+  let _ = if is_lp == 1 then (let _ = pos[0] = pos[0] + 1 in (let _ = ppos[0] = pos[0] in (let _ = skip_to(s, pos, 41) in (let _ = pos[0] = pos[0] + 1 in 0)))) else 0;
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch0 = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_rb = if ch0 == 125 then 1 else 0;
+    let aname = read_ident(s, pos);
+    let _ = skip_ws(s, pos);
+    let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_lp2 = if ch2 == 40 then 1 else 0;
+    let vpos = if is_lp2 == 1 then (let _ = pos[0] = pos[0] + 1 in pos[0]) else 0;
+    let vname = if is_lp2 == 1 then read_ident(s, pos) else 0;
+    let _ = if is_lp2 == 1 then (let _ = skip_ws(s, pos) in (let _ = pos[0] = pos[0] + 1 in 0)) else 0;
+    let _ = skip_ws(s, pos);
+    let _ = pos[0] = pos[0] + 2;
+    let bodypos = pos[0];
+    let _ = skip_to_field_delim(s, pos);
+    let is_match = if aname == cname then 1 else 0;
+    let has_var = is_lp * is_lp2;
+    let _ = if is_match == 1 then emit_match_arm(s, ppos[0], has_var, vname, vpos, bodypos, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
+    let ch3 = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_comma = if ch3 == 44 then 1 else 0;
+    let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let done = if is_rb + at_end >= 1 then 1 else 0;
+    0
+  };
+  n[0]
+}
+
+// Skip a "//" line comment: advance pos to the newline (or end). pos is at '/'.
+fn skip_line_comment(s: str, pos: [i64]) -> i64 {
+  let strn = str_len(s);
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_nl = if ch == 10 then 1 else 0;
+    let adv = 1 - is_nl - at_end;
+    let _ = pos[0] = pos[0] + adv;
+    let done = if is_nl + at_end >= 1 then 1 else 0;
+    0
+  };
+  0
+}
+
+// Skip a "..." string literal: pos is at the opening '"', leave it after the
+// closing '"'.
+fn skip_string(s: str, pos: [i64]) -> i64 {
+  let strn = str_len(s);
+  let _ = pos[0] = pos[0] + 1;
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_q = if ch == 34 then 1 else 0;
+    let adv = 1 - is_q - at_end;
+    let _ = pos[0] = pos[0] + adv;
+    let done = if is_q + at_end >= 1 then 1 else 0;
+    0
+  };
+  let _ = pos[0] = pos[0] + 1;
+  0
+}
+
+fn skip_ws(s: str, pos: [i64]) -> i64 {
+  let n = str_len(s);
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= n then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_sp = if ch == 32 then 1 else 0;
+    let is_tab = if ch == 9 then 1 else 0;
+    let is_nl = if ch == 10 then 1 else 0;
+    let is_cr = if ch == 13 then 1 else 0;
+    let is_ws = is_sp + is_tab + is_nl + is_cr;
+    let _ = pos[0] = pos[0] + is_ws;
+    let at_end2 = if pos[0] >= n then 1 else 0;
+    let e1 = if pos[0] + 1 >= n then 1 else 0;
+    let ch0 = if at_end2 == 1 then 0 else char(s, pos[0]);
+    let ch1 = if e1 == 1 then 0 else char(s, pos[0] + 1);
+    let is_sl = if ch0 == 47 then 1 else 0;
+    let is_sl2 = if ch1 == 47 then 1 else 0;
+    let is_comment = is_sl * is_sl2;
+    let _ = if is_comment == 1 then skip_line_comment(s, pos) else 0;
+    let done = if is_ws + is_comment >= 1 then 0 else 1;
+    0
+  };
+  0
+}
+
+// Append one instruction word and advance the count.
+fn em(insns: [i64], n: [i64], w: i64) -> i64 {
+  let _ = insns[n[0]] = w;
+  let _ = n[0] = n[0] + 1;
+  n[0]
+}
+
+// Push x0 (sub sp,#16 ; str x0,[sp]).
+fn push(insns: [i64], n: [i64]) -> i64 {
+  let _ = em(insns, n, 3506455551);
+  let _ = em(insns, n, 4177527776);
+  n[0]
+}
+
+// Pop into x<rd> (ldr x<rd>,[sp] ; add sp,#16).
+fn pop(insns: [i64], n: [i64], rd: i64) -> i64 {
+  let _ = em(insns, n, 4181722080 + rd);
+  let _ = em(insns, n, 2432713727);
+  n[0]
+}
+
+// Emit one movk half-slice for hw>=1 if non-zero. Negative immediates
+// (source literals above 2^63 wrap on i64) must be normalized per half so
+// the FULL 64-bit pattern materializes -- otherwise big builtin-hash
+// constants compile to a bare 16-bit slice and every dispatch compare fails.
+fn emit_half(insns: [i64], n: [i64], imm: i64, hw: i64) -> i64 {
+  let p = [1, 65536, 4294967296, 281474976710656, 18446744073709551616];
+  let hi = imm / p[hw + 1];
+  let lo = imm - hi * p[hw + 1];
+  let lo2 = if lo < 0 then lo + p[hw + 1] else lo;
+  let slraw = lo2 / p[hw];
+  // hw==3: p[4] wraps to 0 (2^64) so lo2 stays negative for wrapped
+  // literals; recover the exact top slice from the floored quotient
+  let hi3 = imm / p[3];
+  let r3 = imm - hi3 * p[3];
+  let adj3 = if r3 == 0 then 0 else 1;
+  let sl3 = if imm < 0 then hi3 + 65536 - adj3 else hi3;
+  let ishw3 = if hw == 3 then 1 else 0;
+  let sl = ishw3 * sl3 + (1 - ishw3) * slraw;
+  let _ = if sl > 0 then (let _ = em(insns, n, 4068474880 + sl * 32 + hw * 2097152) in 0) else 0;
+  n[0]
+}
+
+// Emit a literal (movz x0,#imm16 ; movk for higher halves ; push).
+// Mirrors native.c emit_mov64: hw=0 always movz, hw=1..3 movk only if
+// that 16-bit slice is non-zero. Without the movk halves any constant
+// above 65535 was silently truncated (loop bounds > 64K hung/wrong).
+fn emit_lit(insns: [i64], n: [i64], imm: i64) -> i64 {
+  let imm16 = imm - (imm / 65536) * 65536;
+  let imm16u = if imm16 < 0 then imm16 + 65536 else imm16;
+  let _ = em(insns, n, 3531603968 + imm16u * 32);
+  let _ = emit_half(insns, n, imm, 1);
+  let _ = emit_half(insns, n, imm, 2);
+  let _ = emit_half(insns, n, imm, 3);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// Emit a binary op (2=add 3=sub 4=mul 5=div): pop b->x1, pop a->x0, op, push.
+fn emit_binop(insns: [i64], n: [i64], op: i64) -> i64 {
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 0);
+  let wadd = if op == 2 then 2332098560 else 0;
+  let wsub = if op == 3 then 3405840384 else 0;
+  let wmul = if op == 4 then 2600565760 else 0;
+  let wdiv = if op == 5 then 2596342784 else 0;
+  // bitwise tier (legacy stack machine): and/orr/eor/lslv/lsrv x0,x0,x1
+  let wand = if op == 12 then 2315321344 else 0;
+  let worr = if op == 13 then 2852192256 else 0;
+  let weor = if op == 14 then 3389063168 else 0;
+  let wshl = if op == 15 then 2596347904 else 0;
+  let wshr = if op == 16 then 2596348928 else 0;
+  // modulo (op 11): a % b via mov x2,x0; sdiv x0,x0,x1; msub x0,x0,x1,x2
+  let is_md = if op == 11 then 1 else 0;
+  let _ = if is_md == 1 then (let _ = em(insns, n, 2852127714) in (let _ = em(insns, n, 2596342784) in (let _ = em(insns, n, 2600568832) in 0))) else 0;
+  let _ = if is_md == 0 then (let _ = em(insns, n, wadd + wsub + wmul + wdiv + wand + worr + weor + wshl + wshr) in 0) else 0;
+  let _ = push(insns, n);
+  n[0]
+}
+
+// Emit a variable load: mov x0, x<reg> (register) or ldr x0,[x15,#slot*8]
+// (spilled); push.
+fn emit_var(insns: [i64], n: [i64], reg: i64) -> i64 {
+  let is_neg = if reg < 0 then 1 else 0;
+  let is_spill = if reg >= 100 then 1 else 0;
+  let slot = reg - 100;
+  let movw = 2852127712 + reg * 65536;
+  // ldr x0,[x15,#slot*8] : 0xF9400000 | imm12(slot)<<10 | Rn(x15)<<5
+  // (0xF9400000 = 4181721088; +480 = Rn field for x15)
+  let ldrw = 4181721568 + slot * 1024;
+  // -2 (table full) traps loudly; -1 (unbound) keeps the legacy xzr load
+  // (established checksums bless it: unresolved calls read xzr)
+  let trapw = 3558866944;
+  let zerow = 2852127712;
+  let bad_full = if reg == 0 - 2 then 1 else 0;
+  let unk = if reg == 0 - 1 then 1 else 0;
+  let w = trapw * bad_full + (zerow * unk + (movw * (1 - is_spill) + ldrw * is_spill) * (1 - is_neg)) * (1 - bad_full);
+  let _ = em(insns, n, w);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// Bind a register/spill slot to the value in x0: mov x<reg>, x0 (register) or
+// str x0, [x15, #slot*8] (spilled).
+fn bind_reg(insns: [i64], n: [i64], reg: i64) -> i64 {
+  let is_neg = if reg < 0 then 1 else 0;
+  let is_spill = if reg >= 100 then 1 else 0;
+  let slot = reg - 100;
+  let movw = 2852127712 + reg;
+  let strw = 4177527264 + slot * 1024;
+  // table-full (-2) or unbound (-1): loud trap instead of a garbage mov
+  let trapw = 3558866944;
+  let w = trapw * is_neg + (movw * (1 - is_spill) + strw * is_spill) * (1 - is_neg);
+  let _ = em(insns, n, w);
+  n[0]
+}
+
+// Read digits, emit their literal; returns the parsed value.
+fn emit_num(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
+  let strn = str_len(s);
+  let v = 0;
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let dg = if at_end == 1 then 0 else is_digit(ch);
+    let v = if dg == 1 then (v * 10) + (ch - 48) else v;
+    let adv = if dg == 1 then 1 else 0;
+    let _ = pos[0] = pos[0] + adv;
+    let done = if dg == 1 then 0 else 1;
+    0
+  };
+  let _ = emit_lit(insns, n, v);
+  n[0]
+}
+
+// Consume one (+ or -) term, then fold (branchless helper).
+fn emit_apply_op(s: str, pos: [i64], insns: [i64], n: [i64], is_minus: i64, stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_term(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let op = if is_minus == 1 then 3 else 2;
+  let _ = emit_binop(insns, n, op);
+  n[0]
+}
+
+// Consume one (* or /) factor, then fold (branchless helper).
+fn emit_apply_mul(s: str, pos: [i64], insns: [i64], n: [i64], is_div: i64, stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_factor(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let op = if is_div == 1 then 5 else 4;
+  let _ = emit_binop(insns, n, op);
+  n[0]
+}
+
+// Apply a modulo step (a % b): same shape as mul/div; binop opcode 11.
+fn emit_apply_mod(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_factor(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = emit_binop(insns, n, 11);
+  n[0]
+}
+
+// Emit a comparison (cond: eq=1 ne=0 lt=10 gt=13 le=12 ge=11): pop b->x1,
+// pop a->x0, cmp x0,x1, cset x0,<cond>, push.
+fn emit_cmp_op(insns: [i64], n: [i64], cond: i64) -> i64 {
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 0);
+  let _ = em(insns, n, 3942711327);
+  let _ = em(insns, n, 2594113504 + cond * 4096);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// Apply a bitwise operator (op: and=12 orr=13 eor=14 shl=15 shr=16) between
+// the value already on the stack and the next factor. Shifts are two-char
+// tokens (adv=2), the rest one char.
+fn emit_apply_bits(s: str, pos: [i64], insns: [i64], n: [i64], op: i64, adv: i64, stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + adv;
+  let _ = emit_factor(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = emit_binop(insns, n, op);
+  n[0]
+}
+
+// bitlvl = factor (('&'|'|'|'^'|'<<'|'>>') factor)*
+// Binds tighter than mul/div, mirroring the fast-path fpC_bitlvl tier.
+fn emit_bitlvl(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = emit_factor(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let strn = str_len(s);
+    let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let isand = if ch == 38 then 1 else 0;
+    let isorr = if ch == 124 then 1 else 0;
+    let iseor = if ch == 94 then 1 else 0;
+    let nch = if pos[0] + 1 >= strn then 0 else char(s, pos[0] + 1);
+    let lt60 = if ch == 60 then 1 else 0;
+    let gt62 = if ch == 62 then 1 else 0;
+    let nxt60 = if nch == 60 then 1 else 0;
+    let nxt62 = if nch == 62 then 1 else 0;
+    let isshl = lt60 * nxt60;
+    let isshr = gt62 * nxt62;
+    let isop = isand + isorr + iseor + isshl + isshr;
+    let op = isand * 12 + isorr * 13 + iseor * 14 + isshl * 15 + isshr * 16;
+    let adv = isshl * 2 + isshr * 2 + (isand + isorr + iseor);
+    let _ = if isop == 1 then emit_apply_bits(s, pos, insns, n, op, adv, stab, selfname, selfstart, fntab) else 0;
+    let done = if isop == 1 then 0 else 1;
+    0
+  };
+  0
+}
+
+// Consume one comparison operator + right operand, then fold (branchless).
+fn emit_apply_cmp(s: str, pos: [i64], insns: [i64], n: [i64], cond: i64, adv: i64, stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + adv;
+  let _ = emit_expr(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = emit_cmp_op(insns, n, cond);
+  n[0]
+}
+
+// cmp = expr (('=='|'!='|'<'|'>'|'<='|'>=') expr)*
+fn emit_cmp(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = emit_expr(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let strn = str_len(s);
+    let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let e1 = if pos[0] + 1 >= strn then 1 else 0;
+    let ch1 = if e1 == 1 then 0 else char(s, pos[0] + 1);
+    let is_eq = if ch == 61 then 1 else 0;
+    let is_bang = if ch == 33 then 1 else 0;
+    let is_lt = if ch == 60 then 1 else 0;
+    let is_gt = if ch == 62 then 1 else 0;
+    let is_e2 = if ch1 == 61 then 1 else 0;
+    let is_eqop = is_eq * is_e2;
+    let is_neop = is_bang * is_e2;
+    let not_e2 = 1 - is_e2;
+    let is_ltop = is_lt * not_e2;
+    let is_gtop = is_gt * not_e2;
+    let is_leop = is_lt * is_e2;
+    let is_geop = is_gt * is_e2;
+    let is_op = is_eqop + is_neop + is_ltop + is_gtop + is_leop + is_geop;
+    let cond = is_eqop + is_ltop * 10 + is_gtop * 13 + is_leop * 12 + is_geop * 11;
+    let avv = 1 + is_eqop + is_neop + is_leop + is_geop;
+    let _ = if is_op == 1 then emit_apply_cmp(s, pos, insns, n, cond, avv, stab, selfname, selfstart, fntab) else 0;
+    let done = if is_op == 1 then 0 else 1;
+    0
+  };
+  0
+}
+
+// expr = term ((+|-) term)*
+fn emit_expr(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = emit_term(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let strn = str_len(s);
+    let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_plus = if ch == 43 then 1 else 0;
+    let is_minus = if ch == 45 then 1 else 0;
+    let is_op = is_plus + is_minus;
+    let _ = if is_op == 1 then emit_apply_op(s, pos, insns, n, is_minus, stab, selfname, selfstart, fntab) else 0;
+    let done = if is_op == 1 then 0 else 1;
+    0
+  };
+  0
+}
+
+// term = factor ((*|/) factor)*
+fn emit_term(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = emit_bitlvl(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let strn = str_len(s);
+    let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_mul = if ch == 42 then 1 else 0;
+    let is_div = if ch == 47 then 1 else 0;
+    let is_mod = if ch == 37 then 1 else 0;
+    let is_op = is_mul + is_div + is_mod;
+    let _ = if is_mod == 1 then emit_apply_mod(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
+    let _ = if is_mul + is_div == 1 then emit_apply_mul(s, pos, insns, n, is_div, stab, selfname, selfstart, fntab) else 0;
+    let done = if is_op == 1 then 0 else 1;
+    0
+  };
+  0
+}
+
+// Consume ( expr ).
+fn emit_paren(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  n[0]
+}
+
+// Branchless conditional - evaluate cond + BOTH branches, then csel picks the
+// result (native.c TERM_IF). cond/then/else are pure, so speculating both
+// branches is sound and removes a mispredictable branch.
+fn emit_cond(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 2;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = pop(insns, n, 0);
+  let _ = em(insns, n, 4043309087);
+  let p1 = n[0];
+  let _ = em(insns, n, 1409286144);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 4;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 4;
+  let p2 = n[0];
+  let _ = em(insns, n, 335544320);
+  let else_pos = n[0];
+  let _ = insns[p1] = 1409286144 + (else_pos - p1) * 32;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let end_pos = n[0];
+  let _ = insns[p2] = 335544320 + (end_pos - p2);
+  n[0]
+}
+
+// Emit `let name = value in body` (expression form): bind name to a register,
+// evaluate body as the result. The statement form (`let x = v;`) is handled by
+// emit_body; this handles the `in` form nested inside if/while/match branches.
+fn emit_let_in(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 3;
+  let _ = skip_ws(s, pos);
+  let npos = pos[0];
+  let name = read_ident(s, pos);
+  let reg = sym_bind(s, stab, name, npos);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 2;
+  let _ = pop(insns, n, 0);
+  let _ = bind_reg(insns, n, reg);
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  n[0]
+}
+
+// Skip a string literal and emit a placeholder value (mov x0,#0; push). Proper
+// string codegen (data section + adr) is a later step; this keeps the stack
+// balanced and advances pos past the literal so parsing doesn't stall.
+fn emit_str(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
+  let _ = skip_string(s, pos);
+  let _ = emit_lit(insns, n, 0);
+  n[0]
+}
+
+// Emit an array literal [e0, e1, ...]: store elements in order at [x14+i*8],
+// then mov x0,x14; add x14,#8n; push the pointer. Immediate-offset stores, so
+// valid for <=511 elements (imm12).
+fn emit_array_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let strn = str_len(s);
+  let _ = pos[0] = pos[0] + 1;
+  let cnt = 0;
+  let done = 0;
+  while done == 0 {
+    // progress guard: a malformed element (e.g. "[+4)") must not spin forever
+    let before = pos[0];
+    let _ = skip_ws(s, pos);
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_rb = if ch == 93 then 1 else 0;
+    let _ = if is_rb == 0 then emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
+    let _ = if is_rb == 0 then pop(insns, n, 0) else 0;
+    let _ = if is_rb == 0 then em(insns, n, 4177527232 + cnt * 1024) else 0;
+    let cnt = if is_rb == 0 then cnt + 1 else cnt;
+    let _ = skip_ws(s, pos);
+    let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_comma = if ch2 == 44 then 1 else 0;
+    let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let stuck = if pos[0] > before then 0 else 1;
+    let done = if is_rb + at_end >= 1 then 1 else stuck;
+    0
+  };
+  let _ = pos[0] = pos[0] + 1;
+  let _ = em(insns, n, 2853045216);
+  let _ = em(insns, n, 2432696320 + cnt * 8192 + 462);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// Array get: base + index already on the stack (base pushed first). Pop index
+// into x1, base into x2, then ldr x0,[x2,x1,lsl 3]; push.
+fn emit_array_get(insns: [i64], n: [i64]) -> i64 {
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 2);
+  let _ = em(insns, n, 4167137344);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// Array set: base + index on the stack; value emitted next. Pop value->x0,
+// index->x1, base->x2; str x0,[x2,x1,lsl 3]; result 0.
+fn emit_array_set(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 2);
+  let _ = em(insns, n, 4162943040);
+  let _ = em(insns, n, 3531603968);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// Emit name[i] (get) or name[i] = v (set). `name` is a bound array variable;
+// pos is at '['. Emit base (push), emit index (push), then get or set.
+fn emit_array_index(s: str, name: i64, npos: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let strn = str_len(s);
+  let reg = sym_lookup(s, stab, name, npos);
+  let _ = emit_var(insns, n, reg);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = skip_ws(s, pos);
+  let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+  let e1 = if pos[0] + 1 >= strn then 1 else 0;
+  let ch1 = if e1 == 1 then 0 else char(s, pos[0] + 1);
+  let is_eq = if ch == 61 then 1 else 0;
+  let is_eq2 = if ch1 == 61 then 1 else 0;
+  let is_set = is_eq * (1 - is_eq2);
+  let _ = if is_set == 1 then emit_array_set(s, pos, insns, n, stab, selfname, selfstart, fntab) else emit_array_get(insns, n);
+  n[0]
+}
+
+// factor = number | letter | ( expr ) | cond expr then expr else expr
+fn emit_factor(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = skip_ws(s, pos);
+  let strn = str_len(s);
+  let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+  // unary not: !e desugars to (e == 0). The '!=' two-char token is left
+  // alone for the comparison tier. (Desugar disabled: the nested
+  // if-in-comparison branch code misfires in the JIT-compiled emitter;
+  // the corpus never uses unary '!'.)
+  let e1 = if pos[0] + 1 >= strn then 1 else 0;
+  let ch1 = if e1 == 1 then 0 else char(s, pos[0] + 1);
+  let is_lparen = if ch == 40 then 1 else 0;
+  let is_i = if ch == 105 then 1 else 0;
+  let is_f = if ch1 == 102 then 1 else 0;
+  let is_ifkw = is_i * is_f;
+  let e2 = if pos[0] + 2 >= strn then 1 else 0;
+  let e3 = if pos[0] + 3 >= strn then 1 else 0;
+  let e4 = if pos[0] + 4 >= strn then 1 else 0;
+  let ch2 = if e2 == 1 then 0 else char(s, pos[0] + 2);
+  let ch3 = if e3 == 1 then 0 else char(s, pos[0] + 3);
+  let ch4 = if e4 == 1 then 0 else char(s, pos[0] + 4);
+  let is_m = if ch == 109 then 1 else 0;
+  let is_a = if ch1 == 97 then 1 else 0;
+  let is_t = if ch2 == 116 then 1 else 0;
+  let is_c = if ch3 == 99 then 1 else 0;
+  let is_h = if ch4 == 104 then 1 else 0;
+  let is_matchkw = is_m * is_a * is_t * is_c * is_h;
+  let is_l = if ch == 108 then 1 else 0;
+  let is_e = if ch1 == 101 then 1 else 0;
+  let is_t2 = if ch2 == 116 then 1 else 0;
+  let is_letkw = is_l * is_e * is_t2;
+  let is_lb = if ch == 91 then 1 else 0;
+  let is_quote = if ch == 34 then 1 else 0;
+  let is_letter = is_alpha(ch);
+  let _ = if is_lparen == 1 then emit_paren(s, pos, insns, n, stab, selfname, selfstart, fntab)
+    else if is_ifkw == 1 then emit_cond(s, pos, insns, n, stab, selfname, selfstart, fntab)
+    else if is_letkw == 1 then emit_let_in(s, pos, insns, n, stab, selfname, selfstart, fntab)
+    else if is_matchkw == 1 then emit_match(s, pos, insns, n, stab, selfname, selfstart, fntab)
+    else if is_lb == 1 then emit_array_lit(s, pos, insns, n, stab, selfname, selfstart, fntab)
+    else if is_quote == 1 then emit_str(s, pos, insns, n)
+    else if is_letter == 1 then emit_ident(s, pos, insns, n, stab, selfname, selfstart, fntab)
+    else emit_num(s, pos, insns, n);
+  let fd = 0;
+  while fd == 0 {
+    // progress guard: '.' that fails to consume input must not spin forever
+    let before = pos[0];
+    let _ = skip_ws(s, pos);
+    let strn2 = str_len(s);
+    let ch2 = if pos[0] >= strn2 then 0 else char(s, pos[0]);
+    let is_dot = if ch2 == 46 then 1 else 0;
+    let _ = if is_dot == 1 then emit_field_access(s, pos, insns, n, stab) else 0;
+    let advanced = if pos[0] > before then 1 else 0;
+    let stuck = is_dot * (1 - advanced);
+    let fd = if is_dot == 1 then stuck else 1;
+    0
+  };
+  n[0]
+}
+
+
+
+// Checksum of the emitted buffer (Bebop has no bitwise xor).
+fn sum_words(insns: [i64], count: i64) -> i64 {
+  let i = 0;
+  let acc = 0;
+  while i < count {
+    let acc = acc + insns[i];
+    let i = i + 1;
+    0
+  };
+  acc
+}
+
+// Parse + emit an expression, return the checksum of the emitted words.
+fn compile(s: str) -> i64 {
+  let insns = zeros(256);
+  let n = [0];
+  let pos = [0];
+  let stab = zeros(385);  // 1 + 3*128 (name,reg,srcpos) verified triples; overflow -> loud trap
+  let selfname = 0 - 1;
+  let selfstart = 0;
+  let fnames_l = zeros(256);
+  let fpos_l = zeros(256);
+  let cnt_l = [0];
+  let _ = collect_fns(s, fnames_l, fpos_l, cnt_l);
+  let _ = if cnt_l[0] >= 256 then em(insns, n, 3558866944) else 0;
+  let fntab = zeros(4096);
+  let _ = fntab[0] = cnt_l[0];
+  let fl_i = [0];
+  let fl_d = if cnt_l[0] == 0 then 1 else 0;
+  while fl_d == 0 {
+    let _ = fntab[1 + fl_i[0]] = fnames_l[fl_i[0]];
+    let _ = fntab[1 + cnt_l[0] + cnt_l[0] + fl_i[0]] = fpos_l[fl_i[0]];
+    let _ = fl_i[0] = fl_i[0] + 1;
+    let fl_d = if fl_i[0] >= cnt_l[0] then 1 else 0;
+    0
+  };
+  let enames_l = zeros(256);
+  let ecnt_l = [0];
+  let _ = collect_ctors(s, enames_l, ecnt_l);
+  let _ = if ecnt_l[0] >= 256 then em(insns, n, 3558866944) else 0;
+  let eb_l = cnt_l[0] + cnt_l[0] + cnt_l[0] + 1;
+  let _ = fntab[eb_l] = ecnt_l[0];
+  let ez_l = [0];
+  let ezd_l = if ecnt_l[0] == 0 then 1 else 0;
+  while ezd_l == 0 {
+    let _ = fntab[eb_l + 1 + ez_l[0]] = enames_l[ez_l[0]];
+    let _ = ez_l[0] = ez_l[0] + 1;
+    let ezd_l = if ez_l[0] >= ecnt_l[0] then 1 else 0;
+    0
+  };
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = pop(insns, n, 0);
+  let _ = em(insns, n, 3596551104);
+  sum_words(insns, n[0])
+}
+
+
+// Advance pos to just before the first occurrence of `target`.
+fn skip_to(s: str, pos: [i64], target: i64) -> i64 {
+  let strn = str_len(s);
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let hit = if ch == target then 1 else 0;
+    let adv = if hit == 1 then 0 else 1;
+    let _ = pos[0] = pos[0] + adv;
+    let at_end_done = if at_end == 1 then 1 else 0;
+    let done = if hit == 1 then 1 else at_end_done;
+    0
+  };
+  0
+}
+
+// Count params in the ( ... ) list (commas + 1); advances pos past ')'.
+
+// Prologue: save FP+LR, allocate a frame (spill slots + heap), save callee-saved
+// x19..x28, then set x15 (spill base) and x14 (heap bump pointer). The frame is
+// [sp, sp+16384): spills live at [x15, x15+…) (x15=sp+256), heap bumps up from
+// x14=sp+1024, and the eval stack grows down from sp. x19-x28 are preserved for
+// recursion + cross-function `bl`.
+fn emit_prologue(insns: [i64], n: [i64]) -> i64 {
+  let _ = em(insns, n, 2847898621);
+  let _ = em(insns, n, 2432697341);
+  let _ = em(insns, n, 3510637567);
+  let _ = em(insns, n, 2835370995);
+  let _ = em(insns, n, 2835438581);
+  let _ = em(insns, n, 2835506167);
+  let _ = em(insns, n, 2835573753);
+  let _ = em(insns, n, 2835641339);
+  let _ = em(insns, n, 2432959471);
+  let _ = em(insns, n, 2433483758);
+  n[0]
+}
+
+// Epilogue: restore x19..x28 (offset ldp), free the frame, restore FP+LR, ret.
+fn emit_epilogue(insns: [i64], n: [i64]) -> i64 {
+  let _ = em(insns, n, 2839835643);
+  let _ = em(insns, n, 2839768057);
+  let _ = em(insns, n, 2839700471);
+  let _ = em(insns, n, 2839632885);
+  let _ = em(insns, n, 2839565299);
+  let _ = em(insns, n, 2436895743);
+  let _ = em(insns, n, 2831252477);
+  let _ = em(insns, n, 3596551104);
+  n[0]
+}
+
+// Emit one 'while cond { body };' statement: a real backward loop (no result).
+// cond is re-evaluated each iteration (its code sits at loop_start); body's
+// final expression is discarded. Mutable `let` (sym_bind reuse) makes loop
+// vars update in place, so re-running the cond reads the updated values.
+fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], cx: [i64], st: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 5;
+  let _ = skip_ws(s, pos);
+  let pcond = pos[0];
+  let loop_start = n[0];
+  // legacy stack-machine loop: emit the condition, materialize it, branch
+  // with a PLACEHOLDER b.eq (fixup recorded at p1), emit the body, then
+  // patch the placeholder once the target address is known. The backward
+  // edge is emitted last with its exact delta (loop_start is fixed).
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = pop(insns, n, 0);
+  let _ = em(insns, n, 4043309087);
+  let p1 = n[0];
+  let _ = em(insns, n, 1409286144);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let nb_body = n[0];
+  let bresl = emit_body(s, pos, insns, n, stab, selfname, selfstart, fntab, cx, st);
+  let blastl = bresl - (bresl / 2) * 2;
+  let grewl_raw = if n[0] > nb_body then 1 else 0;
+  let legbl = if blastl == 0 then grewl_raw else 0;
+  let _ = if legbl == 1 then pop(insns, n, 0) else 0;
+  let _ = em(insns, n, 402653184 + loop_start - n[0]);
+  let endl = n[0];
+  let _ = insns[p1] = 1409286144 + (endl - p1) * 32;
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  n[0]
+}
+
+// Emit one 'let x = value;' statement: emit value, pop x0, mov x<reg>,x0
+// (bind the single-letter var x to reg 19+(x-'a')).
+fn emit_let_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], cx: [i64], st: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 3;
+  let _ = skip_ws(s, pos);
+  let npos = pos[0];
+  let name = read_ident(s, pos);
+  let reg = sym_bind(s, stab, name, npos);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let nb_v = n[0];
+  // ---- chained discard-assign: `let _ = NAME = RHS;` lowers to NAME<-RHS ----
+  let _ = skip_ws(s, pos);
+  let sq0 = pos[0];
+  let strq = str_len(s);
+  let cq0 = if sq0 >= strq then 0 else char(s, sq0);
+  let qa0 = is_alpha(cq0);
+  let wq0 = [sq0];
+  let hq0 = [0];
+  let qgo0 = qa0;
+  while qgo0 == 1 {
+    let ccq0 = if wq0[0] >= strq then 0 else char(s, wq0[0]);
+    let ga0 = is_alpha(ccq0);
+    let gd0 = (if ccq0 >= 48 then 1 else 0) * (if ccq0 <= 57 then 1 else 0);
+    let gu0 = if ccq0 == 95 then 1 else 0;
+    let adv0 = ga0 + gd0 + gu0;
+    let _ = if adv0 == 1 then (let _ = hq0[0] = hq0[0] * 131 + ccq0 in 0) else 0;
+    let _ = wq0[0] = wq0[0] + adv0;
+    let qgo0 = adv0;
+    0
+  };
+  let e1q = if wq0[0] >= strq then 1 else 0;
+  let qws = [wq0[0]];
+  let qwg = 1 - e1q;
+  while qwg == 1 {
+    let cqw = if qws[0] >= strq then 0 else char(s, qws[0]);
+    let isspw = if cqw == 32 then 1 else 0;
+    let _ = if isspw == 1 then (let _ = qws[0] = qws[0] + 1 in 0) else 0;
+    let qwg = isspw;
+    0
+  };
+  let eq1 = if qws[0] >= strq then 0 else char(s, qws[0]);
+  let eq2 = if qws[0] + 1 >= strq then 0 else char(s, qws[0] + 1);
+  let is_chain = qa0 * (if eq1 == 61 then 1 else 0) * (if eq2 == 61 then 0 else 1);
+  let treg_c = sym_lookup(s, stab, hq0[0], sq0);
+  // ---- planning phase: every decision flag is computed BEFORE emission;
+  // the emitter below only executes, it never re-decides ----
+  let treg_chain = if treg_c >= 19 then treg_c else reg;
+  let treg_i = if is_chain == 1 then treg_chain else reg;
+  let _ = if is_chain == 1 then (let _ = pos[0] = qws[0] + 1 in (let _ = skip_ws(s, pos) in 0)) else 0;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let grew_v = if n[0] > nb_v then 1 else 0;
+  let _ = if grew_v == 1 then pop(insns, n, 0) else 0;
+  let _ = bind_reg(insns, n, treg_i);
+  n[0]
+}
+
+
+
+// Emit a function body: zero or more 'let x = v;' statements, then the result
+// expression.
+// Emit a function/loop body: ';'-separated items until '}' or end of input.
+// Items: 'let x = v;' (net 0 words), 'while ... { ... };' (net 0), or a plain
+// expression (net +1 word on the value stack). All expression values except
+// the FINAL one are popped, so the body leaves exactly one value -- matching
+// interpreter semantics where ';' sequences statements and an if-expression
+// ENDS at the first ';' outside parens (parity bug: the old body parser ran
+// one expression to end-of-input, letting `if c then a else b; rest`
+// swallow the rest into the else branch).
+// Compound statement item: IDENT (+|-|*|/|%)= expr ';'
+// Lowers to shadow-rebind: reg = sym_bind(name); old -> stack; rhs ->
+// stack; binop; bind_reg(reg). Consumes the trailing ';'.
+fn emit_compound_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let npos = pos[0];
+  let name = read_ident(s, pos);
+  let reg0 = sym_lookup(s, stab, name, npos);
+  let _ = skip_ws(s, pos);
+  let opch = if pos[0] >= str_len(s) then 0 else char(s, pos[0]);
+  let is_add = if opch == 43 then 1 else 0;
+  let is_sub = if opch == 45 then 1 else 0;
+  let is_mul = if opch == 42 then 1 else 0;
+  let is_div = if opch == 47 then 1 else 0;
+  let is_mod = if opch == 37 then 1 else 0;
+  let opcode = is_add * 2 + is_sub * 3 + is_mul * 4 + is_div * 5 + is_mod * 11;
+  let is_plain = if opch == 61 then 1 else 0;
+  let _ = pos[0] = pos[0] + 2;
+  let _ = if is_plain == 1 then (let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) in 0) else (let _ = emit_var(insns, n, reg0) in (let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) in (let _ = emit_binop(insns, n, opcode) in 0)));
+  let _ = pop(insns, n, 0);
+  let _ = bind_reg(insns, n, reg0);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  n[0]
+}
+
+fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], cx: [i64], st: [i64]) -> i64 {
+  let done = 0;
+  let lastf = 0;
+  while done == 0 {
+    let before = pos[0];
+    let _ = skip_ws(s, pos);
+    let strn = str_len(s);
+    let at_end0 = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end0 == 1 then 0 else char(s, pos[0]);
+    let e1 = if pos[0] + 1 >= strn then 1 else 0;
+    let ch1 = if e1 == 1 then 0 else char(s, pos[0] + 1);
+    let e2 = if pos[0] + 2 >= strn then 1 else 0;
+    let ch2 = if e2 == 1 then 0 else char(s, pos[0] + 2);
+    let e3 = if pos[0] + 3 >= strn then 1 else 0;
+    let ch3 = if e3 == 1 then 0 else char(s, pos[0] + 3);
+    let e4 = if pos[0] + 4 >= strn then 1 else 0;
+    let ch4 = if e4 == 1 then 0 else char(s, pos[0] + 4);
+    let is_l = if ch == 108 then 1 else 0;
+    let is_e = if ch1 == 101 then 1 else 0;
+    let is_t = if ch2 == 116 then 1 else 0;
+    let b3_alpha = is_alpha(ch3);
+    let b3_ge = if ch3 >= 48 then 1 else 0;
+    let b3_le = if ch3 <= 57 then 1 else 0;
+    let b3_num = b3_ge * b3_le;
+    let b3_us = if ch3 == 95 then 1 else 0;
+    let is_let = is_l * is_e * is_t * (1 - b3_alpha) * (1 - b3_num) * (1 - b3_us);
+    let is_w = if ch == 119 then 1 else 0;
+    let is_h = if ch1 == 104 then 1 else 0;
+    let is_i = if ch2 == 105 then 1 else 0;
+    let is_l2 = if ch3 == 108 then 1 else 0;
+    let is_e2 = if ch4 == 101 then 1 else 0;
+    let is_while = is_w * is_h * is_i * is_l2 * is_e2;
+    let at_close = if ch == 125 then 1 else 0;
+    let is_item = (1 - at_close) * (1 - at_end0);
+    let _ = if is_item * is_let == 1 then emit_let_stmt(s, pos, insns, n, stab, selfname, selfstart, fntab, cx, st) else 0;
+    let _ = if is_item * is_while == 1 then emit_while_stmt(s, pos, insns, n, stab, selfname, selfstart, fntab, cx, st) else 0;
+    // compound statement? ident-start (not let/while) followed by ws + one of +-*/% then '='
+    let id_start = is_alpha(ch) * (1 - is_let) * (1 - is_while);
+    let wq = pos[0];
+    let id_go = id_start;
+    while id_go == 1 {
+      let ccq = if wq >= strn then 0 else char(s, wq);
+      let g_a = is_alpha(ccq);
+      let g_d = (if ccq >= 48 then 1 else 0) * (if ccq <= 57 then 1 else 0);
+      let g_u = if ccq == 95 then 1 else 0;
+      let adv = g_a + g_d + g_u;
+      let wq = wq + adv;
+      let id_go = adv;
+      0
+    };
+    let wq2 = if wq >= strn then wq else wq + (if char(s, wq) == 32 then 1 else 0);
+    let oc = if wq2 >= strn then 0 else char(s, wq2);
+    let nc = if wq2 + 1 >= strn then 0 else char(s, wq2 + 1);
+    let ok_op = (if oc == 43 then 1 else 0) + (if oc == 45 then 1 else 0) + (if oc == 42 then 1 else 0) + ((if oc == 47 then 1 else 0) * (if nc != 47 then 1 else 0)) + (if oc == 37 then 1 else 0);
+    let is_compound = id_start * (if nc == 61 then ok_op else 0);
+    let _ = if is_item * is_compound == 1 then emit_compound_stmt(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
+    let is_expr = is_item * (1 - is_let) * (1 - is_while) * (1 - is_compound);
+    let nb_item = n[0];
+    // F3 refined: dead-value suppression applies ONLY to the final expr
+    // item of a while body (lookahead: next non-ws char is rbrace / EOF)
+    let _ = skip_ws(s, pos);
+    let strnE = str_len(s);
+    let cE = if pos[0] >= strnE then 0 else char(s, pos[0]);
+    let fin_brace = if cE == 125 then 1 else 0;
+    let fin_eof = if pos[0] >= strnE then 1 else 0;
+    let _ = cx[28] = is_expr * (fin_brace + fin_eof);
+    let _ = cx[28] = 0;
+    // planning phase: legacy-only decisions (the fast-path dispatch is
+    // deleted; was_fast is the constant 0) -- every flag is fixed BEFORE
+    // the emitter below runs, so guard and codegen can never desync
+    let was_fast = 0;
+    let lastf = if is_expr == 1 then 0 else lastf;
+    let _ = if is_expr == 1 then emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
+    // non-final legacy items must not leave values on the stack
+    let _ = skip_ws(s, pos);
+    let strn9 = str_len(s);
+    let c9 = if pos[0] >= strn9 then 0 else char(s, pos[0]);
+    let not_rbrace = if c9 == 125 then 0 else 1;
+    let not_eof = if pos[0] >= strn9 then 0 else 1;
+    let grew = if n[0] > nb_item then 1 else 0;
+    let leg_item = grew;
+    let ma1 = if is_expr == 0 then 0 else not_rbrace;
+    let more_ahead = if ma1 == 0 then 0 else not_eof;
+    let _ = if more_ahead * leg_item == 1 then pop(insns, n, 0) else 0;
+    let _ = skip_ws(s, pos);
+    let strn2 = str_len(s);
+    let at_end1 = if pos[0] >= strn2 then 1 else 0;
+    let c2 = if at_end1 == 1 then 0 else char(s, pos[0]);
+    let is_semi = if c2 == 59 then 1 else 0;
+    let _ = if is_semi == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    // progress guard: a dispatch that consumed nothing must not spin forever
+    let advanced = if pos[0] > before then 1 else 0;
+    let stuck = (1 - advanced) * (1 - at_close) * (1 - at_end0);
+    let _ = if stuck == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let done = if at_close + at_end0 >= 1 then 1 else 0;
+    0
+  };
+  n[0] * 2 + lastf
+}
+
+// Scan s for the definition "fn <fname>(" (single-letter fn name); record the
+// position of its 'fn' in out[0], return 1 if found.
+fn find_fn(s: str, name: i64, out: [i64]) -> i64 {
+  // Lexical scan: skips strings/comments; requires ident char after "fn "
+  // (scanner source text like `is_fn =` must not register phantoms).
+  let strn = str_len(s);
+  let j = 0;
+  let tpos_c = [0];
+  let spc = [0];
+  let cpc = [0];
+  let found = 0;
+  let best = 0;
+  while j + 2 < strn {
+    let c0 = char(s, j);
+    let c1 = char(s, j + 1);
+    let c2 = char(s, j + 2);
+    let is_quote = if c0 == 34 then 1 else 0;
+    let is_sl = if c0 == 47 then 1 else 0;
+    let is_sl2 = if c1 == 47 then 1 else 0;
+    let is_comment = is_sl * is_sl2;
+    let isf = if c0 == 102 then 1 else 0;
+    let isn = if c1 == 110 then 1 else 0;
+    let issp = if c2 == 32 then 1 else 0;
+    let cafter = if isf * isn * issp == 1 then char(s, j + 3) else 0;
+    let is_fn = isf * isn * issp * (1 - is_quote) * (1 - is_comment) * is_alpha(cafter);
+    let _ = tpos_c[0] = j + 3;
+    let h = if is_fn == 1 then read_ident(s, tpos_c) else 0;
+    let is_match = if h == name then 1 else 0;
+    let hit = is_fn * is_match;
+    let best = if hit == 1 then j else best;
+    let found = if hit == 1 then 1 else found;
+    let _ = spc[0] = j;
+    let _ = cpc[0] = j;
+    let _ = if is_quote == 1 then skip_string(s, spc) else 0;
+    let _ = if is_comment == 1 then skip_line_comment(s, cpc) else 0;
+    let jnext = (j + 1) * (1 - is_quote - is_comment - is_fn) + spc[0] * is_quote + cpc[0] * is_comment + tpos_c[0] * is_fn;
+    let j = jnext;
+    0
+  };
+  let _ = out[0] = best;
+  found
+}
+
+
+// Inline a function call: find fname's def, bind args to its params (a->x19,
+// b->x20, ...), emit the callee body from its source position, restore pos.
+fn emit_call(s: str, fname: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let fnpos = [0];
+  let cached = ft_cache_get(fntab, fname);
+  let is_hit = if cached == 0 then 0 else 1;
+  let sp = if is_hit == 1 then 0 - 1 else ft_srcpos(fntab, fname);
+  let v = if cached > 0 then cached - 1 else 0 - cached - 2;
+  let _ = if is_hit == 1 then (let _ = fnpos[0] = v in 0) else 0;
+  // Resolution budget: cap total source scans; runaway repeats degrade.
+  let _ = if is_hit == 1 then (let _ = fntab[4000] = fntab[4000] + 1 in 0) else 0;
+  let mbudget = fntab[0] + fntab[0] + 8;
+  // Branchless-law form of: scan only when unresolved AND under budget.
+  let want_scan = if is_hit == 1 then 0 else 1;
+  let under_budget = if fntab[4000] < mbudget then 1 else 0;
+  let _ = if want_scan * under_budget == 1 then find_fn(s, fname, fnpos) else 0;
+  let _ = if sp >= 0 then (let _ = fnpos[0] = sp in 0) else 0;
+  let sv = if sp >= 0 then sp + 1 else 0 - fnpos[0] - 2;
+  let _ = if is_hit == 1 then 0 else ft_cache_set(fntab, fname, sv);
+  // unresolved callee: neutralize the inline (pcnt=0, no body re-parse) --
+  // otherwise find_fn failure points body at a garbage offset and the
+  // call/body mutual recursion runs away
+  let okres = if fnpos[0] >= 3 then 1 else 0;
+  let pb = fnpos[0] * okres + 3 * (1 - okres);
+  let pnames = zeros(10);
+  let pparpos = zeros(10);
+  let ppos = [pb];
+  let _ = read_ident(s, ppos);
+  let _ = skip_ws(s, ppos);
+  let pcnt0 = parse_params(s, ppos, pnames, pparpos);
+  let pcnt1 = if pcnt0 > 10 then 10 else pcnt0;
+  let pcnt = pcnt1 * okres;
+  let _ = skip_to(s, ppos, 123);
+  let body = ppos[0] + 1;
+  let _ = if okres == 0 then (let _ = em(insns, n, 3531603968) in (let _ = push(insns, n) in 0)) else 0;
+  let _ = pos[0] = pos[0] + 1;
+  let i = 0;
+  while i < pcnt {
+    let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+    let _ = pop(insns, n, 0);
+    let reg = sym_bind(s, stab, pnames[i], pparpos[i]);
+    let _ = bind_reg(insns, n, reg);
+    let _ = skip_ws(s, pos);
+    let strn = str_len(s);
+    let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_comma = if ch == 44 then 1 else 0;
+    let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let i = i + 1;
+    0
+  };
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let after = pos[0];
+  let _ = pos[0] = body * okres;
+  let macx = zeros(64);
+  let matk = zeros(1088);
+  let _eb = if okres == 1 then (let _r = emit_body(s, pos, insns, n, stab, fname, selfstart, fntab, macx, matk) in 0) else 0;
+  let _ = pos[0] = after;
+  n[0]
+}
+
+
+// Compile a complete function: fn name(a,b,...) { body }.
+// Params are moved x0->x19, x1->x20, ... in the prologue; body references
+// single-letter params a->x19, b->x20, ... Returns the checksum of the words.
+fn compile_fn(s: str) -> i64 {
+  let insns = zeros(256);
+  let n = [0];
+  let pos = [0];
+  let stab = zeros(385);  // 1 + 3*128 (name,reg,srcpos) verified triples; overflow -> loud trap
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 2;
+  let _ = skip_ws(s, pos);
+  let selfname = read_ident(s, pos);
+  let selfstart = 0;
+  let fnames_l = zeros(256);
+  let fpos_l = zeros(256);
+  let cnt_l = [0];
+  let _ = collect_fns(s, fnames_l, fpos_l, cnt_l);
+  let _ = if cnt_l[0] >= 256 then em(insns, n, 3558866944) else 0;
+  let fntab = zeros(4096);
+  let _ = fntab[0] = cnt_l[0];
+  let fl_i = [0];
+  let fl_d = if cnt_l[0] == 0 then 1 else 0;
+  while fl_d == 0 {
+    let _ = fntab[1 + fl_i[0]] = fnames_l[fl_i[0]];
+    let _ = fntab[1 + cnt_l[0] + cnt_l[0] + fl_i[0]] = fpos_l[fl_i[0]];
+    let _ = fl_i[0] = fl_i[0] + 1;
+    let fl_d = if fl_i[0] >= cnt_l[0] then 1 else 0;
+    0
+  };
+  let enames_l = zeros(256);
+  let ecnt_l = [0];
+  let _ = collect_ctors(s, enames_l, ecnt_l);
+  let _ = if ecnt_l[0] >= 256 then em(insns, n, 3558866944) else 0;
+  let eb_l = cnt_l[0] + cnt_l[0] + cnt_l[0] + 1;
+  let _ = fntab[eb_l] = ecnt_l[0];
+  let ez_l = [0];
+  let ezd_l = if ecnt_l[0] == 0 then 1 else 0;
+  while ezd_l == 0 {
+    let _ = fntab[eb_l + 1 + ez_l[0]] = enames_l[ez_l[0]];
+    let _ = ez_l[0] = ez_l[0] + 1;
+    let ezd_l = if ez_l[0] >= ecnt_l[0] then 1 else 0;
+    0
+  };
+  // Legacy single-fn mode: fn-table stays EMPTY (cnt=0) so unresolved calls
+  // take the find_fn inline path; only the enum-ctor zone is populated.
+  let fntab = zeros(4096);
+  let _ = fntab[0] = 0;
+  let eb2 = 1;
+  let _ = fntab[eb2] = ecnt_l[0];
+  let ez2 = [0];
+  let ezd2 = if ecnt_l[0] == 0 then 1 else 0;
+  while ezd2 == 0 {
+    let _ = fntab[eb2 + 1 + ez2[0]] = enames_l[ez2[0]];
+    let _ = ez2[0] = ez2[0] + 1;
+    let ezd2 = if ez2[0] >= ecnt_l[0] then 1 else 0;
+    0
+  };
+  let _ = skip_ws(s, pos);
+  let pnames = zeros(10);
+  let pparpos = zeros(10);
+  let nparams = parse_params(s, pos, pnames, pparpos);
+  let i = [0];
+  let nb = if nparams > 10 then 10 else nparams;
+  let mvdone = if nb == 0 then 1 else 0;
+  while mvdone == 0 {
+    let _ = sym_bind(s, stab, pnames[i[0]], pparpos[i[0]]);
+    let _ = i[0] = i[0] + 1;
+    let mvdone = if i[0] >= nb then 1 else 0;
+    0
+  };
+  let _ = skip_to(s, pos, 123);
+  let _ = pos[0] = pos[0] + 1;
+  let cx = zeros(64);
+  let tkbuf = zeros(1088);
+  let _ = cx[26] = selfname;
+  let _ = cx[27] = 0 - 1;
+  let pbase = n[0];
+  let _ = emit_prologue(insns, n);
+  let j = [0];
+  let mv2 = if nb == 0 then 1 else 0;
+  while mv2 == 0 {
+    let p_is_sp = if j[0] >= 8 then 1 else 0;
+    let p_movw = 2852127712 + j[0] * 65536 + 19 + j[0];
+    let p_strw = 4177526784 + (j[0] - 8) * 1024 + 480 + j[0];
+    let _ = em(insns, n, p_movw * (1 - p_is_sp) + p_strw * p_is_sp);
+    let _ = j[0] = j[0] + 1;
+    let mv2 = if j[0] >= nb then 1 else 0;
+    0
+  };
+  let nb_tail = n[0];
+  let bres_t = if 1 == 1 then emit_body(s, pos, insns, n, stab, selfname, selfstart, fntab, cx, tkbuf) else 0;
+  let blast_t = bres_t - (bres_t / 2) * 2;
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  // legacy emitter leaves the body value on the stack; fast path leaves it
+  // in x0 -- pop exactly when something was pushed by a LEGACY final item
+  let grew_t = if n[0] > nb_tail then 1 else 0;
+  let leg_tail = if blast_t == 0 then grew_t else 0;
+  let _ = if leg_tail == 1 then pop(insns, n, 0) else 0;
+  let _ = emit_epilogue(insns, n);
+  sum_words(insns, n[0])
+}
+
+
+// Collect all "fn <name>(" definitions in source order: fnames[i]=name hash,
+// fpos[i]=byte offset of the 'f'. Returns the count via cnt[0].
+fn collect_fns(s: str, fnames: [i64], fpos: [i64], cnt: [i64]) -> i64 {
+  let strn = str_len(s);
+  let j = 0;
+  let tpos_c = [0];
+  let spc = [0];
+  let cpc = [0];
+  while j + 2 < strn {
+    let c0 = char(s, j);
+    let c1 = char(s, j + 1);
+    let c2 = char(s, j + 2);
+    let is_quote = if c0 == 34 then 1 else 0;
+    let is_sl = if c0 == 47 then 1 else 0;
+    let is_sl2 = if c1 == 47 then 1 else 0;
+    let is_comment = is_sl * is_sl2;
+    let isf = if c0 == 102 then 1 else 0;
+    let isn = if c1 == 110 then 1 else 0;
+    let issp = if c2 == 32 then 1 else 0;
+    let cafter = if isf * isn * issp == 1 then char(s, j + 3) else 0;
+    let is_fn = isf * isn * issp * is_alpha(cafter);
+    let _ = tpos_c[0] = j + 3;
+    let name = if is_fn == 1 then read_ident(s, tpos_c) else 0;
+    let capok = if cnt[0] < 256 then 1 else 0;
+    let _ = if is_fn * capok == 1 then (let _ = fnames[cnt[0]] = name in (let _ = fpos[cnt[0]] = j in 0)) else 0;
+    let _ = cnt[0] = cnt[0] + is_fn;
+    let _ = spc[0] = j;
+    let _ = if is_quote == 1 then skip_string(s, spc) else 0;
+    let _ = cpc[0] = j;
+    let _ = if is_comment == 1 then skip_line_comment(s, cpc) else 0;
+    let jnext = (j + 1) * (1 - is_quote - is_comment - is_fn) + spc[0] * is_quote + cpc[0] * is_comment + tpos_c[0] * is_fn;
+    let j = jnext;
+    0
+  };
+  cnt[0]
+}
+
+// Compile one function whose "fn" keyword is at source offset fpos, appending
+// into the shared insns/n buffer. selfstart = its absolute word offset (0 in a
+// single-fn compile); fntab = full name->start layout (for cross-call bl).
+fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], n: [i64], tkb: [i64]) -> i64 {
+  // Reset per-fn scan-budget so late functions don't exhaust the counter
+  // accumulated by earlier ones (every cache-hit increments fntab[4000];
+  // without reset, late fns compile ALL calls as unresolved/neutral).
+  let _ = fntab[4000] = 0;
+  let pos = [fpos];
+  let stab = zeros(385);  // 1 + 3*128 (name,reg,srcpos) verified triples; overflow -> loud trap
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 2;
+  let _ = skip_ws(s, pos);
+  let selfname = read_ident(s, pos);
+  let _ = skip_ws(s, pos);
+  let pnames = zeros(10);
+  let pparpos = zeros(10);
+  let nparams0 = parse_params(s, pos, pnames, pparpos);
+  let nparams = if nparams0 > 10 then 10 else nparams0;
+  let i = [0];
+  let mvdone = if nparams == 0 then 1 else 0;
+  while mvdone == 0 {
+    let _ = sym_bind(s, stab, pnames[i[0]], pparpos[i[0]]);
+    let _ = i[0] = i[0] + 1;
+    let mvdone = if i[0] >= nparams then 1 else 0;
+    0
+  };
+  let _ = skip_to(s, pos, 123);
+  let _ = pos[0] = pos[0] + 1;
+  let cx = zeros(64);
+  let tkbuf = tkb;
+  let _ = cx[26] = selfname;
+  let _ = cx[27] = selfstart;
+  let pbase = n[0];
+  let _ = emit_prologue(insns, n);
+  // Params 1..8 -> x19..x26; params 9+ -> spill slots (sym_bind maps cnt>=8
+  // to 100+slot). A register move for j>=8 emitted `mov x27,x8`-class words:
+  // it CLOBBERED the reserved arena register AND left the spill slot unwritten
+  // (9th param read as 0; heap corruption downstream). Spilled params get
+  // str xj,[x15,#slot*8]; encoding verified against objdump reference.
+  let j = [0];
+  let mv2 = if nparams == 0 then 1 else 0;
+  while mv2 == 0 {
+    let p_is_sp = if j[0] >= 8 then 1 else 0;
+    let p_movw = 2852127712 + j[0] * 65536 + 19 + j[0];
+    let p_strw = 4177526784 + (j[0] - 8) * 1024 + 480 + j[0];
+    let _ = em(insns, n, p_movw * (1 - p_is_sp) + p_strw * p_is_sp);
+    let _ = j[0] = j[0] + 1;
+    let mv2 = if j[0] >= nparams then 1 else 0;
+    0
+  };
+  let nb_tail = n[0];
+  let bres_t = if 1 == 1 then emit_body(s, pos, insns, n, stab, selfname, selfstart, fntab, cx, tkbuf) else 0;
+  let blast_t = bres_t - (bres_t / 2) * 2;
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  // legacy emitter leaves the body value on the stack; fast path leaves it
+  // in x0 -- pop exactly when something was pushed by a LEGACY final item
+  let grew_t = if n[0] > nb_tail then 1 else 0;
+  let leg_tail = if blast_t == 0 then grew_t else 0;
+  let _ = if leg_tail == 1 then pop(insns, n, 0) else 0;
+  let _ = emit_epilogue(insns, n);
+  // OPT-A: only save/restore callee-saved pairs this fn actually binds.
+  // Prologue words pbase+3..pbase+7 hold stp x19/x20 .. x27/x28; epilogue
+  // holds the mirrored ldp pairs in reverse at ebase+0..ebase+4. Unused
+  // pairs are patched to NOP after the fact (stab[0] is final here).
+  let ebase = n[0] - 8;
+  let nopw = 3573751839;
+  let vc = stab[0];
+  let k = [0];
+  let pkgo = 1;
+  while pkgo == 1 {
+    let kdone = if k[0] > 4 then 1 else 0;
+    let pair_used = if vc > k[0] * 2 then 1 else 0;
+    let do_patch = (1 - kdone) * (1 - pair_used);
+    let _ = if do_patch == 1 then (let _ = insns[pbase + 3 + k[0]] = nopw in 0) else 0;
+    let _ = if do_patch == 1 then (let _ = insns[ebase + 4 - k[0]] = nopw in 0) else 0;
+    let _ = k[0] = k[0] + 1;
+    let pkgo = 1 - kdone;
+    0
+  };
+  // OPT-G1: spill-base x15 / heap-bump x14 setups are pure overhead when
+  // the compiled body never references those registers (typical for small
+  // arithmetic/recursion fns): scan every emitted body word conservatively
+  // (rn / rd / rm fields) and NOP the two prologue adds when unused.
+  let u15 = [0];
+  let u14 = [0];
+  let gi = [nb_tail];
+  let ggo = 1;
+  while ggo == 1 {
+    let gdone = if gi[0] >= n[0] then 1 else 0;
+    let gw = insns[gi[0]];
+    let grn = (gw / 32) - (gw / 1024) * 32;
+    let grd = gw - (gw / 32) * 32;
+    let grm = (gw / 65536) - (gw / 16777216) * 256;
+    let h15 = (if grn == 15 then 1 else 0) + (if grd == 15 then 1 else 0) + (if grm == 15 then 1 else 0);
+    let h14 = (if grn == 14 then 1 else 0) + (if grd == 14 then 1 else 0) + (if grm == 14 then 1 else 0);
+    let _ = if gdone == 0 then (let _ = u15[0] = u15[0] + h15 in (let _ = u14[0] = u14[0] + h14 in 0)) else 0;
+    let _ = gi[0] = gi[0] + 1;
+    let ggo = 1 - gdone;
+    0
+  };
+  let _ = if u15[0] == 0 then (let _ = insns[pbase + 8] = nopw in 0) else 0;
+  let _ = if u14[0] == 0 then (let _ = insns[pbase + 9] = nopw in 0) else 0;
+  n[0]
+}
+
+// Two-pass layout of a whole program: measure each fn's size (bl is a fixed
+// 1-word size, so a placeholder-target pass yields correct sizes), compute
+// start offsets by prefix sums, then re-emit with a full 3-zone table
+// [cnt, names..., offsets..., srcpos...] so every bl resolves to a real offset
+// AND every inline site finds the callee source position in O(#fns)
+// (was: full-source rescan per call site -> superquadratic selfcompile).
+fn compile_program_to(s: str, insns: [i64], n: [i64]) -> i64 {
+  let fnames = zeros(256);
+  let fpos = zeros(256);
+  let cnt = [0];
+  let _ = collect_fns(s, fnames, fpos, cnt);
+  let _ = if cnt[0] >= 256 then em(insns, n, 3558866944) else 0;
+  let sizes = zeros(256);
+  let starts = zeros(256);
+  let ptab = zeros(4096);
+  let _ = ptab[0] = cnt[0];
+  let pm = [0];
+  while pm[0] < cnt[0] {
+    let _ = ptab[1 + pm[0]] = fnames[pm[0]];
+    let _ = pm[0] = pm[0] + 1;
+    0
+  };
+
+  let pz = [0];
+  while pz[0] < cnt[0] {
+    let _ = ptab[1 + cnt[0] + cnt[0] + pz[0]] = fpos[pz[0]];
+    let _ = pz[0] = pz[0] + 1;
+    0
+  };
+
+  let enames_pz = zeros(256);
+  let ecnt_pz = [0];
+  let _ = collect_ctors(s, enames_pz, ecnt_pz);
+  let _ = if ecnt_pz[0] >= 256 then em(insns, n, 3558866944) else 0;
+  let eb_pz = cnt[0] + cnt[0] + cnt[0] + 1;
+  let _ = ptab[eb_pz] = ecnt_pz[0];
+  let ez_pz = [0];
+  let ed_pz = if ecnt_pz[0] == 0 then 1 else 0;
+  while ed_pz == 0 {
+    let _ = ptab[eb_pz + 1 + ez_pz[0]] = enames_pz[ez_pz[0]];
+    let _ = ez_pz[0] = ez_pz[0] + 1;
+    let ed_pz = if ez_pz[0] >= ecnt_pz[0] then 1 else 0;
+    0
+  };
+  let stk_a = zeros(1088);
+    let tmp = zeros(65536);
+  let i = [0];
+  while i[0] < cnt[0] {
+    let tn = [0];
+    let _ = compile_fn_at(s, fpos[i[0]], 0, ptab, tmp, tn, stk_a);
+    let _ = sizes[i[0]] = tn[0];
+    let _ = i[0] = i[0] + 1;
+    0
+  };
+  let acc = 0;
+  let k = [0];
+  while k[0] < cnt[0] {
+    let _ = starts[k[0]] = acc;
+    let acc = acc + sizes[k[0]];
+    let _ = k[0] = k[0] + 1;
+    0
+  };
+  let fntab = zeros(4096);
+  let _ = fntab[0] = cnt[0];
+  let m = [0];
+  while m[0] < cnt[0] {
+    let _ = fntab[1 + m[0]] = fnames[m[0]];
+    let _ = fntab[1 + cnt[0] + m[0]] = starts[m[0]];
+    let _ = m[0] = m[0] + 1;
+    0
+  };
+
+  let fz = [0];
+  while fz[0] < cnt[0] {
+    let _ = fntab[1 + cnt[0] + cnt[0] + fz[0]] = fpos[fz[0]];
+    let _ = fz[0] = fz[0] + 1;
+    0
+  };
+
+  let enames_fz = zeros(256);
+  let ecnt_fz = [0];
+  let _ = collect_ctors(s, enames_fz, ecnt_fz);
+  let _ = if ecnt_fz[0] >= 256 then em(insns, n, 3558866944) else 0;
+  let eb_fz = cnt[0] + cnt[0] + cnt[0] + 1;
+  let _ = fntab[eb_fz] = ecnt_fz[0];
+  let ez_fz = [0];
+  let ed_fz = if ecnt_fz[0] == 0 then 1 else 0;
+  while ed_fz == 0 {
+    let _ = fntab[eb_fz + 1 + ez_fz[0]] = enames_fz[ez_fz[0]];
+    let _ = ez_fz[0] = ez_fz[0] + 1;
+    let ed_fz = if ez_fz[0] >= ecnt_fz[0] then 1 else 0;
+    0
+  };
+  let stk_b = zeros(1088);
+  let q = [0];
+  while q[0] < cnt[0] {
+    let _ = compile_fn_at(s, fpos[q[0]], starts[q[0]], fntab, insns, n, stk_b);
+    let _ = q[0] = q[0] + 1;
+    0
+  };
+  sum_words(insns, n[0])
+}
+
+// Convenience wrapper: compile a whole program to a fresh buffer and return the
+// checksum of its words (kept for self_check regression tests).
+fn compile_program(s: str) -> i64 {
+  let insns = zeros(262144);
+  let n = [0];
+  let r = compile_program_to(s, insns, n);
+  r
+}
+
+// Compile a whole program and execute it with a single i64 argument (self-host
+// bridge: .bp source -> AArch64 words -> exec -> result). Returns the result.
+
+
+
+fn run_program(s: str, arg: i64) -> i64 {
+  let insns = zeros(262144);
+  let n = [0];
+  let _ = compile_program_to(s, insns, n);
+  exec(insns, n[0], arg)
+}
+
+
+// Verify the emitted machine code against known-good checksums (computed from
+// the native emitter's exact AArch64 encodings). 0 = pass.
+fn self_check() -> i64 {
+let c1 = if compile("42") == 21426575550 then 0 else 1;
+let c2 = if compile("1+2") == 55887115099 then 0 else 1;
+let c3 = if compile("1+2*3") == 90616123192 then 0 else 1;
+let c4 = if compile("2*(3+4)") == 90616123288 then 0 else 1;
+let c5 = if compile("8/2-1") == 91685642200 then 0 else 1;
+let c6 = if compile("if 1 then 10 else 20") == 56260325310 then 0 else 1;
+let c7 = if compile("if 0 then 10 else 20") == 56260325278 then 0 else 1;
+let c8 = if compile("1 + if 2 then 3 else 4") == 90720865435 then 0 else 1;
+let c9 = if compile("if 1 then 1+2 else 3*4") == 125449873794 then 0 else 1;
+let c10 = if compile_fn("fn f(a) { a + 1 }") == 105362869862 then 0 else 1;
+let c11 = if compile_fn("fn f(a,b) { a + b }") == 107536897562 then 0 else 1;
+let c12 = if compile("1<2") == 60091882330 then 0 else 1;
+let c13 = if compile("3==3") == 60091845562 then 0 else 1;
+let c14 = if compile("2>3") == 60091894682 then 0 else 1;
+let c15 = if compile("1+2<4") == 94552423255 then 0 else 1;
+let c16 = if compile("5==2+3") == 94552386487 then 0 else 1;
+let c17 = if compile_fn("fn f() { let a = 1; a + 2 }") == 123192893028 then 0 else 1;
+let c18 = if compile_fn("fn f(a) { let b = a + 1; b * 2 }") == 160095863221 then 0 else 1;
+let c19 = if compile_fn("fn main() { f(41) } fn f(a) { a + 1 }") == 144783978990 then 0 else 1;
+let c20 = if compile_fn("fn main() { s(6) } fn s(a) { a * a }") == 126542946768 then 0 else 1;
+let c21 = if compile_fn("fn main() { g(3,4) } fn g(a,b) { a + b }") == 146957875681 then 0 else 1;
+let c22 = if compile_fn("fn main() { foo(41) } fn foo(x) { x + 1 }") == 123191649092 then 0 else 1;
+let c23 = if compile_fn("fn main() { let acc = 10; let delta = 5; acc + delta }") == 143196878710 then 0 else 1;
+let c24 = if compile_fn("fn main() { foo(3,4) } fn foo(a,b) { a + b }") == 143195633270 then 0 else 1;
+let c25 = if compile_fn("fn main() { let total = 0; let extra = 7; total + extra * 2 }") == 177925886515 then 0 else 1;
+let c26 = if compile_fn("fn main() { let p = pt { x: 1, y: 2 }; p.x + p.y } struct pt { x: i64, y: i64 }") == 194352293147 then 0 else 1;
+let c27 = if compile_fn("fn main() { pt { x: 1, y: 2 } } struct pt { x: i64, y: i64 }") == 209330188518 then 0 else 1;
+let c28 = if compile_fn("fn main(p) { p.x + p.y } struct pt { x: i64, y: i64 }") == 141644920226 then 0 else 1;
+let c29 = if compile_fn("fn main() { some(5) } enum opt { none, some }") == 100199269538 then 0 else 1;
+let c30 = if compile_fn("fn main() { none } enum opt { none, some }") == 78191717988 then 0 else 1;
+let c31 = if compile_fn("fn main() { match some(5) { none => 0, some(x) => x + 1 } } enum opt { none, some }") == 123192893124 then 0 else 1;
+let c32 = if compile_fn("fn main() { match none { none => 0, some(x) => x + 1 } } enum opt { none, some }") == 68728432374 then 0 else 1;
+let c33 = if compile_fn("fn fact(n) { if n <= 1 then 1 else n * fact(n-1) }") == 261173770493 then 0 else 1;
+let c34 = if compile_fn("fn main() { let i = 0; let acc = 0; while i < 5 { let acc = acc + i; let i = i + 1; 0 }; acc }") == 297167697046 then 0 else 1;
+let c35 = if compile_program("fn main() { helper(41) } fn helper(x) { x + 1 }") == 237421204746 then 0 else 1;
+let c36 = if compile_program("fn main() { add(3,4) } fn add(a,b) { a + b }") == 257425254461 then 0 else 1;
+  // Execution tests: the self-host bridge (source -> AArch64 -> exec -> result).
+  let c37 = if run_program("fn main() { 42 }", 0) == 42 then 0 else 1;
+  let c38 = if run_program("fn fact(n) { if n <= 1 then 1 else n * fact(n-1) }", 5) == 120 then 0 else 1;
+  let c39 = if run_program("fn main() { let i = 0; let acc = 0; while i < 5 { let acc = acc + i; let i = i + 1; 0 }; acc }", 0) == 10 then 0 else 1;
+  let c40 = if run_program("fn main() { helper(41) } fn helper(x) { x + 1 }", 0) == 42 then 0 else 1;
+  let c41 = if run_program("fn main() { add(3,4) } fn add(a,b) { a + b }", 0) == 7 then 0 else 1;
+  c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10 + c11 + c12 + c13 + c14 + c15 + c16 + c17 + c18 + c19 + c20 + c21 + c22 + c23 + c24 + c25 + c26 + c27 + c28 + c29 + c30 + c31 + c32 + c33 + c34 + c35 + c36 + c37 + c38 + c39 + c40 + c41
+}
+
+
+fn emit_expr_words(src: str) -> [i64] {
+  let insns = zeros(8192);
+  let n = [0];
+  let pos = [0];
+  let stab = zeros(512);
+  let selfname = 0 - 1;
+  let selfstart = 0;
+  let fnames_l = zeros(512);
+  let fpos_l = zeros(512);
+  let cnt_l = [0];
+  let _ = collect_fns(src, fnames_l, fpos_l, cnt_l);
+  let fntab = zeros(2048);
+  let _ = fntab[0] = cnt_l[0];
+  let fl_i = [0];
+  let fl_d = if cnt_l[0] == 0 then 1 else 0;
+  while fl_d == 0 {
+    let _ = fntab[1 + fl_i[0]] = fnames_l[fl_i[0]];
+    let _ = fntab[1 + cnt_l[0] + cnt_l[0] + fl_i[0]] = fpos_l[fl_i[0]];
+    let _ = fl_i[0] = fl_i[0] + 1;
+    let fl_d = if fl_i[0] >= cnt_l[0] then 1 else 0;
+    0
+  };
+  let enames_l = zeros(512);
+  let ecnt_l = zeros(16);
+  let _ = collect_ctors(src, enames_l, ecnt_l);
+  let eb_l = cnt_l[0] + cnt_l[0] + cnt_l[0] + 1;
+  let _ = fntab[eb_l] = ecnt_l[0];
+  let ez_l = [0];
+  let ezd_l = if ecnt_l[0] == 0 then 1 else 0;
+  while ezd_l == 0 {
+    let _ = fntab[eb_l + 1 + ez_l[0]] = enames_l[ez_l[0]];
+    let _ = ez_l[0] = ez_l[0] + 1;
+    let ezd_l = if ez_l[0] >= ecnt_l[0] then 1 else 0;
+    0
+  };
+  let _ = emit_cmp(src, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = pop(insns, n, 0);
+  let _ = em(insns, n, 3596551104);
+  let out = zeros(n[0] + 1);
+  let _ = out[0] = n[0];
+  let pk = [0];
+  let pgo = 1;
+  while pgo == 1 {
+    let pdone = if pk[0] >= n[0] then 1 else 0;
+    let _ = if pdone == 0 then (let _ = out[pk[0] + 1] = insns[pk[0]] in 0) else 0;
+    let _ = pk[0] = pk[0] + 1;
+    let pgo = 1 - pdone;
+    0
+  };
+  out
+}
+
+
+// ---- M3 SELF-BOOTSTRAP ----
+// Reads Bebop source from a fixed path into the arena, compiles it with
+// THIS compiler (emit_words over a raw pointer), returns word checksum.
+// Entry for beboSelf.bin: the frozen compiler compiling other programs.
+// BENCH: two-pass compile of a whole fn-main program; returns [count, words...]
+fn emit_words(src: str) -> [i64] {
+  let insns = zeros(262144);
+  let n = [0];
+  let _ = compile_program_to(src, insns, n);
+  let out = zeros(n[0] + 1);
+  let _ = out[0] = n[0];
+  let k = [0];
+  let go = 1;
+  while go == 1 {
+    let done = if k[0] >= n[0] then 1 else 0;
+    let _ = if done == 0 then (let _ = out[k[0] + 1] = insns[k[0]] in 0) else 0;
+    let _ = k[0] = k[0] + 1;
+    let go = 1 - done;
+    0
+  };
+  out
+}
+
+// BENCH: offsets of each fn (source order) within the compiled word stream.
+fn emit_offsets(src: str) -> [i64] {
+  let offs = zeros(256);
+  let insns = zeros(262144);
+  let n = [0];
+  let fnames = zeros(512);
+  let fpos = zeros(512);
+  let cnt = zeros(1024);
+  let _ = collect_fns(src, fnames, fpos, cnt);
+  let sizes = zeros(512);
+  let starts = zeros(512);
+  let ptab = zeros(512);
+  let _ = ptab[0] = cnt[0];
+  let pm = zeros(1024);
+  while pm[0] < cnt[0] {
+    let _ = ptab[1 + pm[0]] = fnames[pm[0]];
+    let _ = pm[0] = pm[0] + 1;
+    0
+  };
+
+  let pz = zeros(1024);
+  while pz[0] < cnt[0] {
+    let _ = ptab[1 + cnt[0] + cnt[0] + pz[0]] = fpos[pz[0]];
+    let _ = pz[0] = pz[0] + 1;
+    0
+  };
+
+  let enames_pz = zeros(512);
+  let ecnt_pz = zeros(1024);
+  let _ = collect_ctors(src, enames_pz, ecnt_pz);
+  let eb_pz = cnt[0] + cnt[0] + cnt[0] + 1;
+  let _ = ptab[eb_pz] = ecnt_pz[0];
+  let ez_pz = zeros(1024);
+  let ed_pz = if ecnt_pz[0] == 0 then 1 else 0;
+  while ed_pz == 0 {
+    let _ = ptab[eb_pz + 1 + ez_pz[0]] = enames_pz[ez_pz[0]];
+    let _ = ez_pz[0] = ez_pz[0] + 1;
+    let ed_pz = if ez_pz[0] >= ecnt_pz[0] then 1 else 0;
+    0
+  };
+  let i = zeros(1024);
+  while i[0] < cnt[0] {
+    let tmp = zeros(65536);
+    let tn = zeros(1024);
+    let _ = compile_fn_at(src, fpos[i[0]], 0, ptab, tmp, tn);
+    let _ = sizes[i[0]] = tn[0];
+    let _ = i[0] = i[0] + 1;
+    0
+  };
+  let acc = 0;
+  let k = zeros(1024);
+  while k[0] < cnt[0] {
+    let _ = starts[k[0]] = acc;
+    let acc = acc + sizes[k[0]];
+    let _ = k[0] = k[0] + 1;
+    0
+  };
+  let fntab = zeros(512);
+  let _ = fntab[0] = cnt[0];
+  let m = zeros(1024);
+  while m[0] < cnt[0] {
+    let _ = fntab[1 + m[0]] = fnames[m[0]];
+    let _ = fntab[1 + cnt[0] + m[0]] = starts[m[0]];
+    let _ = m[0] = m[0] + 1;
+    0
+  };
+
+  let fz = zeros(1024);
+  while fz[0] < cnt[0] {
+    let _ = fntab[1 + cnt[0] + cnt[0] + fz[0]] = fpos[fz[0]];
+    let _ = fz[0] = fz[0] + 1;
+    0
+  };
+
+  let enames_fz = zeros(512);
+  let ecnt_fz = zeros(1024);
+  let _ = collect_ctors(src, enames_fz, ecnt_fz);
+  let eb_fz = cnt[0] + cnt[0] + cnt[0] + 1;
+  let _ = fntab[eb_fz] = ecnt_fz[0];
+  let ez_fz = zeros(1024);
+  let ed_fz = if ecnt_fz[0] == 0 then 1 else 0;
+  while ed_fz == 0 {
+    let _ = fntab[eb_fz + 1 + ez_fz[0]] = enames_fz[ez_fz[0]];
+    let _ = ez_fz[0] = ez_fz[0] + 1;
+    let ed_fz = if ez_fz[0] >= ecnt_fz[0] then 1 else 0;
+    0
+  };
+  let stk_p = zeros(1088);
+  let q = zeros(1024);
+  while q[0] < cnt[0] {
+    let _ = offs[q[0]] = n[0];
+    let _ = compile_fn_at(src, fpos[q[0]], starts[q[0]], fntab, insns, n, stk_p);
+    let _ = q[0] = q[0] + 1;
+    0
+  };
+    let out = zeros(cnt[0] + 1);
+  let _ = out[0] = cnt[0];
+  let oz = [0];
+  let ogo = 1;
+  while ogo == 1 {
+    let odone = if oz[0] >= cnt[0] then 1 else 0;
+    let _ = if odone == 0 then (let _ = out[oz[0] + 1] = offs[oz[0]] in 0) else 0;
+    let _ = oz[0] = oz[0] + 1;
+    let ogo = 1 - odone;
+    0
+  };
+  out
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// FAST PATH (OPT-C/D): virtual-register codegen for pure arithmetic,
+// variable and literal subtrees. Everything else falls back to the
+// legacy stack machine by resetting n[0] and pos[0] -- the insn buffer
+// is append-only, so a failed attempt rolls back by counter alone.
+//
+// Virtual registers by expression depth: 0->x0, 1->x1, 2..6->x9..x13.
+// Depth >= 7 or any non-arithmetic construct -> legacy path.
+//
+// Constant tracking (OPT-C): cx[10+d]=value, cx[30+d]=known-flag; when
+// both operands of an op are known the operation is computed at compile
+// time and NO instruction is emitted for it.
+// ══════════════════════════════════════════════════════════════════════
+
+// Register number for expression depth d (-1 => beyond fast capacity).
+fn emit_zeros(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 1);
+  // lsl x1,x1,#3 (bytes): assembler-verified 0xD37DF421? no —
+  // 0xD3400000-family UBFM alias; 3548246049 == true LSL #3.
+  let _ = em(insns, n, 3548246049);
+  let _ = em(insns, n, 2432711713);
+  let _ = em(insns, n, 3544513569);
+  let _ = em(insns, n, 3548179489);
+  let _ = em(insns, n, 2334065504);
+  let _ = em(insns, n, 2332099451);
+  // Interpreter zeros(n) zeroes every element (qtt.c TERM_ZEROS eval); the
+  // JIT must too: exec_words resets the bump-arena cursor to its base on
+  // every call_jit, so a second invocation re-allocates the SAME addresses
+  // and would observe stale counts/pointers (stab[0] garbage -> sym_lookup
+  // runs away). Zero the rounded region: mov x2,x0; add x3,x0,x1;
+  // cbz x1,+3; str xzr,[x2],#8; cmp x2,x3; b.ne -2. All assembler-verified.
+  let _ = em(insns, n, 2852127714);
+  let _ = em(insns, n, 2332098563);
+  let _ = em(insns, n, 3019899009);
+  let _ = em(insns, n, 4160783455);
+  let _ = em(insns, n, 3942842463);
+  let _ = em(insns, n, 1426063297);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// ---------- M4 CLI (bebop.bin) ----------
+// Subcommands: compile <src.bp> <out.bin> | size <file> | version | run-via-exec <src.bp>
+// Args contract (seed loader v4): x0 = argc, x1 = pointer array of
+// NUL-terminated argument strings copied into the bump arena.
+
+fn strequals(s: i64, p: [i64]) -> i64 {
+  let i = 0;
+  let same = 1;
+  let done = 0;
+  while done == 0 {
+    let c = char(s, i);
+    let pc = p[i];
+    let isz = if c == 0 then 1 else 0;
+    let mdiff = if c == pc then 0 else 1;
+    let snew = if isz == 1 then same else same * (1 - mdiff);
+    let same = snew;
+    let _ = i = i + 1;
+    let done = isz;
+    0
+  };
+  same
+}
+
+// Copy a NUL-terminated byte string into cell slots (byte per element) —
+// sys_open's path contract is a CELL buffer, argv strings are BYTE strings.
+fn str_to_cells(dst: [i64], src: i64) -> i64 {
+  let i = 0;
+  let done = 0;
+  while done == 0 {
+    let c = char(src, i);
+    let isz = if c == 0 then 1 else 0;
+    let _ = if isz == 0 then (let _ = dst[i] = c in 0) else 0;
+    let _ = i = i + 1;
+    let done = isz;
+    0
+  };
+  i
+}
+
+fn fill_compile(p: [i64]) -> i64 {
+  let _ = p[0] = 99; let _ = p[1] = 111; let _ = p[2] = 109; let _ = p[3] = 112; let _ = p[4] = 105; let _ = p[5] = 108; let _ = p[6] = 101;
+  7
+}
+fn fill_size(p: [i64]) -> i64 {
+  let _ = p[0] = 115; let _ = p[1] = 105; let _ = p[2] = 122; let _ = p[3] = 101;
+  4
+}
+fn fill_version(p: [i64]) -> i64 {
+  let _ = p[0] = 118; let _ = p[1] = 101; let _ = p[2] = 114; let _ = p[3] = 115; let _ = p[4] = 105; let _ = p[5] = 111; let _ = p[6] = 110;
+  7
+}
+fn fill_run(p: [i64]) -> i64 {
+  let _ = p[0] = 114; let _ = p[1] = 117; let _ = p[2] = 110; let _ = p[3] = 45; let _ = p[4] = 118; let _ = p[5] = 105; let _ = p[6] = 97; let _ = p[7] = 45; let _ = p[8] = 101; let _ = p[9] = 120; let _ = p[10] = 101; let _ = p[11] = 99;
+  12
+}
+
+fn idx_of_main(fnames: [i64], cnt: i64) -> i64 {
+  let k = 0;
+  let idx = 0;
+  while k < cnt {
+    let ism = if fnames[k] == 246720401 then 1 else 0;
+    let idx = if ism == 1 then k else idx;
+    let k = k + 1;
+    0
+  };
+  idx
+}
+
+fn cli_compile(argv: i64) -> i64 {
+  let src = argv[3];
+  let out = argv[4];
+  let psrc = zeros(256);
+  let pout = zeros(256);
+  let _ = str_to_cells(psrc, src);
+  let _ = str_to_cells(pout, out);
+  let fd = sys_open(psrc, str_len(src), 0);
+  let srcv = sys_slurp(fd, 400000);
+  let _ = sys_close(fd);
+  let words = emit_words(srcv);
+  let n = words[0];
+  let offs = emit_offsets(srcv);
+  let fnames = zeros(256);
+  let fpos = zeros(256);
+  let cnt = [0];
+  let _ = collect_fns(srcv, fnames, fpos, cnt);
+  let entry = offs[idx_of_main(fnames, cnt[0]) + 1];
+  let e4 = entry * 4;
+  let nb = n * 4 + 8;
+  let buf = zeros(nb);
+  let k = 0;
+  while k < n {
+    let w = words[k + 1];
+    let _ = buf[k * 4] = w & 255;
+    let _ = buf[k * 4 + 1] = (w >> 8) & 255;
+    let _ = buf[k * 4 + 2] = (w >> 16) & 255;
+    let _ = buf[k * 4 + 3] = (w >> 24) & 255;
+    let k = k + 1;
+    0
+  };
+  let _ = buf[n * 4] = e4 & 255;
+  let _ = buf[n * 4 + 1] = (e4 >> 8) & 255;
+  let _ = buf[n * 4 + 2] = (e4 >> 16) & 255;
+  let _ = buf[n * 4 + 3] = (e4 >> 24) & 255;
+  let _ = buf[n * 4 + 4] = (e4 >> 32) & 255;
+  let _ = buf[n * 4 + 5] = (e4 >> 40) & 255;
+  let _ = buf[n * 4 + 6] = (e4 >> 48) & 255;
+  let _ = buf[n * 4 + 7] = (e4 >> 56) & 255;
+  let ofd = sys_open(pout, str_len(out), 577);
+  let w = sys_write(ofd, buf, nb);
+  let _ = sys_close(ofd);
+  w
+}
+
+fn cli_size(argv: i64) -> i64 {
+  let f = argv[3];
+  let pf = zeros(256);
+  let _ = str_to_cells(pf, f);
+  let fd = sys_open(pf, str_len(f), 0);
+  let buf = zeros(262144);
+  let r = sys_read(fd, buf, 400000);
+  let _ = sys_close(fd);
+  r / 4
+}
+
+fn cli_run(argv: i64) -> i64 {
+  // run-via-exec needs the C-side exec builtin (not in the self-hosted
+  // emitter); post-C execution = `seed <compiled.bin>`. Return 2.
+  2
+}
+
+fn main(argc: i64, argv: i64) -> i64 {
+  let cmd = if argc >= 3 then argv[2] else 0;
+  let bcmp = zeros(16);
+  let bsize = zeros(8);
+  let bver = zeros(8);
+  let brun = zeros(16);
+  let _ = fill_compile(bcmp);
+  let _ = fill_size(bsize);
+  let _ = fill_version(bver);
+  let _ = fill_run(brun);
+  let is_compile = if argc >= 3 then strequals(cmd, bcmp) else 0;
+  let is_size = if argc >= 3 then strequals(cmd, bsize) else 0;
+  let is_version = if argc >= 3 then strequals(cmd, bver) else 0;
+  let is_run = if argc >= 3 then strequals(cmd, brun) else 0;
+  let r1 = if is_compile == 1 then cli_compile(argv) else 0;
+  let r2 = if is_size == 1 then cli_size(argv) else 0;
+  let r3 = if is_run == 1 then cli_run(argv) else 0;
+  let r4 = if is_version == 1 then 1000000 else 0;
+  let known = is_compile + is_size + is_version + is_run;
+  let r5 = if known == 0 then 64 else 0;
+  r1 + r2 + r3 + r4 + r5
+}

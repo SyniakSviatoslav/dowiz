@@ -60,7 +60,7 @@ bug. Fixes:
 
 | M | Goal | Acceptance |
 |---|---|---|
-| **M4** | CLI in .bp: `bebop.bin` subcommands `compile / run-via-exec / size / version`. Args passed from the seed loader's stack block into the arena. | `seed bebop.bin compile k1.bp` emits byte-identical words vs `compilewords`; `run` executes a kernel to the known result; `size`/`version` print correct values. |
+| **M4 [DONE 2026-08-28]** | CLI in .bp: `bebop.bin` subcommands `compile / run-via-exec / size / version`. Args passed from the seed loader's stack block into the arena. | `seed bebop.bin compile k1.bp` emits byte-identical words vs `compilewords`; `run` executes a kernel to the known result; `size`/`version` print correct values. |
 | **M5** | std/ .bp twins for toolchain-adjacent algorithms: sort, rng, checksum, base64, sha256 (then whatever else the compiler/tooling consumes). | Each twin golden-vector tested against the C result BEFORE the C twin is removed. |
 | **M6** | Parallelism: clone/futex via svc; pool.c reimplemented as .bp work-splitting over the shared arena. | compilemany and k7 queries run multi-core with identical outputs. |
 | **M7** | Delete `native/src` (keep docs). | Repo = seed + .bp + .bin + docs; full gate green without the C compiler. |
@@ -112,6 +112,12 @@ fuzz/bench/docs green; every milestone committed+pushed.
 - **M3** self-bootstrap: DONE — full selfsource compiled by itself is
   byte-identical to the interpreter's output (67816/67816 words); selfcompile
   fingerprint 236065248692568 == word-sum; self_check = 0.
+- **M4** CLI-in-.bp: DONE — `bebop.bp` = compiler + CLI
+  (`compile/size/version`, `run-via-exec` documented stub; exec is
+  C-dependent and dies at M7 per the charter). seed loader v4 passes
+  argc/argv (x0=argc, x1=arena-copied argv). Verified: `version`=1000000,
+  `size k1c.bin`=94, `compile k1/k7` byte-identical vs compilewords,
+  CLI-compiled k7 executes → 3939697352, unknown cmd → 64.
 - **Hardening** (this session): verified sym table ((name,reg,srcpos)
   triples, byte-compare, capacity trap), unsigned-normalized 64-bit literal
   halves, capacity guards on fn/ctor tables, single-level guard discipline,

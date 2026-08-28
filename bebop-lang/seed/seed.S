@@ -69,6 +69,31 @@ _start:
     mov     x27, x0
     add     x28, x0, x1
 
+    /* M4 args contract: x0 = argc, x1 = pointer array of arena-copied argv
+     * strings. [sp]=argc, [sp+8]=argv (kernel stack). Reserve argc*8+8
+     * bytes at the arena cursor for the pointer array, copy each string,
+     * then jump to the entry. x9/x24/x25 caller-saved locals. */
+    ldr     x19, [sp]          /* argc */
+    add     x20, sp, #8        /* argv (kernel stack) */
+    mov     x22, x27           /* pointer-array base */
+    add     x27, x27, x19, lsl #3
+    add     x27, x27, #8
+    mov     x23, #0
+1:  cmp     x23, x19
+    b.ge    2f
+    ldr     x24, [x20, x23, lsl #3]
+    mov     x25, x27           /* string dst */
+    str     x25, [x22, x23, lsl #3]
+3:  ldrb    w9, [x24]
+    strb    w9, [x25]
+    add     x24, x24, #1
+    add     x25, x25, #1
+    cbnz    w9, 3b
+    mov     x27, x25           /* bump arena past the string */
+    add     x23, x23, #1
+    b       1b
+2:  mov     x0, x19             /* argc */
+    mov     x1, x22             /* argv pointer array */
     add     x15, x21, x12      /* entry */
     blr     x15
 
