@@ -8,6 +8,11 @@ DIR=${1:-/tmp/opencode/pargen}
 PASS=0; FAIL=0; SKIP=0; CRASH=0
 $BEBOPC compilemany selfhost/expr_compile.bp "$DIR"/*.bp >/dev/null
 for f in "$DIR"/*.bp; do
+  # programs without a top-level fn main() have no single entry result;
+  # count them as skipped, never as failures (hello.bp false-positive class)
+  if ! grep -qE "^fn main\(" "$f"; then
+    SKIP=$((SKIP+1)); continue
+  fi
   I=$(timeout 30 $BEBOPC run "$f" main 2>/dev/null | tail -1)
   [ -z "$I" ] && { SKIP=$((SKIP+1)); continue; }
   if ! timeout 90 $BEBOPC compilewords selfhost/expr_compile.bp "$f" > /tmp/opencode/pd.full 2>/dev/null; then

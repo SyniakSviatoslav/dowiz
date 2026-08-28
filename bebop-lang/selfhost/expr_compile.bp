@@ -462,7 +462,8 @@ fn collect_ctors(s: str, names: [i64], cnt: [i64]) -> i64 {
     let _ = skip_ws(s, pos);
     let cname = read_ident(s, pos);
     let is_name = if cname == 0 then 0 else 1;
-    let _ = if is_name == 1 then (let _ = names[k[0]] = cname in 0) else 0;
+    let capok = if k[0] < 256 then 1 else 0;
+    let _ = if is_name * capok == 1 then (let _ = names[k[0]] = cname in 0) else 0;
     let _ = k[0] = k[0] + is_name;
     let _ = skip_to_field_delim(s, pos);
     let ch = char(s, pos[0]);
@@ -510,7 +511,8 @@ fn ft_cache_slot(tab: [i64], name: i64) -> i64 {
   let ecnt = tab[eb];
   let cb = eb + ecnt + 2;
   let slot = name - name / 128 * 128;
-  cb + slot + slot
+  let slot2 = if slot < 0 then slot + 128 else slot;
+  cb + slot2 + slot2
 }
 
 fn ft_cache_get(tab: [i64], name: i64) -> i64 {
@@ -1581,6 +1583,7 @@ fn compile(s: str) -> i64 {
   let fpos_l = zeros(256);
   let cnt_l = [0];
   let _ = collect_fns(s, fnames_l, fpos_l, cnt_l);
+  let _ = if cnt_l[0] >= 256 then em(insns, n, 3558866944) else 0;
   let fntab = zeros(4096);
   let _ = fntab[0] = cnt_l[0];
   let fl_i = [0];
@@ -1595,6 +1598,7 @@ fn compile(s: str) -> i64 {
   let enames_l = zeros(256);
   let ecnt_l = [0];
   let _ = collect_ctors(s, enames_l, ecnt_l);
+  let _ = if ecnt_l[0] >= 256 then em(insns, n, 3558866944) else 0;
   let eb_l = cnt_l[0] + cnt_l[0] + cnt_l[0] + 1;
   let _ = fntab[eb_l] = ecnt_l[0];
   let ez_l = [0];
@@ -2018,6 +2022,7 @@ fn compile_fn(s: str) -> i64 {
   let fpos_l = zeros(256);
   let cnt_l = [0];
   let _ = collect_fns(s, fnames_l, fpos_l, cnt_l);
+  let _ = if cnt_l[0] >= 256 then em(insns, n, 3558866944) else 0;
   let fntab = zeros(4096);
   let _ = fntab[0] = cnt_l[0];
   let fl_i = [0];
@@ -2032,6 +2037,7 @@ fn compile_fn(s: str) -> i64 {
   let enames_l = zeros(256);
   let ecnt_l = [0];
   let _ = collect_ctors(s, enames_l, ecnt_l);
+  let _ = if ecnt_l[0] >= 256 then em(insns, n, 3558866944) else 0;
   let eb_l = cnt_l[0] + cnt_l[0] + cnt_l[0] + 1;
   let _ = fntab[eb_l] = ecnt_l[0];
   let ez_l = [0];
@@ -2126,7 +2132,8 @@ fn collect_fns(s: str, fnames: [i64], fpos: [i64], cnt: [i64]) -> i64 {
     let is_fn = isf * isn * issp * is_alpha(cafter);
     let _ = tpos_c[0] = j + 3;
     let name = if is_fn == 1 then read_ident(s, tpos_c) else 0;
-    let _ = if is_fn == 1 then (let _ = fnames[cnt[0]] = name in (let _ = fpos[cnt[0]] = j in 0)) else 0;
+    let capok = if cnt[0] < 256 then 1 else 0;
+    let _ = if is_fn * capok == 1 then (let _ = fnames[cnt[0]] = name in (let _ = fpos[cnt[0]] = j in 0)) else 0;
     let _ = cnt[0] = cnt[0] + is_fn;
     let _ = spc[0] = j;
     let _ = if is_quote == 1 then skip_string(s, spc) else 0;
@@ -2257,6 +2264,7 @@ fn compile_program_to(s: str, insns: [i64], n: [i64]) -> i64 {
   let fpos = zeros(256);
   let cnt = [0];
   let _ = collect_fns(s, fnames, fpos, cnt);
+  let _ = if cnt[0] >= 256 then em(insns, n, 3558866944) else 0;
   let sizes = zeros(256);
   let starts = zeros(256);
   let ptab = zeros(4096);
@@ -2278,6 +2286,7 @@ fn compile_program_to(s: str, insns: [i64], n: [i64]) -> i64 {
   let enames_pz = zeros(256);
   let ecnt_pz = [0];
   let _ = collect_ctors(s, enames_pz, ecnt_pz);
+  let _ = if ecnt_pz[0] >= 256 then em(insns, n, 3558866944) else 0;
   let eb_pz = cnt[0] + cnt[0] + cnt[0] + 1;
   let _ = ptab[eb_pz] = ecnt_pz[0];
   let ez_pz = [0];
@@ -2326,6 +2335,7 @@ fn compile_program_to(s: str, insns: [i64], n: [i64]) -> i64 {
   let enames_fz = zeros(256);
   let ecnt_fz = [0];
   let _ = collect_ctors(s, enames_fz, ecnt_fz);
+  let _ = if ecnt_fz[0] >= 256 then em(insns, n, 3558866944) else 0;
   let eb_fz = cnt[0] + cnt[0] + cnt[0] + 1;
   let _ = fntab[eb_fz] = ecnt_fz[0];
   let ez_fz = [0];
