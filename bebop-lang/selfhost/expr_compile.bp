@@ -24,7 +24,9 @@ fn is_digit(c: i64) -> i64 {
 fn is_alpha(c: i64) -> i64 {
   let ge97 = if c >= 97 then 1 else 0;
   let le122 = if c <= 122 then 1 else 0;
-  ge97 * le122
+  let ge65 = if c >= 65 then 1 else 0;
+  let le90 = if c <= 90 then 1 else 0;
+  ge97 * le122 + ge65 * le90
 }
 
 // Read a multi-char identifier (letters/digits/underscore) starting at pos[0];

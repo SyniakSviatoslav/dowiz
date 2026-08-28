@@ -605,3 +605,16 @@ normalized unsigned (emit_lit/emit_half are the single choke point).**
 **[RULE] Nested `if` inside a let-statement's then-branch, and plain-var
 assignment inside `let _ =`, crash or desync the toolchain — index cells
 and single-level guards only.**
+
+## [FIXED] Uppercase identifiers misparsed by the self-hosted emitter (2026-08-28)
+
+`is_alpha` recognized only a-z (97-122), so `read_ident("S1")` returned
+hash 0 WITHOUT advancing pos. In `emit_let_stmt` the caller then did
+`pos++` past the position it assumed was `=`, landing INSIDE the name:
+`let S1 = h[4] >> 6;` compiled as `S1 = 1` (the tail `1 = h[4] >> 6`
+emitted as dead code). The C interpreter's lexer accepts A-Z, so every
+program with uppercase names showed interp==C but JIT==garbage
+(result 1/0, or SIGSEGV when the desync ran away). Hit while porting
+SHA-256 (S0/S1 temporaries). Fix: is_alpha now accepts A-Z too
+(ge65*le90). Verified: self_check=0, self_bootstrap 236271528687723,
+parity_driver 54/0/0, construct_parity 20/20, std_golden 5/5.

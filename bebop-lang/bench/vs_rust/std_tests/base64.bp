@@ -1,0 +1,87 @@
+// selfhost/std/base64.bp — base64 char encode/decode over i64.
+//
+// Base64 alphabet: A-Z (0-25), a-z (26-51), 0-9 (52-61), + (62), / (63).
+// Encode packs 4 ASCII chars into one i64 as:
+//   c0*16777216 + c1*65536 + c2*256 + c3
+// Decode packs 3 bytes into one i64 as:
+//   b0*65536 + b1*256 + b2
+
+module core { }
+
+// b64_val: map an ASCII char code to its 6-bit base64 value (0-63), or -1.
+// Uses sequential let-override pattern to avoid deeply nested if/else.
+fn b64_val(c: i64) -> i64 {
+  let v = 0 - 1;
+  let u_lo = if c >= 65 then 1 else 0;
+  let u_hi = if c <= 90 then 1 else 0;
+  let uhit = u_lo * u_hi;
+  let v = uhit * (c - 65) + (1 - uhit) * v;
+  let l_lo = if c >= 97 then 1 else 0;
+  let l_hi = if c <= 122 then 1 else 0;
+  let lhit = l_lo * l_hi;
+  let v = lhit * (c - 97 + 26) + (1 - lhit) * v;
+  let d_lo = if c >= 48 then 1 else 0;
+  let d_hi = if c <= 57 then 1 else 0;
+  let dhit = d_lo * d_hi;
+  let v = dhit * (c - 48 + 52) + (1 - dhit) * v;
+  let v = if c == 43 then 62 else v;
+  let v = if c == 47 then 63 else v;
+  v
+}
+
+// b64_char: map a 6-bit value (0-63) to its base64 ASCII char code.
+fn b64_char(v: i64) -> i64 {
+  let out = 0 - 1;
+  let a_hit = if v < 26 then 1 else 0;
+  let out = a_hit * (v + 65) + (1 - a_hit) * out;
+  let b_lo = if v >= 26 then 1 else 0;
+  let b_hi = if v < 52 then 1 else 0;
+  let b_hit = b_lo * b_hi;
+  let out = b_hit * (v - 26 + 97) + (1 - b_hit) * out;
+  let c_lo = if v >= 52 then 1 else 0;
+  let c_hi = if v < 62 then 1 else 0;
+  let c_hit = c_lo * c_hi;
+  let out = c_hit * (v - 52 + 48) + (1 - c_hit) * out;
+  let out = if v == 62 then 43 else out;
+  let out = if v == 63 then 47 else out;
+  out
+}
+
+// b64_encode_byte3: encode 3 bytes (b0,b1,b2 as 0-255) into a packed
+// 4-char base64 value. Packed as c0*16777216 + c1*65536 + c2*256 + c3.
+fn b64_encode_byte3(b0: i64, b1: i64, b2: i64) -> i64 {
+  let c0 = b64_char(b0 / 4);
+  let c1 = b64_char((b0 - (b0 / 4) * 4) * 16 + b1 / 16);
+  let c2 = b64_char((b1 - (b1 / 16) * 16) * 4 + b2 / 64);
+  let c3 = b64_char(b2 - (b2 / 64) * 64);
+  (c0 * 16777216) + (c1 * 65536) + (c2 * 256) + c3
+}
+
+// b64_unpack_char: extract one ASCII char code from a packed 4-char value.
+// slot 0=most significant, 3=least significant.
+fn b64_unpack_char(packed: i64, slot: i64) -> i64 {
+  if slot == 0 then (packed / 16777216)
+  else (if slot == 1 then ((packed / 65536) - (packed / 16777216) * 256)
+  else (if slot == 2 then ((packed / 256) - (packed / 65536) * 256)
+  else (packed - (packed / 256) * 256)))
+}
+
+// b64_decode_char4: decode a packed 4-char base64 value into a packed
+// 3-byte value (b0*65536 + b1*256 + b2), or -1 if any char is invalid.
+fn b64_decode_char4(packed: i64) -> i64 {
+  let c0 = b64_unpack_char(packed, 0);
+  let c1 = b64_unpack_char(packed, 1);
+  let c2 = b64_unpack_char(packed, 2);
+  let c3 = b64_unpack_char(packed, 3);
+  let v0 = b64_val(c0);
+  let v1 = b64_val(c1);
+  let v2 = b64_val(c2);
+  let v3 = b64_val(c3);
+  let bad = if v0 < 0 then 1 else (if v1 < 0 then 1 else (if v2 < 0 then 1 else (if v3 < 0 then 1 else 0)));
+  if bad == 1 then (0 - 1) else ((v0 * 4 + v1 / 16) * 65536 + ((v1 - (v1 / 16) * 16) * 16 + v2 / 4) * 256 + (v2 - (v2 / 4) * 4) * 64 + v3)
+}
+fn main() -> i64 {
+  let v1 = b64_encode_byte3(77, 97, 110);
+  let v2 = b64_encode_byte3(102, 111, 120);
+  v1 * 1000000000 + v2
+}

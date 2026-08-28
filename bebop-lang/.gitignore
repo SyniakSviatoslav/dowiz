@@ -27,3 +27,5 @@ bench/r10/timing
 # compilewords cache (content-addressed by crc32(compiler)+crc32(source))
 .becache/
 .becache.bak/
+# M5 golden driver (rebuilt by std_golden.sh)
+bench/vs_rust/c/std_golden
