@@ -88,5 +88,13 @@ r=$(run_one "$TDIR/sha256.bp"); iv=${r% *}; jv=${r#* }
 g=$(sed -n '4p' /tmp/opencode/std_golden.txt | awk '{print $2}')
 gate sha256 "$g" "$iv" "$jv"
 
+# ---- crc32 (zlib_crc32 check value 0xCBF43926 for "123456789") ----
+r=$(run_one "$TDIR/crc.bp"); iv=${r% *}; jv=${r#* }
+gate crc32 3421780262 "$iv" "$jv"
+
+# ---- hex (hex_encode of AB CD EF -> packed ASCII "abcdef") ----
+r=$(run_one "$TDIR/hex.bp"); iv=${r% *}; jv=${r#* }
+gate hex 107075202213222 "$iv" "$jv"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]
