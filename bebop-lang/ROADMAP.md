@@ -61,7 +61,7 @@ bug. Fixes:
 | M | Goal | Acceptance |
 |---|---|---|
 | **M4 [DONE 2026-08-28]** | CLI in .bp: `bebop.bin` subcommands `compile / run-via-exec / size / version`. Args passed from the seed loader's stack block into the arena. | `seed bebop.bin compile k1.bp` emits byte-identical words vs `compilewords`; `run` executes a kernel to the known result; `size`/`version` print correct values. |
-| **M5** | std/ .bp twins for toolchain-adjacent algorithms: sort, rng, checksum, base64, sha256 (then whatever else the compiler/tooling consumes). | Each twin golden-vector tested against the C result BEFORE the C twin is removed. |
+| **M5 [CORE DONE 2026-08-28]** | std/ .bp twins for toolchain-adjacent algorithms: sort, rng, checksum, base64, sha256 (then whatever else the compiler/tooling consumes). | Each twin golden-vector tested against the C result BEFORE the C twin is removed. |
 | **M6** | Parallelism: clone/futex via svc; pool.c reimplemented as .bp work-splitting over the shared arena. | compilemany and k7 queries run multi-core with identical outputs. |
 | **M7** | Delete `native/src` (keep docs). | Repo = seed + .bp + .bin + docs; full gate green without the C compiler. |
 
@@ -118,6 +118,14 @@ fuzz/bench/docs green; every milestone committed+pushed.
   argc/argv (x0=argc, x1=arena-copied argv). Verified: `version`=1000000,
   `size k1c.bin`=94, `compile k1/k7` byte-identical vs compilewords,
   CLI-compiled k7 executes → 3939697352, unknown cmd → 64.
+- **M5** std twins: CORE DONE — `bench/vs_rust/std_golden.sh` gate:
+  7/7 PASS. checksum, sort, rng (exact SplitMix64/PCG64 port), base64,
+  sha256 (FIPS 180-4, K/IV parsed from sha256.c; boundary vectors
+  empty/55/56/64/112B match hashlib), crc32 (zlib check value),
+  hex — JIT == interp == C golden. Emitter fix shipped along: `is_alpha`
+  accepted only a-z, so uppercase idents (S0/S1) compiled as literal
+  0/1 — self_check=0, self_bootstrap 236271528687723, parity 54/0/0,
+  construct_parity 20/20.
 - **Hardening** (this session): verified sym table ((name,reg,srcpos)
   triples, byte-compare, capacity trap), unsigned-normalized 64-bit literal
   halves, capacity guards on fn/ctor tables, single-level guard discipline,
