@@ -1,2 +1,0 @@
-module core { }
-fn sum(x: i64) -> i64 { x + 1 }

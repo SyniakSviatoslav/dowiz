@@ -1,3 +1,0 @@
-module core { }
-fn pen_dx(c: i64) -> i64 { if c==1 then 1 else 0 }
-fn glyph_outline(id: i64) -> i64 { id }

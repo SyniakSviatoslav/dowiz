@@ -1,4 +1,0 @@
-module core { }
-fn adt_pack(tag: i64, payload: i64) -> i64 { tag * 1000000 + payload }
-fn adt_tag(v: i64) -> i64 { v / 1000000 }
-fn adt_payload(v: i64) -> i64 { v - (v / 1000000) * 1000000 }

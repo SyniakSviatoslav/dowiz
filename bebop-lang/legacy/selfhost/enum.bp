@@ -1,6 +1,0 @@
-module core { }
-fn mk_ctor(tag: i64, payload: i64) -> i64 { tag * 1000 + payload }
-fn ctor_tag(v: i64) -> i64 { v / 1000 }
-fn ctor_payload(v: i64) -> i64 { v - (v / 1000) * 1000 }
-fn is_ctor(v: i64, tag: i64) -> i64 { if ctor_tag(v) == tag then 1 else 0 }
-fn main() -> i64 { mk_ctor(5, 123) }

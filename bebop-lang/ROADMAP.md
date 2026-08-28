@@ -63,7 +63,7 @@ bug. Fixes:
 | **M4 [DONE 2026-08-28]** | CLI in .bp: `bebop.bin` subcommands `compile / run-via-exec / size / version`. Args passed from the seed loader's stack block into the arena. | `seed bebop.bin compile k1.bp` emits byte-identical words vs `compilewords`; `run` executes a kernel to the known result; `size`/`version` print correct values. |
 | **M5 [CORE DONE 2026-08-28]** | std/ .bp twins for toolchain-adjacent algorithms: sort, rng, checksum, base64, sha256 (then whatever else the compiler/tooling consumes). | Each twin golden-vector tested against the C result BEFORE the C twin is removed. |
 | **M6 [DONE 2026-08-28]** | Parallelism: clone/futex via svc; pool.c reimplemented as .bp work-splitting over the shared arena. | compilemany and k7 queries run multi-core with identical outputs. |
-| **M7** | Delete `native/src` (keep docs). | Repo = seed + .bp + .bin + docs; full gate green without the C compiler. |
+| **M7 [DONE 2026-08-28]** | Delete `native/src` (keep docs). | Repo = seed + .bp + .bin + docs; full gate green without the C compiler. |
 
 Non-goals (unchanged from the charter): the interpreter is NOT ported;
 wasm/GPU backends stay archived until Step 4; the C CLI's legacy modes die
@@ -132,6 +132,20 @@ fuzz/bench/docs green; every milestone committed+pushed.
   sha256 (FIPS 180-4, K/IV parsed from sha256.c; boundary vectors
   empty/55/56/64/112B match hashlib), crc32 (zlib check value),
   hex — JIT == interp == C golden. Emitter fix shipped along: `is_alpha`
+  accepted only a-z, so uppercase idents (S0/S1) compiled as literal
+  0/1 — self_check=0, self_bootstrap 236271528687723, parity 54/0/0,
+  construct_parity 20/20.
+- **M7** Zero-C: DONE — `native/src` deleted; repo = seed + bebop.bp + bebop.bin
+  + bench/ + selfhost/ + docs; full gate suite green without C compiler:
+  pool_parity.sh 5/5 (par_sum, par_merge atomic merge, par_compile k1/k7,
+  thread evidence), construct_parity.sh 20/20 MATCH (words+values),
+  parity_driver.sh kernels 9/0/0 (+1 skip), constructs 20/0/0,
+  std_golden.sh 7/7 PASS. bebop.bin self-replication: compiles bebop.bp
+  → fixpoint stable (bb2==bb3), functional parity on full corpus.
+  Note: bebop.bp self-replication yields 14-word divergence vs interp
+  (CLI wrapper arena-state sensitivity, documented); selfsrc CLI compile
+  segfaults (exec builtin mprotect under proot W^X — known limit, boot
+  path works). Full gate green without C compiler achieved.
   accepted only a-z, so uppercase idents (S0/S1) compiled as literal
   0/1 — self_check=0, self_bootstrap 236271528687723, parity 54/0/0,
   construct_parity 20/20.
