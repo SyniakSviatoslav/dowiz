@@ -23,3 +23,7 @@ bench/r8/stream_o3
 bench/r10/clockprobe
 bench/r10/resprobe
 bench/r10/timing
+
+# compilewords cache (content-addressed by crc32(compiler)+crc32(source))
+.becache/
+.becache.bak/
