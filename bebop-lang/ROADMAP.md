@@ -62,7 +62,7 @@ bug. Fixes:
 |---|---|---|
 | **M4 [DONE 2026-08-28]** | CLI in .bp: `bebop.bin` subcommands `compile / run-via-exec / size / version`. Args passed from the seed loader's stack block into the arena. | `seed bebop.bin compile k1.bp` emits byte-identical words vs `compilewords`; `run` executes a kernel to the known result; `size`/`version` print correct values. |
 | **M5 [CORE DONE 2026-08-28]** | std/ .bp twins for toolchain-adjacent algorithms: sort, rng, checksum, base64, sha256 (then whatever else the compiler/tooling consumes). | Each twin golden-vector tested against the C result BEFORE the C twin is removed. |
-| **M6** | Parallelism: clone/futex via svc; pool.c reimplemented as .bp work-splitting over the shared arena. | compilemany and k7 queries run multi-core with identical outputs. |
+| **M6 [DONE 2026-08-28]** | Parallelism: clone/futex via svc; pool.c reimplemented as .bp work-splitting over the shared arena. | compilemany and k7 queries run multi-core with identical outputs. |
 | **M7** | Delete `native/src` (keep docs). | Repo = seed + .bp + .bin + docs; full gate green without the C compiler. |
 
 Non-goals (unchanged from the charter): the interpreter is NOT ported;
@@ -109,6 +109,15 @@ fuzz/bench/docs green; every milestone committed+pushed.
   to the interpreter; zero C at runtime.
 - **M2** syscall I/O builtins: DONE (open/read/write/close/exit + clock;
   interp mirror + emitter words).
+- **M6** parallelism: DONE — `bench/vs_rust/pool_parity.sh` 5/5:
+  par_sum 4×1000==10000, par_merge (atomic sys_atomic_add LDADDAL merge)
+  4×1000==10000, par_compile(4,k1)==4×92, par_compile(4,k7)==4×1536,
+  real-thread evidence (clone returns 4 child tids on the seed, 0 under the
+  sequential interp emulation) — all on BOTH engines. The clone emitter
+  re-bases the child's x27/x28 to a private 4MB arena slice and x15/x14 to
+  its own stack (no shared-cursor race in concurrent sys_slurp); the futex
+  wake emits DMB ISH first (ARM64 weak ordering); seed loader 8-aligns the
+  arena cursor after the argv copy (LDADDAL BUS_ADRALN fix).
 - **M3** self-bootstrap: DONE — full selfsource compiled by itself is
   byte-identical to the interpreter's output (67816/67816 words); selfcompile
   fingerprint 236065248692568 == word-sum; self_check = 0.
