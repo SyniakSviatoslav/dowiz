@@ -12,6 +12,8 @@
 /* raw aarch64 Linux syscalls (SVC). Returns the kernel's return value. */
 long bp_syscall1(long n, long a);
 long bp_syscall3(long n, long a, long b, long c);
+long bp_syscall2(long n, long a, long b);
+long bp_syscall6(long n, long a, long b, long c, long d, long e, long f);
 
 /* write(2) via raw syscall (no libc). Returns bytes written or negative errno. */
 long bp_write(int fd, const void *buf, size_t n);

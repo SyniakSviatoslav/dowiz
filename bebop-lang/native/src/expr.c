@@ -373,6 +373,20 @@ static Term *parse_primary(P *p) {
             t->kind = TERM_SYSREADBUF; /* (fd,len): read into scratch, return its address */
         } else if (strcmp(buf, "sys_slurp") == 0) {
             t->kind = TERM_SYSREADBUF; /* same shape, arena buffer */
+        } else if (strcmp(buf, "sys_clone") == 0) {
+            t->kind = TERM_SYSCLONE; /* (flags,stack_top) */
+        } else if (strcmp(buf, "sys_cond_set") == 0) {
+            t->kind = TERM_SYSCONDSET; /* (cond,arr,idx,val) */
+        } else if (strcmp(buf, "sys_exit_thread_guard") == 0) {
+            t->kind = TERM_SYSEXITTHREAD; /* (cond,code) guarded thread exit */
+        } else if (strcmp(buf, "sys_futex_wait_guard") == 0) {
+            t->kind = TERM_SYSFUTEXWAIT; /* (cond,arr,idx,val) guarded WAIT */
+        } else if (strcmp(buf, "sys_futex_wake") == 0) {
+            t->kind = TERM_SYSFUTEXWAKE; /* (arr,idx,n) */
+        } else if (strcmp(buf, "sys_arena_base") == 0) {
+            t->kind = TERM_SYSARENABASE; /* () */
+        } else if (strcmp(buf, "sys_arena_end") == 0) {
+            t->kind = TERM_SYSARENAEND; /* () */
         } else if (strcmp(buf, "exec") == 0) {
             t->kind = TERM_EXEC; /* placeholder: two args parsed in postfix */
         } else if (g_reg && enum_ctor_lookup(buf)) {
@@ -527,6 +541,89 @@ static Term *parse_primary(P *p) {
             atom->c = an;
             continue;
         }
+        if ((atom->kind == TERM_SYSCONDSET || atom->kind == TERM_SYSFUTEXWAIT) &&
+            p->s[p->pos] == '(') {
+            p->pos++;
+            Term *aa = parse_expr(p);
+            if (!aa) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ',') { err(p, "expected ','"); return NULL; }
+            p->pos++;
+            Term *ab = parse_expr(p);
+            if (!ab) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ',') { err(p, "expected ','"); return NULL; }
+            p->pos++;
+            Term *ac = parse_expr(p);
+            if (!ac) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ',') { err(p, "expected ','"); return NULL; }
+            p->pos++;
+            Term *ad = parse_expr(p);
+            if (!ad) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ')') { err(p, "expected ')'"); return NULL; }
+            p->pos++;
+            atom->a = aa;
+            atom->b = ab;
+            atom->c = ac;
+            atom->d = ad;
+            continue;
+        }
+        if (atom->kind == TERM_SYSFUTEXWAKE && p->s[p->pos] == '(') {
+            p->pos++;
+            Term *aa = parse_expr(p);
+            if (!aa) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ',') { err(p, "expected ','"); return NULL; }
+            p->pos++;
+            Term *ab = parse_expr(p);
+            if (!ab) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ',') { err(p, "expected ','"); return NULL; }
+            p->pos++;
+            Term *ac = parse_expr(p);
+            if (!ac) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ')') { err(p, "expected ')'"); return NULL; }
+            p->pos++;
+            atom->a = aa;
+            atom->b = ab;
+            atom->c = ac;
+            continue;
+        }
+        if (atom->kind == TERM_SYSCLONE && p->s[p->pos] == '(') {
+            p->pos++;
+            Term *aa = parse_expr(p);
+            if (!aa) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ',') { err(p, "expected ','"); return NULL; }
+            p->pos++;
+            Term *ab = parse_expr(p);
+            if (!ab) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ')') { err(p, "expected ')'"); return NULL; }
+            p->pos++;
+            atom->a = aa;
+            atom->b = ab;
+            continue;
+        }
+        if (atom->kind == TERM_SYSEXITTHREAD && p->s[p->pos] == '(') {
+            p->pos++;
+            Term *aa = parse_expr(p);
+            if (!aa) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ',') { err(p, "expected ','"); return NULL; }
+            p->pos++;
+            Term *ab = parse_expr(p);
+            if (!ab) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ')') { err(p, "expected ')'"); return NULL; }
+            p->pos++;
+            atom->a = aa;
+            atom->b = ab;
+            continue;
+        }
         if ((atom->kind == TERM_SYSOPEN || atom->kind == TERM_SYSREAD ||
              atom->kind == TERM_SYSWRITE) && p->s[p->pos] == '(') {
             p->pos++;
@@ -576,7 +673,8 @@ static Term *parse_primary(P *p) {
             atom->a = sa;
             continue;
         }
-        if (atom->kind == TERM_CLOCKMS && p->s[p->pos] == '(') {
+        if ((atom->kind == TERM_CLOCKMS || atom->kind == TERM_SYSARENABASE ||
+             atom->kind == TERM_SYSARENAEND) && p->s[p->pos] == '(') {
             p->pos++;
             skip_ws(p);
             if (p->s[p->pos] != ')') { err(p, "expected ')'"); return NULL; }

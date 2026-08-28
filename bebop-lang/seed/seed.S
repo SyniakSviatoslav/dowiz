@@ -138,7 +138,7 @@ _start:
     mov     x8, #64
     svc     #0
     mov     x0, #0
-    mov     x8, #93
+    mov     x8, #94
     svc     #0
 f_open:
     mov     x0, #90
@@ -149,9 +149,9 @@ f_read:
 f_mmap:
     mov     x0, #92
 xexit:
-    mov     x8, #93
+    mov     x8, #94
     svc     #0
 fail:
     mov     x0, #94
-    mov     x8, #93
+    mov     x8, #94
     svc     #0

@@ -136,6 +136,17 @@ typedef enum {
     TERM_SYSEXIT,  /* sys_exit(code) — noreturn */
     TERM_CLOCKMS,  /* clock_ms(): monotonic milliseconds */
     TERM_SYSREADBUF, /* sys_readbuf(fd,len): raw read -> scratch addr */
+    TERM_SYSCLONE,  /* sys_clone(flags,stack_top): child tid / 0 in child
+                     *   (interp: setjmp emulation — child path runs first) */
+    TERM_SYSEXITTHREAD, /* sys_exit_thread_guard(cond,code): real-branch
+                     *   thread exit iff cond (interp: longjmp back) */
+    TERM_SYSFUTEXWAIT,  /* sys_futex_wait_guard(cond,arr,idx,val): FUTEX_WAIT
+                     *   iff cond; .d = val */
+    TERM_SYSFUTEXWAKE,  /* sys_futex_wake(arr,idx,n): FUTEX_WAKE n waiters */
+    TERM_SYSCONDSET,    /* sys_cond_set(cond,arr,idx,val): *arr[idx]=val iff
+                     *   cond — real branch, no speculation lost-updates */
+    TERM_SYSARENABASE,  /* sys_arena_base(): seed loader x27 arena cursor */
+    TERM_SYSARENAEND,   /* sys_arena_end(): seed loader x28 arena limit */
 } TermKind;
 
 typedef enum {

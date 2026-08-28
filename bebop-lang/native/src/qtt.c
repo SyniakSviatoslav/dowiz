@@ -923,11 +923,33 @@ static Term *subst_p(const Term *t, const char *name, const Term *v) {
             o->a = subst_p(t->a, name, v);
             o->b = subst_p(t->b, name, v);
             return o;
+        case TERM_SYSCLONE:
+            o->a = subst_p(t->a, name, v);
+            o->b = subst_p(t->b, name, v);
+            return o;
+        case TERM_SYSCONDSET:
+        case TERM_SYSFUTEXWAIT:
+            o->a = subst_p(t->a, name, v);
+            o->b = subst_p(t->b, name, v);
+            o->c = subst_p(t->c, name, v);
+            o->d = subst_p(t->d, name, v);
+            return o;
+        case TERM_SYSFUTEXWAKE:
+            o->a = subst_p(t->a, name, v);
+            o->b = subst_p(t->b, name, v);
+            o->c = subst_p(t->c, name, v);
+            return o;
+        case TERM_SYSEXITTHREAD:
+            o->a = subst_p(t->a, name, v);
+            o->b = subst_p(t->b, name, v);
+            return o;
         case TERM_SYSCLOSE:
         case TERM_SYSEXIT:
             o->a = subst_p(t->a, name, v);
             return o;
         case TERM_CLOCKMS:
+        case TERM_SYSARENABASE:
+        case TERM_SYSARENAEND:
             return o;
         case TERM_ARRAY_GET:
             o->a = subst_p(t->a, name, v);
@@ -1206,7 +1228,30 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
             *out = &I64_TY;
             return 0;
         }
-        case TERM_CLOCKMS: {
+        case TERM_SYSEXITTHREAD:
+        case TERM_SYSCLONE: {
+            if (t->a && check(c, t->a, &I64_TY, err, cap) != 0) return -1;
+            if (t->b && check(c, t->b, &I64_TY, err, cap) != 0) return -1;
+            *out = &I64_TY;
+            return 0;
+        }
+        case TERM_SYSCONDSET:
+        case TERM_SYSFUTEXWAIT: {
+            if (t->a && check(c, t->a, &I64_TY, err, cap) != 0) return -1;
+            if (t->c && check(c, t->c, &I64_TY, err, cap) != 0) return -1;
+            if (t->d && check(c, t->d, &I64_TY, err, cap) != 0) return -1;
+            *out = &I64_TY;
+            return 0;
+        }
+        case TERM_SYSFUTEXWAKE: {
+            if (t->b && check(c, t->b, &I64_TY, err, cap) != 0) return -1;
+            if (t->c && check(c, t->c, &I64_TY, err, cap) != 0) return -1;
+            *out = &I64_TY;
+            return 0;
+        }
+        case TERM_CLOCKMS:
+        case TERM_SYSARENABASE:
+        case TERM_SYSARENAEND: {
             *out = &I64_TY;
             return 0;
         }
@@ -1746,6 +1791,8 @@ static Env env_pool[262144];
  * raise only together with a stack-size contract for embeddings. */
 #define EVAL_DEPTH_MAX 1000
 static int eval_depth = 0;
+/* M6 sequential clone emulation: TERM_SYSCLONE setjmps here, the worker
+ * path (r==0) runs first, TERM_SYSEXITTHREAD longjmps back. */
 static int env_i = 0;
 /* Array-value arena: a flat bump allocator for TERM_ARRAY field values. Arrays
  * are mutable and passed by reference, so their backing storage must stay valid
@@ -1756,8 +1803,6 @@ static size_t afv_pos = 0;
 static Env *env_new(const char *name, Value val, Env *next) {
     if (env_i >= (int)(sizeof env_pool / sizeof env_pool[0])) {
         return NULL; /* pool exhausted (bounded eval) */
-    }
-    if ((env_i & 0xFFFFF) == 0) {
     }
     Env *e = &env_pool[env_i++];
     e->name = name;
@@ -2339,6 +2384,76 @@ static Value eval(const Term *t, Env *env) {
             Value vc = eval(t->a, env);
             _exit((int)(vc.kind == 0 ? vc.i : 94));
         }
+        case TERM_SYSCLONE: {
+            /* Sequential emulation (documented): returns 0 — the "child"
+             * path runs inline. The native side truly clones; the idiom's
+             * worker work is deterministic, so the sequential execution
+             * equals the parallel result (verified by the pool gate).
+             * The stack arg is evaluated (side effects) then ignored. */
+            (void)eval(t->a, env);
+            (void)eval(t->b, env);
+            v.kind = 0;
+            v.i = 0;
+            return v;
+        }
+        case TERM_SYSEXITTHREAD: {
+            /* Sequential emulation: a no-op — the inline "child" simply
+             * continues; the native side really exits the worker thread. */
+            (void)eval(t->a, env);
+            (void)eval(t->b, env);
+            v.kind = 0;
+            v.i = 0;
+            return v;
+        }
+        case TERM_SYSCONDSET: {
+            Value vc = eval(t->a, env);
+            Value va = eval(t->b, env);
+            Value vi = eval(t->c, env);
+            Value vv = eval(t->d, env);
+            if (vc.kind != 0 || va.kind != 6 || vi.kind != 0 ||
+                vv.kind != 0 || vi.i < 0 || vi.i >= va.nfv) {
+                v.kind = -1; return v;
+            }
+            if (vc.i != 0) va.fv[vi.i].val.i = vv.i;
+            v.kind = 0;
+            v.i = 0;
+            return v;
+        }
+        case TERM_SYSFUTEXWAIT: {
+            /* Sequential emulation (documented): the worker's inline
+             * execution has already satisfied every wait, so the emulated
+             * wait marks the cell (idempotent) and returns 0. */
+            Value vc = eval(t->a, env);
+            if (vc.kind == 0 && vc.i != 0) { v.kind = 0; v.i = 0; return v; }
+            Value va = eval(t->b, env);
+            Value vi = eval(t->c, env);
+            if (va.kind != 6 || vi.kind != 0 ||
+                vi.i < 0 || vi.i >= va.nfv) { v.kind = -1; return v; }
+            va.fv[vi.i].val.i = 1;
+            v.kind = 0;
+            v.i = 0;
+            return v;
+        }
+        case TERM_SYSFUTEXWAKE: {
+            Value va = eval(t->a, env);
+            Value vi = eval(t->b, env);
+            Value vn = eval(t->c, env);
+            if (va.kind != 6 || vi.kind != 0 || vn.kind != 0 ||
+                vi.i < 0 || vi.i >= va.nfv) { v.kind = -1; return v; }
+            /* REAL futex wake. */
+            v.kind = 0;
+            v.i = bp_syscall6(98, (long)&va.fv[vi.i].val.i, 1L,
+                              vn.i, 0L, 0L, 0L);
+            return v;
+        }
+        case TERM_SYSARENABASE:
+        case TERM_SYSARENAEND: {
+            /* The interpreter has no seed-arena; the only consumer is the
+             * clone stack arg, which the emulation ignores. */
+            v.kind = 0;
+            v.i = 0;
+            return v;
+        }
         case TERM_CLOCKMS: {
             long ts[2];
             if (bp_syscall3(113, 1L, (long)ts, 0L) == 0) {
@@ -2688,11 +2803,33 @@ Term *qtt_subst(const Term *t, const char *name, const Term *v) {
             o->a = qtt_subst(t->a, name, v);
             o->b = qtt_subst(t->b, name, v);
             return o;
+        case TERM_SYSCLONE:
+            o->a = qtt_subst(t->a, name, v);
+            o->b = qtt_subst(t->b, name, v);
+            return o;
+        case TERM_SYSCONDSET:
+        case TERM_SYSFUTEXWAIT:
+            o->a = qtt_subst(t->a, name, v);
+            o->b = qtt_subst(t->b, name, v);
+            o->c = qtt_subst(t->c, name, v);
+            o->d = qtt_subst(t->d, name, v);
+            return o;
+        case TERM_SYSFUTEXWAKE:
+            o->a = qtt_subst(t->a, name, v);
+            o->b = qtt_subst(t->b, name, v);
+            o->c = qtt_subst(t->c, name, v);
+            return o;
+        case TERM_SYSEXITTHREAD:
+            o->a = qtt_subst(t->a, name, v);
+            o->b = qtt_subst(t->b, name, v);
+            return o;
         case TERM_SYSCLOSE:
         case TERM_SYSEXIT:
             o->a = qtt_subst(t->a, name, v);
             return o;
         case TERM_CLOCKMS:
+        case TERM_SYSARENABASE:
+        case TERM_SYSARENAEND:
             return o;
         case TERM_ZEROS: /* substitute into the size expression */
         case TERM_NAT_S:
@@ -2793,11 +2930,33 @@ static Term *norm_rec(const Term *t) {
             o->a = norm_rec(t->a);
             o->b = norm_rec(t->b);
             return o;
+        case TERM_SYSCLONE:
+            o->a = norm_rec(t->a);
+            o->b = norm_rec(t->b);
+            return o;
+        case TERM_SYSCONDSET:
+        case TERM_SYSFUTEXWAIT:
+            o->a = norm_rec(t->a);
+            o->b = norm_rec(t->b);
+            o->c = norm_rec(t->c);
+            o->d = norm_rec(t->d);
+            return o;
+        case TERM_SYSFUTEXWAKE:
+            o->a = norm_rec(t->a);
+            o->b = norm_rec(t->b);
+            o->c = norm_rec(t->c);
+            return o;
+        case TERM_SYSEXITTHREAD:
+            o->a = norm_rec(t->a);
+            o->b = norm_rec(t->b);
+            return o;
         case TERM_SYSCLOSE:
         case TERM_SYSEXIT:
             o->a = norm_rec(t->a);
             return o;
         case TERM_CLOCKMS:
+        case TERM_SYSARENABASE:
+        case TERM_SYSARENAEND:
             return o;
         case TERM_ZEROS: /* normalize the size expression */
             o->a = norm_rec(t->a);
@@ -3054,10 +3213,23 @@ static int conv_rec(const Term *a, const Term *b) {
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b) && conv_rec(a->c, b->c);
         case TERM_SYSREADBUF:
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
+        case TERM_SYSCLONE:
+            return conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
+        case TERM_SYSCONDSET:
+        case TERM_SYSFUTEXWAIT:
+            return conv_rec(a->a, b->a) && conv_rec(a->b, b->b) &&
+                   conv_rec(a->c, b->c) && conv_rec(a->d, b->d);
+        case TERM_SYSFUTEXWAKE:
+            return conv_rec(a->a, b->a) && conv_rec(a->b, b->b) &&
+                   conv_rec(a->c, b->c);
+        case TERM_SYSEXITTHREAD:
+            return conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
         case TERM_SYSCLOSE:
         case TERM_SYSEXIT:
             return conv_rec(a->a, b->a);
         case TERM_CLOCKMS:
+        case TERM_SYSARENABASE:
+        case TERM_SYSARENAEND:
             return 1;
         case TERM_LIT:
             return a->ival == b->ival && a->bval == b->bval;

@@ -26,10 +26,28 @@ int qtt_termination_check(const Term *t, char *err, size_t cap) {
         case TERM_SYSREADBUF:
             return qtt_termination_check(t->a, err, cap) == 0 &&
                    qtt_termination_check(t->b, err, cap) == 0 ? 0 : -1;
+        case TERM_SYSCLONE:
+            return qtt_termination_check(t->a, err, cap) == 0 &&
+                   qtt_termination_check(t->b, err, cap) == 0 ? 0 : -1;
+        case TERM_SYSCONDSET:
+        case TERM_SYSFUTEXWAIT:
+            return qtt_termination_check(t->a, err, cap) == 0 &&
+                   qtt_termination_check(t->b, err, cap) == 0 &&
+                   qtt_termination_check(t->c, err, cap) == 0 &&
+                   qtt_termination_check(t->d, err, cap) == 0 ? 0 : -1;
+        case TERM_SYSFUTEXWAKE:
+            return qtt_termination_check(t->a, err, cap) == 0 &&
+                   qtt_termination_check(t->b, err, cap) == 0 &&
+                   qtt_termination_check(t->c, err, cap) == 0 ? 0 : -1;
+        case TERM_SYSEXITTHREAD:
+            return qtt_termination_check(t->a, err, cap) == 0 &&
+                   qtt_termination_check(t->b, err, cap) == 0 ? 0 : -1;
         case TERM_SYSCLOSE:
         case TERM_SYSEXIT:
             return qtt_termination_check(t->a, err, cap);
         case TERM_CLOCKMS:
+        case TERM_SYSARENABASE:
+        case TERM_SYSARENAEND:
             return 0;
         case TERM_VAR:
         case TERM_LIT:

@@ -1,0 +1,65 @@
+// selfhost/std/pool.bp — worker pool over the shared seed arena.
+//
+// M6: parallelism in pure .bp. Each worker is a clone'd thread (CLONE_VM |
+// CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_THREAD = 68864) with its
+// own 64 KiB stack carved from the arena above the cursor. Shared cells
+// live in frame-heap arrays (register-held base pointers — keep <= 8 live
+// symbols across a parallel region; spilled slots are per-thread stack
+// memory and are NOT shared).
+//
+// The publish/wait idiom uses real-branch guarded builtins so the
+// emitter's branchless speculation cannot race:
+//   sys_cond_set(cond, arr, idx, val)        — publish iff cond
+//   sys_futex_wait_guard(cond, arr, idx, v)  — FUTEX_WAIT iff cond == 0
+//   sys_futex_wake(arr, idx, n)              — FUTEX_WAKE (harmless both)
+// Workers PARK on a never-woken futex cell instead of exiting (raw svc 94
+// followed by another clone breaks under ptrace sandboxes; the parked
+// thread dies with the process's exit_group). Standard futex pattern:
+// wait on the CURRENT flag value, re-check in a loop (no lost wakeups).
+//
+// Interp mirror: sequential emulation — sys_clone returns 0 (the worker
+// path runs inline), futex waits mark the cell and return 0. The
+// deterministic work-split yields the identical result. Both engines
+// verified by the pool gate (bench/vs_rust/pool_parity.sh).
+
+module core { }
+
+// par_sum(W, per): W workers; worker i contributes (i+1)*per into cells[i];
+// the merge phase sums cells[0..W) after every done flag is set. cells
+// holds W results + W done flags + 1 park cell. No allocations inside
+// loops (L8).
+fn par_sum(W: i64, per: i64) -> i64 {
+  let cells = zeros(W * 2 + 1);
+  let base = sys_arena_base();
+  let i = 0;
+  while i < W {
+    let r = sys_clone(68864, base + 131072 + i * 65536);
+    let is_child = if r == 0 then 1 else 0;
+    let part = is_child * (i + 1) * per;
+    let _ = sys_cond_set(is_child, cells, i, part);
+    let _ = sys_cond_set(is_child, cells, W + i, 1);
+    let _ = sys_futex_wake(cells, W + i, 64);
+    let parked = if is_child == 0 then 1 else 0;
+    while parked == 0 {
+      let w = sys_futex_wait_guard(1 - is_child, cells, W * 2, 0);
+      let parked = if cells[W * 2] == 1 then 1 else 0;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  let k = 0;
+  let acc = 0;
+  while k < W {
+    let d = 0;
+    while d == 0 {
+      let w = sys_futex_wait_guard(0, cells, W + k, 0);
+      let d = if cells[W + k] == 1 then 1 else 0;
+      0
+    };
+    let acc = acc + cells[k];
+    let k = k + 1;
+    0
+  };
+  acc
+}
