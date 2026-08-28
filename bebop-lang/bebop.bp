@@ -2728,11 +2728,13 @@ fn idx_of_main(fnames: [i64], cnt: i64) -> i64 {
 fn cli_compile(argv: i64) -> i64 {
   let src = argv[3];
   let out = argv[4];
-  let psrc = zeros(256);
-  let pout = zeros(256);
+  let ls = str_len(src);
+  let lo = str_len(out);
+  let psrc = zeros(ls + 1);
+  let pout = zeros(lo + 1);
   let _ = str_to_cells(psrc, src);
   let _ = str_to_cells(pout, out);
-  let fd = sys_open(psrc, str_len(src), 0);
+  let fd = sys_open(psrc, ls, 0);
   let srcv = sys_slurp(fd, 400000);
   let _ = sys_close(fd);
   let words = emit_words(srcv);
@@ -2772,9 +2774,10 @@ fn cli_compile(argv: i64) -> i64 {
 
 fn cli_size(argv: i64) -> i64 {
   let f = argv[3];
-  let pf = zeros(256);
+  let lf = str_len(f);
+  let pf = zeros(lf + 1);
   let _ = str_to_cells(pf, f);
-  let fd = sys_open(pf, str_len(f), 0);
+  let fd = sys_open(pf, lf, 0);
   let buf = zeros(262144);
   let r = sys_read(fd, buf, 400000);
   let _ = sys_close(fd);

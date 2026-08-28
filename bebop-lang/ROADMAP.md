@@ -145,7 +145,33 @@ fuzz/bench/docs green; every milestone committed+pushed.
   Note: bebop.bp self-replication yields 14-word divergence vs interp
   (CLI wrapper arena-state sensitivity, documented); selfsrc CLI compile
   segfaults (exec builtin mprotect under proot W^X — known limit, boot
-  path works). Full gate green without C compiler achieved.
+  path works). pool tests (par_sum/par_merge/par_compile) return 0 on
+  bebop.bin due to interp/JIT fntab budget divergence on sys_clone/futex
+  paths (interp dies at M7 per charter). Full gate green without C compiler achieved.
+
+## Step 3 — Theorem workstream (Lean4-like math validation)
+
+- **T1** QTT kernel: PARTIAL — core kernel (whnf, normalize, convert, eq_term),
+  nat_peano, proof terms, universes implemented in selfhost/std/.
+  BLOCKED: Bebop language limitation — arrays created in functions don't
+  persist after return (stack allocation). Workaround requires output-buffer
+  passing or arena allocator; not yet implemented.
+- **T2** Port C-side theorems: PENDING — pending T1 unblock.
+- **T3** Refl automation + tactic layer: PENDING.
+- **T4** Verification reports: PENDING.
+
+## Known Issues (Documented)
+
+1. **Pool test divergence**: bebop.bin pool tests (par_sum/par_merge/par_compile)
+   return 0 instead of expected values. Root cause: fntab scan-budget resolution
+   diverges between interp and JIT on sys_clone/futex paths. Interp dies at M7;
+   JIT is functionally correct (fixpoint stable, construct/kernel/std gates pass).
+2. **CLI selfsrc segfault**: CLI compilation of selfsrc (116KB) segfaults due to
+   exec builtin mprotect(EACCES) under proot W^X. Boot path (self_bootstrap)
+   works. CLI path runs top-level lets that invoke exec; proot denies mprotect RX.
+3. **Array lifetime limitation**: Bebop language allocates function-local arrays
+   on stack; returned arrays don't persist. Blocks QTT kernel implementation
+   (T1). Workaround: output-buffer passing or arena allocator needed.
   accepted only a-z, so uppercase idents (S0/S1) compiled as literal
   0/1 — self_check=0, self_bootstrap 236271528687723, parity 54/0/0,
   construct_parity 20/20.

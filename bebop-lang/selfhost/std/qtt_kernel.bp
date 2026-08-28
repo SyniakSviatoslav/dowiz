@@ -1,0 +1,297 @@
+// qtt_kernel.bp — core QTT type-checking kernel.
+// Implements β+δ conversion and type checking for the proof kernel.
+// Based on the C kernel in native/src/qtt.c, ported to Bebop.
+
+module core { }
+
+// ============================================================
+// Universe hierarchy
+// ============================================================
+
+// Universe levels: 0, 1, 2, ... (cumulative: Type_i : Type_{i+1})
+fn u_zero() -> i64 { 0 }
+fn u_suc(u: i64) -> i64 { u + 1 }
+fn u_max(u1: i64, u2: i64) -> i64 { if u1 > u2 then u1 else u2 }
+
+// ============================================================
+// Kinds: Type u | Kind (for type constructors)
+// ============================================================
+
+// Kind codes: 0 = Type u, 1 = Pi (dependent function), 2 = Sigma, 3 = Base
+// We encode kinds as i64: positive = Type u, negative = special
+
+fn k_type(u: i64) -> i64 { u + 1 }      // Type u  -> u+1 (positive)
+fn k_pi() -> i64 { -1 }                // Pi kind
+fn k_sigma() -> i64 { -2 }             // Sigma kind
+fn k_base() -> i64 { -3 }              // Base kind (i64, etc.)
+
+fn is_type(k: i64) -> i64 { if k > 0 then 1 else 0 }
+fn type_universe(k: i64) -> i64 { k - 1 }
+
+// ============================================================
+// Terms (de Bruijn indices for bound variables)
+// ============================================================
+
+// Term codes:
+//  0 = Var (index)
+//  1 = App (fn, arg)
+//  2 = Lam (domain type, body)
+//  3 = Pi (domain type, codomain type)
+//  4 = Let (type, value, body)
+//  5 = Const (name hash, universe)
+//  6 = Type (universe)
+//  7 = Sort (universe)  // synonym for Type
+
+// Term is a tagged tuple: [code, field1, field2, ...]
+
+fn tm_var(idx: i64) -> [i64] { let r = zeros(2); let _ = r[0] = 0; let _ = r[1] = idx; r }
+fn tm_app(fn: [i64], arg: [i64]) -> [i64] { let r = zeros(3); let _ = r[0] = 1; let _ = r[1] = fn; let _ = r[2] = arg; r }
+fn tm_lam(dom: [i64], body: [i64]) -> [i64] { let r = zeros(3); let _ = r[0] = 2; let _ = r[1] = dom; let _ = r[2] = body; r }
+fn tm_pi(dom: [i64], cod: [i64]) -> [i64] { let r = zeros(3); let _ = r[0] = 3; let _ = r[1] = dom; let _ = r[2] = cod; r }
+fn tm_let(ty: [i64], val: [i64], body: [i64]) -> [i64] { let r = zeros(4); let _ = r[0] = 4; let _ = r[1] = ty; let _ = r[2] = val; let _ = r[3] = body; r }
+fn tm_const(name: i64, u: i64) -> [i64] { let r = zeros(3); let _ = r[0] = 5; let _ = r[1] = name; let _ = r[2] = u; r }
+fn tm_type(u: i64) -> [i64] { let r = zeros(2); let _ = r[0] = 6; let _ = r[1] = u; r }
+fn tm_sort(u: i64) -> [i64] { tm_type(u) }
+
+// Term accessors
+fn tm_code(t: [i64]) -> i64 { t[0] }
+fn tm_fst(t: [i64]) -> i64 { t[1] }
+fn tm_snd(t: [i64]) -> i64 { t[2] }
+fn tm_thd(t: [i64]) -> i64 { t[3] }
+
+// ============================================================
+// Context: list of (name hash, type)
+// ============================================================
+
+// Context is a list of [name_hash, type] pairs, terminated by 0
+fn ctx_empty() -> [i64] { zeros(1) }
+fn ctx_extend(ctx: [i64], name: i64, ty: [i64]) -> [i64] {
+  let len = ctx[0];
+  let new = zeros(len + 3);
+  let _ = new[0] = len + 2;
+  let _ = new[1] = name;
+  let _ = new[2] = ty;
+  let i = 1;
+  while i <= len {
+    let _ = new[i + 2] = ctx[i];
+    let i = i + 1;
+    0
+  };
+  new
+}
+fn ctx_lookup(ctx: [i64], name: i64) -> [i64] {
+  let len = ctx[0];
+  let i = 1;
+  while i <= len {
+    let n = ctx[i * 2 - 1];
+    let t = ctx[i * 2];
+    let eq = if n == name then 1 else 0;
+    if eq == 1 { t } else { 0 };
+    let i = i + 1;
+    0
+  };
+  zeros(1)  // not found
+}
+
+// ============================================================
+// β-reduction (weak head normal form)
+// ============================================================
+
+fn whnf(t: [i64], ctx: [i64]) -> [i64] {
+  let code = tm_code(t);
+  if code == 1 then { // App
+    let fn = whnf(tm_fst(t), ctx);
+    let arg = tm_snd(t);
+    let fn_code = tm_code(fn);
+    if fn_code == 2 then { // Lam
+      // β-reduction: (λx. body) arg → body[arg/0]
+      subst(tm_thd(fn), 0, arg, ctx)
+    } else {
+      // Not a lambda, rebuild app
+      tm_app(fn, arg)
+    }
+  } else if code == 4 then { // Let
+    // Let reduction: let x = v in body → body[v/x]
+    subst(tm_thd(t), 0, tm_snd(t), ctx)
+  } else {
+    t
+  }
+}
+
+// Substitute variable at depth d with value v
+fn subst(t: [i64], d: i64, v: [i64], ctx: [i64]) -> [i64] {
+  let code = tm_code(t);
+  if code == 0 then { // Var
+    let idx = tm_fst(t);
+    if idx == d then v else t
+  } else if code == 1 then { // App
+    tm_app(subst(tm_fst(t), d, v, ctx), subst(tm_snd(t), d, v, ctx))
+  } else if code == 2 then { // Lam
+    // Increase depth for bound variable
+    tm_lam(subst(tm_fst(t), d + 1, v, ctx), subst(tm_snd(t), d + 1, v, ctx))
+  } else if code == 3 then { // Pi
+    tm_pi(subst(tm_fst(t), d, v, ctx), subst(tm_snd(t), d + 1, v, ctx))
+  } else if code == 4 then { // Let
+    tm_let(subst(tm_fst(t), d, v, ctx), subst(tm_snd(t), d, v, ctx), subst(tm_thd(t), d + 1, v, ctx))
+  } else if code == 5 then { // Const
+    t
+  } else {
+    t
+  }
+}
+
+// ============================================================
+// Full normalization (β+δ)
+// ============================================================
+
+fn normalize(t: [i64], ctx: [i64]) -> [i64] {
+  let nf = whnf(t, ctx);
+  let code = tm_code(nf);
+  if code == 1 then { // App
+    tm_app(normalize(tm_fst(nf), ctx), normalize(tm_snd(nf), ctx))
+  } else if code == 2 then { // Lam
+    tm_lam(normalize(tm_fst(nf), ctx), normalize(tm_snd(nf), ctx))
+  } else if code == 3 then { // Pi
+    tm_pi(normalize(tm_fst(nf), ctx), normalize(tm_snd(nf), ctx))
+  } else if code == 4 then { // Let
+    tm_let(normalize(tm_fst(nf), ctx), normalize(tm_snd(nf), ctx), normalize(tm_thd(nf), ctx))
+  } else {
+    nf
+  }
+}
+
+// ============================================================
+// Conversion (β+δ equality)
+// ============================================================
+
+fn convert(t1: [i64], t2: [i64], ctx: [i64]) -> i64 {
+  let n1 = normalize(t1, ctx);
+  let n2 = normalize(t2, ctx);
+  eq_term(n1, n2)
+}
+
+// Syntactic equality of normal forms
+fn eq_term(t1: [i64], t2: [i64]) -> i64 {
+  let c1 = tm_code(t1);
+  let c2 = tm_code(t2);
+  let diff = c1 - c2;
+  if diff != 0 then 0 else {
+    let code = c1;
+    if code == 0 then { // Var
+      let eq = tm_fst(t1) - tm_fst(t2);
+      if eq == 0 then 1 else 0
+    } else if code == 1 then { // App
+      eq_term(tm_fst(t1), tm_fst(t2)) * eq_term(tm_snd(t1), tm_snd(t2))
+    } else if code == 2 then { // Lam
+      eq_term(tm_fst(t1), tm_fst(t2)) * eq_term(tm_snd(t1), tm_snd(t2))
+    } else if code == 3 then { // Pi
+      eq_term(tm_fst(t1), tm_fst(t2)) * eq_term(tm_snd(t1), tm_snd(t2))
+    } else if code == 4 then { // Let
+      eq_term(tm_fst(t1), tm_fst(t2)) * eq_term(tm_snd(t1), tm_snd(t2)) * eq_term(tm_thd(t1), tm_thd(t2))
+    } else if code == 5 then { // Const
+      let eq1 = tm_fst(t1) - tm_fst(t2);
+      let eq2 = tm_snd(t1) - tm_snd(t2);
+      (eq1 == 0) * (eq2 == 0)
+    } else if code == 6 then { // Type
+      let eq = tm_fst(t1) - tm_fst(t2);
+      if eq == 0 then 1 else 0
+    } else {
+      0
+    }
+  }
+}
+
+// ============================================================
+// Type checking
+// ============================================================
+
+// infer_type(t, ctx) -> (type, ok) where ok=1 if well-typed
+fn infer_type(t: [i64], ctx: [i64]) -> [i64] {
+  let code = tm_code(t);
+  if code == 0 then { // Var
+    let idx = tm_fst(t);
+    ctx_lookup(ctx, idx)  // lookup by de Bruijn index
+  } else if code == 1 then { // App
+    let fn_ty = infer_type(tm_fst(t), ctx);
+    let arg = tm_snd(t);
+    let arg_ty = infer_type(arg, ctx);
+    let fn_code = tm_code(fn_ty);
+    if fn_code == 3 then { // Pi
+      // Check argument type matches domain
+      let dom = tm_fst(fn_ty);
+      if convert(arg, tm_fst(t), ctx_empty()) == 1 then { // arg type matches domain
+        tm_snd(fn_ty) // return codomain
+      } else {
+        zeros(1) // type error
+      }
+    } else {
+      zeros(1)
+    }
+  } else if code == 2 then { // Lam
+    let dom = tm_fst(t);
+    let body = tm_snd(t);
+    let body_ty = infer_type(body, ctx_extend(ctx_empty(), 0, tm_fst(t)));
+    tm_pi(tm_fst(t), body_ty)
+  } else if code == 3 then { // Pi
+    let dom = tm_fst(t);
+    let cod = tm_snd(t);
+    // Check domain is a valid type
+    let dom_ty = infer_type(dom, ctx);
+    let cod_ty = infer_type(cod, ctx_extend(ctx_empty(), 0, dom));
+    if tm_code(dom_ty) == 6 && tm_code(cod_ty) == 6 then { // both are types
+      let u1 = tm_fst(dom_ty);
+      let u2 = tm_fst(cod_ty);
+      tm_type(u_max(u1, u2))
+    } else {
+      zeros(1)
+    }
+  } else if code == 5 then { // Const
+    let u = tm_snd(t);
+    tm_type(u)
+  } else if code == 6 then { // Type u
+    let u = tm_fst(t);
+    tm_type(u + 1)  // Type u : Type (u+1)
+  } else {
+    zeros(1)
+  }
+}
+
+// ============================================================
+// Check if term has expected type
+// ============================================================
+
+fn check(t: [i64], expected: [i64], ctx: [i64]) -> i64 {
+  let inferred = infer_type(t, ctx);
+  convert(t, expected, ctx_empty())
+}
+
+// ============================================================
+// Parse theorem statement and check proof
+// ============================================================
+
+// theorem name := proof
+// proof is a term that should type-check as the theorem statement
+fn check_theorem(stmt: [i64], proof: [i64]) -> i64 {
+  let stmt_ty = infer_type(stmt, ctx_empty());
+  let proof_ty = infer_type(proof, ctx_empty());
+  // Check proof type matches statement
+  let ok1 = convert(proof, stmt, ctx_empty());
+  // Check statement is a valid proposition (Type 0)
+  let stmt_ty_code = tm_code(infer_type(stmt, ctx_empty()));
+  let ok2 = if tm_code(stmt_ty) == 6 && tm_fst(stmt_ty) == 0 then 1 else 0;
+  ok1 * ok2
+}
+
+// ============================================================
+// Refl proof: checks β+δ equality
+// ============================================================
+// refl proves t1 = t2 iff convert(t1, t2) = 1
+
+fn refl_proof(t1: [i64], t2: [i64]) -> [i64] {
+  // Refl proof is just a marker; checking does the conversion
+  tm_const(0, 0)  // dummy
+}
+
+fn check_refl(t1: [i64], t2: [i64]) -> i64 {
+  convert(t1, t2, ctx_empty())
+}

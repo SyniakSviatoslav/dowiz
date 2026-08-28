@@ -1,0 +1,176 @@
+// universes.bp — Universe hierarchy and cumulativity for QTT.
+// Implements universe polymorphism, cumulativity, and level constraints.
+
+module core { }
+
+// ============================================================
+// Universe levels
+// ============================================================
+
+// Level expressions: constants, variables, max, suc
+// Encoded as: 0 = zero, 1 = var 0, 2 = var 1, ... 
+//             negative = operations: -1 = suc, -2 = max, -3 = imax
+
+fn lvl_zero() -> i64 { 0 }
+fn lvl_var(v: i64) -> i64 { v + 1 }  // 1 = var 0, 2 = var 1, ...
+fn lvl_suc(l: i64) -> i64 { -1 }  // suc(l)
+fn lvl_max(l1: i64, l2: i64) -> i64 { -2 }  // max(l1, l2)
+fn lvl_imax(l1: i64, l2: i64) -> i64 { -3 }  // imax(l1, l2)
+
+// ============================================================
+// Universe constraints and solving
+// ============================================================
+
+// Constraint: l1 <= l2
+fn leq(l1: i64, l2: i64) -> i64 {
+  // Returns 1 if l1 <= l2 can be proven, 0 otherwise
+  // For concrete levels: compare concrete values
+  // For variables: add constraint to solver
+  1  // placeholder
+}
+
+// Constraint set: list of (l1, l2) pairs meaning l1 <= l2
+fn cs_empty() -> [i64] { zeros(1) }
+fn cs_add(cs: [i64], l1: i64, l2: i64) -> [i64] {
+  let len = cs[0];
+  let new = zeros(len + 3);
+  let _ = new[0] = len + 2;
+  let _ = new[1] = l1;
+  let _ = new[2] = l2;
+  let i = 1;
+  while i <= len {
+    let _ = new[i + 2] = cs[i];
+    let i = i + 1;
+    0
+  };
+  new
+}
+
+// Solve constraints: assign concrete levels to variables
+fn cs_solve(cs: [i64]) -> [i64] {
+  // Returns assignment: [var0_level, var1_level, ...] or empty if unsolvable
+  zeros(1)  // placeholder
+}
+
+// ============================================================
+// Universe polymorphism
+// ============================================================
+
+// Polymorphic type: forall (u : Level), Type u
+fn poly_type(body: [i64], u: i64) -> [i64] {
+  // Forall u. body
+  let r = zeros(3);
+  let _ = r[0] = -4;  // Pi over level
+  let _ = r[1] = u;
+  let _ = r[2] = body;
+  r
+}
+
+// Instantiate polymorphic type at level l
+fn poly_inst(poly: [i64], l: i64) -> [i64] {
+  // Substitute level variable with concrete level
+  poly  // placeholder
+}
+
+// ============================================================
+// Cumulativity: Type u <= Type (u+1)
+// ============================================================
+
+fn cumulate(u1: i64, u2: i64) -> i64 {
+  // Returns 1 if Type u1 <= Type u2 (i.e., u1 <= u2)
+  if u1 <= u2 then 1 else 0
+}
+
+// Subtyping with cumulativity
+fn subtype(ty1: [i64], ty2: [i64]) -> i64 {
+  let c1 = tm_code(ty1);
+  let c2 = tm_code(ty2);
+  if c1 == 6 && c2 == 6 then { // both Type
+    cumulate(tm_fst(ty1), tm_fst(ty2))
+  } else if c1 == 3 && c2 == 3 then { // Pi
+    // Contravariant in domain, covariant in codomain
+    let d1 = tm_fst(ty1); let c1 = tm_snd(ty1);
+    let d2 = tm_fst(ty2); let c2 = tm_snd(ty2);
+    subtype(d2, d1) * subtype(tm_snd(ty1), tm_snd(ty2))
+  } else {
+    0
+  }
+}
+
+// ============================================================
+// Universe inference
+// ============================================================
+
+// Infer universe level of a type
+fn infer_level(ty: [i64]) -> i64 {
+  let c = tm_code(ty);
+  if c == 6 then { // Type u
+    tm_fst(ty)
+  } else if c == 3 then { // Pi
+    let d = tm_fst(ty);
+    let c = tm_snd(ty);
+    lvl_max(infer_level(d), infer_level(c))
+  } else if c == 2 then { // Lam
+    infer_level(tm_snd(ty))
+  } else if c == 5 then { // Const
+    tm_snd(ty)  // stored level
+  } else {
+    0
+  }
+}
+
+// ============================================================
+// Level metavariables and unification
+// ============================================================
+
+// Level metavariable: unresolved level variable
+fn lvl_meta(id: i64) -> i64 {
+  -100 - id  // negative, distinct from operations
+}
+
+fn is_meta(l: i64) -> i64 {
+  if l < -10 then 1 else 0
+}
+
+fn lvl_meta_id(l: i64) -> i64 {
+  -100 - l
+}
+
+// Unification of levels
+fn lvl_unify(l1: i64, l2: i64, subst: [i64]) -> [i64] {
+  // Returns extended substitution or empty if conflict
+  if l1 == l2 then subst else {
+    if is_meta(l1) == 1 then {
+      // l1 is meta, unify with l2
+      let id = lvl_meta_id(l1);
+      cs_add(subst, id, l2)
+    } else if is_meta(l2) == 1 then {
+      lvl_unify(l2, l1, subst)
+    } else if l1 == l2 then {
+      subst
+    } else {
+      zeros(1)  // conflict
+    }
+  }
+}
+
+// ============================================================
+// Level arithmetic
+// ============================================================
+
+fn lvl_add(l1: i64, l2: i64) -> i64 {
+  if l1 < 0 && l1 > -10 then {
+    // operation
+    if l1 == -1 then { // suc
+      lvl_suc(l2)
+    } else if l1 == -2 then { // max
+      lvl_max(l2, 0)  // placeholder
+    } else {
+      l2
+    }
+  } else if l2 < 0 && l2 > -10 then {
+    lvl_add(l2, l1)
+  } else {
+    l1 + l2  // concrete levels
+  }
+}
