@@ -563,3 +563,45 @@ sym_bind REUSES an existing spilled binding (existing<0 path skipped),
 possibly double-evaluating or mis-ordering the arm's push. Fix hint:
 audit emit_cond's then/else emission when inner lets rebind an existing
 spill symbol; compare word streams MIN3 (broken) vs V1 (clean).
+
+## [FIXED] M3 self-compile closes: four architectural failure classes (2026-08-28)
+
+The full self_bootstrap gate is green: JIT-compiled compiler reproduces the
+interpreter's selfsource words **byte-for-byte** (67248/67248), selfcompile
+fingerprint matches, self_check=0, parity driver 55/56 (the one "failure" is
+hello.bp, which has no `main`).
+
+Root causes, in the order they surfaced:
+
+1. **Symbol-table overflow (silent OOB).** stab was 129 cells = 64 pairs, but
+   emit_body needs 10 params + 58 locals = 68 binds; emit_while_stmt 69;
+   fp_tk 80. The last binds wrote past the array into the next arena object
+   (pos[0]!), and the overflowed names looked up as unbound → `mov x0,xzr`
+   reads (the phantom "extra pops" in every body). This was also the old
+   full-run `n[0]=0x75cc28` runaway. Fix: table is now (name, reg, srcpos)
+   triples in zeros(385); capacity 128; overflow returns -2 and bind emits
+   brk #0 instead of corrupting memory.
+2. **Big-literal truncation.** Source literals > 2^63 (builtin hashes
+   sys_slurp/sys_write/sys_close/readbuf) wrap negative in the C parser;
+   emit_lit/emit_half skipped movk halves for negative values, so the JIT
+   compiled those compares against 16-bit constants and dispatched
+   sys_slurp as sys_open. Fix: unsigned-normalize every 16-bit half
+   (incl. the hw==3 slice, where 2^64 itself wraps to 0 in the p[] table).
+3. **Hash trust.** Binding/lookup now byte-compares identifier spellings
+   at stored source positions (ident_eq); a hash hit alone no longer aliases
+   two names onto one register.
+4. **Guard/emission desync.** The dead fast-path dispatch (`1 == 999 then
+   emit_fast_v2`), the fusA/fusB peephole and the whole fp/fpC subsystem
+   were deleted; decision flags in emit_body/emit_let_stmt/emit_while_stmt
+   are computed in a planning block before any emission, and the pop/bind
+   guards are single-level ifs (nested `let _ = if A then (let _ = if B
+   ...)` crashes the C interpreter — another meta-trap). Branch emitters
+   use fixup-after-emit patching uniformly.
+
+**[RULE] Per-fn bind budget: params + unique locals must fit 128; sym_bind
+failure is a trap, never a silent reg.**
+**[RULE] Any literal ≥ 2^63 in compiler source is a hazard; halves must be
+normalized unsigned (emit_lit/emit_half are the single choke point).**
+**[RULE] Nested `if` inside a let-statement's then-branch, and plain-var
+assignment inside `let _ =`, crash or desync the toolchain — index cells
+and single-level guards only.**

@@ -12,8 +12,61 @@
 #include <stdint.h>
 #include <time.h>
 #include <sys/mman.h>
+#include <signal.h>
+#include <ucontext.h>
 
 typedef long (*fn1)(void);
+
+/* Crash reporter: dump PC + key registers before the default action. */
+static void crash_h(int sig, siginfo_t *si, void *uc) {
+    ucontext_t *ctx = (ucontext_t *)uc;
+    fprintf(stderr, "CRASH sig=%d addr=%p pc=%p\n",
+            sig, si->si_addr, (void *)ctx->uc_mcontext.__pc);
+    fprintf(stderr, "CRASH w[-2..+2]=%08x %08x %08x %08x %08x\n",
+            ((unsigned *)(uintptr_t)ctx->uc_mcontext.__pc)[-2],
+            ((unsigned *)(uintptr_t)ctx->uc_mcontext.__pc)[-1],
+            ((unsigned *)(uintptr_t)ctx->uc_mcontext.__pc)[0],
+            ((unsigned *)(uintptr_t)ctx->uc_mcontext.__pc)[1],
+            ((unsigned *)(uintptr_t)ctx->uc_mcontext.__pc)[2]);
+    {
+        int r;
+        fprintf(stderr, "CRASH regs:");
+        for (r = 0; r <= 30; r++) fprintf(stderr, " x%d=%llx", r, (unsigned long long)ctx->uc_mcontext.__regs[r]);
+        fprintf(stderr, "\n");
+        unsigned long fp = ctx->uc_mcontext.__regs[29];
+        unsigned long sp0 = ctx->uc_mcontext.__sp;
+        int k;
+        for (k = 0; k < 16; k++) {
+            if (fp < sp0 - 8u*1024u*1024u || fp > sp0 + 8u*1024u*1024u) break;
+            unsigned long sfp = *(unsigned long *)fp;
+            unsigned long s30 = *(unsigned long *)(fp + 8);
+            fprintf(stderr, "FR%d fp=%llx ret=%llx\n", k, fp, s30);
+            if (sfp <= fp) break;
+            fp = sfp;
+        }
+    }
+    {
+        unsigned long fp = ctx->uc_mcontext.__regs[29];
+        int k;
+        for (k = 0; k < 14 && fp != 0; k++) {
+            unsigned long sfp = *(unsigned long *)fp;
+            unsigned long s30 = *(unsigned long *)(fp + 8);
+            if (s30 < 0x700000000000UL) break;
+            fprintf(stderr, "FR k=%d fp=%llx ret=%llx\n", k,
+                    (unsigned long long)fp, (unsigned long long)s30);
+            fp = sfp;
+        }
+    }
+    fprintf(stderr, "CRASH x0=%llx x19=%llx x20=%llx x27=%llx x28=%llx sp=%llx\n",
+            (unsigned long long)ctx->uc_mcontext.__regs[0],
+            (unsigned long long)ctx->uc_mcontext.__regs[19],
+            (unsigned long long)ctx->uc_mcontext.__regs[20],
+            (unsigned long long)ctx->uc_mcontext.__regs[27],
+            (unsigned long long)ctx->uc_mcontext.__regs[28],
+            (unsigned long long)ctx->uc_mcontext.__sp);
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
 
 /* Bump-arena cursor/end handed to native zeros() via fixed registers.
  * Global asm register variables: GCC reserves x27/x28 for the whole unit. */
@@ -51,6 +104,13 @@ static uint64_t now_ns(void) {
 }
 
 int main(int argc, char **argv) {
+    struct sigaction sa;
+    memset(&sa, 0, sizeof sa);
+    sa.sa_sigaction = crash_h;
+    sa.sa_flags = SA_SIGINFO;
+    sigaction(SIGSEGV, &sa, NULL);
+    sigaction(SIGILL, &sa, NULL);
+    sigaction(SIGBUS, &sa, NULL);
     if (argc < 2) { fprintf(stderr, "usage: %s words.txt [iters]\n", argv[0]); return 2; }
     /* Two input formats:
      *   .bin — raw flat binary of little-endian AArch64 words (the
@@ -91,6 +151,8 @@ int main(int argc, char **argv) {
     fclose(f);
     }
     __builtin___clear_cache((char *)code, (char *)code + (size_t)n * 4);
+    if (mprotect(code, ((size_t)n * 4 + 4095) & ~4095ul,
+                 PROT_READ | PROT_EXEC) != 0) { perror("mprotect"); return 2; }
 
     /* optional third arg:
      *   raw .bin : entry word offset as a plain number
@@ -162,6 +224,19 @@ int main(int argc, char **argv) {
         runs[i] = now_ns() - t0;
     }
     printf("result=%ld\n", ref);
+    {
+        /* DEBUG: dump first 8MB of the arena to ARENA_DUMP so the emitted
+         * word array (out) can be inspected post-run. */
+        const char *dmp = getenv("ARENA_DUMP");
+        if (dmp) {
+            FILE *df = fopen(dmp, "wb");
+            if (df) {
+                fwrite((void *)arena_base, 1, 8u << 20, df);
+                fclose(df);
+                fprintf(stderr, "ARENA_DUMP written to %s (base=%p)\n", dmp, (void *)arena_base);
+            }
+        }
+    }
     printf("ns");
     for (int i = 0; i < iters; i++) printf(" %llu", (unsigned long long)runs[i]);
     printf("\n");

@@ -2,7 +2,7 @@ exp 6
 ctl 2
 mem 7
 hot 1
-quit 22
+quit 29
 nav 1
 par 4
 sh 9
@@ -11,4 +11,4 @@ exit 1
 run 8
 fnmap 8
 runx 4
-lint 3
+lint 10
