@@ -1,0 +1,10 @@
+// compound assignment
+fn main() -> i64 {
+  let x = 10;
+  x += 5;
+  x *= 2;
+  x -= 3;
+  x /= 9;
+  x %= 5;
+  x
+}

@@ -1,0 +1,8 @@
+// lets + shadow updates
+fn main() -> i64 {
+  let acc = 0;
+  let acc = acc + 1;
+  let acc = acc + 2;
+  let acc = acc + 4;
+  acc
+}

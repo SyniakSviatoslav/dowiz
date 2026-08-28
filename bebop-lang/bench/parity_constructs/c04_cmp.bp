@@ -1,0 +1,9 @@
+// comparisons
+fn main() -> i64 {
+  let a = if 1 < 2 then 10 else 0;
+  let b = if 3 >= 3 then 20 else 0;
+  let c = if 2 > 3 then 0 else 40;
+  let d = if 1 == 1 then 80 else 0;
+  let e = if 1 != 2 then 160 else 0;
+  a + b + c + d + e
+}

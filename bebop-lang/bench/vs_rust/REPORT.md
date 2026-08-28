@@ -71,7 +71,7 @@ cargo --release on this machine, and slightly slower than gcc -O2.
   wasm parity 22/22 executed in node/V8 (`make wasm-check`), 145/145 `.bp`
   files pass strict branchless scan + typecheck; contract/theorem annotations
   currently appear in 5 of 72 top-level `.bp` modules — this is the thinnest
-  area and is tracked in PLAN_B.
+  area and is tracked in ROADMAP.md.
 
 ## Bugs found by building this benchmark
 

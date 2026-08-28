@@ -1,0 +1,11 @@
+// while loop
+fn main() -> i64 {
+  let i = 0;
+  let acc = 0;
+  while i < 10 {
+    let acc = acc + i;
+    let i = i + 1;
+    0
+  };
+  acc
+}

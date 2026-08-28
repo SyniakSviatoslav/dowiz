@@ -1,0 +1,7 @@
+// array literal + index + set
+fn main() -> i64 {
+  let a = [10, 20, 30];
+  let x = a[1];
+  let _ = a[2] = 99;
+  x + a[2]
+}

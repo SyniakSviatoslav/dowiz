@@ -21,12 +21,12 @@ this document.
 
 > **Stage B update (2026-08-23):** this report describes expr_compile.bp only.
 > Since it was written: the corpus grew to 144 files, all strict+check green
-> (SWEEP-B3-3.md); backends gained exec-verified slices (aarch64, wasm, NEON,
+> (ROADMAP.md "Current verified state"); backends gained exec-verified slices (aarch64, wasm, NEON,
 > GPU/FPGA emit contract); parity vs live C goldens is 20/20 constructs with
 > real failure accounting; `make wasm-check` executes emitted modules in
 > node/V8; two evaluator root causes were fixed (255-char string cap + chr()
 > aliasing -> string arena; cross-invocation env aliasing under in_while ->
-> boundary markers). Current honest gaps: PLAN_B.md OPEN list and ROADMAP.md
+> boundary markers). Current honest gaps: ROADMAP.md
 > Stage B update.
 
 ## 0. Method

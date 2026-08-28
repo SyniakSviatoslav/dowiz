@@ -1,0 +1,2 @@
+// struct construction + field access
+fn main() -> i64 { let p = pt { x: 3, y: 4 }; p.x + p.y } struct pt { x: i64, y: i64 }

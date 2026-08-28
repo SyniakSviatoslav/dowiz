@@ -1,0 +1,2 @@
+// unary minus + negatives
+fn main() -> i64 { (0 - 100) + (0 - (0 - 25)) + (3 - 10) * 4 }
