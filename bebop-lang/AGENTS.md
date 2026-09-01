@@ -109,8 +109,8 @@ session. Fan out when:
   interp≠JIT mismatch: agent A tests ≤8-symbol version (spills?), agent B
   greps BUGFIXES/docs for matching symptom classes, main thread runs the
   T1 identity checks.
-- **Independent gates** (parity driver, fuzz_selfhost, make test,
-  selfcompile ×2) → run concurrently, integrate verdicts.
+- **Independent gates** (std_golden, parity driver, construct parity) →
+  run concurrently, integrate verdicts.
 - **Artifact prep**: reference-word extraction (asm→objdump→words) can run
   while another agent writes the emitter skeleton / interp mirror.
 
@@ -151,42 +151,28 @@ Isolation rules (hard-won):
   same commit that discovers it. Keep the index short enough to recall at
   the decision moment.
 
-## AGENTD — hot-path daemon (no cold starts)
+## AGENT WORKFLOW (zero-C daemon — agentd replaced by spectral verification)
 
-`native/build/agentd` (build: `gcc -O2 -Wall -Wextra -pthread -I native/src
--o native/build/agentd tools/agentd.c native/src/lmem.c`) is a RESIDENT
-process: memory graph loaded once, navigation indexes cached by mtime,
-gates run as one-liners, `par N` fans out N jobs on threads. Line protocol
-on stdin: mem add|link|query · nav fns|find · gate parity|fuzz|test|
-selfcompile · sh <cmd> · par N (+N lines) · exp <slug> <0|1|2> <secs>
-[journal+auto-memory] · ctl · hot · save · quit.
+Agent work is gate-and-journal driven: every experiment states its
+expected value (LAW L10), returns a VERDICT, and logs to `docs/exp.journal`.
+Gates (`std_golden`, parity driver, construct parity) run via
+`./seed/build/seed bebop.bin compile … && ./seed/build/seed <bin>` with
+no external tooling.
 
-- Hydra-borrowed controller: EMA(α=0.3) of inconclusive-verdict ratio =
-  entropy; PID-ish gain turns entropy + mean duration into an adaptive
-  timebox; >0.5 entropy prints a forced re-enumeration nudge (metacognition
-  enforced mechanically); <0.2 = converged. Every experiment goes through
-  `exp` so the journal (docs/exp.journal) and memory graph grow together.
-- Evolution loop: usage counters persist (docs/memory.stats), `hot` shows
-  what the workflow actually uses — new recurring shapes become agentd
-  subcommands, dead ones retire.
-- Cold-start rule: anything executed repeatedly lives in the daemon or in
-  compiled subcommands; python/bash one-offs are for single use only.
+- Cold-start rule: anything executed repeatedly lives in the self-hosted
+  compiler pipeline (seed + bebop.bin); python/bash one-offs are for single
+  use only.
+- Spectral invariants replace C-oracle checks: the fixpoint (bb2 == bb3)
+  and spectral drift (spectral_drift) are the primary correctness signals.
 
 ## TOOLING & NAVIGATION (agent work only — runtime stays zero-C)
 
-- **Navigation is AST-level, not grep**: `bebopc parse FILE` lists items,
-  `tokens FILE` gives line-numbered token stream, `fmt` canonicalizes,
-  `glyphs` shows language constructs. grep/cat are last resort for raw
-  text hunts only.
-- **Recurring agent operations become compiled subcommands** in
-  `tools/agent.c` (build: `gcc -O2 -Wall -Wextra -o native/build/agent
-  tools/agent.c`): `pack`, `sum`, `prolog`, `entryfind`. Compiled tools
-  replace python one-offs after their SECOND use — scripts that ran twice
-  already paid for formalization (LAW L3 applied to tooling).
-- Living memory CLI: `bebopc memory add|link|query|dump` over
-  docs/memory.lmem (committed). Session start = query topic; postmortems =
-  pat-bad nodes; distilled wins = pat-ok nodes; milestone shifts = state/*.
-  (There is also an unrelated legacy `mem` command — don't confuse them.)
+- **Navigation is grep + AST-level parsing via the self-hosted compiler**:
+  `grep/rg` for raw text hunts; `.bp` source is structured enough that
+  regex suffices. No external C tools remain.
+- **Recurring agent operations** run directly through the self-hosted
+  pipeline (`./seed/build/seed bebop.bin compile …`); python one-offs
+  are for single-use only (cold-start rule).
 
 ## LAWS (condensed, zero-tolerance)
 
@@ -205,14 +191,13 @@ L6. Before touching a subsystem: load its living-memory nodes and read the
     the map repeats solved bugs (rule/map-before-work node).
 L8. NO allocations inside while bodies (cells `[..]`, ctors, zeros): the
     frame-heap bump never resets per iteration -> monotonic escape -> SIGSEGV
-    (collect_fns 3.9MB climb). Enforced mechanically: agentd `lint` must be
-    clean before every M3+ build.
+    (collect_fns 3.9MB climb).
 L9. Runtime self-source is a GENERATED artifact: always regenerate
     /tmp scratch .bp from selfhost/ in-repo in the SAME commit; hand-copied
     sources drift silently and poison entire debug ladders (2026-08-25:
     stale 158B K1 file read all day). Generator: tools/gen_selfsrc.sh.
-L10. Every probe run states its expected value AT ISSUE TIME (agentd `runx`,
-     auto-verdict+journal). A run without expectation is noise, not evidence.
+L10. Every probe run states its expected value AT ISSUE TIME
+     (auto-verdict+journal). A run without expectation is noise, not evidence.
 L11. ENTRY IDENTITY for packed binaries: entry=0 means FIRST fn IN THE FILE,
      not "the interesting one". Before interpreting ANY result, confirm which
      fn executes (fnmap w<entry>). Incident class: probes returning callee's

@@ -1,0 +1,22 @@
+// store.bp — Ф2/F4: .bt store (F2 I/O artifacts). Atomic publish path:
+//   tmp -> sys_open(O_RDWR|O_CREAT|O_TRUNC) -> sys_export(fd, bytes, n)
+//   (ftruncate + mmap MAP_SHARED + stores + munmap, zero sys_write on the
+//   critical path) -> sys_close -> sys_rename(tmp, out) = renameat publish.
+//   rename(x,x) is a no-op, so re-storing over the same path is idempotent.
+// The caller supplies byte-per-cell buffers (the .bp I/O tier convention).
+// Golden: the same 220-byte "BT4R" stream bt.bp packs, with bt_fnv read
+// back AFTER the atomic publish must still equal golden.txt's bt_fnv.
+// Interp==JIT on all builtins here (L5 twins closed, parity gate 720000).
+
+// bt_store(tmp, tlen, out, olen, bytes, n): atomically publish n bytes of the
+// byte-per-cell buffer `bytes` onto path `out` via a tmp file. Returns
+// 7 only when export, close and rename all return 0. Flags 578 = O_RDWR|O_CREAT|
+// O_TRUNC (2|64|512): sys_export mmaps PROT_READ|WRITE|MAP_SHARED, which needs
+// O_RDWR — O_WRONLY (577) make mmap fail with EACCES and the stores SIGSEGV.
+fn bt_store(tmp: [i64], tlen: i64, out: [i64], olen: i64, bytes: [i64], n: i64) -> i64 {
+  let fd = sys_open(tmp, tlen, 578);
+  let e = sys_export(fd, bytes, n);
+  let c = sys_close(fd);
+  let r = sys_rename(tmp, out);
+  (if e == 0 then 1 else 0) + (if c == 0 then 2 else 0) + (if r == 0 then 4 else 0)
+}

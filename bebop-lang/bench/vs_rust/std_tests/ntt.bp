@@ -1,12 +1,14 @@
-// selfhost/std/ntt.bp — Number-Theoretic Transform (NTT) forward/inverse over i64.
-// Port of native/src/ntt.c ntt_transform (and dowiz ntt.rs ntt). Field arithmetic
-// modulo the NTT-friendly prime MOD = 998244353 = 2^23 * 119 + 1, primitive root 3.
-// Every intermediate product stays < MOD^2 (~9.96e17), which fits i64 (~9.22e18).
-// No u64/floats/structs/bitwise ops: division truncates toward zero, so `rem`
-// re-adds m for negative inputs; the bit-reversal permutation and the butterfly
-// stages use only + - * / and low-bit extraction (x - (x/2)*2). n must be a power
-// of two. convolve/circular are omitted: they need dynamic next-power-of-two
-// allocation, which the fixed-size [i64] literal-array surface cannot express.
+// ntt.bp — Self-contained std twin for the MESO-tier gate: NTT forward/inverse
+// over i64 modulo MOD = 998244353 = 2^23 * 119 + 1, primitive root 3.
+// Exact finite-field arithmetic: every intermediate product < MOD^2 fits i64.
+// Gate (word*1000 + ok):
+//   word = 141 — sign binarization of the centered spectrum of the ramp
+//          [1..8] (bits 0,2,3,7 set ↔ cells +36, +346334868, +201631260, +103943341)
+//          goldens: centered_spectrum = [36, -103943349, 346334868, 201631260, -4,
+//          -201631268, -346334876, 103943341] (oracle: Python NTT over MOD)
+//   ok   = 1 if NTT(ramp)∘NTT⁻¹ == ramp (exact roundtrip)
+//        + 2 if circular convolution of ramp ⊛ reverse(ramp) == [176, 156, 144,
+//          140, 144, 156, 176, 204] (computed by NTT multiply-then-invert).
 
 module core { }
 
@@ -43,10 +45,6 @@ fn mod_inv(a: i64, m: i64) -> i64 {
 
 // ntt: in-place iterative forward NTT over MOD. a[0..n) holds the data, n must
 // be a power of two; elements are reduced into [0, MOD) on input. Returns 0.
-// NOTE (2026-09-01, N1c gate): the inverse is a SEPARATE straight-line function
-// ntt_inv — an `invert` parameter decided via `if .. then (block) .. else 0` was
-// found NOT to run its scaling block (inverse restored 8x input); the if..then
-// multi-statement block is an L1 meta-language trap. See bench/vs_rust/std_tests/ntt.bp.
 fn ntt(a: [i64], n: i64) -> i64 {
   let m = 998244353;
   let i = 0;
@@ -101,7 +99,7 @@ fn ntt(a: [i64], n: i64) -> i64 {
 }
 
 // ntt_inv: in-place iterative inverse NTT over MOD. Mirrors ntt but walks the
-// butterflies with inverse roots and finally scales by n^-1, so that
+// butterfly with inverse roots and finally scales by n^-1, so that
 // ntt_inv(a, n) after ntt(a, n) restores the original cells exactly.
 // Straight-line body only (no conditional block) per L1 law. Returns 0.
 fn ntt_inv(a: [i64], n: i64) -> i64 {
@@ -171,4 +169,42 @@ fn centered(v: i64) -> i64 {
   let m = 998244353;
   let r = rem(v, m);
   if r > m / 2 then r - m else r
+}
+
+fn main() -> i64 {
+  let a = zeros(8);
+  let _ = a[0] = 1;
+  let _ = a[1] = 2;
+  let _ = a[2] = 3;
+  let _ = a[3] = 4;
+  let _ = a[4] = 5;
+  let _ = a[5] = 6;
+  let _ = a[6] = 7;
+  let _ = a[7] = 8;
+  let _ = ntt(a, 8);
+  let w = (if centered(a[0]) > 0 then 1 else 0) + (if centered(a[1]) > 0 then 2 else 0) + (if centered(a[2]) > 0 then 4 else 0) + (if centered(a[3]) > 0 then 8 else 0) + (if centered(a[4]) > 0 then 16 else 0) + (if centered(a[5]) > 0 then 32 else 0) + (if centered(a[6]) > 0 then 64 else 0) + (if centered(a[7]) > 0 then 128 else 0);
+  let _ = ntt_inv(a, 8);
+  let rt = (if a[0] == 1 then 1 else 0) + (if a[1] == 2 then 1 else 0) + (if a[2] == 3 then 1 else 0) + (if a[3] == 4 then 1 else 0) + (if a[4] == 5 then 1 else 0) + (if a[5] == 6 then 1 else 0) + (if a[6] == 7 then 1 else 0) + (if a[7] == 8 then 1 else 0);
+  let b = zeros(8);
+  let _ = b[0] = 8;
+  let _ = b[1] = 7;
+  let _ = b[2] = 6;
+  let _ = b[3] = 5;
+  let _ = b[4] = 4;
+  let _ = b[5] = 3;
+  let _ = b[6] = 2;
+  let _ = b[7] = 1;
+  let _ = ntt(b, 8);
+  let _ = ntt(a, 8);
+  let c = zeros(8);
+  let i = 0;
+  while i < 8 {
+    let _ = c[i] = mod_mul(a[i], b[i], 998244353);
+    let i = i + 1;
+    0
+  };
+  let _ = ntt_inv(c, 8);
+  let cv = (if centered(c[0]) == 176 then 1 else 0) + (if centered(c[1]) == 156 then 1 else 0) + (if centered(c[2]) == 144 then 1 else 0) + (if centered(c[3]) == 140 then 1 else 0) + (if centered(c[4]) == 144 then 1 else 0) + (if centered(c[5]) == 156 then 1 else 0) + (if centered(c[6]) == 176 then 1 else 0) + (if centered(c[7]) == 204 then 1 else 0);
+  let ok = (if rt == 8 then 1 else 0) + (if cv == 8 then 2 else 0);
+  w * 1000 + ok
 }

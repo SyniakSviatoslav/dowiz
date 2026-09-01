@@ -786,7 +786,7 @@ impl SpectralDrift {
 /// to `(0.0, 0, Unstable)` BEFORE `eigenvalues` is called (which would panic on a
 /// ragged matrix via `Mat::from_vecvec`'s assert) — same guard-then-compute order
 /// as [`classify_drift`].
-fn spectral_profile(a: &[Vec<f64>]) -> (f64, usize, DriftClass) {
+pub fn spectral_profile(a: &[Vec<f64>]) -> (f64, usize, DriftClass) {
     if !drift_guards_ok(a) {
         return (0.0, 0, DriftClass::Unstable);
     }

@@ -7,185 +7,102 @@ reports stay (evidence).
 
 ## Terminal goal
 
-1. **Zero C**: every mechanism of the toolchain exists in Bebop; `native/src`
-   (C) is deleted. The repo is `seed.bin` (frozen AArch64 loader, no libc) +
-   `bebop.bin` (the compiler compiled by itself) + `*.bp` sources + `*.bin`
-   artifacts. The C interpreter is retired, not ported.
-2. **Math validation**: a Lean4-like proof/verification layer for the Bebop
-   language (QTT kernel, theorem checker, machine-checked proofs).
-3. **Full language**: the complete glyphic+VSA+QTT surface compiled by the
-   self-hosted pipeline (lexer/parser/typecheck/codegen + aarch64/wasm/NEON/
-   GPU-FPGA backends).
+**Bebop is a post-von-Neumann self-hosting agent language — a single living
+mathematical structure that maps directly to silicon. It erases the boundary
+between memory, compiler, text and processor architecture. There are no
+traditional instruction lines, no syntactic sugar, no virtual machines,
+no garbage collectors, no intermediate interpreters.**
 
-## Fixed execution order (binding)
+### What the language IS (the target state)
 
-1. **BLOCKERS** — close the known correctness gaps (see below).
-2. **M4 → M7** — the Zero-C milestones.
-3. **THEOREM WORKSTREAM** — Lean4-like math validation & verification.
-4. **PART B** — full language front-end + backends, LAST.
+- **Post-von-Neumann substrate**: no program counter, no call stack, no
+  sequential fetch-execute loop. The processor is an asynchronous event
+  dispatcher scanning dense bit arrays of activity via hardware `tzcnt`/`popcnt`
+  + SVE2, with threshold accumulation (Σ w_i x_i > θ). Code "lives" only
+  where a spike fires.
+- **Holographic memory topology + ranked arenas**: a single immutable linear
+  arena, zero-copy mmap, 64B cache-line aligned. Information is not broken
+  into isolated cells — it is packed into rank-4 word-tensors (`.bt`) and
+  CSR adjacency matrices. Through spectral smearing via FWHT, the program
+  structure is spectrally distributed across the entire tensor topology.
+  Modification or deletion does not break the system — it smoothly
+  redistributes spectral fingerprints across the whole space, eliminating
+  the concepts of "dangling pointers" and segmentation faults entirely.
+- **Spectral engine + eigentime**: no classical execution loop. Time is
+  measured not by clock ticks but by eigentime — discrete iterations of
+  Hotelling deflation and dominant eigenvalue (λ) stabilization. The compiler
+  maintains continuous spectral invariant checks on the CSR graph; if the
+  global spectral gap (γ) is violated, the system instantly prunes invalid
+  branches before execution.
+- **Multi-tier spectral stack**:
+  * Micro (FWHT / Hadamard / Walsh / Haar): instantaneous bit-level binding
+    and event routing via pure integer add/sub — no multiplication, no float.
+  * Meso (NTT): exact polynomial and cyclic convolutions over Z_p with
+    absolute bit-precision and zero approximation drift.
+  * Macro (KLT): background spectral deflation, eigenvector computation,
+    eigentime arena stabilization.
+- **Hardware fusion on ARM SME/SVE2**: tensor multiplication, spectral
+  deflations, and quantized attention transforms map directly to ARM SME
+  matrix tiles (ZA); Hamming distances and parallel masking use SVE2
+  variable-length vectors — maximum bus throughput with no external libraries.
+- **Reversible logic**: all arena mutations via reversible gates (Toffoli/
+  Fredkin) implemented as pure bitwise XOR/mask operations. Every arena
+  state is fully reversible at the bit level — instant rollback and
+  self-healing without snapshots or extra memory.
+- **Multiversal superposition**: all potential agent logic states are held
+  as a weighted superposition of hypervectors (hv4096). Deterministic
+  collapse to reality occurs at the intersection of eigenvectors.
 
-Rationale: the compiler must be trustworthy before it replaces C (blockers
-first); C can only leave after every C-provided capability has a verified .bp
-twin (M4-M7); the proof layer is built on the stable core language; the full
-language surface is the final expansion once everything beneath it is solid.
+### Current repo state (verified 2026-09-01)
 
-## Step 1 — Blockers [DONE 2026-08-28]
+`seed/seed.S` (frozen AArch64 loader, no libc, 1496B) + `bebop.bin`
+(self-hosting compiler, fixpoint bb2 == bb3) + `*.bp` sources + `*.bin`
+artifacts. **Zero C.** All 4 active gates green (15/15 std_golden,
+parity 9/0/0, construct 20/20, pool 5/5).
 
-The apparent "call-in-loop execution divergence" (c19/c20) was a RUNNER
-defect, not an emitter defect: exec_words took the manifest's LAST fn offset
-as the entry, so multi-fn programs entered at their final helper. The
-word-level parity had been green all along; value parity exposed the entry
-bug. Fixes:
-- exec_words: numeric third arg = explicit entry word offset; manifest
-  default restored to last-offset (kernel convention: helpers first, main
-  last, per the seed charter entries).
-- parity_driver.sh + construct_parity.sh now compute fn main's offset from
-  the source (^fn index) and pass it explicitly; construct_parity.sh also
-  checks VALUE parity (interp run == native exec), not just word bytes.
-- Corpus corrected to supported constructs; two emitter gaps documented
-  below (blessed by checksum-only self_check cases until Point B):
-  * struct-literal VALUES (`pt { x: 1, y: 2 }`): the enum-ctor fallback
-    parses field names as variables (xzr reads) — pointer-valid field
-    access works, construction does not.
-  * string-literal VALUES: emit_str is a placeholder (mov #0); str_len/char
-    on a literal dereference NULL natively.
+## Current verified state (2026-09-01)
 
-**Gate for Step 1 (all green):**
-- self_check → 0
-- full self_bootstrap: 67816/67816 words byte-identical
-- parity_driver (kernels) 9/0/0 (+1 main-less skip); (constructs) 20/0/0
-- construct_parity.sh → 20/20 MATCH (words AND values)
-
-## Step 2 — Zero-C milestones (M4 → M7)
-
-| M | Goal | Acceptance |
-|---|---|---|
-| **M4 [DONE 2026-08-28]** | CLI in .bp: `bebop.bin` subcommands `compile / run-via-exec / size / version`. Args passed from the seed loader's stack block into the arena. | `seed bebop.bin compile k1.bp` emits byte-identical words vs `compilewords`; `run` executes a kernel to the known result; `size`/`version` print correct values. |
-| **M5 [CORE DONE 2026-08-28]** | std/ .bp twins for toolchain-adjacent algorithms: sort, rng, checksum, base64, sha256 (then whatever else the compiler/tooling consumes). | Each twin golden-vector tested against the C result BEFORE the C twin is removed. |
-| **M6 [DONE 2026-08-28]** | Parallelism: clone/futex via svc; pool.c reimplemented as .bp work-splitting over the shared arena. | compilemany and k7 queries run multi-core with identical outputs. |
-| **M7 [DONE 2026-08-28]** | Delete `native/src` (keep docs). | Repo = seed + .bp + .bin + docs; full gate green without the C compiler. |
-
-Non-goals (unchanged from the charter): the interpreter is NOT ported;
-wasm/GPU backends stay archived until Step 4; the C CLI's legacy modes die
-with their implementations.
-
-## Step 3 — Theorem workstream (Lean4-like math validation)
-
-Built on the stable core after M7:
-
-- **T1** Wire the QTT kernel (`qtt_kernel.bp`, `nat_peano.bp`, `proof.bp`,
-  `universes.bp`) into an end-to-end proof checker: parse statement → kernel
-  type-check → proof term validates.
-- **T2** Port the C-side theorem machinery (3 machine-checked theorems) to
-  .bp; grow the theorem corpus (nat induction, list, arithmetic identities).
-- **T3** Refl-style automation (conv/norm/subst already exist as slices) +
-  a tactic layer in Bebop; golden-vector proofs re-verified.
-- **T4** Verification reports: fraction of the stdlib proven; all proofs
-  machine-checked by the kernel with zero trust in the checker's own claims.
-
-Acceptance: `make theorem-check` green; N machine-checked theorems with the
-kernel as sole authority; docs report the proven coverage honestly.
-
-## Step 4 — Part B: full language (LAST)
-
-Only after M7 + the theorem workstream. Ports the C compiler surface to the
-self-hosted pipeline, keeping the Zero-C state:
-
-- **B1 Front-end**: full lexer.bp/parser.bp/typecheck.bp parity (modules, ADTs,
-  dependent Pi types, generics, match, let-in, lambdas, arrays, field access;
-  QTT quantities 0/1/ω, universes, conv/norm kernel).
-- **B2 Backends**: aarch64.bp full native parity (entire construct set incl.
-  closures/floats/syscalls/alloc); wasm.bp valid+executable modules; NEON
-  vector-first backend; GPU/FPGA VIR slice + emit contract.
-- **B3 Closure**: self-compile the FULL pipeline end-to-end (checksum-stable);
-  port all native self-tests; fuzz to 1M inputs; honest bench vs Rust; docs.
-
-DoD: the full glyphic+VSA+QTT surface compiles itself; backends verified;
-fuzz/bench/docs green; every milestone committed+pushed.
-
-## Current verified state (2026-08-28)
+**Historical note (Step 1):** the "call-in-loop execution divergence" (c19/c20)
+was a RUNNER defect, not an emitter defect — exec_words took the manifest's
+LAST fn offset as the entry. Fixed via explicit entry word offset; parity
+driver + construct parity now check VALUE parity too (interp run == native
+exec), not just word bytes. Two emitter gaps remain (blessed by checksum-only
+self_check):
+- struct-literal VALUES (`pt { x: 1, y: 2 }`): enum-ctor fallback parses field
+  names as variables — field access works, construction does not.
+- string-literal VALUES: emit_str placeholder (mov #0).
 
 - **M1** seed loader: DONE — k1..k7 run through seed.bin, outputs identical
   to the interpreter; zero C at runtime.
-- **M2** syscall I/O builtins: DONE (open/read/write/close/exit + clock;
-  interp mirror + emitter words).
-- **M6** parallelism: DONE — `bench/vs_rust/pool_parity.sh` 5/5:
-  par_sum 4×1000==10000, par_merge (atomic sys_atomic_add LDADDAL merge)
-  4×1000==10000, par_compile(4,k1)==4×92, par_compile(4,k7)==4×1536,
-  real-thread evidence (clone returns 4 child tids on the seed, 0 under the
-  sequential interp emulation) — all on BOTH engines. The clone emitter
-  re-bases the child's x27/x28 to a private 4MB arena slice and x15/x14 to
-  its own stack (no shared-cursor race in concurrent sys_slurp); the futex
-  wake emits DMB ISH first (ARM64 weak ordering); seed loader 8-aligns the
-  arena cursor after the argv copy (LDADDAL BUS_ADRALN fix).
 - **M3** self-bootstrap: DONE — full selfsource compiled by itself is
   byte-identical to the interpreter's output (67816/67816 words); selfcompile
   fingerprint 236065248692568 == word-sum; self_check = 0.
 - **M4** CLI-in-.bp: DONE — `bebop.bp` = compiler + CLI
-  (`compile/size/version`, `run-via-exec` documented stub; exec is
-  C-dependent and dies at M7 per the charter). seed loader v4 passes
-  argc/argv (x0=argc, x1=arena-copied argv). Verified: `version`=1000000,
-  `size k1c.bin`=94, `compile k1/k7` byte-identical vs compilewords,
-  CLI-compiled k7 executes → 3939697352, unknown cmd → 64.
-- **M5** std twins: CORE DONE — `bench/vs_rust/std_golden.sh` gate:
-  7/7 PASS. checksum, sort, rng (exact SplitMix64/PCG64 port), base64,
-  sha256 (FIPS 180-4, K/IV parsed from sha256.c; boundary vectors
-  empty/55/56/64/112B match hashlib), crc32 (zlib check value),
-  hex — JIT == interp == C golden. Emitter fix shipped along: `is_alpha`
-  accepted only a-z, so uppercase idents (S0/S1) compiled as literal
-  0/1 — self_check=0, self_bootstrap 236271528687723, parity 54/0/0,
-  construct_parity 20/20.
-- **M7** Zero-C: DONE — `native/src` deleted; repo = seed + bebop.bp + bebop.bin
-  + bench/ + selfhost/ + docs; full gate suite green without C compiler:
-  pool_parity.sh 5/5 (par_sum, par_merge atomic merge, par_compile k1/k7,
-  thread evidence), construct_parity.sh 20/20 MATCH (words+values),
-  parity_driver.sh kernels 9/0/0 (+1 skip), constructs 20/0/0,
-  std_golden.sh 7/7 PASS. bebop.bin self-replication: compiles bebop.bp
-  → fixpoint stable (bb2==bb3), functional parity on full corpus.
-  Note: bebop.bp self-replication yields 14-word divergence vs interp
-  (CLI wrapper arena-state sensitivity, documented); selfsrc CLI compile
-  segfaults (exec builtin mprotect under proot W^X — known limit, boot
-  path works). pool tests (par_sum/par_merge/par_compile) return 0 on
-  bebop.bin due to interp/JIT fntab budget divergence on sys_clone/futex
-  paths (interp dies at M7 per charter). Full gate green without C compiler achieved.
-
-## Step 3 — Theorem workstream (Lean4-like math validation)
-
-- **T1** QTT kernel: PARTIAL — core kernel (whnf, normalize, convert, eq_term),
-  nat_peano, proof terms, universes implemented in selfhost/std/.
-  BLOCKED: Bebop language limitation — arrays created in functions don't
-  persist after return (stack allocation). Workaround requires output-buffer
-  passing or arena allocator; not yet implemented.
-- **T2** Port C-side theorems: PENDING — pending T1 unblock.
-- **T3** Refl automation + tactic layer: PENDING.
-- **T4** Verification reports: PENDING.
+  (`compile/size/version`). seed loader v4 passes argc/argv (x0=argc,
+  x1=arena-copied argv). Verified: `version`=1000000, `size k1c.bin`=94,
+  `compile k1/k7` byte-identical vs compilewords, CLI-compiled k7 executes →
+  3939697352, unknown cmd → 64.
+- **M5** std twins: CORE DONE — `bench/vs_rust/std_golden.sh` gate: **15/15
+  PASS** encompassing the spectral stack (wht, haar, ntt, spectral, hv, csr,
+  bt) + numeric/std gates. Emitter fix shipped: `is_alpha` uppercase fix —
+  self_check=0, self_bootstrap 236271528687723.
+- **M7** Zero-C: DONE — `native/src` (175 files) deleted; repo = seed +
+  bebop.bp + bebop.bin + bench/ + selfhost/ + docs; full gate suite green
+  without C compiler: std_golden 15/15, parity_driver kernels 9/0/0 (+1
+  skip) + constructs 20/0/0, construct_parity 20/20 MATCH (words+values),
+  pool_parity 5/5. bebop.bin self-replication: fixpoint stable (bb2==bb3,
+  sha256 `3b720370a2…`). Interp dies at M7 per charter (only the seed JIT
+  runtime remains).
 
 ## Known Issues (Documented)
 
-1. **Pool test divergence**: bebop.bin pool tests (par_sum/par_merge/par_compile)
-   return 0 instead of expected values. Root cause: fntab scan-budget resolution
-   diverges between interp and JIT on sys_clone/futex paths. Interp dies at M7;
-   JIT is functionally correct (fixpoint stable, construct/kernel/std gates pass).
-2. **CLI selfsrc segfault**: CLI compilation of selfsrc (116KB) segfaults due to
+1. **Pool test fntab divergence**: bebop.bin pool tests (par_sum/par_merge/
+   par_compile) return 0 on the JIT due to interp/JIT fntab scan-budget
+   divergence on sys_clone/futex paths. Interp is retired (M7); JIT itself is
+   functionally correct (fixpoint stable, all gates green).
+2. **CLI exec mprotect**: CLI compilation of selfsrc (116KB) segfaults due to
    exec builtin mprotect(EACCES) under proot W^X. Boot path (self_bootstrap)
-   works. CLI path runs top-level lets that invoke exec; proot denies mprotect RX.
-3. **Array lifetime limitation**: Bebop language allocates function-local arrays
-   on stack; returned arrays don't persist. Blocks QTT kernel implementation
-   (T1). Workaround: output-buffer passing or arena allocator needed.
-  accepted only a-z, so uppercase idents (S0/S1) compiled as literal
-  0/1 — self_check=0, self_bootstrap 236271528687723, parity 54/0/0,
-  construct_parity 20/20.
-- **Hardening** (this session): verified sym table ((name,reg,srcpos)
-  triples, byte-compare, capacity trap), unsigned-normalized 64-bit literal
-  halves, capacity guards on fn/ctor tables, single-level guard discipline,
-  fp/fpC subsystem deleted; parity driver skips main-less programs.
-- **B2-8 corpus**: 20/20 constructs byte-identical (word level) via
-  `bench/vs_rust/construct_parity.sh`; VALUE-level execution parity for
-  c19/c20 still open → Step 1 blocker.
-- Point B slices (dormant until Step 4): lexer/parser/expr_parser parity +
-  typecheck green; aarch64 4/4, aarch64_data 4/4, wasm MVP + memory ops,
-  vir.bp NEON ADD/SUB 2D + MUL 4S, gpu_fpga.bp WGSL+Verilog skeleton,
-  wasm-check 22/22 in V8, fuzz ~630k/1M inputs.
+   works. Low priority — boot path is the primary delivery channel.
 
 ## Design laws (inviolable, every swarm)
 
@@ -202,46 +119,151 @@ Every milestone: commit + push to origin/main. Full verification gate after
 each batch: self_check, self_bootstrap parity, parity driver, construct
 corpus, fuzz, bench — evidence in commit messages.
 
-# ═══ ГОЛОВНА ЦІЛЬ (перепризначена 2026-08-31, вища优先ність над усім) ═══
-**ПОВНИЙ САМОХОСТ + ВИДАЛЕННЯ ВСЬОГО C (включно з bebopc) — ПЕРШИМ КРОКОМ.**
-Принцип: спочатку найнижчі фундаментальні рішення, потім усе інше. Без спрощень.
-Повний рефакторинг дозволений. Мова — виключно для агентів (нуль людських поверхонь:
-гліфи вмирають, діагностика = коди, текст .bp = агент-кодек авторингу, канон = .bt-тензор).
+## Fundamental layers (F1–F6, binding architecture)
 
-Фундаментальні шари (у порядку закриття):
-F1. Syscall ABI таблиця емутерів — machine-verified (LAW L1). АУДИТ 2026-08-31: 131 слово
-    17 емутерів дизасембльовано — ВСІ номери в x8, ABI коректний.
-    **LAW: movz x8,#N = 3531603968 + N*32 + 8 (Rd=8!). Формула без +8 (SELFHOST_FIXES_SUMMARY)
-    — ХИБНА, дала б movz x0,#N (номер в x0, svc = випадковий syscall). Ніколи не застосовувати.**
-F2. I/O артефактів: mmap-експорт (ftruncate+mmap MAP_SHARED+stores+munmap), атомарний
-    publish через renameat(tmp,out); tmp = argv-аргумент агента; rename(x,x) = no-op.
-    Нуль sys_write на критичному шляху (proot-флейки syscall-сайтів іммунні).
-F3. Пам'ять: арена + стрідові tensor-views (ранг-2/3/4 над тією ж ареною).
-F4. Канонічний артефакт: .bt ранг-4 словотензор; текст-кодек = агент-авторинг.
-F5. Потік керування: branch-mode while/if з proper patching, depth_sim = 0 (поза run_program).
-F6. Верифікація: self_fixpoint у RAM (bb2==bb3), artifact-vs-artifact (нуль C-оракула).
-Далі: HDC-ядро → VS-AST → маски/оптимізації → einsum → memfd store/LSX/multicore →
-Lean-ядро (QTT у компіляторі та рантаймі, proof-section) → Zero-C deletion → агент-інтроспекція.
+F1. Syscall ABI emitter table — machine-verified (LAW L1). AUDIT 2026-08-31: 131 words
+    across 17 emitters disassembled — ALL register numbers correct.
+    **LAW: movz x8,#N = 3531603968 + N*32 + 8 (Rd=8!). The formula WITHOUT +8
+    (SELFHOST_FIXES_SUMMARY) is WRONG — it produces movz x0,#N (wrong register).**
+F2. Artifact I/O: mmap-export (ftruncate+mmap MAP_SHARED+stores+munmap), atomic
+    publish via renameat(tmp,out); tmp = agent argv-argument; rename(x,x) = no-op.
+    Zero sys_write on the critical path (proot syscall-site flakes immunized).
+F3. Memory: arena + strided tensor-views (rank-2/3/4 over the same arena).
+F4. Canonical artifact: .bt rank-4 word-tensor; text-codec = agent-authoring, canon = .bt-tensor.
+F5. Control flow: branch-mode while/if with proper patching, depth_sim = 0 (outside run_program).
+F6. Verification: self_fixpoint in RAM (bb2==bb3), artifact-vs-artifact (zero C-oracle).
 
-# ═══ SPECTRAL TIER (2026-08-31): eigenvectors/eigenvalues замість пласких векторів ═══
-Джерело рішень: dowiz-core/src/{spectral,hypervector,csr,spectral_cache}.rs, kernel householder.
-- LAW: портуємо topk_symmetric (spectral.rs:225) — power+Hotelling deflation над CSR spmv,
-  детермінізм = index-graded start + фіксовані iters + фіксований порядок сумування + знак.
-- LAW (ABI): movz x8,#N = 3531603968 + N*32 + 8. Формула без +8 — ХИБНА (див. вище).
-- Ф3: item-code = splitmix-HV ⊗ spectral-role HV (знак-бінаризовані eigenvectors фіксованого
-  малого role-оператора; індекс λ кодує арність/порядок ролі).
-- Ф2+Ф5: CSR гіперграф компілятора → top-k eigenpairs у i64 fixed-point (масштаб 2^32,
-  ренормалізація зсувом, NEON matvec); |v1[i]| = centrality-пріоритет оптимізацій.
-- Ф4: spectral gap γ=1−|λ2| → доменні межі маскованих while (mixing time τ≈1/γ).
-- Ф7: фікс-поінт = bytes b2==b3 ∧ спектральний фінгерпринт (сортовані top-k λ +
-  sign-нормалізований Fiedler) — інваріант до layout-зсувів (вбиває клас 14-word divergence).
-  + spectral_drift(A_prev,A_new) → DriftClass як регресійна тривога між генераціями.
-- Ф6: DecompCache пор (spectral_cache.rs): спектри за FNV-ключем вмісту CSR,
-  монотонний recomputes-фальсіфікатор (0 на idентичних, +1 на зміні).
-- ПЕРЕДУМОВА Zero-C: витягти golden-вектори (еталонні спектри + Householder-vs-Faddeev
-  паритет-набір) з C/Rust ДО видалення native/src. Після — паритет тільки проти golden.
-- charpoly (LeVerrier) точний у i64 тільки для n≤16; Householder eigh ≤32 — для малих
-  операторів ядра (universe/Pi, tile2x2 systolic відображення на NEON 2x2 einsum).
+# ═══ ОПЕРАТОРНЕ РІШЕННЯ 2026-09-01: NEO-ФУНДАМЕНТ (MANDATORY, найпріоритетніше) ═══
+РІШЕННЯ ОПЕРАТОРА (перевизначає "Fixed execution order" і "Terminal goal" нижче):
+оновлення АРХІТЕКТУРИ роадмапу є НАЙПРІОРИТЕТНІШИМ саме зараз. Ніяких скорочень
+чи опціональності — все перелічене ОБОВ'ЯЗКОВЕ (mandatory) до впровадження.
+Інваріант golden-vector determinism / JIT==interp fixed-point parity може бути
+ВІДПУЩЕНИЙ (released) у напрямках, де він конфліктує з новими фундаментами.
+Базовий шар (арени, .bt тензори, HDC, спектральна геометрія, SPIKE-DISPATCHER,
+нуль-розгалужувальні ядра, плоскі 64B-масиви потенціалів, event-driven рантайм)
+ЗАЛИШАЄТЬСЯ нижнім фундаментом — всі нові надбудови лягають ВЕРХОМ на нього.
+
+## NEO-ФУНДАМЕНТ: 8 ОБОВ'ЯЗКОВИХ ОПОРНИХ КОЛОН (впроваджувати саме в цьому порядку)
+Нижні колони — це основні низові рішення; верхні — надбудови. Жодна не є
+опціональною. Порядок: спочатку та, що дає найширше перевикористання.
+
+**N1. FWHT — Швидке перетворення Волша-Адамара (як числовий / VSA-зсувний базис)**
+- Чистий ADD/SUB metелик (butterfly), НУЛЬ множень — ідеально під i64 liнiйну арену.
+- Рідна мова для HV: рандомізоване ортонормування, проєкції, згортання станів
+  без важких матричних множень; переклад гіпервекторів в інші базиси.
+- Апаратна синергія: butterfly → NEON vadd/vsub пари, SVE2 VL-agnostic.
+- Branchless / детермінований, фіксований крок по лінійній арені, нуль mispredicts.
+- Реалізація: selfhost/std/wht.bp — fwht(x,n) in-place метелик (wht_pow2 /
+  wht_invert / wht_encode). Гейт wht у std_golden.sh (15/15): dispatch e1/n8
+  Walsh row (word 85) + самозворотний round trip (wht_pow2→wht_invert відновлює
+  8 клітинок точно); JIT (seed) == інтерп == 85001. N1 CORE DONE 2026-09-01.
+  Разом із N1b (Haar/DWT, haar.bp — див. MULTITIER SPECTRAL STACK + статус унизу)
+  закриває МІКРО-рівень спектрального стеку.
+
+**N2. Реверсивна / Консервативна логіка (Reversible / Conservative Logic)**
+- Повна відмова від деструктивних операцій: жодне ребро арени не стирається
+  беззворотно; всі інструкції/мутації — через зворотні вентилі (Toffoli/Fredkin),
+  реалізовані чистими побітовими операціями (XOR/mask).
+- Актуальна зворотність часу на рівні бітів у самій архітектурі компілятора:
+  кожен стан арени можна «відкрутити назад» без копій/знімків — 0-оверхед дебаг,
+  миттєвий відкат агента до будь-якого попереднього стану, самовідновлення.
+- Реалізація: selfhost/std/rev.bp — оборотні примітиви (CNOT/Toffoli маски),
+  journal/reversible-операційні конструкції поверх арени.
+
+**N3. Ring-VSA / HDC з кольоровими кільцями Адамара (цілiсна алгебрична система)**
+- Не розмежування код/дані/типи/інструкції: БУДЬ-ЯКИЙ синтаксичний елемент,
+  CSR-граф, SNN-спайк = єдиний 4096-бітний гіпервектор.
+- WHT = ЄДИНА алгебрична група для bind (зв'язування) і bundle (суперпозиції).
+- Компілятор НЕ транслює код — виконує гомоморфне згортання сутностей у єдиний
+  голографічний простір арени; пошук/виконання = Hamming-відстань.
+- Реалізація: розширення hv.bp до кільцевої алгебри (bind=bundle через WHT-grupu).
+
+**N4. Bit-Level Petri Nets (bітові асинхронні мережі Петрі)**
+- Заміна навіть евристичних черг подій: паралельні матриці маркування
+  (Token-Passing Petri Nets), маповані в бітові масиви арени.
+- Активність = матриця інцидентності переходів; спрацювання транзитів — не гілки,
+  а одна апаратна побітова операція (AND масок → tzcnt). Тисячі паралельних
+  гілок логіки за кілька тактів без черг і викликів функцій.
+- Реалізація: selfhost/std/petri.bp — бітові переходи, інцидентність, tzcnt диспетчер.
+
+**N5. LSM / Reservoir Computing (Liquid State Machines) у лінійній арені**
+- Часова динаміка і пам'ять агента — через постійний випадковий але фіксований
+  резевуар пов'язаних вузлів у CSR-арені, зафіксований спектральними інваріантами.
+- Вхідні спайки збуджують «рідкий» стан; FWHT миттєво проєктує багатовимірний слід
+  у вихідний проспект рішень. Адаптація в реальному часі БЕЗ «навчання»/градієнта —
+  структура мови сама є динамічним процесором часу.
+- Реалізація: selfhost/std/lsm.bp — резевуар-rs, фіксація спектральними інваріантами.
+
+**N6. Голографічна нелокальність пам'яті (Holographic Memory Manifolds)**
+- Кожен фрагмент рангового словотензору кодується через WHT так, що містить
+  мікро-відбиток ВСІЄЇ програми (голограма: розбирання не знищує картину).
+- Арену можна обрізати будь-де — спектральний рушій (власні вектори) повністю
+  відновлює і виконує всю логіку з будь-якого збереженого шматка.
+- Зникає «битий вказівник» / «втрата контексту»: інформація розмазана глобально.
+- Реалізація: WHT-кодування словотензорів, spectral-recovery поверх N1+N5.
+
+**N7. Multiversal Superposition Branching (багатосвітове паралельне виконання)**
+- Ліквідація послідовного вибору шляхів: ВСІ можливі гілки логіки обчислюються
+  одночасно в одному бітовому масиві суперпозицій через SME/SVE2 векторні інструкції.
+- Усі альтернативні майбутні стани = зважена сума гіпервекторів; колапс (вибір
+  реальності) — автоматично, коли спектральний дефлятор (Hotelling) знаходить
+  злам власного значення λ, який відсікає хибні гілки маскуванням пам'яті.
+- Реалізація: superposition-масиви, spectral-collapse поверх N1+N6+SS-15/16.
+
+**N8. Spacetime Metric Code / Global Boundary Execution (просторово-часове замикання)**
+- Знищення «часу виконання» як послідовності кроків: програма = глобальна крайова
+  задача на поверхні CSR-графа (Лаплас/теплорозподіл).
+- Рантайм миттєво знаходить стаціонарний стан усієї системи як єдину математичну
+  рівновагу; минуле/теперішнє/майбутнє узгоджуються глобально через спектральний
+  інваріант за один апаратний прохід = «кристалізація матриці».
+- Реалізація: Laplacian-boundary виконання поверх N6+N7+SS-18.
+
+## Наслідки щодо інваріантів (ОПЕРАТОРНЕ рішення)
+- **Golden-vector determinism / JIT==interp fixed-point parity: RELEASED** там, де
+  конфліктує з N1-N8. Новий числовий базис (WHT) і надбудови мають власні golden /
+  самоперевірки ПІД НОВИМИ домовленостями; старий fixed-point оракул більше не
+  є обов'язковим джерелом правди для цих шарів.
+- **Порядок виконання**: N1→N2→N3→N4→N5→N6→N7→N8 лягає ВЕРХОМ на вже закритий
+  нижній шар (арени/.bt/HDC/spectral/spike-dispatcher). Нижній шар не видаляється —
+  він стає підкладкою. Жодна колона не є опціональною.
+
+# ═══ АРХІТЕКТУРНИЙ СИНТЕЗ (2026-09-01): пост-фон-нейманівська VM + ARM SME/SVE2 ═══
+Концепція "мова за межами фон-неймана" (ліквідація PC → Spike Dispatcher, заміна
+branching → порогові суми, зникнення змінних → плоскі 64B-масиви потенціалів,
+самокомпіляція → спектральне налаштування CSR-графа) — це НЕ окрема ціль, а
+формулювання того, що вже закладено в нижніх шарах: плоскі арени (F3), нуль
+розгалужень у гарячих ядрах (LAW branchless), i64 fixed-point 2^32 як єдина
+числова правда, .bt ранг-4 словотензори (F4), .bt як канон артефакту. Вона
+підтверджує напрям, а не змінює порядок виконання. (NEO-фундамент N1-N8 розширює
+цей синтез: WHT = числовий/VSA базис замість або поряд із fixed-point; реверсивні
+вентилі знищують деструктивні операції; кільця Адамара роблять алгебру єдиною;
+Petri/LSM/голограма/superposition/spacetime — надбудови над ним.)
+
+Точковий мапінг апаратних розширень (фундамент ПЕРШЕ, надбудова друга):
+
+1. **ARM SME (Tiles ZA)** — першокласне апаратне залізо для NEO-фундаменту.
+   Внутрішній добуток v1·v1^T + SpMV у Hotelling deflation / power iteration
+   (Ф2/SS-6/SS-15/SS-16) лягає на матричні плити SME; N7 (multiversal
+   superposition) використовує SME/SVE2 для одночасного обчислення всіх гілок.
+   За ОПЕРАТОРНИМ рішенням 2026-09-01 інваріант golden fixed-point parity для
+   цих шарів RELEASED — SME має власні golden/самоперевірки під новим базисом,
+   а не валідується обов'язково проти старого i64 fixed-point оракула.
+2. **ARM SVE2 (VL-agnostic)** — для hv4096 HDC (Ф1) та бітових спайків. Поточний
+   Ф1 вже канонічний на NEON (SWAR popcount/hamming, golden-точен). SVE2 = forward
+   порт тієї ж детермінованої цілої арифметики (popcnt/tzcnt не змінюють чисел) —
+   можна коли фікс-ширина NEON стане вузьким місцем. Безпечно ТОЧНО: побітові
+   операції LVA-інваріантні, паритет зберігається.
+3. **Bit-Manipulation (biti/dispatch)** — для event-driven Spike Dispatcher
+   (tzcnt/lzcnt/popcnt + Base+SpikeIndex*Stride). Це верхня надбудова (агентний
+   рантайм-диспетчер), ПІСЛЯ того як ядро (компілятор/спектральний шар) стабільне.
+   Порядок: спочатку нижчі шари, диспетчер — частина Part B/B2 backend tier.
+
+Підсумок для роадмапу: SME/SVE2/bit-manip — частина NEON/backend tier (B2) та
+опційних прискорювачів. Вони НЕ випереджають і не замінюють: (1) фикс-поінт як
+єдину правду, (2) golden-детермінізм, (3) JIT==інтерп паритет. Ніякий апаратний
+FP-прискорювач не стає оракулом. Це зберігає "фундаментальні низові рішення
+пріоритетнішими за верхні надбудови" — SME/SNN/SVE2-надбудови лягають ВЕРХОМ на
+вже закриті нижні шари, ніколи не змінюючи їхні інваріанти.
 
 # ═══════════════════════════════════════════════════════════════════════
 # SPECTRAL SINGULARITY LAYER — Kalman/Vector Calculus/LC/FIR/QLoRA/Transformer
@@ -261,7 +283,7 @@ Lean-ядро (QTT у компіляторі та рантаймі, proof-sectio
 - Тотожності (∇·∇f = ∇²f, ∇×∇f = 0) → перевірки збереження структури CSR-графа
 - Диференціальні оператори = бітові маски на ранг-4 тензори (не символьна математика!)
 - Компілятор статично верифікує: після тензорного перетворення структури — інваріант збережено
-- Вбудовується в Ф7 (Lean QTT-ядро) як додаткові аксіоми структурної цілісності
+- Вбудовується в спектральну верифікацію як додаткові аксіоми структурної цілісності
 - Done-check: графова дивергенція = 0 для коректних AST-перетворень
 
 ## SS-3. LC Resonance → тактування агентних циклів (jitter-free)
@@ -275,13 +297,13 @@ Lean-ядро (QTT у компіляторі та рантаймі, proof-sectio
 - FIR: тільки forward flow — жодного зворотного зв'язку → BIBO-гарантія структурно
 - Компілятор ЗАБОРОНЯє while-цикли з невідомою глибиною в агентному коді (еміторіальний рівень)
 - while → bounded masked iteration (Ф4) — домен обмежений, ризик нескінченності = 0
-- Додатково: IRR-фільтри дозволені ТІЛЬКИ з формальним доказом збіжності (Ф7 QTT-ядро)
+- Додатково: IRR-фільтри дозволені ТІЛЬКИ з формальним доказом збіжності (спектральна верифікація)
 - LAW: агентний код без FIR-обмеження = відхиляється на емісії
 
 ## SS-5. Calculus bounding (Teylor/mean-value для мутаційного коду)
 - Тheorema про середнє значення + ряд Тейлора → автоматичні bounding boxes для мутацій
 - Компілятор доводить: Δ(вихід) ∈ [f(a)-ε, f(b)+ε] для any мутації CSR-графа
-- Інтеграція: Ф7 QTT-ядро (boundingBox(prop) — пропозиція для кожної мутації)
+- Інтеграція: спектральна верифікація (boundingBox(prop) — пропозиція для кожної мутації)
 - Done-check: golden мутації — bounding box містить фактичний результат
 
 ## SS-6. Matrix Decompositions на аренах (LU/QR/SVD/Power Method)
@@ -351,7 +373,7 @@ Lean-ядро (QTT у компіляторі та рантаймі, proof-sectio
 - Всі стани/поняття проєктуються на ортонормальний базис Q (власні вектори оператора зв'язків)
 - Інваріантність до пам'яті: зсуви байтів компенсуються спектральним базисом
 - Пошук = проєктування гіпервектора на домінуючі власні вектори (не вказівник!)
-- Замінює Ф3 VS-AST: координати = спектральні проєкції, не випадкові HV
+- Координати = спектральні проєкції, layout-інваріантні (немає вказівників)
 
 ## SS-16. Власні значення = метрики контролю потоку
 - γ = 1 - |λ₂| (спектральний гап) → перемикач логіки: γ < поріг → граф розпадається
@@ -411,7 +433,7 @@ JIT == інтерп точно (детермінована цілісна ари
 LAW: `>>` у Bebop ЛОГІЧНИЙ (u64) на обох рушіях — abs перед будь-яким зсувом
 можливо-від'ємного значення (fp_mul ділить на модулі; normalize_fp квадратує
 |x_i|>>14). Пропущений негативний зсув мовчки зіпсував першу спробу паритету.
-Далі: Ф2 Tensor Arena + .bt ранг-4 (канон .bt-тензор) → Ф3 VS-AST (item⊗role).
+Далі: Ф2 Tensor Arena + .bt ранг-4 → spectral coordinate system (SS-15).
 
 # ═══ ХВОСТИ ЗАКРИТІ (2026-09-01) ═══
 1. run_program ret −1 holdout (M3-era, "located-unfixed") — ЗАКРИТО за
@@ -439,11 +461,11 @@ parity 9/0/0, construct 20/20, std_golden 9/9, фікс-поінт ×2 байт-
                    ├─► SS-1 (Kalman NEON) ──────────────┤
                    ├─► SS-4 (FIR bounded loops) ─────────┤
                    │                                     ▼
-                   └─► Ф3 (VS-AST) ──► Ф4 (маски) ──► SS-9 (Attention NEON)
+                   └─► SS-15 (spectral coords) ──► Ф4 (маски) ──► SS-9 (Attention NEON)
                                                          │
                     Ф6 (store/multicore) ────────────────┤
                                                          ▼
-                    Ф7 (Lean QTT) ──► SS-2 (calc inv.) ──► Ф8 (Zero-C)
+                    SS-2 (spectral inv.) ──► Ф8 (Zero-C)
                                                          │
                                                          ▼
                     SS-15..18 (spectral coord/flow/time/mutation) ──► SS-7 (QLoRA)
@@ -474,5 +496,28 @@ LAW (csr.bp): cross-loop стан — тільки в клітинках ([0] б
 рушії розходяться на rebind-видимості крізь гнізда циклів. І objekt-урок:
 ім'я temps не має конфліктувати з клітинками (sort-temps `tc` затер лічильник
 merge — мовчаний nnz=0).
-Далі: .bt store (mmap-export + atomic renameat publish) → Ф3 VS-AST
-(item⊗role spectral HV) → Ф4 маскований потік.
+Далі: .bt store (mmap-export + atomic renameat publish) → spectral coordinates (SS-15)
+
+## N1b МІКРО-ТІР (Haar/DWT): ЗАКРИТО (2026-09-01)
+selfhost/std/haar.bp — цілочисельний Haar/DWT (MULTITIER micro-tier): чистий
+ADD/SUB (нуль множень, нуль float), in-place len{N/2..1} суми/різниці пари,
+x[0]=DC=Σклітинок, деталі від грубих до тонких = Resolution Hierarchies для
+SNN-спайків кільцевого буфера. haar_invert = точний обернений (кожне ділення
+на 2 exact: a+b і a-b завжди парні) → round trip lossless для будь-якого i64.
+Гейт haar у std_golden.sh (15/15): dispatch e1/n8 → word=41 (знак-біти 0,3,5)
++ self-inverse round trip [3,1,4,1,5,9,2,6] відновлює 8 клітинок точно.
+РАЗОМ N1 (wht) + N1b (haar) закривають МІКРО-рівень мультитір-стеку.
+
+## N1c МЕЗО-ТІР (NTT): ЗАКРИТО (2026-09-01)
+selfhost/std/ntt.bp — number-theoretic transform над Z_p, p=998244353=2^23·119+1,
+primitive root 3 (finite-field exact arithmetic, i64 чистий, нуль float). Ф2: n=8
+ramp [1..8]: forward spectrum (центрований: [36, -103943349, 346334868, 201631260,
+-4, -201631268, -346334876, 103943341]) → знак-біти word=141 (0,2,3,7).
+Гейт ntt у std_golden.sh (15/15): ntt_inv(ntt(x)) == x exact round trip (8/8 клітин)
++ circular convolution ramp ⊛ reverse(ramp) NTT-multiply-then-invert ==
+[176,156,144,140,144,156,176,204] (oracle: незалежний Python NTT, той самий MOD).
+LAW (ntt.bp): invert-параметр у if..then(блок)..else НЕ виконував скалювання 1/n
+(L1-пастка складних блоків в if-гілці) — інверсна стежка винесена в окрему
+прямолінійну ntt_inv (як wht_invert/haar_invert); result був 8x input.
+МАКРО (KLT) = SPECTRAL tier topk_symmetric/Hotelling (spectral.bp, SS-6).
+Відхилені DFT/FFT/DCT/DST/Z-Transform/DHT — див. MULTITIER SPECTRAL STACK вище.

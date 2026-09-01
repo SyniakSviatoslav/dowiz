@@ -79,5 +79,31 @@ gate bt -5708805812714944038 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/cache.bp /tmp/opencode/cache_test.bin >/dev/null 2>&1 && sleep 1 && timeout 60 ./seed/build/seed /tmp/opencode/cache_test.bin | tail -1)
 gate cache 38876254956 "$r"
 
+# ---- wht (N1 NEO-foundation: FWHT ADD/SUB butterfly — unit-vector dispatch
+#      (e1/n8 Walsh row word=85) + self-inverse round trip (wht_pow2 then
+#      wht_invert restores 8 cells exactly). 85001 = word*1000 + roundtrip_ok;
+#      JIT==interp on both engines.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/wht.bp /tmp/opencode/wht_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/wht_test.bin | tail -1)
+gate wht 85001 "$r"
+
+# ---- haar (N1b MULTITIER micro-tier: integer DWT — unit-vector dispatch
+#      (e1/n8 Haarer row word=41) + exact inverse round trip (haar_pow2 then
+#      haar_invert restores 8 cells losslessly). 41001 = word*1000 + ok;
+#      branch-free ADD/SUB, no multiplies, no floats.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/haar.bp /tmp/opencode/haar_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/haar_test.bin | tail -1)
+gate haar 41001 "$r"
+
+# ---- ntt (N1b MULTITIER meso-tier: number-theoretic transform over
+#      Z_p, p = 998244353 = 2^23*119+1, primitive root 3 — finite-field
+#      forward/inverse, exact END-equivalence of convolution. 141003 =
+#      word*1000 + ok, word = sign binarization of the centered spectrum
+#      of the ramp [1..8] (cells +36, +346334868, +201631260, +103943341;
+#      oracle: independent Python NTT over the same modulus); ok =
+#      roundtrip bit (ntt_inv(ntt(x)) == x, all 8 cells) + 2*conv bit
+#      (NTT-multiply-then-invert circular convolution of ramp ⊛ reverse
+#      == [176,156,144,140,144,156,176,204]).) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/ntt.bp /tmp/opencode/ntt_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/ntt_test.bin | tail -1)
+gate ntt 141003 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

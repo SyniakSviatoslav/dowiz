@@ -1,0 +1,124 @@
+// wht.bp — N1: Fast Walsh-Hadamard Transform (FWHT) core.
+// Post-von-Neumann numeric / VSA-shift basis: a pure ADD/SUB butterfly with
+// ZERO multiplies — a natural fit for the i64 linear arena and for the
+// Ring-VSA / holographic layers (N3/N6) that bind and superpose through the
+// Hadamard group.
+//
+// Transform (in-place, N = power of two):
+//   for len in {1,2,4,...,N/2}:
+//     for i in {0, len*2, len*4, ...} (block start):
+//       for j in {0..len}:
+//         u = x[i+j]; v = x[i+j+len]
+//         x[i+j]     = u + v
+//         x[i+j+len] = u - v
+//
+// Properties (golden-verifiable):
+//   * FWHT(FWHT(x)) == N * x   (self-inverse up to scale N)
+//   * dispatch of a unit vector e_k is the k-th Walsh row (all entries ±1)
+//   * branch-free, fixed stride, no allocations inside the body (L8: the
+//     staging buffer is allocated once at fn entry).
+
+// wht_pow2(x, n): in-place FWHT of the first n cells of x. n MUST be a power
+// of two, 1 <= n <= 1024. Returns the scaling N (the self-inverse constant).
+// Exactly ~8 binds (x, n, T, len, base, i, j, u) — spill-free.
+fn wht_pow2(x: [i64], n: i64) -> i64 {
+  let T = zeros(1024);
+  let len = 1;
+  while len < n {
+    let base = 0;
+    while base < n {
+      let i = 0;
+      while i < len {
+        let j = base + i;
+        let _ = T[i] = x[j];
+        let _ = T[len + i] = x[j + len];
+        let i = i + 1;
+        0
+      };
+      let i = 0;
+      while i < len {
+        let j = base + i;
+        let _ = x[j] = T[i] + T[len + i];
+        let _ = x[j + len] = T[i] - T[len + i];
+        let i = i + 1;
+        0
+      };
+      let base = base + len * 2;
+      0
+    };
+    let len = len * 2;
+    0
+  };
+  n
+}
+
+// wht_invert(x, n): FWHT self-inverse — rescales wht_pow2(x,n) back to x.
+// Because FWHT(FWHT(x)) == n*x, the inverse is FWHT followed by a division
+// by n. Computes FWHT in place then divides every cell by n (integer-exact
+// only when the forward/backward round trip is lossless; for i64 this holds
+// when intermediate sums fit i64).
+fn wht_invert(x: [i64], n: i64) -> i64 {
+  let _ = wht_pow2(x, n);
+  let i = 0;
+  while i < n {
+    let _ = x[i] = x[i] / n;
+    let i = i + 1;
+    0
+  };
+  n
+}
+
+// wht_encode(x, n): map the D-bit HV words onto a length-D AWGN-ish i64
+// sequence and transform — a basis shift used by N6 (holographic dispersal):
+// every output cell carries a micro-fingerprint of the whole block, so a
+// truncated block still lets the spectral layer reconstruct the original.
+// Here we expose the raw transform; N6 recovery builds on wht_invert.
+fn wht_encode(x: [i64], n: i64) -> i64 {
+  wht_pow2(x, n)
+}
+
+fn main() -> i64 {
+  let x = zeros(1024);
+  let n = 8;
+  let k = 0;
+  while k < n {
+    let _ = x[k] = 0;
+    let k = k + 1;
+    0
+  };
+  let _ = x[1] = 1;
+  let _ = wht_pow2(x, n);
+  let word = 0;
+  let k = 0;
+  while k < n {
+    let bit = if x[k] > 0 then 1 else 0;
+    let word = word + (bit << k);
+    let k = k + 1;
+    0
+  };
+  let inp = zeros(1024);
+  let _ = inp[0] = 3;
+  let _ = inp[1] = 1;
+  let _ = inp[2] = 4;
+  let _ = inp[3] = 1;
+  let _ = inp[4] = 5;
+  let _ = inp[5] = 9;
+  let _ = inp[6] = 2;
+  let _ = inp[7] = 6;
+  let k = 0;
+  while k < n {
+    let _ = x[k] = inp[k];
+    let k = k + 1;
+    0
+  };
+  let _ = wht_pow2(x, n);
+  let _ = wht_invert(x, n);
+  let ok = 0;
+  let k = 0;
+  while k < n {
+    let ok = ok + (if x[k] == inp[k] then 1 else 0);
+    let k = k + 1;
+    0
+  };
+  word * 1000 + (if ok == n then 1 else 0)
+}

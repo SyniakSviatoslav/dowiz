@@ -1,0 +1,124 @@
+// haar.bp — N1b (MULTITIER micro-tier): integer Haar transform / DWT.
+// Multi-scale event analysis for the SNN spike stream: a discrete +1/-1
+// wavelet, the closest structural cousin of the Hadamard butterfly — pure
+// ADD/SUB, ZERO multiplies, branch-free, no floating point anywhere.
+//
+// Transform (in-place, N = power of two, unnormalized sums/differences):
+//   for len in {N/2, N/4, ..., 1}:
+//     for i in {0..len}:
+//       a = x[i]; b = x[i+len]
+//       x[i]     = a + b     (average-sum of the pair)
+//       x[i+len] = a - b     (detail of the pair)
+// After the full pass x[0] = Σ cells (DC), and later indices carry the
+// detail scales from coarsest to finest — the Resolution Hierarchies the
+// spectral layer reads as microsecond spikes (ring buffer) vs global trends.
+//
+// Properties (golden-verifiable):
+//   * haar_invert(haar_pow2(x)) == x exactly (every inverse divide is exact:
+//     sums differ by 2·(a±b) patterns, so (u+v)/2 never truncates)
+//   * dispatch of a unit vector e_k is the k-th Haar basis row (0/±1/±2)
+//   * branch-free, fixed strides, no allocations inside the body (L8).
+
+// haar_pow2(x, n): in-place forward Haar (DWT) of the first n cells of x.
+// n MUST be a power of two, 1 <= n <= 1024. Returns n.
+fn haar_pow2(x: [i64], n: i64) -> i64 {
+  let len = n / 2;
+  while len >= 1 {
+    let i = 0;
+    while i < len {
+      let a = x[i];
+      let b = x[i + len];
+      let _ = x[i] = a + b;
+      let _ = x[i + len] = a - b;
+      let i = i + 1;
+      0
+    };
+    let len = len / 2;
+    0
+  };
+  n
+}
+
+// haar_invert(x, n): in-place inverse Haar (IDWT). Undoes haar_pow2 exactly:
+//   for len in {1, 2, ..., N/2}:
+//     for i in {0..len}:
+//       a = x[i]; b = x[i+len]
+//       x[i]     = (a + b) / 2
+//       x[i+len] = (a - b) / 2
+// Every division is exact (a+b and a-b are both even for the forward's
+// outputs), so the round trip is lossless for any input fitting i64.
+fn haar_invert(x: [i64], n: i64) -> i64 {
+  let len = 1;
+  while len <= n / 2 {
+    let i = 0;
+    while i < len {
+      let a = x[i];
+      let b = x[i + len];
+      let _ = x[i] = (a + b) / 2;
+      let _ = x[i + len] = (a - b) / 2;
+      let i = i + 1;
+      0
+    };
+    let len = len * 2;
+    0
+  };
+  n
+}
+
+// haar_encode(x, n): expose the raw forward for the holographic layer (N6) —
+// a spike-block maps to its Haar spectrum, so a truncated block still lets
+// inverse reconstruction recover the coarse shape (same contract as
+// wht_encode for the Walsh basis).
+fn haar_encode(x: [i64], n: i64) -> i64 {
+  haar_pow2(x, n)
+}
+
+// Test: (1) unit-vector dispatch — transform of e_1 must be the Haarer row
+// (sign-bit word of x = 41 for n=8: bits 0,3,5 set); (2) self-inverse round
+// trip — haar_pow2 then haar_invert restores [3,1,4,1,5,9,2,6] exactly.
+// Return word*1000 + roundtrip_ok.
+fn main() -> i64 {
+  let x = zeros(1024);
+  let n = 8;
+  let k = 0;
+  while k < n {
+    let _ = x[k] = 0;
+    let k = k + 1;
+    0
+  };
+  let _ = x[1] = 1;
+  let _ = haar_pow2(x, n);
+  let word = 0;
+  let k = 0;
+  while k < n {
+    let bit = if x[k] > 0 then 1 else 0;
+    let word = word + (bit << k);
+    let k = k + 1;
+    0
+  };
+  let inp = zeros(1024);
+  let _ = inp[0] = 3;
+  let _ = inp[1] = 1;
+  let _ = inp[2] = 4;
+  let _ = inp[3] = 1;
+  let _ = inp[4] = 5;
+  let _ = inp[5] = 9;
+  let _ = inp[6] = 2;
+  let _ = inp[7] = 6;
+  let k = 0;
+  while k < n {
+    let _ = x[k] = inp[k];
+    let k = k + 1;
+    0
+  };
+  let _ = haar_pow2(x, n);
+  let _ = haar_invert(x, n);
+  let ok = 0;
+  let k = 0;
+  while k < n {
+    let ok = ok + (if x[k] == inp[k] then 1 else 0);
+    let k = k + 1;
+    0
+  };
+  word * 1000 + (if ok == n then 1 else 0)
+}
