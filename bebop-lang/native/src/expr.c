@@ -373,6 +373,14 @@ static Term *parse_primary(P *p) {
             t->kind = TERM_SYSREADBUF; /* (fd,len): read into scratch, return its address */
         } else if (strcmp(buf, "sys_slurp") == 0) {
             t->kind = TERM_SYSREADBUF; /* same shape, arena buffer */
+        } else if (strcmp(buf, "sys_ftruncate") == 0) {
+            t->kind = TERM_SYSFTRUNCATE; /* (fd,len): file grows to len */
+        } else if (strcmp(buf, "sys_munmap") == 0) {
+            t->kind = TERM_SYSMUNMAP; /* (addr,len): unmap */
+        } else if (strcmp(buf, "sys_mmap") == 0) {
+            t->kind = TERM_SYSMMAP; /* (addr,len,prot,flags,fd,off) 6 args in postfix */
+        } else if (strcmp(buf, "sys_rename") == 0) {
+            t->kind = TERM_SYSRENAME; /* (old,new): renameat(AT_FDCWD,...) */
         } else if (strcmp(buf, "sys_clone") == 0) {
             t->kind = TERM_SYSCLONE; /* (flags,stack_top) */
         } else if (strcmp(buf, "sys_cond_set") == 0) {
@@ -648,6 +656,42 @@ static Term *parse_primary(P *p) {
             atom->a = aa;
             atom->b = ab;
             atom->c = an;
+            continue;
+        }
+        if ((atom->kind == TERM_SYSRENAME || atom->kind == TERM_SYSFTRUNCATE ||
+             atom->kind == TERM_SYSMUNMAP) && p->s[p->pos] == '(') {
+            p->pos++;
+            Term *aa = parse_expr(p);
+            if (!aa) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ',') { err(p, "expected ','"); return NULL; }
+            p->pos++;
+            Term *ab = parse_expr(p);
+            if (!ab) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ')') { err(p, "expected ')'"); return NULL; }
+            p->pos++;
+            atom->a = aa;
+            atom->b = ab;
+            continue;
+        }
+        if (atom->kind == TERM_SYSMMAP && p->s[p->pos] == '(') {
+            /* sys_mmap(addr, len, prot, flags, fd, off) — 6 slots: a..f */
+            p->pos++;
+            Term *args[6]; int nargs = 0;
+            for (;;) {
+                Term *aa = parse_expr(p);
+                if (!aa) return NULL;
+                args[nargs++] = aa;
+                skip_ws(p);
+                if (p->s[p->pos] == ',') { p->pos++; skip_ws(p); continue; }
+                if (p->s[p->pos] != ')') { err(p, "expected ')' in sys_mmap"); return NULL; }
+                p->pos++;
+                break;
+            }
+            if (nargs != 6) { err(p, "sys_mmap expects 6 args"); return NULL; }
+            atom->a = args[0]; atom->b = args[1]; atom->c = args[2];
+            atom->d = args[3]; atom->e = args[4]; atom->f = args[5];
             continue;
         }
         if (atom->kind == TERM_SYSREADBUF && p->s[p->pos] == '(') {

@@ -934,8 +934,19 @@ static Term *subst_p(const Term *t, const char *name, const Term *v) {
             o->c = subst_p(t->c, name, v);
             return o;
         case TERM_SYSREADBUF:
+        case TERM_SYSFTRUNCATE:
+        case TERM_SYSMUNMAP:
+        case TERM_SYSRENAME:
             o->a = subst_p(t->a, name, v);
             o->b = subst_p(t->b, name, v);
+            return o;
+        case TERM_SYSMMAP:
+            o->a = subst_p(t->a, name, v);
+            o->b = subst_p(t->b, name, v);
+            o->c = subst_p(t->c, name, v);
+            o->d = subst_p(t->d, name, v);
+            o->e = subst_p(t->e, name, v);
+            o->f = subst_p(t->f, name, v);
             return o;
         case TERM_SYSCLONE:
             o->a = subst_p(t->a, name, v);
@@ -1233,6 +1244,33 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
             if (t->b && check(c, t->b, &I64_TY, err, cap) != 0) return -1;
             if (t->c && check(c, t->c, &I64_TY, err, cap) != 0) return -1;
             *out = &STR_TY;
+            return 0;
+        }
+        case TERM_SYSFTRUNCATE:
+        case TERM_SYSMUNMAP: {
+            /* (fd|addr : i64, len : i64) : i64 */
+            if (t->a && check(c, t->a, &I64_TY, err, cap) != 0 &&
+                check(c, t->a, &STR_TY, err, cap) != 0) return -1;
+            if (t->b && check(c, t->b, &I64_TY, err, cap) != 0) return -1;
+            *out = &I64_TY;
+            return 0;
+        }
+        case TERM_SYSRENAME: {
+            /* (old : Str|I64, new : Str|I64) : i64 */
+            if (t->a && check(c, t->a, &STR_TY, err, cap) != 0 &&
+                check(c, t->a, &I64_TY, err, cap) != 0) return -1;
+            if (t->b && check(c, t->b, &STR_TY, err, cap) != 0 &&
+                check(c, t->b, &I64_TY, err, cap) != 0) return -1;
+            *out = &I64_TY;
+            return 0;
+        }
+        case TERM_SYSMMAP: {
+            /* (addr, len, prot, flags, fd, off) : i64 — raw syscall */
+            Term *mm[6] = {t->a, t->b, t->c, t->d, t->e, t->f};
+            for (int mi = 0; mi < 6; mi++) {
+                if (mm[mi] && check(c, mm[mi], &I64_TY, err, cap) != 0) return -1;
+            }
+            *out = &I64_TY;
             return 0;
         }
         case TERM_SYSOPEN: {
@@ -2455,6 +2493,63 @@ static Value eval(const Term *t, Env *env) {
             v.i = (long)scratch;
             return v;
         }
+        case TERM_SYSFTRUNCATE: {
+            /* sys_ftruncate(fd,len): mirrors the JIT emitter (movz x8,#46). */
+            Value vf = eval(t->a, env);
+            Value vn = eval(t->b, env);
+            if (vf.kind != 0 || vn.kind != 0) { v.kind = -1; return v; }
+            v.kind = 0;
+            v.i = bp_syscall2(46, vf.i, vn.i);
+            return v;
+        }
+        case TERM_SYSMUNMAP: {
+            /* sys_munmap(addr,len): movz x8,#215. */
+            Value vf = eval(t->a, env);
+            Value vn = eval(t->b, env);
+            if (vf.kind != 0 || vn.kind != 0) { v.kind = -1; return v; }
+            v.kind = 0;
+            v.i = bp_syscall2(215, vf.i, vn.i);
+            return v;
+        }
+        case TERM_SYSMMAP: {
+            /* sys_mmap(addr,len,prot,flags,fd,off): movz x8,#222. Returns the
+             * mapped address as an i64 handle (pointer-duality with str). */
+            Value ma[6];
+            for (int mi = 0; mi < 6; mi++) {
+                Term *mt = (mi == 0) ? t->a : (mi == 1) ? t->b : (mi == 2) ? t->c
+                         : (mi == 3) ? t->d : (mi == 4) ? t->e : t->f;
+                ma[mi] = eval(mt, env);
+                if (ma[mi].kind != 0) { v.kind = -1; return v; }
+            }
+            v.kind = 0;
+            v.i = bp_syscall6(222, ma[0].i, ma[1].i, ma[2].i, ma[3].i, ma[4].i, ma[5].i);
+            return v;
+        }
+        case TERM_SYSRENAME: {
+            /* sys_rename(old,new): renameat(AT_FDCWD,old,AT_FDCWD,new) —
+             * movz x8,#38. Args are byte-per-element cell arrays (kind 6) or
+             * raw i64 pointers (kind 0), mirroring sys_open's path handling. */
+            Value vo = eval(t->a, env);
+            Value vn2 = eval(t->b, env);
+            char oldbuf[4097], newbuf[4097];
+            if (vo.kind == 6) {
+                if (vo.nfv < 0 || vo.nfv > 4096) { v.kind = -1; return v; }
+                for (long q3 = 0; q3 < vo.nfv; q3++) oldbuf[q3] = (char)(vo.fv[q3].val.i & 0xFF);
+                oldbuf[vo.nfv] = 0;
+            } else if (vo.kind == 0) {
+                snprintf(oldbuf, sizeof oldbuf, "%s", (const char *)vo.i);
+            } else { v.kind = -1; return v; }
+            if (vn2.kind == 6) {
+                if (vn2.nfv < 0 || vn2.nfv > 4096) { v.kind = -1; return v; }
+                for (long q3 = 0; q3 < vn2.nfv; q3++) newbuf[q3] = (char)(vn2.fv[q3].val.i & 0xFF);
+                newbuf[vn2.nfv] = 0;
+            } else if (vn2.kind == 0) {
+                snprintf(newbuf, sizeof newbuf, "%s", (const char *)vn2.i);
+            } else { v.kind = -1; return v; }
+            v.kind = 0;
+            v.i = bp_syscall4(38, -100L, (long)oldbuf, -100L, (long)newbuf);
+            return v;
+        }
         case TERM_SYSCLOSE: {
             Value vf = eval(t->a, env);
             if (vf.kind != 0) { v.kind = -1; return v; }
@@ -2892,8 +2987,19 @@ Term *qtt_subst(const Term *t, const char *name, const Term *v) {
             o->c = qtt_subst(t->c, name, v);
             return o;
         case TERM_SYSREADBUF:
+        case TERM_SYSFTRUNCATE:
+        case TERM_SYSMUNMAP:
+        case TERM_SYSRENAME:
             o->a = qtt_subst(t->a, name, v);
             o->b = qtt_subst(t->b, name, v);
+            return o;
+        case TERM_SYSMMAP:
+            o->a = qtt_subst(t->a, name, v);
+            o->b = qtt_subst(t->b, name, v);
+            o->c = qtt_subst(t->c, name, v);
+            o->d = qtt_subst(t->d, name, v);
+            o->e = qtt_subst(t->e, name, v);
+            o->f = qtt_subst(t->f, name, v);
             return o;
         case TERM_SYSCLONE:
             o->a = qtt_subst(t->a, name, v);
@@ -3020,8 +3126,19 @@ static Term *norm_rec(const Term *t) {
             o->c = norm_rec(t->c);
             return o;
         case TERM_SYSREADBUF:
+        case TERM_SYSFTRUNCATE:
+        case TERM_SYSMUNMAP:
+        case TERM_SYSRENAME:
             o->a = norm_rec(t->a);
             o->b = norm_rec(t->b);
+            return o;
+        case TERM_SYSMMAP:
+            o->a = norm_rec(t->a);
+            o->b = norm_rec(t->b);
+            o->c = norm_rec(t->c);
+            o->d = norm_rec(t->d);
+            o->e = norm_rec(t->e);
+            o->f = norm_rec(t->f);
             return o;
         case TERM_SYSCLONE:
             o->a = norm_rec(t->a);
@@ -3306,7 +3423,14 @@ static int conv_rec(const Term *a, const Term *b) {
         case TERM_SYSWRITE:
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b) && conv_rec(a->c, b->c);
         case TERM_SYSREADBUF:
+        case TERM_SYSFTRUNCATE:
+        case TERM_SYSMUNMAP:
+        case TERM_SYSRENAME:
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
+        case TERM_SYSMMAP:
+            return conv_rec(a->a, b->a) && conv_rec(a->b, b->b) &&
+                   conv_rec(a->c, b->c) && conv_rec(a->d, b->d) &&
+                   conv_rec(a->e, b->e) && conv_rec(a->f, b->f);
         case TERM_SYSCLONE:
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
         case TERM_SYSCONDSET:

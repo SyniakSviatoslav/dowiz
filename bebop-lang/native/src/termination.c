@@ -26,6 +26,18 @@ int qtt_termination_check(const Term *t, char *err, size_t cap) {
         case TERM_SYSREADBUF:
             return qtt_termination_check(t->a, err, cap) == 0 &&
                    qtt_termination_check(t->b, err, cap) == 0 ? 0 : -1;
+        case TERM_SYSFTRUNCATE:
+        case TERM_SYSMUNMAP:
+        case TERM_SYSRENAME:
+            return qtt_termination_check(t->a, err, cap) == 0 &&
+                   qtt_termination_check(t->b, err, cap) == 0 ? 0 : -1;
+        case TERM_SYSMMAP:
+            return qtt_termination_check(t->a, err, cap) == 0 &&
+                   qtt_termination_check(t->b, err, cap) == 0 &&
+                   qtt_termination_check(t->c, err, cap) == 0 &&
+                   qtt_termination_check(t->d, err, cap) == 0 &&
+                   qtt_termination_check(t->e, err, cap) == 0 &&
+                   qtt_termination_check(t->f, err, cap) == 0 ? 0 : -1;
         case TERM_SYSCLONE:
             return qtt_termination_check(t->a, err, cap) == 0 &&
                    qtt_termination_check(t->b, err, cap) == 0 ? 0 : -1;

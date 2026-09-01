@@ -136,6 +136,10 @@ typedef enum {
     TERM_SYSEXIT,  /* sys_exit(code) — noreturn */
     TERM_CLOCKMS,  /* clock_ms(): monotonic milliseconds */
     TERM_SYSREADBUF, /* sys_readbuf(fd,len): raw read -> scratch addr */
+    TERM_SYSFTRUNCATE, /* sys_ftruncate(fd,len): file grows to len (F2 export) */
+    TERM_SYSMUNMAP,  /* sys_munmap(addr,len): unmap (F2 export) */
+    TERM_SYSMMAP,    /* sys_mmap(addr,len,prot,flags,fd,off): raw mmap -> addr */
+    TERM_SYSRENAME,  /* sys_rename(old,new): renameat(AT_FDCWD,old,AT_FDCWD,new) */
     TERM_SYSCLONE,  /* sys_clone(flags,stack_top): child tid / 0 in child
                      *   (interp: setjmp emulation — child path runs first) */
     TERM_SYSEXITTHREAD, /* sys_exit_thread_guard(cond,code): real-branch
@@ -192,6 +196,7 @@ struct Term {
     Ty *ty;           /* LAM domain / ANN type / STRUCT type / ENUM type */
     Term *a, *b, *c;  /* APP/LAM/ANN/BIN/IF/LET/FIELD(base)/ENUM_CTOR(payload)/MATCH(scrut) */
     Term *d;          /* NAT_IND motive (4th subterm slot) */
+    Term *e, *f;      /* TERM_SYSMMAP args 5-6 (addr,len,prot,flags,fd,off) */
     TermField *fields; /* TERM_STRUCT: field name → value */
     int nfields;
     MatchArm *arms;   /* TERM_MATCH: arms */
