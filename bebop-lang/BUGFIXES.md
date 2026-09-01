@@ -4,6 +4,70 @@ Every native-codegen or toolchain bug that cost debugging time this week,
 with the rule each one earns. Rules marked **[RULE]** are binding for future
 sessions on this codebase.
 
+## [FIXED] Ф0.3 bootstrap blocker closed — the "≥3fn crash" was an 8KB scratch overflow (2026-09-01)
+
+The single blocker (bebop.bin segfaults compiling pristine+Nfn) is CLOSED.
+Four stacked root causes; none was where the session notes pointed.
+
+**RC1 — IO scratch overflow in the emitted sys_read/sys_write (THE blocker).**
+Both builtins move bytes through a HARDCODED 8192-byte scratch at x28-8192
+while taking the LENGTH from the caller: disasm of emitted sys_write shows
+`mov x10,#0x2000; sub x10,x28,x10` then a `strb [x10,x9]` loop bounded by the
+caller's len, then `svc write(fd,scratch,len)`. Any len > 8192 writes past the
+64MB arena end. Whether that crashes depends on what is mapped after the
+arena — silent corruption into mapped pages read as a "~291KB write ceiling"
+and "~112KB read ceiling"; unmapped stores give SIGBUS/SIGSEGV. Evidence:
+sys_write of 290744B → SIGBUS, 0-byte file; sys_read(fd,buf,16384) → SIGILL;
+8192 → clean. **Myth corrected: there is NO proot read/write ceiling on these
+paths — sys_slurp (direct arena read, no scratch) reads 113344B in one call.**
+Fix (word-stream-safe, no emitter change): cli_compile writes via an 8192-cell
+staging buffer in ≤8192 sys_write chunks; cli_size reads in ≤8192 sys_read
+chunks. The emitters stay documented as scratch-limited until F2 mmap-export
+replaces artifact I/O. **[RULE] Every byte-moving builtin must bound its
+scratch by its own length argument; scratch size and transfer size are two
+names for the same constant or there is a loop.**
+
+**RC2 — stale bebop.bin.** The running binary was built Aug 29; bebop.bp had
+moved (Aug 31, 15 new emitters + dispatch). Rebuild path (now repeatable):
+`bebopc compilewords bebop.bp bebop.bp` (interp bootstrap oracle) → pack.py
+with entry = main's byte offset, computed by a GENERATED entry-probe
+(self_bootstrap_entry: slurp + emit_offsets + collect_fns + idx_of_main,
+run via `bebopc run`) — never hand-derived (L1/L9).
+
+**RC3 — mangled emitter names.** The Aug 31 F0.1 batch defined
+`emit_sys_emit_sys_{ftruncate,mmap,munmap,rename}` (double prefix). In
+expr_compile.bp the dispatch ALREADY referenced the correct names — dead
+definitions. Renamed all four; bebop.bp (which had only mmap/rename) got
+ftruncate/munmap + dispatch hashes. **[RULE] A new emitter ships only with
+(a) its dispatch hash, (b) `grep "fn emit_sys_"` count parity between
+bebop.bp and selfhost/expr_compile.bp, (c) an emitted-word disasm check.**
+
+**RC4 — C-parser split-brain (expr.c, Aug 31 implicit-separator work).**
+bp_parse (whole file) accepted strequals, but cw_load's isolated
+bp_parse_fn_decl rejected it ("expected 'in' or ';' after let", at the
+`let same = snew;` following an if/else-let) and its isolated typecheck now
+rejects char() on an `s: i64` param (want Str). Fixed at .bp level:
+strequals/str_to_cells take `s: str`/`src: str` (codebase convention —
+read_ident/ident_eq already did) and `let _ = i = i + 1;` → `let i = i + 1;`
+(the discard-assign + if-else-let combination trips the isolated parser).
+**[OPEN] The two C parsers still disagree (whole-file lax vs isolated
+strict); any fn may pass `bebopc parse` and fail compilewords. Reconcile or
+delete one path before Zero-C.**
+
+Gates after the fix (all green): parity_driver 9/0/0; construct_parity 20/20;
+std_golden 7/7; self_check 0; self-replication fixpoint byte-identical in TWO
+generations (bebop.bin == selfA == selfB); pristine+1/+2/+3fn compile clean,
+and the +3fn binary itself compiles k2==75025 / k7==3939697352.
+
+**[OBSERVED, open] depth_sim flags** `self_check ret (131,-1)` on
+expr_compile streams and `fn#0 (88,-1)` on bebop streams — reproduced on the
+PURE-HEAD tree, so pre-existing (not this session's emitters); execution is
+proven correct by every gate above, so the simulator's model of the
+value-ret idiom (push+load, no drop before ret) is the suspect. L0's
+"0 non-run_program flags" has been red at HEAD; fix depth_sim's ret model or
+bless the idiom with an execution-based check.
+
+
 ## A. Encoding / constants class
 
 **A1. movrr base constant wrong by heart-math.** Symptom: garbage register

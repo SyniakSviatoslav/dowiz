@@ -926,8 +926,16 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   let is_sp = if name == 10054667875361132632 then 1 else 0;
   let is_sln = if name == 585709020818199 then 1 else 0;
   let is_chf = if name == 224358574 then 1 else 0;
+  let is_smm = if name == 76753189874778913 then 1 else 0;
+  let is_srn = if name == 7442662398273192292 then 1 else 0;
+  let is_sft = if name == 12598865016055593546 then 1 else 0;
+  let is_smun = if name == 7442662210087947144 then 1 else 0;
   if is_hh == 1 then emit_hvham(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_hh2 == 1 then emit_hvham2(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_smm == 1 then emit_sys_mmap(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_srn == 1 then emit_sys_rename(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_sft == 1 then emit_sys_ftruncate(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_smun == 1 then emit_sys_munmap(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_sp == 1 then emit_sys_slurp(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_sln == 1 then emit_str_len_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_chf == 1 then emit_char_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
@@ -2662,7 +2670,7 @@ fn emit_zeros(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
 // Args contract (seed loader v4): x0 = argc, x1 = pointer array of
 // NUL-terminated argument strings copied into the bump arena.
 
-fn strequals(s: i64, p: [i64]) -> i64 {
+fn strequals(s: str, p: [i64]) -> i64 {
   let i = 0;
   let same = 1;
   let done = 0;
@@ -2673,7 +2681,7 @@ fn strequals(s: i64, p: [i64]) -> i64 {
     let mdiff = if c == pc then 0 else 1;
     let snew = if isz == 1 then same else same * (1 - mdiff);
     let same = snew;
-    let _ = i = i + 1;
+    let i = i + 1;
     let done = isz;
     0
   };
@@ -2682,14 +2690,14 @@ fn strequals(s: i64, p: [i64]) -> i64 {
 
 // Copy a NUL-terminated byte string into cell slots (byte per element) —
 // sys_open's path contract is a CELL buffer, argv strings are BYTE strings.
-fn str_to_cells(dst: [i64], src: i64) -> i64 {
+fn str_to_cells(dst: [i64], src: str) -> i64 {
   let i = 0;
   let done = 0;
   while done == 0 {
     let c = char(src, i);
     let isz = if c == 0 then 1 else 0;
     let _ = if isz == 0 then (let _ = dst[i] = c in 0) else 0;
-    let _ = i = i + 1;
+    let i = i + 1;
     let done = isz;
     0
   };
@@ -2767,9 +2775,25 @@ fn cli_compile(argv: i64) -> i64 {
   let _ = buf[n * 4 + 6] = (e4 >> 48) & 255;
   let _ = buf[n * 4 + 7] = (e4 >> 56) & 255;
   let ofd = sys_open(pout, str_len(out), 577);
-  let w = sys_write(ofd, buf, nb);
+  let ob = zeros(8192);
+  let total = [0];
+  let k = 0;
+  while k < nb {
+    let rem = nb - k;
+    let c = if rem > 8192 then 8192 else rem;
+    let j = 0;
+    while j < c {
+      let _ = ob[j] = buf[k + j];
+      let j = j + 1;
+      0
+    };
+    let w = sys_write(ofd, ob, c);
+    let _ = total[0] = total[0] + w;
+    let k = k + c;
+    0
+  };
   let _ = sys_close(ofd);
-  w
+  total[0]
 }
 
 fn cli_size(argv: i64) -> i64 {
@@ -2778,10 +2802,19 @@ fn cli_size(argv: i64) -> i64 {
   let pf = zeros(lf + 1);
   let _ = str_to_cells(pf, f);
   let fd = sys_open(pf, lf, 0);
-  let buf = zeros(262144);
-  let r = sys_read(fd, buf, 400000);
+  let buf = zeros(8192);
+  let total = [0];
+  let nr = sys_read(fd, buf, 8192);
+  let _ = total[0] = total[0] + nr;
+  let done = if nr > 0 then 0 else 1;
+  while done == 0 {
+    let nr2 = sys_read(fd, buf, 8192);
+    let _ = total[0] = total[0] + nr2;
+    let done = if nr2 > 0 then 0 else 1;
+    0
+  };
   let _ = sys_close(fd);
-  r / 4
+  total[0] / 4
 }
 
 fn cli_run(argv: i64) -> i64 {
@@ -2790,7 +2823,43 @@ fn cli_run(argv: i64) -> i64 {
   2
 }
 
-fn emit_sys_emit_sys_mmap(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+// sys_ftruncate(fd,len): ftruncate — mmap-export path (F2).
+fn emit_sys_ftruncate(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 0);
+  em(insns, n, 3531605448);
+  em(insns, n, 3556769793);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// sys_munmap(addr,len): munmap — mmap-export path (F2).
+fn emit_sys_munmap(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 0);
+  em(insns, n, 3531610856);
+  em(insns, n, 3556769793);
+  let _ = push(insns, n);
+  n[0]
+}
+
+fn emit_sys_mmap(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
@@ -2827,7 +2896,7 @@ fn emit_sys_emit_sys_mmap(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64
   n[0]
 }
 
-fn emit_sys_emit_sys_rename(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+fn emit_sys_rename(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);

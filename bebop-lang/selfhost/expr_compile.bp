@@ -1103,6 +1103,102 @@ fn emit_sys_slurp(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   n[0]
 }
 
+// objdump-verified 2026-08-31 (F0.1)
+fn emit_sys_ftruncate(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 0);
+  em(insns, n, 3531605448);
+  em(insns, n, 3556769793);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// objdump-verified 2026-08-31 (F0.1)
+fn emit_sys_mmap(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 5);
+  let _ = pop(insns, n, 4);
+  let _ = pop(insns, n, 3);
+  let _ = pop(insns, n, 2);
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 0);
+  em(insns, n, 3531611080);
+  em(insns, n, 3556769793);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// objdump-verified 2026-08-31 (F0.1)
+fn emit_sys_munmap(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 0);
+  em(insns, n, 3531610856);
+  em(insns, n, 3556769793);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// objdump-verified 2026-08-31 (F0.1)
+fn emit_sys_rename(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 0);
+  em(insns, n, 2852193251);
+  em(insns, n, 2852127713);
+  em(insns, n, 2457865312);
+  em(insns, n, 2852127714);
+  em(insns, n, 3531605192);
+  em(insns, n, 3556769793);
+  let _ = push(insns, n);
+  n[0]
+}
+
 fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let tag = ft_ctor_tag(fntab, name);
   let is_ctor = if tag >= 0 then 1 else 0;
@@ -1122,6 +1218,10 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   let is_sp = if name == 10054667875361132632 then 1 else 0;
   let is_sln = if name == 585709020818199 then 1 else 0;
   let is_chf = if name == 224358574 then 1 else 0;
+  let is_m0 = if name == 12598865016055593546 then 1 else 0;
+  let is_m1 = if name == 76753189874778913 then 1 else 0;
+  let is_m2 = if name == 7442662210087947144 then 1 else 0;
+  let is_m3 = if name == 7442662398273192292 then 1 else 0;
   let is_arb = if name == 7040940390938053523 then 1 else 0;
   let is_are = if name == 12163823898702034029 then 1 else 0;
   let is_cln = if name == 10054667870649030395 then 1 else 0;
@@ -1135,6 +1235,10 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   else if is_sp == 1 then emit_sys_slurp(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_sln == 1 then emit_str_len_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_chf == 1 then emit_char_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_m0 == 1 then emit_sys_ftruncate(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_m1 == 1 then emit_sys_mmap(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_m2 == 1 then emit_sys_munmap(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_m3 == 1 then emit_sys_rename(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_rb == 1 then emit_sys_readbuf(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_so == 1 then emit_sys_open(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_sr == 1 then emit_sys_read(s, pos, insns, n, stab, selfname, selfstart, fntab)
