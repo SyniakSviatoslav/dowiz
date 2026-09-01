@@ -2001,6 +2001,36 @@ fn emit_call(s: str, fname: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64]
     let i = i + 1;
     0
   };
+  // Unresolved callee (pcnt==0): the arg list was previously left unparsed,
+  // stranding pos INSIDE the call — the body loop then saw ')' as "another
+  // statement ahead", popped the value early, and emit_num(')') pushed a
+  // phantom 0 (net -1 at ret: the run_program / depth_sim holdout). Skip the
+  // args LEXICALLY (paren depth + strings + line comments) so pos resumes on
+  // ')'. Pure pos arithmetic — no emitter state — so both engines agree.
+  // Limit: /* */ block comments are not skipped (the corpus uses // only).
+  let go = if okres == 0 then 1 else 0;
+  let depth = 0;
+  while go == 1 {
+    let strn3 = str_len(s);
+    let at_end3 = if pos[0] >= strn3 then 1 else 0;
+    let ch3 = if at_end3 == 1 then 0 else char(s, pos[0]);
+    let nch3 = if pos[0] + 1 >= strn3 then 0 else char(s, pos[0] + 1);
+    let is_q = if ch3 == 34 then 1 else 0;
+    let is_sl = if ch3 == 47 then 1 else 0;
+    let is_cmt = is_sl * (if nch3 == 47 then 1 else 0);
+    let is_lp = if ch3 == 40 then 1 else 0;
+    let is_rp = if ch3 == 41 then 1 else 0;
+    let is_close0 = is_rp * (if depth == 0 then 1 else 0);
+    let _ = if is_q == 1 then (let _ = pos[0] = pos[0] + 1 in (let _ = skip_string(s, pos) in 0)) else 0;
+    let _ = if is_cmt == 1 then skip_line_comment(s, pos) else 0;
+    let adv3 = 1 - is_q - is_cmt - is_close0;
+    let _ = pos[0] = pos[0] + adv3;
+    let depth = depth + is_lp - is_rp + is_close0;
+    let stop3 = is_close0 + at_end3;
+    let stop3 = if stop3 > 0 then 1 else 0;
+    let go = 1 - stop3;
+    0
+  };
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let after = pos[0];

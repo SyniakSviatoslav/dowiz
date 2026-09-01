@@ -4,6 +4,48 @@ Every native-codegen or toolchain bug that cost debugging time this week,
 with the rule each one earns. Rules marked **[RULE]** are binding for future
 sessions on this codebase.
 
+## [FIXED] run_program ret −1 / depth_sim holdout — unresolved-call pos stranding (2026-09-01)
+
+The last depth_sim flag (run_program ret (131,−1) in bebop streams,
+self_check ret (131,−1) in expr_compile streams — flagged since the M3 era,
+"located-unfixed" in the journal) is CLOSED by root cause, and the L0 gate
+("0 non-run_program flags") is green for the first time.
+
+Mechanism (confirmed by micro-repro `unknown_fn(x)` as a fn's final
+expression, then by the linear delta trace of the emitted run_program):
+`emit_call`'s unresolved/neutral path emitted `mov x0,#0; push` and then
+skipped the ARGUMENT LIST without advancing `pos` past `)`. pos stranded
+inside the call text caused two compounding effects in `emit_body`:
+1. the item loop's `more_ahead` lookahead read `')'` as "another statement
+   follows" and popped the neutral value early;
+2. the next iteration parsed `')'` as an expression — `emit_num(')')`
+   pushed a phantom 0.
+Two pushes, three pops → the fn epilogue's `ldp x29,x30,[sp],#16` consumed
+the caller's frame slot → x29/x30 restored from garbage AND a 16-byte
+upward SP creep per call. The corpus never called unknown fns, which is why
+every parity gate stayed green while the imbalance sat in the compiler's own
+`run_program` (dead code in bebop.bin — never called).
+
+Fix: the unresolved path now SKIPS the argument list lexically — a
+paren-depth scan that also skips strings (`skip_string`) and `//` comments
+(`skip_line_comment`), stopping on the call's own `)`. Pure pos arithmetic,
+no emitter state: interp and JIT agree by construction. (First fix attempt
+evaluated the args with emit_cmp+pop instead — engine-divergent stream
+lengths, fixpoint broken; killed in favor of the lexical skip.)
+Applied to BOTH twins: bebop.bp and selfhost/expr_compile.bp. Streams
+re-baselined; bebop.bin rebuilt; fixpoint byte-identical ×2 generations;
+depth_sim re-run with a corrected `sub/add sp,#imm,lsl #12` decode (the old
+model shifted by 1 instead of 12 — symmetric, never flagged, now exact).
+
+**[RULE] Any emitter path that skips source text must land pos ON the
+delimiter the outer loop expects (here `)`), verified by a depth_sim run on
+a micro-repro BEFORE declaring the emitter fixed.**
+**[RULE] New emitter code paths run through: (a) micro-repro + depth_sim 0,
+(b) self-compile fixpoint byte-identical, (c) full gate suite. The interp
+and JIT are two executions of one spec — a stream divergence is always an
+engine-semantics bug, never "close enough".**
+
+
 ## [FIXED] Ф0.3 bootstrap blocker closed — the "≥3fn crash" was an 8KB scratch overflow (2026-09-01)
 
 The single blocker (bebop.bin segfaults compiling pristine+Nfn) is CLOSED.

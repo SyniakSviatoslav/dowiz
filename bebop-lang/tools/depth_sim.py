@@ -28,10 +28,13 @@ def sim(span):
             t=i+imm; nxt=[i+1]+([t] if 0<=t<L else [])
         else:
             rd=w&0x1F; rn=(w>>5)&0x1F
+            # sub/add sp,#imm{,lsl #12}: sh bit 22 means imm<<12 (a full slot
+            # count of imm*4096/16); the old model shifted by 1 — symmetric in
+            # prologue/epilogue so it never flagged, but count it true now.
             if (w&0xFFC00000)==0xD1000000 and rn==31 and rd==31:
-                d+=((w>>10)&0xFFF)<<((w>>22)&3)>>4
+                d+=((w>>10)&0xFFF)<<(12*((w>>22)&1))>>4
             elif (w&0xFFC00000)==0x91000000 and rn==31 and rd==31:
-                d-=((w>>10)&0xFFF)<<((w>>22)&3)>>4
+                d-=((w>>10)&0xFFF)<<(12*((w>>22)&1))>>4
             elif w==0xA9BF7BFD: d+=1
             elif w==0xA8C17BFD: d-=1
         for t in nxt:
