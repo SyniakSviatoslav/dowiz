@@ -1,0 +1,490 @@
+// scoord.bp — SS-15: eigenvectors as the single coordinate system.
+// Machine (embedded, gate-validated): fp_mul/isqrt/lcg/spmv/normalize/topk +
+// csr_from_dense from spectral.bp (SS-6). Gate main: C8+I eigenbasis, concept
+// spectral projections (DC coordinate = dominant mode = cyclic-rotation
+// invariant), layout-mirror identity, orthonormality audit.
+
+fn fp_mul(a: i64, b: i64) -> i64 {
+  let na = if a < 0 then 1 else 0;
+  let aa = if na == 1 then 0 - a else a;
+  let nb = if b < 0 then 1 else 0;
+  let ab = if nb == 1 then 0 - b else b;
+  let a1 = aa >> 32;
+  let a0 = aa - (a1 << 32);
+  let b1 = ab >> 32;
+  let b0 = ab - (b1 << 32);
+  let hi = a1 * b1;
+  let mid = a1 * b0 + a0 * b1;
+  let ah = a0 >> 16;
+  let al = a0 - (ah << 16);
+  let bh = b0 >> 16;
+  let bl = b0 - (bh << 16);
+  let ll_h = ah * bh;
+  let ll_m = ah * bl + al * bh;
+  let ll_l = al * bl;
+  let low = ll_h + ((ll_m + (ll_l >> 16)) >> 16);
+  let p = (hi << 32) + mid + low;
+  let flip = na + nb;
+  let flip = flip - (flip / 2) * 2;
+  let p = if flip == 1 then 0 - p else p;
+  p
+}
+
+// isqrt(s): floor(sqrt(s)) for 0 <= s < 2^62 — bit-by-bit restoring method,
+// 31 steps, shifts and subtracts only (no division, fully deterministic).
+fn isqrt(s: i64) -> i64 {
+  let rem = 0;
+  let root = 0;
+  let i = 0;
+  while i < 31 {
+    let sh = 60 - i * 2;
+    let rem = (rem << 2) + ((s >> sh) & 3);
+    let tst = (root << 2) + 1;
+    let take = if tst <= rem then 1 else 0;
+    let root = (root << 1) + take;
+    let rem = rem - take * tst;
+    let i = i + 1;
+    0
+  };
+  root
+}
+
+// lcg_next(rng): the golden start-vector LCG step (SPECTRAL LAW constants:
+// mul 6364136223846793005, add 1442695040888963407 — wrapping i64).
+fn lcg_next(rng: i64) -> i64 {
+  let rng = rng * 6364136223846793005;
+  let rng = rng + 1442695040888963407;
+  rng
+}
+
+// spmv_fp(rp,ci,vv,n, x, out): out = A·x in fp. Fixed order: rows 0..n,
+// ascending columns within a row (the Csr::spmv contract); out zeroed first.
+fn spmv_fp(rp: [i64], ci: [i64], vv: [i64], n: i64, x: [i64], out: [i64]) -> i64 {
+  let j = 0;
+  while j < n {
+    let _ = out[j] = 0;
+    let j = j + 1;
+    0
+  };
+  let i = 0;
+  while i < n {
+    let xi = x[i];
+    let lo = rp[i];
+    let hi = rp[i + 1];
+    let k = lo;
+    while k < hi {
+      let j = ci[k];
+      let _ = out[j] = out[j] + fp_mul(vv[k], xi);
+      let k = k + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  n
+}
+
+// normalize_fp(x, n): scale so the Euclidean norm is 2^32. Sum of squares is
+// taken on |x_i|>>8 (LAW: >> is logical — abs first!); for |x| <= 2^36 the
+// square <= 2^56 and the sum <= 2^62 — inside isqrt's range. The isqrt
+// rounding (+-1 at the |x|>>8 scale) bounds the normalized-component error
+// near 2^-24 relative — lambda error ~256 fp units, well inside the 1e-6
+// drift band (4295 fp units). Reciprocal R = 2^56/nrm = fp(2^32/|x|).
+fn normalize_fp(x: [i64], n: i64) -> i64 {
+  let ss = 0;
+  let i = 0;
+  while i < n {
+    let ai = x[i];
+    let ai = if ai < 0 then 0 - ai else ai;
+    let t = ai >> 8;
+    let ss = ss + t * t;
+    let i = i + 1;
+    0
+  };
+  let nrm = isqrt(ss);
+  let isz = if nrm == 0 then 1 else 0;
+  let nrm = nrm + isz;
+  let r = 72057594037927936 / nrm;
+  let i = 0;
+  while i < n {
+    let _ = x[i] = fp_mul(x[i], r);
+    let i = i + 1;
+    0
+  };
+  nrm << 14
+}
+
+// topk_symmetric_fp(rp,ci,vv,n, k, iters, evals, evecs): the golden oracle's
+// power+Hotelling loop in fp. evals[0..k] = λ descending |λ| (fp); evecs
+// [m*n+j] = sign-fixed unit eigenvectors. evals/evecs caller-provided.
+// Iteration: A·x via spmv, deflate found pairs (per-iteration Hotelling),
+// normalize. λ = Rayleigh quotient on the deflated space, recompute-deflate.
+fn topk_symmetric_fp(rp: [i64], ci: [i64], vv: [i64], n: i64, k: i64, iters: i64, evals: [i64], evecs: [i64]) -> i64 {
+  let x = zeros(192);
+  let ax = zeros(192);
+  let tmp = zeros(192);
+  let m = 0;
+  let found = 0;
+  while m < k {
+    let rng = 0 - 7046029254386353131;
+    let j = 0;
+    while j < n {
+      let rng = lcg_next(rng);
+      let frac = (rng >> 11) >> 20;
+      let _ = x[j] = frac + frac - 4294967296;
+      let j = j + 1;
+      0
+    };
+    let _ = normalize_fp(x, n);
+    let om = 0;
+    while om < found {
+      let proj = 0;
+      let j = 0;
+      while j < n {
+        let proj = proj + fp_mul(evecs[om * n + j], x[j]);
+        let j = j + 1;
+        0
+      };
+      let j = 0;
+      while j < n {
+        let _ = x[j] = x[j] - fp_mul(proj, evecs[om * n + j]);
+        let j = j + 1;
+        0
+      };
+      let om = om + 1;
+      0
+    };
+    let _ = normalize_fp(x, n);
+    let it = 0;
+    while it < iters {
+      let _ = spmv_fp(rp, ci, vv, n, x, ax);
+      let om = 0;
+      while om < found {
+        let proj = 0;
+        let j = 0;
+        while j < n {
+          let proj = proj + fp_mul(evecs[om * n + j], ax[j]);
+          let j = j + 1;
+          0
+        };
+        let j = 0;
+        while j < n {
+          let _ = ax[j] = ax[j] - fp_mul(proj, evecs[om * n + j]);
+          let j = j + 1;
+          0
+        };
+        let om = om + 1;
+        0
+      };
+      let _ = normalize_fp(ax, n);
+      let j = 0;
+      while j < n {
+        let _ = x[j] = ax[j];
+        let j = j + 1;
+        0
+      };
+      let it = it + 1;
+      0
+    };
+    let _ = spmv_fp(rp, ci, vv, n, x, tmp);
+    let om = 0;
+    while om < found {
+      let proj = 0;
+      let j = 0;
+      while j < n {
+        let proj = proj + fp_mul(evecs[om * n + j], tmp[j]);
+        let j = j + 1;
+        0
+      };
+      let j = 0;
+      while j < n {
+        let _ = tmp[j] = tmp[j] - fp_mul(proj, evecs[om * n + j]);
+        let j = j + 1;
+        0
+      };
+      let om = om + 1;
+      0
+    };
+    let lambda = 0;
+    let j = 0;
+    while j < n {
+      let lambda = lambda + fp_mul(x[j], tmp[j]);
+      let j = j + 1;
+      0
+    };
+    let om = 0;
+    while om < found {
+      let proj = 0;
+      let j = 0;
+      while j < n {
+        let proj = proj + fp_mul(evecs[om * n + j], x[j]);
+        let j = j + 1;
+        0
+      };
+      let j = 0;
+      while j < n {
+        let _ = x[j] = x[j] - fp_mul(proj, evecs[om * n + j]);
+        let j = j + 1;
+        0
+      };
+      let om = om + 1;
+      0
+    };
+    let _ = normalize_fp(x, n);
+    let fpos = 0;
+    let j = 0;
+    while j < n {
+      let mag = x[j];
+      let mag = if mag < 0 then 0 - mag else mag;
+      let big = if mag > 65536 then 1 else 0;
+      let seen = if fpos != 0 then 1 else 0;
+      let fpos = if seen == 0 then x[j] * big else fpos;
+      let j = j + 1;
+      0
+    };
+    let neg = if fpos < 0 then 1 else 0;
+    let j = 0;
+    while j < n {
+      let _ = evecs[found * n + j] = if neg == 1 then 0 - x[j] else x[j];
+      let j = j + 1;
+      0
+    };
+    let _ = evals[found] = lambda;
+    let found = found + 1;
+    let m = m + 1;
+    0
+  };
+  // descending |λ|: insertion sort of (λ, eigenvector) pairs; the candidate
+  // row is held in kr (shifts overwrite row i when j+1 == i).
+  let kr = zeros(64);
+  let i = 1;
+  while i < found {
+    let key = evals[i];
+    let jj = 0;
+    while jj < n {
+      let _ = kr[jj] = evecs[i * n + jj];
+      let jj = jj + 1;
+      0
+    };
+    let ke = key;
+    let ke = if ke < 0 then 0 - ke else ke;
+    let j = i - 1;
+    let go = 1;
+    while go == 1 {
+      let inb = if j >= 0 then 1 else 0;
+      let je = evals[j];
+      let je = if je < 0 then 0 - je else je;
+      let lt = if je < ke then 1 else 0;
+      let move_ = lt * inb;
+      let _ = if move_ == 1 then (let _ = evals[j + 1] = evals[j] in 0) else 0;
+      let jj = 0;
+      while jj < n {
+        let _ = if move_ == 1 then (let _ = evecs[(j + 1) * n + jj] = evecs[j * n + jj] in 0) else 0;
+        let jj = jj + 1;
+        0
+      };
+      let j = j - move_;
+      let go = move_;
+      0
+    };
+    let _ = evals[j + 1] = key;
+    let jj = 0;
+    while jj < n {
+      let _ = evecs[(j + 1) * n + jj] = kr[jj];
+      let jj = jj + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  found
+}
+
+// ═══ SS-6: drift machinery (twins of spectral.rs classify_drift /
+// spectral_drift) ═══
+// Classes: 0 = Damped (rho < 1-band), 1 = Resonant (|rho-1| <= band),
+// 2 = Unstable (rho > 1+band). DRIFT_BAND = 1e-6 -> fp 2^32 scale: 4295.
+// The unstable-mode count uses tol = 2^20 above 1.0 (the fp port's ~8e-6
+// relative eigenvalue error exceeds the 1e-6 band; count at exact-1.0 must
+// stay 0, matching the oracle's |lambda| > 1.0 strict compare on I2).
+// csr_from_dense(a, n, rp, ci, vv): row-major scan, non-zero cells -> edges.
+fn csr_from_dense(a: [i64], n: i64, rp: [i64], ci: [i64], vv: [i64]) -> i64 {
+  let nnzc = zeros(1);
+  let i = 0;
+  while i < n {
+    let _ = rp[i] = nnzc[0];
+    let j = 0;
+    while j < n {
+      let w = a[i * n + j];
+      let nz = if w == 0 then 0 else 1;
+      let _ = if nz == 1 then (let _ = ci[nnzc[0]] = j in (let _ = vv[nnzc[0]] = w in (let _ = nnzc[0] = nnzc[0] + 1 in 0))) else 0;
+      let j = j + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  let _ = rp[n] = nnzc[0];
+  nnzc[0]
+}
+
+// spectral_profile_fp(a, n, rho_c, unst_c, evals, evecs) -> class:
+// rho = max|lambda| (fp), unst = #{|lambda| > 1 + tol}, class by the band.
+// a is a DENSE n x n fp matrix (row-major). Buffers: evals/evecs >= n.
+fn spectral_profile_fp(a: [i64], n: i64, rho_c: [i64], unst_c: [i64], evals: [i64], evecs: [i64]) -> i64 {
+  let rp = zeros(280);
+  let ci = zeros(1024);
+  let vv = zeros(1024);
+  let _ = csr_from_dense(a, n, rp, ci, vv);
+  let _ = topk_symmetric_fp(rp, ci, vv, n, n, 32, evals, evecs);
+  let rho = evals[0];
+  let rho = if rho < 0 then 0 - rho else rho;
+  let _ = rho_c[0] = rho;
+  let tol = 1048576;
+  let one = 4294967296;
+  let unst = 0;
+  let k = 0;
+  while k < n {
+    let ev = evals[k];
+    let ev = if ev < 0 then 0 - ev else ev;
+    let over = if ev - one - tol > 0 then 1 else 0;
+    let unst = unst + over;
+    let k = k + 1;
+    0
+  };
+  let _ = unst_c[0] = unst;
+  let dmp = rho - (one - 4295);
+  let unp = rho - (one + 4295);
+  let d = if dmp < 0 then 1 else 0;
+  let u = if unp > 0 then 1 else 0;
+  d * 0 + u * 2 + (1 - d) * (1 - u)
+}
+
+// spectral_drift_fp(a0, a1, n, out) -> class-transition packed int:
+// out[0] = rho_delta (fp, signed), out[1] = unstable-count delta (signed),
+// out[2] = from class, out[3] = to class.
+fn spectral_drift_fp(a0: [i64], a1: [i64], n: i64, out: [i64]) -> i64 {
+  let rho0 = zeros(1);
+  let un0 = zeros(1);
+  let rho1 = zeros(1);
+  let un1 = zeros(1);
+  let ev = zeros(280);
+  let ec = zeros(280);
+  let f = spectral_profile_fp(a0, n, rho0, un0, ev, ec);
+  let t = spectral_profile_fp(a1, n, rho1, un1, ev, ec);
+  let _ = out[0] = rho1[0] - rho0[0];
+  let _ = out[1] = un1[0] - un0[0];
+  let _ = out[2] = f;
+  let _ = out[3] = t;
+  f * 4 + t
+}
+
+
+
+
+fn vdot(w: [i64], cb: i64, ev: [i64], r: i64, n: i64) -> i64 {
+  let s = 0;
+  let j = 0;
+  while j < n {
+    let s = s + w[cb + j] * ev[r * n + j];
+    let j = j + 1;
+    0
+  };
+  s
+}
+
+fn main() -> i64 {
+  let w = zeros(256);
+  let a = zeros(64);
+  let one = 4294967296;
+  let i = 0;
+  while i < 8 {
+    let _ = a[i * 8 + i] = one;
+    let _ = a[i * 8 + ((i + 1) & 7)] = one;
+    let _ = a[i * 8 + ((i + 7) & 7)] = one;
+    let i = i + 1;
+    0
+  };
+  let rp = zeros(16);
+  let ci = zeros(64);
+  let vv = zeros(64);
+  let _ = csr_from_dense(a, 8, rp, ci, vv);
+  let evals = zeros(8);
+  let evecs = zeros(64);
+  let _ = topk_symmetric_fp(rp, ci, vv, 8, 4, 64, evals, evecs);
+  let _ = w[0] = 1;  let _ = w[1] = 1;  let _ = w[2] = 1;  let _ = w[3] = 1;
+  let _ = w[4] = 1;  let _ = w[5] = 1;  let _ = w[6] = 1;  let _ = w[7] = 0 - 1;
+  let _ = w[8] = 1;  let _ = w[9] = 1;  let _ = w[10] = 1; let _ = w[11] = 1;
+  let _ = w[12] = 0 - 1; let _ = w[13] = 0 - 1; let _ = w[14] = 0 - 1; let _ = w[15] = 0 - 1;
+  let _ = w[16] = 1; let _ = w[17] = 1; let _ = w[18] = 0 - 1; let _ = w[19] = 0 - 1;
+  let _ = w[20] = 1; let _ = w[21] = 1; let _ = w[22] = 0 - 1; let _ = w[23] = 1;
+  let jj = 0;
+  while jj < 8 {
+    let _ = w[80 + jj] = w[16 + jj];
+    let r2 = (jj + 2) - ((jj + 2) / 8) * 8;
+    let r5 = (jj + 5) - ((jj + 5) / 8) * 8;
+    let _ = w[96 + jj] = w[16 + r2];
+    let _ = w[104 + jj] = w[8 + r5];
+    let jj = jj + 1;
+    0
+  };
+  let q = zeros(1);
+  let s = 0;
+  while s < 3 {
+    let _ = q[0] = vdot(w, s * 8, evecs, 0, 8);
+    let _ = w[128 + s] = q[0];
+    let s = s + 1;
+    0
+  };
+  let _ = q[0] = vdot(w, 80, evecs, 0, 8);
+  let _ = w[131] = q[0];
+  let _ = q[0] = vdot(w, 96, evecs, 0, 8);
+  let _ = w[132] = q[0];
+  let _ = q[0] = vdot(w, 104, evecs, 0, 8);
+  let _ = w[133] = q[0];
+  let _ = w[136] = w[132] - w[128 + 0];
+  let _ = w[137] = w[132] - w[128 + 1];
+  let _ = w[138] = w[132] - w[128 + 2];
+  let _ = w[139] = w[133] - w[128 + 0];
+  let _ = w[140] = w[133] - w[128 + 1];
+  let _ = w[141] = w[133] - w[128 + 2];
+  let _ = w[136] = if w[136] < 0 then 0 - w[136] else w[136];
+  let _ = w[137] = if w[137] < 0 then 0 - w[137] else w[137];
+  let _ = w[138] = if w[138] < 0 then 0 - w[138] else w[138];
+  let _ = w[139] = if w[139] < 0 then 0 - w[139] else w[139];
+  let _ = w[140] = if w[140] < 0 then 0 - w[140] else w[140];
+  let _ = w[141] = if w[141] < 0 then 0 - w[141] else w[141];
+  let pa = if w[137] < w[136] then 1 else 0;
+  let va = if pa == 1 then w[137] else w[136];
+  let ida = pa;
+  let pb = if w[138] < va then 1 else 0;
+  let ida = if pb == 1 then 2 else ida;
+  let pb = if w[140] < w[139] then 1 else 0;
+  let vb = if pb == 1 then w[140] else w[139];
+  let idb = pb;
+  let pc = if w[141] < vb then 1 else 0;
+  let idb = if pc == 1 then 2 else idb;
+  let la = w[138];
+  let lb = w[140];
+  let lay = w[131] - w[128 + 2];
+  let lay = if lay == 0 then 1 else 0;
+  let oo = 0;
+  let p0 = 0;
+  while p0 < 3 {
+    let p1 = p0 + 1;
+    while p1 < 4 {
+      let dot = vdot(evecs, p0 * 8, evecs, p1, 8);
+      let ad = dot;
+      let ad = if ad < 0 then 0 - ad else ad;
+      let oo = oo + (ad >> 28);
+      let p1 = p1 + 1;
+      0
+    };
+    let p0 = p0 + 1;
+    0
+  };
+  let rot = if la <= 1048576 then 1 else 0;
+  let rot = rot * 2 + (if lb <= 1048576 then 1 else 0);
+  let ob = if oo <= 200 then 1 else 0;
+  ida * 1000000 + idb * 10000 + lay * 100 + rot * 10 + ob
+}

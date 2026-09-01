@@ -81,3 +81,26 @@
   array-loaded w[161] emits LSR; python `x >> 7` on negative x is ASR -> oracle must
   mask unsigned before shift ((x & M) >> 7); with that, stream + fold exact match
   VERDICT:confirmed (oracle-mirror rule: shift the unsigned mask at every >>)
+1788288200 H:oracle-asr-trap-2-ss15 DID:ss15 mirror vs BP evecs drift ~1e-7 rel;
+  generic: same class as 1788288199 (last-bit oracle/emitter mismatch); here
+  degenerate 2.414 space basis is ARBITRARY -> offdiag ortho residual (oo)
+  differs 58 vs 2 between mirror and BP; only robust invariant = bound-check
+  (ob = oo<=200), not the raw value GOT:kept ob, froze 2010131 VERDICT:confirmed
+1788288201 H:undefined-fn-and-phantom-builtin tolerance DID:first ss15 fold 103
+  traced to (a) csr_from_dense excluded (lives past the SS-6 embed marker) and
+  (b) s64() invented wrapper = ZERO everywhere; compiler silently tolerates
+  BOTH (undefined calls + unknown builtins -> neutral/0) GOT:fold 103 was an
+  all-coordinates-zero artifact; after real embed + dropping s64 fold 2011243 ->
+  2010131; LAW: never trust a run without verifying every helper is DEFINED
+  (grep -c fn) and no phantom builtins (corpus-grep call name)
+  VERDICT:confirmed (T0 addition)
+1788288202 H:ss15-argmin-negabs DID:argmin compared raw diffs; -6.07e9 < -1224
+  wrongly won while | -1224 | is the match GOT:abs before argmin; then ida=2
+  idb=1 lay=1 rot=3 ob=1; fold 2010131 == oracle bit-exact VERDICT:confirmed
+1788288203 H:SS-15-scoord-gate DID:C8+I conn (self-loop => eigen2 simple => row0
+  EXACT const); topk k=4 iters=64; concepts c1/c2/c3 (+-1 vecs, distinct sums);
+  DC coordinate = projection onto dominant mode (rotation-invariant to fp
+  error); layout mirror offset 80 == stored 16 bit-exact; queries = cyclic
+  rotations (c3 by 2, c2 by 5) at offsets 96/104; argmin |dDC| identity
+  GOT:fold 2010131 (ida=2 idb=1 lay=1 rot=3 ob=1) == python mirror; std_golden
+  21 pass VERDICT:confirmed

@@ -147,5 +147,19 @@ gate lsm -4383576415516299782 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/holo.bp /tmp/opencode/holo_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/holo_test.bin | tail -1)
 gate holo 2766693490590679850 "$r"
 
+# ---- scoord (SS-15 eigenvectors = the single coordinate system: concepts are
+#      +-1 vectors; COORDINATES = spectral projections onto the topk eigenbasis
+#      Q of the C8+I connection operator (dominant mode ~ constant vector ->
+#      cyclic byte-shift leaves the DC coordinate invariant to fp error); search
+#      = argmin(|dCoordinate|) over VALUES at any arena offset (no pointers);
+#      layout-mirror proof = identical content at two offsets -> bit-exact equal
+#      DC; orthonormality audit ob (offdiag Q^TQ residuals bounded). C8+I has a
+#      SIMPLE max |lambda| so row 0 is the exact constant mode (C8 alone has a
+#      +/-2 double eigenspace -> mixed basis). Fold 2010131 = python oracle
+#      (mirror of fp topk at n=8,k=4,iters=64) bit-exact; identity 2/1, layout
+#      1, rotation 3, orthonormality ok.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/scoord.bp /tmp/opencode/scoord_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/scoord_test.bin | tail -1)
+gate scoord 2010131 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]
