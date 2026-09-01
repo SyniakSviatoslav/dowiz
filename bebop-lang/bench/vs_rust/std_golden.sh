@@ -228,5 +228,15 @@ gate srepl 8449214 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/sinc.bp /tmp/opencode/sinc_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/sinc_test.bin | tail -1)
 gate sinc 6684880500081 "$r"
 
+# ---- kalman (SS-1 Kalman filter pure .bp: scalar-only fixed-point 1-D step
+#      response, zero alloc. F=H=1.0, Q=0.001, R=0.01, z=5.0, 1000 iters
+#      (done-check horizon). Riccati map reaches an EXACT fp fixpoint
+#      (P1000==P999 -> fix=1 = 0 drift, fixed tick count by construction);
+#      state tracks z inside the 0.1% band (err 3 fp units -> trk=1). Fold
+#      28327900110011 = kq*10^8 + pq*10^4 + trk*10 + fix (kq=K>>12,
+#      pq=P>>20) = python mirror bit-exact.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/kalman.bp /tmp/opencode/kalman_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/kalman_test.bin | tail -1)
+gate kalman 28327900110011 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

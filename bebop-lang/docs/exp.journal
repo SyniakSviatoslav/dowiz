@@ -189,3 +189,9 @@
   sinc(1/2) = 2/pi to ~1e-8 (q05=667544 vs golden 667544.2), sinc(1) err
   0.013% < 0.1% band (ok=1); fold 6684880500081, .bp == python mirror
   bit-exact; std_golden 26 pass VERDICT:confirmed
+1788288215 H:SS-1-kalman-gate DID:1-D fixed-point Kalman (scalars only, zero
+  alloc): fp_mul + fp_div (32-step restoring long division, r<2b no overflow);
+  F=H=1.0 Q=0.001 R=0.01 z=5.0, 1000 iters GOT:Riccati map reaches an EXACT fp
+  fixpoint (P1000==P999 -> fix=1 = zero drift, fixed tick count structural);
+  state tracks z inside 0.1% band (err=3 fp units); fold 28327900110011, .bp
+  == python mirror bit-exact; std_golden 27 pass VERDICT:confirmed
