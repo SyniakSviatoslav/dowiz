@@ -218,5 +218,15 @@ gate seigtime 1233012011 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/srepl.bp /tmp/opencode/srepl_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/srepl_test.bin | tail -1)
 gate srepl 8449214 "$r"
 
+# ---- sinc (SS-8 sinc(x)=sin(pi*x)/(pi*x) ideal interpolant, direct Taylor
+#      series (no division): 1 - z2/3! + z4/5! - z6/7! + z8/9! - z10/11!,
+#      z = pi*x in fp 2^32. Honest window |x|<=1 (fixed-point truncation):
+#      sinc(0)=1.0 exact; sinc(1/2) = 2/pi to ~1e-8 (q05>>12 = 667544 vs
+#      golden 667544.2); sinc(1) error 0.013% inside the 0.1% done-check
+#      band (ok bit). Critical for Kalman (SS-1). Fold 6684880500081 =
+#      q05*10^7 + q025*10^4 + e1q*10 + ok = python mirror bit-exact.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/sinc.bp /tmp/opencode/sinc_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/sinc_test.bin | tail -1)
+gate sinc 6684880500081 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

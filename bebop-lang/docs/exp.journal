@@ -182,3 +182,10 @@
   GOT:std_golden 25 pass, 0 fail; spectral self-replication closed: mutation
   via dA -> DriftClass, within-gamma auto-fix vs outside-gamma dump both
   structurally encoded in one fold VERDICT:confirmed
+1788288214 H:SS-8-sinc-gate DID:sinc via DIRECT Taylor series (no division): 1 -
+  z2/3! + z4/5! - z6/7! + z8/9! - z10/11!, z = pi*x fp 2^32; honest window
+  |x|<=1 (fixed-point truncation of 1/n! kills terms beyond z^10 at this
+  scale; direct sin-Taylor diverges for |z|>2) GOT:sinc(0)=1.0 exact,
+  sinc(1/2) = 2/pi to ~1e-8 (q05=667544 vs golden 667544.2), sinc(1) err
+  0.013% < 0.1% band (ok=1); fold 6684880500081, .bp == python mirror
+  bit-exact; std_golden 26 pass VERDICT:confirmed

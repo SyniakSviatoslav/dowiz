@@ -411,12 +411,17 @@ capability with its done-check.
   eigentime is the first SEED-SENSITIVE gate (topk folds are seed-insensitive,
   which is why ss15/16 never exposed it).
 
-**SS-18 Spectral self-replication (mutation via ΔA)** — [DriftClass ported]
+**SS-18 Spectral self-replication (mutation via ΔA)** — [DriftClass ported] — **DONE**
 - Agent changing logic = matrix perturbation ΔA. Check: spectral_drift(A₀,
   A₀+ΔA) → DriftClass (spectral.rs:800 port; `selfhost/std/spectral.bp`).
   Drift within γ → automatic fix (mmap snapshot); outside → .bt dump.
   Replaces textual compilation: evolution = pure spectral jumps.
-- Impl: `spectral_drift` in spectral.bp. (Committed: DriftClass profile + delta.)
+- Gate `srepl` fold 8449214 (25th): base A₀ = 0.25·(C8+I) (ρ=0.75 Damped,
+  γ=0.1465); within-γ mutation (+0.01 one self-loop) → Δρ=0.00128 ≪ γ →
+  class stable Damped→Damped (trans 0 = auto-fix regime); outside-γ
+  (+0.4 all self-loops) → ρ=1.15, 3 unstable modes → Damped→Unstable
+  (trans 2 = .bt dump regime). Fold = Δρ₁q·10⁵ + trans₂·10⁴ + unst₂·10³ +
+  trans₁·10² + Δρ₂q. Oracle == BP bit-exact (journal 1788288212-13).
 
 ---
 
