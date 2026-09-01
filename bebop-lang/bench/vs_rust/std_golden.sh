@@ -204,5 +204,19 @@ gate tb 1111000 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/seigtime.bp /tmp/opencode/seigtime_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/seigtime_test.bin | tail -1)
 gate seigtime 1233012011 "$r"
 
+# ---- srepl (SS-18 spectral self-replication: agent logic change = matrix
+#      perturbation dA; spectral_drift(A0, A0+dA) -> DriftClass transition.
+#      Base A0 = 0.25*(C8+I) (rho = 0.75, Damped class 0, gamma = 0.1465).
+#      S1 within gamma: +0.01 on one self-loop -> drho = 0.00128 -> class
+#      stable Damped->Damped (trans 0 = auto-fix / mmap snapshot regime).
+#      S2 outside gamma: +0.4 on ALL self-loops -> rho = 1.15, 3 unstable
+#      modes -> Damped->Unstable (trans 2 = .bt dump regime). Evolution =
+#      pure spectral jumps, no textual recompilation. Fold 8449214 =
+#      drho1q*100000 + trans2*10000 + unst2*1000 + trans1*100 + drho2q
+#      (drhoq = drho >> 16) = python oracle bit-exact (topk seed shift
+#      mirrored unsigned, R3.b).) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/srepl.bp /tmp/opencode/srepl_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/srepl_test.bin | tail -1)
+gate srepl 8449214 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

@@ -168,3 +168,17 @@
 1788288211 H:SS-17-seigtime-gate DID:seigtime.bp installed (selfhost/std +
   bench/vs_rust/std_tests), gate 24 in std_golden.sh, fold 1233012011
   GOT:std_golden 24 pass, 0 fail; oracle == BP bit-exact VERDICT:confirmed
+1788288212 H:SS-18-srepl-gate-design DID:base A0 = 0.25*(C8+I) ring (rho=0.75
+  Damped class 0, gamma=0.1465); S1 within-gamma mutation (+0.01 one
+  self-loop) -> drho=0.00128 << gamma -> Damped->Damped (trans 0 = auto-fix
+  regime); S2 outside-gamma (+0.4 all self-loops) -> rho=1.15, 3 unstable
+  modes -> Damped->Unstable (trans 2 = dump regime); fold = drho1q*100000 +
+  trans2*10000 + unst2*1000 + trans1*100 + drho2q GOT:fold 8449214
+  (drho1q=84, trans2=2, unst2=3, trans1=0, drho2q=26214), .bp == python
+  oracle bit-exact (topk LSR-seed mirrored unsigned per 1788288210)
+  VERDICT:confirmed
+1788288213 H:SS-18-srepl-gate DID:srepl.bp installed (selfhost/std +
+  bench/vs_rust/std_tests), gate 25 in std_golden.sh, fold 8449214
+  GOT:std_golden 25 pass, 0 fail; spectral self-replication closed: mutation
+  via dA -> DriftClass, within-gamma auto-fix vs outside-gamma dump both
+  structurally encoded in one fold VERDICT:confirmed
