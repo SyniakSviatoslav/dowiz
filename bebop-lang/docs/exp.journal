@@ -138,3 +138,33 @@
   drop empty, truncate 120, cap 40); select-idiom stores (branch-free, immune
   to 1788288197); buffers outside loops (L8) GOT:self-test fold 1111000, gate
   23, std_golden 23 pass; crc32 == python zlib bit-exact VERDICT:confirmed
+1788288208 H:SS-17-seigtime-phase-A-measure DID:probe eigentime per SPEC (period
+  1/2 detector px/p2x, absorb 16) on C8+I ring vs J8 all-ones GOT:J8 enters
+  exact period-1 fixpoint t=2 ab=1 (fold 211 as designed); C8+I NEVER enters a
+  period-1/2 cycle - tmax guard 2000 fires. Root cause: the normalize map is
+  locally FLAT at the dominant constant mode (c' ~ 2^32/sqrt(8) independent of
+  c, first-order slope 0) so the rounding-locked trajectory sawtooths: exact
+  period-30 cycle, first recurrence t=132 (ASR-seed) / t=123 (LSR-seed), full
+  vector -1 LSB walk with ~30-step jumps. At >>8 precision the vector creeps 1
+  LSB per 256 iterations - no cycle at ANY reduced precision; the only exact
+  structure is the full-precision 30-cycle VERDICT:SPEC period-1/2 falsified
+1788288209 H:SS-17-ring-30-redesign (Pro-approved) DID:extend cycle detection to
+  depth 30 via ONE ring array hist[240] (shortest p in 1..30 with x_t ==
+  x_{t-p}, branch-free per-stick), absorb = 16-step cycle-membership over the
+  last 30 states; e = td*1000 + per*10 + ab (td = first recurrence); fold =
+  es*10000 + ef GOT:es=123301 (td=123 per=30 ab=1), ef=2011 (td=2 per=1 ab=1),
+  fold 1233012011, python oracle bit-exact; claims hold: time-scale separation
+  123301 >> 2011, ab=1 both (absorbing) VERDICT:confirmed
+1788288210 H:R3b-LSR-seed-first-seed-sensitive-gate DID:.bp eigentime and oracle
+  diverged (detect t 123 vs 132): the seed shift (rng>>11)>>20 with the
+  loop-reassigned LOCAL rng EMITS AS LSR (oracle ASR+&M gave a different seed
+  vector) - dbg17b proved x[j] = oracle_xj + 2^34 exactly (one LSR-31). The
+  topk machinery carries the same pattern but its folds are SEED-INSENSITIVE
+  (converged eigenspace, ss15/16 never exposed it); eigentime MEASURES the
+  transient itself - first seed-sensitive gate, defect surfaces here. GOT:
+  oracle mirrors unsigned ((rng&M)>>11)>>20 per the shift law -> bit-exact;
+  LAW: every >> in seed-sensitive code must be mirrored UNSIGNED
+  VERDICT:confirmed (R3.x defect b, new trigger)
+1788288211 H:SS-17-seigtime-gate DID:seigtime.bp installed (selfhost/std +
+  bench/vs_rust/std_tests), gate 24 in std_golden.sh, fold 1233012011
+  GOT:std_golden 24 pass, 0 fail; oracle == BP bit-exact VERDICT:confirmed

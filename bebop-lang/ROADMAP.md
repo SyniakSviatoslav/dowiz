@@ -392,11 +392,24 @@ capability with its done-check.
   different λ freeze the power method at mixed fixed points (self-loops fix;
   equal-λ pairs are harmless).
 
-**SS-17 Eigentime (time = spectral iteration)**
-- Synchronization = number of Hotelling iterations (not clock!). λ₁ fixpoint
-  stabilizes → cores into energy-efficient state (WFI/WFE). Agent signal →
-  ΔA → new iteration → new λ → continued execution. Removes the need for OS
-  scheduler, timers, interrupts.
+**SS-17 Eigentime (time = spectral iteration)** — **DONE**
+- Synchronization = number of Hotelling iterations until the iterate enters an
+  exact cycle of the power map (not a wall clock!). λ₁ fixpoint stabilizes →
+  cores into energy-efficient state (WFI/WFE); agent signal → ΔA → new
+  iteration. Removes the need for OS scheduler, timers, interrupts.
+- Gate `seigtime` fold 1233012011 (24th): slow clock C8+I (λ₂/λ₁ = 0.805) —
+  the normalize map is locally flat at the dominant constant mode (c′ ≈
+  2³²/√8 independent of c), so the rounding-locked trajectory sawtooths into
+  an exact period-30 cycle: first recurrence td=123, absorb 16/16 (ab=1) →
+  e_slow=123301; fast clock J8 (λ₂..₈ = 0) — exact period-1 fixpoint td=2,
+  ab=1 → e_fast=2011. Time-scale separation + absorbing both. Detection =
+  ring history hist[240], shortest p∈1..30 with x_t == x_{t−p}, +16-step
+  membership absorb; e = td·1000 + per·10 + ab. Oracle == BP bit-exact.
+  Journal 1788288208-11: SPEC's period-1/2 detector falsified by measurement
+  (no short cycle at any precision); ring-30 redesign Pro-approved; R3(b)
+  LSR-seed discovery — the seed shift emits LSR for loop-reassigned locals;
+  eigentime is the first SEED-SENSITIVE gate (topk folds are seed-insensitive,
+  which is why ss15/16 never exposed it).
 
 **SS-18 Spectral self-replication (mutation via ΔA)** — [DriftClass ported]
 - Agent changing logic = matrix perturbation ΔA. Check: spectral_drift(A₀,
@@ -470,8 +483,9 @@ Emitter defects reserved for R3.x emitter work:
     work (journal 1788288206; workaround: str-free programs - argv + cells +
     arithmetic only).
 Next pulls: N6 DONE, SS-15/SS-16 DONE; tb (tokenbox, gate 23) DONE - merged
-token-economy tool (rtk+graphify+mempalace in one str-free .bp binary); next
-SS-17/SS-18, then SS-1..14, then SME/SVE2.
+token-economy tool (rtk+graphify+mempalace in one str-free .bp binary);
+SS-17 seigtime DONE (gate 24, fold 1233012011, ring-30 eigentime);
+next SS-18, then SS-1..14, then SME/SVE2.
 
 1. **N2 → N3**: N2 rev.bp gate DONE (fold 5092789399242, 17th gate;
    xor-toggle/CNOT/Toffoli/Fredkin self-inverse + rev_round/rev_undo delta
@@ -487,9 +501,11 @@ SS-17/SS-18, then SS-1..14, then SME/SVE2.
    fold 2766693490590679850; WHT-dispersed 4x copies, trim recovery
    pf=15/dan=32/best=0, recovered-tensor re-execution through reservoir at
    2^15 spike scale; oracle == BP bit-exact).
-4. **SS-15/16/17/18** — spectral coordinates, gap flow control, eigentime,
-   spectral self-replication; then SS-1..SS-14 in dependency order (SS-6
-   foundation first, already CORE DONE).
+4. **SS-15/16/17 DONE, SS-18 next** — spectral coordinates, gap flow
+   control, eigentime (gates 21/22/24, folds 2010131/3550431/1233012011),
+   then spectral self-replication (spectral_drift already in spectral.bp);
+   then SS-1..SS-14 in dependency order (SS-6 foundation first, already
+   CORE DONE).
 5. **SME/SVE2 path** — NEON canonical first (already), SVE2 forward port when
    fixed-width is the bottleneck; Spike Dispatcher last (only after the core
    compiler/spectral layer is stable).

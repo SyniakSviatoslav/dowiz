@@ -1,0 +1,317 @@
+// seigtime.bp — SS-17: eigentime (time = spectral iteration).
+// Synchronization = number of Hotelling iterations until the iterate ENTERS AN
+// EXACT CYCLE of the power map (not a wall clock). Slow clock = C8+I ring
+// (lambda2/lambda1 = 0.805): the normalize map is locally flat at the
+// dominant mode (c' ~ 2^32/sqrt(8) independent of c), so the rounding-locked
+// trajectory sawtooths into an exact period-30 cycle — first recurrence at
+// td=123, absorb 16/16 (ab=1). Fast clock = J8 all-ones (lambda2..8 = 0):
+// exact period-1 fixpoint at td=2, ab=1. Time-scale separation:
+// e_slow(123301) > e_fast(2011). Detection: ring history hist[240] (30
+// states x 8), shortest p in 1..30 with x_t == x_{t-p}; +16 absorb steps
+// verifying cycle membership (stable bit). e = td*1000 + per*10 + ab.
+// Gate fold = es*10000 + ef = 1233012011 == python oracle bit-exact.
+// Machine embedded verbatim from spectral_machinery.bp (sha256 c184416666fe).
+
+fn fp_mul(a: i64, b: i64) -> i64 {
+  let na = if a < 0 then 1 else 0;
+  let aa = if na == 1 then 0 - a else a;
+  let nb = if b < 0 then 1 else 0;
+  let ab = if nb == 1 then 0 - b else b;
+  let a1 = aa >> 32;
+  let a0 = aa - (a1 << 32);
+  let b1 = ab >> 32;
+  let b0 = ab - (b1 << 32);
+  let hi = a1 * b1;
+  let mid = a1 * b0 + a0 * b1;
+  let ah = a0 >> 16;
+  let al = a0 - (ah << 16);
+  let bh = b0 >> 16;
+  let bl = b0 - (bh << 16);
+  let ll_h = ah * bh;
+  let ll_m = ah * bl + al * bh;
+  let ll_l = al * bl;
+  let low = ll_h + ((ll_m + (ll_l >> 16)) >> 16);
+  let p = (hi << 32) + mid + low;
+  let flip = na + nb;
+  let flip = flip - (flip / 2) * 2;
+  let p = if flip == 1 then 0 - p else p;
+  p
+}
+
+// isqrt(s): floor(sqrt(s)) for 0 <= s < 2^62 — bit-by-bit restoring method,
+// 31 steps, shifts and subtracts only (no division, fully deterministic).
+fn isqrt(s: i64) -> i64 {
+  let rem = 0;
+  let root = 0;
+  let i = 0;
+  while i < 31 {
+    let sh = 60 - i * 2;
+    let rem = (rem << 2) + ((s >> sh) & 3);
+    let tst = (root << 2) + 1;
+    let take = if tst <= rem then 1 else 0;
+    let root = (root << 1) + take;
+    let rem = rem - take * tst;
+    let i = i + 1;
+    0
+  };
+  root
+}
+
+// lcg_next(rng): the golden start-vector LCG step (SPECTRAL LAW constants:
+// mul 6364136223846793005, add 1442695040888963407 — wrapping i64).
+fn lcg_next(rng: i64) -> i64 {
+  let rng = rng * 6364136223846793005;
+  let rng = rng + 1442695040888963407;
+  rng
+}
+
+// spmv_fp(rp,ci,vv,n, x, out): out = A·x in fp. Fixed order: rows 0..n,
+// ascending columns within a row (the Csr::spmv contract); out zeroed first.
+fn spmv_fp(rp: [i64], ci: [i64], vv: [i64], n: i64, x: [i64], out: [i64]) -> i64 {
+  let j = 0;
+  while j < n {
+    let _ = out[j] = 0;
+    let j = j + 1;
+    0
+  };
+  let i = 0;
+  while i < n {
+    let xi = x[i];
+    let lo = rp[i];
+    let hi = rp[i + 1];
+    let k = lo;
+    while k < hi {
+      let j = ci[k];
+      let _ = out[j] = out[j] + fp_mul(vv[k], xi);
+      let k = k + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  n
+}
+
+// normalize_fp(x, n): scale so the Euclidean norm is 2^32 (verbatim).
+fn normalize_fp(x: [i64], n: i64) -> i64 {
+  let ss = 0;
+  let i = 0;
+  while i < n {
+    let ai = x[i];
+    let ai = if ai < 0 then 0 - ai else ai;
+    let t = ai >> 8;
+    let ss = ss + t * t;
+    let i = i + 1;
+    0
+  };
+  let nrm = isqrt(ss);
+  let isz = if nrm == 0 then 1 else 0;
+  let nrm = nrm + isz;
+  let r = 72057594037927936 / nrm;
+  let i = 0;
+  while i < n {
+    let _ = x[i] = fp_mul(x[i], r);
+    let i = i + 1;
+    0
+  };
+  nrm << 14
+}
+
+// csr_from_dense(a, n, rp, ci, vv): row-major scan, non-zero cells -> edges.
+fn csr_from_dense(a: [i64], n: i64, rp: [i64], ci: [i64], vv: [i64]) -> i64 {
+  let nnzc = zeros(1);
+  let i = 0;
+  while i < n {
+    let _ = rp[i] = nnzc[0];
+    let j = 0;
+    while j < n {
+      let w = a[i * n + j];
+      let nz = if w == 0 then 0 else 1;
+      let _ = if nz == 1 then (let _ = ci[nnzc[0]] = j in (let _ = vv[nnzc[0]] = w in (let _ = nnzc[0] = nnzc[0] + 1 in 0))) else 0;
+      let j = j + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  let _ = rp[n] = nnzc[0];
+  nnzc[0]
+}
+
+// all_eq_off(a, off, b, n): 1 iff a[off+k]==b[k] for all k<n (branch-free).
+fn all_eq_off(a: [i64], off: i64, b: [i64], n: i64) -> i64 {
+  let eq = 1;
+  let k = 0;
+  while k < n {
+    let m = if a[off + k] == b[k] then 1 else 0;
+    let eq = eq * m;
+    let k = k + 1;
+    0
+  };
+  eq
+}
+
+// ═══ SS-17: eigentime (time = spectral iteration) ═══
+// eigentime(rp,ci,vv,n,x,ax,hist): LCG seed -> normalize -> power iteration
+// spmv_fp+normalize. Ring history hist[30*n]: after every step the new state
+// is stored at slot (t mod 30)*n; detection = shortest p in 1..30 with
+// x_t == x_{t-p} (exact cycle of the power map); td = iterations to the FIRST
+// recurrence (the eigentime). Absorb: 16 more steps, each must land on one of
+// the last 30 states (cycle membership) — ab=1 iff all 16 hold (absorbing
+// state). Return td*1000 + per*10 + ab (per = cycle period; per=3 = tmax
+// guard). R3(b) note: the seed shift `(rng >> 11) >> 20` EMITS AS LSR for
+// the loop-reassigned local rng — the oracle mirrors with (rng & M) >> 31
+// (unsigned) per the "oracle mirrors must shift unsigned" law.
+fn eigentime(rp: [i64], ci: [i64], vv: [i64], n: i64, x: [i64], ax: [i64], hist: [i64]) -> i64 {
+  let rng = 0 - 7046029254386353131;
+  let j = 0;
+  while j < n {
+    let rng = lcg_next(rng);
+    let frac = (rng >> 11) >> 20;
+    let _ = x[j] = frac + frac - 4294967296;
+    let j = j + 1;
+    0
+  };
+  let _ = normalize_fp(x, n);
+  let j = 0;
+  while j < n {
+    let _ = hist[j] = x[j];
+    let j = j + 1;
+    0
+  };
+  let t = 0;
+  let per = 0;
+  let td = 0;
+  let tmax = 2000;
+  while per == 0 {
+    let _ = spmv_fp(rp, ci, vv, n, x, ax);
+    let _ = normalize_fp(ax, n);
+    let j = 0;
+    while j < n {
+      let _ = x[j] = ax[j];
+      let j = j + 1;
+      0
+    };
+    let t = t + 1;
+    let p = 1;
+    while p < 31 {
+      let m = t - p;
+      let idx = m - (m / 30) * 30;
+      let idx = idx + (if idx < 0 then 30 else 0);
+      let eq = all_eq_off(hist, idx * 8, x, n);
+      let perz = if per == 0 then 1 else 0;
+      let per = per + perz * eq * p;
+      let td = td + perz * eq * t;
+      let p = p + 1;
+      0
+    };
+    let over = if t >= tmax then 1 else 0;
+    let per = if over == 1 then 3 else per;
+    let m = t;
+    let idx = m - (m / 30) * 30;
+    let j = 0;
+    while j < n {
+      let _ = hist[idx * 8 + j] = x[j];
+      let j = j + 1;
+      0
+    };
+    0
+  };
+  let s = 0;
+  let ab = 1;
+  while s < 16 {
+    let _ = spmv_fp(rp, ci, vv, n, x, ax);
+    let _ = normalize_fp(ax, n);
+    let j = 0;
+    while j < n {
+      let _ = x[j] = ax[j];
+      let j = j + 1;
+      0
+    };
+    let ok = 0;
+    let p = 1;
+    while p < 31 {
+      let m = t - p;
+      let idx = m - (m / 30) * 30;
+      let idx = idx + (if idx < 0 then 30 else 0);
+      let eq = all_eq_off(hist, idx * 8, x, n);
+      let ok = ok + (1 - ok) * eq;
+      let p = p + 1;
+      0
+    };
+    let ab = ab * ok;
+    let t = t + 1;
+    let m = t;
+    let idx = m - (m / 30) * 30;
+    let j = 0;
+    while j < n {
+      let _ = hist[idx * 8 + j] = x[j];
+      let j = j + 1;
+      0
+    };
+    let s = s + 1;
+    0
+  };
+  td * 1000 + per * 10 + ab
+}
+
+// ring_dense: C8+I slow clock — cycle ring with self-loops, weight 1.0 each.
+fn ring_dense(a: [i64], n: i64, o: i64, loopw: i64) -> i64 {
+  let one = 4294967296;
+  let i = 0;
+  while i < n {
+    let c = 0;
+    while c < 8 {
+      let _ = a[(o + i) * 8 + c] = 0;
+      let c = c + 1;
+      0
+    };
+    let _ = a[(o + i) * 8 + (o + i)] = loopw;
+    let ip1 = i + 1 - (if i + 1 == n then n else 0);
+    let im1 = i - 1 + (if i == 0 then n else 0);
+    let _ = a[(o + i) * 8 + (o + ip1)] = one;
+    let _ = a[(o + i) * 8 + (o + im1)] = one;
+    let i = i + 1;
+    0
+  };
+  n
+}
+
+// ones_dense: J8 fast clock — all-ones matrix (lambda1 = 8, rest 0).
+fn ones_dense(a: [i64], n: i64, o: i64) -> i64 {
+  let one = 4294967296;
+  let i = 0;
+  while i < n {
+    let c = 0;
+    while c < 8 {
+      let _ = a[(o + i) * 8 + c] = one;
+      let c = c + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  n
+}
+
+// eigentime of a dense n x n matrix: build csr, run eigentime (fresh buffers).
+fn eigentime_dense(a: [i64], n: i64) -> i64 {
+  let rp = zeros(16);
+  let ci = zeros(64);
+  let vv = zeros(64);
+  let x = zeros(8);
+  let ax = zeros(8);
+  let hist = zeros(240);
+  let _ = csr_from_dense(a, n, rp, ci, vv);
+  eigentime(rp, ci, vv, n, x, ax, hist)
+}
+
+fn main() -> i64 {
+  let a = zeros(64);
+  let one = 4294967296;
+  let _ = ring_dense(a, 8, 0, one);
+  let es = eigentime_dense(a, 8);
+  let _ = ones_dense(a, 8, 0);
+  let ef = eigentime_dense(a, 8);
+  es * 10000 + ef
+}

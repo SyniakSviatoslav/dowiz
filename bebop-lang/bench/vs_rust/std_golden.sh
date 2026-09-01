@@ -186,5 +186,23 @@ gate sgamma 3550431 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/tb.bp /tmp/opencode/tb_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/tb_test.bin | tail -1)
 gate tb 1111000 "$r"
 
+# ---- seigtime (SS-17 eigentime: time = spectral iteration, not wall clock.
+#      Synchronization = Hotelling iterations until the iterate enters an
+#      EXACT cycle of the power map. Slow clock = C8+I ring (lambda2/lambda1
+#      = 0.805): the normalize map is locally flat at the dominant constant
+#      mode (c' ~ 2^32/sqrt(8) independent of c) so the rounding-locked
+#      trajectory sawtooths into an exact period-30 cycle — first recurrence
+#      td=123, absorb 16/16 (ab=1) -> e_slow=123301. Fast clock = J8 all-ones
+#      (lambda2..8 = 0): exact period-1 fixpoint td=2, ab=1 -> e_fast=2011.
+#      Time-scale separation e_slow >> e_fast, absorbing both. Detection =
+#      ring history hist[240], shortest p in 1..30 with x_t == x_{t-p}, then
+#      16-step cycle-membership absorb; e = td*1000 + per*10 + ab. Seed shift
+#      (rng>>11)>>20 EMITS LSR (R3.b, loop-reassigned local) — oracle mirrors
+#      unsigned per the shift law; first seed-sensitive gate (the eigentime
+#      MEASURES the transient, unlike topk folds). Fold 1233012011 = es*10000
+#      + ef = python oracle bit-exact.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/seigtime.bp /tmp/opencode/seigtime_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/seigtime_test.bin | tail -1)
+gate seigtime 1233012011 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]
