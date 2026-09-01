@@ -17,6 +17,6 @@ fn bt_store(tmp: [i64], tlen: i64, out: [i64], olen: i64, bytes: [i64], n: i64) 
   let fd = sys_open(tmp, tlen, 578);
   let e = sys_export(fd, bytes, n);
   let c = sys_close(fd);
-  let r = sys_rename(tmp, out);
+  let r = sys_rename(tmp, tlen, out, olen);
   (if e == 0 then 1 else 0) + (if c == 0 then 2 else 0) + (if r == 0 then 4 else 0)
 }

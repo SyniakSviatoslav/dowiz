@@ -2767,7 +2767,7 @@ fn idx_of_main(fnames: [i64], cnt: i64) -> i64 {
   idx
 }
 
-fn cli_compile(argv: i64) -> i64 {
+fn cli_compile(argc: i64, argv: i64) -> i64 {
   let src = argv[3];
   let out = argv[4];
   let ls = str_len(src);
@@ -2808,16 +2808,24 @@ fn cli_compile(argv: i64) -> i64 {
   let _ = buf[n * 4 + 5] = (e4 >> 40) & 255;
   let _ = buf[n * 4 + 6] = (e4 >> 48) & 255;
   let _ = buf[n * 4 + 7] = (e4 >> 56) & 255;
-  // F2 atomic publish: argv[5] = tmp path (when argc >= 6) — export via
-  // mmap (ftruncate + MAP_SHARED stores, NO sys_write on the artifact path),
-  // close, renameat(tmp, out). Without argv[5]: direct export to out.
-  // F2 mmap-export: ftruncate + MAP_SHARED stores — NO sys_write, NO scratch.
-  // Atomic renameat publish is interp-verified but JIT-pending (rename
-  // arg-pointers under spills); direct export ships now, publish lands with Ф6.
-  let ofd = sys_open(pout, lo, 578);
-  let rc = sys_export(ofd, buf, nb);
+  // F2 atomic publish (Ф6): argv[5] = tmp path (when argc >= 6) - export the
+  // artifact to tmp via mmap (ftruncate + MAP_SHARED stores, NO sys_write on
+  // the artifact path), close, then renameat(tmp, out): the artifact appears
+  // atomically - readers never observe a partially-written .bin. Without
+  // argv[5]: direct export to out.
+  let rc2 = 0;
+  let publish = if argc >= 6 then 1 else 0;
+  let ptmp = zeros(256);
+  let ptl = [0];
+  let _ = if publish == 1 then (let _ = ptl[0] = str_len(argv[5]) in 0) else 0;
+  let _ = if publish == 1 then str_to_cells(ptmp, argv[5]) else 0;
+  let tg = if publish == 1 then ptmp else pout;
+  let tl = if publish == 1 then ptl[0] else lo;
+  let ofd = sys_open(tg, tl, 578);
+  let rc2 = sys_export(ofd, buf, nb);
   let _ = sys_close(ofd);
-  rc
+  let rn = if publish == 1 then sys_rename(ptmp, ptl[0], pout, lo) else 0;
+  rc2 * 10 + rn
 }
 
 fn cli_size(argv: i64) -> i64 {
@@ -2969,21 +2977,60 @@ fn emit_sys_mmap(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   n[0]
 }
 
+// sys_rename(old, oldlen, new, newlen): pack both byte-per-cell paths into
+// the IO scratch zone (x28-8192, offsets 0..oldlen and oldlen+1..) with NUL
+// termination (like sys_open), then renameat(AT_FDCWD, old, AT_FDCWD, new).
+// Register table: x0=old ptr (pop0), x1=old len (pop1), x2=new ptr (pop2),
+// x3=new len (pop3); x11/x13/x16/x12 hold the four args across packing;
+// x10=scratch base old, x17=scratch base new, x9=loop i, x7=byte temp;
+// x8=38 renameat; return errno-style negative on failure.
 fn emit_sys_rename(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 3);
+  let _ = pop(insns, n, 2);
   let _ = pop(insns, n, 1);
   let _ = pop(insns, n, 0);
-  em(insns, n, 2852193251);
-  em(insns, n, 2852127713);
+  em(insns, n, 2852127723);
+  em(insns, n, 2852193261);
+  em(insns, n, 2852258800);
+  em(insns, n, 2852324332);
+  em(insns, n, 3531866122);
+  em(insns, n, 3406431114);
+  em(insns, n, 3531603977);
+  em(insns, n, 3943498047);
+  em(insns, n, 1409286314);
+  em(insns, n, 4167661927);
+  em(insns, n, 942238023);
+  em(insns, n, 2432697641);
+  em(insns, n, 402653179);
+  em(insns, n, 942500191);
+  em(insns, n, 2852783089);
+  em(insns, n, 2332885553);
+  em(insns, n, 2432697905);
+  em(insns, n, 3531603977);
+  em(insns, n, 3943432511);
+  em(insns, n, 1409286314);
+  em(insns, n, 4167662087);
+  em(insns, n, 942238247);
+  em(insns, n, 2432697641);
+  em(insns, n, 402653179);
+  em(insns, n, 942434879);
   em(insns, n, 2457865312);
-  em(insns, n, 2852127714);
+  em(insns, n, 2852783073);
+  em(insns, n, 2457865314);
+  em(insns, n, 2853241827);
   em(insns, n, 3531605192);
   em(insns, n, 3556769793);
   let _ = push(insns, n);
@@ -3005,7 +3052,7 @@ fn main(argc: i64, argv: i64) -> i64 {
   let is_size = if argc >= 3 then strequals(cmd, bsize) else 0;
   let is_version = if argc >= 3 then strequals(cmd, bver) else 0;
   let is_run = if argc >= 3 then strequals(cmd, brun) else 0;
-  let r1 = if is_compile == 1 then cli_compile(argv) else 0;
+  let r1 = if is_compile == 1 then cli_compile(argc, argv) else 0;
   let r2 = if is_size == 1 then cli_size(argv) else 0;
   let r3 = if is_run == 1 then cli_run(argv) else 0;
   let r4 = if is_version == 1 then 1000000 else 0;

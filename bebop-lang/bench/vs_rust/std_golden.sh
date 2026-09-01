@@ -105,5 +105,19 @@ gate haar 41001 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/ntt.bp /tmp/opencode/ntt_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/ntt_test.bin | tail -1)
 gate ntt 141003 "$r"
 
+# ---- store (Ф2/F4: .bt atomic-publish store — tmp -> sys_export ->
+#      sys_rename(=renameat AT_FDCWD) -> read-back -> unpack vs golden;
+#      fold 2245524994793680850, the SAME "BT4R" 220-byte stream bt.bp packs;
+#      proof renameat publish round-trips byte-identically) ----
+# ---- rev (N2 reversible/conservative logic: XOR-toggle, CNOT, Toffoli,
+#      Fredkin are all self-inverse - bit-for-bit unwind without snapshots;
+#      rev_round/rev_undo record deltas and restore the exact arena,
+#      oracle-verified independently in Python over the same assertions) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/rev.bp /tmp/opencode/rev_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/rev_test.bin | tail -1)
+gate rev 5092789399242 "$r"
+
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/store.bp /tmp/opencode/store_test.bin >/dev/null 2>&1 && sleep 1 && timeout 60 ./seed/build/seed /tmp/opencode/store_test.bin | tail -1)
+gate store 2245524994793680850 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

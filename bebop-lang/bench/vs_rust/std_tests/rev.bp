@@ -28,7 +28,7 @@ fn rev_cnot(x: [i64], i: i64, j: i64) -> i64 {
 fn rev_toffoli_bit(x: [i64], a: i64, b: i64, c: i64, bit: i64) -> i64 {
   let ca = (x[a] >> bit) & 1;
   let cb = (x[b] >> bit) & 1;
-  let p = ca * cb << bit;
+  let p = (ca * cb) << bit;
   let _ = x[c] = x[c] ^ p;
   bit
 }
