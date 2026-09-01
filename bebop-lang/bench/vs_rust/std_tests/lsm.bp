@@ -1,0 +1,225 @@
+// lsm.bp - N5: LSM / Reservoir Computing (liquid state machines).
+// Post-von-Neumann invariant: agent temporal dynamics live in a constant
+// random-but-fixed reservoir of connected nodes stored in the CSR arena,
+// fixed by a spectral invariant (echo-state property). Input spikes excite a
+// "liquid" state; the FWHT instantly projects the high-dim trace into the
+// decision prospect. No training/gradient - the update law is a linear leaky
+// contraction (weights in {-1,0,1}, leak 1/2, pre down-scaled >>4): effective
+// row strength <= 8/16 = 0.5 so max|liq'| <= (B + B/2)/2 < B and the
+// homogeneous spectral radius is < 1 by Gershgorin - the reservoir provably
+// forgets its input history (echo state). All integer-exact.
+//
+// Reservoir: 8 nodes, 64 candidate edges from a MULTIPLY-FREE xorshift64
+// generator (shifts/xor only - the exact op set the petri gate proves;
+// splitmix's mul-chain trips the emitter fast-path, see exp.journal
+// 1788288190), each edge weight w = (z&7)%3 - 1 in {-1,0,1}; edges with
+// w != 0 kept in CSR (rp, ci, vv) via a deterministic two-pass replay.
+// Liquid update (one step):
+//   pre[i] = sum_edges vv[e]*liq[ci[e]] + u*win[i]*8
+//   liq[i] = (liq[i] + (pre[i] >> 4)) >> 1            (floor asr on negatives)
+
+// xorshift64: x ^= x<<13; x ^= x>>7; x ^= x<<17. Multiply-free, no constants.
+fn gen_next(s: [i64]) -> i64 {
+  let x = s[0];
+  let _ = s[0] = x ^ (x << 13);
+  let _ = s[0] = s[0] ^ (s[0] >> 7);
+  let _ = s[0] = s[0] ^ (s[0] << 17);
+  s[0]
+}
+
+// FWT-8 in place (integer ADD/SUB butterflies). Unrolled, single scratch
+// array `d` - no nested loops, no allocation in bodies.
+fn fwht(a: [i64]) -> i64 {
+  let d = zeros(8);
+  let _ = d[0] = a[0] + a[1];
+  let _ = d[1] = a[0] - a[1];
+  let _ = d[2] = a[2] + a[3];
+  let _ = d[3] = a[2] - a[3];
+  let _ = d[4] = a[4] + a[5];
+  let _ = d[5] = a[4] - a[5];
+  let _ = d[6] = a[6] + a[7];
+  let _ = d[7] = a[6] - a[7];
+  let _ = a[0] = d[0] + d[2];
+  let _ = a[1] = d[1] + d[3];
+  let _ = a[2] = d[0] - d[2];
+  let _ = a[3] = d[1] - d[3];
+  let _ = a[4] = d[4] + d[6];
+  let _ = a[5] = d[5] + d[7];
+  let _ = a[6] = d[4] - d[6];
+  let _ = a[7] = d[5] - d[7];
+  let _ = d[0] = a[0] + a[4];
+  let _ = d[1] = a[1] + a[5];
+  let _ = d[2] = a[2] + a[6];
+  let _ = d[3] = a[3] + a[7];
+  let _ = d[4] = a[0] - a[4];
+  let _ = d[5] = a[1] - a[5];
+  let _ = d[6] = a[2] - a[6];
+  let _ = d[7] = a[3] - a[7];
+  let _ = a[0] = d[0];
+  let _ = a[1] = d[1];
+  let _ = a[2] = d[2];
+  let _ = a[3] = d[3];
+  let _ = a[4] = d[4];
+  let _ = a[5] = d[5];
+  let _ = a[6] = d[6];
+  let _ = a[7] = d[7];
+  1
+}
+
+// one liquid step: mix through CSR reservoir + input spike, leaky update.
+// NOTE: the emitter's `>>` is LSR (logical) when the shifted operand comes
+// from an array load, ASR (arithmetic) when from locals/literals (see
+// exp.journal 1788288190+1, `a*b<<c` class). To stay origin-independent all
+// down-scaling is done as FLOOR division on the positive magnitude first, so
+// both selector paths agree (lsr==asr on non-negatives).
+fn lsm_step(liq: [i64], rp: [i64], ci: [i64], vv: [i64], win: [i64], u: i64) -> i64 {
+  let pre = zeros(8);
+  let i = [0];
+  while i[0] < 8 {
+    let acc = [0];
+    let e = rp[i[0]];
+    while e < rp[i[0] + 1] {
+      let _ = acc[0] = acc[0] + vv[e] * liq[ci[e]];
+      let e = e + 1;
+      0
+    };
+    let _ = pre[i[0]] = acc[0] + u * win[i[0]] * 8;
+    let _ = i[0] = i[0] + 1;
+    0
+  };
+  let j = [0];
+  while j[0] < 8 {
+    let v = pre[j[0]];
+    let d4 = if v < 0 then 0 - (((0 - v) + 15) >> 4) else v >> 4;
+    let s = liq[j[0]] + d4;
+    let h = if s < 0 then 0 - (((0 - s) + 1) >> 1) else s >> 1;
+    let _ = liq[j[0]] = h;
+    let _ = j[0] = j[0] + 1;
+    0
+  };
+  1
+}
+
+// L1-norm of the 8-cell liquid vector.
+fn lsm_energy(liq: [i64]) -> i64 {
+  let s = [0];
+  let i = [0];
+  while i[0] < 8 {
+    let v = liq[i[0]];
+    let _ = s[0] = s[0] + (if v < 0 then 0 - v else v);
+    let _ = i[0] = i[0] + 1;
+    0
+  };
+  s[0]
+}
+
+fn main() -> i64 {
+  let s = [1234567];
+  let rp = zeros(9);
+  let ci = zeros(64);
+  let vv = zeros(64);
+  let liq = zeros(8);
+  let win = zeros(8);
+  let tm = zeros(8);
+  let i = [0];
+  // pass 1: row degrees -> rp
+  while i[0] < 8 {
+    let _ = rp[i[0] + 1] = rp[i[0]];
+    let j = [0];
+    while j[0] < 8 {
+      let z = gen_next(s);
+      let w = (z & 7) % 3 - 1;
+      let _ = rp[i[0] + 1] = rp[i[0] + 1] + (if w != 0 then 1 else 0);
+      let _ = j[0] = j[0] + 1;
+      0
+    };
+    let _ = i[0] = i[0] + 1;
+    0
+  };
+  // pass 2: replay the identical stream, fill ci/vv from rp offsets (row-local)
+  let _ = s[0] = 1234567;
+  let i2 = [0];
+  while i2[0] < 8 {
+    let loc = [0];
+    let j2 = [0];
+    while j2[0] < 8 {
+      let z = gen_next(s);
+      let w = (z & 7) % 3 - 1;
+      let _ = if w != 0 then (let _ = ci[rp[i2[0]] + loc[0]] = j2[0] in 0) else 0;
+      let _ = if w != 0 then (let _ = vv[rp[i2[0]] + loc[0]] = w in 0) else 0;
+      let _ = loc[0] = loc[0] + (if w != 0 then 1 else 0);
+      let _ = j2[0] = j2[0] + 1;
+      0
+    };
+    let _ = i2[0] = i2[0] + 1;
+    0
+  };
+  // win: odd nodes receive input spikes
+  let iw = [0];
+  while iw[0] < 8 {
+    let _ = win[iw[0]] = 1 - (iw[0] & 1);
+    let _ = iw[0] = iw[0] + 1;
+    0
+  };
+  let acc = 0;
+  // spectral invariant: echo-state / Gershgorin - homogeneous impulse 256 at
+  // node 0 must decay STRICTLY (m0 > m1 > m2), proving spectral radius < 1.
+  let _ = liq[0] = 256;
+  let m0 = lsm_energy(liq);
+  let _ = lsm_step(liq, rp, ci, vv, win, 0);
+  let m1 = lsm_energy(liq);
+  let _ = lsm_step(liq, rp, ci, vv, win, 0);
+  let m2 = lsm_energy(liq);
+  let cbit = (if m0 > m1 then 1 else 0) + (if m1 > m2 then 2 else 0)
+           + (if m0 == 256 then 4 else 0) + (if m0 > m2 then 8 else 0);
+  let acc = acc * 131 + cbit;
+  // reservoir structure pin: row degrees weighted + orphan/overload probes
+  let ig = [0];
+  let dec = [0];
+  let degsum = [0];
+  while ig[0] < 8 {
+    let d = rp[ig[0] + 1] - rp[ig[0]];
+    let _ = degsum[0] = degsum[0] + d * (ig[0] + 1);
+    let _ = dec[0] = dec[0] + (if d == 0 then 9 else 0) + (if d > 6 then 3 else 0);
+    let _ = ig[0] = ig[0] + 1;
+    0
+  };
+  let acc = acc * 131 + degsum[0] * 97 + dec[0] * 13;
+  // spike-driven phase: 8 steps, each spike u excites the liquid; the FWHT
+  // projects each liquid vector -> sign word (decision prospect per step)
+  let _ = liq[0] = 0;
+  let _ = liq[1] = 0;
+  let _ = liq[2] = 0;
+  let _ = liq[3] = 0;
+  let _ = liq[4] = 0;
+  let _ = liq[5] = 0;
+  let _ = liq[6] = 0;
+  let _ = liq[7] = 0;
+  let it = [0];
+  let ew = [0];
+  while it[0] < 8 {
+    let z = gen_next(s);
+    let u = z & 1;
+    let _ = lsm_step(liq, rp, ci, vv, win, u);
+    let k = [0];
+    while k[0] < 8 {
+      let _ = tm[k[0]] = liq[k[0]];
+      let _ = k[0] = k[0] + 1;
+      0
+    };
+    let _ = fwht(tm);
+    let wb = [0];
+    let ib = [0];
+    while ib[0] < 8 {
+      let _ = wb[0] = wb[0] | ((1 << ib[0]) * (if tm[ib[0]] > 0 then 1 else 0));
+      let _ = ib[0] = ib[0] + 1;
+      0
+    };
+    let _ = ew[0] = ew[0] + lsm_energy(liq);
+    let acc = acc * 131 + wb[0];
+    let _ = it[0] = it[0] + 1;
+    0
+  };
+  let acc = acc * 131 + ew[0];
+  acc
+}

@@ -1,0 +1,128 @@
+// petri.bp - N4: Bit-Level Petri Nets (bit-asynchronous Petri nets).
+// Post-von-Neumann invariant: event/task QUEUES are replaced by parallel
+// token-passing marking matrices mapped into arena bit arrays. Marking for
+// place p lives at cell p/64, bit (p%64). A transition is a (pre, post) pair
+// of bitmasks over one word cell: firing consumes all pre places (bitwise
+// AND -> equality) and produces post places - one or two hardware ops per
+// transition, no branches, no queues, no function calls. petri_step builds the
+// enabled bitmap for a transition list in one AND-mask sweep, then tzcnt picks
+// the LOWEST enabled transition and fires it in place (self-scheduling
+// dispatcher - thousands of parallel logic branches collapse to one tzcnt).
+
+// mark place p in arena bit-array x (returns p's bitmask)
+fn petri_mark(x: [i64], p: i64) -> i64 {
+  let c = p / 64;
+  let b = p - c * 64;
+  let _ = x[c] = x[c] | (1 << b);
+  1 << b
+}
+
+// clear the marker for place p (returns p's bitmask)
+fn petri_clear(x: [i64], p: i64) -> i64 {
+  let c = p / 64;
+  let b = p - c * 64;
+  let _ = x[c] = x[c] & (0 - 1 - (1 << b));
+  1 << b
+}
+
+// is place p marked? (1/0)
+fn petri_get(x: [i64], p: i64) -> i64 {
+  let c = p / 64;
+  let b = p - c * 64;
+  (x[c] >> b) & 1
+}
+
+// tzcnt: index (0..63) of the LOWEST set bit of v, or -1 when v == 0.
+// Single pass, no branches on v's sign, works with negative literals.
+fn petri_tzcnt(v: i64) -> i64 {
+  let r = [0 - 1];
+  let i = [0];
+  let hit = [0];
+  while i[0] < 64 {
+    let b = (v >> i[0]) & 1;
+    let _ = hit[0] = hit[0] + b;
+    let _ = r[0] = if hit[0] == 1 then i[0] else r[0];
+    let _ = i[0] = i[0] + 1;
+    0
+  };
+  r[0]
+}
+
+// is transition (pre-mask over cell c) currently enabled? branchless equality.
+fn petri_okc(x: [i64], c: i64, pre: i64) -> i64 {
+  if (x[c] & pre) == pre then 1 else 0
+}
+
+// fire (pre, post) on cell c unconditionally; returns 1.
+fn petri_apply(x: [i64], c: i64, pre: i64, post: i64) -> i64 {
+  let _ = x[c] = (x[c] & (0 - 1 - pre)) | post;
+  1
+}
+
+// one dispatcher tick over n transitions (arrays pre/post, all over cell 0):
+// sweep AND-masks to build the enabled bitmap, tzcnt picks the lowest enabled
+// transition, fire it in place. Returns the fired transition index or -1
+// (deadlock). Self-scheduling - no queue, no branch per transition.
+fn petri_step(x: [i64], pre: [i64], post: [i64], n: i64) -> i64 {
+  let act = 0;
+  let i = 0;
+  while i < n {
+    let ok = petri_okc(x, 0, pre[i]);
+    let act = act | ((1 << i) * ok);
+    let i = i + 1;
+    0
+  };
+  let t = petri_tzcnt(act);
+  let _ = if t >= 0 then (let _ = petri_apply(x, 0, pre[t], post[t]) in 0) else 0;
+  t
+}
+
+fn main() -> i64 {
+  let x = zeros(8);
+  let pre = zeros(16);
+  let post = zeros(16);
+  let acc = 0;
+  let _ = petri_mark(x, 0);
+  let _ = petri_mark(x, 3);
+  let _ = petri_mark(x, 63);
+  let _ = petri_mark(x, 65);
+  let acc = acc * 131 + petri_get(x, 0) + petri_get(x, 3) * 2 + petri_get(x, 5) * 4
+           + petri_get(x, 63) * 8 + petri_get(x, 65) * 16;
+  let _ = petri_clear(x, 0);
+  let acc = acc * 131 + petri_get(x, 0) + (0 - petri_get(x, 3)) * 7 + petri_get(x, 65) * 64;
+  // producer-consumer: p0 ->{t0} p1 ; p0 ->{t1} p2 ; t0 has lower index so the
+  // dispatcher must fire t0 first; when p0 is empty it must deadlock (-1) and
+  // leave p1's token in place.
+  let _ = x[0] = 0;
+  let _ = x[1] = 0;
+  let _ = petri_mark(x, 0);
+  let _ = pre[0] = 1;
+  let _ = post[0] = 2;
+  let _ = pre[1] = 1;
+  let _ = post[1] = 4;
+  let t0 = petri_step(x, pre, post, 2);
+  let t2 = petri_step(x, pre, post, 2);
+  let acc = acc * 131 + (if t0 == 0 then 1 else 0) + (if t2 == 0 - 1 then 2 else 0)
+           + (if petri_get(x, 1) == 1 then 4 else 0) + (if petri_get(x, 0) == 0 then 8 else 0);
+  // crossbar ring: 4 transitions with disjoint pre sets, all marked -> the
+  // dispatcher fires in index order (0,1,2,...), each consumes its pre and
+  // produces its post; the sequence probes lowest-enabled ordering via tzcnt.
+  let _ = x[0] = 0;
+  let _ = pre[0] = 1;
+  let _ = post[0] = 16;
+  let _ = pre[1] = 2;
+  let _ = post[1] = 32;
+  let _ = pre[2] = 4;
+  let _ = post[2] = 64;
+  let _ = pre[3] = 8;
+  let _ = post[3] = 128;
+  let _ = petri_mark(x, 0);
+  let _ = petri_mark(x, 1);
+  let _ = petri_mark(x, 2);
+  let _ = petri_mark(x, 3);
+  let seq = petri_tzcnt(15) * 1000 + petri_step(x, pre, post, 4) * 100
+          + petri_step(x, pre, post, 4) * 10 + petri_step(x, pre, post, 4);
+  let acc = acc * 131 + (if seq == 12 then 1 else 0) + (if petri_get(x, 6) == 1 then 2 else 0)
+           + (if petri_get(x, 7) == 0 then 4 else 0);
+  acc
+}

@@ -40,3 +40,23 @@
 1788288190 H:mul-lshift-fastpath DID:rev.bp N2 toffoli fold divergence; probes revA-K with a*b<<c, (a*b)<<c, cb<<0, ca*cb isolated GOT:bare `a * b << c` miscompiles to 0/1 (fast-path/legacy rollback leaves garbage), parens `(a*b)<<c` and isolated lets CORRECT; fixed source with parens; rev fold 5092789399242 == python oracle VERDICT:confirmed (emitter fast-path bug: `MUL * MUL << SHIFT` unprecedenced chain; workaround = parenthesize; fix emitter fast-path later)
 1788288191 H:store-gate-rename DID:emit_sys_rename rewritten to pack both byte-per-cell paths into IO scratch +NUL (1st path base x28-8192, 2nd at +oldlen+1) then renameat(AT_FDCWD,old,AT_FDCWD,new) x8=38; call sites sys_rename(tmp,tlen,out,olen); fixpoint bebop.bin reborn 23b3a492 GOT:store gate fold 2245524994793680850 == interp-paused expected; atomic /tmp/bt_store_out.bin read-back round trips; 17/17 std_golden VERDICT:confirmed
 1788288192 H:canonical-compiler-source DID:compile bebop.bp vs expr_compile.bp with bebop.bin GOT:bebop.bp reproduces bebop.bin bit-exact (fixpoint source); expr_compile.bp is the driverless forward fork — edits MUST land in both VERDICT:confirmed
+1788288193 shift-selector LSR/ASR origin bug (parameterized journal entry)
+  EVIDENCE: probe K (-16 into a[2]; a[2]>>2) -> 4611686018427384460
+  (lsr path = 0x3FFFFFFFFFFFFFFC); literal/local (0-32)>>2 -> -8 asr path.
+  RULE-CHECK: `>>` operand loaded via ldr (array elem, spill slot) = LSR(logical),
+  operand from arithmetic literal/local chain = ASR(arithmetic).
+  STORIES IT EXPLAINS: 1) lsm liquid growth (pre<0 >>4 as lsr -> huge positive);
+  2) splitmix64_next deviations observed this session (state operands passed
+  through spills -> lsr inside mix) incl. off-by-golden patterns;
+  3) petri unaffected (bit-tests (x[c]>>b)&1 identical under either selector).
+  DISPOSITION: roadmap-reserved emitter fix (R3.4 shift-selector) must make
+  `>>` on i64 ALWAYS asr; code dodge for now = shift only non-negative values
+  (floor-div via positive magnitude, lsm.bp asr2/asr4 helpers) or &-mask.
+1788288194 N5 lsm gate: xorshift64 reservoir (multiply-free; splitmix avoided),
+  CSR 2-pass replay fill (row-local offsets; the first global-tail fill would
+  overflow ci and bebop tolerated it via arena adjacency -> silent corruption),
+  echo-state/impulse decay check, FWHT sign-word projection, fold
+  -4383576415516299782 == independent Python floor-div oracle.
+1788288195 N4 petri gate: bit Petri nets, mark/get/clear round trip incl.
+  bit63/cell-1, tzcnt dispatcher, deadlock -1, 4-transition crossbar ordered
+  firing; fold 61678606 == Python cell-faithful oracle.

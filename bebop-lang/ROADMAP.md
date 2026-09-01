@@ -439,12 +439,30 @@ capability with its done-check.
 
 ## Roadmap for the next batch (in-order)
 
-1. **N2 → N3**: extend rev.bp into a gate; extend hv.bp into ring-VSA (N3).
-2. **.bt store (Ф2/F4 I/O)**: atomic publish gate (tmp → open → export →
-   renameat). Needs the `emit_sys_rename` byte-packing fix in expr_compile.bp,
-   then rebuild bebop.bin fixpoint. Expected gate fold 2245524994793680850.
-3. **N4 petri.bp** (bit Petri nets) → **N5 lsm.bp** (reservoir) → **N6**
-   (holographic WHT recovery).
+Status (2026-09-01): items 1-2 of the current pull are DONE below (rev/store
+gates, atomic-publish driver), N4 petri and N5 lsm are DONE (gates 18/19,
+folds in std_golden.sh); the canonical fixpoint source is bebop.bp (the
+driverless expr_compile.bp is its forward fork - edits land in BOTH).
+Two emitter defects reserved for R3.x emitter work:
+(a) fast-path `a*b<<c` miscompile (journal 1788288190;
+    workaround: parenthesize/lift into lets);
+(b) `>>` selector splits by OPERAND ORIGIN: array-loaded/spilled operands emit
+    LSR (logical), literal/local-arithmetic operands emit ASR (journal
+    1788288193; workaround: shift only non-negative magnitudes).
+Next pulls: N6 then the SS-15..18 cluster, then SS-1..14, then SME/SVE2.
+
+1. **N2 → N3**: N2 rev.bp gate DONE (fold 5092789399242, 17th gate;
+   xor-toggle/CNOT/Toffoli/Fredkin self-inverse + rev_round/rev_undo delta
+   unwind, Oracle-verified; rev_toffoli_bit parenthesized after the `a*b<<c`
+   fast-path finding). N3 ring-VSA (hv.bp extension) still OPEN.
+2. **.bt store (Ф2/F4 I/O)**: DONE. emit_sys_rename 4-arg byte-packing rewrite
+   (register table in both compilers), fixpoint rebuilt bebop.bin dfaf06c3,
+   atomic-publish driver Ф6 (argv[5]=tmp -> export -> renameat publish,
+   artifact atomically visible, tmp gone), store gate fold
+   2245524994793680850 (16th gate). Fixpoint self-test: bb2==bb3 required.
+3. **N4 petri.bp** DONE (18th gate, fold 61678606) → **N5 lsm.bp** DONE
+   (19th gate, fold -4383576415516299782) → **N6** (holographic WHT
+   recovery) OPEN.
 4. **SS-15/16/17/18** — spectral coordinates, gap flow control, eigentime,
    spectral self-replication; then SS-1..SS-14 in dependency order (SS-6
    foundation first, already CORE DONE).

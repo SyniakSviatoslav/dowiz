@@ -119,5 +119,20 @@ gate rev 5092789399242 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/store.bp /tmp/opencode/store_test.bin >/dev/null 2>&1 && sleep 1 && timeout 60 ./seed/build/seed /tmp/opencode/store_test.bin | tail -1)
 gate store 2245524994793680850 "$r"
 
+# ---- petri (N4 bit-level Petri nets: marking bit-arrays, mark/get/clear
+#      round-trip incl. bit 63/cell-1 places, branchless AND-mask pre-eval,
+#      tzcnt deadlock (-1), lowest-enabled ordering on a 4-transition crossbar;
+#      fold 61678606 = independent Python cell-faithful oracle) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/petri.bp /tmp/opencode/petri_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/petri_test.bin | tail -1)
+gate petri 61678606 "$r"
+
+# ---- lsm (N5 reservoir computing: xorshift64-built CSR reservoir (weights in
+#      {-1,0,1}, leaky linear contraction -> Gershgorin spectral radius < 1,
+#      echo-state verified by strict impulse decay m0>m1>m2); spike-driven
+#      liquid; per-step FWHT sign-word decision prospects; fold -4383576415516299782
+#      = independent Python oracle over the exact floor-div semantics) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/lsm.bp /tmp/opencode/lsm_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/lsm_test.bin | tail -1)
+gate lsm -4383576415516299782 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]
