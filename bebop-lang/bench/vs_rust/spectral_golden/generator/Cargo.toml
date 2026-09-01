@@ -1,0 +1,10 @@
+[package]
+name = "spectral_golden"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dowiz-core = { path = "../../../../../crates/dowiz-core" }
+
+[profile.release]
+opt-level = 3
