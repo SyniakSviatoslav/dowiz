@@ -104,3 +104,20 @@
   rotations (c3 by 2, c2 by 5) at offsets 96/104; argmin |dDC| identity
   GOT:fold 2010131 (ida=2 idb=1 lay=1 rot=3 ob=1) == python mirror; std_golden
   21 pass VERDICT:confirmed
+1788288204 H:SS-16-bipartite-degeneracy-trap DID:P8 chain topk k=2 gave lambda_1
+  1.87903 (true 1.87939) and unphysical lambda_2, DIFFERENT in each engine
+  (BP -1.3617, mirror +0.8166); decomp: 1.87903 = 1.87939*(c1^2-c2^2) with
+  c2^2~9.5e-5 -> power iteration froze at a MIXED fixed point of the two
+  equal-modulus modes (+/-1.87939, bipartite symmetry). +1.87939 and
+  -1.87939 amplify at the SAME rate -> the mix never decays. lambda_2 mixes
+  differently per engine (seed/deflation numerics) GOT:added self-loops
+  (P8+I, spectrum 1+2cos(k*pi/9), all |lambda| distinct) -> lambda_1=2.8794
+  lambda_2=2.5321 gap=0.3473 exactly, both engines bit-equal; LAW: power
+  method (any engine) needs UNIQUE |lambda| in the top-k block; equal-|lambda|
+  pairs with different lambda are fatal, equal-lambda pairs are harmless
+  (Rayleigh stays exact) VERDICT:confirmed
+1788288205 H:SS-16-sgamma-gate DID:gap gamma = lambda_1-lambda_2 as flow switch
+  (connected: >>22 = 355 ON; two identical P4+I blocks: 172 fp units -> 0
+  OFF); Fiedler evecs[1] sign cut = 4+/4- work split; topk k=2 iters=64
+  GOT:fold 3550431 == python mirror bit-exact; std_golden 22 pass
+  VERDICT:confirmed

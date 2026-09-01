@@ -370,18 +370,27 @@ capability with its done-check.
 
 ### SPECTRAL COORDINATE SYSTEM (eigen integration)
 
-**SS-15 Eigenvectors = the single coordinate system** — [replaces VS-AST]
+**SS-15 Eigenvectors = the single coordinate system** — [replaces VS-AST] — **DONE**
 - All states/concepts project onto the orthonormal basis Q (eigenvectors of the
   connection operator); byte-shift invariance via the spectral basis; search =
   projecting a hypervector onto dominant eigenvectors (not a pointer!).
   Coordinates are spectral projections, layout-invariant — no pointers at all.
+- Gate `scoord` fold 2010131 (21st): C8+I dominant mode = constant vector →
+  DC coordinate invariant under cyclic byte-shift to fp error; layout-mirror
+  bit-exact; argmin over stored coordinate VALUES (no pointers); orthonormality
+  bounded (ob). Oracle == BP bit-exact. Journal 1788288200-03 (s64 phantom,
+  silent undefined-fn tolerance → T0 law).
 
-**SS-16 Eigenvalues = control-flow metrics**
-- γ = 1 − |λ₂| (spectral gap) as the logic switch: γ < threshold → the graph
+**SS-16 Eigenvalues = control-flow metrics** — **DONE**
+- γ = λ₁ − λ₂ (spectral gap) as the logic switch: γ < threshold → the graph
   disintegrates. Fiedler vector → automatic parallelization (sign = graph
-  bipartition). Raw hardware: NEON power method → λ₁, λ₂ → γ condition → NEON
-  bipartition. Integrates masked flow (γ-domains) + work-stealing (Fiedler
   bipartition).
+- Gate `sgamma` fold 3550431 (22nd): connected P8+selfloop → γ·2⁻³² ≈ 0.3473
+  (switch ON), two identical P4+I blocks → γ ≈ 0 (switch fires); Fiedler
+  evecs[1] sign cut = 4+/4− (work split). Oracle == BP bit-exact. Journal
+  1788288204-05: bipartite ± spectrum degeneracy — equal-|λ| pairs with
+  different λ freeze the power method at mixed fixed points (self-loops fix;
+  equal-λ pairs are harmless).
 
 **SS-17 Eigentime (time = spectral iteration)**
 - Synchronization = number of Hotelling iterations (not clock!). λ₁ fixpoint
@@ -442,8 +451,10 @@ capability with its done-check.
 Status (2026-09-01): items 1-2 of the current pull are DONE below (rev/store
 gates, atomic-publish driver), N4 petri, N5 lsm and N6 holo are DONE (gates
 18/19/20, folds in std_golden.sh; holo fold 2766693490590679850 == python
-oracle bit-exact); the canonical fixpoint source is bebop.bp (the
-driverless expr_compile.bp is its forward fork - edits land in BOTH).
+oracle bit-exact); SS-15 scoord and SS-16 sgamma DONE (gates 21/22, folds
+2010131/3550431 == python mirrors bit-exact); the canonical fixpoint source
+is bebop.bp (the driverless expr_compile.bp is its forward fork - edits land
+in BOTH).
 Emitter defects reserved for R3.x emitter work:
 (a) fast-path `a*b<<c` miscompile (journal 1788288190;
     workaround: parenthesize/lift into lets);
@@ -454,7 +465,8 @@ Emitter defects reserved for R3.x emitter work:
 (c) loop-shaped miscompile: while-loop + local-extract + compare +
     conditional-store -> layout-dependent garbage (journal 1788288197;
     workaround: unroll, hoist values to locals).
-Next pulls: N6 DONE, then the SS-15..18 cluster, then SS-1..14, then SME/SVE2.
+Next pulls: N6 DONE, SS-15/SS-16 DONE; next SS-17/SS-18, then SS-1..14, then
+SME/SVE2.
 
 1. **N2 → N3**: N2 rev.bp gate DONE (fold 5092789399242, 17th gate;
    xor-toggle/CNOT/Toffoli/Fredkin self-inverse + rev_round/rev_undo delta

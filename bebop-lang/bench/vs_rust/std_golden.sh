@@ -161,5 +161,19 @@ gate holo 2766693490590679850 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/scoord.bp /tmp/opencode/scoord_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/scoord_test.bin | tail -1)
 gate scoord 2010131 "$r"
 
+# ---- sgamma (SS-16 eigenvalues = control-flow metrics: the spectral gap
+#      gamma = lambda_1 - lambda_2 is the flow switch - connected P8+selfloop
+#      gives gamma ~ 0.3473 (fp >>22 = 355, switch stays ON), two identical
+#      P4+selfloop components give gamma ~ 0 (>>22 = 0, switch fires ->
+#      graph disintegrates); the Fiedler vector evecs[1] sign-bipartitions
+#      the line 4+/4- (work-stealing split). Self-loops REQUIRED: a pure
+#      chain is bipartite (+/- symmetric spectrum) -> |lambda_1| = |-lambda_1|
+#      freezes the power iteration at a mixed fixed point (observed lambda_1
+#      1.87903 vs true 1.87939; lambda_2 unphysical, engine-dependent). The
+#      +1 spectrum shift makes every |lambda| unique. Fold 3550431 = python
+#      mirror bit-exact.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/sgamma.bp /tmp/opencode/sgamma_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/sgamma_test.bin | tail -1)
+gate sgamma 3550431 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]
