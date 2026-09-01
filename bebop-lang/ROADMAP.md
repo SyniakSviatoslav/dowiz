@@ -400,6 +400,19 @@ permute (біт-ротація D=1024), SWAR popcount/hamming. Гейт hv у st
 LAW: hv_bundle out не може аліювати з рядком vs (w-loop пише out[w], поки
 k-цикл читає vs[k*16+w]). Наступні: SPECTRAL topk_symmetric .bp порт → Ф2.
 
+# ═══ SPECTRAL topk_symmetric .bp ПОРТ: ЗАКРИТО (2026-09-01) ═══
+selfhost/std/spectral.bp: power+Hotelling над CSR spmv у i64 fixed-point 2^32 —
+fp_mul (schoolbook 32/16-бітний спліт, точний 64-біт), isqrt (біт-за-бітом,
+без ділення), LCG-старт з константами оракула, знак = перший |компонент| > 2^-16
+додатній, сортування desc |λ|. Гейт spectral у std_golden.sh (9/9):
+B6_bridge k=3 iters=32, frozen = Σ|λ_bp−λ_golden| = 184684 fp-одиниць
+(~8e-6 відносно на кожне λ — чесний розрив fixed-point truncation vs f64).
+JIT == інтерп точно (детермінована цілісна арифметика).
+LAW: `>>` у Bebop ЛОГІЧНИЙ (u64) на обох рушіях — abs перед будь-яким зсувом
+можливо-від'ємного значення (fp_mul ділить на модулі; normalize_fp квадратує
+|x_i|>>14). Пропущений негативний зсув мовчки зіпсував першу спробу паритету.
+Далі: Ф2 Tensor Arena + .bt ранг-4 (канон .bt-тензор) → Ф3 VS-AST (item⊗role).
+
 # ═══ ПРІОРИТЕТ РЕАЛІЗАЦІЇ (після Ф0.3 bootstrap) ═══
 ```
 Ф0.3 (bootstrap) ─┬─► Ф1 (HDC) ──► Ф2 (.bt+CSR) ──► SS-6 (spectral.rs порт)
