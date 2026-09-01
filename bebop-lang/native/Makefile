@@ -176,9 +176,8 @@ test: $(BIN)
 	$(BIN) energytest
 	@echo "--- zlib (deflate/inflate + crc32/adler32) ---"
 	$(BIN) zlib
-	@echo "--- L0: selfhost strict 139/139 ---"
-	$(BIN) check ../selfhost/expr_compile.bp
-	@test $$($(BIN) check ../selfhost/expr_compile.bp 2>&1 | grep -c " ok") -eq 139 || (echo "L0 FAIL: expected 139 ok fns"; exit 1)
+	@echo "--- L0: selfhost per-fn check (every ^fn must be ok) ---"
+	@test $$($(BIN) check ../selfhost/expr_compile.bp 2>&1 | grep -c " ok") -eq $$(grep -c "^fn " ../selfhost/expr_compile.bp) || (echo "L0 FAIL: some fns fail the isolated fn-decl check"; exit 1)
 	@echo "--- L0: fuzz_selfhost 100 ---"
 	$(MAKE) fuzz-selfhost
 	./$(FUZZ_SELF_BIN) 100

@@ -210,6 +210,11 @@ int qtt_self_test(char *out, size_t cap) {
 static Ty I64_TY = {.kind = TY_I64};
 static Ty BOOL_TY = {.kind = TY_BOOL};
 static Ty TYPE_TY = {.kind = TY_TYPE, .n = 0};
+/* Cell-array type for syscall buffers: bytes land in / come from element
+ * slots (sys_read/sys_write) or the path is a byte-per-element buffer
+ * (sys_open). The .bp tier passes [i64]; raw i64 pointers are equally legal
+ * (pointer-duality). */
+static Ty VEC_I64_TY = {.kind = TY_VEC, .elem = &I64_TY};
 static Ty TYPE1_TY = {.kind = TY_TYPE, .n = 1};
 static Ty TYPE2_TY = {.kind = TY_TYPE, .n = 2};
 static Ty VOID_TY = {.kind = TY_VOID};
@@ -748,6 +753,14 @@ static int ty_leq(const Ty *a, const Ty *b) {
     if (a->kind == TY_TYPE && b->kind == TY_TYPE) {
         return a->n <= b->n;
     }
+    /* Runtime pointer-duality: str is an untyped 64-bit handle at the ABI
+     * (the seed loader hands over argv as i64 pointer cells; char/str_len
+     * read raw bytes through it). Str ~ I64 both directions so the isolated
+     * fn-decl typecheck matches the .bp tier, which does not enforce it. */
+    if ((a->kind == TY_STR && b->kind == TY_I64) ||
+        (a->kind == TY_I64 && b->kind == TY_STR)) {
+        return 1;
+    }
     /* Vec<N> ~ Vec<M>: compare elems only, ignore element count. */
     if (a->kind == TY_VEC && b->kind == TY_VEC) {
         return ty_leq(a->elem, b->elem);
@@ -1152,8 +1165,15 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
             *out = &STR_TY;
             return 0;
         case TERM_STR_CHAR:
-            if (check(c, t->a, &STR_TY, err, cap) != 0 ||
-                check(c, t->b, &I64_TY, err, cap) != 0) {
+            /* str is an i64 raw pointer at runtime (seed argv) — accept both
+             * Str and I64 for the receiver so the isolated fn-decl typecheck
+             * matches the .bp tier (strequals-style helpers take s: str but
+             * callers pass i64 argv cells). */
+            if (check(c, t->a, &STR_TY, err, cap) != 0 &&
+                check(c, t->a, &I64_TY, err, cap) != 0) {
+                return -1;
+            }
+            if (check(c, t->b, &I64_TY, err, cap) != 0) {
                 return -1;
             }
             *out = &I64_TY;
@@ -1215,11 +1235,22 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
             *out = &STR_TY;
             return 0;
         }
-        case TERM_SYSOPEN:
+        case TERM_SYSOPEN: {
+            /* (path-buffer [i64]|i64, len, flags) : i64 */
+            if (t->a && check(c, t->a, &I64_TY, err, cap) != 0 &&
+                check(c, t->a, &VEC_I64_TY, err, cap) != 0) return -1;
+            if (t->b && check(c, t->b, &I64_TY, err, cap) != 0) return -1;
+            if (t->c && check(c, t->c, &I64_TY, err, cap) != 0) return -1;
+            *out = &I64_TY;
+            return 0;
+        }
         case TERM_SYSREAD:
         case TERM_SYSWRITE: {
-            /* (array-ish, i64..., i64) : i64 */
-            if (t->b && check(c, t->b, &I64_TY, err, cap) != 0) return -1;
+            /* (fd, buffer [i64]|i64, len) : i64 — bytes travel through
+             * element slots (cell array) or a raw pointer. */
+            if (t->a && check(c, t->a, &I64_TY, err, cap) != 0) return -1;
+            if (t->b && check(c, t->b, &I64_TY, err, cap) != 0 &&
+                check(c, t->b, &VEC_I64_TY, err, cap) != 0) return -1;
             if (t->c && check(c, t->c, &I64_TY, err, cap) != 0) return -1;
             *out = &I64_TY;
             return 0;
@@ -1290,8 +1321,16 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
             Ty *aty = NULL;
             if (infer(c, t->a, &aty, err, cap) != 0) return -1;
             if (aty->kind != TY_VEC) {
-                snprintf(err, cap, "array_get on non-array type");
-                return -1;
+                /* I64 receivers are legal: argv is a raw i64 pointer array
+                 * handed over by the seed loader — pointer-duality, mirrors
+                 * the char(s: i64) relaxation. Indexing an i64 yields i64. */
+                if (aty != &I64_TY) {
+                    snprintf(err, cap, "array_get on non-array type");
+                    return -1;
+                }
+                if (check(c, t->b, &I64_TY, err, cap) != 0) return -1;
+                *out = &I64_TY;
+                return 0;
             }
             if (check(c, t->b, &I64_TY, err, cap) != 0) return -1;
             *out = aty->elem;

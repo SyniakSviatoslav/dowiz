@@ -45,6 +45,42 @@ a micro-repro BEFORE declaring the emitter fixed.**
 and JIT are two executions of one spec — a stream divergence is always an
 engine-semantics bug, never "close enough".**
 
+## [FIXED] C-parser split-brain — one accepted surface for both tiers (2026-09-01)
+
+The "[OPEN] two C parsers disagree" note is CLOSED. Ground truth first:
+`bp_parse` (whole-file) never parsed fn bodies — it only splits the file
+into brace-balanced AST items, which is why `bebopc parse` "passed" while
+`check`/`strict`/compilewords (per-fn `bp_parse_fn_decl` → `expr_parse` on
+the isolated body) failed. There is exactly ONE body parser; the split was
+between its accepted surface and the .bp emitter's surface.
+
+Reconciled by widening the C tier to the .bp tier's surface (the .bp tier is
+the language authority; the C tier is the bootstrap oracle):
+1. chained-discard-assign `let _ = x = expr [;|in] rest` now lowers to
+   `LET(x, expr, rest)` in expr.c's let-handler — matching emit_let_stmt's
+   is_chain lowering (the '_' slot is discarded, the inner name rebinds).
+2. `char()` accepts an i64 receiver — str is an untyped 64-bit handle at the
+   runtime ABI (seed argv), so `ty_leq` now treats Str ~ I64 both directions.
+3. `array_get` on an i64 receiver yields i64 — argv is a raw pointer array
+   handed over by the seed loader.
+4. syscall buffer args (`sys_open` path, `sys_read`/`sys_write` buffer)
+   accept `[i64]` cell arrays as well as raw i64 pointers (bytes travel
+   through element slots in the .bp tier).
+
+Evidence: bebop.bp 112/112 fns ok, expr_compile.bp 110/110 (the twin's
+legitimate divergence: no CLI, has self_bootstrap + the futex/clone group);
+`compilewords bebop.bp bebop.bp` stream byte-identical to the pre-fix stream
+(C-tier change cannot touch .bp emission); self_check 0; parity 9/0/0.
+The Makefile L0 expectation was stale (hard-coded 139) — now asserts
+`check` ok-count == `^fn` count, so any future fn automatically gates itself.
+
+**[RULE] `bebopc parse` proves nothing about fn bodies (item splitting
+only); the fn gate is `check` — its ok-count must equal the ^fn count.**
+**[RULE] A language surface accepted by the .bp emitter must parse under
+expr.c too, or compiler source will pass one tier and fail the other. When
+adding an emitter construct, mirror its parse+check in expr.c/qtt.c in the
+same commit.**
+
 
 ## [FIXED] Ф0.3 bootstrap blocker closed — the "≥3fn crash" was an 8KB scratch overflow (2026-09-01)
 

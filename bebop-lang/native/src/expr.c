@@ -1010,7 +1010,53 @@ static Term *parse_expr(P *p) {
         skip_ws(p);
         if (p->s[p->pos] != '=') { err(p, "expected '=' in let"); return NULL; }
         p->pos++;
-        Term *val = parse_expr(p);
+        /* chained-discard-assign: `let _ = IDENT = expr [;|in] rest` lowers to
+         * LET(IDENT, expr, rest) — the '_' slot is discarded. The .bp emitter
+         * (emit_let_stmt is_chain) accepts this surface for compiled programs;
+         * accepting it here reconciles the C tier with the .bp tier (one
+         * spec, two engines). Fall through to the normal path otherwise. */
+        Term *val = NULL;
+        if (name[0] == '_' && name[1] == '\0') {
+            long save2 = p->pos;
+            skip_ws(p);
+            if ((isalpha((unsigned char)p->s[p->pos]) || p->s[p->pos] == '_')) {
+                long ns = p->pos;
+                while (is_ident_cont(p->s[p->pos])) p->pos++;
+                long nl = p->pos - ns;
+                skip_ws(p);
+                if (nl > 0 && p->s[p->pos] == '=' && p->s[p->pos + 1] != '=') {
+                    p->pos++;
+                    val = parse_expr(p);
+                    if (!val) return NULL;
+                    static char iname[64];
+                    if (nl >= 64) nl = 63;
+                    memcpy(iname, p->s + ns, (size_t)nl);
+                    iname[nl] = '\0';
+                    skip_ws(p);
+                    skip_ws(p);
+                    Term *ibody = NULL;
+                    if (match_kw(p, "in")) {
+                        ibody = parse_seq(p);
+                    } else if (p->s[p->pos] == ';') {
+                        p->pos++;
+                        ibody = parse_seq(p);
+                    } else {
+                        err(p, "expected 'in' or ';' after let");
+                        return NULL;
+                    }
+                    if (!ibody) return NULL;
+                    Term *it = tnew();
+                    if (!it) { err(p, "term pool exhausted"); return NULL; }
+                    it->kind = TERM_LET;
+                    it->name = iname;
+                    it->a = val;
+                    it->b = ibody;
+                    return it;
+                }
+            }
+            p->pos = save2;
+        }
+        val = parse_expr(p);
         if (!val) return NULL;
         skip_ws(p);
         skip_ws(p);
