@@ -94,16 +94,18 @@ fn spmv_fp(rp: [i64], ci: [i64], vv: [i64], n: i64, x: [i64], out: [i64]) -> i64
 }
 
 // normalize_fp(x, n): scale so the Euclidean norm is 2^32. Sum of squares is
-// taken on |x_i|>>14 (LAW: >> is logical — abs first!), square < 2^36, sum
-// < 2^42 — no overflow; isqrt of that ≈ |x|>>14. Reciprocal R = 2^50/nrm
-// (fp of 2^32/|x|), applied by fp_mul. Returns |x| in fp units (2^32 = 1.0).
+// taken on |x_i|>>8 (LAW: >> is logical — abs first!); for |x| <= 2^36 the
+// square <= 2^56 and the sum <= 2^62 — inside isqrt's range. The isqrt
+// rounding (+-1 at the |x|>>8 scale) bounds the normalized-component error
+// near 2^-24 relative — lambda error ~256 fp units, well inside the 1e-6
+// drift band (4295 fp units). Reciprocal R = 2^56/nrm = fp(2^32/|x|).
 fn normalize_fp(x: [i64], n: i64) -> i64 {
   let ss = 0;
   let i = 0;
   while i < n {
     let ai = x[i];
     let ai = if ai < 0 then 0 - ai else ai;
-    let t = ai >> 14;
+    let t = ai >> 8;
     let ss = ss + t * t;
     let i = i + 1;
     0
@@ -111,7 +113,7 @@ fn normalize_fp(x: [i64], n: i64) -> i64 {
   let nrm = isqrt(ss);
   let isz = if nrm == 0 then 1 else 0;
   let nrm = nrm + isz;
-  let r = 1125899906842624 / nrm;
+  let r = 72057594037927936 / nrm;
   let i = 0;
   while i < n {
     let _ = x[i] = fp_mul(x[i], r);
@@ -305,4 +307,83 @@ fn topk_symmetric_fp(rp: [i64], ci: [i64], vv: [i64], n: i64, k: i64, iters: i64
     0
   };
   found
+}
+
+// ═══ SS-6: drift machinery (twins of spectral.rs classify_drift /
+// spectral_drift) ═══
+// Classes: 0 = Damped (rho < 1-band), 1 = Resonant (|rho-1| <= band),
+// 2 = Unstable (rho > 1+band). DRIFT_BAND = 1e-6 -> fp 2^32 scale: 4295.
+// The unstable-mode count uses tol = 2^20 above 1.0 (the fp port's ~8e-6
+// relative eigenvalue error exceeds the 1e-6 band; count at exact-1.0 must
+// stay 0, matching the oracle's |lambda| > 1.0 strict compare on I2).
+// csr_from_dense(a, n, rp, ci, vv): row-major scan, non-zero cells -> edges.
+fn csr_from_dense(a: [i64], n: i64, rp: [i64], ci: [i64], vv: [i64]) -> i64 {
+  let nnzc = zeros(1);
+  let i = 0;
+  while i < n {
+    let _ = rp[i] = nnzc[0];
+    let j = 0;
+    while j < n {
+      let w = a[i * n + j];
+      let nz = if w == 0 then 0 else 1;
+      let _ = if nz == 1 then (let _ = ci[nnzc[0]] = j in (let _ = vv[nnzc[0]] = w in (let _ = nnzc[0] = nnzc[0] + 1 in 0))) else 0;
+      let j = j + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  let _ = rp[n] = nnzc[0];
+  nnzc[0]
+}
+
+// spectral_profile_fp(a, n, rho_c, unst_c, evals, evecs) -> class:
+// rho = max|lambda| (fp), unst = #{|lambda| > 1 + tol}, class by the band.
+// a is a DENSE n x n fp matrix (row-major). Buffers: evals/evecs >= n.
+fn spectral_profile_fp(a: [i64], n: i64, rho_c: [i64], unst_c: [i64], evals: [i64], evecs: [i64]) -> i64 {
+  let rp = zeros(280);
+  let ci = zeros(1024);
+  let vv = zeros(1024);
+  let _ = csr_from_dense(a, n, rp, ci, vv);
+  let _ = topk_symmetric_fp(rp, ci, vv, n, n, 32, evals, evecs);
+  let rho = evals[0];
+  let rho = if rho < 0 then 0 - rho else rho;
+  let _ = rho_c[0] = rho;
+  let tol = 1048576;
+  let one = 4294967296;
+  let unst = 0;
+  let k = 0;
+  while k < n {
+    let ev = evals[k];
+    let ev = if ev < 0 then 0 - ev else ev;
+    let over = if ev - one - tol > 0 then 1 else 0;
+    let unst = unst + over;
+    let k = k + 1;
+    0
+  };
+  let _ = unst_c[0] = unst;
+  let dmp = rho - (one - 4295);
+  let unp = rho - (one + 4295);
+  let d = if dmp < 0 then 1 else 0;
+  let u = if unp > 0 then 1 else 0;
+  d * 0 + u * 2 + (1 - d) * (1 - u)
+}
+
+// spectral_drift_fp(a0, a1, n, out) -> class-transition packed int:
+// out[0] = rho_delta (fp, signed), out[1] = unstable-count delta (signed),
+// out[2] = from class, out[3] = to class.
+fn spectral_drift_fp(a0: [i64], a1: [i64], n: i64, out: [i64]) -> i64 {
+  let rho0 = zeros(1);
+  let un0 = zeros(1);
+  let rho1 = zeros(1);
+  let un1 = zeros(1);
+  let ev = zeros(280);
+  let ec = zeros(280);
+  let f = spectral_profile_fp(a0, n, rho0, un0, ev, ec);
+  let t = spectral_profile_fp(a1, n, rho1, un1, ev, ec);
+  let _ = out[0] = rho1[0] - rho0[0];
+  let _ = out[1] = un1[0] - un0[0];
+  let _ = out[2] = f;
+  let _ = out[3] = t;
+  f * 4 + t
 }

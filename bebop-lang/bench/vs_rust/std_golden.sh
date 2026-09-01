@@ -56,9 +56,10 @@ r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/hv.bp /tmp/openc
 gate hv 4427592702613580868 "$r"
 
 # ---- spectral (SPECTRAL tier: topk_symmetric fp32 port vs Rust golden —
-#      B6_bridge, k=3, 32 iters; frozen = total |λ_bp − λ_golden| fp dev) ----
+#      B6_bridge, k=3, 32 iters; frozen = total |λ_bp − λ_golden| fp dev,
+#      re-baselined after the normalize_fp precision raise (>>14 -> >>8)) ----
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/spectral.bp /tmp/opencode/spectral_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/spectral_test.bin | tail -1)
-gate spectral 184684 "$r"
+gate spectral 2038 "$r"
 
 # ---- csr (Ф2: from_edges structural twin — fold over rp+ci+vv of the five
 #      golden graphs; bench/vs_rust/spectral_golden/golden.txt CSR section) ----

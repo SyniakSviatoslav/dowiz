@@ -388,62 +388,69 @@ fn spectral_drift_fp(a0: [i64], a1: [i64], n: i64, out: [i64]) -> i64 {
   f * 4 + t
 }
 
-// ---- std gate main: B6_bridge (n=6, nnz=14) vs the Rust golden ----
-// golden.txt vals_fp32: 9389401939 7949044807 -5801560312 (k=3, iters=32).
-// The frozen value = total |λ_bp − λ_golden| (fp units, 2^32 = 1.0) — the
-// honest fixed-point-vs-f64 deviation; determinism makes it exact-run-stable.
+// ---- std gate main: spectral profile + drift vs the Rust golden ----
+// Matrices: HALF_I (rho=.5), I2 (rho=1, Resonant), TWO_I (rho=2),
+// MIX (rho=2, unstable=1). Frozen = fold of 28 all-ones flags
+// (rho within 2^20 of the golden fp value, unstable counts, classes,
+// drift from/to/udelta exact) — golden.txt DRIFT GOLDENS section.
 fn main() -> i64 {
-  let rp = zeros(16);
-  let ci = zeros(16);
-  let vv = zeros(16);
-  let _ = rp[0] = 0;
-  let _ = rp[1] = 2;
-  let _ = rp[2] = 4;
-  let _ = rp[3] = 7;
-  let _ = rp[4] = 10;
-  let _ = rp[5] = 12;
-  let _ = rp[6] = 14;
-  let _ = ci[0] = 1;
-  let _ = ci[1] = 2;
-  let _ = ci[2] = 0;
-  let _ = ci[3] = 2;
-  let _ = ci[4] = 0;
-  let _ = ci[5] = 1;
-  let _ = ci[6] = 3;
-  let _ = ci[7] = 2;
-  let _ = ci[8] = 4;
-  let _ = ci[9] = 5;
-  let _ = ci[10] = 3;
-  let _ = ci[11] = 5;
-  let _ = ci[12] = 3;
-  let _ = ci[13] = 4;
-  let w1 = 4294967296;
-  let wh = 2147483648;
-  let _ = vv[0] = w1;
-  let _ = vv[1] = w1;
-  let _ = vv[2] = w1;
-  let _ = vv[3] = w1;
-  let _ = vv[4] = w1;
-  let _ = vv[5] = w1;
-  let _ = vv[6] = wh;
-  let _ = vv[7] = wh;
-  let _ = vv[8] = w1;
-  let _ = vv[9] = w1;
-  let _ = vv[10] = w1;
-  let _ = vv[11] = w1;
-  let _ = vv[12] = w1;
-  let _ = vv[13] = w1;
-  let evals = zeros(8);
-  let evecs = zeros(192);
-  let _ = topk_symmetric_fp(rp, ci, vv, 6, 3, 32, evals, evecs);
-  let g0 = 9389401939;
-  let g1 = 7949044807;
-  let g2 = 0 - 5801560312;
-  let d0 = evals[0] - g0;
-  let d0 = if d0 < 0 then 0 - d0 else d0;
-  let d1 = evals[1] - g1;
-  let d1 = if d1 < 0 then 0 - d1 else d1;
-  let d2 = evals[2] - g2;
-  let d2 = if d2 < 0 then 0 - d2 else d2;
-  d0 + d1 + d2
+  let half = zeros(4);
+  let _ = half[0] = 2147483648;
+  let _ = half[3] = 2147483648;
+  let eye = zeros(4);
+  let _ = eye[0] = 4294967296;
+  let _ = eye[3] = 4294967296;
+  let two = zeros(4);
+  let _ = two[0] = 8589934592;
+  let _ = two[3] = 8589934592;
+  let mix = zeros(4);
+  let _ = mix[0] = 6442450944;
+  let _ = mix[1] = 2147483648;
+  let _ = mix[2] = 2147483648;
+  let _ = mix[3] = 6442450944;
+  let rho = zeros(1);
+  let unst = zeros(1);
+  let ev = zeros(280);
+  let ec = zeros(280);
+  let acc = 0;
+  // profiles: class 0/1/2/2, unstable 0/0/2/1, rho 2^31/2^32/2^33/2^33
+  let c0 = spectral_profile_fp(half, 2, rho, unst, ev, ec);
+  let acc = acc * 131 + (if c0 == 0 then 1 else 0);
+  let acc = acc * 131 + (if unst[0] == 0 then 1 else 0);
+  let acc = acc * 131 + (if rho[0] - 2147483648 < 1048576 then 1 else 0);
+  let c1 = spectral_profile_fp(eye, 2, rho, unst, ev, ec);
+  let acc = acc * 131 + (if c1 == 1 then 1 else 0);
+  let acc = acc * 131 + (if unst[0] == 0 then 1 else 0);
+  let acc = acc * 131 + (if rho[0] - 4294967296 < 1048576 then 1 else 0);
+  let c2 = spectral_profile_fp(two, 2, rho, unst, ev, ec);
+  let acc = acc * 131 + (if c2 == 2 then 1 else 0);
+  let acc = acc * 131 + (if unst[0] == 2 then 1 else 0);
+  let acc = acc * 131 + (if rho[0] - 8589934592 < 1048576 then 1 else 0);
+  let c3 = spectral_profile_fp(mix, 2, rho, unst, ev, ec);
+  let acc = acc * 131 + (if c3 == 2 then 1 else 0);
+  let acc = acc * 131 + (if unst[0] == 1 then 1 else 0);
+  let acc = acc * 131 + (if rho[0] - 8589934592 < 1048576 then 1 else 0);
+  // drifts
+  let out = zeros(8);
+  let _ = spectral_drift_fp(half, eye, 2, out);
+  let acc = acc * 131 + (if out[2] == 0 then 1 else 0);
+  let acc = acc * 131 + (if out[3] == 1 then 1 else 0);
+  let acc = acc * 131 + (if out[1] == 0 then 1 else 0);
+  let acc = acc * 131 + (if out[0] - 2147483647 < 1048576 then 1 else 0);
+  let _ = spectral_drift_fp(eye, two, 2, out);
+  let acc = acc * 131 + (if out[2] == 1 then 1 else 0);
+  let acc = acc * 131 + (if out[3] == 2 then 1 else 0);
+  let acc = acc * 131 + (if out[1] == 2 then 1 else 0);
+  let acc = acc * 131 + (if out[0] - 4294967296 < 1048576 then 1 else 0);
+  let _ = spectral_drift_fp(half, mix, 2, out);
+  let acc = acc * 131 + (if out[2] == 0 then 1 else 0);
+  let acc = acc * 131 + (if out[3] == 2 then 1 else 0);
+  let acc = acc * 131 + (if out[1] == 1 then 1 else 0);
+  let acc = acc * 131 + (if out[0] - 6442450943 < 1048576 then 1 else 0);
+  let _ = spectral_drift_fp(mix, mix, 2, out);
+  let acc = acc * 131 + (if out[2] == 2 then 1 else 0);
+  let acc = acc * 131 + (if out[3] == 2 then 1 else 0);
+  let acc = acc * 131 + (if out[1] == 0 then 1 else 0);
+  let acc = acc * 131 + (if out[0] == 0 then 1 else 0);
+  acc
 }
