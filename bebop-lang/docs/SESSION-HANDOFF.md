@@ -42,9 +42,10 @@ HEAD: 37fd6ea "docs: token economy & tiered routing protocol". Everything pushed
 
 ## Toolstack (always on)
 - rtk (git/ls output compression); rtk plugin auto-activates after restart.
-- tb = /tmp/opencode/tb.bin (auto-compiles from selfhost/std/tb.bp):
-  tb h <path> (crc32), tb ctx j r g, tb s <needle> <path> (line numbers),
-  tb c (stdin compressor), no args = self-test fold 1111000.
+- tb = `tb` wrapper at ~/.local/bin/tb (PATH via ~/.profile; auto-recompiles
+  from selfhost/std/tb.bp if missing/stale): tb h <path> (crc32), tb ctx j r g,
+  tb s <needle> <path> (line numbers), tb c (stdin compressor), no args =
+  self-test fold 1111000. Gate 23 in std_golden.
 - graphify (uv tool): query/path/explain on graphify-out/graph.json;
   update . after code changes. mempalace: search/wake-up; re-mine journal
   after commits. snap (/tmp/opencode/snap): text→PNG for vision models only
