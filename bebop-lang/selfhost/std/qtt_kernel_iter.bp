@@ -1,0 +1,189 @@
+// qtt_kernel_iter.bp — Iterative QTT type-checking kernel.
+// Uses explicit stacks to avoid recursion depth limits.
+
+module core { }
+
+// ============================================================
+// Term representation
+// ============================================================
+// Term codes:
+//  0 = Var (index)
+//  1 = App (fn, arg)
+//  2 = Lam (dom, body)
+//  3 = Pi (dom, cod)
+//  4 = Let (ty, val, body)
+//  5 = Const (name_hash, universe)
+//  6 = Type (universe)
+
+// Term is a tagged array: [code, field1, field2, ...]
+
+// ============================================================
+// Term constructors (output-buffer passing)
+// ============================================================
+
+fn mk_var(out: [i64], idx: i64) -> i64 {
+  out[0] = 0; out[1] = idx; 1
+}
+
+fn mk_app(out: [i64], fn_term: [i64], arg_term: [i64]) -> i64 {
+  out[0] = 1; out[1] = fn_term; out[2] = arg_term; 1
+}
+
+fn mk_lam(out: [i64], dom_term: [i64], body_term: [i64]) -> i64 {
+  out[0] = 2; out[1] = dom_term; out[2] = body_term; 1
+}
+
+fn mk_pi(out: [i64], dom_term: [i64], cod_term: [i64]) -> i64 {
+  out[0] = 3; out[1] = dom_term; out[2] = cod_term; 1
+}
+
+fn mk_let(out: [i64], ty_term: [i64], val_term: [i64], body_term: [i64]) -> i64 {
+  out[0] = 4; out[1] = ty_term; out[2] = val_term; out[3] = body_term; 1
+}
+
+fn mk_const(out: [i64], name_hash: i64, universe: i64) -> i64 {
+  out[0] = 5; out[1] = name_hash; out[2] = universe; 1
+}
+
+fn mk_type(out: [i64], universe: i64) -> i64 {
+  out[0] = 6; out[1] = universe; 1
+}
+
+// ============================================================
+// Term accessors
+// ============================================================
+
+fn tm_code(t: [i64]) -> i64 { t[0] }
+fn tm_fst(t: [i64]) -> i64 { t[1] }
+fn tm_snd(t: [i64]) -> i64 { t[2] }
+fn tm_thd(t: [i64]) -> i64 { t[3] }
+
+// ============================================================
+// Context: list of (name_hash, type)
+// ============================================================
+
+fn ctx_empty(out: [i64]) -> i64 { out[0] = 0; 1 }
+
+fn ctx_extend(out: [i64], ctx: [i64], name: i64, ty: [i64]) -> i64 {
+  let len = ctx[0];
+  out[0] = len + 2;
+  out[1] = name; out[2] = ty;
+  let i = 1;
+  while i <= len {
+    out[i * 2 + 1] = ctx[i * 2 - 1];
+    out[i * 2 + 2] = ctx[i * 2];
+    i = i + 1; 0
+  };
+  1
+}
+
+fn ctx_lookup(out: [i64], ctx: [i64], name: i64) -> i64 {
+  let len = ctx[0];
+  let i = 1;
+  while i <= len {
+    if ctx[i * 2 - 1] == name { out[0] = ctx[i * 2]; 1 } else { 0 };
+    i = i + 1; 0
+  };
+  out[0] = 0; 0
+}
+
+// ============================================================
+// Iterative β-reduction (weak head normal form)
+// Uses explicit stack instead of recursion
+// ============================================================
+
+// whnf_iter(out, term, ctx) -> i64
+fn whnf_iter(out: [i64], term: [i64], ctx: [i64]) -> i64 {
+  // Stack frames: [term_ptr, state, fn_term, arg_term, ret_addr]
+  // state: 0=start, 1=after_fn, 2=done
+  let stack = zeros(256);
+  let sp = 0;
+  
+  // Push initial frame
+  stack[sp] = term; stack[sp+1] = 0; stack[sp+2] = 0; stack[sp+2] = 0; stack[sp+4] = 0;
+  sp = sp + 5;
+  
+  while sp > 0 {
+    sp = sp - 5;
+    let term_ptr = stack[sp];
+    let state = stack[sp+1];
+    let fn_term = stack[sp+2];
+    let arg_term = stack[sp+3];
+    let ret_addr = stack[sp+4];
+    
+    let code = tm_code(term_ptr);
+    
+    if state == 0 then {
+      if tm_code(term_ptr) == 1 then { // App
+        // Evaluate function part first
+        stack[sp] = term_ptr; stack[sp+1] = 1; stack[sp+2] = 0; stack[sp+3] = tm_snd(term_ptr); stack[sp+4] = 0;
+        sp = sp + 5;
+        // Push frame for fn
+        let fn_term_ptr = zeros(4);
+        tm_fst(term_ptr, fn_term_ptr); // fn_term = term[1]
+        stack[sp] = fn_term_ptr; stack[sp+1] = 0; stack[sp+2] = 0; stack[sp+2] = 0; stack[sp+4] = 0;
+        sp = sp + 5;
+      } else if tm_code(term_ptr) == 4 then { // Let
+        // Let reduction: let x = v in body -> body[v/x]
+        let let_val = tm_snd(term_ptr);
+        let let_body = tm_thd(term_ptr);
+        subst_iter(term_ptr, 0, let_val, zeros(1)); // substitute into body
+        // Continue with substituted body
+        term_ptr = let_body; // tail call
+        sp = sp + 5; // pop current frame
+      } else {
+        // Copy term to output
+        let c = tm_code(term_ptr);
+        out[0] = c;
+        if c == 0 then out[1] = tm_fst(term_ptr)
+        else if c == 5 then { out[1] = tm_fst(term_ptr); out[2] = tm_snd(term_ptr) }
+        else if c == 6 then out[1] = tm_fst(term_ptr)
+        else if c == 1 then { out[1] = tm_fst(term_ptr); out[2] = tm_snd(term_ptr) }
+        else if c == 2 then { out[1] = tm_fst(term_ptr); out[2] = tm_snd(term_ptr) }
+        else if c == 3 then { out[1] = tm_fst(term_ptr); out[2] = tm_snd(term_ptr) }
+        else if c == 4 then { out[1] = tm_fst(term_ptr); out[2] = tm_snd(term_ptr); out[3] = tm_thd(term_ptr) }
+        else { 0 };
+        // Return to caller
+        if ret_addr != 0 then { /* return to caller */ } else { 1 }
+      }
+    } else if state == 1 then {
+      // After evaluating fn, now evaluate arg if needed
+      fn_term = term_ptr; // result of fn evaluation
+      let fn_code = tm_code(fn_term);
+      if fn_code == 2 then { // Lam - beta reduce
+        // (λx. body) arg -> body[arg/0]
+        let body = tm_thd(fn_term);
+        subst_iter(out, 0, arg_term, zeros(1)); // substitute arg into body
+      } else {
+        // Not a lambda, rebuild app
+        mk_app(out, fn_term, arg_term);
+      }
+      // Return to caller
+      if ret_addr != 0 then { /* return */ } else { 1 }
+    } else { 0 }
+  };
+  0
+}
+
+// Simplified iterative subst (placeholder - full implementation needed)
+fn subst_iter(out: [i64], term: [i64], d: i64, value: [i64], ctx: [i64]) -> i64 {
+  // Simplified: just copy for now
+  let c = tm_code(term);
+  out[0] = c;
+  if c == 0 then { if tm_fst(term) == d then { let c2 = tm_code(value); out[0] = c2; if c2==0 then out[1]=tm_fst(value) else if c2==5 {out[1]=tm_fst(value);out[2]=tm_snd(value)} else if c2==6 {out[1]=tm_fst(value)} } else { out[0]=0; out[1]=tm_fst(term); } }
+  else if c==5 then { out[0]=5; out[1]=tm_fst(term); out[2]=tm_snd(term); }
+  else if c==6 then { out[0]=6; out[1]=tm_fst(term); }
+  else if c==1 then { out[0]=1; out[1]=tm_fst(term); out[2]=tm_snd(term); }
+  else if c==2 then { out[0]=2; out[1]=tm_fst(term); out[2]=tm_snd(term); }
+  else if c==3 then { out[0]=3; out[1]=tm_fst(term); out[2]=tm_snd(term); }
+  else if c==4 then { out[0]=4; out[1]=tm_fst(term); out[2]=tm_snd(term); out[3]=tm_thd(term); }
+  else { out[0]=0 };
+  1
+}
+
+// ... rest of kernel (eq_term, convert, etc.) would go here
+
+fn tm_code(t: [i64]) -> i64 { t[0] }
+fn tm_fst(t: [i64]) -> i64 { t[1] }
+fn tm_snd(t: [i64]) -> i64 { t[2] }
+fn tm_thd(t: [i64]) -> i64 { t[3] }
