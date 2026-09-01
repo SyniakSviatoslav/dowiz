@@ -201,3 +201,199 @@ guards only); capacity asserts on every fixed table.
 Every milestone: commit + push to origin/main. Full verification gate after
 each batch: self_check, self_bootstrap parity, parity driver, construct
 corpus, fuzz, bench — evidence in commit messages.
+
+# ═══ ГОЛОВНА ЦІЛЬ (перепризначена 2026-08-31, вища优先ність над усім) ═══
+**ПОВНИЙ САМОХОСТ + ВИДАЛЕННЯ ВСЬОГО C (включно з bebopc) — ПЕРШИМ КРОКОМ.**
+Принцип: спочатку найнижчі фундаментальні рішення, потім усе інше. Без спрощень.
+Повний рефакторинг дозволений. Мова — виключно для агентів (нуль людських поверхонь:
+гліфи вмирають, діагностика = коди, текст .bp = агент-кодек авторингу, канон = .bt-тензор).
+
+Фундаментальні шари (у порядку закриття):
+F1. Syscall ABI таблиця емутерів — machine-verified (LAW L1). АУДИТ 2026-08-31: 131 слово
+    17 емутерів дизасембльовано — ВСІ номери в x8, ABI коректний.
+    **LAW: movz x8,#N = 3531603968 + N*32 + 8 (Rd=8!). Формула без +8 (SELFHOST_FIXES_SUMMARY)
+    — ХИБНА, дала б movz x0,#N (номер в x0, svc = випадковий syscall). Ніколи не застосовувати.**
+F2. I/O артефактів: mmap-експорт (ftruncate+mmap MAP_SHARED+stores+munmap), атомарний
+    publish через renameat(tmp,out); tmp = argv-аргумент агента; rename(x,x) = no-op.
+    Нуль sys_write на критичному шляху (proot-флейки syscall-сайтів іммунні).
+F3. Пам'ять: арена + стрідові tensor-views (ранг-2/3/4 над тією ж ареною).
+F4. Канонічний артефакт: .bt ранг-4 словотензор; текст-кодек = агент-авторинг.
+F5. Потік керування: branch-mode while/if з proper patching, depth_sim = 0 (поза run_program).
+F6. Верифікація: self_fixpoint у RAM (bb2==bb3), artifact-vs-artifact (нуль C-оракула).
+Далі: HDC-ядро → VS-AST → маски/оптимізації → einsum → memfd store/LSX/multicore →
+Lean-ядро (QTT у компіляторі та рантаймі, proof-section) → Zero-C deletion → агент-інтроспекція.
+
+# ═══ SPECTRAL TIER (2026-08-31): eigenvectors/eigenvalues замість пласких векторів ═══
+Джерело рішень: dowiz-core/src/{spectral,hypervector,csr,spectral_cache}.rs, kernel householder.
+- LAW: портуємо topk_symmetric (spectral.rs:225) — power+Hotelling deflation над CSR spmv,
+  детермінізм = index-graded start + фіксовані iters + фіксований порядок сумування + знак.
+- LAW (ABI): movz x8,#N = 3531603968 + N*32 + 8. Формула без +8 — ХИБНА (див. вище).
+- Ф3: item-code = splitmix-HV ⊗ spectral-role HV (знак-бінаризовані eigenvectors фіксованого
+  малого role-оператора; індекс λ кодує арність/порядок ролі).
+- Ф2+Ф5: CSR гіперграф компілятора → top-k eigenpairs у i64 fixed-point (масштаб 2^32,
+  ренормалізація зсувом, NEON matvec); |v1[i]| = centrality-пріоритет оптимізацій.
+- Ф4: spectral gap γ=1−|λ2| → доменні межі маскованих while (mixing time τ≈1/γ).
+- Ф7: фікс-поінт = bytes b2==b3 ∧ спектральний фінгерпринт (сортовані top-k λ +
+  sign-нормалізований Fiedler) — інваріант до layout-зсувів (вбиває клас 14-word divergence).
+  + spectral_drift(A_prev,A_new) → DriftClass як регресійна тривога між генераціями.
+- Ф6: DecompCache пор (spectral_cache.rs): спектри за FNV-ключем вмісту CSR,
+  монотонний recomputes-фальсіфікатор (0 на idентичних, +1 на зміні).
+- ПЕРЕДУМОВА Zero-C: витягти golden-вектори (еталонні спектри + Householder-vs-Faddeev
+  паритет-набір) з C/Rust ДО видалення native/src. Після — паритет тільки проти golden.
+- charpoly (LeVerrier) точний у i64 тільки для n≤16; Householder eigh ≤32 — для малих
+  операторів ядра (universe/Pi, tile2x2 systolic відображення на NEON 2x2 einsum).
+
+# ═══════════════════════════════════════════════════════════════════════
+# SPECTRAL SINGULARITY LAYER — Kalman/Vector Calculus/LC/FIR/QLoRA/Transformer
+# (максимальна проєкція: арени + .bt тензори + HDC + спектральна геометрія)
+# ═══════════════════════════════════════════════════════════════════════
+
+## SS-1. NEON Kalman Filter (нуль-алокаційний, арени, real-time)
+- Фільтр Калмана як чиста .bp бібліотека на лінійних аренах: нуль malloc, нуль heap
+- Матричні операції (predict/update) через NEON 2×2 systolic tiles (tile2x2 патерн)
+- Детермінована затримка: фіксована кількість тактів на ітерацію (WCET-гарантія)
+- Застосування: сенсорні стани дронів/боївок без ROS/C++/CUDA
+- Emit: `kalman_predict(state F Q)`, `kalman_update(state H R z)` — .bp fns
+- Верифікація: golden KAT (еталонні stани) vs C-еталон ДО Zero-C
+- Done-check: 1000 ітерацій → PVC-стани = C-еталон, 0 дрифтів
+
+## SS-2. Vector Calculus як статичні інваріанти (rot/div/grad → граф-топологія)
+- Тотожності (∇·∇f = ∇²f, ∇×∇f = 0) → перевірки збереження структури CSR-графа
+- Диференціальні оператори = бітові маски на ранг-4 тензори (не символьна математика!)
+- Компілятор статично верифікує: після тензорного перетворення структури — інваріант збережено
+- Вбудовується в Ф7 (Lean QTT-ядро) як додаткові аксіоми структурної цілісності
+- Done-check: графова дивергенція = 0 для коректних AST-перетворень
+
+## SS-3. LC Resonance → тактування агентних циклів (jitter-free)
+- Цикл обробки = електронний LC-контур: L = латентність, C = ємність арени
+- Резонансна частота f₀ = 1/(2π√LC) → цільовий інтервал між ітераціями фікспоінту
+- Агент планує ітерації на резонансній частоті → мінімальний джиттер без ОС-планувальника
+- Реалізація: clock_ms() + NEON-компенсація дрифту (PID-регулятор на .bp)
+- Done-check: джиттер < 1% на 1000 циклів (без ОС-планувальника)
+
+## SS-4. FIR-фільтр як заборона циклічних залежностей (BIBO-стабільність)
+- FIR: тільки forward flow — жодного зворотного зв'язку → BIBO-гарантія структурно
+- Компілятор ЗАБОРОНЯє while-цикли з невідомою глибиною в агентному коді (еміторіальний рівень)
+- while → bounded masked iteration (Ф4) — домен обмежений, ризик нескінченності = 0
+- Додатково: IRR-фільтри дозволені ТІЛЬКИ з формальним доказом збіжності (Ф7 QTT-ядро)
+- LAW: агентний код без FIR-обмеження = відхиляється на емісії
+
+## SS-5. Calculus bounding (Teylor/mean-value для мутаційного коду)
+- Тheorema про середнє значення + ряд Тейлора → автоматичні bounding boxes для мутацій
+- Компілятор доводить: Δ(вихід) ∈ [f(a)-ε, f(b)+ε] для any мутації CSR-графа
+- Інтеграція: Ф7 QTT-ядро (boundingBox(prop) — пропозиція для кожної мутації)
+- Done-check: golden мутації — bounding box містить фактичний результат
+
+## SS-6. Matrix Decompositions на аренах (LU/QR/SVD/Power Method)
+- Port: dowiz-core spectral.rs → .bp (Faddeev-LeVerrier, Durand-Kerner, Householder eigh)
+- topk_symmetric (power method + Hotelling deflation) — i64 fixed-point (2^32 scale)
+- DecompCache: content-addressed (FNV-64) кеш спектрів — recomputes falsifier
+- par порт: NEON matvec (Ф5 einsum) для matmul-примітива в power iteration
+- Done-check: golden-спектри з householder_spectral_parity.rs — парність з .bp портом
+
+## SS-7. QLoRA 4-bit агентна еволюція
+- Ваги агентних стратегій = 4-бітні матриці у фіксованих аренах
+- Low-rank адаптери (A·B де rank << dim) → оновлення логіки на живому залізі
+- DecompCache зберігає квантовані стани — FNV-64 ключ, лoàd через mmap
+- NEON: 4-бітне розпакування (shift/mask) + матвек за 1 цикл на 16 елементів
+- Done-check: агент-стратегія оновлюється за < 1ms, 0 malloc
+
+## SS-8. Sinc інтерполяція (без фазових спотворень)
+- sinc(x) = sin(πx)/(πx) як ідеальний інтерполянт для тензорної телеметрії
+- NEON: векторизований обчислення sinc через наближення (ехактно до 4 знаків)
+- Фільтрування сенсорних потоків без фазового спотворення = критично для Kalman (SS-1)
+- Done-check: sinc-інтерполяція vs точне значення — похибка < 0.1%
+
+## SS-9. Transformer Attention на ARM64 NEON (нуль фреймворків)
+- Q,K,V = ранг-4 .bt тензори в лінійних аренах (64B-алігновані)
+- Self-Attention: hv4096 Hamming distance через vcnt (замість softmax+float)
+- bind = XOR, bundle = мажоритарний — лічені такти, без CUDA/PyTorch
+- Позиційні енкодинги: топ-k власні значення + Фідлерерів вектор (спектральні, layout-інваріантні)
+- Маскування: геометричні стріди ранг-4 (верхній трикутник = stride-skip, нуль розгалужень)
+- KV-cache: DecompCache (FNV-64 ключ, квантовані low-rank стани, нуль malloc)
+- Done-check: attention(Q,K,V) на .bt = узгоджений з C-еталоном, < 1ms на 128 токенів
+
+## SS-10. Нормалізації та стрід-оптимізація (cache-line aligned)
+- Layer Norm / Instance Norm = стрід-геометрія ранг-4 (.bt) під кеш-лінії 64B
+- Розташування арен: гарячі тензори (attention scores) — L1-resident; холодні (KV-cache) — L2/L3
+- Zero false sharing: кожен NEON-канал = окрема кеш-лінія, work-stealing без блокування кешу
+- Done-check: bench attention-проходу — L1 hit rate > 95%
+
+## SS-11. Поколінна арена з MAP_NORESERVE пагінацією
+- mmap(NULL, size, PROT_READ|WRITE, MAP_PRIVATE|ANONYMOUS|NORESERVE) — віртуальний простір
+- Виділення = зміщення вказівника (bump) — детермінована затримка, нуль GC
+- Скидання = mprotect(PROT_NONE) — миттєвий звільнення сторінок, ядро деалокує
+- Нові покоління: старий стан → mprotect(READ_ONLY) → нова арена = bump від base
+- Done-check: 1M alloc/free циклів — 0 syscall (окрім mmap), 0 фрагментації
+
+## SS-12. NEON бітові матриці (switch/case → паралельні бітові сітки)
+- Патерн-матчинг: всі умови пакуються в щільні бітові сітки (128-bit NEON регістри)
+- Оцінка десятків станів за 1 такт (CCMP/CCMP-ланцюги або bif/bit)
+- Заміна switch/case в emit_call_or_ctor диспетчері → бітові маски
+- Done-check: диспетчер 23 builtins через бітову матрицю — < 10 тактів
+
+## SS-13. Позиційно-незалежні DecompCache блоки
+- Кешовані AST-графи + скомпільований код = позиційно-незалежні бінарні блоки
+- Збереження/завантаження = нуль-копіювальний mmap (диск або /dev/shm)
+- Скомпільований код = raw bytes в арені без релокацій — миттєвий cold-start
+- Відмінність від Ф6: кеш НЕ-content-addressed (позиційний), а RELOCATABLE (PIE-стиль)
+- Done-check: cold-start компілятора < 5ms (mmap + jump)
+
+## SS-14. Direct-threaded code в аренах (без dispatch loop)
+- Інструкції = прямі посилання на наступний обробник (no dispatch loop)
+- Максимізація I-cache L1: інструкції в лінійній арені, наступний обробник = сусідня адреса
+- Застосування: інтерпретатор .bt-тензорних операцій (якщо потрібен), агентні state machines
+- Done-check: threaded код vs switch-dispatch — ≥ 2× на I-cache-intensive навантаженні
+
+## ═══ SPECTRAL COORDINATE SYSTEM (інтеграція eigen в єдину систему) ═══
+
+## SS-15. Власні вектори = єдина система координат
+- Всі стани/поняття проєктуються на ортонормальний базис Q (власні вектори оператора зв'язків)
+- Інваріантність до пам'яті: зсуви байтів компенсуються спектральним базисом
+- Пошук = проєктування гіпервектора на домінуючі власні вектори (не вказівник!)
+- Замінює Ф3 VS-AST: координати = спектральні проєкції, не випадкові HV
+
+## SS-16. Власні значення = метрики контролю потоку
+- γ = 1 - |λ₂| (спектральний гап) → перемикач логіки: γ < поріг → граф розпадається
+- Фідлерерів вектор → автоматичне розпаралелювання (знак = біпартиція графа)
+- На рівні сирого заліза: NEON power method → λ₁,λ₂ → умова на γ → NEON біпартиція
+- Интеграція: Ф4 маскований потік (γ-домени) + Ф6 work-stealing (Фідлерерів біпартиція)
+
+## SS-17. Eigentime (час = спектральна ітерація)
+- Синхронізація = кількість ітерацій Hotelling deflation (не годинник!)
+- Фікспоінт λ₁ стабілізується → ядра в енергоефективний стан (WFI/WFE)
+- Агентний сигнал → ΔA → нова ітерація → новий λ → continued execution
+- Забирає потребу в ОС-планувальнику, таймерах, перериваннях
+
+## SS-18. Спектральна самореплікація (мутація через ΔA)
+- Агент змінює логіку = матричне збурення CSR-графа ΔA
+- Перевірка: spectral_drift(A₀, A₀+ΔA) → DriftClass (spectral.rs:800 порт)
+- Дрифт в межах γ → автоматична фіксація (mmap snapshot); поза → .bt дамп
+- Замінює текстову компіляцію: еволюція = чисті математичні стрибки спектру
+
+## ═══ ПРІОРИТЕТ РЕАЛІЗАЦІЇ (після Ф0.3 bootstrap) ═══
+```
+Ф0.3 (bootstrap) ─┬─► Ф1 (HDC) ──► Ф2 (.bt+CSR) ──► SS-6 (spectral.rs порт)
+                   │                                     │
+                   ├─► SS-1 (Kalman NEON) ──────────────┤
+                   ├─► SS-4 (FIR bounded loops) ─────────┤
+                   │                                     ▼
+                   └─► Ф3 (VS-AST) ──► Ф4 (маски) ──► SS-9 (Attention NEON)
+                                                         │
+                    Ф6 (store/multicore) ────────────────┤
+                                                         ▼
+                    Ф7 (Lean QTT) ──► SS-2 (calc inv.) ──► Ф8 (Zero-C)
+                                                         │
+                                                         ▼
+                    SS-15..18 (spectral coord/flow/time/mutation) ──► SS-7 (QLoRA)
+                                                         │
+                                                         ▼
+                                                    Ф9 (agent introspection)
+```
+
+## ПЕРШИЙ КОД: SS-6 (Matrix Decompositions порт) — бо це фундамент для SS-15/16/18
+- Power Method + Hotelling deflation в i64 fixed-point (2^32 scale) — ФУНДАМЕНТ
+- CSR spmv (матвек) через NEON (2×2 systolic) — ФУНДАМЕНТ для все графового аналізу
+- DecompCache (FNV-64 ключ, recomputes falsifier) — ФУНДАМЕНТ для кешування
+- Ці 3 примітиви = спільний залежність для SS-1, SS-9, SS-15, SS-16, SS-18
+- БЕЗ НИХ: немає спектральної верифікації, немає layout-інваріантності, немає біпартиції

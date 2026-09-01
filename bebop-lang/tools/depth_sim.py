@@ -6,7 +6,8 @@ Merge-point depth conflicts and nonzero-at-ret are candidate emitter bugs."""
 import sys
 toks=open(sys.argv[1]).read().split()
 n=int(toks[0]); W=[int(t)&0xffffffff for t in toks[1:1+n]]
-OFF=[int(x) for x in [l for l in open(sys.argv[1]) if l.startswith('OFF')][0].split()[2:]]
+_offl=[l for l in open(sys.argv[1]) if l.startswith('OFF')]
+OFF=[int(x) for x in _offl[0].split()[2:]] if _offl else [0]
 def sim(span):
     L=len(span); depths=[None]*L; depths[0]=0; work=[0]; problems=[]
     while work:

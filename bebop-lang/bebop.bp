@@ -2790,6 +2790,65 @@ fn cli_run(argv: i64) -> i64 {
   2
 }
 
+fn emit_sys_emit_sys_mmap(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 5);
+  let _ = pop(insns, n, 4);
+  let _ = pop(insns, n, 3);
+  let _ = pop(insns, n, 2);
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 0);
+  em(insns, n, 3531611080);
+  em(insns, n, 3556769793);
+  let _ = push(insns, n);
+  n[0]
+}
+
+fn emit_sys_emit_sys_rename(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 0);
+  em(insns, n, 2852193251);
+  em(insns, n, 2852127713);
+  em(insns, n, 2457865312);
+  em(insns, n, 2852127714);
+  em(insns, n, 3531605192);
+  em(insns, n, 3556769793);
+  let _ = push(insns, n);
+  n[0]
+}
+
+
 fn main(argc: i64, argv: i64) -> i64 {
   let cmd = if argc >= 3 then argv[2] else 0;
   let bcmp = zeros(16);
