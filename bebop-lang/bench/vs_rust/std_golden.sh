@@ -49,5 +49,10 @@ gate crc32 3421780262 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/hex.bp /tmp/opencode/hex_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/hex_test.bin | tail -1)
 gate hex 107075202213222 "$r"
 
+# ---- hv (Ф1 HDC core vs Rust golden: splitmix code/bind/bundle/permute/
+#      hamming/popcount chain — bench/vs_rust/spectral_golden/golden.txt) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/hv.bp /tmp/opencode/hv_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/hv_test.bin | tail -1)
+gate hv 4427592702613580868 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

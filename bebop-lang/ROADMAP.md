@@ -386,6 +386,20 @@ Lean-ядро (QTT у компіляторі та рантаймі, proof-sectio
 pristine+1/+2/+3fn компілюються, +3fn-бінарник компілює k2/k7 правильно.
 Наступні: GOLDEN-вектори спектрів з C/Rust (до Zero-C) → Ф1 HDC → Ф2 Tensor Arena.
 
+# ═══ GOLDEN + Ф1 HDC: ЗАКРИТО (2026-09-01) ═══
+GOLDEN: bench/vs_rust/spectral_golden/golden.txt — еталони з Rust (dowiz-core)
+ДО Zero-C: topk_symmetric (6 графів, 32 iters, i64 fixed-point 2^32 + f64 bits),
+Householder eigh референс (power-vs-Householder паритет), LeVerrier charpoly,
+HDC-секція (code/bind/bundle/permute/hamming/popcount). Генератор — окремий
+cargo-проєкт, regen-верифікований байт-в-байт.
+Ф1 HDC-ядро: selfhost/std/hv.bp — канонічний twin hypervector.rs:
+splitmix64 code(seed), bind (XOR), bundle (мажоритарний, ties→0),
+permute (біт-ротація D=1024), SWAR popcount/hamming. Гейт hv у std_golden.sh
+(8/8): ланцюг golden-векторів відтворений ТОЧНО (4427592702613580868)
+через повний self-hosted pipeline (bebop.bin → seed), обидва рушії згодні.
+LAW: hv_bundle out не може аліювати з рядком vs (w-loop пише out[w], поки
+k-цикл читає vs[k*16+w]). Наступні: SPECTRAL topk_symmetric .bp порт → Ф2.
+
 # ═══ ПРІОРИТЕТ РЕАЛІЗАЦІЇ (після Ф0.3 bootstrap) ═══
 ```
 Ф0.3 (bootstrap) ─┬─► Ф1 (HDC) ──► Ф2 (.bt+CSR) ──► SS-6 (spectral.rs порт)
