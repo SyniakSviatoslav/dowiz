@@ -413,6 +413,25 @@ LAW: `>>` у Bebop ЛОГІЧНИЙ (u64) на обох рушіях — abs п�
 |x_i|>>14). Пропущений негативний зсув мовчки зіпсував першу спробу паритету.
 Далі: Ф2 Tensor Arena + .bt ранг-4 (канон .bt-тензор) → Ф3 VS-AST (item⊗role).
 
+# ═══ ХВОСТИ ЗАКРИТІ (2026-09-01) ═══
+1. run_program ret −1 holdout (M3-era, "located-unfixed") — ЗАКРИТО за
+   коренем: unresolved emit_call не проковтував список аргументів → pos
+   застрягав усередині виклику → зайвий pop + фантомний push → ldp x29,x30
+   читав сміття + SP-крип 16Б/виклик. Фікс: лексичний skip аргументів
+   (глибина дужок + рядки + //), оба твіни. L0 depth-gate ЗЕЛЕНИЙ уперше
+   (0 прапорців на обох потоках); depth_sim lsl#12 декодування виправлене.
+2. C-парсер split-brain — ЗАКРИТО. bp_parse ніколи не парсив тіла (тільки
+   ріжe на items); єдиний body-парсер (bp_parse_fn_decl → expr_parse)
+   розширений до поверхні .bp-рівня: chained-discard-assign, Str~I64
+   (pointer-duality), array_get на i64, syscall-буфери [i64].
+   Гейт: check ok-count == ^fn-count (Makefile де-хардкоджений).
+3. Interp-твіни sys_ftruncate/munmap/mmap/rename — ЗАКРИТО (L5): Term
+   отримав e,f слоти (6 арг mmap), bp_syscall4, eval/check/subst/norm/conv/
+   termination гілки. Паритет-проба: interp == JIT == 720000.
+Стан: bebop.bp 112/112 check-ok, expr_compile.bp 110/110, self_check 0,
+parity 9/0/0, construct 20/20, std_golden 9/9, фікс-поінт ×2 байт-в-байт.
+Далі: Ф2 Tensor Arena + .bt ранг-4 → Ф3 VS-AST (item⊗role).
+
 # ═══ ПРІОРИТЕТ РЕАЛІЗАЦІЇ (після Ф0.3 bootstrap) ═══
 ```
 Ф0.3 (bootstrap) ─┬─► Ф1 (HDC) ──► Ф2 (.bt+CSR) ──► SS-6 (spectral.rs порт)
