@@ -440,16 +440,21 @@ capability with its done-check.
 ## Roadmap for the next batch (in-order)
 
 Status (2026-09-01): items 1-2 of the current pull are DONE below (rev/store
-gates, atomic-publish driver), N4 petri and N5 lsm are DONE (gates 18/19,
-folds in std_golden.sh); the canonical fixpoint source is bebop.bp (the
+gates, atomic-publish driver), N4 petri, N5 lsm and N6 holo are DONE (gates
+18/19/20, folds in std_golden.sh; holo fold 2766693490590679850 == python
+oracle bit-exact); the canonical fixpoint source is bebop.bp (the
 driverless expr_compile.bp is its forward fork - edits land in BOTH).
-Two emitter defects reserved for R3.x emitter work:
+Emitter defects reserved for R3.x emitter work:
 (a) fast-path `a*b<<c` miscompile (journal 1788288190;
     workaround: parenthesize/lift into lets);
 (b) `>>` selector splits by OPERAND ORIGIN: array-loaded/spilled operands emit
     LSR (logical), literal/local-arithmetic operands emit ASR (journal
-    1788288193; workaround: shift only non-negative magnitudes).
-Next pulls: N6 then the SS-15..18 cluster, then SS-1..14, then SME/SVE2.
+    1788288193; workaround: shift only non-negative magnitudes, or &-mask for
+    LSR);
+(c) loop-shaped miscompile: while-loop + local-extract + compare +
+    conditional-store -> layout-dependent garbage (journal 1788288197;
+    workaround: unroll, hoist values to locals).
+Next pulls: N6 DONE, then the SS-15..18 cluster, then SS-1..14, then SME/SVE2.
 
 1. **N2 → N3**: N2 rev.bp gate DONE (fold 5092789399242, 17th gate;
    xor-toggle/CNOT/Toffoli/Fredkin self-inverse + rev_round/rev_undo delta
@@ -461,8 +466,10 @@ Next pulls: N6 then the SS-15..18 cluster, then SS-1..14, then SME/SVE2.
    artifact atomically visible, tmp gone), store gate fold
    2245524994793680850 (16th gate). Fixpoint self-test: bb2==bb3 required.
 3. **N4 petri.bp** DONE (18th gate, fold 61678606) → **N5 lsm.bp** DONE
-   (19th gate, fold -4383576415516299782) → **N6** (holographic WHT
-   recovery) OPEN.
+   (19th gate, fold -4383576415516299782) → **N6 holo.bp** DONE (20th gate,
+   fold 2766693490590679850; WHT-dispersed 4x copies, trim recovery
+   pf=15/dan=32/best=0, recovered-tensor re-execution through reservoir at
+   2^15 spike scale; oracle == BP bit-exact).
 4. **SS-15/16/17/18** — spectral coordinates, gap flow control, eigentime,
    spectral self-replication; then SS-1..SS-14 in dependency order (SS-6
    foundation first, already CORE DONE).

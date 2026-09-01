@@ -1,0 +1,393 @@
+// holo.bp - N6: holographic memory non-locality.
+// Every fragment of the ranked word-tensor is WHT-encoded to carry a
+// micro-fingerprint of the WHOLE message (each hologram cell = a +/- mix of
+// ALL words - the FWHT basis shift wht.bp exposes for N6). The arena stores 4
+// dispersed copies; it can be TRIMMED anywhere (copy zeroed, cells cut) yet
+// the spectral layer fully recovers the logic from the surviving piece and
+// re-executes it through the N5 reservoir. Changing ONE word moves EVERY
+// picture cell; cutting never destroys the picture (redundancy regime).
+//
+// Regime (all integer-exact, oracle-mirrored):
+//   * message word-tensor m[8] = [7,-3,5,-11,13,-17,19,-23];
+//   * hologram h = FWHT(m) (N1 butterfly); arena[32] = 4 copies of h at
+//     bases 0,8,16,24 ("the picture");
+//   * arena trims: copy1 fully cut (cells 8..15 -> 0), copy3 cell 26 cut;
+//   * recovery: mhat_s = FWHT(arena_base_s)/8. A candidate is trusted iff it
+//     agrees with some OTHER independent copy (self-resolving, no ground
+//     truth); winner = lowest-index max-support candidate.
+//   * invariants folded: recover-consensus, match-with-message, dead-copy
+//     zero, damaged-copy non-match, and the global-fingerprint probe dan
+//     (picture cells changed when m[0]+=1 -> 32 of 32).
+//   * the recovered word-tensor is EXECUTED as logic: its signs + the
+//     reservoir stream spike the N5 liquid, per-spike FWHT sign-word
+//     prospect, fold through *131 as in the lsm gate - the spectral engine
+//     recovers and EXECUTES logic, not just data.
+//
+// STACK DISCIPLINE: an earlier ">8 stack-bound array symbols segfault"
+// hypothesis (journal 1788288196) was RETRACTED - extra unused declarations and
+// mixed array+scalar call ABIs are fine (S8, ABI probes). The real defect this
+// gate hit was the loop-shaped miscompile (journal 1788288197: while-loop
+// reading w[172+i] into a local, comparing, conditional store -> layout-
+// dependent garbage; fixed by unrolling to locals, Q1..Q7 green). Workspace-single
+// array `w` + <=8-bind audit is kept as defensive discipline; m, arena, pert are
+// the only independent arrays.
+//
+// Workspace layout: rp[0..9] ci[9..73] vv[73..137] liq[137..145] win[145..153]
+// tm[153..161] st[161] (xorshift PRNG state) pre[162..170] acc[170] dan[171]
+// sup[172..176] best[176].
+
+// h_fwht_at(x, b): in-place 8-point FWHT of x[b..b+7] (N1 ADD/SUB recursion).
+// Binds: x, b, d = 3.
+fn h_fwht_at(x: [i64], b: i64) -> i64 {
+  let d = zeros(8);
+  let _ = d[0] = x[b] + x[b + 1];
+  let _ = d[1] = x[b] - x[b + 1];
+  let _ = d[2] = x[b + 2] + x[b + 3];
+  let _ = d[3] = x[b + 2] - x[b + 3];
+  let _ = d[4] = x[b + 4] + x[b + 5];
+  let _ = d[5] = x[b + 4] - x[b + 5];
+  let _ = d[6] = x[b + 6] + x[b + 7];
+  let _ = d[7] = x[b + 6] - x[b + 7];
+  let _ = x[b] = d[0] + d[2];
+  let _ = x[b + 1] = d[1] + d[3];
+  let _ = x[b + 2] = d[0] - d[2];
+  let _ = x[b + 3] = d[1] - d[3];
+  let _ = x[b + 4] = d[4] + d[6];
+  let _ = x[b + 5] = d[5] + d[7];
+  let _ = x[b + 6] = d[4] - d[6];
+  let _ = x[b + 7] = d[5] - d[7];
+  let _ = d[0] = x[b] + x[b + 4];
+  let _ = d[1] = x[b + 1] + x[b + 5];
+  let _ = d[2] = x[b + 2] + x[b + 6];
+  let _ = d[3] = x[b + 3] + x[b + 7];
+  let _ = d[4] = x[b] - x[b + 4];
+  let _ = d[5] = x[b + 1] - x[b + 5];
+  let _ = d[6] = x[b + 2] - x[b + 6];
+  let _ = d[7] = x[b + 3] - x[b + 7];
+  let _ = x[b] = d[0];
+  let _ = x[b + 1] = d[1];
+  let _ = x[b + 2] = d[2];
+  let _ = x[b + 3] = d[3];
+  let _ = x[b + 4] = d[4];
+  let _ = x[b + 5] = d[5];
+  let _ = x[b + 6] = d[6];
+  let _ = x[b + 7] = d[7];
+  1
+}
+
+// h_inv8_at: FWHT(FWHT(x)) == 8*x -> rescale (integer-exact). Binds 3.
+fn h_inv8_at(x: [i64], b: i64) -> i64 {
+  let _ = h_fwht_at(x, b);
+  let i = [0];
+  while i[0] < 8 {
+    let _ = x[b + i[0]] = x[b + i[0]] / 8;
+    let _ = i[0] = i[0] + 1;
+    0
+  };
+  8
+}
+
+// h_seqeq(x, a, c): 1 iff 8-cell blocks at arena bases a*8, c*8 are equal.
+// Binds: x, a, c, eq, i = 5.
+fn h_seqeq(x: [i64], a: i64, c: i64) -> i64 {
+  let eq = [1];
+  let i = [0];
+  while i[0] < 8 {
+    let _ = if x[a * 8 + i[0]] != x[c * 8 + i[0]] then (let _ = eq[0] = 0 in 0) else 0;
+    let _ = i[0] = i[0] + 1;
+    0
+  };
+  eq[0]
+}
+
+// h_seqeq_m(x, b, m): 1 iff block x[b..b+7] equals message m (fold invariant
+// only - recovery never reads ground truth). Binds 5.
+fn h_seqeq_m(x: [i64], b: i64, m: [i64]) -> i64 {
+  let eq = [1];
+  let i = [0];
+  while i[0] < 8 {
+    let _ = if x[b + i[0]] != m[i[0]] then (let _ = eq[0] = 0 in 0) else 0;
+    let _ = i[0] = i[0] + 1;
+    0
+  };
+  eq[0]
+}
+
+// ---- N5 reservoir core in the workspace. ----
+
+fn lsm_gen(w: [i64]) -> i64 {
+  let x = w[161];
+  let _ = w[161] = x ^ (x << 13);
+  let _ = w[161] = w[161] ^ (w[161] >> 7);
+  let _ = w[161] = w[161] ^ (w[161] << 17);
+  w[161]
+}
+
+fn lsm_step(w: [i64], u: i64) -> i64 {
+  let pre = zeros(8);
+  let i = [0];
+  while i[0] < 8 {
+    let acc = [0];
+    let e = w[0 + i[0]];
+    while e < w[1 + i[0]] {
+      let _ = acc[0] = acc[0] + w[73 + e] * w[137 + w[9 + e]];
+      let e = e + 1;
+      0
+    };
+    let _ = pre[i[0]] = acc[0] + u * w[145 + i[0]] * 32768;
+    let _ = i[0] = i[0] + 1;
+    0
+  };
+  let j = [0];
+  while j[0] < 8 {
+    let v = pre[j[0]];
+    let d4 = if v < 0 then 0 - (((0 - v) + 15) >> 4) else v >> 4;
+    let s = w[137 + j[0]] + d4;
+    let h = if s < 0 then 0 - (((0 - s) + 1) >> 1) else s >> 1;
+    let _ = w[137 + j[0]] = h;
+    let _ = j[0] = j[0] + 1;
+    0
+  };
+  1
+}
+
+fn lsm_build(w: [i64]) -> i64 {
+  let _ = w[161] = 1234567;
+  let i = [0];
+  while i[0] < 8 {
+    let _ = w[1 + i[0]] = w[0 + i[0]];
+    let j = [0];
+    while j[0] < 8 {
+      let z = lsm_gen(w);
+      let wr = (z & 7) % 3 - 1;
+      let _ = w[1 + i[0]] = w[1 + i[0]] + (if wr != 0 then 1 else 0);
+      let _ = j[0] = j[0] + 1;
+      0
+    };
+    let _ = i[0] = i[0] + 1;
+    0
+  };
+  let i2 = [0];
+  while i2[0] < 8 {
+    let loc = [0];
+    let j2 = [0];
+    while j2[0] < 8 {
+      let z = lsm_gen(w);
+      let wr = (z & 7) % 3 - 1;
+      let _ = if wr != 0 then (let _ = w[9 + w[0 + i2[0]] + loc[0]] = j2[0] in 0) else 0;
+      let _ = if wr != 0 then (let _ = w[73 + w[0 + i2[0]] + loc[0]] = wr in 0) else 0;
+      let _ = loc[0] = loc[0] + (if wr != 0 then 1 else 0);
+      let _ = j2[0] = j2[0] + 1;
+      0
+    };
+    let _ = i2[0] = i2[0] + 1;
+    0
+  };
+  1
+}
+
+fn lsm_win(w: [i64]) -> i64 {
+  let i = [0];
+  while i[0] < 8 {
+    let _ = w[145 + i[0]] = 1 - (i[0] & 1);
+    let _ = i[0] = i[0] + 1;
+    0
+  };
+  1
+}
+
+// ---- holographic phases (each <=8 binds) ----
+
+fn h_picture(m: [i64], arena: [i64]) -> i64 {
+  let s = [0];
+  while s[0] < 4 {
+    let c = [0];
+    while c[0] < 8 {
+      let _ = arena[s[0] * 8 + c[0]] = m[c[0]];
+      let _ = c[0] = c[0] + 1;
+      0
+    };
+    let _ = h_fwht_at(arena, s[0] * 8);
+    let _ = s[0] = s[0] + 1;
+    0
+  };
+  1
+}
+
+// perturbed picture: same message with m[0]+=1, WHT-dispersed identically.
+fn h_perturb(m: [i64], pert: [i64]) -> i64 {
+  let q = [0];
+  while q[0] < 4 {
+    let c2 = [0];
+    while c2[0] < 8 {
+      let v = m[c2[0]];
+      let _ = pert[q[0] * 8 + c2[0]] = (if c2[0] == 0 then v + 1 else v);
+      let _ = c2[0] = c2[0] + 1;
+      0
+    };
+    let _ = h_fwht_at(pert, q[0] * 8);
+    let _ = q[0] = q[0] + 1;
+    0
+  };
+  1
+}
+
+fn h_dan(arena: [i64], pert: [i64], w: [i64]) -> i64 {
+  let _ = w[171] = 0;
+  let k = [0];
+  while k[0] < 32 {
+    let _ = w[171] = w[171] + (if arena[k[0]] != pert[k[0]] then 1 else 0);
+    let _ = k[0] = k[0] + 1;
+    0
+  };
+  w[171]
+}
+
+fn h_trim(arena: [i64]) -> i64 {
+  let z = [0];
+  while z[0] < 8 {
+    let _ = arena[8 + z[0]] = 0;
+    let _ = z[0] = z[0] + 1;
+    0
+  };
+  let _ = arena[26] = 0;
+  1
+}
+
+fn h_recover(arena: [i64]) -> i64 {
+  let r = [0];
+  while r[0] < 4 {
+    let _ = h_inv8_at(arena, r[0] * 8);
+    let _ = r[0] = r[0] + 1;
+    0
+  };
+  1
+}
+
+fn h_consensus(arena: [i64], w: [i64]) -> i64 {
+  let a = [0];
+  while a[0] < 4 {
+    let _ = w[172 + a[0]] = 0;
+    let c = [0];
+    while c[0] < 4 {
+      let e = h_seqeq(arena, a[0], c[0]);
+      let add = (if c[0] != a[0] then e else 0);
+      let _ = if add == 1 then (let _ = w[172 + a[0]] = w[172 + a[0]] + 1 in 0) else 0;
+      let _ = c[0] = c[0] + 1;
+      0
+    };
+    let _ = a[0] = a[0] + 1;
+    0
+  };
+  1
+}
+
+// pick lowest-index copy with max support; pack bmax*16 + best.
+// pick lowest-index copy with max support; pack bmax*16 + best. Unrolled,
+// array values hoisted to locals, no loop-carried condition on array reads
+// (loop-shaped pick miscompiled: layout-dependent wrong max, journal
+// 1788288197). bt is selected with an armed-sentinel: take = (match && armed),
+// bt = i*take + bt*(1-take); armed deactivates after the first match so the
+// LOWEST and only the lowest max index is selected.
+fn h_pick(w: [i64]) -> i64 {
+  let s0 = w[172];
+  let s1 = w[173];
+  let s2 = w[174];
+  let s3 = w[175];
+  let bm = [0];
+  let bt = [0];
+  let t = [0];
+  let u = [0];
+  let v = [0];
+  let _ = bm[0] = (if s0 > s1 then s0 else s1);
+  let _ = bm[0] = (if s2 > bm[0] then s2 else bm[0]);
+  let _ = bm[0] = (if s3 > bm[0] then s3 else bm[0]);
+  let _ = bt[0] = 4;
+  let _ = t[0] = (if s0 == bm[0] then 1 else 0);
+  let _ = u[0] = (if bt[0] == 4 then 1 else 0);
+  let _ = v[0] = t[0] * u[0];
+  let _ = bt[0] = v[0] * 0 + bt[0] * (1 - v[0]);
+  let _ = t[0] = (if s1 == bm[0] then 1 else 0);
+  let _ = u[0] = (if bt[0] == 4 then 1 else 0);
+  let _ = v[0] = t[0] * u[0];
+  let _ = bt[0] = v[0] * 1 + bt[0] * (1 - v[0]);
+  let _ = t[0] = (if s2 == bm[0] then 1 else 0);
+  let _ = u[0] = (if bt[0] == 4 then 1 else 0);
+  let _ = v[0] = t[0] * u[0];
+  let _ = bt[0] = v[0] * 2 + bt[0] * (1 - v[0]);
+  let _ = t[0] = (if s3 == bm[0] then 1 else 0);
+  let _ = u[0] = (if bt[0] == 4 then 1 else 0);
+  let _ = v[0] = t[0] * u[0];
+  let _ = bt[0] = v[0] * 3 + bt[0] * (1 - v[0]);
+  bm[0] * 16 + bt[0]
+}
+
+// fold invariants into pf (bitmask 1+2+4+8) from the RECOVERED arena vs m.
+// Accumulator-cell style keeps live symbols <=5 (spill class, journal
+// 1788288196): each RHS is one call, accumulated into pf[0] step by step.
+fn h_inv(arena: [i64], m: [i64], best: i64, w: [i64]) -> i64 {
+  let pf = [0];
+  let _ = pf[0] = (if w[172 + best] != 0 then 1 else 0);
+  let _ = pf[0] = pf[0] + h_seqeq_m(arena, best * 8, m) * 2;
+  let _ = pf[0] = pf[0] + (1 - h_seqeq_m(arena, 8, m)) * 4;
+  let _ = pf[0] = pf[0] + (1 - h_seqeq_m(arena, 24, m)) * 8;
+  pf[0]
+}
+
+// execute the recovered logic through the reservoir: 8 spikes, each spike =
+// (reservoir stream low bit + recovered-word sign); per-spike FWHT sign-word
+// prospect folds via *131; ends with the invariants tail.
+fn h_exec(w: [i64], arena: [i64], best: i64, m: [i64]) -> i64 {
+  let _ = w[170] = 0;
+  let it = [0];
+  while it[0] < 8 {
+    let z = lsm_gen(w);
+    let u = (z & 1) + (if arena[best * 8 + it[0]] < 0 then 1 else 0);
+    let _ = lsm_step(w, u);
+    let k = [0];
+    while k[0] < 8 {
+      let _ = w[153 + k[0]] = w[137 + k[0]];
+      let _ = k[0] = k[0] + 1;
+      0
+    };
+    let _ = h_fwht_at(w, 153);
+    let wb = [0];
+    let ib = [0];
+    while ib[0] < 8 {
+      let _ = wb[0] = wb[0] | ((1 << ib[0]) * (if w[153 + ib[0]] > 0 then 1 else 0));
+      let _ = ib[0] = ib[0] + 1;
+      0
+    };
+    let _ = w[170] = w[170] * 131 + wb[0] * 17 + (w[153] + w[160]);
+    let j = [0];
+    while j[0] < 8 {
+      let _ = w[137 + j[0]] = 0;
+      let _ = j[0] = j[0] + 1;
+      0
+    };
+    let _ = it[0] = it[0] + 1;
+    0
+  };
+  let _ = w[170] = w[170] * 131 + w[162] * 1000 + w[171];
+  w[170]
+}
+
+fn main() -> i64 {
+  let m = [7, 0 - 3, 5, 0 - 11, 13, 0 - 17, 19, 0 - 23];
+  let arena = zeros(32);
+  let pert = zeros(32);
+  let w = zeros(192);
+  let _ = h_picture(m, arena);
+  let _ = h_perturb(m, pert);
+  let _ = w[171] = h_dan(arena, pert, w);
+  let _ = h_trim(arena);
+  let _ = h_recover(arena);
+  let _ = h_consensus(arena, w);
+  let pk = h_pick(w);
+  let best = pk & 15;
+  let _ = w[162] = h_inv(arena, m, best, w);
+  let _ = lsm_build(w);
+  let _ = lsm_win(w);
+  let _ = w[170] = h_exec(w, arena, best, m);
+  w[170]
+}

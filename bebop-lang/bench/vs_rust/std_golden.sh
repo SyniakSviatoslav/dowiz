@@ -134,5 +134,18 @@ gate petri 61678606 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/lsm.bp /tmp/opencode/lsm_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/lsm_test.bin | tail -1)
 gate lsm -4383576415516299782 "$r"
 
+# ---- holo (N6 holographic memory: message m[8]=[7,-3,5,-11,13,-17,19,-23]
+#      WHT-dispersed into arena[32] as 4 copies; trims cut copy1 whole + copy3
+#      cell 26; recovery = in-place FWHT(FWHT)/8; self-resolving consensus
+#      (trust iff another copy agrees), winner = lowest-index max support;
+#      invariants pf=15 (recovered==message, dead copy zero, damaged copy
+#      mismatch), global-fingerprint dan=32 (m[0]+=1 moves ALL 32 picture
+#      cells); recovered signs + xorshift64 stream spike the N5 liquid at
+#      2^15 scale, per-spike FWHT sign-word and DC+Nyquist prospect folded
+#      through *131; fold 2766693490590679850 = independent Python oracle
+#      (xorshift LSR semantics, FWHT i64 wrap, floor-div step)) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/holo.bp /tmp/opencode/holo_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/holo_test.bin | tail -1)
+gate holo 2766693490590679850 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

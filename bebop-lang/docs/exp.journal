@@ -60,3 +60,24 @@
 1788288195 N4 petri gate: bit Petri nets, mark/get/clear round trip incl.
   bit63/cell-1, tzcnt dispatcher, deadlock -1, 4-transition crossbar ordered
   firing; fold 61678606 == Python cell-faithful oracle.
+1788288196 H:spill->8-symbol-theory DID:retract; J1..J8 (extra unused array decls,
+  mixed-array+scalar call ABI probe t9 = 102034, S8 = 51307) GOT:no segfault; the
+  earlier ">8 stack-bound symbols" crashes were malformed fn-main probe SPLICES
+  (L11), not the emitter; array+scalar ABI verified correct VERDICT:retracted
+1788288197 H:loop-shaped-miscompile DID:h_pick contains pure-h, fold 15032 did not
+  gate (folded acc=0 degenerate); pure repros P1-P4 FIRST MAX at index0 -> MAX-1,
+  bt garbage; layouts vary result GOT:while-loop reading w[172+i] to local, compare,
+  conditional store to max cell = layout-dependent; rewritten fully unrolled with
+  values hoisted to locals (no loop-carried array condition); Q1=16 Q2=33 Q3=48
+  Q4=112 Q5=0 Q6=50 Q7=147 all correct, lowest-index max-support rule VERDICT:
+  confirmed (emitter defect class: loop + local-extract + compare + cond-store)
+1788288198 H:holo-gate DID:post w[161]=fix + 2^15 spike scale full holo.bp; probe
+  S1..S4 (build state: rp/ci/vv/w[161]); G1/G3/P1 gen stream bisection; oracle
+  mirror corrected (w[161]-driven, fwht in place, gen shift on unsigned) GOT:full
+  run rc=0 reproducible fold 2766693490590679850; rp=[0,4,9,12,19,23,27,32,37],
+  pf=15, dan=32, best=0; oracle == BP exact; gate 20/20 std_golden VERDICT:confirmed
+1788288199 H:xorshift-mirror-asr-trap DID:locus bp vs oracle fold mismatch; bisect
+  G1(==1 gen ok)/G3(!= after 3 gens); checked lsr-vs-asr variants GOT:Bebop `>>` on
+  array-loaded w[161] emits LSR; python `x >> 7` on negative x is ASR -> oracle must
+  mask unsigned before shift ((x & M) >> 7); with that, stream + fold exact match
+  VERDICT:confirmed (oracle-mirror rule: shift the unsigned mask at every >>)
