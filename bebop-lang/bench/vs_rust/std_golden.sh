@@ -40,7 +40,10 @@ gate base64 1415005814517107508 "$r"
 
 # ---- sha256 ----
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/sha256.bp /tmp/opencode/sha256_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/sha256_test.bin | tail -1)
-gate sha256 65665208959391223 "$r"
+# sha256("abc") = ba7816bf8f01cfea...ad; the frozen = fold(h[i]*31^..) of the
+# TRUE digest (hashlib-verified 2026-09-01). The old frozen 65665208959391223
+# was captured from the S0/S1-as-zero miscompile (the lost is_alpha A-Z fix).
+gate sha256 -4000131497313522475 "$r"
 
 # ---- crc32 (zlib_crc32 check value 0xCBF43926 for "123456789") ----
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/crc.bp /tmp/opencode/crc_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/crc_test.bin | tail -1)
@@ -70,6 +73,11 @@ gate csr -6945622865743784444 "$r"
 #      golden byte stream; bench/vs_rust/spectral_golden/golden.txt .bt section) ----
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/bt.bp /tmp/opencode/bt_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/bt_test.bin | tail -1)
 gate bt -5708805812714944038 "$r"
+
+# ---- cache (SS-6/Ф6 DecompCache falsifier: FNV key, 0 recomputes on
+#      identical content, +1 on any change) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/cache.bp /tmp/opencode/cache_test.bin >/dev/null 2>&1 && sleep 1 && timeout 60 ./seed/build/seed /tmp/opencode/cache_test.bin | tail -1)
+gate cache 38876254956 "$r"
 
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

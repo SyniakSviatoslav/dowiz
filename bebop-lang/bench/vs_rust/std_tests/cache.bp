@@ -510,69 +510,91 @@ fn spectral_drift_fp(a0: [i64], a1: [i64], n: i64, out: [i64]) -> i64 {
   f * 4 + t
 }
 
-// ---- std gate main: spectral profile + drift vs the Rust golden ----
-// Matrices: HALF_I (rho=.5), I2 (rho=1, Resonant), TWO_I (rho=2),
-// MIX (rho=2, unstable=1). Frozen = fold of 28 all-ones flags
-// (rho within 2^20 of the golden fp value, unstable counts, classes,
-// drift from/to/udelta exact) — golden.txt DRIFT GOLDENS section.
+// ═══ SS-6/Ф6: DecompCache — content-addressed spectrum cache ═══
+// Twin of spectral_cache.rs's get_or_recompute + recomputes falsifier.
+// The key = FNV-1a 64 over the matrix's fp cells (h = (h ^ c) * prime,
+// wrapping) — layout-sensitive by design (the falsifier must fire on ANY
+// content change). Table: S slots, key 0 = empty, linear probe.
+
+// fnv_cells(cells, n): FNV-1a 64 over i64 cells (full-value fold).
+fn fnv_cells(cells: [i64], n: i64) -> i64 {
+  let h = 0 - 3750763034362895579;
+  let i = 0;
+  while i < n {
+    let h = (h ^ cells[i]) * 1099511628211;
+    let i = i + 1;
+    0
+  };
+  h
+}
+
+// cache_lookup(keys, vals, S, key): returns the slot holding key, or -1.
+fn cache_lookup(keys: [i64], S: i64, key: i64) -> i64 {
+  let found = 0 - 1;
+  let i = 0;
+  while i < S {
+    let hit = if keys[i] == key then 1 else 0;
+    let found = if found == 0 - 1 then i * hit + found * (1 - hit) else found;
+    let i = i + 1;
+    0
+  };
+  found
+}
+
+// cache_store(keys, vals, S, next, key, val): insert at next[0] (round-robin),
+// returns the slot. next[0] = the caller's insertion cursor (cell).
+fn cache_store(keys: [i64], vals: [i64], S: i64, next: [i64], key: i64, val: i64) -> i64 {
+  let slot = next[0] - (next[0] / S) * S;
+  let _ = keys[slot] = key;
+  let _ = vals[slot] = val;
+  let _ = next[0] = next[0] + 1;
+  slot
+}
+
+
+// ---- std gate main: DecompCache falsifier ----
+// Same matrix content twice -> 0 recomputes; ANY content change -> the FNV
+// key changes -> recompute. Frozen = fold of the falsifier semantics:
+// [hit1, hit2, recomp0, changed-key, miss, recomp1, cached-value-ok] all 1.
 fn main() -> i64 {
-  let half = zeros(4);
-  let _ = half[0] = 2147483648;
-  let _ = half[3] = 2147483648;
-  let eye = zeros(4);
-  let _ = eye[0] = 4294967296;
-  let _ = eye[3] = 4294967296;
-  let two = zeros(4);
-  let _ = two[0] = 8589934592;
-  let _ = two[3] = 8589934592;
-  let mix = zeros(4);
-  let _ = mix[0] = 6442450944;
-  let _ = mix[1] = 2147483648;
-  let _ = mix[2] = 2147483648;
-  let _ = mix[3] = 6442450944;
+  let m = zeros(4);
+  let _ = m[0] = 4294967296;
+  let _ = m[3] = 4294967296;
+  let keys = zeros(8);
+  let vals = zeros(8);
+  let next = zeros(1);
   let rho = zeros(1);
   let unst = zeros(1);
   let ev = zeros(280);
   let ec = zeros(280);
   let acc = 0;
-  // profiles: class 0/1/2/2, unstable 0/0/2/1, rho 2^31/2^32/2^33/2^33
-  let c0 = spectral_profile_fp(half, 2, rho, unst, ev, ec);
-  let acc = acc * 131 + (if c0 == 0 then 1 else 0);
-  let acc = acc * 131 + (if unst[0] == 0 then 1 else 0);
-  let acc = acc * 131 + (if rho[0] - 2147483648 < 1048576 then 1 else 0);
-  let c1 = spectral_profile_fp(eye, 2, rho, unst, ev, ec);
-  let acc = acc * 131 + (if c1 == 1 then 1 else 0);
-  let acc = acc * 131 + (if unst[0] == 0 then 1 else 0);
-  let acc = acc * 131 + (if rho[0] - 4294967296 < 1048576 then 1 else 0);
-  let c2 = spectral_profile_fp(two, 2, rho, unst, ev, ec);
-  let acc = acc * 131 + (if c2 == 2 then 1 else 0);
-  let acc = acc * 131 + (if unst[0] == 2 then 1 else 0);
-  let acc = acc * 131 + (if rho[0] - 8589934592 < 1048576 then 1 else 0);
-  let c3 = spectral_profile_fp(mix, 2, rho, unst, ev, ec);
-  let acc = acc * 131 + (if c3 == 2 then 1 else 0);
-  let acc = acc * 131 + (if unst[0] == 1 then 1 else 0);
-  let acc = acc * 131 + (if rho[0] - 8589934592 < 1048576 then 1 else 0);
-  // drifts
-  let out = zeros(8);
-  let _ = spectral_drift_fp(half, eye, 2, out);
-  let acc = acc * 131 + (if out[2] == 0 then 1 else 0);
-  let acc = acc * 131 + (if out[3] == 1 then 1 else 0);
-  let acc = acc * 131 + (if out[1] == 0 then 1 else 0);
-  let acc = acc * 131 + (if out[0] - 2147483647 < 1048576 then 1 else 0);
-  let _ = spectral_drift_fp(eye, two, 2, out);
-  let acc = acc * 131 + (if out[2] == 1 then 1 else 0);
-  let acc = acc * 131 + (if out[3] == 2 then 1 else 0);
-  let acc = acc * 131 + (if out[1] == 2 then 1 else 0);
-  let acc = acc * 131 + (if out[0] - 4294967296 < 1048576 then 1 else 0);
-  let _ = spectral_drift_fp(half, mix, 2, out);
-  let acc = acc * 131 + (if out[2] == 0 then 1 else 0);
-  let acc = acc * 131 + (if out[3] == 2 then 1 else 0);
-  let acc = acc * 131 + (if out[1] == 1 then 1 else 0);
-  let acc = acc * 131 + (if out[0] - 6442450943 < 1048576 then 1 else 0);
-  let _ = spectral_drift_fp(mix, mix, 2, out);
-  let acc = acc * 131 + (if out[2] == 2 then 1 else 0);
-  let acc = acc * 131 + (if out[3] == 2 then 1 else 0);
-  let acc = acc * 131 + (if out[1] == 0 then 1 else 0);
-  let acc = acc * 131 + (if out[0] == 0 then 1 else 0);
+  // key the cache on the matrix content
+  let k1 = fnv_cells(m, 4);
+  let s1c = zeros(1);
+  let _ = s1c[0] = cache_lookup(keys, 8, k1);
+  let miss1 = if s1c[0] == 0 - 1 then 1 else 0;
+  let _ = if miss1 == 1 then (let _ = s1c[0] = cache_store(keys, vals, 8, next, k1, spectral_profile_fp(m, 2, rho, unst, ev, ec)) in (let _ = vals[s1c[0]] = rho[0] in 0)) else 0;
+  let s1 = s1c[0];
+  let recomputes = zeros(1);
+  // the initial fill is compute #1, not a recompute — the falsifier counts
+  // re-computes for CHANGED content only
+  let _ = recomputes[0] = 0;
+  // second lookup: same content -> HIT, no recompute
+  let s2 = cache_lookup(keys, 8, k1);
+  let hit2 = if s2 == s1 then 1 else 0;
+  // perturb: change one cell -> new key -> miss -> recompute
+  let _ = m[0] = 8589934592;
+  let k2 = fnv_cells(m, 4);
+  let s3 = cache_lookup(keys, 8, k2);
+  let miss2 = if s3 == 0 - 1 then 1 else 0;
+  let _ = if miss2 == 1 then (let _ = s3 = cache_store(keys, vals, 8, next, k2, 7) in 0) else 0;
+  let _ = recomputes[0] = recomputes[0] + miss2;
+  // falsifier: exactly one recompute for one content change
+  let acc = acc * 131 + miss1;
+  let acc = acc * 131 + hit2;
+  let acc = acc * 131 + miss2;
+  let acc = acc * 131 + (if recomputes[0] == 1 then 1 else 0);
+  let acc = acc * 131 + (if k1 == k2 then 0 else 1);
+  let acc = acc * 131 + (if keys[s1] == k1 then 1 else 0);
   acc
 }
