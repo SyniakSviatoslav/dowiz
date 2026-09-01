@@ -937,6 +937,7 @@ static Term *subst_p(const Term *t, const char *name, const Term *v) {
         case TERM_SYSFTRUNCATE:
         case TERM_SYSMUNMAP:
         case TERM_SYSRENAME:
+        case TERM_SYSEXPORT:
             o->a = subst_p(t->a, name, v);
             o->b = subst_p(t->b, name, v);
             return o;
@@ -1256,11 +1257,14 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
             return 0;
         }
         case TERM_SYSRENAME: {
-            /* (old : Str|I64, new : Str|I64) : i64 */
+            /* (old, new) : i64 — paths are [i64] cell arrays, str literals,
+             * or raw i64 pointers (the same path triple sys_open accepts). */
             if (t->a && check(c, t->a, &STR_TY, err, cap) != 0 &&
-                check(c, t->a, &I64_TY, err, cap) != 0) return -1;
+                check(c, t->a, &I64_TY, err, cap) != 0 &&
+                check(c, t->a, &VEC_I64_TY, err, cap) != 0) return -1;
             if (t->b && check(c, t->b, &STR_TY, err, cap) != 0 &&
-                check(c, t->b, &I64_TY, err, cap) != 0) return -1;
+                check(c, t->b, &I64_TY, err, cap) != 0 &&
+                check(c, t->b, &VEC_I64_TY, err, cap) != 0) return -1;
             *out = &I64_TY;
             return 0;
         }
@@ -1286,6 +1290,15 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
         case TERM_SYSWRITE: {
             /* (fd, buffer [i64]|i64, len) : i64 — bytes travel through
              * element slots (cell array) or a raw pointer. */
+            if (t->a && check(c, t->a, &I64_TY, err, cap) != 0) return -1;
+            if (t->b && check(c, t->b, &I64_TY, err, cap) != 0 &&
+                check(c, t->b, &VEC_I64_TY, err, cap) != 0) return -1;
+            if (t->c && check(c, t->c, &I64_TY, err, cap) != 0) return -1;
+            *out = &I64_TY;
+            return 0;
+        }
+        case TERM_SYSEXPORT: {
+            /* (fd, cells [i64]|i64, len) : i64 — bytes stored to the mapped file */
             if (t->a && check(c, t->a, &I64_TY, err, cap) != 0) return -1;
             if (t->b && check(c, t->b, &I64_TY, err, cap) != 0 &&
                 check(c, t->b, &VEC_I64_TY, err, cap) != 0) return -1;
@@ -2550,6 +2563,33 @@ static Value eval(const Term *t, Env *env) {
             v.i = bp_syscall4(38, -100L, (long)oldbuf, -100L, (long)newbuf);
             return v;
         }
+        case TERM_SYSEXPORT: {
+            /* sys_export(fd,cells,len): ftruncate(46), mmap(222, RW|SHARED),
+             * store low bytes of the cell vector into the mapped region, 
+             * munmap(215). Returns 0. Mirrors the JIT emitter word-for-word. */
+            Value vf = eval(t->a, env);
+            Value vb = eval(t->b, env);
+            Value vn = eval(t->c, env);
+            if (vf.kind != 0 || vn.kind != 0) { v.kind = -1; return v; }
+            long len = vn.i;
+            if (len < 0) { v.kind = -1; return v; }
+            if (bp_syscall2(46, vf.i, len) != 0) { v.kind = -1; return v; }
+            long map = bp_syscall6(222, 0L, len, 3L, 1L, vf.i, 0L);
+            if (map < 0) { v.kind = -1; return v; }
+            if (vb.kind == 6) {
+                long cnt = vb.nfv < len ? vb.nfv : len;
+                unsigned char *p = (unsigned char *)map;
+                for (long q3 = 0; q3 < cnt; q3++) p[q3] = (unsigned char)(vb.fv[q3].val.i & 0xFF);
+            } else if (vb.kind == 0) {
+                unsigned char *p = (unsigned char *)map;
+                unsigned char *s2 = (unsigned char *)vb.i;
+                for (long q3 = 0; q3 < len; q3++) p[q3] = s2[q3];
+            } else { v.kind = -1; return v; }
+            bp_syscall2(215, map, len);
+            v.kind = 0;
+            v.i = 0;
+            return v;
+        }
         case TERM_SYSCLOSE: {
             Value vf = eval(t->a, env);
             if (vf.kind != 0) { v.kind = -1; return v; }
@@ -2990,6 +3030,7 @@ Term *qtt_subst(const Term *t, const char *name, const Term *v) {
         case TERM_SYSFTRUNCATE:
         case TERM_SYSMUNMAP:
         case TERM_SYSRENAME:
+        case TERM_SYSEXPORT:
             o->a = qtt_subst(t->a, name, v);
             o->b = qtt_subst(t->b, name, v);
             return o;
@@ -3129,6 +3170,7 @@ static Term *norm_rec(const Term *t) {
         case TERM_SYSFTRUNCATE:
         case TERM_SYSMUNMAP:
         case TERM_SYSRENAME:
+        case TERM_SYSEXPORT:
             o->a = norm_rec(t->a);
             o->b = norm_rec(t->b);
             return o;
@@ -3426,6 +3468,7 @@ static int conv_rec(const Term *a, const Term *b) {
         case TERM_SYSFTRUNCATE:
         case TERM_SYSMUNMAP:
         case TERM_SYSRENAME:
+        case TERM_SYSEXPORT:
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
         case TERM_SYSMMAP:
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b) &&

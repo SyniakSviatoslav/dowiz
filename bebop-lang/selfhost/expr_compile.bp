@@ -1122,6 +1122,55 @@ fn emit_sys_ftruncate(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], s
 }
 
 // objdump-verified 2026-08-31 (F0.1)
+// sys_export(fd, cells, len): F2 mmap-export — ftruncate, mmap the file,
+// store low bytes of cells directly into the mapped region (NO scratch, NO
+// sys_write), munmap. Returns 0. objdump-verified 2026-09-01.
+fn emit_sys_export(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 2);
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 0);
+  em(insns, n, 2852127723);
+  em(insns, n, 2852193260);
+  em(insns, n, 2852258797);
+  em(insns, n, 2852848608);
+  em(insns, n, 2852979681);
+  em(insns, n, 3531605448);
+  em(insns, n, 3556769793);
+  em(insns, n, 2854159328);
+  em(insns, n, 2852979681);
+  em(insns, n, 3531604066);
+  em(insns, n, 3531604003);
+  em(insns, n, 2852848612);
+  em(insns, n, 2854159333);
+  em(insns, n, 3531611080);
+  em(insns, n, 3556769793);
+  em(insns, n, 2852127722);
+  em(insns, n, 2854159337);
+  em(insns, n, 3943498047);
+  em(insns, n, 1409286314);
+  em(insns, n, 4167661959);
+  em(insns, n, 942238023);
+  em(insns, n, 2432697641);
+  em(insns, n, 402653179);
+  em(insns, n, 2852783072);
+  em(insns, n, 2852979681);
+  em(insns, n, 3531610856);
+  em(insns, n, 3556769793);
+  em(insns, n, 2854159328);
+  let _ = push(insns, n);
+  n[0]
+}
+
 fn emit_sys_mmap(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
@@ -1219,6 +1268,7 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   let is_sln = if name == 585709020818199 then 1 else 0;
   let is_chf = if name == 224358574 then 1 else 0;
   let is_m0 = if name == 12598865016055593546 then 1 else 0;
+  let is_sex = if name == 7442661902340062434 then 1 else 0;
   let is_m1 = if name == 76753189874778913 then 1 else 0;
   let is_m2 = if name == 7442662210087947144 then 1 else 0;
   let is_m3 = if name == 7442662398273192292 then 1 else 0;
@@ -1236,6 +1286,7 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   else if is_sln == 1 then emit_str_len_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_chf == 1 then emit_char_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_m0 == 1 then emit_sys_ftruncate(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_sex == 1 then emit_sys_export(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_m1 == 1 then emit_sys_mmap(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_m2 == 1 then emit_sys_munmap(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_m3 == 1 then emit_sys_rename(s, pos, insns, n, stab, selfname, selfstart, fntab)

@@ -381,6 +381,8 @@ static Term *parse_primary(P *p) {
             t->kind = TERM_SYSMMAP; /* (addr,len,prot,flags,fd,off) 6 args in postfix */
         } else if (strcmp(buf, "sys_rename") == 0) {
             t->kind = TERM_SYSRENAME; /* (old,new): renameat(AT_FDCWD,...) */
+        } else if (strcmp(buf, "sys_export") == 0) {
+            t->kind = TERM_SYSEXPORT; /* (fd,cells,len): mmap-export, no scratch */
         } else if (strcmp(buf, "sys_clone") == 0) {
             t->kind = TERM_SYSCLONE; /* (flags,stack_top) */
         } else if (strcmp(buf, "sys_cond_set") == 0) {
@@ -636,7 +638,7 @@ static Term *parse_primary(P *p) {
             continue;
         }
         if ((atom->kind == TERM_SYSOPEN || atom->kind == TERM_SYSREAD ||
-             atom->kind == TERM_SYSWRITE) && p->s[p->pos] == '(') {
+             atom->kind == TERM_SYSWRITE || atom->kind == TERM_SYSEXPORT) && p->s[p->pos] == '(') {
             p->pos++;
             Term *aa = parse_expr(p);
             if (!aa) return NULL;
@@ -658,7 +660,8 @@ static Term *parse_primary(P *p) {
             atom->c = an;
             continue;
         }
-        if ((atom->kind == TERM_SYSRENAME || atom->kind == TERM_SYSFTRUNCATE ||
+        if ((atom->kind == TERM_SYSRENAME ||
+             atom->kind == TERM_SYSFTRUNCATE ||
              atom->kind == TERM_SYSMUNMAP) && p->s[p->pos] == '(') {
             p->pos++;
             Term *aa = parse_expr(p);

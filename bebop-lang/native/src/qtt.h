@@ -140,6 +140,7 @@ typedef enum {
     TERM_SYSMUNMAP,  /* sys_munmap(addr,len): unmap (F2 export) */
     TERM_SYSMMAP,    /* sys_mmap(addr,len,prot,flags,fd,off): raw mmap -> addr */
     TERM_SYSRENAME,  /* sys_rename(old,new): renameat(AT_FDCWD,old,AT_FDCWD,new) */
+    TERM_SYSEXPORT,  /* sys_export(fd,cells,len): ftruncate+mmap+store-bytes+munmap (F2) */
     TERM_SYSCLONE,  /* sys_clone(flags,stack_top): child tid / 0 in child
                      *   (interp: setjmp emulation — child path runs first) */
     TERM_SYSEXITTHREAD, /* sys_exit_thread_guard(cond,code): real-branch

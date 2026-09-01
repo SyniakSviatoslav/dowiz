@@ -2,6 +2,7 @@
 # M7 construct parity gate: compile with bebop.bin (no C compiler),
 # compare word-for-byte against frozen .bin artifacts, and verify
 # execution values against frozen expected values.
+ulimit -s 65536 2>/dev/null || true  # eval recursion: 113+ fn self-compile needs >8MB stack
 set -u
 BEBOPC=./seed/build/seed
 BEBOP_BIN=./bebop.bin

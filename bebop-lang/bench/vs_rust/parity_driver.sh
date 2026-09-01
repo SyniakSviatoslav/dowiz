@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # M7 parity driver: compile with bebop.bin, run with seed,
 # compare output against frozen expected values (no interp).
+ulimit -s 65536 2>/dev/null || true  # eval recursion: 113+ fn self-compile needs >8MB stack
 set -u
 SEED=./seed/build/seed
 BEBOP_BIN=./bebop.bin

@@ -38,6 +38,7 @@ $(BIN): $(SRC) src/glyph.h src/calyx.h src/arena.h src/memristor.h src/adc.h src
 	$(CC) $(CFLAGS) -o $@ $(SRC) $(LDLIBS)
 
 test: $(BIN)
+	@ulimit -s 65536 2>/dev/null || true
 	$(BIN) version
 	$(BIN) glyphs
 	$(BIN) glyph fn

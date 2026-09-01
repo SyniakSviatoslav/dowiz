@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # M7 std twin golden gate: compile with bebop.bin, run with seed,
 # compare output against frozen expected values (no C compiler, no interp).
+ulimit -s 65536 2>/dev/null || true  # eval recursion: 113+ fn self-compile needs >8MB stack
 set -u
 PASS=0; FAIL=0
 
