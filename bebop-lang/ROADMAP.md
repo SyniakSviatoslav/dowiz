@@ -464,9 +464,14 @@ Emitter defects reserved for R3.x emitter work:
     LSR);
 (c) loop-shaped miscompile: while-loop + local-extract + compare +
     conditional-store -> layout-dependent garbage (journal 1788288197;
-    workaround: unroll, hoist values to locals).
-Next pulls: N6 DONE, SS-15/SS-16 DONE; next SS-17/SS-18, then SS-1..14, then
-SME/SVE2.
+    workaround: unroll, hoist values to locals, or branch-free
+    multiply-select stores);
+(d) str literals and ++ concat SEGFAULT in the .bin runtime; argv strings
+    work (journal 1788288206; workaround: str-free programs - argv + cells +
+    arithmetic only).
+Next pulls: N6 DONE, SS-15/SS-16 DONE; tb (tokenbox, gate 23) DONE - merged
+token-economy tool (rtk+graphify+mempalace in one str-free .bp binary); next
+SS-17/SS-18, then SS-1..14, then SME/SVE2.
 
 1. **N2 → N3**: N2 rev.bp gate DONE (fold 5092789399242, 17th gate;
    xor-toggle/CNOT/Toffoli/Fredkin self-inverse + rev_round/rev_undo delta

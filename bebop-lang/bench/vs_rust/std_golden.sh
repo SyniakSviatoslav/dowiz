@@ -175,5 +175,16 @@ gate scoord 2010131 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/sgamma.bp /tmp/opencode/sgamma_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/sgamma_test.bin | tail -1)
 gate sgamma 3550431 "$r"
 
+# ---- tb (tokenbox: merged token-economy tool - rtk compressor + mempalace
+#      search + content-address hashing in ONE str-free .bp binary; answers in
+#      numbers only: tb h <path> = crc32 (== zlib bit-exact), tb ctx = corpus
+#      digest, tb s <needle> <path> = line numbers, tb c = stdin dedup/trunc;
+#      self-test fold 1111000 = crc32("123456789")==0xCBF43926 + empty-crc +
+#      line_has + itoa checks; str literals/++ segfault in the .bin runtime
+#      (R3 defect d, journal 1788288206) so tb is str-free by construction
+#      (argv + cells + arithmetic only)) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/tb.bp /tmp/opencode/tb_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/tb_test.bin | tail -1)
+gate tb 1111000 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

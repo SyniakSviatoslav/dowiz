@@ -1,0 +1,338 @@
+// tb.bp assembled: crc std slice + tokenbox core (str-free).
+
+fn xor32(a: i64, b: i64) -> i64 {
+  let aa = a;
+  let bb = b;
+  let r = 0;
+  let p = 1;
+  let i = 0;
+  while i < 32 {
+    let ba = aa - (aa / 2) * 2;
+    let bv = bb - (bb / 2) * 2;
+    let bx = ba + bv - (2 * (ba * bv));
+    let r = r + (p * bx);
+    let aa = aa / 2;
+    let bb = bb / 2;
+    let p = p * 2;
+    let i = i + 1;
+    0
+  };
+  r
+}
+
+// crc32_update(crc, b): one reflected CRC-32 step for byte b (0 <= b <= 255).
+// crc is the running 32-bit register (0 <= crc < 2^32), already complemented.
+// Equivalent to the table-driven crc = table[(crc ^ b) & 0xFF] ^ (crc >> 8).
+
+fn crc32_update(crc: i64, b: i64) -> i64 {
+  let c = xor32(crc, b);
+  let i = 0;
+  while i < 8 {
+    let low = c - (c / 2) * 2;
+    let c = if low == 1 then xor32(c / 2, 3988292384) else c / 2;
+    let i = i + 1;
+    0
+  };
+  c
+}
+
+// crc32_arr(data, n): CRC-32 of the n bytes data[0..n). Init ~0, final ~.
+// Matches zlib_crc32(0, data, n) and zlib.crc32(bytes).
+
+fn crc32_arr(data: [i64], n: i64) -> i64 {
+  let crc = 4294967295;
+  let i = 0;
+  while i < n {
+    let crc = crc32_update(crc, data[i]);
+    let i = i + 1;
+    0
+  };
+  4294967295 - crc
+}
+
+// crc32_str(s): CRC-32 of the bytes of string s.
+
+// tb.bp — tokenbox: merged token-economy tool (rtk + mempalace + graphify → one
+// zero-dependency bebop binary). Answers in NUMBERS only (hashes, line
+// indices, counts) — the cheapest format an agent can read.
+//
+//   tb h <path>              crc32 of a file (content-address: re-read only changed)
+//   tb ctx <j> <r> <g>       one-line digest: crc32 of three corpus files
+//   tb s <needle> <path>     search file for needle, prints LINE NUMBERS (max 12)
+//   tb c                     stdin compressor: dedup consecutive, drop empty,
+//                            truncate lines to 120, stop after 40 kept lines
+//   tb (no args)             self-test -> fold (gate)
+//
+// STR-FREE BY CONSTRUCTION: str literals and ++ concat SEGFAULT in the .bin
+// runtime (R3 defect, journal 1788288206) — argv strings are the only safe
+// str source; every output byte is computed arithmetically into cells.
+// Conditional cell stores use the multiply-select idiom (branch-free) —
+// immune to the loop-shaped store trap (journal 1788288197). All buffers
+// allocated OUTSIDE loops (L8).
+
+// is argv str s equal to NUL-terminated cells p? (bebop.bp strequals pattern)
+fn strequals(s: str, p: [i64]) -> i64 {
+  let i = 0;
+  let same = 1;
+  let done = 0;
+  while done == 0 {
+    let c = char(s, i);
+    let pc = p[i];
+    let isz = if c == 0 then 1 else 0;
+    let mdiff = if c == pc then 0 else 1;
+    let snew = if isz == 1 then same else same * (1 - mdiff);
+    let same = snew;
+    let i = i + 1;
+    let done = isz;
+    0
+  };
+  same
+}
+
+// copy NUL-terminated byte string into cell slots (byte per element)
+fn str_to_cells(dst: [i64], src: str) -> i64 {
+  let i = 0;
+  let done = 0;
+  while done == 0 {
+    let c = char(src, i);
+    let _ = dst[i] = c;
+    let done = if c == 0 then 1 else 0;
+    let i = i + 1;
+    0
+  };
+  str_len(src)
+}
+
+// decimal digits of |n| (0 counts as 1)
+fn digits(n: i64) -> i64 {
+  let m = if n < 0 then 0 - n else n;
+  let count = 1;
+  while m >= 10 {
+    let m = m / 10;
+    let count = count + 1;
+    0
+  };
+  count
+}
+
+// itoa into cells: returns length; dst must be >= 24 cells. dst[0..len) = digits.
+fn itoa(dst: [i64], n: i64) -> i64 {
+  let neg = if n < 0 then 1 else 0;
+  let m = if n < 0 then 0 - n else n;
+  let p = 23;
+  let m2 = m;
+  let go = 1;
+  while go == 1 {
+    let d = m2 - (m2 / 10) * 10;
+    let _ = dst[p] = 48 + d;
+    let p = p - 1;
+    let m2 = m2 / 10;
+    let go = if m2 > 0 then 1 else 0;
+    0
+  };
+  let start = p + 1;
+  let len = 24 - start;
+  let i = 0;
+  while i < len {
+    let _ = dst[neg + i] = dst[start + i];
+    let i = i + 1;
+    0
+  };
+  let _ = if neg == 1 then (let _ = dst[0] = 45 in 0) else 0;
+  len + neg
+}
+
+// crc32 of a file (path = argv str): -1 on io error, else zlib crc32.
+fn file_crc(path: str, buf: [i64], cells: [i64]) -> i64 {
+  let n = str_to_cells(cells, path);
+  let fd = sys_open(cells, n, 0);
+  let crc = 4294967295;
+  let go = if fd >= 0 then 1 else 0;
+  let bad = if fd < 0 then 1 else 0;
+  while go == 1 {
+    let r = sys_read(fd, buf, 8192);
+    let bad = if r < 0 then 1 else bad;
+    let go = if r > 0 then 1 else 0;
+    let k = 0;
+    while k < r {
+      let crc = crc32_update(crc, buf[k]);
+      let k = k + 1;
+      0
+    };
+    0
+  };
+  let _ = sys_close(fd);
+  if bad == 1 then -1 else 4294967295 - crc
+}
+
+// does line[0..len) contain needle cells[0..nlen)?
+fn line_has(line: [i64], len: i64, needle: [i64], nlen: i64) -> i64 {
+  let i = 0;
+  let hit = 0;
+  while i + nlen <= len {
+    let j = 0;
+    let same = 1;
+    while j < nlen {
+      let same = if line[i + j] == needle[j] then same else 0;
+      let j = j + 1;
+      0
+    };
+    let hit = if same == 1 then hit + 1 else hit;
+    let i = i + 1;
+    0
+  };
+  hit
+}
+
+// print number + trailing byte b (10=newline, 32=space, 0=none) to fd 1
+fn print_num(n: i64, out: [i64], b: i64) -> i64 {
+  let len = itoa(out, n);
+  let _ = sys_write(1, out, len);
+  let _ = if b > 0 then (let _ = out[0] = b in sys_write(1, out, 1)) else 0;
+  0
+}
+
+// search a file for needle; prints matching line numbers (1-based), max 12.
+fn search_file(needle: str, path: str) -> i64 {
+  let buf = zeros(8192);
+  let cells = zeros(256);
+  let line = zeros(2048);
+  let ncell = zeros(64);
+  let tmp = zeros(24);
+  let nlen = str_to_cells(ncell, needle);
+  let n = str_to_cells(cells, path);
+  let fd = sys_open(cells, n, 0);
+  let lineno = 0;
+  let li = 0;
+  let hits = 0;
+  let bad = if fd < 0 then 1 else 0;
+  let go = if fd >= 0 then 1 else 0;
+  while go == 1 {
+    let r = sys_read(fd, buf, 8192);
+    let bad = if r < 0 then 1 else bad;
+    let go = if r > 0 then 1 else 0;
+    let k = 0;
+    while k < r {
+      let c = buf[k];
+      let eol = if c == 10 then 1 else 0;
+      let push = (1 - eol) * (if li < 2047 then 1 else 0);
+      let _ = line[li] = line[li] + push * (c - line[li]);
+      let li = li + push;
+      let nonempty = if li == 0 then 0 else 1;
+      let h = if eol == 1 then nonempty * (if line_has(line, li, ncell, nlen) >= 1 then 1 else 0) else 0;
+      let lineno = lineno + eol;
+      let hits = hits + h;
+      let show = h * (if hits <= 12 then 1 else 0);
+      let _ = if show == 1 then (let _ = print_num(lineno, tmp, 32) in 0) else 0;
+      let li = li * (1 - eol);
+      let k = k + 1;
+      0
+    };
+    0
+  };
+  let _ = sys_close(fd);
+  let _ = if bad == 1 then sys_write(1, ncell, 0) else 0;
+  let _ = print_num(0 - hits, tmp, 10);
+  hits
+}
+
+// stdin compressor: keep line if nonempty and != previous kept; truncate to
+// 120 chars; stop after 40 kept lines. Returns kept count.
+fn compress_stdin() -> i64 {
+  let buf = zeros(8192);
+  let line = zeros(2048);
+  let prev = zeros(2048);
+  let nl = zeros(2);
+  let _ = nl[0] = 10;
+  let li = 0;
+  let pl = 0;
+  let kept = 0;
+  let go = 1;
+  while go == 1 {
+    let r = sys_read(0, buf, 8192);
+    let go = if r > 0 then 1 else 0;
+    let k = 0;
+    while k < r {
+      let c = buf[k];
+      let eol = if c == 10 then 1 else 0;
+      let push = (1 - eol) * (if li < 2047 then 1 else 0);
+      let _ = line[li] = line[li] + push * (c - line[li]);
+      let li = li + push;
+      let cut = if li > 120 then 120 else li;
+      let nonempty = if li == 0 then 0 else 1;
+      let eq = if cut == pl then 1 else 0;
+      let j = 0;
+      while j < cut {
+        let eq = if line[j] == prev[j] then eq else 0;
+        let j = j + 1;
+        0
+      };
+      let ke = eol * nonempty * (1 - eq) * (1 - (if kept >= 40 then 1 else 0));
+      let kept = kept + ke;
+      let _ = if ke == 1 then (let _ = sys_write(1, line, cut) in (let _ = sys_write(1, nl, 1) in 0)) else 0;
+      let jj = 0;
+      while jj < 120 {
+        let sel = eol * (if jj < cut then 1 else 0);
+        let _ = prev[jj] = prev[jj] + sel * (line[jj] - prev[jj]);
+        let jj = jj + 1;
+        0
+      };
+      let pl = pl + eol * (cut - pl);
+      let li = li * (1 - eol);
+      let k = k + 1;
+      0
+    };
+    0
+  };
+  kept
+}
+
+fn self_test() -> i64 {
+  let cz = if crc32_arr(zeros(8), 0) == 0 then 1 else 0;
+  let cells = zeros(16);
+  let i = 0;
+  while i < 9 {
+    let _ = cells[i] = 49 + i;
+    let i = i + 1;
+    0
+  };
+  let c1 = if crc32_arr(cells, 9) == 3421780262 then 1 else 0;
+  let ncell = zeros(4);
+  let _ = ncell[0] = 52;
+  let _ = ncell[1] = 53;
+  let _ = ncell[2] = 54;
+  let lh = if line_has(cells, 9, ncell, 3) >= 1 then 1 else 0;
+  let tmp = zeros(24);
+  let ln = itoa(tmp, 12345);
+  let it = if ln == 5 then (if tmp[0] == 49 then (if tmp[4] == 53 then 1 else 0) else 0) else 0;
+  c1 * 1000000 + cz * 100000 + lh * 10000 + it * 1000
+}
+
+fn main(argc: i64, argv: i64) -> i64 {
+  let cmd = if argc >= 3 then argv[2] else 0;
+  let has_arg = if argc >= 4 then 1 else 0;
+  let has_arg2 = if argc >= 5 then 1 else 0;
+  let hc = zeros(4);
+  let _ = hc[0] = 104;
+  let cc = zeros(8);
+  let _ = cc[0] = 99;
+  let _ = cc[1] = 116;
+  let _ = cc[2] = 120;
+  let sc = zeros(4);
+  let _ = sc[0] = 115;
+  let dc = zeros(4);
+  let _ = dc[0] = 99;
+  let is_h = if argc >= 3 then strequals(cmd, hc) else 0;
+  let is_ctx = if argc >= 3 then strequals(cmd, cc) else 0;
+  let is_s = if argc >= 3 then strequals(cmd, sc) else 0;
+  let is_c = if argc >= 3 then strequals(cmd, dc) else 0;
+  let buf = zeros(8192);
+  let cells = zeros(256);
+  let tmp = zeros(24);
+  let hres = if is_h * has_arg == 1 then file_crc(argv[3], buf, cells) else 0;
+  let _ = if is_h * has_arg == 1 then (let _ = print_num(hres, tmp, 10) in 0) else 0;
+  let _ = if is_ctx * has_arg2 == 1 then (let _ = print_num(file_crc(argv[3], buf, cells), tmp, 32) in (let _ = print_num(file_crc(argv[4], buf, cells), tmp, 32) in (let _ = print_num(file_crc(argv[5], buf, cells), tmp, 10) in 0))) else 0;
+  let _ = if is_s * has_arg2 == 1 then search_file(argv[3], argv[4]) else 0;
+  let _ = if is_c == 1 then compress_stdin() else 0;
+  if argc < 3 then self_test() else 0
+}

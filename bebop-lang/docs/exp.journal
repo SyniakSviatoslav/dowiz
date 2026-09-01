@@ -121,3 +121,20 @@
   OFF); Fiedler evecs[1] sign cut = 4+/4- work split; topk k=2 iters=64
   GOT:fold 3550431 == python mirror bit-exact; std_golden 22 pass
   VERDICT:confirmed
+1788288206 H:R3-str-literal-runtime-segfault DID:tb.bp v1 (str literals, int_to_str
+  with ++, str_find/str_cmp on literals) hung/SEGFAULTED in the .bin runtime;
+  minimal probes: str_len("hello"), char("hello",1), "he"++"llo" all SIGSEGV,
+  while argv strings work (str_len(argv[2])+char == 109) - no shipped gate ever
+  used a runtime str literal (gates are pure-cell fold mains; the compiler
+  binary parses argv/cell buffers, its str-literal self-tests are dead code)
+  GOT:tb rewritten STR-FREE (argv + cells + arithmetic only): strequals against
+  cell buffers, itoa into cells, needle as cells; all subcommands bit-exact
+  (crc == zlib 2253791084 on journal); LAW: .bin programs must not use str
+  literals/++ until R3 fixes the literal repr; argv strings are the only safe
+  str source VERDICT:confirmed (R3.x defect d)
+1788288207 H:TB-tokenbox-merged-tool DID:one str-free .bp binary subsumes the
+  token-tool trio: tb h (content-address crc32), tb ctx (corpus digest), tb s
+  (needle -> line numbers, max 12), tb c (stdin compressor: dedup consecutive,
+  drop empty, truncate 120, cap 40); select-idiom stores (branch-free, immune
+  to 1788288197); buffers outside loops (L8) GOT:self-test fold 1111000, gate
+  23, std_golden 23 pass; crc32 == python zlib bit-exact VERDICT:confirmed
