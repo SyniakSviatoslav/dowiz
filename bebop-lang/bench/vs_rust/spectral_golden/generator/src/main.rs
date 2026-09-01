@@ -49,6 +49,8 @@ fn dense(n: usize, edges: &[(usize, usize, f64)]) -> Vec<Vec<f64>> {
 
 fn main() {
     hdc_goldens();
+    csr_goldens();
+    bt_golden();
     // P4 path graph
     let p4 = csr_from(4, &[(0, 1, 1.0), (1, 2, 1.0), (2, 3, 1.0)]);
     dump("P4_path", &p4, 2, 32);
@@ -126,4 +128,51 @@ fn hdc_goldens() {
     let item = Hv::code(11);
     hv_words_dump("role_A1", &role0);
     hv_words_dump("item11_xor_roleA1", &item.bind(&role0));
+}
+
+fn csr_goldens() {
+    use dowiz_core::csr::Csr;
+    println!("════ CSR GOLDENS (from_edges structural order) ════");
+    let graphs: Vec<(&str, usize, Vec<(usize,usize,f64)>)> = vec![
+        ("P4", 4, vec![(0,1,1.0),(1,2,1.0),(2,3,1.0)]),
+        ("C3", 3, vec![(0,1,1.0),(1,2,1.0),(2,0,1.0)]),
+        ("K4W", 4, vec![(0,1,2.0),(0,2,3.0),(0,3,1.0),(1,2,1.0),(1,3,4.0),(2,3,2.0)]),
+        ("B6", 6, vec![(0,1,1.0),(0,2,1.0),(1,2,1.0),(3,4,1.0),(3,5,1.0),(4,5,1.0),(2,3,0.5)]),
+        ("D2DUP", 2, vec![(0,1,1.0),(0,1,1.0),(1,0,0.5)]),
+    ];
+    for (name, n, edges) in graphs {
+        // symmetric both directions (the canonical pattern)
+        let mut e2: Vec<(usize,usize,f64)> = Vec::new();
+        for &(s,d,w) in &edges { e2.push((s,d,w)); e2.push((d,s,w)); }
+        let g = Csr::from_edges(n, &e2);
+        println!("== csr {} n={} nnz={}", name, g.nrows(), g.nnz());
+        println!("row_ptr: {}", g.row_ptr.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(" "));
+        println!("col_idx: {}", g.col_idx.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(" "));
+        println!("val_fp32: {}", g.val.iter().map(|v| { let s = v*4294967296.0; (if s>=9.2233720368547758e18 {i64::MAX} else if s<=-9.2233720368547758e18 {i64::MIN} else {s as i64}).to_string() }).collect::<Vec<_>>().join(" "));
+    }
+}
+
+fn bt_golden() {
+    println!("════ .bt RANK-4 GOLDEN (format v1) ════");
+    // dims 2x3x2x2, data[k] = ((k*2654435761 + 7) mod 2^44) - 2^43 (distinct, sign-varied)
+    let d = [2usize, 3, 2, 2];
+    let n: usize = d[0]*d[1]*d[2]*d[3];
+    let mut data: Vec<i64> = Vec::with_capacity(n);
+    for k in 0..n {
+        let u = ((k as u64).wrapping_mul(2654435761).wrapping_add(7)) & ((1u64<<44)-1);
+        data.push((u as i64) - (1i64<<43));
+    }
+    // .bt v1 LE: magic "BT4R", u32 version=1, u32 rank=4, u32 dims[4], then i64 LE data
+    let mut bytes: Vec<u8> = Vec::new();
+    bytes.extend_from_slice(b"BT4R");
+    bytes.extend_from_slice(&1u32.to_le_bytes());
+    bytes.extend_from_slice(&4u32.to_le_bytes());
+    for x in d { bytes.extend_from_slice(&(x as u32).to_le_bytes()); }
+    for v in &data { bytes.extend_from_slice(&v.to_le_bytes()); }
+    // sha256-style fold: simple deterministic checksum chain (FNV-1a 64)
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in &bytes { h ^= *b as u64; h = h.wrapping_mul(0x100000001b3); }
+    println!("bt_bytes_len: {}", bytes.len());
+    println!("bt_fnv: {}", h);
+    println!("bt_data: {}", data.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(" "));
 }

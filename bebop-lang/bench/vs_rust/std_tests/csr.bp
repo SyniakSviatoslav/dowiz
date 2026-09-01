@@ -1,0 +1,281 @@
+// csr.bp — structural twin of dowiz/core/src/csr.rs (golden: CSR GOLDENS
+// section in bench/vs_rust/spectral_golden/golden.txt).
+// CSR layout: rp[n+1] row offsets, ci[nnz] column indices ascending within
+// each row, vv[nnz] weights in 2^32 fixed-point (fp(1.0) = 4294967296).
+// from_edges contract mirrored exactly: per-row buckets in input order,
+// stable sort by column, adjacent duplicate columns MERGED by summing
+// weights (wrapping i64 addition is commutative — merge result exact),
+// edges with src/dst out of range ignored. Working buffer caps m <= 4096.
+// LAW: cross-loop state lives in CELLS ([0] buffers), never in plain rebinds
+// — the two engines disagree on rebind visibility across loop nests.
+
+// fp_mul(a,b): (a*b) >> 32 — schoolbook 32-bit split (see spectral.bp; the
+// same exact-64-bit schoolbook, duplicated so csr.bp stays standalone).
+// Bebop >> is LOGICAL (u64) on both engines: split on magnitudes, fold sign.
+fn fp_mul(a: i64, b: i64) -> i64 {
+  let na = if a < 0 then 1 else 0;
+  let aa = if na == 1 then 0 - a else a;
+  let nb = if b < 0 then 1 else 0;
+  let ab = if nb == 1 then 0 - b else b;
+  let a1 = aa >> 32;
+  let a0 = aa - (a1 << 32);
+  let b1 = ab >> 32;
+  let b0 = ab - (b1 << 32);
+  let hi = a1 * b1;
+  let mid = a1 * b0 + a0 * b1;
+  let ah = a0 >> 16;
+  let al = a0 - (ah << 16);
+  let bh = b0 >> 16;
+  let bl = b0 - (bh << 16);
+  let ll_h = ah * bh;
+  let ll_m = ah * bl + al * bh;
+  let ll_l = al * bl;
+  let low = ll_h + ((ll_m + (ll_l >> 16)) >> 16);
+  let p = (hi << 32) + mid + low;
+  let flip = na + nb;
+  let flip = flip - (flip / 2) * 2;
+  let p = if flip == 1 then 0 - p else p;
+  p
+}
+
+// csr_from_edges(n, es, ed, ew, m, rp, ci, vv): m edges (src,dst,weight-fp).
+// rp needs n+1 cells, ci/vv need <= m cells (<= 4096 edges). Returns nnz.
+fn csr_from_edges(n: i64, es: [i64], ed: [i64], ew: [i64], m: i64, rp: [i64], ci: [i64], vv: [i64]) -> i64 {
+  let wcol = zeros(4096);
+  let wval = zeros(4096);
+  let nnzc = zeros(1);
+  let wcnt = zeros(1);
+  let mcell = zeros(1);
+  let tc = zeros(1);
+  let pcol = zeros(1);
+  let i = 0;
+  while i < n {
+    let _ = wcnt[0] = 0;
+    let e = 0;
+    while e < m {
+      let src = es[e];
+      let dst = ed[e];
+      let ok = (if src == i then 1 else 0) * (if src < n then 1 else 0) * (if dst < n then 1 else 0);
+      let _ = if ok == 1 then (let _ = wcol[wcnt[0]] = dst in (let _ = wval[wcnt[0]] = ew[e] in (let _ = wcnt[0] = wcnt[0] + 1 in 0))) else 0;
+      let e = e + 1;
+      0
+    };
+    // selection sort by column (equal columns end adjacent; the merge below
+    // sums them — wrapping addition is order-independent, so the result
+    // matches the Rust stable-sort + merge byte-for-byte)
+    let st = 0;
+    while st < wcnt[0] {
+      let _ = mcell[0] = st;
+      let j = st + 1;
+      while j < wcnt[0] {
+        let _ = if wcol[j] < wcol[mcell[0]] then (let _ = mcell[0] = j in 0) else 0;
+        let j = j + 1;
+        0
+      };
+      let sc = wcol[st];
+      let sv = wval[st];
+      let _ = wcol[st] = wcol[mcell[0]];
+      let _ = wval[st] = wval[mcell[0]];
+      let _ = wcol[mcell[0]] = sc;
+      let _ = wval[mcell[0]] = sv;
+      let st = st + 1;
+      0
+    };
+    // merge adjacent duplicates in place
+    let _ = tc[0] = 0;
+    let _ = pcol[0] = 0 - 1;
+    let k = 0;
+    while k < wcnt[0] {
+      let pv = wcol[k] - pcol[0];
+      let isz = if pv == 0 then 1 else 0;
+      let hasp = if pcol[0] >= 0 then 1 else 0;
+      let same = isz * hasp;
+      let _ = if same == 1 then (let _ = wval[tc[0] - 1] = wval[tc[0] - 1] + wval[k] in 0) else 0;
+      let wr = 1 - same;
+      let _ = if wr == 1 then (let _ = wcol[tc[0]] = wcol[k] in (let _ = wval[tc[0]] = wval[k] in (let _ = tc[0] = tc[0] + 1 in (let _ = pcol[0] = wcol[k] in 0)))) else 0;
+      let k = k + 1;
+      0
+    };
+    let _ = rp[i] = nnzc[0];
+    let k = 0;
+    while k < tc[0] {
+      let _ = ci[nnzc[0]] = wcol[k];
+      let _ = vv[nnzc[0]] = wval[k];
+      let _ = nnzc[0] = nnzc[0] + 1;
+      let k = k + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  let _ = rp[n] = nnzc[0];
+  nnzc[0]
+}
+
+// csr_spmv(rp, ci, vv, n, x, out): out = A·x in fp. Rows ascending, columns
+// ascending within a row — the canonical summation order (Csr::spmv).
+fn csr_spmv(rp: [i64], ci: [i64], vv: [i64], n: i64, x: [i64], out: [i64]) -> i64 {
+  let j = 0;
+  while j < n {
+    let _ = out[j] = 0;
+    let j = j + 1;
+    0
+  };
+  let i = 0;
+  while i < n {
+    let xi = x[i];
+    let lo = rp[i];
+    let hi = rp[i + 1];
+    let k = lo;
+    while k < hi {
+      let j = ci[k];
+      let _ = out[j] = out[j] + fp_mul(vv[k], xi);
+      let j = j + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  n
+}
+
+
+// ---- std gate main: structural fold of the golden CSR graphs ----
+// Graphs (symmetrized, golden order): P4, C3, K4W, B6, D2DUP — weights fp
+// (2^32 = 1.0). Frozen = polynomial fold over row_ptr+col_idx+val of all
+// five (bench/vs_rust/spectral_golden/golden.txt, CSR GOLDENS section):
+// -6945622865743784444.
+fn main() -> i64 {
+  let es = zeros(64);
+  let ed = zeros(64);
+  let ew = zeros(64);
+  let rp = zeros(16);
+  let ci = zeros(64);
+  let vv = zeros(64);
+  let acc = 0;
+  let w1 = 4294967296;
+  let w2 = 8589934592;
+  let w3 = 12884901888;
+  let w4 = 17179869184;
+  let wh = 2147483648;
+  // P4
+  let _ = es[0] = 0; let _ = ed[0] = 1; let _ = ew[0] = w1;
+  let _ = es[1] = 1; let _ = ed[1] = 0; let _ = ew[1] = w1;
+  let _ = es[2] = 1; let _ = ed[2] = 2; let _ = ew[2] = w1;
+  let _ = es[3] = 2; let _ = ed[3] = 1; let _ = ew[3] = w1;
+  let _ = es[4] = 2; let _ = ed[4] = 3; let _ = ew[4] = w1;
+  let _ = es[5] = 3; let _ = ed[5] = 2; let _ = ew[5] = w1;
+  let _ = csr_from_edges(4, es, ed, ew, 6, rp, ci, vv);
+  let k = 0;
+  while k < 5 {
+    let acc = acc * 131 + rp[k];
+    let k = k + 1;
+    0
+  };
+  let k = 0;
+  while k < 6 {
+    let acc = acc * 131 + ci[k];
+    let acc = acc * 131 + vv[k];
+    let k = k + 1;
+    0
+  };
+  // C3
+  let _ = es[0] = 0; let _ = ed[0] = 1; let _ = ew[0] = w1;
+  let _ = es[1] = 1; let _ = ed[1] = 0; let _ = ew[1] = w1;
+  let _ = es[2] = 1; let _ = ed[2] = 2; let _ = ew[2] = w1;
+  let _ = es[3] = 2; let _ = ed[3] = 1; let _ = ew[3] = w1;
+  let _ = es[4] = 2; let _ = ed[4] = 0; let _ = ew[4] = w1;
+  let _ = es[5] = 0; let _ = ed[5] = 2; let _ = ew[5] = w1;
+  let _ = csr_from_edges(3, es, ed, ew, 6, rp, ci, vv);
+  let k = 0;
+  while k < 4 {
+    let acc = acc * 131 + rp[k];
+    let k = k + 1;
+    0
+  };
+  let k = 0;
+  while k < 6 {
+    let acc = acc * 131 + ci[k];
+    let acc = acc * 131 + vv[k];
+    let k = k + 1;
+    0
+  };
+  // K4W: edges (0,1,2),(0,2,3),(0,3,1),(1,2,1),(1,3,4),(2,3,2) symmetrized
+  let _ = es[0] = 0; let _ = ed[0] = 1; let _ = ew[0] = w2;
+  let _ = es[1] = 1; let _ = ed[1] = 0; let _ = ew[1] = w2;
+  let _ = es[2] = 0; let _ = ed[2] = 2; let _ = ew[2] = w3;
+  let _ = es[3] = 2; let _ = ed[3] = 0; let _ = ew[3] = w3;
+  let _ = es[4] = 0; let _ = ed[4] = 3; let _ = ew[4] = w1;
+  let _ = es[5] = 3; let _ = ed[5] = 0; let _ = ew[5] = w1;
+  let _ = es[6] = 1; let _ = ed[6] = 2; let _ = ew[6] = w1;
+  let _ = es[7] = 2; let _ = ed[7] = 1; let _ = ew[7] = w1;
+  let _ = es[8] = 1; let _ = ed[8] = 3; let _ = ew[8] = w4;
+  let _ = es[9] = 3; let _ = ed[9] = 1; let _ = ew[9] = w4;
+  let _ = es[10] = 2; let _ = ed[10] = 3; let _ = ew[10] = w2;
+  let _ = es[11] = 3; let _ = ed[11] = 2; let _ = ew[11] = w2;
+  let _ = csr_from_edges(4, es, ed, ew, 12, rp, ci, vv);
+  let k = 0;
+  while k < 5 {
+    let acc = acc * 131 + rp[k];
+    let k = k + 1;
+    0
+  };
+  let k = 0;
+  while k < 12 {
+    let acc = acc * 131 + ci[k];
+    let acc = acc * 131 + vv[k];
+    let k = k + 1;
+    0
+  };
+  // B6: two triangles + bridge (2,3,0.5) symmetrized
+  let _ = es[0] = 0; let _ = ed[0] = 1; let _ = ew[0] = w1;
+  let _ = es[1] = 1; let _ = ed[1] = 0; let _ = ew[1] = w1;
+  let _ = es[2] = 0; let _ = ed[2] = 2; let _ = ew[2] = w1;
+  let _ = es[3] = 2; let _ = ed[3] = 0; let _ = ew[3] = w1;
+  let _ = es[4] = 1; let _ = ed[4] = 2; let _ = ew[4] = w1;
+  let _ = es[5] = 2; let _ = ed[5] = 1; let _ = ew[5] = w1;
+  let _ = es[6] = 3; let _ = ed[6] = 4; let _ = ew[6] = w1;
+  let _ = es[7] = 4; let _ = ed[7] = 3; let _ = ew[7] = w1;
+  let _ = es[8] = 3; let _ = ed[8] = 5; let _ = ew[8] = w1;
+  let _ = es[9] = 5; let _ = ed[9] = 3; let _ = ew[9] = w1;
+  let _ = es[10] = 4; let _ = ed[10] = 5; let _ = ew[10] = w1;
+  let _ = es[11] = 5; let _ = ed[11] = 4; let _ = ew[11] = w1;
+  let _ = es[12] = 2; let _ = ed[12] = 3; let _ = ew[12] = wh;
+  let _ = es[13] = 3; let _ = ed[13] = 2; let _ = ew[13] = wh;
+  let _ = csr_from_edges(6, es, ed, ew, 14, rp, ci, vv);
+  let k = 0;
+  while k < 7 {
+    let acc = acc * 131 + rp[k];
+    let k = k + 1;
+    0
+  };
+  let k = 0;
+  while k < 14 {
+    let acc = acc * 131 + ci[k];
+    let acc = acc * 131 + vv[k];
+    let k = k + 1;
+    0
+  };
+  // D2DUP: duplicate edges merged ((0,1,1)+(0,1,1) -> 2.0 after symmetrization 2.5)
+  let _ = es[0] = 0; let _ = ed[0] = 1; let _ = ew[0] = w1;
+  let _ = es[1] = 1; let _ = ed[1] = 0; let _ = ew[1] = w1;
+  let _ = es[2] = 0; let _ = ed[2] = 1; let _ = ew[2] = w1;
+  let _ = es[3] = 1; let _ = ed[3] = 0; let _ = ew[3] = w1;
+  let _ = es[4] = 1; let _ = ed[4] = 0; let _ = ew[4] = wh;
+  let _ = es[5] = 0; let _ = ed[5] = 1; let _ = ew[5] = wh;
+  let _ = csr_from_edges(2, es, ed, ew, 6, rp, ci, vv);
+  let k = 0;
+  while k < 3 {
+    let acc = acc * 131 + rp[k];
+    let k = k + 1;
+    0
+  };
+  let k = 0;
+  while k < 2 {
+    let acc = acc * 131 + ci[k];
+    let acc = acc * 131 + vv[k];
+    let k = k + 1;
+    0
+  };
+  acc
+}

@@ -40,3 +40,17 @@ cd generator && cargo run --release > ../golden.txt
 - Rayleigh λ = xᵀ(Ax) on the deflated space, recompute-deflate-then-dot.
 - zero-vector placeholder if deflated away (nx==0).
 - Ф7 fingerprint: sorted top-k λ + sign-normalized Fiedler = layout-invariant.
+
+## Ф2 additions (2026-09-01)
+
+- `════ CSR GOLDENS ════` — structural from_edges reference (P4/C3/K4W/B6/
+  D2DUP, symmetrized): row_ptr / col_idx / val_fp32. D2DUP exercises the
+  duplicate-column merge (wrapping sums are order-independent). Consumer:
+  selfhost/std/csr.bp (gate `csr` in std_golden.sh, frozen -6945622865743784444).
+- `════ .bt RANK-4 GOLDEN ════` — the canonical .bt artifact format v1:
+  magic "BT4R" (4B), u32 version=1, u32 rank=4, u32 dims[4], dense i64 LE
+  data (row-major rank-4 strides: ((i*D1+j)*D2+k)*D3+l). Golden: dims
+  2x3x2x2, data[k] = ((k*2654435761+7) mod 2^44) - 2^43, 220 bytes,
+  bt_fnv = FNV-1a 64 over the byte stream (signed -6204655307031605165).
+  Consumer: selfhost/std/bt.bp (gate `bt`, frozen -5708805812714944038 —
+  pack/FNV/unpack/stride roundtrip flags folded).

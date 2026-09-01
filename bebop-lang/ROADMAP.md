@@ -458,3 +458,21 @@ parity 9/0/0, construct 20/20, std_golden 9/9, фікс-поінт ×2 байт-
 - DecompCache (FNV-64 ключ, recomputes falsifier) — ФУНДАМЕНТ для кешування
 - Ці 3 примітиви = спільний залежність для SS-1, SS-9, SS-15, SS-16, SS-18
 - БЕЗ НИХ: немає спектральної верифікації, немає layout-інваріантності, немає біпартиції
+
+# ═══ Ф2 CORE PRIMITIVES: ЗАКРИТО (2026-09-01) ═══
+CSR twin: selfhost/std/csr.bp — from_edges (per-row bucketing, selection
+sort, adjacent-duplicate merge — wrapping sums order-independent = exact
+Rust parity) + csr_spmv (канонічний порядок сумування). Гейт csr у
+std_golden.sh (frozen -6945622865743784444 — структурний фолд 5 golden-графів).
+.bt ранг-4 кодек: selfhost/std/bt.bp — Ф4 канон v1 ("BT4R", u32 version/rank,
+dims[4], dense i64 LE data; 28B header): bt_pack / bt_fnv (FNV-1a 64
+фінгерпринт) / bt_unpack (валідація magic+version+rank) / bt_offset
+(ранг-4 stride view). Гейт bt (frozen -5708805812714944038 — roundtrip
+фолд проти Rust golden 220-байтного потоку). std_golden 11/11, JIT ==
+інтерп на обох.
+LAW (csr.bp): cross-loop стан — тільки в клітинках ([0] буфери); два
+рушії розходяться на rebind-видимості крізь гнізда циклів. І objekt-урок:
+ім'я temps не має конфліктувати з клітинками (sort-temps `tc` затер лічильник
+merge — мовчаний nnz=0).
+Далі: .bt store (mmap-export + atomic renameat publish) → Ф3 VS-AST
+(item⊗role spectral HV) → Ф4 маскований потік.

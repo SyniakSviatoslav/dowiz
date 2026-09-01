@@ -1,0 +1,158 @@
+// bt.bp — Ф2/F4: .bt rank-4 word-tensor codec (canonical artifact format v1).
+// Format (little-endian, deterministic, self-describing):
+//   magic  : 4 bytes "BT4R"
+//   version: u32 = 1
+//   rank   : u32 = 4
+//   dims   : u32 x 4 (d0,d1,d2,d3)
+//   data   : d0*d1*d2*d3 x i64 (LE two's complement, dense row-major)
+// Header size = 4+4+4+16 = 28 bytes; total = 28 + 8*count.
+// Byte convention matches the .bp I/O tier: buffers are byte-per-cell
+// (sys_write packs low bytes of cells), so pack writes bytes into cells.
+// Golden: ".bt RANK-4 GOLDEN" section in bench/vs_rust/spectral_golden/
+// golden.txt (bt_fnv = FNV-1a 64 over the exact byte stream).
+
+// bt_offset(d, i, j, k, l): rank-4 row-major stride view offset.
+fn bt_offset(d: [i64], i: i64, j: i64, k: i64, l: i64) -> i64 {
+  ((i * d[1] + j) * d[2] + k) * d[3] + l
+}
+
+// bt_pack(d, data, out): serialize dims[4] + data (count = d0*d1*d2*d3)
+// into the byte-per-cell buffer out (needs 28 + 8*count cells). Returns the
+// byte count. data cells carry full i64 values.
+fn bt_pack(d: [i64], data: [i64], out: [i64]) -> i64 {
+  // magic "BT4R"
+  let _ = out[0] = 66;
+  let _ = out[1] = 84;
+  let _ = out[2] = 52;
+  let _ = out[3] = 82;
+  // version u32 LE = 1
+  let _ = out[4] = 1;
+  let _ = out[5] = 0;
+  let _ = out[6] = 0;
+  let _ = out[7] = 0;
+  // rank u32 LE = 4
+  let _ = out[8] = 4;
+  let _ = out[9] = 0;
+  let _ = out[10] = 0;
+  let _ = out[11] = 0;
+  // dims u32 LE x4
+  let q = 0;
+  while q < 4 {
+    let v = d[q];
+    let _ = out[12 + q * 4] = v & 255;
+    let _ = out[13 + q * 4] = (v >> 8) & 255;
+    let _ = out[14 + q * 4] = (v >> 16) & 255;
+    let _ = out[15 + q * 4] = (v >> 24) & 255;
+    let q = q + 1;
+    0
+  };
+  let count = (d[0] * d[1] * d[2]) * d[3];
+  let o = 28;
+  let k = 0;
+  while k < count {
+    let v = data[k];
+    let b = 0;
+    while b < 8 {
+      let _ = out[o + k * 8 + b] = (v >> (b * 8)) & 255;
+      let b = b + 1;
+      0
+    };
+    let k = k + 1;
+    0
+  };
+  28 + count * 8
+}
+
+// bt_fnv(out, len): FNV-1a 64 over the byte-per-cell buffer — the .bt
+// fingerprint (golden bt_fnv). h = (h ^ b) * 0x100000001b3, wrapping.
+// Offset basis 0xcbf29ce484222325 as i64: 0 - 3750763034362895579.
+fn bt_fnv(out: [i64], len: i64) -> i64 {
+  let h = 0 - 3750763034362895579;
+  let i = 0;
+  while i < len {
+    let h = (h ^ (out[i] & 255)) * 1099511628211;
+    let i = i + 1;
+    0
+  };
+  h
+}
+
+// bt_unpack(src, d, data): parse a .bt byte stream (byte-per-cell) —
+// validates magic "BT4R", version 1, rank 4; fills d[0..4) and data
+// (needs d0*d1*d2*d3 cells). Returns 0 on success, -1 on a bad header
+// (buffers hold garbage then — check the return before use).
+fn bt_unpack(src: [i64], d: [i64], data: [i64]) -> i64 {
+  let ok = (if src[0] == 66 then 1 else 0) + (if src[1] == 84 then 1 else 0)
+         + (if src[2] == 52 then 1 else 0) + (if src[3] == 82 then 1 else 0);
+  let ok = ok + (if src[4] == 1 then 1 else 0) + (if src[5] == 0 then 1 else 0)
+         + (if src[6] == 0 then 1 else 0) + (if src[7] == 0 then 1 else 0);
+  let ok = ok + (if src[8] == 4 then 1 else 0) + (if src[9] == 0 then 1 else 0)
+         + (if src[10] == 0 then 1 else 0) + (if src[11] == 0 then 1 else 0);
+  let q = 0;
+  while q < 4 {
+    let _ = d[q] = src[12 + q * 4] + (src[13 + q * 4] << 8) + (src[14 + q * 4] << 16) + (src[15 + q * 4] << 24);
+    let q = q + 1;
+    0
+  };
+  let count = (d[0] * d[1] * d[2]) * d[3];
+  let k = 0;
+  while k < count {
+    let v = 0;
+    let b = 7;
+    while b >= 0 {
+      let v = (v << 8) + (src[28 + k * 8 + b] & 255);
+      let b = b - 1;
+      0
+    };
+    let _ = data[k] = v;
+    let k = k + 1;
+    0
+  };
+  let res = if ok == 12 then 0 else 0 - 1;
+  res
+}
+
+
+// ---- std gate main: .bt rank-4 pack/unpack/stride vs the Rust golden ----
+// Reference tensor: dims 2x3x2x2, data[k] = ((k*2654435761+7) & (2^44-1)) -
+// 2^43. Frozen = fold of [fnv==golden, unpack-rc==0, 24 data-equality zeros,
+// offset(1,2,1,0)==22 flag, view write/read flag] (golden bt_fnv over the
+// exact byte stream = -6204655307031605165 signed):
+// -5708805812714944038.
+fn main() -> i64 {
+  let d = zeros(8);
+  let _ = d[0] = 2;
+  let _ = d[1] = 3;
+  let _ = d[2] = 2;
+  let _ = d[3] = 2;
+  let data = zeros(64);
+  let data2 = zeros(64);
+  let d2 = zeros(8);
+  let out = zeros(512);
+  let mask = 17592186044415;
+  let base = 8796093022208;
+  let k = 0;
+  while k < 24 {
+    let _ = data[k] = ((k * 2654435761 + 7) & mask) - base;
+    let k = k + 1;
+    0
+  };
+  let acc = 0;
+  let len = bt_pack(d, data, out);
+  let acc = acc * 131 + (if len == 220 then 1 else 0);
+  let fnv = bt_fnv(out, len);
+  let acc = acc * 131 + (if fnv == 0 - 6204655307031605165 then 1 else 0);
+  let rc = bt_unpack(out, d2, data2);
+  let acc = acc * 131 + (if rc == 0 then 1 else 0);
+  let k = 0;
+  while k < 24 {
+    let eq = if data2[k] == data[k] then 0 else 1;
+    let acc = acc * 131 + eq;
+    let k = k + 1;
+    0
+  };
+  let v22 = bt_offset(d, 1, 2, 1, 0);
+  let acc = acc * 131 + (if v22 == 22 then 1 else 0);
+  let acc = acc * 131 + (if d2[0] == 2 then 1 else 0) + (if d2[3] == 2 then 1 else 0);
+  acc
+}

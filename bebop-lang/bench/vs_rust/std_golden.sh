@@ -59,5 +59,15 @@ gate hv 4427592702613580868 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/spectral.bp /tmp/opencode/spectral_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/spectral_test.bin | tail -1)
 gate spectral 184684 "$r"
 
+# ---- csr (Ф2: from_edges structural twin — fold over rp+ci+vv of the five
+#      golden graphs; bench/vs_rust/spectral_golden/golden.txt CSR section) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/csr.bp /tmp/opencode/csr_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/csr_test.bin | tail -1)
+gate csr -6945622865743784444 "$r"
+
+# ---- bt (Ф2/F4: .bt rank-4 codec — pack/FNV/unpack/stride vs the Rust
+#      golden byte stream; bench/vs_rust/spectral_golden/golden.txt .bt section) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/bt.bp /tmp/opencode/bt_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/bt_test.bin | tail -1)
+gate bt -5708805812714944038 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]
