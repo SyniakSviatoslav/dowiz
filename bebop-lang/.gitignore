@@ -29,3 +29,8 @@ bench/r10/timing
 .becache.bak/
 # M5 golden driver (rebuilt by std_golden.sh)
 bench/vs_rust/c/std_golden
+
+# token-economy tooling artifacts (graphify/mempalace)
+graphify-out/
+entities.json
+mempalace.yaml
