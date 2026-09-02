@@ -275,7 +275,7 @@ fn emit_struct_field(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], fc
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
-  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 0, fntab);
   let _ = em(insns, n, 4177527232 + fcnt * 1024);
   n[0]
 }
@@ -304,21 +304,21 @@ fn emit_struct_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = pos[0] = pos[0] + 1;
   let _ = em(insns, n, 2853045216);
   let _ = em(insns, n, 2432696320 + fcnt * 8192 + 462);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
 // Emit a field access .f: pop the base pointer, ldr x0,[x0,#idx*8], push.
-fn emit_field_access(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64]) -> i64 {
+fn emit_field_access(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
   let _ = skip_ws(s, pos);
   let fname = read_ident(s, pos);
   let spos = [0];
   let _ = find_struct(s, spos);
   let idx = field_index(s, spos[0], fname);
-  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 0, fntab);
   let _ = em(insns, n, 4181721088 + idx * 1024);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
@@ -373,22 +373,22 @@ fn emit_enum_ctor(s: str, tag: i64, pos: [i64], insns: [i64], n: [i64], stab: [i
   let _ = em(insns, n, 3531603968 + tag * 32);
   let _ = em(insns, n, 4177527232);
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
-  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 0, fntab);
   let _ = em(insns, n, 4177528256);
   let _ = pos[0] = pos[0] + 1;
   let _ = em(insns, n, 2853045216);
   let _ = em(insns, n, 2432713166);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
 // Emit a nullary enum ctor: ctor -> [tag] block (no payload).
-fn emit_enum_ctor_nullary(insns: [i64], n: [i64], tag: i64) -> i64 {
+fn emit_enum_ctor_nullary(insns: [i64], n: [i64], tag: i64, fntab: [i64]) -> i64 {
   let _ = em(insns, n, 3531603968 + tag * 32);
   let _ = em(insns, n, 4177527232);
   let _ = em(insns, n, 2853045216);
   let _ = em(insns, n, 2432713166);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
@@ -557,13 +557,13 @@ fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i6
   let _ = pos[0] = pos[0] + 1;
   let i = nargs - 1;
   while i >= 0 {
-    let _ = pop(insns, n, i);
+    let _ = pop(insns, n, i, fntab);
     let i = i - 1;
     0
   };
   let target = fntab_lookup(fntab, name);
   let _ = emit_bl(insns, n, target, 1);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
@@ -572,9 +572,9 @@ fn emit_self_call(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 0, fntab);
   let _ = emit_bl(insns, n, selfstart, 1);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
@@ -591,9 +591,9 @@ fn emit_hvham(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = pop(insns, n, 2);
-  let _ = pop(insns, n, 1);
-  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 2, fntab);
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 0, fntab);
   // ldp q0,q1 covers 32 BYTES = 4 words per iteration -> divide by 4
   let _ = em(insns, n, 3544382532);
   let _ = em(insns, n, 3019899236);
@@ -611,7 +611,7 @@ fn emit_hvham(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   let _ = em(insns, n, 1848653957);
   let _ = em(insns, n, 235027622);
   let _ = em(insns, n, 2852520928);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
@@ -633,11 +633,11 @@ fn emit_hvham2(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = pop(insns, n, 3);
-  let _ = pop(insns, n, 5);
-  let _ = pop(insns, n, 1);
-  let _ = pop(insns, n, 6);
-  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 3, fntab);
+  let _ = pop(insns, n, 5, fntab);
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 6, fntab);
+  let _ = pop(insns, n, 0, fntab);
   let _ = em(insns, n, 2332363809);
   let _ = em(insns, n, 2332429312);
   let _ = em(insns, n, 2852324322);
@@ -657,7 +657,7 @@ fn emit_hvham2(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
   let _ = em(insns, n, 1848653957);
   let _ = em(insns, n, 235027622);
   let _ = em(insns, n, 2852520928);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
@@ -674,9 +674,9 @@ fn emit_sys_open(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = pop(insns, n, 2);
-  let _ = pop(insns, n, 1);
-  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 2, fntab);
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 0, fntab);
   em(insns, n, 2852127723);
   em(insns, n, 2852193261);
   em(insns, n, 2852258796);
@@ -696,7 +696,7 @@ fn emit_sys_open(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   em(insns, n, 3531603971);
   em(insns, n, 3531605768);
   em(insns, n, 3556769793);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
@@ -712,9 +712,9 @@ fn emit_sys_read(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = pop(insns, n, 2);
-  let _ = pop(insns, n, 1);
-  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 2, fntab);
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 0, fntab);
   em(insns, n, 2852127723);
   em(insns, n, 2852193260);
   em(insns, n, 3531866122);
@@ -732,7 +732,7 @@ fn emit_sys_read(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   em(insns, n, 2432697641);
   em(insns, n, 402653179);
   em(insns, n, 2852979680);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
@@ -748,9 +748,9 @@ fn emit_sys_write(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = pop(insns, n, 2);
-  let _ = pop(insns, n, 1);
-  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 2, fntab);
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 0, fntab);
   em(insns, n, 2852127723);
   em(insns, n, 2852258797);
   em(insns, n, 3531866122);
@@ -766,7 +766,7 @@ fn emit_sys_write(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   em(insns, n, 2852848608);
   em(insns, n, 3531606024);
   em(insns, n, 3556769793);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
@@ -776,10 +776,10 @@ fn emit_sys_close(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 0, fntab);
   em(insns, n, 3531605800);
   em(insns, n, 3556769793);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
@@ -789,7 +789,7 @@ fn emit_sys_exit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 0, fntab);
   em(insns, n, 3531606952);
   em(insns, n, 3556769793);
   n[0]
@@ -818,7 +818,7 @@ fn emit_clock_ms(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   em(insns, n, 4070572519);
   em(insns, n, 2596735141);
   em(insns, n, 2332360832);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
@@ -832,8 +832,8 @@ fn emit_sys_readbuf(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], sel
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = pop(insns, n, 1);
-  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 0, fntab);
   em(insns, n, 2852193250);
   em(insns, n, 3531866122);
   em(insns, n, 3406431114);
@@ -843,7 +843,7 @@ fn emit_sys_readbuf(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], sel
   em(insns, n, 2852127725);
   em(insns, n, 942500191);
   em(insns, n, 2852783072);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
@@ -853,14 +853,14 @@ fn emit_str_len_fn(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 0, fntab);
   em(insns, n, 3531603970);
   em(insns, n, 945973249);
   em(insns, n, 872415329);
   em(insns, n, 2432697410);
   em(insns, n, 402653181);
   em(insns, n, 2852258784);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
@@ -873,12 +873,12 @@ fn emit_char_fn(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfnam
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = pop(insns, n, 1);
-  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 0, fntab);
   em(insns, n, 2852193250);
   em(insns, n, 2852127713);
   em(insns, n, 945907776);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
@@ -892,8 +892,8 @@ fn emit_sys_slurp(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = pop(insns, n, 1);
-  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 0, fntab);
   em(insns, n, 2852193250);
   em(insns, n, 3548246057);
   em(insns, n, 2432711977);
@@ -907,7 +907,7 @@ fn emit_sys_slurp(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   em(insns, n, 2852127725);
   em(insns, n, 942500191);
   em(insns, n, 2852783072);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
@@ -963,14 +963,14 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
 fn emit_var_or_ctor(s: str, name: i64, npos: i64, insns: [i64], n: [i64], stab: [i64], fntab: [i64]) -> i64 {
   let tag = ft_ctor_tag(fntab, name);
   let is_ctor = if tag >= 0 then 1 else 0;
-  if is_ctor == 1 then emit_enum_ctor_nullary(insns, n, tag)
-  else emit_var(insns, n, sym_lookup(s, stab, name, npos))
+  if is_ctor == 1 then emit_enum_ctor_nullary(insns, n, tag, fntab)
+  else emit_var(insns, n, sym_lookup(s, stab, name, npos), fntab)
 }
 
 // Emit a matching match-arm: bind the payload var (if any) then emit the arm body.
 fn emit_match_arm(s: str, ppos: i64, has_var: i64, vname: i64, vpos: i64, bodypos: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let saved = pos[0];
-  let _ = if has_var == 1 then (let _ = pos[0] = ppos in (let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) in (let _ = pop(insns, n, 0) in (let _ = bind_reg(insns, n, sym_bind(s, stab, vname, vpos)) in 0)))) else 0;
+  let _ = if has_var == 1 then (let _ = pos[0] = ppos in (let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) in (let _ = pop(insns, n, 0, fntab) in (let _ = bind_reg(insns, n, sym_bind(s, stab, vname, vpos)) in 0)))) else 0;
   let _ = pos[0] = bodypos;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = pos[0] = saved;
@@ -1087,15 +1087,33 @@ fn em(insns: [i64], n: [i64], w: i64) -> i64 {
   n[0]
 }
 
-// Push x0 (sub sp,#16 ; str x0,[sp]).
-fn push(insns: [i64], n: [i64]) -> i64 {
+// Push x0 (sub sp,#16 ; str x0,[sp]). R6.1 model: slot=d+11 at 3801+d,
+// depth at 3800, self-check traps (push-slot/push-depth).
+fn push(insns: [i64], n: [i64], fntab: [i64]) -> i64 {
+  let d = fntab[3800];
+  let _ = fntab[3801 + d] = d + 11;
+  let _ = fntab[3800] = d + 1;
+  let chk2 = fntab[3800];
+  let ok2 = if chk2 == d + 1 then 1 else 0;
+  let _ = if ok2 == 0 then em(insns, n, 3558866976) else 0;
+  let chk1 = fntab[3801 + d];
+  let ok1 = if chk1 == d + 11 then 1 else 0;
+  let _ = if ok1 == 0 then em(insns, n, 3558866944) else 0;
   let _ = em(insns, n, 3506455551);
   let _ = em(insns, n, 4177527776);
   n[0]
 }
 
-// Pop into x<rd> (ldr x<rd>,[sp] ; add sp,#16).
-fn pop(insns: [i64], n: [i64], rd: i64) -> i64 {
+// Pop into x<rd> (ldr x<rd>,[sp] ; add sp,#16). R6.1 model + traps.
+fn pop(insns: [i64], n: [i64], rd: i64, fntab: [i64]) -> i64 {
+  let d = fntab[3800];
+  let dm1 = d - 1;
+  let s = fntab[3801 + dm1];
+  let _ = fntab[3800] = dm1;
+  let okd = if d < 1 then 1 else 0;
+  let _ = if okd == 1 then em(insns, n, 3558867040) else 0;
+  let oks = if s == 0 then 1 else 0;
+  let _ = if oks == 1 then em(insns, n, 3558867008) else 0;
   let _ = em(insns, n, 4181722080 + rd);
   let _ = em(insns, n, 2432713727);
   n[0]
@@ -1105,7 +1123,7 @@ fn pop(insns: [i64], n: [i64], rd: i64) -> i64 {
 // (source literals above 2^63 wrap on i64) must be normalized per half so
 // the FULL 64-bit pattern materializes -- otherwise big builtin-hash
 // constants compile to a bare 16-bit slice and every dispatch compare fails.
-fn emit_half(insns: [i64], n: [i64], imm: i64, hw: i64) -> i64 {
+fn emit_half(insns: [i64], n: [i64], imm: i64, hw: i64, fntab: [i64]) -> i64 {
   let p = [1, 65536, 4294967296, 281474976710656, 18446744073709551616];
   let hi = imm / p[hw + 1];
   let lo = imm - hi * p[hw + 1];
@@ -1127,21 +1145,21 @@ fn emit_half(insns: [i64], n: [i64], imm: i64, hw: i64) -> i64 {
 // Mirrors native.c emit_mov64: hw=0 always movz, hw=1..3 movk only if
 // that 16-bit slice is non-zero. Without the movk halves any constant
 // above 65535 was silently truncated (loop bounds > 64K hung/wrong).
-fn emit_lit(insns: [i64], n: [i64], imm: i64) -> i64 {
+fn emit_lit(insns: [i64], n: [i64], imm: i64, fntab: [i64]) -> i64 {
   let imm16 = imm - (imm / 65536) * 65536;
   let imm16u = if imm16 < 0 then imm16 + 65536 else imm16;
   let _ = em(insns, n, 3531603968 + imm16u * 32);
-  let _ = emit_half(insns, n, imm, 1);
-  let _ = emit_half(insns, n, imm, 2);
-  let _ = emit_half(insns, n, imm, 3);
-  let _ = push(insns, n);
+  let _ = emit_half(insns, n, imm, 1, fntab);
+  let _ = emit_half(insns, n, imm, 2, fntab);
+  let _ = emit_half(insns, n, imm, 3, fntab);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
 // Emit a binary op (2=add 3=sub 4=mul 5=div): pop b->x1, pop a->x0, op, push.
-fn emit_binop(insns: [i64], n: [i64], op: i64) -> i64 {
-  let _ = pop(insns, n, 1);
-  let _ = pop(insns, n, 0);
+fn emit_binop(insns: [i64], n: [i64], op: i64, fntab: [i64]) -> i64 {
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 0, fntab);
   let wadd = if op == 2 then 2332098560 else 0;
   let wsub = if op == 3 then 3405840384 else 0;
   let wmul = if op == 4 then 2600565760 else 0;
@@ -1156,13 +1174,13 @@ fn emit_binop(insns: [i64], n: [i64], op: i64) -> i64 {
   let is_md = if op == 11 then 1 else 0;
   let _ = if is_md == 1 then (let _ = em(insns, n, 2852127714) in (let _ = em(insns, n, 2596342784) in (let _ = em(insns, n, 2600568832) in 0))) else 0;
   let _ = if is_md == 0 then (let _ = em(insns, n, wadd + wsub + wmul + wdiv + wand + worr + weor + wshl + wshr) in 0) else 0;
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
 // Emit a variable load: mov x0, x<reg> (register) or ldr x0,[x15,#slot*8]
 // (spilled); push.
-fn emit_var(insns: [i64], n: [i64], reg: i64) -> i64 {
+fn emit_var(insns: [i64], n: [i64], reg: i64, fntab: [i64]) -> i64 {
   let is_neg = if reg < 0 then 1 else 0;
   let is_spill = if reg >= 100 then 1 else 0;
   let slot = reg - 100;
@@ -1178,7 +1196,7 @@ fn emit_var(insns: [i64], n: [i64], reg: i64) -> i64 {
   let unk = if reg == 0 - 1 then 1 else 0;
   let w = trapw * bad_full + (zerow * unk + (movw * (1 - is_spill) + ldrw * is_spill) * (1 - is_neg)) * (1 - bad_full);
   let _ = em(insns, n, w);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
@@ -1198,7 +1216,7 @@ fn bind_reg(insns: [i64], n: [i64], reg: i64) -> i64 {
 }
 
 // Read digits, emit their literal; returns the parsed value.
-fn emit_num(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
+fn emit_num(s: str, pos: [i64], insns: [i64], n: [i64], fntab: [i64]) -> i64 {
   let strn = str_len(s);
   let v = 0;
   let done = 0;
@@ -1212,7 +1230,7 @@ fn emit_num(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
     let done = if dg == 1 then 0 else 1;
     0
   };
-  let _ = emit_lit(insns, n, v);
+  let _ = emit_lit(insns, n, v, fntab);
   n[0]
 }
 
@@ -1221,7 +1239,7 @@ fn emit_apply_op(s: str, pos: [i64], insns: [i64], n: [i64], is_minus: i64, stab
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_term(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let op = if is_minus == 1 then 3 else 2;
-  let _ = emit_binop(insns, n, op);
+  let _ = emit_binop(insns, n, op, fntab);
   n[0]
 }
 
@@ -1235,7 +1253,7 @@ fn emit_apply_mul(s: str, pos: [i64], insns: [i64], n: [i64], is_div: i64, stab:
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_bitlvl(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let op = if is_div == 1 then 5 else 4;
-  let _ = emit_binop(insns, n, op);
+  let _ = emit_binop(insns, n, op, fntab);
   n[0]
 }
 
@@ -1244,18 +1262,18 @@ fn emit_apply_mul(s: str, pos: [i64], insns: [i64], n: [i64], is_div: i64, stab:
 fn emit_apply_mod(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_bitlvl(s, pos, insns, n, stab, selfname, selfstart, fntab);
-  let _ = emit_binop(insns, n, 11);
+  let _ = emit_binop(insns, n, 11, fntab);
   n[0]
 }
 
 // Emit a comparison (cond: eq=1 ne=0 lt=10 gt=13 le=12 ge=11): pop b->x1,
 // pop a->x0, cmp x0,x1, cset x0,<cond>, push.
-fn emit_cmp_op(insns: [i64], n: [i64], cond: i64) -> i64 {
-  let _ = pop(insns, n, 1);
-  let _ = pop(insns, n, 0);
+fn emit_cmp_op(insns: [i64], n: [i64], cond: i64, fntab: [i64]) -> i64 {
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 0, fntab);
   let _ = em(insns, n, 3942711327);
   let _ = em(insns, n, 2594113504 + cond * 4096);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
@@ -1265,7 +1283,7 @@ fn emit_cmp_op(insns: [i64], n: [i64], cond: i64) -> i64 {
 fn emit_apply_bits(s: str, pos: [i64], insns: [i64], n: [i64], op: i64, adv: i64, stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + adv;
   let _ = emit_factor(s, pos, insns, n, stab, selfname, selfstart, fntab);
-  let _ = emit_binop(insns, n, op);
+  let _ = emit_binop(insns, n, op, fntab);
   n[0]
 }
 
@@ -1302,7 +1320,7 @@ fn emit_bitlvl(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
 fn emit_apply_cmp(s: str, pos: [i64], insns: [i64], n: [i64], cond: i64, adv: i64, stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + adv;
   let _ = emit_expr(s, pos, insns, n, stab, selfname, selfstart, fntab);
-  let _ = emit_cmp_op(insns, n, cond);
+  let _ = emit_cmp_op(insns, n, cond, fntab);
   n[0]
 }
 
@@ -1391,7 +1409,7 @@ fn emit_paren(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
 fn emit_cond(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 2;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
-  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 0, fntab);
   let _ = em(insns, n, 4043309087);
   let p1 = n[0];
   let _ = em(insns, n, 1409286144);
@@ -1459,7 +1477,7 @@ fn emit_let_plain(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 2;
-  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 0, fntab);
   let _ = bind_reg(insns, n, reg);
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   n[0]
@@ -1475,7 +1493,7 @@ fn emit_let_chain(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 2;
-  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 0, fntab);
   let _ = bind_reg(insns, n, treg);
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   n[0]
@@ -1497,7 +1515,7 @@ fn emit_str(s: str, pos: [i64], insns: [i64], n: [i64], fntab: [i64]) -> i64 {
   let imm21 = dw - cur;
   let adrw = 268435456 + imm21 * 32;
   let _ = em(insns, n, adrw);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   let _ = fntab[3902] = li + 1;
   let _ = skip_string(s, pos);
   n[0]
@@ -1519,7 +1537,7 @@ fn emit_array_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
     let ch = if at_end == 1 then 0 else char(s, pos[0]);
     let is_rb = if ch == 93 then 1 else 0;
     let _ = if is_rb == 0 then emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
-    let _ = if is_rb == 0 then pop(insns, n, 0) else 0;
+    let _ = if is_rb == 0 then pop(insns, n, 0, fntab) else 0;
     let _ = if is_rb == 0 then em(insns, n, 4177527232 + cnt * 1024) else 0;
     let cnt = if is_rb == 0 then cnt + 1 else cnt;
     let _ = skip_ws(s, pos);
@@ -1533,17 +1551,17 @@ fn emit_array_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let _ = pos[0] = pos[0] + 1;
   let _ = em(insns, n, 2853045216);
   let _ = em(insns, n, 2432696320 + cnt * 8192 + 462);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
 // Array get: base + index already on the stack (base pushed first). Pop index
 // into x1, base into x2, then ldr x0,[x2,x1,lsl 3]; push.
-fn emit_array_get(insns: [i64], n: [i64]) -> i64 {
-  let _ = pop(insns, n, 1);
-  let _ = pop(insns, n, 2);
+fn emit_array_get(insns: [i64], n: [i64], fntab: [i64]) -> i64 {
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 2, fntab);
   let _ = em(insns, n, 4167137344);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
@@ -1552,12 +1570,12 @@ fn emit_array_get(insns: [i64], n: [i64]) -> i64 {
 fn emit_array_set(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
-  let _ = pop(insns, n, 0);
-  let _ = pop(insns, n, 1);
-  let _ = pop(insns, n, 2);
+  let _ = pop(insns, n, 0, fntab);
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 2, fntab);
   let _ = em(insns, n, 4162943040);
   let _ = em(insns, n, 3531603968);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
@@ -1566,7 +1584,7 @@ fn emit_array_set(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
 fn emit_array_index(s: str, name: i64, npos: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let strn = str_len(s);
   let reg = sym_lookup(s, stab, name, npos);
-  let _ = emit_var(insns, n, reg);
+  let _ = emit_var(insns, n, reg, fntab);
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
@@ -1578,7 +1596,7 @@ fn emit_array_index(s: str, name: i64, npos: i64, pos: [i64], insns: [i64], n: [
   let is_eq = if ch == 61 then 1 else 0;
   let is_eq2 = if ch1 == 61 then 1 else 0;
   let is_set = is_eq * (1 - is_eq2);
-  let _ = if is_set == 1 then emit_array_set(s, pos, insns, n, stab, selfname, selfstart, fntab) else emit_array_get(insns, n);
+  let _ = if is_set == 1 then emit_array_set(s, pos, insns, n, stab, selfname, selfstart, fntab) else emit_array_get(insns, n, fntab);
   n[0]
 }
 
@@ -1623,7 +1641,7 @@ fn emit_factor(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
     else if is_lb == 1 then emit_array_lit(s, pos, insns, n, stab, selfname, selfstart, fntab)
     else if is_quote == 1 then emit_str(s, pos, insns, n, fntab)
     else if is_letter == 1 then emit_ident(s, pos, insns, n, stab, selfname, selfstart, fntab)
-    else emit_num(s, pos, insns, n);
+    else emit_num(s, pos, insns, n, fntab);
   let fd = 0;
   while fd == 0 {
     // progress guard: '.' that fails to consume input must not spin forever
@@ -1632,7 +1650,7 @@ fn emit_factor(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
     let strn2 = str_len(s);
     let ch2 = if pos[0] >= strn2 then 0 else char(s, pos[0]);
     let is_dot = if ch2 == 46 then 1 else 0;
-    let _ = if is_dot == 1 then emit_field_access(s, pos, insns, n, stab) else 0;
+    let _ = if is_dot == 1 then emit_field_access(s, pos, insns, n, stab, fntab) else 0;
     let advanced = if pos[0] > before then 1 else 0;
     let stuck = is_dot * (1 - advanced);
     let fd = if is_dot == 1 then stuck else 1;
@@ -1694,7 +1712,7 @@ fn compile(s: str) -> i64 {
     0
   };
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
-  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 0, fntab);
   let _ = em(insns, n, 3596551104);
   sum_words(insns, n[0])
 }
@@ -1765,7 +1783,7 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   // patch the placeholder once the target address is known. The backward
   // edge is emitted last with its exact delta (loop_start is fixed).
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
-  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 0, fntab);
   let _ = em(insns, n, 4043309087);
   let p1 = n[0];
   let _ = em(insns, n, 1409286144);
@@ -1776,7 +1794,7 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let blastl = bresl - (bresl / 2) * 2;
   let grewl_raw = if n[0] > nb_body then 1 else 0;
   let legbl = if blastl == 0 then grewl_raw else 0;
-  let _ = if legbl == 1 then pop(insns, n, 0) else 0;
+  let _ = if legbl == 1 then pop(insns, n, 0, fntab) else 0;
   let _ = em(insns, n, 402653184 + loop_start - n[0]);
   let endl = n[0];
   let _ = insns[p1] = 1409286144 + (endl - p1) * 32;
@@ -1841,7 +1859,7 @@ fn emit_let_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let grew_v = if n[0] > nb_v then 1 else 0;
-  let _ = if grew_v == 1 then pop(insns, n, 0) else 0;
+  let _ = if grew_v == 1 then pop(insns, n, 0, fntab) else 0;
   let _ = bind_reg(insns, n, treg_i);
   n[0]
 }
@@ -1875,8 +1893,8 @@ fn emit_compound_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], s
   let opcode = is_add * 2 + is_sub * 3 + is_mul * 4 + is_div * 5 + is_mod * 11;
   let is_plain = if opch == 61 then 1 else 0;
   let _ = pos[0] = pos[0] + 2;
-  let _ = if is_plain == 1 then (let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) in 0) else (let _ = emit_var(insns, n, reg0) in (let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) in (let _ = emit_binop(insns, n, opcode) in 0)));
-  let _ = pop(insns, n, 0);
+  let _ = if is_plain == 1 then (let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) in 0) else (let _ = emit_var(insns, n, reg0, fntab) in (let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) in (let _ = emit_binop(insns, n, opcode, fntab) in 0)));
+  let _ = pop(insns, n, 0, fntab);
   let _ = bind_reg(insns, n, reg0);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
@@ -1966,7 +1984,7 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     let leg_item = grew;
     let ma1 = if is_expr == 0 then 0 else not_rbrace;
     let more_ahead = if ma1 == 0 then 0 else not_eof;
-    let _ = if more_ahead * leg_item == 1 then pop(insns, n, 0) else 0;
+    let _ = if more_ahead * leg_item == 1 then pop(insns, n, 0, fntab) else 0;
     let _ = skip_ws(s, pos);
     let strn2 = str_len(s);
     let at_end1 = if pos[0] >= strn2 then 1 else 0;
@@ -2061,12 +2079,12 @@ fn emit_call(s: str, fname: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64]
   let pcnt = pcnt1 * okres;
   let _ = skip_to(s, ppos, 123);
   let body = ppos[0] + 1;
-  let _ = if okres == 0 then (let _ = em(insns, n, 3531603968) in (let _ = push(insns, n) in 0)) else 0;
+  let _ = if okres == 0 then (let _ = em(insns, n, 3531603968) in (let _ = push(insns, n, fntab) in 0)) else 0;
   let _ = pos[0] = pos[0] + 1;
   let i = 0;
   while i < pcnt {
     let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
-    let _ = pop(insns, n, 0);
+    let _ = pop(insns, n, 0, fntab);
     let reg = sym_bind(s, stab, pnames[i], pparpos[i]);
     let _ = bind_reg(insns, n, reg);
     let _ = skip_ws(s, pos);
@@ -2217,7 +2235,7 @@ fn compile_fn(s: str) -> i64 {
   // in x0 -- pop exactly when something was pushed by a LEGACY final item
   let grew_t = if n[0] > nb_tail then 1 else 0;
   let leg_tail = if blast_t == 0 then grew_t else 0;
-  let _ = if leg_tail == 1 then pop(insns, n, 0) else 0;
+  let _ = if leg_tail == 1 then pop(insns, n, 0, fntab) else 0;
   let _ = emit_epilogue(insns, n);
   sum_words(insns, n[0])
 }
@@ -2320,7 +2338,7 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   // in x0 -- pop exactly when something was pushed by a LEGACY final item
   let grew_t = if n[0] > nb_tail then 1 else 0;
   let leg_tail = if blast_t == 0 then grew_t else 0;
-  let _ = if leg_tail == 1 then pop(insns, n, 0) else 0;
+  let _ = if leg_tail == 1 then pop(insns, n, 0, fntab) else 0;
   let _ = emit_epilogue(insns, n);
   // OPT-A: only save/restore callee-saved pairs this fn actually binds.
   // Prologue words pbase+3..pbase+7 hold stp x19/x20 .. x27/x28; epilogue
@@ -2693,7 +2711,7 @@ fn emit_expr_words(src: str) -> [i64] {
     0
   };
   let _ = emit_cmp(src, pos, insns, n, stab, selfname, selfstart, fntab);
-  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 0, fntab);
   let _ = em(insns, n, 3596551104);
   let out = zeros(n[0] + 1);
   let _ = out[0] = n[0];
@@ -2863,7 +2881,7 @@ fn emit_zeros(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 1, fntab);
   // lsl x1,x1,#3 (bytes): assembler-verified 0xD37DF421? no —
   // 0xD3400000-family UBFM alias; 3548246049 == true LSL #3.
   let _ = em(insns, n, 3548246049);
@@ -2884,7 +2902,7 @@ fn emit_zeros(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   let _ = em(insns, n, 4160783455);
   let _ = em(insns, n, 3942842463);
   let _ = em(insns, n, 1426063297);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
@@ -3054,11 +3072,11 @@ fn emit_sys_ftruncate(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], s
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = pop(insns, n, 1);
-  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 0, fntab);
   em(insns, n, 3531605448);
   em(insns, n, 3556769793);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
@@ -3072,11 +3090,11 @@ fn emit_sys_munmap(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = pop(insns, n, 1);
-  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 0, fntab);
   em(insns, n, 3531610856);
   em(insns, n, 3556769793);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
@@ -3094,9 +3112,9 @@ fn emit_sys_export(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = pop(insns, n, 2);
-  let _ = pop(insns, n, 1);
-  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 2, fntab);
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 0, fntab);
   em(insns, n, 2852127723);
   em(insns, n, 2852193260);
   em(insns, n, 2852258797);
@@ -3125,7 +3143,7 @@ fn emit_sys_export(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   em(insns, n, 3531610856);
   em(insns, n, 3556769793);
   em(insns, n, 2854159328);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
@@ -3154,15 +3172,15 @@ fn emit_sys_mmap(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = pop(insns, n, 5);
-  let _ = pop(insns, n, 4);
-  let _ = pop(insns, n, 3);
-  let _ = pop(insns, n, 2);
-  let _ = pop(insns, n, 1);
-  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 5, fntab);
+  let _ = pop(insns, n, 4, fntab);
+  let _ = pop(insns, n, 3, fntab);
+  let _ = pop(insns, n, 2, fntab);
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 0, fntab);
   em(insns, n, 3531611080);
   em(insns, n, 3556769793);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
@@ -3187,10 +3205,10 @@ fn emit_sys_rename(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = pop(insns, n, 3);
-  let _ = pop(insns, n, 2);
-  let _ = pop(insns, n, 1);
-  let _ = pop(insns, n, 0);
+  let _ = pop(insns, n, 3, fntab);
+  let _ = pop(insns, n, 2, fntab);
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 0, fntab);
   em(insns, n, 2852127723);
   em(insns, n, 2852193261);
   em(insns, n, 2852258800);
@@ -3222,7 +3240,7 @@ fn emit_sys_rename(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   em(insns, n, 2853241827);
   em(insns, n, 3531605192);
   em(insns, n, 3556769793);
-  let _ = push(insns, n);
+  let _ = push(insns, n, fntab);
   n[0]
 }
 
