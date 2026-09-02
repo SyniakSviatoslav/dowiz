@@ -280,5 +280,16 @@ gate fir 11104857722880 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/qlora.bp /tmp/opencode/qlora_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/qlora_test.bin | tail -1)
 gate qlora 1116506000272 "$r"
 
+# ---- bitmat (SS-12 bit matrices: switch/case -> parallel bit grids. The
+#      dispatcher core = first-set-bit over an 8-bit condition flags word,
+#      branch-free bit-grid reduction (idx = sum k*b_k*nf_k, nf = running
+#      not-found mask) - the arithmetic the 23-builtin emit dispatcher
+#      compiles to; fixed 8-step tick = the structural part of the <10-cycle
+#      claim. Verified over ALL 256 flag patterns vs expected index (-1 when
+#      empty; sum of outputs = 246). Fold 1000024600 = ok*10^9 + tot*100 =
+#      python mirror bit-exact.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/bitmat.bp /tmp/opencode/bitmat_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/bitmat_test.bin | tail -1)
+gate bitmat 1000024600 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

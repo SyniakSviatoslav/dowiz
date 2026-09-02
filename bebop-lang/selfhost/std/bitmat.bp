@@ -1,0 +1,49 @@
+// bitmat.bp — SS-12: bit matrices (switch/case -> parallel bit grids).
+// The dispatcher core: first-set-bit over an 8-bit condition flags word,
+// computed BRANCH-FREE as a bit-grid reduction - idx = sum k*b_k*nf_k with
+// the running "not found yet" mask nf = prod_{j<k}(1-b_j) (each case = one
+// bit column of the grid, evaluated in parallel, no branches). Verified
+// over ALL 256 flag patterns against the expected first-set index (0..7,
+// -1 when empty). This is the exact arithmetic the 23-builtin emit
+// dispatcher compiles to; a fixed 8-step tick = the <10-cycle claim's
+// structural part. Fold = ok*10^9 + tot*100 (tot = sum of dispatcher
+// outputs over all 256 patterns = 246). No fp; >> only on the non-negative
+// literal/local f (shift law).
+
+fn main() -> i64 {
+  let ok = 1;
+  let tot = 0;
+  let f = 0;
+  while f < 256 {
+    let any = if f > 0 then 1 else 0;
+    let idx = 0;
+    let nf = 1;
+    let k = 0;
+    while k < 8 {
+      let bk = (f >> k) - ((f >> k) / 2) * 2;
+      let idx = idx + k * bk * nf;
+      let nf = nf * (1 - bk);
+      let k = k + 1;
+      0
+    };
+    let idx = idx - (1 - any);
+    let exp = 0;
+    let found = 0;
+    let k = 0;
+    while k < 8 {
+      let bk = (f >> k) - ((f >> k) / 2) * 2;
+      let sel = (1 - found) * bk;
+      let exp = exp + sel * (k + 1);
+      let found = found + sel;
+      let k = k + 1;
+      0
+    };
+    let exp = exp - 1;
+    let good = if idx == exp then 1 else 0;
+    let ok = ok * good;
+    let tot = tot + idx;
+    let f = f + 1;
+    0
+  };
+  ok * 1000000000 + tot * 100
+}
