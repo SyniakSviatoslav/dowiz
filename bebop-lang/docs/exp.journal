@@ -451,3 +451,20 @@
   bench/golden/bebop-8ec62df.bin+.sha256 (md5 f7803358...); harness preflights
   in all 3 suites; AGENTS.md L12-L16 + symptom row for exit 90/91; docs/
   BUG-LEDGER-WEEK.md. Suite: 44/44, parity 9/0, construct 24/24, fixpoint green.
+1788288252 R6.2a:model-driven-folding DID:emit_lit records (value,count,is-const)
+  at fntab 3601/3501/3401+d; emit_binop add/sub/mul retract recorded chunks and
+  re-emit folded (both-const via emit_lit; right-const via pop+imm12-op) GOT:
+  small probes all correct (1+2=3, 1+2*3=7, 10-3-2=5, 2*(3+4)=14, 8/2-1=3,
+  70000*70000 wraps OK, -7- -9=-16 = PRE-EXISTING parser unary-minus quirk
+  confirmed identical on golden 8ec62df). BUT compile-time segfault on
+  k7/s800/s1600; HEISENBUG: with ladder prints in the fold paths g5 compiles
+  clean (D fired 4x = domul on kk*n*2) - layout-sensitive = spill-machinery
+  class; emit_binop grew to ~35 bindings (b36 probe: 36 bindings OK on both
+  compilers, so not raw count - the specific compiled form) VERDICT:REVERTED
+  per L14/L15 (single-variable diffs; no fpC/spill edits without a failing
+  probe first). Next session: split the fold into helper fns <=15 bindings
+  each (the proven range), keep both-const only, then add the imm path.
+  Side-find: while-stmt boundary bug (PRE-EXISTING, both compilers): a
+  trailing expression after `while ... {};` is emitted INSIDE the loop
+  before the back-jump -> stack grows per iteration -> Bus error (s3 repro,
+  old+new identical). New language bug for the ledger, independent of R6.

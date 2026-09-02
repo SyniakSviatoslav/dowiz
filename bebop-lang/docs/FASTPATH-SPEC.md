@@ -85,7 +85,25 @@ stream). State = per-emission-point: depth + "top is in x0" flag. Concretely:
   path safe; otherwise thread a dedicated `stm: [i64]` through the emit_*
   signatures (mechanical, ~40 call sites — the earlier script exists).
 
-## R6.2 — constant folding (source-level, not word-level)
+## R6.2 — model-driven folding (DESIGN PROVEN, implementation deferred)
+Status (journal 1788288252): the design is validated end-to-end on small
+probes (both-const and right-const retract+re-emit are semantically exact),
+but the first implementation carried a layout-sensitive compile-time crash
+(heisenbug: vanished with ladder prints; emit_binop reached ~35 bindings —
+the spill-machinery class per L15). Reverted per L14/L15.
+
+Next-session plan (single-variable diffs, one commit each):
+1. Extract the fold into helper fns, each <=15 bindings (the proven range:
+   emit_match_arm=15 works, b36=36 works as a USER fn, but the compiler's
+   own 35-binding emit_binop crashes) — both-const path ONLY first.
+2. Re-run the full battery (fixpoint, 44 gates, parity, construct 24/24)
+   and regenerate frozen artifacts + the c1-c8 startup checksums (folding
+   changes emitted streams; compile() user-call returns 0 — the checksums
+   must be recomputed from the compiler's own startup path).
+3. Then add the right-const imm12 path (the i+1 increment win) as a second
+   commit.
+
+## R6.2-archive — constant folding (source-level, not word-level)
 In emit_apply_*/emit_binop: when BOTH operands are compile-time constants
 (the emitter knows: the literal emitter just ran), compute the folded value
 in the EMITTER and emit ONE literal — never rewrite already-emitted words.
