@@ -238,5 +238,15 @@ gate sinc 6684880500081 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/kalman.bp /tmp/opencode/kalman_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/kalman_test.bin | tail -1)
 gate kalman 28327900110011 "$r"
 
+# ---- calcbound (SS-5 calculus bounding: mean-value slope bounds on
+#      f(x)=x^2-x give a bounding box for every golden mutation d in
+#      {-1/8,-1/16,0,+1/16,+1/8} around x0=1.0: df in [min(fmin*d,
+#      fmax*d)-eps, max(fmin*d,fmax*d)+eps], f'=2x-1 in [0.75,1.25],
+#      eps=0.01 slack. Done-check: box CONTAINS all 5 actual results.
+#      Fold 1024576000 = contained*10^9 + sum(|fi|>>16)*10^3 + (f0>>20)
+#      = python mirror bit-exact (>> is logical - abs-first per shift law).) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/calcbound.bp /tmp/opencode/calcbound_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/calcbound_test.bin | tail -1)
+gate calcbound 1024576000 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

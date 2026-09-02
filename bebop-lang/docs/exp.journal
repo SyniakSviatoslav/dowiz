@@ -195,3 +195,11 @@
   fixpoint (P1000==P999 -> fix=1 = zero drift, fixed tick count structural);
   state tracks z inside 0.1% band (err=3 fp units); fold 28327900110011, .bp
   == python mirror bit-exact; std_golden 27 pass VERDICT:confirmed
+1788288216 H:SS-5-calcbound-gate DID:mean-value bounding box for f(x)=x^2-x at
+  x0=1.0, five golden mutations d in {-1/8,-1/16,0,+1/16,+1/8}; slope bounds
+  f' in [0.75,1.25], box [min(fmin*d,fmax*d)-eps, max+eps], eps=0.01 slack;
+  branch-free min/max via even-difference /2 GOT:all 5 actual df inside the
+  box (contained=1), fold 1024576000, .bp == python mirror bit-exact;
+  std_golden 28 pass; LAW re-confirmed: >> is LOGICAL - abs before any shift
+  of a possibly-negative value (fi>>16 was LSR'd, sum 2^49+2560 exposed it)
+  VERDICT:confirmed
