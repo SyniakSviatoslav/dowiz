@@ -258,5 +258,16 @@ gate calcbound 1024576000 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/vecinv.bp /tmp/opencode/vecinv_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/vecinv_test.bin | tail -1)
 gate vecinv 1111018 "$r"
 
+# ---- fir (SS-4 FIR as a structural ban on cyclic dependencies: forward-only
+#      4-tap flow h={1,1/2,1/4,1/8}, fixed literal tap count = bounded masked
+#      iteration (zero infinite-loop risk by construction). Impulse at each
+#      lag reproduces the tap exactly; BIBO: all 16 worst-case sign patterns
+#      |x|<=1 give |y| <= sum|h| = 15/8 exactly (equality at the aligned
+#      pattern). Fold 11104857722880 = taps_ok*10^13 + bib_ok*10^12 +
+#      sumq*10^5 + maxq (q=>>16, positives only - shift law) = python mirror
+#      bit-exact.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/fir.bp /tmp/opencode/fir_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/fir_test.bin | tail -1)
+gate fir 11104857722880 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

@@ -210,3 +210,9 @@
   == python mirror bit-exact; std_golden 29 pass; NOTE: replaced the in-loop
   conditional lf0 store (R3.c pattern) with a direct out-of-loop computation
   VERDICT:confirmed
+1788288218 H:SS-4-fir-gate DID:4-tap FIR h={1,1/2,1/4,1/8} forward-only, literal
+  tap count (bounded masked iteration structural); impulse per lag == tap
+  exact; BIBO over all 16 sign patterns |x|<=1: |y| <= sum|h| = 15/8 exact,
+  equality at aligned pattern GOT:fold 11104857722880 (taps_ok=1 bib_ok=1
+  sumq=2^20 maxq=122880), .bp == python mirror bit-exact; std_golden 30
+  pass VERDICT:confirmed
