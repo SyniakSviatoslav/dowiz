@@ -273,3 +273,11 @@
   decisive; readout argmax <S,H_b> = 0 in surviving group GOT:fold
   1114056100000 (collapse=1 read=1 decisive=1 gap=40561 win=0), .bp ==
   python mirror bit-exact; std_golden 39 pass; N7 CLOSED VERDICT:confirmed
+1788288228 H:N8-spacetime-gate DID:boundary-value execution crystallized in one
+  pass (pinned nodes + constant arc increments, exact integer division); two
+  configs, loop closure + Laplacian==0 all interior + Jacobi heat-flow
+  consistency with pinned survival; ROUNDING BASINS of the truncated
+  averaging map (Jacobi from zero lands [10,6,3,0,-2,0,3,6], from random
+  oscillates - truncation basins) sidestepped by one-pass crystallization
+  GOT:fold 1111100012240, .bp == python mirror bit-exact; std_golden 40
+  pass; N8 CLOSED VERDICT:confirmed

@@ -366,5 +366,19 @@ gate ringvsa 1110000000544 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/msuper.bp /tmp/opencode/msuper_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/msuper_test.bin | tail -1)
 gate msuper 1114056100000 "$r"
 
+# ---- spacetime (N8 spacetime metric code / boundary execution: the program
+#      = a boundary-value problem on the ring surface, crystallized in ONE
+#      pass - pinned nodes + constant arc increments (exact integer
+#      division); two configurations (10,-2)->[10,7,4,1,-2,1,4,7] and
+#      (20,-4)->[20,14,8,2,-4,2,8,14]; loop closure (arc B meets the start,
+#      past/present/future agree), Laplacian==0 at every interior node, and
+#      Jacobi heat-flow consistency (crystal is an exact fixpoint, pinned
+#      nodes survive 8 steps). Rounding basins of the truncated averaging
+#      map sidestepped by one-pass crystallization. Fold 1111100012240 =
+#      close1*10^12 + harm1*10^11 + fix1*10^10 + close2*10^9 + harm2*10^8 +
+#      chk1*100 + chk2 = python mirror bit-exact.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/spacetime.bp /tmp/opencode/spacetime_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/spacetime_test.bin | tail -1)
+gate spacetime 1111100012240 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

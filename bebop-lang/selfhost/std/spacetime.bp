@@ -1,0 +1,138 @@
+// spacetime.bp — N8: spacetime metric code / global boundary execution.
+// The program = a global boundary-value problem on the CSR graph surface:
+// the runtime crystallizes the whole stationary state in ONE pass (no
+// sequential steps) - pinned boundary nodes determine the field via the
+// harmonic constraint (constant edge increment on each arc: delta =
+// (x_end - x_start)/arc_len, exact integer when divisible). Two boundary
+// configurations: (10, -2) -> field [10,7,4,1,-2,1,4,7]; (20, -4) ->
+// [20,14,8,2,-4,2,8,14]. Checks: loop closure (arc B meets the start
+// exactly - past/present/future agree globally), harmonicity (Laplacian
+// == 0 at every interior node), and Jacobi heat-flow consistency (the
+// crystal is an EXACT fixpoint of the averaging map - all neighbor sums
+// even - 8 steps leave it bit-identical). Rounding basins of the truncated
+// averaging map are sidestepped by the one-pass crystallization (journal).
+// Fold = close1*10^12 + harm1*10^11 + fix1*10^10 + close2*10^9 +
+// harm2*10^8 + chk1*100 + chk2.
+
+fn main() -> i64 {
+  let x1 = zeros(8);
+  let x2 = zeros(8);
+  let t = zeros(8);
+  // ---- config 1: x0 = 10 pinned, x4 = -2 pinned
+  let _ = x1[0] = 10;
+  let _ = x1[4] = 0 - 2;
+  let dA = (x1[4] - x1[0]) / 4;
+  let dB = (x1[0] - x1[4]) / 4;
+  let i = 1;
+  while i < 4 {
+    let _ = x1[i] = x1[i - 1] + dA;
+    let i = i + 1;
+    0
+  };
+  let i = 5;
+  while i < 8 {
+    let _ = x1[i] = x1[i - 1] + dB;
+    let i = i + 1;
+    0
+  };
+  let close1 = if x1[7] + dB == x1[0] then 1 else 0;
+  let harm1 = 1;
+  let i = 0;
+  while i < 8 {
+    let inr = if i == 0 then 0 else 1;
+    let inr = if i == 4 then 0 else inr;
+    let ip1 = i + 1 - (if i + 1 == 8 then 8 else 0);
+    let im1 = i - 1 + (if i == 0 then 8 else 0);
+    let lap = x1[im1] + x1[ip1] - 2 * x1[i];
+    let ok = if lap == 0 then 1 else 0;
+    let harm1 = harm1 * (1 - inr * (1 - ok));
+    let i = i + 1;
+    0
+  };
+  let chk1 = 0;
+  let i = 0;
+  while i < 8 {
+    let chk1 = chk1 + x1[i] * (i + 1);
+    let i = i + 1;
+    0
+  };
+  // Jacobi heat-flow consistency: 8 steps on a copy must not move the crystal
+  let i = 0;
+  while i < 8 {
+    let _ = t[i] = x1[i];
+    let i = i + 1;
+    0
+  };
+  let it = 0;
+  while it < 8 {
+    let i = 0;
+    while i < 8 {
+      let _ = x1[i] = t[i];
+      let i = i + 1;
+      0
+    };
+    let i = 0;
+    while i < 8 {
+      let ip1 = i + 1 - (if i + 1 == 8 then 8 else 0);
+      let im1 = i - 1 + (if i == 0 then 8 else 0);
+      let newv = (x1[im1] + x1[ip1]) / 2;
+      let pinned = if i == 0 then 1 else 0;
+      let pinned = if i == 4 then 1 else pinned;
+      let _ = t[i] = t[i] + (1 - pinned) * (newv - t[i]);
+      let i = i + 1;
+      0
+    };
+    let it = it + 1;
+    0
+  };
+  let fix1 = 1;
+  let i = 0;
+  while i < 8 {
+    let ok = if t[i] == x1[i] then 1 else 0;
+    let fix1 = fix1 * ok;
+    let i = i + 1;
+    0
+  };
+  let p0 = if t[0] == 10 then 1 else 0;
+  let p4 = if t[4] == 0 - 2 then 1 else 0;
+  let fix1 = fix1 * p0 * p4;
+  // ---- config 2: x0 = 20, x4 = -4
+  let _ = x2[0] = 20;
+  let _ = x2[4] = 0 - 4;
+  let dA2 = (x2[4] - x2[0]) / 4;
+  let dB2 = (x2[0] - x2[4]) / 4;
+  let i = 1;
+  while i < 4 {
+    let _ = x2[i] = x2[i - 1] + dA2;
+    let i = i + 1;
+    0
+  };
+  let i = 5;
+  while i < 8 {
+    let _ = x2[i] = x2[i - 1] + dB2;
+    let i = i + 1;
+    0
+  };
+  let close2 = if x2[7] + dB2 == x2[0] then 1 else 0;
+  let harm2 = 1;
+  let i = 0;
+  while i < 8 {
+    let inr = if i == 0 then 0 else 1;
+    let inr = if i == 4 then 0 else inr;
+    let ip1 = i + 1 - (if i + 1 == 8 then 8 else 0);
+    let im1 = i - 1 + (if i == 0 then 8 else 0);
+    let lap = x2[im1] + x2[ip1] - 2 * x2[i];
+    let ok = if lap == 0 then 1 else 0;
+    let harm2 = harm2 * (1 - inr * (1 - ok));
+    let i = i + 1;
+    0
+  };
+  let chk2 = 0;
+  let i = 0;
+  while i < 8 {
+    let chk2 = chk2 + x2[i] * (i + 1);
+    let i = i + 1;
+    0
+  };
+  close1 * 1000000000000 + harm1 * 100000000000 + fix1 * 10000000000 + close2 * 1000000000 + harm2 * 100000000 + chk1 * 100 + chk2
+}
