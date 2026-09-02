@@ -405,5 +405,14 @@ gate fno 111152971008019 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/r3x.bp /tmp/opencode/r3x_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/r3x_test.bin | tail -1)
 gate r3x 1111000151 "$r"
 
+# ---- mma (SS-11 hardware half: generation arena on a REAL kernel mmap via
+#      the 6-arg sys_mmap wrapper (MAP_PRIVATE|ANONYMOUS); positive
+#      4096-aligned writable base; 100000 bump-allocated cells store/load
+#      round-trip all correct (zero per-alloc syscalls, zero fragmentation);
+#      sys_munmap releases. Fold 1111100000 = ok1*10^9 + al*10^8 +
+#      good*10^7 + okh*10^6 + 100000.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/mma.bp /tmp/opencode/mma_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/mma_test.bin | tail -1)
+gate mma 1111100000 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

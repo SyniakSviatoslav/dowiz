@@ -63,7 +63,16 @@ Everything pushed.
 - Token economy: docs/TOKEN-ECONOMY.md (binding). Tier routing: Pro =
   reasoning/planning/debugging/synthesis; Flash = SPEC card execution.
 
-## ACTIVE SPEC — R3.x emitter defect fixes (the only open correctness work)
+## ACTIVE SPEC — R6 fast path + R3.x(e) clock defect (the open work)
+- R6 register-aware emitter: docs/FASTPATH-SPEC.md (binding) - R6.0 root-
+  causes the R4 model-write failure FIRST, then source-level register/
+  constant awareness; NO in-place word-stream rewrites (all of R4/R5 killed
+  by layout-sensitive self-compile crashes, journal 1788288234/36).
+- R3.x(e): clock_ms() miscompiles the following statement (zero-arg builtin
+  parse) - minimal repros /tmp/opencode/z2.bp jm.bp zn.bp; SS-3 jitter half
+  blocked on it (journal 1788288238).
+- Remaining tail: SS-14 direct-threaded, SME/SVE2 forward port (ARMv9).
+
 (a) fast-path `a*b<<c` miscompile (1788288190);
 (b) `>>` logical/arithmetic selector split — emitted LSR on locals; the
     language LAW is ">> is logical; abs first" (1788288210/216);

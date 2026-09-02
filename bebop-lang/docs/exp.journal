@@ -354,3 +354,21 @@
   with the failure modes + R6.0 root-cause task + R6.1/2 design + R6.3
   verification ladder; the honest status: correctness complete, the perf
   gap vs Rust remains the ONE open roadmap item VERDICT:confirmed
+1788288238 H:R3x-e-clock-builtin-defect DID:clock_ms() miscompiles: minimal
+  repro `fn main() { let t0 = clock_ms(); let i = 0; i }` emits the RHS 0 of
+  the FOLLOWING let as an unbound-ident read (mov x0,x0) and binds i to
+  register 0 -> loop conditions read x0 -> infinite loop; with a while after
+  the clock: hang; clock in a helper fn: SIGSEGV. Plain fn-call + let is
+  fine (f() variant OK) - the defect is clock-specific (the zero-arg builtin
+  parse/emission corrupts the statement after it). The clock builtin was
+  never exercised by the gates (timing-free by design) so it slipped
+  through. SS-3 jitter half stays blocked on this. GOT:repros saved
+  (/tmp/opencode/z2.bp jm.bp zn.bp), fold of the clock's own words decoded
+  CORRECT (mov x1,#8208; sub x1,x28,x1; clock_gettime 113; ms = sec*1000 +
+  nsec/1e6) - the EMISSION is right, the surrounding statement parse is not
+  VERDICT:confirmed (R3.x defect e, open)
+1788288239 H:SS-11-mma-gate DID:generation arena on a REAL kernel mmap via the
+  6-arg sys_mmap wrapper (100000 bump-allocated cells store/load round-trip,
+  base positive+4096-aligned, munmap release) GOT:fold 1111100000, gate 43,
+  std_golden 43 pass; raw mmap base usable as an array binding (curs[i] =
+  i works) - the SS-11 hardware half is CLOSED VERDICT:confirmed

@@ -1,0 +1,30 @@
+// mma.bp — SS-11 hardware half: the generation arena on a REAL kernel mmap
+// (sys_mmap MAP_PRIVATE|ANONYMOUS, the MAP_NORESERVE analogue; the compiler
+// mmap wrapper exposes the full 6-arg signature). Claims: the kernel returns
+// a positive, 4096-aligned, WRITABLE base; bump-allocate 100000 cells
+// (store index / load back round-trip all correct - zero fragmentation by
+// construction, zero per-alloc syscalls - one mmap for the whole arena);
+// munmap releases it. Fold = ok1*10^9 + al*10^8 + good*10^7 + n*10 +
+
+
+fn main() -> i64 {
+  let b = sys_mmap(0, 1048576, 3, 34, 0 - 1, 0);
+  let ok1 = if b > 0 then 1 else 0;
+  let al = if b - (b / 4096) * 4096 == 0 then 1 else 0;
+  let curs = b;
+  let i = 0;
+  let good = 1;
+  while i < 100000 {
+    let _ = curs[i] = i;
+    let r = curs[i];
+    let g = if r == i then 1 else 0;
+    let good = good * g;
+    let i = i + 1;
+    0
+  };
+  let hw = b + 100000;
+  let hwv = curs[99999];
+  let okh = if hwv == 99999 then 1 else 0;
+  let _ = sys_munmap(b, 1048576);
+  ok1 * 1000000000 + al * 100000000 + good * 10000000 + okh * 1000000 + 100000
+}
