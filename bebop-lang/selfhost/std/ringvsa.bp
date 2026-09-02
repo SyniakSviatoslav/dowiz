@@ -1,0 +1,154 @@
+// ringvsa.bp — N3: Ring-VSA / HDC with colored Hadamard rings. The holistic
+// algebraic system: 16-cell hypervectors, bind = dyadic (XOR-index)
+// convolution over the WHT group, bundle = superposition. Gate axioms:
+// (1) ASSOCIATIVITY of the ring product: (a*b)*c == a*(b*c) elementwise;
+// (2) the WHT CONVOLUTION THEOREM: fwht(a*b)[k] == fwht(a)[k]*fwht(b)[k] for
+// all k - WHT is the single algebraic group for bind (convolution
+// diagonalizes under it); (3) IDENTITY: a*e == a for the delta vector e.
+// Vectors: a = (-1)^popcount, b = (-1)^(popcount/2), c = colored 3-periodic,
+// e = delta. Fold = assoc*10^12 + conv*10^11 + ident*10^10 + chk
+// (chk = sum |a*b|[k]*(k+1) = 544). wht_pow2 embedded verbatim from wht.bp
+// (gate wht 85001). Pure integer, deterministic.
+
+fn wht_pow2(x: [i64], n: i64) -> i64 {
+  let T = zeros(1024);
+  let len = 1;
+  while len < n {
+    let base = 0;
+    while base < n {
+      let i = 0;
+      while i < len {
+        let j = base + i;
+        let _ = T[i] = x[j];
+        let _ = T[len + i] = x[j + len];
+        let i = i + 1;
+        0
+      };
+      let i = 0;
+      while i < len {
+        let j = base + i;
+        let _ = x[j] = T[i] + T[len + i];
+        let _ = x[j + len] = T[i] - T[len + i];
+        let i = i + 1;
+        0
+      };
+      let base = base + len * 2;
+      0
+    };
+    let len = len * 2;
+    0
+  };
+  n
+}
+
+fn popc4(i: i64) -> i64 {
+  let p = i;
+  let c = 0;
+  let t = 0;
+  while t < 4 {
+    let c = c + p - (p / 2) * 2;
+    let p = p / 2;
+    let t = t + 1;
+    0
+  };
+  c
+}
+
+fn bind(a: [i64], b: [i64], r: [i64], n: i64) -> i64 {
+  let k = 0;
+  while k < n {
+    let _ = r[k] = 0;
+    let k = k + 1;
+    0
+  };
+  let i = 0;
+  while i < n {
+    let j = 0;
+    while j < n {
+      let k = i ^ j;
+      let _ = r[k] = r[k] + a[i] * b[j];
+      let j = j + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  n
+}
+
+fn eq16(x: [i64], y: [i64]) -> i64 {
+  let eq = 1;
+  let k = 0;
+  while k < 16 {
+    let m = if x[k] == y[k] then 1 else 0;
+    let eq = eq * m;
+    let k = k + 1;
+    0
+  };
+  eq
+}
+
+fn main() -> i64 {
+  let a = zeros(16);
+  let b = zeros(16);
+  let c = zeros(16);
+  let e = zeros(16);
+  let r1 = zeros(16);
+  let r2 = zeros(16);
+  let r3 = zeros(16);
+  let r4 = zeros(16);
+  let i = 0;
+  while i < 16 {
+    let p = popc4(i);
+    let av = if p - (p / 2) * 2 == 0 then 1 else 0 - 1;
+    let q = p / 2;
+    let bv = if q - (q / 2) * 2 == 0 then 1 else 0 - 1;
+    let cv = if i - (i / 3) * 3 == 0 then 1 else 0 - 1;
+    let ev = if i == 0 then 1 else 0;
+    let _ = a[i] = av;
+    let _ = b[i] = bv;
+    let _ = c[i] = cv;
+    let _ = e[i] = ev;
+    let i = i + 1;
+    0
+  };
+  // (a*b)*c vs a*(b*c)
+  let _ = bind(a, b, r1, 16);
+  let chk = 0;
+  let k = 0;
+  while k < 16 {
+    let v = r1[k];
+    let v = if v < 0 then 0 - v else v;
+    let chk = chk + v * (k + 1);
+    let k = k + 1;
+    0
+  };
+  let _ = bind(b, c, r2, 16);
+  let _ = bind(r1, c, r3, 16);
+  let _ = bind(a, r2, r4, 16);
+  let assoc = eq16(r3, r4);
+  // WHT convolution theorem: fwht(a*b) == fwht(a)*fwht(b)
+  let _ = bind(a, b, r3, 16);
+  let i = 0;
+  while i < 16 {
+    let _ = r1[i] = a[i];
+    let _ = r2[i] = b[i];
+    let i = i + 1;
+    0
+  };
+  let _ = wht_pow2(r1, 16);
+  let _ = wht_pow2(r2, 16);
+  let _ = wht_pow2(r3, 16);
+  let conv = 1;
+  let k = 0;
+  while k < 16 {
+    let ok = if r3[k] == r1[k] * r2[k] then 1 else 0;
+    let conv = conv * ok;
+    let k = k + 1;
+    0
+  };
+  // identity: a*e == a
+  let _ = bind(a, e, r4, 16);
+  let ident = eq16(r4, a);
+  assoc * 1000000000000 + conv * 100000000000 + ident * 10000000000 + chk
+}

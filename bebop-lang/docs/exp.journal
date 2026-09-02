@@ -260,3 +260,10 @@
   GOT:fold 1100800001 (pie=1 integ=1 wsum=800 cyc=1), .bp == python mirror
   bit-exact; std_golden 37 pass; <5ms cold-start half deferred (mmap
   save/load compiler-internal) VERDICT:confirmed
+1788288226 H:N3-ringvsa-gate DID:ring algebra axioms over 16-cell HV: bind =
+  dyadic XOR-index convolution; associativity (a*b)*c == a*(b*c); WHT
+  convolution theorem fwht(a*b)==fwht(a)*fwht(b) all 16 cells (WHT = the
+  single algebraic group for bind); identity a*e == a GOT:fold
+  1110000000544 (assoc=1 conv=1 ident=1 chk=544), .bp == python mirror
+  bit-exact; std_golden 38 pass; N3 CLOSED (hv.bp extension into the ring)
+  VERDICT:confirmed

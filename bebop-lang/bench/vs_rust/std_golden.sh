@@ -345,5 +345,15 @@ gate stride 11100128016 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/pieblock.bp /tmp/opencode/pieblock_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/pieblock_test.bin | tail -1)
 gate pieblock 1100800001 "$r"
 
+# ---- ringvsa (N3 Ring-VSA / HDC colored Hadamard rings: bind = dyadic
+#      XOR-index convolution; ring axioms gated - associativity
+#      (a*b)*c == a*(b*c), the WHT convolution theorem fwht(a*b) ==
+#      fwht(a)*fwht(b) for all 16 cells (WHT = the single algebraic group
+#      for bind), identity a*e == a. Fold 1110000000544 = assoc*10^12 +
+#      conv*10^11 + ident*10^10 + chk (544) = python mirror bit-exact;
+#      wht_pow2 embedded verbatim from wht.bp.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/ringvsa.bp /tmp/opencode/ringvsa_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/ringvsa_test.bin | tail -1)
+gate ringvsa 1110000000544 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]
