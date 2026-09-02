@@ -1,0 +1,62 @@
+// attn.bp — SS-9: transformer attention on ARM64 via hyperdimensional
+// computing (zero frameworks, zero floats). Self-attention = Hamming
+// nearest-neighbour over hypervectors instead of softmax+float: scores
+// s_j = 64 - hv_pop1(Q ^ K_j) (the vcnt path); the winning key's VALUE is
+// bound by XOR: out = V_win ^ Q (bind tier of the HDC stack). Deterministic
+// argmin (lowest index wins ties) is the fixed-tick selection layer that
+// the NEON bit-grid dispatcher parallelizes. Done-check component: Q sits 3
+// bits from K2 and >=19 from every other key -> unique winner (uniq=1).
+// Fold = win*10^9 + bestdist*10^6 + (out&0xFFFF)*100 + uniq.
+// hv_pop1 embedded verbatim from hv.bp (gate hv 4427592702613580868; SWAR
+// popcount, unsigned-shift semantics).
+
+fn hv_pop1(w: i64) -> i64 {
+  let m1 = 6148914691236517205;
+  let m2 = 3689348814741910323;
+  let mh = 1085102592571150095;
+  let x = w - ((w >> 1) & m1);
+  let x = (x & m2) + ((x >> 2) & m2);
+  let x = (x + (x >> 4)) & mh;
+  let x = x + (x >> 8);
+  let x = x + (x >> 16);
+  let x = x + (x >> 32);
+  x - (x / 128) * 128
+}
+
+fn main() -> i64 {
+  let k = zeros(4);
+  let v = zeros(4);
+  let _ = k[0] = 6148914691236517205;
+  let _ = k[1] = 0 - 6148914691236517206;
+  let _ = k[2] = 8608480567731124087;
+  let _ = k[3] = 0 - 8608480567731124088;
+  let _ = v[0] = 2654435761;
+  let _ = v[1] = 2246822519;
+  let _ = v[2] = 3266489917;
+  let _ = v[3] = 668265263;
+  let q = 8608480567731124159;
+  let bestdist = 999;
+  let win = 0;
+  let j = 0;
+  while j < 4 {
+    let d = hv_pop1(q ^ k[j]);
+    let better = if d < bestdist then 1 else 0;
+    let win = win + better * (j - win);
+    let bestdist = bestdist + better * (d - bestdist);
+    let j = j + 1;
+    0
+  };
+  let ties = 0;
+  let j = 0;
+  while j < 4 {
+    let d = hv_pop1(q ^ k[j]);
+    let eq = if d == bestdist then 1 else 0;
+    let ties = ties + eq;
+    let j = j + 1;
+    0
+  };
+  let uniq = if ties == 1 then 1 else 0;
+  let out = v[win] ^ q;
+  let outq = out & 65535;
+  win * 1000000000 + bestdist * 1000000 + outq * 100 + uniq
+}

@@ -228,3 +228,9 @@
   PRECEDENCE TRAP: `exp != 0 - 1` misparsed -> -900/ok=0, rewritten with an
   explicit found flag GOT:fold 1000024600 (tot=246), .bp == python mirror
   bit-exact; std_golden 32 pass VERDICT:confirmed
+1788288221 H:SS-9-attn-gate DID:HDC attention: Hamming nearest-neighbour over
+  64-bit hypervectors (hv_pop1 SWAR, embedded verbatim from hv.bp), XOR-bind
+  the winning value; Q at distance 3 from K2, >=19 from the rest -> unique
+  winner, deterministic argmin (lowest-index tie-break) GOT:fold 2008568201
+  (win=2 bestdist=3 outq=55682 uniq=1), .bp == python mirror bit-exact;
+  std_golden 33 pass VERDICT:confirmed

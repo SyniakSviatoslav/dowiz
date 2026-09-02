@@ -291,5 +291,15 @@ gate qlora 1116506000272 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/bitmat.bp /tmp/opencode/bitmat_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/bitmat_test.bin | tail -1)
 gate bitmat 1000024600 "$r"
 
+# ---- attn (SS-9 transformer attention via HDC: Hamming nearest-neighbour
+#      over 64-bit hypervectors instead of softmax+float (s_j = 64 -
+#      hv_pop1(Q^K_j), the vcnt path); winning key's VALUE bound by XOR
+#      (bind tier). Q sits 3 bits from K2, >=19 from every other key ->
+#      unique winner. Fold 2008568201 = win*10^9 + bestdist*10^6 +
+#      (out&0xFFFF)*100 + uniq = python mirror bit-exact; hv_pop1 embedded
+#      verbatim from hv.bp (gate hv).) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/attn.bp /tmp/opencode/attn_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/attn_test.bin | tail -1)
+gate attn 2008568201 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]
