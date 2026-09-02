@@ -28,10 +28,14 @@ _start:
     b.lt   f_read
     mov     x20, x0            /* file size */
 
-    /* code = mmap(0, size, PROT_READ|WRITE=3, MAP_PRIVATE=2, fd, 0) */
+    /* code = mmap(0, size, PROT_READ|PROT_EXEC=5, MAP_PRIVATE=2, fd, 0)
+       W^X-clean: the .bin is FILE-BACKED and read-only-executed - no page is
+       ever writable+executable at once. This is also the Android-safe shape:
+       SELinux execmem denies anonymous RWX, but file-backed RX on an
+       app-owned code-cache path is the standard JIT pattern. */
     mov     x0, #0
     mov     x1, x20
-    mov     x2, #3
+    mov     x2, #5
     mov     x3, #2
     mov     x4, x19            /* fd */
     mov     x5, #0
@@ -41,13 +45,7 @@ _start:
     b.lt   fail
     mov     x21, x0            /* code base */
 
-    /* mprotect(base, round_up(size), RWX=7) */
-    mov     x0, x21
-    add     x1, x20, #4095
-    and     x1, x1, #-4096
-    mov     x2, #7
-    mov     x8, #226
-    svc     #0
+    /* no mprotect needed: PROT_READ|PROT_EXEC from the start */
 
     /* entry_off = LE64 at base[size-8] */
     sub     x9, x20, #8

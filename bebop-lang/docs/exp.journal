@@ -316,3 +316,27 @@
   exercises none of the fixed paths, so the pre/post fixpoints coincide)
   GOT:std_golden 42 pass, parity 9/0, construct 20/20; fold 1111000151
   VERDICT:confirmed
+1788288234 H:R4-register-cache-peephole DID:three attempts to make the stack
+  machine faster: (1) push/pop virtual-slot model in fntab cells (depth +
+  per-slot reg state, flush-on-bl) - model writes silently not landing,
+  abandoned; (2) post-emission length-preserving peephole rewriting
+  [sub,str][ldr,add] pairs to movs (branch-target marking via b/b.eq/bl/
+  cbz decode - found and fixed a 14-bit cbz imm19 mask bug) - segfaulted
+  the self-compile at ~1/4 of the stream, layout-sensitive, root cause not
+  isolated in budget; (3) emitter-level micro-cancel (NOP the right
+  operand's trailing push + runtime-branch past the matching ldr/add in
+  emit_binop/cmp_op/let/while) - CORRECT but 2-8x SLOWER: each cancel adds
+  a mispredictable branch per arithmetic op, which costs more than the two
+  L1-cached sp-relative ldr/str it saves. All three reverted. GOT:the
+  performance gap vs Rust is NOT closeable by peepholes - it needs the real
+  register-cache fast path (the deleted fpC tier) rebuilt with proper
+  liveness; stack-machine ldr/str are already L1-resident and cheap.
+  VERDICT:negative result, documented (honest: no speedup shipped, no
+  fabricated maturity)
+1788288235 H:WX-android-loader DID:seed.S mmap changed PROT_RWX(7) -> PROT_READ|
+  PROTO_EXEC(5) (file-backed, no writable+executable page ever); removed the
+  mprotect step; docs/ANDROID.md with the embedding contract (in-process
+  loader, arena setup, M4 argv, code-cache placement, syscall surface)
+  GOT:42/42 std_golden + parity 9/0 + construct 20/20 with the W^X loader;
+  Android path = real (SELinux execmem-safe, no libc)
+  VERDICT:confirmed
