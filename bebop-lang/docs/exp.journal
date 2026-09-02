@@ -290,3 +290,29 @@
   .bp abs-then-div gives 52971); branchless SNN dispatch on the mode support
   (mask 7/popcnt 3/tzcnt 0) GOT:fold 111152971008019, .bp == python mirror
   bit-exact; std_golden 41 pass VERDICT:confirmed
+1788288230 H:R3x-a-mul-shift-fix DID:emit_apply_mul/emit_apply_mod parsed the
+  RHS at factor level, leaving `<<c` detached in `a*b<<c` -> 0/1 garbage;
+  fixed to parse at the bitlvl tier (a*b<<c == a*(b<<c) by design)
+  GOT:bare==paren==240; std_golden 41 pass unchanged (all shipped code
+  parenthesized) VERDICT:confirmed (R3.x defect a FIXED)
+1788288231 H:R3x-c-let-in-chain-fix DID:emit_let_in parsed `let _ = NAME = RHS
+  in body` as NAME then blindly skipped "in" -> landed inside RHS, store
+  never emitted (loop-shaped conditional-store, 1788288197); added
+  emit_let_chain helper (chain detection needs skip_ws after '=' - first
+  attempt missed the space, repro still -1) GOT:max==48 via the exact
+  defect-shaped source VERDICT:confirmed (R3.x defect c FIXED)
+1788288232 H:R3x-d-str-literal-data-section DID:emit_str emitted placeholder
+  mov x0,#0; added a real data section: scan_literals lays per-literal DATA
+  WORD offsets (fntab[3903+i], L in 3901, cursor 3902, total 3899),
+  write_lit_cells packs bytes, emit_str emits adr x0,#(dw-cur)*4 (seed mmaps
+  the whole .bin so PC-relative lands on the data). TWO bugs found: the
+  write walk must advance past the OPENING quote (negative len, no bytes),
+  and insns are 32-BIT words so packing is 4 bytes/word (cells=(len+4)/4,
+  cidx=j/4) - the 8-byte assumption silently truncated byte 4 GOT:
+  str_len("hello")==5, char 104/111 -> 60511; "abcde" -> 5 VERDICT:
+  confirmed (R3.x defect d FIXED)
+1788288233 H:R3x-gate DID:r3x.bp regression gate freezing all four defect
+  classes; fixpoint rebuilt gen2==gen3, sha 7bddbc6f (note: bebop.bp itself
+  exercises none of the fixed paths, so the pre/post fixpoints coincide)
+  GOT:std_golden 42 pass, parity 9/0, construct 20/20; fold 1111000151
+  VERDICT:confirmed

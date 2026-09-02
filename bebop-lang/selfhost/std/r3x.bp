@@ -1,0 +1,44 @@
+// r3x.bp — R3.x emitter defect regression gate (the four defect classes now
+// FIXED in the emitter, frozen against re-introduction):
+// (a) bare `a*b<<c` must parse as a*(b<<c) at the bitlvl tier (was: detached
+//     `<<c` tokens miscompiled to 0/1 garbage);
+// (b) `>>` is LOGICAL on both engines (spec'd): (-16)>>2 == 0x3FFFF...C;
+// (c) the loop-shaped conditional-store pattern (let _ = if c then
+//     (let _ = x = v in 0) else 0 inside a while) must store (was: silently
+//     never stored — the let-in chained discard-assign now lowers to x<-v);
+// (d) str literals are real data-section pointers (adr into the mapped
+//     .bin), not placeholders (was: segfault on str_len/char).
+// Fold = t1*10^9 + t2*10^8 + t3*10^7 + t4*10^6 + str_len("abcde")*10 +
+// char("hello",1).
+
+fn main() -> i64 {
+  let a = 3;
+  let b = 5;
+  let c = 4;
+  let bare = a * b << c;
+  let paren = (a * b) << c;
+  let t1 = if bare == paren then 1 else 0;
+  let shr = (0 - 16) >> 2;
+  let t2 = if shr == 4611686018427387900 then 1 else 0;
+  let w = zeros(16);
+  let _ = w[0] = 7;
+  let _ = w[1] = 33;
+  let _ = w[2] = 2;
+  let _ = w[3] = 48;
+  let max = 0 - 1;
+  let i = 0;
+  while i < 4 {
+    let wi = w[i];
+    let _ = if wi > max then (let _ = max = wi in 0) else 0;
+    let i = i + 1;
+    0
+  };
+  let t3 = if max == 48 then 1 else 0;
+  let sl = str_len("hello");
+  let c0 = char("hello", 0);
+  let c4 = char("hello", 4);
+  let t4 = if sl * 10000 + c0 * 100 + c4 == 60511 then 1 else 0;
+  let n5 = str_len("abcde");
+  let e1 = char("hello", 1);
+  t1 * 1000000000 + t2 * 100000000 + t3 * 10000000 + t4 * 1000000 + n5 * 10 + e1
+}

@@ -1224,18 +1224,24 @@ fn emit_apply_op(s: str, pos: [i64], insns: [i64], n: [i64], is_minus: i64, stab
 }
 
 // Consume one (* or /) factor, then fold (branchless helper).
+// R3.x(a) FIX: the right operand must parse at the BITLVL tier (factor plus
+// &,|,^,<<,>> chains), not a bare factor — a bare factor left `<<c` dangling
+// in `a*b<<c` and the detached tokens miscompiled to 0/1 garbage (journal
+// 1788288190). With bitlvl (which binds tighter than mul by design) the
+// expression is well-formed: a*b<<c == a*(b<<c).
 fn emit_apply_mul(s: str, pos: [i64], insns: [i64], n: [i64], is_div: i64, stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
-  let _ = emit_factor(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = emit_bitlvl(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let op = if is_div == 1 then 5 else 4;
   let _ = emit_binop(insns, n, op);
   n[0]
 }
 
 // Apply a modulo step (a % b): same shape as mul/div; binop opcode 11.
+// R3.x(a) FIX: bitlvl-tier right operand, same reasoning as mul/div.
 fn emit_apply_mod(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
-  let _ = emit_factor(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = emit_bitlvl(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = emit_binop(insns, n, 11);
   n[0]
 }
@@ -1405,6 +1411,14 @@ fn emit_cond(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
 // Emit `let name = value in body` (expression form): bind name to a register,
 // evaluate body as the result. The statement form (`let x = v;`) is handled by
 // emit_body; this handles the `in` form nested inside if/while/match branches.
+// R3.x(c) FIX: the chained discard-assign `let _ = NAME = RHS in body` lowers
+// to NAME <- RHS (mirroring emit_let_stmt's chain); the old code parsed only
+// NAME, then skipped two chars assuming "in" — landing inside the RHS and
+// silently never storing (the loop-shaped conditional-store defect, journal
+// 1788288197). The array-store chain `let _ = arr[i] = v in ...` already
+// worked through emit_array_index; this adds the plain-name twin via a
+// separate helper (if/else dispatch on a pre-computed flag, no consumption
+// before the decision).
 fn emit_let_in(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 3;
   let _ = skip_ws(s, pos);
@@ -1413,6 +1427,33 @@ fn emit_let_in(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
   let reg = sym_bind(s, stab, name, npos);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
+  let _ = skip_ws(s, pos);
+  // chain detection: ident followed by '=' (but not '=='/'=>')
+  let strq = str_len(s);
+  let c0 = if pos[0] >= strq then 0 else char(s, pos[0]);
+  let is_id = is_alpha(c0);
+  let wq = pos[0];
+  let go = is_id;
+  while go == 1 {
+    let cc = if wq >= strq then 0 else char(s, wq);
+    let ga = is_alpha(cc);
+    let gd = (if cc >= 48 then 1 else 0) * (if cc <= 57 then 1 else 0);
+    let gu = if cc == 95 then 1 else 0;
+    let adv = ga + gd + gu;
+    let wq = wq + adv;
+    let go = adv;
+    0
+  };
+  let wq2 = if wq >= strq then wq else wq + (if char(s, wq) == 32 then 1 else 0);
+  let cw = if wq2 >= strq then 0 else char(s, wq2);
+  let nw = if wq2 + 1 >= strq then 0 else char(s, wq2 + 1);
+  let is_chain = is_id * (if cw == 61 then 1 else 0) * (if nw == 61 then 0 else 1);
+  let _ = if is_chain == 1 then emit_let_chain(s, pos, insns, n, stab, selfname, selfstart, fntab) else emit_let_plain(s, pos, insns, n, stab, selfname, selfstart, fntab, reg);
+  n[0]
+}
+
+// Plain `let x = RHS in body`: bind x to the RHS value.
+fn emit_let_plain(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], reg: i64) -> i64 {
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 2;
@@ -1422,12 +1463,41 @@ fn emit_let_in(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
   n[0]
 }
 
-// Skip a string literal and emit a placeholder value (mov x0,#0; push). Proper
-// string codegen (data section + adr) is a later step; this keeps the stack
-// balanced and advances pos past the literal so parsing doesn't stall.
-fn emit_str(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
+// Chained `let _ = NAME = RHS in body`: NAME <- RHS, discard.
+fn emit_let_chain(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let tnpos = pos[0];
+  let tname = read_ident(s, pos);
+  let treg = sym_lookup(s, stab, tname, tnpos);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 2;
+  let _ = pop(insns, n, 0);
+  let _ = bind_reg(insns, n, treg);
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  n[0]
+}
+
+// R3.x(d) FIX: real string-literal codegen. The literal's BYTES ride in a
+// data section appended after the code words (compile_program_to lays it out
+// and records per-literal data word offsets in fntab[3903+i], code length in
+// fntab[3901], cursor in fntab[3902]). Emit `adr x0, #imm` with
+// imm = (dw - cur)*4: the seed loader mmaps the whole .bin at the code base,
+// so PC = base + cur*4 and the data cell sits at base + dw*4 — the address
+// is a real pointer into the mapped image. Was: placeholder mov x0,#0 that
+// segfaulted str_len/char (journal 1788288206).
+fn emit_str(s: str, pos: [i64], insns: [i64], n: [i64], fntab: [i64]) -> i64 {
+  let li = fntab[3902];
+  let L = fntab[3901];
+  let dw = fntab[3903 + li];
+  let cur = n[0];
+  let imm21 = dw - cur;
+  let adrw = 268435456 + imm21 * 32;
+  let _ = em(insns, n, adrw);
+  let _ = push(insns, n);
+  let _ = fntab[3902] = li + 1;
   let _ = skip_string(s, pos);
-  let _ = emit_lit(insns, n, 0);
   n[0]
 }
 
@@ -1549,7 +1619,7 @@ fn emit_factor(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
     else if is_letkw == 1 then emit_let_in(s, pos, insns, n, stab, selfname, selfstart, fntab)
     else if is_matchkw == 1 then emit_match(s, pos, insns, n, stab, selfname, selfstart, fntab)
     else if is_lb == 1 then emit_array_lit(s, pos, insns, n, stab, selfname, selfstart, fntab)
-    else if is_quote == 1 then emit_str(s, pos, insns, n)
+    else if is_quote == 1 then emit_str(s, pos, insns, n, fntab)
     else if is_letter == 1 then emit_ident(s, pos, insns, n, stab, selfname, selfstart, fntab)
     else emit_num(s, pos, insns, n);
   let fd = 0;
@@ -2301,6 +2371,63 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
 // [cnt, names..., offsets..., srcpos...] so every bl resolves to a real offset
 // AND every inline site finds the callee source position in O(#fns)
 // (was: full-source rescan per call site -> superquadratic selfcompile).
+// R3.x(d) literal data section: scan the source for string literals in order
+// (skipping // comments), record per-literal DATA WORD offsets in
+// fntab[3903+i] (code length L + cumulative cell offset), the count in
+// fntab[3900], L in fntab[3901], cursor 0 in fntab[3902], total cells in
+// fntab[3899]. The cells are appended after the code words once emission
+// completes (write_lit_cells); emit_str turns each literal into adr x0,<imm>.
+fn scan_literals(s: str, fntab: [i64], L: i64) -> i64 {
+  let strn = str_len(s);
+  let pos = [0];
+  let lcnt = [0];
+  let cum = [0];
+  while pos[0] < strn {
+    let c0 = char(s, pos[0]);
+    let e1 = if pos[0] + 1 >= strn then 1 else 0;
+    let c1 = if e1 == 1 then 0 else char(s, pos[0] + 1);
+    let is_sl = if c0 == 47 then 1 else 0;
+    let is_sl2 = if c1 == 47 then 1 else 0;
+    let is_cm = is_sl * is_sl2;
+    let _ = if is_cm == 1 then skip_line_comment(s, pos) else 0;
+    let is_q = if c0 == 34 then 1 else 0;
+    let _ = if is_q == 1 then (let _ = pos[0] = pos[0] + 1 in (let _ = scan_one_lit(s, pos, fntab, L, lcnt, cum) in 0)) else 0;
+    let adv = 1 - is_q - is_cm;
+    let _ = pos[0] = pos[0] + adv;
+    0
+  };
+  let _ = fntab[3900] = lcnt[0];
+  let _ = fntab[3901] = L;
+  let _ = fntab[3902] = 0;
+  let _ = fntab[3899] = cum[0];
+  cum[0]
+}
+
+// Measure + register one literal: pos is INSIDE it (just after '"'). Record
+// fntab[3903 + lcnt] = L + cum, advance cum by ceil((len+1)/8) cells, move
+// pos past the closing '"'.
+fn scan_one_lit(s: str, pos: [i64], fntab: [i64], L: i64, lcnt: [i64], cum: [i64]) -> i64 {
+  let strn = str_len(s);
+  let start = pos[0];
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_q = if ch == 34 then 1 else 0;
+    let adv = 1 - is_q - at_end;
+    let _ = pos[0] = pos[0] + adv;
+    let done = if is_q + at_end >= 1 then 1 else 0;
+    0
+  };
+  let _ = pos[0] = pos[0] + 1;
+  let len = pos[0] - start - 1;
+  let cells = (len + 1 + 3) / 4;
+  let _ = fntab[3903 + lcnt[0]] = L + cum[0];
+  let _ = cum[0] = cum[0] + cells;
+  let _ = lcnt[0] = lcnt[0] + 1;
+  len
+}
+
 fn compile_program_to(s: str, insns: [i64], n: [i64]) -> i64 {
   let fnames = zeros(256);
   let fpos = zeros(256);
@@ -2359,6 +2486,7 @@ fn compile_program_to(s: str, insns: [i64], n: [i64]) -> i64 {
   };
   let fntab = zeros(4096);
   let _ = fntab[0] = cnt[0];
+  let _ = scan_literals(s, fntab, acc);
   let m = [0];
   while m[0] < cnt[0] {
     let _ = fntab[1 + m[0]] = fnames[m[0]];
@@ -2395,7 +2523,65 @@ fn compile_program_to(s: str, insns: [i64], n: [i64]) -> i64 {
     let _ = q[0] = q[0] + 1;
     0
   };
+  // R3.x(d): append the string-literal data section after the code words.
+  // Scan the source in order, write each literal's bytes (NUL-terminated)
+  // into the reserved cells at insns[L + cum].
+  let dcell_tot = fntab[3899];
+  let dlitc = fntab[3900];
+  let Lcode = n[0];
+  let sp = [0];
+  let dli = [0];
+  let dgo = if dlitc > 0 then 1 else 0;
+  while dgo == 1 {
+    let strn = str_len(s);
+    let c0 = if sp[0] >= strn then 0 else char(s, sp[0]);
+    let e1 = if sp[0] + 1 >= strn then 1 else 0;
+    let c1 = if e1 == 1 then 0 else char(s, sp[0] + 1);
+    let is_sl = if c0 == 47 then 1 else 0;
+    let is_sl2 = if c1 == 47 then 1 else 0;
+    let is_cm = is_sl * is_sl2;
+    let _ = if is_cm == 1 then skip_line_comment(s, sp) else 0;
+    let is_q = if c0 == 34 then 1 else 0;
+    let adv = 1 - is_q - is_cm;
+    let _ = sp[0] = sp[0] + adv;
+    let _ = if is_q == 1 then (let _ = sp[0] = sp[0] + 1 in (let _ = write_lit_cells(s, sp, insns, fntab, dli) in 0)) else 0;
+    let dgo = if dli[0] >= dlitc then 0 else 1;
+    0
+  };
+  let _ = n[0] = Lcode + dcell_tot;
   sum_words(insns, n[0])
+}
+
+// Write literal li's bytes into cells starting at data word fntab[3903+li].
+// sp points INSIDE the literal (just after '"'). Advances sp past '"',
+// bumps dli. The trailing cell's unused bytes stay 0 -> NUL termination.
+fn write_lit_cells(s: str, sp: [i64], insns: [i64], fntab: [i64], dli: [i64]) -> i64 {
+  let strn = str_len(s);
+  let start = sp[0];
+  let done = 0;
+  while done == 0 {
+    let at_end = if sp[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, sp[0]);
+    let is_q = if ch == 34 then 1 else 0;
+    let adv = 1 - is_q - at_end;
+    let _ = sp[0] = sp[0] + adv;
+    let done = if is_q + at_end >= 1 then 1 else 0;
+    0
+  };
+  let _ = sp[0] = sp[0] + 1;
+  let len = sp[0] - start - 1;
+  let base = fntab[3903 + dli[0]];
+  let j = 0;
+  while j < len {
+    let b = char(s, start + j);
+    let cidx = j / 4;
+    let sh = (j - cidx * 4) * 8;
+    let _ = insns[base + cidx] = insns[base + cidx] + (b << sh);
+    let j = j + 1;
+    0
+  };
+  let _ = dli[0] = dli[0] + 1;
+  len
 }
 
 // Convenience wrapper: compile a whole program to a fresh buffer and return the
@@ -2480,7 +2666,7 @@ fn emit_expr_words(src: str) -> [i64] {
   let fpos_l = zeros(512);
   let cnt_l = [0];
   let _ = collect_fns(src, fnames_l, fpos_l, cnt_l);
-  let fntab = zeros(2048);
+  let fntab = zeros(4096);
   let _ = fntab[0] = cnt_l[0];
   let fl_i = [0];
   let fl_d = if cnt_l[0] == 0 then 1 else 0;
@@ -2602,8 +2788,9 @@ fn emit_offsets(src: str) -> [i64] {
     let _ = k[0] = k[0] + 1;
     0
   };
-  let fntab = zeros(512);
+  let fntab = zeros(4096);
   let _ = fntab[0] = cnt[0];
+  let _ = scan_literals(src, fntab, acc);
   let m = zeros(1024);
   while m[0] < cnt[0] {
     let _ = fntab[1 + m[0]] = fnames[m[0]];
