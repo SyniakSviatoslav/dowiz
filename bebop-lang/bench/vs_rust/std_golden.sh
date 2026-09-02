@@ -414,5 +414,16 @@ gate r3x 1111100151 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/mma.bp /tmp/opencode/mma_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/mma_test.bin | tail -1)
 gate mma 1111100000 "$r"
 
+# ---- thr (SS-14 direct-threaded code: every tensor-op instruction cell
+#      carries the DIRECT LINK to the next cell in its low 32 bits - no
+#      central dispatch loop, no fetch-decode PC; branch-free mask-select
+#      op decode. Program: r2=(3+4)*4-3=25; JZ on the zero reg takes the
+#      +2 jump straight to halt, skipping the poison instruction (r3 stays
+#      0); 4 ops executed + halt. The >=2x-vs-switch claim stays a
+#      hardware timing item (honest). Fold 25000411 = r2*10^6 + exec*10^2
+#      + jtok*10 + zok.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/thr.bp /tmp/opencode/thr_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/thr_test.bin | tail -1)
+gate thr 25000411 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

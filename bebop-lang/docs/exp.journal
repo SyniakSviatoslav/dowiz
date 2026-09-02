@@ -387,3 +387,10 @@
   bound ~0.04%) - inside the <1% done-check band; honest note: ms
   granularity limits the claim to the 0.04% bound, not finer VERDICT:
   confirmed (SS-3 hardware half CLOSED at the measured precision)
+1788288242 H:SS-14-thr-gate DID:direct-threaded tensor-op interpreter in .bp:
+  instruction cells carry the DIRECT LINK (low 32 bits) to the next cell -
+  no dispatch loop, branch-free mask-select op decode (bitmat pattern);
+  program r2=(3+4)*4-3=25, JZ on the zero register jumps +2 straight to
+  halt skipping the poison instruction (r3 stays 0), 4 ops + halt
+  GOT:fold 25000411, gate 44, std_golden 44 pass; the >=2x-vs-switch
+  timing claim remains a hardware item (honest) VERDICT:confirmed

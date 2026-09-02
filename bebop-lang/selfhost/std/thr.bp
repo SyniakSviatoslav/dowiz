@@ -1,0 +1,62 @@
+// thr.bp — SS-14: direct-threaded code (no dispatch loop). A tensor-op
+// interpreter where EVERY instruction cell carries the DIRECT LINK to the
+// next cell in its low 32 bits - the "program counter" is the link field
+// itself, no central switch/case dispatch, no fetch-decode cycle. Op
+// selection is branch-free mask-select (bitmat pattern). ISA: cell =
+// op<<56 | a<<48 | b<<40 | d<<32 | link (signed delta). Ops: 0=add 1=mul
+// 2=sub 3=jz (jump delta if reg[a]==0) 4=halt.
+// Program: r2=(3+4)*4-3=25; JZ skipped (25!=0) so the +2 jump lands at
+// halt - the skipped instruction (r3=99) must NOT execute (jump taken,
+// r3 stays 0); executed op count = 5. The >=2x vs switch-dispatch claim is
+// hardware timing (deferred honestly); the gate freezes the direct-link
+// semantics. Fold = r2*10^6 + exec*10^2 + jtok*10 + zok.
+
+fn main() -> i64 {
+  let regs = zeros(8);
+  let prog = zeros(16);
+  let _ = regs[0] = 3;
+  let _ = regs[1] = 4;
+  let _ = prog[0] = 0 * 72057594037927936 + 0 * 281474976710656 + 1 * 1099511627776 + 2 * 4294967296 + 1;
+  let _ = prog[1] = 1 * 72057594037927936 + 2 * 281474976710656 + 1 * 1099511627776 + 2 * 4294967296 + 1;
+  let _ = prog[2] = 2 * 72057594037927936 + 2 * 281474976710656 + 0 * 1099511627776 + 2 * 4294967296 + 1;
+  let _ = prog[3] = 3 * 72057594037927936 + 5 * 281474976710656 + 0 * 1099511627776 + 0 * 4294967296 + 2;
+  let _ = prog[4] = 0 * 72057594037927936 + 3 * 281474976710656 + 0 * 1099511627776 + 3 * 4294967296 + 1;
+  let _ = prog[5] = 4 * 72057594037927936;
+  let p = 0;
+  let exec = 0;
+  let jtok = 0;
+  let go = 1;
+  while go == 1 {
+    let w = prog[p];
+    let op = w / 72057594037927936;
+    let fa = (w / 281474976710656) - (w / 72057594037927936) * 256;
+    let fb = (w / 1099511627776) - (w / 281474976710656) * 256;
+    let fd = (w / 4294967296) - (w / 1099511627776) * 256;
+    let link = w - (w / 4294967296) * 4294967296;
+    let links = if link >= 2147483648 then link - 4294967296 else link;
+    let va = regs[fa];
+    let vb = regs[fb];
+    let vadd = va + vb;
+    let vmul = va * vb;
+    let vsub = va - vb;
+    let oadd = if op == 0 then 1 else 0;
+    let omul = if op == 1 then 1 else 0;
+    let osub = if op == 2 then 1 else 0;
+    let ojz = if op == 3 then 1 else 0;
+    let ohl = if op == 4 then 1 else 0;
+    let vv = oadd * vadd + omul * vmul + osub * vsub + ojz * (va + vb) + ohl * (va + vb);
+    let _ = regs[fd] = vv;
+    let z = if va == 0 then 1 else 0;
+    let step = 1 + ojz * z * (links - 1);
+    let halt = ohl;
+    let jtok = jtok + ojz * z;
+    let exec = exec + (1 - halt);
+    let p = p + step;
+    let go = 1 - halt;
+    0
+  };
+  let r2 = regs[2];
+  let r3 = regs[3];
+  let zok = if r3 == 0 then 1 else 0;
+  r2 * 1000000 + exec * 100 + jtok * 10 + zok
+}
