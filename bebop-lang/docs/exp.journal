@@ -487,3 +487,22 @@
   GOT: s3 repro 139->7, s3a 3, w1/w2 nested 3, `} 42` 42 (was 2); fixpoint
   bb2==bb3 (md5 be922030ba6ed359ab85a72b08fc5e69); std_golden 45/45 (new
   whileb gate 7127), parity 9/0, construct 24/24 VERDICT:confirmed
+1788385630 H:R6.2-fold-v3 | DID:implemented the journal-prescribed helper-fn split
+  (fold_set/fold_clear/fold_try <=15 binds, one-level dispatch via
+  emit_binop_plain, flat guards) GOT:fold logic PROVEN correct - the debug
+  build (post-retraction marker dump) shows all 5 self-compile fold sites
+  compute exact values (0-1=-1, 1+0=1, 0-2=-2, 0-1=-1); 200 random exprs
+  bit-exact vs the old compiler; f1 (old-emitter build) handles everything.
+  BUT bb2 (f1's self-compile, folds active during the build) has sym_bind's
+  `0 - 2` folded to -1 (vB read 1 instead of 2) and deterministically
+  segfaults on two discard-let inputs (`let _ = 5; let _ = 6;`). Single
+  trap-word insertions ANYWHERE in the mid-file emitter region make the
+  crash vanish (layout heisenbug, journal-1788288252 class). Branch-free
+  rewrite of fold_try (law form) did NOT fix it. User-level probes of the
+  exact fold pipeline (push/fold_clear/fold_set/fold_try) compile and run
+  correctly - the corruption is compiler-context-specific (R6.0-class).
+  VERDICT:REVERTED per the FASTPATH-SPEC fallback + Q12. 3rd reproduction
+  of the same class (R5, 1788288252, v3). Root cause = the old emitter's
+  layout-sensitive compiler-context defect; R6.2 stays BLOCKED until that
+  defect is fixed. Fold design + exact failing artifacts documented
+  (/tmp/opencode f1/bb2/fq2.bp). Bench status unchanged (R6.3 numbers).
