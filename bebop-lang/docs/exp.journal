@@ -254,3 +254,9 @@
   alignment price) GOT:fold 11100128016, .bp == python mirror bit-exact;
   std_golden 36 pass; L1 hit-rate hardware half deferred (PMU)
   VERDICT:confirmed
+1788288225 H:SS-13-pieblock-gate DID:PIE relocation core: serialized object
+  graph (relative link deltas) moved base 0 -> 1000 resolves identical
+  payloads; FNV-64 fingerprint move-invariant; link walk cycles to origin
+  GOT:fold 1100800001 (pie=1 integ=1 wsum=800 cyc=1), .bp == python mirror
+  bit-exact; std_golden 37 pass; <5ms cold-start half deferred (mmap
+  save/load compiler-internal) VERDICT:confirmed

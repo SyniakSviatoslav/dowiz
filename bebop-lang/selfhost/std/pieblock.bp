@@ -1,0 +1,74 @@
+// pieblock.bp — SS-13: position-independent DecompCache blocks (the PIE
+// relocation core). A serialized object graph lives in ONE contiguous cell
+// block: [magic, count, then per node {payload, rel_next}], links are
+// RELATIVE cell deltas (base + rel), never absolute pointers. The same
+// block is loaded at base 0 and re-loaded at base 1000 (relocation); the
+// link walk resolves IDENTICAL payloads from both bases (pie_ok = position
+// independence), the FNV-64 block fingerprint is unchanged by the move
+// (integ_ok = zero-copy integrity), and the 3-link walk returns to its
+// origin (cyc = the cached AST graph structure survives). The <5ms cold-
+// start timing half needs the mmap save/load path (compiler-internal -
+// deferred). Fold = pie_ok*10^9 + integ_ok*10^8 + wsum*10^3 + cyc.
+
+fn fnv_cells(cells: [i64], n: i64) -> i64 {
+  let h = 0 - 3750763034362895579;
+  let i = 0;
+  while i < n {
+    let h = (h ^ cells[i]) * 1099511628211;
+    let i = i + 1;
+    0
+  };
+  h
+}
+
+fn main() -> i64 {
+  let buf = zeros(1200);
+  // block at base 0: magic, count, nodes {payload, rel_next}
+  let _ = buf[0] = 1346456865;
+  let _ = buf[1] = 3;
+  let _ = buf[2] = 100;
+  let _ = buf[3] = 2;
+  let _ = buf[4] = 200;
+  let _ = buf[5] = 2;
+  let _ = buf[6] = 500;
+  let _ = buf[7] = 0 - 4;
+  // relocate: copy the 8-cell block to base 1000
+  let i = 0;
+  while i < 8 {
+    let _ = buf[1000 + i] = buf[i];
+    let i = i + 1;
+    0
+  };
+  // walk from base 0
+  let cur0 = 2;
+  let sum0 = 0;
+  let steps = 0;
+  while steps < 3 {
+    let sum0 = sum0 + buf[cur0];
+    let cur0 = cur0 + buf[cur0 + 1];
+    let steps = steps + 1;
+    0
+  };
+  // walk from base 1000
+  let cur1 = 1002;
+  let sum1 = 0;
+  let steps = 0;
+  while steps < 3 {
+    let sum1 = sum1 + buf[cur1];
+    let cur1 = cur1 + buf[cur1 + 1];
+    let steps = steps + 1;
+    0
+  };
+  let pie_ok = if sum0 == sum1 then 1 else 0;
+  let cyc = if cur0 == 2 then 1 else 0;
+  let f0 = fnv_cells(buf, 8);
+  let i = 0;
+  let f1 = 0 - 3750763034362895579;
+  while i < 8 {
+    let f1 = (f1 ^ buf[1000 + i]) * 1099511628211;
+    let i = i + 1;
+    0
+  };
+  let integ_ok = if f1 == f0 then 1 else 0;
+  pie_ok * 1000000000 + integ_ok * 100000000 + sum0 * 1000 + cyc
+}

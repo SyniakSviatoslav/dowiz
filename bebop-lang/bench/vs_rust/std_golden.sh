@@ -333,5 +333,17 @@ gate genarena 1110300000100 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/stride.bp /tmp/opencode/stride_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/stride_test.bin | tail -1)
 gate stride 11100128016 "$r"
 
+# ---- pieblock (SS-13 position-independent DecompCache blocks: a serialized
+#      object graph in one contiguous cell block with RELATIVE link deltas;
+#      relocated from base 0 to base 1000 the link walk resolves identical
+#      payloads (position independence), the FNV-64 block fingerprint is
+#      move-invariant (zero-copy integrity), the 3-link walk cycles back to
+#      origin (graph structure survives). <5ms cold-start timing half
+#      deferred (mmap save/load path is compiler-internal). Fold 1100800001
+#      = pie_ok*10^9 + integ_ok*10^8 + wsum*10^3 + cyc = python mirror
+#      bit-exact.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/pieblock.bp /tmp/opencode/pieblock_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/pieblock_test.bin | tail -1)
+gate pieblock 1100800001 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]
