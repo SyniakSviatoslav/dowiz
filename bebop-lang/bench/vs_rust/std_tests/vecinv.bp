@@ -1,0 +1,122 @@
+// vecinv.bp — SS-2: vector calculus as static invariants. Differential
+// operators = graph-structure checks on rank-4 tensors, no symbolic math.
+// On the C8 ring: f = node potential (f_i = i); grad flow F1[i][j] = f_j -
+// f_i; div(grad f) computed two ways - row-sum of the stored flow matrix vs
+// the direct Laplacian formula f_{i+1}+f_{i-1}-2f_i - must AGREE for all 8
+// nodes (ident1 = div.grad == laplacian). A pure circulation F2 (skew:
+// +1/-1 around the cycle) has ZERO divergence (ident2 = div.rot == 0) and
+// keeps it under a node relabel rotation (rot_ok - layout-invariant
+// invariant). A broken field F3 (asymmetric edge: F[0][1]=1 kept, F[1][0]
+// set 0) leaks exactly 1 unit of total divergence (caught - the invariant
+// fires). Fold = ident1*10^6 + ident2*10^5 + rot_ok*10^4 + caught*10^3 +
+// div3*10 + lf0 (Laplacian at node 0 = 8).
+
+fn main() -> i64 {
+  let f = zeros(8);
+  let f1 = zeros(64);
+  let f2 = zeros(64);
+  let f3 = zeros(64);
+  let i = 0;
+  while i < 8 {
+    let _ = f[i] = i;
+    let i = i + 1;
+    0
+  };
+  // grad flow on the ring: F1[i][i+1 mod 8] = f[i+1]-f[i] (antisymmetric by construction)
+  let i = 0;
+  while i < 8 {
+    let ip1 = i + 1 - (if i + 1 == 8 then 8 else 0);
+    let _ = f1[i * 8 + ip1] = f[ip1] - f[i];
+    let _ = f1[ip1 * 8 + i] = f[i] - f[ip1];
+    let i = i + 1;
+    0
+  };
+  // ident1: div(grad f) = row-sum == direct Laplacian, all nodes
+  let ident1 = 1;
+  let i = 0;
+  while i < 8 {
+    let ip1 = i + 1 - (if i + 1 == 8 then 8 else 0);
+    let im1 = i - 1 + (if i == 0 then 8 else 0);
+    let rowsum = 0;
+    let j = 0;
+    while j < 8 {
+      let rowsum = rowsum + f1[i * 8 + j];
+      let j = j + 1;
+      0
+    };
+    let lap = f[ip1] + f[im1] - 2 * f[i];
+    let ok = if rowsum == lap then 1 else 0;
+    let ident1 = ident1 * ok;
+    let i = i + 1;
+    0
+  };
+  let lf0 = f[1] + f[7] - 2 * f[0];
+  // circulation: skew +/-1 around the cycle
+  let i = 0;
+  while i < 8 {
+    let ip1 = i + 1 - (if i + 1 == 8 then 8 else 0);
+    let _ = f2[i * 8 + ip1] = 1;
+    let _ = f2[ip1 * 8 + i] = 0 - 1;
+    let i = i + 1;
+    0
+  };
+  let ident2 = 1;
+  let i = 0;
+  while i < 8 {
+    let rowsum = 0;
+    let j = 0;
+    while j < 8 {
+      let rowsum = rowsum + f2[i * 8 + j];
+      let j = j + 1;
+      0
+    };
+    let ok = if rowsum == 0 then 1 else 0;
+    let ident2 = ident2 * ok;
+    let i = i + 1;
+    0
+  };
+  // rotation = relabel by +2 (layout-mirror): invariant must survive
+  let rot_ok = 1;
+  let i = 0;
+  while i < 8 {
+    let rowsum = 0;
+    let j = 0;
+    while j < 8 {
+      let ri = (i + 2) - ((i + 2) / 8) * 8;
+      let cj = (j + 2) - ((j + 2) / 8) * 8;
+      let rowsum = rowsum + f2[ri * 8 + cj];
+      let j = j + 1;
+      0
+    };
+    let ok = if rowsum == 0 then 1 else 0;
+    let rot_ok = rot_ok * ok;
+    let i = i + 1;
+    0
+  };
+  // broken field: drop the incoming edge at node 0 (asymmetry)
+  let i = 0;
+  while i < 64 {
+    let _ = f3[i] = f2[i];
+    let i = i + 1;
+    0
+  };
+  let _ = f3[0 * 8 + 1] = 1;
+  let _ = f3[1 * 8 + 0] = 0;
+  let div3 = 0;
+  let i = 0;
+  while i < 8 {
+    let rowsum = 0;
+    let j = 0;
+    while j < 8 {
+      let rowsum = rowsum + f3[i * 8 + j];
+      let j = j + 1;
+      0
+    };
+    let rowsum = if rowsum < 0 then 0 - rowsum else rowsum;
+    let div3 = div3 + rowsum;
+    let i = i + 1;
+    0
+  };
+  let caught = if div3 > 0 then 1 else 0;
+  ident1 * 1000000 + ident2 * 100000 + rot_ok * 10000 + caught * 1000 + div3 * 10 + lf0
+}

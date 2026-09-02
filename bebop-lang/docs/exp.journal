@@ -203,3 +203,10 @@
   std_golden 28 pass; LAW re-confirmed: >> is LOGICAL - abs before any shift
   of a possibly-negative value (fi>>16 was LSR'd, sum 2^49+2560 exposed it)
   VERDICT:confirmed
+1788288217 H:SS-2-vecinv-gate DID:div.grad==laplacian (stored-flow row-sum vs
+  direct formula, 8/8 agree), div.rot==0 (skew circulation, survives relabel
+  rotation), broken asymmetric edge leaks exactly 1 unit -> invariant fires
+  GOT:fold 1111018 (ident1=1 ident2=1 rot_ok=1 caught=1 div3=1 lf0=8), .bp
+  == python mirror bit-exact; std_golden 29 pass; NOTE: replaced the in-loop
+  conditional lf0 store (R3.c pattern) with a direct out-of-loop computation
+  VERDICT:confirmed

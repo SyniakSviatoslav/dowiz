@@ -248,5 +248,15 @@ gate kalman 28327900110011 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/calcbound.bp /tmp/opencode/calcbound_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/calcbound_test.bin | tail -1)
 gate calcbound 1024576000 "$r"
 
+# ---- vecinv (SS-2 vector calculus as static invariants on the C8 ring:
+#      div.grad==laplacian (row-sum of the stored flow == direct formula,
+#      all 8 nodes), div.rot==0 for a skew circulation and survives node
+#      relabel rotation (layout-invariant invariant); a broken asymmetric
+#      edge leaks exactly 1 unit of divergence and the invariant fires.
+#      Fold 1111018 = ident1*10^6 + ident2*10^5 + rot_ok*10^4 + caught*10^3
+#      + div3*10 + lf0 = python mirror bit-exact.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/vecinv.bp /tmp/opencode/vecinv_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/vecinv_test.bin | tail -1)
+gate vecinv 1111018 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]
