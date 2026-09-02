@@ -340,3 +340,17 @@
   GOT:42/42 std_golden + parity 9/0 + construct 20/20 with the W^X loader;
   Android path = real (SELinux execmem-safe, no libc)
   VERDICT:confirmed
+1788288236 H:R5-cancellations-folding DID:compound/let/while/cond adjacent
+  push-pop cancellations + literal folding in emit_binop (fold_binop walks
+  the movz/movk extents, decodes, emits ONE folded literal, NOP-pads -
+  length-preserving) GOT:42->2 gates green (crashes), kernels bit-exact;
+  even the emit_cond cancellation alone crashed a REBUILD - the in-place
+  word-stream rewrite class is layout-sensitive under self-compilation;
+  ALL REVERTED. LAW for R6: never rewrite emitted words in place - the
+  emitters must be register/constant-aware at the SOURCE level
+  VERDICT:killed (negative result, documented in docs/FASTPATH-SPEC.md)
+1788288237 H:R5-verdict-clean-state DID:reverted to f318a43 (R3.x + W^X) GOT:
+  42/42 std_golden, parity 9/0, construct 20/20; FASTPATH-SPEC.md written
+  with the failure modes + R6.0 root-cause task + R6.1/2 design + R6.3
+  verification ladder; the honest status: correctness complete, the perf
+  gap vs Rust remains the ONE open roadmap item VERDICT:confirmed
