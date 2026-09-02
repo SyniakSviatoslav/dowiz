@@ -420,3 +420,27 @@
   confirmed on medium inputs. Full self-compile still pending: the box
   (Android/termux proot, 7.5GB RAM) survives 23+ min runs but bb2 did not
   finish; thermal/CPU limits make the fixpoint impractical here.
+1788288246 H:slow-self-compile | DID:depth/F-position logs GOT:depth legitimately
+  reaches 99+ (big array literals) and 230+ (unresolved-call leak +1/call);
+  caps+traps on the model turned the benign leak into stream pollution and
+  literal/budget clobber VERDICT:model reduced to guarded bookkeeping
+  (slot d<96, depth clamp 0, no traps); bp1600 14.4s byte-identical
+1788288247 H:13-param-truncation | DID:p13 probe (13 params) GOT:old+new
+  BOTH emit silently-wrong 440 (cap=10 truncates to 10 params; 55<<3 stack
+  desync) VERDICT:PRE-EXISTING silent bug; cap raised 10->14 in parse_params
+  + 3 call sites; p13 now 91 correct; 13-param spill machinery verified
+  (prC: spilled array args 110 correct)
+1788288248 H:artifact-identity | DID:re-extracted the old compiler GOT:the
+  earlier "old" binary was an EMPTY FILE (git show path prefix error,
+  md5 d41d8cd9...) - every old-vs-new comparison before this entry was
+  against an empty file; exit 91 = seed's invalid-.bin code VERDICT:true
+  baseline re-established (real 8ec62df binary): matches all work, p13=440
+1788288249 H:match-binding-segfault | DID:ladder prints in emit_match_arm
+  GOT:A1 B C then crash - crash inside the pop(insns,n,0,fntab) call;
+  generic 4-arg/spilled-arg probes pass (prA/prC) so the call form from the
+  properly-bound 13-param frame is the trigger; the OLD ran matches only
+  because cap-10 truncation read fntab as 0 (xzr) and simple match bodies
+  never touch it VERDICT:fixed by INLINING the pop's two words in the arm
+  (byte-identical output); c12/b1/v1 green
+1788288250 GATES fixpoint byte-exact; std_golden 44/44; parity 9/0;
+  construct 20/20 (c12_match now compiles); p13=91 h1a=495 ifsp=99 prC=110

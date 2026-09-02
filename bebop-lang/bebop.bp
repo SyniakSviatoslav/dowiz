@@ -153,9 +153,9 @@ fn parse_params(s: str, pos: [i64], pnames: [i64], ppos: [i64]) -> i64 {
     let ch = if at_end == 1 then 0 else char(s, pos[0]);
     let is_rp = if ch == 41 then 1 else 0;
     let is_letter = is_alpha(ch);
-    let _ = if pcnt < 10 then (let _ = ppos[pcnt] = pos[0] in 0) else 0;
+    let _ = if pcnt < 14 then (let _ = ppos[pcnt] = pos[0] in 0) else 0;
     let name = read_ident(s, pos);
-    let _ = if pcnt < 10 then (let _ = pnames[pcnt] = name in 0) else 0;
+    let _ = if pcnt < 14 then (let _ = pnames[pcnt] = name in 0) else 0;
     let pcnt = pcnt + is_letter;
     let _ = skip_to_delim(s, pos);
     let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
@@ -970,7 +970,7 @@ fn emit_var_or_ctor(s: str, name: i64, npos: i64, insns: [i64], n: [i64], stab: 
 // Emit a matching match-arm: bind the payload var (if any) then emit the arm body.
 fn emit_match_arm(s: str, ppos: i64, has_var: i64, vname: i64, vpos: i64, bodypos: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let saved = pos[0];
-  let _ = if has_var == 1 then (let _ = pos[0] = ppos in (let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) in (let _ = pop(insns, n, 0, fntab) in (let _ = bind_reg(insns, n, sym_bind(s, stab, vname, vpos)) in 0)))) else 0;
+  let _ = if has_var == 1 then (let _ = pos[0] = ppos in (let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) in (let _ = em(insns, n, 4181722080) in (let _ = em(insns, n, 2432713727) in (let _ = bind_reg(insns, n, sym_bind(s, stab, vname, vpos)) in 0))))) else 0;
   let _ = pos[0] = bodypos;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = pos[0] = saved;
@@ -1095,7 +1095,7 @@ fn em(insns: [i64], n: [i64], w: i64) -> i64 {
 // pollution cascade (journal 1788288246). Bookkeeping only.
 fn push(insns: [i64], n: [i64], fntab: [i64]) -> i64 {
   let d = fntab[3700];
-  let wsl = if d < 96 then 1 else 0;
+  let wsl = if d < 96 then (if d >= 0 then 1 else 0) else 0;
   let _ = if wsl == 1 then (let _ = fntab[3701 + d] = d + 11 in 0) else 0;
   let _ = fntab[3700] = d + 1;
   let _ = em(insns, n, 3506455551);
@@ -1107,7 +1107,7 @@ fn push(insns: [i64], n: [i64], fntab: [i64]) -> i64 {
 // only (depth at fntab[3700]); see push for why traps were removed.
 fn pop(insns: [i64], n: [i64], rd: i64, fntab: [i64]) -> i64 {
   let d = fntab[3700];
-  let dm1 = d - 1;
+  let dm1 = if d > 0 then d - 1 else 0;
   let _ = fntab[3700] = dm1;
   let _ = em(insns, n, 4181722080 + rd);
   let _ = em(insns, n, 2432713727);
@@ -2064,13 +2064,13 @@ fn emit_call(s: str, fname: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64]
   // call/body mutual recursion runs away
   let okres = if fnpos[0] >= 3 then 1 else 0;
   let pb = fnpos[0] * okres + 3 * (1 - okres);
-  let pnames = zeros(10);
-  let pparpos = zeros(10);
+  let pnames = zeros(14);
+  let pparpos = zeros(14);
   let ppos = [pb];
   let _ = read_ident(s, ppos);
   let _ = skip_ws(s, ppos);
   let pcnt0 = parse_params(s, ppos, pnames, pparpos);
-  let pcnt1 = if pcnt0 > 10 then 10 else pcnt0;
+  let pcnt1 = if pcnt0 > 14 then 14 else pcnt0;
   let pcnt = pcnt1 * okres;
   let _ = skip_to(s, ppos, 123);
   let body = ppos[0] + 1;
@@ -2190,11 +2190,11 @@ fn compile_fn(s: str) -> i64 {
     0
   };
   let _ = skip_ws(s, pos);
-  let pnames = zeros(10);
-  let pparpos = zeros(10);
+  let pnames = zeros(14);
+  let pparpos = zeros(14);
   let nparams = parse_params(s, pos, pnames, pparpos);
   let i = [0];
-  let nb = if nparams > 10 then 10 else nparams;
+  let nb = if nparams > 14 then 14 else nparams;
   let mvdone = if nb == 0 then 1 else 0;
   while mvdone == 0 {
     let _ = sym_bind(s, stab, pnames[i[0]], pparpos[i[0]]);
@@ -2288,10 +2288,10 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   let _ = skip_ws(s, pos);
   let selfname = read_ident(s, pos);
   let _ = skip_ws(s, pos);
-  let pnames = zeros(10);
-  let pparpos = zeros(10);
+  let pnames = zeros(14);
+  let pparpos = zeros(14);
   let nparams0 = parse_params(s, pos, pnames, pparpos);
-  let nparams = if nparams0 > 10 then 10 else nparams0;
+  let nparams = if nparams0 > 14 then 14 else nparams0;
   let i = [0];
   let mvdone = if nparams == 0 then 1 else 0;
   while mvdone == 0 {
