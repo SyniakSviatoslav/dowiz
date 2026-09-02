@@ -312,5 +312,16 @@ gate attn 2008568201 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/lcres.bp /tmp/opencode/lcres_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/lcres_test.bin | tail -1)
 gate lcres 1116675441335088 "$r"
 
+# ---- genarena (SS-11 generation arena bookkeeping core: pointer bump +
+#      O(1) reset to the generation mark, generations reuse the arena so the
+#      high-water mark is constant and fragmentation is zero by construction.
+#      100 gens x 10000 bump-allocs = 1M alloc/free cycles, pure arithmetic
+#      (zero syscalls), monotonic addresses, exact gen accounting (hw=30000).
+#      mmap/mprotect syscall half is compiler-internal (deferred). Fold
+#      1110300000100 = frag*10^12 + reset_ok*10^11 + mono*10^10 + hw*10^4 +
+#      gens = python mirror bit-exact.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/genarena.bp /tmp/opencode/genarena_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/genarena_test.bin | tail -1)
+gate genarena 1110300000100 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

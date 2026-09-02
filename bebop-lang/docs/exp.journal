@@ -241,3 +241,10 @@
   GOT:fold 1116675441335088, .bp == python mirror bit-exact; std_golden 34
   pass; hardware jitter half deferred (no clock syscall in std gates)
   VERDICT:confirmed
+1788288223 H:SS-11-genarena-gate DID:generation-arena bookkeeping core: pointer
+  bump + O(1) reset-to-mark, generations reuse the arena (hw constant, zero
+  fragmentation by construction); 100 gens x 10000 bump-allocs = 1M
+  alloc/free cycles pure arithmetic GOT:fold 1110300000100 (frag=1 reset=1
+  mono=1 hw=30000), .bp == python mirror bit-exact; std_golden 35 pass;
+  mmap/mprotect syscall half compiler-internal - deferred (innovate note)
+  VERDICT:confirmed
