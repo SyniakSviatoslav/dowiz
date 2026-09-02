@@ -40,5 +40,12 @@ fn main() -> i64 {
   let t4 = if sl * 10000 + c0 * 100 + c4 == 60511 then 1 else 0;
   let n5 = str_len("abcde");
   let e1 = char("hello", 1);
-  t1 * 1000000000 + t2 * 100000000 + t3 * 10000000 + t4 * 1000000 + n5 * 10 + e1
+  let t0 = clock_ms();
+  let jj = 0;
+  while jj < 3 {
+    let jj = jj + 1;
+    0
+  };
+  let t5 = if jj == 3 then 1 else 0;
+  t1 * 1000000000 + t2 * 100000000 + t3 * 10000000 + t4 * 1000000 + t5 * 100000 + n5 * 10 + e1
 }

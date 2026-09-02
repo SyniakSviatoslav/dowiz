@@ -798,8 +798,10 @@ fn emit_sys_exit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
 // clock_ms(): CLOCK_MONOTONIC via raw svc; ms = sec*1000 + nsec/1000000.
 // timespec parked at x28-8208 (below the 8 KiB IO scratch zone).
 fn emit_clock_ms(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
-  let _ = pos[0] = pos[0] + 1;
-  let _ = skip_ws(s, pos);
+  // R3.x(e) FIX: the zero-arg builtin consumed `()` AND the trailing ';' -
+  // the extra skip ate the first char of the NEXT statement (`let i` became
+  // `et i` -> unbound-ident reads, hangs/segfaults). Only the parens belong
+  // to the builtin; the ';' is the statement layer's.
   let _ = pos[0] = pos[0] + 1;
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;

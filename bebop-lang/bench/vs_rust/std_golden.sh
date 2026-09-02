@@ -403,7 +403,7 @@ gate fno 111152971008019 "$r"
 #      frozen against re-introduction. Fold 1111000151 = t1*10^9 + t2*10^8
 #      + t3*10^7 + t4*10^6 + str_len("abcde")*10 + char("hello",1).) ----
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/r3x.bp /tmp/opencode/r3x_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/r3x_test.bin | tail -1)
-gate r3x 1111000151 "$r"
+gate r3x 1111100151 "$r"
 
 # ---- mma (SS-11 hardware half: generation arena on a REAL kernel mmap via
 #      the 6-arg sys_mmap wrapper (MAP_PRIVATE|ANONYMOUS); positive

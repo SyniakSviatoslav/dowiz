@@ -372,3 +372,18 @@
   base positive+4096-aligned, munmap release) GOT:fold 1111100000, gate 43,
   std_golden 43 pass; raw mmap base usable as an array binding (curs[i] =
   i works) - the SS-11 hardware half is CLOSED VERDICT:confirmed
+1788288240 H:R3x-e-clock-root-cause DID:instrumented emit_clock_ms's parse
+  (pos before/after): 036|039 for `clock_ms();` - the zero-arg builtin had a
+  THIRD pos+1 that consumed the trailing ';' itself, so the next statement
+  lost its first char (`let i` -> `et i` = unbound-ident reads, infinite
+  loop / segfault). All arg-bearing builtins skip only '(' and ')' (two
+  +1s). GOT:removed the extra skip; z2/jm/zn repros now correct (0/7),
+  fixpoint A==B, 43/43 gates + parity 9/0 + construct 20/20; r3x gate
+  extended with the clock structural bit (fold 1111100151) VERDICT:
+  confirmed (R3.x defect e FIXED - the zero-arg builtin parse)
+1788288241 H:SS-3-jitter-half DID:the jitter probe (clock_ms now fixed) - 1000
+  agent-loop cycles, inner work 100 compound ops GOT:total 4951/4952/4951 ms
+  -> period 4.951 ms, run-to-run spread 1 ms = ~0.02% (ms quantization
+  bound ~0.04%) - inside the <1% done-check band; honest note: ms
+  granularity limits the claim to the 0.04% bound, not finer VERDICT:
+  confirmed (SS-3 hardware half CLOSED at the measured precision)
