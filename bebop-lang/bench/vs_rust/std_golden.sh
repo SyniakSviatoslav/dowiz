@@ -269,5 +269,16 @@ gate vecinv 1111018 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/fir.bp /tmp/opencode/fir_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/fir_test.bin | tail -1)
 gate fir 11104857722880 "$r"
 
+# ---- qlora (SS-7 QLoRA 4-bit agentic evolution: 8 strategy weights
+#      quantized to 4-bit signed (round(|w|*8), error <= 1/16 all 8 - rt_ok);
+#      live update = rank-1 adapter A[i]*B[i] at 2^-8 scale; updated state
+#      re-quantizes and its packed FNV-64 content-address key CHANGES
+#      (DecompCache invalidation on live hardware); adapter moves the
+#      strategy output (moved). Fold 1116506000272 = rt_ok*10^12 +
+#      moved*10^11 + invalid*10^10 + k0q*10^5 + ydeltaq (k0q=key0&65535,
+#      ydeltaq=|ydelta|>>20) = python mirror bit-exact.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/qlora.bp /tmp/opencode/qlora_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/qlora_test.bin | tail -1)
+gate qlora 1116506000272 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

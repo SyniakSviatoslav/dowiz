@@ -1,0 +1,127 @@
+// qlora.bp — SS-7: QLoRA 4-bit agentic evolution. Strategy weights W (8 fp
+// cells) quantized to 4-bit signed (qa = round(|w|*8) -> q in -7..7, error
+// <= 1/16 per element); live update = rank-1 adapter dW[i] = A[i]*B[i] at
+// 2^-8 scale (low-rank A.B with rank << dim); the updated state re-quantizes
+// and its content-address FNV-64 key CHANGES (DecompCache invalidation on
+// live hardware). Claims: 4-bit roundtrip error <= 1/16 for all 8 (rt_ok);
+// the adapter moves the strategy output (moved); the packed-state key
+// flips after the update (invalid). Fold = rt_ok*10^12 + moved*10^11 +
+// invalid*10^10 + k0q*10^5 + ydeltaq (k0q = key0 & 65535, ydeltaq =
+// |ydelta|>>20, positives only per shift law). Machine: fp_mul verbatim
+// (sha c184416666fe); fnv step from spectral.bp DecompCache.
+
+fn fp_mul(a: i64, b: i64) -> i64 {
+  let na = if a < 0 then 1 else 0;
+  let aa = if na == 1 then 0 - a else a;
+  let nb = if b < 0 then 1 else 0;
+  let ab = if nb == 1 then 0 - b else b;
+  let a1 = aa >> 32;
+  let a0 = aa - (a1 << 32);
+  let b1 = ab >> 32;
+  let b0 = ab - (b1 << 32);
+  let hi = a1 * b1;
+  let mid = a1 * b0 + a0 * b1;
+  let ah = a0 >> 16;
+  let al = a0 - (ah << 16);
+  let bh = b0 >> 16;
+  let bl = b0 - (bh << 16);
+  let ll_h = ah * bh;
+  let ll_m = ah * bl + al * bh;
+  let ll_l = al * bl;
+  let low = ll_h + ((ll_m + (ll_l >> 16)) >> 16);
+  let p = (hi << 32) + mid + low;
+  let flip = na + nb;
+  let flip = flip - (flip / 2) * 2;
+  let p = if flip == 1 then 0 - p else p;
+  p
+}
+
+fn main() -> i64 {
+  let one = 4294967296;
+  let w = zeros(8);
+  let a = zeros(8);
+  let b = zeros(8);
+  let wup = zeros(8);
+  let _ = w[0] = one / 10;
+  let _ = w[1] = 0 - one * 3 / 10;
+  let _ = w[2] = one / 2;
+  let _ = w[3] = 0 - one * 7 / 10;
+  let _ = w[4] = one * 9 / 10;
+  let _ = w[5] = 0 - one / 5;
+  let _ = w[6] = one * 2 / 5;
+  let _ = w[7] = 0 - one * 3 / 5;
+  let _ = a[0] = 2;
+  let _ = a[1] = 0 - 1;
+  let _ = a[2] = 3;
+  let _ = a[3] = 1;
+  let _ = a[4] = 0 - 2;
+  let _ = a[5] = 2;
+  let _ = a[6] = 0 - 3;
+  let _ = a[7] = 1;
+  let _ = b[0] = 1;
+  let _ = b[1] = 0 - 2;
+  let _ = b[2] = 1;
+  let _ = b[3] = 0;
+  let _ = b[4] = 0 - 1;
+  let _ = b[5] = 2;
+  let _ = b[6] = 0 - 1;
+  let _ = b[7] = 1;
+  // quantize -> pack (4-bit signed, +8 offset nibbles, base-16 accumulate)
+  let p4 = 1;
+  let pk0 = 0;
+  let rt_ok = 1;
+  let y_old = 0;
+  let i = 0;
+  while i < 8 {
+    let wi = w[i];
+    let aw = if wi < 0 then 0 - wi else wi;
+    let qa = (aw * 8 + one / 2) / one;
+    let q = if wi < 0 then 0 - qa else qa;
+    let wq = q * one / 8;
+    let err = wi - wq;
+    let err = if err < 0 then 0 - err else err;
+    let ok = if err <= one / 16 then 1 else 0;
+    let rt_ok = rt_ok * ok;
+    let pk0 = pk0 + (q + 8) * p4;
+    let p4 = p4 * 16;
+    let y_old = y_old + wi;
+    let i = i + 1;
+    0
+  };
+  // rank-1 adapter at 2^-8 scale; updated strategy
+  let ydelta = 0;
+  let i = 0;
+  while i < 8 {
+    let ai = a[i] * (one / 16);
+    let bi = b[i] * (one / 16);
+    let dwi = fp_mul(ai, bi);
+    let _ = wup[i] = w[i] + dwi;
+    let ydelta = ydelta + dwi;
+    let i = i + 1;
+    0
+  };
+  let y_new = y_old + ydelta;
+  let moved = if y_new == y_old then 0 else 1;
+  // re-quantize the updated state -> new pack -> key
+  let p4 = 1;
+  let pk1 = 0;
+  let i = 0;
+  while i < 8 {
+    let wi = wup[i];
+    let aw = if wi < 0 then 0 - wi else wi;
+    let qa = (aw * 8 + one / 2) / one;
+    let q = if wi < 0 then 0 - qa else qa;
+    let pk1 = pk1 + (q + 8) * p4;
+    let p4 = p4 * 16;
+    let i = i + 1;
+    0
+  };
+  // FNV-1a 64 content-address keys (DecompCache twin)
+  let h0 = 0 - 3750763034362895579;
+  let key0 = (h0 ^ pk0) * 1099511628211;
+  let key1 = (h0 ^ pk1) * 1099511628211;
+  let invalid = if key1 == key0 then 0 else 1;
+  let k0q = key0 & 65535;
+  let ydeltaq = ydelta >> 20;
+  rt_ok * 1000000000000 + moved * 100000000000 + invalid * 10000000000 + k0q * 100000 + ydeltaq
+}

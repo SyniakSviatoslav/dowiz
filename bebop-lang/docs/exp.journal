@@ -216,3 +216,9 @@
   equality at aligned pattern GOT:fold 11104857722880 (taps_ok=1 bib_ok=1
   sumq=2^20 maxq=122880), .bp == python mirror bit-exact; std_golden 30
   pass VERDICT:confirmed
+1788288219 H:SS-7-qlora-gate DID:8 strategy weights -> 4-bit signed quantization
+  (round(|w|*8), err <= 1/16 all 8); rank-1 adapter A[i]*B[i] at 2^-8 scale
+  (17/256 = 0.0664 delta); updated state re-quantizes, packed nibble state
+  FNV-64 key flips (invalid=1, DecompCache invalidation) GOT:fold
+  1116506000272 (rt_ok=1 moved=1 invalid=1 k0q=65060 ydeltaq=272), .bp ==
+  python mirror bit-exact; std_golden 31 pass VERDICT:confirmed
