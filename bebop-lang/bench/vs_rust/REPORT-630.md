@@ -1,5 +1,24 @@
 # Bebop vs Rust — R6.3 Bench (2026-09-02)
 
+## Rerun 2026-09-03 (final status of the roadmap-pull session)
+
+Same method, same box, back-to-back, medians of 31 runs, the compiler at
+the while-boundary-fix state (bebop.bin md5 be922030..., fixpoint
+bb2==bb3, std_golden 48/48, parity 9/0, construct 24/24):
+
+| kernel              | Bebop (median) | Rust (median) | Bebop/Rust | Bebop p95 |
+|---------------------|---------------:|--------------:|-----------:|----------:|
+| K1 sum-loop 1M      |      34.00 ms  |      7.99 ms  |      4.3×  |  44.00 ms |
+| K2 fib(25)          |       4.40 ms  |      2.11 ms  |      2.1×  |   5.00 ms |
+| K3 nested 300×300   |       2.10 ms  |      0.56 ms  |      3.7×  |   2.30 ms |
+| K4 arith-chain 2M   |      62.00 ms  |      9.12 ms  |      6.8×  |  73.00 ms |
+
+vs the 2026-09-02 numbers: K1 5.3×→4.3×, K2 3.0×→2.1×, K3 6.9×→3.7×,
+K4 9.7×→6.8×. The Rust medians also moved (5.82→7.99 on K1) — the box
+remains load-sensitive; treat the direction, not the exact cells. The
+R6.2 constant fold is NOT in this build (reverted per journal
+1788285630); these numbers are the honest stack-machine baseline.
+
 Environment: aarch64 Linux (proot/Ubuntu, the same box as the 2026-08-23
 report). Bebop = the self-hosted compiler at the R6.1+guards state
 (bebop.bin md5 6cd1ab23..., fixpoint byte-exact, std_golden 44/44,

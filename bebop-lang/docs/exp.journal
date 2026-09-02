@@ -520,3 +520,10 @@
   M7 5/5 stands; SS-13 cold start measured: median 15.8ms/min 11ms under
   proot (spawn-dominated; zero-copy file-map real); perf_event_open blocked
   (SS-10/PMU stays deferred) VERDICT:confirmed, std_golden 48/48
+1788385632 R6.4:FINAL-BENCH DID:re-ran bench630 back-to-back (31 runs, medians)
+  with the while-fix compiler (48 gates green, fixpoint byte-exact) GOT:
+  K1 34.0ms vs 7.99 (4.3x), K2 4.40 vs 2.11 (2.1x), K3 2.10 vs 0.56
+  (3.7x), K4 62.0 vs 9.12 (6.8x); vs the 09-02 report: 5.3->4.3, 3.0->2.1,
+  6.9->3.7, 9.7->6.8 (all narrowed; Rust medians also moved - box noise;
+  the direction is the signal) VERDICT:delivered - honest stack-machine
+  baseline, R6.2 fold out per journal 1788285630, report updated
