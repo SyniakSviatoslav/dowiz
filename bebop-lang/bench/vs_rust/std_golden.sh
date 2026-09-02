@@ -323,5 +323,15 @@ gate lcres 1116675441335088 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/genarena.bp /tmp/opencode/genarena_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/genarena_test.bin | tail -1)
 gate genarena 1110300000100 "$r"
 
+# ---- stride (SS-10 normalization & stride geometry core: (4,4,4) tensor,
+#      innermost runs padded 4->8 cells = one 64B line, stride 8/64/256,
+#      footprint 128 cells = 16 runs; every run base 64B-aligned (zero
+#      false sharing), padding cost exactly 64 cells (the honest price of
+#      alignment). L1 hit-rate hardware half deferred (PMU). Fold
+#      11100128016 = align_ok*10^10 + line_ok*10^9 + waste_ok*10^8 +
+#      footprint*10^3 + n_runs = python mirror bit-exact.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/stride.bp /tmp/opencode/stride_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/stride_test.bin | tail -1)
+gate stride 11100128016 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

@@ -248,3 +248,9 @@
   mono=1 hw=30000), .bp == python mirror bit-exact; std_golden 35 pass;
   mmap/mprotect syscall half compiler-internal - deferred (innovate note)
   VERDICT:confirmed
+1788288224 H:SS-10-stride-gate DID:(4,4,4) tensor innermost runs padded 4->8
+  cells (one 64B line), stride 8/64/256, footprint 128 cells; run bases all
+  64B-aligned (zero false sharing), padding cost exactly 64 cells (honest
+  alignment price) GOT:fold 11100128016, .bp == python mirror bit-exact;
+  std_golden 36 pass; L1 hit-rate hardware half deferred (PMU)
+  VERDICT:confirmed

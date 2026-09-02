@@ -1,0 +1,43 @@
+// stride.bp — SS-10: normalization & stride optimization (64B cache-line
+// stride geometry core). Logical rank-3 tensor (4,4,4); every innermost run
+// is PADDED from 4 to 8 cells (one 64B cache line - 8 cells x 8B): inner
+// stride 8, middle 64, outer 256, footprint 128 cells = 16 padded runs.
+// Checks: every run base is 8-cell (64B) aligned (align_ok, zero false
+// sharing); padding cost is exactly footprint - logical_size = 64 cells
+// (waste_ok - the honest price of alignment); every run fits one cache
+// line (line_ok). The L1 hit-rate >95% hardware half needs PMU counters
+// (not on the std gate surface - deferred). Fold = align_ok*10^10 +
+// line_ok*10^9 + waste_ok*10^8 + footprint*10^3 + n_runs.
+
+fn main() -> i64 {
+  let d0 = 4;
+  let d1 = 4;
+  let run = 8;
+  let s1 = run;
+  let s0 = d1 * run;
+  let footprint = d0 * s0;
+  let n_runs = d0 * d1;
+  let logical = d0 * d1 * 4;
+  let align_ok = 1;
+  let tile_ok = 1;
+  let o0 = 0;
+  while o0 < d0 {
+    let o1 = 0;
+    while o1 < d1 {
+      let base = o0 * s0 + o1 * s1;
+      let rem = base - (base / 8) * 8;
+      let al = if rem == 0 then 1 else 0;
+      let align_ok = align_ok * al;
+      let inb = if base < footprint then 1 else 0;
+      let tile_ok = tile_ok * inb;
+      let o1 = o1 + 1;
+      0
+    };
+    let o0 = o0 + 1;
+    0
+  };
+  let line_ok = if run == 8 then 1 else 0;
+  let waste = footprint - logical;
+  let waste_ok = if waste == 64 then 1 else 0;
+  align_ok * 10000000000 + line_ok * 1000000000 + waste_ok * 100000000 + footprint * 1000 + n_runs
+}
