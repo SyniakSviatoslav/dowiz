@@ -267,3 +267,9 @@
   1110000000544 (assoc=1 conv=1 ident=1 chk=544), .bp == python mirror
   bit-exact; std_golden 38 pass; N3 CLOSED (hv.bp extension into the ring)
   VERDICT:confirmed
+1788288227 H:N7-msuper-gate DID:superposition S = sum w_b*H_b (4 branches, one
+  bit array); spectral collapse via Gram topk (k=2 iters=32): dominant evec
+  sign pattern {+,+,-,-} masks false branches EXACTLY, gap>>22=40561
+  decisive; readout argmax <S,H_b> = 0 in surviving group GOT:fold
+  1114056100000 (collapse=1 read=1 decisive=1 gap=40561 win=0), .bp ==
+  python mirror bit-exact; std_golden 39 pass; N7 CLOSED VERDICT:confirmed

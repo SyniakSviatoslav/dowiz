@@ -355,5 +355,16 @@ gate pieblock 1100800001 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/ringvsa.bp /tmp/opencode/ringvsa_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/ringvsa_test.bin | tail -1)
 gate ringvsa 1110000000544 "$r"
 
+# ---- msuper (N7 multiversal superposition branching: 4 branches computed
+#      simultaneously in one bit array S = sum w_b*H_b (weights
+#      {+1,+1,-1,-1}); the spectral collapse = dominant eigenvector of the
+#      branch Gram matrix whose sign pattern {+,+,-,-} masks the false
+#      branches EXACTLY (lambda1=50.08 vs lambda2=10.47, gap>>22=40561,
+#      decisive); readout argmax <S,H_b> = 0 inside the surviving group
+#      {0,1}. Fold 1114056100000 = collapse_ok*10^12 + read_ok*10^11 +
+#      decisive*10^10 + gap*10^5 + win = python mirror bit-exact.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/msuper.bp /tmp/opencode/msuper_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/msuper_test.bin | tail -1)
+gate msuper 1114056100000 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]
