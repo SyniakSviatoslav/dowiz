@@ -414,3 +414,9 @@
   misthreaded site in compile/compile_fn/emit_expr_words). R6.1 committed
   4ad49f2. Full self-compile fixpoint pending stable-box window (env kept
   rebooting under 40-min compile load).
+1788288245 H:model-zone-clobber | DID:relocated model to fntab[3700..3798]
+  + depth-cap trap 3558867072 (d>=98) GOT:seed build green; k7.bp (1536
+  words) and hv_stdlib.bp (682) compile with ZERO traps VERDICT:fix
+  confirmed on medium inputs. Full self-compile still pending: the box
+  (Android/termux proot, 7.5GB RAM) survives 23+ min runs but bb2 did not
+  finish; thermal/CPU limits make the fixpoint impractical here.
