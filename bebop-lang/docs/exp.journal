@@ -234,3 +234,10 @@
   winner, deterministic argmin (lowest-index tie-break) GOT:fold 2008568201
   (win=2 bestdist=3 outq=55682 uniq=1), .bp == python mirror bit-exact;
   std_golden 33 pass VERDICT:confirmed
+1788288222 H:SS-3-lcres-gate DID:LC resonance arithmetic core: f0=1/(2*pi*sqrt
+  (L*C)) fp 2^32, two tanks (2/pi, 4/pi + period pi/4), all inside 0.1%
+  band; BUGFOUND: restoring long division escapes to all-ones for ratios >=1
+  (r<b invariant broken without an integer-part pre-loop) - fixed fp_div
+  GOT:fold 1116675441335088, .bp == python mirror bit-exact; std_golden 34
+  pass; hardware jitter half deferred (no clock syscall in std gates)
+  VERDICT:confirmed

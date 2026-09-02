@@ -301,5 +301,16 @@ gate bitmat 1000024600 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/attn.bp /tmp/opencode/attn_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/attn_test.bin | tail -1)
 gate attn 2008568201 "$r"
 
+# ---- lcres (SS-3 LC resonance as agent-loop timing, arithmetic core:
+#      f0 = 1/(2*pi*sqrt(L*C)) in fp 2^32 for two tanks - (1/16,1) -> 2/pi
+#      and (1/4,1/16) -> 4/pi with period pi/4, all three inside the 0.1%
+#      band vs exact (ok bits). Restoring long division with integer-part
+#      pre-loop (r<b invariant). Hardware jitter half (clock_ms + PID over
+#      1000 real cycles) deferred: no clock syscall on the std gate surface.
+#      Fold 1116675441335088 = ok1*10^15 + ok2*10^14 + okT*10^13 + f1q*10^7
+#      + f2q = python mirror bit-exact.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/lcres.bp /tmp/opencode/lcres_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/lcres_test.bin | tail -1)
+gate lcres 1116675441335088 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]
