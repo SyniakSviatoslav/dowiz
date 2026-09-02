@@ -468,3 +468,11 @@
   trailing expression after `while ... {};` is emitted INSIDE the loop
   before the back-jump -> stack grows per iteration -> Bus error (s3 repro,
   old+new identical). New language bug for the ledger, independent of R6.
+1788288253 R6.3:HONEST-BENCH DID:clock_ms-wrapped kernel copies (k1t-k4t,
+  x10 scaling, k2x20/k3x50 repeats), 31 runs each, vs rust release twins
+  (internal ns), same box back-to-back GOT:K1 31.0ms vs 5.82 (5.3x), K2
+  4.10 vs 1.36 (3.0x), K3 2.10 vs 0.30 (6.9x), K4 63.0 vs 6.52 (9.7x);
+  vs Aug: K2 5.6->3.0, K3 13.7->6.9, K4 12.0->9.7 (narrowed), K1
+  4.4->5.3 (widened, env-noise suspect) VERDICT:R6.3 delivered, report
+  bench/vs_rust/REPORT-630.md; R6.2 fold NOT in this build (reverted,
+  model-desync-at-if root cause documented in 1788288252 arc + spec)

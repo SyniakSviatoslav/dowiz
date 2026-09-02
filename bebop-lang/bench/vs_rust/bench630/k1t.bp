@@ -1,0 +1,8 @@
+// K1 bench: linear sum loop 1M, in-process clock_ms delta as the result
+fn main() -> i64 {
+  let t0 = clock_ms();
+  let s = 0;
+  let i = 1000000;
+  while i > 0 { let s = s + i; let i = i - 1; 0 };
+  ((clock_ms() - t0) * 10)
+}

@@ -1,0 +1,12 @@
+// K4 bench: tight mixed-arith chain 2M, in-process clock_ms delta
+fn main() -> i64 {
+  let t0 = clock_ms();
+  let v = 1;
+  let i = 2000000;
+  while i > 0 {
+    let v = (v + i * 7) * 3 - 11;
+    let i = i - 1;
+    0
+  };
+  ((clock_ms() - t0) * 10)
+}

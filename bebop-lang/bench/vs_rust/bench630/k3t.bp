@@ -1,0 +1,22 @@
+// K3 bench: nested 300x300 x50, in-process clock_ms delta (result = ms per nest)
+fn main() -> i64 {
+  let t0 = clock_ms();
+  let k = 50;
+  while k > 0 {
+    let a = 0;
+    let x = 300;
+    while x > 0 {
+      let y = 300;
+      while y > 0 {
+        let a = a + x * 2 + y * 3;
+        let y = y - 1;
+        0
+      };
+      let x = x - 1;
+      0
+    };
+    let k = k - 1;
+    0
+  };
+  ((clock_ms() - t0) * 10) / 50
+}
