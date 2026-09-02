@@ -2071,6 +2071,7 @@ fn emit_call(s: str, fname: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64]
   let _ = skip_ws(s, ppos);
   let pcnt0 = parse_params(s, ppos, pnames, pparpos);
   let pcnt1 = if pcnt0 > 14 then 14 else pcnt0;
+  let _ = if pcnt0 > 14 then em(insns, n, 3558867200) else 0;
   let pcnt = pcnt1 * okres;
   let _ = skip_to(s, ppos, 123);
   let body = ppos[0] + 1;
@@ -2194,6 +2195,7 @@ fn compile_fn(s: str) -> i64 {
   let pparpos = zeros(14);
   let nparams = parse_params(s, pos, pnames, pparpos);
   let i = [0];
+  let _ = if nparams > 14 then em(insns, n, 3558867200) else 0;
   let nb = if nparams > 14 then 14 else nparams;
   let mvdone = if nb == 0 then 1 else 0;
   while mvdone == 0 {
@@ -2292,6 +2294,7 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   let pparpos = zeros(14);
   let nparams0 = parse_params(s, pos, pnames, pparpos);
   let nparams = if nparams0 > 14 then 14 else nparams0;
+  let _ = if nparams0 > 14 then em(insns, n, 3558867200) else 0;
   let i = [0];
   let mvdone = if nparams == 0 then 1 else 0;
   while mvdone == 0 {

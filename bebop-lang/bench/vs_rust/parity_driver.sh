@@ -5,6 +5,9 @@ ulimit -s 65536 2>/dev/null || true  # eval recursion: 113+ fn self-compile need
 set -u
 SEED=./seed/build/seed
 BEBOP_BIN=./bebop.bin
+GUARD="GUARD: bebop.bin is missing or empty (silent-artifact class, journal 1788288248)"
+[ -s bebop.bin ] || { echo "$GUARD"; exit 1; }
+
 DIR=${1:-bench/vs_rust/kernels}
 FROZEN=bench/vs_rust/kernels/frozen
 PASS=0; FAIL=0; SKIP=0

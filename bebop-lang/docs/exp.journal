@@ -444,3 +444,10 @@
   (byte-identical output); c12/b1/v1 green
 1788288250 GATES fixpoint byte-exact; std_golden 44/44; parity 9/0;
   construct 20/20 (c12_match now compiles); p13=91 h1a=495 ifsp=99 prC=110
+1788288251 GUARDS mechanical preventers shipped for the week's bug classes:
+  bebop.bp param-cap LOUD trap 3558867200 (3 sites, truncation never silent);
+  c21_param13/c22_matchbind/c23_spillcall/c24_ifspill probes + frozen bins
+  (construct 24/24); tools/guard_artifact.sh (size>0+md5) + tools/fetch_golden.sh;
+  bench/golden/bebop-8ec62df.bin+.sha256 (md5 f7803358...); harness preflights
+  in all 3 suites; AGENTS.md L12-L16 + symptom row for exit 90/91; docs/
+  BUG-LEDGER-WEEK.md. Suite: 44/44, parity 9/0, construct 24/24, fixpoint green.

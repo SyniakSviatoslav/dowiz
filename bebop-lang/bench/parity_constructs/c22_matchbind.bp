@@ -1,0 +1,3 @@
+// match payload binding guard: 4-arg pop from a 13-param spilled frame
+// segfaulted before the inline-pop fix (journal 1788288249)
+fn main() -> i64 { match some(5) { some(x) => 7 } } enum opt { none, some }

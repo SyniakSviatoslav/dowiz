@@ -6,6 +6,9 @@ ulimit -s 65536 2>/dev/null || true  # eval recursion: 113+ fn self-compile need
 set -u
 BEBOPC=./seed/build/seed
 BEBOP_BIN=./bebop.bin
+GUARD="GUARD: bebop.bin is missing or empty (silent-artifact class, journal 1788288248)"
+[ -s bebop.bin ] || { echo "$GUARD"; exit 1; }
+
 DIR=${1:-bench/parity_constructs}
 FROZEN=bench/parity_constructs/frozen
 PASS=0; FAIL=0
@@ -42,6 +45,10 @@ for f in "$DIR"/*.bp; do
     c18_bigconst) EXPECT=-8392076198348418983;;
     c19_multi) EXPECT=115;;
     c20_deep) EXPECT=43;;
+    c21_param13) EXPECT=91;;
+    c22_matchbind) EXPECT=7;;
+    c23_spillcall) EXPECT=110;;
+    c24_ifspill) EXPECT=99;;
     *) EXPECT="";;
   esac
   if [ "$IVAL" = "$EXPECT" ]; then

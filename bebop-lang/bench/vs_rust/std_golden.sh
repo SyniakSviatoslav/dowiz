@@ -3,6 +3,9 @@
 # compare output against frozen expected values (no C compiler, no interp).
 ulimit -s 65536 2>/dev/null || true  # eval recursion: 113+ fn self-compile needs >8MB stack
 set -u
+GUARD="GUARD: bebop.bin is missing or empty (silent-artifact class, journal 1788288248)"
+[ -s bebop.bin ] || { echo "$GUARD"; exit 1; }
+
 PASS=0; FAIL=0
 
 run_test() {

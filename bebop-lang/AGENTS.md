@@ -136,6 +136,7 @@ Isolation rules (hard-won):
 | Silent SMALL wrong number (e.g. 7 vs 14M) | L11 entry identity FIRST; then spills |
 | Crash site moves between fns across builds | name-map off-by-one: verify attribution (fnmap), don't trust it |
 | Garbage array BASE from stack (x2=0/29) | T2.1 spills: check bind-store slot vs lookup-read slot in disasm |
+| Compiler "traps" / exit 90-91 on trivial input | T1 artifact identity FIRST (empty-.bin class, journal 1788288248) |
 
 ## RULES ABOUT RULES (meta)
 
@@ -202,6 +203,33 @@ L11. ENTRY IDENTITY for packed binaries: entry=0 means FIRST fn IN THE FILE,
      not "the interesting one". Before interpreting ANY result, confirm which
      fn executes (fnmap w<entry>). Incident class: probes returning callee's
      value for hours.
+
+L12. ARTIFACT IDENTITY before use: any .bin used as a compiler or baseline
+     must pass tools/guard_artifact.sh (size>0 + optional md5) FIRST; the
+     three gate harnesses already preflight bebop.bin. exit 90/91 from the
+     seed on a "trivial" input means invalid/empty .bin — never chase logic
+     before T1. Incident: 2026-09-02 empty git-show artifact cost hours.
+
+L13. IMMUTABLE BASELINES: golden binaries live in bench/golden/<name>-<rev>.bin
+     with .sha256 sidecars and are never overwritten; extract only via
+     tools/fetch_golden.sh (which verifies non-empty). bebop.bin promotion
+     happens ONLY from a fixpoint-green rebuild; never cp an unverified
+     binary over the working compiler.
+
+L14. SINGLE-VARIABLE DIFFS: signature changes (adding a param/arg), model
+     changes, and cap changes each land as their own commit with their own
+     probe. Mixed commits produced the cascading-fix chain of 2026-09-02.
+
+L15. FALSIFIABLE PROBE BEFORE fpC/SPILL EDITS: before touching the
+     branchless-cond or spill machinery, run (or add) the minimal probe for
+     the construct (bench/parity_constructs/c22-c24 are the canonical
+     shapes: match-binding, spilled-arg call, spilled-array-in-if). Fix
+     only after the probe fails; then freeze the probe.
+
+L16. push/pop emit EXACTLY their canonical words — never extra words
+     (check-traps in push/pop polluted the stream and cascaded into
+     900-s self-compiles; journal 1788288246). Model state is
+     bookkeeping-only: guarded slot writes (0<=d<96), depth clamped >=0.
 
 L7. str-vs-int comparisons in any analysis mirror of .bp code are banned:
     char() returns ints in Bebop; python mirrors must compare ord()s. The
