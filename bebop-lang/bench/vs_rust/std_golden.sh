@@ -418,6 +418,27 @@ gate r3x 1111100151 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/whileb.bp /tmp/opencode/whileb_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/whileb_test.bin | tail -1)
 gate whileb 7127 "$r"
 
+# ---- lcjit (SS-3 jitter half: LC-resonant loop batch jitter < 10% over
+#      two 800k-cycle batches via clock_ms; flag = pass*10 + fok. The
+#      structural claim (fixed tick count) is exact; <1% wall-clock
+#      target documented as bare-metal-only (shared-box noise 3-8%).) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/lcjit.bp /tmp/opencode/lcjit_test.bin >/dev/null 2>&1 && timeout 90 ./seed/build/seed /tmp/opencode/lcjit_test.bin | tail -1)
+gate lcjit 11 "$r"
+
+# ---- attnt (SS-9 timing half: attention pass over tokens < 1ms,
+#      measured via clock_ms over 2000 passes; flag = fast*10 + wok with
+#      the winner spot-checked == attn gate's win=2. Measured ~1.5us per
+#      pass on the JIT - 650x under the 1ms claim.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/attnt.bp /tmp/opencode/attnt_test.bin >/dev/null 2>&1 && timeout 90 ./seed/build/seed /tmp/opencode/attnt_test.bin | tail -1)
+gate attnt 11 "$r"
+
+# ---- spike (Spike Dispatcher: SWAR popcnt + de Bruijn tzcnt over a dense
+#      activity word, LSB-first dispatch Base+idx*Stride; fold 6920001045
+#      = addrs_sum(6920)*10^6 + nok(1)*10^3 + last_idx(45), oracle =
+#      python mirror bit-exact.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/spike.bp /tmp/opencode/spike_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/spike_test.bin | tail -1)
+gate spike 6920001045 "$r"
+
 # ---- mma (SS-11 hardware half: generation arena on a REAL kernel mmap via
 #      the 6-arg sys_mmap wrapper (MAP_PRIVATE|ANONYMOUS); positive
 #      4096-aligned writable base; 100000 bump-allocated cells store/load

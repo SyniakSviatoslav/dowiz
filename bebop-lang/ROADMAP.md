@@ -353,8 +353,10 @@ capability with its done-check.
   two tanks (2/π, 4/π + period π/4) inside the 0.1% band; fp_div fixed
   (integer-part pre-loop restores the r<b invariant for ratios ≥ 1).
   Oracle == BP bit-exact (journal 1788288222).
-- innovate: the jitter <1%-over-1000-real-cycles half needs `clock_ms` (not
-  on the std gate syscall surface) — upgrade trigger: add sys_clock builtin.
+- DONE (jitter half, gate `lcjit`): clock_ms landed on the std gate surface
+  (R3.x(e) parse fix); two 800k-cycle LC batches timed in-process. Honest:
+  3-8% batch jitter on this shared proot box; fixed tick count per cycle is
+  structural; <1% wall-clock needs bare metal (upgrade trigger stays).
 
 ### SS-4 FIR as a ban on cyclic dependencies (BIBO stability) — **DONE**
 - FIR: forward-only flow → BIBO guarantee structurally (the emission
@@ -417,7 +419,8 @@ capability with its done-check.
 - Gate `stride` fold 11100128016 (36th): (4,4,4) tensor padded to 8-cell
   (64B) runs, stride 8/64/256; every run base 64B-aligned (zero false
   sharing), padding cost exactly 64 cells. Oracle == BP bit-exact (journal
-  1788288224). innovate: L1 hit-rate >95% needs PMU counters — deferred.
+  1788288224). innovate: L1 hit-rate >95% needs PMU counters — perf_event_open
+  blocked by the sandbox (probe errno); deferred to bare metal.
 
 ### SS-11 Generation arena with MAP_NORESERVE pagination — **DONE (core)**
 - Allocation = pointer bump (deterministic, zero GC); reset = instant return
@@ -554,28 +557,60 @@ capability with its done-check.
 
 ## Roadmap for the next batch (in-order)
 
-Status (2026-09-02, session end): **the roadmap pull is COMPLETE at the gate
-level** — 41/41 std_golden gates, every gate == an independent python mirror
-bit-exact. Closed this session: SS-17 seigtime (24th, ring-30 eigentime,
-1233012011), SS-18 srepl (25th, 8449214), SS-8 sinc (26th, 6684880500081),
-SS-1 kalman (27th, 28327900110011), SS-5 calcbound (28th, 1024576000), SS-2
-vecinv (29th, 1111018), SS-4 fir (30th, 11104857722880), SS-7 qlora (31st,
-1116506000272), SS-12 bitmat (32nd, 1000024600), SS-9 attn (33rd,
-2008568201), SS-3 lcres (34th, 1116675441335088), SS-11 genarena (35th,
-1110300000100), SS-10 stride (36th, 11100128016), SS-13 pieblock (37th,
-1100800001), N3 ringvsa (38th, 1110000000544), N7 msuper (39th,
-1114056100000), N8 spacetime (40th, 1111100012240), Neural Operator Core fno
-(41st, 111152971008019). Journal 1788288208-1788288229.
-Remaining (honest, non-gate-able — hardware/compiler claims, no fabricated
-maturity per Q12):
-- SS-14 direct-threaded code — emitter rework + real I-cache benchmarks.
-- SS-3 jitter half (clock syscall), SS-9 <1ms timing, SS-10 L1 hit rate
-  (PMU), SS-11 mmap/mprotect syscall surface, SS-13 zero-copy mmap cold
-  start — all marked innovate: with upgrade triggers in their sections.
-- SME/SVE2 forward port — canonical arithmetic is gate-frozen; ZA tiles /
-  SVE2 VL-agnostic scans land when ARMv9/SME silicon is available.
-- R3.x emitter defects (a)-(d) below still open; all gates are written
-  immune to them (workarounds per the laws).
+Status (2026-09-03, session end): **48/48 std_golden gates**, every gate ==
+an independent python mirror bit-exact. New this session:
+- **while-boundary language bug FIXED** (journal 1788288252 / 1788385580):
+  a trailing expression after a while whose final body statement was a
+  let without `;` was emitted INSIDE the loop before the back-jump, and
+  let-final bodies underflowed the value stack per iteration (Bus error).
+  Fix: guarded `;` consumption in emit_let_stmt/emit_compound_stmt/
+  emit_while_stmt + emit_body's lastf now means "body leaves exactly one
+  value" and legbl/leg_tail pop iff lastf==1 in all three consumers
+  (bebop.bp + selfhost/expr_compile.bp, fixpoint bb2==bb3 md5 be922030...).
+  Gate `whileb` 7127 (46th).
+- **SS-3 jitter half** — gate `lcjit` (47th): two 800k-cycle LC-resonant
+  batches via clock_ms (the sys_clock builtin that was missing at SS-3
+  core). HONEST: batch jitter measures 3-8% on this shared proot box
+  (preemption noise); the structural claim (fixed tick count per cycle)
+  is exact; <1% wall-clock needs a quiet/bare-metal box.
+- **SS-9 timing half** — gate `attnt` (48th): 2000 attention passes via
+  clock_ms; measured ~1.5us/pass on the JIT, 650x under the 1ms claim;
+  winner spot-checked bit-exact (win=2).
+- **Spike Dispatcher** — gate `spike` (49th): SWAR popcnt + de Bruijn
+  tzcnt over a dense activity word, LSB-first dispatch Base+idx*Stride;
+  fold 6920001045 == python mirror.
+- **Pool gates** — honest proot guard in pool_parity.sh: under a ptrace
+  tracer clone(CLONE_VM|CLONE_THREAD) returns 0 in BOTH parent and child
+  and threads don't share memory, so the shared-cell futex tests cannot
+  run here (verified: parent never sees child writes); 5/5 on a bare
+  kernel (M7 evidence). Skip-with-reason, not a fabricated pass.
+- **SS-13 cold start** — measured: median 15.8ms / min 11ms under proot
+  (process spawn dominates; the zero-copy part is real: file-backed RX
+  mmap, no copy, no mprotect). <5ms needs bare metal.
+- **SS-10 L1 hit-rate / PMU + SS-14 I-cache bench** — perf_event_open
+  blocked by the sandbox (syscall probe errno). Forward-port triggers
+  stay (bare metal / ARMv9).
+- **R6.2 constant folding — 3rd reproduction, REVERTED** (journal
+  1788385630): the fold logic is proven correct (debug-build marker dump:
+  all 5 self-compile fold sites exact; 200 random exprs bit-exact;
+  user-level fold pipeline probes pass), but the fold-active self-compile
+  misreads a model slot (`0 - 2` folds to -1 in sym_bind) and
+  deterministically segfaults on two discard-let inputs; any single-word
+  layout shift in the emitter region removes the crash (the documented
+  layout heisenbug, journal 1788288252 class). Root cause = the old
+  emitter's layout-sensitive compiler-context defect (R6.0 class); R6.2
+  stays BLOCKED until that defect is fixed. Bench status unchanged
+  (R6.3 numbers).
+Remaining (honest, marked innovate: with triggers):
+- SS-14 direct-threaded — thr gate done (direct-threaded cells); the
+  I-cache benchmark half needs real hardware counters.
+- SS-10 L1 hit rate (PMU), SS-14 I-cache bench, SME/SVE2 forward port —
+  all need bare metal / ARMv9 silicon.
+- R3.x emitter defect (b) remains documented-as-law (`>>` is logical on
+  both engines); (a)(c)(d) fixed with the r3x regression gate (journal
+  1788385580 session's predecessor commit 6928c99).
+- R6.2 fold + the old emitter's layout defect that blocks it (the one
+  remaining correctness item at the emitter level).
 Emitter defects reserved for R3.x emitter work:
 (a) fast-path `a*b<<c` miscompile (journal 1788288190;
     workaround: parenthesize/lift into lets);

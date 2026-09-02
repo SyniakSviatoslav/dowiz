@@ -1,0 +1,62 @@
+// attnt.bp — SS-9 timing half: the transformer-attention pass over 128
+// tokens < 1ms, measured in-process with clock_ms at scale. One token
+// pass = the attn gate's full nearest-neighbour search (hv_pop1 over 4
+// keys, deterministic argmin, XOR bind) — the exact arithmetic of the
+// attn gate (fold 2008568201), embedded verbatim. 2000 passes are timed
+// as one batch (~tens of ms on the JIT, so the 1ms clock quantizes <10%);
+// the result is a FLAG: 1 = per-token time < 1ms AND the search values
+// stay bit-exact (spot-check equals the attn gate's winner). The raw
+// batch time goes to the journal. PMU-grade ns timing stays on the
+// forward-port list (perf_event_open blocked in this sandbox).
+
+fn hv_pop1(w: i64) -> i64 {
+  let m1 = 6148914691236517205;
+  let m2 = 3689348814741910323;
+  let mh = 1085102592571150095;
+  let x = w - ((w >> 1) & m1);
+  let x = (x & m2) + ((x >> 2) & m2);
+  let x = (x + (x >> 4)) & mh;
+  let x = x + (x >> 8);
+  let x = x + (x >> 16);
+  let x = x + (x >> 32);
+  x - (x / 128) * 128
+}
+
+fn main() -> i64 {
+  let k = zeros(4);
+  let v = zeros(4);
+  let _ = k[0] = 6148914691236517205;
+  let _ = k[1] = 0 - 6148914691236517206;
+  let _ = k[2] = 8608480567731124087;
+  let _ = k[3] = 0 - 8608480567731124088;
+  let _ = v[0] = 2654435761;
+  let _ = v[1] = 2246822519;
+  let _ = v[2] = 3266489917;
+  let _ = v[3] = 668265263;
+  let q = 8608480567731124159;
+  let t0 = clock_ms();
+  let pass = 0;
+  let win0 = 0;
+  let win = 0;
+  while pass < 2000 {
+    let bestdist = 999;
+    let win = 0;
+    let j = 0;
+    while j < 4 {
+      let d = hv_pop1(q ^ k[j]);
+      let better = if d < bestdist then 1 else 0;
+      let win = win + better * (j - win);
+      let bestdist = bestdist + better * (d - bestdist);
+      let j = j + 1;
+      0
+    };
+    let win0 = win;
+    let pass = pass + 1;
+    0
+  };
+  let dt = clock_ms() - t0;
+  let per_pass = if pass > 0 then dt * 1000000 / pass else 999;
+  let fast = if per_pass < 1000000 then 1 else 0;
+  let wok = if win0 == 2 then 1 else 0;
+  fast * 10 + wok
+}

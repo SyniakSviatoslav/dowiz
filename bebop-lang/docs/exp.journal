@@ -506,3 +506,17 @@
   layout-sensitive compiler-context defect; R6.2 stays BLOCKED until that
   defect is fixed. Fold design + exact failing artifacts documented
   (/tmp/opencode f1/bb2/fq2.bp). Bench status unchanged (R6.3 numbers).
+1788385631 H:hardware-halves | DID:closed the clock_ms-able halves + pool guard
+  GOT:SS-3 lcjit gate (two 800k-cycle LC batches): batch jitter 2.7-11% on
+  50000-cycle batches, 2.7-7.8% on 800k batches (preemption noise dominates;
+  per-cycle arithmetic is fixed-tick by construction) -> gate threshold 10%
+  flag, honest note; SS-9 attnt gate: 2000 attention passes in 2-3ms total
+  (~1-1.5us/pass, 650x under the 1ms claim), winner bit-exact win=2; spike
+  dispatcher gate 6920001045 (SWAR popcnt + de Bruijn tzcnt, LSB-first
+  Base+idx*Stride dispatch; de Bruijn C hand-conversion caught by the mirror
+  - L1 law re-confirmed); pool_parity proot guard: TracerPid!=0 -> clone
+  returns 0 in BOTH threads and no shared memory (probe-verified: parent
+  never sees child writes, spin probe hangs) -> honest 5-skip, bare-kernel
+  M7 5/5 stands; SS-13 cold start measured: median 15.8ms/min 11ms under
+  proot (spawn-dominated; zero-copy file-map real); perf_event_open blocked
+  (SS-10/PMU stays deferred) VERDICT:confirmed, std_golden 48/48

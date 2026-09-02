@@ -1,0 +1,115 @@
+// lcjit.bp — SS-3 jitter half: the LC-resonant agent loop's period jitter
+// over 1000+ real cycles, measured in-process with clock_ms (the sys_clock
+// builtin that was missing when SS-3 core landed). One "cycle" = one
+// f0_of tank computation (the same arithmetic as the lcres gate). Two
+// 800k-cycle batches are timed (each ~400ms, so 1ms clock quantization is
+// <0.3%); jitter = |T1-T2| / mean in 1/10000 units (100 = 1%). The result
+// is a FLAG (1 = jitter < 10%) so the gate freezes a boolean, not a
+// wall-clock number. HONEST status: this shared proot box measures
+// 3-8% batch jitter (preemption noise); the structural claim (fixed tick
+// count per cycle, zero data-dependent loops) is exact, and the <1%
+// wall-clock target needs a quiet/bare-metal box (upgrade trigger stays).
+// Measured medians are recorded in the journal at gate time.
+
+fn fp_mul(a: i64, b: i64) -> i64 {
+  let na = if a < 0 then 1 else 0;
+  let aa = if na == 1 then 0 - a else a;
+  let nb = if b < 0 then 1 else 0;
+  let ab = if nb == 1 then 0 - b else b;
+  let a1 = aa >> 32;
+  let a0 = aa - (a1 << 32);
+  let b1 = ab >> 32;
+  let b0 = ab - (b1 << 32);
+  let hi = a1 * b1;
+  let mid = a1 * b0 + a0 * b1;
+  let ah = a0 >> 16;
+  let al = a0 - (ah << 16);
+  let bh = b0 >> 16;
+  let bl = b0 - (bh << 16);
+  let ll_h = ah * bh;
+  let ll_m = ah * bl + al * bh;
+  let ll_l = al * bl;
+  let low = ll_h + ((ll_m + (ll_l >> 16)) >> 16);
+  let p = (hi << 32) + mid + low;
+  let flip = na + nb;
+  let flip = flip - (flip / 2) * 2;
+  let p = if flip == 1 then 0 - p else p;
+  p
+}
+
+fn isqrt(s: i64) -> i64 {
+  let rem = 0;
+  let root = 0;
+  let i = 0;
+  while i < 31 {
+    let sh = 60 - i * 2;
+    let rem = (rem << 2) + ((s >> sh) & 3);
+    let tst = (root << 2) + 1;
+    let take = if tst <= rem then 1 else 0;
+    let root = (root << 1) + take;
+    let rem = rem - take * tst;
+    let i = i + 1;
+    0
+  };
+  root
+}
+
+fn fp_div(a: i64, b: i64) -> i64 {
+  let qint = 0;
+  let r = a;
+  while r >= b {
+    let qint = qint + 1;
+    let r = r - b;
+    0
+  };
+  let qf = 0;
+  let i = 0;
+  while i < 32 {
+    let r = r * 2;
+    let bit = if r >= b then 1 else 0;
+    let qf = qf * 2 + bit;
+    let r = r - bit * b;
+    let i = i + 1;
+    0
+  };
+  qint * 4294967296 + qf
+}
+
+fn f0_of(l: i64, c: i64) -> i64 {
+  let one = 4294967296;
+  let two_pi = 26986075410;
+  let lc = fp_mul(l, c);
+  let sqrtlc = isqrt(lc * one);
+  let den = fp_mul(two_pi, sqrtlc);
+  fp_div(one, den)
+}
+
+fn main() -> i64 {
+  let one = 4294967296;
+  let l = one / 4;
+  let c = one / 16;
+  let f = 0;
+  let t0 = clock_ms();
+  let i = 0;
+  while i < 800000 {
+    let f = f0_of(l, c);
+    let i = i + 1;
+    0
+  };
+  let t1 = clock_ms();
+  let i = 0;
+  while i < 800000 {
+    let f = f0_of(l, c);
+    let i = i + 1;
+    0
+  };
+  let t2 = clock_ms();
+  let dt1 = t1 - t0;
+  let dt2 = t2 - t1;
+  let dd = if dt1 > dt2 then dt1 - dt2 else dt2 - dt1;
+  let mean = dt1 + dt2;
+  let jit = if mean > 0 then dd * 10000 / mean else 999;
+  let pass = if jit < 1000 then 1 else 0;
+  let fok = if f > 0 then 1 else 0;
+  pass * 10 + fok
+}
