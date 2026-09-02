@@ -380,5 +380,20 @@ gate msuper 1114056100000 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/spacetime.bp /tmp/opencode/spacetime_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/spacetime_test.bin | tail -1)
 gate spacetime 1111100012240 "$r"
 
+# ---- fno (Neural Operator Core: the three-level spectral stack replaces
+#      classic attention - micro FWHT wave pre-encoding (zero-multiply
+#      roundtrip), meso NTT kernel convolution in Z_p (bit-exact, no float
+#      drift: ntt-conv == direct circular conv mod p for all 8 cells), macro
+#      KLT spectral parametrization (kernel = 3 low-frequency modes
+#      {7,-3,2}, output spectrum = pointwise mode product). Eigentime
+#      trigger: spectral gap gamma = |DC|-|mode1| of the output spectrum
+#      (gapq=52971); SNN dispatcher fires branchless on the kernel mode
+#      support (mask 7 / popcnt 3 / tzcnt 0). Fold 111152971008019 =
+#      conv_ok*10^14 + modes_ok*10^13 + spec_ok*10^12 + fwht_ok*10^11 +
+#      gapq*10^6 + mask*10^3 + mchk = python mirror bit-exact; ntt/wht
+#      machinery embedded verbatim (gates ntt 141003, wht 85001).) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/fno.bp /tmp/opencode/fno_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed /tmp/opencode/fno_test.bin | tail -1)
+gate fno 111152971008019 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

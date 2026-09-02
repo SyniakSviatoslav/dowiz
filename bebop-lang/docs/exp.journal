@@ -281,3 +281,12 @@
   oscillates - truncation basins) sidestepped by one-pass crystallization
   GOT:fold 1111100012240, .bp == python mirror bit-exact; std_golden 40
   pass; N8 CLOSED VERDICT:confirmed
+1788288229 H:FNO-neural-operator-core-gate DID:three-level spectral stack in one
+  gate: micro FWHT wave pre-encoding roundtrip (zero multiplies); meso NTT
+  kernel convolution in Z_p == direct circular conv mod p all 8 cells
+  (bit-exact, no float drift); macro KLT kernel = 3 low modes {7,-3,2},
+  output spectrum == pointwise mode product; gamma trigger = |DC|-|mode1|
+  gapq 52971 (abs-first rounding - python floor of negative gap gave 52972,
+  .bp abs-then-div gives 52971); branchless SNN dispatch on the mode support
+  (mask 7/popcnt 3/tzcnt 0) GOT:fold 111152971008019, .bp == python mirror
+  bit-exact; std_golden 41 pass VERDICT:confirmed

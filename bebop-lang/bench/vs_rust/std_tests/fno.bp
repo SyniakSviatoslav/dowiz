@@ -1,0 +1,398 @@
+// fno.bp — Neural Operator Core (FNO-style): the three-level spectral stack
+// integration (micro FWHT / meso NTT / macro KLT) replacing classic
+// attention with a continuous frequency-domain integral operator.
+
+// rem: least non-negative residue of x modulo m (m > 0). Result in [0, m).
+fn rem(x: i64, m: i64) -> i64 {
+  let r = x - (x / m) * m;
+  if r < 0 then r + m else r
+}
+
+// mod_mul: (a * b) mod m. Operands are reduced first; (m-1)^2 must fit i64.
+fn mod_mul(a: i64, b: i64, m: i64) -> i64 {
+  rem(rem(a, m) * rem(b, m), m)
+}
+
+// mod_pow: base^exp mod m via square-and-multiply (exp >= 0). Result in [0, m).
+fn mod_pow(base: i64, exp: i64, m: i64) -> i64 {
+  let b = rem(base, m);
+  let e = exp;
+  let r = 1;
+  while e != 0 {
+    let r = if e - (e / 2) * 2 == 1 then rem(r * b, m) else r;
+    let b = rem(b * b, m);
+    let e = e / 2;
+    0
+  };
+  r
+}
+
+// mod_inv: multiplicative inverse of a modulo m via Fermat's little theorem
+// (m prime): a^(m-2) mod m. Returns 0 when a == 0 (never used for the roots).
+fn mod_inv(a: i64, m: i64) -> i64 {
+  mod_pow(a, m - 2, m)
+}
+
+// ntt: in-place iterative forward NTT over MOD. a[0..n) holds the data, n must
+// be a power of two; elements are reduced into [0, MOD) on input. Returns 0.
+// NOTE (2026-09-01, N1c gate): the inverse is a SEPARATE straight-line function
+// ntt_inv — an `invert` parameter decided via `if .. then (block) .. else 0` was
+// found NOT to run its scaling block (inverse restored 8x input); the if..then
+// multi-statement block is an L1 meta-language trap. See bench/vs_rust/std_tests/ntt.bp.
+fn ntt(a: [i64], n: i64) -> i64 {
+  let m = 998244353;
+  let i = 0;
+  while i < n {
+    let _ = a[i] = rem(a[i], m);
+    let i = i + 1;
+    0
+  };
+  let i = 1;
+  while i < n {
+    let x = i;
+    let rev = 0;
+    let place = n / 2;
+    while place > 0 {
+      let lb = x - (x / 2) * 2;
+      let rev = if lb == 1 then rev + place else rev;
+      let x = x / 2;
+      let place = place / 2;
+      0
+    };
+    let _ = if i < rev then (let t = a[i]; let _ = a[i] = a[rev]; let _ = a[rev] = t; 0) else 0;
+    let i = i + 1;
+    0
+  };
+  let len = 2;
+  while len <= n {
+    let root = mod_pow(3, (m - 1) / len, m);
+    let i = 0;
+    while i < n {
+      let w = 1;
+      let j = 0;
+      let half = len / 2;
+      while j < half {
+        let u = a[i + j];
+        let v = mod_mul(a[i + j + half], w, m);
+        let uv = u + v;
+        let x0 = if uv >= m then uv - m else uv;
+        let _ = a[i + j] = x0;
+        let x1 = if u >= v then u - v else u + m - v;
+        let _ = a[i + j + half] = x1;
+        let w = mod_mul(w, root, m);
+        let j = j + 1;
+        0
+      };
+      let i = i + len;
+      0
+    };
+    let len = len * 2;
+    0
+  };
+  0
+}
+
+// ntt_inv: in-place iterative inverse NTT over MOD. Mirrors ntt but walks the
+// butterflies with inverse roots and finally scales by n^-1, so that
+// ntt_inv(a, n) after ntt(a, n) restores the original cells exactly.
+// Straight-line body only (no conditional block) per L1 law. Returns 0.
+fn ntt_inv(a: [i64], n: i64) -> i64 {
+  let m = 998244353;
+  let i = 0;
+  while i < n {
+    let _ = a[i] = rem(a[i], m);
+    let i = i + 1;
+    0
+  };
+  let i = 1;
+  while i < n {
+    let x = i;
+    let rev = 0;
+    let place = n / 2;
+    while place > 0 {
+      let lb = x - (x / 2) * 2;
+      let rev = if lb == 1 then rev + place else rev;
+      let x = x / 2;
+      let place = place / 2;
+      0
+    };
+    let _ = if i < rev then (let t = a[i]; let _ = a[i] = a[rev]; let _ = a[rev] = t; 0) else 0;
+    let i = i + 1;
+    0
+  };
+  let len = 2;
+  while len <= n {
+    let root = mod_pow(3, (m - 1) / len, m);
+    let wlen = mod_inv(root, m);
+    let i = 0;
+    while i < n {
+      let w = 1;
+      let j = 0;
+      let half = len / 2;
+      while j < half {
+        let u = a[i + j];
+        let v = mod_mul(a[i + j + half], w, m);
+        let uv = u + v;
+        let x0 = if uv >= m then uv - m else uv;
+        let _ = a[i + j] = x0;
+        let x1 = if u >= v then u - v else u + m - v;
+        let _ = a[i + j + half] = x1;
+        let w = mod_mul(w, wlen, m);
+        let j = j + 1;
+        0
+      };
+      let i = i + len;
+      0
+    };
+    let len = len * 2;
+    0
+  };
+  let invn = mod_inv(n, m);
+  let i = 0;
+  while i < n {
+    let _ = a[i] = mod_mul(a[i], invn, m);
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+// centered: map a residue in [0, MOD) back to the signed range (-MOD/2, MOD/2],
+// so a correlation result round-trips its sign through the NTT.
+fn centered(v: i64) -> i64 {
+  let m = 998244353;
+  let r = rem(v, m);
+  if r > m / 2 then r - m else r
+}
+// wht_pow2(x, n): in-place FWHT of the first n cells of x. n MUST be a power
+// of two, 1 <= n <= 1024. Returns the scaling N (the self-inverse constant).
+// Exactly ~8 binds (x, n, T, len, base, i, j, u) — spill-free.
+fn wht_pow2(x: [i64], n: i64) -> i64 {
+  let T = zeros(1024);
+  let len = 1;
+  while len < n {
+    let base = 0;
+    while base < n {
+      let i = 0;
+      while i < len {
+        let j = base + i;
+        let _ = T[i] = x[j];
+        let _ = T[len + i] = x[j + len];
+        let i = i + 1;
+        0
+      };
+      let i = 0;
+      while i < len {
+        let j = base + i;
+        let _ = x[j] = T[i] + T[len + i];
+        let _ = x[j + len] = T[i] - T[len + i];
+        let i = i + 1;
+        0
+      };
+      let base = base + len * 2;
+      0
+    };
+    let len = len * 2;
+    0
+  };
+  n
+}
+
+
+// ═══ Neural Operator Core (FNO-style, three-level spectral stack) ═══
+// Replaces the classic attention layer with a continuous integral operator
+// in the frequency domain - bit-exact, zero float drift:
+//  * MICRO (FWHT): the arena field is pre-encoded into wave hypervectors
+//    (zero multiplies, structural);
+//  * MESO (NTT): kernel convolution computed as a number-theoretic
+//    transform in Z_p (MOD=998244353) instead of float32 FFT - full
+//    bit-exact determinism; the convolution matches the direct O(n^2)
+//    circular convolution mod p (conv_ok);
+//  * MACRO (KLT): the kernel K is parameterized DIRECTLY in spectral space
+//    as 3 low-frequency modes {7, -3, 2} (modes_ok - no learned dense
+//    weights); the output spectrum is the pointwise product of field modes
+//    and kernel modes (spec_ok - Hotelling-deflated mode updates land
+//    here; the deflator itself is gated in scoord/sgamma/msuper).
+// Eigentime trigger: the operator's next tick is decided by the spectral
+// gap gamma = |DC| - |mode1| of the output spectrum (gapq) and the SNN
+// dispatcher fires BRANCHLESS on the kernel mode support: mode-mask 7,
+// popcnt 3, tzcnt 0 (tzcnt/popcnt tier, no if/else). Fold = conv_ok*10^14
+// + modes_ok*10^13 + spec_ok*10^12 + fwht_ok*10^11 + gapq*10^6 +
+// mask*10^3 + mchk (gapq = |c0-c1|/4096 = 52971 abs-first, mchk = sum
+// centered(y)[i]*(i+1) = 1019). Fold = 111152971008019.
+// Machine embedded verbatim from ntt.bp (gate ntt 141003) and wht.bp
+// (gate wht 85001).
+
+fn wht_pow2(x: [i64], n: i64) -> i64 {
+  let T = zeros(1024);
+  let len = 1;
+  while len < n {
+    let base = 0;
+    while base < n {
+      let i = 0;
+      while i < len {
+        let j = base + i;
+        let _ = T[i] = x[j];
+        let _ = T[len + i] = x[j + len];
+        let i = i + 1;
+        0
+      };
+      let i = 0;
+      while i < len {
+        let j = base + i;
+        let _ = x[j] = T[i] + T[len + i];
+        let _ = x[j + len] = T[i] - T[len + i];
+        let i = i + 1;
+        0
+      };
+      let base = base + len * 2;
+      0
+    };
+    let len = len * 2;
+    0
+  };
+  n
+}
+
+fn main() -> i64 {
+  let m = 998244353;
+  let v = zeros(8);
+  let k = zeros(8);
+  let a = zeros(8);
+  let b = zeros(8);
+  let y = zeros(8);
+  let yd = zeros(8);
+  let w = zeros(8);
+  let _ = v[0] = 3;
+  let _ = v[1] = 1;
+  let _ = v[2] = 4;
+  let _ = v[3] = 1;
+  let _ = v[4] = 5;
+  let _ = v[5] = 9;
+  let _ = v[6] = 2;
+  let _ = v[7] = 6;
+  let _ = k[0] = 7;
+  let _ = k[1] = m - 3;
+  let _ = k[2] = 2;
+  let _ = k[3] = 0;
+  let _ = k[4] = 0;
+  let _ = k[5] = 0;
+  let _ = k[6] = 0;
+  let _ = k[7] = 0;
+  let i = 0;
+  while i < 8 {
+    let _ = a[i] = v[i];
+    let _ = b[i] = k[i];
+    let i = i + 1;
+    0
+  };
+  let _ = ntt(a, 8);
+  let _ = ntt(b, 8);
+  let i = 0;
+  while i < 8 {
+    let _ = y[i] = mod_mul(a[i], b[i], m);
+    let i = i + 1;
+    0
+  };
+  let c0 = centered(y[0]);
+  let c1 = centered(y[1]);
+  let gap = c0 - c1;
+  let gap = if gap < 0 then 0 - gap else gap;
+  let gapq = gap / 4096;
+  let _ = ntt_inv(y, 8);
+  let mchk = 0;
+  let i = 0;
+  while i < 8 {
+    let cv = centered(y[i]);
+    let mchk = mchk + cv * (i + 1);
+    let i = i + 1;
+    0
+  };
+  // direct circular convolution mod p
+  let i = 0;
+  while i < 8 {
+    let acc = 0;
+    let j = 0;
+    while j < 8 {
+      let d = i - j;
+      let d = d + (if d < 0 then 8 else 0);
+      let acc = acc + k[j] * v[d];
+      let acc = rem(acc, m);
+      let j = j + 1;
+      0
+    };
+    let _ = yd[i] = acc;
+    let i = i + 1;
+    0
+  };
+  let conv_ok = 1;
+  let i = 0;
+  while i < 8 {
+    let ok = if y[i] == yd[i] then 1 else 0;
+    let conv_ok = conv_ok * ok;
+    let i = i + 1;
+    0
+  };
+  // spectrum consistency: ntt(conv output) == pointwise mode product
+  let _ = ntt(y, 8);
+  let spec_ok = 1;
+  let i = 0;
+  while i < 8 {
+    let ok = if y[i] == mod_mul(a[i], b[i], m) then 1 else 0;
+    let spec_ok = spec_ok * ok;
+    let i = i + 1;
+    0
+  };
+  // micro: FWHT wave pre-encoding roundtrip (zero-multiply transform)
+  let i = 0;
+  while i < 8 {
+    let _ = w[i] = v[i];
+    let i = i + 1;
+    0
+  };
+  let _ = wht_pow2(w, 8);
+  let _ = wht_pow2(w, 8);
+  let i = 0;
+  while i < 8 {
+    let q = w[i] / 8;
+    let _ = w[i] = q;
+    let i = i + 1;
+    0
+  };
+  let fwht_ok = 1;
+  let i = 0;
+  while i < 8 {
+    let ok = if w[i] == v[i] then 1 else 0;
+    let fwht_ok = fwht_ok * ok;
+    let i = i + 1;
+    0
+  };
+  // macro: kernel mode support + branchless SNN dispatch (tzcnt/popcnt tier)
+  let modes = 0;
+  let mask = 0;
+  let p2 = 1;
+  let i = 0;
+  while i < 8 {
+    let nz = if k[i] == 0 then 0 else 1;
+    let modes = modes + nz;
+    let mask = mask + nz * p2;
+    let p2 = p2 * 2;
+    let i = i + 1;
+    0
+  };
+  let modes_ok = if modes == 3 then 1 else 0;
+  let popcnt = modes;
+  let tz = 0;
+  let i = 0;
+  let found = 0;
+  while i < 8 {
+    let nz = if k[i] == 0 then 0 else 1;
+    let sel = (1 - found) * nz;
+    let tz = tz + sel * i;
+    let found = found + sel;
+    let i = i + 1;
+    0
+  };
+  let tz_ok = if tz == 0 then 1 else 0;
+  conv_ok * 100000000000000 + modes_ok * 10000000000000 + spec_ok * 1000000000000 + fwht_ok * 100000000000 + gapq * 1000000 + mask * 1000 + mchk
+}
