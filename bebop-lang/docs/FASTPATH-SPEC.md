@@ -43,16 +43,25 @@ compiles, and the failure mode is layout-sensitive in a way the fixpoint
 generation check does not catch. In-place rewrites are banned for R6.
 
 ## R6.0 — root-cause the (1) write failure FIRST (blocking, ~1 session)
-Minimal repro: a 20-line .bp whose compiler-run shows the model write lost.
-Instrument push/pop with sys_write hex dumps; verify with the OLD binary and
-the NEW binary separately. Hypotheses to check in order:
-- fntab array param alias: is the fntab passed to push the SAME array the
-  reset wrote (compile_fn_at's fntab vs the ptab of the sizing pass)?
-- the `let dbg = zeros(24)` debug added calls (sys_write) INSIDE push — the
-  old compiler's own call ABI may clobber the model cells via the arena
-  (x27 bump) — check x27/x28 cursor interaction with the fntab allocation.
-- emit-time `if … then em(…) else …` evaluating BOTH branches at compile
-  time (the branchless-cond lore) — if em() ran twice, n advances twice.
+STATUS: sharpened this session (journal 1788288243). The failure is REAL
+and now LOCATED to its signature, not yet its mechanism:
+- trap cascade built: push write-reread checks (slot + depth) NEVER trap —
+  the pushes' writes land and are CONFIRMED inside push; pop checks trap
+  EVERY time (s==0, d==0) — so the model zone is ZEROED between the push's
+  return and the pop's entry;
+- the COMPILED push and pop are provably correct (full disasm: right base
+  register per signature — push param3=x21, pop param4=x22; right
+  3800/3801+d indexing; str/ldr [x2,x1,lsl#3]);
+- standalone probes (user-level big-index writes, writes+call+read) all
+  PASS — the corruption is COMPILER-CONTEXT-SPECIFIC.
+Next-session hypotheses, in order:
+- the sizing pass uses PTAB, the real pass FNTAB — is the pass-2 pop
+  reading an array the pass-2 push did not write (ptab/fntab aliasing)?
+- the caller's arg-prep stack (sub sp per arg) vs the callee's frame:
+  verify the caller's fntab register survives the callee's param binding
+  (x19-x26 saves) — disasm the push/pop prologues completely.
+- run ONE push+pop pair at compile_program_to's top (outside emission) and
+  observe whether the zone survives even without intervening emissions.
 
 ## R6.1 — the register-aware protocol (no word rewrites)
 Track the value stack at EMIT TIME in emitter-owned state (not in the emitted

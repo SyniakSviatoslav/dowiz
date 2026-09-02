@@ -394,3 +394,12 @@
   halt skipping the poison instruction (r3 stays 0), 4 ops + halt
   GOT:fold 25000411, gate 44, std_golden 44 pass; the >=2x-vs-switch
   timing claim remains a hardware item (honest) VERDICT:confirmed
+1788288243 H:R6.0-trap-cascade DID:R6.1 model rebuilt with write-reread
+  self-checks emitting DISTINCT brk words per invariant (push-slot /
+  push-depth / pop-slot / pop-depth) GOT:push checks NEVER trap (writes
+  land + confirmed inside push); pop traps EVERY time (s==0 AND d==0) - the
+  model zone is zeroed between the push's return and the pop's entry; the
+  compiled push/pop are provably correct (full disasm: bases x21/x22 per
+  signature, right indexing); standalone user-level probes pass - the
+  corruption is compiler-context-specific. FASTPATH-SPEC R6.0 updated with
+  the sharpened signature + ordered hypotheses VERDICT:located-not-fixed
