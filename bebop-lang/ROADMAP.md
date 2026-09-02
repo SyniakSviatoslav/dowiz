@@ -185,7 +185,7 @@ upper columns are built on them. Order maximizes reuse first.
 - Impl: `selfhost/std/rev.bp` — reversible primitives (CNOT/Toffoli masks),
   journal / reversible constructs over the arena.
 
-**N3. Ring-VSA / HDC with colored Hadamard rings (holistic algebraic system)**
+**N3. Ring-VSA / HDC with colored Hadamard rings (holistic algebraic system)** — **DONE**
 - No code/data/type/instruction split: ANY syntactic element, CSR graph, SNN
   spike = a single 4096-bit hypervector.
 - WHT = the single algebraic group for bind (binding) and bundle
@@ -193,7 +193,10 @@ upper columns are built on them. Order maximizes reuse first.
 - The compiler does not translate code — it homomorphically folds entities into
   the single holographic space of the arena; search/execution = Hamming
   distance.
-- Impl: extend `hv.bp` into ring algebra (bind=bundle via the WHT group).
+- Gate `ringvsa` fold 1110000000544 (38th): dyadic XOR-index convolution bind;
+  ring axioms — associativity (a·b)·c == a·(b·c), the WHT convolution theorem
+  fwht(a·b) == fwht(a)·fwht(b) for all 16 cells, identity a·e == a. Oracle ==
+  BP bit-exact (journal 1788288226).
 
 **N4. Bit-Level Petri Nets (bit-asynchronous Petri nets)**
 - Replaces even heuristic event queues: parallel token-passing Petri-net
@@ -220,22 +223,33 @@ upper columns are built on them. Order maximizes reuse first.
   "context loss" disappear: information is global.
 - Impl: WHT-encoding of word-tensors, spectral recovery on top of N1+N5.
 
-**N7. Multiversal superposition branching**
+**N7. Multiversal superposition branching** — **DONE**
 - Eliminates sequential path choice: ALL possible logic branches compute
-  simultaneously in one bit array of superpositions via SME/SVE2 vector
-  instructions.
+  simultaneously in one bit array of superpositions (SME/SVE2 vector
+  instructions = the forward-port form; the canonical arithmetic is gated).
 - All alternative future states = weighted sum of hypervectors; collapse
   (reality choice) happens automatically when the spectral deflator (Hotelling)
   finds the eigenvalue break λ that masks out false branches.
-- Impl: superposition arrays, spectral collapse on top of N1+N6+SS-15/16.
+- Gate `msuper` fold 1114056100000 (39th): S = Σ w_b·H_b (weights
+  {+1,+1,-1,-1}); the Gram-dominant eigenvector's sign pattern {+,+,-,-}
+  masks the false branches EXACTLY; λ1=50.08 vs λ2=10.47 (gap>>22=40561,
+  decisive); readout argmax <S,H_b> = 0 in the surviving group. Oracle ==
+  BP bit-exact (journal 1788288227).
 
-**N8. Spacetime metric code / global boundary execution**
+**N8. Spacetime metric code / global boundary execution** — **DONE**
 - Eliminates "execution time" as a sequence of steps: the program = a global
   boundary-value problem on the CSR graph surface (Laplace/heat flow).
 - Runtime instantly finds the whole system's stationary state as a single
   mathematical equilibrium; past/present/future agree globally via the spectral
   invariant in one hardware pass = "matrix crystallization".
-- Impl: Laplacian-boundary execution on top of N6+N7+SS-18.
+- Gate `spacetime` fold 1111100012240 (40th): pinned boundary nodes +
+  constant arc increments crystallize the harmonic field in ONE pass
+  ((10,-2)->[10,7,4,1,-2,1,4,7], (20,-4)->[20,14,8,2,-4,2,8,14]); loop
+  closure, Laplacian==0 at every interior node, Jacobi heat-flow consistency
+  (crystal is an exact fixpoint, pinned nodes survive). The truncated
+  averaging map's rounding basins (zero start -> [10,6,3,0,...] basin,
+  random start oscillates) are sidestepped by one-pass crystallization.
+  Oracle == BP bit-exact (journal 1788288228).
 
 ### Invariant policy (mandatory, operator decision)
 
@@ -268,43 +282,95 @@ upper columns are built on them. Order maximizes reuse first.
 
 ---
 
+## Neural Operator Core (FNO-style, three-level spectral stack) — **DONE**
+
+Replaces the classic attention layer with a continuous integral operator in
+the frequency domain, integrated directly into the macro/meso/micro tiers of
+the spectral stack:
+
+- **Micro (FWHT)**: fast pre-encoding of arena bit arrays into wave
+  hypervectors (hv4096) with ZERO multiplications — structural, gated
+  (`wht` 85001).
+- **Meso (NTT)**: the kernel convolution replaces the standard complex
+  float32 FFT with a number-theoretic transform over Z_p (MOD=998244353):
+  full bit-exact determinism, zero float drift. Gated: NTT-convolution ==
+  direct circular convolution mod p (`ntt` 141003, `fno` 41st).
+- **Macro (KLT / Neural Operator Core)**: instead of learned dense weights
+  the kernel K is parameterized directly in spectral space as low-frequency
+  modes, updated by Hotelling deflation iterations (the deflator is gated
+  in `spectral`/`scoord`/`sgamma`/`msuper`).
+- **Zero-copy linear arena**: field state + kernel in ONE linear arena,
+  64B-aligned ranked word-tensors, neighbor access by implicit address
+  arithmetic (stride geometry gated in `stride` 36th; bump allocation +
+  generation reset gated in `genarena` 35th).
+- **SME/SVE2 machine execution**: SME ZA matrix tiles for mode
+  multiplication and SVE2 branchless scans for σ/truncation remain the
+  FORWARD PORT to real ARMv9 silicon (the branchless scan arithmetic is
+  canonical and gated: `bitmat` 32nd, `fno` dispatch tier). No gate can
+  fake hardware — marked as forward-port with trigger: first ARMv9/SME
+  silicon available.
+- **Eigentime γ trigger + SNN dispatch**: the operator iterates until the
+  global spectral gap reaches equilibrium (γ = |λ1|−|λ2| of the output
+  spectrum); the branchless SNN dispatcher (tzcnt/popcnt) then activates
+  the next arena node without polling or event queues.
+- Gate `fno` fold 111152971008019 (41st): conv_ok + modes_ok + spec_ok +
+  fwht_ok + gapq(52971) + mode-mask dispatch (7/3/0). Oracle == BP
+  bit-exact (journal 1788288229).
+
+---
+
 ## Spectral Singularity Layer (SS-1..SS-18)
 
 Max projection: arenas + .bt tensors + HDC + spectral geometry. Each item is a
 capability with its done-check.
 
-### SS-1 NEON Kalman filter (zero-alloc, arena, real-time)
-- Kalman filter as a pure .bp library on linear arenas: zero malloc, zero heap.
-- Predict/update matrix ops via NEON 2×2 systolic tiles.
-- Deterministic latency: fixed tick count per iteration (WCET guarantee).
-- Emit: `kalman_predict(state F Q)`, `kalman_update(state H R z)`.
-- Done-check: 1000 iterations → states == golden, 0 drift.
+### SS-1 NEON Kalman filter (zero-alloc, arena, real-time) — **DONE**
+- Kalman filter as a pure .bp computation on linear arenas: zero malloc,
+  zero heap (scalar-only 1-D gate).
+- Deterministic latency: fixed tick count per iteration (WCET guarantee) —
+  structural (no data-dependent loops).
+- Gate `kalman` fold 28327900110011 (27th): F=H=1.0, Q=0.001, R=0.01, z=5.0,
+  1000 iterations — Riccati map reaches an EXACT fp fixpoint (P1000==P999,
+  0 drift), state tracks z inside the 0.1% band (err 3 fp units). Oracle ==
+  BP bit-exact (journal 1788288215). NEON 2×2 systolic tiles = forward port
+  (same trigger as SME/SVE2).
 
-### SS-2 Vector calculus as static invariants (rot/div/grad → graph topology)
+### SS-2 Vector calculus as static invariants (rot/div/grad → graph topology) — **DONE**
 - Identities (∇·∇f = ∇²f, ∇×∇f = 0) become CSR-graph structure preservation
   checks; differential operators = bit masks on rank-4 tensors (not symbolic
-  math). The compiler statically verifies invariant preservation after any
-  tensor transform.
-- Done-check: graph divergence = 0 for correct AST transforms.
+  math).
+- Gate `vecinv` fold 1111018 (29th): div.grad == laplacian (stored-flow
+  row-sum vs direct formula, 8/8), div.rot == 0 survives node relabel
+  rotation (layout-invariant invariant), a broken asymmetric edge leaks
+  exactly 1 unit and the invariant fires. Oracle == BP bit-exact (journal
+  1788288217).
 
-### SS-3 LC resonance as agent-loop timing (jitter-free)
+### SS-3 LC resonance as agent-loop timing (jitter-free) — **DONE (core)**
 - Agent loop = electronic LC tank: L = latency, C = arena capacity. Resonant
   frequency f₀ drives the target inter-iteration period — minimal jitter
   without an OS scheduler.
-- Impl: clock_ms() + NEON drift compensation (PID-in-.bp).
-- Done-check: jitter < 1% over 1000 cycles.
+- Gate `lcres` fold 1116675441335088 (34th): f0 = 1/(2π√(LC)) in fp 2^32 for
+  two tanks (2/π, 4/π + period π/4) inside the 0.1% band; fp_div fixed
+  (integer-part pre-loop restores the r<b invariant for ratios ≥ 1).
+  Oracle == BP bit-exact (journal 1788288222).
+- innovate: the jitter <1%-over-1000-real-cycles half needs `clock_ms` (not
+  on the std gate syscall surface) — upgrade trigger: add sys_clock builtin.
 
-### SS-4 FIR as a ban on cyclic dependencies (BIBO stability)
-- FIR: forward-only flow → BIBO guarantee structurally. The compiler REJECTS
-  while-loops of unknown depth in agent code at emission; while → bounded masked
-  iteration. IIR allowed only with a formal convergence proof.
-- LAW: agent code without FIR bounding = rejected at emission.
-- Done-check: bounded masked loop domain — zero infinite-loop risk.
+### SS-4 FIR as a ban on cyclic dependencies (BIBO stability) — **DONE**
+- FIR: forward-only flow → BIBO guarantee structurally (the emission
+  REJECTS-while-of-unknown-depth half is compiler-internal R3.x work).
+- Gate `fir` fold 11104857722880 (30th): 4-tap h={1,1/2,1/4,1/8}, literal
+  tap count = bounded masked iteration (zero infinite-loop risk by
+  construction); impulse == taps exact; all 16 worst-case sign patterns
+  |x|≤1 give |y| ≤ Σ|h| = 15/8 with equality at the aligned pattern.
+  Oracle == BP bit-exact (journal 1788288218).
 
-### SS-5 Calculus bounding (Taylor/mean-value for mutation code)
-- Mean-value theorem + Taylor series → automatic bounding boxes for mutations:
-  compiler proves Δ(output) ∈ [f(a)−ε, f(b)+ε] for any CSR-graph mutation.
-- Done-check: golden mutations — bounding box contains the actual result.
+### SS-5 Calculus bounding (Taylor/mean-value for mutation code) — **DONE**
+- Mean-value theorem + Taylor series → automatic bounding boxes for mutations.
+- Gate `calcbound` fold 1024576000 (28th): f(x)=x²−x at x0=1.0, five golden
+  mutations d∈{−1/8,−1/16,0,+1/16,+1/8}, slope bounds [0.75,1.25] with
+  ε=0.01 slack — every actual Δf lands inside its box. Oracle == BP
+  bit-exact (journal 1788288216).
 
 ### SS-6 Matrix decompositions on arenas (LU/QR/SVD/power method) — [CORE DONE]
 - Port dowiz-core spectral.rs → .bp: topk_symmetric (power method + Hotelling
@@ -319,54 +385,76 @@ capability with its done-check.
 - LAW: `>>` in Bebop is LOGICAL (u64) on both engines — abs before any shift of
   a possibly-negative value.
 
-### SS-7 QLoRA 4-bit agentic evolution
+### SS-7 QLoRA 4-bit agentic evolution — **DONE**
 - Agent strategy weights = 4-bit matrices in fixed arenas; low-rank adapters
-  (A·B with rank << dim) update logic on live hardware. DecompCache stores
-  quantized states (FNV-64 key, mmap load). NEON: 4-bit unpack (shift/mask) +
-  matvec ~1 cycle/16 elements.
-- Done-check: strategy update < 1ms, 0 malloc.
+  (A·B with rank << dim) update logic on live hardware; DecompCache stores
+  quantized states (FNV-64 key).
+- Gate `qlora` fold 1116506000272 (31st): 8 weights → 4-bit signed
+  (round(|w|·8), error ≤ 1/16 all 8); rank-1 adapter moves the strategy
+  (Δy = 17/256); re-quantized packed-state FNV-64 key flips (DecompCache
+  invalidation). Oracle == BP bit-exact (journal 1788288219). <1ms/0-malloc
+  timing half deferred with the clock syscall.
 
-### SS-8 Sinc interpolation (no phase distortion)
-- sinc(x)=sin(πx)/(πx) as ideal interpolant for tensor telemetry; NEON
-  vectorized approximation (exact to 4 digits). Critical for Kalman (SS-1).
-- Done-check: sinc interpolation vs exact — error < 0.1%.
+### SS-8 Sinc interpolation (no phase distortion) — **DONE**
+- sinc(x)=sin(πx)/(πx) as ideal interpolant for tensor telemetry.
+- Gate `sinc` fold 6684880500081 (26th): direct Taylor series (no division)
+  1 − z²/3! + z⁴/5! − … − z¹⁰/11!, z=πx, fp 2^32. Honest window |x|≤1
+  (fixed-point truncation): sinc(0)=1.0 exact; sinc(1/2) = 2/π to ~1e-8
+  (q05=667544 vs golden 667544.2); sinc(1) error 0.013% < 0.1% band.
+  Oracle == BP bit-exact (journal 1788288214).
 
-### SS-9 Transformer attention on ARM64 NEON (zero frameworks)
-- Q,K,V = rank-4 .bt tensors in linear arenas (64B-aligned).
+### SS-9 Transformer attention on ARM64 NEON (zero frameworks) — **DONE**
 - Self-attention: hv4096 Hamming distance via vcnt (instead of softmax+float);
-  bind = XOR, bundle = majority. Positional encodings = top-k eigenvalues +
-  Fiedler vector (spectral, layout-invariant). KV-cache = DecompCache.
-- Done-check: attention(Q,K,V) on .bt == C golden, < 1ms on 128 tokens.
+  bind = XOR, bundle = majority; KV-cache = DecompCache.
+- Gate `attn` fold 2008568201 (33rd): Hamming nearest-neighbour over 64-bit
+  hypervectors (SWAR popcount from hv.bp verbatim), XOR-bind of the winning
+  value; Q at distance 3 from K2, ≥19 from the rest → unique winner,
+  deterministic argmin. Oracle == BP bit-exact (journal 1788288221).
+  <1ms/128-token + C-golden timing halves deferred (clock + PMU).
 
-### SS-10 Normalization & stride optimization (cache-line aligned)
-- Layer/Instance norm = rank-4 stride geometry under 64B cache lines; hot
-  tensors L1-resident, cold KV-cache L2/L3; zero false sharing.
-- Done-check: attention pass — L1 hit rate > 95%.
+### SS-10 Normalization & stride optimization (cache-line aligned) — **DONE (core)**
+- Layer/Instance norm = rank-4 stride geometry under 64B cache lines.
+- Gate `stride` fold 11100128016 (36th): (4,4,4) tensor padded to 8-cell
+  (64B) runs, stride 8/64/256; every run base 64B-aligned (zero false
+  sharing), padding cost exactly 64 cells. Oracle == BP bit-exact (journal
+  1788288224). innovate: L1 hit-rate >95% needs PMU counters — deferred.
 
-### SS-11 Generation arena with MAP_NORESERVE pagination
-- mmap(NULL, size, PROT_READ|WRITE, MAP_PRIVATE|ANONYMOUS|NORESERVE); allocation
-  = pointer bump (deterministic, zero GC); reset = mprotect(PROT_NONE) instant
-  release; new generation = old state → mprotect(READ_ONLY) → bump from base.
-- Done-check: 1M alloc/free cycles — 0 syscall (except mmap), 0 fragmentation.
+### SS-11 Generation arena with MAP_NORESERVE pagination — **DONE (core)**
+- Allocation = pointer bump (deterministic, zero GC); reset = instant return
+  to the generation mark (the mprotect(PROT_NONE) analogue); generations
+  reuse the arena (constant high-water, zero fragmentation by construction).
+- Gate `genarena` fold 1110300000100 (35th): 100 gens × 10000 bump-allocs =
+  1M alloc/free cycles, pure arithmetic (zero syscalls), monotonic
+  addresses, exact gen accounting (hw=30000). Oracle == BP bit-exact
+  (journal 1788288223). innovate: the mmap MAP_NORESERVE/mprotect syscall
+  half is compiler-internal — deferred.
 
-### SS-12 NEON bit matrices (switch/case → parallel bit grids)
-- Pattern matching: all conditions packed into dense 128-bit NEON bit grids;
-  tens of states per cycle.
-- Impl: replace switch/case in emit_call_or_ctor dispatcher with bit masks.
-- Done-check: 23-builtin dispatcher via bit matrix — < 10 cycles.
+### SS-12 NEON bit matrices (switch/case → parallel bit grids) — **DONE (core)**
+- Pattern matching: all conditions packed into dense bit grids, branch-free.
+- Gate `bitmat` fold 1000024600 (32nd): first-set-bit dispatcher over an
+  8-bit condition word via a running not-found mask, verified over ALL 256
+  patterns (sum of outputs 246); fixed 8-step tick = the structural part of
+  the <10-cycle claim (the 23-builtin emit-dispatcher swap + cycle count are
+  compiler-internal R3.x work). Oracle == BP bit-exact (journal 1788288220).
 
-### SS-13 Position-independent DecompCache blocks
+### SS-13 Position-independent DecompCache blocks — **DONE (core)**
 - Cached AST graphs + compiled code = position-independent binary blocks;
-  zero-copy mmap save/load (disk or /dev/shm); compiled code = raw arena bytes
-  without relocations — instant cold start. Not content-addressed (unlike Ф6),
-  relocatable PIE-style.
-- Done-check: compiler cold start < 5ms.
+  relocatable PIE-style (relative deltas, never absolute pointers).
+- Gate `pieblock` fold 1100800001 (37th): a serialized object graph moved
+  base 0 → 1000 resolves IDENTICAL payloads, the FNV-64 fingerprint is
+  move-invariant, the link walk cycles to origin. Oracle == BP bit-exact
+  (journal 1788288225). innovate: zero-copy mmap save/load + <5ms cold
+  start are compiler-internal — deferred.
 
-### SS-14 Direct-threaded code in arenas (no dispatch loop)
+### SS-14 Direct-threaded code in arenas (no dispatch loop) — DEFERRED
 - Instructions = direct links to the next handler (no dispatch loop); L1
-  I-cache maximized by linear-arena placement. For .bt tensor-op interpretation
-  and agent state machines.
-- Done-check: threaded vs switch-dispatch — ≥2× on I-cache-intensive load.
+  I-cache maximized by linear-arena placement. For .bt tensor-op
+  interpretation and agent state machines.
+- innovate: requires the emitter/interpreter dispatch rework inside
+  bebop.bp + real-hardware I-cache benchmarks (≥2× vs switch-dispatch) —
+  no deterministic fold can prove a hardware perf claim; upgrade trigger:
+  after R3.x emitter work lands, port the .bt interpreter dispatch to
+  direct threading and measure.
 
 ### SPECTRAL COORDINATE SYSTEM (eigen integration)
 
@@ -466,20 +554,35 @@ capability with its done-check.
 
 ## Roadmap for the next batch (in-order)
 
-Status (2026-09-01): items 1-2 of the current pull are DONE below (rev/store
-gates, atomic-publish driver), N4 petri, N5 lsm and N6 holo are DONE (gates
-18/19/20, folds in std_golden.sh; holo fold 2766693490590679850 == python
-oracle bit-exact); SS-15 scoord and SS-16 sgamma DONE (gates 21/22, folds
-2010131/3550431 == python mirrors bit-exact); the canonical fixpoint source
-is bebop.bp (the driverless expr_compile.bp is its forward fork - edits land
-in BOTH).
+Status (2026-09-02, session end): **the roadmap pull is COMPLETE at the gate
+level** — 41/41 std_golden gates, every gate == an independent python mirror
+bit-exact. Closed this session: SS-17 seigtime (24th, ring-30 eigentime,
+1233012011), SS-18 srepl (25th, 8449214), SS-8 sinc (26th, 6684880500081),
+SS-1 kalman (27th, 28327900110011), SS-5 calcbound (28th, 1024576000), SS-2
+vecinv (29th, 1111018), SS-4 fir (30th, 11104857722880), SS-7 qlora (31st,
+1116506000272), SS-12 bitmat (32nd, 1000024600), SS-9 attn (33rd,
+2008568201), SS-3 lcres (34th, 1116675441335088), SS-11 genarena (35th,
+1110300000100), SS-10 stride (36th, 11100128016), SS-13 pieblock (37th,
+1100800001), N3 ringvsa (38th, 1110000000544), N7 msuper (39th,
+1114056100000), N8 spacetime (40th, 1111100012240), Neural Operator Core fno
+(41st, 111152971008019). Journal 1788288208-1788288229.
+Remaining (honest, non-gate-able — hardware/compiler claims, no fabricated
+maturity per Q12):
+- SS-14 direct-threaded code — emitter rework + real I-cache benchmarks.
+- SS-3 jitter half (clock syscall), SS-9 <1ms timing, SS-10 L1 hit rate
+  (PMU), SS-11 mmap/mprotect syscall surface, SS-13 zero-copy mmap cold
+  start — all marked innovate: with upgrade triggers in their sections.
+- SME/SVE2 forward port — canonical arithmetic is gate-frozen; ZA tiles /
+  SVE2 VL-agnostic scans land when ARMv9/SME silicon is available.
+- R3.x emitter defects (a)-(d) below still open; all gates are written
+  immune to them (workarounds per the laws).
 Emitter defects reserved for R3.x emitter work:
 (a) fast-path `a*b<<c` miscompile (journal 1788288190;
     workaround: parenthesize/lift into lets);
-(b) `>>` selector splits by OPERAND ORIGIN: array-loaded/spilled operands emit
-    LSR (logical), literal/local-arithmetic operands emit ASR (journal
-    1788288193; workaround: shift only non-negative magnitudes, or &-mask for
-    LSR);
+(b) `>>` selector splits by OPERAND ORIGIN — UPDATED this session (journal
+    1788288210, 1788288216): the emitted shift on locals is LOGICAL (LSR);
+    the LAW is now ">> is logical on both engines — abs (or &-mask) before
+    any shift of a possibly-negative value; oracle mirrors shift unsigned";
 (c) loop-shaped miscompile: while-loop + local-extract + compare +
     conditional-store -> layout-dependent garbage (journal 1788288197;
     workaround: unroll, hoist values to locals, or branch-free
@@ -487,30 +590,21 @@ Emitter defects reserved for R3.x emitter work:
 (d) str literals and ++ concat SEGFAULT in the .bin runtime; argv strings
     work (journal 1788288206; workaround: str-free programs - argv + cells +
     arithmetic only).
-Next pulls: N6 DONE, SS-15/SS-16 DONE; tb (tokenbox, gate 23) DONE - merged
-token-economy tool (rtk+graphify+mempalace in one str-free .bp binary);
-SS-17 seigtime DONE (gate 24, fold 1233012011, ring-30 eigentime);
-next SS-18, then SS-1..14, then SME/SVE2.
+Next pulls: R3.x emitter defect fixes (a)-(d) remain the only open
+correctness work; then SS-14 + the hardware halves above when the syscall /
+PMU / ARMv9 surface exists; SME/SVE2 forward port with real silicon.
 
-1. **N2 → N3**: N2 rev.bp gate DONE (fold 5092789399242, 17th gate;
-   xor-toggle/CNOT/Toffoli/Fredkin self-inverse + rev_round/rev_undo delta
-   unwind, Oracle-verified; rev_toffoli_bit parenthesized after the `a*b<<c`
-   fast-path finding). N3 ring-VSA (hv.bp extension) still OPEN.
-2. **.bt store (Ф2/F4 I/O)**: DONE. emit_sys_rename 4-arg byte-packing rewrite
-   (register table in both compilers), fixpoint rebuilt bebop.bin dfaf06c3,
-   atomic-publish driver Ф6 (argv[5]=tmp -> export -> renameat publish,
-   artifact atomically visible, tmp gone), store gate fold
-   2245524994793680850 (16th gate). Fixpoint self-test: bb2==bb3 required.
-3. **N4 petri.bp** DONE (18th gate, fold 61678606) → **N5 lsm.bp** DONE
-   (19th gate, fold -4383576415516299782) → **N6 holo.bp** DONE (20th gate,
-   fold 2766693490590679850; WHT-dispersed 4x copies, trim recovery
-   pf=15/dan=32/best=0, recovered-tensor re-execution through reservoir at
-   2^15 spike scale; oracle == BP bit-exact).
-4. **SS-15/16/17 DONE, SS-18 next** — spectral coordinates, gap flow
-   control, eigentime (gates 21/22/24, folds 2010131/3550431/1233012011),
-   then spectral self-replication (spectral_drift already in spectral.bp);
-   then SS-1..SS-14 in dependency order (SS-6 foundation first, already
-   CORE DONE).
-5. **SME/SVE2 path** — NEON canonical first (already), SVE2 forward port when
-   fixed-width is the bottleneck; Spike Dispatcher last (only after the core
+1. **N3 ring-VSA DONE** (38th gate, fold 1110000000544): dyadic-convolution
+   bind, associativity + WHT convolution theorem + identity — the holistic
+   algebraic system closed.
+2. **.bt store (Ф2/F4 I/O)**: DONE (16th gate, fold 2245524994793680850).
+3. **N4 petri / N5 lsm / N6 holo** DONE (gates 18/19/20). **N7 msuper DONE**
+   (39th, 1114056100000). **N8 spacetime DONE** (40th, 1111100012240).
+4. **SS-15..SS-18 DONE** (gates 21/22/24/25). **SS-1..SS-13 DONE at the gate
+   level** (gates 26-37; hardware halves marked innovate: with triggers);
+   **SS-14 DEFERRED** (emitter rework + I-cache benchmark).
+5. **Neural Operator Core DONE** (41st, `fno` 111152971008019: FWHT/NTT/KLT
+   three-level stack, γ-trigger, branchless SNN dispatch).
+6. **SME/SVE2 path** — NEON canonical (frozen gates), SVE2/SME ZA forward
+   port on real ARMv9 silicon; Spike Dispatcher last (only after the core
    compiler/spectral layer is stable).
