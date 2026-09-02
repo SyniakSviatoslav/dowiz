@@ -403,3 +403,14 @@
   signature, right indexing); standalone user-level probes pass - the
   corruption is compiler-context-specific. FASTPATH-SPEC R6.0 updated with
   the sharpened signature + ordered hypotheses VERDICT:located-not-fixed
+1788288244 H:R6.0-alias | DID:clean R6.1 rebuild (full threading: 32 push
+  +73 pop sites; push/pop take fntab; model fntab[3800]=depth 3801+d=d+11;
+  4 distinct trap words; base-pointer log P/p b16 b8 d) GOT:on 1+2 the
+  log = P f8f7'0' P f8f7'1' p f8f7'2' p f8f7'1' (bases MATCH push vs pop,
+  depth SURVIVES across calls) with ZERO traps; 4 array groups (ptab, fntab,
+  compile/compile_fn self-tests) all consistent VERDICT:corruption NOT
+  reproducing on clean implementation - the R6.0 zeroing signature was an
+  artifact of the earlier WIP (likely the per-fn reset/emit_bl flush or a
+  misthreaded site in compile/compile_fn/emit_expr_words). R6.1 committed
+  4ad49f2. Full self-compile fixpoint pending stable-box window (env kept
+  rebooting under 40-min compile load).

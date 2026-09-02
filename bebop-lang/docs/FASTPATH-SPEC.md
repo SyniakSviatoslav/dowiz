@@ -42,7 +42,16 @@ ITSELF: every word-level rewrite changes the stream the next generation
 compiles, and the failure mode is layout-sensitive in a way the fixpoint
 generation check does not catch. In-place rewrites are banned for R6.
 
-## R6.0 — root-cause the (1) write failure FIRST (blocking, ~1 session)
+## R6.0 — RESOLVED (journal 1788288244, commit 4ad49f2)
+The clean R6.1 rebuild does NOT reproduce the zeroing. Base-pointer logs
+prove push and pop see the SAME fntab (matching b16/b8 bytes) and the
+depth survives across calls; zero traps across ptab/fntab/self-test
+arrays. The old signature was an artifact of the WIP (per-fn reset,
+emit_bl flush, or misthreaded site in compile/compile_fn/emit_expr_words),
+now superseded by the committed threading. REMAINING: re-verify fixpoint
+bb2==bb3 and 44 gates on a stable box.
+
+## R6.0-archive — root-cause the (1) write failure FIRST (blocking, ~1 session)
 STATUS: sharpened this session (journal 1788288243). The failure is REAL
 and now LOCATED to its signature, not yet its mechanism:
 - trap cascade built: push write-reread checks (slot + depth) NEVER trap —
