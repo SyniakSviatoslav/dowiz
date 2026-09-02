@@ -2097,7 +2097,7 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let bresl = emit_body(s, pos, insns, n, stab, selfname, selfstart, fntab, cx, st);
   let blastl = bresl - (bresl / 2) * 2;
   let grewl_raw = if n[0] > nb_body then 1 else 0;
-  let legbl = if blastl == 0 then grewl_raw else 0;
+  let legbl = if blastl == 1 then grewl_raw else 0;
   let _ = if legbl == 1 then pop(insns, n, 0) else 0;
   let _ = em(insns, n, 402653184 + loop_start - n[0]);
   let endl = n[0];
@@ -2105,7 +2105,9 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = skip_ws(s, pos);
-  let _ = pos[0] = pos[0] + 1;
+  let strnW = str_len(s);
+  let cW = if pos[0] >= strnW then 0 else char(s, pos[0]);
+  let _ = if cW == 59 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
   n[0]
 }
 
@@ -2161,7 +2163,9 @@ fn emit_let_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   let _ = if is_chain == 1 then (let _ = pos[0] = qws[0] + 1 in (let _ = skip_ws(s, pos) in 0)) else 0;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
-  let _ = pos[0] = pos[0] + 1;
+  let strnV = str_len(s);
+  let cV = if pos[0] >= strnV then 0 else char(s, pos[0]);
+  let _ = if cV == 59 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
   let grew_v = if n[0] > nb_v then 1 else 0;
   let _ = if grew_v == 1 then pop(insns, n, 0) else 0;
   let _ = bind_reg(insns, n, treg_i);
@@ -2201,7 +2205,9 @@ fn emit_compound_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], s
   let _ = pop(insns, n, 0);
   let _ = bind_reg(insns, n, reg0);
   let _ = skip_ws(s, pos);
-  let _ = pos[0] = pos[0] + 1;
+  let strnC = str_len(s);
+  let cC = if pos[0] >= strnC then 0 else char(s, pos[0]);
+  let _ = if cC == 59 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
   n[0]
 }
 
@@ -2276,7 +2282,7 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     // deleted; was_fast is the constant 0) -- every flag is fixed BEFORE
     // the emitter below runs, so guard and codegen can never desync
     let was_fast = 0;
-    let lastf = if is_expr == 1 then 0 else lastf;
+    let lastf = if is_item == 1 then is_expr else lastf;
     let _ = if is_expr == 1 then emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
     // non-final legacy items must not leave values on the stack
     let _ = skip_ws(s, pos);

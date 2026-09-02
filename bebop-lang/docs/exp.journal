@@ -476,3 +476,14 @@
   4.4->5.3 (widened, env-noise suspect) VERDICT:R6.3 delivered, report
   bench/vs_rust/REPORT-630.md; R6.2 fold NOT in this build (reverted,
   model-desync-at-if root cause documented in 1788288252 arc + spec)
+1788385580 H:while-boundary | DID:fixed the journal-1788288252 language bug in
+  both bebop.bp and selfhost/expr_compile.bp: (1) emit_let_stmt/emit_compound_
+  stmt/emit_while_stmt no longer BLINDLY consume ';' - guarded on char==59, so
+  a final `let x = v` without ';' no longer eats the block '}'; (2) emit_body
+  lastf now means "body leaves exactly ONE value on the stack" (last item was
+  an expr AND not popped by more_ahead); (3) legbl/leg_tail polarity flipped in
+  emit_while_stmt + compile_fn + compile_fn_at (pop iff lastf==1 - the OLD
+  blast==0 check popped let-final bodies -> stack underflow per iteration).
+  GOT: s3 repro 139->7, s3a 3, w1/w2 nested 3, `} 42` 42 (was 2); fixpoint
+  bb2==bb3 (md5 be922030ba6ed359ab85a72b08fc5e69); std_golden 45/45 (new
+  whileb gate 7127), parity 9/0, construct 24/24 VERDICT:confirmed

@@ -1,0 +1,41 @@
+module core { }
+
+// while-boundary regression gate (journal 1788288252): the trailing
+// expression after a while whose body's final statement is a LET (no `;`
+// before `}`) used to be emitted INSIDE the loop before the back-jump and
+// the let-final body underflowed the value stack once per iteration
+// (Bus error / SIGSEGV). Shapes covered: let-final body + trailing expr
+// (s3), let-only body, compound-final body, nested while-final body,
+// missing `;` after `}`.
+
+fn main() -> i64 {
+  let mem = zeros(8);
+  let i = 0;
+  while i < 4 {
+    let _ = mem[i] = i * 2 + 1;
+    let i = i + 1
+  };
+  let j = 0;
+  while j < 3 {
+    let j = j + 2
+  };
+  let k = 0;
+  while k < 3 {
+    k += 1
+  };
+  let a = 0;
+  while a < 4 {
+    let _ = a = a + 3
+  };
+  let q = 0;
+  let r2 = 0;
+  while q < 2 {
+    let w = 0;
+    while w < 2 {
+      let w = w + 1
+    };
+    let q = q + 1;
+    0
+  };
+  mem[3] * 1000 + (if j == 4 then 1 else 0) * 100 + (if k == 3 then 2 else 0) * 10 + (if a == 6 then 3 else 0) + (if q == 2 then 4 else 0)
+}

@@ -408,6 +408,16 @@ gate fno 111152971008019 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/r3x.bp /tmp/opencode/r3x_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/r3x_test.bin | tail -1)
 gate r3x 1111100151 "$r"
 
+# ---- whileb (while-boundary regression gate, journal 1788288252): a
+#      trailing expression after a while whose final body statement is a
+#      let (no `;` before `}`) was emitted INSIDE the loop before the
+#      back-jump and the let-final body underflowed the value stack per
+#      iteration (Bus error/SIGSEGV). Shapes: let-final + trailing expr,
+#      let-only, compound-final, nested while-final, `}` without `;`.
+#      Fold 7127 = mem[3](7)*1000 + j==4(100) + k==3(20) + a==6(3) + q==2(4).) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/whileb.bp /tmp/opencode/whileb_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/whileb_test.bin | tail -1)
+gate whileb 7127 "$r"
+
 # ---- mma (SS-11 hardware half: generation arena on a REAL kernel mmap via
 #      the 6-arg sys_mmap wrapper (MAP_PRIVATE|ANONYMOUS); positive
 #      4096-aligned writable base; 100000 bump-allocated cells store/load
