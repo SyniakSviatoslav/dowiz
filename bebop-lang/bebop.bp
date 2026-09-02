@@ -1087,18 +1087,21 @@ fn em(insns: [i64], n: [i64], w: i64) -> i64 {
   n[0]
 }
 
-// Push x0 (sub sp,#16 ; str x0,[sp]). R6.1 model: slot=d+11 at 3801+d,
-// depth at 3800, self-check traps (push-slot/push-depth).
+// Push x0 (sub sp,#16 ; str x0,[sp]). R6.1 model: slot=d+11 at 3701+d,
+// depth at 3700, self-check traps (push-slot/push-depth 3558866944/3558866976)
+// + depth-cap trap 3558867072 (d>=99 would clobber the 3899+ literal table).
 fn push(insns: [i64], n: [i64], fntab: [i64]) -> i64 {
-  let d = fntab[3800];
-  let _ = fntab[3801 + d] = d + 11;
-  let _ = fntab[3800] = d + 1;
-  let chk2 = fntab[3800];
+  let d = fntab[3700];
+  let _ = fntab[3701 + d] = d + 11;
+  let _ = fntab[3700] = d + 1;
+  let chk2 = fntab[3700];
   let ok2 = if chk2 == d + 1 then 1 else 0;
   let _ = if ok2 == 0 then em(insns, n, 3558866976) else 0;
-  let chk1 = fntab[3801 + d];
+  let chk1 = fntab[3701 + d];
   let ok1 = if chk1 == d + 11 then 1 else 0;
   let _ = if ok1 == 0 then em(insns, n, 3558866944) else 0;
+  let ocap = if d >= 98 then 1 else 0;
+  let _ = if ocap == 1 then em(insns, n, 3558867072) else 0;
   let _ = em(insns, n, 3506455551);
   let _ = em(insns, n, 4177527776);
   n[0]
@@ -1106,10 +1109,10 @@ fn push(insns: [i64], n: [i64], fntab: [i64]) -> i64 {
 
 // Pop into x<rd> (ldr x<rd>,[sp] ; add sp,#16). R6.1 model + traps.
 fn pop(insns: [i64], n: [i64], rd: i64, fntab: [i64]) -> i64 {
-  let d = fntab[3800];
+  let d = fntab[3700];
   let dm1 = d - 1;
-  let s = fntab[3801 + dm1];
-  let _ = fntab[3800] = dm1;
+  let s = fntab[3701 + dm1];
+  let _ = fntab[3700] = dm1;
   let okd = if d < 1 then 1 else 0;
   let _ = if okd == 1 then em(insns, n, 3558867040) else 0;
   let oks = if s == 0 then 1 else 0;
