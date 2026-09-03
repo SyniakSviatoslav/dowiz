@@ -801,3 +801,48 @@ T1->T7 bottom-up, T13/T14 as the substrate endgame, T15 when bare
 metal exists. The remaining pre-vision items (SS-10 PMU, SS-14 I-cache
 bench, pool-on-bare-kernel, <1% jitter, <5ms cold start, SME/SVE2) all
 fold into T15. R3.x(b) stays documented-as-law.
+
+Status (2026-09-03, session 2): **SILICON-REGISTER PULL T1–T12 + T11 all
+LANDED**, std_golden 57/57 (was 50/50). Closed this session with each
+gate == python mirror bit-exact (commits e5bbdf7, f9cd9f0):
+- **T1 tern** 8888868889989889 — ternary Clifford basis {-1,0,1} packed
+  2-bits, blade multiply via Cayley masks (no float MUL), rotor sandwich.
+- **T2 rns** 1183829339 — 4 moduli 16-bit lanes, Garner CRT spot-check.
+- **T3 snn** 65504516937878 — in-register bit-mask SNN, one POPCNT/AND/OR
+  propagation round, ternary payload (T1).
+- **T4 lsys** 144175882039858 — L-system fractal memory: arena stores the
+  rule, expansion generated on demand + FNV digest.
+- **T5 lod** 1000088904914 — fractal LOD zoom: expand->rotate->collapse ==
+  direct high-dim rotation bit-exact, arena high-water bounded.
+- **T6 phant** 8328000021 — time-phantom networks: algae depth-6 expansion
+  -> connword -> ring-adjacency propagation -> evaporate + re-expand
+  determinism. Fixed connword OR-not-sum (wrap-ADD carried cells 16-20).
+- **T7 rnsrot** 1000088888708 — RNS-integrated spike rotors: T1 sandwich of
+  e1/e2 round-trips through 4-modulus RNS + Garner DECODE with OFFSET
+  encoding (+M/2: Garner is mod-M, negatives need offset). Fused neural +
+  geometric passes == one arithmetic.
+- **T8 deltasync** 1168535566021 — VSA delta mesh sync: codebook XOR delta
+  + FNV fold; bad delta (one flipped bit) does NOT reproduce the digest
+  (breaker).
+- **T9 mutlsys** 44349936263 — self-mutating L-rules: FNV fold IS the
+  fitness fn, keep iff fold improves (signed compare, deterministic).
+- **T10 entcol** 3000021007 — entropic topological collapse (GC
+  replacement): decaying grammar drives diversity below the 3 threshold;
+  3 collapses, 21 cells freed, exact accounting.
+- **T11 morph** gate 11 + morph_loop.sh 8/8 — JIT D-I fusion: kernel rule
+  published atomically (tmp->sys_export->renameat) + read back
+  byte-identical; K=8 compile->atomic-replace->run loop, k1 fold
+  500000500000 stable. W^X-clean mprotect equivalent.
+- **T12 ptrless** 1118234452261 — .becache-as-the-only-pointer: content
+  digest addresses state; corrupted key does NOT resolve (loud breaker).
+
+**ACTIVE NEXT (T13)**: the register-window emitter (R6.1 protocol,
+FASTPATH-SPEC.md is binding). The T13 goal is a full re-architecture of
+the value machinery — push/pop -> mov x(9+depth) register window, "top is
+in x0" tracking, flush-on-bl, ~40 emit_* call sites threaded, then a
+fresh fixpoint compile + the whole battery. The SPEC's own R6.2 plan and
+the 5-attempt heisenbug history (R4 x5, journal 1788288234) require
+single-variable diffs, one commit per step, battery after each, and a
+clean revert on ANY layout crash (SPEC fallback: keep the stack machine —
+its ops are forwarding-cheap — publish performance-gap honestly). This is
+the multi-session architectural jump; stage it as its own focused block.
