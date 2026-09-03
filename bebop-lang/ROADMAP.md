@@ -557,60 +557,49 @@ capability with its done-check.
 
 ## Roadmap for the next batch (in-order)
 
-Status (2026-09-03, session end): **48/48 std_golden gates**, every gate ==
-an independent python mirror bit-exact. New this session:
-- **while-boundary language bug FIXED** (journal 1788288252 / 1788385580):
-  a trailing expression after a while whose final body statement was a
-  let without `;` was emitted INSIDE the loop before the back-jump, and
-  let-final bodies underflowed the value stack per iteration (Bus error).
-  Fix: guarded `;` consumption in emit_let_stmt/emit_compound_stmt/
-  emit_while_stmt + emit_body's lastf now means "body leaves exactly one
-  value" and legbl/leg_tail pop iff lastf==1 in all three consumers
-  (bebop.bp + selfhost/expr_compile.bp, fixpoint bb2==bb3 md5 be922030...).
-  Gate `whileb` 7127 (46th).
-- **SS-3 jitter half** — gate `lcjit` (47th): two 800k-cycle LC-resonant
-  batches via clock_ms (the sys_clock builtin that was missing at SS-3
-  core). HONEST: batch jitter measures 3-8% on this shared proot box
-  (preemption noise); the structural claim (fixed tick count per cycle)
-  is exact; <1% wall-clock needs a quiet/bare-metal box.
-- **SS-9 timing half** — gate `attnt` (48th): 2000 attention passes via
-  clock_ms; measured ~1.5us/pass on the JIT, 650x under the 1ms claim;
-  winner spot-checked bit-exact (win=2).
-- **Spike Dispatcher** — gate `spike` (49th): SWAR popcnt + de Bruijn
-  tzcnt over a dense activity word, LSB-first dispatch Base+idx*Stride;
-  fold 6920001045 == python mirror.
-- **Pool gates** — honest proot guard in pool_parity.sh: under a ptrace
-  tracer clone(CLONE_VM|CLONE_THREAD) returns 0 in BOTH parent and child
-  and threads don't share memory, so the shared-cell futex tests cannot
-  run here (verified: parent never sees child writes); 5/5 on a bare
-  kernel (M7 evidence). Skip-with-reason, not a fabricated pass.
-- **SS-13 cold start** — measured: median 15.8ms / min 11ms under proot
-  (process spawn dominates; the zero-copy part is real: file-backed RX
-  mmap, no copy, no mprotect). <5ms needs bare metal.
-- **SS-10 L1 hit-rate / PMU + SS-14 I-cache bench** — perf_event_open
-  blocked by the sandbox (syscall probe errno). Forward-port triggers
-  stay (bare metal / ARMv9).
-- **R6.2 constant folding — 3rd reproduction, REVERTED** (journal
-  1788385630): the fold logic is proven correct (debug-build marker dump:
-  all 5 self-compile fold sites exact; 200 random exprs bit-exact;
-  user-level fold pipeline probes pass), but the fold-active self-compile
-  misreads a model slot (`0 - 2` folds to -1 in sym_bind) and
-  deterministically segfaults on two discard-let inputs; any single-word
-  layout shift in the emitter region removes the crash (the documented
-  layout heisenbug, journal 1788288252 class). Root cause = the old
-  emitter's layout-sensitive compiler-context defect (R6.0 class); R6.2
-  stays BLOCKED until that defect is fixed. Bench status unchanged
-  (R6.3 numbers).
+Status (2026-09-03, session end): **50/50 std_golden gates**, every gate ==
+an independent python mirror bit-exact. Closed this session:
+- **R6.2 constant folding LANDED (4th attempt, v5)** — journal
+  1788285641: the v1-v3 dynamic-slot model (fntab[3401+d]) was the
+  layout-sensitive miscompile source; v5 uses FIVE FIXED CELLS
+  (fntab[3655..3659], hard addressing, zero dynamic slot arithmetic) with
+  push/pop/emit_cond/emit_match clearing the const depth and emit_lit
+  re-recording from captured pre-push state, PLUS the right-const imm12
+  path (`i - 1` -> `sub x0,#1`: 5 words vs 10). Fixpoint byte-exact
+  (md5 13a6447f), gate `foldx` 7150011 (50th), 10 self_check goldens
+  regenerated, construct frozen bins regenerated. Bebop-side wins: K1
+  hot loop 35->11ms on a cool run (throttle-bound later), canonical
+  k1-loop footprint 124->114 words (-9%).
+- **Software PMU / translation index** (SS-10/SS-14 in-sandbox form):
+  perf_event_open blocked by the sandbox (syscall probe); the
+  deterministic stand-in = the construct frozen bins (byte-freeze every
+  emitted stream) + the measured footprints. 100% repeatable by
+  construction; the hardware counters stay forward-port.
+- **Cooperative fiber scheduler** — gate `fiber` 1215172329: N agents on
+  ONE process, shared arena, zero kernel calls — the in-sandbox
+  replacement for the clone/futex pool semantics (pool gate = honest
+  5-skip under ptrace; bare-kernel trigger for the real 5/5).
+- **SS-13 cold start** documented as env tax: median 15.8ms under proot
+  (spawn-dominated; the seed's mmap+init is sub-ms by construction).
+- **Bench**: K1 4.5-5.6×, K2 2.6×, K3 5.1-8.1×, K4 6.7-10.6× vs Rust
+  (two noisy sessions; box thermal-dominated).
 Remaining (honest, marked innovate: with triggers):
-- SS-14 direct-threaded — thr gate done (direct-threaded cells); the
-  I-cache benchmark half needs real hardware counters.
-- SS-10 L1 hit rate (PMU), SS-14 I-cache bench, SME/SVE2 forward port —
-  all need bare metal / ARMv9 silicon.
-- R3.x emitter defect (b) remains documented-as-law (`>>` is logical on
-  both engines); (a)(c)(d) fixed with the r3x regression gate (journal
-  1788385580 session's predecessor commit 6928c99).
-- R6.2 fold + the old emitter's layout defect that blocks it (the one
-  remaining correctness item at the emitter level).
+- The FASTPATH-SPEC done-check (K1/K4 ≥ 1.0× vs Rust) — the R6.1
+  register-aware emitter protocol is the next rung (no word rewrites;
+  the fold is rung one).
+- SS-10 L1 hit rate / SS-14 I-cache bench / SME/SVE2 — bare metal or
+  ARMv9 silicon.
+- Pool 5/5 on a bare kernel (M7 evidence); fibers carry the shared-cell
+  semantics in-sandbox.
+- **Terminal-goal gap (honest)**: all mathematical layers (N1-N8,
+  SS-1..18, FNO, eigentime, HDC, .bt, CSR, spike dispatch) exist and are
+  gate-proven, and the compiler is zero-C self-hosted — but the
+  EXECUTION SUBSTRATE is still a classical von-Neumann stack machine
+  (seed loader -> blr -> push/pop code). The post-von-Neumann runtime
+  (event dispatcher as the substrate, not a library) is the remaining
+  architectural jump: SS-14 direct-threaded cells are the first step;
+  replacing the emitter's stack-machine body with the dispatcher is the
+  whole of it. R3.x(b) remains documented-as-law (`>>` logical).
 Emitter defects reserved for R3.x emitter work:
 (a) fast-path `a*b<<c` miscompile (journal 1788288190;
     workaround: parenthesize/lift into lets);
