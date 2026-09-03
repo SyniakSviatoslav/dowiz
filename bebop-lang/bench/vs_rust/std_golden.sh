@@ -560,5 +560,19 @@ gate dispatcher 81001005 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/substrate.bp /tmp/opencode/substrate_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/substrate_test.bin | tail -1)
 gate substrate 36750250113 "$r"
 
+# ---- swpmu (T15a: SOFTWARE PMU COUNTERS — the blocked-perf_event_open
+#      replacement. Android perf_event_paranoid=3 + seccomp => EACCES on
+#      syscall 241, no root to lift it. Hardware PERF_TYPE_HARDWARE
+#      counters are replaced by deterministic SOFTWARE instrumentation
+#      inside the JIT'd kernel: an iteration/step counter incremented per
+#      loop body (bit-exact, immune to thermal throttling / clock noise)
+#      + clock_ms() = CLOCK_MONOTONIC via raw svc (works user-space,
+#      distinct syscall from 241). Fold = sum*10^12 + ok*10^10 where
+#      sum = 1+..+N = 2001000 (N=2000) and ok = stepok*10+sumok = 11;
+#      the k1-step loop is pinned bit-exact independent of wall-clock
+#      jitter. Golden 2001000110000000000.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/swpmu.bp /tmp/opencode/swpmu_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/swpmu_test.bin | tail -1)
+gate swpmu 2001000110000000000 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

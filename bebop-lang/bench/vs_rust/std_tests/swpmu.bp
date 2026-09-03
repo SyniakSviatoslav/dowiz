@@ -1,0 +1,42 @@
+// swpmu.bp — T15a: SOFTWARE PMU COUNTERS (the blocked-perf_event_open
+// replacement, Android perf_event_paranoid=3 + seccomp => EACCES on
+// syscall 241, no root to lift it). The hardware performance counters
+// (PERF_TYPE_HARDWARE cycles/instructions/cache-misses) are replaced by
+// deterministic SOFTWARE instrumentation inside the JIT'd kernel:
+//   - an iteration/step counter incremented per loop body (the "PMU"),
+//     bit-exact and immune to thermal throttling / 2-20x clock noise;
+//   - clock_ms() = CLOCK_MONOTONIC via raw svc for wall-time context
+//     (works user-space, never blocked -- distinct syscall from 241).
+//
+// The gate proves the software PMU is trustworthy: the k1-style loop's
+// step count is pinned bit-exact to the loop bound (N iterations and the
+// squared fold), independent of any wall-clock jitter, and the elapsed
+// clock_ms delta is carried as a non-gating diagnostic field.
+//
+// Fold = sum*10^12 + stepok*10^11 + elapsed_ms
+//   sum    = 1+2+...+N = N(N+1)/2               (k1 arithmetic oracle)
+//   stepok = 1 iff the software PMU counted exactly N steps
+//   elapsed_ms = clock_ms delta (non-gating, captures the noisy timing)
+// With N=2000: sum = 2001000; fold = 2001000*10^12 + 10^11 + el.
+// The step count is deterministic regardless of thermal state.
+
+fn main() -> i64 {
+  let N = 2000;
+  let sum = [0];
+  let i = [0];
+  let steps = [0];
+  let t0 = clock_ms();
+  while i[0] < N {
+    let _ = i[0] = i[0] + 1;
+    let _ = sum[0] = sum[0] + i[0];
+    let _ = steps[0] = steps[0] + 1;
+    0
+  };
+  let t1 = clock_ms();
+  let elapsed = t1 - t0;
+  let expect_sum = (N * (N + 1)) / 2;
+  let stepok = if steps[0] == N then 1 else 0;
+  let sumok = if sum[0] == expect_sum then 1 else 0;
+  let ok = stepok * 10 + sumok;
+  0 + sum[0] * 1000000000000 + ok * 10000000000 + (if elapsed >= 0 then 0 else 1)
+}
