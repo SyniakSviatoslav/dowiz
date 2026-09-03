@@ -533,5 +533,18 @@ gate ptrless 1118234452261 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/morph.bp /tmp/opencode/morph_test.bin >/dev/null 2>&1 && sleep 1 && timeout 30 ./seed/build/seed /tmp/opencode/morph_test.bin | tail -1)
 gate morph 11 "$r"
 
+# ---- dispatcher (T14 first rung — the .bt bridge artifact: a kernel's
+#      operand data lives as a rank-4 .bt word-tensor; execution = the
+#      event dispatcher scanning a dense activity word (SWAR popcnt + de
+#      Bruijn tzcnt, LSB-first, NO program counter / fetch-decode loop)
+#      with threshold accumulation over the active cells. The artifact
+#      round-trips (pack->unpack identical) and the dispatcher sum over
+#      the active set equals the direct sum of that same set — execution
+#      is order-independent bit-exact. spike machinery embedded verbatim
+#      from spike.bp; the seed-runtime swap is the future work. Fold
+#      81001005 = sum*10^6 + rt*10^3 + n, python mirror bit-exact.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/dispatcher.bp /tmp/opencode/dispatcher_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/dispatcher_test.bin | tail -1)
+gate dispatcher 81001005 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]
