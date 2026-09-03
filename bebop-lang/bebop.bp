@@ -562,7 +562,10 @@ fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i6
     0
   };
   let target = fntab_lookup(fntab, name);
+  let rep_save = fntab[3890];
+  let _ = flush_on_bl(insns, n, fntab, rep_save);
   let _ = emit_bl(insns, n, target, 1);
+  let _ = pop_back(insns, n, fntab, rep_save);
   let _ = push(insns, n, fntab);
   n[0]
 }
@@ -573,7 +576,10 @@ fn emit_self_call(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = pop(insns, n, 0, fntab);
+  let rep_save = fntab[3890];
+  let _ = flush_on_bl(insns, n, fntab, rep_save);
   let _ = emit_bl(insns, n, selfstart, 1);
+  let _ = pop_back(insns, n, fntab, rep_save);
   let _ = push(insns, n, fntab);
   n[0]
 }
@@ -1114,6 +1120,39 @@ fn pop(insns: [i64], n: [i64], rd: i64, fntab: [i64]) -> i64 {
   let _ = fold_clear(fntab);
   let _ = em(insns, n, 4181722080 + rd);
   let _ = em(insns, n, 2432713727);
+  n[0]
+}
+
+// S3: flush register window to stack before a bl (call site).
+// Saves x9..x(9+rep-1) to stack, resets rep=-1. No-op when rep==0 (all-memory).
+fn flush_on_bl(insns: [i64], n: [i64], fntab: [i64], rep: i64) -> i64 {
+  let do_flush = if rep > 0 then 1 else 0;
+  let _ = if do_flush == 1 then (let _ = fntab[3890] = 0 - 1 in 0) else 0;
+  let _ = if do_flush == 1 then str_reg(insns, n, 0, rep) else 0;
+  n[0]
+}
+
+fn str_reg(insns: [i64], n: [i64], i: i64, rep: i64) -> i64 {
+  let done = if i >= rep then 1 else 0;
+  let _ = if done == 0 then (let _ = em(insns, n, 4177527776 + (9 + i) + i * 8192) in 0) else 0;
+  let _ = if done == 0 then (let _ = str_reg(insns, n, i + 1, rep) in 0) else 0;
+  n[0]
+}
+
+// S3: pop_back after bl — restores flushed registers from stack. No-op when rep==0.
+fn pop_back(insns: [i64], n: [i64], fntab: [i64], rep: i64) -> i64 {
+  let do_restore = if rep > 0 then 1 else 0;
+  let total = rep * 8 + 64;  // flush space + bl frame (48) + push space (16)
+  let _ = if do_restore == 1 then (let _ = em(insns, n, 2432713727 + (total - 16) * 1024) in 0) else 0;
+  let _ = if do_restore == 1 then ldr_reg(insns, n, 0, rep) else 0;
+  let _ = if do_restore == 1 then (let _ = fntab[3890] = rep in 0) else 0;
+  n[0]
+}
+
+fn ldr_reg(insns: [i64], n: [i64], i: i64, rep: i64) -> i64 {
+  let done = if i >= rep then 1 else 0;
+  let _ = if done == 0 then (let _ = em(insns, n, 4181722080 + (9 + i) + i * 8192) in 0) else 0;
+  let _ = if done == 0 then (let _ = ldr_reg(insns, n, i + 1, rep) in 0) else 0;
   n[0]
 }
 
@@ -2374,6 +2413,7 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   // accumulated by earlier ones (every cache-hit increments fntab[4000];
   // without reset, late fns compile ALL calls as unresolved/neutral).
   let _ = fntab[4000] = 0;
+  let _ = fntab[3890] = 0;  // S3: rep=0 (all-memory) at function entry
   let pos = [fpos];
   let stab = zeros(385);  // 1 + 3*128 (name,reg,srcpos) verified triples; overflow -> loud trap
   let _ = skip_ws(s, pos);
