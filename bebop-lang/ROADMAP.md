@@ -516,6 +516,217 @@ capability with its done-check.
 
 ---
 
+## SILICON-REGISTER PULL (vision -> bottom-up task stack)
+
+Added 2026-09-03: the register-level vision (ternary Clifford basis,
+RNS, L-systems, in-register SNN, mprotect morphing, .becache-as-pointer)
+is the terminal goal elaborated at the silicon layer. Analysis: ~70% of
+its mathematics is ALREADY gate-proven in this repo; the new pulls are
+listed bottom-up with falsifiable done-checks. Every new layer carries
+its own gate (fold == independent python mirror) per the invariant
+policy; the v5 lesson (fixed addressing cells, no dynamic slot
+arithmetic, branch-free selection, journal 1788385641) is a LAW for all
+new emitter-adjacent work.
+
+### Vision -> existing-gate map (what is NOT new work)
+
+| Vision item | Already proven by |
+|---|---|
+| Hypervector codebooks (hv4096, XOR bind, majority bundle) | gate `hv` 4427592702613580868 |
+| Spectral projections / KLT deflation | gates `spectral`/`scoord`/`sgamma` |
+| In-register SNN semantics (bit masks, POPCNT) | gates `petri` (18th), `bitmat` (32nd), `spike` (49th) |
+| Superposition branching + collapse | gate `msuper` (39th) |
+| Entropic selection (spectral gap switch) | gates `sgamma` (22nd), `seigtime` (24th) |
+| Deterministic .becache + i64 folds | gate `cache` + the fold discipline itself |
+| 4-bit agentic evolution (self-mutation) | gates `qlora` (31st), `srepl` (25th) |
+| Holographic memory / WHT smearing | gates `holo` (19th), `wht` |
+| Canonical AST-less interchange format | `.bt` rank-4 tensors (F4) + `bt` gate |
+| Direct-threaded cells | gate `thr` |
+| Constant folding (the register-window rung 1) | gate `foldx` (R6.2 v5) |
+
+### Layer 0 -- numeric basis (new gates, pure .bp arithmetic)
+
+**T1 · ternary Clifford basis** (`tern.bp`)
+GOAL: {-1,0,1} coefficients, 2 bits each, packed into i64 words; blade
+multiplication via the Cayley table as combinatorial masks (AND/XOR +
+sign-inversion masks), NOT float MUL; the rotor sandwich R x R~ (grade
+projection) as a bitwise pass.
+DONE-CHECK: gate `tern` fold == python mirror: pack 8 ternary blades,
+multiply a rotor pair, sandwich-rotate a probe blade; sign pattern and
+2-bit packing invariants (no value outside {-1,0,1}).
+DEPS: bits.bp (popcount/rotate). BLOCKERS: none (deterministic i64).
+
+**T2 · packed RNS** (`rns.bp`)
+GOAL: 4 coprime moduli with residues in 16-bit lanes of an i64;
+parallel add/mul by lane-local arithmetic (no carry chains by
+construction); CRT spot-check against the direct i64 result.
+DONE-CHECK: gate `rns` fold == mirror: N random-ish pairs, RNS add and
+mul == direct mod-2^64 arithmetic on every lane AND the CRT check.
+DEPS: none. BLOCKERS: none.
+
+**T3 · in-register SNN engine** (`snn.bp`)
+GOAL: the vision's bit-mask neurons with ternary spikes: a neuron's
+state = bit mask; a spike = a packed ternary coefficient (T1); the
+propagation step = one POPCNT + AND/OR pass (no per-synapse loops);
+the spike event simultaneously encodes a rotor multiply (fuses with T7
+later).
+DONE-CHECK: gate `snn` fold == mirror: N-bit network, one propagation
+round, activity + weight-fold == python.
+DEPS: T1 (ternary spike payload), bits.bp. BLOCKERS: none.
+
+### Layer 1 -- generative memory
+
+**T4 · L-system fractal memory** (`lsys.bp`)
+GOAL: the arena stores ONLY the compact recursive rule + the seed; the
+expansion is generated into the arena on demand and folded back into a
+digest after use. Expansion factor measured and frozen (bytes of rule
+vs words of expansion -- the "orders of magnitude" claim becomes a
+number).
+DONE-CHECK: gate `lsys`: expand rule (algae/Koch-like) to depth d,
+digest the expansion (FNV-64), collapse; fold == mirror; the expansion
+factor printed once and recorded in the journal.
+DEPS: none. BLOCKERS: none (the claim is measured, not assumed).
+
+**T5 · fractal LOD zoom** (`lod.bp`)
+GOAL: the macro-rotor (T1, low dimension) stays register-resident; a
+collision/logical-inference trigger expands a fractal layer locally,
+applies the sandwich, collapses back to a macro-index. The expansion is
+transient -- after the fold, the arena section is reclaimed (generation
+arena, `genarena` gate).
+DONE-CHECK: gate `lod` fold == mirror: expand -> rotate -> collapse
+equals the direct high-dim rotation (bit-exact), plus the arena
+high-water stays bounded (reuse evidence).
+DEPS: T1, T4, genarena. BLOCKERS: none.
+
+**T6 · time-phantom networks** (`phant.bp`)
+GOAL: a full SNN exists for exactly ONE POPCNT pass: the L-rule (T4)
+expands to a bit-mask network, one propagation round runs (T3), the
+64-bit fold is emitted, and the network evaporates (registers freed).
+DONE-CHECK: gate `phant` fold == mirror: expand->propagate->fold->clear
+is bit-exact AND the second expansion reproduces the first (generative
+determinism = the "phantom" exists identically whenever needed).
+DEPS: T3, T4. BLOCKERS: none.
+
+### Layer 2 -- fused hybrids
+
+**T7 · RNS-integrated spike rotors** (`rnsrot.bp`)
+GOAL: the spike event = the rotor multiply: the RNS lanes (T2) carry
+residues of rotor coefficients; propagation via POPCNT (T3) executes the
+geometric rotation R x R~ as ONE fused pass -- the neural and geometric
+engines are one operation.
+DONE-CHECK: gate `rnsrot` fold == mirror: fused pass == the T1 sandwich
+computed separately, bit-exact.
+DEPS: T1, T2, T3. BLOCKERS: none.
+
+**T8 · VSA delta mesh sync** (`deltasync.bp`)
+GOAL: agents exchange ONLY codebook deltas (XOR of old/new hv4096) +
+the i64 fold digest; the receiver applies the delta and verifies the
+fold -- context replication without serialization. Packet size frozen
+and recorded (the "tiny packet" claim becomes a byte count).
+DONE-CHECK: gate `deltasync` fold == mirror: apply-delta + fold check
+== direct codebook transfer, bit-exact; mismatched delta -> loud trap
+word (the breaker, T12).
+DEPS: hv.bp. BLOCKERS: none (single-process gate; real mesh = bare
+metal/network, forward-port).
+
+**T9 · self-mutating L-rules** (`mutlsys.bp`)
+GOAL: the runtime mutates its own generative rule; the .becache fold is
+the fitness function: keep the mutation iff the fold improves, else
+revert -- natural selection over L-systems. Reuses qlora (quantized
+adapter moves) and srepl (DriftClass stability gate) as the mutation
+machinery.
+DONE-CHECK: gate `mutlsys` fold == mirror: N mutations, keep/revert by
+fold comparison, final rule == the mirror's; mutation budget honored.
+DEPS: T4, qlora, srepl. BLOCKERS: none.
+
+**T10 · entropic topological collapse** (`entcol.bp`)
+GOAL: the GC replacement: when a structure's information-utility (a
+deterministic entropy estimate from the spectral layer) falls below a
+threshold, the structure folds back to its base L-rule and the arena
+slot is freed -- no scans, no refcounts.
+DONE-CHECK: gate `entcol` fold == mirror: threshold crossings collapse
+exactly the structures the mirror predicts; the freed-cell accounting
+is exact.
+DEPS: T4, spectral (entropy proxy). BLOCKERS: none.
+
+### Layer 3 -- code-as-data runtime
+
+**T11 · JIT D-I fusion / morph loop** (`morph.bp` + runtime)
+GOAL: "data becomes code" via the COMPILER ITSELF: a generated rule is
+emitted as AArch64 words, published atomically (F2 mmap-export +
+renameat), and the seed mmaps it PROT_READ|PROT_EXEC file-backed --
+code is born, runs once, and is replaced by the next publication. This
+is the in-sandbox form of the vision's mprotect morphing (proot W^X
+blocks mprotect RWX: the file-backed RX map is the W^X-clean
+equivalent, already frozen in seed.S).
+DONE-CHECK: a bench+gate loop (compile k1-shaped rule -> run -> fold
+== frozen) iterated K times proves the morph loop is deterministic
+and the artifacts replace atomically; mprotect variant = forward-port
+trigger (bare metal).
+DEPS: F1/F2 (emitters, export), the whole compiler. BLOCKERS: mprotect
+RWX (proot W^X) -- the file path is the substitute.
+
+**T12 · .becache as the only pointer + mismatch breaker** (`ptrless`)
+GOAL: references ARE content digests: a state is addressed by its
+.becache key + i64 fold; every materialization verifies the fold and
+a one-bit mismatch emits a LOUD trap word (3558867200-class) and
+aborts -- immunity to garbage/stale reads by construction (the policy,
+not a claim of unbreakability).
+DONE-CHECK: construct-parity-frozen trap word + gate `ptrless`: correct
+key materializes the right state; corrupted key traps (fold != 0).
+DEPS: cache.bp, pieblock, sha256. BLOCKERS: none.
+
+### Layer 4 -- the substrate (the terminal-goal gap)
+
+**T13 · register-window emitter (R6.1 protocol)**
+GOAL: the stack machine -> register-resident values: compile-time
+"top is in x0" tracking, movs instead of push/pop pairs where provable,
+flush-on-bl. NO in-place word rewrites (the R4/R5 lesson), fixed-cell
+model only (the v5 lesson). This is the rung that closes the
+FASTPATH-SPEC done-check (K1/K4 >= 1.0x vs Rust).
+DONE-CHECK: fixpoint byte-exact + 50 gates + K1/K4 benchmarked vs the
+frozen Rust medians -- ship whatever the numbers are.
+DEPS: R6.2 fold (landed). BLOCKERS: the old emitter's layout-sensitive
+classes -- all new emitter state must follow the v5 law.
+
+**T14 · dispatcher as the execution substrate (post-von-Neumann)**
+GOAL: the terminal state -- the emitted artifact is not a fetch-execute
+stream but a dense activity/incidence structure; the seed runtime is
+the asynchronous dispatcher (tzcnt/popcnt scans + threshold
+accumulation); code "lives" only where a spike fires. This REPLACES the
+stack-machine body wholesale; the .bp authoring surface stays, the
+canonical artifact (.bt) stays.
+DONE-CHECK: the k1-k7 kernels + all 50 gates execute on the dispatcher
+runtime bit-exactly (the old streams are the oracle); fixpoint of the
+new emitter; the eigentime/spike gates move from "library" to
+"substrate".
+DEPS: T13, SS-14 thr, spike gate, the laws above. BLOCKERS: this is the
+multi-session architectural jump; sequence it after T13 stabilizes.
+
+**T15 · hardware validation (bare metal / ARMv9)**
+GOAL: the claims that cannot be gated in-sandbox: PMU-backed L1/L2 hit
+rate (SS-10), I-cache residency (SS-14), pool 5/5 on a real kernel,
+cold-start <5ms, no-throttle sustained 2.4GHz runs, SME/SVE2 tiles.
+DONE-CHECK: the bench harness rerun on bare metal with perf counters;
+every number recorded, whatever it is.
+DEPS: the environment. BLOCKERS: none in-sandbox -- this is the
+forward-port trigger list.
+
+### Honest flags (Q12)
+
+1. mprotect RWX is BLOCKED under proot W^X (documented since M4); the
+   file-backed RX morph loop (T11) is the W^X-clean equivalent, not a
+   fake of the mprotect path.
+2. "No heating / no throttling at 2.4GHz" and "thousands of connections
+   per microsecond" are HARDWARE claims: unfalsifiable in this sandbox
+   (the box demonstrably throttles). Gated on T15.
+3. The AST-less semantic stream already exists as the canonical .bt
+   tensor + hv4096 interchange; the .bp text remains the AUTHORING
+   surface by design (the roadmap never claims the compiler reads
+   hypervectors).
+4. The terminal-goal sentence stands until T14 lands: the math layers
+   are complete and gate-proven; the substrate is still von-Neumann.
+
 ## Progress log (closed statuses, evidence)
 
 - **Ф0.3 bootstrap closed (2026-09-01)** — bebop.bin crash on pristine+3fn
@@ -583,52 +794,8 @@ an independent python mirror bit-exact. Closed this session:
   (spawn-dominated; the seed's mmap+init is sub-ms by construction).
 - **Bench**: K1 4.5-5.6×, K2 2.6×, K3 5.1-8.1×, K4 6.7-10.6× vs Rust
   (two noisy sessions; box thermal-dominated).
-Remaining (honest, marked innovate: with triggers):
-- The FASTPATH-SPEC done-check (K1/K4 ≥ 1.0× vs Rust) — the R6.1
-  register-aware emitter protocol is the next rung (no word rewrites;
-  the fold is rung one).
-- SS-10 L1 hit rate / SS-14 I-cache bench / SME/SVE2 — bare metal or
-  ARMv9 silicon.
-- Pool 5/5 on a bare kernel (M7 evidence); fibers carry the shared-cell
-  semantics in-sandbox.
-- **Terminal-goal gap (honest)**: all mathematical layers (N1-N8,
-  SS-1..18, FNO, eigentime, HDC, .bt, CSR, spike dispatch) exist and are
-  gate-proven, and the compiler is zero-C self-hosted — but the
-  EXECUTION SUBSTRATE is still a classical von-Neumann stack machine
-  (seed loader -> blr -> push/pop code). The post-von-Neumann runtime
-  (event dispatcher as the substrate, not a library) is the remaining
-  architectural jump: SS-14 direct-threaded cells are the first step;
-  replacing the emitter's stack-machine body with the dispatcher is the
-  whole of it. R3.x(b) remains documented-as-law (`>>` logical).
-Emitter defects reserved for R3.x emitter work:
-(a) fast-path `a*b<<c` miscompile (journal 1788288190;
-    workaround: parenthesize/lift into lets);
-(b) `>>` selector splits by OPERAND ORIGIN — UPDATED this session (journal
-    1788288210, 1788288216): the emitted shift on locals is LOGICAL (LSR);
-    the LAW is now ">> is logical on both engines — abs (or &-mask) before
-    any shift of a possibly-negative value; oracle mirrors shift unsigned";
-(c) loop-shaped miscompile: while-loop + local-extract + compare +
-    conditional-store -> layout-dependent garbage (journal 1788288197;
-    workaround: unroll, hoist values to locals, or branch-free
-    multiply-select stores);
-(d) str literals and ++ concat SEGFAULT in the .bin runtime; argv strings
-    work (journal 1788288206; workaround: str-free programs - argv + cells +
-    arithmetic only).
-Next pulls: R3.x emitter defect fixes (a)-(d) remain the only open
-correctness work; then SS-14 + the hardware halves above when the syscall /
-PMU / ARMv9 surface exists; SME/SVE2 forward port with real silicon.
-
-1. **N3 ring-VSA DONE** (38th gate, fold 1110000000544): dyadic-convolution
-   bind, associativity + WHT convolution theorem + identity — the holistic
-   algebraic system closed.
-2. **.bt store (Ф2/F4 I/O)**: DONE (16th gate, fold 2245524994793680850).
-3. **N4 petri / N5 lsm / N6 holo** DONE (gates 18/19/20). **N7 msuper DONE**
-   (39th, 1114056100000). **N8 spacetime DONE** (40th, 1111100012240).
-4. **SS-15..SS-18 DONE** (gates 21/22/24/25). **SS-1..SS-13 DONE at the gate
-   level** (gates 26-37; hardware halves marked innovate: with triggers);
-   **SS-14 DEFERRED** (emitter rework + I-cache benchmark).
-5. **Neural Operator Core DONE** (41st, `fno` 111152971008019: FWHT/NTT/KLT
-   three-level stack, γ-trigger, branchless SNN dispatch).
-6. **SME/SVE2 path** — NEON canonical (frozen gates), SVE2/SME ZA forward
-   port on real ARMv9 silicon; Spike Dispatcher last (only after the core
-   compiler/spectral layer is stable).
+Next pulls (in-order): the SILICON-REGISTER PULL section above --
+T1->T7 bottom-up, T13/T14 as the substrate endgame, T15 when bare
+metal exists. The remaining pre-vision items (SS-10 PMU, SS-14 I-cache
+bench, pool-on-bare-kernel, <1% jitter, <5ms cold start, SME/SVE2) all
+fold into T15. R3.x(b) stays documented-as-law.
