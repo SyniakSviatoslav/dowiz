@@ -85,10 +85,12 @@ Milestone history (all DONE):
 - **M7** Zero-C: `native/src` deleted; full gate suite green without C compiler.
 
 **Active gates (all green):**
-- std_golden.sh → 15/15 PASS
-- parity_driver.sh (kernels) → 9/0/0 (+1 main-less skip); (constructs) → 20/0/0
-- construct_parity.sh → 20/20 MATCH (words AND values)
-- pool tests → 5/5 (JIT-only; interp retired at M7)
+- std_golden.sh → 56/56 PASS (includes tern, rns, snn, lsys, lod, phant,
+  rnsrot, deltasync, mutlsys, entcol, ptrless — the T1–T12 stack)
+- parity_driver.sh (kernels) → 9/0/0 (+1 main-less skip)
+- construct_parity.sh → 24/24 MATCH (words AND values)
+- pool tests → 5/5 (JIT-only; interp retired at M7) — proot-blocked;
+  fiber scheduler is the in-sandbox replacement
 
 ### Known issues
 1. **Pool test JIT divergence**: bebop.bin pool tests (par_sum/par_merge/
@@ -546,7 +548,7 @@ new emitter-adjacent work.
 
 ### Layer 0 -- numeric basis (new gates, pure .bp arithmetic)
 
-**T1 · ternary Clifford basis** (`tern.bp`)
+**T1 · ternary Clifford basis** (`tern.bp`) — DONE ✓ (fold 8888868889989889)
 GOAL: {-1,0,1} coefficients, 2 bits each, packed into i64 words; blade
 multiplication via the Cayley table as combinatorial masks (AND/XOR +
 sign-inversion masks), NOT float MUL; the rotor sandwich R x R~ (grade
@@ -556,7 +558,7 @@ multiply a rotor pair, sandwich-rotate a probe blade; sign pattern and
 2-bit packing invariants (no value outside {-1,0,1}).
 DEPS: bits.bp (popcount/rotate). BLOCKERS: none (deterministic i64).
 
-**T2 · packed RNS** (`rns.bp`)
+**T2 · packed RNS** (`rns.bp`) — DONE ✓ (fold 1183829339)
 GOAL: 4 coprime moduli with residues in 16-bit lanes of an i64;
 parallel add/mul by lane-local arithmetic (no carry chains by
 construction); CRT spot-check against the direct i64 result.
@@ -564,7 +566,7 @@ DONE-CHECK: gate `rns` fold == mirror: N random-ish pairs, RNS add and
 mul == direct mod-2^64 arithmetic on every lane AND the CRT check.
 DEPS: none. BLOCKERS: none.
 
-**T3 · in-register SNN engine** (`snn.bp`)
+**T3 · in-register SNN engine** (`snn.bp`) — DONE ✓ (fold 65504516937878)
 GOAL: the vision's bit-mask neurons with ternary spikes: a neuron's
 state = bit mask; a spike = a packed ternary coefficient (T1); the
 propagation step = one POPCNT + AND/OR pass (no per-synapse loops);
@@ -576,7 +578,7 @@ DEPS: T1 (ternary spike payload), bits.bp. BLOCKERS: none.
 
 ### Layer 1 -- generative memory
 
-**T4 · L-system fractal memory** (`lsys.bp`)
+**T4 · L-system fractal memory** (`lsys.bp`) — DONE ✓ (fold 144175882039858)
 GOAL: the arena stores ONLY the compact recursive rule + the seed; the
 expansion is generated into the arena on demand and folded back into a
 digest after use. Expansion factor measured and frozen (bytes of rule
@@ -587,7 +589,7 @@ digest the expansion (FNV-64), collapse; fold == mirror; the expansion
 factor printed once and recorded in the journal.
 DEPS: none. BLOCKERS: none (the claim is measured, not assumed).
 
-**T5 · fractal LOD zoom** (`lod.bp`)
+**T5 · fractal LOD zoom** (`lod.bp`) — DONE ✓ (fold 1000088904914)
 GOAL: the macro-rotor (T1, low dimension) stays register-resident; a
 collision/logical-inference trigger expands a fractal layer locally,
 applies the sandwich, collapses back to a macro-index. The expansion is
@@ -598,7 +600,7 @@ equals the direct high-dim rotation (bit-exact), plus the arena
 high-water stays bounded (reuse evidence).
 DEPS: T1, T4, genarena. BLOCKERS: none.
 
-**T6 · time-phantom networks** (`phant.bp`)
+**T6 · time-phantom networks** (`phant.bp`) — DONE ✓ (fold 8328000021)
 GOAL: a full SNN exists for exactly ONE POPCNT pass: the L-rule (T4)
 expands to a bit-mask network, one propagation round runs (T3), the
 64-bit fold is emitted, and the network evaporates (registers freed).
@@ -609,7 +611,7 @@ DEPS: T3, T4. BLOCKERS: none.
 
 ### Layer 2 -- fused hybrids
 
-**T7 · RNS-integrated spike rotors** (`rnsrot.bp`)
+**T7 · RNS-integrated spike rotors** (`rnsrot.bp`) — DONE ✓ (fold 1000088888708)
 GOAL: the spike event = the rotor multiply: the RNS lanes (T2) carry
 residues of rotor coefficients; propagation via POPCNT (T3) executes the
 geometric rotation R x R~ as ONE fused pass -- the neural and geometric
@@ -618,7 +620,7 @@ DONE-CHECK: gate `rnsrot` fold == mirror: fused pass == the T1 sandwich
 computed separately, bit-exact.
 DEPS: T1, T2, T3. BLOCKERS: none.
 
-**T8 · VSA delta mesh sync** (`deltasync.bp`)
+**T8 · VSA delta mesh sync** (`deltasync.bp`) — DONE ✓ (fold 1168535566021)
 GOAL: agents exchange ONLY codebook deltas (XOR of old/new hv4096) +
 the i64 fold digest; the receiver applies the delta and verifies the
 fold -- context replication without serialization. Packet size frozen
@@ -629,7 +631,7 @@ word (the breaker, T12).
 DEPS: hv.bp. BLOCKERS: none (single-process gate; real mesh = bare
 metal/network, forward-port).
 
-**T9 · self-mutating L-rules** (`mutlsys.bp`)
+**T9 · self-mutating L-rules** (`mutlsys.bp`) — DONE ✓ (fold 44349936263)
 GOAL: the runtime mutates its own generative rule; the .becache fold is
 the fitness function: keep the mutation iff the fold improves, else
 revert -- natural selection over L-systems. Reuses qlora (quantized
@@ -639,7 +641,7 @@ DONE-CHECK: gate `mutlsys` fold == mirror: N mutations, keep/revert by
 fold comparison, final rule == the mirror's; mutation budget honored.
 DEPS: T4, qlora, srepl. BLOCKERS: none.
 
-**T10 · entropic topological collapse** (`entcol.bp`)
+**T10 · entropic topological collapse** (`entcol.bp`) — DONE ✓ (fold 3000021007)
 GOAL: the GC replacement: when a structure's information-utility (a
 deterministic entropy estimate from the spectral layer) falls below a
 threshold, the structure folds back to its base L-rule and the arena
@@ -666,7 +668,7 @@ trigger (bare metal).
 DEPS: F1/F2 (emitters, export), the whole compiler. BLOCKERS: mprotect
 RWX (proot W^X) -- the file path is the substitute.
 
-**T12 · .becache as the only pointer + mismatch breaker** (`ptrless`)
+**T12 · .becache as the only pointer + mismatch breaker** (`ptrless`) — DONE ✓ (fold 1118234452261)
 GOAL: references ARE content digests: a state is addressed by its
 .becache key + i64 fold; every materialization verifies the fold and
 a one-bit mismatch emits a LOUD trap word (3558867200-class) and

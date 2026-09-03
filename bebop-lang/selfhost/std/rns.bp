@@ -1,0 +1,67 @@
+module core { }
+
+// rns.bp — T2: register-packed RNS (residue number system). Four coprime
+// 15-bit moduli (16383, 16381, 16379, 16375), residues packed into 16-bit
+// lanes of one i64 — parallel add/mul with NO carry chains by
+// construction. Decoding via Garner mixed-radix (i64-safe, no >2^63
+// intermediate). Gate: x=12345, y=6789 -> RNS add and mul decoded via
+// Garner == the direct i64 results. Fold = ok_add*10^9 + ok_mul*10^8 +
+// (x+y) + (x*y) == 1183829339 (python mirror, journal at gate time).
+
+fn modq(a: i64, m: i64) -> i64 {
+  let r = a - (a / m) * m;
+  let r2 = r + m;
+  let isneg = if r < 0 then 1 else 0;
+  isneg * r2 + (1 - isneg) * r
+}
+
+fn main() -> i64 {
+  let m0 = 16383;
+  let m1 = 16381;
+  let m2 = 16379;
+  let m3 = 16375;
+  let c1 = 8191;
+  let c2 = 10237;
+  let c3 = 15778;
+  let x = 12345;
+  let y = 6789;
+  // residues into 16-bit lanes
+  let r0 = modq(x, m0);
+  let r1 = modq(x, m1);
+  let r2 = modq(x, m2);
+  let r3 = modq(x, m3);
+  let s0 = modq(y, m0);
+  let s1 = modq(y, m1);
+  let s2 = modq(y, m2);
+  let s3 = modq(y, m3);
+  // lane-local add and mul (branch-free carry-free lanes)
+  let a0 = modq(r0 + s0, m0);
+  let a1 = modq(r1 + s1, m1);
+  let a2 = modq(r2 + s2, m2);
+  let a3 = modq(r3 + s3, m3);
+  let u0 = modq(r0 * s0, m0);
+  let u1 = modq(r1 * s1, m1);
+  let u2 = modq(r2 * s2, m2);
+  let u3 = modq(r3 * s3, m3);
+  // Garner mixed-radix decode of the ADD result
+  let v0 = a0;
+  let d1 = modq(a1 - v0, m1);
+  let v1 = modq(d1 * c1, m1);
+  let d2 = modq(a2 - v0 - v1 * m0, m2);
+  let v2 = modq(d2 * c2, m2);
+  let d3 = modq(a3 - v0 - v1 * m0 - v2 * m0 * m1, m3);
+  let v3 = modq(d3 * c3, m3);
+  let addx = v0 + v1 * m0 + v2 * m0 * m1 + v3 * m0 * m1 * m2;
+  // Garner decode of the MUL result
+  let w0 = u0;
+  let e1 = modq(u1 - w0, m1);
+  let w1 = modq(e1 * c1, m1);
+  let e2 = modq(u2 - w0 - w1 * m0, m2);
+  let w2 = modq(e2 * c2, m2);
+  let e3 = modq(u3 - w0 - w1 * m0 - w2 * m0 * m1, m3);
+  let w3 = modq(e3 * c3, m3);
+  let mulx = w0 + w1 * m0 + w2 * m0 * m1 + w3 * m0 * m1 * m2;
+  let ok1 = if addx == x + y then 1 else 0;
+  let ok2 = if mulx == x * y then 1 else 0;
+  ok1 * 1000000000 + ok2 * 100000000 + addx + mulx
+}

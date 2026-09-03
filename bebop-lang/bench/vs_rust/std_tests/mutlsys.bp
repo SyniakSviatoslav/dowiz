@@ -1,0 +1,130 @@
+module core { }
+
+// mutlsys.bp — T9: self-mutating L-rules. The runtime mutates its own
+// generative rule (a 2-cell grammar: symbol A expands to [0, rule[1]],
+// symbol B to [rule[0]]); the .becache-style FNV fold of the expansion
+// IS the fitness function — a mutation is kept iff the fold improves,
+// else reverted: natural selection over L-systems with no human in the
+// loop. 4 scheduled mutations at rule[k mod 2]. Fold = final digest mod
+// 10^11 + accepted*10^11 (python mirror, journal at gate time).
+
+fn fnvc(cells: [i64], n: i64) -> i64 {
+  let h = [14695981039346656037];
+  let k = 0;
+  while k < n {
+    let v = cells[k];
+    let _ = h[0] = (h[0] ^ v) * 1099511628211;
+    let k = k + 1;
+    0
+  };
+  h[0]
+}
+
+fn main() -> i64 {
+  let rule = zeros(2);
+  let trial = zeros(2);
+  let _ = rule[0] = 0;
+  let _ = rule[1] = 1;
+  let buf1 = zeros(2048);
+  let buf2 = zeros(2048);
+  let accepted = [0];
+  let gen = 0;
+  while gen < 4 {
+    let m = gen - (gen / 2) * 2;
+    let _ = trial[0] = rule[0];
+    let _ = trial[1] = rule[1];
+    let _ = trial[m] = 1 - trial[m];
+    // fitness of the current rule
+    let _ = buf1[0] = 0;
+    let l1 = [1];
+    let d = 0;
+    while d < 6 {
+      let sl = l1[0];
+      let n = [0];
+      let k = 0;
+      while k < sl {
+        let s = buf1[k];
+        let _ = buf2[n[0]] = s * rule[0];
+        let _ = n[0] = n[0] + 1;
+        let _ = buf2[n[0]] = (1 - s) * rule[1];
+        let _ = n[0] = n[0] + 1 - s;
+        let k = k + 1;
+        0
+      };
+      let _ = l1[0] = n[0];
+      let k2 = 0;
+      while k2 < n[0] {
+        let _ = buf1[k2] = buf2[k2];
+        let k2 = k2 + 1;
+        0
+      };
+      let d = d + 1;
+      0
+    };
+    let fit1 = fnvc(buf1, l1[0]);
+    // fitness of the trial
+    let _ = buf1[0] = 0;
+    let l2 = [1];
+    let d2 = 0;
+    while d2 < 6 {
+      let sl = l2[0];
+      let n = [0];
+      let k = 0;
+      while k < sl {
+        let s = buf1[k];
+        let _ = buf2[n[0]] = s * trial[0];
+        let _ = n[0] = n[0] + 1;
+        let _ = buf2[n[0]] = (1 - s) * trial[1];
+        let _ = n[0] = n[0] + 1 - s;
+        let k = k + 1;
+        0
+      };
+      let _ = l2[0] = n[0];
+      let k2 = 0;
+      while k2 < n[0] {
+        let _ = buf1[k2] = buf2[k2];
+        let k2 = k2 + 1;
+        0
+      };
+      let d2 = d2 + 1;
+      0
+    };
+    let fit2 = fnvc(buf1, l2[0]);
+    let better = if fit2 > fit1 then 1 else 0;
+    let _ = rule[0] = better * trial[0] + (1 - better) * rule[0];
+    let _ = rule[1] = better * trial[1] + (1 - better) * rule[1];
+    let _ = accepted[0] = accepted[0] + better;
+    let gen = gen + 1;
+    0
+  };
+  let _ = buf1[0] = 0;
+  let lf = [1];
+  let df = 0;
+  while df < 6 {
+    let sl = lf[0];
+    let n = [0];
+    let k = 0;
+    while k < sl {
+      let s = buf1[k];
+      let _ = buf2[n[0]] = s * rule[0];
+      let _ = n[0] = n[0] + 1;
+      let _ = buf2[n[0]] = (1 - s) * rule[1];
+      let _ = n[0] = n[0] + 1 - s;
+      let k = k + 1;
+        0
+    };
+    let _ = lf[0] = n[0];
+    let k2 = 0;
+    while k2 < n[0] {
+      let _ = buf1[k2] = buf2[k2];
+      let k2 = k2 + 1;
+      0
+    };
+    let df = df + 1;
+    0
+  };
+  let dig = fnvc(buf1, lf[0]);
+  let r = dig - (dig / 100000000000) * 100000000000;
+  let dl = r + (if r < 0 then 100000000000 else 0);
+  dl + accepted[0] * 100000000000
+}

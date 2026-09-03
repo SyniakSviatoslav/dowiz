@@ -1,0 +1,130 @@
+module core { }
+
+// rnsrot.bp — T7: RNS-integrated spike rotors. The spike event IS the
+// rotor multiply: the T1 sandwich (R x R~ with R = 1+e12) rotates the
+// spike blades e1 and e2; the resulting coefficients are carried in RNS
+// lanes (the T2 4-modulus residue domain), Garner-decoded back, and the
+// macro-index digest is compared against the direct i64 computation — the
+// neural (spike) and geometric (rotor) passes are ONE arithmetic, and
+// the residue domain round-trips it bit-exactly. Fold = digest + eq*10^12
+// (python mirror, journal at gate time).
+
+fn gprod(pa: i64, pb: i64, acc: [i64]) -> i64 {
+  let i = 0;
+  while i < 8 {
+    let j = 0;
+    while j < 8 {
+      let ca = ((pa >> (i * 2)) & 3) - 1;
+      let cb = ((pb >> (j * 2)) & 3) - 1;
+      let c = i ^ j;
+      let x = 0;
+      let t = 0;
+      while x < 3 {
+        let bx = (i >> x) & 1;
+        let y = 0;
+        while y < 3 {
+          let by = (j >> y) & 1;
+          let gt = (if x == 1 then 1 else 0) * (if y == 0 then 1 else 0) + (if x == 2 then 1 else 0) * (if y < 2 then 1 else 0);
+          let t = t + bx * by * gt;
+          let y = y + 1;
+          0
+        };
+        let x = x + 1;
+        0
+      };
+      let tp = t - (t / 2) * 2;
+      let sgn = 1 - tp * 2;
+      let _ = acc[c] = acc[c] + ca * cb * sgn;
+      let j = j + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+fn pack(acc: [i64]) -> i64 {
+  let tp = 0;
+  let k = 0;
+  while k < 8 {
+    let enc = acc[k] + 1;
+    let tp = tp + enc * (1 << (k * 2));
+    let k = k + 1;
+    0
+  };
+  tp
+}
+
+fn modq(a: i64, m: i64) -> i64 {
+  let r = a - (a / m) * m;
+  let r2 = r + m;
+  let isneg = if r < 0 then 1 else 0;
+  isneg * r2 + (1 - isneg) * r
+}
+
+fn main() -> i64 {
+  let base = 21845;
+  let rp = base + 1 + 64;
+  let rt = base + 1 - 64;
+  let e1p = base + 4;
+  let e2p = base + 16;
+  // direct i64 sandwich of the spike blades e1 and e2
+  let acc = zeros(8);
+  let t1 = zeros(8);
+  let s1 = zeros(8);
+  let t2 = zeros(8);
+  let s2 = zeros(8);
+  let _ = gprod(rp, e1p, t1);
+  let p1 = pack(t1);
+  let _ = gprod(p1, rt, s1);
+  let _ = gprod(rp, e2p, t2);
+  let p2 = pack(t2);
+  let _ = gprod(p2, rt, s2);
+  let b = 0;
+  while b < 8 {
+    let _ = acc[b] = s1[b] + s2[b];
+    let b = b + 1;
+    0
+  };
+  // RNS round-trip: residues of every coefficient in 4 lanes, Garner back
+  let m0 = 16383;
+  let m1 = 16381;
+  let m2 = 16379;
+  let m3 = 16375;
+  let c1 = 8191;
+  let c2 = 10237;
+  let c3 = 15778;
+  let acc2 = zeros(8);
+  let koff = 35989228557189187;
+  let k = 0;
+  while k < 8 {
+    let v = acc[k];
+    let r0 = modq(v + koff, m0);
+    let r1 = modq(v + koff, m1);
+    let r2 = modq(v + koff, m2);
+    let r3 = modq(v + koff, m3);
+    let v0 = r0;
+    let d1 = modq(r1 - v0, m1);
+    let v1 = modq(d1 * c1, m1);
+    let d2 = modq(r2 - v0 - v1 * m0, m2);
+    let v2 = modq(d2 * c2, m2);
+    let d3 = modq(r3 - v0 - v1 * m0 - v2 * m0 * m1, m3);
+    let v3 = modq(d3 * c3, m3);
+    let _ = acc2[k] = v0 + v1 * m0 + v2 * m0 * m1 + v3 * m0 * m1 * m2 - koff;
+    let k = k + 1;
+    0
+  };
+  let dig1 = [0];
+  let dig2 = [0];
+  let b2 = 0;
+  while b2 < 8 {
+    let p = (if b2 == 0 then 1 else 0) + (if b2 == 1 then 10 else 0) + (if b2 == 2 then 100 else 0) + (if b2 == 3 then 1000 else 0) + (if b2 == 4 then 10000 else 0) + (if b2 == 5 then 100000 else 0) + (if b2 == 6 then 1000000 else 0) + (if b2 == 7 then 10000000 else 0);
+    let _ = dig1[0] = dig1[0] + (acc[b2] + 8) * p;
+    let _ = dig2[0] = dig2[0] + (acc2[b2] + 8) * p;
+    let b2 = b2 + 1;
+    0
+  };
+  let eq = if dig2[0] == dig1[0] then 1 else 0;
+  dig1[0] + eq * 1000000000000
+}

@@ -472,5 +472,57 @@ gate mma 1111100000 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/thr.bp /tmp/opencode/thr_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/thr_test.bin | tail -1)
 gate thr 25000411 "$r"
 
+# ---- phant (T6 fractal time-phantom networks: algae L-rule depth-6
+#      expansion → 16-bit connword → ring adjacency propagation (AND of
+#      neighbours) → evaporate+re-expand verification = deterministic
+#      identity. Fold 8328000021 = ns*10^6 + eq*10^8 + length, python
+#      mirror bit-exact.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/phant.bp /tmp/opencode/phant_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/phant_test.bin | tail -1)
+gate phant 8328000021 "$r"
+
+# ---- rnsrot (T7 RNS-integrated spike rotors: T1 sandwich (R x R~ with
+#      R=1+e12) rotates spike blades e1,e2; the resulting coefficients
+#      round-trip through RNS residues (4 moduli + Garner decode with
+#      offset encoding) back to the direct i64 digest — neural and
+#      geometric passes are ONE arithmetic. Fold 1000088888708 =
+#      digest + eq*10^12, python mirror bit-exact.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/rnsrot.bp /tmp/opencode/rnsrot_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/rnsrot_test.bin | tail -1)
+gate rnsrot 1000088888708 "$r"
+
+# ---- deltasync (T8 VSA delta mesh sync: agents exchange ONLY the
+#      codebook delta (XOR old/new) + FNV fold digest; the receiver
+#      applies delta and verifies — context replication without
+#      serialization. Corrupted delta (one flipped bit) must NOT
+#      reproduce the digest (breaker flag). Fold 1168535566021 =
+#      dl + good*10^11 + detected*10^12, python mirror bit-exact.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/deltasync.bp /tmp/opencode/deltasync_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/deltasync_test.bin | tail -1)
+gate deltasync 1168535566021 "$r"
+
+# ---- mutlsys (T9 self-mutating L-rules: runtime mutates its own
+#      generative rule (A→[0,rule[1]], B→[rule[0]]); FNV fold of the
+#      expansion IS the fitness function — natural selection over
+#      L-systems with no human in the loop. Signed-fitness comparison
+#      (deterministic). Fold 44349936263 = dl + accepted*10^11,
+#      python mirror bit-exact.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/mutlsys.bp /tmp/opencode/mutlsys_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/mutlsys_test.bin | tail -1)
+gate mutlsys 44349936263 "$r"
+
+# ---- entcol (T10 entropic topological collapse — the GC replacement.
+#      Structures are L-rule expansions with a deterministic diversity
+#      proxy (min(A,B)*10/length < 3 → collapse); decaying grammar
+#      drives diversity down as depth grows. 3 collapses, freed 21
+#      cells. Fold 3000021007 = collapsed*10^9 + freed*10^3 + 7,
+#      python mirror bit-exact.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/entcol.bp /tmp/opencode/entcol_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/entcol_test.bin | tail -1)
+gate entcol 3000021007 "$r"
+
+# ---- ptrless (T12 .becache-as-the-only-pointer: states addressed by
+#      content digest (FNV-64); materialization verifies the fold; a
+#      corrupted key must NOT resolve (loud mismatch). Fold
+#      1118234452261 = dl + verify*10^11 + corrupt_detected*10^12,
+#      python mirror bit-exact.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/ptrless.bp /tmp/opencode/ptrless_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/ptrless_test.bin | tail -1)
+gate ptrless 1118234452261 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

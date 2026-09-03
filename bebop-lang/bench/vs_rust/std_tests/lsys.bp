@@ -1,0 +1,54 @@
+module core { }
+
+// lsys.bp — T4: fractal-generative memory via L-systems. The arena stores
+// ONLY the compact recursive rule (A->AB, B->A, the algae grammar, 2
+// symbols) + the seed; the expansion is generated into the arena on
+// demand and folded into an FNV-64 digest afterwards — the storage claim
+// is the expansion factor (rule: 2 cells vs expansion: 144 cells at
+// depth 10, 72x, growing Fibonacci-wise per depth). Fold = length*10^12 +
+// digest mod 10^12 == 144249591591474 (python mirror, journal at gate
+// time).
+
+fn main() -> i64 {
+  let buf1 = zeros(2048);
+  let buf2 = zeros(2048);
+  let _ = buf1[0] = 0;
+  let len1 = [1];
+  let d = 0;
+  while d < 10 {
+    let sl = len1[0];
+    let n = [0];
+    let k = 0;
+    while k < sl {
+      let s = buf1[k];
+      let _ = buf2[n[0]] = 0;
+      let _ = n[0] = n[0] + 1;
+      let _ = buf2[n[0]] = 1 - s;
+      let _ = n[0] = n[0] + 1 - s;
+      let k = k + 1;
+      0
+    };
+    let _ = len1[0] = n[0];
+    let k2 = 0;
+    while k2 < n[0] {
+      let _ = buf1[k2] = buf2[k2];
+      let k2 = k2 + 1;
+      0
+    };
+    let d = d + 1;
+    0
+  };
+  let length = len1[0];
+  let h = [14695981039346656037];
+  let k = 0;
+  while k < length {
+    let v = buf1[k];
+    let _ = h[0] = (h[0] ^ v) * 1099511628211;
+    let k = k + 1;
+    0
+  };
+  let dig = h[0];
+  let r = dig - (dig / 1000000000000) * 1000000000000;
+  let dl = r + (if r < 0 then 1000000000000 else 0);
+  length * 1000000000000 + dl
+}

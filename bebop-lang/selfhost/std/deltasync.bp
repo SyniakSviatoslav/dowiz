@@ -1,0 +1,78 @@
+module core { }
+
+// deltasync.bp — T8: VSA delta mesh sync. Agents exchange ONLY the
+// codebook delta (XOR of old/new hypervector cells) + the i64 fold
+// digest; the receiver applies the delta and verifies the fold — context
+// replication without serialization (the packet is 8 cells + 1 digest).
+// A corrupted delta (one flipped bit) must NOT reproduce the digest —
+// the breaker flag fires. Fold = digest mod 10^11 + good*10^11 +
+// detected*10^12 (python mirror, journal at gate time).
+
+fn fnv8(cb: [i64], n: i64) -> i64 {
+  let h = [14695981039346656037];
+  let i = 0;
+  while i < n {
+    let v = cb[i];
+    let sh = 0;
+    while sh < 8 {
+      let byte = (v >> (sh * 8)) & 255;
+      let _ = h[0] = (h[0] ^ byte) * 1099511628211;
+      let sh = sh + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  h[0]
+}
+
+fn main() -> i64 {
+  let cb1 = zeros(8);
+  let cb2 = zeros(8);
+  let delta = zeros(8);
+  let applied = zeros(8);
+  let bad = zeros(8);
+  let badapp = zeros(8);
+  let i = 0;
+  while i < 8 {
+    let _ = cb1[i] = 1229782938247303441 * (i + 1);
+    let i = i + 1;
+    0
+  };
+  let mask = 1311768467294899696;
+  let j = 0;
+  while j < 8 {
+    let _ = cb2[j] = cb1[j] ^ mask;
+    let _ = delta[j] = cb1[j] ^ cb2[j];
+    let j = j + 1;
+    0
+  };
+  let k = 0;
+  while k < 8 {
+    let _ = applied[k] = cb2[k] ^ delta[k];
+    let k = k + 1;
+    0
+  };
+  let d1 = fnv8(cb1, 8);
+  let d2 = fnv8(applied, 8);
+  let good = if d2 == d1 then 1 else 0;
+  // corrupted delta: one flipped bit in cell 3
+  let k2 = 0;
+  while k2 < 8 {
+    let _ = bad[k2] = delta[k2];
+    let k2 = k2 + 1;
+    0
+  };
+  let _ = bad[3] = bad[3] ^ 1;
+  let k3 = 0;
+  while k3 < 8 {
+    let _ = badapp[k3] = cb2[k3] ^ bad[k3];
+    let k3 = k3 + 1;
+    0
+  };
+  let d3 = fnv8(badapp, 8);
+  let detected = if d3 == d1 then 0 else 1;
+  let r = d1 - (d1 / 100000000000) * 100000000000;
+  let dl = r + (if r < 0 then 100000000000 else 0);
+  dl + good * 100000000000 + detected * 1000000000000
+}

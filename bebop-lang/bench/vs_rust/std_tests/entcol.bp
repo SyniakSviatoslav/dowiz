@@ -1,0 +1,71 @@
+module core { }
+
+// entcol.bp — T10: entropic topological collapse — the GC replacement.
+// Structures are L-rule expansions with a deterministic diversity proxy
+// (min(A-count, B-count) * 10 / length); when a structure's diversity
+// falls below the threshold (3 = 0.3), it collapses back to its base
+// rule and its arena cells are freed — no scans, no refcounts. The
+// decaying grammar (A->AB, B->B) drives diversity down as depth grows:
+// depths [2,4,6,8] -> diversities [0.33, 0.2, 0.08, 0.02], so exactly
+// the depths 4,6,8 collapse. Fold = collapsed*10^9 + freed*10^3 + 7
+// (python mirror, journal at gate time).
+
+fn main() -> i64 {
+  let buf1 = zeros(2048);
+  let buf2 = zeros(2048);
+  let depths = zeros(4);
+  let _ = depths[0] = 2;
+  let _ = depths[1] = 4;
+  let _ = depths[2] = 6;
+  let _ = depths[3] = 8;
+  let collapsed = [0];
+  let freed = [0];
+  let si = 0;
+  while si < 4 {
+    let _ = buf1[0] = 0;
+    let l1 = [1];
+    let d = 0;
+    while d < depths[si] {
+      let sl = l1[0];
+      let n = [0];
+      let k = 0;
+      while k < sl {
+        let s = buf1[k];
+        let _ = buf2[n[0]] = s;
+        let _ = n[0] = n[0] + 1;
+        let _ = buf2[n[0]] = 1;
+        let _ = n[0] = n[0] + 1 - s;
+        let k = k + 1;
+        0
+      };
+      let _ = l1[0] = n[0];
+      let k2 = 0;
+      while k2 < n[0] {
+        let _ = buf1[k2] = buf2[k2];
+        let k2 = k2 + 1;
+        0
+      };
+      let d = d + 1;
+      0
+    };
+    let length = l1[0];
+    let ac = [0];
+    let k3 = 0;
+    while k3 < length {
+      let _ = ac[0] = ac[0] + 1 - buf1[k3];
+      let k3 = k3 + 1;
+        0
+    };
+    let b = length - ac[0];
+    let mn = if ac[0] < b then ac[0] else b;
+    let div = mn * 10 / length;
+    let do_col = if div < 3 then 1 else 0;
+    let _ = collapsed[0] = collapsed[0] + do_col;
+    let _ = freed[0] = freed[0] + do_col * length;
+    // collapse: fold back to the base rule
+    let _ = buf1[0] = 0;
+    let si = si + 1;
+    0
+  };
+  collapsed[0] * 1000000000 + freed[0] * 1000 + 7
+}

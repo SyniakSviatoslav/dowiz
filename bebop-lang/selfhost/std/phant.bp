@@ -1,0 +1,104 @@
+module core { }
+
+// phant.bp — T6: fractal time-phantom networks. A full bit-mask network
+// exists for exactly ONE propagation pass: the L-rule (algae, depth 6,
+// 21 cells) expands into the arena, its cells form the connectivity word,
+// one ring-adjacency propagation round runs (AND of neighbours per
+// neuron), the 64-bit fold is emitted, and the network evaporates — the
+// buffers collapse back to the rule. The done-check is GENERATIVE
+// DETERMINISM: the second expansion reproduces the phantom bit-exactly.
+// Fold = ns*10^6 + eq*10^8 + length == 8328000021 (python mirror,
+// journal at gate time).
+
+fn main() -> i64 {
+  let buf1 = zeros(512);
+  let buf2 = zeros(512);
+  let _ = buf1[0] = 0;
+  let len1 = [1];
+  let d = 0;
+  while d < 6 {
+    let sl = len1[0];
+    let n = [0];
+    let k = 0;
+    while k < sl {
+      let s = buf1[k];
+      let _ = buf2[n[0]] = 0;
+      let _ = n[0] = n[0] + 1;
+      let _ = buf2[n[0]] = 1 - s;
+      let _ = n[0] = n[0] + 1 - s;
+      let k = k + 1;
+      0
+    };
+    let _ = len1[0] = n[0];
+    let k2 = 0;
+    while k2 < n[0] {
+      let _ = buf1[k2] = buf2[k2];
+      let k2 = k2 + 1;
+      0
+    };
+    let d = d + 1;
+    0
+  };
+  let length = len1[0];
+  // build the connectivity word from the expansion cells
+  let cw = [0];
+  let k = 0;
+  while k < length {
+    let b = buf1[k] & 1;
+    let pos = k - (k / 16) * 16;
+    let _ = cw[0] = cw[0] | (b * (1 << pos));
+    let k = k + 1;
+    0
+  };
+  let state = cw[0] & 65535;
+  // one propagation round: fire iff both ring neighbours are active
+  let ns = [0];
+  let i = 0;
+  while i < 16 {
+    let lp = (i + 15) - ((i + 15) / 16) * 16;
+    let rp = (i + 1) - ((i + 1) / 16) * 16;
+    let left = (state >> lp) & 1;
+    let right = (state >> rp) & 1;
+    let _ = ns[0] = ns[0] + left * right * (1 << i);
+    let i = i + 1;
+    0
+  };
+  // the phantom evaporates: reset to the rule, re-expand, verify identity
+  let _ = buf1[0] = 0;
+  let l2 = [1];
+  let d2 = 0;
+  while d2 < 6 {
+    let sl = l2[0];
+    let n = [0];
+    let k = 0;
+    while k < sl {
+      let s = buf1[k];
+      let _ = buf2[n[0]] = 0;
+      let _ = n[0] = n[0] + 1;
+      let _ = buf2[n[0]] = 1 - s;
+      let _ = n[0] = n[0] + 1 - s;
+      let k = k + 1;
+      0
+    };
+    let _ = l2[0] = n[0];
+    let k2 = 0;
+    while k2 < n[0] {
+      let _ = buf1[k2] = buf2[k2];
+      let k2 = k2 + 1;
+      0
+    };
+    let d2 = d2 + 1;
+    0
+  };
+  let cw2 = [0];
+  let k3 = 0;
+  while k3 < l2[0] {
+    let b = buf1[k3] & 1;
+    let pos = k3 - (k3 / 16) * 16;
+    let _ = cw2[0] = cw2[0] | (b * (1 << pos));
+    let k3 = k3 + 1;
+    0
+  };
+  let eq = if cw2[0] == cw[0] then 1 else 0;
+  ns[0] * 1000000 + eq * 100000000 + length
+}
