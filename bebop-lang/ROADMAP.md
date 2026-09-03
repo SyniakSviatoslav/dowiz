@@ -85,8 +85,8 @@ Milestone history (all DONE):
 - **M7** Zero-C: `native/src` deleted; full gate suite green without C compiler.
 
 **Active gates (all green):**
-- std_golden.sh → 56/56 PASS (includes tern, rns, snn, lsys, lod, phant,
-  rnsrot, deltasync, mutlsys, entcol, ptrless — the T1–T12 stack)
+- std_golden.sh → 57/57 PASS (includes tern, rns, snn, lsys, lod, phant,
+  rnsrot, deltasync, mutlsys, entcol, ptrless, morph — the T1–T12 stack)
 - parity_driver.sh (kernels) → 9/0/0 (+1 main-less skip)
 - construct_parity.sh → 24/24 MATCH (words AND values)
 - pool tests → 5/5 (JIT-only; interp retired at M7) — proot-blocked;
@@ -653,7 +653,7 @@ DEPS: T4, spectral (entropy proxy). BLOCKERS: none.
 
 ### Layer 3 -- code-as-data runtime
 
-**T11 · JIT D-I fusion / morph loop** (`morph.bp` + runtime)
+**T11 · JIT D-I fusion / morph loop** (`morph.bp` + runtime) — DONE ✓ (morph gate fold 11, morph_loop.sh 8/8)
 GOAL: "data becomes code" via the COMPILER ITSELF: a generated rule is
 emitted as AArch64 words, published atomically (F2 mmap-export +
 renameat), and the seed mmaps it PROT_READ|PROT_EXEC file-backed --

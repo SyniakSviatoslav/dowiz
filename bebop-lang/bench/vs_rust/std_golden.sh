@@ -524,5 +524,14 @@ gate entcol 3000021007 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/ptrless.bp /tmp/opencode/ptrless_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/ptrless_test.bin | tail -1)
 gate ptrless 1118234452261 "$r"
 
+# ---- morph (T11 JIT D-I fusion / morph loop publishing half: a kernel
+#      rule block atomically published via tmp -> sys_export -> renameat
+#      and read back byte-identical — code is born and replaced atomically,
+#      the seed mmaps file-backed RX (proot W^X-clean mprotect equivalent).
+#      The K-iteration compile->run->verify loop is morph_loop.sh. Fold 11
+#      = pd*10 + ok.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/morph.bp /tmp/opencode/morph_test.bin >/dev/null 2>&1 && sleep 1 && timeout 30 ./seed/build/seed /tmp/opencode/morph_test.bin | tail -1)
+gate morph 11 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

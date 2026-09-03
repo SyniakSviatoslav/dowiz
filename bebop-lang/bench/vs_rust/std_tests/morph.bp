@@ -1,0 +1,48 @@
+// morph.bp — T11 JIT D-I fusion / morph loop gate: the publishing half of
+// "data becomes code". A kernel-shaped rule block (cells) is atomically
+// published via tmp -> sys_export -> renameat (the F2 .bt publish path,
+// no sys_write on the critical path), then read back; the read-back block
+// must equal the in-memory rule byte-for-byte. This proves the artifact is
+// born and replaced atomically — the seed mmaps file-backed RX (the proot
+// W^X-clean equivalent of mprotect RWX, frozen in seed.S). The K-iteration
+// compile->run->verify loop is morph_loop.sh. Fold = pd*10 + ok, python
+// oracle at gate time.
+
+fn bt_store(tmp: [i64], tlen: i64, out: [i64], olen: i64, bytes: [i64], n: i64) -> i64 {
+  let fd = sys_open(tmp, tlen, 578);
+  let e = sys_export(fd, bytes, n);
+  let c = sys_close(fd);
+  let r = sys_rename(tmp, tlen, out, olen);
+  (if e == 0 then 1 else 0) + (if c == 0 then 2 else 0) + (if r == 0 then 4 else 0)
+}
+
+fn main() -> i64 {
+  let kern = zeros(64);
+  let i = 0;
+  while i < 32 {
+    let _ = kern[i] = i * i + i + 3;
+    let i = i + 1;
+    0
+  };
+  let tmpp = [1];
+  let outp = [2];
+  let _ = tmpp[0] = 3;
+  let _ = outp[0] = 3;
+  let st = bt_store(tmpp, 1, outp, 1, kern, 32);
+  let pd = if st == 7 then 1 else 0;
+  let rd = zeros(32);
+  let fd2 = sys_open(outp, 1, 0);
+  let rn = sys_read(fd2, rd, 32);
+  let _ = sys_close(fd2);
+  let nread = if rn == 32 then 1 else 0;
+  let chk = [0];
+  let k = 0;
+  while k < 32 {
+    let c = if rd[k] == kern[k] then 0 else 1;
+    let _ = chk[0] = chk[0] + c;
+    let k = k + 1;
+    0
+  };
+  let ok = if nread == 1 && chk[0] == 0 then 1 else 0;
+  pd * 10 + ok
+}

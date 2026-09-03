@@ -554,3 +554,4 @@
   a 100-byte file map) GOT:50/50 gates, parity 9/0, construct 24/24,
   fixpoint byte-exact VERDICT:confirmed
 1788434834 H:silicon-pull-t6-t12 | DID:wrote+verified phant(8328000021) rnsrot(1000088888708) deltasync(1168535566021) mutlsys(44349936263) entcol(3000021007) ptrless(1118234452261); added 6 gates to std_golden; fixed rnsrot offset-encoding + entcol/mutlsys branch-free expansion + phant OR-vs-sum connword; ran full battery | GOT:std_golden 56/56, construct_parity 24/24, parity_driver 9/9+1skip; every fold == python mirror bit-exact | VERDICT:confirmed
+1788434834+ H:morph-t11 | DID:wrote morph.bp (atomic publish tmp->sys_export->renameat + read-back byte-identical) fold 11 + morph_loop.sh K-iteration compile->run->verify k1, atomic mv per iter | GOT:morph gate 11, morph_loop 8/8 (fold 500000500000 stable), std_golden 57/57 | VERDICT:confirmed
