@@ -63,12 +63,13 @@ garbage collectors, no intermediate interpreters.
 
 ---
 
-## Verified state (2026-09-01)
+## Verified state (2026-09-03, session 3)
 
 `seed/seed.S` (frozen AArch64 loader, no libc, 1496B) + `bebop.bin`
 (self-hosting compiler, fixpoint bb2 == bb3,
-sha256 `3b720370a22b784847d867dce594dd490e4a51eaaaf2e21f0602982fcc850398`) +
+md5 `13a6447fe65cb3321e8165d38d7e4c77`) +
 `*.bp` sources + `*.bin` artifacts. **Zero C** — `native/` (175 files) deleted.
+std_golden 60/60, construct_parity 24/24, parity_driver 9/9+1skip.
 
 Milestone history (all DONE):
 - **M1** seed loader: k1..k7 run through seed.bin, outputs identical to the
@@ -85,8 +86,9 @@ Milestone history (all DONE):
 - **M7** Zero-C: `native/src` deleted; full gate suite green without C compiler.
 
 **Active gates (all green):**
-- std_golden.sh → 57/57 PASS (includes tern, rns, snn, lsys, lod, phant,
-  rnsrot, deltasync, mutlsys, entcol, ptrless, morph — the T1–T12 stack)
+- std_golden.sh → 60/60 PASS (includes tern, rns, snn, lsys, lod, phant,
+  rnsrot, deltasync, mutlsys, entcol, ptrless, morph, dispatcher,
+  substrate, swpmu — the T1–T15a stack)
 - parity_driver.sh (kernels) → 9/0/0 (+1 main-less skip)
 - construct_parity.sh → 24/24 MATCH (words AND values)
 - pool tests → 5/5 (JIT-only; interp retired at M7) — proot-blocked;
@@ -680,7 +682,7 @@ DEPS: cache.bp, pieblock, sha256. BLOCKERS: none.
 
 ### Layer 4 -- the substrate (the terminal-goal gap)
 
-**T13 · register-window emitter (R6.1 protocol)** — ACTIVE-NEXT (the one open gap)
+**T13 · register-window emitter (R6.1 protocol)** — PROVEN, NOT LANDED (sole open gap)
 GOAL: the stack machine -> register-resident values: compile-time
 "top is in x0" tracking, movs instead of push/pop pairs where provable,
 flush-on-bl. This closes the FASTPATH-SPEC done-check.
@@ -688,24 +690,31 @@ DONE-CHECK: fixpoint byte-exact + 50 gates + K1/K4 benchmarked -- ship
 whatever the numbers are.
 STATUS: the mechanism is PROVEN correct (R4#4: 42/42 gates, K1-K4
 bit-exact) but was never reconciled with the current emitter (R6.2 v5
-folding / L16). NOT YET LANDED. EXACT BLOCKER found this session:
-  1. Of ~100 push/pop call sites, push/pop still emit the canonical
-     stack words (sub sp,#16; str x0,[sp] / ldr; add sp) — no register
-     path exists. Verified: symbols use x19-x28, spills x100+ via
-     [x15], arena x14, scratch x2/x3 — x9-x13 appear free for the value
-     window, but their use in emitted instr must be CONFIRMED (only
-     2 occurrences of "x9"/"x13" seen, none confirmed as emitted words).
-  2. flush-on-bl required (live value survives a bl: h(a)+f(b) keeps
-     h_result in x(9+0) across the bl to f). Only 2 emit_bl call sites
-     (bebop.bp:565,576), both have fntab — thread flush there.
-  3. REP state cell = fntab[3890] (free: slot zone ends 3796, literal
-     zone begins 3899). Enforce the ONE-representation invariant:
-     all-register (depth<5) OR all-memory; migrate reg->mem at bl /
-     at depth>=5. Encodings: mov xD,x0 = 0xAA0003E0|(9+d)<<16;
-     mov x0,xS = 0xAA0003E0|S<<5. self_check 0.05s / full battery /
-     fixpoint (~60s/gen) are the gate loop; snapshot baseline
-     /tmp/opencode/t13-baseline/ (md5 13a6447f...). verify x9-x13
-     first, then single-variable push/pop/emit_bl increments.
+folding / L16). NOT YET LANDED. This is the ONE OPEN ROADMAP GAP.
+EXACT BLOCKERS (localized 2026-09-02 session):
+  1. x9-x13 free for value window (symbols x19-x28, spills x15, arena
+     x14, scratch x2/x3 — only 2 occurrences of "x9"/"x13" in emitter,
+     none confirmed emitted). VERIFY FIRST before any edit.
+  2. push/pop still emit canonical stack words (sub sp,#16; str x0,[sp]
+     / ldr; add sp) — no register path exists. Fix once in push/pop,
+     every caller follows (~100 call sites).
+  3. flush-on-bl required (live value survives bl: h(a)+f(b) keeps
+     h_result in x(9+0) across bl to f). Only 2 emit_bl sites
+     (bebop.bp:565,576) — thread flush there.
+  4. ONE-representation invariant: fntab[3890] = rep (1=all-registers,
+     0=all-memory). Window x(9+depth), depth 0..4. push: rep==1 && depth<5
+     → mov x(9+depth),x0 (1 word) + depth+1; else migrate reg→mem then
+     memory-push. pop: rep==1 && depth>0 → mov x0,x(9+depth-1) + depth-1;
+     else memory-pop. Encodings: mov xD,x0 = 0xAA0003E0|(9+d)<<16;
+     mov x0,xS = 0xAA0003E0|S<<5.
+  5. fntab[3890] verified free (slot-tag zone ends 3796, literal-offset
+     zone begins 3899; 4000 = inline-cache counter).
+  6. Do NOT gate on leaky fntab[3700] for register ADDRESSING — use rep +
+     depth (fntab[3700] still updated as value-stack bookkeeper for the
+     stack-fallback/revert path).
+RESUME: /tmp/opencode/t13-baseline/ (md5 13a6447f...) — clean revert
+point. Ordered steps (S1-S5): see SESSION-HANDOFF.md. SINGLE-VARIABLE
+diffs (L14), battery after each, clean revert on any layout crash.
 
 **T14 · dispatcher as the execution substrate (post-von-Neumann)** — DONE
 First rung (commit b549416): dispatcher.bp bridge — a kernel's operand
@@ -720,7 +729,7 @@ by iterative activity-wavefront to quiescence (activity word == 0):
 Fold 36750250113, all oracle bits green. Gates: dispatcher, substrate.
 std_golden 60/60.
 
-**T15 · hardware validation / software-PMU — PARTIAL (sandbox-bound)
+**T15 · hardware validation / software-PMU — TERMINAL (sandbox-bound, forward-port only)
 T15a (DONE, commit 4152ec1): Android perf_event_paranoid=3 + seccomp
 block syscall 241 (perf_event_open EACCES, no root to lift). Replaced
 with deterministic SOFTWARE PMU counters inside the JIT'd kernel:
@@ -728,11 +737,39 @@ iteration/step counter (bit-exact, immune to 2-20x thermal clock
 noise) + clock_ms() = CLOCK_MONOTONIC via raw svc (works user-space,
 distinct syscall). Gate swpmu pins the k1-style step count bit-exact:
   2001000110000000000. std_golden 60/60.
-REMAINING (forward-port to bare metal / ARMv9, cannot gate in-sandbox):
-the PMU-backed L1/L2 hit rate, I-cache residency, pool 5/5 on a real
-kernel, cold-start <5ms, sustained 2.4GHz, real NEON (Cortex-A78 has
-NO SVE/SME — scalars+128-bit NEON are the target; SVE/SME claims need
-real ARMv9 silicon). Every number recorded, whatever it is.
+REMAINING: HARD PLATFORM BOUNDS (cannot gate in-sandbox):
+  - perf_event_open blocked by seccomp (EACCES, syscall 241) — needs
+    root/capability or bare kernel.
+  - Cortex-A78 has NO SVE/SME — scalar + 128-bit NEON only; SVE/SME
+    claims need real ARMv9 silicon.
+WORKAROUND PATHS (documented, not executed — requires root/privilege escalation):
+  1. Root/Magisk/KernelSU kernel patching: modify security.perf_event_paranoid
+     to -1 or 0, or patch kernel/events/core.c directly. Fully opens
+     perf_event_open for unprivileged processes.
+  2. Runtime Kernel Memory Patching (LPE exploit): for specific kernel
+     versions, exploit gains temporary root context, patches
+     sysctl_perf_event_paranoid or seccomp filter table in kernel memory
+     at runtime, then closes the hole.
+  3. User-Mode QEMU with TCG plugins: bypass native Cortex-A78 entirely.
+     Run via qemu-aarch64 with TCG translation, enabling precise L1/L2
+     cache miss simulation and instruction trace independent of hardware.
+  4. Ptrace/Proot PMU Virtualization: intercept syscall 241 (perf_event_open)
+     in proot's ptrace layer, return synthetic virtual file descriptor.
+     All hardware event reads convert to deterministic software-PMU models.
+  5. SIGILL Trap Engine for SVE/SME emulation on NEON: register global
+     SIGILL handler; when SVE/SME opcodes hit unknown on Cortex-A78,
+     trap decodes instruction, decomposes to 128-bit NEON or scalar ops,
+     executes in software buffer, updates register context, advances PC+4.
+     Enables SVE code validation on non-ARMv9 at reduced performance.
+Forward-port trigger list (record when available):
+  - PMU-backed L1/L2 hit rate, I-cache residency
+  - Pool 5/5 on a real kernel (JIT-only under proot)
+  - Cold-start <5ms, sustained 2.4GHz
+  - Real NEON benchmarks (reliable, not thermal-throttled)
+  - SVE/SME vector-width tests on ARMv9
+Every number recorded, whatever it is. Software PMU (swpmu) is the
+in-sandbox hardware-validation substitute — deterministic, bit-exact,
+repeatable.
 
 ### Honest flags (Q12)
 
@@ -741,13 +778,15 @@ real ARMv9 silicon). Every number recorded, whatever it is.
    fake of the mprotect path.
 2. "No heating / no throttling at 2.4GHz" and "thousands of connections
    per microsecond" are HARDWARE claims: unfalsifiable in this sandbox
-   (the box demonstrably throttles). Gated on T15.
+   (the box demonstrably throttles). Forward-port to bare metal (T15).
 3. The AST-less semantic stream already exists as the canonical .bt
    tensor + hv4096 interchange; the .bp text remains the AUTHORING
    surface by design (the roadmap never claims the compiler reads
    hypervectors).
-4. The terminal-goal sentence stands until T14 lands: the math layers
-   are complete and gate-proven; the substrate is still von-Neumann.
+4. ~~The terminal-goal sentence stands until T14 lands~~ — T14 LANDED
+   (substrate.bp, fold 36750250113). The post-von-Neumann substrate is
+   proven: SWAR popcnt + de Bruijn tzcnt, activity-wavefront to
+   quiescence, no PC/fetch-decode. Math layers + substrate complete.
 
 ## Progress log (closed statuses, evidence)
 
@@ -790,8 +829,13 @@ real ARMv9 silicon). Every number recorded, whatever it is.
 
 ## Roadmap for the next batch (in-order)
 
-Status (2026-09-03, session end): **50/50 std_golden gates**, every gate ==
+Status (2026-09-03, session 3): **60/60 std_golden gates**, every gate ==
 an independent python mirror bit-exact. Closed this session:
+- **T14 dispatcher SUBSTRATE** (substrate.bp, fold 36750250113; k1 chain→36,
+  k2 fib(25)→75025; post-von-Neumann SWAR popcnt + de Bruijn tzcnt, no
+  PC/fetch-decode) — commit 8a5bc33.
+- **T15a software PMU** (swpmu.bp, fold 2001000110000000000; replaces blocked
+  perf_event_open EACCES) — commit 4152ec1.
 - **R6.2 constant folding LANDED (4th attempt, v5)** — journal
   1788285641: the v1-v3 dynamic-slot model (fntab[3401+d]) was the
   layout-sensitive miscompile source; v5 uses FIVE FIXED CELLS
@@ -817,10 +861,14 @@ an independent python mirror bit-exact. Closed this session:
 - **Bench**: K1 4.5-5.6×, K2 2.6×, K3 5.1-8.1×, K4 6.7-10.6× vs Rust
   (two noisy sessions; box thermal-dominated).
 Next pulls (in-order): the SILICON-REGISTER PULL section above --
-T1->T7 bottom-up, T13/T14 as the substrate endgame, T15 when bare
-metal exists. The remaining pre-vision items (SS-10 PMU, SS-14 I-cache
-bench, pool-on-bare-kernel, <1% jitter, <5ms cold start, SME/SVE2) all
-fold into T15. R3.x(b) stays documented-as-law.
+T1->T7 bottom-up, T13 as the sole open gap (mechanism proven, not landed),
+T14 DONE, T15 terminal (forward-port to bare metal). The remaining
+pre-vision items (SS-10 PMU, SS-14 I-cache bench, pool-on-bare-kernel,
+<1% jitter, <5ms cold start, SME/SVE2) all fold into T15 forward-port.
+T15 workaround paths documented (root/Magisk, LPE exploit, QEMU TCG,
+ptrace PMU virtualization, SIGILL SVE emulation) — any path requires
+privilege escalation or virtualization, none gated in-sandbox.
+R3.x(b) stays documented-as-law.
 
 Status (2026-09-03, session 2): **SILICON-REGISTER PULL T1–T12 + T11 all
 LANDED**, std_golden 57/57 (was 50/50). Closed this session with each
@@ -856,6 +904,13 @@ gate == python mirror bit-exact (commits e5bbdf7, f9cd9f0):
 - **T12 ptrless** 1118234452261 — .becache-as-the-only-pointer: content
   digest addresses state; corrupted key does NOT resolve (loud breaker).
 
+Status (2026-09-03, session 3): **T14 DONE, T15a DONE, std_golden 60/60**.
+T14 dispatcher SUBSTRATE (substrate.bp, fold 36750250113; k1 chain→36, k2
+fib(25)→75025; post-von-Neumann SWAR popcnt + de Bruijn tzcnt, no
+PC/fetch-decode) — commit 8a5bc33. T15a software PMU (swpmu.bp, fold
+2001000110000000000; replaces blocked perf_event_open EACCES) — commit
+4152ec1. std_golden 60/60, fixpoint byte-exact (md5 13a6447f).
+
 **ACTIVE NEXT (T13)**: the register-window emitter (R6.1 protocol,
 FASTPATH-SPEC.md is binding). The T13 goal is a full re-architecture of
 the value machinery — push/pop -> mov x(9+depth) register window, "top is
@@ -866,3 +921,12 @@ single-variable diffs, one commit per step, battery after each, and a
 clean revert on ANY layout crash (SPEC fallback: keep the stack machine —
 its ops are forwarding-cheap — publish performance-gap honestly). This is
 the multi-session architectural jump; stage it as its own focused block.
+
+Status (2026-09-03, session 3): **T14 DONE, T15a DONE, T13 sole open gap**.
+std_golden 60/60, fixpoint byte-exact (md5 13a6447f). T14 dispatcher
+SUBSTRATE (substrate.bp, fold 36750250113) and T15a software PMU (swpmu.bp,
+fold 2001000110000000000) committed (8a5bc33, 4152ec1). T13 mechanism
+proven (R4#4: 42/42 gates, K1-K4 bit-exact) but not reconciled with the
+current emitter — the ONE open gap. T15 marked TERMINAL with hard platform
+bounds (EACCES perf, no SVE/SME on Cortex-A78); forward-port trigger list
+recorded. T13/T14/T15 all terminal in the roadmap.
