@@ -60,6 +60,46 @@ garbage collectors, no intermediate interpreters.
 - **Multiversal superposition**: all potential agent logic states are held as a
   weighted superposition of hypervectors (hv4096). Deterministic collapse to
   reality occurs at the intersection of eigenvectors.
+- **Tensor database as the language (T16-T21)**: the language IS the database —
+  data = tensor fields on a manifold; queries = Einstein summation; integrity/
+  audit = the generalized Stokes theorem (`∫∂Ω ω = ∫Ω dω`); schema/migrations =
+  the metric tensor and Jacobian coordinate transforms. There is no SQL, no
+  relational tables, no WAL locks — the relational paradigm is replaced by
+  tensor calculus. The impedance gap between "execution of code" and "execution
+  of a query" disappears: memory, persistence and the compiler are ONE type
+  system. **dowiz-core (Rust) is the reference implementation of this
+  geometry; Bebop is its self-hosted post-von-Neumann form** (each Rust module
+  has a `.bp` twin with a gate). This is not a bolt-on database — it is a
+  continuation of the post-von-Neumann vision where the substrate dispatcher
+  (T14) and the tensor engine converge.
+
+## Tensor-Database-as-Language — cross-links to dowiz-core (Rust reference impl)
+
+The tensor/geometry vision is NOT speculative here: `crates/dowiz-core` (the
+Rust twin repo of bebop-lang) already implements most of it. Bebop's job is to
+be the self-hosted post-von-Neumann form, with each Rust module getting a `.bp`
+twin + gate. Mapped cross-links (dowiz-core → bebop-lang twin):
+
+| dowiz-core (Rust reference) | Bebop twin (target) | Feature |
+|---|---|---|
+| `src/tensor.rs` (Tensor1/Tensor2) | `matrix.bp`/`blas.bp` DONE + `tdg.bp` T16 | rank-n arrays, dot/mul/transpose |
+| `src/csr.rs`, `src/spectral.rs`, `src/spectral_graph.rs` | `csr.bp`/`spectral.bp` DONE | sparse fp, Laplacian, eigen |
+| `src/hypervector.rs` (VSA D=1024) | `hv.bp`/`bt.bp` DONE | bind/bundle, rank-4 codec |
+| `src/academia_p2p.rs` (MetricTensor, ChristoffelSymbols, RiemannTensor, geodesic, sectional/scalar curvature) | `tdggeo.bp`/`tdgcurv.bp` T17-18 | full differential geometry |
+| `src/parametric_spectral.rs` (parametric manifold, O(1) insert/search, geodesic distance) | `tq.bp` T20 | tensor query engine (manifold DB) |
+| `src/memory_search.rs` (geodesic_distance, gaussian_curvature, BM25+PPR fusion) | `tdgstokes.bp`+retrieval T19/21 | manifold memory / audit |
+| `src/retrieval/` (bm25, spine, recall, ppr, diffusion) | tensor-DB retrieval twins T20-21 | the "database" layer |
+| `src/fdr/pmu.rs`, `src/autonomic_pmu.rs` (PmuStamp, PmuBand) | `swpmu.bp` DONE (T15a) | software PMU cross-validated |
+| `src/ktg2/fractal_manchester.rs` (FMA, Manchester transitions) | `dispatcher.bp`/`substrate.bp` DONE (T14) | post-von-Neumann substrate |
+| `src/bebop_bridge.rs` (eigen/wave/trinary → bebop protocol) | bebop protocol | existing spectral bridge |
+| `microphysics/*.wgsl`, `engine/src/shaders/` (WebGPU) | tensor-op → shader export T20 | GPU/WebGPU query execution |
+
+Method: **port-from-reference, not build-from-scratch.** The math (Christoffel,
+Riemann, curvature, geodesic, manifold storage) is proven in Rust. Each `.bp`
+twin is a gate (`fn main() -> i64` fold == python mirror that itself mirrors
+the Rust numeric oracle). This makes T16-T21 a porting ladder from a known-good
+reference, not novel research — dramatically de-risking the "tensor database"
+ambition and reusing the established gate discipline.
 
 ---
 
@@ -771,6 +811,74 @@ Every number recorded, whatever it is. Software PMU (swpmu) is the
 in-sandbox hardware-validation substitute — deterministic, bit-exact,
 repeatable.
 
+### Tensor Database Engine as the language (T16-T21) — port-from-reference
+
+T16-T21 make the terminal goal concrete: **the language IS the tensor
+geometric data engine** — memory, persistence and queries are one type
+system, no SQL/WAL/relational layer. Method = port-from-reference: every
+feature already proven in `crates/dowiz-core` (Rust) gets a `.bp` twin
+with a gate (`fn main() -> i64` fold == independent python mirror that
+mirrors the Rust numeric oracle). In-order, lowest-risk first.
+
+**T16 · Einstein index notation + metric tensor (contract, lower/raise)** —
+`selfhost/std/tdg.bp`
+GOAL: rank-n tensor as flat index (`.bt` codec already), Einstein summation
+over a repeated index, metric tensor g_ij (i64 fixed-point 2^32) to lower/
+raise indices (v_i = g_ij v^j, v^i = g^ij v_j).
+DONE-CHECK: gate == python mirror of dowiz-core `tensor.rs` dot + a 2x2
+metric lower/raise example. DEPS: bt.bp, matrix.bp. BLOCKERS: none.
+
+**T17 · Christoffel symbols + covariant derivative** —
+`selfhost/std/tdggeo.bp`
+GOAL: Γ^k_ij from the metric (first/second kind), covariant derivative
+∇_i V^j = ∂_i V^j + Γ^j_ik V^k (flat metric → ∇ == ∂, the falsifiable
+degeneracy).
+DONE-CHECK: gate == python mirror of dowiz-core `academia_p2p.rs`
+`christoffel()`; flat-metric degeneracy gate. DEPS: T16. BLOCKERS: none.
+
+**T18 · Riemann / Ricci / scalar curvature** — `selfhost/std/tdgcurv.bp`
+GOAL: Riemann tensor R^i_jkl from Γ, Ricci R_jl = R^i_jil, scalar R.
+Falsifiable oracle: **S² (unit sphere, known sectional curvature) —
+table-driven known values, not invented.**
+DONE-CHECK: gate == python mirror of dowiz-core `academia_p2p.rs`
+`sectional_curvature`/`scalar_curvature` on a known-geometry input
+(e.g. 2-sphere), all bit-exact i64 fp. DEPS: T17. BLOCKERS: none.
+
+**T19 · Differential forms + exterior derivative d** —
+`selfhost/std/tdgforms.bp`
+GOAL: k-form as alternating tensor, wedge product, exterior derivative d.
+Falsifiable invariant: **d(dω) = 0** (Poincaré lemma) must hold bit-exact
+on convenience 2-forms. (Stokes on a 0/1-form boundary as the audit hook.)
+DONE-CHECK: gate == d(dω) == 0 on a table-driven 2-form; python mirror.
+DEPS: T16. BLOCKERS: none.
+
+**T20 · Tensor Query Engine (manifold database core)** — `selfhost/std/tq.bp`
+GOAL: data as tensor fields on a manifold; queries as Einstein contractions/
+nearest-neighbor geodesic lookup — port of dowiz-core `parametric_spectral.rs`
+(top-2 eigen parametric surface, O(1) insert/search) + `memory_search.rs`
+(geodesic_distance) into .bp. "SELECT" ≡ contraction; "JOIN" ≡ tensor product
++ index contraction; "INDEX" ≡ parametric manifold coordinates.
+DONE-CHECK: gate == python mirror: insert N points, query nearest by
+geodesic distance on the manifold, all bit-exact. DEPS: T16, spectral.bp,
+bt.bp. BLOCKERS: none.
+
+**T21 · Stokes' theorem as audit/transaction invariant** —
+`selfhost/std/tdgstokes.bp`
+GOAL: audit the data engine — a transaction's total change across the
+manifold's interior equals the boundary flux: ∫∂Ω ω = ∫Ω dω, computed as
+discrete sums of i64 fp, bit-exact. This is the WAL/ACID-free integrity
+guard: every committed update satisfies Stokes (no “lost update”, no torn
+reads) — the SQL transaction rollback paradigm replaced by a geometric
+conservation law.
+DONE-CHECK: gate == python mirror at or above machine precision on a
+table-driven field; zero false Stokes violations. DEPS: T19, T20.
+BLOCKERS: none.
+
+Porting ladder marshal (per column, L14 single-variable): bt.bp/matrix.bp
+exist → T16 → T17 → T18 → T19; T20 builds on T16+spectral+bt; T21 caps on
+T19+T20. Every column = one file + `fn main() -> i64` + gate appended to
+`bench/vs_rust/std_golden.sh`.
+
 ### Honest flags (Q12)
 
 1. mprotect RWX is BLOCKED under proot W^X (documented since M4); the
@@ -870,6 +978,15 @@ ptrace PMU virtualization, SIGILL SVE emulation) — any path requires
 privilege escalation or virtualization, none gated in-sandbox.
 R3.x(b) stays documented-as-law.
 
+After T15's terminal bounds (forward-port only), the language work
+CONTINUES in-sandbox via **T16-T21: Tensor Database Engine as the language**
+(see the SILICON-REGISTER PULL section). These replace no existing gate;
+they port dowiz-core's proven tensor/geometry into self-hosted `.bp` twins
+(contract → Christoffel → curvature → forms → query engine → Stokes audit),
+each with a `fn main() -> i64` gate == python mirror of the Rust oracle.
+The substrate (T14) + tensor engine (T16-T21) converge into the terminal
+goal: a post-von-Neumann language that IS a geometric data engine.
+
 Status (2026-09-03, session 2): **SILICON-REGISTER PULL T1–T12 + T11 all
 LANDED**, std_golden 57/57 (was 50/50). Closed this session with each
 gate == python mirror bit-exact (commits e5bbdf7, f9cd9f0):
@@ -930,3 +1047,9 @@ proven (R4#4: 42/42 gates, K1-K4 bit-exact) but not reconciled with the
 current emitter — the ONE open gap. T15 marked TERMINAL with hard platform
 bounds (EACCES perf, no SVE/SME on Cortex-A78); forward-port trigger list
 recorded. T13/T14/T15 all terminal in the roadmap.
+
+T16-T21 (Tensor Database Engine as the language) columns defined, ordered
+contract→Christoffel→curvature→forms→query→Stokes, each a port from
+dowiz-core Rust reference (academia_p2p.rs / tensor.rs / parametric_spectral.rs
+/ memory_search.rs) into `.bp` twins with gates. Cross-link table in the
+SILICON-REGISTER PULL section maps every Rust module to its Bebop twin.
