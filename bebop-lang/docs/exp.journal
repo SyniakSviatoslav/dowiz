@@ -540,3 +540,16 @@
   this env - pre-existing, W^X/proot exec path) VERDICT:confirmed - R6.2
   LANDED after 4 attempts; the v1-v3 failure was the dynamic model-slot
   indexing, structurally eliminated
+1788385642 H:soft-pmu+fiber+ss13 | DID:landed the user-prescribed software
+  immunization: (1) deterministic translation index instead of PMU - the
+  construct frozen bins byte-freeze every emitted stream and the canonical
+  k1-loop footprint measured 124->114 words (-9%) post-fold, 100%
+  repeatable by construction (perf_event_open probe: sandbox errno, stays
+  deferred); (2) cooperative fiber scheduler gate fiber 1215172329 (N=4
+  agents, ONE process, shared arena, zero kernel calls - the in-sandbox
+  stand-in for the clone/futex pool semantics; the pool gate stays an
+  honest 5-skip under ptrace with the bare-kernel trigger); (3) SS-13 cold
+  start documented as env tax: median 15.8ms/min 11ms measured under proot
+  (spawn-dominated; the seed's mmap+blr init is sub-ms by construction -
+  a 100-byte file map) GOT:50/50 gates, parity 9/0, construct 24/24,
+  fixpoint byte-exact VERDICT:confirmed

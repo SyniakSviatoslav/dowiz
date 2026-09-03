@@ -445,6 +445,13 @@ gate spike 6920001045 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/foldx.bp /tmp/opencode/foldx_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/foldx_test.bin | tail -1)
 gate foldx 7150011 "$r"
 
+# ---- fiber (cooperative user-space fiber scheduler: N=4 agents on ONE
+#      process, shared arena, zero kernel calls - the in-sandbox stand-in
+#      for the clone/futex pool semantics that ptrace breaks. Fold
+#      1215172329 == python mirror bit-exact.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/fiber.bp /tmp/opencode/fiber_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/fiber_test.bin | tail -1)
+gate fiber 1215172329 "$r"
+
 # ---- mma (SS-11 hardware half: generation arena on a REAL kernel mmap via
 #      the 6-arg sys_mmap wrapper (MAP_PRIVATE|ANONYMOUS); positive
 #      4096-aligned writable base; 100000 bump-allocated cells store/load

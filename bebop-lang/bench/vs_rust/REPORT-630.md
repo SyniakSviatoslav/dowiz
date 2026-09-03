@@ -1,23 +1,31 @@
 # Bebop vs Rust — R6.3 Bench (2026-09-02)
 
-## Rerun 2026-09-03 (final status of the roadmap-pull session)
+## Final rerun 2026-09-03, post-R6.2 (constant folding landed)
 
-Same method, same box, back-to-back, medians of 31 runs, the compiler at
-the while-boundary-fix state (bebop.bin md5 be922030..., fixpoint
-bb2==bb3, std_golden 48/48, parity 9/0, construct 24/24):
+Same method, same box, medians of 31 runs each. Two back-to-back sessions
+of the run_bench harness with the R6.2 v5 compiler (fixed-cell constant
+fold + right-const imm12 path; fixpoint byte-exact md5 13a6447f...,
+std_golden 50/50, parity 9/0, construct 24/24):
 
-| kernel              | Bebop (median) | Rust (median) | Bebop/Rust | Bebop p95 |
-|---------------------|---------------:|--------------:|-----------:|----------:|
-| K1 sum-loop 1M      |      34.00 ms  |      7.99 ms  |      4.3×  |  44.00 ms |
-| K2 fib(25)          |       4.40 ms  |      2.11 ms  |      2.1×  |   5.00 ms |
-| K3 nested 300×300   |       2.10 ms  |      0.56 ms  |      3.7×  |   2.30 ms |
-| K4 arith-chain 2M   |      62.00 ms  |      9.12 ms  |      6.8×  |  73.00 ms |
+| kernel              | Bebop ms (run A / run B) | Rust ms (A / B) | Bebop/Rust |
+|---------------------|--------------------------|-----------------|------------|
+| K1 sum-loop 1M      | 30.00 / 30.00            | 5.39 / 6.67     | 5.6× / 4.5× |
+| K2 fib(25)          | 4.10 / 4.10              | 1.56 / 1.56     | 2.6× / 2.6× |
+| K3 nested 300×300   | 2.10 / 2.10              | 0.26 / 0.41     | 8.1× / 5.1× |
+| K4 arith-chain 2M   | 64.00 / 59.00            | 6.05 / 8.86     | 10.6× / 6.7× |
 
-vs the 2026-09-02 numbers: K1 5.3×→4.3×, K2 3.0×→2.1×, K3 6.9×→3.7×,
-K4 9.7×→6.8×. The Rust medians also moved (5.82→7.99 on K1) — the box
-remains load-sensitive; treat the direction, not the exact cells. The
-R6.2 constant fold is NOT in this build (reverted per journal
-1788285630); these numbers are the honest stack-machine baseline.
+Notes, honest:
+- The box is thermal/noise-dominated: K1 measured 11.00 ms in one cool
+  run right after the imm12 landed (3.8× vs a 2.91 ms Rust median), then
+  30.00 ms across the two final sessions. The imm12 fold's structural
+  win on K1's hot loop (`i - 1` -> `sub x0,#1`, 5 words instead of 10)
+  is real; the wall-clock is throttle-bound. Canonical k1-loop footprint
+  shrunk 124 -> 114 words (-9%, deterministic).
+- Rust medians swing 2.9-8.9 ms for the same binary across sessions -
+  treat the Bebop-vs-Rust ratio as 2.6-10× today with K2 the tightest.
+- The FASTPATH-SPEC's done-check (K1/K4 >= 1.0× vs Rust) remains UNMET:
+  the fold is the first rung; the register-aware emitter (R6.1 protocol,
+  no word rewrites) is the remaining design for closing it.
 
 Environment: aarch64 Linux (proot/Ubuntu, the same box as the 2026-08-23
 report). Bebop = the self-hosted compiler at the R6.1+guards state
