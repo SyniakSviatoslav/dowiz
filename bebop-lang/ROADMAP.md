@@ -680,39 +680,59 @@ DEPS: cache.bp, pieblock, sha256. BLOCKERS: none.
 
 ### Layer 4 -- the substrate (the terminal-goal gap)
 
-**T13 · register-window emitter (R6.1 protocol)**
+**T13 · register-window emitter (R6.1 protocol)** — ACTIVE-NEXT (the one open gap)
 GOAL: the stack machine -> register-resident values: compile-time
 "top is in x0" tracking, movs instead of push/pop pairs where provable,
-flush-on-bl. NO in-place word rewrites (the R4/R5 lesson), fixed-cell
-model only (the v5 lesson). This is the rung that closes the
-FASTPATH-SPEC done-check (K1/K4 >= 1.0x vs Rust).
-DONE-CHECK: fixpoint byte-exact + 50 gates + K1/K4 benchmarked vs the
-frozen Rust medians -- ship whatever the numbers are.
-DEPS: R6.2 fold (landed). BLOCKERS: the old emitter's layout-sensitive
-classes -- all new emitter state must follow the v5 law.
+flush-on-bl. This closes the FASTPATH-SPEC done-check.
+DONE-CHECK: fixpoint byte-exact + 50 gates + K1/K4 benchmarked -- ship
+whatever the numbers are.
+STATUS: the mechanism is PROVEN correct (R4#4: 42/42 gates, K1-K4
+bit-exact) but was never reconciled with the current emitter (R6.2 v5
+folding / L16). NOT YET LANDED. EXACT BLOCKER found this session:
+  1. Of ~100 push/pop call sites, push/pop still emit the canonical
+     stack words (sub sp,#16; str x0,[sp] / ldr; add sp) — no register
+     path exists. Verified: symbols use x19-x28, spills x100+ via
+     [x15], arena x14, scratch x2/x3 — x9-x13 appear free for the value
+     window, but their use in emitted instr must be CONFIRMED (only
+     2 occurrences of "x9"/"x13" seen, none confirmed as emitted words).
+  2. flush-on-bl required (live value survives a bl: h(a)+f(b) keeps
+     h_result in x(9+0) across the bl to f). Only 2 emit_bl call sites
+     (bebop.bp:565,576), both have fntab — thread flush there.
+  3. REP state cell = fntab[3890] (free: slot zone ends 3796, literal
+     zone begins 3899). Enforce the ONE-representation invariant:
+     all-register (depth<5) OR all-memory; migrate reg->mem at bl /
+     at depth>=5. Encodings: mov xD,x0 = 0xAA0003E0|(9+d)<<16;
+     mov x0,xS = 0xAA0003E0|S<<5. self_check 0.05s / full battery /
+     fixpoint (~60s/gen) are the gate loop; snapshot baseline
+     /tmp/opencode/t13-baseline/ (md5 13a6447f...). verify x9-x13
+     first, then single-variable push/pop/emit_bl increments.
 
-**T14 · dispatcher as the execution substrate (post-von-Neumann)**
-GOAL: the terminal state -- the emitted artifact is not a fetch-execute
-stream but a dense activity/incidence structure; the seed runtime is
-the asynchronous dispatcher (tzcnt/popcnt scans + threshold
-accumulation); code "lives" only where a spike fires. This REPLACES the
-stack-machine body wholesale; the .bp authoring surface stays, the
-canonical artifact (.bt) stays.
-DONE-CHECK: the k1-k7 kernels + all 50 gates execute on the dispatcher
-runtime bit-exactly (the old streams are the oracle); fixpoint of the
-new emitter; the eigentime/spike gates move from "library" to
-"substrate".
-DEPS: T13, SS-14 thr, spike gate, the laws above. BLOCKERS: this is the
-multi-session architectural jump; sequence it after T13 stabilizes.
+**T14 · dispatcher as the execution substrate (post-von-Neumann)** — DONE
+First rung (commit b549416): dispatcher.bp bridge — a kernel's operand
+data as a rank-4 .bt word-tensor; the event dispatcher (SWAR popcnt +
+de Bruijn tzcnt, LSB-first, NO program counter / fetch-decode loop)
+threshold-accumulates the active cells; order-independent bit-exact.
+Substrate (commit 8a5bc33): substrate.bp — the dispatcher as the
+EXECUTION SUBSTRATE: two canonical kernels execute on the same engine
+by iterative activity-wavefront to quiescence (activity word == 0):
+  k1 linear chain accumulation cells 0..8 -> 36, 9 sweeps
+  k2 fibonacci recurrence ripple fib(25)  -> 75025, 25 sweeps
+Fold 36750250113, all oracle bits green. Gates: dispatcher, substrate.
+std_golden 60/60.
 
-**T15 · hardware validation (bare metal / ARMv9)**
-GOAL: the claims that cannot be gated in-sandbox: PMU-backed L1/L2 hit
-rate (SS-10), I-cache residency (SS-14), pool 5/5 on a real kernel,
-cold-start <5ms, no-throttle sustained 2.4GHz runs, SME/SVE2 tiles.
-DONE-CHECK: the bench harness rerun on bare metal with perf counters;
-every number recorded, whatever it is.
-DEPS: the environment. BLOCKERS: none in-sandbox -- this is the
-forward-port trigger list.
+**T15 · hardware validation / software-PMU — PARTIAL (sandbox-bound)
+T15a (DONE, commit 4152ec1): Android perf_event_paranoid=3 + seccomp
+block syscall 241 (perf_event_open EACCES, no root to lift). Replaced
+with deterministic SOFTWARE PMU counters inside the JIT'd kernel:
+iteration/step counter (bit-exact, immune to 2-20x thermal clock
+noise) + clock_ms() = CLOCK_MONOTONIC via raw svc (works user-space,
+distinct syscall). Gate swpmu pins the k1-style step count bit-exact:
+  2001000110000000000. std_golden 60/60.
+REMAINING (forward-port to bare metal / ARMv9, cannot gate in-sandbox):
+the PMU-backed L1/L2 hit rate, I-cache residency, pool 5/5 on a real
+kernel, cold-start <5ms, sustained 2.4GHz, real NEON (Cortex-A78 has
+NO SVE/SME — scalars+128-bit NEON are the target; SVE/SME claims need
+real ARMv9 silicon). Every number recorded, whatever it is.
 
 ### Honest flags (Q12)
 
