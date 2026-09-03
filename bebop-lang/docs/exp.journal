@@ -527,3 +527,16 @@
   6.9->3.7, 9.7->6.8 (all narrowed; Rust medians also moved - box noise;
   the direction is the signal) VERDICT:delivered - honest stack-machine
   baseline, R6.2 fold out per journal 1788285630, report updated
+1788385641 H:R6.2-v5 | DID:replaced the v1-v3 depth-indexed fold model with
+  FIVE FIXED CELLS (fntab[3655..3659], hard addressing, zero dynamic slot
+  arithmetic - the user-prescribed fix for the layout-sensitive slot read),
+  push/pop/emit_cond/emit_match clear the depth, emit_lit captures the
+  pre-push state and re-records, fold_try consumes; added the right-const
+  imm12 path (i+1 -> add x0,#imm: 5 words vs 10) GOT:fixpoint bb2==bb3,
+  49/49 gates (+foldx 7150011), parity 9/0, construct 24/24 (frozen bins
+  regenerated), the v3 crash repros (two discard-lets, k7, attn) all clean;
+  K1 bench 35.0ms -> 11.0ms Bebop-side (3.2x) on the imm path; 10 self_check
+  goldens regenerated via split harnesses (c37-c41 run_program stays 0 in
+  this env - pre-existing, W^X/proot exec path) VERDICT:confirmed - R6.2
+  LANDED after 4 attempts; the v1-v3 failure was the dynamic model-slot
+  indexing, structurally eliminated

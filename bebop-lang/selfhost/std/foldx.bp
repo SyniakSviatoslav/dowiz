@@ -1,0 +1,24 @@
+module core { }
+
+// foldx.bp — R6.2 v5 constant-folding regression gate (journal
+// 1788385630/1788385641): literal-pair add/sub/mul fold at emit time via
+// the fixed-cell model (fntab[3655..3659], hard addressing, no dynamic
+// slot arithmetic), with the control-flow guard: an if-expression whose
+// branches are literals must NOT be folded as a constant (v4's stream
+// decode misread the else branch; v5 clears the model in emit_cond /
+// emit_match). Fold 7150011 = a(7)*10^6 + b(14)*10^4 + d(100)*100 +
+// cok(1)*10 + eok(1), where c = 0 - 6148914691236517206 (big wrapped
+// sub fold) and e = 6148914691236517205 + 1 (big add fold).
+
+fn main() -> i64 {
+  let j = 4;
+  let a = 1 + 2 * 3;
+  let b = 2 * (3 + 4);
+  let c = 0 - 6148914691236517206;
+  let d = (if j == 4 then 1 else 0) * 100;
+  let e = 6148914691236517205 + 1;
+  let cneg = 0 - c;
+  let cok = if cneg == 6148914691236517206 then 1 else 0;
+  let eok = if e == 6148914691236517206 then 1 else 0;
+  a * 1000000 + b * 10000 + d * 100 + cok * 10 + eok
+}

@@ -439,6 +439,12 @@ gate attnt 11 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/spike.bp /tmp/opencode/spike_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/spike_test.bin | tail -1)
 gate spike 6920001045 "$r"
 
+# ---- foldx (R6.2 v5 constant folding: literal-pair add/sub/mul fold via
+#      the fixed-cell model + the control-flow guard (if-branches are NOT
+#      folded). Fold 7150011 == python mirror bit-exact.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/foldx.bp /tmp/opencode/foldx_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/foldx_test.bin | tail -1)
+gate foldx 7150011 "$r"
+
 # ---- mma (SS-11 hardware half: generation arena on a REAL kernel mmap via
 #      the 6-arg sys_mmap wrapper (MAP_PRIVATE|ANONYMOUS); positive
 #      4096-aligned writable base; 100000 bump-allocated cells store/load
