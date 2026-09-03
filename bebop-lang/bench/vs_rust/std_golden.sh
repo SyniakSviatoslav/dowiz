@@ -546,5 +546,19 @@ gate morph 11 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/dispatcher.bp /tmp/opencode/dispatcher_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/dispatcher_test.bin | tail -1)
 gate dispatcher 81001005 "$r"
 
+# ---- substrate (T14 — the dispatcher as the EXECUTION SUBSTRATE: a
+#      kernel's computation is not a fetch-execute stream but a dense
+#      activity/incidence structure drained by the async dispatcher
+#      (SWAR popcnt + de Bruijn tzcnt, LSB-first, NO program counter /
+#      fetch-decode loop). Two canonical kernels execute on the same
+#      engine, threshold-accumulating into downstream cells and iterating
+#      the activity wavefront to quiescence (activity word == 0):
+#        k1 linear chain accumulation over cells 0..8  -> 36,  9 sweeps
+#        k2 fibonacci recurrence ripple fib(25)         -> 75025, 25 sweeps
+#      Fold 36*10^9 + 75025*10^4 + ok1*10^2 + ok2*10 + sw1*2 + sw2
+#        = 36750250113, each check bit-exact vs the kernel oracles.) ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/substrate.bp /tmp/opencode/substrate_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/substrate_test.bin | tail -1)
+gate substrate 36750250113 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

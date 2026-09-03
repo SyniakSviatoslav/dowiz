@@ -1,0 +1,203 @@
+// substrate.bp — T14: the dispatcher as the EXECUTION SUBSTRATE.
+// A kernel's computation is not a fetch-execute stream: it is a dense
+// activity/incidence structure. A cell array holds the dataflow; the
+// async dispatcher (SWAR popcnt + de Bruijn tzcnt, LSB-first) drains a
+// dense activity word each sweep, threshold-accumulating contributions
+// into downstream cells. A cell becomes ready (its bit set in the NEXT
+// sweep's activity word) only when its dependency threshold is met.
+// Execution = the emergent activity wavefront, iterated to quiescence
+// (activity word == 0). NO program counter, NO fetch-decode loop.
+//
+// Two canonical kernels execute on this substrate bit-exactly:
+//   k1  linear accumulation  sum 1..N, N=8      -> N(N+1)/2 = 36
+//   k2  fibonacci recurrence fib(25) via the ripple -> 75025
+// Fold = k1*10^9 + fib25 (k2) with the same dispatcher engine.
+//
+// The ripple is deterministic and order-independent per sweep: each sweep
+// drains the SAME activity word regardless of drain order (accumulation
+// into disjoint downstream cells; LSB-first is canonical).
+
+fn popc(w: i64) -> i64 {
+  let m1 = 6148914691236517205;
+  let m2 = 3689348814741910323;
+  let mh = 1085102592571150095;
+  let x = w - ((w >> 1) & m1);
+  let x = (x & m2) + ((x >> 2) & m2);
+  let x = (x + (x >> 4)) & mh;
+  let x = x + (x >> 8);
+  let x = x + (x >> 16);
+  let x = x + (x >> 32);
+  x - (x / 128) * 128
+}
+
+fn tzidx(b: i64) -> i64 {
+  let db = zeros(64);
+  let _ = db[0] = 0;
+  let _ = db[1] = 1;
+  let _ = db[2] = 48;
+  let _ = db[3] = 2;
+  let _ = db[4] = 57;
+  let _ = db[5] = 49;
+  let _ = db[6] = 28;
+  let _ = db[7] = 3;
+  let _ = db[8] = 61;
+  let _ = db[9] = 58;
+  let _ = db[10] = 50;
+  let _ = db[11] = 42;
+  let _ = db[12] = 38;
+  let _ = db[13] = 29;
+  let _ = db[14] = 17;
+  let _ = db[15] = 4;
+  let _ = db[16] = 62;
+  let _ = db[17] = 55;
+  let _ = db[18] = 59;
+  let _ = db[19] = 36;
+  let _ = db[20] = 53;
+  let _ = db[21] = 51;
+  let _ = db[22] = 43;
+  let _ = db[23] = 22;
+  let _ = db[24] = 45;
+  let _ = db[25] = 39;
+  let _ = db[26] = 33;
+  let _ = db[27] = 30;
+  let _ = db[28] = 24;
+  let _ = db[29] = 18;
+  let _ = db[30] = 12;
+  let _ = db[31] = 5;
+  let _ = db[32] = 63;
+  let _ = db[33] = 47;
+  let _ = db[34] = 56;
+  let _ = db[35] = 27;
+  let _ = db[36] = 60;
+  let _ = db[37] = 41;
+  let _ = db[38] = 37;
+  let _ = db[39] = 16;
+  let _ = db[40] = 54;
+  let _ = db[41] = 35;
+  let _ = db[42] = 52;
+  let _ = db[43] = 21;
+  let _ = db[44] = 44;
+  let _ = db[45] = 32;
+  let _ = db[46] = 23;
+  let _ = db[47] = 11;
+  let _ = db[48] = 46;
+  let _ = db[49] = 26;
+  let _ = db[50] = 40;
+  let _ = db[51] = 15;
+  let _ = db[52] = 34;
+  let _ = db[53] = 20;
+  let _ = db[54] = 31;
+  let _ = db[55] = 10;
+  let _ = db[56] = 25;
+  let _ = db[57] = 14;
+  let _ = db[58] = 19;
+  let _ = db[59] = 9;
+  let _ = db[60] = 13;
+  let _ = db[61] = 8;
+  let _ = db[62] = 7;
+  let _ = db[63] = 6;
+  let c = 285870213051386505;
+  db[((b * c) >> 58) & 63]
+}
+
+// One dispatcher sweep over the dataflow cells. Returns the NEXT activity
+// word (cells whose dependency threshold was met this sweep).
+//   cells[i]   value of cell i
+//   need[i]    remaining incoming spikes required to make i ready (0 = ready)
+//   next       activity word of cells to fire next sweep
+//   act        current sweep's activity word
+// Drain LSB-first; for each fired index i, threshold-accumulate cells[i]
+// into downstream cells. Two topologies share one engine:
+//   chain(i->i+1):  add cells[i] to cells[i+1],  need[i+1] -= 1
+//   addend(i->i+1,i+2): add cells[i] to cells[i+1] and cells[i+2],
+//                       need[i+1] -= 1 ; need[i+2] -= 1
+// The kind bit selects which contribution/decrement pair each fired index
+// applies; per-index the choice is uniform across the whole sweep.
+fn sweep(cells: [i64], need: [i64], act: i64, kind: i64, ncell: i64) -> i64 {
+  let cnt = popc(act);
+  let a = [act];
+  let k = [0];
+  let next = [0];
+  while k[0] < cnt {
+    let lsb = a[0] - (a[0] & (a[0] - 1));
+    let i = tzidx(lsb);
+    let _ = a[0] = a[0] - lsb;
+    let d1 = i + 1;
+    let _ = cells[d1] = cells[d1] + cells[i];
+    let _ = need[d1] = need[d1] - 1;
+    let is_chain = (if kind == 0 then 1 else 0);
+    let _ = if is_chain == 0 then (let _ = cells[i + 2] = cells[i + 2] + cells[i] in (let _ = need[i + 2] = need[i + 2] - 1 in 0)) else 0;
+    let j2 = [1];
+    while j2[0] < ncell {
+      let _ = if need[j2[0]] == 0 then (let _ = next[0] = next[0] + (1 << j2[0]) in (let _ = need[j2[0]] = 0 - 1 in 0)) else 0;
+      let _ = j2[0] = j2[0] + 1;
+      0
+    };
+    let _ = k[0] = k[0] + 1;
+    0
+  };
+  next[0]
+}
+
+// Recurrence driver: iterate sweeps until the activity word empties.
+// Returns cells[nTarget] (the kernel result) and the total sweep count.
+fn drive(cells: [i64], need: [i64], ncell: i64, act0: i64, kind: i64, nTarget: i64) -> i64 {
+  let act = [act0];
+  let sw = [0];
+  while act[0] > 0 {
+    let _ = act[0] = sweep(cells, need, act[0], kind, ncell);
+    let _ = sw[0] = sw[0] + 1;
+    0
+  };
+  cells[nTarget] * 1000000 + sw[0]
+}
+
+// k1: linear chain accumulation over cells 0..8. cell[0] is seeded and
+// fired (act bit 0); each fired cell i accumulates into i+1; cell[k] ends
+// as sum 1..k. Kernel result = cell[8] = 36. Sweeps = 9 (one per cell).
+fn k1_substrate() -> i64 {
+  let cells = zeros(64);
+  let need = zeros(64);
+  let i = 0;
+  while i < 9 {
+    let _ = cells[i] = i;
+    let _ = need[i] = if i == 0 then 0 else 1;
+    let i = i + 1;
+    0
+  };
+  drive(cells, need, 9, 1, 0, 8)
+}
+
+// k2: fibonacci ripple over cells 0..25. cell[0]=0, cell[1]=1 seeded;
+// each completed cell fires into the two succeeding cells (addend
+// topology); cell[i] ends as fib(i). Kernel result = cell[25] = 75025.
+// Sweeps ~ 26.
+fn k2_substrate() -> i64 {
+  let cells = zeros(64);
+  let need = zeros(64);
+  let _ = cells[0] = 0;
+  let _ = cells[1] = 1;
+  let _ = need[0] = 0;
+  let _ = need[1] = 0;
+  let i = 2;
+  while i < 26 {
+    let _ = need[i] = 2;
+    let i = i + 1;
+    0
+  };
+  drive(cells, need, 26, 3, 1, 25)
+}
+
+fn main() -> i64 {
+  let k1res = k1_substrate();
+  let k2res = k2_substrate();
+  let k1v = k1res / 1000000;
+  let k1sw = k1res - k1v * 1000000;
+  let k2v = k2res / 1000000;
+  let k2sw = k2res - k2v * 1000000;
+  let ok1 = if k1v == 36 then 1 else 0;
+  let ok2 = if k2v == 75025 then 1 else 0;
+  let sw1 = if k1sw == 9 then 1 else 0;
+  let sw2 = if k2sw == 25 then 1 else 0;
+  k1v * 1000000000 + k2v * 10000 + ok1 * 100 + ok2 * 10 + sw1 * 2 + sw2
+}
