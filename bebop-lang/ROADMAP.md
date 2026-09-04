@@ -1479,6 +1479,14 @@ D8. (2026-09-04, after the T55 SPIKE — operator: "згідний з усім")
         D1(b) N-core throughput is THE substrate metric; the "Predicted
         speedup and memory" table is replaced by measured rows (T97,
         bench_pinned.sh) — no row without a measurement column.
+    Evidence and the measured plan P1-P10 (T96 ceilings, DRAM 12 GB/s,
+    sqlite scan 180 ms vs indexed 0.13 ms vs tq.bp O(N) geodesic ~4 s on
+    1M points, the bucketed-index mechanism that was never gated):
+    docs/SPEEDUP-ANALYSIS.md. Task ledger + TG-DONE status at d60b2c0:
+    docs/ROADMAP-AUDIT-2026-09-04.md. The analyst's delete/re-scope list
+    (T25/T26/T35 bank ABI, T55 K1-K4 rung, T57/T58/T74, T60, T98 as
+    k1/k2, T92-T95/T84/T85 for speed, T15 "8-12x") is PENDING the
+    operator — nothing is re-scoped by it yet.
 
 ### Layer V — verification foundation (truth becomes reproducible)
 
@@ -2461,7 +2469,7 @@ T52 -> T53 -> T54 -> T55.
 
 ## SPEED & CORES PULL (operator decisions D1-D7, T96-T100)
 
-**T96 · register tier for ordinary expressions (no x9-x13 window)**
+**T96 · register tier for ordinary expressions (no x9-x13 window)** — STEP 1 DONE 2026-09-04 (`pop` retracts the push it immediately follows and emits `mov x<rd>,x0` / nothing for x0; branch targets and rd=0 retractions are barred through the per-fn label cell fntab[3660] — two holes found and fixed on the way: an rd=0 retraction leaves an OLDER push adjacent with x0 != its value (bitset SIGBUS), and the label cell leaking across fns/passes made the planning pass and the emission pass disagree by 3 words (ordfsm: every bl 3 words late); K1 loop 51 -> 25 words, bebop.bin 92526 -> 67161 words (-27%), every construct re-frozen with its word delta, fuzz 150/150, fixpoint 104b6291; steps 2-3 next)
 GOAL: three single-variable steps, each its own commit with fixpoint +
 battery: (1) `pop` that sees the immediately preceding `push` of the
 same register deletes the pair (stream rewind, fold_try precedent; L16

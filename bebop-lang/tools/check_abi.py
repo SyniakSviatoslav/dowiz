@@ -35,7 +35,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROLOGUE = (0xA9BF7BFD, 0x910003FD)  # stp x29,x30,[sp,#-16]! ; mov x29,sp
 RET = 0xD65F03C0
 PRO_N, EPI_N = 10, 8                   # emit_prologue / emit_epilogue word counts
-ARGPASS = {0xF94003E0 + r for r in range(9, 14)}  # ldr x9..x13,[sp]
+ARGPASS = {0xF94003E0 + r for r in range(9, 14)} | {0xAA0003E0 + r for r in range(9, 14)}
+# ldr x9..x13,[sp] (canonical pop into an arg register) and mov x9..x13,x0 (the same
+# pop after T96 step-1 elision of its own push) -- both vanish when T25 S1 lands
 
 
 def load_bin(path):

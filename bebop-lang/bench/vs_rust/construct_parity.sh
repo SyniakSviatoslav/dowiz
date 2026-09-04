@@ -6,7 +6,11 @@ ulimit -s 65536 2>/dev/null || true  # eval recursion: 113+ fn self-compile need
 set -u
 mkdir -p "${BEBOP_TMP:-/tmp/opencode}"
 BEBOPC=./seed/build/seed
-BEBOP_BIN=./bebop.bin
+BEBOP_BIN=${BEBOP_BIN:-./bebop.bin}
+# FREEZE=1: after the value check passes, copy the candidate .bin over the frozen
+# one and print the word delta (T96: every codegen step re-freezes with an
+# asserted per-construct delta). Word mismatches are then reported, not fatal.
+FREEZE=${FREEZE:-0}
 GUARD="GUARD: bebop.bin is missing or empty (silent-artifact class, journal 1788288248)"
 [ -s "${BEBOP_BIN:-bebop.bin}" ] || { echo "$GUARD"; exit 1; }
 
@@ -21,7 +25,11 @@ for f in "$DIR"/*.bp; do
   }
   # Word-for-byte comparison against frozen artifact
   if ! cmp -s "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin" "$FROZEN/${b}.bin"; then
-    echo "WORD_MISMATCH $b"; FAIL=$((FAIL+1)); continue
+    if [ "$FREEZE" = 1 ]; then
+      echo "WORD_DELTA $b $(( $(stat -c %s "$FROZEN/${b}.bin") / 4 )) -> $(( $(stat -c %s "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin") / 4 )) words"
+    else
+      echo "WORD_MISMATCH $b"; FAIL=$((FAIL+1)); continue
+    fi
   fi
   # Execution value check
   IVAL=$(timeout 30 ./seed/build/seed "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin" | tail -1)
@@ -57,6 +65,7 @@ for f in "$DIR"/*.bp; do
     c31_nested_lit) EXPECT=1222;;
     *) EXPECT="";;
   esac
+  [ "$FREEZE" = 1 ] && [ "$IVAL" = "$EXPECT" ] && cp "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin" "$FROZEN/${b}.bin"
   if [ "$IVAL" = "$EXPECT" ]; then
     echo "MATCH $b (value $IVAL)"
     PASS=$((PASS+1))
