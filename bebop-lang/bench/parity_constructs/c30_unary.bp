@@ -1,0 +1,4 @@
+// T99/T42 literal forms (2026-09-04): unary `-` (neg), unary `!` (cmp #0;
+// cset eq), negative literal, hex literal. Expected 0x10*1000 + 3*100
+// + (-(-5))*10 + !0 + !7 = 16000 + 300 + 50 + 1 + 0 = 16351.
+fn main() -> i64 { let x = 3; let y = -5; let h = 0x10; h * 1000 + -(-x) * 100 + (-y) * 10 + !0 + !x }

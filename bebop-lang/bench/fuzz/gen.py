@@ -75,10 +75,14 @@ class Ctx:
 
     def lit(self):
         r = self.r.random()
-        if r < 0.75:
+        if r < 0.70:
             return str(self.r.randint(0, 20))
-        if r < 0.92:
+        if r < 0.85:
             return str(self.r.randint(0, 5000))
+        if r < 0.90:                                  # T99 hex literal
+            return hex(self.r.randint(0, 1 << 20))
+        if r < 0.95:                                  # T99 negative literal
+            return '-' + str(self.r.randint(1, 5000))
         return str(self.r.choice(BIG))
 
     def index(self, name, simple=False, d=1):
@@ -110,8 +114,10 @@ class Ctx:
         if r < 0.55 and self.arrays:
             a = self.r.choice(list(self.arrays))
             return '%s[%s]' % (a, self.index(a, simple, d))
-        if r < 0.78:
+        if r < 0.74:
             return self.binop(d, simple)
+        if r < 0.78:                                  # T99 unary - / !
+            return '%s(%s)' % (self.r.choice(['-', '!']), self.expr(d + 1, simple))
         if r < 0.85:
             return '(if %s then %s else %s)' % (self.expr(d + 1, simple), self.expr(d + 1, simple), self.expr(d + 1, simple))
         if r < 0.90 and not simple:

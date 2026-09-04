@@ -53,6 +53,7 @@ for f in "$DIR"/*.bp; do
     c25_matchtail) EXPECT=42;;
     c26_selfrec) EXPECT=60943;;
     c27_zeroarg) EXPECT=7;;
+    c30_unary) EXPECT=16351;;
     *) EXPECT="";;
   esac
   if [ "$IVAL" = "$EXPECT" ]; then

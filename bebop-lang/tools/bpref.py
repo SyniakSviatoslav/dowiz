@@ -12,6 +12,7 @@ Grammar mirrors bebop.bp's emitter tiers (ground truth), NOT a textbook one:
   factor := ( cmp ) | if cmp then cmp else cmp | let NAME = rhs (in|;) cmp
           | match CTOR[(cmp)] { CTOR[(v)] => cmp, ... } | [cmp, ...] | "str" | NUM
           | NAME | NAME(args) | NAME[cmp] | NAME[cmp] = cmp   (set, value 0)
+          | - factor | ! factor | 0xHEX                          (T99 forms)
   rhs    := NAME = cmp (chain-assign, value discarded) | cmp
   body   := (let NAME = rhs ; | while cmp { body } ; | NAME op= cmp ; | cmp ;)* -- value = last cmp
             a FN body must end in a tail cmp with no `;` (SyntaxError otherwise, T42);
@@ -73,7 +74,7 @@ if os.environ.get('BPREF_CPREC') == '1':
 if os.environ.get('BPREF_ASR') == '1':
     BIN['>>'] = lambda a, b: wrap(a >> (b & 63))
 
-TOK = re.compile(r'\s+|//[^\n]*|(\d+)|([A-Za-z_][A-Za-z0-9_]*)|("(?:[^"\\]|\\.)*")'
+TOK = re.compile(r'\s+|//[^\n]*|(0x[0-9a-fA-F]+|\d+)|([A-Za-z_][A-Za-z0-9_]*)|("(?:[^"\\]|\\.)*")'
                  r'|(\+\+|==|!=|<=|>=|<<|>>|=>|->|\+=|-=|\*=|/=|%=|[-+*/%&|^<>=(){}\[\],;:.!])')
 
 
@@ -81,7 +82,8 @@ def tokenize(src):
     out = []
     for m in TOK.finditer(src):
         if m.group(1):
-            out.append(('n', wrap(int(m.group(1)))))
+            g = m.group(1)
+            out.append(('n', wrap(int(g, 16) if g.startswith('0x') else int(g))))
         elif m.group(2):
             out.append(('i', m.group(2)))
         elif m.group(3):
@@ -241,6 +243,10 @@ class Parser:
         k, v = self.next()
         if k == 'n':
             return ('num', v)
+        if v == '-':                      # T99 unary minus (neg)
+            return ('neg', self.factor())
+        if v == '!':                      # T99 unary not (cmp #0; cset eq)
+            return ('not', self.factor())
         if k == 's':
             return ('str', v)
         if v == '(':
@@ -361,6 +367,10 @@ class Interp:
             return env[e[1]]
         if t == 'bin':
             return BIN[e[1]](self.ev(e[2], env), self.ev(e[3], env))
+        if t == 'neg':
+            return wrap(-self.ev(e[1], env))
+        if t == 'not':
+            return int(self.ev(e[1], env) == 0)
         if t == 'if':
             return self.ev(e[2] if self.ev(e[1], env) != 0 else e[3], env)
         if t == 'letin':
