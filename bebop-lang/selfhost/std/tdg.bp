@@ -1,4 +1,5 @@
-// prelude: fp
+use "selfhost/prelude/fp.bp"
+// (T47c 2026-09-05: was `// prelude: fp`; the expansion used to be textual via tools/gen_selfsrc.sh)
 // tdg.bp — T16: Einstein index notation + metric tensor over flat rank-n
 // storage (i64 fixed-point 2^32). Rank-3 tensor T[2][2][2] lives in one
 // flat array with strides (4,2,1) (bt.bp offset rule); a repeated index

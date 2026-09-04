@@ -1,4 +1,5 @@
-// prelude: fp
+use "selfhost/prelude/fp.bp"
+// (T47c 2026-09-05: was `// prelude: fp`; the expansion used to be textual via tools/gen_selfsrc.sh)
 // calcbound.bp — SS-5: calculus bounding (mean-value theorem + slope bounds
 // -> automatic bounding boxes for mutations). f(x) = x^2 - x in fp 2^32;
 // base x0 = 1.0; five golden mutations d in {-1/8, -1/16, 0, +1/16, +1/8}.

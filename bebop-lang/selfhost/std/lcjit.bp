@@ -1,4 +1,5 @@
-// prelude: fp
+use "selfhost/prelude/fp.bp"
+// (T47c 2026-09-05: was `// prelude: fp`; the expansion used to be textual via tools/gen_selfsrc.sh)
 // lcjit.bp — SS-3 jitter half: the LC-resonant agent loop's period jitter
 // over 1000+ real cycles, measured in-process with clock_ms (the sys_clock
 // builtin that was missing when SS-3 core landed). One "cycle" = one

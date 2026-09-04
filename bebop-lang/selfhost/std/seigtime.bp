@@ -1,4 +1,6 @@
-// prelude: fp rng
+use "selfhost/prelude/fp.bp"
+use "selfhost/prelude/rng.bp"
+// (T47c 2026-09-05: was `// prelude: fp rng`; the expansion used to be textual via tools/gen_selfsrc.sh)
 // seigtime.bp — SS-17: eigentime (time = spectral iteration).
 // Synchronization = number of Hotelling iterations until the iterate ENTERS AN
 // EXACT CYCLE of the power map (not a wall clock). Slow clock = C8+I ring

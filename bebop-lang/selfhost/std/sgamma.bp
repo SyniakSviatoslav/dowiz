@@ -1,4 +1,6 @@
-// prelude: fp rng
+use "selfhost/prelude/fp.bp"
+use "selfhost/prelude/rng.bp"
+// (T47c 2026-09-05: was `// prelude: fp rng`; the expansion used to be textual via tools/gen_selfsrc.sh)
 // sgamma.bp — SS-16: eigenvalues as control-flow metrics.
 // Machine (embedded, gate-validated): fp_mul/isqrt/lcg/spmv/normalize/topk +
 // csr_from_dense from spectral.bp (SS-6). Connected P8+selfloop vs disconnected

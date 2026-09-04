@@ -1,4 +1,5 @@
-// prelude: fp
+use "selfhost/prelude/fp.bp"
+// (T47c 2026-09-05: was `// prelude: fp`; the expansion used to be textual via tools/gen_selfsrc.sh)
 // fir.bp — SS-4: FIR as a structural ban on cyclic dependencies (BIBO).
 // Forward-only flow: y = sum h[k]*x[k], fixed 4 taps h = {1, 1/2, 1/4, 1/8}
 // (bounded masked iteration - the tap count is a literal, no data-dependent

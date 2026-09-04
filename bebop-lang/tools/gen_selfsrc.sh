@@ -3,16 +3,17 @@
 # Usage: gen_selfsrc.sh <out.bp> <bootstrap-path-string>   (LEGACY mode, T45: reads selfhost/attic/expr_compile.bp)
 #        gen_selfsrc.sh std [outdir]   (T38) expand every gate source: for each
 #        bench/vs_rust/std_tests/<g>.bp write outdir/<g>.bp = the prelude files named
-#        on line 1 of selfhost/std/<g>.bp (`// prelude: fp bits hash rng`, header
-#        order) followed by selfhost/std/<g>.bp verbatim; no header = verbatim copy.
+#        = selfhost/std/<g>.bp verbatim (T47c: preludes come in through `use` lines).
 set -e
 if [ "$1" = std ]; then
   OUTDIR="${2:-bench/vs_rust/std_tests}"; mkdir -p "$OUTDIR"
   for t in bench/vs_rust/std_tests/*.bp; do
     g=$(basename "$t"); src="selfhost/std/$g"
     [ -f "$src" ] || { echo "$src: missing (gate source without a selfhost/std twin)" >&2; exit 1; }
-    { for p in $(sed -n '1{/^\/\/ prelude:/s/^\/\/ prelude://p}' "$src"); do cat "selfhost/prelude/$p.bp"; done
-      cat "$src"; } > "$OUTDIR/$g"
+    # T47c (2026-09-05): the prelude is included by `use "selfhost/prelude/<m>.bp"` lines
+    # inside the gate source now (bebop.bin resolves them at compile time); the
+    # std_tests copy is verbatim. The old `// prelude:` header concatenation is gone.
+    cat "$src" > "$OUTDIR/$g"
   done
   echo "$OUTDIR: $(ls "$OUTDIR"/*.bp | wc -l) gate sources expanded"
   exit 0

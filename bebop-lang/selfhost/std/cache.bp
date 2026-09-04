@@ -1,4 +1,7 @@
-// prelude: fp hash rng
+use "selfhost/prelude/fp.bp"
+use "selfhost/prelude/hash.bp"
+use "selfhost/prelude/rng.bp"
+// (T47c 2026-09-05: was `// prelude: fp hash rng`; the expansion used to be textual via tools/gen_selfsrc.sh)
 // spectral.bp — SPECTRAL tier: fixed-point twin of dowiz-core/src/spectral.rs
 // topk_symmetric (power method + Hotelling deflation over CSR spmv).
 // Scale: 2^32 i64 fixed-point (fp(x) = x * 2^32). Determinism laws inherited

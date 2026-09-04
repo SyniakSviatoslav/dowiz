@@ -1,4 +1,5 @@
-// prelude: bits
+use "selfhost/prelude/bits.bp"
+// (T47c 2026-09-05: was `// prelude: bits`; the expansion used to be textual via tools/gen_selfsrc.sh)
 // spike.bp — the event-driven Spike Dispatcher (biti/dispatch tier): a
 // dense bit-array of activity flags is scanned without queues by
 // hardware-grade bit math — SWAR popcnt for the spike count and a

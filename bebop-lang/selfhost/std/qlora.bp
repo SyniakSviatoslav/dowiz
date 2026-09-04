@@ -1,4 +1,5 @@
-// prelude: fp
+use "selfhost/prelude/fp.bp"
+// (T47c 2026-09-05: was `// prelude: fp`; the expansion used to be textual via tools/gen_selfsrc.sh)
 // qlora.bp — SS-7: QLoRA 4-bit agentic evolution. Strategy weights W (8 fp
 // cells) quantized to 4-bit signed (qa = round(|w|*8) -> q in -7..7, error
 // <= 1/16 per element); live update = rank-1 adapter dW[i] = A[i]*B[i] at

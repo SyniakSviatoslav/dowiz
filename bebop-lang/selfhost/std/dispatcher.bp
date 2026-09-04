@@ -1,4 +1,5 @@
-// prelude: bits
+use "selfhost/prelude/bits.bp"
+// (T47c 2026-09-05: was `// prelude: bits`; the expansion used to be textual via tools/gen_selfsrc.sh)
 // dispatcher.bp — T14 first rung: the .bt bridge artifact. A kernel's
 // operand data lives as a rank-4 .bt word-tensor; execution = the event
 // dispatcher scanning a dense activity word (SWAR popcnt + de Bruijn

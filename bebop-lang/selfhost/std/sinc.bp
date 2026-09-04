@@ -1,4 +1,5 @@
-// prelude: fp
+use "selfhost/prelude/fp.bp"
+// (T47c 2026-09-05: was `// prelude: fp`; the expansion used to be textual via tools/gen_selfsrc.sh)
 // sinc.bp — SS-8: sinc(x) = sin(pi*x)/(pi*x) as the ideal interpolant for
 // tensor telemetry (no phase distortion), critical for Kalman (SS-1).
 // Fixed-point 2^32, Taylor series of sinc DIRECTLY (no division): sinc(z) =

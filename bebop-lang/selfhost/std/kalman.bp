@@ -1,4 +1,5 @@
-// prelude: fp
+use "selfhost/prelude/fp.bp"
+// (T47c 2026-09-05: was `// prelude: fp`; the expansion used to be textual via tools/gen_selfsrc.sh)
 // kalman.bp — SS-1: Kalman filter as a pure .bp computation (zero alloc,
 // zero heap, scalar-only 1-D fixed-point step response). Predict/update in
 // fp 2^32: predict x'=F*x, P'=F*P*F+Q; update S=P+R, K=P/S (32-step long

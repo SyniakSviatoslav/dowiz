@@ -1,4 +1,5 @@
-// prelude: fp
+use "selfhost/prelude/fp.bp"
+// (T47c 2026-09-05: was `// prelude: fp`; the expansion used to be textual via tools/gen_selfsrc.sh)
 // tdggeo.bp — T17: Christoffel symbols + covariant derivative (i64 fp 2^32).
 // 2-D metric g(p) at p = (x, y): polar-style g = diag(1, x^2) (curved) or
 // diag(1, 1) (flat, flag). Partials dg[k][i][j] = d_k g_ij by central

@@ -1,4 +1,6 @@
-// prelude: fp rng
+use "selfhost/prelude/fp.bp"
+use "selfhost/prelude/rng.bp"
+// (T47c 2026-09-05: was `// prelude: fp rng`; the expansion used to be textual via tools/gen_selfsrc.sh)
 // msuper.bp — N7: multiversal superposition branching (spectral collapse).
 
 // isqrt(s): floor(sqrt(s)) for 0 <= s < 2^62 — bit-by-bit restoring method,

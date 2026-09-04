@@ -1,4 +1,5 @@
-// prelude: hash
+use "selfhost/prelude/hash.bp"
+// (T47c 2026-09-05: was `// prelude: hash`; the expansion used to be textual via tools/gen_selfsrc.sh)
 // pieblock.bp — SS-13: position-independent DecompCache blocks (the PIE
 // relocation core). A serialized object graph lives in ONE contiguous cell
 // block: [magic, count, then per node {payload, rel_next}], links are

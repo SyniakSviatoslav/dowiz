@@ -308,7 +308,7 @@ fn self_test() -> i64 {
   c1 * 1000000 + cz * 100000 + lh * 10000 + it * 1000
 }
 
-fn main(argc: i64, argv: i64) -> i64 {
+fn main(argc: i64, argv: [str]) -> i64 {
   let cmd = if argc >= 3 then argv[2] else 0;
   let has_arg = if argc >= 4 then 1 else 0;
   let has_arg2 = if argc >= 5 then 1 else 0;

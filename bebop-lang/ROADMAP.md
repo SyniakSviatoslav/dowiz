@@ -44,7 +44,7 @@ and retired by decisions D8-D10.
 |---|---|---|---|---|
 | 1 | honest kernels, in-process pinned, bebop / Rust twin (D11-C) | bench/vs_rust/honest.sh | K1h, K2h, K3h, K4 rows measured after T118 (see Measured) | every row <= 2.0x after T101-T104; <= 1.0x is the D1(a) stretch, decided on the numbers |
 | 2 | linear self-hosting fixpoint | every codegen commit (AGENTS law) | gen3 == gen4 2b6171ce | invariant, never a goal |
-| 3 | one oracle per gate, none self-frozen | bench/oracles/run_all.sh | ok=91 self-frozen=0 | 0 self-frozen; 8 gates await T124 fold specs before "== oracle" |
+| 3 | one oracle per gate, none self-frozen | bench/oracles/run_all.sh | ok=92 self-frozen=0 | 0 self-frozen; 8 gates await T124 fold specs before "== oracle" |
 | 4 | zero tolerated miscompiles | construct_parity (38 constructs + neg), fuzz | R3.x deleted; fuzz 150-seed batches clean | fuzz >= 10^5 programs, 0 CRASH / DIVERGE, traps only (TG-DONE 8) |
 | 5 | single compiler, single language | attic, construct_parity | expr_compile.bp in attic; 38 constructs | every accepted construct in construct_parity; struct literals + `use` + `ref T` landed (T43 rest, T47, T48) |
 | 6 | hardware claims measured, never projected | bench_pinned.sh, REPORT-pinned.md, Measured table below | no projected row remains | stays true |

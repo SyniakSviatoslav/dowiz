@@ -1,4 +1,5 @@
-// prelude: fp
+use "selfhost/prelude/fp.bp"
+// (T47c 2026-09-05: was `// prelude: fp`; the expansion used to be textual via tools/gen_selfsrc.sh)
 module core { }
 
 // tdgcurv.bp — T18: Riemann R^i_jkl from Christoffel Γ (+ tabulated ∂Γ),

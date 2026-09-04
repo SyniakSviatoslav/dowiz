@@ -1,4 +1,6 @@
-// prelude: fp rng
+use "selfhost/prelude/fp.bp"
+use "selfhost/prelude/rng.bp"
+// (T47c 2026-09-05: was `// prelude: fp rng`; the expansion used to be textual via tools/gen_selfsrc.sh)
 // srepl.bp — SS-18: spectral self-replication (mutation via dA).
 // Agent logic change = matrix perturbation dA; spectral_drift(A0, A0+dA) ->
 // DriftClass: drift within gamma -> class stable (auto-fix / mmap snapshot
