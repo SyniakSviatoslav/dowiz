@@ -59,7 +59,7 @@ def classify(src=None, bp=None, wd=None):
     bp = os.path.abspath(bp)
     wd = wd or os.path.dirname(bp)
     bn = bp[:-3] + '.bin'
-    rc, out, err = run(['python3', BPREF, bp], 20, wd)
+    rc, out, err = run(['python3', BPREF, bp], 40, wd)  # D11-D widened generator: 40 s oracle budget
     if rc == 3:
         return 'BPREF-DEPTH', err.strip()[-120:], ''
     if rc == 124:  # the oracle timed out: generator too heavy, not a compiler verdict

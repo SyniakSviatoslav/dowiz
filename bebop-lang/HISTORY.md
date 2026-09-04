@@ -2582,7 +2582,7 @@ DONE-CHECK per task: its gate line in a committed script with the number above; 
 - **T119 LANGUAGE.md + README** — DONE ✓ 2026-09-05.
 - **T120 trap-code table** — DONE ✓ 2026-09-05 (docs/TRAPS.md; T90 line:col diagnostics stays a task).
 - **T121 K5 self-compile + K6 nnidx scan as bench rows** — K5 is in REPORT-pinned (self-compile row); K6 = bench/tq_sqlite RESULT.md scan row; a joint table in honest.sh is open.
-- **T122 reserved-word table** — a fn named like a keyword or builtin exits 99 (open: patch prepared).
+- **T122 reserved-word table** — DONE ✓ 2026-09-05 (42 keyword/builtin names rejected at compile time with exit 99, neg gate c39_fnmatch, bpref SyntaxError; fixpoint 1007257f).
 - **T123 mutation sensitivity** — 15 gates insensitive to one flipped operator (see D11-E); open.
 - **T124 fold specifications** — 8 gates whose folds exist only in code (csr bt store tq mvcc stm sort rng); open.
 

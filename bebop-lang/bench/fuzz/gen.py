@@ -274,7 +274,7 @@ class Ctx:
         # NOT registered as an index candidate (indices stay masked), so the widened
         # loop exercises frame-heap resets (T43), arena growth and trap paths.
         big = self.r.random() < 0.25 and not self.loop_depth
-        k = self.r.randint(100, 250) if big else self.r.randint(1, 6)  # 250: bpref must finish in 20 s (600 gave 53 timeouts/150)
+        k = self.r.randint(100, 200) if big else self.r.randint(1, 6)  # bpref budget: 250 still gave 16 timeouts/60
         self.g.loop_bound[i] = k
         self.scalars.append(i)
         if not big:

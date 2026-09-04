@@ -37,6 +37,7 @@ class ReturnSignal(Exception):
     def __init__(self, v): self.v = v
 class BreakSignal(Exception):
     pass
+RESERVED = set(['let', 'while', 'if', 'then', 'else', 'in', 'fn', 'enum', 'struct', 'module', 'match', 'return', 'break', 'zeros', 'char', 'str_len', 'clock_ms', 'hvham', 'hvham2', 'some', 'none', 'many', 'sys_open', 'sys_read', 'sys_write', 'sys_close', 'sys_readbuf', 'sys_slurp', 'sys_mmap', 'sys_munmap', 'sys_ftruncate', 'sys_rename', 'sys_export', 'sys_exit', 'sys_arena_base', 'sys_arena_end', 'sys_clone', 'sys_cond_set', 'sys_futex_wait_guard', 'sys_futex_wake', 'sys_atomic_add', 'sys_exit_thread_guard'])
 class DepthError(Exception):
     pass
 
@@ -107,6 +108,7 @@ class Parser:
         self.t = tokenize(src)
         self.p = 0
         self.fns = {}
+        self.structs = {}  # T43: NAME -> [field names] in declaration order
         self.ctors = {}
 
     def peek(self, k=0):
@@ -146,6 +148,8 @@ class Parser:
             if v == 'fn':
                 self.next()
                 name = self.ident()
+                if name in RESERVED:  # T122: bebop.bin exits 99 on such a fn
+                    raise SyntaxError('reserved word used as a fn name: ' + name)
                 self.expect('(')
                 params = []
                 while not self.at(')'):
@@ -181,7 +185,22 @@ class Parser:
                     if self.at(','):
                         self.next()
                 self.expect('}')
-            elif v in ('module', 'struct'):
+            elif v == 'struct':  # T43: `struct NAME { f: T, ... }` -> field order
+                self.next(); sname = self.ident(); self.expect('{')
+                fields = []
+                while not self.at('}'):
+                    fields.append(self.ident()); self.expect(':')
+                    if self.at('['):
+                        self.next(); self.next(); self.expect(']')
+                    else:
+                        self.next()
+                    if self.at(','):
+                        self.next()
+                self.expect('}')
+                self.structs.setdefault(sname, fields)
+                if not hasattr(self, 'first_struct'):
+                    self.first_struct = sname
+            elif v == 'module':
                 self.next(); self.ident(); self.skip_block()
             else:
                 raise SyntaxError('unexpected top-level %r' % (v,))
@@ -297,6 +316,15 @@ class Parser:
                     self.next()
             self.expect(')')
             return ('call', v, args)
+        if self.at('{') and v in self.structs:  # T43 struct literal
+            self.next()
+            given = {}
+            while not self.at('}'):
+                f = self.ident(); self.expect(':'); given[f] = self.cmp()
+                if self.at(','):
+                    self.next()
+            self.expect('}')
+            return ('arr', [given[f] for f in self.structs[v]])
         if self.at('['):
             self.next()
             idx = self.cmp()
@@ -305,7 +333,11 @@ class Parser:
                 self.next()
                 return ('set', v, idx, self.cmp())
             return ('get', v, idx)
-        return ('var', v)
+        e = ('var', v)
+        while self.at('.'):  # T43 field access: index of f in the FIRST struct (bebop emit_field_access)
+            self.next(); f = self.ident()
+            e = ('field', e, f)
+        return e
 
     def match(self):
         cname = self.ident()
@@ -335,8 +367,10 @@ class Parser:
 
 
 class Interp:
-    def __init__(self, fns, ctors):
+    def __init__(self, fns, ctors, structs=None, first_struct=None):
         self.fns = fns
+        self.structs = structs or {}
+        self.first_struct = first_struct
         self.ctors = ctors
         self.depth = 0
 
@@ -390,6 +424,8 @@ class Interp:
             return BIN[e[1]](self.ev(e[2], env), self.ev(e[3], env))
         if t == 'neg':
             return wrap(-self.ev(e[1], env))
+        if t == 'field':
+            return self.ev(e[1], env)[self.structs[self.first_struct].index(e[2])]
         if t == 'not':
             return int(self.ev(e[1], env) == 0)
         if t == 'if':
@@ -448,7 +484,7 @@ class Interp:
 def run(src):
     p = Parser(src)
     p.program()
-    return Interp(p.fns, p.ctors).call('main', [])
+    return Interp(p.fns, p.ctors, p.structs, getattr(p, 'first_struct', None)).call('main', [])
 
 
 def main():

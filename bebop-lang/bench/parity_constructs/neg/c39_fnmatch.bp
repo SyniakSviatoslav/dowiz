@@ -1,0 +1,5 @@
+// T122 (D11-M, 2026-09-05): a fn named like a keyword or a builtin is rejected at
+// compile time (exit 99). `fn match` used to compile into a call of the match
+// keyword and return 0 (T31 journal); bpref raises SyntaxError on the same shape.
+fn match(a: i64, b: i64) -> i64 { a + b }
+fn main() -> i64 { match(2, 3) }

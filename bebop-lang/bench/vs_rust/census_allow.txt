@@ -13,3 +13,4 @@ k5 bcond 12 T118 capacity traps (one b.ls per zeros / array literal / enum ctor 
 k6 bcond 7 T118 capacity traps (one b.ls per zeros / array literal / enum ctor site)
 k7 bcond 15 T118 capacity traps (one b.ls per zeros / array literal / enum ctor site)
 k7neon bcond 14 T118 capacity traps (one b.ls per zeros / array literal / enum ctor site)
+bebop bcond 1266 T122 reserved-word checks in compile_fn_at

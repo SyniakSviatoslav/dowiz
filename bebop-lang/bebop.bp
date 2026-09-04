@@ -1881,6 +1881,7 @@ fn emit_term(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
 //   96  `++` in an expression: string concat is not in the surface (T42(d))
 //   97  fn body without a tail expression (compile_fn_at; DIVERGE-81/128)
 //   98  more than 17 `return` / 18 pending `break` in one fn (T99 lists)
+//   99  fn named like a keyword or builtin (T122)
 // Runtime capacity traps (T118, exit_group from the compiled program):
 //   80  arena exhausted (zeros past x28)     81  frame heap exhausted (x14 past
 //   the 16 KiB frame)                         82  stack overflow (guard, T118 b)
@@ -3131,6 +3132,12 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   let _ = pos[0] = pos[0] + 2;
   let _ = skip_ws(s, pos);
   let selfname = read_ident(s, pos);
+  // T122 (D11-M, 2026-09-05): a fn named like a keyword or a builtin is REJECTED
+  // (exit 99) -- `fn match` used to compile into a call of the match keyword
+  // (T31 journal) and return 0. Hash table = read_ident of each reserved word.
+  let rsv1 = (if selfname == 1866735 then 1 else 0) + (if selfname == 35281108217 then 1 else 0) + (if selfname == 13857 then 1 else 0) + (if selfname == 262576641 then 1 else 0) + (if selfname == 228925745 then 1 else 0) + (if selfname == 13865 then 1 else 0) + (if selfname == 13472 then 1 else 0) + (if selfname == 228960337 then 1 else 0) + (if selfname == 4471061603997 then 1 else 0) + (if selfname == 4238080694376 then 1 else 0) + (if selfname == 32320559965 then 1 else 0) + (if selfname == 4428069113672 then 1 else 0) + (if selfname == 29119020707 then 1 else 0) + (if selfname == 36158018563 then 1 else 0) + (if selfname == 224358574 then 1 else 0) + (if selfname == 585709020818199 then 1 else 0) + (if selfname == 66094333908796503 then 1 else 0) + (if selfname == 30895064082 then 1 else 0) + (if selfname == 4047253394792 then 1 else 0) + (if selfname == 260449716 then 1 else 0) + (if selfname == 249209392 then 1 else 0);
+  let rsv2 = (if selfname == 246721067 then 1 else 0) + (if selfname == 76753189879327100 then 1 else 0) + (if selfname == 76753189885882068 then 1 else 0) + (if selfname == -8392076197157136435 then 1 else 0) + (if selfname == -8392076203060520566 then 1 else 0) + (if selfname == -2688661736639986669 then 1 else 0) + (if selfname == -8392076198348418984 then 1 else 0) + (if selfname == 76753189874778913 then 1 else 0) + (if selfname == 7442662210087947144 then 1 else 0) + (if selfname == -5847879057653958070 then 1 else 0) + (if selfname == 7442662398273192292 then 1 else 0) + (if selfname == 7442661902340062434 then 1 else 0) + (if selfname == 76753189856984008 then 1 else 0) + (if selfname == 7040940390938053523 then 1 else 0) + (if selfname == -6282920175007517587 then 1 else 0) + (if selfname == -8392076203060521221 then 1 else 0) + (if selfname == -1736429998027255437 then 1 else 0) + (if selfname == -3153574141067785036 then 1 else 0) + (if selfname == 8779068393901189725 then 1 else 0) + (if selfname == 7221016679989100487 then 1 else 0) + (if selfname == 1084841420853388659 then 1 else 0);
+  let _ = if rsv1 + rsv2 > 0 then sys_exit(99) else 0;
   let _ = skip_ws(s, pos);
   let pnames = zeros(14);
   let pparpos = zeros(14);
