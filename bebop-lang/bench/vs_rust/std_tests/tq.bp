@@ -1,0 +1,211 @@
+module core { }
+
+// tq.bp — T20: tensor query engine (manifold database core). Data = vectors
+// in R^4 as fp Q32 (one = 2^32); "INDEX" = parametric coordinates (u,v) =
+// contraction with the top-2 eigenvectors ev0/ev1 (port of dowiz-core
+// parametric_spectral.rs: project -> grid_cell quantize, GRID_RES=8);
+// "SELECT nearest" = geodesic distance on the manifold with K anchor control
+// points (port of memory_search.rs geodesic_distance: 3-segment walk through
+// the anchor nearest the target, break when best_d < 0.1) + 3x3-cell O(1)
+// candidate window (search_spins). All integer: fp_mul = trunc(a*b/2^32),
+// fp_sqrt(x) = isqrt(x<<26)<<3. Fold = polynomial hash mod 1e9+7 of
+// (nearest index, geodesic distance fp, window count) per query == python.
+
+fn fp_mul(a: i64, b: i64) -> i64 {
+  let na = if a < 0 then 1 else 0;
+  let aa = if na == 1 then 0 - a else a;
+  let nb = if b < 0 then 1 else 0;
+  let ab = if nb == 1 then 0 - b else b;
+  let a1 = aa >> 32;
+  let a0 = aa - (a1 << 32);
+  let b1 = ab >> 32;
+  let b0 = ab - (b1 << 32);
+  let hi = a1 * b1;
+  let mid = a1 * b0 + a0 * b1;
+  let ah = a0 >> 16;
+  let al = a0 - (ah << 16);
+  let bh = b0 >> 16;
+  let bl = b0 - (bh << 16);
+  let ll_h = ah * bh;
+  let ll_m = ah * bl + al * bh;
+  let ll_l = al * bl;
+  let low = ll_h + ((ll_m + (ll_l >> 16)) >> 16);
+  let p = (hi << 32) + mid + low;
+  let flip = na + nb;
+  let flip = flip - (flip / 2) * 2;
+  let p = if flip == 1 then 0 - p else p;
+  p
+}
+
+// isqrt(s): floor(sqrt(s)) for 0 <= s < 2^62 — bit-by-bit restoring method.
+fn isqrt(s: i64) -> i64 {
+  let rem = 0;
+  let root = 0;
+  let i = 0;
+  while i < 31 {
+    let sh = 60 - i * 2;
+    let rem = (rem << 2) + ((s >> sh) & 3);
+    let tst = (root << 2) + 1;
+    let take = if tst <= rem then 1 else 0;
+    let root = (root << 1) + take;
+    let rem = rem - take * tst;
+    let i = i + 1;
+    0
+  };
+  root
+}
+
+// fp_sqrt(x): sqrt of fp x (0 <= x < 2^36), result fp with 2^-29 resolution.
+fn fp_sqrt(x: i64) -> i64 {
+  isqrt(x << 26) << 3
+}
+
+// sqdist(du,dv): du^2 + dv^2 in fp.
+fn sqdist(du: i64, dv: i64) -> i64 {
+  fp_mul(du, du) + fp_mul(dv, dv)
+}
+
+// grid_cell(u,v): quantize (u,v) in [-1,1] to 8x8 cell = vi*8 + ui.
+fn grid_cell(u: i64, v: i64) -> i64 {
+  let one = 4294967296;
+  let ui = ((u + one) * 4) >> 32;
+  let vi = ((v + one) * 4) >> 32;
+  let ui = if ui < 0 then 0 else ui;
+  let ui = if ui > 7 then 7 else ui;
+  let vi = if vi < 0 then 0 else vi;
+  let vi = if vi > 7 then 7 else vi;
+  vi * 8 + ui
+}
+
+// geodesic(u1,v1,u2,v2, cu,cv,k): memory_search.rs geodesic_distance port.
+fn geodesic(u1: i64, v1: i64, u2: i64, v2: i64, cu: [i64], cv: [i64], k: i64) -> i64 {
+  let tenth = 429496729;
+  let dist = 0;
+  let pu = u1;
+  let pv = v1;
+  let go = 1;
+  let s = 0;
+  while s < 3 * go {
+    let bi = 0;
+    let bd = 4611686018427387904;
+    let i = 0;
+    while i < k {
+      let d = sqdist(cu[i] - u2, cv[i] - v2);
+      let c = if d < bd then 1 else 0;
+      let bd = bd * (1 - c) + d * c;
+      let bi = bi * (1 - c) + i * c;
+      let i = i + 1;
+      0
+    };
+    let nu = cu[bi];
+    let nv = cv[bi];
+    let dist = dist + fp_sqrt(sqdist(nu - pu, nv - pv));
+    let pu = nu;
+    let pv = nv;
+    let go = if bd < tenth then 0 else 1;
+    let s = s + 1;
+    0
+  };
+  let dist = dist + fp_sqrt(sqdist(u2 - pu, v2 - pv));
+  dist
+}
+
+// query(qu,qv, pu,pv,cell,n, cu,cv,k, fold): nearest inserted point by
+// geodesic distance (full contraction over the distance field, ties -> lowest
+// index) + count of points in the 3x3 cell window around the query cell.
+fn query(qu: i64, qv: i64, pu: [i64], pv: [i64], cell: [i64], n: i64, cu: [i64], cv: [i64], k: i64, fold: i64) -> i64 {
+  let m = 1000000007;
+  let qc = grid_cell(qu, qv);
+  let qx = qc - (qc / 8) * 8;
+  let qy = qc / 8;
+  let bi = 0;
+  let bd = 4611686018427387904;
+  let cnt = 0;
+  let i = 0;
+  while i < n {
+    let d = geodesic(qu, qv, pu[i], pv[i], cu, cv, k);
+    let c = if d < bd then 1 else 0;
+    let bd = bd * (1 - c) + d * c;
+    let bi = bi * (1 - c) + i * c;
+    let cx = cell[i] - (cell[i] / 8) * 8;
+    let cy = cell[i] / 8;
+    let dx = cx - qx;
+    let dy = cy - qy;
+    let dx = if dx < 0 then 0 - dx else dx;
+    let dy = if dy < 0 then 0 - dy else dy;
+    let inw = (if dx <= 1 then 1 else 0) * (if dy <= 1 then 1 else 0);
+    let cnt = cnt + inw;
+    let i = i + 1;
+    0
+  };
+  let fold = (fold * 131 + bi + 1) % m;
+  let fold = (fold * 131 + bd % m) % m;
+  let fold = (fold * 131 + cnt) % m;
+  fold
+}
+
+fn main() -> i64 {
+  let one = 4294967296;
+  let n = 12;
+  let k = 4;
+  let ev0 = zeros(4);
+  let ev1 = zeros(4);
+  let _ = ev0[0] = 3 * one / 8;
+  let _ = ev0[1] = one / 8;
+  let _ = ev0[2] = 0 - 2 * one / 8;
+  let _ = ev0[3] = 3 * one / 8;
+  let _ = ev1[0] = 0 - one / 8;
+  let _ = ev1[1] = 3 * one / 8;
+  let _ = ev1[2] = 3 * one / 8;
+  let _ = ev1[3] = 0 - 2 * one / 8;
+  let pu = zeros(16);
+  let pv = zeros(16);
+  let cell = zeros(16);
+  // INSERT: vec[i][j] = ((i*7 + j*3) % 11 - 5) / 8; project = contraction.
+  let i = 0;
+  while i < n {
+    let u = 0;
+    let v = 0;
+    let j = 0;
+    while j < 4 {
+      let x = ((i * 7 + j * 3) % 11 - 5) * one / 8;
+      let u = u + fp_mul(ev0[j], x);
+      let v = v + fp_mul(ev1[j], x);
+      let j = j + 1;
+      0
+    };
+    let _ = pu[i] = u;
+    let _ = pv[i] = v;
+    let _ = cell[i] = grid_cell(u, v);
+    let i = i + 1;
+    0
+  };
+  // anchors (manifold control points): (+-1/2, +-1/2)
+  let cu = zeros(4);
+  let cv = zeros(4);
+  let h = one / 2;
+  let _ = cu[0] = h;
+  let _ = cv[0] = h;
+  let _ = cu[1] = 0 - h;
+  let _ = cv[1] = h;
+  let _ = cu[2] = 0 - h;
+  let _ = cv[2] = 0 - h;
+  let _ = cu[3] = h;
+  let _ = cv[3] = 0 - h;
+  let s = one / 16;
+  let fold = 0;
+  let fold = query(2 * s, 3 * s, pu, pv, cell, n, cu, cv, k, fold);
+  let fold = query(0 - 5 * s, 10 * s, pu, pv, cell, n, cu, cv, k, fold);
+  let fold = query(11 * s, 0 - 6 * s, pu, pv, cell, n, cu, cv, k, fold);
+  let fold = query(0 - 10 * s, 0 - 10 * s, pu, pv, cell, n, cu, cv, k, fold);
+  // index sanity: sum of cells folded too
+  let cs = 0;
+  let i = 0;
+  while i < n {
+    let cs = cs + cell[i];
+    let i = i + 1;
+    0
+  };
+  let fold = (fold * 131 + cs) % 1000000007;
+  fold + 1
+}

@@ -574,5 +574,29 @@ gate substrate 36750250113 "$r"
 r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/swpmu.bp /tmp/opencode/swpmu_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/swpmu_test.bin | tail -1)
 gate swpmu 2001000110000000000 "$r"
 
+# ---- tdg ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/tdg.bp /tmp/opencode/tdg_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/tdg_test.bin | tail -1)
+gate tdg 3162519640442167 "$r"
+
+# ---- tdggeo ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/tdggeo.bp /tmp/opencode/tdggeo_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/tdggeo_test.bin | tail -1)
+gate tdggeo 219599976738721791 "$r"
+
+# ---- tq ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/tq.bp /tmp/opencode/tq_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/tq_test.bin | tail -1)
+gate tq 722997760 "$r"
+
+# ---- tdgstokes ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/tdgstokes.bp /tmp/opencode/tdgstokes_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/tdgstokes_test.bin | tail -1)
+gate tdgstokes 173698403 "$r"
+
+# ---- tdgcurv ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/tdgcurv.bp /tmp/opencode/tdgcurv_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/tdgcurv_test.bin | tail -1)
+gate tdgcurv 4262143808388606 "$r"
+
+# ---- tdgforms ----
+r=$(./seed/build/seed bebop.bin compile bench/vs_rust/std_tests/tdgforms.bp /tmp/opencode/tdgforms_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed /tmp/opencode/tdgforms_test.bin | tail -1)
+gate tdgforms 1000351400006779 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

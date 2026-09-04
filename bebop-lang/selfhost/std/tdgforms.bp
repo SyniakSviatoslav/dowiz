@@ -1,0 +1,214 @@
+module core { }
+
+// tdgforms.bp — T19: differential forms on a periodic 3^4 grid in R^4.
+// A k-form is an alternating tensor stored by basis bitmask I (bit i = dx^i),
+// component I at grid point p lives at form[I*81 + p]; p = base-3 digits.
+// wedge: e_I ∧ e_J = 0 if I&J else (-1)^{#(x∈I, y∈J, x>y)} e_{I|J} (inversion
+// count of the concatenated index list = the alternating-sign definition).
+// exterior derivative: dω = Σ_i dx^i ∧ Δ_i ω with Δ_i the forward difference
+// on the periodic grid (Δ_i f(p) = f(p+e_i) - f(p)); Δ_i Δ_j = Δ_j Δ_i so
+// d(dω) = 0 holds BIT-EXACT in integers (discrete Poincaré lemma).
+// Table-driven inputs: 2-form ω_I(p) = ((7p+13I+5) mod 17) - 8 on |I|=2,
+// 1-forms α_i(p) = ((11p+3i+1) mod 13) - 6, β_i(p) = ((5p+7i+2) mod 11) - 5.
+// Checks (all bit-exact, integer): d(dω) == 0; α∧β == -β∧α; (α∧β)∧ω ==
+// α∧(β∧ω); Stokes audit hook: (dα)_ij(p) == circulation of α around the
+// unit square (p, p+e_i, p+e_i+e_j, p+e_j) for every p and i<j.
+// Fold = ok*10^15 + Σ|dω|*10^8 + Σ|α∧β| == python oracle (bench/oracles).
+
+fn pc(m: i64) -> i64 {
+  ((m >> 3) & 1) + ((m >> 2) & 1) + ((m >> 1) & 1) + (m & 1)
+}
+
+// (-1)^{#pairs x in I, y in J, x > y}; 0 if I & J != 0
+fn wsign(ii: i64, jj: i64) -> i64 {
+  let t = 0;
+  let x = 0;
+  while x < 4 {
+    let bx = (ii >> x) & 1;
+    let y = 0;
+    while y < 4 {
+      let by = (jj >> y) & 1;
+      let gt = if x > y then 1 else 0;
+      let t = t + bx * by * gt;
+      let y = y + 1;
+      0
+    };
+    let x = x + 1;
+    0
+  };
+  let tp = t - (t / 2) * 2;
+  let z = if (ii & jj) == 0 then 1 else 0;
+  z * (1 - tp * 2)
+}
+
+// neighbour of p one step in direction i (periodic, base 3)
+fn shp(p: i64, i: i64) -> i64 {
+  let pw = (if i == 0 then 1 else 0) + (if i == 1 then 3 else 0) + (if i == 2 then 9 else 0) + (if i == 3 then 27 else 0);
+  let q = p / pw;
+  let d = q - (q / 3) * 3;
+  p + (if d == 2 then 0 - 2 * pw else pw)
+}
+
+fn fill(a: [i64], n: i64, v: i64) -> i64 {
+  let i = 0;
+  while i < n {
+    let _ = a[i] = v;
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+// table-driven k-form: out[I*81+p] = ((mp*p + mi*I + ad) mod md) - sb on |I| == k
+fn tform(out: [i64], k: i64, mp: i64, mi: i64, ad: i64, md: i64, sb: i64) -> i64 {
+  let ii = 0;
+  while ii < 16 {
+    let z = if pc(ii) == k then 1 else 0;
+    let p = 0;
+    while p < 81 {
+      let v = mp * p + mi * ii + ad;
+      let v = v - (v / md) * md;
+      let _ = out[ii * 81 + p] = z * (v - sb);
+      let p = p + 1;
+      0
+    };
+    let ii = ii + 1;
+    0
+  };
+  0
+}
+
+fn wedge(a: [i64], b: [i64], out: [i64]) -> i64 {
+  let _ = fill(out, 1296, 0);
+  let ii = 0;
+  while ii < 16 {
+    let jj = 0;
+    while jj < 16 {
+      let s = wsign(ii, jj);
+      let kk = ii | jj;
+      let p = 0;
+      while p < 81 {
+        let _ = out[kk * 81 + p] = out[kk * 81 + p] + s * a[ii * 81 + p] * b[jj * 81 + p];
+        let p = p + 1;
+        0
+      };
+      let jj = jj + 1;
+      0
+    };
+    let ii = ii + 1;
+    0
+  };
+  0
+}
+
+// dω = Σ_i dx^i ∧ Δ_i ω
+fn ext_d(a: [i64], out: [i64]) -> i64 {
+  let _ = fill(out, 1296, 0);
+  let i = 0;
+  while i < 4 {
+    let ei = 1 << i;
+    let ii = 0;
+    while ii < 16 {
+      let s = wsign(ei, ii);
+      let kk = ii | ei;
+      let p = 0;
+      while p < 81 {
+        let q = shp(p, i);
+        let _ = out[kk * 81 + p] = out[kk * 81 + p] + s * (a[ii * 81 + q] - a[ii * 81 + p]);
+        let p = p + 1;
+        0
+      };
+      let ii = ii + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+fn sumabs(a: [i64]) -> i64 {
+  let acc = 0;
+  let t = 0;
+  while t < 1296 {
+    let v = a[t];
+    let v = if v < 0 then 0 - v else v;
+    let acc = acc + v;
+    let t = t + 1;
+    0
+  };
+  acc
+}
+
+fn sumabsdiff(a: [i64], b: [i64], sg: i64) -> i64 {
+  let acc = 0;
+  let t = 0;
+  while t < 1296 {
+    let v = a[t] + sg * b[t];
+    let v = if v < 0 then 0 - v else v;
+    let acc = acc + v;
+    let t = t + 1;
+    0
+  };
+  acc
+}
+
+// Σ_p Σ_{i<j} |(dα)_{ij}(p) - circulation of α around unit square (p,i,j)|
+fn stokes(al: [i64], da: [i64]) -> i64 {
+  let acc = 0;
+  let i = 0;
+  while i < 4 {
+    let j = i + 1;
+    while j < 4 {
+      let mi = 1 << i;
+      let mj = 1 << j;
+      let kk = mi | mj;
+      let p = 0;
+      while p < 81 {
+        let pi = shp(p, i);
+        let pj = shp(p, j);
+        let circ = al[mi * 81 + p] + al[mj * 81 + pi] - al[mi * 81 + pj] - al[mj * 81 + p];
+        let v = da[kk * 81 + p] - circ;
+        let v = if v < 0 then 0 - v else v;
+        let acc = acc + v;
+        let p = p + 1;
+        0
+      };
+      let j = j + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  acc
+}
+
+fn main() -> i64 {
+  let w = zeros(1296);
+  let eta = zeros(1296);
+  let zeta = zeros(1296);
+  let al = zeros(1296);
+  let be = zeros(1296);
+  let ab = zeros(1296);
+  let ba = zeros(1296);
+  let _ = tform(w, 2, 7, 13, 5, 17, 8);
+  let _ = tform(al, 1, 11, 3, 1, 13, 6);
+  let _ = tform(be, 1, 5, 7, 2, 11, 5);
+  let _ = ext_d(w, eta);
+  let _ = ext_d(eta, zeta);
+  let s_eta = sumabs(eta);
+  let dd_ok = if sumabs(zeta) == 0 then 1 else 0;
+  let _ = wedge(al, be, ab);
+  let _ = wedge(be, al, ba);
+  let anti_ok = if sumabsdiff(ab, ba, 1) == 0 then 1 else 0;
+  let s_ab = sumabs(ab);
+  let _ = wedge(ab, w, zeta);
+  let _ = wedge(be, w, eta);
+  let _ = wedge(al, eta, ba);
+  let assoc_ok = if sumabsdiff(zeta, ba, 0 - 1) == 0 then 1 else 0;
+  let nz_ok = if sumabs(zeta) > 0 then 1 else 0;
+  let _ = ext_d(al, eta);
+  let st_ok = if stokes(al, eta) == 0 then 1 else 0;
+  let ok = dd_ok * anti_ok * assoc_ok * nz_ok * st_ok;
+  ok * 1000000000000000 + s_eta * 100000000 + s_ab
+}

@@ -1,0 +1,128 @@
+module core { }
+
+// tdgstokes.bp — T21: discrete Stokes as the transaction audit invariant.
+// 8x8 cell grid, 1-form w on edges (wx[j*9+i]: (i,j)->(i+1,j), wy[j*9+i]:
+// (i,j)->(i,j+1)), table-driven fp Q32 values (k*one/16, k = hash mod 23 - 11).
+// dw on cell (i,j) = wx(i,j) + wy(i+1,j) - wx(i,j+1) - wy(i,j) (ccw
+// circulation). For a region [x0,x1)x[y0,y1): boundary integral B = ccw sum of
+// w over its boundary edges; interior integral I = sum of stored dw.
+// Stokes: B == I exactly in i64. Three audit phases over 5 table regions:
+// (1) fresh tables -> 0 violations, (2) committed txn (edge + both adjacent
+// dw refreshed) -> 0 violations, (3) torn update (2 edges changed, dw stale)
+// -> exactly 2 boundary regions violate. Fold = hash mod 1e9+7 of every
+// B (+2^40 offset) and each phase's violation count == python mirror.
+
+fn wval(i: i64, j: i64, a: i64, b: i64, c: i64) -> i64 {
+  let one = 4294967296;
+  ((i * a + j * b + c) % 23 - 11) * one / 16
+}
+
+fn cell_dw(wx: [i64], wy: [i64], i: i64, j: i64) -> i64 {
+  wx[j * 9 + i] + wy[j * 9 + i + 1] - wx[(j + 1) * 9 + i] - wy[j * 9 + i]
+}
+
+// boundary(x0,y0,x1,y1, wx,wy): ccw circulation of w around the region.
+fn boundary(x0: i64, y0: i64, x1: i64, y1: i64, wx: [i64], wy: [i64]) -> i64 {
+  let b = 0;
+  let i = x0;
+  while i < x1 {
+    let b = b + wx[y0 * 9 + i] - wx[y1 * 9 + i];
+    let i = i + 1;
+    0
+  };
+  let j = y0;
+  while j < y1 {
+    let b = b + wy[j * 9 + x1] - wy[j * 9 + x0];
+    let j = j + 1;
+    0
+  };
+  b
+}
+
+// interior(x0,y0,x1,y1, dw): sum of the stored 2-form over the region cells.
+fn interior(x0: i64, y0: i64, x1: i64, y1: i64, dw: [i64]) -> i64 {
+  let s = 0;
+  let j = y0;
+  while j < y1 {
+    let i = x0;
+    while i < x1 {
+      let s = s + dw[j * 8 + i];
+      let i = i + 1;
+      0
+    };
+    let j = j + 1;
+    0
+  };
+  s
+}
+
+// audit(wx,wy,dw,reg,nr,fold): fold every region's B, then the violation count.
+fn audit(wx: [i64], wy: [i64], dw: [i64], reg: [i64], nr: i64, fold: i64) -> i64 {
+  let m = 1000000007;
+  let off = 1099511627776;
+  let viol = 0;
+  let r = 0;
+  while r < nr {
+    let x0 = reg[r * 4];
+    let y0 = reg[r * 4 + 1];
+    let x1 = reg[r * 4 + 2];
+    let y1 = reg[r * 4 + 3];
+    let b = boundary(x0, y0, x1, y1, wx, wy);
+    let s = interior(x0, y0, x1, y1, dw);
+    let viol = viol + (if b == s then 0 else 1);
+    let fold = (fold * 131 + (b + off) % m) % m;
+    let r = r + 1;
+    0
+  };
+  (fold * 131 + viol) % m
+}
+
+fn main() -> i64 {
+  let one = 4294967296;
+  let wx = zeros(81);
+  let wy = zeros(81);
+  let dw = zeros(64);
+  let reg = zeros(20);
+  let j = 0;
+  while j < 9 {
+    let i = 0;
+    while i < 9 {
+      let _ = wx[j * 9 + i] = wval(i, j, 31, 17, 7);
+      let _ = wy[j * 9 + i] = wval(i, j, 13, 29, 3);
+      let i = i + 1;
+      0
+    };
+    let j = j + 1;
+    0
+  };
+  let j = 0;
+  while j < 8 {
+    let i = 0;
+    while i < 8 {
+      let _ = dw[j * 8 + i] = cell_dw(wx, wy, i, j);
+      let i = i + 1;
+      0
+    };
+    let j = j + 1;
+    0
+  };
+  // region table (x0,y0,x1,y1): whole, inner, single cell, row strip, column band
+  let _ = reg[0] = 0; let _ = reg[1] = 0; let _ = reg[2] = 8; let _ = reg[3] = 8;
+  let _ = reg[4] = 1; let _ = reg[5] = 2; let _ = reg[6] = 5; let _ = reg[7] = 7;
+  let _ = reg[8] = 3; let _ = reg[9] = 3; let _ = reg[10] = 4; let _ = reg[11] = 4;
+  let _ = reg[12] = 0; let _ = reg[13] = 5; let _ = reg[14] = 8; let _ = reg[15] = 6;
+  let _ = reg[16] = 2; let _ = reg[17] = 0; let _ = reg[18] = 6; let _ = reg[19] = 8;
+  let nr = 5;
+  // phase 1: fresh tables
+  let fold = audit(wx, wy, dw, reg, nr, 0);
+  // phase 2: committed txn on wx(3,4): edge + cells (3,4),(3,3) refreshed
+  let _ = wx[4 * 9 + 3] = wx[4 * 9 + 3] + 5 * one / 16;
+  let _ = dw[4 * 8 + 3] = cell_dw(wx, wy, 3, 4);
+  let _ = dw[3 * 8 + 3] = cell_dw(wx, wy, 3, 3);
+  let fold = audit(wx, wy, dw, reg, nr, fold);
+  // phase 3: torn update — wy(5,4) and wx(2,5) change, dw left stale
+  let _ = wy[4 * 9 + 5] = wy[4 * 9 + 5] + 3 * one / 16;
+  let _ = wx[5 * 9 + 2] = wx[5 * 9 + 2] - 7 * one / 16;
+  let fold = audit(wx, wy, dw, reg, nr, fold);
+  fold + 1
+}
