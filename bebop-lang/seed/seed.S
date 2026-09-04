@@ -52,7 +52,7 @@ _start:
     add     x10, x21, x9
     ldr     x12, [x10]
 
-    /* arena x27/x28 = mmap(64MB, RW, PRIVATE|ANON) */
+    /* arena x27/x28 = mmap(256MB, RW, PRIVATE|ANON) */
     mov     x0, #0
     mov     x1, #4096
     movk   x1, #4096, lsl #16  /* 256 MB */

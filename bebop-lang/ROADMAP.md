@@ -126,18 +126,19 @@ ambition and reusing the established gate discipline.
 
 ---
 
-## Verified state (2026-09-03, session 3)
+## Verified state (2026-09-04, session 4c)
 
 `seed/seed.S` (frozen AArch64 loader, no libc, 1496B) + `bebop.bin`
 (self-hosting compiler, fixpoint bb2 == bb3,
-md5 `13a6447fe65cb3321e8165d38d7e4c77`) +
+md5 `88d4cd5d3cfaa63f4ab60370b0172d02`, source `bebop.bp` == shipped binary) +
 `*.bp` sources + `*.bin` artifacts. **Zero C** — `native/` (175 files) deleted.
-std_golden 60/60, construct_parity 24/24, parity_driver 9/9+1skip.
-CAVEAT (2026-09-04): these counts were measured on `bebop.bin`; the
-working-tree `bebop.bp` carries an uncommitted T13 window (source !=
-shipped binary, see TERMINAL-GOAL CLOSURE F-H); 54 of the 60 folds have
-no committed independent oracle (F-C) — they prove determinism and
-self-consistency until T36 lands.
+std_golden 82/82, construct_parity 24/24, parity_driver 9/9+1skip,
+oracles `bench/oracles/run_all.sh` ok=82 (every gate has a committed
+independent python oracle, T36; six of them are additionally Rust-backed),
+structural invariants `bench/vs_rust/invariants.sh` GREEN (T40/T51).
+F-H (source != binary) and F-C (no oracles) are CLOSED; the untyped T13
+window was retired (commit 4e6a1d6). Harness scripts accept `BEBOP_BIN`
+(candidate compiler) and `BEBOP_TMP` (per-agent scratch namespace).
 
 Milestone history (all DONE):
 - **M1** seed loader: k1..k7 run through seed.bin, outputs identical to the
@@ -154,9 +155,12 @@ Milestone history (all DONE):
 - **M7** Zero-C: `native/src` deleted; full gate suite green without C compiler.
 
 **Active gates (all green):**
-- std_golden.sh → 60/60 PASS (includes tern, rns, snn, lsys, lod, phant,
-  rnsrot, deltasync, mutlsys, entcol, ptrless, morph, dispatcher,
-  substrate, swpmu — the T1–T15a stack)
+- std_golden.sh → 82/82 PASS (T1–T15a stack; T16–T21 tensor database;
+  T22–T24 graded algebra; T27–T30, T33, T34 sheaf/rewrite/CRUD store;
+  T86 dpll; orphans tern/rns/snn/lsys/lod/drift wired by T37)
+- bench/oracles/run_all.sh → ok=82 (third column: oracle == frozen)
+- bench/vs_rust/invariants.sh → GREEN (register zones, fntab zone map +
+  literal trap, footer/entry identity, branch census no-increase)
 - parity_driver.sh (kernels) → 9/0/0 (+1 main-less skip)
 - construct_parity.sh → 24/24 MATCH (words AND values)
 - pool tests → 5/5 (JIT-only; interp retired at M7) — proot-blocked;
@@ -618,7 +622,7 @@ new emitter-adjacent work.
 
 ### Layer 0 -- numeric basis (new gates, pure .bp arithmetic)
 
-**T1 · ternary Clifford basis** (`tern.bp`) — DONE ✓ (fold 8888868889989889) — **GATE NOT WIRED** (audit 2026-09-04: no `gate` line in std_golden.sh; source in std_tests/ only → T37)
+**T1 · ternary Clifford basis** (`tern.bp`) — DONE ✓ (fold 8888868889989889; gate wired 2026-09-04 by T37, oracle bench/oracles/tern.py)
 GOAL: {-1,0,1} coefficients, 2 bits each, packed into i64 words; blade
 multiplication via the Cayley table as combinatorial masks (AND/XOR +
 sign-inversion masks), NOT float MUL; the rotor sandwich R x R~ (grade
@@ -628,7 +632,7 @@ multiply a rotor pair, sandwich-rotate a probe blade; sign pattern and
 2-bit packing invariants (no value outside {-1,0,1}).
 DEPS: bits.bp (popcount/rotate). BLOCKERS: none (deterministic i64).
 
-**T2 · packed RNS** (`rns.bp`) — DONE ✓ (fold 1183829339) — **GATE NOT WIRED** (audit 2026-09-04: no `gate` line in std_golden.sh; source in std_tests/ only → T37)
+**T2 · packed RNS** (`rns.bp`) — DONE ✓ (fold 1183829339; gate wired 2026-09-04 by T37, oracle bench/oracles/rns.py)
 GOAL: 4 coprime moduli with residues in 16-bit lanes of an i64;
 parallel add/mul by lane-local arithmetic (no carry chains by
 construction); CRT spot-check against the direct i64 result.
@@ -636,7 +640,7 @@ DONE-CHECK: gate `rns` fold == mirror: N random-ish pairs, RNS add and
 mul == direct mod-2^64 arithmetic on every lane AND the CRT check.
 DEPS: none. BLOCKERS: none.
 
-**T3 · in-register SNN engine** (`snn.bp`) — DONE ✓ (fold 65504516937878) — **GATE NOT WIRED** (audit 2026-09-04: no `gate` line in std_golden.sh; source in std_tests/ only → T37)
+**T3 · in-register SNN engine** (`snn.bp`) — DONE ✓ (fold 65504516937878; gate wired 2026-09-04 by T37, oracle bench/oracles/snn.py)
 GOAL: the vision's bit-mask neurons with ternary spikes: a neuron's
 state = bit mask; a spike = a packed ternary coefficient (T1); the
 propagation step = one POPCNT + AND/OR pass (no per-synapse loops);
@@ -648,7 +652,7 @@ DEPS: T1 (ternary spike payload), bits.bp. BLOCKERS: none.
 
 ### Layer 1 -- generative memory
 
-**T4 · L-system fractal memory** (`lsys.bp`) — DONE ✓ (fold 144175882039858) — **GATE NOT WIRED** (audit 2026-09-04: no `gate` line in std_golden.sh; source in std_tests/ only → T37)
+**T4 · L-system fractal memory** (`lsys.bp`) — DONE ✓ (fold 144175882039858; gate wired 2026-09-04 by T37, oracle bench/oracles/lsys.py)
 GOAL: the arena stores ONLY the compact recursive rule + the seed; the
 expansion is generated into the arena on demand and folded back into a
 digest after use. Expansion factor measured and frozen (bytes of rule
@@ -659,7 +663,7 @@ digest the expansion (FNV-64), collapse; fold == mirror; the expansion
 factor printed once and recorded in the journal.
 DEPS: none. BLOCKERS: none (the claim is measured, not assumed).
 
-**T5 · fractal LOD zoom** (`lod.bp`) — DONE ✓ (fold 1000088904914) — **GATE NOT WIRED** (audit 2026-09-04: no `gate` line in std_golden.sh; source in std_tests/ only → T37)
+**T5 · fractal LOD zoom** (`lod.bp`) — DONE ✓ (fold 1000088904914; gate wired 2026-09-04 by T37, oracle bench/oracles/lod.py)
 GOAL: the macro-rotor (T1, low dimension) stays register-resident; a
 collision/logical-inference trigger expands a fractal layer locally,
 applies the sandwich, collapses back to a macro-index. The expansion is
@@ -1028,7 +1032,7 @@ rewrites.
 
 ### Layer A -- graded algebra (new gates, pure .bp arithmetic, zero compiler risk)
 
-**T22 . Grassmann algebra Lambda_5 as bitmask monomials** (`grass.bp`)
+**T22 . Grassmann algebra Lambda_5 as bitmask monomials** (`grass.bp`) — DONE ✓ 2026-09-04 (gate grass 10312435099105887 == bench/oracles/grass.py)
 GOAL: 5 generators -> 32 monomials indexed by their basis bitmask, ternary
 coefficient 2 bits each -> ONE i64 (the x11 payload). Product of
 monomials e_I * e_J = 0 when I & J != 0 (nilpotency = one AND), else
@@ -1040,7 +1044,7 @@ associativity on a triple; Z2 grading closure |I|+|J| mod 2; no packed
 value outside {-1,0,1}.
 DEPS: tern.bp (sign count), bits.bp. BLOCKERS: none.
 
-**T23 . Cl(4,1) ternary CGA basis, even subalgebra, null vectors** (`cl41.bp`)
+**T23 . Cl(4,1) ternary CGA basis, even subalgebra, null vectors** (`cl41.bp`) — DONE ✓ 2026-09-04 (gate cl41 1807759285641197332 == bench/oracles/cl41.py)
 GOAL: 32 blades x 2 bits = one i64 (the dimensional fact above);
 signature (+,+,+,+,-) as a per-generator sign mask in the Cayley product;
 even subalgebra Cl^0 (16 blades) closed under product (the x9/x10
@@ -1053,7 +1057,7 @@ of pairs; n_inf^2 == 0, (2 n_o)^2 == 0, <n_inf, 2 n_o> == -2; sandwich
 == direct table; ternary invariants.
 DEPS: tern.bp, T22 (shared sign count). BLOCKERS: none.
 
-**T24 . supercommutator + nilpotent trigger + select-equivalence** (`zgrade.bp`)
+**T24 . supercommutator + nilpotent trigger + select-equivalence** (`zgrade.bp`) — DONE ✓ 2026-09-04 (gate zgrade 5676760058329986817 == bench/oracles/zgrade.py)
 GOAL: [x,y] = xy - (-1)^{p(x)p(y)} yx on the graded pair Cl^0 (+) Lambda;
 the odd trigger's self-clearing t * t == 0; and the vision's branch claim
 as a THEOREM: parity-sign x mask select == the if/else reference.
@@ -1138,7 +1142,7 @@ DEPS: T25, bt.bp, store.bp. BLOCKERS: none (mmap works under proot).
 ### Layer C -- cellular sheaf store (port-from-reference: incidence.rs)
 
 **T27 . cellular sheaf on a graph: stalks, restriction maps, coboundary,
-sheaf Laplacian** (`sheaf.bp`)
+sheaf Laplacian** (`sheaf.bp`) — DONE ✓ 2026-09-04 (gate sheaf 1114020060 == oracle)
 GOAL: stalk dim d <= 2, i64 fixed-point 2^32; restriction maps rho_{v<e}
 as 2x2 fp matrices per (vertex, edge); coboundary (delta x)_e =
 rho_{v<e} x_v - rho_{u<e} x_u (oriented like incidence.rs, head > tail);
@@ -1152,7 +1156,7 @@ residual on exactly that edge (vecinv-style breaker).
 DEPS: csr.bp, matrix.bp, vecinv.bp. BLOCKERS: none.
 
 **T28 . global sections H^0 as the query; harmonic iteration; Euler
-characteristic** (`sheafh0.bp`)
+characteristic** (`sheafh0.bp`) — DONE ✓ 2026-09-04 (gate sheafh0 11121890396072 == oracle; it_t=396 it_c=72 recorded)
 GOAL: "does a state exist that satisfies all local constraints" = find x
 in ker delta extending pinned local values, by Jacobi/heat-flow on L_F
 (the spacetime.bp crystallization generalized to non-identity
@@ -1169,7 +1173,7 @@ a Laplacian solve; swpmu step count frozen in the journal).
 DEPS: T27, spacetime.bp, swpmu.bp. BLOCKERS: none.
 
 **T29 . content-addressable sheaf nodes (O(1) resolve + phase address)**
-(`csheaf.bp`)
+(`csheaf.bp`) — DONE ✓ 2026-09-04 (gate csheaf 5155430002134088 == oracle)
 GOAL: node address = FNV-64 digest of its stalk (ptrless discipline);
 resolve = digest -> slot, verify fold, corrupted key traps; "phase
 address" variant: digest -> fixed-point angle -> bucket in Cl^0 (rotor
@@ -1183,7 +1187,7 @@ DEPS: T27, ptrless.bp, cache.bp. BLOCKERS: none.
 
 ### Layer D -- categorical rewrite store (port-from-reference: hypergraph.rs, petri.bp)
 
-**T30 . string diagrams as open hypergraphs with Z2-typed wires** (`sdiag.bp`)
+**T30 . string diagrams as open hypergraphs with Z2-typed wires** (`sdiag.bp`) — DONE ✓ 2026-09-04 (gate sdiag 654345454 == bench/oracles/sdiag.py)
 GOAL: boxes = nodes with typed input/output wires; wire type carries the
 Z2 parity (T24); sequential composition (o) and parallel composition
 (x) with parity check on every plugged wire (mismatch = trap);
@@ -1222,7 +1226,7 @@ style K iterations deterministic.
 DEPS: T26, morph.bp, swpmu.bp, R6.2 imm path. BLOCKERS: mprotect RWX
 (proot W^X) -- file-backed RX is the substitute, as T11.
 
-**T33 . CoW versioning + nilpotent reader tokens (MVCC without WAL)** (`mvcc.bp`)
+**T33 . CoW versioning + nilpotent reader tokens (MVCC without WAL)** (`mvcc.bp`) — DONE ✓ 2026-09-04 (gate mvcc 68412663603207 == bench/oracles/mvcc.py)
 GOAL: update = NEW record + a restriction-map edge to the old version
 (a sheaf edge, T27) -- never in place; readers hold Grassmann generator
 tokens (T22); release = product with the own token -> 0 (nilpotency =
@@ -1235,7 +1239,7 @@ cell accounting exact; old versions survive exactly while a live token
 exists.
 DEPS: T22, T27, genarena.bp, rev.bp, entcol.bp. BLOCKERS: none.
 
-**T34 . Z2 transactions (STM on the grading)** (`stm.bp`)
+**T34 . Z2 transactions (STM on the grading)** (`stm.bp`) — DONE ✓ 2026-09-04 (gate stm 871596764015151 == bench/oracles/stm.py)
 GOAL: uncommitted writes accumulate in the ODD sector (O0 trigger, O1
 mask, O2 parity) as Grassmann monomials; commit = pairwise product ->
 EVEN (parity 0) iff the sheaf residual of the touched nodes is 0 (T28,
@@ -1430,7 +1434,7 @@ later gate inherits their oracles.
 ### Layer V — verification foundation (truth becomes reproducible)
 
 **T36 · committed oracles for every gate** (`bench/oracles/<gate>.py`,
-`bench/oracles/run_all.sh`)
+`bench/oracles/run_all.sh`) — DONE ✓ 2026-09-04 (run_all ok=82, self-frozen=0; L17 added to AGENTS.md)
 GOAL: one python file per gate that computes the fold from the gate's
 mathematical definition (not by re-reading the .bp); `std_golden.sh`
 gains a third column: bebop == frozen == oracle. Recover the 28 mirrors
@@ -1444,7 +1448,7 @@ NEW LAW L17: a `gate` line is accepted only with a committed oracle file
 in the same commit.
 DEPS: none. BLOCKERS: none (python3 + cargo present).
 
-**T37 · wire the orphan gates** (tern, rns, snn, lsys, lod, drift)
+**T37 · wire the orphan gates** (tern, rns, snn, lsys, lod, drift) — DONE ✓ 2026-09-04 (std_golden 82/82; drift 5903978048000947864)
 GOAL: add the six `gate` lines with their journal folds (8888868889989889,
 1183829339, 65504516937878, 144175882039858, 1000088904914, drift = TBD
 from spectral_golden DRIFT GOLDENS), each with a T36 oracle.
@@ -1464,7 +1468,7 @@ count unchanged or higher; attic listed in this file.
 DEPS: T36. BLOCKERS: none.
 
 **T39 · reference interpreter + compiler fuzzer** (`tools/bpref.py`,
-`bench/fuzz/gen.py`, `bench/fuzz/fuzz.sh`)
+`bench/fuzz/gen.py`, `bench/fuzz/fuzz.sh`) — PARTIAL 2026-09-04 (bpref.py landed: checksum/foldx/whileb/r3x/fir == frozen; fuzzer in progress)
 GOAL: `bpref.py` executes the IMPLEMENTED .bp surface (grammar of §1 of
 the surface audit: fn/let/let-in/let-chain/if/while/match-literal/enum/
 arrays/zeros/str/char/str_len/sys_* stubs) — the semantic oracle for
@@ -1480,7 +1484,7 @@ file describes the deleted C fuzzer).
 DEPS: T36. BLOCKERS: none.
 
 **T40 · structural invariant gates** (`bench/vs_rust/invariants.sh`,
-`tools/check_abi.py` extended, `tools/census.py`)
+`tools/check_abi.py` extended, `tools/census.py`) — DONE ✓ 2026-09-04 (GREEN on HEAD; planted census increase caught RED)
 GOAL: machine checks that never depended on a fold: (i) register-zone
 law — no write to x27/x28 outside prologue, no write to x9-x13 outside
 prologue/epilogue/bank builtins (T25); (ii) branch census per frozen
@@ -1493,7 +1497,7 @@ DONE-CHECK: `invariants.sh` green on HEAD; a deliberately planted
 violation of each check is caught (RED->GREEN per C7).
 DEPS: none. BLOCKERS: none.
 
-**T41 · one design corpus** (docs)
+**T41 · one design corpus** (docs) — PARTIAL 2026-09-04 (5 corpus-A banners + CORE-ROADMAP-INDEX row + seed.S:55 done; `Status:` lines for bebop-lang/docs and bench/*.md pending)
 GOAL: this file's supersession list names `docs/design/BEBOP-LANGUAGE-
 SPEC.md`, `BEBOP-GLYPH-ALPHABET.md`, `BEBOP-ARCHITECTURE-CATALOG-100.md`,
 `BEBOP-BACKEND-ROADMAP.md`, `BEBOP-LANGUAGE-REWRITE-PLAN-2026-08-17.md`
@@ -1603,7 +1607,7 @@ Baseline (F-E): `if` = 2 branches, `while` = 2, call = `bl` + `ret`,
 SLOWER — branches are removed for correctness of the model AND for
 performance, but only where the select is cheaper than the mispredict.
 
-**T51 · branch census gate** — `tools/census.py` output frozen per
+**T51 · branch census gate** — DONE ✓ 2026-09-04 (census.txt frozen: bebop 872 b.cond/133 cbz/0 tbz over 84230 words + 34 bins) — `tools/census.py` output frozen per
 construct and per kernel in `bench/vs_rust/census.txt`; `invariants.sh`
 fails on any INCREASE; each later rung records its decrease.
 DONE-CHECK: census table committed; RED->GREEN on a planted branch.
@@ -1728,7 +1732,7 @@ DEPS: T36 (oracles first). BLOCKERS: none.
 
 ### Layer D — dowiz integration (the "agent language" half)
 
-**T65 · bebop-lang in the dowiz master index** — one row in `docs/design/
+**T65 · bebop-lang in the dowiz master index** — DONE ✓ 2026-09-04 — one row in `docs/design/
 CORE-ROADMAP-INDEX.md` pointing here; MEMORY.md session-closing note per
 `.claude/CLAUDE.md`.
 DONE-CHECK: the row exists; no other dowiz doc claims Bebop backends
@@ -2027,7 +2031,7 @@ morph-published fragment); erasure: theorems emit zero words (T68 ^0).
 DEPS: T68, T69, bt.bp. BLOCKERS: none (design-bound: critical-path
 item, one writer).
 
-**T86 · bounded bit-vector DPLL in .bp** (B2a) — discharge engine for T69
+**T86 · bounded bit-vector DPLL in .bp** (B2a) — CORE DONE ✓ 2026-09-04 (gate dpll 584168922 == oracle, 20 formulas; T69 hookup pending) — discharge engine for T69
 GOAL: a small CDCL/DPLL solver over fixed-width bit-vector formulas
 (the shapes T69 contracts produce: bounds, overflow, equality of linear
 i64 terms), written in `.bp`, deterministic, with a step budget; UNSAT =
@@ -2184,10 +2188,8 @@ after each, clean revert from a fresh baseline snapshot (L13).
 2. Recursion on the substrate has a fixed depth cap; unbounded recursion
    is a von Neumann call stack by definition. The cap is a trap, never a
    silent limit.
-3. Until T36 lands, every "== python mirror" in this file is a journal
-   claim, not a repo artifact. The gates still prove determinism and
-   self-consistency; they do not yet prove the mathematics independently
-   (6 Rust-backed gates excepted).
+3. CLOSED 2026-09-04: T36 landed — every gate has a committed oracle in
+   `bench/oracles/` and `run_all.sh` is the third column (ok=82).
 4. The five T1-T5 "DONE ✓" marks were wrong as stated; corrected to
    "GATE NOT WIRED -> T37" without deleting the folds.
 5. "Terminal-goal sentence stands" (Honest flag 4 of the SILICON pull)

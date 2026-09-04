@@ -1,5 +1,10 @@
 # Bebop — the Glyph Alphabet (v0.2, ordinary lexicon)
 
+> **SUPERSEDED (2026-09-04)** — superseded by `bebop-lang/ROADMAP.md`.
+> Surviving ideas carried forward as roadmap items T68-T83 (glyphs -> T84).
+> Status: 2026-09-04 SUPERSEDED-BY bebop-lang/ROADMAP.md
+
+
 > Phase 1 foundation. The closed surface vocabulary of Bebop.
 > **Law:** glyphs are **vector δ-outlines, never emoji**. The Unicode char in the left
 > column is only a *terminal-render placeholder*; the canonical form is the δ-outline

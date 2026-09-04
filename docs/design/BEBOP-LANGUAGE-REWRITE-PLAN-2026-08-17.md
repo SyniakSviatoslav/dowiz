@@ -1,5 +1,10 @@
 # Bebop — the language of dowiz: maximal rewrite plan
 
+> **SUPERSEDED (2026-09-04)** — superseded by `bebop-lang/ROADMAP.md`.
+> Surviving ideas carried forward as roadmap items T68-T83 (glyphs -> T84).
+> Status: 2026-09-04 SUPERSEDED-BY bebop-lang/ROADMAP.md
+
+
 > **Author:** Sviatoslav Syniak · **License:** AGPL-3.0-or-later · **Date:** 2026-08-17
 > **Doctrine:** Over-engineering is the #1 ally (MANIFESTO C8, amended). No slices, no gating — full language + full rewrite, at maximum speed.
 

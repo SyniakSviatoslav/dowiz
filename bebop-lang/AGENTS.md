@@ -231,6 +231,10 @@ L16. push/pop emit EXACTLY their canonical words — never extra words
      900-s self-compiles; journal 1788288246). Model state is
      bookkeeping-only: guarded slot writes (0<=d<96), depth clamped >=0.
 
+L17. A `gate` line in std_golden.sh is accepted only with a committed
+     independent oracle `bench/oracles/<gate>.py` in the SAME commit
+     (T36, 2026-09-04); `bench/oracles/run_all.sh` must stay missing=0.
+
 L7. str-vs-int comparisons in any analysis mirror of .bp code are banned:
     char() returns ints in Bebop; python mirrors must compare ord()s. The
     138-names=0 bug was exactly this class.

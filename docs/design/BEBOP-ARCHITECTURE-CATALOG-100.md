@@ -1,5 +1,10 @@
 # Bebop Architecture Catalog — 100 Design Decisions (10 domains × 10)
 
+> **SUPERSEDED (2026-09-04)** — superseded by `bebop-lang/ROADMAP.md`.
+> Surviving ideas carried forward as roadmap items T68-T83 (glyphs -> T84).
+> Status: 2026-09-04 SUPERSEDED-BY bebop-lang/ROADMAP.md
+
+
 > Status: living document. Each decision is immutable once ratified.
 > Format: `D#N. Decision` — `Rationale` — `Tradeoffs`
 

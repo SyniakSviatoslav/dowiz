@@ -1,5 +1,10 @@
 # Bebop Language Specification — v0.3
 
+> **SUPERSEDED (2026-09-04)** — superseded by `bebop-lang/ROADMAP.md`.
+> Surviving ideas carried forward as roadmap items T68-T83 (glyphs -> T84).
+> Status: 2026-09-04 SUPERSEDED-BY bebop-lang/ROADMAP.md
+
+
 > Phase 0 deliverable (revised). Authoritative design reference.
 > Author: Sviatoslav Syniak · License: AGPL-3.0-or-later · 2026-08-17
 > Doctrine: MANIFESTO C8 — over-engineering is the #1 ally. Extension: `.bp`.

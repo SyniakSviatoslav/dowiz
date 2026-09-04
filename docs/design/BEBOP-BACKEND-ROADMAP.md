@@ -1,6 +1,10 @@
 # Bebop Backend v2-5 — Roadmap
 
-> Status: WASM + AArch64 native live; x86_64/GPU/FPGA planned.
+> **SUPERSEDED (2026-09-04)** — superseded by `bebop-lang/ROADMAP.md`.
+> Surviving ideas carried forward as roadmap items T68-T83 (glyphs -> T84).
+> Status: 2026-09-04 SUPERSEDED-BY bebop-lang/ROADMAP.md
+
+
 
 ## v1 (live): AArch64 native
 - Direct AArch64 encoding, W^X, PAC, CSEL branchless, svc #0 syscalls.
