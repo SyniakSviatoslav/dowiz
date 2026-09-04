@@ -202,7 +202,7 @@ class Ctx:
                 else:
                     return self.lit()  # no allocation inside while bodies (L8)
             elif f.rec:
-                args.append('((%s) & 127)' % self.expr(d + 1))  # D11-D: recursion depth to 127
+                args.append('((%s) & 63)' % self.expr(d + 1))  # D11-D: recursion depth to 63 (127 timed the python oracle out)
             else:
                 args.append(self.expr(d + 1))
         return '%s(%s)' % (f.name, ', '.join(args))
@@ -274,7 +274,7 @@ class Ctx:
         # NOT registered as an index candidate (indices stay masked), so the widened
         # loop exercises frame-heap resets (T43), arena growth and trap paths.
         big = self.r.random() < 0.25 and not self.loop_depth
-        k = self.r.randint(100, 200) if big else self.r.randint(1, 6)  # bpref budget: 250 still gave 16 timeouts/60
+        k = self.r.randint(60, 150) if big else self.r.randint(1, 6)  # bpref budget (40 s): 200 still gave 18 timeouts/60
         self.g.loop_bound[i] = k
         self.scalars.append(i)
         if not big:

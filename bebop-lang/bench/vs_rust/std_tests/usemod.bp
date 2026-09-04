@@ -1,0 +1,19 @@
+use "selfhost/prelude/bits.bp"
+use "selfhost/prelude/bits.bp"
+// T47 (2026-09-05): `use "path"` textual inclusion — the prelude's popc/tzidx come
+// from the included file (listed twice: the second is deduped); the fold is
+// popcount and lowest-set-bit index over a small LCG stream.
+fn main() -> i64 {
+  let x = 12345;
+  let i = 0;
+  let acc = 0;
+  while i < 64 {
+    let x = x * 6364136223846793005 + 1442695040888963407;
+    let w = x >> 3;
+    let lsb = w - (w & (w - 1));
+    let acc = acc * 131 + popc(w) * 64 + tzidx(lsb);
+    let i = i + 1;
+    0
+  };
+  acc
+}

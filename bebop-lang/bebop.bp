@@ -3863,6 +3863,112 @@ fn idx_of_main(fnames: [i64], cnt: i64) -> i64 {
   idx
 }
 
+// ---- T47 (2026-09-05): `use "path"` textual inclusion, one level, deduped ----
+// cli_compile scans the main source for lines that start with `use "` (column
+// 0), reads each named file ONCE (path hash = sum(byte*131) over the path, kept
+// in a 64-entry table), and builds one byte buffer: every included file in
+// order of first use, then the main source with each `use` line turned into a
+// `//` comment (positions inside the main text are unchanged). The buffer is
+// exported to <out>.use and slurped back, so every later stage (emit_words,
+// emit_offsets, collect_fns) sees one string. Nested `use` inside an included
+// file is not followed (documented; T47b).
+fn use_path_hash(cells: [i64], n: i64) -> i64 {
+  let i = 0;
+  let h = 0;
+  while i < n {
+    let h = h * 131 + cells[i];
+    let i = i + 1;
+    0
+  };
+  h
+}
+
+// Copy the bytes of str src (NUL-terminated) into dst cells at off; returns the new off.
+fn use_append_str(dst: [i64], off: i64, src: str) -> i64 {
+  let i = 0;
+  let done = 0;
+  while done == 0 {
+    let c = char(src, i);
+    let isz = if c == 0 then 1 else 0;
+    let _ = if isz == 0 then (let _ = dst[off + i] = c in 0) else 0;
+    let i = i + 1;
+    let done = isz;
+    0
+  };
+  off + i - 1
+}
+
+// Expand `use` lines of srcv into a fresh source string (or return srcv when
+// there are none). tmpc/tmpl = the scratch file path cells/length.
+fn use_expand(srcv: str, tmpc: [i64], tmpl: i64) -> str {
+  let strn = str_len(srcv);
+  let seen = zeros(64);
+  let nseen = zeros(1);
+  let buf = zeros(1600000);
+  let off = zeros(1);
+  let pathc = zeros(512);
+  let i = 0;
+  let bol = 1;
+  let nuse = 0;
+  while i < strn {
+    let c = char(srcv, i);
+    let is_use = bol * (if c == 117 then 1 else 0) * (if char(srcv, i + 1) == 115 then 1 else 0) * (if char(srcv, i + 2) == 101 then 1 else 0) * (if char(srcv, i + 3) == 32 then 1 else 0) * (if char(srcv, i + 4) == 34 then 1 else 0);
+    // read the path
+    let j = i + 5;
+    let pl = 0;
+    let go = is_use;
+    while go == 1 {
+      let pc = char(srcv, j + pl);
+      let end = (if pc == 34 then 1 else 0) + (if pc == 0 then 1 else 0) + (if pc == 10 then 1 else 0);
+      let _ = if end == 0 then (let _ = pathc[pl] = pc in 0) else 0;
+      let pl = pl + (1 - end);
+      let go = 1 - end;
+      0
+    };
+    let h = if is_use == 1 then use_path_hash(pathc, pl) else 0;
+    let k = 0;
+    let dup = 0;
+    while k < nseen[0] {
+      let dup = dup + (if seen[k] == h then 1 else 0);
+      let k = k + 1;
+      0
+    };
+    let fresh = is_use * (if dup == 0 then 1 else 0) * (if nseen[0] < 64 then 1 else 0);
+    let _ = if fresh == 1 then (let _ = seen[nseen[0]] = h in (let _ = nseen[0] = nseen[0] + 1 in 0)) else 0;
+    let fd = if fresh == 1 then sys_open(pathc, pl, 0) else 0 - 1;
+    let _ = if fd < 0 then (if fresh == 1 then sys_exit(90) else 0) else 0;
+    let inc = if fresh == 1 then sys_slurp(fd, 400000) else srcv;
+    let _ = if fresh == 1 then sys_close(fd) else 0;
+    let _ = if fresh == 1 then (let _ = off[0] = use_append_str(buf, off[0], inc) in 0) else 0;
+    let _ = if fresh == 1 then (let _ = buf[off[0]] = 10 in (let _ = off[0] = off[0] + 1 in 0)) else 0;
+    let nuse = nuse + is_use;
+    let bol = if c == 10 then 1 else 0;
+    let i = i + 1;
+    0
+  };
+  // main text, with every `use` line commented out in place
+  let base = off[0];
+  let _ = off[0] = use_append_str(buf, base, srcv);
+  let m = 0;
+  let bol2 = 1;
+  while m < strn {
+    let c = char(srcv, m);
+    let is_use = bol2 * (if c == 117 then 1 else 0) * (if char(srcv, m + 1) == 115 then 1 else 0) * (if char(srcv, m + 2) == 101 then 1 else 0) * (if char(srcv, m + 3) == 32 then 1 else 0) * (if char(srcv, m + 4) == 34 then 1 else 0);
+    let _ = if is_use == 1 then (let _ = buf[base + m] = 47 in (let _ = buf[base + m + 1] = 47 in 0)) else 0;
+    let bol2 = if c == 10 then 1 else 0;
+    let m = m + 1;
+    0
+  };
+  let total = off[0];
+  let ofd = if nuse > 0 then sys_open(tmpc, tmpl, 578) else 0 - 1;
+  let _ = if nuse > 0 then sys_export(ofd, buf, total) else 0;
+  let _ = if nuse > 0 then sys_close(ofd) else 0;
+  let rfd = if nuse > 0 then sys_open(tmpc, tmpl, 0) else 0 - 1;
+  let out = if nuse > 0 then sys_slurp(rfd, 1600000) else srcv;
+  let _ = if nuse > 0 then sys_close(rfd) else 0;
+  out
+}
+
 fn cli_compile(argc: i64, argv: i64) -> i64 {
   let src = argv[3];
   let out = argv[4];
@@ -3873,8 +3979,16 @@ fn cli_compile(argc: i64, argv: i64) -> i64 {
   let _ = str_to_cells(psrc, src);
   let _ = str_to_cells(pout, out);
   let fd = sys_open(psrc, ls, 0);
-  let srcv = sys_slurp(fd, 400000);
+  let srcv0 = sys_slurp(fd, 400000);
   let _ = sys_close(fd);
+  // T47: `<out>.use` is the scratch file of the expansion (rewritten each compile)
+  let tmpc = zeros(lo + 5);
+  let _ = str_to_cells(tmpc, out);
+  let _ = tmpc[lo] = 46;
+  let _ = tmpc[lo + 1] = 117;
+  let _ = tmpc[lo + 2] = 115;
+  let _ = tmpc[lo + 3] = 101;
+  let srcv = use_expand(srcv0, tmpc, lo + 4);
   let words = emit_words(srcv);
   let n = words[0];
   let offs = emit_offsets(srcv);

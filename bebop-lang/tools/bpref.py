@@ -109,6 +109,7 @@ class Parser:
         self.p = 0
         self.fns = {}
         self.structs = {}  # T43: NAME -> [field names] in declaration order
+        self.sigs = {}  # T48: fn name -> (param types, return type)
         self.ctors = {}
 
     def peek(self, k=0):
@@ -152,20 +153,29 @@ class Parser:
                     raise SyntaxError('reserved word used as a fn name: ' + name)
                 self.expect('(')
                 params = []
+                ptypes = []  # T48 census: declared param types ('i64', 'str', '[i64]', 'ref T', NAME)
                 while not self.at(')'):
                     params.append(self.ident())
                     self.expect(':')
                     if self.at('['):
-                        self.next(); self.next(); self.expect(']')
+                        self.next(); ptypes.append('[' + self.next()[1] + ']'); self.expect(']')
+                    elif self.at('ref'):
+                        self.next(); ptypes.append('ref ' + self.next()[1])
                     else:
-                        self.next()
+                        ptypes.append(self.next()[1])
                     if self.at(','):
                         self.next()
                 self.expect(')')
+                rtype = 'i64'
                 if self.at('->'):
-                    self.next(); self.next()
+                    self.next()
                     if self.at('['):
-                        self.next(); self.expect(']')
+                        self.next(); rtype = '[' + self.next()[1] + ']'; self.expect(']')
+                    elif self.at('ref'):
+                        self.next(); rtype = 'ref ' + self.next()[1]
+                    else:
+                        rtype = self.next()[1]
+                self.sigs[name] = (ptypes, rtype)
                 self.expect('{')
                 body = self.body()
                 # T42: a fn body ends in a tail EXPRESSION (bebop.bin exits 97
@@ -487,11 +497,27 @@ def run(src):
     return Interp(p.fns, p.ctors, p.structs, getattr(p, 'first_struct', None)).call('main', [])
 
 
+def expand_use(src):
+    """T47 (2026-09-05): `use "path"` at column 0 = textual inclusion, one level, deduped;
+    included files first (in order of first use), then the main text with each `use`
+    line commented out -- exactly bebop.bp's use_expand."""
+    inc, seen, out = [], set(), []
+    for line in src.split('\n'):
+        if line.startswith('use "') and line.rstrip().endswith('"'):
+            p = line.strip()[5:-1]
+            if p not in seen:
+                seen.add(p); inc.append(open(p, encoding='utf-8', errors='replace').read())
+            out.append('//' + line[2:])
+        else:
+            out.append(line)
+    return ('\n'.join(inc) + '\n' + '\n'.join(out)) if inc else src
+
+
 def main():
     sys.setrecursionlimit(1 << 20)
     import threading
     threading.stack_size(512 << 20)
-    src = open(sys.argv[1], encoding='utf-8', errors='replace').read()
+    src = expand_use(open(sys.argv[1], encoding='utf-8', errors='replace').read())
     res = []
 
     def go():

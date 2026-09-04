@@ -699,5 +699,9 @@ gate search 3274903484811434843 "$r"
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/set.bp ${BEBOP_TMP:-/tmp/opencode}/set_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/set_test.bin | tail -1)
 gate set 671356585229707990 "$r"
 
+# ---- usemod (T47 `use "path"` textual inclusion; L17 oracle bench/oracles/usemod.py) ----
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/usemod.bp ${BEBOP_TMP:-/tmp/opencode}/usemod_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/usemod_test.bin | tail -1)
+gate usemod 5450099284205820388 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

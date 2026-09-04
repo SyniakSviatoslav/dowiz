@@ -1723,7 +1723,7 @@ DEPS: T40. BLOCKERS: none in-sandbox.
 
 ### Layer S — language surface required by the terminal goal (no sugar)
 
-**T47 · `use "path"` textual module inclusion with content-digest dedup**
+**T47 · `use "path"` textual module inclusion with content-digest dedup** — DONE ✓ 2026-09-05 (one level, path-hash dedup, `<out>.use` scratch, gate usemod == oracle; fixpoint 446e5515; nested `use` in an included file = T47b; migrating the 25 prelude-headered gates from gen_selfsrc concatenation to `use` = T47c)
 GOAL: `collect_fns` follows `use` lines; an included file is inlined
 once per program keyed by FNV-64 of its bytes (ptrless discipline); no
 namespaces, no renaming — the prelude of T38 becomes language-level.
