@@ -682,3 +682,17 @@ Server location: Falkenstein, Saxony, Germany (50.26°N, 12.36°E, 565m)
 Types: `ProviderKind`, `ProviderInstance`, `FallbackChain`, `FallbackAdapter`
 Strategies: PriorityOrder, FastestFirst, CheapestFirst, RoundRobin
 Auto-deprioritization after ≥3 consecutive failures; recovery on success.
+
+## Session note 2026-09-04 (bebop roadmap + token-economy activation)
+
+- Committed: `d2a0a42` bebop-lang ROADMAP (SUPER-SHEAF T22-T35, TERMINAL-GOAL CLOSURE T36-T95,
+  corpus-A decisions) + 5 journal entries; `4a4e22d` graphify activation (hooks, CLAUDE.md, skill).
+- NOT committed: `bebop-lang/bebop.bp` working-tree T13 window — fixpoint FAILS (bebop.bin 13a6447f →
+  gen2 e1e26314 → gen3 cb016192, all differ). Revert or fix before any commit; source ≠ shipped binary.
+- Open: headroom routing needs the operator to run `headroom init --global --port 8788 claude`
+  (auto-mode classifier blocks agent edits of global API routing); a second Claude session
+  (pid 21587) left stuck helpers: stopped `headroom proxy --port 8787` (27974, ptrace-held),
+  `graphify update .` and `mempalace mine .` running >40 min, a hung `claude -p PROXY_OK` canary.
+- Verified: rtk hook rewrites Bash (63.8% savings); graphify hook-guard exits 0 (non-blocking);
+  headroom OAuth passthrough returned 200 and saved 6,691 tokens on the 14:42 canary.
+

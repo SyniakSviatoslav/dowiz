@@ -70,8 +70,18 @@
 - **CC subagents run on Claude, NOT OpenRouter free:** the Agent-tool `model:` field selects Claude tiers only — `invariant-guardian`/`security-sentinel` (haiku), `test-scout`/`research-verifier` (sonnet). Free-model work must go through OpenRouter (ODR + `odr_verify.py`), not CC subagents.
 - **Stage C deferred:** Mem0 report-sink + pg-boss→Telegram signals. Airweave grounding pluggable into the same gateway when it lands.
 
+## Token-economy toolstack (dev plane — status 2026-09-04)
+
+| Tool | Version | Durable activation | Status |
+|---|---|---|---|
+| rtk | 0.42.4 | `~/.claude/settings.json` PreToolUse hook `rtk hook claude` | ✅ active, 1031 cmds, 679.6K tokens saved (63.8%) |
+| graphify | 0.9.44 | `.claude/settings.json` hook-guard hooks + `CLAUDE.md` rule + `.claude/skills/graphify` (commit 4a4e22d) | ✅ active |
+| mempalace | 3.9.0 CLI / 3.7.1 plugin | global plugin `mempalace@mempalace` (PreCompact, SessionEnd hooks) | ✅ active |
+| ponytail | 4.9.0 | global plugin `ponytail@ponytail` | ✅ active |
+| headroom | 0.37.0 | needs per-user routing: `headroom init --global --port 8788 claude` → `headroom doctor` → canary `claude -p` | ⏳ installed, NOT routed (OAuth passthrough proven 200 on 2026-09-04; port 8787 held by a stale ptrace-stopped proxy of another session → use 8788) |
+
 ## Parked (with triggers — see build plan §4)
-Headroom · Mem0/OpenMemory · Airweave · Octogent (`hesamsheikh/octogent`, MIT) · Pake.
+Mem0/OpenMemory · Airweave · Octogent (`hesamsheikh/octogent`, MIT) · Pake. (Headroom un-parked 2026-09-04 — see toolstack table.)
 
 ## Privacy gate (§2.2 — build into architecture before any owner-data tool)
 Any text → vector must pass ONE ingest contract: (a) strip/pseudonymize PII, (b) tag tenant, (c) then embed locally. Tenant-isolate vectors (extend `verify:rls` to vector tables). Support erasure. Applies to Airweave / Mem0 / product AI features — NOT to Repowise (code corpus: no PII risk, only proprietary-code risk, closed by locality).

@@ -153,3 +153,17 @@ Rules:
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+
+## Token-economy toolstack (always on — every session, verified 2026-09-04)
+
+| Tool | How it is active | What you must do |
+|---|---|---|
+| **rtk** 0.42 | global `PreToolUse` hook rewrites Bash to `rtk …` (63.8% measured savings) | prefer `rtk read/grep/git/ls/find/diff` explicitly for large outputs; never `cat` a big file |
+| **graphify** 0.9 | project hooks (`hook-guard`) + `## graphify` rule above + `/graphify` skill | `graphify query/path/explain` before grep; `graphify update .` after code edits (AST-only) |
+| **mempalace** 3.x | global plugin; PreCompact/SessionEnd hooks mine the session | `mempalace search <words>` before re-reading history; re-mine journals after commits |
+| **ponytail** 4.9 | global plugin (lazy-senior mode: simplest working solution) | do not add unrequested abstractions |
+| **headroom** 0.37 | installed; proxy routing is per-user (`headroom init --global --port 8788 claude`, then `headroom doctor`) | when routed, first request per proxy start pays ~10 s model warm-up; savings visible via `headroom savings` |
+| **tb** | `tb h <path>` crc32 content-address, `tb s <needle> <path>` hit lines | re-read a file only when its hash changed |
+
+Rules: compile/test output to `/dev/null` and read `tail -1`; one deterministic run is proof;
+scratch lives in the session scratchpad, never `/tmp` root. Details: `bebop-lang/docs/TOKEN-ECONOMY.md`.
