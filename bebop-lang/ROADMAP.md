@@ -3,6 +3,12 @@
 This file supersedes PLAN_B.md, MASTER-FINISH-PLAN.md, ROADMAP_SELFHOST.md,
 docs/ZERO_C_CHARTER.md and SWEEP-B3-3.md — all removed. BUGFIXES.md stays
 (bug journal), AGENTS.md stays (process laws), bench/ reports stay (evidence).
+The 2026-08-17/18 design corpus in `docs/design/BEBOP-*` (glyphic QTT
+spec, glyph alphabet, catalog-100, backend roadmap, rewrite plan) is
+NOT superseded by this list yet — it contradicts the tree on seven axes;
+operator decision 2026-09-04: SUPERSEDED, with 16 selected items carried
+over as tasks T68-T83 (TERMINAL-GOAL CLOSURE › CORPUS-A CARRY-OVER); T41
+places the banners.
 Historical closed-status records are consolidated in "Progress log" below;
 new work is tracked live in this file.
 
@@ -72,6 +78,23 @@ garbage collectors, no intermediate interpreters.
   has a `.bp` twin with a gate). This is not a bolt-on database — it is a
   continuation of the post-von-Neumann vision where the substrate dispatcher
   (T14) and the tensor engine converge.
+- **Z2-graded register bank + cellular sheaf store (T22-T35)**: the
+  fixed register file x9-x13 is a TYPED two-sector space g = g0 (+) g1 —
+  x9-x10 even (Cl^0(4,1) rotors/coordinates, commuting), x11-x13 odd
+  (Grassmann triggers/masks/transaction parity: anticommuting, x^2 = 0 =
+  use-once). Storage is a cellular sheaf (local stalks + restriction maps;
+  a query = a global section, H^0), programs/queries are string diagrams
+  rewritten to normal form, records are register images (zero
+  deserialization), CRUD = CoW versions + nilpotent tokens + Z2
+  transactions. Operator decisions and math corrections: see the
+  SUPER-SHEAF PULL section.
+- **Terminal criterion**: "done" is defined falsifiably in TERMINAL-GOAL
+  CLOSURE §TG-DONE (substrate execution of COMPILED programs with one
+  conditional branch in the image, substrate-mode self-hosting fixpoint,
+  committed oracle per gate, zero tolerated miscompiles, one compiler).
+  Audit 2026-09-04: every N/SS/T "DONE" is a standalone gate demo (class
+  a); none is yet integrated into emitted code or the runtime (class b)
+  except foldx/whileb/r3x/morph; none is hardware-validated (class c).
 
 ## Tensor-Database-as-Language — cross-links to dowiz-core (Rust reference impl)
 
@@ -110,6 +133,11 @@ ambition and reusing the established gate discipline.
 md5 `13a6447fe65cb3321e8165d38d7e4c77`) +
 `*.bp` sources + `*.bin` artifacts. **Zero C** — `native/` (175 files) deleted.
 std_golden 60/60, construct_parity 24/24, parity_driver 9/9+1skip.
+CAVEAT (2026-09-04): these counts were measured on `bebop.bin`; the
+working-tree `bebop.bp` carries an uncommitted T13 window (source !=
+shipped binary, see TERMINAL-GOAL CLOSURE F-H); 54 of the 60 folds have
+no committed independent oracle (F-C) — they prove determinism and
+self-consistency until T36 lands.
 
 Milestone history (all DONE):
 - **M1** seed loader: k1..k7 run through seed.bin, outputs identical to the
@@ -590,7 +618,7 @@ new emitter-adjacent work.
 
 ### Layer 0 -- numeric basis (new gates, pure .bp arithmetic)
 
-**T1 · ternary Clifford basis** (`tern.bp`) — DONE ✓ (fold 8888868889989889)
+**T1 · ternary Clifford basis** (`tern.bp`) — DONE ✓ (fold 8888868889989889) — **GATE NOT WIRED** (audit 2026-09-04: no `gate` line in std_golden.sh; source in std_tests/ only → T37)
 GOAL: {-1,0,1} coefficients, 2 bits each, packed into i64 words; blade
 multiplication via the Cayley table as combinatorial masks (AND/XOR +
 sign-inversion masks), NOT float MUL; the rotor sandwich R x R~ (grade
@@ -600,7 +628,7 @@ multiply a rotor pair, sandwich-rotate a probe blade; sign pattern and
 2-bit packing invariants (no value outside {-1,0,1}).
 DEPS: bits.bp (popcount/rotate). BLOCKERS: none (deterministic i64).
 
-**T2 · packed RNS** (`rns.bp`) — DONE ✓ (fold 1183829339)
+**T2 · packed RNS** (`rns.bp`) — DONE ✓ (fold 1183829339) — **GATE NOT WIRED** (audit 2026-09-04: no `gate` line in std_golden.sh; source in std_tests/ only → T37)
 GOAL: 4 coprime moduli with residues in 16-bit lanes of an i64;
 parallel add/mul by lane-local arithmetic (no carry chains by
 construction); CRT spot-check against the direct i64 result.
@@ -608,7 +636,7 @@ DONE-CHECK: gate `rns` fold == mirror: N random-ish pairs, RNS add and
 mul == direct mod-2^64 arithmetic on every lane AND the CRT check.
 DEPS: none. BLOCKERS: none.
 
-**T3 · in-register SNN engine** (`snn.bp`) — DONE ✓ (fold 65504516937878)
+**T3 · in-register SNN engine** (`snn.bp`) — DONE ✓ (fold 65504516937878) — **GATE NOT WIRED** (audit 2026-09-04: no `gate` line in std_golden.sh; source in std_tests/ only → T37)
 GOAL: the vision's bit-mask neurons with ternary spikes: a neuron's
 state = bit mask; a spike = a packed ternary coefficient (T1); the
 propagation step = one POPCNT + AND/OR pass (no per-synapse loops);
@@ -620,7 +648,7 @@ DEPS: T1 (ternary spike payload), bits.bp. BLOCKERS: none.
 
 ### Layer 1 -- generative memory
 
-**T4 · L-system fractal memory** (`lsys.bp`) — DONE ✓ (fold 144175882039858)
+**T4 · L-system fractal memory** (`lsys.bp`) — DONE ✓ (fold 144175882039858) — **GATE NOT WIRED** (audit 2026-09-04: no `gate` line in std_golden.sh; source in std_tests/ only → T37)
 GOAL: the arena stores ONLY the compact recursive rule + the seed; the
 expansion is generated into the arena on demand and folded back into a
 digest after use. Expansion factor measured and frozen (bytes of rule
@@ -631,7 +659,7 @@ digest the expansion (FNV-64), collapse; fold == mirror; the expansion
 factor printed once and recorded in the journal.
 DEPS: none. BLOCKERS: none (the claim is measured, not assumed).
 
-**T5 · fractal LOD zoom** (`lod.bp`) — DONE ✓ (fold 1000088904914)
+**T5 · fractal LOD zoom** (`lod.bp`) — DONE ✓ (fold 1000088904914) — **GATE NOT WIRED** (audit 2026-09-04: no `gate` line in std_golden.sh; source in std_tests/ only → T37)
 GOAL: the macro-rotor (T1, low dimension) stays register-resident; a
 collision/logical-inference trigger expands a fractal layer locally,
 applies the sandwich, collapses back to a macro-index. The expansion is
@@ -722,7 +750,7 @@ DEPS: cache.bp, pieblock, sha256. BLOCKERS: none.
 
 ### Layer 4 -- the substrate (the terminal-goal gap)
 
-**T13 · register-window emitter (R6.1 protocol)** — PROVEN, NOT LANDED (sole open gap)
+**T13 · register-window emitter (R6.1 protocol)** — RE-SCOPED 2026-09-04 (untyped window retired by operator decision; typed bank = T25 in SUPER-SHEAF PULL; history kept below)
 GOAL: the stack machine -> register-resident values: compile-time
 "top is in x0" tracking, movs instead of push/pop pairs where provable,
 flush-on-bl. This closes the FASTPATH-SPEC done-check.
@@ -732,9 +760,15 @@ STATUS: the mechanism is PROVEN correct (R4#4: 42/42 gates, K1-K4
 bit-exact) but was never reconciled with the current emitter (R6.2 v5
 folding / L16). NOT YET LANDED. This is the ONE OPEN ROADMAP GAP.
 EXACT BLOCKERS (localized 2026-09-02 session):
-  1. x9-x13 free for value window (symbols x19-x28, spills x15, arena
-     x14, scratch x2/x3 — only 2 occurrences of "x9"/"x13" in emitter,
-     none confirmed emitted). VERIFY FIRST before any edit.
+  1. x9-x13 free for value window — VERIFIED NEGATIVE 2026-09-04:
+     decoding every em() constant in bebop.bp (ORR-alias mov, add/sub
+     imm, movz, ldr/str, ubfm classes) finds 71 emitted words that write
+     or read x9-x13 as scratch inside 8 builtin emitters (emit_sys_open,
+     _read, _write, _readbuf, _slurp, _export x2, _rename). x9-x13 are
+     also AArch64 caller-saved and the prologue saves only x19-x28 —
+     the gen3==gen4 corruption of commit b4326b5 (S1-S3 landed b211451,
+     disabled b4326b5, revert-of-disable 9d9a2ba). Any window on x9-x13
+     needs T25 S1 (callee-save) + S2 (rehome the 8 emitters) FIRST.
   2. push/pop still emit canonical stack words (sub sp,#16; str x0,[sp]
      / ldr; add sp) — no register path exists. Fix once in push/pop,
      every caller follows (~100 call sites).
@@ -898,12 +932,1270 @@ T19+T20. Every column = one file + `fn main() -> i64` + gate appended to
    (the box demonstrably throttles). Forward-port to bare metal (T15).
 3. The AST-less semantic stream already exists as the canonical .bt
    tensor + hv4096 interchange; the .bp text remains the AUTHORING
-   surface by design (the roadmap never claims the compiler reads
-   hypervectors).
+   surface (the roadmap never claims the compiler reads hypervectors).
+   OVERRIDDEN 2026-09-04 for the token form: glyphs are the canonical
+   spelling, ASCII a lossless projection (T84); the emitter sees the
+   same token stream either way.
 4. ~~The terminal-goal sentence stands until T14 lands~~ — T14 LANDED
    (substrate.bp, fold 36750250113). The post-von-Neumann substrate is
    proven: SWAR popcnt + de Bruijn tzcnt, activity-wavefront to
    quiescence, no PC/fetch-decode. Math layers + substrate complete.
+
+## SUPER-SHEAF PULL (Z2-graded register bank + cellular sheaf store, T22-T35)
+
+Added 2026-09-04 (session 4) from the operator's vision text (Z2-graded
+register window, supercommutator instead of branches, cellular sheaf
+store, categorical rewrite store, register-resident storage layout,
+index-free retrieval, CRUD on the substrate). Analysis result: ~55% of
+the mathematics is ALREADY gate-proven here (map below); the new pulls
+are listed bottom-up with falsifiable done-checks, one `.bp` file + one
+`fn main() -> i64` fold == independent python mirror per column, appended
+to `bench/vs_rust/std_golden.sh`, per the invariant policy. Compiler-side
+columns (T25, T26) obey L14 single-variable diffs, L1 word discipline,
+L16 canonical push/pop words, and the FASTPATH-SPEC ban on in-place word
+rewrites.
+
+### Operator decisions (2026-09-04, binding for this pull)
+
+1. **Physical Z2 partition of x9-x13.** x9-x10 = even sector g0
+   (bosonic: Cl(4,1) even-subalgebra state, rotors, coordinates);
+   x11-x13 = odd sector g1 (fermionic: trigger, validation mask, rep /
+   transaction-parity invariant). The bank is a TYPED register file,
+   not an untyped expression cache. Consequence: T13's untyped value
+   window on x9-x13 is RE-SCOPED (see T13 and T25).
+2. **Odd sector = Grassmann (exterior) algebra Lambda_5; even sector =
+   Cl^0(4,1).** Rationale (math correction to the vision text): a Lie
+   superalgebra bracket does NOT give x^2 = 0 for odd x ([x,x] is
+   symmetric and generally nonzero, e.g. {Q,Q} = 2P); Clifford odd
+   vectors anticommute but square to +-1 (only the CGA null vectors
+   n_inf, n_o are nilpotent). Anticommutation AND nilpotency together
+   is exactly the exterior algebra. Both properties the vision needs
+   ("self-clearing triggers") therefore live in Lambda; rotors live in
+   Cl^0(4,1); the null vectors n_inf = e+ + e-, 2 n_o = e- - e+ are the
+   bridge (representable with ternary coefficients, both square to 0).
+
+### Math corrections carried into the tasks (Q12 honesty)
+
+- Vision text "xy = -xy" is a typo for xy = -yx (anticommutation).
+- "Supercommutator replaces if/else": in a Z2-graded algebra odd*even is
+  ODD, so applying a trigger to a multivector does not yield a masked
+  multivector by itself. Predication on ARM64 stays mask arithmetic (the
+  existing branchless law); the grading's real value is (a) a compile-
+  time TYPE invariant on the bank (parity mismatch = trap) and (b) use-
+  once semantics (x^2 = 0 == QTT quantity-1 linearity of the 2026-08-17
+  rewrite plan). The branch-elimination claim is GATED as an exhaustive
+  select-equivalence (T24), not assumed.
+- Cl(4,1) has 32 blades. 32 blades x 2-bit ternary = 64 bits = ONE i64:
+  a packed ternary CGA multivector fits x9 exactly (tern.bp's Cl(3)
+  scheme scaled up). "Continuous components of a full Cl(4,1)
+  multivector in x9-x10" is dimensionally impossible (32 fixed-point
+  coefficients != 128 bits); the even sector holds packed ternary
+  multivectors or a grade-restricted fixed-point subset (a CGA point =
+  5 coefficients still needs 5 words -> T26 record, not 2 registers).
+  Translators T = 1 - t n_inf / 2 need the coefficient 1/2 -> not
+  representable in ternary; ternary CGA gates use rotation rotors only,
+  fixed-point CGA is a later column.
+- "Search as cohomology" = H^0 of a cellular sheaf = a sheaf-Laplacian
+  solve (iterations to residual 0), NOT O(1). Cost is measured (swpmu
+  step counts), never assumed. Constant sheaf degenerates EXACTLY to the
+  `spacetime`/`vecinv` gates already green.
+- "Search as term rewriting to normal form" is well-defined only for
+  CONFLUENT + TERMINATING rule sets; the gate includes the critical-pair
+  check and rejects rule sets that fail it (the FIR-style structural ban).
+- "Nanosecond CRUD", "80% of time is deserialization", "no GC" are
+  hardware/workload claims -> forward-port (T15 class); the in-sandbox
+  measure is deterministic step counts + exact freed-cell accounting.
+
+### Vision -> existing-gate map (what is NOT new work)
+
+| Vision item | Already proven by |
+|---|---|
+| Clifford blades as bitmasks, Cayley-mask product, rotor sandwich | gate `tern` (Cl(3), T1), `rnsrot` (T7) |
+| Holographic superposition / resonance / unbinding as search | gates `hv`, `ringvsa` (N3), `holo` (N6), `attn` (SS-9) |
+| Data as generators (procedural, transient, re-derivable) | gates `lsys` (T4), `lod` (T5), `phant` (T6) |
+| Content-addressed references, mismatch breaker | gates `ptrless` (T12), `cache`, `pieblock` (SS-13) |
+| Collapse-on-uselessness GC replacement, exact freed accounting | gate `entcol` (T10) |
+| Ad-hoc JIT: compile -> atomic publish -> run | gate `morph` + morph_loop.sh (T11) |
+| Register wave / activity-wavefront execution, no PC | gates `substrate` (T14), `dispatcher`, `spike`, `petri` (N4) |
+| Harmonic consistency on a graph (constant-sheaf case) | gates `spacetime` (N8), `vecinv` (SS-2), `csr` |
+| Layout-invariant canonical forms (isotopy precedent) | gates `pieblock` (SS-13), `scoord` (SS-15) |
+| Zero-copy mmap layout, atomic publish | `.bt` codec (F4), `bt`/`store` gates, F2 |
+| Reversible mutation / rollback without snapshots | gate `rev` (N2) |
+| Transaction as conservation law (Stokes) | T21 (planned, T16-T21 ladder) |
+| Use-once (linear) semantics | QTT quantity 1 (BEBOP-LANGUAGE-REWRITE-PLAN 2026-08-17 s3.1) |
+| Rust reference for sheaf coboundary / Laplacian L = B^T W B | `crates/dowiz-core/src/incidence.rs` (canonical oriented-edge Laplacian) |
+| Rust reference for open-hypergraph diagrams | `crates/dowiz-core/src/hypergraph.rs` (incidence, sparse Laplacian, structural_hash) |
+
+### Layer A -- graded algebra (new gates, pure .bp arithmetic, zero compiler risk)
+
+**T22 . Grassmann algebra Lambda_5 as bitmask monomials** (`grass.bp`)
+GOAL: 5 generators -> 32 monomials indexed by their basis bitmask, ternary
+coefficient 2 bits each -> ONE i64 (the x11 payload). Product of
+monomials e_I * e_J = 0 when I & J != 0 (nilpotency = one AND), else
+(-1)^{inv(I,J)} e_{I|J} with inv = the transposition count already
+computed by tern.bp's gprod (degenerate metric: no e_i^2 term).
+DONE-CHECK: gate `grass` fold == python mirror: e_i e_j == -e_j e_i for
+all 10 pairs; e_I^2 == 0 for ALL 31 non-scalar monomials (exhaustive);
+associativity on a triple; Z2 grading closure |I|+|J| mod 2; no packed
+value outside {-1,0,1}.
+DEPS: tern.bp (sign count), bits.bp. BLOCKERS: none.
+
+**T23 . Cl(4,1) ternary CGA basis, even subalgebra, null vectors** (`cl41.bp`)
+GOAL: 32 blades x 2 bits = one i64 (the dimensional fact above);
+signature (+,+,+,+,-) as a per-generator sign mask in the Cayley product;
+even subalgebra Cl^0 (16 blades) closed under product (the x9/x10
+payload, 32 bits each -> two even multivectors per register or one +
+accumulator); null vectors n_inf = e+ + e- and 2 n_o = e- - e+ square
+to 0 EXACTLY and have scalar product -2; rotation rotor sandwich
+R x R~ on a CGA point (rotation only, see corrections).
+DONE-CHECK: gate `cl41` fold == mirror: even*even is even for a table
+of pairs; n_inf^2 == 0, (2 n_o)^2 == 0, <n_inf, 2 n_o> == -2; sandwich
+== direct table; ternary invariants.
+DEPS: tern.bp, T22 (shared sign count). BLOCKERS: none.
+
+**T24 . supercommutator + nilpotent trigger + select-equivalence** (`zgrade.bp`)
+GOAL: [x,y] = xy - (-1)^{p(x)p(y)} yx on the graded pair Cl^0 (+) Lambda;
+the odd trigger's self-clearing t * t == 0; and the vision's branch claim
+as a THEOREM: parity-sign x mask select == the if/else reference.
+DONE-CHECK: gate `zgrade` fold == mirror: [even,even] == commutator,
+[odd,odd] == anticommutator == 0 on generators (exhaustive pairs);
+super-Jacobi on one triple; trigger applied twice == 0 for all 31
+monomials; select-equivalence over ALL 256 (cond, a, b) bit patterns
+(bitmat-style exhaustive), zero mismatches.
+DEPS: T22, T23. BLOCKERS: none.
+
+### Layer B -- the graded register bank (compiler; T13 re-scope)
+
+**T25 . Z2 bank ABI: x9-x13 callee-saved, builtin scratch rehomed, typed slots**
+Verified facts (2026-09-04, decoder over every `em()` constant in
+bebop.bp -- ORR-alias mov, add/sub imm, movz, ldr/str, ubfm classes):
+**71 emitted words write or read x9-x13 as scratch inside 8 builtin
+emitters** -- emit_sys_open (686), emit_sys_read (724), emit_sys_write
+(760), emit_sys_readbuf (844), emit_sys_slurp (904), emit_sys_export
+(3247, 3262), emit_sys_rename (3341). The prologue saves only x19-x28
+(stp at [sp,#0..#64]); x9-x13 are AArch64 caller-saved, which is exactly
+the gen3==gen4 corruption of commit b4326b5. seed.S touches x9/x10/x12
+only BEFORE its blr (entry setup) -- the loader does not depend on the
+bank across the JIT call. Frame slots [sp,#80..#256) are unused (spill
+base x15 = sp+256, heap x14 = sp+768).
+S1 (ABI): prologue adds stp x9,x10 / stp x11,x12 / str x13 into
+   [sp,#80..#120), epilogue mirrors -- +6 words per fn (123 fns in
+   bebop.bp => +738 words, <1% of the 344KB binary). Encodings per L1
+   (asm -> objdump -> disasm diff), NEVER typed. Done-check: fixpoint
+   byte-exact, std_golden 60/60, construct frozen bins regenerated (every
+   stream grows by exactly 6 words per fn -- assert the delta).
+S2 (rehome): the 8 emitters stop using x9-x13. Default mechanism: save
+   the bank to its frame slots at emitter entry and restore before the
+   result write (mechanical, 6 words per builtin); alternative: re-
+   register onto x4-x7/x16/x17 (sys_rename needs 8 scratch regs and only
+   6 are free -> spill two into the IO scratch zone). One emitter per
+   commit (L14), register-table comment per L2, disasm diff per L1.
+   Done-check: extend `tools/check_abi.py` from x27/x28 to x9-x13 --
+   ZERO writes to x9-x13 outside prologue/epilogue and the T25 bank
+   builtins; fixpoint + battery green.
+S3 (typed slots): x9 = E0, x10 = E1 (even: packed Cl^0(4,1) or fp
+   2^32 coordinate), x11 = O0 trigger (Lambda_5 monomial), x12 = O1
+   validation mask, x13 = O2 rep/transaction parity (runtime twin of the
+   compile-time rep cell fntab[3890]: bit0 = pending-transaction parity,
+   upper bits = generation). Six builtins: even read/write, odd
+   read/write, `scomm` (T24 supercommutator on the bank), `nkill`
+   (nilpotent AND-test kill). Compile-time parity per bank slot in FIXED
+   cells (R6.2 v5 law: hard addressing, no dynamic slot arithmetic):
+   fntab[3891..3898] are unreferenced in bebop.bp (grep 2026-09-04;
+   3701+d is capped at 3796, 3903+i grows upward) -- VERIFY again before
+   use. Odd value into an even slot (or vice versa) = COMPILE-TIME loud
+   trap (3558867200-class). Done-check: gate `zbank` (a .bp program
+   that rotates an even state in x9 by a rotor in x10 under a trigger in
+   x11 == the T24 mirror), parity-mismatch program traps at compile,
+   parity-free programs produce byte-identical streams to pre-S3
+   (zero cost when unused, L16 spirit).
+DEPS: T22-T24 (payload semantics), FASTPATH-SPEC discipline. BLOCKERS:
+none in-sandbox. NOTE: the uncommitted working-tree diff in bebop.bp
+(2026-09-04: `can_reg` register path in push/pop using fntab[3890] as a
+0..5 depth counter) is the UNTYPED window and conflicts with this
+decision -- revert or re-scope it before any commit.
+
+**T13 (re-scoped 2026-09-04)**: the untyped x9-x13 value window is
+RETIRED by operator decision 1. The expression path stays the stack
+machine + R6.2 folding (FASTPATH-SPEC fallback clause, invoked
+deliberately, not by failure); register residency is provided by the
+TYPED bank (T25) for algebraic state and by T26/T35 for records. The
+T13-attributed K1-K4 projections in "Predicted speedup" are WITHDRAWN
+until re-measured after T25/T26/T35 (ship whatever the numbers are).
+
+**T26 . register-resident record layout (zero deserialization)** (`regrec.bp`)
+GOAL: a record = 40 bytes = 5 words = the bank image in sector order
+[E0,E1 | O0,O1,O2]; a table = `.bt` rank-4 tensor dims [N,5,1,1] (F4
+codec unchanged); publish via F2 (mmap-export + renameat); load = ldp
+x9,x10 / ldp x11,x12 / ldr x13 from the mmapped base (3 words), store
+mirrors it -- the on-disk bytes ARE the register image, no parse step.
+DONE-CHECK: gate `regrec` fold == mirror: pack N records -> export ->
+read back -> load into the bank -> fold over all records == direct fold
+over the tensor; disasm diff of the 3-word load/store sequences (L1);
+sys_export/renameat register tables per L2.
+DEPS: T25, bt.bp, store.bp. BLOCKERS: none (mmap works under proot).
+
+### Layer C -- cellular sheaf store (port-from-reference: incidence.rs)
+
+**T27 . cellular sheaf on a graph: stalks, restriction maps, coboundary,
+sheaf Laplacian** (`sheaf.bp`)
+GOAL: stalk dim d <= 2, i64 fixed-point 2^32; restriction maps rho_{v<e}
+as 2x2 fp matrices per (vertex, edge); coboundary (delta x)_e =
+rho_{v<e} x_v - rho_{u<e} x_u (oriented like incidence.rs, head > tail);
+sheaf Laplacian L_F = delta^T delta. Consistency of local data =
+delta x == 0.
+DONE-CHECK: gate `sheaf` fold == python mirror of incidence.rs semantics:
+identity restrictions => L_F == the graph Laplacian D - A from csr/vecinv
+bit-exact (the falsifiable degeneracy); a consistent assignment gives
+delta x == 0 on every edge; ONE perturbed restriction map leaks a nonzero
+residual on exactly that edge (vecinv-style breaker).
+DEPS: csr.bp, matrix.bp, vecinv.bp. BLOCKERS: none.
+
+**T28 . global sections H^0 as the query; harmonic iteration; Euler
+characteristic** (`sheafh0.bp`)
+GOAL: "does a state exist that satisfies all local constraints" = find x
+in ker delta extending pinned local values, by Jacobi/heat-flow on L_F
+(the spacetime.bp crystallization generalized to non-identity
+restrictions); residual -> 0 (consistent) vs residual floor > 0
+(inconsistent, answer NO). Falsifiable topology: on a tree with
+invertible restriction maps dim H^0 = d (d independent harmonic
+sections found); on a cycle with a twisted monodromy (product of
+restriction maps around the loop != identity, the Mobius case) dim H^0
+< d; chi = sum_v dim F(v) - sum_e dim F(e) == dim H^0 - dim H^1 checked
+on both.
+DONE-CHECK: gate `sheafh0` fold == mirror: residuals, dim H^0 on tree
+and twisted cycle, chi identity, iteration counts RECORDED (the cost is
+a Laplacian solve; swpmu step count frozen in the journal).
+DEPS: T27, spacetime.bp, swpmu.bp. BLOCKERS: none.
+
+**T29 . content-addressable sheaf nodes (O(1) resolve + phase address)**
+(`csheaf.bp`)
+GOAL: node address = FNV-64 digest of its stalk (ptrless discipline);
+resolve = digest -> slot, verify fold, corrupted key traps; "phase
+address" variant: digest -> fixed-point angle -> bucket in Cl^0 (rotor
+angle as the hash); on retrieval the stalk is CHECKED against its
+neighbours through delta (the sheaf validates the record, not a schema).
+DONE-CHECK: gate `csheaf` fold == mirror: N keys resolve to their
+stalks; one corrupted key does NOT resolve (loud breaker); bucket
+histogram == mirror; an inconsistent inserted stalk is rejected by the
+delta check.
+DEPS: T27, ptrless.bp, cache.bp. BLOCKERS: none.
+
+### Layer D -- categorical rewrite store (port-from-reference: hypergraph.rs, petri.bp)
+
+**T30 . string diagrams as open hypergraphs with Z2-typed wires** (`sdiag.bp`)
+GOAL: boxes = nodes with typed input/output wires; wire type carries the
+Z2 parity (T24); sequential composition (o) and parallel composition
+(x) with parity check on every plugged wire (mismatch = trap);
+canonical form = topological order with content-digest tie-break
+(structural_hash precedent in hypergraph.rs).
+DONE-CHECK: gate `sdiag` fold == mirror: isotopy invariance -- permuting
+node ids / sliding boxes leaves the canonical fold IDENTICAL (pieblock/
+scoord layout-invariance style); interchange law (f x g) o (h x k) ==
+(f o h) x (g o k) bit-exact on folds; parity mismatch traps.
+DEPS: T24, graph.bp, petri.bp. BLOCKERS: none.
+
+**T31 . rewriting to normal form: termination, confluence, query =
+normalize** (`rewrite.bp`)
+GOAL: a small rule set on T30 diagrams (monoid unit/assoc + Petri token
+rules); termination by a strictly decreasing node-count measure;
+LOCAL CONFLUENCE by exhaustive critical-pair joining on small terms;
+normal form unique => "the answer is the normal form"; pattern diagrams
+with holes as queries (matches = unification against the store).
+DONE-CHECK: gate `rewrite` fold == mirror: two different rewrite orders
+reach the SAME normal form fold; all critical pairs join; a deliberately
+non-confluent rule set is REJECTED at load (structural ban); query
+matches == mirror.
+DEPS: T30. BLOCKERS: none.
+
+### Layer E -- CRUD on the substrate
+
+**T32 . ad-hoc query JIT (predicate -> native filter kernel)** (`qjit.bp` + morph loop)
+GOAL: (field, op, const) -> a `.bp` kernel text generated IN .bp (str-free
+arithmetic per R3.x(d)) -> compiled by bebop.bin -> published atomically
+(T11 morph path, W^X-clean file-backed RX) -> run over the T26 record
+tensor via the 3-word bank load; constants baked as imm12 (R6.2 right-
+const path) -- no query planner, no interpreter.
+DONE-CHECK: gate `qjit` fold == mirror: filtered set == python filter for
+several predicates; swpmu step count per record recorded; morph_loop-
+style K iterations deterministic.
+DEPS: T26, morph.bp, swpmu.bp, R6.2 imm path. BLOCKERS: mprotect RWX
+(proot W^X) -- file-backed RX is the substitute, as T11.
+
+**T33 . CoW versioning + nilpotent reader tokens (MVCC without WAL)** (`mvcc.bp`)
+GOAL: update = NEW record + a restriction-map edge to the old version
+(a sheaf edge, T27) -- never in place; readers hold Grassmann generator
+tokens (T22); release = product with the own token -> 0 (nilpotency =
+end of liveness); a version whose token product reaches 0 collapses and
+its cells are freed (entcol exact accounting) -- no scans, no refcount
+integers, no GC thread.
+DONE-CHECK: gate `mvcc` fold == mirror: N interleaved updates/readers --
+every read fold equals SOME committed version (no torn reads); freed-
+cell accounting exact; old versions survive exactly while a live token
+exists.
+DEPS: T22, T27, genarena.bp, rev.bp, entcol.bp. BLOCKERS: none.
+
+**T34 . Z2 transactions (STM on the grading)** (`stm.bp`)
+GOAL: uncommitted writes accumulate in the ODD sector (O0 trigger, O1
+mask, O2 parity) as Grassmann monomials; commit = pairwise product ->
+EVEN (parity 0) iff the sheaf residual of the touched nodes is 0 (T28,
+no conflict); abort = the odd context squared = 0 in ONE operation
+(nilpotency); every commit must satisfy the T21 Stokes identity (cross-
+gate once T21 lands).
+DONE-CHECK: gate `stm` fold == mirror: N transactions with injected
+conflicts -- committed set == mirror; aborted transactions leave the
+store BIT-IDENTICAL; parity register returns to 0 after every commit/
+abort; Stokes residual 0 after every commit.
+DEPS: T22, T24, T25 (bank), T28, T33, T21. BLOCKERS: none.
+
+**T35 . register wave filter (the index-free stream)** (`wave.bp`)
+GOAL: the record stream flows through the bank (T26 load per record);
+the odd trigger (O0) acts as a FILTER by nilpotent kill: records whose
+mask product with the trigger is 0 are dropped, survivors become the
+current even state -- fused with the T14 dispatcher (survivors set
+activity bits; sweep to quiescence), no keys, no addresses.
+DONE-CHECK: gate `wave` fold == mirror: survivors == python filter,
+order-independent per sweep (substrate discipline), step count recorded
+vs the T32 JIT filter on the same data (two mechanisms, one oracle).
+DEPS: T24, T25, T26, substrate.bp. BLOCKERS: none.
+
+### Ladder (in-order, L14 single-variable per column)
+
+T22 -> T23 -> T24 (pure algebra, no compiler risk, can run in parallel
+with T16-T21) -> T25 S1 -> S2 -> S3 (compiler, one commit each, battery +
+fixpoint after each, clean revert from a fresh baseline snapshot) -> T26
+-> T27 -> T28 -> T29 -> T30 -> T31 -> T32 -> T33 -> T34 (needs T21) ->
+T35. Every column = one file + `fn main() -> i64` + gate line + journal +
+ROADMAP status + commit/push.
+
+### Honest flags (Q12) for this pull
+
+1. The physical partition COSTS: +6 words per fn (ABI), 8 builtin
+   emitters rewritten, and the untyped T13 window retired. Generic
+   expression speed is NOT improved by this pull; algebraic-state
+   residency is. Numbers are shipped after measurement only.
+2. Ternary CGA cannot express translators (needs 1/2); fixed-point Cl(4,1)
+   (32 words per multivector) is a later column, not in T23.
+3. H^0 queries cost a Laplacian solve; "no scan" is true, "O(1)" is not.
+   T29 gives O(1) by content address; consistency (T28) is iterative.
+4. Normal-form search is restricted to confluent + terminating rule sets
+   by construction (T31 rejects the rest).
+5. Nilpotent tokens replace refcount INTEGERS and GC threads, not the
+   concept of liveness: readers must still hold and release tokens.
+6. Hardware claims (nanosecond CRUD, 80% deserialization share) are
+   forward-port; the in-sandbox oracle is swpmu step counts + exact
+   accounting. W^X under proot -> file-backed RX for T32, as T11.
+
+## TERMINAL-GOAL CLOSURE (audit 2026-09-04 + task stack T36-T67)
+
+Added 2026-09-04 (session 4b). Three read-only audits were run over the
+whole tree: (1) the compiler surface (`bebop.bp` 3420 lines + seed.S +
+bench scripts), (2) the 116-module std corpus against the 60 gates, (3)
+the design corpus (`docs/design/BEBOP-*` and `bebop-lang/docs/*`). This
+section records what the audits found, defines a FALSIFIABLE terminal
+criterion, and lays the remaining work bottom-up. Nothing here replaces a
+green gate; several items REMOVE unbacked claims from this file.
+
+### Audit findings (facts, with locations)
+
+**F-A. Gate corpus = demo folds, not integration.** Of 60 gates only 3
+test the compiler (`foldx`, `whileb`, `r3x`) and one (`morph` + morph_loop
+.sh) exercises a real compile->publish->execute path; the other 56 are
+standalone `fn main() -> i64` arithmetic demos compiled to ordinary
+AArch64 by the same emitter. Every N/SS/T "DONE" item is therefore class
+(a) "proven as a standalone gate", NOT (b) "integrated into emitted code
+or the runtime" and NOT (c) "hardware-validated" (zero items are (c)).
+The dispatcher/substrate gates (T14) prove the MATH of a program-counter-
+free execution model inside a program that itself runs on a program
+counter.
+
+**F-B. Five DONE items have no gate.** T1 tern, T2 rns, T3 snn, T4 lsys,
+T5 lod are marked "DONE ✓ (fold …)" but `bench/vs_rust/std_golden.sh`
+contains no `gate tern|rns|snn|lsys|lod` line; the sources sit in
+`std_tests/` unwired (commit e5bbdf7 shipped files, not gate lines).
+`drift.bp` is a sixth unwired test. Fixed in this file: the five headers
+now read "GATE NOT WIRED -> T37".
+
+**F-C. The "independent python mirror" behind 54 gates is not in the
+repo.** No `.py` computes any gate fold (`git log --all -- '**/*.py'`:
+9 files ever, none an oracle); mirrors exist only as prose in
+`std_golden.sh` comments and `docs/exp.journal`. Re-running std_golden
+proves determinism against the compiler's own past output. The only
+runnable external oracle is `bench/vs_rust/spectral_golden/generator`
+(Rust, path-dep on `crates/dowiz-core`; cargo IS installed) covering 6
+gates: spectral, cache, csr, hv, bt, store.
+
+**F-D. No module system; std reuse is copy-paste.** `module core { }` is
+inert text (no parser handles it; `collect_fns` scans for `fn `). 44/60
+gate files are byte-identical copies of std modules; `fp_mul` is
+embedded verbatim in 14 std files, `isqrt` in 9, `lcg` in 7, `popc` in
+6, `fnv` in 5. 50 of 116 std modules are DEAD (no main, no gate, no
+reference anywhere): automaton bignum bitfield bits bitset blas
+combinatorics dist dp effect encoding event file_io fmt gcra graph hash
+heap list log markov math matrix modular nat numeric ops pac permutation
+pid polynomial primes queue quicksort radix ratelimit ring rle search
+session set stack statistics stats string strutil tensor token_bucket
+vec version. `pool.bp`/`pool_compile.bp` compile only with the LEGACY
+`selfhost/expr_compile.bp` (3128 lines, the second compiler, owner of
+sys_clone/futex/atomic builtins that `bebop.bp` lacks).
+
+**F-E. Branches: every `if` is cmp+b.eq+b, every `while` is cmp+b.eq+
+backward b.** `emit_cond`'s docstring (bebop.bp:1529) claims a branchless
+csel; the code (1532-1560) emits placeholder-patched branches. Census
+(decoder over the frozen bins, 2026-09-04): c05_if 2 b.cond + 2 b,
+c07_while 1+1, `bebop.bin` 83515 words = 859 b.cond, 86 cbz/cbnz, 3 tbz,
+820 b, 850 bl, 121 ret, 13 svc, 0 csel-as-if (the 765 "csel-family"
+words are `cset` from comparisons). `match` on literal ctors is compile-
+time (0 branches) but never on runtime values.
+
+**F-F. Compiler debt that the laws currently paper over.** Types are
+parsed and DISCARDED (`skip_to_delim` L127: `: T` skipped) — i64 is the
+only scalar, `str`/`[i64]` are raw pointers; struct literals are disabled
+(`struct_kill = 1`, L188); unary `-`/`!`, hex literals, block comments,
+`return`/`break` absent; R3.x(a)-(e) are documented miscompiles kept as
+LAWS (`>>` = LSRV logical; str `++` segfault; clock_ms zero-arg parse;
+loop-shaped store); L8 (no allocation in while) is a frame-heap leak, not
+a semantic rule; latent zone collision: literal offsets `fntab[3903+li]`
+reach the scan-budget cell `fntab[4000]` at >= 97 string literals and
+overrun `zeros(4096)` at >= 193 (bebop.bp has 41 — latent, undocumented
+until now); `self_check` c37-c41 call `exec`, which is not a builtin of
+the self-hosted emitter (cli_run L3208 returns 2) — they cannot pass;
+seed.S:55 comment says 64MB, the code maps 256MB; syscall surface is 10
+numbers (38 46 56 57 63 64 93 113 215 222) — no sockets, no clone/futex,
+no getrandom, no sched_setaffinity.
+
+**F-G. Two design corpora contradict each other and this file cites
+neither as superseded.** `docs/design/BEBOP-{LANGUAGE-SPEC,GLYPH-
+ALPHABET,ARCHITECTURE-CATALOG-100,BACKEND-ROADMAP,LANGUAGE-REWRITE-PLAN}`
+(2026-08-17/18) promise a glyph-only surface, QTT/Lean proof kernel, SMT
+contracts, C bootstrap, WASM/x86_64/GPU/FPGA backends, hv1024, and a
+6-10 week dowiz rewrite; the tree is ASCII i64-only, zero-C, AArch64-
+only, hv4096, no proof kernel; BACKEND-ROADMAP:3 "WASM + AArch64 native
+live" names a dormant never-loaded file. Stale in corpus B: `bench/
+VERIFICATION.md` + `FUZZING.md` (describe the deleted `native/` C
+fuzzer; there is NO fuzzer today), `bench/SELFHOST.md`, `HV_ARCHITECTURE
+.md` §Status, `LEGACY_BP_ANALYSIS.md` counts, `selfhost/readme.md`,
+`samples/*.bp` (use `theorem/struct/module` the compiler rejects),
+`docs/ANDROID.md` gate counts (42/42 vs 60/60). bebop-lang is absent
+from `docs/design/CORE-ROADMAP-INDEX.md` (the dowiz master index).
+
+**F-H. Source != shipped binary, and the tree is being edited
+concurrently.** `bebop.bp` in the working tree carries an uncommitted
+T13 window (WCAP=5, flush_window at 18 sites) while `bebop.bin` (md5
+13a6447f) is the pre-T13 fixpoint; every "60/60" in this file was
+measured on the binary, not the dirty source. A second Claude Code
+session edited `bebop.bp` at 14:37 on 2026-09-04 while this audit ran —
+single-writer discipline (AGENTS.md PARALLEL AGENT PROTOCOL: main thread
+owns writes) was violated by the environment, not by a rule change.
+
+**F-I. Hardware facts not in any doc.** /proc/cpuinfo: 4x Cortex-A55
+(0xd05) + 4x Cortex-A78 (0xd41), big.LITTLE; Features = fp asimd aes
+pmull sha1 sha2 crc32 atomics fphp asimdhp asimdrdm lrcpc dcpop asimddp
+(NO sve/sme, as recorded; but hardware CRC32/SHA2/LSE atomics ARE
+present and integer-exact). No benchmark pins cores; the 2-20x timing
+noise includes A55/A78 migration, not only thermal. 7.7GB RAM. proot
+(TracerPid != 0). cargo, rustc, gcc, clang, objdump all installed (zero-C
+is a runtime policy, not a tooling absence).
+
+### Terminal criterion (TG-DONE) — falsifiable
+
+The terminal goal is reached when ALL of the following hold, each with
+its own gate line in a committed script:
+
+1. **Substrate execution of compiled programs.** `bebop.bin compile
+   --substrate` turns a `.bp` program into (a) branch-free cell kernels
+   and (b) an incidence/activity `.bt` tensor; the runtime sweep
+   (`activity != 0`) is the ONLY conditional branch in the executable
+   image. Gate: branch census of the image == 1 conditional branch; fold
+   == the linear-mode fold for every std gate and for K1-K4.
+2. **Self-hosting on the substrate.** `bebop.bp` compiled in substrate
+   mode compiles itself to a byte-exact fixpoint (bb2 == bb3) in
+   substrate mode.
+3. **Every gate has a committed independent oracle** (python or Rust)
+   that reproduces the frozen fold from scratch; a gate without one is
+   labelled `self-frozen` in this file, never "proven".
+4. **Zero tolerated miscompiles**: the R3.x(a)-(e) laws are deleted
+   because the defects are fixed and regression-gated; no ban list
+   remains in "Design laws" except capacity limits with loud traps.
+5. **Single compiler, single language**: `selfhost/expr_compile.bp` is
+   retired; every construct the language accepts is in construct_parity;
+   every std module is gated or in an explicit attic.
+6. **Hardware claims are measured or labelled forward-port**, never
+   projected in a table without a measurement column.
+
+Items 1-2 are the post-von-Neumann substance; 3-6 are the honesty floor
+the substance stands on. The order below builds 3-6 FIRST because every
+later gate inherits their oracles.
+
+### Layer V — verification foundation (truth becomes reproducible)
+
+**T36 · committed oracles for every gate** (`bench/oracles/<gate>.py`,
+`bench/oracles/run_all.sh`)
+GOAL: one python file per gate that computes the fold from the gate's
+mathematical definition (not by re-reading the .bp); `std_golden.sh`
+gains a third column: bebop == frozen == oracle. Recover the 28 mirrors
+described in `docs/exp.journal` first; write the missing ones; where a
+mirror cannot be reconstructed the gate is relabelled `self-frozen` in
+the gate list of this file (honest downgrade, not deletion).
+DONE-CHECK: `run_all.sh` prints 60 folds == std_golden's frozen table;
+the 6 Rust-backed gates additionally re-run `spectral_golden/generator`
+(`cargo run --release`) and diff `golden.txt` byte-exact.
+NEW LAW L17: a `gate` line is accepted only with a committed oracle file
+in the same commit.
+DEPS: none. BLOCKERS: none (python3 + cargo present).
+
+**T37 · wire the orphan gates** (tern, rns, snn, lsys, lod, drift)
+GOAL: add the six `gate` lines with their journal folds (8888868889989889,
+1183829339, 65504516937878, 144175882039858, 1000088904914, drift = TBD
+from spectral_golden DRIFT GOLDENS), each with a T36 oracle.
+DONE-CHECK: std_golden 66/66; T1-T5 headers in this file flip from
+"GATE NOT WIRED" to DONE with the std_golden count in the evidence.
+DEPS: T36. BLOCKERS: none.
+
+**T38 · dead-std triage + prelude** (`selfhost/std/attic/`,
+`selfhost/prelude/{fp,bits,hash,rng}.bp`, `tools/gen_selfsrc.sh`)
+GOAL: each of the 50 dead modules either gets a `fn main` + gate + oracle
+or moves to `attic/` with a one-line reason; the 14/9/7/6/5 verbatim
+copies of fp_mul/isqrt/lcg/popc/fnv become ONE prelude file each,
+concatenated by `gen_selfsrc.sh` into gate sources (textual include is
+the L9-compliant mechanism until T47 lands a language-level `use`).
+DONE-CHECK: `grep -c "fn fp_mul" selfhost/std/*.bp` == 1; std_golden
+count unchanged or higher; attic listed in this file.
+DEPS: T36. BLOCKERS: none.
+
+**T39 · reference interpreter + compiler fuzzer** (`tools/bpref.py`,
+`bench/fuzz/gen.py`, `bench/fuzz/fuzz.sh`)
+GOAL: `bpref.py` executes the IMPLEMENTED .bp surface (grammar of §1 of
+the surface audit: fn/let/let-in/let-chain/if/while/match-literal/enum/
+arrays/zeros/str/char/str_len/sys_* stubs) — the semantic oracle for
+the COMPILER (the T36 oracles are semantic oracles for the ALGORITHMS;
+both are needed). `gen.py` emits random well-typed programs inside the
+documented caps (<=128 binds, <=14 params, <=511-elem arrays, no L8
+allocs until T43); `fuzz.sh` compiles with bebop.bin, runs via seed,
+compares to bpref — every divergence is a minimal repro filed in
+BUGFIXES.md with a construct-parity guard (BUG-LEDGER-WEEK precedent).
+DONE-CHECK: 10^5 generated programs, 0 divergences, 0 crashes, run time
+recorded; `bench/FUZZING.md` rewritten from these numbers (the current
+file describes the deleted C fuzzer).
+DEPS: T36. BLOCKERS: none.
+
+**T40 · structural invariant gates** (`bench/vs_rust/invariants.sh`,
+`tools/check_abi.py` extended, `tools/census.py`)
+GOAL: machine checks that never depended on a fold: (i) register-zone
+law — no write to x27/x28 outside prologue, no write to x9-x13 outside
+prologue/epilogue/bank builtins (T25); (ii) branch census per frozen
+construct bin frozen in a table (the T51 baseline); (iii) fntab zone map
+asserted (3655-3661 fold, 3700-3796 slots, 3890-3898 bank, 3899-3999
+literals, 4000 budget) with a COMPILE-TIME trap when `3903 + nlits >=
+4000` (fixes F-F's latent collision); (iv) `.bin` footer/entry identity
+(L11/L12) for every artifact the scripts touch.
+DONE-CHECK: `invariants.sh` green on HEAD; a deliberately planted
+violation of each check is caught (RED->GREEN per C7).
+DEPS: none. BLOCKERS: none.
+
+**T41 · one design corpus** (docs)
+GOAL: this file's supersession list names `docs/design/BEBOP-LANGUAGE-
+SPEC.md`, `BEBOP-GLYPH-ALPHABET.md`, `BEBOP-ARCHITECTURE-CATALOG-100.md`,
+`BEBOP-BACKEND-ROADMAP.md`, `BEBOP-LANGUAGE-REWRITE-PLAN-2026-08-17.md`
+as SUPERSEDED (operator decision required — recorded here as the
+recommended resolution), each receiving a 3-line banner pointing here;
+the still-valid ideas are carried as roadmap items, not as live specs:
+QTT quantity-1 linearity -> Z2 odd sector (T22/T25), contracts ->
+gates + T48 checked types, glyphs -> T84 (operator 2026-09-04: glyphs
+become the CANONICAL surface with a lossless ASCII projection; Honest
+flag 3 of the SILICON pull is overridden). Fix stale corpus-B docs:
+`bench/VERIFICATION.md`, `FUZZING.md`, `SELFHOST.md`, `HV_ARCHITECTURE
+.md`, `LEGACY_BP_ANALYSIS.md`, `selfhost/readme.md`, `samples/*.bp`,
+`docs/ANDROID.md` counts, `docs/SESSION-HANDOFF.md`, bebop.bp:1529
+docstring, seed.S:55 comment. Register bebop-lang in `docs/design/CORE-
+ROADMAP-INDEX.md`.
+DONE-CHECK: `grep -rl "WASM + AArch64 native live" docs` == 0; every
+doc in `bebop-lang/docs` and `bench/*.md` carries a `Status:` line with
+a date and either CURRENT or SUPERSEDED-BY.
+DEPS: none. BLOCKERS: none — DECIDED 2026-09-04: corpus A is superseded;
+its surviving content is exactly the 16 carry-over items T68-T83 (see
+CORPUS-A CARRY-OVER); T41 now only executes the banners and doc fixes.
+
+### Layer C — compiler debt (tolerated miscompiles die)
+
+**T42 · fix R3.x(a)-(e) at the root, then delete the laws**
+GOAL: (a) precedence: `emit_bitlvl` binds tighter than `*` — decide and
+document the grammar (recommended: C precedence; regression gate r3x
+updated) ; (b) `>>`: emit ASRV for `>>` and add `>>>` for LSRV (both
+gated on negative operands; every std module audited for the abs-before-
+shift idiom and simplified); (c) loop-shaped while+compare+conditional-
+store: root-cause in `emit_let_stmt`/`emit_cond` join state, fuzz-guarded
+by T39; (d) string literals + `++`: either implement concat over the
+arena or remove `++` from the surface — no third state; (e) zero-arg
+call parse fixed generically (`clock_ms` was one instance). Add unary
+`-`, unary `!`, hex literals (literal FORMS, not sugar).
+DONE-CHECK: SESSION-HANDOFF "R3.x defects" block deleted; construct
+parity gains c25-c31 covering each fixed shape; fixpoint byte-exact.
+DEPS: T39 (fuzzer proves closure). BLOCKERS: none.
+
+**T43 · lift L8 and the nesting bans structurally**
+GOAL: per-iteration frame-heap mark/reset around `while` bodies
+(genarena semantics inside the 16KiB frame: record x14 at loop entry,
+restore at back-edge unless the body's value escapes — escape = the
+body's final expression is an array/ctor; conservative: trap, never
+leak); nested `if` inside `let` statements and plain assignment inside
+`let _ =` compile correctly (fuzzer shapes). Re-enable struct literals
+(`struct_kill`) with field access as fixed-offset loads.
+DONE-CHECK: L8 and the nesting ban removed from "Design laws"; gates
+c32-c35; fixpoint byte-exact; fuzz 10^5 with allocations in loops.
+DEPS: T39, T40. BLOCKERS: none.
+
+**T44 · self_check honesty** — replace c37-c41 (`exec`, dead in the
+self-hosted emitter) with the morph path (compile -> publish -> seed
+run -> fold) or delete them; `self_check` must be 41/41 or renumbered.
+DONE-CHECK: `self_check()` returns 0 with no dead checks.
+DEPS: none. BLOCKERS: none.
+
+**T45 · retire the second compiler** — port `sys_clone` (220),
+`sys_futex_wait/wake` (98), `sys_atomic_add` (LSE LDADD), `sys_arena_
+base/end`, `sys_exit_thread` from `selfhost/expr_compile.bp` into
+`bebop.bp` (register tables per L2, disasm per L1); `pool_parity.sh`
+builds with `bebop.bin`; `expr_compile.bp` moves to `attic/` (history
+stays in git).
+DONE-CHECK: pool gate compiles under bebop.bin (still an honest 5-skip
+under ptrace; 5/5 is the bare-kernel trigger); `expr_compile.bp` not
+referenced by any script.
+DEPS: T40. BLOCKERS: none in-sandbox.
+
+### Layer S — language surface required by the terminal goal (no sugar)
+
+**T47 · `use "path"` textual module inclusion with content-digest dedup**
+GOAL: `collect_fns` follows `use` lines; an included file is inlined
+once per program keyed by FNV-64 of its bytes (ptrless discipline); no
+namespaces, no renaming — the prelude of T38 becomes language-level.
+DONE-CHECK: gate `usemod`; `gen_selfsrc.sh` concatenation deleted;
+bebop.bp itself split into `use`d files with the fixpoint byte-exact.
+DEPS: T38. BLOCKERS: none.
+
+**T48 · checked types at zero runtime cost**
+GOAL: the annotations the parser currently discards become checked:
+`i64`, `[i64]`, `str`, `fp` (fixed-point 2^32), `even`/`odd` (Z2 parity,
+T25 S3), `cell` (dispatcher cell id, T50). Mismatch = compile-time loud
+trap; no runtime word changes (frozen construct bins stay byte-exact for
+well-typed programs).
+DONE-CHECK: construct gates c36-c40 (each type, one mismatch program
+that traps); fixpoint byte-exact.
+DEPS: T24/T25 for parity. BLOCKERS: none.
+
+**T49 · records = register images** — `struct` layouts compile to the
+T26 5-word bank image when declared `bank`, else to fixed-offset arena
+records; field access = fixed-offset load (no branches, no hashing).
+DONE-CHECK: gate `recstruct` == T26 fold. DEPS: T26, T43. BLOCKERS: none.
+
+**T50 · functions as cells** — `&f` yields the cell id / code offset of
+`f` (adr), tables of cells are arrays, and `call_cell(id, args)` is a
+`blr` today and an activity edge under T55; this is what direct-threaded
+`thr` (SS-14) and the substrate need to stop being demos.
+DONE-CHECK: gate `cells`: a table-driven dispatcher over 8 cells == the
+`match` reference; thr gate re-expressed through `&f`.
+DEPS: T48. BLOCKERS: none.
+
+### Layer B — branch elimination ladder (critical path to TG-DONE 1)
+
+Baseline (F-E): `if` = 2 branches, `while` = 2, call = `bl` + `ret`,
+`bebop.bin` = 859 b.cond / 86 cbz / 820 b / 850 bl. Measured lesson
+(FASTPATH-SPEC R4#3): a runtime branch per arithmetic op made K1 6x
+SLOWER — branches are removed for correctness of the model AND for
+performance, but only where the select is cheaper than the mispredict.
+
+**T51 · branch census gate** — `tools/census.py` output frozen per
+construct and per kernel in `bench/vs_rust/census.txt`; `invariants.sh`
+fails on any INCREASE; each later rung records its decrease.
+DONE-CHECK: census table committed; RED->GREEN on a planted branch.
+DEPS: T40. BLOCKERS: none.
+
+**T52 · pure `if` -> csel** — when both arms are pure (no call, no
+store, no alloc, no syscall) and each arm <= N words (N frozen after
+measurement), emit cond + both arms + `csel` (the T24 select-equivalence
+gate is the semantics oracle; bebop.bp:1529's stale docstring becomes
+true). Impure arms fall to T53.
+DONE-CHECK: c05_if census 2 -> 0 b.cond; K1-K4 folds bit-exact; K3/K4
+timing recorded (swpmu steps + clock_ms, cores pinned per T63).
+DEPS: T24, T51. BLOCKERS: none.
+
+**T53 · side-effecting arms -> sink-predicated stores** — an arm's
+stores go to `csel(real_addr, sink)` where `sink` is a per-frame scratch
+cell (the write always happens, only its address is selected); arms with
+calls stay branched until T55 (a call is an activity edge there).
+DONE-CHECK: c24_ifspill and the store-shaped fuzz corpus branch-free;
+fold parity; census decrease recorded.
+DEPS: T52, T43. BLOCKERS: none.
+
+**T54 · bounded loops -> masked fixed-count iteration** — `while i < K`
+with literal K (or K known by R6.2 folding) compiles to K masked steps
+(FIR gate shape) and unrolls when K*body <= budget; data-dependent exits
+keep the backward branch until T55.
+DONE-CHECK: c07_while(literal bound) census 2 -> 0; k1 (1M iterations)
+stays a loop (budget) — recorded honestly; fold parity.
+DEPS: T52. BLOCKERS: none.
+
+**T55 · substrate codegen (the terminal move)** — `compile --substrate`:
+each fn body is cut at calls, loop back-edges and data-dependent exits
+into straight-line branch-free cells (T52-T54 make the cell bodies);
+dependencies become an incidence tensor; loops become self-re-arming
+cells; calls become activity edges; recursion depth is a fixed cap with a
+loud trap (honest limit, like the 14-param cap). The artifact = cells
+`.bin` + `.bt` incidence (F4 codec); the runtime = a Bebop prelude
+(`substrate.bp` generalized) whose sweep `while activity != 0` is the
+only conditional branch. Ladder: k1 -> k2 (today's hand-written
+substrate kernels must fall out of the compiler) -> K3/K4 -> the 66 std
+gates -> `bebop.bp` itself (TG-DONE 2).
+DONE-CHECK: per rung, fold == linear mode AND census == 1 conditional
+branch AND sweep count recorded (eigentime, SS-17 becomes real);
+terminal rung: substrate-mode fixpoint bb2 == bb3.
+DEPS: T50, T52-T54, T14 substrate.bp, T26 (cell state as bank images).
+BLOCKERS: none in-sandbox; performance is measured, not promised.
+
+**T56 · runtime `match` without branches** — `match` on runtime values
+via bitmat multiply-select (SS-12) or cell dispatch (T50); today `match`
+only accepts literal ctors at compile time.
+DONE-CHECK: gate `rmatch` over all 256 scrutinee patterns == reference.
+DEPS: T50. BLOCKERS: none.
+
+### Layer R — runtime: gate demos become the running system
+
+**T57 · substrate runtime prelude, seed stays frozen** — the sweep loop,
+activity words, cell table and bank load/store live in a `.bp` prelude
+linked (T47) into every substrate artifact; `seed.S` (1496B, frozen) is
+unchanged and only maps + jumps. Fix the seed.S:55 comment (256MB).
+DONE-CHECK: T55 rungs run through the unmodified seed; prelude word
+count frozen in census.
+DEPS: T47, T55. BLOCKERS: none.
+
+**T58 · eigentime as the scheduler** — sweep count and quiescence
+detection ARE the clock (SS-17 seigtime moves from gate to runtime):
+the prelude exposes `sweeps()`; WFE/WFI on quiescence is forward-port.
+DONE-CHECK: substrate K1-K4 report sweep counts == the mirror's; step
+counts replace clock_ms as the primary benchmark number.
+DEPS: T55. BLOCKERS: none.
+
+**T59 · reversible arena as the mutation path** — cell writes go through
+the XOR journal of `rev.bp` (N2): unwind-to-any-sweep without snapshots.
+DONE-CHECK: gate `unwind`: run K sweeps, unwind to sweep j, re-run ->
+byte-identical arena; cost per write recorded.
+DEPS: T55, T57. BLOCKERS: none.
+
+**T60 · holographic artifact** — the `.bt` incidence tensor is WHT-
+encoded with redundancy (N6 `holo.bp` from gate to loader): a trimmed
+artifact still loads and runs to the same fold.
+DONE-CHECK: gate `holoload`: zero 1/4 of the artifact's cells, run, fold
+unchanged; size overhead recorded (the "cutting never destroys the
+picture" claim gets a number).
+DEPS: T57. BLOCKERS: none.
+
+**T61 · threads and cores** — sys_clone/futex/LSE builtins (T45) + a
+`sys_sched_setaffinity` builtin (syscall 122) so the fiber scheduler
+(gate `fiber`) can run N fibers on N pinned cores; pool 5/5 remains
+the bare-kernel trigger under ptrace.
+DONE-CHECK: affinity probe shows the mask took effect (getcpu 168);
+fiber gate unchanged in single-core mode.
+DEPS: T45. BLOCKERS: clone semantics under ptrace (honest skip stays).
+
+**T62 · network syscalls for the agent language** — socket 198, bind
+200, connect 203, sendto 206, recvfrom 207, epoll_create1 20 /
+epoll_ctl 21 / epoll_pwait 22, getrandom 278 (for nonces only; the core
+stays RNG-free per C2): the T8 deltasync codebook delta crosses a real
+process boundary (two seeds, one loopback socket).
+DONE-CHECK: gate `deltanet`: sender/receiver folds equal over loopback;
+register tables per L2; proot permits AF_INET loopback (probe first).
+DEPS: T45. BLOCKERS: proot networking (probe, do not assume).
+
+**T63 · benchmark hygiene** — every bench pins to the A78 cluster
+(affinity mask 0xF0) or records the core class per sample; swpmu step
+counts are the primary column, clock_ms the secondary; REPORT-630
+re-baselined with both columns and the census column.
+DONE-CHECK: 31-run medians with core class recorded; the 2-20x spread
+re-measured pinned vs unpinned (the number replaces the folklore).
+DEPS: T61 (affinity builtin). BLOCKERS: none.
+
+### Layer H — hardware that IS present (integer-exact, in-sandbox)
+
+**T64 · use the silicon this box has** — cpuinfo exposes crc32, sha2,
+pmull, LSE atomics, asimddp: emit `CRC32X` for crc.bp, `SHA256H/H2/SU0/
+SU1` for sha256.bp, `CNT`+`ADDV` NEON popcount for hv/holo/attn (hvham
+already does), `EOR3`-free XOR-binding on NEON for ringvsa; each keeps
+its EXISTING fold (integer-exact instructions cannot change the oracle,
+so this is fusion without a new golden — the invariant policy's
+condition is met).
+DONE-CHECK: folds unchanged, swpmu steps and clock_ms recorded before/
+after; disasm diffs per L1; SVE/SME remain forward-port (T15).
+DEPS: T36 (oracles first). BLOCKERS: none.
+
+### Layer D — dowiz integration (the "agent language" half)
+
+**T65 · bebop-lang in the dowiz master index** — one row in `docs/design/
+CORE-ROADMAP-INDEX.md` pointing here; MEMORY.md session-closing note per
+`.claude/CLAUDE.md`.
+DONE-CHECK: the row exists; no other dowiz doc claims Bebop backends
+that do not exist. DEPS: T41. BLOCKERS: none.
+
+**T66 · first dowiz twins WITH runnable Rust oracles** — `money.bp`
+(exact i64 minor-unit law; oracle = `kernel/src/money.rs` via a small
+cargo bin, parity like `eqc_gen.rs`) and `order_machine.bp` (decide/fold
+FSM; oracle = the kernel's golden signature and rho = 0 nilpotent-DAG
+proof). These are the first twins whose oracle is production code, not
+a mirror written for the gate.
+DONE-CHECK: gates `money`, `ordfsm` == cargo-run oracle output byte-
+exact; forbidden transitions trap loudly (errors, not no-ops — the
+kernel's rule).
+DEPS: T36, T48. BLOCKERS: none (cargo present).
+
+**T67 · bebop2 mesh bridge** — T8 deltasync + T62 sockets + the
+`mesh-adapter` seam: a dowiz hub consumes a codebook delta produced by
+a Bebop agent; capability-authenticated per DECISIONS D0 (no scoring).
+DONE-CHECK: one round-trip through `mesh-adapter` tests; fold verified
+on both sides. DEPS: T62, T66. BLOCKERS: bebop-repo cross-repo drift
+(docs/design/ROADMAP.md item 12) must be closed first.
+
+### CORPUS-A CARRY-OVER (operator selection 2026-09-04, T68-T83)
+
+The 2026-08-17/18 design corpus (`docs/design/BEBOP-*`) was read in
+full and sieved against the terminal goal. The operator selected the 16
+items below as the ONLY content that survives; everything else in that
+corpus (glyph-only surface, Lean/dependent types, proof kernel, SMT
+solvers, C bootstrap, LLVM, WASM/x86_64/GPU/FPGA backends, f64 + IEEE
+trig, supervision trees, async/await, traits/generics/dynamic dispatch,
+semicolon-free layout, package registry, LSP, Ed25519-only signatures)
+is SUPERSEDED — T41 executes the banners. Each carry-over item is
+re-homed onto the task it strengthens; none introduces a runtime, a
+solver, a float, or a second compiler.
+
+**T68 · QTT quantities as annotations `^0 ^1 ^w`** (SPEC §3, catalog D1-2,
+ergonomics #21) — strengthens T48, T25, T33, T34
+GOAL: a binding or parameter may carry `^0` (erased: readable only inside
+contracts/tests, never emitted), `^1` (linear: used exactly once), `^w`
+(default, unrestricted). A per-fn usage-count pass over `sym_lookup`
+enforces: `^1` used 0 or >= 2 times = compile-time loud trap; `^0` read
+in emitted code = trap; `^1` values entering the odd bank slots (T25 S3)
+are the Z2-odd/nilpotent tokens of T33/T34 — one discipline, two names
+retired. No dependent types, no universes, no quantities beyond the rig.
+DONE-CHECK: gate `qtt`: programs with correct usage compile byte-
+identical to their unannotated twins (zero runtime cost); one double-use
+and one erased-read program trap at compile; fixpoint byte-exact.
+DEPS: T48. BLOCKERS: none.
+
+**T69 · contracts as gates, no SMT** (SPEC §4, ergonomics #141-143) —
+strengthens T36, T39, T66
+GOAL: `where { requires E; ensures E; invariant E }` after a fn
+signature (loop `invariant` before `while`). Semantics: constant-
+foldable clauses (R6.2 cells) are decided at compile time (false =
+trap); the rest compile ONLY in `--check` builds as cmp + loud trap word
+and are erased (^0) in normal builds so the release stream is byte-
+identical to the contract-free program. `result` names the return value.
+No external solver ever; the fuzzer (T39) is the discharge engine.
+DONE-CHECK: gate `contract`: a violated `requires` traps under --check,
+the release stream equals the frozen contract-free bin (byte compare);
+std gate headers' prose folds are re-expressed as `ensures` clauses on
+>= 10 gates.
+DEPS: T68 (erasure), T40. BLOCKERS: none.
+
+**T70 · effects `pure`/`io`** (SPEC §5, catalog D6 51-53) — strengthens
+T55 (cut points), MANIFESTO C2
+GOAL: `pure fn` may not call `io` fns; all `sys_*`, `clock_ms`,
+`tokens`, `mem_*` are `io`; propagation is transitive over the resolved
+call graph (fntab); unresolved callees are treated as `io` (sound,
+possibly noisy). `--substrate` (T55) cuts cells exactly at `io` calls
+and loop back-edges — purity is the cell-body oracle.
+DONE-CHECK: gate `effects`: pure->io call traps at compile; bebop.bp
+annotated (123 fns) with fixpoint byte-exact; T55 rung k1 uses the
+effect table to place its cuts.
+DEPS: T48. BLOCKERS: none.
+
+**T71 · `bit_identical(f_scalar, f_hw)` declaration** (SPEC §4) —
+strengthens T64
+GOAL: a top-level declaration naming two fns of the same signature;
+`--check` builds compile both and run the T39 generator over them,
+trapping on the first differing result; normal builds emit only `f_hw`.
+DONE-CHECK: gate `bitid` over crc32 (CRC32X vs table), sha256 (SHA256H
+vs scalar), popcount (CNT+ADDV vs SWAR): 10^5 inputs, 0 differences.
+DEPS: T64, T39. BLOCKERS: none.
+
+**T72 · core affinity builtins** (ergonomics #127, ENERGY §1.1) —
+strengthens T61, T63
+GOAL: `sys_sched_setaffinity(pid, len, maskptr)` (122) and `sys_getcpu`
+(168) builtins with L2 register tables; the fiber scheduler (gate
+`fiber`) gains a class argument (LITTLE = 0x0F, big = 0xF0 on this
+box); every bench script pins to big before timing and records
+`getcpu` per sample.
+DONE-CHECK: probe shows the mask took effect under proot (getcpu in the
+requested set for 100/100 samples) or records EPERM honestly; K1-K4
+re-measured pinned vs unpinned, spread recorded (replaces the 2-20x
+folklore with two numbers).
+DEPS: T45 (builtin pattern). BLOCKERS: proot may reject (probe first).
+
+**T73 · `snapshot()` / `rollback(mark)` / `on_fail(mark, e)`** (catalog
+D7 56-57, ergonomics #41, #74-75, agentic primitive 1) — strengthens
+T59, T34
+GOAL: three builtins over the XOR journal of `rev.bp` (T59): `snapshot`
+returns the journal mark, `rollback` unwinds to it, `on_fail` runs `e`
+after unwinding when the guarded block trapped. DECISION: the XOR
+journal is THE rollback mechanism; corpus A's separate append-only CoW
+log is rejected (two mechanisms = two truths). Journal growth is bounded
+by T10 entropic collapse of dead marks.
+DONE-CHECK: gate `snap`: mutate, snapshot, mutate, rollback -> arena
+byte-identical to the snapshot; `on_fail` path runs exactly once;
+journal length accounted.
+DEPS: T59. BLOCKERS: none.
+
+**T74 · WFE at quiescence** (ENERGY §1.2) — strengthens T57, T58
+GOAL: the substrate prelude emits `wfe` when the activity word is 0 and
+no input cell is armed; a `sev` from the input path wakes it. In-sandbox
+the gate checks the word placement and that quiescent programs still
+terminate; the energy effect is forward-port (needs a meter).
+DONE-CHECK: gate `wfe`: disasm shows exactly one WFE in the sweep;
+folds unchanged; idle-loop step count drops to the sweep constant.
+DEPS: T57. BLOCKERS: energy measurement (forward-port).
+
+**T75 · integer-exact micro-optimizations** (PHYSICAL-LIMIT §1-6) —
+strengthens T64, census
+GOAL: single-variable emitter changes, each with fold unchanged and
+census/steps recorded: DC ZVA for `zeros()` blocks (read DCZID_EL0 for
+the block size, fall back to the str-xzr loop below one block), PRFM
+in stride loops (SS-10 shapes), STNP/LDNP for `.bt` export/import
+streams, ROR/EXTR for `bits.bp` rotations, NEON TBL/VSRI for
+hv_permute (the 8x gap of the 08-17 benchmark). ORDER: `zeros` DC ZVA
+may land early (cheap, isolated); the rest wait for T55 (critical-path
+law: optimize the substrate's bottleneck, not the stack machine's).
+DONE-CHECK: per item, gate folds unchanged + disasm diff + before/after
+swpmu steps and pinned clock_ms in `bench/vs_rust/census.txt`.
+DEPS: T51, T72; T55 for all but DC ZVA. BLOCKERS: none.
+
+**T76 · living memory as ONE primitive** (SPEC §1.6-4, §7) — strengthens
+T20, T27-T29
+GOAL: builtins `mem_insert(stalk)`, `mem_search(query)`, `mem_link(a,b,
+rho)` over the content-addressed sheaf (T29) with the T20 tensor query
+as the retrieval engine and T28 consistency as the validity check;
+timestamps come from `clock_ms` (io). NO NTT index, NO HNSW — the
+"indexed via NTT" clause of corpus A is dropped (index-free doctrine).
+DONE-CHECK: gate `livmem`: insert N, search returns the T20 nearest
+and the T28 residual for each hit; an inconsistent insert is rejected;
+mirrors == T20/T29 folds.
+DEPS: T29, T20, T70. BLOCKERS: none.
+
+**T77 · minimal counterexample shrinker** (agentic primitive 3, without
+SMT) — strengthens T39, AGENTS.md T4
+GOAL: on any fuzz divergence, `bench/fuzz/shrink.py` delta-debugs the
+program to the smallest .bp that still diverges and prints `H:|DID:|
+GOT:|VERDICT:` for the journal plus the construct-parity guard stub.
+DONE-CHECK: three historical repros (c21-c24 class) re-derived by the
+shrinker to <= the hand-minimized size.
+DEPS: T39. BLOCKERS: none.
+
+**T78 · token streams: `.bt` as canonical I/O** (agentic primitive 5) —
+strengthens T35, F4
+GOAL: builtin `tokens(fd)` reads a stream into a rank-4 `.bt` token
+tensor (byte-per-cell today; word tokens later) and T35's register wave
+filters it in place; `sys_write` of a `.bt` is the canonical output.
+Text remains the authoring format; `.bt` is the canonical interchange.
+DONE-CHECK: gate `tokens`: file -> tokens -> filter -> `.bt` -> read
+back == python mirror; zero intermediate copies (address arithmetic
+only).
+DEPS: T26, T35. BLOCKERS: none.
+
+**T79 · VSA navigation tooling (compiler identity stays bytes)** (SPEC
+§2.2, HV_ARCHITECTURE L3) — strengthens agent workflow, replaces
+graphify dependence
+GOAL: `tools/hvnav.bp` encodes fn names + header comments as hv4096
+(trigram bundling from hv.bp) and answers `near <name>` / `search
+<text>` by Hamming distance; LAW: the compiler resolves identifiers by
+byte equality only — fuzzy identity in the compiler is banned (silent
+miscompile class).
+DONE-CHECK: gate `hvnav`: known-neighbor queries return the expected
+fn in top-3 for 20 hand-picked cases; the tool is compiled by
+bebop.bin (cold-start rule).
+DEPS: hv.bp, T47. BLOCKERS: none.
+
+**T80 · content-addressed imports `use "cas://sha256:<hex>"`**
+(ergonomics #161, #165, #172, #180) — strengthens T47, T12
+GOAL: T47's `use` accepts a sha256 address resolved from the local store
+`.bcas/<hex>.bp`; `bebop.bin cas add <file>` computes the digest with
+`sha256.bp` and stores; dedup key for inclusion is the same digest;
+FNV-64 is BANNED for source addressing (not collision-resistant).
+Agents exchange source as digests + T8 deltas — no registry.
+DONE-CHECK: gate `casuse`: a program importing by digest compiles
+byte-identical to the path import; a tampered store file fails the
+digest check with a loud trap.
+DEPS: T47, sha256.bp. BLOCKERS: none.
+
+**T81 · `test name { ... }` blocks with erasure** (catalog D5-50, D10-74,
+ergonomics #55) — strengthens T38, T36
+GOAL: modules carry test blocks; `bebop.bin test <file>` synthesizes a
+main that runs every block and folds their results (the gate fold);
+normal compiles erase the blocks (^0). `std_tests/` is deleted once all
+60 gates live inside their modules; `std_golden.sh` calls `test`.
+DONE-CHECK: 60 gates green through `bebop.bin test`; `ls std_tests` ==
+empty; release compile of a module with tests is byte-identical to the
+test-free module.
+DEPS: T68, T38. BLOCKERS: none.
+
+**T82 · replay debugger over the journal** (ergonomics #186) —
+strengthens T59, AGENTS.md T5
+GOAL: `bebop.bin replay <artifact> <sweep>` runs a substrate artifact to
+sweep j via the T59 journal and prints the bank image + activity word;
+`step` advances one sweep. gdb stays the last rung of the Occam ladder.
+DONE-CHECK: replay to sweep j equals a fresh run stopped at j (byte-
+compare of arena + bank) for K1/K2 substrate artifacts.
+DEPS: T57, T59. BLOCKERS: none.
+
+**T83 · "faster than Rust" as a MEASURED TARGET, not a law**
+(PHYSICAL-LIMIT "hard law", FASTPATH done-check) — strengthens Q12
+GOAL: the FASTPATH/REPORT tables gain a `target >= 1.0x` column and a
+status per kernel (MET/UNMET with the pinned median); the sentence
+"any benchmark slower than Rust is a bug" is NOT adopted (today 2.6-10x
+slower; a law that is false on adoption violates Q12). The target is
+re-evaluated after T55 + T75 + T72 with both step-count and wall-clock
+columns.
+DONE-CHECK: REPORT-630 successor with the target column; every row has
+a measured value or "not measured", never a projection.
+DEPS: T63, T72. BLOCKERS: none.
+
+Carry-over ordering: T77, T79, T83 are parallel-safe now (tooling/docs);
+T72 and T75(DC ZVA) are small single-writer builtins; T68 -> T70 -> T69
+-> T81 -> T71 form the typing/testing chain after T48; T80 rides T47;
+T73/T74/T82 ride T57-T59; T76 rides T29; T78 rides T35; the rest of
+T75 waits for T55.
+
+### REJECTED-LIST DECISIONS (operator, 2026-09-04, T84-T95)
+
+The items the carry-over sieve had marked "contradicting" were put to
+the operator one by one with what/pros/cons. Decisions:
+
+**ADDED (as tasks below):** glyphs as the canonical surface (A1b, full
+item — overrides Honest flag 3 of the SILICON pull); zero-dependency
+Lean-like verification with mathematical provability IN the runtime
+(B1 in its dependency-free form); bounded bit-vector DPLL in .bp (B2a);
+f64 only as an io-effect at the data boundary (B3a); supervisor as a
+cell library (B4a); trust chain + diverse double-compiling without C
+(C1a); `bebop.bin check` with line:col (C4a); x86_64 backend without
+AVX-512 first (D2); direct Verilog from `.bt` without MLIR (D4a);
+WGSL i32 export as forward-port (D3a); WASM and GPU emitters ONLY in
+zero-dependency form (direct binary emission + own .bp simulators;
+execution outside the tree is forward-port).
+
+**REJECTED for good:** semicolon-free layout (A2), traits/generics/
+dynamic dispatch (A3), async/await (A4), external Lean/Mathlib (B1
+external form), Z3/CVC5 (B2b), f64 in the pure core (B3b), a
+supervision runtime framework (B4b), C bootstrap (C1b), LLVM (C2),
+package registry (C3), full LSP (C4b), WASM as a runtime dependency
+(D1 runtime form), Vulkan/driver-bound GPU (D3b), Calyx/CIRCT (D4b).
+
+**T84 · glyphs as the canonical surface, ASCII as a lossless projection**
+(SPEC §2, GLYPH-ALPHABET v0.2, ergonomics #3) — overrides Honest flag 3
+GOAL: the canonical `.bp` token is the glyph; every glyph has exactly one
+ASCII name (the alphabet's right column) and the lexer accepts BOTH
+spellings identically (bidirectional lexer): glyph bytes are mapped to
+the ASCII name before the 131-hash dispatch, so the emitter is
+untouched. `bebop.bin fmt --glyph` / `--ascii` convert losslessly and
+round-trip byte-exact. Staging (L14): G1 alphabet table as a `.bt`
+(glyph UTF-8 bytes -> ASCII name, ~99 entries, closed); G2 lexer
+accepts glyph spellings (gate: glyph twin of every construct-parity
+source compiles to the IDENTICAL frozen bin — no bin regenerates); G3
+`fmt` round-trip; G4 δ-outline renderer as a separate tool (terminal
+braille/half-block), never part of the compiler; G5 sources flip to
+glyph form file by file with `fmt`, fixpoint byte-exact at each step
+(the binary cannot change because the token stream after mapping is
+identical). Cost recorded honestly: agent tokenizers split glyphs into
+more BPE tokens than ASCII — TOKEN-ECONOMY measures both and the doc
+records the number.
+DONE-CHECK: 24/24 construct bins unchanged with glyph sources; fmt
+round-trip byte-exact on all 116 std modules + bebop.bp; TOKEN-ECONOMY
+carries the measured token cost; fixpoint byte-exact.
+DEPS: T39 (fuzzer covers both spellings), T47. BLOCKERS: none.
+
+**T85 · proof kernel in Bebop, zero dependencies, usable at runtime**
+(catalog D5 41-50, `samples/theorem-sample.bp`, SPEC §3 restricted)
+GOAL: a minimal type-theory kernel written in `.bp` (Type₀ only, no
+universes/quotients/general fix — catalog D5/D7/D8 postponements stand):
+terms as `.bt` tensors, βδ-normalization over the i64 primitives
+(`str_len("abc") ≡ 3` computes), definitional equality `conv(a,b)`,
+`refl` as the sole equality constructor, `nat_ind` as the sole
+eliminator (cong/subst derived), a `theorem name : l = r := proof`
+surface checked at COMPILE time, and a `verify(term_bt)` builtin so an
+agent can check a generated fragment at RUNTIME and receive the failing
+subterm (the counterexample of SPEC §1.6-3, solver-free). No Lean, no
+Mathlib, no external process: the kernel is itself gated and self-
+checked (it type-checks its own gate theorems).
+DONE-CHECK: gates `kernel` (conv on 50 table-driven pairs == mirror),
+`theorem` (theorem-sample.bp's 3 theorems accepted, 3 false twins
+rejected with the failing subterm), `rtverify` (runtime verify of a
+morph-published fragment); erasure: theorems emit zero words (T68 ^0).
+DEPS: T68, T69, bt.bp. BLOCKERS: none (design-bound: critical-path
+item, one writer).
+
+**T86 · bounded bit-vector DPLL in .bp** (B2a) — discharge engine for T69
+GOAL: a small CDCL/DPLL solver over fixed-width bit-vector formulas
+(the shapes T69 contracts produce: bounds, overflow, equality of linear
+i64 terms), written in `.bp`, deterministic, with a step budget; UNSAT =
+contract proven for the bounded domain, SAT = counterexample assignment
+printed. Bounded and honest: outside the fragment the contract stays a
+--check trap.
+DONE-CHECK: gate `dpll` on a table of 20 formulas (10 SAT with models,
+10 UNSAT) == mirror; T69's `ensures` on 5 std gates discharged at
+compile time.
+DEPS: T69. BLOCKERS: none.
+
+**T87 · f64 at the boundary only** (B3a)
+GOAL: builtins `f64_bits_to_fp(bits)` and `fp_to_f64_bits(fp)`
+converting IEEE-754 bit patterns to/from fixed-point 2^32 with round-
+half-even, both `io` (T70) so no `pure` code can name a float; no float
+arithmetic instruction is ever emitted (FMOV/FADD banned by the census).
+DONE-CHECK: gate `f64edge`: 32 table-driven patterns round-trip within
+1 fp unit == mirror; census shows zero FP instructions in every bin.
+DEPS: T70. BLOCKERS: none.
+
+**T88 · supervisor as a cell library** (B4a)
+GOAL: `supervise.bp`: a substrate cell that watches other cells'
+activity/trap words and re-arms a failed cell after `rollback(mark)`
+(T73) with a bounded restart budget — a library, not a language feature
+or runtime.
+DONE-CHECK: gate `superv`: a cell that traps on sweep 3 is re-armed and
+completes; budget exhaustion propagates the trap; fold == mirror.
+DEPS: T55, T73. BLOCKERS: none.
+
+**T89 · trust chain + diverse double-compiling without C** (C1a)
+GOAL: `docs/TRUST-CHAIN.md` records the full chain seed.S (1496B,
+frozen, disassembly listed) -> golden `bebop.bin` sha256 (L13) ->
+fixpoint; DDC: the attic'd `selfhost/expr_compile.bp` (T45) is kept as
+the independent witness compiler: witness compiles bebop.bp -> W1; W1
+compiles bebop.bp -> W2; W2 must equal the golden fixpoint byte-exact.
+Any divergence = a trusting-trust alarm.
+DONE-CHECK: `tools/ddc.sh` green; sha256 sidecars for seed.bin and
+bebop.bin; the chain doc lists every hash.
+DEPS: T45. BLOCKERS: witness must still compile the current surface
+(freeze the surface subset the witness supports).
+
+**T90 · `bebop.bin check <file>` with line:col diagnostics** (C4a)
+GOAL: parse + type/effect/quantity checks (T48/T68/T70) with no
+emission; every trap word class gets a message and a `file:line:col`;
+exit codes distinct per class (the KEEP pattern).
+DONE-CHECK: 10 planted errors report the right line:col; runtime of
+check on bebop.bp recorded.
+DEPS: T48. BLOCKERS: none.
+
+**T91 · x86_64 backend (no AVX-512 first)** (D2)
+GOAL: a second encoding table for the same emitter structure (mov/add/
+sub/imul/idiv/cmp/setcc/cmovcc/jcc/call/ret/syscall), a `seed.x86.S`
+twin of the loader (mmap RX, entry footer, arena in r14/r15), the Z2
+bank on the five callee-saved GPRs (even = rbx, r12; odd = r13, r14,
+r15 — SysV keeps them across calls, mirroring T25 S1), CSEL -> CMOVcc
+(T52), the substrate prelude unchanged (.bp). Cross-architecture folds
+become a SECOND INDEPENDENT ORACLE for every gate (two ISAs, one fold).
+Server-class x86_64 hosts expose perf_event_open, so T15's hardware
+counters stop being terminal there.
+DONE-CHECK: 66 gates + construct parity + K1-K4 folds identical on
+both ISAs; x86_64 fixpoint bb2 == bb3; PMU-backed L1/I-cache numbers
+recorded for K1-K4 on a Linux x86_64 host (first real class-(c)
+evidence). AVX-512 is a later, separate column.
+DEPS: T40, T51, T57. BLOCKERS: needs an x86_64 Linux host for the
+execution half (emission is gated in-sandbox by disassembler diff).
+
+**T92 · direct Verilog netlist from the `.bt` incidence tensor** (D4a)
+GOAL: a text emitter in `.bp`: cells -> always-blocks, incidence ->
+wires, activity word -> enable lines, the sweep -> one clock; no MLIR/
+Calyx/CIRCT; plus `vsim.bp`, a cycle-accurate simulator of the emitted
+netlist subset, as the oracle.
+DONE-CHECK: gate `verilog`: k1 and k2 substrate artifacts emitted and
+simulated to the same folds as the software sweep; sweep count ==
+clock count. Synthesis on real FPGA = forward-port (equipment).
+DEPS: T55. BLOCKERS: hardware (forward-port).
+
+**T93 · WGSL i32 export of tensor queries** (D3a, forward-port)
+GOAL: T20 contraction kernels emitted as WGSL text (i32 lanes; i64
+folds are split hi/lo with explicit carry) for the dowiz engine's
+WebGPU path; the browser supplies the driver, the tree gains no
+dependency. Bit-exactness is asserted by the engine's existing pixel/
+parity tests, not assumed.
+DONE-CHECK: emitted WGSL compiles in the engine's test harness; the
+hi/lo split reproduces the i64 fold on a table of queries.
+DEPS: T20. BLOCKERS: GPU under proot (execution is forward-port).
+
+**T94 · WASM direct binary emitter (zero deps) + own interpreter**
+GOAL: emit a valid `.wasm` module (magic, sections, i64 ops) directly
+from the emitter structure — a second encoding table like T91, no
+toolchain; `wasmi.bp`, an interpreter of the emitted i64 subset, is the
+in-sandbox oracle; execution in a browser (dowiz web/) is forward-port.
+HONEST: WASM is a stack VM — this column exists for reach (browser hubs),
+not for the post-von-Neumann model; the substrate prelude runs INSIDE it
+as ordinary code.
+DONE-CHECK: gate `wasm`: k1/k2/K3 emitted, interpreted by wasmi.bp ==
+folds; module validates against the spec's binary grammar (own checker).
+DEPS: T91 (second-table pattern). BLOCKERS: browser execution
+(forward-port).
+
+**T95 · SPIR-V direct emitter (zero deps) + own integer simulator**
+GOAL: emit SPIR-V words (spec-defined binary; OpTypeInt 32, OpIAdd/
+OpIMul/OpBitwise*, OpLoad/OpStore, workgroup dispatch) for the T20/T35
+kernels; `spvsim.bp` simulates the integer subset lane-by-lane as the
+oracle; real GPU execution goes through the engine's WebGPU path
+(forward-port) — no Vulkan loader in the tree.
+DONE-CHECK: gate `spirv`: hv bundle and one T20 contraction emitted,
+simulated == folds; module passes the own structural validator.
+DEPS: T93. BLOCKERS: GPU (forward-port).
+
+Ordering for T84-T95: T90 and T89 ride T48/T45; T84 G1-G3 after T39 +
+T47 (one writer); T85 is a critical-path design item after T68/T69; T86
+after T69; T87 after T70; T88 after T73; T91 after T57 (first non-ARM
+fixpoint); T92 after T55; T93 after T20; T94 after T91; T95 after T93.
+
+**Honest flags for this section**
+1. T84 reverses Honest flag 3 of the SILICON pull: the canonical surface
+   is now glyphs; the total ASCII projection keeps agents and the
+   emitter unchanged. The token-cost number is recorded, not assumed.
+2. T85 is a minimal kernel, not Lean: Type₀, refl + nat_ind, no
+   tactics, no quotients, no termination checker. "Every statement
+   proven" is NOT claimed; "every `theorem` checked by our own kernel"
+   is.
+3. T94/T95 emit VM/GPU code without dependencies, but running it needs
+   a host VM or driver outside the tree — forward-port by definition.
+4. T91's execution half needs an x86_64 Linux host; in-sandbox only the
+   emitted bytes are gated (disassembler diff).
+
+### Critical path and ordering
+
+```
+V:  T36 -> T37 -> T38 -> T39 -> T40 -> T41            (truth floor; ~all parallel-safe after T36)
+C:  T42 -> T43 -> T44 -> T45                          (needs T39/T40)
+S:  T47 -> T48 -> T49 -> T50                          (needs T38, T24-T26)
+B:  T51 -> T52 -> T53 -> T54 -> T55 -> T56            (needs T24, T50; T55 is TG-DONE 1-2)
+R:  T57 -> T58 -> T59 -> T60 ; T61 -> T62 -> T63      (needs T55 / T45)
+H:  T64                                               (needs T36 only — can start now)
+D:  T65 -> T66 -> T67                                 (needs T41, T36, T48, T62)
+A:  T77 T79 T83 now | T72 T75(DC ZVA) small | T68 -> T70 -> T69 -> T81 -> T71 after T48 |
+    T80 with T47 | T73 T74 T82 with T57-T59 | T76 after T29 | T78 after T35 | T75 rest after T55
+R2: T90 T89 with T48/T45 | T84 after T39+T47 | T85 (critical, design-bound) after T68/T69 -> T86 |
+    T87 after T70 | T88 after T73 | T91 after T57 -> T94 | T92 after T55 | T93 after T20 -> T95
+```
+Parallel-safe now (no shared files): T36, T40, T41, T51, T64, T22-T24.
+Serialized (touch `bebop.bp`): T25, T42-T45, T47-T50, T52-T56 — ONE
+writer, one commit per single-variable change (L14), battery + fixpoint
+after each, clean revert from a fresh baseline snapshot (L13).
+
+### Honest flags (Q12) for this section
+
+1. Substrate-mode performance is unknown. A dispatcher sweep per cell may
+   be slower than straight-line code on this CPU; TG-DONE is a model
+   criterion, and the numbers ship whatever they are (FASTPATH fallback
+   clause: linear mode stays available).
+2. Recursion on the substrate has a fixed depth cap; unbounded recursion
+   is a von Neumann call stack by definition. The cap is a trap, never a
+   silent limit.
+3. Until T36 lands, every "== python mirror" in this file is a journal
+   claim, not a repo artifact. The gates still prove determinism and
+   self-consistency; they do not yet prove the mathematics independently
+   (6 Rust-backed gates excepted).
+4. The five T1-T5 "DONE ✓" marks were wrong as stated; corrected to
+   "GATE NOT WIRED -> T37" without deleting the folds.
+5. "Terminal-goal sentence stands" (Honest flag 4 of the SILICON pull)
+   is narrowed: the substrate MATH is proven; substrate EXECUTION of
+   compiled programs is T55 and is not done.
+6. Corpus-A supersession is DECIDED (2026-09-04); the 16 carry-over items
+   are tasks, not live specs — a carried idea that later contradicts a
+   gate is dropped, not the gate.
 
 ## Progress log (closed statuses, evidence)
 
@@ -1063,6 +2355,35 @@ dowiz-core Rust reference (academia_p2p.rs / tensor.rs / parametric_spectral.rs
 / memory_search.rs) into `.bp` twins with gates. Cross-link table in the
 SILICON-REGISTER PULL section maps every Rust module to its Bebop twin.
 
+Status (2026-09-04, session 4): **T13 S1-S3 landed (b211451), disabled
+(b4326b5: prologue saves x19-x28 only -> x9-x13 window corrupted in
+gen3==gen4), disable reverted (9d9a2ba)**; std_golden 60/60, construct
+24/24, parity 9/9+1skip at HEAD; a further UNCOMMITTED push/pop
+`can_reg` diff sits in the working tree (untyped window, fntab[3890]
+used as a 0..5 depth counter — conflicts with the decision below).
+Verified: x9-x13 are NOT free (71 emitted words in 8 builtin emitters,
+T13 blocker #1 answered negative). Operator decisions recorded:
+(1) physical Z2 partition x9-x10 even / x11-x13 odd, (2) odd sector =
+Grassmann Lambda_5, even = Cl^0(4,1). New pull defined: **SUPER-SHEAF
+PULL T22-T35** (graded algebra T22-T24 -> bank ABI T25 -> register
+records T26 -> cellular sheaf T27-T29 -> categorical rewrite T30-T31 ->
+CRUD T32-T35), each a `.bp` gate == python mirror; T13 re-scoped (untyped
+window retired, T13-attributed speedups withdrawn until re-measured).
+Next in-order: T22 -> T23 -> T24 (pure algebra, parallel-safe with
+T16-T21), then T25 S1 as its own single-variable commit.
+
+Status (2026-09-04, session 4b): full-tree audit (compiler surface, std
+corpus, design corpus) recorded in TERMINAL-GOAL CLOSURE F-A..F-I. Key
+corrections: T1-T5 gates never wired (T37); 54/60 gates lack a committed
+oracle (T36); 50/116 std modules dead, reuse = copy-paste (T38, T47);
+every `if`/`while` is a real branch (census baseline, T51-T55); R3.x
+laws + L8 are debt (T42-T43); two contradictory design corpora (T41);
+big.LITTLE 4xA55+4xA78 unpinned benches (T63); HW crc32/sha2/LSE present
+and unused (T64). TG-DONE defined. Revised in-order start: T36 + T40 +
+T51 + T64 (parallel-safe, no bebop.bp edits) alongside T22-T24; then the
+single-writer bebop.bp queue T25 -> T42 -> T43 -> T47 -> T48 -> T50 ->
+T52 -> T53 -> T54 -> T55.
+
 ---
 
 ## Predicted speedup and memory after full roadmap completion
@@ -1125,3 +2446,10 @@ The speedup is dominated by T13 (register window) + T15 bare metal
 eliminating SQL structures. The tensor query latency is the terminal-goal
 payoff: the language IS the database, so queries compile to native code
 with zero runtime overhead.
+
+Revision note (2026-09-04): the K1-K4 rows attribute their gains to the
+T13 untyped register window, which the operator retired in favour of the
+typed Z2 bank (SUPER-SHEAF PULL, T25). Those rows are WITHDRAWN until
+re-measured after T25/T26/T35 land; the T16-T21, T15 and memory rows are
+unaffected. Sheaf queries (T28) cost a Laplacian solve whose iteration
+count is frozen per gate — no latency number is projected for them.
