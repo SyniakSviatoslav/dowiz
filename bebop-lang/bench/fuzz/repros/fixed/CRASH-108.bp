@@ -1,0 +1,53 @@
+// CRASH seed=108 expected=-2 got=signal 11 (3/3 reruns crashed)
+// gen.py --seed 108
+fn main() -> i64 {
+  let i0 = 0;
+  while i0 != 4 {
+    i0;
+    let v0 = 17;
+    i0 += 1;
+    0
+  };
+  let _ = v0 = 453;
+  let i1 = 0;
+  while i1 < 5 {
+    let v0 = 4294967296;
+    v0 -= 65535;
+    14 << (5 - (3953));
+    let i2 = 0;
+    while i2 != 5 {
+      2;
+      ((i1) / ((17) / (10) | (3080)) * ((1000000000000) >= (i2) * ((1571) & i2) / (v0)) < (1 != (i2)) % i0) / (if (1818) / i2 then 0 + i2 / (v0) else 4294967296);
+      i2 += 1;
+    };
+    let i1 = i1 + 1;
+    0
+  };
+  let i3 = 0;
+  while i3 < 3 {
+    v0 += i3 - (10054667875361132632 * i0 << i3 == ((i0) < 3658));
+    let v1 = v0;
+    let v2 = ((if 13 then i0 else 19)) > (match none(v0) { none(m1) => (if 3 then i3 else 5 + (1945) | (15) / 16), some => 9 * i0 != (((7) * (7 ^ i2)) ^ 10) != (6), many => 10 >> ((v1) / (i1)) });
+    let _ = v1 = v1;
+    let _ = i3 = i3 + 1;
+    0
+  };
+  let v2 = 0;
+  let v1 = (if (let t0 = (v0 | 16) + (3154) in t0) then 3773 else (if ((if v0 then (i2) < (14 >= 19) else 17)) >= 16 then v1 else i3));
+  let v1 = 18 + (v2) <= 4;
+  v2 *= (let t2 = i0 + 3 | (563) in i1);
+  v1 += 17;
+  let _ = v2 = v2;
+  let i4 = 0;
+  while i4 != 3 {
+    let v1 = (15) * (if 3052 ^ 17 then (if i3 - (2800) then (1 / 12) ^ 11 / 3297 else (7) ^ 1000000000000) else (if 12 then i4 else i1));
+    i4 += 1;
+    0
+  };
+  v0 += (16) % 15;
+  let v3 = (v2) << i1;
+  i1;
+  let a0 = [v2 - (5), 4, v3, 65535, 10054667875361132632, (let t1 = 4 % (i2 | 10) in 9223372036854775808), 4096, 20];
+  (a0[((9223372036854775807 << (i0)) & 7)]) ^ (v2 | ((if v1 then i4 else i1 % a0[i3])))
+}
+enum opt { none, some, many }

@@ -1,0 +1,55 @@
+// CRASH seed=126 expected=0 got=signal 5 (3/3 reruns crashed)
+// gen.py --seed 126
+fn main() -> i64 {
+  let i0 = 0;
+  while i0 <= 3 {
+    let i1 = 0;
+    while i1 <= 1 {
+      let v0 = (let t0 = 3667 in 14);
+      v0 *= i0;
+      v0 += 10;
+      let v0 = f1(v0 % ((v0) / (9)) * (if v0 + 2061 then i0 else (i1) / ((5) / 227)), i1);
+      i1 += 1;
+      0
+    };
+    let v1 = f0(((((let _ = v0 = 13 in v0)) == 1 == (18)) & 7)) & (20);
+    i0 += 1;
+    0
+  };
+  let v2 = 421 >> (if 10 then f1(7, v0) else 10 - i0);
+  let a0 = zeros(512);
+  v1
+}
+fn f0(n: i64) -> i64 {
+  n += 0;
+  let _ = n = n;
+  let i0 = 0;
+  while i0 < 2 {
+    let v0 = 1875 - (((18 % (n)) * (i0) | (n) > (n)) + (4) << ((if 16 + 15 then (i0) == (i0) else n)));
+    let i1 = 0;
+    while i1 < 3 {
+      let n = f1(9, (6) << (15 > match some(i1 - 18) { some => i1 % i0 / i0, none => 14 % (16) }));
+      let v1 = i1;
+      let i1 = i1 + 1;
+      0
+    };
+    let _ = n = f1((if i1 then v1 else 2948), 4096);
+    let i2 = 0;
+    while i2 < 5 {
+      (1000000000000 * (2352)) == 17;
+      v1 %= i0;
+      let _ = i2 = i2 + 1;
+      0
+    };
+    let i0 = i0 + 1;
+  };
+  let _ = v1 = i2;
+  if n < 1 then f1(v0, 20) else (if 1 then f0(n - 1) else 17)
+}
+fn f1(p0: i64, p1: i64) -> i64 {
+  p1 -= p1 / (if 4294967296 then (65536 / (0 | (2683 & (p1)))) - (p0) else 9223372036854775807) & (p0) * (10 != p0);
+  p0 *= (6) % 18 >> ((if 5 then p0 else 1362)) > (p0) * p0;
+  let v0 = 14;
+  p0
+}
+enum opt { none, some, many }

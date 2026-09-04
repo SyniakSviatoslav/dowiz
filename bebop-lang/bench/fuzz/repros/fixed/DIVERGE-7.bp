@@ -1,0 +1,152 @@
+// DIVERGE seed=7 expected=2 got=3
+// gen.py --seed 7
+fn main() -> i64 {
+  let i0 = 0;
+  while i0 < 4 {
+    let i1 = 0;
+    while i1 < 3 {
+      3711;
+      let _ = i1 = i1 + 1;
+      0
+    };
+    let v0 = (let t2 = i1 in (i0) + (((if 18 then 4 >= 13 else 20)) < (18)));
+    let _ = i0 = i0 + 1;
+    0
+  };
+  let v0 = 7;
+  let _ = v0 = 8;
+  v0 += 2869;
+  v0 %= match many(0) { many => 6 };
+  let v0 = (if 9 then (if (i1) / (5) then 10 else (let t2 = i1 in t2)) >= (i0) < (5) else i0 / v0);
+  let i2 = 0;
+  while i2 < 5 {
+    v0 += i1;
+    v0 -= i0;
+    v0 -= 19;
+    i1;
+    let _ = i2 = i2 + 1;
+    0
+  };
+  let v0 = (let t1 = (if (if (3) / 10054667875361132632 then i2 else 20) then 13 else v0) in v0) & 2628;
+  v0 %= i0 & (i0);
+  let i3 = 0;
+  while i3 < 1 {
+    let v1 = 442;
+    let v2 = (65536) | (i1);
+    let _ = v1 = 9223372036854775808;
+    i3 += 1;
+  };
+  v1 += i2;
+  (let t3 = (let _ = v0 = i2 in match many(i1 % 4959) { none => 17, many => 8, some => 7 }) in (7) % ((6) ^ i1))
+}
+fn f0(p0: [i64]) -> i64 {
+  let v0 = p0[6];
+  let v1 = 18;
+  2372 - v0;
+  let _ = v0 = (18) ^ (17);
+  let v2 = v0;
+  let _ = v0 = 15;
+  let i0 = 0;
+  while i0 <= 5 {
+    let v0 = p0[((1) & 7)];
+    10;
+    let v3 = p0[1];
+    p0[4];
+    let _ = i0 = i0 + 1;
+    0
+  };
+  let v4 = (v3) / (9);
+  let v5 = 17;
+  let v6 = v3;
+  let v7 = v5;
+  7;
+  let _ = v0 = p0[0];
+  let v8 = ((let t3 = 15 in v0)) << (65535) >> 4 - (((15) * (3817)) - 8);
+  v7;
+  (match some { some => p0[((11) & 7)] | (v0), many => v4 }) * (7) + v6;
+  let i1 = 0;
+  while i1 < 4 {
+    let i2 = 0;
+    while i2 < 1 {
+      (if (i1) - (i2) then 5 else 18);
+      i2 += 1;
+    };
+    v7 *= 0;
+    let v1 = p0[i0];
+    let i1 = i1 + 1;
+    0
+  };
+  let v9 = (if 14 then (v7) <= (16) else 4) / (3);
+  let v10 = (if 7 then 3 else p0[((match some(1000000000000) { none => 8, some => 14 }) & 7)]);
+  let v11 = 2;
+  let v12 = 2999;
+  let v13 = 3;
+  let v14 = 1322;
+  let _ = v8 = v10;
+  let v15 = p0[4] % (p0[3]);
+  let v16 = ((if (if (4674) > (i1) then (2) + p0[i0] else p0[((v7) & 7)]) then (match none(9 % 8) { none(m1) => v14 / (p0[((v5) & 7)]) | p0[i1] }) - (8) else (v1) - (v4) % i1)) - (2147483647);
+  let v17 = v5;
+  let v18 = 1178;
+  let v19 = 7;
+  let v4 = i1 >> (if v13 then v19 else p0[(((if v19 then v19 else v2) & (11)) & 7)]) & (p0[i2]) * v11;
+  let _ = v2 = (if 1890 then ((if 2353 then p0[2] else 9)) > ((3) / v18) else 65535 <= (16)) + v5;
+  let v20 = 4167 * (i0);
+  p0[7];
+  let _ = v12 = v3;
+  let v21 = 10;
+  let i3 = 0;
+  while i3 <= 3 {
+    9;
+    i3 += 1;
+    0
+  };
+  let v22 = 2147483647;
+  let i4 = 0;
+  while i4 < 3 {
+    let v23 = i1 * 13;
+    let _ = i4 = i4 + 1;
+    0
+  };
+  let _ = v1 = match some(2344) { many => v7, some => 20 };
+  let v24 = 2;
+  let v15 = 4 * (p0[5]);
+  let v25 = 13;
+  let v26 = 1;
+  let v27 = v10;
+  let v28 = v23;
+  let v29 = (if 13 then 2 > v28 else 4);
+  let v3 = 20;
+  let i5 = 0;
+  while i5 != 4 {
+    let v30 = (if 2488 then 16 else (18) & 19);
+    i5 += 1;
+    0
+  };
+  v28 -= p0[i0];
+  3440 + (13);
+  let v31 = i3;
+  let v32 = (p0[3]) | 9;
+  v14 /= i0;
+  6;
+  let v33 = i0;
+  let v34 = 4095 + (16);
+  let _ = v24 = (if 3 then 11 else v6);
+  let v35 = v16;
+  let i6 = 0;
+  while i6 <= 3 {
+    let v36 = v23;
+    let i6 = i6 + 1;
+    0
+  };
+  let v37 = (if p0[1] + ((let _ = v17 = v33 in 10)) then (15) & (((if p0[7] then 2484 else p0[i2])) / ((let _ = p0[i3] = p0[i5] in 10))) else p0[2] / (v33));
+  let v38 = v30 ^ (v13);
+  let v39 = 4737;
+  let v40 = v12;
+  let v41 = (if 1893 == (if match none { many => v3, none => 3679 } then (19) & (10) else v32) then (if (if v20 then 6 else 15) then 12 else 8 % (v15)) else 11);
+  let v42 = (6) >= 5;
+  let v43 = p0[0];
+  let v44 = match none(9223372036854775807 * 5) { many => (if 4 then (if 2576 then 4096 else 5) else v9 <= (if 12 then 6 * (1) else 20)), some => 11, none(m0) => v1 };
+  let v29 = 3754;
+  (if (if v3 then 2 else (if p0[2] then 16 else 3095)) then (let t0 = 65535 in v44) & (match none(v3) { many => v24, none(m1) => 8 }) else v9)
+}
+enum opt { none, some, many }

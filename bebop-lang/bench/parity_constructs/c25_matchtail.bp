@@ -1,0 +1,5 @@
+// match followed by more of the enclosing expression (array element, binop
+// operand): emit_match's arm loop used to run its arm tail at the closing "}"
+// and scan into the enclosing expression, swallowing the suffix (T42
+// 2026-09-04, root cause of all 56 CRASH/DIVERGE/TIMEOUT fuzz repros)
+fn main() -> i64 { let x = [match many(3) { none => 0, many(v) => v }, 5]; x[0] * 10 + x[1] + (match none { none => 7, some => 0 }) } enum opt { none, some, many }

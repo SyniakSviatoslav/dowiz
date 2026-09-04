@@ -1,0 +1,62 @@
+// TIMEOUT seed=91 expected=7 got=timeout 5s
+// gen.py --seed 91
+fn main() -> i64 {
+  let i0 = 0;
+  while i0 <= 3 {
+    let i1 = 0;
+    while i1 < 3 {
+      let v0 = (if 3166 then (if 2859 ^ 10054667875361132632 then i1 else 17) & ((if 1 then i0 > 13 else (i1) != i1)) else i1);
+      let v1 = ((let _ = v0 = ((if 0 then ((20) | i0) & (i0) else i1)) + (i0) in (if i1 then (v0 - v0) << (i1) else (7 + (i0) % i1) ^ ((16) <= 20)) | (17))) >> (match none(3 - 2) { none => (16 - (v0) - (i1) >> ((19 - (i0)) == (3254 << 2022)) >= (11) % v0) + 6 & i0 });
+      let _ = i1 = i1 + 1;
+      0
+    };
+    let i2 = 0;
+    while i2 < 6 {
+      v1;
+      let v0 = (3181 + v0 >> 10) - v0;
+      let v2 = v1;
+      let _ = i2 = i2 + 1;
+      0
+    };
+    let i3 = 0;
+    while i3 < 4 {
+      v2 /= match none(v1) { many => 1, none => 65535 };
+      let i3 = i3 + 1;
+    };
+    let i4 = 0;
+    while i4 < 6 {
+      v2 *= (if 3 then 14 > v1 else 4096);
+      let _ = i4 = i4 + 1;
+      0
+    };
+    let i0 = i0 + 1;
+    0
+  };
+  v1 %= (5 & (v0)) + ((let t0 = ((3) + (i2)) % (14) in i1)) ^ (v0 > 15 >= (1));
+  let a0 = zeros(256);
+  a0[6] = 14;
+  let a1 = [17, v2 <= v2 < 1890 - v2, i3, (if 18 then v2 else (15) << a0[i2]) / (20), 5, 3460, (a0[((11) & 255)]) != (14 > (i4 | v1)), (if (if 12 then i2 else i3) & (18 < (5)) then 14 else 18 != 2148), (if 2516 then (match many(10) { many(m0) => i1, some => 12 }) ^ (v2) else 4294967296), a0[i4], ((if (if 18 then a0[i3] else 719) then 19 else 20)) + i2, 3181, a0[i0] | i1, 4, 337, 13, v1, (a0[((9223372036854775808) & 255)]) - (15), (if a0[i1] then 1441 else (let _ = v0 = 10 in a0[3])), 6, i4 >> (i1), i0, 10, (if 20 then 12 else (let _ = v0 = (i0) | i0 in a0[((i3) & 255)])), 8, i3 << (v0) ^ i0, a0[((1000000000000) & 255)], a0[(((if match some(i4) { some(m0) => a0[0], none => a0[1] } then (i1) != a0[((v2 + (a0[i3])) & 255)] else (i1) | i2)) & 255)], i3, a0[((18) & 255)], 11, i1 - (i2 < (9223372036854775807))];
+  a0[2] = (9223372036854775807 / i1 >> 3861) ^ (i3) << ((i4) ^ 19);
+  let v0 = 8;
+  let i5 = 0;
+  while i5 < 5 {
+    a0[1] = 2311;
+    let _ = a1[((i3) & 31)] = 6;
+    let v1 = i2;
+    i5 += 1;
+    0
+  };
+  v2 *= (if 4676 then 18 else 3);
+  let i6 = 0;
+  while i6 < 6 {
+    let v2 = i2;
+    let v1 = i4;
+    a0[2] = match some(v2 / 4096) { some(m1) => (18) & (20), many => 1 % 4096 };
+    let _ = v1 = (if i6 * (0) then 12 else 20) <= match none { none => 4, some => i5, many => v2 };
+    let _ = i6 = i6 + 1;
+    0
+  };
+  let a2 = zeros(8);
+  7
+}
+enum opt { none, some, many }

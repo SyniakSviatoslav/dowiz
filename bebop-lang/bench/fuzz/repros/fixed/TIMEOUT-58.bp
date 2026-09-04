@@ -1,0 +1,35 @@
+// TIMEOUT seed=58 expected=5 got=timeout 5s
+// gen.py --seed 58
+fn main() -> i64 {
+  let v0 = (2169) != (13);
+  let v1 = 19;
+  let i0 = 0;
+  while i0 != 5 {
+    let _ = v0 = (if (i0 & (if v0 then i0 | v1 ^ 2917 >= (19) else v0)) > (5) then 3255 else ((if 6 then match none(v1) { none(m0) => i0 - 14 } else 4)) != i0);
+    let v0 = v0 | 3;
+    let v1 = 9;
+    let _ = v0 = i0 % (7);
+    i0 += 1;
+    0
+  };
+  let v2 = (if v1 then (i0) + 2 else i0 | (v0) >> (v0 & i0));
+  v0 -= (3) * v1 >> 11 + v0;
+  v0 -= v1 != (((let t2 = 20 in v1)) / (3));
+  18;
+  i0
+}
+fn f0(n: i64) -> i64 {
+  let v0 = (if n then n else n);
+  let _ = v0 = 3282;
+  let v1 = (if f1([v0 & (16), 11, 12, (v0) * (9223372036854775807), 2, v0, f1([n, v0, 7, 8, v0, v0, v0, n], v0, v0), n ^ (n >> (6) != n)], f1([15 % 9223372036854775807 * (13), 1 << (4095), 3544, v0, v0, 16, 18, v0], (8) + v0, match some { some => 13 }), 10) then (10 << (n)) ^ (v0 >> (n)) else (v0 >= 16) + ((let t2 = n in t2)) / (2));
+  if n < 1 then (if (f1([v0, n, 10, (0) | (v0) == 2147483647, v0, n, v1, 10054667875361132632], v1, (7) >> (v1))) ^ (v1) then (v1) + (36) ^ (v0 % (v1)) else v0) else (if 11 then f0(n - 1) else v1)
+}
+fn f1(p0: [i64], p1: i64, p2: i64) -> i64 {
+  let p1 = p0[((p0[((1103) & 7)]) & 7)];
+  let a1 = [p1, 4 != (((if p1 then p2 else p2)) * ((4995) * 2)), (1) + (p1), 17, match some(p2) { some(m1) => (m1) ^ 18446744073709551615, many => (13) % p2, none => 12 }, p0[1], (if 9223372036854775808 then p1 > (17 % p1) else p2) | 3639, (p1) + (3), p1, p2, ((18446744073709551615) < (18)) / p0[3], 65536, p0[((p0[2]) & 7)], ((if 19 then p2 > p0[((p0[((8) & 7)]) & 7)] & (p1) else p0[2])) & (16), 17, match none { none => 11, some => 3266 == (65535), many => 5 }];
+  let v0 = 5;
+  let a2 = zeros(16);
+  let v1 = 12;
+  (let _ = a1[5] = 1 in a2[6])
+}
+enum opt { none, some, many }

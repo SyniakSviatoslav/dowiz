@@ -1,0 +1,53 @@
+// TIMEOUT seed=6 expected=9 got=timeout 5s
+// gen.py --seed 6
+fn main() -> i64 {
+  let i0 = 0;
+  while i0 < 2 {
+    (let t3 = (3) > (3204) in (if (let t1 = t3 in 9223372036854775807) then 10 else t3) >> ((t3) > ((15) % 18 >> (t3))));
+    let v0 = 16;
+    v0 -= match some(19 - 17) { none => i0, some(m1) => i0, many => (if 6 then 0 else (4 > (7)) / 4) };
+    let _ = i0 = i0 + 1;
+  };
+  let i1 = 0;
+  while i1 < 5 {
+    v0 /= 20;
+    let i1 = i1 + 1;
+  };
+  let i2 = 0;
+  while i2 < 1 {
+    v0 %= ((let _ = v0 = (18) & (i0) in (i2 >> 4868) - (f1(i1, i2, i2, 13)))) * (match some { none => (if (if i1 then i2 else i0) then 8 else i0 - i0 == (9)), many => i1, some => 19 });
+    v0 -= v0;
+    let i2 = i2 + 1;
+    0
+  };
+  v0 -= match many { none => 16, many => 8 };
+  9
+}
+fn f0(p0: [i64], p1: [i64], p2: i64) -> i64 {
+  let v0 = 12;
+  let p2 = 1108;
+  p2 /= p2;
+  5
+}
+fn f1(p0: i64, p1: i64, p2: i64, p3: i64) -> i64 {
+  let v0 = ((if (let _ = p3 = (p2) < 11 in 19) then 4 == p0 else p0 ^ 18 * 3) | (f2([(7) & (20), 4294967296 >> p1, (15) + 830 + 3, 3313, 0 != p3 != 12, p2, p2 ^ (p0), ((2627) % (9)) <= 11]))) >= (let t1 = p3 in match none(2942) { some => p0, none(m0) => m0 < (p0) / (((16) % 1) | 0) });
+  p2
+}
+fn f2(p0: [i64]) -> i64 {
+  p0[((p0[3]) & 7)] = (12) + (p0[((p0[2] * (16)) & 7)]);
+  p0[((0) & 7)];
+  (if (let _ = p0[2] = (4) ^ (12) in p0[1]) * (p0[4] & (18)) then 9223372036854775807 else 4387 / ((if 8 then p0[((1) & 7)] else 7)) / match some(423 / 8) { some(m0) => p0[((m0) & 7)], many => 1 * 5 })
+}
+fn f3(p0: i64, p1: i64, p2: [i64]) -> i64 {
+  let _ = p1 = 6;
+  let i0 = 0;
+  while i0 < 3 {
+    match many(p0 / 18) { many(m0) => p1, none => 16 };
+    let p0 = (p0 % (i0) - 14) >> (let _ = p2[((p2[6]) & 7)] = 8 in p2[1]);
+    let p1 = match some { some => p2[i0], many => ((i0) <= (i0)) * ((if 0 then (918) != p1 else 6)) };
+    let p1 = 11;
+    i0 += 1;
+  };
+  ((p2[i0]) / (i0 >= (6)) != (i0) * 2977) + (p1)
+}
+enum opt { none, some, many }

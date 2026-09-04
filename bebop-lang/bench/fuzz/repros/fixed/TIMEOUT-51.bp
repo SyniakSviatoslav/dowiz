@@ -1,0 +1,65 @@
+// TIMEOUT seed=51 expected=6 got=timeout 5s
+// gen.py --seed 51
+fn main() -> i64 {
+  let i0 = 0;
+  while i0 <= 1 {
+    i0;
+    let i1 = 0;
+    while i1 != 5 {
+      i1;
+      232;
+      5;
+      i1 += 1;
+      0
+    };
+    let i2 = 0;
+    while i2 < 6 {
+      18446744073709551615;
+      match none { many => 15 != 5, some => 334 + (10054667875361132632), none => (if i2 then (if (if 2 then (i1) > 18 else i1) then (i0) >> (i2) else 13) else 9) };
+      i2 += 1;
+    };
+    let _ = i0 = i0 + 1;
+    0
+  };
+  let i3 = 0;
+  while i3 != 5 {
+    let i4 = 0;
+    while i4 <= 4 {
+      (12) * (i3);
+      14;
+      (4096) % ((let t3 = i3 in ((17) / (1522 & i0 / i0) ^ ((i1) % (13)) * 2) + (3610) >> 3982));
+      4580;
+      let i4 = i4 + 1;
+    };
+    let i5 = 0;
+    while i5 != 1 {
+      let v0 = i0;
+      let v0 = 1;
+      i5 += 1;
+    };
+    let v0 = i5;
+    let _ = i3 = i3 + 1;
+  };
+  let _ = v0 = i0;
+  let v1 = 13;
+  v0 *= (match some(419 % 18446744073709551615) { many => 997 % (9), none => (2147483647) >= ((11) + (i4) >= (3)) != 3 + (7) << (17), some(m1) => i4 }) % (i3);
+  v0;
+  let _ = v1 = 18 * (1052) - ((let t0 = 4025 in 8 ^ 13));
+  let i6 = 0;
+  while i6 < 3 {
+    let v1 = 3 - (i1 * i3);
+    let v1 = match some(7 - 8) { some => 7, none => (205) <= (4) ^ (19), many => i0 };
+    let v1 = 1;
+    let _ = i6 = i6 + 1;
+    0
+  };
+  let v2 = 11 < 5 % (15);
+  let v0 = 17;
+  let _ = v1 = 3;
+  let _ = v1 = 13 + 2;
+  v1 += i4;
+  v2 += i2;
+  let v3 = 2;
+  v2
+}
+enum opt { none, some, many }

@@ -1,0 +1,34 @@
+// TIMEOUT seed=34 expected=0 got=timeout 5s
+// gen.py --seed 34
+fn main() -> i64 {
+  let i0 = 0;
+  while i0 != 2 {
+    i0;
+    13 == (i0);
+    let i1 = 0;
+    while i1 < 3 {
+      ((if 8 then 17 else i1)) % (3078);
+      let i1 = i1 + 1;
+      0
+    };
+    let v0 = i1;
+    let i0 = i0 + 1;
+    0
+  };
+  let a0 = zeros(256);
+  let i2 = 0;
+  while i2 < 5 {
+    v0 %= (4) / 13 >= (4800 / (i1) * i2);
+    let v0 = match none(i0) { some => v0 < 4, many => i1 * ((if i2 then 1000000000000 else 17)), none => 0 };
+    2;
+    let i2 = i2 + 1;
+  };
+  a0[(((if i0 then 11 else i1) > (let _ = v0 = i1 in i1)) & 255)]
+}
+fn f0(p0: i64, p1: i64) -> i64 {
+  (if match many { none => 19, many => 17, some => 4759 } then (p0) / (((if 2801 then p0 else p1)) != (p1)) else p1)
+}
+fn f1(p0: i64, p1: i64, p2: i64, p3: i64, p4: [i64], p5: i64) -> i64 {
+  p5
+}
+enum opt { none, some, many }

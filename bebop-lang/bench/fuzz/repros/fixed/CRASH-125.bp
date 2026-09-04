@@ -1,0 +1,34 @@
+// CRASH seed=125 expected=921120 got=signal 5 (3/3 reruns crashed)
+// gen.py --seed 125
+fn main() -> i64 {
+  let i0 = 0;
+  while i0 < 2 {
+    let v0 = ((4017) ^ match none(17) { many => i0, none(m0) => i0 }) << (20) - 1988;
+    let i1 = 0;
+    while i1 < 5 {
+      v0 /= (v0) >= 8;
+      let v1 = i1;
+      i1 += 1;
+      0
+    };
+    v1 %= i0;
+    let i0 = i0 + 1;
+    0
+  };
+  let i2 = 0;
+  while i2 < 1 {
+    v0 *= i1;
+    let v1 = match many(v1) { many => 13, none => 19, some => 5 } / (((((1000000000000) % (4095)) == (i0)) ^ (14 % 3862)) % ((let t1 = 65536 in 2)));
+    v1 += match some(0 % 3268) { some(m0) => 9223372036854775808 / (if 7 then m0 else (m0) - v1) };
+    v1 *= 16;
+    let i2 = i2 + 1;
+    0
+  };
+  v1 %= (2955) - (if v0 then (if (i0 & 3) != (2098) then v1 else (let _ = v1 = v0 in ((17) >= (i0)) - i0 == v1 & (692))) else 9223372036854775808);
+  let v1 = (3) | (15);
+  9;
+  v1 *= (if i0 then 19 else ((let t3 = (5) >> (3559) in 4429)) < ((v1 - (v0)) + (i2)) | v1) * (3232);
+  let v2 = match some(2588 - 1) { some => (if v1 then 1221 else v0 / 3336) - (10) / (10), many => 10054667875361132632, none => i1 };
+  v1
+}
+enum opt { none, some, many }

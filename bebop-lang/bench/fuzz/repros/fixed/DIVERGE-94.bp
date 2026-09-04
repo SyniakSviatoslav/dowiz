@@ -1,0 +1,26 @@
+// DIVERGE seed=94 expected=17 got=0
+// gen.py --seed 94
+fn main() -> i64 {
+  let v0 = 17;
+  let v1 = (v0 == v0) + v0;
+  let v0 = 17;
+  let v2 = 0;
+  let v2 = v0;
+  v2 += (if 8 then 18 else match none { none => 9223372036854775807, many => 5 } | (v1) / (7));
+  (v0) * (match some(v2) { none => 21, some(m0) => 2310 });
+  let v3 = ((f0(((16 * 14) & 7))) - 19) ^ (65536) * ((if v0 * 65536 then (1) + (((v2) * (10)) * (65535 == 8)) - (v1) else 11)) % (v0);
+  v0
+}
+fn f0(n: i64) -> i64 {
+  n += (if n then 9223372036854775807 else n);
+  let v0 = 5;
+  let _ = v0 = (65536) / (let t2 = 20 in 297);
+  (v0 * 19 - (v0)) | (2597);
+  if n < 1 then n else (if ((let t0 = 6 in (v0) << (671) & (t0 / ((v0) != 2974)))) * (((n) + (v0)) % ((v0) % 6) % (17)) * (match none { some => 16 > (2), none => 7, many => 147 }) then f0(n - 1) else 13)
+}
+fn f1(p0: i64) -> i64 {
+  p0 *= 6;
+  let _ = p0 = p0;
+  p0
+}
+enum opt { none, some, many }

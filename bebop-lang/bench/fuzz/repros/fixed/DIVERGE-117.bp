@@ -1,0 +1,50 @@
+// DIVERGE seed=117 expected=3 got=0
+// gen.py --seed 117
+fn main() -> i64 {
+  let i0 = 0;
+  while i0 <= 5 {
+    let i1 = 0;
+    while i1 < 5 {
+      (if 4096 then 20 else i0);
+      let v0 = 4;
+      v0 /= (let _ = v0 = (10) % (v0) in 8 >= (i0));
+      i1 += 1;
+      0
+    };
+    let _ = i0 = i0 + 1;
+  };
+  let i2 = 0;
+  while i2 != 1 {
+    v0 %= (let _ = v0 = 1670 in 3);
+    let i3 = 0;
+    while i3 != 6 {
+      i1;
+      let v0 = 14;
+      let v0 = i0;
+      i3 += 1;
+      0
+    };
+    let v1 = 2 ^ (65535);
+    let v2 = (let t2 = (13) & 11 + (((v0) | (17)) <= 9) in 3 + (t2));
+    i2 += 1;
+    0
+  };
+  let v2 = i0 <= (14);
+  let i4 = 0;
+  while i4 < 5 {
+    v0 %= (if match none(v2 % 5) { none(m0) => 9223372036854775808, some => (16) * (17 ^ 5 / (7)) * (4095) } then ((let t3 = 12 in (i2) | 14)) >> 20 else 810) ^ 16;
+    let i5 = 0;
+    while i5 < 2 {
+      let _ = v2 = 441;
+      v1 %= i2;
+      v1 -= 65535;
+      let v1 = i1;
+      let i5 = i5 + 1;
+    };
+    let _ = i4 = i4 + 1;
+    0
+  };
+  let _ = v2 = i5;
+  3
+}
+enum opt { none, some, many }

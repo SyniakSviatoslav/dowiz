@@ -1,0 +1,41 @@
+// DIVERGE seed=21 expected=6 got=549736868176
+// gen.py --seed 21
+fn main() -> i64 {
+  let i0 = 0;
+  while i0 < 2 {
+    let i1 = 0;
+    while i1 < 5 {
+      11;
+      i0;
+      let i1 = i1 + 1;
+    };
+    let i2 = 0;
+    while i2 < 6 {
+      15;
+      (1022) == ((if 10 then i0 else 7));
+      (if 17 <= (i0 != (let t2 = 19 / (i0) + ((i1) - (9)) ^ i0 in ((16) % (7)) > ((8) << (i0)))) then i2 else (2996) & ((if (let t3 = i1 in 8) then 12 else 7 == ((i0) ^ 3))));
+      7;
+      let _ = i2 = i2 + 1;
+      0
+    };
+    let i3 = 0;
+    while i3 < 2 {
+      ((if 2 then i1 else (let t2 = 2416 - 10 % ((i1) % (1649)) > 14 in 13 << 18))) & i1 / (11 == (i2) > (3161));
+      let _ = i3 = i3 + 1;
+      0
+    };
+    let v0 = 14;
+    let i0 = i0 + 1;
+  };
+  let _ = v0 = (i2 + (10054667875361132632)) % (13 | (((9223372036854775807) & 11) | (14)));
+  i1;
+  v0 %= (if i3 then v0 else 18);
+  (let _ = v0 = 1542 in 16);
+  v0 /= i2 | (i0);
+  let v0 = i2;
+  let v1 = (11) << ((i1 & 11) - (20 >= ((i3) * i1) & i3 / i3 & (12) / i0 * (17) >= (v0)));
+  let v0 = (let _ = v1 = (5) >= i3 in (let _ = v1 = 17 in (if i0 then 1083 else i3))) % v0;
+  let _ = v1 = (match none(v1 - 8) { none(m0) => 10 / ((1) & 495), some => v0 % (20), many => v1 } + i1 | 14) * i1;
+  i2
+}
+enum opt { none, some, many }

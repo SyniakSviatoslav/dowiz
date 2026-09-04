@@ -1,0 +1,15 @@
+// DIVERGE seed=66 expected=2668 got=0
+// gen.py --seed 66
+fn main() -> i64 {
+  let v0 = (if 4054 then 2 else 12 % 0 << 10);
+  let v1 = (if v0 then 19 else 13) * 3;
+  let a0 = zeros(64);
+  match some { none => a0[((11 ^ (if 4 then v0 else a0[((12) & 63)])) & 63)], many => 1, some => a0[7] } + (v0);
+  let v2 = v0;
+  a0[((((if v0 then v0 else v1)) == (v0) << (v0)) & 63)] = a0[((6) & 63)] / (3330);
+  6;
+  let _ = v0 = v1;
+  let _ = v2 = 17;
+  2668
+}
+enum opt { none, some, many }

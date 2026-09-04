@@ -1,0 +1,49 @@
+// TIMEOUT seed=80 expected=0 got=timeout 5s
+// gen.py --seed 80
+fn main() -> i64 {
+  let i0 = 0;
+  while i0 != 3 {
+    5;
+    let i1 = 0;
+    while i1 < 1 {
+      let v0 = 9223372036854775807;
+      792;
+      let v0 = 2;
+      3 / (7 | i1 & (12)) ^ (4) * (3 - i1);
+      i1 += 1;
+      0
+    };
+    let i0 = i0 + 1;
+  };
+  let v0 = 19;
+  let i2 = 0;
+  while i2 <= 3 {
+    let v0 = (if (8) >= 3 then i2 else 19);
+    let i3 = 0;
+    while i3 <= 3 {
+      let v1 = i3 == v0 * match many { none => 1741, many => i3, some => 8 };
+      let v1 = v0;
+      v0 += (if (if (if 12 then 3 else 11) >= ((let t2 = i2 in 0 * (i1))) then (1000000000000) + (2 * 0) else (let _ = v0 = (if i2 then i2 else 65536) in i3)) then 11 else 2550);
+      let i3 = i3 + 1;
+      0
+    };
+    let v2 = 10;
+    let i4 = 0;
+    while i4 <= 2 {
+      let v3 = ((let _ = v0 = 4 in (let t0 = v0 - (239) / 3 | (9223372036854775807) in (if i2 then v2 else v1)))) >> 5;
+      let i4 = i4 + 1;
+      0
+    };
+    i2 += 1;
+    0
+  };
+  let a0 = zeros(256);
+  a0[(((if 9 then (let _ = v0 = v3 in 19) else (if 7 then 1763 else a0[6]))) & 255)]
+}
+fn f0(p0: i64, p1: i64, p2: i64, p3: i64, p4: i64, p5: i64, p6: i64, p7: i64, p8: i64, p9: [i64], p10: [i64], p11: i64, p12: i64) -> i64 {
+  let v0 = 4294967296;
+  let p5 = 0;
+  let v1 = match many(p3) { many(m0) => 2838, none => 3163 };
+  p9[((((if p2 then 4 else p9[2])) != 4154) & 7)] + p10[2] + ((11) * p0)
+}
+enum opt { none, some, many }

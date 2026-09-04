@@ -1,0 +1,129 @@
+// CRASH seed=123 expected=16 got=signal 11 (3/3 reruns crashed)
+// gen.py --seed 123
+fn main() -> i64 {
+  let i0 = 0;
+  while i0 <= 0 {
+    let v0 = (let t2 = (2) | (let t0 = i0 in 4) in t2);
+    let v1 = (if 16 / v0 == (20 / (3988) >> (2)) then v0 else 16);
+    let i1 = 0;
+    while i1 <= 0 {
+      7;
+      let v0 = 14;
+      let v2 = 11;
+      let _ = i1 = i1 + 1;
+      0
+    };
+    v0 += 4389 & (v2);
+    i0 += 1;
+    0
+  };
+  let v3 = i0;
+  v1 /= 1179;
+  let v4 = 468;
+  let i2 = 0;
+  while i2 < 4 {
+    let v5 = match some(10) { many => (14) / (i0), none => (v2) % (10) + (9223372036854775807 <= (2)), some => 15 };
+    let v6 = 18;
+    let i3 = 0;
+    while i3 < 3 {
+      (if match many(v6 % 1) { none => 6, many => i1, some => 9223372036854775807 } then (if v2 then (if 11 then 8 else (10 / (14)) & 15 + (i2) % v3) else ((2075) / 4095) % (v1) <= (16)) else (let t2 = ((v0) - v4) % (20) in 4294967296 - (match none(i3) { many => v3 * (11), some => v4, none(m0) => 15 })));
+      let v7 = 11;
+      let v8 = i0 - (777);
+      let v9 = 4;
+      i3 += 1;
+      0
+    };
+    let i2 = i2 + 1;
+  };
+  let v10 = 6;
+  let _ = v0 = 2;
+  let v11 = v8;
+  let i4 = 0;
+  while i4 != 2 {
+    let i5 = 0;
+    while i5 < 3 {
+      let v12 = v8;
+      let v13 = 3;
+      let i5 = i5 + 1;
+      0
+    };
+    let v14 = (let t2 = match many(v0 + 4148) { some => (2 <= (13)) + (18446744073709551615), many(m0) => 5 } in (if i1 then 3 else v1));
+    i4 += 1;
+    0
+  };
+  let v15 = 17;
+  let i6 = 0;
+  while i6 < 6 {
+    v14;
+    let _ = i6 = i6 + 1;
+    0
+  };
+  let v16 = (if (if (let t1 = 0 + 5 + (18 * 20) in 4096 ^ 2) then 17 else 3678) then (v7) >= (1771) % ((20) + (i6)) else v15) > (13);
+  let v17 = (if 18 then i4 else v5);
+  let v18 = 19 <= ((let t1 = 2017 >> 14 > 17 in 1));
+  let v19 = 19;
+  let v20 = 3;
+  let i7 = 0;
+  while i7 <= 3 {
+    let i8 = 0;
+    while i8 != 5 {
+      let v20 = (if (if (let t2 = v11 in 1) then v0 | (1370) else (if ((i0) / v5) <= i2 then (let t0 = v20 in 10) else i0)) then 11 else v17);
+      let v21 = (i2) >= 14 > ((v14) & (match some { none => v18, some => 16 }));
+      let v22 = v9;
+      16;
+      i8 += 1;
+      0
+    };
+    let v23 = 2;
+    i7 += 1;
+  };
+  i7;
+  let _ = v13 = 65536;
+  let v24 = (v7) + 16;
+  let i9 = 0;
+  while i9 < 3 {
+    let v25 = i9;
+    let i10 = 0;
+    while i10 != 1 {
+      15;
+      let v26 = match none(v21 * 9) { none => 2638, some => (((if i5 then v12 else 13)) / (if (20) >> ((v5) < (2147483647)) then (v13) % ((v7) >> (5)) else 5)) | 20 };
+      let v27 = 12;
+      (14) % ((v10) | i2 <= (7) / (((1000000000000) * (2)) + v7)) / (i8);
+      i10 += 1;
+      0
+    };
+    let v28 = 9223372036854775807;
+    i9 += 1;
+    0
+  };
+  let v29 = i7;
+  let v30 = 10;
+  let v31 = 4492;
+  let v32 = i3;
+  let v33 = (if 13 then (19) - 4095 else i0);
+  let _ = v21 = 8 | (20);
+  let v34 = (if v33 % 2475 & ((let t1 = (v21) / (i1) in v4)) then match some { some => 9223372036854775808, many => v8 << v18, none => 16 } else (let t2 = v21 in i9));
+  let i11 = 0;
+  while i11 != 3 {
+    let v35 = v10;
+    1;
+    let _ = i11 = i11 + 1;
+  };
+  v2 %= i11;
+  let i12 = 0;
+  while i12 < 3 {
+    let v36 = (v21 * ((i3) % (v24)) ^ (v35)) % 20 < 4;
+    i12 += 1;
+  };
+  let v14 = 7;
+  let v37 = v32;
+  let v38 = match many { some => v14, many => (10) & (19) >= 2 };
+  3623;
+  let v39 = 4;
+  let _ = v31 = (14) >> (2);
+  let v40 = 5;
+  let v39 = v11;
+  let v41 = v16;
+  16
+}
+enum opt { none, some, many }

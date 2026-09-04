@@ -867,7 +867,7 @@ feature already proven in `crates/dowiz-core` (Rust) gets a `.bp` twin
 with a gate (`fn main() -> i64` fold == independent python mirror that
 mirrors the Rust numeric oracle). In-order, lowest-risk first.
 
-**T16 · Einstein index notation + metric tensor (contract, lower/raise)** —
+**T16 · Einstein index notation + metric tensor (contract, lower/raise)** — DONE ✓ 2026-09-04 (gate tdg 3162519640442167 == bench/oracles/tdg.py)
 `selfhost/std/tdg.bp`
 GOAL: rank-n tensor as flat index (`.bt` codec already), Einstein summation
 over a repeated index, metric tensor g_ij (i64 fixed-point 2^32) to lower/
@@ -875,7 +875,7 @@ raise indices (v_i = g_ij v^j, v^i = g^ij v_j).
 DONE-CHECK: gate == python mirror of dowiz-core `tensor.rs` dot + a 2x2
 metric lower/raise example. DEPS: bt.bp, matrix.bp. BLOCKERS: none.
 
-**T17 · Christoffel symbols + covariant derivative** —
+**T17 · Christoffel symbols + covariant derivative** — DONE ✓ 2026-09-04 (gate tdggeo 219599976738721791 == bench/oracles/tdggeo.py)
 `selfhost/std/tdggeo.bp`
 GOAL: Γ^k_ij from the metric (first/second kind), covariant derivative
 ∇_i V^j = ∂_i V^j + Γ^j_ik V^k (flat metric → ∇ == ∂, the falsifiable
@@ -883,7 +883,7 @@ degeneracy).
 DONE-CHECK: gate == python mirror of dowiz-core `academia_p2p.rs`
 `christoffel()`; flat-metric degeneracy gate. DEPS: T16. BLOCKERS: none.
 
-**T18 · Riemann / Ricci / scalar curvature** — `selfhost/std/tdgcurv.bp`
+**T18 · Riemann / Ricci / scalar curvature** — `selfhost/std/tdgcurv.bp` — DONE ✓ 2026-09-04 (gate tdgcurv 4262143808388606 == bench/oracles/tdgcurv.py)
 GOAL: Riemann tensor R^i_jkl from Γ, Ricci R_jl = R^i_jil, scalar R.
 Falsifiable oracle: **S² (unit sphere, known sectional curvature) —
 table-driven known values, not invented.**
@@ -891,7 +891,7 @@ DONE-CHECK: gate == python mirror of dowiz-core `academia_p2p.rs`
 `sectional_curvature`/`scalar_curvature` on a known-geometry input
 (e.g. 2-sphere), all bit-exact i64 fp. DEPS: T17. BLOCKERS: none.
 
-**T19 · Differential forms + exterior derivative d** —
+**T19 · Differential forms + exterior derivative d** — DONE ✓ 2026-09-04 (gate tdgforms 1000351400006779 == bench/oracles/tdgforms.py)
 `selfhost/std/tdgforms.bp`
 GOAL: k-form as alternating tensor, wedge product, exterior derivative d.
 Falsifiable invariant: **d(dω) = 0** (Poincaré lemma) must hold bit-exact
@@ -899,7 +899,7 @@ on convenience 2-forms. (Stokes on a 0/1-form boundary as the audit hook.)
 DONE-CHECK: gate == d(dω) == 0 on a table-driven 2-form; python mirror.
 DEPS: T16. BLOCKERS: none.
 
-**T20 · Tensor Query Engine (manifold database core)** — `selfhost/std/tq.bp`
+**T20 · Tensor Query Engine (manifold database core)** — `selfhost/std/tq.bp` — DONE ✓ 2026-09-04 (gate tq 722997760 == bench/oracles/tq.py)
 GOAL: data as tensor fields on a manifold; queries as Einstein contractions/
 nearest-neighbor geodesic lookup — port of dowiz-core `parametric_spectral.rs`
 (top-2 eigen parametric surface, O(1) insert/search) + `memory_search.rs`
@@ -909,7 +909,7 @@ DONE-CHECK: gate == python mirror: insert N points, query nearest by
 geodesic distance on the manifold, all bit-exact. DEPS: T16, spectral.bp,
 bt.bp. BLOCKERS: none.
 
-**T21 · Stokes' theorem as audit/transaction invariant** —
+**T21 · Stokes' theorem as audit/transaction invariant** — DONE ✓ 2026-09-04 (gate tdgstokes 173698403 == bench/oracles/tdgstokes.py)
 `selfhost/std/tdgstokes.bp`
 GOAL: audit the data engine — a transaction's total change across the
 manifold's interior equals the boundary flux: ∫∂Ω ω = ∫Ω dω, computed as
@@ -1457,7 +1457,7 @@ DONE-CHECK: std_golden 66/66; T1-T5 headers in this file flip from
 DEPS: T36. BLOCKERS: none.
 
 **T38 · dead-std triage + prelude** (`selfhost/std/attic/`,
-`selfhost/prelude/{fp,bits,hash,rng}.bp`, `tools/gen_selfsrc.sh`)
+`selfhost/prelude/{fp,bits,hash,rng}.bp`, `tools/gen_selfsrc.sh`) — DONE ✓ 2026-09-04 (44 modules in attic/ with reasons; prelude fp/bits/hash/rng, expansion invariant in invariants.sh; +6 gates bitset dp modular rle search set; std_golden 91/91)
 GOAL: each of the 50 dead modules either gets a `fn main` + gate + oracle
 or moves to `attic/` with a one-line reason; the 14/9/7/6/5 verbatim
 copies of fp_mul/isqrt/lcg/popc/fnv become ONE prelude file each,
@@ -1465,6 +1465,7 @@ concatenated by `gen_selfsrc.sh` into gate sources (textual include is
 the L9-compliant mechanism until T47 lands a language-level `use`).
 DONE-CHECK: `grep -c "fn fp_mul" selfhost/std/*.bp` == 1; std_golden
 count unchanged or higher; attic listed in this file.
+ATTIC: see selfhost/std/attic/README.md (44 files, reason classes f64/str/if-while/retired-interp/no-consumer).
 DEPS: T36. BLOCKERS: none.
 
 **T39 · reference interpreter + compiler fuzzer** (`tools/bpref.py`,
@@ -1497,7 +1498,7 @@ DONE-CHECK: `invariants.sh` green on HEAD; a deliberately planted
 violation of each check is caught (RED->GREEN per C7).
 DEPS: none. BLOCKERS: none.
 
-**T41 · one design corpus** (docs) — PARTIAL 2026-09-04 (5 corpus-A banners + CORE-ROADMAP-INDEX row + seed.S:55 done; `Status:` lines for bebop-lang/docs and bench/*.md pending)
+**T41 · one design corpus** (docs) — DONE ✓ 2026-09-04 (banners + index row + seed.S:55 + Status: lines on every doc)
 GOAL: this file's supersession list names `docs/design/BEBOP-LANGUAGE-
 SPEC.md`, `BEBOP-GLYPH-ALPHABET.md`, `BEBOP-ARCHITECTURE-CATALOG-100.md`,
 `BEBOP-BACKEND-ROADMAP.md`, `BEBOP-LANGUAGE-REWRITE-PLAN-2026-08-17.md`
@@ -1522,7 +1523,7 @@ CORPUS-A CARRY-OVER); T41 now only executes the banners and doc fixes.
 
 ### Layer C — compiler debt (tolerated miscompiles die)
 
-**T42 · fix R3.x(a)-(e) at the root, then delete the laws**
+**T42 · fix R3.x(a)-(e) at the root, then delete the laws** — PARTIAL 2026-09-04 (match codegen root cause fixed: emit_match arm loop overran the closing `}` and swallowed the enclosing expression suffix; c25 gate; fuzz N=450 seeds 1000+: OK=315 DIVERGE=0 CRASH=0 TIMEOUT=0 COMPILEFAIL=0 GENFAIL=135 gen.py recursion bug; open: parenthesised match payload s16, (a)-(e) untouched)
 GOAL: (a) precedence: `emit_bitlvl` binds tighter than `*` — decide and
 document the grammar (recommended: C precedence; regression gate r3x
 updated) ; (b) `>>`: emit ASRV for `>>` and add `>>>` for LSRV (both
@@ -1549,7 +1550,7 @@ DONE-CHECK: L8 and the nesting ban removed from "Design laws"; gates
 c32-c35; fixpoint byte-exact; fuzz 10^5 with allocations in loops.
 DEPS: T39, T40. BLOCKERS: none.
 
-**T44 · self_check honesty** — replace c37-c41 (`exec`, dead in the
+**T44 · self_check honesty** — DONE ✓ 2026-09-04 (c1-c36 re-frozen, c37-c41 + run_program deleted, self_check()==0, fixpoint a03c546ef7bef2153aad0c0ada2f8ded) — replace c37-c41 (`exec`, dead in the
 self-hosted emitter) with the morph path (compile -> publish -> seed
 run -> fold) or delete them; `self_check` must be 41/41 or renumbered.
 DONE-CHECK: `self_check()` returns 0 with no dead checks.

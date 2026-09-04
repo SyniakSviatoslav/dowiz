@@ -4,6 +4,43 @@ Every native-codegen or toolchain bug that cost debugging time this week,
 with the rule each one earns. Rules marked **[RULE]** are binding for future
 sessions on this codebase.
 
+## [FIXED] `match` swallowed the enclosing expression after its `}` — arm loop overran the closing brace (2026-09-04, T42)
+
+All 56 CRASH/DIVERGE/TIMEOUT repros of the T39 fuzzer had one root cause
+in `emit_match` (bebop.bp ~987-1035). The arm loop read `is_rb` (the
+current char is `}`) at the top of each iteration but then ran the arm tail
+unconditionally: `pos += 2` (meant to skip `=>`; at `}` it skipped the brace
+plus one char of the ENCLOSING expression), `skip_to_field_delim` (scanned to
+the next `,`/`}` of the enclosing context) and the comma consumption. So
+after the last arm the parser resumed at the enclosing expression's next
+delimiter, having dropped everything in between. It only worked when the
+match's `}` was directly followed by a block `}` — which is every use in
+c12, c22 and the std gates, so no gate ever saw it.
+
+Minimal repro (`fn main() -> i64 { (match many { many => 1, none => 2 }) + 2 }
+enum opt { none, some, many }`): expected 3, got 549454657840 (stranded pos
+→ the `) + 2` is gone → unterminated paren → garbage register read). Shape
+matrix (`/tmp/opencode/agentA/shapes`, 16 files): every shape with a suffix
+after `}` failed (binop operand, array element, `let x = match…; x+1`, call
+arg, if-arm, statement `match…; 5`, `(match…)` as last expr, trailing-comma
+arm list); payload binding, arm order, nested match and whole-body match
+passed. Proof of closure: dematch.py (rewrite every match to its taken arm)
+turned all 56 repros OK; after the fix all 56 classify OK unchanged.
+
+Fix (5 lines, single variable): `stop = is_rb + at_end`; at `}` advance by
+`is_rb` (consume only the brace), skip `skip_to_field_delim` and the comma
+consumption, `done = stop`. Gate c25_matchtail (array element + binop
+operand + nullary match, value 42) freezes the shape. Fixpoint 556dd329ee8aea2d79ff09720fecc023 (bebop.bin a03c546e -> 556dd329, cand==g2==g3 in one generation).
+
+Still open in the same emitter (separate, smaller): the payload is delimited
+with `skip_to(')')`, so a parenthesised payload `match many((3)) {…}` is cut
+at the first `)` (shape s16, value 2 vs 3). gen.py already avoids it.
+
+**[RULE] A parser loop that detects its terminator at the top of the
+iteration must skip the whole iteration tail on that terminator — not only
+flip `done`. The delimiter-landing rule above (pos ON the delimiter the outer
+loop expects) applies to `}` exactly as it does to `)`.**
+
 ## [FIXED] run_program ret −1 / depth_sim holdout — unresolved-call pos stranding (2026-09-01)
 
 The last depth_sim flag (run_program ret (131,−1) in bebop streams,

@@ -1,0 +1,97 @@
+// BPREF-ERROR seed=26 expected= got=rc=2 bpref error: RecursionError: maximum recursion depth exceeded 
+// gen.py --seed 26
+fn main() -> i64 {
+  let i0 = 0;
+  while i0 < 1 {
+    let i1 = 0;
+    while i1 < 6 {
+      ((if i1 then 8 > (if i0 then i1 else 4659) else (20) % (14))) + i0;
+      let v0 = match none(17 % 15) { none(m0) => (if (if (4) >> ((i1) | (10) * (m0) >> 7 / ((i0) + (18)) % (i0) / m0 == (18)) + (4096) then 10 else (3) % (19)) then 19 else m0), some => i1, many => (((14) & i1 * 3 - (i1 * 12)) != (i0) & (i1)) >> (i0) };
+      let _ = i1 = i1 + 1;
+      0
+    };
+    let _ = i0 = i0 + 1;
+    0
+  };
+  let _ = v0 = (5) > (f1(9223372036854775807, i0));
+  let a0 = zeros(64);
+  let v0 = (let _ = v0 = (let _ = v0 = (if i1 then v0 else match many(i0) { many(m0) => i1, some => i1, none => 9 }) in ((v0 < i0) % a0[i0]) / i1) in 15);
+  let v1 = i0;
+  let v2 = (if 17 & (f1((if 12 then a0[i1] else v1), i1 >> 1)) then i1 / ((v0) << 8 ^ i0) else 19);
+  let v1 = a0[i1];
+  a0[i1];
+  let v3 = i1;
+  let a1 = zeros(16);
+  10;
+  let v1 = i1;
+  i1 >> f2(((2) & 7)) & a1[i0];
+  let v1 = (8 - v3 % f0(v1, [2878, 9223372036854775807, 17, 19, 2, 9, 18, 4147], (v1) - (12), i0, a0, 16 | (18), i0, 2, v2)) - i1;
+  (if (let t0 = (v2) >= f1(17, 16) in i0) then (12) % (9223372036854775808) else 8)
+}
+fn f0(p0: i64, p1: [i64], p2: i64, p3: i64, p4: [i64], p5: i64, p6: i64, p7: i64, p8: i64) -> i64 {
+  let _ = p0 = 3;
+  let _ = p4[6] = (p7) ^ (((0) ^ (p8)) <= (if p6 then 1 else p1[0]) - ((((p1[4]) & (p2)) != (4)) << (p6)) / 5);
+  let i0 = 0;
+  while i0 != 2 {
+    let v0 = p6;
+    i0 += 1;
+  };
+  p6;
+  p0 *= (if match none(10) { some => p8, none(m0) => p5 } >> ((f2(((16) & 7))) / (4)) then (((4) > (p0)) != 9223372036854775807) | (p6) else p6);
+  let v1 = p2;
+  p0 -= 3;
+  (3) % (if 16 then 8 << (9) else p1[i0])
+}
+fn f1(p0: i64, p1: i64) -> i64 {
+  p1 %= f2(((14) & 7));
+  let a0 = [19 + ((p0) / 18) / 65536, match some { many => 2249 ^ ((20) & 14 % (1)), none => p1, some => 16 }, p0 * ((if 19 then p0 * (20) else 2844)), p1 & p1 | (p0), ((7) - ((let t3 = ((17) > 14 < (18)) <= 12 in t3))) | (p1), (f2((((19 + (15)) > 8) & 7)) - p1) - (let t2 = (12) < (p1) in p1 ^ 16), (let t2 = (if 12 then (1821) | 19 else 0) in t2 % (16) % p0 + t2 - (17) ^ p1 + p0) / match some { many => 17 & p0, some => 0 } <= (((20) == (6)) / (19)), p0];
+  12;
+  a0[((p1) & 7)] = p1;
+  let i0 = 0;
+  while i0 != 2 {
+    let i1 = 0;
+    while i1 <= 1 {
+      17;
+      a0[i1] = f2((((let _ = p1 = ((if a0[((12) & 7)] then i1 else a0[i0])) & (18) in 5)) & 7));
+      let i1 = i1 + 1;
+      0
+    };
+    let v0 = match many(i1) { some => 17, none => a0[(((p0 / (i0)) % ((10054667875361132632) ^ (i1))) & 7)] | (11), many(m1) => 4 };
+    let i2 = 0;
+    while i2 < 6 {
+      v0 -= 17;
+      let v1 = a0[4];
+      1 >> a0[0];
+      let _ = a0[((f2((((if a0[3] then (p1) != ((10054667875361132632) >> (v0)) else 3)) & 7))) & 7)] = (2) / (a0[i2]);
+      i2 += 1;
+    };
+    let i3 = 0;
+    while i3 < 1 {
+      let v2 = 1000000000000;
+      i3 += 1;
+    };
+    let i0 = i0 + 1;
+    0
+  };
+  f2(((v2) & 7))
+}
+fn f2(n: i64) -> i64 {
+  let n = 17;
+  n += (if (let t1 = 4294967296 in match some { some => 1 }) then ((let _ = n = n >= 7 in n)) == (n) else n) ^ 0;
+  n += (n) == 3 == ((let t3 = ((n) >= (6)) < 12 in ((10) == 13) & (3)));
+  let i0 = 0;
+  while i0 != 1 {
+    let i1 = 0;
+    while i1 < 5 {
+      let v0 = 6;
+      i1 += 1;
+      0
+    };
+    v0 *= v0;
+    let _ = i0 = i0 + 1;
+  };
+  15 ^ ((if (if n then (if (i0) | (n >> (i1)) then ((2 == v0 & (15 % (i1)) | 17) >> (v0)) + (3621) else 18) else ((n) - 13) | (i1)) then n + (v0 * i1) | v0 else 11));
+  let v1 = (19 & ((9) / (18)) - 18 - (15)) << (v0 / (i1));
+  if n < 1 then v1 else (f2(n - 1)) - (let _ = n = n != (i0 * ((65536) & (10)) ^ (11)) + ((v0 * (15) - v1) * 12) in v1)
+}
+enum opt { none, some, many }

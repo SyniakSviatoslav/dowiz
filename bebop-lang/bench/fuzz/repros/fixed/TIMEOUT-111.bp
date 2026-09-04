@@ -1,0 +1,75 @@
+// TIMEOUT seed=111 expected=0 got=timeout 5s
+// gen.py --seed 111
+fn main() -> i64 {
+  let i0 = 0;
+  while i0 != 2 {
+    let v0 = i0;
+    v0 += v0;
+    let v1 = 2;
+    let _ = v1 = (let t2 = v1 % ((if (v0) & v0 * (v1) then (18) | (1) else 1 / (7))) in 13);
+    let i0 = i0 + 1;
+    0
+  };
+  let i1 = 0;
+  while i1 != 2 {
+    let i2 = 0;
+    while i2 <= 0 {
+      let v2 = (let _ = v0 = i0 in 0);
+      v2 %= (8) % (18);
+      8;
+      let _ = i2 = i2 + 1;
+      0
+    };
+    let i1 = i1 + 1;
+  };
+  6;
+  let _ = v0 = (18) / ((let t3 = 2570 + v0 in (13) / (i0)) / f3([v1, 350, 9, 10, 14 >= 18, 0, 773, 6], (v2 >> (v0)) < (v1) * i2 ^ 2, 15, [1714, 6, i0, (15) != v1, i0, 707, v2, v1], [i0, v0, i1, 9223372036854775807, v2 > (65536), (v1) - 8, ((5) - i2) / i1, 9]));
+  let i3 = 0;
+  while i3 != 5 {
+    v0 += match many(v1) { many => (10) & ((3078) >> (20 - v1)), none => (if 10 | 6 % 17 then i2 else i2), some => i1 };
+    let i4 = 0;
+    while i4 < 3 {
+      19 - i4 <= (13);
+      v1 <= (i0 | (i1) == ((let _ = v1 = i1 in 14 % 20 << 2)));
+      v2 /= v2;
+      i4 += 1;
+      0
+    };
+    v1 -= (v1 <= (f2(i2) * 7 % 10)) / (v0);
+    i3 += 1;
+    0
+  };
+  let a0 = zeros(16);
+  let _ = v0 = 19;
+  5 / (((if a0[(((if 19 then 17 else 13)) & 15)] then (if 10 then 20 else a0[7]) else i0)) ^ (v0))
+}
+fn f0(p0: i64, p1: i64, p2: i64, p3: [i64], p4: [i64]) -> i64 {
+  let v0 = 16;
+  (f2(v0)) < (p1)
+}
+fn f1(p0: i64, p1: i64, p2: i64, p3: [i64], p4: i64, p5: i64, p6: i64, p7: i64, p8: i64, p9: i64, p10: [i64], p11: i64, p12: i64) -> i64 {
+  let _ = p2 = 18446744073709551615 % 3;
+  p11 -= 15;
+  let _ = p10[((p11) & 7)] = (if p8 then (match some(p4 / 20) { some(m0) => 2, none => 1 }) % 12 else (if p3[((p10[3] << match none { none => p10[((p0) & 7)], many => 9 }) & 7)] then match many { many => p4 } else p12));
+  let i0 = 0;
+  while i0 != 3 {
+    let i1 = 0;
+    while i1 != 3 {
+      f3(p10, 11, p7, p10, p10);
+      let _ = i1 = i1 + 1;
+    };
+    p10[i0] = (20) + p10[((3) & 7)];
+    let _ = i0 = i0 + 1;
+    0
+  };
+  p12
+}
+fn f2(p0: i64) -> i64 {
+  let a0 = [match none(18) { some => (20) / 13, many => (p0) % (p0) + (15), none(m0) => (if 11 then p0 else 4587) }, p0, p0, (((if p0 then p0 + p0 >> 19 else 8 == (p0))) < (let _ = p0 = 0 in 9 & ((p0) ^ (p0)))) % ((let t3 = p0 in t3) >= (if p0 then 18446744073709551615 else p0)), match many(6) { none => p0, some => 0, many => 926 } <= (14) << (p0 > (p0) << (13) % (9)), (match many(14) { many => p0 }) != (6) + (let t3 = 2080 in t3), 15, f3([2, 1712, 4888 + (2479) - (3238) >= (p0), 14, p0, 13, p0 + p0, 9], p0, p0, [7, 1, 19, 15 / p0, p0, (7) ^ p0 / (p0), p0, 4], [0 >> (4096) & (p0), 4362, p0, p0, 1370, 1 / p0 + (p0) - ((18) ^ p0 / p0), (p0) + 20, p0]) % match many { many => 5, none => (2147483647) & (13 % (p0) < (2) >> 13 - ((p0) | 208 * (15)) / p0 + ((7) / 10) + p0) } / (p0 & p0)];
+  p0
+}
+fn f3(p0: [i64], p1: i64, p2: i64, p3: [i64], p4: [i64]) -> i64 {
+  let _ = p1 = 15;
+  3735
+}
+enum opt { none, some, many }

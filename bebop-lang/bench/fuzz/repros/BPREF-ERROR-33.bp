@@ -1,0 +1,97 @@
+// BPREF-ERROR seed=33 expected= got=rc=2 bpref error: RecursionError: maximum recursion depth exceeded 
+// gen.py --seed 33
+fn main() -> i64 {
+  let i0 = 0;
+  while i0 < 3 {
+    let v0 = i0;
+    let i1 = 0;
+    while i1 <= 1 {
+      let v0 = 10;
+      i1 += 1;
+    };
+    let _ = i0 = i0 + 1;
+    0
+  };
+  9223372036854775807;
+  let a0 = zeros(512);
+  i0;
+  let a1 = [match many(7 * 65536) { many(m1) => 10 + 15, none => 15, some => a0[7] }, (f1(((i0) & 7))) | ((if (6) >> ((9223372036854775807) - (i0)) then i1 else i1)), 3698, 9, 0, match some(17) { some => 18, none => v0 }, (if 0 then (18) > (i0) else (5 == (v0)) >> (f0(((6) & 7)))), 3146, (let t0 = f1(((a0[(((12 * ((a0[i0]) + 6)) ^ (6 & a0[i0])) & 511)]) & 7)) * i0 * (10 ^ (5)) in 2887), i0 * (i0) * 20, 3074, (v0 > (f0(((i1) & 7)))) & (f1(((f0(((1) & 7))) & 7))), 12, (((9) ^ i1) + (v0)) | (let _ = v0 = v0 in (v0) | v0), 13, match none(2777) { some => 2, many => (i1) - (a0[1] + v0), none => a0[((a0[(((if (if (15) ^ (6) / (15 == (i0)) then i0 else a0[0]) then (a0[5]) != a0[((8) & 511)] else 15)) & 511)]) & 511)] }, (if i1 then a0[i0] else i1), (8) <= (7 - i0), (if 18 then v0 else i1), 19, i1, 19, a0[2], a0[i1], 18, 11, a0[7], 3, 9, a0[(((5 | (2737)) <= (4095)) & 511)], (((if (18446744073709551615) * (11) then v0 else a0[i1])) << ((let _ = v0 = a0[4] in v0))) - 1000000000000, i1];
+  v0 *= (i0) ^ (0);
+  let _ = v0 = f1((((let t1 = 10054667875361132632 in f1(((t1) & 7)) - 2)) & 7));
+  let _ = v0 = (if (if 16 then (a1[5]) < (7) else i1) == ((let t1 = a1[((14) & 31)] in a0[i1]) + i0) then v0 else v0);
+  let v0 = (if v0 then a0[i0] else v0);
+  a1[i1] = (if 11 then 11 else i1);
+  let v0 = i0;
+  let v0 = 20;
+  let i2 = 0;
+  while i2 <= 5 {
+    let _ = a0[1] = 2;
+    let i3 = 0;
+    while i3 <= 5 {
+      1005;
+      a0[6] = (if i1 then (let _ = a1[0] = i3 in i3) else (18) - (a1[6]));
+      let v1 = 6;
+      let _ = i3 = i3 + 1;
+      0
+    };
+    a1[i3] = 2 != (a1[i3]);
+    i2 += 1;
+  };
+  i2
+}
+fn f0(n: i64) -> i64 {
+  let i0 = 0;
+  while i0 < 1 {
+    f1((((let _ = n = 5 in (if i0 then f1((((n) % 8) & 7)) else 9223372036854775807))) & 7));
+    n *= 8;
+    let n = 4294967296;
+    2006 ^ ((12) * (65536) + 3741);
+    let i0 = i0 + 1;
+    0
+  };
+  n -= i0;
+  let a0 = [n, 2147483647, 7, (let _ = n = (19) % match none(n) { some => 12, many => n, none(m1) => 3682 * 8 } in (let t3 = (let _ = n = 2859 in n) in 4294)), (if 3348 | (((i0) > i0 - n) << (8)) then (if (n) >> (10054667875361132632) then 9 else (2147483647) != (i0)) else ((if n < i0 then 8 else 17)) / i0), (if (7 <= i0) | n % (10) < (4) then f1(((i0) & 7)) < 2147483647 == 65535 % (i0) else f1(((4) & 7))), (17) >> (i0), (if i0 * (n) * (4294967296 * i0) then (if 1 >= (464) then n else (if i0 then (n) == 834 else 0)) else (2 + 1) | ((20) ^ n + 4274))];
+  let i1 = 0;
+  while i1 < 3 {
+    let i2 = 0;
+    while i2 <= 0 {
+      let n = 16;
+      let n = 9223372036854775807;
+      n *= 11;
+      i2 += 1;
+      0
+    };
+    let i3 = 0;
+    while i3 < 1 {
+      let _ = a0[0] = n;
+      n *= a0[5];
+      let _ = i3 = i3 + 1;
+      0
+    };
+    126;
+    let i1 = i1 + 1;
+    0
+  };
+  let a1 = [16, a0[i0], (let _ = n = ((a0[i0]) | 1000000000000) >> (a0[6]) in (if 12 then i2 else 13 + (9223372036854775807)) << (i2 - a0[i1])), 0, 2147483647, (a0[((14) & 7)]) >> (i2), a0[5], f1(((((if n then 13 else i2)) - i2) & 7))];
+  let _ = n = a1[7];
+  let n = i0;
+  let _ = a0[((f1(((a1[i2]) & 7))) & 7)] = i1;
+  let v0 = 5;
+  if n < 1 then i0 else f0(n - 1) * 2 + i2
+}
+fn f1(n: i64) -> i64 {
+  match many(n) { none => (8) % (7), many => n, some => 20 };
+  let a0 = [n, (n) / ((let t0 = 10 in 11)), (if n * (n) then n % (((19) << (n) * 3947) != 9223372036854775807) else n / n <= (8 & (19 + 9223372036854775807))) / (0), (n) ^ (let t0 = (if n then n else n) in 14), (4) < 14, 2, 8, 0, (n) >> (5), 1538, (7) < ((if 635 then (9 >= n) - (20) else ((5) - (16 - 18)) - n) - (if (n) % (15 << 2537) % (n) % (0) then 11 >> 1500 else 1)), (if (0) < (9223372036854775808) + (5) then (n) < n else 18), (let _ = n = match many(20 - 15) { many(m0) => m0, none => 2 * 0 } in (n) & (2992) + (4)), n, (let t1 = 3 | (n) in 12), (n) % n];
+  let v0 = (((n & (3099)) <= 5) % n) + 14;
+  a0[6] = v0;
+  (let t2 = v0 in n * match many { many => 2, none => a0[(((if a0[(((n) < (14 < (a0[2]) | v0)) & 15)] then 4095 else a0[7] / v0) <= (2869)) & 15)] });
+  let i0 = 0;
+  while i0 <= 0 {
+    let _ = a0[((14) & 15)] = 1;
+    let _ = i0 = i0 + 1;
+    0
+  };
+  match none(16) { none => (if (i0 | 9) >= i0 then v0 else n), many => 13 };
+  if n < 1 then v0 else f1(n - 1) * 2 + 11
+}
+enum opt { none, some, many }

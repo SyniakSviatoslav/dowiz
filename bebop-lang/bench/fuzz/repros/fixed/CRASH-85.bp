@@ -1,0 +1,58 @@
+// CRASH seed=85 expected=1 got=signal 11 (3/3 reruns crashed)
+// gen.py --seed 85
+fn main() -> i64 {
+  11;
+  let i0 = 0;
+  while i0 < 6 {
+    let i1 = 0;
+    while i1 != 5 {
+      i0 >> (((3 | 12) / (match many(65535 + 5) { many => 5, none => 5 })) / 0);
+      2147483647;
+      i1 += 1;
+      0
+    };
+    let v0 = ((((i1) / i0) >= ((11) - ((i1) / (10)))) >> (match none(3372 / 17) { some => 2147483647, none(m1) => 4 })) % 2;
+    let v1 = (v0 / 2099) + (i1 + 2);
+    v1 %= match many { none => (v0) - 15, some => 18, many => 17 };
+    i0 += 1;
+    0
+  };
+  v1 -= ((let t1 = 8 in (9) + ((if 8 then 18 else (17) & 15)))) + (let _ = v1 = 11 in 2718) < (16) != (if v1 then 14 else (7 - (16) | v0) - ((117 / (v0)) * (11) >= (i1)));
+  let v1 = v1;
+  v1 -= (let t2 = 8 in 18);
+  let a0 = zeros(8);
+  let v2 = ((12) / (2901)) < (if a0[((v1) & 7)] then 14 * (i0) else i0);
+  let _ = a0[i0] = match many(4) { many(m1) => i1, some => v0 };
+  let _ = a0[((a0[((match many(i1 - 14) { none => 15, many => (if 11 then a0[6] else 19), some => 13 }) & 7)]) & 7)] = (8) <= (9) / v1 == i0;
+  let i2 = 0;
+  while i2 < 3 {
+    let _ = a0[((i0) & 7)] = (i0) - (18) - ((if v0 then v0 else a0[((match many(v0 / 11) { many(m1) => v2 } != (let _ = v1 = 16 in v1)) & 7)]));
+    let _ = v2 = a0[3];
+    let v3 = 65536;
+    let _ = a0[0] = (v0 > (i2 * (a0[((i2) & 7)])) | v3) ^ (a0[i0]);
+    let _ = i2 = i2 + 1;
+    0
+  };
+  let i3 = 0;
+  while i3 <= 0 {
+    v0;
+    v0;
+    15;
+    let i4 = 0;
+    while i4 <= 4 {
+      8;
+      let v4 = a0[i2];
+      a0[7] = v1;
+      let _ = v1 = (if a0[((0) & 7)] then (if 5 then match some(3 % 8) { some => 15 } else v3) else 6);
+      i4 += 1;
+      0
+    };
+    let i3 = i3 + 1;
+    0
+  };
+  let v2 = i3;
+  a0[2] = ((if 13 then 9 else i4)) >= ((if 1689 then 10 else match some(4294967296) { none => v1, some(m1) => 17, many => (if 8 then 15 else 3) }));
+  match many { many => (4) + (if i2 then v1 else v2 | 12) } & a0[((((if 1000000000000 << (v0) then a0[0] else 16)) | match many(6 - 2119) { none => a0[3], many(m1) => 4294967296, some => 15 + (a0[0]) }) & 7)];
+  19 > (i0)
+}
+enum opt { none, some, many }

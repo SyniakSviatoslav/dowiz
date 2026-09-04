@@ -1,0 +1,56 @@
+// CRASH seed=112 expected=65536 got=signal 11 (3/3 reruns crashed)
+// gen.py --seed 112
+fn main() -> i64 {
+  let i0 = 0;
+  while i0 != 2 {
+    let i1 = 0;
+    while i1 < 3 {
+      let v0 = ((i0) * (65535) ^ 14) >> 15 * 3;
+      match some(i1) { some(m1) => 3, none => i0 } * ((v0) * (i1) > (1144)) * (i1);
+      v0 *= match many(i0 - 65536) { some => (i1) >= (8), none => 14 ^ 19 / 20 / (8 * 2) * (0), many(m1) => (if m1 then (if 65536 then 0 else 1) else (if i0 then i0 else (v0) - i1) & ((12) % (13))) };
+      v0 += i0;
+      let _ = i1 = i1 + 1;
+      0
+    };
+    v0 %= ((let t0 = match many(v0 + 2) { many(m0) => i0, some => i0 } in match many(v0) { many => i1 })) - ((let _ = v0 = 20 + v0 in i0)) <= 2;
+    let i2 = 0;
+    while i2 <= 0 {
+      (if v0 then 3 else match many(0 - 13) { many(m1) => (3) % (i2) >> (i0 + 16) < 7, none => i1 });
+      let _ = i2 = i2 + 1;
+      0
+    };
+    let i0 = i0 + 1;
+    0
+  };
+  17;
+  (if i0 then 9223372036854775807 else v0) % f0(7, f0(v0, 7, 19) * 20 + (3441) & (15), i2);
+  2;
+  let i3 = 0;
+  while i3 <= 0 {
+    let v1 = 6;
+    v0 /= ((9) > (1914 - 82) | 14) - 11;
+    let v1 = (i2 | 0 / (6)) > (i3) + (137);
+    let _ = i3 = i3 + 1;
+    0
+  };
+  let v2 = i3;
+  (match some { some => 65536 } + ((if 8 + ((2741) & i0) / 4 then i1 >> (i0) else (if i3 then v2 else 5)))) * f0(i0 ^ (18) / ((8) <= v2) / (v1) >= (18446744073709551615), (v2) + 12, i1)
+}
+fn f0(p0: i64, p1: i64, p2: i64) -> i64 {
+  let p0 = 5 * (((12) + (17 == (p0) <= (16) != (p0))) << ((p2) + 826 >> (p2)));
+  p2 -= (if 3377 then p0 else 17) == p0 * (4095);
+  let a0 = zeros(8);
+  p1 /= (if match many { none => (if p1 > (p1) then 4 else a0[(((if (p1) - 6 then 2020 + (13 >> (p2)) else p0 >> (3))) & 7)]), many => 4 } then 6 * (p2) == (5) else 5);
+  let p2 = p1;
+  let i0 = 0;
+  while i0 < 1 {
+    let v0 = 4824;
+    let p2 = v0;
+    let v1 = 19;
+    (if 11 then i0 else 341);
+    i0 += 1;
+    0
+  };
+  p0 != (p2) >> (match many(2526 / 1) { some => p1, none => 1, many(m1) => 2605 })
+}
+enum opt { none, some, many }

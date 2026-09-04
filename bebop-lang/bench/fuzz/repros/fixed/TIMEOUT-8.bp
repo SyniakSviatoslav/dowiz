@@ -1,0 +1,24 @@
+// TIMEOUT seed=8 expected=12 got=timeout 5s
+// gen.py --seed 8
+fn main() -> i64 {
+  let i0 = 0;
+  while i0 <= 0 {
+    let v0 = 14;
+    v0 /= 0 > match some { some => v0 } << (20);
+    let _ = i0 = i0 + 1;
+  };
+  let _ = v0 = 18;
+  v0;
+  let i1 = 0;
+  while i1 < 4 {
+    let v0 = ((v0) - ((match many(v0 + 12) { some => 0, many(m1) => (v0) - 13 + 2 }) % (i0 % ((10) % (271 / (13) <= (i0))) + (i1)))) > (3);
+    v0 *= (if 16 >> (i1) >= (v0) >= 17 then v0 else (i1) / ((if 19 then 4289 else i1 >> v0)) < ((if v0 then 10054667875361132632 % 7 else 4887)) > (18 << 8 != (9) / v0));
+    let i1 = i1 + 1;
+  };
+  v0 -= v0;
+  4993;
+  let a0 = [(let _ = v0 = 9 in match some { some => (v0) | 16, many => 18446744073709551615 }), 4, (if i1 then i1 >= v0 else 15) << (if (i1) % (16) then v0 else 1) / v0, 2, (if i0 then 19 == (v0) <= 15 else ((i1) + (i1)) ^ (11)), 0, (if ((i1 + i0) / 14) ^ (18) then (if 2550 then 8 else 947) else 6), i0, 4, 10 & ((let t0 = (let t1 = i1 in v0 + (11)) in 6)), (9) - (i1), (if 4049 | (1956) then i1 else (if 3 <= 5000 / ((v0) - (18) % (i0)) then i1 else (let t0 = i1 in v0))), 19, (let _ = v0 = 2147483647 in 7) / (i1 * v0), 484, ((let t0 = (i1 >> 9 | (v0)) << (v0) in i1)) - 15];
+  let v0 = (i1) - (15);
+  12
+}
+enum opt { none, some, many }

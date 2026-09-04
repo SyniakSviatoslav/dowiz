@@ -1,0 +1,53 @@
+// CRASH seed=118 expected=1 got=signal 11 (3/3 reruns crashed)
+// gen.py --seed 118
+fn main() -> i64 {
+  let i0 = 0;
+  while i0 != 3 {
+    let i1 = 0;
+    while i1 <= 5 {
+      f1(i1, i1, i0, 2, (((i1) & 17) | (if i0 & ((9) >= i0 & 14) then i0 else i0)) * (i1));
+      i0;
+      (let t2 = 11 in t2);
+      let v0 = i0 * 2203;
+      let i1 = i1 + 1;
+      0
+    };
+    let _ = i0 = i0 + 1;
+    0
+  };
+  let v1 = 9;
+  let v2 = (v1) | (5);
+  let _ = v2 = 19 & ((4) | f0(f2(((5) & 7)), [1, i1, i1 + ((i1) ^ (5)), 4762, i0, v0 - 7, 4, 1], i0 - (v1), [i0, 4294967296, i0, 2, 4667, i1 + (5) != (18446744073709551615), 19, (6) == (v1)]));
+  v2 >= v1 - match none(i1 - 16) { none(m1) => v0, many => (((18) / (2)) / v1 % (v1 & (i0))) <= ((v0) ^ (4)) < (65536) }
+}
+fn f0(p0: i64, p1: [i64], p2: i64, p3: [i64]) -> i64 {
+  let i0 = 0;
+  while i0 < 2 {
+    let v0 = (if 8 then (if p0 then p3[6] else p2) else p0);
+    v0 += p0;
+    let i1 = 0;
+    while i1 != 2 {
+      let _ = p0 = i0;
+      let _ = p2 = v0;
+      10054667875361132632;
+      4095 & 10;
+      i1 += 1;
+      0
+    };
+    f2(((14) & 7)) != (15);
+    i0 += 1;
+    0
+  };
+  let p0 = p0;
+  (let _ = v0 = p3[i1] in 19)
+}
+fn f1(p0: i64, p1: i64, p2: i64, p3: i64, p4: i64) -> i64 {
+  let a0 = [1, (p2 * 20) + p3 > f2(((p0) & 7)), (if p0 then 2935 << p4 % (10 < (12)) << (20 >> p0 / (p3) | (7)) else 9), 3, (let t3 = 9223372036854775808 in (let _ = p3 = ((3) | (8)) % (9) in p3)), (if 7 then ((let t3 = 10 - (8) in (((1000000000000) <= (7 * 20 < p4 - (p2)) * 3) / p3) >> 9223372036854775807)) + ((p3) << 16) else 6), match some(p1 + 4106) { many => 17, none => p4, some(m1) => (if (p1) == 14 / (5) then (p2 ^ (16)) - (2520) * 11 - p4 else ((p2) % 9223372036854775808) * ((p1) * (5)) % 12) }, (let _ = p1 = (p1) + ((if 17 then p0 else 4)) in (20) * (20) & 0)];
+  let p4 = p4;
+  let p3 = 18;
+  a0[((a0[((2147483647) & 7)]) & 7)]
+}
+fn f2(n: i64) -> i64 {
+  if n < 1 then ((if n <= n then 647 else (2249 - 8) - (((13) % (((((n) / (n)) & 1) + (n)) - (3946)) <= (13) >> 19) >> (n)) & n)) <= ((if (n) >= 2028 then n else n)) else (f2(n - 1)) - 11 * (15)
+}
+enum opt { none, some, many }
