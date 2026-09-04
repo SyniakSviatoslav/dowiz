@@ -1,14 +1,8 @@
-// calcbound.bp — SS-5: calculus bounding (mean-value theorem + slope bounds
-// -> automatic bounding boxes for mutations). f(x) = x^2 - x in fp 2^32;
-// base x0 = 1.0; five golden mutations d in {-1/8, -1/16, 0, +1/16, +1/8}.
-// Slope f' = 2x-1 on the mutated window lies in [0.75, 1.25]; mean-value box
-// for each d: df = f(x0+d) - f(x0) in [min(fmin*d, fmax*d) - eps,
-// max(fmin*d, fmax*d) + eps], eps = 0.01 slack (covers fp truncation).
-// Done-check: the bounding box CONTAINS the actual result for every golden
-// mutation. Branch-free min/max (even-difference division, no shift-origin
-// trap); contained = product of per-mutation ok bits. Fold = contained*10^9
-// + sum(fi>>16)*10^3 + (f0>>20). Machine: fp_mul verbatim (sha c184416666fe).
-
+// selfhost/prelude/fp.bp — Q32 fixed-point core shared by every fp gate (T38).
+// Textual include: a gate whose first line is `// prelude: fp ...` gets this file
+// prepended by tools/gen_selfsrc.sh std (L9 mechanism until T47 `use`).
+// fp_mul: signed 64x64 -> Q32 product via 32/16-bit limbs (no i128, no >> on
+// negatives); isqrt: digit-by-digit integer sqrt over bits 60..0.
 fn fp_mul(a: i64, b: i64) -> i64 {
   let na = if a < 0 then 1 else 0;
   let aa = if na == 1 then 0 - a else a;
@@ -34,6 +28,33 @@ fn fp_mul(a: i64, b: i64) -> i64 {
   let p = if flip == 1 then 0 - p else p;
   p
 }
+fn isqrt(s: i64) -> i64 {
+  let rem = 0;
+  let root = 0;
+  let i = 0;
+  while i < 31 {
+    let sh = 60 - i * 2;
+    let rem = (rem << 2) + ((s >> sh) & 3);
+    let tst = (root << 2) + 1;
+    let take = if tst <= rem then 1 else 0;
+    let root = (root << 1) + take;
+    let rem = rem - take * tst;
+    let i = i + 1;
+    0
+  };
+  root
+}
+// prelude: fp
+// calcbound.bp — SS-5: calculus bounding (mean-value theorem + slope bounds
+// -> automatic bounding boxes for mutations). f(x) = x^2 - x in fp 2^32;
+// base x0 = 1.0; five golden mutations d in {-1/8, -1/16, 0, +1/16, +1/8}.
+// Slope f' = 2x-1 on the mutated window lies in [0.75, 1.25]; mean-value box
+// for each d: df = f(x0+d) - f(x0) in [min(fmin*d, fmax*d) - eps,
+// max(fmin*d, fmax*d) + eps], eps = 0.01 slack (covers fp truncation).
+// Done-check: the bounding box CONTAINS the actual result for every golden
+// mutation. Branch-free min/max (even-difference division, no shift-origin
+// trap); contained = product of per-mutation ok bits. Fold = contained*10^9
+// + sum(fi>>16)*10^3 + (f0>>20). Machine: fp_mul verbatim (sha c184416666fe).
 
 fn main() -> i64 {
   let one = 4294967296;

@@ -1,5 +1,7 @@
 # Bebop vs Rust — R6.3 Bench (2026-09-02)
 
+Status: 2026-09-04 CURRENT (R6.3 bench, final rerun 2026-09-03 with the R6.2 v5 compiler)
+
 ## Final rerun 2026-09-03, post-R6.2 (constant folding landed)
 
 Same method, same box, medians of 31 runs each. Two back-to-back sessions

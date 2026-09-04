@@ -1,13 +1,7 @@
-module core { }
-
-// snn.bp — T3: in-register SNN engine. Neurons = bits of one i64 word;
-// synapses = per-neuron bit-mask connectivity words; one propagation round
-// = SWAR popcount(state & conn[i]) + a threshold — AND/OR/POPCNT only, no
-// per-synapse loops. The spike payload is TERNARY: spike[i] = fire - old
-// state bit in {-1,0,1} (the T1 ternary coefficient). Fold =
-// Sum (spike[i]+1)*4^i + new_state*10^9 == 65504516937878 (python mirror,
-// journal at gate time).
-
+// selfhost/prelude/bits.bp — 64-bit word helpers shared by the bit-level gates (T38).
+// popc: SWAR popcount (mask-add tree, mod 128 instead of >> 56 — R3.x logical
+// shift safe); tzidx: index of the lowest set bit of an isolated bit b via the
+// 64-entry de Bruijn table (c = 0x03F79D71B4CB0A89).
 fn popc(w: i64) -> i64 {
   let m1 = 6148914691236517205;
   let m2 = 3689348814741910323;
@@ -20,6 +14,85 @@ fn popc(w: i64) -> i64 {
   let x = x + (x >> 32);
   x - (x / 128) * 128
 }
+fn tzidx(b: i64) -> i64 {
+  let db = zeros(64);
+  let _ = db[0] = 0;
+  let _ = db[1] = 1;
+  let _ = db[2] = 48;
+  let _ = db[3] = 2;
+  let _ = db[4] = 57;
+  let _ = db[5] = 49;
+  let _ = db[6] = 28;
+  let _ = db[7] = 3;
+  let _ = db[8] = 61;
+  let _ = db[9] = 58;
+  let _ = db[10] = 50;
+  let _ = db[11] = 42;
+  let _ = db[12] = 38;
+  let _ = db[13] = 29;
+  let _ = db[14] = 17;
+  let _ = db[15] = 4;
+  let _ = db[16] = 62;
+  let _ = db[17] = 55;
+  let _ = db[18] = 59;
+  let _ = db[19] = 36;
+  let _ = db[20] = 53;
+  let _ = db[21] = 51;
+  let _ = db[22] = 43;
+  let _ = db[23] = 22;
+  let _ = db[24] = 45;
+  let _ = db[25] = 39;
+  let _ = db[26] = 33;
+  let _ = db[27] = 30;
+  let _ = db[28] = 24;
+  let _ = db[29] = 18;
+  let _ = db[30] = 12;
+  let _ = db[31] = 5;
+  let _ = db[32] = 63;
+  let _ = db[33] = 47;
+  let _ = db[34] = 56;
+  let _ = db[35] = 27;
+  let _ = db[36] = 60;
+  let _ = db[37] = 41;
+  let _ = db[38] = 37;
+  let _ = db[39] = 16;
+  let _ = db[40] = 54;
+  let _ = db[41] = 35;
+  let _ = db[42] = 52;
+  let _ = db[43] = 21;
+  let _ = db[44] = 44;
+  let _ = db[45] = 32;
+  let _ = db[46] = 23;
+  let _ = db[47] = 11;
+  let _ = db[48] = 46;
+  let _ = db[49] = 26;
+  let _ = db[50] = 40;
+  let _ = db[51] = 15;
+  let _ = db[52] = 34;
+  let _ = db[53] = 20;
+  let _ = db[54] = 31;
+  let _ = db[55] = 10;
+  let _ = db[56] = 25;
+  let _ = db[57] = 14;
+  let _ = db[58] = 19;
+  let _ = db[59] = 9;
+  let _ = db[60] = 13;
+  let _ = db[61] = 8;
+  let _ = db[62] = 7;
+  let _ = db[63] = 6;
+  let c = 285870213051386505;
+  db[((b * c) >> 58) & 63]
+}
+// prelude: bits
+module core { }
+
+// snn.bp — T3: in-register SNN engine. Neurons = bits of one i64 word;
+// synapses = per-neuron bit-mask connectivity words; one propagation round
+// = SWAR popcount(state & conn[i]) + a threshold — AND/OR/POPCNT only, no
+// per-synapse loops. The spike payload is TERNARY: spike[i] = fire - old
+// state bit in {-1,0,1} (the T1 ternary coefficient). Fold =
+// Sum (spike[i]+1)*4^i + new_state*10^9 == 65504516937878 (python mirror,
+// journal at gate time).
 
 fn main() -> i64 {
   let conn = zeros(16);

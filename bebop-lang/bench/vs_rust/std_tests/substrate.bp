@@ -1,22 +1,7 @@
-// substrate.bp — T14: the dispatcher as the EXECUTION SUBSTRATE.
-// A kernel's computation is not a fetch-execute stream: it is a dense
-// activity/incidence structure. A cell array holds the dataflow; the
-// async dispatcher (SWAR popcnt + de Bruijn tzcnt, LSB-first) drains a
-// dense activity word each sweep, threshold-accumulating contributions
-// into downstream cells. A cell becomes ready (its bit set in the NEXT
-// sweep's activity word) only when its dependency threshold is met.
-// Execution = the emergent activity wavefront, iterated to quiescence
-// (activity word == 0). NO program counter, NO fetch-decode loop.
-//
-// Two canonical kernels execute on this substrate bit-exactly:
-//   k1  linear accumulation  sum 1..N, N=8      -> N(N+1)/2 = 36
-//   k2  fibonacci recurrence fib(25) via the ripple -> 75025
-// Fold = k1*10^9 + fib25 (k2) with the same dispatcher engine.
-//
-// The ripple is deterministic and order-independent per sweep: each sweep
-// drains the SAME activity word regardless of drain order (accumulation
-// into disjoint downstream cells; LSB-first is canonical).
-
+// selfhost/prelude/bits.bp — 64-bit word helpers shared by the bit-level gates (T38).
+// popc: SWAR popcount (mask-add tree, mod 128 instead of >> 56 — R3.x logical
+// shift safe); tzidx: index of the lowest set bit of an isolated bit b via the
+// 64-entry de Bruijn table (c = 0x03F79D71B4CB0A89).
 fn popc(w: i64) -> i64 {
   let m1 = 6148914691236517205;
   let m2 = 3689348814741910323;
@@ -29,7 +14,6 @@ fn popc(w: i64) -> i64 {
   let x = x + (x >> 32);
   x - (x / 128) * 128
 }
-
 fn tzidx(b: i64) -> i64 {
   let db = zeros(64);
   let _ = db[0] = 0;
@@ -99,6 +83,25 @@ fn tzidx(b: i64) -> i64 {
   let c = 285870213051386505;
   db[((b * c) >> 58) & 63]
 }
+// prelude: bits
+// substrate.bp — T14: the dispatcher as the EXECUTION SUBSTRATE.
+// A kernel's computation is not a fetch-execute stream: it is a dense
+// activity/incidence structure. A cell array holds the dataflow; the
+// async dispatcher (SWAR popcnt + de Bruijn tzcnt, LSB-first) drains a
+// dense activity word each sweep, threshold-accumulating contributions
+// into downstream cells. A cell becomes ready (its bit set in the NEXT
+// sweep's activity word) only when its dependency threshold is met.
+// Execution = the emergent activity wavefront, iterated to quiescence
+// (activity word == 0). NO program counter, NO fetch-decode loop.
+//
+// Two canonical kernels execute on this substrate bit-exactly:
+//   k1  linear accumulation  sum 1..N, N=8      -> N(N+1)/2 = 36
+//   k2  fibonacci recurrence fib(25) via the ripple -> 75025
+// Fold = k1*10^9 + fib25 (k2) with the same dispatcher engine.
+//
+// The ripple is deterministic and order-independent per sweep: each sweep
+// drains the SAME activity word regardless of drain order (accumulation
+// into disjoint downstream cells; LSB-first is canonical).
 
 // One dispatcher sweep over the dataflow cells. Returns the NEXT activity
 // word (cells whose dependency threshold was met this sweep).

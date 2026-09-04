@@ -4,6 +4,7 @@
 #  (ii) branch census, no increase   tools/census.py --check bench/vs_rust/census.txt
 #  (iii) fntab zone map + lit trap   tools/check_abi.py --fntab bebop.bp
 #  (iv) .bin footer/entry identity   inside check_abi.py for every bin touched
+#  (v)  gate-source expansion identity  gen_selfsrc.sh std == bench/vs_rust/std_tests (T38/L9)
 # Usage: bench/vs_rust/invariants.sh [--freeze]   (--freeze rewrites census.txt)
 set -u
 mkdir -p "${BEBOP_TMP:-/tmp/opencode}"
@@ -34,6 +35,13 @@ if [ "${1:-}" = "--freeze" ]; then
   python3 tools/census.py bebop.bin $BINS > bench/vs_rust/census.txt && echo "census.txt frozen"
 fi
 python3 tools/census.py --check bench/vs_rust/census.txt bebop.bin $BINS || fail=1
+
+echo "== (v) gate-source expansion identity (prelude + selfhost/std == std_tests)"
+rm -rf "$OUT/std_expand"; sh tools/gen_selfsrc.sh std "$OUT/std_expand" >/dev/null || fail=1
+for t in bench/vs_rust/std_tests/*.bp; do
+  cmp -s "$t" "$OUT/std_expand/$(basename "$t")" || { echo "EXPANSION-DRIFT $(basename "$t" .bp): std_tests copy != prelude+selfhost/std (rerun tools/gen_selfsrc.sh std)"; fail=1; }
+done
+echo "expansion: $(ls bench/vs_rust/std_tests/*.bp | wc -l) gate sources checked"
 
 [ $fail = 0 ] && echo "invariants: GREEN" || echo "invariants: RED"
 exit $fail

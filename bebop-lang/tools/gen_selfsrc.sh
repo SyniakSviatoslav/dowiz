@@ -1,7 +1,22 @@
 #!/bin/sh
 # L9: single source of truth — regenerate runtime self-source from selfhost/.
 # Usage: gen_selfsrc.sh <out.bp> <bootstrap-path-string>
+#        gen_selfsrc.sh std [outdir]   (T38) expand every gate source: for each
+#        bench/vs_rust/std_tests/<g>.bp write outdir/<g>.bp = the prelude files named
+#        on line 1 of selfhost/std/<g>.bp (`// prelude: fp bits hash rng`, header
+#        order) followed by selfhost/std/<g>.bp verbatim; no header = verbatim copy.
 set -e
+if [ "$1" = std ]; then
+  OUTDIR="${2:-bench/vs_rust/std_tests}"; mkdir -p "$OUTDIR"
+  for t in bench/vs_rust/std_tests/*.bp; do
+    g=$(basename "$t"); src="selfhost/std/$g"
+    [ -f "$src" ] || { echo "$src: missing (gate source without a selfhost/std twin)" >&2; exit 1; }
+    { for p in $(sed -n '1{/^\/\/ prelude:/s/^\/\/ prelude://p}' "$src"); do cat "selfhost/prelude/$p.bp"; done
+      cat "$src"; } > "$OUTDIR/$g"
+  done
+  echo "$OUTDIR: $(ls "$OUTDIR"/*.bp | wc -l) gate sources expanded"
+  exit 0
+fi
 OUT="$1"; PATHSTR="${2:-/tmp/bebop_self_src.bp}"
 python3 - "$OUT" "$PATHSTR" <<'PY'
 import re,sys

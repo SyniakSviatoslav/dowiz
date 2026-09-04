@@ -1,19 +1,8 @@
-module core { }
-
-// tdgcurv.bp — T18: Riemann R^i_jkl from Christoffel Γ (+ tabulated ∂Γ),
-// Ricci R_jl = R^i_jil, scalar R = g^jl R_jl, sectional K(x,y). n = 2,
-// i64 fixed-point 2^32 (fp_mul verbatim). Geometry: unit 2-sphere S² in
-// (θ, φ), g = diag(1, sin²θ), Γ^θ_φφ = -sinθcosθ, Γ^φ_θφ = Γ^φ_φθ = cotθ,
-// ∂_θ Γ^θ_φφ = -(cos²-sin²), ∂_θ Γ^φ_θφ = -csc²θ (closed-form derivative
-// evaluated in fp; all φ-derivatives 0). Table: θ ∈ {π/6, π/4, π/3, π/2}
-// as fp (sinθ, cosθ, cscθ) via isqrt — no division anywhere.
-// Convention R^i_jkl = ∂_k Γ^i_lj - ∂_l Γ^i_kj + Γ^i_km Γ^m_lj - Γ^i_lm Γ^m_kj;
-// K = R_ijkl x^i y^j x^k y^l / (xx*yy - xy²) (mirror of dowiz-core
-// academia_p2p.rs sectional_curvature: numerator contraction + Gram denom).
-// Known values (not invented): scalar R = 2, K = 1 at EVERY point of S²,
-// checked as |R - 2| < 2^-16 and |num - denom| < 2^-16 (K=1 without a div).
-// Fold = okcount*10^15 + Σ_p (num_p>>12)*10^8 + Σ_p (R_p>>12) == python oracle.
-
+// selfhost/prelude/fp.bp — Q32 fixed-point core shared by every fp gate (T38).
+// Textual include: a gate whose first line is `// prelude: fp ...` gets this file
+// prepended by tools/gen_selfsrc.sh std (L9 mechanism until T47 `use`).
+// fp_mul: signed 64x64 -> Q32 product via 32/16-bit limbs (no i128, no >> on
+// negatives); isqrt: digit-by-digit integer sqrt over bits 60..0.
 fn fp_mul(a: i64, b: i64) -> i64 {
   let na = if a < 0 then 1 else 0;
   let aa = if na == 1 then 0 - a else a;
@@ -39,6 +28,38 @@ fn fp_mul(a: i64, b: i64) -> i64 {
   let p = if flip == 1 then 0 - p else p;
   p
 }
+fn isqrt(s: i64) -> i64 {
+  let rem = 0;
+  let root = 0;
+  let i = 0;
+  while i < 31 {
+    let sh = 60 - i * 2;
+    let rem = (rem << 2) + ((s >> sh) & 3);
+    let tst = (root << 2) + 1;
+    let take = if tst <= rem then 1 else 0;
+    let root = (root << 1) + take;
+    let rem = rem - take * tst;
+    let i = i + 1;
+    0
+  };
+  root
+}
+// prelude: fp
+module core { }
+
+// tdgcurv.bp — T18: Riemann R^i_jkl from Christoffel Γ (+ tabulated ∂Γ),
+// Ricci R_jl = R^i_jil, scalar R = g^jl R_jl, sectional K(x,y). n = 2,
+// i64 fixed-point 2^32 (fp_mul verbatim). Geometry: unit 2-sphere S² in
+// (θ, φ), g = diag(1, sin²θ), Γ^θ_φφ = -sinθcosθ, Γ^φ_θφ = Γ^φ_φθ = cotθ,
+// ∂_θ Γ^θ_φφ = -(cos²-sin²), ∂_θ Γ^φ_θφ = -csc²θ (closed-form derivative
+// evaluated in fp; all φ-derivatives 0). Table: θ ∈ {π/6, π/4, π/3, π/2}
+// as fp (sinθ, cosθ, cscθ) via isqrt — no division anywhere.
+// Convention R^i_jkl = ∂_k Γ^i_lj - ∂_l Γ^i_kj + Γ^i_km Γ^m_lj - Γ^i_lm Γ^m_kj;
+// K = R_ijkl x^i y^j x^k y^l / (xx*yy - xy²) (mirror of dowiz-core
+// academia_p2p.rs sectional_curvature: numerator contraction + Gram denom).
+// Known values (not invented): scalar R = 2, K = 1 at EVERY point of S²,
+// checked as |R - 2| < 2^-16 and |num - denom| < 2^-16 (K=1 without a div).
+// Fold = okcount*10^15 + Σ_p (num_p>>12)*10^8 + Σ_p (R_p>>12) == python oracle.
 
 fn fill(a: [i64], n: i64, v: i64) -> i64 {
   let i = 0;

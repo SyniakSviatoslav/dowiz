@@ -118,3 +118,8 @@ fn sha256_fold(data: [i64], n: i64) -> i64 {
   };
   acc
 }
+
+fn main() -> i64 {
+  let abc = [97, 98, 99];
+  sha256_fold(abc, 3)
+}

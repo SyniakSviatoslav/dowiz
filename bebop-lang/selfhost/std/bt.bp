@@ -111,3 +111,48 @@ fn bt_unpack(src: [i64], d: [i64], data: [i64]) -> i64 {
   let res = if ok == 12 then 0 else 0 - 1;
   res
 }
+
+
+// ---- std gate main: .bt rank-4 pack/unpack/stride vs the Rust golden ----
+// Reference tensor: dims 2x3x2x2, data[k] = ((k*2654435761+7) & (2^44-1)) -
+// 2^43. Frozen = fold of [fnv==golden, unpack-rc==0, 24 data-equality zeros,
+// offset(1,2,1,0)==22 flag, view write/read flag] (golden bt_fnv over the
+// exact byte stream = -6204655307031605165 signed):
+// -5708805812714944038.
+fn main() -> i64 {
+  let d = zeros(8);
+  let _ = d[0] = 2;
+  let _ = d[1] = 3;
+  let _ = d[2] = 2;
+  let _ = d[3] = 2;
+  let data = zeros(64);
+  let data2 = zeros(64);
+  let d2 = zeros(8);
+  let out = zeros(512);
+  let mask = 17592186044415;
+  let base = 8796093022208;
+  let k = 0;
+  while k < 24 {
+    let _ = data[k] = ((k * 2654435761 + 7) & mask) - base;
+    let k = k + 1;
+    0
+  };
+  let acc = 0;
+  let len = bt_pack(d, data, out);
+  let acc = acc * 131 + (if len == 220 then 1 else 0);
+  let fnv = bt_fnv(out, len);
+  let acc = acc * 131 + (if fnv == 0 - 6204655307031605165 then 1 else 0);
+  let rc = bt_unpack(out, d2, data2);
+  let acc = acc * 131 + (if rc == 0 then 1 else 0);
+  let k = 0;
+  while k < 24 {
+    let eq = if data2[k] == data[k] then 0 else 1;
+    let acc = acc * 131 + eq;
+    let k = k + 1;
+    0
+  };
+  let v22 = bt_offset(d, 1, 2, 1, 0);
+  let acc = acc * 131 + (if v22 == 22 then 1 else 0);
+  let acc = acc * 131 + (if d2[0] == 2 then 1 else 0) + (if d2[3] == 2 then 1 else 0);
+  acc
+}

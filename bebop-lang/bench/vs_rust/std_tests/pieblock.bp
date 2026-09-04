@@ -1,3 +1,17 @@
+// selfhost/prelude/hash.bp — FNV-1a over whole i64 cells (T38 shared copy).
+// fnv_cells: offset basis 0xcbf29ce484222325 (as the negative i64), prime
+// 0x100000001b3, one xor-multiply step per cell (not per byte).
+fn fnv_cells(cells: [i64], n: i64) -> i64 {
+  let h = 0 - 3750763034362895579;
+  let i = 0;
+  while i < n {
+    let h = (h ^ cells[i]) * 1099511628211;
+    let i = i + 1;
+    0
+  };
+  h
+}
+// prelude: hash
 // pieblock.bp — SS-13: position-independent DecompCache blocks (the PIE
 // relocation core). A serialized object graph lives in ONE contiguous cell
 // block: [magic, count, then per node {payload, rel_next}], links are
@@ -9,17 +23,6 @@
 // origin (cyc = the cached AST graph structure survives). The <5ms cold-
 // start timing half needs the mmap save/load path (compiler-internal -
 // deferred). Fold = pie_ok*10^9 + integ_ok*10^8 + wsum*10^3 + cyc.
-
-fn fnv_cells(cells: [i64], n: i64) -> i64 {
-  let h = 0 - 3750763034362895579;
-  let i = 0;
-  while i < n {
-    let h = (h ^ cells[i]) * 1099511628211;
-    let i = i + 1;
-    0
-  };
-  h
-}
 
 fn main() -> i64 {
   let buf = zeros(1200);

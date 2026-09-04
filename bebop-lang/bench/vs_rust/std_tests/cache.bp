@@ -1,18 +1,8 @@
-// spectral.bp — SPECTRAL tier: fixed-point twin of dowiz-core/src/spectral.rs
-// topk_symmetric (power method + Hotelling deflation over CSR spmv).
-// Scale: 2^32 i64 fixed-point (fp(x) = x * 2^32). Determinism laws inherited
-// from the Rust oracle (bench/vs_rust/spectral_golden/golden.txt):
-// index-graded LCG start, FIXED iteration count, fixed summation order,
-// sign = first |component| > epsilon is positive. Parity vs the f64 oracle is
-// tolerance-based (few LSBs at 2^32 scale), not bit-exact: the port truncates
-// where the oracle rounds. Working range: all fp values |v| < 2^42 (graphs
-// with n ≤ 64, |λ| < 2^10, unit vectors) — keeps every fp_mul partial below
-// 2^53. Buffers: n ≤ 64 slots are preallocated (x/ax/tmp zeros(192) = 3*64).
-
-// fp_mul(a,b): (a*b) >> 32 in exact 64-bit — schoolbook 32-bit split with a
-// 16-bit sub-split of the low×low term. Never wraps inside the working range.
-// LAW: Bebop `>>` is LOGICAL (u64) on both engines, so the split runs on
-// magnitudes with the sign folded back at the end.
+// selfhost/prelude/fp.bp — Q32 fixed-point core shared by every fp gate (T38).
+// Textual include: a gate whose first line is `// prelude: fp ...` gets this file
+// prepended by tools/gen_selfsrc.sh std (L9 mechanism until T47 `use`).
+// fp_mul: signed 64x64 -> Q32 product via 32/16-bit limbs (no i128, no >> on
+// negatives); isqrt: digit-by-digit integer sqrt over bits 60..0.
 fn fp_mul(a: i64, b: i64) -> i64 {
   let na = if a < 0 then 1 else 0;
   let aa = if na == 1 then 0 - a else a;
@@ -38,9 +28,6 @@ fn fp_mul(a: i64, b: i64) -> i64 {
   let p = if flip == 1 then 0 - p else p;
   p
 }
-
-// isqrt(s): floor(sqrt(s)) for 0 <= s < 2^62 — bit-by-bit restoring method,
-// 31 steps, shifts and subtracts only (no division, fully deterministic).
 fn isqrt(s: i64) -> i64 {
   let rem = 0;
   let root = 0;
@@ -57,15 +44,46 @@ fn isqrt(s: i64) -> i64 {
   };
   root
 }
-
-// lcg_next(rng): the golden start-vector LCG step (SPECTRAL LAW constants:
-// mul 6364136223846793005, add 1442695040888963407 — wrapping i64).
+// selfhost/prelude/hash.bp — FNV-1a over whole i64 cells (T38 shared copy).
+// fnv_cells: offset basis 0xcbf29ce484222325 (as the negative i64), prime
+// 0x100000001b3, one xor-multiply step per cell (not per byte).
+fn fnv_cells(cells: [i64], n: i64) -> i64 {
+  let h = 0 - 3750763034362895579;
+  let i = 0;
+  while i < n {
+    let h = (h ^ cells[i]) * 1099511628211;
+    let i = i + 1;
+    0
+  };
+  h
+}
+// selfhost/prelude/rng.bp — Knuth MMIX LCG step shared by the spectral gates (T38).
+// lcg_next: state * 6364136223846793005 + 1442695040888963407 (mod 2^64).
 fn lcg_next(rng: i64) -> i64 {
   let rng = rng * 6364136223846793005;
   let rng = rng + 1442695040888963407;
   rng
 }
+// prelude: fp hash rng
+// spectral.bp — SPECTRAL tier: fixed-point twin of dowiz-core/src/spectral.rs
+// topk_symmetric (power method + Hotelling deflation over CSR spmv).
+// Scale: 2^32 i64 fixed-point (fp(x) = x * 2^32). Determinism laws inherited
+// from the Rust oracle (bench/vs_rust/spectral_golden/golden.txt):
+// index-graded LCG start, FIXED iteration count, fixed summation order,
+// sign = first |component| > epsilon is positive. Parity vs the f64 oracle is
+// tolerance-based (few LSBs at 2^32 scale), not bit-exact: the port truncates
+// where the oracle rounds. Working range: all fp values |v| < 2^42 (graphs
+// with n ≤ 64, |λ| < 2^10, unit vectors) — keeps every fp_mul partial below
+// 2^53. Buffers: n ≤ 64 slots are preallocated (x/ax/tmp zeros(192) = 3*64).
 
+// fp_mul(a,b): (a*b) >> 32 in exact 64-bit — schoolbook 32-bit split with a
+// 16-bit sub-split of the low×low term. Never wraps inside the working range.
+// LAW: Bebop `>>` is LOGICAL (u64) on both engines, so the split runs on
+// magnitudes with the sign folded back at the end.
+// isqrt(s): floor(sqrt(s)) for 0 <= s < 2^62 — bit-by-bit restoring method,
+// 31 steps, shifts and subtracts only (no division, fully deterministic).
+// lcg_next(rng): the golden start-vector LCG step (SPECTRAL LAW constants:
+// mul 6364136223846793005, add 1442695040888963407 — wrapping i64).
 // spmv_fp(rp,ci,vv,n, x, out): out = A·x in fp. Fixed order: rows 0..n,
 // ascending columns within a row (the Csr::spmv contract); out zeroed first.
 fn spmv_fp(rp: [i64], ci: [i64], vv: [i64], n: i64, x: [i64], out: [i64]) -> i64 {
@@ -395,17 +413,6 @@ fn spectral_drift_fp(a0: [i64], a1: [i64], n: i64, out: [i64]) -> i64 {
 // content change). Table: S slots, key 0 = empty, linear probe.
 
 // fnv_cells(cells, n): FNV-1a 64 over i64 cells (full-value fold).
-fn fnv_cells(cells: [i64], n: i64) -> i64 {
-  let h = 0 - 3750763034362895579;
-  let i = 0;
-  while i < n {
-    let h = (h ^ cells[i]) * 1099511628211;
-    let i = i + 1;
-    0
-  };
-  h
-}
-
 // cache_lookup(keys, vals, S, key): returns the slot holding key, or -1.
 fn cache_lookup(keys: [i64], S: i64, key: i64) -> i64 {
   let found = 0 - 1;
@@ -517,17 +524,6 @@ fn spectral_drift_fp(a0: [i64], a1: [i64], n: i64, out: [i64]) -> i64 {
 // content change). Table: S slots, key 0 = empty, linear probe.
 
 // fnv_cells(cells, n): FNV-1a 64 over i64 cells (full-value fold).
-fn fnv_cells(cells: [i64], n: i64) -> i64 {
-  let h = 0 - 3750763034362895579;
-  let i = 0;
-  while i < n {
-    let h = (h ^ cells[i]) * 1099511628211;
-    let i = i + 1;
-    0
-  };
-  h
-}
-
 // cache_lookup(keys, vals, S, key): returns the slot holding key, or -1.
 fn cache_lookup(keys: [i64], S: i64, key: i64) -> i64 {
   let found = 0 - 1;

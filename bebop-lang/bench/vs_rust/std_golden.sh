@@ -675,5 +675,29 @@ gate money 872656672063013 "$r"
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/ordfsm.bp ${BEBOP_TMP:-/tmp/opencode}/ordfsm_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/ordfsm_test.bin | tail -1)
 gate ordfsm 346243789026198 "$r"
 
+# ---- bitset ----
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/bitset.bp ${BEBOP_TMP:-/tmp/opencode}/bitset_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/bitset_test.bin | tail -1)
+gate bitset 2036794690103862628 "$r"
+
+# ---- dp ----
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dp.bp ${BEBOP_TMP:-/tmp/opencode}/dp_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/dp_test.bin | tail -1)
+gate dp 1228358969285510033 "$r"
+
+# ---- modular ----
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/modular.bp ${BEBOP_TMP:-/tmp/opencode}/modular_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/modular_test.bin | tail -1)
+gate modular 116545118955335780 "$r"
+
+# ---- rle ----
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/rle.bp ${BEBOP_TMP:-/tmp/opencode}/rle_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/rle_test.bin | tail -1)
+gate rle 3598486830113687277 "$r"
+
+# ---- search ----
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/search.bp ${BEBOP_TMP:-/tmp/opencode}/search_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/search_test.bin | tail -1)
+gate search 3274903484811434843 "$r"
+
+# ---- set ----
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/set.bp ${BEBOP_TMP:-/tmp/opencode}/set_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/set_test.bin | tail -1)
+gate set 671356585229707990 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

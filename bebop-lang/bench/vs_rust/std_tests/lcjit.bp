@@ -1,16 +1,8 @@
-// lcjit.bp — SS-3 jitter half: the LC-resonant agent loop's period jitter
-// over 1000+ real cycles, measured in-process with clock_ms (the sys_clock
-// builtin that was missing when SS-3 core landed). One "cycle" = one
-// f0_of tank computation (the same arithmetic as the lcres gate). Two
-// 800k-cycle batches are timed (each ~400ms, so 1ms clock quantization is
-// <0.3%); jitter = |T1-T2| / mean in 1/10000 units (100 = 1%). The result
-// is a FLAG (1 = jitter < 10%) so the gate freezes a boolean, not a
-// wall-clock number. HONEST status: this shared proot box measures
-// 3-8% batch jitter (preemption noise); the structural claim (fixed tick
-// count per cycle, zero data-dependent loops) is exact, and the <1%
-// wall-clock target needs a quiet/bare-metal box (upgrade trigger stays).
-// Measured medians are recorded in the journal at gate time.
-
+// selfhost/prelude/fp.bp — Q32 fixed-point core shared by every fp gate (T38).
+// Textual include: a gate whose first line is `// prelude: fp ...` gets this file
+// prepended by tools/gen_selfsrc.sh std (L9 mechanism until T47 `use`).
+// fp_mul: signed 64x64 -> Q32 product via 32/16-bit limbs (no i128, no >> on
+// negatives); isqrt: digit-by-digit integer sqrt over bits 60..0.
 fn fp_mul(a: i64, b: i64) -> i64 {
   let na = if a < 0 then 1 else 0;
   let aa = if na == 1 then 0 - a else a;
@@ -36,7 +28,6 @@ fn fp_mul(a: i64, b: i64) -> i64 {
   let p = if flip == 1 then 0 - p else p;
   p
 }
-
 fn isqrt(s: i64) -> i64 {
   let rem = 0;
   let root = 0;
@@ -53,6 +44,19 @@ fn isqrt(s: i64) -> i64 {
   };
   root
 }
+// prelude: fp
+// lcjit.bp — SS-3 jitter half: the LC-resonant agent loop's period jitter
+// over 1000+ real cycles, measured in-process with clock_ms (the sys_clock
+// builtin that was missing when SS-3 core landed). One "cycle" = one
+// f0_of tank computation (the same arithmetic as the lcres gate). Two
+// 800k-cycle batches are timed (each ~400ms, so 1ms clock quantization is
+// <0.3%); jitter = |T1-T2| / mean in 1/10000 units (100 = 1%). The result
+// is a FLAG (1 = jitter < 10%) so the gate freezes a boolean, not a
+// wall-clock number. HONEST status: this shared proot box measures
+// 3-8% batch jitter (preemption noise); the structural claim (fixed tick
+// count per cycle, zero data-dependent loops) is exact, and the <1%
+// wall-clock target needs a quiet/bare-metal box (upgrade trigger stays).
+// Measured medians are recorded in the journal at gate time.
 
 fn fp_div(a: i64, b: i64) -> i64 {
   let qint = 0;

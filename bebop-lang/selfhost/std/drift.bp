@@ -1,0 +1,519 @@
+// prelude: fp hash rng
+// spectral.bp — SPECTRAL tier: fixed-point twin of dowiz-core/src/spectral.rs
+// topk_symmetric (power method + Hotelling deflation over CSR spmv).
+// Scale: 2^32 i64 fixed-point (fp(x) = x * 2^32). Determinism laws inherited
+// from the Rust oracle (bench/vs_rust/spectral_golden/golden.txt):
+// index-graded LCG start, FIXED iteration count, fixed summation order,
+// sign = first |component| > epsilon is positive. Parity vs the f64 oracle is
+// tolerance-based (few LSBs at 2^32 scale), not bit-exact: the port truncates
+// where the oracle rounds. Working range: all fp values |v| < 2^42 (graphs
+// with n ≤ 64, |λ| < 2^10, unit vectors) — keeps every fp_mul partial below
+// 2^53. Buffers: n ≤ 64 slots are preallocated (x/ax/tmp zeros(192) = 3*64).
+
+// fp_mul(a,b): (a*b) >> 32 in exact 64-bit — schoolbook 32-bit split with a
+// 16-bit sub-split of the low×low term. Never wraps inside the working range.
+// LAW: Bebop `>>` is LOGICAL (u64) on both engines, so the split runs on
+// magnitudes with the sign folded back at the end.
+// isqrt(s): floor(sqrt(s)) for 0 <= s < 2^62 — bit-by-bit restoring method,
+// 31 steps, shifts and subtracts only (no division, fully deterministic).
+// lcg_next(rng): the golden start-vector LCG step (SPECTRAL LAW constants:
+// mul 6364136223846793005, add 1442695040888963407 — wrapping i64).
+// spmv_fp(rp,ci,vv,n, x, out): out = A·x in fp. Fixed order: rows 0..n,
+// ascending columns within a row (the Csr::spmv contract); out zeroed first.
+fn spmv_fp(rp: [i64], ci: [i64], vv: [i64], n: i64, x: [i64], out: [i64]) -> i64 {
+  let j = 0;
+  while j < n {
+    let _ = out[j] = 0;
+    let j = j + 1;
+    0
+  };
+  let i = 0;
+  while i < n {
+    let xi = x[i];
+    let lo = rp[i];
+    let hi = rp[i + 1];
+    let k = lo;
+    while k < hi {
+      let j = ci[k];
+      let _ = out[j] = out[j] + fp_mul(vv[k], xi);
+      let k = k + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  n
+}
+
+// normalize_fp(x, n): scale so the Euclidean norm is 2^32. Sum of squares is
+// taken on |x_i|>>8 (LAW: >> is logical — abs first!); for |x| <= 2^36 the
+// square <= 2^56 and the sum <= 2^62 — inside isqrt's range. The isqrt
+// rounding (+-1 at the |x|>>8 scale) bounds the normalized-component error
+// near 2^-24 relative — lambda error ~256 fp units, well inside the 1e-6
+// drift band (4295 fp units). Reciprocal R = 2^56/nrm = fp(2^32/|x|).
+fn normalize_fp(x: [i64], n: i64) -> i64 {
+  let ss = 0;
+  let i = 0;
+  while i < n {
+    let ai = x[i];
+    let ai = if ai < 0 then 0 - ai else ai;
+    let t = ai >> 8;
+    let ss = ss + t * t;
+    let i = i + 1;
+    0
+  };
+  let nrm = isqrt(ss);
+  let isz = if nrm == 0 then 1 else 0;
+  let nrm = nrm + isz;
+  let r = 72057594037927936 / nrm;
+  let i = 0;
+  while i < n {
+    let _ = x[i] = fp_mul(x[i], r);
+    let i = i + 1;
+    0
+  };
+  nrm << 14
+}
+
+// topk_symmetric_fp(rp,ci,vv,n, k, iters, evals, evecs): the golden oracle's
+// power+Hotelling loop in fp. evals[0..k] = λ descending |λ| (fp); evecs
+// [m*n+j] = sign-fixed unit eigenvectors. evals/evecs caller-provided.
+// Iteration: A·x via spmv, deflate found pairs (per-iteration Hotelling),
+// normalize. λ = Rayleigh quotient on the deflated space, recompute-deflate.
+fn topk_symmetric_fp(rp: [i64], ci: [i64], vv: [i64], n: i64, k: i64, iters: i64, evals: [i64], evecs: [i64]) -> i64 {
+  let x = zeros(192);
+  let ax = zeros(192);
+  let tmp = zeros(192);
+  let m = 0;
+  let found = 0;
+  while m < k {
+    let rng = 0 - 7046029254386353131;
+    let j = 0;
+    while j < n {
+      let rng = lcg_next(rng);
+      let frac = (rng >> 11) >> 20;
+      let _ = x[j] = frac + frac - 4294967296;
+      let j = j + 1;
+      0
+    };
+    let _ = normalize_fp(x, n);
+    let om = 0;
+    while om < found {
+      let proj = 0;
+      let j = 0;
+      while j < n {
+        let proj = proj + fp_mul(evecs[om * n + j], x[j]);
+        let j = j + 1;
+        0
+      };
+      let j = 0;
+      while j < n {
+        let _ = x[j] = x[j] - fp_mul(proj, evecs[om * n + j]);
+        let j = j + 1;
+        0
+      };
+      let om = om + 1;
+      0
+    };
+    let _ = normalize_fp(x, n);
+    let it = 0;
+    while it < iters {
+      let _ = spmv_fp(rp, ci, vv, n, x, ax);
+      let om = 0;
+      while om < found {
+        let proj = 0;
+        let j = 0;
+        while j < n {
+          let proj = proj + fp_mul(evecs[om * n + j], ax[j]);
+          let j = j + 1;
+          0
+        };
+        let j = 0;
+        while j < n {
+          let _ = ax[j] = ax[j] - fp_mul(proj, evecs[om * n + j]);
+          let j = j + 1;
+          0
+        };
+        let om = om + 1;
+        0
+      };
+      let _ = normalize_fp(ax, n);
+      let j = 0;
+      while j < n {
+        let _ = x[j] = ax[j];
+        let j = j + 1;
+        0
+      };
+      let it = it + 1;
+      0
+    };
+    let _ = spmv_fp(rp, ci, vv, n, x, tmp);
+    let om = 0;
+    while om < found {
+      let proj = 0;
+      let j = 0;
+      while j < n {
+        let proj = proj + fp_mul(evecs[om * n + j], tmp[j]);
+        let j = j + 1;
+        0
+      };
+      let j = 0;
+      while j < n {
+        let _ = tmp[j] = tmp[j] - fp_mul(proj, evecs[om * n + j]);
+        let j = j + 1;
+        0
+      };
+      let om = om + 1;
+      0
+    };
+    let lambda = 0;
+    let j = 0;
+    while j < n {
+      let lambda = lambda + fp_mul(x[j], tmp[j]);
+      let j = j + 1;
+      0
+    };
+    let om = 0;
+    while om < found {
+      let proj = 0;
+      let j = 0;
+      while j < n {
+        let proj = proj + fp_mul(evecs[om * n + j], x[j]);
+        let j = j + 1;
+        0
+      };
+      let j = 0;
+      while j < n {
+        let _ = x[j] = x[j] - fp_mul(proj, evecs[om * n + j]);
+        let j = j + 1;
+        0
+      };
+      let om = om + 1;
+      0
+    };
+    let _ = normalize_fp(x, n);
+    let fpos = 0;
+    let j = 0;
+    while j < n {
+      let mag = x[j];
+      let mag = if mag < 0 then 0 - mag else mag;
+      let big = if mag > 65536 then 1 else 0;
+      let seen = if fpos != 0 then 1 else 0;
+      let fpos = if seen == 0 then x[j] * big else fpos;
+      let j = j + 1;
+      0
+    };
+    let neg = if fpos < 0 then 1 else 0;
+    let j = 0;
+    while j < n {
+      let _ = evecs[found * n + j] = if neg == 1 then 0 - x[j] else x[j];
+      let j = j + 1;
+      0
+    };
+    let _ = evals[found] = lambda;
+    let found = found + 1;
+    let m = m + 1;
+    0
+  };
+  // descending |λ|: insertion sort of (λ, eigenvector) pairs; the candidate
+  // row is held in kr (shifts overwrite row i when j+1 == i).
+  let kr = zeros(64);
+  let i = 1;
+  while i < found {
+    let key = evals[i];
+    let jj = 0;
+    while jj < n {
+      let _ = kr[jj] = evecs[i * n + jj];
+      let jj = jj + 1;
+      0
+    };
+    let ke = key;
+    let ke = if ke < 0 then 0 - ke else ke;
+    let j = i - 1;
+    let go = 1;
+    while go == 1 {
+      let inb = if j >= 0 then 1 else 0;
+      let je = evals[j];
+      let je = if je < 0 then 0 - je else je;
+      let lt = if je < ke then 1 else 0;
+      let move_ = lt * inb;
+      let _ = if move_ == 1 then (let _ = evals[j + 1] = evals[j] in 0) else 0;
+      let jj = 0;
+      while jj < n {
+        let _ = if move_ == 1 then (let _ = evecs[(j + 1) * n + jj] = evecs[j * n + jj] in 0) else 0;
+        let jj = jj + 1;
+        0
+      };
+      let j = j - move_;
+      let go = move_;
+      0
+    };
+    let _ = evals[j + 1] = key;
+    let jj = 0;
+    while jj < n {
+      let _ = evecs[(j + 1) * n + jj] = kr[jj];
+      let jj = jj + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  found
+}
+
+// ═══ SS-6: drift machinery (twins of spectral.rs classify_drift /
+// spectral_drift) ═══
+// Classes: 0 = Damped (rho < 1-band), 1 = Resonant (|rho-1| <= band),
+// 2 = Unstable (rho > 1+band). DRIFT_BAND = 1e-6 -> fp 2^32 scale: 4295.
+// The unstable-mode count uses tol = 2^20 above 1.0 (the fp port's ~8e-6
+// relative eigenvalue error exceeds the 1e-6 band; count at exact-1.0 must
+// stay 0, matching the oracle's |lambda| > 1.0 strict compare on I2).
+// csr_from_dense(a, n, rp, ci, vv): row-major scan, non-zero cells -> edges.
+fn csr_from_dense(a: [i64], n: i64, rp: [i64], ci: [i64], vv: [i64]) -> i64 {
+  let nnzc = zeros(1);
+  let i = 0;
+  while i < n {
+    let _ = rp[i] = nnzc[0];
+    let j = 0;
+    while j < n {
+      let w = a[i * n + j];
+      let nz = if w == 0 then 0 else 1;
+      let _ = if nz == 1 then (let _ = ci[nnzc[0]] = j in (let _ = vv[nnzc[0]] = w in (let _ = nnzc[0] = nnzc[0] + 1 in 0))) else 0;
+      let j = j + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  let _ = rp[n] = nnzc[0];
+  nnzc[0]
+}
+
+// spectral_profile_fp(a, n, rho_c, unst_c, evals, evecs) -> class:
+// rho = max|lambda| (fp), unst = #{|lambda| > 1 + tol}, class by the band.
+// a is a DENSE n x n fp matrix (row-major). Buffers: evals/evecs >= n.
+fn spectral_profile_fp(a: [i64], n: i64, rho_c: [i64], unst_c: [i64], evals: [i64], evecs: [i64]) -> i64 {
+  let rp = zeros(280);
+  let ci = zeros(1024);
+  let vv = zeros(1024);
+  let _ = csr_from_dense(a, n, rp, ci, vv);
+  let _ = topk_symmetric_fp(rp, ci, vv, n, n, 32, evals, evecs);
+  let rho = evals[0];
+  let rho = if rho < 0 then 0 - rho else rho;
+  let _ = rho_c[0] = rho;
+  let tol = 1048576;
+  let one = 4294967296;
+  let unst = 0;
+  let k = 0;
+  while k < n {
+    let ev = evals[k];
+    let ev = if ev < 0 then 0 - ev else ev;
+    let over = if ev - one - tol > 0 then 1 else 0;
+    let unst = unst + over;
+    let k = k + 1;
+    0
+  };
+  let _ = unst_c[0] = unst;
+  let dmp = rho - (one - 4295);
+  let unp = rho - (one + 4295);
+  let d = if dmp < 0 then 1 else 0;
+  let u = if unp > 0 then 1 else 0;
+  d * 0 + u * 2 + (1 - d) * (1 - u)
+}
+
+// spectral_drift_fp(a0, a1, n, out) -> class-transition packed int:
+// out[0] = rho_delta (fp, signed), out[1] = unstable-count delta (signed),
+// out[2] = from class, out[3] = to class.
+fn spectral_drift_fp(a0: [i64], a1: [i64], n: i64, out: [i64]) -> i64 {
+  let rho0 = zeros(1);
+  let un0 = zeros(1);
+  let rho1 = zeros(1);
+  let un1 = zeros(1);
+  let ev = zeros(280);
+  let ec = zeros(280);
+  let f = spectral_profile_fp(a0, n, rho0, un0, ev, ec);
+  let t = spectral_profile_fp(a1, n, rho1, un1, ev, ec);
+  let _ = out[0] = rho1[0] - rho0[0];
+  let _ = out[1] = un1[0] - un0[0];
+  let _ = out[2] = f;
+  let _ = out[3] = t;
+  f * 4 + t
+}
+
+// ═══ SS-6/Ф6: DecompCache — content-addressed spectrum cache ═══
+// Twin of spectral_cache.rs's get_or_recompute + recomputes falsifier.
+// The key = FNV-1a 64 over the matrix's fp cells (h = (h ^ c) * prime,
+// wrapping) — layout-sensitive by design (the falsifier must fire on ANY
+// content change). Table: S slots, key 0 = empty, linear probe.
+
+// fnv_cells(cells, n): FNV-1a 64 over i64 cells (full-value fold).
+// cache_lookup(keys, vals, S, key): returns the slot holding key, or -1.
+fn cache_lookup(keys: [i64], S: i64, key: i64) -> i64 {
+  let found = 0 - 1;
+  let i = 0;
+  let go = 1;
+  while go == 1 {
+    let hit = if keys[i] == key then 1 else 0;
+    let found = if found == 0 - 1 then i * hit + found * (1 - hit) else found;
+    let i = i + 1;
+    let go = if i >= S then 0 else 1;
+    0
+  };
+  found
+}
+
+// cache_store(keys, vals, S, next, key, val): insert at next[0] (round-robin),
+// returns the slot. next[0] = the caller's insertion cursor (cell).
+fn cache_store(keys: [i64], vals: [i64], S: i64, next: [i64], key: i64, val: i64) -> i64 {
+  let slot = next[0] - (next[0] / S) * S;
+  let _ = keys[slot] = key;
+  let _ = vals[slot] = val;
+  let _ = next[0] = next[0] + 1;
+  slot
+}
+
+// ═══ SS-6: drift machinery (twins of spectral.rs classify_drift /
+// spectral_drift) ═══
+// Classes: 0 = Damped (rho < 1-band), 1 = Resonant (|rho-1| <= band),
+// 2 = Unstable (rho > 1+band). DRIFT_BAND = 1e-6 -> fp 2^32 scale: 4295.
+// The unstable-mode count uses tol = 2^20 above 1.0 (the fp port's ~8e-6
+// relative eigenvalue error exceeds the 1e-6 band; count at exact-1.0 must
+// stay 0, matching the oracle's |lambda| > 1.0 strict compare on I2).
+// csr_from_dense(a, n, rp, ci, vv): row-major scan, non-zero cells -> edges.
+fn csr_from_dense(a: [i64], n: i64, rp: [i64], ci: [i64], vv: [i64]) -> i64 {
+  let nnzc = zeros(1);
+  let i = 0;
+  while i < n {
+    let _ = rp[i] = nnzc[0];
+    let j = 0;
+    while j < n {
+      let w = a[i * n + j];
+      let nz = if w == 0 then 0 else 1;
+      let _ = if nz == 1 then (let _ = ci[nnzc[0]] = j in (let _ = vv[nnzc[0]] = w in (let _ = nnzc[0] = nnzc[0] + 1 in 0))) else 0;
+      let j = j + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  let _ = rp[n] = nnzc[0];
+  nnzc[0]
+}
+
+// spectral_profile_fp(a, n, rho_c, unst_c, evals, evecs) -> class:
+// rho = max|lambda| (fp), unst = #{|lambda| > 1 + tol}, class by the band.
+// a is a DENSE n x n fp matrix (row-major). Buffers: evals/evecs >= n.
+fn spectral_profile_fp(a: [i64], n: i64, rho_c: [i64], unst_c: [i64], evals: [i64], evecs: [i64]) -> i64 {
+  let rp = zeros(280);
+  let ci = zeros(1024);
+  let vv = zeros(1024);
+  let _ = csr_from_dense(a, n, rp, ci, vv);
+  let _ = topk_symmetric_fp(rp, ci, vv, n, n, 32, evals, evecs);
+  let rho = evals[0];
+  let rho = if rho < 0 then 0 - rho else rho;
+  let _ = rho_c[0] = rho;
+  let tol = 1048576;
+  let one = 4294967296;
+  let unst = 0;
+  let k = 0;
+  while k < n {
+    let ev = evals[k];
+    let ev = if ev < 0 then 0 - ev else ev;
+    let over = if ev - one - tol > 0 then 1 else 0;
+    let unst = unst + over;
+    let k = k + 1;
+    0
+  };
+  let _ = unst_c[0] = unst;
+  let dmp = rho - (one - 4295);
+  let unp = rho - (one + 4295);
+  let d = if dmp < 0 then 1 else 0;
+  let u = if unp > 0 then 1 else 0;
+  d * 0 + u * 2 + (1 - d) * (1 - u)
+}
+
+// spectral_drift_fp(a0, a1, n, out) -> class-transition packed int:
+// out[0] = rho_delta (fp, signed), out[1] = unstable-count delta (signed),
+// out[2] = from class, out[3] = to class.
+fn spectral_drift_fp(a0: [i64], a1: [i64], n: i64, out: [i64]) -> i64 {
+  let rho0 = zeros(1);
+  let un0 = zeros(1);
+  let rho1 = zeros(1);
+  let un1 = zeros(1);
+  let ev = zeros(280);
+  let ec = zeros(280);
+  let f = spectral_profile_fp(a0, n, rho0, un0, ev, ec);
+  let t = spectral_profile_fp(a1, n, rho1, un1, ev, ec);
+  let _ = out[0] = rho1[0] - rho0[0];
+  let _ = out[1] = un1[0] - un0[0];
+  let _ = out[2] = f;
+  let _ = out[3] = t;
+  f * 4 + t
+}
+
+// ---- std gate main: spectral profile + drift vs the Rust golden ----
+// Matrices: HALF_I (rho=.5), I2 (rho=1, Resonant), TWO_I (rho=2),
+// MIX (rho=2, unstable=1). Frozen = fold of 28 all-ones flags
+// (rho within 2^20 of the golden fp value, unstable counts, classes,
+// drift from/to/udelta exact) — golden.txt DRIFT GOLDENS section.
+fn main() -> i64 {
+  let half = zeros(4);
+  let _ = half[0] = 2147483648;
+  let _ = half[3] = 2147483648;
+  let eye = zeros(4);
+  let _ = eye[0] = 4294967296;
+  let _ = eye[3] = 4294967296;
+  let two = zeros(4);
+  let _ = two[0] = 8589934592;
+  let _ = two[3] = 8589934592;
+  let mix = zeros(4);
+  let _ = mix[0] = 6442450944;
+  let _ = mix[1] = 2147483648;
+  let _ = mix[2] = 2147483648;
+  let _ = mix[3] = 6442450944;
+  let rho = zeros(1);
+  let unst = zeros(1);
+  let ev = zeros(280);
+  let ec = zeros(280);
+  let acc = 0;
+  // profiles: class 0/1/2/2, unstable 0/0/2/1, rho 2^31/2^32/2^33/2^33
+  let c0 = spectral_profile_fp(half, 2, rho, unst, ev, ec);
+  let acc = acc * 131 + (if c0 == 0 then 1 else 0);
+  let acc = acc * 131 + (if unst[0] == 0 then 1 else 0);
+  let acc = acc * 131 + (if rho[0] - 2147483648 < 1048576 then 1 else 0);
+  let c1 = spectral_profile_fp(eye, 2, rho, unst, ev, ec);
+  let acc = acc * 131 + (if c1 == 1 then 1 else 0);
+  let acc = acc * 131 + (if unst[0] == 0 then 1 else 0);
+  let acc = acc * 131 + (if rho[0] - 4294967296 < 1048576 then 1 else 0);
+  let c2 = spectral_profile_fp(two, 2, rho, unst, ev, ec);
+  let acc = acc * 131 + (if c2 == 2 then 1 else 0);
+  let acc = acc * 131 + (if unst[0] == 2 then 1 else 0);
+  let acc = acc * 131 + (if rho[0] - 8589934592 < 1048576 then 1 else 0);
+  let c3 = spectral_profile_fp(mix, 2, rho, unst, ev, ec);
+  let acc = acc * 131 + (if c3 == 2 then 1 else 0);
+  let acc = acc * 131 + (if unst[0] == 1 then 1 else 0);
+  let acc = acc * 131 + (if rho[0] - 8589934592 < 1048576 then 1 else 0);
+  // drifts
+  let out = zeros(8);
+  let _ = spectral_drift_fp(half, eye, 2, out);
+  let acc = acc * 131 + (if out[2] == 0 then 1 else 0);
+  let acc = acc * 131 + (if out[3] == 1 then 1 else 0);
+  let acc = acc * 131 + (if out[1] == 0 then 1 else 0);
+  let acc = acc * 131 + (if out[0] - 2147483647 < 1048576 then 1 else 0);
+  let _ = spectral_drift_fp(eye, two, 2, out);
+  let acc = acc * 131 + (if out[2] == 1 then 1 else 0);
+  let acc = acc * 131 + (if out[3] == 2 then 1 else 0);
+  let acc = acc * 131 + (if out[1] == 2 then 1 else 0);
+  let acc = acc * 131 + (if out[0] - 4294967296 < 1048576 then 1 else 0);
+  let _ = spectral_drift_fp(half, mix, 2, out);
+  let acc = acc * 131 + (if out[2] == 0 then 1 else 0);
+  let acc = acc * 131 + (if out[3] == 2 then 1 else 0);
+  let acc = acc * 131 + (if out[1] == 1 then 1 else 0);
+  let acc = acc * 131 + (if out[0] - 6442450943 < 1048576 then 1 else 0);
+  let _ = spectral_drift_fp(mix, mix, 2, out);
+  let acc = acc * 131 + (if out[2] == 2 then 1 else 0);
+  let acc = acc * 131 + (if out[3] == 2 then 1 else 0);
+  let acc = acc * 131 + (if out[1] == 0 then 1 else 0);
+  let acc = acc * 131 + (if out[0] == 0 then 1 else 0);
+  acc
+}

@@ -86,3 +86,43 @@ fn rev_undo(x: [i64], n: i64, deltas: [i64]) -> i64 {
 fn rev_mix(x: [i64], n: i64, deltas: [i64]) -> i64 {
   rev_round(x, n, deltas)
 }
+fn main() -> i64 {
+  let x = zeros(16);
+  let d = zeros(16);
+  let acc = 0;
+  let n = 5;
+  let _ = x[0] = 15;
+  let _ = rev_toggle(x, 0, 3);
+  let t = x[0];
+  let _ = rev_toggle(x, 0, 3);
+  let acc = acc * 131 + (if x[0] == 15 then 1 else 0);
+  let _ = x[1] = 5;
+  let _ = x[2] = 3;
+  let _ = rev_cnot(x, 1, 2);
+  let _ = rev_cnot(x, 1, 2);
+  let acc = acc * 131 + (if x[2] == 3 then 1 else 0);
+  let _ = x[1] = 3;
+  let _ = x[2] = 1;
+  let _ = x[3] = 0;
+  let _ = rev_toffoli_bit(x, 1, 2, 3, 0);
+  let acc = acc * 131 + (if x[3] == 1 then 1 else 0);
+  let _ = rev_toffoli_bit(x, 1, 2, 3, 0);
+  let acc = acc * 131 + (if x[3] == 0 then 1 else 0);
+  let _ = x[1] = 1;
+  let _ = x[2] = 1;
+  let _ = x[3] = 0;
+  let _ = rev_fredkin_bit(x, 1, 2, 3, 0);
+  let acc = acc * 131 + (if x[3] == 1 then 1 else 0);
+  let _ = rev_fredkin_bit(x, 1, 2, 3, 0);
+  let acc = acc * 131 + (if x[3] == 0 then 1 else 0);
+  let _ = x[0] = 1000;
+  let _ = x[1] = 0;
+  let _ = x[2] = 0 - 5;
+  let _ = x[3] = 42;
+  let _ = x[4] = 7;
+  let _ = rev_round(x, n, d);
+  let mid = x[2];
+  let _ = rev_undo(x, n, d);
+  let ok = (if x[0] == 1000 then 1 else 0) + (if x[1] == 0 then 1 else 0) + (if x[2] == 0 - 5 then 1 else 0) + (if x[3] == 42 then 1 else 0) + (if x[4] == 7 then 1 else 0) + (if mid != x[2] then 1 else 0);
+  acc * 131 + ok
+}

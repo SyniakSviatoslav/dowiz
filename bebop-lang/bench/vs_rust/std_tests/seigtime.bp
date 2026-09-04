@@ -1,17 +1,8 @@
-// seigtime.bp — SS-17: eigentime (time = spectral iteration).
-// Synchronization = number of Hotelling iterations until the iterate ENTERS AN
-// EXACT CYCLE of the power map (not a wall clock). Slow clock = C8+I ring
-// (lambda2/lambda1 = 0.805): the normalize map is locally flat at the
-// dominant mode (c' ~ 2^32/sqrt(8) independent of c), so the rounding-locked
-// trajectory sawtooths into an exact period-30 cycle — first recurrence at
-// td=123, absorb 16/16 (ab=1). Fast clock = J8 all-ones (lambda2..8 = 0):
-// exact period-1 fixpoint at td=2, ab=1. Time-scale separation:
-// e_slow(123301) > e_fast(2011). Detection: ring history hist[240] (30
-// states x 8), shortest p in 1..30 with x_t == x_{t-p}; +16 absorb steps
-// verifying cycle membership (stable bit). e = td*1000 + per*10 + ab.
-// Gate fold = es*10000 + ef = 1233012011 == python oracle bit-exact.
-// Machine embedded verbatim from spectral_machinery.bp (sha256 c184416666fe).
-
+// selfhost/prelude/fp.bp — Q32 fixed-point core shared by every fp gate (T38).
+// Textual include: a gate whose first line is `// prelude: fp ...` gets this file
+// prepended by tools/gen_selfsrc.sh std (L9 mechanism until T47 `use`).
+// fp_mul: signed 64x64 -> Q32 product via 32/16-bit limbs (no i128, no >> on
+// negatives); isqrt: digit-by-digit integer sqrt over bits 60..0.
 fn fp_mul(a: i64, b: i64) -> i64 {
   let na = if a < 0 then 1 else 0;
   let aa = if na == 1 then 0 - a else a;
@@ -37,9 +28,6 @@ fn fp_mul(a: i64, b: i64) -> i64 {
   let p = if flip == 1 then 0 - p else p;
   p
 }
-
-// isqrt(s): floor(sqrt(s)) for 0 <= s < 2^62 — bit-by-bit restoring method,
-// 31 steps, shifts and subtracts only (no division, fully deterministic).
 fn isqrt(s: i64) -> i64 {
   let rem = 0;
   let root = 0;
@@ -56,14 +44,33 @@ fn isqrt(s: i64) -> i64 {
   };
   root
 }
-
-// lcg_next(rng): the golden start-vector LCG step (SPECTRAL LAW constants:
-// mul 6364136223846793005, add 1442695040888963407 — wrapping i64).
+// selfhost/prelude/rng.bp — Knuth MMIX LCG step shared by the spectral gates (T38).
+// lcg_next: state * 6364136223846793005 + 1442695040888963407 (mod 2^64).
 fn lcg_next(rng: i64) -> i64 {
   let rng = rng * 6364136223846793005;
   let rng = rng + 1442695040888963407;
   rng
 }
+// prelude: fp rng
+// seigtime.bp — SS-17: eigentime (time = spectral iteration).
+// Synchronization = number of Hotelling iterations until the iterate ENTERS AN
+// EXACT CYCLE of the power map (not a wall clock). Slow clock = C8+I ring
+// (lambda2/lambda1 = 0.805): the normalize map is locally flat at the
+// dominant mode (c' ~ 2^32/sqrt(8) independent of c), so the rounding-locked
+// trajectory sawtooths into an exact period-30 cycle — first recurrence at
+// td=123, absorb 16/16 (ab=1). Fast clock = J8 all-ones (lambda2..8 = 0):
+// exact period-1 fixpoint at td=2, ab=1. Time-scale separation:
+// e_slow(123301) > e_fast(2011). Detection: ring history hist[240] (30
+// states x 8), shortest p in 1..30 with x_t == x_{t-p}; +16 absorb steps
+// verifying cycle membership (stable bit). e = td*1000 + per*10 + ab.
+// Gate fold = es*10000 + ef = 1233012011 == python oracle bit-exact.
+// Machine embedded verbatim from spectral_machinery.bp (sha256 c184416666fe).
+
+// isqrt(s): floor(sqrt(s)) for 0 <= s < 2^62 — bit-by-bit restoring method,
+// 31 steps, shifts and subtracts only (no division, fully deterministic).
+
+// lcg_next(rng): the golden start-vector LCG step (SPECTRAL LAW constants:
+// mul 6364136223846793005, add 1442695040888963407 — wrapping i64).
 
 // spmv_fp(rp,ci,vv,n, x, out): out = A·x in fp. Fixed order: rows 0..n,
 // ascending columns within a row (the Csr::spmv contract); out zeroed first.

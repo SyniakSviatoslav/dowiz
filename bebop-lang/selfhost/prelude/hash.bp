@@ -1,0 +1,13 @@
+// selfhost/prelude/hash.bp — FNV-1a over whole i64 cells (T38 shared copy).
+// fnv_cells: offset basis 0xcbf29ce484222325 (as the negative i64), prime
+// 0x100000001b3, one xor-multiply step per cell (not per byte).
+fn fnv_cells(cells: [i64], n: i64) -> i64 {
+  let h = 0 - 3750763034362895579;
+  let i = 0;
+  while i < n {
+    let h = (h ^ cells[i]) * 1099511628211;
+    let i = i + 1;
+    0
+  };
+  h
+}

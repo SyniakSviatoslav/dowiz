@@ -72,3 +72,53 @@ fn haar_invert(x: [i64], n: i64) -> i64 {
 fn haar_encode(x: [i64], n: i64) -> i64 {
   haar_pow2(x, n)
 }
+
+// Test: (1) unit-vector dispatch — transform of e_1 must be the Haarer row
+// (sign-bit word of x = 41 for n=8: bits 0,3,5 set); (2) self-inverse round
+// trip — haar_pow2 then haar_invert restores [3,1,4,1,5,9,2,6] exactly.
+// Return word*1000 + roundtrip_ok.
+fn main() -> i64 {
+  let x = zeros(1024);
+  let n = 8;
+  let k = 0;
+  while k < n {
+    let _ = x[k] = 0;
+    let k = k + 1;
+    0
+  };
+  let _ = x[1] = 1;
+  let _ = haar_pow2(x, n);
+  let word = 0;
+  let k = 0;
+  while k < n {
+    let bit = if x[k] > 0 then 1 else 0;
+    let word = word + (bit << k);
+    let k = k + 1;
+    0
+  };
+  let inp = zeros(1024);
+  let _ = inp[0] = 3;
+  let _ = inp[1] = 1;
+  let _ = inp[2] = 4;
+  let _ = inp[3] = 1;
+  let _ = inp[4] = 5;
+  let _ = inp[5] = 9;
+  let _ = inp[6] = 2;
+  let _ = inp[7] = 6;
+  let k = 0;
+  while k < n {
+    let _ = x[k] = inp[k];
+    let k = k + 1;
+    0
+  };
+  let _ = haar_pow2(x, n);
+  let _ = haar_invert(x, n);
+  let ok = 0;
+  let k = 0;
+  while k < n {
+    let ok = ok + (if x[k] == inp[k] then 1 else 0);
+    let k = k + 1;
+    0
+  };
+  word * 1000 + (if ok == n then 1 else 0)
+}

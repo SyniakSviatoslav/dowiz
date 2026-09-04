@@ -1,5 +1,7 @@
 # Bebop Parser Fuzzing Resilience Report
 
+Status: 2026-09-04 SUPERSEDED-BY ROADMAP.md (2026-08-19 report on the deleted native/ C parser fuzz harness — zero-C; the live fuzzer is bench/fuzz/ + T39 tools/bpref.py)
+
 **Date:** 2026-08-19
 **Scope:** run-and-report only. No `native/src/*.c` (including `fuzz.c`) or any other
 source file was modified; nothing was committed or pushed. The harness was built

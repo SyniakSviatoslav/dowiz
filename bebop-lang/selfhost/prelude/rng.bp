@@ -1,0 +1,7 @@
+// selfhost/prelude/rng.bp — Knuth MMIX LCG step shared by the spectral gates (T38).
+// lcg_next: state * 6364136223846793005 + 1442695040888963407 (mod 2^64).
+fn lcg_next(rng: i64) -> i64 {
+  let rng = rng * 6364136223846793005;
+  let rng = rng + 1442695040888963407;
+  rng
+}

@@ -1,5 +1,7 @@
 # Bebop vs Rust — Performance Report (2026-08-23)
 
+Status: 2026-09-04 SUPERSEDED-BY bench/vs_rust/REPORT-630.md (2026-08-23 numbers from the LEGACY expr_compile.bp two-pass pipeline; the live compiler is bebop.bp/bebop.bin)
+
 Environment: aarch64 Linux (proot/Ubuntu), gcc -O2 / rustc 1.96.1 release
 (opt-level=3, lto, codegen-units=1) vs Bebop self-hosted compiler
 (`expr_compile.bp` two-pass pipeline → AArch64 words → native execution).

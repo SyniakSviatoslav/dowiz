@@ -1,3 +1,4 @@
+// prelude: bits
 module core { }
 
 // snn.bp — T3: in-register SNN engine. Neurons = bits of one i64 word;
@@ -7,19 +8,6 @@ module core { }
 // state bit in {-1,0,1} (the T1 ternary coefficient). Fold =
 // Sum (spike[i]+1)*4^i + new_state*10^9 == 65504516937878 (python mirror,
 // journal at gate time).
-
-fn popc(w: i64) -> i64 {
-  let m1 = 6148914691236517205;
-  let m2 = 3689348814741910323;
-  let mh = 1085102592571150095;
-  let x = w - ((w >> 1) & m1);
-  let x = (x & m2) + ((x >> 2) & m2);
-  let x = (x + (x >> 4)) & mh;
-  let x = x + (x >> 8);
-  let x = x + (x >> 16);
-  let x = x + (x >> 32);
-  x - (x / 128) * 128
-}
 
 fn main() -> i64 {
   let conn = zeros(16);

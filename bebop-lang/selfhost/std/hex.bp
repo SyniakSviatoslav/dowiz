@@ -38,3 +38,10 @@ fn hex_decode_byte(pair: i64) -> i64 {
   let lo = hex_val(pair - (pair / 256) * 256);
   if hi < 0 then (0 - 1) else (if lo < 0 then (0 - 1) else ((hi * 16) + lo))
 }
+
+fn main() -> i64 {
+  let v1 = hex_encode_byte(171);
+  let v2 = hex_encode_byte(205);
+  let v3 = hex_encode_byte(239);
+  v1 * 4294967296 + v2 * 65536 + v3
+}

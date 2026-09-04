@@ -1,3 +1,4 @@
+// prelude: fp hash rng
 // spectral.bp — SPECTRAL tier: fixed-point twin of dowiz-core/src/spectral.rs
 // topk_symmetric (power method + Hotelling deflation over CSR spmv).
 // Scale: 2^32 i64 fixed-point (fp(x) = x * 2^32). Determinism laws inherited
@@ -13,58 +14,12 @@
 // 16-bit sub-split of the low×low term. Never wraps inside the working range.
 // LAW: Bebop `>>` is LOGICAL (u64) on both engines, so the split runs on
 // magnitudes with the sign folded back at the end.
-fn fp_mul(a: i64, b: i64) -> i64 {
-  let na = if a < 0 then 1 else 0;
-  let aa = if na == 1 then 0 - a else a;
-  let nb = if b < 0 then 1 else 0;
-  let ab = if nb == 1 then 0 - b else b;
-  let a1 = aa >> 32;
-  let a0 = aa - (a1 << 32);
-  let b1 = ab >> 32;
-  let b0 = ab - (b1 << 32);
-  let hi = a1 * b1;
-  let mid = a1 * b0 + a0 * b1;
-  let ah = a0 >> 16;
-  let al = a0 - (ah << 16);
-  let bh = b0 >> 16;
-  let bl = b0 - (bh << 16);
-  let ll_h = ah * bh;
-  let ll_m = ah * bl + al * bh;
-  let ll_l = al * bl;
-  let low = ll_h + ((ll_m + (ll_l >> 16)) >> 16);
-  let p = (hi << 32) + mid + low;
-  let flip = na + nb;
-  let flip = flip - (flip / 2) * 2;
-  let p = if flip == 1 then 0 - p else p;
-  p
-}
 
 // isqrt(s): floor(sqrt(s)) for 0 <= s < 2^62 — bit-by-bit restoring method,
 // 31 steps, shifts and subtracts only (no division, fully deterministic).
-fn isqrt(s: i64) -> i64 {
-  let rem = 0;
-  let root = 0;
-  let i = 0;
-  while i < 31 {
-    let sh = 60 - i * 2;
-    let rem = (rem << 2) + ((s >> sh) & 3);
-    let tst = (root << 2) + 1;
-    let take = if tst <= rem then 1 else 0;
-    let root = (root << 1) + take;
-    let rem = rem - take * tst;
-    let i = i + 1;
-    0
-  };
-  root
-}
 
 // lcg_next(rng): the golden start-vector LCG step (SPECTRAL LAW constants:
 // mul 6364136223846793005, add 1442695040888963407 — wrapping i64).
-fn lcg_next(rng: i64) -> i64 {
-  let rng = rng * 6364136223846793005;
-  let rng = rng + 1442695040888963407;
-  rng
-}
 
 // spmv_fp(rp,ci,vv,n, x, out): out = A·x in fp. Fixed order: rows 0..n,
 // ascending columns within a row (the Csr::spmv contract); out zeroed first.
@@ -395,16 +350,6 @@ fn spectral_drift_fp(a0: [i64], a1: [i64], n: i64, out: [i64]) -> i64 {
 // content change). Table: S slots, key 0 = empty, linear probe.
 
 // fnv_cells(cells, n): FNV-1a 64 over i64 cells (full-value fold).
-fn fnv_cells(cells: [i64], n: i64) -> i64 {
-  let h = 0 - 3750763034362895579;
-  let i = 0;
-  while i < n {
-    let h = (h ^ cells[i]) * 1099511628211;
-    let i = i + 1;
-    0
-  };
-  h
-}
 
 // cache_lookup(keys, vals, S, key): returns the slot holding key, or -1.
 fn cache_lookup(keys: [i64], S: i64, key: i64) -> i64 {
@@ -429,4 +374,143 @@ fn cache_store(keys: [i64], vals: [i64], S: i64, next: [i64], key: i64, val: i64
   let _ = vals[slot] = val;
   let _ = next[0] = next[0] + 1;
   slot
+}
+
+// ═══ SS-6: drift machinery (twins of spectral.rs classify_drift /
+// spectral_drift) ═══
+// Classes: 0 = Damped (rho < 1-band), 1 = Resonant (|rho-1| <= band),
+// 2 = Unstable (rho > 1+band). DRIFT_BAND = 1e-6 -> fp 2^32 scale: 4295.
+// The unstable-mode count uses tol = 2^20 above 1.0 (the fp port's ~8e-6
+// relative eigenvalue error exceeds the 1e-6 band; count at exact-1.0 must
+// stay 0, matching the oracle's |lambda| > 1.0 strict compare on I2).
+// csr_from_dense(a, n, rp, ci, vv): row-major scan, non-zero cells -> edges.
+fn csr_from_dense(a: [i64], n: i64, rp: [i64], ci: [i64], vv: [i64]) -> i64 {
+  let nnzc = zeros(1);
+  let i = 0;
+  while i < n {
+    let _ = rp[i] = nnzc[0];
+    let j = 0;
+    while j < n {
+      let w = a[i * n + j];
+      let nz = if w == 0 then 0 else 1;
+      let _ = if nz == 1 then (let _ = ci[nnzc[0]] = j in (let _ = vv[nnzc[0]] = w in (let _ = nnzc[0] = nnzc[0] + 1 in 0))) else 0;
+      let j = j + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  let _ = rp[n] = nnzc[0];
+  nnzc[0]
+}
+
+// spectral_profile_fp(a, n, rho_c, unst_c, evals, evecs) -> class:
+// rho = max|lambda| (fp), unst = #{|lambda| > 1 + tol}, class by the band.
+// a is a DENSE n x n fp matrix (row-major). Buffers: evals/evecs >= n.
+fn spectral_profile_fp(a: [i64], n: i64, rho_c: [i64], unst_c: [i64], evals: [i64], evecs: [i64]) -> i64 {
+  let rp = zeros(280);
+  let ci = zeros(1024);
+  let vv = zeros(1024);
+  let _ = csr_from_dense(a, n, rp, ci, vv);
+  let _ = topk_symmetric_fp(rp, ci, vv, n, n, 32, evals, evecs);
+  let rho = evals[0];
+  let rho = if rho < 0 then 0 - rho else rho;
+  let _ = rho_c[0] = rho;
+  let tol = 1048576;
+  let one = 4294967296;
+  let unst = 0;
+  let k = 0;
+  while k < n {
+    let ev = evals[k];
+    let ev = if ev < 0 then 0 - ev else ev;
+    let over = if ev - one - tol > 0 then 1 else 0;
+    let unst = unst + over;
+    let k = k + 1;
+    0
+  };
+  let _ = unst_c[0] = unst;
+  let dmp = rho - (one - 4295);
+  let unp = rho - (one + 4295);
+  let d = if dmp < 0 then 1 else 0;
+  let u = if unp > 0 then 1 else 0;
+  d * 0 + u * 2 + (1 - d) * (1 - u)
+}
+
+// spectral_drift_fp(a0, a1, n, out) -> class-transition packed int:
+// out[0] = rho_delta (fp, signed), out[1] = unstable-count delta (signed),
+// out[2] = from class, out[3] = to class.
+fn spectral_drift_fp(a0: [i64], a1: [i64], n: i64, out: [i64]) -> i64 {
+  let rho0 = zeros(1);
+  let un0 = zeros(1);
+  let rho1 = zeros(1);
+  let un1 = zeros(1);
+  let ev = zeros(280);
+  let ec = zeros(280);
+  let f = spectral_profile_fp(a0, n, rho0, un0, ev, ec);
+  let t = spectral_profile_fp(a1, n, rho1, un1, ev, ec);
+  let _ = out[0] = rho1[0] - rho0[0];
+  let _ = out[1] = un1[0] - un0[0];
+  let _ = out[2] = f;
+  let _ = out[3] = t;
+  f * 4 + t
+}
+
+// ---- std gate main: B6_bridge (n=6, nnz=14) vs the Rust golden ----
+// golden.txt vals_fp32: 9389401939 7949044807 -5801560312 (k=3, iters=32).
+// The frozen value = total |λ_bp − λ_golden| (fp units, 2^32 = 1.0) — the
+// honest fixed-point-vs-f64 deviation; determinism makes it exact-run-stable.
+fn main() -> i64 {
+  let rp = zeros(16);
+  let ci = zeros(16);
+  let vv = zeros(16);
+  let _ = rp[0] = 0;
+  let _ = rp[1] = 2;
+  let _ = rp[2] = 4;
+  let _ = rp[3] = 7;
+  let _ = rp[4] = 10;
+  let _ = rp[5] = 12;
+  let _ = rp[6] = 14;
+  let _ = ci[0] = 1;
+  let _ = ci[1] = 2;
+  let _ = ci[2] = 0;
+  let _ = ci[3] = 2;
+  let _ = ci[4] = 0;
+  let _ = ci[5] = 1;
+  let _ = ci[6] = 3;
+  let _ = ci[7] = 2;
+  let _ = ci[8] = 4;
+  let _ = ci[9] = 5;
+  let _ = ci[10] = 3;
+  let _ = ci[11] = 5;
+  let _ = ci[12] = 3;
+  let _ = ci[13] = 4;
+  let w1 = 4294967296;
+  let wh = 2147483648;
+  let _ = vv[0] = w1;
+  let _ = vv[1] = w1;
+  let _ = vv[2] = w1;
+  let _ = vv[3] = w1;
+  let _ = vv[4] = w1;
+  let _ = vv[5] = w1;
+  let _ = vv[6] = wh;
+  let _ = vv[7] = wh;
+  let _ = vv[8] = w1;
+  let _ = vv[9] = w1;
+  let _ = vv[10] = w1;
+  let _ = vv[11] = w1;
+  let _ = vv[12] = w1;
+  let _ = vv[13] = w1;
+  let evals = zeros(8);
+  let evecs = zeros(192);
+  let _ = topk_symmetric_fp(rp, ci, vv, 6, 3, 32, evals, evecs);
+  let g0 = 9389401939;
+  let g1 = 7949044807;
+  let g2 = 0 - 5801560312;
+  let d0 = evals[0] - g0;
+  let d0 = if d0 < 0 then 0 - d0 else d0;
+  let d1 = evals[1] - g1;
+  let d1 = if d1 < 0 then 0 - d1 else d1;
+  let d2 = evals[2] - g2;
+  let d2 = if d2 < 0 then 0 - d2 else d2;
+  d0 + d1 + d2
 }

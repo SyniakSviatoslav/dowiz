@@ -1,5 +1,7 @@
 # Optimization playbook: what actually worked
 
+Status: 2026-09-04 CURRENT (practices playbook; the 340/340 parity and self_check counts are from the expr_compile.bp era — the live gates are bench/vs_rust/std_golden.sh + bench/oracles/run_all.sh)
+
 Practices distilled from getting 4 kernels 1.3x-5.4x faster than equivalent
 Rust, ordered by leverage. Each survived bit-exact differential parity
 (340/340) and self-hosted checksums (self_check).

@@ -1,18 +1,7 @@
-// spike.bp — the event-driven Spike Dispatcher (biti/dispatch tier): a
-// dense bit-array of activity flags is scanned without queues by
-// hardware-grade bit math — SWAR popcnt for the spike count and a
-// de Bruijn multiply for tzcnt (lowest-set-bit index) - then each spike
-// dispatches Base + idx*Stride in LSB-first order via branch-free
-// arithmetic. This is the agent-runtime dispatcher layer the roadmap
-// ordered AFTER the core (compiler/spectral) went stable.
-// Constants: de Bruijn C = 0x03F79D71B4CB0A89 (the standard 64-bit
-// sequence, shift 58), the 64-entry lookup table embedded verbatim.
-// Gate: activity word 0x2000100002040028 = bits {3,5,9,20,33,45};
-// dispatch addresses Base(1000) + idx*Stride(8) accumulated in order.
-// Fold = addrs_sum*10^6 + popcnt*10^3 + last_idx =
-// 6920*10^6 + 6*10^3 + 45 = 6920006045. Oracle = python mirror
-// bit-exact (journal entry at gate time).
-
+// selfhost/prelude/bits.bp — 64-bit word helpers shared by the bit-level gates (T38).
+// popc: SWAR popcount (mask-add tree, mod 128 instead of >> 56 — R3.x logical
+// shift safe); tzidx: index of the lowest set bit of an isolated bit b via the
+// 64-entry de Bruijn table (c = 0x03F79D71B4CB0A89).
 fn popc(w: i64) -> i64 {
   let m1 = 6148914691236517205;
   let m2 = 3689348814741910323;
@@ -25,7 +14,6 @@ fn popc(w: i64) -> i64 {
   let x = x + (x >> 32);
   x - (x / 128) * 128
 }
-
 fn tzidx(b: i64) -> i64 {
   let db = zeros(64);
   let _ = db[0] = 0;
@@ -93,9 +81,23 @@ fn tzidx(b: i64) -> i64 {
   let _ = db[62] = 7;
   let _ = db[63] = 6;
   let c = 285870213051386505;
-  let i = db[((b * c) >> 58) & 63];
-  i
+  db[((b * c) >> 58) & 63]
 }
+// prelude: bits
+// spike.bp — the event-driven Spike Dispatcher (biti/dispatch tier): a
+// dense bit-array of activity flags is scanned without queues by
+// hardware-grade bit math — SWAR popcnt for the spike count and a
+// de Bruijn multiply for tzcnt (lowest-set-bit index) - then each spike
+// dispatches Base + idx*Stride in LSB-first order via branch-free
+// arithmetic. This is the agent-runtime dispatcher layer the roadmap
+// ordered AFTER the core (compiler/spectral) went stable.
+// Constants: de Bruijn C = 0x03F79D71B4CB0A89 (the standard 64-bit
+// sequence, shift 58), the 64-entry lookup table embedded verbatim.
+// Gate: activity word 0x2000100002040028 = bits {3,5,9,20,33,45};
+// dispatch addresses Base(1000) + idx*Stride(8) accumulated in order.
+// Fold = addrs_sum*10^6 + popcnt*10^3 + last_idx =
+// 6920*10^6 + 6*10^3 + 45 = 6920006045. Oracle = python mirror
+// bit-exact (journal entry at gate time).
 
 fn main() -> i64 {
   let act = 35192963072552;

@@ -128,3 +128,148 @@ fn hv_popcount(v: [i64]) -> i64 {
   };
   acc
 }
+
+// ---- std gate main: polynomial checksum over the golden vector chain ----
+// Order mirrors golden.txt (HDC section): 6 codes -> bind -> bind_inv(1) ->
+// bundle -> perm 1/64/255/1023 -> perm0/perm1024 oks -> hamming -> popcount.
+// Golden: 4427592702613580868 (bench/vs_rust/spectral_golden/golden.txt).
+fn hv_eq(a: [i64], b: [i64]) -> i64 {
+  let same = 1;
+  let k = 0;
+  while k < 16 {
+    let diff = if a[k] == b[k] then 0 else 1;
+    let same = same * (1 - diff);
+    let k = k + 1;
+    0
+  };
+  same
+}
+
+fn main() -> i64 {
+  let a = zeros(16);
+  let b = zeros(16);
+  let t = zeros(16);
+  let acc = 0;
+  let s0 = 0;
+  let s1 = 1;
+  let s2 = 2;
+  let s42 = 42;
+  let sdead = 3735928559;
+  let sbig = 1234567890123456789;
+  let _ = hv_code(s0, t);
+  let k = 0;
+  while k < 16 {
+    let acc = acc * 131 + t[k];
+    let k = k + 1;
+    0
+  };
+  let _ = hv_code(s1, t);
+  let k = 0;
+  while k < 16 {
+    let acc = acc * 131 + t[k];
+    let k = k + 1;
+    0
+  };
+  let _ = hv_code(s2, t);
+  let k = 0;
+  while k < 16 {
+    let acc = acc * 131 + t[k];
+    let k = k + 1;
+    0
+  };
+  let _ = hv_code(s42, a);
+  let k = 0;
+  while k < 16 {
+    let acc = acc * 131 + a[k];
+    let k = k + 1;
+    0
+  };
+  let _ = hv_code(sdead, b);
+  let k = 0;
+  while k < 16 {
+    let acc = acc * 131 + b[k];
+    let k = k + 1;
+    0
+  };
+  let _ = hv_code(sbig, t);
+  let k = 0;
+  while k < 16 {
+    let acc = acc * 131 + t[k];
+    let k = k + 1;
+    0
+  };
+  let _ = hv_bind(a, b, t);
+  let k = 0;
+  while k < 16 {
+    let acc = acc * 131 + t[k];
+    let k = k + 1;
+    0
+  };
+  let _ = hv_bind(t, b, t);
+  let inv = hv_eq(t, a);
+  let acc = acc * 131 + inv;
+  let flat = zeros(48);
+  let _ = hv_code(s42, a);
+  let _ = hv_code(sdead, b);
+  let k = 0;
+  while k < 16 {
+    let _ = flat[k] = a[k];
+    let _ = flat[k + 16] = b[k];
+    let k = k + 1;
+    0
+  };
+  let _ = hv_code(7, t);
+  let k = 0;
+  while k < 16 {
+    let _ = flat[k + 32] = t[k];
+    let k = k + 1;
+    0
+  };
+  let u = zeros(16);
+  let _ = hv_bundle(flat, 3, u);
+  let k = 0;
+  while k < 16 {
+    let acc = acc * 131 + u[k];
+    let k = k + 1;
+    0
+  };
+  let _ = hv_permute(a, 1, t);
+  let k = 0;
+  while k < 16 {
+    let acc = acc * 131 + t[k];
+    let k = k + 1;
+    0
+  };
+  let _ = hv_permute(a, 64, t);
+  let k = 0;
+  while k < 16 {
+    let acc = acc * 131 + t[k];
+    let k = k + 1;
+    0
+  };
+  let _ = hv_permute(a, 255, t);
+  let k = 0;
+  while k < 16 {
+    let acc = acc * 131 + t[k];
+    let k = k + 1;
+    0
+  };
+  let _ = hv_permute(a, 1023, t);
+  let k = 0;
+  while k < 16 {
+    let acc = acc * 131 + t[k];
+    let k = k + 1;
+    0
+  };
+  let _ = hv_permute(a, 0, t);
+  let p0 = hv_eq(t, a);
+  let acc = acc * 131 + p0;
+  let _ = hv_permute(a, 1024, t);
+  let p1 = hv_eq(t, a);
+  let acc = acc * 131 + p1;
+  let hm = hv_hamming(a, b);
+  let acc = acc * 131 + hm;
+  let pc = hv_popcount(a);
+  let acc = acc * 131 + pc;
+  acc
+}

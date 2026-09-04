@@ -1,17 +1,8 @@
-// csr.bp — structural twin of dowiz/core/src/csr.rs (golden: CSR GOLDENS
-// section in bench/vs_rust/spectral_golden/golden.txt).
-// CSR layout: rp[n+1] row offsets, ci[nnz] column indices ascending within
-// each row, vv[nnz] weights in 2^32 fixed-point (fp(1.0) = 4294967296).
-// from_edges contract mirrored exactly: per-row buckets in input order,
-// stable sort by column, adjacent duplicate columns MERGED by summing
-// weights (wrapping i64 addition is commutative — merge result exact),
-// edges with src/dst out of range ignored. Working buffer caps m <= 4096.
-// LAW: cross-loop state lives in CELLS ([0] buffers), never in plain rebinds
-// — the two engines disagree on rebind visibility across loop nests.
-
-// fp_mul(a,b): (a*b) >> 32 — schoolbook 32-bit split (see spectral.bp; the
-// same exact-64-bit schoolbook, duplicated so csr.bp stays standalone).
-// Bebop >> is LOGICAL (u64) on both engines: split on magnitudes, fold sign.
+// selfhost/prelude/fp.bp — Q32 fixed-point core shared by every fp gate (T38).
+// Textual include: a gate whose first line is `// prelude: fp ...` gets this file
+// prepended by tools/gen_selfsrc.sh std (L9 mechanism until T47 `use`).
+// fp_mul: signed 64x64 -> Q32 product via 32/16-bit limbs (no i128, no >> on
+// negatives); isqrt: digit-by-digit integer sqrt over bits 60..0.
 fn fp_mul(a: i64, b: i64) -> i64 {
   let na = if a < 0 then 1 else 0;
   let aa = if na == 1 then 0 - a else a;
@@ -37,6 +28,37 @@ fn fp_mul(a: i64, b: i64) -> i64 {
   let p = if flip == 1 then 0 - p else p;
   p
 }
+fn isqrt(s: i64) -> i64 {
+  let rem = 0;
+  let root = 0;
+  let i = 0;
+  while i < 31 {
+    let sh = 60 - i * 2;
+    let rem = (rem << 2) + ((s >> sh) & 3);
+    let tst = (root << 2) + 1;
+    let take = if tst <= rem then 1 else 0;
+    let root = (root << 1) + take;
+    let rem = rem - take * tst;
+    let i = i + 1;
+    0
+  };
+  root
+}
+// prelude: fp
+// csr.bp — structural twin of dowiz/core/src/csr.rs (golden: CSR GOLDENS
+// section in bench/vs_rust/spectral_golden/golden.txt).
+// CSR layout: rp[n+1] row offsets, ci[nnz] column indices ascending within
+// each row, vv[nnz] weights in 2^32 fixed-point (fp(1.0) = 4294967296).
+// from_edges contract mirrored exactly: per-row buckets in input order,
+// stable sort by column, adjacent duplicate columns MERGED by summing
+// weights (wrapping i64 addition is commutative — merge result exact),
+// edges with src/dst out of range ignored. Working buffer caps m <= 4096.
+// LAW: cross-loop state lives in CELLS ([0] buffers), never in plain rebinds
+// — the two engines disagree on rebind visibility across loop nests.
+
+// fp_mul(a,b): (a*b) >> 32 — schoolbook 32-bit split (see spectral.bp; the
+// same exact-64-bit schoolbook, duplicated so csr.bp stays standalone).
+// Bebop >> is LOGICAL (u64) on both engines: split on magnitudes, fold sign.
 
 // csr_from_edges(n, es, ed, ew, m, rp, ci, vv): m edges (src,dst,weight-fp).
 // rp needs n+1 cells, ci/vv need <= m cells (<= 4096 edges). Returns nnz.
@@ -138,7 +160,6 @@ fn csr_spmv(rp: [i64], ci: [i64], vv: [i64], n: i64, x: [i64], out: [i64]) -> i6
   };
   n
 }
-
 
 // ---- std gate main: structural fold of the golden CSR graphs ----
 // Graphs (symmetrized, golden order): P4, C3, K4W, B6, D2DUP — weights fp
