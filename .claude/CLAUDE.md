@@ -75,3 +75,6 @@
 
 Source: derived from AGENTS.md operating spine + DECISIONS.md invariants + operator directives 2026-07-11/14/16
 + pasted rule sets (Planning, Error Recovery, Code Standards, Tool Use) folded in as binding rules.
+# graphify
+- **graphify** (`.claude/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`
+When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
