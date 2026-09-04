@@ -63,14 +63,15 @@ BIN = {
     '<': lambda a, b: int(a < b), '>': lambda a, b: int(a > b),
     '<=': lambda a, b: int(a <= b), '>=': lambda a, b: int(a >= b),
 }
-TIERS = [('==', '!=', '<=', '>=', '<', '>'), ('+', '-'), ('*', '/', '%'),
-         ('&', '|', '^', '<<', '>>')]
-# T42(a)/(b) oracle switches (decision D5: measure before adopting).
-# BPREF_CPREC=1 -> C precedence: cmp < | < ^ < & < shifts < +- < */%
-# BPREF_ASR=1   -> `>>` is ARITHMETIC (sign-propagating) instead of logical
-if os.environ.get('BPREF_CPREC') == '1':
-    TIERS = [('==', '!=', '<=', '>=', '<', '>'), ('|',), ('^',), ('&',),
-             ('<<', '>>'), ('+', '-'), ('*', '/', '%')]
+# T42(a) 2026-09-04 (D5 measured: zero fold delta): C precedence
+#   cmp < | < ^ < & < shifts < +- < */%   (bebop.bp emit_cmp/bor/bxor/band/shift/expr/term)
+TIERS = [('==', '!=', '<=', '>=', '<', '>'), ('|',), ('^',), ('&',),
+         ('<<', '>>'), ('+', '-'), ('*', '/', '%')]
+# BPREF_OLDPREC=1 -> the pre-2026-09-04 grammar (bit ops tighter than * /), archaeology only
+# BPREF_ASR=1     -> `>>` is ARITHMETIC (sign-propagating) instead of logical (T42(b), operator)
+if os.environ.get('BPREF_OLDPREC') == '1':
+    TIERS = [('==', '!=', '<=', '>=', '<', '>'), ('+', '-'), ('*', '/', '%'),
+             ('&', '|', '^', '<<', '>>')]
 if os.environ.get('BPREF_ASR') == '1':
     BIN['>>'] = lambda a, b: wrap(a >> (b & 63))
 

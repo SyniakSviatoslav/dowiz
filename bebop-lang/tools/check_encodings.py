@@ -6,7 +6,8 @@ objdump-derived and execution-verified.
 Usage: python3 tools/check_encodings.py [--fix]
 
 Checks:
-  1. Every decimal literal passed to em() in selfhost/expr_compile.bp
+  1. Every decimal literal passed to em() in bebop.bp (T45: the legacy
+     selfhost/attic/expr_compile.bp is no longer the compiler)
      appears in the verified table below (populated from aarch64 objdump
      of assembler reference programs + exec_words execution).
   2. The table itself is execution-verified: each entry's word, when
@@ -18,7 +19,7 @@ L1 rule: hands never convert hex; Python computes decimals; objdump is anchor.
 import re, sys, os, subprocess, struct, tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BP = os.path.join(ROOT, "selfhost/expr_compile.bp")
+BP = os.path.join(ROOT, "bebop.bp")
 
 # Verified table: word -> (asm, objdump_hex, smoke_desc)
 # Populated from `echo '<asm>' | aarch64-linux-gnu-as -o ref.o && objdump -d ref.o`

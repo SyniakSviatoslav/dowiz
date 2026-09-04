@@ -1458,6 +1458,27 @@ D5. T42(a) grammar and T42(b) shifts: MEASURE first with an oracle
 D6. Order for the compiler writer: T42 to completion FIRST, then T96,
     clone/T45, T52. Tooling agent in parallel (never commits).
 D7. New tasks T97-T100 (below, SPEED & CORES PULL).
+D8. (2026-09-04, after the T55 SPIKE — operator: "згідний з усім")
+    (1) Codegen first: T96 three steps, then temporaries in x1-x7 and a
+        wider fold_try; a one-pass compiler's honest ceiling is 1.5-3x
+        Rust on K1-K4, and 1.0x single-core needs scheduling, LICM and
+        strength reduction (an optimizer pass in .bp, measured per step).
+    (2) The substrate moves from the runtime into the compiler: the
+        dataflow graph of straight-line code is levelized at compile
+        time and each level is emitted straight-line — no activity word,
+        zero overhead (the spike: the same fn as levels IS linear code).
+    (3) "One conditional branch" (TG-DONE 1) is reached by predication
+        (T52-T54: pure `if` -> csel, masked stores, fixed-count loops),
+        never by runtime cells; every site is measured, N frozen after.
+    (4) The sweep engine stays only where parallelism and sparsity are
+        real: T20 tensor queries over many points as sweeps across NEON
+        lanes and the four A78 cores (T98), sparse agent activity,
+        dynamic graphs. Cores are the only in-sandbox lever that can
+        beat single-threaded Rust; NEON is 2 x i64 lanes, no SVE.
+    (5) Metrics: D1(a) K1-K4 >= 1.0x Rust is a LINEAR-compiler target;
+        D1(b) N-core throughput is THE substrate metric; the "Predicted
+        speedup and memory" table is replaced by measured rows (T97,
+        bench_pinned.sh) — no row without a measurement column.
 
 ### Layer V — verification foundation (truth becomes reproducible)
 
@@ -1551,7 +1572,7 @@ CORPUS-A CARRY-OVER); T41 now only executes the banners and doc fixes.
 
 ### Layer C — compiler debt (tolerated miscompiles die)
 
-**T42 · fix R3.x(a)-(e) at the root, then delete the laws** — PARTIAL 2026-09-04 (match codegen root cause fixed: emit_match arm loop overran the closing `}` and swallowed the enclosing expression suffix; c25 gate; fuzz N=450 seeds 1000+: OK=315 DIVERGE=0 CRASH=0 TIMEOUT=0 COMPILEFAIL=0 GENFAIL=135 gen.py recursion bug; s16 parenthesised match payload fixed 2026-09-04 via shared lexical skip_args (fixpoint b1489f05, std_golden 91/91, run_all ok=91, construct 26/26); c27_zeroarg gates (e), (d) resolved = `++` removed from the surface (trap 96, neg/c28_plusplus, bpref SyntaxError) 2026-09-04; (c) DIVERGE-81/128 = fn body without tail expression -> compile trap 97 (neg/c29_emptybody) 2026-09-04; ntt/fno exit-95 regression root-caused: `(let t = e; body)` paren form only parsed because `; ` was skipped as `in` -> `;` is now a real synonym for `in` in the let-expression (bpref mirrors), std_golden 91/91 again; unary `-`/`!` + `0x` hex literals landed 2026-09-04 (c30_unary, bpref + gen.py mirror; T99 literal-forms half DONE); array literal element-order defect fixed 2026-09-04 (nested literal or allocating call inside an element overwrote the outer cells; c31_nested_lit); open: (a) grammar and (b) `>>` under D5 measurement (tools/prec_switch.sh))
+**T42 · fix R3.x(a)-(e) at the root, then delete the laws** — DONE except (b) 2026-09-04 (c25-c31 + neg/c28-c29 construct gates; (a) C precedence LANDED per D5: `tools/prec_switch.sh` measured zero fold delta on 85/85 bpref-measurable gates, bebop.bp emit_cmp > bor > bxor > band > shift > expr > term > factor, bpref.py default = C precedence (`BPREF_OLDPREC=1` archaeology), fixpoint 46ddf919, construct 31/31 word-identical (no construct mixed the tiers); (b) `>>`=ASR changes 8 gate folds (rng hv spectral lsm holo seigtime srepl r3x) — per D5 the numbers are with the OPERATOR, `>>` stays LOGICAL until decided; (c) trap 97, (d) `++` trap 96, (e) c27_zeroarg, array-literal order c31, unary/hex c30 all landed; history in the journal 1788538390..)
 GOAL: (a) precedence: `emit_bitlvl` binds tighter than `*` — decide and
 document the grammar (recommended: C precedence; regression gate r3x
 updated) ; (b) `>>`: emit ASRV for `>>` and add `>>>` for LSRV (both
@@ -1584,12 +1605,7 @@ run -> fold) or delete them; `self_check` must be 41/41 or renumbered.
 DONE-CHECK: `self_check()` returns 0 with no dead checks.
 DEPS: none. BLOCKERS: none.
 
-**T45 · retire the second compiler** — PARTIAL 2026-09-04 (D4 CLOSED: the clone defect was the LEGACY compiler, not proot — raw C clone probe 4/4 and `par_tids(4)`=4 under this proot; the 8 thread/arena builtins are ported verbatim into bebop.bp, `pool_parity.sh` runs 5/5 under bebop.bin with no ptrace skip (its k1/k7 path arrays wrote p[10] twice = wrong file = 0 words, fixed; expected = 4 x census words); fixpoint 364009e9; open: expr_compile.bp -> attic + tools/check_encodings.py/gen_selfsrc.sh re-pointed) — port `sys_clone` (220),
-`sys_futex_wait/wake` (98), `sys_atomic_add` (LSE LDADD), `sys_arena_
-base/end`, `sys_exit_thread` from `selfhost/expr_compile.bp` into
-`bebop.bp` (register tables per L2, disasm per L1); `pool_parity.sh`
-builds with `bebop.bin`; `expr_compile.bp` moves to `attic/` (history
-stays in git).
+**T45 · retire the second compiler** — DONE ✓ 2026-09-04 (D4 CLOSED: the clone defect was the LEGACY compiler, not proot — raw C clone probe 4/4 and `par_tids(4)`=4 under this proot; the 8 thread/arena builtins are ported verbatim into bebop.bp; `pool_parity.sh` 5/5 under bebop.bin with no ptrace skip (its k1/k7 path arrays wrote p[10] twice = wrong file = 0 words, fixed; expected = 4 x census words); `selfhost/expr_compile.bp` + `ec_driver.bp` moved to `selfhost/attic/`, `tools/check_encodings.py` points at bebop.bp, `gen_selfsrc.sh` legacy mode reads the attic; no script references the legacy compiler) — port `sys_clone` (220),
 DONE-CHECK: pool gate compiles under bebop.bin (still an honest 5-skip
 under ptrace; 5/5 is the bare-kernel trigger); `expr_compile.bp` not
 referenced by any script.
@@ -1667,7 +1683,7 @@ DONE-CHECK: c07_while(literal bound) census 2 -> 0; k1 (1M iterations)
 stays a loop (budget) — recorded honestly; fold parity.
 DEPS: T52. BLOCKERS: none.
 
-**T55 · substrate codegen (the terminal move)** — `compile --substrate`:
+**T55 · substrate codegen (the terminal move)** — RE-SCOPED 2026-09-04 by D8 after the spike below: straight-line dataflow is levelized at COMPILE time into linear code, runtime cells only for sparse/parallel sweeps (T98/T20) — `compile --substrate`:
 each fn body is cut at calls, loop back-edges and data-dependent exits
 into straight-line branch-free cells (T52-T54 make the cell bodies);
 dependencies become an incidence tensor; loops become self-re-arming

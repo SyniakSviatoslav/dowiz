@@ -1,5 +1,5 @@
-// tools/ec_driver.bp — CLI tail for the LEGACY second compiler (D4/T45 tooling).
-// Usage: cat selfhost/expr_compile.bp tools/ec_driver.bp > $BEBOP_TMP/ec_cli.bp
+// selfhost/attic/ec_driver.bp — CLI tail for the LEGACY second compiler (D4/T45 tooling).
+// Usage: cat selfhost/attic/expr_compile.bp selfhost/attic/ec_driver.bp > $BEBOP_TMP/ec_cli.bp
 //        seed bebop.bin compile $BEBOP_TMP/ec_cli.bp $BEBOP_TMP/ec_cli.bin
 //        seed $BEBOP_TMP/ec_cli.bin compile <src.bp> <out.bin>
 // Mirrors bebop.bp cli_compile (same argv layout, same footer) minus the

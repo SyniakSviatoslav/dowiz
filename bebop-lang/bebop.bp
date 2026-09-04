@@ -1598,7 +1598,7 @@ fn emit_apply_op(s: str, pos: [i64], insns: [i64], n: [i64], is_minus: i64, stab
 // expression is well-formed: a*b<<c == a*(b<<c).
 fn emit_apply_mul(s: str, pos: [i64], insns: [i64], n: [i64], is_div: i64, stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
-  let _ = emit_bitlvl(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = emit_factor(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let op = if is_div == 1 then 5 else 4;
   let _ = emit_binop(insns, n, op, fntab);
   n[0]
@@ -1608,7 +1608,7 @@ fn emit_apply_mul(s: str, pos: [i64], insns: [i64], n: [i64], is_div: i64, stab:
 // R3.x(a) FIX: bitlvl-tier right operand, same reasoning as mul/div.
 fn emit_apply_mod(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
-  let _ = emit_bitlvl(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = emit_factor(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = emit_binop(insns, n, 11, fntab);
   n[0]
 }
@@ -1627,37 +1627,83 @@ fn emit_cmp_op(insns: [i64], n: [i64], cond: i64, fntab: [i64]) -> i64 {
 // Apply a bitwise operator (op: and=12 orr=13 eor=14 shl=15 shr=16) between
 // the value already on the stack and the next factor. Shifts are two-char
 // tokens (adv=2), the rest one char.
-fn emit_apply_bits(s: str, pos: [i64], insns: [i64], n: [i64], op: i64, adv: i64, stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+fn emit_apply_bits(s: str, pos: [i64], insns: [i64], n: [i64], op: i64, adv: i64, lvl: i64, stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + adv;
-  let _ = emit_factor(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  // right operand = the next-tighter tier: lvl 3 (`|`) -> bxor, 2 (`^`) -> band,
+  // 1 (`&`) -> shift, 0 (`<<` `>>`) -> expr
+  let _ = if lvl == 3 then emit_bxor(s, pos, insns, n, stab, selfname, selfstart, fntab)
+    else if lvl == 2 then emit_band(s, pos, insns, n, stab, selfname, selfstart, fntab)
+    else if lvl == 1 then emit_shift(s, pos, insns, n, stab, selfname, selfstart, fntab)
+    else emit_expr(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = emit_binop(insns, n, op, fntab);
   n[0]
 }
 
-// bitlvl = factor (('&'|'|'|'^'|'<<'|'>>') factor)*
-// Binds tighter than mul/div, mirroring the fast-path fpC_bitlvl tier.
-fn emit_bitlvl(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
-  let _ = emit_factor(s, pos, insns, n, stab, selfname, selfstart, fntab);
+// T42(a) 2026-09-04 (decision D5, measured zero fold delta on 85/85 gates):
+// C precedence for the bit tier.  cmp > `|` > `^` > `&` > `<<` `>>` > + - > * / %
+// bor = bxor ('|' bxor)*
+fn emit_bor(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = emit_bxor(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let done = 0;
   while done == 0 {
     let _ = skip_ws(s, pos);
     let strn = str_len(s);
     let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
-    let isand = if ch == 38 then 1 else 0;
-    let isorr = if ch == 124 then 1 else 0;
-    let iseor = if ch == 94 then 1 else 0;
+    let isop = if ch == 124 then 1 else 0;
+    let _ = if isop == 1 then emit_apply_bits(s, pos, insns, n, 13, 1, 3, stab, selfname, selfstart, fntab) else 0;
+    let done = 1 - isop;
+    0
+  };
+  0
+}
+
+// bxor = band ('^' band)*
+fn emit_bxor(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = emit_band(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let strn = str_len(s);
+    let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let isop = if ch == 94 then 1 else 0;
+    let _ = if isop == 1 then emit_apply_bits(s, pos, insns, n, 14, 1, 2, stab, selfname, selfstart, fntab) else 0;
+    let done = 1 - isop;
+    0
+  };
+  0
+}
+
+// band = shift ('&' shift)*
+fn emit_band(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = emit_shift(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let strn = str_len(s);
+    let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let isop = if ch == 38 then 1 else 0;
+    let _ = if isop == 1 then emit_apply_bits(s, pos, insns, n, 12, 1, 1, stab, selfname, selfstart, fntab) else 0;
+    let done = 1 - isop;
+    0
+  };
+  0
+}
+
+// shift = expr (('<<'|'>>') expr)*   (`>>` is LOGICAL; R3.x(b) ASR is with the operator)
+fn emit_shift(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = emit_expr(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let strn = str_len(s);
+    let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
     let nch = if pos[0] + 1 >= strn then 0 else char(s, pos[0] + 1);
-    let lt60 = if ch == 60 then 1 else 0;
-    let gt62 = if ch == 62 then 1 else 0;
-    let nxt60 = if nch == 60 then 1 else 0;
-    let nxt62 = if nch == 62 then 1 else 0;
-    let isshl = lt60 * nxt60;
-    let isshr = gt62 * nxt62;
-    let isop = isand + isorr + iseor + isshl + isshr;
-    let op = isand * 12 + isorr * 13 + iseor * 14 + isshl * 15 + isshr * 16;
-    let adv = isshl * 2 + isshr * 2 + (isand + isorr + iseor);
-    let _ = if isop == 1 then emit_apply_bits(s, pos, insns, n, op, adv, stab, selfname, selfstart, fntab) else 0;
-    let done = if isop == 1 then 0 else 1;
+    let isshl = (if ch == 60 then 1 else 0) * (if nch == 60 then 1 else 0);
+    let isshr = (if ch == 62 then 1 else 0) * (if nch == 62 then 1 else 0);
+    let isop = isshl + isshr;
+    let op = isshl * 15 + isshr * 16;
+    let _ = if isop == 1 then emit_apply_bits(s, pos, insns, n, op, 2, 0, stab, selfname, selfstart, fntab) else 0;
+    let done = 1 - isop;
     0
   };
   0
@@ -1666,14 +1712,14 @@ fn emit_bitlvl(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
 // Consume one comparison operator + right operand, then fold (branchless).
 fn emit_apply_cmp(s: str, pos: [i64], insns: [i64], n: [i64], cond: i64, adv: i64, stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + adv;
-  let _ = emit_expr(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = emit_bor(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = emit_cmp_op(insns, n, cond, fntab);
   n[0]
 }
 
-// cmp = expr (('=='|'!='|'<'|'>'|'<='|'>=') expr)*
+// cmp = bor (('=='|'!='|'<'|'>'|'<='|'>=') bor)*
 fn emit_cmp(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
-  let _ = emit_expr(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = emit_bor(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let done = 0;
   while done == 0 {
     let _ = skip_ws(s, pos);
@@ -1728,9 +1774,9 @@ fn emit_expr(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
   0
 }
 
-// term = factor ((*|/) factor)*
+// term = factor ((*|/|%) factor)*
 fn emit_term(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
-  let _ = emit_bitlvl(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = emit_factor(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let done = 0;
   while done == 0 {
     let _ = skip_ws(s, pos);
