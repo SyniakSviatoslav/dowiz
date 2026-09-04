@@ -1,0 +1,7 @@
+// K1h (D11-C honest twin of rust_once/k1h.rs): s = s*3 + i wrapping, i = 1M..1
+fn main() -> i64 {
+  let s = 0;
+  let i = 1000000;
+  while i > 0 { let s = s * 3 + i; let i = i - 1; 0 };
+  s
+}

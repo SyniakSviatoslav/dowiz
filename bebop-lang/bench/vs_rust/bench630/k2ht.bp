@@ -1,0 +1,3 @@
+// K2h bench: fib(25), in-process clock_ms delta (0.1 ms units)
+fn fib(n: i64) -> i64 { if n < 2 then n else fib(n - 1) + fib(n - 2) }
+fn main() -> i64 { let t0 = clock_ms(); let r = fib(25); ((clock_ms() - t0) * 10) + r * 0 }

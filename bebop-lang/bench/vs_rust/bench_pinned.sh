@@ -23,21 +23,21 @@ PIN=""; for c in $BIG; do for u in $USABLE; do [ "$c" = "$u" ] && [ -z "$PIN" ] 
 ALLOWED=$(taskset -c "$PIN" cat /proc/self/status | awk '/Cpus_allowed_list/{print $2}')
 PINOK=no; [ "$ALLOWED" = "$PIN" ] && PINOK=yes
 
-for k in 1 2 3 4; do
+for k in 1 2 3 4 1h 2h 3h; do
   $SEED "$BEBOP_BIN" compile bench/vs_rust/kernels/k$k.bp "$T/k$k.bin" >/dev/null 2>&1 || { echo "COMPILEFAIL k$k"; exit 1; }
   $SEED "$BEBOP_BIN" compile bench/vs_rust/bench630/k${k}t.bp "$T/k${k}t.bin" >/dev/null 2>&1 || { echo "COMPILEFAIL k${k}t"; exit 1; }
 done
 printf 'fn main() -> i64 { 0 }\n' > "$T/k0.bp"
 $SEED "$BEBOP_BIN" compile "$T/k0.bp" "$T/k0.bin" >/dev/null 2>&1 || { echo "COMPILEFAIL k0"; exit 1; }
 mkdir -p "$T/rust"
-for k in 0 1 2 3 4; do
+for k in 0 1 2 3 4 1h 2h 3h; do
   [ -x "$T/rust/k$k" ] || rustc -O -o "$T/rust/k$k" bench/vs_rust/rust_once/k$k.rs || { echo "RUSTC FAIL k$k"; exit 1; }
 done
 
 T="$T" R="$R" PIN="$PIN" PINOK="$PINOK" BIG="$BIG" USABLE="$USABLE" ALLOWED="$ALLOWED" BEBOP_BIN="$BEBOP_BIN" SEED="$SEED" python3 - <<'PY'
 import os, re, subprocess, time, statistics, hashlib
 T=os.environ['T']; R=int(os.environ['R']); PIN=os.environ['PIN']; SEED=os.environ['SEED']; BB=os.environ['BEBOP_BIN']
-EXPECT={'k1':'500000500000','k2':'75025','k3':'67725000','k4':None,'k0':'0'}
+EXPECT={'k1':'500000500000','k2':'75025','k3':'67725000','k4':None,'k0':'0','k1h':'-3696702234462988320','k2h':'75025','k3h':'-4697575123276160824'}
 
 def run1(argv, pin):
     if pin: argv=['taskset','-c',pin]+argv
@@ -67,7 +67,7 @@ def words_per_iter(binpath):
 
 rows=[]
 res={}
-for k in ['k0','k1','k2','k3','k4']:
+for k in ['k0','k1','k2','k3','k4','k1h','k2h','k3h']:
     bp=[SEED, f'{T}/{k}.bin']; ru=[f'{T}/rust/{k}']
     bpin=series(bp,PIN,R); bun=series(bp,'',R); rpin=series(ru,PIN,R); run_=series(ru,'',R)
     e=EXPECT[k]
@@ -76,7 +76,7 @@ for k in ['k0','k1','k2','k3','k4']:
     res[k]=(bpin,bun,rpin,run_,ok,same)
 # in-process clock_ms (bench630 twins, 0.1 ms units), pinned & unpinned
 inproc={}
-for k in ['k1','k2','k3','k4']:
+for k in ['k1','k2','k3','k4','k1h','k2h','k3h']:
     for pin,label in ((PIN,'pin'),('','unpin')):
         vals=[]
         run1([SEED,f'{T}/{k}t.bin'],pin)
@@ -100,18 +100,18 @@ L.append('- wall = whole process (seed load+mmap+run / rust start+run), perf_cou
 L.append('- ratio = bebop pinned median / rust pinned median (process wall, includes both startup floors)\n')
 L.append('| kernel | bebop pinned med/p95 ms | bebop unpinned med/p95 ms | rust pinned med/p95 ms | rust unpinned med ms | ratio | RSS bebop KB | RSS rust KB | fold ok |')
 L.append('|---|---|---|---|---|---|---|---|---|')
-for k in ['k0','k1','k2','k3','k4']:
+for k in ['k0','k1','k2','k3','k4','k1h','k2h','k3h']:
     bpin,bun,rpin,run_,ok,same=res[k]
     L.append(f'| {k.upper()} | {bpin[0]:.2f} / {bpin[1]:.2f} | {bun[0]:.2f} / {bun[1]:.2f} | {rpin[0]:.2f} / {rpin[1]:.2f} | {run_[0]:.2f} | {bpin[0]/rpin[0]:.2f}x | {bpin[2]} | {rpin[2]} | {"ok" if ok and same else ("SAME-but-unexpected" if same else "MISMATCH "+bpin[3]+" vs "+rpin[3])} |')
 L.append('\n## In-process clock_ms (bench630/k*t.bp, D3 primary column), ms\n')
 L.append('| kernel | pinned med / p95 | unpinned med / p95 | spread unpinned/pinned |')
 L.append('|---|---|---|---|')
-for k in ['k1','k2','k3','k4']:
+for k in ['k1','k2','k3','k4','k1h','k2h','k3h']:
     a=inproc[(k,'pin')]; b=inproc[(k,'unpin')]
     L.append(f'| {k.upper()} | {a[0]:.1f} / {a[1]:.1f} | {b[0]:.1f} / {b[1]:.1f} | {b[0]/a[0] if a[0] else float("nan"):.2f}x |')
 L.append('\n## Words per iteration (backward-branch spans in the compiled .bin, head..back-branch inclusive; smallest = innermost loop)\n')
 L.append('| kernel | loop spans (words) |'); L.append('|---|---|')
-for k in ['k1','k2','k3','k4']:
+for k in ['k1','k2','k3','k4','k1h','k2h','k3h']:
     L.append(f'| {k.upper()} | {words_per_iter(f"{T}/{k}.bin")} |')
 L.append(f'\n## Self-compile (`seed bebop.bin compile bebop.bp`), pinned, 3 runs\n\n- wall median {scdt:.0f} ms, peak RSS {scrss} KB ({scrss/1024:.1f} MB)\n')
 open(f'{T}/REPORT-pinned.md','w').write('\n'.join(L)+'\n')

@@ -1,0 +1,16 @@
+// K3h (D11-C honest twin of rust_once/k3h.rs): 300x300, a = a*3 + x*2 + y*3 wrapping
+fn main() -> i64 {
+  let a = 0;
+  let x = 300;
+  while x > 0 {
+    let y = 300;
+    while y > 0 {
+      let a = a * 3 + x * 2 + y * 3;
+      let y = y - 1;
+      0
+    };
+    let x = x - 1;
+    0
+  };
+  a
+}

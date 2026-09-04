@@ -202,7 +202,7 @@ class Ctx:
                 else:
                     return self.lit()  # no allocation inside while bodies (L8)
             elif f.rec:
-                args.append('((%s) & 7)' % self.expr(d + 1))
+                args.append('((%s) & 127)' % self.expr(d + 1))  # D11-D: recursion depth to 127
             else:
                 args.append(self.expr(d + 1))
         return '%s(%s)' % (f.name, ', '.join(args))
@@ -222,6 +222,14 @@ class Ctx:
             if v not in self.scalars:
                 self.scalars.append(v)
             return 'let %s = %s;' % (v, rhs)
+        if r < 0.40 and self.loop_depth and len(self.arrays) < 8 and len(self.binds) < self.budget and self.r.random() < 0.5:
+            # D11-D: an array literal INSIDE a loop body (T43 frame-heap reset path)
+            a = 'a%d' % len(self.arrays)
+            n = self.r.choice([8, 8, 16])
+            rhs = '[%s]' % ', '.join(self.expr(1) for _ in range(n))
+            self.bind(a)
+            self.arrays[a] = n - 1
+            return 'let %s = %s;' % (a, rhs)
         if r < 0.40 and not self.loop_depth and len(self.arrays) < 8 and len(self.binds) < self.budget:
             a = 'a%d' % len(self.arrays)
             k = self.r.random()
@@ -262,10 +270,15 @@ class Ctx:
         if not self.can_bind(i):
             return '%s;' % self.expr(0)
         self.bind(i)
-        k = self.r.randint(1, 6)
+        # D11-D (2026-09-05): one loop in four runs 100..3000 iterations; its var is
+        # NOT registered as an index candidate (indices stay masked), so the widened
+        # loop exercises frame-heap resets (T43), arena growth and trap paths.
+        big = self.r.random() < 0.25 and not self.loop_depth
+        k = self.r.randint(100, 250) if big else self.r.randint(1, 6)  # 250: bpref must finish in 20 s (600 gave 53 timeouts/150)
         self.g.loop_bound[i] = k
         self.scalars.append(i)
-        self.loopvars.append(i)
+        if not big:
+            self.loopvars.append(i)
         self.loop_depth += 1
         body = [self.stmt(depth + 1) for _ in range(self.r.randint(1, 4))]
         # T99: `break;` only as the LAST statement of a loop body -- a `let` after it

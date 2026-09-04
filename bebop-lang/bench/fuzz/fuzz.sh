@@ -6,7 +6,10 @@
 # Categories (classifier = bench/fuzz/shrink.py --classify, shared with the
 # T77 shrinker): OK DIVERGE COMPILEFAIL CRASH TIMEOUT BPREF-ERROR
 # BPREF-DEPTH (oracle call depth > 5000: unbounded recursion = generator
-# defect, not a compiler verdict) GENFAIL (generator bug).
+# defect, not a compiler verdict) GENFAIL (generator bug) TRAP-OK (T118: the
+# oracle predicted a capacity trap and bebop exited with the same code)
+# TRAP-80/81/82 (bebop trapped, the oracle did not predict it: frame heap is
+# not modelled by bpref).
 # Every compiler-class program is saved to $REPROS/<CAT>-<seed>.bp with an
 # expected-vs-got header (L10). A CRASH is re-run 3x before it is believed.
 # Every seed/compiled-program run has cwd = the per-seed scratch dir, so a
@@ -44,9 +47,9 @@ t1=$(date +%s.%N)
 awk -v n="$N" -v s="$START" -v t0="$t0" -v t1="$t1" -v bin="$(md5sum "$BEBOP_BIN" | cut -c1-8)" '
   { c[$1]++ }
   END { t = t1 - t0
-        printf "fuzz: N=%d START=%d OK=%d DIVERGE=%d COMPILEFAIL=%d CRASH=%d TIMEOUT=%d BPREF-ERROR=%d BPREF-DEPTH=%d GENFAIL=%d STRAY=%d wall=%.1fs rate=%.2f/s bin=%s\n",
-        n, s, c["OK"], c["DIVERGE"], c["COMPILEFAIL"], c["CRASH"], c["TIMEOUT"], c["BPREF-ERROR"], c["BPREF-DEPTH"], c["GENFAIL"], c["STRAY"], t, n / (t > 0 ? t : 1), bin }' "$TMP/results"
-grep -v -E '^(OK|GENFAIL|BPREF-DEPTH) ' "$TMP/results" | sort -k2 -n | head -40
+        printf "fuzz: N=%d START=%d OK=%d DIVERGE=%d COMPILEFAIL=%d CRASH=%d TIMEOUT=%d BPREF-ERROR=%d BPREF-DEPTH=%d BPREF-TIMEOUT=%d GENFAIL=%d STRAY=%d TRAP-OK=%d TRAP-UNPREDICTED=%d wall=%.1fs rate=%.2f/s bin=%s\n",
+        n, s, c["OK"], c["DIVERGE"], c["COMPILEFAIL"], c["CRASH"], c["TIMEOUT"], c["BPREF-ERROR"], c["BPREF-DEPTH"], c["BPREF-TIMEOUT"], c["GENFAIL"], c["STRAY"], c["TRAP-OK"], c["TRAP-80"] + c["TRAP-81"] + c["TRAP-82"], t, n / (t > 0 ? t : 1), bin }' "$TMP/results"
+grep -v -E '^(OK|GENFAIL|BPREF-DEPTH|BPREF-TIMEOUT|TRAP-OK) ' "$TMP/results" | sort -k2 -n | head -40
 rc=$([ "$(grep -v -c -E '^(OK|GENFAIL|BPREF-DEPTH) ' "$TMP/results")" = 0 ]; echo $?)
 rm -rf "$TMP"
 exit $rc

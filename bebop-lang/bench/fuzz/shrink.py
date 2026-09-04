@@ -62,6 +62,18 @@ def classify(src=None, bp=None, wd=None):
     rc, out, err = run(['python3', BPREF, bp], 20, wd)
     if rc == 3:
         return 'BPREF-DEPTH', err.strip()[-120:], ''
+    if rc == 124:  # the oracle timed out: generator too heavy, not a compiler verdict
+        return 'BPREF-TIMEOUT', 'bpref > 20 s', ''
+    if rc in (80, 81, 82):  # T118: the oracle predicts a capacity trap
+        exp_trap = rc
+        bn = bp[:-3] + '.bin'
+        rc2, out2, err2 = run([SEED, BIN, 'compile', bp, bn], 20, wd)
+        if rc2 != 0 or not os.path.exists(bn):
+            return 'COMPILEFAIL', 'compile rc=%d' % rc2, 'rc=%d' % exp_trap
+        rc3, out3, err3 = run([SEED, bn], RUN_T, wd)
+        if rc3 in (80, 81, 82):  # any capacity trap: bpref models the arena only, order may differ
+            return 'TRAP-OK', 'rc=%d' % rc3, 'rc=%d' % exp_trap
+        return 'DIVERGE', 'rc=%d %s' % (rc3, out3.strip()[-60:]), 'rc=%d (trap)' % exp_trap
     if rc != 0:
         return 'BPREF-ERROR', 'rc=%d %s' % (rc, err.strip()[-120:].replace('\n', ' ')), ''
     exp = last_line(out)
@@ -72,6 +84,8 @@ def classify(src=None, bp=None, wd=None):
     got = last_line(out)
     if rc == 124:
         return 'TIMEOUT', 'timeout %gs' % RUN_T, exp
+    if rc in (80, 81, 82):  # T118: a capacity trap the oracle did not predict (frame heap is not modelled)
+        return 'TRAP-%d' % rc, 'rc=%d' % rc, exp
     if rc < 0 or rc >= 128:  # a CRASH is re-run 3x before it is believed
         sig = -rc if rc < 0 else rc - 128
         n = sum(1 for _ in range(3) if run([SEED, bn], RUN_T, wd)[0] not in range(0, 124))

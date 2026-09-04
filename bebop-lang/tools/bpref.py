@@ -422,6 +422,12 @@ class Interp:
         if name in self.ctors:
             return ('ctor', self.ctors[name], args)
         if name == 'zeros':
+            # T118 (2026-09-05): the 256 MB seed arena is a capacity; bebop.bin exits 80
+            # when a zeros() crosses x28. Mirror it (arena minus the ~64 KiB the loader
+            # and argv take): the fuzzer classifies rc 80 == 80 as TRAP-OK.
+            self.arena_cells = getattr(self, 'arena_cells', 0) + max(args[0], 0)
+            if self.arena_cells > (256 << 20) // 8 - 8192:
+                raise SystemExit(80)
             return [0] * args[0]
         if name == 'str_len':
             return len(args[0])

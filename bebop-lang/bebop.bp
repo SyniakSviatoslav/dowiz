@@ -378,6 +378,17 @@ fn emit_enum_ctor(s: str, tag: i64, pos: [i64], insns: [i64], n: [i64], stab: [i
   let _ = pos[0] = pos[0] + 1;
   let _ = em(insns, n, 2853045216);
   let _ = em(insns, n, 2432713166);
+  // T118 (D11-D): frame-heap capacity trap -- the frame is 16 KiB from the
+  // prologue sp and x15 = sp+256, so the heap end is x15 + 16128:
+  // add x2,x15,#12288 ; add x2,x2,#3840 ; cmp x14,x2 ; b.ls +4 ; mov x0,#81 ;
+  // mov x8,#94 ; svc  (exit 81 = frame heap exhausted)
+  let _ = em(insns, n, 2436894178);
+  let _ = em(insns, n, 2436628546);
+  let _ = em(insns, n, 3942777311);
+  let _ = em(insns, n, 1409286281);
+  let _ = em(insns, n, 3531606560);
+  let _ = em(insns, n, 3531606984);
+  let _ = em(insns, n, 3556769793);
   let _ = push(insns, n, fntab);
   n[0]
 }
@@ -388,6 +399,17 @@ fn emit_enum_ctor_nullary(insns: [i64], n: [i64], tag: i64, fntab: [i64]) -> i64
   let _ = em(insns, n, 4177527232);
   let _ = em(insns, n, 2853045216);
   let _ = em(insns, n, 2432713166);
+  // T118 (D11-D): frame-heap capacity trap -- the frame is 16 KiB from the
+  // prologue sp and x15 = sp+256, so the heap end is x15 + 16128:
+  // add x2,x15,#12288 ; add x2,x2,#3840 ; cmp x14,x2 ; b.ls +4 ; mov x0,#81 ;
+  // mov x8,#94 ; svc  (exit 81 = frame heap exhausted)
+  let _ = em(insns, n, 2436894178);
+  let _ = em(insns, n, 2436628546);
+  let _ = em(insns, n, 3942777311);
+  let _ = em(insns, n, 1409286281);
+  let _ = em(insns, n, 3531606560);
+  let _ = em(insns, n, 3531606984);
+  let _ = em(insns, n, 3556769793);
   let _ = push(insns, n, fntab);
   n[0]
 }
@@ -875,7 +897,11 @@ fn emit_sys_clone(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let _ = em(insns, n, 2432959471);
   let _ = em(insns, n, 2433483758);
   let _ = em(insns, n, 2437940219);
-  let _ = em(insns, n, 2438988796);
+  // T118 (2026-09-05): the child arena is [sp+4 MiB, sp+12 MiB) -- the arena
+  // trap exposed that x28 = sp+8 MiB left par_compile's in-thread compiler
+  // (slurp 3.2 MB + insns 2 MB + tables) only 4 MiB, which it silently overran
+  // before; 12 MiB still leaves 4 MiB of stack for the next 16 MiB-pitched worker.
+  let _ = em(insns, n, 2440037372);
   let _ = push(insns, n, fntab);
   n[0]
 }
@@ -1855,6 +1881,9 @@ fn emit_term(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
 //   96  `++` in an expression: string concat is not in the surface (T42(d))
 //   97  fn body without a tail expression (compile_fn_at; DIVERGE-81/128)
 //   98  more than 17 `return` / 18 pending `break` in one fn (T99 lists)
+// Runtime capacity traps (T118, exit_group from the compiled program):
+//   80  arena exhausted (zeros past x28)     81  frame heap exhausted (x14 past
+//   the 16 KiB frame)                         82  stack overflow (guard, T118 b)
 // A trap fires before the output is opened (cli_compile), so no .bin is
 // produced; bench/vs_rust/construct_parity.sh gates them as
 // EXPECT=COMPILEFAIL:<code> from bench/parity_constructs/neg/.
@@ -2040,6 +2069,17 @@ fn emit_array_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let _ = pos[0] = pos[0] + 1;
   let _ = em(insns, n, 2853045216);
   let _ = em(insns, n, 2432696320 + cnt * 8192 + 462);
+  // T118 (D11-D): frame-heap capacity trap -- the frame is 16 KiB from the
+  // prologue sp and x15 = sp+256, so the heap end is x15 + 16128:
+  // add x2,x15,#12288 ; add x2,x2,#3840 ; cmp x14,x2 ; b.ls +4 ; mov x0,#81 ;
+  // mov x8,#94 ; svc  (exit 81 = frame heap exhausted)
+  let _ = em(insns, n, 2436894178);
+  let _ = em(insns, n, 2436628546);
+  let _ = em(insns, n, 3942777311);
+  let _ = em(insns, n, 1409286281);
+  let _ = em(insns, n, 3531606560);
+  let _ = em(insns, n, 3531606984);
+  let _ = em(insns, n, 3556769793);
   // pop x1 ; str x1,[x0,#k*8] (0xF9000001 + k*1024, as+objdump L1)
   let k = cnt;
   while k > 0 {
@@ -3680,6 +3720,14 @@ fn emit_zeros(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   let _ = em(insns, n, 3548179489);
   let _ = em(insns, n, 2334065504);
   let _ = em(insns, n, 2332099451);
+  // T118 (D11-D, 2026-09-05): arena capacity trap -- cmp x27,x28 ; b.ls +4 ;
+  // mov x0,#80 ; mov x8,#94 ; svc  (exit 80 = arena exhausted, was a silent
+  // walk past the mapping and a SIGSEGV later)
+  let _ = em(insns, n, 3944481663);
+  let _ = em(insns, n, 1409286281);
+  let _ = em(insns, n, 3531606528);
+  let _ = em(insns, n, 3531606984);
+  let _ = em(insns, n, 3556769793);
   // Interpreter zeros(n) zeroes every element (qtt.c TERM_ZEROS eval); the
   // JIT must too: exec_words resets the bump-arena cursor to its base on
   // every call_jit, so a second invocation re-allocates the SAME addresses

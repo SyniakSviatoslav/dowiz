@@ -96,11 +96,21 @@ for f in "${DIR%/}/neg"/*.bp; do
   case "$b" in
     c28_plusplus) EXPECT=COMPILEFAIL:96;;
     c29_emptybody) EXPECT=COMPILEFAIL:97;;
+    c37_arenafull) EXPECT=RUNFAIL:80;;
+    c38_frameheap) EXPECT=RUNFAIL:81;;
     *) EXPECT="";;
   esac
-  want=${EXPECT#COMPILEFAIL:}
   out="${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin"
   rm -f "$out"
+  # RUNFAIL:<code> (T118): the program must COMPILE and then exit with <code> at run time
+  if [ "${EXPECT%%:*}" = RUNFAIL ]; then
+    want=${EXPECT#RUNFAIL:}
+    ./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$f" "$out" >/dev/null 2>&1 || { echo "TRAP_MISMATCH $b (compile failed, want run exit $want)"; FAIL=$((FAIL+1)); continue; }
+    timeout 30 ./seed/build/seed "$out" >/dev/null 2>&1; rc=$?
+    if [ "$rc" = "$want" ]; then echo "MATCH $b (run exit $rc)"; PASS=$((PASS+1)); else echo "TRAP_MISMATCH $b (run exit $rc, want $want)"; FAIL=$((FAIL+1)); fi
+    continue
+  fi
+  want=${EXPECT#COMPILEFAIL:}
   ./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$f" "$out" >/dev/null 2>&1; rc=$?
   if [ -n "$want" ] && [ "$rc" = "$want" ] && [ ! -e "$out" ]; then
     echo "MATCH $b (compile exit $rc, no .bin)"; PASS=$((PASS+1))
