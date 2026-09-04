@@ -1684,6 +1684,32 @@ terminal rung: substrate-mode fixpoint bb2 == bb3.
 DEPS: T50, T52-T54, T14 substrate.bp, T26 (cell state as bank images).
 BLOCKERS: none in-sandbox; performance is measured, not promised.
 
+**T55 SPIKE (operator request 2026-09-04, `bench/substrate_spike/`)** —
+one straight-line fn (12 binary ops, DAG depth 7) lowered by `lower.py`
+to a cell table and run to quiescence (LSB-first tzcnt drain, branch-free
+6-way op select, candidate/readiness scan) vs the same ops as linear
+code, N=300000, pinned A78, R=5 medians, in-process clock_ms, folds
+bit-identical in every mode (see `RESULT.md`, regenerate with `run.sh`):
+
+| mode | ms | ns/op | vs bebop linear | vs Rust linear |
+|---|---|---|---|---|
+| bebop linear (inlined) | 18 | 5.0 | 1.0x | 18x |
+| bebop substrate | 738 | 205 | 41x | 740x |
+| Rust linear (twin) | 1.0 | 0.28 | | 1.0x |
+| Rust twin of the SAME sweep engine (model floor) | 39 | 10.9 | 2.2x | 39x |
+
+Reading: for straight-line code the sweep-to-quiescence MODEL costs ~39x
+over linear Rust even with optimal codegen (18.6 ns per sweep, 10.9 ns
+per fired cell: a sweep is a dependent chain of load-tzcnt-load-select-
+store-or; a linear op is one register instruction), and the bebop stack
+machine multiplies that by another 19x. D1(a) (>= 1.0x Rust) and TG-DONE
+1 (one conditional branch, everything else cells) are therefore NOT
+compatible under this substrate model on Cortex-A78 for ordinary
+expressions; the substrate can only win where the program's own branch
+structure is what costs (K2-style recursion, sparse activity, N-core
+sharding per T98), never on the K1 straight-line rung. Numbers go back to
+the operator (T52-T55 scope decision) before any cell-codegen work.
+
 **T56 · runtime `match` without branches** — `match` on runtime values
 via bitmat multiply-select (SS-12) or cell dispatch (T50); today `match`
 only accepts literal ctors at compile time.
