@@ -26,6 +26,7 @@ c23_spillcall 276 0 0 0 0 2 3
 c24_ifspill 208 1 0 0 1 2 3
 c25_matchtail 98 0 0 0 0 0 1
 c26_selfrec 440 4 0 0 4 8 4
+c27_zeroarg 82 1 0 0 1 0 1
 hv_stdlib 667 2 0 0 2 1 4
 io_probe 1226 7 3 0 4 0 1
 k1 87 1 0 0 1 0 1
