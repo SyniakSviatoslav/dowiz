@@ -1,4 +1,4 @@
-Status: 2026-09-04 CURRENT (read-only research by the session-8 analyst agent: prior art, code inventory, measured mmap/sqlite physics, the persistence design + gates G1-G7, Eve, the four-taxes decomposition; the design is a PROPOSAL pending operator decisions)
+Status: 2026-09-04 CURRENT (read-only research by the session-8 analyst agent: prior art, code inventory, measured mmap/sqlite physics, the persistence design + gates G1-G8, Eve, the four-taxes decomposition, the tensor-graph indexing analysis §9; the design is a PROPOSAL pending operator decisions)
 
 # Language + database at once: research and a proposal for Bebop
 
@@ -17,6 +17,7 @@ Dearle/Kirby/Morrison 2009) were text-extracted locally and quoted from the extr
 3. Bebop today has zero of the four walls closed: no struct layout (types are discarded, bebop.bp:127; struct literals killed, :186), arrays are headerless absolute pointers into an anonymous 256 MB arena (seed.S:55-68, emit_zeros bebop.bp:3440), no versioning, no free, no file-backed data mapping — but it has every PART: `sys_mmap` with all 6 args (:3711), `sys_export` MAP_SHARED publish (:3665), tmp+rename atomic publish (cli_compile :3538-3596), relative-link blocks (pieblock.bp), CoW-append MVCC with exact freed accounting (mvcc.bp:48-95), a CSR bucket index that beats sqlite 13.8x (nnidx.bp, T100), sha256.bp, threads+LSE+futex (pool.bp).
 4. Physics on this box: page-cache read fault 0.3 us/page, MAP_PRIVATE CoW fault 3.5 us/page, first write to a sparse f2fs file 7 us/page, msync 0.6 GB/s, one-page msync/fdatasync ~90-100 us, rename ~270 us under proot; f2fs is mounted `fsync_mode=nobarrier`, so power-loss durability is NOT provable here — only process-crash consistency is.
 5. "Zero-copy" is worth 10-100x against serde/JSON and 1.0x against sqlite's page cache on bytes moved; the real wins over sqlite are (a) no per-row VDBE/record decode (M1: 8.6x measured on scans against sqlite's native 158 ms MIN scan) and (b) fewer cache misses per point query (M2) — and the T100 "13.8x" shrinks to ~9x once the ctypes call floor (1.17 us per C call, 16 calls = ~19 us of the 55 us) is subtracted; §8 decomposes sqlite's native ~35 us into B-tree seeks (~70%), VDBE (~9%), setup/sort (~20%), parse (0%). 100x is reachable on the scan class only (Rust-quality codegen: 112x measured), never on DRAM-resident random point lookups (both engines sit on the same ~100 ns miss; bebop just needs 3-4x fewer of them).
+5c. The operator's tensor-graph proposals (§9): "dimensional descent" is the T100 grid index under another name (a 2-level arithmetic router = grid file; more levels = a B-tree with shifts; wins on uniform keys, loses on skew); its real mechanisms are clustering (range scan at 2 ns/row), block zone maps and a presence bitmap (the only root summary that answers "does k exist" in one L2 hit — Stokes sums and tensor cores cannot); graph = tensor is exact (GraphBLAS), SpMSpV beats pointer chasing 5-10x only for frontiers (miss batching + push/pull switch) and is the same machine words for a single row; "row_ptr amortized O(1)" is false for packed CSR — Bebop takes edge log + tiered CSR rebuilt by generation (GraphOne/LSM class); delete = tombstone bitmap at word granularity but block-CoW'd, update under MVCC = 4 KB block CoW, not "one store". The 100x row that survives is BFS vs sqlite recursive CTE (~15-40 ns vs ~1.5 us per edge), gate G8.
 5b. Eve (2014-2018, §7) is the closest prior attempt at "everything is a record + insert-only logs + views + unified I/O": its mechanisms (event log, derived state, dependency-graph recomputation) map onto mvcc.bp/csheaf.bp/M3 and §4a; its death teaches what NOT to import — a pure Datalog surface (users said it "didn't even feel like programming") and whole-graph incremental recomputation without a k/N regime (M3's crossover at k/N < 3%).
 6. Proposal: one file = two superblocks (LMDB pattern) + an append-only bump arena of self-describing objects (2-cell header: layout digest+length, crc32+generation); refs are OBJECT-relative i64 cell offsets (deref = `ldr; add x0,x0,x1,lsl #3`, 2 words, no reserved register, no seed change); commit = append + superblock toggle (no rename, no CoW pages); rollback = old root; readers never lock; the mapping IS the reader token (munmap = release; the kernel's inode refcount is the "nilpotent product to zero").
 7. Schema evolution: field append is free (length in header + zero default, Cap'n Proto rule); removal = tombstone in the layout table (FlatBuffers rule); anything else = a migration fn named by sha256 in the store's migration table and executed only from the local `.bcas` (T80) at compaction time — code is never loaded from the data file.
@@ -467,6 +468,198 @@ queries (fewer cache misses, no VDBE/setup) and by 10-100x on scans (no interpre
 top of the range needs Rust-quality codegen), ties on updates and reopen, and loses ~2x on
 file size." The "four taxes" are two taxes ((3) for point queries, (4) for scans); (1) is
 zero in any prepared-statement oracle and (2) is worth tens of ns per row on integer data.
+
+---
+
+## 9. The operator's proposals (A) dimensional descent, (B) graph = tensor, (C) CRUD on it — mechanism by mechanism
+
+Constants used throughout (this box, measured earlier): DRAM miss ~100 ns (SPEEDUP §3: 12 GB/s,
+one A78 saturates it; a random 64 B line at ~10-20 outstanding misses ≈ 10-20 ns effective in a
+pipelined loop, ~100 ns dependent); L2 ~1 MB per core; L1D 64 KB; no SVE, NEON = 2 x i64
+lanes, no gather instruction (ARMv8-A NEON has no indexed load; gathers are SVE-only); 1M
+records = 8 MB per i64 column (> L2). sqlite native costs from §8: covering-index seek ~1.0 us,
+rowid seek + decode ~1.8 us, PK seek ~0.6 us, 11 ns/VDBE step, 158 ns/row scanned; sqlite
+native insert of 1M rows ≈ 7.44 s - 6 ctypes calls x 1.17 us x 10^6 ≈ 0.42 s + 0.72 s index.
+
+### 9.1 (A) "Hierarchical tensorization / dimensional descent" — is it an index?
+
+Yes, and it has a name: a fixed-fanout arithmetic partition of the key space is a **grid file /
+k-ary trie / radix tree**, and its 2-level instance ("vector = routing coefficients, matrix =
+local cluster") is exactly the T100 bucket grid (nnidx.bp:7 `cellof` computes the router
+coordinate with a shift; :25-46 builds rp/ci). It differs from a B-tree in ONE respect: the
+router is computed by arithmetic on the key (shift/multiply), not by comparisons against
+stored separators — the same idea as learned indexes ("index = a function of the key",
+Kraska et al. 2018, https://arxiv.org/abs/1712.01208) and radix trees (ART,
+https://db.in.tum.de/~leis/papers/ART.pdf). Arithmetic routing wins when the key
+distribution is known and near-uniform (the LCG points are), and LOSES on skew (one cell
+holding 10^5 points is a 10^5-point scan; a B-tree rebalances, a grid does not — that is why
+Terrace stores high-degree vertices differently, https://people.eecs.berkeley.edu/~aydin/terrace.pdf).
+
+Miss counts per operation, 1M records, i64 cells (the numbers that decide, not the names):
+
+| operation | B-tree (sqlite, 4 KB pages, 3 levels, interior hot) | hash table (open addressing, 16 B slots, load 0.5) | dense array by id | 2-level router (grid + window), records in insertion order | same, records CLUSTERED by cell |
+|---|---|---|---|---|---|
+| exact key lookup ("does k exist / fetch k") | ~6-8 line misses (binary search inside the cold leaf page) + 9 VDBE steps ≈ 0.6 us measured | 1 slot miss + 1 record miss ≈ 0.2 us | 1 miss ≈ 0.1 us | grid is NOT an exact index unless the key is the cell: 1 line (rp) + 1 line (ci) + per candidate 2 lines (u,v) — a spatial hash | 1 + 1 + 1 line (record adjacent) |
+| 3x3 window / small range | 9 seeks + 8.5 rowid seeks ≈ 25 us of 35 (measured) | not possible (no order) | not possible on (u,v) | ~35 lines ≈ 3.5-4 us measured (4.0) | ~9 rp lines + ~4 contiguous record lines ≈ 1.3 us |
+| 1-D range scan over 10^4 keys | seek + leaf walk, 158 ns/row (VDBE) ≈ 1.6 ms | full scan only | contiguous if id-range | ci slice contiguous but us/vs gathers random: 2 misses/row ≈ 0.2-2 ms | pure stream: 24 B/row at 12 GB/s = 2 ns/row ≈ 20 us — this is the "kills random access" mechanism, and its name is CLUSTERING (sqlite has it too: WITHOUT ROWID / clustered index) |
+| insert 1M | ~0.42 s native + 0.72 s index (page splits, memmove inside pages) | ~2 misses/row ≈ 0.2 s | append 24 MB ≈ 5-10 ms | append + counting-sort rebuild: 3 passes over 8-24 MB ≈ 5-10 ms at DRAM speed; bebop today ~50-100 ms (18-50 ns/op), after T101-T105 ~10-20 ms | + one permutation pass (24 MB) |
+| delete 1 | seek + memmove within page ≈ 1 us | tombstone 1 miss | tombstone bit | physical: shift O(nnz) = 8 MB memmove ≈ 1 ms; tombstone: 1 bit (1 miss) | same |
+
+So the 2-level router is a mechanism, already measured, and its honest ceiling per point query
+is the ~25-35 lines of the window (§8) — 3.5 us — falling to ~1.3 us with clustering. Adding
+MORE levels does not reduce misses: a 3rd level adds a line per level unless that level's table
+fits in L1/L2; 1M leaves with fanout 1024 need exactly 2 levels and the 8 KB root is L1-hot —
+which is also precisely why sqlite's 3-level B-tree keeps its interior pages hot and pays only
+for the leaf. "Descent" beyond two levels is the B-tree, spelled with shifts.
+
+The "scalar at the top" — when a root summary skips work in 1 cycle and when it is a metaphor:
+
+| root summary | question it answers | cost | verdict |
+|---|---|---|---|
+| dense presence bitmap over the id space (1M bits = 128 KB, L2-resident) | "does id k exist" (and the tombstone mask of 9.3) | 1 L2 hit ≈ 4 ns; "is this 64-id block entirely dead" = 1 cycle on the word | mechanism — this IS the nilpotent-product-zero test scaled up: grass.bp's `I & J != 0` is a 5-bit version of it |
+| per-block zone map (min/max of u and v per 4 KB block, 4 cells per block = 1 line per 8 blocks) | "can this block contain a key in [a,b]" | 1 line per 8 blocks; skips a block without touching it | mechanism (Parquet/ORC row-group statistics; sqlite has none) — add to the CSR object (§4f) |
+| Bloom filter (10 bits/key, 1% FP; 1.2 MB for 1M keys) | "is key k definitely absent" | 1-2 misses | mechanism when the store is larger than L2 and misses dominate; not needed at 1M with a bitmap |
+| crc32 / generation in the object header (§4a) | "did anything under this root change since g" | 1 word | mechanism (the incremental-view trigger of §7) |
+| "Stokes energy sum" / any linear aggregate (tdgstokes.bp:25-40 boundary vs :43-57 interior) | "is the total conserved" — an AUDIT of a region in O(perimeter) | O(√R) | mechanism for audit only; a sum is not injective: it cannot answer "does k exist" or "which subtree holds k" — as a lookup router it is a metaphor |
+| eigenvalue / spectral gap of a subtree | "has the structure changed a lot" | O(N) iterations (spectral.bp:86 topk is a power method) | metaphor for lookup; robustness tool at best |
+| tensor-train / hierarchical-Tucker cores | approximate low-rank reconstruction of a SMOOTH dense tensor | TT-SVD is global O(N r^2); incremental TT-ICE / HT-RISE update by rank growth, i.e. approximation drift per update (https://arxiv.org/pdf/2211.12487 , https://arxiv.org/abs/2412.16544) | metaphor for a database: a key set is a sparse 0/1 tensor with no low-rank structure (1M random points in a 1024x1024 grid have rank up to 1024), and an index must be EXACT; the operator's own trap is real and their fix ("block-sparse tree of routers") is the k-ary trie above |
+
+Verdict on (A): true-with-conditions. Mechanism = arithmetic routing + clustering + block
+summaries (bitmap, zone map); metaphor = "search becomes arithmetic instead of branching" (a
+router lookup is still a dependent load; the branch that vanishes is the comparison ladder
+inside a B-tree page, worth ~5 misses per seek, not the miss itself), "boundary operators /
+rank reduction" as lookup, and any claim that levels beyond two reduce memory traffic.
+
+### 9.2 (B) "Graph and tensor are the same structure" — SpMV vs pointer chasing
+
+The identity is exact and old: a property graph IS the sparse (src, dst, relation) tensor,
+CSR is its storage, and BFS over a Boolean semiring IS iterated sparse-matrix x sparse-vector
+(SpMSpV) — this is the GraphBLAS thesis (https://www.researchgate.net/publication/326910948_Implementing_Push-Pull_Efficiently_in_GraphBLAS).
+The physics of one nonzero on this box, CSR with i64 ci/vv (16 B/nnz) and a dense x of 8 MB:
+`ldr ci[k]` (sequential, prefetched, ~0), `ldr x[ci[k]]` (random gather: 1 line miss, ~10-20
+ns pipelined because the loop has no dependence between iterations, ~100 ns if the address
+chain is dependent), multiply-add, `str out[j]` (push: random scatter, another line) — i.e.
+**10-40 ns per nonzero, memory-bound; NEON adds nothing** (no gather, 2 lanes). Per-edge cost
+on CPUs in the literature is the same class: Ligra/GAP-class single-machine BFS runs at
+~10-50 ns per edge per core on CSR (Beamer/Asanović/Patterson direction-optimizing BFS,
+https://scottbeamer.net/pubs/beamer-sc2012.pdf ; Ligra, https://jshun.csail.mit.edu/ligra.pdf).
+spectral.bp:26 `spmv_fp` is exactly this loop (pull order: rows outer, `out[j] +=` scatter
+inner — a PUSH formulation per row; the `fp_mul` schoolbook costs ~30 ops per nnz today,
+M12).
+
+Where the tensor formulation beats pointer chasing, and where it is the same code:
+
+| workload | pointer traversal (queue + adjacency walk) | SpMV / frontier formulation | who wins and why |
+|---|---|---|---|
+| single point query = one row (neighbours of v, or the T100 window) | `ldr rp[v]; ldr rp[v+1]; loop ci[k]` — one contiguous slice | e_v^T A = the SAME slice; there is nothing to batch | identical machine words; "contraction" is a metaphor for one row |
+| BFS/traversal with a frontier of thousands of vertices | one dependent miss chain per vertex, ~100 ns/edge | frontier sorted by vertex id -> rows visited in address order, misses independent -> 10-20 ns/edge; switch to PULL (unvisited x A^T) when the frontier exceeds ~1/14 of the edges (Beamer's alpha=14, beta=24; Ligra's dense threshold m/20) | SpMV wins 5-10x by batching misses and by direction switching; Gunrock does the same on GPUs (https://arxiv.org/pdf/1701.01170) |
+| PageRank / power iteration / sheaf Laplacian solve (sheafh0.bp) | n/a | streaming SpMV, 16 B/nnz -> 12 GB/s / 16 B ≈ 1.3 ns/nnz floor if x fits L2, 10-20 ns if not | memory-bound; 4 cores 1.0-1.4x (M5) |
+| "message passing / GNN on the metal" | n/a | SpMM (matrix x dense feature block): the only place NEON pays (dense inner block, 2 x i64 or 4 x i32 lanes) | mechanism only when features are dense vectors per node |
+| sqlite recursive CTE for the same BFS | 1 index seek per edge ≈ 1-2 us/edge + VDBE | — | this is where the 100x lives: ~1.5 us vs ~15 ns per edge |
+
+The language-graph isomorphism (§4a): a `ref T` field IS an edge (src = the object's offset,
+relation = the field index in the layout, dst = the target offset); a struct IS a row of the
+(src, relation) fibre; an array of refs IS one CSR row. A compiled traversal of one hop is
+`ldr x1,[x0,#(2+f)*8]; add x0,x0,x1,lsl #3` — 2 words, one dependent miss per hop — and that is
+optimal for ONE path; SpMV is what you emit when the hop applies to a SET of objects (the
+frontier): sort the set by offset, walk it in address order, let the OoO core overlap the
+misses. "Business logic and storage merge into one instruction stream with no cache misses" is
+half right: no serialization, no VDBE, yes; no cache misses, no — a 1M-node graph is 8+ MB per
+column and every random hop is a line miss; register promotion (P1-P5) removes the stack-machine
+words (51 -> 14 in K1), not the DRAM latency.
+
+Verdict on (B): mechanism for bulk traversal (frontier-batched, direction-switching SpMSpV over
+CSR — add it), identity for single queries (same words either way), metaphor for "no cache
+misses" and for NEON on index gathers.
+
+### 9.3 CSR mutation: the "row_ptr amortized O(1)" claim is false as stated
+
+Inserting an edge into row r of a packed CSR shifts every element after `rp[r+1]` in ci/vv
+(for 10M edges, 160 MB of memmove per insert ≈ 15 ms) and increments n - r row pointers; only
+an append to the LAST row is O(1). The real mechanisms, with their measured trade-offs:
+
+| mechanism | insert cost | traversal cost | snapshot / MVCC | source |
+|---|---|---|---|---|
+| PCSR (packed memory array with gaps) | O(log^2 N) amortized element moves; "orders of magnitude faster than CSR" | ~2x slower than CSR (gaps) | none | Wheatman & Xu, HPEC'18, https://itshelenxu.github.io/files/papers/pcsr.pdf |
+| VCSR (vertex-centric PMA, slack per vertex proportional to degree) | better locality than PCSR for skew | ~CSR | none | https://webpages.charlotte.edu/ddai/data/dong-ccgrid-22.pdf |
+| Aspen (C-trees: chunked purely-functional trees) | batch inserts, O(log) per batch element; lightweight snapshots by construction | slower than CSR (tree chunks), faster than Stinger/LLAMA | yes (functional) | Dhulipala/Blelloch/Shun PLDI'19, https://arxiv.org/abs/1904.08380 |
+| Terrace (per-vertex structure by degree: in-place array / PMA / B-tree) | faster batch inserts than Aspen up to 1M | near CSR for low degree | partial | SIGMOD'21, https://people.eecs.berkeley.edu/~aydin/terrace.pdf |
+| LSM levels of CSR (LSMGraph, BACH) | append to L0, merge down; 50x LiveGraph throughput | reads merge k levels | per level | https://arxiv.org/pdf/2411.06392 , https://www.vldb.org/pvldb/vol18/p1509-miao.pdf |
+| edge log + periodic adjacency snapshot (GraphOne) | O(1) append | reads snapshot + log tail; "lower data freshness" | snapshot per rebuild | https://www.researchgate.net/publication/340434324_G_raph_O_ne_A_Data_Store_for_Real-time_Analytics_on_Evolving_Graphs |
+| in-place edge vectors with resizing (LiveGraph TEL) | in-place, lowest throughput in the LSMGraph comparison | sequential per vertex | per-edge versions | same |
+
+Pick for Bebop (the §4 arena is append-only, so the choice is forced): **edge log + tiered CSR
+rebuilt by generation** = GraphOne with an LSM twist, all of it objects in the store:
+- L_log: appended edge records (src, dst, rel), at most 4096 since the last L0 rebuild — a
+  query scans this tail contiguously (32-64 KB, prefetched, ~2 ns/edge ≈ ≤ 10 us worst case).
+- L0: a small CSR rebuilt from the tail every 4096 edges (counting sort 3 passes ≈ 12k ops ≈
+  50-200 us today, 20 us after T101-T105), growing to 2^18 edges.
+- L1: the big CSR; L0 is merged into it every 2^18 edges (rebuild over E: 10M edges = 3 passes x
+  160 MB ≈ 40 ms at DRAM speed; today's codegen ~0.5 s, ~0.1 s after T101-T105).
+- Amortized per edge: ~3 ops (L0) + 3 x (E / 2^18) ops (L1 merges) ≈ 10-120 ops for E = 1-10M
+  ≈ 0.2-2 us/edge today, 20-200 ns after codegen; PCSR's log^2 N ≈ 400 element moves is the
+  same class, with worse traversal. Staleness window: zero (the log is always read); rebuild
+  latency is the only stall, and it is a background job publishing a new generation (§4c).
+- A point query reads ≤ 3 row slices (L1, L0, tail) + the tombstone mask; all contiguous.
+- Row_ptr "amortized O(1)" becomes literally true only for the log; everything else is
+  rebuild-by-generation, which the roadmap's own CSR (csr.bp:19 `csr_from_edges`, capped at
+  4096 edges by its 4096-cell working buffer) already does at toy scale.
+
+### 9.4 (C) CRUD: delete via bitmask tombstones, and what "update = one store" hides
+
+Delete: a presence/tombstone bitmap of N bits is N/8 bytes (128 KB per 1M records, L2-resident;
+1.25 MB per 10M, DRAM). Delete = clear one bit = 1 line write. Scan-skip = `tzcnt` over live
+words: AArch64 has no scalar popcount or tzcnt — `cnt` exists only on NEON (the hvham emitters
+bebop.bp:584-663 already use `cnt` + `uaddlv`) and tzcnt = `rbit` + `clz` (2 words). spike.bp
+uses SWAR popcount and a de Bruijn multiply (~12 and ~4 ops per word); bitset.bp:12-27 computes
+`pow2(bit)` with a loop of up to 63 multiplications and then DIVIDES — ~100x slower than
+`(w >> bit) & 1`, which the language now has (T42). A 64-record block that is all dead costs one
+word test (1 cycle when the word is in L1); a scan over 1M records with 10% tombstones costs
+15.6k word loads + the live records — the skip is real at WORD granularity, not at record
+granularity (a live word still walks its 64 records with a mask). Compact the mask (rebuild CSR
+without tombstones) when dead > ~25% (PCSR/PMA density thresholds are the same idea), which is
+the same generation rebuild as 9.3.
+
+Interaction with §4: the bitmap is a store object ([len] + words, layout `arr:i64`, crc32,
+generation). Flipping a bit IN PLACE breaks snapshot isolation (a reader holding root g would see
+a deletion committed at g+1) and breaks the object's crc. So a delete is a **block-CoW**: copy the
+4 KB block holding the word into the append region, flip the bit there, publish a new block
+table (one ref per 512-cell block: 32 refs for 1M bits) with the new root. Cost per delete batch
+≈ 4 KB + 256 B append ≈ 0.5 us; per single delete the same (batch them). The same rule applies to
+"Update of fixed-size values = one store into the contiguous array": true only WITHOUT snapshot
+isolation (in-place, the mvcc.bp:48 rule "never in place" violated); with §4c it is a block CoW
+of 4 KB (≈ 0.3-0.5 us, 100x write amplification for an 8-byte change, exactly sqlite's WAL frame
+cost) — so the design gains one rule: **arrays larger than one block are chunked (block table +
+refs), and an update CoWs one block**; small structs are re-appended whole (mvcc semantics).
+Read: "offsets + vector instructions (max speed)" — offsets yes; vector instructions only on the
+dense inner blocks (SpMM, distance on a clustered window), never on the index gather.
+Create = append: solved (§4c), 24 B/record at DRAM speed.
+
+### 9.5 Verdicts and what to add
+
+| claim | verdict | add to §4 / §5 |
+|---|---|---|
+| (A) dimensional descent replaces B-tree/hash | true-with-conditions: it is a 2-level arithmetic router (grid file) = the T100 index; more levels = a B-tree with shifts; wins on uniform keys, loses on skew | §4f: clustering of records by index order (the range-scan mechanism), per-block zone maps (4 cells/block), a presence bitmap per table; a skew guard (cell count > threshold -> loud trap or sub-grid) |
+| (A) scalar root skips subtrees in 1 cycle | mechanism for bitmaps/zone maps/crc; metaphor for Stokes sums, eigenvalues, tensor cores as lookup | zone map + bitmap in the CSR header object |
+| (A) "search is arithmetic not branching" | half: the comparison ladder disappears (~5 misses/seek), the dependent load does not | — |
+| (B) graph = tensor, CSR storage | mechanism (GraphBLAS identity) | — |
+| (B) SpMV traversal beats pointer chasing | true for frontiers (5-10x by miss batching + push/pull switch at alpha=14), identity for single rows, metaphor for "no cache misses" and NEON on gathers | a `frontier` library: sorted frontier, push/pull switch, over the tiered CSR |
+| (B) language-graph isomorphism | mechanism at the object level: ref = edge, struct = fibre row, array of refs = CSR row; a hop = 2 words | already §4a/§4f; state it in the type rules |
+| (B) row_ptr update amortized O(1) | false as stated; true for the log only | §4f: edge log + L0/L1 tiered CSR rebuilt by generation (9.3) |
+| (C) create = append | mechanism | — |
+| (C) update = one store | true only without snapshot isolation; with MVCC = 4 KB block CoW | §4: chunked arrays + block table; batch updates |
+| (C) delete = tombstone bitmap, O(1) | mechanism at word granularity; compaction at ~25% dead; bitmap must be block-CoW'd, not flipped in place | §4: tombstone bitmap object; rebuild trigger; fix bitset.bp to shifts (100x) |
+| "no serialization, no VDBE, no cache misses" | 2 of 3 | — |
+
+New gate G8 `sgraph` (python oracle: networkx-free BFS with dicts, levels fold + counts):
+1M nodes, 10M edges from the LCG (uniform; plus a skewed variant with 1% hubs), stored as the
+edge log + tiered CSR of 9.3 in the §4 store. Rows: (a) BFS from 100 sources — pointer/queue
+traversal vs frontier SpMSpV with push/pull switch vs sqlite `WITH RECURSIVE` over an indexed
+edge table (expected ~15-40 ns/edge vs ~1.5 us/edge: the 100x row of this whole exercise);
+(b) insert 1M edges through the log with L0/L1 rebuilds, amortized ns/edge and max stall ms;
+(c) delete 10% via the tombstone bitmap, then BFS again (fold == oracle on the pruned graph),
+then compaction (file size, time); (d) point query "neighbours of v" before and after
+compaction (≤ 3 slices). Pass = folds == oracle; numbers reported whatever they are (D8(5)).
 
 ---
 

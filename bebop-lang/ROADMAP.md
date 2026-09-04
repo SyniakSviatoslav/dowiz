@@ -1502,6 +1502,29 @@ D9. (2026-09-04, operator answers to the analysis questions)
         surface tasks T43/T47/T48 (operator: surface first).
     (5) T42(b): `>>>` = ASR is added as a literal form; `>>` stays
         LOGICAL (zero fold delta); R3.x(b) becomes documented semantics.
+D10. (2026-09-04, operator: "Прийняти") The persistence design of
+    docs/LANG-DB-DESIGN.md §4 with the §9.5 additions is the STORE
+    SPECIFICATION: 2-cell object header (layout digest+length, crc32+
+    generation), `ref T` = object-relative cell offset (2-word deref, no
+    seed change), one file = two superblocks + append-only bump arena,
+    commit = append + superblock toggle (root swap), readers never lock
+    (the mapping is the token), Cheney compaction into a fresh file via
+    tmp+rename, schema evolution = free append / tombstone / sha256-named
+    migration run only from .bcas at compaction; records clustered by
+    index order, zone maps + presence bitmap in the CSR header object,
+    chunked arrays with a block table (update/delete = one 4 KB block CoW),
+    edge log + tiered CSR (log <= 4096 -> L0 <= 2^18 -> L1) rebuilt by
+    generation, a frontier library (sorted frontier, push/pull switch at
+    alpha=14/beta=24). Tasks T109-T117 (STORE PULL below) are scheduled
+    AFTER T101-T108. T48 gains `ref T` as a distinct type (the only guard
+    against absolute arena addresses reaching a store cell). T73 is
+    amended: the XOR journal governs the volatile arena, the store's
+    rollback is the previous root — one mechanism per world, never two for
+    one. bitset.bp is fixed to shifts at the first opportunity (fold
+    unchanged). Honest expectation recorded with the tasks: PK lookup 3-5x
+    sqlite native, window ~9x, scans 8.6x today / 30-50x after T101-T105 /
+    112x at Rust-quality codegen, BFS vs recursive CTE ~100x, file size
+    LOSES ~2.2x, updates and reopen tie.
     Evidence and the measured plan P1-P10 (T96 ceilings, DRAM 12 GB/s,
     sqlite scan 180 ms vs indexed 0.13 ms vs tq.bp O(N) geodesic ~4 s on
     1M points, the bucketed-index mechanism that was never gated):
@@ -1651,7 +1674,7 @@ DONE-CHECK: gate `usemod`; `gen_selfsrc.sh` concatenation deleted;
 bebop.bp itself split into `use`d files with the fixpoint byte-exact.
 DEPS: T38. BLOCKERS: none.
 
-**T48 · checked types at zero runtime cost**
+**T48 · checked types at zero runtime cost** — D10 2026-09-04: adds `ref T` (object-relative offset) as a distinct type — the only guard against an arena/frame address reaching a store cell; `[T]` and `fp` tagged in the layout digest.
 GOAL: the annotations the parser currently discards become checked:
 `i64`, `[i64]`, `str`, `fp` (fixed-point 2^32), `even`/`odd` (Z2 parity,
 T25 S3), `cell` (dispatcher cell id, T50). Mismatch = compile-time loud
@@ -1910,7 +1933,7 @@ re-measured pinned vs unpinned, spread recorded (replaces the 2-20x
 folklore with two numbers).
 DEPS: T45 (builtin pattern). BLOCKERS: proot may reject (probe first).
 
-**T73 · `snapshot()` / `rollback(mark)` / `on_fail(mark, e)`** (catalog
+**T73 · `snapshot()` / `rollback(mark)` / `on_fail(mark, e)`** (catalog — AMENDED by D10 2026-09-04: the XOR journal is the rollback of the VOLATILE arena only; the store (docs/LANG-DB-DESIGN.md §4c) rolls back by the previous root — one mechanism per world.
 D7 56-57, ergonomics #41, #74-75, agentic primitive 1) — strengthens
 T59, T34
 GOAL: three builtins over the XOR journal of `rev.bp` (T59): `snapshot`
@@ -2511,6 +2534,53 @@ sqlite3 (python stdlib), runs the T20 nearest query; gate records both
 latencies and both RSS (T97) side by side.
 DONE-CHECK: table row with measured ms and MB for both engines.
 DEPS: T20, T97. BLOCKERS: none.
+
+## STORE PULL (decision D10, 2026-09-04; spec = docs/LANG-DB-DESIGN.md §4 + §9.5; after T101-T108)
+
+Each task = one commit with fixpoint + battery; each gate = `selfhost/std/<g>.bp`
++ `bench/oracles/<g>.py` (L17), pinned numbers reported whatever they are
+(D8(5)). Order: G1 -> G2 -> G4 -> G5 -> G3 -> G6 -> G7 -> G8.
+
+**T109 · `crc32(cells, n)` builtin** — hardware CRC32X (8 B/cycle) in a 5-word
+loop, L1/L2 register table, check_abi allowlist; replaces crc.bp's bit loop
+where integrity is needed. DONE-CHECK: crc gate fold unchanged; 64 B in ~3 ns.
+**T110 · `sys_msync(addr, len, flags)`** (syscall 227) — the durability row;
+DONE-CHECK: one-page msync ~100 us measured; kill -9 consistency does not need it.
+**T111 · `store.bp` library** (with T47 `use`): open/map (any base,
+MAP_SHARED), alloc(cells) with the 2-cell header, commit (append +
+superblock toggle), abort (cursor reset), deref helpers, pre-extend by 64 MB
++ MAP_POPULATE. DONE-CHECK: a 10^5-object round trip through the library.
+**T112 · layouts + gates G1 `slayout` / G2 `sround`** — types-only sha256 layout
+digest, struct/enum/array bytes == python struct.pack; map at TWO bases in one
+process + reopen in a second run; fold through the second base == python parse
+via offsets. Falsifier: an absolute address anywhere in the file.
+**T113 · compaction + crash: G4 `scompact` / G5 `scrash`** — Cheney copy into
+`<store>.tmp` + rename, forwarding cells in a MAP_PRIVATE scratch view; 10^6
+objects, 60% superseded: live fold unchanged, file <= live*8 + 3 pages,
+superseded == 0; SIGKILL x100 at random microseconds over 10^4 generations:
+reopen -> generation in {last, last-1}, superblock crc valid, fold == oracle(g).
+**T114 · evolution: G3 `sevolve`** — v1 writes, v2 (appended field) reads/writes,
+v1 reads v2's store, v3 registers a sha256 migration (from .bcas, T80) and
+compacts; four folds == oracle. Falsifier: a stale-layout read that neither
+defaults nor traps; a migration touching an unrelated value.
+**T115 · concurrency: G6 `sconc`** — 4 writer threads x 10^4 increments through
+the single-writer lock (sys_atomic_add + futex) + 4 reader threads folding
+concurrently: counters == 4*10^4, every read fold == oracle(g) for a committed
+g; lost updates == 0.
+**T116 · sbench: G7** — T100-pattern rows vs sqlite 3.46 C API with the ctypes
+floor subtracted and VM_STEP recorded: insert 1M, PK lookup, cell range scan
+10^4, update 10^5 (block CoW), reopen, file size, compaction, durable variant.
+Pass = PK lookup >= 3x sqlite native, scan >= 5x; file size reported even at the
+expected ~2.2x loss.
+**T117 · sgraph: G8** — 1M nodes / 10M edges (uniform + 1%-hub skew) as edge log +
+tiered CSR in the store: BFS from 100 sources via queue vs frontier SpMSpV
+(push/pull switch) vs sqlite `WITH RECURSIVE` (expected ~15-40 ns vs ~1.5 us per
+edge); insert 1M edges through the log with L0/L1 rebuilds (ns/edge, max stall);
+delete 10% via the tombstone bitmap (block CoW) then BFS + compaction;
+neighbour query <= 3 slices. Folds == oracle; numbers reported.
+DEPS: T47 `use`, T43 struct literals + field access, T48 `ref T`, T80 .bcas,
+T101-T108 first (operator). BLOCKERS: power-loss durability is forward-port
+(f2fs fsync_mode=nobarrier on this box); everything else in-sandbox.
 
 ## ROBUSTNESS / ENERGY (not speed) — moved here by D9(3), 2026-09-04
 
