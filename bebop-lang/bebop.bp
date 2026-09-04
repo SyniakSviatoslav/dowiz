@@ -1542,10 +1542,12 @@ fn emit_binop_plain(insns: [i64], n: [i64], op: i64, fntab: [i64]) -> i64 {
   let weor = if op == 14 then 3389063168 else 0;
   let wshl = if op == 15 then 2596347904 else 0;
   let wshr = if op == 16 then 2596348928 else 0;
+  // asrv x0,x0,x1 = 0x9AC12800 (lsrv 0x9AC12400 + 0x400; as+objdump)
+  let wasr = if op == 17 then 2596349952 else 0;
   // modulo (op 11): a % b via mov x2,x0; sdiv x0,x0,x1; msub x0,x0,x1,x2
   let is_md = if op == 11 then 1 else 0;
   let _ = if is_md == 1 then (let _ = em(insns, n, 2852127714) in (let _ = em(insns, n, 2596342784) in (let _ = em(insns, n, 2600568832) in 0))) else 0;
-  let _ = if is_md == 0 then (let _ = em(insns, n, wadd + wsub + wmul + wdiv + wand + worr + weor + wshl + wshr) in 0) else 0;
+  let _ = if is_md == 0 then (let _ = em(insns, n, wadd + wsub + wmul + wdiv + wand + worr + weor + wshl + wshr + wasr) in 0) else 0;
   let _ = push(insns, n, fntab);
   n[0]
 }
@@ -1736,7 +1738,9 @@ fn emit_band(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
   0
 }
 
-// shift = expr (('<<'|'>>') expr)*   (`>>` is LOGICAL; R3.x(b) ASR is with the operator)
+// shift = expr (('<<'|'>>'|'>>>') expr)*   `>>` is LOGICAL (lsrv), `>>>` is
+// ARITHMETIC (asrv) — decision D9(5) 2026-09-04: R3.x(b) is documented
+// semantics, not a ban; bpref.py mirrors both; gate c32_asr.
 fn emit_shift(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = emit_expr(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let done = 0;
@@ -1745,11 +1749,15 @@ fn emit_shift(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
     let strn = str_len(s);
     let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
     let nch = if pos[0] + 1 >= strn then 0 else char(s, pos[0] + 1);
+    let nch2 = if pos[0] + 2 >= strn then 0 else char(s, pos[0] + 2);
     let isshl = (if ch == 60 then 1 else 0) * (if nch == 60 then 1 else 0);
-    let isshr = (if ch == 62 then 1 else 0) * (if nch == 62 then 1 else 0);
-    let isop = isshl + isshr;
-    let op = isshl * 15 + isshr * 16;
-    let _ = if isop == 1 then emit_apply_bits(s, pos, insns, n, op, 2, 0, stab, selfname, selfstart, fntab) else 0;
+    let isshr2 = (if ch == 62 then 1 else 0) * (if nch == 62 then 1 else 0);
+    let isasr = isshr2 * (if nch2 == 62 then 1 else 0);
+    let isshr = isshr2 - isasr;
+    let isop = isshl + isshr + isasr;
+    let op = isshl * 15 + isshr * 16 + isasr * 17;
+    let adv = 2 + isasr;
+    let _ = if isop == 1 then emit_apply_bits(s, pos, insns, n, op, adv, 0, stab, selfname, selfstart, fntab) else 0;
     let done = 1 - isop;
     0
   };

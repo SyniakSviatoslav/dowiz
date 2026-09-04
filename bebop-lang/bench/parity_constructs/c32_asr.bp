@@ -1,0 +1,11 @@
+// T42(b) / D9(5) 2026-09-04: `>>>` is the ARITHMETIC shift (asrv), `>>` stays
+// LOGICAL (lsrv). Both on a negative value, plus a positive `>>>` and a
+// precedence check (`>>>` sits in the shift tier with `<<`/`>>`).
+fn main() -> i64 {
+  let a = 0 - 16;
+  let lg = a >> 2;
+  let ar = a >>> 2;
+  let p = 1024 >>> 3;
+  let t = 1 + 2 >>> 1;
+  ar * 1000 + p + (lg == 4611686018427387900) * 100000 + t * 10
+}

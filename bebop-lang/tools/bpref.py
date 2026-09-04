@@ -59,6 +59,7 @@ BIN = {
     '^': lambda a, b: wrap(a ^ b),
     '<<': lambda a, b: wrap(a << (b & 63)),
     '>>': lambda a, b: wrap((a & MASK) >> (b & 63)),
+    '>>>': lambda a, b: wrap(a >> (b & 63)),  # T42(b)/D9: arithmetic shift is its own form
     '==': lambda a, b: int(a == b), '!=': lambda a, b: int(a != b),
     '<': lambda a, b: int(a < b), '>': lambda a, b: int(a > b),
     '<=': lambda a, b: int(a <= b), '>=': lambda a, b: int(a >= b),
@@ -66,17 +67,17 @@ BIN = {
 # T42(a) 2026-09-04 (D5 measured: zero fold delta): C precedence
 #   cmp < | < ^ < & < shifts < +- < */%   (bebop.bp emit_cmp/bor/bxor/band/shift/expr/term)
 TIERS = [('==', '!=', '<=', '>=', '<', '>'), ('|',), ('^',), ('&',),
-         ('<<', '>>'), ('+', '-'), ('*', '/', '%')]
+         ('<<', '>>', '>>>'), ('+', '-'), ('*', '/', '%')]
 # BPREF_OLDPREC=1 -> the pre-2026-09-04 grammar (bit ops tighter than * /), archaeology only
 # BPREF_ASR=1     -> `>>` is ARITHMETIC (sign-propagating) instead of logical (T42(b), operator)
 if os.environ.get('BPREF_OLDPREC') == '1':
     TIERS = [('==', '!=', '<=', '>=', '<', '>'), ('+', '-'), ('*', '/', '%'),
-             ('&', '|', '^', '<<', '>>')]
+             ('&', '|', '^', '<<', '>>', '>>>')]
 if os.environ.get('BPREF_ASR') == '1':
     BIN['>>'] = lambda a, b: wrap(a >> (b & 63))
 
 TOK = re.compile(r'\s+|//[^\n]*|(0x[0-9a-fA-F]+|\d+)|([A-Za-z_][A-Za-z0-9_]*)|("(?:[^"\\]|\\.)*")'
-                 r'|(\+\+|==|!=|<=|>=|<<|>>|=>|->|\+=|-=|\*=|/=|%=|[-+*/%&|^<>=(){}\[\],;:.!])')
+                 r'|(\+\+|==|!=|<=|>=|<<|>>>|>>|=>|->|\+=|-=|\*=|/=|%=|[-+*/%&|^<>=(){}\[\],;:.!])')
 
 
 def tokenize(src):

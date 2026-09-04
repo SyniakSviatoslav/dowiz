@@ -26,7 +26,8 @@ for f in "$DIR"/*.bp; do
   # Word-for-byte comparison against frozen artifact
   if ! cmp -s "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin" "$FROZEN/${b}.bin"; then
     if [ "$FREEZE" = 1 ]; then
-      echo "WORD_DELTA $b $(( $(stat -c %s "$FROZEN/${b}.bin") / 4 )) -> $(( $(stat -c %s "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin") / 4 )) words"
+      OLDW=0; [ -f "$FROZEN/${b}.bin" ] && OLDW=$(( $(stat -c %s "$FROZEN/${b}.bin") / 4 ))
+      echo "WORD_DELTA $b $OLDW -> $(( $(stat -c %s "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin") / 4 )) words (0 = new construct)"
     else
       echo "WORD_MISMATCH $b"; FAIL=$((FAIL+1)); continue
     fi
@@ -63,6 +64,7 @@ for f in "$DIR"/*.bp; do
     c27_zeroarg) EXPECT=7;;
     c30_unary) EXPECT=16351;;
     c31_nested_lit) EXPECT=1222;;
+    c32_asr) EXPECT=96138;;
     *) EXPECT="";;
   esac
   [ "$FREEZE" = 1 ] && [ "$IVAL" = "$EXPECT" ] && cp "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin" "$FROZEN/${b}.bin"
