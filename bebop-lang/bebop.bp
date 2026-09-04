@@ -561,7 +561,8 @@ fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i6
     let i = i - 1;
     0
   };
-  let target = fntab_lookup(fntab, name);
+  let tgt0 = fntab_lookup(fntab, name);
+  let target = if name == selfname then selfstart else tgt0;
   let rep_save = fntab[3890];
   let _ = flush_on_bl(insns, n, fntab, rep_save);
   let _ = emit_bl(insns, n, target, 1);
@@ -570,18 +571,12 @@ fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i6
   n[0]
 }
 
+// Self-recursive call: same N-argument path as any resolved callee, target =
+// selfstart (T42 2026-09-04: this used to parse exactly ONE argument and
+// strand pos on the first `,` -- every multi-arg recursion (gcd, ackermann)
+// silently returned garbage; only 1-arg recursion (c09 factorial) was right).
 fn emit_self_call(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
-  let _ = pos[0] = pos[0] + 1;
-  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
-  let _ = skip_ws(s, pos);
-  let _ = pos[0] = pos[0] + 1;
-  let _ = pop(insns, n, 0, fntab);
-  let rep_save = fntab[3890];
-  let _ = flush_on_bl(insns, n, fntab, rep_save);
-  let _ = emit_bl(insns, n, selfstart, 1);
-  let _ = pop_back(insns, n, fntab, rep_save);
-  let _ = push(insns, n, fntab);
-  n[0]
+  emit_bl_call(s, selfname, pos, insns, n, stab, selfname, selfstart, fntab)
 }
 
 // hvham(a, b, n): NEON popcount of a^b over floor(n/8)*8 words.
@@ -1508,11 +1503,16 @@ fn emit_term(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
   0
 }
 
-// Consume ( expr ).
+// Consume ( expr ). T42 2026-09-04: the closing delimiter is CHECKED, not
+// assumed -- a statement sequence inside parens (`( let i = 0; while ... ; r )`,
+// the attic "if-while" shape) is outside the surface (`( cmp )`) and used to
+// compile silently to garbage; now the compiler exits 95 (expected `)`).
 fn emit_paren(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
+  let cp = if pos[0] >= str_len(s) then 0 else char(s, pos[0]);
+  let _ = if cp == 41 then 0 else sys_exit(95);
   let _ = pos[0] = pos[0] + 1;
   n[0]
 }
@@ -1592,6 +1592,8 @@ fn emit_let_in(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
 fn emit_let_plain(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], reg: i64) -> i64 {
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
+  let ci = if pos[0] >= str_len(s) then 0 else char(s, pos[0]);
+  let _ = if ci == 105 then 0 else sys_exit(95);
   let _ = pos[0] = pos[0] + 2;
   let _ = pop(insns, n, 0, fntab);
   let _ = bind_reg(insns, n, reg);
@@ -1608,6 +1610,8 @@ fn emit_let_chain(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
+  let ci = if pos[0] >= str_len(s) then 0 else char(s, pos[0]);
+  let _ = if ci == 105 then 0 else sys_exit(95);
   let _ = pos[0] = pos[0] + 2;
   let _ = pop(insns, n, 0, fntab);
   let _ = bind_reg(insns, n, treg);

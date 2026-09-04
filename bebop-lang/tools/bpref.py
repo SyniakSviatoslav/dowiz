@@ -18,9 +18,20 @@ Semantics (aarch64 runtime): i64 wraparound; `/` truncates, x/0 = 0,
 MIN/-1 = MIN; `%` = a - (a/b)*b (so a%0 = a); shifts take amount mod 64,
 `>>` is LOGICAL; `let` is fn-scoped assignment (rebinding mutates, incl.
 inside while/let-in); no unary minus, no `!`.
+Exit codes: 0 value printed; 2 `bpref error:` (parse/runtime error in the
+oracle); 3 `bpref depth:` call depth exceeded BPREF_DEPTH (default 5000) --
+the program recurses without bound, a generator/program defect, not a
+compiler verdict (fuzz category BPREF-DEPTH).
 """
+import os
 import re
 import sys
+
+DEPTH_CAP = int(os.environ.get('BPREF_DEPTH', '5000'))
+
+
+class DepthError(Exception):
+    pass
 
 MASK = (1 << 64) - 1
 
@@ -292,11 +303,18 @@ class Interp:
     def __init__(self, fns, ctors):
         self.fns = fns
         self.ctors = ctors
+        self.depth = 0
 
     def call(self, name, args):
         params, body = self.fns[name]
         env = dict(zip(params, args))
-        return self.run_body(body, env)
+        self.depth += 1
+        if self.depth > DEPTH_CAP:
+            raise DepthError('call depth > %d in %s' % (DEPTH_CAP, name))
+        try:
+            return self.run_body(body, env)
+        finally:
+            self.depth -= 1
 
     def run_body(self, items, env):
         val = 0
@@ -391,6 +409,8 @@ def main():
             res.append(run(src))
         except SystemExit as ex:
             res.append(('exit', ex.code))
+        except DepthError as ex:
+            res.append(('depth', str(ex)))
         except BaseException as ex:  # noqa
             res.append(('err', '%s: %s' % (type(ex).__name__, ex)))
     th = threading.Thread(target=go)
@@ -399,6 +419,9 @@ def main():
     if isinstance(r, tuple) and r[0] == 'err':
         print('bpref error: ' + r[1], file=sys.stderr)
         sys.exit(2)
+    if isinstance(r, tuple) and r[0] == 'depth':
+        print('bpref depth: ' + r[1], file=sys.stderr)
+        sys.exit(3)
     if isinstance(r, tuple) and r[0] == 'exit':
         sys.exit(r[1])
     print(r)

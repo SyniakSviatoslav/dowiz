@@ -4,6 +4,40 @@ Every native-codegen or toolchain bug that cost debugging time this week,
 with the rule each one earns. Rules marked **[RULE]** are binding for future
 sessions on this codebase.
 
+## [FIXED] multi-argument self-recursion returned garbage — `emit_self_call` parsed ONE argument (2026-09-04, T42)
+
+`emit_call_or_ctor` (bebop.bp ~920) dispatches `is_self` BEFORE `is_fn`, so
+every recursive call goes through `emit_self_call`, which did `pos+1;
+emit_cmp; skip_ws; pos+1; pop x0; bl selfstart` — exactly one argument. For
+`gcd(b, a % b)` it emitted the first argument, skipped the `,` as if it were
+`)`, and left pos INSIDE the argument list; the enclosing expression then
+parsed `a % b)` as its own continuation. Only 1-argument recursion (c09
+factorial) was right, which is why no gate ever saw it. The two multi-arg
+recursive fns in the compiler itself (`str_reg`/`ldr_reg`, S3 register
+window) are dead at runtime (rep == 0), so the fixpoint hid it too. Found
+by the delimiter check of the next entry (the compiler refused to compile
+itself: `str_reg` tripped `expected )`).
+
+Minimal repro: `fn gcd(a: i64, b: i64) -> i64 { if b == 0 then a else gcd(b,
+a % b) } fn main() -> i64 { gcd(48, 18) }` → expected 6, got 0. Shape matrix
+(`shapes_A2`, 9 files): gcd, ackermann (self-call as self-call argument),
+2-arg accumulator, 3-arg modular pow, 3-arg array recursion (SIGSEGV),
+self-call inside `let _ = … in` inside parens (SIGSEGV), statement-level
+`let r = self(...)`, mutual recursion + self — all wrong; c09 OK.
+
+Fix (single variable): `emit_self_call` delegates to `emit_bl_call` (the
+N-argument loop every resolved callee uses), whose target is `selfstart`
+when `name == selfname` (pass 1 has no table entry for the fn being
+compiled; pass 2's entry equals selfstart, so word counts agree across
+passes). Gate c26_selfrec (gcd·10^4 + ack(2,3)·100 + powm(3,5,100) = 60943;
+old compiler 0). Fixpoint 556dd329 → d4b81e21a8e04c8b7b69588c32c4e9fa
+(cand != g2 because the OLD compiler miscompiled str_reg/ldr_reg; g2 == g3).
+Census: bebop bcond 868 → 869 (the selfname conditional), inherent.
+
+**[RULE] A dispatch that special-cases a callee class (self, builtin,
+ctor) must go through the SAME argument-list parser as the general path;
+a bespoke arg parser is a second grammar and drifts silently.**
+
 ## [FIXED] `match` swallowed the enclosing expression after its `}` — arm loop overran the closing brace (2026-09-04, T42)
 
 All 56 CRASH/DIVERGE/TIMEOUT repros of the T39 fuzzer had one root cause

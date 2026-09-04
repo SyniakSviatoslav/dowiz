@@ -1,54 +1,52 @@
 #!/usr/bin/env bash
-# T39 compiler fuzzer: gen.py -> bebop.bin compile -> seed run, compared to
+# T39 compiler fuzzer: gen.py -> $BEBOP_BIN compile -> seed run, compared to
 # tools/bpref.py (the semantic oracle). Usage: bench/fuzz/fuzz.sh [N] [START]
-# env: J=parallel jobs (default 4), BEBOP_TMP=scratch root.
-# Categories: OK DIVERGE COMPILEFAIL CRASH TIMEOUT BPREF-ERROR (GENFAIL = generator bug).
-# Every non-OK program is saved to bench/fuzz/repros/<CAT>-<seed>.bp with an
+# env: J=parallel jobs (default 4), BEBOP_BIN=compiler (default bebop.bin),
+# REPROS=repro dir (default bench/fuzz/repros), BEBOP_TMP=scratch root.
+# Categories (classifier = bench/fuzz/shrink.py --classify, shared with the
+# T77 shrinker): OK DIVERGE COMPILEFAIL CRASH TIMEOUT BPREF-ERROR
+# BPREF-DEPTH (oracle call depth > 5000: unbounded recursion = generator
+# defect, not a compiler verdict) GENFAIL (generator bug).
+# Every compiler-class program is saved to $REPROS/<CAT>-<seed>.bp with an
 # expected-vs-got header (L10). A CRASH is re-run 3x before it is believed.
+# Every seed/compiled-program run has cwd = the per-seed scratch dir, so a
+# stray file written by a misbehaving binary lands there, not in the repo.
 ulimit -s 65536 2>/dev/null || true
 cd "$(dirname "$0")/../.." || exit 1
 N=${1:-200}; START=${2:-1}; J=${J:-4}
+export BEBOP_BIN=$(realpath -m "${BEBOP_BIN:-bebop.bin}")
+export REPROS=${REPROS:-bench/fuzz/repros}
 export TMP=${BEBOP_TMP:-/tmp/opencode/agentB-fuzz}/fuzz.$$
-export REPROS=bench/fuzz/repros
 mkdir -p "$TMP" "$REPROS"
-[ -s bebop.bin ] || { echo "GUARD: bebop.bin is missing or empty (L12)"; exit 1; }
+[ -s "$BEBOP_BIN" ] || { echo "GUARD: $BEBOP_BIN is missing or empty (L12)"; exit 1; }
+# snapshot the compiler: a concurrent promotion (rm+cp of bebop.bin) made
+# seed's openat fail mid-run (exit 90 = f_open, classified COMPILEFAIL);
+# the whole run now sees ONE artifact, whose md5 is printed in the summary
+cp "$BEBOP_BIN" "$TMP/bebop.bin" && export BEBOP_BIN=$TMP/bebop.bin
 
 one() {
-  local s=$1 d=$TMP/$1 cat exp got rc n k
+  local s=$1 d=$TMP/$1 cat exp got
   mkdir -p "$d"
   python3 bench/fuzz/gen.py --seed "$s" --out "$d/p.bp" 2>"$d/gerr" || { echo "GENFAIL $s"; return; }
-  exp=$(timeout 20 python3 tools/bpref.py "$d/p.bp" 2>"$d/err"); rc=$?
-  if [ $rc -ne 0 ]; then
-    cat=BPREF-ERROR; got="rc=$rc $(tail -c 160 "$d/err" | tr '\n' ' ')"
-  else
-    timeout 20 ./seed/build/seed bebop.bin compile "$d/p.bp" "$d/p.bin" >"$d/cout" 2>&1; rc=$?
-    if [ $rc -ne 0 ] || [ ! -s "$d/p.bin" ]; then
-      cat=COMPILEFAIL; got="compile rc=$rc $(tail -c 80 "$d/cout" | tr '\n' ' ')"
-    else
-      timeout 5 ./seed/build/seed "$d/p.bin" >"$d/out" 2>/dev/null; rc=$?
-      got=$(tail -1 "$d/out")
-      if [ $rc -eq 124 ]; then cat=TIMEOUT; got="timeout 5s"
-      elif [ $rc -ge 128 ]; then
-        n=0; for k in 1 2 3; do timeout 5 ./seed/build/seed "$d/p.bin" >/dev/null 2>&1; [ $? -ge 128 ] && n=$((n+1)); done
-        cat=CRASH; got="signal $((rc-128)) ($n/3 reruns crashed)"
-      elif [ "$got" = "$exp" ]; then cat=OK
-      else cat=DIVERGE; [ $rc -ne 0 ] && got="$got (exit rc=$rc)"
-      fi
-    fi
-  fi
-  if [ "$cat" != OK ]; then
-    { echo "// $cat seed=$s expected=$exp got=$got"; cat "$d/p.bp"; } >"$REPROS/$cat-$s.bp"
-  fi
-  echo "$cat $s"
+  IFS=$'\t' read -r cat exp got < <(python3 bench/fuzz/shrink.py --classify "$d/p.bp")
+  case "$cat" in
+    OK|BPREF-DEPTH) ;;
+    *) { echo "// $cat seed=$s expected=$exp got=$got"; cat "$d/p.bp"; } >"$REPROS/$cat-$s.bp" ;;
+  esac
+  echo "${cat:-HARNESS-ERROR} $s"
+  ls "$d" | grep -v -E '^(p\.bp|p\.bin|gerr)$' | sed "s/^/STRAY $s /"  # anything else = a stray file written by a run
   rm -rf "$d"
 }
 export -f one
 t0=$(date +%s.%N)
 seq "$START" $((START + N - 1)) | xargs -P "$J" -I{} bash -c 'one {}' >"$TMP/results"
 t1=$(date +%s.%N)
-awk -v n="$N" -v t="$(echo "$t1 - $t0" | bc)" '
+awk -v n="$N" -v s="$START" -v t0="$t0" -v t1="$t1" -v bin="$(md5sum "$BEBOP_BIN" | cut -c1-8)" '
   { c[$1]++ }
-  END { printf "fuzz: N=%d OK=%d DIVERGE=%d COMPILEFAIL=%d CRASH=%d TIMEOUT=%d BPREF-ERROR=%d GENFAIL=%d wall=%.1fs\n",
-        n, c["OK"], c["DIVERGE"], c["COMPILEFAIL"], c["CRASH"], c["TIMEOUT"], c["BPREF-ERROR"], c["GENFAIL"], t }' "$TMP/results"
-grep -v '^OK' "$TMP/results" | sort -k2 -n | head -40
-[ "$(grep -vc '^OK' "$TMP/results")" = 0 ]
+  END { t = t1 - t0
+        printf "fuzz: N=%d START=%d OK=%d DIVERGE=%d COMPILEFAIL=%d CRASH=%d TIMEOUT=%d BPREF-ERROR=%d BPREF-DEPTH=%d GENFAIL=%d STRAY=%d wall=%.1fs rate=%.2f/s bin=%s\n",
+        n, s, c["OK"], c["DIVERGE"], c["COMPILEFAIL"], c["CRASH"], c["TIMEOUT"], c["BPREF-ERROR"], c["BPREF-DEPTH"], c["GENFAIL"], c["STRAY"], t, n / (t > 0 ? t : 1), bin }' "$TMP/results"
+grep -v -E '^(OK|GENFAIL|BPREF-DEPTH) ' "$TMP/results" | sort -k2 -n | head -40
+rc=$([ "$(grep -v -c -E '^(OK|GENFAIL|BPREF-DEPTH) ' "$TMP/results")" = 0 ]; echo $?)
+rm -rf "$TMP"
+exit $rc

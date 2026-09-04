@@ -81,7 +81,7 @@ class Ctx:
             return str(self.r.randint(0, 5000))
         return str(self.r.choice(BIG))
 
-    def index(self, name, simple=False):
+    def index(self, name, simple=False, d=1):
         mask = self.arrays[name]
         r = self.r.random()
         lv = self.loopvars  # bounds <= 6 < 8 <= every array length
@@ -89,7 +89,9 @@ class Ctx:
             return str(self.r.randint(0, min(mask, 7)))
         if r < 0.7 and lv:
             return self.r.choice(lv)
-        return '((%s) & %d)' % (self.expr(2, simple), mask)
+        # depth flows through: an index used to restart at expr(2), and a
+        # chain of a[..a[..a[..]]] resets recursed past Python's frame limit
+        return '((%s) & %d)' % (self.expr(max(d + 1, 2), simple), mask)
 
     # ---- expressions ----
     def expr(self, d, simple=False):
@@ -97,13 +99,17 @@ class Ctx:
         r = self.r.random()
         if d >= 4:
             r *= 0.6
-        if r < 0.25:
+        if d >= 8 or r < 0.25:
+            # hard leaf at d>=8: the 0.6 damping alone is supercritical when
+            # scalars/arrays are empty (lit 42% vs binop 58% x 2 children)
+            if self.scalars and self.r.random() < 0.5:
+                return self.r.choice(self.scalars)
             return self.lit()
         if r < 0.45 and self.scalars:
             return self.r.choice(self.scalars)
         if r < 0.55 and self.arrays:
             a = self.r.choice(list(self.arrays))
-            return '%s[%s]' % (a, self.index(a, simple))
+            return '%s[%s]' % (a, self.index(a, simple, d))
         if r < 0.78:
             return self.binop(d, simple)
         if r < 0.85:
@@ -138,7 +144,7 @@ class Ctx:
         if k < 0.6 and self.arrays and self.can_bind('_'):
             self.bind('_')
             a = self.r.choice(list(self.arrays))
-            return '(let _ = %s[%s] = %s in %s)' % (a, self.index(a), self.expr(d + 1), self.expr(d + 1))
+            return '(let _ = %s[%s] = %s in %s)' % (a, self.index(a, False, d), self.expr(d + 1), self.expr(d + 1))
         t = 't%d' % self.r.randint(0, 3)
         if not self.can_bind(t):
             return self.lit()

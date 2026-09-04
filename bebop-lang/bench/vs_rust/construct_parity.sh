@@ -51,6 +51,7 @@ for f in "$DIR"/*.bp; do
     c23_spillcall) EXPECT=110;;
     c24_ifspill) EXPECT=99;;
     c25_matchtail) EXPECT=42;;
+    c26_selfrec) EXPECT=60943;;
     *) EXPECT="";;
   esac
   if [ "$IVAL" = "$EXPECT" ]; then
