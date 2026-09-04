@@ -562,10 +562,8 @@ fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i6
     0
   };
   let target = fntab_lookup(fntab, name);
-  let rep_save = fntab[3890];
-  let _ = flush_on_bl(insns, n, fntab, rep_save);
+  let _ = flush_window(insns, n, fntab);
   let _ = emit_bl(insns, n, target, 1);
-  let _ = pop_back(insns, n, fntab, rep_save);
   let _ = push(insns, n, fntab);
   n[0]
 }
@@ -576,10 +574,8 @@ fn emit_self_call(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = pop(insns, n, 0, fntab);
-  let rep_save = fntab[3890];
-  let _ = flush_on_bl(insns, n, fntab, rep_save);
+  let _ = flush_window(insns, n, fntab);
   let _ = emit_bl(insns, n, selfstart, 1);
-  let _ = pop_back(insns, n, fntab, rep_save);
   let _ = push(insns, n, fntab);
   n[0]
 }
@@ -587,6 +583,7 @@ fn emit_self_call(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
 // hvham(a, b, n): NEON popcount of a^b over floor(n/8)*8 words.
 // Single-path loop form (works for any n%8==0). Dossier: BUGFIXES.md.
 fn emit_hvham(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = flush_window(insns, n, fntab);  // T13: body uses x9-x13 as scratch
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
@@ -623,6 +620,7 @@ fn emit_hvham(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
 
 // hvham2(a, ao, b, bo, n): NEON hamming with row offsets — no bounce copy.
 fn emit_hvham2(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = flush_window(insns, n, fntab);  // T13: body uses x9-x13 as scratch
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
@@ -670,6 +668,7 @@ fn emit_hvham2(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
 // sys_open(p,n,flags): pack byte-per-element path into the IO scratch zone
 // (last 8 KiB below x28), then raw openat. Words assembler+execution-verified.
 fn emit_sys_open(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = flush_window(insns, n, fntab);  // T13: body uses x9-x13 as scratch
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
@@ -708,6 +707,7 @@ fn emit_sys_open(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
 
 // sys_read(fd,buf,len): raw read into scratch, unpack bytes to element slots.
 fn emit_sys_read(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = flush_window(insns, n, fntab);  // T13: body uses x9-x13 as scratch
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
@@ -744,6 +744,7 @@ fn emit_sys_read(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
 
 // sys_write(fd,buf,len): pack low bytes of elements to scratch, raw write.
 fn emit_sys_write(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = flush_window(insns, n, fntab);  // T13: body uses x9-x13 as scratch
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
@@ -831,6 +832,7 @@ fn emit_clock_ms(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
 // sys_readbuf(fd,len): raw read into the IO scratch zone, returns its
 // address — the standard handoff for feeding source text to emit_words.
 fn emit_sys_readbuf(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = flush_window(insns, n, fntab);  // T13: body uses x9-x13 as scratch
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
@@ -891,6 +893,7 @@ fn emit_char_fn(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfnam
 // sys_slurp(fd,len): arena-allocate round16(len*8) bytes, raw read into it,
 // NUL-terminate at nread, return the base address. Feeds emit_words directly.
 fn emit_sys_slurp(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = flush_window(insns, n, fntab);  // T13: body uses x9-x13 as scratch
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
@@ -976,7 +979,7 @@ fn emit_var_or_ctor(s: str, name: i64, npos: i64, insns: [i64], n: [i64], stab: 
 // Emit a matching match-arm: bind the payload var (if any) then emit the arm body.
 fn emit_match_arm(s: str, ppos: i64, has_var: i64, vname: i64, vpos: i64, bodypos: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let saved = pos[0];
-  let _ = if has_var == 1 then (let _ = pos[0] = ppos in (let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) in (let _ = em(insns, n, 4181722080) in (let _ = em(insns, n, 2432713727) in (let _ = bind_reg(insns, n, sym_bind(s, stab, vname, vpos)) in 0))))) else 0;
+  let _ = if has_var == 1 then (let _ = pos[0] = ppos in (let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) in (let _ = pop(insns, n, 0, fntab) in (let _ = bind_reg(insns, n, sym_bind(s, stab, vname, vpos)) in 0)))) else 0;
   let _ = pos[0] = bodypos;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = pos[0] = saved;
@@ -1094,65 +1097,67 @@ fn em(insns: [i64], n: [i64], w: i64) -> i64 {
   n[0]
 }
 
-// Push x0 (sub sp,#16 ; str x0,[sp]). R6.1 model: depth at fntab[3700],
-// slot tag d+11 at 3701+d (guarded d<96). NO traps and NO stream side
-// effects: the legacy emitter legitimately leaks +1 depth per unresolved
-// call site (okres==0 dummy push) and big array literals reach depth ~99+
-// transiently - checks/caps on that turned a benign leak into a stream
-// pollution cascade (journal 1788288246). Bookkeeping only.
+// Push x0. T13 register window (R6.1 protocol): the newest WCAP values of
+// the value stack live in x9..x(8+WCAP) (window depth at fntab[3890]);
+// everything older is on the memory stack in the canonical layout. A push
+// into a full window first MIGRATES the whole window to memory
+// (flush_window: exactly the pushes the stack machine would have emitted,
+// oldest first), so memory always holds the older values below and the
+// window the newer ones above - ONE representation, never interleaved.
+// WCAP=0 reproduces the legacy stack machine byte-exact. The depth cell
+// fntab[3700] is a leaky bookkeeper for the slot tags only (guarded d<96)
+// and is never used for register addressing (journal 1788288246).
 fn push(insns: [i64], n: [i64], fntab: [i64]) -> i64 {
   let d = fntab[3700];
   let wsl = if d < 96 then (if d >= 0 then 1 else 0) else 0;
   let _ = if wsl == 1 then (let _ = fntab[3701 + d] = d + 11 in 0) else 0;
   let _ = fntab[3700] = d + 1;
   let _ = fold_clear(fntab);
-  let _ = em(insns, n, 3506455551);
-  let _ = em(insns, n, 4177527776);
+  let wcap = 5;
+  let full = if fntab[3890] >= wcap then 1 else 0;
+  let _ = if full == 1 then flush_window(insns, n, fntab) else 0;
+  let wd = fntab[3890];
+  let toreg = if wd < wcap then 1 else 0;
+  let _ = if toreg == 1 then (let _ = em(insns, n, 2852127721 + wd) in (let _ = fntab[3890] = wd + 1 in 0)) else 0;
+  let _ = if toreg == 0 then (let _ = em(insns, n, 3506455551) in (let _ = em(insns, n, 4177527776) in 0)) else 0;
   n[0]
 }
 
-// Pop into x<rd> (ldr x<rd>,[sp] ; add sp,#16). R6.1 model bookkeeping
-// only (depth at fntab[3700]); see push for why traps were removed.
+// Pop into x<rd> (rd is always x0..x7): mov x<rd>,x(8+wd) when the top is
+// in the window, else the canonical memory pop (ldr x<rd>,[sp] ; add sp,#16).
 fn pop(insns: [i64], n: [i64], rd: i64, fntab: [i64]) -> i64 {
   let d = fntab[3700];
   let dm1 = if d > 0 then d - 1 else 0;
   let _ = fntab[3700] = dm1;
   let _ = fold_clear(fntab);
-  let _ = em(insns, n, 4181722080 + rd);
-  let _ = em(insns, n, 2432713727);
+  let wd = fntab[3890];
+  let inreg = if wd > 0 then 1 else 0;
+  let _ = if inreg == 1 then (let _ = em(insns, n, 2852127712 + (8 + wd) * 65536 + rd) in (let _ = fntab[3890] = wd - 1 in 0)) else 0;
+  let _ = if inreg == 0 then (let _ = em(insns, n, 4181722080 + rd) in (let _ = em(insns, n, 2432713727) in 0)) else 0;
   n[0]
 }
 
-// S3: flush register window to stack before a bl (call site).
-// Saves x9..x(9+rep-1) to stack, resets rep=-1. No-op when rep==0 (all-memory).
-fn flush_on_bl(insns: [i64], n: [i64], fntab: [i64], rep: i64) -> i64 {
-  let do_flush = if rep > 0 then 1 else 0;
-  let _ = if do_flush == 1 then (let _ = fntab[3890] = 0 - 1 in 0) else 0;
-  let _ = if do_flush == 1 then str_reg(insns, n, 0, rep) else 0;
-  n[0]
-}
-
-fn str_reg(insns: [i64], n: [i64], i: i64, rep: i64) -> i64 {
-  let done = if i >= rep then 1 else 0;
-  let _ = if done == 0 then (let _ = em(insns, n, 4177527776 + (9 + i) + i * 8192) in 0) else 0;
-  let _ = if done == 0 then (let _ = str_reg(insns, n, i + 1, rep) in 0) else 0;
-  n[0]
-}
-
-// S3: pop_back after bl — restores flushed registers from stack. No-op when rep==0.
-fn pop_back(insns: [i64], n: [i64], fntab: [i64], rep: i64) -> i64 {
-  let do_restore = if rep > 0 then 1 else 0;
-  let total = rep * 8 + 64;  // flush space + bl frame (48) + push space (16)
-  let _ = if do_restore == 1 then (let _ = em(insns, n, 2432713727 + (total - 16) * 1024) in 0) else 0;
-  let _ = if do_restore == 1 then ldr_reg(insns, n, 0, rep) else 0;
-  let _ = if do_restore == 1 then (let _ = fntab[3890] = rep in 0) else 0;
-  n[0]
-}
-
-fn ldr_reg(insns: [i64], n: [i64], i: i64, rep: i64) -> i64 {
-  let done = if i >= rep then 1 else 0;
-  let _ = if done == 0 then (let _ = em(insns, n, 4181722080 + (9 + i) + i * 8192) in 0) else 0;
-  let _ = if done == 0 then (let _ = ldr_reg(insns, n, i + 1, rep) in 0) else 0;
+// T13 flush: migrate the register window to the memory stack, oldest
+// first (sub sp,#16 ; str x(9+k),[sp] for k = 0..wd-1) - exactly the pushes
+// the stack machine would have emitted, so from here on the memory layout
+// is identical to the legacy one - then empty the window. Required before
+// anything that clobbers x9-x13: every bl (callee ABI) and the inline
+// builtins that use x9-x13 as scratch (hvham/hvham2, sys_*), and at every
+// control-flow join (cond entry + both arm ends, while entry) so all paths
+// meet in ONE state. Also clears the fold model: its word counts are only
+// stream-contiguous while nothing sits between a literal and its consumer.
+// Unrolled on purpose (window is x9..x13, WCAP <= 5): a multi-argument
+// direct self-call miscompiles (emit_self_call parses ONE argument), so a
+// recursive helper here segfaults the compiler (journal, T13 session 4).
+fn flush_window(insns: [i64], n: [i64], fntab: [i64]) -> i64 {
+  let wd = fntab[3890];
+  let _ = if wd > 0 then (let _ = em(insns, n, 3506455551) in (let _ = em(insns, n, 4177527785) in 0)) else 0;
+  let _ = if wd > 1 then (let _ = em(insns, n, 3506455551) in (let _ = em(insns, n, 4177527786) in 0)) else 0;
+  let _ = if wd > 2 then (let _ = em(insns, n, 3506455551) in (let _ = em(insns, n, 4177527787) in 0)) else 0;
+  let _ = if wd > 3 then (let _ = em(insns, n, 3506455551) in (let _ = em(insns, n, 4177527788) in 0)) else 0;
+  let _ = if wd > 4 then (let _ = em(insns, n, 3506455551) in (let _ = em(insns, n, 4177527789) in 0)) else 0;
+  let _ = fntab[3890] = 0;
+  let _ = fold_clear(fntab);
   n[0]
 }
 
@@ -1192,6 +1197,8 @@ fn emit_lit(insns: [i64], n: [i64], imm: i64, fntab: [i64]) -> i64 {
   let d0 = fntab[3655];
   let t0 = fntab[3656];
   let c0 = fntab[3657];
+  let w0 = fntab[3890];
+  let wp0 = fntab[3660];
   let _ = em(insns, n, 3531603968 + imm16u * 32);
   let _ = emit_half(insns, n, imm, 1, fntab);
   let _ = emit_half(insns, n, imm, 2, fntab);
@@ -1203,6 +1210,8 @@ fn emit_lit(insns: [i64], n: [i64], imm: i64, fntab: [i64]) -> i64 {
   let _ = fntab[3656] = imm;
   let _ = fntab[3657] = cnt;
   let _ = fntab[3655] = if d0 > 0 then 2 else 1;
+  let _ = fntab[3661] = wp0;
+  let _ = fntab[3660] = w0;
   n[0]
 }
 
@@ -1214,6 +1223,8 @@ fn emit_lit(insns: [i64], n: [i64], imm: i64, fntab: [i64]) -> i64 {
 //                 literals recorded in the cells below
 //   fntab[3656] = top value,     fntab[3657] = top word count
 //   fntab[3658] = second value,  fntab[3659] = second word count
+//   fntab[3660] = top pre-push window depth, fntab[3661] = second's (T13:
+//                 a retracted push must also restore the register window)
 // push() and pop() clear the depth (unknown values on the stack);
 // emit_lit records its literal after pushing; emit_cond/emit_match clear
 // (their runtime value depends on the condition); fold_try consumes the
@@ -1241,6 +1252,7 @@ fn fold_try(insns: [i64], n: [i64], fntab: [i64], op: i64) -> i64 {
   let cnt = fntab[3657] + fntab[3659];
   let vfold = (if op == 2 then 1 else 0) * (vA + vB) + (if op == 3 then 1 else 0) * (vA - vB) + (if op == 4 then 1 else 0) * (vA * vB);
   let _ = if isb == 1 then (let _ = n[0] = n[0] - cnt in 0) else 0;
+  let _ = if isb == 1 then (let _ = fntab[3890] = fntab[3661] in 0) else 0;
   let _ = if isb == 1 then (let _ = fold_clear(fntab) in 0) else 0;
   let _ = if isb == 1 then (let _ = emit_lit(insns, n, vfold, fntab) in 0) else 0;
   // right-const imm12 path (only fires when the both-const fold did not)
@@ -1251,6 +1263,7 @@ fn fold_try(insns: [i64], n: [i64], fntab: [i64], op: i64) -> i64 {
   let isi = (if d == 1 then 1 else 0) * ir * iadd;
   let wimm = (if op == 2 then 1 else 0) * (2432696320 + vTop * 1024) + (if op == 3 then 1 else 0) * (3506438144 + vTop * 1024);
   let _ = if isi == 1 then (let _ = n[0] = n[0] - cTop in 0) else 0;
+  let _ = if isi == 1 then (let _ = fntab[3890] = fntab[3660] in 0) else 0;
   let _ = if isi == 1 then (let _ = pop(insns, n, 0, fntab) in 0) else 0;
   let _ = if isi == 1 then (let _ = em(insns, n, wimm) in 0) else 0;
   let _ = if isi == 1 then (let _ = push(insns, n, fntab) in 0) else 0;
@@ -1520,12 +1533,17 @@ fn emit_cond(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
   let _ = pos[0] = pos[0] + 2;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = pop(insns, n, 0, fntab);
+  // T13: both arms start from ONE state (empty window, older values in
+  // memory) and end in ONE state (arm result migrated to memory), so the
+  // join has a single representation whatever each arm did internally.
+  let _ = flush_window(insns, n, fntab);
   let _ = em(insns, n, 4043309087);
   let p1 = n[0];
   let _ = em(insns, n, 1409286144);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 4;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = flush_window(insns, n, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 4;
   let p2 = n[0];
@@ -1533,6 +1551,7 @@ fn emit_cond(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
   let else_pos = n[0];
   let _ = insns[p1] = 1409286144 + (else_pos - p1) * 32;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = flush_window(insns, n, fntab);
   let end_pos = n[0];
   let _ = insns[p2] = 335544320 + (end_pos - p2);
   let _ = fold_clear(fntab);
@@ -1888,6 +1907,7 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = pos[0] = pos[0] + 5;
   let _ = skip_ws(s, pos);
   let pcond = pos[0];
+  let _ = flush_window(insns, n, fntab);  // T13: loop entry/back-edge in ONE state
   let loop_start = n[0];
   // legacy stack-machine loop: emit the condition, materialize it, branch
   // with a PLACEHOLDER b.eq (fixup recorded at p1), emit the body, then
@@ -2413,7 +2433,7 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   // accumulated by earlier ones (every cache-hit increments fntab[4000];
   // without reset, late fns compile ALL calls as unresolved/neutral).
   let _ = fntab[4000] = 0;
-  let _ = fntab[3890] = 0;  // S3: rep=0 (all-memory) at function entry
+  let _ = fntab[3890] = 0;  // T13: empty register window at function entry
   let pos = [fpos];
   let stab = zeros(385);  // 1 + 3*128 (name,reg,srcpos) verified triples; overflow -> loud trap
   let _ = skip_ws(s, pos);
@@ -3231,6 +3251,7 @@ fn emit_sys_munmap(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
 // store low bytes of cells directly into the mapped region (NO scratch, NO
 // sys_write), munmap. Returns 0. objdump-verified 2026-09-01.
 fn emit_sys_export(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = flush_window(insns, n, fntab);  // T13: body uses x9-x13 as scratch
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
@@ -3321,6 +3342,7 @@ fn emit_sys_mmap(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
 // x10=scratch base old, x17=scratch base new, x9=loop i, x7=byte temp;
 // x8=38 renameat; return errno-style negative on failure.
 fn emit_sys_rename(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = flush_window(insns, n, fntab);  // T13: body uses x9-x13 as scratch
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
