@@ -1,0 +1,266 @@
+// sheafh0.bp — T28: global sections H^0 as the query (harmonic iteration on
+// the sheaf Laplacian), Euler characteristic check. Same sheaf conventions
+// as sheaf.bp: 5 nodes, stalk dim 2, stalks fp 2^32, integer unimodular
+// restriction maps rho[(e*2+side)*4 + i*2+j] (side 0 tail, 1 head), edges
+// (tail < head) as incidence.rs. Two spaces on ONE edge table: the TREE =
+// path 0-1-2-3-4 (ne = 4, tail maps T0..T3, head = I) and the TWISTED CYCLE
+// = tree + edge (0,4) whose tail map is P*diag(1,-1), P = T3 T2 T1 T0 the
+// path transport (a Mobius flip of stalk component 2 around the loop).
+// Query: pin x_0 to a basis vector, block-Jacobi on L_F = delta^T delta with
+// node 0 fixed (x_v -= adj(L_vv) (L x)_v / det L_vv, trunc division, K = 512
+// steps); residual sum |delta x| < 2^16 => a global section exists. dim H^0
+// (pins) = number of basis pins that extend: tree 2 (= d), twisted cycle 1
+// (< d; pin (0,1) hits a residual FLOOR >= 2^28 = the loud NO). Independent
+// linear algebra: rank(delta) by fraction-free Bareiss elimination, h1 =
+// d*ne - rank; chi = d*nv - d*ne == h0(pins) - h1(rank) on both spaces.
+// Recorded step counts: it_t / it_c = first iteration with residual < 2^16
+// for pin (1,0) on tree / cycle (K = 512 frozen).
+// Fold = chi_ok_t*10^13 + chi_ok_c*10^12 + floor_ok*10^11 + h0_t*10^10
+//      + h0_c*10^9 + rank_t*10^8 + rank_c*10^7 + it_t*10^3 + it_c.
+
+fn setm(rho: [i64], k: i64, a: i64, b: i64, c: i64, d: i64) -> i64 {
+  let _ = rho[k * 4] = a;
+  let _ = rho[k * 4 + 1] = b;
+  let _ = rho[k * 4 + 2] = c;
+  let _ = rho[k * 4 + 3] = d;
+  0
+}
+
+fn zero(a: [i64], n: i64) -> i64 {
+  let i = 0;
+  while i < n {
+    let _ = a[i] = 0;
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+// r = delta x ; returns sum |r|
+fn delta(et: [i64], eh: [i64], rho: [i64], ne: i64, x: [i64], r: [i64]) -> i64 {
+  let res = 0;
+  let e = 0;
+  while e < ne {
+    let t = et[e] * 2;
+    let h = eh[e] * 2;
+    let kt = (e * 2) * 4;
+    let kh = (e * 2 + 1) * 4;
+    let r0 = rho[kh] * x[h] + rho[kh + 1] * x[h + 1] - (rho[kt] * x[t] + rho[kt + 1] * x[t + 1]);
+    let r1 = rho[kh + 2] * x[h] + rho[kh + 3] * x[h + 1] - (rho[kt + 2] * x[t] + rho[kt + 3] * x[t + 1]);
+    let _ = r[e * 2] = r0;
+    let _ = r[e * 2 + 1] = r1;
+    let a0 = if r0 < 0 then 0 - r0 else r0;
+    let a1 = if r1 < 0 then 0 - r1 else r1;
+    let res = res + a0 + a1;
+    let e = e + 1;
+    0
+  };
+  res
+}
+
+// y = delta^T r
+fn deltat(et: [i64], eh: [i64], rho: [i64], ne: i64, r: [i64], y: [i64]) -> i64 {
+  let e = 0;
+  while e < ne {
+    let t = et[e] * 2;
+    let h = eh[e] * 2;
+    let kt = (e * 2) * 4;
+    let kh = (e * 2 + 1) * 4;
+    let r0 = r[e * 2];
+    let r1 = r[e * 2 + 1];
+    let _ = y[h] = y[h] + rho[kh] * r0 + rho[kh + 2] * r1;
+    let _ = y[h + 1] = y[h + 1] + rho[kh + 1] * r0 + rho[kh + 3] * r1;
+    let _ = y[t] = y[t] - (rho[kt] * r0 + rho[kt + 2] * r1);
+    let _ = y[t + 1] = y[t + 1] - (rho[kt + 1] * r0 + rho[kt + 3] * r1);
+    let e = e + 1;
+    0
+  };
+  0
+}
+
+// dd[v*4..] += rho^T rho for every (edge, side) incident to v (block diagonal of L_F)
+fn blockdiag(et: [i64], eh: [i64], rho: [i64], ne: i64, dd: [i64]) -> i64 {
+  let s = 0;
+  while s < ne * 2 {
+    let e = s / 2;
+    let v = if s - e * 2 == 0 then et[e] else eh[e];
+    let k = s * 4;
+    let a = rho[k];
+    let b = rho[k + 1];
+    let c = rho[k + 2];
+    let d = rho[k + 3];
+    let _ = dd[v * 4] = dd[v * 4] + a * a + c * c;
+    let _ = dd[v * 4 + 1] = dd[v * 4 + 1] + a * b + c * d;
+    let _ = dd[v * 4 + 2] = dd[v * 4 + 2] + a * b + c * d;
+    let _ = dd[v * 4 + 3] = dd[v * 4 + 3] + b * b + d * d;
+    let s = s + 1;
+    0
+  };
+  0
+}
+
+// block-Jacobi, node 0 pinned, 512 steps. returns it_conv * 2^40 + residual
+fn solve(et: [i64], eh: [i64], rho: [i64], ne: i64, dd: [i64], x: [i64], r: [i64], y: [i64]) -> i64 {
+  let it = 0;
+  let res = 0;
+  let k = 1;
+  while k < 513 {
+    let _ = zero(y, 10);
+    let _ = delta(et, eh, rho, ne, x, r);
+    let _ = deltat(et, eh, rho, ne, r, y);
+    let v = 1;
+    while v < 5 {
+      let a = dd[v * 4];
+      let b = dd[v * 4 + 1];
+      let c = dd[v * 4 + 2];
+      let d = dd[v * 4 + 3];
+      let det = a * d - b * c;
+      let y0 = y[v * 2];
+      let y1 = y[v * 2 + 1];
+      let _ = x[v * 2] = x[v * 2] - (d * y0 - b * y1) / det;
+      let _ = x[v * 2 + 1] = x[v * 2 + 1] - (a * y1 - c * y0) / det;
+      let v = v + 1;
+      0
+    };
+    let res = delta(et, eh, rho, ne, x, r);
+    let hit = if res < 65536 then 1 else 0;
+    let first = if it == 0 then 1 else 0;
+    let it = it + k * hit * first;
+    let k = k + 1;
+    0
+  };
+  let rc = if res < 1099511627776 then res else 1099511627775;
+  it * 1099511627776 + rc
+}
+
+fn run(et: [i64], eh: [i64], rho: [i64], ne: i64, dd: [i64], x: [i64], r: [i64], y: [i64], p0: i64, p1: i64) -> i64 {
+  let _ = zero(dd, 20);
+  let _ = zero(x, 10);
+  let _ = blockdiag(et, eh, rho, ne, dd);
+  let _ = x[0] = p0 << 32;
+  let _ = x[1] = p1 << 32;
+  solve(et, eh, rho, ne, dd, x, r, y)
+}
+
+// a[(2e+i)*10 + 2v+j] = +rho_head (v = head), -rho_tail (v = tail)
+fn dmat(et: [i64], eh: [i64], rho: [i64], ne: i64, a: [i64]) -> i64 {
+  let _ = zero(a, 100);
+  let e = 0;
+  while e < ne {
+    let i = 0;
+    while i < 2 {
+      let j = 0;
+      while j < 2 {
+        let row = (2 * e + i) * 10;
+        let ch = row + 2 * eh[e] + j;
+        let ct = row + 2 * et[e] + j;
+        let _ = a[ch] = a[ch] + rho[(e * 2 + 1) * 4 + i * 2 + j];
+        let _ = a[ct] = a[ct] - rho[(e * 2) * 4 + i * 2 + j];
+        let j = j + 1;
+        0
+      };
+      let i = i + 1;
+      0
+    };
+    let e = e + 1;
+    0
+  };
+  0
+}
+
+// Bareiss fraction-free elimination with column skipping; stride 10
+fn rank(a: [i64], rows: i64, cols: i64) -> i64 {
+  let rk = 0;
+  let prev = 1;
+  let col = 0;
+  while col < cols {
+    let p = 0 - 1;
+    let i = rk;
+    while i < rows {
+      let nz = if a[i * 10 + col] == 0 then 0 else 1;
+      let take = if p < 0 then nz else 0;
+      let p = p + (i - p) * take;
+      let i = i + 1;
+      0
+    };
+    let found = if p < 0 then 0 else 1;
+    let p = if p < 0 then rk else p;
+    let j = 0;
+    while j < cols {
+      let u = a[rk * 10 + j];
+      let w = a[p * 10 + j];
+      let _ = a[rk * 10 + j] = w;
+      let _ = a[p * 10 + j] = u;
+      let j = j + 1;
+      0
+    };
+    let piv = a[rk * 10 + col];
+    let iend = rows * found + (rk + 1) * (1 - found);
+    let i = rk + 1;
+    while i < iend {
+      let f = a[i * 10 + col];
+      let j = 0;
+      while j < cols {
+        let _ = a[i * 10 + j] = (a[i * 10 + j] * piv - f * a[rk * 10 + j]) / prev;
+        let j = j + 1;
+        0
+      };
+      let i = i + 1;
+      0
+    };
+    let prev = prev * (1 - found) + piv * found;
+    let rk = rk + found;
+    let col = col + 1;
+    0
+  };
+  rk
+}
+
+fn main() -> i64 {
+  let et = [0, 1, 2, 3, 0];
+  let eh = [1, 2, 3, 4, 4];
+  let rho = zeros(40);
+  let dd = zeros(20);
+  let x = zeros(10);
+  let r = zeros(10);
+  let y = zeros(10);
+  let a = zeros(100);
+  // tree maps: tail T0..T3, head I
+  let _ = setm(rho, 0, 1, 1, 0, 1);
+  let _ = setm(rho, 1, 1, 0, 0, 1);
+  let _ = setm(rho, 2, 1, 0, 1, 1);
+  let _ = setm(rho, 3, 1, 0, 0, 1);
+  let _ = setm(rho, 4, 0, 1, 0 - 1, 0);
+  let _ = setm(rho, 5, 1, 0, 0, 1);
+  let _ = setm(rho, 6, 1, 0 - 1, 0, 1);
+  let _ = setm(rho, 7, 1, 0, 0, 1);
+  // cycle edge (0,4): tail = P*diag(1,-1) = [[2,-3],[-1,1]], head I
+  let _ = setm(rho, 8, 2, 0 - 3, 0 - 1, 1);
+  let _ = setm(rho, 9, 1, 0, 0, 1);
+  let big = 1099511627776;
+  // ---- tree, pins (1,0) and (0,1)
+  let q = run(et, eh, rho, 4, dd, x, r, y, 1, 0);
+  let it_t = q / big;
+  let res_t0 = q - it_t * big;
+  let q = run(et, eh, rho, 4, dd, x, r, y, 0, 1);
+  let res_t1 = q - (q / big) * big;
+  let h0_t = (if res_t0 < 65536 then 1 else 0) + (if res_t1 < 65536 then 1 else 0);
+  // ---- twisted cycle, pins (1,0) and (0,1)
+  let q = run(et, eh, rho, 5, dd, x, r, y, 1, 0);
+  let it_c = q / big;
+  let res_c0 = q - it_c * big;
+  let q = run(et, eh, rho, 5, dd, x, r, y, 0, 1);
+  let res_c1 = q - (q / big) * big;
+  let h0_c = (if res_c0 < 65536 then 1 else 0) + (if res_c1 < 65536 then 1 else 0);
+  let floor_ok = if res_c1 >= 268435456 then (if res_c0 < 65536 then 1 else 0) else 0;
+  // ---- ranks by Bareiss
+  let _ = dmat(et, eh, rho, 4, a);
+  let rank_t = rank(a, 8, 10);
+  let _ = dmat(et, eh, rho, 5, a);
+  let rank_c = rank(a, 10, 10);
+  let h1_t = 8 - rank_t;
+  let h1_c = 10 - rank_c;
+  let chi_ok_t = if 10 - 8 == h0_t - h1_t then 1 else 0;
+  let chi_ok_c = if 10 - 10 == h0_c - h1_c then 1 else 0;
+  chi_ok_t * 10000000000000 + chi_ok_c * 1000000000000 + floor_ok * 100000000000 + h0_t * 10000000000 + h0_c * 1000000000 + rank_t * 100000000 + rank_c * 10000000 + it_t * 1000 + it_c
+}

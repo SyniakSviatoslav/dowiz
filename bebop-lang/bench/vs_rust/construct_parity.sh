@@ -4,10 +4,11 @@
 # execution values against frozen expected values.
 ulimit -s 65536 2>/dev/null || true  # eval recursion: 113+ fn self-compile needs >8MB stack
 set -u
+mkdir -p "${BEBOP_TMP:-/tmp/opencode}"
 BEBOPC=./seed/build/seed
 BEBOP_BIN=./bebop.bin
 GUARD="GUARD: bebop.bin is missing or empty (silent-artifact class, journal 1788288248)"
-[ -s bebop.bin ] || { echo "$GUARD"; exit 1; }
+[ -s "${BEBOP_BIN:-bebop.bin}" ] || { echo "$GUARD"; exit 1; }
 
 DIR=${1:-bench/parity_constructs}
 FROZEN=bench/parity_constructs/frozen
@@ -15,15 +16,15 @@ PASS=0; FAIL=0
 
 for f in "$DIR"/*.bp; do
   b=$(basename "$f" .bp)
-  ./seed/build/seed bebop.bin compile "$f" "/tmp/opencode/${b}_test.bin" 2>/dev/null || {
+  ./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$f" "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin" 2>/dev/null || {
     echo "COMPILEFAIL $b"; FAIL=$((FAIL+1)); continue
   }
   # Word-for-byte comparison against frozen artifact
-  if ! cmp -s "/tmp/opencode/${b}_test.bin" "$FROZEN/${b}.bin"; then
+  if ! cmp -s "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin" "$FROZEN/${b}.bin"; then
     echo "WORD_MISMATCH $b"; FAIL=$((FAIL+1)); continue
   fi
   # Execution value check
-  IVAL=$(timeout 30 ./seed/build/seed "/tmp/opencode/${b}_test.bin" | tail -1)
+  IVAL=$(timeout 30 ./seed/build/seed "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin" | tail -1)
   case "$b" in
     c01_lit) EXPECT=1000000065571;;
     c02_arith) EXPECT=34;;

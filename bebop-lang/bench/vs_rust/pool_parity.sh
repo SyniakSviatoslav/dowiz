@@ -2,10 +2,11 @@
 # M7 pool gate: compile with bebop.bin, run with seed,
 # compare against frozen expected values (no interp).
 set -u
+mkdir -p "${BEBOP_TMP:-/tmp/opencode}"
 SEED=./seed/build/seed
 BEBOP_BIN=./bebop.bin
 PASS=0; FAIL=0
-SCR=/tmp/opencode/pool_scr.bp
+SCR=${BEBOP_TMP:-/tmp/opencode}/pool_scr.bp
 
 # proot/ptrace sandbox guard (journal 1788385631): under a ptrace tracer
 # clone(CLONE_VM|CLONE_THREAD) returns 0 in BOTH parent and child and the
@@ -32,8 +33,8 @@ fn main() -> i64 {
   par_sum(4, 1000)
 }
 EOF
-./seed/build/seed bebop.bin compile "$SCR" /tmp/opencode/pool_sum.bin >/dev/null 2>&1 || { echo "COMPILEFAIL par_sum"; exit 1; }
-SV=$(timeout 60 ./seed/build/seed /tmp/opencode/pool_sum.bin | tail -1)
+./seed/build/seed bebop.bin compile "$SCR" ${BEBOP_TMP:-/tmp/opencode}/pool_sum.bin >/dev/null 2>&1 || { echo "COMPILEFAIL par_sum"; exit 1; }
+SV=$(timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/pool_sum.bin | tail -1)
 [ "$SV" = "$PAR_SUM_EXPECT" ] && { echo "PASS par_sum (seed=$SV)"; PASS=$((PASS+1)); } || { echo "FAIL par_sum (seed=$SV want $PAR_SUM_EXPECT)"; FAIL=$((FAIL+1)); }
 
 # ---- gate 1b: par_merge (atomic sys_atomic_add merge) ----
@@ -44,13 +45,13 @@ fn main() -> i64 {
   par_merge(4, 1000)
 }
 EOF
-./seed/build/seed bebop.bin compile "$SCR" /tmp/opencode/pool_merge.bin >/dev/null 2>&1 || { echo "COMPILEFAIL par_merge"; exit 1; }
-SV=$(timeout 60 ./seed/build/seed /tmp/opencode/pool_merge.bin | tail -1)
+./seed/build/seed bebop.bin compile "$SCR" ${BEBOP_TMP:-/tmp/opencode}/pool_merge.bin >/dev/null 2>&1 || { echo "COMPILEFAIL par_merge"; exit 1; }
+SV=$(timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/pool_merge.bin | tail -1)
 [ "$SV" = "$PAR_MERGE_EXPECT" ] && { echo "PASS par_merge (seed=$SV)"; PASS=$((PASS+1)); } || { echo "FAIL par_merge (seed=$SV want $PAR_MERGE_EXPECT)"; FAIL=$((FAIL+1)); }
 
 # ---- gate 2: par_compile == 4 * serial count ----
-./seed/build/seed bebop.bin compile bench/vs_rust/kernels/k1.bp /tmp/opencode/k1_ref.bin >/dev/null 2>&1 || { echo "COMPILEFAIL k1 ref"; exit 1; }
-SERIAL=$(timeout 30 ./seed/build/seed /tmp/opencode/k1_ref.bin | tail -1)
+./seed/build/seed bebop.bin compile bench/vs_rust/kernels/k1.bp ${BEBOP_TMP:-/tmp/opencode}/k1_ref.bin >/dev/null 2>&1 || { echo "COMPILEFAIL k1 ref"; exit 1; }
+SERIAL=$(timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/k1_ref.bin | tail -1)
 cat selfhost/expr_compile.bp > "$SCR"
 cat selfhost/std/pool_compile.bp >> "$SCR"
 cat >> "$SCR" <<'EOF'
@@ -88,14 +89,14 @@ fn main() -> i64 {
   par_compile(4, p, 27)
 }
 EOF
-./seed/build/seed bebop.bin compile "$SCR" /tmp/opencode/par_compile.bin >/dev/null 2>&1 || { echo "COMPILEFAIL par_compile"; exit 1; }
-SV=$(timeout 120 ./seed/build/seed /tmp/opencode/par_compile.bin | tail -1)
+./seed/build/seed bebop.bin compile "$SCR" ${BEBOP_TMP:-/tmp/opencode}/par_compile.bin >/dev/null 2>&1 || { echo "COMPILEFAIL par_compile"; exit 1; }
+SV=$(timeout 120 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/par_compile.bin | tail -1)
 WANT=$((SERIAL * 4))
 [ "$SV" = "$WANT" ] && { echo "PASS par_compile (serial=$SERIAL x4: seed=$SV)"; PASS=$((PASS+1)); } || { echo "FAIL par_compile (serial=$SERIAL want=$WANT seed=$SV)"; FAIL=$((FAIL+1)); }
 
 # ---- gate 2b: par_compile(4, k7.bp) — k7 queries multi-core, identical outputs ----
-./seed/build/seed bebop.bin compile bench/vs_rust/kernels/k7.bp /tmp/opencode/k7_ref.bin >/dev/null 2>&1 || { echo "COMPILEFAIL k7 ref"; exit 1; }
-SERIAL7=$(timeout 30 ./seed/build/seed /tmp/opencode/k7_ref.bin | tail -1)
+./seed/build/seed bebop.bin compile bench/vs_rust/kernels/k7.bp ${BEBOP_TMP:-/tmp/opencode}/k7_ref.bin >/dev/null 2>&1 || { echo "COMPILEFAIL k7 ref"; exit 1; }
+SERIAL7=$(timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/k7_ref.bin | tail -1)
 cat selfhost/expr_compile.bp > "$SCR"
 cat selfhost/std/pool_compile.bp >> "$SCR"
 cat >> "$SCR" <<'EOF'
@@ -133,8 +134,8 @@ fn main() -> i64 {
   par_compile(4, p, 27)
 }
 EOF
-./seed/build/seed bebop.bin compile "$SCR" /tmp/opencode/par_compile_k7.bin >/dev/null 2>&1 || { echo "COMPILEFAIL par_compile_k7"; exit 1; }
-SV=$(timeout 180 ./seed/build/seed /tmp/opencode/par_compile_k7.bin | tail -1)
+./seed/build/seed bebop.bin compile "$SCR" ${BEBOP_TMP:-/tmp/opencode}/par_compile_k7.bin >/dev/null 2>&1 || { echo "COMPILEFAIL par_compile_k7"; exit 1; }
+SV=$(timeout 180 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/par_compile_k7.bin | tail -1)
 WANT7=$((SERIAL7 * 4))
 [ "$SV" = "$WANT7" ] && { echo "PASS par_compile_k7 (serial=$SERIAL7 x4: seed=$SV)"; PASS=$((PASS+1)); } || { echo "FAIL par_compile_k7 (serial=$SERIAL7 want=$WANT7 seed=$SV)"; FAIL=$((FAIL+1)); }
 
@@ -146,8 +147,8 @@ fn main() -> i64 {
   par_tids(4)
 }
 EOF
-./seed/build/seed bebop.bin compile "$SCR" /tmp/opencode/pool_tids.bin >/dev/null 2>&1 || { echo "COMPILEFAIL par_tids"; exit 1; }
-SV=$(timeout 60 ./seed/build/seed /tmp/opencode/pool_tids.bin | tail -1)
+./seed/build/seed bebop.bin compile "$SCR" ${BEBOP_TMP:-/tmp/opencode}/pool_tids.bin >/dev/null 2>&1 || { echo "COMPILEFAIL par_tids"; exit 1; }
+SV=$(timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/pool_tids.bin | tail -1)
 [ "$SV" = "4" ] && { echo "PASS threads (seed=$SV child-tids)"; PASS=$((PASS+1)); } || { echo "FAIL threads (seed=$SV want 4)"; FAIL=$((FAIL+1)); }
 
 echo "pool_parity: $PASS pass, $FAIL fail"

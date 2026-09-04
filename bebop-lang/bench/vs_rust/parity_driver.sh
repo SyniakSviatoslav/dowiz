@@ -3,10 +3,11 @@
 # compare output against frozen expected values (no interp).
 ulimit -s 65536 2>/dev/null || true  # eval recursion: 113+ fn self-compile needs >8MB stack
 set -u
+mkdir -p "${BEBOP_TMP:-/tmp/opencode}"
 SEED=./seed/build/seed
 BEBOP_BIN=./bebop.bin
 GUARD="GUARD: bebop.bin is missing or empty (silent-artifact class, journal 1788288248)"
-[ -s bebop.bin ] || { echo "$GUARD"; exit 1; }
+[ -s "${BEBOP_BIN:-bebop.bin}" ] || { echo "$GUARD"; exit 1; }
 
 DIR=${1:-bench/vs_rust/kernels}
 FROZEN=bench/vs_rust/kernels/frozen
@@ -17,10 +18,10 @@ for f in "$DIR"/*.bp; do
   if ! grep -qE "^fn main\(" "$f"; then
     SKIP=$((SKIP+1)); continue
   fi
-  ./seed/build/seed bebop.bin compile "$f" "/tmp/opencode/${b}_test.bin" 2>/dev/null || {
+  ./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$f" "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin" 2>/dev/null || {
     echo "COMPILEFAIL $b"; FAIL=$((FAIL+1)); continue
   }
-  IVAL=$(timeout 30 ./seed/build/seed "/tmp/opencode/${b}_test.bin" | tail -1)
+  IVAL=$(timeout 30 ./seed/build/seed "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin" | tail -1)
   case "$b" in
     hv_stdlib) EXPECT=1;;
     io_probe) EXPECT=110741101;;

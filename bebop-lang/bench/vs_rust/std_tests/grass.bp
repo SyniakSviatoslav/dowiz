@@ -1,0 +1,245 @@
+module core { }
+
+// grass.bp — T22: Grassmann (exterior) algebra Lambda_5 as bitmask
+// monomials. 5 generators -> 32 monomials indexed by their basis bitmask,
+// ternary coefficient {-1,0,1} as 2 bits (enc = coef+1) -> ONE i64 payload.
+// Monomial product e_I e_J = 0 when I & J != 0 (nilpotency = one AND),
+// else (-1)^inv(I,J) e_{I|J} with inv = #(x in I, y in J, x > y) — the
+// tern.bp gprod transposition count, degenerate metric (no e_i^2 term).
+// Checks (all exhaustive, integer): anticommutation e_i e_j = -e_j e_i on
+// all 10 generator pairs; e_I^2 = 0 for all 31 non-scalar monomials; full
+// 32x32 Cayley table Z2-grading closure (|I|+|J| mod 2), nonzero count
+// (3^5 = 243) and sign sum; associativity (ab)c = a(bc) on a triple with
+// mixed grades/signs; ternary invariant + pack/unpack roundtrip of the
+// result. Fold = ((((anti*100+nil)*1000+nz)*10000+(ssum+5000))*100000
+// + chk)*10 + assoc*4 + rt*2 + tern; chk = Sum (r[k]+1)*(k+1)^2.
+
+// sign of e_i e_j: 0 if i & j != 0, else (-1)^(#pairs x in i, y in j, x>y)
+fn sgn(i: i64, j: i64) -> i64 {
+  let t = 0;
+  let x = 1;
+  while x < 5 {
+    let y = 0;
+    while y < x {
+      let t = t + ((i >> x) & 1) * ((j >> y) & 1);
+      let y = y + 1;
+      0
+    };
+    let x = x + 1;
+    0
+  };
+  let ov = if (i & j) == 0 then 1 else 0;
+  ov * (1 - (t % 2) * 2)
+}
+
+fn popc(i: i64) -> i64 {
+  let n = 0;
+  let x = 0;
+  while x < 5 {
+    let n = n + ((i >> x) & 1);
+    let x = x + 1;
+    0
+  };
+  n
+}
+
+// acc += a * b (exterior product on 32-coefficient arrays)
+fn gprod(a: [i64], b: [i64], acc: [i64]) -> i64 {
+  let i = 0;
+  while i < 32 {
+    let j = 0;
+    while j < 32 {
+      let s = sgn(i, j);
+      let c = i | j;
+      let _ = acc[c] = acc[c] + a[i] * b[j] * s;
+      let j = j + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+fn clear(a: [i64]) -> i64 {
+  let k = 0;
+  while k < 32 {
+    let _ = a[k] = 0;
+    let k = k + 1;
+    0
+  };
+  0
+}
+
+// 1 if a[k] + b[k] == 0 for all k (b may be a for "is zero")
+fn sumzero(a: [i64], b: [i64]) -> i64 {
+  let bad = 0;
+  let k = 0;
+  while k < 32 {
+    let bad = bad + (if a[k] + b[k] == 0 then 0 else 1);
+    let k = k + 1;
+    0
+  };
+  if bad == 0 then 1 else 0
+}
+
+fn same(a: [i64], b: [i64]) -> i64 {
+  let bad = 0;
+  let k = 0;
+  while k < 32 {
+    let bad = bad + (if a[k] == b[k] then 0 else 1);
+    let k = k + 1;
+    0
+  };
+  if bad == 0 then 1 else 0
+}
+
+fn istern(a: [i64]) -> i64 {
+  let bad = 0;
+  let k = 0;
+  while k < 32 {
+    let v = a[k];
+    let bad = bad + (if v * v > 1 then 1 else 0);
+    let k = k + 1;
+    0
+  };
+  if bad == 0 then 1 else 0
+}
+
+// pack ternary coefficients: enc = coef + 1 at bits 2k..2k+1 (32 slots = 64 bits)
+fn pack(a: [i64]) -> i64 {
+  let p = 0;
+  let k = 0;
+  while k < 32 {
+    let p = p + (a[k] + 1) * (1 << (k * 2));
+    let k = k + 1;
+    0
+  };
+  p
+}
+
+fn unpack(p: i64, a: [i64]) -> i64 {
+  let k = 0;
+  while k < 32 {
+    let _ = a[k] = ((p >> (k * 2)) & 3) - 1;
+    let k = k + 1;
+    0
+  };
+  0
+}
+
+fn chk(a: [i64]) -> i64 {
+  let s = 0;
+  let k = 0;
+  while k < 32 {
+    let s = s + (a[k] + 1) * (k + 1) * (k + 1);
+    let k = k + 1;
+    0
+  };
+  s
+}
+
+// count generator pairs i<j with e_i e_j + e_j e_i == 0 and e_i e_j == +e_{ij}
+fn anti(ei: [i64], ej: [i64], p1: [i64], p2: [i64]) -> i64 {
+  let n = 0;
+  let i = 0;
+  while i < 5 {
+    let j = i + 1;
+    while j < 5 {
+      let _ = clear(ei);
+      let _ = clear(ej);
+      let _ = clear(p1);
+      let _ = clear(p2);
+      let bi = 1 << i;
+      let bj = 1 << j;
+      let _ = ei[bi] = 1;
+      let _ = ej[bj] = 1;
+      let _ = gprod(ei, ej, p1);
+      let _ = gprod(ej, ei, p2);
+      let ok = sumzero(p1, p2) * (if p1[bi | bj] == 1 then 1 else 0);
+      let n = n + ok;
+      let j = j + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  n
+}
+
+// count non-scalar monomials I with e_I * e_I == 0
+fn nil(ei: [i64], p1: [i64]) -> i64 {
+  let n = 0;
+  let m = 1;
+  while m < 32 {
+    let _ = clear(ei);
+    let _ = clear(p1);
+    let _ = ei[m] = 1;
+    let _ = gprod(ei, ei, p1);
+    let n = n + sumzero(p1, p1);
+    let m = m + 1;
+    0
+  };
+  n
+}
+
+// full Cayley table: par = #nonzero products whose grade parity == |I|+|J| mod 2,
+// nz = #nonzero products, ssum = sum of signs. Returns par*1000000 + nz*1000 + ssum + 500.
+fn cayley() -> i64 {
+  let par = 0;
+  let nz = 0;
+  let ssum = 0;
+  let i = 0;
+  while i < 32 {
+    let j = 0;
+    while j < 32 {
+      let s = sgn(i, j);
+      let z = s * s;
+      let g = (popc(i) + popc(j) - popc(i | j)) % 2;
+      let par = par + z * (1 - g);
+      let nz = nz + z;
+      let ssum = ssum + s;
+      let j = j + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  par * 1000000 + nz * 1000 + ssum + 500
+}
+
+fn main() -> i64 {
+  let x1 = zeros(32);
+  let x2 = zeros(32);
+  let x3 = zeros(32);
+  let x4 = zeros(32);
+  let x5 = zeros(32);
+  let x6 = zeros(32);
+  let x7 = zeros(32);
+  let na = anti(x1, x2, x3, x4);
+  let nn = nil(x1, x3);
+  let cy = cayley();
+  // a = e3 + e12, b = e1 + e4, c = e2 - e5
+  let _ = clear(x1);
+  let _ = clear(x2);
+  let _ = clear(x3);
+  let _ = clear(x4);
+  let _ = x1[4] = 1;
+  let _ = x1[3] = 1;
+  let _ = x2[1] = 1;
+  let _ = x2[8] = 1;
+  let _ = x3[2] = 1;
+  let _ = x3[16] = 0 - 1;
+  let _ = gprod(x1, x2, x4);
+  let _ = gprod(x2, x3, x5);
+  let _ = gprod(x4, x3, x6);
+  let _ = gprod(x1, x5, x7);
+  let assoc = same(x6, x7);
+  let tern = istern(x6) * istern(x4) * istern(x5);
+  let p = pack(x6);
+  let _ = clear(x7);
+  let _ = unpack(p, x7);
+  let rt = same(x6, x7);
+  let c = chk(x6);
+  ((((na * 100 + nn) * 1000 + (cy / 1000) % 1000) * 10000 + (cy % 1000 + 4500)) * 100000 + c) * 10 + assoc * 4 + rt * 2 + tern
+}

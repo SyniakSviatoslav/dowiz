@@ -1,0 +1,158 @@
+// sheaf.bp — T27: cellular sheaf on a graph (port of incidence.rs semantics).
+// 5 nodes, 6 oriented edges (tail < head, as incidence.rs), stalk dim 2,
+// stalks in fp 2^32, restriction maps rho_{v<e} = 2x2 integer (unimodular)
+// matrices per (edge, side). rho[(e*2+side)*4 + i*2+j], side 0 = tail,
+// side 1 = head. Coboundary (delta x)_e = rho_{head<e} x_head -
+// rho_{tail<e} x_tail; sheaf Laplacian L_F x = delta^T (delta x).
+// Checks: (1) identity restrictions => L_F x == (D - A) x on both stalk
+// components (ident_ok; the csr/vecinv degeneracy), lapsum = sum |L x| >> 32;
+// (2) a section built by pushing x_0 = (3,2) along the tree with non-identity
+// maps (non-tree edges carry the path product) gives delta x == 0 on all 6
+// edges (cons_ok); (3) ONE perturbed entry of rho_{tail<e4} leaks a residual
+// on exactly edge 4 (mask == 1<<4), magnitude 2 (leak_mag, fp-shifted).
+// Fold = ident_ok*10^9 + cons_ok*10^8 + one_leaky*10^7 + leak_edge*10^6
+//      + leak_mag*10^4 + lapsum.
+
+fn setm(rho: [i64], k: i64, a: i64, b: i64, c: i64, d: i64) -> i64 {
+  let _ = rho[k * 4] = a;
+  let _ = rho[k * 4 + 1] = b;
+  let _ = rho[k * 4 + 2] = c;
+  let _ = rho[k * 4 + 3] = d;
+  0
+}
+
+// r[e*2+i] = (rho_head x_head - rho_tail x_tail)_i ; returns bitmask of nonzero edges
+fn delta(et: [i64], eh: [i64], rho: [i64], x: [i64], r: [i64]) -> i64 {
+  let mask = 0;
+  let e = 0;
+  while e < 6 {
+    let t = et[e] * 2;
+    let h = eh[e] * 2;
+    let kt = (e * 2) * 4;
+    let kh = (e * 2 + 1) * 4;
+    let r0 = rho[kh] * x[h] + rho[kh + 1] * x[h + 1] - (rho[kt] * x[t] + rho[kt + 1] * x[t + 1]);
+    let r1 = rho[kh + 2] * x[h] + rho[kh + 3] * x[h + 1] - (rho[kt + 2] * x[t] + rho[kt + 3] * x[t + 1]);
+    let _ = r[e * 2] = r0;
+    let _ = r[e * 2 + 1] = r1;
+    let nz = if r0 == 0 then (if r1 == 0 then 0 else 1) else 1;
+    let mask = mask | (nz << e);
+    let e = e + 1;
+    0
+  };
+  mask
+}
+
+// y = delta^T r  (scatter with rho^T, + at head, - at tail)
+fn deltat(et: [i64], eh: [i64], rho: [i64], r: [i64], y: [i64]) -> i64 {
+  let e = 0;
+  while e < 6 {
+    let t = et[e] * 2;
+    let h = eh[e] * 2;
+    let kt = (e * 2) * 4;
+    let kh = (e * 2 + 1) * 4;
+    let r0 = r[e * 2];
+    let r1 = r[e * 2 + 1];
+    let _ = y[h] = y[h] + rho[kh] * r0 + rho[kh + 2] * r1;
+    let _ = y[h + 1] = y[h + 1] + rho[kh + 1] * r0 + rho[kh + 3] * r1;
+    let _ = y[t] = y[t] - (rho[kt] * r0 + rho[kt + 2] * r1);
+    let _ = y[t + 1] = y[t + 1] - (rho[kt + 1] * r0 + rho[kt + 3] * r1);
+    let e = e + 1;
+    0
+  };
+  0
+}
+
+// graph Laplacian (D - A) x from the edge list, componentwise (incidence.rs)
+fn glap(et: [i64], eh: [i64], x: [i64], g: [i64]) -> i64 {
+  let e = 0;
+  while e < 6 {
+    let t = et[e] * 2;
+    let h = eh[e] * 2;
+    let f0 = x[h] - x[t];
+    let f1 = x[h + 1] - x[t + 1];
+    let _ = g[h] = g[h] + f0;
+    let _ = g[h + 1] = g[h + 1] + f1;
+    let _ = g[t] = g[t] - f0;
+    let _ = g[t + 1] = g[t + 1] - f1;
+    let e = e + 1;
+    0
+  };
+  0
+}
+
+fn main() -> i64 {
+  let et = [0, 1, 2, 3, 0, 1];
+  let eh = [1, 2, 3, 4, 2, 4];
+  let rho = zeros(48);
+  let x = zeros(10);
+  let r = zeros(12);
+  let y = zeros(10);
+  let g = zeros(10);
+  // ---- (1) identity restrictions on all 12 (edge, side) slots
+  let k = 0;
+  while k < 12 {
+    let _ = setm(rho, k, 1, 0, 0, 1);
+    let k = k + 1;
+    0
+  };
+  let v = 0;
+  while v < 5 {
+    let _ = x[v * 2] = ((v + 1) * 2) << 32;
+    let _ = x[v * 2 + 1] = ((v + 1) * 3) << 32;
+    let v = v + 1;
+    0
+  };
+  let _ = delta(et, eh, rho, x, r);
+  let _ = deltat(et, eh, rho, r, y);
+  let _ = glap(et, eh, x, g);
+  let ident_ok = 1;
+  let lapsum = 0;
+  let i = 0;
+  while i < 10 {
+    let ok = if y[i] == g[i] then 1 else 0;
+    let ident_ok = ident_ok * ok;
+    let a = if y[i] < 0 then 0 - y[i] else y[i];
+    let lapsum = lapsum + (a >> 32);
+    let i = i + 1;
+    0
+  };
+  // ---- (2) non-identity sheaf: tail maps T0..T3 on the tree, head = I;
+  // e4 = (0,2): head B4, tail B4*T1*T0 ; e5 = (1,4): head B5, tail B5*T3*T2*T1
+  let _ = setm(rho, 0, 1, 1, 0, 1);
+  let _ = setm(rho, 1, 1, 0, 0, 1);
+  let _ = setm(rho, 2, 1, 0, 1, 1);
+  let _ = setm(rho, 3, 1, 0, 0, 1);
+  let _ = setm(rho, 4, 0, 1, 0 - 1, 0);
+  let _ = setm(rho, 5, 1, 0, 0, 1);
+  let _ = setm(rho, 6, 1, 0 - 1, 0, 1);
+  let _ = setm(rho, 7, 1, 0, 0, 1);
+  // T1*T0 = [[1,1],[1,2]]; B4*(T1*T0) = [[2,3],[1,2]]
+  let _ = setm(rho, 8, 2, 3, 1, 2);
+  let _ = setm(rho, 9, 1, 1, 0, 1);
+  // T2*T1 = [[1,1],[-1,0]]; T3*(T2*T1) = [[2,1],[-1,0]]; B5*.. = [[2,1],[-3,-1]]
+  let _ = setm(rho, 10, 2, 1, 0 - 3, 0 - 1);
+  let _ = setm(rho, 11, 1, 0, 0 - 1, 1);
+  // section: x0 = (3,2), x_{e+1} = T_e x_e along the path
+  let _ = x[0] = 3 << 32;
+  let _ = x[1] = 2 << 32;
+  let e = 0;
+  while e < 4 {
+    let kt = (e * 2) * 4;
+    let s = e * 2;
+    let _ = x[s + 2] = rho[kt] * x[s] + rho[kt + 1] * x[s + 1];
+    let _ = x[s + 3] = rho[kt + 2] * x[s] + rho[kt + 3] * x[s + 1];
+    let e = e + 1;
+    0
+  };
+  let m = delta(et, eh, rho, x, r);
+  let cons_ok = if m == 0 then 1 else 0;
+  // ---- (3) breaker: one perturbed entry of rho_{tail<e4}
+  let _ = rho[8 * 4 + 1] = rho[8 * 4 + 1] + 1;
+  let m = delta(et, eh, rho, x, r);
+  let one_leaky = if m == 16 then 1 else 0;
+  let leak_edge = if m == 16 then 4 else 0;
+  let a0 = if r[8] < 0 then 0 - r[8] else r[8];
+  let a1 = if r[9] < 0 then 0 - r[9] else r[9];
+  let leak_mag = (a0 + a1) >> 32;
+  ident_ok * 1000000000 + cons_ok * 100000000 + one_leaky * 10000000 + leak_edge * 1000000 + leak_mag * 10000 + lapsum
+}

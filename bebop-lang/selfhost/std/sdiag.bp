@@ -1,0 +1,436 @@
+// sdiag.bp - T30: string diagrams as open hypergraphs with Z2-typed wires.
+// A diagram lives in a 320-cell slot of one flat bank: [nw, nb, ni, no],
+// wire parity table (32, offset 4), interface inputs (8, offset 36),
+// interface outputs (8, offset 44), boxes (16 x 12, offset 52:
+// label, nin, nout, in0..in5, out0, out1, pad; -1 = unused wire slot),
+// canonicalisation scratch at 244 (wire digests), 276 (box digests),
+// 292 (done flags). Wires are the hypergraph vertices, boxes the ordered
+// hyperedges; every wire carries a Z2 parity (T24 sector). Sequential
+// composition a;b plugs a's outputs into b's inputs and TRAPS (-1, target
+// slot untouched) on arity or parity mismatch; parallel composition a x b
+// is disjoint union with concatenated interfaces. Canonical form: Kahn
+// topological order, ready box with the smallest content digest first;
+// wire digests are Merkle over their producer so the fold depends only on
+// the shape (structural_hash precedent), never on wire/box numbering.
+// Gate: interchange law (f x g);(h x k) == (f;h) x (g;k) bit-exact,
+// isotopy invariance (diamond built with permuted wire+box ids), traps.
+
+fn hm(h: i64, x: i64) -> i64 {
+  let v = h * 131 + x + 1;
+  v - (v / 1000000007) * 1000000007
+}
+
+fn sd_clear(d: [i64], o: i64) -> i64 {
+  let i = 0;
+  while i < 320 {
+    let _ = d[o + i] = 0;
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+fn sd_wire(d: [i64], o: i64, par: i64) -> i64 {
+  let w = d[o];
+  let _ = d[o + 4 + w] = par;
+  let _ = d[o] = w + 1;
+  w
+}
+
+fn sd_box(d: [i64], o: i64, label: i64, nin: i64, nout: i64) -> i64 {
+  let b = d[o + 1];
+  let base = o + 52 + b * 12;
+  let _ = d[base] = label;
+  let _ = d[base + 1] = nin;
+  let _ = d[base + 2] = nout;
+  let i = 3;
+  while i < 12 {
+    let _ = d[base + i] = 0 - 1;
+    let i = i + 1;
+    0
+  };
+  let _ = d[o + 1] = b + 1;
+  b
+}
+
+fn sd_in(d: [i64], o: i64, b: i64, i: i64, w: i64) -> i64 {
+  let _ = d[o + 52 + b * 12 + 3 + i] = w;
+  0
+}
+
+fn sd_out(d: [i64], o: i64, b: i64, j: i64, w: i64) -> i64 {
+  let _ = d[o + 52 + b * 12 + 9 + j] = w;
+  0
+}
+
+fn sd_iin(d: [i64], o: i64, k: i64, w: i64) -> i64 {
+  let _ = d[o + 36 + k] = w;
+  let _ = d[o + 2] = k + 1;
+  0
+}
+
+fn sd_iout(d: [i64], o: i64, k: i64, w: i64) -> i64 {
+  let _ = d[o + 44 + k] = w;
+  let _ = d[o + 3] = k + 1;
+  0
+}
+
+// copy one 12-cell box record; wire slots (3..10) are remapped through m
+// (usemap=1) or shifted by off (usemap=0); -1 stays -1.
+fn sd_cpb(d: [i64], sb: i64, db: i64, m: [i64], off: i64, usemap: i64) -> i64 {
+  let i = 0;
+  while i < 12 {
+    let v = d[sb + i];
+    let neg = if v < 0 then 1 else 0;
+    let idx = v * (1 - neg);
+    let mv = (m[idx] * usemap + (v + off) * (1 - usemap)) * (1 - neg) - neg;
+    let iswire = (if i >= 3 then 1 else 0) * (if i <= 10 then 1 else 0);
+    let _ = d[db + i] = v * (1 - iswire) + mv * iswire;
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+// c = a ; b  (outputs of a plugged into inputs of b), arities already checked
+fn sd_glue(d: [i64], oa: i64, ob: i64, oc: i64, m: [i64]) -> i64 {
+  let _ = sd_clear(d, oc);
+  let nwa = d[oa];
+  let nwb = d[ob];
+  let nba = d[oa + 1];
+  let nbb = d[ob + 1];
+  let w = 0;
+  while w < nwa {
+    let _ = d[oc + 4 + w] = d[oa + 4 + w];
+    let w = w + 1;
+    0
+  };
+  let w = 0;
+  while w < nwb {
+    let _ = m[w] = 0 - 1;
+    let w = w + 1;
+    0
+  };
+  let k = 0;
+  while k < d[ob + 2] {
+    let _ = m[d[ob + 36 + k]] = d[oa + 44 + k];
+    let k = k + 1;
+    0
+  };
+  let cnt = 0;
+  let w = 0;
+  while w < nwb {
+    let isnew = if m[w] < 0 then 1 else 0;
+    let nid = nwa + cnt;
+    let _ = m[w] = m[w] * (1 - isnew) + nid * isnew;
+    let _ = d[oc + 4 + nid] = d[oc + 4 + nid] * (1 - isnew) + d[ob + 4 + w] * isnew;
+    let cnt = cnt + isnew;
+    let w = w + 1;
+    0
+  };
+  let b = 0;
+  while b < nba {
+    let _ = sd_cpb(d, oa + 52 + b * 12, oc + 52 + b * 12, m, 0, 0);
+    let b = b + 1;
+    0
+  };
+  let b = 0;
+  while b < nbb {
+    let _ = sd_cpb(d, ob + 52 + b * 12, oc + 52 + (nba + b) * 12, m, 0, 1);
+    let b = b + 1;
+    0
+  };
+  let _ = d[oc] = nwa + cnt;
+  let _ = d[oc + 1] = nba + nbb;
+  let _ = d[oc + 2] = d[oa + 2];
+  let k = 0;
+  while k < d[oa + 2] {
+    let _ = d[oc + 36 + k] = d[oa + 36 + k];
+    let k = k + 1;
+    0
+  };
+  let _ = d[oc + 3] = d[ob + 3];
+  let k = 0;
+  while k < d[ob + 3] {
+    let _ = d[oc + 44 + k] = m[d[ob + 44 + k]];
+    let k = k + 1;
+    0
+  };
+  nba + nbb
+}
+
+// sequential composition with the Z2 type check: returns box count of the
+// result or -1 (trap) on arity / parity mismatch (slot oc untouched).
+fn sd_seq(d: [i64], oa: i64, ob: i64, oc: i64, m: [i64]) -> i64 {
+  let mm = if d[oa + 3] == d[ob + 2] then 0 else 1;
+  let lim = d[oa + 3] * (1 - mm);
+  let bad = 0;
+  let k = 0;
+  while k < lim {
+    let pa = d[oa + 4 + d[oa + 44 + k]];
+    let pb = d[ob + 4 + d[ob + 36 + k]];
+    let bad = bad + (if pa == pb then 0 else 1);
+    let k = k + 1;
+    0
+  };
+  if mm + bad > 0 then 0 - 1 else sd_glue(d, oa, ob, oc, m)
+}
+
+// parallel composition c = a x b (disjoint union, interfaces concatenated)
+fn sd_par(d: [i64], oa: i64, ob: i64, oc: i64, m: [i64]) -> i64 {
+  let _ = sd_clear(d, oc);
+  let nwa = d[oa];
+  let nwb = d[ob];
+  let nba = d[oa + 1];
+  let nbb = d[ob + 1];
+  let w = 0;
+  while w < nwa {
+    let _ = d[oc + 4 + w] = d[oa + 4 + w];
+    let w = w + 1;
+    0
+  };
+  let w = 0;
+  while w < nwb {
+    let _ = d[oc + 4 + nwa + w] = d[ob + 4 + w];
+    let w = w + 1;
+    0
+  };
+  let b = 0;
+  while b < nba {
+    let _ = sd_cpb(d, oa + 52 + b * 12, oc + 52 + b * 12, m, 0, 0);
+    let b = b + 1;
+    0
+  };
+  let b = 0;
+  while b < nbb {
+    let _ = sd_cpb(d, ob + 52 + b * 12, oc + 52 + (nba + b) * 12, m, nwa, 0);
+    let b = b + 1;
+    0
+  };
+  let _ = d[oc] = nwa + nwb;
+  let _ = d[oc + 1] = nba + nbb;
+  let nia = d[oa + 2];
+  let noa = d[oa + 3];
+  let _ = d[oc + 2] = nia + d[ob + 2];
+  let _ = d[oc + 3] = noa + d[ob + 3];
+  let k = 0;
+  while k < nia {
+    let _ = d[oc + 36 + k] = d[oa + 36 + k];
+    let k = k + 1;
+    0
+  };
+  let k = 0;
+  while k < d[ob + 2] {
+    let _ = d[oc + 36 + nia + k] = d[ob + 36 + k] + nwa;
+    let k = k + 1;
+    0
+  };
+  let k = 0;
+  while k < noa {
+    let _ = d[oc + 44 + k] = d[oa + 44 + k];
+    let k = k + 1;
+    0
+  };
+  let k = 0;
+  while k < d[ob + 3] {
+    let _ = d[oc + 44 + noa + k] = d[ob + 44 + k] + nwa;
+    let k = k + 1;
+    0
+  };
+  nba + nbb
+}
+
+// canonical digest: Kahn topological order, smallest ready content digest
+// first; wire digest = Merkle(producer digest, port, parity); interface
+// inputs seeded by position. Dead boxes (label 0) are skipped.
+fn sd_canon(d: [i64], o: i64) -> i64 {
+  let nb = d[o + 1];
+  let ni = d[o + 2];
+  let no = d[o + 3];
+  let i = 0;
+  while i < 32 {
+    let _ = d[o + 244 + i] = 0 - 1;
+    let _ = d[o + 276 + i] = 0;
+    let i = i + 1;
+    0
+  };
+  let nal = 0;
+  let b = 0;
+  while b < nb {
+    let nal = nal + (if d[o + 52 + b * 12] == 0 then 0 else 1);
+    let b = b + 1;
+    0
+  };
+  let k = 0;
+  while k < ni {
+    let w = d[o + 36 + k];
+    let _ = d[o + 244 + w] = hm(hm(1, k), d[o + 4 + w]);
+    let k = k + 1;
+    0
+  };
+  let acc = hm(hm(hm(0, nal), ni), no);
+  let round = 0;
+  while round < nb {
+    let best = 0 - 1;
+    let bestd = 1000000007;
+    let b = 0;
+    while b < nb {
+      let base = o + 52 + b * 12;
+      let label = d[base];
+      let nin = d[base + 1];
+      let alive = if label == 0 then 0 else 1;
+      let done = d[o + 292 + b];
+      let cd = hm(hm(hm(7, label), nin), d[base + 2]);
+      let rdy = 1;
+      let i = 0;
+      while i < nin {
+        let wdv = d[o + 244 + d[base + 3 + i]];
+        let kn = if wdv < 0 then 0 else 1;
+        let rdy = rdy * kn;
+        let cd = hm(cd, wdv * kn);
+        let i = i + 1;
+        0
+      };
+      let c = alive * (1 - done) * rdy * (if cd < bestd then 1 else 0);
+      let best = best + (b - best) * c;
+      let bestd = bestd + (cd - bestd) * c;
+      let b = b + 1;
+      0
+    };
+    let has = if best < 0 then 0 else 1;
+    let bi = best * has;
+    let base = o + 52 + bi * 12;
+    let _ = d[o + 292 + bi] = d[o + 292 + bi] + has;
+    let _ = d[o + 276 + bi] = bestd * has;
+    let acc = acc + (hm(acc, bestd) - acc) * has;
+    let j = 0;
+    while j < d[base + 2] * has {
+      let w = d[base + 9 + j];
+      let nv = hm(hm(bestd, 2 + j), d[o + 4 + w]);
+      let _ = d[o + 244 + w] = nv;
+      let j = j + 1;
+      0
+    };
+    let round = round + 1;
+    0
+  };
+  let k = 0;
+  while k < no {
+    let acc = hm(acc, d[o + 244 + d[o + 44 + k]]);
+    let k = k + 1;
+    0
+  };
+  acc
+}
+
+// one 1->1 box `label` typed pin -> pout
+fn mk1(d: [i64], o: i64, label: i64, pin: i64, pout: i64) -> i64 {
+  let _ = sd_clear(d, o);
+  let w0 = sd_wire(d, o, pin);
+  let w1 = sd_wire(d, o, pout);
+  let b = sd_box(d, o, label, 1, 1);
+  let _ = sd_in(d, o, b, 0, w0);
+  let _ = sd_out(d, o, b, 0, w1);
+  let _ = sd_iin(d, o, 0, w0);
+  let _ = sd_iout(d, o, 0, w1);
+  b
+}
+
+// diamond: A(5):w0->w1,w2 ; B(6):w1->w3 ; C(7):w2->w4 ; D(8):w3,w4->w5
+// natural numbering
+fn mk_dia0(d: [i64], o: i64) -> i64 {
+  let _ = sd_clear(d, o);
+  let w0 = sd_wire(d, o, 0);
+  let w1 = sd_wire(d, o, 1);
+  let w2 = sd_wire(d, o, 0);
+  let w3 = sd_wire(d, o, 1);
+  let w4 = sd_wire(d, o, 0);
+  let w5 = sd_wire(d, o, 1);
+  let a = sd_box(d, o, 5, 1, 2);
+  let _ = sd_in(d, o, a, 0, w0);
+  let _ = sd_out(d, o, a, 0, w1);
+  let _ = sd_out(d, o, a, 1, w2);
+  let b = sd_box(d, o, 6, 1, 1);
+  let _ = sd_in(d, o, b, 0, w1);
+  let _ = sd_out(d, o, b, 0, w3);
+  let c = sd_box(d, o, 7, 1, 1);
+  let _ = sd_in(d, o, c, 0, w2);
+  let _ = sd_out(d, o, c, 0, w4);
+  let e = sd_box(d, o, 8, 2, 1);
+  let _ = sd_in(d, o, e, 0, w3);
+  let _ = sd_in(d, o, e, 1, w4);
+  let _ = sd_out(d, o, e, 0, w5);
+  let _ = sd_iin(d, o, 0, w0);
+  let _ = sd_iout(d, o, 0, w5);
+  4
+}
+
+// same diamond, wires allocated in reverse, boxes in order D, C, B, A
+fn mk_dia1(d: [i64], o: i64) -> i64 {
+  let _ = sd_clear(d, o);
+  let w5 = sd_wire(d, o, 1);
+  let w4 = sd_wire(d, o, 0);
+  let w3 = sd_wire(d, o, 1);
+  let w2 = sd_wire(d, o, 0);
+  let w1 = sd_wire(d, o, 1);
+  let w0 = sd_wire(d, o, 0);
+  let e = sd_box(d, o, 8, 2, 1);
+  let _ = sd_in(d, o, e, 0, w3);
+  let _ = sd_in(d, o, e, 1, w4);
+  let _ = sd_out(d, o, e, 0, w5);
+  let c = sd_box(d, o, 7, 1, 1);
+  let _ = sd_in(d, o, c, 0, w2);
+  let _ = sd_out(d, o, c, 0, w4);
+  let b = sd_box(d, o, 6, 1, 1);
+  let _ = sd_in(d, o, b, 0, w1);
+  let _ = sd_out(d, o, b, 0, w3);
+  let a = sd_box(d, o, 5, 1, 2);
+  let _ = sd_in(d, o, a, 0, w0);
+  let _ = sd_out(d, o, a, 0, w1);
+  let _ = sd_out(d, o, a, 1, w2);
+  let _ = sd_iin(d, o, 0, w0);
+  let _ = sd_iout(d, o, 0, w5);
+  4
+}
+
+fn main() -> i64 {
+  let d = zeros(3840);
+  let m = zeros(32);
+  // f:1(0->1)  g:2(1->0)  h:3(1->0)  k:4(0->1)   slot = index*320
+  let _ = mk1(d, 0, 1, 0, 1);
+  let _ = mk1(d, 320, 2, 1, 0);
+  let _ = mk1(d, 640, 3, 1, 0);
+  let _ = mk1(d, 960, 4, 0, 1);
+  // lhs = (f x g) ; (h x k)
+  let _ = sd_par(d, 0, 320, 1280, m);
+  let _ = sd_par(d, 640, 960, 1600, m);
+  let nl = sd_seq(d, 1280, 1600, 1920, m);
+  // rhs = (f ; h) x (g ; k)
+  let n1 = sd_seq(d, 0, 640, 2240, m);
+  let n2 = sd_seq(d, 320, 960, 2560, m);
+  let _ = sd_par(d, 2240, 2560, 2880, m);
+  let cl = sd_canon(d, 1920);
+  let cr = sd_canon(d, 2880);
+  let acc = hm(hm(0, cl), if cl == cr then 1 else 0);
+  let acc = hm(acc, nl * 100 + n1 * 10 + n2);
+  // traps: f;f (parity 1 vs 0), f;(f x g) (arity 1 vs 2), g;f fine (0 vs 0)
+  let t1 = sd_seq(d, 0, 0, 3200, m);
+  let t2 = sd_seq(d, 0, 1280, 3200, m);
+  let t3 = sd_seq(d, 320, 0, 3200, m);
+  let acc = hm(acc, (if t1 == 0 - 1 then 1 else 0) + (if t2 == 0 - 1 then 2 else 0) + (if t3 == 2 then 4 else 0));
+  let acc = hm(acc, sd_canon(d, 3200));
+  // isotopy: diamond under permuted wire + box numbering
+  let _ = mk_dia0(d, 3200);
+  let _ = mk_dia1(d, 3520);
+  let c0 = sd_canon(d, 3200);
+  let c1 = sd_canon(d, 3520);
+  let acc = hm(hm(acc, c0), if c0 == c1 then 1 else 0);
+  // sliding a box across the parallel gap: (dia ; h') where h' = g on par 1
+  let _ = mk1(d, 1280, 2, 1, 1);
+  let n3 = sd_seq(d, 3200, 1280, 1600, m);
+  let n4 = sd_seq(d, 3520, 1280, 1920, m);
+  let c2 = sd_canon(d, 1600);
+  let c3 = sd_canon(d, 1920);
+  let acc = hm(hm(acc, c2), (if c2 == c3 then 1 else 0) + n3 * 2 + n4 * 16);
+  acc
+}

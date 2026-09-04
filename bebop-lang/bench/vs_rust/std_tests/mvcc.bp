@@ -1,0 +1,177 @@
+module core { }
+
+// mvcc.bp — T33: CoW versioning + nilpotent reader tokens (MVCC without
+// WAL). An update never writes in place: it allocates a NEW record (bump
+// arena, genarena) whose `prev` cell is the edge to the old version (the
+// restriction map old->new is x -> 3x+t+1 mod 2^16). Liveness of a
+// version is a Grassmann monomial over the 4 reader generators e_0..e_3
+// (T22 encoding: tok = sign*(2*mask+1); tok 1 = scalar = no readers;
+// tok 0 = the product collapsed). Acquire = tok * e_r (0 if e_r already
+// present: nilpotency); release = the reader's own token squared -> 0
+// (end of the reader's liveness) and the contraction d_r on the version
+// (d_r d_r = 0, the dual nilpotent). A version collapses (cells freed,
+// entcol exact accounting, 3 cells/record) exactly when it is superseded
+// AND its liveness is the bare scalar — checked at the two events only,
+// no scans, no refcount integers. Every read compares the version cell
+// with the snapshot taken at acquire (a torn/in-place write would break
+// it) and checks the version is not collapsed. 64 LCG-scheduled steps.
+// Fold = (h % 1e9)*1e5 + collapsed*100 + surv*4 + acct*2 + reads_ok,
+// h = mixing hash of every token after acquire/release; python mirror
+// bench/oracles/mvcc.py.
+
+fn absv(x: i64) -> i64 { if x < 0 then 0 - x else x }
+fn pc4(x: i64) -> i64 { (x & 1) + ((x >> 1) & 1) + ((x >> 2) & 1) + ((x >> 3) & 1) }
+fn sg(n: i64) -> i64 { 1 - 2 * (n & 1) }
+fn mix(h: i64, x: i64) -> i64 { ((h * 1000003) + x) & 4611686018427387903 }
+
+// e_I * e_r : 0 if r in I, else (-1)^{#i in I, i>r} e_{I|r}
+fn gmul(tk: i64, r: i64) -> i64 {
+  let m = absv(tk) >> 1;
+  let s = if tk < 0 then 0 - 1 else 1;
+  let bit = 1 << r;
+  let hit = if (m & bit) != 0 then 1 else 0;
+  let hit = if tk == 0 then 1 else hit;
+  let sgn = s * sg(pc4(m >> (r + 1)));
+  (1 - hit) * sgn * (2 * (m | bit) + 1)
+}
+// d_r e_I : 0 if r not in I, else (-1)^{#i in I, i<r} e_{I\r}
+fn gdel(tk: i64, r: i64) -> i64 {
+  let m = absv(tk) >> 1;
+  let s = if tk < 0 then 0 - 1 else 1;
+  let bit = 1 << r;
+  let hit = if (m & bit) != 0 then 1 else 0;
+  let hit = if tk == 0 then 0 else hit;
+  let sgn = s * sg(pc4(m & (bit - 1)));
+  hit * sgn * (2 * (m ^ bit) + 1)
+}
+
+fn upd(val: [i64], prev: [i64], tok: [i64], head: [i64], kof: [i64], st: [i64], k: i64, t: i64, cnt: i64, u: i64) -> i64 {
+  let old = head[k];
+  let nv = cnt;
+  let newv = (val[old] * 3 + t + 1) & 65535;
+  let _ = val[nv] = val[nv] * (1 - u) + newv * u;
+  let _ = prev[nv] = prev[nv] * (1 - u) + old * u;
+  let _ = tok[nv] = tok[nv] * (1 - u) + u;
+  let _ = kof[nv] = kof[nv] * (1 - u) + k * u;
+  let _ = head[k] = old * (1 - u) + nv * u;
+  let empty = if absv(tok[old]) == 1 then 1 else 0;
+  let c = u * empty;
+  let _ = tok[old] = tok[old] * (1 - c);
+  let _ = val[old] = val[old] * (1 - c);
+  let _ = prev[old] = prev[old] * (1 - c) + (0 - 2) * c;
+  let _ = st[0] = st[0] + c * 3;
+  let _ = st[1] = st[1] + c;
+  cnt + u
+}
+
+fn acq(val: [i64], tok: [i64], head: [i64], rd: [i64], st: [i64], k: i64, r: i64, a: i64) -> i64 {
+  let free = if rd[r] < 0 then 1 else 0;
+  let a = a * free;
+  let v = head[k];
+  let nt = gmul(tok[v], r);
+  let _ = tok[v] = tok[v] * (1 - a) + nt * a;
+  let _ = rd[r] = rd[r] * (1 - a) + v * a;
+  let _ = rd[4 + r] = rd[4 + r] * (1 - a) + val[v] * a;
+  let _ = st[4] = mix(st[4], a * (nt + 64));
+  0
+}
+
+fn rel(val: [i64], prev: [i64], tok: [i64], head: [i64], kof: [i64], rd: [i64], st: [i64], r: i64, d: i64) -> i64 {
+  let busy = if rd[r] >= 0 then 1 else 0;
+  let d = d * busy;
+  let v = rd[r] * busy;
+  let own = 2 * (1 << r) + 1;
+  let sq = gmul(own, r);
+  let nil = if sq == 0 then 1 else 0;
+  let _ = st[2] = st[2] + d * nil;
+  let nt = gdel(tok[v], r);
+  let _ = tok[v] = tok[v] * (1 - d) + nt * d;
+  let _ = rd[r] = rd[r] * (1 - d) + (0 - 1) * d;
+  let kk = kof[v];
+  let sup = if head[kk] != v then 1 else 0;
+  let empty = if absv(nt) == 1 then 1 else 0;
+  let c = d * sup * empty;
+  let _ = tok[v] = tok[v] * (1 - c);
+  let _ = val[v] = val[v] * (1 - c);
+  let _ = prev[v] = prev[v] * (1 - c) + (0 - 2) * c;
+  let _ = st[0] = st[0] + c * 3;
+  let _ = st[1] = st[1] + c;
+  let _ = st[4] = mix(st[4], d * (nt + 64));
+  0
+}
+
+fn rdchk(val: [i64], prev: [i64], rd: [i64], st: [i64]) -> i64 {
+  let r = 0;
+  while r < 4 {
+    let busy = if rd[r] >= 0 then 1 else 0;
+    let v = rd[r] * busy;
+    let same = if val[v] == rd[4 + r] then 1 else 0;
+    let alive = if prev[v] != (0 - 2) then 1 else 0;
+    let _ = st[3] = st[3] + busy * same * alive;
+    let _ = st[5] = st[5] + busy;
+    let r = r + 1;
+    0
+  };
+  0
+}
+
+fn main() -> i64 {
+  let val = zeros(512);
+  let prev = zeros(512);
+  let tok = zeros(512);
+  let kof = zeros(512);
+  let head = zeros(4);
+  let rd = zeros(8);
+  let st = zeros(8);
+  let k = 0;
+  while k < 4 {
+    let _ = val[k] = (k + 1) * 100;
+    let _ = prev[k] = 0 - 1;
+    let _ = tok[k] = 1;
+    let _ = kof[k] = k;
+    let _ = head[k] = k;
+    let _ = rd[k] = 0 - 1;
+    let k = k + 1;
+    0
+  };
+  let cnt = 4;
+  let s = 12345;
+  let t = 0;
+  while t < 64 {
+    let s = ((s * 1103515245) + 12345) & 2147483647;
+    let op = (s >> 4) & 3;
+    let r = (s >> 8) & 3;
+    let k = (s >> 12) & 3;
+    let u = if op < 2 then 1 else 0;
+    let a = if op == 2 then 1 else 0;
+    let d = if op == 3 then 1 else 0;
+    let cnt = upd(val, prev, tok, head, kof, st, k, t, cnt, u);
+    let _ = acq(val, tok, head, rd, st, k, r, a);
+    let _ = rel(val, prev, tok, head, kof, rd, st, r, d);
+    let _ = rdchk(val, prev, rd, st);
+    let t = t + 1;
+    0
+  };
+  // final invariants: collapsed <=> (superseded AND no live token); freed cells exact
+  let surv = 1;
+  let nfreed = 0;
+  let v = 0;
+  while v < cnt {
+    let kk = kof[v];
+    let sup = if head[kk] != v then 1 else 0;
+    let hastok = if absv(tok[v]) > 1 then 1 else 0;
+    let fr = if prev[v] == (0 - 2) then 1 else 0;
+    let exp = sup * (1 - hastok);
+    let ok = if fr == exp then 1 else 0;
+    let surv = surv * ok;
+    let nfreed = nfreed + fr;
+    let v = v + 1;
+    0
+  };
+  let acct = if st[0] == nfreed * 3 then 1 else 0;
+  let rok = if st[3] == st[5] then 1 else 0;
+  let h = mix(st[4], st[5]);
+  let h = mix(h, st[2]);
+  let h = mix(h, cnt);
+  (h % 1000000000) * 100000 + st[1] * 100 + surv * 4 + acct * 2 + rok
+}

@@ -1,0 +1,236 @@
+module core { }
+
+// zgrade.bp — T24: supercommutator, nilpotent trigger, select-equivalence.
+// Graded pair Cl^0(4,1) (+) Lambda_5 realised as the graded tensor algebra
+// with basis (I, J): I an even Cl(4,1) blade (16, Clifford product with
+// signature ++++-, cl41.bp csgn), J a Lambda_5 monomial (32, exterior
+// product, grass.bp sgn); element id k = I*32 + J; parity p = |J| mod 2
+// (Cl^0 is purely even). Basis product (I1,J1)(I2,J2) =
+// csgn(I1,I2)*sgn(J1,J2) (I1^I2, J1|J2). Supercommutator
+// [x,y] = xy - (-1)^{p(x)p(y)} yx with the Koszul sign ks = 1 - 2 p(x) p(y).
+// Checks (integer, exhaustive): over ALL 512x512 basis pairs the bracket
+// equals the if/else reference (both odd -> xy+yx, else xy-yx) and on the
+// even-even pairs equals the plain commutator (okall, okee bits; zc =
+// #pairs with [x,y] = 0 as content); [odd,odd] = anticommutator = 0 on
+// ALL 25 pairs of the 5 odd generators (gz); super-Jacobi
+// (-1)^{p(x)p(z)}[x,[y,z]] + cyclic = 0 for x over all 512 basis elements
+// and y,z over the 15 generators (5 odd e_i, 10 bivectors) (jz = 57600);
+// trigger t (all 31 non-scalar monomials) applied twice to every monomial
+// v gives t(tv) = 0 (trig = 992); select-equivalence: for ALL 256 8-bit
+// patterns (px, py, a, b) the parity-sign select
+// (b(1+ks) + a(1-ks))/2 == if px*py == 1 then a else b (okmis), tot = sum
+// of outputs. Fold (mixed radix) = (((((((zc*2+okall)*2+okee)*26+gz)
+// *57601+jz)*993+trig)*2048+tot+1024)*2+okmis.
+
+// exterior sign on Lambda_5: 0 if overlap, else (-1)^inv
+fn sgn(i: i64, j: i64) -> i64 {
+  let t = 0;
+  let x = 1;
+  while x < 5 {
+    let y = 0;
+    while y < x {
+      let t = t + ((i >> x) & 1) * ((j >> y) & 1);
+      let y = y + 1;
+      0
+    };
+    let x = x + 1;
+    0
+  };
+  let ov = if (i & j) == 0 then 1 else 0;
+  ov * (1 - (t % 2) * 2)
+}
+
+// Clifford sign on Cl(4,1): (-1)^inv * (-1)^[e5 in I&J]
+fn csgn(i: i64, j: i64) -> i64 {
+  let t = 0;
+  let x = 1;
+  while x < 5 {
+    let y = 0;
+    while y < x {
+      let t = t + ((i >> x) & 1) * ((j >> y) & 1);
+      let y = y + 1;
+      0
+    };
+    let x = x + 1;
+    0
+  };
+  let m = ((i & j) >> 4) & 1;
+  (1 - (t % 2) * 2) * (1 - m * 2)
+}
+
+fn popc(i: i64) -> i64 {
+  let n = 0;
+  let x = 0;
+  while x < 5 {
+    let n = n + ((i >> x) & 1);
+    let x = x + 1;
+    0
+  };
+  n
+}
+
+// parity of basis element k = I*32 + J
+fn par(k: i64) -> i64 {
+  popc(k % 32) % 2
+}
+
+// coefficient of the basis product x*y (index is idx(x,y))
+fn pc(kx: i64, ky: i64) -> i64 {
+  csgn(kx / 32, ky / 32) * sgn(kx % 32, ky % 32)
+}
+
+fn idx(kx: i64, ky: i64) -> i64 {
+  ((kx / 32) ^ (ky / 32)) * 32 + ((kx % 32) | (ky % 32))
+}
+
+// supercommutator coefficient [x,y] = xy - ks*yx, ks = 1 - 2 p(x) p(y)
+fn bc(kx: i64, ky: i64) -> i64 {
+  let ks = 1 - 2 * par(kx) * par(ky);
+  pc(kx, ky) - ks * pc(ky, kx)
+}
+
+// all 512x512 basis pairs: bracket == if/else reference (okall), even-even
+// bracket == commutator (okee), zc = #zero brackets. Returns zc*4 + okall*2 + okee.
+fn pairs() -> i64 {
+  let mmall = 0;
+  let mmee = 0;
+  let zc = 0;
+  let kx = 0;
+  while kx < 1024 {
+    let ex = 1 - popc(kx / 32) % 2;
+    let px = par(kx);
+    let ky = 0;
+    while ky < 1024 {
+      let ey = 1 - popc(ky / 32) % 2;
+      let py = par(ky);
+      let s1 = pc(kx, ky);
+      let s2 = pc(ky, kx);
+      let br = s1 - (1 - 2 * px * py) * s2;
+      let ref = if px * py == 1 then s1 + s2 else s1 - s2;
+      let e = ex * ey;
+      let mmall = mmall + e * (if br == ref then 0 else 1);
+      let mmee = mmee + e * (1 - px) * (1 - py) * (if br == s1 - s2 then 0 else 1);
+      let zc = zc + e * (if br == 0 then 1 else 0);
+      let ky = ky + 1;
+      0
+    };
+    let kx = kx + 1;
+    0
+  };
+  zc * 4 + (if mmall == 0 then 2 else 0) + (if mmee == 0 then 1 else 0)
+}
+
+// the 25 pairs of odd generators (0, e_i): [x,y] = xy + yx == 0
+fn gens() -> i64 {
+  let n = 0;
+  let i = 0;
+  while i < 5 {
+    let j = 0;
+    while j < 5 {
+      let n = n + (if bc(1 << i, 1 << j) == 0 then 1 else 0);
+      let j = j + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  n
+}
+
+// generator n: n < 5 -> (0, e_n) odd; n >= 5 -> (bivector, 1) even
+fn gen(n: i64) -> i64 {
+  let odd = if n < 5 then 1 else 0;
+  let m = 5;
+  let bv = 0;
+  let a = 0;
+  while a < 5 {
+    let b = a + 1;
+    while b < 5 {
+      let bv = bv + ((1 << a) | (1 << b)) * (if m == n then 1 else 0);
+      let m = m + 1;
+      let b = b + 1;
+      0
+    };
+    let a = a + 1;
+    0
+  };
+  odd * (1 << (n * odd)) + (1 - odd) * bv * 32
+}
+
+// (-1)^{p(x)p(z)} [x,[y,z]] + cyclic == 0; x over all 512 basis elements,
+// y, z over the 15 generators. Returns #zero (57600 when the identity holds).
+fn jac() -> i64 {
+  let n = 0;
+  let kx = 0;
+  while kx < 1024 {
+    let ex = 1 - popc(kx / 32) % 2;
+    let ny = 0;
+    while ny < 15 {
+      let ky = gen(ny);
+      let nz = 0;
+      while nz < 15 {
+        let kz = gen(nz);
+        let t1 = (1 - 2 * par(kx) * par(kz)) * bc(ky, kz) * bc(kx, idx(ky, kz));
+        let t2 = (1 - 2 * par(ky) * par(kx)) * bc(kz, kx) * bc(ky, idx(kz, kx));
+        let t3 = (1 - 2 * par(kz) * par(ky)) * bc(kx, ky) * bc(kz, idx(kx, ky));
+        let n = n + ex * (if t1 + t2 + t3 == 0 then 1 else 0);
+        let nz = nz + 1;
+        0
+      };
+      let ny = ny + 1;
+      0
+    };
+    let kx = kx + 1;
+    0
+  };
+  n
+}
+
+// trigger t (31 non-scalar monomials) applied twice to every monomial v: t(tv) == 0
+fn trig() -> i64 {
+  let n = 0;
+  let t = 1;
+  while t < 32 {
+    let v = 0;
+    while v < 32 {
+      let c = sgn(t, v) * sgn(t, t | v);
+      let n = n + (if c == 0 then 1 else 0);
+      let v = v + 1;
+      0
+    };
+    let t = t + 1;
+    0
+  };
+  n
+}
+
+// all 256 patterns w = px | py<<1 | (a+4)<<2 | (b+4)<<5: parity-sign select vs if/else.
+// Returns (tot + 1024) * 2 + [mismatches == 0]
+fn select() -> i64 {
+  let mis = 0;
+  let tot = 0;
+  let w = 0;
+  while w < 256 {
+    let px = w & 1;
+    let py = (w >> 1) & 1;
+    let a = ((w >> 2) & 7) - 4;
+    let b = ((w >> 5) & 7) - 4;
+    let ks = 1 - 2 * px * py;
+    let out = (b * (1 + ks) + a * (1 - ks)) / 2;
+    let ref = if px * py == 1 then a else b;
+    let mis = mis + (if out == ref then 0 else 1);
+    let tot = tot + out;
+    let w = w + 1;
+    0
+  };
+  (tot + 1024) * 2 + (if mis == 0 then 1 else 0)
+}
+
+fn main() -> i64 {
+  let p = pairs();
+  let gz = gens();
+  let jz = jac();
+  let tr = trig();
+  let se = select();
+  ((((p * 26 + gz) * 57601 + jz) * 993 + tr) * 2048 + se / 2) * 2 + se % 2
+}

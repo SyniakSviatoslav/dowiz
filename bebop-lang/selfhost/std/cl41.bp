@@ -1,0 +1,292 @@
+module core { }
+
+// cl41.bp — T23: Cl(4,1) ternary conformal (CGA) basis. 32 blades x 2-bit
+// ternary coefficient = ONE i64; blade index = basis bitmask, generators
+// e1..e4 square to +1, e5 (bit 4) to -1: Cayley product e_I e_J =
+// (-1)^inv(I,J) * (-1)^[e5 in I&J] * e_{I^J}, inv = tern.bp/grass.bp
+// transposition count (x in I, y in J, x > y). Checks: even subalgebra
+// Cl^0 (16 blades) closed under product — exhaustive 16x16 blade pairs
+// (ev = 256) plus full 32x32 sign sum (metric checksum); two even
+// ternary multivectors packed in ONE i64 (16 blades x 2 bits = 32 bits
+// each), unpacked, multiplied: even + ternary + roundtrip; null vectors
+// n_inf = e+ + e- (e4+e5) and 2 n_o = e- - e+ (e5-e4) square to 0 exactly
+// and <n_inf, 2 n_o> = -2; CGA points 2P(x) = 2x + x^2 n_inf + 2 n_o for
+// ALL 27 ternary x in {-1,0,1}^3 are null, and the rotor sandwich
+// R (2P(x)) R~ with R = 1 + e12 (R R~ = 2) equals the direct table
+// 2 * 2P(x'), x' = (x2, -x1, x3). Fold =
+// (((((ev*1000 + nullc*28 + sw)*64 + bits6)*10^4 + schk)*10^4 + ssum+1024)*1100 + chkAB,
+// bits6 = ninf0*32 + no0*16 + sp*8 + re*4 + tern*2 + rt.
+
+fn csgn(i: i64, j: i64) -> i64 {
+  let t = 0;
+  let x = 1;
+  while x < 5 {
+    let y = 0;
+    while y < x {
+      let t = t + ((i >> x) & 1) * ((j >> y) & 1);
+      let y = y + 1;
+      0
+    };
+    let x = x + 1;
+    0
+  };
+  let m = ((i & j) >> 4) & 1;
+  (1 - (t % 2) * 2) * (1 - m * 2)
+}
+
+fn popc(i: i64) -> i64 {
+  let n = 0;
+  let x = 0;
+  while x < 5 {
+    let n = n + ((i >> x) & 1);
+    let x = x + 1;
+    0
+  };
+  n
+}
+
+// acc += a * b (geometric product in Cl(4,1))
+fn cprod(a: [i64], b: [i64], acc: [i64]) -> i64 {
+  let i = 0;
+  while i < 32 {
+    let j = 0;
+    while j < 32 {
+      let s = csgn(i, j);
+      let c = i ^ j;
+      let _ = acc[c] = acc[c] + a[i] * b[j] * s;
+      let j = j + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+fn clear(a: [i64]) -> i64 {
+  let k = 0;
+  while k < 32 {
+    let _ = a[k] = 0;
+    let k = k + 1;
+    0
+  };
+  0
+}
+
+fn same(a: [i64], b: [i64]) -> i64 {
+  let bad = 0;
+  let k = 0;
+  while k < 32 {
+    let bad = bad + (if a[k] == b[k] then 0 else 1);
+    let k = k + 1;
+    0
+  };
+  if bad == 0 then 1 else 0
+}
+
+fn iszero(a: [i64]) -> i64 {
+  let bad = 0;
+  let k = 0;
+  while k < 32 {
+    let bad = bad + (if a[k] == 0 then 0 else 1);
+    let k = k + 1;
+    0
+  };
+  if bad == 0 then 1 else 0
+}
+
+fn istern(a: [i64]) -> i64 {
+  let bad = 0;
+  let k = 0;
+  while k < 32 {
+    let v = a[k];
+    let bad = bad + (if v * v > 1 then 1 else 0);
+    let k = k + 1;
+    0
+  };
+  if bad == 0 then 1 else 0
+}
+
+// 1 if every odd-grade coefficient is 0
+fn iseven(a: [i64]) -> i64 {
+  let bad = 0;
+  let k = 0;
+  while k < 32 {
+    let odd = popc(k) % 2;
+    let bad = bad + odd * (if a[k] == 0 then 0 else 1);
+    let k = k + 1;
+    0
+  };
+  if bad == 0 then 1 else 0
+}
+
+// pack the 16 even blades (ascending index) into 32 bits, enc = coef + 1
+fn packe(a: [i64]) -> i64 {
+  let p = 0;
+  let s = 0;
+  let k = 0;
+  while k < 32 {
+    let ev = 1 - popc(k) % 2;
+    let p = p + ev * (a[k] + 1) * (1 << (s * 2));
+    let s = s + ev;
+    let k = k + 1;
+    0
+  };
+  p
+}
+
+fn unpacke(p: i64, a: [i64]) -> i64 {
+  let s = 0;
+  let k = 0;
+  while k < 32 {
+    let ev = 1 - popc(k) % 2;
+    let _ = a[k] = ev * (((p >> (s * 2)) & 3) - 1);
+    let s = s + ev;
+    let k = k + 1;
+    0
+  };
+  0
+}
+
+fn chk(a: [i64]) -> i64 {
+  let s = 0;
+  let k = 0;
+  while k < 32 {
+    let s = s + a[k] * (k + 1);
+    let k = k + 1;
+    0
+  };
+  s
+}
+
+// exhaustive blade table: ev = #(even,even) pairs whose product blade is even,
+// ssum = sum of all 1024 Cayley signs. Returns ev*10000 + ssum + 1024.
+fn table() -> i64 {
+  let ev = 0;
+  let ssum = 0;
+  let i = 0;
+  while i < 32 {
+    let j = 0;
+    while j < 32 {
+      let both = (1 - popc(i) % 2) * (1 - popc(j) % 2);
+      let ev = ev + both * (1 - popc(i ^ j) % 2);
+      let ssum = ssum + csgn(i, j);
+      let j = j + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  ev * 10000 + ssum + 1024
+}
+
+// A = 1 + e12, B = 1 + e13 packed together in one i64 (A low 32, B high 32).
+// Returns (re*4 + tern*2 + rt) * 10000 + chk(A'B') + 528.
+fn evenpair() -> i64 {
+  let a = zeros(32);
+  let b = zeros(32);
+  let u = zeros(32);
+  let v = zeros(32);
+  let ab = zeros(32);
+  let _ = a[0] = 1;
+  let _ = a[3] = 1;
+  let _ = b[0] = 1;
+  let _ = b[5] = 1;
+  let reg = packe(a) + (packe(b) << 32);
+  let _ = unpacke(reg & 4294967295, u);
+  let _ = unpacke(reg >> 32, v);
+  let rt = same(a, u) * same(b, v);
+  let _ = cprod(u, v, ab);
+  let re = iseven(ab);
+  let tern = istern(ab);
+  (re * 4 + tern * 2 + rt) * 10000 + chk(ab) + 528
+}
+
+// n_inf = e4 + e5, 2 n_o = e5 - e4. Returns ninf0*4 + no0*2 + [scalar == -2]
+fn nulls() -> i64 {
+  let ni = zeros(32);
+  let no = zeros(32);
+  let t = zeros(32);
+  let _ = ni[8] = 1;
+  let _ = ni[16] = 1;
+  let _ = no[8] = 0 - 1;
+  let _ = no[16] = 1;
+  let _ = cprod(ni, ni, t);
+  let z1 = iszero(t);
+  let _ = clear(t);
+  let _ = cprod(no, no, t);
+  let z2 = iszero(t);
+  let _ = clear(t);
+  let _ = cprod(ni, no, t);
+  let sp = if t[0] == (0 - 2) then 1 else 0;
+  z1 * 4 + z2 * 2 + sp
+}
+
+// s * 2P(x) with 2P(x) = 2x + x^2 n_inf + 2 n_o
+fn mkpoint(a: [i64], x1: i64, x2: i64, x3: i64, s: i64) -> i64 {
+  let q = x1 * x1 + x2 * x2 + x3 * x3;
+  let _ = a[1] = s * 2 * x1;
+  let _ = a[2] = s * 2 * x2;
+  let _ = a[4] = s * 2 * x3;
+  let _ = a[8] = s * (q - 1);
+  let _ = a[16] = s * (q + 1);
+  0
+}
+
+// all 27 ternary points: nullc = #null, sw = #(R P R~ == 2 * 2P(x')), schk = sum chk(R P R~)
+// Returns (nullc*28 + sw)*10000 + schk
+fn points() -> i64 {
+  let p = zeros(32);
+  let r = zeros(32);
+  let rt = zeros(32);
+  let t = zeros(32);
+  let s = zeros(32);
+  let d = zeros(32);
+  let _ = r[0] = 1;
+  let _ = r[3] = 1;
+  let _ = rt[0] = 1;
+  let _ = rt[3] = 0 - 1;
+  let nullc = 0;
+  let sw = 0;
+  let schk = 0;
+  let i1 = 0;
+  while i1 < 3 {
+    let i2 = 0;
+    while i2 < 3 {
+      let i3 = 0;
+      while i3 < 3 {
+        let _ = clear(p);
+        let _ = clear(t);
+        let _ = clear(s);
+        let _ = clear(d);
+        let _ = mkpoint(p, i1 - 1, i2 - 1, i3 - 1, 1);
+        let _ = cprod(p, p, t);
+        let nullc = nullc + iszero(t);
+        let _ = clear(t);
+        let _ = cprod(r, p, t);
+        let _ = cprod(t, rt, s);
+        let _ = mkpoint(d, i2 - 1, 1 - i1, i3 - 1, 2);
+        let sw = sw + same(s, d);
+        let schk = schk + chk(s);
+        let i3 = i3 + 1;
+        0
+      };
+      let i2 = i2 + 1;
+      0
+    };
+    let i1 = i1 + 1;
+    0
+  };
+  (nullc * 28 + sw) * 10000 + schk
+}
+
+fn main() -> i64 {
+  let tb = table();
+  let ev = tb / 10000;
+  let ssum = tb % 10000;
+  let ep = evenpair();
+  let nl = nulls();
+  let pt = points();
+  let bits6 = nl * 8 + ep / 10000;
+  ((((ev * 1000 + pt / 10000) * 64 + bits6) * 10000 + pt % 10000) * 10000 + ssum) * 1100 + ep % 10000
+}

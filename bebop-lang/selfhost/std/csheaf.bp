@@ -1,0 +1,185 @@
+// csheaf.bp — T29: content-addressable sheaf nodes (O(1) resolve + phase
+// address). The sheaf of sheaf.bp (5 nodes, 6 edges tail < head, stalk dim 2,
+// stalks fp 2^32, integer unimodular maps rho[(e*2+side)*4 + i*2+j]) and its
+// consistent section x_0 = (3,2) pushed along the tree. Record = (v, x0, x1);
+// address = FNV-1a-64 digest of the 3 words (ptrless discipline: no slot
+// pointer is ever stored, addr[v] is a digest). Store = 16-slot open-address
+// table, slot = digest & 15, linear probing. insert(v, x) is REJECTED unless
+// delta == 0 against every neighbour already resolvable (the sheaf validates
+// the record, not a schema); verify(v) = resolve(addr[v]) + re-hash == key +
+// delta check against neighbours. Phase address: angle = digest >> 32 (fp
+// 2^32 fraction of a turn), bucket = angle >> 29 = 8 rotor sectors of Cl^0;
+// hist packed 3 bits per bucket. Breaker: ONE key bit flipped (slot of v=3)
+// -> exactly that vertex stops resolving (after = 4, bad_v = 3).
+// Fold = ins*10^15 + rej*10^14 + res_ok*10^13 + ver_ok*10^12 + after*10^11
+//      + bad_v*10^10 + hist.
+
+fn setm(rho: [i64], k: i64, a: i64, b: i64, c: i64, d: i64) -> i64 {
+  let _ = rho[k * 4] = a;
+  let _ = rho[k * 4 + 1] = b;
+  let _ = rho[k * 4 + 2] = c;
+  let _ = rho[k * 4 + 3] = d;
+  0
+}
+
+fn fnv3(v: i64, a: i64, b: i64) -> i64 {
+  let h = [14695981039346656037];
+  let i = 0;
+  while i < 3 {
+    let w = if i == 0 then v else (if i == 1 then a else b);
+    let sh = 0;
+    while sh < 8 {
+      let byte = (w >> (sh * 8)) & 255;
+      let _ = h[0] = (h[0] ^ byte) * 1099511628211;
+      let sh = sh + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  h[0]
+}
+
+// linear probe: first slot holding d or empty
+fn probe(keys: [i64], d: i64) -> i64 {
+  let s = d & 15;
+  while (if keys[s] == 0 then 0 else (if keys[s] == d then 0 else 1)) == 1 {
+    let s = (s + 1) & 15;
+    0
+  };
+  s
+}
+
+// slot of digest d, or -1
+fn resolve(keys: [i64], d: i64) -> i64 {
+  let s = probe(keys, d);
+  if d == 0 then 0 - 1 else (if keys[s] == d then s else 0 - 1)
+}
+
+// 1 iff (v, x0, x1) has delta == 0 against every resolvable neighbour
+fn check(et: [i64], eh: [i64], rho: [i64], keys: [i64], vals: [i64], addr: [i64], v: i64, x0: i64, x1: i64) -> i64 {
+  let ok = 1;
+  let e = 0;
+  while e < 6 {
+    let ist = if et[e] == v then 1 else 0;
+    let ish = if eh[e] == v then 1 else 0;
+    let inc = ist + ish;
+    let u = if ist == 1 then eh[e] else et[e];
+    let s = resolve(keys, addr[u]);
+    let have = if s < 0 then 0 else 1;
+    let s = if s < 0 then 0 else s;
+    let u0 = vals[s * 3 + 1];
+    let u1 = vals[s * 3 + 2];
+    let km = (e * 2 + ish) * 4;
+    let ko = (e * 2 + ist) * 4;
+    let r0 = rho[km] * x0 + rho[km + 1] * x1 - (rho[ko] * u0 + rho[ko + 1] * u1);
+    let r1 = rho[km + 2] * x0 + rho[km + 3] * x1 - (rho[ko + 2] * u0 + rho[ko + 3] * u1);
+    let bad = if r0 == 0 then (if r1 == 0 then 0 else 1) else 1;
+    let ok = ok * (1 - bad * inc * have);
+    let e = e + 1;
+    0
+  };
+  ok
+}
+
+fn insert(et: [i64], eh: [i64], rho: [i64], keys: [i64], vals: [i64], addr: [i64], v: i64, x0: i64, x1: i64) -> i64 {
+  let ok = check(et, eh, rho, keys, vals, addr, v, x0, x1);
+  let d = fnv3(v, x0, x1);
+  let s = probe(keys, d);
+  let _ = keys[s] = keys[s] * (1 - ok) + d * ok;
+  let _ = vals[s * 3] = vals[s * 3] * (1 - ok) + v * ok;
+  let _ = vals[s * 3 + 1] = vals[s * 3 + 1] * (1 - ok) + x0 * ok;
+  let _ = vals[s * 3 + 2] = vals[s * 3 + 2] * (1 - ok) + x1 * ok;
+  let _ = addr[v] = addr[v] * (1 - ok) + d * ok;
+  ok
+}
+
+fn verify(et: [i64], eh: [i64], rho: [i64], keys: [i64], vals: [i64], addr: [i64], v: i64) -> i64 {
+  let s = resolve(keys, addr[v]);
+  let have = if s < 0 then 0 else 1;
+  let s = if s < 0 then 0 else s;
+  let rv = vals[s * 3];
+  let a = vals[s * 3 + 1];
+  let b = vals[s * 3 + 2];
+  let hok = if fnv3(rv, a, b) == keys[s] then 1 else 0;
+  let cok = check(et, eh, rho, keys, vals, addr, rv, a, b);
+  have * hok * cok
+}
+
+fn main() -> i64 {
+  let et = [0, 1, 2, 3, 0, 1];
+  let eh = [1, 2, 3, 4, 2, 4];
+  let rho = zeros(48);
+  let x = zeros(10);
+  let keys = zeros(16);
+  let vals = zeros(48);
+  let addr = zeros(5);
+  let hist = zeros(8);
+  let _ = setm(rho, 0, 1, 1, 0, 1);
+  let _ = setm(rho, 1, 1, 0, 0, 1);
+  let _ = setm(rho, 2, 1, 0, 1, 1);
+  let _ = setm(rho, 3, 1, 0, 0, 1);
+  let _ = setm(rho, 4, 0, 1, 0 - 1, 0);
+  let _ = setm(rho, 5, 1, 0, 0, 1);
+  let _ = setm(rho, 6, 1, 0 - 1, 0, 1);
+  let _ = setm(rho, 7, 1, 0, 0, 1);
+  let _ = setm(rho, 8, 2, 3, 1, 2);
+  let _ = setm(rho, 9, 1, 1, 0, 1);
+  let _ = setm(rho, 10, 2, 1, 0 - 3, 0 - 1);
+  let _ = setm(rho, 11, 1, 0, 0 - 1, 1);
+  // consistent section along the path
+  let _ = x[0] = 3 << 32;
+  let _ = x[1] = 2 << 32;
+  let e = 0;
+  while e < 4 {
+    let kt = (e * 2) * 4;
+    let s = e * 2;
+    let _ = x[s + 2] = rho[kt] * x[s] + rho[kt + 1] * x[s + 1];
+    let _ = x[s + 3] = rho[kt + 2] * x[s] + rho[kt + 3] * x[s + 1];
+    let e = e + 1;
+    0
+  };
+  // insert 5 stalks (each checked against already-stored neighbours)
+  let ins = 0;
+  let v = 0;
+  while v < 5 {
+    let ins = ins + insert(et, eh, rho, keys, vals, addr, v, x[v * 2], x[v * 2 + 1]);
+    let v = v + 1;
+    0
+  };
+  // inconsistent stalk at v = 2 -> rejected by the delta check
+  let rej = 1 - insert(et, eh, rho, keys, vals, addr, 2, x[4] + (1 << 32), x[5]);
+  let res_ok = 0;
+  let ver_ok = 0;
+  let v = 0;
+  while v < 5 {
+    let s = resolve(keys, addr[v]);
+    let res_ok = res_ok + (if s < 0 then 0 else 1);
+    let ver_ok = ver_ok + verify(et, eh, rho, keys, vals, addr, v);
+    let b = (addr[v] >> 32) >> 29;
+    let _ = hist[b] = hist[b] + 1;
+    let v = v + 1;
+    0
+  };
+  let hpack = 0;
+  let b = 0;
+  while b < 8 {
+    let hpack = hpack + (hist[b] << (3 * b));
+    let b = b + 1;
+    0
+  };
+  // breaker: flip one bit of the key holding v = 3
+  let s3 = resolve(keys, addr[3]);
+  let _ = keys[s3] = keys[s3] ^ 128;
+  let after = 0;
+  let bad_v = 0;
+  let v = 0;
+  while v < 5 {
+    let ok = verify(et, eh, rho, keys, vals, addr, v);
+    let after = after + ok;
+    let bad_v = bad_v + v * (1 - ok);
+    let v = v + 1;
+    0
+  };
+  ins * 1000000000000000 + rej * 100000000000000 + res_ok * 10000000000000 + ver_ok * 1000000000000 + after * 100000000000 + bad_v * 10000000000 + hpack
+}

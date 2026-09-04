@@ -1,0 +1,208 @@
+module core { }
+
+// stm.bp — T34: Z2 transactions (STM on the grading). The store (8 cells)
+// is the EVEN sector; a transaction's uncommitted writes live in the ODD
+// sector as a Grassmann monomial over the touched-node generators e_0..e_7
+// (T22 form: ctx = sign*(2*mask+1); ctx 0 = no context): O0 trigger =
+// ctx != 0, O1 mask = touched nodes, O2 parity = |mask| mod 2 (the parity
+// register). Two slots interleave under an LCG schedule; each slot keeps
+// the union `win` of contexts committed by the other slot since it began.
+// Commit: the pairwise product ctx * e_win is 0 (nilpotency = overlap =
+// conflict) EXACTLY when the sheaf residual sum |store - snapshot| over
+// the touched nodes is nonzero (T28, identity restrictions, monotone
+// writes) — the two detectors are counted for agreement. No conflict:
+// writes land (store += pend), post-residual 0, Stokes: whole-store
+// change == boundary flux sum(pend) (T21), and the context is contracted
+// by all its generators -> even scalar +-1 (parity 0). Conflict: abort =
+// ctx*ctx = 0 in one operation; the store hash is bit-identical before
+// and after. Fold = (h % 1e9)*1e6 + commits*1000 + aborts*10 + all_ok,
+// h = mix of every commit scalar, abort and final store; mirror
+// bench/oracles/stm.py.
+
+fn absv(x: i64) -> i64 { if x < 0 then 0 - x else x }
+fn pc8(x: i64) -> i64 {
+  (x & 1) + ((x >> 1) & 1) + ((x >> 2) & 1) + ((x >> 3) & 1)
+  + ((x >> 4) & 1) + ((x >> 5) & 1) + ((x >> 6) & 1) + ((x >> 7) & 1)
+}
+fn sg(n: i64) -> i64 { 1 - 2 * (n & 1) }
+fn mix(h: i64, x: i64) -> i64 { ((h * 1000003) + x) & 4611686018427387903 }
+
+// e_I * e_r : 0 if r in I, else (-1)^{#i in I, i>r} e_{I|r}
+fn gmul(tk: i64, r: i64) -> i64 {
+  let m = absv(tk) >> 1;
+  let s = if tk < 0 then 0 - 1 else 1;
+  let bit = 1 << r;
+  let hit = if (m & bit) != 0 then 1 else 0;
+  let hit = if tk == 0 then 1 else hit;
+  let sgn = s * sg(pc8(m >> (r + 1)));
+  (1 - hit) * sgn * (2 * (m | bit) + 1)
+}
+// d_r e_I : 0 if r not in I, else (-1)^{#i in I, i<r} e_{I\r}
+fn gdel(tk: i64, r: i64) -> i64 {
+  let m = absv(tk) >> 1;
+  let s = if tk < 0 then 0 - 1 else 1;
+  let bit = 1 << r;
+  let hit = if (m & bit) != 0 then 1 else 0;
+  let hit = if tk == 0 then 0 else hit;
+  let sgn = s * sg(pc8(m & (bit - 1)));
+  hit * sgn * (2 * (m ^ bit) + 1)
+}
+// monomial product e_I * e_J by right-multiplying the generators of J in
+// ascending order (0 as soon as a generator repeats)
+fn gprod(ta: i64, tb: i64) -> i64 {
+  let mb = absv(tb) >> 1;
+  let sb = if tb < 0 then 0 - 1 else 1;
+  let acc = ta;
+  let j = 0;
+  while j < 8 {
+    let bit = (mb >> j) & 1;
+    let acc = acc * (1 - bit) + gmul(acc, j) * bit;
+    let j = j + 1;
+    0
+  };
+  acc * sb
+}
+// full contraction d_7 ... d_0 restricted to the generators of I -> scalar
+fn gcontract(tk: i64) -> i64 {
+  let m = absv(tk) >> 1;
+  let acc = tk;
+  let j = 0;
+  while j < 8 {
+    let bit = (m >> j) & 1;
+    let acc = acc * (1 - bit) + gdel(acc, j) * bit;
+    let j = j + 1;
+    0
+  };
+  acc
+}
+fn shash(store: [i64]) -> i64 {
+  let h = 7;
+  let i = 0;
+  while i < 8 {
+    let h = mix(h, store[i]);
+    let i = i + 1;
+    0
+  };
+  h
+}
+
+// sl[x*4+0] = ctx, sl[x*4+1] = win, sl[x*4+2] = parity register
+fn begin(store: [i64], snap: [i64], pend: [i64], sl: [i64], x: i64, s: i64, b: i64) -> i64 {
+  let ctx = sl[x * 4];
+  let free = if ctx == 0 then 1 else 0;
+  let b = b * free;
+  let msk = ((s >> 8) & 255) | (1 << ((s >> 16) & 7));
+  let tk = 1;
+  let i = 7;
+  while i >= 0 {
+    let bit = (msk >> i) & 1;
+    let delta = ((s >> (i * 2)) & 3) + 1;
+    let _ = snap[x * 8 + i] = snap[x * 8 + i] * (1 - b) + store[i] * b;
+    let _ = pend[x * 8 + i] = pend[x * 8 + i] * (1 - b) + bit * delta * b;
+    let tk = tk * (1 - bit) + gmul(tk, i) * bit;
+    let i = i - 1;
+    0
+  };
+  let _ = sl[x * 4] = ctx * (1 - b) + tk * b;
+  let _ = sl[x * 4 + 1] = sl[x * 4 + 1] * (1 - b);
+  let _ = sl[x * 4 + 2] = sl[x * 4 + 2] * (1 - b) + (pc8(msk) & 1) * b;
+  0
+}
+
+// st: 0 commits, 1 aborts, 2 agree, 3 nil_ok, 4 post_ok, 5 stokes_ok, 6 par_ok, 7 ident, 8 h, 9 attempts
+fn commit(store: [i64], snap: [i64], pend: [i64], sl: [i64], st: [i64], x: i64, c: i64) -> i64 {
+  let tk = sl[x * 4];
+  let busy = if tk != 0 then 1 else 0;
+  let c = c * busy;
+  let msk = absv(tk) >> 1;
+  let win = sl[x * 4 + 1];
+  let prod = gprod(tk, 2 * win + 1);
+  let conflict = if prod == 0 then 1 else 0;
+  let hb = shash(store);
+  let res = 0;
+  let before = 0;
+  let flux = 0;
+  let i = 0;
+  while i < 8 {
+    let bit = (msk >> i) & 1;
+    let res = res + bit * absv(store[i] - snap[x * 8 + i]);
+    let before = before + store[i];
+    let flux = flux + pend[x * 8 + i];
+    let i = i + 1;
+    0
+  };
+  let rnz = if res != 0 then 1 else 0;
+  let agree = if conflict == rnz then 1 else 0;
+  let _ = st[2] = st[2] + c * agree;
+  let _ = st[9] = st[9] + c;
+  // abort path: odd context squared = 0 in one product
+  let a = c * conflict;
+  let sq = gprod(tk, tk);
+  let nil = if sq == 0 then 1 else 0;
+  let _ = st[3] = st[3] + a * nil;
+  let _ = st[1] = st[1] + a;
+  // commit path: writes land, post-residual, Stokes
+  let k = c * (1 - conflict);
+  let post = 0;
+  let after = 0;
+  let i = 0;
+  while i < 8 {
+    let bit = (msk >> i) & 1;
+    let _ = store[i] = store[i] + k * pend[x * 8 + i];
+    let post = post + bit * absv(store[i] - (snap[x * 8 + i] + pend[x * 8 + i]));
+    let after = after + store[i];
+    let i = i + 1;
+    0
+  };
+  let _ = st[4] = st[4] + k * (if post == 0 then 1 else 0);
+  let _ = st[5] = st[5] + k * (if after - before == flux then 1 else 0);
+  let _ = st[0] = st[0] + k;
+  let o = 1 - x;
+  let _ = sl[o * 4 + 1] = sl[o * 4 + 1] | (msk * k);
+  let scal = gcontract(tk);
+  let rm = scal * k;
+  let grade = pc8(absv(rm) >> 1) & 1;
+  let _ = sl[x * 4 + 2] = sl[x * 4 + 2] * (1 - c) + grade * c;
+  let _ = st[6] = st[6] + c * (if grade == 0 then 1 else 0);
+  let _ = sl[x * 4] = tk * (1 - c);
+  let ha = shash(store);
+  let _ = st[7] = st[7] + a * (if ha == hb then 1 else 0);
+  let _ = st[8] = mix(st[8], c * (rm + 2) + a * 5);
+  0
+}
+
+fn main() -> i64 {
+  let store = zeros(8);
+  let snap = zeros(16);
+  let pend = zeros(16);
+  let sl = zeros(8);
+  let st = zeros(16);
+  let i = 0;
+  while i < 8 {
+    let _ = store[i] = (i + 1) * 10;
+    let i = i + 1;
+    0
+  };
+  let s = 777;
+  let t = 0;
+  while t < 64 {
+    let s = ((s * 1103515245) + 12345) & 2147483647;
+    let x = s & 1;
+    let act = (s >> 1) & 1;
+    let b = 1 - act;
+    let c = act;
+    let _ = begin(store, snap, pend, sl, x, s, b);
+    let _ = commit(store, snap, pend, sl, st, x, c);
+    let t = t + 1;
+    0
+  };
+  let ok = 1;
+  let ok = ok * (if st[2] == st[9] then 1 else 0);
+  let ok = ok * (if st[3] == st[1] then 1 else 0);
+  let ok = ok * (if st[4] == st[0] then 1 else 0);
+  let ok = ok * (if st[5] == st[0] then 1 else 0);
+  let ok = ok * (if st[6] == st[9] then 1 else 0);
+  let ok = ok * (if st[7] == st[1] then 1 else 0);
+  let h = mix(st[8], shash(store));
+  (h % 1000000000) * 1000000 + st[0] * 1000 + st[1] * 10 + ok
+}

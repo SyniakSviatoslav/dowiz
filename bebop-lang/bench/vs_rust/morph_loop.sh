@@ -8,6 +8,7 @@
 # mprotect morphing (proot W^X blocks mprotect RWX; the file-backed RX
 # seed map is the W^X-clean equivalent).
 set -eu
+mkdir -p "${BEBOP_TMP:-/tmp/opencode}"
 SEED=./seed/build/seed
 BIN=./bebop.bin
 SRC=bench/vs_rust/kernels/k1.bp
@@ -15,8 +16,8 @@ GOLDEN=500000500000
 K=${K:-8}
 PASS=0
 for i in $(seq 1 "$K"); do
-  PUB=/tmp/opencode/morph_k1_${i}.bin
-  TMP=/tmp/opencode/morph_k1_${i}.tmp
+  PUB=${BEBOP_TMP:-/tmp/opencode}/morph_k1_${i}.bin
+  TMP=${BEBOP_TMP:-/tmp/opencode}/morph_k1_${i}.tmp
   "$SEED" "$BIN" compile "$SRC" "$TMP" >/dev/null 2>&1
   mv -f "$TMP" "$PUB"   # atomic replacement per iteration
   GOT=$("$SEED" "$PUB" | tail -1)
