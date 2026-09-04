@@ -167,10 +167,10 @@ Milestone history (all DONE):
   fiber scheduler is the in-sandbox replacement
 
 ### Known issues
-1. **Pool test JIT divergence**: bebop.bin pool tests (par_sum/par_merge/
-   par_compile) return 0 on the JIT due to the retired interp's fntab
-   scan-budget divergence on sys_clone/futex paths — JIT itself is functionally
-   correct (fixpoint stable, all gates green); documented, not blocking.
+1. **Pool tests** — CLOSED 2026-09-04 (T45/D4): `bench/vs_rust/pool_parity.sh`
+   5/5 under bebop.bin (par_sum, par_merge, par_compile k1/k7, 4 child tids);
+   the "ptrace sandbox skip" and the "JIT divergence" were both the legacy
+   compiler, not the platform.
 2. **CLI exec mprotect**: CLI compilation of selfsrc (116KB) segfaults via the
    exec builtin under proot W^X. Boot path (self_bootstrap) works; low priority.
 
@@ -1449,7 +1449,8 @@ D2. T96 register tier for ordinary expressions is APPROVED (three
 D3. Primary optimisation column in-sandbox = pinned clock_ms (T72
     affinity first); words/iteration and swpmu steps are secondary.
 D4. sys_clone is root-caused NOW (not forward-port): multi-core and
-    parallelism are mandatory for the terminal goal.
+    parallelism are mandatory for the terminal goal. [CLOSED 2026-09-04:
+    root cause = legacy compiler; bebop.bin port runs 4 real threads, see T45]
 D5. T42(a) grammar and T42(b) shifts: MEASURE first with an oracle
     switch over every gate; adopt C precedence and `>>`=ASR/`>>>`=LSR
     when the fold delta is zero, otherwise the numbers come back to the
@@ -1583,7 +1584,7 @@ run -> fold) or delete them; `self_check` must be 41/41 or renumbered.
 DONE-CHECK: `self_check()` returns 0 with no dead checks.
 DEPS: none. BLOCKERS: none.
 
-**T45 · retire the second compiler** — port `sys_clone` (220),
+**T45 · retire the second compiler** — PARTIAL 2026-09-04 (D4 CLOSED: the clone defect was the LEGACY compiler, not proot — raw C clone probe 4/4 and `par_tids(4)`=4 under this proot; the 8 thread/arena builtins are ported verbatim into bebop.bp, `pool_parity.sh` runs 5/5 under bebop.bin with no ptrace skip (its k1/k7 path arrays wrote p[10] twice = wrong file = 0 words, fixed; expected = 4 x census words); fixpoint 364009e9; open: expr_compile.bp -> attic + tools/check_encodings.py/gen_selfsrc.sh re-pointed) — port `sys_clone` (220),
 `sys_futex_wait/wake` (98), `sys_atomic_add` (LSE LDADD), `sys_arena_
 base/end`, `sys_exit_thread` from `selfhost/expr_compile.bp` into
 `bebop.bp` (register tables per L2, disasm per L1); `pool_parity.sh`

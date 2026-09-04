@@ -1,0 +1,24 @@
+// D4-clone-3: clone + shared-memory visibility. RESOLVED 2026-09-04 (T45 port):
+// compiles and runs under bebop.bin (tid*10+7). NOTE the guard parks iff its
+// cond == 0, so the child passes r (0), not is_child - the first draft had it
+// backwards and the child fell off main onto a zeroed stack frame (SIGSEGV).
+// Child stores 7 into cells[0] (sys_cond_set guarded on is_child) and parks
+// on a never-woken futex; parent spins until cells[0] != 0 (bounded) and
+// returns r*10 + cells[0]. <= 8 live symbols (no spills).
+// EXPECT: (tid*10 + 7), i.e. value % 10 == 7 and value / 10 > 0.
+module core { }
+
+fn main() -> i64 {
+  let cells = zeros(4);
+  let base = sys_arena_base();
+  let r = sys_clone(68864, base + 131072);
+  let is_child = if r == 0 then 1 else 0;
+  let _ = sys_cond_set(is_child, cells, 0, 7);
+  let park = sys_futex_wait_guard(r, cells, 2, 0);
+  let spin = 50000000;
+  while spin > 0 {
+    let spin = if cells[0] == 0 then spin - 1 else 0;
+    0
+  };
+  r * 10 + cells[0]
+}

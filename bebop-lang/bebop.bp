@@ -823,6 +823,205 @@ fn emit_clock_ms(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   n[0]
 }
 
+// ---- T45 (2026-09-04): thread/arena builtins ported verbatim from the legacy
+// selfhost/expr_compile.bp (now attic). Word tables per L2; check_abi allowlists
+// every em() inside fn emit_sys_* (clone re-homes x14/x15/x27/x28 for the child).
+// sys_arena_base(): mov x0, x27 — the seed loader's arena cursor
+// (post-argv). x27/x28 are reserved by the register protocol and survive
+// into the program; callers derive shared cell addresses as
+// sys_arena_base() + idx * 8. Assembler-verified (m6.s).
+fn emit_sys_arena_base(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = em(insns, n, 2853897184);
+  let _ = push(insns, n, fntab);
+  n[0]
+}
+
+// sys_arena_end(): mov x0, x28 — arena limit (seed loader's x28).
+fn emit_sys_arena_end(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = em(insns, n, 2853962720);
+  let _ = push(insns, n, fntab);
+  n[0]
+}
+
+// sys_clone(flags, stack_top): raw clone. x0=flags, x1=stack_top, x2..x5=0.
+// Returns child tid in the parent, 0 in the child. The child continues at
+// the same instruction stream with the caller's registers (VM shared), so
+// the worker must branch on r==0 and finish with sys_exit_thread.
+// Register table: x0=flags (arg0), x1=stack_top (arg1), x2..x5=xzr, x8=220.
+fn emit_sys_clone(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 0, fntab);
+  let _ = em(insns, n, 2854159330);
+  let _ = em(insns, n, 2854159331);
+  let _ = em(insns, n, 2854159332);
+  let _ = em(insns, n, 2854159333);
+  let _ = em(insns, n, 2457660449);
+  let _ = em(insns, n, 3531611016);
+  let _ = em(insns, n, 3556769793);
+  let _ = em(insns, n, 3036676256);
+  let _ = em(insns, n, 2432959471);
+  let _ = em(insns, n, 2433483758);
+  let _ = em(insns, n, 2437940219);
+  let _ = em(insns, n, 2438988796);
+  let _ = push(insns, n, fntab);
+  n[0]
+}
+
+// sys_cond_set(cond, arr, idx, val): *arr[idx] = val iff cond != 0.
+// Real cbz inside: both threads may execute it, only the guard-matching
+// one writes — no branchless speculation, no lost updates on shared cells.
+// Register table: x0=cond (arg0), x1=arr (arg1), x2=idx (arg2),
+// x3=val (arg3); cbz x0,+3; add x1,x1,x2<<3; str x3,[x1]; mov x0,xzr.
+fn emit_sys_cond_set(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 3, fntab);
+  let _ = pop(insns, n, 2, fntab);
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 0, fntab);
+  let _ = em(insns, n, 3019898976);
+  let _ = em(insns, n, 2332167201);
+  let _ = em(insns, n, 4177526819);
+  let _ = em(insns, n, 2854159328);
+  let _ = push(insns, n, fntab);
+  n[0]
+}
+
+// sys_futex_wait_guard(cond, arr, idx, val): FUTEX_WAIT on arr[idx] iff
+// cond == 0 (the parked/waiting side), else return cond untouched. Real
+// cbnz (0xB5000100 = cbnz x0,+8 words): x0=cond (arg0), x1=arr, x2=idx,
+// x3=val; mov x0,x1; add x0,x0,x2<<3; x1=0 (WAIT); x2=val; x3=0; x8=98;
+// svc; mov x0,xzr. (The legacy comment said "iff cond != 0" - wrong; a
+// worker that parks passes r (0 in the child), see D4-clone-3.)
+fn emit_sys_futex_wait_guard(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 3, fntab);
+  let _ = pop(insns, n, 2, fntab);
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 0, fntab);
+  let _ = em(insns, n, 3036676352);
+  let _ = em(insns, n, 2852193248);
+  let _ = em(insns, n, 2332167168);
+  let _ = em(insns, n, 2854159329);
+  let _ = em(insns, n, 2852324322);
+  let _ = em(insns, n, 2854159331);
+  let _ = em(insns, n, 3531607112);
+  let _ = em(insns, n, 3556769793);
+  let _ = em(insns, n, 2854159328);
+  let _ = push(insns, n, fntab);
+  n[0]
+}
+
+// sys_futex_wake(arr, idx, n): futex WAKE n waiters on arr[idx].
+// Register table: x0=base (arg0), x1=idx (arg1), x2=n (arg2),
+// then x0+=x1<<3, x1=1 (FUTEX_WAKE), x3=0, x8=98.
+fn emit_sys_futex_wake(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 2, fntab);
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 0, fntab);
+  let _ = em(insns, n, 2332101632);
+  let _ = em(insns, n, 3531604001);
+  let _ = em(insns, n, 2854159331);
+  let _ = em(insns, n, 3573758911);
+  let _ = em(insns, n, 3531607112);
+  let _ = em(insns, n, 3556769793);
+  let _ = push(insns, n, fntab);
+  n[0]
+}
+
+// sys_atomic_add(arr, idx, val): LSE LDADDAL — *arr[idx] += val atomically,
+// returns the OLD value (full barrier). Register table: x0=arr (arg0),
+// x1=idx (arg1), x2=val (arg2); add x0,x0,x1<<3; ldaddal x2,x1,[x0];
+// mov x0,x1.
+fn emit_sys_atomic_add(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 2, fntab);
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 0, fntab);
+  let _ = em(insns, n, 2332101632);
+  let _ = em(insns, n, 4175560705);
+  let _ = em(insns, n, 2852193248);
+  let _ = push(insns, n, fntab);
+  n[0]
+}
+
+// sys_exit_thread_guard(cond, code): raw thread exit (svc 94) iff
+// cond != 0 — the worker dies alone, the parent skips (real cbz) and
+// returns 0. Never speculate this: svc 94 would kill the main thread.
+fn emit_sys_exit_thread_guard(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 0, fntab);
+  let _ = em(insns, n, 3019899008);
+  let _ = em(insns, n, 2852193248);
+  let _ = em(insns, n, 3531606984);
+  let _ = em(insns, n, 3556769793);
+  let _ = em(insns, n, 2854159328);
+  let _ = push(insns, n, fntab);
+  n[0]
+}
+
 // sys_readbuf(fd,len): raw read into the IO scratch zone, returns its
 // address — the standard handoff for feeding source text to emit_words.
 fn emit_sys_readbuf(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
@@ -936,6 +1135,14 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   let is_sft = if name == 12598865016055593546 then 1 else 0;
   let is_sex = if name == 7442661902340062434 then 1 else 0;
   let is_smun = if name == 7442662210087947144 then 1 else 0;
+  let is_arb = if name == 7040940390938053523 then 1 else 0;
+  let is_are = if name == 12163823898702034029 then 1 else 0;
+  let is_cln = if name == 10054667870649030395 then 1 else 0;
+  let is_fwk = if name == 8779068393901189725 then 1 else 0;
+  let is_ext = if name == 1084841420853388659 then 1 else 0;
+  let is_ata = if name == 7221016679989100487 then 1 else 0;
+  let is_fwg = if name == 15293169932641766580 then 1 else 0;
+  let is_cs = if name == 16710314075682296179 then 1 else 0;
   if is_hh == 1 then emit_hvham(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_hh2 == 1 then emit_hvham2(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_smm == 1 then emit_sys_mmap(s, pos, insns, n, stab, selfname, selfstart, fntab)
@@ -943,6 +1150,14 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   else if is_sft == 1 then emit_sys_ftruncate(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_sex == 1 then emit_sys_export(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_smun == 1 then emit_sys_munmap(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_arb == 1 then emit_sys_arena_base(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_are == 1 then emit_sys_arena_end(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_cln == 1 then emit_sys_clone(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_cs == 1 then emit_sys_cond_set(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_fwg == 1 then emit_sys_futex_wait_guard(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_fwk == 1 then emit_sys_futex_wake(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_ext == 1 then emit_sys_exit_thread_guard(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_ata == 1 then emit_sys_atomic_add(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_sp == 1 then emit_sys_slurp(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_sln == 1 then emit_str_len_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_chf == 1 then emit_char_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)

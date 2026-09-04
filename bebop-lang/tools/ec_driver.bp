@@ -1,0 +1,80 @@
+// tools/ec_driver.bp — CLI tail for the LEGACY second compiler (D4/T45 tooling).
+// Usage: cat selfhost/expr_compile.bp tools/ec_driver.bp > $BEBOP_TMP/ec_cli.bp
+//        seed bebop.bin compile $BEBOP_TMP/ec_cli.bp $BEBOP_TMP/ec_cli.bin
+//        seed $BEBOP_TMP/ec_cli.bin compile <src.bp> <out.bin>
+// Mirrors bebop.bp cli_compile (same argv layout, same footer) minus the
+// atomic-publish path, so programs using sys_clone/futex/atomic_add (which
+// bebop.bp cannot emit until T45) can be compiled and run under seed.
+
+fn ec_str_to_cells(dst: [i64], src: str) -> i64 {
+  let i = 0;
+  let done = 0;
+  while done == 0 {
+    let c = char(src, i);
+    let isz = if c == 0 then 1 else 0;
+    let _ = if isz == 0 then (let _ = dst[i] = c in 0) else 0;
+    let i = i + 1;
+    let done = isz;
+    0
+  };
+  i
+}
+
+fn ec_idx_of_main(fnames: [i64], cnt: i64) -> i64 {
+  let k = 0;
+  let idx = 0;
+  while k < cnt {
+    let ism = if fnames[k] == 246720401 then 1 else 0;
+    let idx = if ism == 1 then k else idx;
+    let k = k + 1;
+    0
+  };
+  idx
+}
+
+fn main(argc: i64, argv: i64) -> i64 {
+  let src = argv[3];
+  let out = argv[4];
+  let ls = str_len(src);
+  let lo = str_len(out);
+  let psrc = zeros(ls + 1);
+  let pout = zeros(lo + 1);
+  let _ = ec_str_to_cells(psrc, src);
+  let _ = ec_str_to_cells(pout, out);
+  let fd = sys_open(psrc, ls, 0);
+  let srcv = sys_slurp(fd, 400000);
+  let _ = sys_close(fd);
+  let words = emit_words(srcv);
+  let n = words[0];
+  let offs = emit_offsets(srcv);
+  let fnames = zeros(256);
+  let fpos = zeros(256);
+  let cnt = [0];
+  let _ = collect_fns(srcv, fnames, fpos, cnt);
+  let entry = offs[ec_idx_of_main(fnames, cnt[0]) + 1];
+  let e4 = entry * 4;
+  let nb = n * 4 + 8;
+  let buf = zeros(nb);
+  let k = 0;
+  while k < n {
+    let w = words[k + 1];
+    let _ = buf[k * 4] = w & 255;
+    let _ = buf[k * 4 + 1] = (w >> 8) & 255;
+    let _ = buf[k * 4 + 2] = (w >> 16) & 255;
+    let _ = buf[k * 4 + 3] = (w >> 24) & 255;
+    let k = k + 1;
+    0
+  };
+  let _ = buf[n * 4] = e4 & 255;
+  let _ = buf[n * 4 + 1] = (e4 >> 8) & 255;
+  let _ = buf[n * 4 + 2] = (e4 >> 16) & 255;
+  let _ = buf[n * 4 + 3] = (e4 >> 24) & 255;
+  let _ = buf[n * 4 + 4] = (e4 >> 32) & 255;
+  let _ = buf[n * 4 + 5] = (e4 >> 40) & 255;
+  let _ = buf[n * 4 + 6] = (e4 >> 48) & 255;
+  let _ = buf[n * 4 + 7] = (e4 >> 56) & 255;
+  let ofd = sys_open(pout, lo, 578);
+  let rc2 = sys_export(ofd, buf, nb);
+  let _ = sys_close(ofd);
+  rc2
+}

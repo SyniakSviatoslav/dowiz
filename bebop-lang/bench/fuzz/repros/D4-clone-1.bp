@@ -1,0 +1,13 @@
+// D4-clone-1: minimal sys_clone RESOLVED 2026-09-04: compiles+runs under bebop.bin (T45 port); the LEGACY compiler (expr_compile.bp
+// via tools/ec_driver.bp). One clone, child exits via sys_exit_thread_guard,
+// parent returns r. <= 8 live symbols (no spills).
+// EXPECT (kernel semantics, verified by raw asm probe under this proot): r = child tid > 0.
+module core { }
+
+fn main() -> i64 {
+  let base = sys_arena_base();
+  let r = sys_clone(68864, base + 131072);
+  let is_child = if r == 0 then 1 else 0;
+  let _ = sys_exit_thread_guard(is_child, 0);
+  r
+}
