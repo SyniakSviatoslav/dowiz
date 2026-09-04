@@ -1,0 +1,118 @@
+// T100 row (d): the bucketed index the repo always had the parts for
+// (tq.grid_cell + csr row pointers): counting sort of N points by 1024x1024
+// cell -> rp[]/ci[] (CSR), a query scans the 3x3 cell window. Q=1000 queries,
+// same window rule as oracle.py window_fold_Q1000 (lowest d, then lowest id,
+// -1 if the window is empty). Returns fold * 1000000 + query_ms.
+fn lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
+fn cellof(u: i64, v: i64) -> i64 { ((u + 1073741824) >> 21) * 1024 + ((v + 1073741824) >> 21) }
+fn fill(us: [i64], vs: [i64], cells: [i64], n: i64) -> i64 {
+  let x = 12345;
+  let i = 0;
+  while i < n {
+    let x = lcg(x);
+    let u = (x >> 33) - 1073741824;
+    let x = lcg(x);
+    let v = (x >> 33) - 1073741824;
+    let _ = us[i] = u;
+    let _ = vs[i] = v;
+    let _ = cells[i] = cellof(u, v);
+    let i = i + 1;
+    0
+  };
+  x
+}
+// build CSR: rp[c] = start of cell c in ci (rp has 1048577 entries), cur = cursor copy
+fn build(cells: [i64], rp: [i64], cur: [i64], ci: [i64], n: i64) -> i64 {
+  let i = 0;
+  while i < n {
+    let c = cells[i];
+    let _ = rp[c + 1] = rp[c + 1] + 1;
+    let i = i + 1;
+    0
+  };
+  let c = 0;
+  while c < 1048576 {
+    let _ = rp[c + 1] = rp[c + 1] + rp[c];
+    let _ = cur[c] = rp[c];
+    let c = c + 1;
+    0
+  };
+  let i = 0;
+  while i < n {
+    let c = cells[i];
+    let slot = cur[c];
+    let _ = ci[slot] = i;
+    let _ = cur[c] = slot + 1;
+    let i = i + 1;
+    0
+  };
+  rp[1048576]
+}
+// best over one cell's bucket; st[0] = best d, st[1] = best id
+fn scan_cell(us: [i64], vs: [i64], rp: [i64], ci: [i64], c: i64, qu: i64, qv: i64, st: [i64]) -> i64 {
+  let j = rp[c];
+  let e = rp[c + 1];
+  while j < e {
+    let i = ci[j];
+    let du = us[i] - qu;
+    let dv = vs[i] - qv;
+    let d = du * du + dv * dv;
+    let hit = (d < st[0]) + (d == st[0]) * (i < st[1]);
+    let _ = st[0] = if hit >= 1 then d else st[0];
+    let _ = st[1] = if hit >= 1 then i else st[1];
+    let j = j + 1;
+    0
+  };
+  0
+}
+fn query(us: [i64], vs: [i64], rp: [i64], ci: [i64], qu: i64, qv: i64, st: [i64]) -> i64 {
+  let c = cellof(qu, qv);
+  let cx = c / 1024;
+  let cy = c - cx * 1024;
+  let _ = st[0] = 9223372036854775807;
+  let _ = st[1] = 0 - 1;
+  let dx = 0 - 1;
+  while dx <= 1 {
+    let dy = 0 - 1;
+    while dy <= 1 {
+      let ok = (cx + dx >= 0) * (cx + dx < 1024) * (cy + dy >= 0) * (cy + dy < 1024);
+      let _ = if ok == 1 then scan_cell(us, vs, rp, ci, (cx + dx) * 1024 + cy + dy, qu, qv, st) else 0;
+      let dy = dy + 1;
+      0
+    };
+    let dx = dx + 1;
+    0
+  };
+  st[1]
+}
+fn main() -> i64 {
+  let n = 1000000;
+  let q = 1000;
+  let us = zeros(n);
+  let vs = zeros(n);
+  let cells = zeros(n);
+  let rp = zeros(1048577);
+  let cur = zeros(1048577);
+  let ci = zeros(n);
+  let st = zeros(2);
+  let x = fill(us, vs, cells, n);
+  let _ = build(cells, rp, cur, ci, n);
+  let t0 = clock_ms();
+  let fold = 0;
+  let p = 1;
+  let k = 0;
+  let x = x;
+  while k < q {
+    let x = lcg(x);
+    let qu = (x >> 33) - 1073741824;
+    let x = lcg(x);
+    let qv = (x >> 33) - 1073741824;
+    let bi = query(us, vs, rp, ci, qu, qv, st);
+    let fold = (fold + (bi + 1000000007) * p) % 1000000007;
+    let p = (p * 131) % 1000000007;
+    let k = k + 1;
+    0
+  };
+  let ms = clock_ms() - t0;
+  fold * 1000000 + ms
+}

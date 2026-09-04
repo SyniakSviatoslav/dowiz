@@ -2504,7 +2504,7 @@ T42; return/break after T43.
 DONE-CHECK: construct gates per form; fuzzer generates them; fixpoint
 byte-exact. DEPS: T42, T43. BLOCKERS: none.
 
-**T100 · sqlite oracle for tensor-query latency (D1(c))**
+**T100 · sqlite oracle for tensor-query latency (D1(c))** — DONE ✓ 2026-09-04, first MEASURED rows (`bench/tq_sqlite/run.sh`, RESULT.md): 1M LCG points, 1000 queries, pinned A78, folds cross-checked three ways; bebop bucketed index (cell -> CSR -> 3x3 window, nnidx.bp) 4.0 us/query vs sqlite 3.46 C-API prepared statement 55 us (13.8x) and python wrapper 44 us; bebop brute scan 18.4 ms vs sqlite scan 183 ms (9.9x — the 10x scan rule of the analysis is missed by 1%, reported as measured); bebop.bin 104b6291 (T96 step 1). This replaces the "15-50x vs SQL / 0.2-0.7 ms" projection: the O(1) part is the cell lookup + CSR bucket, and it was never in tq.bp until now.
 GOAL: `bench/oracles/tq_sqlite.py` builds the same 1M-point set in
 sqlite3 (python stdlib), runs the T20 nearest query; gate records both
 latencies and both RSS (T97) side by side.

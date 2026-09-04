@@ -1,0 +1,58 @@
+// T100 row (c): brute-force nearest neighbour over N LCG points, Q=20 queries.
+// Same data/rule as bench/tq_sqlite/oracle.py (truth_fold_Q20). Returns
+// fold * 1000000 + query_ms (in-process clock_ms around the Q scans).
+fn lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
+fn fill(us: [i64], vs: [i64], n: i64) -> i64 {
+  let x = 12345;
+  let i = 0;
+  while i < n {
+    let x = lcg(x);
+    let _ = us[i] = (x >> 33) - 1073741824;
+    let x = lcg(x);
+    let _ = vs[i] = (x >> 33) - 1073741824;
+    let i = i + 1;
+    0
+  };
+  x
+}
+fn scan(us: [i64], vs: [i64], n: i64, qu: i64, qv: i64) -> i64 {
+  let best = 9223372036854775807;
+  let bi = 0 - 1;
+  let i = 0;
+  while i < n {
+    let du = us[i] - qu;
+    let dv = vs[i] - qv;
+    let d = du * du + dv * dv;
+    let hit = d < best;
+    let best = if hit == 1 then d else best;
+    let bi = if hit == 1 then i else bi;
+    let i = i + 1;
+    0
+  };
+  bi
+}
+fn main() -> i64 {
+  let n = 1000000;
+  let q = 20;
+  let us = zeros(n);
+  let vs = zeros(n);
+  let x = fill(us, vs, n);
+  let t0 = clock_ms();
+  let fold = 0;
+  let p = 1;
+  let k = 0;
+  let x = x;
+  while k < q {
+    let x = lcg(x);
+    let qu = (x >> 33) - 1073741824;
+    let x = lcg(x);
+    let qv = (x >> 33) - 1073741824;
+    let bi = scan(us, vs, n, qu, qv);
+    let fold = (fold + (bi + 1000000007) * p) % 1000000007;
+    let p = (p * 131) % 1000000007;
+    let k = k + 1;
+    0
+  };
+  let ms = clock_ms() - t0;
+  fold * 1000000 + ms
+}

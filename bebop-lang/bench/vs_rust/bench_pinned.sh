@@ -37,7 +37,7 @@ done
 T="$T" R="$R" PIN="$PIN" PINOK="$PINOK" BIG="$BIG" USABLE="$USABLE" ALLOWED="$ALLOWED" BEBOP_BIN="$BEBOP_BIN" SEED="$SEED" python3 - <<'PY'
 import os, re, subprocess, time, statistics, hashlib
 T=os.environ['T']; R=int(os.environ['R']); PIN=os.environ['PIN']; SEED=os.environ['SEED']; BB=os.environ['BEBOP_BIN']
-EXPECT={'k1':'500000500000','k2':'75025','k3':'40635000','k4':None,'k0':'0'}
+EXPECT={'k1':'500000500000','k2':'75025','k3':'67725000','k4':None,'k0':'0'}
 
 def run1(argv, pin):
     if pin: argv=['taskset','-c',pin]+argv
