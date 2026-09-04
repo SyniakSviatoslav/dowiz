@@ -1,3 +1,4 @@
+// Status: 2026-09-04 SUPERSEDED — `theorem` needs the in-.bp proof kernel, ROADMAP T85 (not implemented).
 // theorem-false.bp — a FALSE theorem. The kernel must reject it at elaboration
 // and stop the build (exit 1). `1 + 1` folds to 2, not 3.
 

@@ -1,5 +1,7 @@
 # BUG LEDGER — week ending 2026-09-02 (R3.x closure + R6.1)
 
+Status: 2026-09-04 CURRENT (historical ledger, week ending 2026-09-02; open R3.x classes tracked as ROADMAP T42)
+
 Every defect from the week with: class, evidence, fix, and the MECHANICAL
 guard that now exists to catch the class (per AGENTS v2 rules: a rule
 lives only with its trigger and its check).

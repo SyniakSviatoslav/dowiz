@@ -1,3 +1,4 @@
+// Status: 2026-09-04 SUPERSEDED — `theorem` needs the in-.bp proof kernel, ROADMAP T85 (not implemented).
 // theorem-sample.bp — formal theorems, proved in the kernel at elaboration.
 // A theorem is checked by the proof kernel: `refl` proves `l = r` exactly
 // when l ≡ r up to β+δ conversion (the same judgement Lean uses for rfl).

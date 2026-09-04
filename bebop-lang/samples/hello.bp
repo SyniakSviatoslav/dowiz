@@ -1,3 +1,4 @@
+// Status: 2026-09-04 SUPERSEDED — `module`/`struct` literal are inert or disabled (struct_kill) in bebop.bp; glyph surface is ROADMAP T84.
 // hello.bp — canonical "Hello world" for Bebop (ASCII fallback surface)
 // Bebop is glyphic + VSA: this is the tokenizer-facing form; the human-facing
 // surface renders the same program as glyphs (see BEBOP-GLYPH-ALPHABET.md).

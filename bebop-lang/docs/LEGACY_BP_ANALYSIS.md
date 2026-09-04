@@ -1,5 +1,7 @@
 # Legacy & Opportunity Audit — .bp world ONLY (target: zero C)
 
+Status: 2026-09-04 SUPERSEDED-BY ROADMAP.md (counts are pre-zero-C; the live corpus audit is ROADMAP "TERMINAL-GOAL CLOSURE" F-A..F-I and T38)
+
 Scope: everything that must survive C elimination — selfhost/*.bp,
 bench/vs_rust/kernels/*.bp, and the QUALITY OF CODE the .bp compiler
 emits. C-side findings excluded except where they mark a hole that .bp

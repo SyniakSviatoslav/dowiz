@@ -1,5 +1,7 @@
 # Bebop as a Hypervector-first runtime
 
+Status: 2026-09-04 SUPERSEDED-BY ROADMAP.md (zero-C: hyper.c is gone; the living twin is selfhost/std/hv.bp, gate hv, D=1024/4096 per gate — this file is the historical target statement)
+
 Target state: every subsystem either CONSUMES hypervector primitives
 (1024-bit VSA, hyper.c), PRODUCES them (encoders), or VERIFIES them
 (self-hosted .bp VSA kernels). Nothing stays isolated.

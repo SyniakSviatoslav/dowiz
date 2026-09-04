@@ -1,5 +1,7 @@
 # Bebop Self-Hosting Status Report
 
+Status: 2026-09-04 SUPERSEDED-BY ROADMAP.md (describes the LEGACY second compiler selfhost/expr_compile.bp and the deleted native/ C reference; the live compiler is bebop.bp/bebop.bin, fixpoint md5 88d4cd5d; expr_compile.bp retires under T45)
+
 Status of `selfhost/expr_compile.bp` — a compiler written in Bebop that parses a
 small language and emits AArch64 machine-code words. This report documents what
 is **verified** against what is still **unverified**, the architecture, the ABI,

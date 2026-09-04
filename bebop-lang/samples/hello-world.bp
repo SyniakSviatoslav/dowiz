@@ -1,3 +1,4 @@
+// Status: 2026-09-04 SUPERSEDED — string literals + write compile but the str surface is R3.x(d) territory until ROADMAP T42; run through seed, not bebopc.
 // hello-world.bp — Bebop Hello World (working, with I/O syscalls)
 //
 // Run: ./build/bebopc run samples/hello-world.bp main

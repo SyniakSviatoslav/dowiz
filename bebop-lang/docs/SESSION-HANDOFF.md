@@ -1,5 +1,7 @@
 # SESSION HANDOFF — 2026-09-03 (resume in ONE read)
 
+Status: 2026-09-04 SUPERSEDED (T13 plan retired 2026-09-04; see ROADMAP.md "Verified state" + T25 — this file is rewritten at each session close)
+
 Repo: /root/dowiz/bebop-lang (git@github.com:SyniakSviatoslav/dowiz.git, branch main)
 HEAD: d704321 "docs(roadmap): T14+T15a done, T13 slot-localized as sole gap, session journal"
 Everything pushed. Nothing uncommitted.

@@ -1,5 +1,7 @@
 # Token economy & tiered routing (binding, always-on)
 
+Status: 2026-09-04 CURRENT
+
 Provenance: 2026-09-02 session; measured -78% token volume, ~-93% cost per
 gate. All agents working in this repo follow this file.
 

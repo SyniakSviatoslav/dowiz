@@ -1,6 +1,7 @@
 # SPEC — R6 Fast-Path Tier (register-aware emitter, "faster than Rust")
 
-Status: NOT STARTED (blocked on R6.0 root-cause). This card replaces the
+Status: 2026-09-04 SUPERSEDED-BY ROADMAP.md (R6.2 v5 folding LANDED 2026-09-03; the untyped register window R6.1/T13 was RETIRED by operator decision 2026-09-04 — register residency is the typed Z2 bank, ROADMAP T25/T26/T35). Historical card kept for the failure modes it records.
+Original status: NOT STARTED (blocked on R6.0 root-cause). This card replaces the
 failed R4/R5 attempts with the exact failure modes recorded so the next
 session does not repeat them.
 

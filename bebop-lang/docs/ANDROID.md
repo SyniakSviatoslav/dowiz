@@ -1,5 +1,7 @@
 # Bebop on Linux & Android (W^X-clean loader)
 
+Status: 2026-09-04 CURRENT
+
 ## Status
 - **Linux aarch64**: native — the whole self-hosted toolchain (seed loader +
   bebop.bin compiler) runs directly on the Linux syscall ABI.
@@ -49,7 +51,7 @@ munmap(215), ftruncate(46), renameat(38), exit(94) — all present on
 Android's arm64 kernel ABI, no libc, no bionic dependency.
 
 ## Verified
-- W^X loader: 42/42 std_golden gates, parity 9/0, construct 20/20 with
-  PROT_READ|PROT_EXEC mapping (2026-09-02).
+- W^X loader: 82/82 std_golden gates, parity 9/0, construct 24/24 with
+  PROT_READ|PROT_EXEC mapping (2026-09-02; counts re-verified 2026-09-04).
 - `seed` built with `aarch64-linux-gnu-as` + `ld` (works with NDK clang the
   same way — plain armv8-a, no extensions).
