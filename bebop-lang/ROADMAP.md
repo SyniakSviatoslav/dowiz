@@ -2511,70 +2511,45 @@ latencies and both RSS (T97) side by side.
 DONE-CHECK: table row with measured ms and MB for both engines.
 DEPS: T20, T97. BLOCKERS: none.
 
-## Predicted speedup and memory after full roadmap completion
+## Measured speed and memory (2026-09-04; replaces the projection table per decision D8(5))
 
-These are measured-baseline projections, not aspirational numbers. All
-predictions derive from existing benchmarks (K1-K4, session 3) + the
-known mechanical impact of each remaining task.
+Every row below is a measurement with its script; there is no projected
+row. "Rust twin" = bench/vs_rust/rust_once/k*.rs (K1/K3 carry an in-loop
+black_box, K4 is the only honest twin — docs/SPEEDUP-ANALYSIS.md §2).
+Pinned = `taskset -c 4` (Cortex-A78), in-process clock_ms, medians.
 
-### Speedup (execution, vs Rust baseline, same workload)
+| kernel (bench/vs_rust/bench_pinned.sh) | before T96 (364009e9) | after T96 step 1 (104b6291) | Rust twin | after / Rust |
+|---|---|---|---|---|
+| K1 sum 1M | 10.0 ms | 3.0 ms | 2.41 ms | 1.24x |
+| K2 fib(25) | 2.85 ms | 1.6 ms | 0.277 ms | 5.8x |
+| K3 300x300 | 1.2-1.5 ms | 0.6 ms | 0.213 ms | 2.8x |
+| K4 chain 2M | 32 ms | 13.0 ms | 2.85 ms | 4.6x |
+| K1 loop words/iteration | 51 | 25 | 3 | |
 
-| Task | Current measured | Projected | Why |
+| tensor query, 1M points (bench/tq_sqlite/run.sh, T100) | sqlite 3.46 | bebop | bebop faster by |
 |---|---|---|---|
-| K1 (linear chain) | 4.5-5.6× | 6-7× | T13 eliminates ~40% push/pop (1 instr vs 2 per value): K1
-  hot loop 35→11ms → projected 8-9ms on a non-throttled box. |
-| K2 (fibonacci) | 2.6× | 3.5-4× | T13 register window keeps fib(25) state in registers,
-  eliminates 25 spill/reload cycles. |
-| K3 (matrix) | 5.1-8.1× | 7-10× | T13 + T14 substrate: matrix inner loop already register-
-  resident; the remaining bottleneck is the 64B cache-line
-  alignment, not instruction count. |
-| K4 (bitfield) | 6.7-10.6× | 9-12× | T13 eliminates branch overhead; bitfield ops are already
-  branchless (T14 SWAR). |
-| T16-T21 (tensor DB) | N/A (new) | 15-50× vs SQL | Einstein summation = fused inner loop (no query parser, no
-  WAL, no B-tree traversal). Memory bandwidth bound; same data
-  = fewer instructions = fewer cache misses. On a 1M-point
-  manifold query: SQL ~10ms, tensor ~0.2-0.7ms (parametric
-  surface O(1) lookup vs B-tree O(log N)). |
-| T15 forward-port (bare metal) | 4.5-5.6× | 8-12× | Removing proot overhead (15.8ms cold start, syscall
-  interception) + sustained 2.4GHz (no thermal throttling under
-  proot). This is a platform gain, not a code gain. |
+| nearest, full scan | 183 ms (python wrapper) | 18.4 ms | 9.9x |
+| nearest, 3x3 cell index | 55 us (C API) / 44 us (python) | 4.0 us | 13.8x / 11.0x |
+| build + index | 2.46 s (python executemany) | in-process, not separated | |
 
-Aggregate (K1-K4 average, T13 landed, bare metal): **8-10× geometric
-mean** vs Rust on the same integer workloads.
+| substrate (bench/substrate_spike/run.sh, T55 spike) | ms | vs linear |
+|---|---|---|
+| 12-op straight-line fn x 300k, bebop linear | 18 | 1.0x |
+| same as runtime cells, bebop sweep engine | 738 | 41x slower |
+| same sweep engine in Rust (model floor) | 39 | 39x slower than Rust linear (1.0 ms) |
 
-### Memory (peak RSS, same workload)
+| memory / platform | measured |
+|---|---|
+| process RSS, K1-K4 | bebop 17.0 MB, Rust 17.0 MB (256 MB arena is mapped, not touched) |
+| self-compile `bebop.bin compile bebop.bp` | 108.7 s wall pinned, 77.8 MB RSS |
+| process startup floor | bebop (seed + mmap) 8.4 ms, Rust 12.4 ms |
+| DRAM bandwidth, one A78 / four | ~12 GB/s / ~12 GB/s (streaming gains 1.0-1.4x from cores) |
+| thread spawn under proot | ~0.7 ms |
 
-| Component | Current | Projected | Why |
-|---|---|---|---|
-| Arena allocator | 64B aligned, zero GC | Same | Already optimal; no change. |
-| .bt rank-4 tensors | 4-10× compression vs flat | Same | Already proven (bt.bp). |
-| Parametric manifold (T20) | N/A (new) | N × (16 bytes + hash) vs N × 256 × 8 = 2GB | The parametric surface
-  stores (u:f32, v:f32, hash:u256) per point, not the full
-  256D vector. 1M points = 24MB vs 2GB. |
-| SQL/WAL overhead (eliminated) | 50-200MB typical | 0 | No B-tree pages, no WAL buffer, no query plan cache.
-  The tensor engine IS the storage. |
-| Total peak RSS (1M-point query) | 200-500MB | 24-50MB | Arena + manifold + no SQL structures. 10-20× reduction. |
-| Binary size (bebop.bin) | ~1.4KB seed + ~68KB compiler | Same | No change; compiler is the same. |
-| Cold start | 15.8ms (proot) | <1ms (bare metal) | T15 forward-port + mmap-init (sub-ms by construction). |
-
-### Summary
-
-| Metric | Current (proot sandbox) | After full roadmap (bare metal) | Δ |
-|---|---|---|---|
-| Execution speed (K1-K4 avg) | 4.5-5.6× | 8-12× | +1.5-2.2× |
-| Memory (1M-point manifold query) | N/A (SQL: 200-500MB) | 24-50MB | 10-20× reduction |
-| Cold start | 15.8ms | <1ms | 15× reduction |
-| Tensor query latency | N/A (SQL: ~10ms) | ~0.2-0.7ms | 15-50× faster |
-
-The speedup is dominated by T13 (register window) + T15 bare metal
-(platform). The memory reduction is dominated by T20 (parametric manifold)
-eliminating SQL structures. The tensor query latency is the terminal-goal
-payoff: the language IS the database, so queries compile to native code
-with zero runtime overhead.
-
-Revision note (2026-09-04): the K1-K4 rows attribute their gains to the
-T13 untyped register window, which the operator retired in favour of the
-typed Z2 bank (SUPER-SHEAF PULL, T25). Those rows are WITHDRAWN until
-re-measured after T25/T26/T35 land; the T16-T21, T15 and memory rows are
-unaffected. Sheaf queries (T28) cost a Laplacian solve whose iteration
-count is frozen per gate — no latency number is projected for them.
+Numbers that were in the deleted projection and are now known to be
+wrong: "SQL ~10 ms" (183 ms scan / 0.055 ms indexed), "tensor 0.2-0.7 ms
+O(1) lookup" (tq.bp was O(N); the bucketed index does 4 us), "SQL 200-500
+MB RSS" (~20 MB), "bare metal 8-12x" (in-process loops already run at
+silicon speed; proot costs are per process/spawn), K1-K4 "6-12x faster
+than Rust" (today 1.2-5.8x slower after step 1; the one-pass ceiling is
+§1.4 of the analysis).
