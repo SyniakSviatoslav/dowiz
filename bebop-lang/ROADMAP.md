@@ -1070,7 +1070,7 @@ DEPS: T22, T23. BLOCKERS: none.
 
 ### Layer B -- the graded register bank (compiler; T13 re-scope)
 
-**T25 . Z2 bank ABI: x9-x13 callee-saved, builtin scratch rehomed, typed slots**
+**T25 . Z2 bank ABI: x9-x13 callee-saved, builtin scratch rehomed, typed slots** — RE-SCOPED 2026-09-04 (D9(2)): the bank is a library convention on arena cells; NO x9-x13 reservation — those registers go to compiler temporaries (T101). Text below kept as history.
 Verified facts (2026-09-04, decoder over every `em()` constant in
 bebop.bp -- ORR-alias mov, add/sub imm, movz, ldr/str, ubfm classes):
 **71 emitted words write or read x9-x13 as scratch inside 8 builtin
@@ -1127,7 +1127,7 @@ TYPED bank (T25) for algebraic state and by T26/T35 for records. The
 T13-attributed K1-K4 projections in "Predicted speedup" are WITHDRAWN
 until re-measured after T25/T26/T35 (ship whatever the numbers are).
 
-**T26 . register-resident record layout (zero deserialization)** (`regrec.bp`)
+**T26 . register-resident record layout (zero deserialization)** (`regrec.bp`) — RE-SCOPED 2026-09-04 (D9(2)): the record image is the mmapped .bt, loaded with ldp on use; not a register file.
 GOAL: a record = 40 bytes = 5 words = the bank image in sector order
 [E0,E1 | O0,O1,O2]; a table = `.bt` rank-4 tensor dims [N,5,1,1] (F4
 codec unchanged); publish via F2 (mmap-export + renameat); load = ldp
@@ -1252,7 +1252,7 @@ store BIT-IDENTICAL; parity register returns to 0 after every commit/
 abort; Stokes residual 0 after every commit.
 DEPS: T22, T24, T25 (bank), T28, T33, T21. BLOCKERS: none.
 
-**T35 . register wave filter (the index-free stream)** (`wave.bp`)
+**T35 . register wave filter (the index-free stream)** (`wave.bp`) — RE-SCOPED 2026-09-04 (D9(2)): a library over arena cells, after T101.
 GOAL: the record stream flows through the bank (T26 load per record);
 the odd trigger (O0) acts as a FILTER by nilpotent kill: records whose
 mask product with the trigger is 0 are dropped, survivors become the
@@ -1406,15 +1406,20 @@ is a runtime policy, not a tooling absence).
 The terminal goal is reached when ALL of the following hold, each with
 its own gate line in a committed script:
 
-1. **Substrate execution of compiled programs.** `bebop.bin compile
-   --substrate` turns a `.bp` program into (a) branch-free cell kernels
-   and (b) an incidence/activity `.bt` tensor; the runtime sweep
-   (`activity != 0`) is the ONLY conditional branch in the executable
-   image. Gate: branch census of the image == 1 conditional branch; fold
-   == the linear-mode fold for every std gate and for K1-K4.
-2. **Self-hosting on the substrate.** `bebop.bp` compiled in substrate
-   mode compiles itself to a byte-exact fixpoint (bb2 == bb3) in
-   substrate mode.
+1. **Compile-time substrate, measured predication (rewritten by D9 after
+   the T55 spike).** The dataflow graph of straight-line code is levelized
+   at COMPILE time and emitted as linear code (zero runtime cells);
+   control flow becomes predication (T52 csel, T53 masked stores, T54
+   fixed-count loops) at every site where the measured pinned time does
+   not regress, with N frozen after measurement. Gate: K1-K4 in-process
+   pinned >= 1.0x the Rust twins (D1(a)), branch census of every gate
+   image recorded (never "one branch" by fiat). The runtime sweep engine
+   is kept ONLY where activity is sparse or parallel: T106 (nn4 sharding)
+   and T107 (incremental curve) with their Rust twins.
+2. **Self-hosting stays linear.** `bebop.bp` compiles itself to a
+   byte-exact fixpoint (three generations once codegen changes) under
+   every codegen step; "self-hosting on runtime cells" is deleted as a
+   criterion (measured 41x/740x against, bench/substrate_spike).
 3. **Every gate has a committed independent oracle** (python or Rust)
    that reproduces the frozen fold from scratch; a gate without one is
    labelled `self-frozen` in this file, never "proven".
@@ -1479,14 +1484,31 @@ D8. (2026-09-04, after the T55 SPIKE — operator: "згідний з усім")
         D1(b) N-core throughput is THE substrate metric; the "Predicted
         speedup and memory" table is replaced by measured rows (T97,
         bench_pinned.sh) — no row without a measurement column.
+D9. (2026-09-04, operator answers to the analysis questions)
+    (1) TG-DONE 1-2 rewritten under D8 (below): the dataflow is levelized
+        at compile time, "one conditional branch" becomes predication
+        measured per site; self-hosting on runtime cells is deleted as a
+        criterion; the sweep engine survives only as the sparse/parallel
+        gates (T106 nn4, T107 incremental curve).
+    (2) T25/T26/T35: the Z2 bank is a LIBRARY CONVENTION on arena cells
+        (mvcc/stm/zgrade already work that way), not an x9-x13 ABI
+        reservation; x9-x13 become compiler temporaries (T101). T26
+        regrec = the mmapped .bt image, not registers.
+    (3) T57/T58/T74/T60 move to "ROBUSTNESS / ENERGY (not speed)"; T15's
+        "8-12x bare metal" is struck (in-process loops already run at
+        silicon speed; the forward-port trigger is spawn/syscall-heavy
+        work only).
+    (4) The analysis plan P2-P10 becomes T101-T108, scheduled AFTER the
+        surface tasks T43/T47/T48 (operator: surface first).
+    (5) T42(b): `>>>` = ASR is added as a literal form; `>>` stays
+        LOGICAL (zero fold delta); R3.x(b) becomes documented semantics.
     Evidence and the measured plan P1-P10 (T96 ceilings, DRAM 12 GB/s,
     sqlite scan 180 ms vs indexed 0.13 ms vs tq.bp O(N) geodesic ~4 s on
     1M points, the bucketed-index mechanism that was never gated):
     docs/SPEEDUP-ANALYSIS.md. Task ledger + TG-DONE status at d60b2c0:
     docs/ROADMAP-AUDIT-2026-09-04.md. The analyst's delete/re-scope list
     (T25/T26/T35 bank ABI, T55 K1-K4 rung, T57/T58/T74, T60, T98 as
-    k1/k2, T92-T95/T84/T85 for speed, T15 "8-12x") is PENDING the
-    operator — nothing is re-scoped by it yet.
+    k1/k2, T92-T95/T84/T85 for speed, T15 "8-12x") was decided as D9.
 
 ### Layer V — verification foundation (truth becomes reproducible)
 
@@ -1580,7 +1602,7 @@ CORPUS-A CARRY-OVER); T41 now only executes the banners and doc fixes.
 
 ### Layer C — compiler debt (tolerated miscompiles die)
 
-**T42 · fix R3.x(a)-(e) at the root, then delete the laws** — DONE except (b) 2026-09-04 (c25-c31 + neg/c28-c29 construct gates; (a) C precedence LANDED per D5: `tools/prec_switch.sh` measured zero fold delta on 85/85 bpref-measurable gates, bebop.bp emit_cmp > bor > bxor > band > shift > expr > term > factor, bpref.py default = C precedence (`BPREF_OLDPREC=1` archaeology), fixpoint 46ddf919, construct 31/31 word-identical (no construct mixed the tiers); (b) `>>`=ASR changes 8 gate folds (rng hv spectral lsm holo seigtime srepl r3x) — per D5 the numbers are with the OPERATOR, `>>` stays LOGICAL until decided; (c) trap 97, (d) `++` trap 96, (e) c27_zeroarg, array-literal order c31, unary/hex c30 all landed; history in the journal 1788538390..)
+**T42 · fix R3.x(a)-(e) at the root, then delete the laws** — DONE except (b) 2026-09-04 (c25-c31 + neg/c28-c29 construct gates; (a) C precedence LANDED per D5: `tools/prec_switch.sh` measured zero fold delta on 85/85 bpref-measurable gates, bebop.bp emit_cmp > bor > bxor > band > shift > expr > term > factor, bpref.py default = C precedence (`BPREF_OLDPREC=1` archaeology), fixpoint 46ddf919, construct 31/31 word-identical (no construct mixed the tiers); (b) decided D9(5): `>>>` = ASR literal form (gate c32_asr, bpref mirror), `>>` stays LOGICAL — R3.x(b) is now documented semantics, not a ban; (c) trap 97, (d) `++` trap 96, (e) c27_zeroarg, array-literal order c31, unary/hex c30 all landed; history in the journal 1788538390..)
 GOAL: (a) precedence: `emit_bitlvl` binds tighter than `*` — decide and
 document the grammar (recommended: C precedence; regression gate r3x
 updated) ; (b) `>>`: emit ASRV for `>>` and add `>>>` for LSRV (both
@@ -1742,34 +1764,11 @@ DEPS: T50. BLOCKERS: none.
 
 ### Layer R — runtime: gate demos become the running system
 
-**T57 · substrate runtime prelude, seed stays frozen** — the sweep loop,
-activity words, cell table and bank load/store live in a `.bp` prelude
-linked (T47) into every substrate artifact; `seed.S` (1496B, frozen) is
-unchanged and only maps + jumps. Fix the seed.S:55 comment (256MB).
-DONE-CHECK: T55 rungs run through the unmodified seed; prelude word
-count frozen in census.
-DEPS: T47, T55. BLOCKERS: none.
-
-**T58 · eigentime as the scheduler** — sweep count and quiescence
-detection ARE the clock (SS-17 seigtime moves from gate to runtime):
-the prelude exposes `sweeps()`; WFE/WFI on quiescence is forward-port.
-DONE-CHECK: substrate K1-K4 report sweep counts == the mirror's; step
-counts replace clock_ms as the primary benchmark number.
-DEPS: T55. BLOCKERS: none.
-
 **T59 · reversible arena as the mutation path** — cell writes go through
 the XOR journal of `rev.bp` (N2): unwind-to-any-sweep without snapshots.
 DONE-CHECK: gate `unwind`: run K sweeps, unwind to sweep j, re-run ->
 byte-identical arena; cost per write recorded.
 DEPS: T55, T57. BLOCKERS: none.
-
-**T60 · holographic artifact** — the `.bt` incidence tensor is WHT-
-encoded with redundancy (N6 `holo.bp` from gate to loader): a trimmed
-artifact still loads and runs to the same fold.
-DONE-CHECK: gate `holoload`: zero 1/4 of the artifact's cells, run, fold
-unchanged; size overhead recorded (the "cutting never destroys the
-picture" claim gets a number).
-DEPS: T57. BLOCKERS: none.
 
 **T61 · threads and cores** — sys_clone/futex/LSE builtins (T45) + a
 `sys_sched_setaffinity` builtin (syscall 122) so the fiber scheduler
@@ -1924,15 +1923,6 @@ DONE-CHECK: gate `snap`: mutate, snapshot, mutate, rollback -> arena
 byte-identical to the snapshot; `on_fail` path runs exactly once;
 journal length accounted.
 DEPS: T59. BLOCKERS: none.
-
-**T74 · WFE at quiescence** (ENERGY §1.2) — strengthens T57, T58
-GOAL: the substrate prelude emits `wfe` when the activity word is 0 and
-no input cell is armed; a `sev` from the input path wakes it. In-sandbox
-the gate checks the word placement and that quiescent programs still
-terminate; the energy effect is forward-port (needs a meter).
-DONE-CHECK: gate `wfe`: disasm shows exactly one WFE in the sweep;
-folds unchanged; idle-loop step count drops to the sweep constant.
-DEPS: T57. BLOCKERS: energy measurement (forward-port).
 
 **T75 · integer-exact micro-optimizations** (PHYSICAL-LIMIT §1-6) —
 strengthens T64, census
@@ -2488,13 +2478,24 @@ K1-K4, the tensor-DB gates and bebop.bin self-compile; every row of
 DONE-CHECK: table committed; no projection without a measurement column.
 DEPS: none. BLOCKERS: none.
 
-**T98 · multi-core substrate gate (D1(b))**
+**T98 · multi-core substrate gate (D1(b))** — RE-SCOPED 2026-09-04 (D9): k1/k2 are serial recurrences and cannot shard; the D1(b) gate is T106 `nn4` (persistent parked workers sharding the bucketed nearest-neighbour scan).
 GOAL: k1/k2 substrate kernels sharded over 4 big cores via sys_clone +
 affinity (T45/T72): fold identical to single-core, sweeps/sec and pinned
 ms recorded 1 vs 4 cores — the first post-von-Neumann number.
 DONE-CHECK: gate `substrate4`: fold == substrate gate; speedup recorded
 whatever it is. DEPS: T45, T72, sys_clone root cause (D4). BLOCKERS:
 none once clone works under proot.
+
+**T101-T108 · the measured speed plan (docs/SPEEDUP-ANALYSIS.md §5 P2-P10; added by D9(4), scheduled AFTER T43/T47/T48)**
+- **T101 temporaries in registers**: value-stack slots for nested operands map to x1-x7 and x9-x13 (D9(2)); gate K4 <= 5.0 ms, K3 <= 0.25 ms, spike linear <= 5 ms.
+- **T102 condition fusion**: `while`/`if` conditions emit `cmp xR,#imm` / `cmp xR,xS` + `b.cond` (extend fold_try to cmp); gate K1 <= 12 words, K4 <= 4.7 ms.
+- **T103 calling convention**: frame = 16 + 8 x spill slots (not 16 KB), args stay in x0-x7 for <= 8 params, callee-saved pairs only when used; gate K2 <= 1.0 ms vs an `#[inline(never)]` Rust twin (add it).
+- **T104 peephole pass** over the per-fn word stream: mul-by-const -> shift/madd, `x*c1*c2` -> `x*(c1c2)`, hoist loop-invariant `mov xR,#imm`; gate K4 <= 3.0 ms, construct folds unchanged.
+- **T105 hardware division**: fp_div/isqrt software loops in tq/tdg -> `sdiv` + clz-seeded Newton isqrt; gate tq fold unchanged, tq geodesic on 1M points <= 50 ms.
+- **T106 nn4 (the D1(b) gate, replaces T98)**: persistent parked workers (pool.bp pattern) sharding the bucketed nearest scan across 4 A78; record the speedup while compute-bound (>= 3.0x expected) and after it turns memory-bound (1.0-1.4x).
+- **T107 incremental-substrate curve**: N = 2^16 cells, change k in {1,16,256,4096}, sweep vs full recompute, Rust twin of both; pass = the crossover k/N is recorded (<= 5% expected after T101).
+- **T108 .becache for the live compiler**: digest(source) -> .bin replay in cli_compile; gate std_golden warm run >= 5x faster, folds identical; makes T32 qjit memoized by construction.
+DONE-CHECK per task: its gate line in a committed script with the number above; fixpoint byte-exact (three generations); constructs re-frozen with deltas. DEPS: T96 (done), T43/T47/T48 first per the operator.
 
 **T99 · agent-facing surface: unary `-`/`!`, hex literals, `return`/`break`**
 GOAL: literal forms (not sugar): `-x` = `neg`, `!x` = `cmp #0; cset eq`,
@@ -2510,6 +2511,50 @@ sqlite3 (python stdlib), runs the T20 nearest query; gate records both
 latencies and both RSS (T97) side by side.
 DONE-CHECK: table row with measured ms and MB for both engines.
 DEPS: T20, T97. BLOCKERS: none.
+
+## ROBUSTNESS / ENERGY (not speed) — moved here by D9(3), 2026-09-04
+
+These tasks name real mechanisms (a sweep prelude, an iteration counter
+that detects periodicity, WFE, 4x WHT redundancy) but the analysis
+(docs/SPEEDUP-ANALYSIS.md §3 M14/M15, §6.2 ranks 11-12) shows none of
+them produces speed on this hardware. They stay as robustness/energy
+work, scheduled after T101-T108, and must never appear in a speed claim.
+
+**T57 · substrate runtime prelude, seed stays frozen** — the sweep loop,
+activity words, cell table and bank load/store live in a `.bp` prelude
+linked (T47) into every substrate artifact; `seed.S` (1496B, frozen) is
+unchanged and only maps + jumps. Fix the seed.S:55 comment (256MB).
+DONE-CHECK: T55 rungs run through the unmodified seed; prelude word
+count frozen in census.
+DEPS: T47, T55. BLOCKERS: none.
+
+
+**T58 · eigentime as the scheduler** — sweep count and quiescence
+detection ARE the clock (SS-17 seigtime moves from gate to runtime):
+the prelude exposes `sweeps()`; WFE/WFI on quiescence is forward-port.
+DONE-CHECK: substrate K1-K4 report sweep counts == the mirror's; step
+counts replace clock_ms as the primary benchmark number.
+DEPS: T55. BLOCKERS: none.
+
+
+**T60 · holographic artifact** — the `.bt` incidence tensor is WHT-
+encoded with redundancy (N6 `holo.bp` from gate to loader): a trimmed
+artifact still loads and runs to the same fold.
+DONE-CHECK: gate `holoload`: zero 1/4 of the artifact's cells, run, fold
+unchanged; size overhead recorded (the "cutting never destroys the
+picture" claim gets a number).
+DEPS: T57. BLOCKERS: none.
+
+
+**T74 · WFE at quiescence** (ENERGY §1.2) — strengthens T57, T58
+GOAL: the substrate prelude emits `wfe` when the activity word is 0 and
+no input cell is armed; a `sev` from the input path wakes it. In-sandbox
+the gate checks the word placement and that quiescent programs still
+terminate; the energy effect is forward-port (needs a meter).
+DONE-CHECK: gate `wfe`: disasm shows exactly one WFE in the sweep;
+folds unchanged; idle-loop step count drops to the sweep constant.
+DEPS: T57. BLOCKERS: energy measurement (forward-port).
+
 
 ## Measured speed and memory (2026-09-04; replaces the projection table per decision D8(5))
 
