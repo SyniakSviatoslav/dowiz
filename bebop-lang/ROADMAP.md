@@ -1525,6 +1525,61 @@ D10. (2026-09-04, operator: "Прийняти") The persistence design of
     sqlite native, window ~9x, scans 8.6x today / 30-50x after T101-T105 /
     112x at Rust-quality codegen, BFS vs recursive CTE ~100x, file size
     LOSES ~2.2x, updates and reopen tie.
+D11. (2026-09-04, operator answers to docs/ROADMAP-CRITIQUE-2026-09-04.md)
+    A. The binding goal is the D8-D10 thesis; "Terminal goal" is rewritten
+       in <= 30 lines and the nine dead paragraphs move to HISTORY.md.
+    B. TG-DONE 1 := a frozen table {kernel, honest Rust twin, pinned
+       in-process ms, target ratio}, pass = every row <= target; TG-DONE 2
+       (linear fixpoint) becomes an AGENTS law; TG-DONE 7 := store gates
+       G1-G8 green with numbers; TG-DONE 8 := widened fuzz >= 10^5
+       programs, 0 CRASH/DIVERGE, capacity traps only.
+    C. Honest Rust twins (K1/K3 with a loop-carried nonlinear recurrence,
+       K2 #[inline(never)]) as a second column for one release, then the
+       only column; D1(a) re-baselined; p95/median noise per row.
+    D. Loud traps at the three runtime capacities (arena end, frame heap,
+       recursion guard page; exit codes 80-82); arrays stay UB until T48;
+       gen.py widened (alloc in loops, recursion to 200, multi-arg
+       recursion, keyword-named fns, strings, loops to 10^4) and 10^5
+       programs run before T101.
+    E. A second INDEPENDENT oracle now for the ~12 critical-path gates
+       (csr bt store tq/nnidx mvcc stm sha256 crc32 sort rng money
+       ordfsm), written from the specs with the .bp withheld; plus the
+       mutation gate (E3) in the battery; "== oracle" -> "== mirror" for
+       the single-mirror gates.
+    F. construct FREEZE=1 needs words(new) <= words(frozen) or a
+       `WORD_BUDGET <c> +N because ...` line in the commit; census growth
+       needs an ALLOW file (fn, +bcond) added by the commit.
+    G. T101-T104 go through a per-fn op-list IR with a byte-identical
+       first rung (fixpoint proves losslessness); if byte-identity is not
+       reached in 3 commits, fall back to stream retractions with x1-x7
+       only (x9-x13 excluded until rehomed).
+    H. Store spec amended: no RW MAP_SHARED mapping while user code runs
+       (writes via store.bp over a MAP_PRIVATE staging view, published by
+       pwrite/msync of the dirty range, or an RW window opened only inside
+       alloc/commit); G2 adds a deliberate OOB write that must NOT reach
+       the file; packed i32 cells get a date (with T48).
+    I. "Language IS the database" := persisted objects are the in-memory
+       objects (same layout, offsets), queries are compiled fns, and on a
+       REAL workload W (dowiz-core order log or an OSM node extract) the
+       system is >= a x sqlite (C API, ctypes floor subtracted), >= b x
+       LMDB on point lookups, within c x of a native Rust scan, with file
+       size and durable-commit rows; a,b,c frozen by the operator before
+       the gate runs.
+    J. All tasks stay (no PARKED section); ordering text governs.
+    K. No cooling rule; same-day decisions stand.
+    L. ROADMAP.md is split: ROADMAP.md <= 300 lines (thesis, TG-DONE
+       table, critical path, open decisions, measured table), HISTORY.md
+       (progress log, closed pulls, superseded goal text), TASKS.md (the
+       ledger); tools/roadmap_check.sh fails on stale md5/gate counts;
+       law: commit or revert the working tree at every session end.
+    M. New tasks: T118 capacity traps (= D), T119 LANGUAGE.md from
+       bpref's grammar + a root README, T120 trap-code table + T90 pulled
+       before T48, T121 K5 (self-compile) + K6 (nnidx scan) bench rows,
+       T122 reserved-word table (`fn match` must be rejected); packed i32
+       with T48, .bin version word with T112, no-proot column when a host
+       exists, A55 workers with T106, arena size knob with T111.
+    Measured the same day: only 3 A78 cores are usable in this shell
+    (affinity {0..6}; CPU 7 refuses taskset) -> T106 is "3 A78".
     Evidence and the measured plan P1-P10 (T96 ceilings, DRAM 12 GB/s,
     sqlite scan 180 ms vs indexed 0.13 ms vs tq.bp O(N) geodesic ~4 s on
     1M points, the bucketed-index mechanism that was never gated):
