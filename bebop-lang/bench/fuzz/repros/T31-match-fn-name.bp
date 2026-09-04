@@ -1,0 +1,17 @@
+// T31-match-fn-name expected=33 got=hang (timeout; single non-loop call `let x = match(3,4)` gives 0 instead of 34)
+// A user fn named `match` compiles silently but the call site is parsed as the
+// match-expression keyword: `let x = match(3,4)` yields 0 instead of 34, and
+// inside a while body the loop never advances (timeout). bpref rejects it with
+// "expected ident got '('" -- bebop.bin should reject it at parse too, or treat
+// `match(` as a call. Workaround: never name a fn `match` (rewrite.bp -> unify).
+fn match(a: i64, b: i64) -> i64 { a * 10 + b }
+fn main() -> i64 {
+  let n = 0;
+  let s = 0;
+  while s < 3 {
+    let n = n + match(s, 1);
+    let s = s + 1;
+    0
+  };
+  n
+}

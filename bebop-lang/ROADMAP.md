@@ -1200,7 +1200,7 @@ scoord layout-invariance style); interchange law (f x g) o (h x k) ==
 DEPS: T24, graph.bp, petri.bp. BLOCKERS: none.
 
 **T31 . rewriting to normal form: termination, confluence, query =
-normalize** (`rewrite.bp`)
+normalize** (`rewrite.bp`) — DONE ✓ 2026-09-04 (gate rewrite 38233233101031 == bench/oracles/rewrite.py, 0.2 s)
 GOAL: a small rule set on T30 diagrams (monoid unit/assoc + Petri token
 rules); termination by a strictly decreasing node-count measure;
 LOCAL CONFLUENCE by exhaustive critical-pair joining on small terms;

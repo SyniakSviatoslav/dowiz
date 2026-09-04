@@ -651,6 +651,10 @@ gate csheaf 5155430002134088 "$r"
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sdiag.bp ${BEBOP_TMP:-/tmp/opencode}/sdiag_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/sdiag_test.bin | tail -1)
 gate sdiag 654345454 "$r"
 
+# ---- rewrite ----
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/rewrite.bp ${BEBOP_TMP:-/tmp/opencode}/rewrite_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/rewrite_test.bin | tail -1)
+gate rewrite 38233233101031 "$r"
+
 # ---- mvcc ----
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/mvcc.bp ${BEBOP_TMP:-/tmp/opencode}/mvcc_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/mvcc_test.bin | tail -1)
 gate mvcc 68412663603207 "$r"

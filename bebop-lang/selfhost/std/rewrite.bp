@@ -1,0 +1,617 @@
+// rewrite.bp - T31: rewriting T30 string diagrams to normal form.
+// Terms are sdiag slots (320 cells, same layout as sdiag.bp: [nw,nb,ni,no],
+// parity 4, iin 36, iout 44, boxes 52 (16 x 12: label,nin,nout,in0..5,
+// out0,out1,pad), canon scratch 244/276/292). Every box has one output
+// wire, so a term is a tree; a wire with no producer is an interface input
+// (free variable k = iin position k). Labels: 20 = n-ary monoid product
+// m_k (m_0 = unit), 30 = Petri token, 50 = transition (nout=1 <= nin, the
+// termination guarantee), 40+k = hole ?k (query pattern variable).
+// Rules (each strictly decreases the alive-box count; mask bit = rule):
+//   1 flatten  m_j plugged into input i of m_k  =>  m_{k+j-1}  (assoc; unit
+//              is the j=0 case)                                     -1 box
+//   2 erase    m_1 => identity wire                                  -1 box
+//   4 fire     t(tok..tok) with nin>=1 => tok on t's output          -nin
+//   8 badfire  t(tok..tok) => unit m_0 (DELIBERATE conflict with fire)
+// GOOD = 7, BAD = 15. Redex enumeration order: box index, then input
+// slot, then rule 1,2,4,8; strategy pick=0 rewrites the first redex, pick=1
+// the last. Loader: for each small term F0..F4 every one-step reduct is
+// normalized (first-redex strategy) and canonised (sd_canon, numbering-
+// invariant); a rule set is accepted iff every pair of reducts joins
+// (Newman: terminating + locally confluent => unique normal form); BAD is
+// rejected because fire/badfire on t(tok) do not join. Query = normalize
+// the pattern, then unify against each stored normal form top-down with
+// hole bindings compared by the store's canon wire digests (non-linear
+// holes ?0,?0 require equal subterms).
+// Terms are 5-bit prefix codes packed 12 per word (code = m_k:k, tok:7,
+// var k:8+k, hole k:12+k, t with nin n:16+n):
+//   M  = m2(m2(t2(tok,tok),m0), m2(m1(x0), m2(y1, t1(tok))))  -> m4(tok,x,y,tok)
+//   F0 = m2(m2(x0,m0),y1)  F1 = m2(m0,m0)  F2 = t1(tok)
+//   F3 = m2(m1(x0), m1(t2(tok,tok)))  F4 = m2(m1(m0), t1(tok))
+//   S0 = m2(m2(x,y),z)  S1 = m2(m2(tok,tok),x)  S2 = m2(tok,tok)  S3 = t1(tok)
+//   S4 = m2(x, m2(y,z))
+//   Q0 = m2(m2(?0,?1),?2)  Q1 = m2(?0,?0)  Q2 = ?0  Q3 = m3(?0,tok,?1)
+// Fold = (h % 1e9)*1e5 + nmatch*100 + accG*16 + rejB*8 + same*4 + dec*2 + fix,
+//   h = mix chain over cA, cB (canon of M's normal form under the two
+//   strategies), ptG, pjG, ptB, pjB (reduct pairs total/joined per rule
+//   set), cS0..cS4, cQ0..cQ3, red (boxes removed from M);
+//   nmatch = sum of pattern/store matches, accG = GOOD accepted, rejB = BAD
+//   rejected, same = cA == cB, dec = every step lowered the box count,
+//   fix = re-normalizing a normal form takes 0 steps and keeps its canon.
+// Mirror: bench/oracles/rewrite.py.
+
+fn hm(h: i64, x: i64) -> i64 {
+  let v = h * 131 + x + 1;
+  v - (v / 1000000007) * 1000000007
+}
+
+fn mix(h: i64, x: i64) -> i64 { ((h * 1000003) + x) & 4611686018427387903 }
+
+fn sd_clear(d: [i64], o: i64) -> i64 {
+  let i = 0;
+  while i < 320 {
+    let _ = d[o + i] = 0;
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+fn sd_wire(d: [i64], o: i64, par: i64) -> i64 {
+  let w = d[o];
+  let _ = d[o + 4 + w] = par;
+  let _ = d[o] = w + 1;
+  w
+}
+
+fn sd_box(d: [i64], o: i64, label: i64, nin: i64, nout: i64) -> i64 {
+  let b = d[o + 1];
+  let base = o + 52 + b * 12;
+  let _ = d[base] = label;
+  let _ = d[base + 1] = nin;
+  let _ = d[base + 2] = nout;
+  let i = 3;
+  while i < 12 {
+    let _ = d[base + i] = 0 - 1;
+    let i = i + 1;
+    0
+  };
+  let _ = d[o + 1] = b + 1;
+  b
+}
+
+// canonical digest (verbatim T30): Kahn order, smallest ready content
+// digest first; wire digests left at o+244 (used by the matcher).
+fn sd_canon(d: [i64], o: i64) -> i64 {
+  let nb = d[o + 1];
+  let ni = d[o + 2];
+  let no = d[o + 3];
+  let i = 0;
+  while i < 32 {
+    let _ = d[o + 244 + i] = 0 - 1;
+    let _ = d[o + 276 + i] = 0;
+    let i = i + 1;
+    0
+  };
+  let nal = 0;
+  let b = 0;
+  while b < nb {
+    let nal = nal + (if d[o + 52 + b * 12] == 0 then 0 else 1);
+    let b = b + 1;
+    0
+  };
+  let k = 0;
+  while k < ni {
+    let w = d[o + 36 + k];
+    let _ = d[o + 244 + w] = hm(hm(1, k), d[o + 4 + w]);
+    let k = k + 1;
+    0
+  };
+  let acc = hm(hm(hm(0, nal), ni), no);
+  let round = 0;
+  while round < nb {
+    let best = 0 - 1;
+    let bestd = 1000000007;
+    let b = 0;
+    while b < nb {
+      let base = o + 52 + b * 12;
+      let label = d[base];
+      let nin = d[base + 1];
+      let alive = if label == 0 then 0 else 1;
+      let done = d[o + 292 + b];
+      let cd = hm(hm(hm(7, label), nin), d[base + 2]);
+      let rdy = 1;
+      let i = 0;
+      while i < nin {
+        let wdv = d[o + 244 + d[base + 3 + i]];
+        let kn = if wdv < 0 then 0 else 1;
+        let rdy = rdy * kn;
+        let cd = hm(cd, wdv * kn);
+        let i = i + 1;
+        0
+      };
+      let c = alive * (1 - done) * rdy * (if cd < bestd then 1 else 0);
+      let best = best + (b - best) * c;
+      let bestd = bestd + (cd - bestd) * c;
+      let b = b + 1;
+      0
+    };
+    let has = if best < 0 then 0 else 1;
+    let bi = best * has;
+    let base = o + 52 + bi * 12;
+    let _ = d[o + 292 + bi] = d[o + 292 + bi] + has;
+    let _ = d[o + 276 + bi] = bestd * has;
+    let acc = acc + (hm(acc, bestd) - acc) * has;
+    let j = 0;
+    while j < d[base + 2] * has {
+      let w = d[base + 9 + j];
+      let nv = hm(hm(bestd, 2 + j), d[o + 4 + w]);
+      let _ = d[o + 244 + w] = nv;
+      let j = j + 1;
+      0
+    };
+    let round = round + 1;
+    0
+  };
+  let k = 0;
+  while k < no {
+    let acc = hm(acc, d[o + 244 + d[o + 44 + k]]);
+    let k = k + 1;
+    0
+  };
+  acc
+}
+
+// box field f of box b, or -1 when b < 0
+fn fld(d: [i64], o: i64, b: i64, f: i64) -> i64 {
+  let neg = if b < 0 then 1 else 0;
+  d[o + 52 + b * (1 - neg) * 12 + f] * (1 - neg) - neg
+}
+
+// alive box producing wire w, or -1 (interface input / dangling)
+fn prod(d: [i64], o: i64, w: i64) -> i64 {
+  let nb = d[o + 1];
+  let r = 0 - 1;
+  let b = 0;
+  while b < nb {
+    let base = o + 52 + b * 12;
+    let hit = (if d[base] == 0 then 0 else 1) * (if d[base + 9] == w then 1 else 0);
+    let r = r + (b - r) * hit;
+    let b = b + 1;
+    0
+  };
+  r
+}
+
+fn alive(d: [i64], o: i64) -> i64 {
+  let nb = d[o + 1];
+  let n = 0;
+  let b = 0;
+  while b < nb {
+    let n = n + (if d[o + 52 + b * 12] == 0 then 0 else 1);
+    let b = b + 1;
+    0
+  };
+  n
+}
+
+fn copy(d: [i64], s: i64, t: i64) -> i64 {
+  let i = 0;
+  while i < 320 {
+    let _ = d[t + i] = d[s + i];
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+// build a term from packed prefix codes v1 (nodes 0..11) and v2 (12..);
+// st = pending-slot stack (parent*8 + input index, -1 = root). Returns
+// node count.
+fn bld(d: [i64], o: i64, st: [i64], v1: i64, v2: i64) -> i64 {
+  let _ = sd_clear(d, o);
+  let _ = st[0] = 0 - 1;
+  let top = 1;
+  let v = v1;
+  let n = 0;
+  let nvar = 0;
+  while top > 0 {
+    let top = top - 1;
+    let tgt = st[top];
+    let v = v + (v2 - v) * (if n == 12 then 1 else 0);
+    let c = v & 31;
+    let v = v >> 5;
+    let w = sd_wire(d, o, 0);
+    let isroot = if tgt < 0 then 1 else 0;
+    let tg = tgt * (1 - isroot);
+    let pb = tg / 8;
+    let pi = tg - pb * 8;
+    let _ = d[o + 44] = d[o + 44] * (1 - isroot) + w * isroot;
+    let pa = o + 52 + pb * 12 + 3 + pi;
+    let _ = d[pa] = d[pa] * isroot + w * (1 - isroot);
+    let ism = if c <= 6 then 1 else 0;
+    let istok = if c == 7 then 1 else 0;
+    let isvar = (if c >= 8 then 1 else 0) * (if c <= 11 then 1 else 0);
+    let ishole = (if c >= 12 then 1 else 0) * (if c <= 15 then 1 else 0);
+    let ist = if c >= 17 then 1 else 0;
+    let nin = c * ism + (c - 16) * ist;
+    let label = 20 * ism + 30 * istok + (28 + c) * ishole + 50 * ist;
+    let isbox = 1 - isvar;
+    let b = sd_box(d, o, label, nin, 1);
+    let _ = d[o + 1] = b + isbox;
+    let oa = o + 52 + b * 12 + 9;
+    let _ = d[oa] = d[oa] * (1 - isbox) + w * isbox;
+    let k = (c - 8) * isvar;
+    let _ = d[o + 36 + k] = d[o + 36 + k] * (1 - isvar) + w * isvar;
+    let k1 = (k + 1) * isvar;
+    let nvar = nvar + (k1 - nvar) * (if k1 > nvar then 1 else 0);
+    let i = 0;
+    while i < nin {
+      let _ = st[top + i] = b * 8 + (nin - 1 - i);
+      let i = i + 1;
+      0
+    };
+    let top = top + nin;
+    let n = n + 1;
+    0
+  };
+  let _ = d[o + 2] = nvar;
+  let _ = d[o + 3] = 1;
+  n
+}
+
+// enumerate redexes of the rules in mask; record the which-th one
+// (which < 0: the last) in out[1..3] = rule, box, input. Returns count.
+fn scan(d: [i64], o: i64, mask: i64, which: i64, out: [i64]) -> i64 {
+  let nb = d[o + 1];
+  let any = if which < 0 then 1 else 0;
+  let m1 = mask & 1;
+  let m2 = (mask >> 1) & 1;
+  let m4 = (mask >> 2) & 1;
+  let m8 = (mask >> 3) & 1;
+  let cnt = 0;
+  let rr = 0;
+  let rb = 0;
+  let ri = 0;
+  let b = 0;
+  while b < nb {
+    let base = o + 52 + b * 12;
+    let label = d[base];
+    let nin = d[base + 1];
+    let alv = if label == 0 then 0 else 1;
+    let ism = if label == 20 then 1 else 0;
+    let ist = if label == 50 then 1 else 0;
+    let at = 1;
+    let j = 0;
+    while j < nin * ist {
+      let p = prod(d, o, d[base + 3 + j]);
+      let pl = fld(d, o, p, 0);
+      let at = at * (if pl == 30 then 1 else 0);
+      let j = j + 1;
+      0
+    };
+    let hf = alv * ist * at * (if nin >= 1 then 1 else 0);
+    let i = 0;
+    while i < 6 {
+      let iv = if i < nin then 1 else 0;
+      let p = prod(d, o, d[base + 3 + i]);
+      let pl = fld(d, o, p, 0);
+      let pn = fld(d, o, p, 1);
+      let h1 = m1 * alv * ism * iv * (if pl == 20 then 1 else 0) * (if nin + pn <= 7 then 1 else 0);
+      let sel = h1 * ((if cnt == which then 1 else 0) + any);
+      let rr = rr + (1 - rr) * sel;
+      let rb = rb + (b - rb) * sel;
+      let ri = ri + (i - ri) * sel;
+      let cnt = cnt + h1;
+      let i0 = if i == 0 then 1 else 0;
+      let h2 = m2 * alv * ism * i0 * (if nin == 1 then 1 else 0);
+      let sel = h2 * ((if cnt == which then 1 else 0) + any);
+      let rr = rr + (2 - rr) * sel;
+      let rb = rb + (b - rb) * sel;
+      let ri = ri * (1 - sel);
+      let cnt = cnt + h2;
+      let h3 = m4 * hf * i0;
+      let sel = h3 * ((if cnt == which then 1 else 0) + any);
+      let rr = rr + (3 - rr) * sel;
+      let rb = rb + (b - rb) * sel;
+      let ri = ri * (1 - sel);
+      let cnt = cnt + h3;
+      let h4 = m8 * hf * i0;
+      let sel = h4 * ((if cnt == which then 1 else 0) + any);
+      let rr = rr + (4 - rr) * sel;
+      let rb = rb + (b - rb) * sel;
+      let ri = ri * (1 - sel);
+      let cnt = cnt + h4;
+      let i = i + 1;
+      0
+    };
+    let b = b + 1;
+    0
+  };
+  let _ = out[0] = cnt;
+  let _ = out[1] = rr;
+  let _ = out[2] = rb;
+  let _ = out[3] = ri;
+  cnt
+}
+
+// flatten: splice the inputs of the m_j feeding input i of m_k (box b)
+fn ap_flat(d: [i64], o: i64, b: i64, i: i64, tmp: [i64]) -> i64 {
+  let bb = o + 52 + b * 12;
+  let p = prod(d, o, d[bb + 3 + i]);
+  let pb = o + 52 + p * 12;
+  let k = d[bb + 1];
+  let j = d[pb + 1];
+  let t = 0;
+  while t < 6 {
+    let a1 = if t < i then 1 else 0;
+    let a2 = (if t >= i then 1 else 0) * (if t < i + j then 1 else 0);
+    let a3 = (if t >= i + j then 1 else 0) * (if t < k + j - 1 then 1 else 0);
+    let s1 = d[bb + 3 + t];
+    let s2 = d[pb + 3 + (t - i) * a2];
+    let s3 = d[bb + 3 + (t - j + 1) * a3];
+    let _ = tmp[t] = s1 * a1 + s2 * a2 + s3 * a3 - (1 - a1 - a2 - a3);
+    let t = t + 1;
+    0
+  };
+  let t = 0;
+  while t < 6 {
+    let _ = d[bb + 3 + t] = tmp[t];
+    let t = t + 1;
+    0
+  };
+  let _ = d[bb + 1] = k + j - 1;
+  let _ = d[pb] = 0;
+  1
+}
+
+// erase m_1: every consumer of its output wire now reads its input wire
+fn ap_erase(d: [i64], o: i64, b: i64) -> i64 {
+  let bb = o + 52 + b * 12;
+  let wi = d[bb + 3];
+  let wo = d[bb + 9];
+  let dlt = wi - wo;
+  let nb = d[o + 1];
+  let c = 0;
+  while c < nb {
+    let s = 0;
+    while s < 6 {
+      let addr = o + 52 + c * 12 + 3 + s;
+      let v = d[addr];
+      let _ = d[addr] = v + dlt * (if v == wo then 1 else 0);
+      let s = s + 1;
+      0
+    };
+    let c = c + 1;
+    0
+  };
+  let k = 0;
+  while k < d[o + 3] {
+    let v = d[o + 44 + k];
+    let _ = d[o + 44 + k] = v + dlt * (if v == wo then 1 else 0);
+    let k = k + 1;
+    0
+  };
+  let _ = d[bb] = 0;
+  1
+}
+
+// fire transition b: its input tokens and itself die, the first token box
+// is re-pointed at b's output with label newlab (30 = token, 20 = unit)
+fn ap_fire(d: [i64], o: i64, b: i64, newlab: i64) -> i64 {
+  let bb = o + 52 + b * 12;
+  let nin = d[bb + 1];
+  let p0 = prod(d, o, d[bb + 3]);
+  let j = 1;
+  while j < nin {
+    let p = prod(d, o, d[bb + 3 + j]);
+    let _ = d[o + 52 + p * 12] = 0;
+    let j = j + 1;
+    0
+  };
+  let pb = o + 52 + p0 * 12;
+  let _ = d[pb] = newlab;
+  let _ = d[pb + 1] = 0;
+  let _ = d[pb + 9] = d[bb + 9];
+  let _ = d[bb] = 0;
+  1
+}
+
+// one rewrite step: apply the which-th redex; returns 1 if one existed
+fn red(d: [i64], o: i64, mask: i64, which: i64, out: [i64], tmp: [i64]) -> i64 {
+  let cnt = scan(d, o, mask, which, out);
+  let has = if cnt > 0 then 1 else 0;
+  let rr = out[1] * has;
+  let _ = if rr == 1 then ap_flat(d, o, out[2], out[3], tmp) else 0;
+  let _ = if rr == 2 then ap_erase(d, o, out[2]) else 0;
+  let _ = if rr == 3 then ap_fire(d, o, out[2], 30) else 0;
+  let _ = if rr == 4 then ap_fire(d, o, out[2], 20) else 0;
+  has
+}
+
+// normalize with strategy pick (0 first redex, 1 last); out[5] counts
+// steps that failed to lower the box count (termination measure)
+fn norm(d: [i64], o: i64, mask: i64, pick: i64, out: [i64], tmp: [i64]) -> i64 {
+  let go = 1;
+  let steps = 0;
+  let prev = alive(d, o);
+  while go > 0 {
+    let a = red(d, o, mask, 0 - pick, out, tmp);
+    let n = alive(d, o);
+    let _ = out[5] = out[5] + a * (if n < prev then 0 else 1);
+    let prev = n;
+    let steps = steps + a;
+    let go = a;
+    0
+  };
+  steps
+}
+
+// all one-step reducts of slot f, normalized in slot w; out[6] += pairs,
+// out[7] += joined pairs (equal canon)
+fn cpair(d: [i64], f: i64, w: i64, mask: i64, out: [i64], tmp: [i64], cp: [i64]) -> i64 {
+  let cnt = scan(d, f, mask, 0, out);
+  let k = 0;
+  while k < cnt {
+    let _ = copy(d, f, w);
+    let _ = red(d, w, mask, k, out, tmp);
+    let _ = norm(d, w, mask, 0, out, tmp);
+    let _ = cp[k] = sd_canon(d, w);
+    let k = k + 1;
+    0
+  };
+  let k = 0;
+  while k < cnt {
+    let l = k + 1;
+    while l < cnt {
+      let _ = out[6] = out[6] + 1;
+      let _ = out[7] = out[7] + (if cp[k] == cp[l] then 1 else 0);
+      let l = l + 1;
+      0
+    };
+    let k = k + 1;
+    0
+  };
+  cnt
+}
+
+// unify pattern slot qo (holes 40..43) against store slot so; the store
+// slot must have been canonised (wire digests at so+244). wk = pair stack.
+fn unify(d: [i64], qo: i64, so: i64, wk: [i64], hb: [i64]) -> i64 {
+  let _ = hb[0] = 0 - 1;
+  let _ = hb[1] = 0 - 1;
+  let _ = hb[2] = 0 - 1;
+  let _ = hb[3] = 0 - 1;
+  let _ = wk[0] = d[qo + 44];
+  let _ = wk[1] = d[so + 44];
+  let top = 1;
+  let ok = 1;
+  while top > 0 {
+    let top = top - 1;
+    let pw = wk[top * 2];
+    let sw = wk[top * 2 + 1];
+    let pb = prod(d, qo, pw);
+    let sb = prod(d, so, sw);
+    let pl = fld(d, qo, pb, 0);
+    let pn = fld(d, qo, pb, 1);
+    let sl = fld(d, so, sb, 0);
+    let sn = fld(d, so, sb, 1);
+    let ishole = (if pl >= 40 then 1 else 0) * (if pl <= 43 then 1 else 0);
+    let hid = (pl - 40) * ishole;
+    let dig = d[so + 244 + sw];
+    let cur = hb[hid];
+    let bound = if cur < 0 then 0 else 1;
+    let hmt = ishole * ((1 - bound) + bound * (if cur == dig then 1 else 0));
+    let _ = hb[hid] = cur + (dig - cur) * ishole * (1 - bound);
+    let isopen = if pb < 0 then 1 else 0;
+    let sopen = if sb < 0 then 1 else 0;
+    let omt = isopen * sopen;
+    let isbox = (1 - isopen) * (1 - ishole);
+    let bmt = isbox * (1 - sopen) * (if pl == sl then 1 else 0) * (if pn == sn then 1 else 0);
+    let ok = ok * (hmt + omt + bmt);
+    let nc = pn * bmt * ok;
+    let qb = qo + 52 + pb * (1 - isopen) * 12;
+    let sbb = so + 52 + sb * (1 - sopen) * 12;
+    let i = 0;
+    while i < nc {
+      let _ = wk[(top + i) * 2] = d[qb + 3 + i];
+      let _ = wk[(top + i) * 2 + 1] = d[sbb + 3 + i];
+      let i = i + 1;
+      0
+    };
+    let top = (top + nc) * ok;
+    0
+  };
+  ok
+}
+
+fn main() -> i64 {
+  let d = zeros(5440);
+  let st = zeros(16);
+  let out = zeros(8);
+  let tmp = zeros(8);
+  let cp = zeros(16);
+  let wk = zeros(64);
+  let hb = zeros(4);
+  // slots: A 0, B 320, F0..F4 640..1920, W 2240, S0..S4 2560..3840, Q0..Q3 4160..5120
+  // load: critical pairs of the small-term family under GOOD (7) and BAD (15)
+  let _ = bld(d, 640, st, 9445442, 0);
+  let _ = bld(d, 960, st, 2, 0);
+  let _ = bld(d, 1280, st, 241, 0);
+  let _ = bld(d, 1600, st, 7769989154, 0);
+  let _ = bld(d, 1920, st, 7897122, 0);
+  let f = 0;
+  while f < 5 {
+    let _ = cpair(d, 640 + f * 320, 2240, 7, out, tmp, cp);
+    let f = f + 1;
+    0
+  };
+  let ptg = out[6];
+  let pjg = out[7];
+  let _ = out[6] = 0;
+  let _ = out[7] = 0;
+  let f = 0;
+  while f < 5 {
+    let _ = cpair(d, 640 + f * 320, 2240, 15, out, tmp, cp);
+    let f = f + 1;
+    0
+  };
+  let ptb = out[6];
+  let pjb = out[7];
+  let accg = if ptg == pjg then 1 else 0;
+  let rejb = if ptb == pjb then 0 else 1;
+  // main term under two strategies
+  let _ = bld(d, 0, st, 622701849835980866, 7);
+  let _ = bld(d, 320, st, 622701849835980866, 7);
+  let n0 = alive(d, 0);
+  let _ = norm(d, 0, 7, 0, out, tmp);
+  let _ = norm(d, 320, 7, 1, out, tmp);
+  let ca = sd_canon(d, 0);
+  let cb = sd_canon(d, 320);
+  let same = if ca == cb then 1 else 0;
+  let redn = n0 - alive(d, 0);
+  let s2 = norm(d, 0, 7, 0, out, tmp);
+  let ca2 = sd_canon(d, 0);
+  let fix = (if s2 == 0 then 1 else 0) * (if ca2 == ca then 1 else 0);
+  let dec = if out[5] == 0 then 1 else 0;
+  let h = mix(mix(0, ca), cb);
+  let h = mix(mix(mix(mix(h, ptg), pjg), ptb), pjb);
+  // store: normal forms of S0..S4
+  let _ = bld(d, 2560, st, 10788930, 0);
+  let _ = bld(d, 2880, st, 8625218, 0);
+  let _ = bld(d, 3200, st, 7394, 0);
+  let _ = bld(d, 3520, st, 241, 0);
+  let _ = bld(d, 3840, st, 10782978, 0);
+  let s = 0;
+  while s < 5 {
+    let _ = norm(d, 2560 + s * 320, 7, 0, out, tmp);
+    let h = mix(h, sd_canon(d, 2560 + s * 320));
+    let s = s + 1;
+    0
+  };
+  // queries: normalize the patterns, then unify against the store
+  let _ = bld(d, 4160, st, 15118402, 0);
+  let _ = bld(d, 4480, st, 12674, 0);
+  let _ = bld(d, 4800, st, 12, 0);
+  let _ = bld(d, 5120, st, 433539, 0);
+  let q = 0;
+  while q < 4 {
+    let _ = norm(d, 4160 + q * 320, 7, 0, out, tmp);
+    let h = mix(h, sd_canon(d, 4160 + q * 320));
+    let q = q + 1;
+    0
+  };
+  let nmatch = 0;
+  let q = 0;
+  while q < 4 {
+    let s = 0;
+    while s < 5 {
+      let nmatch = nmatch + unify(d, 4160 + q * 320, 2560 + s * 320, wk, hb);
+      let s = s + 1;
+      0
+    };
+    let q = q + 1;
+    0
+  };
+  let h = mix(h, redn);
+  (h % 1000000000) * 100000 + nmatch * 100 + accg * 16 + rejb * 8 + same * 4 + dec * 2 + fix
+}
