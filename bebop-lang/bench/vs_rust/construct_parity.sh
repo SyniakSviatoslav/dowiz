@@ -27,7 +27,12 @@ for f in "$DIR"/*.bp; do
   if ! cmp -s "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin" "$FROZEN/${b}.bin"; then
     if [ "$FREEZE" = 1 ]; then
       OLDW=0; [ -f "$FROZEN/${b}.bin" ] && OLDW=$(( $(stat -c %s "$FROZEN/${b}.bin") / 4 ))
-      echo "WORD_DELTA $b $OLDW -> $(( $(stat -c %s "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin") / 4 )) words (0 = new construct)"
+      NEWW=$(( $(stat -c %s "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin") / 4 ))
+      echo "WORD_DELTA $b $OLDW -> $NEWW words (0 = new construct)"
+      # D11-F: growth needs a committed budget line `<construct> <newwords> <reason>`
+      if [ "$OLDW" != 0 ] && [ "$NEWW" -gt "$OLDW" ] && ! grep -q "^$b $NEWW " bench/parity_constructs/word_budget.txt; then
+        echo "WORD_BUDGET_MISSING $b ($OLDW -> $NEWW): add \"$b $NEWW <reason>\" to bench/parity_constructs/word_budget.txt"; FAIL=$((FAIL+1)); continue
+      fi
     else
       echo "WORD_MISMATCH $b"; FAIL=$((FAIL+1)); continue
     fi

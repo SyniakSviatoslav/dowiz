@@ -1578,6 +1578,12 @@ D11. (2026-09-04, operator answers to docs/ROADMAP-CRITIQUE-2026-09-04.md)
        T122 reserved-word table (`fn match` must be rejected); packed i32
        with T48, .bin version word with T112, no-proot column when a host
        exists, A55 workers with T106, arena size knob with T111.
+    D11-E first run (tools/mutate_gate.sh, one flipped operator per gate):
+    76 gates sensitive, 15 INSENSITIVE (sort rng base64 crc32 hex petri
+    lsm calcbound attnt mma dispatcher tdg tdggeo mvcc set) — their folds
+    do not prove that operator; T123 := make every gate mutation-sensitive
+    (fold covers the flipped site or the mutation point moves) and freeze
+    the threshold at 0 insensitive in the battery.
     Measured the same day: only 3 A78 cores are usable in this shell
     (affinity {0..6}; CPU 7 refuses taskset) -> T106 is "3 A78".
     Evidence and the measured plan P1-P10 (T96 ceilings, DRAM 12 GB/s,

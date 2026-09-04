@@ -47,6 +47,24 @@ def read_table(path):
 
 
 def main(argv):
+    if argv[:1] == ["--freeze-check"]:
+        # D11-F: a re-freeze may raise bcond/cbz/tbz of a bin ONLY if census_allow.txt
+        # (committed with the change) carries `<bin> <col> <new_value> <reason...>`.
+        table, allow, rc = read_table(argv[1]), {}, 0
+        for line in open(argv[2]):
+            if line.strip() and not line.startswith("#"):
+                b, k, v = line.split()[:3]; allow[(b, k)] = int(v)
+        for path in argv[3:]:
+            name = os.path.basename(path).rsplit(".", 1)[0]
+            c = census(path)
+            if name not in table:
+                continue  # a new bin is allowed (it gets its first row)
+            for k in GATE:
+                if c[k] > table[name][k] and allow.get((name, k)) != c[k]:
+                    print(f"CENSUS FREEZE REFUSED {name}: {k} {table[name][k]} -> {c[k]} without a census_allow.txt line `{name} {k} {c[k]} <reason>`"); rc = 1
+        if rc == 0:
+            print("census freeze: every increase is covered by census_allow.txt")
+        return rc
     if argv[:1] == ["--check"]:
         table, rc = read_table(argv[1]), 0
         seen = set()
