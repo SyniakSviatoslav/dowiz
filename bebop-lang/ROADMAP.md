@@ -1431,6 +1431,33 @@ Items 1-2 are the post-von-Neumann substance; 3-6 are the honesty floor
 the substance stands on. The order below builds 3-6 FIRST because every
 later gate inherits their oracles.
 
+### Operator decisions (2026-09-04, session 7 — binding)
+
+Evidence that forced them: K1 hot loop = 50 words/iteration, 8 `sub sp/
+str/ldr/add sp` quartets (6 of them push immediately followed by pop of
+the same value); R6.2 folding fires only for const-const and var+imm12;
+Rust = 3 words. The 5-10x gap is the stack machine, not the substrate.
+Rust `std::thread` runs 4 threads under this proot in 76 ms while
+`par_tids(4)` compiled through expr_compile.bp returns 0 — the pool
+"honest skip" is a bebop-side clone defect, not a platform bound.
+
+D1. Breakthrough metric = ALL of (a) K1-K4 >= 1.0x Rust single core
+    pinned wall-clock, (b) throughput on N cores through the substrate,
+    (c) tensor-query latency vs SQL. Each gets its own measured gate.
+D2. T96 register tier for ordinary expressions is APPROVED (three
+    single-variable steps; the x9-x13 window stays retired).
+D3. Primary optimisation column in-sandbox = pinned clock_ms (T72
+    affinity first); words/iteration and swpmu steps are secondary.
+D4. sys_clone is root-caused NOW (not forward-port): multi-core and
+    parallelism are mandatory for the terminal goal.
+D5. T42(a) grammar and T42(b) shifts: MEASURE first with an oracle
+    switch over every gate; adopt C precedence and `>>`=ASR/`>>>`=LSR
+    when the fold delta is zero, otherwise the numbers come back to the
+    operator.
+D6. Order for the compiler writer: T42 to completion FIRST, then T96,
+    clone/T45, T52. Tooling agent in parallel (never commits).
+D7. New tasks T97-T100 (below, SPEED & CORES PULL).
+
 ### Layer V — verification foundation (truth becomes reproducible)
 
 **T36 · committed oracles for every gate** (`bench/oracles/<gate>.py`,
@@ -2388,6 +2415,50 @@ single-writer bebop.bp queue T25 -> T42 -> T43 -> T47 -> T48 -> T50 ->
 T52 -> T53 -> T54 -> T55.
 
 ---
+
+## SPEED & CORES PULL (operator decisions D1-D7, T96-T100)
+
+**T96 · register tier for ordinary expressions (no x9-x13 window)**
+GOAL: three single-variable steps, each its own commit with fixpoint +
+battery: (1) `pop` that sees the immediately preceding `push` of the
+same register deletes the pair (stream rewind, fold_try precedent; L16
+bans EXTRA words, not fewer); (2) a binop whose right operand is a bound
+variable emits `mov x1, xR` instead of push/pop; (3) `let` binds
+straight from x0 without the push/pop round trip. Frozen construct bins
+are regenerated with an asserted per-construct word delta.
+DONE-CHECK: K1 <= 16 words/iteration (was 50); K1-K4 folds bit-exact;
+pinned medians recorded in REPORT-630 successor with the D1(a) target
+column; fixpoint byte-exact. DEPS: T42. BLOCKERS: none.
+
+**T97 · memory column (RSS) for every projected row**
+GOAL: `bench/vs_rust/mem.sh` reads VmHWM from /proc/<pid>/status for
+K1-K4, the tensor-DB gates and bebop.bin self-compile; every row of
+"Predicted memory" becomes measured or "not measured".
+DONE-CHECK: table committed; no projection without a measurement column.
+DEPS: none. BLOCKERS: none.
+
+**T98 · multi-core substrate gate (D1(b))**
+GOAL: k1/k2 substrate kernels sharded over 4 big cores via sys_clone +
+affinity (T45/T72): fold identical to single-core, sweeps/sec and pinned
+ms recorded 1 vs 4 cores — the first post-von-Neumann number.
+DONE-CHECK: gate `substrate4`: fold == substrate gate; speedup recorded
+whatever it is. DEPS: T45, T72, sys_clone root cause (D4). BLOCKERS:
+none once clone works under proot.
+
+**T99 · agent-facing surface: unary `-`/`!`, hex literals, `return`/`break`**
+GOAL: literal forms (not sugar): `-x` = `neg`, `!x` = `cmp #0; cset eq`,
+`0x..` literals; `return e` = one `b` to the epilogue, `break` = one
+`b` to the loop exit. bpref.py mirrors each form. Unary/hex land inside
+T42; return/break after T43.
+DONE-CHECK: construct gates per form; fuzzer generates them; fixpoint
+byte-exact. DEPS: T42, T43. BLOCKERS: none.
+
+**T100 · sqlite oracle for tensor-query latency (D1(c))**
+GOAL: `bench/oracles/tq_sqlite.py` builds the same 1M-point set in
+sqlite3 (python stdlib), runs the T20 nearest query; gate records both
+latencies and both RSS (T97) side by side.
+DONE-CHECK: table row with measured ms and MB for both engines.
+DEPS: T20, T97. BLOCKERS: none.
 
 ## Predicted speedup and memory after full roadmap completion
 
