@@ -14,3 +14,6 @@ k6 bcond 7 T118 capacity traps (one b.ls per zeros / array literal / enum ctor s
 k7 bcond 15 T118 capacity traps (one b.ls per zeros / array literal / enum ctor site)
 k7neon bcond 14 T118 capacity traps (one b.ls per zeros / array literal / enum ctor site)
 bebop bcond 1266 T122 reserved-word checks in compile_fn_at
+bebop bcond 1280 T43 rest: struct-literal guard + find_struct line-start test
+bebop cbz 142 T43 rest: struct-literal guard + find_struct line-start test
+c40_struct bcond 4 T43 rest: new construct (struct literals + 2 frame traps + loop)

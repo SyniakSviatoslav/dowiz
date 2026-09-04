@@ -1,0 +1,21 @@
+// T43 rest (2026-09-05): struct literals re-enabled with a context guard (the
+// literal name must be the declared struct and we are not inside a while
+// condition); fields are stored in declaration order on the frame heap after all
+// field values are evaluated; `.f` is a fixed-offset load.
+struct P { x: i64, y: i64, z: i64 }
+fn mk(a: i64) -> i64 {
+  let p = P { z: a * 3, x: a, y: a * 2 };
+  p.x + p.y * 10 + p.z * 100
+}
+fn main() -> i64 {
+  let q = P { x: 1, y: 2, z: 3 + 5 };
+  let i = 0;
+  let s = 0;
+  while i < q.y {
+    let r = P { x: i, y: 0, z: 0 };
+    let s = s + r.x;
+    let i = i + 1;
+    0
+  };
+  mk(2) * 10000 + q.z * 100 + q.y * 10 + q.x + s
+}

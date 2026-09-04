@@ -183,9 +183,15 @@ fn emit_ident(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   // spilled-symbol programs). Struct literals are currently unused by
   // every kernel/test; the branch stays disabled until a context flag
   // distinguishes real struct construction from block openers.
-  let struct_kill = 1;
+  // T43 rest (2026-09-05): the context guard -- `NAME {` is a struct literal
+  // only when NAME is the declared (first) struct, cached in fntab[3891]
+  // (0 = not yet scanned, -1 = no struct), and we are not inside a `while`
+  // condition (fntab[3892], set by emit_while_stmt): `while i < n {` stays a loop.
+  let _ = if fntab[3891] == 0 then (let _ = fntab[3891] = struct_name_hash(s) in 0) else 0;
+  let is_sname = (if name == fntab[3891] then 1 else 0) * (if name == 0 then 0 else 1);
+  let struct_ok = is_sname * (1 - fntab[3892]);
   if is_lp == 1 then emit_call_or_ctor(s, name, pos, insns, n, stab, selfname, selfstart, fntab)
-  else if is_br * (1 - struct_kill) == 1 then emit_struct_lit(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_br * struct_ok == 1 then emit_struct_lit(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_lb == 1 then emit_array_index(s, name, npos, pos, insns, n, stab, selfname, selfstart, fntab)
   else emit_var_or_ctor(s, name, npos, insns, n, stab, fntab)
 }
@@ -230,7 +236,10 @@ fn find_struct(s: str, out: [i64]) -> i64 {
     let is_c = if c4 == 99 then 1 else 0;
     let is_t2 = if c5 == 116 then 1 else 0;
     let is_sp = if c6 == 32 then 1 else 0;
-    let hit = is_s * is_t1 * is_r * is_u * is_c * is_t2 * is_sp;
+    // T43 rest: a declaration starts a line -- `struct ` inside a comment or a
+    // string is not one (bebop.bp's own comments say "struct literal")
+    let at_bol = if j == 0 then 1 else (if char(s, j - 1) == 10 then 1 else 0);
+    let hit = is_s * is_t1 * is_r * is_u * is_c * is_t2 * is_sp * at_bol;
     let best = if hit == 1 then j else best;
     let found = if hit == 1 then 1 else found;
     let j = j + 1;
@@ -269,22 +278,41 @@ fn field_index(s: str, spos: i64, fname: i64) -> i64 {
   idx
 }
 
-// Emit one struct-literal field: read name, skip ':', emit value, str at fcnt*8.
-fn emit_struct_field(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], fcnt: i64, selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
-  let _ = read_ident(s, pos);
+// Hash of the first declared struct's name (read_ident hash), -1 when the
+// program declares none. Cached per program in fntab[3891] by emit_ident.
+fn struct_name_hash(s: str) -> i64 {
+  let spos = [0];
+  let found = find_struct(s, spos);
+  let p = [spos[0] + 7];
+  let h = if found == 1 then read_ident(s, p) else 0 - 1;
+  if h == 0 then 0 - 1 else h
+}
+
+// Emit one struct-literal field: read the name, resolve its declaration index
+// (slots[fcnt] = index in the first struct's field list), skip ':', emit the
+// value (it stays pushed; emit_struct_lit stores it after the bump).
+fn emit_struct_field(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], fcnt: i64, slots: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let fname = read_ident(s, pos);
+  let spos = [0];
+  let _ = find_struct(s, spos);
+  let idx = field_index(s, spos[0], fname);
+  let _ = slots[fcnt] = if idx < 0 then fcnt else idx;
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
+  let _ = skip_ws(s, pos);
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
-  let _ = pop(insns, n, 0, fntab);
-  let _ = em(insns, n, 4177527232 + fcnt * 1024);
   n[0]
 }
 
-// Emit a struct literal { f: v, ... }: store fields in order at [x14+i*8],
-// then mov x0,x14; add x14,#8n; push the pointer.
+// Emit a struct literal NAME { f: v, ... }: the declaration order is the layout
+// (c40 writes the fields out of order on purpose). Every field value is
+// evaluated first (each stays on the stack), THEN mov x0,x14; add x14,#8n
+// (+ the T118 frame trap) and the values are popped into their slots from the
+// last down -- the same order rule as emit_array_lit (T42).
 fn emit_struct_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let strn = str_len(s);
   let _ = pos[0] = pos[0] + 1;
+  let slots = zeros(16);
   let fcnt = 0;
   let done = 0;
   while done == 0 {
@@ -292,7 +320,7 @@ fn emit_struct_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
     let at_end = if pos[0] >= strn then 1 else 0;
     let ch = if at_end == 1 then 0 else char(s, pos[0]);
     let is_rb = if ch == 125 then 1 else 0;
-    let _ = if is_rb == 0 then emit_struct_field(s, pos, insns, n, stab, fcnt, selfname, selfstart, fntab) else 0;
+    let _ = if is_rb == 0 then emit_struct_field(s, pos, insns, n, stab, fcnt, slots, selfname, selfstart, fntab) else 0;
     let fcnt = if is_rb == 0 then fcnt + 1 else fcnt;
     let _ = skip_ws(s, pos);
     let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
@@ -304,6 +332,20 @@ fn emit_struct_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = pos[0] = pos[0] + 1;
   let _ = em(insns, n, 2853045216);
   let _ = em(insns, n, 2432696320 + fcnt * 8192 + 462);
+  let _ = em(insns, n, 2436894178);
+  let _ = em(insns, n, 2436628546);
+  let _ = em(insns, n, 3942777311);
+  let _ = em(insns, n, 1409286281);
+  let _ = em(insns, n, 3531606560);
+  let _ = em(insns, n, 3531606984);
+  let _ = em(insns, n, 3556769793);
+  let k = fcnt;
+  while k > 0 {
+    let k = k - 1;
+    let _ = pop(insns, n, 1, fntab);
+    let _ = em(insns, n, 4177526785 + slots[k] * 1024);
+    0
+  };
   let _ = push(insns, n, fntab);
   n[0]
 }
@@ -2548,7 +2590,9 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   // with a PLACEHOLDER b.eq (fixup recorded at p1), emit the body, then
   // patch the placeholder once the target address is known. The backward
   // edge is emitted last with its exact delta (loop_start is fixed).
+  let _ = fntab[3892] = 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = fntab[3892] = 0;
   let _ = pop(insns, n, 0, fntab);
   let _ = em(insns, n, 4043309087);
   let p1 = n[0];
