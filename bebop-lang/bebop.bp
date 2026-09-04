@@ -1111,11 +1111,8 @@ fn push(insns: [i64], n: [i64], fntab: [i64]) -> i64 {
   n[0]
 }
 
-fn mig_to_mem(insns: [i64], n: [i64], rep0: i64) -> i64 {
-  n[0]
-}
-
-// Pop into x<rd>.
+// Pop into x<rd> (ldr x<rd>,[sp] ; add sp,#16). R6.1 model bookkeeping
+// only (depth at fntab[3700]); see push for why traps were removed.
 fn pop(insns: [i64], n: [i64], rd: i64, fntab: [i64]) -> i64 {
   let d = fntab[3700];
   let dm1 = if d > 0 then d - 1 else 0;
@@ -1126,15 +1123,36 @@ fn pop(insns: [i64], n: [i64], rd: i64, fntab: [i64]) -> i64 {
   n[0]
 }
 
+// S3: flush register window to stack before a bl (call site).
+// Saves x9..x(9+rep-1) to stack, resets rep=-1. No-op when rep==0 (all-memory).
 fn flush_on_bl(insns: [i64], n: [i64], fntab: [i64], rep: i64) -> i64 {
+  let do_flush = if rep > 0 then 1 else 0;
+  let _ = if do_flush == 1 then (let _ = fntab[3890] = 0 - 1 in 0) else 0;
+  let _ = if do_flush == 1 then str_reg(insns, n, 0, rep) else 0;
   n[0]
 }
 
-// S3: no-op. The window (x9..x13) is CALLEE-SAVED in emit_prologue/
-// emit_epilogue, so values survive calls with zero caller-side emission.
-// No restore here: the callee already preserved the window; restoring again
-// would double-load registers and move sp for pushes that never touched it.
+fn str_reg(insns: [i64], n: [i64], i: i64, rep: i64) -> i64 {
+  let done = if i >= rep then 1 else 0;
+  let _ = if done == 0 then (let _ = em(insns, n, 4177527776 + (9 + i) + i * 8192) in 0) else 0;
+  let _ = if done == 0 then (let _ = str_reg(insns, n, i + 1, rep) in 0) else 0;
+  n[0]
+}
+
+// S3: pop_back after bl — restores flushed registers from stack. No-op when rep==0.
 fn pop_back(insns: [i64], n: [i64], fntab: [i64], rep: i64) -> i64 {
+  let do_restore = if rep > 0 then 1 else 0;
+  let total = rep * 8 + 64;  // flush space + bl frame (48) + push space (16)
+  let _ = if do_restore == 1 then (let _ = em(insns, n, 2432713727 + (total - 16) * 1024) in 0) else 0;
+  let _ = if do_restore == 1 then ldr_reg(insns, n, 0, rep) else 0;
+  let _ = if do_restore == 1 then (let _ = fntab[3890] = rep in 0) else 0;
+  n[0]
+}
+
+fn ldr_reg(insns: [i64], n: [i64], i: i64, rep: i64) -> i64 {
+  let done = if i >= rep then 1 else 0;
+  let _ = if done == 0 then (let _ = em(insns, n, 4181722080 + (9 + i) + i * 8192) in 0) else 0;
+  let _ = if done == 0 then (let _ = ldr_reg(insns, n, i + 1, rep) in 0) else 0;
   n[0]
 }
 
@@ -1217,22 +1235,12 @@ fn fold_clear(fntab: [i64]) -> i64 {
 fn fold_try(insns: [i64], n: [i64], fntab: [i64], op: i64) -> i64 {
   let d = fntab[3655];
   let opok = (if op == 2 then 1 else 0) + (if op == 3 then 1 else 0) + (if op == 4 then 1 else 0);
-  // Register-window concordance gate: the stream-rewind fold is only safe
-  // when the window model is fully consistent (wd == wrep: every value
-  // window-resident, no pending migration). If a mig_to_mem fired while
-  // pushing the operands, wrep drained to 0 while wd kept climbing; the
-  // fold's n[0] rewind then removes the mig words WITHOUT restoring wrep,
-  // orphaning the surviving siblings' model. Splitting across
-  // window/memory is the exact stall the fold must not touch — the legacy
-  // emit_binop plain path reconciles it via pop/push correctly.
-  let wf = (if fntab[3700] == fntab[3890] then 1 else 0);
-  let isb = (if d == 2 then 1 else 0) * opok * wf;
+  let isb = (if d == 2 then 1 else 0) * opok;
   let vA = fntab[3658];
   let vB = fntab[3656];
   let cnt = fntab[3657] + fntab[3659];
   let vfold = (if op == 2 then 1 else 0) * (vA + vB) + (if op == 3 then 1 else 0) * (vA - vB) + (if op == 4 then 1 else 0) * (vA * vB);
   let _ = if isb == 1 then (let _ = n[0] = n[0] - cnt in 0) else 0;
-  let _ = if isb == 1 then fold_unpush(fntab, 2) else 0;
   let _ = if isb == 1 then (let _ = fold_clear(fntab) in 0) else 0;
   let _ = if isb == 1 then (let _ = emit_lit(insns, n, vfold, fntab) in 0) else 0;
   // right-const imm12 path (only fires when the both-const fold did not)
@@ -1240,35 +1248,13 @@ fn fold_try(insns: [i64], n: [i64], fntab: [i64], op: i64) -> i64 {
   let cTop = fntab[3657];
   let ir = (if vTop >= 0 then 1 else 0) * (if vTop < 4096 then 1 else 0);
   let iadd = (if op == 2 then 1 else 0) + (if op == 3 then 1 else 0);
-  let isi = (if d == 1 then 1 else 0) * ir * iadd * wf;
+  let isi = (if d == 1 then 1 else 0) * ir * iadd;
   let wimm = (if op == 2 then 1 else 0) * (2432696320 + vTop * 1024) + (if op == 3 then 1 else 0) * (3506438144 + vTop * 1024);
   let _ = if isi == 1 then (let _ = n[0] = n[0] - cTop in 0) else 0;
-  let _ = if isi == 1 then fold_unpush(fntab, 1) else 0;
   let _ = if isi == 1 then (let _ = pop(insns, n, 0, fntab) in 0) else 0;
   let _ = if isi == 1 then (let _ = em(insns, n, wimm) in 0) else 0;
   let _ = if isi == 1 then (let _ = push(insns, n, fntab) in 0) else 0;
   isb + isi
-}
-
-// Roll the register-window model back by k pushes (used by fold_try, which
-// retracts literal chunks via n[0]-count rewind without touching model state).
-fn fold_unpush(fntab: [i64], k: i64) -> i64 {
-  let d = fntab[3700];
-  let rep = fntab[3890];
-  let nd = if d >= k then d - k else 0;
-  let nr = if rep >= k then rep - k else 0;
-  let _ = fntab[3700] = nd;
-  let _ = fntab[3890] = nr;
-  0
-}
-
-// Control-flow join reset: force the register-window MODEL back to a canonical
-// (depth, rep) so divergent branches (if/else, loop bodies) emit into the SAME
-// window slot and the model agrees with runtime (only one branch executes).
-fn fj_reset(fntab: [i64], d: i64, rep: i64) -> i64 {
-  let _ = fntab[3700] = d;
-  let _ = fntab[3890] = rep;
-  0
 }
 
 // Emit a binary op (2=add 3=sub 4=mul 5=div): pop b->x1, pop a->x0, op, push.
@@ -1532,22 +1518,6 @@ fn emit_paren(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
 // branches is sound and removes a mispredictable branch.
 fn emit_cond(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 2;
-  // S5: flush the register window to memory BEFORE compiling the condition so
-  // the IF-expression's divergent branches join on the MEMORY stack, not the
-  // window. A condition-call (e.g. if f(x) then ...) triggers flush_on_bl which
-  // drains the pre-if pending operands to memory; if we kept the branch base as
-  // WINDOW-resident (base_rep>0), the fj_reset join below would restore a model
-  // claiming those operands live in x9..x13 when they physically sit on the
-  // stack -> subsequent pops read the wrong slot -> SIGSEGV/wild indirect
-  // branch (m7 repro, fold-orphan class). Flushing first pins base_rep==0 so
-  // condition + then + else all push to memory at the same logical depth and
-  // converge (exactly one branch executes, one net push).
-  let rep0 = fntab[3890];
-  let _ = flush_on_bl(insns, n, fntab, rep0);
-  // S4: capture the pre-condition window base so divergent branches emit
-  // into the SAME slot and merge consistently (register-window join rule).
-  let base_d = fntab[3700];
-  let base_rep = fntab[3890];
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = pop(insns, n, 0, fntab);
   let _ = em(insns, n, 4043309087);
@@ -1562,9 +1532,6 @@ fn emit_cond(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
   let _ = em(insns, n, 335544320);
   let else_pos = n[0];
   let _ = insns[p1] = 1409286144 + (else_pos - p1) * 32;
-  // S4: reset the model to the pre-if base before the else body so it emits
-  // into the same slot as the then-body (single real result at the join).
-  let _ = fj_reset(fntab, base_d, base_rep);
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let end_pos = n[0];
   let _ = insns[p2] = 335544320 + (end_pos - p2);
@@ -1713,17 +1680,6 @@ fn emit_array_get(insns: [i64], n: [i64], fntab: [i64]) -> i64 {
 // index->x1, base->x2; str x0,[x2,x1,lsl 3]; result 0.
 fn emit_array_set(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
-  // S6: drain base+index out of the WINDOW into memory BEFORE compiling the
-  // RHS. The store operands (base, index) were pushed by emit_array_index and
-  // occupy window slots x9..x10; if the RHS contains a nested call (e.g.
-  // `arr[i] = f(...)`), that call's flush_on_bl drains the WHOLE window --
-  // INCLUDING base/index -- onto the top of the argument stack, so the
-  // callee's arg-pop consumes them as args (off-by-N, base lands as 0 ->
-  // SIGSEGV). Pinning base/index into memory first leaves them beneath the
-  // RHS's own pushes, untouched by any nested flush, and the store pops read
-  // them back in the correct relative order. (min_crash repro, cache_store.)
-  let rep0 = fntab[3890];
-  let _ = flush_on_bl(insns, n, fntab, rep0);
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = pop(insns, n, 0, fntab);
   let _ = pop(insns, n, 1, fntab);
