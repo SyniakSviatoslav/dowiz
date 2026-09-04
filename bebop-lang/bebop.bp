@@ -990,7 +990,7 @@ fn emit_match(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
   let is_lp = if ch == 40 then 1 else 0;
   let ppos = [0];
-  let _ = if is_lp == 1 then (let _ = pos[0] = pos[0] + 1 in (let _ = ppos[0] = pos[0] in (let _ = skip_to(s, pos, 41) in (let _ = pos[0] = pos[0] + 1 in 0)))) else 0;
+  let _ = if is_lp == 1 then (let _ = pos[0] = pos[0] + 1 in (let _ = ppos[0] = pos[0] in (let _ = skip_args(s, pos) in (let _ = pos[0] = pos[0] + 1 in 0)))) else 0;
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let done = 0;
@@ -2181,6 +2181,39 @@ fn find_fn(s: str, name: i64, out: [i64]) -> i64 {
 
 // Inline a function call: find fname's def, bind args to its params (a->x19,
 // b->x20, ...), emit the callee body from its source position, restore pos.
+// Skip a parenthesised argument list LEXICALLY: pos is just after the opening
+// "(", and stops ON the matching ")" (paren depth + strings + line comments;
+// /* */ block comments are not skipped -- the corpus uses // only). Pure pos
+// arithmetic, no emitter state. Shared by the unresolved-callee path of
+// emit_call and by emit_match's payload scan (T42 2026-09-04: the payload
+// used to end at the FIRST ")", so `match many((3)) {..}` bound `(3`).
+fn skip_args(s: str, pos: [i64]) -> i64 {
+  let go = 1;
+  let depth = 0;
+  while go == 1 {
+    let strn3 = str_len(s);
+    let at_end3 = if pos[0] >= strn3 then 1 else 0;
+    let ch3 = if at_end3 == 1 then 0 else char(s, pos[0]);
+    let nch3 = if pos[0] + 1 >= strn3 then 0 else char(s, pos[0] + 1);
+    let is_q = if ch3 == 34 then 1 else 0;
+    let is_sl = if ch3 == 47 then 1 else 0;
+    let is_cmt = is_sl * (if nch3 == 47 then 1 else 0);
+    let is_lp = if ch3 == 40 then 1 else 0;
+    let is_rp = if ch3 == 41 then 1 else 0;
+    let is_close0 = is_rp * (if depth == 0 then 1 else 0);
+    let _ = if is_q == 1 then (let _ = pos[0] = pos[0] + 1 in (let _ = skip_string(s, pos) in 0)) else 0;
+    let _ = if is_cmt == 1 then skip_line_comment(s, pos) else 0;
+    let adv3 = 1 - is_q - is_cmt - is_close0;
+    let _ = pos[0] = pos[0] + adv3;
+    let depth = depth + is_lp - is_rp + is_close0;
+    let stop3 = is_close0 + at_end3;
+    let stop3 = if stop3 > 0 then 1 else 0;
+    let go = 1 - stop3;
+    0
+  };
+  0
+}
+
 fn emit_call(s: str, fname: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let fnpos = [0];
   let cached = ft_cache_get(fntab, fname);
@@ -2237,29 +2270,7 @@ fn emit_call(s: str, fname: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64]
   // args LEXICALLY (paren depth + strings + line comments) so pos resumes on
   // ')'. Pure pos arithmetic — no emitter state — so both engines agree.
   // Limit: /* */ block comments are not skipped (the corpus uses // only).
-  let go = if okres == 0 then 1 else 0;
-  let depth = 0;
-  while go == 1 {
-    let strn3 = str_len(s);
-    let at_end3 = if pos[0] >= strn3 then 1 else 0;
-    let ch3 = if at_end3 == 1 then 0 else char(s, pos[0]);
-    let nch3 = if pos[0] + 1 >= strn3 then 0 else char(s, pos[0] + 1);
-    let is_q = if ch3 == 34 then 1 else 0;
-    let is_sl = if ch3 == 47 then 1 else 0;
-    let is_cmt = is_sl * (if nch3 == 47 then 1 else 0);
-    let is_lp = if ch3 == 40 then 1 else 0;
-    let is_rp = if ch3 == 41 then 1 else 0;
-    let is_close0 = is_rp * (if depth == 0 then 1 else 0);
-    let _ = if is_q == 1 then (let _ = pos[0] = pos[0] + 1 in (let _ = skip_string(s, pos) in 0)) else 0;
-    let _ = if is_cmt == 1 then skip_line_comment(s, pos) else 0;
-    let adv3 = 1 - is_q - is_cmt - is_close0;
-    let _ = pos[0] = pos[0] + adv3;
-    let depth = depth + is_lp - is_rp + is_close0;
-    let stop3 = is_close0 + at_end3;
-    let stop3 = if stop3 > 0 then 1 else 0;
-    let go = 1 - stop3;
-    0
-  };
+  let _ = if okres == 0 then skip_args(s, pos) else 0;
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let after = pos[0];

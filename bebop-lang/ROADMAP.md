@@ -1523,7 +1523,7 @@ CORPUS-A CARRY-OVER); T41 now only executes the banners and doc fixes.
 
 ### Layer C — compiler debt (tolerated miscompiles die)
 
-**T42 · fix R3.x(a)-(e) at the root, then delete the laws** — PARTIAL 2026-09-04 (match codegen root cause fixed: emit_match arm loop overran the closing `}` and swallowed the enclosing expression suffix; c25 gate; fuzz N=450 seeds 1000+: OK=315 DIVERGE=0 CRASH=0 TIMEOUT=0 COMPILEFAIL=0 GENFAIL=135 gen.py recursion bug; open: parenthesised match payload s16, (a)-(e) untouched)
+**T42 · fix R3.x(a)-(e) at the root, then delete the laws** — PARTIAL 2026-09-04 (match codegen root cause fixed: emit_match arm loop overran the closing `}` and swallowed the enclosing expression suffix; c25 gate; fuzz N=450 seeds 1000+: OK=315 DIVERGE=0 CRASH=0 TIMEOUT=0 COMPILEFAIL=0 GENFAIL=135 gen.py recursion bug; s16 parenthesised match payload fixed 2026-09-04 via shared lexical skip_args (fixpoint b1489f05, std_golden 91/91, run_all ok=91, construct 26/26); open: DIVERGE-81/128 (shrinking), (a)-(e) untouched)
 GOAL: (a) precedence: `emit_bitlvl` binds tighter than `*` — decide and
 document the grammar (recommended: C precedence; regression gate r3x
 updated) ; (b) `>>`: emit ASRV for `>>` and add `>>>` for LSRV (both
