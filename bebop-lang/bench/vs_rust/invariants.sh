@@ -33,7 +33,7 @@ python3 tools/check_abi.py --fntab bebop.bp $SRCS || fail=1
 echo "== (ii) branch census"
 if [ "${1:-}" = "--freeze" ]; then
   if python3 tools/census.py --freeze-check bench/vs_rust/census.txt bench/vs_rust/census_allow.txt bebop.bin $BINS; then
-    python3 tools/census.py bebop.bin $BINS > bench/vs_rust/census.txt && echo "census.txt frozen" && : > bench/vs_rust/census_allow.txt
+    python3 tools/census.py bebop.bin $BINS > bench/vs_rust/census.txt && echo "census.txt frozen (census_allow.txt lines stay as the record of the increase)"
   else
     echo "census.txt NOT frozen (D11-F: add the allow lines to bench/vs_rust/census_allow.txt in this commit)"; fail=1
   fi

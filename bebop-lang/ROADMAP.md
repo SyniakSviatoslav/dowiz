@@ -1584,6 +1584,14 @@ D11. (2026-09-04, operator answers to docs/ROADMAP-CRITIQUE-2026-09-04.md)
     do not prove that operator; T123 := make every gate mutation-sensitive
     (fold covers the flipped site or the mutation point moves) and freeze
     the threshold at 0 insensitive in the battery.
+    D11-E second oracles (bench/oracles2/, written with the .bp and the
+    mirrors withheld): sha256, crc, money, ordfsm and the exact-nearest
+    nnidx fold REPRODUCE the frozen values from the public standards / the
+    production Rust ported to python; csr bt store tq mvcc stm sort rng
+    could NOT be reproduced because their folds are written in no prose
+    (only in the .bp) -> T124 := a written fold specification per gate
+    (inputs, generator, fold function) in selfhost/std/<g>.bp's header,
+    then oracles2 re-run until MATCH; until then those 8 are "== mirror".
     Measured the same day: only 3 A78 cores are usable in this shell
     (affinity {0..6}; CPU 7 refuses taskset) -> T106 is "3 A78".
     Evidence and the measured plan P1-P10 (T96 ceilings, DRAM 12 GB/s,
