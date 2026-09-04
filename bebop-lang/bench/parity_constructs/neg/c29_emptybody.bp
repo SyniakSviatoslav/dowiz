@@ -1,0 +1,7 @@
+// T42 2026-09-04 (fuzz DIVERGE-81/128 shrunk): a fn body with NO tail
+// expression (empty, or ending in `let ...;` / `x += 1;` / `while ... { };`)
+// used to compile silently and return whatever x0 held (stale register or
+// heap garbage); the compiler now exits 97 and writes no .bin. bpref.py
+// raises SyntaxError on the same shape.
+fn main() -> i64 { let i = 0; while i < 1 { let i = i + 1; }; }
+fn f0(n: i64) -> i64 { }

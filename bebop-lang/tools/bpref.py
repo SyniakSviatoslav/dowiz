@@ -9,11 +9,13 @@ Grammar mirrors bebop.bp's emitter tiers (ground truth), NOT a textbook one:
   expr   := term ((+ -) term)*
   term   := bitlvl ((* / %) bitlvl)*
   bitlvl := factor ((& | ^ << >>) factor)*        -- binds TIGHTER than * /
-  factor := ( cmp ) | if cmp then cmp else cmp | let NAME = rhs in cmp
+  factor := ( cmp ) | if cmp then cmp else cmp | let NAME = rhs (in|;) cmp
           | match CTOR[(cmp)] { CTOR[(v)] => cmp, ... } | [cmp, ...] | "str" | NUM
           | NAME | NAME(args) | NAME[cmp] | NAME[cmp] = cmp   (set, value 0)
   rhs    := NAME = cmp (chain-assign, value discarded) | cmp
   body   := (let NAME = rhs ; | while cmp { body } ; | NAME op= cmp ; | cmp ;)* -- value = last cmp
+            a FN body must end in a tail cmp with no `;` (SyntaxError otherwise, T42);
+            a while body may be empty
 Semantics (aarch64 runtime): i64 wraparound; `/` truncates, x/0 = 0,
 MIN/-1 = MIN; `%` = a - (a/b)*b (so a%0 = a); shifts take amount mod 64,
 `>>` is LOGICAL; `let` is fn-scoped assignment (rebinding mutates, incl.
@@ -62,6 +64,14 @@ BIN = {
 }
 TIERS = [('==', '!=', '<=', '>=', '<', '>'), ('+', '-'), ('*', '/', '%'),
          ('&', '|', '^', '<<', '>>')]
+# T42(a)/(b) oracle switches (decision D5: measure before adopting).
+# BPREF_CPREC=1 -> C precedence: cmp < | < ^ < & < shifts < +- < */%
+# BPREF_ASR=1   -> `>>` is ARITHMETIC (sign-propagating) instead of logical
+if os.environ.get('BPREF_CPREC') == '1':
+    TIERS = [('==', '!=', '<=', '>=', '<', '>'), ('|',), ('^',), ('&',),
+             ('<<', '>>'), ('+', '-'), ('*', '/', '%')]
+if os.environ.get('BPREF_ASR') == '1':
+    BIN['>>'] = lambda a, b: wrap(a >> (b & 63))
 
 TOK = re.compile(r'\s+|//[^\n]*|(\d+)|([A-Za-z_][A-Za-z0-9_]*)|("(?:[^"\\]|\\.)*")'
                  r'|(\+\+|==|!=|<=|>=|<<|>>|=>|->|\+=|-=|\*=|/=|%=|[-+*/%&|^<>=(){}\[\],;:.!])')
@@ -146,6 +156,10 @@ class Parser:
                         self.next(); self.expect(']')
                 self.expect('{')
                 body = self.body()
+                # T42: a fn body ends in a tail EXPRESSION (bebop.bin exits 97
+                # otherwise): not empty, not a statement, not `e;`
+                if not body or body[-1][0] != 'expr' or self.t[self.p - 1][1] == ';':
+                    raise SyntaxError('fn %s: body has no tail expression (bebop.bin exits 97)' % name)
                 self.expect('}')
                 self.fns[name] = (params, body)
             elif v == 'enum':
@@ -241,7 +255,8 @@ class Parser:
             name = self.ident()
             self.expect('=')
             r = self.rhs()
-            self.expect('in')
+            if self.at(';'): self.next()   # `;` is a synonym for `in` (T42)
+            else: self.expect('in')
             return ('letin', name, r, self.cmp())
         if v == 'match':
             return self.match()

@@ -73,6 +73,7 @@ for f in "${DIR%/}/neg"/*.bp; do
   b=$(basename "$f" .bp)
   case "$b" in
     c28_plusplus) EXPECT=COMPILEFAIL:96;;
+    c29_emptybody) EXPECT=COMPILEFAIL:97;;
     *) EXPECT="";;
   esac
   want=${EXPECT#COMPILEFAIL:}

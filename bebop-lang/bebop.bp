@@ -1514,6 +1514,7 @@ fn emit_term(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
 // 90 open, 91 read, 92 mmap, 94 fail -- seed/seed.S):
 //   95  expected `)` (emit_paren) or `in` (emit_let_plain / emit_let_chain)
 //   96  `++` in an expression: string concat is not in the surface (T42(d))
+//   97  fn body without a tail expression (compile_fn_at; DIVERGE-81/128)
 // A trap fires before the output is opened (cli_compile), so no .bin is
 // produced; bench/vs_rust/construct_parity.sh gates them as
 // EXPECT=COMPILEFAIL:<code> from bench/parity_constructs/neg/.
@@ -1607,8 +1608,13 @@ fn emit_let_plain(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let ci = if pos[0] >= str_len(s) then 0 else char(s, pos[0]);
-  let _ = if ci == 105 then 0 else sys_exit(95);
-  let _ = pos[0] = pos[0] + 2;
+  // `in` or `;` (T42 2026-09-04: the corpus' `(let t = e; body)` form
+  // only ever worked because `; ` was skipped as if it were `in`; make it
+  // a real synonym instead of trapping it -- ntt/fno regression at 3eeb007)
+  let is_in = if ci == 105 then 1 else 0;
+  let is_semi = if ci == 59 then 1 else 0;
+  let _ = if is_in + is_semi > 0 then 0 else sys_exit(95);
+  let _ = pos[0] = pos[0] + 1 + is_in;
   let _ = pop(insns, n, 0, fntab);
   let _ = bind_reg(insns, n, reg);
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
@@ -1625,8 +1631,13 @@ fn emit_let_chain(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let ci = if pos[0] >= str_len(s) then 0 else char(s, pos[0]);
-  let _ = if ci == 105 then 0 else sys_exit(95);
-  let _ = pos[0] = pos[0] + 2;
+  // `in` or `;` (T42 2026-09-04: the corpus' `(let t = e; body)` form
+  // only ever worked because `; ` was skipped as if it were `in`; make it
+  // a real synonym instead of trapping it -- ntt/fno regression at 3eeb007)
+  let is_in = if ci == 105 then 1 else 0;
+  let is_semi = if ci == 59 then 1 else 0;
+  let _ = if is_in + is_semi > 0 then 0 else sys_exit(95);
+  let _ = pos[0] = pos[0] + 1 + is_in;
   let _ = pop(insns, n, 0, fntab);
   let _ = bind_reg(insns, n, treg);
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
@@ -2495,6 +2506,11 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   let nb_tail = n[0];
   let bres_t = if 1 == 1 then emit_body(s, pos, insns, n, stab, selfname, selfstart, fntab, cx, tkbuf) else 0;
   let blast_t = bres_t - (bres_t / 2) * 2;
+  // T42 2026-09-04 (fuzz DIVERGE-81/128 shrunk): a body with NO tail
+  // expression (empty, or ending in a let/while/compound statement, or
+  // `e;` before the `}`) returned whatever x0 held; trap 97 instead
+  // (exit-code table at emit_paren). bpref.py raises on the same shape.
+  let _ = if blast_t == 1 then 0 else sys_exit(97);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   // legacy emitter leaves the body value on the stack; fast path leaves it
