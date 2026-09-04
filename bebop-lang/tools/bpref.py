@@ -17,7 +17,7 @@ Grammar mirrors bebop.bp's emitter tiers (ground truth), NOT a textbook one:
 Semantics (aarch64 runtime): i64 wraparound; `/` truncates, x/0 = 0,
 MIN/-1 = MIN; `%` = a - (a/b)*b (so a%0 = a); shifts take amount mod 64,
 `>>` is LOGICAL; `let` is fn-scoped assignment (rebinding mutates, incl.
-inside while/let-in); no unary minus, no `!`.
+inside while/let-in); no unary minus, no `!`; `++` is a SyntaxError (T42(d)).
 Exit codes: 0 value printed; 2 `bpref error:` (parse/runtime error in the
 oracle); 3 `bpref depth:` call depth exceeded BPREF_DEPTH (default 5000) --
 the program recurses without bound, a generator/program defect, not a
@@ -64,7 +64,7 @@ TIERS = [('==', '!=', '<=', '>=', '<', '>'), ('+', '-'), ('*', '/', '%'),
          ('&', '|', '^', '<<', '>>')]
 
 TOK = re.compile(r'\s+|//[^\n]*|(\d+)|([A-Za-z_][A-Za-z0-9_]*)|("(?:[^"\\]|\\.)*")'
-                 r'|(==|!=|<=|>=|<<|>>|=>|->|\+=|-=|\*=|/=|%=|[-+*/%&|^<>=(){}\[\],;:.!])')
+                 r'|(\+\+|==|!=|<=|>=|<<|>>|=>|->|\+=|-=|\*=|/=|%=|[-+*/%&|^<>=(){}\[\],;:.!])')
 
 
 def tokenize(src):
@@ -77,6 +77,8 @@ def tokenize(src):
         elif m.group(3):
             out.append(('s', m.group(3)[1:-1].encode().decode('unicode_escape').encode('latin-1')))
         elif m.group(4):
+            if m.group(4) == '++':
+                raise SyntaxError('`++` is not in the surface (T42(d): bebop.bin exits 96)')
             out.append(('o', m.group(4)))
     out.append(('o', '<eof>'))
     return out

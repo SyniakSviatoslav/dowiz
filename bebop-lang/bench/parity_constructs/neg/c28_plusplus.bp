@@ -1,0 +1,4 @@
+// T42(d) 2026-09-04: `++` (string concat) is NOT in the surface and there is
+// no third state -- `"ab" ++ "cd"` used to compile silently to a binary
+// that crashed; the compiler now exits 96 and writes no .bin.
+fn main() -> i64 { let s = "ab" ++ "cd"; str_len(s) }

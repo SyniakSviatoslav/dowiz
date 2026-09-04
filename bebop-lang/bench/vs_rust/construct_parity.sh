@@ -64,5 +64,27 @@ for f in "$DIR"/*.bp; do
   fi
 done
 
+# Negative gates (T42 2026-09-04): bench/parity_constructs/neg/*.bp must be
+# REJECTED at compile time with a specific exit code and produce no .bin.
+# They live outside the positive dir so invariants.sh (which fresh-compiles
+# every positive construct) never sees them.
+for f in "${DIR%/}/neg"/*.bp; do
+  [ -e "$f" ] || continue
+  b=$(basename "$f" .bp)
+  case "$b" in
+    c28_plusplus) EXPECT=COMPILEFAIL:96;;
+    *) EXPECT="";;
+  esac
+  want=${EXPECT#COMPILEFAIL:}
+  out="${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin"
+  rm -f "$out"
+  ./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$f" "$out" >/dev/null 2>&1; rc=$?
+  if [ -n "$want" ] && [ "$rc" = "$want" ] && [ ! -e "$out" ]; then
+    echo "MATCH $b (compile exit $rc, no .bin)"; PASS=$((PASS+1))
+  else
+    echo "TRAP_MISMATCH $b (compile exit $rc, want ${want:-?}$([ -e "$out" ] && echo ', .bin produced'))"; FAIL=$((FAIL+1))
+  fi
+done
+
 echo "construct parity: pass=$PASS fail=$FAIL"
 [ "$FAIL" = 0 ]

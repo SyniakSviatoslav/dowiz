@@ -1475,6 +1475,13 @@ fn emit_expr(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
     let is_plus = if ch == 43 then 1 else 0;
     let is_minus = if ch == 45 then 1 else 0;
+    // T42(d) 2026-09-04: `++` (string concat) is NOT in the surface and there
+    // is no third state -- it used to compile silently to a crashing binary;
+    // now the compiler exits 96 (see the exit-code table at emit_paren).
+    let e1 = if pos[0] + 1 >= strn then 1 else 0;
+    let ch1 = if e1 == 1 then 0 else char(s, pos[0] + 1);
+    let is_pp = is_plus * (if ch1 == 43 then 1 else 0);
+    let _ = if is_pp == 1 then sys_exit(96) else 0;
     let is_op = is_plus + is_minus;
     let _ = if is_op == 1 then emit_apply_op(s, pos, insns, n, is_minus, stab, selfname, selfstart, fntab) else 0;
     let done = if is_op == 1 then 0 else 1;
@@ -1503,6 +1510,13 @@ fn emit_term(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
   0
 }
 
+// Compile-time trap exit codes of bebop.bin (the seed loader owns 90-94:
+// 90 open, 91 read, 92 mmap, 94 fail -- seed/seed.S):
+//   95  expected `)` (emit_paren) or `in` (emit_let_plain / emit_let_chain)
+//   96  `++` in an expression: string concat is not in the surface (T42(d))
+// A trap fires before the output is opened (cli_compile), so no .bin is
+// produced; bench/vs_rust/construct_parity.sh gates them as
+// EXPECT=COMPILEFAIL:<code> from bench/parity_constructs/neg/.
 // Consume ( expr ). T42 2026-09-04: the closing delimiter is CHECKED, not
 // assumed -- a statement sequence inside parens (`( let i = 0; while ... ; r )`,
 // the attic "if-while" shape) is outside the surface (`( cmp )`) and used to
