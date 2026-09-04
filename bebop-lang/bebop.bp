@@ -1854,6 +1854,7 @@ fn emit_term(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
 //   95  expected `)` (emit_paren) or `in` (emit_let_plain / emit_let_chain)
 //   96  `++` in an expression: string concat is not in the surface (T42(d))
 //   97  fn body without a tail expression (compile_fn_at; DIVERGE-81/128)
+//   98  more than 17 `return` / 18 pending `break` in one fn (T99 lists)
 // A trap fires before the output is opened (cli_compile), so no .bin is
 // produced; bench/vs_rust/construct_parity.sh gates them as
 // EXPECT=COMPILEFAIL:<code> from bench/parity_constructs/neg/.
@@ -2433,6 +2434,56 @@ fn count_word(insns: [i64], a: i64, b: i64, w: i64) -> i64 {
   c
 }
 
+// T99 (2026-09-04): `return e;` -> e in x0, one placeholder `b` recorded in
+// fntab[3662] (count) / 3663..3679 (positions), patched to the epilogue by
+// compile_fn_at; `break;` -> placeholder `b` recorded in fntab[3680] / 3681..
+// 3699, patched to the enclosing loop's exit by emit_while_stmt (which
+// remembers the count at entry). More than 17 returns / 18 pending breaks in
+// one fn traps loudly (exit 98, exit-code table at emit_paren).
+fn emit_return_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 6;
+  let _ = skip_ws(s, pos);
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = pop(insns, n, 0, fntab);
+  let k = fntab[3662];
+  let _ = if k >= 17 then sys_exit(98) else 0;
+  let _ = fntab[3663 + k] = n[0];
+  let _ = fntab[3662] = k + 1;
+  let _ = em(insns, n, 335544320);
+  let _ = skip_ws(s, pos);
+  let cs = if pos[0] >= str_len(s) then 0 else char(s, pos[0]);
+  let _ = if cs == 59 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+  n[0]
+}
+
+fn emit_break_stmt(s: str, pos: [i64], insns: [i64], n: [i64], fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 5;
+  let k = fntab[3680];
+  let _ = if k >= 18 then sys_exit(98) else 0;
+  let _ = fntab[3681 + k] = n[0];
+  let _ = fntab[3680] = k + 1;
+  let _ = em(insns, n, 335544320);
+  let _ = skip_ws(s, pos);
+  let cs = if pos[0] >= str_len(s) then 0 else char(s, pos[0]);
+  let _ = if cs == 59 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+  n[0]
+}
+
+// Patch the pending `b` placeholders recorded at fntab[base+1+j], j in
+// [from, fntab[base]) to `target`, then rewind the count to `from`.
+fn patch_jumps(insns: [i64], fntab: [i64], base: i64, from: i64, target: i64) -> i64 {
+  let j = from;
+  let cnt = fntab[base];
+  while j < cnt {
+    let p = fntab[base + 1 + j];
+    let _ = insns[p] = 335544320 + (target - p);
+    let j = j + 1;
+    0
+  };
+  let _ = fntab[base] = from;
+  0
+}
+
 // Emit one 'while cond { body };' statement: a real backward loop (no result).
 // cond is re-evaluated each iteration (its code sits at loop_start); body's
 // final expression is discarded. Mutable `let` (sym_bind reuse) makes loop
@@ -2442,6 +2493,7 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = skip_ws(s, pos);
   let pcond = pos[0];
   let cnt0 = stab[0];
+  let brk0 = fntab[3680];
   let ldepth = fntab[3661];
   let _ = fntab[3661] = ldepth + 1;
   let slot_ok = if ldepth <= 20 then 1 else 0;
@@ -2494,6 +2546,7 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = em(insns, n, 402653184 + loop_start - n[0]);
   let endl = n[0];
   let _ = fntab[3660] = endl;
+  let _ = patch_jumps(insns, fntab, 3680, brk0, endl);
   let _ = if do_reset == 1 then (let _ = em(insns, n, ldrw) in 0) else 0;
   let _ = if do_reset == 1 then (let _ = insns[pmark] = 4177527790 + (10 + ldepth) * 1024 in 0) else 0;
   let _ = fntab[3661] = ldepth;
@@ -2639,12 +2692,24 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     let is_l2 = if ch3 == 108 then 1 else 0;
     let is_e2 = if ch4 == 101 then 1 else 0;
     let is_while = is_w * is_h * is_i * is_l2 * is_e2;
+    // T99 (2026-09-04): `return e;` and `break;` are statements (literal forms:
+    // one `b` each), recognised by keyword + a non-identifier follower.
+    let e5 = if pos[0] + 5 >= strn then 1 else 0;
+    let ch5 = if e5 == 1 then 0 else char(s, pos[0] + 5);
+    let e6 = if pos[0] + 6 >= strn then 1 else 0;
+    let ch6 = if e6 == 1 then 0 else char(s, pos[0] + 6);
+    let id5 = is_alpha(ch5) + is_digit(ch5) + (if ch5 == 95 then 1 else 0);
+    let id6 = is_alpha(ch6) + is_digit(ch6) + (if ch6 == 95 then 1 else 0);
+    let is_ret = (if ch == 114 then 1 else 0) * (if ch1 == 101 then 1 else 0) * (if ch2 == 116 then 1 else 0) * (if ch3 == 117 then 1 else 0) * (if ch4 == 114 then 1 else 0) * (if ch5 == 110 then 1 else 0) * (1 - id6);
+    let is_brk = (if ch == 98 then 1 else 0) * (if ch1 == 114 then 1 else 0) * (if ch2 == 101 then 1 else 0) * (if ch3 == 97 then 1 else 0) * (if ch4 == 107 then 1 else 0) * (1 - id5);
     let at_close = if ch == 125 then 1 else 0;
     let is_item = (1 - at_close) * (1 - at_end0);
     let _ = if is_item * is_let == 1 then emit_let_stmt(s, pos, insns, n, stab, selfname, selfstart, fntab, cx, st) else 0;
     let _ = if is_item * is_while == 1 then emit_while_stmt(s, pos, insns, n, stab, selfname, selfstart, fntab, cx, st) else 0;
+    let _ = if is_item * is_ret == 1 then emit_return_stmt(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
+    let _ = if is_item * is_brk == 1 then emit_break_stmt(s, pos, insns, n, fntab) else 0;
     // compound statement? ident-start (not let/while) followed by ws + one of +-*/% then '='
-    let id_start = is_alpha(ch) * (1 - is_let) * (1 - is_while);
+    let id_start = is_alpha(ch) * (1 - is_let) * (1 - is_while) * (1 - is_ret) * (1 - is_brk);
     let wq = pos[0];
     let id_go = id_start;
     while id_go == 1 {
@@ -2663,7 +2728,7 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     let ok_op = (if oc == 43 then 1 else 0) + (if oc == 45 then 1 else 0) + (if oc == 42 then 1 else 0) + ((if oc == 47 then 1 else 0) * (if nc != 47 then 1 else 0)) + (if oc == 37 then 1 else 0);
     let is_compound = id_start * (if nc == 61 then ok_op else 0);
     let _ = if is_item * is_compound == 1 then emit_compound_stmt(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
-    let is_expr = is_item * (1 - is_let) * (1 - is_while) * (1 - is_compound);
+    let is_expr = is_item * (1 - is_let) * (1 - is_while) * (1 - is_compound) * (1 - is_ret) * (1 - is_brk);
     let nb_item = n[0];
     // F3 refined: dead-value suppression applies ONLY to the final expr
     // item of a while body (lookahead: next non-ws char is rbrace / EOF)
@@ -2958,6 +3023,8 @@ fn compile_fn(s: str) -> i64 {
   let grew_t = if n[0] > nb_tail then 1 else 0;
   let leg_tail = if blast_t == 1 then grew_t else 0;
   let _ = if leg_tail == 1 then pop(insns, n, 0, fntab) else 0;
+  let _ = fntab[3660] = n[0];
+  let _ = patch_jumps(insns, fntab, 3662, 0, n[0]);
   let _ = emit_epilogue(insns, n);
   sum_words(insns, n[0])
 }
@@ -3016,6 +3083,8 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   // words late, SIGBUS). -1 never equals a position.
   let _ = fntab[3660] = 0 - 1;
   let _ = fntab[3661] = 0;  // T43: while nesting depth (frame-heap mark slot)
+  let _ = fntab[3662] = 0;  // T99: pending `return` placeholders
+  let _ = fntab[3680] = 0;  // T99: pending `break` placeholders
   let pos = [fpos];
   let stab = zeros(385);  // 1 + 3*128 (name,reg,srcpos) verified triples; overflow -> loud trap
   let _ = skip_ws(s, pos);
@@ -3075,6 +3144,8 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   let grew_t = if n[0] > nb_tail then 1 else 0;
   let leg_tail = if blast_t == 1 then grew_t else 0;
   let _ = if leg_tail == 1 then pop(insns, n, 0, fntab) else 0;
+  let _ = fntab[3660] = n[0];
+  let _ = patch_jumps(insns, fntab, 3662, 0, n[0]);
   let _ = emit_epilogue(insns, n);
   // OPT-A: only save/restore callee-saved pairs this fn actually binds.
   // Prologue words pbase+3..pbase+7 hold stp x19/x20 .. x27/x28; epilogue

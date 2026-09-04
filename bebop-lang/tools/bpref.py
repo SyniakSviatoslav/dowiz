@@ -33,6 +33,10 @@ import sys
 DEPTH_CAP = int(os.environ.get('BPREF_DEPTH', '5000'))
 
 
+class ReturnSignal(Exception):
+    def __init__(self, v): self.v = v
+class BreakSignal(Exception):
+    pass
 class DepthError(Exception):
     pass
 
@@ -211,6 +215,12 @@ class Parser:
                 b = self.body()
                 self.expect('}')
                 items.append(('while', c, b))
+            elif v == 'return':  # T99: `return e;` = one b to the epilogue
+                self.next()
+                items.append(('return', self.cmp()))
+            elif v == 'break':   # T99: `break;` = one b to the loop exit
+                self.next()
+                items.append(('break',))
             elif k == 'i' and self.peek(1)[1] in ('+=', '-=', '*=', '/=', '%='):
                 name = self.next()[1]
                 op = self.next()[1][0]
@@ -338,6 +348,8 @@ class Interp:
             raise DepthError('call depth > %d in %s' % (DEPTH_CAP, name))
         try:
             return self.run_body(body, env)
+        except ReturnSignal as r:
+            return r.v
         finally:
             self.depth -= 1
 
@@ -353,8 +365,15 @@ class Interp:
                 val = 0
             elif it[0] == 'while':
                 while self.ev(it[1], env) != 0:
-                    self.run_body(it[2], env)
+                    try:
+                        self.run_body(it[2], env)
+                    except BreakSignal:
+                        break
                 val = 0
+            elif it[0] == 'return':
+                raise ReturnSignal(self.ev(it[1], env))
+            elif it[0] == 'break':
+                raise BreakSignal()
             else:
                 val = self.ev(it[1], env)
         return val

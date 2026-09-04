@@ -2520,7 +2520,7 @@ none once clone works under proot.
 - **T108 .becache for the live compiler**: digest(source) -> .bin replay in cli_compile; gate std_golden warm run >= 5x faster, folds identical; makes T32 qjit memoized by construction.
 DONE-CHECK per task: its gate line in a committed script with the number above; fixpoint byte-exact (three generations); constructs re-frozen with deltas. DEPS: T96 (done), T43/T47/T48 first per the operator.
 
-**T99 · agent-facing surface: unary `-`/`!`, hex literals, `return`/`break`**
+**T99 · agent-facing surface: unary `-`/`!`, hex literals, `return`/`break`** — DONE ✓ 2026-09-04 (unary/hex 2026-09-04 c30; `return e;` = e in x0 + one `b` patched to the fn epilogue, `break;` = one `b` patched to the enclosing loop exit (pending lists fntab[3662..3679] / [3680..3699] = the new "jumps" zone, cap 17/18 per fn -> exit 98); gates c35_return 15041 + c36_break 4950014 == bpref; bpref.py mirrors with exceptions; gen.py emits both only as the last statement of a body (a `let` after them is dead in bebop but unbound in bpref: symbols are fn-scoped); fixpoint 4c454e21 unchanged from gen2)
 GOAL: literal forms (not sugar): `-x` = `neg`, `!x` = `cmp #0; cset eq`,
 `0x..` literals; `return e` = one `b` to the epilogue, `break` = one
 `b` to the loop exit. bpref.py mirrors each form. Unary/hex land inside

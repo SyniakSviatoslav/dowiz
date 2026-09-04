@@ -1,0 +1,28 @@
+// T99 (2026-09-04): `break;` = one `b` to the enclosing loop's exit; the
+// inner break must not leave the outer loop; the T43 frame-heap reset at the
+// loop exit still runs (the inner body allocates).
+fn main() -> i64 {
+  let s = 0;
+  let i = 0;
+  while i < 100 {
+    let j = 0;
+    while j < 100 {
+      let v = [i, j];
+      let s = s + v[0] * 100 + v[1];
+      let j = j + 1;
+      break;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  let k = 0;
+  while k < 1000 {
+    let k = k + 1;
+    let s = s + 1;
+    break;
+    0
+  };
+  let z = [3, 4];
+  s * 10 + z[1]
+}

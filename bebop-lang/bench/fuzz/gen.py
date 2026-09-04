@@ -268,6 +268,10 @@ class Ctx:
         self.loopvars.append(i)
         self.loop_depth += 1
         body = [self.stmt(depth + 1) for _ in range(self.r.randint(1, 4))]
+        # T99: `break;` only as the LAST statement of a loop body -- a `let` after it
+        # would be dead in bebop (fn-scoped symbol never assigned) but unbound in bpref
+        if self.r.random() < 0.15:
+            body.append('break;')
         step = self.r.choice(['let %s = %s + 1;' % (i, i), '%s += 1;' % i, 'let _ = %s = %s + 1;' % (i, i)])
         if step.startswith('let _') and not self.can_bind('_'):
             step = '%s += 1;' % i
@@ -283,6 +287,9 @@ class Ctx:
 
     def body(self, nstmts):
         lines = [self.stmt(0) for _ in range(nstmts)]
+        # T99: `return e;` only as the last statement before the tail (same reason)
+        if not self.fn.rec and self.r.random() < 0.12:
+            lines.append('return %s;' % self.expr(0))
         if self.fn.rec:
             n = self.fn.params[0][0]
             base = self.expr(1)

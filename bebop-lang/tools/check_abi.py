@@ -142,7 +142,7 @@ def check_bin(path, allow):
 
 
 # ---- (iii) fntab zone map -------------------------------------------------
-ZONES = [(0, 1, "fntab"), (3655, 3661, "fold"), (3700, 3796, "slots"),
+ZONES = [(0, 1, "fntab"), (3655, 3661, "fold"), (3662, 3699, "jumps"), (3700, 3796, "slots"),
          (3890, 3898, "bank"), (3899, 3999, "literals"), (4000, 4000, "budget")]
 LIT_BASE, LIT_END = 3903, 4000
 

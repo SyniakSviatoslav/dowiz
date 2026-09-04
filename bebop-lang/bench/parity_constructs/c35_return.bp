@@ -1,0 +1,18 @@
+// T99 (2026-09-04): `return e;` is a statement = one `b` to the fn epilogue
+// with e in x0: early exit from inside a loop (`early`) and before the tail
+// expression (`nested`); the value after `return` is dead code.
+fn early(limit: i64) -> i64 {
+  let i = 0;
+  while i < 1000 {
+    let i = i + 1;
+    return i * 10 + limit;
+    0
+  };
+  7
+}
+fn nested(x: i64) -> i64 {
+  let a = x * 2;
+  return a + 1;
+  99
+}
+fn main() -> i64 { early(5) * 1000 + nested(20) }
