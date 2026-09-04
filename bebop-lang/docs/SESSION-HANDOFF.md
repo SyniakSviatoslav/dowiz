@@ -1,6 +1,6 @@
 # SESSION HANDOFF — 2026-09-04 (session 8; resume in ONE read)
 
-Status: 2026-09-04 CURRENT (rewritten at every session close; the previous T13 plan is history — see ROADMAP.md)
+Status: 2026-09-05 CURRENT (rewritten at every session close; task bodies now live in HISTORY.md, the ledger in TASKS.md)
 
 Repo: /root/dowiz/bebop-lang (git@github.com:SyniakSviatoslav/dowiz.git, branch main)
 HEAD: see `git log --oneline | head -3`; every commit message carries the full gate evidence.
