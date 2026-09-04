@@ -1,0 +1,20 @@
+[package]
+name = "dowiz_oracles"
+version = "0.1.0"
+edition = "2021"
+
+# T66: production-Rust oracles for the bebop gates `money` / `ordfsm`.
+# The bins call dowiz-core's money.rs / order_machine.rs directly (no mirror).
+[dependencies]
+dowiz-core = { path = "../../../../crates/dowiz-core" }
+
+[[bin]]
+name = "money"
+path = "src/bin/money.rs"
+
+[[bin]]
+name = "ordfsm"
+path = "src/bin/ordfsm.rs"
+
+[profile.release]
+opt-level = 3

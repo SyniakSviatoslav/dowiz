@@ -667,5 +667,13 @@ gate stm 871596764015151 "$r"
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dpll.bp ${BEBOP_TMP:-/tmp/opencode}/dpll_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/dpll_test.bin | tail -1)
 gate dpll 584168922 "$r"
 
+# ---- money ----
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/money.bp ${BEBOP_TMP:-/tmp/opencode}/money_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/money_test.bin | tail -1)
+gate money 872656672063013 "$r"
+
+# ---- ordfsm ----
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/ordfsm.bp ${BEBOP_TMP:-/tmp/opencode}/ordfsm_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/ordfsm_test.bin | tail -1)
+gate ordfsm 346243789026198 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

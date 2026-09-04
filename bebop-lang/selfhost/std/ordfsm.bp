@@ -1,0 +1,327 @@
+module core { }
+
+// ordfsm.bp — T66: order-lifecycle FSM (the decide/fold Law), twin of
+// crates/dowiz-core/src/order_machine.rs. Oracle = PRODUCTION Rust:
+// bench/oracles/rust/src/bin/ordfsm.rs calls order_machine.rs on the same
+// event table; bench/oracles/ordfsm.py wraps it.
+// States (idx_of order): 0 Pending 1 Confirmed 2 Preparing 3 Ready
+// 4 InDelivery 5 Delivered 6 Rejected 7 Cancelled 8 Scheduled (scaffold)
+// 9 PickedUp 10 Refunding 11 CompensatedRefund. adj[i] = allowed_next(i)
+// as a 12-bit successor mask (14 edges incl. the P07 refund sub-flow).
+// decide = assert_transition(from, to) -> 0 ok | 1 SameStatus
+// | 2 ScaffoldDisabled | 3 IllegalTransition: a forbidden step is a loud
+// error code in the fold, never a no-op. fold = fold_transitions: the
+// first error stops the fold and reports (code, state reached).
+// Sections mixed into h: A exhaustive 12x12 decide matrix; B1 16 hand
+// sequences (packed nibbles: start, steps.., 15 sentinel); B2 64 LCG
+// sequences (seed 1234); C structural signature: |V|, |E|, acyclic
+// (A^12 == 0 — nilpotent adjacency, so rho = 0 exactly), cyclomatic
+// mu = |E|-|V|+components, reach bitmask from every state (BFS), Kahn
+// topological order (lowest-index source first), and the golden-signature
+// check (12, 14, acyclic, mu 4, rho 0, reach 3839, 11 states, Some(12)).
+// Fold = (h % 1e9)*1e6 + oks*1000 + errs.
+
+fn lcg(s: i64) -> i64 { ((s * 1103515245) + 12345) & 2147483647 }
+fn mix(h: i64, x: i64) -> i64 { ((h * 1000003) + x) & 4611686018427387903 }
+fn pc12(x: i64) -> i64 {
+  (x & 1) + ((x >> 1) & 1) + ((x >> 2) & 1) + ((x >> 3) & 1)
+  + ((x >> 4) & 1) + ((x >> 5) & 1) + ((x >> 6) & 1) + ((x >> 7) & 1)
+  + ((x >> 8) & 1) + ((x >> 9) & 1) + ((x >> 10) & 1) + ((x >> 11) & 1)
+}
+
+// decide: same-status first, then scaffold (either side), then the table.
+fn decide(adj: [i64], f: i64, t: i64) -> i64 {
+  let same = if f == t then 1 else 0;
+  let sc = if f == 8 then 1 else (if t == 8 then 1 else 0);
+  let ill = 1 - ((adj[f] >> t) & 1);
+  if same == 1 then 1 else (if sc == 1 then 2 else (if ill == 1 then 3 else 0))
+}
+
+// st: 0 h, 1 oks, 2 errs, 3 fold err, 4 fold state (3/4 = per-sequence scratch)
+fn emit(st: [i64], c: i64) -> i64 {
+  let ok = if c == 0 then 1 else 0;
+  let _ = st[0] = mix(st[0], c);
+  let _ = st[1] = st[1] + ok;
+  let _ = st[2] = st[2] + (1 - ok);
+  0
+}
+fn emit_fold(st: [i64]) -> i64 {
+  let err = st[3];
+  let cur = st[4];
+  let ok = if err == 0 then 1 else 0;
+  let _ = st[0] = mix(mix(st[0], ok), err * 16 + cur);
+  let _ = st[1] = st[1] + ok;
+  let _ = st[2] = st[2] + (1 - ok);
+  0
+}
+// one fold step: after the first error the state freezes (reached state).
+fn step(adj: [i64], st: [i64], nxt: i64) -> i64 {
+  let err = st[3];
+  let cur = st[4];
+  let c = decide(adj, cur, nxt);
+  let live = if err == 0 then 1 else 0;
+  let bad = if c != 0 then 1 else 0;
+  let _ = st[3] = err + live * c;
+  let _ = st[4] = cur + live * (1 - bad) * (nxt - cur);
+  0
+}
+
+fn matrix(adj: [i64], st: [i64]) -> i64 {
+  let k = 0;
+  while k < 144 {
+    let _ = emit(st, decide(adj, k / 12, k % 12));
+    let k = k + 1;
+    0
+  };
+  0
+}
+fn hand_seqs(adj: [i64], st: [i64], hand: [i64]) -> i64 {
+  let i = 0;
+  while i < 16 {
+    let v = hand[i];
+    let _ = st[3] = 0;
+    let _ = st[4] = v & 15;
+    let v = v >> 4;
+    while (v & 15) != 15 {
+      let _ = step(adj, st, v & 15);
+      let v = v >> 4;
+      0
+    };
+    let _ = emit_fold(st);
+    let i = i + 1;
+    0
+  };
+  0
+}
+fn lcg_seqs(adj: [i64], st: [i64]) -> i64 {
+  let s = 1234;
+  let n = 0;
+  while n < 64 {
+    let s = lcg(s);
+    let start = s % 12;
+    let s = lcg(s);
+    let len = 1 + (s % 4);
+    let _ = st[3] = 0;
+    let _ = st[4] = start;
+    let prev = start;
+    let k = 0;
+    while k < len {
+      let s = lcg(s);
+      let nxt = if (s % 4) == 0 then (s >> 4) % 12 else (prev + 1 + ((s >> 4) % 2)) % 12;
+      let _ = step(adj, st, nxt);
+      let prev = nxt;
+      let k = k + 1;
+      0
+    };
+    let _ = emit_fold(st);
+    let n = n + 1;
+    0
+  };
+  0
+}
+
+// BFS closure of `from` over rows g (bitmask); the start is included.
+fn flood(g: [i64], from: i64) -> i64 {
+  let seen = 1 << from;
+  let r = 0;
+  while r < 12 {
+    let j = 0;
+    while j < 12 {
+      let seen = seen | (g[j] * ((seen >> j) & 1));
+      let j = j + 1;
+      0
+    };
+    let r = r + 1;
+    0
+  };
+  seen
+}
+// A^12 over the boolean semiring; all-zero <=> DAG <=> rho = 0.
+fn nilpotent(adj: [i64], pw: [i64]) -> i64 {
+  let i = 0;
+  while i < 12 {
+    let _ = pw[i] = adj[i];
+    let i = i + 1;
+    0
+  };
+  let k = 1;
+  while k < 12 {
+    let i = 0;
+    while i < 12 {
+      let row = pw[i];
+      let acc = 0;
+      let j = 0;
+      while j < 12 {
+        let acc = acc | (adj[j] * ((row >> j) & 1));
+        let j = j + 1;
+        0
+      };
+      let _ = pw[i] = acc;
+      let i = i + 1;
+      0
+    };
+    let k = k + 1;
+    0
+  };
+  let z = 0;
+  let i = 0;
+  while i < 12 {
+    let z = z | pw[i];
+    let i = i + 1;
+    0
+  };
+  if z == 0 then 1 else 0
+}
+// undirected components (union-find in the Rust): count distinct floods.
+fn comps(adj: [i64], und: [i64]) -> i64 {
+  let i = 0;
+  while i < 12 {
+    let _ = und[i] = adj[i];
+    let i = i + 1;
+    0
+  };
+  let i = 0;
+  while i < 12 {
+    let j = 0;
+    while j < 12 {
+      let _ = und[j] = und[j] | (((adj[i] >> j) & 1) << i);
+      let j = j + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  let vis = 0;
+  let c = 0;
+  let i = 0;
+  while i < 12 {
+    let new = 1 - ((vis >> i) & 1);
+    let f = flood(und, i);
+    let vis = vis | f;
+    let c = c + new;
+    let i = i + 1;
+    0
+  };
+  c
+}
+// Kahn: emit the lowest-index unemitted source each round; returns the count.
+fn kahn(adj: [i64], indeg: [i64], ord: [i64]) -> i64 {
+  let i = 0;
+  while i < 12 {
+    let j = 0;
+    while j < 12 {
+      let _ = indeg[j] = indeg[j] + ((adj[i] >> j) & 1);
+      let j = j + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  let done = 0;
+  let n = 0;
+  let r = 0;
+  while r < 12 {
+    let pick = 12;
+    let j = 11;
+    while j >= 0 {
+      let ok = (if indeg[j] == 0 then 1 else 0) * (1 - ((done >> j) & 1));
+      let pick = pick * (1 - ok) + j * ok;
+      let j = j - 1;
+      0
+    };
+    let got = if pick < 12 then 1 else 0;
+    let p = pick * got;
+    let _ = ord[n] = p;
+    let done = done | (got << p);
+    let succ = adj[p] * got;
+    let j = 0;
+    while j < 12 {
+      let _ = indeg[j] = indeg[j] - ((succ >> j) & 1);
+      let j = j + 1;
+      0
+    };
+    let n = n + got;
+    let r = r + 1;
+    0
+  };
+  n
+}
+
+fn main() -> i64 {
+  let st = zeros(8);
+  let adj = zeros(12);
+  let hand = zeros(16);
+  let pw = zeros(12);
+  let und = zeros(12);
+  let indeg = zeros(12);
+  let ord = zeros(13);
+  let _ = adj[0] = 194;
+  let _ = adj[1] = 1044;
+  let _ = adj[2] = 1032;
+  let _ = adj[3] = 1552;
+  let _ = adj[4] = 1056;
+  let _ = adj[10] = 2048;
+  // happy paths: delivery, pickup, direct delivery, refund, reject, cancel, late refund
+  let _ = hand[0] = 257176080;
+  let _ = hand[1] = 16331280;
+  let _ = hand[2] = 1004560;
+  let _ = hand[3] = 1030672;
+  let _ = hand[4] = 3936;
+  let _ = hand[5] = 3952;
+  let _ = hand[6] = 4221841936;
+  // loud failures: same-status, scaffold both ways, reopen, from-terminal,
+  // refund-after-delivered, skip-confirm, backwards refund, same-status mid-fold
+  let _ = hand[7] = 3840;
+  let _ = hand[8] = 3968;
+  let _ = hand[9] = 3848;
+  let _ = hand[10] = 987664;
+  let _ = hand[11] = 3845;
+  let _ = hand[12] = 4199821840;
+  let _ = hand[13] = 3872;
+  let _ = hand[14] = 4011;
+  let _ = hand[15] = 1026576;
+  let _ = matrix(adj, st);
+  let _ = hand_seqs(adj, st, hand);
+  let _ = lcg_seqs(adj, st);
+  let edges = 0;
+  let i = 0;
+  while i < 12 {
+    let edges = edges + pc12(adj[i]);
+    let i = i + 1;
+    0
+  };
+  let acyc = nilpotent(adj, pw);
+  let c = comps(adj, und);
+  let mu = edges - 12 + c;
+  let rho = (1 - acyc) * 1000000;
+  let reach = flood(adj, 0);
+  let rs = pc12(reach);
+  let n = kahn(adj, indeg, ord);
+  let full = if n == 12 then 1 else 0;
+  let tlen = full * 12 + (1 - full) * (0 - 1);
+  let h = mix(st[0], 12);
+  let h = mix(h, edges);
+  let h = mix(h, acyc);
+  let h = mix(h, mu);
+  let h = mix(h, rho);
+  let h = mix(h, reach);
+  let h = mix(h, rs);
+  let h = mix(h, tlen);
+  let i = 0;
+  while i < 12 {
+    let h = mix(h, flood(adj, i));
+    let i = i + 1;
+    0
+  };
+  let k = 0;
+  while k < 12 {
+    let h = h * (1 - full) + mix(h, ord[k]) * full;
+    let k = k + 1;
+    0
+  };
+  let sig = (if edges == 14 then 1 else 0) * acyc * (if mu == 4 then 1 else 0)
+    * (if rho == 0 then 1 else 0) * (if reach == 3839 then 1 else 0)
+    * (if rs == 11 then 1 else 0) * full;
+  let h = mix(h, sig);
+  (h % 1000000000) * 1000000 + st[1] * 1000 + st[2]
+}

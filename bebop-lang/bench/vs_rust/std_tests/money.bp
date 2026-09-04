@@ -1,0 +1,261 @@
+module core { }
+
+// money.bp — T66: exact i64 minor-unit money law, twin of
+// crates/dowiz-core/src/money.rs (kernel/src/money.rs re-exports it).
+// Oracle = PRODUCTION Rust: bench/oracles/rust/src/bin/money.rs calls
+// money.rs on the same case table; bench/oracles/money.py wraps it.
+// Ops (op code): 1 Money::checked_add, 2 checked_sub, 3 checked_neg,
+// 4 compute_line_total(price,[m1,m2],q), 5 apply_tax exclusive,
+// 6 apply_tax inclusive (rate in micro-units, half-up, truncating div),
+// 7 convert_all_to_eur_cents (rate in nano-units), 8 estimate_order_total
+// (fee ladder + tax + min gate, fail-closed Options), 9 assert_non_negative.
+// Every op emits tag then value into h = mix chain: Ok(v) -> 1, v;
+// Err -> 0, reason (1 cross-currency, 2 overflow, 3 non-positive tax
+// denominator, 4 negative total, 5 rate <= 0). Overflow is checked
+// (i64 wrap detected -> reason 2), never silent. Op 8 emits 1 then
+// fee_known, fee, tax_known, tax, total_known, total, min_not_met.
+// Cases: 28 hand-picked edges (i64::MAX/MIN, cross-currency, denom<=0,
+// i64::MIN neg, total overflow -> None) + 48 LCG-generated (seed 4242).
+// Fold = (h % 1e9)*1e6 + oks*1000 + errs.
+// ponytail: i128 zone excluded — table keeps |sub*rate| < 2^63 except
+// where the RESULT also exceeds i64 (both sides Err 2); widen to hi/lo
+// split if a case ever needs the i64<prod<i128, tax fits band.
+
+fn lcg(s: i64) -> i64 { ((s * 1103515245) + 12345) & 2147483647 }
+fn mix(h: i64, x: i64) -> i64 { ((h * 1000003) + x) & 4611686018427387903 }
+fn absv(x: i64) -> i64 { if x < 0 then 0 - x else x }
+
+fn addov(a: i64, b: i64) -> i64 { if (((a ^ (a + b)) & (b ^ (a + b))) < 0) then 1 else 0 }
+fn subov(a: i64, b: i64) -> i64 { if (((a ^ b) & (a ^ (a - b))) < 0) then 1 else 0 }
+fn mulov(a: i64, b: i64) -> i64 {
+  let lo = 0 - 9223372036854775807 - 1;
+  let bz = if b == 0 then 1 else 0;
+  let bm = if b == (0 - 1) then 1 else 0;
+  let bs = if (bz + bm) != 0 then 1 else b;
+  let p = a * b;
+  let q = p / bs;
+  let gen = if q != a then 1 else 0;
+  let ovm = if a == lo then 1 else 0;
+  bm * ovm + (1 - bz) * (1 - bm) * gen
+}
+
+// st: 0 h, 1 oks, 2 errs, 3 tag, 4 val (3/4 = scratch written by every op)
+fn op_add(st: [i64], a: i64, ca: i64, b: i64, cb: i64) -> i64 {
+  let cross = if ca != cb then 1 else 0;
+  let ov = addov(a, b);
+  let _ = st[3] = (1 - cross) * (1 - ov);
+  let _ = st[4] = if cross == 1 then 1 else (if ov == 1 then 2 else a + b);
+  0
+}
+fn op_sub(st: [i64], a: i64, ca: i64, b: i64, cb: i64) -> i64 {
+  let cross = if ca != cb then 1 else 0;
+  let ov = subov(a, b);
+  let _ = st[3] = (1 - cross) * (1 - ov);
+  let _ = st[4] = if cross == 1 then 1 else (if ov == 1 then 2 else a - b);
+  0
+}
+fn op_neg(st: [i64], a: i64) -> i64 {
+  let lo = 0 - 9223372036854775807 - 1;
+  let ov = if a == lo then 1 else 0;
+  let _ = st[3] = 1 - ov;
+  let _ = st[4] = ov * 2 + (1 - ov) * (0 - a);
+  0
+}
+fn op_line(st: [i64], p: i64, m1: i64, m2: i64, q: i64) -> i64 {
+  let o1 = addov(p, m1);
+  let u1 = p + m1;
+  let o2 = addov(u1, m2);
+  let u2 = u1 + m2;
+  let o3 = mulov(u2, q);
+  let ov = if (o1 + o2 + o3) > 0 then 1 else 0;
+  let _ = st[3] = 1 - ov;
+  let _ = st[4] = ov * 2 + (1 - ov) * (u2 * q);
+  0
+}
+fn op_taxx(st: [i64], sub: i64, rm: i64) -> i64 {
+  let zero = if sub == 0 then 1 else (if rm == 0 then 1 else 0);
+  let prod = sub * rm;
+  let ov = if (mulov(sub, rm) + addov(prod, 500000)) > 0 then 1 else 0;
+  let tax = (prod + 500000) / 1000000;
+  let _ = st[3] = zero + (1 - zero) * (1 - ov);
+  let _ = st[4] = (1 - zero) * (ov * 2 + (1 - ov) * tax);
+  0
+}
+fn op_taxi(st: [i64], sub: i64, rm: i64) -> i64 {
+  let zero = if sub == 0 then 1 else (if rm == 0 then 1 else 0);
+  let denom = 1000000 + rm;
+  let bad = if denom <= 0 then 1 else 0;
+  let ds = if bad == 1 then 1 else denom;
+  let net = ((sub * 1000000) + (ds / 2)) / ds;
+  let tax = sub - net;
+  let _ = st[3] = zero + (1 - zero) * (1 - bad);
+  let _ = st[4] = (1 - zero) * (bad * 3 + (1 - bad) * tax);
+  0
+}
+fn op_eur(st: [i64], amt: i64, nano: i64) -> i64 {
+  let bad = if nano <= 0 then 1 else 0;
+  let c1 = amt * nano;
+  let ov = if (mulov(amt, nano) + mulov(c1, 100)) > 0 then 1 else 0;
+  let cents = c1 * 100;
+  let rounded = (cents + 500000000) / 1000000000;
+  let _ = st[3] = (1 - bad) * (1 - ov);
+  let _ = st[4] = bad * 5 + (1 - bad) * (ov * 2 + (1 - ov) * rounded);
+  0
+}
+fn op_nonneg(st: [i64], a: i64) -> i64 {
+  let neg = if a < 0 then 1 else 0;
+  let _ = st[3] = 1 - neg;
+  let _ = st[4] = neg * 4;
+  0
+}
+// flags: 1 pickup, 2 distance tiers, 4 price includes tax, 8 has threshold,
+// 16 has flat fee, 32 has min order. e = 1 when this case is op 8.
+fn op_est(st: [i64], sub: i64, flags: i64, thr: i64, flat: i64, mn: i64, rm: i64, e: i64) -> i64 {
+  let pickup = flags & 1;
+  let tiers = (flags >> 1) & 1;
+  let incl = (flags >> 2) & 1;
+  let hthr = (flags >> 3) & 1;
+  let hflat = (flags >> 4) & 1;
+  let hmin = (flags >> 5) & 1;
+  let free = hthr * (if sub >= thr then 1 else 0);
+  let fk = if pickup == 1 then 1 else (if free == 1 then 1 else (if tiers == 1 then 0 else hflat));
+  let fv = if pickup == 1 then 0 else (if free == 1 then 0 else (if tiers == 1 then 0 else hflat * flat));
+  let _ = op_taxx(st, sub, rm);
+  let tk = (1 - incl) * st[3];
+  let tv = (1 - incl) * st[4];
+  let _ = op_taxi(st, sub, rm);
+  let tk = tk + incl * st[3];
+  let tv = tv + incl * st[4];
+  let tvv = tk * tv;
+  let mnm = hmin * (if sub < mn then 1 else 0);
+  let o1 = addov(sub, fv);
+  let s1 = sub + fv;
+  let o2 = addov(s1, tvv);
+  let tot = s1 + tvv;
+  let totk = fk * tk * (1 - o1) * (1 - o2);
+  let h = mix(st[0], 1);
+  let h = mix(h, fk);
+  let h = mix(h, fk * fv);
+  let h = mix(h, tk);
+  let h = mix(h, tvv);
+  let h = mix(h, totk);
+  let h = mix(h, totk * tot);
+  let h = mix(h, mnm);
+  let _ = st[0] = st[0] * (1 - e) + h * e;
+  let _ = st[1] = st[1] + e;
+  0
+}
+
+// one case: every op is evaluated (pure, division-safe), the op code selects.
+fn case(st: [i64], op: i64, a: i64, b: i64, ca: i64, cb: i64, rm: i64, m1: i64, m2: i64, nano: i64, s6: i64, flat: i64, mn: i64) -> i64 {
+  let q = (s6 % 20) - 2;
+  let flags = s6 >> 8;
+  let thr = absv(b);
+  let _ = op_add(st, a, ca, b, cb);
+  let k = if op == 1 then 1 else 0;
+  let tag = k * st[3];
+  let val = k * st[4];
+  let _ = op_sub(st, a, ca, b, cb);
+  let k = if op == 2 then 1 else 0;
+  let tag = tag + k * st[3];
+  let val = val + k * st[4];
+  let _ = op_neg(st, a);
+  let k = if op == 3 then 1 else 0;
+  let tag = tag + k * st[3];
+  let val = val + k * st[4];
+  let _ = op_line(st, a, m1, m2, q);
+  let k = if op == 4 then 1 else 0;
+  let tag = tag + k * st[3];
+  let val = val + k * st[4];
+  let _ = op_taxx(st, a, rm);
+  let k = if op == 5 then 1 else 0;
+  let tag = tag + k * st[3];
+  let val = val + k * st[4];
+  let _ = op_taxi(st, a, rm);
+  let k = if op == 6 then 1 else 0;
+  let tag = tag + k * st[3];
+  let val = val + k * st[4];
+  let _ = op_eur(st, a, nano);
+  let k = if op == 7 then 1 else 0;
+  let tag = tag + k * st[3];
+  let val = val + k * st[4];
+  let _ = op_nonneg(st, a);
+  let k = if op == 9 then 1 else 0;
+  let tag = tag + k * st[3];
+  let val = val + k * st[4];
+  let e = if op == 8 then 1 else 0;
+  let g = 1 - e;
+  let h = mix(mix(st[0], tag), val);
+  let _ = st[0] = st[0] * e + h * g;
+  let _ = st[1] = st[1] + g * tag;
+  let _ = st[2] = st[2] + g * (1 - tag);
+  let _ = op_est(st, a, flags, thr, flat, mn, rm, e);
+  0
+}
+
+fn main() -> i64 {
+  let st = zeros(8);
+  let lo = 0 - 9223372036854775807 - 1;
+  let hi = 9223372036854775807;
+  // case(st, op, a, b, ca, cb, rm, m1, m2, nano, s6, flat, mn); q = s6%20-2, flags = s6>>8
+  let _ = case(st, 1, hi, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  let _ = case(st, 1, 100, 200, 0, 1, 0, 0, 0, 0, 0, 0, 0);
+  let _ = case(st, 1, hi, 1, 1, 2, 0, 0, 0, 0, 0, 0, 0);
+  let _ = case(st, 1, 1050, 200, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  let _ = case(st, 2, lo, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  let _ = case(st, 2, 1000, 300, 1, 1, 0, 0, 0, 0, 0, 0, 0);
+  let _ = case(st, 2, 1000, 300, 0, 2, 0, 0, 0, 0, 0, 0, 0);
+  let _ = case(st, 3, lo, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  let _ = case(st, 3, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  let _ = case(st, 4, hi, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0);
+  let _ = case(st, 4, hi, 0, 0, 0, 0, 1, 0, 0, 3, 0, 0);
+  let _ = case(st, 4, 100, 0, 0, 0, 0, 10, 20, 0, 5, 0, 0);
+  let _ = case(st, 5, 1000, 0, 0, 0, 200000, 0, 0, 0, 0, 0, 0);
+  let _ = case(st, 5, 1005, 0, 0, 0, 125000, 0, 0, 0, 0, 0, 0);
+  let _ = case(st, 5, 0 - 1000, 0, 0, 0, 200000, 0, 0, 0, 0, 0, 0);
+  let _ = case(st, 5, hi, 0, 0, 0, 2000000, 0, 0, 0, 0, 0, 0);
+  let _ = case(st, 5, 12345, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  let _ = case(st, 6, 1200, 0, 0, 0, 200000, 0, 0, 0, 0, 0, 0);
+  let _ = case(st, 6, 1000, 0, 0, 0, 0 - 1000000, 0, 0, 0, 0, 0, 0);
+  let _ = case(st, 6, 1000, 0, 0, 0, 0 - 1500000, 0, 0, 0, 0, 0, 0);
+  let _ = case(st, 6, 0, 0, 0, 0, 0 - 1500000, 0, 0, 0, 0, 0, 0);
+  let _ = case(st, 7, 100000, 0, 0, 0, 0, 0, 0, 7500000, 0, 0, 0);
+  let _ = case(st, 7, 0 - 100000, 0, 0, 0, 0, 0, 0, 7500000, 0, 0, 0);
+  let _ = case(st, 7, 100000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  let _ = case(st, 9, 0 - 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  let _ = case(st, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  let _ = case(st, 8, hi, 0, 0, 0, 0, 0, 0, 0, 4096, 1, 0);
+  let _ = case(st, 8, 5000, 10000, 0, 0, 200000, 0, 0, 0, 14336, 500, 6000);
+  let s = 4242;
+  let t = 0;
+  while t < 48 {
+    let s = lcg(s);
+    let op = 1 + (s % 8);
+    let s = lcg(s);
+    let a = (s % 2000000001) - 1000000000;
+    let s = lcg(s);
+    let b = (s % 2000000001) - 1000000000;
+    let s = lcg(s);
+    let ca = s % 3;
+    let s = lcg(s);
+    let cb = if (s % 4) == 0 then (ca + 1) % 3 else ca;
+    let s = lcg(s);
+    let rm = s % 500001;
+    let s = lcg(s);
+    let m1 = (s % 2000001) - 1000000;
+    let s = lcg(s);
+    let m2 = (s % 2000001) - 1000000;
+    let s = lcg(s);
+    let nano = 1 + (s % 20000000);
+    let s = lcg(s);
+    let s6 = s;
+    let s = lcg(s);
+    let flat = s % 100001;
+    let s = lcg(s);
+    let mn = s % 1000001;
+    let _ = case(st, op, a, b, ca, cb, rm, m1, m2, nano, s6, flat, mn);
+    let t = t + 1;
+    0
+  };
+  (st[0] % 1000000000) * 1000000 + st[1] * 1000 + st[2]
+}

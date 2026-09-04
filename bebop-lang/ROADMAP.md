@@ -1738,7 +1738,7 @@ CORE-ROADMAP-INDEX.md` pointing here; MEMORY.md session-closing note per
 DONE-CHECK: the row exists; no other dowiz doc claims Bebop backends
 that do not exist. DEPS: T41. BLOCKERS: none.
 
-**T66 · first dowiz twins WITH runnable Rust oracles** — `money.bp`
+**T66 · first dowiz twins WITH runnable Rust oracles** — DONE ✓ 2026-09-04 (gates money 872656672063013 + ordfsm 346243789026198 == cargo-run PRODUCTION dowiz-core money.rs/order_machine.rs byte-exact; forbidden transitions = loud codes 1/2/3) — `money.bp`
 (exact i64 minor-unit law; oracle = `kernel/src/money.rs` via a small
 cargo bin, parity like `eqc_gen.rs`) and `order_machine.bp` (decide/fold
 FSM; oracle = the kernel's golden signature and rho = 0 nilpotent-DAG
