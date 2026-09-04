@@ -54,6 +54,7 @@ for f in "$DIR"/*.bp; do
     c26_selfrec) EXPECT=60943;;
     c27_zeroarg) EXPECT=7;;
     c30_unary) EXPECT=16351;;
+    c31_nested_lit) EXPECT=1222;;
     *) EXPECT="";;
   esac
   if [ "$IVAL" = "$EXPECT" ]; then

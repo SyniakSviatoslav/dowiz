@@ -1689,9 +1689,13 @@ fn emit_str(s: str, pos: [i64], insns: [i64], n: [i64], fntab: [i64]) -> i64 {
   n[0]
 }
 
-// Emit an array literal [e0, e1, ...]: store elements in order at [x14+i*8],
-// then mov x0,x14; add x14,#8n; push the pointer. Immediate-offset stores, so
-// valid for <=511 elements (imm12).
+// Emit an array literal [e0, e1, ...]: evaluate the elements left to right
+// (each stays on the stack), THEN mov x0,x14; add x14,#8n, and pop them into
+// [x0+i*8] from the last down. Immediate-offset stores, so valid for <=511
+// elements (imm12). T42 2026-09-04 (fuzz DIVERGE-2131 shrunk): the old order
+// stored each element at [x14+i*8] BEFORE the bump, so a nested literal or
+// an allocating call inside an element reused the same x14 cells and
+// silently overwrote the outer elements. Same word count, no extra pushes.
 fn emit_array_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let strn = str_len(s);
   let _ = pos[0] = pos[0] + 1;
@@ -1705,8 +1709,6 @@ fn emit_array_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
     let ch = if at_end == 1 then 0 else char(s, pos[0]);
     let is_rb = if ch == 93 then 1 else 0;
     let _ = if is_rb == 0 then emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
-    let _ = if is_rb == 0 then pop(insns, n, 0, fntab) else 0;
-    let _ = if is_rb == 0 then em(insns, n, 4177527232 + cnt * 1024) else 0;
     let cnt = if is_rb == 0 then cnt + 1 else cnt;
     let _ = skip_ws(s, pos);
     let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
@@ -1719,6 +1721,14 @@ fn emit_array_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let _ = pos[0] = pos[0] + 1;
   let _ = em(insns, n, 2853045216);
   let _ = em(insns, n, 2432696320 + cnt * 8192 + 462);
+  // pop x1 ; str x1,[x0,#k*8] (0xF9000001 + k*1024, as+objdump L1)
+  let k = cnt;
+  while k > 0 {
+    let k = k - 1;
+    let _ = pop(insns, n, 1, fntab);
+    let _ = em(insns, n, 4177526785 + k * 1024);
+    0
+  };
   let _ = push(insns, n, fntab);
   n[0]
 }
