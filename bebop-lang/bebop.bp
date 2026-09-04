@@ -1487,6 +1487,39 @@ fn fold_try(insns: [i64], n: [i64], fntab: [i64], op: i64) -> i64 {
   isb + isi
 }
 
+// T96 step 2 (2026-09-04, D2): bring the two operands of a binop/cmp into
+// x0 (left) and x1 (right). When the stream ends with exactly
+//   push(a) ; P ; push(b)        P = one word that loads x0 from a register
+//                                (mov x0,xR), a spill slot (ldr x0,[x15,#k])
+//                                or a 16-bit literal (movz x0,#imm)
+// and no label/barrier sits inside (fntab[3660] < n-4), the three chunks are
+// retracted and P is re-emitted with rd = x1: x0 still holds a, x1 gets b,
+// zero memory traffic. Otherwise the canonical pops (which may still elide
+// the last push, step 1).
+fn pop2(insns: [i64], n: [i64], fntab: [i64]) -> i64 {
+  let cur = n[0];
+  let ok5 = if cur >= 5 then 1 else 0;
+  let b0 = if ok5 == 1 then cur - 5 else 0;
+  let w = insns[b0 + 2];
+  let is_movr = if (w & 4292935679) == 2852127712 then 1 else 0;
+  let is_ldr15 = if (w & 4290774015) == 4181721568 then 1 else 0;
+  let is_movz = if (w & 4292870175) == 3531603968 then 1 else 0;
+  let is_p = is_movr + is_ldr15 + is_movz;
+  let pa = (if insns[b0] == 3506455551 then 1 else 0) * (if insns[b0 + 1] == 4177527776 then 1 else 0);
+  let pb = (if insns[b0 + 3] == 3506455551 then 1 else 0) * (if insns[b0 + 4] == 4177527776 then 1 else 0);
+  let nolab = if fntab[3660] < b0 + 1 then 1 else 0;
+  let hit = ok5 * pa * pb * is_p * nolab;
+  let d = fntab[3700];
+  let dm2 = if d > 1 then d - 2 else 0;
+  let _ = if hit == 1 then (let _ = fntab[3700] = dm2 in 0) else 0;
+  let _ = if hit == 1 then (let _ = fold_clear(fntab) in 0) else 0;
+  let _ = if hit == 1 then (let _ = n[0] = b0 in 0) else 0;
+  let _ = if hit == 1 then (let _ = em(insns, n, w + 1) in 0) else 0;
+  let _ = if hit == 0 then (let _ = pop(insns, n, 1, fntab) in 0) else 0;
+  let _ = if hit == 0 then (let _ = pop(insns, n, 0, fntab) in 0) else 0;
+  n[0]
+}
+
 // Emit a binary op (2=add 3=sub 4=mul 5=div): pop b->x1, pop a->x0, op, push.
 // R6.2 v4: const-const add/sub/mul fold via fold_try (stream decode);
 // the legacy body lives in emit_binop_plain, dispatched at ONE level.
@@ -1498,8 +1531,7 @@ fn emit_binop(insns: [i64], n: [i64], op: i64, fntab: [i64]) -> i64 {
 
 // The legacy stack-machine binary op (see emit_binop).
 fn emit_binop_plain(insns: [i64], n: [i64], op: i64, fntab: [i64]) -> i64 {
-  let _ = pop(insns, n, 1, fntab);
-  let _ = pop(insns, n, 0, fntab);
+  let _ = pop2(insns, n, fntab);
   let wadd = if op == 2 then 2332098560 else 0;
   let wsub = if op == 3 then 3405840384 else 0;
   let wmul = if op == 4 then 2600565760 else 0;
@@ -1632,8 +1664,7 @@ fn emit_apply_mod(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
 // Emit a comparison (cond: eq=1 ne=0 lt=10 gt=13 le=12 ge=11): pop b->x1,
 // pop a->x0, cmp x0,x1, cset x0,<cond>, push.
 fn emit_cmp_op(insns: [i64], n: [i64], cond: i64, fntab: [i64]) -> i64 {
-  let _ = pop(insns, n, 1, fntab);
-  let _ = pop(insns, n, 0, fntab);
+  let _ = pop2(insns, n, fntab);
   let _ = em(insns, n, 3942711327);
   let _ = em(insns, n, 2594113504 + cond * 4096);
   let _ = push(insns, n, fntab);
@@ -2288,7 +2319,16 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   // body underflows the stack once per iteration. blastl = lastf = 1 in
   // exactly that case.
   let legbl = if blastl == 1 then grewl_raw else 0;
-  let _ = if legbl == 1 then pop(insns, n, 0, fntab) else 0;
+  // T96 step 2b: a body that ends in a bare 16-bit literal (`0`) leaves
+  // [movz x0,#imm ; sub sp ; str x0] whose value is discarded -> retract
+  // all three words (no label may sit inside: fntab[3660] < n-2).
+  let curw = n[0];
+  let w3 = if curw >= 3 then insns[curw - 3] else 0;
+  let dead = legbl * (if curw >= 3 then 1 else 0) * (if (w3 & 4292870175) == 3531603968 then 1 else 0) * (if insns[curw - 2] == 3506455551 then 1 else 0) * (if insns[curw - 1] == 4177527776 then 1 else 0) * (if fntab[3660] < curw - 2 then 1 else 0);
+  let _ = if dead == 1 then (let _ = n[0] = curw - 3 in 0) else 0;
+  let _ = if dead == 1 then (let _ = fntab[3700] = (if fntab[3700] > 0 then fntab[3700] - 1 else 0) in 0) else 0;
+  let _ = if dead == 1 then (let _ = fold_clear(fntab) in 0) else 0;
+  let _ = if legbl * (1 - dead) == 1 then pop(insns, n, 0, fntab) else 0;
   let _ = em(insns, n, 402653184 + loop_start - n[0]);
   let endl = n[0];
   let _ = fntab[3660] = endl;
