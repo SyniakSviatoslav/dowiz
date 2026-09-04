@@ -1640,7 +1640,7 @@ DONE-CHECK: SESSION-HANDOFF "R3.x defects" block deleted; construct
 parity gains c25-c31 covering each fixed shape; fixpoint byte-exact.
 DEPS: T39 (fuzzer proves closure). BLOCKERS: none.
 
-**T43 · lift L8 and the nesting bans structurally**
+**T43 · lift L8 and the nesting bans structurally** — PARTIAL 2026-09-04: L8 lifted for `while` bodies (x14 frame-heap mark before loop_start / restore at the back-edge and exit when the body allocates on x14 AND a conservative text scan proves no `let` at paren-depth 0 binds an OUTER symbol to a bare right-hand side and no `let _ = a[i] = v` stores a bare `v`; unsafe bodies keep leaking, never a wrong value; slot [sp,#80+8*depth], depth <= 20; gates c33_loopalloc (100000 iterations x 2 array literals, was SIGSEGV) + c34_loopescape (negative: outer rebind to a bare literal keeps the memory); nested `if` inside `let` and assignment inside `let _ =` verified correct by shape matrix s1-s6 == bpref, no compiler change needed; open: struct literals (`struct_kill`) + field access with the context flag, and the L8 text in Design laws stays until struct literals land)
 GOAL: per-iteration frame-heap mark/reset around `while` bodies
 (genarena semantics inside the 16KiB frame: record x14 at loop entry,
 restore at back-edge unless the body's value escapes — escape = the

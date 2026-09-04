@@ -2296,6 +2296,143 @@ fn emit_epilogue(insns: [i64], n: [i64]) -> i64 {
   n[0]
 }
 
+// ---- T43 (2026-09-04): per-iteration frame-heap reset around `while` bodies.
+// A body that allocates on x14 (array literal / enum ctor: the stream contains
+// `mov x0,x14` = 2853045216) leaked 16 bytes+ per iteration and overflowed the
+// 15 KiB frame heap (L8 "no allocations inside while bodies"). Now the loop
+// saves x14 once before loop_start and restores it at the back-edge and at
+// the exit, PROVIDED the body cannot leak an allocated pointer: a
+// conservative TEXT scan of the body says no `let` at paren-depth 0 binds an
+// OUTER symbol (bound before the loop) to a BARE right-hand side (no
+// arithmetic/comparison operator = possibly a pointer), and no `let _ = a[i] =
+// v` stores a bare `v`. Anything else (rebinding outer scalars with arithmetic,
+// new names, nested loops) is fine. Unsafe bodies keep today's behaviour
+// (leak, never a wrong value). Slot = [sp, #80 + 8*depth], depth <= 20
+// (frame words 80..256 are free below the x15 spill base).
+fn sym_is_outer(s: str, stab: [i64], name: i64, srcpos: i64, cnt0: i64) -> i64 {
+  let i = 0;
+  let hit = 0;
+  while i < cnt0 {
+    let nm = stab[1 + 3 * i];
+    let sp = stab[3 + 3 * i];
+    let h = if nm == name then ident_eq(s, sp, srcpos) else 0;
+    let hit = hit + h;
+    let i = i + 1;
+    0
+  };
+  if hit > 0 then 1 else 0
+}
+
+// 1 when [a,b) holds no operator character (+ - * / % & | ^ < > !) at
+// paren/bracket depth 0: `s + v[1]` is a scalar, `[i, i * i]` and `f(a + b)`
+// are bare values (an array literal / call may yield a pointer).
+fn rhs_is_bare(s: str, a: i64, b: i64) -> i64 {
+  let i = a;
+  let ops = 0;
+  let dp = 0;
+  while i < b {
+    let c = char(s, i);
+    let o = (c == 43) + (c == 45) + (c == 42) + (c == 47) + (c == 37) + (c == 38) + (c == 124) + (c == 94) + (c == 60) + (c == 62) + (c == 33);
+    let ops = ops + o * (if dp == 0 then 1 else 0);
+    let dp = dp + (c == 40) + (c == 91) - (c == 41) - (c == 93);
+    let i = i + 1;
+    0
+  };
+  if ops == 0 then 1 else 0
+}
+
+// End of a right-hand side starting at r0: the first `;`, `}` or ` in ` at
+// local paren/bracket depth 0 (never past b1).
+fn rhs_end(s: str, r0: i64, b1: i64) -> i64 {
+  let k = r0;
+  let ld = 0;
+  let done = 0;
+  while done == 0 {
+    let at_end = if k >= b1 then 1 else 0;
+    let c = if at_end == 1 then 59 else char(s, k);
+    let c1 = if k + 1 >= b1 then 0 else char(s, k + 1);
+    let c2 = if k + 2 >= b1 then 0 else char(s, k + 2);
+    let c3 = if k + 3 >= b1 then 0 else char(s, k + 3);
+    let is_in = (c == 32) * (c1 == 105) * (c2 == 110) * (c3 == 32);
+    let stop = (if ld == 0 then 1 else 0) * ((c == 59) + (c == 125) + is_in) + at_end;
+    let ld = ld + (c == 40) + (c == 91) - (c == 41) - (c == 93);
+    let k = k + (1 - (if stop >= 1 then 1 else 0));
+    let done = if stop >= 1 then 1 else 0;
+    0
+  };
+  k
+}
+
+fn loop_alloc_safe(s: str, b0: i64, b1: i64, stab: [i64], cnt0: i64) -> i64 {
+  let p = zeros(1);
+  let i = b0;
+  let pd = 0;
+  let bad = 0;
+  while i < b1 {
+    let c = char(s, i);
+    let c1 = if i + 1 >= b1 then 0 else char(s, i + 1);
+    let c2 = if i + 2 >= b1 then 0 else char(s, i + 2);
+    let c3 = if i + 3 >= b1 then 0 else char(s, i + 3);
+    let is_cm = (c == 47) * (c1 == 47);
+    let is_q = if c == 34 then 1 else 0;
+    let _ = p[0] = i;
+    let _ = if is_cm == 1 then skip_line_comment(s, p) else 0;
+    let _ = if is_q == 1 then skip_string(s, p) else 0;
+    let skipped = is_cm + is_q;
+    let prev = if i > b0 then char(s, i - 1) else 32;
+    let prev_id = is_alpha(prev) + is_digit(prev) + (if prev == 95 then 1 else 0);
+    let is_let = (1 - skipped) * (if pd == 0 then 1 else 0) * (c == 108) * (c1 == 101) * (c2 == 116) * (c3 == 32) * (1 - prev_id);
+    let _ = if is_let == 1 then (let _ = p[0] = i + 4 in skip_ws(s, p)) else 0;
+    let npos = p[0];
+    let nch = if is_let == 1 then char(s, npos) else 0;
+    let is_us = (if nch == 95 then 1 else 0) * (if is_alpha(char(s, npos + 1)) + is_digit(char(s, npos + 1)) == 0 then 1 else 0);
+    let name = if is_let * (1 - is_us) == 1 then read_ident(s, p) else 0;
+    let _ = if is_let == 1 then (let _ = if is_us == 1 then (let _ = p[0] = npos + 1 in 0) else 0 in skip_ws(s, p)) else 0;
+    // p[0] is at `=` now (for a let); RHS starts after it
+    let r0 = p[0] + 1;
+    let r1 = if is_let == 1 then rhs_end(s, r0, b1) else r0;
+    // `let _ = IDENT[...] = v`: find the store `=` (a `]` followed by ws and a single `=`)
+    let st = if is_let * is_us == 1 then store_eq_pos(s, r0, r1) else 0 - 1;
+    let v0 = if st >= 0 then st + 1 else r0;
+    let bare = if is_let == 1 then rhs_is_bare(s, v0, r1) else 0;
+    let outer = if is_let * (1 - is_us) == 1 then sym_is_outer(s, stab, name, npos, cnt0) else 0;
+    let bad = bad + is_let * bare * (outer + (if st >= 0 then 1 else 0));
+    let pd = pd + (1 - skipped) * ((c == 40) + (c == 91) - (c == 41) - (c == 93));
+    let i = if skipped == 1 then p[0] else (if is_let == 1 then r1 else i + 1);
+    0
+  };
+  if bad > 0 then 0 else 1
+}
+
+// Position of the store `=` in `a[i] = v` between r0 and r1 (a `]` then ws then
+// `=` not followed by `=`), or -1.
+fn store_eq_pos(s: str, r0: i64, r1: i64) -> i64 {
+  let k = r0;
+  let found = 0 - 1;
+  while k < r1 {
+    let c = char(s, k);
+    let is_rb = if c == 93 then 1 else 0;
+    let j = k + 1;
+    let j = if is_rb * (if j < r1 then 1 else 0) * (if char(s, j) == 32 then 1 else 0) == 1 then j + 1 else j;
+    let hit = is_rb * (if j < r1 then 1 else 0) * (if char(s, j) == 61 then 1 else 0) * (if j + 1 < r1 then (if char(s, j + 1) == 61 then 0 else 1) else 1);
+    let found = if hit * (if found < 0 then 1 else 0) == 1 then j else found;
+    let k = k + 1;
+    0
+  };
+  found
+}
+
+fn count_word(insns: [i64], a: i64, b: i64, w: i64) -> i64 {
+  let i = a;
+  let c = 0;
+  while i < b {
+    let c = c + (if insns[i] == w then 1 else 0);
+    let i = i + 1;
+    0
+  };
+  c
+}
+
 // Emit one 'while cond { body };' statement: a real backward loop (no result).
 // cond is re-evaluated each iteration (its code sits at loop_start); body's
 // final expression is discarded. Mutable `let` (sym_bind reuse) makes loop
@@ -2304,6 +2441,14 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = pos[0] = pos[0] + 5;
   let _ = skip_ws(s, pos);
   let pcond = pos[0];
+  let cnt0 = stab[0];
+  let ldepth = fntab[3661];
+  let _ = fntab[3661] = ldepth + 1;
+  let slot_ok = if ldepth <= 20 then 1 else 0;
+  // T43 mark placeholder: a nop that becomes str x14,[sp,#80+8*depth]
+  // (0xF90003EE + imm12<<10, as+objdump) once the body proves reset-safe.
+  let pmark = n[0];
+  let _ = em(insns, n, 3573751839);
   let loop_start = n[0];
   let _ = fntab[3660] = loop_start;
   // legacy stack-machine loop: emit the condition, materialize it, branch
@@ -2318,7 +2463,9 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let nb_body = n[0];
+  let b0 = pos[0];
   let bresl = emit_body(s, pos, insns, n, stab, selfname, selfstart, fntab, cx, st);
+  let b1 = pos[0];
   let blastl = bresl - (bresl / 2) * 2;
   let grewl_raw = if n[0] > nb_body then 1 else 0;
   // while-boundary fix (journal 1788288252): pop the body's leftover value
@@ -2337,9 +2484,19 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = if dead == 1 then (let _ = fntab[3700] = (if fntab[3700] > 0 then fntab[3700] - 1 else 0) in 0) else 0;
   let _ = if dead == 1 then (let _ = fold_clear(fntab) in 0) else 0;
   let _ = if legbl * (1 - dead) == 1 then pop(insns, n, 0, fntab) else 0;
+  // T43 reset: only when the body allocated on x14 and the text scan proves
+  // no allocated pointer can leave the iteration.
+  let allocs = count_word(insns, nb_body, n[0], 2853045216);
+  let safe = if allocs > 0 then loop_alloc_safe(s, b0, b1, stab, cnt0) else 0;
+  let do_reset = slot_ok * (if allocs > 0 then 1 else 0) * safe;
+  let ldrw = 4181722094 + (10 + ldepth) * 1024;
+  let _ = if do_reset == 1 then (let _ = em(insns, n, ldrw) in 0) else 0;
   let _ = em(insns, n, 402653184 + loop_start - n[0]);
   let endl = n[0];
   let _ = fntab[3660] = endl;
+  let _ = if do_reset == 1 then (let _ = em(insns, n, ldrw) in 0) else 0;
+  let _ = if do_reset == 1 then (let _ = insns[pmark] = 4177527790 + (10 + ldepth) * 1024 in 0) else 0;
+  let _ = fntab[3661] = ldepth;
   let _ = insns[p1] = 1409286144 + (endl - p1) * 32;
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
@@ -2858,6 +3015,7 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   // fntab offsets disagree with the emitted layout (ordfsm: every bl 3
   // words late, SIGBUS). -1 never equals a position.
   let _ = fntab[3660] = 0 - 1;
+  let _ = fntab[3661] = 0;  // T43: while nesting depth (frame-heap mark slot)
   let pos = [fpos];
   let stab = zeros(385);  // 1 + 3*128 (name,reg,srcpos) verified triples; overflow -> loud trap
   let _ = skip_ws(s, pos);

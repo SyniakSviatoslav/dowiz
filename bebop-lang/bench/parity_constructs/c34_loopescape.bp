@@ -1,0 +1,14 @@
+// T43 negative-safety twin of c33: the loop REBINDS an outer name to a bare
+// array literal (a pointer escapes the iteration), so the scan must refuse the
+// reset; the allocation after the loop must not overwrite k. Expect 4 + 70 = 74.
+fn main() -> i64 {
+  let k = [0, 0];
+  let i = 0;
+  while i < 3 {
+    let k = [i, i * i];
+    let i = i + 1;
+    0
+  };
+  let z = [7, 8];
+  k[1] + z[0] * 10
+}

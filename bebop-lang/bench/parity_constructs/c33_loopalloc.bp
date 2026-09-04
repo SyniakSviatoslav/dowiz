@@ -1,0 +1,16 @@
+// T43 (2026-09-04): allocations inside a while body no longer leak the frame
+// heap — x14 is marked before the loop and restored at the back-edge/exit
+// when the body cannot leak a pointer. 100000 iterations x two array
+// literals (48 bytes) used to overflow the 15 KiB frame heap (SIGSEGV).
+fn main() -> i64 {
+  let s = 0;
+  let i = 0;
+  while i < 100000 {
+    let v = [i, i * 2, i * 3];
+    let w = [v[2], 1, 2];
+    let s = s + v[1] + w[0];
+    let i = i + 1;
+    0
+  };
+  s
+}
