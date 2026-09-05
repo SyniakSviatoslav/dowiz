@@ -84,6 +84,7 @@ Honest twins (bench/vs_rust/honest.sh, D11-C): see bench/vs_rust/REPORT-honest.m
 |---|---|---|---|
 | nearest, full scan | 183 ms (python) / ~158 ms native | 18.4 ms | 8.6-9.9x |
 | nearest, 3x3 cell index | 55 us (C API incl. ~19 us ctypes) / ~35 us native | 4.0 us | ~9x native |
+| nn4 bucketed scan, 1 A78 vs 3 A78 pinned (bench/tq_sqlite/nn4.sh, T106) | seq 219 ms | par 99 ms | 2.21x on 3 cores |
 
 | substrate (bench/substrate_spike/run.sh, T55 spike) | ms | vs linear |
 |---|---|---|

@@ -12,3 +12,5 @@
 | bebop indexed nnidx.bp: cell -> CSR bucket -> 3x3 window (Q=1000) | 4.0 us | 1.0x |
 
 - pass rule (docs/SPEEDUP-ANALYSIS.md 4.3): indexed <= 10 us AND >= 3x sqlite C-API: PASS; scan >= 10x sqlite scan: FAIL (9.9x)
+
+| nn4.bp bucketed scan, 1 A78 vs 3 A78 (sys_setaffinity, R=5) | seq 219 ms / par 99 ms | 2.21x | folds equal: 1 |

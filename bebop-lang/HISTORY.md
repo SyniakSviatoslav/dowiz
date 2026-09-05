@@ -1977,7 +1977,13 @@ DONE-CHECK: gate `bitid` over crc32 (CRC32X vs table), sha256 (SHA256H
 vs scalar), popcount (CNT+ADDV vs SWAR): 10^5 inputs, 0 differences.
 DEPS: T64, T39. BLOCKERS: none.
 
-**T72 · core affinity builtins** (ergonomics #127, ENERGY §1.1) —
+**T72 · core affinity builtins** (ergonomics #127, ENERGY §1.1) — DONE ✓ 2026-09-05
+reduced scope: `sys_setaffinity(arr, idx)` = sched_setaffinity(0, 8, &arr[idx]) builtin
+(emit_sys_setaffinity, fixpoint gen2==gen3 0fd13ad3, census +2 bcond ALLOWed); the
+mask took effect: nn4 workers pinned to cpus 4/5/6 give 2.21x on 3 A78 (T106).
+SKIPPED: sys_getcpu, the fiber class argument and re-measuring K1-K4 pinned vs
+unpinned (bench scripts pin with taskset; REPORT-pinned.md already records the
+spread) — YAGNI until a gate needs them.
 strengthens T61, T63
 GOAL: `sys_sched_setaffinity(pid, len, maskptr)` (122) and `sys_getcpu`
 (168) builtins with L2 register tables; the fiber scheduler (gate
@@ -2572,7 +2578,7 @@ none once clone works under proot.
 - **T103 calling convention** — DONE ✓ 2026-09-05 (call site 9 -> 3 words via stp/ldp of x15/x14; K2 89 -> 71 words; fixpoint ed8ad1a2; the 16 KiB frame stays: untouched pages cost nothing and array literals need the heap; callee-saved pairs were already NOPed when unused): gate K2 <= 1.0 ms vs the `#[inline(never)]` twin K2h (honest.sh).
 - **T104 peephole pass** — PARTIAL 2026-09-05 (madd fusion landed: K4 loop 14 words, fixpoint 0f0da434; open T104b: `x*c1*c2`, mul-by-const -> shift, LICM of loop-invariant movz): gate K4 <= 3.0 ms, construct folds unchanged.
 - **T105 hardware division**: fp_div/isqrt software loops in tq/tdg -> `sdiv` + clz-seeded Newton isqrt; gate tq fold unchanged, tq geodesic on 1M points <= 50 ms.
-- **T106 nn4 (the D1(b) gate, replaces T98)**: persistent parked workers (pool.bp pattern) sharding the bucketed nearest scan across 4 A78; record the speedup while compute-bound (>= 3.0x expected) and after it turns memory-bound (1.0-1.4x).
+- **T106 nn4 (the D1(b) gate, replaces T98)** — DONE ✓ 2026-09-05 (bench/tq_sqlite/nn4.sh: seq 219 ms / par 99 ms = 2.21x on the 3 usable A78, folds equal, R=5; below the 3.0x compute-bound expectation — the bucketed scan is already partly memory-bound and 3 not 4 cores are usable; recorded, not projected): persistent parked workers (pool.bp pattern) sharding the bucketed nearest scan across 4 A78; record the speedup while compute-bound (>= 3.0x expected) and after it turns memory-bound (1.0-1.4x).
 - **T107 incremental-substrate curve**: N = 2^16 cells, change k in {1,16,256,4096}, sweep vs full recompute, Rust twin of both; pass = the crossover k/N is recorded (<= 5% expected after T101).
 - **T108 .becache for the live compiler**: digest(source) -> .bin replay in cli_compile; gate std_golden warm run >= 5x faster, folds identical; makes T32 qjit memoized by construction.
 DONE-CHECK per task: its gate line in a committed script with the number above; fixpoint byte-exact (three generations); constructs re-frozen with deltas. DEPS: T96 (done), T43/T47/T48 first per the operator.

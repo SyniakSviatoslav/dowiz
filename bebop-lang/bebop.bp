@@ -1086,6 +1086,30 @@ fn emit_sys_exit_thread_guard(s: str, pos: [i64], insns: [i64], n: [i64], stab: 
   n[0]
 }
 
+// sys_setaffinity(arr, idx): sched_setaffinity(0, 8, &arr[idx]) -- pin the calling
+// thread to the CPU mask in arr[idx] (T72, 2026-09-05). Register table: x0=arr
+// (arg0), x1=idx (arg1); add x0,x0,x1,lsl #3; mov x2,x0; mov x0,xzr (pid 0 =
+// self); mov x1,#8 (cpusetsize); mov x8,#122; svc. Returns the syscall result.
+fn emit_sys_setaffinity(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 0, fntab);
+  let _ = em(insns, n, 2332101632);
+  let _ = em(insns, n, 2852127714);
+  let _ = em(insns, n, 2854159328);
+  let _ = em(insns, n, 3531604225);
+  let _ = em(insns, n, 3531607880);
+  let _ = em(insns, n, 3556769793);
+  let _ = push(insns, n, fntab);
+  n[0]
+}
+
 // sys_readbuf(fd,len): raw read into the IO scratch zone, returns its
 // address — the standard handoff for feeding source text to emit_words.
 fn emit_sys_readbuf(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
@@ -1205,6 +1229,7 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   let is_fwk = if name == 8779068393901189725 then 1 else 0;
   let is_ext = if name == 1084841420853388659 then 1 else 0;
   let is_ata = if name == 7221016679989100487 then 1 else 0;
+  let is_aff = if name == 7304771531850188344 then 1 else 0;
   let is_fwg = if name == 15293169932641766580 then 1 else 0;
   let is_cs = if name == 16710314075682296179 then 1 else 0;
   if is_hh == 1 then emit_hvham(s, pos, insns, n, stab, selfname, selfstart, fntab)
@@ -1222,6 +1247,7 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   else if is_fwk == 1 then emit_sys_futex_wake(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_ext == 1 then emit_sys_exit_thread_guard(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_ata == 1 then emit_sys_atomic_add(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_aff == 1 then emit_sys_setaffinity(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_sp == 1 then emit_sys_slurp(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_sln == 1 then emit_str_len_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_chf == 1 then emit_char_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)

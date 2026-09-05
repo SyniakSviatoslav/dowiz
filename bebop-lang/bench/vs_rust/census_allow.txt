@@ -25,3 +25,4 @@ bebop bcond 1373 T101 left-operand slide (hazard scan loops)
 bebop bcond 1377 T101 left-operand slide
 bebop bcond 1387 T102 condition fusion
 bebop bcond 1401 T104 madd fusion
+bebop bcond 1403 T72 sys_setaffinity emitter (is_aff dispatch)

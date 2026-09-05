@@ -37,7 +37,7 @@ class ReturnSignal(Exception):
     def __init__(self, v): self.v = v
 class BreakSignal(Exception):
     pass
-RESERVED = set(['sys_setaffinity', 'let', 'while', 'if', 'then', 'else', 'in', 'fn', 'enum', 'struct', 'module', 'match', 'return', 'break', 'zeros', 'char', 'str_len', 'clock_ms', 'hvham', 'hvham2', 'some', 'none', 'many', 'sys_open', 'sys_read', 'sys_write', 'sys_close', 'sys_readbuf', 'sys_slurp', 'sys_mmap', 'sys_munmap', 'sys_ftruncate', 'sys_rename', 'sys_export', 'sys_exit', 'sys_arena_base', 'sys_arena_end', 'sys_clone', 'sys_cond_set', 'sys_futex_wait_guard', 'sys_futex_wake', 'sys_atomic_add', 'sys_exit_thread_guard'])
+RESERVED = set(['clz', 'sys_setaffinity', 'let', 'while', 'if', 'then', 'else', 'in', 'fn', 'enum', 'struct', 'module', 'match', 'return', 'break', 'zeros', 'char', 'str_len', 'clock_ms', 'hvham', 'hvham2', 'some', 'none', 'many', 'sys_open', 'sys_read', 'sys_write', 'sys_close', 'sys_readbuf', 'sys_slurp', 'sys_mmap', 'sys_munmap', 'sys_ftruncate', 'sys_rename', 'sys_export', 'sys_exit', 'sys_arena_base', 'sys_arena_end', 'sys_clone', 'sys_cond_set', 'sys_futex_wait_guard', 'sys_futex_wake', 'sys_atomic_add', 'sys_exit_thread_guard'])
 class DepthError(Exception):
     pass
 
@@ -486,6 +486,8 @@ class Interp:
             data = bytes(x & 255 for x in buf[:n]) if isinstance(buf, list) else buf[:n]
             (sys.stdout.buffer if fd == 1 else sys.stderr.buffer).write(data)
             return n
+        if name == 'clz':
+            return 64 - (args[0] & 0xFFFFFFFFFFFFFFFF).bit_length()
         if name == 'clock_ms' or name.startswith('sys_'):
             return 0  # ponytail: stubs; real fs/mmap syscalls are out of the fuzzed surface
         raise NameError('unknown fn %s' % name)
