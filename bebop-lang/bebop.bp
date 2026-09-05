@@ -831,7 +831,7 @@ fn emit_sys_open(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   em(insns, n, 2457865312);
   em(insns, n, 2852783073);
   em(insns, n, 2852914146);
-  em(insns, n, 3531603971);
+  em(insns, n, 3531617411);  // mov x3, #0o644 = openat mode (was #0: files got mode 000, proot chmod races -> EACCES rc=90, journal 1788641800)
   em(insns, n, 3531605768);
   em(insns, n, 3556769793);
   let _ = push(insns, n, fntab);
