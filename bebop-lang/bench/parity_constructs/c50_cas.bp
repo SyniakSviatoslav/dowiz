@@ -1,0 +1,4 @@
+use "cas://sha256:632cc10e760076356e446c2f667b9634c7758c7f2e845f7b230c728b34f4e117"
+// T80 2026-09-06: a content-addressed module: .bcas/<sha256>.bp, verified by digest at
+// compile time (the same inner.bp as c47; inner(10) = 71, inner(5) = 36).
+fn main() -> i64 { inner(10) * 100 + inner(5) }

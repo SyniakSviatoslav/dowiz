@@ -37,3 +37,5 @@ bebop bcond 1471 T47b nested use (use_scan recursion + use_comment)
 bebop cbz 158 T47b nested use (use_scan recursion + use_comment)
 bebop bcond 1477 T130 unresolved-call trap + T118b entry stub
 bebop cbz 160 T130 unresolved-call trap + T118b entry stub
+bebop bcond 1544 T80 cas:// imports (cas_prefix/cas_path/cas_verify in use_scan, cli_cas verb, sha256 prelude compiled into the compiler)
+bebop cbz 177 T80 cas:// imports (cas_prefix/cas_path/cas_verify in use_scan, cli_cas verb, sha256 prelude compiled into the compiler)

@@ -1,0 +1,3 @@
+use "cas://sha256:543df89fec85b1c280e5be7bc6a33e31203503cd6edb3084312de4db5a9b436c"
+// T80 2026-09-06: the digest names a different content -> exit 88 at compile time.
+fn main() -> i64 { inner(1) }

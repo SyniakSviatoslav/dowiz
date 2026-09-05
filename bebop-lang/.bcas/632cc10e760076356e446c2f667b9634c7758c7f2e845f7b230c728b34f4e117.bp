@@ -1,0 +1,2 @@
+// T47b 2026-09-06: the inner module of the nested-use construct (used by mods/outer.bp).
+fn inner(a: i64) -> i64 { a * 7 + 1 }

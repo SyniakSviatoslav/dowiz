@@ -12,7 +12,8 @@ discarded (T48 will check them).
 ## Program
 
 ```
-program := (enum | struct | fn | module)*        -- top level, any order
+program := (use | enum | struct | fn | module)*  -- top level, any order
+use     := 'use' '"' PATH '"'                     -- line-initial; textual inclusion (T47)
 fn      := 'fn' NAME '(' (NAME ':' TYPE (',' NAME ':' TYPE)*)? ')' '->' TYPE '{' body '}'
 enum    := 'enum' NAME '{' CTOR ('(' TYPE ')')? (',' CTOR ('(' TYPE ')')?)* '}'
 struct  := 'struct' NAME '{' NAME ':' TYPE (',' NAME ':' TYPE)* '}'   -- literals disabled (T43 rest)
@@ -25,6 +26,13 @@ The program's result is `main`'s value, printed by the seed as a decimal line.
 A function body is a sequence of statements followed by ONE tail expression (a body
 without a tail expression is a compile-time error, exit 97). Functions may have up to
 14 parameters (args in x0..x13). Recursion is ordinary; there is no inlining.
+
+`use "path"` (T47, nested since T47b) includes the file once, dependencies first, with
+the same content-hash dedup for every path; the compiler writes the expanded program to
+`<out>.use`. `use "cas://sha256:<64 hex>"` (T80) resolves to `.bcas/<hex>.bp` and the
+file's SHA-256 must equal the name, else the compile exits 88 — a module is named by
+what it is. `bebop.bin cas add <file>` stores a file under its digest and prints the
+address line to paste into a `use`.
 
 ## Statements (inside `{ ... }`, separated by `;`)
 
@@ -95,6 +103,12 @@ match CTOR(payload) { CTOR => expr, CTOR(x) => expr, ... }   -- COMPILE-TIME: th
   is freed, and an allocation survives the return of the fn that made it (T126, 2026-09-05:
   fns with >= 9 symbols used to save/restore x27/x28 and silently roll their allocations
   back — construct c43_arena_persist guards this). Crossing the end exits 80.
+- Frame heap: array literals and enum constructors live in a 16 KiB per-call frame (x14);
+  overflowing it exits 81. A `while` body's frame allocations are released at the back-edge
+  and at loop exit (T43), so an array literal bound INSIDE a loop body is per-iteration:
+  reading it after the loop is a use-after-release (the next literal overwrites it) — bind
+  such arrays before the loop. The reset is skipped (the body leaks instead) when a `let`
+  in the body rebinds an outer name to a bare literal or stores one (construct c34).
 - Frame heap: 16 KiB per function activation (x14). Array literals and enum
   constructors live there and die at return. `while` bodies that allocate are reset
   per iteration when the compiler can prove no pointer escapes (T43); otherwise they
@@ -111,4 +125,4 @@ See docs/TRAPS.md.
 
 Strings as values, string concatenation (`++` is rejected, exit 96), struct literals
 (disabled), closures, generics, floats (Q32 fixed point lives in selfhost/prelude/fp.bp),
-modules with contents, imports (T47 `use`), bounds checks, garbage collection.
+modules with contents (only `use` inclusion), bounds checks, garbage collection.

@@ -1,3 +1,4 @@
+use "selfhost/prelude/sha256.bp"
 // selfhost/expr_compile.bp - real expression + function compiler (self-host).
 //
 // Two stages toward a self-hosting compiler:
@@ -4286,6 +4287,72 @@ fn use_comment(buf: [i64], base: i64, txt: str) -> i64 {
   };
   0
 }
+// T80 (2026-09-06): content-addressed imports. `use "cas://sha256:<64 hex>"` resolves to
+// `.bcas/<hex>.bp`; after the slurp the file's SHA-256 must equal the hex or the compile
+// exits 88 -- a module is named by what it IS. cas_prefix: does the path start with
+// "cas://sha256:" (13 chars) and carry 64 hex digits? cas_path: build the real path.
+// cas_verify: sha256_words over the bytes, compare against the hex, exit 88 on mismatch.
+fn cas_prefix(p: [i64], pl: i64) -> i64 {
+  let pre = [99, 97, 115, 58, 47, 47, 115, 104, 97, 50, 53, 54, 58];
+  let ok = if pl == 77 then 1 else 0;
+  let i = 0;
+  while i < 13 * ok {
+    let ok = if p[i] == pre[i] then ok else 0;
+    let i = i + 1;
+    0
+  };
+  ok
+}
+fn cas_path(p: [i64], real: [i64]) -> i64 {
+  let pre = [46, 98, 99, 97, 115, 47];
+  let i = 0;
+  while i < 6 {
+    let _ = real[i] = pre[i];
+    let i = i + 1;
+    0
+  };
+  let j = 0;
+  while j < 64 {
+    let _ = real[6 + j] = p[13 + j];
+    let j = j + 1;
+    0
+  };
+  let _ = real[70] = 46;
+  let _ = real[71] = 98;
+  let _ = real[72] = 112;
+  73
+}
+fn hexval(c: i64) -> i64 {
+  if c >= 97 then c - 87 else if c >= 65 then c - 55 else c - 48
+}
+fn cas_verify(inc: str, p: [i64]) -> i64 {
+  let n = str_len(inc);
+  let bytes = zeros(n + 1);
+  let i = 0;
+  while i < n {
+    let _ = bytes[i] = char(inc, i);
+    let i = i + 1;
+    0
+  };
+  let h = zeros(8);
+  let _ = sha256_words(bytes, n, h);
+  let ok = 1;
+  let w = 0;
+  while w < 8 {
+    let want = 0;
+    let d = 0;
+    while d < 8 {
+      let want = want * 16 + hexval(p[13 + w * 8 + d]);
+      let d = d + 1;
+      0
+    };
+    let ok = if h[w] == want then ok else 0;
+    let w = w + 1;
+    0
+  };
+  let _ = if ok == 0 then sys_exit(88) else 0;
+  ok
+}
 // use_scan(srcv, buf, off, seen, nseen): T47b (2026-09-06) nested `use`: for every
 // line-initial `use "path"` of srcv, a fresh path (content hash not in seen) is slurped,
 // scanned RECURSIVELY (its own uses land first, dependencies before dependents), then
@@ -4294,6 +4361,7 @@ fn use_comment(buf: [i64], base: i64, txt: str) -> i64 {
 fn use_scan(srcv: str, buf: [i64], off: [i64], seen: [i64], nseen: [i64]) -> i64 {
   let strn = str_len(srcv);
   let pathc = zeros(512);
+  let real = zeros(80);
   let i = 0;
   let bol = 1;
   let nuse = 0;
@@ -4321,10 +4389,14 @@ fn use_scan(srcv: str, buf: [i64], off: [i64], seen: [i64], nseen: [i64]) -> i64
     };
     let fresh = is_use * (if dup == 0 then 1 else 0) * (if nseen[0] < 64 then 1 else 0);
     let _ = if fresh == 1 then (let _ = seen[nseen[0]] = h in (let _ = nseen[0] = nseen[0] + 1 in 0)) else 0;
-    let fd = if fresh == 1 then sys_open(pathc, pl, 0) else 0 - 1;
+    let is_cas = fresh * cas_prefix(pathc, pl);
+    let rl = if is_cas == 1 then cas_path(pathc, real) else pl;
+    let src_path = if is_cas == 1 then real else pathc;
+    let fd = if fresh == 1 then sys_open(src_path, rl, 0) else 0 - 1;
     let _ = if fd < 0 then (if fresh == 1 then sys_exit(90) else 0) else 0;
     let inc = if fresh == 1 then sys_slurp(fd, 400000) else srcv;
     let _ = if fresh == 1 then sys_close(fd) else 0;
+    let _ = if fresh * is_cas == 1 then cas_verify(inc, pathc) else 0;
     let _ = if fresh == 1 then use_scan(inc, buf, off, seen, nseen) else 0;
     let base = off[0];
     let _ = if fresh == 1 then (let _ = off[0] = use_append_str(buf, base, inc) in 0) else 0;
@@ -4531,6 +4603,67 @@ fn cli_compile(argc: i64, argv: [str]) -> i64 {
   rc2 * 10 + rn
 }
 
+// T80 (2026-09-06): `bebop.bin cas add <file>` -- the file's SHA-256 names it: the bytes
+// are stored as .bcas/<hex>.bp (the directory must exist; exit 90 otherwise) and the
+// address line `cas://sha256:<hex>` is written to stdout, ready to paste into a `use`.
+fn fill_cas(p: [i64]) -> i64 {
+  let _ = p[0] = 99; let _ = p[1] = 97; let _ = p[2] = 115;
+  3
+}
+fn fill_add(p: [i64]) -> i64 {
+  let _ = p[0] = 97; let _ = p[1] = 100; let _ = p[2] = 100;
+  3
+}
+fn hexdig(v: i64) -> i64 {
+  if v < 10 then 48 + v else 87 + v
+}
+fn cli_cas(argc: i64, argv: [str]) -> i64 {
+  let badd = zeros(8);
+  let _ = fill_add(badd);
+  let is_add = if argc >= 5 then strequals(argv[3], badd) else 0;
+  let _ = if is_add == 0 then sys_exit(64) else 0;
+  let f = argv[4];
+  let lf = str_len(f);
+  let pf = zeros(lf + 1);
+  let _ = str_to_cells(pf, f);
+  let fd = sys_open(pf, lf, 0);
+  let _ = if fd < 0 then sys_exit(90) else 0;
+  let src = sys_slurp(fd, 400000);
+  let _ = sys_close(fd);
+  let n = str_len(src);
+  let bytes = zeros(n + 1);
+  let i = 0;
+  while i < n {
+    let _ = bytes[i] = char(src, i);
+    let i = i + 1;
+    0
+  };
+  let h = zeros(8);
+  let _ = sha256_words(bytes, n, h);
+  let addr = zeros(80);
+  let pre = [99, 97, 115, 58, 47, 47, 115, 104, 97, 50, 53, 54, 58];
+  let k = 0;
+  while k < 13 {
+    let _ = addr[k] = pre[k];
+    let k = k + 1;
+    0
+  };
+  let d = 0;
+  while d < 64 {
+    let _ = addr[13 + d] = hexdig((h[d / 8] >> (28 - 4 * (d % 8))) & 15);
+    let d = d + 1;
+    0
+  };
+  let _ = addr[77] = 10;
+  let real = zeros(80);
+  let rl = cas_path(addr, real);
+  let ofd = sys_open(real, rl, 578);
+  let _ = if ofd < 0 then sys_exit(90) else 0;
+  let _ = sys_export(ofd, bytes, n);
+  let _ = sys_close(ofd);
+  let _ = sys_write(1, addr, 78);
+  0
+}
 fn cli_size(argv: [str]) -> i64 {
   let f = argv[3];
   let lf = str_len(f);
@@ -4747,6 +4880,8 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let bsize = zeros(8);
   let bver = zeros(8);
   let brun = zeros(16);
+  let bcas = zeros(8);
+  let _ = fill_cas(bcas);
   let _ = fill_compile(bcmp);
   let _ = fill_size(bsize);
   let _ = fill_version(bver);
@@ -4755,11 +4890,13 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let is_size = if argc >= 3 then strequals(cmd, bsize) else 0;
   let is_version = if argc >= 3 then strequals(cmd, bver) else 0;
   let is_run = if argc >= 3 then strequals(cmd, brun) else 0;
+  let is_cas = if argc >= 3 then strequals(cmd, bcas) else 0;
   let r1 = if is_compile == 1 then cli_compile(argc, argv) else 0;
   let r2 = if is_size == 1 then cli_size(argv) else 0;
   let r3 = if is_run == 1 then cli_run(argv) else 0;
   let r4 = if is_version == 1 then 1000000 else 0;
-  let known = is_compile + is_size + is_version + is_run;
+  let r6 = if is_cas == 1 then cli_cas(argc, argv) else 0;
+  let known = is_compile + is_size + is_version + is_run + is_cas;
   let r5 = if known == 0 then 64 else 0;
-  r1 + r2 + r3 + r4 + r5
+  r1 + r2 + r3 + r4 + r5 + r6
 }

@@ -10,6 +10,7 @@ Status: 2026-09-05 CURRENT (T120, decision D11-M; the single table of exit codes
 | 81 | program | frame heap exhausted: an array literal / enum ctor crossed the 16 KiB frame (T118) | emit_array_lit, emit_enum_ctor |
 | 82 | program | SIGSEGV or SIGBUS in the program: stack overflow (deep recursion at 16 KiB per frame) or a wild access; the entry stub's handler exits 82 on an alternate stack (T118b) | entry_stub |
 | 87 | program | a call to a function the compiler never resolved was executed (T130; before it the call silently yielded 0) | emit_call |
+| 88 | bebop.bin | `use "cas://sha256:<hex>"`: the module's SHA-256 differs from its name (T80) | cas_verify |
 | 90 | seed / bebop.bin | open failed (source, output or the .bin to run; since T129 also the compiler's output or `.use` temp) | seed.S, cli_compile |
 | 91 | seed | read failed | seed.S |
 | 92 | seed | mmap failed | seed.S |

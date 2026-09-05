@@ -44,8 +44,8 @@ and retired by decisions D8-D10.
 |---|---|---|---|---|
 | 1 | honest kernels, in-process pinned, bebop / Rust twin (D11-C) | bench/vs_rust/honest.sh | K1h, K2h, K3h, K4 rows measured after T118 (see Measured) | every row <= 2.0x after T101-T104; <= 1.0x is the D1(a) stretch, decided on the numbers |
 | 2 | linear self-hosting fixpoint | every codegen commit (AGENTS law) | gen3 == gen4 2b6171ce | invariant, never a goal |
-| 3 | one oracle per gate, none self-frozen | bench/oracles/run_all.sh | ok=99 self-frozen=0 | 0 self-frozen; 8 gates await T124 fold specs before "== oracle" |
-| 4 | zero tolerated miscompiles | construct_parity (38 constructs + neg), fuzz | R3.x deleted; fuzz 150-seed batches clean | fuzz >= 10^5 programs, 0 CRASH / DIVERGE, traps only (TG-DONE 8) |
+| 3 | one oracle per gate, none self-frozen | bench/oracles/run_all.sh | ok=99 self-frozen=0; every gate mutation-sensitive (T123 sweep 2026-09-06, tools/mutate_gate.sh) | 0 self-frozen; T124 fold specs written (docs/FOLDS.md) |
+| 4 | zero tolerated miscompiles | construct_parity (51 constructs incl. neg), fuzz | R3.x deleted; fuzz 150-seed batches clean; DIVERGE-20056 (2026-09-06) was an undefined program (array literal bound in a while body read after the loop) — rule now in LANGUAGE.md, bpref raises on it, gen.py never emits it | fuzz >= 10^5 programs, 0 CRASH / DIVERGE, traps only (TG-DONE 8) |
 | 5 | single compiler, single language | attic, construct_parity | expr_compile.bp in attic; 38 constructs | every accepted construct in construct_parity; struct literals + `use` + `ref T` landed (T43 rest, T47, T48) |
 | 6 | hardware claims measured, never projected | bench_pinned.sh, REPORT-pinned.md, Measured table below | no projected row remains | stays true |
 | 7 | the store | G1-G8 (T112-T117) | library + G1-G6 green in std_golden (99 gates; 100/100 SIGKILL trials); G7 sbench measured vs sqlite (17x insert, 450 ns PK lookup, 30x window scan, 2.5x size loss); G8 stage 1 measured (BFS 187 ns/edge vs sqlite 10.8 us), stage 2 running | all eight green with numbers; G7/G8 thresholds a,b,c frozen by the operator before the run (D11-I) |
@@ -54,7 +54,7 @@ and retired by decisions D8-D10.
 ## Critical path (in order; one writer, one commit per single-variable step)
 
 T118 traps (done) -> T122 reserved words -> T43 rest (struct literals + field access)
--> T47 `use` -> T48 checked types with `ref T` -> T101-T104 via the op-list IR
+-> T47 `use` (+T47b nested, T80 cas://) -> T48 checked types with `ref T` (+T48b census) -> T101-T104 via the op-list IR
 (byte-identical rung first, D11-G) -> T105 sdiv/isqrt -> T106 nn4 (3 A78) -> T107
 incremental curve -> T108 .becache -> T109-T117 store (G1..G8, with the D11-H
 amendments and a G2-lite spike first) -> T52-T54 predication where measured -> the
