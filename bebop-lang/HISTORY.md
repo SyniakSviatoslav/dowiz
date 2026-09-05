@@ -2609,7 +2609,9 @@ DEPS: T20, T97. BLOCKERS: none.
 
 ## STORE PULL (decision D10, 2026-09-04; spec = docs/LANG-DB-DESIGN.md §4 + §9.5; after T101-T108)
 
-**T127 · `sys_exit_thread_guard` uses exit_group (svc 94)** — OPEN (found by G6, 2026-09-05): the builtin's `mov x8,#94` is exit_group on AArch64 (93 = exit); a worker calling it kills the process. Fix = one word in the table (93) + a pool gate row that lets a worker exit; until then workers park on a futex.
+**T129 · an unwritable output path segfaulted the compiler** — DONE ✓ 2026-09-05 (cli_compile and use_expand now exit 90 when the output or the .use temp cannot be opened, instead of handing fd -1 to sys_export's mmap; found when a runner variable collision pointed the output at a missing directory; verified: `compile ... /no/such/dir/x.bin` -> 90).
+
+**T127 · `sys_exit_thread_guard` uses exit_group (svc 94)** — DONE ✓ 2026-09-05 (one word: mov x8,#93; sconc's workers exit their own thread again and the gate still prints 40000; found by G6): the builtin's `mov x8,#94` is exit_group on AArch64 (93 = exit); a worker calling it kills the process. Fix = one word in the table (93) + a pool gate row that lets a worker exit; until then workers park on a futex.
 
 Each task = one commit with fixpoint + battery; each gate = `selfhost/std/<g>.bp`
 + `bench/oracles/<g>.py` (L17), pinned numbers reported whatever they are
@@ -2633,7 +2635,7 @@ module via `use`); self-compile after the fix: 111 MB RSS, 292.9 s wall — the
 rollback was silently bounding the compiler's own arena use, now the per-fn tables
 persist as LANGUAGE.md always claimed. LANGUAGE.md/AGENTS.md amended.)
 
-**T110 · `sys_msync(addr, len, flags)`** (syscall 227) — the durability row;
+**T110 · `sys_msync(addr, len, flags)`** — DONE ✓ 2026-09-05 (emit_sys_msync: pop x2/x1/x0, mov x8,#227, svc; store.bp st_sync/st_commit_sync; the G7 durable row uses it; fixpoint b43fe630 shared with T127/T129) — (syscall 227) — the durability row;
 DONE-CHECK: one-page msync ~100 us measured; kill -9 consistency does not need it.
 **T111 · `store.bp` library** — DONE ✓ 2026-09-05 (selfhost/prelude/store.bp, `use`d with prelude/sha256.bp: st_open/st_map_ro (MAP_SHARED, any base, init superblock A when fresh), st_pick (valid superblock with the higher generation), st_begin/st_alloc/st_seal/st_check/st_supersede/st_commit (writes the OTHER superblock)/st_abort, st_get/st_put/st_ref/st_link (object-relative refs), st_digest (types-only sha256 low 32); the two mapping-base casts st_cells/st_addr are the only i64<->[i64] casts in the tree, allowlisted by name in tools/typecheck.py; pre-extend by 64 MB + MAP_POPULATE deferred to G7 where it is measured): open/map (any base,
 MAP_SHARED), alloc(cells) with the 2-cell header, commit (append +
@@ -2661,7 +2663,7 @@ floor subtracted and VM_STEP recorded: insert 1M, PK lookup, cell range scan
 10^4, update 10^5 (block CoW), reopen, file size, compaction, durable variant.
 Pass = PK lookup >= 3x sqlite native, scan >= 5x; file size reported even at the
 expected ~2.2x loss.
-**T117 · sgraph: G8** — 1M nodes / 10M edges (uniform + 1%-hub skew) as edge log +
+**T117 · sgraph: G8** — stage 1 DONE ✓ 2026-09-06 (bench/vs_rust/sgraph.sh -> RESULT-sgraph.md: 1M nodes, 5M LCG pairs both ways as a CSR in the store; bebop BFS fold over 3 sources 21482396 and the neighbour fold 500446467359 == the python array-BFS oracle == sqlite; bebop: build 44.8 s (slow — 50M st_get/st_put calls through the library, to be profiled), queue BFS 187 ns per edge slot averaged over 100 sources, neighbours of v ~ns each; sqlite 3.46.1 (edge table, index (a,b), level-synchronous BFS with fixed frontier tables): build 242 s, BFS 10.8 us per edge = 57x slower, file 338 MB; stage 2 (edge log with L0 rebuilds, tombstone deletes, compaction, BFS with tombstones) is written as sgraph2.bp + oracle + sgraph2.sh and runs next; the frontier SpMSpV push/pull row and the 1%-hub variant remain) — 1M nodes / 10M edges (uniform + 1%-hub skew) as edge log +
 tiered CSR in the store: BFS from 100 sources via queue vs frontier SpMSpV
 (push/pull switch) vs sqlite `WITH RECURSIVE` (expected ~15-40 ns vs ~1.5 us per
 edge); insert 1M edges through the log with L0/L1 rebuilds (ns/edge, max stall);

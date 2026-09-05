@@ -1,0 +1,181 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+// sgraph.bp — G8 (T117), stage 1: 1M nodes, 10M undirected edges (LCG 4242: 5M pairs,
+// both directions) as a CSR in the store: RP{arr i64} (N+1 row pointers), CI{arr i64}
+// (2*E neighbour ids), root G{i64 N, i64 E, ref RP, ref CI}. argv[2] phase, argv[3]
+// f (fold) | t (time):
+//   build : counting sort into the store + one commit (ms)
+//   bfs   : queue BFS from argv[4] sources (LCG 31337): fold = sum over sources of
+//           (reached + sum of levels) (wrap); t = ns per edge over all sources
+//   nbr   : 10^5 point queries "neighbours of v" (LCG 4711): fold = sum (deg + sum nbrs);
+//           t = ns per query
+// Oracle bench/oracles/sgraph.py (dict-free array BFS, 3 sources). Stage 2 (edge log +
+// L0 rebuilds, tombstones, compaction, frontier SpMSpV) extends this file.
+fn lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
+fn phase_build(base: [i64], tmp: [i64], drp: i64, dci: i64, dg: i64) -> i64 {
+  let n = 1000000;
+  let e = 5000000;
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let rp = st_alloc(base, tx, n + 2, drp);
+  let _ = st_put(base, rp, 0, n + 1);
+  let src = zeros(e);
+  let dst = zeros(e);
+  let x = 4242;
+  let i = 0;
+  while i < e {
+    let x = lcg(x);
+    let a = (x >> 20) % n;
+    let x = lcg(x);
+    let b = (x >> 20) % n;
+    let _ = src[i] = a;
+    let _ = dst[i] = b;
+    let _ = st_put(base, rp, 2 + a, st_get(base, rp, 2 + a) + 1);
+    let _ = st_put(base, rp, 2 + b, st_get(base, rp, 2 + b) + 1);
+    let i = i + 1;
+    0
+  };
+  let cur = zeros(n);
+  let v = 0;
+  while v < n {
+    let _ = st_put(base, rp, 2 + v, st_get(base, rp, 2 + v) + st_get(base, rp, 1 + v));
+    let _ = cur[v] = st_get(base, rp, 1 + v);
+    let v = v + 1;
+    0
+  };
+  let ci = st_alloc(base, tx, 2 * e + 1, dci);
+  let _ = st_put(base, ci, 0, 2 * e);
+  let j = 0;
+  while j < e {
+    let a = src[j];
+    let b = dst[j];
+    let sa = cur[a];
+    let _ = st_put(base, ci, 1 + sa, b);
+    let _ = cur[a] = sa + 1;
+    let sb = cur[b];
+    let _ = st_put(base, ci, 1 + sb, a);
+    let _ = cur[b] = sb + 1;
+    let j = j + 1;
+    0
+  };
+  let _ = st_seal(base, rp, tmp);
+  let _ = st_seal(base, ci, tmp);
+  let g = st_alloc(base, tx, 4, dg);
+  let _ = st_put(base, g, 0, n);
+  let _ = st_put(base, g, 1, 2 * e);
+  let _ = st_link(base, g, 2, rp);
+  let _ = st_link(base, g, 3, ci);
+  let _ = st_seal(base, g, tmp);
+  st_commit(base, tx, g, tmp)
+}
+// bfs_from(base, rp, ci, n, s, level, queue): plain queue BFS; level[v] = -1 unvisited.
+// Returns reached + sum of levels; level/queue are caller scratch (n cells each).
+fn bfs_from(base: [i64], rp: i64, ci: i64, n: i64, s: i64, level: [i64], queue: [i64]) -> i64 {
+  let i = 0;
+  while i < n {
+    let _ = level[i] = 0 - 1;
+    let i = i + 1;
+    0
+  };
+  let _ = level[s] = 0;
+  let _ = queue[0] = s;
+  let head = 0;
+  let tail = 1;
+  let acc = 0;
+  while head < tail {
+    let v = queue[head];
+    let lv = level[v];
+    let acc = acc + lv + 1;
+    let lo = st_get(base, rp, 1 + v);
+    let hi = st_get(base, rp, 2 + v);
+    let k = lo;
+    while k < hi {
+      let w = st_get(base, ci, 1 + k);
+      let unseen = if level[w] < 0 then 1 else 0;
+      let _ = if unseen == 1 then (let _ = level[w] = lv + 1 in 0) else 0;
+      let _ = if unseen == 1 then (let _ = queue[tail] = w in 0) else 0;
+      let tail = tail + unseen;
+      let k = k + 1;
+      0
+    };
+    let head = head + 1;
+    0
+  };
+  acc
+}
+fn phase_bfs(base: [i64], tmp: [i64], nsrc: i64) -> i64 {
+  let g = st_root(base, tmp);
+  let n = st_get(base, g, 0);
+  let rp = st_ref(base, g, 2);
+  let ci = st_ref(base, g, 3);
+  let level = zeros(n);
+  let queue = zeros(n);
+  let x = 31337;
+  let q = 0;
+  let acc = 0;
+  while q < nsrc {
+    let x = lcg(x);
+    let s = (x >> 20) % n;
+    let acc = acc + bfs_from(base, rp, ci, n, s, level, queue);
+    let q = q + 1;
+    0
+  };
+  acc
+}
+fn phase_nbr(base: [i64], tmp: [i64]) -> i64 {
+  let g = st_root(base, tmp);
+  let n = st_get(base, g, 0);
+  let rp = st_ref(base, g, 2);
+  let ci = st_ref(base, g, 3);
+  let x = 4711;
+  let q = 0;
+  let acc = 0;
+  while q < 100000 {
+    let x = lcg(x);
+    let v = (x >> 20) % n;
+    let lo = st_get(base, rp, 1 + v);
+    let hi = st_get(base, rp, 2 + v);
+    let acc = acc + (hi - lo);
+    let k = lo;
+    while k < hi {
+      let acc = acc + st_get(base, ci, 1 + k);
+      let k = k + 1;
+      0
+    };
+    let q = q + 1;
+    0
+  };
+  acc
+}
+fn parse(s: str) -> i64 {
+  let n = str_len(s);
+  let i = 0;
+  let v = 0;
+  while i < n {
+    let v = v * 10 + (char(s, i) - 48);
+    let i = i + 1;
+    0
+  };
+  v
+}
+fn main(argc: i64, argv: [str]) -> i64 {
+  let path = zeros(64);
+  let pl = st_str(path, "sgraph.store");
+  let tmp = zeros(256);
+  let size = 268435456;
+  let ph = char(argv[2], 0);
+  let want_t = if char(argv[3], 0) == 116 then 1 else 0;
+  let nsrc = if argc >= 5 then parse(argv[4]) else 3;
+  let drp = st_digest("RP{arr i64}");
+  let dci = st_digest("CI{arr i64}");
+  let dg = st_digest("G{i64,i64,ref RP,ref CI}");
+  let base = st_open(path, pl, size, tmp);
+  let t0 = clock_ms();
+  let r = if ph == 98 then phase_build(base, tmp, drp, dci, dg) else if ph == 102 then phase_bfs(base, tmp, nsrc) else phase_nbr(base, tmp);
+  let t1 = clock_ms();
+  let edges = st_get(base, st_root(base, tmp), 1);
+  let _ = sys_munmap(st_addr(base), size);
+  let ns_per_edge = (t1 - t0) * 1000000 / (edges * nsrc);
+  let ns_per_q = (t1 - t0) * 1000000 / 100000;
+  if want_t == 0 then r else if ph == 98 then t1 - t0 else if ph == 102 then ns_per_edge else ns_per_q
+}

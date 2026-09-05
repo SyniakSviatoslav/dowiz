@@ -82,6 +82,12 @@ match CTOR(payload) { CTOR => expr, CTOR(x) => expr, ... }   -- COMPILE-TIME: th
 | `sys_open(cells, len, flags)`, `sys_read(fd, buf, n)`, `sys_write(fd, buf, n)`, `sys_close(fd)`, `sys_readbuf(fd, len)`, `sys_slurp(fd, len)`, `sys_mmap(addr, len, prot, flags, fd, off)`, `sys_munmap(a, len)`, `sys_ftruncate(fd, len)`, `sys_rename(a, la, b, lb)`, `sys_export(cells, n, path, len)`, `sys_exit(code)` | raw Linux syscalls |
 | `sys_arena_base()`, `sys_arena_end()`, `sys_clone(flags, stack_top)`, `sys_cond_set(c, arr, i, v)`, `sys_futex_wait_guard(c, arr, i, v)`, `sys_futex_wake(arr, i, n)`, `sys_atomic_add(arr, i, v)`, `sys_exit_thread_guard(c, code)` | threads over the shared arena (T45; see selfhost/std/pool.bp) |
 | `hvham(a, b, n)`, `hvham2(...)` | NEON popcount of a^b over n words |
+| `clz(x)` | count leading zeros of the 64-bit word, clz(0) = 64 (T105; seeds the Newton isqrt) |
+| `crc32(cells, n)` | zlib crc32 of n bytes held one per cell (CRC32B loop, T109) |
+| `crc32x(cells, off, n)` | zlib crc32 of the raw little-endian bytes of n cells from cells[off] (CRC32X, 8 B per step, T109b; the store's integrity crc) |
+| `sys_msync(addr, len, flags)` | msync (227), the store's durable-commit call (T110) |
+| `sys_setaffinity(arr, idx)` | sched_setaffinity(0, 8, &arr[idx]) — pin the calling thread to the mask in arr[idx] (T72) |
+| `sys_exit_thread_guard(cond, code)` | exit the calling THREAD (svc 93) iff cond != 0 (T127: it was exit_group before) |
 
 ## Memory model
 

@@ -1,0 +1,344 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+// sgraph2.bp — G8 (T117) stage 2 on its own store: the stage-1 graph (1M nodes, 5M LCG
+// pairs both ways = L1 CSR) plus (a) an EDGE LOG: 1M new directed edges (LCG 777) in
+// 100 batches; each batch appends a chunk E{arr i64} (pairs) and rebuilds L0 = a CSR
+// over every logged edge so far (RP0/CI0), one commit per batch; (b) TOMBSTONES: 10% of
+// the L1 slots (LCG 555 over 2*E slots) set in a bitmap TB{arr i64}, one new bitmap
+// version, one commit; (c) COMPACTION; (d) neighbour queries = L1 slice + L0 slice
+// filtered by the tombstone bit (<= 3 slices). Root G2{N, E, ref RP, ref CI, ref LOG,
+// ref RP0, ref CI0, ref TB, nlog}, LOG{arr ref E}. argv[2] phase, argv[3] f|t:
+//   b : build L1 + empty log/L0/TB + commit (ms)
+//   l : the 100 log batches (t = amortized ns per logged edge; the max batch stall is
+//       printed by phase m in ms)
+//   n : 10^5 neighbour queries (LCG 4711) over L1 + L0 minus tombstones: fold
+//   d : tombstone 10% of L1 slots + commit (ms)
+//   f : BFS (queue) over L1 minus tombstones + L0, from argv[4] sources (LCG 31337):
+//       fold = sum(reached + sum levels); t = ns per live edge slot
+//   c : compaction (ms); z : logical size (arena_used*8)
+fn lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
+fn csr_build(base: [i64], tx: [i64], tmp: [i64], src: [i64], dst: [i64], m: i64, n: i64, drp: i64, dci: i64, out: [i64]) -> i64 {
+  let rp = st_alloc(base, tx, n + 2, drp);
+  let _ = st_put(base, rp, 0, n + 1);
+  let i = 0;
+  while i < m {
+    let a = src[i];
+    let _ = st_put(base, rp, 2 + a, st_get(base, rp, 2 + a) + 1);
+    let i = i + 1;
+    0
+  };
+  let cur = zeros(n);
+  let v = 0;
+  while v < n {
+    let _ = st_put(base, rp, 2 + v, st_get(base, rp, 2 + v) + st_get(base, rp, 1 + v));
+    let _ = cur[v] = st_get(base, rp, 1 + v);
+    let v = v + 1;
+    0
+  };
+  let ci = st_alloc(base, tx, m + 1, dci);
+  let _ = st_put(base, ci, 0, m);
+  let j = 0;
+  while j < m {
+    let a = src[j];
+    let s = cur[a];
+    let _ = st_put(base, ci, 1 + s, dst[j]);
+    let _ = cur[a] = s + 1;
+    let j = j + 1;
+    0
+  };
+  let _ = st_seal(base, rp, tmp);
+  let _ = st_seal(base, ci, tmp);
+  let _ = out[0] = rp;
+  let _ = out[1] = ci;
+  0
+}
+fn root_write(base: [i64], tx: [i64], tmp: [i64], dg: i64, n: i64, e: i64, rp: i64, ci: i64, log: i64, rp0: i64, ci0: i64, tb: i64, nlog: i64) -> i64 {
+  let g = st_alloc(base, tx, 9, dg);
+  let _ = st_put(base, g, 0, n);
+  let _ = st_put(base, g, 1, e);
+  let _ = st_link(base, g, 2, rp);
+  let _ = st_link(base, g, 3, ci);
+  let _ = st_link(base, g, 4, log);
+  let _ = if rp0 == 0 then st_put(base, g, 5, 0) else st_link(base, g, 5, rp0);
+  let _ = if ci0 == 0 then st_put(base, g, 6, 0) else st_link(base, g, 6, ci0);
+  let _ = st_link(base, g, 7, tb);
+  let _ = st_put(base, g, 8, nlog);
+  let _ = st_seal(base, g, tmp);
+  g
+}
+fn phase_build(base: [i64], tmp: [i64], d: [i64]) -> i64 {
+  let n = 1000000;
+  let e = 5000000;
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let src = zeros(2 * e);
+  let dst = zeros(2 * e);
+  let x = 4242;
+  let i = 0;
+  while i < e {
+    let x = lcg(x);
+    let a = (x >> 20) % n;
+    let x = lcg(x);
+    let b = (x >> 20) % n;
+    let _ = src[2 * i] = a;
+    let _ = dst[2 * i] = b;
+    let _ = src[2 * i + 1] = b;
+    let _ = dst[2 * i + 1] = a;
+    let i = i + 1;
+    0
+  };
+  let out = zeros(2);
+  let _ = csr_build(base, tx, tmp, src, dst, 2 * e, n, d[0], d[1], out);
+  let log = st_alloc(base, tx, 101, d[3]);
+  let _ = st_put(base, log, 0, 0);
+  let _ = st_seal(base, log, tmp);
+  let tb = st_alloc(base, tx, 156251, d[4]);
+  let _ = st_put(base, tb, 0, 156250);
+  let _ = st_seal(base, tb, tmp);
+  let g = root_write(base, tx, tmp, d[2], n, 2 * e, out[0], out[1], log, 0, 0, tb, 0);
+  st_commit(base, tx, g, tmp)
+}
+// phase_log(base, tmp, d, stall): 100 batches; stall[0] = max batch ms.
+fn phase_log(base: [i64], tmp: [i64], d: [i64], stall: [i64]) -> i64 {
+  let n = 1000000;
+  let src = zeros(1000000);
+  let dst = zeros(1000000);
+  let x = 777;
+  let b = 0;
+  let out = zeros(2);
+  let tx = zeros(6);
+  while b < 100 {
+    let t0 = clock_ms();
+    let _ = st_begin(base, tx, tmp);
+    let g = st_root(base, tmp);
+    let chunk = st_alloc(base, tx, 20001, d[5]);
+    let _ = st_put(base, chunk, 0, 20000);
+    let k = 0;
+    while k < 10000 {
+      let x = lcg(x);
+      let a = (x >> 20) % n;
+      let x = lcg(x);
+      let c = (x >> 20) % n;
+      let idx = b * 10000 + k;
+      let _ = src[idx] = a;
+      let _ = dst[idx] = c;
+      let _ = st_put(base, chunk, 1 + 2 * k, a);
+      let _ = st_put(base, chunk, 2 + 2 * k, c);
+      let k = k + 1;
+      0
+    };
+    let _ = st_seal(base, chunk, tmp);
+    let oldlog = st_ref(base, g, 4);
+    let nl = st_get(base, oldlog, 0);
+    let log = st_alloc(base, tx, 101, d[3]);
+    let _ = st_put(base, log, 0, nl + 1);
+    let i = 0;
+    while i < nl {
+      let _ = st_link(base, log, 1 + i, st_ref(base, oldlog, 1 + i));
+      let i = i + 1;
+      0
+    };
+    let _ = st_link(base, log, 1 + nl, chunk);
+    let _ = st_seal(base, log, tmp);
+    let _ = st_supersede(base, tx, oldlog);
+    let _ = csr_build(base, tx, tmp, src, dst, (b + 1) * 10000, n, d[0], d[1], out);
+    let _ = if st_get(base, g, 5) == 0 then 0 else st_supersede(base, tx, st_ref(base, g, 5));
+    let _ = if st_get(base, g, 6) == 0 then 0 else st_supersede(base, tx, st_ref(base, g, 6));
+    let g2 = root_write(base, tx, tmp, d[2], n, st_get(base, g, 1), st_ref(base, g, 2), st_ref(base, g, 3), log, out[0], out[1], st_ref(base, g, 7), (b + 1) * 10000);
+    let _ = st_supersede(base, tx, g);
+    let _ = st_commit(base, tx, g2, tmp);
+    let dt = clock_ms() - t0;
+    let _ = if dt > stall[0] then (let _ = stall[0] = dt in 0) else 0;
+    let b = b + 1;
+    0
+  };
+  0
+}
+fn tomb(base: [i64], tb: i64, slot: i64) -> i64 {
+  (st_get(base, tb, 1 + (slot >> 6)) >> (slot & 63)) & 1
+}
+// nbr_fold(base, g, v): deg + sum of neighbours over L1 (minus tombstones) and L0.
+fn nbr_fold(base: [i64], g: i64, v: i64) -> i64 {
+  let rp = st_ref(base, g, 2);
+  let ci = st_ref(base, g, 3);
+  let tb = st_ref(base, g, 7);
+  let lo = st_get(base, rp, 1 + v);
+  let hi = st_get(base, rp, 2 + v);
+  let acc = 0;
+  let k = lo;
+  while k < hi {
+    let live = 1 - tomb(base, tb, k);
+    let acc = acc + live * (1 + st_get(base, ci, 1 + k));
+    let k = k + 1;
+    0
+  };
+  let has0 = if st_get(base, g, 5) == 0 then 0 else 1;
+  let rp0 = st_ref(base, g, 5);
+  let ci0 = st_ref(base, g, 6);
+  let lo0 = if has0 == 1 then st_get(base, rp0, 1 + v) else 0;
+  let hi0 = if has0 == 1 then st_get(base, rp0, 2 + v) else 0;
+  let k = lo0;
+  while k < hi0 {
+    let acc = acc + 1 + st_get(base, ci0, 1 + k);
+    let k = k + 1;
+    0
+  };
+  acc
+}
+fn phase_nbr(base: [i64], tmp: [i64]) -> i64 {
+  let g = st_root(base, tmp);
+  let x = 4711;
+  let q = 0;
+  let acc = 0;
+  while q < 100000 {
+    let x = lcg(x);
+    let acc = acc + nbr_fold(base, g, (x >> 20) % 1000000);
+    let q = q + 1;
+    0
+  };
+  acc
+}
+fn phase_del(base: [i64], tmp: [i64], d: [i64]) -> i64 {
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let g = st_root(base, tmp);
+  let old = st_ref(base, g, 7);
+  let tb = st_alloc(base, tx, 156251, d[4]);
+  let _ = st_put(base, tb, 0, 156250);
+  let i = 0;
+  while i < 156250 {
+    let _ = st_put(base, tb, 1 + i, st_get(base, old, 1 + i));
+    let i = i + 1;
+    0
+  };
+  let x = 555;
+  let k = 0;
+  while k < 1000000 {
+    let x = lcg(x);
+    let slot = (x >> 20) % 10000000;
+    let w = 1 + (slot >> 6);
+    let _ = st_put(base, tb, w, st_get(base, tb, w) | (1 << (slot & 63)));
+    let k = k + 1;
+    0
+  };
+  let _ = st_seal(base, tb, tmp);
+  let _ = st_supersede(base, tx, old);
+  let g2 = root_write(base, tx, tmp, d[2], st_get(base, g, 0), st_get(base, g, 1), st_ref(base, g, 2), st_ref(base, g, 3), st_ref(base, g, 4), st_ref(base, g, 5), st_ref(base, g, 6), tb, st_get(base, g, 8));
+  let _ = st_supersede(base, tx, g);
+  st_commit(base, tx, g2, tmp)
+}
+fn bfs_from(base: [i64], g: i64, n: i64, s: i64, level: [i64], queue: [i64]) -> i64 {
+  let rp = st_ref(base, g, 2);
+  let ci = st_ref(base, g, 3);
+  let tb = st_ref(base, g, 7);
+  let has0 = if st_get(base, g, 5) == 0 then 0 else 1;
+  let rp0 = st_ref(base, g, 5);
+  let ci0 = st_ref(base, g, 6);
+  let i = 0;
+  while i < n {
+    let _ = level[i] = 0 - 1;
+    let i = i + 1;
+    0
+  };
+  let _ = level[s] = 0;
+  let _ = queue[0] = s;
+  let head = 0;
+  let tail = 1;
+  let acc = 0;
+  while head < tail {
+    let v = queue[head];
+    let lv = level[v];
+    let acc = acc + lv + 1;
+    let k = st_get(base, rp, 1 + v);
+    let hi = st_get(base, rp, 2 + v);
+    while k < hi {
+      let w = st_get(base, ci, 1 + k);
+      let take = (1 - tomb(base, tb, k)) * (if level[w] < 0 then 1 else 0);
+      let _ = if take == 1 then (let _ = level[w] = lv + 1 in 0) else 0;
+      let _ = if take == 1 then (let _ = queue[tail] = w in 0) else 0;
+      let tail = tail + take;
+      let k = k + 1;
+      0
+    };
+    let k0 = if has0 == 1 then st_get(base, rp0, 1 + v) else 0;
+    let hi0 = if has0 == 1 then st_get(base, rp0, 2 + v) else 0;
+    while k0 < hi0 {
+      let w = st_get(base, ci0, 1 + k0);
+      let take = if level[w] < 0 then 1 else 0;
+      let _ = if take == 1 then (let _ = level[w] = lv + 1 in 0) else 0;
+      let _ = if take == 1 then (let _ = queue[tail] = w in 0) else 0;
+      let tail = tail + take;
+      let k0 = k0 + 1;
+      0
+    };
+    let head = head + 1;
+    0
+  };
+  acc
+}
+fn phase_bfs(base: [i64], tmp: [i64], nsrc: i64) -> i64 {
+  let g = st_root(base, tmp);
+  let n = st_get(base, g, 0);
+  let level = zeros(n);
+  let queue = zeros(n);
+  let x = 31337;
+  let q = 0;
+  let acc = 0;
+  while q < nsrc {
+    let x = lcg(x);
+    let acc = acc + bfs_from(base, g, n, (x >> 20) % n, level, queue);
+    let q = q + 1;
+    0
+  };
+  acc
+}
+fn parse(s: str) -> i64 {
+  let n = str_len(s);
+  let i = 0;
+  let v = 0;
+  while i < n {
+    let v = v * 10 + (char(s, i) - 48);
+    let i = i + 1;
+    0
+  };
+  v
+}
+fn main(argc: i64, argv: [str]) -> i64 {
+  let path = zeros(64);
+  let pl = st_str(path, "sgraph2.store");
+  let tmp = zeros(256);
+  let size = 536870912;
+  let ph = char(argv[2], 0);
+  let want_t = if char(argv[3], 0) == 116 then 1 else 0;
+  let nsrc = if argc >= 5 then parse(argv[4]) else 3;
+  let d = zeros(6);
+  let _ = d[0] = st_digest("RP{arr i64}");
+  let _ = d[1] = st_digest("CI{arr i64}");
+  let _ = d[2] = st_digest("G2{i64,i64,ref RP,ref CI,ref LOG,ref RP,ref CI,ref TB,i64}");
+  let _ = d[3] = st_digest("LOG{arr ref E}");
+  let _ = d[4] = st_digest("TB{arr i64}");
+  let _ = d[5] = st_digest("E{arr i64}");
+  let stall = zeros(1);
+  let lay = zeros(12);
+  let _ = lay[0] = d[0];
+  let _ = lay[2] = d[1];
+  let _ = lay[4] = d[2];
+  let _ = lay[5] = 252;
+  let _ = lay[6] = d[3];
+  let _ = lay[7] = 0 - 1;
+  let _ = lay[8] = d[4];
+  let _ = lay[10] = d[5];
+  let t0 = clock_ms();
+  let live = if ph == 99 then st_compact(path, pl, size, lay, 6, tmp) else 0;
+  let base = st_open(path, pl, size, tmp);
+  let t1 = clock_ms();
+  let r = if ph == 98 then phase_build(base, tmp, d) else if ph == 108 then phase_log(base, tmp, d, stall) else if ph == 110 then phase_nbr(base, tmp) else if ph == 100 then phase_del(base, tmp, d) else if ph == 102 then phase_bfs(base, tmp, nsrc) else 0;
+  let t2 = clock_ms();
+  let g = st_root(base, tmp);
+  let used = st_gen(base, tmp) * 0 + base[st_pick(base, tmp) + 4] * 8;
+  let e1 = st_get(base, g, 1);
+  let _ = sys_munmap(st_addr(base), size);
+  let ms = if ph == 99 then t1 - t0 else t2 - t1;
+  let val = if ph == 108 then ms * 1000000 / 1000000 else if ph == 102 then ms * 1000000 / ((e1 + 1000000) * nsrc) else ms;
+  if ph == 122 then used else if ph == 109 then stall[0] else if ph == 99 then (if want_t == 1 then ms else live) else if want_t == 1 then val else r
+}

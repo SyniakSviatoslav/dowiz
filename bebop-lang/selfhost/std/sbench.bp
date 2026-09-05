@@ -13,6 +13,7 @@ use "selfhost/prelude/store.bp"
 //   reopen  : 100 x (open + validated superblock + one record + unmap) (us each)
 //   compact : Cheney compaction (ms); the lookup fold must be unchanged after
 //   z       : logical store size = arena_used * 8 bytes (the file is preallocated)
+//   y       : 1000 durable commits (one record version + msync each), us per commit
 // t prints ms for insert/update/compact, ns per op for lookup/scan, us for reopen.
 // bench/vs_rust/sbench.sh drives the phases, the sqlite C-API twin and the sizes.
 fn lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
@@ -183,6 +184,33 @@ fn phase_update(base: [i64], tmp: [i64], dp: i64, dt: i64, dh: i64) -> i64 {
   let _ = st_supersede(base, tx, h);
   st_commit(base, tx, h2, tmp)
 }
+// phase_durable: 1000 transactions, each one new record version + msync'd commit
+// (st_commit_sync: arena range, superblock toggle, superblock pages). Returns the new
+// generation; t = us per durable commit.
+fn phase_durable(base: [i64], tmp: [i64], dp: i64, dt: i64, dh: i64) -> i64 {
+  let tx = zeros(6);
+  let k = 0;
+  let g = 0;
+  while k < 1000 {
+    let _ = st_begin(base, tx, tmp);
+    let h = st_root(base, tmp);
+    let p = st_alloc(base, tx, 4, dp);
+    let _ = st_put(base, p, 0, k);
+    let _ = st_put(base, p, 1, k * 3);
+    let _ = st_put(base, p, 2, k * 5);
+    let _ = st_put(base, p, 3, 0);
+    let _ = st_seal(base, p, tmp);
+    let h2 = st_alloc(base, tx, 2, dh);
+    let _ = st_link(base, h2, 0, st_ref(base, h, 0));
+    let _ = st_link(base, h2, 1, st_ref(base, h, 1));
+    let _ = st_seal(base, h2, tmp);
+    let _ = st_supersede(base, tx, h);
+    let g = st_commit_sync(base, tx, h2, tmp);
+    let k = k + 1;
+    0
+  };
+  g
+}
 fn main(argc: i64, argv: [str]) -> i64 {
   let path = zeros(64);
   let pl = st_str(path, "sbench.store");
@@ -219,13 +247,13 @@ fn main(argc: i64, argv: [str]) -> i64 {
   };
   let base = last;
   let t2 = clock_ms();
-  let r = if ph == 105 then phase_insert(base, tmp, dp, dt, drp, dci, dix, dh) else if ph == 108 then phase_lookup(base, tmp) else if ph == 115 then phase_scan(base, tmp) else if ph == 117 then phase_update(base, tmp, dp, dt, dh) else one;
+  let r = if ph == 105 then phase_insert(base, tmp, dp, dt, drp, dci, dix, dh) else if ph == 108 then phase_lookup(base, tmp) else if ph == 115 then phase_scan(base, tmp) else if ph == 117 then phase_update(base, tmp, dp, dt, dh) else if ph == 121 then phase_durable(base, tmp, dp, dt, dh) else one;
   let t3 = clock_ms();
   let _ = sys_munmap(st_addr(base), size);
-  let per = if ph == 108 then 100000 else if ph == 115 then 10000 else if is_reopen == 1 then 100 else 1;
+  let per = if ph == 108 then 100000 else if ph == 115 then 10000 else if is_reopen == 1 then 100 else if ph == 121 then 1000 else 1;
   let ms = if is_reopen == 1 then t2 - t0 else if is_compact == 1 then t1 - t0 else t3 - t2;
   let per_ns = if ph == 108 then 1 else if ph == 115 then 1 else 0;
-  let val = if per_ns == 1 then ms * 1000000 / per else if is_reopen == 1 then ms * 1000 / per else ms;
+  let val = if per_ns == 1 then ms * 1000000 / per else if is_reopen == 1 then ms * 1000 / per else if ph == 121 then ms * 1000 / per else ms;
   let used = snap[4] * 8;
   if ph == 122 then used else if want_t == 1 then val else if is_compact == 1 then live else r
 }

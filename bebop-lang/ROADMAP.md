@@ -48,7 +48,7 @@ and retired by decisions D8-D10.
 | 4 | zero tolerated miscompiles | construct_parity (38 constructs + neg), fuzz | R3.x deleted; fuzz 150-seed batches clean | fuzz >= 10^5 programs, 0 CRASH / DIVERGE, traps only (TG-DONE 8) |
 | 5 | single compiler, single language | attic, construct_parity | expr_compile.bp in attic; 38 constructs | every accepted construct in construct_parity; struct literals + `use` + `ref T` landed (T43 rest, T47, T48) |
 | 6 | hardware claims measured, never projected | bench_pinned.sh, REPORT-pinned.md, Measured table below | no projected row remains | stays true |
-| 7 | the store | G1-G8 (T112-T117) | library + G1 G2 G4 G5 G3 G6 green (std_golden 99: slayout, sround x2, scompact, scrash, sevolve, sconc; 100/100 SIGKILL trials); G7 sbench and G8 sgraph running | all eight green with numbers; G7/G8 thresholds a,b,c frozen by the operator before the run (D11-I) |
+| 7 | the store | G1-G8 (T112-T117) | library + G1-G6 green in std_golden (99 gates; 100/100 SIGKILL trials); G7 sbench measured vs sqlite (17x insert, 450 ns PK lookup, 30x window scan, 2.5x size loss); G8 stage 1 measured (BFS 187 ns/edge vs sqlite 10.8 us), stage 2 running | all eight green with numbers; G7/G8 thresholds a,b,c frozen by the operator before the run (D11-I) |
 | 8 | fuzz at scale | bench/fuzz/fuzz.sh | 150-seed batches; gen.py widened 2026-09-05 (large loops, literals in loops, recursion 127, return/break) | 10^5 programs, 0 CRASH/DIVERGE, only TRAP-OK/TRAP-8x |
 
 ## Critical path (in order; one writer, one commit per single-variable step)

@@ -32,3 +32,4 @@ bebop cbz 157 T108 .becache (cache_hit/cache_write read loops)
 bebop bcond 1461 T109 crc32 emitter (is_crc dispatch)
 bebop bcond 1462 T126 x27/x28 pair never saved (k == 4 arm in OPT-A)
 bebop bcond 1464 T109b crc32x emitter (is_crx dispatch)
+bebop bcond 1469 T110 sys_msync emitter + T129 exit-90 guards on unwritable outputs

@@ -9,7 +9,7 @@ Status: 2026-09-05 CURRENT (T120, decision D11-M; the single table of exit codes
 | 80 | program | arena exhausted: a `zeros` crossed x28 (T118) | emit_zeros |
 | 81 | program | frame heap exhausted: an array literal / enum ctor crossed the 16 KiB frame (T118) | emit_array_lit, emit_enum_ctor |
 | 82 | program | stack overflow guard (planned, T118 b) | — |
-| 90 | seed | open failed (source, output or the .bin to run) | seed.S |
+| 90 | seed / bebop.bin | open failed (source, output or the .bin to run; since T129 also the compiler's output or `.use` temp) | seed.S, cli_compile |
 | 91 | seed | read failed | seed.S |
 | 92 | seed | mmap failed | seed.S |
 | 94 | seed | generic failure | seed.S |

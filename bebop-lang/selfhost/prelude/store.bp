@@ -165,6 +165,19 @@ fn st_snapshot(base: [i64], snap: [i64], tmp: [i64]) -> i64 {
   };
   pick
 }
+// st_sync(base, nbytes): msync(MS_SYNC = 4) the first nbytes of the mapping (T110) — the
+// durable-commit row: call it on the appended range before st_commit and on the
+// superblock pages after (process-crash consistency never needs it, §4g).
+fn st_sync(base: [i64], nbytes: i64) -> i64 {
+  sys_msync(st_addr(base), nbytes, 4)
+}
+// st_commit_sync: msync the arena up to the cursor, toggle the superblock, msync page 0-1.
+fn st_commit_sync(base: [i64], tx: [i64], root: i64, tmp: [i64]) -> i64 {
+  let _ = st_sync(base, tx[2] * 8);
+  let g = st_commit(base, tx, root, tmp);
+  let _ = st_sync(base, 8192);
+  g
+}
 fn st_abort(tx: [i64]) -> i64 {
   let _ = tx[2] = tx[1];
   let _ = tx[3] = 0;

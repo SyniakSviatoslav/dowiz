@@ -1064,7 +1064,8 @@ fn emit_sys_atomic_add(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], 
   n[0]
 }
 
-// sys_exit_thread_guard(cond, code): raw thread exit (svc 94) iff
+// sys_exit_thread_guard(cond, code): raw thread exit (svc 93 = exit; T127 2026-09-05:
+// it emitted 94 = exit_group on AArch64 and killed the whole process) iff
 // cond != 0 — the worker dies alone, the parent skips (real cbz) and
 // returns 0. Never speculate this: svc 94 would kill the main thread.
 fn emit_sys_exit_thread_guard(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
@@ -1079,7 +1080,7 @@ fn emit_sys_exit_thread_guard(s: str, pos: [i64], insns: [i64], n: [i64], stab: 
   let _ = pop(insns, n, 0, fntab);
   let _ = em(insns, n, 3019899008);
   let _ = em(insns, n, 2852193248);
-  let _ = em(insns, n, 3531606984);
+  let _ = em(insns, n, 3531606952);
   let _ = em(insns, n, 3556769793);
   let _ = em(insns, n, 2854159328);
   let _ = push(insns, n, fntab);
@@ -1176,6 +1177,28 @@ fn emit_crc32x(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
   let _ = em(insns, n, 3506439234);
   let _ = em(insns, n, 402653180);
   let _ = em(insns, n, 706937824);
+  let _ = push(insns, n, fntab);
+  n[0]
+}
+
+// sys_msync(addr, len, flags): msync (syscall 227) — the store's durability row
+// (T110, 2026-09-05). pop x2 = flags, pop x1 = len, pop x0 = addr; mov x8,#227; svc.
+fn emit_sys_msync(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 2, fntab);
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 0, fntab);
+  let _ = em(insns, n, 3531611240);
+  let _ = em(insns, n, 3556769793);
   let _ = push(insns, n, fntab);
   n[0]
 }
@@ -1302,6 +1325,7 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   let is_aff = if name == 7304771531850188344 then 1 else 0;
   let is_clz = if name == 1713209 then 1 else 0;
   let is_crc = if name == 29413480223 then 1 else 0;
+  let is_msy = if name == -8392076200099613766 then 1 else 0;
   let is_crx = if name == 3853165909333 then 1 else 0;
   let is_fwg = if name == 15293169932641766580 then 1 else 0;
   let is_cs = if name == 16710314075682296179 then 1 else 0;
@@ -1323,6 +1347,7 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   else if is_aff == 1 then emit_sys_setaffinity(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_clz == 1 then emit_clz(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_crc == 1 then emit_crc32(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_msy == 1 then emit_sys_msync(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_crx == 1 then emit_crc32x(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_sp == 1 then emit_sys_slurp(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_sln == 1 then emit_str_len_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
@@ -4304,6 +4329,7 @@ fn use_expand(srcv: str, tmpc: [i64], tmpl: i64) -> str {
   };
   let total = off[0];
   let ofd = if nuse > 0 then sys_open(tmpc, tmpl, 578) else 0 - 1;
+  let _ = if nuse > 0 then (if ofd < 0 then sys_exit(90) else 0) else 0;
   let _ = if nuse > 0 then sys_export(ofd, buf, total) else 0;
   let _ = if nuse > 0 then sys_close(ofd) else 0;
   let rfd = if nuse > 0 then sys_open(tmpc, tmpl, 0) else 0 - 1;
@@ -4402,6 +4428,7 @@ fn cli_compile(argc: i64, argv: [str]) -> i64 {
   let tg = if publish == 1 then ptmp else pout;
   let tl = if publish == 1 then ptl[0] else lo;
   let ofd = sys_open(tg, tl, 578);
+  let _ = if ofd < 0 then sys_exit(90) else 0;
   let rc2 = sys_export(ofd, buf, nb);
   let _ = sys_close(ofd);
   let kfd1 = if nocache == 1 then 0 - 1 else sys_open(pcomp, lc, 0);

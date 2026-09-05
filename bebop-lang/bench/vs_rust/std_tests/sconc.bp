@@ -8,9 +8,8 @@ use "selfhost/prelude/store.bp"
 // -> counters, require sum == generation - 1 (generation 1 = all zero). Threads
 // are sys_clone workers spawned from an 8-symbol fn (spawn) with 16 MiB-pitched
 // stacks above the arena cursor (the parent allocates nothing after cloning); a
-// finished worker parks on a never-set futex cell (pool.bp pattern) and dies with the
-// process -- sys_exit_thread_guard emits svc 94 = exit_group on AArch64 and would end
-// the whole process (T127, fix pending in the builtin table).
+// finished worker exits its own thread with sys_exit_thread_guard (svc 93 since T127;
+// before that it was exit_group and ended the whole process).
 // Result = 40000 iff every counter == 10^4, sum == 40000 == generation - 1, and no
 // reader ever saw an inconsistent generation; else the failing quantity.
 // read_sum: a torn superblock copy (both copies failed their crc because the writer was
@@ -95,10 +94,7 @@ fn spawn(base: [i64], cells: [i64], dc: i64, dr: i64) -> i64 {
     let _ = if job == 2 then reader(base, cells, w - 4) else 0;
     let _ = sys_cond_set(is_child, cells, 16 + w, 1);
     let _ = sys_futex_wake(cells, 16 + w, 64);
-    while is_child == 1 {
-      let _ = sys_futex_wait_guard(0, cells, 31, 0);
-      0
-    };
+    let _ = sys_exit_thread_guard(is_child, 0);
     let w = w + 1;
     0
   };
