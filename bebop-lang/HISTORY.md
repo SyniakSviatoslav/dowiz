@@ -2613,7 +2613,7 @@ Each task = one commit with fixpoint + battery; each gate = `selfhost/std/<g>.bp
 + `bench/oracles/<g>.py` (L17), pinned numbers reported whatever they are
 (D8(5)). Order: G1 -> G2 -> G4 -> G5 -> G3 -> G6 -> G7 -> G8.
 
-**T109 · `crc32(cells, n)` builtin** — hardware CRC32X (8 B/cycle) in a 5-word
+**T109 · `crc32(cells, n)` builtin** — DONE ✓ 2026-09-05 (emit_crc32: movn w2; L: cbz x1; ldr x3,[x0],#8; crc32b w2,w2,w3; sub x1; b L; orn w0 — CRC32B per cell because bytes-in-cells is the language's byte form (sys_read/sys_export/str_to_cells), so crc.bp/tb.bp semantics hold; ~1 cell per cycle, not 8 B/cycle — a crc32x-over-words variant is a later builtin if the store needs it; construct c42_crc32 = zlib values for "", "123456789", bytes 0..255; fixpoint b5ab8cdc; census bcond +2 ALLOWed; every encoding derived by int(hex,16) after the T105 lesson): hardware CRC32X (8 B/cycle) in a 5-word
 loop, L1/L2 register table, check_abi allowlist; replaces crc.bp's bit loop
 where integrity is needed. DONE-CHECK: crc gate fold unchanged; 64 B in ~3 ns.
 **T110 · `sys_msync(addr, len, flags)`** (syscall 227) — the durability row;

@@ -1,0 +1,23 @@
+// T109 2026-09-05: `crc32(cells, n)` builtin = zlib crc32 of n bytes held one per
+// cell (hardware CRC32B loop). Values from python zlib.crc32: "" -> 0,
+// "123456789" -> 3421780262 (cbf43926), bytes 0..255 -> 688229491.
+fn main() -> i64 {
+  let a = zeros(256);
+  let i = 0;
+  while i < 256 {
+    let _ = a[i] = i;
+    let i = i + 1;
+    0
+  };
+  let d = zeros(9);
+  let j = 0;
+  while j < 9 {
+    let _ = d[j] = 49 + j;
+    let j = j + 1;
+    0
+  };
+  let e = crc32(a, 0);
+  let c9 = crc32(d, 9);
+  let c256 = crc32(a, 256);
+  (c9 == 3421780262) * 1000000 + (c256 == 688229491) * 1000 + (e == 0) * 7 + c9 % 1000
+}

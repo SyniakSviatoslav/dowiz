@@ -1123,6 +1123,32 @@ fn emit_clz(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i
   n[0]
 }
 
+// crc32(cells, n): zlib crc32 of n bytes held one per cell (T109, 2026-09-05), on the
+// hardware CRC32B unit: pop x1 = n, pop x0 = cells; movn w2,#0; L: cbz x1,done;
+// ldr x3,[x0],#8; crc32b w2,w2,w3; sub x1,x1,#1; b L; done: orn w0,wzr,w2; push.
+// Bytes-in-cells is the language's byte form (sys_read, sys_export, str_to_cells),
+// so crc.bp / tb.bp folds are unchanged; ~1 cell per cycle.
+fn emit_crc32(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 0, fntab);
+  let _ = em(insns, n, 310378498);
+  let _ = em(insns, n, 3019899041);
+  let _ = em(insns, n, 4164977667);
+  let _ = em(insns, n, 449003586);
+  let _ = em(insns, n, 3506439201);
+  let _ = em(insns, n, 402653180);
+  let _ = em(insns, n, 706872288);
+  let _ = push(insns, n, fntab);
+  n[0]
+}
+
 // sys_readbuf(fd,len): raw read into the IO scratch zone, returns its
 // address — the standard handoff for feeding source text to emit_words.
 fn emit_sys_readbuf(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
@@ -1244,6 +1270,7 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   let is_ata = if name == 7221016679989100487 then 1 else 0;
   let is_aff = if name == 7304771531850188344 then 1 else 0;
   let is_clz = if name == 1713209 then 1 else 0;
+  let is_crc = if name == 29413480223 then 1 else 0;
   let is_fwg = if name == 15293169932641766580 then 1 else 0;
   let is_cs = if name == 16710314075682296179 then 1 else 0;
   if is_hh == 1 then emit_hvham(s, pos, insns, n, stab, selfname, selfstart, fntab)
@@ -1263,6 +1290,7 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   else if is_ata == 1 then emit_sys_atomic_add(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_aff == 1 then emit_sys_setaffinity(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_clz == 1 then emit_clz(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_crc == 1 then emit_crc32(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_sp == 1 then emit_sys_slurp(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_sln == 1 then emit_str_len_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_chf == 1 then emit_char_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
