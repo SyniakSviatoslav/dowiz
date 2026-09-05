@@ -73,8 +73,8 @@ here, HISTORY's "Ordering for T84-T95" is superseded).
       dev-speed list (modules / IR cache / parallel emit) were estimated there and are NOT
       worth it against a 1.5 s baseline (best case 1.15-0.85 s, medium-high risk).
 2. Close the PARTIALs: T104b wider peephole (x*c1*c2, mul-by-const -> shift, LICM of movz)
-   through `tools/chain.sh --codegen`; T96 rest; T90 step 2 (`check` verb, d08/d10, messages
-   for runtime traps 80-88).
+   through `tools/chain.sh --codegen`; T96 rest. T90 step 2 CLOSED 2026-09-06 (`check` verb,
+   d08/d10, `brk #code` traps + the entry stub's SIGTRAP handler printing `trap NN: <text>`).
 3. Measurements on a quiet box, in the background: honest.sh R=11 (TG-DONE 1), the full
    sgraph2.sh run (frontier + hub-skew rows), the 45-90 s CSR build profile (sgraph phase b).
    Then the operator freezes a, b, c (D11-I) on the numbers, not before.

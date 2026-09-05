@@ -109,20 +109,23 @@ def sys_allow(bp):
 
 
 def entry_stub(bp):
-    """T118b: the 39 words of bebop.bp entry_stub (`st[i] = <int>`); word 35 is `b main`."""
+    """T118b: the words of bebop.bp entry_stub (`st[i] = <int>`); the 0x14000000 word is `b main`."""
     m = re.search(r"^fn entry_stub\(.*?\n}\n", open(bp).read(), re.S | re.M)
     return [int(x) for x in re.findall(r"st\[\d+\] = (\d+)", m.group(0))] if m else []
 
 
 def at_stub(W, entry, starts, stub):
-    """entry is the T118b stub iff its 39 words match the template and word 35 branches to a fn prologue."""
+    """entry is the T118b stub iff its words match the template and the `b` placeholder branches to a fn prologue."""
     span = W[entry:entry + len(stub)]
-    if len(stub) != 39 or len(span) != 39 or any(a != b for i, (a, b) in enumerate(zip(span, stub)) if i != 35):
+    if not stub or 0x14000000 not in stub or len(span) != len(stub):
         return False
-    b = span[35]
+    bi = stub.index(0x14000000)   # the `b .` placeholder cli_compile patches into `b main`
+    if any(a != b for i, (a, b) in enumerate(zip(span, stub)) if i != bi):
+        return False
+    b = span[bi]
     imm = b & 0x3FFFFFF
     imm -= 1 << 26 if imm & (1 << 25) else 0
-    return (b >> 26) == 5 and entry + 35 + imm in starts
+    return (b >> 26) == 5 and entry + bi + imm in starts
 
 
 def check_bin(path, allow, stub=()):

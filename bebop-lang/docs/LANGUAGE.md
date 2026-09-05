@@ -84,7 +84,7 @@ match CTOR(payload) { CTOR => expr, CTOR(x) => expr, ... }   -- COMPILE-TIME: th
 
 | call | meaning |
 |---|---|
-| `zeros(n)` | allocate n zeroed i64 cells from the arena (never freed; exit 80 when the arena is exhausted, T118) |
+| `zeros(n)` | allocate n zeroed i64 cells from the arena (never freed; exit 80 with `trap 80: arena exhausted (zeros crossed x28)` on stderr when the arena is exhausted, T118/T90) |
 | `str_len(s)`, `char(s, i)` | length / byte of a string literal (`"..."` is only valid as an argument) |
 | `clock_ms()` | CLOCK_MONOTONIC in ms |
 | `sys_open(cells, len, flags)`, `sys_read(fd, buf, n)`, `sys_write(fd, buf, n)`, `sys_close(fd)`, `sys_readbuf(fd, len)`, `sys_slurp(fd, len)`, `sys_mmap(addr, len, prot, flags, fd, off)`, `sys_munmap(a, len)`, `sys_ftruncate(fd, len)`, `sys_rename(a, la, b, lb)`, `sys_export(cells, n, path, len)`, `sys_exit(code)` | raw Linux syscalls |
@@ -114,7 +114,7 @@ match CTOR(payload) { CTOR => expr, CTOR(x) => expr, ... }   -- COMPILE-TIME: th
   per iteration when the compiler can prove no pointer escapes (T43); otherwise they
   leak within the frame. Overflow exits 81.
 - Stack: eval values and spills (x15). Deep recursion overflows the 64 MiB process
-  stack (SIGSEGV today; exit 82 planned, T118 b).
+  stack (exit 82 with `trap 82: SIGSEGV/SIGBUS (stack overflow or wild access)` on stderr, T118b/T90; the codes are in docs/TRAPS.md).
 - Arrays carry no length; indices are not checked (T48 will add `[T]` with length).
 
 ## Exit codes of a compiled program and of the compiler

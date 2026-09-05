@@ -1,4 +1,4 @@
-Status: 2026-09-05 CURRENT (T120, decision D11-M; the single table of exit codes — a code that is not here is a bug)
+Status: 2026-09-06 CURRENT (T120, decision D11-M; runtime traps 80/81/87 are one `brk #code` word each and the entry stub's SIGTRAP handler prints the row's text, T90 2c; the single table of exit codes — a code that is not here is a bug)
 
 # Exit codes
 
@@ -6,11 +6,11 @@ Status: 2026-09-05 CURRENT (T120, decision D11-M; the single table of exit codes
 |---|---|---|---|
 | 0..63 | program | `main`'s value modulo 256 is NOT the exit code: the seed prints the value and exits 0; a program exits non-zero only through `sys_exit` or a trap | seed.S |
 | 64 | bebop.bin | unknown CLI command (`compile`, `check`, `size`, `version`, `run-via-exec`, `cas`) or `check` without a file | bebop.bp main |
-| 80 | program | arena exhausted: a `zeros` crossed x28 (T118) | emit_zeros |
-| 81 | program | frame heap exhausted: an array literal / enum ctor crossed the 16 KiB frame (T118) | emit_array_lit, emit_enum_ctor |
-| 82 | program | SIGSEGV or SIGBUS in the program: stack overflow (deep recursion at 16 KiB per frame) or a wild access; the entry stub's handler exits 82 on an alternate stack (T118b) | entry_stub |
+| 80 | program | arena exhausted: a `zeros` crossed x28 (T118); `brk #80`, stderr `trap 80: arena exhausted (zeros crossed x28)` (T90 2c) | emit_zeros, entry_stub handler |
+| 81 | program | frame heap exhausted: an array literal / enum ctor crossed the 16 KiB frame (T118); `brk #81`, stderr `trap 81: frame heap exhausted (array literal or enum ctor)` | emit_array_lit, emit_enum_ctor, entry_stub handler |
+| 82 | program | SIGSEGV or SIGBUS in the program: stack overflow (deep recursion at 16 KiB per frame) or a wild access; the entry stub's handler writes `trap 82: SIGSEGV/SIGBUS (stack overflow or wild access)` and exits 82 on an alternate stack (T118b, T90 2c) | entry_stub |
 | 83 | bebop.bin | code buffer exhausted: one fn emitted 65536 words (the planning-pass buffer) or the program 262144 (before 2026-09-06 this was a SIGSEGV = exit 82); `code buffer exhausted at <cap> words (one fn or the program)` on stderr | em / cap_exit |
-| 87 | program | a call to a function the compiler never resolved was executed (T130; before it the call silently yielded 0) | emit_call |
+| 87 | program | a call to a function the compiler never resolved was executed (T130; before it the call silently yielded 0); `brk #87`, stderr `trap 87: call to an unresolved function` | emit_call, entry_stub handler |
 | 88 | bebop.bin | `use "cas://sha256:<hex>"`: the module's SHA-256 differs from its name (T80) | cas_verify |
 | 90 | seed / bebop.bin | open failed (source, output or the .bin to run; since T129 also the compiler's output or `.use` temp) | seed.S, cli_compile |
 | 91 | seed | read failed | seed.S |

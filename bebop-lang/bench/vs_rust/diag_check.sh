@@ -27,4 +27,21 @@ else echo "FAIL check d01 want 4:17 exit 95, got exit $rc: $err"; fail=$((fail+1
 rm -f "$T/c53.bin"; out=$(./seed/build/seed "$BIN" check bench/parity_constructs/c53_param9.bp 2>&1); rc=$?
 if [ "$rc" = 0 ] && [ ! -e bench/parity_constructs/c53_param9.bin ]; then echo "PASS check c53_param9 exit 0, no .bin written"; pass=$((pass+1));
 else echo "FAIL check c53_param9 want exit 0 and no .bin, got exit $rc: $out"; fail=$((fail+1)); fi
+# T90 step 2c (2026-09-06): runtime traps are `brk #code`; the entry stub's SIGTRAP handler
+# writes `trap NN: <text>` on stderr and exits with the code (82 = the SIGSEGV/SIGBUS handler).
+printf 'fn main() -> i64 {\n  let a = zeros(40000000);\n  a[0]\n}\n' > "$T/t80.bp"
+python3 -c 'lit="["+",".join(["1"]*511)+"]"; print("fn main() -> i64 {"); [print("  let a%d = %s;" % (i,lit)) for i in range(4)]; print("  a0[0] + a1[1] + a2[2] + a3[3]\n}")' > "$T/t81.bp"
+printf 'fn r(n: i64) -> i64 {\n  r(n + 1)\n}\nfn main() -> i64 {\n  r(0)\n}\n' > "$T/t82.bp"
+printf 'fn main() -> i64 {\n  nosuch(1)\n}\n' > "$T/t87.bp"
+while read -r code text; do
+  ./seed/build/seed "$BIN" compile "$T/t$code.bp" "$T/t$code.bin" >/dev/null 2>&1 || { echo "FAIL trap $code: compile failed"; fail=$((fail+1)); continue; }
+  err=$(timeout 20 ./seed/build/seed "$T/t$code.bin" 2>&1 >/dev/null); rc=$?
+  if [ "$rc" = "$code" ] && [ "$err" = "trap $code: $text" ]; then echo "PASS trap $code: $text"; pass=$((pass+1));
+  else echo "FAIL trap $code want exit $code + 'trap $code: $text', got exit $rc: $err"; fail=$((fail+1)); fi
+done <<'TRAPS'
+80 arena exhausted (zeros crossed x28)
+81 frame heap exhausted (array literal or enum ctor)
+82 SIGSEGV/SIGBUS (stack overflow or wild access)
+87 call to an unresolved function
+TRAPS
 echo "diag: $pass pass, $fail fail"; [ "$fail" = 0 ]

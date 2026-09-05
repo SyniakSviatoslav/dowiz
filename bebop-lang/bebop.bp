@@ -412,10 +412,8 @@ fn emit_struct_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = em(insns, n, 2436894178);
   let _ = em(insns, n, 2436628546);
   let _ = em(insns, n, 3942777311);
-  let _ = em(insns, n, 1409286281);
-  let _ = em(insns, n, 3531606560);
-  let _ = em(insns, n, 3531606984);
-  let _ = em(insns, n, 3556769793);
+  let _ = em(insns, n, 1409286217);
+  let _ = em(insns, n, 3558869536);
   let k = fcnt;
   while k > 0 {
     let k = k - 1;
@@ -499,15 +497,13 @@ fn emit_enum_ctor(s: str, tag: i64, pos: [i64], insns: [i64], n: [i64], stab: [i
   let _ = em(insns, n, 2432713166);
   // T118 (D11-D): frame-heap capacity trap -- the frame is 16 KiB from the
   // prologue sp and x15 = sp+256, so the heap end is x15 + 16128:
-  // add x2,x15,#12288 ; add x2,x2,#3840 ; cmp x14,x2 ; b.ls +4 ; mov x0,#81 ;
-  // mov x8,#94 ; svc  (exit 81 = frame heap exhausted)
+  // add x2,x15,#12288 ; add x2,x2,#3840 ; cmp x14,x2 ; b.ls +2 ; brk #81
+  // (exit 81 = frame heap exhausted; T90 2c: the entry stub's SIGTRAP handler prints the text)
   let _ = em(insns, n, 2436894178);
   let _ = em(insns, n, 2436628546);
   let _ = em(insns, n, 3942777311);
-  let _ = em(insns, n, 1409286281);
-  let _ = em(insns, n, 3531606560);
-  let _ = em(insns, n, 3531606984);
-  let _ = em(insns, n, 3556769793);
+  let _ = em(insns, n, 1409286217);
+  let _ = em(insns, n, 3558869536);
   let _ = push(insns, n, fntab);
   n[0]
 }
@@ -520,15 +516,13 @@ fn emit_enum_ctor_nullary(insns: [i64], n: [i64], tag: i64, fntab: [i64]) -> i64
   let _ = em(insns, n, 2432713166);
   // T118 (D11-D): frame-heap capacity trap -- the frame is 16 KiB from the
   // prologue sp and x15 = sp+256, so the heap end is x15 + 16128:
-  // add x2,x15,#12288 ; add x2,x2,#3840 ; cmp x14,x2 ; b.ls +4 ; mov x0,#81 ;
-  // mov x8,#94 ; svc  (exit 81 = frame heap exhausted)
+  // add x2,x15,#12288 ; add x2,x2,#3840 ; cmp x14,x2 ; b.ls +2 ; brk #81
+  // (exit 81 = frame heap exhausted; T90 2c: the entry stub's SIGTRAP handler prints the text)
   let _ = em(insns, n, 2436894178);
   let _ = em(insns, n, 2436628546);
   let _ = em(insns, n, 3942777311);
-  let _ = em(insns, n, 1409286281);
-  let _ = em(insns, n, 3531606560);
-  let _ = em(insns, n, 3531606984);
-  let _ = em(insns, n, 3556769793);
+  let _ = em(insns, n, 1409286217);
+  let _ = em(insns, n, 3558869536);
   let _ = push(insns, n, fntab);
   n[0]
 }
@@ -2586,15 +2580,13 @@ fn emit_array_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let _ = em(insns, n, 2432696320 + cnt * 8192 + 462);
   // T118 (D11-D): frame-heap capacity trap -- the frame is 16 KiB from the
   // prologue sp and x15 = sp+256, so the heap end is x15 + 16128:
-  // add x2,x15,#12288 ; add x2,x2,#3840 ; cmp x14,x2 ; b.ls +4 ; mov x0,#81 ;
-  // mov x8,#94 ; svc  (exit 81 = frame heap exhausted)
+  // add x2,x15,#12288 ; add x2,x2,#3840 ; cmp x14,x2 ; b.ls +2 ; brk #81
+  // (exit 81 = frame heap exhausted; T90 2c: the entry stub's SIGTRAP handler prints the text)
   let _ = em(insns, n, 2436894178);
   let _ = em(insns, n, 2436628546);
   let _ = em(insns, n, 3942777311);
-  let _ = em(insns, n, 1409286281);
-  let _ = em(insns, n, 3531606560);
-  let _ = em(insns, n, 3531606984);
-  let _ = em(insns, n, 3556769793);
+  let _ = em(insns, n, 1409286217);
+  let _ = em(insns, n, 3558869536);
   // pop x1 ; str x1,[x0,#k*8] (0xF9000001 + k*1024, as+objdump L1)
   let k = cnt;
   while k > 0 {
@@ -3455,8 +3447,8 @@ fn emit_call(s: str, fname: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64]
   let _ = skip_to(s, ppos, 123);
   let body = ppos[0] + 1;
   // T130 (2026-09-06): a call whose callee never resolves is a RUNTIME trap (exit 87),
-  // not a silent 0 -- mov x0,#87; mov x8,#94; svc; the push keeps the stack shape.
-  let _ = if okres == 0 then (let _ = em(insns, n, 3531606752) in (let _ = em(insns, n, 3531606984) in (let _ = em(insns, n, 3556769793) in (let _ = push(insns, n, fntab) in 0)))) else 0;
+  // not a silent 0 -- `brk #87` (T90 2c: the stub's SIGTRAP handler prints the text); the push keeps the stack shape.
+  let _ = if okres == 0 then (let _ = em(insns, n, 3558869728) in (let _ = push(insns, n, fntab) in 0)) else 0;
   let _ = pos[0] = pos[0] + 1;
   let i = 0;
   while i < pcnt {
@@ -4175,14 +4167,12 @@ fn emit_zeros(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   let _ = em(insns, n, 3548179489);
   let _ = em(insns, n, 2334065504);
   let _ = em(insns, n, 2332099451);
-  // T118 (D11-D, 2026-09-05): arena capacity trap -- cmp x27,x28 ; b.ls +4 ;
-  // mov x0,#80 ; mov x8,#94 ; svc  (exit 80 = arena exhausted, was a silent
-  // walk past the mapping and a SIGSEGV later)
+  // T118 (D11-D, 2026-09-05): arena capacity trap -- cmp x27,x28 ; b.ls +2 ; brk #80
+  // (exit 80 = arena exhausted, was a silent walk past the mapping and a SIGSEGV later;
+  // T90 2c: the entry stub's SIGTRAP handler prints `trap 80: ...`)
   let _ = em(insns, n, 3944481663);
-  let _ = em(insns, n, 1409286281);
-  let _ = em(insns, n, 3531606528);
-  let _ = em(insns, n, 3531606984);
-  let _ = em(insns, n, 3556769793);
+  let _ = em(insns, n, 1409286217);
+  let _ = em(insns, n, 3558869504);
   // Interpreter zeros(n) zeroes every element (qtt.c TERM_ZEROS eval); the
   // JIT must too: exec_words resets the bump-arena cursor to its base on
   // every call_jit, so a second invocation re-allocates the SAME addresses
@@ -4542,50 +4532,146 @@ fn use_expand(srcv: str, tmpc: [i64], tmpl: i64) -> str {
 // kernel-killed process. The code image is PROT_READ|EXEC, so the kernel sigaction
 // {handler, flags, restorer, mask} (32 B) and stack_t {sp, flags, size} (24 B) are
 // built in the ARENA at x27 (kept in x7) and the alternate stack follows them; x27
-// advances by 65600. argc/argv are preserved in x5/x6; word 35 is `b main`, patched
-// by the caller; words 36-38 are the handler. Assembled by python + objdump (scratch
-// stub2.bin), 39 words.
+// advances by 65600. argc/argv are preserved in x5/x6; word 42 is `b main`, patched
+// by the caller; the handler follows it. T90 step 2c (2026-09-06): SIGTRAP is registered too
+// (SA_SIGINFO | SA_ONSTACK): every capacity / unresolved-call trap site is one `brk #code`
+// word; the handler reads pc from ucontext (+440), takes imm16 of that word as the code
+// (82 for SIGSEGV/SIGBUS), writes `trap NN: <text>` from the table + texts that end the
+// stub, and exit_groups with the code. Assembled by as + objcopy + objdump (scratch
+// brk/stub.S), 131 words, verified standalone through the seed for 80/82/87/99.
 fn entry_stub(st: [i64]) -> i64 {
   let _ = st[0] = 2852127717;
   let _ = st[1] = 2852193254;
   let _ = st[2] = 2853897191;
-  let _ = st[3] = 268436514;
+  let _ = st[3] = 268436738;
   let _ = st[4] = 4177527010;
-  let _ = st[5] = 3533766658;
-  let _ = st[6] = 4177528034;
-  let _ = st[7] = 4177529087;
-  let _ = st[8] = 4177530111;
-  let _ = st[9] = 2432729315;
-  let _ = st[10] = 2432762084;
-  let _ = st[11] = 4177526884;
-  let _ = st[12] = 4177527935;
-  let _ = st[13] = 3533701156;
-  let _ = st[14] = 4177528932;
-  let _ = st[15] = 2332296059;
-  let _ = st[16] = 2432762747;
-  let _ = st[17] = 2852324320;
-  let _ = st[18] = 2854159329;
-  let _ = st[19] = 3531608200;
-  let _ = st[20] = 3556769793;
-  let _ = st[21] = 3531604320;
-  let _ = st[22] = 2852586465;
-  let _ = st[23] = 2854159330;
-  let _ = st[24] = 3531604227;
-  let _ = st[25] = 3531608264;
-  let _ = st[26] = 3556769793;
-  let _ = st[27] = 3531604192;
-  let _ = st[28] = 2852586465;
-  let _ = st[29] = 2854159330;
-  let _ = st[30] = 3531604227;
-  let _ = st[31] = 3531608264;
-  let _ = st[32] = 3556769793;
-  let _ = st[33] = 2852455392;
-  let _ = st[34] = 2852520929;
-  let _ = st[35] = 335544320;
-  let _ = st[36] = 3531606592;
-  let _ = st[37] = 3531606984;
-  let _ = st[38] = 3556769793;
-  39
+  let _ = st[5] = 3531604098;
+  let _ = st[6] = 4070637570;
+  let _ = st[7] = 4177528034;
+  let _ = st[8] = 4177529087;
+  let _ = st[9] = 4177530111;
+  let _ = st[10] = 2432729315;
+  let _ = st[11] = 2432762084;
+  let _ = st[12] = 4177526884;
+  let _ = st[13] = 4177527935;
+  let _ = st[14] = 3533701156;
+  let _ = st[15] = 4177528932;
+  let _ = st[16] = 2332296059;
+  let _ = st[17] = 2432762747;
+  let _ = st[18] = 2852324320;
+  let _ = st[19] = 2854159329;
+  let _ = st[20] = 3531608200;
+  let _ = st[21] = 3556769793;
+  let _ = st[22] = 3531604320;
+  let _ = st[23] = 2852586465;
+  let _ = st[24] = 2854159330;
+  let _ = st[25] = 3531604227;
+  let _ = st[26] = 3531608264;
+  let _ = st[27] = 3556769793;
+  let _ = st[28] = 3531604192;
+  let _ = st[29] = 2852586465;
+  let _ = st[30] = 2854159330;
+  let _ = st[31] = 3531604227;
+  let _ = st[32] = 3531608264;
+  let _ = st[33] = 3556769793;
+  let _ = st[34] = 3531604128;
+  let _ = st[35] = 2852586465;
+  let _ = st[36] = 2854159330;
+  let _ = st[37] = 3531604227;
+  let _ = st[38] = 3531608264;
+  let _ = st[39] = 3556769793;
+  let _ = st[40] = 2852455392;
+  let _ = st[41] = 2852520929;
+  let _ = st[42] = 335544320;
+  let _ = st[43] = 1384122947;
+  let _ = st[44] = 1895830559;
+  let _ = st[45] = 1409286273;
+  let _ = st[46] = 4181777476;
+  let _ = st[47] = 3107979396;
+  let _ = st[48] = 1392857219;
+  let _ = st[49] = 1359036518;
+  let _ = st[50] = 1895832799;
+  let _ = st[51] = 1409286504;
+  let _ = st[52] = 268435877;
+  let _ = st[53] = 2332429477;
+  let _ = st[54] = 3107979425;
+  let _ = st[55] = 3107980450;
+  let _ = st[56] = 872415426;
+  let _ = st[57] = 268435716;
+  let _ = st[58] = 2332098689;
+  let _ = st[59] = 3531604032;
+  let _ = st[60] = 3531606024;
+  let _ = st[61] = 3556769793;
+  let _ = st[62] = 704840672;
+  let _ = st[63] = 3531606984;
+  let _ = st[64] = 3556769793;
+  let _ = st[65] = 64;
+  let _ = st[66] = 45;
+  let _ = st[67] = 109;
+  let _ = st[68] = 59;
+  let _ = st[69] = 168;
+  let _ = st[70] = 56;
+  let _ = st[71] = 0;
+  let _ = st[72] = 0;
+  let _ = st[73] = 0;
+  let _ = st[74] = 0;
+  let _ = st[75] = 0;
+  let _ = st[76] = 0;
+  let _ = st[77] = 0;
+  let _ = st[78] = 0;
+  let _ = st[79] = 224;
+  let _ = st[80] = 40;
+  let _ = st[81] = 1885434484;
+  let _ = st[82] = 976238624;
+  let _ = st[83] = 1701994784;
+  let _ = st[84] = 1696620910;
+  let _ = st[85] = 1969318008;
+  let _ = st[86] = 1684370547;
+  let _ = st[87] = 1702504480;
+  let _ = st[88] = 544436082;
+  let _ = st[89] = 1936683619;
+  let _ = st[90] = 543450483;
+  let _ = st[91] = 691548792;
+  let _ = st[92] = 1634890762;
+  let _ = st[93] = 825761904;
+  let _ = st[94] = 1919295546;
+  let _ = st[95] = 543518049;
+  let _ = st[96] = 1885431144;
+  let _ = st[97] = 1752720672;
+  let _ = st[98] = 1953723745;
+  let _ = st[99] = 673211493;
+  let _ = st[100] = 1634890337;
+  let _ = st[101] = 1768693881;
+  let _ = st[102] = 1634887028;
+  let _ = st[103] = 1919885420;
+  let _ = st[104] = 1970169120;
+  let _ = st[105] = 1952653421;
+  let _ = st[106] = 170488431;
+  let _ = st[107] = 1885434484;
+  let _ = st[108] = 976369696;
+  let _ = st[109] = 1195987744;
+  let _ = st[110] = 1447511379;
+  let _ = st[111] = 1195987759;
+  let _ = st[112] = 542332226;
+  let _ = st[113] = 1635021608;
+  let _ = st[114] = 1864395619;
+  let _ = st[115] = 1718773110;
+  let _ = st[116] = 544698220;
+  let _ = st[117] = 1998615151;
+  let _ = st[118] = 543452265;
+  let _ = st[119] = 1701012321;
+  let _ = st[120] = 170488691;
+  let _ = st[121] = 1885434484;
+  let _ = st[122] = 976697376;
+  let _ = st[123] = 1818321696;
+  let _ = st[124] = 1869881452;
+  let _ = st[125] = 544104736;
+  let _ = st[126] = 1701998197;
+  let _ = st[127] = 1986817907;
+  let _ = st[128] = 1713398885;
+  let _ = st[129] = 1952673397;
+  let _ = st[130] = 175009641;
+  131
 }
 fn cli_compile(argc: i64, argv: [str]) -> i64 {
   let src = argv[3];
@@ -4642,10 +4728,10 @@ fn cli_compile(argc: i64, argv: [str]) -> i64 {
   let cnt = [0];
   let _ = collect_fns(srcv, fnames, fpos, cnt);
   let main_off = offs[idx_of_main(fnames, cnt[0]) + 1];
-  let stub = zeros(39);
+  let stub = zeros(131);
   let _ = entry_stub(stub);
-  let _ = stub[35] = 335544320 + ((main_off - (n0 + 35)) & 67108863);
-  let words = zeros(n0 + 40);
+  let _ = stub[42] = 335544320 + ((main_off - (n0 + 42)) & 67108863);
+  let words = zeros(n0 + 132);
   let ci = 0;
   while ci <= n0 {
     let _ = words[ci] = words0[ci];
@@ -4653,12 +4739,12 @@ fn cli_compile(argc: i64, argv: [str]) -> i64 {
     0
   };
   let cj = 0;
-  while cj < 39 {
+  while cj < 131 {
     let _ = words[n0 + 1 + cj] = stub[cj];
     let cj = cj + 1;
     0
   };
-  let n = n0 + 39;
+  let n = n0 + 131;
   let _ = words[0] = n;
   let entry = n0;
   let e4 = entry * 4;
