@@ -43,3 +43,5 @@ bebop bcond 1568 T104b shl_try + addshift_try (peephole matchers: 24 b.cond in t
 bebop bcond 1509 speed-up: slen (source length carried in pos[1], validated) replaces 43 per-token str_len scans
 bebop bcond 1536 T90 step 1: diag_exit/put_num/diag_text (line:col diagnostics before exit 95-99) compiled into the compiler
 bebop cbz 113 T90 step 1: diag_exit loops
+bebop bcond 1542 roadmap 1b: em bounds check (n[0] >= n[1] -> cap_exit, trap 83) + cap_exit's loops
+bebop cbz 114 roadmap 1b: cap_exit
