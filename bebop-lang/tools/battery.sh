@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.." || exit 1
 BIN=$(realpath -m "${1:?candidate .bin}"); T=${2:?tmp root}; export FREEZE=${FREEZE:-0}
 [ -s "$BIN" ] || { echo "GUARD: $BIN missing or empty (L12)"; exit 1; }
 mkdir -p "$T"/{std,cp,pd,pool}
-( BEBOP_TMP=$T/std BEBOP_BIN=$BIN bash bench/vs_rust/std_golden.sh > "$T/std.log" 2>&1 ) &
+( J=${J:-3} BEBOP_TMP=$T/std BEBOP_BIN=$BIN bash tools/std_par.sh > "$T/std.log" 2>&1 ) &  # sharded std_golden, one shard per A78 core
 ( BEBOP_TMP=$T/cp BEBOP_BIN=$BIN bash bench/vs_rust/construct_parity.sh > "$T/cp.log" 2>&1;
   BEBOP_TMP=$T/pd BEBOP_BIN=$BIN bash bench/vs_rust/parity_driver.sh > "$T/pd.log" 2>&1 ) &
 ( BEBOP_TMP=$T/pool BEBOP_BIN=$BIN bash bench/vs_rust/pool_parity.sh > "$T/pool.log" 2>&1;

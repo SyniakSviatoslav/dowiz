@@ -3693,7 +3693,14 @@ fn scan_one_lit(s: str, pos: [i64], fntab: [i64], L: i64, lcnt: [i64], cum: [i64
   len
 }
 
+// speed-up (2026-09-06): the fn starts are a by-product of the planning pass; cli_compile
+// used to run a THIRD full pass (emit_offsets) to learn main's offset. offs[0] = cnt,
+// offs[1 + i] = start of fn i in source order.
 fn compile_program_to(s: str, insns: [i64], n: [i64]) -> i64 {
+  let offs = zeros(256);
+  compile_program_offs(s, insns, n, offs)
+}
+fn compile_program_offs(s: str, insns: [i64], n: [i64], offs: [i64]) -> i64 {
   let fnames = zeros(256);
   let fpos = zeros(256);
   let cnt = [0];
@@ -3745,10 +3752,12 @@ fn compile_program_to(s: str, insns: [i64], n: [i64]) -> i64 {
   let k = [0];
   while k[0] < cnt[0] {
     let _ = starts[k[0]] = acc;
+    let _ = offs[1 + k[0]] = acc;
     let acc = acc + sizes[k[0]];
     let _ = k[0] = k[0] + 1;
     0
   };
+  let _ = offs[0] = cnt[0];
   let fntab = zeros(4096);
   let _ = fntab[0] = cnt[0];
   let _ = scan_literals(s, fntab, acc);
@@ -3962,9 +3971,13 @@ fn emit_expr_words(src: str) -> [i64] {
 // Entry for beboSelf.bin: the frozen compiler compiling other programs.
 // BENCH: two-pass compile of a whole fn-main program; returns [count, words...]
 fn emit_words(src: str) -> [i64] {
+  let offs = zeros(256);
+  emit_words_offs(src, offs)
+}
+fn emit_words_offs(src: str, offs: [i64]) -> [i64] {
   let insns = zeros(262144);
   let n = [0];
-  let _ = compile_program_to(src, insns, n);
+  let _ = compile_program_offs(src, insns, n, offs);
   let out = zeros(n[0] + 1);
   let _ = out[0] = n[0];
   let k = [0];
@@ -3979,118 +3992,6 @@ fn emit_words(src: str) -> [i64] {
   out
 }
 
-// BENCH: offsets of each fn (source order) within the compiled word stream.
-fn emit_offsets(src: str) -> [i64] {
-  let offs = zeros(256);
-  let insns = zeros(262144);
-  let n = [0];
-  let fnames = zeros(512);
-  let fpos = zeros(512);
-  let cnt = zeros(1024);
-  let _ = collect_fns(src, fnames, fpos, cnt);
-  let sizes = zeros(512);
-  let starts = zeros(512);
-  let ptab = zeros(512);
-  let _ = ptab[0] = cnt[0];
-  let pm = zeros(1024);
-  while pm[0] < cnt[0] {
-    let _ = ptab[1 + pm[0]] = fnames[pm[0]];
-    let _ = pm[0] = pm[0] + 1;
-    0
-  };
-
-  let pz = zeros(1024);
-  while pz[0] < cnt[0] {
-    let _ = ptab[1 + cnt[0] + cnt[0] + pz[0]] = fpos[pz[0]];
-    let _ = pz[0] = pz[0] + 1;
-    0
-  };
-
-  let enames_pz = zeros(512);
-  let ecnt_pz = zeros(1024);
-  let _ = collect_ctors(src, enames_pz, ecnt_pz);
-  let eb_pz = cnt[0] + cnt[0] + cnt[0] + 1;
-  let _ = ptab[eb_pz] = ecnt_pz[0];
-  let ez_pz = zeros(1024);
-  let ed_pz = if ecnt_pz[0] == 0 then 1 else 0;
-  while ed_pz == 0 {
-    let _ = ptab[eb_pz + 1 + ez_pz[0]] = enames_pz[ez_pz[0]];
-    let _ = ez_pz[0] = ez_pz[0] + 1;
-    let ed_pz = if ez_pz[0] >= ecnt_pz[0] then 1 else 0;
-    0
-  };
-  let i = zeros(1024);
-  while i[0] < cnt[0] {
-    let tmp = zeros(65536);
-    let tn = zeros(1024);
-    // T48a (2026-09-05): the planning pass passed SIX args to a 7-param fn (the
-    // token buffer came from whatever x6 held) -- found by tools/typecheck.py
-    let stk_o = zeros(1088);
-    let _ = compile_fn_at(src, fpos[i[0]], 0, ptab, tmp, tn, stk_o);
-    let _ = sizes[i[0]] = tn[0];
-    let _ = i[0] = i[0] + 1;
-    0
-  };
-  let acc = 0;
-  let k = zeros(1024);
-  while k[0] < cnt[0] {
-    let _ = starts[k[0]] = acc;
-    let acc = acc + sizes[k[0]];
-    let _ = k[0] = k[0] + 1;
-    0
-  };
-  let fntab = zeros(4096);
-  let _ = fntab[0] = cnt[0];
-  let _ = scan_literals(src, fntab, acc);
-  let m = zeros(1024);
-  while m[0] < cnt[0] {
-    let _ = fntab[1 + m[0]] = fnames[m[0]];
-    let _ = fntab[1 + cnt[0] + m[0]] = starts[m[0]];
-    let _ = m[0] = m[0] + 1;
-    0
-  };
-
-  let fz = zeros(1024);
-  while fz[0] < cnt[0] {
-    let _ = fntab[1 + cnt[0] + cnt[0] + fz[0]] = fpos[fz[0]];
-    let _ = fz[0] = fz[0] + 1;
-    0
-  };
-
-  let enames_fz = zeros(512);
-  let ecnt_fz = zeros(1024);
-  let _ = collect_ctors(src, enames_fz, ecnt_fz);
-  let eb_fz = cnt[0] + cnt[0] + cnt[0] + 1;
-  let _ = fntab[eb_fz] = ecnt_fz[0];
-  let ez_fz = zeros(1024);
-  let ed_fz = if ecnt_fz[0] == 0 then 1 else 0;
-  while ed_fz == 0 {
-    let _ = fntab[eb_fz + 1 + ez_fz[0]] = enames_fz[ez_fz[0]];
-    let _ = ez_fz[0] = ez_fz[0] + 1;
-    let ed_fz = if ez_fz[0] >= ecnt_fz[0] then 1 else 0;
-    0
-  };
-  let stk_p = zeros(1088);
-  let q = zeros(1024);
-  while q[0] < cnt[0] {
-    let _ = offs[q[0]] = n[0];
-    let _ = compile_fn_at(src, fpos[q[0]], starts[q[0]], fntab, insns, n, stk_p);
-    let _ = q[0] = q[0] + 1;
-    0
-  };
-    let out = zeros(cnt[0] + 1);
-  let _ = out[0] = cnt[0];
-  let oz = [0];
-  let ogo = 1;
-  while ogo == 1 {
-    let odone = if oz[0] >= cnt[0] then 1 else 0;
-    let _ = if odone == 0 then (let _ = out[oz[0] + 1] = offs[oz[0]] in 0) else 0;
-    let _ = oz[0] = oz[0] + 1;
-    let ogo = 1 - odone;
-    0
-  };
-  out
-}
 
 // ══════════════════════════════════════════════════════════════════════
 // FAST PATH (OPT-C/D): virtual-register codegen for pure arithmetic,
@@ -4580,9 +4481,9 @@ fn cli_compile(argc: i64, argv: [str]) -> i64 {
     return 0;
     0
   };
-  let words0 = emit_words(srcv);
+  let offs = zeros(256);
+  let words0 = emit_words_offs(srcv, offs);
   let n0 = words0[0];
-  let offs = emit_offsets(srcv);
   let fnames = zeros(256);
   let fpos = zeros(256);
   let cnt = [0];
