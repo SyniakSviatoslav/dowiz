@@ -45,3 +45,4 @@ bebop bcond 1536 T90 step 1: diag_exit/put_num/diag_text (line:col diagnostics b
 bebop cbz 113 T90 step 1: diag_exit loops
 bebop bcond 1542 roadmap 1b: em bounds check (n[0] >= n[1] -> cap_exit, trap 83) + cap_exit's loops
 bebop cbz 114 roadmap 1b: cap_exit
+bebop bcond 1559 T104b step 2: mulc_try (x*c for c = 2^k+1 / 2^k-1 / 2^j+2^k -> add-lsl / lsl+sub / add-lsl+lsl, 17 b.cond of selector ifs)

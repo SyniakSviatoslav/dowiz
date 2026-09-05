@@ -1952,6 +1952,43 @@ fn shl_try(insns: [i64], n: [i64], op: i64, fntab: [i64]) -> i64 {
   ok
 }
 
+// T104b step 2 (2026-09-06): `x * c` for a non-power-of-2 c in a single `movz x1,#c`:
+//   c = 2^k + 1              -> add x0,x0,x0,lsl #k                    (1 word for 2)
+//   c = 2^k - 1  (c >= 3)    -> lsl x1,x0,#k ; sub x0,x1,x0            (2 for 2, no multiplier)
+//   c = 2^j + 2^k (0 < j < k) -> add x0,x0,x0,lsl #(k-j) ; lsl x0,x0,#j (2 for 2: 6, 10, 12, 20, 24 ...)
+// Words (python + as + objdump, scratch forkC/t.s): add x0,x0,x0,lsl #k = 0x8B000000 | k<<10
+// (8b000400 #1, 8b003c00 #15); lsl x1,x0,#k = UBFM 0xD3400001 | (64-k)<<16 | (63-k)<<10
+// (d37df001 #3); sub x0,x1,x0 = 0xCB000020. The movz is retracted (label/barrier check as shl_try).
+fn mulc_try(insns: [i64], n: [i64], op: i64, fntab: [i64]) -> i64 {
+  let at = n[0] - 1;
+  let w = if at >= 0 then insns[at] else 0;
+  let is_movz1 = if (w & 4292870175) == 3531603969 then 1 else 0;
+  let c = (w >> 5) & 65535;
+  let base = (if op == 4 then 1 else 0) * is_movz1 * (if fntab[3660] == at then 0 else 1) * (if c >= 3 then 1 else 0);
+  let cm1 = c - 1;
+  let cp1 = c + 1;
+  let r1 = c & (c - 1);
+  let is_p1 = if (cm1 & (cm1 - 1)) == 0 then 1 else 0;
+  let is_m1 = if (cp1 & (cp1 - 1)) == 0 then 1 else 0;
+  let is_2b = (if r1 > 0 then 1 else 0) * (if (r1 & (r1 - 1)) == 0 then 1 else 0);
+  let sel_p1 = base * is_p1;
+  let sel_m1 = base * (1 - is_p1) * is_m1;
+  let sel_2b = base * (1 - is_p1) * (1 - is_m1) * is_2b;
+  let hit = sel_p1 + sel_m1 + sel_2b;
+  let kp = 63 - clz(cm1);
+  let km = 63 - clz(cp1);
+  let kh = 63 - clz(c);
+  let j = 63 - clz(c & (0 - c));
+  let _ = if hit == 1 then (let _ = n[0] = at in 0) else 0;
+  let _ = if sel_p1 == 1 then em(insns, n, 2332033024 + kp * 1024) else 0;
+  let _ = if sel_m1 == 1 then em(insns, n, 3544186881 + ((64 - km) & 63) * 65536 + (63 - km) * 1024) else 0;
+  let _ = if sel_m1 == 1 then em(insns, n, 3405774880) else 0;
+  let _ = if sel_2b == 1 then em(insns, n, 2332033024 + (kh - j) * 1024) else 0;
+  let _ = if sel_2b == 1 then em(insns, n, 3544186880 + ((64 - j) & 63) * 65536 + (63 - j) * 1024) else 0;
+  let _ = if hit == 1 then push(insns, n, fntab) else 0;
+  hit
+}
+
 // T104b: the shifted-register add. `xB + xA * 2^k` now arrives as [mov x0,xA]
 // [lsl x0,x0,#k][mov x1,x0][mov x0,xB] + add: the four words become ONE
 // `add x0,xB,xA,lsl #k` (0x8B000000 | A<<16 | k<<10 | B<<5; as+objdump:
@@ -1986,8 +2023,9 @@ fn addshift_try(insns: [i64], n: [i64], op: i64, fntab: [i64]) -> i64 {
 fn emit_binop_regs(insns: [i64], n: [i64], op: i64, fntab: [i64]) -> i64 {
   let fused = madd_try(insns, n, op, fntab);
   let shifted = if fused == 1 then 0 else shl_try(insns, n, op, fntab);
-  let addsh = if fused + shifted >= 1 then 0 else addshift_try(insns, n, op, fntab);
-  if fused + shifted + addsh >= 1 then n[0] else emit_binop_regs_plain(insns, n, op, fntab)
+  let mulc = if fused + shifted >= 1 then 0 else mulc_try(insns, n, op, fntab);
+  let addsh = if fused + shifted + mulc >= 1 then 0 else addshift_try(insns, n, op, fntab);
+  if fused + shifted + mulc + addsh >= 1 then n[0] else emit_binop_regs_plain(insns, n, op, fntab)
 }
 
 fn emit_binop_regs_plain(insns: [i64], n: [i64], op: i64, fntab: [i64]) -> i64 {
