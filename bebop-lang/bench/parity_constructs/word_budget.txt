@@ -9,3 +9,4 @@ c31_nested_lit 179 T118 frame-heap trap: 7 words per array literal / enum ctor s
 c33_loopalloc 141 T118 frame-heap trap: 7 words per array literal / enum ctor site
 c34_loopescape 125 T118 frame-heap trap: 7 words per array literal / enum ctor site
 c36_break 163 T118 frame-heap trap: 7 words per array literal / enum ctor site
+c01_lit 44 T101 slide defeats the const-const fold for 42 + 65536 (the second literal is two words); T104 peephole folds it back

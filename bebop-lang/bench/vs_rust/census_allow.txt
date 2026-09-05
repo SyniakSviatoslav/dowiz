@@ -21,3 +21,5 @@ bebop bcond 1339 T47 use_expand (scan + dedup loops in cli_compile)
 bebop cbz 149 T47 use_expand (scan + dedup loops in cli_compile)
 bebop bcond 1341 T48a emit_offsets token buffer
 bebop cbz 150 T48a emit_offsets token buffer
+bebop bcond 1373 T101 left-operand slide (hazard scan loops)
+bebop bcond 1377 T101 left-operand slide

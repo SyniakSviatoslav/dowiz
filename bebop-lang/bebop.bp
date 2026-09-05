@@ -1588,6 +1588,91 @@ fn pop2(insns: [i64], n: [i64], fntab: [i64]) -> i64 {
   n[0]
 }
 
+// ---- T101 (2026-09-05, D11-G fallback: x0/x1 only, no IR): the left operand
+// of a binop/cmp is one word P (mov x0,xR / ldr x0,[x15,#k] / movz x0,#imm)
+// sitting under its push when the right operand starts. If the right operand
+// R (a) is longer than one producer + push (else pop2 already handles it),
+// (b) contains no label (fntab[3660] < L) and (c) never writes P's register or
+// spill slot (mov xR,x0 / str x0,[x15,#k]), then R is slid down over [P][push]
+// and the pair becomes `mov x1,x0 ; P ; op` -- the stack round trip of the
+// left operand disappears (K4 loop: 24 -> 20 words). Positions inside R are
+// PC-relative only (expressions hold no statements), so the slide is exact.
+fn left_single_begin(insns: [i64], n: [i64], fntab: [i64]) -> i64 {
+  let cur = n[0];
+  let ok3 = if cur >= 3 then 1 else 0;
+  let L = if ok3 == 1 then cur - 3 else 0;
+  let w = insns[L];
+  let is_movr = if (w & 4292935679) == 2852127712 then 1 else 0;
+  let is_ldr15 = if (w & 4290774015) == 4181721568 then 1 else 0;
+  let is_movz = if (w & 4292870175) == 3531603968 then 1 else 0;
+  let pa = (if insns[L + 1] == 3506455551 then 1 else 0) * (if insns[L + 2] == 4177527776 then 1 else 0);
+  let nolab = if fntab[3660] < L then 1 else 0;
+  let hit = ok3 * (is_movr + is_ldr15 + is_movz) * pa * nolab;
+  if hit == 1 then L else 0 - 1
+}
+
+// 1 when the words [a,b) write register/slot of the producer P (hazard).
+fn writes_producer(insns: [i64], a: i64, b: i64, p: i64) -> i64 {
+  let is_movr = if (p & 4292935679) == 2852127712 then 1 else 0;
+  let is_ldr15 = if (p & 4290774015) == 4181721568 then 1 else 0;
+  let reg = (p >> 16) & 31;
+  let slot = (p >> 10) & 4095;
+  let movw = 2852127712 + reg;
+  let strw = 4177527264 + slot * 1024;
+  let i = a;
+  let hz = 0;
+  while i < b {
+    let w = insns[i];
+    let hz = hz + is_movr * (if w == movw then 1 else 0) + is_ldr15 * (if w == strw then 1 else 0);
+    let i = i + 1;
+    0
+  };
+  if hz > 0 then 1 else 0
+}
+
+// Count words in [a,b) with (w & mask) == pat.
+fn count_masked(insns: [i64], a: i64, b: i64, mask: i64, pat: i64) -> i64 {
+  let i = a;
+  let c = 0;
+  while i < b {
+    let c = c + (if (insns[i] & mask) == pat then 1 else 0);
+    let i = i + 1;
+    0
+  };
+  c
+}
+
+// After R was emitted (it ends with a push): perform the slide when legal.
+// Returns 1 when the operands are now x0 = left, x1 = right (no pops needed).
+fn left_single_finish(insns: [i64], n: [i64], fntab: [i64], L: i64) -> i64 {
+  let cur = n[0];
+  let rlen = cur - (L + 3) - 2;
+  let p = insns[L];
+  let long = if rlen > 1 then 1 else 0;
+  let nolab = if fntab[3660] < L then 1 else 0;
+  let endpush = (if insns[cur - 2] == 3506455551 then 1 else 0) * (if insns[cur - 1] == 4177527776 then 1 else 0);
+  // PC-relative words inside R that target OUTSIDE R move with the slide:
+  // `bl` (0x94000000) gets its imm26 bumped by 3; an `adr` (string literal
+  // address, 0x10000000 family) refuses the slide (rare, not worth re-encoding).
+  let has_adr = count_masked(insns, L + 3, cur - 2, 2667577344, 268435456);
+  let go = (if L >= 0 then 1 else 0) * long * nolab * endpush * (1 - writes_producer(insns, L + 3, cur - 2, p)) * (if has_adr > 0 then 0 else 1);
+  let i = 0;
+  while i < rlen * go {
+    let w = insns[L + 3 + i];
+    let is_bl = if (w & 4227858432) == 2483027968 then 1 else 0;
+    let _ = insns[L + i] = w + is_bl * 3;
+    let i = i + 1;
+    0
+  };
+  let _ = if go == 1 then (let _ = n[0] = L + rlen in 0) else 0;
+  let _ = if go == 1 then (let _ = em(insns, n, 2852127713) in 0) else 0;
+  let _ = if go == 1 then (let _ = em(insns, n, p) in 0) else 0;
+  let d = fntab[3700];
+  let _ = if go == 1 then (let _ = fntab[3700] = (if d > 1 then d - 2 else 0) in 0) else 0;
+  let _ = if go == 1 then fold_clear(fntab) else 0;
+  go
+}
+
 // Emit a binary op (2=add 3=sub 4=mul 5=div): pop b->x1, pop a->x0, op, push.
 // R6.2 v4: const-const add/sub/mul fold via fold_try (stream decode);
 // the legacy body lives in emit_binop_plain, dispatched at ONE level.
@@ -1600,6 +1685,11 @@ fn emit_binop(insns: [i64], n: [i64], op: i64, fntab: [i64]) -> i64 {
 // The legacy stack-machine binary op (see emit_binop).
 fn emit_binop_plain(insns: [i64], n: [i64], op: i64, fntab: [i64]) -> i64 {
   let _ = pop2(insns, n, fntab);
+  emit_binop_regs(insns, n, op, fntab)
+}
+
+// The op word(s) + push with x0 = left, x1 = right already in place.
+fn emit_binop_regs(insns: [i64], n: [i64], op: i64, fntab: [i64]) -> i64 {
   let wadd = if op == 2 then 2332098560 else 0;
   let wsub = if op == 3 then 3405840384 else 0;
   let wmul = if op == 4 then 2600565760 else 0;
@@ -1702,9 +1792,11 @@ fn emit_num(s: str, pos: [i64], insns: [i64], n: [i64], fntab: [i64]) -> i64 {
 // Consume one (+ or -) term, then fold (branchless helper).
 fn emit_apply_op(s: str, pos: [i64], insns: [i64], n: [i64], is_minus: i64, stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
+  let L = left_single_begin(insns, n, fntab);
   let _ = emit_term(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let op = if is_minus == 1 then 3 else 2;
-  let _ = emit_binop(insns, n, op, fntab);
+  let slid = left_single_finish(insns, n, fntab, L);
+  let _ = if slid == 1 then emit_binop_regs(insns, n, op, fntab) else emit_binop(insns, n, op, fntab);
   n[0]
 }
 
@@ -1716,9 +1808,11 @@ fn emit_apply_op(s: str, pos: [i64], insns: [i64], n: [i64], is_minus: i64, stab
 // expression is well-formed: a*b<<c == a*(b<<c).
 fn emit_apply_mul(s: str, pos: [i64], insns: [i64], n: [i64], is_div: i64, stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
+  let L = left_single_begin(insns, n, fntab);
   let _ = emit_factor(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let op = if is_div == 1 then 5 else 4;
-  let _ = emit_binop(insns, n, op, fntab);
+  let slid = left_single_finish(insns, n, fntab, L);
+  let _ = if slid == 1 then emit_binop_regs(insns, n, op, fntab) else emit_binop(insns, n, op, fntab);
   n[0]
 }
 
@@ -1726,8 +1820,10 @@ fn emit_apply_mul(s: str, pos: [i64], insns: [i64], n: [i64], is_div: i64, stab:
 // R3.x(a) FIX: bitlvl-tier right operand, same reasoning as mul/div.
 fn emit_apply_mod(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
+  let L = left_single_begin(insns, n, fntab);
   let _ = emit_factor(s, pos, insns, n, stab, selfname, selfstart, fntab);
-  let _ = emit_binop(insns, n, 11, fntab);
+  let slid = left_single_finish(insns, n, fntab, L);
+  let _ = if slid == 1 then emit_binop_regs(insns, n, 11, fntab) else emit_binop(insns, n, 11, fntab);
   n[0]
 }
 
@@ -1735,6 +1831,10 @@ fn emit_apply_mod(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
 // pop a->x0, cmp x0,x1, cset x0,<cond>, push.
 fn emit_cmp_op(insns: [i64], n: [i64], cond: i64, fntab: [i64]) -> i64 {
   let _ = pop2(insns, n, fntab);
+  emit_cmp_regs(insns, n, cond, fntab)
+}
+
+fn emit_cmp_regs(insns: [i64], n: [i64], cond: i64, fntab: [i64]) -> i64 {
   let _ = em(insns, n, 3942711327);
   let _ = em(insns, n, 2594113504 + cond * 4096);
   let _ = push(insns, n, fntab);
@@ -1746,13 +1846,15 @@ fn emit_cmp_op(insns: [i64], n: [i64], cond: i64, fntab: [i64]) -> i64 {
 // tokens (adv=2), the rest one char.
 fn emit_apply_bits(s: str, pos: [i64], insns: [i64], n: [i64], op: i64, adv: i64, lvl: i64, stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + adv;
+  let L = left_single_begin(insns, n, fntab);
   // right operand = the next-tighter tier: lvl 3 (`|`) -> bxor, 2 (`^`) -> band,
   // 1 (`&`) -> shift, 0 (`<<` `>>`) -> expr
   let _ = if lvl == 3 then emit_bxor(s, pos, insns, n, stab, selfname, selfstart, fntab)
     else if lvl == 2 then emit_band(s, pos, insns, n, stab, selfname, selfstart, fntab)
     else if lvl == 1 then emit_shift(s, pos, insns, n, stab, selfname, selfstart, fntab)
     else emit_expr(s, pos, insns, n, stab, selfname, selfstart, fntab);
-  let _ = emit_binop(insns, n, op, fntab);
+  let slid = left_single_finish(insns, n, fntab, L);
+  let _ = if slid == 1 then emit_binop_regs(insns, n, op, fntab) else emit_binop(insns, n, op, fntab);
   n[0]
 }
 
@@ -1835,8 +1937,10 @@ fn emit_shift(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
 // Consume one comparison operator + right operand, then fold (branchless).
 fn emit_apply_cmp(s: str, pos: [i64], insns: [i64], n: [i64], cond: i64, adv: i64, stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + adv;
+  let L = left_single_begin(insns, n, fntab);
   let _ = emit_bor(s, pos, insns, n, stab, selfname, selfstart, fntab);
-  let _ = emit_cmp_op(insns, n, cond, fntab);
+  let slid = left_single_finish(insns, n, fntab, L);
+  let _ = if slid == 1 then emit_cmp_regs(insns, n, cond, fntab) else emit_cmp_op(insns, n, cond, fntab);
   n[0]
 }
 

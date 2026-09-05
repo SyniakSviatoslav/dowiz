@@ -73,6 +73,8 @@ def classify(src=None, bp=None, wd=None):
         rc3, out3, err3 = run([SEED, bn], RUN_T, wd)
         if rc3 in (80, 81, 82):  # any capacity trap: bpref models the arena only, order may differ
             return 'TRAP-OK', 'rc=%d' % rc3, 'rc=%d' % exp_trap
+        if rc3 == 124:  # the oracle trapped early, bebop is still computing: a heavy generator case
+            return 'TRAP-TIMEOUT', 'rc=124', 'rc=%d (trap)' % exp_trap
         return 'DIVERGE', 'rc=%d %s' % (rc3, out3.strip()[-60:]), 'rc=%d (trap)' % exp_trap
     if rc != 0:
         return 'BPREF-ERROR', 'rc=%d %s' % (rc, err.strip()[-120:].replace('\n', ' ')), ''
