@@ -56,3 +56,16 @@ bebop.bp changes (every gate recompiles: 99 x 0.36 s on 3 cores), the 40 s bpref
 heavy nested-loop seeds (1 in 300), and any battery run alongside another battery (timing
 gates flake: lcjit). Rule that paid off most: differential timing over gdb sampling under
 proot, and one line in the emitter over any tooling when the cause is O(n) x O(n).
+
+## Operator dev-speed list (2026-09-05) — status (Status: 2026-09-06 CURRENT, update in place)
+
+| # | item | state | evidence |
+|---|---|---|---|
+| 1 | automated minimiser (creduce-like, one command) | IN PROGRESS | bench/fuzz/ladder.py: 3301 -> 1010 bytes on the 42122 repro in 250 s (statement rungs cut 530, the token rung the rest); target <= 15 lines in <= 3 min |
+| 2 | granular compilation (parser / IR / backend as separate binaries) | MEASURE FIRST | docs/SPEEDUP-ANALYSIS.md section 2026-09-06 (phase timings of the 15 s self-compile) -> operator decision |
+| 3 | editor watch mode | DONE | tools/watch.sh [--once] f.bp -> `f.bp:line:col: msg [exit N]` or `OK <words> words <ms> ms`; Vim errorformat / VS Code problemMatcher in the header |
+| 4 | smart test selection | DONE (as a gate memo) | std_golden.sh replays a PASSed run keyed by md5(.bin).md5(seed).ordinal[.argv]: 99/99 in 11 s instead of 33 s; a compiler change misses exactly the gates whose .bin changed, so the "dependency graph" is computed from outputs, not guessed from file hashes |
+| 5 | build artifacts on tmpfs | REFUTED | journal 1788634841: tmpfs vs flash 649 vs 641 ms per compile under proot; BEBOP_TMP is tmpfs already |
+| 6 | binary AST/IR cache for unchanged modules | MEASURE FIRST | .becache (T108) already keys compiler+kernel crc and saves the whole std-gate compile (113 ms hit); what a per-module cache buys the self-compile is in SPEEDUP-ANALYSIS 2026-09-06 |
+| 7 | parallel per-fn codegen | MEASURE FIRST | same section: fn-size distribution + determinism/fixpoint cost |
+| 8 | micro-REPL | DONE | tools/eval.sh '<expr>' / -f file / -p helpers: bebop and bpref in parallel, DIFF on disagreement, 0.3 s |
