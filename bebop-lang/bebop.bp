@@ -1684,8 +1684,44 @@ fn emit_binop_plain(insns: [i64], n: [i64], op: i64, fntab: [i64]) -> i64 {
   emit_binop_regs(insns, n, op, fntab)
 }
 
+// T104 (2026-09-05): multiply-add fusion. `xB + xA * c` (after the T101 slide)
+// arrives as [mov x0,xA][mov x1,#c][mul x0,x0,x1][mov x1,x0][mov x0,xB] + add:
+// the five words become [mov x1,#c][madd x0,xA,x1,xB] (0x9B010000 | B<<10 |
+// A<<5; as+objdump). Same for xA * c + xB (the mul is the left, the var the
+// right: [mov x0,xA][mov x1,#c][mul][mov x1,xB] + add -> [mov x1,#c][mov x2,xB]
+// ... not done; only the slid form). Returns 1 when fused (the op is emitted).
+fn madd_try(insns: [i64], n: [i64], op: i64, fntab: [i64]) -> i64 {
+  let cur = n[0];
+  let ok = if cur >= 5 then 1 else 0;
+  let b0 = if ok == 1 then cur - 5 else 0;
+  let w0 = insns[b0];
+  let w1 = insns[b0 + 1];
+  let w2 = insns[b0 + 2];
+  let w3 = insns[b0 + 3];
+  let w4 = insns[b0 + 4];
+  let is_mova = if (w0 & 4292935679) == 2852127712 then 1 else 0;
+  let is_movc = if (w1 & 4292870175) == 3531603969 then 1 else 0;
+  let is_mul = if w2 == 2600565760 then 1 else 0;
+  let is_mov10 = if w3 == 2852127713 then 1 else 0;
+  let is_movb = if (w4 & 4292935679) == 2852127712 then 1 else 0;
+  let nolab = if fntab[3660] < b0 then 1 else 0;
+  let hit = ok * (if op == 2 then 1 else 0) * is_mova * is_movc * is_mul * is_mov10 * is_movb * nolab;
+  let ra = (w0 >> 16) & 31;
+  let rb = (w4 >> 16) & 31;
+  let _ = if hit == 1 then (let _ = n[0] = b0 in 0) else 0;
+  let _ = if hit == 1 then (let _ = em(insns, n, w1) in 0) else 0;
+  let _ = if hit == 1 then (let _ = em(insns, n, 2600534016 + rb * 1024 + ra * 32) in 0) else 0;
+  let _ = if hit == 1 then (let _ = push(insns, n, fntab) in 0) else 0;
+  hit
+}
+
 // The op word(s) + push with x0 = left, x1 = right already in place.
 fn emit_binop_regs(insns: [i64], n: [i64], op: i64, fntab: [i64]) -> i64 {
+  let fused = madd_try(insns, n, op, fntab);
+  if fused == 1 then n[0] else emit_binop_regs_plain(insns, n, op, fntab)
+}
+
+fn emit_binop_regs_plain(insns: [i64], n: [i64], op: i64, fntab: [i64]) -> i64 {
   let wadd = if op == 2 then 2332098560 else 0;
   let wsub = if op == 3 then 3405840384 else 0;
   let wmul = if op == 4 then 2600565760 else 0;

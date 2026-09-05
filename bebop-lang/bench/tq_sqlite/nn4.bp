@@ -1,0 +1,135 @@
+// T106 nn4 (D1(b) gate, 2026-09-05): the brute-force nearest scan of nn.bp sharded
+// over W worker threads (pool.bp idiom: sys_clone with 64 KiB stacks carved from the
+// arena, per-worker done flags, futex park). Q = 24 queries; worker w answers
+// queries [w*8, w*8+8) over the whole 1M-point array (read-only, shared arena).
+// Returns ok * 10^12 + seq_ms * 10^6 + par_ms where ok = (parallel fold == sequential fold, same rule as nn.bp
+// over the 24 answers (== bench/oracles: truth_fold_Q24 is NOT computed by
+// oracle.py; the gate compares the parallel fold with the sequential fold in the
+// same run) and seq/par are in-process clock_ms of the two scans.
+fn lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
+fn fill(us: [i64], vs: [i64], n: i64) -> i64 {
+  let x = 12345;
+  let i = 0;
+  while i < n {
+    let x = lcg(x);
+    let _ = us[i] = (x >> 33) - 1073741824;
+    let x = lcg(x);
+    let _ = vs[i] = (x >> 33) - 1073741824;
+    let i = i + 1;
+    0
+  };
+  x
+}
+fn scan(us: [i64], vs: [i64], n: i64, qu: i64, qv: i64) -> i64 {
+  let best = 9223372036854775807;
+  let bi = 0 - 1;
+  let i = 0;
+  while i < n {
+    let du = us[i] - qu;
+    let dv = vs[i] - qv;
+    let d = du * du + dv * dv;
+    let hit = d < best;
+    let best = if hit == 1 then d else best;
+    let bi = if hit == 1 then i else bi;
+    let i = i + 1;
+    0
+  };
+  bi
+}
+// answer queries [q0, q1) into env[3]; env = [us, vs, qs, ans] (one pointer array so
+// the clone-spanning fn below keeps <= 8 live symbols: spilled slots are per-thread)
+fn work(env: [i64], n: i64, q0: i64, q1: i64) -> i64 {
+  let us = env[0];
+  let vs = env[1];
+  let qs = env[2];
+  let ans = env[3];
+  let q = q0;
+  while q < q1 {
+    let _ = ans[q] = scan(us, vs, n, qs[q * 2], qs[q * 2 + 1]);
+    let q = q + 1;
+    0
+  };
+  0
+}
+// the parallel region: 4 params + 4 locals = 8 symbols, nothing spilled (pool.bp rule)
+fn par(env: [i64], n: i64, cells: [i64], W: i64) -> i64 {
+  let base = sys_arena_base();
+  let i = 0;
+  while i < W {
+    let r = sys_clone(68864, base + 131072 + i * 65536);
+    // T72: the child pins itself to A78 core 4+i (cells[W*2+1+i] holds the mask)
+    let _ = if r == 0 then sys_setaffinity(cells, W * 2 + 1 + i) else 0;
+    let _ = if r == 0 then work(env, n, i * 8, i * 8 + 8) else 0;
+    let _ = sys_cond_set(if r == 0 then 1 else 0, cells, W + i, 1);
+    let _ = sys_futex_wake(cells, W + i, 64);
+    let parked = if r == 0 then 0 else 1;
+    while parked == 0 {
+      let _ = sys_futex_wait_guard(if r == 0 then 0 else 1, cells, W * 2, 0);
+      let parked = if cells[W * 2] == 1 then 1 else 0;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  let i = 0;
+  while i < W {
+    let parked = 0;
+    while parked == 0 {
+      let _ = sys_futex_wait_guard(0, cells, W + i, 0);
+      let parked = if cells[W + i] == 1 then 1 else 0;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  0
+}
+fn fold_of(ans: [i64], q: i64) -> i64 {
+  let fold = 0;
+  let p = 1;
+  let k = 0;
+  while k < q {
+    let fold = (fold + (ans[k] + 1000000007) * p) % 1000000007;
+    let p = (p * 131) % 1000000007;
+    let k = k + 1;
+    0
+  };
+  fold
+}
+fn main() -> i64 {
+  let n = 1000000;
+  let q = 24;
+  let W = 3;
+  let us = zeros(n);
+  let vs = zeros(n);
+  let x = fill(us, vs, n);
+  let qs = zeros(q * 2);
+  let ans = zeros(q);
+  let cells = zeros(W * 2 + 1 + W);
+  let _ = cells[W * 2 + 1] = 16;
+  let _ = cells[W * 2 + 2] = 32;
+  let _ = cells[W * 2 + 3] = 64;
+  let k = 0;
+  let x = x;
+  while k < q {
+    let x = lcg(x);
+    let _ = qs[k * 2] = (x >> 33) - 1073741824;
+    let x = lcg(x);
+    let _ = qs[k * 2 + 1] = (x >> 33) - 1073741824;
+    let k = k + 1;
+    0
+  };
+  let env = [us, vs, qs, ans];
+  let t0 = clock_ms();
+  let _ = work(env, n, 0, q);
+  let seq_ms = clock_ms() - t0;
+  let fold_seq = fold_of(ans, q);
+  let k = 0;
+  while k < q { let _ = ans[k] = 0 - 1; let k = k + 1; 0 };
+  let t1 = clock_ms();
+  let _ = par(env, n, cells, W);
+  let par_ms = clock_ms() - t1;
+  let fold_par = fold_of(ans, q);
+  let ok = if fold_par == fold_seq then 1 else 0;
+  ok * 1000000000000 + seq_ms * 1000000 + par_ms
+}
