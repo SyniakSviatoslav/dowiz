@@ -3676,7 +3676,10 @@ fn emit_offsets(src: str) -> [i64] {
   while i[0] < cnt[0] {
     let tmp = zeros(65536);
     let tn = zeros(1024);
-    let _ = compile_fn_at(src, fpos[i[0]], 0, ptab, tmp, tn);
+    // T48a (2026-09-05): the planning pass passed SIX args to a 7-param fn (the
+    // token buffer came from whatever x6 held) -- found by tools/typecheck.py
+    let stk_o = zeros(1088);
+    let _ = compile_fn_at(src, fpos[i[0]], 0, ptab, tmp, tn, stk_o);
     let _ = sizes[i[0]] = tn[0];
     let _ = i[0] = i[0] + 1;
     0
@@ -3969,7 +3972,7 @@ fn use_expand(srcv: str, tmpc: [i64], tmpl: i64) -> str {
   out
 }
 
-fn cli_compile(argc: i64, argv: i64) -> i64 {
+fn cli_compile(argc: i64, argv: [str]) -> i64 {
   let src = argv[3];
   let out = argv[4];
   let ls = str_len(src);
@@ -4038,7 +4041,7 @@ fn cli_compile(argc: i64, argv: i64) -> i64 {
   rc2 * 10 + rn
 }
 
-fn cli_size(argv: i64) -> i64 {
+fn cli_size(argv: [str]) -> i64 {
   let f = argv[3];
   let lf = str_len(f);
   let pf = zeros(lf + 1);
@@ -4059,7 +4062,7 @@ fn cli_size(argv: i64) -> i64 {
   total[0] / 4
 }
 
-fn cli_run(argv: i64) -> i64 {
+fn cli_run(argv: [str]) -> i64 {
   // run-via-exec needs the C-side exec builtin (not in the self-hosted
   // emitter); post-C execution = `seed <compiled.bin>`. Return 2.
   2
@@ -4248,7 +4251,7 @@ fn emit_sys_rename(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
 }
 
 
-fn main(argc: i64, argv: i64) -> i64 {
+fn main(argc: i64, argv: [str]) -> i64 {
   let cmd = if argc >= 3 then argv[2] else 0;
   let bcmp = zeros(16);
   let bsize = zeros(8);

@@ -19,3 +19,5 @@ bebop cbz 142 T43 rest: struct-literal guard + find_struct line-start test
 c40_struct bcond 4 T43 rest: new construct (struct literals + 2 frame traps + loop)
 bebop bcond 1339 T47 use_expand (scan + dedup loops in cli_compile)
 bebop cbz 149 T47 use_expand (scan + dedup loops in cli_compile)
+bebop bcond 1341 T48a emit_offsets token buffer
+bebop cbz 150 T48a emit_offsets token buffer

@@ -1731,7 +1731,7 @@ DONE-CHECK: gate `usemod`; `gen_selfsrc.sh` concatenation deleted;
 bebop.bp itself split into `use`d files with the fixpoint byte-exact.
 DEPS: T38. BLOCKERS: none.
 
-**T48 · checked types at zero runtime cost** — D10 2026-09-04: adds `ref T` (object-relative offset) as a distinct type — the only guard against an arena/frame address reaching a store cell; `[T]` and `fp` tagged in the layout digest.
+**T48 · checked types at zero runtime cost** — D10 2026-09-04: adds `ref T` (object-relative offset) as a distinct type — the only guard against an arena/frame address reaching a store cell; `[T]` and `fp` tagged in the layout digest. — PARTIAL 2026-09-05 (T48a: declared-vs-use census as invariants gate (vii) via tools/typecheck.py, 0 findings; found and fixed the emit_offsets 6-of-7-args call; T48b = `ref T`/[T]-with-length inside bebop.bin, scheduled with the STORE PULL). T125 (new): `&&`/`||` are accepted by bebop.bin (morph.bp:46) but undefined — define short-circuit forms or reject (bpref has neither).
 GOAL: the annotations the parser currently discards become checked:
 `i64`, `[i64]`, `str`, `fp` (fixed-point 2^32), `even`/`odd` (Z2 parity,
 T25 S3), `cell` (dispatcher cell id, T50). Mismatch = compile-time loud
