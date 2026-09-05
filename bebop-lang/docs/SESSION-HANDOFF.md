@@ -25,10 +25,14 @@ HEAD: `git log --oneline | head -3`; every commit message carries the gate evide
 - Store: unchanged this session (G1-G8 numbers in ROADMAP Measured / RESULT-*.md).
 
 ## Session 14 (2026-09-06, HEAD c2173f8 pushed)
-- T90 step 2b landed: `bebop.bin check <src>` (cli_check; diag 13/13; fixpoint deef28e0; census
-  bcond 1588 / cbz 119 ALLOWed). T90's last open piece: messages for runtime traps 80-88 — a
-  design choice for the operator (brk #imm + SIGTRAP handler in the entry stub, 1 word per site,
-  vs an inline write at every trap site), not started.
+- T90 DONE. 2b: `bebop.bin check <src>` (cli_check; fixpoint deef28e0). 2c (operator chose brk):
+  every runtime trap site is one `brk #code` word (80 zeros, 81 frame heap x4, 87 unresolved call);
+  the entry stub (39 -> 131 words, scratch brk/stub.S assembled with as) registers SIGTRAP and its
+  handler prints `trap NN: <text>` + exits with the code (82 for SEGV/BUS). Fixpoint d785e062,
+  44 constructs re-frozen at +92 words (word_budget.txt), census.txt k7 603 -> 599, diag 17/17
+  with four runtime probes. Rebuilding the stub: edit brk/stub.S in a scratchpad, `as` + `objcopy
+  -O binary -j .text`, regenerate the `st[i] =` lines with python, update the 131/42/132 constants
+  in cli_compile (check_abi finds the `b .` placeholder itself).
 - AGENTS L21 + tools/reap.sh: after every task list/kill orphaned work shells and zombie
   parents (`REAP_PS=tools/reap.fixture tools/reap.sh` is the self-test). Found today: an
   orphaned invariants.sh + 4 zombies from a dead session at the 32-process cap.
