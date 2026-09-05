@@ -40,3 +40,4 @@ bebop cbz 160 T130 unresolved-call trap + T118b entry stub
 bebop bcond 1544 T80 cas:// imports (cas_prefix/cas_path/cas_verify in use_scan, cli_cas verb, sha256 prelude compiled into the compiler)
 bebop cbz 177 T80 cas:// imports (cas_prefix/cas_path/cas_verify in use_scan, cli_cas verb, sha256 prelude compiled into the compiler)
 bebop bcond 1568 T104b shl_try + addshift_try (peephole matchers: 24 b.cond in the emitter, every construct shrinks)
+bebop bcond 1509 speed-up: slen (source length carried in pos[1], validated) replaces 43 per-token str_len scans

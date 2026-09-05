@@ -32,8 +32,23 @@ fn is_alpha(c: i64) -> i64 {
 
 // Read a multi-char identifier (letters/digits/underscore) starting at pos[0];
 // return its polynomial hash (h = h*131 + c, i64-wrapping), advance pos past it.
+// speed-up (2026-09-06): str_len is a NUL scan (~100 us over a 200 KB source) and the
+// emitter asked for the source length about ten times per token -- O(source x tokens),
+// most of a self-compile (4000 `let s = s + i;` statements took 15 s, +200 KB of comment
+// made it 20x slower). compile_fn_at now carries the length in pos[1]; slen returns it
+// when it is a valid end (char(s, L) == 0 and char(s, L - 1) != 0 -- a 1-cell pos from a
+// whole-source scanner reads a neighbour cell here and the check rejects it) and scans
+// otherwise. Lookahead past the end reads the zero tail of the slurp buffer.
+fn slen(s: str, pos: [i64]) -> i64 {
+  let L = pos[1];
+  let inr = (if L > 0 then 1 else 0) * (if L < 2000000 then 1 else 0);
+  let c0 = if inr == 1 then char(s, L) else 1;
+  let c1 = if inr == 1 then char(s, L - 1) else 0;
+  let ok = inr * (if c0 == 0 then 1 else 0) * (if c1 == 0 then 0 else 1);
+  if ok == 1 then L else str_len(s)
+}
 fn read_ident(s: str, pos: [i64]) -> i64 {
-  let strn = str_len(s);
+  let strn = slen(s, pos);
   let h = 0;
   let done = 0;
   while done == 0 {
@@ -71,7 +86,7 @@ fn sym_lookup(s: str, stab: [i64], name: i64, srcpos: i64) -> i64 {
 // Byte-compare two identifier spellings at source offsets pa/pb: equal if
 // the char sequences match exactly AND both end at a non-ident char.
 fn ident_eq(s: str, pa: i64, pb: i64) -> i64 {
-  let strn = str_len(s);
+  let strn = 2000000000;  // speed-up 2026-09-06: no NUL scan; the zero tail ends the loop
   let same = 1;
   let ia = [pa];
   let ib = [pb];
@@ -126,7 +141,7 @@ fn sym_bind(s: str, stab: [i64], name: i64, srcpos: i64) -> i64 {
 
 // Skip over a param's type annotation up to the next ',' or ')'.
 fn skip_to_delim(s: str, pos: [i64]) -> i64 {
-  let strn = str_len(s);
+  let strn = slen(s, pos);
   let done = 0;
   while done == 0 {
     let at_end = if pos[0] >= strn then 1 else 0;
@@ -144,7 +159,7 @@ fn skip_to_delim(s: str, pos: [i64]) -> i64 {
 // Parse a param list (pos at '('): read each param name hash into pnames,
 // advance pos past ')', return the count.
 fn parse_params(s: str, pos: [i64], pnames: [i64], ppos: [i64]) -> i64 {
-  let strn = str_len(s);
+  let strn = slen(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let pcnt = 0;
   let done = 0;
@@ -174,7 +189,7 @@ fn emit_ident(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   let npos = pos[0];
   let name = read_ident(s, pos);
   let _ = skip_ws(s, pos);
-  let strn = str_len(s);
+  let strn = slen(s, pos);
   let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
   let is_lp = if ch == 40 then 1 else 0;
   let is_br = if ch == 123 then 1 else 0;
@@ -201,7 +216,7 @@ fn emit_ident(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
 
 // Skip over a struct field's type annotation up to the next ',' or '}'.
 fn skip_to_field_delim(s: str, pos: [i64]) -> i64 {
-  let strn = str_len(s);
+  let strn = slen(s, pos);
   let done = 0;
   while done == 0 {
     let at_end = if pos[0] >= strn then 1 else 0;
@@ -311,7 +326,7 @@ fn emit_struct_field(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], fc
 // (+ the T118 frame trap) and the values are popped into their slots from the
 // last down -- the same order rule as emit_array_lit (T42).
 fn emit_struct_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
-  let strn = str_len(s);
+  let strn = slen(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let slots = zeros(16);
   let fcnt = 0;
@@ -594,7 +609,7 @@ fn ft_cache_set(tab: [i64], name: i64, val: i64) -> i64 {
 
 // A real cross-function call via bl: eval args -> x0..x(n-1), bl target, push.
 fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
-  let strn = str_len(s);
+  let strn = slen(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let nargs = 0;
   let done = 0;
@@ -1389,7 +1404,7 @@ fn emit_match_arm(s: str, ppos: i64, has_var: i64, vname: i64, vpos: i64, bodypo
 // The arm loop stops at the closing brace and consumes ONLY it (T42 2026-09-04:
 // it used to run the arm tail at "}" and scan into the enclosing expression).
 fn emit_match(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
-  let strn = str_len(s);
+  let strn = slen(s, pos);
   let _ = pos[0] = pos[0] + 5;
   let _ = skip_ws(s, pos);
   let cname = read_ident(s, pos);
@@ -1434,7 +1449,7 @@ fn emit_match(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
 
 // Skip a "//" line comment: advance pos to the newline (or end). pos is at '/'.
 fn skip_line_comment(s: str, pos: [i64]) -> i64 {
-  let strn = str_len(s);
+  let strn = slen(s, pos);
   let done = 0;
   while done == 0 {
     let at_end = if pos[0] >= strn then 1 else 0;
@@ -1451,7 +1466,7 @@ fn skip_line_comment(s: str, pos: [i64]) -> i64 {
 // Skip a "..." string literal: pos is at the opening '"', leave it after the
 // closing '"'.
 fn skip_string(s: str, pos: [i64]) -> i64 {
-  let strn = str_len(s);
+  let strn = slen(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let done = 0;
   while done == 0 {
@@ -1468,7 +1483,7 @@ fn skip_string(s: str, pos: [i64]) -> i64 {
 }
 
 fn skip_ws(s: str, pos: [i64]) -> i64 {
-  let n = str_len(s);
+  let n = slen(s, pos);
   let done = 0;
   while done == 0 {
     let at_end = if pos[0] >= n then 1 else 0;
@@ -1972,7 +1987,7 @@ fn hex_val(ch: i64) -> i64 {
 // T99 (2026-09-04): `0x..` hex literals are a literal FORM (base 16 in the
 // same digit loop), not sugar; bpref.py mirrors the token.
 fn read_num_val(s: str, pos: [i64]) -> i64 {
-  let strn = str_len(s);
+  let strn = slen(s, pos);
   let ch0 = if pos[0] >= strn then 0 else char(s, pos[0]);
   let ch1 = if pos[0] + 1 >= strn then 0 else char(s, pos[0] + 1);
   let is_hex = (if ch0 == 48 then 1 else 0) * (if ch1 == 120 then 1 else 0);
@@ -2077,7 +2092,7 @@ fn emit_bor(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i
   let done = 0;
   while done == 0 {
     let _ = skip_ws(s, pos);
-    let strn = str_len(s);
+    let strn = slen(s, pos);
     let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
     let isop = if ch == 124 then 1 else 0;
     let _ = if isop == 1 then emit_apply_bits(s, pos, insns, n, 13, 1, 3, stab, selfname, selfstart, fntab) else 0;
@@ -2093,7 +2108,7 @@ fn emit_bxor(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
   let done = 0;
   while done == 0 {
     let _ = skip_ws(s, pos);
-    let strn = str_len(s);
+    let strn = slen(s, pos);
     let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
     let isop = if ch == 94 then 1 else 0;
     let _ = if isop == 1 then emit_apply_bits(s, pos, insns, n, 14, 1, 2, stab, selfname, selfstart, fntab) else 0;
@@ -2109,7 +2124,7 @@ fn emit_band(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
   let done = 0;
   while done == 0 {
     let _ = skip_ws(s, pos);
-    let strn = str_len(s);
+    let strn = slen(s, pos);
     let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
     let isop = if ch == 38 then 1 else 0;
     let _ = if isop == 1 then emit_apply_bits(s, pos, insns, n, 12, 1, 1, stab, selfname, selfstart, fntab) else 0;
@@ -2127,7 +2142,7 @@ fn emit_shift(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   let done = 0;
   while done == 0 {
     let _ = skip_ws(s, pos);
-    let strn = str_len(s);
+    let strn = slen(s, pos);
     let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
     let nch = if pos[0] + 1 >= strn then 0 else char(s, pos[0] + 1);
     let nch2 = if pos[0] + 2 >= strn then 0 else char(s, pos[0] + 2);
@@ -2161,7 +2176,7 @@ fn emit_cmp(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i
   let done = 0;
   while done == 0 {
     let _ = skip_ws(s, pos);
-    let strn = str_len(s);
+    let strn = slen(s, pos);
     let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
     let e1 = if pos[0] + 1 >= strn then 1 else 0;
     let ch1 = if e1 == 1 then 0 else char(s, pos[0] + 1);
@@ -2193,7 +2208,7 @@ fn emit_expr(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
   let done = 0;
   while done == 0 {
     let _ = skip_ws(s, pos);
-    let strn = str_len(s);
+    let strn = slen(s, pos);
     let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
     let is_plus = if ch == 43 then 1 else 0;
     let is_minus = if ch == 45 then 1 else 0;
@@ -2218,7 +2233,7 @@ fn emit_term(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
   let done = 0;
   while done == 0 {
     let _ = skip_ws(s, pos);
-    let strn = str_len(s);
+    let strn = slen(s, pos);
     let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
     let is_mul = if ch == 42 then 1 else 0;
     let is_div = if ch == 47 then 1 else 0;
@@ -2253,7 +2268,7 @@ fn emit_paren(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
-  let cp = if pos[0] >= str_len(s) then 0 else char(s, pos[0]);
+  let cp = if pos[0] >= slen(s, pos) then 0 else char(s, pos[0]);
   let _ = if cp == 41 then 0 else sys_exit(95);
   let _ = pos[0] = pos[0] + 1;
   n[0]
@@ -2333,7 +2348,7 @@ fn emit_let_in(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
   let _ = pos[0] = pos[0] + 1;
   let _ = skip_ws(s, pos);
   // chain detection: ident followed by '=' (but not '=='/'=>')
-  let strq = str_len(s);
+  let strq = slen(s, pos);
   let c0 = if pos[0] >= strq then 0 else char(s, pos[0]);
   let is_id = is_alpha(c0);
   let wq = pos[0];
@@ -2360,7 +2375,7 @@ fn emit_let_in(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
 fn emit_let_plain(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], reg: i64) -> i64 {
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
-  let ci = if pos[0] >= str_len(s) then 0 else char(s, pos[0]);
+  let ci = if pos[0] >= slen(s, pos) then 0 else char(s, pos[0]);
   // `in` or `;` (T42 2026-09-04: the corpus' `(let t = e; body)` form
   // only ever worked because `; ` was skipped as if it were `in`; make it
   // a real synonym instead of trapping it -- ntt/fno regression at 3eeb007)
@@ -2383,7 +2398,7 @@ fn emit_let_chain(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
-  let ci = if pos[0] >= str_len(s) then 0 else char(s, pos[0]);
+  let ci = if pos[0] >= slen(s, pos) then 0 else char(s, pos[0]);
   // `in` or `;` (T42 2026-09-04: the corpus' `(let t = e; body)` form
   // only ever worked because `; ` was skipped as if it were `in`; make it
   // a real synonym instead of trapping it -- ntt/fno regression at 3eeb007)
@@ -2427,7 +2442,7 @@ fn emit_str(s: str, pos: [i64], insns: [i64], n: [i64], fntab: [i64]) -> i64 {
 // an allocating call inside an element reused the same x14 cells and
 // silently overwrote the outer elements. Same word count, no extra pushes.
 fn emit_array_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
-  let strn = str_len(s);
+  let strn = slen(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let cnt = 0;
   let done = 0;
@@ -2501,7 +2516,7 @@ fn emit_array_set(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
 // Emit name[i] (get) or name[i] = v (set). `name` is a bound array variable;
 // pos is at '['. Emit base (push), emit index (push), then get or set.
 fn emit_array_index(s: str, name: i64, npos: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
-  let strn = str_len(s);
+  let strn = slen(s, pos);
   let reg = sym_lookup(s, stab, name, npos);
   let _ = emit_var(insns, n, reg, fntab);
   let _ = pos[0] = pos[0] + 1;
@@ -2544,7 +2559,7 @@ fn emit_unary(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
 // factor = number | letter | ( expr ) | cond expr then expr else expr
 fn emit_factor(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = skip_ws(s, pos);
-  let strn = str_len(s);
+  let strn = slen(s, pos);
   let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
   // unary not: !e desugars to (e == 0). The '!=' two-char token is left
   // alone for the comparison tier. (Desugar disabled: the nested
@@ -2597,7 +2612,7 @@ fn emit_factor(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
     // progress guard: '.' that fails to consume input must not spin forever
     let before = pos[0];
     let _ = skip_ws(s, pos);
-    let strn2 = str_len(s);
+    let strn2 = slen(s, pos);
     let ch2 = if pos[0] >= strn2 then 0 else char(s, pos[0]);
     let is_dot = if ch2 == 46 then 1 else 0;
     let _ = if is_dot == 1 then emit_field_access(s, pos, insns, n, stab, fntab) else 0;
@@ -2670,7 +2685,7 @@ fn compile(s: str) -> i64 {
 
 // Advance pos to just before the first occurrence of `target`.
 fn skip_to(s: str, pos: [i64], target: i64) -> i64 {
-  let strn = str_len(s);
+  let strn = slen(s, pos);
   let done = 0;
   while done == 0 {
     let at_end = if pos[0] >= strn then 1 else 0;
@@ -2873,7 +2888,7 @@ fn emit_return_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], sel
   let _ = fntab[3662] = k + 1;
   let _ = em(insns, n, 335544320);
   let _ = skip_ws(s, pos);
-  let cs = if pos[0] >= str_len(s) then 0 else char(s, pos[0]);
+  let cs = if pos[0] >= slen(s, pos) then 0 else char(s, pos[0]);
   let _ = if cs == 59 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
   n[0]
 }
@@ -2886,7 +2901,7 @@ fn emit_break_stmt(s: str, pos: [i64], insns: [i64], n: [i64], fntab: [i64]) -> 
   let _ = fntab[3680] = k + 1;
   let _ = em(insns, n, 335544320);
   let _ = skip_ws(s, pos);
-  let cs = if pos[0] >= str_len(s) then 0 else char(s, pos[0]);
+  let cs = if pos[0] >= slen(s, pos) then 0 else char(s, pos[0]);
   let _ = if cs == 59 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
   n[0]
 }
@@ -2978,7 +2993,7 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = skip_ws(s, pos);
-  let strnW = str_len(s);
+  let strnW = slen(s, pos);
   let cW = if pos[0] >= strnW then 0 else char(s, pos[0]);
   let _ = if cW == 59 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
   n[0]
@@ -2998,7 +3013,7 @@ fn emit_let_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   // ---- chained discard-assign: `let _ = NAME = RHS;` lowers to NAME<-RHS ----
   let _ = skip_ws(s, pos);
   let sq0 = pos[0];
-  let strq = str_len(s);
+  let strq = slen(s, pos);
   let cq0 = if sq0 >= strq then 0 else char(s, sq0);
   let qa0 = is_alpha(cq0);
   let wq0 = [sq0];
@@ -3036,7 +3051,7 @@ fn emit_let_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   let _ = if is_chain == 1 then (let _ = pos[0] = qws[0] + 1 in (let _ = skip_ws(s, pos) in 0)) else 0;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
-  let strnV = str_len(s);
+  let strnV = slen(s, pos);
   let cV = if pos[0] >= strnV then 0 else char(s, pos[0]);
   let _ = if cV == 59 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
   let grew_v = if n[0] > nb_v then 1 else 0;
@@ -3065,7 +3080,7 @@ fn emit_compound_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], s
   let name = read_ident(s, pos);
   let reg0 = sym_lookup(s, stab, name, npos);
   let _ = skip_ws(s, pos);
-  let opch = if pos[0] >= str_len(s) then 0 else char(s, pos[0]);
+  let opch = if pos[0] >= slen(s, pos) then 0 else char(s, pos[0]);
   let is_add = if opch == 43 then 1 else 0;
   let is_sub = if opch == 45 then 1 else 0;
   let is_mul = if opch == 42 then 1 else 0;
@@ -3078,7 +3093,7 @@ fn emit_compound_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], s
   let _ = pop(insns, n, 0, fntab);
   let _ = bind_reg(insns, n, reg0);
   let _ = skip_ws(s, pos);
-  let strnC = str_len(s);
+  let strnC = slen(s, pos);
   let cC = if pos[0] >= strnC then 0 else char(s, pos[0]);
   let _ = if cC == 59 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
   n[0]
@@ -3090,7 +3105,7 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
   while done == 0 {
     let before = pos[0];
     let _ = skip_ws(s, pos);
-    let strn = str_len(s);
+    let strn = slen(s, pos);
     let at_end0 = if pos[0] >= strn then 1 else 0;
     let ch = if at_end0 == 1 then 0 else char(s, pos[0]);
     let e1 = if pos[0] + 1 >= strn then 1 else 0;
@@ -3157,7 +3172,7 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     // F3 refined: dead-value suppression applies ONLY to the final expr
     // item of a while body (lookahead: next non-ws char is rbrace / EOF)
     let _ = skip_ws(s, pos);
-    let strnE = str_len(s);
+    let strnE = slen(s, pos);
     let cE = if pos[0] >= strnE then 0 else char(s, pos[0]);
     let fin_brace = if cE == 125 then 1 else 0;
     let fin_eof = if pos[0] >= strnE then 1 else 0;
@@ -3170,7 +3185,7 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     let _ = if is_expr == 1 then emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
     // non-final legacy items must not leave values on the stack
     let _ = skip_ws(s, pos);
-    let strn9 = str_len(s);
+    let strn9 = slen(s, pos);
     let c9 = if pos[0] >= strn9 then 0 else char(s, pos[0]);
     let not_rbrace = if c9 == 125 then 0 else 1;
     let not_eof = if pos[0] >= strn9 then 0 else 1;
@@ -3184,7 +3199,7 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     // and fn emitters pop that value, and must NOT pop otherwise
     let lastf = if is_item == 1 then is_expr * (1 - more_ahead) else lastf;
     let _ = skip_ws(s, pos);
-    let strn2 = str_len(s);
+    let strn2 = slen(s, pos);
     let at_end1 = if pos[0] >= strn2 then 1 else 0;
     let c2 = if at_end1 == 1 then 0 else char(s, pos[0]);
     let is_semi = if c2 == 59 then 1 else 0;
@@ -3255,7 +3270,7 @@ fn skip_args(s: str, pos: [i64]) -> i64 {
   let go = 1;
   let depth = 0;
   while go == 1 {
-    let strn3 = str_len(s);
+    let strn3 = slen(s, pos);
     let at_end3 = if pos[0] >= strn3 then 1 else 0;
     let ch3 = if at_end3 == 1 then 0 else char(s, pos[0]);
     let nch3 = if pos[0] + 1 >= strn3 then 0 else char(s, pos[0] + 1);
@@ -3322,7 +3337,7 @@ fn emit_call(s: str, fname: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64]
     let reg = sym_bind(s, stab, pnames[i], pparpos[i]);
     let _ = bind_reg(insns, n, reg);
     let _ = skip_ws(s, pos);
-    let strn = str_len(s);
+    let strn = slen(s, pos);
     let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
     let is_comma = if ch == 44 then 1 else 0;
     let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
@@ -3459,7 +3474,7 @@ fn compile_fn(s: str) -> i64 {
 // Collect all "fn <name>(" definitions in source order: fnames[i]=name hash,
 // fpos[i]=byte offset of the 'f'. Returns the count via cnt[0].
 fn collect_fns(s: str, fnames: [i64], fpos: [i64], cnt: [i64]) -> i64 {
-  let strn = str_len(s);
+  let strn = slen(s, pos);
   let j = 0;
   let tpos_c = [0];
   let spc = [0];
@@ -3511,7 +3526,7 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   let _ = fntab[3661] = 0;  // T43: while nesting depth (frame-heap mark slot)
   let _ = fntab[3662] = 0;  // T99: pending `return` placeholders
   let _ = fntab[3680] = 0;  // T99: pending `break` placeholders
-  let pos = [fpos];
+  let pos = [fpos, str_len(s)];
   let stab = zeros(385);  // 1 + 3*128 (name,reg,srcpos) verified triples; overflow -> loud trap
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 2;
@@ -3672,7 +3687,7 @@ fn scan_literals(s: str, fntab: [i64], L: i64) -> i64 {
 // fntab[3903 + lcnt] = L + cum, advance cum by ceil((len+1)/8) cells, move
 // pos past the closing '"'.
 fn scan_one_lit(s: str, pos: [i64], fntab: [i64], L: i64, lcnt: [i64], cum: [i64]) -> i64 {
-  let strn = str_len(s);
+  let strn = slen(s, pos);
   let start = pos[0];
   let done = 0;
   while done == 0 {

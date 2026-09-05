@@ -23,6 +23,10 @@ HEAD: `git log --oneline | head -3`; every commit message carries the gate evide
 - Language rule made explicit (DIVERGE-20056): an array literal bound INSIDE a while body is
   released at the back-edge / loop exit (T43 frame heap) — LANGUAGE.md memory model; bpref
   raises "use after loop release"; gen.py never emits the shape. Not a miscompile.
+- Compiler speed: str_len was a NUL scan called ~10x per token on the whole source; the length
+  now travels in pos[1] (slen). Self-compile 187 s -> 15 s; a std gate 20 s -> 0.6 s. The
+  third compile pass (emit_offsets) is gone. tools/pcprof.sh's gdb samples are NOT reliable
+  under proot (they clustered at one call site) — use differential timing (scratch mb/).
 - Fuzz: gen.py named loop vars by len(loopvars) and big loops were not in it -> reused
   names + assignable big-loop vars = non-terminating programs in BOTH engines; those were
   the 49 "BPREF-TIMEOUT"s. Fixed: 20 seeds in 12.8 s, 0 timeouts (1.56/s vs 0.05/s).
