@@ -1149,6 +1149,37 @@ fn emit_crc32(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   n[0]
 }
 
+// crc32x(cells, off, n): zlib crc32 of the RAW little-endian bytes of n cells starting
+// at cells[off] (T109b, 2026-09-05) -- the store's integrity crc with no staging
+// (8 B per CRC32X). pop x2 = n, pop x1 = off, pop x0 = cells; add x0,x0,x1,lsl #3;
+// movn w3,#0; L: cbz x2,done; ldr x4,[x0],#8; crc32x w3,w3,x4; sub x2,x2,#1; b L;
+// done: orn w0,wzr,w3; push. Equals zlib.crc32(struct.pack('<%dq' % n, cells)).
+fn emit_crc32x(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 2, fntab);
+  let _ = pop(insns, n, 1, fntab);
+  let _ = pop(insns, n, 0, fntab);
+  let _ = em(insns, n, 2332101632);
+  let _ = em(insns, n, 310378499);
+  let _ = em(insns, n, 3019899042);
+  let _ = em(insns, n, 4164977668);
+  let _ = em(insns, n, 2596555875);
+  let _ = em(insns, n, 3506439234);
+  let _ = em(insns, n, 402653180);
+  let _ = em(insns, n, 706937824);
+  let _ = push(insns, n, fntab);
+  n[0]
+}
+
 // sys_readbuf(fd,len): raw read into the IO scratch zone, returns its
 // address — the standard handoff for feeding source text to emit_words.
 fn emit_sys_readbuf(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
@@ -1271,6 +1302,7 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   let is_aff = if name == 7304771531850188344 then 1 else 0;
   let is_clz = if name == 1713209 then 1 else 0;
   let is_crc = if name == 29413480223 then 1 else 0;
+  let is_crx = if name == 3853165909333 then 1 else 0;
   let is_fwg = if name == 15293169932641766580 then 1 else 0;
   let is_cs = if name == 16710314075682296179 then 1 else 0;
   if is_hh == 1 then emit_hvham(s, pos, insns, n, stab, selfname, selfstart, fntab)
@@ -1291,6 +1323,7 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   else if is_aff == 1 then emit_sys_setaffinity(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_clz == 1 then emit_clz(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_crc == 1 then emit_crc32(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_crx == 1 then emit_crc32x(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_sp == 1 then emit_sys_slurp(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_sln == 1 then emit_str_len_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_chf == 1 then emit_char_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)

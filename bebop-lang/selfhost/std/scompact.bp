@@ -1,0 +1,82 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+// scompact.bp — G4 (T113): 10^6 nodes N{i64} reachable from a root R{arr ref N}
+// (payload [n, ref x n]); 60% of the nodes get a new version (val + 1) and one new
+// root (the old root and 600k old nodes are superseded); compaction = Cheney copy
+// into <store>.tmp + rename. Fold = sum val_i * (i + 1) (wrap) over the live graph,
+// computed through the store before and after; result = fold * ok where ok needs
+// fold unchanged, superseded_cells == 0 after, arena_used == live + 1024, and
+// every 100000th node crc-valid after the copy. bench/oracles/scompact.py holds
+// the fold and checks the file size <= live * 8 + 3 pages.
+fn fold_live(base: [i64], tmp: [i64]) -> i64 {
+  let root = st_root(base, tmp);
+  let n = st_get(base, root, 0);
+  let i = 0;
+  let acc = 0;
+  let ok = 1;
+  while i < n {
+    let node = st_ref(base, root, 1 + i);
+    let acc = acc + st_get(base, node, 0) * (i + 1);
+    let ok = if i % 100000 == 0 then ok * st_check(base, node, tmp) else ok;
+    let i = i + 1;
+    0
+  };
+  acc * ok
+}
+fn main() -> i64 {
+  let path = zeros(64);
+  let pl = st_str(path, "scompact.store");
+  let tmp = zeros(256);
+  let size = 100663296;
+  let n = 1000000;
+  let base = st_open(path, pl, size, tmp);
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let dn = st_digest("N{i64}");
+  let dr = st_digest("R{arr ref N}");
+  let root = st_alloc(base, tx, n + 1, dr);
+  let _ = st_put(base, root, 0, n);
+  let v = 42;
+  let i = 0;
+  while i < n {
+    let v = v * 6364136223846793005 + 1442695040888963407;
+    let o = st_alloc(base, tx, 1, dn);
+    let _ = st_put(base, o, 0, v);
+    let _ = st_seal(base, o, tmp);
+    let _ = st_link(base, root, 1 + i, o);
+    let i = i + 1;
+    0
+  };
+  let _ = st_seal(base, root, tmp);
+  let _ = st_commit(base, tx, root, tmp);
+  let _ = st_begin(base, tx, tmp);
+  let root2 = st_alloc(base, tx, n + 1, dr);
+  let _ = st_put(base, root2, 0, n);
+  let j = 0;
+  while j < n {
+    let old = st_ref(base, root, 1 + j);
+    let sup = if j < 600000 then 1 else 0;
+    let o = if sup == 1 then st_alloc(base, tx, 1, dn) else old;
+    let _ = if sup == 1 then st_put(base, o, 0, st_get(base, old, 0) + 1) else 0;
+    let _ = if sup == 1 then st_seal(base, o, tmp) else 0;
+    let _ = if sup == 1 then st_supersede(base, tx, old) else 0;
+    let _ = st_link(base, root2, 1 + j, o);
+    let j = j + 1;
+    0
+  };
+  let _ = st_seal(base, root2, tmp);
+  let _ = st_supersede(base, tx, root);
+  let _ = st_commit(base, tx, root2, tmp);
+  let f1 = fold_live(base, tmp);
+  let sb = st_pick(base, tmp);
+  let sup_before = base[sb + 8];
+  let _ = sys_munmap(st_addr(base), size);
+  let lay = [dn, 0, dr, 0 - 1];
+  let live = st_compact(path, pl, size, lay, 2, tmp);
+  let b2 = st_map_ro(path, pl, size);
+  let f2 = fold_live(b2, tmp);
+  let sb2 = st_pick(b2, tmp);
+  let ok = (f1 == f2) * (b2[sb2 + 8] == 0) * (b2[sb2 + 4] == live + 1024) * (sup_before > 0) * (live == n * 3 + n + 3);
+  let _ = sys_munmap(st_addr(b2), size);
+  f1 * ok
+}

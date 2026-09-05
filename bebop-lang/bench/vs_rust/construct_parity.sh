@@ -79,6 +79,7 @@ for f in "$DIR"/*.bp; do
     c42_crc32) EXPECT=1001269;;
     c43_arena_persist) EXPECT=16048003;;
     c44_use24) EXPECT=131;;
+    c45_crc32x) EXPECT=1001978;;
     *) EXPECT="";;
   esac
   [ "$FREEZE" = 1 ] && [ "$IVAL" = "$EXPECT" ] && cp "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin" "$FROZEN/${b}.bin"

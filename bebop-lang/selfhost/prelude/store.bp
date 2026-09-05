@@ -12,8 +12,7 @@
 // cells 0..14. A reader picks the valid superblock with the higher generation.
 // Transaction tx (6 cells): 0 live sb, 1 mark, 2 cursor, 3 live delta,
 // 4 superseded delta, 5 next generation. Commit = write the OTHER superblock.
-// crc32 is over little-endian bytes of cells, staged one byte per cell in tmp
-// (tmp needs 8 * max cells; 120 for a superblock).
+// crc32 is crc32x over the raw little-endian bytes of the cells (no staging).
 fn st_cells(a: i64) -> [i64] { a }
 fn st_addr(base: [i64]) -> i64 { base }
 fn st_magic() -> i64 { 3554557610294396226 }
@@ -42,17 +41,24 @@ fn st_bytes(src: [i64], off: i64, n: i64, out: [i64]) -> i64 {
   };
   n * 8
 }
+// st_crc: zlib crc32 of the raw little-endian bytes of n cells (crc32x, T109b); tmp is
+// kept in the signatures for the API but no longer used (staging 8*len bytes into a
+// 256-cell tmp overflowed the arena on the first million-slot root, G4).
 fn st_crc(src: [i64], off: i64, n: i64, tmp: [i64]) -> i64 {
-  crc32(tmp, st_bytes(src, off, n, tmp))
+  crc32x(src, off, n)
 }
 fn st_sb_write(base: [i64], sb: i64, gen: i64, root: i64, used: i64, live: i64, sup: i64, tmp: [i64]) -> i64 {
+  st_sb_write_m(base, sb, gen, root, used, live, sup, 0, tmp)
+}
+// st_sb_write_m: the same with the migration-table object offset (cell 6, T114).
+fn st_sb_write_m(base: [i64], sb: i64, gen: i64, root: i64, used: i64, live: i64, sup: i64, mig: i64, tmp: [i64]) -> i64 {
   let _ = base[sb] = st_magic();
   let _ = base[sb + 1] = 1;
   let _ = base[sb + 2] = gen;
   let _ = base[sb + 3] = root;
   let _ = base[sb + 4] = used;
   let _ = base[sb + 5] = 0;
-  let _ = base[sb + 6] = 0;
+  let _ = base[sb + 6] = mig;
   let _ = base[sb + 7] = live;
   let _ = base[sb + 8] = sup;
   let k = 9;
@@ -126,11 +132,38 @@ fn st_supersede(base: [i64], tx: [i64], off: i64) -> i64 {
   0
 }
 fn st_commit(base: [i64], tx: [i64], root: i64, tmp: [i64]) -> i64 {
+  st_commit_m(base, tx, root, base[tx[0] + 6], tmp)
+}
+// st_commit_m: commit with a (new) migration-table object offset; 0 clears it.
+fn st_commit_m(base: [i64], tx: [i64], root: i64, mig: i64, tmp: [i64]) -> i64 {
   let sb = tx[0];
   let live = base[sb + 7] + tx[3] - tx[4];
   let sup = base[sb + 8] + tx[4];
-  let _ = st_sb_write(base, 512 - sb, tx[5], root, tx[2], live, sup, tmp);
+  let _ = st_sb_write_m(base, 512 - sb, tx[5], root, tx[2], live, sup, mig, tmp);
   tx[5]
+}
+fn st_mig(base: [i64], tmp: [i64]) -> i64 { base[st_pick(base, tmp) + 6] }
+// st_snapshot(base, snap, tmp): copy the live superblock into snap (16 cells) and
+// validate the crc on the COPY -- a reader racing a writer's superblock toggle sees
+// either a whole superblock or a torn one that fails its crc (then the other is
+// tried). Returns the superblock index taken, -1 if neither copy validated.
+fn st_snapshot(base: [i64], snap: [i64], tmp: [i64]) -> i64 {
+  let k = 0;
+  while k < 32 {
+    let _ = snap[k] = base[(k / 16) * 512 + k % 16];
+    let k = k + 1;
+    0
+  };
+  let va = if snap[0] == st_magic() then (if snap[15] == st_crc(snap, 0, 15, tmp) then 1 else 0) else 0;
+  let vb = if snap[16] == st_magic() then (if snap[31] == st_crc(snap, 16, 15, tmp) then 1 else 0) else 0;
+  let pick = if va + vb == 2 then (if snap[18] > snap[2] then 512 else 0) else if va == 1 then 0 else if vb == 1 then 512 else 0 - 1;
+  let j = 0;
+  while j < 16 * (if pick == 512 then 1 else 0) {
+    let _ = snap[j] = snap[16 + j];
+    let j = j + 1;
+    0
+  };
+  pick
 }
 fn st_abort(tx: [i64]) -> i64 {
   let _ = tx[2] = tx[1];
@@ -156,4 +189,104 @@ fn st_digest(s: str) -> i64 {
   let b = zeros(256);
   let n = st_str(b, s);
   sha256_lo64(b, n) & 4294967295
+}
+// ---- compaction = Cheney copy into <store>.tmp + rename (T113, §4e) ----
+// lay = [digest32, refmask] pairs (nlay pairs): bit i of refmask = payload cell i is
+// a ref; refmask -1 = a ref ARRAY (cell 0 = count, cells 1.. are refs). Forwarding is
+// written into the OLD file's MAP_PRIVATE view (h0 := 0, payload cell 0 := new
+// offset; CoW pages vanish at munmap, the old inode is never modified), so every
+// object must have >= 1 payload cell (exit 84 otherwise). While an object waits in
+// the new arena its h1 holds (old_offset << 32 | generation); the scan rewrites its
+// refs, recomputes the crc and restores h1 = crc << 32 | generation.
+fn st_refmask(lay: [i64], nlay: i64, digest: i64) -> i64 {
+  let i = 0;
+  let m = 0;
+  while i < nlay {
+    let m = if lay[i * 2] == digest then lay[i * 2 + 1] else m;
+    let i = i + 1;
+    0
+  };
+  m
+}
+fn st_copy_obj(old: [i64], new: [i64], cur: [i64], o: i64) -> i64 {
+  let len = st_len(old, o);
+  let _ = if len < 1 then sys_exit(84) else 0;
+  let at = cur[0];
+  let _ = new[at] = old[o];
+  let _ = new[at + 1] = (o << 32) | (old[o + 1] & 4294967295);
+  let i = 0;
+  while i < len {
+    let _ = new[at + 2 + i] = old[o + 2 + i];
+    let i = i + 1;
+    0
+  };
+  let _ = old[o] = 0;
+  let _ = old[o + 2] = at;
+  let _ = cur[0] = at + 2 + len;
+  at
+}
+// st_forward(old, new, cur, o): the new offset of old object o, copying it on demand.
+fn st_forward(old: [i64], new: [i64], cur: [i64], o: i64) -> i64 {
+  if old[o] == 0 then old[o + 2] else st_copy_obj(old, new, cur, o)
+}
+fn st_compact(path: [i64], plen: i64, size: i64, lay: [i64], nlay: i64, tmp: [i64]) -> i64 {
+  let fd = sys_open(path, plen, 0);
+  let old = st_cells(sys_mmap(0, size, 3, 2, fd, 0));
+  let _ = sys_close(fd);
+  let sb = st_pick(old, tmp);
+  let root = old[sb + 3];
+  let gen = old[sb + 2];
+  let mig = old[sb + 6];
+  let tp = zeros(plen + 5);
+  let i = 0;
+  while i < plen {
+    let _ = tp[i] = path[i];
+    let i = i + 1;
+    0
+  };
+  let _ = tp[plen] = 46;
+  let _ = tp[plen + 1] = 116;
+  let _ = tp[plen + 2] = 109;
+  let _ = tp[plen + 3] = 112;
+  let nfd = sys_open(tp, plen + 4, 578);
+  let _ = sys_ftruncate(nfd, size);
+  let new = st_cells(sys_mmap(0, size, 3, 1, nfd, 0));
+  let cur = [1024];
+  let nroot = if root == 0 then 0 else st_copy_obj(old, new, cur, root);
+  let nmig = if mig == 0 then 0 else st_copy_obj(old, new, cur, mig);
+  let scan = 1024;
+  while scan < cur[0] {
+    let len = st_len(new, scan);
+    let oself = new[scan + 1] >> 32;
+    let g = new[scan + 1] & 4294967295;
+    let mask = st_refmask(lay, nlay, new[scan] >> 32);
+    let i = if mask == 0 - 1 then 1 else 0;
+    let stop = len;
+    while i < stop {
+      let isref = if mask == 0 - 1 then 1 else (mask >> i) & 1;
+      let rel = new[scan + 2 + i];
+      let live = isref * (if rel == 0 then 0 else 1) * (if i < len then 1 else 0);
+      let _ = if live == 1 then (let _ = new[scan + 2 + i] = st_forward(old, new, cur, oself + rel) - scan in 0) else 0;
+      let i = i + 1;
+      0
+    };
+    let crc = st_crc(new, scan + 2, len, tmp);
+    let _ = new[scan + 1] = (crc << 32) | g;
+    let scan = scan + 2 + len;
+    0
+  };
+  let live = cur[0] - 1024;
+  let _ = st_sb_write_m(new, 0, gen + 1, nroot, cur[0], live, 0, nmig, tmp);
+  let k = 512;
+  while k < 528 {
+    let _ = new[k] = 0;
+    let k = k + 1;
+    0
+  };
+  let _ = sys_munmap(st_addr(new), size);
+  let _ = sys_ftruncate(nfd, cur[0] * 8);
+  let _ = sys_close(nfd);
+  let _ = sys_munmap(st_addr(old), size);
+  let _ = sys_rename(tp, plen + 4, path, plen);
+  live
 }

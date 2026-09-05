@@ -1,0 +1,11 @@
+// T109b 2026-09-05: `crc32x(cells, off, n)` = zlib crc32 of the raw little-endian
+// bytes of n cells from cells[off] (hardware CRC32X, no staging). Values from
+// python zlib.crc32(struct.pack('<%dq')): whole 12-cell array 2543655971, cells 3..7
+// 61672598, empty 0.
+fn main() -> i64 {
+  let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0 - 1, 1099511627776];
+  let w = crc32x(a, 0, 12);
+  let m = crc32x(a, 3, 5);
+  let e = crc32x(a, 5, 0);
+  (w == 2543655971) * 1000000 + (m == 61672598) * 1000 + (e == 0) * 7 + w % 1000
+}

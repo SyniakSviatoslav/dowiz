@@ -1,0 +1,154 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+// sevolve.bp — G3 (T114): schema evolution by layout digests. Three "programs" =
+// three code paths over one store: v1 writes 1000 P{i64,i64} (a = LCG, b = a ^ k)
+// under layout L1; v2 reads v1's objects (c defaults to 0 when the object is
+// shorter — the Cap'n Proto rule) and appends 1000 P{i64,i64,i64} under L2 (c =
+// a + b); v1 reads v2's store and ignores the third cell; v3 registers the
+// migration L2 -> L3 = Q{i64,i64} (fields a+b, c) as an object M{from, to, sha}
+// in the migration table (superblock cell 6, sha = sha256 low 64 of the migration
+// fn's source text), rewrites every live P as a Q version, commits and compacts
+// (the M object survives compaction). Result = (((f1*31 + f2)*31 + f3)*31 + f4)
+// (wrap) with f1 = v1 fold of the v1 store, f2 = v2 fold (a, b, c) of the v2
+// store, f3 = v1 fold of the v2 store, f4 = v3 fold of the migrated+compacted
+// store, times ok (migration record present after compaction, superseded == 0).
+fn fold_v1(base: [i64], tmp: [i64]) -> i64 {
+  let root = st_root(base, tmp);
+  let n = st_get(base, root, 0);
+  let i = 0;
+  let acc = 0;
+  while i < n {
+    let o = st_ref(base, root, 1 + i);
+    let acc = acc * 31 + st_get(base, o, 0) * 7 + st_get(base, o, 1);
+    let i = i + 1;
+    0
+  };
+  acc
+}
+fn fold_v2(base: [i64], tmp: [i64]) -> i64 {
+  let root = st_root(base, tmp);
+  let n = st_get(base, root, 0);
+  let i = 0;
+  let acc = 0;
+  while i < n {
+    let o = st_ref(base, root, 1 + i);
+    let c = if st_len(base, o) >= 3 then st_get(base, o, 2) else 0;
+    let acc = acc * 31 + st_get(base, o, 0) * 7 + st_get(base, o, 1) + c * 3;
+    let i = i + 1;
+    0
+  };
+  acc
+}
+fn fold_q(base: [i64], tmp: [i64]) -> i64 {
+  let root = st_root(base, tmp);
+  let n = st_get(base, root, 0);
+  let i = 0;
+  let acc = 0;
+  while i < n {
+    let o = st_ref(base, root, 1 + i);
+    let acc = acc * 31 + st_get(base, o, 0) * 5 + st_get(base, o, 1);
+    let i = i + 1;
+    0
+  };
+  acc
+}
+// migrate_p_to_q(base, o, tx, dq): the migration L2 -> L3 (its source text is what
+// the M record's sha256 names): Q{a + b, c}, c = 0 for a v1 object.
+fn migrate_p_to_q(base: [i64], o: i64, tx: [i64], dq: i64, tmp: [i64]) -> i64 {
+  let c = if st_len(base, o) >= 3 then st_get(base, o, 2) else 0;
+  let q = st_alloc(base, tx, 2, dq);
+  let _ = st_put(base, q, 0, st_get(base, o, 0) + st_get(base, o, 1));
+  let _ = st_put(base, q, 1, c);
+  let _ = st_seal(base, q, tmp);
+  q
+}
+fn write_root(base: [i64], tx: [i64], dr: i64, objs: [i64], n: i64, tmp: [i64]) -> i64 {
+  let root = st_alloc(base, tx, n + 1, dr);
+  let _ = st_put(base, root, 0, n);
+  let i = 0;
+  while i < n {
+    let _ = st_link(base, root, 1 + i, objs[i]);
+    let i = i + 1;
+    0
+  };
+  let _ = st_seal(base, root, tmp);
+  root
+}
+fn main() -> i64 {
+  let path = zeros(64);
+  let pl = st_str(path, "sevolve.store");
+  let tmp = zeros(256);
+  let size = 8388608;
+  let base = st_open(path, pl, size, tmp);
+  let tx = zeros(6);
+  let d1 = st_digest("P{i64,i64}");
+  let d2 = st_digest("P{i64,i64,i64}");
+  let dq = st_digest("Q{i64,i64}");
+  let dr = st_digest("R{arr ref P}");
+  let dm = st_digest("M{i64,i64,i64}");
+  let objs = zeros(2000);
+  let _ = st_begin(base, tx, tmp);
+  let v = 42;
+  let i = 0;
+  while i < 1000 {
+    let v = v * 6364136223846793005 + 1442695040888963407;
+    let o = st_alloc(base, tx, 2, d1);
+    let _ = st_put(base, o, 0, v);
+    let _ = st_put(base, o, 1, v ^ i);
+    let _ = st_seal(base, o, tmp);
+    let _ = objs[i] = o;
+    let i = i + 1;
+    0
+  };
+  let r1 = write_root(base, tx, dr, objs, 1000, tmp);
+  let _ = st_commit(base, tx, r1, tmp);
+  let f1 = fold_v1(base, tmp);
+  let _ = st_begin(base, tx, tmp);
+  let j = 0;
+  while j < 1000 {
+    let v = v * 6364136223846793005 + 1442695040888963407;
+    let o = st_alloc(base, tx, 3, d2);
+    let _ = st_put(base, o, 0, v);
+    let _ = st_put(base, o, 1, v ^ (1000 + j));
+    let _ = st_put(base, o, 2, v + (v ^ (1000 + j)));
+    let _ = st_seal(base, o, tmp);
+    let _ = objs[1000 + j] = o;
+    let j = j + 1;
+    0
+  };
+  let r2 = write_root(base, tx, dr, objs, 2000, tmp);
+  let _ = st_supersede(base, tx, r1);
+  let _ = st_commit(base, tx, r2, tmp);
+  let f2 = fold_v2(base, tmp);
+  let f3 = fold_v1(base, tmp);
+  let _ = st_begin(base, tx, tmp);
+  let msrc = zeros(512);
+  let ml = st_str(msrc, "fn migrate_p_to_q(base, o, tx, dq, tmp) { Q{a + b, c}, c = 0 for a v1 object }");
+  let m = st_alloc(base, tx, 3, dm);
+  let _ = st_put(base, m, 0, d2);
+  let _ = st_put(base, m, 1, dq);
+  let _ = st_put(base, m, 2, sha256_lo64(msrc, ml));
+  let _ = st_seal(base, m, tmp);
+  let k = 0;
+  while k < 2000 {
+    let old = objs[k];
+    let _ = objs[k] = migrate_p_to_q(base, old, tx, dq, tmp);
+    let _ = st_supersede(base, tx, old);
+    let k = k + 1;
+    0
+  };
+  let r3 = write_root(base, tx, dr, objs, 2000, tmp);
+  let _ = st_supersede(base, tx, r2);
+  let _ = st_commit_m(base, tx, r3, m, tmp);
+  let f4a = fold_q(base, tmp);
+  let _ = sys_munmap(st_addr(base), size);
+  let lay = [dr, 0 - 1, dq, 0, dm, 0];
+  let live = st_compact(path, pl, size, lay, 3, tmp);
+  let b2 = st_map_ro(path, pl, size);
+  let f4 = fold_q(b2, tmp);
+  let mig = st_mig(b2, tmp);
+  let sb = st_pick(b2, tmp);
+  let ok = (f4 == f4a) * (if mig == 0 then 0 else 1) * (b2[sb + 8] == 0) * (if mig == 0 then 0 else (st_get(b2, mig, 1) == dq)) * (live == 2000 * 4 + 2003 + 5);
+  let _ = sys_munmap(st_addr(b2), size);
+  (((f1 * 31 + f2) * 31 + f3) * 31 + f4) * ok
+}

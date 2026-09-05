@@ -595,6 +595,26 @@ gate sround -8475951406600543408 "$r"
 r=$(timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/sround_test.bin | tail -1)
 gate sround_reopen -8475951406600543408 "$r"
 
+# ---- scompact (G4, T113: 10^6 nodes, 60% superseded, Cheney compaction into .tmp + rename) ----
+rm -f scompact.store scompact.store.tmp
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/scompact.bp ${BEBOP_TMP:-/tmp/opencode}/scompact_test.bin >/dev/null 2>&1 && timeout 300 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/scompact_test.bin | tail -1)
+gate scompact -2246042833172211968 "$r"
+
+# ---- scrash (G5, T113: 10^4 generations appended by the writer, then the reader's fold; the SIGKILL trials live in bench/vs_rust/scrash.sh) ----
+rm -f scrash.store
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/scrash.bp ${BEBOP_TMP:-/tmp/opencode}/scrash_test.bin >/dev/null 2>&1 && timeout 120 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/scrash_test.bin w >/dev/null && timeout 120 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/scrash_test.bin | tail -1)
+gate scrash 4231007695826602272 "$r"
+
+# ---- sevolve (G3, T114: v1/v2 layouts, v1 reads v2, sha256-named migration + compaction) ----
+rm -f sevolve.store sevolve.store.tmp
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sevolve.bp ${BEBOP_TMP:-/tmp/opencode}/sevolve_test.bin >/dev/null 2>&1 && timeout 120 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/sevolve_test.bin | tail -1)
+gate sevolve -6849083777328568796 "$r"
+
+# ---- sconc (G6, T115: 4 writers x 10^4 under the lock + 4 readers x 10^4 snapshots) ----
+rm -f sconc.store
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sconc.bp ${BEBOP_TMP:-/tmp/opencode}/sconc_test.bin >/dev/null 2>&1 && timeout 300 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/sconc_test.bin | tail -1)
+gate sconc 40000 "$r"
+
 # ---- tq ----
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/tq.bp ${BEBOP_TMP:-/tmp/opencode}/tq_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/tq_test.bin | tail -1)
 gate tq 722997760 "$r"

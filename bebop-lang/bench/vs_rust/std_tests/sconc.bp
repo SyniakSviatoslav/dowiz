@@ -1,0 +1,150 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+// sconc.bp — G6 (T115): single writer lock + lock-free readers on one store. Root
+// R{arr ref C} holds 4 counters C{i64}. 4 writer threads x 10^4 increments: take
+// the lock (sys_atomic_add fetch-and-add on cells[0], spin), append a new counter
+// version and a new root, commit (superblock toggle), release. 4 reader threads x
+// 10^4 reads: st_snapshot (crc-validated copy of the live superblock), walk root
+// -> counters, require sum == generation - 1 (generation 1 = all zero). Threads
+// are sys_clone workers spawned from an 8-symbol fn (spawn) with 16 MiB-pitched
+// stacks above the arena cursor (the parent allocates nothing after cloning); a
+// finished worker parks on a never-set futex cell (pool.bp pattern) and dies with the
+// process -- sys_exit_thread_guard emits svc 94 = exit_group on AArch64 and would end
+// the whole process (T127, fix pending in the builtin table).
+// Result = 40000 iff every counter == 10^4, sum == 40000 == generation - 1, and no
+// reader ever saw an inconsistent generation; else the failing quantity.
+// read_sum: a torn superblock copy (both copies failed their crc because the writer was
+// mid-toggle on both, in turn) is not an inconsistency -- retry, up to 1000 times.
+fn read_sum(base: [i64], snap: [i64], tmp: [i64]) -> i64 {
+  let sb = st_snapshot(base, snap, tmp);
+  let tries = 0;
+  while sb < 0 {
+    let sb = if tries < 1000 then st_snapshot(base, snap, tmp) else 0 - 2;
+    let tries = tries + 1;
+    0
+  };
+  let root = snap[3];
+  let gen = snap[2];
+  let s = st_get(base, st_ref(base, root, 1), 0) + st_get(base, st_ref(base, root, 2), 0) + st_get(base, st_ref(base, root, 3), 0) + st_get(base, st_ref(base, root, 4), 0);
+  if sb < 0 then 0 - 1 else if s == gen - 1 then 0 else 1
+}
+fn writer(base: [i64], cells: [i64], w: i64, dc: i64, dr: i64) -> i64 {
+  let tx = zeros(6);
+  let tmp = zeros(8);
+  let k = 0;
+  while k < 10000 {
+    let spin = 1;
+    while spin == 1 {
+      let old = sys_atomic_add(cells, 0, 1);
+      let spin = if old == 0 then 0 else 1;
+      let _ = if spin == 1 then sys_atomic_add(cells, 0, 0 - 1) else 0;
+      0
+    };
+    let _ = st_begin(base, tx, tmp);
+    let root = st_root(base, tmp);
+    let old = st_ref(base, root, 1 + w);
+    let c = st_alloc(base, tx, 1, dc);
+    let _ = st_put(base, c, 0, st_get(base, old, 0) + 1);
+    let _ = st_seal(base, c, tmp);
+    let _ = st_supersede(base, tx, old);
+    let r = st_alloc(base, tx, 5, dr);
+    let _ = st_put(base, r, 0, 4);
+    let i = 0;
+    while i < 4 {
+      let keep = st_ref(base, root, 1 + i);
+      let tgt = if i == w then c else keep;
+      let _ = st_link(base, r, 1 + i, tgt);
+      let i = i + 1;
+      0
+    };
+    let _ = st_seal(base, r, tmp);
+    let _ = st_supersede(base, tx, root);
+    let _ = st_commit(base, tx, r, tmp);
+    let _ = sys_atomic_add(cells, 0, 0 - 1);
+    let k = k + 1;
+    0
+  };
+  0
+}
+fn reader(base: [i64], cells: [i64], j: i64) -> i64 {
+  let snap = zeros(32);
+  let tmp = zeros(8);
+  let k = 0;
+  let bad = 0;
+  while k < 10000 {
+    let r = read_sum(base, snap, tmp);
+    let bad = bad + (if r == 0 then 0 else 1);
+    let k = k + 1;
+    0
+  };
+  let _ = cells[8 + j] = bad;
+  bad
+}
+// stk(w): the worker's stack top, 16 MiB-pitched above the arena cursor (child arena =
+// [sp + 4 MiB, sp + 12 MiB), T118). spawn() keeps <= 8 live symbols: a clone-spanning
+// fn must not spill (spill slots live in the shared frame, one per process, not per
+// thread -- the nn4 lesson).
+fn stk(w: i64) -> i64 { sys_arena_base() + 16777216 * (w + 1) }
+fn spawn(base: [i64], cells: [i64], dc: i64, dr: i64) -> i64 {
+  let w = 0;
+  while w < 8 {
+    let r = sys_clone(68864, stk(w));
+    let is_child = if r == 0 then 1 else 0;
+    let job = is_child * (if w < 4 then 1 else 2);
+    let _ = if job == 1 then writer(base, cells, w, dc, dr) else 0;
+    let _ = if job == 2 then reader(base, cells, w - 4) else 0;
+    let _ = sys_cond_set(is_child, cells, 16 + w, 1);
+    let _ = sys_futex_wake(cells, 16 + w, 64);
+    while is_child == 1 {
+      let _ = sys_futex_wait_guard(0, cells, 31, 0);
+      0
+    };
+    let w = w + 1;
+    0
+  };
+  0
+}
+fn main() -> i64 {
+  let path = zeros(64);
+  let pl = st_str(path, "sconc.store");
+  let tmp = zeros(256);
+  let size = 67108864;
+  let base = st_open(path, pl, size, tmp);
+  let tx = zeros(6);
+  let dc = st_digest("C{i64}");
+  let dr = st_digest("R{arr ref C}");
+  let _ = st_begin(base, tx, tmp);
+  let r0 = st_alloc(base, tx, 5, dr);
+  let _ = st_put(base, r0, 0, 4);
+  let i = 0;
+  while i < 4 {
+    let c = st_alloc(base, tx, 1, dc);
+    let _ = st_put(base, c, 0, 0);
+    let _ = st_seal(base, c, tmp);
+    let _ = st_link(base, r0, 1 + i, c);
+    let i = i + 1;
+    0
+  };
+  let _ = st_seal(base, r0, tmp);
+  let _ = st_commit(base, tx, r0, tmp);
+  let cells = zeros(32);
+  let _ = spawn(base, cells, dc, dr);
+  let k = 0;
+  while k < 8 {
+    let d = 0;
+    while d == 0 {
+      let _ = sys_futex_wait_guard(0, cells, 16 + k, 0);
+      let d = if cells[16 + k] == 1 then 1 else 0;
+      0
+    };
+    let k = k + 1;
+    0
+  };
+  let root = st_root(base, tmp);
+  let gen = st_gen(base, tmp);
+  let sum = st_get(base, st_ref(base, root, 1), 0) + st_get(base, st_ref(base, root, 2), 0) + st_get(base, st_ref(base, root, 3), 0) + st_get(base, st_ref(base, root, 4), 0);
+  let each = (st_get(base, st_ref(base, root, 1), 0) == 10000) * (st_get(base, st_ref(base, root, 2), 0) == 10000) * (st_get(base, st_ref(base, root, 3), 0) == 10000) * (st_get(base, st_ref(base, root, 4), 0) == 10000);
+  let bad = cells[8] + cells[9] + cells[10] + cells[11];
+  let _ = sys_munmap(st_addr(base), size);
+  if each * (sum == 40000) * (gen == 40001) * (bad == 0) == 1 then 40000 else 0 - (bad * 1000000 + (40001 - gen) * 10 + (1 - each))
+}

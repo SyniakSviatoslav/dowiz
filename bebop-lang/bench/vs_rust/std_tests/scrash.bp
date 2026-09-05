@@ -1,0 +1,63 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+// scrash.bp — G5 (T113): crash consistency by construction. Writer mode (argv[2] =
+// "w"): 10^4 generations, each appends 100 nodes N{i64, ref N} (val = LCG chain
+// from 42 continuing across generations, prev = previous node) and commits root =
+// the last node (append + superblock toggle, nothing overwritten). Reader mode
+// ("r", the default): pick the valid superblock with the higher generation, walk
+// the chain from the root, return fold = acc*31 + val (wrap); 0 if any walked node
+// fails its crc or the walk length != 100 * generation. bench/vs_rust/scrash.sh
+// kills the writer with SIGKILL at random moments (100 trials) and checks every
+// reopened store against bench/oracles/scrash.py (fold for the parsed generation).
+// The std gate = one complete writer run + the reader (fold for g = 10^4).
+fn walk(base: [i64], tmp: [i64]) -> i64 {
+  let root = st_root(base, tmp);
+  let gen = st_gen(base, tmp);
+  let cur = root;
+  let acc = 0;
+  let n = 0;
+  let ok = 1;
+  while cur != 0 {
+    let acc = acc * 31 + st_get(base, cur, 0);
+    let ok = if n % 97 == 0 then ok * st_check(base, cur, tmp) else ok;
+    let nxt = st_ref(base, cur, 1);
+    let cur = if st_get(base, cur, 1) == 0 then 0 else nxt;
+    let n = n + 1;
+    0
+  };
+  acc * ok * (if n == gen * 100 then 1 else 0)
+}
+fn main(argc: i64, argv: [str]) -> i64 {
+  let path = zeros(64);
+  let pl = st_str(path, "scrash.store");
+  let tmp = zeros(256);
+  let size = 67108864;
+  let is_w = if argc >= 3 then (if char(argv[2], 0) == 119 then 1 else 0) else 0;
+  let base = st_open(path, pl, size, tmp);
+  let tx = zeros(6);
+  let d = st_digest("N{i64,ref N}");
+  let g = 0;
+  let v = 42;
+  let prev = 0;
+  while g < 10000 * is_w {
+    let _ = st_begin(base, tx, tmp);
+    let k = 0;
+    while k < 100 {
+      let v = v * 6364136223846793005 + 1442695040888963407;
+      let o = st_alloc(base, tx, 2, d);
+      let _ = st_put(base, o, 0, v);
+      let _ = if prev == 0 then st_put(base, o, 1, 0) else st_link(base, o, 1, prev);
+      let _ = st_seal(base, o, tmp);
+      let prev = o;
+      let k = k + 1;
+      0
+    };
+    let _ = st_commit(base, tx, prev, tmp);
+    let g = g + 1;
+    0
+  };
+  let _ = if is_w == 1 then sys_munmap(st_addr(base), size) else 0;
+  let f = if is_w == 1 then 0 else walk(base, tmp);
+  let _ = if is_w == 0 then sys_munmap(st_addr(base), size) else 0;
+  if is_w == 1 then g else f
+}

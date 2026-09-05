@@ -2609,9 +2609,13 @@ DEPS: T20, T97. BLOCKERS: none.
 
 ## STORE PULL (decision D10, 2026-09-04; spec = docs/LANG-DB-DESIGN.md §4 + §9.5; after T101-T108)
 
+**T127 · `sys_exit_thread_guard` uses exit_group (svc 94)** — OPEN (found by G6, 2026-09-05): the builtin's `mov x8,#94` is exit_group on AArch64 (93 = exit); a worker calling it kills the process. Fix = one word in the table (93) + a pool gate row that lets a worker exit; until then workers park on a futex.
+
 Each task = one commit with fixpoint + battery; each gate = `selfhost/std/<g>.bp`
 + `bench/oracles/<g>.py` (L17), pinned numbers reported whatever they are
 (D8(5)). Order: G1 -> G2 -> G4 -> G5 -> G3 -> G6 -> G7 -> G8.
+
+**T109b · `crc32x(cells, off, n)` builtin** — DONE ✓ 2026-09-05 (the raw-word crc the design asked for: add x0,x0,x1,lsl#3; movn w3; L: cbz x2; ldr x4,[x0],#8; crc32x w3,w3,x4; sub x2; b L; orn w0 — zlib crc32 of the little-endian bytes of n cells, no staging; construct c45_crc32x; fixpoint e820f619; census +2 ALLOWed. Found by G4: st_seal staged 8*len bytes into a 256-cell tmp and the million-slot root array overflowed the arena. The store library's st_crc is crc32x now; the byte-cell crc32 stays for byte buffers.)
 
 **T109 · `crc32(cells, n)` builtin** — DONE ✓ 2026-09-05 (emit_crc32: movn w2; L: cbz x1; ldr x3,[x0],#8; crc32b w2,w2,w3; sub x1; b L; orn w0 — CRC32B per cell because bytes-in-cells is the language's byte form (sys_read/sys_export/str_to_cells), so crc.bp/tb.bp semantics hold; ~1 cell per cycle, not 8 B/cycle — a crc32x-over-words variant is a later builtin if the store needs it; construct c42_crc32 = zlib values for "", "123456789", bytes 0..255; fixpoint b5ab8cdc; census bcond +2 ALLOWed; every encoding derived by int(hex,16) after the T105 lesson): hardware CRC32X (8 B/cycle) in a 5-word
 loop, L1/L2 register table, check_abi allowlist; replaces crc.bp's bit loop
@@ -2639,16 +2643,16 @@ superblock toggle), abort (cursor reset), deref helpers, pre-extend by 64 MB
 digest, struct/enum/array bytes == python struct.pack; map at TWO bases in one
 process + reopen in a second run; fold through the second base == python parse
 via offsets. Falsifier: an absolute address anywhere in the file.
-**T113 · compaction + crash: G4 `scompact` / G5 `scrash`** — Cheney copy into
+**T113 · compaction + crash: G4 `scompact` / G5 `scrash`** — DONE ✓ 2026-09-05 (st_compact in selfhost/prelude/store.bp: MAP_PRIVATE scratch view of the old file, forwarding in the old header + payload cell 0, Cheney scan over the new arena with per-layout ref masks, crc recomputed, superblock A written, ftruncate to used, rename; G4: 10^6 nodes + root array, 60% superseded, live fold unchanged, superseded_cells 0, file 32,008,216 bytes = live*8 + 2 pages, 1207 ms wall for build + supersede + compaction + two folds; G5: writer of 10^4 generations x 100 appends, bench/vs_rust/scrash.sh SIGKILLs it at a uniform random moment — 100 trials, 0 failures, generations reached at the kill: 14 below 1000, spread through 9000+, 33 complete; every reopened store had a valid superblock, a crc-clean chain of 100*g nodes and the other superblock at g-1; a store killed before its first superblock counts as generation 0) — Cheney copy into
 `<store>.tmp` + rename, forwarding cells in a MAP_PRIVATE scratch view; 10^6
 objects, 60% superseded: live fold unchanged, file <= live*8 + 3 pages,
 superseded == 0; SIGKILL x100 at random microseconds over 10^4 generations:
 reopen -> generation in {last, last-1}, superblock crc valid, fold == oracle(g).
-**T114 · evolution: G3 `sevolve`** — v1 writes, v2 (appended field) reads/writes,
+**T114 · evolution: G3 `sevolve`** — DONE ✓ 2026-09-05 (one program, three code paths over one store: v1 writes 1000 P{i64,i64}; v2 reads them with c defaulting to 0 and appends 1000 P{i64,i64,i64}; v1 reads v2's store ignoring the third cell; v3 records M{from digest, to digest, sha256 low 64 of the migration fn's source} in the migration table (superblock cell 6, carried through compaction by st_commit_m/st_compact), rewrites every live P as Q{a+b, c} and compacts; the four folds == bench/oracles/sevolve.py, which also re-parses the file for the surviving M record and superseded == 0. `.bcas` loading of the migration by hash stays with T80.) — v1 writes, v2 (appended field) reads/writes,
 v1 reads v2's store, v3 registers a sha256 migration (from .bcas, T80) and
 compacts; four folds == oracle. Falsifier: a stale-layout read that neither
 defaults nor traps; a migration touching an unrelated value.
-**T115 · concurrency: G6 `sconc`** — 4 writer threads x 10^4 increments through
+**T115 · concurrency: G6 `sconc`** — DONE ✓ 2026-09-05 (4 sys_clone writers x 10^4 increments through a sys_atomic_add spin lock — each increment = new counter version + new root + superblock toggle — and 4 readers x 10^4 crc-validated superblock snapshots (st_snapshot; a copy torn on both superblocks is retried, not counted); 4x10^4 commits in ~230 ms on 3 A78 (~5.7 us per contended commit); every counter 10^4, sum == generation-1 on every read, 6/6 runs = 40000. Two traps on the way: a clone-spanning fn must keep <= 8 live symbols (spill slots are per process, not per thread — the nn4 lesson, now in the gate's comment), and `sys_exit_thread_guard` emits svc 94 = exit_group on AArch64, which ends the whole process: workers park on a futex instead; the builtin fix is T127.) — 4 writer threads x 10^4 increments through
 the single-writer lock (sys_atomic_add + futex) + 4 reader threads folding
 concurrently: counters == 4*10^4, every read fold == oracle(g) for a committed
 g; lost updates == 0.

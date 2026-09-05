@@ -35,3 +35,5 @@ graphify-out/
 entities.json
 mempalace.yaml
 *.store
+*.store.tmp
+*.sqlite
