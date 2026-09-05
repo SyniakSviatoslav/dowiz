@@ -276,7 +276,11 @@ class Ctx:
         # D11-D (2026-09-05): one loop in four runs 100..3000 iterations; its var is
         # NOT registered as an index candidate (indices stay masked), so the widened
         # loop exercises frame-heap resets (T43), arena growth and trap paths.
-        big = self.r.random() < 0.25 and not self.loop_depth
+        # 2026-09-06: ONE big loop per program -- two of them multiply through calls (a big
+        # loop calling a fn with a big loop = 150 x 150 x the small nests) and were the 34
+        # BPREF-TIMEOUTs (40 s each = 22 % of the shard time) of the first 5000-seed batch.
+        big = self.r.random() < 0.25 and not self.loop_depth and not getattr(self.g, 'big_done', False)
+        if big: self.g.big_done = True
         k = self.r.randint(60, 150) if big else self.r.randint(1, 6)  # bpref budget (40 s): 200 still gave 18 timeouts/60
         self.g.loop_bound[i] = k
         self.scalars.append(i)

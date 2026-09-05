@@ -2,14 +2,14 @@
 # dev_loop.sh (2026-09-06): inner development-loop timings for one compiler binary.
 # Usage: bench/dev_loop.sh [compiler.bin (default ./bebop.bin)] [label (default md5)]
 # env: CPU (core for pinned steps, default 4), BEBOP_TMP (scratch root), DATE,
-#      STEPS (subset of abcdef to run, default all).
+#      STEPS (subset of abcdefg to run, default all; g = the whole tools/chain.sh incl. battery).
 # Prints `metric value unit` lines + a markdown table, and appends a section to
 # docs/DEV-LOOP.md. Never touches ./bebop.bin or ./bebop.bp.
 cd "$(dirname "$0")/.." || exit 1
 ulimit -s 65536 2>/dev/null
 BIN=$(realpath "${1:-./bebop.bin}"); [ -s "$BIN" ] || { echo "GUARD: $BIN missing or empty"; exit 1; }
 MD5=$(md5sum "$BIN" | cut -c1-8); LABEL=${2:-$MD5}
-CPU=${CPU:-4}; DATE=${DATE:-$(date +%F)}; STEPS=${STEPS:-abcdef}
+CPU=${CPU:-4}; DATE=${DATE:-$(date +%F)}; STEPS=${STEPS:-abcdefg}
 S=${BEBOP_TMP:-/tmp/opencode}/devloop; mkdir -p "$S"
 SEED=./seed/build/seed
 declare -a ROWS
@@ -59,6 +59,13 @@ if step f; then
 # f. construct parity
 read -r v RC < <(wall "$S/f.log" env BEBOP_TMP="$S/cp" BEBOP_BIN="$BIN" taskset -c "$CPU" bash bench/vs_rust/construct_parity.sh)
 row construct_parity "$v" s "$(grep '^construct parity:' "$S/f.log" | tail -1), cpu$CPU"
+fi
+
+if step g; then
+# g. the real unit of work: tools/chain.sh on the current bebop.bp (gen2, gen3->gen4 || battery)
+rm -rf "$S/chain"
+read -r v RC < <(wall "$S/g.log" env BEBOP_TMP="$S/chain" bash tools/chain.sh bebop.bp "$S/chain" "$BIN")
+row chain_full "$v" s "rc=$RC, $(grep -o 'fixpoint gen3 == gen4 [0-9a-f]*' "$S/g.log" | head -1), $(grep -o 'battery: [A-Z]*' "$S/g.log" | tail -1)"
 fi
 
 DOC=docs/DEV-LOOP.md

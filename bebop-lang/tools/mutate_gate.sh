@@ -6,14 +6,15 @@
 # own text (after the last `//e "` line of the expansion, i.e. after the modules); each
 # mutant is compiled and run; a gate is INSENSITIVE only if NO mutant changes its fold
 # (its fold then proves none of its first three operators). Prints one line per gate
-# and a summary; exit 0 always. env: BEBOP_BIN, BEBOP_TMP, K (sites, default 3).
+# and a summary; exit 0 always. env: BEBOP_BIN, BEBOP_TMP, K (sites, default 3), J (gates in
+# parallel, default 4: the 80-min sweep of 2026-09-06 was one gate at a time).
 cd "$(dirname "$0")/.." || exit 1
 ulimit -s 65536 2>/dev/null
 BEBOP_BIN=${BEBOP_BIN:-./bebop.bin}; T=${BEBOP_TMP:-/tmp/opencode}/mutate; K=${K:-3}; mkdir -p "$T"
-awk '/std_tests\/[a-z0-9_]+\.bp/{match($0,/std_tests\/[a-z0-9_]+\.bp/);f=substr($0,RSTART,RLENGTH)} /^gate /{print $2, $3, f}' bench/vs_rust/std_golden.sh | while read -r g want f; do
+one_gate() { local g=$1 want=$2 f=$3
   src=bench/vs_rust/$f
   rm -f "$T/${g}_base.bin" "$T/${g}_base.bin.use" "$T/${g}_base.bin.becache"
-  ./seed/build/seed "$BEBOP_BIN" compile "$src" "$T/${g}_base.bin" >/dev/null 2>&1 || { echo "$g COMPILEFAIL base"; continue; }
+  ./seed/build/seed "$BEBOP_BIN" compile "$src" "$T/${g}_base.bin" >/dev/null 2>&1 || { echo "$g COMPILEFAIL base"; return; }
   exp="$T/${g}_base.bin.use"; [ -f "$exp" ] || exp="$src"
   n=$(python3 - "$exp" "$T" "$g" "$K" <<'PY'
 import sys, re
@@ -44,5 +45,7 @@ PY
     [ "$got" = "$want" ] || changed=$((changed + 1))
   done
   if [ "$n" = 0 ]; then echo "$g INSENSITIVE fold=$want (no operator site)"; elif [ "$changed" = 0 ]; then echo "$g INSENSITIVE fold=$want ($tried sites)"; else echo "$g sensitive ($changed/$tried mutants changed the fold, $cf failed to compile)"; fi
-done | tee "$T/report.txt"
+}
+export -f one_gate; export BEBOP_BIN T K
+awk '/std_tests\/[a-z0-9_]+\.bp/{match($0,/std_tests\/[a-z0-9_]+\.bp/);f=substr($0,RSTART,RLENGTH)} /^gate /{print $2, $3, f}' bench/vs_rust/std_golden.sh | xargs -P "${J:-4}" -n 3 bash -c 'one_gate "$@"' _ | sort | tee "$T/report.txt"
 echo "mutation: $(grep -c ' sensitive' "$T/report.txt") sensitive, $(grep -c INSENSITIVE "$T/report.txt") insensitive"

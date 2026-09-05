@@ -13,9 +13,9 @@ PIN=${PIN:-taskset -c 4-6}  # the 3 A78 cores; PIN="" to unpin
 gen() { $PIN ./seed/build/seed "$1" compile "$SRC" "$2" >/dev/null 2>&1; local rc=$?; [ $rc = 0 ] && [ -s "$2" ] || { echo "gen $2 FAILED rc=$rc"; exit 1; }; }
 t0=$(date +%s); gen "$BIN0" "$OUT/gen2.bin"; echo "gen2 $(md5sum < "$OUT/gen2.bin" | cut -c1-8) $(( $(date +%s) - t0 )) s"
 ( gen "$OUT/gen2.bin" "$OUT/gen3.bin"; echo "gen3 $(md5sum < "$OUT/gen3.bin" | cut -c1-8)"; gen "$OUT/gen3.bin" "$OUT/gen4.bin"; echo "gen4 $(md5sum < "$OUT/gen4.bin" | cut -c1-8)" ) > "$OUT/chain.log" 2>&1 &
-if [ $CG = 0 ]; then bash tools/battery.sh "$OUT/gen2.bin" "$OUT/bat" > "$OUT/battery.log" 2>&1; fi
+if [ $CG = 0 ]; then SRC=$SRC bash tools/battery.sh "$OUT/gen2.bin" "$OUT/bat" > "$OUT/battery.log" 2>&1; fi
 wait; cat "$OUT/chain.log"
-if [ $CG = 1 ]; then bash tools/battery.sh "$OUT/gen4.bin" "$OUT/bat" > "$OUT/battery.log" 2>&1; fi
+if [ $CG = 1 ]; then SRC=$SRC bash tools/battery.sh "$OUT/gen4.bin" "$OUT/bat" > "$OUT/battery.log" 2>&1; fi
 cat "$OUT/battery.log"
 m3=$(md5sum < "$OUT/gen3.bin" 2>/dev/null | cut -c1-8); m4=$(md5sum < "$OUT/gen4.bin" 2>/dev/null | cut -c1-8); m2=$(md5sum < "$OUT/gen2.bin" | cut -c1-8)
 if [ -n "$m4" ] && [ "$m3" = "$m4" ]; then
