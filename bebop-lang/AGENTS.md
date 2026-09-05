@@ -369,3 +369,11 @@ their own proot (`sv status $PREFIX/var/service/fuzzd`, tools/fuzzd.sh); (c) kee
 process count under 32 (Android phantom cap until ~/adbfix.sh is applied): fuzz J<=2,
 one battery at a time, at most 3 parallel agents; (d) `ulimit -Sd` caps anonymous memory
 at 3 GB per process -- an exit 137/MemoryError at that size is the cap, not the box.
+
+L20. EXPERIMENT LOOP (2026-09-06, Karpathy autoresearch shape; the ralph-loop plugin runs it
+unattended): one hypothesis per iteration; keep the change only if tools/chain.sh + battery
+are GREEN and the metric is not worse, else `git checkout -- .`; every iteration writes ONE
+docs/exp.journal line (H:/DID:/GOT:/VERDICT:) — the journal is the results.tsv; never pause
+to ask whether to continue: stop only on the completion promise or max_iterations. Hard laws
+(no cp onto bebop.bin, TASKS.md is generated, pkill -f literals, gate evidence in commits)
+are also hookify rules in ~/.claude/hookify.*.local.md — edit the rule there, not the prose.
