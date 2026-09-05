@@ -9,16 +9,42 @@ GUARD="GUARD: bebop.bin is missing or empty (silent-artifact class, journal 1788
 
 PASS=0; FAIL=0
 
+# Gate memo (2026-09-06, operator "smart test selection"): a run's verdict is a function of
+# (compiled .bin, seed, argv, ordinal of this .bin's runs in this invocation -- sround_reopen
+# and scrash's `w` re-run one .bin and read the .store an earlier run left). `run` replaces the
+# blocks' `timeout N ./seed/build/seed X.bin args`: a key that already PASSed replays its stored
+# stdout instead of running (compile still happens: it produces the key); `gate` commits the
+# block's staged outputs on PASS and marks a block whose every run was a replay `(MEMO)`.
+# BEBOP_MEMO=<dir> (default ~/.cache/bebop/gate-memo); BEBOP_MEMO=0 disables.
+MEMO=${BEBOP_MEMO:-${HOME:-/tmp}/.cache/bebop/gate-memo}; [ "$MEMO" = 0 ] || mkdir -p "$MEMO"
+SEEDMD5=$(md5sum < ./seed/build/seed | cut -c1-32); : > "$BEBOP_TMP/memo.log"; : > "$BEBOP_TMP/memo.keys"
+run() {  # run <timeout-s> <bin> [args...]  -- stdout is the program's stdout (or its replay)
+  local t="$1" bin="$2" b k rc; shift 2
+  [ "$MEMO" = 0 ] && { timeout "$t" ./seed/build/seed "$bin" "$@"; return; }
+  b=$(md5sum < "$bin" | cut -c1-32); k="$b.$SEEDMD5.$(grep -c "^$b " "$BEBOP_TMP/memo.log")${*:+.$*}"
+  echo "$b $k" >> "$BEBOP_TMP/memo.log"
+  if [ -f "$MEMO/$k" ]; then echo "$k hit" >> "$BEBOP_TMP/memo.keys"; cat "$MEMO/$k"; return 0; fi
+  echo "$k miss" >> "$BEBOP_TMP/memo.keys"
+  timeout "$t" ./seed/build/seed "$bin" "$@" > "$BEBOP_TMP/memo.$k"; rc=$?; cat "$BEBOP_TMP/memo.$k"; return $rc
+}
+
 run_test() {
   local f="$1" out_bin="$2"
   ./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$f" "$out_bin" >/dev/null 2>&1 || return 1
-  timeout 30 ./seed/build/seed "$out_bin" | tail -1
+  run 30 "$out_bin" | tail -1
 }
 
 gate() {
-  local name="$1" golden="$2" result="$3"
+  local name="$1" golden="$2" result="$3" tag="" k s
+  if [ "$MEMO" != 0 ] && [ -s "$BEBOP_TMP/memo.keys" ]; then
+    if ! grep -q ' miss$' "$BEBOP_TMP/memo.keys"; then tag=" (MEMO)"
+    elif [ "$result" = "$golden" ]; then
+      while read -r k s; do [ "$s" = miss ] && cp "$BEBOP_TMP/memo.$k" "$MEMO/$k"; done < "$BEBOP_TMP/memo.keys"
+    fi
+    : > "$BEBOP_TMP/memo.keys"
+  fi
   if [ "$result" = "$golden" ]; then
-    echo "PASS $name ($golden)"
+    echo "PASS $name ($golden)$tag"
     PASS=$((PASS+1))
   else
     echo "FAIL $name: golden=$golden got=$result"
@@ -27,74 +53,74 @@ gate() {
 }
 
 # ---- checksum ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/checksum.bp ${BEBOP_TMP:-/tmp/opencode}/checksum_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/checksum_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/checksum.bp ${BEBOP_TMP:-/tmp/opencode}/checksum_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/checksum_test.bin | tail -1)
 gate checksum 96354 "$r"
 
 # ---- sort ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sort.bp ${BEBOP_TMP:-/tmp/opencode}/sort_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/sort_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sort.bp ${BEBOP_TMP:-/tmp/opencode}/sort_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/sort_test.bin | tail -1)
 gate sort 847859010857894 "$r"
 
 # ---- rng ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/rng.bp ${BEBOP_TMP:-/tmp/opencode}/rng_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/rng_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/rng.bp ${BEBOP_TMP:-/tmp/opencode}/rng_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/rng_test.bin | tail -1)
 gate rng -552671757612340580 "$r"
 
 # ---- base64 (RFC 4648, packed 4-char words) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/base64.bp ${BEBOP_TMP:-/tmp/opencode}/base64_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/base64_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/base64.bp ${BEBOP_TMP:-/tmp/opencode}/base64_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/base64_test.bin | tail -1)
 gate base64 1415261057095227803 "$r"
 
 # ---- sha256 ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sha256.bp ${BEBOP_TMP:-/tmp/opencode}/sha256_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/sha256_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sha256.bp ${BEBOP_TMP:-/tmp/opencode}/sha256_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/sha256_test.bin | tail -1)
 # sha256("abc") = ba7816bf8f01cfea...ad; the frozen = fold(h[i]*31^..) of the
 # TRUE digest (hashlib-verified 2026-09-01). The old frozen 65665208959391223
 # was captured from the S0/S1-as-zero miscompile (the lost is_alpha A-Z fix).
 gate sha256 -4000131497313522475 "$r"
 
 # ---- crc32 (zlib_crc32 check value 0xCBF43926 for "123456789") ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/crc.bp ${BEBOP_TMP:-/tmp/opencode}/crc_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/crc_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/crc.bp ${BEBOP_TMP:-/tmp/opencode}/crc_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/crc_test.bin | tail -1)
 gate crc32 3421780262 "$r"
 
 # ---- hex (hex_encode of AB CD EF -> packed ASCII "abcdef") ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/hex.bp ${BEBOP_TMP:-/tmp/opencode}/hex_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/hex_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/hex.bp ${BEBOP_TMP:-/tmp/opencode}/hex_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/hex_test.bin | tail -1)
 gate hex 14026851505647836 "$r"
 
 # ---- hv (Ф1 HDC core vs Rust golden: splitmix code/bind/bundle/permute/
 #      hamming/popcount chain — bench/vs_rust/spectral_golden/golden.txt) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/hv.bp ${BEBOP_TMP:-/tmp/opencode}/hv_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/hv_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/hv.bp ${BEBOP_TMP:-/tmp/opencode}/hv_test.bin >/dev/null 2>&1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/hv_test.bin | tail -1)
 gate hv 4427592702613580868 "$r"
 
 # ---- spectral (SPECTRAL tier: topk_symmetric fp32 port vs Rust golden —
 #      B6_bridge, k=3, 32 iters; frozen = total |λ_bp − λ_golden| fp dev,
 #      re-baselined after the normalize_fp precision raise (>>14 -> >>8)) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/spectral.bp ${BEBOP_TMP:-/tmp/opencode}/spectral_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/spectral_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/spectral.bp ${BEBOP_TMP:-/tmp/opencode}/spectral_test.bin >/dev/null 2>&1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/spectral_test.bin | tail -1)
 gate spectral 2038 "$r"
 
 # ---- csr (Ф2: from_edges structural twin — fold over rp+ci+vv of the five
 #      golden graphs; bench/vs_rust/spectral_golden/golden.txt CSR section) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/csr.bp ${BEBOP_TMP:-/tmp/opencode}/csr_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/csr_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/csr.bp ${BEBOP_TMP:-/tmp/opencode}/csr_test.bin >/dev/null 2>&1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/csr_test.bin | tail -1)
 gate csr -6945622865743784444 "$r"
 
 # ---- bt (Ф2/F4: .bt rank-4 codec — pack/FNV/unpack/stride vs the Rust
 #      golden byte stream; bench/vs_rust/spectral_golden/golden.txt .bt section) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/bt.bp ${BEBOP_TMP:-/tmp/opencode}/bt_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/bt_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/bt.bp ${BEBOP_TMP:-/tmp/opencode}/bt_test.bin >/dev/null 2>&1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/bt_test.bin | tail -1)
 gate bt -5708805812714944038 "$r"
 
 # ---- cache (SS-6/Ф6 DecompCache falsifier: FNV key, 0 recomputes on
 #      identical content, +1 on any change) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/cache.bp ${BEBOP_TMP:-/tmp/opencode}/cache_test.bin >/dev/null 2>&1 && sleep 1 && timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/cache_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/cache.bp ${BEBOP_TMP:-/tmp/opencode}/cache_test.bin >/dev/null 2>&1 && sleep 1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/cache_test.bin | tail -1)
 gate cache 38876254956 "$r"
 
 # ---- wht (N1 NEO-foundation: FWHT ADD/SUB butterfly — unit-vector dispatch
 #      (e1/n8 Walsh row word=85) + self-inverse round trip (wht_pow2 then
 #      wht_invert restores 8 cells exactly). 85001 = word*1000 + roundtrip_ok;
 #      JIT==interp on both engines.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/wht.bp ${BEBOP_TMP:-/tmp/opencode}/wht_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/wht_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/wht.bp ${BEBOP_TMP:-/tmp/opencode}/wht_test.bin >/dev/null 2>&1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/wht_test.bin | tail -1)
 gate wht 85001 "$r"
 
 # ---- haar (N1b MULTITIER micro-tier: integer DWT — unit-vector dispatch
 #      (e1/n8 Haarer row word=41) + exact inverse round trip (haar_pow2 then
 #      haar_invert restores 8 cells losslessly). 41001 = word*1000 + ok;
 #      branch-free ADD/SUB, no multiplies, no floats.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/haar.bp ${BEBOP_TMP:-/tmp/opencode}/haar_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/haar_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/haar.bp ${BEBOP_TMP:-/tmp/opencode}/haar_test.bin >/dev/null 2>&1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/haar_test.bin | tail -1)
 gate haar 41001 "$r"
 
 # ---- ntt (N1b MULTITIER meso-tier: number-theoretic transform over
@@ -106,7 +132,7 @@ gate haar 41001 "$r"
 #      roundtrip bit (ntt_inv(ntt(x)) == x, all 8 cells) + 2*conv bit
 #      (NTT-multiply-then-invert circular convolution of ramp ⊛ reverse
 #      == [176,156,144,140,144,156,176,204]).) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/ntt.bp ${BEBOP_TMP:-/tmp/opencode}/ntt_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/ntt_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/ntt.bp ${BEBOP_TMP:-/tmp/opencode}/ntt_test.bin >/dev/null 2>&1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/ntt_test.bin | tail -1)
 gate ntt 141003 "$r"
 
 # ---- store (Ф2/F4: .bt atomic-publish store — tmp -> sys_export ->
@@ -117,17 +143,17 @@ gate ntt 141003 "$r"
 #      Fredkin are all self-inverse - bit-for-bit unwind without snapshots;
 #      rev_round/rev_undo record deltas and restore the exact arena,
 #      oracle-verified independently in Python over the same assertions) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/rev.bp ${BEBOP_TMP:-/tmp/opencode}/rev_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/rev_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/rev.bp ${BEBOP_TMP:-/tmp/opencode}/rev_test.bin >/dev/null 2>&1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/rev_test.bin | tail -1)
 gate rev 5092789399242 "$r"
 
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/store.bp ${BEBOP_TMP:-/tmp/opencode}/store_test.bin >/dev/null 2>&1 && sleep 1 && timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/store_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/store.bp ${BEBOP_TMP:-/tmp/opencode}/store_test.bin >/dev/null 2>&1 && sleep 1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/store_test.bin | tail -1)
 gate store 2245524994793680850 "$r"
 
 # ---- petri (N4 bit-level Petri nets: marking bit-arrays, mark/get/clear
 #      round-trip incl. bit 63/cell-1 places, branchless AND-mask pre-eval,
 #      tzcnt deadlock (-1), lowest-enabled ordering on a 4-transition crossbar;
 #      fold 61678606 = independent Python cell-faithful oracle) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/petri.bp ${BEBOP_TMP:-/tmp/opencode}/petri_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/petri_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/petri.bp ${BEBOP_TMP:-/tmp/opencode}/petri_test.bin >/dev/null 2>&1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/petri_test.bin | tail -1)
 gate petri 61678606 "$r"
 
 # ---- lsm (N5 reservoir computing: xorshift64-built CSR reservoir (weights in
@@ -135,7 +161,7 @@ gate petri 61678606 "$r"
 #      echo-state verified by strict impulse decay m0>m1>m2); spike-driven
 #      liquid; per-step FWHT sign-word decision prospects; fold -4383576415516299782
 #      = independent Python oracle over the exact floor-div semantics) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/lsm.bp ${BEBOP_TMP:-/tmp/opencode}/lsm_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/lsm_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/lsm.bp ${BEBOP_TMP:-/tmp/opencode}/lsm_test.bin >/dev/null 2>&1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/lsm_test.bin | tail -1)
 gate lsm 2555866056013284810 "$r"
 
 # ---- holo (N6 holographic memory: message m[8]=[7,-3,5,-11,13,-17,19,-23]
@@ -148,7 +174,7 @@ gate lsm 2555866056013284810 "$r"
 #      2^15 scale, per-spike FWHT sign-word and DC+Nyquist prospect folded
 #      through *131; fold 2766693490590679850 = independent Python oracle
 #      (xorshift LSR semantics, FWHT i64 wrap, floor-div step)) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/holo.bp ${BEBOP_TMP:-/tmp/opencode}/holo_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/holo_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/holo.bp ${BEBOP_TMP:-/tmp/opencode}/holo_test.bin >/dev/null 2>&1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/holo_test.bin | tail -1)
 gate holo 2766693490590679850 "$r"
 
 # ---- scoord (SS-15 eigenvectors = the single coordinate system: concepts are
@@ -162,7 +188,7 @@ gate holo 2766693490590679850 "$r"
 #      +/-2 double eigenspace -> mixed basis). Fold 2010131 = python oracle
 #      (mirror of fp topk at n=8,k=4,iters=64) bit-exact; identity 2/1, layout
 #      1, rotation 3, orthonormality ok.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/scoord.bp ${BEBOP_TMP:-/tmp/opencode}/scoord_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/scoord_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/scoord.bp ${BEBOP_TMP:-/tmp/opencode}/scoord_test.bin >/dev/null 2>&1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/scoord_test.bin | tail -1)
 gate scoord 2010131 "$r"
 
 # ---- sgamma (SS-16 eigenvalues = control-flow metrics: the spectral gap
@@ -176,7 +202,7 @@ gate scoord 2010131 "$r"
 #      1.87903 vs true 1.87939; lambda_2 unphysical, engine-dependent). The
 #      +1 spectrum shift makes every |lambda| unique. Fold 3550431 = python
 #      mirror bit-exact.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sgamma.bp ${BEBOP_TMP:-/tmp/opencode}/sgamma_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/sgamma_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sgamma.bp ${BEBOP_TMP:-/tmp/opencode}/sgamma_test.bin >/dev/null 2>&1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/sgamma_test.bin | tail -1)
 gate sgamma 3550431 "$r"
 
 # ---- tb (tokenbox: merged token-economy tool - rtk compressor + mempalace
@@ -187,7 +213,7 @@ gate sgamma 3550431 "$r"
 #      line_has + itoa checks; str literals/++ segfault in the .bin runtime
 #      (R3 defect d, journal 1788288206) so tb is str-free by construction
 #      (argv + cells + arithmetic only)) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/tb.bp ${BEBOP_TMP:-/tmp/opencode}/tb_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/tb_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/tb.bp ${BEBOP_TMP:-/tmp/opencode}/tb_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/tb_test.bin | tail -1)
 gate tb 1111000 "$r"
 
 # ---- seigtime (SS-17 eigentime: time = spectral iteration, not wall clock.
@@ -205,7 +231,7 @@ gate tb 1111000 "$r"
 #      unsigned per the shift law; first seed-sensitive gate (the eigentime
 #      MEASURES the transient, unlike topk folds). Fold 1233012011 = es*10000
 #      + ef = python oracle bit-exact.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/seigtime.bp ${BEBOP_TMP:-/tmp/opencode}/seigtime_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/seigtime_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/seigtime.bp ${BEBOP_TMP:-/tmp/opencode}/seigtime_test.bin >/dev/null 2>&1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/seigtime_test.bin | tail -1)
 gate seigtime 1233012011 "$r"
 
 # ---- srepl (SS-18 spectral self-replication: agent logic change = matrix
@@ -219,7 +245,7 @@ gate seigtime 1233012011 "$r"
 #      drho1q*100000 + trans2*10000 + unst2*1000 + trans1*100 + drho2q
 #      (drhoq = drho >> 16) = python oracle bit-exact (topk seed shift
 #      mirrored unsigned, R3.b).) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/srepl.bp ${BEBOP_TMP:-/tmp/opencode}/srepl_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/srepl_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/srepl.bp ${BEBOP_TMP:-/tmp/opencode}/srepl_test.bin >/dev/null 2>&1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/srepl_test.bin | tail -1)
 gate srepl 8449214 "$r"
 
 # ---- sinc (SS-8 sinc(x)=sin(pi*x)/(pi*x) ideal interpolant, direct Taylor
@@ -229,7 +255,7 @@ gate srepl 8449214 "$r"
 #      golden 667544.2); sinc(1) error 0.013% inside the 0.1% done-check
 #      band (ok bit). Critical for Kalman (SS-1). Fold 6684880500081 =
 #      q05*10^7 + q025*10^4 + e1q*10 + ok = python mirror bit-exact.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sinc.bp ${BEBOP_TMP:-/tmp/opencode}/sinc_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/sinc_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sinc.bp ${BEBOP_TMP:-/tmp/opencode}/sinc_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/sinc_test.bin | tail -1)
 gate sinc 6684880500081 "$r"
 
 # ---- kalman (SS-1 Kalman filter pure .bp: scalar-only fixed-point 1-D step
@@ -239,7 +265,7 @@ gate sinc 6684880500081 "$r"
 #      state tracks z inside the 0.1% band (err 3 fp units -> trk=1). Fold
 #      28327900110011 = kq*10^8 + pq*10^4 + trk*10 + fix (kq=K>>12,
 #      pq=P>>20) = python mirror bit-exact.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/kalman.bp ${BEBOP_TMP:-/tmp/opencode}/kalman_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/kalman_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/kalman.bp ${BEBOP_TMP:-/tmp/opencode}/kalman_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/kalman_test.bin | tail -1)
 gate kalman 28327900110011 "$r"
 
 # ---- calcbound (SS-5 calculus bounding: mean-value slope bounds on
@@ -249,7 +275,7 @@ gate kalman 28327900110011 "$r"
 #      eps=0.01 slack. Done-check: box CONTAINS all 5 actual results.
 #      Fold 1024576000 = contained*10^9 + sum(|fi|>>16)*10^3 + (f0>>20)
 #      = python mirror bit-exact (>> is logical - abs-first per shift law).) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/calcbound.bp ${BEBOP_TMP:-/tmp/opencode}/calcbound_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/calcbound_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/calcbound.bp ${BEBOP_TMP:-/tmp/opencode}/calcbound_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/calcbound_test.bin | tail -1)
 gate calcbound 1024576000 "$r"
 
 # ---- vecinv (SS-2 vector calculus as static invariants on the C8 ring:
@@ -259,7 +285,7 @@ gate calcbound 1024576000 "$r"
 #      edge leaks exactly 1 unit of divergence and the invariant fires.
 #      Fold 1111018 = ident1*10^6 + ident2*10^5 + rot_ok*10^4 + caught*10^3
 #      + div3*10 + lf0 = python mirror bit-exact.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/vecinv.bp ${BEBOP_TMP:-/tmp/opencode}/vecinv_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/vecinv_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/vecinv.bp ${BEBOP_TMP:-/tmp/opencode}/vecinv_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/vecinv_test.bin | tail -1)
 gate vecinv 1111018 "$r"
 
 # ---- fir (SS-4 FIR as a structural ban on cyclic dependencies: forward-only
@@ -270,7 +296,7 @@ gate vecinv 1111018 "$r"
 #      pattern). Fold 11104857722880 = taps_ok*10^13 + bib_ok*10^12 +
 #      sumq*10^5 + maxq (q=>>16, positives only - shift law) = python mirror
 #      bit-exact.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/fir.bp ${BEBOP_TMP:-/tmp/opencode}/fir_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/fir_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/fir.bp ${BEBOP_TMP:-/tmp/opencode}/fir_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/fir_test.bin | tail -1)
 gate fir 11104857722880 "$r"
 
 # ---- qlora (SS-7 QLoRA 4-bit agentic evolution: 8 strategy weights
@@ -281,7 +307,7 @@ gate fir 11104857722880 "$r"
 #      strategy output (moved). Fold 1116506000272 = rt_ok*10^12 +
 #      moved*10^11 + invalid*10^10 + k0q*10^5 + ydeltaq (k0q=key0&65535,
 #      ydeltaq=|ydelta|>>20) = python mirror bit-exact.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/qlora.bp ${BEBOP_TMP:-/tmp/opencode}/qlora_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/qlora_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/qlora.bp ${BEBOP_TMP:-/tmp/opencode}/qlora_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/qlora_test.bin | tail -1)
 gate qlora 1116506000272 "$r"
 
 # ---- bitmat (SS-12 bit matrices: switch/case -> parallel bit grids. The
@@ -292,7 +318,7 @@ gate qlora 1116506000272 "$r"
 #      claim. Verified over ALL 256 flag patterns vs expected index (-1 when
 #      empty; sum of outputs = 246). Fold 1000024600 = ok*10^9 + tot*100 =
 #      python mirror bit-exact.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/bitmat.bp ${BEBOP_TMP:-/tmp/opencode}/bitmat_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/bitmat_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/bitmat.bp ${BEBOP_TMP:-/tmp/opencode}/bitmat_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/bitmat_test.bin | tail -1)
 gate bitmat 1000024600 "$r"
 
 # ---- attn (SS-9 transformer attention via HDC: Hamming nearest-neighbour
@@ -302,7 +328,7 @@ gate bitmat 1000024600 "$r"
 #      unique winner. Fold 2008568201 = win*10^9 + bestdist*10^6 +
 #      (out&0xFFFF)*100 + uniq = python mirror bit-exact; hv_pop1 embedded
 #      verbatim from hv.bp (gate hv).) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/attn.bp ${BEBOP_TMP:-/tmp/opencode}/attn_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/attn_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/attn.bp ${BEBOP_TMP:-/tmp/opencode}/attn_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/attn_test.bin | tail -1)
 gate attn 2008568201 "$r"
 
 # ---- lcres (SS-3 LC resonance as agent-loop timing, arithmetic core:
@@ -313,7 +339,7 @@ gate attn 2008568201 "$r"
 #      1000 real cycles) deferred: no clock syscall on the std gate surface.
 #      Fold 1116675441335088 = ok1*10^15 + ok2*10^14 + okT*10^13 + f1q*10^7
 #      + f2q = python mirror bit-exact.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/lcres.bp ${BEBOP_TMP:-/tmp/opencode}/lcres_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/lcres_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/lcres.bp ${BEBOP_TMP:-/tmp/opencode}/lcres_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/lcres_test.bin | tail -1)
 gate lcres 1116675441335088 "$r"
 
 # ---- genarena (SS-11 generation arena bookkeeping core: pointer bump +
@@ -324,7 +350,7 @@ gate lcres 1116675441335088 "$r"
 #      mmap/mprotect syscall half is compiler-internal (deferred). Fold
 #      1110300000100 = frag*10^12 + reset_ok*10^11 + mono*10^10 + hw*10^4 +
 #      gens = python mirror bit-exact.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/genarena.bp ${BEBOP_TMP:-/tmp/opencode}/genarena_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/genarena_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/genarena.bp ${BEBOP_TMP:-/tmp/opencode}/genarena_test.bin >/dev/null 2>&1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/genarena_test.bin | tail -1)
 gate genarena 1110300000100 "$r"
 
 # ---- stride (SS-10 normalization & stride geometry core: (4,4,4) tensor,
@@ -334,7 +360,7 @@ gate genarena 1110300000100 "$r"
 #      alignment). L1 hit-rate hardware half deferred (PMU). Fold
 #      11100128016 = align_ok*10^10 + line_ok*10^9 + waste_ok*10^8 +
 #      footprint*10^3 + n_runs = python mirror bit-exact.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/stride.bp ${BEBOP_TMP:-/tmp/opencode}/stride_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/stride_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/stride.bp ${BEBOP_TMP:-/tmp/opencode}/stride_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/stride_test.bin | tail -1)
 gate stride 11100128016 "$r"
 
 # ---- pieblock (SS-13 position-independent DecompCache blocks: a serialized
@@ -346,7 +372,7 @@ gate stride 11100128016 "$r"
 #      deferred (mmap save/load path is compiler-internal). Fold 1100800001
 #      = pie_ok*10^9 + integ_ok*10^8 + wsum*10^3 + cyc = python mirror
 #      bit-exact.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/pieblock.bp ${BEBOP_TMP:-/tmp/opencode}/pieblock_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/pieblock_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/pieblock.bp ${BEBOP_TMP:-/tmp/opencode}/pieblock_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/pieblock_test.bin | tail -1)
 gate pieblock 1100800001 "$r"
 
 # ---- ringvsa (N3 Ring-VSA / HDC colored Hadamard rings: bind = dyadic
@@ -356,7 +382,7 @@ gate pieblock 1100800001 "$r"
 #      for bind), identity a*e == a. Fold 1110000000544 = assoc*10^12 +
 #      conv*10^11 + ident*10^10 + chk (544) = python mirror bit-exact;
 #      wht_pow2 embedded verbatim from wht.bp.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/ringvsa.bp ${BEBOP_TMP:-/tmp/opencode}/ringvsa_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/ringvsa_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/ringvsa.bp ${BEBOP_TMP:-/tmp/opencode}/ringvsa_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/ringvsa_test.bin | tail -1)
 gate ringvsa 1110000000544 "$r"
 
 # ---- msuper (N7 multiversal superposition branching: 4 branches computed
@@ -367,7 +393,7 @@ gate ringvsa 1110000000544 "$r"
 #      decisive); readout argmax <S,H_b> = 0 inside the surviving group
 #      {0,1}. Fold 1114056100000 = collapse_ok*10^12 + read_ok*10^11 +
 #      decisive*10^10 + gap*10^5 + win = python mirror bit-exact.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/msuper.bp ${BEBOP_TMP:-/tmp/opencode}/msuper_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/msuper_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/msuper.bp ${BEBOP_TMP:-/tmp/opencode}/msuper_test.bin >/dev/null 2>&1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/msuper_test.bin | tail -1)
 gate msuper 1114056100000 "$r"
 
 # ---- spacetime (N8 spacetime metric code / boundary execution: the program
@@ -381,7 +407,7 @@ gate msuper 1114056100000 "$r"
 #      map sidestepped by one-pass crystallization. Fold 1111100012240 =
 #      close1*10^12 + harm1*10^11 + fix1*10^10 + close2*10^9 + harm2*10^8 +
 #      chk1*100 + chk2 = python mirror bit-exact.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/spacetime.bp ${BEBOP_TMP:-/tmp/opencode}/spacetime_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/spacetime_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/spacetime.bp ${BEBOP_TMP:-/tmp/opencode}/spacetime_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/spacetime_test.bin | tail -1)
 gate spacetime 1111100012240 "$r"
 
 # ---- fno (Neural Operator Core: the three-level spectral stack replaces
@@ -396,7 +422,7 @@ gate spacetime 1111100012240 "$r"
 #      conv_ok*10^14 + modes_ok*10^13 + spec_ok*10^12 + fwht_ok*10^11 +
 #      gapq*10^6 + mask*10^3 + mchk = python mirror bit-exact; ntt/wht
 #      machinery embedded verbatim (gates ntt 141003, wht 85001).) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/fno.bp ${BEBOP_TMP:-/tmp/opencode}/fno_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/fno_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/fno.bp ${BEBOP_TMP:-/tmp/opencode}/fno_test.bin >/dev/null 2>&1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/fno_test.bin | tail -1)
 gate fno 111152971008019 "$r"
 
 # ---- r3x (R3.x emitter defect regression gate: (a) bare a*b<<c parses at
@@ -406,7 +432,7 @@ gate fno 111152971008019 "$r"
 #      (adr into the mapped .bin) - all four were emitter defects, now
 #      frozen against re-introduction. Fold 1111000151 = t1*10^9 + t2*10^8
 #      + t3*10^7 + t4*10^6 + str_len("abcde")*10 + char("hello",1).) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/r3x.bp ${BEBOP_TMP:-/tmp/opencode}/r3x_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/r3x_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/r3x.bp ${BEBOP_TMP:-/tmp/opencode}/r3x_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/r3x_test.bin | tail -1)
 gate r3x 1111100151 "$r"
 
 # ---- whileb (while-boundary regression gate, journal 1788288252): a
@@ -416,41 +442,41 @@ gate r3x 1111100151 "$r"
 #      iteration (Bus error/SIGSEGV). Shapes: let-final + trailing expr,
 #      let-only, compound-final, nested while-final, `}` without `;`.
 #      Fold 7127 = mem[3](7)*1000 + j==4(100) + k==3(20) + a==6(3) + q==2(4).) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/whileb.bp ${BEBOP_TMP:-/tmp/opencode}/whileb_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/whileb_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/whileb.bp ${BEBOP_TMP:-/tmp/opencode}/whileb_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/whileb_test.bin | tail -1)
 gate whileb 7127 "$r"
 
 # ---- lcjit (SS-3 jitter half: LC-resonant loop batch jitter < 10% over
 #      two 800k-cycle batches via clock_ms; flag = pass*10 + fok. The
 #      structural claim (fixed tick count) is exact; <1% wall-clock
 #      target documented as bare-metal-only (shared-box noise 3-8%).) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/lcjit.bp ${BEBOP_TMP:-/tmp/opencode}/lcjit_test.bin >/dev/null 2>&1 && timeout 90 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/lcjit_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/lcjit.bp ${BEBOP_TMP:-/tmp/opencode}/lcjit_test.bin >/dev/null 2>&1 && run 90 ${BEBOP_TMP:-/tmp/opencode}/lcjit_test.bin | tail -1)
 gate lcjit 11 "$r"
 
 # ---- attnt (SS-9 timing half: attention pass over tokens < 1ms,
 #      measured via clock_ms over 2000 passes; flag = fast*10 + wok with
 #      the winner spot-checked == attn gate's win=2. Measured ~1.5us per
 #      pass on the JIT - 650x under the 1ms claim.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/attnt.bp ${BEBOP_TMP:-/tmp/opencode}/attnt_test.bin >/dev/null 2>&1 && timeout 90 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/attnt_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/attnt.bp ${BEBOP_TMP:-/tmp/opencode}/attnt_test.bin >/dev/null 2>&1 && run 90 ${BEBOP_TMP:-/tmp/opencode}/attnt_test.bin | tail -1)
 gate attnt 11 "$r"
 
 # ---- spike (Spike Dispatcher: SWAR popcnt + de Bruijn tzcnt over a dense
 #      activity word, LSB-first dispatch Base+idx*Stride; fold 6920001045
 #      = addrs_sum(6920)*10^6 + nok(1)*10^3 + last_idx(45), oracle =
 #      python mirror bit-exact.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/spike.bp ${BEBOP_TMP:-/tmp/opencode}/spike_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/spike_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/spike.bp ${BEBOP_TMP:-/tmp/opencode}/spike_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/spike_test.bin | tail -1)
 gate spike 6920001045 "$r"
 
 # ---- foldx (R6.2 v5 constant folding: literal-pair add/sub/mul fold via
 #      the fixed-cell model + the control-flow guard (if-branches are NOT
 #      folded). Fold 7150011 == python mirror bit-exact.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/foldx.bp ${BEBOP_TMP:-/tmp/opencode}/foldx_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/foldx_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/foldx.bp ${BEBOP_TMP:-/tmp/opencode}/foldx_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/foldx_test.bin | tail -1)
 gate foldx 7150011 "$r"
 
 # ---- fiber (cooperative user-space fiber scheduler: N=4 agents on ONE
 #      process, shared arena, zero kernel calls - the in-sandbox stand-in
 #      for the clone/futex pool semantics that ptrace breaks. Fold
 #      1215172329 == python mirror bit-exact.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/fiber.bp ${BEBOP_TMP:-/tmp/opencode}/fiber_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/fiber_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/fiber.bp ${BEBOP_TMP:-/tmp/opencode}/fiber_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/fiber_test.bin | tail -1)
 gate fiber 1215172329 "$r"
 
 # ---- mma (SS-11 hardware half: generation arena on a REAL kernel mmap via
@@ -459,7 +485,7 @@ gate fiber 1215172329 "$r"
 #      round-trip all correct (zero per-alloc syscalls, zero fragmentation);
 #      sys_munmap releases. Fold 1111100000 = ok1*10^9 + al*10^8 +
 #      good*10^7 + okh*10^6 + 100000.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/mma.bp ${BEBOP_TMP:-/tmp/opencode}/mma_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/mma_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/mma.bp ${BEBOP_TMP:-/tmp/opencode}/mma_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/mma_test.bin | tail -1)
 gate mma 1111100000 "$r"
 
 # ---- thr (SS-14 direct-threaded code: every tensor-op instruction cell
@@ -470,7 +496,7 @@ gate mma 1111100000 "$r"
 #      0); 4 ops executed + halt. The >=2x-vs-switch claim stays a
 #      hardware timing item (honest). Fold 25000411 = r2*10^6 + exec*10^2
 #      + jtok*10 + zok.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/thr.bp ${BEBOP_TMP:-/tmp/opencode}/thr_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/thr_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/thr.bp ${BEBOP_TMP:-/tmp/opencode}/thr_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/thr_test.bin | tail -1)
 gate thr 25000411 "$r"
 
 # ---- phant (T6 fractal time-phantom networks: algae L-rule depth-6
@@ -478,7 +504,7 @@ gate thr 25000411 "$r"
 #      neighbours) → evaporate+re-expand verification = deterministic
 #      identity. Fold 8328000021 = ns*10^6 + eq*10^8 + length, python
 #      mirror bit-exact.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/phant.bp ${BEBOP_TMP:-/tmp/opencode}/phant_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/phant_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/phant.bp ${BEBOP_TMP:-/tmp/opencode}/phant_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/phant_test.bin | tail -1)
 gate phant 8328000021 "$r"
 
 # ---- rnsrot (T7 RNS-integrated spike rotors: T1 sandwich (R x R~ with
@@ -487,7 +513,7 @@ gate phant 8328000021 "$r"
 #      offset encoding) back to the direct i64 digest — neural and
 #      geometric passes are ONE arithmetic. Fold 1000088888708 =
 #      digest + eq*10^12, python mirror bit-exact.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/rnsrot.bp ${BEBOP_TMP:-/tmp/opencode}/rnsrot_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/rnsrot_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/rnsrot.bp ${BEBOP_TMP:-/tmp/opencode}/rnsrot_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/rnsrot_test.bin | tail -1)
 gate rnsrot 1000088888708 "$r"
 
 # ---- deltasync (T8 VSA delta mesh sync: agents exchange ONLY the
@@ -496,7 +522,7 @@ gate rnsrot 1000088888708 "$r"
 #      serialization. Corrupted delta (one flipped bit) must NOT
 #      reproduce the digest (breaker flag). Fold 1168535566021 =
 #      dl + good*10^11 + detected*10^12, python mirror bit-exact.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/deltasync.bp ${BEBOP_TMP:-/tmp/opencode}/deltasync_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/deltasync_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/deltasync.bp ${BEBOP_TMP:-/tmp/opencode}/deltasync_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/deltasync_test.bin | tail -1)
 gate deltasync 1168535566021 "$r"
 
 # ---- mutlsys (T9 self-mutating L-rules: runtime mutates its own
@@ -505,7 +531,7 @@ gate deltasync 1168535566021 "$r"
 #      L-systems with no human in the loop. Signed-fitness comparison
 #      (deterministic). Fold 44349936263 = dl + accepted*10^11,
 #      python mirror bit-exact.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/mutlsys.bp ${BEBOP_TMP:-/tmp/opencode}/mutlsys_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/mutlsys_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/mutlsys.bp ${BEBOP_TMP:-/tmp/opencode}/mutlsys_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/mutlsys_test.bin | tail -1)
 gate mutlsys 44349936263 "$r"
 
 # ---- entcol (T10 entropic topological collapse — the GC replacement.
@@ -514,7 +540,7 @@ gate mutlsys 44349936263 "$r"
 #      drives diversity down as depth grows. 3 collapses, freed 21
 #      cells. Fold 3000021007 = collapsed*10^9 + freed*10^3 + 7,
 #      python mirror bit-exact.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/entcol.bp ${BEBOP_TMP:-/tmp/opencode}/entcol_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/entcol_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/entcol.bp ${BEBOP_TMP:-/tmp/opencode}/entcol_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/entcol_test.bin | tail -1)
 gate entcol 3000021007 "$r"
 
 # ---- ptrless (T12 .becache-as-the-only-pointer: states addressed by
@@ -522,7 +548,7 @@ gate entcol 3000021007 "$r"
 #      corrupted key must NOT resolve (loud mismatch). Fold
 #      1118234452261 = dl + verify*10^11 + corrupt_detected*10^12,
 #      python mirror bit-exact.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/ptrless.bp ${BEBOP_TMP:-/tmp/opencode}/ptrless_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/ptrless_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/ptrless.bp ${BEBOP_TMP:-/tmp/opencode}/ptrless_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/ptrless_test.bin | tail -1)
 gate ptrless 1118234452261 "$r"
 
 # ---- morph (T11 JIT D-I fusion / morph loop publishing half: a kernel
@@ -531,7 +557,7 @@ gate ptrless 1118234452261 "$r"
 #      the seed mmaps file-backed RX (proot W^X-clean mprotect equivalent).
 #      The K-iteration compile->run->verify loop is morph_loop.sh. Fold 11
 #      = pd*10 + ok.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/morph.bp ${BEBOP_TMP:-/tmp/opencode}/morph_test.bin >/dev/null 2>&1 && sleep 1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/morph_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/morph.bp ${BEBOP_TMP:-/tmp/opencode}/morph_test.bin >/dev/null 2>&1 && sleep 1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/morph_test.bin | tail -1)
 gate morph 11 "$r"
 
 # ---- dispatcher (T14 first rung — the .bt bridge artifact: a kernel's
@@ -544,7 +570,7 @@ gate morph 11 "$r"
 #      is order-independent bit-exact. spike machinery embedded verbatim
 #      from spike.bp; the seed-runtime swap is the future work. Fold
 #      81001005 = sum*10^6 + rt*10^3 + n, python mirror bit-exact.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dispatcher.bp ${BEBOP_TMP:-/tmp/opencode}/dispatcher_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/dispatcher_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dispatcher.bp ${BEBOP_TMP:-/tmp/opencode}/dispatcher_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/dispatcher_test.bin | tail -1)
 gate dispatcher 10611131774 "$r"
 
 # ---- substrate (T14 — the dispatcher as the EXECUTION SUBSTRATE: a
@@ -558,7 +584,7 @@ gate dispatcher 10611131774 "$r"
 #        k2 fibonacci recurrence ripple fib(25)         -> 75025, 25 sweeps
 #      Fold 36*10^9 + 75025*10^4 + ok1*10^2 + ok2*10 + sw1*2 + sw2
 #        = 36750250113, each check bit-exact vs the kernel oracles.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/substrate.bp ${BEBOP_TMP:-/tmp/opencode}/substrate_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/substrate_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/substrate.bp ${BEBOP_TMP:-/tmp/opencode}/substrate_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/substrate_test.bin | tail -1)
 gate substrate 36750250113 "$r"
 
 # ---- swpmu (T15a: SOFTWARE PMU COUNTERS — the blocked-perf_event_open
@@ -572,167 +598,167 @@ gate substrate 36750250113 "$r"
 #      sum = 1+..+N = 2001000 (N=2000) and ok = stepok*10+sumok = 11;
 #      the k1-step loop is pinned bit-exact independent of wall-clock
 #      jitter. Golden 2001000110000000000.) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/swpmu.bp ${BEBOP_TMP:-/tmp/opencode}/swpmu_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/swpmu_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/swpmu.bp ${BEBOP_TMP:-/tmp/opencode}/swpmu_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/swpmu_test.bin | tail -1)
 gate swpmu 2001000110000000000 "$r"
 
 # ---- tdg ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/tdg.bp ${BEBOP_TMP:-/tmp/opencode}/tdg_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/tdg_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/tdg.bp ${BEBOP_TMP:-/tmp/opencode}/tdg_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/tdg_test.bin | tail -1)
 gate tdg 3162519640442167 "$r"
 
 # ---- tdggeo ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/tdggeo.bp ${BEBOP_TMP:-/tmp/opencode}/tdggeo_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/tdggeo_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/tdggeo.bp ${BEBOP_TMP:-/tmp/opencode}/tdggeo_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/tdggeo_test.bin | tail -1)
 gate tdggeo 219599976738721791 "$r"
 
 # ---- slayout (G1, T112: store file bytes == python struct.pack from the layout rules) ----
 rm -f slayout.store
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/slayout.bp ${BEBOP_TMP:-/tmp/opencode}/slayout_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/slayout_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/slayout.bp ${BEBOP_TMP:-/tmp/opencode}/slayout_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/slayout_test.bin | tail -1)
 gate slayout 75004859 "$r"
 
 # ---- sround (G2, T112: 10^5 objects, two mapping bases, and a reopen in a second run) ----
 rm -f sround.store
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sround.bp ${BEBOP_TMP:-/tmp/opencode}/sround_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/sround_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sround.bp ${BEBOP_TMP:-/tmp/opencode}/sround_test.bin >/dev/null 2>&1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/sround_test.bin | tail -1)
 gate sround -8475951406600543408 "$r"
-r=$(timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/sround_test.bin | tail -1)
+r=$(run 60 ${BEBOP_TMP:-/tmp/opencode}/sround_test.bin | tail -1)
 gate sround_reopen -8475951406600543408 "$r"
 
 # ---- scompact (G4, T113: 10^6 nodes, 60% superseded, Cheney compaction into .tmp + rename) ----
 rm -f scompact.store scompact.store.tmp
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/scompact.bp ${BEBOP_TMP:-/tmp/opencode}/scompact_test.bin >/dev/null 2>&1 && timeout 300 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/scompact_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/scompact.bp ${BEBOP_TMP:-/tmp/opencode}/scompact_test.bin >/dev/null 2>&1 && run 300 ${BEBOP_TMP:-/tmp/opencode}/scompact_test.bin | tail -1)
 gate scompact -2246042833172211968 "$r"
 
 # ---- scrash (G5, T113: 10^4 generations appended by the writer, then the reader's fold; the SIGKILL trials live in bench/vs_rust/scrash.sh) ----
 rm -f scrash.store
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/scrash.bp ${BEBOP_TMP:-/tmp/opencode}/scrash_test.bin >/dev/null 2>&1 && timeout 120 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/scrash_test.bin w >/dev/null && timeout 120 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/scrash_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/scrash.bp ${BEBOP_TMP:-/tmp/opencode}/scrash_test.bin >/dev/null 2>&1 && run 120 ${BEBOP_TMP:-/tmp/opencode}/scrash_test.bin w >/dev/null && run 120 ${BEBOP_TMP:-/tmp/opencode}/scrash_test.bin | tail -1)
 gate scrash 4231007695826602272 "$r"
 
 # ---- sevolve (G3, T114: v1/v2 layouts, v1 reads v2, sha256-named migration + compaction) ----
 rm -f sevolve.store sevolve.store.tmp
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sevolve.bp ${BEBOP_TMP:-/tmp/opencode}/sevolve_test.bin >/dev/null 2>&1 && timeout 120 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/sevolve_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sevolve.bp ${BEBOP_TMP:-/tmp/opencode}/sevolve_test.bin >/dev/null 2>&1 && run 120 ${BEBOP_TMP:-/tmp/opencode}/sevolve_test.bin | tail -1)
 gate sevolve -6849083777328568796 "$r"
 
 # ---- sconc (G6, T115: 4 writers x 10^4 under the lock + 4 readers x 10^4 snapshots) ----
 rm -f sconc.store
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sconc.bp ${BEBOP_TMP:-/tmp/opencode}/sconc_test.bin >/dev/null 2>&1 && timeout 300 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/sconc_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sconc.bp ${BEBOP_TMP:-/tmp/opencode}/sconc_test.bin >/dev/null 2>&1 && run 300 ${BEBOP_TMP:-/tmp/opencode}/sconc_test.bin | tail -1)
 gate sconc 40000 "$r"
 
 # ---- tq ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/tq.bp ${BEBOP_TMP:-/tmp/opencode}/tq_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/tq_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/tq.bp ${BEBOP_TMP:-/tmp/opencode}/tq_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/tq_test.bin | tail -1)
 gate tq 722997760 "$r"
 
 # ---- tdgstokes ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/tdgstokes.bp ${BEBOP_TMP:-/tmp/opencode}/tdgstokes_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/tdgstokes_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/tdgstokes.bp ${BEBOP_TMP:-/tmp/opencode}/tdgstokes_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/tdgstokes_test.bin | tail -1)
 gate tdgstokes 173698403 "$r"
 
 # ---- tdgcurv ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/tdgcurv.bp ${BEBOP_TMP:-/tmp/opencode}/tdgcurv_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/tdgcurv_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/tdgcurv.bp ${BEBOP_TMP:-/tmp/opencode}/tdgcurv_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/tdgcurv_test.bin | tail -1)
 gate tdgcurv 4262143808388606 "$r"
 
 # ---- tdgforms ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/tdgforms.bp ${BEBOP_TMP:-/tmp/opencode}/tdgforms_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/tdgforms_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/tdgforms.bp ${BEBOP_TMP:-/tmp/opencode}/tdgforms_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/tdgforms_test.bin | tail -1)
 gate tdgforms 1000351400006779 "$r"
 
 # ---- tern ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/tern.bp ${BEBOP_TMP:-/tmp/opencode}/tern_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/tern_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/tern.bp ${BEBOP_TMP:-/tmp/opencode}/tern_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/tern_test.bin | tail -1)
 gate tern 8888868889989889 "$r"
 
 # ---- rns ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/rns.bp ${BEBOP_TMP:-/tmp/opencode}/rns_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/rns_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/rns.bp ${BEBOP_TMP:-/tmp/opencode}/rns_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/rns_test.bin | tail -1)
 gate rns 1183829339 "$r"
 
 # ---- snn ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/snn.bp ${BEBOP_TMP:-/tmp/opencode}/snn_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/snn_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/snn.bp ${BEBOP_TMP:-/tmp/opencode}/snn_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/snn_test.bin | tail -1)
 gate snn 65504516937878 "$r"
 
 # ---- lsys ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/lsys.bp ${BEBOP_TMP:-/tmp/opencode}/lsys_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/lsys_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/lsys.bp ${BEBOP_TMP:-/tmp/opencode}/lsys_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/lsys_test.bin | tail -1)
 gate lsys 144175882039858 "$r"
 
 # ---- lod ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/lod.bp ${BEBOP_TMP:-/tmp/opencode}/lod_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/lod_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/lod.bp ${BEBOP_TMP:-/tmp/opencode}/lod_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/lod_test.bin | tail -1)
 gate lod 1000088904914 "$r"
 
 # ---- drift ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/drift.bp ${BEBOP_TMP:-/tmp/opencode}/drift_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/drift_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/drift.bp ${BEBOP_TMP:-/tmp/opencode}/drift_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/drift_test.bin | tail -1)
 gate drift 5903978048000947864 "$r"
 
 # ---- grass ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/grass.bp ${BEBOP_TMP:-/tmp/opencode}/grass_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/grass_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/grass.bp ${BEBOP_TMP:-/tmp/opencode}/grass_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/grass_test.bin | tail -1)
 gate grass 10312435099105887 "$r"
 
 # ---- cl41 ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/cl41.bp ${BEBOP_TMP:-/tmp/opencode}/cl41_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/cl41_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/cl41.bp ${BEBOP_TMP:-/tmp/opencode}/cl41_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/cl41_test.bin | tail -1)
 gate cl41 1807759285641197332 "$r"
 
 # ---- zgrade ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/zgrade.bp ${BEBOP_TMP:-/tmp/opencode}/zgrade_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/zgrade_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/zgrade.bp ${BEBOP_TMP:-/tmp/opencode}/zgrade_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/zgrade_test.bin | tail -1)
 gate zgrade 5676760058329986817 "$r"
 
 # ---- sheaf ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sheaf.bp ${BEBOP_TMP:-/tmp/opencode}/sheaf_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/sheaf_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sheaf.bp ${BEBOP_TMP:-/tmp/opencode}/sheaf_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/sheaf_test.bin | tail -1)
 gate sheaf 1114020060 "$r"
 
 # ---- sheafh0 ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sheafh0.bp ${BEBOP_TMP:-/tmp/opencode}/sheafh0_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/sheafh0_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sheafh0.bp ${BEBOP_TMP:-/tmp/opencode}/sheafh0_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/sheafh0_test.bin | tail -1)
 gate sheafh0 11121890396072 "$r"
 
 # ---- csheaf ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/csheaf.bp ${BEBOP_TMP:-/tmp/opencode}/csheaf_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/csheaf_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/csheaf.bp ${BEBOP_TMP:-/tmp/opencode}/csheaf_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/csheaf_test.bin | tail -1)
 gate csheaf 5155430002134088 "$r"
 
 # ---- sdiag ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sdiag.bp ${BEBOP_TMP:-/tmp/opencode}/sdiag_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/sdiag_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sdiag.bp ${BEBOP_TMP:-/tmp/opencode}/sdiag_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/sdiag_test.bin | tail -1)
 gate sdiag 654345454 "$r"
 
 # ---- rewrite ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/rewrite.bp ${BEBOP_TMP:-/tmp/opencode}/rewrite_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/rewrite_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/rewrite.bp ${BEBOP_TMP:-/tmp/opencode}/rewrite_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/rewrite_test.bin | tail -1)
 gate rewrite 38233233101031 "$r"
 
 # ---- mvcc ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/mvcc.bp ${BEBOP_TMP:-/tmp/opencode}/mvcc_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/mvcc_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/mvcc.bp ${BEBOP_TMP:-/tmp/opencode}/mvcc_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/mvcc_test.bin | tail -1)
 gate mvcc 71068412663603207 "$r"
 
 # ---- stm ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/stm.bp ${BEBOP_TMP:-/tmp/opencode}/stm_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/stm_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/stm.bp ${BEBOP_TMP:-/tmp/opencode}/stm_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/stm_test.bin | tail -1)
 gate stm 871596764015151 "$r"
 
 # ---- dpll ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dpll.bp ${BEBOP_TMP:-/tmp/opencode}/dpll_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/dpll_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dpll.bp ${BEBOP_TMP:-/tmp/opencode}/dpll_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/dpll_test.bin | tail -1)
 gate dpll 584168922 "$r"
 
 # ---- money ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/money.bp ${BEBOP_TMP:-/tmp/opencode}/money_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/money_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/money.bp ${BEBOP_TMP:-/tmp/opencode}/money_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/money_test.bin | tail -1)
 gate money 872656672063013 "$r"
 
 # ---- ordfsm ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/ordfsm.bp ${BEBOP_TMP:-/tmp/opencode}/ordfsm_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/ordfsm_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/ordfsm.bp ${BEBOP_TMP:-/tmp/opencode}/ordfsm_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/ordfsm_test.bin | tail -1)
 gate ordfsm 346243789026198 "$r"
 
 # ---- bitset ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/bitset.bp ${BEBOP_TMP:-/tmp/opencode}/bitset_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/bitset_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/bitset.bp ${BEBOP_TMP:-/tmp/opencode}/bitset_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/bitset_test.bin | tail -1)
 gate bitset 2036794690103862628 "$r"
 
 # ---- dp ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dp.bp ${BEBOP_TMP:-/tmp/opencode}/dp_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/dp_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dp.bp ${BEBOP_TMP:-/tmp/opencode}/dp_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/dp_test.bin | tail -1)
 gate dp 1228358969285510033 "$r"
 
 # ---- modular ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/modular.bp ${BEBOP_TMP:-/tmp/opencode}/modular_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/modular_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/modular.bp ${BEBOP_TMP:-/tmp/opencode}/modular_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/modular_test.bin | tail -1)
 gate modular 116545118955335780 "$r"
 
 # ---- rle ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/rle.bp ${BEBOP_TMP:-/tmp/opencode}/rle_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/rle_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/rle.bp ${BEBOP_TMP:-/tmp/opencode}/rle_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/rle_test.bin | tail -1)
 gate rle 3598486830113687277 "$r"
 
 # ---- search ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/search.bp ${BEBOP_TMP:-/tmp/opencode}/search_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/search_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/search.bp ${BEBOP_TMP:-/tmp/opencode}/search_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/search_test.bin | tail -1)
 gate search 3274903484811434843 "$r"
 
 # ---- set ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/set.bp ${BEBOP_TMP:-/tmp/opencode}/set_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/set_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/set.bp ${BEBOP_TMP:-/tmp/opencode}/set_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/set_test.bin | tail -1)
 gate set 671356585229707990 "$r"
 
 # ---- usemod (T47 `use "path"` textual inclusion; L17 oracle bench/oracles/usemod.py) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/usemod.bp ${BEBOP_TMP:-/tmp/opencode}/usemod_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/usemod_test.bin | tail -1)
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/usemod.bp ${BEBOP_TMP:-/tmp/opencode}/usemod_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/usemod_test.bin | tail -1)
 gate usemod 5450099284205820388 "$r"
 
 echo "std_golden: $PASS pass, $FAIL fail"
