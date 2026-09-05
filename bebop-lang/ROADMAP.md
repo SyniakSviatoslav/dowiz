@@ -93,6 +93,11 @@ Honest twins (bench/vs_rust/honest.sh, D11-C): see bench/vs_rust/REPORT-honest.m
 | same as runtime cells (bebop sweep) | 738 | 41x slower |
 | same sweep engine in Rust (model floor) | 39 | 39x slower than Rust linear (1.0 ms) |
 
+| incremental curve, 2^16-cell DAG (bench/substrate_spike/incr.sh, T107) | sweep / full, us per rep | crossover |
+|---|---|---|
+| bebop k=1 / 16 / 256 / 4096 | 15/1031, 234/984, 1828/1078, 5281/1109 | k = 256 (0.39% of N) |
+| Rust twin k=1 / 16 / 256 / 4096 | 4/132, 50/127, 525/129, 1446/135 | k = 256 (0.39% of N) |
+
 | platform | measured |
 |---|---|
 | usable A78 cores in this shell | 3 (cpus 4-6; cpu 7 refuses taskset) |
