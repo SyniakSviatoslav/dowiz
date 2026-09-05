@@ -461,19 +461,15 @@ fn emit_bl(insns: [i64], n: [i64], target: i64, has_spills: i64) -> i64 {
   // x14 (frame-heap cursor) and x15 (spill base) are caller-saved: callees
   // rebind both from their own sp. A caller that allocates cells AFTER a
   // call (let k = [0] post-bl) or reads its own spill slots must get them
-  // back. Always save/restore; frame: 48 bytes [x15 @0, x14 @8, x15 @16].
-  let _ = em(insns, n, 3506488319);
-  let _ = em(insns, n, 4177527791);
-  let _ = em(insns, n, 4177528814);
-  let _ = em(insns, n, 4177529839);
+  // back. T103 (2026-09-05): one pair instead of the old 48-byte frame with
+  // x15 saved twice -- stp x15,x14,[sp,#-16]! ; bl ; ldp x15,x14,[sp],#16
+  // (0xA9BF3BEF / 0xA8C13BEF, as+objdump): 9 -> 3 words per call site.
+  let _ = em(insns, n, 2847882223);
   let offset = target - n[0];
   let is_back = if offset < 0 then 1 else 0;
   let word = 2483027968 + offset + is_back * 67108864;
   let _ = em(insns, n, word);
-  let _ = em(insns, n, 4181722095);
-  let _ = em(insns, n, 4181723118);
-  let _ = em(insns, n, 4181724143);
-  let _ = em(insns, n, 2432746495);
+  let _ = em(insns, n, 2831236079);
   n[0]
 }
 
@@ -1440,7 +1436,7 @@ fn str_reg(insns: [i64], n: [i64], i: i64, rep: i64) -> i64 {
 // S3: pop_back after bl — restores flushed registers from stack. No-op when rep==0.
 fn pop_back(insns: [i64], n: [i64], fntab: [i64], rep: i64) -> i64 {
   let do_restore = if rep > 0 then 1 else 0;
-  let total = rep * 8 + 64;  // flush space + bl frame (48) + push space (16)
+  let total = rep * 8 + 32;  // flush space + bl frame (16, T103) + push space (16); dead: rep is 0 since 4e6a1d6
   let _ = if do_restore == 1 then (let _ = em(insns, n, 2432713727 + (total - 16) * 1024) in 0) else 0;
   let _ = if do_restore == 1 then ldr_reg(insns, n, 0, rep) else 0;
   let _ = if do_restore == 1 then (let _ = fntab[3890] = rep in 0) else 0;
