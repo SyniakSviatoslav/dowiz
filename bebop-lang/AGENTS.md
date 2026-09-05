@@ -356,3 +356,16 @@ L18. NO IDLE WAITING (operator rule, 2026-09-06): while a shell, chain, battery 
      run_in_background / long gate. Cost: none; the box has 3 A78 cores and one
      writer. Incident: session 10 lost wall-clock to wait-only turns while a
      5-minute self-compile ran.
+L19. THE BOX IS GUARDED (operator priority, 2026-09-05): a Termux-side watchdog
+(`boxguard status|log`, source /data/data/com.termux/files/home/boxguard.py) holds the
+box at <= 450 % CPU (of 800 %), pauses nice-10 background work first (SIGSTOP/SIGCONT
+rotation), kills the largest worker below 450 MB MemAvailable, halves the budget above
+75 C, and kills any shell spinning at 100 % for 30 s with ppid 1 (a detached proot
+tracee from a dead session -- the cause of the session deaths). Consequences: (a) a slow
+step is usually `stopped=[...]` in `boxguard status`, not a regression -- read it before
+timing anything; (b) never detach long work from a Claude shell (`nohup`, `&` + disown):
+it dies or spins with the session's proot -- background shields run as runit services in
+their own proot (`sv status $PREFIX/var/service/fuzzd`, tools/fuzzd.sh); (c) keep the
+process count under 32 (Android phantom cap until ~/adbfix.sh is applied): fuzz J<=2,
+one battery at a time, at most 3 parallel agents; (d) `ulimit -Sd` caps anonymous memory
+at 3 GB per process -- an exit 137/MemoryError at that size is the cap, not the box.

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# pre-push (2026-09-06): the background fuzzer (tools/fuzzd.sh) found a DIVERGE/CRASH/COMPILEFAIL
+# that nobody has classified -> refuse the push. Fix (or classify) it, then `tools/fuzzd.sh clear`.
+# Enable once per clone: git config core.hooksPath bebop-lang/tools/hooks
+D=${FUZZD:-$HOME/.cache/bebop/fuzzd}
+[ -f "$D/ALERT" ] && { echo "pre-push: fuzzd ALERT pending ($D/ALERT):"; cat "$D/ALERT"; echo "classify/fix it, then tools/fuzzd.sh clear"; exit 1; }
+exit 0
