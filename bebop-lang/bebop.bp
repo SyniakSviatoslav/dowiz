@@ -3903,8 +3903,8 @@ fn compile_program_offs(s: str, insns: [i64], n: [i64], offs: [i64]) -> i64 {
   let sp = [0];
   let dli = [0];
   let dgo = if dlitc > 0 then 1 else 0;
+  let strn = str_len(s);
   while dgo == 1 {
-    let strn = str_len(s);
     let c0 = if sp[0] >= strn then 0 else char(s, sp[0]);
     let e1 = if sp[0] + 1 >= strn then 1 else 0;
     let c1 = if e1 == 1 then 0 else char(s, sp[0] + 1);
