@@ -61,17 +61,17 @@ T105-T108 -> T109-T117 G1-G8 stage 2 -> T123-T125 -> T130/T118b -> T90 step 1) a
 HISTORY.md; this list is only what remains and is the ONE ordering (SESSION-HANDOFF points
 here, HISTORY's "Ordering for T84-T95" is superseded).
 
-1. Loop hygiene — repays every later step.
-   a. Fuzz at scale (TG-DONE 8): `bench/fuzz/fuzz.sh 5000 <start>` batches (~25 min at
-      3.5/s), one journal line per batch; every DIVERGE = probe ladder -> construct ->
-      one-line fix (the 42122 pattern, 2026-09-06). Start each batch before the next code
-      step, read it after.
-   b. Capacity trap for a fn emitting > 65536 words (the planning-pass tmp buffer dies with
-      exit 82 today; needs its own code in docs/TRAPS.md + a neg construct).
-   c. T77 shrinker = the cut-and-return ladder as a tool (the T77 delta-debugger ran 90 min
-      without a result on 5 KB; four hand probes found 20056 and 42122).
-   d. The remaining per-call n^2 term in the compiler (calls4000 1.8 s; profile by
-      differential timing, never gdb under proot).
+1. Loop hygiene — DONE 2026-09-06 (session 13), one line each so nobody reopens it:
+   a. Fuzz at scale: continuous — tools/fuzzd.sh as the Termux runit service `fuzzd` (own
+      proot, little cores, 500-seed batches, one journal line each, ALERT file gates the
+      push via tools/hooks/pre-push). 3100 seeds from 100000 + 5000 from 50000: 0 miscompiles.
+   b. Capacity trap: exit 83 (0ba3154).
+   c. Shrinker: bench/fuzz/ladder.py (b37e1c0) — 42122: 3301 -> 398 B in 67 s, 20056 -> 142 B.
+   d. The per-call n^2 term is gone (SPEEDUP-ANALYSIS section 7: calls 1000/2000/4000 =
+      0.092/0.120/0.165 s, linear); the real 15 s was one str_len-per-byte loop, now hoisted
+      (a27b594): self-compile 1.5 s, chain + battery 34 s. Items 2/6/7 of the operator's
+      dev-speed list (modules / IR cache / parallel emit) were estimated there and are NOT
+      worth it against a 1.5 s baseline (best case 1.15-0.85 s, medium-high risk).
 2. Close the PARTIALs: T104b wider peephole (x*c1*c2, mul-by-const -> shift, LICM of movz)
    through `tools/chain.sh --codegen`; T96 rest; T90 step 2 (`check` verb, d08/d10, messages
    for runtime traps 80-88).
