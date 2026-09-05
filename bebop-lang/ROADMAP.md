@@ -44,7 +44,7 @@ and retired by decisions D8-D10.
 |---|---|---|---|---|
 | 1 | honest kernels, in-process pinned, bebop / Rust twin (D11-C) | bench/vs_rust/honest.sh | K1h, K2h, K3h, K4 rows measured after T118 (see Measured) | every row <= 2.0x after T101-T104; <= 1.0x is the D1(a) stretch, decided on the numbers |
 | 2 | linear self-hosting fixpoint | every codegen commit (AGENTS law) | gen3 == gen4 2b6171ce | invariant, never a goal |
-| 3 | one oracle per gate, none self-frozen | bench/oracles/run_all.sh | ok=97 self-frozen=0 (std gate count 99) | 0 self-frozen; 8 gates await T124 fold specs before "== oracle" |
+| 3 | one oracle per gate, none self-frozen | bench/oracles/run_all.sh | ok=99 self-frozen=0 | 0 self-frozen; 8 gates await T124 fold specs before "== oracle" |
 | 4 | zero tolerated miscompiles | construct_parity (38 constructs + neg), fuzz | R3.x deleted; fuzz 150-seed batches clean | fuzz >= 10^5 programs, 0 CRASH / DIVERGE, traps only (TG-DONE 8) |
 | 5 | single compiler, single language | attic, construct_parity | expr_compile.bp in attic; 38 constructs | every accepted construct in construct_parity; struct literals + `use` + `ref T` landed (T43 rest, T47, T48) |
 | 6 | hardware claims measured, never projected | bench_pinned.sh, REPORT-pinned.md, Measured table below | no projected row remains | stays true |
@@ -86,6 +86,16 @@ Honest twins (bench/vs_rust/honest.sh, D11-C): see bench/vs_rust/REPORT-honest.m
 | nearest, full scan | 183 ms (python) / ~158 ms native | 18.4 ms | 8.6-9.9x |
 | nearest, 3x3 cell index | 55 us (C API incl. ~19 us ctypes) / ~35 us native | 4.0 us | ~9x native |
 | nn4 bucketed scan, 1 A78 vs 3 A78 pinned (bench/tq_sqlite/nn4.sh, T106) | seq 219 ms | par 99 ms | 2.21x on 3 cores |
+
+| store vs sqlite 3.46.1 C API via ctypes (bench/vs_rust/sbench.sh, G7/T116, 1M records) | store | sqlite | ratio |
+|---|---|---|---|
+| insert 1M + index + commit | 880 ms | 15147 ms | 17x |
+| PK lookup (10^5) | 450 ns | 10.3 us (ctypes; ~2 us via python's module) | 22.8x / >= 4x native |
+| 3x3 cell-window scan (10^4) | 2.7 us | 83 us | 30.7x |
+| update 10^5, one transaction | 157 ms | 1000 ms | 6.4x |
+| reopen + first record | 590 us | 3600 us | 6.1x |
+| logical size after update / after compaction | 85.2 MB / 72.4 MB | 34.1 MB | 2.5x / 2.1x LOSS |
+| compaction vs VACUUM | 747 ms | 544 ms | 0.7x |
 
 | substrate (bench/substrate_spike/run.sh, T55 spike) | ms | vs linear |
 |---|---|---|

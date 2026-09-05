@@ -1,0 +1,231 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+// sbench.bp — G7 (T116): the T100 workload on the store, one phase per run.
+// Records P{id,u,v,cell} (u,v = LCG from 12345 as in bench/tq_sqlite, cell =
+// 1024x1024 grid), table T{arr ref P} (1M slots), index IX{K,N,ref RP,ref CI} with
+// RP{arr i64} (K+1 row pointers) and CI{arr i64} (record ids per cell, counting
+// sort), root H{ref T, ref IX}. argv[2] = phase, argv[3] = f (print the fold) or
+// t (print microseconds per operation, or ms for insert/update/compact):
+//   insert  : fresh store, 1M appends + index build + one commit (ms)
+//   lookup  : 10^5 PK lookups (LCG ids): slot -> record -> u; fold = sum u
+//   scan    : 10^4 3x3 cell-window scans through the CSR: fold = sum of ids
+//   update  : 10^5 new record versions (u + 1) + new T + new H, one commit (ms)
+//   reopen  : 100 x (open + validated superblock + one record + unmap) (us each)
+//   compact : Cheney compaction (ms); the lookup fold must be unchanged after
+//   z       : logical store size = arena_used * 8 bytes (the file is preallocated)
+// t prints ms for insert/update/compact, ns per op for lookup/scan, us for reopen.
+// bench/vs_rust/sbench.sh drives the phases, the sqlite C-API twin and the sizes.
+fn lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
+fn cellof(u: i64, v: i64) -> i64 { ((u + 1073741824) >> 21) * 1024 + ((v + 1073741824) >> 21) }
+fn phase_insert(base: [i64], tmp: [i64], dp: i64, dt: i64, drp: i64, dci: i64, dix: i64, dh: i64) -> i64 {
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let n = 1000000;
+  let t = st_alloc(base, tx, n + 1, dt);
+  let _ = st_put(base, t, 0, n);
+  let cells = zeros(n);
+  let x = 12345;
+  let i = 0;
+  while i < n {
+    let x = lcg(x);
+    let u = (x >> 33) - 1073741824;
+    let x = lcg(x);
+    let v = (x >> 33) - 1073741824;
+    let c = cellof(u, v);
+    let p = st_alloc(base, tx, 4, dp);
+    let _ = st_put(base, p, 0, i);
+    let _ = st_put(base, p, 1, u);
+    let _ = st_put(base, p, 2, v);
+    let _ = st_put(base, p, 3, c);
+    let _ = st_seal(base, p, tmp);
+    let _ = st_link(base, t, 1 + i, p);
+    let _ = cells[i] = c;
+    let i = i + 1;
+    0
+  };
+  let _ = st_seal(base, t, tmp);
+  let k = 1048576;
+  let rp = st_alloc(base, tx, k + 2, drp);
+  let _ = st_put(base, rp, 0, k + 1);
+  let j = 0;
+  while j < n {
+    let c = cells[j];
+    let _ = st_put(base, rp, 2 + c, st_get(base, rp, 2 + c) + 1);
+    let j = j + 1;
+    0
+  };
+  let cur = zeros(k);
+  let c = 0;
+  while c < k {
+    let _ = st_put(base, rp, 2 + c, st_get(base, rp, 2 + c) + st_get(base, rp, 1 + c));
+    let _ = cur[c] = st_get(base, rp, 1 + c);
+    let c = c + 1;
+    0
+  };
+  let ci = st_alloc(base, tx, n + 1, dci);
+  let _ = st_put(base, ci, 0, n);
+  let j = 0;
+  while j < n {
+    let c = cells[j];
+    let slot = cur[c];
+    let _ = st_put(base, ci, 1 + slot, j);
+    let _ = cur[c] = slot + 1;
+    let j = j + 1;
+    0
+  };
+  let _ = st_seal(base, rp, tmp);
+  let _ = st_seal(base, ci, tmp);
+  let ix = st_alloc(base, tx, 4, dix);
+  let _ = st_put(base, ix, 0, k);
+  let _ = st_put(base, ix, 1, n);
+  let _ = st_link(base, ix, 2, rp);
+  let _ = st_link(base, ix, 3, ci);
+  let _ = st_seal(base, ix, tmp);
+  let h = st_alloc(base, tx, 2, dh);
+  let _ = st_link(base, h, 0, t);
+  let _ = st_link(base, h, 1, ix);
+  let _ = st_seal(base, h, tmp);
+  st_commit(base, tx, h, tmp)
+}
+fn phase_lookup(base: [i64], tmp: [i64]) -> i64 {
+  let h = st_root(base, tmp);
+  let t = st_ref(base, h, 0);
+  let x = 777;
+  let q = 0;
+  let acc = 0;
+  while q < 100000 {
+    let x = lcg(x);
+    let id = (x >> 20) % 1000000;
+    let p = st_ref(base, t, 1 + id);
+    let acc = acc + st_get(base, p, 1);
+    let q = q + 1;
+    0
+  };
+  acc
+}
+fn phase_scan(base: [i64], tmp: [i64]) -> i64 {
+  let h = st_root(base, tmp);
+  let ix = st_ref(base, h, 1);
+  let rp = st_ref(base, ix, 2);
+  let ci = st_ref(base, ix, 3);
+  let x = 999;
+  let q = 0;
+  let acc = 0;
+  while q < 10000 {
+    let x = lcg(x);
+    let cx = (x >> 30) % 1024;
+    let x = lcg(x);
+    let cy = (x >> 30) % 1024;
+    let dx = 0 - 1;
+    while dx <= 1 {
+      let dy = 0 - 1;
+      while dy <= 1 {
+        let ax = cx + dx;
+        let ay = cy + dy;
+        let inb = (if ax >= 0 then 1 else 0) * (if ax < 1024 then 1 else 0) * (if ay >= 0 then 1 else 0) * (if ay < 1024 then 1 else 0);
+        let c = ax * 1024 + ay;
+        let lo = if inb == 1 then st_get(base, rp, 1 + c) else 0;
+        let hi = if inb == 1 then st_get(base, rp, 2 + c) else 0;
+        let s = lo;
+        while s < hi {
+          let acc = acc + st_get(base, ci, 1 + s);
+          let s = s + 1;
+          0
+        };
+        let dy = dy + 1;
+        0
+      };
+      let dx = dx + 1;
+      0
+    };
+    let q = q + 1;
+    0
+  };
+  acc
+}
+fn phase_update(base: [i64], tmp: [i64], dp: i64, dt: i64, dh: i64) -> i64 {
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let h = st_root(base, tmp);
+  let t = st_ref(base, h, 0);
+  let n = st_get(base, t, 0);
+  let t2 = st_alloc(base, tx, n + 1, dt);
+  let _ = st_put(base, t2, 0, n);
+  let i = 0;
+  while i < n {
+    let _ = st_link(base, t2, 1 + i, st_ref(base, t, 1 + i));
+    let i = i + 1;
+    0
+  };
+  let x = 555;
+  let q = 0;
+  while q < 100000 {
+    let x = lcg(x);
+    let id = (x >> 20) % 1000000;
+    let old = st_ref(base, t2, 1 + id);
+    let p = st_alloc(base, tx, 4, dp);
+    let _ = st_put(base, p, 0, id);
+    let _ = st_put(base, p, 1, st_get(base, old, 1) + 1);
+    let _ = st_put(base, p, 2, st_get(base, old, 2));
+    let _ = st_put(base, p, 3, st_get(base, old, 3));
+    let _ = st_seal(base, p, tmp);
+    let _ = st_supersede(base, tx, old);
+    let _ = st_link(base, t2, 1 + id, p);
+    let q = q + 1;
+    0
+  };
+  let _ = st_seal(base, t2, tmp);
+  let _ = st_supersede(base, tx, t);
+  let h2 = st_alloc(base, tx, 2, dh);
+  let _ = st_link(base, h2, 0, t2);
+  let _ = st_link(base, h2, 1, st_ref(base, h, 1));
+  let _ = st_seal(base, h2, tmp);
+  let _ = st_supersede(base, tx, h);
+  st_commit(base, tx, h2, tmp)
+}
+fn main(argc: i64, argv: [str]) -> i64 {
+  let path = zeros(64);
+  let pl = st_str(path, "sbench.store");
+  let tmp = zeros(256);
+  let size = 268435456;
+  let ph = char(argv[2], 0);
+  let ph2 = char(argv[2], 1);
+  let want_t = if char(argv[3], 0) == 116 then 1 else 0;
+  let dp = st_digest("P{i64,i64,i64,i64}");
+  let dt = st_digest("T{arr ref P}");
+  let drp = st_digest("RP{arr i64}");
+  let dci = st_digest("CI{arr i64}");
+  let dix = st_digest("IX{i64,i64,ref RP,ref CI}");
+  let dh = st_digest("H{ref T,ref IX}");
+  let is_compact = if ph == 99 then 1 else 0;
+  let is_reopen = if ph == 114 then 1 else 0;
+  let t0 = clock_ms();
+  let live = if is_compact == 1 then st_compact(path, pl, size, [dp, 0, dt, 0 - 1, drp, 0, dci, 0, dix, 12, dh, 3], 6, tmp) else 0;
+  let base0 = st_open(path, pl, size, tmp);
+  let t1 = clock_ms();
+  let snap = zeros(32);
+  let reps = if is_reopen == 1 then 100 else 1;
+  let k = 0;
+  let one = 0;
+  let last = base0;
+  while k < reps {
+    let _ = if k > 0 then sys_munmap(st_addr(last), size) else 0;
+    let b = if k > 0 then st_open(path, pl, size, tmp) else base0;
+    let _ = st_snapshot(b, snap, tmp);
+    let one = st_get(b, st_ref(b, st_ref(b, snap[3], 0), 1), 1);
+    let last = b;
+    let k = k + 1;
+    0
+  };
+  let base = last;
+  let t2 = clock_ms();
+  let r = if ph == 105 then phase_insert(base, tmp, dp, dt, drp, dci, dix, dh) else if ph == 108 then phase_lookup(base, tmp) else if ph == 115 then phase_scan(base, tmp) else if ph == 117 then phase_update(base, tmp, dp, dt, dh) else one;
+  let t3 = clock_ms();
+  let _ = sys_munmap(st_addr(base), size);
+  let per = if ph == 108 then 100000 else if ph == 115 then 10000 else if is_reopen == 1 then 100 else 1;
+  let ms = if is_reopen == 1 then t2 - t0 else if is_compact == 1 then t1 - t0 else t3 - t2;
+  let per_ns = if ph == 108 then 1 else if ph == 115 then 1 else 0;
+  let val = if per_ns == 1 then ms * 1000000 / per else if is_reopen == 1 then ms * 1000 / per else ms;
+  let used = snap[4] * 8;
+  if ph == 122 then used else if want_t == 1 then val else if is_compact == 1 then live else r
+}

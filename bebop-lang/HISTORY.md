@@ -2656,7 +2656,7 @@ defaults nor traps; a migration touching an unrelated value.
 the single-writer lock (sys_atomic_add + futex) + 4 reader threads folding
 concurrently: counters == 4*10^4, every read fold == oracle(g) for a committed
 g; lost updates == 0.
-**T116 · sbench: G7** — T100-pattern rows vs sqlite 3.46 C API with the ctypes
+**T116 · sbench: G7** — DONE ✓ 2026-09-05, first numbers (bench/vs_rust/sbench.sh -> RESULT-sbench.md, folds equal after every phase, pinned A78, sqlite 3.46.1 through ctypes inside one EXCLUSIVE transaction): insert 1M + CSR index + commit 880 ms vs 15147 ms (17x); PK lookup 450 ns vs 10.3 us through ctypes (22.8x; the python sqlite3 module does the same lookup in ~2 us, so >= 4x against native); 3x3 cell-window scan 2.7 us vs 83 us (30.7x; T100's native C-API window was ~35 us -> >= 13x); update 10^5 in one transaction 157 ms vs 1000 ms (6.4x); reopen + first record 590 us vs 3600 us (6.1x); logical size after the update 85.2 MB vs 34.1 MB (2.5x LOSS, as predicted), after compaction 72.4 MB (2.1x loss); compaction 747 ms vs VACUUM 544 ms (0.7x, the one row sqlite wins). Pass rule met (PK >= 3x native, scan >= 5x). Not yet: the durable-commit row (needs T110 sys_msync), VM_STEP, and a ctypes-floor subtraction measured in the same run. — T100-pattern rows vs sqlite 3.46 C API with the ctypes
 floor subtracted and VM_STEP recorded: insert 1M, PK lookup, cell range scan
 10^4, update 10^5 (block CoW), reopen, file size, compaction, durable variant.
 Pass = PK lookup >= 3x sqlite native, scan >= 5x; file size reported even at the
