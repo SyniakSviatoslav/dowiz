@@ -5,7 +5,7 @@ Status: 2026-09-05 CURRENT (T120, decision D11-M; the single table of exit codes
 | code | who | meaning | where |
 |---|---|---|---|
 | 0..63 | program | `main`'s value modulo 256 is NOT the exit code: the seed prints the value and exits 0; a program exits non-zero only through `sys_exit` or a trap | seed.S |
-| 64 | bebop.bin | unknown CLI command (`compile`, `size`, `version`, `run`) | bebop.bp main |
+| 64 | bebop.bin | unknown CLI command (`compile`, `check`, `size`, `version`, `run-via-exec`, `cas`) or `check` without a file | bebop.bp main |
 | 80 | program | arena exhausted: a `zeros` crossed x28 (T118) | emit_zeros |
 | 81 | program | frame heap exhausted: an array literal / enum ctor crossed the 16 KiB frame (T118) | emit_array_lit, emit_enum_ctor |
 | 82 | program | SIGSEGV or SIGBUS in the program: stack overflow (deep recursion at 16 KiB per frame) or a wild access; the entry stub's handler exits 82 on an alternate stack (T118b) | entry_stub |

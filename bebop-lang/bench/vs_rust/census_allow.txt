@@ -47,3 +47,5 @@ bebop bcond 1542 roadmap 1b: em bounds check (n[0] >= n[1] -> cap_exit, trap 83)
 bebop cbz 114 roadmap 1b: cap_exit
 bebop bcond 1559 T104b step 2: mulc_try (x*c for c = 2^k+1 / 2^k-1 / 2^j+2^k -> add-lsl / lsl+sub / add-lsl+lsl, 17 b.cond of selector ifs)
 bebop bcond 1575 T90 step 2: call-argument delimiter checks (emit_bl_call / emit_call: only a comma or the closing paren after an argument) + a body let must end in semicolon, closing brace or `in` (lax d08/d10 now exit 95)
+bebop bcond 1588 T90 step 2b: `check` verb (cli_check: argc / open guards, main: is_check selector + dispatch if)
+bebop cbz 119 T90 step 2b: cli_check + the check dispatch in main

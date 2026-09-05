@@ -4708,6 +4708,36 @@ fn cli_compile(argc: i64, argv: [str]) -> i64 {
   rc2 * 10 + rn
 }
 
+// T90 step 2b (2026-09-06): `bebop.bin check <src.bp>` -- the whole compile (use expansion,
+// planning, emission) without an output file: exit 0 when the program compiles, else the
+// same `line:col: <message>` + exit 95-99 as `compile`. The T47 expansion scratch is
+// `<src>.use` (written only when the source has `use` lines); nothing is cached.
+fn fill_check(p: [i64]) -> i64 {
+  let _ = p[0] = 99; let _ = p[1] = 104; let _ = p[2] = 101; let _ = p[3] = 99; let _ = p[4] = 107;
+  5
+}
+fn cli_check(argc: i64, argv: [str]) -> i64 {
+  let _ = if argc >= 4 then 0 else sys_exit(64);
+  let src = argv[3];
+  let ls = str_len(src);
+  let psrc = zeros(ls + 1);
+  let _ = str_to_cells(psrc, src);
+  let fd = sys_open(psrc, ls, 0);
+  let _ = if fd < 0 then sys_exit(90) else 0;
+  let srcv0 = sys_slurp(fd, 400000);
+  let _ = sys_close(fd);
+  let tmpc = zeros(ls + 5);
+  let _ = str_to_cells(tmpc, src);
+  let _ = tmpc[ls] = 46;
+  let _ = tmpc[ls + 1] = 117;
+  let _ = tmpc[ls + 2] = 115;
+  let _ = tmpc[ls + 3] = 101;
+  let srcv = use_expand(srcv0, tmpc, ls + 4);
+  let offs = zeros(256);
+  let words0 = emit_words_offs(srcv, offs);
+  words0[0] * 0
+}
+
 // T80 (2026-09-06): `bebop.bin cas add <file>` -- the file's SHA-256 names it: the bytes
 // are stored as .bcas/<hex>.bp (the directory must exist; exit 90 otherwise) and the
 // address line `cas://sha256:<hex>` is written to stdout, ready to paste into a `use`.
@@ -4986,6 +5016,8 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let bver = zeros(8);
   let brun = zeros(16);
   let bcas = zeros(8);
+  let bchk = zeros(8);
+  let _ = fill_check(bchk);
   let _ = fill_cas(bcas);
   let _ = fill_compile(bcmp);
   let _ = fill_size(bsize);
@@ -4996,12 +5028,14 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let is_version = if argc >= 3 then strequals(cmd, bver) else 0;
   let is_run = if argc >= 3 then strequals(cmd, brun) else 0;
   let is_cas = if argc >= 3 then strequals(cmd, bcas) else 0;
+  let is_check = if argc >= 3 then strequals(cmd, bchk) else 0;
+  let r7 = if is_check == 1 then cli_check(argc, argv) else 0;
   let r1 = if is_compile == 1 then cli_compile(argc, argv) else 0;
   let r2 = if is_size == 1 then cli_size(argv) else 0;
   let r3 = if is_run == 1 then cli_run(argv) else 0;
   let r4 = if is_version == 1 then 1000000 else 0;
   let r6 = if is_cas == 1 then cli_cas(argc, argv) else 0;
-  let known = is_compile + is_size + is_version + is_run + is_cas;
+  let known = is_compile + is_size + is_version + is_run + is_cas + is_check;
   let r5 = if known == 0 then 64 else 0;
-  r1 + r2 + r3 + r4 + r5 + r6
+  r1 + r2 + r3 + r4 + r5 + r6 + r7
 }

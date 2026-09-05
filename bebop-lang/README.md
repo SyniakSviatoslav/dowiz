@@ -10,6 +10,7 @@ source of truth), the laws of work in `AGENTS.md`.
 
 - Language: `docs/LANGUAGE.md`. Exit codes: `docs/TRAPS.md`.
 - Try it: `./seed/build/seed ./bebop.bin compile bench/vs_rust/kernels/k1.bp /tmp/k1.bin && ./seed/build/seed /tmp/k1.bin` prints `500000500000`.
+- Check without output: `./seed/build/seed ./bebop.bin check file.bp` exits 0 or prints `line:col: <message>` (exit 95-99, `docs/TRAPS.md`).
 - Reference semantics: `python3 tools/bpref.py file.bp` (the oracle the fuzzer compares against).
 - Gates: `bench/vs_rust/std_golden.sh` (91 std gates with python oracles in `bench/oracles/`),
   `bench/vs_rust/construct_parity.sh` (frozen word streams + values), `bench/vs_rust/invariants.sh`
