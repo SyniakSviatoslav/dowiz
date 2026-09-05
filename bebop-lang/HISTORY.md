@@ -2568,7 +2568,7 @@ none once clone works under proot.
 
 **T101-T108 · the measured speed plan (docs/SPEEDUP-ANALYSIS.md §5 P2-P10; added by D9(4), scheduled AFTER T43/T47/T48)**
 - **T101 temporaries in registers** — DONE ✓ 2026-09-05 as the D11-G fallback (x0/x1 slide of a one-word left operand under a complex right operand; K4 loop 24 -> 20 words; fixpoint ef825b4a; the per-fn op-list IR was assessed as a multi-session refactor of every emit_* and not attempted — recorded for the operator): value-stack slots for nested operands map to x1-x7 and x9-x13 (D9(2)); gate K4 <= 5.0 ms, K3 <= 0.25 ms, spike linear <= 5 ms (measured after T102-T104 by honest.sh).
-- **T102 condition fusion**: `while`/`if` conditions emit `cmp xR,#imm` / `cmp xR,xS` + `b.cond` (extend fold_try to cmp); gate K1 <= 12 words, K4 <= 4.7 ms.
+- **T102 condition fusion** — DONE ✓ 2026-09-05 (cmp + cset + cmp#0 + b.eq -> cmp + b.<inverse>; K1 loop 12 words, fixpoint 3239034d): `while`/`if` conditions emit `cmp xR,#imm` / `cmp xR,xS` + `b.cond`; gate K1 <= 12 words (met), K4 <= 4.7 ms (honest.sh after T104).
 - **T103 calling convention**: frame = 16 + 8 x spill slots (not 16 KB), args stay in x0-x7 for <= 8 params, callee-saved pairs only when used; gate K2 <= 1.0 ms vs an `#[inline(never)]` Rust twin (add it).
 - **T104 peephole pass** over the per-fn word stream: mul-by-const -> shift/madd, `x*c1*c2` -> `x*(c1c2)`, hoist loop-invariant `mov xR,#imm`; gate K4 <= 3.0 ms, construct folds unchanged.
 - **T105 hardware division**: fp_div/isqrt software loops in tq/tdg -> `sdiv` + clz-seeded Newton isqrt; gate tq fold unchanged, tq geodesic on 1M points <= 50 ms.

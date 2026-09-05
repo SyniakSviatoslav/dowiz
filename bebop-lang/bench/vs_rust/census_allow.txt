@@ -23,3 +23,4 @@ bebop bcond 1341 T48a emit_offsets token buffer
 bebop cbz 150 T48a emit_offsets token buffer
 bebop bcond 1373 T101 left-operand slide (hazard scan loops)
 bebop bcond 1377 T101 left-operand slide
+bebop bcond 1387 T102 condition fusion

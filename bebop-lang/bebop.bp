@@ -2048,6 +2048,30 @@ fn emit_paren(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   n[0]
 }
 
+// ---- T102 (2026-09-05): condition fusion. A `while`/`if` condition that
+// ends in `cmp ... ; cset x0,<c>` (any cmp form: subs/subs-imm sets the flags)
+// no longer materialises the 0/1 and re-tests it (`cmp x0,#0 ; b.eq`): the
+// cset is retracted and the placeholder becomes `b.<not c>` directly -- the
+// encoded field of a cset IS the inverse condition, so the placeholder word is
+// 0x54000000 | (cset >> 12 & 15). The patch sites add the offset to the word
+// (they used to rebuild it as b.eq). Returns the placeholder word to emit.
+fn cond_branch_word(insns: [i64], n: [i64], fntab: [i64]) -> i64 {
+  let cur = n[0];
+  let w1 = if cur >= 1 then insns[cur - 1] else 0;
+  let w2 = if cur >= 2 then insns[cur - 2] else 0;
+  let is_cset = if (w1 & 4294905855) == 2594113504 then 1 else 0;
+  let is_cmp = (if (w2 & 4278190111) == 3942645791 then 1 else 0) + (if (w2 & 4286578719) == 4043309087 then 1 else 0);
+  // fntab[3660] == cur here is the rd=0 pop barrier just placed, not a label: a
+  // jump target at cur would follow a push, never a cmp+cset pair.
+  let fuse = is_cset * (if is_cmp >= 1 then 1 else 0);
+  let _ = if fuse == 1 then (let _ = n[0] = cur - 1 in 0) else 0;
+  // the pop barrier pointed one past the cset; move it to the new end so the
+  // body's first binop may still slide its left operand (T101)
+  let _ = if fuse == 1 then (let _ = fntab[3660] = cur - 1 in 0) else 0;
+  let _ = if fuse == 0 then (let _ = em(insns, n, 4043309087) in 0) else 0;
+  if fuse == 1 then 1409286144 + ((w1 >> 12) & 15) else 1409286144
+}
+
 // Conditional `if c then a else b`: evaluate cond into x0, `cmp x0,#0`, then a
 // `b.eq` placeholder to the else arm, the then-arm, a `b` placeholder to the
 // end, the else-arm; both placeholders are patched once the arm lengths are
@@ -2056,9 +2080,9 @@ fn emit_cond(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
   let _ = pos[0] = pos[0] + 2;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = pop(insns, n, 0, fntab);
-  let _ = em(insns, n, 4043309087);
+  let bw = cond_branch_word(insns, n, fntab);
   let p1 = n[0];
-  let _ = em(insns, n, 1409286144);
+  let _ = em(insns, n, bw);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 4;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
@@ -2068,7 +2092,7 @@ fn emit_cond(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
   let _ = em(insns, n, 335544320);
   let else_pos = n[0];
   let _ = fntab[3660] = else_pos;
-  let _ = insns[p1] = 1409286144 + (else_pos - p1) * 32;
+  let _ = insns[p1] = insns[p1] + (else_pos - p1) * 32;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let end_pos = n[0];
   let _ = fntab[3660] = end_pos;
@@ -2698,9 +2722,9 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = fntab[3892] = 0;
   let _ = pop(insns, n, 0, fntab);
-  let _ = em(insns, n, 4043309087);
+  let bw = cond_branch_word(insns, n, fntab);
   let p1 = n[0];
-  let _ = em(insns, n, 1409286144);
+  let _ = em(insns, n, bw);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let nb_body = n[0];
@@ -2739,7 +2763,7 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = if do_reset == 1 then (let _ = em(insns, n, ldrw) in 0) else 0;
   let _ = if do_reset == 1 then (let _ = insns[pmark] = 4177527790 + (10 + ldepth) * 1024 in 0) else 0;
   let _ = fntab[3661] = ldepth;
-  let _ = insns[p1] = 1409286144 + (endl - p1) * 32;
+  let _ = insns[p1] = insns[p1] + (endl - p1) * 32;
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = skip_ws(s, pos);
