@@ -377,3 +377,12 @@ docs/exp.journal line (H:/DID:/GOT:/VERDICT:) — the journal is the results.tsv
 to ask whether to continue: stop only on the completion promise or max_iterations. Hard laws
 (no cp onto bebop.bin, TASKS.md is generated, pkill -f literals, gate evidence in commits)
 are also hookify rules in ~/.claude/hookify.*.local.md — edit the rule there, not the prose.
+
+L21. REAP AFTER EVERY TASK (operator rule, 2026-09-06): when a task ends (a chain, a battery,
+a fuzz batch, an agent, a commit) run `tools/reap.sh` and read the process count; anything it
+lists -- a bash/python3/seed/xargs with ppid 1 running bench/ or tools/ work, or a parent whose
+children are all zombies -- is a leftover of a dead session: `tools/reap.sh kill` it before the
+next task starts. Reason: 2026-09-05 four such shells spun at 100 % each and the count hit 32 =
+Android's phantom-process cap (the false "transient COMPILEFAIL rc=90"); 2026-09-06 an
+orphaned invariants.sh with four zombie children sat at the cap again. Never `pkill -f` a
+literal (L20 hookify rule); reap.sh kills by pid.

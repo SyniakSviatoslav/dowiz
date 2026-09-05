@@ -1,0 +1,13 @@
+    1     0 S     10:00 init
+29014     1 S     08:23 bash bench/vs_rust/invariants.sh
+29080 29014 S     08:23 bash bench/vs_rust/invariants.sh
+29083 29080 S     08:23 xargs -P 4 -n 1 bash -c comp "$@" _
+29203 29083 Z     08:23 [bash] <defunct>
+29209 29083 ZN    08:23 [bash] <defunct>
+30035 30032 S     05:05 proot --kill-on-exit /bin/bash -c 'exec tools/fuzzd.sh run 500'
+30085 30035 S     05:03 bash /root/dowiz/bebop-lang/tools/fuzzd.sh run 500
+30216 30085 S     05:03 bash bench/fuzz/fuzz.sh 500 106100
+30959 30902 S     04:43 claude
+31241 31237 S     26:38 python3 /data/data/com.termux/files/home/boxguard.py
+ 6314 30959 S     00:00 bash /bin/bash -c tools/chain.sh bebop.bp out
+ 7000     1 S     00:10 bash tools/reap.sh
