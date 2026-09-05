@@ -1,0 +1,10 @@
+// T105 2026-09-05: `clz(x)` builtin = AArch64 clz (count leading zeros of the
+// 64-bit word); clz(0) = 64, clz(1) = 63, negative values have bit 63 set.
+fn main() -> i64 {
+  let a = clz(0);
+  let b = clz(1);
+  let c = clz(4611686018427387904);
+  let d = clz(0 - 1);
+  let e = clz(1000000) + 1;
+  a * 1000000 + b * 10000 + c * 1000 + d * 100 + e
+}

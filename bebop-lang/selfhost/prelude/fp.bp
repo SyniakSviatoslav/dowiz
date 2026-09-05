@@ -2,7 +2,7 @@
 // Textual include: a gate whose first line is `// prelude: fp ...` gets this file
 // prepended by tools/gen_selfsrc.sh std (L9 mechanism until T47 `use`).
 // fp_mul: signed 64x64 -> Q32 product via 32/16-bit limbs (no i128, no >> on
-// negatives); isqrt: digit-by-digit integer sqrt over bits 60..0.
+// negatives); isqrt: clz-seeded Newton descent (T105), exact floor(sqrt).
 fn fp_mul(a: i64, b: i64) -> i64 {
   let na = if a < 0 then 1 else 0;
   let aa = if na == 1 then 0 - a else a;
@@ -28,19 +28,17 @@ fn fp_mul(a: i64, b: i64) -> i64 {
   let p = if flip == 1 then 0 - p else p;
   p
 }
+// isqrt(s): floor(sqrt(s)) for 0 <= s < 2^62 (T105, 2026-09-05: Newton from a
+// clz seed 2^ceil(bits/2) >= sqrt(s), monotone descent, <= 6 sdiv steps;
+// bit-exact against math.isqrt on 1.2M values incl. every 2^k+-1 and r^2+-1,
+// scratch t105chk.py). Was the 31-step restoring loop.
 fn isqrt(s: i64) -> i64 {
-  let rem = 0;
-  let root = 0;
-  let i = 0;
-  while i < 31 {
-    let sh = 60 - i * 2;
-    let rem = (rem << 2) + ((s >> sh) & 3);
-    let tst = (root << 2) + 1;
-    let take = if tst <= rem then 1 else 0;
-    let root = (root << 1) + take;
-    let rem = rem - take * tst;
-    let i = i + 1;
+  let x = 1 << ((65 - clz(s)) >> 1);
+  let y = (x + s / x) >> 1;
+  while y < x {
+    let x = y;
+    let y = (x + s / x) >> 1;
     0
   };
-  root
+  if s <= 0 then 0 else x
 }

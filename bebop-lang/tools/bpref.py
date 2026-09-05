@@ -496,7 +496,11 @@ class Interp:
 def run(src):
     p = Parser(src)
     p.program()
-    return Interp(p.fns, p.ctors, p.structs, getattr(p, 'first_struct', None)).call('main', [])
+    it = Interp(p.fns, p.ctors, p.structs, getattr(p, 'first_struct', None))
+    if p.fns['main'][0]:  # fn main(argc, argv): argv[2:] = the args after the program path, as the seed passes them
+        argv = [b'seed', sys.argv[1].encode()] + [a.encode() for a in sys.argv[2:]]
+        return it.call('main', [len(argv), argv])
+    return it.call('main', [])
 
 
 def expand_use(src):

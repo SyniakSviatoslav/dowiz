@@ -76,6 +76,7 @@ mutation-sensitivity of 15 gates, T124 fold specs, docs.
 | K3 300x300 | 1.2-1.5 ms | 0.5 ms | 0.213 ms | 2.3x |
 | K4 chain 2M | 32 ms | 12.0 ms | 2.85 ms | 4.2x |
 | K1 loop words/iteration | 51 | 14 | 3 | |
+| isqrt / fp_div, 1M calls (T105, scratch micro-bench, pinned A78) | 286 ms / 253 ms (restoring loops) | 41 ms / 22 ms (clz Newton / sdiv base-2^k) | | 7x / 10x faster |
 
 Honest twins (bench/vs_rust/honest.sh, D11-C): see bench/vs_rust/REPORT-honest.md
 (first run recorded after T118).

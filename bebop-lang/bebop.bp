@@ -1110,6 +1110,19 @@ fn emit_sys_setaffinity(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64],
   n[0]
 }
 
+// clz(x): count leading zeros of the 64-bit word, clz(0) = 64 (T105, 2026-09-05).
+// pop x0; clz x0,x0 (0xDAC01000); push. Seeds the Newton isqrt in prelude/fp.bp.
+fn emit_clz(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 0, fntab);
+  let _ = em(insns, n, 3670020096);
+  let _ = push(insns, n, fntab);
+  n[0]
+}
+
 // sys_readbuf(fd,len): raw read into the IO scratch zone, returns its
 // address — the standard handoff for feeding source text to emit_words.
 fn emit_sys_readbuf(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
@@ -1230,6 +1243,7 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   let is_ext = if name == 1084841420853388659 then 1 else 0;
   let is_ata = if name == 7221016679989100487 then 1 else 0;
   let is_aff = if name == 7304771531850188344 then 1 else 0;
+  let is_clz = if name == 1713209 then 1 else 0;
   let is_fwg = if name == 15293169932641766580 then 1 else 0;
   let is_cs = if name == 16710314075682296179 then 1 else 0;
   if is_hh == 1 then emit_hvham(s, pos, insns, n, stab, selfname, selfstart, fntab)
@@ -1248,6 +1262,7 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   else if is_ext == 1 then emit_sys_exit_thread_guard(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_ata == 1 then emit_sys_atomic_add(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_aff == 1 then emit_sys_setaffinity(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_clz == 1 then emit_clz(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_sp == 1 then emit_sys_slurp(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_sln == 1 then emit_str_len_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_chf == 1 then emit_char_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
