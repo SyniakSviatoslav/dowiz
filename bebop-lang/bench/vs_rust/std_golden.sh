@@ -583,6 +583,18 @@ gate tdg 3162519640442167 "$r"
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/tdggeo.bp ${BEBOP_TMP:-/tmp/opencode}/tdggeo_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/tdggeo_test.bin | tail -1)
 gate tdggeo 219599976738721791 "$r"
 
+# ---- slayout (G1, T112: store file bytes == python struct.pack from the layout rules) ----
+rm -f slayout.store
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/slayout.bp ${BEBOP_TMP:-/tmp/opencode}/slayout_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/slayout_test.bin | tail -1)
+gate slayout 75004859 "$r"
+
+# ---- sround (G2, T112: 10^5 objects, two mapping bases, and a reopen in a second run) ----
+rm -f sround.store
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sround.bp ${BEBOP_TMP:-/tmp/opencode}/sround_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/sround_test.bin | tail -1)
+gate sround -8475951406600543408 "$r"
+r=$(timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/sround_test.bin | tail -1)
+gate sround_reopen -8475951406600543408 "$r"
+
 # ---- tq ----
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/tq.bp ${BEBOP_TMP:-/tmp/opencode}/tq_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/tq_test.bin | tail -1)
 gate tq 722997760 "$r"

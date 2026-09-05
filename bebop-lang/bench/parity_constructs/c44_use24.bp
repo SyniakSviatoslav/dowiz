@@ -1,0 +1,5 @@
+use "bench/parity_constructs/mods/big24.bp"
+// T126 2026-09-05: `use` of a 24-fn module (see mods/big24.bp).
+fn main() -> i64 {
+  m00(1) + m11(2) + m23(3)
+}

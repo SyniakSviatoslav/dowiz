@@ -86,7 +86,9 @@ match CTOR(payload) { CTOR => expr, CTOR(x) => expr, ... }   -- COMPILE-TIME: th
 ## Memory model
 
 - Arena: one 256 MB anonymous mapping (x27 cursor, x28 end). `zeros` bumps it; nothing
-  is freed. Crossing the end exits 80.
+  is freed, and an allocation survives the return of the fn that made it (T126, 2026-09-05:
+  fns with >= 9 symbols used to save/restore x27/x28 and silently roll their allocations
+  back — construct c43_arena_persist guards this). Crossing the end exits 80.
 - Frame heap: 16 KiB per function activation (x14). Array literals and enum
   constructors live there and die at return. `while` bodies that allocate are reset
   per iteration when the compiler can prove no pointer escapes (T43); otherwise they

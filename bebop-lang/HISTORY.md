@@ -2616,13 +2616,26 @@ Each task = one commit with fixpoint + battery; each gate = `selfhost/std/<g>.bp
 **T109 · `crc32(cells, n)` builtin** — DONE ✓ 2026-09-05 (emit_crc32: movn w2; L: cbz x1; ldr x3,[x0],#8; crc32b w2,w2,w3; sub x1; b L; orn w0 — CRC32B per cell because bytes-in-cells is the language's byte form (sys_read/sys_export/str_to_cells), so crc.bp/tb.bp semantics hold; ~1 cell per cycle, not 8 B/cycle — a crc32x-over-words variant is a later builtin if the store needs it; construct c42_crc32 = zlib values for "", "123456789", bytes 0..255; fixpoint b5ab8cdc; census bcond +2 ALLOWed; every encoding derived by int(hex,16) after the T105 lesson): hardware CRC32X (8 B/cycle) in a 5-word
 loop, L1/L2 register table, check_abi allowlist; replaces crc.bp's bit loop
 where integrity is needed. DONE-CHECK: crc gate fold unchanged; 64 B in ~3 ns.
+**T126 · arena cursor rollback (x27/x28 saved by 9-symbol prologues)** — DONE ✓ 2026-09-05
+(found while landing the store: `use` of a module with >= 21 fns died with exit 97 under
+every compiler since T72 — objdump diff, a debug build dumping addresses at the trap, and
+`add x27` census showed the mechanism: OPT-A saved/restored callee-saved pair 4 =
+x27/x28 for fns with >= 9 symbols, so use_expand's slurped expanded source (and
+emit_offsets' table, and anything a big fn allocates) was rolled back at return and
+overwritten by the caller's next zeros() once enough fns had been compiled. Fix: pair 4
+is never saved (x27/x28 are the arena, never symbols). Fixpoint 8051f264; constructs
+c43_arena_persist (an allocation from a 9-symbol fn survives) and c44_use24 (a 24-fn
+module via `use`); self-compile after the fix: 111 MB RSS, 292.9 s wall — the
+rollback was silently bounding the compiler's own arena use, now the per-fn tables
+persist as LANGUAGE.md always claimed. LANGUAGE.md/AGENTS.md amended.)
+
 **T110 · `sys_msync(addr, len, flags)`** (syscall 227) — the durability row;
 DONE-CHECK: one-page msync ~100 us measured; kill -9 consistency does not need it.
-**T111 · `store.bp` library** (with T47 `use`): open/map (any base,
+**T111 · `store.bp` library** — DONE ✓ 2026-09-05 (selfhost/prelude/store.bp, `use`d with prelude/sha256.bp: st_open/st_map_ro (MAP_SHARED, any base, init superblock A when fresh), st_pick (valid superblock with the higher generation), st_begin/st_alloc/st_seal/st_check/st_supersede/st_commit (writes the OTHER superblock)/st_abort, st_get/st_put/st_ref/st_link (object-relative refs), st_digest (types-only sha256 low 32); the two mapping-base casts st_cells/st_addr are the only i64<->[i64] casts in the tree, allowlisted by name in tools/typecheck.py; pre-extend by 64 MB + MAP_POPULATE deferred to G7 where it is measured): open/map (any base,
 MAP_SHARED), alloc(cells) with the 2-cell header, commit (append +
 superblock toggle), abort (cursor reset), deref helpers, pre-extend by 64 MB
 + MAP_POPULATE. DONE-CHECK: a 10^5-object round trip through the library.
-**T112 · layouts + gates G1 `slayout` / G2 `sround`** — types-only sha256 layout
+**T112 · layouts + gates G1 `slayout` / G2 `sround`** — DONE ✓ 2026-09-05 (G1: three structs + one enum through the library, fold = crc32 of the 65536-byte file == bench/oracles/slayout.py built from struct.pack and the layout rules alone, 75004859; G2: 10^5 N{i64, ref N} objects, one commit, munmap, two read mappings at two bases in one process + a second std_golden run that reopens, fold through the second base == oracle -8475951406600543408 and the oracle re-parses the file's bytes by the layout rules; 10^5 appends + walk in 260 ms wall incl. the ~100 ms process floor) — types-only sha256 layout
 digest, struct/enum/array bytes == python struct.pack; map at TWO bases in one
 process + reopen in a second run; fold through the second base == python parse
 via offsets. Falsifier: an absolute address anywhere in the file.

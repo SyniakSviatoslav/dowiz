@@ -1,0 +1,56 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+// sround.bp — G2 (T112): 10^5 objects N{i64 val, ref N prev} appended through the
+// T111 library (val = LCG chain from 42, prev = the previous object, root = the
+// last), committed once. If the store already holds a generation the write is
+// skipped (the second std_golden run reopens the same file). Then the file is
+// unmapped and mapped TWICE at two bases; the fold walks the ref chain from the
+// root through the SECOND mapping: acc = acc*31 + val (wrap), every 1000th object
+// crc-checked. Fold == bench/oracles/sround.py (LCG spec, and it re-parses the
+// file's bytes when present). A store-relative or absolute pointer anywhere
+// breaks the walk at the second base.
+fn main() -> i64 {
+  let path = zeros(64);
+  let pl = st_str(path, "sround.store");
+  let tmp = zeros(256);
+  let size = 4194304;
+  let base = st_open(path, pl, size, tmp);
+  let tx = zeros(6);
+  let fresh = if st_gen(base, tmp) == 0 then 1 else 0;
+  let _ = st_begin(base, tx, tmp);
+  let d = st_digest("N{i64,ref N}");
+  let k = 0;
+  let v = 42;
+  let prev = 0;
+  while k < 100000 * fresh {
+    let v = v * 6364136223846793005 + 1442695040888963407;
+    let o = st_alloc(base, tx, 2, d);
+    let _ = st_put(base, o, 0, v);
+    let _ = if prev == 0 then st_put(base, o, 1, 0) else st_link(base, o, 1, prev);
+    let _ = st_seal(base, o, tmp);
+    let prev = o;
+    let k = k + 1;
+    0
+  };
+  let _ = if fresh == 1 then st_commit(base, tx, prev, tmp) else st_abort(tx);
+  let _ = sys_munmap(st_addr(base), size);
+  let m1 = st_map_ro(path, pl, size);
+  let m2 = st_map_ro(path, pl, size);
+  let distinct = if st_addr(m1) != st_addr(m2) then 1 else 0;
+  let root = st_root(m2, tmp);
+  let acc = 0;
+  let n = 0;
+  let ok = 1;
+  let cur = root;
+  while cur != 0 {
+    let acc = acc * 31 + st_get(m2, cur, 0);
+    let ok = if n % 1000 == 0 then ok * st_check(m2, cur, tmp) else ok;
+    let nxt = st_ref(m2, cur, 1);
+    let cur = if st_get(m2, cur, 1) == 0 then 0 else nxt;
+    let n = n + 1;
+    0
+  };
+  let _ = sys_munmap(st_addr(m1), size);
+  let _ = sys_munmap(st_addr(m2), size);
+  acc * ok * distinct * (if n == 100000 then 1 else 0)
+}

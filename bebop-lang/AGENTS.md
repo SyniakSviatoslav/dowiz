@@ -47,7 +47,8 @@ Ordered by historical hit rate for interp≠native/JIT divergence:
    every buffer handed to the kernel, EVERY call (never trust fresh mmap).
 4. Harness execution model: exec_words runs JIT TWICE (warmup+ref); state
    leaks between calls (scratch, arena cursor, fds).
-5. Register protocol: x19–x26 symbols; x15 spill base; x27/x28 arena;
+5. Register protocol: x19–x26 symbols; x15 spill base; x27/x28 arena (never
+   saved/restored by a prologue — T126: doing so rolled allocations back);
    caller-saved x0–x14 across bl; pop() already emits ldr+addSP.
 6. Meta-language traps: nested `if` inside expressions segfaults the
    interpreted compiler; dangling/duplicate else-if links remap registers.

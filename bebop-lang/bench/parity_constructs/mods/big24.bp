@@ -1,0 +1,26 @@
+// T126 2026-09-05: 24 one-line fns; `use` of a module this size lost its expanded
+// source to the arena rollback (exit 97) before the x27/x28 fix.
+fn m00(a: i64) -> i64 { a * 1 + 0 }
+fn m01(a: i64) -> i64 { a * 2 + 1 }
+fn m02(a: i64) -> i64 { a * 3 + 2 }
+fn m03(a: i64) -> i64 { a * 4 + 3 }
+fn m04(a: i64) -> i64 { a * 5 + 4 }
+fn m05(a: i64) -> i64 { a * 6 + 5 }
+fn m06(a: i64) -> i64 { a * 7 + 6 }
+fn m07(a: i64) -> i64 { a * 8 + 7 }
+fn m08(a: i64) -> i64 { a * 9 + 8 }
+fn m09(a: i64) -> i64 { a * 10 + 9 }
+fn m10(a: i64) -> i64 { a * 11 + 10 }
+fn m11(a: i64) -> i64 { a * 12 + 11 }
+fn m12(a: i64) -> i64 { a * 13 + 12 }
+fn m13(a: i64) -> i64 { a * 14 + 13 }
+fn m14(a: i64) -> i64 { a * 15 + 14 }
+fn m15(a: i64) -> i64 { a * 16 + 15 }
+fn m16(a: i64) -> i64 { a * 17 + 16 }
+fn m17(a: i64) -> i64 { a * 18 + 17 }
+fn m18(a: i64) -> i64 { a * 19 + 18 }
+fn m19(a: i64) -> i64 { a * 20 + 19 }
+fn m20(a: i64) -> i64 { a * 21 + 20 }
+fn m21(a: i64) -> i64 { a * 22 + 21 }
+fn m22(a: i64) -> i64 { a * 23 + 22 }
+fn m23(a: i64) -> i64 { a * 24 + 23 }

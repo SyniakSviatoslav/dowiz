@@ -3471,6 +3471,12 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   // Prologue words pbase+3..pbase+7 hold stp x19/x20 .. x27/x28; epilogue
   // holds the mirrored ldp pairs in reverse at ebase+0..ebase+4. Unused
   // pairs are patched to NOP after the fact (stab[0] is final here).
+  // T126 (2026-09-05): pair 4 = x27/x28 is the ARENA cursor/end, never a symbol
+  // register (symbols 9+ spill to [x15,...]). Saving and restoring it in fns with
+  // >= 9 symbols rolled back every arena allocation they made (use_expand's
+  // expanded source, emit_offsets' table) -- the caller then overwrote them with
+  // its next zeros(): `use` of a module with >= 21 fns died with exit 97. The
+  // pair is always NOPed now; x27 flows through calls as LANGUAGE.md says.
   let ebase = n[0] - 8;
   let nopw = 3573751839;
   let vc = stab[0];
@@ -3478,7 +3484,7 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   let pkgo = 1;
   while pkgo == 1 {
     let kdone = if k[0] > 4 then 1 else 0;
-    let pair_used = if vc > k[0] * 2 then 1 else 0;
+    let pair_used = if k[0] == 4 then 0 else if vc > k[0] * 2 then 1 else 0;
     let do_patch = (1 - kdone) * (1 - pair_used);
     let _ = if do_patch == 1 then (let _ = insns[pbase + 3 + k[0]] = nopw in 0) else 0;
     let _ = if do_patch == 1 then (let _ = insns[ebase + 4 - k[0]] = nopw in 0) else 0;

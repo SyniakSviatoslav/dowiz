@@ -1,0 +1,59 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+// slayout.bp — G1 (T112): three structs + one enum written into a fresh store file
+// through the T111 library; fold = crc32 of the whole 65536-byte file (superblock A
+// gen 0, superblock B gen 1 after the commit, objects P{i64,i64,i64} = (3,5,7),
+// R{ref P,i64} = (ref -> P, 11), A{arr i64} = [3, 10,20,30], E{Some(i64)|None} =
+// Some(42) as [0, 42]; root = R). Oracle bench/oracles/slayout.py builds the same
+// bytes with struct.pack from the layout rules alone; any absolute address in the
+// file breaks the fold.
+fn main() -> i64 {
+  let path = zeros(64);
+  let pl = st_str(path, "slayout.store");
+  let tmp = zeros(1024);
+  let base = st_open(path, pl, 65536, tmp);
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let p = st_alloc(base, tx, 3, st_digest("P{i64,i64,i64}"));
+  let _ = st_put(base, p, 0, 3);
+  let _ = st_put(base, p, 1, 5);
+  let _ = st_put(base, p, 2, 7);
+  let _ = st_seal(base, p, tmp);
+  let r = st_alloc(base, tx, 2, st_digest("R{ref P,i64}"));
+  let _ = st_link(base, r, 0, p);
+  let _ = st_put(base, r, 1, 11);
+  let _ = st_seal(base, r, tmp);
+  let a = st_alloc(base, tx, 4, st_digest("A{arr i64}"));
+  let _ = st_put(base, a, 0, 3);
+  let _ = st_put(base, a, 1, 10);
+  let _ = st_put(base, a, 2, 20);
+  let _ = st_put(base, a, 3, 30);
+  let _ = st_seal(base, a, tmp);
+  let e = st_alloc(base, tx, 2, st_digest("E{Some(i64)|None}"));
+  let _ = st_put(base, e, 0, 0);
+  let _ = st_put(base, e, 1, 42);
+  let _ = st_seal(base, e, tmp);
+  let gen = st_commit(base, tx, r, tmp);
+  let back = st_get(base, st_ref(base, r, 0), 2);
+  let ok = (gen == 1) * (back == 7) * st_check(base, a, tmp) * (st_root(base, tmp) == r);
+  let _ = sys_munmap(st_addr(base), 65536);
+  let fd = sys_open(path, pl, 0);
+  let file = zeros(65536);
+  let chunk = zeros(8192);
+  let got = 0;
+  let go = 1;
+  while go == 1 {
+    let n = sys_read(fd, chunk, 8192);
+    let k = 0;
+    while k < n {
+      let _ = file[got + k] = chunk[k];
+      let k = k + 1;
+      0
+    };
+    let got = if n > 0 then got + n else got;
+    let go = if n > 0 then 1 else 0;
+    0
+  };
+  let _ = sys_close(fd);
+  crc32(file, got) * ok + (got == 65536) * 0
+}

@@ -48,7 +48,7 @@ and retired by decisions D8-D10.
 | 4 | zero tolerated miscompiles | construct_parity (38 constructs + neg), fuzz | R3.x deleted; fuzz 150-seed batches clean | fuzz >= 10^5 programs, 0 CRASH / DIVERGE, traps only (TG-DONE 8) |
 | 5 | single compiler, single language | attic, construct_parity | expr_compile.bp in attic; 38 constructs | every accepted construct in construct_parity; struct literals + `use` + `ref T` landed (T43 rest, T47, T48) |
 | 6 | hardware claims measured, never projected | bench_pinned.sh, REPORT-pinned.md, Measured table below | no projected row remains | stays true |
-| 7 | the store | G1-G8 (T112-T117) | not started (spec accepted, D10/D11-H) | all eight green with numbers; G7/G8 thresholds a,b,c frozen by the operator before the run (D11-I) |
+| 7 | the store | G1-G8 (T112-T117) | T111 library + G1 slayout + G2 sround green (std_golden 95, oracles parse the file bytes); G4 in progress | all eight green with numbers; G7/G8 thresholds a,b,c frozen by the operator before the run (D11-I) |
 | 8 | fuzz at scale | bench/fuzz/fuzz.sh | 150-seed batches; gen.py widened 2026-09-05 (large loops, literals in loops, recursion 127, return/break) | 10^5 programs, 0 CRASH/DIVERGE, only TRAP-OK/TRAP-8x |
 
 ## Critical path (in order; one writer, one commit per single-variable step)
@@ -103,7 +103,7 @@ Honest twins (bench/vs_rust/honest.sh, D11-C): see bench/vs_rust/REPORT-honest.m
 | usable A78 cores in this shell | 3 (cpus 4-6; cpu 7 refuses taskset) |
 | DRAM bandwidth, one A78 / three | ~12 GB/s / ~12 GB/s |
 | process RSS K1-K4, bebop / Rust | 16-17 MB / 16-17 MB |
-| self-compile pinned | 108.7 s wall, 77.8 MB RSS (bebop.bin 65-67k words) |
+| self-compile pinned (2026-09-05 re-measured, core 4: T109 binary / T126 binary) | 294.5 s, 94 MB / 292.9 s, 111 MB (the 108.7 s row of 2026-09-04 is not reproducible today; same box, same core) |
 | compile of a std gate, cold / warm .becache hit / trivial-program floor (T108, becache_gate.sh) | 346 ms / 113 ms / 106 ms |
 | page-cache read fault / CoW fault / msync 1 page / rename (proot) | 0.3 us / 3.5 us / ~100 us / ~270 us |
 

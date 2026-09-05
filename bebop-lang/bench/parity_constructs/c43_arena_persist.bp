@@ -1,0 +1,25 @@
+// T126 2026-09-05: an arena allocation made inside a fn with >= 9 live symbols
+// must survive its return (the prologue used to save/restore x27/x28 for such
+// fns, rolling the arena cursor back; the caller's next zeros() then overwrote
+// the returned array). bpref (no registers) defines the value.
+fn big(a: i64, b: i64, c: i64) -> [i64] {
+  let d = a + 1;
+  let e = b + 2;
+  let f = c + 3;
+  let g = d + e;
+  let h = e + f;
+  let i = g + h;
+  let arr = zeros(8);
+  let _ = arr[0] = i;
+  let _ = arr[7] = d * e * f;
+  arr
+}
+fn main() -> i64 {
+  let x = big(1, 2, 3);
+  let y = zeros(8);
+  let _ = y[0] = 999;
+  let _ = y[7] = 999;
+  let z = zeros(8);
+  let _ = z[0] = 555;
+  x[0] * 1000000 + x[7] * 1000 + (if y[0] == 999 then 1 else 0) + (if z[0] == 555 then 2 else 0)
+}
