@@ -9,15 +9,15 @@ use "selfhost/prelude/store.bp"
 // filtered by the tombstone bit (<= 3 slices). Root G2{N, E, ref RP, ref CI, ref LOG,
 // ref RP0, ref CI0, ref TB, nlog}, LOG{arr ref E}. argv[2] phase, argv[3] f|t:
 //   b : build L1 + empty log/L0/TB + commit (ms)
-//   l : the 100 log batches (t = amortized ns per logged edge; the max batch stall is
-//       printed by phase m in ms)
-//   n : 10^5 neighbour queries (LCG 4711) over L1 + L0 minus tombstones: fold
+//   l : log batches argv[4] .. +argv[5] (default 0, 10); t = ns per logged edge * 1000
+//       + the max batch stall in ms (the runner compacts between ranges)
+//   n : 10^5 neighbour queries (LCG 4711) over L1 + L0 minus tombstones: fold; t = ns per query
 //   d : tombstone 10% of L1 slots + commit (ms)
 //   f : BFS (queue) over L1 minus tombstones + L0, from argv[4] sources (LCG 31337):
 //       fold = sum(reached + sum levels); t = ns per live edge slot
 //   c : compaction (ms); z : logical size (arena_used*8)
 fn lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
-fn csr_build(base: [i64], tx: [i64], tmp: [i64], src: [i64], dst: [i64], m: i64, n: i64, drp: i64, dci: i64, out: [i64]) -> i64 {
+fn csr_build(base: [i64], tx: [i64], tmp: [i64], src: [i64], dst: [i64], m: i64, n: i64, drp: i64, dci: i64, out: [i64], cur: [i64]) -> i64 {
   let rp = st_alloc(base, tx, n + 2, drp);
   let _ = st_put(base, rp, 0, n + 1);
   let i = 0;
@@ -27,7 +27,6 @@ fn csr_build(base: [i64], tx: [i64], tmp: [i64], src: [i64], dst: [i64], m: i64,
     let i = i + 1;
     0
   };
-  let cur = zeros(n);
   let v = 0;
   while v < n {
     let _ = st_put(base, rp, 2 + v, st_get(base, rp, 2 + v) + st_get(base, rp, 1 + v));
@@ -88,7 +87,8 @@ fn phase_build(base: [i64], tmp: [i64], d: [i64]) -> i64 {
     0
   };
   let out = zeros(2);
-  let _ = csr_build(base, tx, tmp, src, dst, 2 * e, n, d[0], d[1], out);
+  let cur = zeros(n);
+  let _ = csr_build(base, tx, tmp, src, dst, 2 * e, n, d[0], d[1], out, cur);
   let log = st_alloc(base, tx, 101, d[3]);
   let _ = st_put(base, log, 0, 0);
   let _ = st_seal(base, log, tmp);
@@ -98,16 +98,25 @@ fn phase_build(base: [i64], tmp: [i64], d: [i64]) -> i64 {
   let g = root_write(base, tx, tmp, d[2], n, 2 * e, out[0], out[1], log, 0, 0, tb, 0);
   st_commit(base, tx, g, tmp)
 }
-// phase_log(base, tmp, d, stall): 100 batches; stall[0] = max batch ms.
-fn phase_log(base: [i64], tmp: [i64], d: [i64], stall: [i64]) -> i64 {
+// phase_log(base, tmp, d, b0, nb, stall): log batches b0 .. b0+nb-1 (of 100); each batch
+// appends a chunk of 10^4 LCG-777 edges (the generator is advanced past the earlier
+// batches), rebuilds L0 from EVERY logged chunk, commits. stall[0] = max batch ms.
+fn phase_log(base: [i64], tmp: [i64], d: [i64], b0: i64, nb: i64, stall: [i64]) -> i64 {
   let n = 1000000;
   let src = zeros(1000000);
   let dst = zeros(1000000);
+  let cur = zeros(n);
   let x = 777;
-  let b = 0;
+  let skip = 0;
+  while skip < b0 * 20000 {
+    let x = lcg(x);
+    let skip = skip + 1;
+    0
+  };
+  let b = b0;
   let out = zeros(2);
   let tx = zeros(6);
-  while b < 100 {
+  while b < b0 + nb {
     let t0 = clock_ms();
     let _ = st_begin(base, tx, tmp);
     let g = st_root(base, tmp);
@@ -119,9 +128,6 @@ fn phase_log(base: [i64], tmp: [i64], d: [i64], stall: [i64]) -> i64 {
       let a = (x >> 20) % n;
       let x = lcg(x);
       let c = (x >> 20) % n;
-      let idx = b * 10000 + k;
-      let _ = src[idx] = a;
-      let _ = dst[idx] = c;
       let _ = st_put(base, chunk, 1 + 2 * k, a);
       let _ = st_put(base, chunk, 2 + 2 * k, c);
       let k = k + 1;
@@ -141,10 +147,25 @@ fn phase_log(base: [i64], tmp: [i64], d: [i64], stall: [i64]) -> i64 {
     let _ = st_link(base, log, 1 + nl, chunk);
     let _ = st_seal(base, log, tmp);
     let _ = st_supersede(base, tx, oldlog);
-    let _ = csr_build(base, tx, tmp, src, dst, (b + 1) * 10000, n, d[0], d[1], out);
+    let m = 0;
+    let ch = 0;
+    while ch <= nl {
+      let cobj = st_ref(base, log, 1 + ch);
+      let q = 0;
+      while q < 10000 {
+        let _ = src[m] = st_get(base, cobj, 1 + 2 * q);
+        let _ = dst[m] = st_get(base, cobj, 2 + 2 * q);
+        let m = m + 1;
+        let q = q + 1;
+        0
+      };
+      let ch = ch + 1;
+      0
+    };
+    let _ = csr_build(base, tx, tmp, src, dst, m, n, d[0], d[1], out, cur);
     let _ = if st_get(base, g, 5) == 0 then 0 else st_supersede(base, tx, st_ref(base, g, 5));
     let _ = if st_get(base, g, 6) == 0 then 0 else st_supersede(base, tx, st_ref(base, g, 6));
-    let g2 = root_write(base, tx, tmp, d[2], n, st_get(base, g, 1), st_ref(base, g, 2), st_ref(base, g, 3), log, out[0], out[1], st_ref(base, g, 7), (b + 1) * 10000);
+    let g2 = root_write(base, tx, tmp, d[2], n, st_get(base, g, 1), st_ref(base, g, 2), st_ref(base, g, 3), log, out[0], out[1], st_ref(base, g, 7), (nl + 1) * 10000);
     let _ = st_supersede(base, tx, g);
     let _ = st_commit(base, tx, g2, tmp);
     let dt = clock_ms() - t0;
@@ -311,6 +332,8 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let ph = char(argv[2], 0);
   let want_t = if char(argv[3], 0) == 116 then 1 else 0;
   let nsrc = if argc >= 5 then parse(argv[4]) else 3;
+  let b0 = if argc >= 5 then parse(argv[4]) else 0;
+  let nb = if argc >= 6 then parse(argv[5]) else 10;
   let d = zeros(6);
   let _ = d[0] = st_digest("RP{arr i64}");
   let _ = d[1] = st_digest("CI{arr i64}");
@@ -332,13 +355,13 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let live = if ph == 99 then st_compact(path, pl, size, lay, 6, tmp) else 0;
   let base = st_open(path, pl, size, tmp);
   let t1 = clock_ms();
-  let r = if ph == 98 then phase_build(base, tmp, d) else if ph == 108 then phase_log(base, tmp, d, stall) else if ph == 110 then phase_nbr(base, tmp) else if ph == 100 then phase_del(base, tmp, d) else if ph == 102 then phase_bfs(base, tmp, nsrc) else 0;
+  let r = if ph == 98 then phase_build(base, tmp, d) else if ph == 108 then phase_log(base, tmp, d, b0, nb, stall) else if ph == 110 then phase_nbr(base, tmp) else if ph == 100 then phase_del(base, tmp, d) else if ph == 102 then phase_bfs(base, tmp, nsrc) else 0;
   let t2 = clock_ms();
   let g = st_root(base, tmp);
   let used = st_gen(base, tmp) * 0 + base[st_pick(base, tmp) + 4] * 8;
   let e1 = st_get(base, g, 1);
   let _ = sys_munmap(st_addr(base), size);
   let ms = if ph == 99 then t1 - t0 else t2 - t1;
-  let val = if ph == 108 then ms * 1000000 / 1000000 else if ph == 102 then ms * 1000000 / ((e1 + 1000000) * nsrc) else ms;
+  let val = if ph == 108 then (ms * 1000000 / (nb * 10000)) * 1000 + stall[0] else if ph == 102 then ms * 1000000 / ((e1 + 1000000) * nsrc) else if ph == 110 then ms * 1000000 / 100000 else ms;
   if ph == 122 then used else if ph == 109 then stall[0] else if ph == 99 then (if want_t == 1 then ms else live) else if want_t == 1 then val else r
 }

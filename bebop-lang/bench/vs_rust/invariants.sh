@@ -40,8 +40,8 @@ if [ "${1:-}" = "--freeze" ]; then
 fi
 python3 tools/census.py --check bench/vs_rust/census.txt bebop.bin $BINS || fail=1
 
-echo "== (vii) declared types vs use (T48 census, tools/typecheck.py over bpref's AST; morph.bp excluded: \`&&\` is not in bpref, T125)"
-TC=$(python3 tools/typecheck.py bebop.bp $(ls bench/vs_rust/std_tests/*.bp | grep -v '/morph.bp') bench/vs_rust/kernels/*.bp bench/parity_constructs/*.bp 2>&1 | tail -1)
+echo "== (vii) declared types vs use (T48 census, tools/typecheck.py over bpref's AST; every std gate since T125 gave bpref \`&&\`/\`||\`)"
+TC=$(python3 tools/typecheck.py bebop.bp bench/vs_rust/std_tests/*.bp bench/vs_rust/kernels/*.bp bench/parity_constructs/*.bp 2>&1 | tail -1)
 echo "$TC"; [ "$TC" = "typecheck census: 0 findings" ] || { echo "TYPECHECK FAIL (see tools/typecheck.py output)"; fail=1; }
 echo "== (v) gate-source expansion identity (prelude + selfhost/std == std_tests)"
 rm -rf "$OUT/std_expand"; sh tools/gen_selfsrc.sh std "$OUT/std_expand" >/dev/null || fail=1

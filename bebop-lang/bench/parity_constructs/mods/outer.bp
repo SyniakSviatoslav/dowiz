@@ -1,0 +1,3 @@
+use "bench/parity_constructs/mods/inner.bp"
+// T47b 2026-09-06: a module that itself uses a module; c47_usenest uses only this one.
+fn outer(a: i64) -> i64 { inner(a) + inner(a + 1) }

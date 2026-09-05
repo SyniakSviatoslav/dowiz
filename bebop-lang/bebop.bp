@@ -4268,12 +4268,29 @@ fn use_append_str(dst: [i64], off: i64, src: str) -> i64 {
 
 // Expand `use` lines of srcv into a fresh source string (or return srcv when
 // there are none). tmpc/tmpl = the scratch file path cells/length.
-fn use_expand(srcv: str, tmpc: [i64], tmpl: i64) -> str {
+// use_comment(buf, base, txt): overwrite every line-initial `use "` in buf[base..] (a copy
+// of txt) with `//` so the expanded text carries no raw use lines.
+fn use_comment(buf: [i64], base: i64, txt: str) -> i64 {
+  let strn = str_len(txt);
+  let m = 0;
+  let bol2 = 1;
+  while m < strn {
+    let c = char(txt, m);
+    let is_use = bol2 * (if c == 117 then 1 else 0) * (if char(txt, m + 1) == 115 then 1 else 0) * (if char(txt, m + 2) == 101 then 1 else 0) * (if char(txt, m + 3) == 32 then 1 else 0) * (if char(txt, m + 4) == 34 then 1 else 0);
+    let _ = if is_use == 1 then (let _ = buf[base + m] = 47 in (let _ = buf[base + m + 1] = 47 in 0)) else 0;
+    let bol2 = if c == 10 then 1 else 0;
+    let m = m + 1;
+    0
+  };
+  0
+}
+// use_scan(srcv, buf, off, seen, nseen): T47b (2026-09-06) nested `use`: for every
+// line-initial `use "path"` of srcv, a fresh path (content hash not in seen) is slurped,
+// scanned RECURSIVELY (its own uses land first, dependencies before dependents), then
+// appended with its use lines commented. Returns the number of use lines seen at
+// this level. Cycles and repeats are cut by the seen table (64 paths).
+fn use_scan(srcv: str, buf: [i64], off: [i64], seen: [i64], nseen: [i64]) -> i64 {
   let strn = str_len(srcv);
-  let seen = zeros(64);
-  let nseen = zeros(1);
-  let buf = zeros(1600000);
-  let off = zeros(1);
   let pathc = zeros(512);
   let i = 0;
   let bol = 1;
@@ -4281,7 +4298,6 @@ fn use_expand(srcv: str, tmpc: [i64], tmpl: i64) -> str {
   while i < strn {
     let c = char(srcv, i);
     let is_use = bol * (if c == 117 then 1 else 0) * (if char(srcv, i + 1) == 115 then 1 else 0) * (if char(srcv, i + 2) == 101 then 1 else 0) * (if char(srcv, i + 3) == 32 then 1 else 0) * (if char(srcv, i + 4) == 34 then 1 else 0);
-    // read the path
     let j = i + 5;
     let pl = 0;
     let go = is_use;
@@ -4307,26 +4323,28 @@ fn use_expand(srcv: str, tmpc: [i64], tmpl: i64) -> str {
     let _ = if fd < 0 then (if fresh == 1 then sys_exit(90) else 0) else 0;
     let inc = if fresh == 1 then sys_slurp(fd, 400000) else srcv;
     let _ = if fresh == 1 then sys_close(fd) else 0;
-    let _ = if fresh == 1 then (let _ = off[0] = use_append_str(buf, off[0], inc) in 0) else 0;
+    let _ = if fresh == 1 then use_scan(inc, buf, off, seen, nseen) else 0;
+    let base = off[0];
+    let _ = if fresh == 1 then (let _ = off[0] = use_append_str(buf, base, inc) in 0) else 0;
+    let _ = if fresh == 1 then use_comment(buf, base, inc) else 0;
     let _ = if fresh == 1 then (let _ = buf[off[0]] = 10 in (let _ = off[0] = off[0] + 1 in 0)) else 0;
     let nuse = nuse + is_use;
     let bol = if c == 10 then 1 else 0;
     let i = i + 1;
     0
   };
+  nuse
+}
+fn use_expand(srcv: str, tmpc: [i64], tmpl: i64) -> str {
+  let seen = zeros(64);
+  let nseen = zeros(1);
+  let buf = zeros(1600000);
+  let off = zeros(1);
+  let nuse = use_scan(srcv, buf, off, seen, nseen);
   // main text, with every `use` line commented out in place
   let base = off[0];
   let _ = off[0] = use_append_str(buf, base, srcv);
-  let m = 0;
-  let bol2 = 1;
-  while m < strn {
-    let c = char(srcv, m);
-    let is_use = bol2 * (if c == 117 then 1 else 0) * (if char(srcv, m + 1) == 115 then 1 else 0) * (if char(srcv, m + 2) == 101 then 1 else 0) * (if char(srcv, m + 3) == 32 then 1 else 0) * (if char(srcv, m + 4) == 34 then 1 else 0);
-    let _ = if is_use == 1 then (let _ = buf[base + m] = 47 in (let _ = buf[base + m + 1] = 47 in 0)) else 0;
-    let bol2 = if c == 10 then 1 else 0;
-    let m = m + 1;
-    0
-  };
+  let _ = use_comment(buf, base, srcv);
   let total = off[0];
   let ofd = if nuse > 0 then sys_open(tmpc, tmpl, 578) else 0 - 1;
   let _ = if nuse > 0 then (if ofd < 0 then sys_exit(90) else 0) else 0;

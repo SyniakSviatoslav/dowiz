@@ -1,0 +1,7 @@
+use "bench/parity_constructs/mods/outer.bp"
+// T47b 2026-09-06: nested `use`: main uses outer only; outer uses inner (mods/). The
+// one-level expander left outer's use line raw and inner undefined.
+// outer(3) = inner(3) + inner(4) = 22 + 29 = 51; inner(10) = 71.
+fn main() -> i64 {
+  outer(3) * 1000 + inner(10)
+}

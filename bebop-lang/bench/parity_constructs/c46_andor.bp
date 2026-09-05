@@ -1,0 +1,12 @@
+// T125 2026-09-06: `&&` and `||` pinned: the `&` / `|` tiers on 0/1 comparison values
+// (bebop.bin consumes one `&`, the right operand parses the second), no short circuit.
+fn main() -> i64 {
+  let a = 3;
+  let b = 5;
+  let p = if a < b && b < 9 then 1 else 0;
+  let q = if a > b && b < 9 then 1 else 0;
+  let r = if a > b || b < 9 then 1 else 0;
+  let s = if a > b || b > 9 then 1 else 0;
+  let t = (a < b && b < 9) * 100 + (a > b || b > 9) * 10;
+  p * 100000 + q * 10000 + r * 1000 + s * 100 + t
+}

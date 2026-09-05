@@ -20,7 +20,7 @@ B[update]=$(bb update t); B[lookup2_f]=$(bb lookup f); B[reopen]=$(bb reopen t);
 B[compact]=$(bb compact t); B[lookup3_f]=$(bb lookup f); B[size2]=$(bb z f); B[blocks2]=$(( $(stat -c %b sbench.store) * 512 )); B[durable]=$(bb y t)
 read -r _ S[insert] _ <<<"$(sq insert)"; read -r _ S[lookup] S[lookup_f] <<<"$(sq lookup)"; read -r _ S[scan] S[scan_f] <<<"$(sq scan)"
 read -r _ S[update] _ <<<"$(sq update)"; read -r _ S[lookup2] S[lookup2_f] <<<"$(sq lookup)"; read -r _ S[reopen] _ <<<"$(sq reopen)"
-read -r _ S[size1] _ <<<"$(sq size)"; read -r _ S[compact] _ <<<"$(sq compact)"; read -r _ S[size2] _ <<<"$(sq size)"; read -r _ S[durable] _ <<<"$(sq durable)"
+read -r _ S[size1] _ <<<"$(sq size)"; read -r _ S[compact] _ <<<"$(sq compact)"; read -r _ S[size2] _ <<<"$(sq size)"; read -r _ S[durable] _ <<<"$(sq durable)"; read -r _ S[durable_full] _ <<<"$(sq durable_full)"
 folds=$([ "${B[lookup_f]}" = "${S[lookup_f]}" ] && [ "${B[scan_f]}" = "${S[scan_f]}" ] && [ "${B[lookup2_f]}" = "${S[lookup2_f]}" ] && [ "${B[lookup3_f]}" = "${S[lookup2_f]}" ] && echo equal || echo "MISMATCH bebop ${B[lookup_f]}/${B[scan_f]}/${B[lookup2_f]}/${B[lookup3_f]} sqlite ${S[lookup_f]}/${S[scan_f]}/${S[lookup2_f]}")
 r() { python3 -c "print(f'{$2/max($1,0.001):.1f}x')"; }
 out="# G7 sbench ($(date -u +%F), $(md5sum "$BB" | cut -c1-8), core $PIN): store vs sqlite $(python3 -c 'import sqlite3;print(sqlite3.sqlite_version)') C API, folds $folds
@@ -35,7 +35,8 @@ out="# G7 sbench ($(date -u +%F), $(md5sum "$BB" | cut -c1-8), core $PIN): store
 | logical size after update, arena_used*8 (bytes) | ${B[size1]} | ${S[size1]} | $(r ${B[size1]} ${S[size1]}) |
 | compaction / VACUUM (ms) | ${B[compact]} | ${S[compact]} | $(r ${B[compact]} ${S[compact]}) |
 | logical size after compaction (bytes; file blocks allocated ${B[blocks2]}) | ${B[size2]} | ${S[size2]} | $(r ${B[size2]} ${S[size2]}) |
-| durable commit, us each (1000 x one record version; store = msync range + superblock; sqlite = WAL synchronous=NORMAL) | ${B[durable]} | ${S[durable]} | $(r ${B[durable]} ${S[durable]}) |
+| durable commit, us each (1000 x one record version; store = msync of the appended pages + the superblock pages; sqlite = WAL synchronous=NORMAL, no fsync per commit) | ${B[durable]} | ${S[durable]} | $(r ${B[durable]} ${S[durable]}) |
+| durable commit vs sqlite WAL synchronous=FULL (fsync per commit) | ${B[durable]} | ${S[durable_full]} | $(r ${B[durable]} ${S[durable_full]}) |
 
 - pass rule (docs/LANG-DB-DESIGN.md §5 G7): PK lookup >= 3x sqlite native AND scan >= 5x; the file size is reported whatever it is (expected ~2.2x loss before compaction)
 - store rows are in-process clock_ms deltas (insert/update/compact exclude the ~100 ms process floor and the open); sqlite rows go through ctypes (4 calls per lookup, ~8 us of ctypes per op, T100 measured ~19 us for the window query) inside one transaction with locking_mode=EXCLUSIVE, so its per-op rows are an upper bound on native sqlite by roughly that floor

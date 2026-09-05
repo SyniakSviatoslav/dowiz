@@ -38,4 +38,13 @@ print('|---|---|---|---|')
 for k,(bm,bp),(rm,rp) in rows:
     ratio = bm/rm if rm==rm and rm>0 else float('nan')
     print(f'| {k.upper()} | {bm:.1f} / {bp:.1f} | {rm:.3f} / {rp:.3f} | {ratio:.1f}x |' if rm==rm else f'| {k.upper()} | {bm:.1f} / {bp:.1f} | (K4 twin prints no in-process ms; 2.85 ms measured in SPEEDUP-ANALYSIS) | — |')
+import re
+try:
+    k6=re.search(r'\| bebop scan nn\.bp \(Q=20\) \| ([0-9.]+) ms', open('bench/tq_sqlite/RESULT.md').read()).group(1)
+except Exception: k6='?'
+try:
+    k5=re.search(r'self-compile pinned[^|]*\|[^|]*?([0-9.]+) s', open('ROADMAP.md').read()).group(1)
+except Exception: k5='?'
+print(f'| K5 self-compile (ROADMAP Measured, pinned, single run) | {k5} s | (no twin: rustc is not a fair twin of a 200 KB one-pass compiler) | |')
+print(f'| K6 nnidx scan 1M (bench/tq_sqlite/RESULT.md, Q=20) | {k6} ms | sqlite scan 183 ms python / ~158 ms native (T100) | store faster |')
 PY

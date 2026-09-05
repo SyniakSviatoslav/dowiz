@@ -71,5 +71,10 @@ elif ph == 'durable':
     for k in range(1000):
         exe(db, 'BEGIN'); L.sqlite3_bind_int64(q, 1, k); L.sqlite3_step(q); L.sqlite3_reset(q); exe(db, 'COMMIT')
     print('durable', round((time.perf_counter() - t0) * 1e6 / 1000, 1), 0); L.sqlite3_close(db)
+elif ph == 'durable_full':
+    db = opendb(); exe(db, 'PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL'); q = prep(db, 'UPDATE p SET u=u+1 WHERE id=?'); t0 = time.perf_counter()
+    for k in range(1000):
+        exe(db, 'BEGIN'); L.sqlite3_bind_int64(q, 1, k); L.sqlite3_step(q); L.sqlite3_reset(q); exe(db, 'COMMIT')
+    print('durable_full', round((time.perf_counter() - t0) * 1e6 / 1000, 1), 0); L.sqlite3_close(db)
 elif ph == 'size':
     print('size', os.path.getsize(DB), 0)

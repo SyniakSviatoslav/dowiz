@@ -61,6 +61,10 @@ BIN = {
     '*': lambda a, b: wrap(a * b), '/': i_div,
     '%': lambda a, b: wrap(a - i_div(a, b) * b),
     '&': lambda a, b: wrap(a & b), '|': lambda a, b: wrap(a | b),
+    # T125 (2026-09-06): `&&` / `||` are the same tiers as `&` / `|` on 0/1 comparison values,
+    # NOT short-circuit -- bebop.bin's `&` tier consumes one `&` and the second is parsed by
+    # the right operand (morph.bp is the only user); construct c46_andor pins the semantics.
+    '&&': lambda a, b: wrap(a & b), '||': lambda a, b: wrap(a | b),
     '^': lambda a, b: wrap(a ^ b),
     '<<': lambda a, b: wrap(a << (b & 63)),
     '>>': lambda a, b: wrap((a & MASK) >> (b & 63)),
@@ -71,7 +75,7 @@ BIN = {
 }
 # T42(a) 2026-09-04 (D5 measured: zero fold delta): C precedence
 #   cmp < | < ^ < & < shifts < +- < */%   (bebop.bp emit_cmp/bor/bxor/band/shift/expr/term)
-TIERS = [('==', '!=', '<=', '>=', '<', '>'), ('|',), ('^',), ('&',),
+TIERS = [('==', '!=', '<=', '>=', '<', '>'), ('|', '||'), ('^',), ('&', '&&'),
          ('<<', '>>', '>>>'), ('+', '-'), ('*', '/', '%')]
 # BPREF_OLDPREC=1 -> the pre-2026-09-04 grammar (bit ops tighter than * /), archaeology only
 # BPREF_ASR=1     -> `>>` is ARITHMETIC (sign-propagating) instead of logical (T42(b), operator)
@@ -82,7 +86,7 @@ if os.environ.get('BPREF_ASR') == '1':
     BIN['>>'] = lambda a, b: wrap(a >> (b & 63))
 
 TOK = re.compile(r'\s+|//[^\n]*|(0x[0-9a-fA-F]+|\d+)|([A-Za-z_][A-Za-z0-9_]*)|("(?:[^"\\]|\\.)*")'
-                 r'|(\+\+|==|!=|<=|>=|<<|>>>|>>|=>|->|\+=|-=|\*=|/=|%=|[-+*/%&|^<>=(){}\[\],;:.!])')
+                 r'|(\+\+|&&|\|\||==|!=|<=|>=|<<|>>>|>>|=>|->|\+=|-=|\*=|/=|%=|[-+*/%&|^<>=(){}\[\],;:.!])')
 
 
 def tokenize(src):
@@ -510,21 +514,22 @@ def run(src):
     return it.call('main', [])
 
 
-def expand_use(src):
-    """T47 (2026-09-05): `use "path"` at column 0 = textual inclusion, one level, deduped;
-    included files first (in order of first use), then the main text with each `use`
-    line commented out -- exactly bebop.bp's use_expand."""
-    inc, seen, out = [], set(), []
+def expand_use(src, seen=None):
+    # T47 one-level `use "path"` expansion; T47b (2026-09-06): recursive, path-deduplicated,
+    # dependencies first, every use line replaced by a comment -- the same shape as
+    # bebop.bp's use_scan.
+    if seen is None: seen = set()
+    out = []; pre = []
     for line in src.split('\n'):
         if line.startswith('use "') and line.rstrip().endswith('"'):
-            p = line.strip()[5:-1]
-            if p not in seen:
-                seen.add(p); inc.append(open(p, encoding='utf-8', errors='replace').read())
-            out.append('//' + line[2:])
+            path = line.strip()[5:-1]
+            if path not in seen:
+                seen.add(path)
+                pre.append(expand_use(open(path, encoding='utf-8', errors='replace').read(), seen))
+            out.append('//' + line[1:])
         else:
             out.append(line)
-    return ('\n'.join(inc) + '\n' + '\n'.join(out)) if inc else src
-
+    return '\n'.join(pre + out)
 
 def main():
     sys.setrecursionlimit(1 << 20)

@@ -96,6 +96,14 @@ Honest twins (bench/vs_rust/honest.sh, D11-C): see bench/vs_rust/REPORT-honest.m
 | reopen + first record | 590 us | 3600 us | 6.1x |
 | logical size after update / after compaction | 85.2 MB / 72.4 MB | 34.1 MB | 2.5x / 2.1x LOSS |
 | compaction vs VACUUM | 747 ms | 544 ms | 0.7x |
+| durable commit (msync appended pages + superblock) vs WAL NORMAL / FULL | 506 us | 78 us / 567 us | 0.15x / 1.1x |
+
+| graph in the store, 1M nodes 10M edge slots (bench/vs_rust/sgraph.sh + sgraph2.sh, G8/T117) | store | sqlite 3.46.1 | ratio |
+|---|---|---|---|
+| BFS, ns per edge (bebop 100 sources; sqlite level-synchronous, 3 sources) | 187 | 10758 | 57x |
+| build the CSR | 44.8 s | 242 s | 5.4x |
+| 1M edges through the edge log, 100 L0 rebuilds, 5 compactions | 30 us / edge, max stall 747 ms | | |
+| tombstone 10% + commit / BFS with tombstones + log / compaction | 131 ms / 240 ns per slot / 795 ms | | |
 
 | substrate (bench/substrate_spike/run.sh, T55 spike) | ms | vs linear |
 |---|---|---|
