@@ -9,6 +9,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bpref
 # The only sanctioned i64 <-> [i64] casts: the store's mapping base (selfhost/prelude/store.bp, T111).
 CASTS = {'st_cells', 'st_addr'}
+# T48b (2026-09-06): `ref T` is a distinct type. It is produced only by these store fns
+# (they return 'ref *', compatible with every `ref T`) or by params/returns declared `ref T`;
+# arithmetic on a ref, an i64 where a `ref T` is declared, or a ref where a scalar is
+# declared are findings. The generic store helpers take a ref where they declare i64.
+REF_PRODUCERS = {'st_alloc', 'st_ref', 'st_root', 'st_mig', 'st_forward', 'st_copy_obj'}
+REF_TOLERANT = {'st_get', 'st_put', 'st_seal', 'st_check', 'st_len', 'st_link', 'st_supersede', 'st_ref', 'st_commit', 'st_commit_m', 'st_commit_sync', 'st_mig'}
+STORE_INTERNAL = {'st_compact', 'st_link', 'st_ref', 'st_forward', 'st_copy_obj'}  # the fns that DEFINE object-relative offsets
+def is_ref(t): return isinstance(t, str) and t.startswith('ref ')
+def ref_ok(pt, at): return pt == at or at == 'ref *' or pt == 'ref *'
 BUILTIN = {'zeros': (['i64'], '[i64]'), 'str_len': (['str'], 'i64'), 'char': (['str', 'i64'], 'i64'), 'clock_ms': ([], 'i64'),
            'sys_open': (['[i64]', 'i64', 'i64'], 'i64'), 'sys_slurp': (['i64', 'i64'], 'str'), 'sys_close': (['i64'], 'i64'),
            'sys_read': (['i64', '[i64]', 'i64'], 'i64'), 'sys_write': (['i64', '?', 'i64'], 'i64'), 'sys_exit': (['i64'], 'i64'),
@@ -35,6 +44,7 @@ class TC:
             a, b = self.ty(e[2], env, fn), self.ty(e[3], env, fn)
             if e[1] in ('+', '-', '*', '/', '%', '&', '|', '^', '<<', '>>', '>>>'):
                 if '[i64]' in (a, b) or 'str' in (a, b): self.note(fn, 'arithmetic %s on %s / %s' % (e[1], a, b))
+                if (is_ref(a) or is_ref(b)) and fn not in STORE_INTERNAL: self.note(fn, 'arithmetic %s on a ref (%s / %s): a ref is an object-relative offset, deref it with st_ref' % (e[1], a, b))
             return 'i64'
         if t == 'if':
             self.ty(e[1], env, fn); a, b = self.ty(e[2], env, fn), self.ty(e[3], env, fn)
@@ -47,6 +57,7 @@ class TC:
             if base == 'i64' and e[1] in self.declared: self.note(fn, 'index into `%s` declared i64' % e[1])
             if base == 'str': self.note(fn, 'index into str `%s`' % e[1])
             self.ty(e[2], env, fn)
+            if is_ref(self.ty(e[2], env, fn)): self.note(fn, 'index into `%s` with a ref: a ref is not an array index' % e[1])
             if t == 'set': self.ty(e[3], env, fn)
             return 'str' if base == '[str]' else 'i64'
         if t == 'field': self.ty(e[1], env, fn); return 'i64'
@@ -59,6 +70,15 @@ class TC:
                 for i, (pt, at) in enumerate(zip(pts, ats)):
                     if pt in ('i64', '[i64]', 'str', '[str]') and at in ('i64', '[i64]', 'str', '[str]') and pt != at:
                         self.note(fn, 'call %s: arg %d is %s, param declared %s' % (name, i, at, pt))
+                    if is_ref(pt) and at in ('i64', '[i64]', 'str', '[str]') and args[i] != ('num', 0):  # 0 is the null ref (§4a)
+                        self.note(fn, 'call %s: arg %d is %s, param declared %s (only a store ref may flow into a ref)' % (name, i, at, pt))
+                    if is_ref(pt) and is_ref(at) and not ref_ok(pt, at):
+                        self.note(fn, 'call %s: arg %d is %s, param declared %s' % (name, i, at, pt))
+                    if is_ref(at) and pt in ('[i64]', 'str', '[str]'):
+                        self.note(fn, 'call %s: arg %d is %s, param declared %s' % (name, i, at, pt))
+                    if is_ref(at) and pt == 'i64' and name not in REF_TOLERANT:
+                        self.note(fn, 'call %s: arg %d is %s, param declared i64 (a ref never leaves the store helpers as a number)' % (name, i, at))
+                if name in REF_PRODUCERS: return 'ref *'
                 return rt
             if name in BUILTIN:
                 pts, rt = BUILTIN[name]
@@ -83,7 +103,7 @@ class TC:
                 else:
                     tr = self.ty(r, env, fn)
                     if it[1] != '_':
-                        if it[1] in env and env[it[1]] not in ('?', tr) and tr != '?':
+                        if it[1] in env and env[it[1]] not in ('?', tr) and tr != '?' and {env[it[1]], tr} != {'i64', 'ref *'}:  # `let prev = 0` then a ref: the null idiom
                             self.note(fn, 'rebind changes `%s` from %s to %s' % (it[1], env[it[1]], tr))
                         env[it[1]] = tr
                 val = 'i64'
@@ -103,6 +123,10 @@ class TC:
             self.declared = set(params)
             v = self.body(body, env, fn)
             if rt in ('i64', '[i64]', 'str') and v in ('i64', '[i64]', 'str') and v != rt and fn not in CASTS:
+                self.note(fn, 'returns %s, declared -> %s' % (v, rt))
+            if is_ref(rt) and v in ('i64', '[i64]', 'str') and fn not in REF_PRODUCERS:
+                self.note(fn, 'returns %s, declared -> %s (only a store ref may be returned as a ref)' % (v, rt))
+            if is_ref(v) and rt in ('[i64]', 'str'):
                 self.note(fn, 'returns %s, declared -> %s' % (v, rt))
         return self.findings
 total = 0

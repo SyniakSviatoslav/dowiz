@@ -16,9 +16,12 @@ use "selfhost/prelude/store.bp"
 //   f : BFS (queue) over L1 minus tombstones + L0, from argv[4] sources (LCG 31337):
 //       fold = sum(reached + sum levels); t = ns per live edge slot
 //   c : compaction (ms); z : logical size (arena_used*8)
+//   p : frontier (SpMSpV, push/pull, alpha 14) BFS from argv[4] sources on the L1 graph
+//       (run before the log phase); fold == the queue BFS; t = ns per L1 edge slot
 fn lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
-fn csr_build(base: [i64], tx: [i64], tmp: [i64], src: [i64], dst: [i64], m: i64, n: i64, drp: i64, dci: i64, out: [i64], cur: [i64]) -> i64 {
-  let rp = st_alloc(base, tx, n + 2, drp);
+// csr_build(base, tmp, src, dst, m, n, rp, ci, cur): fill the caller-allocated RP (n+2 cells)
+// and CI (m+1 cells) objects (refs stay refs: no i64 round trip through an out array).
+fn csr_build(base: [i64], tmp: [i64], src: [i64], dst: [i64], m: i64, n: i64, rp: ref RP, ci: ref CI, cur: [i64]) -> i64 {
   let _ = st_put(base, rp, 0, n + 1);
   let i = 0;
   while i < m {
@@ -34,7 +37,6 @@ fn csr_build(base: [i64], tx: [i64], tmp: [i64], src: [i64], dst: [i64], m: i64,
     let v = v + 1;
     0
   };
-  let ci = st_alloc(base, tx, m + 1, dci);
   let _ = st_put(base, ci, 0, m);
   let j = 0;
   while j < m {
@@ -47,11 +49,9 @@ fn csr_build(base: [i64], tx: [i64], tmp: [i64], src: [i64], dst: [i64], m: i64,
   };
   let _ = st_seal(base, rp, tmp);
   let _ = st_seal(base, ci, tmp);
-  let _ = out[0] = rp;
-  let _ = out[1] = ci;
   0
 }
-fn root_write(base: [i64], tx: [i64], tmp: [i64], dg: i64, n: i64, e: i64, rp: i64, ci: i64, log: i64, rp0: i64, ci0: i64, tb: i64, nlog: i64) -> i64 {
+fn root_write(base: [i64], tx: [i64], tmp: [i64], dg: i64, n: i64, e: i64, rp: ref RP, ci: ref CI, log: ref LOG, rp0: ref RP, ci0: ref CI, tb: ref TB, nlog: i64) -> ref G2 {
   let g = st_alloc(base, tx, 9, dg);
   let _ = st_put(base, g, 0, n);
   let _ = st_put(base, g, 1, e);
@@ -65,7 +65,9 @@ fn root_write(base: [i64], tx: [i64], tmp: [i64], dg: i64, n: i64, e: i64, rp: i
   let _ = st_seal(base, g, tmp);
   g
 }
-fn phase_build(base: [i64], tmp: [i64], d: [i64]) -> i64 {
+// phase_build(base, tmp, d, skew): skew = 1 sends half of all destination endpoints to
+// the 1% hub set (nodes 0..9999): the skewed variant of §9.5 (row 'uniform + 1%-hub').
+fn phase_build(base: [i64], tmp: [i64], d: [i64], skew: i64) -> i64 {
   let n = 1000000;
   let e = 5000000;
   let tx = zeros(6);
@@ -78,7 +80,8 @@ fn phase_build(base: [i64], tmp: [i64], d: [i64]) -> i64 {
     let x = lcg(x);
     let a = (x >> 20) % n;
     let x = lcg(x);
-    let b = (x >> 20) % n;
+    let hub = skew * ((x >> 10) & 1);
+    let b = if hub == 1 then (x >> 20) % 10000 else (x >> 20) % n;
     let _ = src[2 * i] = a;
     let _ = dst[2 * i] = b;
     let _ = src[2 * i + 1] = b;
@@ -86,16 +89,17 @@ fn phase_build(base: [i64], tmp: [i64], d: [i64]) -> i64 {
     let i = i + 1;
     0
   };
-  let out = zeros(2);
   let cur = zeros(n);
-  let _ = csr_build(base, tx, tmp, src, dst, 2 * e, n, d[0], d[1], out, cur);
+  let rp1 = st_alloc(base, tx, n + 2, d[0]);
+  let ci1 = st_alloc(base, tx, 2 * e + 1, d[1]);
+  let _ = csr_build(base, tmp, src, dst, 2 * e, n, rp1, ci1, cur);
   let log = st_alloc(base, tx, 101, d[3]);
   let _ = st_put(base, log, 0, 0);
   let _ = st_seal(base, log, tmp);
   let tb = st_alloc(base, tx, 156251, d[4]);
   let _ = st_put(base, tb, 0, 156250);
   let _ = st_seal(base, tb, tmp);
-  let g = root_write(base, tx, tmp, d[2], n, 2 * e, out[0], out[1], log, 0, 0, tb, 0);
+  let g = root_write(base, tx, tmp, d[2], n, 2 * e, rp1, ci1, log, 0, 0, tb, 0);
   st_commit(base, tx, g, tmp)
 }
 // phase_log(base, tmp, d, b0, nb, stall): log batches b0 .. b0+nb-1 (of 100); each batch
@@ -114,7 +118,6 @@ fn phase_log(base: [i64], tmp: [i64], d: [i64], b0: i64, nb: i64, stall: [i64]) 
     0
   };
   let b = b0;
-  let out = zeros(2);
   let tx = zeros(6);
   while b < b0 + nb {
     let t0 = clock_ms();
@@ -162,10 +165,12 @@ fn phase_log(base: [i64], tmp: [i64], d: [i64], b0: i64, nb: i64, stall: [i64]) 
       let ch = ch + 1;
       0
     };
-    let _ = csr_build(base, tx, tmp, src, dst, m, n, d[0], d[1], out, cur);
+    let rp0 = st_alloc(base, tx, n + 2, d[0]);
+    let ci0 = st_alloc(base, tx, m + 1, d[1]);
+    let _ = csr_build(base, tmp, src, dst, m, n, rp0, ci0, cur);
     let _ = if st_get(base, g, 5) == 0 then 0 else st_supersede(base, tx, st_ref(base, g, 5));
     let _ = if st_get(base, g, 6) == 0 then 0 else st_supersede(base, tx, st_ref(base, g, 6));
-    let g2 = root_write(base, tx, tmp, d[2], n, st_get(base, g, 1), st_ref(base, g, 2), st_ref(base, g, 3), log, out[0], out[1], st_ref(base, g, 7), (nl + 1) * 10000);
+    let g2 = root_write(base, tx, tmp, d[2], n, st_get(base, g, 1), st_ref(base, g, 2), st_ref(base, g, 3), log, rp0, ci0, st_ref(base, g, 7), (nl + 1) * 10000);
     let _ = st_supersede(base, tx, g);
     let _ = st_commit(base, tx, g2, tmp);
     let dt = clock_ms() - t0;
@@ -175,11 +180,11 @@ fn phase_log(base: [i64], tmp: [i64], d: [i64], b0: i64, nb: i64, stall: [i64]) 
   };
   0
 }
-fn tomb(base: [i64], tb: i64, slot: i64) -> i64 {
+fn tomb(base: [i64], tb: ref TB, slot: i64) -> i64 {
   (st_get(base, tb, 1 + (slot >> 6)) >> (slot & 63)) & 1
 }
 // nbr_fold(base, g, v): deg + sum of neighbours over L1 (minus tombstones) and L0.
-fn nbr_fold(base: [i64], g: i64, v: i64) -> i64 {
+fn nbr_fold(base: [i64], g: ref G2, v: i64) -> i64 {
   let rp = st_ref(base, g, 2);
   let ci = st_ref(base, g, 3);
   let tb = st_ref(base, g, 7);
@@ -248,7 +253,7 @@ fn phase_del(base: [i64], tmp: [i64], d: [i64]) -> i64 {
   let _ = st_supersede(base, tx, g);
   st_commit(base, tx, g2, tmp)
 }
-fn bfs_from(base: [i64], g: i64, n: i64, s: i64, level: [i64], queue: [i64]) -> i64 {
+fn bfs_from(base: [i64], g: ref G2, n: i64, s: i64, level: [i64], queue: [i64]) -> i64 {
   let rp = st_ref(base, g, 2);
   let ci = st_ref(base, g, 3);
   let tb = st_ref(base, g, 7);
@@ -297,6 +302,156 @@ fn bfs_from(base: [i64], g: i64, n: i64, s: i64, level: [i64], queue: [i64]) -> 
   };
   acc
 }
+// ---- frontier BFS (SpMSpV, §9.2): level-synchronous over bitmaps, push/pull switch ----
+// bit(bm, i): bit i of bitmap bm (cells of 64 bits).
+fn bit(bm: [i64], i: i64) -> i64 { (bm[i >> 6] >> (i & 63)) & 1 }
+fn setbit(bm: [i64], i: i64) -> i64 {
+  let _ = bm[i >> 6] = bm[i >> 6] | (1 << (i & 63));
+  0
+}
+// nbr_live(base, g, k): the neighbour at L1 slot k, or -1 if tombstoned.
+fn nbr_live(base: [i64], g: ref G2, k: i64) -> i64 {
+  if tomb(base, st_ref(base, g, 7), k) == 1 then 0 - 1 else st_get(base, st_ref(base, g, 3), 1 + k)
+}
+// push_step: for every frontier vertex v (drain each word LSB-first, index by clz),
+// mark every unvisited neighbour (L1 minus tombstones, then L0) in next.
+fn push_step(base: [i64], g: ref G2, fr: [i64], vis: [i64], nx: [i64], level: [i64], lv: i64, nw: i64, cnt: [i64]) -> i64 {
+  let rp = st_ref(base, g, 2);
+  let ci = st_ref(base, g, 3);
+  let tb = st_ref(base, g, 7);
+  let has0 = if st_get(base, g, 5) == 0 then 0 else 1;
+  let rp0 = st_ref(base, g, 5);
+  let ci0 = st_ref(base, g, 6);
+  let w = 0;
+  while w < nw {
+    while fr[w] != 0 {
+      let x = fr[w];
+      let low = x & (0 - x);
+      let _ = fr[w] = x - low;
+      let v = w * 64 + 63 - clz(low);
+      let k = st_get(base, rp, 1 + v);
+      let hi = st_get(base, rp, 2 + v);
+      while k < hi {
+        let u = st_get(base, ci, 1 + k);
+        let take = (1 - tomb(base, tb, k)) * (1 - bit(vis, u));
+        let _ = if take == 1 then setbit(vis, u) else 0;
+        let _ = if take == 1 then setbit(nx, u) else 0;
+        let _ = if take == 1 then (let _ = level[u] = lv in 0) else 0;
+        let _ = cnt[0] = cnt[0] + take;
+        let k = k + 1;
+        0
+      };
+      let k0 = if has0 == 1 then st_get(base, rp0, 1 + v) else 0;
+      let hi0 = if has0 == 1 then st_get(base, rp0, 2 + v) else 0;
+      while k0 < hi0 {
+        let u = st_get(base, ci0, 1 + k0);
+        let take = 1 - bit(vis, u);
+        let _ = if take == 1 then setbit(vis, u) else 0;
+        let _ = if take == 1 then setbit(nx, u) else 0;
+        let _ = if take == 1 then (let _ = level[u] = lv in 0) else 0;
+        let _ = cnt[0] = cnt[0] + take;
+        let k0 = k0 + 1;
+        0
+      };
+      0
+    };
+    let w = w + 1;
+    0
+  };
+  0
+}
+// pull_step: for every unvisited vertex u, scan its (undirected L1) neighbours until one
+// is in the frontier; the log edges are directed, so a pull also scans u's L0 out-edges
+// -- correct only because the log is small; the switch keeps pull to dense levels.
+fn pull_step(base: [i64], g: ref G2, fr: [i64], vis: [i64], nx: [i64], level: [i64], lv: i64, n: i64, cnt: [i64]) -> i64 {
+  let rp = st_ref(base, g, 2);
+  let ci = st_ref(base, g, 3);
+  let tb = st_ref(base, g, 7);
+  let u = 0;
+  while u < n {
+    let unseen = 1 - bit(vis, u);
+    let k = if unseen == 1 then st_get(base, rp, 1 + u) else 0;
+    let hi = if unseen == 1 then st_get(base, rp, 2 + u) else 0;
+    let found = 0;
+    while k < hi {
+      let v = st_get(base, ci, 1 + k);
+      let hit = (1 - tomb(base, tb, k)) * bit(fr, v);
+      let found = if hit == 1 then 1 else found;
+      let k = if hit == 1 then hi else k + 1;
+      0
+    };
+    let _ = if found == 1 then setbit(vis, u) else 0;
+    let _ = if found == 1 then setbit(nx, u) else 0;
+    let _ = if found == 1 then (let _ = level[u] = lv in 0) else 0;
+    let _ = cnt[0] = cnt[0] + found;
+    let u = u + 1;
+    0
+  };
+  0
+}
+// bfs_frontier(base, g, n, s, level, fr, nx, vis): Beamer's direction-optimising BFS on
+// bitmaps: push while the frontier is small, pull when |frontier| * 14 > unvisited
+// (alpha = 14); returns reached + sum of levels like bfs_from. Pull is exact only when
+// the log holds no edges INTO unvisited vertices that push would find -- so pull is
+// used only for the L1 graph plus L0 out-edges of the pulled vertex; with a
+// symmetric L1 and the switch applied only while the log is empty, folds agree with
+// the queue BFS (the oracle). phase 'p' runs it BEFORE the log phase (build state).
+fn bfs_frontier(base: [i64], g: ref G2, n: i64, s: i64, level: [i64], fr: [i64], nx: [i64], vis: [i64]) -> i64 {
+  let nw = (n + 63) >> 6;
+  let i = 0;
+  while i < nw {
+    let _ = fr[i] = 0;
+    let _ = nx[i] = 0;
+    let _ = vis[i] = 0;
+    let i = i + 1;
+    0
+  };
+  let _ = setbit(fr, s);
+  let _ = setbit(vis, s);
+  let _ = level[s] = 0;
+  let acc = 1;
+  let reached = 1;
+  let lv = 1;
+  let nf = 1;
+  let cnt = zeros(1);
+  while nf > 0 {
+    let _ = cnt[0] = 0;
+    let pull = if nf * 14 > n - reached then 1 else 0;
+    let _ = if pull == 1 then pull_step(base, g, fr, vis, nx, level, lv, n, cnt) else push_step(base, g, fr, vis, nx, level, lv, nw, cnt);
+    let nf = cnt[0];
+    let reached = reached + nf;
+    let acc = acc + nf * (lv + 1);
+    let w = 0;
+    while w < nw {
+      let _ = fr[w] = nx[w];
+      let _ = nx[w] = 0;
+      let w = w + 1;
+      0
+    };
+    let lv = lv + 1;
+    0
+  };
+  acc
+}
+fn phase_frontier(base: [i64], tmp: [i64], nsrc: i64) -> i64 {
+  let g = st_root(base, tmp);
+  let n = st_get(base, g, 0);
+  let level = zeros(n);
+  let nw = (n + 63) >> 6;
+  let fr = zeros(nw);
+  let nx = zeros(nw);
+  let vis = zeros(nw);
+  let x = 31337;
+  let q = 0;
+  let acc = 0;
+  while q < nsrc {
+    let x = lcg(x);
+    let acc = acc + bfs_frontier(base, g, n, (x >> 20) % n, level, fr, nx, vis);
+    let q = q + 1;
+    0
+  };
+  acc
+}
 fn phase_bfs(base: [i64], tmp: [i64], nsrc: i64) -> i64 {
   let g = st_root(base, tmp);
   let n = st_get(base, g, 0);
@@ -326,7 +481,8 @@ fn parse(s: str) -> i64 {
 }
 fn main(argc: i64, argv: [str]) -> i64 {
   let path = zeros(64);
-  let pl = st_str(path, "sgraph2.store");
+  let skew = if char(argv[2], 1) == 104 then 1 else 0;
+  let pl = if skew == 1 then st_str(path, "sgraph2h.store") else st_str(path, "sgraph2.store");
   let tmp = zeros(256);
   let size = 536870912;
   let ph = char(argv[2], 0);
@@ -355,13 +511,13 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let live = if ph == 99 then st_compact(path, pl, size, lay, 6, tmp) else 0;
   let base = st_open(path, pl, size, tmp);
   let t1 = clock_ms();
-  let r = if ph == 98 then phase_build(base, tmp, d) else if ph == 108 then phase_log(base, tmp, d, b0, nb, stall) else if ph == 110 then phase_nbr(base, tmp) else if ph == 100 then phase_del(base, tmp, d) else if ph == 102 then phase_bfs(base, tmp, nsrc) else 0;
+  let r = if ph == 98 then phase_build(base, tmp, d, skew) else if ph == 108 then phase_log(base, tmp, d, b0, nb, stall) else if ph == 110 then phase_nbr(base, tmp) else if ph == 100 then phase_del(base, tmp, d) else if ph == 102 then phase_bfs(base, tmp, nsrc) else if ph == 112 then phase_frontier(base, tmp, nsrc) else 0;
   let t2 = clock_ms();
   let g = st_root(base, tmp);
   let used = st_gen(base, tmp) * 0 + base[st_pick(base, tmp) + 4] * 8;
   let e1 = st_get(base, g, 1);
   let _ = sys_munmap(st_addr(base), size);
   let ms = if ph == 99 then t1 - t0 else t2 - t1;
-  let val = if ph == 108 then (ms * 1000000 / (nb * 10000)) * 1000 + stall[0] else if ph == 102 then ms * 1000000 / ((e1 + 1000000) * nsrc) else if ph == 110 then ms * 1000000 / 100000 else ms;
+  let val = if ph == 108 then (ms * 1000000 / (nb * 10000)) * 1000 + stall[0] else if ph == 102 then ms * 1000000 / ((e1 + 1000000) * nsrc) else if ph == 112 then ms * 1000000 / (e1 * nsrc) else if ph == 110 then ms * 1000000 / 100000 else ms;
   if ph == 122 then used else if ph == 109 then stall[0] else if ph == 99 then (if want_t == 1 then ms else live) else if want_t == 1 then val else r
 }

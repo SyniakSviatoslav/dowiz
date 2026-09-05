@@ -106,6 +106,8 @@ for f in "${DIR%/}/neg"/*.bp; do
     c29_emptybody) EXPECT=COMPILEFAIL:97;;
     c37_arenafull) EXPECT=RUNFAIL:80;;
     c38_frameheap) EXPECT=RUNFAIL:81;;
+    c48_stackovf) EXPECT=RUNFAIL:82;;
+    c52_undef) EXPECT=RUNFAIL:87;;
     c39_fnmatch) EXPECT=COMPILEFAIL:99;;
     *) EXPECT="";;
   esac

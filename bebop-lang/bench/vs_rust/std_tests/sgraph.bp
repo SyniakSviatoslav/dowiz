@@ -70,7 +70,7 @@ fn phase_build(base: [i64], tmp: [i64], drp: i64, dci: i64, dg: i64) -> i64 {
 }
 // bfs_from(base, rp, ci, n, s, level, queue): plain queue BFS; level[v] = -1 unvisited.
 // Returns reached + sum of levels; level/queue are caller scratch (n cells each).
-fn bfs_from(base: [i64], rp: i64, ci: i64, n: i64, s: i64, level: [i64], queue: [i64]) -> i64 {
+fn bfs_from(base: [i64], rp: ref RP, ci: ref CI, n: i64, s: i64, level: [i64], queue: [i64]) -> i64 {
   let i = 0;
   while i < n {
     let _ = level[i] = 0 - 1;

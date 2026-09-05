@@ -1202,7 +1202,7 @@ DEPS: T30. BLOCKERS: none.
 
 ### Layer E -- CRUD on the substrate
 
-**T32 . ad-hoc query JIT (predicate -> native filter kernel)** (`qjit.bp` + morph loop)
+**T32 . ad-hoc query JIT (predicate -> native filter kernel)** — RE-SCOPED 2026-09-06 to docs/LANG-DB-DESIGN.md §4f + T108: a query is an ordinary compiled fn over the store (G7's lookup/scan phases ARE the filter kernels, 630 ns / 1.8 us), memoized by the exact-bytes .becache; no separate JIT. (`qjit.bp` + morph loop)
 GOAL: (field, op, const) -> a `.bp` kernel text generated IN .bp (str-free
 arithmetic per R3.x(d)) -> compiled by bebop.bin -> published atomically
 (T11 morph path, W^X-clean file-backed RX) -> run over the T26 record
@@ -1731,7 +1731,7 @@ DONE-CHECK: gate `usemod`; `gen_selfsrc.sh` concatenation deleted;
 bebop.bp itself split into `use`d files with the fixpoint byte-exact.
 DEPS: T38. BLOCKERS: none.
 
-**T48 · checked types at zero runtime cost** — D10 2026-09-04: adds `ref T` (object-relative offset) as a distinct type — the only guard against an arena/frame address reaching a store cell; `[T]` and `fp` tagged in the layout digest. — PARTIAL 2026-09-05 (T48a: declared-vs-use census as invariants gate (vii) via tools/typecheck.py, 0 findings; found and fixed the emit_offsets 6-of-7-args call; T48b = `ref T`/[T]-with-length inside bebop.bin, scheduled with the STORE PULL). T125 (new): `&&`/`||` are accepted by bebop.bin (morph.bp:46) but undefined — define short-circuit forms or reject (bpref has neither).
+**T48 · checked types at zero runtime cost** — T48b `ref T` DONE ✓ 2026-09-06 in the census (tools/typecheck.py): `ref T` is a distinct type produced only by the store's ref producers (st_alloc/st_ref/st_root/st_mig/st_forward/st_copy_obj, typed `ref *`) or by params/returns declared `ref T`; findings for arithmetic on a ref, a ref used as an array index, an i64/[i64]/str where a `ref T` is declared (the literal 0 = null is allowed), a ref where a scalar is declared outside the generic store helpers, and a fn declared `-> ref T` that returns a number; the graph gates declare `ref RP`/`ref CI`/`ref G2`/`ref TB` params and the census is 0 findings over the corpus; bench/typecheck_neg/ref_misuse.bp must never type-check clean (invariants vii). The compiler already accepted `ref T` in signatures (types are textual), so the cost is zero words. — D10 2026-09-04: adds `ref T` (object-relative offset) as a distinct type — the only guard against an arena/frame address reaching a store cell; `[T]` and `fp` tagged in the layout digest. — PARTIAL 2026-09-05 (T48a: declared-vs-use census as invariants gate (vii) via tools/typecheck.py, 0 findings; found and fixed the emit_offsets 6-of-7-args call; T48b = `ref T`/[T]-with-length inside bebop.bin, scheduled with the STORE PULL). T125 (new): `&&`/`||` are accepted by bebop.bin (morph.bp:46) but undefined — define short-circuit forms or reject (bpref has neither).
 GOAL: the annotations the parser currently discards become checked:
 `i64`, `[i64]`, `str`, `fp` (fixed-point 2^32), `even`/`odd` (Z2 parity,
 T25 S3), `cell` (dispatcher cell id, T50). Mismatch = compile-time loud
@@ -2584,6 +2584,7 @@ none once clone works under proot.
 DONE-CHECK per task: its gate line in a committed script with the number above; fixpoint byte-exact (three generations); constructs re-frozen with deltas. DEPS: T96 (done), T43/T47/T48 first per the operator.
 
 **T118-T124 · decision-D11 tasks (2026-09-05)**
+- **T118b stack-overflow guard (exit 82)** — DONE ✓ 2026-09-06: every .bin now starts at a 39-word entry stub that installs a 64 KiB alternate signal stack and a SIGSEGV+SIGBUS handler (sigaltstack 132, rt_sigaction 134, SA_ONSTACK) whose only act is exit 82, then branches to main with argc/argv intact; the code image is PROT_READ|EXEC (seed.S), so the kernel sigaction and stack_t live in the arena at x27 (the first stub wrote into its own image and faulted — objdump-verified rewrite); neg construct c48_stackovf (unbounded recursion at 16 KiB per frame) = RUNFAIL:82; fixpoint 0af854a9; the compiler itself runs under the stub.
 - **T118 capacity traps** — DONE ✓ 2026-09-05 (exit 80 = zeros past x28 (5 words per zeros), exit 81 = array literal / enum ctor past the 16 KiB frame (7 words per site); neg gates c37_arenafull / c38_frameheap with the new `EXPECT=RUNFAIL:<code>` form; bpref mirrors the arena limit (SystemExit 80), the fuzzer classifies TRAP-OK / TRAP-8x / BPREF-TIMEOUT; the trap exposed the 4 MiB child arena of sys_clone (par_compile silently overran it) -> x28 = sp+12 MiB; word_budget.txt + census_allow.txt carry the growth; fixpoint 3e6f44e3; the stack-overflow guard (exit 82, sigaltstack + SIGSEGV handler at main entry) is T118b, open).
 - **T119 LANGUAGE.md + README** — DONE ✓ 2026-09-05.
 - **T120 trap-code table** — DONE ✓ 2026-09-05 (docs/TRAPS.md; T90 line:col diagnostics stays a task).
@@ -2610,7 +2611,7 @@ DEPS: T20, T97. BLOCKERS: none.
 
 ## STORE PULL (decision D10, 2026-09-04; spec = docs/LANG-DB-DESIGN.md §4 + §9.5; after T101-T108)
 
-**T130 · a call to an undefined function compiles silently** — OPEN (found by T47b, 2026-09-06): `fn main() { outer(3) }` with `outer` undefined compiles (rc 0) and returns 0 — the planning pass treats unresolved calls as neutral. A loud trap (exit 8x at the END of compilation when a call never resolved) is the fix; the two-pass design means the check must run after the final pass, not at the call site.
+**T130 · a call to an undefined function compiles silently** — DONE ✓ 2026-09-06 (the unresolved-callee path now emits mov x0,#87; mov x8,#94; svc instead of mov x0,#0: a runtime trap the moment the call executes; neg construct c52_undef = RUNFAIL:87; fixpoint 0af854a9 shared with T118b; found by T47b): `fn main() { outer(3) }` with `outer` undefined compiles (rc 0) and returns 0 — the planning pass treats unresolved calls as neutral. A loud trap (exit 8x at the END of compilation when a call never resolved) is the fix; the two-pass design means the check must run after the final pass, not at the call site.
 
 **T129 · an unwritable output path segfaulted the compiler** — DONE ✓ 2026-09-05 (cli_compile and use_expand now exit 90 when the output or the .use temp cannot be opened, instead of handing fd -1 to sys_export's mmap; found when a runner variable collision pointed the output at a missing directory; verified: `compile ... /no/such/dir/x.bin` -> 90).
 
@@ -2666,7 +2667,7 @@ floor subtracted and VM_STEP recorded: insert 1M, PK lookup, cell range scan
 10^4, update 10^5 (block CoW), reopen, file size, compaction, durable variant.
 Pass = PK lookup >= 3x sqlite native, scan >= 5x; file size reported even at the
 expected ~2.2x loss.
-**T117 · sgraph: G8** — stage 1 DONE ✓ 2026-09-06 (bench/vs_rust/sgraph.sh -> RESULT-sgraph.md: 1M nodes, 5M LCG pairs both ways as a CSR in the store; bebop BFS fold over 3 sources 21482396 and the neighbour fold 500446467359 == the python array-BFS oracle == sqlite; bebop: build 44.8 s (slow — 50M st_get/st_put calls through the library, to be profiled), queue BFS 187 ns per edge slot averaged over 100 sources, neighbours of v ~ns each; sqlite 3.46.1 (edge table, index (a,b), level-synchronous BFS with fixed frontier tables): build 242 s, BFS 10.8 us per edge = 57x slower, file 338 MB; stage 2 DONE ✓ 2026-09-06 (sgraph2.bp/sgraph2.sh, every fold == the one-run python oracle: 1M edges through the log in 100 batches, each rebuilding L0 over every logged edge, compaction every 20 batches — amortized 30 us per logged edge with a max batch stall of 747 ms (the O(N) L0 rebuild, exactly §9.3's point: the log is O(1), the row pointers are not); tombstoning 10% of the L1 slots = one 1.25 MB bitmap version, 131 ms; BFS over L1 minus tombstones plus L0 240 ns per edge slot; compaction 795 ms, logical size 122.5 -> 121.3 MB; neighbour queries after the log ~1.1 us each (10^5 in 113 ms; an earlier "112 us" was a units slip in the phase, not the store); the frontier SpMSpV push/pull row and the 1%-hub variant remain) — 1M nodes / 10M edges (uniform + 1%-hub skew) as edge log +
+**T117 · sgraph: G8** — stage 1 DONE ✓ 2026-09-06 (bench/vs_rust/sgraph.sh -> RESULT-sgraph.md: 1M nodes, 5M LCG pairs both ways as a CSR in the store; bebop BFS fold over 3 sources 21482396 and the neighbour fold 500446467359 == the python array-BFS oracle == sqlite; bebop: build 44.8 s (slow — 50M st_get/st_put calls through the library, to be profiled), queue BFS 187 ns per edge slot averaged over 100 sources, neighbours of v ~ns each; sqlite 3.46.1 (edge table, index (a,b), level-synchronous BFS with fixed frontier tables): build 242 s, BFS 10.8 us per edge = 57x slower, file 338 MB; stage 2 DONE ✓ 2026-09-06 (sgraph2.bp/sgraph2.sh, every fold == the one-run python oracle: 1M edges through the log in 100 batches, each rebuilding L0 over every logged edge, compaction every 20 batches — amortized 30 us per logged edge with a max batch stall of 747 ms (the O(N) L0 rebuild, exactly §9.3's point: the log is O(1), the row pointers are not); tombstoning 10% of the L1 slots = one 1.25 MB bitmap version, 131 ms; BFS over L1 minus tombstones plus L0 240 ns per edge slot; compaction 795 ms, logical size 122.5 -> 121.3 MB; neighbour queries after the log ~1.1 us each (10^5 in 113 ms; an earlier "112 us" was a units slip in the phase, not the store); frontier row 2026-09-06: Beamer direction-optimising BFS on bitmaps (push drains frontier words with clz, pull scans unvisited rows until a frontier bit, alpha = 14; sgraph2 phase p) = 45 ns per edge slot vs 192 ns for the queue BFS on the same 3 sources, fold identical (21482396) — a 4.3x from miss batching, inside §9.2's predicted 5-10x band's lower edge; the 1%-hub skewed graph (phase letters + h, sgraph2h.store, same oracle with the skewed generator) is wired into sgraph2.sh and measured in the next full run) — 1M nodes / 10M edges (uniform + 1%-hub skew) as edge log +
 tiered CSR in the store: BFS from 100 sources via queue vs frontier SpMSpV
 (push/pull switch) vs sqlite `WITH RECURSIVE` (expected ~15-40 ns vs ~1.5 us per
 edge); insert 1M edges through the log with L0/L1 rebuilds (ns/edge, max stall);
@@ -2684,7 +2685,7 @@ that detects periodicity, WFE, 4x WHT redundancy) but the analysis
 them produces speed on this hardware. They stay as robustness/energy
 work, scheduled after T101-T108, and must never appear in a speed claim.
 
-**T57 · substrate runtime prelude, seed stays frozen** — the sweep loop,
+**T57 · substrate runtime prelude, seed stays frozen** — RE-SCOPED 2026-09-06 under D8/T55/T107: no runtime cell substrate for ordinary code (41x/740x measured); the sweep engine lives in bench/substrate_spike (spike.bp, incr.bp) and pays only below ~0.4% activity; eigentime/WFE/holographic loading stay forward-port ideas without a gate. — the sweep loop,
 activity words, cell table and bank load/store live in a `.bp` prelude
 linked (T47) into every substrate artifact; `seed.S` (1496B, frozen) is
 unchanged and only maps + jumps. Fix the seed.S:55 comment (256MB).
@@ -2693,7 +2694,7 @@ count frozen in census.
 DEPS: T47, T55. BLOCKERS: none.
 
 
-**T58 · eigentime as the scheduler** — sweep count and quiescence
+**T58 · eigentime as the scheduler** — RE-SCOPED 2026-09-06 under D8/T55/T107: no runtime cell substrate for ordinary code (41x/740x measured); the sweep engine lives in bench/substrate_spike (spike.bp, incr.bp) and pays only below ~0.4% activity; eigentime/WFE/holographic loading stay forward-port ideas without a gate. — sweep count and quiescence
 detection ARE the clock (SS-17 seigtime moves from gate to runtime):
 the prelude exposes `sweeps()`; WFE/WFI on quiescence is forward-port.
 DONE-CHECK: substrate K1-K4 report sweep counts == the mirror's; step
@@ -2701,7 +2702,7 @@ counts replace clock_ms as the primary benchmark number.
 DEPS: T55. BLOCKERS: none.
 
 
-**T60 · holographic artifact** — the `.bt` incidence tensor is WHT-
+**T60 · holographic artifact** — RE-SCOPED 2026-09-06 under D8/T55/T107: no runtime cell substrate for ordinary code (41x/740x measured); the sweep engine lives in bench/substrate_spike (spike.bp, incr.bp) and pays only below ~0.4% activity; eigentime/WFE/holographic loading stay forward-port ideas without a gate. — the `.bt` incidence tensor is WHT-
 encoded with redundancy (N6 `holo.bp` from gate to loader): a trimmed
 artifact still loads and runs to the same fold.
 DONE-CHECK: gate `holoload`: zero 1/4 of the artifact's cells, run, fold
@@ -2710,7 +2711,7 @@ picture" claim gets a number).
 DEPS: T57. BLOCKERS: none.
 
 
-**T74 · WFE at quiescence** (ENERGY §1.2) — strengthens T57, T58
+**T74 · WFE at quiescence** — RE-SCOPED 2026-09-06 under D8/T55/T107: no runtime cell substrate for ordinary code (41x/740x measured); the sweep engine lives in bench/substrate_spike (spike.bp, incr.bp) and pays only below ~0.4% activity; eigentime/WFE/holographic loading stay forward-port ideas without a gate. (ENERGY §1.2) — strengthens T57, T58
 GOAL: the substrate prelude emits `wfe` when the activity word is 0 and
 no input cell is armed; a `sev` from the input path wakes it. In-sandbox
 the gate checks the word placement and that quiescent programs still

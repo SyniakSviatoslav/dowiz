@@ -37,7 +37,7 @@ one() {
     *) { echo "// $cat seed=$s expected=$exp got=$got"; cat "$d/p.bp"; } >"$REPROS/$cat-$s.bp" ;;
   esac
   echo "${cat:-HARNESS-ERROR} $s"
-  ls "$d" | grep -v -E '^(p\.bp|p\.bin|gerr)$' | sed "s/^/STRAY $s /"  # anything else = a stray file written by a run
+  ls "$d" | grep -v -E '^(p\.bp|p\.bin|p\.bin\.becache|gerr)$' | sed "s/^/STRAY $s /"  # anything else = a stray file written by a run
   rm -rf "$d"
 }
 export -f one

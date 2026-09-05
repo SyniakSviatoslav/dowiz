@@ -1,0 +1,4 @@
+// T118b (2026-09-06): unbounded recursion at 16 KiB per frame overruns the stack; the
+// entry stub's SIGSEGV handler turns the fault into exit 82 instead of a kernel kill.
+fn down(n: i64) -> i64 { down(n + 1) + 1 }
+fn main() -> i64 { down(0) }

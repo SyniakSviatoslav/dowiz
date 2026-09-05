@@ -101,6 +101,7 @@ Honest twins (bench/vs_rust/honest.sh, D11-C): see bench/vs_rust/REPORT-honest.m
 | graph in the store, 1M nodes 10M edge slots (bench/vs_rust/sgraph.sh + sgraph2.sh, G8/T117) | store | sqlite 3.46.1 | ratio |
 |---|---|---|---|
 | BFS, ns per edge (bebop 100 sources; sqlite level-synchronous, 3 sources) | 187 | 10758 | 57x |
+| BFS on L1, queue vs frontier SpMSpV (push/pull, alpha 14), ns per edge slot, 3 sources | 192 vs 45 (4.3x) | | |
 | build the CSR | 44.8 s | 242 s | 5.4x |
 | 1M edges through the edge log, 100 L0 rebuilds, 5 compactions | 30 us / edge, max stall 747 ms | | |
 | tombstone 10% + commit / BFS with tombstones + log / compaction | 131 ms / 240 ns per slot / 795 ms | | |

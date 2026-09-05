@@ -12,9 +12,10 @@ def s64(x): x &= M; return x - (1 << 64) if x >> 63 else x
 N = 1000000; E = 5000000
 mode = sys.argv[1] if len(sys.argv) > 1 else 'all3'
 with_log = True; with_del = True
-src = array('i', [0]) * E; dst = array('i', [0]) * E; deg = array('i', [0]) * (N + 1); x = 4242
+src = array('i', [0]) * E; dst = array('i', [0]) * E; deg = array('i', [0]) * (N + 1); skew = len(sys.argv) > 2 and sys.argv[2] == 'h'   # 1%-hub variant: half of the destinations land on nodes 0..9999
+x = 4242
 for i in range(E):
-    x = lcg(x); a = (x >> 20) % N; x = lcg(x); b = (x >> 20) % N
+    x = lcg(x); a = (x >> 20) % N; x = lcg(x); b = ((x >> 20) % 10000) if (skew and ((x >> 10) & 1)) else ((x >> 20) % N)
     src[i] = a; dst[i] = b; deg[a + 1] += 1; deg[b + 1] += 1
 rp = array('q', [0]) * (N + 1)
 for v in range(N): rp[v + 1] = rp[v] + deg[v + 1]

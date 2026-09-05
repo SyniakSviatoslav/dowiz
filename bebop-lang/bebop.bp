@@ -3259,7 +3259,9 @@ fn emit_call(s: str, fname: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64]
   let pcnt = pcnt1 * okres;
   let _ = skip_to(s, ppos, 123);
   let body = ppos[0] + 1;
-  let _ = if okres == 0 then (let _ = em(insns, n, 3531603968) in (let _ = push(insns, n, fntab) in 0)) else 0;
+  // T130 (2026-09-06): a call whose callee never resolves is a RUNTIME trap (exit 87),
+  // not a silent 0 -- mov x0,#87; mov x8,#94; svc; the push keeps the stack shape.
+  let _ = if okres == 0 then (let _ = em(insns, n, 3531606752) in (let _ = em(insns, n, 3531606984) in (let _ = em(insns, n, 3556769793) in (let _ = push(insns, n, fntab) in 0)))) else 0;
   let _ = pos[0] = pos[0] + 1;
   let i = 0;
   while i < pcnt {
@@ -4356,6 +4358,58 @@ fn use_expand(srcv: str, tmpc: [i64], tmpl: i64) -> str {
   out
 }
 
+// T118b (2026-09-06): the entry stub. Every .bin starts here instead of at main: it
+// installs a 64 KiB alternate signal stack and a SIGSEGV + SIGBUS handler (sigaltstack
+// 132, rt_sigaction 134, SA_ONSTACK) whose only act is exit 82 -- so a stack overflow
+// (deep recursion at 16 KiB per frame) or a wild access is a LOUD trap, not a
+// kernel-killed process. The code image is PROT_READ|EXEC, so the kernel sigaction
+// {handler, flags, restorer, mask} (32 B) and stack_t {sp, flags, size} (24 B) are
+// built in the ARENA at x27 (kept in x7) and the alternate stack follows them; x27
+// advances by 65600. argc/argv are preserved in x5/x6; word 35 is `b main`, patched
+// by the caller; words 36-38 are the handler. Assembled by python + objdump (scratch
+// stub2.bin), 39 words.
+fn entry_stub(st: [i64]) -> i64 {
+  let _ = st[0] = 2852127717;
+  let _ = st[1] = 2852193254;
+  let _ = st[2] = 2853897191;
+  let _ = st[3] = 268436514;
+  let _ = st[4] = 4177527010;
+  let _ = st[5] = 3533766658;
+  let _ = st[6] = 4177528034;
+  let _ = st[7] = 4177529087;
+  let _ = st[8] = 4177530111;
+  let _ = st[9] = 2432729315;
+  let _ = st[10] = 2432762084;
+  let _ = st[11] = 4177526884;
+  let _ = st[12] = 4177527935;
+  let _ = st[13] = 3533701156;
+  let _ = st[14] = 4177528932;
+  let _ = st[15] = 2332296059;
+  let _ = st[16] = 2432762747;
+  let _ = st[17] = 2852324320;
+  let _ = st[18] = 2854159329;
+  let _ = st[19] = 3531608200;
+  let _ = st[20] = 3556769793;
+  let _ = st[21] = 3531604320;
+  let _ = st[22] = 2852586465;
+  let _ = st[23] = 2854159330;
+  let _ = st[24] = 3531604227;
+  let _ = st[25] = 3531608264;
+  let _ = st[26] = 3556769793;
+  let _ = st[27] = 3531604192;
+  let _ = st[28] = 2852586465;
+  let _ = st[29] = 2854159330;
+  let _ = st[30] = 3531604227;
+  let _ = st[31] = 3531608264;
+  let _ = st[32] = 3556769793;
+  let _ = st[33] = 2852455392;
+  let _ = st[34] = 2852520929;
+  let _ = st[35] = 335544320;
+  let _ = st[36] = 3531606592;
+  let _ = st[37] = 3531606984;
+  let _ = st[38] = 3556769793;
+  39
+}
 fn cli_compile(argc: i64, argv: [str]) -> i64 {
   let src = argv[3];
   let out = argv[4];
@@ -4403,14 +4457,33 @@ fn cli_compile(argc: i64, argv: [str]) -> i64 {
     return 0;
     0
   };
-  let words = emit_words(srcv);
-  let n = words[0];
+  let words0 = emit_words(srcv);
+  let n0 = words0[0];
   let offs = emit_offsets(srcv);
   let fnames = zeros(256);
   let fpos = zeros(256);
   let cnt = [0];
   let _ = collect_fns(srcv, fnames, fpos, cnt);
-  let entry = offs[idx_of_main(fnames, cnt[0]) + 1];
+  let main_off = offs[idx_of_main(fnames, cnt[0]) + 1];
+  let stub = zeros(39);
+  let _ = entry_stub(stub);
+  let _ = stub[35] = 335544320 + ((main_off - (n0 + 35)) & 67108863);
+  let words = zeros(n0 + 40);
+  let ci = 0;
+  while ci <= n0 {
+    let _ = words[ci] = words0[ci];
+    let ci = ci + 1;
+    0
+  };
+  let cj = 0;
+  while cj < 39 {
+    let _ = words[n0 + 1 + cj] = stub[cj];
+    let cj = cj + 1;
+    0
+  };
+  let n = n0 + 39;
+  let _ = words[0] = n;
+  let entry = n0;
   let e4 = entry * 4;
   let nb = n * 4 + 8;
   let buf = zeros(nb);

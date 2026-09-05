@@ -22,7 +22,8 @@ ret; the code region ends at the last ret, data cells follow.
               (bebop.bp emit_call: `pop(insns, n, i, fntab)` for i >= 9).
   Everything else is a violation.
 (iv) footer/entry identity (L11/L12): size >= 16, size % 4 == 0, entry
-  byte offset % 4 == 0, entry inside the code region and at a prologue,
+  byte offset % 4 == 0, entry inside the code region and at a prologue (or, since
+  T118b, at the 39-word entry stub whose word 35 is `b` to a prologue),
   every fn span ends with ret, no fn starts inside the data cells.
 
 Decoder: minimal AArch64 register-write classifier by op0 (bits 28-25);
@@ -107,7 +108,24 @@ def sys_allow(bp):
     return allow
 
 
-def check_bin(path, allow):
+def entry_stub(bp):
+    """T118b: the 39 words of bebop.bp entry_stub (`st[i] = <int>`); word 35 is `b main`."""
+    m = re.search(r"^fn entry_stub\(.*?\n}\n", open(bp).read(), re.S | re.M)
+    return [int(x) for x in re.findall(r"st\[\d+\] = (\d+)", m.group(0))] if m else []
+
+
+def at_stub(W, entry, starts, stub):
+    """entry is the T118b stub iff its 39 words match the template and word 35 branches to a fn prologue."""
+    span = W[entry:entry + len(stub)]
+    if len(stub) != 39 or len(span) != 39 or any(a != b for i, (a, b) in enumerate(zip(span, stub)) if i != 35):
+        return False
+    b = span[35]
+    imm = b & 0x3FFFFFF
+    imm -= 1 << 26 if imm & (1 << 25) else 0
+    return (b >> 26) == 5 and entry + 35 + imm in starts
+
+
+def check_bin(path, allow, stub=()):
     """-> (errors, sys_count, argpass_count)."""
     try:
         W, entry, code_end = load_bin(path)
@@ -115,8 +133,8 @@ def check_bin(path, allow):
         return [f"footer: {e}"], 0, 0
     starts = fn_starts(W, code_end)
     errs, nsys, narg = [], 0, 0
-    if entry not in starts:
-        errs.append(f"entry word {entry} is not a fn prologue (L11)")
+    if entry not in starts and not at_stub(W, entry, starts, stub):
+        errs.append(f"entry word {entry} is not a fn prologue nor the T118b entry stub -> main (L11)")
     for i in range(code_end, len(W) - 1):
         if (W[i], W[i + 1]) == PROLOGUE:
             errs.append(f"fn prologue @{i} inside data cells")
@@ -207,10 +225,10 @@ def main(argv):
     bp = os.path.join(ROOT, "bebop.bp")
     if argv[0] == "--allow-from":
         bp, argv = argv[1], argv[2:]
-    allow = sys_allow(bp)
+    allow, stub = sys_allow(bp), entry_stub(bp)
     rc = 0
     for path in argv:
-        errs, nsys, narg = check_bin(path, allow)
+        errs, nsys, narg = check_bin(path, allow, stub)
         if errs:
             rc = 1
             print(f"ABI FAIL {path}:")

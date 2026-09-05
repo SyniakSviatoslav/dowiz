@@ -33,11 +33,11 @@ for k in ['k1h','k2h','k3h','k4']:
     rows.append((k,med(bb),med(rs)))
 md5=hashlib.md5(open(BB,'rb').read()).hexdigest()[:8]
 print(f'# honest twins (D11-C), in-process pinned core {PIN}, R={R}, bebop.bin {md5}')
-print('| kernel | bebop med / p95 ms | Rust honest med / p95 ms | bebop / Rust |')
-print('|---|---|---|---|')
+print('| kernel | bebop med / p95 ms | Rust honest med / p95 ms | bebop / Rust | target >= 1.0x (T83) |')
+print('|---|---|---|---|---|')
 for k,(bm,bp),(rm,rp) in rows:
     ratio = bm/rm if rm==rm and rm>0 else float('nan')
-    print(f'| {k.upper()} | {bm:.1f} / {bp:.1f} | {rm:.3f} / {rp:.3f} | {ratio:.1f}x |' if rm==rm else f'| {k.upper()} | {bm:.1f} / {bp:.1f} | (K4 twin prints no in-process ms; 2.85 ms measured in SPEEDUP-ANALYSIS) | — |')
+    print(f'| {k.upper()} | {bm:.1f} / {bp:.1f} | {rm:.3f} / {rp:.3f} | {ratio:.1f}x | {"MET" if ratio <= 1.0 else "UNMET"} |' if rm==rm else f'| {k.upper()} | {bm:.1f} / {bp:.1f} | (K4 twin prints no in-process ms; 2.85 ms measured in SPEEDUP-ANALYSIS) | — |')
 import re
 try:
     k6=re.search(r'\| bebop scan nn\.bp \(Q=20\) \| ([0-9.]+) ms', open('bench/tq_sqlite/RESULT.md').read()).group(1)

@@ -1,0 +1,8 @@
+// T48b (2026-09-06): every fn here must produce a type-census finding; invariants (vii)
+// fails if this file ever type-checks clean. `ref P` is an object-relative store offset.
+fn arith(p: ref P) -> i64 { p + 1 }
+fn forge(base: [i64]) -> ref P { 1024 }
+fn leak(p: ref P, arr: [i64]) -> i64 { arr[p] }
+fn addr_as_ref(base: [i64]) -> i64 { take(base, base) }
+fn take(base: [i64], p: ref P) -> i64 { 0 }
+fn main() -> i64 { 0 }
