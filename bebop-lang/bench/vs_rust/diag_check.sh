@@ -20,4 +20,11 @@ python3 -c 'print("fn main() -> i64 {\n  let s = 1;"); [print("  let s = s + %d;
 err=$(./seed/build/seed "$BIN" compile "$T/d99_cap.bp" "$T/d99_cap.bin" 2>&1 >/dev/null); rc=$?
 if [ "$rc" = 83 ] && [ "$err" = "code buffer exhausted at 65536 words (one fn or the program)" ]; then echo "PASS d99_cap exit 83: $err"; pass=$((pass+1));
 else echo "FAIL d99_cap want exit 83 + message, got exit $rc: $err"; fail=$((fail+1)); fi
+# T90 step 2b (2026-09-06): `check <src>` = the same diagnostics, no output file
+err=$(./seed/build/seed "$BIN" check bench/diag_neg/d01_paren.bp 2>&1 >/dev/null); rc=$?
+if [ "$rc" = 95 ] && [ "$(echo "$err" | tail -n 1 | cut -d: -f1,2)" = 4:17 ]; then echo "PASS check d01 4:17 exit 95"; pass=$((pass+1));
+else echo "FAIL check d01 want 4:17 exit 95, got exit $rc: $err"; fail=$((fail+1)); fi
+rm -f "$T/c53.bin"; out=$(./seed/build/seed "$BIN" check bench/parity_constructs/c53_param9.bp 2>&1); rc=$?
+if [ "$rc" = 0 ] && [ ! -e bench/parity_constructs/c53_param9.bin ]; then echo "PASS check c53_param9 exit 0, no .bin written"; pass=$((pass+1));
+else echo "FAIL check c53_param9 want exit 0 and no .bin, got exit $rc: $out"; fail=$((fail+1)); fi
 echo "diag: $pass pass, $fail fail"; [ "$fail" = 0 ]

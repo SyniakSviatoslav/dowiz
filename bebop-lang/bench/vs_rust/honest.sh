@@ -4,6 +4,9 @@
 # vectorise; K2h: fib(25) with #[inline(never)]; K4 unchanged) for bebop
 # (bench630/k*ht.bp clock_ms) and Rust (rust_once/k*h.rs Instant on stderr).
 # Run on a QUIET machine. env: BEBOP_BIN, BEBOP_TMP, R (default 11).
+# 2026-09-06: clock_ms is 1 ms coarse, so every kernel runs REPS=100 reps in-process and
+# returns the TOTAL ms; the table divides by REPS (0.01 ms resolution). K4 has its own
+# honest twin now (rust_once/k4h.rs, black_box only on input/output).
 set -u
 cd "$(dirname "$0")/../.."
 ulimit -s 65536 2>/dev/null
@@ -13,7 +16,7 @@ BIG=$(awk '/^processor/{p=$3} /CPU part/ && $NF=="0xd41"{print p}' /proc/cpuinfo
 PIN=$(python3 -c "import os;u=sorted(os.sched_getaffinity(0));b=[int(x) for x in '$BIG'.split()];print(next((c for c in b if c in u),u[0]))")
 for k in k1h k2h k3h k4; do
   ./seed/build/seed "$BEBOP_BIN" compile bench/vs_rust/bench630/${k}t.bp "$T/${k}t.bin" >/dev/null 2>&1 || { echo "COMPILEFAIL ${k}t"; exit 1; }
-  rustc -O -o "$T/rust/$k" bench/vs_rust/rust_once/$k.rs 2>/dev/null || { echo "RUSTC FAIL $k"; exit 1; }
+  rustc -O -o "$T/rust/$k" bench/vs_rust/rust_once/$([ $k = k4 ] && echo k4h || echo $k).rs 2>/dev/null || { echo "RUSTC FAIL $k"; exit 1; }
 done
 T="$T" R="$R" PIN="$PIN" BB="$BEBOP_BIN" python3 - <<'PY'
 import os, subprocess, statistics, hashlib
@@ -24,27 +27,31 @@ for k in ['k1h','k2h','k3h','k4']:
     bb=[]; rs=[]
     for _ in range(R):
         v=subprocess.run(['taskset','-c',PIN,'./seed/build/seed',f'{T}/{k}t.bin'],capture_output=True,text=True).stdout.strip().split('\n')[-1]
-        bb.append(int(v)/10.0)
-        if k=='k4':
-            rs.append(float('nan'))
-        else:
+        bb.append(int(v)/100.0)  # TOTAL ms over REPS=100 reps
+        if True:
             e=subprocess.run(['taskset','-c',PIN,f'{T}/rust/{k}'],capture_output=True,text=True).stderr.strip().split('\n')[-1]
             rs.append(float(e))
     rows.append((k,med(bb),med(rs)))
 md5=hashlib.md5(open(BB,'rb').read()).hexdigest()[:8]
-print(f'# honest twins (D11-C), in-process pinned core {PIN}, R={R}, bebop.bin {md5}')
-print('| kernel | bebop med / p95 ms | Rust honest med / p95 ms | bebop / Rust | target >= 1.0x (T83) |')
+print(f'# honest twins (D11-C), in-process pinned core {PIN}, R={R}, REPS=100 per run, bebop.bin {md5}')
+print('| kernel | bebop med / p95 ms per rep | Rust honest med / p95 ms per rep | bebop / Rust | target >= 1.0x (T83) |')
 print('|---|---|---|---|---|')
 for k,(bm,bp),(rm,rp) in rows:
     ratio = bm/rm if rm==rm and rm>0 else float('nan')
-    print(f'| {k.upper()} | {bm:.1f} / {bp:.1f} | {rm:.3f} / {rp:.3f} | {ratio:.1f}x | {"MET" if ratio <= 1.0 else "UNMET"} |' if rm==rm else f'| {k.upper()} | {bm:.1f} / {bp:.1f} | (K4 twin prints no in-process ms; 2.85 ms measured in SPEEDUP-ANALYSIS) | — |')
+    print(f'| {k.upper()} | {bm:.2f} / {bp:.2f} | {rm:.3f} / {rp:.3f} | {ratio:.1f}x | {"MET" if ratio <= 1.0 else "UNMET"} |')
 import re
 try:
     k6=re.search(r'\| bebop scan nn\.bp \(Q=20\) \| ([0-9.]+) ms', open('bench/tq_sqlite/RESULT.md').read()).group(1)
 except Exception: k6='?'
-try:
-    k5=re.search(r'self-compile pinned[^|]*\|[^|]*?([0-9.]+) s', open('ROADMAP.md').read()).group(1)
-except Exception: k5='?'
-print(f'| K5 self-compile (ROADMAP Measured, pinned, single run) | {k5} s | (no twin: rustc is not a fair twin of a 200 KB one-pass compiler) | |')
+# K5 (2026-09-06): measured here, COLD (the .becache replay is removed before every run), 3 runs, median
+import time
+k5v=[]
+for _ in range(3):
+    for f in (f'{T}/k5.bin', f'{T}/k5.bin.becache', f'{T}/k5.bin.use'):
+        try: os.remove(f)
+        except FileNotFoundError: pass
+    t=time.time(); subprocess.run(['taskset','-c',PIN,'./seed/build/seed',BB,'compile','bebop.bp',f'{T}/k5.bin'],capture_output=True); k5v.append(time.time()-t)
+k5=sorted(k5v)[1]
+print(f'| K5 self-compile of bebop.bp (cold, pinned, median of 3) | {k5:.2f} s | (no twin: rustc is not a fair twin of a 200 KB one-pass compiler) | |')
 print(f'| K6 nnidx scan 1M (bench/tq_sqlite/RESULT.md, Q=20) | {k6} ms | sqlite scan 183 ms python / ~158 ms native (T100) | store faster |')
 PY

@@ -42,7 +42,7 @@ and retired by decisions D8-D10.
 
 | # | criterion | script / gate | today (2026-09-05) | target |
 |---|---|---|---|---|
-| 1 | honest kernels, in-process pinned, bebop / Rust twin (D11-C) | bench/vs_rust/honest.sh | K1h, K2h, K3h, K4 rows measured after T118 (see Measured) | every row <= 2.0x after T101-T104; <= 1.0x is the D1(a) stretch, decided on the numbers |
+| 1 | honest kernels, in-process pinned, bebop / Rust twin (D11-C) | bench/vs_rust/honest.sh | 2026-09-06 (REPORT-honest.md, 94e47998, REPS=100): K1H 1.8x, K2H 3.3x, K3H 3.4x, K4 1.6x | every row <= 2.0x after T101-T104; <= 1.0x is the D1(a) stretch, decided on the numbers |
 | 2 | linear self-hosting fixpoint | every codegen commit (AGENTS law) | gen3 == gen4 c3f58e8e (2026-09-06) | invariant, never a goal |
 | 3 | one oracle per gate, none self-frozen | bench/oracles/run_all.sh | ok=99 self-frozen=0; every gate mutation-sensitive (T123 sweep 2026-09-06, tools/mutate_gate.sh) | 0 self-frozen; T124 fold specs written (docs/FOLDS.md) |
 | 4 | zero tolerated miscompiles | construct_parity (52 constructs incl. neg), fuzz | R3.x deleted; DIVERGE-20056 (2026-09-06) was an undefined program (loop-release rule now in LANGUAGE.md, bpref raises, gen.py never emits it); DIVERGE-42122 (2026-09-06) WAS a miscompile — a 9+-param callee whose body never touched x15 wrote its 9th param into the caller's spill slot (OPT-G1 scan started after the param stores) — fixed, construct c53_param9 | fuzz >= 10^5 programs, 0 CRASH / DIVERGE, traps only (TG-DONE 8) |
@@ -105,8 +105,16 @@ Parallel-safe at any time: docs, oracles, fuzz batches, honest.sh rows, T78/T79/
 | K1 loop words/iteration | 51 | 14 | 3 | |
 | isqrt / fp_div, 1M calls (T105, scratch micro-bench, pinned A78) | 286 ms / 253 ms (restoring loops) | 41 ms / 22 ms (clz Newton / sdiv base-2^k) | | 7x / 10x faster |
 
-Honest twins (bench/vs_rust/honest.sh, D11-C): see bench/vs_rust/REPORT-honest.md
-(first run recorded after T118).
+Honest twins (bench/vs_rust/honest.sh, D11-C, 2026-09-06, bebop.bin 94e47998, REPS=100 in-process,
+pinned core 4, R=11 medians; bench/vs_rust/REPORT-honest.md has the p95 column and the method):
+
+| kernel | bebop ms | Rust honest twin ms | bebop / Rust |
+|---|---|---|---|
+| K1H s = s*3 + i, 1M | 2.07 | 1.132 | 1.8x |
+| K2H fib(25), inline(never) | 1.30 | 0.397 | 3.3x |
+| K3H 300x300 nonlinear accumulator | 0.65 | 0.194 | 3.4x |
+| K4 (v + i*7)*3 - 11, 2M (twin black_box on input/output only) | 5.26 | 3.259 | 1.6x |
+| K5 self-compile of bebop.bp, cold, median of 3 | 1.67 s | | |
 
 | tensor query, 1M points (bench/tq_sqlite/run.sh, T100) | sqlite 3.46 | bebop | bebop faster by |
 |---|---|---|---|
@@ -150,7 +158,7 @@ Honest twins (bench/vs_rust/honest.sh, D11-C): see bench/vs_rust/REPORT-honest.m
 | DRAM bandwidth, one A78 / three | ~12 GB/s / ~12 GB/s |
 | process RSS K1-K4, bebop / Rust | 16-17 MB / 16-17 MB |
 | self-compile pinned (2026-09-05 re-measured, core 4: T109 binary / T126 binary) | 294.5 s, 94 MB / 292.9 s, 111 MB (the 108.7 s row of 2026-09-04 is not reproducible today; same box, same core) |
-| self-compile after the 2026-09-06 speed-ups (third pass removed, slen), gen3 / gen4 of the chain | 17 s / 15 s |
+| self-compile after the 2026-09-06 speed-ups (third pass removed, slen, str_len hoist a27b594), cold / warm .becache hit | 1.5-1.7 s / 0.07 s |
 | compile of a std gate, cold / warm .becache hit / trivial-program floor (T108, becache_gate.sh) | 346 ms / 113 ms / 106 ms |
 | page-cache read fault / CoW fault / msync 1 page / rename (proot) | 0.3 us / 3.5 us / ~100 us / ~270 us |
 

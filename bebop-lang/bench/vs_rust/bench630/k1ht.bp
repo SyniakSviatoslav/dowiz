@@ -1,9 +1,17 @@
 // K1h (D11-C honest twin of rust_once/k1h.rs): s = s*3 + i wrapping, i = 1M..1
+// REPS=100 reps in-process (2026-09-06): clock_ms is 1 ms coarse, so main returns the
+// TOTAL ms over REPS reps; honest.sh divides by REPS (0.01 ms resolution). s is carried
+// across reps so no rep is dead.
 fn main() -> i64 {
   let t0 = clock_ms();
   let s = 0;
-  let i = 1000000;
-  while i > 0 { let s = s * 3 + i; let i = i - 1; 0 };
+  let rep = 100;
+  while rep > 0 {
+    let i = 1000000;
+    while i > 0 { let s = s * 3 + i; let i = i - 1; 0 };
+    let rep = rep - 1;
+    0
+  };
   let r = s;
-  ((clock_ms() - t0) * 10) + r * 0
+  (clock_ms() - t0) + r * 0
 }

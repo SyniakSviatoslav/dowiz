@@ -1,18 +1,24 @@
 // K3h (D11-C honest twin of rust_once/k3h.rs): 300x300, a = a*3 + x*2 + y*3 wrapping
+// REPS=100 reps in-process, main returns the TOTAL ms (honest.sh / REPS); a carried across reps
 fn main() -> i64 {
   let t0 = clock_ms();
   let a = 0;
-  let x = 300;
-  while x > 0 {
-    let y = 300;
-    while y > 0 {
-      let a = a * 3 + x * 2 + y * 3;
-      let y = y - 1;
+  let rep = 100;
+  while rep > 0 {
+    let x = 300;
+    while x > 0 {
+      let y = 300;
+      while y > 0 {
+        let a = a * 3 + x * 2 + y * 3;
+        let y = y - 1;
+        0
+      };
+      let x = x - 1;
       0
     };
-    let x = x - 1;
+    let rep = rep - 1;
     0
   };
   let r = a;
-  ((clock_ms() - t0) * 10) + r * 0
+  (clock_ms() - t0) + r * 0
 }

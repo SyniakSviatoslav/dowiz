@@ -1,12 +1,19 @@
-// K4 bench: tight mixed-arith chain 2M, in-process clock_ms delta
+// K4 bench: tight mixed-arith chain 2M, REPS=100 reps in-process, main returns the TOTAL ms
+// (honest.sh / REPS); v carried across reps
 fn main() -> i64 {
   let t0 = clock_ms();
   let v = 1;
-  let i = 2000000;
-  while i > 0 {
-    let v = (v + i * 7) * 3 - 11;
-    let i = i - 1;
+  let rep = 100;
+  while rep > 0 {
+    let i = 2000000;
+    while i > 0 {
+      let v = (v + i * 7) * 3 - 11;
+      let i = i - 1;
+      0
+    };
+    let rep = rep - 1;
     0
   };
-  ((clock_ms() - t0) * 10)
+  let r = v;
+  (clock_ms() - t0) + r * 0
 }
