@@ -43,6 +43,10 @@ def run(cmd, t, cwd):
         return 124, '', ''
 
 
+def oracle(bp, wd):  # the semantic oracle; fuzz_batch.py rebinds this to an in-process fork of bpref
+    return run(['python3', BPREF, bp], 40, wd)  # D11-D widened generator: 40 s oracle budget
+
+
 def last_line(s):
     s = s.strip()
     return s.split('\n')[-1] if s else ''
@@ -59,7 +63,7 @@ def classify(src=None, bp=None, wd=None):
     bp = os.path.abspath(bp)
     wd = wd or os.path.dirname(bp)
     bn = bp[:-3] + '.bin'
-    rc, out, err = run(['python3', BPREF, bp], 40, wd)  # D11-D widened generator: 40 s oracle budget
+    rc, out, err = oracle(bp, wd)
     if rc == 3:
         return 'BPREF-DEPTH', err.strip()[-120:], ''
     if rc == 124:  # the oracle timed out: generator too heavy, not a compiler verdict

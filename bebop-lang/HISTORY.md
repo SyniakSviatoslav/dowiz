@@ -2228,7 +2228,7 @@ bebop.bin; the chain doc lists every hash.
 DEPS: T45. BLOCKERS: witness must still compile the current surface
 (freeze the surface subset the witness supports).
 
-**T90 · `bebop.bin check <file>` with line:col diagnostics** (C4a)
+**T90 · `bebop.bin check <file>` with line:col diagnostics** (C4a) — STEP 1 DONE 2026-09-06 (exits 95-99 now print `line:col: <message>` on stderr before the old code: diag_exit in bebop.bp; bench/diag_neg/d01..d09 with hand-counted EXPECT headers, bench/vs_rust/diag_check.sh in tools/battery.sh; open: the `check` verb, the lax parses d08/d10, messages for the runtime traps)
 GOAL: parse + type/effect/quantity checks (T48/T68/T70) with no
 emission; every trap word class gets a message and a `file:line:col`;
 exit codes distinct per class (the KEEP pattern).
@@ -2583,7 +2583,7 @@ none once clone works under proot.
 - **T108 .becache for the live compiler** — DONE ✓ 2026-09-05 (no digest: `<out>.becache` = exact compiler bytes ++ expanded source bytes, streamed through 8192-byte scratch chunks and compared byte-for-byte against argv[1] and the expanded source, so a hit can never collide; publish mode bypasses; fixpoint c8e44292, census bcond +54 / cbz +7 ALLOWed; bench/vs_rust/becache_gate.sh: 92 std gates cold 346 ms per compile -> warm 113 ms, process floor 106 ms (running a trivial .bin under seed), warm bins byte-identical; the original '>= 5x warm std_golden' is unattainable behind a ~100 ms per-process floor and 25 s of gate RUN time, so the gate is 'warm <= 1.5x floor' — PASS; a first 1M-cell buffer version tripped the arena trap 80 — the trap earned its keep; OPEN observation: the 90-106 ms floor for a trivial program is the seed/proot startup, worth a look before any latency claim): digest(source) -> .bin replay in cli_compile; gate std_golden warm run >= 5x faster, folds identical; makes T32 qjit memoized by construction.
 DONE-CHECK per task: its gate line in a committed script with the number above; fixpoint byte-exact (three generations); constructs re-frozen with deltas. DEPS: T96 (done), T43/T47/T48 first per the operator.
 
-**T118-T124 · decision-D11 tasks (2026-09-05)**
+**T118-T125 · decision-D11 tasks (2026-09-05)**
 - **T118b stack-overflow guard (exit 82)** — DONE ✓ 2026-09-06: every .bin now starts at a 39-word entry stub that installs a 64 KiB alternate signal stack and a SIGSEGV+SIGBUS handler (sigaltstack 132, rt_sigaction 134, SA_ONSTACK) whose only act is exit 82, then branches to main with argc/argv intact; the code image is PROT_READ|EXEC (seed.S), so the kernel sigaction and stack_t live in the arena at x27 (the first stub wrote into its own image and faulted — objdump-verified rewrite); neg construct c48_stackovf (unbounded recursion at 16 KiB per frame) = RUNFAIL:82; fixpoint 0af854a9; the compiler itself runs under the stub.
 - **T118 capacity traps** — DONE ✓ 2026-09-05 (exit 80 = zeros past x28 (5 words per zeros), exit 81 = array literal / enum ctor past the 16 KiB frame (7 words per site); neg gates c37_arenafull / c38_frameheap with the new `EXPECT=RUNFAIL:<code>` form; bpref mirrors the arena limit (SystemExit 80), the fuzzer classifies TRAP-OK / TRAP-8x / BPREF-TIMEOUT; the trap exposed the 4 MiB child arena of sys_clone (par_compile silently overran it) -> x28 = sp+12 MiB; word_budget.txt + census_allow.txt carry the growth; fixpoint 3e6f44e3; the stack-overflow guard (exit 82, sigaltstack + SIGSEGV handler at main entry) is T118b, open).
 - **T119 LANGUAGE.md + README** — DONE ✓ 2026-09-05.

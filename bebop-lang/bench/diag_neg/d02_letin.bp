@@ -1,0 +1,5 @@
+// EXPECT 4:18 95
+fn main() -> i64 {
+  let y = 3;
+  (let z = y + 1 5)
+}

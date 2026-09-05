@@ -39,6 +39,67 @@ fn is_alpha(c: i64) -> i64 {
 // when it is a valid end (char(s, L) == 0 and char(s, L - 1) != 0 -- a 1-cell pos from a
 // whole-source scanner reads a neighbour cell here and the check rejects it) and scans
 // otherwise. Lookahead past the end reads the zero tail of the slurp buffer.
+// T90 step 1 (2026-09-06): compile-time errors say WHERE. diag_exit(s, p, code) writes
+// `line:col: <message>` + newline (1-based, counted over the program the emitter sees --
+// the `.use` expansion when the program has `use` lines) to stderr, then exits with the
+// same code as before (the exit-code table is unchanged; docs/TRAPS.md).
+fn put_num(buf: [i64], at: i64, v: i64) -> i64 {
+  let d = zeros(24);
+  let k = 0;
+  let x = v;
+  let go = 1;
+  while go == 1 {
+    let _ = d[k] = 48 + x - (x / 10) * 10;
+    let x = x / 10;
+    let k = k + 1;
+    let go = if x > 0 then 1 else 0;
+    0
+  };
+  let i = 0;
+  while i < k {
+    let _ = buf[at + i] = d[k - 1 - i];
+    let i = i + 1;
+    0
+  };
+  at + k
+}
+fn diag_text(buf: [i64], at: i64, m: [i64], len: i64) -> i64 {
+  let i = 0;
+  while i < len {
+    let _ = buf[at + i] = m[i];
+    let i = i + 1;
+    0
+  };
+  at + len
+}
+fn diag_exit(s: str, p: i64, code: i64) -> i64 {
+  let line = 1;
+  let col = 1;
+  let i = 0;
+  while i < p {
+    let nl = if char(s, i) == 10 then 1 else 0;
+    let line = line + nl;
+    let col = if nl == 1 then 1 else col + 1;
+    let i = i + 1;
+    0
+  };
+  let buf = zeros(128);
+  let a1 = put_num(buf, 0, line);
+  let _ = buf[a1] = 58;
+  let a2 = put_num(buf, a1 + 1, col);
+  let _ = buf[a2] = 58;
+  let _ = buf[a2 + 1] = 32;
+  let at = a2 + 2;
+  let _ = if code == 95 then diag_text(buf, at, [101, 120, 112, 101, 99, 116, 101, 100, 32, 96, 41, 96, 32, 111, 114, 32, 96, 105, 110, 96], 20) else 0;
+  let _ = if code == 96 then diag_text(buf, at, [96, 43, 43, 96, 32, 105, 115, 32, 110, 111, 116, 32, 105, 110, 32, 116, 104, 101, 32, 108, 97, 110, 103, 117, 97, 103, 101], 27) else 0;
+  let _ = if code == 97 then diag_text(buf, at, [102, 110, 32, 98, 111, 100, 121, 32, 119, 105, 116, 104, 111, 117, 116, 32, 97, 32, 116, 97, 105, 108, 32, 101, 120, 112, 114, 101, 115, 115, 105, 111, 110], 33) else 0;
+  let _ = if code == 98 then diag_text(buf, at, [116, 111, 111, 32, 109, 97, 110, 121, 32, 114, 101, 116, 117, 114, 110, 47, 98, 114, 101, 97, 107, 32, 105, 110, 32, 111, 110, 101, 32, 102, 110], 31) else 0;
+  let _ = if code == 99 then diag_text(buf, at, [114, 101, 115, 101, 114, 118, 101, 100, 32, 119, 111, 114, 100, 32, 117, 115, 101, 100, 32, 97, 115, 32, 97, 32, 102, 110, 32, 110, 97, 109, 101], 31) else 0;
+  let mlen = (if code == 95 then 20 else 0) + (if code == 96 then 27 else 0) + (if code == 97 then 33 else 0) + (if code == 98 then 31 else 0) + (if code == 99 then 31 else 0);
+  let _ = buf[at + mlen] = 10;
+  let _ = sys_write(2, buf, at + mlen + 1);
+  sys_exit(code)
+}
 fn slen(s: str, pos: [i64]) -> i64 {
   let L = pos[1];
   let inr = (if L > 0 then 1 else 0) * (if L < 2000000 then 1 else 0);
@@ -2218,7 +2279,7 @@ fn emit_expr(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     let e1 = if pos[0] + 1 >= strn then 1 else 0;
     let ch1 = if e1 == 1 then 0 else char(s, pos[0] + 1);
     let is_pp = is_plus * (if ch1 == 43 then 1 else 0);
-    let _ = if is_pp == 1 then sys_exit(96) else 0;
+    let _ = if is_pp == 1 then diag_exit(s, pos[0], 96) else 0;
     let is_op = is_plus + is_minus;
     let _ = if is_op == 1 then emit_apply_op(s, pos, insns, n, is_minus, stab, selfname, selfstart, fntab) else 0;
     let done = if is_op == 1 then 0 else 1;
@@ -2269,7 +2330,7 @@ fn emit_paren(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let cp = if pos[0] >= slen(s, pos) then 0 else char(s, pos[0]);
-  let _ = if cp == 41 then 0 else sys_exit(95);
+  let _ = if cp == 41 then 0 else diag_exit(s, pos[0], 95);
   let _ = pos[0] = pos[0] + 1;
   n[0]
 }
@@ -2381,7 +2442,7 @@ fn emit_let_plain(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   // a real synonym instead of trapping it -- ntt/fno regression at 3eeb007)
   let is_in = if ci == 105 then 1 else 0;
   let is_semi = if ci == 59 then 1 else 0;
-  let _ = if is_in + is_semi > 0 then 0 else sys_exit(95);
+  let _ = if is_in + is_semi > 0 then 0 else diag_exit(s, pos[0], 95);
   let _ = pos[0] = pos[0] + 1 + is_in;
   let _ = pop(insns, n, 0, fntab);
   let _ = bind_reg(insns, n, reg);
@@ -2404,7 +2465,7 @@ fn emit_let_chain(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   // a real synonym instead of trapping it -- ntt/fno regression at 3eeb007)
   let is_in = if ci == 105 then 1 else 0;
   let is_semi = if ci == 59 then 1 else 0;
-  let _ = if is_in + is_semi > 0 then 0 else sys_exit(95);
+  let _ = if is_in + is_semi > 0 then 0 else diag_exit(s, pos[0], 95);
   let _ = pos[0] = pos[0] + 1 + is_in;
   let _ = pop(insns, n, 0, fntab);
   let _ = bind_reg(insns, n, treg);
@@ -2878,12 +2939,13 @@ fn count_word(insns: [i64], a: i64, b: i64, w: i64) -> i64 {
 // remembers the count at entry). More than 17 returns / 18 pending breaks in
 // one fn traps loudly (exit 98, exit-code table at emit_paren).
 fn emit_return_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let stmt_at = pos[0];
   let _ = pos[0] = pos[0] + 6;
   let _ = skip_ws(s, pos);
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = pop(insns, n, 0, fntab);
   let k = fntab[3662];
-  let _ = if k >= 17 then sys_exit(98) else 0;
+  let _ = if k >= 17 then diag_exit(s, stmt_at, 98) else 0;
   let _ = fntab[3663 + k] = n[0];
   let _ = fntab[3662] = k + 1;
   let _ = em(insns, n, 335544320);
@@ -2894,9 +2956,10 @@ fn emit_return_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], sel
 }
 
 fn emit_break_stmt(s: str, pos: [i64], insns: [i64], n: [i64], fntab: [i64]) -> i64 {
+  let stmt_at = pos[0];
   let _ = pos[0] = pos[0] + 5;
   let k = fntab[3680];
-  let _ = if k >= 18 then sys_exit(98) else 0;
+  let _ = if k >= 18 then diag_exit(s, stmt_at, 98) else 0;
   let _ = fntab[3681 + k] = n[0];
   let _ = fntab[3680] = k + 1;
   let _ = em(insns, n, 335544320);
@@ -3531,13 +3594,14 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 2;
   let _ = skip_ws(s, pos);
+  let namepos = pos[0];
   let selfname = read_ident(s, pos);
   // T122 (D11-M, 2026-09-05): a fn named like a keyword or a builtin is REJECTED
   // (exit 99) -- `fn match` used to compile into a call of the match keyword
   // (T31 journal) and return 0. Hash table = read_ident of each reserved word.
   let rsv1 = (if selfname == 1866735 then 1 else 0) + (if selfname == 35281108217 then 1 else 0) + (if selfname == 13857 then 1 else 0) + (if selfname == 262576641 then 1 else 0) + (if selfname == 228925745 then 1 else 0) + (if selfname == 13865 then 1 else 0) + (if selfname == 13472 then 1 else 0) + (if selfname == 228960337 then 1 else 0) + (if selfname == 4471061603997 then 1 else 0) + (if selfname == 4238080694376 then 1 else 0) + (if selfname == 32320559965 then 1 else 0) + (if selfname == 4428069113672 then 1 else 0) + (if selfname == 29119020707 then 1 else 0) + (if selfname == 36158018563 then 1 else 0) + (if selfname == 224358574 then 1 else 0) + (if selfname == 585709020818199 then 1 else 0) + (if selfname == 66094333908796503 then 1 else 0) + (if selfname == 30895064082 then 1 else 0) + (if selfname == 4047253394792 then 1 else 0) + (if selfname == 260449716 then 1 else 0) + (if selfname == 249209392 then 1 else 0);
   let rsv2 = (if selfname == 246721067 then 1 else 0) + (if selfname == 76753189879327100 then 1 else 0) + (if selfname == 76753189885882068 then 1 else 0) + (if selfname == -8392076197157136435 then 1 else 0) + (if selfname == -8392076203060520566 then 1 else 0) + (if selfname == -2688661736639986669 then 1 else 0) + (if selfname == -8392076198348418984 then 1 else 0) + (if selfname == 76753189874778913 then 1 else 0) + (if selfname == 7442662210087947144 then 1 else 0) + (if selfname == -5847879057653958070 then 1 else 0) + (if selfname == 7442662398273192292 then 1 else 0) + (if selfname == 7442661902340062434 then 1 else 0) + (if selfname == 76753189856984008 then 1 else 0) + (if selfname == 7040940390938053523 then 1 else 0) + (if selfname == -6282920175007517587 then 1 else 0) + (if selfname == -8392076203060521221 then 1 else 0) + (if selfname == -1736429998027255437 then 1 else 0) + (if selfname == -3153574141067785036 then 1 else 0) + (if selfname == 8779068393901189725 then 1 else 0) + (if selfname == 7221016679989100487 then 1 else 0) + (if selfname == 1084841420853388659 then 1 else 0);
-  let _ = if rsv1 + rsv2 > 0 then sys_exit(99) else 0;
+  let _ = if rsv1 + rsv2 > 0 then diag_exit(s, namepos, 99) else 0;
   let _ = skip_ws(s, pos);
   let pnames = zeros(14);
   let pparpos = zeros(14);
@@ -3583,7 +3647,7 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   // expression (empty, or ending in a let/while/compound statement, or
   // `e;` before the `}`) returned whatever x0 held; trap 97 instead
   // (exit-code table at emit_paren). bpref.py raises on the same shape.
-  let _ = if blast_t == 1 then 0 else sys_exit(97);
+  let _ = if blast_t == 1 then 0 else diag_exit(s, pos[0], 97);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   // legacy emitter leaves the body value on the stack; fast path leaves it
@@ -3625,7 +3689,11 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   // (rn / rd / rm fields) and NOP the two prologue adds when unused.
   let u15 = [0];
   let u14 = [0];
-  let gi = [nb_tail];
+  // DIVERGE-42122 (2026-09-06): the scan must start right after the prologue, NOT at
+  // nb_tail -- the `str xj,[x15,#slot*8]` stores for params 9+ sit between them, so a
+  // fn with 9+ params whose body never touched x15 got its `add x15,sp,#256` NOPed and
+  // wrote its 9th param into the CALLER's spill slot 0 (construct c53_param9).
+  let gi = [pbase + 10];
   let ggo = 1;
   while ggo == 1 {
     let gdone = if gi[0] >= n[0] then 1 else 0;

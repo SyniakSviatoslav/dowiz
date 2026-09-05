@@ -42,7 +42,17 @@ one() {
 }
 export -f one
 t0=$(date +%s.%N)
-seq "$START" $((START + N - 1)) | xargs -P "$J" -I{} bash -c 'one {}' >"$TMP/results"
+# J contiguous shards, each ONE python process (bench/fuzz/fuzz_batch.py: gen in-process,
+# bpref forked, seed compile/run as subprocesses) -- 3 interpreter starts per seed were
+# ~70 % of the wall under proot (0.56/s -> 5/s on one core, 2026-09-06). one() above is
+# the reference shape of a seed; fuzz_batch.py prints the same lines.
+per=$(( (N + J - 1) / J ))
+for ((j = 0; j < J; j++)); do
+  st=$((START + j * per)); cnt=$((N - j * per)); [ "$cnt" -gt "$per" ] && cnt=$per; [ "$cnt" -le 0 ] && break
+  python3 bench/fuzz/fuzz_batch.py "$st" "$cnt" >"$TMP/results.$j" 2>"$TMP/err.$j" &
+done
+wait
+cat "$TMP"/results.* >"$TMP/results"; cat "$TMP"/err.* >&2
 t1=$(date +%s.%N)
 awk -v n="$N" -v s="$START" -v t0="$t0" -v t1="$t1" -v bin="$(md5sum "$BEBOP_BIN" | cut -c1-8)" '
   { c[$1]++ }

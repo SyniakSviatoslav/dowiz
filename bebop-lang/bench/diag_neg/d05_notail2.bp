@@ -1,0 +1,5 @@
+// EXPECT 5:1 97
+fn main() -> i64 {
+  let a = 4;
+  a;
+}

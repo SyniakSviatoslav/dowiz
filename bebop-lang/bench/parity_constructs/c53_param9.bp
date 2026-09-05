@@ -1,0 +1,19 @@
+// c53_param9 (DIVERGE-42122, 2026-09-06): a callee with 9+ params stores p8 into its own
+// spill slot 0 -- the prologue's `add x15,sp,#256` must stay even when the BODY never
+// touches x15. Before the fix the callee wrote into the caller's slot 0 (= i2 here):
+// buggy value 5 - 17 = -12, correct 90 - 17 = 73.
+fn main() -> i64 {
+  let a = 1;
+  let b = 2;
+  let c = 3;
+  let d = 4;
+  let e = 5;
+  let f = 6;
+  let g = 7;
+  let h = 8;
+  let i2 = 90;
+  i2 - f9(a, b, 17, d, e, f, g, h, 5)
+}
+fn f9(p0: i64, p1: i64, p2: i64, p3: i64, p4: i64, p5: i64, p6: i64, p7: i64, p8: i64) -> i64 {
+  p2
+}

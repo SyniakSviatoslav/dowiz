@@ -1,0 +1,3 @@
+// EXPECT 2:4 99
+fn while(n: i64) -> i64 { n }
+fn main() -> i64 { 1 }

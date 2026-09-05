@@ -52,3 +52,4 @@ c44_use24 635 T118b entry stub: 39 words per program (sigaltstack + SIGSEGV/SIGB
 c45_crc32x 259 T118b entry stub: 39 words per program (sigaltstack + SIGSEGV/SIGBUS handler -> exit 82)
 c46_andor 220 T118b entry stub: 39 words per program (sigaltstack + SIGSEGV/SIGBUS handler -> exit 82)
 c47_usenest 132 T118b entry stub: 39 words per program (sigaltstack + SIGSEGV/SIGBUS handler -> exit 82)
+c53_param9 153 DIVERGE-42122: callee with 9 params keeps its x15 setup (OPT-G1 scan starts after the prologue)

@@ -1,0 +1,4 @@
+// EXPECT 3:4 99
+fn ok(n: i64) -> i64 { n }
+fn zeros(n: i64) -> i64 { n }
+fn main() -> i64 { ok(1) }

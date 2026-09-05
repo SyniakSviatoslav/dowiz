@@ -43,23 +43,50 @@ and retired by decisions D8-D10.
 | # | criterion | script / gate | today (2026-09-05) | target |
 |---|---|---|---|---|
 | 1 | honest kernels, in-process pinned, bebop / Rust twin (D11-C) | bench/vs_rust/honest.sh | K1h, K2h, K3h, K4 rows measured after T118 (see Measured) | every row <= 2.0x after T101-T104; <= 1.0x is the D1(a) stretch, decided on the numbers |
-| 2 | linear self-hosting fixpoint | every codegen commit (AGENTS law) | gen3 == gen4 2b6171ce | invariant, never a goal |
+| 2 | linear self-hosting fixpoint | every codegen commit (AGENTS law) | gen3 == gen4 c3f58e8e (2026-09-06) | invariant, never a goal |
 | 3 | one oracle per gate, none self-frozen | bench/oracles/run_all.sh | ok=99 self-frozen=0; every gate mutation-sensitive (T123 sweep 2026-09-06, tools/mutate_gate.sh) | 0 self-frozen; T124 fold specs written (docs/FOLDS.md) |
-| 4 | zero tolerated miscompiles | construct_parity (51 constructs incl. neg), fuzz | R3.x deleted; fuzz 150-seed batches clean; DIVERGE-20056 (2026-09-06) was an undefined program (array literal bound in a while body read after the loop) — rule now in LANGUAGE.md, bpref raises on it, gen.py never emits it | fuzz >= 10^5 programs, 0 CRASH / DIVERGE, traps only (TG-DONE 8) |
+| 4 | zero tolerated miscompiles | construct_parity (52 constructs incl. neg), fuzz | R3.x deleted; DIVERGE-20056 (2026-09-06) was an undefined program (loop-release rule now in LANGUAGE.md, bpref raises, gen.py never emits it); DIVERGE-42122 (2026-09-06) WAS a miscompile — a 9+-param callee whose body never touched x15 wrote its 9th param into the caller's spill slot (OPT-G1 scan started after the param stores) — fixed, construct c53_param9 | fuzz >= 10^5 programs, 0 CRASH / DIVERGE, traps only (TG-DONE 8) |
 | 5 | single compiler, single language | attic, construct_parity | expr_compile.bp in attic; 38 constructs | every accepted construct in construct_parity; struct literals + `use` + `ref T` landed (T43 rest, T47, T48) |
 | 6 | hardware claims measured, never projected | bench_pinned.sh, REPORT-pinned.md, Measured table below | no projected row remains | stays true |
 | 7 | the store | G1-G8 (T112-T117) | library + G1-G6 green in std_golden (99 gates; 100/100 SIGKILL trials); G7 sbench measured vs sqlite (17x insert, 450 ns PK lookup, 30x window scan, 2.5x size loss); G8 stage 1 measured (BFS 187 ns/edge vs sqlite 10.8 us), stage 2 running | all eight green with numbers; G7/G8 thresholds a,b,c frozen by the operator before the run (D11-I) |
-| 8 | fuzz at scale | bench/fuzz/fuzz.sh | 150-seed batches; gen.py widened 2026-09-05 (large loops, literals in loops, recursion 127, return/break); 2026-09-06 generator fixed (fresh loop names, big-loop vars never reassigned, loop-bound literals released) -> 1.5 programs/s, 0 timeouts on 20 seeds | 10^5 programs, 0 CRASH/DIVERGE, only TRAP-OK/TRAP-8x |
+| 8 | fuzz at scale | bench/fuzz/fuzz.sh | 150-seed batches; gen.py widened 2026-09-05 (large loops, literals in loops, recursion 127, return/break); 2026-09-06 generator fixed (fresh loop names, big-loop vars never reassigned, loop-bound literals released) -> 1.5 programs/s, 0 timeouts on 20 seeds; 2026-09-06 in-process shards (fuzz_batch.py): 3.5 programs/s on 3 cores, 300-seed batch found 42122 | 10^5 programs, 0 CRASH/DIVERGE, only TRAP-OK/TRAP-8x |
 
 ## Critical path (in order; one writer, one commit per single-variable step)
 
-T118 traps (done) -> T122 reserved words -> T43 rest (struct literals + field access)
--> T47 `use` (+T47b nested, T80 cas://) -> T48 checked types with `ref T` (+T48b census) -> T101-T104 via the op-list IR
-(byte-identical rung first, D11-G) -> T105 sdiv/isqrt -> T106 nn4 (3 A78) -> T107
-incremental curve -> T108 .becache -> T109-T117 store (G1..G8, with the D11-H
-amendments and a G2-lite spike first) -> T52-T54 predication where measured -> the
-rest by ordering text in HISTORY.md. Parallel-safe now: T121 K5/K6 rows, T123
-mutation-sensitivity of 15 gates, T124 fold specs, docs.
+Sorted 2026-09-06 (operator: "щоб прискорити роботу і не повторюватись"): every step that
+makes the later steps cheaper comes first; PARTIALs close before anything new opens; a
+measurement that only needs a quiet box runs in the background under L18 while the code
+steps proceed. The done rungs (T118 -> T122 -> T43 -> T47/T47b/T80 -> T48b -> T101-T103 +
+T105-T108 -> T109-T117 G1-G8 stage 2 -> T123-T125 -> T130/T118b -> T90 step 1) are in
+HISTORY.md; this list is only what remains and is the ONE ordering (SESSION-HANDOFF points
+here, HISTORY's "Ordering for T84-T95" is superseded).
+
+1. Loop hygiene — repays every later step.
+   a. Fuzz at scale (TG-DONE 8): `bench/fuzz/fuzz.sh 5000 <start>` batches (~25 min at
+      3.5/s), one journal line per batch; every DIVERGE = probe ladder -> construct ->
+      one-line fix (the 42122 pattern, 2026-09-06). Start each batch before the next code
+      step, read it after.
+   b. Capacity trap for a fn emitting > 65536 words (the planning-pass tmp buffer dies with
+      exit 82 today; needs its own code in docs/TRAPS.md + a neg construct).
+   c. T77 shrinker = the cut-and-return ladder as a tool (the T77 delta-debugger ran 90 min
+      without a result on 5 KB; four hand probes found 20056 and 42122).
+   d. The remaining per-call n^2 term in the compiler (calls4000 1.8 s; profile by
+      differential timing, never gdb under proot).
+2. Close the PARTIALs: T104b wider peephole (x*c1*c2, mul-by-const -> shift, LICM of movz)
+   through `tools/chain.sh --codegen`; T96 rest; T90 step 2 (`check` verb, d08/d10, messages
+   for runtime traps 80-88).
+3. Measurements on a quiet box, in the background: honest.sh R=11 (TG-DONE 1), the full
+   sgraph2.sh run (frontier + hub-skew rows), the 45-90 s CSR build profile (sgraph phase b).
+   Then the operator freezes a, b, c (D11-I) on the numbers, not before.
+4. Codegen where a row says a branch costs: T52 -> T53 -> T54 (predication, each behind
+   honest.sh); T48 rest (checked types inside the compiler, not only the census); T61 (the
+   pool/futex builtins exist: the task is the library + a gate).
+5. Design-bound, operator decision first (AskUserQuestion before code): T68-T70, T85 -> T86
+   follow-ups, T73, T76, T49/T50, T56, T59.
+6. Last, each a project of its own: backends T91-T95, T84 glyphs, T62 network, T67 mesh,
+   T87 f64, T88 supervisor, T89 trust chain, T63/T64/T83 bench policy rows as they come up.
+
+Parallel-safe at any time: docs, oracles, fuzz batches, honest.sh rows, T78/T79/T81/T82 tooling.
 
 ## Open decisions (operator)
 

@@ -1,5 +1,5 @@
 # name words bcond cbz tbz b bl ret  (tools/census.py; gate = bcond/cbz/tbz never increase)
-bebop 71020 1509 111 0 1270 1245 191
+bebop 72763 1536 113 0 1288 1260 194
 c01_lit 42 0 0 0 0 0 1
 c02_arith 35 0 0 0 0 0 1
 c03_precedence 24 0 0 0 0 0 1
@@ -43,6 +43,7 @@ c45_crc32x 218 1 3 0 3 0 1
 c46_andor 179 4 0 0 4 0 1
 c47_usenest 91 0 0 0 0 4 3
 c50_cas 57 0 0 0 0 2 2
+c53_param9 112 0 0 0 0 1 2
 hv_stdlib 297 2 0 0 2 1 4
 io_probe 814 10 3 0 4 0 1
 k1 37 1 0 0 1 0 1

@@ -1,0 +1,7 @@
+// EXPECT 4:27 95
+fn g(a: i64, b: i64) -> i64 { a + b }
+fn main() -> i64 {
+  let k = 7;
+  let r = g(k, (k * 2) + 1];
+  r
+}
