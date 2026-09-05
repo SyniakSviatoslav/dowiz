@@ -166,6 +166,10 @@ def cands(src):
         if src[i] == '[' and rest.startswith('=') and not rest.startswith('=='):
             continue  # array store: handled by line deletion
         yield src[:m.start()] + '0' + src[j + 1:]
+    for m in re.finditer(r'(?<![\w\])])\[', src):  # an array literal -> [0] (ladder.py, 2026-09-06)
+        j = match_paren(src, m.start(), '[', ']')
+        if j > m.start() + 2:
+            yield src[:m.start()] + '[0]' + src[j + 1:]
     for m in re.finditer(r'\bmatch\b', src):  # match -> each arm body
         i = src.find('{', m.start())
         j = match_paren(src, i, '{', '}') if i >= 0 else -1
