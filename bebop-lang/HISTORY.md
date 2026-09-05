@@ -2228,7 +2228,7 @@ bebop.bin; the chain doc lists every hash.
 DEPS: T45. BLOCKERS: witness must still compile the current surface
 (freeze the surface subset the witness supports).
 
-**T90 · `bebop.bin check <file>` with line:col diagnostics** (C4a) — STEP 1 DONE 2026-09-06 (exits 95-99 now print `line:col: <message>` on stderr before the old code: diag_exit in bebop.bp; bench/diag_neg/d01..d09 with hand-counted EXPECT headers, bench/vs_rust/diag_check.sh in tools/battery.sh; open: the `check` verb, the lax parses d08/d10, messages for the runtime traps)
+**T90 · `bebop.bin check <file>` with line:col diagnostics** (C4a) — STEP 1 DONE 2026-09-06 (exits 95-99 now print `line:col: <message>` on stderr before the old code: diag_exit in bebop.bp; bench/diag_neg/d01..d09 with hand-counted EXPECT headers, bench/vs_rust/diag_check.sh in tools/battery.sh; STEP 2a DONE 2026-09-06 (lax d08/d10 exit 95: call-argument delimiters checked in emit_bl_call/emit_call, a body let must end in `;` `}` `in`; diag 11/11; fixpoint 94e47998); open: the `check` verb, messages for the runtime traps)
 GOAL: parse + type/effect/quantity checks (T48/T68/T70) with no
 emission; every trap word class gets a message and a `file:line:col`;
 exit codes distinct per class (the KEEP pattern).

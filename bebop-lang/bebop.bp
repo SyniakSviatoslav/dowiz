@@ -686,6 +686,11 @@ fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i6
     let _ = skip_ws(s, pos);
     let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
     let is_comma = if ch2 == 44 then 1 else 0;
+    // T90 step 2 (2026-09-06): after an argument only `,` or `)` may follow (lax d08:
+    // `g(k, e]` compiled -- the progress guard consumed `]` as the closing paren)
+    let at_end2 = if pos[0] >= strn then 1 else 0;
+    let bad2 = (1 - is_comma) * (if ch2 == 41 then 0 else 1) * (1 - at_end2);
+    let _ = if bad2 == 1 then diag_exit(s, pos[0], 95) else 0;
     let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
     let stuck = if pos[0] > before then 0 else 1;
     let done = if is_rp + at_end + stuck >= 1 then 1 else 0;
@@ -3168,6 +3173,14 @@ fn emit_let_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   let _ = skip_ws(s, pos);
   let strnV = slen(s, pos);
   let cV = if pos[0] >= strnV then 0 else char(s, pos[0]);
+  // T90 step 2 (2026-09-06): `;` or the closing `}` / end of input, nothing else (lax d10:
+  // `let q = 5 let r = 6;` was accepted, the second let simply became the next item)
+  let cV1 = if pos[0] + 1 >= strnV then 0 else char(s, pos[0] + 1);
+  let cV2 = if pos[0] + 2 >= strnV then 0 else char(s, pos[0] + 2);
+  let idV2 = is_alpha(cV2) + is_digit(cV2) + (if cV2 == 95 then 1 else 0);
+  let inV = (if cV == 105 then 1 else 0) * (if cV1 == 110 then 1 else 0) * (1 - idV2);
+  let okV = (if cV == 59 then 1 else 0) + (if cV == 125 then 1 else 0) + (if cV == 0 then 1 else 0) + inV;
+  let _ = if okV >= 1 then 0 else diag_exit(s, pos[0], 95);
   let _ = if cV == 59 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
   let grew_v = if n[0] > nb_v then 1 else 0;
   let _ = if grew_v == 1 then pop(insns, n, 0, fntab) else 0;
@@ -3455,6 +3468,8 @@ fn emit_call(s: str, fname: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64]
     let strn = slen(s, pos);
     let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
     let is_comma = if ch == 44 then 1 else 0;
+    let need_comma = if i + 1 < pcnt then 1 else 0;
+    let _ = if need_comma * (1 - is_comma) == 1 then diag_exit(s, pos[0], 95) else 0;
     let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
     let i = i + 1;
     0
@@ -3468,6 +3483,9 @@ fn emit_call(s: str, fname: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64]
   // Limit: /* */ block comments are not skipped (the corpus uses // only).
   let _ = if okres == 0 then skip_args(s, pos) else 0;
   let _ = skip_ws(s, pos);
+  // T90 step 2 (2026-09-06): the closing `)` is CHECKED (lax d08: `g(k, e]` was accepted)
+  let ccl = if pos[0] >= slen(s, pos) then 0 else char(s, pos[0]);
+  let _ = if ccl == 41 then 0 else diag_exit(s, pos[0], 95);
   let _ = pos[0] = pos[0] + 1;
   let after = pos[0];
   let _ = pos[0] = body * okres;
