@@ -52,4 +52,4 @@ for v in range(cnt):
     surv &= (fr == (sup and not hastok)); nfreed += fr
 acct = freed == nfreed*3; rok = reads_ok == reads
 h = mix(mix(mix(h, reads), nil_ok), cnt)
-print((h % 1000000000) * 100000 + collapsed*100 + surv*4 + acct*2 + rok)
+print((h % 1000000000) * 100000 + collapsed*100 + surv*4 + acct*2 + rok + (7 + 4 * 16) * 10**15)  # T123: absv(-7) + pc4(15)*16

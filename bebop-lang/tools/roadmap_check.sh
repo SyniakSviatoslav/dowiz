@@ -6,7 +6,10 @@
 cd "$(dirname "$0")/.." || exit 1
 fail=0
 n=$(wc -l < ROADMAP.md); [ "$n" -le 300 ] || { echo "ROADMAP.md is $n lines (> 300)"; fail=1; }
-python3 tools/split_roadmap.py --from HISTORY.md > /dev/null && git diff --quiet -- TASKS.md || { echo "TASKS.md drifted from HISTORY.md headers (regenerate with tools/split_roadmap.py --from HISTORY.md)"; fail=1; }
+# (2) compare the file with its own regeneration, not with git HEAD (an uncommitted but
+# current TASKS.md used to read as drift, 2026-09-06)
+prev=$(mktemp); cp TASKS.md "$prev"; python3 tools/split_roadmap.py --from HISTORY.md > /dev/null
+cmp -s TASKS.md "$prev" || { echo "TASKS.md drifted from HISTORY.md headers (regenerated it now; commit the result)"; fail=1; }; rm -f "$prev"
 python3 - <<'PY' || fail=1
 import re
 ids=set()

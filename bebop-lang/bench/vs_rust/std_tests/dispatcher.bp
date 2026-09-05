@@ -128,5 +128,9 @@ fn main() -> i64 {
     0
   };
   let nok = if n == cnt then 1 else 0;
-  acc * 1000000 + rt * 1000 * nok + n
+  // T123 (2026-09-06): bt_offset on a dense shape joins the fold -- with dims [1,1,8,1]
+  // a flipped operator in it moved pack and unpack alike and the round trip still held.
+  let dd = [2, 3, 4, 5];
+  let off = bt_offset(dd, 1, 2, 3, 4);
+  (acc * 1000000 + rt * 1000 * nok + n) * 131 + off
 }

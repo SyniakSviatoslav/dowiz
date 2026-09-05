@@ -28,10 +28,12 @@ m0 = energy(liq); liq = step(liq, 0); m1 = energy(liq); liq = step(liq, 0); m2 =
 acc = (m0 > m1) + 2 * (m1 > m2) + 4 * (m0 == 256) + 8 * (m0 > m2)
 deg = [len(r) for r in adj]
 acc = w(acc * 131 + sum(d * (i + 1) for i, d in enumerate(deg)) * 97 + sum(9 * (d == 0) + 3 * (d > 6) for d in deg) * 13)
+pv = fwht([1, 2, 3, 4, 5, 6, 7, 8]); acc = w(acc * 131 + sum(pv[i] * (i + 1) for i in range(8)))  # T123 dense probe
 liq = [0] * 8; ew = 0
 for _ in range(8):
     liq = step(liq, next(g) & 1)
     tm = fwht(liq)
     acc = w(acc * 131 + sum(1 << i for i in range(8) if tm[i] > 0))
+    acc = w(acc * 131 + sum(tm[i] * (i + 1) for i in range(8)))  # T123
     ew += energy(liq)
 print(w(acc * 131 + ew))

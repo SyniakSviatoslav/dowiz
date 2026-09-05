@@ -1,4 +1,4 @@
-# SESSION HANDOFF — 2026-09-06 (session 9; resume in ONE read)
+# SESSION HANDOFF — 2026-09-06 (session 10; resume in ONE read)
 
 Status: 2026-09-06 CURRENT (rewritten at every session close; task bodies live in HISTORY.md,
 the ledger in TASKS.md, one line per experiment in docs/exp.journal)
@@ -8,40 +8,39 @@ SUBDIRECTORY of that repo: `git show HEAD:./bebop.bin`, commits carry `bebop-lan
 HEAD: `git log --oneline | head -3`; every commit message carries the gate evidence.
 
 ## Where we are
-- Compiler: fixpoint chain = three generations (gen3 == gen4). Landed this session: T72
-  sys_setaffinity, T105 clz + Newton isqrt + sdiv fp_div, T108 .becache (exact bytes,
-  warm 113 ms vs cold 346 ms per gate; floor 106 ms), T109/T109b crc32 (bytes) + crc32x
-  (raw words), T110 sys_msync, T126 (x27/x28 were saved/restored by >= 9-symbol fns:
-  every arena allocation they made was rolled back — root cause of the `use` crashes),
-  T127 (thread exit was exit_group), T129 (unwritable output -> exit 90), T47b nested
-  `use`, T130 (unresolved call -> runtime exit 87), T118b (entry stub: sigaltstack +
-  SIGSEGV/SIGBUS handler -> exit 82; the code image is PROT_READ|EXEC so the stub's
-  structs live in the arena). Pending at close: see "In flight".
-- Battery: std_golden 99/99 (92 + slayout, sround x2, scompact, scrash, sevolve, sconc),
-  constructs 47 (+ neg c48 stack overflow, c52 undefined call), run_all 99, pool 5/5,
-  invariants GREEN incl. the T48b negative sample; mutation tool (T123) now mutates 3
-  operator sites of the EXPANDED program.
-- Store (T111, selfhost/prelude/store.bp): superblock pair, append arena, object-relative
-  refs, crc32x integrity, commit = superblock toggle, Cheney compaction to .tmp + rename,
-  migration table, reader snapshots, msync'd commits. Gates G1-G7 green with numbers;
-  G8 stages 1+2 + frontier BFS measured; hub-skew variant wired.
-- Numbers (bench/vs_rust/RESULT-sbench.md, RESULT-sgraph.md, ROADMAP Measured): store vs
-  sqlite 3.46.1 C API: insert 17x, PK lookup 630 ns vs 7.8 us, window scan 1.8 vs 63.6 us,
-  update 6.4x, reopen 6x, size 2.5x LOSS, compaction 0.7x of VACUUM, durable commit in the
-  fsync-per-commit class; graph BFS 187 ns/edge vs sqlite 10.8 us (57x); frontier BFS 45
-  vs queue 192 ns/slot; 100/100 SIGKILL trials consistent.
+- Compiler: fixpoint chain = three generations (gen3 == gen4). Landed this session: T130
+  (unresolved call -> exit 87), T118b (39-word entry stub: sigaltstack + SIGSEGV/SIGBUS -> exit
+  82; every program +39 words, budgeted), T48b (`ref T` census in tools/typecheck.py + the
+  negative sample), check_abi (iv) accepts the stub, T80 cas:// imports (`use
+  "cas://sha256:<hex>"` -> .bcas/<hex>.bp verified by digest, exit 88; `bebop.bin cas add
+  <file>`; bebop.bp's first line is `use "selfhost/prelude/sha256.bp"`; fixpoint 0b0f07f0).
+- Battery: std_golden 99/99, constructs 51 (+ c50_cas, neg c51_casbad/c48/c52), run_all 99,
+  parity 12/12+1, pool 5/5, invariants GREEN; T123 DONE: every gate mutation-sensitive
+  (5 folds extended: base64 hex lsm dispatcher mvcc; goldens from oracle == bebop == bpref).
+- ONE COMMAND now: `tools/chain.sh <src.bp> <out-dir> [--codegen]` = gen2, then gen3->gen4
+  in parallel with `tools/battery.sh` (all gate scripts on the 3 cores, one summary block).
+  invariants.sh still runs after promotion (hardcodes ./bebop.bin; `--freeze` for census).
+- Language rule made explicit (DIVERGE-20056): an array literal bound INSIDE a while body is
+  released at the back-edge / loop exit (T43 frame heap) — LANGUAGE.md memory model; bpref
+  raises "use after loop release"; gen.py never emits the shape. Not a miscompile.
+- Store: unchanged this session (G1-G8 numbers in ROADMAP Measured / RESULT-*.md).
 
 ## In flight / next
-1. T130 + T118b chain (scratch fx/v2..v4) -> promote, battery (c48/c52 neg), commit.
-2. T80 `use "cas://sha256:<hex>"` (scratch t80.py, .bcas/, hold/c50_cas + c51_casbad
-   COMPILEFAIL:88): bebop.bp gains `use "selfhost/prelude/sha256.bp"`; chain + battery.
-3. Full `bench/vs_rust/sgraph2.sh` run (frontier + skew rows) on a quiet core 4.
-4. T123: fix the folds of the gates the rewritten sweep still calls insensitive.
-5. T104b wider peephole (x*c1*c2, mul-by-const -> shift, LICM of movz); honest.sh R=11 on
-   a quiet box (self-compile today 293 s vs the 108.7 s row of 2026-09-04 — not reproducible).
-6. Profile the 45-90 s CSR build in the store (50M library calls) — sgraph phase b.
+1. Full `bench/vs_rust/sgraph2.sh` run (frontier + hub-skew rows) on a quiet core 4.
+2. T104b wider peephole (x*c1*c2, mul-by-const -> shift, LICM of movz) via tools/chain.sh
+   --codegen; honest.sh R=11 on a quiet box.
+3. Profile the 45-90 s CSR build in the store (50M library calls) — sgraph phase b.
+4. Fuzz at scale (TG-DONE 8): 10^5 programs; BPREF-TIMEOUT dominates the wall clock
+   (49/150 under load) — lower the generator's loop bounds or run J=3 on a quiet box.
+5. T124 fold specs for the 8 gates named in TG-DONE row 3; T47c (prelude-headered gates to
+   `use`) is done for all 99 already — verify and close the note in HISTORY.
 
 ## Pitfalls that cost hours this session (also in the memory file)
+- An 8-deep parenthesised chain of calls `((((f(a)*16+f(b))*16+...` hits exit 95 in the
+  compiler — write a loop. A `zeros` inside a while body is L8 (the T80 draft had one).
+- `pgrep -f <pattern>` matches the shell that runs it; never pipe it to kill.
+- Timing-flag gates (lcjit) miss under three parallel batteries; rerun standalone first.
+- AGENTS.md L18: never a wait-only turn while a shell runs — do the next independent item.
 - Derive every instruction word with python int(hex,16) and objdump the emitted .bin: a
   hand-typed clz became `rev`; the first entry stub wrote into the RX code image.
 - A clone-spanning fn must keep <= 8 live symbols; workers exit with

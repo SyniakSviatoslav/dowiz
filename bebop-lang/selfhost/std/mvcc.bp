@@ -173,5 +173,7 @@ fn main() -> i64 {
   let h = mix(st[4], st[5]);
   let h = mix(h, st[2]);
   let h = mix(h, cnt);
-  (h % 1000000000) * 100000 + st[1] * 100 + surv * 4 + acct * 2 + rok
+  // T123 (2026-09-06): absv and pc4 (the gate's first operator sites) are in the fold.
+  let helpers = absv(0 - 7) + pc4(15) * 16;
+  (h % 1000000000) * 100000 + st[1] * 100 + surv * 4 + acct * 2 + rok + helpers * 1000000000000000
 }

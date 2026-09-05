@@ -348,3 +348,11 @@ III. DEBUGGING PRINCIPLES (engineering trouble-shooting)
 
 COLD-START RULE: Anything executed repeatedly lives in the daemon or in
 compiled subcommands; python/bash one-offs are for single use only.
+
+L18. NO IDLE WAITING (operator rule, 2026-09-06): while a shell, chain, battery or
+     sweep runs in the background, the agent keeps working on an independent item
+     (the next hunt, docs, the next patch in scratch) and polls the running work
+     only alongside that work — never a turn that only waits. Trigger: any
+     run_in_background / long gate. Cost: none; the box has 3 A78 cores and one
+     writer. Incident: session 10 lost wall-clock to wait-only turns while a
+     5-minute self-compile ran.

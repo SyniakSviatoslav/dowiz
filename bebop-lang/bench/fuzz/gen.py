@@ -280,7 +280,9 @@ class Ctx:
         if not big:
             self.loopvars.append(i)
         self.loop_depth += 1
+        outer_arrays = set(self.arrays)  # T43: a literal bound in the body is released at loop exit (DIVERGE-20056)
         body = [self.stmt(depth + 1) for _ in range(self.r.randint(1, 4))]
+        for a in [a for a in self.arrays if a not in outer_arrays]: del self.arrays[a]
         # T99: `break;` only as the LAST statement of a loop body -- a `let` after it
         # would be dead in bebop (fn-scoped symbol never assigned) but unbound in bpref
         if self.r.random() < 0.15:

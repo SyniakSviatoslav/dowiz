@@ -33,6 +33,13 @@ import sys
 DEPTH_CAP = int(os.environ.get('BPREF_DEPTH', '5000'))
 
 
+class Arr(list):
+    """An array literal evaluated inside a `while` body (T43 frame-heap reset, 2026-09-06):
+    bebop releases it at the back-edge / loop exit, so a later read is a use-after-release
+    (DIVERGE-20056 was exactly this). bpref marks it released and refuses the access."""
+    released = False
+
+
 class ReturnSignal(Exception):
     def __init__(self, v): self.v = v
 class BreakSignal(Exception):
@@ -383,6 +390,7 @@ class Parser:
 class Interp:
     def __init__(self, fns, ctors, structs=None, first_struct=None):
         self.fns = fns
+        self.loop_arrs = []  # T43: per-iteration array literals of the running while bodies
         self.structs = structs or {}
         self.first_struct = first_struct
         self.ctors = ctors
@@ -412,11 +420,19 @@ class Interp:
                     env[it[1]] = self.ev(r, env)
                 val = 0
             elif it[0] == 'while':
+                # the compiler skips the reset when a body `let` rebinds an OUTER name to a
+                # bare literal (construct c34): then nothing is released
+                outer = set(env)
+                leaks = any(b[0] == 'let' and b[1] in outer and b[2][0] == 'arr' for b in it[2])
                 while self.ev(it[1], env) != 0:
+                    self.loop_arrs.append([])
                     try:
                         self.run_body(it[2], env)
                     except BreakSignal:
                         break
+                    finally:
+                        for a in self.loop_arrs.pop():
+                            a.released = not leaks
                 val = 0
             elif it[0] == 'return':
                 raise ReturnSignal(self.ev(it[1], env))
@@ -454,14 +470,22 @@ class Interp:
         if t == 'call':
             return self.builtin_or_call(e[1], [self.ev(a, env) for a in e[2]])
         if t == 'get':
-            return env[e[1]][self.ev(e[2], env)]
+            arr = env[e[1]]
+            if getattr(arr, 'released', False):
+                raise RuntimeError('use after loop release: `%s` was bound to an array literal inside a while body (T43)' % e[1])
+            return arr[self.ev(e[2], env)]
         if t == 'set':
             arr = env[e[1]]
+            if getattr(arr, 'released', False):
+                raise RuntimeError('use after loop release: `%s` was bound to an array literal inside a while body (T43)' % e[1])
             i = self.ev(e[2], env)
             arr[i] = self.ev(e[3], env)
             return 0
         if t == 'arr':
-            return [self.ev(x, env) for x in e[1]]
+            a = Arr(self.ev(x, env) for x in e[1])
+            if self.loop_arrs:
+                self.loop_arrs[-1].append(a)
+            return a
         if t == 'str':
             return e[1]
         raise RuntimeError('bad node %r' % (t,))
@@ -525,7 +549,12 @@ def expand_use(src, seen=None):
             path = line.strip()[5:-1]
             if path not in seen:
                 seen.add(path)
-                pre.append(expand_use(open(path, encoding='utf-8', errors='replace').read(), seen))
+                real = path
+                if path.startswith('cas://sha256:'):  # T80: content-addressed module, verified by digest
+                    import hashlib
+                    real = '.bcas/%s.bp' % path[13:]
+                    if hashlib.sha256(open(real, 'rb').read()).hexdigest() != path[13:]: raise SystemExit(88)
+                pre.append(expand_use(open(real, encoding='utf-8', errors='replace').read(), seen))
             out.append('//' + line[1:])
         else:
             out.append(line)

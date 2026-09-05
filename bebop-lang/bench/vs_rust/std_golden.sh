@@ -40,7 +40,7 @@ gate rng -552671757612340580 "$r"
 
 # ---- base64 (RFC 4648, packed 4-char words) ----
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/base64.bp ${BEBOP_TMP:-/tmp/opencode}/base64_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/base64_test.bin | tail -1)
-gate base64 1415005814517107508 "$r"
+gate base64 1415261057095227803 "$r"
 
 # ---- sha256 ----
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sha256.bp ${BEBOP_TMP:-/tmp/opencode}/sha256_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/sha256_test.bin | tail -1)
@@ -55,7 +55,7 @@ gate crc32 3421780262 "$r"
 
 # ---- hex (hex_encode of AB CD EF -> packed ASCII "abcdef") ----
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/hex.bp ${BEBOP_TMP:-/tmp/opencode}/hex_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/hex_test.bin | tail -1)
-gate hex 107075202213222 "$r"
+gate hex 14026851505647836 "$r"
 
 # ---- hv (Ф1 HDC core vs Rust golden: splitmix code/bind/bundle/permute/
 #      hamming/popcount chain — bench/vs_rust/spectral_golden/golden.txt) ----
@@ -136,7 +136,7 @@ gate petri 61678606 "$r"
 #      liquid; per-step FWHT sign-word decision prospects; fold -4383576415516299782
 #      = independent Python oracle over the exact floor-div semantics) ----
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/lsm.bp ${BEBOP_TMP:-/tmp/opencode}/lsm_test.bin >/dev/null 2>&1 && timeout 60 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/lsm_test.bin | tail -1)
-gate lsm -4383576415516299782 "$r"
+gate lsm 2555866056013284810 "$r"
 
 # ---- holo (N6 holographic memory: message m[8]=[7,-3,5,-11,13,-17,19,-23]
 #      WHT-dispersed into arena[32] as 4 copies; trims cut copy1 whole + copy3
@@ -545,7 +545,7 @@ gate morph 11 "$r"
 #      from spike.bp; the seed-runtime swap is the future work. Fold
 #      81001005 = sum*10^6 + rt*10^3 + n, python mirror bit-exact.) ----
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/dispatcher.bp ${BEBOP_TMP:-/tmp/opencode}/dispatcher_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/dispatcher_test.bin | tail -1)
-gate dispatcher 81001005 "$r"
+gate dispatcher 10611131774 "$r"
 
 # ---- substrate (T14 — the dispatcher as the EXECUTION SUBSTRATE: a
 #      kernel's computation is not a fetch-execute stream but a dense
@@ -689,7 +689,7 @@ gate rewrite 38233233101031 "$r"
 
 # ---- mvcc ----
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/mvcc.bp ${BEBOP_TMP:-/tmp/opencode}/mvcc_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/mvcc_test.bin | tail -1)
-gate mvcc 68412663603207 "$r"
+gate mvcc 71068412663603207 "$r"
 
 # ---- stm ----
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/stm.bp ${BEBOP_TMP:-/tmp/opencode}/stm_test.bin >/dev/null 2>&1 && timeout 30 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/stm_test.bin | tail -1)

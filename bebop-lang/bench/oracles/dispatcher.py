@@ -11,4 +11,5 @@ fired = [i for i in range(64) if act >> i & 1]
 acc = sum(w8[i] for i in fired)
 n = len(fired)
 nok = int(n == bin(act).count("1"))
-print(acc * 10**6 + rt * 1000 * nok + n)
+off = ((1 * 3 + 2) * 4 + 3) * 5 + 4  # T123: bt_offset([2,3,4,5], 1, 2, 3, 4)
+print((acc * 10**6 + rt * 1000 * nok + n) * 131 + off)
