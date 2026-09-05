@@ -1,4 +1,4 @@
-# SESSION HANDOFF — 2026-09-06 (session 11; resume in ONE read)
+# SESSION HANDOFF — 2026-09-06 (session 14; resume in ONE read)
 
 Status: 2026-09-06 CURRENT (rewritten at every session close; task bodies live in HISTORY.md,
 the ledger in TASKS.md, one line per experiment in docs/exp.journal)
@@ -23,6 +23,17 @@ HEAD: `git log --oneline | head -3`; every commit message carries the gate evide
 - Inner loop numbers: docs/DEV-LOOP.md (self-compile 14-17 s, std gate compile 0.5 s,
   std_golden 8.8 s sharded, fuzz 1.1/s per core).
 - Store: unchanged this session (G1-G8 numbers in ROADMAP Measured / RESULT-*.md).
+
+## Session 14 (2026-09-06, HEAD c2173f8 pushed)
+- T90 step 2b landed: `bebop.bin check <src>` (cli_check; diag 13/13; fixpoint deef28e0; census
+  bcond 1588 / cbz 119 ALLOWed). T90's last open piece: messages for runtime traps 80-88 — a
+  design choice for the operator (brk #imm + SIGTRAP handler in the entry stub, 1 word per site,
+  vs an inline write at every trap site), not started.
+- AGENTS L21 + tools/reap.sh: after every task list/kill orphaned work shells and zombie
+  parents (`REAP_PS=tools/reap.fixture tools/reap.sh` is the self-test). Found today: an
+  orphaned invariants.sh + 4 zombies from a dead session at the 32-process cap.
+- fuzzd: the stop file only ends the loop; runsv restarts it — `sv down $PREFIX/var/service/fuzzd`
+  is the real stop (it touches the file via the TERM trap and stays down). `sv up` to resume.
 
 ## Next
 The ordering lives in ONE place: ROADMAP.md "Critical path" (sorted 2026-09-06). Step 1
