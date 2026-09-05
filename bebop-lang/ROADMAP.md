@@ -104,6 +104,7 @@ Honest twins (bench/vs_rust/honest.sh, D11-C): see bench/vs_rust/REPORT-honest.m
 | DRAM bandwidth, one A78 / three | ~12 GB/s / ~12 GB/s |
 | process RSS K1-K4, bebop / Rust | 16-17 MB / 16-17 MB |
 | self-compile pinned | 108.7 s wall, 77.8 MB RSS (bebop.bin 65-67k words) |
+| compile of a std gate, cold / warm .becache hit / trivial-program floor (T108, becache_gate.sh) | 346 ms / 113 ms / 106 ms |
 | page-cache read fault / CoW fault / msync 1 page / rename (proot) | 0.3 us / 3.5 us / ~100 us / ~270 us |
 
 ## Where everything else is

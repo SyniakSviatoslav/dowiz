@@ -27,3 +27,5 @@ bebop bcond 1387 T102 condition fusion
 bebop bcond 1401 T104 madd fusion
 bebop bcond 1403 T72 sys_setaffinity emitter (is_aff dispatch)
 bebop bcond 1405 T105 clz emitter (is_clz dispatch)
+bebop bcond 1459 T108 .becache (chunk_eq/cache_hit/cache_write + cli_compile cache path)
+bebop cbz 157 T108 .becache (cache_hit/cache_write read loops)

@@ -1,4 +1,6 @@
-// selfhost/std/sha256.bp — SHA-256 (FIPS 180-4), exact port of sha256.c.
+use "selfhost/prelude/sha256.bp"
+// selfhost/std/sha256.bp — SHA-256 gate; the algorithm lives in selfhost/prelude/sha256.bp
+// since the T47c split (2026-09-05, so the store can `use` it for layout digests).
 // 64-round K table + message schedule + compression + Merkle-Damgard
 // padding (0x80 … 64-bit BE bit length). i64 cells carry u32 words;
 // every addition is masked & 0xffffffff. ~e is (0 - 1 - e). Bitwise
@@ -10,114 +12,6 @@
 // length is ((n+9+63)/64)*64.
 
 module core { }
-
-// rotr32: 32-bit right rotate over the low 32 bits (masked).
-fn rotr32(x: i64, n: i64) -> i64 {
-  ((x >> n) | (x << (32 - n))) & 4294967295
-}
-
-// sha_transform: compress one 64-byte block into state h[0..8) in place.
-// w[0..16) must hold the block as 16 big-endian u32 cells; w[16..64) is
-// the message schedule scratch. ktab = the 64-entry round-constant table.
-fn sha_transform(h: [i64], w: [i64], ktab: [i64]) -> i64 {
-  let i = 16;
-  while i < 64 {
-    let w15 = w[i - 15];
-    let w2 = w[i - 2];
-    let s0 = rotr32(w15, 7) ^ rotr32(w15, 18) ^ (w15 >> 3);
-    let s1 = rotr32(w2, 17) ^ rotr32(w2, 19) ^ (w2 >> 10);
-    let _ = w[i] = (w[i - 16] + s0 + w[i - 7] + s1) & 4294967295;
-    let i = i + 1;
-    0
-  };
-  let a = h[0];
-  let b = h[1];
-  let c = h[2];
-  let d = h[3];
-  let e = h[4];
-  let f = h[5];
-  let g = h[6];
-  let hh = h[7];
-  let j = 0;
-  while j < 64 {
-    let S1 = rotr32(e, 6) ^ rotr32(e, 11) ^ rotr32(e, 25);
-    let ch = (e & f) ^ ((0 - 1 - e) & g);
-    let t1 = (hh + S1 + ch + ktab[j] + w[j]) & 4294967295;
-    let S0 = rotr32(a, 2) ^ rotr32(a, 13) ^ rotr32(a, 22);
-    let maj = (a & b) ^ (a & c) ^ (b & c);
-    let t2 = (S0 + maj) & 4294967295;
-    let hh = g;
-    let g = f;
-    let f = e;
-    let e = (d + t1) & 4294967295;
-    let d = c;
-    let c = b;
-    let b = a;
-    let a = (t1 + t2) & 4294967295;
-    let j = j + 1;
-    0
-  };
-  let _ = h[0] = (h[0] + a) & 4294967295;
-  let _ = h[1] = (h[1] + b) & 4294967295;
-  let _ = h[2] = (h[2] + c) & 4294967295;
-  let _ = h[3] = (h[3] + d) & 4294967295;
-  let _ = h[4] = (h[4] + e) & 4294967295;
-  let _ = h[5] = (h[5] + f) & 4294967295;
-  let _ = h[6] = (h[6] + g) & 4294967295;
-  let _ = h[7] = (h[7] + hh) & 4294967295;
-  0
-}
-
-// sha256_fold: SHA-256 of byte cells data[0..n), folded to one i64.
-fn sha256_fold(data: [i64], n: i64) -> i64 {
-  let size = ((n + 9 + 63) / 64) * 64;
-  let pad = zeros(size);
-  let k = 0;
-  while k < n {
-    let _ = pad[k] = data[k];
-    let k = k + 1;
-    0
-  };
-  let _ = pad[n] = 128;
-  let tl = n * 8;
-  let _ = pad[size - 8] = (tl >> 56) & 255;
-  let _ = pad[size - 7] = (tl >> 48) & 255;
-  let _ = pad[size - 6] = (tl >> 40) & 255;
-  let _ = pad[size - 5] = (tl >> 32) & 255;
-  let _ = pad[size - 4] = (tl >> 24) & 255;
-  let _ = pad[size - 3] = (tl >> 16) & 255;
-  let _ = pad[size - 2] = (tl >> 8) & 255;
-  let _ = pad[size - 1] = tl & 255;
-  let h = [1779033703, 3144134277, 1013904242, 2773480762, 1359893119, 2600822924, 528734635, 1541459225];
-  let w = zeros(64);
-  let ktab = [1116352408, 1899447441, 3049323471, 3921009573, 961987163, 1508970993, 2453635748, 2870763221, 3624381080, 310598401, 607225278, 1426881987, 1925078388, 2162078206, 2614888103, 3248222580, 3835390401, 4022224774, 264347078, 604807628, 770255983, 1249150122, 1555081692, 1996064986, 2554220882, 2821834349, 2952996808, 3210313671, 3336571891, 3584528711, 113926993, 338241895, 666307205, 773529912, 1294757372, 1396182291, 1695183700, 1986661051, 2177026350, 2456956037, 2730485921, 2820302411, 3259730800, 3345764771, 3516065817, 3600352804, 4094571909, 275423344, 430227734, 506948616, 659060556, 883997877, 958139571, 1322822218, 1537002063, 1747873779, 1955562222, 2024104815, 2227730452, 2361852424, 2428436474, 2756734187, 3204031479, 3329325298];
-  let bi = 0;
-  let nb = size / 64;
-  while bi < nb {
-    let o = bi * 64;
-    let j = 0;
-    while j < 16 {
-      let b0 = pad[o + j * 4];
-      let b1 = pad[o + j * 4 + 1];
-      let b2 = pad[o + j * 4 + 2];
-      let b3 = pad[o + j * 4 + 3];
-      let _ = w[j] = ((b0 * 256 + b1) * 256 + b2) * 256 + b3;
-      let j = j + 1;
-      0
-    };
-    let _ = sha_transform(h, w, ktab);
-    let bi = bi + 1;
-    0
-  };
-  let i = 0;
-  let acc = 0;
-  while i < 8 {
-    let acc = acc * 31 + h[i];
-    let i = i + 1;
-    0
-  };
-  acc
-}
 
 fn main() -> i64 {
   let abc = [97, 98, 99];

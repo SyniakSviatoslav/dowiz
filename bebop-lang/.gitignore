@@ -34,3 +34,4 @@ bench/vs_rust/c/std_golden
 graphify-out/
 entities.json
 mempalace.yaml
+*.store

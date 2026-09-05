@@ -7,6 +7,8 @@ Types: 'i64' | '[i64]' | 'str' | '?' (unknown)."""
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bpref
+# The only sanctioned i64 <-> [i64] casts: the store's mapping base (selfhost/prelude/store.bp, T111).
+CASTS = {'st_cells', 'st_addr'}
 BUILTIN = {'zeros': (['i64'], '[i64]'), 'str_len': (['str'], 'i64'), 'char': (['str', 'i64'], 'i64'), 'clock_ms': ([], 'i64'),
            'sys_open': (['[i64]', 'i64', 'i64'], 'i64'), 'sys_slurp': (['i64', 'i64'], 'str'), 'sys_close': (['i64'], 'i64'),
            'sys_read': (['i64', '[i64]', 'i64'], 'i64'), 'sys_write': (['i64', '?', 'i64'], 'i64'), 'sys_exit': (['i64'], 'i64'),
@@ -15,7 +17,7 @@ BUILTIN = {'zeros': (['i64'], '[i64]'), 'str_len': (['str'], 'i64'), 'char': (['
            'sys_futex_wake': (['[i64]', 'i64', 'i64'], 'i64'), 'sys_atomic_add': (['[i64]', 'i64', 'i64'], 'i64'),
            'sys_exit_thread_guard': (['i64', 'i64'], 'i64'), 'sys_readbuf': (['i64', 'i64'], 'str'), 'sys_mmap': (['i64'] * 6, 'i64'),
            'sys_munmap': (['i64', 'i64'], 'i64'), 'sys_ftruncate': (['i64', 'i64'], 'i64'), 'sys_rename': (['[i64]', 'i64', '[i64]', 'i64'], 'i64'),
-           'sys_arena_end': ([], 'i64'), 'sys_setaffinity': (['[i64]', 'i64'], 'i64'), 'clz': (['i64'], 'i64'), 'hvham': (['[i64]', '[i64]', 'i64'], 'i64'), 'hvham2': (['[i64]', 'i64', '[i64]', 'i64', 'i64'], 'i64')}
+           'sys_arena_end': ([], 'i64'), 'sys_setaffinity': (['[i64]', 'i64'], 'i64'), 'clz': (['i64'], 'i64'), 'crc32': (['[i64]', 'i64'], 'i64'), 'hvham': (['[i64]', '[i64]', 'i64'], 'i64'), 'hvham2': (['[i64]', 'i64', '[i64]', 'i64', 'i64'], 'i64')}
 class TC:
     def __init__(self, p, fname):
         self.p, self.fname, self.findings = p, fname, []
@@ -100,7 +102,7 @@ class TC:
             env = {n: t for n, t in zip(params, pts)}
             self.declared = set(params)
             v = self.body(body, env, fn)
-            if rt in ('i64', '[i64]', 'str') and v in ('i64', '[i64]', 'str') and v != rt:
+            if rt in ('i64', '[i64]', 'str') and v in ('i64', '[i64]', 'str') and v != rt and fn not in CASTS:
                 self.note(fn, 'returns %s, declared -> %s' % (v, rt))
         return self.findings
 total = 0

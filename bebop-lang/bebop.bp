@@ -4024,6 +4024,78 @@ fn strequals(s: str, p: [i64]) -> i64 {
 
 // Copy a NUL-terminated byte string into cell slots (byte per element) —
 // sys_open's path contract is a CELL buffer, argv strings are BYTE strings.
+// T108 .becache (2026-09-05): `<out>.becache` = [compiler bytes][expanded source
+// bytes]. A compile whose compiler binary (argv[1]), expanded source and existing
+// <out> are byte-identical to that record returns before emit_words. No hash: the
+// key is the exact bytes, so a hit can never be a collision (D11 honesty floor).
+// Streamed in 8192-byte chunks (two scratch buffers, no arena growth: a 1M-cell
+// buffer tripped the arena trap 80). Publish mode (argc >= 6) bypasses the cache.
+// chunk_eq(ta, tb, n): 1 iff the first n cells agree.
+fn chunk_eq(ta: [i64], tb: [i64], n: i64) -> i64 {
+  let ok = 1;
+  let k = 0;
+  while k < n * ok {
+    let ok = if ta[k] == tb[k] then 1 else 0;
+    let k = k + 1;
+    0
+  };
+  ok
+}
+// cache_hit(cfd, kfd, srcv): the cache stream == compiler stream ++ source bytes, exactly.
+fn cache_hit(cfd: i64, kfd: i64, srcv: str, ta: [i64], tb: [i64]) -> i64 {
+  let ok = 1;
+  let go = 1;
+  while go == 1 {
+    let rk = sys_read(kfd, tb, 8192);
+    let rc = if rk > 0 then sys_read(cfd, ta, rk) else 0;
+    let ok = if rk > 0 then (if rc == rk then chunk_eq(ta, tb, rk) else 0) else ok;
+    let go = if rk > 0 then ok else 0;
+    0
+  };
+  let sl = str_len(srcv);
+  let off = 0;
+  while off < sl * ok {
+    let want = if sl - off < 8192 then sl - off else 8192;
+    let rc = sys_read(cfd, ta, want);
+    let ok = if rc == want then 1 else 0;
+    let k = 0;
+    while k < rc * ok {
+      let ok = if ta[k] == char(srcv, off + k) then 1 else 0;
+      let k = k + 1;
+      0
+    };
+    let off = off + want;
+    0
+  };
+  let tail = if ok == 1 then sys_read(cfd, ta, 8192) else 1;
+  if tail == 0 then ok else 0
+}
+// cache_write(cfd, kfd, srcv): stream the compiler bytes then the source bytes.
+fn cache_write(cfd: i64, kfd: i64, srcv: str, ta: [i64]) -> i64 {
+  let go = 1;
+  while go == 1 {
+    let rk = sys_read(kfd, ta, 8192);
+    let _ = if rk > 0 then sys_write(cfd, ta, rk) else 0;
+    let go = if rk > 0 then 1 else 0;
+    0
+  };
+  let sl = str_len(srcv);
+  let off = 0;
+  while off < sl {
+    let want = if sl - off < 8192 then sl - off else 8192;
+    let k = 0;
+    while k < want {
+      let _ = ta[k] = char(srcv, off + k);
+      let k = k + 1;
+      0
+    };
+    let _ = sys_write(cfd, ta, want);
+    let off = off + want;
+    0
+  };
+  0
+}
+
 fn str_to_cells(dst: [i64], src: str) -> i64 {
   let i = 0;
   let done = 0;
@@ -4193,6 +4265,33 @@ fn cli_compile(argc: i64, argv: [str]) -> i64 {
   let _ = tmpc[lo + 2] = 115;
   let _ = tmpc[lo + 3] = 101;
   let srcv = use_expand(srcv0, tmpc, lo + 4);
+  let cpath = zeros(lo + 9);
+  let _ = str_to_cells(cpath, out);
+  let _ = cpath[lo] = 46;
+  let _ = cpath[lo + 1] = 98;
+  let _ = cpath[lo + 2] = 101;
+  let _ = cpath[lo + 3] = 99;
+  let _ = cpath[lo + 4] = 97;
+  let _ = cpath[lo + 5] = 99;
+  let _ = cpath[lo + 6] = 104;
+  let _ = cpath[lo + 7] = 101;
+  let lc = str_len(argv[1]);
+  let pcomp = zeros(lc + 1);
+  let _ = str_to_cells(pcomp, argv[1]);
+  let ta = zeros(8192);
+  let tb = zeros(8192);
+  let nocache = if argc >= 6 then 1 else 0;
+  let ofd0 = if nocache == 1 then 0 - 1 else sys_open(pout, lo, 0);
+  let cfd0 = if ofd0 >= 0 then sys_open(cpath, lo + 8, 0) else 0 - 1;
+  let kfd0 = if cfd0 >= 0 then sys_open(pcomp, lc, 0) else 0 - 1;
+  let hit = if kfd0 >= 0 then cache_hit(cfd0, kfd0, srcv, ta, tb) else 0;
+  let _ = if ofd0 >= 0 then sys_close(ofd0) else 0;
+  let _ = if cfd0 >= 0 then sys_close(cfd0) else 0;
+  let _ = if kfd0 >= 0 then sys_close(kfd0) else 0;
+  while hit == 1 {
+    return 0;
+    0
+  };
   let words = emit_words(srcv);
   let n = words[0];
   let offs = emit_offsets(srcv);
@@ -4238,6 +4337,11 @@ fn cli_compile(argc: i64, argv: [str]) -> i64 {
   let ofd = sys_open(tg, tl, 578);
   let rc2 = sys_export(ofd, buf, nb);
   let _ = sys_close(ofd);
+  let kfd1 = if nocache == 1 then 0 - 1 else sys_open(pcomp, lc, 0);
+  let cfd1 = if kfd1 >= 0 then sys_open(cpath, lo + 8, 578) else 0 - 1;
+  let _ = if cfd1 >= 0 then cache_write(cfd1, kfd1, srcv, ta) else 0;
+  let _ = if cfd1 >= 0 then sys_close(cfd1) else 0;
+  let _ = if kfd1 >= 0 then sys_close(kfd1) else 0;
   let rn = if publish == 1 then sys_rename(ptmp, ptl[0], pout, lo) else 0;
   rc2 * 10 + rn
 }
