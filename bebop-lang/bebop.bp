@@ -1843,10 +1843,61 @@ fn madd_try(insns: [i64], n: [i64], op: i64, fntab: [i64]) -> i64 {
   hit
 }
 
+// T104b (2026-09-06): `x * 2^k` whose right operand is the `movz x1,#c` just emitted
+// becomes `lsl x0,x0,#k` = UBFM x0,x0,#(64-k),#(63-k) (0xD3400000 | (64-k)<<16 | (63-k)<<10;
+// as+objdump: lsl #3 = d37df000, #1 = d37ff800, #15 = d371c000) and the movz is retracted:
+// one word for two, no multiplier. c in 2..2^15 (a single movz), the movz not a label /
+// barrier position (fntab[3660]). Constants derived by tools scratch t104 (python), not typed.
+fn shl_try(insns: [i64], n: [i64], op: i64, fntab: [i64]) -> i64 {
+  let at = n[0] - 1;
+  let w = if at >= 0 then insns[at] else 0;
+  let is_movz1 = if (w & 4292870175) == 3531603969 then 1 else 0;
+  let c = (w >> 5) & 65535;
+  let pow2 = if c >= 2 then (if (c & (c - 1)) == 0 then 1 else 0) else 0;
+  let ok = (if op == 4 then 1 else 0) * is_movz1 * pow2 * (if fntab[3660] == at then 0 else 1);
+  let k = 63 - clz(c);
+  let _ = if ok == 1 then (let _ = n[0] = at in 0) else 0;
+  let _ = if ok == 1 then em(insns, n, 3544186880 + (((64 - k) & 63) << 16) + ((63 - k) << 10)) else 0;
+  let _ = if ok == 1 then push(insns, n, fntab) else 0;
+  ok
+}
+
+// T104b: the shifted-register add. `xB + xA * 2^k` now arrives as [mov x0,xA]
+// [lsl x0,x0,#k][mov x1,x0][mov x0,xB] + add: the four words become ONE
+// `add x0,xB,xA,lsl #k` (0x8B000000 | A<<16 | k<<10 | B<<5; as+objdump:
+// add x0,x5,x3,lsl #3 = 8b030ca0). Returns 1 when fused.
+fn addshift_try(insns: [i64], n: [i64], op: i64, fntab: [i64]) -> i64 {
+  let cur = n[0];
+  let ok = if cur >= 4 then 1 else 0;
+  let b0 = if ok == 1 then cur - 4 else 0;
+  let w0 = insns[b0];
+  let w1 = insns[b0 + 1];
+  let w2 = insns[b0 + 2];
+  let w3 = insns[b0 + 3];
+  let is_mova = if (w0 & 4292935679) == 2852127712 then 1 else 0;
+  let is_ubfm = if (w1 & 4290774015) == 3544186880 then 1 else 0;
+  let imms = (w1 >> 10) & 63;
+  let immr = (w1 >> 16) & 63;
+  let is_lsl = is_ubfm * (if immr == ((imms + 1) & 63) then 1 else 0) * (if imms < 63 then 1 else 0);
+  let is_mov10 = if w2 == 2852127713 then 1 else 0;
+  let is_movb = if (w3 & 4292935679) == 2852127712 then 1 else 0;
+  let nolab = if fntab[3660] < b0 then 1 else 0;
+  let hit = ok * (if op == 2 then 1 else 0) * is_mova * is_lsl * is_mov10 * is_movb * nolab;
+  let ra = (w0 >> 16) & 31;
+  let rb = (w3 >> 16) & 31;
+  let k = 63 - imms;
+  let _ = if hit == 1 then (let _ = n[0] = b0 in 0) else 0;
+  let _ = if hit == 1 then (let _ = em(insns, n, 2332033024 + ra * 65536 + k * 1024 + rb * 32) in 0) else 0;
+  let _ = if hit == 1 then (let _ = push(insns, n, fntab) in 0) else 0;
+  hit
+}
+
 // The op word(s) + push with x0 = left, x1 = right already in place.
 fn emit_binop_regs(insns: [i64], n: [i64], op: i64, fntab: [i64]) -> i64 {
   let fused = madd_try(insns, n, op, fntab);
-  if fused == 1 then n[0] else emit_binop_regs_plain(insns, n, op, fntab)
+  let shifted = if fused == 1 then 0 else shl_try(insns, n, op, fntab);
+  let addsh = if fused + shifted >= 1 then 0 else addshift_try(insns, n, op, fntab);
+  if fused + shifted + addsh >= 1 then n[0] else emit_binop_regs_plain(insns, n, op, fntab)
 }
 
 fn emit_binop_regs_plain(insns: [i64], n: [i64], op: i64, fntab: [i64]) -> i64 {

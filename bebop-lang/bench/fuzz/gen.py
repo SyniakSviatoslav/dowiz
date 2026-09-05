@@ -47,6 +47,8 @@ class Ctx:
         self.scalars = [p for p, a in fn.params if not a]
         self.arrays = {p: 7 for p, a in fn.params if a}  # name -> mask
         self.loopvars = []
+        self.bigvars = []
+        self.nloops = 0  # every loop var is fresh: a big loop is not in loopvars, so len(loopvars) repeated a name (seed 30002 looped forever in BOTH engines)
         self.binds = set(p for p, _ in fn.params)
         self.budget = budget  # max binds this fn may reach (<=128)
         self.loop_depth = 0
@@ -70,7 +72,7 @@ class Ctx:
     def assignable(self):
         # the recursion parameter is never assigned: `f(n - 1)` guarded by
         # `n < 1` only bounds the depth (<= 7) if n keeps its entry value
-        fixed = self.loopvars + ([self.fn.params[0][0]] if self.fn.rec else [])
+        fixed = self.loopvars + self.bigvars + ([self.fn.params[0][0]] if self.fn.rec else [])  # a big loop's var is not an index candidate but must never be reassigned either (seed 30002: `let i4 = i5` inside the body looped forever)
         return [s for s in self.scalars if s not in fixed]
 
     def lit(self):
@@ -266,7 +268,8 @@ class Ctx:
         return '%s;' % self.expr(0)
 
     def loop(self, depth):
-        i = 'i%d' % len(self.loopvars)
+        i = 'i%d' % self.nloops
+        self.nloops += 1
         if not self.can_bind(i):
             return '%s;' % self.expr(0)
         self.bind(i)
@@ -279,6 +282,8 @@ class Ctx:
         self.scalars.append(i)
         if not big:
             self.loopvars.append(i)
+        else:
+            self.bigvars.append(i)
         self.loop_depth += 1
         outer_arrays = set(self.arrays)  # T43: a literal bound in the body is released at loop exit (DIVERGE-20056)
         body = [self.stmt(depth + 1) for _ in range(self.r.randint(1, 4))]

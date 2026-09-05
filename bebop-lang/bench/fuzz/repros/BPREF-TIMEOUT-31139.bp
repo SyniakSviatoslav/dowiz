@@ -1,0 +1,254 @@
+// BPREF-TIMEOUT seed=31139 expected=bpref > 20 s got=
+// gen.py --seed 31139
+fn main() -> i64 {
+  let v0 = (2) + (-(((16) <= ((6) + 9) < 2048 >> 2729 - 14 != (14) != 4110 >> 0 % (((377) == (14)) + 8)) - (16 << 16 > (3931) != (4271) * (8 / (-1235)) - (2))));
+  let v1 = v0;
+  let i0 = 0;
+  while i0 <= 2 {
+    v0 *= (if v0 then v1 else v0);
+    i0 += 1;
+    0
+  };
+  match some { none => (v1) >>> (i0), some => 3 };
+  let a0 = [f2(i0, 764, (if v1 then 1248 else v1) ^ v1, v0, 2, ((let t3 = i0 in v1)) >>> ((0xd1c62) + (v1) * (v0)), f2((if (12) > (v1) - (v0) != i0 then v1 else i0 * (i0 / (v0 >> v1))), (if i0 + (i0) then i0 else 14), v0, (i0 % v0 + v1) + (v1) >= v1, 0, !(4), (let _ = v1 = (v1 - 0 * v0 - i0 | (v0)) <= (-4030) in v1 == -1487), match many { many => v1, some => i0 }, (i0) + ((0x27f62) / v1)), i0 > (v0), v1), (let t3 = v1 in 0xeba11), v1, v1, v0, v1, i0, 10];
+  let i1 = 0;
+  while i1 < 136 {
+    let v1 = (!((let t3 = a0[i0] / (i0) in v1)) >= v0) - (i0);
+    let a1 = [(v0) / (v1), v0, f1(((v0) & 63)) < i0, (let t2 = v1 | i1 in match none(15) { some => (a0[i0]) == (a0[i0]), many => t2, none(m0) => 11 }), a0[4], 13, v0, f2(v0, match many(v0 - 12) { many => a0[i0], some => v0, none => a0[7] }, v0, v1, i0, (if i1 then v0 else v0), v0, !(i1), v0)];
+    let v0 = ((if 2864 then a0[i0] else i1)) / i0;
+    i1 += 1;
+    0
+  };
+  a0[i0] = 11;
+  let i2 = 0;
+  while i2 != 70 {
+    (v0) >> (v0);
+    let _ = v1 = v1;
+    let _ = i2 = i2 + 1;
+    0
+  };
+  a0[5] = v1;
+  i2
+}
+fn f0(n: i64) -> i64 {
+  13 + (8);
+  let i0 = 0;
+  while i0 != 4 {
+    let i1 = 0;
+    while i1 != 3 {
+      i1;
+      (if f1((((n) * 13) & 63)) then (if 0x1bdc2 then i1 else n) else (if 20 then (if 2147483647 then (i0) >>> (5) else i1) else match none { some => (n) / 0x4e7c4, none => 3, many => 17 }));
+      let i1 = i1 + 1;
+      0
+    };
+    let i2 = 0;
+    while i2 <= 5 {
+      let v0 = 2039;
+      v0 /= i2;
+      let v0 = v0;
+      let v0 = i0;
+      i2 += 1;
+      0
+    };
+    let _ = i0 = i0 + 1;
+    0
+  };
+  if n < 1 then 16 else (f0(n - 1)) - 5
+}
+fn f1(n: i64) -> i64 {
+  ((if n then n else n)) / match some(4) { none => 0, some => (n) < 1 };
+  let v0 = f2(10 < (n), 15 - n * ((if n ^ n + n - n >>> n then (n) >= (n) else n)), n, n, f2((n) >> ((let t3 = 20 in (t3) % ((1000000000000) <= (n << (t3) | (n))))), n, (if n then !(6) else -1680 / (n)), 2994, (n) - ((n) % (n) - ((n) / (0xb2932)) <= 18) - n * 19, (if n then 15 & (n) else n), !(n - n), -3273, match some { some => (n) != ((n) / (3755) / ((19) - (n))) % (n >= n * n), none => (n) % (n) }), n, n, n, n % (n) % (2) > (n) == (n) ^ (n));
+  let i0 = 0;
+  while i0 < 6 {
+    let v0 = v0;
+    let i1 = 0;
+    while i1 != 2 {
+      let v1 = i0;
+      v0 += i0;
+      let v2 = n;
+      i1 += 1;
+    };
+    let v3 = f2((if 1 then (let t2 = v2 in n > (t2)) else 2177) & (!((i1) * (v0) | i0 / (v2))) % 10, v1, f2(!(v0) * ((let t1 = v0 / (12) in n)), !(n), (let _ = v1 = (i1) - 8 in 15 % (n) >= (v1)), -2074, (match many(18) { many(m0) => v1, none => i1 % (i1) }) % v1, ((20) >> (((4096) >>> (14 + (v2))) - ((i0) - (v1)))) != v1 >> (if v1 then n else i0), v1, (n) / (v0) & v1, v1), (if v0 then 65536 else i1), match some(9 % 17) { some(m1) => 13, none => v1 }, i1, (if !(v0) then n != (let t3 = v0 in (2679) * (i0) < ((20 | (16)) ^ v1)) else n), v2, i0);
+    let v4 = 1089;
+    i0 += 1;
+    0
+  };
+  let _ = v4 = i1;
+  let i2 = 0;
+  while i2 < 6 {
+    match none { many => 10, some => 14, none => i1 };
+    let v5 = (if i1 then 1444 else f2(((n) / (v3 != n) + (14)) == -(n), v0, match many { some => (if (v1) >= (v1) - (i1 != v0) then v0 else i1), many => v2, none => v2 }, v3, (i1) + 8, n, v1, i0, v0));
+    let i2 = i2 + 1;
+    0
+  };
+  let v6 = (if (let t1 = (let _ = v4 = v1 in v5) in v4 > i0) ^ (i1) then !(1033) else 20 / ((v1 >= (v0)) - 4768) < match many(10) { many(m0) => (v2) & (v2), some => (if i0 then v3 - (i1) <= (i0) else i0), none => i0 });
+  let v7 = (!(i0)) + (4 != (let _ = v6 = v0 in v0));
+  let v8 = 0xef2c9;
+  let v9 = ((if v4 then (if v8 then v8 else (i0) == (i1)) / v0 else i2 <= (2))) % (10);
+  let i3 = 0;
+  while i3 <= 2 {
+    let v10 = i0;
+    let i4 = 0;
+    while i4 < 5 {
+      f2(n, (if 14 then v10 else !(i1) % (f2(7, v8, i2, (v4) % (i3), i4, v9, (i1) << (17), i0, i1))), v5, v3, 10, i2 << (0 + (v7) ^ (if 11 then 12 / (i3) else i2)), v1, i4, 19);
+      let v11 = match some { some => ((if v7 then 7 else ((11) + 2) >> i3)) - ((i4 % (0)) <= (v2) >> (v5) + v10), many => (v3) + v3 ^ (((i2) < n) / -4283) };
+      break;
+      i4 += 1;
+    };
+    let _ = i3 = i3 + 1;
+  };
+  let v12 = v7;
+  let v13 = v1;
+  let i5 = 0;
+  while i5 <= 94 {
+    let v14 = -(v1 % (f2(-(((v9) / v13) ^ (v8) + v11), 4, (i4) >= 777, v3, (if (v7 << (13)) / (v1) << i4 then v11 != (v11) else v10), 3830, (if 13 then i5 else v8), v1 % i5 != (i4), i1)));
+    let v15 = match some(5) { some(m0) => 9, none => (v6) <= 9, many => 4 };
+    let i6 = 0;
+    while i6 <= 1 {
+      v6 %= f2(f2(0x1388a, (let t1 = i4 in (v14) >= v8), ((let t3 = v2 in v12)) / (v7 / v8) / n, i6, v1 + (v15), v2, (9223372036854775807) >= i0 % v6 >>> (let _ = v15 = v5 in 13 > 2), v15, v14 | (i1) ^ (18) << v12), (i4 % v6) - ((4) == v8 >> ((-3418 != i0) ^ (v0 ^ (19 & (v6)))) % ((if i2 then 5 else v10))), 3527 / ((let _ = v6 = (let _ = v14 = v0 in (i1) ^ (((v7) != v0) + (i0 + (i4))) | (v4)) in i5)), i3, v15, 18446744073709551615, (let t1 = i1 in v9), (9) == (v5), 4);
+      let v16 = 19;
+      let v17 = !(11);
+      let v18 = i4;
+      let _ = i6 = i6 + 1;
+      0
+    };
+    let i7 = 0;
+    while i7 != 3 {
+      v8;
+      let v2 = (let t3 = i2 in v11);
+      let i7 = i7 + 1;
+    };
+    i5 += 1;
+    0
+  };
+  let _ = v8 = 7;
+  let i8 = 0;
+  while i8 < 3 {
+    (if i0 then (if i6 then (10) >> ((v1) < (v2)) else v11) else v9);
+    i5;
+    let v19 = (if v2 then 11 else 14 / (v6)) % v13;
+    let i9 = 0;
+    while i9 <= 3 {
+      v13;
+      match many(i0 * 6) { many => i9 | (17), some => 8 } - ((let _ = v19 = !(f2((v12) >>> i4, v16, (v16) * (i7), v8, v14, 5, 13, v16, i1)) in i9));
+      let v20 = f2((if v16 then i0 else v13), v3, (if v4 ^ i3 / ((v0) >> (i0)) then v10 else v4), ((v12) * (i1)) == v16, 9223372036854775807 | v13, (9 + i3) | 6, !(v15), !((i6) == (11)), v3) | i1 >> (i8) + f2(v16, (v5) + (i1), v12, (11) < (i9) * v18, i4, (5) - 9, v11, v5 + v17, 9);
+      let i9 = i9 + 1;
+      0
+    };
+    let i8 = i8 + 1;
+    0
+  };
+  let v21 = ((if (v15) % 10 then (if (v13) * 100 then v11 else v6 >>> (0xfe32f)) else v9)) != 1 - (f2(5, ((i1) & v1) ^ (8), (if 6 then 1 else i7), 11, match many(5 - 808) { many(m0) => 2, some => (if (i9) >> (v14) then i9 else i3) }, v15, i4, (let t0 = (v16) / (i2) in i0 << (v13)), f2((v12) <= (i9), v15, (if v3 then 18 else (i9) | i5), v2, i9 <= (4095 / v18) / ((v20) << (i8)), v15, (i9) | v20, 4542, (if i5 then v2 else i3 >= (i0)))));
+  let _ = v0 = !(v2);
+  let i10 = 0;
+  while i10 != 1 {
+    let v22 = v18;
+    let v23 = v12;
+    let v24 = v10;
+    let v19 = (if f2(9, v9, f2(i6, i2, v10, i8, 3965, v14 == v10, 13, 10, i7), (v21) | (v11), 4, v19, v5, 4096 >= v10, (v14) * (0x603a3)) then (v23) < (7) > v3 else v10 == (-2745) << (v7)) | ((let t2 = (i7) > v16 in 18));
+    break;
+    i10 += 1;
+    0
+  };
+  let i11 = 0;
+  while i11 != 3 {
+    let i12 = 0;
+    while i12 != 6 {
+      i6;
+      let v25 = (-(v10)) - (if f2((if v4 then i10 >= (i2) else i9 <= (0x9ac9d)), (let _ = v18 = 4855 in v20), (let t3 = v1 in i5), v7, v0, 20, v23, (let _ = v3 = 20 in i8 > v23), i1) then v3 else n % 2129 << v17);
+      let _ = i12 = i12 + 1;
+      0
+    };
+    let v26 = i11;
+    let v27 = (match many(4625 / 4475) { many(m0) => i2 > 4, some => ((v18) | 0x226f8) > i6, none => 936 & ((n) ^ (n)) }) * ((if v16 then ((if 20 then i11 else (10) != (v6))) - f2(((i5) + v19) + ((19) ^ (3) | v22 > -1532 << 7 + v7), 8 ^ (v0), i5, v23 == (v1), i7, (i7 % i4) | (16), i3, i10, 1984) else 8));
+    i7;
+    let _ = i11 = i11 + 1;
+  };
+  let i13 = 0;
+  while i13 != 78 {
+    let i14 = 0;
+    while i14 <= 1 {
+      let v28 = f2(i2 * (v12 * (v22)), v16, v25, 16, 12, 20, 16, ((v25) < v25 << i0 & f2(v6, 2209, v9, v11, i0 * v25, v19, v2, 2147483647, 0x35020)) <= 12, (if v17 then -454 else v15));
+      let v19 = n;
+      i14 += 1;
+      0
+    };
+    let i15 = 0;
+    while i15 != 2 {
+      let _ = v7 = (let t2 = f2((i13) * (v19 | 10 < (v12)), 4, v9, (0xc4489) >>> (i4) | (2), i4, v22, -131, v9 - (i7), 12 >= (v13) >>> (v9)) in (i4) / (v1)) <= v8 < v27;
+      let v29 = (v23) % (v21) & (6) >> v5 - (v1);
+      let v30 = 20;
+      let v31 = f2((if 0xbce9a then i1 else 2792), i14, v20, 65536 != v15, (5) == (14) <= v22 * v19, f2(v23 << v28, (2) / (i10), 5, 0x5ac00, v5, v1, i14, v4, v6), ((13) >> (v4) * (15)) > (v25 <= i10) ^ i15, v20, (v2) > (v7) == v30) + (v14) + i6;
+      let _ = i15 = i15 + 1;
+      0
+    };
+    let v32 = f2(i5, v16, v21, (v6) + f2(i7, v16 > (i1), v5, 4228, (10) & ((v2) - i15), 9, (i7) ^ v20, 7, (v24 + 3 - (v30)) / ((v27) + ((i9) % (v14)))), v10, 9223372036854775807, f2(f2(4, v4 / (v25), 4505, v25, v22, v26, i10 << v11 - (i3) * (i6) % ((11) < v6), 6, i8), v17 * (v28), v22, match none(v18 - 17) { none(m1) => v6, some => v13 }, v28 >> -819 * 1, 0, match some(10 * 0) { none => 6, some(m1) => v11 >> (2) - v1 }, f2(2, i2, v17, v30, i12 & i3, 13, v28, (v2) >= (i8), i2), i8 | (v1)), i15, (10) * (f2(i8, (v26 / n + i0) - ((i6) >> (v6) != 5), i0, v26, (v25) > i5, (i12) / i15, v23, i10 ^ i14, -3836))) ^ (((v13) >> 15) << (n) - 3415 >> (v7));
+    i13 += 1;
+    0
+  };
+  v32;
+  let v24 = !(2);
+  let v33 = v15;
+  let v34 = (i12) << (match many { many => i2, none => v15 });
+  let v35 = ((let t3 = v1 in -(v32 - (v28)))) >>> v31;
+  let i16 = 0;
+  while i16 < 132 {
+    let v36 = (v12) >> (12);
+    let v37 = (let t1 = (if 0 then v7 else v28) in (if ((if 18 then v15 else 9)) ^ (v5) then (i2) | (-(((v26 & (3)) / v30) == v1 + (i9))) else (v30 < (v27)) + v25));
+    break;
+    let _ = i16 = i16 + 1;
+    0
+  };
+  let v38 = match many { some => i8, none => (v32) * (i3) - (v20), many => (if 6 then (if i5 then -(v25) else (if (((v26) + (2)) >> (1) + (v29 < (9223372036854775807))) * (8) then (14) / i9 >> ((i4 - ((15) % (4))) / (v18)) else v35)) else ((i4) + (v23)) | (12) ^ !(-4625)) };
+  let i17 = 0;
+  while i17 <= 95 {
+    let v39 = v15;
+    let _ = v10 = (let t0 = v6 in 0x840ab);
+    i17 += 1;
+    0
+  };
+  (if (match none(1000000000000) { many => -(i1), none(m1) => 16 }) >> (let t3 = (let t1 = v34 in v31) in i7) then f2(i17, i17, (if (v33) >>> (v37) then 0 else (if v39 then v6 else i13)), (if v20 then v33 else 9223372036854775808), (if (v15) << (v5 / 9223372036854775807) then i16 else i9), v21, (if v3 then -(v0) else (if i12 then v5 else v18)), -(i9), v32) else (if v10 then v36 else v6 * ((i0) + v33) ^ v36));
+  v36 %= v35;
+  let i18 = 0;
+  while i18 < 103 {
+    let v40 = v0;
+    let v13 = 16;
+    let i19 = 0;
+    while i19 < 5 {
+      let v41 = 0x1f101;
+      v40;
+      let v42 = v31 & v10;
+      let v43 = -1289;
+      let _ = i19 = i19 + 1;
+      0
+    };
+    let i18 = i18 + 1;
+    0
+  };
+  let _ = v14 = (v20) % ((i5) + (((12 * (2)) == (v24) != v38) & ((v4) - ((v5) | v27))));
+  let v44 = v2;
+  v37 %= v18 <= i5;
+  let i20 = 0;
+  while i20 < 3 {
+    (v44) >= ((let t0 = f2(v12, (1841 * (20)) + (i2 != (9223372036854775808)), 5, v6 << v36, (780) >>> v1 << (i1), i16, v44, (v35 == v8) + (v4), v32) in (let t1 = v39 in (0xca4c2 % (i19 * (v6))) << (v1)))) != (match none(v40) { none(m0) => v36 });
+    let v45 = (if (let _ = v16 = v18 in i17) then v15 else (if 3 then v34 else v40) + (v22) << ((if i11 then i11 else v14 >= (v25) & v33)));
+    break;
+    let _ = i20 = i20 + 1;
+    0
+  };
+  v35 /= 16;
+  i18;
+  if n < 1 then v15 else i1 + f1(n - 1)
+}
+fn f2(p0: i64, p1: i64, p2: i64, p3: i64, p4: i64, p5: i64, p6: i64, p7: i64, p8: i64) -> i64 {
+  p6 -= p0;
+  let i0 = 0;
+  while i0 < 99 {
+    let v0 = p7;
+    p6 /= -((if 14 % p5 then (p0) << p4 else 3)) + (12) == (p3);
+    let _ = i0 = i0 + 1;
+  };
+  let a0 = zeros(16);
+  9
+}
+enum opt { none, some, many }

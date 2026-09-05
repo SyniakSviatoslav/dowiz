@@ -23,6 +23,11 @@ HEAD: `git log --oneline | head -3`; every commit message carries the gate evide
 - Language rule made explicit (DIVERGE-20056): an array literal bound INSIDE a while body is
   released at the back-edge / loop exit (T43 frame heap) — LANGUAGE.md memory model; bpref
   raises "use after loop release"; gen.py never emits the shape. Not a miscompile.
+- Fuzz: gen.py named loop vars by len(loopvars) and big loops were not in it -> reused
+  names + assignable big-loop vars = non-terminating programs in BOTH engines; those were
+  the 49 "BPREF-TIMEOUT"s. Fixed: 20 seeds in 12.8 s, 0 timeouts (1.56/s vs 0.05/s).
+- T104b step 1: mul by 2^k -> lsl, `xB + xA*2^k` -> one shifted-register add (constants
+  as+objdump-verified); the chain ran through tools/chain.sh --codegen.
 - Store: unchanged this session (G1-G8 numbers in ROADMAP Measured / RESULT-*.md).
 
 ## In flight / next
@@ -30,8 +35,8 @@ HEAD: `git log --oneline | head -3`; every commit message carries the gate evide
 2. T104b wider peephole (x*c1*c2, mul-by-const -> shift, LICM of movz) via tools/chain.sh
    --codegen; honest.sh R=11 on a quiet box.
 3. Profile the 45-90 s CSR build in the store (50M library calls) — sgraph phase b.
-4. Fuzz at scale (TG-DONE 8): 10^5 programs; BPREF-TIMEOUT dominates the wall clock
-   (49/150 under load) — lower the generator's loop bounds or run J=3 on a quiet box.
+4. Fuzz at scale (TG-DONE 8): 10^5 programs now ~6 h at J=3 (1.5/s) — run it in batches
+   of 5000 (`bench/fuzz/fuzz.sh 5000 <start>`), journal each batch's summary line.
 5. T124 fold specs for the 8 gates named in TG-DONE row 3; T47c (prelude-headered gates to
    `use`) is done for all 99 already — verify and close the note in HISTORY.
 

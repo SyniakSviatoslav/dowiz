@@ -1,0 +1,137 @@
+// BPREF-TIMEOUT seed=31141 expected=bpref > 20 s got=
+// gen.py --seed 31141
+fn main() -> i64 {
+  let i0 = 0;
+  while i0 < 120 {
+    let i1 = 0;
+    while i1 <= 4 {
+      i0;
+      i0;
+      let _ = i1 = i1 + 1;
+      0
+    };
+    let v0 = (i1) / ((if i1 then i1 else ((i1) << (3147) * i0 * (i0) >= i0) / (i0)) % i1) + ((13) < (i1) % (i1 * (i1)));
+    let i0 = i0 + 1;
+    0
+  };
+  let i2 = 0;
+  while i2 <= 2 {
+    !(i0);
+    let v0 = !(((if v0 then !(v0) else i2)) >>> (f1((((if i1 then 9223372036854775808 else v0)) & 63))));
+    let i3 = 0;
+    while i3 <= 5 {
+      let v0 = f0(((v0) & 63));
+      let v1 = f0((((17) * i1 & (i0)) & 63));
+      i3 += 1;
+      0
+    };
+    let i4 = 0;
+    while i4 != 1 {
+      v1 += 14;
+      let i4 = i4 + 1;
+      0
+    };
+    i2 += 1;
+    0
+  };
+  let v0 = f0(((i1) & 63));
+  1954;
+  let _ = v0 = 16;
+  v0 /= i3;
+  let v2 = 9;
+  let v0 = (let t2 = i0 in f1(((9) & 63)));
+  let i5 = 0;
+  while i5 < 3 {
+    let v3 = (if i4 then i5 else match many { none => (if (3) & i2 < i5 + v0 then i4 else (65535) * (((6) << (i2)) & ((11 * i1) % i0))), many => -(6), some => v1 }) <= v0;
+    v0 -= (i3) + (v1);
+    let i6 = 0;
+    while i6 != 6 {
+      let a0 = [(let _ = v2 = (i3 >> v1) & ((v1) % (((v1) << 17) ^ v0) / (v3)) + v1 in (5) >>> (i1)), !(i1), (let t1 = (i0) >= (i3 >> (10)) + (0x389d1) in (let _ = t1 = v3 in (i0) != i0)), !(((if i4 then i0 else 4669)) * v1), match none { many => v1, some => i4, none => i5 }, v0 & (((v3) / (v2)) >> ((3633) | 8)) >> 2147483647 * (v1), i3, 5 * f0(((v3) & 63))];
+      let i6 = i6 + 1;
+    };
+    let v1 = (v3) * (i4);
+    let _ = i5 = i5 + 1;
+  };
+  let _ = v0 = (-1554) < 11 * (if (if v3 then v0 else i5) then (17) << i6 / (v3) else -(65536));
+  let a0 = zeros(256);
+  let _ = a0[i2] = 0x46eab;
+  (if i1 then 6 else 19)
+}
+fn f0(n: i64) -> i64 {
+  let i0 = 0;
+  while i0 <= 0 {
+    let i1 = 0;
+    while i1 <= 2 {
+      let v0 = match none(17) { many => n, none(m0) => 9 };
+      v0 += i1 / (0) ^ (f1(((f1(((2) & 63))) & 63)));
+      5;
+      i1 += 1;
+      0
+    };
+    v0 *= 4521;
+    let _ = v0 = i1;
+    i0 += 1;
+    0
+  };
+  let i2 = 0;
+  while i2 != 4 {
+    v0 /= (i0) % ((i1) + 11 % (i1) != i0);
+    let i3 = 0;
+    while i3 < 4 {
+      (i2) / ((if i0 then v0 else f1(((i1) & 63)))) - 17;
+      let v0 = 9;
+      i0;
+      i3 += 1;
+      0
+    };
+    let i4 = 0;
+    while i4 != 4 {
+      let v0 = (let _ = v0 = i0 in v0);
+      let v1 = 0xf51d8;
+      let v2 = (let _ = v0 = n in i1);
+      v1 -= i0 / ((((i2 - (i0)) >>> i4) + (i3 & i0 >= (i4))) % (0xe52f1) + !(v2)) + (if -(i4) then v2 else n);
+      let i4 = i4 + 1;
+    };
+    let _ = i2 = i2 + 1;
+  };
+  v0 /= 19 != -2221 >> i4 | ((0) >>> ((v2) << (15))) % (i4);
+  let v3 = i2;
+  v0 += v3;
+  let v1 = f1((((let t3 = 19 in i4)) & 63)) * (i1);
+  let v4 = (n >>> (i3)) == (i1);
+  if n < 1 then i4 + ((let t3 = i0 * (i2) in ((20) % i1) - (t3))) else -4227 + f0(n - 1)
+}
+fn f1(n: i64) -> i64 {
+  let i0 = 0;
+  while i0 < 5 {
+    let i1 = 0;
+    while i1 < 2 {
+      0xa95df;
+      let a0 = [(if (3) > !(i0) then (19) >= (!(i0)) else 7), ((!(i0)) < (n) | (((i0) & (((573) << i0) ^ (17))) | n)) - (10), i0, i1, (i0) + 5, 18, i0, i1 / n <= ((let t2 = 12 in t2 & t2 > t2))];
+      let a1 = [a0[(((let _ = a0[6] = n in (i0) % (17) >> a0[5])) & 7)], i1, (let t0 = a0[i0] in 11), (n) + (a0[3]), i0, (n) * 1921, i0, !((let t3 = i1 in 4095))];
+      i1 += 1;
+    };
+    let i0 = i0 + 1;
+  };
+  let i2 = 0;
+  while i2 <= 140 {
+    let i3 = 0;
+    while i3 < 5 {
+      (let t2 = i2 in (if 3 then (!((i3) + ((n) + 0 == 361))) << 4651 else i1));
+      let v0 = 16;
+      i1 >> ((let t2 = i0 in (if v0 then i1 > (i0) else n >= i3)));
+      let v1 = (if (let t2 = 12 + i3 in ((i1 / (v0)) << i0) / (i0 | (i0))) << i1 then i0 < (i2) else i1 >>> 0x1301f);
+      i3 += 1;
+    };
+    let _ = i2 = i2 + 1;
+    0
+  };
+  let v2 = v0;
+  ((if (v0 * i2) & (v1) then i3 else v1)) + 2592;
+  let a0 = [v0 > n / (9), i3, !(i3), v2, i0, n, v2, -(v2), ((v2) >> 16) - n | i0, 7, v2, i1, v0, n, i1, 1159 % 10];
+  a0[7];
+  v1 /= (if 19 then 9 else i2);
+  let _ = v0 = v1;
+  if n < 1 then 7 else (f1(n - 1)) - (if a0[((v2) & 15)] >>> (n) then (let _ = v2 = -(a0[((n) & 15)]) in match many(i0 - -207) { none => n, many(m0) => a0[5], some => a0[i3] }) else a0[2])
+}
+enum opt { none, some, many }
