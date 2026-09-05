@@ -355,3 +355,87 @@ eigenvectors of a 4x4 built to have a gap), "holographic artifact" (4x redundanc
 The mechanisms that are real: CSR, hash probe, tzcnt drain, CoW append, nilpotent product
 test, Stokes boundary sum, FWHT/NTT/Haar, DPLL, Kahn/topological nilpotent-matrix test,
 NEON hamming, clone/futex/LSE pool, atomic tmp+rename publish, digest-keyed replay.
+
+# 7. INNER LOOP 2026-09-05 — where the 15 s self-compile goes (fork B, session 13)
+
+Status: 2026-09-05 CURRENT (measured that day on the promoted bebop.bin 9017813e, `taskset -c 6`,
+one compile at a time, 3 repetitions, medians; raw logs in the session-13 scratch archB/log,
+archB/log2). Numbers answer operator items 2 (modular compilation), 6 (IR cache), 7 (parallel
+per-fn codegen) and roadmap 1d (per-call n^2 term). No repo code changed by this section;
+the variants live in scratch.
+
+## 7.1 Phase cut (variant compilers = bebop.bp + `let _ = sys_exit(0);` after phase X)
+
+| variant exits after | self-compile of bebop.bp (218 KB expanded, 195 fns) | phase cost |
+|---|---|---|
+| read + `use` expansion (cli_compile) | 0.10 s | 0.10 s |
+| planning pass (1st compile_fn_at over every fn, sizes only) | 0.41 s | 0.31 s |
+| emission pass (2nd compile_fn_at over every fn) | 1.34 s | 0.93 s |
+| string-literal data section (compile_program_offs tail) | 16.0 s | **14.6 s** |
+| full (stub, word->byte copy, sys_export, .becache write) | 15.6 s (15.6 / 17.2 / 15.6) | ~0.1 s |
+
+The 14.6 s is one loop: the data-section walk (`while dgo == 1 { let strn = str_len(s); ... }`)
+re-measures the 218 KB source on EVERY byte it walks, and it walks to the last literal
+(byte 198 071 of 217 954): 198k x str_len(218k) = 4.3e10 byte reads. Same class as the
+per-token str_len sites the slen fix removed (journal 1788613300); this site survived
+because it sits after emission, outside every fn body.
+
+Hoisting that one line above the loop (variant `vh_full_hoist`, scratch only):
+
+| compiler | self-compile | sgraph2.bp (std gate, cold) | output |
+|---|---|---|---|
+| bebop.bin 9017813e | 15.6 s | 0.57 s | g2 |
+| + hoist | **1.45 s** (1.43 / 1.48 / 1.54) | **0.15 s** | byte-identical g2 (`cmp` SAME); gen3 == gen4 by the hoisted compiler |
+
+So after the hoist the phases are: expand 0.10 s (7 %), planning 0.31 s (21 %), emission
+0.93 s (64 %), data + export + .becache 0.1 s. `.becache` hit (T108, key = exact compiler bytes
+++ expanded source, whole-output): 0.07 s either way.
+
+## 7.2 Roadmap 1d — the per-call n^2 term is gone
+
+Current compiler, one fn with N statements (control: `s += k;` no calls):
+
+| N | `s += k;` (no call) | `s += f0(k);` | `let s = s + f0(k);` |
+|---|---|---|---|
+| 1000 | 0.092 s | 0.092 s | 0.102 s |
+| 2000 | 0.101 s | 0.120 s | 0.132 s |
+| 4000 | 0.124 / 0.152 s | 0.165 / 0.172 s | 0.212 / 0.198 s |
+
+400 fns x 3 calls: 0.24 s. Linear: ~18 ms per 1000 calls over a 70 ms process floor
+(journal 1788611200's 0.9/4.7/20.9 s and the ROADMAP "calls4000 1.8 s" are pre-slen numbers).
+Callee resolution is cached per name (ft_cache_get/ft_cache_set, find_fn full-source scan only
+on a miss under a 2*fns+8 budget); parse_params re-reads the callee signature per call (tiny).
+Roadmap 1d closes with this table.
+
+## 7.3 Inputs for items 2 / 6 / 7
+
+- `use` prelude: bebop.bp pulls one module, selfhost/prelude/sha256.bp (5 fns, 4.8 KB = 2.2 %
+  of the expanded source); it is re-expanded and re-compiled every build inside the 0.10 s
+  expansion + its 5/195 share of the passes. Nothing to cache there.
+- fn-size distribution of the emitted compiler (check_abi.fn_starts on bebop.bin): 195 fns,
+  73 340 code words, median 255, mean 376, largest 2 607 words (3.6 %), top-4 12.8 %; a greedy
+  4-way partition balances to 25.0 % each (3-way 33.3 %) -> the ideal parallel-emission
+  speedup is 3.0x on the three A78 cores, no long-pole fn.
+- The planning pass exists only to learn per-fn sizes (starts feed the bl offsets of pass 2);
+  a fn's word COUNT depends on its own text only, its WORDS depend on `starts` (bl rel26 to
+  callees, data-word addresses from scan_literals).
+
+## 7.4 Estimates, ranked (self-compile, after the hoist baseline 1.45 s)
+
+| # | change | expected self-compile | edit-one-fn rebuild | cost / risk |
+|---|---|---|---|---|
+| 0 | hoist `str_len(s)` out of the data-section loop (1 line, compile_program_offs) | **1.45 s** (from 15.6) | 1.45 s | none: SAME_BIN, gen3 == gen4 measured; non-codegen chain.sh |
+| 6a | per-fn SIZE cache keyed by fn text -> skip the planning pass for unchanged fns | ~1.15 s | ~1.15 s | low: sizes are pure per fn; key = exact bytes like .becache; ~40 lines |
+| 6b | per-fn WORD cache + bl/data relocation -> skip emission for unchanged fns | ~1.45 s (cold) | **~0.2 s** | medium: every `bl` (0x94000000 class) and data-address word must be re-based; fntab[3660] label state and OPT-G1 NOPs are per fn (ok); verify by cmp against a cold build on every chain |
+| 7 | parallel emission, 3 A78 workers over the balanced partition | ~0.85 s | ~0.85 s | high: shared bump arena (T126) needs per-worker arenas, fntab is mutated during emission (ft_cache, literal counters), clone-spanning fn <= 8 live symbols, determinism only if each worker writes its own [start, start+size) slot; the box budget (boxguard 450 %, fuzzd on the little cores) eats part of the 3x |
+| 2 | parser / IR / backend as separate binaries | no gain (1.45 s is 0.1 + 0.3 + 0.9 s of ONE text-to-words pass; there is no IR to hand over, and an emitter edit rebuilds the whole compiler regardless) | – | high: serialisation + three fixpoint chains; drop it — item 6b is the modular win that actually exists |
+
+Recommended ONE next step: #0, the hoist, through `tools/chain.sh` (non-codegen) — 10.8x on the
+self-compile and 3.8x on a std gate compile for one line; it also drops the std_golden memo
+floor (99 compiles, 11 s) to ~3 s. Then 6a only if the 0.3 s planning pass still shows in the
+loop; 6b when edit-one-fn latency matters; 7 and 2 not now.
+
+Not measured: the emission pass per phase INSIDE compile_fn_at (fast path vs legacy, OPT passes)
+— needs variants per emitter stage, ~16 s build each on the un-hoisted compiler; do it after
+the hoist lands when a build costs 1.5 s. The box ran at 31-39 processes and 59-75 C during the
+runs (fork A + fuzzd finishing a batch); every number above is a median of 3 within 5 %.
