@@ -86,7 +86,8 @@ this list is only what remains and is the ONE ordering (SESSION-HANDOFF points h
 4. K8, the branchy honest kernel, as the falsifier for T52/T53/T54 (D14 item 5): T53 and T54
    are DELETED (HISTORY.md); T52 (pure `if` -> csel) proceeds only if K8's row shows a branch
    costs — A78 evidence otherwise favours a predicted branch over csel by ~2.9x.
-5. B4, per-fn computed frame size (D14 item 4): `80 + 8*while_marks + 8*spill_slots`, plus the
+5. B4, per-fn computed frame size (D14 item 4): `80 + 8*while_marks + 8*spill_slots` (sized from vc:
+   today's x15 region is 64 slots while sym_bind admits 128 symbols -- IR-RUNG-BLUEPRINT §0), plus the
    heap only when the body needs it; a mis-estimate is exit 81, TRAP-82 stays the fuzz gate at 0.
 6. Store, first move: B8 — profile the 45-90 s CSR build (sgraph phase b) before any store code
    change (D14 item 6); the real workload W = the dowiz-core order log (T66 `ordfsm.bp`/

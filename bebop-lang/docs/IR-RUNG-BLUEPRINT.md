@@ -1,4 +1,4 @@
-Status: 2026-09-06 (session 17) -- Opus analyst blueprint for the operand-tag-stack IR rung (ROADMAP critical path item 2, D12-B amended by D14 item 2), copied from the session scratchpad by the main session. Three deviations from docs/DECISIONS-RESEARCH-2026-09-06.md §3.3 await operator ratification (see the VERDICT block at the end): (1) spill target = machine stack instead of [x15,#s*8]; (2) a sixth tag kind MULC r,c replacing the five word-pattern fusions; (3) k3h_loopwords <= 10 as a gated PERF row at R4. Main-session recommendation: accept (1) and (2) -- both keep R1 byte-identical and delete more matcher code; accept (3) as a gate only once R4's row proves reachable, reported before that. R1 (byte-identical scaffold) depends on none of the three.
+Status: 2026-09-06 (session 17) -- blueprint OWNED by the main session (Fable): the fact inventory (line numbers, fntab census, matcher table, kernel estimates) was gathered by an Opus agent, then every load-bearing claim was verified by the main session against bebop.bp at 1e7f729 (madd_try's is_movc = movz-only multiplier: true; emit_bl_call evaluates all arguments before popping them into x(n-1)..x0: true; fntab 3797..3822 unwritten: true, the census below is corrected to include 3900-3903; the R1 gate was wrong and is corrected in §3). The three design deviations from docs/DECISIONS-RESEARCH-2026-09-06.md §3.3 are DECIDED in §0 by the main session; the operator may override before R2 starts (R1 depends on none of them). Operator rule 2026-09-06 (AGENTS.md L22): blueprints and specs are written by the main session only -- this document is the first under that rule.
 
 # The operand-tag-stack rung — executable blueprint (B3 / D14 item 2)
 
@@ -14,6 +14,36 @@ Every instruction word below is given as **asm text only**. The coding agent der
 the battery is the enforcement.
 
 ---
+
+## 0. Decisions (main session, 2026-09-06)
+
+D-IR1. **Operand spills go to the machine stack** (`sub sp,sp,#16 ; str x0,[sp]`), not to `[x15,#s*8]`.
+Reason: STACK entries are always a contiguous bottom prefix of the value stack (only `vs_spill_deepest`
+and `vs_sync` create kind 4, and they always take the deepest window entry), so `[sp]` is a correct LIFO
+for them; depth is unbounded (array literals reach ~99); the words are today's push/pop words, which is
+what keeps R1 byte-identical; and x15's slot region is only 64 slots (sp+256..sp+768), already shared
+with symbols 9..72. **Invariant:** no code path other than `vs_spill_deepest`/`vs_sync` may record a
+kind-4 entry while `w > 0` (R1's `vs_push_*` may, because `w == 0` there by construction).
+
+D-IR2. **`MULC r,c` is a sixth tag kind.** It is the only provenance the model carries and it is exactly
+what the five word-pattern fusions (`madd_try`, `shl_try`, `mulc_try`, `addshift_try`, `cmp_try`'s imm
+half) decode today from the stream; on tags they become table rows (§1.4). Restriction: `c` in
+1..2^16-1 (today's single-`movz` range, `shl_try`/`mulc_try` accept nothing wider), `r` may be a window
+register or a symbol register; the register in a `MULC` tag is pinned in the free mask until the tag
+is consumed or materialised (risk 5).
+
+D-IR3. **`k3h_loopwords` is a reported PERF row from R1 and becomes a gate (`<= 10`) in the R4
+commit**, the rung whose row claims it; D12-B's `k4_loopwords <= 13` and `<= 3.0 ms` stay the gate
+from R3 on. A gate is added in the same commit that first meets it, never before (L10).
+
+D-IR4. **Rung order is R1 -> R2 -> R3 -> R4 -> R5 after B5**; every rung is one commit through
+`tools/chain.sh` (R1 without `--codegen`, R2+ with it), constructs re-frozen, one journal line, an
+honest.sh row at R3 and R5. If a rung is not GREEN in one commit it is reverted, not patched forward
+(report §3.5, D11-G).
+
+Finding for ROADMAP item 5 (B4): the x15 slot region holds 64 slots but `sym_bind` admits 128
+symbols, so a fn with 73+ distinct symbols writes its spills into the x14 frame heap today
+(risk 8). B4's computed frame must size the slot region from the planning pass's `vc`.
 
 ## 1. Model
 
@@ -52,8 +82,9 @@ fntab[3801 + 3i]   payload1
 ```
 
 `i` ranges 0..7, so the block is `3797..3822`. `fntab = zeros(4096)` (bebop.bp:2859, 3640, 3667, 4042,
-4208) already covers it and cells 3797-3889 are unused today (verified: the only `fntab[36xx/37xx/38xx]`
-bases in the source are 3655-3663, 3680-3681, 3700-3701, 3890-3892, 3899).
+4208) already covers it and cells 3797-3889 are unused today (verified: the `fntab[36xx..39xx]`
+bases in the source are 3655-3663, 3680-3681, 3700-3701, 3890-3892, 3899-3903 -- verified by the
+main session with `grep -o 'fntab\[3[6-9][0-9][0-9]' bebop.bp | sort | uniq -c`).
 
 `tools/check_abi.py:166` gains one tuple, inserted after the `slots` entry:
 
@@ -296,18 +327,14 @@ Registration in the same commit: add `c55_vswindow) EXPECT=312;;` to the case li
   today (no `fntab[3660]` reasoning, just "push a `REG 0` tag instead of syncing").
 - **Independent of B2: R1, R2, R3, R5.** Only R4 carries the join-reset line.
 
-**B5 (loop rotation, bottom test).**
-
-- *If B5 lands first* (assumed): `emit_while_stmt` 3154 emits `[b .test][body][.test: cond][b.cond
-  .body]`. There are then **two** barrier positions per loop instead of two (`.body` and `.test`), so
-  §1.5's rule is unchanged in kind — the agent syncs at both, and at R4 resets the mask at both.
-  The `pcond` re-parse B5 introduces re-runs `emit_cmp` over the same source with an empty tag stack,
-  which is exactly the state a sync leaves behind, so the two emissions of the condition are identical
-  word-for-word — that is what keeps B5's own fixpoint.
-- *If B5 lands after*: R1-R4 are unchanged; B5's diff gains one `vs_sync()` before the back edge.
-- **Independent of B5: R1, R2, R3, R4, R5.** B5's only coupling is the number of sync sites, and the
-  −1 word per loop it buys is additive with every rung's kernel numbers above (K4 11→10 at R3, 9→8 at
-  R4; K3H 10→9 / 8→7; K1H 8→7 / 6→5).
+**B5 (loop rotation, bottom test).** B5 as specified by the main session (prompt-b5, session 17)
+parses and emits the condition ONCE, at the bottom: `[mark][b .test][body_start: body][.test: cond]
+[b.<inv> body_start][endl]`, the body start found by a textual skip to the `{` at bracket depth 0.
+So a loop has three barrier positions (`body_start`, `test`, `endl`) where today it has two
+(`loop_start`, `endl`); §1.5's rule is unchanged in kind -- sync at every one of them, and at R4 reset
+the mask at every one of them. No condition text is parsed twice, so nothing in R1-R5 has to make two
+emissions agree. **Independent of B5: R1-R5.** B5's -1 word per loop is additive with every kernel
+number above (K4 11 -> 10 at R3, 9 -> 8 at R4; K3H 10 -> 9 / 8 -> 7; K1H 8 -> 7 / 6 -> 5).
 
 **Ordering.** B1 (landed), B2, B5, then R1..R5 in order. R1's md5 claim is relative to whatever
 `bebop.bin` is at the moment R1 is committed, so if B2 or B5 land between the writing of this
@@ -315,11 +342,6 @@ blueprint and R1, re-derive the baseline md5 — do not carry a stale one into t
 
 ---
 
-VERDICT: blueprint written, rungs: 5, first-rung md5 claim: byte-identical, open questions for the
-operator: (1) the report's §3.3 spill tag is `[x15,#s*8]`; this blueprint uses the machine stack
-(`sub sp,#16 ; str`) instead — unbounded, byte-identical to today's spill words, and free of any
-collision with `sym_bind`'s x15 slots — please ratify or override before R4; (2) `MULC` is a sixth tag
-kind not named in D14 item 2, and it is what lets `madd_try`/`shl_try`/`mulc_try`/`addshift_try` be
-deleted rather than kept as word peepholes — ratify or say to keep the word-level peepholes;
-(3) `k3h_loopwords <= 10` is proposed as a new gated PERF row at R4 (D12-B gates only K4 today) —
-confirm it should be a gate and not just a reported number.
+VERDICT: blueprint owned by the main session, rungs: 5, first-rung claim: byte-identical (gen2 == gen3 == gen4),
+deviations from DECISIONS-RESEARCH §3.3: decided in §0 (D-IR1 machine-stack spills, D-IR2 MULC tag, D-IR3 k3h gate at
+R4); open questions for the operator: none blocking -- override §0 before R2 if wanted.

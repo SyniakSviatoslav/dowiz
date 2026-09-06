@@ -396,7 +396,9 @@ literal (L20 hookify rule); reap.sh kills by pid.
 L22. ROLES (operator rule, 2026-09-06): the main session (Fable) is the analyst, planner and
 orchestrator -- it reads the state, writes the spec/blueprint and the agent prompt, verifies the
 VERDICT, commits and pushes. Roadmap work items (code, gates, journal lines) are executed by a
-Sonnet agent from that spec; research and analysis reports by an Opus agent. Agent prompts follow
+Sonnet agent from that spec; fact-gathering research reports may go to an Opus agent, but every
+blueprint, spec and meta-prompt is written by the main session itself (operator 2026-09-06:
+"блюпринти має писати лише fable, як і спеки"). Agent prompts follow
 the Opus-5 prompting rules: goal + intent stated once, only the constraints the task really has,
 no filler or verification nudges, concrete reference material in a <context> block, tags in the
 order <context> <constraints> <output_format> <task>, one scope sentence. L19(c) caps still
