@@ -1,6 +1,6 @@
 # Bebop — THE Roadmap (single source of truth)
 
-Status: 2026-09-05 CURRENT (D11-L split: this file = thesis, TG-DONE table, critical
+Status: 2026-09-06 CURRENT (D11-L split: this file = thesis, TG-DONE table, critical
 path, open decisions, measured table; HISTORY.md = every pull, task body, decision
 D1-D11 with evidence and the superseded 2026-08 vision text; TASKS.md = the generated
 ledger; docs/exp.journal = one line per experiment; AGENTS.md = the laws L1-L17)
@@ -72,13 +72,17 @@ here, HISTORY's "Ordering for T84-T95" is superseded).
       (a27b594): self-compile 1.5 s, chain + battery 34 s. Items 2/6/7 of the operator's
       dev-speed list (modules / IR cache / parallel emit) were estimated there and are NOT
       worth it against a 1.5 s baseline (best case 1.15-0.85 s, medium-high risk).
-2. Close the PARTIALs: T96 rest = P2 (operands in x1-x7, no x0/x1 shuffles; K4 15 -> <= 13
-   loop words, K4 <= 3.0 ms) through `tools/chain.sh --codegen`. P3 DONE 2026-09-06 (cmp_try:
+2. D12 order (2026-09-06): (A) evals E1-E14 = tools/perf.py + bench/perf.csv + docs/PERF.md
+   (E7 guard -> E1 self-compile -> E3 size budget -> E2 kernels A/B -> E11 report -> the rest);
+   (C+D) fuzz TRAP-82 ALERT + per-bin seed counter, the hygiene commit (golden, seed rebuild
+   rung, TASKS hook, bebop word budget, honest RSS, LANGUAGE.md/emit_var); (B) T96 rest = P2
+   through the IR rung T101 (op-list per fn + register tier; K4 15 -> <= 13 loop words,
+   K4 <= 3.0 ms) through `tools/chain.sh --codegen`. P3 DONE 2026-09-06 (cmp_try:
    `cmp xR,#imm` / `cmp xR,xS` + b.cond directly; K4 17 -> 15, K1 10 <= 12; fixpoint e14dd55e). T104b CLOSED 2026-09-06 (x*c1*c2 / LICM have no target on any measured program).
    T90 CLOSED 2026-09-06 (`check` verb, d08/d10, `brk #code` traps + the stub's SIGTRAP handler).
 3. Measurements on a quiet box, in the background: honest.sh R=11 (TG-DONE 1), the full
    sgraph2.sh run (frontier + hub-skew rows), the 45-90 s CSR build profile (sgraph phase b).
-   Then the operator freezes a, b, c (D11-I) on the numbers, not before.
+   a, b, c are frozen (D12-F: 4x / 10x / 2.5x); the rerun stamps validity via E7.
 4. Codegen where a row says a branch costs: T52 -> T53 -> T54 (predication, each behind
    honest.sh); T48 rest (checked types inside the compiler, not only the census); T61 (the
    pool/futex builtins exist: the task is the library + a gate).
@@ -91,9 +95,9 @@ Parallel-safe at any time: docs, oracles, fuzz batches, honest.sh rows, T78/T79/
 
 ## Open decisions (operator)
 
-- a, b, c thresholds of the store claim (D11-I) and the real workload W.
-- T101-T104: the IR rung passes or falls back to x1-x7 retractions (D11-G rule).
-- Whether "<= 1.0x Rust" (D1(a)) stays a target once the honest rows exist.
+- The real workload W of the store claim (a/b/c are frozen: D12-F).
+- (decided 2026-09-06, HISTORY D12: evals E1-E14, P2 = IR rung, TRAP-82 ALERT, hygiene
+  commit, a/b/c = 4x/10x/2.5x, 1.0x stays the long target, K8 before csel, T48 into bebop.bp)
 
 ## Measured (pinned A78, in-process clock_ms medians; every number has a script)
 
