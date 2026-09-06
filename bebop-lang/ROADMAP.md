@@ -93,6 +93,22 @@ this list is only what remains and is the ONE ordering (SESSION-HANDOFF points h
    any honest twin, §5.3). Measured-first: twins exist; gates `k1h_ms <= 0.5 x Rust`,
    `k4_ms <= 0.6 x Rust`, bpref parity on std_tests (LCG/hash loops). ~300 lines. The only proven
    path to beat Rust on K1H-K4 (1.8-3x).
+4b. Pointer-free data (docs/RESEARCH-NOPOINTERS-SQL-2026-09-06.md part 1, operator 2026-09-06):
+   "indices in data, pointers only in registers". Step 0 (python, any time): census of absolute
+   pointer stores into store cells + perf row `ptr_stores`. Step 1: arena-relative addressing with
+   one global base in x17 (`ldr xd,[x17,xidx,lsl #3]`; `zeros` returns an index; sys_* add the base;
+   arena image = file via sys_export = process checkpoint), ~190 lines, constructs c65_index_roundtrip
+   / c66_ptrfree; expected cost +1 add per array access until LICM (K5 +5-8 %, codegen-bound scans
+   +10-20 %, 0 at the DRAM ceiling and on K1H-K8H). Step 2: aggregates (array literals, ctors, struct
+   literals) into arena tables with mark/reset on the back-edge instead of the x14 frame heap --
+   deletes x14, the T118 words, exit 81 and `count_word(mov x0,x14)`; B4 (item 9) merges into this
+   step (frame = 80 + 8*marks + 8*slots, recursion 20x deeper), ~250 lines (-200), c67_deeprec.
+   Step 3: byte arena + `str` as a value `(off<<32 | len)`, raw-byte parser, crc32x per page --
+   ends bytes-in-cells (8x IO memory), makes strings first-class; ~380 lines + bpref; c68_strval +
+   the 100 MB ingest twin (five rows: bebop raw / bebop cells / sqlite import / Rust memmap2+winnow /
+   Rust serde-owned). Step 4 (with T48 types): u32 cells for CSR/store (file size 2.5x loss -> ~1x,
+   scan/BFS traffic 2x), ~200 lines. Placement: steps 1-3 after item 4 (LIN) and before item 12
+   (flat IR, which then removes the add via LICM and gets alias facts from typed tables).
 5. Freeze codegen for one 24 h fuzz window once items 2-4 land, so `fuzz_seeds_on_bin` reaches
    10^5 on one md5 (TG-DONE 8, D14 item 12) -- before more codegen work resets the per-binary
    seed counter again.
@@ -134,6 +150,17 @@ this list is only what remains and is the ONE ordering (SESSION-HANDOFF points h
     rejected in favour of specialise-then-run template kernels (item 6). OISC/subleq, dataflow,
     graph reduction, CGRA and single-level store: none is a runtime target on the A78 (3-100x or
     already realised in software); their compile-time readings are items 4, 6, 12.
+14a. Store vs SQL as a class (RESEARCH-NOPOINTERS-SQL part 2, ranked by argument per line): (1) G5b
+    torn-write harness in the SQLite atomiccommit sector model + `sys_fsync` of the directory after
+    the compaction rename (~150 py + ~30 bp; gate 1000 trials, 0 invalid reopens; same harness over
+    sqlite WAL) -- python part any time; (2) raw-byte ingest = item 4b step 3; (3) compiled Q6/Q1
+    kernels + `.bp` generator + minimal planner over CSR/zone-maps (~1 100 lines) = item 6 in
+    concrete form (gates Q6 >= 10x, Q1 >= 5x sqlite native, first/repeat rows; DuckDB not
+    installable here -- published numbers only, marked); (4) u32 cells = item 4b step 4; (5) group
+    commit / st_verify / recovery row (~100); multi-writer only if W demands it. Claims defensible
+    now: scans, BFS, point lookup, insert, compile latency, kill -9 + snapshot readers + atomic
+    multi-object commit, zero deps. Never claim: multi-writer OLTP, a standard SQL surface, one-shot
+    unique query shapes under 50 ms, datasets beyond RAM, "zero-copy 50-100x vs Rust".
 14. Store, first move: B8 — profile the 45-90 s CSR build (sgraph phase b) before any store code
    change (D14 item 6); the real workload W = the dowiz-core order log (T66 `ordfsm.bp`/
    `money.bp`, byte-exact Rust oracles — D14 item 8); a, b, c stay frozen (D12-F: 4x / 10x /
