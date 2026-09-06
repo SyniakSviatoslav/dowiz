@@ -144,7 +144,9 @@ count_word 49
 emit_return_stmt 305
 emit_break_stmt 228
 patch_jumps 89
-emit_while_stmt 1101
+skip_char_lit 159
+skip_while_cond 250
+emit_while_stmt 1146
 emit_let_stmt 1011
 emit_compound_stmt 478
 emit_body 1730

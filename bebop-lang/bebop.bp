@@ -3163,10 +3163,64 @@ fn patch_jumps(insns: [i64], fntab: [i64], base: i64, from: i64, target: i64) ->
   0
 }
 
+// Skip a '...' char literal (defensive: the T39 surface has no char-literal
+// syntax today -- `char(s,i)` is a builtin call, not a literal); mirrors
+// skip_string for a single-quote delimiter.
+fn skip_char_lit(s: str, pos: [i64]) -> i64 {
+  let strn = slen(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_q = if ch == 39 then 1 else 0;
+    let adv = 1 - is_q - at_end;
+    let _ = pos[0] = pos[0] + adv;
+    let done = if is_q + at_end >= 1 then 1 else 0;
+    0
+  };
+  let _ = pos[0] = pos[0] + 1;
+  0
+}
+
+// B5 (D14 item 1): scan from pcond (the start of a while condition's text) to
+// the first '{' at paren/bracket depth 0, without parsing or emitting
+// anything. The grammar guarantees a while condition is a `cmp` expression
+// followed by `{` (fntab[3892] forbids struct literals there); this only
+// needs to track paren/bracket nesting and skip string/char literals so a
+// quoted brace or paren can't be mistaken for the body opener.
+fn skip_while_cond(s: str, pos: [i64]) -> i64 {
+  let strn = slen(s, pos);
+  let depth = [0];
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_str = if ch == 34 then 1 else 0;
+    let is_chr = if ch == 39 then 1 else 0;
+    let _ = if is_str == 1 then skip_string(s, pos) else 0;
+    let _ = if is_chr == 1 then skip_char_lit(s, pos) else 0;
+    let dopen = (if ch == 40 then 1 else 0) + (if ch == 91 then 1 else 0);
+    let dclose = (if ch == 41 then 1 else 0) + (if ch == 93 then 1 else 0);
+    let _ = depth[0] = depth[0] + dopen - dclose;
+    let stop = (if depth[0] == 0 then 1 else 0) * (if ch == 123 then 1 else 0);
+    let adv = 1 - is_str - is_chr - stop - at_end;
+    let _ = pos[0] = pos[0] + adv;
+    let done = stop + at_end;
+    0
+  };
+  0
+}
+
 // Emit one 'while cond { body };' statement: a real backward loop (no result).
-// cond is re-evaluated each iteration (its code sits at loop_start); body's
-// final expression is discarded. Mutable `let` (sym_bind reuse) makes loop
-// vars update in place, so re-running the cond reads the updated values.
+// B5 (D14 item 1, research S2): loop rotation, bottom test -- one branch per
+// iteration in steady state instead of two. The condition is parsed and
+// emitted ONCE, at the bottom: skip_while_cond finds the body's '{' without
+// parsing the condition, the body is emitted, then pos rewinds to pcond to
+// parse+emit the condition for real and jumps forward to b1 (already
+// recorded) rather than re-scanning the body text it already emitted.
+// Mutable `let` (sym_bind reuse) makes loop vars update in place, so
+// re-running the cond reads the updated values.
 fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], cx: [i64], st: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 5;
   let _ = skip_ws(s, pos);
@@ -3180,27 +3234,25 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   // (0xF90003EE + imm12<<10, as+objdump) once the body proves reset-safe.
   let pmark = n[0];
   let _ = em(insns, n, 3573751839);
-  let loop_start = n[0];
-  let _ = fntab[3660] = loop_start;
-  // legacy stack-machine loop: emit the condition, materialize it, branch
-  // with a PLACEHOLDER b.eq (fixup recorded at p1), emit the body, then
-  // patch the placeholder once the target address is known. The backward
-  // edge is emitted last with its exact delta (loop_start is fixed).
-  let _ = fntab[3892] = 1;
-  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
-  let _ = fntab[3892] = 0;
-  let _ = pop(insns, n, 0, fntab);
-  let bw = cond_branch_word(insns, n, fntab);
-  let p1 = n[0];
-  let _ = em(insns, n, bw);
-  let _ = skip_ws(s, pos);
+  // forward placeholder `b -> test` (emit_cond's `b -> end` pattern),
+  // patched once test's address is known below.
+  let pjump = n[0];
+  let _ = em(insns, n, 335544320);
+  let body_start = n[0];
+  // barrier at pjump (not body_start): body_start is reached by exactly one
+  // edge (the bottom backward branch, never by fallthrough -- pjump always
+  // branches away), so T101/pop retraction sliding a value across it is safe;
+  // pjump itself is real, settled code and stays protected (fntab[3660] < L
+  // is the same slack the old top-test loop had between its own barrier and
+  // nb_body, just one word instead of several).
+  let _ = fntab[3660] = pjump;
+  let _ = skip_while_cond(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let nb_body = n[0];
   let b0 = pos[0];
   let bresl = emit_body(s, pos, insns, n, stab, selfname, selfstart, fntab, cx, st);
   let b1 = pos[0];
   let blastl = bresl - (bresl / 2) * 2;
-  let grewl_raw = if n[0] > nb_body then 1 else 0;
+  let grewl_raw = if n[0] > body_start then 1 else 0;
   // while-boundary fix (journal 1788288252): pop the body's leftover value
   // ONLY when the body leaves exactly ONE value on the stack (final item
   // was an expr; let/while/compound leave nothing); popping a let-final
@@ -3218,20 +3270,43 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = if dead == 1 then (let _ = fold_clear(fntab) in 0) else 0;
   let _ = if legbl * (1 - dead) == 1 then pop(insns, n, 0, fntab) else 0;
   // T43 reset: only when the body allocated on x14 and the text scan proves
-  // no allocated pointer can leave the iteration.
-  let allocs = count_word(insns, nb_body, n[0], 2853045216);
+  // no allocated pointer can leave the iteration. Once per iteration, right
+  // after the body, before falling into the bottom test (same position
+  // relative to the body as the old top-test loop's pre-backward-branch reset).
+  let allocs = count_word(insns, body_start, n[0], 2853045216);
   let safe = if allocs > 0 then loop_alloc_safe(s, b0, b1, stab, cnt0) else 0;
   let do_reset = slot_ok * (if allocs > 0 then 1 else 0) * safe;
   let ldrw = 4181722094 + (10 + ldepth) * 1024;
   let _ = if do_reset == 1 then (let _ = em(insns, n, ldrw) in 0) else 0;
-  let _ = em(insns, n, 402653184 + loop_start - n[0]);
+  // bottom test: parse+emit the condition here (once), then jump the text
+  // pointer straight to b1 instead of re-scanning the already-emitted body.
+  let test = n[0];
+  let _ = fntab[3660] = test;
+  let _ = insns[pjump] = 335544320 + (test - pjump);
+  let _ = pos[0] = pcond;
+  let _ = fntab[3892] = 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = fntab[3892] = 0;
+  let _ = pop(insns, n, 0, fntab);
+  let bw = cond_branch_word(insns, n, fntab);
+  // The bottom branch is the exit condition inverted (AArch64: flip the
+  // lowest bit of the condition field) and backward to body_start; the
+  // target is already fixed, so it is emitted directly instead of
+  // placeholder+patch (the old `b loop_start` pattern). B.cond's imm19 sits
+  // at bits[23:5] (* 32), and a negative (backward) delta borrows into bit
+  // 24, so this needs +16777216 the same way the old unconditional backward
+  // `b` needed +0x04000000 for its imm26 at bit 0 -- derived with as+objdump,
+  // see $OUT/words.objdump (70/70 exact matches across gap sizes and every
+  // condition code).
+  let contw = bw ^ 1;
+  let _ = em(insns, n, contw + 16777216 + (body_start - n[0]) * 32);
+  let _ = pos[0] = b1;
   let endl = n[0];
   let _ = fntab[3660] = endl;
   let _ = patch_jumps(insns, fntab, 3680, brk0, endl);
   let _ = if do_reset == 1 then (let _ = em(insns, n, ldrw) in 0) else 0;
   let _ = if do_reset == 1 then (let _ = insns[pmark] = 4177527790 + (10 + ldepth) * 1024 in 0) else 0;
   let _ = fntab[3661] = ldepth;
-  let _ = insns[p1] = insns[p1] + (endl - p1) * 32;
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = skip_ws(s, pos);

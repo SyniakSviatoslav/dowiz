@@ -281,3 +281,68 @@ ts,commit,bin,metric,value,unit,n,valid,at_max_pct,temp_mc,note
 1788684730,8c4a336,a903d33b,k4_loopwords,15,words,1,1,,,base 1a3b2cc2 4.58/4.64 loop 15
 1788684948,8c4a336,a903d33b,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
 1788684948,8c4a336,a903d33b,gate_run_ms,0,ms,1,1,,,"sum of non-memo gate runs (0 runs, 100 memo hits)"
+1788685649,3d512dc,a903d33b,bin_words,67775,words,1,1,,,bytes 272936
+1788685649,3d512dc,a903d33b,stub_words,131,words,1,1,,,
+1788685650,3d512dc,a903d33b,bin_fns,202,fns,1,1,,,
+1788685650,3d512dc,a903d33b,fuzz_seeds_on_bin,0,seeds,1,1,,,TG-DONE 8: 0 on a903d33b; total 45600 over 7 bins
+1788685650,3d512dc,a903d33b,fuzz_rate,0.0,prog/s,1,1,,,"median over the bin's batches (LITTLE cores, nice)"
+1788685650,3d512dc,a903d33b,fuzz_trap_unpredicted,0,count,1,1,,,"TRAP-80/81/82 total; 81 by design, 82 is fuzz_trap82 (ALERT)"
+1788685650,3d512dc,a903d33b,fuzz_trap82,0,count,1,1,,,"D12-C: SIGSEGV/SIGBUS, 0 tolerated, repros in $REPROS"
+1788685681,3d512dc,a903d33b,bin_words,67775,words,1,1,,,bytes 272936
+1788685681,3d512dc,a903d33b,stub_words,131,words,1,1,,,
+1788685681,3d512dc,a903d33b,bin_fns,202,fns,1,1,,,
+1788685682,3d512dc,a903d33b,fuzz_seeds_on_bin,0,seeds,1,1,,,TG-DONE 8: 0 on a903d33b; total 45600 over 7 bins
+1788685682,3d512dc,a903d33b,fuzz_rate,0.0,prog/s,1,1,,,"median over the bin's batches (LITTLE cores, nice)"
+1788685682,3d512dc,a903d33b,fuzz_trap_unpredicted,0,count,1,1,,,"TRAP-80/81/82 total; 81 by design, 82 is fuzz_trap82 (ALERT)"
+1788685682,3d512dc,a903d33b,fuzz_trap82,0,count,1,1,,,"D12-C: SIGSEGV/SIGBUS, 0 tolerated, repros in $REPROS"
+1788685692,3d512dc,a903d33b,selfcompile_wall,1581.7303,ms,5,0,0.0,37500,base a903d33b 1582
+1788685692,3d512dc,a903d33b,selfcompile_utime,1.5062,s,5,0,0.0,37500,base a903d33b 1.506
+1788685692,3d512dc,a903d33b,selfcompile_stime,0.0356,s,5,0,0.0,37500,base a903d33b 0.0356
+1788685692,3d512dc,a903d33b,selfcompile_maxrss,22508,kB,5,0,0.0,37500,base a903d33b 2.251e+04
+1788685692,3d512dc,a903d33b,selfcompile_energy,1.5063,core-s@fmax (proxy),5,0,0.0,37500,base a903d33b 1.506
+1788685707,3d512dc,a903d33b,k1h_ms,2.13,ms/rep,11,0,0.0,39500,p95 2.230 base a903d33b 2.13/2.23 loop 11
+1788685707,3d512dc,a903d33b,k1h_loopwords,11,words,1,1,,,base a903d33b 2.13/2.23 loop 11
+1788685707,3d512dc,a903d33b,k2h_ms,0.89,ms/rep,11,0,0.0,39500,p95 1.000 base a903d33b 0.89/1.00 loop 51
+1788685707,3d512dc,a903d33b,k2h_loopwords,51,words,1,1,,,base a903d33b 0.89/1.00 loop 51
+1788685707,3d512dc,a903d33b,k3h_ms,0.74,ms/rep,11,0,0.0,39500,p95 0.780 base a903d33b 0.74/0.78 loop 25
+1788685707,3d512dc,a903d33b,k3h_loopwords,25,words,1,1,,,base a903d33b 0.74/0.78 loop 25
+1788685708,3d512dc,a903d33b,k4_ms,4.63,ms/rep,11,0,0.0,39500,p95 4.710 base a903d33b 4.63/4.71 loop 15
+1788685708,3d512dc,a903d33b,k4_loopwords,15,words,1,1,,,base a903d33b 4.63/4.71 loop 15
+1788685708,3d512dc,a903d33b,k8h_ms,0.39,ms/rep,11,0,0.0,39500,p95 0.430 base a903d33b 0.39/0.43 loop 40
+1788685708,3d512dc,a903d33b,k8h_loopwords,40,words,1,1,,,base a903d33b 0.39/0.43 loop 40
+1788685781,3d512dc,df6044a8,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788685781,3d512dc,df6044a8,gate_run_ms,23487,ms,1,1,,,"sum of non-memo gate runs (96 runs, 4 memo hits)"
+1788686046,69e0eb5,a903d33b,bin_words,67775,words,1,1,,,bytes 272936
+1788686046,69e0eb5,a903d33b,stub_words,131,words,1,1,,,
+1788686046,69e0eb5,a903d33b,bin_fns,202,fns,1,1,,,
+1788686046,69e0eb5,df6044a8,bin_words,68233,words,1,1,,,bytes 274768
+1788686046,69e0eb5,df6044a8,stub_words,131,words,1,1,,,
+1788686046,69e0eb5,df6044a8,bin_fns,204,fns,1,1,,,
+1788686678,69e0eb5,f7a25d38,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788686678,69e0eb5,f7a25d38,gate_run_ms,37085,ms,1,1,,,"sum of non-memo gate runs (149 runs, 51 memo hits)"
+1788688555,69e0eb5,f7a25d38,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788688555,69e0eb5,f7a25d38,gate_run_ms,0,ms,1,1,,,"sum of non-memo gate runs (0 runs, 100 memo hits)"
+1788689839,69e0eb5,f7a25d38,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788689840,69e0eb5,f7a25d38,gate_run_ms,0,ms,1,1,,,"sum of non-memo gate runs (0 runs, 200 memo hits)"
+1788690006,69e0eb5,f7a25d38,bin_words,68229,words,1,1,,,bytes 274752
+1788690006,69e0eb5,f7a25d38,stub_words,131,words,1,1,,,
+1788690006,69e0eb5,f7a25d38,bin_fns,204,fns,1,1,,,
+1788690006,69e0eb5,f7a25d38,fuzz_seeds_on_bin,0,seeds,1,1,,,TG-DONE 8: 0 on f7a25d38; total 45600 over 7 bins
+1788690006,69e0eb5,f7a25d38,fuzz_rate,0.0,prog/s,1,1,,,"median over the bin's batches (LITTLE cores, nice)"
+1788690006,69e0eb5,f7a25d38,fuzz_trap_unpredicted,0,count,1,1,,,"TRAP-80/81/82 total; 81 by design, 82 is fuzz_trap82 (ALERT)"
+1788690006,69e0eb5,f7a25d38,fuzz_trap82,0,count,1,1,,,"D12-C: SIGSEGV/SIGBUS, 0 tolerated, repros in $REPROS"
+1788690025,69e0eb5,f7a25d38,selfcompile_wall,1507.616,ms,5,0,0.0,47000,base a903d33b 1501
+1788690025,69e0eb5,f7a25d38,selfcompile_utime,1.4396,s,5,0,0.0,47000,base a903d33b 1.444
+1788690025,69e0eb5,f7a25d38,selfcompile_stime,0.0237,s,5,0,0.0,47000,base a903d33b 0.02772
+1788690025,69e0eb5,f7a25d38,selfcompile_maxrss,22628,kB,5,0,0.0,47000,base a903d33b 2.264e+04
+1788690025,69e0eb5,f7a25d38,selfcompile_energy,0.0,core-s@fmax (proxy),5,0,0.0,47000,base a903d33b 0
+1788690046,69e0eb5,f7a25d38,k1h_ms,1.75,ms/rep,11,0,0.0,43600,p95 1.790 base a903d33b 1.91/2.25 loop 11
+1788690046,69e0eb5,f7a25d38,k1h_loopwords,10,words,1,1,,,base a903d33b 1.91/2.25 loop 11
+1788690046,69e0eb5,f7a25d38,k2h_ms,0.71,ms/rep,11,0,0.0,43600,p95 0.910 base a903d33b 0.72/0.89 loop 51
+1788690046,69e0eb5,f7a25d38,k2h_loopwords,51,words,1,1,,,base a903d33b 0.72/0.89 loop 51
+1788690046,69e0eb5,f7a25d38,k3h_ms,0.54,ms/rep,11,0,0.0,43600,p95 0.600 base a903d33b 0.54/0.59 loop 25
+1788690046,69e0eb5,f7a25d38,k3h_loopwords,24,words,1,1,,,base a903d33b 0.54/0.59 loop 25
+1788690046,69e0eb5,f7a25d38,k4_ms,4.04,ms/rep,11,0,0.0,43600,p95 4.110 base a903d33b 4.23/4.37 loop 15
+1788690046,69e0eb5,f7a25d38,k4_loopwords,14,words,1,1,,,base a903d33b 4.23/4.37 loop 15
+1788690046,69e0eb5,f7a25d38,k8h_ms,0.33,ms/rep,11,0,0.0,43600,p95 0.420 base a903d33b 0.21/0.37 loop 40
+1788690046,69e0eb5,f7a25d38,k8h_loopwords,39,words,1,1,,,base a903d33b 0.21/0.37 loop 40

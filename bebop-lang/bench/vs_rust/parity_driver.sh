@@ -36,6 +36,7 @@ for f in "$DIR"/*.bp; do
     k6) EXPECT=236;;
     k7) EXPECT=3939697352;;
     k7neon) EXPECT=3939697352;;
+    k8h) EXPECT=2455774231069866078;;  # T39 oracle (tools/bpref.py), added alongside the K8 kernel
     c01_lit) EXPECT=1000000065571;;
     c02_arith) EXPECT=34;;
     c03_precedence) EXPECT=7;;
