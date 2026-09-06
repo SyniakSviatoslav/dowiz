@@ -320,6 +320,17 @@ arm body leaves its entry. `fold_clear` call goes.
 
 ---
 
+### 3.14 Ownership invariants (session-18 corrections; enforced in the compiler, zero cost in emitted code)
+
+Every window-mask / cs-mask bit change goes through one helper pair (`vs_mask_take/free`,
+`vs_cs_take/free`) that exits loudly on a register outside its range (window 0..7, cs 19..26; a
+`1 << -1` would set bit 63 because `lslv` takes the amount mod 64). At every statement boundary
+(w == 0 at the end of an emit_body item, and at vs_reset) `fntab[3798] == 255` and `fntab[3823] == 0`,
+else compile-time exit 102: a temp obtained by vs_alloc must be owned by a window entry or freed
+in the same emitter -- the multiplier of the general MULC form, the sdiv temp of `mod`, both
+operands of a `cmp` (FLAGS owns nothing), constant temps of and/orr/eor/shifts, a MULC's own
+window register when the MULC is consumed, the source of a `vs_to` move.
+
 ## 4. Planning/emission agreement (the invariant that makes two passes agree on n[0])
 
 Both passes run the same code on the same text. The emitted word count of any expression must be
