@@ -275,12 +275,12 @@ fn emit_ident(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   // every kernel/test; the branch stays disabled until a context flag
   // distinguishes real struct construction from block openers.
   // T43 rest (2026-09-05): the context guard -- `NAME {` is a struct literal
-  // only when NAME is the declared (first) struct, cached in fntab[3891]
+  // only when NAME is the declared (first) struct, cached in fntab[4641]
   // (0 = not yet scanned, -1 = no struct), and we are not inside a `while`
-  // condition (fntab[3892], set by emit_while_stmt): `while i < n {` stays a loop.
-  let _ = if fntab[3891] == 0 then (let _ = fntab[3891] = struct_name_hash(s) in 0) else 0;
-  let is_sname = (if name == fntab[3891] then 1 else 0) * (if name == 0 then 0 else 1);
-  let struct_ok = is_sname * (1 - fntab[3892]);
+  // condition (fntab[4642], set by emit_while_stmt): `while i < n {` stays a loop.
+  let _ = if fntab[4641] == 0 then (let _ = fntab[4641] = struct_name_hash(s) in 0) else 0;
+  let is_sname = (if name == fntab[4641] then 1 else 0) * (if name == 0 then 0 else 1);
+  let struct_ok = is_sname * (1 - fntab[4642]);
   if is_lp == 1 then emit_call_or_ctor(s, name, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_br * struct_ok == 1 then emit_struct_lit(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_lb == 1 then emit_array_index(s, name, npos, pos, insns, n, stab, selfname, selfstart, fntab)
@@ -370,7 +370,7 @@ fn field_index(s: str, spos: i64, fname: i64) -> i64 {
 }
 
 // Hash of the first declared struct's name (read_ident hash), -1 when the
-// program declares none. Cached per program in fntab[3891] by emit_ident.
+// program declares none. Cached per program in fntab[4641] by emit_ident.
 fn struct_name_hash(s: str) -> i64 {
   let spos = [0];
   let found = find_struct(s, spos);
@@ -437,7 +437,7 @@ fn emit_struct_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let k = [fcnt];
   while k[0] > 0 {
     let _ = k[0] = k[0] - 1;
-    let r = vs_reg(insns, n, fntab, stab, fntab[3797] - 1);
+    let r = vs_reg(insns, n, fntab, stab, fntab[4547] - 1);
     let _ = em(insns, n, 4177526784 + slots[k[0]] * 1024 + r);
     let _ = vs_pop(fntab);
     0
@@ -588,13 +588,15 @@ fn fntab_lookup(fntab: [i64], name: i64) -> i64 {
 
 // B1 (2026-09-06): look up a function's PUBLISHED planning-pass facts (packed
 // as vc*2+has_alloc, vc = final symbol count incl. params, has_alloc = body
-// allocates on x14) from fntab[1500+i]. 0 if absent (harmless default: a
+// allocates on x14) from fntab[2200+i]. 0 if absent (harmless default: a
 // caller with no lookup hit behaves as if vc=0/has_alloc=0, i.e. does not
 // need x15/x14 -- only used during the emission pass, where every fn's own
 // source position is guaranteed to have been published by the planning pass
-// first). Indices 1500..1755 are free: the ctor/name/start/fpos zones top
-// out below 1026 (cnt <= 256), and 3655+ is claimed by unrelated per-fn
-// scratch.
+// first). A2 step 0 (2026-09-06/07) relayout: indices 2200..2711 are free
+// (fn cap raised 300 -> 512; the ctor/name/start/fpos zones + ft_cache top
+// out at 2046 worst case, cnt=511/ecnt=255), and 4410+ is claimed by
+// unrelated per-fn scratch (loop/mask/struct/literal cells, window moved to
+// fntab[2800+3i]).
 //
 // Keyed by SOURCE POSITION (srcpos, zone 3: fntab[1+2*cnt+i]), not by name:
 // two `fn` DEFINITIONS CAN share a spelling (bench/vs_rust/std_tests/cache.bp
@@ -613,7 +615,7 @@ fn fntab_fact_lookup(fntab: [i64], srcpos: i64) -> i64 {
   while i < cnt {
     let sp = fntab[1 + cnt + cnt + i];
     let is_match = if sp == srcpos then 1 else 0;
-    let fv = fntab[1500 + i];
+    let fv = fntab[2200 + i];
     let val = if is_match == 1 then fv else val;
     let i = i + 1;
     0
@@ -755,7 +757,7 @@ fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i6
   // Every window temp deeper than the args survives the call in cs/slot;
   // then a parallel move places the args into x0..x(nargs-1) (params 9-14
   // arrive in x8..x13, so target register == argument index uniformly).
-  let base = fntab[3797] - nargs;
+  let base = fntab[4547] - nargs;
   let _ = vs_park(insns, n, fntab, stab, nargs);
   let _ = vs_place_args(insns, n, fntab, stab, base, nargs);
   let i = [nargs - 1];
@@ -766,12 +768,12 @@ fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i6
   };
   let tgt0 = fntab_lookup(fntab, name);
   let target = if name == selfname then selfstart else tgt0;
-  // B1 (2026-09-06): fntab[1800]/[1801] are the current fn's own call-site
+  // B1 (2026-09-06): fntab[2712]/[1801] are the current fn's own call-site
   // counter and skip-save flag (0 = save, matches the pre-B1 unconditional
   // behaviour and is the default in any fntab this mechanism never touches;
   // 1 = the caller's own facts say it never needs x15/x14 preserved).
-  let _ = fntab[1800] = fntab[1800] + 1;
-  let _ = emit_bl(insns, n, target, 1 - fntab[1801]);
+  let _ = fntab[2712] = fntab[2712] + 1;
+  let _ = emit_bl(insns, n, target, 1 - fntab[2713]);
   // x1..x7 are free (parked); x0 holds the result. `bl` has no destination
   // field to retarget, so p = -1.
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
@@ -853,7 +855,7 @@ fn vs_find_blocker(fntab: [i64], base: i64, nargs: i64) -> i64 {
 // is argument nops-1 -> x<nops-1>, matching today exactly), then drop the
 // tags (the hand-word block below may clobber x0..x13 and the flags freely).
 fn vs_deliver(insns: [i64], n: [i64], fntab: [i64], stab: [i64], nops: i64) -> i64 {
-  let base = fntab[3797] - nops;
+  let base = fntab[4547] - nops;
   let _ = vs_park(insns, n, fntab, stab, nops);
   let _ = vs_place_args(insns, n, fntab, stab, base, nops);
   let i = [nops - 1];
@@ -1719,15 +1721,16 @@ fn em(insns: [i64], n: [i64], w: i64) -> i64 {
 // machine is gone. Every expression value lives in a register (the
 // compile-time "window" x0..x7) or, when it cannot, in a callee-saved
 // register or an x15 frame slot chosen at compile time -- never [sp].
-// fntab[3797] w (0..128, window entry count) ; fntab[3798] free mask x0..x7
-// (bit set = free) ; fntab[2000+3i..2002+3i] kind/payload0/payload1 of
-// window entry i (0 = deepest .. w-1 = top; 128-entry LIST, decoupled from
-// the 8-register mask above -- only REG/MULC-window/FLAGS kinds actually
-// consume a register bit) ; fntab[3823] cs mask (bit
-// r-19 set = cs temp r LIVE) ; fntab[3824] temp slot cursor k ;
-// fntab[3825] cs_hi (highest cs register index used, r-18, 0 = none, max
-// over the fn) ; fntab[3826] tsp (max temp slots used, max over the fn) ;
-// fntab[3827] S (emission-pass spilled-symbol count for slot addresses;
+// fntab[4547] w (0..512, window entry count) ; fntab[4548] free mask x0..x7
+// (bit set = free) ; fntab[2800+3i..2802+3i] kind/payload0/payload1 of
+// window entry i (0 = deepest .. w-1 = top; 512-entry LIST (A2 step 0
+// relayout, moved from 2000+3i), decoupled from the 8-register mask above --
+// only REG/MULC-window/FLAGS kinds actually consume a register bit) ;
+// fntab[4573] cs mask (bit
+// r-19 set = cs temp r LIVE) ; fntab[4574] temp slot cursor k ;
+// fntab[4575] cs_hi (highest cs register index used, r-18, 0 = none, max
+// over the fn) ; fntab[4576] tsp (max temp slots used, max over the fn) ;
+// fntab[4577] S (emission-pass spilled-symbol count for slot addresses;
 // planning pass 0). kinds: 1 CONST c  2 REG r,p  3 SYM r,-  4 CS r,-
 // 5 SLOT k,-  6 MULC r,c  7 FLAGS cond,-. `p` on a REG entry is the index
 // of the word that produced it when that word's rd field IS r and can be
@@ -1754,8 +1757,8 @@ fn em(insns: [i64], n: [i64], w: i64) -> i64 {
 // identical between planning and emission.
 fn check_reg_collision(s: str, insns: [i64], n: [i64], fntab: [i64], stab: [i64], reg: i64, srcpos: i64) -> i64 {
   let is_reg = (if reg >= 19 then 1 else 0) * (if reg < 27 then 1 else 0);
-  let bit = if is_reg == 1 then (fntab[3823] >> (reg - 19)) & 1 else 0;
-  let w = if bit == 1 then fntab[3797] else 0;
+  let bit = if is_reg == 1 then (fntab[4573] >> (reg - 19)) & 1 else 0;
+  let w = if bit == 1 then fntab[4547] else 0;
   let i = 0;
   let idx = 0 - 1;
   while i < w {
@@ -1766,7 +1769,7 @@ fn check_reg_collision(s: str, insns: [i64], n: [i64], fntab: [i64], stab: [i64]
     let i = i + 1;
     0
   };
-  let _ = if idx >= 0 then (let cfi = cs_free_idx(fntab[3823], stab[0]) in (let _ = if cfi < 8 then vs_park_to_cs(insns, n, fntab, idx, reg, cfi) else vs_park_to_slot(insns, n, fntab, idx, reg) in vs_cs_free(fntab, reg, 11))) else 0;
+  let _ = if idx >= 0 then (let cfi = cs_free_idx(fntab[4573], stab[0]) in (let _ = if cfi < 8 then vs_park_to_cs(insns, n, fntab, idx, reg, cfi) else vs_park_to_slot(insns, n, fntab, idx, reg) in vs_cs_free(fntab, reg, 11))) else 0;
   // unreachable now that a real collision is always relocated above --
   // kept as an assert: bit==1 with no owning window entry found is an
   // actual invariant violation elsewhere, not this fn's job to paper over.
@@ -1775,12 +1778,12 @@ fn check_reg_collision(s: str, insns: [i64], n: [i64], fntab: [i64], stab: [i64]
 }
 
 fn vs_reset(fntab: [i64]) -> i64 {
-  let _ = fntab[3797] = 0;
-  let _ = fntab[3798] = 255;
-  let _ = fntab[3823] = 0;
-  let _ = fntab[3824] = 0;
-  let _ = fntab[3825] = 0;
-  let _ = fntab[3826] = 0;
+  let _ = fntab[4547] = 0;
+  let _ = fntab[4548] = 255;
+  let _ = fntab[4573] = 0;
+  let _ = fntab[4574] = 0;
+  let _ = fntab[4575] = 0;
+  let _ = fntab[4576] = 0;
   0
 }
 
@@ -1816,18 +1819,18 @@ fn lsb_idx(mask: i64) -> i64 {
   63 - clz(lsb)
 }
 
-fn vs_entry_kind(fntab: [i64], i: i64) -> i64 { fntab[2000 + 3 * i] }
-fn vs_entry_p0(fntab: [i64], i: i64) -> i64 { fntab[2001 + 3 * i] }
-fn vs_entry_p1(fntab: [i64], i: i64) -> i64 { fntab[2002 + 3 * i] }
+fn vs_entry_kind(fntab: [i64], i: i64) -> i64 { fntab[2800 + 3 * i] }
+fn vs_entry_p0(fntab: [i64], i: i64) -> i64 { fntab[2801 + 3 * i] }
+fn vs_entry_p1(fntab: [i64], i: i64) -> i64 { fntab[2802 + 3 * i] }
 fn vs_set_entry(fntab: [i64], i: i64, kind: i64, p0: i64, p1: i64) -> i64 {
-  let _ = fntab[2000 + 3 * i] = kind;
-  let _ = fntab[2001 + 3 * i] = p0;
-  let _ = fntab[2002 + 3 * i] = p1;
+  let _ = fntab[2800 + 3 * i] = kind;
+  let _ = fntab[2801 + 3 * i] = p0;
+  let _ = fntab[2802 + 3 * i] = p1;
   0
 }
 
-// Single choke point for every window-mask (fntab[3798], bits 0-7 = x0-x7)
-// and cs-mask (fntab[3823], bits 0-7 = x19-x26) bit flip, per the
+// Single choke point for every window-mask (fntab[4548], bits 0-7 = x0-x7)
+// and cs-mask (fntab[4573], bits 0-7 = x19-x26) bit flip, per the
 // coordinator's bug-9 postmortem: `1 << r` for r < 0 is `1 << (r mod 64)`
 // on this target (lslv), so a stray -1 sets bit 63, not "no bit" -- the
 // exact corruption chased across this session. `site` (1..20 window,
@@ -1837,14 +1840,14 @@ fn vs_set_entry(fntab: [i64], i: i64, kind: i64, p0: i64, p1: i64) -> i64 {
 // 99+site / 119+site. Two words of cost, kept permanently.
 fn vs_mask_take(fntab: [i64], r: i64, site: i64) -> i64 {
   let _ = if (if r < 0 then 1 else 0) + (if r >= 8 then 1 else 0) > 0 then sys_exit(100 + site) else 0;
-  let _ = fntab[3798] = fntab[3798] - (fntab[3798] & (1 << r));
-  let _ = if (fntab[3798] & (0 - 256)) != 0 then sys_exit(99 + site) else 0;
+  let _ = fntab[4548] = fntab[4548] - (fntab[4548] & (1 << r));
+  let _ = if (fntab[4548] & (0 - 256)) != 0 then sys_exit(99 + site) else 0;
   0
 }
 fn vs_mask_free(fntab: [i64], r: i64, site: i64) -> i64 {
   let _ = if (if r < 0 then 1 else 0) + (if r >= 8 then 1 else 0) > 0 then sys_exit(100 + site) else 0;
-  let _ = fntab[3798] = fntab[3798] | (1 << r);
-  let _ = if (fntab[3798] & (0 - 256)) != 0 then sys_exit(99 + site) else 0;
+  let _ = fntab[4548] = fntab[4548] | (1 << r);
+  let _ = if (fntab[4548] & (0 - 256)) != 0 then sys_exit(99 + site) else 0;
   0
 }
 // cs mask polarity is the OPPOSITE of the window mask: bit SET means the
@@ -1853,21 +1856,21 @@ fn vs_mask_free(fntab: [i64], r: i64, site: i64) -> i64 {
 // window convention (bit SET = free) on purpose; do not swap these.
 fn vs_cs_take(fntab: [i64], r: i64, site: i64) -> i64 {
   let _ = if (if r < 19 then 1 else 0) + (if r > 26 then 1 else 0) > 0 then sys_exit(120 + site) else 0;
-  let _ = fntab[3823] = fntab[3823] | (1 << (r - 19));
-  let _ = if (fntab[3823] & (0 - 256)) != 0 then sys_exit(119 + site) else 0;
+  let _ = fntab[4573] = fntab[4573] | (1 << (r - 19));
+  let _ = if (fntab[4573] & (0 - 256)) != 0 then sys_exit(119 + site) else 0;
   0
 }
 fn vs_cs_free(fntab: [i64], r: i64, site: i64) -> i64 {
   let _ = if (if r < 19 then 1 else 0) + (if r > 26 then 1 else 0) > 0 then sys_exit(120 + site) else 0;
-  let _ = fntab[3823] = fntab[3823] - (fntab[3823] & (1 << (r - 19)));
-  let _ = if (fntab[3823] & (0 - 256)) != 0 then sys_exit(119 + site) else 0;
+  let _ = fntab[4573] = fntab[4573] - (fntab[4573] & (1 << (r - 19)));
+  let _ = if (fntab[4573] & (0 - 256)) != 0 then sys_exit(119 + site) else 0;
   0
 }
 
 
 fn vs_alloc(insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
-  let _ = if fntab[3798] == 0 then vs_park_deepest(insns, n, fntab, stab) else 0;
-  let r = lsb_idx(fntab[3798]);
+  let _ = if fntab[4548] == 0 then vs_park_deepest(insns, n, fntab, stab) else 0;
+  let r = lsb_idx(fntab[4548]);
   let _ = vs_mask_take(fntab, r, 1);
   r
 }
@@ -1929,14 +1932,14 @@ fn vs_park_to_cs(insns: [i64], n: [i64], fntab: [i64], idx: i64, d0: i64, cfi: i
   // mask rule (2026-09-06, §3.8/bug 9): d0 can be an argument-placement
   // register 8..13 (kind 2 entries target x8..x13 for the 9th+ argument,
   // per emit_bl_call), not only a vs_alloc-sourced window temp 0..7 --
-  // never OR that into the WINDOW mask (fntab[3798] tracks x0..x7 only).
+  // never OR that into the WINDOW mask (fntab[4548] tracks x0..x7 only).
   let _ = if d0 < 8 then vs_mask_free(fntab, d0, 4) else 0;
   let hi = cfi + 1;
-  let _ = if hi > fntab[3825] then fntab[3825] = hi else 0;
+  let _ = if hi > fntab[4575] then fntab[4575] = hi else 0;
   vs_set_entry(fntab, idx, 4, cr, 0)
 }
 fn vs_park_to_slot(insns: [i64], n: [i64], fntab: [i64], idx: i64, d0: i64) -> i64 {
-  let k = fntab[3824];
+  let k = fntab[4574];
   // BUGFIX (2026-09-06, window relocation follow-up): this word encoded
   // `str x0, [x<d0>, #(S+k)*8]` (base 4177526784 = 0xf9000000, Rn=0, and
   // `d0*32` landing in the Rn field, bits 5-9) instead of `str x<d0>, [x15,
@@ -1946,12 +1949,12 @@ fn vs_park_to_slot(insns: [i64], n: [i64], fntab: [i64], idx: i64, d0: i64) -> i
   // (x19-x26) are already live -- verified via `as`/objdump (base
   // `str x0,[x15]` = 4177527264 = 0xf90001e0; +1 per Rt register, +1024 per
   // slot index, matching vs_mat_slot's LOAD encoding below).
-  let _ = em(insns, n, 4177527264 + d0 + (fntab[3827] + k) * 1024);
+  let _ = em(insns, n, 4177527264 + d0 + (fntab[4577] + k) * 1024);
   // mask rule (2026-09-06, §3.8/bug 9): same as vs_park_to_cs -- d0 may be
   // an argument register 8..13, which the window mask does not track.
   let _ = if d0 < 8 then vs_mask_free(fntab, d0, 5) else 0;
-  let _ = fntab[3824] = k + 1;
-  let _ = if k + 1 > fntab[3826] then fntab[3826] = k + 1 else 0;
+  let _ = fntab[4574] = k + 1;
+  let _ = if k + 1 > fntab[4576] then fntab[4576] = k + 1 else 0;
   vs_set_entry(fntab, idx, 5, k, 0)
 }
 
@@ -1966,7 +1969,7 @@ fn vs_park_move(insns: [i64], n: [i64], fntab: [i64], stab: [i64], idx: i64, is_
   // of a normal materialise (e.g. emit_cond's vs_park(1) parking a pending
   // `acc*131` MULC that sits below the if-expression on the window).
   let _ = if is_mulc_win == 1 then vs_mask_free(fntab, p0, 21) else 0;
-  let cfi = cs_free_idx(fntab[3823], stab[0]);
+  let cfi = cs_free_idx(fntab[4573], stab[0]);
   if cfi < 8 then vs_park_to_cs(insns, n, fntab, idx, d0, cfi) else vs_park_to_slot(insns, n, fntab, idx, d0)
 }
 
@@ -1983,7 +1986,7 @@ fn vs_park_idx(insns: [i64], n: [i64], fntab: [i64], stab: [i64], idx: i64) -> i
 }
 
 fn vs_park(insns: [i64], n: [i64], fntab: [i64], stab: [i64], keep: i64) -> i64 {
-  let target = fntab[3797] - keep;
+  let target = fntab[4547] - keep;
   let i = 0;
   while i < target {
     let _ = vs_park_idx(insns, n, fntab, stab, i);
@@ -2034,13 +2037,13 @@ fn vs_find_parkable(fntab: [i64], w: i64) -> i64 {
   found2
 }
 fn vs_park_deepest(insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
-  let idx = vs_find_parkable(fntab, fntab[3797]);
+  let idx = vs_find_parkable(fntab, fntab[4547]);
   let _ = if idx >= 0 then vs_park_idx(insns, n, fntab, stab, idx) else 0;
   0
 }
 
 fn vs_find_owning(fntab: [i64], r: i64, excl: i64) -> i64 {
-  let w = fntab[3797];
+  let w = fntab[4547];
   let i = 0;
   let found = 0 - 1;
   while i < w {
@@ -2077,7 +2080,7 @@ fn vs_evict_move(insns: [i64], n: [i64], fntab: [i64], stab: [i64], idx: i64, r:
 }
 
 fn vs_evict_at(insns: [i64], n: [i64], fntab: [i64], stab: [i64], idx: i64, r: i64) -> i64 {
-  let mask = fntab[3798];
+  let mask = fntab[4548];
   if mask > 0 then vs_evict_move(insns, n, fntab, stab, idx, r, lsb_idx(mask)) else vs_park_idx(insns, n, fntab, stab, idx)
 }
 
@@ -2088,7 +2091,7 @@ fn vs_evict(insns: [i64], n: [i64], fntab: [i64], stab: [i64], r: i64) -> i64 {
 }
 
 fn vs_settle_flags(insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
-  let w = fntab[3797];
+  let w = fntab[4547];
   let is_flags = if w > 0 then (if vs_entry_kind(fntab, w - 1) == 7 then 1 else 0) else 0;
   let _ = if is_flags == 1 then vs_mat(insns, n, fntab, stab, w - 1, vs_alloc(insns, n, fntab, stab)) else 0;
   0
@@ -2096,20 +2099,21 @@ fn vs_settle_flags(insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
 
 fn vs_push(insns: [i64], n: [i64], fntab: [i64], stab: [i64], kind: i64, p0: i64, p1: i64) -> i64 {
   let _ = vs_settle_flags(insns, n, fntab, stab);
-  // REGISTER-MODEL-BLUEPRINT window relocation: the entry LIST (fntab[2000..3535],
+  // REGISTER-MODEL-BLUEPRINT window relocation: the entry LIST (fntab[2800..4335],
   // 512 slots -- raised from 128 2026-09-06: emit_cond's parkable-`d` fix keeps one
   // extra live entry per nested if-level for the whole else-branch compile, so a
   // deep `if..else if..` dispatch chain (dpll.bp's SAT-solver branching hit 256)
-  // now needs several times the entries it used to; fntab[2384..3659] was already
-  // unused, room for the 512-slot table) is decoupled from the 8-register free
-  // mask (fntab[3798]) -- only REG/MULC-window/FLAGS kinds need a register, so a
+  // now needs several times the entries it used to) is decoupled from the
+  // 8-register free mask (fntab[4548]; A2 step 0 2026-09-06/07 moved the
+  // whole table from the old base 2000+3i to fntab[2800+3i] to make room for the
+  // fn-cap-512 relayout) -- only REG/MULC-window/FLAGS kinds need a register, so a
   // pending SYM/CONST/etc. entry must never be forced through vs_park_deepest
   // just because w passed 8. The only cap left is the physical entry-list
   // capacity itself.
-  let _ = if fntab[3797] >= 512 then sys_exit(89) else 0;
-  let w = fntab[3797];
+  let _ = if fntab[4547] >= 512 then sys_exit(89) else 0;
+  let w = fntab[4547];
   let _ = vs_set_entry(fntab, w, kind, p0, p1);
-  let _ = fntab[3797] = w + 1;
+  let _ = fntab[4547] = w + 1;
   // A REG push always OWNS its register in the free mask. Most callers get
   // this for free (the register came from vs_alloc, whose bit is already
   // clear) -- but a `bl`/builtin result and the -1 unbound-symbol path claim
@@ -2121,7 +2125,7 @@ fn vs_push(insns: [i64], n: [i64], fntab: [i64], stab: [i64], kind: i64, p0: i64
 }
 
 fn vs_pop(fntab: [i64]) -> i64 {
-  let w = fntab[3797];
+  let w = fntab[4547];
   let top = w - 1;
   let kind = vs_entry_kind(fntab, top);
   let p0 = vs_entry_p0(fntab, top);
@@ -2129,19 +2133,19 @@ fn vs_pop(fntab: [i64]) -> i64 {
   // argument-placement register 8..13 (emit_bl_call pops every arg entry
   // after a call, including the 9th+ that target x8..x13) -- guard is_reg
   // by p0<8 too, not just is_mulc_win, so that never leaks into the
-  // window mask (fntab[3798] tracks x0..x7 only).
+  // window mask (fntab[4548] tracks x0..x7 only).
   let is_reg = (if kind == 2 then 1 else 0) * (if p0 < 8 then 1 else 0);
   let is_mulc_win = if kind == 6 then (if p0 < 8 then 1 else 0) else 0;
   let is_cs = if kind == 4 then 1 else 0;
   let _ = if is_reg + is_mulc_win == 1 then vs_mask_free(fntab, p0, 9) else 0;
   let _ = if is_cs == 1 then vs_cs_free(fntab, p0, 2) else 0;
-  let _ = fntab[3797] = top;
+  let _ = fntab[4547] = top;
   // statement boundary: the temp-slot cursor is bump-allocated per
   // expression statement and resets once the window is fully drained.
-  let _ = if top == 0 then fntab[3824] = 0 else 0;
+  let _ = if top == 0 then fntab[4574] = 0 else 0;
   // A "w==0" boundary here fires too often to double as a leak invariant
   // point (e.g. mid multi-arg call setup, well before the `bl`/result
-  // push) -- tried fntab[3798]==255 and fntab[3823]==0 checks here per
+  // push) -- tried fntab[4548]==255 and fntab[4573]==0 checks here per
   // the coordinator's bug-9 diagnostic; both false-positived on trivial,
   // already-correct programs (tfib.bp), so removed rather than shipped
   // broken. The real leaks found and fixed this round (vs_not_reg,
@@ -2153,7 +2157,7 @@ fn vs_pop(fntab: [i64]) -> i64 {
 fn vs_mat_reg(insns: [i64], n: [i64], fntab: [i64], i: i64, r: i64, d: i64) -> i64 {
   // mask rule (2026-09-06, §3.8 cycle-break fix): x16 (the scratch used to
   // evict a cycle's blocker) lives outside the window mask -- freeing "bit
-  // 16" would set a bit >=8 in fntab[3798], the exact corruption bug 9
+  // 16" would set a bit >=8 in fntab[4548], the exact corruption bug 9
   // chased. r is always <8 for a genuine window REG except this one case.
   let _ = if r != d then (let _ = em(insns, n, 2852127712 + r * 65536 + d) in (let _ = if r < 8 then vs_mask_free(fntab, r, 10) else 0 in vs_set_entry(fntab, i, 2, d, n[0] - 1))) else 0;
   n[0]
@@ -2175,7 +2179,7 @@ fn vs_mat_cs(insns: [i64], n: [i64], fntab: [i64], i: i64, r: i64, d: i64) -> i6
   vs_set_entry(fntab, i, 2, d, n[0] - 1)
 }
 fn vs_mat_slot(insns: [i64], n: [i64], fntab: [i64], i: i64, k: i64, d: i64) -> i64 {
-  let _ = em(insns, n, 4181721568 + (fntab[3827] + k) * 1024 + d);
+  let _ = em(insns, n, 4181721568 + (fntab[4577] + k) * 1024 + d);
   vs_set_entry(fntab, i, 2, d, n[0] - 1)
 }
 
@@ -2210,7 +2214,7 @@ fn vs_reg(insns: [i64], n: [i64], fntab: [i64], stab: [i64], i: i64) -> i64 {
 
 
 fn vs_to(insns: [i64], n: [i64], fntab: [i64], stab: [i64], d: i64) -> i64 {
-  let w = fntab[3797];
+  let w = fntab[4547];
   let top = w - 1;
   let owns = if vs_entry_kind(fntab, top) == 2 then (if vs_entry_p0(fntab, top) == d then 1 else 0) else 0;
   let _ = if owns == 0 then vs_evict(insns, n, fntab, stab, d) else 0;
@@ -2224,7 +2228,7 @@ fn vs_bind(insns: [i64], n: [i64], fntab: [i64], stab: [i64], reg: i64) -> i64 {
   let is_neg = if reg < 0 then 1 else 0;
   let is_spill = (1 - is_neg) * (if reg >= 100 then 1 else 0);
   let is_reg = (1 - is_neg) * (1 - is_spill);
-  let w = fntab[3797];
+  let w = fntab[4547];
   let r_spill = if is_spill == 1 then vs_reg(insns, n, fntab, stab, w - 1) else 0;
   let _ = if is_neg == 1 then em(insns, n, 3558866944) else 0;
   // same STR-to-slot encoding bugfix as vs_park_to_slot: base is
@@ -2237,7 +2241,7 @@ fn vs_bind(insns: [i64], n: [i64], fntab: [i64], stab: [i64], reg: i64) -> i64 {
   vs_pop(fntab)
 }
 fn vs_bind_reg(insns: [i64], n: [i64], fntab: [i64], stab: [i64], reg: i64) -> i64 {
-  let w = fntab[3797];
+  let w = fntab[4547];
   let top = w - 1;
   let kind = vs_entry_kind(fntab, top);
   let p0 = vs_entry_p0(fntab, top);
@@ -2258,14 +2262,14 @@ fn vs_bind_reg(insns: [i64], n: [i64], fntab: [i64], stab: [i64], reg: i64) -> i
   let _ = if is_slow * (if kind == 3 then 1 else 0) * is_spill_sym == 1 then em(insns, n, 4181721568 + (p0 - 100) * 1024 + reg) else 0;
   let _ = if is_slow * (if kind == 4 then 1 else 0) == 1 then em(insns, n, 2852127712 + p0 * 65536 + reg) else 0;
   let _ = if is_slow * (if kind == 4 then 1 else 0) == 1 then vs_cs_free(fntab, p0, 4) else 0;
-  let _ = if is_slow * (if kind == 5 then 1 else 0) == 1 then em(insns, n, 4181721568 + (fntab[3827] + p0) * 1024 + reg) else 0;
+  let _ = if is_slow * (if kind == 5 then 1 else 0) == 1 then em(insns, n, 4181721568 + (fntab[4577] + p0) * 1024 + reg) else 0;
   let _ = if is_slow * (if kind == 6 then 1 else 0) == 1 then mat_mulc(insns, n, fntab, stab, p0, p1, reg) else 0;
   let _ = if is_slow * (if kind == 7 then 1 else 0) == 1 then em(insns, n, 2594113504 + (p0 ^ 1) * 4096 + reg) else 0;
   0
 }
 
 fn vs_pick_dest(insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
-  let w = fntab[3797];
+  let w = fntab[4547];
   let ak = vs_entry_kind(fntab, w - 2);
   let bk = vs_entry_kind(fntab, w - 1);
   if ak == 2 then vs_entry_p0(fntab, w - 2) else (if bk == 2 then vs_entry_p0(fntab, w - 1) else vs_alloc(insns, n, fntab, stab))
@@ -2275,7 +2279,7 @@ fn vs_pick_dest(insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
 // §2 table rows); every sub-case was previously a single-caller function --
 // merged to stay under the bootstrap compiler's 256-fn table cap.
 fn vs_try_fold(insns: [i64], n: [i64], fntab: [i64], stab: [i64], op: i64) -> i64 {
-  let w = fntab[3797];
+  let w = fntab[4547];
   let ak = vs_entry_kind(fntab, w - 2);
   let bk = vs_entry_kind(fntab, w - 1);
   let both = (if ak == 1 then 1 else 0) * (if bk == 1 then 1 else 0);
@@ -2293,7 +2297,7 @@ fn vs_try_fold(insns: [i64], n: [i64], fntab: [i64], stab: [i64], op: i64) -> i6
 }
 
 fn vs_try_addsub_imm(insns: [i64], n: [i64], fntab: [i64], stab: [i64], op: i64) -> i64 {
-  let w = fntab[3797];
+  let w = fntab[4547];
   let bk = vs_entry_kind(fntab, w - 1);
   let is_addsub = (if op == 2 then 1 else 0) + (if op == 3 then 1 else 0);
   let is_c = if bk == 1 then 1 else 0;
@@ -2312,7 +2316,7 @@ fn vs_try_addsub_imm(insns: [i64], n: [i64], fntab: [i64], stab: [i64], op: i64)
 }
 
 fn vs_try_mulc_new(insns: [i64], n: [i64], fntab: [i64], stab: [i64], op: i64) -> i64 {
-  let w = fntab[3797];
+  let w = fntab[4547];
   let is_mul = if op == 4 then 1 else 0;
   let ak = vs_entry_kind(fntab, w - 2);
   let bk = vs_entry_kind(fntab, w - 1);
@@ -2325,8 +2329,8 @@ fn vs_try_mulc_new(insns: [i64], n: [i64], fntab: [i64], stab: [i64], op: i64) -
   let other_idx = if b_isc == 1 then w - 2 else w - 1;
   let other_kind = if b_isc == 1 then ak else bk;
   // BUGFIX (2026-09-06): vs_pop (below) unconditionally frees the OTHER
-  // operand's ownership bit (window mask fntab[3798] for a REG entry, cs
-  // mask fntab[3823] for a CS entry) -- but the MULC tag pushed right
+  // operand's ownership bit (window mask fntab[4548] for a REG entry, cs
+  // mask fntab[4573] for a CS entry) -- but the MULC tag pushed right
   // after still references that register (`r`, computed next) as live.
   // Without re-claiming the bit, a later vs_alloc/vs_park can hand it to
   // something else while the tag still owns it, silently dropping the
@@ -2351,7 +2355,7 @@ fn vs_try_mulc_new(insns: [i64], n: [i64], fntab: [i64], stab: [i64], op: i64) -
 }
 
 fn vs_try_shift_imm(insns: [i64], n: [i64], fntab: [i64], stab: [i64], op: i64) -> i64 {
-  let w = fntab[3797];
+  let w = fntab[4547];
   let is_shift = (if op == 15 then 1 else 0) + (if op == 16 then 1 else 0) + (if op == 17 then 1 else 0);
   let bk = vs_entry_kind(fntab, w - 1);
   let is_c = if bk == 1 then 1 else 0;
@@ -2368,7 +2372,7 @@ fn vs_try_shift_imm(insns: [i64], n: [i64], fntab: [i64], stab: [i64], op: i64) 
 }
 
 fn vs_try_mulc_add(insns: [i64], n: [i64], fntab: [i64], stab: [i64], op: i64) -> i64 {
-  let w = fntab[3797];
+  let w = fntab[4547];
   let is_add = if op == 2 then 1 else 0;
   let ak = vs_entry_kind(fntab, w - 2);
   let bk = vs_entry_kind(fntab, w - 1);
@@ -2393,7 +2397,7 @@ fn vs_try_mulc_add(insns: [i64], n: [i64], fntab: [i64], stab: [i64], op: i64) -
 }
 
 fn vs_try_mulc_sub(insns: [i64], n: [i64], fntab: [i64], stab: [i64], op: i64) -> i64 {
-  let w = fntab[3797];
+  let w = fntab[4547];
   let is_sub = if op == 3 then 1 else 0;
   let bk = vs_entry_kind(fntab, w - 1);
   let b_mulc = if bk == 6 then 1 else 0;
@@ -2411,7 +2415,7 @@ fn vs_try_mulc_sub(insns: [i64], n: [i64], fntab: [i64], stab: [i64], op: i64) -
 
 fn vs_binop_reg(insns: [i64], n: [i64], fntab: [i64], stab: [i64], op: i64) -> i64 {
   let d = vs_pick_dest(insns, n, fntab, stab);
-  let w = fntab[3797];
+  let w = fntab[4547];
   let a = vs_reg(insns, n, fntab, stab, w - 2);
   let b = vs_reg(insns, n, fntab, stab, w - 1);
   let is_mod = if op == 11 then 1 else 0;
@@ -2453,7 +2457,7 @@ fn vs_binop(insns: [i64], n: [i64], fntab: [i64], stab: [i64], op: i64) -> i64 {
 // function (each sub-case was a single-caller helper) to stay under the
 // bootstrap compiler's 256-fn table cap.
 fn vs_cmp(insns: [i64], n: [i64], fntab: [i64], stab: [i64], cond: i64) -> i64 {
-  let w = fntab[3797];
+  let w = fntab[4547];
   let ak = vs_entry_kind(fntab, w - 2);
   let bk = vs_entry_kind(fntab, w - 1);
   let a0 = vs_entry_p0(fntab, w - 2);
@@ -2470,7 +2474,7 @@ fn vs_cmp(insns: [i64], n: [i64], fntab: [i64], stab: [i64], cond: i64) -> i64 {
   n[0]
 }
 fn vs_cmp_emit(insns: [i64], n: [i64], fntab: [i64], stab: [i64], cond: i64, ak: i64, bk: i64, b0: i64) -> i64 {
-  let w = fntab[3797];
+  let w = fntab[4547];
   let b_fits = (if bk == 1 then 1 else 0) * (if b0 >= 0 then 1 else 0) * (if b0 < 4096 then 1 else 0);
   let a_isc = if ak == 1 then 1 else 0;
   let _ = if b_fits == 1 then vs_cmp_imm(insns, n, fntab, stab, cond, b0) else 0;
@@ -2478,7 +2482,7 @@ fn vs_cmp_emit(insns: [i64], n: [i64], fntab: [i64], stab: [i64], cond: i64, ak:
   n[0]
 }
 fn vs_cmp_imm(insns: [i64], n: [i64], fntab: [i64], stab: [i64], cond: i64, c: i64) -> i64 {
-  let w = fntab[3797];
+  let w = fntab[4547];
   let a = vs_reg(insns, n, fntab, stab, w - 2);
   let _ = em(insns, n, 4043309087 + c * 1024 + a * 32);
   let _ = vs_pop(fntab);
@@ -2486,7 +2490,7 @@ fn vs_cmp_imm(insns: [i64], n: [i64], fntab: [i64], stab: [i64], cond: i64, c: i
   vs_push(insns, n, fntab, stab, 7, cond, 0)
 }
 fn vs_cmp_mirror(insns: [i64], n: [i64], fntab: [i64], stab: [i64], cond: i64) -> i64 {
-  let w = fntab[3797];
+  let w = fntab[4547];
   let a_val = vs_entry_p0(fntab, w - 2);
   let a_fits = (if a_val >= 0 then 1 else 0) * (if a_val < 4096 then 1 else 0);
   let mcond = (if cond == 1 then 1 else 0) + (if cond == 11 then 12 else 0) + (if cond == 12 then 11 else 0) + (if cond == 13 then 10 else 0) + (if cond == 10 then 13 else 0);
@@ -2498,7 +2502,7 @@ fn vs_cmp_mirror(insns: [i64], n: [i64], fntab: [i64], stab: [i64], cond: i64) -
   vs_push(insns, n, fntab, stab, 7, mcond, 0)
 }
 fn vs_cmp_regs2(insns: [i64], n: [i64], fntab: [i64], stab: [i64], cond: i64) -> i64 {
-  let w = fntab[3797];
+  let w = fntab[4547];
   let a = vs_reg(insns, n, fntab, stab, w - 2);
   let b = vs_reg(insns, n, fntab, stab, w - 1);
   let _ = em(insns, n, 3942645791 + b * 65536 + a * 32);
@@ -2787,12 +2791,12 @@ fn emit_term(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
 //   89  let binding while a call temp is live (REGISTER-MODEL-BLUEPRINT §1.1:
 //       the register sym_bind needs collides with a live cs temp -- bind the
 //       call result with a let first), S+tsp > 64 (§5), or fn table full
-//       (256, compile_program_offs/compile/compile_fn: the compiler's own
-//       fnames/fpos/sizes/starts arrays are fixed-size zeros(256); silently
-//       tolerating a 257th fn overflowed starts[256] into the next arena
+//       (512, A2 step 0 2026-09-06/07: compile_program_offs/cli_compile's own
+//       fnames/fpos/sizes/starts/offs arrays are fixed-size zeros(512); silently
+//       tolerating a 513th fn overflowed starts[512] into the next arena
 //       cell and shifted every later word by one -- SIGILL, T96-class bug),
-//       or expression nesting / pending operands > 128 (vs_push: the
-//       window's 128-entry list at fntab[2000..2383] is full)
+//       or expression nesting / pending operands > 512 (vs_push: the
+//       window's 512-entry list at fntab[2800..4335] is full)
 // Runtime capacity traps (T118, exit_group from the compiled program):
 //   80  arena exhausted (zeros past x28)     81  frame heap exhausted (x14 past
 //   the 16 KiB frame)                         82  stack overflow (guard, T118 b)
@@ -2819,7 +2823,7 @@ fn emit_paren(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
 // is the real AArch64 code of the negation); any other tag is materialised
 // into a register first and takes the real `cbz` branch.
 fn vs_cond_branch(insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
-  let top = fntab[3797] - 1;
+  let top = fntab[4547] - 1;
   if vs_entry_kind(fntab, top) == 7 then 1409286144 + (vs_entry_p0(fntab, top) ^ 1) else vs_cond_branch_reg(insns, n, fntab, stab, top)
 }
 fn vs_cond_branch_reg(insns: [i64], n: [i64], fntab: [i64], stab: [i64], top: i64) -> i64 {
@@ -2831,7 +2835,7 @@ fn vs_cond_branch_reg(insns: [i64], n: [i64], fntab: [i64], stab: [i64], top: i6
 // taken exactly when the loop should continue); any other tag materialises
 // into a register and takes `cbnz`.
 fn vs_loop_branch(insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
-  let top = fntab[3797] - 1;
+  let top = fntab[4547] - 1;
   if vs_entry_kind(fntab, top) == 7 then 1409286144 + vs_entry_p0(fntab, top) else vs_loop_branch_reg(insns, n, fntab, stab, top)
 }
 fn vs_loop_branch_reg(insns: [i64], n: [i64], fntab: [i64], stab: [i64], top: i64) -> i64 {
@@ -2852,10 +2856,10 @@ fn emit_cond(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
   let _ = em(insns, n, bw);
   let _ = vs_pop(fntab);
   let d = vs_alloc(insns, n, fntab, stab);
-  let sw = fntab[3797];
-  let smask = fntab[3798];
-  let scs = fntab[3823];
-  let sslot = fntab[3824];
+  let sw = fntab[4547];
+  let smask = fntab[4548];
+  let scs = fntab[4573];
+  let sslot = fntab[4574];
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 4;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
@@ -2867,10 +2871,10 @@ fn emit_cond(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
   let _ = em(insns, n, 335544320);
   let else_pos = n[0];
   let _ = insns[p1] = insns[p1] + (else_pos - p1) * 32;
-  let _ = fntab[3797] = sw;
-  let _ = fntab[3798] = smask;
-  let _ = fntab[3823] = scs;
-  let _ = fntab[3824] = sslot;
+  let _ = fntab[4547] = sw;
+  let _ = fntab[4548] = smask;
+  let _ = fntab[4573] = scs;
+  let _ = fntab[4574] = sslot;
   // BUGFIX (2026-09-06, bug 9 hunt / exit-101 mid-expression): `d` used to
   // be held as a bare register across the ENTIRE else-branch compile,
   // invisible to vs_park_deepest (no window entry represents it) -- a
@@ -2881,7 +2885,7 @@ fn emit_cond(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
   // parkable window entry before compiling the else-branch, so a deeply
   // nested chain can evict it (to a cs register, then a memory slot) via
   // the existing vs_park_deepest path exactly like any other value.
-  let dix = fntab[3797];
+  let dix = fntab[4547];
   let _ = vs_push(insns, n, fntab, stab, 2, d, 0 - 1);
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   // The then-branch's code, already emitted above, is hard-coded to leave
@@ -2909,8 +2913,8 @@ fn emit_cond(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
   let ep0 = vs_entry_p0(fntab, dix);
   let _ = if (ek == 2) * (if ep0 < 8 then 1 else 0) == 1 then vs_mask_free(fntab, ep0, 19) else 0;
   let _ = if ek == 4 then vs_cs_free(fntab, ep0, 10) else 0;
-  let topk = vs_entry_kind(fntab, fntab[3797] - 1);
-  let topp0 = vs_entry_p0(fntab, fntab[3797] - 1);
+  let topk = vs_entry_kind(fntab, fntab[4547] - 1);
+  let topp0 = vs_entry_p0(fntab, fntab[4547] - 1);
   // transplant the else-branch's (now `d`-resident) result down into dix's
   // slot, then drop the now-duplicate top slot WITHOUT vs_pop's free --
   // ownership of `d` is moving to dix's slot, not being released.
@@ -2926,7 +2930,7 @@ fn emit_cond(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
   // original design used p1=-1 here for exactly this reason (a plain
   // vs_push(...,d,0-1) at the end); the transplant must keep that sentinel.
   let _ = vs_set_entry(fntab, dix, topk, topp0, 0 - 1);
-  let _ = fntab[3797] = fntab[3797] - 1;
+  let _ = fntab[4547] = fntab[4547] - 1;
   let end_pos = n[0];
   let _ = insns[p2] = 335544320 + (end_pos - p2);
   // the unified result is already on the window at index dix (transplanted
@@ -3021,21 +3025,21 @@ fn emit_let_chain(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
 
 // R3.x(d) FIX: real string-literal codegen. The literal's BYTES ride in a
 // data section appended after the code words (compile_program_to lays it out
-// and records per-literal data word offsets in fntab[3903+i], code length in
-// fntab[3901], cursor in fntab[3902]). Emit `adr x0, #imm` with
+// and records per-literal data word offsets in fntab[5000+i], code length in
+// fntab[4651], cursor in fntab[4652]). Emit `adr x0, #imm` with
 // imm = (dw - cur)*4: the seed loader mmaps the whole .bin at the code base,
 // so PC = base + cur*4 and the data cell sits at base + dw*4 — the address
 // is a real pointer into the mapped image. Was: placeholder mov x0,#0 that
 // segfaulted str_len/char (journal 1788288206).
 fn emit_str(s: str, pos: [i64], insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
-  let li = fntab[3902];
-  let L = fntab[3901];
-  let dw = fntab[3903 + li];
+  let li = fntab[4652];
+  let L = fntab[4651];
+  let dw = fntab[5000 + li];
   let d = vs_alloc(insns, n, fntab, stab);
   let cur = n[0];
   let imm21 = dw - cur;
   let _ = em(insns, n, 268435456 + imm21 * 32 + d);
-  let _ = fntab[3902] = li + 1;
+  let _ = fntab[4652] = li + 1;
   let _ = skip_string(s, pos);
   vs_push(insns, n, fntab, stab, 2, d, n[0] - 1)
 }
@@ -3093,7 +3097,7 @@ fn emit_array_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let k = [cnt];
   while k[0] > 0 {
     let _ = k[0] = k[0] - 1;
-    let r = vs_reg(insns, n, fntab, stab, fntab[3797] - 1);
+    let r = vs_reg(insns, n, fntab, stab, fntab[4547] - 1);
     let _ = em(insns, n, 4177526784 + k[0] * 1024 + r);
     let _ = vs_pop(fntab);
     0
@@ -3105,7 +3109,7 @@ fn emit_array_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
 // Array get: base + index tags already on the window (base pushed first).
 // index CONST c<4096 -> ldr x<d>,[x<base>,#c*8]; else ldr x<d>,[x<base>,x<idx>,lsl#3].
 fn emit_array_get(insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
-  let w = fntab[3797];
+  let w = fntab[4547];
   let idxk = vs_entry_kind(fntab, w - 1);
   let idxc = vs_entry_p0(fntab, w - 1);
   let is_cimm = (if idxk == 1 then 1 else 0) * (if idxc >= 0 then 1 else 0) * (if idxc < 4096 then 1 else 0);
@@ -3126,7 +3130,7 @@ fn vs_array_get_reg(insns: [i64], n: [i64], fntab: [i64], stab: [i64], base: i64
 fn emit_array_set(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
-  let w = fntab[3797];
+  let w = fntab[4547];
   let idxk = vs_entry_kind(fntab, w - 2);
   let idxc = vs_entry_p0(fntab, w - 2);
   let is_cimm = (if idxk == 1 then 1 else 0) * (if idxc >= 0 then 1 else 0) * (if idxc < 4096 then 1 else 0);
@@ -3181,7 +3185,7 @@ fn emit_unary(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   if kind == 0 then vs_neg(insns, n, fntab, stab) else vs_not(insns, n, fntab, stab)
 }
 fn vs_neg(insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
-  let top = fntab[3797] - 1;
+  let top = fntab[4547] - 1;
   if vs_entry_kind(fntab, top) == 1 then vs_neg_const(fntab, top) else vs_neg_reg(insns, n, fntab, stab, top)
 }
 fn vs_neg_const(fntab: [i64], top: i64) -> i64 {
@@ -3200,7 +3204,7 @@ fn vs_neg_reg(insns: [i64], n: [i64], fntab: [i64], stab: [i64], top: i64) -> i6
   vs_set_entry(fntab, top, 2, d, n[0] - 1)
 }
 fn vs_not(insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
-  let top = fntab[3797] - 1;
+  let top = fntab[4547] - 1;
   let kind = vs_entry_kind(fntab, top);
   let _ = if kind == 1 then vs_set_entry(fntab, top, 1, (if vs_entry_p0(fntab, top) == 0 then 1 else 0), 0)
     else if kind == 7 then vs_set_entry(fntab, top, 7, vs_entry_p0(fntab, top) ^ 1, 0)
@@ -3316,7 +3320,7 @@ fn compile(s: str) -> i64 {
   let cnt_l = [0];
   let _ = collect_fns(s, fnames_l, fpos_l, cnt_l);
   let _ = if cnt_l[0] >= 256 then diag_exit(s, 0, 89) else 0;
-  let fntab = zeros(4096);
+  let fntab = zeros(8192);
   let _ = fntab[0] = cnt_l[0];
   let _ = vs_reset(fntab);
   let fl_i = [0];
@@ -3578,9 +3582,9 @@ fn count_word(insns: [i64], a: i64, b: i64, w: i64) -> i64 {
 }
 
 // T99 (2026-09-04): `return e;` -> e in x0, one placeholder `b` recorded in
-// fntab[3662] (count) / 3663..3679 (positions), patched to the epilogue by
-// compile_fn_at; `break;` -> placeholder `b` recorded in fntab[3680] / 3681..
-// 3699, patched to the enclosing loop's exit by emit_while_stmt (which
+// fntab[4412] (count) / 4413..4429 (positions), patched to the epilogue by
+// compile_fn_at; `break;` -> placeholder `b` recorded in fntab[4430] / 4431..
+// 4448, patched to the enclosing loop's exit by emit_while_stmt (which
 // remembers the count at entry). More than 17 returns / 18 pending breaks in
 // one fn traps loudly (exit 98, exit-code table at emit_paren).
 fn emit_return_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
@@ -3589,10 +3593,10 @@ fn emit_return_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], sel
   let _ = skip_ws(s, pos);
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = vs_deliver(insns, n, fntab, stab, 1);
-  let k = fntab[3662];
+  let k = fntab[4412];
   let _ = if k >= 17 then diag_exit(s, stmt_at, 98) else 0;
-  let _ = fntab[3663 + k] = n[0];
-  let _ = fntab[3662] = k + 1;
+  let _ = fntab[4413 + k] = n[0];
+  let _ = fntab[4412] = k + 1;
   let _ = em(insns, n, 335544320);
   let _ = skip_ws(s, pos);
   let cs = if pos[0] >= slen(s, pos) then 0 else char(s, pos[0]);
@@ -3603,10 +3607,10 @@ fn emit_return_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], sel
 fn emit_break_stmt(s: str, pos: [i64], insns: [i64], n: [i64], fntab: [i64]) -> i64 {
   let stmt_at = pos[0];
   let _ = pos[0] = pos[0] + 5;
-  let k = fntab[3680];
+  let k = fntab[4430];
   let _ = if k >= 18 then diag_exit(s, stmt_at, 98) else 0;
-  let _ = fntab[3681 + k] = n[0];
-  let _ = fntab[3680] = k + 1;
+  let _ = fntab[4431 + k] = n[0];
+  let _ = fntab[4430] = k + 1;
   let _ = em(insns, n, 335544320);
   let _ = skip_ws(s, pos);
   let cs = if pos[0] >= slen(s, pos) then 0 else char(s, pos[0]);
@@ -3652,7 +3656,7 @@ fn skip_char_lit(s: str, pos: [i64]) -> i64 {
 // B5 (D14 item 1): scan from pcond (the start of a while condition's text) to
 // the first '{' at paren/bracket depth 0, without parsing or emitting
 // anything. The grammar guarantees a while condition is a `cmp` expression
-// followed by `{` (fntab[3892] forbids struct literals there); this only
+// followed by `{` (fntab[4642] forbids struct literals there); this only
 // needs to track paren/bracket nesting and skip string/char literals so a
 // quoted brace or paren can't be mistaken for the body opener.
 fn skip_while_cond(s: str, pos: [i64]) -> i64 {
@@ -3692,16 +3696,16 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = skip_ws(s, pos);
   let pcond = pos[0];
   let cnt0 = stab[0];
-  let brk0 = fntab[3680];
-  let ldepth = fntab[3661];
-  let _ = fntab[3661] = ldepth + 1;
+  let brk0 = fntab[4430];
+  let ldepth = fntab[4411];
+  let _ = fntab[4411] = ldepth + 1;
   let slot_ok = if ldepth <= 20 then 1 else 0;
   // statement context: the window is normally empty here; park makes it
   // exact for the inline-call path (a `let` binding an inlined call's
   // result before a nested while, say).
   let _ = vs_park(insns, n, fntab, stab, 0);
-  let _ = if fntab[3798] != 255 then sys_exit(102) else 0;
-  let _ = if fntab[3823] != 0 then sys_exit(105) else 0;
+  let _ = if fntab[4548] != 255 then sys_exit(102) else 0;
+  let _ = if fntab[4573] != 0 then sys_exit(105) else 0;
   // T43 mark placeholder: a nop that becomes str x14,[sp,#80+8*depth]
   // (0xF90003EE + imm12<<10, as+objdump) once the body proves reset-safe.
   let pmark = n[0];
@@ -3737,13 +3741,13 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let test = n[0];
   let _ = insns[pjump] = 335544320 + (test - pjump);
   let _ = pos[0] = pcond;
-  let _ = fntab[3892] = 1;
+  let _ = fntab[4642] = 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
-  let _ = fntab[3892] = 0;
+  let _ = fntab[4642] = 0;
   let bw = vs_loop_branch(insns, n, fntab, stab);
   let _ = vs_pop(fntab);
-  let _ = if fntab[3798] != 255 then sys_exit(102) else 0;
-  let _ = if fntab[3823] != 0 then sys_exit(106) else 0;
+  let _ = if fntab[4548] != 255 then sys_exit(102) else 0;
+  let _ = if fntab[4573] != 0 then sys_exit(106) else 0;
   // The bottom branch continues the loop on its OWN (non-inverted) tag and
   // is backward to body_start; the target is already fixed, so it is
   // emitted directly instead of placeholder+patch (the old `b loop_start`
@@ -3755,10 +3759,10 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = em(insns, n, bw + 16777216 + (body_start - n[0]) * 32);
   let _ = pos[0] = b1;
   let endl = n[0];
-  let _ = patch_jumps(insns, fntab, 3680, brk0, endl);
+  let _ = patch_jumps(insns, fntab, 4430, brk0, endl);
   let _ = if do_reset == 1 then (let _ = em(insns, n, ldrw) in 0) else 0;
   let _ = if do_reset == 1 then (let _ = insns[pmark] = 4177527790 + (10 + ldepth) * 1024 in 0) else 0;
-  let _ = fntab[3661] = ldepth;
+  let _ = fntab[4411] = ldepth;
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = skip_ws(s, pos);
@@ -3970,7 +3974,7 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     let is_compound = id_start * (if nc == 61 then ok_op else 0);
     let _ = if is_item * is_compound == 1 then emit_compound_stmt(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
     let is_expr = is_item * (1 - is_let) * (1 - is_while) * (1 - is_compound) * (1 - is_ret) * (1 - is_brk);
-    let nb_item_w = fntab[3797];
+    let nb_item_w = fntab[4547];
     // F3 refined: dead-value suppression applies ONLY to the final expr
     // item of a while body (lookahead: next non-ws char is rbrace / EOF)
     let _ = skip_ws(s, pos);
@@ -3991,7 +3995,7 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     let c9 = if pos[0] >= strn9 then 0 else char(s, pos[0]);
     let not_rbrace = if c9 == 125 then 0 else 1;
     let not_eof = if pos[0] >= strn9 then 0 else 1;
-    let grew = if fntab[3797] > nb_item_w then 1 else 0;
+    let grew = if fntab[4547] > nb_item_w then 1 else 0;
     let leg_item = grew;
     let ma1 = if is_expr == 0 then 0 else not_rbrace;
     let more_ahead = if ma1 == 0 then 0 else not_eof;
@@ -4001,9 +4005,9 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     // `return`/`break`/compound never leaves a value; a non-final expr
     // item was just popped above) -- assert the invariant whenever that
     // happened, skip it for the one case (the tail item) where w==1 by
-    // design (fntab[3797]!=0 guards exactly that case).
-    let _ = if (fntab[3797] == 0) * (if fntab[3798] != 255 then 1 else 0) == 1 then diag_exit(s, before, 102) else 0;
-    let _ = if (fntab[3797] == 0) * (if fntab[3823] != 0 then 1 else 0) == 1 then diag_exit(s, before, 103) else 0;
+    // design (fntab[4547]!=0 guards exactly that case).
+    let _ = if (fntab[4547] == 0) * (if fntab[4548] != 255 then 1 else 0) == 1 then diag_exit(s, before, 102) else 0;
+    let _ = if (fntab[4547] == 0) * (if fntab[4573] != 0 then 1 else 0) == 1 then diag_exit(s, before, 103) else 0;
     // bug 9 hunt (2026-09-06): the check above only fires when w IS 0 -- a
     // leaked WINDOW ENTRY (not just leaked mask bits) leaves w != 0 after a
     // non-tail item and silently escapes it forever (every later item's
@@ -4011,7 +4015,7 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     // the stronger form: any item that is not the fn's own final tail expr
     // must leave the window EMPTY, period.
     let must_be_empty = is_item * (1 - is_expr * (1 - more_ahead));
-    let _ = if (must_be_empty == 1) * (if fntab[3797] != 0 then 1 else 0) == 1 then diag_exit(s, before, 107) else 0;
+    let _ = if (must_be_empty == 1) * (if fntab[4547] != 0 then 1 else 0) == 1 then diag_exit(s, before, 107) else 0;
     // lastf = 1 exactly when the body leaves ONE value on the stack
     // (final item was an expr and no more items followed it): the while
     // and fn emitters pop that value, and must NOT pop otherwise
@@ -4125,11 +4129,11 @@ fn emit_call_resolve(s: str, fname: i64, fntab: [i64]) -> i64 {
   let v = if cached > 0 then cached - 1 else 0 - cached - 2;
   let _ = if is_hit == 1 then (let _ = fnpos[0] = v in 0) else 0;
   // Resolution budget: cap total source scans; runaway repeats degrade.
-  let _ = if is_hit == 1 then (let _ = fntab[4000] = fntab[4000] + 1 in 0) else 0;
+  let _ = if is_hit == 1 then (let _ = fntab[4750] = fntab[4750] + 1 in 0) else 0;
   let mbudget = fntab[0] + fntab[0] + 8;
   // Branchless-law form of: scan only when unresolved AND under budget.
   let want_scan = if is_hit == 1 then 0 else 1;
-  let under_budget = if fntab[4000] < mbudget then 1 else 0;
+  let under_budget = if fntab[4750] < mbudget then 1 else 0;
   let _ = if want_scan * under_budget == 1 then find_fn(s, fname, fnpos) else 0;
   let _ = if sp >= 0 then (let _ = fnpos[0] = sp in 0) else 0;
   let sv = if sp >= 0 then sp + 1 else 0 - fnpos[0] - 2;
@@ -4226,7 +4230,7 @@ fn compile_fn(s: str) -> i64 {
   let _ = if ecnt_l[0] >= 256 then diag_exit(s, 0, 89) else 0;
   // Legacy single-fn mode: fn-table stays EMPTY (cnt=0) so unresolved calls
   // take the find_fn inline path; only the enum-ctor zone is populated.
-  let fntab = zeros(4096);
+  let fntab = zeros(8192);
   let _ = fntab[0] = 0;
   let _ = vs_reset(fntab);
   let eb2 = 1;
@@ -4281,9 +4285,9 @@ fn compile_fn(s: str) -> i64 {
   // means emit_body's own lastf flag: a real tail expression left a tag).
   let _ = if blast_t == 1 then vs_to(insns, n, fntab, stab, 0) else 0;
   let _ = if blast_t == 1 then vs_pop(fntab) else 0;
-  let _ = if fntab[3798] != 255 then sys_exit(102) else 0;
-  let _ = if fntab[3823] != 0 then sys_exit(104) else 0;
-  let _ = patch_jumps(insns, fntab, 3662, 0, n[0]);
+  let _ = if fntab[4548] != 255 then sys_exit(102) else 0;
+  let _ = if fntab[4573] != 0 then sys_exit(104) else 0;
+  let _ = patch_jumps(insns, fntab, 4412, 0, n[0]);
   let _ = emit_epilogue(insns, n);
   sum_words(insns, n[0])
 }
@@ -4334,31 +4338,31 @@ fn collect_fns(s: str, fnames: [i64], fpos: [i64], cnt: [i64]) -> i64 {
 // the very call that computes them; the old unconditional prologue/epilogue/
 // call-site form is used, so the throwaway buffer's word count needs an
 // arithmetic size correction at the end instead of a real omission), 1 for
-// the emission pass (fntab[1500+i] already holds every fn's facts, looked up
+// the emission pass (fntab[2200+i] already holds every fn's facts, looked up
 // here by name and applied from the start -- no post-hoc patch or scan).
 // Register-model exit-89 rewrite: compile_fn_at had 46 locals (+8 params =
 // 54, S=46) before counting any temp-slot pressure from its own body. The
 // planning-pass arithmetic correction (B1's "what emission will not emit")
 // only needs (insns,n,fntab,stab,pbase,is_emission) and doesn't interact
 // with anything else in compile_fn_at, so it moves to its own frame --
-// also publishes fntab[1802] as a side effect, same as before.
+// also publishes fntab[2714] as a side effect, same as before.
 fn compile_fn_at_total_saved(insns: [i64], n: [i64], fntab: [i64], stab: [i64], pbase: i64, is_emission: i64) -> i64 {
   let real_vc = stab[0];
   let real_alloc = if count_word(insns, pbase, n[0], 2853045216) > 0 then 1 else 0;
   // cs_hi/tsp: the max cs-temp register index and temp-slot count this fn's
-  // OWN emission actually used (fntab[3825]/[3826], live-tracked by vs_park*
+  // OWN emission actually used (fntab[4575]/[3826], live-tracked by vs_park*
   // since vs_reset zeroed them at entry -- valid on either pass).
-  let real_cs_hi = fntab[3825];
-  let real_tsp = fntab[3826];
+  let real_cs_hi = fntab[4575];
+  let real_tsp = fntab[4576];
   let real_mvc = if real_vc > real_cs_hi then real_vc else real_cs_hi;
   let real_needs_save_raw = (if real_vc > 8 then 1 else real_alloc) + (if real_tsp > 0 then 1 else 0);
   let real_needs_save = if real_needs_save_raw > 0 then 1 else 0;
   let saved_pairs01 = (if real_mvc <= 0 then 1 else 0) + (if real_mvc <= 2 then 1 else 0) + (if real_mvc <= 4 then 1 else 0) + (if real_mvc <= 6 then 1 else 0);
   let saved_x15 = 1 - real_needs_save;
   let saved_x14 = 1 - real_alloc;
-  let saved_calls = fntab[1800] * 2 * (1 - real_needs_save);
+  let saved_calls = fntab[2712] * 2 * (1 - real_needs_save);
   let total_saved = (saved_pairs01 * 2 + 2 + saved_x15 + saved_x14 + saved_calls) * (1 - is_emission);
-  let _ = fntab[1802] = real_vc + 256 * real_alloc + 512 * real_cs_hi + 8192 * real_tsp;
+  let _ = fntab[2714] = real_vc + 256 * real_alloc + 512 * real_cs_hi + 8192 * real_tsp;
   total_saved
 }
 
@@ -4378,10 +4382,10 @@ fn compile_fn_at_facts(s: str, fntab: [i64], fpos: i64, namepos: i64, is_emissio
   let tsp0 = fw_tsp(fw0);
   let needs_save0raw = (if vc0 > 8 then 1 else alloc0) + (if tsp0 > 0 then 1 else 0);
   let needs_save0 = if needs_save0raw > 0 then 1 else 0;
-  let _ = fntab[1801] = (1 - needs_save0) * is_emission;
+  let _ = fntab[2713] = (1 - needs_save0) * is_emission;
   // S: the emission pass's spilled-symbol slot base (0 on the planning pass).
   let s0 = if vc0 > 8 then vc0 - 8 else 0;
-  let _ = fntab[3827] = s0 * is_emission;
+  let _ = fntab[4577] = s0 * is_emission;
   // overflow trap (§5): this compiler does not spill further than 64 temp
   // slots beyond the spilled symbols.
   let _ = if is_emission == 1 then (if s0 + tsp0 > 64 then diag_exit(s, namepos, 89) else 0) else 0;
@@ -4390,19 +4394,19 @@ fn compile_fn_at_facts(s: str, fntab: [i64], fpos: i64, namepos: i64, is_emissio
 
 fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], n: [i64], tkb: [i64], is_emission: i64) -> i64 {
   // Reset per-fn scan-budget so late functions don't exhaust the counter
-  // accumulated by earlier ones (every cache-hit increments fntab[4000];
+  // accumulated by earlier ones (every cache-hit increments fntab[4750];
   // without reset, late fns compile ALL calls as unresolved/neutral).
-  let _ = fntab[4000] = 0;
-  let _ = fntab[3890] = 0;  // S3: rep=0 (all-memory) at function entry
+  let _ = fntab[4750] = 0;
+  let _ = fntab[4640] = 0;  // S3: rep=0 (all-memory) at function entry
   // T96 step 1: the label/barrier position is per-fn state. Without this
   // reset a position left by the previous fn (or the planning pass) could
   // coincide with n[0] here and block one elision in one pass only -> the
   // fntab offsets disagree with the emitted layout (ordfsm: every bl 3
   // words late, SIGBUS). -1 never equals a position.
-  let _ = fntab[3660] = 0 - 1;
-  let _ = fntab[3661] = 0;  // T43: while nesting depth (frame-heap mark slot)
-  let _ = fntab[3662] = 0;  // T99: pending `return` placeholders
-  let _ = fntab[3680] = 0;  // T99: pending `break` placeholders
+  let _ = fntab[4410] = 0 - 1;
+  let _ = fntab[4411] = 0;  // T43: while nesting depth (frame-heap mark slot)
+  let _ = fntab[4412] = 0;  // T99: pending `return` placeholders
+  let _ = fntab[4430] = 0;  // T99: pending `break` placeholders
   let pos = [fpos, str_len(s)];
   let stab = zeros(385);  // 1 + 3*128 (name,reg,srcpos) verified triples; overflow -> loud trap
   let _ = skip_ws(s, pos);
@@ -4436,12 +4440,12 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   let tkbuf = tkb;
   let _ = cx[26] = selfname;
   let _ = cx[27] = selfstart;
-  // B1: own-fn facts. fntab[1800] = call-site counter (this compile only,
+  // B1: own-fn facts. fntab[2712] = call-site counter (this compile only,
   // read by the end-of-fn arithmetic adjustment on the planning pass);
-  // fntab[1801] = skip-save flag read by emit_bl_call at every bl in this
+  // fntab[2713] = skip-save flag read by emit_bl_call at every bl in this
   // fn's body (0 = save, the safe default; is_emission==0 forces 0 so the
   // planning pass reproduces today's unconditional call-site form exactly).
-  let _ = fntab[1800] = 0;
+  let _ = fntab[2712] = 0;
   let _ = vs_reset(fntab);
   let fw0 = compile_fn_at_facts(s, fntab, fpos, namepos, is_emission);
   let pbase = n[0];
@@ -4476,9 +4480,9 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   // means emit_body's own lastf flag: a real tail expression left a tag).
   let _ = if blast_t == 1 then vs_to(insns, n, fntab, stab, 0) else 0;
   let _ = if blast_t == 1 then vs_pop(fntab) else 0;
-  let _ = if fntab[3798] != 255 then sys_exit(102) else 0;
-  let _ = if fntab[3823] != 0 then sys_exit(104) else 0;
-  let _ = patch_jumps(insns, fntab, 3662, 0, n[0]);
+  let _ = if fntab[4548] != 255 then sys_exit(102) else 0;
+  let _ = if fntab[4573] != 0 then sys_exit(104) else 0;
+  let _ = patch_jumps(insns, fntab, 4412, 0, n[0]);
   let _ = if is_emission == 1 then emit_epilogue_sized(insns, n, fw_vc(fw0), fw_cshi(fw0)) else emit_epilogue(insns, n);
   // B1 (2026-09-06): replaces OPT-A's post-hoc NOP patch of unused
   // callee-saved pairs and OPT-G1's generic register-field scan of the
@@ -4496,13 +4500,13 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   //
   // On the emission pass (is_emission==1) the words above were already
   // right-sized from the start via emit_prologue_sized/emit_epilogue_sized
-  // and fntab[1801], using vc0/alloc0 published by the PRECEDING planning
+  // and fntab[2713], using vc0/alloc0 published by the PRECEDING planning
   // run -- nothing more to do here. On the planning pass (is_emission==0)
   // emit_prologue/emit_epilogue/the call sites still emitted today's full,
   // unshrunk form (its buffer is thrown away; only the size matters), so
   // n[0] is corrected by exactly what emission will not emit, and the
-  // just-computed real facts are published in fntab[1802] for
-  // compile_program_offs to copy into the real fntab[1500+i] the emission
+  // just-computed real facts are published in fntab[2714] for
+  // compile_program_offs to copy into the real fntab[2200+i] the emission
   // pass will read.
   let _ = n[0] = n[0] - compile_fn_at_total_saved(insns, n, fntab, stab, pbase, is_emission);
   n[0]
@@ -4516,9 +4520,9 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
 // (was: full-source rescan per call site -> superquadratic selfcompile).
 // R3.x(d) literal data section: scan the source for string literals in order
 // (skipping // comments), record per-literal DATA WORD offsets in
-// fntab[3903+i] (code length L + cumulative cell offset), the count in
-// fntab[3900], L in fntab[3901], cursor 0 in fntab[3902], total cells in
-// fntab[3899]. The cells are appended after the code words once emission
+// fntab[5000+i] (code length L + cumulative cell offset), the count in
+// fntab[4650], L in fntab[4651], cursor 0 in fntab[4652], total cells in
+// fntab[4649]. The cells are appended after the code words once emission
 // completes (write_lit_cells); emit_str turns each literal into adr x0,<imm>.
 fn scan_literals(s: str, fntab: [i64], L: i64) -> i64 {
   let strn = str_len(s);
@@ -4539,15 +4543,15 @@ fn scan_literals(s: str, fntab: [i64], L: i64) -> i64 {
     let _ = pos[0] = pos[0] + adv;
     0
   };
-  let _ = fntab[3900] = lcnt[0];
-  let _ = fntab[3901] = L;
-  let _ = fntab[3902] = 0;
-  let _ = fntab[3899] = cum[0];
+  let _ = fntab[4650] = lcnt[0];
+  let _ = fntab[4651] = L;
+  let _ = fntab[4652] = 0;
+  let _ = fntab[4649] = cum[0];
   cum[0]
 }
 
 // Measure + register one literal: pos is INSIDE it (just after '"'). Record
-// fntab[3903 + lcnt] = L + cum, advance cum by ceil((len+1)/8) cells, move
+// fntab[5000 + lcnt] = L + cum, advance cum by ceil((len+1)/8) cells, move
 // pos past the closing '"'.
 fn scan_one_lit(s: str, pos: [i64], fntab: [i64], L: i64, lcnt: [i64], cum: [i64]) -> i64 {
   let strn = slen(s, pos);
@@ -4565,7 +4569,7 @@ fn scan_one_lit(s: str, pos: [i64], fntab: [i64], L: i64, lcnt: [i64], cum: [i64
   let _ = pos[0] = pos[0] + 1;
   let len = pos[0] - start - 1;
   let cells = (len + 1 + 3) / 4;
-  let _ = fntab[3903 + lcnt[0]] = L + cum[0];
+  let _ = fntab[5000 + lcnt[0]] = L + cum[0];
   let _ = cum[0] = cum[0] + cells;
   let _ = lcnt[0] = lcnt[0] + 1;
   len
@@ -4575,18 +4579,18 @@ fn scan_one_lit(s: str, pos: [i64], fntab: [i64], L: i64, lcnt: [i64], cum: [i64
 // used to run a THIRD full pass (emit_offsets) to learn main's offset. offs[0] = cnt,
 // offs[1 + i] = start of fn i in source order.
 fn compile_program_to(s: str, insns: [i64], n: [i64]) -> i64 {
-  let offs = zeros(300);
+  let offs = zeros(512);
   compile_program_offs(s, insns, n, offs)
 }
 fn compile_program_offs(s: str, insns: [i64], n: [i64], offs: [i64]) -> i64 {
-  let fnames = zeros(300);
-  let fpos = zeros(300);
+  let fnames = zeros(512);
+  let fpos = zeros(512);
   let cnt = [0];
   let _ = collect_fns(s, fnames, fpos, cnt);
-  let _ = if cnt[0] >= 300 then diag_exit(s, 0, 89) else 0;
-  let sizes = zeros(300);
-  let starts = zeros(300);
-  let ptab = zeros(4096);
+  let _ = if cnt[0] >= 512 then diag_exit(s, 0, 89) else 0;
+  let sizes = zeros(512);
+  let starts = zeros(512);
+  let ptab = zeros(8192);
   let _ = ptab[0] = cnt[0];
   let pm = [0];
   while pm[0] < cnt[0] {
@@ -4618,17 +4622,17 @@ fn compile_program_offs(s: str, insns: [i64], n: [i64], offs: [i64]) -> i64 {
   };
   let stk_a = zeros(1088);
     let tmp = zeros(65536);
-  // B1 (2026-09-06): factbuf[i] harvests fn i's own facts (fntab[1802],
+  // B1 (2026-09-06): factbuf[i] harvests fn i's own facts (fntab[2714],
   // packed vc*2+has_alloc) right after its planning-pass compile, in the
   // same fn-index order as fnames/fpos/sizes/starts -- copied into the real
-  // fntab[1500+i] below once fntab exists, for the emission pass to look up.
-  let factbuf = zeros(300);
+  // fntab[2200+i] below once fntab exists, for the emission pass to look up.
+  let factbuf = zeros(512);
   let i = [0];
   while i[0] < cnt[0] {
     let tn = [0, 65536];
     let _ = compile_fn_at(s, fpos[i[0]], 0, ptab, tmp, tn, stk_a, 0);
     let _ = sizes[i[0]] = tn[0];
-    let _ = factbuf[i[0]] = ptab[1802];
+    let _ = factbuf[i[0]] = ptab[2714];
     let _ = i[0] = i[0] + 1;
     0
   };
@@ -4642,14 +4646,14 @@ fn compile_program_offs(s: str, insns: [i64], n: [i64], offs: [i64]) -> i64 {
     0
   };
   let _ = offs[0] = cnt[0];
-  let fntab = zeros(4096);
+  let fntab = zeros(8192);
   let _ = fntab[0] = cnt[0];
   let _ = scan_literals(s, fntab, acc);
   let m = [0];
   while m[0] < cnt[0] {
     let _ = fntab[1 + m[0]] = fnames[m[0]];
     let _ = fntab[1 + cnt[0] + m[0]] = starts[m[0]];
-    let _ = fntab[1500 + m[0]] = factbuf[m[0]];  // B1: publish planning's facts for emission
+    let _ = fntab[2200 + m[0]] = factbuf[m[0]];  // B1: publish planning's facts for emission
     let _ = m[0] = m[0] + 1;
     0
   };
@@ -4685,8 +4689,8 @@ fn compile_program_offs(s: str, insns: [i64], n: [i64], offs: [i64]) -> i64 {
   // R3.x(d): append the string-literal data section after the code words.
   // Scan the source in order, write each literal's bytes (NUL-terminated)
   // into the reserved cells at insns[L + cum].
-  let dcell_tot = fntab[3899];
-  let dlitc = fntab[3900];
+  let dcell_tot = fntab[4649];
+  let dlitc = fntab[4650];
   let Lcode = n[0];
   let sp = [0];
   let dli = [0];
@@ -4711,7 +4715,7 @@ fn compile_program_offs(s: str, insns: [i64], n: [i64], offs: [i64]) -> i64 {
   sum_words(insns, n[0])
 }
 
-// Write literal li's bytes into cells starting at data word fntab[3903+li].
+// Write literal li's bytes into cells starting at data word fntab[5000+li].
 // sp points INSIDE the literal (just after '"'). Advances sp past '"',
 // bumps dli. The trailing cell's unused bytes stay 0 -> NUL termination.
 fn write_lit_cells(s: str, sp: [i64], insns: [i64], fntab: [i64], dli: [i64]) -> i64 {
@@ -4729,7 +4733,7 @@ fn write_lit_cells(s: str, sp: [i64], insns: [i64], fntab: [i64], dli: [i64]) ->
   };
   let _ = sp[0] = sp[0] + 1;
   let len = sp[0] - start - 1;
-  let base = fntab[3903 + dli[0]];
+  let base = fntab[5000 + dli[0]];
   let j = 0;
   while j < len {
     let b = char(s, start + j);
@@ -4808,7 +4812,7 @@ fn emit_expr_words(src: str) -> [i64] {
   let fpos_l = zeros(512);
   let cnt_l = [0];
   let _ = collect_fns(src, fnames_l, fpos_l, cnt_l);
-  let fntab = zeros(4096);
+  let fntab = zeros(8192);
   let _ = fntab[0] = cnt_l[0];
   let _ = vs_reset(fntab);
   let fl_i = [0];
@@ -4857,7 +4861,7 @@ fn emit_expr_words(src: str) -> [i64] {
 // Entry for beboSelf.bin: the frozen compiler compiling other programs.
 // BENCH: two-pass compile of a whole fn-main program; returns [count, words...]
 fn emit_words(src: str) -> [i64] {
-  let offs = zeros(300);
+  let offs = zeros(512);
   emit_words_offs(src, offs)
 }
 fn emit_words_offs(src: str, offs: [i64]) -> [i64] {
@@ -4899,7 +4903,7 @@ fn emit_zeros(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let base = fntab[3797] - 1;
+  let base = fntab[4547] - 1;
   let _ = vs_park(insns, n, fntab, stab, 1);
   let _ = vs_evict(insns, n, fntab, stab, 1);
   let _ = vs_mat(insns, n, fntab, stab, base, 1);
@@ -5465,11 +5469,11 @@ fn cli_compile(argc: i64, argv: [str]) -> i64 {
     return 0;
     0
   };
-  let offs = zeros(300);
+  let offs = zeros(512);
   let words0 = emit_words_offs(srcv, offs);
   let n0 = words0[0];
-  let fnames = zeros(300);
-  let fpos = zeros(300);
+  let fnames = zeros(512);
+  let fpos = zeros(512);
   let cnt = [0];
   let _ = collect_fns(srcv, fnames, fpos, cnt);
   let main_off = offs[idx_of_main(fnames, cnt[0]) + 1];
@@ -5564,7 +5568,7 @@ fn cli_check(argc: i64, argv: [str]) -> i64 {
   let _ = tmpc[ls + 2] = 115;
   let _ = tmpc[ls + 3] = 101;
   let srcv = use_expand(srcv0, tmpc, ls + 4);
-  let offs = zeros(300);
+  let offs = zeros(512);
   let words0 = emit_words_offs(srcv, offs);
   words0[0] * 0
 }

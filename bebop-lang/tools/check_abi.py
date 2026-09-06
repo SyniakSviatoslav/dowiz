@@ -182,26 +182,37 @@ def check_bin(path, allow, stub=()):
 
 
 # ---- (iii) fntab zone map -------------------------------------------------
-ZONES = [(0, 1, "fntab"), (1500, 1755, "b1_facts"), (1800, 1802, "b1_scratch"),
-         (2000, 3535, "window"), (3655, 3661, "fold"), (3662, 3699, "jumps"),
-         (3700, 3796, "slots"), (3797, 3798, "window_hdr"),
-         (3823, 3827, "window_cs"), (3890, 3898, "bank"),
-         (3899, 3999, "literals"), (4000, 4000, "budget")]
+# A2 step 0 relayout (2026-09-06/07): fn cap 300 -> 512 pushed the floating
+# zone1/2/3 + enum + ft_cache envelope worst case (cnt=511, ecnt=255) up to
+# index 2046, past the old b1_facts base (1500) -- every fixed zone below
+# moved to make room; fntab (and ptab, the planning-pass twin) grew
+# zeros(4096) -> zeros(8192).
+ZONES = [(0, 1, "fntab"), (2200, 2711, "b1_facts"), (2712, 2714, "b1_scratch"),
+         (2800, 4335, "window"), (4405, 4411, "fold"), (4412, 4449, "jumps"),
+         (4450, 4546, "slots"), (4547, 4548, "window_hdr"),
+         (4573, 4577, "window_cs"), (4640, 4648, "bank"),
+         (4649, 4699, "literals"), (4750, 4750, "budget"),
+         (5000, 5999, "lit_table")]
 # window (2026-09-06, REGISTER-MODEL-BLUEPRINT; raised 128->512 2026-09-06 --
 # emit_cond's parkable-`d` fix needs one extra live entry per nested if-level
-# for the whole else-branch compile): fntab[2000+3i..2002+3i] = kind/p0/p1 of
-# window entry i, capacity 512 entries (2000..3535) -- a compile-time LIST,
-# decoupled from the 8-register free mask at [3798]
+# for the whole else-branch compile; moved 2000+3i -> 2800+3i in the A2 step 0
+# relayout): fntab[2800+3i..2802+3i] = kind/p0/p1 of window entry i, capacity
+# 512 entries (2800..4335) -- a compile-time LIST, decoupled from the
+# 8-register free mask at [4548]
 # (only REG/MULC-window/FLAGS kinds actually own a register). window_hdr:
-# [3797] w (entry count, 0..128), [3798] free mask x0..x7. window_cs:
-# [3823] cs mask, [3824] slot cursor, [3825] cs_hi, [3826] tsp, [3827] S.
-# b1_facts (2026-09-06): fntab[1500+i] = per-fn packed planning facts
-# (vc*2+has_alloc), i = the fn's index in collect_fns order, keyed by lookup
-# on source position (fntab_fact_lookup) so two same-named fn definitions
-# never alias each other's facts. b1_scratch: [1800] call-site counter,
-# [1801] skip-save flag, [1802] this-compile's harvested fact word -- all
+# [4547] w (entry count, 0..512), [4548] free mask x0..x7. window_cs:
+# [4573] cs mask, [4574] slot cursor, [4575] cs_hi, [4576] tsp, [4577] S.
+# b1_facts (2026-09-06, moved 1500 -> 2200 in step 0): fntab[2200+i] =
+# per-fn packed planning facts (vc*2+has_alloc), i = the fn's index in
+# collect_fns order, keyed by lookup on source position (fntab_fact_lookup)
+# so two same-named fn definitions never alias each other's facts.
+# b1_scratch (moved 1800 -> 2712): [2712] call-site counter, [2713]
+# skip-save flag, [2714] this-compile's harvested fact word -- all
 # reset/written once per compile_fn_at call (bebop.bp:B1, 2026-09-06).
-LIT_BASE, LIT_END = 3903, 4000
+# literals/lit_table (moved 3899-3903+ -> 4649-4652 headers / 5000+i table,
+# cap raised 193 -> 1000 entries): headers [4649] cum cells, [4650] lcnt,
+# [4651] L, [4652] cursor; table entries at fntab[5000+i].
+LIT_BASE, LIT_END = 5000, 6000
 
 
 def zone_of(b):

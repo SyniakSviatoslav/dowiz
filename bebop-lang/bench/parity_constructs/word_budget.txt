@@ -2,6 +2,7 @@
 # line here, added by the same commit: <construct> <newwords> <reason ...>
 # D12-A (2026-09-06): tools/perf.py gates bebop.bin's own words and the entry stub the same way:
 # a `bebop <newwords> <reason>` / `stub <newwords> <reason>` line per growth (docs/PERF.md).
+bebop 36195 A2 step 0 fntab relayout: window_hdr/window_cs (4547-4577) and bank/literals/budget (4640-4750) bases exceed the 4095 add-immediate range every old base (<=4000) fit inside, so each of those ~150 use sites needs one extra movk word; zeros(4096)->zeros(8192) itself adds 0 words
 c13_array 86 T118 frame-heap trap: 7 words per array literal / enum ctor site
 c20_deep 148 T118 frame-heap trap: 7 words per array literal / enum ctor site
 c23_spillcall 266 T118 frame-heap trap: 7 words per array literal / enum ctor site
