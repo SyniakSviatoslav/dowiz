@@ -22,11 +22,12 @@ T="$T" R="$R" PIN="$PIN" BB="$BEBOP_BIN" python3 - <<'PY'
 import os, subprocess, statistics, hashlib
 T=os.environ['T']; R=int(os.environ['R']); PIN=os.environ['PIN']; BB=os.environ['BB']
 def med(v): v=sorted(v); return v[len(v)//2], v[min(len(v)-1,int(round(0.95*(len(v)-1))))]
-rows=[]
+rows=[]; rss={}
 for k in ['k1h','k2h','k3h','k4']:
     bb=[]; rs=[]
     for _ in range(R):
-        v=subprocess.run(['taskset','-c',PIN,'./seed/build/seed',f'{T}/{k}t.bin'],capture_output=True,text=True).stdout.strip().split('\n')[-1]
+        p=subprocess.Popen(['taskset','-c',PIN,'./seed/build/seed',f'{T}/{k}t.bin'],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
+        v=p.stdout.read().decode().strip().split('\n')[-1]; _,_,ru=os.wait4(p.pid,0); rss[k]=max(rss.get(k,0),ru.ru_maxrss)  # D12-D: RSS column (T97)
         bb.append(int(v)/100.0)  # TOTAL ms over REPS=100 reps
         if True:
             e=subprocess.run(['taskset','-c',PIN,f'{T}/rust/{k}'],capture_output=True,text=True).stderr.strip().split('\n')[-1]
@@ -34,11 +35,11 @@ for k in ['k1h','k2h','k3h','k4']:
     rows.append((k,med(bb),med(rs)))
 md5=hashlib.md5(open(BB,'rb').read()).hexdigest()[:8]
 print(f'# honest twins (D11-C), in-process pinned core {PIN}, R={R}, REPS=100 per run, bebop.bin {md5}')
-print('| kernel | bebop med / p95 ms per rep | Rust honest med / p95 ms per rep | bebop / Rust | target >= 1.0x (T83) |')
-print('|---|---|---|---|---|')
+print('| kernel | bebop med / p95 ms per rep | Rust honest med / p95 ms per rep | bebop / Rust | gate <= 2.0x (TG-DONE 1) | 1.0x (D1(a) long target) | bebop RSS MB |')
+print('|---|---|---|---|---|---|---|')
 for k,(bm,bp),(rm,rp) in rows:
     ratio = bm/rm if rm==rm and rm>0 else float('nan')
-    print(f'| {k.upper()} | {bm:.2f} / {bp:.2f} | {rm:.3f} / {rp:.3f} | {ratio:.1f}x | {"MET" if ratio <= 1.0 else "UNMET"} |')
+    print(f'| {k.upper()} | {bm:.2f} / {bp:.2f} | {rm:.3f} / {rp:.3f} | {ratio:.1f}x | {"MET" if ratio <= 2.0 else "UNMET"} | {ratio:.1f}x | {rss.get(k,0)/1024:.1f} |')
 import re
 try:
     k6=re.search(r'\| bebop scan nn\.bp \(Q=20\) \| ([0-9.]+) ms', open('bench/tq_sqlite/RESULT.md').read()).group(1)

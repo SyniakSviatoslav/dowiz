@@ -2058,8 +2058,8 @@ fn emit_var(insns: [i64], n: [i64], reg: i64, fntab: [i64]) -> i64 {
   // ldr x0,[x15,#slot*8] : 0xF9400000 | imm12(slot)<<10 | Rn(x15)<<5
   // (0xF9400000 = 4181721088; +480 = Rn field for x15)
   let ldrw = 4181721568 + slot * 1024;
-  // -2 (table full) traps loudly; -1 (unbound) keeps the legacy xzr load
-  // (established checksums bless it: unresolved calls read xzr)
+  // -2 (table full) traps loudly; -1 (unbound) emits `mov x0,x0` (0xAA0003E0: x0 keeps
+  // its value -- historically called "the xzr load"; established checksums bless it)
   let trapw = 3558866944;
   let zerow = 2852127712;
   let bad_full = if reg == 0 - 2 then 1 else 0;

@@ -122,7 +122,7 @@ def rows():
 def record(binpath, metric, value, unit, n, st, note=""):
     new = not os.path.exists(CSV)
     with open(CSV, "a", newline="") as f:
-        w = csv.writer(f)
+        w = csv.writer(f, lineterminator="\n")
         if new: w.writerow(COLS)
         w.writerow([int(time.time()), commit(), md5(binpath), metric, value, unit, n, st.get("valid", 1),
                     st.get("at_max_pct", ""), st.get("temp_mc", ""), note])

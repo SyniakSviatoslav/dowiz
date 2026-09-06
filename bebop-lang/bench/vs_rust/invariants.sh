@@ -53,5 +53,11 @@ for t in bench/vs_rust/std_tests/*.bp; do
 done
 echo "expansion: $(ls bench/vs_rust/std_tests/*.bp | wc -l) gate sources checked"
 
+echo "== (viii) seed loader rebuild (D12-D): as seed/seed.S | ld -static | .text == .text of the committed seed/build/seed"
+mkdir -p "$OUT/seed"; if as seed/seed.S -o "$OUT/seed/seed.o" 2>/dev/null && ld -static -o "$OUT/seed/seed" "$OUT/seed/seed.o" 2>/dev/null \
+   && objcopy -O binary -j .text "$OUT/seed/seed" "$OUT/seed/rebuilt.text" && objcopy -O binary -j .text seed/build/seed "$OUT/seed/committed.text" \
+   && cmp -s "$OUT/seed/rebuilt.text" "$OUT/seed/committed.text"; then echo "seed: .text identical ($(stat -c %s "$OUT/seed/committed.text") B; the ELF wrapper may differ by linker version)"
+else echo "SEED DRIFT: seed/seed.S no longer rebuilds seed/build/seed's .text (or as/ld missing)"; fail=1; fi
+
 [ $fail = 0 ] && echo "invariants: GREEN" || echo "invariants: RED"
 exit $fail

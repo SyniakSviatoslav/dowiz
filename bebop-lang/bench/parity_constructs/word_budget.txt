@@ -1,5 +1,7 @@
 # D11-F (2026-09-04): FREEZE=1 accepts a construct whose word count GREW only with a
 # line here, added by the same commit: <construct> <newwords> <reason ...>
+# D12-A (2026-09-06): tools/perf.py gates bebop.bin's own words and the entry stub the same way:
+# a `bebop <newwords> <reason>` / `stub <newwords> <reason>` line per growth (docs/PERF.md).
 c13_array 86 T118 frame-heap trap: 7 words per array literal / enum ctor site
 c20_deep 148 T118 frame-heap trap: 7 words per array literal / enum ctor site
 c23_spillcall 266 T118 frame-heap trap: 7 words per array literal / enum ctor site

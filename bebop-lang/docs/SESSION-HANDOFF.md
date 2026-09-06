@@ -13,7 +13,7 @@ HEAD: `git log --oneline | head -3`; every commit message carries the gate evide
   = a real miscompile fixed (a 9+-param callee whose body never touched x15 had its
   `add x15,sp,#256` NOPed by OPT-G1 and stored p8 into the CALLER's spill slot 0; the scan
   now starts at pbase+10; construct c53_param9), fuzz_batch.py (in-process shards: 3.5
-  programs/s on 3 cores, 1.1/s on one), dev_loop.sh STEPS=<subset>, docs/DEV-LOOP.md.
+  programs/s on 3 cores, 1.1/s on one), docs/DEV-LOOP.md (dev_loop.sh was folded into tools/chain.sh).
 - Battery: std_golden 99/99, constructs 52 (+ neg c48/c51/c52), diag 8/8, run_all 99,
   parity 12/12+1, pool 5/5, invariants GREEN (census bcond 1536, cbz 113 ALLOWed).
 - ONE COMMAND: `tools/chain.sh <src.bp> <out-dir> [--codegen]` (gen2, then gen3->gen4 in

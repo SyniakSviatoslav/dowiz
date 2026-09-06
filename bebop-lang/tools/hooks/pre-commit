@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# pre-commit (D12-D, 2026-09-06): TASKS.md is GENERATED from HISTORY.md headers; regenerate and stage it
+# so the ledger can never drift from the headers (it did on T90/T77/T101-T108 before this hook).
+# Enable once per clone: git config core.hooksPath bebop-lang/tools/hooks
+cd "$(git rev-parse --show-toplevel)/bebop-lang" || exit 0
+git diff --cached --quiet -- HISTORY.md && exit 0
+python3 tools/split_roadmap.py --from HISTORY.md > /dev/null && git add TASKS.md && echo "pre-commit: TASKS.md regenerated from HISTORY.md headers"

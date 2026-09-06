@@ -2388,6 +2388,9 @@ D12. (2026-09-06, operator answers to docs/ANALYSIS-2026-09-06.md §5 and
        pre-commit hook; a `bebop <words>` budget line for the compiler's own
        size; an RSS column in honest.sh; LANGUAGE.md:9 and the emit_var
        comment corrected.
+       LANDED 2026-09-06 (session 16, hygiene commit): golden bebop-f86bee7.bin, invariants
+       rung (viii) seed rebuild, tools/hooks/pre-commit (TASKS.md), bebop/stub budget lines,
+       honest.sh RSS column, LANGUAGE.md + emit_var comment.
     E. Order of work: A -> C + D -> B.
     F. D11-I thresholds frozen now: a = PK lookup >= 4x native sqlite,
        b = 3x3 window scan >= 10x, c = logical size after update <= 2.5x

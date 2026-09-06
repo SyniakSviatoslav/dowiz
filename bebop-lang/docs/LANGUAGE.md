@@ -6,8 +6,9 @@ Bebop is a small, integer-only, self-hosting language compiled straight to AArch
 machine words by `bebop.bin` (itself written in Bebop, `bebop.bp`) and loaded by the
 frozen `seed/seed.S`. There is no runtime library, no garbage collector, no strings
 beyond literals, and no types at run time: every value is a 64-bit integer (`i64`),
-and an array is the address of a run of i64 cells. Types are parsed and, today,
-discarded (T48 will check them).
+and an array is the address of a run of i64 cells. Types are parsed and discarded by
+the compiler; they are checked by the T48 census outside it (tools/typecheck.py over
+bpref's AST, invariants.sh rung (vii)) — D12-H (2026-09-06) moves that check into bebop.bp.
 
 ## Program
 
