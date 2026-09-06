@@ -79,7 +79,7 @@ is superseded by B5 (mandatory).
 
 | # | task | blueprint | gate (the number) | depends on |
 |---|---|---|---|---|
-| A1 | register model, one commit (in flight) | docs/REGISTER-MODEL-BLUEPRINT.md | push_words == 0; k4 <= 13, k3h <= 10, k1h <= 8, k2h <= 30 loop words; k4_ms <= 1.15x Rust twin; c55-c64 | -- |
+| A1 | register model, one commit (landed 2026-09-06, fixpoint 831a357c) | docs/REGISTER-MODEL-BLUEPRINT.md | push_words == 0; k4 <= 13, k3h <= 10, k1h <= 8, k2h <= 30 loop words; k4_ms <= 1.15x Rust twin; c55-c61 | -- |
 | A1b | fntab relayout + fn cap 512 (the old compiler's `offs/fnames/fpos/sizes/starts = zeros(256)` and the 3*cnt+1 zones; bebop.bp is at ~250 fns and every later task adds fns) -- one byte-identical commit (gen2 == gen3 == gen4 md5 unchanged) | docs/blueprints/A2-csel-and-const-hoist.md step 0 | fixpoint md5 unchanged; a 300-fn synthetic program compiles; exit 89 above 512 | A1 |
 | A2 | T52 `csel` on FLAGS/REG tags for pure `if` arms; + hoisting of 64-bit loop-invariant constants as the optional second commit if K8H > 1.2x after csel | docs/blueprints/A2-csel-and-const-hoist.md | K8H <= 1.2x Rust (honest.sh row) | A1b |
 | A3 | LIN tag: folding of linear recurrences over k = 2/4 iterations on tags (exact in wraparound i64) | docs/blueprints/A3-lin-recurrence-folding.md | k1h_ms <= 0.5x Rust, k4_ms <= 0.6x Rust, bpref parity on std_tests | A1 |

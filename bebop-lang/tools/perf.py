@@ -32,8 +32,13 @@ SEED = "./seed/build/seed"
 T = os.environ.get("BEBOP_TMP", "/tmp/opencode") + "/perf"
 THRESH = {"selfcompile_wall": 5, "selfcompile_utime": 5, "selfcompile_stime": 15, "selfcompile_maxrss": 10,
           "selfcompile_energy": 5, "k1h_ms": 3, "k2h_ms": 3, "k3h_ms": 3, "k4_ms": 3, "k8h_ms": 3}
-EXACT = {"bin_words": "bebop", "stub_words": "stub", "k1h_loopwords": "k1h", "k2h_loopwords": "k2h",
-         "k3h_loopwords": "k3h", "k4_loopwords": "k4", "k8h_loopwords": "k8h"}
+EXACT = {"bin_words": "bebop", "stub_words": "stub", "push_words": "bebop", "k1h_loopwords": "k1h",
+         "k2h_loopwords": "k2h", "k3h_loopwords": "k3h", "k4_loopwords": "k4", "k8h_loopwords": "k8h"}
+# REGISTER-MODEL-BLUEPRINT §7: the stack-machine words the register model removes (derived
+# as -> objdump -> int, $OUT/words.objdump): str x0,[sp] ; ldr x0,[sp] ; ldr x1,[sp] ;
+# sub sp,sp,#16 ; add sp,sp,#16. push_words counts these in the code region after stub_words;
+# invariants.sh fails when push_words != 0 for ./bebop.bin.
+PUSH_WORDS = {0xf90003e0, 0xf94003e0, 0xf94003e1, 0xd10043ff, 0x910043ff}
 KERNELS = ["k1h", "k2h", "k3h", "k4", "k8h"]
 
 
@@ -204,10 +209,19 @@ def size(binpath):
     record(binpath, "bin_words", end, "words", 1, st, f"bytes {os.path.getsize(binpath)}")
     record(binpath, "stub_words", stub, "words", 1, st)
     record(binpath, "bin_fns", len(starts), "fns", 1, st)
+    pw = push_words(W, stub, end)
+    record(binpath, "push_words", pw, "words", 1, st, "register model: 0 = stack machine fully retired")
     os.makedirs("bench/perf_fn", exist_ok=True)
     with open("bench/perf_fn/latest.txt", "w") as f:
         for k, v in fnw.items(): f.write(f"{k} {v}\n")
-    return {"bin_words": end, "stub_words": stub, "bin_fns": len(starts)}, fnw
+    return {"bin_words": end, "stub_words": stub, "bin_fns": len(starts), "push_words": pw}, fnw
+
+
+def push_words(W, stub, end):
+    """REGISTER-MODEL-BLUEPRINT §7: count of the retired stack-machine words in the code
+    region after stub_words (str/ldr x0/x1,[sp] + sub/add sp,sp,#16). 0 once the register
+    model has fully replaced the value-stack spill path."""
+    return sum(1 for w in W[stub:end] if w in PUSH_WORDS)
 
 
 # ---------- E2 ----------

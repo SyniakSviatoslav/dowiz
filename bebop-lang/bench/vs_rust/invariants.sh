@@ -59,5 +59,10 @@ mkdir -p "$OUT/seed"; if as seed/seed.S -o "$OUT/seed/seed.o" 2>/dev/null && ld 
    && cmp -s "$OUT/seed/rebuilt.text" "$OUT/seed/committed.text"; then echo "seed: .text identical ($(stat -c %s "$OUT/seed/committed.text") B; the ELF wrapper may differ by linker version)"
 else echo "SEED DRIFT: seed/seed.S no longer rebuilds seed/build/seed's .text (or as/ld missing)"; fail=1; fi
 
+echo "== (ix) push_words == 0 (REGISTER-MODEL-BLUEPRINT §7: the stack machine is retired)"
+PW=$(python3 tools/perf.py size --bin "$BIN" 2>/dev/null | python3 -c "import ast,sys; print(ast.literal_eval(sys.stdin.readline())['push_words'])")
+echo "push_words: $PW"
+[ "$PW" = 0 ] || { echo "PUSH_WORDS NONZERO: $PW stack-machine words remain in $BIN (want 0)"; fail=1; }
+
 [ $fail = 0 ] && echo "invariants: GREEN" || echo "invariants: RED"
 exit $fail

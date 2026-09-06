@@ -2,17 +2,21 @@ use "selfhost/prelude/sha256.bp"
 use "selfhost/prelude/store.bp"
 // scrash_small.bp — B1 prep (G5b torn-write harness, bench/vs_rust/scrash_torn.sh).
 // Byte-for-byte the same writer/reader as scrash.bp (T113) EXCEPT a smaller
-// generation count and arena size, so each trial's crashed-image file the
-// harness builds stays small (the box's filesystem-heaviness rule, AGENTS.md).
+// generation count and arena size (each trial's crashed-image file the
+// harness builds stays small, the box's filesystem-heaviness rule, AGENTS.md)
+// AND the durable commit (B1 step: this is the writer the torn-write harness
+// runs against, so it is the one that must take the durable path -- scrash.bp
+// itself, the separate G5 SIGKILL gate, is untouched, out of this task's scope).
 // Writer mode (argv[2] = "w"): NGEN generations, each appends 100 nodes
 // N{i64, ref N} (val = LCG chain from 42 continuing across generations, prev =
-// previous node) and commits root = the last node (append + superblock
-// toggle, nothing overwritten). Reader mode ("r", default): pick the valid
-// superblock with the higher generation, walk the chain from the root,
-// return fold = acc*31 + val (wrap); 0 if any walked node fails its crc or
-// the walk length != 100 * generation. bench/oracles/scrash.py is generic in
-// g (no scrash.bp-specific constant) and is reused UNMODIFIED against this
-// writer's store.
+// previous node) and commits root = the last node via st_commit_sync (append,
+// msync the appended range, toggle superblock, msync superblock pages --
+// store.bp:176). Reader mode ("r", default): st_open (which now verifies the
+// picked superblock's object chain before trusting it, B1 store.bp
+// st_reopen_verify) then walk the chain from the root, return fold = acc*31 +
+// val (wrap); 0 if any walked node fails its crc or the walk length != 100 *
+// generation. bench/oracles/scrash.py is generic in g (no scrash.bp-specific
+// constant) and is reused UNMODIFIED against this writer's store.
 fn walk(base: [i64], tmp: [i64]) -> i64 {
   let root = st_root(base, tmp);
   let gen = st_gen(base, tmp);
@@ -55,7 +59,7 @@ fn main(argc: i64, argv: [str]) -> i64 {
       let k = k + 1;
       0
     };
-    let _ = st_commit(base, tx, prev, tmp);
+    let _ = st_commit_sync(base, tx, prev, tmp);
     let g = g + 1;
     0
   };

@@ -79,15 +79,74 @@ fn st_pick(base: [i64], tmp: [i64]) -> i64 {
   let vb = st_sb_valid(base, 512, tmp);
   if va + vb == 2 then (if base[514] > base[2] then 512 else 0) else if va == 1 then 0 else if vb == 1 then 512 else 0 - 1
 }
+// st_verify(base, upto, tmp): reopen-time trust check for one superblock's whole
+// object arena, cells 1024..upto (append-only, so this is every object that
+// generation's root chain could ever reach -- no per-type ref/layout table
+// needed, and it is strictly stronger than a root-only walk since it also
+// covers superseded objects, harmless since those are only ever written once).
+// Closes the B1 torn-write gap (docs/blueprints/B1-durability-torn-write.md):
+// a torn/zeroed PAYLOAD page can leave a superblock whose OWN crc is fully
+// valid (two independent pages -- st_pick alone cannot see this). A torn
+// object HEADER (h0's length word) is itself untrusted: `len >= 1` is
+// required (st_compact enforces the same invariant elsewhere, exit 84 on
+// len < 1 -- no real object is ever length 0), which is what actually
+// catches a zeroed page: an all-zero h0/h1 looks like a trivially "valid"
+// zero-length object whose crc-of-nothing (0) matches its own zeroed crc
+// field, so without this check a torn/zeroed run is silently stepped over
+// two cells at a time and never flagged. A length that would run the scan
+// past `upto` (torn to something merely large, not zero) also stops it
+// immediately and counts as bad -- the scan can never read past the
+// caller's own arena bound, however garbled the length word. Inlines
+// st_len/st_check (via st_crc, already defined above) rather than calling
+// them, so this can sit before st_open without a forward reference.
+// Returns (bad_count << 32) | objects_visited.
+fn st_verify(base: [i64], upto: i64, tmp: [i64]) -> i64 {
+  let off = 1024;
+  let bad = 0;
+  let n = 0;
+  while off < upto {
+    let len = base[off] & 4294967295;
+    let fits = if len >= 1 then (if off + 2 + len <= upto then 1 else 0) else 0;
+    let ok = if fits == 1 then (if (base[off + 1] >> 32) == st_crc(base, off + 2, len, tmp) then 1 else 0) else 0;
+    let bad = bad + (1 - ok);
+    let n = n + 1;
+    let off = if fits == 1 then off + 2 + len else upto;
+    0
+  };
+  (bad << 32) | n
+}
+// st_reopen_verify(base, tmp): called by st_open on every non-fresh open.
+// st_pick only checks a superblock's OWN crc -- it will happily pick a
+// generation whose superblock survived a crash intact while its payload was
+// independently torn (the B1 gap). Re-verify the picked superblock's object
+// arena; on failure, stamp that superblock's magic word to 0 IN THE MAPPING
+// (self-heals the file: every future reader, this process or any other,
+// including a tool that only checks a superblock's own crc, now sees it as
+// invalid and skips it -- MAP_SHARED writes are visible to any process that
+// reads the same file afterward, no fsync needed for that, only for crash
+// durability) and re-pick. One retry is enough: the fallback generation's
+// payload range was written and made durable several commits before the one
+// that tore. Returns the superblock finally selected (matches st_pick's
+// return convention, -1 if both copies fail verification).
+fn st_reopen_verify(base: [i64], tmp: [i64]) -> i64 {
+  let sb = st_pick(base, tmp);
+  let bad = st_verify(base, base[sb + 4], tmp) >> 32;
+  let _ = if bad > 0 then base[sb] = 0 else 0;
+  let sb2 = if bad > 0 then st_pick(base, tmp) else sb;
+  let bad2 = if bad > 0 then (if sb2 < 0 then 0 else st_verify(base, base[sb2 + 4], tmp) >> 32) else 0;
+  let _ = if bad2 > 0 then base[sb2] = 0 else 0;
+  sb2
+}
 // st_open(path, plen, size, tmp): create/extend, map MAP_SHARED RW, init superblock A
-// when the file is fresh. Returns the base (index it as cells).
+// when the file is fresh; on a real (non-fresh) open, verify-and-heal per
+// st_reopen_verify above. Returns the base (index it as cells).
 fn st_open(path: [i64], plen: i64, size: i64, tmp: [i64]) -> [i64] {
   let fd = sys_open(path, plen, 66);
   let _ = sys_ftruncate(fd, size);
   let base = st_cells(sys_mmap(0, size, 3, 1, fd, 0));
   let _ = sys_close(fd);
   let fresh = if st_pick(base, tmp) < 0 then 1 else 0;
-  let _ = if fresh == 1 then st_sb_write(base, 0, 0, 0, 1024, 0, 0, tmp) else 0;
+  let _ = if fresh == 1 then st_sb_write(base, 0, 0, 0, 1024, 0, 0, tmp) else st_reopen_verify(base, tmp);
   base
 }
 // st_map_ro(path, plen, size): a reader's mapping (PROT_READ, MAP_SHARED).

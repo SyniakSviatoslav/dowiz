@@ -99,3 +99,4 @@ c46_andor 312 T90 2c: entry stub 39 -> 131 words (SIGTRAP handler + trap texts, 
 c47_usenest 224 T90 2c: entry stub 39 -> 131 words (SIGTRAP handler + trap texts, +92), trap sites 3 -> 1 word (brk)
 c50_cas 190 T90 2c: entry stub 39 -> 131 words (SIGTRAP handler + trap texts, +92), trap sites 3 -> 1 word (brk)
 c53_param9 245 T90 2c: entry stub 39 -> 131 words (SIGTRAP handler + trap texts, +92), trap sites 3 -> 1 word (brk)
+c05_if 151 register model: if-expression join keeps the destination as a parkable window entry (one eviction mov in this construct)

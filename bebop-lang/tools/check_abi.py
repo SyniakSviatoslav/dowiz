@@ -39,6 +39,24 @@ PRO_N, EPI_N = 10, 8                   # emit_prologue / emit_epilogue word coun
 ARGPASS = {0xF94003E0 + r for r in range(9, 14)} | {0xAA0003E0 + r for r in range(9, 14)}
 # ldr x9..x13,[sp] (canonical pop into an arg register) and mov x9..x13,x0 (the same
 # pop after T96 step-1 elision of its own push) -- both vanish when T25 S1 lands
+STP_X15X14 = 0xA9BF3BEF   # stp x15,x14,[sp,#-16]!  (call-site x15/x14 save wrapper)
+MAX_ARGS = 13             # x0..x7 direct + x8..x13 spill-slot params 9-14 (blueprint §1)
+
+
+def argpass_window(span):
+    """Positions in `span` where a write to x8..x13 is a REGISTER-MODEL-BLUEPRINT §3.8
+    argument placement, not a violation: any word within the (up to MAX_ARGS) words
+    immediately before a `bl`, or before its `stp x15,x14` save wrapper when present --
+    generalises the old fixed ldr/mov-from-x0 patterns to whatever vs_place_args actually
+    emits (a direct mov, a cs mov, a slot ldr, or a mat_const/mat_mulc sequence) for that
+    argument. Kept tight: only the contiguous run immediately preceding one `bl`."""
+    win = set()
+    for j, w in enumerate(span):
+        if (w >> 26) != 0x25:          # not a `bl`
+            continue
+        call_start = j - 1 if j > 0 and span[j - 1] == STP_X15X14 else j
+        win.update(range(max(0, call_start - MAX_ARGS), call_start))
+    return win
 
 
 def load_bin(path):
@@ -146,6 +164,7 @@ def check_bin(path, allow, stub=()):
         span = W[s:e]
         if span[-1] != RET:
             errs.append(f"fn#{k} @{s} does not end with ret")
+        argwin = argpass_window(span)
         for i in range(PRO_N, len(span) - EPI_N):
             w = span[i]
             for r in writes(w):
@@ -155,7 +174,7 @@ def check_bin(path, allow, stub=()):
                 elif 9 <= r <= 13:
                     if w in allow:
                         nsys += 1
-                    elif w in ARGPASS:
+                    elif w in ARGPASS or i in argwin:
                         narg += 1
                     else:
                         errs.append(f"fn#{k} @{s + i}: {w:08x} writes x{r}")
@@ -164,8 +183,18 @@ def check_bin(path, allow, stub=()):
 
 # ---- (iii) fntab zone map -------------------------------------------------
 ZONES = [(0, 1, "fntab"), (1500, 1755, "b1_facts"), (1800, 1802, "b1_scratch"),
-         (3655, 3661, "fold"), (3662, 3699, "jumps"), (3700, 3796, "slots"),
-         (3890, 3898, "bank"), (3899, 3999, "literals"), (4000, 4000, "budget")]
+         (2000, 3535, "window"), (3655, 3661, "fold"), (3662, 3699, "jumps"),
+         (3700, 3796, "slots"), (3797, 3798, "window_hdr"),
+         (3823, 3827, "window_cs"), (3890, 3898, "bank"),
+         (3899, 3999, "literals"), (4000, 4000, "budget")]
+# window (2026-09-06, REGISTER-MODEL-BLUEPRINT; raised 128->512 2026-09-06 --
+# emit_cond's parkable-`d` fix needs one extra live entry per nested if-level
+# for the whole else-branch compile): fntab[2000+3i..2002+3i] = kind/p0/p1 of
+# window entry i, capacity 512 entries (2000..3535) -- a compile-time LIST,
+# decoupled from the 8-register free mask at [3798]
+# (only REG/MULC-window/FLAGS kinds actually own a register). window_hdr:
+# [3797] w (entry count, 0..128), [3798] free mask x0..x7. window_cs:
+# [3823] cs mask, [3824] slot cursor, [3825] cs_hi, [3826] tsp, [3827] S.
 # b1_facts (2026-09-06): fntab[1500+i] = per-fn packed planning facts
 # (vc*2+has_alloc), i = the fn's index in collect_fns order, keyed by lookup
 # on source position (fntab_fact_lookup) so two same-named fn definitions

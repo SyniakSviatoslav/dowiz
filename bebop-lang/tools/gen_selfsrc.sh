@@ -9,11 +9,19 @@ if [ "$1" = std ]; then
   OUTDIR="${2:-bench/vs_rust/std_tests}"; mkdir -p "$OUTDIR"
   for t in bench/vs_rust/std_tests/*.bp; do
     g=$(basename "$t"); src="selfhost/std/$g"
-    [ -f "$src" ] || { echo "$src: missing (gate source without a selfhost/std twin)" >&2; exit 1; }
-    # T47c (2026-09-05): the prelude is included by `use "selfhost/prelude/<m>.bp"` lines
-    # inside the gate source now (bebop.bin resolves them at compile time); the
-    # std_tests copy is verbatim. The old `// prelude:` header concatenation is gone.
-    cat "$src" > "$OUTDIR/$g"
+    # B2 (2026-09-06): a few gate sources (csr_build_profile.bp, join_twin.bp,
+    # scrash_small.bp) are documented LOCAL COPIES with no selfhost/std twin by
+    # design (bench-only instrumented variants, not edits of the twinned file);
+    # for those the std_tests copy IS the source of truth, so it is its own
+    # expansion instead of an error.
+    if [ -f "$src" ]; then
+      # T47c (2026-09-05): the prelude is included by `use "selfhost/prelude/<m>.bp"` lines
+      # inside the gate source now (bebop.bin resolves them at compile time); the
+      # std_tests copy is verbatim. The old `// prelude:` header concatenation is gone.
+      cat "$src" > "$OUTDIR/$g"
+    else
+      cat "$t" > "$OUTDIR/$g"
+    fi
   done
   echo "$OUTDIR: $(ls "$OUTDIR"/*.bp | wc -l) gate sources expanded"
   exit 0

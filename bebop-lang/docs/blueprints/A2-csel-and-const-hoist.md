@@ -13,7 +13,7 @@ Out: any `if` with a call, a `let`, a `while`, a nested `if`, an array literal, 
 
 ## 2. Preconditions
 
-A1 landed and promoted (push_words == 0, c55-c64 frozen); `vs_cmp` pushes `FLAGS cond` with the real AArch64 condition number (REGISTER-MODEL §2); `vs_alloc`/`vs_pop`/`vs_to` and the ownership invariants (§3.14, mask helpers with sites); K8H honest row exists (bench/vs_rust/kernels/k8h.bp, rust_once/k8h.rs, honest.sh:17 `for k in k1h k2h k3h k4 k8h`, verified). The fn count is 250 against the old compiler's cap of 256 (bebop.bp:4465 `if cnt[0] >= 256 then diag_exit(s,0,89)`, verified): **step 0 below raises the cap first, as its own commit.**
+A1 landed and promoted (push_words == 0, c55-c61 frozen); `vs_cmp` pushes `FLAGS cond` with the real AArch64 condition number (REGISTER-MODEL §2); `vs_alloc`/`vs_pop`/`vs_to` and the ownership invariants (§3.14, mask helpers with sites); K8H honest row exists (bench/vs_rust/kernels/k8h.bp, rust_once/k8h.rs, honest.sh:17 `for k in k1h k2h k3h k4 k8h`, verified). The fn count is 250 against the old compiler's cap of 256 (bebop.bp:4465 `if cnt[0] >= 256 then diag_exit(s,0,89)`, verified): **step 0 below raises the cap first, as its own commit.**
 
 ## 3. Design
 

@@ -14,9 +14,17 @@ for f in bench/diag_neg/*.bp; do
   if [ "$rc" = "$code" ] && [ "$got" = "$want" ]; then echo "PASS $b $got exit $rc: $(echo "$err" | tail -n 1 | cut -d: -f3-)"; pass=$((pass+1));
   else echo "FAIL $b want $want exit $code, got '$got' exit $rc: $err"; fail=$((fail+1)); fi
 done
-# d99 (generated, roadmap 1b 2026-09-06): one fn of 24000 statements emits > 65536 words ->
-# the planning buffer traps 83 with a message (it was a SIGSEGV = exit 82 before).
-python3 -c 'print("fn main() -> i64 {\n  let s = 1;"); [print("  let s = s + %d;" % (i % 7)) for i in range(24000)]; print("  s\n}")' > "$T/d99_cap.bp"
+# d99 (generated, roadmap 1b 2026-09-06): one fn emits > 65536 words -> the
+# planning buffer traps 83 with a message (it was a SIGSEGV = exit 82 before).
+# Register-model 2026-09-06: the old 24000-statement `let s = s + %d;` shape
+# (~2.73 words/statement) cut ~47% under the new codegen (~1.45 words/stmt),
+# so scaling the SAME shape to ~52800 statements needs ~950KB of source --
+# well past cli_compile's fixed 400000-byte sys_slurp cap, which truncates
+# the file first and mis-reports exit 97 ("no tail expression") instead of
+# the buffer limit. Fix: raise words-per-byte instead of statement count --
+# 10 chained `+`s per statement (~10 add words in ~53 bytes) reaches 65536
+# words at 6600 statements / ~356KB, safely under the 400000-byte cap.
+python3 -c 'print("fn main() -> i64 {\n  let s = 1;"); [print("  let s = s + 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10;") for i in range(6600)]; print("  s\n}")' > "$T/d99_cap.bp"
 err=$(./seed/build/seed "$BIN" compile "$T/d99_cap.bp" "$T/d99_cap.bin" 2>&1 >/dev/null); rc=$?
 if [ "$rc" = 83 ] && [ "$err" = "code buffer exhausted at 65536 words (one fn or the program)" ]; then echo "PASS d99_cap exit 83: $err"; pass=$((pass+1));
 else echo "FAIL d99_cap want exit 83 + message, got exit $rc: $err"; fail=$((fail+1)); fi

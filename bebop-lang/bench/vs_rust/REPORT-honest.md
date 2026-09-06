@@ -93,3 +93,21 @@ same kernel with a predictable bit `let bit = (i >> 4) & 1;` runs 0.15 ms/rep ag
 time is the mispredicted branch itself and the remaining ~2.2x over Rust (0.069 ms) is the 40-word stack-machine loop.
 Decision: T52 proceeds -- as a csel on tags in the IR rung (R3+, both arms REG/SYM/CONST), not as a word peephole;
 T53/T54 stay deleted.
+
+## Register-model row (2026-09-06, session 18): stack machine retired (docs/REGISTER-MODEL-BLUEPRINT.md), bebop.bin 53d13800
+
+Status: measured after the register-model landing (R=11, pinned core 4, box idle, fuzzd paused). Every value/expr lives in a register or an x15 frame slot; push_words (str/ldr x0,[sp] + ldr x1,[sp] + sub/add sp,sp,#16 in the code region after stub_words) is now the enforced invariant (`bench/vs_rust/invariants.sh`, `tools/perf.py` EXACT `push_words`) and reads 0. bin_words 68229 -> 36218 (-47 %, well under the "< 55000" report target). Loop words: K1H 10 -> 5 (gate <= 8, MET), K3H 24 -> 8 (gate <= 10, MET), K4 14 -> 7 (gate <= 13, MET), K8H 39 -> 25. K2H's automated `k2h_loopwords` reads 51, unchanged from every prior baseline (B1/B2/B5 rows above all show the same 51): this is a pre-existing quirk of `loop_words()` for a non-looping kernel -- it picks up the entry_stub's SIGTRAP-handler jump-back (`b main`-equivalent, the single smallest backward branch in the whole binary) rather than a real hot loop, since `fib` recurses via `bl` and has no loop of its own. The real per-fn footprint is `bench/perf_fn/latest.txt`'s `fib` entry: fn body shrank from the old stack-machine form to 24 words (prologue-to-ret span at 0x0-0x5c in the k2ht plain disassembly), close to the blueprint's "~21" estimate.
+
+| kernel | bebop med / p95 ms per rep | Rust honest med / p95 ms per rep | bebop / Rust | gate <= 2.0x (TG-DONE 1) | 1.0x (D1(a) long target) | bebop RSS MB |
+|---|---|---|---|---|---|---|
+| K1H | 0.97 / 1.12 | 0.979 / 1.075 | 1.0x | MET | 1.0x | 15.8 |
+| K2H | 0.69 / 0.90 | 0.347 / 0.482 | 2.0x | MET | 2.0x | 15.8 |
+| K3H | 0.28 / 0.37 | 0.226 / 0.321 | 1.2x | MET | 1.2x | 15.8 |
+| K4 | 3.63 / 3.75 | 2.759 / 2.889 | 1.3x | MET | 1.3x | 15.8 |
+| K8H | 0.25 / 0.31 | 0.070 / 0.074 | 3.6x | UNMET | 3.6x | 15.8 |
+| K5 self-compile of bebop.bp (cold, pinned, median of 3) | 1.27 s | (no twin: rustc is not a fair twin of a 200 KB one-pass compiler) | |
+| K6 nnidx scan 1M (bench/tq_sqlite/RESULT.md, Q=20) | 18.4 ms | sqlite scan 183 ms python / ~158 ms native (T100) | store faster |
+
+K4's ms gate: `k4_ms 3.63 <= 3.0`? UNMET on the absolute figure, but the blueprint's ratio form (`k4_ms <= 1.15 x` the Rust honest twin in the same run) is the one that governs (D12-B's 3.0 ms absolute predates the honest twins): 3.63 / 2.759 = 1.32x, still above 1.15x -- UNMET on the ratio form too, recorded honestly rather than declared MET.
+
+REGRESSION FOUND, not closed by this row: `bench/vs_rust/parity_driver.sh`'s K7NEON (`bench/vs_rust/kernels/k7neon.bp`, `hvham2` builtin) SIGSEGVs (trap 82) with this bebop.bin; it passes with the previously-committed bebop.bin (e654370993d2, HEAD). Root cause and minimal repro: see docs/exp.journal and the VERDICT of this session's wrap-up task -- `emit_hvham2`'s new `vs_park`/`vs_evict`/`vs_mat` non-sequential register materialisation (a->x0, ao->x6, b->x1, bo->x5, n->x3) loses track of a computed (non-symbol, non-constant) `ao` argument during the evict cascade and a later `vs_mat` overwrites it before it is read. Not patched here (real miscompile, not an exit-89 case) -- left for the main session.

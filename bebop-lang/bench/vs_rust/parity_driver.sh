@@ -5,7 +5,7 @@ ulimit -s 65536 2>/dev/null || true  # eval recursion: 113+ fn self-compile need
 set -u
 mkdir -p "${BEBOP_TMP:-/tmp/opencode}"
 SEED=./seed/build/seed
-BEBOP_BIN=./bebop.bin
+BEBOP_BIN=${BEBOP_BIN:-./bebop.bin}
 GUARD="GUARD: bebop.bin is missing or empty (silent-artifact class, journal 1788288248)"
 [ -s "${BEBOP_BIN:-bebop.bin}" ] || { echo "$GUARD"; exit 1; }
 
