@@ -23,8 +23,9 @@ plan serves that sentence and is judged by a number in a committed script:
 2. a store (docs/LANG-DB-DESIGN.md §4 + §9.5, amended by D11-H): two superblocks +
    append-only arena of self-describing objects, `ref T` = object-relative offset,
    commit = root swap, Cheney compaction, sha256-named migrations, CSR/bucket indexes,
-   edge log + tiered CSR for graphs — gated G1-G8 against sqlite, LMDB and native
-   Rust on a real workload (D11-I);
+   edge log + tiered CSR for graphs — gated G1-G8 against sqlite on a real workload
+   (D11-I; D14 item 7 drops LMDB and native Rust from this sentence — neither is
+   measured by any script in the tree);
 3. cores only for parallel scans (T106), the sweep engine only where activity is sparse
    (T107); no runtime cells for ordinary code (T55 spike: 41x/740x against);
 4. an honesty floor that cannot be talked around: every gate has an oracle and a
@@ -51,55 +52,70 @@ and retired by decisions D8-D10.
 | 7 | the store | G1-G8 (T112-T117) | library + G1-G6 green in std_golden (99 gates; 100/100 SIGKILL trials); G7 sbench measured vs sqlite (17x insert, 450 ns PK lookup, 30x window scan, 2.5x size loss); G8 stage 1 measured (BFS 187 ns/edge vs sqlite 10.8 us), stage 2 running | all eight green with numbers; G7/G8 thresholds a,b,c frozen by the operator before the run (D11-I) |
 | 8 | fuzz at scale | bench/fuzz/fuzz.sh | 150-seed batches; gen.py widened 2026-09-05 (large loops, literals in loops, recursion 127, return/break); 2026-09-06 generator fixed (fresh loop names, big-loop vars never reassigned, loop-bound literals released) -> 1.5 programs/s, 0 timeouts on 20 seeds; 2026-09-06 in-process shards (fuzz_batch.py): 3.5 programs/s on 3 cores, 300-seed batch found 42122 | >= 10^5 seeds ON THE PROMOTED BINARY (D12-C: docs/PERF.md `fuzz_seeds_on_bin`, keyed by md5; 28.5k on d785e062, e14dd55e counting), 0 CRASH/DIVERGE/COMPILEFAIL, TRAP-82 = 0 (ALERT class since D12-C), capacity traps 80/81/83 only |
 
+Row 1's target (D14 item 10, wasmtime's own baseline-vs-optimising numbers): one-pass
+(baseline) compiler tiers land at 1.1x-1.5x of an optimising tier generally, so <= 2.0x per
+honest row is the real target for this compiler shape; D1(a)'s <= 1.0x stays report-only
+(D12-G), not a gate.
+
 ## Critical path (in order; one writer, one commit per single-variable step)
 
-Sorted 2026-09-06 (operator: "щоб прискорити роботу і не повторюватись"): every step that
-makes the later steps cheaper comes first; PARTIALs close before anything new opens; a
-measurement that only needs a quiet box runs in the background under L18 while the code
-steps proceed. The done rungs (T118 -> T122 -> T43 -> T47/T47b/T80 -> T48b -> T101-T103 +
-T105-T108 -> T109-T117 G1-G8 stage 2 -> T123-T125 -> T130/T118b -> T90 step 1) are in
-HISTORY.md; this list is only what remains and is the ONE ordering (SESSION-HANDOFF points
-here, HISTORY's "Ordering for T84-T95" is superseded).
+Reordered 2026-09-06 by D14 item 1 (docs/DECISIONS-RESEARCH-2026-09-06.md §5 Q1, session 16):
+the disassembly of the three honest kernels showed K2H's 3.8x and K3H's 4.0x are prologue/join/
+left-nest overhead, not the 16 KiB frame or a missing compare fusion (REPORT-honest.md's
+attribution was wrong) — so three single-variable commits move before the IR rung and shrink
+what it has to reproduce byte-for-byte. The done rungs (T118 -> T122 -> T43 -> T47/T47b/T80 ->
+T48b -> T101-T103 + T105-T108 -> T109-T117 G1-G8 stage 2 -> T123-T125 -> T130/T118b -> T90 ->
+T104b -> P3 cmp_try -> D13's twelve retro proposals, all DONE 2026-09-06) are in HISTORY.md;
+this list is only what remains and is the ONE ordering (SESSION-HANDOFF points here, HISTORY's
+"Ordering for T84-T95" is superseded).
 
-1. Loop hygiene — DONE 2026-09-06 (session 13), one line each so nobody reopens it:
-   a. Fuzz at scale: continuous — tools/fuzzd.sh as the Termux runit service `fuzzd` (own
-      proot, little cores, 500-seed batches, one journal line each, ALERT file gates the
-      push via tools/hooks/pre-push). 3100 seeds from 100000 + 5000 from 50000: 0 miscompiles.
-   b. Capacity trap: exit 83 (0ba3154).
-   c. Shrinker: bench/fuzz/ladder.py (b37e1c0) — 42122: 3301 -> 398 B in 67 s, 20056 -> 142 B.
-   d. The per-call n^2 term is gone (SPEEDUP-ANALYSIS section 7: calls 1000/2000/4000 =
-      0.092/0.120/0.165 s, linear); the real 15 s was one str_len-per-byte loop, now hoisted
-      (a27b594): self-compile 1.5 s, chain + battery 34 s. Items 2/6/7 of the operator's
-      dev-speed list (modules / IR cache / parallel emit) were estimated there and are NOT
-      worth it against a 1.5 s baseline (best case 1.15-0.85 s, medium-high risk).
-2. D12 order (2026-09-06): (A) evals E1-E14 = tools/perf.py + bench/perf.csv + docs/PERF.md
-   (E7 guard -> E1 self-compile -> E3 size budget -> E2 kernels A/B -> E11 report -> the rest);
-   (C+D) fuzz TRAP-82 ALERT + per-bin seed counter, the hygiene commit (golden, seed rebuild
-   rung, TASKS hook, bebop word budget, honest RSS, LANGUAGE.md/emit_var); (B) T96 rest = P2
-   through the IR rung T101 (op-list per fn + register tier; K4 15 -> <= 13 loop words,
-   K4 <= 3.0 ms) through `tools/chain.sh --codegen`. P3 DONE 2026-09-06 (cmp_try:
-   `cmp xR,#imm` / `cmp xR,xS` + b.cond directly; K4 17 -> 15, K1 10 <= 12; fixpoint e14dd55e). T104b CLOSED 2026-09-06 (x*c1*c2 / LICM have no target on any measured program).
-   T90 CLOSED 2026-09-06 (`check` verb, d08/d10, `brk #code` traps + the stub's SIGTRAP handler).
-3. Measurements on a quiet box, in the background: honest.sh R=11 (TG-DONE 1), the full
-   sgraph2.sh run (frontier + hub-skew rows), the 45-90 s CSR build profile (sgraph phase b).
-   a, b, c are frozen (D12-F: 4x / 10x / 2.5x); the rerun stamps validity via E7.
-4. Codegen where a row says a branch costs: T52 -> T53 -> T54 (predication, each behind
-   honest.sh); T48 rest (checked types inside the compiler, not only the census); T61 (the
-   pool/futex builtins exist: the task is the library + a gate).
-5. Design-bound, operator decision first (AskUserQuestion before code): T68-T70, T85 -> T86
+1. B1 (prologue/epilogue + call-site x15/x14 sizing, conditional on use) -> B2 (value-in-x0 at
+   `if`/`while` joins, no push/pop round trip) -> B5 (loop rotation, bottom test): three
+   single-variable codegen commits, each through `tools/chain.sh --codegen`, constructs
+   re-frozen, an honest.sh row (D14 item 1; expected K2H 3.8x -> ~2.1x with no change to the
+   expression model).
+2. The operand-tag-stack IR rung (D12-B amended by D14 item 2, docs/DECISIONS-RESEARCH-2026-09-06.md
+   §3.3, Liftoff `CacheState` shape): a compile-time value stack of {reg, const, spill} tags,
+   NOT a per-fn op-list — deletes pop2 / left_single_* / writes_producer / count_masked and the
+   fusion retraction guards. Window: x1-x7, with one synthetic construct that forces the spill
+   path so it is not dead code (D14 item 3). Gate: K4 <= 13 loop words, fixpoint, constructs
+   re-frozen (D12-B unchanged).
+3. Freeze codegen for one 24 h fuzz window once the IR rung lands, so `fuzz_seeds_on_bin`
+   reaches 10^5 on one md5 (TG-DONE 8, D14 item 12) — scheduled here, before more codegen work
+   resets the per-binary seed counter again.
+4. K8, the branchy honest kernel, as the falsifier for T52/T53/T54 (D14 item 5): T53 and T54
+   are DELETED (HISTORY.md); T52 (pure `if` -> csel) proceeds only if K8's row shows a branch
+   costs — A78 evidence otherwise favours a predicted branch over csel by ~2.9x.
+5. B4, per-fn computed frame size (D14 item 4): `80 + 8*while_marks + 8*spill_slots`, plus the
+   heap only when the body needs it; a mis-estimate is exit 81, TRAP-82 stays the fuzz gate at 0.
+6. Store, first move: B8 — profile the 45-90 s CSR build (sgraph phase b) before any store code
+   change (D14 item 6); the real workload W = the dowiz-core order log (T66 `ordfsm.bp`/
+   `money.bp`, byte-exact Rust oracles — D14 item 8); a, b, c stay frozen (D12-F: 4x / 10x /
+   2.5x) and the sgraph2.sh full run + honest.sh R=11 rerun stamp validity via E7 in the
+   background.
+7. T48 rest (checked types into bebop.bp) rides the IR rung's per-symbol table (S once the
+   rung lands, not before); T61 (pool/futex builtins exist: the task is the library + a gate).
+8. Design-bound, operator decision first (AskUserQuestion before code): T68-T70, T85 -> T86
    follow-ups, T73, T76, T49/T50, T56, T59.
-6. Last, each a project of its own: backends T91-T95, T84 glyphs, T62 network, T67 mesh,
-   T87 f64, T88 supervisor, T89 trust chain, T63/T64/T83 bench policy rows as they come up.
+9. Last, each a project of its own: T91 x86_64 backend, T63/T64/T83 bench-policy rows as they
+   come up; T92-T95 backends, T84 glyphs, T62 network, T67 mesh, T87 f64, T88 supervisor, T89
+   trust chain moved to HISTORY.md's `## PARKED` heading (D14 item 11, reverses D11-J).
 
 Parallel-safe at any time: docs, oracles, fuzz batches, honest.sh rows, T78/T79/T81/T82 tooling.
 
 ## Open decisions (operator)
 
-- The real workload W of the store claim (a/b/c are frozen: D12-F).
 - (decided 2026-09-06, HISTORY D13: all 12 retro proposals of docs/RETRO-SESSIONS-2026-09-06.md §5
   are work items; process-count gate, FREEZE-on-codegen, pkill block first)
 - (decided 2026-09-06, HISTORY D12: evals E1-E14, P2 = IR rung, TRAP-82 ALERT, hygiene
   commit, a/b/c = 4x/10x/2.5x, 1.0x stays the long target, K8 before csel, T48 into bebop.bp)
+- (decided 2026-09-06, HISTORY D14, docs/DECISIONS-RESEARCH-2026-09-06.md: order B1 -> B2 ->
+  B5 -> the operand-tag-stack IR rung (not an op-list) -> K8 -> B4 computed frames; window
+  x1-x7 with a forced spill path; T53/T54 DELETED, T52 conditional on K8; store's first move
+  is B8 (profile the CSR build), workload W = the dowiz-core order log (T66); LMDB and "native
+  Rust" leave the thesis sentence; D1(a) 1.0x stays report-only, <= 2.0x is the real TG-DONE 1
+  target; the 11 project-sized tasks of report §4 move to HISTORY.md's `## PARKED` heading
+  (reverses D11-J); codegen freezes for a 24 h fuzz window after the IR rung lands (TG-DONE 8))
 
 ## Measured (pinned A78, in-process clock_ms medians; every number has a script)
 

@@ -1768,16 +1768,24 @@ fails on any INCREASE; each later rung records its decrease.
 DONE-CHECK: census table committed; RED->GREEN on a planted branch.
 DEPS: T40. BLOCKERS: none.
 
-**T52 · pure `if` -> csel** — when both arms are pure (no call, no
+**T52 · pure `if` -> csel** — OPEN, conditional on K8's row (D14.5: K8, the
+branchy honest kernel, is written first as the falsifier; T52 proceeds only
+if K8 shows a branch costs — A78 evidence otherwise favours a predicted
+branch over csel by ~2.9x) — when both arms are pure (no call, no
 store, no alloc, no syscall) and each arm <= N words (N frozen after
 measurement), emit cond + both arms + `csel` (the T24 select-equivalence
 gate is the semantics oracle; bebop.bp:1529's stale docstring becomes
-true). Impure arms fall to T53.
+true). Impure arms fell to T53 (DELETED, see below).
 DONE-CHECK: c05_if census 2 -> 0 b.cond; K1-K4 folds bit-exact; K3/K4
 timing recorded (swpmu steps + clock_ms, cores pinned per T63).
-DEPS: T24, T51. BLOCKERS: none.
+DEPS: T24, T51, K8. BLOCKERS: none.
 
-**T53 · side-effecting arms -> sink-predicated stores** — an arm's
+**T53 · side-effecting arms -> sink-predicated stores** — RE-SCOPED 2026-09-06,
+DELETED (D14 item 5, docs/DECISIONS-RESEARCH-2026-09-06.md §4/§5 Q5): design-only,
+no gate script, no oracle; A78 evidence is against predication except at
+high mispredict rates (a well-predicted branch measured ~2.9x faster than
+cmov), and T104b already set the precedent ("no target on any measured
+program"). Text kept as history — an arm's
 stores go to `csel(real_addr, sink)` where `sink` is a per-frame scratch
 cell (the write always happens, only its address is selected); arms with
 calls stay branched until T55 (a call is an activity edge there).
@@ -1785,7 +1793,10 @@ DONE-CHECK: c24_ifspill and the store-shaped fuzz corpus branch-free;
 fold parity; census decrease recorded.
 DEPS: T52, T43. BLOCKERS: none.
 
-**T54 · bounded loops -> masked fixed-count iteration** — `while i < K`
+**T54 · bounded loops -> masked fixed-count iteration** — RE-SCOPED 2026-09-06,
+DELETED (D14 item 5, docs/DECISIONS-RESEARCH-2026-09-06.md §4/§5 Q5): same
+A78 predication evidence as T53; no gate script, no oracle. Text kept as
+history — `while i < K`
 with literal K (or K known by R6.2 folding) compiles to K masked steps
 (FIR gate shape) and unrolls when K*body <= budget; data-dependent exits
 keep the backward branch until T55.
@@ -1858,15 +1869,6 @@ DONE-CHECK: affinity probe shows the mask took effect (getcpu 168);
 fiber gate unchanged in single-core mode.
 DEPS: T45. BLOCKERS: clone semantics under ptrace (honest skip stays).
 
-**T62 · network syscalls for the agent language** — socket 198, bind
-200, connect 203, sendto 206, recvfrom 207, epoll_create1 20 /
-epoll_ctl 21 / epoll_pwait 22, getrandom 278 (for nonces only; the core
-stays RNG-free per C2): the T8 deltasync codebook delta crosses a real
-process boundary (two seeds, one loopback socket).
-DONE-CHECK: gate `deltanet`: sender/receiver folds equal over loopback;
-register tables per L2; proot permits AF_INET loopback (probe first).
-DEPS: T45. BLOCKERS: proot networking (probe, do not assume).
-
 **T63 · benchmark hygiene** — every bench pins to the A78 cluster
 (affinity mask 0xF0) or records the core class per sample; swpmu step
 counts are the primary column, clock_ms the secondary; REPORT-630
@@ -1906,13 +1908,6 @@ DONE-CHECK: gates `money`, `ordfsm` == cargo-run oracle output byte-
 exact; forbidden transitions trap loudly (errors, not no-ops — the
 kernel's rule).
 DEPS: T36, T48. BLOCKERS: none (cargo present).
-
-**T67 · bebop2 mesh bridge** — T8 deltasync + T62 sockets + the
-`mesh-adapter` seam: a dowiz hub consumes a codebook delta produced by
-a Bebop agent; capability-authenticated per DECISIONS D0 (no scoring).
-DONE-CHECK: one round-trip through `mesh-adapter` tests; fold verified
-on both sides. DEPS: T62, T66. BLOCKERS: bebop-repo cross-repo drift
-(docs/design/ROADMAP.md item 12) must be closed first.
 
 ### CORPUS-A CARRY-OVER (operator selection 2026-09-04, T68-T83)
 
@@ -2143,6 +2138,81 @@ supervision runtime framework (B4b), C bootstrap (C1b), LLVM (C2),
 package registry (C3), full LSP (C4b), WASM as a runtime dependency
 (D1 runtime form), Vulkan/driver-bound GPU (D3b), Calyx/CIRCT (D4b).
 
+**T86 · bounded bit-vector DPLL in .bp** (B2a) — CORE DONE ✓ 2026-09-04 (gate dpll 584168922 == oracle, 20 formulas; T69 hookup pending) — discharge engine for T69
+GOAL: a small CDCL/DPLL solver over fixed-width bit-vector formulas
+(the shapes T69 contracts produce: bounds, overflow, equality of linear
+i64 terms), written in `.bp`, deterministic, with a step budget; UNSAT =
+contract proven for the bounded domain, SAT = counterexample assignment
+printed. Bounded and honest: outside the fragment the contract stays a
+--check trap.
+DONE-CHECK: gate `dpll` on a table of 20 formulas (10 SAT with models,
+10 UNSAT) == mirror; T69's `ensures` on 5 std gates discharged at
+compile time.
+DEPS: T69. BLOCKERS: none.
+
+**T90 · `bebop.bin check <file>` with line:col diagnostics** (C4a) — STEP 1 DONE 2026-09-06 (exits 95-99 now print `line:col: <message>` on stderr before the old code: diag_exit in bebop.bp; bench/diag_neg/d01..d09 with hand-counted EXPECT headers, bench/vs_rust/diag_check.sh in tools/battery.sh; STEP 2a DONE 2026-09-06 (lax d08/d10 exit 95: call-argument delimiters checked in emit_bl_call/emit_call, a body let must end in `;` `}` `in`; diag 11/11; fixpoint 94e47998); STEP 2b DONE 2026-09-06 (`bebop.bin check <src>`: cli_check = use expansion + emit_words_offs with no output file, `<src>.use` scratch only when the source has `use` lines, exit 0 or the same `line:col: <message>` 95-99; diag 13/13 incl. check d01 + c53 no-.bin; fixpoint deef28e0 = gen2 == gen3 == gen4, census bcond 1575 -> 1588 / cbz 114 -> 119 ALLOWed); STEP 2c DONE 2026-09-06 = T90 DONE (runtime traps are one `brk #code` word each -- emit_zeros 80, frame heap 81 x4, emit_call 87 -- and the entry stub, 39 -> 131 words, registers SIGTRAP with SA_SIGINFO: the handler reads pc from ucontext (+440), takes imm16 as the code (82 for SEGV/BUS), writes `trap NN: <text>` and exit_groups; diag_check 4 runtime probes; fixpoint d785e062, 44 constructs re-frozen at +92 words, census.txt k7 603 -> 599; operator chose brk over inline writes 2026-09-06))
+GOAL: parse + type/effect/quantity checks (T48/T68/T70) with no
+emission; every trap word class gets a message and a `file:line:col`;
+exit codes distinct per class (the KEEP pattern).
+DONE-CHECK: 10 planted errors report the right line:col; runtime of
+check on bebop.bp recorded.
+DEPS: T48. BLOCKERS: none.
+
+**T91 · x86_64 backend (no AVX-512 first)** (D2)
+GOAL: a second encoding table for the same emitter structure (mov/add/
+sub/imul/idiv/cmp/setcc/cmovcc/jcc/call/ret/syscall), a `seed.x86.S`
+twin of the loader (mmap RX, entry footer, arena in r14/r15), the Z2
+bank on the five callee-saved GPRs (even = rbx, r12; odd = r13, r14,
+r15 — SysV keeps them across calls, mirroring T25 S1), CSEL -> CMOVcc
+(T52), the substrate prelude unchanged (.bp). Cross-architecture folds
+become a SECOND INDEPENDENT ORACLE for every gate (two ISAs, one fold).
+Server-class x86_64 hosts expose perf_event_open, so T15's hardware
+counters stop being terminal there.
+DONE-CHECK: 66 gates + construct parity + K1-K4 folds identical on
+both ISAs; x86_64 fixpoint bb2 == bb3; PMU-backed L1/I-cache numbers
+recorded for K1-K4 on a Linux x86_64 host (first real class-(c)
+evidence). AVX-512 is a later, separate column.
+DEPS: T40, T51, T57. BLOCKERS: needs an x86_64 Linux host for the
+execution half (emission is gated in-sandbox by disassembler diff).
+
+Ordering for T84-T95: T90 and T89 ride T48/T45; T84 G1-G3 after T39 +
+T47 (one writer); T85 is a critical-path design item after T68/T69; T86
+after T69; T87 after T70; T88 after T73; T91 after T57 (first non-ARM
+fixpoint); T92 after T55; T93 after T20; T94 after T91; T95 after T93.
+
+**Honest flags for this section**
+1. T84 reverses Honest flag 3 of the SILICON pull: the canonical surface
+   is now glyphs; the total ASCII projection keeps agents and the
+   emitter unchanged. The token-cost number is recorded, not assumed.
+2. T85 is a minimal kernel, not Lean: Type₀, refl + nat_ind, no
+   tactics, no quotients, no termination checker. "Every statement
+   proven" is NOT claimed; "every `theorem` checked by our own kernel"
+   is.
+3. T94/T95 emit VM/GPU code without dependencies, but running it needs
+   a host VM or driver outside the tree — forward-port by definition.
+4. T91's execution half needs an x86_64 Linux host; in-sandbox only the
+   emitted bytes are gated (disassembler diff).
+
+## PARKED (reopened only by decision)
+
+D14 item 11 (2026-09-06, docs/DECISIONS-RESEARCH-2026-09-06.md §4/§5 Q11) reverses D11-J ("all tasks stay, no PARKED section"): the 11 project-sized tasks named in report §4's PARKED row move here verbatim, each a separate project with zero speed and no gate script; T52-T54's D14 item 5 disposition and every other status change stays where the task is defined above.
+
+**T62 · network syscalls for the agent language** — socket 198, bind
+200, connect 203, sendto 206, recvfrom 207, epoll_create1 20 /
+epoll_ctl 21 / epoll_pwait 22, getrandom 278 (for nonces only; the core
+stays RNG-free per C2): the T8 deltasync codebook delta crosses a real
+process boundary (two seeds, one loopback socket).
+DONE-CHECK: gate `deltanet`: sender/receiver folds equal over loopback;
+register tables per L2; proot permits AF_INET loopback (probe first).
+DEPS: T45. BLOCKERS: proot networking (probe, do not assume).
+
+**T67 · bebop2 mesh bridge** — T8 deltasync + T62 sockets + the
+`mesh-adapter` seam: a dowiz hub consumes a codebook delta produced by
+a Bebop agent; capability-authenticated per DECISIONS D0 (no scoring).
+DONE-CHECK: one round-trip through `mesh-adapter` tests; fold verified
+on both sides. DEPS: T62, T66. BLOCKERS: bebop-repo cross-repo drift
+(docs/design/ROADMAP.md item 12) must be closed first.
+
 **T84 · glyphs as the canonical surface, ASCII as a lossless projection**
 (SPEC §2, GLYPH-ALPHABET v0.2, ergonomics #3) — overrides Honest flag 3
 GOAL: the canonical `.bp` token is the glyph; every glyph has exactly one
@@ -2186,18 +2256,6 @@ morph-published fragment); erasure: theorems emit zero words (T68 ^0).
 DEPS: T68, T69, bt.bp. BLOCKERS: none (design-bound: critical-path
 item, one writer).
 
-**T86 · bounded bit-vector DPLL in .bp** (B2a) — CORE DONE ✓ 2026-09-04 (gate dpll 584168922 == oracle, 20 formulas; T69 hookup pending) — discharge engine for T69
-GOAL: a small CDCL/DPLL solver over fixed-width bit-vector formulas
-(the shapes T69 contracts produce: bounds, overflow, equality of linear
-i64 terms), written in `.bp`, deterministic, with a step budget; UNSAT =
-contract proven for the bounded domain, SAT = counterexample assignment
-printed. Bounded and honest: outside the fragment the contract stays a
---check trap.
-DONE-CHECK: gate `dpll` on a table of 20 formulas (10 SAT with models,
-10 UNSAT) == mirror; T69's `ensures` on 5 std gates discharged at
-compile time.
-DEPS: T69. BLOCKERS: none.
-
 **T87 · f64 at the boundary only** (B3a)
 GOAL: builtins `f64_bits_to_fp(bits)` and `fp_to_f64_bits(fp)`
 converting IEEE-754 bit patterns to/from fixed-point 2^32 with round-
@@ -2227,31 +2285,6 @@ DONE-CHECK: `tools/ddc.sh` green; sha256 sidecars for seed.bin and
 bebop.bin; the chain doc lists every hash.
 DEPS: T45. BLOCKERS: witness must still compile the current surface
 (freeze the surface subset the witness supports).
-
-**T90 · `bebop.bin check <file>` with line:col diagnostics** (C4a) — STEP 1 DONE 2026-09-06 (exits 95-99 now print `line:col: <message>` on stderr before the old code: diag_exit in bebop.bp; bench/diag_neg/d01..d09 with hand-counted EXPECT headers, bench/vs_rust/diag_check.sh in tools/battery.sh; STEP 2a DONE 2026-09-06 (lax d08/d10 exit 95: call-argument delimiters checked in emit_bl_call/emit_call, a body let must end in `;` `}` `in`; diag 11/11; fixpoint 94e47998); STEP 2b DONE 2026-09-06 (`bebop.bin check <src>`: cli_check = use expansion + emit_words_offs with no output file, `<src>.use` scratch only when the source has `use` lines, exit 0 or the same `line:col: <message>` 95-99; diag 13/13 incl. check d01 + c53 no-.bin; fixpoint deef28e0 = gen2 == gen3 == gen4, census bcond 1575 -> 1588 / cbz 114 -> 119 ALLOWed); STEP 2c DONE 2026-09-06 = T90 DONE (runtime traps are one `brk #code` word each -- emit_zeros 80, frame heap 81 x4, emit_call 87 -- and the entry stub, 39 -> 131 words, registers SIGTRAP with SA_SIGINFO: the handler reads pc from ucontext (+440), takes imm16 as the code (82 for SEGV/BUS), writes `trap NN: <text>` and exit_groups; diag_check 4 runtime probes; fixpoint d785e062, 44 constructs re-frozen at +92 words, census.txt k7 603 -> 599; operator chose brk over inline writes 2026-09-06))
-GOAL: parse + type/effect/quantity checks (T48/T68/T70) with no
-emission; every trap word class gets a message and a `file:line:col`;
-exit codes distinct per class (the KEEP pattern).
-DONE-CHECK: 10 planted errors report the right line:col; runtime of
-check on bebop.bp recorded.
-DEPS: T48. BLOCKERS: none.
-
-**T91 · x86_64 backend (no AVX-512 first)** (D2)
-GOAL: a second encoding table for the same emitter structure (mov/add/
-sub/imul/idiv/cmp/setcc/cmovcc/jcc/call/ret/syscall), a `seed.x86.S`
-twin of the loader (mmap RX, entry footer, arena in r14/r15), the Z2
-bank on the five callee-saved GPRs (even = rbx, r12; odd = r13, r14,
-r15 — SysV keeps them across calls, mirroring T25 S1), CSEL -> CMOVcc
-(T52), the substrate prelude unchanged (.bp). Cross-architecture folds
-become a SECOND INDEPENDENT ORACLE for every gate (two ISAs, one fold).
-Server-class x86_64 hosts expose perf_event_open, so T15's hardware
-counters stop being terminal there.
-DONE-CHECK: 66 gates + construct parity + K1-K4 folds identical on
-both ISAs; x86_64 fixpoint bb2 == bb3; PMU-backed L1/I-cache numbers
-recorded for K1-K4 on a Linux x86_64 host (first real class-(c)
-evidence). AVX-512 is a later, separate column.
-DEPS: T40, T51, T57. BLOCKERS: needs an x86_64 Linux host for the
-execution half (emission is gated in-sandbox by disassembler diff).
 
 **T92 · direct Verilog netlist from the `.bt` incidence tensor** (D4a)
 GOAL: a text emitter in `.bp`: cells -> always-blocks, incidence ->
@@ -2295,24 +2328,6 @@ oracle; real GPU execution goes through the engine's WebGPU path
 DONE-CHECK: gate `spirv`: hv bundle and one T20 contraction emitted,
 simulated == folds; module passes the own structural validator.
 DEPS: T93. BLOCKERS: GPU (forward-port).
-
-Ordering for T84-T95: T90 and T89 ride T48/T45; T84 G1-G3 after T39 +
-T47 (one writer); T85 is a critical-path design item after T68/T69; T86
-after T69; T87 after T70; T88 after T73; T91 after T57 (first non-ARM
-fixpoint); T92 after T55; T93 after T20; T94 after T91; T95 after T93.
-
-**Honest flags for this section**
-1. T84 reverses Honest flag 3 of the SILICON pull: the canonical surface
-   is now glyphs; the total ASCII projection keeps agents and the
-   emitter unchanged. The token-cost number is recorded, not assumed.
-2. T85 is a minimal kernel, not Lean: Type₀, refl + nat_ind, no
-   tactics, no quotients, no termination checker. "Every statement
-   proven" is NOT claimed; "every `theorem` checked by our own kernel"
-   is.
-3. T94/T95 emit VM/GPU code without dependencies, but running it needs
-   a host VM or driver outside the tree — forward-port by definition.
-4. T91's execution half needs an x86_64 Linux host; in-sandbox only the
-   emitted bytes are gated (disassembler diff).
 
 ### Critical path and ordering
 
