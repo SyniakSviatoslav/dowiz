@@ -86,23 +86,53 @@ this list is only what remains and is the ONE ordering (SESSION-HANDOFF points h
    k4 <= 13, k3h <= 10, k1h <= 8, k2h <= 30, k4_ms <= 3.0; constructs c55-c61 (window cap, nesting,
    FLAGS, call mix, x0 eviction, nested ctor, array-of-calls). Expected: K4 14 -> 7, K1H 10 -> 5,
    K3H 24 -> 7, K2H 51 -> ~21 words, bin_words 68229 -> < 55000.
-3. Freeze codegen for one 24 h fuzz window once the register model (item 2) lands, so `fuzz_seeds_on_bin`
-   reaches 10^5 on one md5 (TG-DONE 8, D14 item 12) — scheduled here, before more codegen work
-   resets the per-binary seed counter again.
-4. K8 DONE 2026-09-06 (REPORT-honest.md K8 row: bebop 0.31-0.34 ms/rep vs Rust csel 0.069, 4.5-5.7x;
-   control with a predictable bit 0.15 ms/rep = the branch is ~55 % of K8): T52 (pure `if` -> csel)
-   PROCEEDS as a `csel` on FLAGS/REG tags in the commit right after the register model (item 2; pure arms = no calls, no statements), T53/T54 stay DELETED (HISTORY.md).
-5. B4, per-fn computed frame size (D14 item 4): `80 + 8*while_marks + 8*spill_slots` (sized from vc:
-   today's x15 region is 64 slots while sym_bind admits 128 symbols -- IR-RUNG-BLUEPRINT §0; the register model publishes vc/alloc/cs_hi/tsp per fn, REGISTER-MODEL-BLUEPRINT §5, and traps exit 89 on slot overflow until B4 sizes the region), plus the
+3. T52 `csel` on FLAGS/REG tags for pure `if` arms (no calls, no statements; ~60 lines): K8H
+   4.5x -> ~1.0-1.2x Rust (K8 control: the mispredict is ~55 % of K8). Gate: honest.sh K8H row.
+4. LIN tag -- folding of linear recurrences `s = a*s + b(i)` over k = 2/4 iterations on tags
+   (docs/RESEARCH-DEPS-2026-09-06.md §1b(4); exact in wraparound i64, LLVM -O3 does not do it in
+   any honest twin, §5.3). Measured-first: twins exist; gates `k1h_ms <= 0.5 x Rust`,
+   `k4_ms <= 0.6 x Rust`, bpref parity on std_tests (LCG/hash loops). ~300 lines. The only proven
+   path to beat Rust on K1H-K4 (1.8-3x).
+5. Freeze codegen for one 24 h fuzz window once items 2-4 land, so `fuzz_seeds_on_bin` reaches
+   10^5 on one md5 (TG-DONE 8, D14 item 12) -- before more codegen work resets the per-binary
+   seed counter again.
+6. "specialise-then-run" twin pair (RESEARCH-DEPS §6d-1, measured-first, code only after twin +
+   gate): bebop generates and compiles a scan for one concrete schema (~50 ms) vs a Rust generic
+   scan with a runtime schema; gate = ms to result INCLUDING compilation, second row without it.
+   Expected 5-30x on latency-to-result, 1.5-3x on the scan itself.
+7. Hoisting of 64-bit loop-invariant constants out of `while` bodies (K8H -8 words/iter) -- only if
+   K8H is still > 1.2x Rust after items 2-3.
+8. NEON `scan(s, pos, class)` builtin for the parser loops (skip_ws/read_ident/skip_string) --
+   measured-first: replace one skip_ws by hand and measure K5 differentially; threshold 10 %.
+9. B4, per-fn computed frame size (D14 item 4): `80 + 8*while_marks + 8*spill_slots` from the
+   facts the register model publishes (vc/alloc/cs_hi/tsp, REGISTER-MODEL-BLUEPRINT §5), plus the
    heap only when the body needs it; a mis-estimate is exit 81, TRAP-82 stays the fuzz gate at 0.
-6. Store, first move: B8 — profile the 45-90 s CSR build (sgraph phase b) before any store code
+10. Per-fn memo (Salsa-like, operator 2026-09-06: needed, not deferred): words of each fn memoised
+    by the hash of its text + facts; `bl` offsets re-linked from the layout table, so a one-fn edit
+    recompiles one fn. Gate: one-fn-edit self-compile <= 0.3 s (today 1.5 s cold / 0.07 s
+    whole-output .becache hit), fixpoint md5 unchanged. Zero dependencies (in bebop.bp).
+11. bebop dogfooding of the harness (RESEARCH-DEPS §7, operator 2026-09-06): (a) codeless first --
+    one instrumented chain (`strace -f -e trace=execve -c` or `bash -x` count) + perf.py rows
+    `chain_spawns`/`chain_spawn_ms`; decision gate 20 % of battery wall (spawn = proot ptrace
+    4-9 ms, not bash); (b) if above the gate: a bebop-native std-runner as ONE battery lane
+    (builtins execve/wait4/pipe2/dup3/kill + in-process `run(bin)`, ~650 lines), verified
+    byte-for-byte against std_golden.sh for three chains with the old lane as the oracle; (c) full
+    chain.bp only after (b) and a golden-runner decision (a frozen runner bin so the compiler never
+    gates itself with its own broken runner). just/Nushell/osh rejected: dependencies that remove
+    no spawn. Zero external dependencies stays the rule for the compiler AND for new tooling.
+12. Flat per-fn index IR (RESEARCH-DEPS §3: rows {op,a,b,aux}, blocks as ranges, CSR shape; passes =
+    the QBE list + tre) -- only for the self-compile, after measuring SROA/inline by hand in one
+    hot loop; threshold 15 %; ~600-900 lines. K2H -> ~1.0x via tail-recursion -> loop.
+13. Tensor/graph register-model upgrade -- research in flight (session 18); enters here only with
+    a measured-first gate from that report.
+14. Store, first move: B8 — profile the 45-90 s CSR build (sgraph phase b) before any store code
    change (D14 item 6); the real workload W = the dowiz-core order log (T66 `ordfsm.bp`/
    `money.bp`, byte-exact Rust oracles — D14 item 8); a, b, c stay frozen (D12-F: 4x / 10x /
    2.5x) and the sgraph2.sh full run + honest.sh R=11 rerun stamp validity via E7 in the
    background.
-7. T48 rest (checked types into bebop.bp) rides the register model's per-symbol table (S once
+15. T48 rest (checked types into bebop.bp) rides the register model's per-symbol table (S once
    item 2 lands, not before); T61 (pool/futex builtins exist: the task is the library + a gate).
-8. Design-bound, operator decision first (AskUserQuestion before code): T68-T70, T85 -> T86
+16. Design-bound, operator decision first (AskUserQuestion before code): T68-T70, T85 -> T86
    follow-ups, T73, T76, T49/T50, T56, T59.
 9. Last, each a project of its own: T91 x86_64 backend, T63/T64/T83 bench-policy rows as they
    come up; T92-T95 backends, T84 glyphs, T62 network, T67 mesh, T87 f64, T88 supervisor, T89

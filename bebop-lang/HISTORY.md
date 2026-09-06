@@ -2492,6 +2492,14 @@ D14. (2026-09-06, session 16, operator: "усе за рекомендаціям�
 
 ## Progress log (closed statuses, evidence)
 
+- **Roadmap after the register model fixed (2026-09-06, session 18)** -- operator accepted the
+  RESEARCH-DEPS-2026-09-06 ranking with two amendments: the Salsa-like per-fn memo is needed (not
+  deferred) and bebop dogfooding of the harness enters as a measured-first item; zero external
+  dependencies stays the rule. ROADMAP critical path items 3-13: T52 csel, LIN tag (recurrence
+  folding, the only proven way past Rust on K1H-K4), 24 h fuzz freeze, specialise-then-run twin,
+  const hoisting (conditional), NEON scan builtin (measured-first), B4, per-fn memo, dogfooding
+  (spawn count first, then a bebop-native std-runner lane), flat per-fn IR (threshold 15 %), the
+  tensor/graph register-model research slot.
 - **Register-model blueprint written (2026-09-06, session 18)** -- operator decisions: B5 lands
   first; values that outlive the register window go to callee-saved temps, then to x15 frame slots
   sized by the planning pass, never to `[sp]`; the new emitter lands as ONE commit (big bang) instead
