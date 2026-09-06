@@ -216,7 +216,7 @@ new primitives; the primitives' bodies are today's code verbatim.
 
 ```sh
 PROC_CAP=30 tools/chain.sh bebop.bp ${BEBOP_TMP:-/tmp/opencode}/r1
-md5sum bebop.bin ${BEBOP_TMP:-/tmp/opencode}/r1/gen2.bin   # the two md5s must be equal
+md5sum ${BEBOP_TMP:-/tmp/opencode}/r1/gen2.bin ${BEBOP_TMP:-/tmp/opencode}/r1/gen3.bin   # equal = byte-identical codegen (main-session correction: bebop.bp itself changes at R1, so gen2 != HEAD's bebop.bin; the identity claim is gen2 == gen3 == gen4 plus 0 WORD_MISMATCH on the frozen constructs)
 ```
 
 `chain.sh` without `--codegen` already fails with `gen3 == gen4 ... but gen2 differs -- codegen
