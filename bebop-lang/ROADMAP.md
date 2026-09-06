@@ -123,8 +123,17 @@ this list is only what remains and is the ONE ordering (SESSION-HANDOFF points h
 12. Flat per-fn index IR (RESEARCH-DEPS §3: rows {op,a,b,aux}, blocks as ranges, CSR shape; passes =
     the QBE list + tre) -- only for the self-compile, after measuring SROA/inline by hand in one
     hot loop; threshold 15 %; ~600-900 lines. K2H -> ~1.0x via tail-recursion -> loop.
-13. Tensor/graph register-model upgrade -- research in flight (session 18); enters here only with
-    a measured-first gate from that report.
+13. Tensor/graph register model -- decided by docs/RESEARCH-TENSOR-2026-09-06.md (session 18):
+    (A) graph register allocation (Hack/Goos SSA colouring + coalescing, ~450 lines replacing the
+    window/park/retarget) enters only as the SECOND rung of the flat IR (item 12); gate K5 -3 %
+    over the IR, bin_words -2 %, pressure > 8 constructs. (B) NEON as a second register dimension:
+    builtin-level only -- after `scan` (item 8) add `cmp_mask`/`sum64` for the K6 scan (gate
+    ns/row <= 4 with a Rust scan twin in the same honest report) and `fill` for the CSR build;
+    auto-vectorisation and a (file, lane, width) tag payload rejected (i64 recurrences have no .2d
+    multiply, no gathers without SVE, the corpus has no independent loops). (C) tensor/loop-nest IR
+    rejected in favour of specialise-then-run template kernels (item 6). OISC/subleq, dataflow,
+    graph reduction, CGRA and single-level store: none is a runtime target on the A78 (3-100x or
+    already realised in software); their compile-time readings are items 4, 6, 12.
 14. Store, first move: B8 — profile the 45-90 s CSR build (sgraph phase b) before any store code
    change (D14 item 6); the real workload W = the dowiz-core order log (T66 `ordfsm.bp`/
    `money.bp`, byte-exact Rust oracles — D14 item 8); a, b, c stay frozen (D12-F: 4x / 10x /
