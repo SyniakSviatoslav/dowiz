@@ -1,0 +1,162 @@
+// join_twin.bp — B2 decisive twin (i): 2-way join as SpGEMM (docs/blueprints/B2-decisive-twins.md
+// §3(i), RESEARCH-GRAPHBLAS-2026-09-06.md §1.2/§4). R(k,a), S(k,b), n rows each, keys in [0,n).
+// Hand-written, no library code (gb.bp/generators/DSL are out of scope per the blueprint).
+//
+// Generator (must match bench/oracles/join_twin.py bit-for-bit): one continuous LCG stream
+// (x' = x*6364136223846793005 + 1442695040888963407 mod 2^64, the PCG-style constant used
+// throughout this repo), R's n rows drawn first, then S's n rows. Every row draws exactly 3
+// LCG steps regardless of distribution (key-uniform, key-zipf-coin, payload) so switching the
+// distribution flag never changes the stream length — only which drawn value is kept as the key.
+// uniform: k = (x>>20) % n. zipf: heavy = max(1, n/100) keys (the top 1%) get 30% of the rows
+// (coin = (x>>40) % 1000 < 300), the other n-heavy keys split the rest — this reproduces the
+// blueprint's "1% of keys carry 30% of the rows" property exactly by construction (no floats:
+// bebop has none, so this replaces a literal Zipf(1.1) rank-frequency curve; see B2-PREP.md).
+// Payload a,b in [0, 65536) — keeps a*b < 2^32 and the summed checksum well under 2^63 for the
+// pair counts this split produces (~9.5n pairs at scale), so no engine needs wraparound/overflow
+// semantics to agree (sidesteps sqlite's silent int->float promotion on integer overflow).
+//
+// csr_build here is a LOCAL PLAIN-ARRAY counting sort (rp/ci over zeros() arrays), not the
+// store-object csr_build in selfhost/std/sgraph2.bp:24 — that one runs inside a store
+// transaction (st_alloc/st_begin/st_seal/st_commit) and persists rp/ci as store objects, which
+// is plumbing this twin does not need (it never opens a store file) and would just add file I/O
+// to what's being measured (the SpGEMM probe, not persistence). Same counting-sort algorithm.
+//
+// checksum = sum over matching pairs of ((a*b) mod 2^61) (blueprint §3); combined
+// fold = count*1000000007 + checksum so a single i64 return covers both components (bebop
+// main returns exactly one i64 — python/sqlite/rust twins print count and checksum separately
+// AND the same combined fold for a one-number comparison).
+//
+// argv (seed's own argv[0]/[1] are "seed"/the binary path; user args start at argv[2]):
+//   argv[2] = n (rows per relation)      argv[3] = 'u' | 'z' (uniform / zipf distribution)
+//   argv[4] = mode: c=count s=checksum f=combined fold (default) b=build ms p=probe ms t=total ms
+// mode b/p/t are ms via clock_ms() (1 ms coarse, per K1h) — present now so the LATER run on the
+// register-model binary needs no code change, but no timing number from this file is claimed yet.
+
+fn lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
+
+fn parse(s: str) -> i64 {
+  let n = str_len(s);
+  let i = 0;
+  let v = 0;
+  while i < n {
+    let v = v * 10 + (char(s, i) - 48);
+    let i = i + 1;
+    0
+  };
+  v
+}
+
+// gen(seed, n, zipf, rk, ra, sk, sb): fills R (rk,ra) then S (sk,sb), n cells each.
+fn gen(seed: i64, n: i64, zipf: i64, rk: [i64], ra: [i64], sk: [i64], sb: [i64]) -> i64 {
+  let heavy = if n / 100 < 1 then 1 else n / 100;
+  let light = n - heavy;
+  let x = seed;
+  let i = 0;
+  while i < n {
+    let x = lcg(x);
+    let k0 = (x >> 20) % n;
+    let coin = (x >> 40) % 1000;
+    let x = lcg(x);
+    let kz = if coin < 300 then (x >> 20) % heavy else heavy + (x >> 20) % light;
+    let k = if zipf == 1 then kz else k0;
+    let x = lcg(x);
+    let _ = rk[i] = k;
+    let _ = ra[i] = (x >> 20) % 65536;
+    let i = i + 1;
+    0
+  };
+  let i = 0;
+  while i < n {
+    let x = lcg(x);
+    let k0 = (x >> 20) % n;
+    let coin = (x >> 40) % 1000;
+    let x = lcg(x);
+    let kz = if coin < 300 then (x >> 20) % heavy else heavy + (x >> 20) % light;
+    let k = if zipf == 1 then kz else k0;
+    let x = lcg(x);
+    let _ = sk[i] = k;
+    let _ = sb[i] = (x >> 20) % 65536;
+    let i = i + 1;
+    0
+  };
+  x
+}
+
+// build_csr(sk, n, nk, rp, ci_idx, cur): counting sort of S by key into rp[0..nk] / ci_idx[0..n)
+// (ci_idx holds row ids of S, ascending within a bucket in input order — no library csr_build).
+fn build_csr(sk: [i64], n: i64, nk: i64, rp: [i64], ci_idx: [i64], cur: [i64]) -> i64 {
+  let i = 0;
+  while i < nk + 1 { let _ = rp[i] = 0; let i = i + 1; 0 };
+  let i = 0;
+  while i < n { let k = sk[i]; let _ = rp[k + 1] = rp[k + 1] + 1; let i = i + 1; 0 };
+  let i = 0;
+  while i < nk { let _ = rp[i + 1] = rp[i + 1] + rp[i]; let i = i + 1; 0 };
+  let i = 0;
+  while i < nk { let _ = cur[i] = rp[i]; let i = i + 1; 0 };
+  let i = 0;
+  while i < n {
+    let k = sk[i];
+    let pos = cur[k];
+    let _ = ci_idx[pos] = i;
+    let _ = cur[k] = pos + 1;
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+// probe: Gustavson row of R^T . S restricted to count/checksum (§1.2 of the GraphBLAS doc).
+// cnt/sum are cells (not rebinds): they cross the outer(r)/inner(j) loop nest, and AGENTS.md's
+// LAW says cross-loop state must live in [0] cells — the two engines disagree on rebind
+// visibility across nested loops (csr.bp's wcnt[0] is the same pattern).
+fn probe(rk: [i64], ra: [i64], n: i64, rp: [i64], ci_idx: [i64], sb: [i64], cnt: [i64], sum: [i64]) -> i64 {
+  let i = 0;
+  while i < n {
+    let k = rk[i];
+    let a = ra[i];
+    let lo = rp[k];
+    let hi = rp[k + 1];
+    let j = lo;
+    while j < hi {
+      let s = ci_idx[j];
+      let p = (a * sb[s]) % 2305843009213693952;
+      let _ = cnt[0] = cnt[0] + 1;
+      let _ = sum[0] = sum[0] + p;
+      let j = j + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  let n = parse(argv[2]);
+  let zipf = if char(argv[3], 0) == 122 then 1 else 0;
+  let mode = char(argv[4], 0);
+  let seed = if zipf == 1 then 8823 else 4711;
+  let rk = zeros(n);
+  let ra = zeros(n);
+  let sk = zeros(n);
+  let sb = zeros(n);
+  let t0 = clock_ms();
+  let _ = gen(seed, n, zipf, rk, ra, sk, sb);
+  let t1 = clock_ms();
+  let rp = zeros(n + 1);
+  let ci_idx = zeros(n);
+  let cur = zeros(n);
+  let _ = build_csr(sk, n, n, rp, ci_idx, cur);
+  let t2 = clock_ms();
+  let cnt = zeros(1);
+  let sum = zeros(1);
+  let _ = probe(rk, ra, n, rp, ci_idx, sb, cnt, sum);
+  let t3 = clock_ms();
+  let fold = cnt[0] * 1000000007 + sum[0];
+  if mode == 99 then cnt[0]
+  else if mode == 115 then sum[0]
+  else if mode == 98 then t2 - t1
+  else if mode == 112 then t3 - t2
+  else if mode == 116 then t3 - t1
+  else fold
+}

@@ -1,0 +1,169 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+// csr_build_profile.bp — B2 decisive twin (iii): differential clock_ms timing of the sgraph2
+// phase-b CSR build (docs/blueprints/B2-decisive-twins.md §3(iii), HISTORY STORE PULL "to be
+// profiled"). LOCAL COPY of selfhost/std/sgraph2.bp:70 phase_build / :24 csr_build — NOT an
+// edit of that file (bench/ rule): this one prints a clock_ms delta after each sub-phase
+// (pair generation, counting pass, prefix sum, fill pass, st_seal x2, st_commit) instead of
+// returning one aggregate ms, and it opens its OWN store file (b2_csrprofile.store) so it
+// never touches sgraph.store/sgraph2.store. Same counting-sort csr_build algorithm and the
+// same n=1,000,000 / e=5,000,000 default scale as sgraph2.bp's phase_build (argv[2]/argv[3]
+// override n/e for a smaller dry run). Default LCG seed/shift choices match sgraph2.bp's
+// lcg()/phase_build so the pair stream is the same shape (undirected: each edge inserted both
+// ways), though this profile doesn't need to match sgraph2's fold — it only measures phases.
+//
+// NOT RUN as part of B2 prep: deliverable 5 is "the CSR-build profile method ... as a script,
+// not run now" (a 5M-pair build is the 45-90s row from HISTORY; this file is compile-checked
+// only — see bench/vs_rust/csr_profile_b2.sh and bench/vs_rust/B2-PREP.md open items).
+//
+// argv[2] = n (nodes, default 1000000), argv[3] = e (undirected edges, default 5000000).
+
+fn lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
+
+fn parse(s: str) -> i64 {
+  let n = str_len(s);
+  let i = 0;
+  let v = 0;
+  while i < n {
+    let v = v * 10 + (char(s, i) - 48);
+    let i = i + 1;
+    0
+  };
+  v
+}
+
+// itoa/say: bebop main returns one i64 (see join_twin.bp), but a differential PROFILE needs
+// several numbers in order, so this file prints as it goes (sys_write, per tb.bp:188
+// print_num's convention) instead of returning a single fold.
+fn itoa(dst: [i64], n: i64) -> i64 {
+  let neg = if n < 0 then 1 else 0;
+  let m = if n < 0 then 0 - n else n;
+  let p = 23;
+  let m2 = m;
+  let go = 1;
+  while go == 1 {
+    let d = m2 - (m2 / 10) * 10;
+    let _ = dst[p] = 48 + d;
+    let p = p - 1;
+    let m2 = m2 / 10;
+    let go = if m2 > 0 then 1 else 0;
+    0
+  };
+  let start = p + 1;
+  let len = 24 - start;
+  let i = 0;
+  while i < len { let _ = dst[neg + i] = dst[start + i]; let i = i + 1; 0 };
+  let _ = if neg == 1 then (let _ = dst[0] = 45 in 0) else 0;
+  len + neg
+}
+
+fn say(label: str, ms: i64, buf: [i64]) -> i64 {
+  let n = st_str(buf, label);
+  let _ = sys_write(1, buf, n);
+  let l = itoa(buf, ms);
+  let _ = sys_write(1, buf, l);
+  let _ = buf[0] = 10;
+  sys_write(1, buf, 1)
+}
+
+// csr_build_profiled: identical algorithm to sgraph2.bp:24 csr_build (counting sort), with a
+// say() after each of its three passes plus the two st_seal calls.
+fn csr_build_profiled(base: [i64], tmp: [i64], src: [i64], dst: [i64], m: i64, n: i64, rp: ref RP, ci: ref CI, cur: [i64], buf: [i64]) -> i64 {
+  let _ = st_put(base, rp, 0, n + 1);
+  let t0 = clock_ms();
+  let i = 0;
+  while i < m {
+    let a = src[i];
+    let _ = st_put(base, rp, 2 + a, st_get(base, rp, 2 + a) + 1);
+    let i = i + 1;
+    0
+  };
+  let t1 = clock_ms();
+  let _ = say("counting pass ms ", t1 - t0, buf);
+  let v = 0;
+  while v < n {
+    let _ = st_put(base, rp, 2 + v, st_get(base, rp, 2 + v) + st_get(base, rp, 1 + v));
+    let _ = cur[v] = st_get(base, rp, 1 + v);
+    let v = v + 1;
+    0
+  };
+  let t2 = clock_ms();
+  let _ = say("prefix sum ms ", t2 - t1, buf);
+  let _ = st_put(base, ci, 0, m);
+  let j = 0;
+  while j < m {
+    let a = src[j];
+    let s = cur[a];
+    let _ = st_put(base, ci, 1 + s, dst[j]);
+    let _ = cur[a] = s + 1;
+    let j = j + 1;
+    0
+  };
+  let t3 = clock_ms();
+  let _ = say("fill pass ms ", t3 - t2, buf);
+  let _ = st_seal(base, rp, tmp);
+  let _ = st_seal(base, ci, tmp);
+  let t4 = clock_ms();
+  let _ = say("st_seal (rp+ci) ms ", t4 - t3, buf);
+  0
+}
+
+fn root_write(base: [i64], tx: [i64], tmp: [i64], dg: i64, rp: ref RP, ci: ref CI) -> ref PROF {
+  let g = st_alloc(base, tx, 2, dg);
+  let _ = st_link(base, g, 0, rp);
+  let _ = st_link(base, g, 1, ci);
+  let _ = st_seal(base, g, tmp);
+  g
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  let n = if argc >= 3 then parse(argv[2]) else 1000000;
+  let e = if argc >= 4 then parse(argv[3]) else 5000000;
+  let m = 2 * e;
+  let path = zeros(64);
+  let pl = st_str(path, "b2_csrprofile.store");
+  let tmp = zeros(256);
+  let size = 536870912;
+  let buf = zeros(64);
+  let dg_rp = st_digest("RP{arr i64}");
+  let dg_ci = st_digest("CI{arr i64}");
+  let dg_pf = st_digest("PROF{ref RP, ref CI}");
+
+  let base = st_open(path, pl, size, tmp);
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+
+  let t0 = clock_ms();
+  let src = zeros(m);
+  let dst = zeros(m);
+  let x = 4242;
+  let i = 0;
+  while i < e {
+    let x = lcg(x);
+    let a = (x >> 20) % n;
+    let x = lcg(x);
+    let b = (x >> 20) % n;
+    let _ = src[2 * i] = a;
+    let _ = dst[2 * i] = b;
+    let _ = src[2 * i + 1] = b;
+    let _ = dst[2 * i + 1] = a;
+    let i = i + 1;
+    0
+  };
+  let t1 = clock_ms();
+  let _ = say("pair generation ms ", t1 - t0, buf);
+
+  let cur = zeros(n);
+  let rp = st_alloc(base, tx, n + 2, dg_rp);
+  let ci = st_alloc(base, tx, m + 1, dg_ci);
+  let _ = csr_build_profiled(base, tmp, src, dst, m, n, rp, ci, cur, buf);
+
+  let t5 = clock_ms();
+  let g = root_write(base, tx, tmp, dg_pf, rp, ci);
+  let _ = st_commit(base, tx, g, tmp);
+  let t6 = clock_ms();
+  let _ = say("st_commit ms ", t6 - t5, buf);
+  let _ = say("total build ms ", t6 - t0, buf);
+  let _ = sys_munmap(st_addr(base), size);
+  t6 - t0
+}
