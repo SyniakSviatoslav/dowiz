@@ -2492,6 +2492,12 @@ D14. (2026-09-06, session 16, operator: "усе за рекомендаціям�
 
 ## Progress log (closed statuses, evidence)
 
+- **B1 closed (2026-09-06, session 17, 308f2db)** — prologue/epilogue + call-site x15/x14
+  right-sizing from planning-pass facts (fntab[1500+i] = vc*2+has_alloc keyed by source position;
+  emit_prologue_sized/emit_epilogue_sized, emit_bl_call drops stp/ldp x15,x14 when the caller never
+  needs them; replaces OPT-A NOP patching and the OPT-G1 register scan). Gate: chain --codegen
+  fixpoint 1a3b2cc2, battery GREEN, 44 constructs re-frozen, perf 0 alerts; bin_words 74804 -> 74222,
+  k2h_loopwords 65 -> 51; honest.sh R=11 K1H 1.8x, K2H 2.6x (was 3.8x), K3H 2.4x (was 4.0x), K4 1.4x.
 - **Ф0.3 bootstrap closed (2026-09-01)** — bebop.bin crash on pristine+3fn
   fixed: emit_sys_read/write push bytes through a fixed 8192-byte scratch
   (x28−8192); any len > 8192 = silent write past the arena end (read as a
