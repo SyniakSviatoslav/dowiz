@@ -2492,6 +2492,14 @@ D14. (2026-09-06, session 16, operator: "усе за рекомендаціям�
 
 ## Progress log (closed statuses, evidence)
 
+- **Register-model blueprint written (2026-09-06, session 18)** -- operator decisions: B5 lands
+  first; values that outlive the register window go to callee-saved temps, then to x15 frame slots
+  sized by the planning pass, never to `[sp]`; the new emitter lands as ONE commit (big bang) instead
+  of the R1-R5 rungs. docs/REGISTER-MODEL-BLUEPRINT.md (main session, after reading the whole
+  emitter) supersedes docs/IR-RUNG-BLUEPRINT.md: tags CONST/SYM/REG/CS/SLOT/MULC/FLAGS over x0..x7,
+  one stream edit left (retarget the last word's rd), every peephole deleted, exit 89 = register
+  pressure, facts vc/alloc/cs_hi/tsp, invariant push_words == 0. Baseline at the B5 fixpoint:
+  68229 words of which ~24 k are push/pop traffic (6790 pushes). ROADMAP critical path item 2 rewritten.
 - **K8 closed (2026-09-06, session 17, 46a975c)** — branchy honest kernel (B9, D14 item 5): bebop
   0.31-0.34 ms/rep vs Rust csel 0.069 (4.5-5.7x, k8h_loopwords 40, b.cond x2); main-session control
   with a predictable bit 0.15 ms/rep -> the mispredict is ~55 % of K8, the rest is the 40-word loop.

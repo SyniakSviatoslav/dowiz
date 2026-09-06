@@ -74,28 +74,34 @@ this list is only what remains and is the ONE ordering (SESSION-HANDOFF points h
    single-variable codegen commits, each through `tools/chain.sh --codegen`, constructs
    re-frozen, an honest.sh row (D14 item 1; expected K2H 3.8x -> ~2.1x with no change to the
    expression model).
-2. The operand-tag-stack IR rung (D12-B amended by D14 item 2, docs/DECISIONS-RESEARCH-2026-09-06.md
-   §3.3, Liftoff `CacheState` shape): a compile-time value stack of {reg, const, spill} tags,
-   NOT a per-fn op-list — deletes pop2 / left_single_* / writes_producer / count_masked and the
-   fusion retraction guards. Window: x1-x7, with one synthetic construct that forces the spill
-   path so it is not dead code (D14 item 3). Gate: K4 <= 13 loop words, fixpoint, constructs
-   re-frozen (D12-B unchanged).
-3. Freeze codegen for one 24 h fuzz window once the IR rung lands, so `fuzz_seeds_on_bin`
+2. The register model, ONE commit (operator 2026-09-06, session 18, supersedes D12-B/D14 item 2's
+   R1-R5 rungs): docs/REGISTER-MODEL-BLUEPRINT.md. The stack machine is deleted -- no
+   `sub sp/str x0,[sp]` / `ldr/add sp` anywhere in emitted code (new invariant push_words == 0 in
+   invariants.sh + a PERF row); expression values are tags (CONST / SYM / REG / CS / SLOT / MULC /
+   FLAGS) over a window x0..x7, values that outlive the window go to callee-saved temps x(19+vc)..x26,
+   then to x15 frame slots sized by the planning pass (facts vc/alloc/cs_hi/tsp published by the
+   B1 mechanism); one stream edit remains (retarget of the last word's rd), every peephole and
+   word-pattern decoder is deleted (pop2 / left_single_* / madd_try / shl_try / mulc_try /
+   addshift_try / cmp_try / fold_try / cond_branch_word). Gates: chain --codegen GREEN, push_words 0,
+   k4 <= 13, k3h <= 10, k1h <= 8, k2h <= 30, k4_ms <= 3.0; constructs c55-c61 (window cap, nesting,
+   FLAGS, call mix, x0 eviction, nested ctor, array-of-calls). Expected: K4 14 -> 7, K1H 10 -> 5,
+   K3H 24 -> 7, K2H 51 -> ~21 words, bin_words 68229 -> < 55000.
+3. Freeze codegen for one 24 h fuzz window once the register model (item 2) lands, so `fuzz_seeds_on_bin`
    reaches 10^5 on one md5 (TG-DONE 8, D14 item 12) — scheduled here, before more codegen work
    resets the per-binary seed counter again.
 4. K8 DONE 2026-09-06 (REPORT-honest.md K8 row: bebop 0.31-0.34 ms/rep vs Rust csel 0.069, 4.5-5.7x;
    control with a predictable bit 0.15 ms/rep = the branch is ~55 % of K8): T52 (pure `if` -> csel)
-   PROCEEDS as a tag-level csel inside the IR rung (R3+), T53/T54 stay DELETED (HISTORY.md).
+   PROCEEDS as a `csel` on FLAGS/REG tags in the commit right after the register model (item 2; pure arms = no calls, no statements), T53/T54 stay DELETED (HISTORY.md).
 5. B4, per-fn computed frame size (D14 item 4): `80 + 8*while_marks + 8*spill_slots` (sized from vc:
-   today's x15 region is 64 slots while sym_bind admits 128 symbols -- IR-RUNG-BLUEPRINT §0), plus the
+   today's x15 region is 64 slots while sym_bind admits 128 symbols -- IR-RUNG-BLUEPRINT §0; the register model publishes vc/alloc/cs_hi/tsp per fn, REGISTER-MODEL-BLUEPRINT §5, and traps exit 89 on slot overflow until B4 sizes the region), plus the
    heap only when the body needs it; a mis-estimate is exit 81, TRAP-82 stays the fuzz gate at 0.
 6. Store, first move: B8 — profile the 45-90 s CSR build (sgraph phase b) before any store code
    change (D14 item 6); the real workload W = the dowiz-core order log (T66 `ordfsm.bp`/
    `money.bp`, byte-exact Rust oracles — D14 item 8); a, b, c stay frozen (D12-F: 4x / 10x /
    2.5x) and the sgraph2.sh full run + honest.sh R=11 rerun stamp validity via E7 in the
    background.
-7. T48 rest (checked types into bebop.bp) rides the IR rung's per-symbol table (S once the
-   rung lands, not before); T61 (pool/futex builtins exist: the task is the library + a gate).
+7. T48 rest (checked types into bebop.bp) rides the register model's per-symbol table (S once
+   item 2 lands, not before); T61 (pool/futex builtins exist: the task is the library + a gate).
 8. Design-bound, operator decision first (AskUserQuestion before code): T68-T70, T85 -> T86
    follow-ups, T73, T76, T49/T50, T56, T59.
 9. Last, each a project of its own: T91 x86_64 backend, T63/T64/T83 bench-policy rows as they
