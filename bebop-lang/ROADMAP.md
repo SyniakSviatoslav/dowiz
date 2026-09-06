@@ -69,8 +69,8 @@ T104b -> P3 cmp_try -> D13's twelve retro proposals, all DONE 2026-09-06) are in
 this list is only what remains and is the ONE ordering (SESSION-HANDOFF points here, HISTORY's
 "Ordering for T84-T95" is superseded).
 
-1. B1 DONE 2026-09-06 (308f2db: fixpoint 1a3b2cc2, K2H 3.8x -> 2.6x, K3H 4.0x -> 2.4x) -> B2 (value-in-x0 at
-   `if`/`while` joins, no push/pop round trip) -> B5 (loop rotation, bottom test): three
+1. B1 DONE 2026-09-06 (308f2db: fixpoint 1a3b2cc2, K2H 3.8x -> 2.6x, K3H 4.0x -> 2.4x) -> B2 DONE 2026-09-06 (fixpoint a903d33b,
+   bin_words 74222 -> 67775, K2H 2.0x MET) -> B5 (loop rotation, bottom test): three
    single-variable codegen commits, each through `tools/chain.sh --codegen`, constructs
    re-frozen, an honest.sh row (D14 item 1; expected K2H 3.8x -> ~2.1x with no change to the
    expression model).

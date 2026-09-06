@@ -2492,6 +2492,14 @@ D14. (2026-09-06, session 16, operator: "усе за рекомендаціям�
 
 ## Progress log (closed statuses, evidence)
 
+- **B2 closed (2026-09-06, session 17)** — if-expression join convention: each arm materialises
+  its value into x0 (pop-0 retraction of the arm's own push, real load when a barrier blocks it),
+  end_pos is the one barrier, one push after the join replaces the two arm pushes. Gate: chain
+  --codegen fixpoint a903d33b, battery GREEN (99/99 std, 52/52 constructs, 9 re-frozen, pool_parity
+  5/5 after the census re-freeze), perf 0 alerts; bin_words 74222 -> 67775 (-8.7 %), c05_if 25 -> 17,
+  c24_ifspill 146 -> 140; honest.sh R=11 K2H 2.0x (gate MET, was 2.6x), K1H 1.8x, K4 1.4x, K3H bebop
+  0.70 -> 0.60 ms. Note: perf.py loop_words() reports the smallest backward-branch loop in the whole
+  kernel binary, so k2h_loopwords is a prelude loop, not fib (E-metric caveat, fix with K8's wiring).
 - **B1 closed (2026-09-06, session 17, 308f2db)** — prologue/epilogue + call-site x15/x14
   right-sizing from planning-pass facts (fntab[1500+i] = vc*2+has_alloc keyed by source position;
   emit_prologue_sized/emit_epilogue_sized, emit_bl_call drops stp/ldp x15,x14 when the caller never

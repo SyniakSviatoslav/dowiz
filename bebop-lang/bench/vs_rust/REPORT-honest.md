@@ -40,3 +40,16 @@ Status: measured after B1 landed (R=11, pinned core 4, box idle, fuzzd paused). 
 | K4 | 4.70 / 4.77 | 3.284 / 3.383 | 1.4x | MET | 1.4x | 16.2 |
 | K5 self-compile of bebop.bp (cold, pinned, median of 3) | 1.83 s | (no twin: rustc is not a fair twin of a 200 KB one-pass compiler) | |
 | K6 nnidx scan 1M (bench/tq_sqlite/RESULT.md, Q=20) | 18.4 ms | sqlite scan 183 ms python / ~158 ms native (T100) | store faster |
+
+## B2 row (2026-09-06, session 17): if-expression join convention, bebop.bin a903d33b
+
+Status: measured after B2 landed (R=11, pinned core 4, box idle). K2H 2.6x -> 2.0x (gate MET), bebop K3H 0.70 -> 0.60 ms while the Rust K3H column moved 0.293 -> 0.189 ms between the two runs (DVFS; its ratio 2.4x -> 3.2x is column noise, the bebop side improved). bin_words 74222 -> 67775 (-8.7 %: every if-expression loses the two arm pushes).
+
+| kernel | bebop med / p95 ms per rep | Rust honest med / p95 ms per rep | bebop / Rust | gate <= 2.0x (TG-DONE 1) | 1.0x (D1(a) long target) | bebop RSS MB |
+|---|---|---|---|---|---|---|
+| K1H | 2.08 / 2.20 | 1.184 / 1.246 | 1.8x | MET | 1.8x | 13.6 |
+| K2H | 0.88 / 0.94 | 0.449 / 0.501 | 2.0x | MET | 2.0x | 13.6 |
+| K3H | 0.60 / 0.79 | 0.189 / 0.288 | 3.2x | UNMET | 3.2x | 13.6 |
+| K4 | 4.57 / 4.76 | 3.247 / 3.374 | 1.4x | MET | 1.4x | 13.6 |
+| K5 self-compile of bebop.bp (cold, pinned, median of 3) | 1.56 s | (no twin: rustc is not a fair twin of a 200 KB one-pass compiler) | |
+| K6 nnidx scan 1M (bench/tq_sqlite/RESULT.md, Q=20) | 18.4 ms | sqlite scan 183 ms python / ~158 ms native (T100) | store faster |
