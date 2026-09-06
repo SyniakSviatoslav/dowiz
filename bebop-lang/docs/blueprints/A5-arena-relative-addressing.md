@@ -4,7 +4,7 @@ Status: 2026-09-06, owner main session (Fable fork), grounded at HEAD b1c0175 wi
 
 ## 0. Goal
 
-Every `[i64]` VALUE in data is an integer index of a cell in ONE reserved address space whose base lives in x17; addresses exist only inside the instruction that reads or writes (`ldr xd,[x17,xt,lsl #3]`). Gates: chain GREEN with constructs c65_index_roundtrip / c66_ptrfree; K5 <= +8 % (docs/PERF.md selfcompile_wall vs the A3 row); K6 nn.bp scan ns/row <= +20 % (bench/tq_sqlite/run.sh); std_golden 99/99 (the store's G1-G8 gates run there); RSS unchanged.
+Every `[i64]` VALUE in data is an integer index of a cell in ONE reserved address space whose base lives in x17; addresses exist only inside the instruction that reads or writes (`ldr xd,[x17,xt,lsl #3]`). Gates: chain GREEN with constructs c69_index_roundtrip / c70_ptrfree; K5 <= +8 % (docs/PERF.md selfcompile_wall vs the A3 row); K6 nn.bp scan ns/row <= +20 % (bench/tq_sqlite/run.sh); std_golden 99/99 (the store's G1-G8 gates run there); RSS unchanged.
 
 ## 1. Scope
 
@@ -53,8 +53,8 @@ Leave uncommitted for the main session.
 
 | construct | source | EXPECT | exercises |
 |---|---|---|---|
-| c65_index_roundtrip | `zeros(64)`, fill i*i, `sys_export` the arena range to a temp file, `sys_mmap` it back (lands at a different index), read back through index+offset and fold; also `let b = a + 3; b[0]` cell stepping | bpref | index arithmetic, export/mmap inside the reserve |
-| c66_ptrfree | a program storing an array value into another array and reading through it (`t[0] = a; t[0][2]`) -- valid under both models; plus the census run as a battery lane: `python3 tools/typecheck.py --ptr-census bebop.bp selfhost bench/vs_rust/std_tests` must print 0 findings | bpref / census | no address escapes into cells |
+| c69_index_roundtrip | `zeros(64)`, fill i*i, `sys_export` the arena range to a temp file, `sys_mmap` it back (lands at a different index), read back through index+offset and fold; also `let b = a + 3; b[0]` cell stepping | bpref | index arithmetic, export/mmap inside the reserve |
+| c70_ptrfree | a program storing an array value into another array and reading through it (`t[0] = a; t[0][2]`) -- valid under both models; plus the census run as a battery lane: `python3 tools/typecheck.py --ptr-census bebop.bp selfhost bench/vs_rust/std_tests` must print 0 findings | bpref / census | no address escapes into cells |
 | c33_loopalloc / c34_loopescape / c40_struct | re-frozen | -- | frame heap inside the arena + T43 reset |
 
 Twins: K6 (bench/tq_sqlite/run.sh, nn.bp/nnidx.bp) before/after; store gates G1-G8 via std_golden (sbench.sh, sgraph.sh rows optional).
