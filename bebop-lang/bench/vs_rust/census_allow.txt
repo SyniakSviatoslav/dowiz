@@ -50,3 +50,5 @@ bebop bcond 1575 T90 step 2: call-argument delimiter checks (emit_bl_call / emit
 bebop bcond 1588 T90 step 2b: `check` verb (cli_check: argc / open guards, main: is_check selector + dispatch if)
 bebop cbz 119 T90 step 2b: cli_check + the check dispatch in main
 bebop bcond 1604 T96 P3: cmp_try (cmp x0,x1 with a movz/mov right operand and a mov left operand -> cmp xR,#imm / cmp xR,xS; the 16 b.cond of its selector ifs)
+bebop bcond 1610 B1 prologue/epilogue/call-site right-sizing (emit_prologue_sized/emit_epilogue_sized conditional pair/x15/x14 emission, fntab_fact_lookup, the planning-pass arithmetic size correction)
+bebop cbz 120 B1 fntab_fact_lookup's is_match loop test

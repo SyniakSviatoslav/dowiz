@@ -163,8 +163,15 @@ def check_bin(path, allow, stub=()):
 
 
 # ---- (iii) fntab zone map -------------------------------------------------
-ZONES = [(0, 1, "fntab"), (3655, 3661, "fold"), (3662, 3699, "jumps"), (3700, 3796, "slots"),
+ZONES = [(0, 1, "fntab"), (1500, 1755, "b1_facts"), (1800, 1802, "b1_scratch"),
+         (3655, 3661, "fold"), (3662, 3699, "jumps"), (3700, 3796, "slots"),
          (3890, 3898, "bank"), (3899, 3999, "literals"), (4000, 4000, "budget")]
+# b1_facts (2026-09-06): fntab[1500+i] = per-fn packed planning facts
+# (vc*2+has_alloc), i = the fn's index in collect_fns order, keyed by lookup
+# on source position (fntab_fact_lookup) so two same-named fn definitions
+# never alias each other's facts. b1_scratch: [1800] call-site counter,
+# [1801] skip-save flag, [1802] this-compile's harvested fact word -- all
+# reset/written once per compile_fn_at call (bebop.bp:B1, 2026-09-06).
 LIT_BASE, LIT_END = 3903, 4000
 
 

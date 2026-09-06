@@ -27,3 +27,16 @@ together (DVFS on the pinned A78), the ratios stay 1.8-1.9x / 3.3-3.4x / 3.4-3.6
 The ratio is the claim; TG-DONE 1 target is <= 2.0x on every row after T101-T104: K1H and K4
 are inside, K2H (calls: frame 16 KiB + spills, P4) and K3H (nested loop, no condition fusion
 on the inner compare, P3) are the two rows the codegen steps must move.
+
+## B1 row (2026-09-06, session 17): prologue/epilogue/call-site right-sizing, bebop.bin 1a3b2cc2
+
+Status: measured after B1 landed (R=11, pinned core 4, box idle, fuzzd paused). Ratio is the claim: K2H 3.8x -> 2.6x, K3H 4.0x -> 2.4x (D14 item 1 predicted ~2.7x for K2H); bin_words 74804 -> 74222 (-0.8 %), k2h_loopwords 65 -> 51. Both columns sit ~20 % above the session-15 run (DVFS), K1H/K4 unchanged in ratio.
+
+| kernel | bebop med / p95 ms per rep | Rust honest med / p95 ms per rep | bebop / Rust | gate <= 2.0x (TG-DONE 1) | 1.0x (D1(a) long target) | bebop RSS MB |
+|---|---|---|---|---|---|---|
+| K1H | 2.01 / 2.20 | 1.147 / 1.232 | 1.8x | MET | 1.8x | 16.2 |
+| K2H | 1.13 / 1.19 | 0.443 / 0.491 | 2.6x | UNMET | 2.6x | 16.2 |
+| K3H | 0.70 / 0.79 | 0.293 / 0.359 | 2.4x | UNMET | 2.4x | 16.2 |
+| K4 | 4.70 / 4.77 | 3.284 / 3.383 | 1.4x | MET | 1.4x | 16.2 |
+| K5 self-compile of bebop.bp (cold, pinned, median of 3) | 1.83 s | (no twin: rustc is not a fair twin of a 200 KB one-pass compiler) | |
+| K6 nnidx scan 1M (bench/tq_sqlite/RESULT.md, Q=20) | 18.4 ms | sqlite scan 183 ms python / ~158 ms native (T100) | store faster |

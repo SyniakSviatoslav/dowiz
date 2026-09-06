@@ -535,12 +535,17 @@ fn emit_bl(insns: [i64], n: [i64], target: i64, has_spills: i64) -> i64 {
   // back. T103 (2026-09-05): one pair instead of the old 48-byte frame with
   // x15 saved twice -- stp x15,x14,[sp,#-16]! ; bl ; ldp x15,x14,[sp],#16
   // (0xA9BF3BEF / 0xA8C13BEF, as+objdump): 9 -> 3 words per call site.
-  let _ = em(insns, n, 2847882223);
+  // B1 (2026-09-06): has_spills is the CALLER's own published fact (does the
+  // caller itself bind a spill or allocate on x14 anywhere in its body) --
+  // not the callee's. The save is a conservative superset: it fires whenever
+  // the caller might need x15/x14 preserved across ANY call, regardless of
+  // what the specific callee does.
+  let _ = if has_spills == 1 then em(insns, n, 2847882223) else 0;
   let offset = target - n[0];
   let is_back = if offset < 0 then 1 else 0;
   let word = 2483027968 + offset + is_back * 67108864;
   let _ = em(insns, n, word);
-  let _ = em(insns, n, 2831236079);
+  let _ = if has_spills == 1 then em(insns, n, 2831236079) else 0;
   n[0]
 }
 
@@ -558,6 +563,41 @@ fn fntab_lookup(fntab: [i64], name: i64) -> i64 {
     0
   };
   start
+}
+
+// B1 (2026-09-06): look up a function's PUBLISHED planning-pass facts (packed
+// as vc*2+has_alloc, vc = final symbol count incl. params, has_alloc = body
+// allocates on x14) from fntab[1500+i]. 0 if absent (harmless default: a
+// caller with no lookup hit behaves as if vc=0/has_alloc=0, i.e. does not
+// need x15/x14 -- only used during the emission pass, where every fn's own
+// source position is guaranteed to have been published by the planning pass
+// first). Indices 1500..1755 are free: the ctor/name/start/fpos zones top
+// out below 1026 (cnt <= 256), and 3655+ is claimed by unrelated per-fn
+// scratch.
+//
+// Keyed by SOURCE POSITION (srcpos, zone 3: fntab[1+2*cnt+i]), not by name:
+// two `fn` DEFINITIONS CAN share a spelling (bench/vs_rust/std_tests/cache.bp
+// has two differently-shaped `cache_lookup`s) and fntab_lookup's own
+// name-keyed "last match wins" is harmless there (every caller ends up
+// resolved to the same one implementation either way). Facts are NOT
+// interchangeable across two same-named-but-different-bodied definitions --
+// a name-keyed lookup silently handed instance A instance B's vc, dropping a
+// callee-saved pair instance A genuinely used (wrong "needs save" -> a
+// clobbered register survives past a `ret`, corrupting the caller). Source
+// position is unique per `fn` keyword, so this cannot alias.
+fn fntab_fact_lookup(fntab: [i64], srcpos: i64) -> i64 {
+  let cnt = fntab[0];
+  let i = 0;
+  let val = 0;
+  while i < cnt {
+    let sp = fntab[1 + cnt + cnt + i];
+    let is_match = if sp == srcpos then 1 else 0;
+    let fv = fntab[1500 + i];
+    let val = if is_match == 1 then fv else val;
+    let i = i + 1;
+    0
+  };
+  val
 }
 
 // Source-position ab over a 3-zone table [cnt, names..., offsets..., srcpos...]:
@@ -701,7 +741,12 @@ fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i6
   let target = if name == selfname then selfstart else tgt0;
   let rep_save = fntab[3890];
   let _ = flush_on_bl(insns, n, fntab, rep_save);
-  let _ = emit_bl(insns, n, target, 1);
+  // B1 (2026-09-06): fntab[1800]/[1801] are the current fn's own call-site
+  // counter and skip-save flag (0 = save, matches the pre-B1 unconditional
+  // behaviour and is the default in any fntab this mechanism never touches;
+  // 1 = the caller's own facts say it never needs x15/x14 preserved).
+  let _ = fntab[1800] = fntab[1800] + 1;
+  let _ = emit_bl(insns, n, target, 1 - fntab[1801]);
   let _ = pop_back(insns, n, fntab, rep_save);
   let _ = push(insns, n, fntab);
   n[0]
@@ -2878,6 +2923,41 @@ fn emit_epilogue(insns: [i64], n: [i64]) -> i64 {
   n[0]
 }
 
+// B1 (2026-09-06): right-sized prologue for the emission pass, using facts
+// (vc = final symbol count incl. params, has_alloc = body allocates on x14)
+// published by the planning pass -- replaces OPT-A's post-hoc NOP patch and
+// always omits pair 4 (x19..28 pair index 4 = x27/x28, the arena registers;
+// T126: never a symbol register, was unconditionally NOPed already, so
+// omitting it here is not a new elision). emit_prologue/emit_epilogue above
+// stay untouched and unconditional -- used by the planning pass (its own
+// facts aren't known yet: chicken-and-egg within one compile) and by the
+// legacy single-fn compile_fn path, both of which must keep today's exact
+// word count.
+fn emit_prologue_sized(insns: [i64], n: [i64], vc: i64, has_alloc: i64) -> i64 {
+  let _ = em(insns, n, 2847898621);
+  let _ = em(insns, n, 2432697341);
+  let _ = em(insns, n, 3510637567);
+  let _ = if vc > 0 then em(insns, n, 2835370995) else 0;
+  let _ = if vc > 2 then em(insns, n, 2835438581) else 0;
+  let _ = if vc > 4 then em(insns, n, 2835506167) else 0;
+  let _ = if vc > 6 then em(insns, n, 2835573753) else 0;
+  let needs15 = if vc > 8 then 1 else has_alloc;
+  let _ = if needs15 == 1 then em(insns, n, 2432959471) else 0;
+  let _ = if has_alloc == 1 then em(insns, n, 2433483758) else 0;
+  n[0]
+}
+
+fn emit_epilogue_sized(insns: [i64], n: [i64], vc: i64) -> i64 {
+  let _ = if vc > 6 then em(insns, n, 2839768057) else 0;
+  let _ = if vc > 4 then em(insns, n, 2839700471) else 0;
+  let _ = if vc > 2 then em(insns, n, 2839632885) else 0;
+  let _ = if vc > 0 then em(insns, n, 2839565299) else 0;
+  let _ = em(insns, n, 2436895743);
+  let _ = em(insns, n, 2831252477);
+  let _ = em(insns, n, 3596551104);
+  n[0]
+}
+
 // ---- T43 (2026-09-04): per-iteration frame-heap reset around `while` bodies.
 // A body that allocates on x14 (array literal / enum ctor: the stream contains
 // `mov x0,x14` = 2853045216) leaked 16 bytes+ per iteration and overflowed the
@@ -3670,7 +3750,14 @@ fn collect_fns(s: str, fnames: [i64], fpos: [i64], cnt: [i64]) -> i64 {
 // Compile one function whose "fn" keyword is at source offset fpos, appending
 // into the shared insns/n buffer. selfstart = its absolute word offset (0 in a
 // single-fn compile); fntab = full name->start layout (for cross-call bl).
-fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], n: [i64], tkb: [i64]) -> i64 {
+// B1 (2026-09-06): is_emission distinguishes the two calls compile_program_offs
+// makes per fn -- 0 for the planning pass (facts not published yet: this is
+// the very call that computes them; the old unconditional prologue/epilogue/
+// call-site form is used, so the throwaway buffer's word count needs an
+// arithmetic size correction at the end instead of a real omission), 1 for
+// the emission pass (fntab[1500+i] already holds every fn's facts, looked up
+// here by name and applied from the start -- no post-hoc patch or scan).
+fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], n: [i64], tkb: [i64], is_emission: i64) -> i64 {
   // Reset per-fn scan-budget so late functions don't exhaust the counter
   // accumulated by earlier ones (every cache-hit increments fntab[4000];
   // without reset, late fns compile ALL calls as unresolved/neutral).
@@ -3718,8 +3805,19 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   let tkbuf = tkb;
   let _ = cx[26] = selfname;
   let _ = cx[27] = selfstart;
+  // B1: own-fn facts. fntab[1800] = call-site counter (this compile only,
+  // read by the end-of-fn arithmetic adjustment on the planning pass);
+  // fntab[1801] = skip-save flag read by emit_bl_call at every bl in this
+  // fn's body (0 = save, the safe default; is_emission==0 forces 0 so the
+  // planning pass reproduces today's unconditional call-site form exactly).
+  let _ = fntab[1800] = 0;
+  let fw0 = fntab_fact_lookup(fntab, fpos) * is_emission;
+  let vc0 = fw0 / 2;
+  let alloc0 = fw0 - (fw0 / 2) * 2;
+  let needs_save0 = if vc0 > 8 then 1 else alloc0;
+  let _ = fntab[1801] = (1 - needs_save0) * is_emission;
   let pbase = n[0];
-  let _ = emit_prologue(insns, n);
+  let _ = if is_emission == 1 then emit_prologue_sized(insns, n, vc0, alloc0) else emit_prologue(insns, n);
   // Params 1..8 -> x19..x26; params 9+ -> spill slots (sym_bind maps cnt>=8
   // to 100+slot). A register move for j>=8 emitted `mov x27,x8`-class words:
   // it CLOBBERED the reserved arena register AND left the spill slot unwritten
@@ -3753,59 +3851,41 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   let _ = if leg_tail == 1 then pop(insns, n, 0, fntab) else 0;
   let _ = fntab[3660] = n[0];
   let _ = patch_jumps(insns, fntab, 3662, 0, n[0]);
-  let _ = emit_epilogue(insns, n);
-  // OPT-A: only save/restore callee-saved pairs this fn actually binds.
-  // Prologue words pbase+3..pbase+7 hold stp x19/x20 .. x27/x28; epilogue
-  // holds the mirrored ldp pairs in reverse at ebase+0..ebase+4. Unused
-  // pairs are patched to NOP after the fact (stab[0] is final here).
-  // T126 (2026-09-05): pair 4 = x27/x28 is the ARENA cursor/end, never a symbol
-  // register (symbols 9+ spill to [x15,...]). Saving and restoring it in fns with
-  // >= 9 symbols rolled back every arena allocation they made (use_expand's
-  // expanded source, emit_offsets' table) -- the caller then overwrote them with
-  // its next zeros(): `use` of a module with >= 21 fns died with exit 97. The
-  // pair is always NOPed now; x27 flows through calls as LANGUAGE.md says.
-  let ebase = n[0] - 8;
-  let nopw = 3573751839;
-  let vc = stab[0];
-  let k = [0];
-  let pkgo = 1;
-  while pkgo == 1 {
-    let kdone = if k[0] > 4 then 1 else 0;
-    let pair_used = if k[0] == 4 then 0 else if vc > k[0] * 2 then 1 else 0;
-    let do_patch = (1 - kdone) * (1 - pair_used);
-    let _ = if do_patch == 1 then (let _ = insns[pbase + 3 + k[0]] = nopw in 0) else 0;
-    let _ = if do_patch == 1 then (let _ = insns[ebase + 4 - k[0]] = nopw in 0) else 0;
-    let _ = k[0] = k[0] + 1;
-    let pkgo = 1 - kdone;
-    0
-  };
-  // OPT-G1: spill-base x15 / heap-bump x14 setups are pure overhead when
-  // the compiled body never references those registers (typical for small
-  // arithmetic/recursion fns): scan every emitted body word conservatively
-  // (rn / rd / rm fields) and NOP the two prologue adds when unused.
-  let u15 = [0];
-  let u14 = [0];
-  // DIVERGE-42122 (2026-09-06): the scan must start right after the prologue, NOT at
-  // nb_tail -- the `str xj,[x15,#slot*8]` stores for params 9+ sit between them, so a
-  // fn with 9+ params whose body never touched x15 got its `add x15,sp,#256` NOPed and
-  // wrote its 9th param into the CALLER's spill slot 0 (construct c53_param9).
-  let gi = [pbase + 10];
-  let ggo = 1;
-  while ggo == 1 {
-    let gdone = if gi[0] >= n[0] then 1 else 0;
-    let gw = insns[gi[0]];
-    let grn = (gw / 32) - (gw / 1024) * 32;
-    let grd = gw - (gw / 32) * 32;
-    let grm = (gw / 65536) - (gw / 16777216) * 256;
-    let h15 = (if grn == 15 then 1 else 0) + (if grd == 15 then 1 else 0) + (if grm == 15 then 1 else 0);
-    let h14 = (if grn == 14 then 1 else 0) + (if grd == 14 then 1 else 0) + (if grm == 14 then 1 else 0);
-    let _ = if gdone == 0 then (let _ = u15[0] = u15[0] + h15 in (let _ = u14[0] = u14[0] + h14 in 0)) else 0;
-    let _ = gi[0] = gi[0] + 1;
-    let ggo = 1 - gdone;
-    0
-  };
-  let _ = if u15[0] == 0 then (let _ = insns[pbase + 8] = nopw in 0) else 0;
-  let _ = if u14[0] == 0 then (let _ = insns[pbase + 9] = nopw in 0) else 0;
+  let _ = if is_emission == 1 then emit_epilogue_sized(insns, n, vc0) else emit_epilogue(insns, n);
+  // B1 (2026-09-06): replaces OPT-A's post-hoc NOP patch of unused
+  // callee-saved pairs and OPT-G1's generic register-field scan of the
+  // emitted words (the DIVERGE-42122 bug: that scan false-positived on
+  // emit_bl's own stp/ldp x15,x14 words, so any fn containing a call was
+  // seen as "uses x15" regardless of its own facts). The real facts are
+  // exact instead of scanned: real_vc = final stab[0] (params + lets,
+  // covers spilled params too -- c53_param9) says whether ANY symbol
+  // spilled (real_vc > 8) and drives the same per-pair keep/drop the old
+  // OPT-A loop used (pair k kept iff real_vc > k*2; pair 4 = x27/x28 the
+  // arena registers is never a symbol register, T126, always dropped);
+  // real_alloc is an EXACT word match (2853045216 = "mov x0,x14", only ever
+  // emitted by an allocation site) rather than a generic decode, so it
+  // cannot alias a call site's own stp/ldp x15,x14.
+  //
+  // On the emission pass (is_emission==1) the words above were already
+  // right-sized from the start via emit_prologue_sized/emit_epilogue_sized
+  // and fntab[1801], using vc0/alloc0 published by the PRECEDING planning
+  // run -- nothing more to do here. On the planning pass (is_emission==0)
+  // emit_prologue/emit_epilogue/the call sites still emitted today's full,
+  // unshrunk form (its buffer is thrown away; only the size matters), so
+  // n[0] is corrected by exactly what emission will not emit, and the
+  // just-computed real facts are published in fntab[1802] for
+  // compile_program_offs to copy into the real fntab[1500+i] the emission
+  // pass will read.
+  let real_vc = stab[0];
+  let real_alloc = if count_word(insns, pbase, n[0], 2853045216) > 0 then 1 else 0;
+  let real_needs_save = if real_vc > 8 then 1 else real_alloc;
+  let saved_pairs01 = (if real_vc <= 0 then 1 else 0) + (if real_vc <= 2 then 1 else 0) + (if real_vc <= 4 then 1 else 0) + (if real_vc <= 6 then 1 else 0);
+  let saved_x15 = 1 - real_needs_save;
+  let saved_x14 = 1 - real_alloc;
+  let saved_calls = fntab[1800] * 2 * (1 - real_needs_save);
+  let total_saved = (saved_pairs01 * 2 + 2 + saved_x15 + saved_x14 + saved_calls) * (1 - is_emission);
+  let _ = fntab[1802] = real_vc * 2 + real_alloc;
+  let _ = n[0] = n[0] - total_saved;
   n[0]
 }
 
@@ -3919,11 +3999,17 @@ fn compile_program_offs(s: str, insns: [i64], n: [i64], offs: [i64]) -> i64 {
   };
   let stk_a = zeros(1088);
     let tmp = zeros(65536);
+  // B1 (2026-09-06): factbuf[i] harvests fn i's own facts (fntab[1802],
+  // packed vc*2+has_alloc) right after its planning-pass compile, in the
+  // same fn-index order as fnames/fpos/sizes/starts -- copied into the real
+  // fntab[1500+i] below once fntab exists, for the emission pass to look up.
+  let factbuf = zeros(256);
   let i = [0];
   while i[0] < cnt[0] {
     let tn = [0, 65536];
-    let _ = compile_fn_at(s, fpos[i[0]], 0, ptab, tmp, tn, stk_a);
+    let _ = compile_fn_at(s, fpos[i[0]], 0, ptab, tmp, tn, stk_a, 0);
     let _ = sizes[i[0]] = tn[0];
+    let _ = factbuf[i[0]] = ptab[1802];
     let _ = i[0] = i[0] + 1;
     0
   };
@@ -3944,6 +4030,7 @@ fn compile_program_offs(s: str, insns: [i64], n: [i64], offs: [i64]) -> i64 {
   while m[0] < cnt[0] {
     let _ = fntab[1 + m[0]] = fnames[m[0]];
     let _ = fntab[1 + cnt[0] + m[0]] = starts[m[0]];
+    let _ = fntab[1500 + m[0]] = factbuf[m[0]];  // B1: publish planning's facts for emission
     let _ = m[0] = m[0] + 1;
     0
   };
@@ -3972,7 +4059,7 @@ fn compile_program_offs(s: str, insns: [i64], n: [i64], offs: [i64]) -> i64 {
   let stk_b = zeros(1088);
   let q = [0];
   while q[0] < cnt[0] {
-    let _ = compile_fn_at(s, fpos[q[0]], starts[q[0]], fntab, insns, n, stk_b);
+    let _ = compile_fn_at(s, fpos[q[0]], starts[q[0]], fntab, insns, n, stk_b, 1);
     let _ = q[0] = q[0] + 1;
     0
   };
