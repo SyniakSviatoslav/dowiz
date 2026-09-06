@@ -116,6 +116,28 @@ this list is only what remains and is the ONE ordering (SESSION-HANDOFF points h
    gate): bebop generates and compiles a scan for one concrete schema (~50 ms) vs a Rust generic
    scan with a runtime schema; gate = ms to result INCLUDING compilation, second row without it.
    Expected 5-30x on latency-to-result, 1.5-3x on the scan itself.
+6b. Tensor-graph DB over the store (docs/RESEARCH-GRAPHBLAS-2026-09-06.md, operator 2026-09-06):
+   GraphBLAS is the name of what the store already does (CSR, counting sort, frontier SpMSpV,
+   spmv_fp, tombstone masks) plus ~8 ops as GENERATED kernels with the semiring as a compile-time
+   parameter (`gb.bp` prelude ~300 lines: GbMatrix/GbVector as store objects, formats CSR/bitmap/iso,
+   masks; `gen_gb.bp` generator + templates ~900: mxv push/pull, mxm Gustavson+SPA, eWiseAdd/Mult,
+   select, apply, reduce; 6 semirings x ~6 ops <= 36 kernels, 50 ms compile, digest memo = SuiteSparse
+   JIT + HyPer). Relational algebra as linear algebra (Kepner associative arrays): select = mask,
+   join = SpGEMM over a CSR bucket = hash join without a hash table, group-by = reduce along a mode;
+   the associative-array DSL + planner (~450) IS item 14a-3. Purely functional tensor updates = move
+   persistence from objects to matrices: tail COO + L0 + L1 with row-block CoW (2-level blocktab,
+   ~10 KB append per update, block merge at commit; ~300 lines) = STORE PULL sgraph stage 3 -- stall
+   747 ms -> <= 2 ms, 30 us -> 0.1-0.3 us/edge, snapshot/time-travel free. Rank > 2 not needed for W
+   (a mode = another CSR). Substrate: item 2, csel, u32 (4b-4), NEON cmp_mask/sum64, a `umulh`
+   builtin (~8 words) before any PageRank row; LIN and the flat IR not needed. Forecast after this:
+   BFS 150-300x, Q6 50-80x, Q1 30-50x, join 20-50x, update 20-50x vs sqlite; ~1x (0.7-1.5x) vs Rust.
+   Replaces SQL for analytics/graphs/repeated shapes over known schemas, never multi-writer OLTP or
+   an ad-hoc SQL surface. ~2 000-2 500 lines, 6-8 chain commits, zero dependencies.
+   FIRST, before any gb.bp code (measured-first): the 2-way join as SpGEMM twin -- 1M x 1M, uniform +
+   Zipf keys, bebop csr_build + probe (~60 hand-written lines) vs sqlite native (indexed / hash plan)
+   vs Rust HashMap join and sort-merge; gate >= 10x sqlite AND >= 0.7x best Rust on both
+   distributions -- failing the Rust condition by > 2x narrows the thesis to "graph + scan DB".
+   Second twin: single-row updates (row-block CoW) vs sqlite WAL UPDATE.
 7. Hoisting of 64-bit loop-invariant constants out of `while` bodies (K8H -8 words/iter) -- only if
    K8H is still > 1.2x Rust after items 2-3.
 8. NEON `scan(s, pos, class)` builtin for the parser loops (skip_ws/read_ident/skip_string) --
