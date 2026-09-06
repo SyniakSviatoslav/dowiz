@@ -2492,6 +2492,10 @@ D14. (2026-09-06, session 16, operator: "усе за рекомендаціям�
 
 ## Progress log (closed statuses, evidence)
 
+- **K8 closed (2026-09-06, session 17, 46a975c)** — branchy honest kernel (B9, D14 item 5): bebop
+  0.31-0.34 ms/rep vs Rust csel 0.069 (4.5-5.7x, k8h_loopwords 40, b.cond x2); main-session control
+  with a predictable bit 0.15 ms/rep -> the mispredict is ~55 % of K8, the rest is the 40-word loop.
+  Decision: T52 proceeds as a tag-level csel in the IR rung (R3+); T53/T54 stay deleted.
 - **B2 closed (2026-09-06, session 17)** — if-expression join convention: each arm materialises
   its value into x0 (pop-0 retraction of the arm's own push, real load when a barrier blocks it),
   end_pos is the one barrier, one push after the join replaces the two arm pushes. Gate: chain
