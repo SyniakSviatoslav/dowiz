@@ -1,0 +1,71 @@
+ts,commit,bin,metric,value,unit,n,valid,at_max_pct,temp_mc,note
+1788674659,5ec3152,e14dd55e,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788674659,5ec3152,e14dd55e,gate_run_ms,0,ms,1,1,,,"sum of non-memo gate runs (0 runs, 100 memo hits)"
+1788674663,5ec3152,e14dd55e,chain_wall,18,s,1,1,,,"chain + battery, CG=0"
+1788674663,5ec3152,e14dd55e,chain_cpu,27.631,s,1,1,,,children utime+stime of chain.sh
+1788674664,5ec3152,e14dd55e,bin_words,74804,words,1,1,,,bytes 301052
+1788674664,5ec3152,e14dd55e,stub_words,131,words,1,1,,,
+1788674664,5ec3152,e14dd55e,bin_fns,199,fns,1,1,,,
+1788674664,5ec3152,e14dd55e,cw:c01_lit,42,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c02_arith,35,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c03_precedence,24,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c04_cmp,92,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c05_if,37,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c06_let,30,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c07_while,34,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c08_call,59,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c09_recursion,63,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c10_struct,92,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c11_enum,19,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c12_match,26,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c13_array,78,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c14_string,27,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c15_bitwise,42,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c16_compound,40,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c17_neg,45,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c18_bigconst,22,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c19_multi,105,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c20_deep,122,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c21_param13,139,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c22_matchbind,25,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c23_spillcall,246,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c24_ifspill,169,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c25_matchtail,70,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c26_selfrec,239,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c27_zeroarg,42,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c30_unary,69,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c31_nested_lit,167,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c32_asr,75,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c33_loopalloc,127,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c34_loopescape,113,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c35_return,95,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c36_break,141,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c40_struct,206,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c41_clz,73,words,1,1,,,first
+1788674664,5ec3152,e14dd55e,cw:c42_crc32,196,words,1,1,,,first
+1788674665,5ec3152,e14dd55e,cw:c43_arena_persist,285,words,1,1,,,first
+1788674665,5ec3152,e14dd55e,cw:c44_use24,586,words,1,1,,,first
+1788674665,5ec3152,e14dd55e,cw:c45_crc32x,214,words,1,1,,,first
+1788674665,5ec3152,e14dd55e,cw:c46_andor,173,words,1,1,,,first
+1788674665,5ec3152,e14dd55e,cw:c47_usenest,91,words,1,1,,,first
+1788674665,5ec3152,e14dd55e,cw:c50_cas,57,words,1,1,,,first
+1788674665,5ec3152,e14dd55e,cw:c53_param9,112,words,1,1,,,first
+1788674665,5ec3152,e14dd55e,fuzz_seeds_on_bin,1000,seeds,2,1,,,TG-DONE 8: 1000 on e14dd55e; total 38100 over 7 bins
+1788674665,5ec3152,e14dd55e,fuzz_rate,1.6,prog/s,2,1,,,"median over the bin's batches (LITTLE cores, nice)"
+1788674665,5ec3152,e14dd55e,fuzz_trap_unpredicted,7,count,1,1,,,TRAP-82 becomes ALERT per D12-C; 81 stays by design
+1788674674,5ec3152,e14dd55e,selfcompile_wall,1569.3481,ms,5,0,0.0,60200,
+1788674674,5ec3152,e14dd55e,selfcompile_utime,1.5288,s,5,0,0.0,60200,
+1788674674,5ec3152,e14dd55e,selfcompile_stime,0.02,s,5,0,0.0,60200,
+1788674674,5ec3152,e14dd55e,selfcompile_maxrss,23000,kB,5,0,0.0,60200,
+1788674674,5ec3152,e14dd55e,selfcompile_energy,1.6332,core-s@fmax (proxy),5,0,0.0,60200,
+1788674685,5ec3152,e14dd55e,k1h_ms,1.64,ms/rep,11,0,0.0,60500,p95 1.760 
+1788674685,5ec3152,e14dd55e,k1h_loopwords,11,words,1,1,,,
+1788674685,5ec3152,e14dd55e,k2h_ms,1.18,ms/rep,11,0,0.0,60500,p95 1.250 
+1788674685,5ec3152,e14dd55e,k2h_loopwords,65,words,1,1,,,
+1788674685,5ec3152,e14dd55e,k3h_ms,0.54,ms/rep,11,0,0.0,60500,p95 0.580 
+1788674685,5ec3152,e14dd55e,k3h_loopwords,25,words,1,1,,,
+1788674685,5ec3152,e14dd55e,k4_ms,4.04,ms/rep,11,0,0.0,60500,p95 4.330 
+1788674685,5ec3152,e14dd55e,k4_loopwords,15,words,1,1,,,
+1788674723,5ec3152,e14dd55e,proc_floor_ms,23,ms,1,1,,,"median of 5, seed running a trivial .bin under proot"
+1788674723,5ec3152,e14dd55e,becache_warm_ms,36,ms,1,1,,,"per gate, 101 gates"
+1788674724,5ec3152,e14dd55e,becache_cold_ms,48,ms,1,1,,,"per gate, 101 gates"

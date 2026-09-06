@@ -23,9 +23,11 @@ run() {  # run <timeout-s> <bin> [args...]  -- stdout is the program's stdout (o
   [ "$MEMO" = 0 ] && { timeout "$t" ./seed/build/seed "$bin" "$@"; return; }
   b=$(md5sum < "$bin" | cut -c1-32); k="$b.$SEEDMD5.$(grep -c "^$b " "$BEBOP_TMP/memo.log")${*:+.$*}"
   echo "$b $k" >> "$BEBOP_TMP/memo.log"
-  if [ -f "$MEMO/$k" ]; then echo "$k hit" >> "$BEBOP_TMP/memo.keys"; cat "$MEMO/$k"; return 0; fi
-  echo "$k miss" >> "$BEBOP_TMP/memo.keys"
-  timeout "$t" ./seed/build/seed "$bin" "$@" > "$BEBOP_TMP/memo.$k"; rc=$?; cat "$BEBOP_TMP/memo.$k"; return $rc
+  # E4 (D12-A): one line per run in $BEBOP_TMP/gates.txt -- `<gate> <ms> hit|miss rc=N` (std_par.sh sums them)
+  if [ -f "$MEMO/$k" ]; then echo "$k hit" >> "$BEBOP_TMP/memo.keys"; cat "$MEMO/$k"; echo "$(basename "$bin" .bin) 0 hit rc=0" >> "$BEBOP_TMP/gates.txt"; return 0; fi
+  echo "$k miss" >> "$BEBOP_TMP/memo.keys"; local t0=$(date +%s%N)
+  timeout "$t" ./seed/build/seed "$bin" "$@" > "$BEBOP_TMP/memo.$k"; rc=$?
+  echo "$(basename "$bin" .bin) $(( ($(date +%s%N) - t0) / 1000000 )) miss rc=$rc" >> "$BEBOP_TMP/gates.txt"; cat "$BEBOP_TMP/memo.$k"; return $rc
 }
 
 run_test() {

@@ -2370,6 +2370,9 @@ D12. (2026-09-06, operator answers to docs/ANALYSIS-2026-09-06.md §5 and
        gate with a budget line; ms gate = median of N, alert when > T % AND
        > 3 MAD; invalid rows never alert). Energy stays a proxy until
        Termux:API exists on the Termux side; the column header says so.
+       LANDED 2026-09-06 (session 15): tools/perf.py + tools/perf_bisect.sh + record
+       hooks in chain.sh / std_golden.sh / std_par.sh / becache_gate.sh / sbench.sh /
+       sgraph2.sh; bench/perf.csv, bench/perf_fn/{latest,gates}.txt, docs/PERF.md.
     B. T96 P2 goes through the IR rung (T101: an op-list per fn with a
        register tier on top), NOT through more x0/x1 retractions; D11-G's
        fallback clause is retired for P2. Gate unchanged: K4 <= 13 loop

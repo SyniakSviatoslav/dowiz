@@ -17,4 +17,8 @@ printf 'fn main() -> i64 { 0 }\n' > "$T/floor.bp"; ./seed/build/seed "$BB" compi
 fl=(); for i in 1 2 3 4 5; do t0=$(date +%s%N); ./seed/build/seed "$T/floor.bin" >/dev/null 2>&1; fl+=($(( ($(date +%s%N) - t0) / 1000000 ))); done
 floor=$(printf '%s\n' "${fl[@]}" | sort -n | sed -n 3p); per=$((w / n))
 echo "becache: $n gates, compile cold ${c} ms ($((c / n)) per gate), warm ${w} ms (${per} per gate), process floor ${floor} ms, ratio $(python3 -c "print(f'{$c/max($w,1):.1f}x')"), warm bins $same"
+# E10 (D12-A): the process floor and the warm/cold per-gate compile as perf.csv rows
+python3 tools/perf.py record --bin "$BB" proc_floor_ms "$floor" ms "median of 5, seed running a trivial .bin under proot"
+python3 tools/perf.py record --bin "$BB" becache_warm_ms "$per" ms "per gate, $n gates"
+python3 tools/perf.py record --bin "$BB" becache_cold_ms "$((c / n))" ms "per gate, $n gates"
 [ "$same" = identical ] && [ $((per * 2)) -le $((floor * 3)) ] && echo "becache gate: PASS" || { echo "becache gate: FAIL"; exit 1; }

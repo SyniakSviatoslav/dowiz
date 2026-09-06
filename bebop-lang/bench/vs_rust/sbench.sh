@@ -41,5 +41,7 @@ out="# G7 sbench ($(date -u +%F), $(md5sum "$BB" | cut -c1-8), core $PIN): store
 - pass rule (docs/LANG-DB-DESIGN.md §5 G7): PK lookup >= 3x sqlite native AND scan >= 5x; the file size is reported whatever it is (expected ~2.2x loss before compaction)
 - store rows are in-process clock_ms deltas (insert/update/compact exclude the ~100 ms process floor and the open); sqlite rows go through ctypes (4 calls per lookup, ~8 us of ctypes per op, T100 measured ~19 us for the window query) inside one transaction with locking_mode=EXCLUSIVE, so its per-op rows are an upper bound on native sqlite by roughly that floor
 - the store file is preallocated (256 MB ftruncate); the logical size is what a size-aware open would map"
+# E9 (D12-A): the G7 phases as perf.csv rows (store side; the sqlite twin stays in RESULT-sbench.md)
+for m in insert lookup scan update reopen size1 compact size2 durable; do python3 tools/perf.py record --bin "$BB" "sbench_$m" "${B[$m]}" "$([ $m = lookup ] || [ $m = scan ] && echo ns || { [ $m = reopen ] || [ $m = durable ] && echo us || { [[ $m = size* ]] && echo bytes || echo ms; }; })" "sqlite ${S[$m]}"; done
 echo "$out" > bench/vs_rust/RESULT-sbench.md; echo "$out"
 [ "$folds" = equal ] || { echo "G7 FAIL: fold mismatch"; exit 1; }

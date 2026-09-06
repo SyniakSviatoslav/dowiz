@@ -37,4 +37,9 @@ out="
 | 1%-hub skewed graph (sgraph2h.store): build ms / BFS queue vs frontier ns per slot / neighbours ns per query | $hb / $hq_t vs $hp_t / $hn_t (folds $([ "$hq_f" = "$hp_f" ] && [ "$hq_f" = "$hob" ] && [ "$hn_f" = "$ho0" ] && echo equal || echo DIFFER)) |
 - folds: neighbours before/after the log and before/after compaction, BFS before/after compaction == python oracle
 - the hub variant's oracle is the same array BFS with the skewed generator (the log/tombstone phases run on the uniform graph only)"
+# E9 (D12-A): G8 stage-2 phases as perf.csv rows
+python3 tools/perf.py record --bin "$BB" sgraph2_build_ms "$build" ms "L1 + empty log/L0/bitmap"
+python3 tools/perf.py record --bin "$BB" sgraph2_bfs_ns "$bfs0_t" ns "per edge slot, queue BFS before the log ($NSRC sources)"
+python3 tools/perf.py record --bin "$BB" sgraph2_log_ns "$log_ns" ns "amortized per inserted edge through the log (max stall $stall ms)"
+python3 tools/perf.py record --bin "$BB" sgraph2_compact_ms "$comp_ms" ms ""
 echo "$out" >> bench/vs_rust/RESULT-sgraph.md; echo "$out"; [ "$ok" = equal ] || { echo "G8 stage 2 FAIL"; exit 1; }

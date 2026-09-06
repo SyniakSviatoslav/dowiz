@@ -44,6 +44,10 @@ PY
   case "$r" in PASS*) sed -i "s/^FAIL $name:.*/PASS $name (RETRIED standalone, pinned)/" "$T/all.log";; esac
 done
 grep '^FAIL ' "$T/all.log"; grep 'RETRIED' "$T/all.log"
+# E4 (D12-A): per-gate run ms + the flake ledger as perf.csv rows; the per-gate list = bench/perf_fn/gates.txt (diff it against git)
+cat "$T"/[0-9]*/gates.txt 2>/dev/null | sort > "$T/gates.txt"; mkdir -p bench/perf_fn; cp "$T/gates.txt" bench/perf_fn/gates.txt
+python3 tools/perf.py record --bin "$BIN" battery_flakes "$(grep -c RETRIED "$T/all.log")" count "FAILs that passed standalone (timing-flag gates under load)"
+python3 tools/perf.py record --bin "$BIN" gate_run_ms "$(awk '$3=="miss"{s+=$2} END{print s+0}' "$T/gates.txt")" ms "sum of non-memo gate runs ($(grep -c ' miss ' "$T/gates.txt") runs, $(grep -c ' hit ' "$T/gates.txt") memo hits)"
 P=$(grep -c '^PASS ' "$T/all.log"); F=$(grep -c '^FAIL ' "$T/all.log")
 echo "std_golden: $P pass, $F fail (J=$J shards)"
 [ "$F" = 0 ]

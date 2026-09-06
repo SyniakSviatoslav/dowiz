@@ -20,5 +20,15 @@ cat "$OUT/battery.log"
 m3=$(md5sum < "$OUT/gen3.bin" 2>/dev/null | cut -c1-8); m4=$(md5sum < "$OUT/gen4.bin" 2>/dev/null | cut -c1-8); m2=$(md5sum < "$OUT/gen2.bin" | cut -c1-8)
 if [ -n "$m4" ] && [ "$m3" = "$m4" ]; then
   if [ $CG = 0 ] && [ "$m2" != "$m3" ]; then echo "chain: gen3 == gen4 $m4 but gen2 differs ($m2) -- codegen changed: rerun with --codegen"; exit 1; fi
-  echo "chain: fixpoint gen3 == gen4 $m4 ($(( $(date +%s) - t0 )) s total)"; grep -q 'battery: GREEN' "$OUT/battery.log"
+  echo "chain: fixpoint gen3 == gen4 $m4 ($(( $(date +%s) - t0 )) s total)"; grep -q 'battery: GREEN' "$OUT/battery.log" || exit 1
 else echo "chain: NO FIXPOINT (gen3 $m3, gen4 $m4)"; exit 1; fi
+# D12-A evals (tools/perf.py): size/constructs/fuzz rows, self-compile + K-kernels interleaved against BIN0,
+# docs/PERF.md; exit 1 on an alert. PERF=0 skips (~60 s). E14: the chain's own wall + children cpu-seconds.
+if [ "${PERF:-1}" = 1 ]; then
+  CAND=$OUT/gen4.bin; [ $CG = 0 ] && CAND=$OUT/gen2.bin
+  times > "$OUT/times.txt"; cpu=$(awk 'NR==2{split($1,a,"m"); split($2,b,"m"); print a[1]*60+a[2]+b[1]*60+b[2]}' "$OUT/times.txt" | sed 's/s//g')
+  python3 tools/perf.py record --bin "$CAND" chain_wall $(( $(date +%s) - t0 )) s "chain + battery, CG=$CG"
+  python3 tools/perf.py record --bin "$CAND" chain_cpu "${cpu:-0}" s "children utime+stime of chain.sh"
+  BEBOP_TMP=$OUT python3 tools/perf.py run --bin "$CAND" --base "$BIN0" --n "${PERF_N:-5}" --r "${PERF_R:-11}" > "$OUT/perf.log" 2>&1; prc=$?
+  tail -${PERF_TAIL:-3} "$OUT/perf.log"; [ $prc = 0 ] || { echo "perf: ALERT or error (rc=$prc, $OUT/perf.log)"; exit 1; }
+fi
