@@ -5,10 +5,21 @@
 # NOT a codegen change gen2 == gen3 == gen4 and the battery result stands as soon as the
 # md5s agree; pass --codegen to run the battery against gen4 instead (gen2 differs then).
 # Usage: tools/chain.sh <src.bp> <out-dir> [--codegen] [BIN0=./bebop.bin]
-cd "$(dirname "$0")/.." || exit 1
-SRC=${1:?src.bp}; OUT=${2:?out dir}; shift 2; CG=0; [ "${1:-}" = --codegen ] && { CG=1; shift; }
-BIN0=$(realpath -m "${1:-./bebop.bin}"); mkdir -p "$OUT"
+# item 8 (self-copy exec): the run copies itself into $OUT before doing any work, so editing
+# this file while a run is in progress cannot change that run.
+# item 1 (process-count gate): refuses to start above ${PROC_CAP:-30} procs (tools/reap.sh --check), exit 97.
+# Measured 2026-09-06: a chain adds +15 procs (ps -e 26 -> 41 peak, box survived); the gate reads ~+3
+# over idle. 30 = idle box without a fuzzd batch; `tools/fuzzd.sh pause` first.
+# item 4: --codegen implies FREEZE=1 for the battery it drives (no more forgotten env var).
+[ "${SELF_COPY:-}" ] || cd "$(dirname "$0")/.." || exit 1  # the copy is exec'd with cwd already at repo root; re-deriving it from $0 there would resolve against $OUT instead
+SRC=${1:?src.bp}; OUT=${2:?out dir}; mkdir -p "$OUT"
+[ "${SELF_COPY:-}" ] || { cp "$0" "$OUT/.chain.sh"; SELF_COPY=1 exec bash "$OUT/.chain.sh" "$@"; }
+shift 2; CG=0; [ "${1:-}" = --codegen ] && { CG=1; shift; }
+BIN0=$(realpath -m "${1:-./bebop.bin}")
 [ -s "$BIN0" ] || { echo "GUARD: $BIN0 missing or empty (L12)"; exit 1; }
+[ "${REAP_GATED:-}" ] || tools/reap.sh --check "${PROC_CAP:-30}" || { echo "GUARD: process cap exceeded (item 1, L19c)"; exit 97; }
+export REAP_GATED=1  # one gate per run tree: battery/fuzz started by this run skip their own check
+[ $CG = 1 ] && export FREEZE=1
 PIN=${PIN:-taskset -c 4-6}  # the 3 A78 cores; PIN="" to unpin
 gen() { $PIN ./seed/build/seed "$1" compile "$SRC" "$2" >/dev/null 2>&1; local rc=$?; [ $rc = 0 ] && [ -s "$2" ] || { echo "gen $2 FAILED rc=$rc"; exit 1; }; }
 t0=$(date +%s); gen "$BIN0" "$OUT/gen2.bin"; echo "gen2 $(md5sum < "$OUT/gen2.bin" | cut -c1-8) $(( $(date +%s) - t0 )) s"

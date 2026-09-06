@@ -25,6 +25,9 @@ case "${1:-status}" in
     N=${2:-2000}; [ -f "$D/next" ] || echo 100000 > "$D/next"; echo $$ > "$D/pid"; rm -f "$D/stop"
     trap 'rm -f "$D/pid"; exit 0' TERM INT
     while [ ! -f "$D/stop" ]; do
+      # D13 item 1: `tools/fuzzd.sh pause` parks the loop (reachable from inside a proot, where sv is not);
+      # the batch in flight finishes, then the daemon idles at 30 s polls until `resume`.
+      while [ -f "$D/pause" ]; do sleep 30; done
       START=$(cat "$D/next"); T=$D/run.$START; mkdir -p "$T"
       BEBOP_TMP=$T REPROS=$D/repros J=${J:-$(tr ',' '\n' <<<"$LITTLE" | wc -l)} \
         nice -n 10 ${LITTLE:+taskset -c $LITTLE} bash bench/fuzz/fuzz.sh "$N" "$START" > "$T/log" 2>&1
@@ -43,7 +46,9 @@ case "${1:-status}" in
     cur=$(ls -d "$D"/run.* 2>/dev/null | head -1); [ -n "$cur" ] && echo "current batch: $(basename "$cur") $(cat "$cur"/fuzz.*/results.* 2>/dev/null | wc -l) seeds so far"
     tail -n 3 "$D/log" 2>/dev/null | cut -c1-200
     [ -f "$D/ALERT" ] && { echo "ALERT:"; cat "$D/ALERT"; } || echo "no ALERT";;
+  pause) touch "$D/pause"; echo "fuzzd pauses after the current batch (next seed $(cat "$D/next"))";;
+  resume) rm -f "$D/pause"; echo "fuzzd resumes";;
   stop) alive && { touch "$D/stop"; echo "fuzzd stops after the current batch (seed $(cat "$D/next"))"; } || echo "fuzzd not running";;
   clear) rm -f "$D/ALERT"; echo "ALERT cleared (repros stay in $D/repros)";;
-  *) echo "usage: tools/fuzzd.sh run [N] | start [N] | status | stop | clear"; exit 64;;
+  *) echo "usage: tools/fuzzd.sh run [N] | start [N] | status | pause | resume | stop | clear"; exit 64;;
 esac

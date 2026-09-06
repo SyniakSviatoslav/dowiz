@@ -12,6 +12,7 @@ import os
 import select
 import shutil
 import signal
+import subprocess
 import sys
 import time
 
@@ -82,6 +83,11 @@ def one(s, tmp, repros):
 
 
 def main():
+    # item 1 (process-count gate, retro D13): refuse above the cap when run directly (fuzz.sh
+    # already gates before spawning shards; this covers a direct/daemon invocation too).
+    root = os.path.join(HERE, '..', '..')
+    if not os.environ.get('REAP_GATED') and subprocess.run(['tools/reap.sh', '--check', os.environ.get('PROC_CAP', '30')], cwd=root).returncode != 0:
+        sys.exit(97)
     start, n = int(sys.argv[1]), int(sys.argv[2])
     tmp = os.environ.get('TMP') or os.path.join(os.environ.get('BEBOP_TMP', '/tmp/opencode/agentB-fuzz'), 'fuzz.%d' % os.getpid())
     repros = os.environ.get('REPROS', os.path.join(HERE, 'repros'))

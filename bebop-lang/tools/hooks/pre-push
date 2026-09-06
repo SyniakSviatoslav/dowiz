@@ -4,4 +4,7 @@
 # Enable once per clone: git config core.hooksPath bebop-lang/tools/hooks
 D=${FUZZD:-$HOME/.cache/bebop/fuzzd}
 [ -f "$D/ALERT" ] && { echo "pre-push: fuzzd ALERT pending ($D/ALERT):"; cat "$D/ALERT"; echo "classify/fix it, then tools/fuzzd.sh clear"; exit 1; }
+# item 11 (retro D13/P2): no "transient/flaky/not reproducible" journal line without errno=|rc= + EXPECT:
+R=$(git rev-parse --show-toplevel)/bebop-lang
+bash "$R/tools/journal_lint.sh" || { echo "pre-push: journal_lint failed -- fix the wording (item 11)"; exit 1; }
 exit 0

@@ -18,7 +18,7 @@ HEAD: `git log --oneline | head -3`; every commit message carries the gate evide
   parity 12/12+1, pool 5/5, invariants GREEN (census bcond 1536, cbz 113 ALLOWed).
 - ONE COMMAND: `tools/chain.sh <src.bp> <out-dir> [--codegen]` (gen2, then gen3->gen4 in
   parallel with tools/battery.sh); a non-codegen change costs ~95 s end to end, a codegen
-  change ~125 s (FREEZE=1 in the env re-freezes constructs). invariants.sh after promotion
+  change ~125 s (`--codegen` implies FREEZE=1). invariants.sh after promotion
   (`--freeze` when the census moves + a census_allow.txt line). Promote with cp-to-temp + mv.
 - Inner loop numbers: docs/DEV-LOOP.md (self-compile 14-17 s, std gate compile 0.5 s,
   std_golden 8.8 s sharded, fuzz 1.1/s per core).

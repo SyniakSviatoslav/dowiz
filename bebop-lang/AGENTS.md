@@ -180,6 +180,7 @@ no external tooling.
 
 L1. Words: asm → objdump → script → LE int → scripted insert → **disassembly
     diff at insertion site**. Hand-typing a constant is a defect.
+    Dead letter (D13 item 7): mechanised by tools/check_words.py, run in battery.sh.
 L2. Syscall/bl wrappers: full register table comment before emission;
     every argument register has a producer.
 L3. Scripted source patches carry `assert old.count==1`; analysis tools
@@ -220,12 +221,14 @@ L13. IMMUTABLE BASELINES: golden binaries live in bench/golden/<name>-<rev>.bin
 L14. SINGLE-VARIABLE DIFFS: signature changes (adding a param/arg), model
      changes, and cap changes each land as their own commit with their own
      probe. Mixed commits produced the cascading-fix chain of 2026-09-02.
+     Dead letter (D13 item 12): mechanised by tools/hooks/commit-msg.
 
 L15. FALSIFIABLE PROBE BEFORE fpC/SPILL EDITS: before touching the
      branchless-cond or spill machinery, run (or add) the minimal probe for
      the construct (bench/parity_constructs/c22-c24 are the canonical
      shapes: match-binding, spilled-arg call, spilled-array-in-if). Fix
      only after the probe fails; then freeze the probe.
+     Dead letter (D13 item 12): mechanised by tools/hooks/commit-msg.
 
 L16. push/pop emit EXACTLY their canonical words — never extra words
      (check-traps in push/pop polluted the stream and cascaded into
@@ -356,6 +359,7 @@ L18. NO IDLE WAITING (operator rule, 2026-09-06): while a shell, chain, battery 
      run_in_background / long gate. Cost: none; the box has 3 A78 cores and one
      writer. Incident: session 10 lost wall-clock to wait-only turns while a
      5-minute self-compile ran.
+     Dead letter (D13 item 6): mechanised by a hookify sleep-poll block rule (Claude-config side).
 L19. THE BOX IS GUARDED (operator priority, 2026-09-05): a Termux-side watchdog
 (`boxguard status|log`, source /data/data/com.termux/files/home/boxguard.py) holds the
 box at <= 450 % CPU (of 800 %), pauses nice-10 background work first (SIGSTOP/SIGCONT
@@ -369,6 +373,8 @@ their own proot (`sv status $PREFIX/var/service/fuzzd`, tools/fuzzd.sh); (c) kee
 process count under 32 (Android phantom cap until ~/adbfix.sh is applied): fuzz J<=2,
 one battery at a time, at most 3 parallel agents; (d) `ulimit -Sd` caps anonymous memory
 at 3 GB per process -- an exit 137/MemoryError at that size is the cap, not the box.
+     Dead letter, L19(c) (D13 items 1-2): mechanised by tools/reap.sh --check (runners refuse
+     to start above 26 procs) and the Agent-spawn PreToolUse hook (Claude-config side).
 
 L20. EXPERIMENT LOOP (2026-09-06, Karpathy autoresearch shape; the ralph-loop plugin runs it
 unattended): one hypothesis per iteration; keep the change only if tools/chain.sh + battery

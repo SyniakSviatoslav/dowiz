@@ -30,6 +30,17 @@
           }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cat /root/dowiz/bebop-lang/docs/SESSION-HANDOFF.md; tools/reap.sh"
+          }
+        ]
+      }
     ]
   }
 }

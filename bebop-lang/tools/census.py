@@ -77,7 +77,10 @@ def main(argv):
             old = table[name]
             for k in GATE:
                 if c[k] > old[k]:
-                    print(f"CENSUS FAIL {name}: {k} {old[k]} -> {c[k]} (INCREASE)"); rc = 1
+                    print(f"CENSUS FAIL {name}: {k} {old[k]} -> {c[k]} (INCREASE)")
+                    # item 4 (retro D13): the ready-to-paste census_allow.txt candidate line
+                    print(f"  candidate census_allow.txt line: {name} {k} {c[k]} <reason>")
+                    rc = 1
                 elif c[k] < old[k]:
                     print(f"CENSUS DECREASE {name}: {k} {old[k]} -> {c[k]} (re-freeze table)")
         for name in sorted(set(table) - seen):

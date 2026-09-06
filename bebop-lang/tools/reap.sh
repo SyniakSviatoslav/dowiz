@@ -6,7 +6,15 @@
 # themselves cannot be killed; their orphaned parent can. Never touches claude, node, proot,
 # sshd, runsv*, svlogd, boxguard, the fuzzd loop (its own proot; stop = `sv down fuzzd`).
 # Usage: tools/reap.sh [kill]   self-test: `REAP_PS=tools/reap.fixture tools/reap.sh` lists 29014 + 29083 (the 2026-09-06 orphan)
+# --check N (item 1, retro D13): print the total process count and exit non-zero above N --
+# the process-count gate the runners (chain.sh/battery.sh/fuzz.sh/fuzz_batch.py) call first.
 psl() { if [ -n "${REAP_PS:-}" ]; then cat "$REAP_PS"; else ps -eo pid,ppid,stat,etime,args --no-headers; fi; }
+if [ "${1:-}" = --check ]; then
+  N=${2:?tools/reap.sh --check N}; n=$(psl | wc -l)
+  echo "reap: $n procs (cap $N)"
+  [ "$n" -le "$N" ]
+  exit $?
+fi
 PROTECT='claude|node|proot|sshd|runsv|svlogd|boxguard|fuzzd\.sh run|reap\.sh'
 list=$(psl | awk -v prot="$PROTECT" '
   $3 ~ /^Z/ { z[$2]++; next }

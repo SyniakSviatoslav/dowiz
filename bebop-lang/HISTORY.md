@@ -2447,6 +2447,33 @@ D13. (2026-09-06, session 16, operator: "бери усі 12 пропозицій
      the FREEZE note in SESSION-HANDOFF -> 4; move pitfalls (a)-(m) of the memory file into the
      AGENTS laws they duplicate. Executed by Sonnet agents per AGENTS L22.
 
+D14. (2026-09-06, session 16, operator: "усе за рекомендаціями" to the 12 questions of
+     docs/DECISIONS-RESEARCH-2026-09-06.md §5)
+     1. Order: B1 (prologue/epilogue/x15-x14 call-site sizing), B2 (value-in-x0 at if/while
+        joins), B5 (loop rotation) land as three single-variable codegen commits BEFORE the IR
+        rung; each through `tools/chain.sh --codegen`, constructs re-frozen, honest.sh row.
+     2. IR shape: the operand-tag stack (report §3.3, Liftoff CacheState shape), not an op-list;
+        D12-B's wording is amended to this. It deletes pop2 / left_single_* / writes_producer /
+        count_masked and the fusion retraction guards.
+     3. Window: x1-x7 with a spill path that one synthetic construct forces (so it is not dead).
+     4. Frame: per-fn computed frame size (B4); a mis-estimate is exit 81, TRAP-82 = 0 stays the
+        fuzz gate.
+     5. T52-T54: K8 (branchy honest kernel) is written first as the falsifier; T53 and T54 are
+        DELETED now; T52 stays OPEN conditional on K8's row.
+     6. Store first move: profile the 45-90 s CSR build (B8) before any store code change.
+     7. LMDB and "native Rust" leave the ROADMAP thesis sentence (no script measures them).
+     8. Workload W = the dowiz-core order log (T66 ordfsm.bp / money.bp, byte-exact Rust oracles).
+     9. Size loss c = 2.5x is reported as the price of the thesis; no header fold.
+     10. ROADMAP gets one line: one-pass tiers land at 1.1-1.5x of an optimising compiler, so
+        <= 2.0x per honest row is the real target; D1(a) 1.0x stays report-only (D12-G).
+     11. D11-J reversed: the 13 project-sized tasks move under one `## PARKED` heading in
+        HISTORY.md (TASKS.md follows from the headers).
+     12. After the IR rung lands, codegen is frozen for one 24 h fuzz window so
+        fuzz_seeds_on_bin reaches 10^5 on one md5 (TG-DONE 8).
+     Execution per AGENTS L22: ledger/docs items (5, 7, 10, 11, plus the critical-path reorder)
+     by a Sonnet agent; B1 -> B2 -> B5 -> tag stack as codegen work items after D13 lands.
+
+
 
 ## Progress log (closed statuses, evidence)
 

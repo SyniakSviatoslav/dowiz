@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# commit-msg (item 12, retro D13: L15 mechanised): a commit whose SUBJECT starts `fix(bebop)`
+# and touches bebop.bp must also touch bench/parity_constructs/ or bench/diag_neg/ -- the
+# falsifiable probe that proves the fix (L14/L15). The subject is only available here, not in
+# pre-commit (which only sees the staged file set) -- hence this separate hook.
+# Enable once per clone: git config core.hooksPath bebop-lang/tools/hooks
+MSG_FILE=$1
+head -n1 "$MSG_FILE" | grep -q '^fix(bebop)' || exit 0
+STAGED=$(git diff --cached --name-only)
+echo "$STAGED" | grep -qE '(^|/)bebop\.bp$' || exit 0
+echo "$STAGED" | grep -qE '(^|/)bench/(parity_constructs|diag_neg)/' && exit 0
+cat >&2 <<'EOF'
+commit-msg REFUSED (L15 mechanised, item 12): a fix(bebop) commit touching bebop.bp must also
+touch bench/parity_constructs/ or bench/diag_neg/ in the SAME commit -- add the falsifiable
+construct/negative-diagnostic probe that proves the fix (L14/L15: single-variable diffs need
+a probe, not a claim).
+EOF
+exit 1

@@ -447,10 +447,13 @@ gate r3x 1111100151 "$r"
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/whileb.bp ${BEBOP_TMP:-/tmp/opencode}/whileb_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/whileb_test.bin | tail -1)
 gate whileb 7127 "$r"
 
+# timing
 # ---- lcjit (SS-3 jitter half: LC-resonant loop batch jitter < 10% over
 #      two 800k-cycle batches via clock_ms; flag = pass*10 + fok. The
 #      structural claim (fixed tick count) is exact; <1% wall-clock
-#      target documented as bare-metal-only (shared-box noise 3-8%).) ----
+#      target documented as bare-metal-only (shared-box noise 3-8%). item 9,
+#      retro P9: flaky under parallel load -- std_par.sh runs this gate last,
+#      single-threaded, pinned, after `boxguard status`.) ----
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/lcjit.bp ${BEBOP_TMP:-/tmp/opencode}/lcjit_test.bin >/dev/null 2>&1 && run 90 ${BEBOP_TMP:-/tmp/opencode}/lcjit_test.bin | tail -1)
 gate lcjit 11 "$r"
 

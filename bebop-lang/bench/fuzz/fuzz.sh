@@ -22,6 +22,14 @@ export REPROS=${REPROS:-bench/fuzz/repros}
 export TMP=${BEBOP_TMP:-/tmp/opencode/agentB-fuzz}/fuzz.$$
 mkdir -p "$TMP" "$REPROS"
 [ -s "$BEBOP_BIN" ] || { echo "GUARD: $BEBOP_BIN is missing or empty (L12)"; exit 1; }
+# item 1 (process-count gate): fuzzd runs a chain in parallel legitimately near the cap, so
+# retry every 30 s for up to 10 min (a delayed batch, not a lost one) instead of exit 97 at once.
+i=0
+while [ -z "${REAP_GATED:-}" ] && ! tools/reap.sh --check "${PROC_CAP:-30}"; do
+  i=$((i + 1)); [ "$i" -ge 20 ] && { echo "GUARD: process cap exceeded for 10 min, giving up (item 1)"; exit 97; }
+  sleep 30
+done
+export REAP_GATED=1  # fuzz_batch.py shards skip their own check
 # snapshot the compiler: a concurrent promotion (rm+cp of bebop.bin) made
 # seed's openat fail mid-run (exit 90 = f_open, classified COMPILEFAIL);
 # the whole run now sees ONE artifact, whose md5 is printed in the summary
