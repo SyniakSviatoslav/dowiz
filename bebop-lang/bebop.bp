@@ -2172,8 +2172,42 @@ fn emit_cmp_op(insns: [i64], n: [i64], cond: i64, fntab: [i64]) -> i64 {
   emit_cmp_regs(insns, n, cond, fntab)
 }
 
+// P3 of T96 rest (2026-09-06, SPEEDUP-ANALYSIS P3): the operands of a comparison reach
+// `cmp x0,x1` as `P_a -> x0 ; P_b -> x1` (pop2). When P_b is `movz x1,#imm` (imm <= 4095)
+// or `mov x1,xS` the cmp takes that operand directly -- `cmp x0,#imm` / `cmp x0,xS` -- and
+// P_b is retracted; when P_a is `mov x0,xR` it is retracted too and the cmp reads xR. Only
+// the flags are consumed afterwards (the cset, or the fused b.cond of cond_branch_word, whose
+// is_cmp masks accept both SUBS forms). Words python-derived, as+objdump: cmp x20,#0 f100029f,
+// cmp x3,#4095 f13ffc7f, cmp x0,#7 f1001c1f, cmp x20,x19 eb13029f, cmp x5,x0 eb0000bf;
+// SUBS-imm base 0xF100001F + imm<<10 + ra<<5, SUBS-reg base 0xEB00001F + rs<<16 + ra<<5.
+// Label/barrier rule as shl_try: a retracted word must not be a jump target (fntab[3660]).
+fn cmp_try(insns: [i64], n: [i64], fntab: [i64]) -> i64 {
+  let cur = n[0];
+  let w1 = if cur >= 1 then insns[cur - 1] else 0;
+  let w0 = if cur >= 2 then insns[cur - 2] else 0;
+  let is_movz1 = if (w1 & 4292870175) == 3531603969 then 1 else 0;
+  let imm = (w1 >> 5) & 65535;
+  let kimm = is_movz1 * (if imm <= 4095 then 1 else 0);
+  let kreg = if (w1 & 4292935679) == 2852127713 then 1 else 0;
+  let lab1 = if fntab[3660] == cur - 1 then 1 else 0;
+  let hit = (if cur >= 1 then 1 else 0) * (kimm + kreg) * (1 - lab1);
+  let is_movr0 = if (w0 & 4292935679) == 2852127712 then 1 else 0;
+  // a label AT cur-2 (a while's loop_start) is fine: the pair is replaced by one equivalent
+  // word at the same address; a label at cur-1 (inside the pair) already cleared hit (lab1).
+  let both = hit * (if cur >= 2 then 1 else 0) * is_movr0;
+  let ra = if both == 1 then (w0 >> 16) & 31 else 0;
+  let rs = (w1 >> 16) & 31;
+  let word = if kimm == 1 then 4043309087 + imm * 1024 + ra * 32 else 3942645791 + rs * 65536 + ra * 32;
+  let back = if both == 1 then cur - 2 else cur - 1;
+  let _ = if hit == 1 then (let _ = fold_clear(fntab) in 0) else 0;
+  let _ = if hit == 1 then (let _ = n[0] = back in 0) else 0;
+  let _ = if hit == 1 then em(insns, n, word) else 0;
+  hit
+}
+
 fn emit_cmp_regs(insns: [i64], n: [i64], cond: i64, fntab: [i64]) -> i64 {
-  let _ = em(insns, n, 3942711327);
+  let hit = cmp_try(insns, n, fntab);
+  let _ = if hit == 0 then em(insns, n, 3942711327) else 0;
   let _ = em(insns, n, 2594113504 + cond * 4096);
   let _ = push(insns, n, fntab);
   n[0]

@@ -49,3 +49,4 @@ bebop bcond 1559 T104b step 2: mulc_try (x*c for c = 2^k+1 / 2^k-1 / 2^j+2^k -> 
 bebop bcond 1575 T90 step 2: call-argument delimiter checks (emit_bl_call / emit_call: only a comma or the closing paren after an argument) + a body let must end in semicolon, closing brace or `in` (lax d08/d10 now exit 95)
 bebop bcond 1588 T90 step 2b: `check` verb (cli_check: argc / open guards, main: is_check selector + dispatch if)
 bebop cbz 119 T90 step 2b: cli_check + the check dispatch in main
+bebop bcond 1604 T96 P3: cmp_try (cmp x0,x1 with a movz/mov right operand and a mov left operand -> cmp xR,#imm / cmp xR,xS; the 16 b.cond of its selector ifs)
