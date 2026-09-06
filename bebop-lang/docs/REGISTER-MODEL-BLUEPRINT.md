@@ -262,11 +262,18 @@ evaluate-then-bind loop using `vs_bind(param)` and `emit_body` unchanged):
 ```
 args: emit_cmp per argument (each leaves one entry; nargs entries on top)
 vs_park(nargs)                     -- every deeper window temp survives the call in cs/slot
-placement (parallel move into x0..x(nargs-1), x8.. for 9+):
-  repeat until no change: for i in 0..nargs-1 with entry_i not already REG x<i>:
-     if x<i> is free (no window entry owns it): vs_mat(entry_i, i)
-  if entries remain (a cycle among REG entries): mov x16,x<r_j> for one of them, free r_j, mark it "in x16",
-     continue the loop; at the end mov x<j>,x16
+placement (parallel move into x0..x(nargs-1), x8.. for 9+) -- corrected in session 18 after the
+worker hit an unbounded retry (only REG entries, kind 2 p0 < 8, and MULC-on-window entries, kind 6
+p0 < 8, can block a target; spilling any other kind frees nothing, so the eviction must pick a
+BLOCKING entry, and the loop is bounded):
+  pass = 0; while not all placed and pass < 2*nargs+2:
+     progress = 0
+     for i: skip if kind 2 with p0 == i (placed); if no OTHER blocking entry owns x<i>: vs_mat(e, i); progress = 1
+     if progress == 0: pick the first arg entry j whose register r (kind 2 or 6, r < nargs, r != j)
+        blocks a target and vs_mat(j, 16) -- x16 is the scratch, outside both masks (any mask
+        set/clear with r >= 8 is a no-op); at most one entry is ever in x16
+     pass += 1
+  if not all placed: compile-time exit 89 (cannot happen; never silent)
 then vs_pop x nargs; rep/flush_on_bl/pop_back are deleted (rep is always 0 since 4e6a1d6)
 emit_bl(target, 1 - fntab[1801]) exactly as today
 push REG 0,-1 (x0 owned; mask bit 0 cleared)
