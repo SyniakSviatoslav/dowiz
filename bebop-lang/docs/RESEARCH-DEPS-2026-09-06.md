@@ -295,10 +295,120 @@ mmap-файлу: обидві заявки в одному вимірі, три 
 політики — хвилини на fixpoint і той самий battery; це і є актив, який робить §1b(4) і §6d-1
 досяжними взагалі.
 
+## 7. Bash у tooling bebop: чим замінити — власним рішенням чи наявним
+
+**(a) Інвентар (read-only, 2026-09-06).** tools/: 16 sh (526 рядків) + 11 py (1 887 рядків); bench/:
+23 sh (2 053) + 124 py (6 257). Разом **39 shell-скриптів / 2 579 рядків і 135 python-файлів / 8 144
+рядки** — python уже є прийнятою залежністю репо, і вона в 3x більша за bash-шар (perf.py 362, check_abi.py
+261, census, check_words, fuzz_batch, pre-commit/journal linter). Що роблять sh: chain.sh (45 рядків:
+gen2→gen3→gen4 + battery + perf), battery.sh (45: 8 лейнів паралельно, підсумок через `grep -E | tail`),
+std_golden.sh (769: 99 тестів, 109 викликів `seed`), construct_parity.sh (136), invariants.sh (63),
+reap.sh (31, proc-cap gate), std_par.sh (J=3 шарди), fuzz.sh/fuzzd.sh, honest.sh/bench_pinned.sh
+(хронометраж), решта — one-shot гейти. Зовнішні команди у всіх sh (входжень у тексті): `seed` 412,
+`tail` 140, `python3` 83, `grep` 50, `awk` 43, `taskset` 36, `date` 27, `timeout` 22, `cut` 21,
+`md5sum` 20, `sort` 15, `sed` 12. Структуровані дані справді сплющуються в текст: кожен лейн друкує
+рядок-підсумок, battery.sh витягує його `grep -E`-ом і звіряє regex-ом (`line()`), perf.py читає csv.
+
+**(b) Реальна ціна, виміряна під proot (ptrace на кожен syscall).** Мікробенчмарк ×200 послідовно:
+
+| примітив | ms на виклик |
+|---|---|
+| bash `$(echo)` (fork без exec) | 2.1 |
+| bash → `/bin/true` (fork+exec, dyn libc) | 8.5 |
+| python `subprocess.run(['/bin/true'])` | 8.0 |
+| `seed c01.bin` (bebop-процес: статичний, 5 syscall'ів на старт) | 4.3 |
+| `grep -c` на малому файлі | 21 (динамічний лінк + ugrep) |
+| `python3 -c pass` | 85 |
+
+Chain (perf.csv, 2026-09-06): `chain_wall` 18 s (CG=1) / 38 s (CG=0 + повний battery), `chain_cpu`
+20-50 s, `gate_run_ms` 37 085 ms = сума 149 не-memo прогонів (≈250 ms кожен, з них ~10 ms spawn), або
+0 при 100-200 memo-hit'ах; лейн perf.py +60-70 s (хронометраж кернелів, не оркестрація). Оцінка кількості
+spawn'ів на один chain із скриптів: std_golden 99 тестів × (compile + run + порівняння + 3-6 `$(…)`/`grep`/
+`md5sum`) ≈ 600-900; construct_parity 52 × ~6 ≈ 300; parity/pool/diag ≈ 150; python-старти 6-10 (×85 ms);
+`taskset`/`timeout` обгортки подвоюють exec на кожен запуск → **≈1 500-2 500 fork/exec на chain**, по
+4-9 ms → **≈10-18 s CPU, ≈4-6 s wall на 3 ядрах**.
+
+**(c) Частка оркестрації.** З ~30 s battery-wall: реальна робота (compile+run 149 гейтів) ≈ 37 s CPU /
+3 ядра ≈ 12 s wall; spawn+текст ≈ 4-6 s wall; решта — послідовні хвости лейнів (inv.sh закінчує останнім,
++10 s) і python-старти (~1 s). **Стеля будь-якої заміни bash — 15-25 % battery-wall і 0 % на gen-компіляціях
+(3 × 1.5 s) та на perf-лейні (60-70 s чистого хронометражу).** При повному memo (gate_run_ms = 0) частка
+оркестрації зростає до ~50 %, але абсолютно це ті самі 5-8 s. Заміна, що спавнить ті самі процеси (just,
+nu, osh), не зменшує нічого: spawn — це ptrace-ціна proot, а не bash.
+
+**(d) Що bebop уже має для варіанту (4) і чого бракує.** Є (`grep '^fn emit_sys_' bebop.bp`): open, read,
+write, close, exit, clock_ms, arena_base/end, **clone (сирий: flags + stack_top — `sys_clone(17, 0)` =
+fork із SIGCHLD, тобто fork процесу вже є)**, cond_set, futex_wait_guard/wake, atomic_add,
+exit_thread_guard, setaffinity, msync, readbuf, slurp, ftruncate, munmap, export, mmap, rename; argv —
+контракт M4 seed'а (argc/argv скопійовано в арену), envp — ні; `sha256_words` (cas_verify) для хешів.
+Бракує для оркестрації (кожен — за шаблоном `emit_sys_*`: 8-20 ручних слів + 15-30 рядків bebop.bp +
+рядок у words.objdump + allowlist check_abi + заглушка bpref + конструкт-гейт ≈ 40-60 рядків на builtin):
+
+| builtin | syscall | слів | навіщо |
+|---|---|---|---|
+| `sys_execve(path, argv, envp)` | 221 | ~10 | запуск seed/python3 |
+| `sys_wait4(pid, status)` | 260 | ~10 | rc/сигнал дитини (SIGILL/SIGBUS тестів) |
+| `sys_pipe2(fds)` + `sys_dup3(a,b)` | 59, 24 | ~8+6 | захоплення stdout лейну без tmp-файлів (або писати у файли — уже можна) |
+| `sys_getdents64(fd, buf)` | 61 | ~10 | перелік std_tests/ (або статичний список у .bp) |
+| `sys_fstat/statx` | 80/291 | ~10 | розмір/mtime для memo (є обхід: sys_slurp + порівняння) |
+| `sys_kill(pid, sig)` | 129 | ~6 | timeout-и без `timeout(1)` |
+| `sys_unlinkat/mkdirat` | 35/34 | ~8 | tmp-дерева |
+| `run(bin)` — mmap PROT_EXEC + `blr` | mmap є | ~15 | **виконати .bin у тому ж процесі без fork/exec** — єдина річ, що прибирає spawn взагалі (потрібен fork для ізоляції краху тесту) |
+
+Разом ≈ 8 builtins ≈ 350-450 рядків bebop.bp + ~80 слів. Ескіз `chain.bp` (те, що робить 45-рядковий
+chain.sh): `gen(bin, src, out)` = fork + execve seed (або **in-process: `cli_compile` — це функція самого
+bebop.bp, gen2/gen3/gen4 можна викликати без жодного процесу, якщо chain.bp злінкований з компілятором**
+через `use`); fixpoint = `sys_slurp` обох .bin + поцільне порівняння (md5 не потрібен); battery fan-out =
+3 `sys_clone`-потоки (по A78-ядру, `sys_setaffinity`), кожен fork+exec'ає лейни або, для std_golden, компілює
+й запускає тести in-process через `run()` під fork-ізоляцією; perf.py/census/check_abi/check_words лишаються
+python (8 k рядків ніхто не переписує) → 4-6 execve python3 (0.5 s); reap-gate = читання /proc через
+getdents+read (або лишити `reap.sh --check` як один exec). Оцінка **150-250 рядків chain.bp + 300-500
+рядків std-runner**; правила, що лишаються: proc-cap (тепер точний: chain.bp знає своїх дітей), reap після
+задач (менше сиріт, бо wait4 свій), pkill-пастка зникає (kill по pid). Що ламається: memo `BEBOP_MEMO`
+(треба переписати), словесні підсумки лейнів (battery.log — контракт для агентів і людей; лишити текст),
+кожен лейн — це sh зі своїм regex-контрактом → переписувати всі 39 скриптів або обгортати їх execve'ом
+(тоді виграш = 0).
+
+**(e) Залежності.** `command -v just nu osh` — жодного; apt (Ubuntu ports arm64 у цьому proot): `just`
+1.45.0-1 доступний, `nushell`/`oils-for-unix` — відсутні; Termux `pkg` з цього proot недосяжний. Усі три —
+Rust/Python-екосистемні бінарники: just — Rust, «just a command runner» (github.com/casey/just, завантажено;
+кожен рядок рецепта виконується `sh -c`, тобто spawn той самий + ще один `sh`; залежності між рецептами є,
+паралелізм — лише атрибутом `[parallel]` на залежностях у нових версіях, без `-j` для довільного DAG — з
+пам'яті, не перевірено); Nushell — Rust, «external programs are spawned as separate processes, their output
+appears as text by default», «does not execute bash scripts natively» (nushell.sh/book, завантажено) → повна
+міграція 2.6 k рядків; Oils/osh — bash-сумісний парсер + YSH зі структурованими даними, Python→C++
+транслятор, збірка з tarball (oils.pub повернув 403; з пам'яті). AGENTS.md: нуль залежностей для
+компілятора; для tooling репо вже прийняв python (8 k рядків) і coreutils/ugrep/objdump/as — це треба
+сказати чесно: питання не «залежність чи ні», а «ще одна, заради чого».
+
+**(f) Матриця рішень** (overhead removed з (c); рядки міграції з (a); ризик — battery = safety net, історія
+T77/T96 показала, що баг harness'а коштує днів):
+
+| варіант | прибирає overhead | нові залежності | self-host чистота | міграція, рядків | ризик для гейтів | вердикт |
+|---|---|---|---|---|---|---|
+| bash (статус-кво) | 0 | 0 | tooling ≠ компілятор; ок | 0 | 0 | **лишити зараз** |
+| just | 0 (ті самі spawn'и + `sh -c`) | 1 (apt є) | ні | ~200 (Justfile-обгортка) | низький, але виграш 0 | відхилити |
+| Nushell | ≤5 % (менше `grep/awk/cut` через таблиці; spawn'и ті самі) | 1 (не в apt) | ні | 2 600 (переписати все) | **високий** (кожен regex-контракт) | відхилити |
+| osh/YSH | 0-3 % | 1 (не в apt, збірка) | ні | 0 для osh (сумісний) → тоді й виграш 0 | середній (сумісність 39 скриптів) | відхилити |
+| python (уже є) для текстових шматків | ≤5 % (85 ms на старт з'їдає виграш, якщо не один процес на лейн) | 0 нових | ні | ~300 (battery.sh `line()` + підсумки) | низький | лише як заміна `awk`-сміття, не мета |
+| bebop-native, повний (chain.bp + усі лейни) | 15-25 % battery (стеля (c)); до ~40 % з in-process `run()` | 0 (dogfooding) | **так** — і це єдиний аргумент | 800-1 200 (builtins + chain.bp + runner) + переписати/обгорнути 39 скриптів | **високий**: fixpoint-критичний harness переписується мовою, чий компілятор він гейтить (циклічна довіра: зламаний компілятор ламає свій же гейт — потрібен frozen golden-runner, як golden bebop-f86bee7.bin) | не зараз |
+| bebop-native, лише std-runner (in-process compile+run 99 тестів під fork-ізоляцією, викликаний з battery.sh як один лейн) | 10-20 % battery (найбільший лейн: ~700 spawn'ів → ~100) | 0 | так, локально | ~350 builtins + ~300 runner | середній (один лейн, звіряється з std_golden.sh байт-у-байт паралельно, старий лейн лишається як oracle до 3 зелених chain'ів) | **кандидат після виміру** |
+
+**Рекомендація (ранжовано).** 1) Bash лишається оркестратором: 45+45 рядків chain/battery — це не гальмо,
+гальмо — proot-spawn (4-9 ms) і хронометраж. 2) **Перший крок, без коду (measured-first):** один
+інструментований chain на вільній коробці — `strace -f -e trace=execve -c` (або `bash -x` + підрахунок)
+для точної кількості exec'ів і `perf.py`-рядки `chain_spawns`, `chain_spawn_ms`; гейт рішення: якщо
+spawn+текст < 20 % battery-wall — питання закрите до зміни платформи (без proot spawn ≈ 0.5 ms і частка
+падає нижче 5 %). 3) Якщо > 20 %: bebop-native **std-runner як один лейн** (builtins execve/wait4/pipe2/
+kill + `run()`; runner звіряється зі std_golden.sh байт-у-байт три chain'и поспіль, старий лейн — oracle);
+це і dogfooding, і єдине місце, де spawn'и реально зникають. 4) Повний chain.bp — лише після (3) і після
+рішення про golden-runner (frozen bin для гейту, щоб компілятор не гейтив себе своїм же зламаним runner'ом).
+5) just/Nushell/osh — відхилити: залежність без усунення жодного spawn'а; python для текстових підсумків —
+лише як прибирання `awk`-шматків усередині наявних лейнів, не як міграція.
+
 VERDICT: top = дозавершити регістрову модель + T52 csel + тег LIN (§1b(4): складання лінійної рекурентності на тегах, ~300 рядків,
 1.8-3x над Rust -O3 на K1H/K3H/K4 — LLVM цього не робить, дизасемблювання §5.3); очікувані відношення до Rust після регістрової
 моделі: K4 1.0x, K1H 1.0-1.05x, K3H 0.6-1.2x, K2H 1.5-1.8x, K8H 1.3-1.6x → 1.0-1.2x із csel; після LIN: K1H ~0.35x, K4 ~0.55x,
 K3H ~0.3-0.5x; порядок величини проти Rust — лише в класі specialise-then-run (5-30x на latency-to-result, twin спершу); zero-copy над mmap і
 zero-allocation (заявки 50-100x / 5-20x) — ~1x проти найкращого Rust (memmap2+winnow, bumpalo), 2-10x проти звичайного, порядок лише проти
 Python/JS/GC — міряти одним спільним twin (парсер → CSR з mmap-файлу, три Rust-рядки) до будь-якої заявки; плоский per-fn IR (CSR-форма, QBE-список +
-tre) — лише під самокомпіляцію після виміру (поріг 15 %), ~600-900 рядків; LLVM/Cranelift/QBE як залежності — відхилити.
+tre) — лише під самокомпіляцію після виміру (поріг 15 %), ~600-900 рядків; LLVM/Cranelift/QBE як залежності — відхилити.; §7: bash лишається оркестратором (стеля заміни 15-25 % battery-wall, spawn = proot-ptrace 4-9 ms, не bash), перший крок = інструментований підрахунок exec'ів + перф-рядки chain_spawns (гейт 20 %), потім bebop-native std-runner як один лейн (execve/wait4/pipe2/kill/run builtins, ~650 рядків, старий лейн як oracle); just/Nushell/osh — відхилити.

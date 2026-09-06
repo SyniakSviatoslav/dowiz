@@ -83,12 +83,19 @@ owned until the `MULC` is consumed or materialised. A `REG` register is owned by
 
 ### 1.3 State cells (all per-fn, reset by `vs_reset` in `compile_fn_at` beside the 3661/3662/3680 resets)
 
+Correction 2026-09-06 (session 18, after the worker hit it): the window is a compile-time LIST --
+only REG / MULC-on-window / FLAGS entries need a register, and a call has up to 14 pending
+arguments (emit_body takes 10) while an array literal may have ~99 pending elements. The entry
+array is therefore NOT tied to the 8 registers: it lives in the free zone fntab[2000..2383]
+(nothing is written between 1803 and 3654: fn zones end below ~1100 with 256 fns, facts are
+1500+i and 1800-1802) with capacity 128 entries.
+
 ```
-fntab[3797]        w                       window entry count, 0..8 (more -> vs_park of the deepest)
+fntab[3797]        w                       window entry count, 0..128 (a push at 128 = compile-time exit 89)
 fntab[3798]        free mask over x0..x7   bit r set = free; reset = 255
-fntab[3799 + 3i]   kind of entry i         i = 0..7
-fntab[3800 + 3i]   payload0
-fntab[3801 + 3i]   payload1
+fntab[2000 + 3i]   kind of entry i         i = 0..127
+fntab[2001 + 3i]   payload0
+fntab[2002 + 3i]   payload1
 fntab[3823]        cs mask                 bit (r-19) set = cs temp r LIVE (owned); reset = 0
 fntab[3824]        temp slot cursor k      next free temp slot; reset = 0
 fntab[3825]        cs_hi                   highest cs register index used (r-18, 0 = none), max over the fn
@@ -96,18 +103,18 @@ fntab[3826]        tsp                     max temp slots used, max over the fn
 fntab[3827]        S                       spilled-symbol count the emission pass uses for slot addresses (planning pass: 0)
 ```
 
-Cells 3797-3889 are unwritten today (verified: `grep -o 'fntab\[3[6-9][0-9][0-9]' bebop.bp | sort -u`
-gives 3655-3663, 3680-3681, 3700-3701, 3890-3892, 3899-3903). `tools/check_abi.py:167` zones:
-`(3655, 3661, "fold")` becomes `(3661, 3661, "whiledepth")`, `(3700, 3796, "slots")` becomes
-`(3797, 3827, "window")`; 3655-3660, 3700-3796 and 3890 are retired (§6).
+`tools/check_abi.py:167` zones: `(3655, 3661, "fold")` becomes `(3661, 3661, "whiledepth")`,
+`(3700, 3796, "slots")` becomes `(3797, 3798, "window_hdr")`, plus `(2000, 2383, "window")` and
+`(3823, 3827, "window_cs")`; 3655-3660, 3700-3796 and 3890 are retired (§6).
 
-**Entry count cap.** `w == 8` and a ninth push: `vs_park_deepest()` first (§1.4). Window entries
-never index past 3822.
+**Entry count cap.** `w == 128` and another push: compile-time exit 89 ("pending operands >
+128"). `vs_park_deepest` is only the fallback of `vs_alloc` when the free MASK is empty (it
+frees a register by parking the deepest register-owning entry IN PLACE; it never changes `w`).
 
 ### 1.4 Primitives (new functions, replace push/pop/fold/pop2/left_single/*_try)
 
 - `vs_reset(fntab)` -- cells 3797, 3798=255, 3823=0, 3824=0, 3825=0, 3826=0.
-- `vs_push(fntab, kind, p0, p1)` -- FLAGS-on-top rule, cap rule, then append.
+- `vs_push(fntab, kind, p0, p1)` -- FLAGS-on-top rule, cap rule (exit 89 at 128), then append; a REG push clears the register's mask bit (a `bl`/builtin result arrives in x0 without `vs_alloc`).
 - `vs_pop(fntab)` -- drop the top entry; if it owned a window register (REG, or MULC with r < 8)
   free the bit; if it was CS free the cs bit; SLOT frees nothing (slots are bump-allocated per
   expression statement and the cursor resets to 0 whenever `w` returns to 0 -- statement boundary).
@@ -126,7 +133,7 @@ never index past 3822.
   `19 + stab[0] + popcount(cs mask)` exceeds 26, to a temp slot (`str x<r>,[x15,#(S+k)*8]`, entry
   becomes `SLOT k`, k = cursor++, tsp = max). The window register is freed. Word count: exactly one
   word per parked entry either way (this is what keeps planning and emission in agreement, §4).
-- `vs_park_deepest(fntab)` -- `vs_park` restricted to entry 0 (the cap rule and the empty-mask rule).
+- `vs_park_deepest(fntab)` -- `vs_park` restricted to the deepest entry that owns a window register (the empty-mask rule only); in place, `w` unchanged.
 - `vs_evict(fntab, r)` -- if a window entry owns x<r>: `mov x<r'>,x<r>` into another free window
   register if any (entry becomes `REG r',-1`), else park that one entry. Then x<r> is free.
 - `vs_bind(fntab, insns, n, reg)` -- consume the top entry into symbol register/slot `reg`:
@@ -144,8 +151,12 @@ A `REG r,p` entry with `p == n[0] - 1` is the value of the last word emitted and
 rd field is r. Binding it to x<S> (or delivering it to x<d>) rewrites bits 0-4 of `insns[p]` to
 S/d instead of emitting `mov`. It is always semantics-preserving on AArch64 because every integer
 instruction reads its sources by number (`add x1,x1,x20` retargeted to `add x19,x1,x20` still reads
-the old x1); the single exception, `movk`, never carries a valid p. No label check is needed: a
-label at p means the word is itself a target, and the rename does not move it. No other function
+the old x1); the single exception, `movk`, never carries a valid p. One positional rule (correction, session
+18): retarget is only valid when NO label sits at n[0] (right after the producing word) -- at the
+`if` join the else-arm's last word writes d and the then-arm jumps to `end_pos` with the value in d,
+so renaming that word would leave the then-path's value in the wrong register. `emit_cond` therefore
+pushes `REG d,-1` (§3.5); no other label follows a producing word (B5's `endl` follows the backward
+branch, `else_pos` follows the `b`). A label AT p (the word itself is a target) is harmless. No other function
 may read or rewrite emitted words: `fold_try`, `pop2`, `left_single_*`, `madd_try`, `shl_try`,
 `mulc_try`, `addshift_try`, `cmp_try`, `cond_branch_word`, the `pop` retraction and its rd=0 bar,
 and the `emit_while_stmt` `dead` retraction all go (§6). `fntab[3660]` is retired with them.
@@ -380,7 +391,7 @@ for `./bebop.bin`. docs/PERF.md shows the row.
 
 | kernel | today | expected | gate added in this commit |
 |---|---|---|---|
-| K4 `let v = (v + i*7)*3 - 11; let i = i - 1` | 14 (B5) | 7: `movz;madd` (v + i*7) ; `add t,t,t,lsl #1` ; `sub x19,t,#11` ; `sub x20,x20,#1` ; `cmp x20,#0 ; b.gt` | `k4_loopwords <= 13` (D12-B, stays), `k4_ms <= 3.0` |
+| K4 `let v = (v + i*7)*3 - 11; let i = i - 1` | 14 (B5) | 7: `movz;madd` (v + i*7) ; `add t,t,t,lsl #1` ; `sub x19,t,#11` ; `sub x20,x20,#1` ; `cmp x20,#0 ; b.gt` | `k4_loopwords <= 13` (D12-B, stays); `k4_ms <= 3.0` OR `k4_ms <= 1.15 x` the Rust honest twin measured in the same honest.sh run (the twin is 3.25 ms on this box, so the absolute 3.0 ms figure of D12-B predates the honest twins and cannot be met without beating Rust; the ratio form is the gate) |
 | K1H `let s = s*3 + i` | 10 | 5 | `k1h_loopwords <= 8` |
 | K3H inner `a*3 + x*2 + y*3` | 24 | 7 | `k3h_loopwords <= 10` |
 | K2H fib (fn words) | 51 | ~21: prologue 4, `mov x19,x0`, `cmp x19,#2 ; b.ge`, `mov x0,x19 ; b`, `sub x0,x19,#1 ; bl ; mov x20,x0 ; sub x0,x19,#2 ; bl ; add x0,x20,x0`, epilogue 4 | `k2h_loopwords <= 30` |
