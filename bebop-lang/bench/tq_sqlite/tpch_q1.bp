@@ -1,0 +1,73 @@
+// tpch_q1.bp -- B7 store-side prep (docs/blueprints/B7-dsl-planner.md section 6,
+// docs/RESEARCH-GRAPHBLAS-2026-09-06.md section 1.2 Q1 shape): hand-written template
+// for the scan-group-agg kernel gen_gb will later generate. Group key = returnflag*2
+// + linestatus (6 groups, dense: no sort/hash needed, matches the research doc's
+// "6 groups -> 6x8 registers/cells, no sort"), one fused pass with dense per-group
+// accumulators [count, sum_qty, sum_extendedprice, sum_disc_price]; group order
+// ascending (returnflag,linestatus) so combine() folds in the same order as
+// bench/oracles/tpch.py's q1_fold / bench/oracles/lag_common.combine.
+//
+// usage: ./seed/build/seed <this.bin> <store path>   (argv[2] = store)
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+
+// upd: accumulate one qualifying row into group g's 4 dense cells (ga is 24 cells,
+// [group*4 + field]).
+fn upd(ga: [i64], flag: i64, ls: i64, q: i64, ep: i64, dc: i64) -> i64 {
+  let g = flag * 2 + ls;
+  let b = g * 4;
+  let _ = ga[b] = ga[b] + 1;
+  let _ = ga[b + 1] = ga[b + 1] + q;
+  let _ = ga[b + 2] = ga[b + 2] + ep;
+  let _ = ga[b + 3] = ga[b + 3] + ep * (100 - dc);
+  0
+}
+fn q1_scan(base: [i64], ship: i64, disc: i64, qty: i64, price: i64, rf: i64, ls: i64, n: i64, ga: [i64]) -> i64 {
+  let cutoff = 729634;   // (date(1998,12,1) - 90 days).toordinal()
+  let i = 0;
+  while i < n {
+    let sd = st_get(base, ship, 1 + i);
+    let ok = if sd <= cutoff then 1 else 0;
+    let flag = st_get(base, rf, 1 + i);
+    let lst = st_get(base, ls, 1 + i);
+    let q = st_get(base, qty, 1 + i);
+    let ep = st_get(base, price, 1 + i);
+    let dc = st_get(base, disc, 1 + i);
+    let _ = if ok == 1 then upd(ga, flag, lst, q, ep, dc) else 0;
+    let i = i + 1;
+    0
+  };
+  0
+}
+// combine: acc*1000003+v rolling fold over ga's 24 cells in order (matches
+// bench/oracles/lag_common.combine exactly under native i64 wraparound arithmetic).
+fn combine24(ga: [i64]) -> i64 {
+  let acc = 0;
+  let k = 0;
+  while k < 24 {
+    let acc = acc * 1000003 + ga[k];
+    let k = k + 1;
+    0
+  };
+  acc
+}
+fn main(argc: i64, argv: [str]) -> i64 {
+  let spath = zeros(256);
+  let sl = st_str(spath, argv[2]);
+  let size = 67108864;
+  let base = st_map_ro(spath, sl, size);
+  let tmp = zeros(256);
+  let root = st_root(base, tmp);
+  let n = st_get(base, root, 0);
+  let ship = st_ref(base, root, 1);
+  let disc = st_ref(base, root, 2);
+  let qty = st_ref(base, root, 3);
+  let price = st_ref(base, root, 4);
+  let rf = st_ref(base, root, 5);
+  let ls = st_ref(base, root, 6);
+  let ga = zeros(24);
+  let _ = q1_scan(base, ship, disc, qty, price, rf, ls, n, ga);
+  let fold = combine24(ga);
+  let _ = sys_munmap(st_addr(base), size);
+  fold
+}

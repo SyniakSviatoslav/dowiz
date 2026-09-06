@@ -1,0 +1,49 @@
+// tpch_q6.bp -- B7 store-side prep (docs/blueprints/B7-dsl-planner.md section 6,
+// docs/RESEARCH-GRAPHBLAS-2026-09-06.md section 1.2 Q6 shape): hand-written template
+// for the scan-filter-agg kernel gen_gb will later generate. One fused loop over the
+// store's lineitem columns: predicate on shipdate range / discount range / quantity
+// (constants baked in, as the generated kernel's will be -- see B7-dsl-planner.md
+// section 8), branchless mask-multiply-accumulate (no data-dependent branch, matching
+// the "cmp_mask -> madd" shape in the research doc). Fold = SUM(extendedprice *
+// discount) over the qualifying rows, exactly bench/oracles/tpch.py's q6_fold.
+//
+// usage: ./seed/build/seed <this.bin> <store path>   (argv[2] = store)
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+
+fn q6_scan(base: [i64], ship: i64, disc: i64, qty: i64, price: i64, n: i64) -> i64 {
+  let lo = 727929;   // date(1994,1,1).toordinal()
+  let hi = 728294;   // date(1995,1,1).toordinal(), exclusive
+  let acc = 0;
+  let i = 0;
+  while i < n {
+    let sd = st_get(base, ship, 1 + i);
+    let dc = st_get(base, disc, 1 + i);
+    let q = st_get(base, qty, 1 + i);
+    let m1 = if sd >= lo then (if sd < hi then 1 else 0) else 0;
+    let m2 = if dc >= 5 then (if dc <= 7 then 1 else 0) else 0;
+    let m3 = if q < 24 then 1 else 0;
+    let hit = m1 * m2 * m3;
+    let ep = st_get(base, price, 1 + i);
+    let acc = acc + hit * ep * dc;
+    let i = i + 1;
+    0
+  };
+  acc
+}
+fn main(argc: i64, argv: [str]) -> i64 {
+  let spath = zeros(256);
+  let sl = st_str(spath, argv[2]);
+  let size = 67108864;
+  let base = st_map_ro(spath, sl, size);
+  let tmp = zeros(256);
+  let root = st_root(base, tmp);
+  let n = st_get(base, root, 0);
+  let ship = st_ref(base, root, 1);
+  let disc = st_ref(base, root, 2);
+  let qty = st_ref(base, root, 3);
+  let price = st_ref(base, root, 4);
+  let fold = q6_scan(base, ship, disc, qty, price, n);
+  let _ = sys_munmap(st_addr(base), size);
+  fold
+}

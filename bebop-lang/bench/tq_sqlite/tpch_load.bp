@@ -1,0 +1,128 @@
+// tpch_load.bp -- B7 store-side prep (docs/blueprints/B7-dsl-planner.md section 6):
+// loads bench/tq_sqlite/gen_lineitem.py's CSV (same 600,000 deterministic rows as
+// bench/oracles/tpch.py) into the store as SoA columns, one `arr i64` object per
+// column (cell 0 = row count, cells 1..n = values), plus a root object holding the
+// row count and a ref to each column. Columns, in CSV order: shipdate, discount,
+// quantity, extendedprice, returnflag, linestatus, tax (bench/tq_sqlite/
+// gen_lineitem.py COLUMNS). One transaction, one commit.
+//
+// usage: ./seed/build/seed <this.bin> <csv path> <store path>
+// argv[0] = seed binary, argv[1] = this.bin, argv[2] = csv, argv[3] = store.
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+
+// read_int(buf, pos): parses one unsigned decimal field starting at pos[0],
+// advances pos[0] past the field, its terminator (comma or \r, one byte) and,
+// if present, a following \n (python's csv.writer emits \r\n line endings).
+fn read_int(buf: i64, pos: [i64]) -> i64 {
+  let v = 0;
+  let cont = 1;
+  while cont == 1 {
+    let b = char(buf, pos[0]);
+    let _ = pos[0] = pos[0] + 1;
+    let isdig = if b >= 48 then (if b <= 57 then 1 else 0) else 0;
+    let v = if isdig == 1 then v * 10 + (b - 48) else v;
+    let cont = isdig;
+    0
+  };
+  let nb = char(buf, pos[0]);
+  let skip_lf = if nb == 10 then 1 else 0;
+  let _ = if skip_lf == 1 then pos[0] = pos[0] + 1 else 0;
+  v
+}
+// skip_line(buf, pos): advances pos[0] past the next \n (the CSV header row).
+fn skip_line(buf: i64, pos: [i64]) -> i64 {
+  let cont = 1;
+  while cont == 1 {
+    let b = char(buf, pos[0]);
+    let _ = pos[0] = pos[0] + 1;
+    let cont = if b == 10 then 0 else 1;
+    0
+  };
+  0
+}
+// load_rows: one pass over the CSV bytes, 7 fields/row, writing straight into the
+// 7 store column objects (cols[f] = column f's store offset) at cell 1+row.
+fn load_rows(base: [i64], buf: i64, pos: [i64], nrows: i64, cols: [i64]) -> i64 {
+  let row = 0;
+  while row < nrows {
+    let f = 0;
+    while f < 7 {
+      let v = read_int(buf, pos);
+      let _ = st_put(base, cols[f], 1 + row, v);
+      let f = f + 1;
+      0
+    };
+    let row = row + 1;
+    0
+  };
+  row
+}
+fn main(argc: i64, argv: [str]) -> i64 {
+  let nrows = 600000;
+  let cpath = zeros(256);
+  let cl = st_str(cpath, argv[2]);
+  let spath = zeros(256);
+  let sl = st_str(spath, argv[3]);
+  // sys_slurp(fd,len): the raw read() requests `len` BYTES (verified empirically --
+  // NOT len*8; only the arena allocation is round16(len*8) bytes); the CSV is
+  // 16,068,481 bytes, so len must cover that directly.
+  let fd = sys_open(cpath, cl, 0);
+  let buf = sys_slurp(fd, 16100000);
+  let _ = sys_close(fd);
+  let size = 67108864;
+  let tmp = zeros(256);
+  let base = st_open(spath, sl, size, tmp);
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let dcol = st_digest("COL{arr i64}");
+  let c_ship = st_alloc(base, tx, nrows + 1, dcol);
+  let _ = st_put(base, c_ship, 0, nrows);
+  let c_disc = st_alloc(base, tx, nrows + 1, dcol);
+  let _ = st_put(base, c_disc, 0, nrows);
+  let c_qty = st_alloc(base, tx, nrows + 1, dcol);
+  let _ = st_put(base, c_qty, 0, nrows);
+  let c_price = st_alloc(base, tx, nrows + 1, dcol);
+  let _ = st_put(base, c_price, 0, nrows);
+  let c_rf = st_alloc(base, tx, nrows + 1, dcol);
+  let _ = st_put(base, c_rf, 0, nrows);
+  let c_ls = st_alloc(base, tx, nrows + 1, dcol);
+  let _ = st_put(base, c_ls, 0, nrows);
+  let c_tax = st_alloc(base, tx, nrows + 1, dcol);
+  let _ = st_put(base, c_tax, 0, nrows);
+  let cols = zeros(7);
+  let _ = cols[0] = c_ship;
+  let _ = cols[1] = c_disc;
+  let _ = cols[2] = c_qty;
+  let _ = cols[3] = c_price;
+  let _ = cols[4] = c_rf;
+  let _ = cols[5] = c_ls;
+  let _ = cols[6] = c_tax;
+  let pos = zeros(1);
+  let _ = pos[0] = 0;
+  let _ = skip_line(buf, pos);
+  let t0 = clock_ms();
+  let loaded = load_rows(base, buf, pos, nrows, cols);
+  let ms = clock_ms() - t0;
+  let _ = st_seal(base, c_ship, tmp);
+  let _ = st_seal(base, c_disc, tmp);
+  let _ = st_seal(base, c_qty, tmp);
+  let _ = st_seal(base, c_price, tmp);
+  let _ = st_seal(base, c_rf, tmp);
+  let _ = st_seal(base, c_ls, tmp);
+  let _ = st_seal(base, c_tax, tmp);
+  let droot = st_digest("LIROOT{i64,ref,ref,ref,ref,ref,ref,ref}");
+  let root = st_alloc(base, tx, 8, droot);
+  let _ = st_put(base, root, 0, nrows);
+  let _ = st_link(base, root, 1, c_ship);
+  let _ = st_link(base, root, 2, c_disc);
+  let _ = st_link(base, root, 3, c_qty);
+  let _ = st_link(base, root, 4, c_price);
+  let _ = st_link(base, root, 5, c_rf);
+  let _ = st_link(base, root, 6, c_ls);
+  let _ = st_link(base, root, 7, c_tax);
+  let _ = st_seal(base, root, tmp);
+  let gen = st_commit(base, tx, root, tmp);
+  let _ = sys_munmap(st_addr(base), size);
+  loaded * 1000000000 + ms * 1000 + gen
+}
