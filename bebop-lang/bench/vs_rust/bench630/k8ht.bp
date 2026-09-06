@@ -1,0 +1,27 @@
+// K8h (D14 item 5 / B9, honest twin of rust_once/k8h.rs): the branchy honest kernel, the
+// falsifier for T52-T54. State x is an LCG: x = x*6364136223846793005 + 1442695040888963407
+// (i64 wrapping); the branch bit is a HIGH bit, (x >> 60) & 1 -- the low bit of an LCG
+// alternates and would be perfectly predicted, so this is a ~50% coin flip. The two arms do
+// different real work: acc = if bit==1 then acc+x else acc-i. 20000 inner iterations per rep,
+// REPS=100 (2M branches total); x and acc both carried across reps (like k3ht.bp's `a`).
+// main returns the TOTAL ms (honest.sh / REPS); acc is live via + r * 0.
+fn main() -> i64 {
+  let t0 = clock_ms();
+  let acc = 0;
+  let x = 1;
+  let rep = 100;
+  while rep > 0 {
+    let i = 20000;
+    while i > 0 {
+      let x = x * 6364136223846793005 + 1442695040888963407;
+      let bit = (x >> 60) & 1;
+      let acc = if bit == 1 then acc + x else acc - i;
+      let i = i - 1;
+      0
+    };
+    let rep = rep - 1;
+    0
+  };
+  let r = acc;
+  (clock_ms() - t0) + r * 0
+}

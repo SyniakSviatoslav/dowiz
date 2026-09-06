@@ -14,7 +14,7 @@ BEBOP_BIN=${BEBOP_BIN:-./bebop.bin}; R=${R:-11}
 T=${BEBOP_TMP:-/tmp/opencode}/honest; mkdir -p "$T/rust"
 BIG=$(awk '/^processor/{p=$3} /CPU part/ && $NF=="0xd41"{print p}' /proc/cpuinfo | tr '\n' ' ')
 PIN=$(python3 -c "import os;u=sorted(os.sched_getaffinity(0));b=[int(x) for x in '$BIG'.split()];print(next((c for c in b if c in u),u[0]))")
-for k in k1h k2h k3h k4; do
+for k in k1h k2h k3h k4 k8h; do
   ./seed/build/seed "$BEBOP_BIN" compile bench/vs_rust/bench630/${k}t.bp "$T/${k}t.bin" >/dev/null 2>&1 || { echo "COMPILEFAIL ${k}t"; exit 1; }
   rustc -O -o "$T/rust/$k" bench/vs_rust/rust_once/$([ $k = k4 ] && echo k4h || echo $k).rs 2>/dev/null || { echo "RUSTC FAIL $k"; exit 1; }
 done
@@ -23,7 +23,7 @@ import os, subprocess, statistics, hashlib
 T=os.environ['T']; R=int(os.environ['R']); PIN=os.environ['PIN']; BB=os.environ['BB']
 def med(v): v=sorted(v); return v[len(v)//2], v[min(len(v)-1,int(round(0.95*(len(v)-1))))]
 rows=[]; rss={}
-for k in ['k1h','k2h','k3h','k4']:
+for k in ['k1h','k2h','k3h','k4','k8h']:
     bb=[]; rs=[]
     for _ in range(R):
         p=subprocess.Popen(['taskset','-c',PIN,'./seed/build/seed',f'{T}/{k}t.bin'],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)

@@ -53,3 +53,43 @@ Status: measured after B2 landed (R=11, pinned core 4, box idle). K2H 2.6x -> 2.
 | K4 | 4.57 / 4.76 | 3.247 / 3.374 | 1.4x | MET | 1.4x | 13.6 |
 | K5 self-compile of bebop.bp (cold, pinned, median of 3) | 1.56 s | (no twin: rustc is not a fair twin of a 200 KB one-pass compiler) | |
 | K6 nnidx scan 1M (bench/tq_sqlite/RESULT.md, Q=20) | 18.4 ms | sqlite scan 183 ms python / ~158 ms native (T100) | store faster |
+
+## K8 row (2026-09-06): branchy honest kernel, the B9 falsifier for T52-T54, bebop.bin a903d33b
+
+Status: measured R=11, pinned core 4 (ps -e wc -l was 24-25 throughout, no chain/battery from another
+agent running). K8H's branch is a genuine ~50% coin flip (bit = (x >> 60) & 1 of an LCG stream,
+x = x*6364136223846793005 + 1442695040888963407 wrapping); the two arms do different real work
+(acc+x vs acc-i), 20000 inner iterations x REPS=100 = 2,000,000 branches per run. bebop compiles the
+`if` to a real conditional branch (b.ne, confirmed by objdump of bench/vs_rust/kernels/k8h.bp's
+40-word inner loop -- b.cond count 2: the loop's own down-counter test (b.le, cheap/predictable) plus
+the data-dependent arm-select (b.ne, ~50% mispredict)). rustc -O picked `csel` for the same arm-select
+(confirmed by objdump of rust_once/k8h.rs: `csel x17, x15, x14, eq` at the sole branch point in its
+inner loop, no data-dependent b.cond at all). Two runs the same session: 5.7x (a standalone R=11
+script) and 4.5x (the honest.sh run below) -- both far above the naive 2-3x expectation from A78's
+1-cycle csel / ~10-cycle mispredict model (B9's research estimate), because bebop's branch also pays
+extra mov/spill overhead per arm beyond the raw mispredict cost (see the 40-word disassembly: a stack
+spill/reload of the LCG multiply result, register-shuffle movs before/after the branch). acc parity
+verified bit-exact against the Rust twin for seed=1: -7706214503032352720 on both sides.
+
+| kernel | bebop med / p95 ms per rep | Rust honest med / p95 ms per rep | bebop / Rust | gate <= 2.0x (TG-DONE 1) | 1.0x (D1(a) long target) | bebop RSS MB |
+|---|---|---|---|---|---|---|
+| K1H | 2.03 / 2.18 | 1.118 / 1.230 | 1.8x | MET | 1.8x | 15.5 |
+| K2H | 0.87 / 1.04 | 0.390 / 0.494 | 2.2x | UNMET | 2.2x | 15.5 |
+| K3H | 0.68 / 0.81 | 0.257 / 0.342 | 2.6x | UNMET | 2.6x | 15.5 |
+| K4 | 4.60 / 4.76 | 3.254 / 3.300 | 1.4x | MET | 1.4x | 15.5 |
+| K8H | 0.31 / 0.43 | 0.069 / 0.073 | 4.5x | UNMET | 4.5x | 15.5 |
+| K5 self-compile of bebop.bp (cold, pinned, median of 3) | 1.59 s | (no twin: rustc is not a fair twin of a 200 KB one-pass compiler) | |
+| K6 nnidx scan 1M (bench/tq_sqlite/RESULT.md, Q=20) | 18.4 ms | sqlite scan 183 ms python / ~158 ms native (T100) | store faster |
+
+VERDICT: K8H falsifies the "no target" half of B9's hedge -- a genuinely data-dependent branch at
+~50% mispredict costs bebop 4.5-5.7x versus LLVM's csel choice, well outside TG-DONE 1's <= 2.0x gate
+and well above the 2-3x A78 csel/mispredict model. T52 (pure `if` -> csel) has a real, large target on
+this shape; T53/T54 (sink-predicated stores, masked loops) remain undemonstrated by this row and can
+still be dropped per B9's original plan -- this row is only evidence for the simplest case (`if` as a
+2-way scalar select), not for predicated stores or masked loops.
+
+Control by the main session (same bebop.bin a903d33b, 5 interleaved pinned runs, B5 chain in flight on the box): the
+same kernel with a predictable bit `let bit = (i >> 4) & 1;` runs 0.15 ms/rep against K8's 0.34 ms/rep, so ~55 % of K8's
+time is the mispredicted branch itself and the remaining ~2.2x over Rust (0.069 ms) is the 40-word stack-machine loop.
+Decision: T52 proceeds -- as a csel on tags in the IR rung (R3+, both arms REG/SYM/CONST), not as a word peephole;
+T53/T54 stay deleted.

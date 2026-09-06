@@ -31,10 +31,10 @@ PIN = os.environ.get("PIN", "4")           # one A78 core (cpu part 0xd41: 4-7);
 SEED = "./seed/build/seed"
 T = os.environ.get("BEBOP_TMP", "/tmp/opencode") + "/perf"
 THRESH = {"selfcompile_wall": 5, "selfcompile_utime": 5, "selfcompile_stime": 15, "selfcompile_maxrss": 10,
-          "selfcompile_energy": 5, "k1h_ms": 3, "k2h_ms": 3, "k3h_ms": 3, "k4_ms": 3}
+          "selfcompile_energy": 5, "k1h_ms": 3, "k2h_ms": 3, "k3h_ms": 3, "k4_ms": 3, "k8h_ms": 3}
 EXACT = {"bin_words": "bebop", "stub_words": "stub", "k1h_loopwords": "k1h", "k2h_loopwords": "k2h",
-         "k3h_loopwords": "k3h", "k4_loopwords": "k4"}
-KERNELS = ["k1h", "k2h", "k3h", "k4"]
+         "k3h_loopwords": "k3h", "k4_loopwords": "k4", "k8h_loopwords": "k8h"}
+KERNELS = ["k1h", "k2h", "k3h", "k4", "k8h"]
 
 
 # ---------- E7: validity ----------
