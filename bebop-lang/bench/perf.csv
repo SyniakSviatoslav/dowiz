@@ -94,3 +94,51 @@ ts,commit,bin,metric,value,unit,n,valid,at_max_pct,temp_mc,note
 1788675690,f86bee7,e14dd55e,k3h_loopwords,25,words,1,1,,,
 1788675691,f86bee7,e14dd55e,k4_ms,3.75,ms/rep,11,1,88.2,56800,p95 3.800 
 1788675691,f86bee7,e14dd55e,k4_loopwords,15,words,1,1,,,
+1788676185,01185e7,e14dd55e,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788676185,01185e7,e14dd55e,gate_run_ms,0,ms,1,1,,,"sum of non-memo gate runs (0 runs, 100 memo hits)"
+1788676186,01185e7,e14dd55e,chain_wall,27,s,1,1,,,"chain + battery, CG=0"
+1788676186,01185e7,e14dd55e,chain_cpu,33.322,s,1,1,,,children utime+stime of chain.sh
+1788676186,01185e7,e14dd55e,bin_words,74804,words,1,1,,,bytes 301052
+1788676186,01185e7,e14dd55e,stub_words,131,words,1,1,,,
+1788676186,01185e7,e14dd55e,bin_fns,199,fns,1,1,,,
+1788676186,01185e7,e14dd55e,fuzz_seeds_on_bin,3500,seeds,7,1,,,TG-DONE 8: 3500 on e14dd55e; total 40600 over 7 bins
+1788676186,01185e7,e14dd55e,fuzz_rate,1.53,prog/s,7,1,,,"median over the bin's batches (LITTLE cores, nice)"
+1788676186,01185e7,e14dd55e,fuzz_trap_unpredicted,19,count,1,1,,,"TRAP-80/81/82 total; 81 by design, 82 is fuzz_trap82 (ALERT)"
+1788676186,01185e7,e14dd55e,fuzz_trap82,0,count,1,1,,,"D12-C: SIGSEGV/SIGBUS, 0 tolerated, repros in $REPROS"
+1788676196,01185e7,e14dd55e,selfcompile_wall,1589.587,ms,5,0,0.0,59500,
+1788676196,01185e7,e14dd55e,selfcompile_utime,1.5379,s,5,0,0.0,59500,
+1788676196,01185e7,e14dd55e,selfcompile_stime,0.0273,s,5,0,0.0,59500,
+1788676196,01185e7,e14dd55e,selfcompile_maxrss,22984,kB,5,0,0.0,59500,
+1788676196,01185e7,e14dd55e,selfcompile_energy,1.6423,core-s@fmax (proxy),5,0,0.0,59500,
+1788676206,01185e7,e14dd55e,k1h_ms,1.64,ms/rep,11,0,0.0,52400,p95 1.820 
+1788676206,01185e7,e14dd55e,k1h_loopwords,11,words,1,1,,,
+1788676207,01185e7,e14dd55e,k2h_ms,1.15,ms/rep,11,0,0.0,52400,p95 1.350 
+1788676207,01185e7,e14dd55e,k2h_loopwords,65,words,1,1,,,
+1788676207,01185e7,e14dd55e,k3h_ms,0.57,ms/rep,11,0,0.0,52400,p95 0.730 
+1788676207,01185e7,e14dd55e,k3h_loopwords,25,words,1,1,,,
+1788676207,01185e7,e14dd55e,k4_ms,4.06,ms/rep,11,0,0.0,52400,p95 4.110 
+1788676207,01185e7,e14dd55e,k4_loopwords,15,words,1,1,,,
+1788676237,01185e7,e14dd55e,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788676238,01185e7,e14dd55e,gate_run_ms,0,ms,1,1,,,"sum of non-memo gate runs (0 runs, 100 memo hits)"
+1788676239,01185e7,e14dd55e,chain_wall,24,s,1,1,,,"chain + battery, CG=0"
+1788676239,01185e7,e14dd55e,chain_cpu,28.794,s,1,1,,,children utime+stime of chain.sh
+1788676239,01185e7,e14dd55e,bin_words,74804,words,1,1,,,bytes 301052
+1788676239,01185e7,e14dd55e,stub_words,131,words,1,1,,,
+1788676239,01185e7,e14dd55e,bin_fns,199,fns,1,1,,,
+1788676239,01185e7,e14dd55e,fuzz_seeds_on_bin,4000,seeds,8,1,,,TG-DONE 8: 4000 on e14dd55e; total 41100 over 7 bins
+1788676239,01185e7,e14dd55e,fuzz_rate,1.58,prog/s,8,1,,,"median over the bin's batches (LITTLE cores, nice)"
+1788676239,01185e7,e14dd55e,fuzz_trap_unpredicted,24,count,1,1,,,"TRAP-80/81/82 total; 81 by design, 82 is fuzz_trap82 (ALERT)"
+1788676239,01185e7,e14dd55e,fuzz_trap82,0,count,1,1,,,"D12-C: SIGSEGV/SIGBUS, 0 tolerated, repros in $REPROS"
+1788676249,01185e7,e14dd55e,selfcompile_wall,1479.0348,ms,5,0,61.5,55100,
+1788676249,01185e7,e14dd55e,selfcompile_utime,1.432,s,5,0,61.5,55100,
+1788676249,01185e7,e14dd55e,selfcompile_stime,0.0199,s,5,0,61.5,55100,
+1788676249,01185e7,e14dd55e,selfcompile_maxrss,23000,kB,5,0,61.5,55100,
+1788676249,01185e7,e14dd55e,selfcompile_energy,1.6907,core-s@fmax (proxy),5,0,61.5,55100,
+1788676259,01185e7,e14dd55e,k1h_ms,1.54,ms/rep,11,0,71.0,53100,p95 1.720 
+1788676259,01185e7,e14dd55e,k1h_loopwords,11,words,1,1,,,
+1788676259,01185e7,e14dd55e,k2h_ms,1.08,ms/rep,11,0,71.0,53100,p95 1.270 
+1788676259,01185e7,e14dd55e,k2h_loopwords,65,words,1,1,,,
+1788676259,01185e7,e14dd55e,k3h_ms,0.53,ms/rep,11,0,71.0,53100,p95 0.690 
+1788676259,01185e7,e14dd55e,k3h_loopwords,25,words,1,1,,,
+1788676259,01185e7,e14dd55e,k4_ms,3.77,ms/rep,11,0,71.0,53100,p95 4.060 
+1788676259,01185e7,e14dd55e,k4_loopwords,15,words,1,1,,,

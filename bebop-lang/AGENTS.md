@@ -386,3 +386,12 @@ next task starts. Reason: 2026-09-05 four such shells spun at 100 % each and the
 Android's phantom-process cap (the false "transient COMPILEFAIL rc=90"); 2026-09-06 an
 orphaned invariants.sh with four zombie children sat at the cap again. Never `pkill -f` a
 literal (L20 hookify rule); reap.sh kills by pid.
+
+L22. ROLES (operator rule, 2026-09-06): the main session (Fable) is the analyst, planner and
+orchestrator -- it reads the state, writes the spec/blueprint and the agent prompt, verifies the
+VERDICT, commits and pushes. Roadmap work items (code, gates, journal lines) are executed by a
+Sonnet agent from that spec; research and analysis reports by an Opus agent. Agent prompts follow
+the Opus-5 prompting rules: goal + intent stated once, only the constraints the task really has,
+no filler or verification nudges, concrete reference material in a <context> block, tags in the
+order <context> <constraints> <output_format> <task>, one scope sentence. L19(c) caps still
+hold: at most two agents at once, procs < 30.

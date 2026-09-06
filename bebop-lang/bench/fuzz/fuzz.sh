@@ -57,9 +57,11 @@ t1=$(date +%s.%N)
 awk -v n="$N" -v s="$START" -v t0="$t0" -v t1="$t1" -v bin="$(md5sum "$BEBOP_BIN" | cut -c1-8)" '
   { c[$1]++ }
   END { t = t1 - t0
-        printf "fuzz: N=%d START=%d OK=%d DIVERGE=%d COMPILEFAIL=%d CRASH=%d TIMEOUT=%d BPREF-ERROR=%d BPREF-DEPTH=%d BPREF-TIMEOUT=%d GENFAIL=%d STRAY=%d TRAP-OK=%d TRAP-UNPREDICTED=%d wall=%.1fs rate=%.2f/s bin=%s\n",
-        n, s, c["OK"], c["DIVERGE"], c["COMPILEFAIL"], c["CRASH"], c["TIMEOUT"], c["BPREF-ERROR"], c["BPREF-DEPTH"], c["BPREF-TIMEOUT"], c["GENFAIL"], c["STRAY"], c["TRAP-OK"], c["TRAP-80"] + c["TRAP-81"] + c["TRAP-82"], t, n / (t > 0 ? t : 1), bin }' "$TMP/results"
+        printf "fuzz: N=%d START=%d OK=%d DIVERGE=%d COMPILEFAIL=%d CRASH=%d TIMEOUT=%d BPREF-ERROR=%d BPREF-DEPTH=%d BPREF-TIMEOUT=%d GENFAIL=%d STRAY=%d TRAP-OK=%d TRAP-UNPREDICTED=%d TRAP-81=%d TRAP-82=%d wall=%.1fs rate=%.2f/s bin=%s\n",
+        n, s, c["OK"], c["DIVERGE"], c["COMPILEFAIL"], c["CRASH"], c["TIMEOUT"], c["BPREF-ERROR"], c["BPREF-DEPTH"], c["BPREF-TIMEOUT"], c["GENFAIL"], c["STRAY"], c["TRAP-OK"], c["TRAP-80"] + c["TRAP-81"] + c["TRAP-82"], c["TRAP-81"], c["TRAP-82"], t, n / (t > 0 ? t : 1), bin }' "$TMP/results"
 grep -v -E '^(OK|GENFAIL|BPREF-DEPTH|BPREF-TIMEOUT|TRAP-OK|TRAP-TIMEOUT) ' "$TMP/results" | sort -k2 -n | head -40
-rc=$([ "$(grep -v -c -E '^(OK|GENFAIL|BPREF-DEPTH) ' "$TMP/results")" = 0 ]; echo $?)
+# D12-C: TRAP-81 (frame heap) is by design and stays a pass; TRAP-82 (SIGSEGV/SIGBUS) is
+# a real bug and is never excluded here, so it alone fails the run.
+rc=$([ "$(grep -v -c -E '^(OK|GENFAIL|BPREF-DEPTH|TRAP-81) ' "$TMP/results")" = 0 ]; echo $?)
 rm -rf "$TMP"
 exit $rc

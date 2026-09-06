@@ -96,6 +96,8 @@ Parallel-safe at any time: docs, oracles, fuzz batches, honest.sh rows, T78/T79/
 ## Open decisions (operator)
 
 - The real workload W of the store claim (a/b/c are frozen: D12-F).
+- (decided 2026-09-06, HISTORY D13: all 12 retro proposals of docs/RETRO-SESSIONS-2026-09-06.md §5
+  are work items; process-count gate, FREEZE-on-codegen, pkill block first)
 - (decided 2026-09-06, HISTORY D12: evals E1-E14, P2 = IR rung, TRAP-82 ALERT, hygiene
   commit, a/b/c = 4x/10x/2.5x, 1.0x stays the long target, K8 before csel, T48 into bebop.bp)
 

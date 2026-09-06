@@ -132,6 +132,9 @@ def budget_ok(name, words):
 
 def check(metric, value, binm, hist):
     """-> (alert:bool, text). hist = rows before this run."""
+    if metric == "fuzz_trap82":  # D12-C: 0 tolerated, any count on the current binary alerts
+        v = int(float(value))
+        return v > 0, f"{v} TRAP-82 (SIGSEGV/SIGBUS) on {binm}, 0 tolerated"
     prev = [r for r in hist if r["metric"] == metric and r["valid"] == "1"]
     if metric in EXACT:
         last = [r for r in prev if r["bin"] != binm] or prev
@@ -262,18 +265,22 @@ def constructs(binpath):
 # ---------- E8: fuzz throughput / coverage per promoted binary (docs/exp.journal reader) ----------
 def fuzz(binpath):
     per = {}
-    for line in open("docs/exp.journal"):
+    for line in open(os.environ.get("EXP_JOURNAL", "docs/exp.journal")):
         if "H:fuzzd batch" not in line and "H:fuzz batch" not in line: continue
-        m = re.search(r"GOT:N=(\d+) .*?DIVERGE=(\d+) COMPILEFAIL=(\d+) CRASH=(\d+).*?TRAP-UNPREDICTED=(\d+).*?rate=([0-9.]+)/s bin=(\w+)", line)
+        # TRAP-81=/TRAP-82= are D12-C fields; older journal lines lack them (treated as 0, never alerted on).
+        m = re.search(r"GOT:N=(\d+) .*?DIVERGE=(\d+) COMPILEFAIL=(\d+) CRASH=(\d+).*?TRAP-UNPREDICTED=(\d+)(?: TRAP-81=(\d+) TRAP-82=(\d+))?.*?rate=([0-9.]+)/s bin=(\w+)", line)
         if not m: continue
-        n, dv, cf, cr, tu, rate, b = m.groups()
-        d = per.setdefault(b, {"seeds": 0, "bad": 0, "trap": 0, "rates": []})
-        d["seeds"] += int(n); d["bad"] += int(dv) + int(cf) + int(cr); d["trap"] += int(tu); d["rates"].append(float(rate))
-    cur = md5(binpath); d = per.get(cur, {"seeds": 0, "bad": 0, "trap": 0, "rates": [0.0]})
+        n, dv, cf, cr, tu, t81, t82, rate, b = m.groups()
+        d = per.setdefault(b, {"seeds": 0, "bad": 0, "trap": 0, "trap82": 0, "rates": []})
+        d["seeds"] += int(n); d["bad"] += int(dv) + int(cf) + int(cr); d["trap"] += int(tu)
+        d["trap82"] += int(t82) if t82 is not None else 0
+        d["rates"].append(float(rate))
+    cur = md5(binpath); d = per.get(cur, {"seeds": 0, "bad": 0, "trap": 0, "trap82": 0, "rates": [0.0]})
     st = {"valid": 1}
     record(binpath, "fuzz_seeds_on_bin", d["seeds"], "seeds", len(d["rates"]), st, f"TG-DONE 8: {d['seeds']} on {cur}; total {sum(x['seeds'] for x in per.values())} over {len(per)} bins")
     record(binpath, "fuzz_rate", round(statistics.median(d["rates"]), 2), "prog/s", len(d["rates"]), st, "median over the bin's batches (LITTLE cores, nice)")
-    record(binpath, "fuzz_trap_unpredicted", d["trap"], "count", 1, st, "TRAP-82 becomes ALERT per D12-C; 81 stays by design")
+    record(binpath, "fuzz_trap_unpredicted", d["trap"], "count", 1, st, "TRAP-80/81/82 total; 81 by design, 82 is fuzz_trap82 (ALERT)")
+    record(binpath, "fuzz_trap82", d["trap82"], "count", 1, st, "D12-C: SIGSEGV/SIGBUS, 0 tolerated, repros in $REPROS")
     return per
 
 # ---------- E11 ----------
@@ -342,7 +349,7 @@ def main(a):
         print("construct rows changed:", constructs(b)); return 0
     if cmd == "fuzz":
         per = fuzz(b)
-        for k, v in sorted(per.items(), key=lambda x: -x[1]["seeds"])[:6]: print(k, v["seeds"], "seeds", v["bad"], "bad", v["trap"], "trap-unpredicted")
+        for k, v in sorted(per.items(), key=lambda x: -x[1]["seeds"])[:6]: print(k, v["seeds"], "seeds", v["bad"], "bad", v["trap"], "trap-unpredicted", v.get("trap82", 0), "trap82")
         return 0
     if cmd == "record":   # scripts (E4/E9/E14): perf.py record <metric> <value> <unit> [note]
         record(b, a[1], a[2], a[3], 1, {"valid": 1}, a[4] if len(a) > 4 else ""); return 0
