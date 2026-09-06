@@ -15,13 +15,13 @@ BIN=$(realpath -m "${1:?candidate .bin}"); export FREEZE=${FREEZE:-0}; SRC=${SRC
 [ -s "$BIN" ] || { echo "GUARD: $BIN missing or empty (L12)"; exit 1; }
 [ "${REAP_GATED:-}" ] || tools/reap.sh --check "${PROC_CAP:-30}" || { echo "GUARD: process cap exceeded (item 1, L19c)"; exit 97; }
 export REAP_GATED=1  # one gate per run tree (chain.sh already checked when it drives us)
-mkdir -p "$T"/{std,cp,pd,pool}
-( J=${J:-3} BEBOP_TMP=$T/std BEBOP_BIN=$BIN bash tools/std_par.sh > "$T/std.log" 2>&1 ) &  # sharded std_golden, one shard per A78 core
+mkdir -p "$T"/{std,cp,pd,pool}; sw() { [ -z "${SERIAL:-}" ] || wait; }; [ "${SERIAL:-}" ] && J=${J:-1}  # SERIAL=1 (2026-09-06, box safety): lanes one after another, J=1 -- ~12 procs instead of ~40
+( J=${J:-3} BEBOP_TMP=$T/std BEBOP_BIN=$BIN bash tools/std_par.sh > "$T/std.log" 2>&1 ) & sw  # sharded std_golden, one shard per A78 core
 ( BEBOP_TMP=$T/cp BEBOP_BIN=$BIN bash bench/vs_rust/construct_parity.sh > "$T/cp.log" 2>&1;
-  BEBOP_TMP=$T/pd BEBOP_BIN=$BIN bash bench/vs_rust/parity_driver.sh > "$T/pd.log" 2>&1 ) &
-( BEBOP_TMP=$T/pool BEBOP_BIN=$BIN bash bench/vs_rust/pool_parity.sh > "$T/pool.log" 2>&1 ) &
-( bash bench/oracles/run_all.sh > "$T/oracles.log" 2>&1 ) &  # little cores, memoized
-( BEBOP_TMP=$T/inv BEBOP_BIN=$BIN BEBOP_SRC=$SRC bash bench/vs_rust/invariants.sh $([ "$FREEZE" = 1 ] && echo --freeze) > "$T/inv.log" 2>&1 ) &
+  BEBOP_TMP=$T/pd BEBOP_BIN=$BIN bash bench/vs_rust/parity_driver.sh > "$T/pd.log" 2>&1 ) & sw
+( BEBOP_TMP=$T/pool BEBOP_BIN=$BIN bash bench/vs_rust/pool_parity.sh > "$T/pool.log" 2>&1 ) & sw
+( bash bench/oracles/run_all.sh > "$T/oracles.log" 2>&1 ) & sw  # little cores, memoized
+( BEBOP_TMP=$T/inv BEBOP_BIN=$BIN BEBOP_SRC=$SRC bash bench/vs_rust/invariants.sh $([ "$FREEZE" = 1 ] && echo --freeze) > "$T/inv.log" 2>&1 ) & sw
 python3 tools/census.py "$BIN" | tail -n 1 > "$T/census.txt" 2>&1
 python3 tools/check_abi.py "$BIN" > "$T/abi.txt" 2>&1
 BEBOP_TMP=$T/diag BEBOP_BIN=$BIN bash bench/vs_rust/diag_check.sh > "$T/diag.log" 2>&1  # T90: line:col diagnostics
