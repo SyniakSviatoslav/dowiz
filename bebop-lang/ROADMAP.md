@@ -17,9 +17,9 @@ compiled code runs within a small factor of Rust on honest kernels. Everything i
 plan serves that sentence and is judged by a number in a committed script:
 
 1. a one-pass compiler whose loops carry no stack-machine words (T96 done: K1 loop
-   51 -> 14 words), then temporaries in registers, condition fusion, a real calling
-   convention and one integer-exact peephole pass (T101-T104, through a per-fn op-list
-   IR per D11-G);
+   51 -> 14 words), then the register model (2026-09-06: tags over x0..x7, no runtime push/pop, retarget
+   instead of peepholes -- docs/REGISTER-MODEL-BLUEPRINT.md), csel, LIN recurrence folding,
+   pointer-free data and a flat per-fn IR only where the self-compile measurement earns it;
 2. a store (docs/LANG-DB-DESIGN.md §4 + §9.5, amended by D11-H): two superblocks +
    append-only arena of self-describing objects, `ref T` = object-relative offset,
    commit = root swap, Cheney compaction, sha256-named migrations, CSR/bucket indexes,
@@ -59,142 +59,53 @@ honest row is the real target for this compiler shape; D1(a)'s <= 1.0x stays rep
 
 ## Critical path (in order; one writer, one commit per single-variable step)
 
-Reordered 2026-09-06 by D14 item 1 (docs/DECISIONS-RESEARCH-2026-09-06.md §5 Q1, session 16):
-the disassembly of the three honest kernels showed K2H's 3.8x and K3H's 4.0x are prologue/join/
-left-nest overhead, not the 16 KiB frame or a missing compare fusion (REPORT-honest.md's
-attribution was wrong) — so three single-variable commits move before the IR rung and shrink
-what it has to reproduce byte-for-byte. The done rungs (T118 -> T122 -> T43 -> T47/T47b/T80 ->
-T48b -> T101-T103 + T105-T108 -> T109-T117 G1-G8 stage 2 -> T123-T125 -> T130/T118b -> T90 ->
-T104b -> P3 cmp_try -> D13's twelve retro proposals, all DONE 2026-09-06) are in HISTORY.md;
-this list is only what remains and is the ONE ordering (SESSION-HANDOFF points here, HISTORY's
-"Ordering for T84-T95" is superseded).
+Rewritten 2026-09-06 (session 18) by the main session after the four research reports
+(docs/RESEARCH-DEPS, -TENSOR, -NOPOINTERS-SQL, -GRAPHBLAS -2026-09-06.md) and the operator's
+decisions of the same day: the operand-tag-stack IR rung is replaced by the register model in one
+commit; the Salsa-like per-fn memo is required; harness dogfooding is measured-first; the pointer-
+free data model, u32 cells and the tensor-graph DB over the store are on the path; and -- operator
+2026-09-06, binding -- **multi-writer parallelism, instant start (no first-shape compile latency),
+multi-core execution, rank-n tensors and GraphBLAS-speed transformations are MANDATORY properties of
+the store, not optional "after" items**. Every task below has an executable blueprint in
+docs/blueprints/NN-<name>.md written by the main session (AGENTS.md L22); the Sonnet worker executes
+them in this order, one chain-gated commit per step, and never two codegen tasks in flight.
+Duplicates removed: B4 (frame size) is inside A6; T48 types are inside A8; the NEON items of the
+tensor report are one task A9; the specialise-then-run twin, the SpGEMM-join twin and B8 (profile the
+CSR build) are one measured-first task B2; the compiled planner (14a-3), the DSL (6b-4) and item 6 are
+one task B7; group commit / st_verify / recovery rows are inside B1; "multi-writer only if W demands"
+is superseded by B5 (mandatory).
 
-1. B1 DONE 2026-09-06 (308f2db: fixpoint 1a3b2cc2, K2H 3.8x -> 2.6x, K3H 4.0x -> 2.4x) -> B2 DONE 2026-09-06 (fixpoint a903d33b,
-   bin_words 74222 -> 67775, K2H 2.0x MET) -> B5 (loop rotation, bottom test): three
-   single-variable codegen commits, each through `tools/chain.sh --codegen`, constructs
-   re-frozen, an honest.sh row (D14 item 1; expected K2H 3.8x -> ~2.1x with no change to the
-   expression model).
-2. The register model, ONE commit (operator 2026-09-06, session 18, supersedes D12-B/D14 item 2's
-   R1-R5 rungs): docs/REGISTER-MODEL-BLUEPRINT.md. The stack machine is deleted -- no
-   `sub sp/str x0,[sp]` / `ldr/add sp` anywhere in emitted code (new invariant push_words == 0 in
-   invariants.sh + a PERF row); expression values are tags (CONST / SYM / REG / CS / SLOT / MULC /
-   FLAGS) over a window x0..x7, values that outlive the window go to callee-saved temps x(19+vc)..x26,
-   then to x15 frame slots sized by the planning pass (facts vc/alloc/cs_hi/tsp published by the
-   B1 mechanism); one stream edit remains (retarget of the last word's rd), every peephole and
-   word-pattern decoder is deleted (pop2 / left_single_* / madd_try / shl_try / mulc_try /
-   addshift_try / cmp_try / fold_try / cond_branch_word). Gates: chain --codegen GREEN, push_words 0,
-   k4 <= 13, k3h <= 10, k1h <= 8, k2h <= 30, k4_ms <= 3.0; constructs c55-c61 (window cap, nesting,
-   FLAGS, call mix, x0 eviction, nested ctor, array-of-calls). Expected: K4 14 -> 7, K1H 10 -> 5,
-   K3H 24 -> 7, K2H 51 -> ~21 words, bin_words 68229 -> < 55000.
-3. T52 `csel` on FLAGS/REG tags for pure `if` arms (no calls, no statements; ~60 lines): K8H
-   4.5x -> ~1.0-1.2x Rust (K8 control: the mispredict is ~55 % of K8). Gate: honest.sh K8H row.
-4. LIN tag -- folding of linear recurrences `s = a*s + b(i)` over k = 2/4 iterations on tags
-   (docs/RESEARCH-DEPS-2026-09-06.md §1b(4); exact in wraparound i64, LLVM -O3 does not do it in
-   any honest twin, §5.3). Measured-first: twins exist; gates `k1h_ms <= 0.5 x Rust`,
-   `k4_ms <= 0.6 x Rust`, bpref parity on std_tests (LCG/hash loops). ~300 lines. The only proven
-   path to beat Rust on K1H-K4 (1.8-3x).
-4b. Pointer-free data (docs/RESEARCH-NOPOINTERS-SQL-2026-09-06.md part 1, operator 2026-09-06):
-   "indices in data, pointers only in registers". Step 0 (python, any time): census of absolute
-   pointer stores into store cells + perf row `ptr_stores`. Step 1: arena-relative addressing with
-   one global base in x17 (`ldr xd,[x17,xidx,lsl #3]`; `zeros` returns an index; sys_* add the base;
-   arena image = file via sys_export = process checkpoint), ~190 lines, constructs c65_index_roundtrip
-   / c66_ptrfree; expected cost +1 add per array access until LICM (K5 +5-8 %, codegen-bound scans
-   +10-20 %, 0 at the DRAM ceiling and on K1H-K8H). Step 2: aggregates (array literals, ctors, struct
-   literals) into arena tables with mark/reset on the back-edge instead of the x14 frame heap --
-   deletes x14, the T118 words, exit 81 and `count_word(mov x0,x14)`; B4 (item 9) merges into this
-   step (frame = 80 + 8*marks + 8*slots, recursion 20x deeper), ~250 lines (-200), c67_deeprec.
-   Step 3: byte arena + `str` as a value `(off<<32 | len)`, raw-byte parser, crc32x per page --
-   ends bytes-in-cells (8x IO memory), makes strings first-class; ~380 lines + bpref; c68_strval +
-   the 100 MB ingest twin (five rows: bebop raw / bebop cells / sqlite import / Rust memmap2+winnow /
-   Rust serde-owned). Step 4 (with T48 types): u32 cells for CSR/store (file size 2.5x loss -> ~1x,
-   scan/BFS traffic 2x), ~200 lines. Placement: steps 1-3 after item 4 (LIN) and before item 12
-   (flat IR, which then removes the add via LICM and gets alias facts from typed tables).
-5. Freeze codegen for one 24 h fuzz window once items 2-4 land, so `fuzz_seeds_on_bin` reaches
-   10^5 on one md5 (TG-DONE 8, D14 item 12) -- before more codegen work resets the per-binary
-   seed counter again.
-6. "specialise-then-run" twin pair (RESEARCH-DEPS §6d-1, measured-first, code only after twin +
-   gate): bebop generates and compiles a scan for one concrete schema (~50 ms) vs a Rust generic
-   scan with a runtime schema; gate = ms to result INCLUDING compilation, second row without it.
-   Expected 5-30x on latency-to-result, 1.5-3x on the scan itself.
-6b. Tensor-graph DB over the store (docs/RESEARCH-GRAPHBLAS-2026-09-06.md, operator 2026-09-06):
-   GraphBLAS is the name of what the store already does (CSR, counting sort, frontier SpMSpV,
-   spmv_fp, tombstone masks) plus ~8 ops as GENERATED kernels with the semiring as a compile-time
-   parameter (`gb.bp` prelude ~300 lines: GbMatrix/GbVector as store objects, formats CSR/bitmap/iso,
-   masks; `gen_gb.bp` generator + templates ~900: mxv push/pull, mxm Gustavson+SPA, eWiseAdd/Mult,
-   select, apply, reduce; 6 semirings x ~6 ops <= 36 kernels, 50 ms compile, digest memo = SuiteSparse
-   JIT + HyPer). Relational algebra as linear algebra (Kepner associative arrays): select = mask,
-   join = SpGEMM over a CSR bucket = hash join without a hash table, group-by = reduce along a mode;
-   the associative-array DSL + planner (~450) IS item 14a-3. Purely functional tensor updates = move
-   persistence from objects to matrices: tail COO + L0 + L1 with row-block CoW (2-level blocktab,
-   ~10 KB append per update, block merge at commit; ~300 lines) = STORE PULL sgraph stage 3 -- stall
-   747 ms -> <= 2 ms, 30 us -> 0.1-0.3 us/edge, snapshot/time-travel free. Rank > 2 not needed for W
-   (a mode = another CSR). Substrate: item 2, csel, u32 (4b-4), NEON cmp_mask/sum64, a `umulh`
-   builtin (~8 words) before any PageRank row; LIN and the flat IR not needed. Forecast after this:
-   BFS 150-300x, Q6 50-80x, Q1 30-50x, join 20-50x, update 20-50x vs sqlite; ~1x (0.7-1.5x) vs Rust.
-   Replaces SQL for analytics/graphs/repeated shapes over known schemas, never multi-writer OLTP or
-   an ad-hoc SQL surface. ~2 000-2 500 lines, 6-8 chain commits, zero dependencies.
-   FIRST, before any gb.bp code (measured-first): the 2-way join as SpGEMM twin -- 1M x 1M, uniform +
-   Zipf keys, bebop csr_build + probe (~60 hand-written lines) vs sqlite native (indexed / hash plan)
-   vs Rust HashMap join and sort-merge; gate >= 10x sqlite AND >= 0.7x best Rust on both
-   distributions -- failing the Rust condition by > 2x narrows the thesis to "graph + scan DB".
-   Second twin: single-row updates (row-block CoW) vs sqlite WAL UPDATE.
-7. Hoisting of 64-bit loop-invariant constants out of `while` bodies (K8H -8 words/iter) -- only if
-   K8H is still > 1.2x Rust after items 2-3.
-8. NEON `scan(s, pos, class)` builtin for the parser loops (skip_ws/read_ident/skip_string) --
-   measured-first: replace one skip_ws by hand and measure K5 differentially; threshold 10 %.
-9. B4, per-fn computed frame size (D14 item 4): `80 + 8*while_marks + 8*spill_slots` from the
-   facts the register model publishes (vc/alloc/cs_hi/tsp, REGISTER-MODEL-BLUEPRINT §5), plus the
-   heap only when the body needs it; a mis-estimate is exit 81, TRAP-82 stays the fuzz gate at 0.
-10. Per-fn memo (Salsa-like, operator 2026-09-06: needed, not deferred): words of each fn memoised
-    by the hash of its text + facts; `bl` offsets re-linked from the layout table, so a one-fn edit
-    recompiles one fn. Gate: one-fn-edit self-compile <= 0.3 s (today 1.5 s cold / 0.07 s
-    whole-output .becache hit), fixpoint md5 unchanged. Zero dependencies (in bebop.bp).
-11. bebop dogfooding of the harness (RESEARCH-DEPS §7, operator 2026-09-06): (a) codeless first --
-    one instrumented chain (`strace -f -e trace=execve -c` or `bash -x` count) + perf.py rows
-    `chain_spawns`/`chain_spawn_ms`; decision gate 20 % of battery wall (spawn = proot ptrace
-    4-9 ms, not bash); (b) if above the gate: a bebop-native std-runner as ONE battery lane
-    (builtins execve/wait4/pipe2/dup3/kill + in-process `run(bin)`, ~650 lines), verified
-    byte-for-byte against std_golden.sh for three chains with the old lane as the oracle; (c) full
-    chain.bp only after (b) and a golden-runner decision (a frozen runner bin so the compiler never
-    gates itself with its own broken runner). just/Nushell/osh rejected: dependencies that remove
-    no spawn. Zero external dependencies stays the rule for the compiler AND for new tooling.
-12. Flat per-fn index IR (RESEARCH-DEPS §3: rows {op,a,b,aux}, blocks as ranges, CSR shape; passes =
-    the QBE list + tre) -- only for the self-compile, after measuring SROA/inline by hand in one
-    hot loop; threshold 15 %; ~600-900 lines. K2H -> ~1.0x via tail-recursion -> loop.
-13. Tensor/graph register model -- decided by docs/RESEARCH-TENSOR-2026-09-06.md (session 18):
-    (A) graph register allocation (Hack/Goos SSA colouring + coalescing, ~450 lines replacing the
-    window/park/retarget) enters only as the SECOND rung of the flat IR (item 12); gate K5 -3 %
-    over the IR, bin_words -2 %, pressure > 8 constructs. (B) NEON as a second register dimension:
-    builtin-level only -- after `scan` (item 8) add `cmp_mask`/`sum64` for the K6 scan (gate
-    ns/row <= 4 with a Rust scan twin in the same honest report) and `fill` for the CSR build;
-    auto-vectorisation and a (file, lane, width) tag payload rejected (i64 recurrences have no .2d
-    multiply, no gathers without SVE, the corpus has no independent loops). (C) tensor/loop-nest IR
-    rejected in favour of specialise-then-run template kernels (item 6). OISC/subleq, dataflow,
-    graph reduction, CGRA and single-level store: none is a runtime target on the A78 (3-100x or
-    already realised in software); their compile-time readings are items 4, 6, 12.
-14a. Store vs SQL as a class (RESEARCH-NOPOINTERS-SQL part 2, ranked by argument per line): (1) G5b
-    torn-write harness in the SQLite atomiccommit sector model + `sys_fsync` of the directory after
-    the compaction rename (~150 py + ~30 bp; gate 1000 trials, 0 invalid reopens; same harness over
-    sqlite WAL) -- python part any time; (2) raw-byte ingest = item 4b step 3; (3) compiled Q6/Q1
-    kernels + `.bp` generator + minimal planner over CSR/zone-maps (~1 100 lines) = item 6 in
-    concrete form (gates Q6 >= 10x, Q1 >= 5x sqlite native, first/repeat rows; DuckDB not
-    installable here -- published numbers only, marked); (4) u32 cells = item 4b step 4; (5) group
-    commit / st_verify / recovery row (~100); multi-writer only if W demands it. Claims defensible
-    now: scans, BFS, point lookup, insert, compile latency, kill -9 + snapshot readers + atomic
-    multi-object commit, zero deps. Never claim: multi-writer OLTP, a standard SQL surface, one-shot
-    unique query shapes under 50 ms, datasets beyond RAM, "zero-copy 50-100x vs Rust".
-14. Store, first move: B8 — profile the 45-90 s CSR build (sgraph phase b) before any store code
-   change (D14 item 6); the real workload W = the dowiz-core order log (T66 `ordfsm.bp`/
-   `money.bp`, byte-exact Rust oracles — D14 item 8); a, b, c stay frozen (D12-F: 4x / 10x /
-   2.5x) and the sgraph2.sh full run + honest.sh R=11 rerun stamp validity via E7 in the
-   background.
-15. T48 rest (checked types into bebop.bp) rides the register model's per-symbol table (S once
-   item 2 lands, not before); T61 (pool/futex builtins exist: the task is the library + a gate).
-16. Design-bound, operator decision first (AskUserQuestion before code): T68-T70, T85 -> T86
-   follow-ups, T73, T76, T49/T50, T56, T59.
-9. Last, each a project of its own: T91 x86_64 backend, T63/T64/T83 bench-policy rows as they
-   come up; T92-T95 backends, T84 glyphs, T62 network, T67 mesh, T87 f64, T88 supervisor, T89
-   trust chain moved to HISTORY.md's `## PARKED` heading (D14 item 11, reverses D11-J).
+### Phase A -- compiler substrate (every task through `tools/chain.sh --codegen`, constructs re-frozen)
+
+| # | task | blueprint | gate (the number) | depends on |
+|---|---|---|---|---|
+| A1 | register model, one commit (in flight) | docs/REGISTER-MODEL-BLUEPRINT.md | push_words == 0; k4 <= 13, k3h <= 10, k1h <= 8, k2h <= 30 loop words; k4_ms <= 1.15x Rust twin; c55-c64 | -- |
+| A2 | T52 `csel` on FLAGS/REG tags for pure `if` arms; + hoisting of 64-bit loop-invariant constants as the optional second commit if K8H > 1.2x after csel | docs/blueprints/A2-csel-and-const-hoist.md | K8H <= 1.2x Rust (honest.sh row) | A1 |
+| A3 | LIN tag: folding of linear recurrences over k = 2/4 iterations on tags (exact in wraparound i64) | docs/blueprints/A3-lin-recurrence-folding.md | k1h_ms <= 0.5x Rust, k4_ms <= 0.6x Rust, bpref parity on std_tests | A1 |
+| A4 | 24 h fuzz freeze window (process, no code): fuzzd on the promoted md5 until fuzz_seeds_on_bin >= 10^5 | docs/blueprints/A4-fuzz-freeze.md | 0 CRASH/DIVERGE, TRAP-82 = 0 | A1-A3 |
+| A5 | pointer-free step 1: x17 arena-relative addressing (`zeros` returns an index; `ldr xd,[x17,xidx,lsl #3]`; arena image = file) | docs/blueprints/A5-arena-relative-addressing.md | chain GREEN; c65_index_roundtrip, c66_ptrfree; K5 <= +8 %, K6 ns/row <= +20 % | A3 |
+| A6 | pointer-free step 2: aggregates into arena tables (mark/reset on the back-edge) + computed frames (B4): x14 / T118 / exit 81 deleted, frame = 80 + 8*marks + 8*slots | docs/blueprints/A6-aggregates-in-arena-and-frames.md | c67_deeprec (10^5 recursion), fuzz TRAP-81 = 0, TRAP-82 = 0, RSS row | A5 |
+| A7 | pointer-free step 3: byte arena + `str` as a value `(off<<32 | len)` + raw-byte parser + crc32x per page (= raw ingest) | docs/blueprints/A7-byte-arena-and-str-values.md | c68_strval; 100 MB ingest twin: raw <= 1.5x best Rust, maxrss <= 1.5x file size | A6 |
+| A8 | typed tables: T48 checked types in bebop.bp (`[i64]`, `[u32]`, `str`, `ref T`) + u32 cells for CSR/store | docs/blueprints/A8-typed-tables-u32.md | G7 file size <= 1.2x sqlite; K6 ns/row -2x; typecheck oracle == bpref | A7 |
+| A9 | NEON/hardware builtins: `scan` (parser loops), `cmp_mask`/`sum64`/`fill` (scans, CSR build), `umulh` (Q32 plus-times) | docs/blueprints/A9-neon-builtins.md | K5 -10 % (scan); K6 ns/row <= 4 with a Rust scan twin; each builtin a construct + bpref stub | A1 (scan any time), A8 (cmp_mask on u32) |
+| A10 | per-fn memo (Salsa-like): fn words memoised by hash(text, facts), `bl` re-link from the layout table | docs/blueprints/A10-per-fn-memo.md | one-fn-edit self-compile <= 0.3 s, fixpoint md5 unchanged | A1 |
+| A11 | harness dogfooding: (a) spawn census + perf rows chain_spawns (codeless), (b) bebop-native std-runner lane (execve/wait4/pipe2/dup3/kill/run builtins) with std_golden.sh as oracle for 3 chains, (c) chain.bp after a golden-runner decision | docs/blueprints/A11-harness-dogfooding.md | (a) decision gate 20 % of battery wall; (b) byte-identical lane summaries x3 | A1; (b) after A7 (str values) |
+| A12 | flat per-fn index IR (rows {op,a,b,aux}, blocks as ranges; passes fold/lin/cse/sroa/inline/tre/dce) then rung 2: graph register allocation (Hack/Goos) replacing the window | docs/blueprints/A12-flat-ir-and-graph-ra.md | rung 1: K5 -15 % (measured by hand first), K2H ~1.0x; rung 2: K5 -3 % more, bin_words -2 % | A5-A8 (alias facts from typed tables) |
+
+### Phase B -- the tensor-graph DB over the store (mandatory properties: multi-writer, instant start, multi-core, rank-n, GraphBLAS-speed transformations; zero dependencies)
+
+| # | task | blueprint | gate (the number) | depends on |
+|---|---|---|---|---|
+| B1 | durability: G5b torn-write harness (SQLite atomiccommit sector model) + `sys_fsync` of the directory after the compaction rename + group commit + `st_verify` + recovery row | docs/blueprints/B1-durability-torn-write.md | 1000 torn trials, 0 invalid reopens (same harness over sqlite WAL); commits/s row; recovery row | none (python part any time; sys_fsync after A1) |
+| B2 | measured-first twins that decide the thesis: (i) 2-way join as SpGEMM (1M x 1M, uniform + Zipf) vs sqlite native vs Rust HashMap/sort-merge; (ii) specialise-then-run scan vs Rust generic scan (latency to result incl. compile); (iii) B8 profile of the CSR build | docs/blueprints/B2-decisive-twins.md | join >= 10x sqlite AND >= 0.7x best Rust on both key distributions; scan twin rows first/repeat; CSR build profile row | A1 (register model) |
+| B3 | `gb.bp` + `gen_gb.bp`: GbMatrix/GbVector as store objects, formats CSR/bitmap/iso, masks, and the generated semiring kernels (mxv push/pull, mxm Gustavson+SPA, eWiseAdd/Mult, select, apply, reduce, extract, transpose) with **instant start**: a PreJIT kernel pool (all <= 36 (op, semiring) kernels compiled ahead into the store image, digest-keyed) plus a tier-0 generic kernel (semiring by id, no compile) used until the specialised one exists, compiled in the background | docs/blueprints/B3-graphblas-kernels-prejit.md | G9a round-trip; G9b LAGraph-style folds BFS/PR/TC/CC/SSSP == python oracle; first-query latency <= 1 ms (tier 0) and specialised <= 50 ms; each kernel a construct | B2 gate, A9 (umulh, cmp_mask, sum64) |
+| B4 | purely functional tensor updates: tail COO + L0 + L1 with row-block CoW (2-level blocktab), eWiseAdd block merge at commit, `prev` for time-travel, compaction = GC of unreachable versions (= sgraph stage 3) | docs/blueprints/B4-functional-tensor-updates.md | G9c: 1M single-row updates amortised <= 0.5 us, max stall <= 10 ms, folds == oracle every 10^4, kill -9 during merge (G5 harness); update twin vs sqlite WAL UPDATE | B3 |
+| B5 | multi-writer (mandatory): partitioned writers (one writer thread per matrix partition / arena), per-partition roots under one global root swap, cross-partition atomic commit by in-process 2PC over futex, STM validation of read-sets for cross-partition transactions, single-writer mode kept as the degenerate case | docs/blueprints/B5-multi-writer.md | G10: 3 writers x 10^5 updates on disjoint partitions, linearisable folds == oracle; cross-partition commit atomic under kill -9 (G5 harness); throughput >= 2x single writer on 3 A78 | B4 |
+| B6 | multi-core execution (mandatory): row-range partitioning of mxv/mxm/scan/reduce over 3 A78 via clone/setaffinity work queues, reduce merge, NUMA-free but DRAM-aware (stop scaling at the bandwidth ceiling) | docs/blueprints/B6-multi-core-kernels.md | K6 scan x1.4-2.2 on 3 cores; BFS/PR rows; no lost updates with B5 | B3, B5 |
+| B7 | associative-array DSL + planner (`q { from T where p group by k agg s join U on k }` -> AST -> access path + join order (k <= 4) -> gen_gb -> kernel) + compiled Q6/Q1/join twins; rank-n = mode-ordered CSR chosen by the planner | docs/blueprints/B7-dsl-planner.md | Q6 >= 10x, Q1 >= 5x sqlite native; first/repeat latency rows; rank-3 construct | B3, B6 |
+| B8 | W end to end: the dowiz-core order log (T66 ordfsm/money oracles) on the tensor-graph DB -- ingest (A7), FSM as a 12x12 matrix, queries via B7, updates via B4/B5, durability via B1; the acceptance of the thesis | docs/blueprints/B8-workload-W.md | byte-exact Rust oracles; the G-rows of this workload in REPORT-honest / RESULT-sgraph | B1-B7 |
+
+### Still open after A/B (design-bound, operator decision first): T61 (pool library + gate), T68-T70, T85 -> T86, T73, T76, T49/T50, T56, T59. Project-sized items stay under HISTORY.md `## PARKED` (D14 item 11).
 
 Parallel-safe at any time: docs, oracles, fuzz batches, honest.sh rows, T78/T79/T81/T82 tooling.
 
