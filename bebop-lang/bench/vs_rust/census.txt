@@ -51,6 +51,7 @@ c58_callmix 65 0 0 0 0 5 4
 c59_evict 37 0 0 0 0 2 3
 c60_nestctor 31 2 0 0 0 0 1
 c61_arrcall 53 1 0 0 0 2 3
+c66_fncap 2582 0 0 0 0 5 258
 hv_stdlib 131 2 0 0 2 1 4
 io_probe 251 10 3 0 4 0 1
 k1 18 1 0 0 1 0 1

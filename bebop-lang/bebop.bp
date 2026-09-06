@@ -3315,11 +3315,11 @@ fn compile(s: str) -> i64 {
   let stab = zeros(385);  // 1 + 3*128 (name,reg,srcpos) verified triples; overflow -> loud trap
   let selfname = 0 - 1;
   let selfstart = 0;
-  let fnames_l = zeros(256);
-  let fpos_l = zeros(256);
+  let fnames_l = zeros(512);
+  let fpos_l = zeros(512);
   let cnt_l = [0];
   let _ = collect_fns(s, fnames_l, fpos_l, cnt_l);
-  let _ = if cnt_l[0] >= 256 then diag_exit(s, 0, 89) else 0;
+  let _ = if cnt_l[0] >= 512 then diag_exit(s, 0, 89) else 0;
   let fntab = zeros(8192);
   let _ = fntab[0] = cnt_l[0];
   let _ = vs_reset(fntab);
@@ -4316,7 +4316,7 @@ fn collect_fns(s: str, fnames: [i64], fpos: [i64], cnt: [i64]) -> i64 {
     let is_fn = isf * isn * issp * is_alpha(cafter);
     let _ = tpos_c[0] = j + 3;
     let name = if is_fn == 1 then read_ident(s, tpos_c) else 0;
-    let capok = if cnt[0] < 256 then 1 else 0;
+    let capok = if cnt[0] < 512 then 1 else 0;
     let _ = if is_fn * capok == 1 then (let _ = fnames[cnt[0]] = name in (let _ = fpos[cnt[0]] = j in 0)) else 0;
     let _ = cnt[0] = cnt[0] + is_fn;
     let _ = spc[0] = j;
