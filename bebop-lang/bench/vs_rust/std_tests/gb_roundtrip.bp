@@ -1,0 +1,58 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+use "selfhost/prelude/gb.bp"
+// gb_roundtrip.bp -- B3 step 1 G9a gate (docs/blueprints/B3-graphblas-kernels-prejit.md
+// section 5 step 1, section 9): build a GbMatrix (ring_chords, gb.bp's gb_build_ring_chords)
+// into a fresh store file, transpose it and extract a row range, commit, then st_map_ro the
+// SAME file at a SECOND, independent base (the write base stays resident -- the kernel must
+// place the read-only mapping elsewhere, exactly the "two bases" of G2/slayout.bp) and fold
+// n/m/nnz/rp/ci/vv of all three matrices reading ONLY through that second base. Refs are
+// object-relative (store.bp:197-198): if anything leaked an absolute address, either the
+// second mapping's reads would diverge from the first base's known values, or `ok` (which
+// gates on the two bases genuinely differing) would go to 0 and zero the whole fold. Oracle:
+// bench/oracles/gb_lagraph.py (independent CSR build + transpose + extract over the same
+// ring_chords() generator from bench/oracles/lag_common.py).
+
+// gb_fold_component(base, M): n*C1 + m*C2 + nnz*C3 + sum(rp)*C4 + sum(ci)*C5 + sum(vv)*C6 --
+// sum(ci) via gb_fold_matrix (reduce-row: sum of column ids per row, summed over all rows),
+// so this one fold exercises extract, transpose AND reduce-row through the second base.
+fn gb_fold_component(base: [i64], M: i64) -> i64 {
+  let n = st_get(base, M, 0);
+  let m = st_get(base, M, 1);
+  let nnz = st_get(base, M, 2);
+  let rpsum = arr_sum(base, st_ref(base, M, 4), n + 1);
+  let cisum = gb_fold_matrix(base, M);
+  let vvsum = arr_sum(base, st_ref(base, M, 6), nnz);
+  n * 1000003 + m * 7919 + nnz * 104729 + rpsum * 31 + cisum * 17 + vvsum * 13
+}
+
+fn main() -> i64 {
+  let path = zeros(64);
+  let pl = st_str(path, "gb_roundtrip.store");
+  let tmp = zeros(1024);
+  let base = st_open(path, pl, 131072, tmp);
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let dg = zeros(6);
+  let _ = gb_digests(dg);
+  let a = gb_build_ring_chords(base, tx, tmp, dg);
+  let t = gb_transpose(base, tx, tmp, a, dg);
+  let e = gb_extract_rows(base, tx, tmp, a, 10, 20, dg);
+  let root = st_alloc(base, tx, 3, st_digest("GbRoot3{ref GbMatrix,ref GbMatrix,ref GbMatrix}"));
+  let _ = st_link(base, root, 0, a);
+  let _ = st_link(base, root, 1, t);
+  let _ = st_link(base, root, 2, e);
+  let _ = st_seal(base, root, tmp);
+  let _ = st_commit(base, tx, root, tmp);
+  // second, independent mapping of the SAME file, write base still resident above.
+  let base2 = st_map_ro(path, pl, 131072);
+  let root2 = st_root(base2, tmp);
+  let a2 = st_ref(base2, root2, 0);
+  let t2 = st_ref(base2, root2, 1);
+  let e2 = st_ref(base2, root2, 2);
+  let fa = gb_fold_component(base2, a2);
+  let ft = gb_fold_component(base2, t2);
+  let fe = gb_fold_component(base2, e2);
+  let ok = if st_addr(base) != st_addr(base2) then 1 else 0;
+  ok * (fa * 3 + ft * 5 + fe * 7)
+}

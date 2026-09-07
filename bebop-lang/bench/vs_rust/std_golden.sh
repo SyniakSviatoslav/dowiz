@@ -766,5 +766,19 @@ gate set 671356585229707990 "$r"
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/usemod.bp ${BEBOP_TMP:-/tmp/opencode}/usemod_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/usemod_test.bin | tail -1)
 gate usemod 5450099284205820388 "$r"
 
+# ---- gb_roundtrip (B3 step 1 G9a gate, docs/blueprints/B3-graphblas-kernels-prejit.md section
+#      5 step 1: selfhost/prelude/gb.bp objects + extract/transpose/reduce-row over a store
+#      GbMatrix, built+committed then read back through a SECOND, independent st_map_ro base
+#      -- refs are object-relative so a correct read is base-independent. Fold =
+#      n*1000003+m*7919+nnz*104729+sum(rp)*31+sum(ci)*17+sum(vv)*13 of the original*3 +
+#      transpose*5 + a row-range extract*7, oracle bench/oracles/gb_lagraph.py (independent
+#      CSR/transpose/extract reimplementation over the same ring_chords() generator). KNOWN
+#      RED (2026-09-07): a compiler miscompile in the two-setbit-calls-per-loop-iteration +
+#      later full-range fill-loop shape (selfhost/prelude/gb.bp's gb_build_pairs) corrupts the
+#      first row's ci/vv -- repro $OUT/repro_1.bp (bebop.bin md5 9694b78060201b6caffc09d256acd43f
+#      unchanged), see docs/exp.journal.) ----
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_roundtrip.bp ${BEBOP_TMP:-/tmp/opencode}/gb_roundtrip_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/gb_roundtrip_test.bin | tail -1)
+gate gb_roundtrip 775084997 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

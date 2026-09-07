@@ -1,0 +1,466 @@
+// selfhost/prelude/gb.bp -- B3 step 1 (docs/blueprints/B3-graphblas-kernels-prejit.md section
+// 3): GraphBLAS objects over the store. Library only (no main), `use`d by every driver that
+// needs it -- and because a nested `use` inside an included file is NOT followed (T47b,
+// bebop.bp:5069), every direct user of this file must ALSO directly `use` sha256.bp and
+// store.bp itself (same flat pattern as selfhost/std/sgraph2.bp's own two `use` lines).
+//
+// Objects (store cells, all `ref` fields object-relative via st_ref/st_link, store.bp:197-198):
+//   GbMatrix {n, m, nnz, fmt, ref rp, ref ci, ref vv, ref mask, gen, ref prev}  -- 10 fields,
+//     0 n  1 m  2 nnz  3 fmt (1 CSR, 2 bitmap, 3 iso-CSR/no vv, 4 hypersparse)
+//     4 ref rp  5 ref ci  6 ref vv (0 = none, iso)  7 ref mask (0 = none)  8 gen  9 ref prev
+//   B4 (row-block CoW, RESEARCH-GRAPHBLAS-2026-09-06.md section 2.2) appends `ref blocktab`
+//   as field 10 (a NEW digest/layout version) -- fields 0..9 never move, so no relayout of
+//   any object sealed under today's digest; `prev` (field 9) is already the version-chain
+//   slot section 2.2 wants, so B4 only needs the one new tail field.
+//   GbVector {n, nnz, fmt, ref idx, ref val}  -- 5 fields: fmt 1 dense (val only), 2 sparse
+//     (idx sorted + val), 3 bitmap (idx = the bitmap words, val unused/0).
+// RP/CI/VV/bitmap/dense-val objects all use the store's existing "arr i64" convention
+// (sgraph2.bp RP/CI/LOG/TB, csr.bp): field 0 = element count, fields 1.. = the values;
+// arr_get/arr_put below are that convention's accessors, used everywhere in this file.
+//
+// Formats implemented: CSR (fmt 1, the only one built here), the bitmap/iso ideas are
+// carried by GbVector fmt 3 and by omitting vv (ref 0) -- hypersparse (fmt 4) is out of
+// scope for step 1 (no test graph here needs it: LAGraph-prep graphs are all dense-degree).
+// Masks: a GbVector fmt 3 bitmap, tested with gb_vec_test(base, V, i, complement) --
+// complement is a plain XOR of the bit, matching the blueprint's "AND the bitmap word in
+// the loop" note (section 3, "descriptor").
+//
+// Semirings (id: oplus, otimes; RESEARCH-GRAPHBLAS-2026-09-06.md section 1.1): 1 or-and,
+// 2 any-pair, 3 plus-times (schoolbook Q32 fp_mul -- `umulh` is the A9 builtin that
+// replaces the division-by-2^32 below once it lands), 4 min-plus. gb_mxv_generic is the
+// tier-0 kernel: one function, sr as a runtime parameter, branch inside the loop.
+//
+// The three graphs gb_build_* produce match bench/oracles/lag_common.py's ring_chords(),
+// random_lcg(seed=42) and grid10x10() bit-for-bit: `%` here compiles to `udiv`+`msub`
+// (seed/seed.S:117-118, unsigned remainder) so `x % n` on the raw LCG word matches
+// python's `x % n` on the `& (2**64-1)`-masked word without any extra masking on this
+// side; self-loops and duplicate (u,v) pairs are dropped the same way _adj() does (a
+// python `set`) via a dedupe bitmap of n*n bits, and the final CSR row order matches
+// python's `sorted(s)` because the dedupe bitmap is drained by ascending key = u*n+v.
+
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+
+// ---- "arr i64" accessors (field 0 = count, fields 1.. = values) ----
+fn arr_get(base: [i64], o: i64, i: i64) -> i64 { st_get(base, o, 1 + i) }
+fn arr_put(base: [i64], o: i64, i: i64, v: i64) -> i64 { st_put(base, o, 1 + i, v) }
+fn arr_n(base: [i64], o: i64) -> i64 { st_get(base, o, 0) }
+fn arr_alloc(base: [i64], tx: [i64], dg: i64, nvals: i64) -> i64 {
+  let o = st_alloc(base, tx, nvals + 1, dg);
+  let _ = st_put(base, o, 0, nvals);
+  o
+}
+// arr_sum(base, o, n): sum of the first n values of an "arr i64" object (rp/ci/vv digest,
+// caller passes its own n -- an arr object never lies about its own count via arr_n, but a
+// slice sum needs a caller-chosen bound, e.g. rp has n+1 live cells for an n-row matrix).
+fn arr_sum(base: [i64], o: i64, n: i64) -> i64 {
+  let i = 0;
+  let acc = 0;
+  while i < n {
+    let acc = acc + arr_get(base, o, i);
+    let i = i + 1;
+    0
+  };
+  acc
+}
+
+// ---- bitmaps (plain [i64] cell buffers, 64 bits/cell; also used inside a GbVector) ----
+fn gb_bit(bm: [i64], i: i64) -> i64 { (bm[i >> 6] >> (i & 63)) & 1 }
+fn gb_setbit(bm: [i64], i: i64) -> i64 {
+  let _ = bm[i >> 6] = bm[i >> 6] | (1 << (i & 63));
+  0
+}
+
+// gb_digests(dg): fills dg[0..4) with the layout digests used by every builder below --
+// dg[0] GbRP, dg[1] GbCI, dg[2] GbVV, dg[3] GbMatrix. Call once per store/tx.
+fn gb_digests(dg: [i64]) -> i64 {
+  let _ = dg[0] = st_digest("GbRP{arr i64}");
+  let _ = dg[1] = st_digest("GbCI{arr i64}");
+  let _ = dg[2] = st_digest("GbVV{arr i64}");
+  let _ = dg[3] = st_digest("GbMatrix{i64,i64,i64,i64,ref GbRP,ref GbCI,ref GbVV,ref GbBM,i64,ref GbMatrix}");
+  let _ = dg[4] = st_digest("GbBM{arr i64}");
+  let _ = dg[5] = st_digest("GbVector{i64,i64,i64,ref GbBM,ref GbVL}");
+  0
+}
+
+// gb_csr_fill_w(base, src, dst, val, m, n, rp, ci, vv, cur): counting sort (stable) of m
+// directed edges (src[j],dst[j],val[j]) into pre-allocated rp (n+1 vals, zero-fresh),
+// ci/vv (m vals each); cur is a caller-owned [n] scratch array (fully overwritten below
+// before it is read, so it needs no pre-zeroing). This is sgraph2.bp:24 csr_build plus a
+// carried payload (vv), so a transpose or a fresh build can both go through one function.
+fn gb_csr_fill_w(base: [i64], src: [i64], dst: [i64], val: [i64], m: i64, n: i64, rp: i64, ci: i64, vv: i64, cur: [i64]) -> i64 {
+  let i = 0;
+  while i < m {
+    let a = src[i];
+    let _ = arr_put(base, rp, a + 1, arr_get(base, rp, a + 1) + 1);
+    let i = i + 1;
+    0
+  };
+  let v = 0;
+  while v < n {
+    let _ = arr_put(base, rp, v + 1, arr_get(base, rp, v + 1) + arr_get(base, rp, v));
+    let _ = cur[v] = arr_get(base, rp, v);
+    let v = v + 1;
+    0
+  };
+  let j = 0;
+  while j < m {
+    let a = src[j];
+    let s = cur[a];
+    let _ = arr_put(base, ci, s, dst[j]);
+    let _ = arr_put(base, vv, s, val[j]);
+    let _ = cur[a] = s + 1;
+    let j = j + 1;
+    0
+  };
+  0
+}
+
+// gb_matrix_seal: allocate+fill+seal a 10-field GbMatrix header over already-sealed rp/ci/vv.
+fn gb_matrix_seal(base: [i64], tx: [i64], tmp: [i64], dgm: i64, n: i64, m: i64, nnz: i64, fmt: i64, rp: i64, ci: i64, vv: i64) -> i64 {
+  let mx = st_alloc(base, tx, 10, dgm);
+  let _ = st_put(base, mx, 0, n);
+  let _ = st_put(base, mx, 1, m);
+  let _ = st_put(base, mx, 2, nnz);
+  let _ = st_put(base, mx, 3, fmt);
+  let _ = st_link(base, mx, 4, rp);
+  let _ = st_link(base, mx, 5, ci);
+  let _ = st_link(base, mx, 6, vv);
+  let _ = st_put(base, mx, 7, 0);
+  let _ = st_put(base, mx, 8, 0);
+  let _ = st_put(base, mx, 9, 0);
+  let _ = st_seal(base, mx, tmp);
+  mx
+}
+
+// gb_edge_weight(u,v): the SSSP edge weight (bench/oracles/lag_common.py:135-142), symmetric
+// (order-independent) so it can be recomputed on either the forward or the transposed CSR.
+fn gb_edge_weight(u: i64, v: i64) -> i64 {
+  let a = if u < v then u else v;
+  let b = if u < v then v else u;
+  1 + ((a * 1000003 + b * 7919) % 9)
+}
+
+// gb_build_pairs(base, tx, tmp, n, mp, psrc, pdst, cur, bm, dg): build a GbMatrix (fmt 1,
+// CSR) from mp raw UNDIRECTED (u,v) pairs (self-loops and duplicates allowed, dropped the
+// same way lag_common.py's _adj() does: a set, both directions added). cur: [n] scratch.
+// bm: [ (n*n+63)/64 ] scratch bitmap, must be caller-zeroed (allocated fresh with zeros()
+// is already zero). dg: gb_digests() output.
+// gb_hit_store: the fill loop's per-hit body, gated by the caller (`if hit == 1 then
+// gb_hit_store(...) else 0`) -- coordinator finding 2026-09-07: an EARLIER draft wrote
+// esrc[idx]/edst[idx]/eval[idx] unconditionally every key2, only advancing idx on a hit.
+// That looked harmless (a miss's write to a not-yet-advanced idx is overwritten by the
+// next real hit before idx moves) but breaks on the LAST hit: every miss AFTER it still
+// writes esrc[idx]=edst[idx]=eval[idx] at idx==cnt, one cell past each zeros(cnt)
+// allocation -- esrc's overrun lands in edst[0] (the next arena object), edst's overrun in
+// eval[0], silently (no bounds check in the native codegen). bpref.py caught it correctly
+// (IndexError on the OOB store); the fix is to only ever touch idx when hit == 1.
+fn gb_hit_store(esrc: [i64], edst: [i64], eval: [i64], idx: i64, uu: i64, vv2: i64, w: i64) -> i64 {
+  let _ = esrc[idx] = uu;
+  let _ = edst[idx] = vv2;
+  let _ = eval[idx] = w;
+  0
+}
+fn gb_build_pairs(base: [i64], tx: [i64], tmp: [i64], n: i64, mp: i64, psrc: [i64], pdst: [i64], cur: [i64], bm: [i64], dg: [i64]) -> i64 {
+  let k = 0;
+  while k < mp {
+    let u = psrc[k];
+    let v = pdst[k];
+    let same = if u == v then 1 else 0;
+    let _ = if same == 1 then 0 else gb_setbit(bm, u * n + v);
+    let _ = if same == 1 then 0 else gb_setbit(bm, v * n + u);
+    let k = k + 1;
+    0
+  };
+  let key = 0;
+  let cnt = 0;
+  while key < n * n {
+    let cnt = cnt + gb_bit(bm, key);
+    let key = key + 1;
+    0
+  };
+  let esrc = zeros(cnt);
+  let edst = zeros(cnt);
+  let eval = zeros(cnt);
+  let key2 = 0;
+  let idx = 0;
+  while key2 < n * n {
+    let hit = gb_bit(bm, key2);
+    let uu = key2 / n;
+    let vv2 = key2 % n;
+    let _ = if hit == 1 then gb_hit_store(esrc, edst, eval, idx, uu, vv2, gb_edge_weight(uu, vv2)) else 0;
+    let idx = idx + hit;
+    let key2 = key2 + 1;
+    0
+  };
+  let rp = arr_alloc(base, tx, dg[0], n + 1);
+  let ci = arr_alloc(base, tx, dg[1], cnt);
+  let vv = arr_alloc(base, tx, dg[2], cnt);
+  let _ = gb_csr_fill_w(base, esrc, edst, eval, cnt, n, rp, ci, vv, cur);
+  let _ = st_seal(base, rp, tmp);
+  let _ = st_seal(base, ci, tmp);
+  let _ = st_seal(base, vv, tmp);
+  gb_matrix_seal(base, tx, tmp, dg[3], n, n, cnt, 1, rp, ci, vv)
+}
+
+// ---- the 3 lag_common.py graphs (bench/oracles/lag_common.py:38-63) ----
+fn gb_gen_ring_chords(psrc: [i64], pdst: [i64]) -> i64 {
+  let n = 64;
+  let i = 0;
+  while i < n {
+    let _ = psrc[i] = i;
+    let _ = pdst[i] = (i + 1) % n;
+    let i = i + 1;
+    0
+  };
+  let j = 0;
+  while j < n / 2 {
+    let _ = psrc[n + j] = j;
+    let _ = pdst[n + j] = (j + n / 2) % n;
+    let j = j + 1;
+    0
+  };
+  n + n / 2
+}
+fn gb_lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
+fn gb_gen_random_lcg(psrc: [i64], pdst: [i64]) -> i64 {
+  let n = 1000;
+  let m = 4000;
+  let x = 42;
+  let k = 0;
+  while k < m {
+    let x = gb_lcg(x);
+    let u = x % n;
+    let x = gb_lcg(x);
+    let v = x % n;
+    let _ = psrc[k] = u;
+    let _ = pdst[k] = v;
+    let k = k + 1;
+    0
+  };
+  m
+}
+// grid10x10: absent right/down neighbours are padded as a self-loop (i,i) -- gb_build_pairs
+// drops self-loops unconditionally, so this needs no conditional write (avoids a
+// multi-statement if-branch; AGENTS.md ladder T0 -- keep branches single-expression).
+fn gb_gen_grid10x10(psrc: [i64], pdst: [i64]) -> i64 {
+  let rows = 10;
+  let cols = 10;
+  let r = 0;
+  let cnt = 0;
+  while r < rows {
+    let c = 0;
+    while c < cols {
+      let i = r * cols + c;
+      let hasr = if c + 1 < cols then 1 else 0;
+      let _ = psrc[cnt] = i;
+      let _ = pdst[cnt] = if hasr == 1 then i + 1 else i;
+      let cnt = cnt + 1;
+      let hasd = if r + 1 < rows then 1 else 0;
+      let _ = psrc[cnt] = i;
+      let _ = pdst[cnt] = if hasd == 1 then i + cols else i;
+      let cnt = cnt + 1;
+      let c = c + 1;
+      0
+    };
+    let r = r + 1;
+    0
+  };
+  cnt
+}
+fn gb_build_ring_chords(base: [i64], tx: [i64], tmp: [i64], dg: [i64]) -> i64 {
+  let n = 64;
+  let mp = 96;
+  let psrc = zeros(mp);
+  let pdst = zeros(mp);
+  let _ = gb_gen_ring_chords(psrc, pdst);
+  let cur = zeros(n);
+  let bm = zeros((n * n + 63) / 64);
+  gb_build_pairs(base, tx, tmp, n, mp, psrc, pdst, cur, bm, dg)
+}
+fn gb_build_random_lcg(base: [i64], tx: [i64], tmp: [i64], dg: [i64]) -> i64 {
+  let n = 1000;
+  let mp = 4000;
+  let psrc = zeros(mp);
+  let pdst = zeros(mp);
+  let _ = gb_gen_random_lcg(psrc, pdst);
+  let cur = zeros(n);
+  let bm = zeros((n * n + 63) / 64);
+  gb_build_pairs(base, tx, tmp, n, mp, psrc, pdst, cur, bm, dg)
+}
+fn gb_build_grid10x10(base: [i64], tx: [i64], tmp: [i64], dg: [i64]) -> i64 {
+  let n = 100;
+  let mp = 200;
+  let psrc = zeros(mp);
+  let pdst = zeros(mp);
+  let _ = gb_gen_grid10x10(psrc, pdst);
+  let cur = zeros(n);
+  let bm = zeros((n * n + 63) / 64);
+  gb_build_pairs(base, tx, tmp, n, mp, psrc, pdst, cur, bm, dg)
+}
+
+// ---- extract (row) / reduce (row, = degree) / transpose ----
+fn gb_row_lo(base: [i64], A: i64, i: i64) -> i64 { arr_get(base, st_ref(base, A, 4), i) }
+fn gb_row_hi(base: [i64], A: i64, i: i64) -> i64 { arr_get(base, st_ref(base, A, 4), i + 1) }
+fn gb_degree(base: [i64], A: i64, i: i64) -> i64 { gb_row_hi(base, A, i) - gb_row_lo(base, A, i) }
+fn gb_col(base: [i64], A: i64, k: i64) -> i64 { arr_get(base, st_ref(base, A, 5), k) }
+fn gb_val(base: [i64], A: i64, k: i64) -> i64 { arr_get(base, st_ref(base, A, 6), k) }
+// gb_fold_row(base, A, i): sum of column ids in row i (the G9a "extract a row and fold" op).
+fn gb_fold_row(base: [i64], A: i64, i: i64) -> i64 {
+  let lo = gb_row_lo(base, A, i);
+  let hi = gb_row_hi(base, A, i);
+  let k = lo;
+  let acc = 0;
+  while k < hi {
+    let acc = acc + gb_col(base, A, k);
+    let k = k + 1;
+    0
+  };
+  acc
+}
+// gb_fold_matrix(base, A): sum of gb_fold_row over every row (works from any mapping/base).
+fn gb_fold_matrix(base: [i64], A: i64) -> i64 {
+  let n = st_get(base, A, 0);
+  let i = 0;
+  let acc = 0;
+  while i < n {
+    let acc = acc + gb_fold_row(base, A, i);
+    let i = i + 1;
+    0
+  };
+  acc
+}
+// gb_transpose(base, tx, tmp, A, dg) = csr_build over (dst, src): a fresh GbMatrix whose
+// row i holds every j with A[j,i] != 0 (RESEARCH-GRAPHBLAS-2026-09-06.md section 1.1).
+fn gb_transpose(base: [i64], tx: [i64], tmp: [i64], A: i64, dg: [i64]) -> i64 {
+  let n = st_get(base, A, 0);
+  let nnz = st_get(base, A, 2);
+  let esrc = zeros(nnz);
+  let edst = zeros(nnz);
+  let eval = zeros(nnz);
+  let i = 0;
+  let idx = 0;
+  while i < n {
+    let lo = gb_row_lo(base, A, i);
+    let hi = gb_row_hi(base, A, i);
+    let k = lo;
+    while k < hi {
+      let _ = esrc[idx] = gb_col(base, A, k);
+      let _ = edst[idx] = i;
+      let _ = eval[idx] = gb_val(base, A, k);
+      let idx = idx + 1;
+      let k = k + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  let cur = zeros(n);
+  let rp = arr_alloc(base, tx, dg[0], n + 1);
+  let ci = arr_alloc(base, tx, dg[1], nnz);
+  let vv = arr_alloc(base, tx, dg[2], nnz);
+  let _ = gb_csr_fill_w(base, esrc, edst, eval, nnz, n, rp, ci, vv, cur);
+  let _ = st_seal(base, rp, tmp);
+  let _ = st_seal(base, ci, tmp);
+  let _ = st_seal(base, vv, tmp);
+  gb_matrix_seal(base, tx, tmp, dg[3], n, n, nnz, 1, rp, ci, vv)
+}
+
+// gb_extract_rows(base, tx, tmp, A, lo, hi, dg) = a csr_scan-style row-range slice [lo,hi)
+// of A into a NEW GbMatrix (n' = hi-lo rows, same m columns as A). CSR rows are stored
+// contiguously, so rows lo..hi-1's ci/vv are exactly A's own contiguous slice
+// [rp[lo], rp[hi]) -- no scratch buffers, no counting sort, just an offset copy.
+fn gb_extract_rows(base: [i64], tx: [i64], tmp: [i64], A: i64, lo: i64, hi: i64, dg: [i64]) -> i64 {
+  let m = st_get(base, A, 1);
+  let n2 = hi - lo;
+  let off = gb_row_lo(base, A, lo);
+  let nnz2 = gb_row_lo(base, A, hi) - off;
+  let rp2 = arr_alloc(base, tx, dg[0], n2 + 1);
+  let ci2 = arr_alloc(base, tx, dg[1], nnz2);
+  let vv2 = arr_alloc(base, tx, dg[2], nnz2);
+  let i = 0;
+  while i <= n2 {
+    let _ = arr_put(base, rp2, i, gb_row_lo(base, A, lo + i) - off);
+    let i = i + 1;
+    0
+  };
+  let k = 0;
+  while k < nnz2 {
+    let _ = arr_put(base, ci2, k, gb_col(base, A, off + k));
+    let _ = arr_put(base, vv2, k, gb_val(base, A, off + k));
+    let k = k + 1;
+    0
+  };
+  let _ = st_seal(base, rp2, tmp);
+  let _ = st_seal(base, ci2, tmp);
+  let _ = st_seal(base, vv2, tmp);
+  gb_matrix_seal(base, tx, tmp, dg[3], n2, m, nnz2, 1, rp2, ci2, vv2)
+}
+
+// ---- GbVector bitmap (fmt 3) -- mask + complement ----
+fn gb_vec_bitmap_alloc(base: [i64], tx: [i64], dgbm: i64, dgvec: i64, n: i64) -> i64 {
+  let nw = (n + 63) / 64;
+  let bm = arr_alloc(base, tx, dgbm, nw);
+  let vec = st_alloc(base, tx, 5, dgvec);
+  let _ = st_put(base, vec, 0, n);
+  let _ = st_put(base, vec, 1, 0);
+  let _ = st_put(base, vec, 2, 3);
+  let _ = st_link(base, vec, 3, bm);
+  let _ = st_put(base, vec, 4, 0);
+  vec
+}
+fn gb_vec_bit(base: [i64], V: i64, i: i64) -> i64 {
+  let bm = st_ref(base, V, 3);
+  (arr_get(base, bm, i >> 6) >> (i & 63)) & 1
+}
+fn gb_vec_setbit(base: [i64], V: i64, i: i64) -> i64 {
+  let bm = st_ref(base, V, 3);
+  let w = arr_get(base, bm, i >> 6);
+  arr_put(base, bm, i >> 6, w | (1 << (i & 63)))
+}
+// gb_vec_test(base, V, i, complement): the mask descriptor -- C<M> when complement=0,
+// C<!M> when complement=1 (a plain XOR of the bit, RESEARCH-GRAPHBLAS section 1.1 "descriptor").
+fn gb_vec_test(base: [i64], V: i64, i: i64, complement: i64) -> i64 {
+  gb_vec_bit(base, V, i) ^ complement
+}
+fn gb_vec_seal(base: [i64], V: i64, tmp: [i64]) -> i64 {
+  let _ = st_seal(base, st_ref(base, V, 3), tmp);
+  st_seal(base, V, tmp)
+}
+
+// ---- tier-0 generic mxv (section 3, "Instant start, three tiers", tier 2): one function,
+// semiring id as a runtime parameter, branch inside the loop. sr: 1 or-and, 2 any-pair
+// (both reduce to "does row i touch a nonzero x[j]" on 0/1 vectors -- any-pair's ⊗ = pair
+// ignores the edge value the same way or-and's ⊗ = and does when every edge weight is
+// nonzero, which is always true here), 3 plus-times (schoolbook Q32: (x*w)/2^32, `umulh`
+// is the A9 builtin that replaces the division), 4 min-plus. x, y: dense [i64] length n
+// (fmt-1-CSR-shaped kernels; a real bitmap/GbVector-backed x is a thin wrapper the caller
+// can add without touching this loop -- gb_bit/gb_vec_bit already exist for that).
+// hasmk/mk/cpl: the mask descriptor (0 mk = no mask; mk is only read when hasmk = 1).
+fn gb_mxv_generic(base: [i64], A: i64, sr: i64, x: [i64], y: [i64], n: i64, hasmk: i64, mk: [i64], cpl: i64) -> i64 {
+  let big = 1099511627776;
+  let i = 0;
+  while i < n {
+    let mbit = if hasmk == 1 then gb_bit(mk, i) else 1;
+    let active = mbit ^ cpl;
+    let lo = gb_row_lo(base, A, i);
+    let hi = gb_row_hi(base, A, i);
+    let isminplus = if sr == 4 then 1 else 0;
+    let k = lo;
+    let acc = isminplus * big;
+    while k < hi {
+      let j = gb_col(base, A, k);
+      let w = gb_val(base, A, k);
+      let xb = if x[j] != 0 then 1 else 0;
+      let pt = acc + (x[j] * w) / 4294967296;
+      let mp = x[j] + w;
+      let acc = if sr == 3 then pt else if sr == 4 then (if mp < acc then mp else acc) else (if acc == 1 then 1 else xb);
+      let k = k + 1;
+      0
+    };
+    let _ = if active == 1 then (let _ = y[i] = acc in 0) else 0;
+    let i = i + 1;
+    0
+  };
+  0
+}
