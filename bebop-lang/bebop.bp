@@ -2090,6 +2090,13 @@ fn vs_evict(insns: [i64], n: [i64], fntab: [i64], stab: [i64], r: i64) -> i64 {
   0
 }
 
+// A2 commit 1 (§1.2 rule suspended inside emit_cond's csel window,
+// fntab[4450] = 1 while both pure arms are being compiled below a buried
+// cond FLAGS entry): purity guarantees neither arm emits a flag-setting
+// word, so the entry cannot be corrupted by sitting un-settled -- only this
+// narrow window (set/cleared by emit_cond_csel, never left set on any
+// return path since the arms it wraps can contain no nested `if`) disables
+// the auto-materialise-on-push guard below.
 fn vs_settle_flags(insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
   let w = fntab[4547];
   let is_flags = if w > 0 then (if vs_entry_kind(fntab, w - 1) == 7 then 1 else 0) else 0;
@@ -2847,10 +2854,82 @@ fn vs_loop_branch_reg(insns: [i64], n: [i64], fntab: [i64], stab: [i64], top: i6
 // the join register `d` BEFORE either arm, then run each arm from the SAME
 // saved window/cs/slot state and materialise its value into `d` -- the join
 // owns the one result tag, not each arm.
+// A2 commit 1 (§3 "Commit 1: csel"): dispatch on a text pre-scan of both
+// arms, done ONCE here so the planning and emission passes -- which compile
+// this exact source twice -- see identical text at an identical `pos` and
+// always agree. Neither scanner mutates `pos` (both take value copies), so
+// the real compile below (branch or csel) starts from the same position
+// regardless of which path the pre-scan chose.
 fn emit_cond(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 2;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = vs_park(insns, n, fntab, stab, 1);
+  let strn = slen(s, pos);
+  let peek = [pos[0], strn];
+  let _ = skip_ws(s, peek);
+  let _ = peek[0] = peek[0] + 4;
+  let then_start = peek[0];
+  let then_end = arm_end(s, then_start, strn);
+  let peek2 = [then_end, strn];
+  let _ = skip_ws(s, peek2);
+  let else_start = peek2[0] + 4;
+  let else_end = arm_end(s, else_start, strn);
+  let pure = arm_is_pure(s, then_start, then_end, strn) * arm_is_pure(s, else_start, else_end, strn);
+  if pure == 1 then emit_cond_csel(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else emit_cond_branch(s, pos, insns, n, stab, selfname, selfstart, fntab)
+}
+
+// A2 commit 1: csel path for two pure arms. `condw` is the cond entry's
+// window index, already compiled+parked by emit_cond above -- it stays
+// BURIED below the arms' own entries for the whole compile (§1.2's "FLAGS
+// only at the top" rule is suspended for exactly this window via
+// fntab[4450], vs_settle_flags). Purity guarantees neither arm emits a
+// flag-setting word (cmp, T118 trap, `!`, a call), so nothing here can
+// corrupt the buried cond entry.
+fn emit_cond_csel(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let condw = fntab[4547] - 1;
+  let _ = fntab[4450] = 1;
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 4;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let ta = vs_reg(insns, n, fntab, stab, fntab[4547] - 1);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 4;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let tb = vs_reg(insns, n, fntab, stab, fntab[4547] - 1);
+  let _ = fntab[4450] = 0;
+  let d = vs_pick_dest(insns, n, fntab, stab);
+  let ck = vs_entry_kind(fntab, condw);
+  // cond wasn't (or no longer is) a FLAGS tag -- materialise it into a
+  // register and derive FLAGS from `cmp xr,#0` (ne = nonzero = true,
+  // matching every other truthiness test in the register model), inlined
+  // rather than a helper fn (a separate `emit_cond_flags(insns,n,fntab,stab,
+  // condw)` call here was a real, reproducible self-host miscompile: the
+  // whole-program self-compile traps exit 107 deep in an unrelated later
+  // function whenever this exact logic is a genuinely-called, separate
+  // top-level fn -- confirmed independent of that fn's name, its exact
+  // source position, and total fn count; disappears the moment the same
+  // statements are inlined at the one call site instead. Root cause not
+  // isolated further (open item); the extra `bl`/`ret` this avoids is also
+  // strictly fewer words. Frees the register's own mask/cs bit afterward
+  // exactly like vs_not_reg (bebop.bp, the `!` operator) -- the kind is
+  // read AFTER vs_reg so a freshly materialised CONST/SLOT/MULC temp (now
+  // kind REG) is freed, while a live SYM (a symbol's own permanent
+  // register) is correctly left alone.
+  let c = if ck == 7 then vs_entry_p0(fntab, condw) else (let cfr = vs_reg(insns, n, fntab, stab, condw) in (let cfak = vs_entry_kind(fntab, condw) in (let _ = em(insns, n, 4043309087 + cfr * 32) in (let _ = if cfak == 2 then vs_mask_free(fntab, cfr, 22) else 0 in (let _ = if cfak == 4 then vs_cs_free(fntab, cfr, 23) else 0 in 1)))));
+  // csel xd,xn,xm,<cond> (as+objdump derived, $OUT/words.objdump): base
+  // 2592079872 = 0x9A800000, + Rm*65536 + cond*4096 + Rn*32 + Rd.
+  let _ = em(insns, n, 2592079872 + tb * 65536 + c * 4096 + ta * 32 + d);
+  let _ = vs_pop(fntab);
+  let _ = vs_pop(fntab);
+  let _ = vs_pop(fntab);
+  vs_push(insns, n, fntab, stab, 2, d, n[0] - 1)
+}
+
+// Branch path (byte-identical to pre-A2 emit_cond): an impure arm -- a call,
+// `let`, `while`, nested `if`, array literal, string literal, struct/enum
+// ctor, or a comparison/`!` that would clobber the flags -- stays here.
+fn emit_cond_branch(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let bw = vs_cond_branch(insns, n, fntab, stab);
   let p1 = n[0];
   let _ = em(insns, n, bw);
@@ -3680,6 +3759,156 @@ fn skip_while_cond(s: str, pos: [i64]) -> i64 {
     0
   };
   0
+}
+
+// A2 commit 1 (csel): word-boundary keyword match for arm_end's terminator
+// set {in, then, else} at depth 0. Checks BOTH boundaries (char before pos,
+// char after the candidate word) so "index"/"win"/"elsewhere" never alias
+// the keywords they merely contain as a substring.
+fn kw_term_at(s: str, pos: i64, strn: i64) -> i64 {
+  let cb = if pos <= 0 then 0 else char(s, pos - 1);
+  let idb = is_alpha(cb) + is_digit(cb) + (if cb == 95 then 1 else 0);
+  let c0 = if pos >= strn then 0 else char(s, pos);
+  let c1 = if pos + 1 >= strn then 0 else char(s, pos + 1);
+  let c2 = if pos + 2 >= strn then 0 else char(s, pos + 2);
+  let c3 = if pos + 3 >= strn then 0 else char(s, pos + 3);
+  let is_in = (if c0 == 105 then 1 else 0) * (if c1 == 110 then 1 else 0);
+  let is_then = (if c0 == 116 then 1 else 0) * (if c1 == 104 then 1 else 0) * (if c2 == 101 then 1 else 0) * (if c3 == 110 then 1 else 0);
+  let is_else = (if c0 == 101 then 1 else 0) * (if c1 == 108 then 1 else 0) * (if c2 == 115 then 1 else 0) * (if c3 == 101 then 1 else 0);
+  let alen = 2 * is_in + 4 * is_then + 4 * is_else;
+  let cafter = if pos + alen >= strn then 0 else char(s, pos + alen);
+  let ida = is_alpha(cafter) + is_digit(cafter) + (if cafter == 95 then 1 else 0);
+  let any = is_in + is_then + is_else;
+  any * (1 - ida) * (1 - idb)
+}
+
+// A2 commit 1: scan from the start of an `if` arm (just past `then`/`else`)
+// to its end -- the first `;`, `)`, `,`, `}`, or the keyword `in`/`then`/`else`
+// at paren/bracket depth 0, or end of input (skip_while_cond's discipline:
+// track depth, skip strings/chars/comments so a quoted or commented token
+// can't be mistaken for a terminator). Used for BOTH arms: the then-arm's
+// real terminator (`else`) is a member of this same set, so one scanner
+// serves both call sites (blueprint §3). Restores nothing -- pos0 is a value,
+// not the caller's own position ref, so there is nothing to restore.
+fn arm_end(s: str, pos0: i64, strn: i64) -> i64 {
+  let pos = [pos0, strn];
+  let depth = [0];
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let e1 = if pos[0] + 1 >= strn then 1 else 0;
+    let ch1 = if e1 == 1 then 0 else char(s, pos[0] + 1);
+    let is_str = if ch == 34 then 1 else 0;
+    let is_chr = if ch == 39 then 1 else 0;
+    let is_cm = (if ch == 47 then 1 else 0) * (if ch1 == 47 then 1 else 0);
+    let d0 = if depth[0] == 0 then 1 else 0;
+    let is_open = (if ch == 40 then 1 else 0) + (if ch == 91 then 1 else 0);
+    let is_close = (if ch == 41 then 1 else 0) + (if ch == 93 then 1 else 0);
+    let is_punct = (if ch == 59 then 1 else 0) + (if ch == 44 then 1 else 0) + (if ch == 125 then 1 else 0) + is_close;
+    let is_kw = kw_term_at(s, pos[0], strn);
+    let is_term = d0 * (is_punct + is_kw);
+    let stop = at_end + (1 - at_end) * is_term;
+    let _ = if stop == 1 then 0
+      else if is_str == 1 then skip_string(s, pos)
+      else if is_chr == 1 then skip_char_lit(s, pos)
+      else if is_cm == 1 then skip_line_comment(s, pos)
+      else (let _ = depth[0] = depth[0] + is_open - is_close in (let _ = pos[0] = pos[0] + 1 in 0));
+    let done = stop;
+    0
+  };
+  pos[0]
+}
+
+// A2 commit 1: word-boundary match for arm_is_pure's forbidden keyword set
+// {let, while, if, match, return, break}.
+fn kw_bad_at(s: str, pos: i64, to: i64) -> i64 {
+  let cb = if pos <= 0 then 0 else char(s, pos - 1);
+  let idb = is_alpha(cb) + is_digit(cb) + (if cb == 95 then 1 else 0);
+  let c0 = if pos >= to then 0 else char(s, pos);
+  let c1 = if pos + 1 >= to then 0 else char(s, pos + 1);
+  let c2 = if pos + 2 >= to then 0 else char(s, pos + 2);
+  let c3 = if pos + 3 >= to then 0 else char(s, pos + 3);
+  let c4 = if pos + 4 >= to then 0 else char(s, pos + 4);
+  let c5 = if pos + 5 >= to then 0 else char(s, pos + 5);
+  let is_let = (if c0 == 108 then 1 else 0) * (if c1 == 101 then 1 else 0) * (if c2 == 116 then 1 else 0);
+  let is_if = (if c0 == 105 then 1 else 0) * (if c1 == 102 then 1 else 0);
+  let is_while = (if c0 == 119 then 1 else 0) * (if c1 == 104 then 1 else 0) * (if c2 == 105 then 1 else 0) * (if c3 == 108 then 1 else 0) * (if c4 == 101 then 1 else 0);
+  let is_match = (if c0 == 109 then 1 else 0) * (if c1 == 97 then 1 else 0) * (if c2 == 116 then 1 else 0) * (if c3 == 99 then 1 else 0) * (if c4 == 104 then 1 else 0);
+  let is_return = (if c0 == 114 then 1 else 0) * (if c1 == 101 then 1 else 0) * (if c2 == 116 then 1 else 0) * (if c3 == 117 then 1 else 0) * (if c4 == 114 then 1 else 0) * (if c5 == 110 then 1 else 0);
+  let is_break = (if c0 == 98 then 1 else 0) * (if c1 == 114 then 1 else 0) * (if c2 == 101 then 1 else 0) * (if c3 == 97 then 1 else 0) * (if c4 == 107 then 1 else 0);
+  let alen = 3 * is_let + 2 * is_if + 5 * is_while + 5 * is_match + 6 * is_return + 5 * is_break;
+  let cafter = if pos + alen >= to then 0 else char(s, pos + alen);
+  let ida = is_alpha(cafter) + is_digit(cafter) + (if cafter == 95 then 1 else 0);
+  let any = is_let + is_if + is_while + is_match + is_return + is_break;
+  any * (1 - ida) * (1 - idb)
+}
+
+// A2 commit 1: pos0 is a fresh identifier's start (caller already verified a
+// non-ident char precedes it). Peek past the identifier and any whitespace
+// or `//` comments -- WITHOUT consuming the caller's own scan position --
+// and report whether the next real token is `(` (a call or builtin, per
+// emit_ident's own identical skip_ws-then-check-`(` grammar).
+fn ident_call_at(s: str, pos0: i64, strn: i64) -> i64 {
+  let p = [pos0, strn];
+  let idone = 0;
+  while idone == 0 {
+    let ae = if p[0] >= strn then 1 else 0;
+    let c = if ae == 1 then 0 else char(s, p[0]);
+    let isid = is_alpha(c) + is_digit(c) + (if c == 95 then 1 else 0);
+    let _ = p[0] = p[0] + isid;
+    let idone = 1 - isid;
+    0
+  };
+  let _ = skip_ws(s, p);
+  let cf = if p[0] >= strn then 0 else char(s, p[0]);
+  if cf == 40 then 1 else 0
+}
+
+// A2 commit 1 (§3 "Commit 1: csel"): returns 1 iff [from, to) contains none
+// of: an identifier followed by `(` (call/builtin), the keywords let/while/
+// if/match/return/break, `[` (array literal/index), `"` (string literal),
+// `{` (struct/enum ctor), `.` (field access), or anything that sets flags --
+// `<`, `>`, `==`, `!=`, unary `!` (all excluded via their shared `<`/`>`/`!`
+// characters, `==` via the two-char `=`+`=`). Char/string literals and `//`
+// comments are skipped transparently (their content can't disqualify or
+// hide a real token). A bare `(`/`)`/digit/operator is fine -- only `[` and
+// `identifier(` are banned, so pure grouping and arithmetic both pass.
+fn arm_is_pure(s: str, from: i64, to: i64, strn: i64) -> i64 {
+  let pos = [from, strn];
+  let pure = [1];
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= to then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let e1 = if pos[0] + 1 >= to then 1 else 0;
+    let ch1 = if e1 == 1 then 0 else char(s, pos[0] + 1);
+    let is_str = if ch == 34 then 1 else 0;
+    let is_chr = if ch == 39 then 1 else 0;
+    let is_cm = (if ch == 47 then 1 else 0) * (if ch1 == 47 then 1 else 0);
+    let is_lb = if ch == 91 then 1 else 0;
+    let is_brc = if ch == 123 then 1 else 0;
+    let is_dot = if ch == 46 then 1 else 0;
+    let is_lt = if ch == 60 then 1 else 0;
+    let is_gt = if ch == 62 then 1 else 0;
+    let is_bang = if ch == 33 then 1 else 0;
+    let is_eq2 = (if ch == 61 then 1 else 0) * (if ch1 == 61 then 1 else 0);
+    let is_kw = kw_bad_at(s, pos[0], to);
+    let cb = if pos[0] <= 0 then 0 else char(s, pos[0] - 1);
+    let idb = is_alpha(cb) + is_digit(cb) + (if cb == 95 then 1 else 0);
+    let is_id_start = (is_alpha(ch) + (if ch == 95 then 1 else 0)) * (1 - idb);
+    let is_call = is_id_start * ident_call_at(s, pos[0], strn);
+    let bad = is_str + is_lb + is_brc + is_dot + is_lt + is_gt + is_bang + is_eq2 + is_kw + is_call;
+    let _ = if bad > 0 then (let _ = pure[0] = 0 in 0) else 0;
+    let _ = if at_end == 1 then 0
+      else if is_str == 1 then skip_string(s, pos)
+      else if is_chr == 1 then skip_char_lit(s, pos)
+      else if is_cm == 1 then skip_line_comment(s, pos)
+      else (let _ = pos[0] = pos[0] + 1 in 0);
+    let done = at_end;
+    0
+  };
+  pure[0]
 }
 
 // Emit one 'while cond { body };' statement: a real backward loop (no result).

@@ -58,3 +58,5 @@ bebop cbz 124 register model: cbz/cbnz on register conditions at if/while, b.con
 c04_cmp cbz 5 register model: cbz/cbnz on register conditions at if/while, b.cond on FLAGS
 c05_if cbz 2 register model: cbz/cbnz on register conditions at if/while, b.cond on FLAGS
 c20_deep cbz 1 register model: cbz/cbnz on register conditions at if/while, b.cond on FLAGS
+bebop bcond 1071 A2 commit 1 (csel): net vs the true HEAD baseline (1762) this is a big DROP -- pure if-arms now emit csel instead of b.cond/b/join; 1071 is only an increase relative to the previously (mistakenly) frozen 1056, which was recorded while bebop.bp:1's `use sha256.bp` line was accidentally left commented out and sha256.bp's own branches were never compiled in
+bebop cbz 126 A2 commit 1 (csel): the 5 new scanner fns (arm_end/arm_is_pure/kw_bad_at/kw_term_at/ident_call_at) add a few register-condition cbz sites of their own; net +2 vs the previously (mistakenly) frozen 122, well within a real csel win vs the true HEAD baseline of 124

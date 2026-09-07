@@ -84,6 +84,8 @@ for f in "$DIR"/*.bp; do
     c47_usenest) EXPECT=51071;;
     c50_cas) EXPECT=7136;;
     c53_param9) EXPECT=73;;
+    c70_csel) EXPECT=-162834;;
+    c71_csel_impure) EXPECT=-164832;;
     c55_vswindow) EXPECT=312;;
     c56_nest) EXPECT=240;;
     c57_flags) EXPECT=13;;
