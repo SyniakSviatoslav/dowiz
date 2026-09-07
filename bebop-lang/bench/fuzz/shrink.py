@@ -84,6 +84,11 @@ def classify(src=None, bp=None, wd=None):
         return 'BPREF-ERROR', 'rc=%d %s' % (rc, err.strip()[-120:].replace('\n', ' ')), ''
     exp = last_line(out)
     rc, out, err = run([SEED, BIN, 'compile', bp, bn], 20, wd)
+    if rc == 89 and 'call temp is live' in (out + err):
+        # REGISTER-MODEL-BLUEPRINT §1.1: a documented restriction of the A1 register model (`let ... in`
+        # while a call temp is live), not a compiler failure; bpref does not predict it (ROADMAP A14
+        # lifts it). Counted separately so an ALERT means DIVERGE/CRASH/real COMPILEFAIL only.
+        return 'UNSUPPORTED-89', 'compile rc=89 %s' % (out + err).strip()[-80:].replace('\n', ' '), exp
     if rc != 0 or not os.path.exists(bn) or os.path.getsize(bn) == 0:
         return 'COMPILEFAIL', 'compile rc=%d %s' % (rc, (out + err).strip()[-80:].replace('\n', ' ')), exp
     rc, out, err = run([SEED, bn], RUN_T, wd)
