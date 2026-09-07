@@ -4,6 +4,7 @@ Status: 2026-09-07 CURRENT (operator token-economy priority) -- the harness card
 
 ## Box (a Termux/proot phone; it has died from overload several times)
 - max 30 processes (`tools/reap.sh --check 30`); ONE compile/run/chain/battery at a time; no `&` jobs, no background or sleep loops, no polling, no subagents.
+- the chain runs in the FOREGROUND (Bash timeout 600000), never as a background job; a compiled program runs as `./seed/build/seed prog.bin [args]` (the .bin is not directly executable); a words-lane FAIL for new literals = `as` them + `objdump -d` into $BEBOP_TMP/words.objdump, then rerun `python3 tools/check_words.py`.
 - prefix compiles/runs with `nice -n 10 taskset -c 0-3`; timing rows `taskset -c 4` alone.
 - chain/battery ALWAYS `SERIAL=1 PROC_CAP=30`; exit 97 = cap: `tools/reap.sh`, then `tools/reap.sh kill`.
 - every forked child is wait4'ed; `tools/reap.sh` after each probe and at the end. fuzzd is paused.
