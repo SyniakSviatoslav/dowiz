@@ -15,7 +15,7 @@ import sys
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lag_common import ring_chords, s64, M
+from lag_common import ring_chords, random_lcg, random_lcg_edges, bfs_levels, s64, M
 
 
 def edge_weight(u, v):
@@ -86,5 +86,116 @@ def roundtrip_fold():
     return s64(fa * 3 + ft * 5 + fe * 7)
 
 
+
+# ---- B3 step 2 (docs/blueprints/B3-graphblas-kernels-prejit.md section 5 step 2, section 9):
+# oracle for bench/vs_rust/std_tests/gb_gen.bp's gb_gen gate (mxv/vxm x semirings 1-4 on the
+# 1k/4000-edge random_lcg() graph) and gb_bfs.bp's gb_bfs gate (BFS level-sum, same graph).
+# mxv(A,x)[i] = fold over A's row i of (x[j] oplus/otimes edge weight) -- gb.bp's own
+# gb_mxv_generic (selfhost/prelude/gb.bp:440-465), mirrored here arm for arm. vxm(x,A) ==
+# mxv(A^T,x) exactly (gen_gb.bp's own header note); random_lcg() is UNDIRECTED (both directions
+# added, lag_common._adj) with a symmetric edge weight (edge_weight below == gb.bp's
+# gb_edge_weight), so A^T == A structurally and by weight on this graph -- vxm and mxv fold to
+# the SAME value per semiring, which is exactly what both the bebop tier-0 (gb_mxv_generic
+# called on A then on gb_transpose(A)) and the generated kernels (root field 0 vs field 1)
+# independently confirmed (2026-09-07: all 8 (op,sr) folds pairwise equal, verified by running
+# each of the 8 compiled kernels against the driver's own store file).
+FP32 = 1 << 32
+BIG = 1099511627776  # gb.bp's own min-plus identity ("big")
+
+
+def gb_gen_x(n):
+    # gb_gen.bp's build_x: x[i] = 0 when i%3==0 (~third of vertices inactive), else
+    # ((i%5)+1) * 2**32 (Q32-scaled small positive integer -- plus-times' schoolbook
+    # `(x[j]*w)/2**32` divides out EXACTLY since x[j] is a multiple of 2**32).
+    return [0 if i % 3 == 0 else ((i % 5) + 1) * FP32 for i in range(n)]
+
+
+def _row_fold(i, adj, x, sr):
+    # gb_mxv_generic's per-row loop (gb.bp:446-460), one semiring arm at a time -- same
+    # arithmetic the generated kernels run (gen_gb.bp's wr_init/wr_row_body).
+    acc = BIG if sr == 4 else 0
+    for v in adj[i]:
+        w = edge_weight(i, v)
+        if sr == 3:
+            acc = acc + (x[v] * w) // FP32
+        elif sr == 4:
+            mp = x[v] + w
+            acc = mp if mp < acc else acc
+        else:  # sr 1 or-and / 2 any-pair -- both reduce to "any live neighbour" (gb.bp:24-31)
+            xb = 1 if x[v] != 0 else 0
+            acc = 1 if acc == 1 else xb
+    return acc
+
+
+def gb_fold(n, adj, x, sr):
+    return s64(sum(_row_fold(i, adj, x, sr) for i in range(n)))
+
+
+def directed_lt_adj():
+    """B3 step 2 coordinator review item 2 (2026-09-07): the symmetric random_lcg() graph has
+    AT == A (structurally, and by weight -- edge_weight is symmetric), so mxv and vxm fold to
+    the SAME value per semiring and the gate can't tell the two ops apart. This keeps only
+    (u, v) with u < v from the SAME raw LCG pair stream (random_lcg_edges(), no reverse edge
+    added -- gen_gb.bp's build_directed_lt mirrors this exactly: a bitmap dedupe keyed by
+    u*n+v, no symmetrise step) so the resulting matrix is genuinely directed/asymmetric."""
+    n, edges = random_lcg_edges()
+    s = set(uv for uv in edges if uv[0] < uv[1])
+    adj = [[] for _ in range(n)]
+    for u, v in s:
+        adj[u].append(v)
+    for row in adj:
+        row.sort()
+    return n, adj
+
+
+def transpose_adj(n, adj):
+    tadj = [[] for _ in range(n)]
+    for u in range(n):
+        for v in adj[u]:
+            tadj[v].append(u)
+    for row in tadj:
+        row.sort()
+    return tadj
+
+
+def gb_directed_folds():
+    """dmxv/dvxm sr1 (or-and) and sr4 (min-plus) on directed_lt_adj() -- mxv(DA,x) and
+    vxm(x,DA) == mxv(DA^T,x) must (and do) differ, unlike the symmetric graph's pairs."""
+    n, adj = directed_lt_adj()
+    tadj = transpose_adj(n, adj)
+    x = gb_gen_x(n)
+    dmxv1 = gb_fold(n, adj, x, 1)
+    dmxv4 = gb_fold(n, adj, x, 4)
+    dvxm1 = gb_fold(n, tadj, x, 1)
+    dvxm4 = gb_fold(n, tadj, x, 4)
+    return dmxv1, dmxv4, dvxm1, dvxm4
+
+
+def gb_gen_combined():
+    """The gb_gen gate's golden value: rolling-combine (bebop's own `c*1000003+v`, gen_gb.bp's
+    combine12) of the 8 symmetric (op, sr) folds (order mxv sr1..4 then vxm sr1..4 -- mxv and
+    vxm folds are IDENTICAL per semiring on this undirected graph, see module docstring above)
+    PLUS the 4 directed folds (dmxv sr1, dmxv sr4, dvxm sr1, dvxm sr4 -- these DIFFER, the
+    asymmetric case review item 2 asked for)."""
+    n, adj = random_lcg()
+    x = gb_gen_x(n)
+    mxv = [gb_fold(n, adj, x, sr) for sr in (1, 2, 3, 4)]
+    vxm = list(mxv)  # vxm(x,A) == mxv(A^T,x) == mxv(A,x) here (A^T == A, symmetric weights)
+    directed = list(gb_directed_folds())
+    vals = mxv + vxm + directed
+    c = vals[0]
+    for v in vals[1:]:
+        c = s64(c * 1000003 + v)
+    return c, mxv, directed
+
+
+def gb_bfs_fold():
+    n, adj = random_lcg()
+    return bfs_levels(n, adj, src=0)
+
+
 if __name__ == '__main__':
     print(roundtrip_fold())
+    combined, per_sr, directed = gb_gen_combined()
+    print('gb_gen mxv/vxm sr1..4', per_sr, 'directed dmxv1/4,dvxm1/4', directed, 'combined', combined)
+    print('gb_bfs', gb_bfs_fold())

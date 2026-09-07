@@ -40,7 +40,10 @@ def ring_chords(n=64):
     return n, _adj(n, edges)
 
 
-def random_lcg(n=1000, m=4000, seed=42):
+def random_lcg_edges(n=1000, m=4000, seed=42):
+    """The raw (u, v) LCG pair stream BEFORE _adj()'s undirected/dedupe fold -- shared so a
+    directed (un-symmetrised) variant can be built from the exact same pairs (B3 step 2
+    coordinator review item 2, 2026-09-07: bench/oracles/gb_lagraph.py's directed_lt_adj())."""
     x = seed
     edges = []
     while len(edges) < m:
@@ -49,6 +52,11 @@ def random_lcg(n=1000, m=4000, seed=42):
         x = (x * A + C) & LCGM
         v = x % n
         edges.append((u, v))
+    return n, edges
+
+
+def random_lcg(n=1000, m=4000, seed=42):
+    n, edges = random_lcg_edges(n, m, seed)
     return n, _adj(n, edges)
 
 

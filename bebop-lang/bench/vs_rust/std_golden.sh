@@ -780,5 +780,53 @@ gate usemod 5450099284205820388 "$r"
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_roundtrip.bp ${BEBOP_TMP:-/tmp/opencode}/gb_roundtrip_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/gb_roundtrip_test.bin | tail -1)
 gate gb_roundtrip 775084997 "$r"
 
+# ---- gb_gen (B3 step 2, docs/blueprints/B3-graphblas-kernels-prejit.md section 5 step 2:
+#      selfhost/std/gen_gb.bp's mxv/vxm templates over semirings 1-4). The driver
+#      (bench/vs_rust/std_tests/gb_gen.bp) builds the 1k-node/4000-edge random_lcg() graph +
+#      its transpose + a DIRECTED (un-symmetrised, u<v only, coordinator review item 2
+#      2026-09-07) variant of the SAME LCG pairs + its transpose + a fixed input vector into
+#      $BEBOP_TMP/gb_gen.store, computes the tier-0 fold of the 8 symmetric (op, sr)
+#      combinations PLUS the 4 directed (dmxv/dvxm x sr1,sr4) combinations via gb.bp's
+#      gb_mxv_generic, prints them, and generates all 12 specialised kernel .bp files into
+#      $BEBOP_TMP; this block then compiles and runs each of the 12 against the SAME store
+#      file and checks it against the driver's own tier-0 return value (rolling-combined, 12
+#      folds, order mxv sr1..4, vxm sr1..4, dmxv sr1+sr4, dvxm sr1+sr4) -- one mismatch
+#      anywhere (tier0 vs specialised vs the python oracle, bench/oracles/gb_lagraph.py's
+#      gb_gen_combined()) moves the golden number, so a RED here is never silent. The directed
+#      case is the one that actually tells mxv from vxm apart: dmxv sr1=408 != dvxm sr1=401,
+#      dmxv sr4=624526899545858 != dvxm sr4=625450317514518 (the symmetric graph's 8 folds
+#      pair up identically, mxv==vxm per semiring, since AT==A on an undirected graph -- not a
+#      template no-op, independently confirmed by both tier0-on-AT and the vxm kernels' own
+#      root-field-1 read). gb.bp's own gb_gen_random_lcg's `%` fix (signed-vs-unsigned, gb.bp's
+#      header correction) now lives in gb.bp itself -- no local duplicate in gen_gb.bp. ----
+GBT=${BEBOP_TMP:-/tmp/opencode}
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_gen.bp "$GBT/gb_gen_test.bin" >/dev/null 2>&1 && run 60 "$GBT/gb_gen_test.bin" "$GBT" | tail -1)
+gate gb_gen_tier0 -4783772994166464769 "$r"
+gb_gen_ok=1
+for combo in mxv_1 mxv_2 mxv_3 mxv_4 vxm_1 vxm_2 vxm_3 vxm_4 dmxv_1 dmxv_4 dvxm_1 dvxm_4; do
+  op=${combo%_*}; sr=${combo#*_}
+  ./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$GBT/gb_${op}_${sr}_0_1_0.bp" "$GBT/gb_${op}_${sr}_0_1_0.bin" >/dev/null 2>&1 || gb_gen_ok=0
+  rr=$(run 30 "$GBT/gb_${op}_${sr}_0_1_0.bin" "$GBT/gb_gen.store" | tail -1)
+  case "$op:$sr" in
+    mxv:1|vxm:1|mxv:2|vxm:2) exp=1000 ;;
+    mxv:3|vxm:3) exp=78065 ;;
+    mxv:4|vxm:4) exp=489626275115 ;;
+    dmxv:1) exp=408 ;;
+    dmxv:4) exp=624526899545858 ;;
+    dvxm:1) exp=401 ;;
+    dvxm:4) exp=625450317514518 ;;
+  esac
+  [ "$rr" = "$exp" ] || gb_gen_ok=0
+done
+gate gb_gen_specialised 1 "$gb_gen_ok"
+
+# ---- gb_bfs (B3 step 2 item (d)): BFS level-sum over the same 1k random_lcg() graph via
+#      REPEATED gb_mxv_generic (or-and semiring, visited bitmap as complement mask, dense
+#      frontier) -- bench/vs_rust/std_tests/gb_bfs.bp, oracle lag_common.bfs_levels(). DEVIATION
+#      (coordinator, 2026-09-07): selfhost/std/sgraph2.bp's own frontier BFS is NOT rewritten
+#      onto gb_mxv here (own gated runbook, bench/vs_rust/sgraph2.sh; deferred to step 3). ----
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_bfs.bp "$GBT/gb_bfs_test.bin" >/dev/null 2>&1 && run 30 "$GBT/gb_bfs_test.bin" "$GBT" | tail -1)
+gate gb_bfs -3 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

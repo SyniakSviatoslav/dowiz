@@ -1,0 +1,226 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+use "selfhost/prelude/gb.bp"
+use "selfhost/std/gen_gb.bp"
+// gb_gen.bp -- B3 step 2 driver (docs/blueprints/B3-graphblas-kernels-prejit.md section 5 step
+// 2, section 9): builds the 1k-node/4000-edge LCG graph (gb.bp's own gb_gen_random_lcg + the
+// unmodified gb_build_pairs -- fixed 2026-09-07, gb_gen_random_lcg's `%` now goes through
+// gb_umod, see gb.bp's header correction) plus its transpose, a fixed dense input vector X
+// (persisted into the store as a plain "arr i64" object, gb.bp's own convention), AND a
+// DIRECTED (un-symmetrised, u<v only) variant of the SAME LCG pairs + its transpose
+// (gen_gb.bp's build_directed_lt -- coordinator review item 2, 2026-09-07: the symmetric graph
+// can't tell mxv from vxm apart, every fold pairs up, so this is the asymmetric case) into a
+// store file under argv[2] (the $BEBOP_TMP directory). Computes the tier-0 fold of the 8
+// symmetric (op, semiring) combinations via gb.bp's gb_mxv_generic (op=mxv reads A directly,
+// op=vxm reads AT -- vxm(x,A) == mxv(AT,x) exactly, gen_gb.bp's own header comment) PLUS the 4
+// directed (dmxv/dvxm x sr1,sr4) combinations (dmxv reads DA, dvxm reads DAT), prints every
+// fold, generates all 12 specialised kernel .bp files with gen_gb.bp's gen_gb(), and returns
+// one combined fold (rolling reduce over the 12 tier-0 values, order mxv sr1..4, vxm sr1..4,
+// dmxv sr1+sr4, dvxm sr1+sr4) as main's return -- auto-printed by the runtime (seed.S:102),
+// the std_golden.sh `gb_gen` gate's `tail -1` value.
+//
+// X: x[i] = 0 when i%3==0 (about a third of vertices inactive -- exercises or-and/any-pair's
+// xb==0 branch), else ((i%5)+1) * 2^32 (Q32-scaled small positive integer -- plus-times'
+// schoolbook `(x[j]*w)/2^32` divides out EXACTLY since x[j] is a multiple of 2^32, so sr3's
+// fold is a plain integer weighted sum with no truncation, and min-plus's `x[j]+w` is
+// dominated by the Q32 scale but still an exact, deterministic, reproducible value).
+
+fn build_x(x: [i64], n: i64) -> i64 {
+  let i = 0;
+  while i < n {
+    let m3 = i - (i / 3) * 3;
+    let m5 = i - (i / 5) * 5;
+    let _ = x[i] = if m3 == 0 then 0 else (m5 + 1) * 4294967296;
+    let i = i + 1;
+    0
+  };
+  0
+}
+fn fill_x(base: [i64], X: i64, xloc: [i64], n: i64) -> i64 {
+  let k = 0;
+  while k < n {
+    let _ = arr_put(base, X, k, xloc[k]);
+    let k = k + 1;
+    0
+  };
+  0
+}
+
+// build_graphs: the SAME 4000 LCG pairs (gb.bp's gb_gen_random_lcg) feed BOTH the symmetric
+// build (gb_build_pairs, unmodified -- adds both directions) and the directed build
+// (build_directed_lt, gen_gb.bp -- u<v only, no symmetrisation); info[0..4) = A,AT,DA,DAT.
+fn build_graphs(base: [i64], tx: [i64], tmp: [i64], dg: [i64], info: [i64]) -> i64 {
+  let n = 1000;
+  let mp = 4000;
+  let psrc = zeros(mp);
+  let pdst = zeros(mp);
+  let _ = gb_gen_random_lcg(psrc, pdst);
+  let cur = zeros(n);
+  let bm = zeros((n * n + 63) / 64);
+  let A = gb_build_pairs(base, tx, tmp, n, mp, psrc, pdst, cur, bm, dg);
+  let AT = gb_transpose(base, tx, tmp, A, dg);
+  let DA = build_directed_lt(base, tx, tmp, dg, psrc, pdst, mp);
+  let DAT = gb_transpose(base, tx, tmp, DA, dg);
+  let _ = info[0] = A;
+  let _ = info[1] = AT;
+  let _ = info[2] = DA;
+  let _ = info[3] = DAT;
+  0
+}
+// build_store: opens argv-directed store, builds A/AT/DA/DAT/X, commits, returns base;
+// info[0..4) = A,AT,DA,DAT (out-params, gb.bp's own cnt-style convention).
+fn build_store(dir: str, tmp: [i64], info: [i64]) -> [i64] {
+  let path = zeros(256);
+  let ppos = zeros(1);
+  let _ = wr_str(path, ppos, dir);
+  let _ = wr_str(path, ppos, "/gb_gen.store");
+  let base = st_open(path, ppos[0], 4194304, tmp);
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let dg = zeros(6);
+  let _ = gb_digests(dg);
+  let _ = build_graphs(base, tx, tmp, dg, info);
+  let n = 1000;
+  let xloc = zeros(n);
+  let _ = build_x(xloc, n);
+  let X = arr_alloc(base, tx, st_digest("GbXV{arr i64}"), n);
+  let _ = fill_x(base, X, xloc, n);
+  let _ = st_seal(base, X, tmp);
+  let root = st_alloc(base, tx, 5, st_digest("GbGenRoot5{ref GbMatrix,ref GbMatrix,ref GbXV,ref GbMatrix,ref GbMatrix}"));
+  let _ = st_link(base, root, 0, info[0]);
+  let _ = st_link(base, root, 1, info[1]);
+  let _ = st_link(base, root, 2, X);
+  let _ = st_link(base, root, 3, info[2]);
+  let _ = st_link(base, root, 4, info[3]);
+  let _ = st_seal(base, root, tmp);
+  let _ = st_commit(base, tx, root, tmp);
+  base
+}
+
+fn fold_vec(y: [i64], n: i64) -> i64 {
+  let i = 0;
+  let acc = 0;
+  while i < n {
+    let acc = acc + y[i];
+    let i = i + 1;
+    0
+  };
+  acc
+}
+fn tier0_fold(base: [i64], M: i64, sr: i64, x: [i64], y: [i64], n: i64, dummy: [i64]) -> i64 {
+  let _ = gb_mxv_generic(base, M, sr, x, y, n, 0, dummy, 0);
+  fold_vec(y, n)
+}
+fn say(label: str, v: i64, buf: [i64]) -> i64 {
+  let n = st_str(buf, label);
+  let _ = sys_write(1, buf, n);
+  let pos = zeros(1);
+  let _ = wr_i64(buf, pos, v);
+  let _ = sys_write(1, buf, pos[0]);
+  let _ = buf[0] = 10;
+  sys_write(1, buf, 1)
+}
+// compute_tier0: the 8 symmetric (op,sr) folds, printed as they go (say), collected into
+// out[0..8).
+fn compute_tier0(base: [i64], A: i64, AT: i64, xloc: [i64], n: i64, buf: [i64], out: [i64]) -> i64 {
+  let y = zeros(n);
+  let dummy = zeros(1);
+  let f1 = tier0_fold(base, A, 1, xloc, y, n, dummy);
+  let _ = say("mxv sr1 ", f1, buf);
+  let f2 = tier0_fold(base, A, 2, xloc, y, n, dummy);
+  let _ = say("mxv sr2 ", f2, buf);
+  let f3 = tier0_fold(base, A, 3, xloc, y, n, dummy);
+  let _ = say("mxv sr3 ", f3, buf);
+  let f4 = tier0_fold(base, A, 4, xloc, y, n, dummy);
+  let _ = say("mxv sr4 ", f4, buf);
+  let f5 = tier0_fold(base, AT, 1, xloc, y, n, dummy);
+  let _ = say("vxm sr1 ", f5, buf);
+  let f6 = tier0_fold(base, AT, 2, xloc, y, n, dummy);
+  let _ = say("vxm sr2 ", f6, buf);
+  let f7 = tier0_fold(base, AT, 3, xloc, y, n, dummy);
+  let _ = say("vxm sr3 ", f7, buf);
+  let f8 = tier0_fold(base, AT, 4, xloc, y, n, dummy);
+  let _ = say("vxm sr4 ", f8, buf);
+  let _ = out[0] = f1;
+  let _ = out[1] = f2;
+  let _ = out[2] = f3;
+  let _ = out[3] = f4;
+  let _ = out[4] = f5;
+  let _ = out[5] = f6;
+  let _ = out[6] = f7;
+  let _ = out[7] = f8;
+  0
+}
+// compute_directed_tier0: the 4 directed (dmxv/dvxm x sr1,sr4) folds, out[0..4) -- these must
+// (and do, verified) differ from each other, unlike the symmetric graph's pairs.
+fn compute_directed_tier0(base: [i64], DA: i64, DAT: i64, xloc: [i64], n: i64, buf: [i64], out: [i64]) -> i64 {
+  let y = zeros(n);
+  let dummy = zeros(1);
+  let g1 = tier0_fold(base, DA, 1, xloc, y, n, dummy);
+  let _ = say("dmxv sr1 ", g1, buf);
+  let g2 = tier0_fold(base, DA, 4, xloc, y, n, dummy);
+  let _ = say("dmxv sr4 ", g2, buf);
+  let g3 = tier0_fold(base, DAT, 1, xloc, y, n, dummy);
+  let _ = say("dvxm sr1 ", g3, buf);
+  let g4 = tier0_fold(base, DAT, 4, xloc, y, n, dummy);
+  let _ = say("dvxm sr4 ", g4, buf);
+  let _ = out[0] = g1;
+  let _ = out[1] = g2;
+  let _ = out[2] = g3;
+  let _ = out[3] = g4;
+  0
+}
+fn gen_all(dir: str) -> i64 {
+  let _ = gen_gb(dir, 1, 1, 0, 1, 0);
+  let _ = gen_gb(dir, 1, 2, 0, 1, 0);
+  let _ = gen_gb(dir, 1, 3, 0, 1, 0);
+  let _ = gen_gb(dir, 1, 4, 0, 1, 0);
+  let _ = gen_gb(dir, 2, 1, 0, 1, 0);
+  let _ = gen_gb(dir, 2, 2, 0, 1, 0);
+  let _ = gen_gb(dir, 2, 3, 0, 1, 0);
+  let _ = gen_gb(dir, 2, 4, 0, 1, 0);
+  let _ = gen_gb(dir, 3, 1, 0, 1, 0);
+  let _ = gen_gb(dir, 3, 4, 0, 1, 0);
+  let _ = gen_gb(dir, 4, 1, 0, 1, 0);
+  gen_gb(dir, 4, 4, 0, 1, 0)
+}
+fn combine12(out: [i64]) -> i64 {
+  let c = out[0];
+  let c = c * 1000003 + out[1];
+  let c = c * 1000003 + out[2];
+  let c = c * 1000003 + out[3];
+  let c = c * 1000003 + out[4];
+  let c = c * 1000003 + out[5];
+  let c = c * 1000003 + out[6];
+  let c = c * 1000003 + out[7];
+  let c = c * 1000003 + out[8];
+  let c = c * 1000003 + out[9];
+  let c = c * 1000003 + out[10];
+  let c = c * 1000003 + out[11];
+  c
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  let dir = argv[2];
+  let tmp = zeros(1024);
+  let info = zeros(4);
+  let base = build_store(dir, tmp, info);
+  let A = info[0];
+  let AT = info[1];
+  let DA = info[2];
+  let DAT = info[3];
+  let n = 1000;
+  let xloc = zeros(n);
+  let _ = build_x(xloc, n);
+  let buf = zeros(64);
+  let out = zeros(12);
+  let dout = zeros(4);
+  let _ = compute_tier0(base, A, AT, xloc, n, buf, out);
+  let _ = compute_directed_tier0(base, DA, DAT, xloc, n, buf, dout);
+  let _ = out[8] = dout[0];
+  let _ = out[9] = dout[1];
+  let _ = out[10] = dout[2];
+  let _ = out[11] = dout[3];
+  let _ = gen_all(dir);
+  combine12(out)
+}

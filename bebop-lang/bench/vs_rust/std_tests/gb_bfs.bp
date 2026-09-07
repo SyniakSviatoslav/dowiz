@@ -1,0 +1,112 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+use "selfhost/prelude/gb.bp"
+use "selfhost/std/gen_gb.bp"
+// gb_bfs.bp -- B3 step 2 BFS gate (docs/blueprints/B3-graphblas-kernels-prejit.md section 5
+// step 2 item (d)): BFS level-sum over the 1k-node/4000-edge LCG graph (gb.bp's
+// gb_build_random_lcg -- fixed 2026-09-07, see gb.bp's header correction) computed with
+// REPEATED gb_mxv_generic (gb.bp, or-and
+// semiring, tier 0 -- no new gb.bp code, no sgraph2.bp rewrite) using a visited bitmap as a
+// COMPLEMENT mask (active row = NOT YET visited) and a dense frontier vector, one round per
+// BFS level. DEVIATION (coordinator, 2026-09-07): selfhost/std/sgraph2.bp's own frontier BFS
+// (push_step/pull_step/bfs_frontier, :318-435) is NOT rewritten onto gb_mxv here -- it is
+// covered by its own gated runbook (bench/vs_rust/sgraph2.sh) and the rewrite is deferred to
+// B3 step 3 once mxm/eWise exist (blueprint section 4). This gate is step 2's OWN proof that
+// gb_mxv_generic's or-and semiring drives a correct BFS, independent of sgraph2.bp.
+//
+// Round: y[i] = OR over neighbours j of (frontier[j] != 0), written only for rows the mask
+// lets through (mask = visited, complement = 1 -> active iff NOT visited). A row's hit is
+// legible regardless of gb_mxv_generic leaving stale y[i] on inactive rows (untouched this
+// round): the scan below only trusts y[i] for i the visited bitmap still shows as 0 going IN,
+// exactly gb_mxv_generic's own contract (gb.bp:461's `if active == 1`). Fold = sum(level),
+// unreached = -1 (never happens on this connected graph, matching
+// bench/oracles/lag_common.py's bfs_levels() convention).
+
+fn bfs_round(base: [i64], A: i64, x: [i64], y: [i64], visited: [i64], nx: [i64], level: [i64], lv: i64, n: i64, cnt: [i64]) -> i64 {
+  let _ = gb_mxv_generic(base, A, 1, x, y, n, 1, visited, 1);
+  let i = 0;
+  while i < n {
+    let unv = 1 - gb_bit(visited, i);
+    let hit = if unv == 1 then y[i] else 0;
+    let _ = if hit == 1 then gb_setbit(visited, i) else 0;
+    let _ = if hit == 1 then (let _ = nx[i] = 1 in 0) else 0;
+    let _ = if hit == 1 then (let _ = level[i] = lv in 0) else 0;
+    let _ = cnt[0] = cnt[0] + hit;
+    let i = i + 1;
+    0
+  };
+  0
+}
+fn bfs_swap(x: [i64], nx: [i64], n: i64) -> i64 {
+  let w = 0;
+  while w < n {
+    let _ = x[w] = nx[w];
+    let _ = nx[w] = 0;
+    let w = w + 1;
+    0
+  };
+  0
+}
+fn bfs_init_level(level: [i64], n: i64) -> i64 {
+  let i = 0;
+  while i < n {
+    let _ = level[i] = 0 - 1;
+    let i = i + 1;
+    0
+  };
+  0
+}
+fn bfs_sum_level(level: [i64], n: i64) -> i64 {
+  let k = 0;
+  let acc = 0;
+  while k < n {
+    let acc = acc + level[k];
+    let k = k + 1;
+    0
+  };
+  acc
+}
+fn gb_bfs_fold(base: [i64], A: i64, n: i64) -> i64 {
+  let visited = zeros((n + 63) / 64);
+  let x = zeros(n);
+  let nx = zeros(n);
+  let y = zeros(n);
+  let level = zeros(n);
+  let _ = bfs_init_level(level, n);
+  let _ = level[0] = 0;
+  let _ = gb_setbit(visited, 0);
+  let _ = x[0] = 1;
+  let cnt = zeros(1);
+  let lv = 1;
+  let nf = 1;
+  while nf > 0 {
+    let _ = cnt[0] = 0;
+    let _ = bfs_round(base, A, x, y, visited, nx, level, lv, n, cnt);
+    let nf = cnt[0];
+    let _ = bfs_swap(x, nx, n);
+    let lv = lv + 1;
+    0
+  };
+  bfs_sum_level(level, n)
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  let dir = argv[2];
+  let path = zeros(256);
+  let ppos = zeros(1);
+  let _ = wr_str(path, ppos, dir);
+  let _ = wr_str(path, ppos, "/gb_bfs.store");
+  let tmp = zeros(1024);
+  let base = st_open(path, ppos[0], 4194304, tmp);
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let dg = zeros(6);
+  let _ = gb_digests(dg);
+  let A = gb_build_random_lcg(base, tx, tmp, dg);
+  let root = st_alloc(base, tx, 1, st_digest("GbBfsRoot1{ref GbMatrix}"));
+  let _ = st_link(base, root, 0, A);
+  let _ = st_seal(base, root, tmp);
+  let _ = st_commit(base, tx, root, tmp);
+  let n = 1000;
+  gb_bfs_fold(base, A, n)
+}

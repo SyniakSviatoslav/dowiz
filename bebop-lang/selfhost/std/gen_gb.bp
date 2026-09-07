@@ -1,0 +1,272 @@
+// selfhost/std/gen_gb.bp -- B3 step 2 (docs/blueprints/B3-graphblas-kernels-prejit.md section
+// 3 "Generator" / section 5 step 2): string templates + generator for SPECIALISED mxv/vxm
+// kernels over semirings 1-4 (or-and, any-pair, plus-times schoolbook, min-plus), one .bp
+// program written per call. Library only (no main); a nested `use` inside an included file is
+// NOT followed (T47b, bebop.bp:5069), so every direct user of this file must ALSO directly
+// `use` sha256.bp, store.bp and gb.bp themselves (same flat pattern as gb.bp's own header).
+//
+// Design (coordinator, 2026-09-07): mxv and vxm reduce to the SAME row-major gather loop --
+// mxv reads matrix A as stored, vxm reads its transpose AT (mathematically vxm(x,A) ==
+// mxv(AT,x) exactly, associative/commutative reductions don't care about traversal order).
+// The DRIVER pre-builds AT with gb.bp's own gb_transpose and seals it into the store next to
+// A, so a generated vxm kernel needs no write-transaction machinery of its own -- it just picks
+// root field 1 instead of field 0. This keeps the two "templates" the blueprint asks for
+// (mxv/push, vxm/pull) genuinely distinct generated files while sharing one template writer.
+//
+// The kernel program: `use`s sha256/store/gb, st_map_ro's a store file given on argv[2], reads
+// root field 0 (mxv) or 1 (vxm) for the matrix and field 2 for the input vector (an "arr i64"
+// object, gb.bp convention -- arr_get(base, X, j)), runs ONE specialised row loop (the
+// semiring's oplus/otimes baked in as literal text, no branch inside the inner loop -- that is
+// the whole point vs gb_mxv_generic's tier-0 branch table), folds the output vector (plain sum,
+// gb.bp's own gb_fold_row/arr_sum convention) and returns it (auto-printed by the runtime,
+// seed.S:102).
+//
+// sr 1 or-and / 2 any-pair: both reduce to "does row i touch a nonzero x[j]" (gb.bp:28-31 --
+// edge weights here are always positive, so AND/pair-with-the-matrix is always true) -- ONE
+// body writer serves both, matching gb_mxv_generic's own sr==3/sr==4/else structure.
+// sr 3 plus-times: schoolbook Q32 (`(x[j] * w) / 4294967296`, gb.bp:435) -- marked "schoolbook"
+// per the blueprint until `umulh` lands (A-series, not in scope here).
+// sr 4 min-plus: acc = min(acc, x[j] + w), identity = 1099511627776 (gb.bp's own `big`).
+//
+// mask/fmt/tr: gen_gb accepts the full (op, sr, mask, fmt, tr) parameter set the blueprint's
+// section 3 names (feeds the digest-naming convention `gb_<op>_<sr>_<mask>_<fmt>_<tr>.bp`,
+// Kernel-object naming is step 4) but this step only EXERCISES mask=0 (no mask), fmt=1 (CSR,
+// the only format gb.bp builds) and tr=0 (transpose is already expressed as the vxm op itself,
+// not a separate descriptor bit here) -- mask!=0/fmt!=1/tr!=0 are accepted into the filename
+// for forward compatibility but generate the SAME unmasked/CSR/untransposed body (open item,
+// not a silent wrong-answer: no driver ever calls them, and the generated body has no
+// masked-write code path to be wrong).
+
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+use "selfhost/prelude/gb.bp"
+
+// ---- text-buffer helpers: `pos` is a caller-owned 1-cell cursor (bebop.bp's own emit_cmp/pos
+// idiom, not a `let`-rebind chain -- keeps every writer's live-symbol count flat regardless of
+// how many pieces it emits). `dst` is caller-owned and pre-sized; no allocation in here. ----
+fn wr_str(dst: [i64], pos: [i64], s: str) -> i64 {
+  let off = pos[0];
+  let n = str_len(s);
+  let i = 0;
+  while i < n {
+    let _ = dst[off + i] = char(s, i);
+    let i = i + 1;
+    0
+  };
+  let _ = pos[0] = off + n;
+  0
+}
+// wr_i64: decimal (with sign) of v, written at pos[0]; digits built high-to-low into the SAME
+// destination window (off..off+24) then shifted flush against off (csr_build_profile.bp:38
+// itoa's algorithm, offset-parameterised so it can write into the middle of a larger buffer).
+fn wr_i64(dst: [i64], pos: [i64], v: i64) -> i64 {
+  let off = pos[0];
+  let neg = if v < 0 then 1 else 0;
+  let m = if v < 0 then 0 - v else v;
+  let p = off + 23;
+  let m2 = m;
+  let go = 1;
+  while go == 1 {
+    let d = m2 - (m2 / 10) * 10;
+    let _ = dst[p] = 48 + d;
+    let p = p - 1;
+    let m2 = m2 / 10;
+    let go = if m2 > 0 then 1 else 0;
+    0
+  };
+  let start = p + 1;
+  let len = (off + 24) - start;
+  let i = 0;
+  while i < len {
+    let _ = dst[off + neg + i] = dst[start + i];
+    let i = i + 1;
+    0
+  };
+  let _ = if neg == 1 then (let _ = dst[off] = 45 in 0) else 0;
+  let _ = pos[0] = off + len + neg;
+  0
+}
+// op 1 mxv (root field 0, A) / 2 vxm (field 1, AT) / 3 dmxv (field 3, DA -- the directed,
+// UN-symmetrised u<v matrix, coordinator review item 2) / 4 dvxm (field 4, DAT).
+fn wr_opname(dst: [i64], pos: [i64], op: i64) -> i64 {
+  if op == 2 then wr_str(dst, pos, "vxm")
+  else if op == 3 then wr_str(dst, pos, "dmxv")
+  else if op == 4 then wr_str(dst, pos, "dvxm")
+  else wr_str(dst, pos, "mxv")
+}
+fn op_fieldidx(op: i64) -> i64 {
+  if op == 2 then 1 else if op == 3 then 3 else if op == 4 then 4 else 0
+}
+// wr_ch: one raw byte at pos[0] -- bebop string literals have NO backslash-escape (the
+// scanner treats the first bare `"` as the terminator, scan_one_lit bebop.bp:5709), so a
+// literal double-quote inside GENERATED text (the kernel's own `use "..."` lines) can only be
+// written this way, never as `\"` inside a template string. Real embedded newlines inside a
+// template string DO work (probed 2026-09-07: a multi-line "..." literal compiles and
+// str_len/char see the raw \n byte) so template text below uses actual line breaks, not `\n`.
+fn wr_ch(dst: [i64], pos: [i64], c: i64) -> i64 {
+  let off = pos[0];
+  let _ = dst[off] = c;
+  let _ = pos[0] = off + 1;
+  0
+}
+fn wr_use_line(dst: [i64], pos: [i64], p: str) -> i64 {
+  let _ = wr_str(dst, pos, "use ");
+  let _ = wr_ch(dst, pos, 34);
+  let _ = wr_str(dst, pos, p);
+  let _ = wr_ch(dst, pos, 34);
+  wr_ch(dst, pos, 10)
+}
+
+// ---- semiring text substitutions (section 3 "Generator": oplus/otimes as text) ----
+fn wr_init(dst: [i64], pos: [i64], sr: i64) -> i64 {
+  if sr == 4 then wr_str(dst, pos, "1099511627776") else wr_str(dst, pos, "0")
+}
+// wr_row_body: the per-edge (j, w) update, sr 3 schoolbook Q32 plus-times / sr 4 min-plus /
+// else (1, 2) or-and's "any live neighbour" OR-accumulate -- text-identical to gb_mxv_generic's
+// own three arms (gb.bp:448-457), just with no branch left in the emitted code.
+fn wr_row_body(dst: [i64], pos: [i64], sr: i64) -> i64 {
+  if sr == 3 then wr_str(dst, pos, "    let acc = acc + (arr_get(base, X, j) * w) / 4294967296;
+")
+  else if sr == 4 then wr_str(dst, pos, "    let mp = arr_get(base, X, j) + w;
+    let acc = if mp < acc then mp else acc;
+")
+  else wr_str(dst, pos, "    let xb = if arr_get(base, X, j) != 0 then 1 else 0;
+    let acc = if acc == 1 then 1 else xb;
+")
+}
+
+// gen_kernel_text: the whole compilable .bp program. fieldidx: which root ref carries the
+// matrix to read (0 = A, mxv ; 1 = AT, vxm -- gen_gb.bp's own store layout, see gb_gen.bp).
+fn gen_kernel_text(dst: [i64], pos: [i64], sr: i64, fieldidx: i64) -> i64 {
+  let _ = wr_use_line(dst, pos, "selfhost/prelude/sha256.bp");
+  let _ = wr_use_line(dst, pos, "selfhost/prelude/store.bp");
+  let _ = wr_use_line(dst, pos, "selfhost/prelude/gb.bp");
+  let _ = wr_str(dst, pos, "
+fn kernel_row(base: [i64], M: i64, X: i64, i: i64) -> i64 {
+  let lo = gb_row_lo(base, M, i);
+  let hi = gb_row_hi(base, M, i);
+  let k = lo;
+  let acc = ");
+  let _ = wr_init(dst, pos, sr);
+  let _ = wr_str(dst, pos, ";
+  while k < hi {
+    let j = gb_col(base, M, k);
+    let w = gb_val(base, M, k);
+");
+  let _ = wr_row_body(dst, pos, sr);
+  let _ = wr_str(dst, pos, "    let k = k + 1;
+    0
+  };
+  acc
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  let path = zeros(256);
+  let pl = st_str(path, argv[2]);
+  let tmp = zeros(1024);
+  let base = st_map_ro(path, pl, 4194304);
+  let root = st_root(base, tmp);
+  let M = st_ref(base, root, ");
+  let _ = wr_i64(dst, pos, fieldidx);
+  let _ = wr_str(dst, pos, ");
+  let X = st_ref(base, root, 2);
+  let n = 1000;
+  let i = 0;
+  let fold = 0;
+  while i < n {
+    let acc = kernel_row(base, M, X, i);
+    let fold = fold + acc;
+    let i = i + 1;
+    0
+  };
+  fold
+}
+");
+  0
+}
+
+// gen_path: `gb_<op>_<sr>_<mask>_<fmt>_<tr>.bp` under `dir` (no trailing slash). Returns the
+// path length written into the caller's `path` buffer.
+fn gen_path(dir: str, op: i64, sr: i64, mask: i64, fmt: i64, tr: i64, path: [i64]) -> i64 {
+  let pos = zeros(1);
+  let _ = wr_str(path, pos, dir);
+  let _ = wr_str(path, pos, "/gb_");
+  let _ = wr_opname(path, pos, op);
+  let _ = wr_str(path, pos, "_");
+  let _ = wr_i64(path, pos, sr);
+  let _ = wr_str(path, pos, "_");
+  let _ = wr_i64(path, pos, mask);
+  let _ = wr_str(path, pos, "_");
+  let _ = wr_i64(path, pos, fmt);
+  let _ = wr_str(path, pos, "_");
+  let _ = wr_i64(path, pos, tr);
+  let _ = wr_str(path, pos, ".bp");
+  pos[0]
+}
+fn gen_write(path: [i64], plen: i64, sr: i64, op: i64) -> i64 {
+  let text = zeros(8192);
+  let tpos = zeros(1);
+  let _ = gen_kernel_text(text, tpos, sr, op_fieldidx(op));
+  let fd = sys_open(path, plen, 578);
+  let _ = sys_export(fd, text, tpos[0]);
+  sys_close(fd)
+}
+// gen_gb(dir, op, sr, mask, fmt, tr): op 1 mxv / 2 vxm / 3 dmxv / 4 dvxm, sr 1..4 -- writes the
+// kernel .bp file under dir and returns 0. Digest naming (step 4's st_digest-keyed Kernel
+// objects) is out of scope here; the filename itself IS the digest for step 2's purposes.
+fn gen_gb(dir: str, op: i64, sr: i64, mask: i64, fmt: i64, tr: i64) -> i64 {
+  let path = zeros(512);
+  let plen = gen_path(dir, op, sr, mask, fmt, tr, path);
+  gen_write(path, plen, sr, op)
+}
+
+// ---- directed (UN-symmetrised) test matrix, coordinator review item 2 (2026-09-07): the
+// symmetric random_lcg() graph can't tell mxv from vxm (A^T == A structurally, so every fold
+// pairs up) -- this keeps only (u, v) with u < v from the SAME LCG pair stream (gb.bp's
+// gb_gen_random_lcg), no reverse edge added, so mxv(DA,x) and vxm(x,DA) are genuinely
+// different reductions. gb_build_pairs (gb.bp) can't be reused as-is -- it always adds BOTH
+// directions -- so this is gb_build_pairs' own bitmap-drain shape (ascending key = u*n+v,
+// gb.bp:164-203) with the symmetrise step dropped; same dedupe-via-bitmap, same stable
+// counting-sort fill (gb_csr_fill_w), same gb_matrix_seal. n=1000 fixed (gb_gen.bp's scale).
+fn build_directed_lt(base: [i64], tx: [i64], tmp: [i64], dg: [i64], psrc: [i64], pdst: [i64], mp: i64) -> i64 {
+  let n = 1000;
+  let bm = zeros((n * n + 63) / 64);
+  let k = 0;
+  while k < mp {
+    let u = psrc[k];
+    let v = pdst[k];
+    let _ = if u < v then gb_setbit(bm, u * n + v) else 0;
+    let k = k + 1;
+    0
+  };
+  let key = 0;
+  let cnt = 0;
+  while key < n * n {
+    let cnt = cnt + gb_bit(bm, key);
+    let key = key + 1;
+    0
+  };
+  let esrc = zeros(cnt);
+  let edst = zeros(cnt);
+  let eval = zeros(cnt);
+  let key2 = 0;
+  let idx = 0;
+  while key2 < n * n {
+    let hit = gb_bit(bm, key2);
+    let uu = key2 / n;
+    let vv2 = key2 % n;
+    let _ = if hit == 1 then gb_hit_store(esrc, edst, eval, idx, uu, vv2, gb_edge_weight(uu, vv2)) else 0;
+    let idx = idx + hit;
+    let key2 = key2 + 1;
+    0
+  };
+  let cur = zeros(n);
+  let rp = arr_alloc(base, tx, dg[0], n + 1);
+  let ci = arr_alloc(base, tx, dg[1], cnt);
+  let vv = arr_alloc(base, tx, dg[2], cnt);
+  let _ = gb_csr_fill_w(base, esrc, edst, eval, cnt, n, rp, ci, vv, cur);
+  let _ = st_seal(base, rp, tmp);
+  let _ = st_seal(base, ci, tmp);
+  let _ = st_seal(base, vv, tmp);
+  gb_matrix_seal(base, tx, tmp, dg[3], n, n, cnt, 1, rp, ci, vv)
+}

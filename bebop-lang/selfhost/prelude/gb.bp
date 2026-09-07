@@ -31,12 +31,19 @@
 // tier-0 kernel: one function, sr as a runtime parameter, branch inside the loop.
 //
 // The three graphs gb_build_* produce match bench/oracles/lag_common.py's ring_chords(),
-// random_lcg(seed=42) and grid10x10() bit-for-bit: `%` here compiles to `udiv`+`msub`
-// (seed/seed.S:117-118, unsigned remainder) so `x % n` on the raw LCG word matches
-// python's `x % n` on the `& (2**64-1)`-masked word without any extra masking on this
-// side; self-loops and duplicate (u,v) pairs are dropped the same way _adj() does (a
-// python `set`) via a dedupe bitmap of n*n bits, and the final CSR row order matches
-// python's `sorted(s)` because the dedupe bitmap is drained by ascending key = u*n+v.
+// random_lcg(seed=42) and grid10x10() bit-for-bit; self-loops and duplicate (u,v) pairs are
+// dropped the same way _adj() does (a python `set`) via a dedupe bitmap of n*n bits, and the
+// final CSR row order matches python's `sorted(s)` because the dedupe bitmap is drained by
+// ascending key = u*n+v.
+// CORRECTION (2026-09-07, B3 step 2 review): `%` is bebop's LANGUAGE-DEFINED signed remainder
+// (sdiv+msub, C-style truncation toward zero -- tools/bpref.py mirrors this with `a-(a/b)*b`;
+// objdump-verified 0x9AC00C00 = SDIV, not UDIV). The PRIOR version of this comment claimed `%`
+// was unsigned remainder matching python's `x % n` on the 2**64-masked word -- that was never
+// true and gb_gen_random_lcg below SIGSEGV'd at n=1000 (negative `u*n+v` dedupe-bitmap index)
+// the first time anyone actually called it (never exercised before B3 step 2). gb_umod(x, n, K)
+// below corrects a signed `%` result to the unsigned residue python computes (K = 2**64 mod n,
+// gb_mod64_k(n)); ring_chords()/grid10x10() never needed it since their `%` operands are always
+// small nonnegative sums.
 
 use "selfhost/prelude/sha256.bp"
 use "selfhost/prelude/store.bp"
@@ -223,16 +230,40 @@ fn gb_gen_ring_chords(psrc: [i64], pdst: [i64]) -> i64 {
   n + n / 2
 }
 fn gb_lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
+// gb_mod64_k(n): 2**64 mod n via 64 doublings mod n (no native `%` needed, so this works for
+// any n without itself needing the correction it computes).
+fn gb_mod64_k(n: i64) -> i64 {
+  let k = 1;
+  let i = 0;
+  while i < 64 {
+    let k2 = k * 2;
+    let k = if k2 >= n then k2 - n else k2;
+    let i = i + 1;
+    0
+  };
+  k
+}
+// gb_umod(x, n, K): x's 64-bit pattern mod n treating it as UNSIGNED (K = gb_mod64_k(n)).
+// `%` is signed (see header correction above): x % n has the sign of x, magnitude < n. When
+// x < 0 the true unsigned value is x + 2**64, so the true residue is (x%n + K) corrected back
+// into [0, n) -- x%n in (-n, 0], K in [0, n) => (x%n + K) in (-n, n); a further +n if still
+// negative lands in (0, n) exactly.
+fn gb_umod(x: i64, n: i64, K: i64) -> i64 {
+  let base = x % n;
+  let adj = if x < 0 then base + K else base;
+  if adj < 0 then adj + n else adj
+}
 fn gb_gen_random_lcg(psrc: [i64], pdst: [i64]) -> i64 {
   let n = 1000;
   let m = 4000;
+  let K = gb_mod64_k(n);
   let x = 42;
   let k = 0;
   while k < m {
     let x = gb_lcg(x);
-    let u = x % n;
+    let u = gb_umod(x, n, K);
     let x = gb_lcg(x);
-    let v = x % n;
+    let v = gb_umod(x, n, K);
     let _ = psrc[k] = u;
     let _ = pdst[k] = v;
     let k = k + 1;
