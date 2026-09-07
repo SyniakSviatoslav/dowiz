@@ -5,6 +5,7 @@ Status: 2026-09-06 CURRENT (T120, decision D11-M; runtime traps 80/81/87 are one
 | code | who | meaning | where |
 |---|---|---|---|
 | 0..63 | program | `main`'s value modulo 256 is NOT the exit code: the seed prints the value and exits 0; a program exits non-zero only through `sys_exit` or a trap | seed.S |
+| 8 | program | a fn declared with > 14 parameters: the compiler clamps to 14 and emits one `brk #8` word at that fn's prologue (bebop.bp compile_fn_at / parse_params sites), so the program compiles cleanly and dies SILENTLY (no stderr text, no SIGTRAP row) the first time the fn is called; found 2026-09-07 by the B3 (c) worker (14-16 live arguments), 4-line repro = a 15-parameter fn. Fix wanted: a compile-time diag exit instead of a runtime brk (codegen chain item) | compile_fn_at |
 | 64 | bebop.bin | unknown CLI command (`compile`, `check`, `size`, `version`, `run-via-exec`, `cas`) or `check` without a file | bebop.bp main |
 | 80 | program | arena exhausted: a `zeros` crossed x28 (T118); `brk #80`, stderr `trap 80: arena exhausted (zeros crossed x28)` (T90 2c) | emit_zeros, entry_stub handler |
 | 81 | program | frame heap exhausted: an array literal / enum ctor crossed the 16 KiB frame (T118); `brk #81`, stderr `trap 81: frame heap exhausted (array literal or enum ctor)` | emit_array_lit, emit_enum_ctor, entry_stub handler |

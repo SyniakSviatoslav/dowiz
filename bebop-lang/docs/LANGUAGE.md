@@ -26,7 +26,7 @@ TYPE    := 'i64' | 'str' | '[' 'i64' ']' | NAME
 The program's result is `main`'s value, printed by the seed as a decimal line.
 A function body is a sequence of statements followed by ONE tail expression (a body
 without a tail expression is a compile-time error, exit 97). Functions may have up to
-14 parameters (args in x0..x13). Recursion is ordinary; there is no inlining.
+14 parameters (args in x0..x13); a 15th parameter is NOT a compile error today: the fn gets a `brk #8` prologue and the program exits 8 silently when it is called (docs/TRAPS.md). Recursion is ordinary; there is no inlining.
 
 `use "path"` (T47, nested since T47b) includes the file once, dependencies first, with
 the same content-hash dedup for every path; the compiler writes the expanded program to
