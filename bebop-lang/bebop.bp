@@ -1771,10 +1771,26 @@ fn check_reg_collision(s: str, insns: [i64], n: [i64], fntab: [i64], stab: [i64]
     let i = i + 1;
     0
   };
-  let _ = if idx >= 0 then (let cfi = cs_free_idx(fntab[4573], stab[0]) in (let _ = if cfi < 8 then vs_park_to_cs(insns, n, fntab, idx, reg, cfi) else vs_park_to_slot(insns, n, fntab, idx, reg) in vs_cs_free(fntab, reg, 11))) else 0;
-  // unreachable now that a real collision is always relocated above --
-  // kept as an assert: bit==1 with no owning window entry found is an
-  // actual invariant violation elsewhere, not this fn's job to paper over.
+  // BUGFIX (A4 fuzz DIVERGE hunt, 2026-09-07): relocating `idx` here emits
+  // the move as part of whichever if-ARM is currently compiling -- fine
+  // when `idx` was born inside this SAME arm (arm-local, dies with it), but
+  // when idx predates the arm (idx < fntab[4591], the arm's own base --
+  // i.e. this value must remain valid on BOTH arms and after the join) the
+  // relocation mov only executes on THIS arm's runtime path, leaving the
+  // other path (and the shared post-if code) reading a location nothing
+  // ever wrote there. Same restriction as the call-temp case below (exit
+  // 89, "let binding while a call temp is live") -- a `let` bound inside an
+  // if-arm must not collide with a value that survives the whole `if`;
+  // bind the surviving value with its own `let` first. Repro:
+  // `v0 += (if c then (let t=4 in t*..) else ..)` with v0's op= snapshot
+  // relocated by t's own bind.
+  let arm_spanning = (if fntab[4591] >= 0 then 1 else 0) * (if idx >= 0 then (if idx < fntab[4591] then 1 else 0) else 0);
+  let _ = if arm_spanning == 1 then diag_exit(s, srcpos, 89) else 0;
+  let do_reloc = (if idx >= 0 then 1 else 0) * (1 - arm_spanning);
+  let _ = if do_reloc == 1 then (let cfi = cs_free_idx(fntab[4573], stab[0]) in (let _ = if cfi < 8 then vs_park_to_cs(insns, n, fntab, idx, reg, cfi) else vs_park_to_slot(insns, n, fntab, idx, reg) in vs_cs_free(fntab, reg, 11))) else 0;
+  // unreachable now that a real collision is always relocated (or trapped
+  // 89) above -- kept as an assert: bit==1 with no owning window entry
+  // found is an actual invariant violation elsewhere, not this fn's job.
   let _ = if (bit == 1) * (if idx < 0 then 1 else 0) == 1 then diag_exit(s, srcpos, 89) else 0;
   0
 }
@@ -1786,6 +1802,9 @@ fn vs_reset(fntab: [i64]) -> i64 {
   let _ = fntab[4574] = 0;
   let _ = fntab[4575] = 0;
   let _ = fntab[4576] = 0;
+  // A4 fuzz DIVERGE hunt (2026-09-07): -1 = "not inside an if-arm"; see
+  // emit_cond_branch / check_reg_collision.
+  let _ = fntab[4591] = 0 - 1;
   // A2 commit 2: hoist pairs are per-loop scratch, but ptab is REUSED across
   // functions on the planning pass (bebop.bp compile_fn's outer loop) -- a
   // stale pair from a previous fn's compile must never leak into the next.
@@ -2999,11 +3018,23 @@ fn emit_cond_branch(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], sel
   let smask = fntab[4548];
   let scs = fntab[4573];
   let sslot = fntab[4574];
+  // BUGFIX (A4 fuzz DIVERGE hunt, 2026-09-07): fntab[4591] marks "we are
+  // now compiling an if-arm rooted at window index `sw`" so check_reg_collision
+  // can tell a PRE-EXISTING entry (index < sw, alive before this `if`, whose
+  // physical location must be valid on BOTH arms) from an arm-local one --
+  // relocating a pre-existing entry INSIDE one arm only (the old behaviour)
+  // emits the relocation `mov` as part of that arm's OWN conditionally-
+  // executed code, so the other arm (and the shared code after the join)
+  // silently reads a location nothing ever wrote on that path. See
+  // check_reg_collision's own comment for the fix (exit 89, not a relocate).
+  let saved_arm_base = fntab[4591];
+  let _ = fntab[4591] = sw;
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 4;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = vs_to(insns, n, fntab, stab, d);
   let _ = vs_pop(fntab);
+  let _ = fntab[4591] = saved_arm_base;
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 4;
   let p2 = n[0];
@@ -3014,6 +3045,7 @@ fn emit_cond_branch(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], sel
   let _ = fntab[4548] = smask;
   let _ = fntab[4573] = scs;
   let _ = fntab[4574] = sslot;
+  let _ = fntab[4591] = sw;
   // BUGFIX (2026-09-06, bug 9 hunt / exit-101 mid-expression): `d` used to
   // be held as a bare register across the ENTIRE else-branch compile,
   // invisible to vs_park_deepest (no window entry represents it) -- a
@@ -3027,6 +3059,7 @@ fn emit_cond_branch(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], sel
   let dix = fntab[4547];
   let _ = vs_push(insns, n, fntab, stab, 2, d, 0 - 1);
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = fntab[4591] = saved_arm_base;
   // The then-branch's code, already emitted above, is hard-coded to leave
   // its result in `d` -- so the else-branch's result must converge on
   // that exact same physical register regardless of which runtime path
@@ -3219,6 +3252,16 @@ fn emit_array_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   // the declaration/grammar; an array literal's count is not, short of a
   // second parse). The elements still ride the window/cs/slot bookkeeping
   // -- never [sp] -- so the push_words == 0 invariant is unaffected.
+  // BUGFIX (A4 fuzz DIVERGE hunt, 2026-09-07): if the LAST element is a
+  // raw comparison (a FLAGS tag -- per §1.2 only the TOP window entry may
+  // ever be unmaterialised FLAGS, and vs_park below only touches entries
+  // BELOW the kept `cnt` elements, never this one), it sits unconsumed
+  // while the T118 frame-heap capacity trap check emitted a few words down
+  // (`cmp x14,x2 ; b.ls ...`) clobbers NZCV -- the element-fill loop's
+  // later `vs_reg`/`vs_mat` then `cset`s off the TRAP CHECK's flags, not
+  // the comparison's. Settle it into a real register first (repro:
+  // `let a0=[0, i0<i1]; a0[1]` with i0>i1 -- oracle 0, was compiling to 1).
+  let _ = vs_settle_flags(insns, n, fntab, stab);
   let _ = vs_park(insns, n, fntab, stab, cnt);
   let _ = vs_evict(insns, n, fntab, stab, 0);
   let _ = vs_mask_take(fntab, 0, 16);
@@ -4386,8 +4429,21 @@ fn emit_compound_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], s
 
 // old -> new (retarget makes `i = i - 1` / `i -= 1` one word): push SYM x,
 // the RHS, combine, then vs_bind(x).
+// BUGFIX (A4 fuzz DIVERGE hunt, 2026-09-07): `x op= e` used to leave x as a
+// lazy SYM tag (emit_var) while e was compiled -- if e contains a nested
+// `let _ = x = ... in ...` (emit_let_chain) that reassigns x's own register
+// or slot, vs_binop below reads x's CURRENT (post-e) value, not the value x
+// held when the statement started. `x op= e` means `x = x_old + e` with
+// x_old captured BEFORE e's side effects (bpref.py and the pre-A1 stack
+// machine both do this; repro: `let v0=100; v0 += (let _ = v0 = 7 in 3);`
+// must give 103, gave 10). Fix: materialise x into a fresh window register
+// right away (vs_mat handles both a plain register SYM and a spilled-slot
+// SYM identically), so nothing e does afterward can change the captured
+// value.
 fn emit_compound_rhs(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], reg0: i64, opcode: i64) -> i64 {
   let _ = emit_var(insns, n, reg0, fntab, stab);
+  let d = vs_alloc(insns, n, fntab, stab);
+  let _ = vs_mat(insns, n, fntab, stab, fntab[4547] - 1, d);
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   vs_binop(insns, n, fntab, stab, opcode)
 }

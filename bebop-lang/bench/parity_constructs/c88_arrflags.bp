@@ -1,0 +1,14 @@
+// A4 fuzz DIVERGE hunt (2026-09-07), root cause 3: emit_array_lit's T118
+// frame-heap capacity trap check emits a flag-clobbering `cmp` after the
+// elements are parsed -- when the LAST array element is a bare comparison
+// (an unmaterialised FLAGS tag, legal per §1.2 since only the top window
+// entry may be FLAGS and vs_park(cnt) never touches the kept elements),
+// the deferred `cset` that finally reads it sees the trap check's flags
+// instead. Two elements exercise both outcomes (false then true).
+fn main() -> i64 {
+  let i0 = 95;
+  let i1 = 2;
+  let a0 = [0, i0 < i1];
+  let a1 = [0, i1 < i0];
+  a0[1] * 10 + a1[1]
+}

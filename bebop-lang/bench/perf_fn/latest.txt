@@ -76,8 +76,8 @@ skip_string 73
 skip_ws 165
 cap_exit 208
 em 28
-check_reg_collision 192
-vs_reset 52
+check_reg_collision 244
+vs_reset 58
 emit_half 129
 mat_const 70
 lsb_idx 16
@@ -155,12 +155,12 @@ vs_loop_branch 38
 vs_loop_branch_reg 26
 emit_cond 158
 emit_cond_csel 213
-emit_cond_branch 267
+emit_cond_branch 282
 emit_let_in 259
 emit_let_plain 124
 emit_let_chain 137
 emit_str 75
-emit_array_lit 301
+emit_array_lit 308
 emit_array_get 125
 vs_array_get_reg 40
 emit_array_set 159
@@ -204,7 +204,7 @@ hoist_release 35
 emit_while_stmt 583
 emit_let_stmt 555
 emit_compound_stmt 200
-emit_compound_rhs 52
+emit_compound_rhs 72
 emit_body_classify 417
 emit_body 774
 find_fn 269

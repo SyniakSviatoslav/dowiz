@@ -887,3 +887,19 @@ ts,commit,bin,metric,value,unit,n,valid,at_max_pct,temp_mc,note
 1788794417,7d3e256,e9159318,sbench_dbatch10,30,us,1,1,,,sqlite 44.2
 1788794417,7d3e256,e9159318,sbench_dbatch100,7,us,1,1,,,sqlite 10.9
 1788794417,7d3e256,e9159318,sbench_recover,44713.2,us,1,1,,,sqlite 3298.8
+1788798510,b06823e,aa807ab9,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788798511,b06823e,aa807ab9,gate_run_ms,4255,ms,1,1,,,"sum of non-memo gate runs (22 runs, 101 memo hits)"
+1788798602,b06823e,aa807ab9,bin_words,39425,words,1,1,,,bytes 159536
+1788798602,b06823e,aa807ab9,stub_words,131,words,1,1,,,
+1788798603,b06823e,aa807ab9,bin_fns,270,fns,1,1,,,
+1788798603,b06823e,aa807ab9,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788799122,b06823e,aa807ab9,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788799123,b06823e,aa807ab9,gate_run_ms,6500,ms,1,1,,,"sum of non-memo gate runs (22 runs, 101 memo hits)"
+1788799129,b06823e,aa807ab9,bin_words,39425,words,1,1,,,bytes 159536
+1788799129,b06823e,aa807ab9,stub_words,131,words,1,1,,,
+1788799129,b06823e,aa807ab9,bin_fns,270,fns,1,1,,,
+1788799129,b06823e,aa807ab9,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788800057,b06823e,aa807ab9,bin_words,39425,words,1,1,,,bytes 159536
+1788800057,b06823e,aa807ab9,stub_words,131,words,1,1,,,
+1788800057,b06823e,aa807ab9,bin_fns,270,fns,1,1,,,
+1788800057,b06823e,aa807ab9,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired

@@ -41,7 +41,7 @@ one() {
   python3 bench/fuzz/gen.py --seed "$s" --out "$d/p.bp" 2>"$d/gerr" || { echo "GENFAIL $s"; return; }
   IFS=$'\t' read -r cat exp got < <(python3 bench/fuzz/shrink.py --classify "$d/p.bp")
   case "$cat" in
-    OK|BPREF-DEPTH) ;;
+    OK|BPREF-DEPTH|UNSUPPORTED-89) ;;  # UNSUPPORTED-89: documented register-model restriction (ROADMAP A14), no repro file
     *) { echo "// $cat seed=$s expected=$exp got=$got"; cat "$d/p.bp"; } >"$REPROS/$cat-$s.bp" ;;
   esac
   echo "${cat:-HARNESS-ERROR} $s"

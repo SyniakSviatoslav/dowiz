@@ -96,6 +96,8 @@ for f in "$DIR"/*.bp; do
     c66_fncap) EXPECT=1519;;
     c72_hoist) EXPECT=5504683299252448320;;
     c84_run) EXPECT=1035;;
+    c86_selfassign) EXPECT=103;;
+    c88_arrflags) EXPECT=1;;
     *) EXPECT="";;
   esac
   [ "$FREEZE" = 1 ] && [ "$IVAL" = "$EXPECT" ] && cp "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin" "$FROZEN/${b}.bin"
@@ -124,6 +126,7 @@ for f in "${DIR%/}/neg"/*.bp; do
     c52_undef) EXPECT=RUNFAIL:87;;
     c51_casbad) EXPECT=COMPILEFAIL:88;;
     c39_fnmatch) EXPECT=COMPILEFAIL:99;;
+    c87_ifselfassign) EXPECT=COMPILEFAIL:89;;
     *) EXPECT="";;
   esac
   out="${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin"

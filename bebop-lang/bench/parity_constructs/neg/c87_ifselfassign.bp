@@ -1,0 +1,23 @@
+// A4 fuzz DIVERGE hunt (2026-09-07), root cause 2: emit_cond_branch's
+// then-arm restored fntab[4573]/[4574] (cs mask / temp-slot cursor) to
+// their pre-arm snapshot before compiling the else-arm -- wrong whenever
+// the then-arm PERMANENTLY relocates a pre-existing entry (a value live
+// before the `if`, here v0's op= snapshot) via check_reg_collision making
+// room for a brand-new `let` bound inside the arm; the blind restore
+// desynced the mask from where the value actually lives.
+//
+// MOVED to neg/ (2026-09-07, DIVERGE worker 2): RC2 is currently only
+// fail-closed (check_reg_collision now exits 89 on an arm-spanning
+// relocation instead of emitting a wrong value -- see its comment in
+// bebop.bp). This construct is EXPECT COMPILEFAIL:89 until RC2's real
+// fix (symmetric relocation across both arms / force arm-spanning
+// entries to temp slots, ROADMAP A14) lands; that fix moves this file
+// back to bench/parity_constructs/ with EXPECT=3 restored (the oracle
+// value, see bpref.py).
+fn main() -> i64 {
+  let v0 = 5;
+  let i0 = 1;
+  let i1 = 2;
+  v0 += (if (i0) >= v0 then (let t0 = 4 in t0 * (19 % (i1))) else -(i1));
+  v0
+}

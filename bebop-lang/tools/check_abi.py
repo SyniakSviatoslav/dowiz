@@ -190,7 +190,8 @@ def check_bin(path, allow, stub=()):
 ZONES = [(0, 1, "fntab"), (2200, 2711, "b1_facts"), (2712, 2714, "b1_scratch"),
          (2800, 4335, "window"), (4405, 4411, "fold"), (4412, 4449, "jumps"),
          (4450, 4546, "slots"), (4547, 4548, "window_hdr"),
-         (4573, 4577, "window_cs"), (4578, 4585, "hoist"), (4640, 4648, "bank"),
+         (4573, 4577, "window_cs"), (4578, 4585, "hoist"), (4591, 4591, "arm_base"),
+         (4640, 4648, "bank"),
          (4649, 4699, "literals"), (4750, 4750, "budget"),
          (5000, 5999, "lit_table")]
 # window (2026-09-06, REGISTER-MODEL-BLUEPRINT; raised 128->512 2026-09-06 --
@@ -202,6 +203,11 @@ ZONES = [(0, 1, "fntab"), (2200, 2711, "b1_facts"), (2712, 2714, "b1_scratch"),
 # (only REG/MULC-window/FLAGS kinds actually own a register). window_hdr:
 # [4547] w (entry count, 0..512), [4548] free mask x0..x7. window_cs:
 # [4573] cs mask, [4574] slot cursor, [4575] cs_hi, [4576] tsp, [4577] S.
+# arm_base (2026-09-07, A4 fuzz DIVERGE hunt RC2): fntab[4591] = the window
+# index (`sw`) at which the currently-compiling if-ARM started, or -1 when
+# not inside an if-arm; check_reg_collision compares a relocation target's
+# index against it to tell an arm-local entry (safe to relocate) from one
+# that predates the arm (must exit 89 instead, see emit_cond_branch).
 # hoist (2026-09-07, A2 commit 2): fntab[4578+2k]/[4579+2k] = value/register
 # of loop-invariant-constant pair k (k<4), live only during the compile of
 # one `while` loop's own body text (set at loop entry, cleared right after

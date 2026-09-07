@@ -1,0 +1,6 @@
+// A4 fuzz DIVERGE hunt (2026-09-07), root cause 1: `x op= e` used to push a
+// lazy SYM(x) tag before compiling e -- a nested `let _ = x = .. in ..`
+// inside e (reassigning x mid-expression) corrupted the combine step, which
+// read x's NEW value instead of the value x held when the statement began.
+// `x op= e` must snapshot x BEFORE e's side effects (x = x_old + e).
+fn main() -> i64 { let v0 = 100; v0 += (let _ = v0 = 7 in 3); v0 }
