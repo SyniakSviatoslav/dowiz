@@ -71,6 +71,19 @@ def grid10x10(rows=10, cols=10):
     return n, _adj(n, edges)
 
 
+def ring2(n=64):
+    """B3 step 3 coordinator review (2026-09-07): a ring with chords of length 1 AND 2 -- edges
+    (i, i+1 mod n) and (i, i+2 mod n) -- gives every i a real triangle {i, i+1, i+2} (all three
+    edges present: i-(i+1), (i+1)-(i+2), i-(i+2)), exactly n of them, no double counting (each
+    triangle's 3 vertices are consecutive, so no two i's name the same triple). Unlike
+    ring_chords() (0 triangles) and random_lcg() (0 triangles, independently re-verified by
+    brute force during this step), this graph gives gb_tc.bp's fold real distinguishing power:
+    a broken mxm/select/reduce can no longer coincidentally return the right answer by both
+    returning 0."""
+    edges = [(i, (i + 1) % n) for i in range(n)] + [(i, (i + 2) % n) for i in range(n)]
+    return n, _adj(n, edges)
+
+
 GRAPHS = [('ring_chords', ring_chords), ('random_lcg', random_lcg), ('grid10x10', grid10x10)]
 
 

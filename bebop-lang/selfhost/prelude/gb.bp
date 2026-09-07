@@ -229,6 +229,39 @@ fn gb_gen_ring_chords(psrc: [i64], pdst: [i64]) -> i64 {
   };
   n + n / 2
 }
+// gb_gen_ring2 / gb_build_ring2 (B3 step 3 coordinator review, 2026-09-07): a ring with chords
+// of length 1 AND 2 -- edges (i,i+1 mod n) and (i,i+2 mod n) -- gives every i a real triangle
+// {i,i+1,i+2}, exactly n=64 of them (mirrors bench/oracles/lag_common.py's ring2() bit-for-bit:
+// same edge list, same undirected-set dedupe via gb_build_pairs). Unlike gb_build_ring_chords
+// (0 triangles) this gives gb_tc a fold with real distinguishing power.
+fn gb_gen_ring2(psrc: [i64], pdst: [i64]) -> i64 {
+  let n = 64;
+  let i = 0;
+  while i < n {
+    let _ = psrc[i] = i;
+    let _ = pdst[i] = (i + 1) % n;
+    let i = i + 1;
+    0
+  };
+  let j = 0;
+  while j < n {
+    let _ = psrc[n + j] = j;
+    let _ = pdst[n + j] = (j + 2) % n;
+    let j = j + 1;
+    0
+  };
+  n + n
+}
+fn gb_build_ring2(base: [i64], tx: [i64], tmp: [i64], dg: [i64]) -> i64 {
+  let n = 64;
+  let mp = 128;
+  let psrc = zeros(mp);
+  let pdst = zeros(mp);
+  let _ = gb_gen_ring2(psrc, pdst);
+  let cur = zeros(n);
+  let bm = zeros((n * n + 63) / 64);
+  gb_build_pairs(base, tx, tmp, n, mp, psrc, pdst, cur, bm, dg)
+}
 fn gb_lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
 // gb_mod64_k(n): 2**64 mod n via 64 doublings mod n (no native `%` needed, so this works for
 // any n without itself needing the correction it computes).
@@ -494,4 +527,341 @@ fn gb_mxv_generic(base: [i64], A: i64, sr: i64, x: [i64], y: [i64], n: i64, hasm
     0
   };
   0
+}
+
+// ==== B3 step 3 (docs/blueprints/B3-graphblas-kernels-prejit.md section 3/5 step 3): tier-0
+// mxm/eWiseAdd/eWiseMult/select/apply/reduce, generic over semirings 1-4 plus 7 (plus-pair).
+// Semiring 7 plus-pair: oplus = +, otimes = pair (a CONSTANT 1, ignoring both operand values --
+// the GraphBLAS PAIR binary op; used by triangle counting via mxm(L,L,plus-pair)). sr 3
+// plus-times stays the schoolbook Q32 division gb_mxv_generic already uses (`umulh` is out of
+// scope, A-series). gb_sr_mul/gb_sr_add below are the shared oplus/otimes used by BOTH mxm's
+// SPA inner loop and eWiseAdd/eWiseMult's merge -- one otimes/oplus definition per semiring,
+// text-identical to gb_mxv_generic's own sr==3/sr==4/else arms wherever they overlap.
+fn gb_sr_mul(sr: i64, a: i64, b: i64) -> i64 {
+  if sr == 3 then (a * b) / 4294967296
+  else if sr == 4 then a + b
+  else 1
+}
+fn gb_sr_add(sr: i64, a: i64, b: i64) -> i64 {
+  if sr == 4 then (if a < b then a else b)
+  else if sr == 1 then 1
+  else if sr == 2 then 1
+  else a + b
+}
+
+// ---- mxm: Gustavson + SPA (dense accumulator, m cells -- one per B-column -- allocated ONCE
+// by the caller (gb_mxm) OUTSIDE both row loops, L8). PONYTAIL simplification vs the
+// blueprint's literal "touched list": the reset trick still avoids ever zeroing the dense
+// arrays (a monotonic per-row stamp `s`, `rs` the running counter cristallized cell) but the
+// row's output columns are recovered by a dense scan of `stamp` in gb_mxm_write_row rather
+// than a touched-list + sort -- at this tier's scale (n <= 1000, gb_mxm's own callers) an m-cell
+// scan per row costs the same order as the double-loop accumulate itself and comes with CSR's
+// required ascending column order for free, no sort routine to get subtly wrong. Ceiling: a
+// 1M-row mxm would want the touched list back (avoid the O(n*m) write-side scan) -- step 4's
+// specialised/pooled kernels are the place for that, not this tier-0 fallback.
+fn gb_mxm_row(base: [i64], A: i64, B: i64, sr: i64, i: i64, stamp: [i64], acc: [i64], rs: [i64], cnt: [i64]) -> i64 {
+  let s = rs[0] + 1;
+  let _ = rs[0] = s;
+  let _ = cnt[0] = 0;
+  let lo = gb_row_lo(base, A, i);
+  let hi = gb_row_hi(base, A, i);
+  let k = lo;
+  while k < hi {
+    let kk = gb_col(base, A, k);
+    let wa = gb_val(base, A, k);
+    let lo2 = gb_row_lo(base, B, kk);
+    let hi2 = gb_row_hi(base, B, kk);
+    let p = lo2;
+    while p < hi2 {
+      let jj = gb_col(base, B, p);
+      let wb = gb_val(base, B, p);
+      let contrib = gb_sr_mul(sr, wa, wb);
+      let first = if stamp[jj] != s then 1 else 0;
+      let _ = if first == 1 then (let _ = stamp[jj] = s in 0) else 0;
+      let _ = if first == 1 then (let _ = acc[jj] = contrib in 0) else 0;
+      let _ = if first == 0 then (let _ = acc[jj] = gb_sr_add(sr, acc[jj], contrib) in 0) else 0;
+      let _ = cnt[0] = cnt[0] + first;
+      let p = p + 1;
+      0
+    };
+    let k = k + 1;
+    0
+  };
+  cnt[0]
+}
+// gb_mxm_write_row: dense ascending scan of stamp[0..m) for the columns this row's SPA pass
+// touched (stamp[j] == s), writing ci/vv from offset `off` (= rp[i]) upward via the running
+// cursor `p` (caller-owned [1] cell, reset by the caller before this call).
+fn gb_mxm_write_row(base: [i64], ci: i64, vv: i64, m: i64, s: i64, stamp: [i64], acc: [i64], p: [i64]) -> i64 {
+  let j = 0;
+  while j < m {
+    let hit = if stamp[j] == s then 1 else 0;
+    let _ = if hit == 1 then arr_put(base, ci, p[0], j) else 0;
+    let _ = if hit == 1 then arr_put(base, vv, p[0], acc[j]) else 0;
+    let _ = p[0] = p[0] + hit;
+    let j = j + 1;
+    0
+  };
+  0
+}
+// gb_mxm(base, tx, tmp, A, B, sr, dg): C = A *sr* B (A: n x k CSR, B: k x m CSR, both column-
+// ascending per the CSR contract). Two-pass count/fill (pass 1 builds rp via gb_mxm_row's
+// return count; pass 2 recomputes each row -- rs's monotonic stamp makes this safe to call
+// gb_mxm_row twice per row with the SAME stamp/acc scratch -- and writes it out).
+fn gb_mxm(base: [i64], tx: [i64], tmp: [i64], A: i64, B: i64, sr: i64, dg: [i64]) -> i64 {
+  let n = st_get(base, A, 0);
+  let m = st_get(base, B, 1);
+  let stamp = zeros(m);
+  let acc = zeros(m);
+  let rs = zeros(1);
+  let cnt = zeros(1);
+  let rp = arr_alloc(base, tx, dg[0], n + 1);
+  let i = 0;
+  while i < n {
+    let c = gb_mxm_row(base, A, B, sr, i, stamp, acc, rs, cnt);
+    let _ = arr_put(base, rp, i + 1, c);
+    let i = i + 1;
+    0
+  };
+  let v = 0;
+  while v < n {
+    let _ = arr_put(base, rp, v + 1, arr_get(base, rp, v + 1) + arr_get(base, rp, v));
+    let v = v + 1;
+    0
+  };
+  let nnz = arr_get(base, rp, n);
+  let ci = arr_alloc(base, tx, dg[1], nnz);
+  let vv = arr_alloc(base, tx, dg[2], nnz);
+  let wp = zeros(1);
+  let i2 = 0;
+  while i2 < n {
+    let _ = gb_mxm_row(base, A, B, sr, i2, stamp, acc, rs, cnt);
+    let s2 = rs[0];
+    let _ = wp[0] = arr_get(base, rp, i2);
+    let _ = gb_mxm_write_row(base, ci, vv, m, s2, stamp, acc, wp);
+    let i2 = i2 + 1;
+    0
+  };
+  let _ = st_seal(base, rp, tmp);
+  let _ = st_seal(base, ci, tmp);
+  let _ = st_seal(base, vv, tmp);
+  gb_matrix_seal(base, tx, tmp, dg[3], n, m, nnz, 1, rp, ci, vv)
+}
+
+// ---- eWiseMult (intersection, two-pointer merge of sorted rows) / eWiseAdd (union) ----
+fn gb_ewm_merge_row(base: [i64], A: i64, B: i64, sr: i64, ka0: i64, hia: i64, kb0: i64, hib: i64, ci: i64, vv: i64, w: [i64]) -> i64 {
+  let ka = ka0;
+  let kb = kb0;
+  while (ka < hia) * (kb < hib) == 1 {
+    let ca = gb_col(base, A, ka);
+    let cb = gb_col(base, B, kb);
+    let eq = if ca == cb then 1 else 0;
+    let lt = if ca < cb then 1 else 0;
+    let _ = if eq == 1 then arr_put(base, ci, w[0], ca) else 0;
+    let _ = if eq == 1 then arr_put(base, vv, w[0], gb_sr_mul(sr, gb_val(base, A, ka), gb_val(base, B, kb))) else 0;
+    let _ = w[0] = w[0] + eq;
+    let ka = ka + eq + lt;
+    let kb = kb + eq + (1 - eq) * (1 - lt);
+    0
+  };
+  0
+}
+// gb_ewise_mult(base, tx, tmp, A, B, sr, dg): C[i,j] = A[i,j] otimes B[i,j] where BOTH exist
+// (structural intersection per row) -- A, B same n x m shape. Single pass: `w[0]` is a running
+// GLOBAL cursor (never reset between rows), so rp[i+1] = w[0] right after row i is already the
+// cumulative offset -- no separate prefix-sum pass needed (unlike mxm/select, whose row counts
+// aren't known until the row is done being merged AGAINST an unrelated second matrix's shape).
+fn gb_ewise_mult(base: [i64], tx: [i64], tmp: [i64], A: i64, B: i64, sr: i64, dg: [i64]) -> i64 {
+  let n = st_get(base, A, 0);
+  let m = st_get(base, A, 1);
+  let nnzA = st_get(base, A, 2);
+  let nnzB = st_get(base, B, 2);
+  let cap = nnzA + nnzB;
+  let rp = arr_alloc(base, tx, dg[0], n + 1);
+  let ci = arr_alloc(base, tx, dg[1], cap);
+  let vv = arr_alloc(base, tx, dg[2], cap);
+  let w = zeros(1);
+  let i = 0;
+  while i < n {
+    let ka = gb_row_lo(base, A, i);
+    let hia = gb_row_hi(base, A, i);
+    let kb = gb_row_lo(base, B, i);
+    let hib = gb_row_hi(base, B, i);
+    let _ = gb_ewm_merge_row(base, A, B, sr, ka, hia, kb, hib, ci, vv, w);
+    let _ = arr_put(base, rp, i + 1, w[0]);
+    let i = i + 1;
+    0
+  };
+  let _ = st_seal(base, rp, tmp);
+  let _ = st_seal(base, ci, tmp);
+  let _ = st_seal(base, vv, tmp);
+  gb_matrix_seal(base, tx, tmp, dg[3], n, m, w[0], 1, rp, ci, vv)
+}
+fn gb_ewa_merge_row(base: [i64], A: i64, B: i64, sr: i64, ka0: i64, hia: i64, kb0: i64, hib: i64, ci: i64, vv: i64, w: [i64]) -> i64 {
+  let ka = ka0;
+  let kb = kb0;
+  while (ka < hia) * (kb < hib) == 1 {
+    let ca = gb_col(base, A, ka);
+    let cb = gb_col(base, B, kb);
+    let eq = if ca == cb then 1 else 0;
+    let lt = if ca < cb then 1 else 0;
+    let col = if lt == 1 then ca else cb;
+    let val = if eq == 1 then gb_sr_add(sr, gb_val(base, A, ka), gb_val(base, B, kb)) else if lt == 1 then gb_val(base, A, ka) else gb_val(base, B, kb);
+    let _ = arr_put(base, ci, w[0], col);
+    let _ = arr_put(base, vv, w[0], val);
+    let _ = w[0] = w[0] + 1;
+    let ka = ka + eq + lt;
+    let kb = kb + eq + (1 - eq) * (1 - lt);
+    0
+  };
+  let ka2 = ka;
+  while ka2 < hia {
+    let _ = arr_put(base, ci, w[0], gb_col(base, A, ka2));
+    let _ = arr_put(base, vv, w[0], gb_val(base, A, ka2));
+    let _ = w[0] = w[0] + 1;
+    let ka2 = ka2 + 1;
+    0
+  };
+  let kb2 = kb;
+  while kb2 < hib {
+    let _ = arr_put(base, ci, w[0], gb_col(base, B, kb2));
+    let _ = arr_put(base, vv, w[0], gb_val(base, B, kb2));
+    let _ = w[0] = w[0] + 1;
+    let kb2 = kb2 + 1;
+    0
+  };
+  0
+}
+// gb_ewise_add(base, tx, tmp, A, B, sr, dg): C[i,j] = A[i,j] oplus B[i,j] (union: a column
+// present in only one side passes its value through unchanged, present in both combines via
+// oplus) -- same single-pass running-cursor construction as gb_ewise_mult.
+fn gb_ewise_add(base: [i64], tx: [i64], tmp: [i64], A: i64, B: i64, sr: i64, dg: [i64]) -> i64 {
+  let n = st_get(base, A, 0);
+  let m = st_get(base, A, 1);
+  let nnzA = st_get(base, A, 2);
+  let nnzB = st_get(base, B, 2);
+  let cap = nnzA + nnzB;
+  let rp = arr_alloc(base, tx, dg[0], n + 1);
+  let ci = arr_alloc(base, tx, dg[1], cap);
+  let vv = arr_alloc(base, tx, dg[2], cap);
+  let w = zeros(1);
+  let i = 0;
+  while i < n {
+    let ka = gb_row_lo(base, A, i);
+    let hia = gb_row_hi(base, A, i);
+    let kb = gb_row_lo(base, B, i);
+    let hib = gb_row_hi(base, B, i);
+    let _ = gb_ewa_merge_row(base, A, B, sr, ka, hia, kb, hib, ci, vv, w);
+    let _ = arr_put(base, rp, i + 1, w[0]);
+    let i = i + 1;
+    0
+  };
+  let _ = st_seal(base, rp, tmp);
+  let _ = st_seal(base, ci, tmp);
+  let _ = st_seal(base, vv, tmp);
+  gb_matrix_seal(base, tx, tmp, dg[3], n, m, w[0], 1, rp, ci, vv)
+}
+
+// ---- select: 2-pass count/fill. pred: 1 value != 0, 2 col > row (strict upper triangle),
+// 3 value >= thresh. Column order is preserved for free (a filtered subsequence of an already
+// column-ascending row never needs re-sorting).
+fn gb_select_test(pred: i64, row: i64, col: i64, val: i64, thresh: i64) -> i64 {
+  if pred == 2 then (if col > row then 1 else 0)
+  else if pred == 3 then (if val >= thresh then 1 else 0)
+  else (if val != 0 then 1 else 0)
+}
+fn gb_select(base: [i64], tx: [i64], tmp: [i64], A: i64, pred: i64, thresh: i64, dg: [i64]) -> i64 {
+  let n = st_get(base, A, 0);
+  let m = st_get(base, A, 1);
+  let rp = arr_alloc(base, tx, dg[0], n + 1);
+  let i = 0;
+  while i < n {
+    let lo = gb_row_lo(base, A, i);
+    let hi = gb_row_hi(base, A, i);
+    let k = lo;
+    let c = 0;
+    while k < hi {
+      let hit = gb_select_test(pred, i, gb_col(base, A, k), gb_val(base, A, k), thresh);
+      let c = c + hit;
+      let k = k + 1;
+      0
+    };
+    let _ = arr_put(base, rp, i + 1, c);
+    let i = i + 1;
+    0
+  };
+  let v = 0;
+  while v < n {
+    let _ = arr_put(base, rp, v + 1, arr_get(base, rp, v + 1) + arr_get(base, rp, v));
+    let v = v + 1;
+    0
+  };
+  let nnz = arr_get(base, rp, n);
+  let ci = arr_alloc(base, tx, dg[1], nnz);
+  let vv = arr_alloc(base, tx, dg[2], nnz);
+  let p = zeros(1);
+  let i2 = 0;
+  while i2 < n {
+    let _ = p[0] = arr_get(base, rp, i2);
+    let lo = gb_row_lo(base, A, i2);
+    let hi = gb_row_hi(base, A, i2);
+    let k = lo;
+    while k < hi {
+      let col = gb_col(base, A, k);
+      let val = gb_val(base, A, k);
+      let hit = gb_select_test(pred, i2, col, val, thresh);
+      let _ = if hit == 1 then arr_put(base, ci, p[0], col) else 0;
+      let _ = if hit == 1 then arr_put(base, vv, p[0], val) else 0;
+      let _ = p[0] = p[0] + hit;
+      let k = k + 1;
+      0
+    };
+    let i2 = i2 + 1;
+    0
+  };
+  let _ = st_seal(base, rp, tmp);
+  let _ = st_seal(base, ci, tmp);
+  let _ = st_seal(base, vv, tmp);
+  gb_matrix_seal(base, tx, tmp, dg[3], n, m, nnz, 1, rp, ci, vv)
+}
+
+// ---- apply: unary op on values, structure UNCHANGED -- rp/ci are shared (linked, not
+// copied) with A, since apply never touches the sparsity pattern. op: 1 identity, 2 v+1,
+// 3 negate (0-v).
+fn gb_apply_op(op: i64, v: i64) -> i64 {
+  if op == 2 then v + 1 else if op == 3 then 0 - v else v
+}
+fn gb_apply(base: [i64], tx: [i64], tmp: [i64], A: i64, op: i64, dg: [i64]) -> i64 {
+  let n = st_get(base, A, 0);
+  let m = st_get(base, A, 1);
+  let nnz = st_get(base, A, 2);
+  let vv = arr_alloc(base, tx, dg[2], nnz);
+  let k = 0;
+  while k < nnz {
+    let _ = arr_put(base, vv, k, gb_apply_op(op, gb_val(base, A, k)));
+    let k = k + 1;
+    0
+  };
+  let _ = st_seal(base, vv, tmp);
+  gb_matrix_seal(base, tx, tmp, dg[3], n, m, nnz, 1, st_ref(base, A, 4), st_ref(base, A, 5), vv)
+}
+
+// ---- reduce: row (sum of a row's VALUES, not gb_fold_row's column-id sum) / column (via the
+// TRANSPOSED CSR -- pass gb_transpose(A) as AT, reduce its row j) / scalar (sum of every value).
+fn gb_reduce_row(base: [i64], A: i64, i: i64) -> i64 {
+  let lo = gb_row_lo(base, A, i);
+  let hi = gb_row_hi(base, A, i);
+  let k = lo;
+  let acc = 0;
+  while k < hi {
+    let acc = acc + gb_val(base, A, k);
+    let k = k + 1;
+    0
+  };
+  acc
+}
+fn gb_reduce_col(base: [i64], AT: i64, j: i64) -> i64 { gb_reduce_row(base, AT, j) }
+fn gb_reduce_scalar(base: [i64], A: i64) -> i64 {
+  let nnz = st_get(base, A, 2);
+  arr_sum(base, st_ref(base, A, 6), nnz)
 }

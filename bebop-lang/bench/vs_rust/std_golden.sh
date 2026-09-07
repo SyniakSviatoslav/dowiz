@@ -21,7 +21,9 @@ SEEDMD5=$(md5sum < ./seed/build/seed | cut -c1-32); : > "$BEBOP_TMP/memo.log"; :
 run() {  # run <timeout-s> <bin> [args...]  -- stdout is the program's stdout (or its replay)
   local t="$1" bin="$2" b k rc; shift 2
   [ "$MEMO" = 0 ] && { timeout "$t" ./seed/build/seed "$bin" "$@"; return; }
-  b=$(md5sum < "$bin" | cut -c1-32); k="$b.$SEEDMD5.$(grep -c "^$b " "$BEBOP_TMP/memo.log")${*:+.$*}"
+  # args become part of the key; slashes/spaces (a store DIR arg, B3 gates) must not turn the key into a nested path
+  local a=""; [ $# -gt 0 ] && a=".$(printf '%s' "$*" | tr '/ ' '__')"
+  b=$(md5sum < "$bin" | cut -c1-32); k="$b.$SEEDMD5.$(grep -c "^$b " "$BEBOP_TMP/memo.log")$a"
   echo "$b $k" >> "$BEBOP_TMP/memo.log"
   # E4 (D12-A): one line per run in $BEBOP_TMP/gates.txt -- `<gate> <ms> hit|miss rc=N` (std_par.sh sums them)
   if [ -f "$MEMO/$k" ]; then echo "$k hit" >> "$BEBOP_TMP/memo.keys"; cat "$MEMO/$k"; echo "$(basename "$bin" .bin) 0 hit rc=0" >> "$BEBOP_TMP/gates.txt"; return 0; fi
@@ -827,6 +829,36 @@ gate gb_gen_specialised 1 "$gb_gen_ok"
 #      onto gb_mxv here (own gated runbook, bench/vs_rust/sgraph2.sh; deferred to step 3). ----
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_bfs.bp "$GBT/gb_bfs_test.bin" >/dev/null 2>&1 && run 30 "$GBT/gb_bfs_test.bin" "$GBT" | tail -1)
 gate gb_bfs -3 "$r"
+
+# ---- G9b (B3 step 3, docs/blueprints/B3-graphblas-kernels-prejit.md section 5 step 3/section
+#      6): mxm/eWiseAdd/eWiseMult/select/apply/reduce tier-0 (selfhost/prelude/gb.bp) exercised
+#      by four LAGraph-style folds, oracle bench/oracles/gb_lagraph.py. gb_tc: triangle count via
+#      the masked mxm(select(A,upper), select(A,upper), plus-pair) construction, combined over
+#      [ring_chords, random_lcg, ring2] -- ring_chords/random_lcg have exactly 0 triangles
+#      (independently re-verified by brute force, not a bug); ring2 (coordinator review
+#      2026-09-07, gb.bp's gb_build_ring2 -- chords of length 1 AND 2) adds 64 real triangles so
+#      the gate has distinguishing power (a broken pipeline can no longer coincidentally return
+#      0 -- see gb_tc.bp's header for the upper/lower/full-select sanity probes that confirmed
+#      this). gb_cc: connected-components
+#      label sum via synchronous min-label propagation to a fixpoint (NOT routed through
+#      gb_mxv_generic's min-plus arm, which would add edge weight -- CC needs a structural min of
+#      neighbours) -- the random_lcg graph has 750/1000 nodes unreachable from node 0 (average
+#      degree 7.76 near the ln(1000)=6.9 connectivity threshold; same fact behind gb_bfs's own
+#      -3 golden fold), so this genuinely exercises multiple components, not a single blob.
+#      gb_sssp: min-plus SSSP distance sum from source 0 via repeated gb_mxv_generic(sr=4) to a
+#      fixpoint (Bellman-Ford; oracle reuses lag_common.sssp_minplus()'s Dijkstra unchanged --
+#      SSSP has one correct answer regardless of algorithm), unreachable sentinel -1 on both
+#      sides. gb_pr: PageRank Q32, damping 0.85, exactly 10 iterations, schoolbook
+#      multiply-then-shift (oracle reuses lag_common.pagerank_q32() unchanged; overflow-checked,
+#      max product ~3.6e16 << 2**63). ----
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_tc.bp "$GBT/gb_tc_test.bin" >/dev/null 2>&1 && run 30 "$GBT/gb_tc_test.bin" "$GBT" | tail -1)
+gate gb_tc 64 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_cc.bp "$GBT/gb_cc_test.bin" >/dev/null 2>&1 && run 30 "$GBT/gb_cc_test.bin" "$GBT" | tail -1)
+gate gb_cc 1500 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_sssp.bp "$GBT/gb_sssp_test.bin" >/dev/null 2>&1 && run 30 "$GBT/gb_sssp_test.bin" "$GBT" | tail -1)
+gate gb_sssp 1281 "$r"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_pr.bp "$GBT/gb_pr_test.bin" >/dev/null 2>&1 && run 30 "$GBT/gb_pr_test.bin" "$GBT" | tail -1)
+gate gb_pr 2510021250460919878 "$r"
 
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]

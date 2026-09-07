@@ -1,0 +1,106 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+use "selfhost/prelude/gb.bp"
+// gb_cc.bp -- B3 step 3 G9b gate: connected-components label sum over gb.bp's 1k random_lcg
+// graph. 750 of its 1000 nodes are NOT reachable from node 0 (independently confirmed by BFS
+// during this step's own review -- the graph is genuinely NOT one giant component, average
+// degree 7.76 sits close to the random-graph connectivity threshold ln(1000)=6.9; this is also
+// why gb_bfs's own golden fold is the small negative number -3, not a big positive level sum).
+// CC label sum does not assume single-component connectivity -- the round below propagates the
+// min label within EACH component independently and converges once no label changes anywhere.
+//
+// Algorithm (defined here, mirrored bit-for-bit in bench/oracles/gb_lagraph.py's
+// cc_label_sum()): synchronous ("Jacobi") min-label propagation. label[i] = i initially; each
+// round, nx[i] = min(label[i], min over neighbours j of label[j]) read from the PREVIOUS
+// round's label array (never the in-progress nx), then label := nx; repeat until a round makes
+// no change. This is NOT routed through gb_mxv_generic's min-plus semiring (that arm adds the
+// edge WEIGHT, which CC must ignore -- label propagation is a structural "min of neighbours",
+// not a distance) -- gb_cc_round below reuses gb.bp's own row accessors (gb_row_lo/gb_col) the
+// same way gb_mxv_generic does, just without the +w term, matching the blueprint's "mxv
+// min-plus/any-min" description in spirit (a CSR row-major neighbour gather to a fixpoint).
+
+fn gb_cc_round(base: [i64], A: i64, label: [i64], nx: [i64], n: i64, changed: [i64]) -> i64 {
+  let i = 0;
+  while i < n {
+    let lo = gb_row_lo(base, A, i);
+    let hi = gb_row_hi(base, A, i);
+    let k = lo;
+    let m = label[i];
+    while k < hi {
+      let j = gb_col(base, A, k);
+      let lj = label[j];
+      let m = if lj < m then lj else m;
+      let k = k + 1;
+      0
+    };
+    let _ = nx[i] = m;
+    let _ = if m < label[i] then (let _ = changed[0] = 1 in 0) else 0;
+    let i = i + 1;
+    0
+  };
+  0
+}
+fn gb_cc(base: [i64], A: i64, n: i64) -> i64 {
+  let label = zeros(n);
+  let nx = zeros(n);
+  let i = 0;
+  while i < n {
+    let _ = label[i] = i;
+    let i = i + 1;
+    0
+  };
+  let changed = zeros(1);
+  let _ = changed[0] = 1;
+  while changed[0] == 1 {
+    let _ = changed[0] = 0;
+    let _ = gb_cc_round(base, A, label, nx, n, changed);
+    let w = 0;
+    while w < n {
+      let _ = label[w] = nx[w];
+      let w = w + 1;
+      0
+    };
+    0
+  };
+  let s = 0;
+  let k = 0;
+  while k < n {
+    let s = s + label[k];
+    let k = k + 1;
+    0
+  };
+  s
+}
+
+fn wr_str(dst: [i64], pos: [i64], s: str) -> i64 {
+  let off = pos[0];
+  let n = str_len(s);
+  let i = 0;
+  while i < n {
+    let _ = dst[off + i] = char(s, i);
+    let i = i + 1;
+    0
+  };
+  let _ = pos[0] = off + n;
+  0
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  let dir = argv[2];
+  let path = zeros(256);
+  let ppos = zeros(1);
+  let _ = wr_str(path, ppos, dir);
+  let _ = wr_str(path, ppos, "/gb_cc.store");
+  let tmp = zeros(1024);
+  let base = st_open(path, ppos[0], 4194304, tmp);
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let dg = zeros(6);
+  let _ = gb_digests(dg);
+  let A = gb_build_random_lcg(base, tx, tmp, dg);
+  let root = st_alloc(base, tx, 1, st_digest("GbCcRoot1{ref GbMatrix}"));
+  let _ = st_link(base, root, 0, A);
+  let _ = st_seal(base, root, tmp);
+  let _ = st_commit(base, tx, root, tmp);
+  gb_cc(base, A, 1000)
+}

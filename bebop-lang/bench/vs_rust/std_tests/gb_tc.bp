@@ -1,0 +1,113 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+use "selfhost/prelude/gb.bp"
+// gb_tc.bp -- B3 step 3 G9b gate (docs/blueprints/B3-graphblas-kernels-prejit.md section 5
+// step 3 / section 6): triangle count via the standard masked-mxm construction --
+// L = select(A, upper) (pred 2, col > row, gb.bp's gb_select); TC = reduce_scalar of LL
+// masked to L's structural pattern, LL = mxm(L, L, plus-pair) (sr 7 -- oplus=+, otimes=pair,
+// gb.bp's gb_mxm). The masking step is NOT a generic gb_ewise_mult(sr): the blueprint's
+// formula needs LL's own accumulated count kept wherever L structurally matches (a "first"
+// combine), not a value re-combined through a semiring's otimes (any of gb.bp's sr ids would
+// re-scale or discard LL's count -- sr 7's otimes=pair=1 would collapse every match back to
+// presence, sr 3/4 would multiply/min it against L's edge weight, which is not what "reduce
+// the triangle count" means) -- so this file does the masked two-pointer merge itself
+// (mask_sum_row below), keeping the general gb_ewise_mult in gb.bp for the honest sr-combine
+// use case eWiseMult actually has.
+//
+// Oracle: bench/oracles/gb_lagraph.py's gb_tc_fold() -- lag_common.triangle_count() (forward-
+// adjacency exact count, independently re-verified 2026-09-07 by brute force: BOTH ring_chords
+// and random_lcg have triangle count 0 -- a real property of these two deterministic generator
+// graphs, not a bug; cross-checked against a hand-built 3-node triangle during development,
+// see $OUT/smoke.bp) combined over [ring_chords, random_lcg, ring2] the same rolling-fold way
+// as lag_common.combine() (acc*1000003+v, starting acc=0 -- i64 wraparound IS the `&M` mask
+// python applies explicitly, verified by every other gb_*.bp fold already gated).
+//
+// ring2 (coordinator review, 2026-09-07): gb.bp's gb_build_ring2 -- a ring with chords of
+// length 1 AND 2 (edges (i,i+1) and (i,i+2) mod 64) -- gives every i a real triangle
+// {i,i+1,i+2}, exactly 64 of them. Both ring_chords and random_lcg have 0 triangles, so a
+// broken mxm/select/reduce could coincidentally return 0 too and this gate would never notice
+// -- ring2 is the third term specifically so the combined fold is nonzero and moves if the
+// pipeline is wrong. Sanity probe 2026-09-07 (scratch, not committed -- pred=9 lower-triangle
+// added to gb_select_test, driven, then reverted): flipping select from upper (2, col>row) to
+// lower (col<row) gave the SAME 64, not a different number -- on reflection this is the
+// mathematically expected result (upper- and lower-triangle masked-mxm are mirror-symmetric
+// constructions of the same invariant on an undirected graph, python-cross-checked before
+// trusting it), not evidence the gate is insensitive. The genuinely differentiating probe:
+// select with pred=1 (NO triangular restriction, L=A unfiltered) on ring2 alone gives 384
+// (6x overcount: 3 middle-vertex choices x 2 directions per triangle, matching an independent
+// python re-derivation) -- proving the select step's structural filtering is what the pipeline
+// actually depends on, not a hardcoded/coincidental 64. Both probe numbers logged in
+// docs/exp.journal.
+
+fn mask_sum_row(base: [i64], LL: i64, L: i64, i: i64) -> i64 {
+  let ka = gb_row_lo(base, LL, i);
+  let hia = gb_row_hi(base, LL, i);
+  let kb = gb_row_lo(base, L, i);
+  let hib = gb_row_hi(base, L, i);
+  let acc = 0;
+  while (ka < hia) * (kb < hib) == 1 {
+    let ca = gb_col(base, LL, ka);
+    let cb = gb_col(base, L, kb);
+    let eq = if ca == cb then 1 else 0;
+    let lt = if ca < cb then 1 else 0;
+    let acc = if eq == 1 then acc + gb_val(base, LL, ka) else acc;
+    let ka = ka + eq + lt;
+    let kb = kb + eq + (1 - eq) * (1 - lt);
+    0
+  };
+  acc
+}
+fn gb_tc(base: [i64], tx: [i64], tmp: [i64], A: i64, n: i64, dg: [i64]) -> i64 {
+  let L = gb_select(base, tx, tmp, A, 2, 0, dg);
+  let LL = gb_mxm(base, tx, tmp, L, L, 7, dg);
+  let i = 0;
+  let acc = 0;
+  while i < n {
+    let acc = acc + mask_sum_row(base, LL, L, i);
+    let i = i + 1;
+    0
+  };
+  acc
+}
+
+fn wr_str(dst: [i64], pos: [i64], s: str) -> i64 {
+  let off = pos[0];
+  let n = str_len(s);
+  let i = 0;
+  while i < n {
+    let _ = dst[off + i] = char(s, i);
+    let i = i + 1;
+    0
+  };
+  let _ = pos[0] = off + n;
+  0
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  let dir = argv[2];
+  let path = zeros(256);
+  let ppos = zeros(1);
+  let _ = wr_str(path, ppos, dir);
+  let _ = wr_str(path, ppos, "/gb_tc.store");
+  let tmp = zeros(1024);
+  let base = st_open(path, ppos[0], 4194304, tmp);
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let dg = zeros(6);
+  let _ = gb_digests(dg);
+  let Aring = gb_build_ring_chords(base, tx, tmp, dg);
+  let Alcg = gb_build_random_lcg(base, tx, tmp, dg);
+  let Aring2 = gb_build_ring2(base, tx, tmp, dg);
+  let tcring = gb_tc(base, tx, tmp, Aring, 64, dg);
+  let tclcg = gb_tc(base, tx, tmp, Alcg, 1000, dg);
+  let tcring2 = gb_tc(base, tx, tmp, Aring2, 64, dg);
+  let root = st_alloc(base, tx, 3, st_digest("GbTcRoot3{ref GbMatrix,ref GbMatrix,ref GbMatrix}"));
+  let _ = st_link(base, root, 0, Aring);
+  let _ = st_link(base, root, 1, Alcg);
+  let _ = st_link(base, root, 2, Aring2);
+  let _ = st_seal(base, root, tmp);
+  let _ = st_commit(base, tx, root, tmp);
+  let acc = 0 * 1000003 + tcring;
+  let acc = acc * 1000003 + tclcg;
+  acc * 1000003 + tcring2
+}

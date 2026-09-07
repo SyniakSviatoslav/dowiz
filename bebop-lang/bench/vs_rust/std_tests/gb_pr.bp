@@ -1,0 +1,105 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+use "selfhost/prelude/gb.bp"
+// gb_pr.bp -- B3 step 3 G9b gate: PageRank in Q32 fixed point, damping 0.85, exactly 10
+// iterations, over gb.bp's 1k random_lcg graph -- schoolbook multiply-then-shift, identical
+// integer arithmetic to bench/oracles/gb_lagraph.py's EXISTING pagerank_q32() (reused
+// unmodified as the oracle: same FP_ONE=2**32, d_fp=(85*FP_ONE)//100, base_fp=(FP_ONE-d_fp)//n,
+// per-source contribution = (wgt*r[u])>>32 with wgt=FP_ONE//outdeg(u), incoming[v] accumulated
+// over every neighbour v of u, r rebuilt each iteration as base_fp + ((d_fp*incoming[v])>>32)).
+// No dangling nodes on this graph (every node's degree >= 1, verified 2026-09-07) so the
+// outdeg==0 skip never fires either side. Overflow check (2026-09-07): the largest
+// wgt*r[u]/d_fp*incoming product observed over the 10 iterations is ~3.6e16, far under i64's
+// 2**63 ceiling -- bebop's native i64 multiply matches python's unbounded-int arithmetic
+// exactly here, no wraparound divergence. Final fold = rolling combine of the 10th iteration's
+// rank vector (acc = acc*1000003 + r[x], i64 wraparound standing in for python's explicit
+// `&M`+s64, the same convention every other gb_*.bp fold already gated relies on).
+
+fn gb_pr(base: [i64], A: i64, n: i64) -> i64 {
+  let fp1 = 4294967296;
+  let d_fp = (85 * fp1) / 100;
+  let base_fp = (fp1 - d_fp) / n;
+  let r = zeros(n);
+  let i = 0;
+  while i < n {
+    let _ = r[i] = fp1 / n;
+    let i = i + 1;
+    0
+  };
+  let incoming = zeros(n);
+  let it = 0;
+  while it < 10 {
+    let z = 0;
+    while z < n {
+      let _ = incoming[z] = 0;
+      let z = z + 1;
+      0
+    };
+    let u = 0;
+    while u < n {
+      let lo = gb_row_lo(base, A, u);
+      let hi = gb_row_hi(base, A, u);
+      let deg = hi - lo;
+      let wgt = if deg == 0 then 0 else fp1 / deg;
+      let contrib = (wgt * r[u]) / fp1;
+      let k = lo;
+      while k < hi {
+        let v = gb_col(base, A, k);
+        let _ = incoming[v] = incoming[v] + contrib;
+        let k = k + 1;
+        0
+      };
+      let u = u + 1;
+      0
+    };
+    let w = 0;
+    while w < n {
+      let _ = r[w] = base_fp + (d_fp * incoming[w]) / fp1;
+      let w = w + 1;
+      0
+    };
+    let it = it + 1;
+    0
+  };
+  let acc = 0;
+  let x = 0;
+  while x < n {
+    let acc = acc * 1000003 + r[x];
+    let x = x + 1;
+    0
+  };
+  acc
+}
+
+fn wr_str(dst: [i64], pos: [i64], s: str) -> i64 {
+  let off = pos[0];
+  let n = str_len(s);
+  let i = 0;
+  while i < n {
+    let _ = dst[off + i] = char(s, i);
+    let i = i + 1;
+    0
+  };
+  let _ = pos[0] = off + n;
+  0
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  let dir = argv[2];
+  let path = zeros(256);
+  let ppos = zeros(1);
+  let _ = wr_str(path, ppos, dir);
+  let _ = wr_str(path, ppos, "/gb_pr.store");
+  let tmp = zeros(1024);
+  let base = st_open(path, ppos[0], 4194304, tmp);
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let dg = zeros(6);
+  let _ = gb_digests(dg);
+  let A = gb_build_random_lcg(base, tx, tmp, dg);
+  let root = st_alloc(base, tx, 1, st_digest("GbPrRoot1{ref GbMatrix}"));
+  let _ = st_link(base, root, 0, A);
+  let _ = st_seal(base, root, tmp);
+  let _ = st_commit(base, tx, root, tmp);
+  gb_pr(base, A, 1000)
+}

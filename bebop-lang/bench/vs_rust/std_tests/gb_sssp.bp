@@ -1,0 +1,90 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+use "selfhost/prelude/gb.bp"
+// gb_sssp.bp -- B3 step 3 G9b gate: min-plus SSSP distance sum from source 0 over gb.bp's 1k
+// random_lcg graph, via repeated gb_mxv_generic(sr=4 min-plus) to a fixpoint (Bellman-Ford:
+// positive edge weights, no negative cycles, so relaxation-to-no-change is exact -- same
+// guarantee Dijkstra's heap gives, just without a priority queue). Oracle: reuses
+// bench/oracles/lag_common.py's EXISTING sssp_minplus() (heapq Dijkstra) unmodified -- SSSP has
+// a UNIQUE correct distance vector regardless of algorithm, so the fold from a from-scratch
+// relaxation-to-fixpoint and a from-scratch Dijkstra must (and do, verified 2026-09-07) agree
+// bit for bit; no new oracle function needed.
+//
+// Sentinel: 750 of the graph's 1000 nodes are unreachable from node 0 (same connectivity fact
+// gb_cc.bp's header documents). gb.bp's own min-plus identity (`big` = 1099511627776) is the
+// INTERNAL fixpoint sentinel (an unreachable node's distance never drops below it -- every
+// neighbour's contribution is big+w > big, so `better` never fires); the FOLD converts any
+// dist[k] still == big back to -1 before summing, matching sssp_minplus()'s own -1 convention
+// for unreached nodes exactly (the constraint's "sentinel defined identically on both sides" --
+// python already uses -1, so this is the .bp side agreeing with the existing oracle, not a new
+// definition).
+
+fn gb_sssp(base: [i64], A: i64, n: i64) -> i64 {
+  let big = 1099511627776;
+  let dist = zeros(n);
+  let i = 0;
+  while i < n {
+    let _ = dist[i] = big;
+    let i = i + 1;
+    0
+  };
+  let _ = dist[0] = 0;
+  let y = zeros(n);
+  let changed = zeros(1);
+  let _ = changed[0] = 1;
+  while changed[0] == 1 {
+    let _ = changed[0] = 0;
+    let _ = gb_mxv_generic(base, A, 4, dist, y, n, 0, dist, 0);
+    let k = 0;
+    while k < n {
+      let better = if y[k] < dist[k] then 1 else 0;
+      let _ = if better == 1 then (let _ = dist[k] = y[k] in 0) else 0;
+      let _ = if better == 1 then (let _ = changed[0] = 1 in 0) else 0;
+      let k = k + 1;
+      0
+    };
+    0
+  };
+  let s = 0;
+  let k = 0;
+  while k < n {
+    let d = if dist[k] == big then 0 - 1 else dist[k];
+    let s = s + d;
+    let k = k + 1;
+    0
+  };
+  s
+}
+
+fn wr_str(dst: [i64], pos: [i64], s: str) -> i64 {
+  let off = pos[0];
+  let n = str_len(s);
+  let i = 0;
+  while i < n {
+    let _ = dst[off + i] = char(s, i);
+    let i = i + 1;
+    0
+  };
+  let _ = pos[0] = off + n;
+  0
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  let dir = argv[2];
+  let path = zeros(256);
+  let ppos = zeros(1);
+  let _ = wr_str(path, ppos, dir);
+  let _ = wr_str(path, ppos, "/gb_sssp.store");
+  let tmp = zeros(1024);
+  let base = st_open(path, ppos[0], 4194304, tmp);
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let dg = zeros(6);
+  let _ = gb_digests(dg);
+  let A = gb_build_random_lcg(base, tx, tmp, dg);
+  let root = st_alloc(base, tx, 1, st_digest("GbSsspRoot1{ref GbMatrix}"));
+  let _ = st_link(base, root, 0, A);
+  let _ = st_seal(base, root, tmp);
+  let _ = st_commit(base, tx, root, tmp);
+  gb_sssp(base, A, 1000)
+}

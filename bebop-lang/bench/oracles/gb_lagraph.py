@@ -15,7 +15,7 @@ import sys
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lag_common import ring_chords, random_lcg, random_lcg_edges, bfs_levels, s64, M
+from lag_common import ring_chords, random_lcg, random_lcg_edges, ring2, bfs_levels, triangle_count, sssp_minplus, pagerank_q32, combine, s64, M
 
 
 def edge_weight(u, v):
@@ -194,8 +194,84 @@ def gb_bfs_fold():
     return bfs_levels(n, adj, src=0)
 
 
+# ---- B3 step 3 (docs/blueprints/B3-graphblas-kernels-prejit.md section 5 step 3, section 6):
+# G9b oracles for gb_tc.bp/gb_cc.bp/gb_sssp.bp/gb_pr.bp. Connectivity fact discovered during
+# this step (2026-09-07, verified independently by BFS and by brute-force Dijkstra): the 1k
+# random_lcg() graph has 750 of its 1000 nodes UNREACHABLE from node 0 (average degree 7.76
+# sits close to the random-graph connectivity threshold ln(1000)=6.9) -- this is already why
+# gb_bfs's own golden fold is a small negative number (-3), not a large positive level sum, and
+# it is why gb_cc's algorithm below must not assume a single connected component, and why
+# gb_sssp's -1-unreachable sentinel convention (already lag_common.sssp_minplus()'s own
+# convention) actually matters here rather than being dead code.
+
+
+def gb_tc_fold():
+    """gb_tc.bp's golden value: triangle_count() combined over [ring_chords, random_lcg, ring2]
+    the same rolling-fold way as combine(). ring_chords and random_lcg have EXACTLY ZERO
+    triangles (independently re-verified by brute force, not a bug in triangle_count()) --
+    coordinator review 2026-09-07 added ring2() (a ring with chords of length 1 AND 2, exactly
+    64 triangles) as the third term specifically so this fold has real distinguishing power: a
+    broken mxm/select/reduce pipeline can no longer coincidentally return 0 and pass."""
+    nR, adjR = ring_chords()
+    nL, adjL = random_lcg()
+    n2, adj2 = ring2()
+    return combine([triangle_count(nR, adjR), triangle_count(nL, adjL), triangle_count(n2, adj2)])
+
+
+def cc_label_sum(n, adj):
+    """gb_cc.bp's algorithm, mirrored bit-for-bit: synchronous ("Jacobi") min-label
+    propagation -- label[i]=i initially; each round every node's next label is the min of its
+    OWN current label and its neighbours' CURRENT (pre-round) labels, applied simultaneously;
+    repeat until a round changes nothing. Correct regardless of how many components the graph
+    has (each converges to its own min node id independently)."""
+    label = list(range(n))
+    while True:
+        nx = list(label)
+        changed = False
+        for i in range(n):
+            m = label[i]
+            for j in adj[i]:
+                if label[j] < m:
+                    m = label[j]
+            nx[i] = m
+            if m < label[i]:
+                changed = True
+        label = nx
+        if not changed:
+            break
+    return sum(label)
+
+
+def gb_cc_fold():
+    n, adj = random_lcg()
+    return cc_label_sum(n, adj)
+
+
+def gb_sssp_fold():
+    """gb_sssp.bp's golden value: reuses lag_common.sssp_minplus() UNCHANGED -- SSSP has a
+    unique correct distance vector regardless of algorithm (Dijkstra here vs the .bp side's
+    from-scratch min-plus relaxation to fixpoint), including the -1 sentinel for the graph's
+    750 unreachable nodes, which sssp_minplus() already applies."""
+    n, adj = random_lcg()
+    return sssp_minplus(n, adj, src=0)
+
+
+def gb_pr_fold():
+    """gb_pr.bp's golden value: reuses lag_common.pagerank_q32() UNCHANGED (10 iterations,
+    damping 0.85, Q32 schoolbook multiply-then-shift) -- overflow-checked 2026-09-07: the
+    largest wgt*r[u] / d_fp*incoming product seen across the 10 iterations on this graph is
+    ~3.6e16, far under i64's 2**63 ceiling, so bebop's native i64 multiply and python's
+    unbounded-int arithmetic agree exactly, no wraparound divergence to account for."""
+    n, adj = random_lcg()
+    return pagerank_q32(n, adj)
+
+
 if __name__ == '__main__':
     print(roundtrip_fold())
     combined, per_sr, directed = gb_gen_combined()
     print('gb_gen mxv/vxm sr1..4', per_sr, 'directed dmxv1/4,dvxm1/4', directed, 'combined', combined)
     print('gb_bfs', gb_bfs_fold())
+    print('gb_tc', gb_tc_fold())
+    print('gb_cc', gb_cc_fold())
+    print('gb_sssp', gb_sssp_fold())
+    print('gb_pr', gb_pr_fold())
