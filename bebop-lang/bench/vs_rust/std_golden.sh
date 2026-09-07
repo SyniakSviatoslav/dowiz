@@ -826,6 +826,29 @@ done
 [ "$gb_gen_ok" = 1 ] || gb_gen_c="MISMATCH($gb_gen_c)"
 gate gb_gen_specialised -4783772994166464769 "$gb_gen_c"
 
+# ---- gb_pool (B3 step 4, docs/blueprints/B3-graphblas-kernels-prejit.md section 5 step 4,
+#      design items (c)/(d)/(e)): pool/kernel dispatch via sys_run (selfhost/std/gb_run.bp) --
+#      bench/vs_rust/std_tests/gb_pool.bp builds a fresh 12-kernel pool (own store file) and
+#      dispatches every kernel through gb_kernel_run (fork + mmap + sys_run), rolling-combining
+#      the pool-hit folds the same way gb_gen.bp's combine12 does -- must equal the SAME golden
+#      (pool-hit == tier-0 == golden). Reuses "$GBT/gb_gen.store" already built by the gb_gen
+#      block above; needs compiler internals in scope (gb_compile1.bp), so it is compiled
+#      pool_parity-style: a main-stripped copy of bebop.bp concatenated ahead of it. ----
+awk '/^fn main\(/{skip=1} !skip{print} skip&&/^}/{skip=0}' bebop.bp > "$GBT/gb_pool_build.bp"
+cat bench/vs_rust/std_tests/gb_pool.bp >> "$GBT/gb_pool_build.bp"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$GBT/gb_pool_build.bp" "$GBT/gb_pool_test.bin" >/dev/null 2>&1 && run 60 "$GBT/gb_pool_test.bin" ${BEBOP_BIN:-bebop.bin} "$GBT" "$GBT/gb_pool_gate.gbpool" | tail -1)
+gate gb_pool -4783772994166464769 "$r"
+
+# ---- gb_pool_abi (B3 step 4, design item (d)): a Kernel whose compiler_digest field mismatches
+#      is a MISS (rebuilt, never run) -- bench/vs_rust/std_tests/gb_pool_abi.bp forges a tiny
+#      scratch pool (no real kernel image needed, gb_pool_lookup only compares digest+cmd) and
+#      asserts BOTH outcomes: wrong compiler_digest -> miss (K==0), correct -> hit (K!=0),
+#      folded as 1000*(miss) + 1*(hit) = 1001 when correct (a fold, not a bare 1, per the
+#      blueprint's own preference). Plain compile (no concatenation -- never compiles anything
+#      itself). ----
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_pool_abi.bp "$GBT/gb_pool_abi_test.bin" >/dev/null 2>&1 && run 30 "$GBT/gb_pool_abi_test.bin" "$GBT" | tail -1)
+gate gb_pool_abi 1001 "$r"
+
 # ---- gb_bfs (B3 step 2 item (d)): BFS level-sum over the same 1k random_lcg() graph via
 #      REPEATED gb_mxv_generic (or-and semiring, visited bitmap as complement mask, dense
 #      frontier) -- bench/vs_rust/std_tests/gb_bfs.bp, oracle lag_common.bfs_levels(). DEVIATION

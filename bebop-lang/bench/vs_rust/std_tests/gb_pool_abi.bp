@@ -1,0 +1,51 @@
+// bench/vs_rust/std_tests/gb_pool_abi.bp -- B3 step 4 gate driver, design item (d): a Kernel
+// whose compiler_digest field mismatches must be treated as a MISS (rebuilt, never run), not a
+// hit. gb_pool_lookup (selfhost/std/gb_run.bp) requires BOTH the (op,sr,mask,fmt,tr) digest AND
+// the compiler_digest ("cmd") to match. This probe forges a tiny scratch pool with ONE Kernel
+// (a dummy 4-cell "image" -- gb_pool_lookup never dereferences the words themselves, so no real
+// compiled kernel is needed for this check) keyed with compiler_digest = 424242, then looks it
+// up once with a WRONG compiler_digest (expect a miss, K == 0) and once with the correct one
+// (expect a hit, K != 0). Fold = 1000*(miss) + 1*(hit) = 1001 iff both hold -- a fold, not a
+// bare constant, per the blueprint's own preference (section 5 step 4 design item (d)).
+// Plain compile (no compiler-internals concatenation -- this probe never compiles anything).
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+use "selfhost/prelude/gb.bp"
+use "selfhost/std/gen_gb.bp"
+use "selfhost/std/gb_run.bp"
+
+// pool_ref_i64: see bench/vs_rust/std_tests/gb_pool.bp's own header comment on this pattern
+// (st_root/store.bp is unconditionally ref-producing to typecheck.py; this is a compile-time
+// annotation-only identity cast, no runtime effect -- types are erased before codegen).
+fn pool_ref_i64(p: ref Pool) -> i64 { p }
+fn main(argc: i64, argv: [str]) -> i64 {
+  let ppath = zeros(256);
+  let ppos = zeros(1);
+  let _ = wr_str(ppath, ppos, argv[2]);
+  let _ = wr_str(ppath, ppos, "/gbpool_abi.gbpool");
+  let pl = ppos[0];
+  let tmp = zeros(1024);
+  let base = gb_pool_open_rw(ppath, pl, tmp);
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let P0 = gb_pool_fresh(base, tx, tmp);
+  let words = arr_alloc(base, tx, st_digest("GbKW{arr i64}"), 4);
+  let _ = arr_put(base, words, 0, 1);
+  let _ = arr_put(base, words, 1, 2);
+  let _ = arr_put(base, words, 2, 3);
+  let _ = arr_put(base, words, 3, 4);
+  let _ = st_seal(base, words, tmp);
+  let keybuf = zeros(64);
+  let key = gb_pool_key(keybuf, 1, 1, 0, 1, 0);
+  let realcmd = 424242;
+  let P1 = gb_pool_append(base, tx, tmp, P0, key, 1, 1, 0, 1, 0, realcmd, words, 0);
+  let _ = st_commit(base, tx, P1, tmp);
+  let base2 = gb_pool_open_ro(ppath, pl);
+  let tmp2 = zeros(1024);
+  let Proot = st_root(base2, tmp2);
+  let P = pool_ref_i64(Proot);
+  let wrongcmd = 999999;
+  let missK = gb_pool_lookup(base2, P, key, wrongcmd);
+  let hitK = gb_pool_lookup(base2, P, key, realcmd);
+  (if missK == 0 then 1000 else 0) + (if hitK != 0 then 1 else 0)
+}

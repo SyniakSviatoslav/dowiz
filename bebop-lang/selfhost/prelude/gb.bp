@@ -874,3 +874,24 @@ fn gb_reduce_scalar(base: [i64], A: i64) -> i64 {
   let nnz = st_get(base, A, 2);
   arr_sum(base, st_ref(base, A, 6), nnz)
 }
+
+// ==== B3 step 4 (docs/blueprints/B3-graphblas-kernels-prejit.md section 5 step 4): gb_atoi --
+// decimal string -> i64 (optional leading '-'), used by the pool's address-passing kernel
+// template (gen_gb.bp's gen_kernel_body_addr) to receive an already-mmap'd store base as a
+// decimal argv string instead of a path it would mmap itself -- a SECOND file-backed mmap +
+// dereference issued from CODE ENTERED VIA sys_run (A11(b)) segfaults reproducibly (probed
+// 2026-09-07, $OUT/repro_1.bp) even though the exact same mmap+dereference works fine run
+// directly or from a plain forked (non-sys_run) process; passing an address instead of a path
+// avoids the kernel ever calling st_map_ro itself while running inside a sys_run'd image.
+fn gb_atoi(s: str) -> i64 {
+  let neg = if char(s, 0) == 45 then 1 else 0;
+  let i = neg;
+  let n = str_len(s);
+  let acc = 0;
+  while i < n {
+    let acc = acc * 10 + (char(s, i) - 48);
+    let i = i + 1;
+    0
+  };
+  if neg == 1 then 0 - acc else acc
+}

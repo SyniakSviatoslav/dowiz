@@ -1,0 +1,192 @@
+// selfhost/std/gb_compile1.bp -- B3 step 4: compile ONE generated kernel .bp source (already
+// written to disk by gen_gb.bp's gen_gb()) into a raw .bin byte buffer, IN-PROCESS, reusing the
+// compiler's own emission functions verbatim (emit_words_offs / collect_fns / idx_of_main /
+// entry_stub / use_expand, all defined in bebop.bp -- this is cli_compile's OWN recipe,
+// bebop.bp:5933-6029, minus the file write). ONLY valid when this text is pasted AFTER a (main-
+// stripped) copy of bebop.bp in the same compiled program -- pool_parity.sh's own concatenation
+// precedent (bench/vs_rust/pool_parity.sh:94, selfhost/std/pool_compile.bp's own emit_words
+// call) -- a plain `use` of this file alone will not resolve those names. bench/vs_rust/
+// gbpool.sh does the awk-trim + cat, matching pool_parity.sh's existing precedent instead of
+// inventing a `bebop.bin gbpool` subcommand (that would link the whole GraphBLAS generator into
+// the SHIPPED compiler image for a feature only the PreJIT step ever needs -- recorded
+// deviation from the blueprint's literal wording, section 3 "PreJIT build step").
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+use "selfhost/prelude/gb.bp"
+use "selfhost/std/gen_gb.bp"
+use "selfhost/std/gb_run.bp"
+
+// gb_compile_path(path, plen, outbuf, outcap) -> nb: reads+expands+compiles the .bp source at
+// path, writes the raw .bin bytes (code words + literal cells + LE64 entry footer) into outbuf
+// (byte-per-cell, caller-sized outcap), returns the byte count. Split into gb_pack_code/
+// gb_pack_stub/gb_pack_footer (AGENTS.md ladder: keep live-symbol counts low per fn) rather
+// than cli_compile's own single-function shape.
+fn gb_pack_code(outbuf: [i64], words0: [i64], n0: i64) -> i64 {
+  let k = 0;
+  while k < n0 {
+    let w = words0[k + 1];
+    let _ = outbuf[k * 4] = w & 255;
+    let _ = outbuf[k * 4 + 1] = (w >> 8) & 255;
+    let _ = outbuf[k * 4 + 2] = (w >> 16) & 255;
+    let _ = outbuf[k * 4 + 3] = (w >> 24) & 255;
+    let k = k + 1;
+    0
+  };
+  0
+}
+fn gb_pack_stub(outbuf: [i64], stub: [i64], n0: i64) -> i64 {
+  let j = 0;
+  while j < 131 {
+    let w = stub[j];
+    let kk = n0 + j;
+    let _ = outbuf[kk * 4] = w & 255;
+    let _ = outbuf[kk * 4 + 1] = (w >> 8) & 255;
+    let _ = outbuf[kk * 4 + 2] = (w >> 16) & 255;
+    let _ = outbuf[kk * 4 + 3] = (w >> 24) & 255;
+    let j = j + 1;
+    0
+  };
+  0
+}
+fn gb_pack_footer(outbuf: [i64], n0: i64, n: i64) -> i64 {
+  let e4 = n0 * 4;
+  let _ = outbuf[n * 4] = e4 & 255;
+  let _ = outbuf[n * 4 + 1] = (e4 >> 8) & 255;
+  let _ = outbuf[n * 4 + 2] = (e4 >> 16) & 255;
+  let _ = outbuf[n * 4 + 3] = (e4 >> 24) & 255;
+  let _ = outbuf[n * 4 + 4] = (e4 >> 32) & 255;
+  let _ = outbuf[n * 4 + 5] = (e4 >> 40) & 255;
+  let _ = outbuf[n * 4 + 6] = (e4 >> 48) & 255;
+  let _ = outbuf[n * 4 + 7] = (e4 >> 56) & 255;
+  0
+}
+fn gb_use_path(path: [i64], plen: i64, tmpc: [i64]) -> i64 {
+  let i = 0;
+  while i < plen {
+    let _ = tmpc[i] = path[i];
+    let i = i + 1;
+    0
+  };
+  let _ = tmpc[plen] = 46;
+  let _ = tmpc[plen + 1] = 117;
+  let _ = tmpc[plen + 2] = 115;
+  let _ = tmpc[plen + 3] = 101;
+  plen + 4
+}
+fn gb_compile_path(path: [i64], plen: i64, outbuf: [i64], outcap: i64) -> i64 {
+  let fd = sys_open(path, plen, 0);
+  let srcv0 = sys_slurp(fd, 400000);
+  let _ = sys_close(fd);
+  let tmpc = zeros(plen + 5);
+  let tl = gb_use_path(path, plen, tmpc);
+  let srcv = use_expand(srcv0, tmpc, tl);
+  let offs = zeros(512);
+  let words0 = emit_words_offs(srcv, offs);
+  let n0 = words0[0];
+  let fnames = zeros(512);
+  let fpos = zeros(512);
+  let cnt = [0];
+  let _ = collect_fns(srcv, fnames, fpos, cnt);
+  let main_off = offs[idx_of_main(fnames, cnt[0]) + 1];
+  let stub = zeros(131);
+  let _ = entry_stub(stub);
+  let _ = stub[42] = 335544320 + ((main_off - (n0 + 42)) & 67108863);
+  let n = n0 + 131;
+  let nb = n * 4 + 8;
+  let _ = if nb > outcap then sys_exit(89) else 0;
+  let _ = gb_pack_code(outbuf, words0, n0);
+  let _ = gb_pack_stub(outbuf, stub, n0);
+  let _ = gb_pack_footer(outbuf, n0, n);
+  nb
+}
+
+// gb_gen_and_compile(dir, op, sr, mask, fmt, tr, outbuf, outcap) -> nb: gen_gb() writes the
+// kernel source, then compiles it. Returns nb (bytes written into outbuf) and the byte offset
+// of the entry stub is always nb-139 (131 stub words * 4 + 8 footer - 131*4... simplest: the
+// caller recomputes entry as (nb-8)'s LE64 value is ALREADY the entry byte offset -- gb_entry_of
+// below reads it straight back out of outbuf rather than re-deriving it arithmetically twice).
+fn gb_entry_of(outbuf: [i64], nb: i64) -> i64 {
+  let b0 = outbuf[nb - 8];
+  let b1 = outbuf[nb - 7];
+  let b2 = outbuf[nb - 6];
+  let b3 = outbuf[nb - 5];
+  b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
+}
+fn gb_gen_and_compile(dir: str, op: i64, sr: i64, mask: i64, fmt: i64, tr: i64, outbuf: [i64], outcap: i64) -> i64 {
+  let _ = gen_gb(dir, op, sr, mask, fmt, tr);
+  let path = zeros(512);
+  let plen = gen_path(dir, op, sr, mask, fmt, tr, path);
+  gb_compile_path(path, plen, outbuf, outcap)
+}
+
+// ---- memory-frugal PreJIT path (selfhost/tools/gbpool.bp, 12 back-to-back compiles in ONE
+// process): use_expand's own internal scratch buffer (bebop.bp:5764, `zeros(1600000)` = 12.8 MB,
+// allocated UNCONDITIONALLY on every call, bump-arena-permanent, never freed) made 12 calls in
+// one process exhaust a 256 MB arena (probed 2026-09-07, trap 80). Fix: call use_expand ONCE
+// for the shared sha256+store+gb prefix (identical across all 12 kernels), then for each kernel
+// concatenate that already-expanded text with gen_kernel_body's OWN text (no `use` lines to
+// resolve) and compile with gb_compile_path_noexpand, which skips use_expand entirely.
+fn gb_compile_path_noexpand(path: [i64], plen: i64, outbuf: [i64], outcap: i64) -> i64 {
+  let fd = sys_open(path, plen, 0);
+  let srcv = sys_slurp(fd, 400000);
+  let _ = sys_close(fd);
+  let offs = zeros(512);
+  let words0 = emit_words_offs(srcv, offs);
+  let n0 = words0[0];
+  let fnames = zeros(512);
+  let fpos = zeros(512);
+  let cnt = [0];
+  let _ = collect_fns(srcv, fnames, fpos, cnt);
+  let main_off = offs[idx_of_main(fnames, cnt[0]) + 1];
+  let stub = zeros(131);
+  let _ = entry_stub(stub);
+  let _ = stub[42] = 335544320 + ((main_off - (n0 + 42)) & 67108863);
+  let n = n0 + 131;
+  let nb = n * 4 + 8;
+  let _ = if nb > outcap then sys_exit(89) else 0;
+  let _ = gb_pack_code(outbuf, words0, n0);
+  let _ = gb_pack_stub(outbuf, stub, n0);
+  let _ = gb_pack_footer(outbuf, n0, n);
+  nb
+}
+// gb_lib_expand(path, plen, srcbuf) -> str: writes the 3 `use` lines to `path`, use_expand's
+// it ONCE, returns the resulting text (sha256.bp+store.bp+gb.bp inlined, `use` lines
+// commented) -- callers pass this same `str` to gb_lib_write below for every kernel.
+fn gb_lib_expand(path: [i64], plen: i64, srcbuf: [i64]) -> str {
+  let pos = zeros(1);
+  let _ = wr_use_line(srcbuf, pos, "selfhost/prelude/sha256.bp");
+  let _ = wr_use_line(srcbuf, pos, "selfhost/prelude/store.bp");
+  let _ = wr_use_line(srcbuf, pos, "selfhost/prelude/gb.bp");
+  let fd = sys_open(path, plen, 578);
+  let _ = sys_export(fd, srcbuf, pos[0]);
+  let _ = sys_close(fd);
+  let rfd = sys_open(path, plen, 0);
+  let srcv0 = sys_slurp(rfd, pos[0] + 8);
+  let _ = sys_close(rfd);
+  let tmpc = zeros(plen + 5);
+  let tl = gb_use_path(path, plen, tmpc);
+  use_expand(srcv0, tmpc, tl)
+}
+// gb_lib_write(libtext, sr, fieldidx, path, plen, buf) -> plen2: libtext ++ gen_kernel_body,
+// written to `path`. `buf` is a caller-owned scratch cell buffer (>= str_len(libtext) + 3000).
+fn gb_lib_write(libtext: str, sr: i64, fieldidx: i64, path: [i64], plen: i64, buf: [i64]) -> i64 {
+  let ltn = str_len(libtext);
+  let i = 0;
+  while i < ltn {
+    let _ = buf[i] = char(libtext, i);
+    let i = i + 1;
+    0
+  };
+  let pos = [ltn];
+  let _ = gen_kernel_body_addr(buf, pos, sr, fieldidx);
+  let fd = sys_open(path, plen, 578);
+  let _ = sys_export(fd, buf, pos[0]);
+  sys_close(fd)
+}
+// gb_gen_and_compile_fast: the no-use_expand kernel compile, given an already-expanded libtext.
+fn gb_gen_and_compile_fast(libtext: str, dir: str, op: i64, sr: i64, fieldidx: i64, libbuf: [i64], outbuf: [i64], outcap: i64) -> i64 {
+  let path = zeros(512);
+  let plen = gen_path(dir, op, sr, 0, 1, 0, path);
+  let _ = gb_lib_write(libtext, sr, fieldidx, path, plen, libbuf);
+  gb_compile_path_noexpand(path, plen, outbuf, outcap)
+}

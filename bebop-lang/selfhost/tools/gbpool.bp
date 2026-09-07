@@ -1,0 +1,107 @@
+// selfhost/tools/gbpool.bp -- B3 step 4 PreJIT build step (docs/blueprints/B3-graphblas-
+// kernels-prejit.md section 3 "PreJIT build step", section 5 step 4, design item (b)):
+// enumerates the 12 (op, sr) combos gen_gb.bp's own gb_gen.bp driver already exercises
+// (mxv/vxm x semirings 1-4, dmxv/dvxm x semirings 1,4 -- gen_gb.bp:214-221's op/sr domain),
+// generates + compiles + appends each as a Kernel object into a Pool (its own store file, own
+// root -- design item (a)), and returns count*1000000 + total_bytes (bench/vs_rust/gbpool.sh
+// decodes both). DEVIATION (recorded, coordinator design item (b)): this is its OWN standalone
+// program, built the pool_parity.sh way (a trimmed copy of bebop.bp concatenated ahead of it by
+// bench/vs_rust/gbpool.sh), NOT a `bebop.bin gbpool` subcommand -- see gb_compile1.bp's header
+// for why.
+// MEMORY (probed 2026-09-07): 12 back-to-back use_expand calls in one process exhaust a 256 MB
+// arena (use_expand's own internal scratch is a permanent 12.8 MB per call, bebop.bp:5764) --
+// AND a forked child's own arena is capped to ~8 MB by sys_clone's codegen (T118, built for the
+// CLONE_VM worker pattern), too small to even hold that one scratch buffer -- so forking per
+// kernel does not help here (it does help the ON-DEMAND single-kernel path, gb_pool.bp, where
+// only ONE compile ever happens per fork). This file instead calls use_expand ONCE for the
+// shared sha256+store+gb prefix and reuses it for all 12 kernels via
+// gb_compile1.bp's gb_gen_and_compile_fast (gb_compile_path_noexpand skips use_expand
+// entirely for the other 11).
+// argv: [2] = path to the compiler binary whose bytes key the Kernel's compiler_digest field
+// (the .bp source itself never names "bebop.bin" -- pool_parity.sh's own par_compile
+// convention), [3] = dir (kernel .bp sources + the shared lib prefix land here, $OUT),
+// [4] = the pool store file path.
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+use "selfhost/prelude/gb.bp"
+use "selfhost/std/gen_gb.bp"
+use "selfhost/std/gb_run.bp"
+use "selfhost/std/gb_compile1.bp"
+
+fn gbpool_one(base: [i64], tx: [i64], tmp: [i64], P: i64, libtext: str, dir: str, op: i64, sr: i64, cmd: i64, keybuf: [i64], libbuf: [i64], outbuf: [i64]) -> i64 {
+  let nb = gb_gen_and_compile_fast(libtext, dir, op, sr, op_fieldidx(op), libbuf, outbuf, 131072);
+  let words = arr_alloc(base, tx, st_digest("GbKW{arr i64}"), nb);
+  let i = 0;
+  while i < nb {
+    let _ = arr_put(base, words, i, outbuf[i]);
+    let i = i + 1;
+    0
+  };
+  let _ = st_seal(base, words, tmp);
+  let key = gb_pool_key(keybuf, op, sr, 0, 1, 0);
+  let entry = gb_entry_of(outbuf, nb);
+  gb_pool_append(base, tx, tmp, P, key, op, sr, 0, 1, 0, cmd, words, entry)
+}
+
+fn build_all(base: [i64], tx: [i64], tmp: [i64], libtext: str, dir: str, cmd: i64) -> i64 {
+  let keybuf = zeros(64);
+  let libbuf = zeros(str_len(libtext) + 3000);
+  let outbuf = zeros(131072);
+  let P0 = gb_pool_fresh(base, tx, tmp);
+  let P1 = gbpool_one(base, tx, tmp, P0, libtext, dir, 1, 1, cmd, keybuf, libbuf, outbuf);
+  let P2 = gbpool_one(base, tx, tmp, P1, libtext, dir, 1, 2, cmd, keybuf, libbuf, outbuf);
+  let P3 = gbpool_one(base, tx, tmp, P2, libtext, dir, 1, 3, cmd, keybuf, libbuf, outbuf);
+  let P4 = gbpool_one(base, tx, tmp, P3, libtext, dir, 1, 4, cmd, keybuf, libbuf, outbuf);
+  let P5 = gbpool_one(base, tx, tmp, P4, libtext, dir, 2, 1, cmd, keybuf, libbuf, outbuf);
+  let P6 = gbpool_one(base, tx, tmp, P5, libtext, dir, 2, 2, cmd, keybuf, libbuf, outbuf);
+  build_all_b(base, tx, tmp, libtext, dir, cmd, P6, keybuf, libbuf, outbuf)
+}
+fn build_all_b(base: [i64], tx: [i64], tmp: [i64], libtext: str, dir: str, cmd: i64, P6: i64, keybuf: [i64], libbuf: [i64], outbuf: [i64]) -> i64 {
+  let P7 = gbpool_one(base, tx, tmp, P6, libtext, dir, 2, 3, cmd, keybuf, libbuf, outbuf);
+  let P8 = gbpool_one(base, tx, tmp, P7, libtext, dir, 2, 4, cmd, keybuf, libbuf, outbuf);
+  let P9 = gbpool_one(base, tx, tmp, P8, libtext, dir, 3, 1, cmd, keybuf, libbuf, outbuf);
+  let P10 = gbpool_one(base, tx, tmp, P9, libtext, dir, 3, 4, cmd, keybuf, libbuf, outbuf);
+  let P11 = gbpool_one(base, tx, tmp, P10, libtext, dir, 4, 1, cmd, keybuf, libbuf, outbuf);
+  gbpool_one(base, tx, tmp, P11, libtext, dir, 4, 4, cmd, keybuf, libbuf, outbuf)
+}
+
+fn compiler_digest_of(argv2: str) -> i64 {
+  let cpath = zeros(256);
+  let cl = st_str(cpath, argv2);
+  let fd = sys_open(cpath, cl, 0);
+  let big = zeros(200000);
+  let cn = gb_slurp_all(fd, big, 200000);
+  let _ = sys_close(fd);
+  sha256_lo64(big, cn)
+}
+fn total_bytes(base: [i64], P: i64) -> i64 {
+  let cnt = gb_pool_count(base, P);
+  let i = 0;
+  let acc = 0;
+  while i < cnt {
+    let K = gb_pool_kernel(base, P, i);
+    let acc = acc + arr_n(base, gb_kernel_words(base, K));
+    let i = i + 1;
+    0
+  };
+  acc
+}
+fn main(argc: i64, argv: [str]) -> i64 {
+  let tmp = zeros(1024);
+  let cmd = compiler_digest_of(argv[2]);
+  let dir = argv[3];
+  let ppath = zeros(256);
+  let pl = st_str(ppath, argv[4]);
+  let base = gb_pool_open_rw(ppath, pl, tmp);
+  let libpath = zeros(256);
+  let lppos = zeros(1);
+  let _ = wr_str(libpath, lppos, dir);
+  let _ = wr_str(libpath, lppos, "/gblib.bp");
+  let srcbuf = zeros(256);
+  let libtext = gb_lib_expand(libpath, lppos[0], srcbuf);
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let P = build_all(base, tx, tmp, libtext, dir, cmd);
+  let _ = st_commit(base, tx, P, tmp);
+  gb_pool_count(base, P) * 1000000 + total_bytes(base, P)
+}

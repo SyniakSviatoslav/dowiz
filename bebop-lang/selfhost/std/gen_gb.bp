@@ -135,12 +135,13 @@ fn wr_row_body(dst: [i64], pos: [i64], sr: i64) -> i64 {
 ")
 }
 
-// gen_kernel_text: the whole compilable .bp program. fieldidx: which root ref carries the
-// matrix to read (0 = A, mxv ; 1 = AT, vxm -- gen_gb.bp's own store layout, see gb_gen.bp).
-fn gen_kernel_text(dst: [i64], pos: [i64], sr: i64, fieldidx: i64) -> i64 {
-  let _ = wr_use_line(dst, pos, "selfhost/prelude/sha256.bp");
-  let _ = wr_use_line(dst, pos, "selfhost/prelude/store.bp");
-  let _ = wr_use_line(dst, pos, "selfhost/prelude/gb.bp");
+// gen_kernel_body: the "fn kernel_row / fn main" text only, NO `use` lines -- factored out
+// (B3 step 4, coordinator, 2026-09-07) so a caller that already has sha256/store/gb inlined
+// in a cached, pre-expanded prefix (selfhost/tools/gbpool.bp's own use -- use_expand's own
+// internal 1.6M-cell scratch buffer, bebop.bp:5764, made 12 back-to-back use_expand calls in
+// one process exhaust a 256 MB arena, probed 2026-09-07) can skip re-running use_expand and
+// just concatenate this text onto that cached prefix.
+fn gen_kernel_row(dst: [i64], pos: [i64], sr: i64) -> i64 {
   let _ = wr_str(dst, pos, "
 fn kernel_row(base: [i64], M: i64, X: i64, i: i64) -> i64 {
   let lo = gb_row_lo(base, M, i);
@@ -159,7 +160,12 @@ fn kernel_row(base: [i64], M: i64, X: i64, i: i64) -> i64 {
   };
   acc
 }
-
+");
+  0
+}
+fn gen_kernel_body(dst: [i64], pos: [i64], sr: i64, fieldidx: i64) -> i64 {
+  let _ = gen_kernel_row(dst, pos, sr);
+  let _ = wr_str(dst, pos, "
 fn main(argc: i64, argv: [str]) -> i64 {
   let path = zeros(256);
   let pl = st_str(path, argv[2]);
@@ -183,6 +189,48 @@ fn main(argc: i64, argv: [str]) -> i64 {
 }
 ");
   0
+}
+// gen_kernel_body_addr: the POOL-dispatch variant (B3 step 4) -- argv[2] is a DECIMAL i64
+// (an already-mmap'd store base address, gb_atoi'd via st_cells), not a path the kernel would
+// mmap itself. Needed because a SECOND file-backed mmap+dereference issued from code entered
+// via sys_run (A11(b)) segfaults reproducibly (probed 2026-09-07) even though the identical
+// mmap+dereference works fine run directly or from a plain forked process -- gb.bp's own
+// header comment on gb_atoi has the full story. The dispatcher (gb_kernel_run) mmaps the data
+// store itself (a NORMAL, non-sys_run'd mmap) and hands the kernel the resulting address.
+fn gen_kernel_body_addr(dst: [i64], pos: [i64], sr: i64, fieldidx: i64) -> i64 {
+  let _ = gen_kernel_row(dst, pos, sr);
+  let _ = wr_str(dst, pos, "
+fn main(argc: i64, argv: [str]) -> i64 {
+  let addr = gb_atoi(argv[2]);
+  let base = st_cells(addr);
+  let tmp = zeros(1024);
+  let root = st_root(base, tmp);
+  let M = st_ref(base, root, ");
+  let _ = wr_i64(dst, pos, fieldidx);
+  let _ = wr_str(dst, pos, ");
+  let X = st_ref(base, root, 2);
+  let n = 1000;
+  let i = 0;
+  let fold = 0;
+  while i < n {
+    let acc = kernel_row(base, M, X, i);
+    let fold = fold + acc;
+    let i = i + 1;
+    0
+  };
+  fold
+}
+");
+  0
+}
+// gen_kernel_text: the whole compilable .bp program (3 `use` lines + gen_kernel_body).
+// fieldidx: which root ref carries the matrix to read (0 = A, mxv ; 1 = AT, vxm -- gen_gb.bp's
+// own store layout, see gb_gen.bp).
+fn gen_kernel_text(dst: [i64], pos: [i64], sr: i64, fieldidx: i64) -> i64 {
+  let _ = wr_use_line(dst, pos, "selfhost/prelude/sha256.bp");
+  let _ = wr_use_line(dst, pos, "selfhost/prelude/store.bp");
+  let _ = wr_use_line(dst, pos, "selfhost/prelude/gb.bp");
+  gen_kernel_body(dst, pos, sr, fieldidx)
 }
 
 // gen_path: `gb_<op>_<sr>_<mask>_<fmt>_<tr>.bp` under `dir` (no trailing slash). Returns the

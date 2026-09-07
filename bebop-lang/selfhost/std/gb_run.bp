@@ -1,0 +1,309 @@
+// selfhost/std/gb_run.bp -- B3 step 4 (docs/blueprints/B3-graphblas-kernels-prejit.md section 3
+// "Pool"/"Kernel", section 5 step 4): the Pool/Kernel objects (their OWN store file, own root --
+// a Pool object IS the root, no wrapper) + tier dispatch (digest lookup, kernel run via a
+// file-backed executable mapping). Library only (no main); flat `use` convention (T47b) --
+// every direct user of this file must also directly `use` sha256.bp, store.bp, gb.bp and
+// gen_gb.bp (gen_gb.bp's wr_str/wr_i64 build the digest key text; gb.bp's arr_* accessors hold
+// the Kernel's raw .bin bytes the same "arr i64" way rp/ci/vv do).
+//
+// Kernel {digest, op, sr, mask, fmt, tr, ref words, entry, gen, compiler_digest} -- 10 fields.
+//   digest = sha256_lo64 of "gbk:<op>,<sr>,<mask>,<fmt>,<tr>" (compiler_digest is NOT folded
+//   into the key -- deliberately: gb_pool_abi's probe forges compiler_digest ALONE on an
+//   otherwise-valid Kernel and must still get a digest HIT + a compiler_digest MISMATCH, two
+//   independently observable outcomes, not one hash collapsing them).
+//   words = a GbArr-convention byte buffer (field 0 = nb, fields 1.. = one BYTE VALUE per
+//   cell -- the sys_open/sys_export/pack_bytes convention used throughout the tree) holding
+//   the FULL compiled .bin image: code words + literal cells + the LE64 entry footer, exactly
+//   the bytes cli_compile (bebop.bp:5933) writes to a file and exactly what sys_run expects
+//   mapped PROT_READ|EXEC (A11(b) standalone builtin).
+//   entry = the byte offset of the entry stub (= n0*4, the same value the footer's LE64
+//   encodes -- kept as a field too so a caller never needs to re-derive it from the mapping).
+// Pool {count, ref kernels[CAP]} -- root-reachable: the Pool object's OWN offset IS the
+// store's root (gb_pool_fresh/_append return it; the caller st_commits it directly, no
+// wrapper object). CAP = 48 (gb_pool_cap()) is a fixed ceiling per Pool GENERATION -- a store
+// commit never grows an existing Pool object in place: gb_pool_append allocates a FRESH Pool
+// of the same cap, copies the live kernel refs, links the new one in, seals; the caller
+// commits root = that new object. append/rebuild-on-miss never touches an already-sealed
+// Kernel or Pool object, matching the store's append-only, root-swap discipline (B5 single-
+// writer rule: only the process/child holding the pool file open RW ever calls
+// gb_pool_append + st_commit; every reader maps it RO or shares the SAME RW mapping and only
+// reads).
+struct Kernel { n: i64 }
+struct Pool { n: i64 }
+
+fn gb_pool_cap() -> i64 { 48 }
+fn gb_kernel_digest(base: [i64], K: i64) -> i64 { st_get(base, K, 0) }
+fn gb_kernel_cmd(base: [i64], K: i64) -> i64 { st_get(base, K, 9) }
+fn gb_kernel_entry(base: [i64], K: i64) -> i64 { st_get(base, K, 7) }
+fn gb_kernel_words(base: [i64], K: i64) -> ref GbArr { st_ref(base, K, 6) }
+
+// gb_pool_key(buf, op, sr, mask, fmt, tr) -> digest: buf is a caller-owned scratch byte
+// buffer (>= 64 cells), wr_str/wr_i64 (selfhost/std/gen_gb.bp) build the text, sha256_lo64
+// (selfhost/prelude/sha256.bp) hashes it -- the SAME primitive st_digest itself uses
+// (store.bp:262), just over a runtime-built string instead of a compile-time literal: st_digest
+// only ever accepts literals in this tree (grep-verified, 2026-09-07) and no `str` cast exists
+// from a `[i64]` cell buffer (tools/typecheck.py's CASTS allowlist has none), so this goes
+// around sha256_lo64 directly instead.
+fn gb_pool_key(buf: [i64], op: i64, sr: i64, mask: i64, fmt: i64, tr: i64) -> i64 {
+  let pos = zeros(1);
+  let _ = wr_str(buf, pos, "gbk:");
+  let _ = wr_i64(buf, pos, op);
+  let _ = wr_str(buf, pos, ",");
+  let _ = wr_i64(buf, pos, sr);
+  let _ = wr_str(buf, pos, ",");
+  let _ = wr_i64(buf, pos, mask);
+  let _ = wr_str(buf, pos, ",");
+  let _ = wr_i64(buf, pos, fmt);
+  let _ = wr_str(buf, pos, ",");
+  let _ = wr_i64(buf, pos, tr);
+  sha256_lo64(buf, pos[0])
+}
+
+// gb_pool_open_rw / _ro: the pool's OWN store file, 4 MiB (plenty for 48 small kernels).
+fn gb_pool_open_rw(path: [i64], plen: i64, tmp: [i64]) -> [i64] { st_open(path, plen, 4194304, tmp) }
+fn gb_pool_open_ro(path: [i64], plen: i64) -> [i64] { st_map_ro(path, plen, 4194304) }
+
+// gb_pool_fresh(base, tx, tmp): allocate+seal an EMPTY Pool object (count 0), return its
+// offset -- caller commits root = this offset (a fresh/first-ever pool file).
+fn gb_pool_fresh(base: [i64], tx: [i64], tmp: [i64]) -> i64 {
+  let cap = gb_pool_cap();
+  let P = st_alloc(base, tx, 1 + cap, st_digest("Pool{i64,ref Kernel[48]}"));
+  let _ = st_put(base, P, 0, 0);
+  let _ = st_seal(base, P, tmp);
+  P
+}
+fn gb_pool_count(base: [i64], P: i64) -> i64 { st_get(base, P, 0) }
+fn gb_pool_kernel(base: [i64], P: i64, i: i64) -> i64 { st_ref(base, P, 1 + i) }
+
+// gb_pool_lookup(base, P, key, cmd) -> ref Kernel | 0: linear scan (<= 48 entries -- a hash
+// table is not worth it at this N). A HIT needs digest AND compiler_digest to both match --
+// an ABI-mismatched Kernel (gb_pool_abi's forged-field probe, or a genuine recompiled
+// compiler) is treated exactly like a miss, driving the SAME rebuild path.
+fn gb_pool_lookup(base: [i64], P: i64, key: i64, cmd: i64) -> i64 {
+  let cnt = gb_pool_count(base, P);
+  let i = 0;
+  let found = 0;
+  while i < cnt {
+    let K = gb_pool_kernel(base, P, i);
+    let hit = (if st_get(base, K, 0) == key then 1 else 0) * (if st_get(base, K, 9) == cmd then 1 else 0);
+    let found = if hit == 1 then K else found;
+    let i = i + 1;
+    0
+  };
+  found
+}
+
+// gb_pool_append(base, tx, tmp, P, key, op, sr, mask, fmt, tr, cmd, wordsArr, entry) -> new
+// Pool offset (a FRESH object, count+1 -- see the header comment). Caller commits
+// root = the returned offset. Exit 89 (capacity) if the pool is already at gb_pool_cap().
+fn gb_pool_append(base: [i64], tx: [i64], tmp: [i64], P: i64, key: i64, op: i64, sr: i64, mask: i64, fmt: i64, tr: i64, cmd: i64, wordsArr: ref GbArr, entry: i64) -> i64 {
+  let cap = gb_pool_cap();
+  let cnt = gb_pool_count(base, P);
+  let _ = if cnt >= cap then sys_exit(89) else 0;
+  let K = st_alloc(base, tx, 10, st_digest("Kernel{i64,i64,i64,i64,i64,i64,ref GbKW,i64,i64,i64}"));
+  let _ = st_put(base, K, 0, key);
+  let _ = st_put(base, K, 1, op);
+  let _ = st_put(base, K, 2, sr);
+  let _ = st_put(base, K, 3, mask);
+  let _ = st_put(base, K, 4, fmt);
+  let _ = st_put(base, K, 5, tr);
+  let _ = st_link(base, K, 6, wordsArr);
+  let _ = st_put(base, K, 7, entry);
+  let _ = st_put(base, K, 8, 0);
+  let _ = st_put(base, K, 9, cmd);
+  let _ = st_seal(base, K, tmp);
+  let P2 = st_alloc(base, tx, 1 + cap, st_digest("Pool{i64,ref Kernel[48]}"));
+  let _ = st_put(base, P2, 0, cnt + 1);
+  let i = 0;
+  while i < cnt {
+    let _ = st_link(base, P2, 1 + i, gb_pool_kernel(base, P, i));
+    let i = i + 1;
+    0
+  };
+  let _ = st_link(base, P2, 1 + cnt, K);
+  let _ = st_seal(base, P2, tmp);
+  P2
+}
+
+// ---- compiler identity: digest of the compiler binary's own bytes (a sha256_lo64 digest,
+// NOT literal md5 -- no md5 implementation exists in this tree; sha256_lo64 is the store's own
+// digest primitive, reused here rather than adding one -- deviation recorded in the B3 step 4
+// report). gb_slurp_all mirrors bebop.bp's cache_hit/cache_write chunked-read loop
+// (bebop.bp:5492/5521) but ACCUMULATES into one buffer instead of comparing/streaming, since
+// sha256_words needs the whole message contiguous.
+fn gb_slurp_all(fd: i64, big: [i64], cap: i64) -> i64 {
+  let chunk = zeros(8192);
+  let total = 0;
+  let go = 1;
+  while go == 1 {
+    let rc = sys_read(fd, chunk, 8192);
+    let j = 0;
+    while j < rc {
+      let _ = big[total + j] = chunk[j];
+      let j = j + 1;
+      0
+    };
+    let total = total + rc;
+    let go = if rc > 0 then 1 else 0;
+    0
+  };
+  total
+}
+
+// gb_kernel_export(base, K, path, plen): write the Kernel's raw .bin bytes to `path` (a
+// caller-owned scratch file under $OUT/$BEBOP_TMP -- never inside a store file). Only ever
+// needed once per digest (gb_kernel_run below probes existence first) -- ponytail: no live
+// process-address cache table, a fresh sys_open+sys_mmap per call is well under the 0.1ms
+// pool-hit target at this kernel count (measured, RESULT-gbpool.md); add a cached-address
+// table if a workload calls the SAME kernel enough times in one process for mmap's own
+// syscall cost to matter.
+fn gb_kernel_export(base: [i64], K: i64, path: [i64], plen: i64) -> i64 {
+  let W = gb_kernel_words(base, K);
+  let nb = arr_n(base, W);
+  let buf = zeros(nb);
+  let i = 0;
+  while i < nb {
+    let _ = buf[i] = arr_get(base, W, i);
+    let i = i + 1;
+    0
+  };
+  let fd = sys_open(path, plen, 578);
+  let _ = sys_export(fd, buf, nb);
+  sys_close(fd)
+}
+// gb_kernel_cache_path(dir, kdigest, path) -> plen: "<dir>/k<digest>.bin".
+fn gb_kernel_cache_path(dir: str, kdigest: i64, path: [i64]) -> i64 {
+  let pos = zeros(1);
+  let _ = wr_str(path, pos, dir);
+  let _ = wr_str(path, pos, "/k");
+  let _ = wr_i64(path, pos, kdigest);
+  let _ = wr_str(path, pos, ".bin");
+  pos[0]
+}
+// gb_write_i64_file / gb_read_i64_file: an 8-byte LE64 round-trip through a scratch file --
+// how a forked child hands a full i64 result back to its parent (a real fork, sys_clone flags
+// 17 -- SIGCHLD only, no CLONE_VM -- shares NOTHING but the exit code with its parent, and the
+// exit code is one byte; a fold like 489626275115 does not fit in it).
+fn gb_write_i64_file(path: [i64], plen: i64, v: i64) -> i64 {
+  let buf = zeros(8);
+  let _ = buf[0] = v & 255;
+  let _ = buf[1] = (v >> 8) & 255;
+  let _ = buf[2] = (v >> 16) & 255;
+  let _ = buf[3] = (v >> 24) & 255;
+  let _ = buf[4] = (v >> 32) & 255;
+  let _ = buf[5] = (v >> 40) & 255;
+  let _ = buf[6] = (v >> 48) & 255;
+  let _ = buf[7] = (v >> 56) & 255;
+  let fd = sys_open(path, plen, 578);
+  let _ = sys_export(fd, buf, 8);
+  sys_close(fd)
+}
+fn gb_read_i64_file(path: [i64], plen: i64) -> i64 {
+  let fd = sys_open(path, plen, 0);
+  let buf = zeros(8);
+  let _ = sys_read(fd, buf, 8);
+  let _ = sys_close(fd);
+  buf[0] | (buf[1] << 8) | (buf[2] << 16) | (buf[3] << 24) | (buf[4] << 32) | (buf[5] << 40) | (buf[6] << 48) | (buf[7] << 56)
+}
+fn addr_of(a: [i64]) -> i64 { a }
+// gb_pack_tight(dst, src, n): repack a BYTE-PER-CELL buffer (n cells, each holding one 0..255
+// value -- wr_str/wr_i64's own convention, sys_open/sys_export's convention) into a REAL
+// packed-byte buffer (8 ASCII bytes little-endian per i64 cell) at dst -- the layout a `str`
+// actually is (docs/LANGUAGE.md: "no strings beyond literals"; bebop.bp:1453 str_len is a
+// raw-byte NUL-scan; bebop.bp:3172 a literal's bytes ride the data section as real packed
+// bytes). B3 step 4 bug (coordinator, 2026-09-07, found by re-deriving from first principles
+// after probe19-23 in $OUT): gb_kernel_run_child used to hand the generated kernel's
+// gb_atoi(argv[2]) a wr_i64-built (byte-per-cell) buffer directly -- char()/str_len() read it
+// as raw bytes, saw a NUL in the high 7 (always-zero) bytes of cell 0, and returned a
+// length-1 string, so gb_atoi silently mis-parsed the mmap'd store address (verified: a
+// standalone repro of "sys_run a program that gb_atoi's a byte-per-cell argv string" returns
+// 1 instead of the real value; the same repro with THIS tight packing returns the correct
+// value -- $OUT/probe20-23). dst must have >= n/8+1 cells.
+fn gb_pack_tight(dst: [i64], src: [i64], n: i64) -> i64 {
+  let w = [0];
+  let nwords = n / 8 + 1;
+  while w[0] < nwords {
+    let word = [0];
+    let k = [0];
+    while k[0] < 8 {
+      let idx = w[0] * 8 + k[0];
+      let b = if idx < n then src[idx] else 0;
+      let _ = word[0] = word[0] | (b << (k[0] * 8));
+      let _ = k[0] = k[0] + 1;
+      0
+    };
+    let _ = dst[w[0]] = word[0];
+    let _ = w[0] = w[0] + 1;
+    0
+  };
+  0
+}
+// gb_kernel_run_child: runs ONLY in the pid==0 branch, ends with sys_exit (never returns).
+// Entering another compiled image's entry stub reconfigures the caller's own arena/signal-
+// stack registers (bebop.bp's entry_stub comment, ~line 5800: "the kernel sigaction... are
+// built in the ARENA at x27... x27 advances") -- unsafe to do in a process that must keep
+// running afterward, so (matching c84_run.bp's own precedent) this ALWAYS happens inside a
+// real fork (sys_clone(17, ...)) that exits immediately after using the one return value.
+// The data store is mmap'd HERE (a NORMAL, non-sys_run'd mmap -- proven to work) and its
+// address handed to the kernel as a DECIMAL argv string (gb_atoi'd by the generated kernel's
+// own gen_kernel_body_addr template, gen_gb.bp) -- a SECOND file-backed mmap+dereference
+// issued from CODE ENTERED VIA sys_run segfaults reproducibly (probed 2026-09-07,
+// $OUT/repro_1.bp), so the kernel itself must never call st_map_ro.
+fn gb_kernel_run_child(path: [i64], plen: i64, nb: i64, dpath: [i64], dplen: i64, respath: [i64], replen: i64) -> i64 {
+  let fd = sys_open(path, plen, 0);
+  let addr = sys_mmap(0, nb, 5, 2, fd, 0);
+  let dfd = sys_open(dpath, dplen, 0);
+  let daddr = sys_mmap(0, 4194304, 1, 1, dfd, 0);
+  let _ = sys_close(dfd);
+  let addrbuf = zeros(32);
+  let apos = zeros(1);
+  let _ = wr_i64(addrbuf, apos, daddr);
+  let addrtight = zeros(4);
+  let _ = gb_pack_tight(addrtight, addrbuf, apos[0]);
+  let dummy0 = zeros(1);
+  let argv2 = zeros(3);
+  let _ = argv2[0] = addr_of(dummy0);
+  let _ = argv2[1] = addr_of(dummy0);
+  let _ = argv2[2] = addr_of(addrtight);
+  let result = sys_run(addr, nb, 3, argv2);
+  let _ = gb_write_i64_file(respath, replen, result);
+  sys_exit(0)
+}
+// gb_kernel_run(base, K, dir, path, respath, replen, dpath, dplen): export-if-missing + fork +
+// mmap PROT_READ|EXEC MAP_PRIVATE (the c84_run.bp precedent, docs/blueprints/A11-harness-
+// dogfooding.md) + sys_run in the child, result handed back via respath. `path`/`respath`:
+// caller-owned scratch cell buffers (>= 300 cells each, distinct files). `dpath`/`dplen`: the
+// data store's path cells (the child mmaps it itself, see gb_kernel_run_child).
+// gb_kernel_run: the parent-side prep (export-if-missing, resolve nb) runs BEFORE the clone;
+// everything the child needs is packed into ONE cell array (`args`) first so only `args` + the
+// new `pid` binding are live across the sys_clone call (WORKER-CARD: "a fn spanning clone keeps
+// <= 8 live symbols" -- the previous shape passed path/plen/nb/dpath/dplen/respath/replen as 7
+// separate live locals across the boundary; folding them into one array is the same fix
+// pool_compile.bp/par_compile already uses for its own clone). st_cells is store.bp's own
+// i64<->[i64] cast, reused rather than adding a new one (typecheck's CASTS allowlist).
+fn gb_kernel_run(base: [i64], K: i64, dir: str, path: [i64], respath: [i64], replen: i64, dpath: [i64], dplen: i64) -> i64 {
+  let kdigest = gb_kernel_digest(base, K);
+  let plen = gb_kernel_cache_path(dir, kdigest, path);
+  let probe = sys_open(path, plen, 0);
+  let exists = if probe >= 0 then 1 else 0;
+  let _ = if exists == 1 then sys_close(probe) else 0;
+  let _ = if exists == 0 then gb_kernel_export(base, K, path, plen) else 0;
+  let W = gb_kernel_words(base, K);
+  let nb = arr_n(base, W);
+  let args = zeros(7);
+  let _ = args[0] = addr_of(path);
+  let _ = args[1] = plen;
+  let _ = args[2] = nb;
+  let _ = args[3] = addr_of(dpath);
+  let _ = args[4] = dplen;
+  let _ = args[5] = addr_of(respath);
+  let _ = args[6] = replen;
+  gb_kernel_run_launch(args)
+}
+fn gb_kernel_run_launch(args: [i64]) -> i64 {
+  let pid = sys_clone(17, sys_arena_base() + 16777216);
+  let _ = if pid == 0 then gb_kernel_run_child(st_cells(args[0]), args[1], args[2], st_cells(args[3]), args[4], st_cells(args[5]), args[6]) else 0;
+  let st = zeros(1);
+  let w = sys_wait4(pid, st, 0, 0);
+  gb_read_i64_file(st_cells(args[5]), args[6])
+}
