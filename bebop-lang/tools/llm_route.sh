@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # llm_route.sh (operator token-economy priority 2026-09-07): route a ROUTINE task to a FREE model with fallback.
 # Usage: tools/llm_route.sh [provider[:model]] < prompt.txt      e.g. tools/llm_route.sh kilo < p.txt ; LLM_MAX=800
-# Order without an argument: kilo (no key) -> ovh (no key, 2 RPM) -> llm7 (no key) -> openrouter -> groq -> mistral -> gemini -> nim
+# Order without an argument: groq (keyed, 1000 RPD, fast) -> openrouter -> kilo -> ovh -> llm7 (keyless, often overloaded) -> mistral -> gemini -> nim
 # Keys live in ~/.config/llm/<provider>.key (chmod 600; openrouter's is ~/.config/openrouter/key). Never echo a key.
 # Source of the provider table: github.com/mnfst/awesome-free-llm-apis (fetched 2026-09-07).
 set -u
@@ -36,7 +36,7 @@ if not c or not c[0].get('message',{}).get('content'): print('llm_route['+'$pv'+
 print(c[0]['message']['content'])"
 }
 if [ -n "${1:-}" ]; then one "${1%%:*}" "$([ "${1#*:}" = "$1" ] && echo "" || echo "${1#*:}")"; exit $?; fi
-for pv in kilo ovh llm7 openrouter groq mistral gemini nim; do
+for pv in groq openrouter kilo ovh llm7 mistral gemini nim; do
   if one "$pv"; then exit 0; fi
 done
 echo "llm_route: every provider failed (no key or error)" >&2; exit 1
