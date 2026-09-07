@@ -1,6 +1,15 @@
 # Parallel lanes — 2026-09-08 (operator: 6 workers, 4 of them on codegen)
 
-Status: 2026-09-08 PROTOCOL + lane cards, written by the main session. Binding for every worker
+Status: 2026-09-08 HISTORY + reusable merge protocol. **Operator 2026-09-08 (session 27), binding:
+one main agent + ONE worker, no more** -- so §3's four-lane list below is a record of how the
+session-26 lanes were run and merged (all three landed in session 27: 056ad43/b335a27/abaab38),
+NOT a standing instruction to open lanes. What stays live is §1b (tools/slot.sh, the 3-slot
+semaphore), §1c (token economy) and §2 (what a lane hands back), plus the merge recipe learned
+in session 27: diff only the worktree's CODE files, `git apply --3way`, and RE-DERIVE every
+gate-table number from the new battery output -- a lane's census_allow / word_budget lines are
+cut against the old base and are always stale.
+
+Was: PROTOCOL + lane cards, written by the main session. Binding for every worker
 started from it. Supersedes, for these lanes only, WORKER-CARD's "ONE compile/run/chain/battery
 at a time" — the isolation is now per worktree, not per box, and the box limits below replace it.
 

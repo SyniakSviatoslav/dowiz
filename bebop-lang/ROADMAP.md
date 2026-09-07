@@ -128,6 +128,9 @@ Parallel-safe at any time: docs, oracles, fuzz batches, honest.sh rows, T78/T79/
   Rust" leave the thesis sentence; D1(a) 1.0x stays report-only, <= 2.0x is the real TG-DONE 1
   target; the 11 project-sized tasks of report §4 move to HISTORY.md's `## PARKED` heading
   (reverses D11-J); codegen freezes for a 24 h fuzz window after the IR rung lands (TG-DONE 8))
+- (operator 2026-09-08, session 27, BINDING: one main agent + ONE worker, no more -- the four-lane
+  protocol of docs/blueprints/PARALLEL-LANES-2026-09-08.md is history; its slot.sh semaphore and
+  merge recipe stay, its lane list does not)
 - (measured 2026-09-08, Lane B: the A12 reorder below is REVERSED by its own gate -- rung 1 buys 0-2 % of K5,
   not >= 5 %, so A12 drops off the critical path and A2b/A3/A10 resume their order; the probe is the
   journal line at 1788821670)
