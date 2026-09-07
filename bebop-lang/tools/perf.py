@@ -285,6 +285,8 @@ def fuzz(binpath):
         m = re.search(r"GOT:N=(\d+) .*?DIVERGE=(\d+) COMPILEFAIL=(\d+) CRASH=(\d+).*?TRAP-UNPREDICTED=(\d+)(?: TRAP-81=(\d+) TRAP-82=(\d+))?.*?rate=([0-9.]+)/s bin=(\w+)", line)
         if not m: continue
         n, dv, cf, cr, tu, t81, t82, rate, b = m.groups()
+        # an aborted batch (box overloaded: fork failed) logs N=<n> with every counter 0 -- no seed ran; do not count it
+        if " OK=0 " in line and int(dv) + int(cf) + int(cr) + int(tu) == 0: continue
         d = per.setdefault(b, {"seeds": 0, "bad": 0, "trap": 0, "trap82": 0, "rates": []})
         d["seeds"] += int(n); d["bad"] += int(dv) + int(cf) + int(cr); d["trap"] += int(tu)
         d["trap82"] += int(t82) if t82 is not None else 0
