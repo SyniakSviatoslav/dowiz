@@ -1,55 +1,26 @@
-# Token economy & tiered routing (binding, always-on)
+Status: 2026-09-07 CURRENT (operator priority: "економити нещадно", mechanical enforcement, exact accounting)
 
-Status: 2026-09-04 CURRENT
+# Token economy -- mechanical rules and the measured ledger
 
-Provenance: 2026-09-02 session; measured -78% token volume, ~-93% cost per
-gate. All agents working in this repo follow this file.
+Every rule is enforced by a hook or a script, not by prose. `python3 tools/token_ledger.py [session.jsonl]` prints the exact
+numbers for a session (turns, cached context per turn, alert-turn cost, tool-result bulk, Agent prompt bulk).
 
-## Tier routing
+## Mechanisms (all live)
+| # | mechanism | enforced by | what it removes |
+|---|---|---|---|
+| M1 | no box Monitor task; boxguard alone guards the box | session practice (Monitor stopped 2026-09-07) | every alert wakes a full-context turn |
+| M2 | no raw dumps into context (`cat`, `git diff/show`, `objdump`, `sed -n a,bp` must be squeezed by head/tail/grep/cut/wc) | `~/.claude/hookify.block-raw-dump.local.md` (PreToolUse Bash, block) | tool results that then ride in the context for every later turn |
+| M3 | worker prompts = docs/WORKER-CARD.md reference + task; `cap:` step ceiling; no opus; < 6000 chars | `~/.claude/hooks/agent-gate.sh` (PreToolUse Agent, deny) | 1.5-2k output tokens per launch, unstable cache prefixes |
+| M4 | hard per-agent step ceiling (default 150 tool calls, `TOOL_CAP` env), then STATE.md + stop | `~/.claude/hooks/tool-cap.sh` (PreToolUse all tools, deny past the cap) | runaway reflection loops in workers |
+| M5 | routine tasks routed to a free model | `tools/llm_route.sh [model] < prompt` (OpenRouter free tier; key in ~/.config/openrouter/key, never in the tree) | one full-context frontier turn per routed task |
+| M6 | structured hand-offs: VERDICT block + STATE.md, resumes point at the snapshot | docs/WORKER-CARD.md, agent-gate | narrated history between agents |
 
-| Tier | Model | Work |
-|---|---|---|
-| Pro | `opencode-go/deepseek-v4-pro` | reasoning, analysis, planning, debugging, spectral synthesis, gate design |
-| Flash | `opencode-go/deepseek-v4-flash` (`flash-exec` agent, `small_model`) | everything else: gate execution, compile/run, hash checks, commits, journaling, probe runs |
+## Baseline ledger (session 22, 2026-09-07, measured from the transcript)
+- 540 model turns; context per turn 513-542k tokens; cache_read 160.2M, cache_create 2.93M, uncached input 13.6k, output 643k.
+- 15 Monitor/alert turns = 10.19M context tokens (M1 removes: exact).
+- 197 tool results = 86.7k tokens; 49 of them > 2k chars = 63.6k tokens, each re-read on every later turn (M2; at the mid-session average of ~260 remaining turns that is ~16.5M cached tokens, projected).
+- 8 Agent launches = 14.1k prompt tokens (avg 1.76k) + 8 resumes = 2.6k; with the card a launch is ~200 tokens (M3: ~12.5k output tokens per 8 launches, exact).
+- 7 workers = 2.59M subagent tokens; the largest (csel) 831k over 367 tool calls -- a 150-call cap with a STATE.md hand-off would have cut ~490k (M4, projected).
+- one routed routine task saves one frontier turn = ~0.52M cached tokens at this context size (M5, per task).
 
-Pro ALWAYS writes a SPEC card before any Flash-executable work: goal, exact
-commands with filled vars, expected output per command, freeze criteria,
-journal line. Flash executes verbatim; on any mismatch it STOPS and returns
-`VERDICT: mismatch` with evidence — only Pro decides the next step.
-
-SPEC card format:
-
-```
-SPEC <id> [TIER:F]
-GOAL: one line
-CMDS: exact shell commands, in order
-EXPECT: expected output per command (compare every one)
-FREEZE: fold == N | crc == N | std_golden X pass
-JOURNAL: one-line H:DID:GOT:VERDICT
-```
-
-## Toolstack (always on)
-
-- `rtk <cmd>` for git/ls/file output (84% measured bash compression).
-- `/tmp/opencode/ctx` — orient pack: git + corpus hashes + gate status, one call.
-- `tb h <path>` — crc32 content-address (== zlib bit-exact); re-read only if
-  the hash changed. `tb ctx` corpus digest. `tb s <needle> <path>` — hit line
-  numbers, then read only those windows. `tb c` — stdin compressor.
-- `graphify query/path/explain` before grep; `graphify update .` after edits
-  (AST-only, no LLM). Graph: `graphify-out/graph.json`.
-- `mempalace search <words>` before re-reading history; re-mine journal after
-  commits (`mempalace mine docs/exp.journal`).
-- Machinery embeds: cached slices (`/tmp/opencode/spectral_machinery.bp`,
-  sha256-verified) — never re-read whole std files.
-- Gates: compile `>/dev/null 2>&1`; runs read `tail -1` only; one run is proof
-  when fold == frozen/oracle value (deterministic integer arithmetic);
-  triple-run only at first freeze.
-- Journal: one line per experiment `H:... DID:... GOT:... VERDICT:...`.
-- .bp programs must be str-free (R3 defect d, journal 1788288206): argv +
-  cells + arithmetic; branch-free multiply-select stores (1788288197);
-  no allocations inside while bodies (L8).
-
-## Output contract (zero prose)
-
-Status = one line. Evidence = one number/hash/diff. Explanations only when
-asked. Canonical verdict line: `DID: <x> | GOT: <y> | VERDICT: <confirmed|mismatch>`.
+Projected per comparable session: ~27M+ of 163M context-read tokens (~17%) plus most of the output-token cost of prompts; the next session's ledger is the measurement, not this projection.
