@@ -1,0 +1,61 @@
+// c84_run (A11(b) standalone, docs/blueprints/A11-harness-dogfooding.md §3(b)): the
+// in-process sys_run(bin) builtin (named sys_run, not the blueprint's bare `run`: the
+// gate corpus already has its own 5-param `fn run` in tdggeo.bp/sheafh0.bp -- see
+// bebop.bp's emit_sys_run comment) + sys_wait4, under fork isolation (sys_clone(17, ...) --
+// 17 = SIGCHLD only, no CLONE_VM/CLONE_THREAD: a real copy-on-write fork, child gets
+// pid 0). sys_clone's OWN codegen (T118) unconditionally re-binds x14/x15/x27/x28 in
+// the CHILD branch to [stack_top, stack_top+256), [stack_top+256,stack_top+768) and
+// [stack_top+4MiB, stack_top+12MiB) -- built for the CLONE_VM worker-thread pattern
+// (par_compile/pool_compile: stack_top = sys_arena_base() + i*16MiB carves a disjoint
+// slice OUT OF THE SAME already-mapped 256MB arena). Passing stack_top=0 (as a plain
+// fork() would) points that reset at unmapped memory near the real fork's stack and
+// SIGSEGVs (trap 82) the moment the child touches a zeros()-allocated array --
+// verified in scratch (docs/exp.journal). Fix: pass stack_top = sys_arena_base() +
+// 16777216 (the same one-slot-past-base convention pool_compile.bp uses), which for a
+// COW fork lands inside the SAME 256MB arena mapping (COW-duplicated into the child at
+// the identical virtual address), giving the child a valid, private 8 MiB scratch
+// arena instead of garbage.
+// Child: open + mmap (PROT_READ|PROT_EXEC=5, MAP_PRIVATE=2) the frozen
+// bench/parity_constructs/frozen/c01_lit.bin, run() it with argc=1, argv=["c01"], then
+// sys_exit(result & 255). Parent: sys_wait4(pid, st, 0, 0); exit code = (st[0]>>8)&255.
+// EXPECT derivation: c01_lit's value is 1000000065571; 1000000065571 & 255 = 35 (hand-
+// checked: 1000000065571 mod 256 = 35). Combined with a pid==child sanity check
+// (w == pid) weighted by 1000: EXPECT = 35 + 1000*1 = 1035.
+fn addr_of(a: [i64]) -> i64 { a }
+
+// Byte-per-cell packer (sys_open's path convention): dst[i] = char(src, i) for i < n.
+// n is always passed by the caller (never str_len in the loop, per the text-scanner rule).
+fn pack_bytes(dst: [i64], src: str, n: i64) -> i64 {
+  let i = [0];
+  while i[0] < n {
+    let _ = dst[i[0]] = char(src, i[0]);
+    let _ = i[0] = i[0] + 1;
+    0
+  };
+  0
+}
+
+fn c84_child() -> i64 {
+  let path = zeros(42);
+  let _ = pack_bytes(path, "bench/parity_constructs/frozen/c01_lit.bin", 42);
+  let fd = sys_open(path, 42, 0);
+  let addr = sys_mmap(0, 568, 5, 2, fd, 0);
+  let name = zeros(4);
+  let _ = pack_bytes(name, "c01", 3);
+  let argv = zeros(1);
+  let _ = argv[0] = addr_of(name);
+  let result = sys_run(addr, 568, 1, argv);
+  sys_exit(result & 255)
+}
+
+fn c84_parent(pid: i64) -> i64 {
+  let st = zeros(1);
+  let w = sys_wait4(pid, st, 0, 0);
+  ((st[0] >> 8) & 255) + 1000 * (if w == pid then 1 else 0)
+}
+
+fn main() -> i64 {
+  let base = sys_arena_base();
+  let pid = sys_clone(17, base + 16777216);
+  if pid == 0 then c84_child() else c84_parent(pid)
+}

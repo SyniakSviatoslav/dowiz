@@ -1529,6 +1529,8 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   if name == 30895064082 then emit_hvham(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == 4047253394792 then emit_hvham2(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == 76753189874778913 then emit_sys_mmap(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 585902212871437 then emit_sys_run(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 10054667876514197585 then emit_sys_wait4(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == 7442662398273192292 then emit_sys_rename(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == 12598865016055593546 then emit_sys_ftruncate(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == 7442661902340062434 then emit_sys_export(s, pos, insns, n, stab, selfname, selfstart, fntab)
@@ -6333,6 +6335,83 @@ fn emit_sys_rename(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   em(insns, n, 2853241827);
   em(insns, n, 3531605192);
   em(insns, n, 3556769793);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// sys_wait4(pid, status, options, rusage): raw wait4. x0=pid,x1=status,x2=options,
+// x3=rusage,x8=260. status is the address of a cells array; the kernel writes a
+// 32-bit int there (exit code = (status[0] >> 8) & 255). Same shape as emit_sys_rename.
+fn emit_sys_wait4(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 4);
+  em(insns, n, 3531612296);
+  em(insns, n, 3556769793);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// A11(b) standalone (docs/blueprints/A11-harness-dogfooding.md §3(b)): sys_run(addr,
+// size, argc, argv) -- named sys_run, not the blueprint's bare `run`: bench/vs_rust/
+// std_tests/tdggeo.bp (mirrored from selfhost/std/tdggeo.bp) and sheafh0.bp already
+// define their own 5-param `fn run` and call it that way in the gate corpus; dispatch
+// is by identifier hash alone (no arity check), so reserving the bare `run` would
+// silently hijack their call sites (bpref.py's RESERVED-word parse guard catches this
+// exactly: 'reserved word used as a fn name: run', found by running tools/typecheck.py
+// over the full std_tests/ corpus before landing this). sys_run in-process runs of an
+// already-mmapped .bin (PROT_READ|PROT_EXEC, the
+// caller mmaps it exactly like seed.S does), following the seed calling contract
+// (seed/seed.S:2,50-100): entry_off = LE64 at base[size-8], entry = base + entry_off,
+// x0=argc, x1=argv (a pointer array whose cells are addresses of NUL-terminated byte
+// buffers -- already in the shape seed.S itself builds before its own `blr`), `blr` into
+// it. The callee is an ordinary bebop fn: it runs its own prologue/epilogue and saves
+// whatever x19-x26 pairs it uses, but its prologue ALSO rebinds x14 (frame-heap cursor)
+// and x15 (spill base) from ITS OWN sp -- exactly what a plain `bl` callee does (emit_bl's
+// own comment) -- so this call site needs the identical caller-side save/restore of
+// x14/x15 around it, keyed off the same conservative has_spills fact as every `bl` site
+// in this fn, and the same call-site counter bump (fntab[2712]) so the planning pass's
+// end-of-fn word-count correction (compile_fn_at_total_saved) accounts for this stp/ldp
+// pair too. x9 is scratch (entry-offset arithmetic); named emit_sys_run so check_abi.py's
+// sys_allow (regex over `fn emit_sys_\w+`) auto-allows its x9 writes the same way it
+// already allows emit_sys_rename's x9 loop-index writes -- no check_abi.py change needed.
+// Word-for-word derivation: as+objdump into $BEBOP_TMP/words.objdump before this edit.
+fn emit_sys_run(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 4);
+  let _ = fntab[2712] = fntab[2712] + 1;
+  let has_spills = 1 - fntab[2713];
+  let _ = if has_spills == 1 then em(insns, n, 2847882223) else 0;
+  em(insns, n, 3506446377);
+  em(insns, n, 4167657481);
+  em(insns, n, 2332622857);
+  em(insns, n, 2852258784);
+  em(insns, n, 2852324321);
+  em(insns, n, 3594453280);
+  let _ = if has_spills == 1 then em(insns, n, 2831236079) else 0;
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
   n[0]
 }

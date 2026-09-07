@@ -169,7 +169,7 @@ def check_bin(path, allow, stub=()):
             w = span[i]
             for r in writes(w):
                 if r in (27, 28):
-                    if (w >> 5) & 31 not in (27, 28):   # arena bump add x27,x27,<reg>
+                    if (w >> 5) & 31 not in (27, 28) and w not in allow:   # arena bump add x27,x27,<reg>; or a sys_clone child-arena rebind (a literal em() word of emit_sys_clone, in the allowlist)
                         errs.append(f"fn#{k} @{s + i}: {w:08x} writes x{r}")
                 elif 9 <= r <= 13:
                     if w in allow:

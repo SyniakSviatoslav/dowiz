@@ -8,7 +8,7 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bpref
 # The only sanctioned i64 <-> [i64] casts: the store's mapping base (selfhost/prelude/store.bp, T111).
-CASTS = {'st_cells', 'st_addr'}
+CASTS = {'st_cells', 'st_addr', 'addr_of'}
 # T48b (2026-09-06): `ref T` is a distinct type. It is produced only by these store fns
 # (they return 'ref *', compatible with every `ref T`) or by params/returns declared `ref T`;
 # arithmetic on a ref, an i64 where a `ref T` is declared, or a ref where a scalar is
@@ -26,7 +26,8 @@ BUILTIN = {'zeros': (['i64'], '[i64]'), 'str_len': (['str'], 'i64'), 'char': (['
            'sys_futex_wake': (['[i64]', 'i64', 'i64'], 'i64'), 'sys_atomic_add': (['[i64]', 'i64', 'i64'], 'i64'),
            'sys_exit_thread_guard': (['i64', 'i64'], 'i64'), 'sys_readbuf': (['i64', 'i64'], 'str'), 'sys_mmap': (['i64'] * 6, 'i64'),
            'sys_munmap': (['i64', 'i64'], 'i64'), 'sys_ftruncate': (['i64', 'i64'], 'i64'), 'sys_rename': (['[i64]', 'i64', '[i64]', 'i64'], 'i64'),
-           'sys_arena_end': ([], 'i64'), 'sys_setaffinity': (['[i64]', 'i64'], 'i64'), 'clz': (['i64'], 'i64'), 'crc32': (['[i64]', 'i64'], 'i64'), 'crc32x': (['[i64]', 'i64', 'i64'], 'i64'), 'sys_msync': (['i64', 'i64', 'i64'], 'i64'), 'hvham': (['[i64]', '[i64]', 'i64'], 'i64'), 'hvham2': (['[i64]', 'i64', '[i64]', 'i64', 'i64'], 'i64')}
+           'sys_arena_end': ([], 'i64'), 'sys_setaffinity': (['[i64]', 'i64'], 'i64'), 'clz': (['i64'], 'i64'), 'crc32': (['[i64]', 'i64'], 'i64'), 'crc32x': (['[i64]', 'i64', 'i64'], 'i64'), 'sys_msync': (['i64', 'i64', 'i64'], 'i64'), 'hvham': (['[i64]', '[i64]', 'i64'], 'i64'), 'hvham2': (['[i64]', 'i64', '[i64]', 'i64', 'i64'], 'i64'),
+           'sys_run': (['i64', 'i64', 'i64', '[i64]'], 'i64'), 'sys_wait4': (['i64', '[i64]', 'i64', 'i64'], 'i64')}
 class TC:
     def __init__(self, p, fname):
         self.p, self.fname, self.findings = p, fname, []
