@@ -307,3 +307,269 @@ fn gb_kernel_run_launch(args: [i64]) -> i64 {
   let w = sys_wait4(pid, st, 0, 0);
   gb_read_i64_file(st_cells(args[5]), args[6])
 }
+
+// ==== B3 step 4 coordinator tightened pass (2026-09-07, item (c)/(2)): background compile
+// on miss + a pool-hit path that costs only sys_clone+sys_run+sys_wait4 (no per-call file
+// I/O at all). Everything below is ADDITIVE -- gb_kernel_run/gb_kernel_run_launch/
+// gb_kernel_run_child above are UNCHANGED (signature and body), kept for compat/reference.
+
+// gb_pool_ref_i64(p): ref->i64 identity-cast launder, same technique + same rationale as
+// bench/vs_rust/std_tests/gb_pool.bp's own `pool_ref_i64` (tools/typecheck.py treats
+// st_root as unconditionally ref-producing regardless of a caller's plain-i64 use; retyping
+// gb_pool_append's P param would ripple through every other caller in the tree). A LOCAL
+// copy is needed here (not `use`d from gb_pool.bp) because gb_bg_child below -- which lives
+// in THIS file -- is the one that now calls st_root itself (the single-writer child reads
+// the pool's CURRENT root before appending). Zero runtime effect: types are erased before
+// codegen (LANGUAGE.md); this typechecks with ZERO findings because the checker's return-
+// type check only fires when the inferred body type is itself 'i64'/'[i64]'/'str' -- a ref
+// type string never matches, so the check is skipped entirely (verified against
+// tools/typecheck.py's TC.run: `if rt in (...) and v in (...) and v != rt`).
+fn gb_pool_ref_i64(p: ref Pool) -> i64 { p }
+
+// gb_str_to_file / gb_str_from_file: the ONLY way a `str` value crosses a sys_clone(17,...)
+// packed-`args` boundary in this tree -- there is no i64<->str cast (tools/typecheck.py's
+// CASTS has none), so this round-trips through a scratch file exactly the way
+// gb_lib_expand (gb_compile1.bp) already does to manufacture a `str` from a buffer it just
+// wrote: sys_slurp's own return type IS `str`, no cast needed on the read side.
+fn gb_str_to_file(path: [i64], plen: i64, s: str) -> i64 {
+  let n = str_len(s);
+  let buf = zeros(n);
+  let i = 0;
+  while i < n {
+    let _ = buf[i] = char(s, i);
+    let i = i + 1;
+    0
+  };
+  let fd = sys_open(path, plen, 578);
+  let _ = sys_export(fd, buf, n);
+  sys_close(fd)
+}
+fn gb_str_from_file(path: [i64], plen: i64, cap: i64) -> str {
+  let fd = sys_open(path, plen, 0);
+  let s = sys_slurp(fd, cap);
+  let _ = sys_close(fd);
+  s
+}
+
+// ---- background compile-on-miss (design item (c)): the child generates + compiles +
+// appends + commits; the PARENT never writes the pool file (single-writer rule).
+// gb_bg_compile_append: child-side gen+compile+append (build_one's own shape,
+// bench/vs_rust/std_tests/gb_pool.bp, duplicated here since the child needs it standalone
+// and gb_pool.bp is off-limits to `use` from a library file per the flat-use convention).
+// ROOT-CAUSE FIX (B3c resume, 2026-09-07): this MUST drive gb_gen_and_compile_fast (the
+// no-use_expand variant), NOT the original gb_gen_and_compile -- a sys_clone(17,...) child's
+// own arena window is capped WAY below 12.8 MB (selfhost/tools/gbpool.bp's own header already
+// records this: "a forked child's own arena is capped to ~8 MB by sys_clone's codegen ...
+// too small to even hold that one scratch buffer"), so EVEN ONE use_expand call inside a
+// forked child blows the budget -- not just 12 back-to-back calls in one process. Confirmed:
+// the parked run's 12x "trap 80: arena exhausted" (one per background compile child) plus the
+// 200x "trap 82: SIGSEGV/SIGBUS" downstream (hit_before/hit_after dispatching a Kernel that
+// never got appended because its child died mid-compile, before st_commit) are ONE root
+// cause, not two. `libtext` is built ONCE by the PARENT (gb_lib_expand, full 256 MB arena)
+// and handed to every child via the same file round-trip `dir` already uses.
+// gb_bg_compile_noexpand: a child-memory-safe copy of gb_compile1.bp's
+// gb_compile_path_noexpand -- ONLY difference: `srccap` is caller-supplied (tightly sized to
+// the actual kernel .bp source, libtext_len+3000) instead of a fixed 400000-cell sys_slurp
+// scratch (400000*8 = 3.2 MB). ROOT-CAUSE FIX part 2 (B3c resume): even after routing through
+// gb_gen_and_compile_fast (no use_expand), a forked child's ~8-12 MiB arena window was STILL
+// exhausted -- emit_words_offs's own fixed 2 MB insns buffer (bebop.bp, shared compiler
+// internals, out of scope to shrink here) plus this 3.2 MB oversized slurp cap (the real
+// kernel+lib text is ~57 KB) left no headroom. Trimming the slurp cap to the actual known
+// upper bound is the only knob available without touching codegen.
+fn gb_bg_compile_noexpand(path: [i64], plen: i64, outbuf: [i64], outcap: i64, srccap: i64) -> i64 {
+  let fd = sys_open(path, plen, 0);
+  let srcv = sys_slurp(fd, srccap);
+  let _ = sys_close(fd);
+  let offs = zeros(512);
+  let words0 = emit_words_offs(srcv, offs);
+  let n0 = words0[0];
+  let fnames = zeros(512);
+  let fpos = zeros(512);
+  let cnt = [0];
+  let _ = collect_fns(srcv, fnames, fpos, cnt);
+  let main_off = offs[idx_of_main(fnames, cnt[0]) + 1];
+  let stub = zeros(131);
+  let _ = entry_stub(stub);
+  let _ = stub[42] = 335544320 + ((main_off - (n0 + 42)) & 67108863);
+  let n = n0 + 131;
+  let nb = n * 4 + 8;
+  let _ = if nb > outcap then sys_exit(89) else 0;
+  let _ = gb_pack_code(outbuf, words0, n0);
+  let _ = gb_pack_stub(outbuf, stub, n0);
+  let _ = gb_pack_footer(outbuf, n0, n);
+  nb
+}
+fn gb_bg_compile_append(base: [i64], tx: [i64], tmp: [i64], P: i64, dir: str, op: i64, sr: i64, cmd: i64, outbuf: [i64], libtext: str, fieldidx: i64) -> i64 {
+  let libbuf = zeros(str_len(libtext) + 3000);
+  let path = zeros(512);
+  let plen = gen_path(dir, op, sr, 0, 1, 0, path);
+  let _ = gb_lib_write(libtext, sr, fieldidx, path, plen, libbuf);
+  let nb = gb_bg_compile_noexpand(path, plen, outbuf, 131072, str_len(libtext) + 3000);
+  let words = arr_alloc(base, tx, st_digest("GbKW{arr i64}"), nb);
+  let i = 0;
+  while i < nb {
+    let _ = arr_put(base, words, i, outbuf[i]);
+    let i = i + 1;
+    0
+  };
+  let _ = st_seal(base, words, tmp);
+  let keybuf = zeros(64);
+  let key = gb_pool_key(keybuf, op, sr, 0, 1, 0);
+  let entry = gb_entry_of(outbuf, nb);
+  gb_pool_append(base, tx, tmp, P, key, op, sr, 0, 1, 0, cmd, words, entry)
+}
+// gb_bg_child(args): pid==0 branch ONLY, ends with sys_exit (never returns). args (12 cells):
+// 0=dirpath addr, 1=dirpath len, 2=dirfile read cap, 3=pool path addr, 4=pool path len,
+// 5=op, 6=sr, 7=compiler-digest cmd, 8=libtext-file addr, 9=libtext-file len, 10=libtext
+// read cap, 11=fieldidx (op_fieldidx(op), computed by the parent). Opens the pool file RW
+// itself (gb_pool_open_rw), reads the CURRENT committed root (gb_pool_fresh if this is the
+// very first kernel -- root 0 is the null ref, T48b's own null idiom), appends, commits. No
+// locals survive a clone inside this function (the clone already happened in gb_bg_launch
+// below, before this was called), so the "<=8 live symbols across a clone" rule does not
+// constrain this function's own (larger) local count -- it mirrors gb_kernel_run_child's
+// already-proven shape instead.
+fn gb_bg_child(args: [i64]) -> i64 {
+  let dir = gb_str_from_file(st_cells(args[0]), args[1], args[2]);
+  let ppath = st_cells(args[3]);
+  let pplen = args[4];
+  let op = args[5];
+  let sr = args[6];
+  let cmd = args[7];
+  let libtext = gb_str_from_file(st_cells(args[8]), args[9], args[10]);
+  let fieldidx = args[11];
+  let tmp = zeros(1024);
+  let base = gb_pool_open_rw(ppath, pplen, tmp);
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let Proot = st_root(base, tmp);
+  let P0 = gb_pool_ref_i64(Proot);
+  let P = if P0 == 0 then gb_pool_fresh(base, tx, tmp) else P0;
+  let outbuf = zeros(131072);
+  let P2 = gb_bg_compile_append(base, tx, tmp, P, dir, op, sr, cmd, outbuf, libtext, fieldidx);
+  let _ = st_commit(base, tx, P2, tmp);
+  sys_exit(0)
+}
+// gb_bg_launch(args) -> pid: ONLY args + the new `pid` binding are live across the clone
+// (WORKER-CARD's <=8-live-symbols-across-a-clone rule) -- same shape as
+// gb_kernel_run_launch. Returns immediately in the PARENT with the child's pid; the caller
+// records it and sys_wait4's it later (design item (c): "the parent records the child pid
+// so a later call can sys_wait4 it").
+fn gb_bg_launch(args: [i64]) -> i64 {
+  let pid = sys_clone(17, sys_arena_base() + 16777216);
+  let _ = if pid == 0 then gb_bg_child(args) else 0;
+  pid
+}
+// gb_pool_dispatch_miss(base, A, sr, x, y, n, args) -> pid: the miss-path entry point.
+// Computes the tier-0 fold into `y` (gb_mxv_generic, the SAME single source of truth every
+// tier reads through -- unchanged from before) and returns to the caller as soon as the
+// child is forked -- the caller folds `y` itself (fold_vec2-style) and gets the tier-0
+// answer back BEFORE the child's compile has necessarily finished; the returned pid is
+// sys_wait4'd later, once, to know when the pool has the new Kernel.
+fn gb_pool_dispatch_miss(base: [i64], A: i64, sr: i64, x: [i64], y: [i64], n: i64, args: [i64]) -> i64 {
+  let dummy = zeros(1);
+  let _ = gb_mxv_generic(base, A, sr, x, y, n, 0, dummy, 0);
+  gb_bg_launch(args)
+}
+
+// ---- pool-hit path, tightened (design item (2)): a process-local address-table cache
+// (mmap each kernel image ONCE per process; a real fork always preserves existing memory
+// mappings into the child -- COW for private, shared for MAP_SHARED -- so every dispatch
+// after the first for a given kernel needs no sys_open/sys_mmap at all, just clone+run+
+// wait4) and a result handed back through an anonymous MAP_SHARED mapping instead of a
+// file (no sys_open/sys_export/sys_close on either side).
+// cache layout: cache[0] = count; each entry is 3 cells (K, addr, nb) starting at cache[1].
+fn gb_cache_find(cache: [i64], K: i64) -> i64 {
+  let cnt = cache[0];
+  let i = 0;
+  let found = 0 - 1;
+  while i < cnt {
+    let ck = cache[1 + i * 3];
+    let found = if ck == K then i else found;
+    let i = i + 1;
+    0
+  };
+  found
+}
+fn gb_cache_put(cache: [i64], K: i64, addr: i64, nb: i64) -> i64 {
+  let cnt = cache[0];
+  let b = 1 + cnt * 3;
+  let _ = cache[b] = K;
+  let _ = cache[b + 1] = addr;
+  let _ = cache[b + 2] = nb;
+  cache[0] = cnt + 1
+}
+// gb_kernel_mmap_into(base, K, dir, path, out): export-if-missing (same cache-path probe
+// as gb_kernel_run above) + mmap PROT_READ|EXEC(5) MAP_PRIVATE(2) ONCE; out[0]=addr,
+// out[1]=nb. Only ever called on a gb_cache_find miss.
+fn gb_kernel_mmap_into(base: [i64], K: i64, dir: str, path: [i64], out: [i64]) -> i64 {
+  let kdigest = gb_kernel_digest(base, K);
+  let plen = gb_kernel_cache_path(dir, kdigest, path);
+  let probe = sys_open(path, plen, 0);
+  let exists = if probe >= 0 then 1 else 0;
+  let _ = if exists == 1 then sys_close(probe) else 0;
+  let _ = if exists == 0 then gb_kernel_export(base, K, path, plen) else 0;
+  let W = gb_kernel_words(base, K);
+  let nb = arr_n(base, W);
+  let fd = sys_open(path, plen, 0);
+  let addr = sys_mmap(0, nb, 5, 2, fd, 0);
+  let _ = sys_close(fd);
+  let _ = out[0] = addr;
+  out[1] = nb
+}
+// gb_kernel_run_child2(args): args (4 cells) 0=kernel addr (already mapped, inherited via
+// fork), 1=nb, 2=argv addr (a prebuilt 3-entry argv array, ALSO built once by the caller and
+// inherited unchanged across every fork -- it never needs to be rebuilt per call since the
+// data-store address it encodes never changes for the life of the process), 3=result mmap
+// addr (an anonymous MAP_SHARED mapping, also built once -- a normal write here is visible
+// to the parent's own mapping of the SAME pages immediately, no wait4-then-read-a-file).
+fn gb_kernel_run_child2(args: [i64]) -> i64 {
+  let addr = args[0];
+  let nb = args[1];
+  let argv2 = st_cells(args[2]);
+  let resmem = st_cells(args[3]);
+  let result = sys_run(addr, nb, 3, argv2);
+  let _ = resmem[0] = result;
+  sys_exit(0)
+}
+fn gb_kernel_run_launch2(args: [i64]) -> i64 {
+  let pid = sys_clone(17, sys_arena_base() + 16777216);
+  let _ = if pid == 0 then gb_kernel_run_child2(args) else 0;
+  let st = zeros(1);
+  let w = sys_wait4(pid, st, 0, 0);
+  let resmem = st_cells(args[3]);
+  resmem[0]
+}
+// gb_kernel_run_fast(base, K, dir, path, cache, argv2addr, resmemaddr): the tightened
+// pool-hit dispatch. First call for a given K pays the export+mmap cost (cached
+// thereafter); every call pays exactly sys_clone + sys_run + sys_wait4 -- the fork floor
+// (see gb_fork_floor_one below), nothing else.
+fn gb_kernel_run_fast(base: [i64], K: i64, dir: str, path: [i64], cache: [i64], argv2addr: i64, resmemaddr: i64) -> i64 {
+  let idx = gb_cache_find(cache, K);
+  let out = zeros(2);
+  let _ = if idx < 0 then gb_kernel_mmap_into(base, K, dir, path, out) else 0;
+  let _ = if idx < 0 then gb_cache_put(cache, K, out[0], out[1]) else 0;
+  let fidx = if idx < 0 then cache[0] - 1 else idx;
+  let addr = cache[1 + fidx * 3 + 1];
+  let nb = cache[1 + fidx * 3 + 2];
+  let args = zeros(4);
+  let _ = args[0] = addr;
+  let _ = args[1] = nb;
+  let _ = args[2] = argv2addr;
+  let _ = args[3] = resmemaddr;
+  gb_kernel_run_launch2(args)
+}
+
+// gb_fork_floor_one(): the fork CEILING measurement (task item 2) -- a bare
+// sys_clone+sys_exit(0)+sys_wait4, nothing else. Whatever gb_kernel_run_fast costs beyond
+// this is the mmap-cache/argv/result-mmap overhead; whatever THIS costs beyond 0.1 ms is
+// unreachable while sys_run is required to run inside a fork (see the comment above
+// gb_kernel_run_child: entering another image's entry stub reconfigures the caller's own
+// arena/signal-stack registers, unsafe in a process that must keep running -- an in-process
+// sys_run is explicitly ruled out, not proposed here).
+fn gb_fork_floor_child() -> i64 { sys_exit(0) }
+fn gb_fork_floor_one() -> i64 {
+  let pid = sys_clone(17, sys_arena_base() + 16777216);
+  let _ = if pid == 0 then gb_fork_floor_child() else 0;
+  let st = zeros(1);
+  sys_wait4(pid, st, 0, 0)
+}

@@ -1,29 +1,39 @@
-// bench/vs_rust/std_tests/gb_pool.bp -- B3 step 4 gate driver (docs/blueprints/
-// B3-graphblas-kernels-prejit.md section 5 step 4, design items (d)/(e)). Compiled the
-// pool_parity way (bench/vs_rust/gbpool.sh concatenates a main-stripped copy of bebop.bp ahead
-// of this file, same as selfhost/tools/gbpool.bp -- gb_compile1.bp's own emission functions
+// bench/vs_rust/std_tests/gb_pool.bp -- B3 step 4 gate driver, TIGHTENED pass (2026-09-07,
+// coordinator, item (c) "background compile on miss" + item (2) "pool-hit path cost").
+// Compiled the pool_parity way (bench/vs_rust/gbpool.sh concatenates a main-stripped copy of
+// bebop.bp ahead of this file -- gb_compile1.bp/gb_run.bp's own emission/dispatch functions
 // need to be in scope). Precondition: bench/vs_rust/std_tests/gb_gen.bp has already been run
-// once against `dir` (argv[3]), leaving `<dir>/gb_gen.store` populated (gbpool.sh's own step
-// before this one) -- this driver does not rebuild the graph, only reuses it.
+// once against `dir` (argv[3]), leaving `<dir>/gb_gen.store` populated.
 //
-// Builds a FRESH pool (its own store file, argv[4]) with the same 12 (op,sr) kernels
-// selfhost/tools/gbpool.bp's PreJIT builder produces (gbpool_one/build_all duplicated here,
-// not `use`d -- gbpool.bp has its own `main`, a `use` would collide), measures:
-//   - tier0_ms: one gb_mxv_generic call for (op=1,sr=1) against the existing store
-//   - compile_ms: gen+compile+append of the FIRST kernel (op=1,sr=1) into the fresh pool
-//   - hit_ms: a SECOND gb_kernel_run dispatch of that SAME kernel (the export already
-//     happened on the first dispatch, so this is a genuine cached mmap+fork+sys_run hit)
-// then dispatches all 12 pool entries via gb_kernel_run (design item (c)'s dispatch path,
-// selfhost/std/gb_run.bp) and rolling-combines the folds the SAME way
-// bench/vs_rust/std_tests/gb_gen.bp's combine12 does, so this driver's last-line fold must
-// equal bench/oracles/gb_gen.py's tier-0 golden -4783772994166464769 (pool-hit == tier-0 ==
-// golden, item (d)). DEVIATION (recorded): the miss->fork-compile->append sequence design item
-// (c) describes is exercised here as an in-process compile+append (this driver's own process
-// builds and commits the pool directly, the same way selfhost/tools/gbpool.bp's PreJIT step
-// does) rather than a forked background compiler -- gb_kernel_run's OWN dispatch (the thing
-// actually gated: mmap the exported kernel image + fork + sys_run) is exercised for real, 12
-// times, via the unmodified selfhost/std/gb_run.bp; only the COMPILE step is eager here, not
-// lazy-forked, given box-safety/time constraints. bench/oracles/gb_pool.py holds the golden.
+// Exercises the REAL sequence design item (c) describes, for all 12 (op,sr) kernels: miss
+// (pool file starts empty) -> gb_pool_dispatch_miss returns the tier-0 fold immediately and
+// forks ONE background child (selfhost/std/gb_run.bp's gb_bg_launch/gb_bg_child) that
+// generates + compiles + appends + commits the Kernel under the single-writer rule (only
+// the child ever opens the pool file RW) -> the driver sys_wait4's that child (recording its
+// pid, per design item (c)) -> a subsequent pool lookup HITS. The final fold (all 12 hits,
+// rolling-combined the same way bench/vs_rust/std_tests/gb_gen.bp's combine12 does) must
+// equal bench/oracles/gb_gen.py's tier-0 golden -4783772994166464769 -- pool-hit == tier-0
+// == golden (fold definition UNCHANGED from the previous pass; bench/oracles/gb_pool.py
+// still just reuses gb_gen_tier0.py's computation, no edit needed).
+//
+// Also measures (say_ms lines, parsed by bench/vs_rust/gbpool.sh):
+//   TIER0_MS          -- one standalone gb_mxv_generic call (unrelated to dispatch)
+//   BG_RETURN_MS      -- gb_pool_dispatch_miss's OWN wall time for kernel (1,1): tier0 fold
+//                        compute + fork (NOT the compile) -- "parent returns tier0 while
+//                        child compiles"
+//   BG_CHILD_MS       -- wall time from fork to that same child's sys_wait4 completion (the
+//                        compile-on-miss child latency, target <=50ms)
+//   HIT_BEFORE_MS100  -- 100 pool-hit dispatches via the UNCHANGED gb_kernel_run (per-call
+//                        file round trip: export-probe, open+mmap the kernel image, open+
+//                        mmap the data store, sys_run, write+read a result file)
+//   HIT_AFTER_MS100   -- 100 pool-hit dispatches via gb_kernel_run_fast (cache-mmap'd kernel
+//                        image + data store built ONCE and inherited by every fork; result
+//                        via an anonymous MAP_SHARED mmap, no file I/O at all)
+//   FORK_FLOOR_MS100  -- 100 bare sys_clone+sys_exit(0)+sys_wait4 (the fork ceiling: whatever
+//                        HIT_AFTER costs beyond this is the mmap-cache/argv/resmem overhead;
+//                        whatever THIS costs beyond 0.1ms/call is unreachable while sys_run
+//                        must run inside a fork -- see the comment above
+//                        selfhost/std/gb_run.bp's gb_kernel_run_child).
 use "selfhost/prelude/sha256.bp"
 use "selfhost/prelude/store.bp"
 use "selfhost/prelude/gb.bp"
@@ -52,16 +62,10 @@ fn fold_vec2(y: [i64], n: i64) -> i64 {
   };
   acc
 }
-// pool_ref_i64/matrix_ref_i64: st_root/st_ref (store.bp) are unconditionally treated as
-// ref-producing by tools/typecheck.py (REF_PRODUCERS), regardless of their own declared i64
-// return type -- passing their result straight into a function whose param is declared plain
-// i64 (gb_pool_lookup's P, gb_mxv_generic's A -- neither is in the REF_TOLERANT allowlist, and
-// retyping either would ripple through every OTHER caller in the tree, including files this
-// worker must not touch) trips "a ref never leaves the store helpers as a number". These two
-// one-line identity casts launder the value back to a plain i64 at the type-annotation level
-// only (no runtime effect -- types are erased before codegen, LANGUAGE.md) so the SAME already-
-// correct P/A values flow on unchanged; typecheck.py's own CASTS convention (st_cells/st_addr
-// in store.bp) is exactly this pattern, just object-relative-ref-shaped instead of pointer-shaped.
+// pool_ref_i64/matrix_ref_i64: see selfhost/std/gb_run.bp's gb_pool_ref_i64 comment for why
+// this identity-cast launder exists (tools/typecheck.py's st_root/st_ref REF_PRODUCERS vs.
+// gb_pool_lookup/gb_mxv_generic's plain-i64 params). A separate LOCAL copy on purpose --
+// gb_run.bp's gb_pool_ref_i64 is the one gb_bg_child (a different file) needs internally.
 fn pool_ref_i64(p: ref Pool) -> i64 { p }
 fn matrix_ref_i64(m: ref GbMatrix) -> i64 { m }
 fn tier0_one(base: [i64], M: i64, sr: i64, x: [i64], n: i64) -> i64 {
@@ -71,59 +75,60 @@ fn tier0_one(base: [i64], M: i64, sr: i64, x: [i64], n: i64) -> i64 {
   fold_vec2(y, n)
 }
 
-fn build_one(base: [i64], tx: [i64], tmp: [i64], P: i64, libtext: str, dir: str, op: i64, sr: i64, cmd: i64, keybuf: [i64], libbuf: [i64], outbuf: [i64]) -> i64 {
-  let nb = gb_gen_and_compile_fast(libtext, dir, op, sr, op_fieldidx(op), libbuf, outbuf, 131072);
-  let words = arr_alloc(base, tx, st_digest("GbKW{arr i64}"), nb);
-  let i = 0;
-  while i < nb {
-    let _ = arr_put(base, words, i, outbuf[i]);
-    let i = i + 1;
-    0
-  };
-  let _ = st_seal(base, words, tmp);
-  let key = gb_pool_key(keybuf, op, sr, 0, 1, 0);
-  let entry = gb_entry_of(outbuf, nb);
-  gb_pool_append(base, tx, tmp, P, key, op, sr, 0, 1, 0, cmd, words, entry)
+// ---- background compile-on-miss build chain (design item (c)): 12 sequential
+// miss -> dispatch -> wait4 rounds, same (op,sr) order as before so the combine12 golden
+// ordering is unchanged.
+// mctx (11 cells, built ONCE by main): 0=addr_of(dbase), 1=A, 2=addr_of(ppath), 3=pplen,
+// 4=addr_of(dirfile), 5=dfl, 6=dircap, 7=cmd, 8=addr_of(libfile), 9=lfl, 10=libcap. Folded
+// from 11 separate params (B3c resume, 2026-09-07): miss_build_one/first6/rest6 calls with
+// 14-16 bare params each silently crashed the WHOLE process (no trap text, exit 8) the moment
+// a call carried that many live arguments -- an undocumented compiler ceiling on plain (non-
+// clone) call argument count, found by bisection (checkpoints showed the crash strictly
+// between the last statement before the call and the callee's own first statement, i.e. in
+// the call's own arg-marshalling code). One array param sidesteps it, matching the ctx-array
+// idiom this file and gb_run.bp already use for every sys_clone boundary.
+fn miss_build_one(mctx: [i64], op: i64, sr: i64, x: [i64], y: [i64], n: i64) -> i64 {
+  let dbase = st_cells(mctx[0]);
+  let A = mctx[1];
+  let bgargs = zeros(12);
+  let _ = bgargs[0] = mctx[4];
+  let _ = bgargs[1] = mctx[5];
+  let _ = bgargs[2] = mctx[6];
+  let _ = bgargs[3] = mctx[2];
+  let _ = bgargs[4] = mctx[3];
+  let _ = bgargs[5] = op;
+  let _ = bgargs[6] = sr;
+  let _ = bgargs[7] = mctx[7];
+  let _ = bgargs[8] = mctx[8];
+  let _ = bgargs[9] = mctx[9];
+  let _ = bgargs[10] = mctx[10];
+  let _ = bgargs[11] = op_fieldidx(op);
+  let pid = gb_pool_dispatch_miss(dbase, A, sr, x, y, n, bgargs);
+  let st = zeros(1);
+  sys_wait4(pid, st, 0, 0)
 }
-fn build_rest(base: [i64], tx: [i64], tmp: [i64], libtext: str, dir: str, cmd: i64, P1: i64, keybuf: [i64], libbuf: [i64], outbuf: [i64]) -> i64 {
-  let P2 = build_one(base, tx, tmp, P1, libtext, dir, 1, 2, cmd, keybuf, libbuf, outbuf);
-  let P3 = build_one(base, tx, tmp, P2, libtext, dir, 1, 3, cmd, keybuf, libbuf, outbuf);
-  let P4 = build_one(base, tx, tmp, P3, libtext, dir, 1, 4, cmd, keybuf, libbuf, outbuf);
-  let P5 = build_one(base, tx, tmp, P4, libtext, dir, 2, 1, cmd, keybuf, libbuf, outbuf);
-  let P6 = build_one(base, tx, tmp, P5, libtext, dir, 2, 2, cmd, keybuf, libbuf, outbuf);
-  build_rest_b(base, tx, tmp, libtext, dir, cmd, P6, keybuf, libbuf, outbuf)
+fn miss_build_first6(mctx: [i64], x: [i64], y: [i64], n: i64) -> i64 {
+  let _ = miss_build_one(mctx, 1, 2, x, y, n);
+  let _ = miss_build_one(mctx, 1, 3, x, y, n);
+  let _ = miss_build_one(mctx, 1, 4, x, y, n);
+  let _ = miss_build_one(mctx, 2, 1, x, y, n);
+  let _ = miss_build_one(mctx, 2, 2, x, y, n);
+  miss_build_one(mctx, 2, 3, x, y, n)
 }
-fn build_rest_b(base: [i64], tx: [i64], tmp: [i64], libtext: str, dir: str, cmd: i64, P6: i64, keybuf: [i64], libbuf: [i64], outbuf: [i64]) -> i64 {
-  let P7 = build_one(base, tx, tmp, P6, libtext, dir, 2, 3, cmd, keybuf, libbuf, outbuf);
-  let P8 = build_one(base, tx, tmp, P7, libtext, dir, 2, 4, cmd, keybuf, libbuf, outbuf);
-  let P9 = build_one(base, tx, tmp, P8, libtext, dir, 3, 1, cmd, keybuf, libbuf, outbuf);
-  let P10 = build_one(base, tx, tmp, P9, libtext, dir, 3, 4, cmd, keybuf, libbuf, outbuf);
-  let P11 = build_one(base, tx, tmp, P10, libtext, dir, 4, 1, cmd, keybuf, libbuf, outbuf);
-  build_one(base, tx, tmp, P11, libtext, dir, 4, 4, cmd, keybuf, libbuf, outbuf)
-}
-
-fn dispatch_one(base: [i64], P: i64, op: i64, sr: i64, cmd: i64, keybuf: [i64], dir: str, path: [i64], respath: [i64], dspath: [i64], dpl: i64) -> i64 {
-  let key = gb_pool_key(keybuf, op, sr, 0, 1, 0);
-  let K = gb_pool_lookup(base, P, key, cmd);
-  let rpos = zeros(1);
-  let _ = wr_str(respath, rpos, dir);
-  let _ = wr_str(respath, rpos, "/gbpool_res_");
-  let _ = wr_i64(respath, rpos, op);
-  let _ = wr_str(respath, rpos, "_");
-  let _ = wr_i64(respath, rpos, sr);
-  let _ = wr_str(respath, rpos, ".bin");
-  gb_kernel_run(base, K, dir, path, respath, rpos[0], dspath, dpl)
-}
-fn say_ms(label: str, v: i64, buf: [i64]) -> i64 {
-  let n = st_str(buf, label);
-  let _ = sys_write(1, buf, n);
-  let pos = zeros(1);
-  let _ = wr_i64(buf, pos, v);
-  let _ = sys_write(1, buf, pos[0]);
-  let _ = buf[0] = 10;
-  sys_write(1, buf, 1)
+fn miss_build_rest6(mctx: [i64], x: [i64], y: [i64], n: i64) -> i64 {
+  let _ = miss_build_one(mctx, 2, 4, x, y, n);
+  let _ = miss_build_one(mctx, 3, 1, x, y, n);
+  let _ = miss_build_one(mctx, 3, 4, x, y, n);
+  let _ = miss_build_one(mctx, 4, 1, x, y, n);
+  miss_build_one(mctx, 4, 4, x, y, n)
 }
 
+// ---- pool-hit fold-combine chain, via the tightened gb_kernel_run_fast dispatch.
+fn hit_one(base2: [i64], P: i64, op: i64, sr: i64, cmd: i64, keybuf: [i64], dir: str, path: [i64], cache: [i64], argv2addr: i64, resmemaddr: i64) -> i64 {
+  let key = gb_pool_key(keybuf, op, sr, 0, 1, 0);
+  let K = gb_pool_lookup(base2, P, key, cmd);
+  gb_kernel_run_fast(base2, K, dir, path, cache, argv2addr, resmemaddr)
+}
 fn combine12b(f0: i64, f1: i64, f2: i64, f3: i64, f4: i64, f5: i64, f6: i64, f7: i64, f8: i64, f9: i64, f10: i64, f11: i64) -> i64 {
   let c = f0;
   let c = c * 1000003 + f1;
@@ -138,20 +143,56 @@ fn combine12b(f0: i64, f1: i64, f2: i64, f3: i64, f4: i64, f5: i64, f6: i64, f7:
   let c = c * 1000003 + f10;
   c * 1000003 + f11
 }
-
-fn dispatch_rest(base2: [i64], P: i64, cmd: i64, keybuf: [i64], dir: str, path: [i64], respath: [i64], dspath: [i64], dpl: i64, f1: i64) -> i64 {
-  let f2 = dispatch_one(base2, P, 1, 2, cmd, keybuf, dir, path, respath, dspath, dpl);
-  let f3 = dispatch_one(base2, P, 1, 3, cmd, keybuf, dir, path, respath, dspath, dpl);
-  let f4 = dispatch_one(base2, P, 1, 4, cmd, keybuf, dir, path, respath, dspath, dpl);
-  let f5 = dispatch_one(base2, P, 2, 1, cmd, keybuf, dir, path, respath, dspath, dpl);
-  let f6 = dispatch_one(base2, P, 2, 2, cmd, keybuf, dir, path, respath, dspath, dpl);
-  let f7 = dispatch_one(base2, P, 2, 3, cmd, keybuf, dir, path, respath, dspath, dpl);
-  let f8 = dispatch_one(base2, P, 2, 4, cmd, keybuf, dir, path, respath, dspath, dpl);
-  let f9 = dispatch_one(base2, P, 3, 1, cmd, keybuf, dir, path, respath, dspath, dpl);
-  let f10 = dispatch_one(base2, P, 3, 4, cmd, keybuf, dir, path, respath, dspath, dpl);
-  let f11 = dispatch_one(base2, P, 4, 1, cmd, keybuf, dir, path, respath, dspath, dpl);
-  let f12 = dispatch_one(base2, P, 4, 4, cmd, keybuf, dir, path, respath, dspath, dpl);
+fn hit_rest(base2: [i64], P: i64, cmd: i64, keybuf: [i64], dir: str, path: [i64], cache: [i64], argv2addr: i64, resmemaddr: i64, f1: i64) -> i64 {
+  let f2 = hit_one(base2, P, 1, 2, cmd, keybuf, dir, path, cache, argv2addr, resmemaddr);
+  let f3 = hit_one(base2, P, 1, 3, cmd, keybuf, dir, path, cache, argv2addr, resmemaddr);
+  let f4 = hit_one(base2, P, 1, 4, cmd, keybuf, dir, path, cache, argv2addr, resmemaddr);
+  let f5 = hit_one(base2, P, 2, 1, cmd, keybuf, dir, path, cache, argv2addr, resmemaddr);
+  let f6 = hit_one(base2, P, 2, 2, cmd, keybuf, dir, path, cache, argv2addr, resmemaddr);
+  let f7 = hit_one(base2, P, 2, 3, cmd, keybuf, dir, path, cache, argv2addr, resmemaddr);
+  let f8 = hit_one(base2, P, 2, 4, cmd, keybuf, dir, path, cache, argv2addr, resmemaddr);
+  let f9 = hit_one(base2, P, 3, 1, cmd, keybuf, dir, path, cache, argv2addr, resmemaddr);
+  let f10 = hit_one(base2, P, 3, 4, cmd, keybuf, dir, path, cache, argv2addr, resmemaddr);
+  let f11 = hit_one(base2, P, 4, 1, cmd, keybuf, dir, path, cache, argv2addr, resmemaddr);
+  let f12 = hit_one(base2, P, 4, 4, cmd, keybuf, dir, path, cache, argv2addr, resmemaddr);
   combine12b(f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12)
+}
+
+// ---- before/after/floor loops (no `zeros` inside a while body -- WORKER-CARD L8: every
+// scratch buffer is allocated ONCE outside the loop and reused/reset by plain assignment).
+fn hit_before_loop(base2: [i64], K: i64, dir: str, path: [i64], respath: [i64], dspath: [i64], dpl: i64, iters: i64) -> i64 {
+  let i = 0;
+  let acc = 0;
+  let rpos = zeros(1);
+  while i < iters {
+    let _ = rpos[0] = 0;
+    let _ = wr_str(respath, rpos, dir);
+    let _ = wr_str(respath, rpos, "/gbpool_hb.bin");
+    let acc = acc + gb_kernel_run(base2, K, dir, path, respath, rpos[0], dspath, dpl);
+    let i = i + 1;
+    0
+  };
+  acc
+}
+fn hit_after_loop(base2: [i64], K: i64, dir: str, path: [i64], cache: [i64], argv2addr: i64, resmemaddr: i64, iters: i64) -> i64 {
+  let i = 0;
+  let acc = 0;
+  while i < iters {
+    let acc = acc + gb_kernel_run_fast(base2, K, dir, path, cache, argv2addr, resmemaddr);
+    let i = i + 1;
+    0
+  };
+  acc
+}
+fn fork_floor_loop(iters: i64) -> i64 {
+  let i = 0;
+  let acc = 0;
+  while i < iters {
+    let acc = acc + gb_fork_floor_one();
+    let i = i + 1;
+    0
+  };
+  acc
 }
 
 fn compiler_digest_of2(argv2: str) -> i64 {
@@ -164,14 +205,27 @@ fn compiler_digest_of2(argv2: str) -> i64 {
   sha256_lo64(big, cn)
 }
 
-fn main(argc: i64, argv: [str]) -> i64 {
+fn say_ms(label: str, v: i64, buf: [i64]) -> i64 {
+  let n = st_str(buf, label);
+  let _ = sys_write(1, buf, n);
+  let pos = zeros(1);
+  let _ = wr_i64(buf, pos, v);
+  let _ = sys_write(1, buf, pos[0]);
+  let _ = buf[0] = 10;
+  sys_write(1, buf, 1)
+}
+
+// main_setup: dbase/A/xloc/y/tier0 timing + the dir round-trip file + the (1,1) miss/wait4
+// round, split out of `main` to keep this function's own live-symbol count down (AGENTS.md
+// ladder) even though none of this crosses a clone directly.
+fn main_setup(argv: [str], dspath: [i64], dpl_out: [i64], out: [i64]) -> i64 {
   let dir = argv[3];
   let cmd = compiler_digest_of2(argv[2]);
-  let dspath = zeros(256);
   let dpos = zeros(1);
   let _ = wr_str(dspath, dpos, dir);
   let _ = wr_str(dspath, dpos, "/gb_gen.store");
   let dpl = dpos[0];
+  let _ = dpl_out[0] = dpl;
   let dbase = st_map_ro(dspath, dpl, 4194304);
   let dtmp = zeros(1024);
   let droot = st_root(dbase, dtmp);
@@ -183,42 +237,142 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let t0a = clock_ms();
   let f_t0 = tier0_one(dbase, A, 1, xloc, n);
   let t0b = clock_ms();
+  let _ = out[0] = st_addr(dbase);
+  let _ = out[1] = A;
+  let _ = out[2] = n;
+  let _ = out[3] = cmd;
+  let _ = out[4] = t0b - t0a;
+  0
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  let dspath = zeros(256);
+  let dpl_out = zeros(1);
+  let setup_out = zeros(5);
+  let _ = main_setup(argv, dspath, dpl_out, setup_out);
+  let dbase = st_cells(setup_out[0]);
+  let A = setup_out[1];
+  let n = setup_out[2];
+  let cmd = setup_out[3];
+  let tier0_ms = setup_out[4];
+  let dpl = dpl_out[0];
+  let dir = argv[3];
+  let xloc = zeros(n);
+  let _ = build_x2(xloc, n);
+  let y = zeros(n);
+
   let ppath = zeros(256);
   let ppos = zeros(1);
   let _ = wr_str(ppath, ppos, argv[4]);
   let pl = ppos[0];
-  let tmp = zeros(1024);
-  let base = gb_pool_open_rw(ppath, pl, tmp);
+
+  let dirfile = zeros(256);
+  let dfpos = zeros(1);
+  let _ = wr_str(dirfile, dfpos, argv[4]);
+  let _ = wr_str(dirfile, dfpos, ".dirtxt");
+  let dfl = dfpos[0];
+  let _ = gb_str_to_file(dirfile, dfl, dir);
+  let dircap = str_len(dir) + 8;
+
+  // libtext (design item (c) resume fix): expanded ONCE here, in the parent (full 256 MB
+  // arena) -- every background child gets it via the SAME file round-trip `dir` uses, then
+  // drives gb_gen_and_compile_fast instead of the arena-blowing full gb_gen_and_compile.
   let libpath = zeros(256);
   let lppos = zeros(1);
   let _ = wr_str(libpath, lppos, dir);
-  let _ = wr_str(libpath, lppos, "/gblib2.bp");
-  let srcbuf = zeros(256);
-  let libtext = gb_lib_expand(libpath, lppos[0], srcbuf);
-  let tx = zeros(6);
-  let _ = st_begin(base, tx, tmp);
-  let P0 = gb_pool_fresh(base, tx, tmp);
-  let keybuf = zeros(64);
-  let libbuf = zeros(str_len(libtext) + 3000);
-  let outbuf = zeros(131072);
+  let _ = wr_str(libpath, lppos, "/gblib.bp");
+  let libsrcbuf = zeros(256);
+  let libtext = gb_lib_expand(libpath, lppos[0], libsrcbuf);
+  let libfile = zeros(256);
+  let lfpos = zeros(1);
+  let _ = wr_str(libfile, lfpos, argv[4]);
+  let _ = wr_str(libfile, lfpos, ".libtxt");
+  let lfl = lfpos[0];
+  let _ = gb_str_to_file(libfile, lfl, libtext);
+  let libcap = str_len(libtext) + 8;
+
+  let bgargs1 = zeros(12);
+  let _ = bgargs1[0] = addr_of(dirfile);
+  let _ = bgargs1[1] = dfl;
+  let _ = bgargs1[2] = dircap;
+  let _ = bgargs1[3] = addr_of(ppath);
+  let _ = bgargs1[4] = pl;
+  let _ = bgargs1[5] = 1;
+  let _ = bgargs1[6] = 1;
+  let _ = bgargs1[7] = cmd;
+  let _ = bgargs1[8] = addr_of(libfile);
+  let _ = bgargs1[9] = lfl;
+  let _ = bgargs1[10] = libcap;
+  let _ = bgargs1[11] = op_fieldidx(1);
+  let tra = clock_ms();
+  let pid1 = gb_pool_dispatch_miss(dbase, A, 1, xloc, y, n, bgargs1);
+  let trb = clock_ms();
+  let st1 = zeros(1);
   let tca = clock_ms();
-  let P1 = build_one(base, tx, tmp, P0, libtext, dir, 1, 1, cmd, keybuf, libbuf, outbuf);
+  let _ = sys_wait4(pid1, st1, 0, 0);
   let tcb = clock_ms();
-  let P12 = build_rest(base, tx, tmp, libtext, dir, cmd, P1, keybuf, libbuf, outbuf);
-  let _ = st_commit(base, tx, P12, tmp);
+
+  let mctx = zeros(11);
+  let _ = mctx[0] = addr_of(dbase);
+  let _ = mctx[1] = A;
+  let _ = mctx[2] = addr_of(ppath);
+  let _ = mctx[3] = pl;
+  let _ = mctx[4] = addr_of(dirfile);
+  let _ = mctx[5] = dfl;
+  let _ = mctx[6] = dircap;
+  let _ = mctx[7] = cmd;
+  let _ = mctx[8] = addr_of(libfile);
+  let _ = mctx[9] = lfl;
+  let _ = mctx[10] = libcap;
+  let _ = miss_build_first6(mctx, xloc, y, n);
+  let _ = miss_build_rest6(mctx, xloc, y, n);
+
   let base2 = gb_pool_open_ro(ppath, pl);
   let tmp2 = zeros(1024);
   let Proot = st_root(base2, tmp2);
   let P = pool_ref_i64(Proot);
+  let keybuf = zeros(64);
   let path = zeros(300);
+  let cache = zeros(1 + 48 * 3);
+
+  let daddr = st_addr(dbase);
+  let addrbuf = zeros(32);
+  let apos = zeros(1);
+  let _ = wr_i64(addrbuf, apos, daddr);
+  let addrtight = zeros(4);
+  let _ = gb_pack_tight(addrtight, addrbuf, apos[0]);
+  let dummy0 = zeros(1);
+  let argv2 = zeros(3);
+  let _ = argv2[0] = addr_of(dummy0);
+  let _ = argv2[1] = addr_of(dummy0);
+  let _ = argv2[2] = addr_of(addrtight);
+  let argv2addr = addr_of(argv2);
+  let resmemaddr = sys_mmap(0, 4096, 3, 33, 0 - 1, 0);
+
+  let key1 = gb_pool_key(keybuf, 1, 1, 0, 1, 0);
+  let K1 = gb_pool_lookup(base2, P, key1, cmd);
+
   let respath = zeros(300);
-  let f1 = dispatch_one(base2, P, 1, 1, cmd, keybuf, dir, path, respath, dspath, dpl);
-  let tha = clock_ms();
-  let _ = dispatch_one(base2, P, 1, 1, cmd, keybuf, dir, path, respath, dspath, dpl);
-  let thb = clock_ms();
+  let thba = clock_ms();
+  let _ = hit_before_loop(base2, K1, dir, path, respath, dspath, dpl, 100);
+  let thbb = clock_ms();
+
+  let thaa = clock_ms();
+  let _ = hit_after_loop(base2, K1, dir, path, cache, argv2addr, resmemaddr, 100);
+  let thab = clock_ms();
+
+  let tfa = clock_ms();
+  let _ = fork_floor_loop(100);
+  let tfb = clock_ms();
+
   let buf = zeros(64);
-  let _ = say_ms("TIER0_MS ", t0b - t0a, buf);
-  let _ = say_ms("COMPILE_MS ", tcb - tca, buf);
-  let _ = say_ms("HIT_MS ", thb - tha, buf);
-  dispatch_rest(base2, P, cmd, keybuf, dir, path, respath, dspath, dpl, f1)
+  let _ = say_ms("TIER0_MS ", tier0_ms, buf);
+  let _ = say_ms("BG_RETURN_MS ", trb - tra, buf);
+  let _ = say_ms("BG_CHILD_MS ", tcb - tca, buf);
+  let _ = say_ms("HIT_BEFORE_MS100 ", thbb - thba, buf);
+  let _ = say_ms("HIT_AFTER_MS100 ", thab - thaa, buf);
+  let _ = say_ms("FORK_FLOOR_MS100 ", tfb - tfa, buf);
+
+  let f1 = hit_one(base2, P, 1, 1, cmd, keybuf, dir, path, cache, argv2addr, resmemaddr);
+  hit_rest(base2, P, cmd, keybuf, dir, path, cache, argv2addr, resmemaddr, f1)
 }
