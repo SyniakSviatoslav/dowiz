@@ -322,6 +322,36 @@ fn st_copy_obj(old: [i64], new: [i64], cur: [i64], o: i64) -> i64 {
 fn st_forward(old: [i64], new: [i64], cur: [i64], o: i64) -> i64 {
   if old[o] == 0 then old[o + 2] else st_copy_obj(old, new, cur, o)
 }
+// Fsync the directory that holds `path` (B1 step 1). The `sys_rename` at the end of
+// `st_compact` publishes the compacted store by name; the NAME lives in the directory's inode block, so
+// only an fsync of the DIRECTORY fd makes the publish survive a power cut --
+// fsyncing the file itself flushes data, never the parent's entry. dlen = one
+// past the last '/', so "/a/b" -> "/a/" and "a/b" -> "a/"; no '/' at all -> ".".
+// The fd is closed on every path (fsync/close of a negative fd are harmless
+// EBADF no-ops, so an sys_open failure leaks nothing). Returns the fsync result.
+fn st_fsync_dir(path: [i64], plen: i64) -> i64 {
+  let dpath = zeros(plen + 2);
+  let dlen = 0;
+  let i = 0;
+  while i < plen {
+    let dlen = if path[i] == 47 then i + 1 else dlen;
+    let i = i + 1;
+    0
+  };
+  let j = 0;
+  while j < dlen {
+    let _ = dpath[j] = path[j];
+    let j = j + 1;
+    0
+  };
+  let _ = if dlen == 0 then (let _ = dpath[0] = 46 in 0) else 0;
+  let n = if dlen == 0 then 1 else dlen;
+  let dfd = sys_open(dpath, n, 0);
+  let rc = sys_fsync(dfd);
+  let _ = sys_close(dfd);
+  rc
+}
+
 fn st_compact(path: [i64], plen: i64, size: i64, lay: [i64], nlay: i64, tmp: [i64]) -> i64 {
   let fd = sys_open(path, plen, 0);
   let old = st_cells(sys_mmap(0, size, 3, 2, fd, 0));
@@ -381,5 +411,6 @@ fn st_compact(path: [i64], plen: i64, size: i64, lay: [i64], nlay: i64, tmp: [i6
   let _ = sys_close(nfd);
   let _ = sys_munmap(st_addr(old), size);
   let _ = sys_rename(tp, plen + 4, path, plen);
+  let _ = st_fsync_dir(path, plen);
   live
 }

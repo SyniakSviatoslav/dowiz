@@ -63,11 +63,12 @@ emit_sys_scan 336
 emit_crc32 108
 emit_crc32x 128
 emit_sys_msync 98
+emit_sys_fsync 68
 emit_sys_readbuf 118
 emit_str_len_fn 88
 emit_char_fn 88
 emit_sys_slurp 138
-emit_call_or_ctor 732
+emit_call_or_ctor 751
 emit_var_or_ctor 82
 emit_match_payload 64
 emit_match_arm 65
@@ -223,7 +224,7 @@ fw_alloc 16
 fw_cshi 20
 fw_tsp 15
 compile_fn_at_facts 103
-compile_fn_at 1097
+compile_fn_at 1111
 scan_literals 169
 scan_one_lit 110
 compile_program_to 35

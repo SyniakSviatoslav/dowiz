@@ -1,0 +1,40 @@
+// c94_fsync (B1 step 1, docs/blueprints/B1-durability-torn-write.md §6): the
+// `sys_fsync(fd)` builtin. Syscall number DERIVED, not guessed:
+// /usr/include/asm-generic/unistd.h:218 `#define __NR_fsync 82` (aarch64 uses the
+// generic table), so the emitter is `mov x8,#82 ; svc #0`
+// = 0xd2800a48 / 0xd4000001 (as + objdump, $BEBOP_TMP/words.objdump).
+//
+// The construct fsyncs a DIRECTORY fd -- the exact shape `st_fsync_dir` uses in
+// selfhost/prelude/store.bp to make `st_compact`'s rename durable. A directory
+// is used on purpose: it needs no O_CREAT, writes nothing, and leaves no scratch
+// file behind in the tree, while still being a real fd that the kernel must
+// flush. c84_run establishes the same relative-path-from-repo-root convention.
+//
+// EXPECT DERIVATION (host-only builtin, both sides agree on 0):
+//   native: open(".", O_RDONLY) >= 0, fsync(dirfd) returns 0 on success
+//           (POSIX: 0, or -errno; verified on this box), so main returns 0.
+//   bpref : tools/bpref.py stubs every `sys_*` to 0 (bpref.py:526), so open -> 0
+//           and fsync -> 0, and main returns 0 as well.
+//   => EXPECT=0. A regression that emits the wrong syscall number returns a
+//   negative errno (fsync of a bad number is -ENOSYS/-EBADF), and a missing
+//   dispatch entry is trap 87 (unresolved function) -- both fail the gate.
+
+// Byte-per-cell packer (sys_open's path convention): dst[i] = char(src, i).
+fn pack_bytes(dst: [i64], src: str, n: i64) -> i64 {
+  let i = [0];
+  while i[0] < n {
+    let _ = dst[i[0]] = char(src, i[0]);
+    let _ = i[0] = i[0] + 1;
+    0
+  };
+  0
+}
+
+fn main() -> i64 {
+  let path = zeros(2);
+  let _ = pack_bytes(path, ".", 1);
+  let dfd = sys_open(path, 1, 0);      // O_RDONLY = 0
+  let rc = sys_fsync(dfd);
+  let _ = sys_close(dfd);
+  rc
+}

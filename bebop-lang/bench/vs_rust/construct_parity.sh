@@ -103,6 +103,7 @@ for f in "$DIR"/*.bp; do
     c87_ifselfassign) EXPECT=3;;
     c91_letlive) EXPECT=12;;
     c78_scan) EXPECT=-6715473280576199194;;
+    c94_fsync) EXPECT=0;;
     *) EXPECT="";;
   esac
   [ "$FREEZE" = 1 ] && [ "$IVAL" = "$EXPECT" ] && cp "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin" "$FROZEN/${b}.bin"
