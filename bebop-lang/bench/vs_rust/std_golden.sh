@@ -4,6 +4,7 @@
 ulimit -s 65536 2>/dev/null || true  # eval recursion: 113+ fn self-compile needs >8MB stack
 set -u
 BEBOP_TMP=${BEBOP_TMP:-/tmp/opencode}; mkdir -p "$BEBOP_TMP"  # per-agent scratch namespace (AGENTS.md parallel protocol)
+mkdir -p /tmp/opencode  # store.bp hardcodes /tmp/opencode for atomic publish (trap 82 fix, 2026-09-08)
 GUARD="GUARD: bebop.bin is missing or empty (silent-artifact class, journal 1788288248)"
 [ -s "${BEBOP_BIN:-bebop.bin}" ] || { echo "$GUARD"; exit 1; }
 

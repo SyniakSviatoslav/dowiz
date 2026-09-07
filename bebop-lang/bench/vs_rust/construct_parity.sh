@@ -130,6 +130,13 @@ for f in "${DIR%/}/neg"/*.bp; do
     c52_undef) EXPECT=RUNFAIL:87;;
     c51_casbad) EXPECT=COMPILEFAIL:88;;
     c39_fnmatch) EXPECT=COMPILEFAIL:99;;
+    c85_param15) EXPECT=COMPILEFAIL:100;;
+    c93_unbound) EXPECT=COMPILEFAIL:101;;
+    # A14b part 1 (2026-09-08): the one corpus seed A14's path-independent park does NOT cover
+    # (a post-call temp from a sibling operand colliding with a nested let in a call argument).
+    # 89 records today's fail-closed behaviour, not a decision: A14b part 2 either lifts the case
+    # (EXPECT becomes bpref's 10) or documents it as permanent in REGISTER-MODEL-BLUEPRINT §1.1.
+    c92_letlive2) EXPECT=COMPILEFAIL:89;;
     *) EXPECT="";;
   esac
   out="${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin"

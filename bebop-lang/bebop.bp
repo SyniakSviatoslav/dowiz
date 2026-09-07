@@ -96,7 +96,10 @@ fn diag_exit(s: str, p: i64, code: i64) -> i64 {
   let _ = if code == 98 then diag_text(buf, at, [116, 111, 111, 32, 109, 97, 110, 121, 32, 114, 101, 116, 117, 114, 110, 47, 98, 114, 101, 97, 107, 32, 105, 110, 32, 111, 110, 101, 32, 102, 110], 31) else 0;
   let _ = if code == 99 then diag_text(buf, at, [114, 101, 115, 101, 114, 118, 101, 100, 32, 119, 111, 114, 100, 32, 117, 115, 101, 100, 32, 97, 115, 32, 97, 32, 102, 110, 32, 110, 97, 109, 101], 31) else 0;
   let _ = if code == 89 then diag_text(buf, at, [108, 101, 116, 32, 98, 105, 110, 100, 105, 110, 103, 32, 119, 104, 105, 108, 101, 32, 97, 32, 99, 97, 108, 108, 32, 116, 101, 109, 112, 32, 105, 115, 32, 108, 105, 118, 101], 37) else 0;
-  let mlen = (if code == 95 then 20 else 0) + (if code == 96 then 27 else 0) + (if code == 97 then 33 else 0) + (if code == 98 then 31 else 0) + (if code == 99 then 31 else 0) + (if code == 89 then 37 else 0);
+  let _ = if code == 100 then diag_text(buf, at, [102, 110, 32, 119, 105, 116, 104, 32, 109, 111, 114, 101, 32, 116, 104, 97, 110, 32, 49, 52, 32, 112, 97, 114, 97, 109, 101, 116, 101, 114, 115], 31) else 0;
+  let _ = if code == 101 then diag_text(buf, at, [117, 110, 98, 111, 117, 110, 100, 32, 115, 121, 109, 98, 111, 108], 14) else 0;
+  let _ = if code == 104 then diag_text(buf, at, [116, 111, 111, 32, 109, 97, 110, 121, 32, 102, 110, 115, 32, 40, 99, 97, 112, 32, 53, 49, 50, 41], 22) else 0;
+  let mlen = (if code == 95 then 20 else 0) + (if code == 96 then 27 else 0) + (if code == 97 then 33 else 0) + (if code == 98 then 31 else 0) + (if code == 99 then 31 else 0) + (if code == 89 then 37 else 0) + (if code == 100 then 31 else 0) + (if code == 101 then 14 else 0) + (if code == 104 then 22 else 0);
   let _ = buf[at + mlen] = 10;
   let _ = sys_write(2, buf, at + mlen + 1);
   sys_exit(code)
@@ -238,6 +241,7 @@ fn parse_params(s: str, pos: [i64], pnames: [i64], ppos: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
   let pcnt = 0;
   let done = 0;
+  let first_param_pos = 0;
   while done == 0 {
     let _ = skip_ws(s, pos);
     let at_end = if pos[0] >= strn then 1 else 0;
@@ -245,6 +249,7 @@ fn parse_params(s: str, pos: [i64], pnames: [i64], ppos: [i64]) -> i64 {
     let is_rp = if ch == 41 then 1 else 0;
     let is_letter = is_alpha(ch);
     let _ = if pcnt < 14 then (let _ = ppos[pcnt] = pos[0] in 0) else 0;
+    let _ = if pcnt == 0 then (let _ = first_param_pos = pos[0] in 0) else 0;
     let name = read_ident(s, pos);
     let _ = if pcnt < 14 then (let _ = pnames[pcnt] = name in 0) else 0;
     let pcnt = pcnt + is_letter;
@@ -256,6 +261,7 @@ fn parse_params(s: str, pos: [i64], pnames: [i64], ppos: [i64]) -> i64 {
     0
   };
   let _ = pos[0] = pos[0] + 1;
+  let _ = if pcnt > 14 then diag_exit(s, first_param_pos, 100) else 0;
   pcnt
 }
 
@@ -1557,8 +1563,10 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
 fn emit_var_or_ctor(s: str, name: i64, npos: i64, insns: [i64], n: [i64], stab: [i64], fntab: [i64]) -> i64 {
   let tag = ft_ctor_tag(fntab, name);
   let is_ctor = if tag >= 0 then 1 else 0;
+  let vreg = if is_ctor == 1 then 0 else sym_lookup(s, stab, name, npos);
+  let _ = if vreg < 0 then diag_exit(s, npos, 101) else 0;
   if is_ctor == 1 then emit_enum_ctor_nullary(insns, n, tag, fntab, stab)
-  else emit_var(insns, n, sym_lookup(s, stab, name, npos), fntab, stab)
+  else emit_var(insns, n, vreg, fntab, stab)
 }
 
 fn emit_match_payload(s: str, ppos: i64, vname: i64, vpos: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
@@ -3271,6 +3279,7 @@ fn emit_let_chain(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let tnpos = pos[0];
   let tname = read_ident(s, pos);
   let treg = sym_lookup(s, stab, tname, tnpos);
+  let _ = if treg < 0 then diag_exit(s, tnpos, 101) else 0;
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
@@ -3423,6 +3432,7 @@ fn vs_array_set_reg(insns: [i64], n: [i64], fntab: [i64], stab: [i64], base: i64
 fn emit_array_index(s: str, name: i64, npos: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let strn = slen(s, pos);
   let reg = sym_lookup(s, stab, name, npos);
+  let _ = if reg < 0 then diag_exit(s, npos, 101) else 0;
   let _ = emit_var(insns, n, reg, fntab, stab);
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
@@ -4470,6 +4480,8 @@ fn emit_let_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   let eq2 = if qws[0] + 1 >= strq then 0 else char(s, qws[0] + 1);
   let is_chain = qa0 * (if eq1 == 61 then 1 else 0) * (if eq2 == 61 then 0 else 1);
   let treg_c = sym_lookup(s, stab, hq0[0], sq0);
+  let unbound_c = is_chain * (if treg_c < 0 then 1 else 0);
+  let _ = if unbound_c == 1 then diag_exit(s, sq0, 101) else 0;
   // ---- planning phase: every decision flag is computed BEFORE emission;
   // the emitter below only executes, it never re-decides ----
   let treg_chain = if treg_c >= 19 then treg_c else reg;
@@ -4488,6 +4500,13 @@ fn emit_let_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   let okV = (if cV == 59 then 1 else 0) + (if cV == 125 then 1 else 0) + (if cV == 0 then 1 else 0) + inV;
   let _ = if okV >= 1 then 0 else diag_exit(s, pos[0], 95);
   let _ = if cV == 59 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+  // A15 (2026-09-08): CONSUME the `in` terminator. Before the unbound-symbol
+  // diagnostic existed, leaving it made emit_body classify `in <body>` as a
+  // plain expression item, so `in` was read as an identifier and emitted as a
+  // variable with sym_lookup == -1 -- a dead value that the item pop discarded.
+  // With diag 101 that dead read is a hard error (c14_string), so the parser
+  // now does what it always meant to: the statement owns its own `in`.
+  let _ = if inV == 1 then (let _ = pos[0] = pos[0] + 2 in 0) else 0;
   // `let _ = e;` (name hash 95, discard): drop the value, no word, no register.
   let is_discard = (1 - is_chain) * (if name == 95 then 1 else 0);
   let _ = if is_discard == 1 then vs_pop(fntab) else vs_bind(insns, n, fntab, stab, treg_i);
@@ -4513,6 +4532,7 @@ fn emit_compound_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], s
   let npos = pos[0];
   let name = read_ident(s, pos);
   let reg0 = sym_lookup(s, stab, name, npos);
+  let _ = if reg0 < 0 then diag_exit(s, npos, 101) else 0;
   let _ = skip_ws(s, pos);
   let opch = if pos[0] >= slen(s, pos) then 0 else char(s, pos[0]);
   let is_add = if opch == 43 then 1 else 0;
@@ -4834,9 +4854,7 @@ fn emit_call(s: str, fname: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64]
   let _ = read_ident(s, ppos);
   let _ = skip_ws(s, ppos);
   let pcnt0 = parse_params(s, ppos, pnames, pparpos);
-  let pcnt1 = if pcnt0 > 14 then 14 else pcnt0;
-  let _ = if pcnt0 > 14 then em(insns, n, 3558867200) else 0;
-  let pcnt = pcnt1 * okres;
+  let pcnt = pcnt0 * okres;
   let _ = skip_to(s, ppos, 123);
   let body = ppos[0] + 1;
   // T130 (2026-09-06): a call whose callee never resolves is a RUNTIME trap (exit 87),
@@ -4926,13 +4944,11 @@ fn compile_fn(s: str) -> i64 {
   let pparpos = zeros(14);
   let nparams = parse_params(s, pos, pnames, pparpos);
   let i = [0];
-  let _ = if nparams > 14 then em(insns, n, 3558867200) else 0;
-  let nb = if nparams > 14 then 14 else nparams;
-  let mvdone = if nb == 0 then 1 else 0;
+  let mvdone = if nparams == 0 then 1 else 0;
   while mvdone == 0 {
     let _ = sym_bind(s, stab, pnames[i[0]], pparpos[i[0]]);
     let _ = i[0] = i[0] + 1;
-    let mvdone = if i[0] >= nb then 1 else 0;
+    let mvdone = if i[0] >= nparams then 1 else 0;
     0
   };
   let _ = skip_to(s, pos, 123);
@@ -4944,14 +4960,14 @@ fn compile_fn(s: str) -> i64 {
   let pbase = n[0];
   let _ = emit_prologue(insns, n);
   let j = [0];
-  let mv2 = if nb == 0 then 1 else 0;
+  let mv2 = if nparams == 0 then 1 else 0;
   while mv2 == 0 {
     let p_is_sp = if j[0] >= 8 then 1 else 0;
     let p_movw = 2852127712 + j[0] * 65536 + 19 + j[0];
     let p_strw = 4177526784 + (j[0] - 8) * 1024 + 480 + j[0];
     let _ = em(insns, n, p_movw * (1 - p_is_sp) + p_strw * p_is_sp);
     let _ = j[0] = j[0] + 1;
-    let mv2 = if j[0] >= nb then 1 else 0;
+    let mv2 = if j[0] >= nparams then 1 else 0;
     0
   };
   let nb_tail = n[0];
@@ -5105,9 +5121,7 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   let _ = skip_ws(s, pos);
   let pnames = zeros(14);
   let pparpos = zeros(14);
-  let nparams0 = parse_params(s, pos, pnames, pparpos);
-  let nparams = if nparams0 > 14 then 14 else nparams0;
-  let _ = if nparams0 > 14 then em(insns, n, 3558867200) else 0;
+  let nparams = parse_params(s, pos, pnames, pparpos);
   let i = [0];
   let mvdone = if nparams == 0 then 1 else 0;
   while mvdone == 0 {
@@ -5269,7 +5283,7 @@ fn compile_program_offs(s: str, insns: [i64], n: [i64], offs: [i64]) -> i64 {
   let fpos = zeros(512);
   let cnt = [0];
   let _ = collect_fns(s, fnames, fpos, cnt);
-  let _ = if cnt[0] >= 512 then diag_exit(s, 0, 89) else 0;
+  let _ = if cnt[0] >= 512 then diag_exit(s, 0, 104) else 0;
   let sizes = zeros(512);
   let starts = zeros(512);
   let ptab = zeros(8192);

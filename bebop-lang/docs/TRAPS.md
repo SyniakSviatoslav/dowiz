@@ -5,7 +5,7 @@ Status: 2026-09-06 CURRENT (T120, decision D11-M; runtime traps 80/81/87 are one
 | code | who | meaning | where |
 |---|---|---|---|
 | 0..63 | program | `main`'s value modulo 256 is NOT the exit code: the seed prints the value and exits 0; a program exits non-zero only through `sys_exit` or a trap | seed.S |
-| 8 | program | a fn declared with > 14 parameters: the compiler clamps to 14 and emits one `brk #8` word at that fn's prologue (bebop.bp compile_fn_at / parse_params sites), so the program compiles cleanly and dies SILENTLY (no stderr text, no SIGTRAP row) the first time the fn is called; found 2026-09-07 by the B3 (c) worker (14-16 live arguments), 4-line repro = a 15-parameter fn. Fix wanted: a compile-time diag exit instead of a runtime brk (codegen chain item) | compile_fn_at |
+| 8 | was | silent `brk #8` (pre-A13 for > 14-parameter fns); since A13 (2026-09-08) a compile-time exit 100 instead | — |
 | 64 | bebop.bin | unknown CLI command (`compile`, `check`, `size`, `version`, `run-via-exec`, `cas`) or `check` without a file | bebop.bp main |
 | 80 | program | arena exhausted: a `zeros` crossed x28 (T118); `brk #80`, stderr `trap 80: arena exhausted (zeros crossed x28)` (T90 2c) | emit_zeros, entry_stub handler |
 | 81 | program | frame heap exhausted: an array literal / enum ctor crossed the 16 KiB frame (T118); `brk #81`, stderr `trap 81: frame heap exhausted (array literal or enum ctor)` | emit_array_lit, emit_enum_ctor, entry_stub handler |
@@ -23,6 +23,9 @@ Status: 2026-09-06 CURRENT (T120, decision D11-M; runtime traps 80/81/87 are one
 | 97 | bebop.bin | fn body without a tail expression (T42 c) | compile_fn_at |
 | 98 | bebop.bin | more than 17 `return` / 18 pending `break` in one fn (T99) | emit_return_stmt / emit_break_stmt |
 | 99 | bebop.bin | reserved word used as a function name (T122, planned) | compile_fn_at |
+| 100 | bebop.bin | fn with more than 14 parameters (parse_params) | bebop.bp |
+| 101 | bebop.bin | unbound symbol (emit_let_chain / emit_compound_stmt / emit_ident / emit_array_index) | bebop.bp |
+| 104 | bebop.bin | too many fns (cap 512): compile_program_offs guarding fnames/fpos/sizes/starts arrays (A13 second half; was exit 89) | bebop.bp |
 | 128+n | kernel | signal n: 11 = SIGSEGV (unchecked index, deep recursion), 7 = SIGBUS (misaligned sp — a compiler bug) | — |
 
 Gates: compile-time traps are `bench/parity_constructs/neg/*.bp` with `EXPECT=COMPILEFAIL:<code>`,

@@ -415,6 +415,8 @@ class Interp:
             if it[0] == 'let':
                 r = it[2]
                 if r[0] == 'assign':
+                    if r[1] not in env:
+                        raise NameError('unbound symbol')
                     env[r[1]] = self.ev(r[2], env)
                 else:
                     env[it[1]] = self.ev(r, env)
