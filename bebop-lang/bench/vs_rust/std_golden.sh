@@ -21,8 +21,9 @@ SEEDMD5=$(md5sum < ./seed/build/seed | cut -c1-32); : > "$BEBOP_TMP/memo.log"; :
 run() {  # run <timeout-s> <bin> [args...]  -- stdout is the program's stdout (or its replay)
   local t="$1" bin="$2" b k rc; shift 2
   [ "$MEMO" = 0 ] && { timeout "$t" ./seed/build/seed "$bin" "$@"; return; }
-  # args become part of the key; slashes/spaces (a store DIR arg, B3 gates) must not turn the key into a nested path
-  local a=""; [ $# -gt 0 ] && a=".$(printf '%s' "$*" | tr '/ ' '__')"
+  # args become part of the key as an md5 prefix: embedding them (a store DIR arg, B3 gates) made the memo filename
+  # exceed NAME_MAX under a long BEBOP_TMP -> `cat` failed -> gb_pool "got=" empty (pre-existing since B3 step 4)
+  local a=""; [ $# -gt 0 ] && a=".$(printf '%s' "$*" | md5sum | cut -c1-8)"
   b=$(md5sum < "$bin" | cut -c1-32); k="$b.$SEEDMD5.$(grep -c "^$b " "$BEBOP_TMP/memo.log")$a"
   echo "$b $k" >> "$BEBOP_TMP/memo.log"
   # E4 (D12-A): one line per run in $BEBOP_TMP/gates.txt -- `<gate> <ms> hit|miss rc=N` (std_par.sh sums them)

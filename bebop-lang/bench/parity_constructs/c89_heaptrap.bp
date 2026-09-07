@@ -1,0 +1,15 @@
+// A4 fuzz DIVERGE round 2 (2026-09-07), root cause 4: emit_array_lit's/
+// emit_struct_lit's/emit_enum_ctor(_nullary)'s T118 frame-heap capacity
+// trap check hardcoded x2 as scratch without reserving it in the window
+// mask. vs_evict(0) (freeing x0 for the array/struct/enum base pointer)
+// relocates whatever owned x0 to the next free window register -- x2
+// whenever x0 and x1 were both already live -- and the trap check's two
+// `add`s into x2 then clobber that value before the fill loop stores it.
+// Two array elements before the literal (i0 in x0-ish position via the
+// nested if, i1 pinned) force exactly that eviction-into-x2 shape.
+fn main() -> i64 {
+  let v1 = 100;
+  let i0 = 3;
+  let a0 = [(if (if v1 then i0 else v1) then i0 else v1), v1 / i0];
+  a0[1]
+}

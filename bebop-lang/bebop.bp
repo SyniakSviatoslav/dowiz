@@ -429,11 +429,7 @@ fn emit_struct_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = vs_mask_take(fntab, 0, 2);
   let _ = em(insns, n, 2853045216);
   let _ = em(insns, n, 2432696320 + fcnt * 8192 + 462);
-  let _ = em(insns, n, 2436894178);
-  let _ = em(insns, n, 2436628546);
-  let _ = em(insns, n, 3942777311);
-  let _ = em(insns, n, 1409286217);
-  let _ = em(insns, n, 3558869536);
+  let _ = emit_heap_trap(insns, n, fntab, stab);
   let k = [fcnt];
   while k[0] > 0 {
     let _ = k[0] = k[0] - 1;
@@ -520,11 +516,7 @@ fn emit_enum_ctor(s: str, tag: i64, pos: [i64], insns: [i64], n: [i64], stab: [i
   // prologue sp and x15 = sp+256, so the heap end is x15 + 16128:
   // add x2,x15,#12288 ; add x2,x2,#3840 ; cmp x14,x2 ; b.ls +2 ; brk #81
   // (exit 81 = frame heap exhausted; T90 2c: the entry stub's SIGTRAP handler prints the text)
-  let _ = em(insns, n, 2436894178);
-  let _ = em(insns, n, 2436628546);
-  let _ = em(insns, n, 3942777311);
-  let _ = em(insns, n, 1409286217);
-  let _ = em(insns, n, 3558869536);
+  let _ = emit_heap_trap(insns, n, fntab, stab);
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
   n[0]
 }
@@ -539,11 +531,7 @@ fn emit_enum_ctor_nullary(insns: [i64], n: [i64], tag: i64, fntab: [i64], stab: 
   // prologue sp and x15 = sp+256, so the heap end is x15 + 16128:
   // add x2,x15,#12288 ; add x2,x2,#3840 ; cmp x14,x2 ; b.ls +2 ; brk #81
   // (exit 81 = frame heap exhausted; T90 2c: the entry stub's SIGTRAP handler prints the text)
-  let _ = em(insns, n, 2436894178);
-  let _ = em(insns, n, 2436628546);
-  let _ = em(insns, n, 3942777311);
-  let _ = em(insns, n, 1409286217);
-  let _ = em(insns, n, 3558869536);
+  let _ = emit_heap_trap(insns, n, fntab, stab);
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
   n[0]
 }
@@ -1945,6 +1933,33 @@ fn vs_alloc(insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
   r
 }
 
+// BUGFIX (A4 fuzz DIVERGE round 2, 2026-09-07): the T118 frame-heap
+// capacity trap (add x2,x15,#12288 ; add x2,x2,#3840 ; cmp x14,x2 ; b.ls
+// +2 ; brk #81) hardcoded x2 as scratch WITHOUT reserving it in the window
+// mask. emit_array_lit/emit_struct_lit/emit_enum_ctor/emit_enum_ctor_nullary
+// all run this check AFTER vs_evict(0) has already relocated whatever owned
+// x0 (typically an array/struct element materialised earlier in the same
+// literal) to the next free window register -- x2 whenever x0 and x1 were
+// both already taken. The two `add`s then clobber that LIVE value before
+// the fill loop ever stores it (repro: `let a0=[(if(if v1 then i0 else
+// v1)then i0 else v1), v1/i0]; a0[1]` -- oracle 33, was a raw stack/heap
+// address leaking through, e.g. 549069983631/0x7fd71f0f8f). Fix: allocate
+// the scratch register through vs_alloc (so it can never collide with a
+// live window entry, parking one if the mask is exhausted) and free it
+// right after. Words: `as`+objdump-verified parameterised forms (Rd at
+// bits[4:0] = +1/unit, Rn at bits[9:5] = +32/unit, Rm at bits[20:16] =
+// +65536/unit; t=3 -> 2436894179/2436628579/3942842847, t=5 ->
+// 2436894181/2436628645/3942973919, both exact matches).
+fn emit_heap_trap(insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
+  let t = vs_alloc(insns, n, fntab, stab);
+  let _ = em(insns, n, 2436894176 + t);
+  let _ = em(insns, n, 2436628480 + 33 * t);
+  let _ = em(insns, n, 3942646239 + t * 65536);
+  let _ = em(insns, n, 1409286217);
+  let _ = em(insns, n, 3558869536);
+  vs_mask_free(fntab, t, 40)
+}
+
 // MULC r,c materialisation into x<d> (spec §2 fusion table): all 5 cases
 // merged into one function (each was a single-caller helper) to keep the
 // bootstrap compiler's own fn count under its 256-entry table cap.
@@ -2307,6 +2322,42 @@ fn vs_to(insns: [i64], n: [i64], fntab: [i64], stab: [i64], d: i64) -> i64 {
   vs_mat(insns, n, fntab, stab, top, d)
 }
 
+// BUGFIX (A4 fuzz DIVERGE round 2, 2026-09-07): a bare symbol used as an
+// operand pushes a lazy `SYM r` tag (no word, spec §1.2) that only reads
+// register/slot `r` at MATERIALISE time -- fine when nothing between the
+// push and the materialisation can change what `r` holds, but a sibling
+// operand evaluated afterward (the RHS of `a OP (let _ = x = e in body)`,
+// or an array-index self-store `a0[(x)&7] = ... ` used the same way) can
+// itself be a write to that SAME symbol (emit_let_chain / emit_compound_stmt
+// both call vs_bind directly, with no `let`-creation step for
+// check_reg_collision to hook). The still-pending `SYM r` tag then reads
+// the NEW value at materialise time instead of the value `x` held when it
+// was pushed -- the same snapshot hazard as RC1 (emit_compound_rhs), one
+// level more general: RC1 only guarded op='s OWN implicit left operand;
+// this guards every OTHER pending `SYM r`/`SYM 100+k` window entry whenever
+// ANY write to that register/slot is about to happen. Repro: `let v0=0;
+// let a0=[16,1,2,3,4,5,6,15]; (v0) > (let _ = v0 = a0[(v0)&7] in 8)` --
+// oracle 0 (LHS `v0` reads the OLD 0), was compiling to 1 (LHS re-read
+// AFTER the RHS's reassignment). Fix: before a write to `reg`, materialise
+// every OTHER live `SYM reg` entry into a real register first (vs_mat via
+// vs_alloc) -- a compile-time-only scan, zero extra words unless the
+// hazard is actually present (mirrors check_reg_collision's own scan/site
+// shape, just against kind 3 instead of kind 4, and at write time instead
+// of bind-a-new-name time).
+fn vs_settle_sym_alias(insns: [i64], n: [i64], fntab: [i64], stab: [i64], reg: i64) -> i64 {
+  let w = fntab[4547];
+  let i = 0;
+  while i < w {
+    let k = vs_entry_kind(fntab, i);
+    let p0 = vs_entry_p0(fntab, i);
+    let hit = (if k == 3 then 1 else 0) * (if p0 == reg then 1 else 0);
+    let _ = if hit == 1 then vs_mat(insns, n, fntab, stab, i, vs_alloc(insns, n, fntab, stab)) else 0;
+    let i = i + 1;
+    0
+  };
+  0
+}
+
 // Consume the top tag into symbol register/slot `reg` (spec §1.4 vs_bind).
 // Merged into 2 functions (was 8 single-caller helpers) to stay under the
 // bootstrap compiler's 256-fn table cap.
@@ -2314,6 +2365,7 @@ fn vs_bind(insns: [i64], n: [i64], fntab: [i64], stab: [i64], reg: i64) -> i64 {
   let is_neg = if reg < 0 then 1 else 0;
   let is_spill = (1 - is_neg) * (if reg >= 100 then 1 else 0);
   let is_reg = (1 - is_neg) * (1 - is_spill);
+  let _ = if is_neg == 0 then vs_settle_sym_alias(insns, n, fntab, stab, reg) else 0;
   let w = fntab[4547];
   let r_spill = if is_spill == 1 then vs_reg(insns, n, fntab, stab, w - 1) else 0;
   let _ = if is_neg == 1 then em(insns, n, 3558866944) else 0;
@@ -3271,11 +3323,7 @@ fn emit_array_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   // prologue sp and x15 = sp+256, so the heap end is x15 + 16128:
   // add x2,x15,#12288 ; add x2,x2,#3840 ; cmp x14,x2 ; b.ls +2 ; brk #81
   // (exit 81 = frame heap exhausted; T90 2c: the entry stub's SIGTRAP handler prints the text)
-  let _ = em(insns, n, 2436894178);
-  let _ = em(insns, n, 2436628546);
-  let _ = em(insns, n, 3942777311);
-  let _ = em(insns, n, 1409286217);
-  let _ = em(insns, n, 3558869536);
+  let _ = emit_heap_trap(insns, n, fntab, stab);
   let k = [cnt];
   while k[0] > 0 {
     let _ = k[0] = k[0] - 1;

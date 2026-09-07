@@ -97,6 +97,8 @@ for f in "$DIR"/*.bp; do
     c72_hoist) EXPECT=5504683299252448320;;
     c84_run) EXPECT=1035;;
     c86_selfassign) EXPECT=103;;
+    c89_heaptrap) EXPECT=33;;
+    c90_symalias) EXPECT=0;;
     c88_arrflags) EXPECT=1;;
     *) EXPECT="";;
   esac
