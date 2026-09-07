@@ -14,14 +14,32 @@ use "selfhost/prelude/gb.bp"
 // ring_chords() generator from bench/oracles/lag_common.py).
 
 // gb_fold_component(base, M): n*C1 + m*C2 + nnz*C3 + sum(rp)*C4 + sum(ci)*C5 + sum(vv)*C6 --
-// sum(ci) via gb_fold_matrix (reduce-row: sum of column ids per row, summed over all rows),
-// so this one fold exercises extract, transpose AND reduce-row through the second base.
-fn gb_fold_component(base: [i64], M: i64) -> i64 {
+// sum(ci) is gb_fold_matrix/gb_fold_row inlined (reduce-row: sum of column ids per row,
+// summed over all rows) rather than called, because M here is a genuine `ref GbMatrix`
+// (T48: it crosses the second, independent st_map_ro base as a real store ref, not the
+// i64 every other A/B/AT stays as elsewhere in gb.bp) and gb_fold_matrix/gb_fold_row take
+// `i64`, so this one fold exercises extract, transpose AND reduce-row through the second base.
+fn gb_fold_component(base: [i64], M: ref GbMatrix) -> i64 {
   let n = st_get(base, M, 0);
   let m = st_get(base, M, 1);
   let nnz = st_get(base, M, 2);
-  let rpsum = arr_sum(base, st_ref(base, M, 4), n + 1);
-  let cisum = gb_fold_matrix(base, M);
+  let rp = st_ref(base, M, 4);
+  let ci = st_ref(base, M, 5);
+  let rpsum = arr_sum(base, rp, n + 1);
+  let ri = 0;
+  let cisum = 0;
+  while ri < n {
+    let lo = arr_get(base, rp, ri);
+    let hi = arr_get(base, rp, ri + 1);
+    let k = lo;
+    while k < hi {
+      let cisum = cisum + arr_get(base, ci, k);
+      let k = k + 1;
+      0
+    };
+    let ri = ri + 1;
+    0
+  };
   let vvsum = arr_sum(base, st_ref(base, M, 6), nnz);
   n * 1000003 + m * 7919 + nnz * 104729 + rpsum * 31 + cisum * 17 + vvsum * 13
 }

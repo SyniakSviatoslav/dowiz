@@ -3,4 +3,4 @@
 The value is computed independently in gb_lagraph.py (python mirrors of gb.bp's generators and ops).
 2026-09-07: replaces the unregistered B3-prep placeholder of the same name."""
 import gb_lagraph as G
-print(G.gb_tc_fold())
+print(G.gb_gen_combined()[0])

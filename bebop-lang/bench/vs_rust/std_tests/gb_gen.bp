@@ -36,7 +36,7 @@ fn build_x(x: [i64], n: i64) -> i64 {
   };
   0
 }
-fn fill_x(base: [i64], X: i64, xloc: [i64], n: i64) -> i64 {
+fn fill_x(base: [i64], X: ref GbArr, xloc: [i64], n: i64) -> i64 {
   let k = 0;
   while k < n {
     let _ = arr_put(base, X, k, xloc[k]);

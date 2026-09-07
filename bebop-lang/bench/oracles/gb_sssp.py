@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""B3 prep gate oracle (pending, see gb_bfs.py header). SSSP (min-plus, Dijkstra) distance
-sum over the 3 standard graphs with the deterministic per-edge weight in lag_common.py,
-combined fold."""
-import lag_common as L
-print(L.run_over_graphs(L.sssp_minplus))
+"""B3 gate oracle (run_all.sh convention: <gate>.py prints the gate value as its last line).
+The value is computed independently in gb_lagraph.py (python mirrors of gb.bp's generators and ops).
+2026-09-07: replaces the unregistered B3-prep placeholder of the same name."""
+import gb_lagraph as G
+print(G.gb_sssp_fold())

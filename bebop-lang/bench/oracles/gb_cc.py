@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""B3 prep gate oracle (pending, see gb_bfs.py header). Connected-components label sum
-(label = min node id per component) over the 3 standard graphs, combined fold."""
-import lag_common as L
-print(L.run_over_graphs(L.connected_components))
+"""B3 gate oracle (run_all.sh convention: <gate>.py prints the gate value as its last line).
+The value is computed independently in gb_lagraph.py (python mirrors of gb.bp's generators and ops).
+2026-09-07: replaces the unregistered B3-prep placeholder of the same name."""
+import gb_lagraph as G
+print(G.gb_cc_fold())

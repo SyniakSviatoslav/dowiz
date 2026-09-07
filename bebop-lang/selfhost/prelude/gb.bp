@@ -49,10 +49,19 @@ use "selfhost/prelude/sha256.bp"
 use "selfhost/prelude/store.bp"
 
 // ---- "arr i64" accessors (field 0 = count, fields 1.. = values) ----
-fn arr_get(base: [i64], o: i64, i: i64) -> i64 { st_get(base, o, 1 + i) }
-fn arr_put(base: [i64], o: i64, i: i64, v: i64) -> i64 { st_put(base, o, 1 + i, v) }
-fn arr_n(base: [i64], o: i64) -> i64 { st_get(base, o, 0) }
-fn arr_alloc(base: [i64], tx: [i64], dg: i64, nvals: i64) -> i64 {
+// GbArr: the "arr i64" store object (field 0 = count, 1.. = values) -- typed as `ref GbArr` on every
+// helper parameter that receives an object ref (T48 typecheck: a ref never travels as an i64).
+struct GbArr { n: i64 }
+// GbMatrix: the 10-field matrix object header (see the layout comment at the top of this
+// file) -- typed as `ref GbMatrix` only where a caller holds the object ref itself across a
+// call boundary (T48 typecheck); gb.bp's own A/B/AT params stay i64 and reach it only through
+// st_get/st_ref (REF_TOLERANT), so this struct exists for external callers like
+// gb_roundtrip.bp's gb_fold_component.
+struct GbMatrix { n: i64 }
+fn arr_get(base: [i64], o: ref GbArr, i: i64) -> i64 { st_get(base, o, 1 + i) }
+fn arr_put(base: [i64], o: ref GbArr, i: i64, v: i64) -> i64 { st_put(base, o, 1 + i, v) }
+fn arr_n(base: [i64], o: ref GbArr) -> i64 { st_get(base, o, 0) }
+fn arr_alloc(base: [i64], tx: [i64], dg: i64, nvals: i64) -> ref GbArr {
   let o = st_alloc(base, tx, nvals + 1, dg);
   let _ = st_put(base, o, 0, nvals);
   o
@@ -60,7 +69,7 @@ fn arr_alloc(base: [i64], tx: [i64], dg: i64, nvals: i64) -> i64 {
 // arr_sum(base, o, n): sum of the first n values of an "arr i64" object (rp/ci/vv digest,
 // caller passes its own n -- an arr object never lies about its own count via arr_n, but a
 // slice sum needs a caller-chosen bound, e.g. rp has n+1 live cells for an n-row matrix).
-fn arr_sum(base: [i64], o: i64, n: i64) -> i64 {
+fn arr_sum(base: [i64], o: ref GbArr, n: i64) -> i64 {
   let i = 0;
   let acc = 0;
   while i < n {
@@ -95,7 +104,7 @@ fn gb_digests(dg: [i64]) -> i64 {
 // ci/vv (m vals each); cur is a caller-owned [n] scratch array (fully overwritten below
 // before it is read, so it needs no pre-zeroing). This is sgraph2.bp:24 csr_build plus a
 // carried payload (vv), so a transpose or a fresh build can both go through one function.
-fn gb_csr_fill_w(base: [i64], src: [i64], dst: [i64], val: [i64], m: i64, n: i64, rp: i64, ci: i64, vv: i64, cur: [i64]) -> i64 {
+fn gb_csr_fill_w(base: [i64], src: [i64], dst: [i64], val: [i64], m: i64, n: i64, rp: ref GbArr, ci: ref GbArr, vv: ref GbArr, cur: [i64]) -> i64 {
   let i = 0;
   while i < m {
     let a = src[i];
@@ -124,7 +133,7 @@ fn gb_csr_fill_w(base: [i64], src: [i64], dst: [i64], val: [i64], m: i64, n: i64
 }
 
 // gb_matrix_seal: allocate+fill+seal a 10-field GbMatrix header over already-sealed rp/ci/vv.
-fn gb_matrix_seal(base: [i64], tx: [i64], tmp: [i64], dgm: i64, n: i64, m: i64, nnz: i64, fmt: i64, rp: i64, ci: i64, vv: i64) -> i64 {
+fn gb_matrix_seal(base: [i64], tx: [i64], tmp: [i64], dgm: i64, n: i64, m: i64, nnz: i64, fmt: i64, rp: ref GbArr, ci: ref GbArr, vv: ref GbArr) -> i64 {
   let mx = st_alloc(base, tx, 10, dgm);
   let _ = st_put(base, mx, 0, n);
   let _ = st_put(base, mx, 1, m);
@@ -592,7 +601,7 @@ fn gb_mxm_row(base: [i64], A: i64, B: i64, sr: i64, i: i64, stamp: [i64], acc: [
 // gb_mxm_write_row: dense ascending scan of stamp[0..m) for the columns this row's SPA pass
 // touched (stamp[j] == s), writing ci/vv from offset `off` (= rp[i]) upward via the running
 // cursor `p` (caller-owned [1] cell, reset by the caller before this call).
-fn gb_mxm_write_row(base: [i64], ci: i64, vv: i64, m: i64, s: i64, stamp: [i64], acc: [i64], p: [i64]) -> i64 {
+fn gb_mxm_write_row(base: [i64], ci: ref GbArr, vv: ref GbArr, m: i64, s: i64, stamp: [i64], acc: [i64], p: [i64]) -> i64 {
   let j = 0;
   while j < m {
     let hit = if stamp[j] == s then 1 else 0;
@@ -649,7 +658,7 @@ fn gb_mxm(base: [i64], tx: [i64], tmp: [i64], A: i64, B: i64, sr: i64, dg: [i64]
 }
 
 // ---- eWiseMult (intersection, two-pointer merge of sorted rows) / eWiseAdd (union) ----
-fn gb_ewm_merge_row(base: [i64], A: i64, B: i64, sr: i64, ka0: i64, hia: i64, kb0: i64, hib: i64, ci: i64, vv: i64, w: [i64]) -> i64 {
+fn gb_ewm_merge_row(base: [i64], A: i64, B: i64, sr: i64, ka0: i64, hia: i64, kb0: i64, hib: i64, ci: ref GbArr, vv: ref GbArr, w: [i64]) -> i64 {
   let ka = ka0;
   let kb = kb0;
   while (ka < hia) * (kb < hib) == 1 {
@@ -697,7 +706,7 @@ fn gb_ewise_mult(base: [i64], tx: [i64], tmp: [i64], A: i64, B: i64, sr: i64, dg
   let _ = st_seal(base, vv, tmp);
   gb_matrix_seal(base, tx, tmp, dg[3], n, m, w[0], 1, rp, ci, vv)
 }
-fn gb_ewa_merge_row(base: [i64], A: i64, B: i64, sr: i64, ka0: i64, hia: i64, kb0: i64, hib: i64, ci: i64, vv: i64, w: [i64]) -> i64 {
+fn gb_ewa_merge_row(base: [i64], A: i64, B: i64, sr: i64, ka0: i64, hia: i64, kb0: i64, hib: i64, ci: ref GbArr, vv: ref GbArr, w: [i64]) -> i64 {
   let ka = ka0;
   let kb = kb0;
   while (ka < hia) * (kb < hib) == 1 {

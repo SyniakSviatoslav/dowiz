@@ -804,11 +804,14 @@ gate gb_roundtrip 775084997 "$r"
 GBT=${BEBOP_TMP:-/tmp/opencode}
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_gen.bp "$GBT/gb_gen_test.bin" >/dev/null 2>&1 && run 60 "$GBT/gb_gen_test.bin" "$GBT" | tail -1)
 gate gb_gen_tier0 -4783772994166464769 "$r"
-gb_gen_ok=1
+gb_gen_ok=1; gb_gen_c=""
 for combo in mxv_1 mxv_2 mxv_3 mxv_4 vxm_1 vxm_2 vxm_3 vxm_4 dmxv_1 dmxv_4 dvxm_1 dvxm_4; do
   op=${combo%_*}; sr=${combo#*_}
   ./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$GBT/gb_${op}_${sr}_0_1_0.bp" "$GBT/gb_${op}_${sr}_0_1_0.bin" >/dev/null 2>&1 || gb_gen_ok=0
   rr=$(run 30 "$GBT/gb_${op}_${sr}_0_1_0.bin" "$GBT/gb_gen.store" | tail -1)
+  # rolling combine of the 12 specialised folds (gen_gb.bp combine12: c*1000003+v, i64 wrap = bash's) -> the same golden as the tier-0 driver, oracle bench/oracles/gb_gen_specialised.py
+  case "$rr" in ''|*[!0-9-]*) gb_gen_ok=0; rr=0;; esac
+  if [ -z "$gb_gen_c" ]; then gb_gen_c=$rr; else gb_gen_c=$(( gb_gen_c * 1000003 + rr )); fi
   case "$op:$sr" in
     mxv:1|vxm:1|mxv:2|vxm:2) exp=1000 ;;
     mxv:3|vxm:3) exp=78065 ;;
@@ -820,7 +823,8 @@ for combo in mxv_1 mxv_2 mxv_3 mxv_4 vxm_1 vxm_2 vxm_3 vxm_4 dmxv_1 dmxv_4 dvxm_
   esac
   [ "$rr" = "$exp" ] || gb_gen_ok=0
 done
-gate gb_gen_specialised 1 "$gb_gen_ok"
+[ "$gb_gen_ok" = 1 ] || gb_gen_c="MISMATCH($gb_gen_c)"
+gate gb_gen_specialised -4783772994166464769 "$gb_gen_c"
 
 # ---- gb_bfs (B3 step 2 item (d)): BFS level-sum over the same 1k random_lcg() graph via
 #      REPEATED gb_mxv_generic (or-and semiring, visited bitmap as complement mask, dense
