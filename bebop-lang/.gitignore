@@ -37,3 +37,5 @@ mempalace.yaml
 *.store
 *.store.tmp
 *.sqlite
+sgraph2_bfs.bin*
+sgraph2_bfs.res

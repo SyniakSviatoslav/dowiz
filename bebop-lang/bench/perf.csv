@@ -863,3 +863,15 @@ ts,commit,bin,metric,value,unit,n,valid,at_max_pct,temp_mc,note
 1788764989,248ad81,e9159318,stub_words,131,words,1,1,,,
 1788764989,248ad81,e9159318,bin_fns,270,fns,1,1,,,
 1788764989,248ad81,e9159318,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788788819,9822745,e9159318,sgraph2_build_ms,16766,ms,1,1,,,L1 + empty log/L0/bitmap
+1788788819,9822745,e9159318,sgraph2_bfs_ns,116,ns,1,1,,,"per edge slot, queue BFS before the log (3 sources)"
+1788788820,9822745,e9159318,sgraph2_log_ns,13408,ns,1,1,,,amortized per inserted edge through the log (max stall 230 ms)
+1788788820,9822745,e9159318,sgraph2_compact_ms,414,ms,1,1,,,
+1788790170,9822745,e9159318,sgraph2_build_ms,15927,ms,1,1,,,L1 + empty log/L0/bitmap
+1788790171,9822745,e9159318,sgraph2_bfs_ns,112,ns,1,1,,,"per edge slot, queue BFS before the log (3 sources)"
+1788790171,9822745,e9159318,sgraph2_log_ns,13340,ns,1,1,,,amortized per inserted edge through the log (max stall 233 ms)
+1788790171,9822745,e9159318,sgraph2_compact_ms,415,ms,1,1,,,
+1788790832,9822745,e9159318,sgraph2_build_ms,16478,ms,1,1,,,L1 + empty log/L0/bitmap
+1788790832,9822745,e9159318,sgraph2_bfs_ns,119,ns,1,1,,,"per edge slot, queue BFS before the log (3 sources)"
+1788790832,9822745,e9159318,sgraph2_log_ns,13934,ns,1,1,,,amortized per inserted edge through the log (max stall 289 ms)
+1788790832,9822745,e9159318,sgraph2_compact_ms,521,ms,1,1,,,

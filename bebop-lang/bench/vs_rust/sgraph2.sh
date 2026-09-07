@@ -9,7 +9,12 @@ T=${BEBOP_TMP:-/tmp/opencode}; BB=${BEBOP_BIN:-./bebop.bin}; NSRC=${NSRC:-3}
 BIG=$(awk '/^processor/{p=$3} /CPU part/ && $NF=="0xd41"{print p}' /proc/cpuinfo | tr '\n' ' ')
 PIN=$(python3 -c "import os;u=sorted(os.sched_getaffinity(0));b=[int(x) for x in '$BIG'.split()];print(next((c for c in b if c in u),u[0]))")
 ./seed/build/seed "$BB" compile bench/vs_rust/std_tests/sgraph2.bp "$T/sgraph2.bin" >/dev/null 2>&1 || { echo "COMPILEFAIL sgraph2"; exit 1; }
-rm -f sgraph2.store sgraph2.store.tmp
+# B3 step 4 (f): the frontier phases dispatch gen_gb.bp's op=5 whole-loop BFS kernel (fmt=2, _addr
+# shape) from the fixed path ./sgraph2_bfs.bin -- generate + compile it once here, ahead of every phase.
+./seed/build/seed "$BB" compile bench/vs_rust/std_tests/gb_bfs_gen_addr.bp "$T/gb_bfs_gen_addr.bin" >/dev/null 2>&1 \
+  && ./seed/build/seed "$T/gb_bfs_gen_addr.bin" "$T" >/dev/null 2>&1 \
+  && ./seed/build/seed "$BB" compile "$T/gb_bfs_1_0_2_0.bp" sgraph2_bfs.bin >/dev/null 2>&1 || { echo "COMPILEFAIL sgraph2_bfs kernel"; exit 1; }
+rm -f sgraph2.store sgraph2.store.tmp sgraph2_bfs.res
 bb() { taskset -c "$PIN" ./seed/build/seed "$T/sgraph2.bin" "$@" | tail -1; }
 build=$(bb b t); nbr0=$(bb n f); bfs0_f=$(bb f f "$NSRC"); bfs0_t=$(bb f t "$NSRC"); fro_f=$(bb p f "$NSRC"); fro_t=$(bb p t "$NSRC")
 log_ns=0; stall=0
@@ -42,4 +47,5 @@ python3 tools/perf.py record --bin "$BB" sgraph2_build_ms "$build" ms "L1 + empt
 python3 tools/perf.py record --bin "$BB" sgraph2_bfs_ns "$bfs0_t" ns "per edge slot, queue BFS before the log ($NSRC sources)"
 python3 tools/perf.py record --bin "$BB" sgraph2_log_ns "$log_ns" ns "amortized per inserted edge through the log (max stall $stall ms)"
 python3 tools/perf.py record --bin "$BB" sgraph2_compact_ms "$comp_ms" ms ""
+rm -f sgraph2_bfs.bin sgraph2_bfs.bin.becache sgraph2_bfs.bin.use sgraph2_bfs.res
 echo "$out" >> bench/vs_rust/RESULT-sgraph.md; echo "$out"; [ "$ok" = equal ] || { echo "G8 stage 2 FAIL"; exit 1; }

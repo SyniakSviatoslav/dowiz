@@ -1,0 +1,73 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+use "selfhost/prelude/gb.bp"
+use "selfhost/std/gen_gb.bp"
+// gb_bfs_gen.bp -- B3 step 4 design item (f) gate (docs/blueprints/B3-graphblas-kernels-prejit.md
+// section 5 step 4): proves selfhost/std/gen_gb.bp's op=5 (bfs) generated kernel template
+// against (a) an independent queue-BFS reimplementation below (queue_bfs_fold -- the SAME fold
+// formula as selfhost/std/sgraph2.bp's bfs_from/bfs_frontier: sum over reached vertices of
+// level+1, unreached contribute 0) over the SAME 1k-node/4000-edge random_lcg() graph
+// gb_bfs.bp/gb_gen.bp already gate against, and (b) bench/oracles/gb_bfs_gen.py (a plain
+// python BFS, same fold). This driver builds the store, prints the queue-BFS reference fold
+// (std_golden.sh's tail -1), and writes the generated kernel .bp file (gen_gb(dir,5,1,0,1,0),
+// PATH main -- direct shell-compiled dispatch, no sys_run); std_golden.sh's gb_bfs_gen block
+// then separately compiles+runs that file against the SAME store and checks the two folds and
+// the python oracle all agree before accepting the golden (997).
+
+fn queue_bfs_fold(base: [i64], M: i64, n: i64, s: i64, level: [i64], queue: [i64]) -> i64 {
+  let i = 0;
+  while i < n {
+    let _ = level[i] = 0 - 1;
+    let i = i + 1;
+    0
+  };
+  let _ = level[s] = 0;
+  let _ = queue[0] = s;
+  let head = 0;
+  let tail = 1;
+  let acc = 0;
+  while head < tail {
+    let v = queue[head];
+    let lv = level[v];
+    let acc = acc + lv + 1;
+    let k = gb_row_lo(base, M, v);
+    let hi = gb_row_hi(base, M, v);
+    while k < hi {
+      let w = gb_col(base, M, k);
+      let take = if level[w] < 0 then 1 else 0;
+      let _ = if take == 1 then (let _ = level[w] = lv + 1 in 0) else 0;
+      let _ = if take == 1 then (let _ = queue[tail] = w in 0) else 0;
+      let tail = tail + take;
+      let k = k + 1;
+      0
+    };
+    let head = head + 1;
+    0
+  };
+  acc
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  let dir = argv[2];
+  let path = zeros(256);
+  let ppos = zeros(1);
+  let _ = wr_str(path, ppos, dir);
+  let _ = wr_str(path, ppos, "/gb_bfs_gen.store");
+  let tmp = zeros(1024);
+  let base = st_open(path, ppos[0], 4194304, tmp);
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let dg = zeros(6);
+  let _ = gb_digests(dg);
+  let A = gb_build_random_lcg(base, tx, tmp, dg);
+  let root = st_alloc(base, tx, 1, st_digest("GbBfsGenRoot1{ref GbMatrix}"));
+  let _ = st_link(base, root, 0, A);
+  let _ = st_seal(base, root, tmp);
+  let _ = st_commit(base, tx, root, tmp);
+  let n = 1000;
+  let level = zeros(n);
+  let queue = zeros(n);
+  let fold = queue_bfs_fold(base, A, n, 0, level, queue);
+  let _ = gen_gb(dir, 5, 1, 0, 1, 0);
+  fold
+}

@@ -1,0 +1,14 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+use "selfhost/prelude/gb.bp"
+use "selfhost/std/gen_gb.bp"
+// gb_bfs_gen_addr.bp -- B3 step 4 design item (f): a one-shot generator (no store, no gate --
+// gen_gb's op=5 text depends on nothing but op/fmt) invoked by bench/vs_rust/sgraph2.sh, shell-
+// compiled and run ONCE ahead of every phase, to emit gen_gb.bp's op=5 (bfs) kernel in its
+// _addr shape (fmt=2 -- an already-mmap'd store base + a GbMatrix cell offset, both handed in
+// as decimal argv, never a path the kernel would st_map_ro itself) for selfhost/std/
+// sgraph2.bp's own fork+sys_run frontier-BFS dispatch (see its bfs_kernel_dispatch/
+// bfs_frontier header comment). argv[2] = output dir; writes "<dir>/gb_bfs_1_0_2_0.bp".
+fn main(argc: i64, argv: [str]) -> i64 {
+  gen_gb(argv[2], 5, 1, 0, 2, 0)
+}

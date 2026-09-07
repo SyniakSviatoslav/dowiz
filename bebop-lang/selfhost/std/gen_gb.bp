@@ -92,6 +92,7 @@ fn wr_opname(dst: [i64], pos: [i64], op: i64) -> i64 {
   if op == 2 then wr_str(dst, pos, "vxm")
   else if op == 3 then wr_str(dst, pos, "dmxv")
   else if op == 4 then wr_str(dst, pos, "dvxm")
+  else if op == 5 then wr_str(dst, pos, "bfs")
   else wr_str(dst, pos, "mxv")
 }
 fn op_fieldidx(op: i64) -> i64 {
@@ -223,6 +224,153 @@ fn main(argc: i64, argv: [str]) -> i64 {
 ");
   0
 }
+// ---- op 5 "bfs": B3 step 4 design item (f) -- a COMPLETE generated program: the whole
+// Beamer direction-optimising BFS level loop (push while the frontier is small, pull once
+// nf*14 > n-reached -- the SAME alpha=14 switch, SAME fold formula as selfhost/std/sgraph2.bp's
+// own bfs_frontier/push_step/pull_step, :318-435) baked into ONE dispatch, over a store
+// GbMatrix (gb_row_lo/gb_row_hi/gb_col -- fmt/mask/tr are not used: BFS is unweighted,
+// unmasked, symmetric-CSR only). Two `main` variants share the same core text (gen_bfs_core):
+// _path (argv[2] = a full store PATH the kernel maps itself with st_map_ro, argv[3] = source
+// vertex decimal -- for direct shell-compiled dispatch, gb_bfs_gen's gate and std_golden.sh)
+// and _addr (argv[2] = an ALREADY-MAPPED store base address decimal, argv[3] = a GbMatrix cell
+// OFFSET decimal (object-relative, so valid regardless of the caller's own mmap address),
+// argv[4] = source vertex decimal -- for sgraph2.bp's own fork+premap+sys_run dispatcher: a
+// kernel entered via sys_run must never call st_map_ro itself a SECOND time, gb_run.bp's own
+// header comment on gb_kernel_run_child has the full story). fmt=2 in gen_gb(dir,5,sr,mask,fmt,tr)
+// selects _addr, any other fmt selects _path -- reuses the (op,sr,mask,fmt,tr) key's existing
+// "fmt accepted for forward compatibility" slot (this file's own header comment) instead of a
+// new parameter.
+fn gen_bfs_core(dst: [i64], pos: [i64]) -> i64 {
+  wr_str(dst, pos, "
+fn gbfs_push(base: [i64], M: i64, fr: [i64], vis: [i64], nx: [i64], nw: i64, cnt: [i64]) -> i64 {
+  let w = 0;
+  while w < nw {
+    while fr[w] != 0 {
+      let x = fr[w];
+      let low = x & (0 - x);
+      let _ = fr[w] = x - low;
+      let v = w * 64 + 63 - clz(low);
+      let k = gb_row_lo(base, M, v);
+      let hi = gb_row_hi(base, M, v);
+      while k < hi {
+        let u = gb_col(base, M, k);
+        let take = 1 - gb_bit(vis, u);
+        let _ = if take == 1 then gb_setbit(vis, u) else 0;
+        let _ = if take == 1 then gb_setbit(nx, u) else 0;
+        let _ = cnt[0] = cnt[0] + take;
+        let k = k + 1;
+        0
+      };
+      0
+    };
+    let w = w + 1;
+    0
+  };
+  0
+}
+fn gbfs_pull(base: [i64], M: i64, fr: [i64], vis: [i64], nx: [i64], n: i64, cnt: [i64]) -> i64 {
+  let u = 0;
+  while u < n {
+    let unseen = 1 - gb_bit(vis, u);
+    let k = if unseen == 1 then gb_row_lo(base, M, u) else 0;
+    let hi = if unseen == 1 then gb_row_hi(base, M, u) else 0;
+    let found = 0;
+    while k < hi {
+      let v = gb_col(base, M, k);
+      let hit = gb_bit(fr, v);
+      let found = if hit == 1 then 1 else found;
+      let k = if hit == 1 then hi else k + 1;
+      0
+    };
+    let _ = if found == 1 then gb_setbit(vis, u) else 0;
+    let _ = if found == 1 then gb_setbit(nx, u) else 0;
+    let _ = cnt[0] = cnt[0] + found;
+    let u = u + 1;
+    0
+  };
+  0
+}
+// gbfs_frontier: `level` is deliberately NOT tracked (write-only in the reference
+// selfhost/std/sgraph2.bp's own push_step/pull_step too -- the fold only ever needs `acc`,
+// never a per-vertex level) -- dropped here specifically because a forked child's arena is
+// hard-capped to an 8 MiB window (sys_clone's own codegen, WORKER-CARD) and `zeros(n)` for
+// `level` alone is 7.63 MiB at n=1,000,000 (selfhost/std/sgraph2.bp's own 1M-node graph),
+// leaving no room for fr/nx/vis or the dispatcher's own small buffers -- see B3 step 4 (f)'s
+// worker report. fr/nx/vis alone (~375 KB total at n=1M) fit comfortably.
+fn gbfs_frontier(base: [i64], M: i64, n: i64, s: i64) -> i64 {
+  let nw = (n + 63) >> 6;
+  let fr = zeros(nw);
+  let nx = zeros(nw);
+  let vis = zeros(nw);
+  let _ = gb_setbit(fr, s);
+  let _ = gb_setbit(vis, s);
+  let acc = 1;
+  let reached = 1;
+  let lv = 1;
+  let nf = 1;
+  let cnt = zeros(1);
+  while nf > 0 {
+    let _ = cnt[0] = 0;
+    let pull = if nf * 14 > n - reached then 1 else 0;
+    let _ = if pull == 1 then gbfs_pull(base, M, fr, vis, nx, n, cnt) else gbfs_push(base, M, fr, vis, nx, nw, cnt);
+    let nf = cnt[0];
+    let reached = reached + nf;
+    let acc = acc + nf * (lv + 1);
+    let w = 0;
+    while w < nw {
+      let _ = fr[w] = nx[w];
+      let _ = nx[w] = 0;
+      let w = w + 1;
+      0
+    };
+    let lv = lv + 1;
+    0
+  };
+  acc
+}
+")
+}
+fn gen_bfs_main_path(dst: [i64], pos: [i64]) -> i64 {
+  wr_str(dst, pos, "
+fn main(argc: i64, argv: [str]) -> i64 {
+  let path = zeros(256);
+  let pl = st_str(path, argv[2]);
+  let tmp = zeros(1024);
+  let base = st_map_ro(path, pl, 536870912);
+  let root = st_root(base, tmp);
+  let M = st_ref(base, root, 0);
+  let n = st_get(base, M, 0);
+  let s = gb_atoi(argv[3]);
+  gbfs_frontier(base, M, n, s)
+}
+")
+}
+fn gen_bfs_main_addr(dst: [i64], pos: [i64]) -> i64 {
+  wr_str(dst, pos, "
+fn main(argc: i64, argv: [str]) -> i64 {
+  let base = st_cells(gb_atoi(argv[2]));
+  let M = gb_atoi(argv[3]);
+  let n = st_get(base, M, 0);
+  let s = gb_atoi(argv[4]);
+  gbfs_frontier(base, M, n, s)
+}
+")
+}
+fn gen_bfs_text_path(dst: [i64], pos: [i64]) -> i64 {
+  let _ = wr_use_line(dst, pos, "selfhost/prelude/sha256.bp");
+  let _ = wr_use_line(dst, pos, "selfhost/prelude/store.bp");
+  let _ = wr_use_line(dst, pos, "selfhost/prelude/gb.bp");
+  let _ = gen_bfs_core(dst, pos);
+  gen_bfs_main_path(dst, pos)
+}
+fn gen_bfs_text_addr(dst: [i64], pos: [i64]) -> i64 {
+  let _ = wr_use_line(dst, pos, "selfhost/prelude/sha256.bp");
+  let _ = wr_use_line(dst, pos, "selfhost/prelude/store.bp");
+  let _ = wr_use_line(dst, pos, "selfhost/prelude/gb.bp");
+  let _ = gen_bfs_core(dst, pos);
+  gen_bfs_main_addr(dst, pos)
+}
+
 // gen_kernel_text: the whole compilable .bp program (3 `use` lines + gen_kernel_body).
 // fieldidx: which root ref carries the matrix to read (0 = A, mxv ; 1 = AT, vxm -- gen_gb.bp's
 // own store layout, see gb_gen.bp).
@@ -251,21 +399,28 @@ fn gen_path(dir: str, op: i64, sr: i64, mask: i64, fmt: i64, tr: i64, path: [i64
   let _ = wr_str(path, pos, ".bp");
   pos[0]
 }
-fn gen_write(path: [i64], plen: i64, sr: i64, op: i64) -> i64 {
+// gen_write: op 1-4 emit the row-reduce mxv/vxm body (gen_kernel_text); op 5 (bfs) emits the
+// whole generated Beamer-BFS program instead -- fmt==2 selects the _addr main (sgraph2.bp's
+// premapped-address dispatcher), any other fmt the _path main (direct shell-compiled dispatch,
+// std_golden.sh / gb_bfs_gen's gate). Flat else-if chain (no if-expression nested inside
+// another branch) -- WORKER-CARD's nested-if-as-call-argument trap.
+fn gen_write(path: [i64], plen: i64, sr: i64, op: i64, fmt: i64) -> i64 {
   let text = zeros(8192);
   let tpos = zeros(1);
-  let _ = gen_kernel_text(text, tpos, sr, op_fieldidx(op));
+  let bfsaddr = if op == 5 then fmt else 0;
+  let _ = if bfsaddr == 2 then gen_bfs_text_addr(text, tpos) else if op == 5 then gen_bfs_text_path(text, tpos) else gen_kernel_text(text, tpos, sr, op_fieldidx(op));
   let fd = sys_open(path, plen, 578);
   let _ = sys_export(fd, text, tpos[0]);
   sys_close(fd)
 }
-// gen_gb(dir, op, sr, mask, fmt, tr): op 1 mxv / 2 vxm / 3 dmxv / 4 dvxm, sr 1..4 -- writes the
-// kernel .bp file under dir and returns 0. Digest naming (step 4's st_digest-keyed Kernel
-// objects) is out of scope here; the filename itself IS the digest for step 2's purposes.
+// gen_gb(dir, op, sr, mask, fmt, tr): op 1 mxv / 2 vxm / 3 dmxv / 4 dvxm / 5 bfs, sr 1..4 (sr
+// ignored by op 5) -- writes the kernel .bp file under dir and returns 0. Digest naming (step
+// 4's st_digest-keyed Kernel objects) is out of scope here; the filename itself IS the digest
+// for step 2's purposes.
 fn gen_gb(dir: str, op: i64, sr: i64, mask: i64, fmt: i64, tr: i64) -> i64 {
   let path = zeros(512);
   let plen = gen_path(dir, op, sr, mask, fmt, tr, path);
-  gen_write(path, plen, sr, op)
+  gen_write(path, plen, sr, op, fmt)
 }
 
 // ---- directed (UN-symmetrised) test matrix, coordinator review item 2 (2026-09-07): the

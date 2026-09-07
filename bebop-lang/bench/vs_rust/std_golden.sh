@@ -857,6 +857,22 @@ gate gb_pool_abi 1001 "$r"
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_bfs.bp "$GBT/gb_bfs_test.bin" >/dev/null 2>&1 && run 30 "$GBT/gb_bfs_test.bin" "$GBT" | tail -1)
 gate gb_bfs -3 "$r"
 
+# ---- gb_bfs_gen (B3 step 4 design item (f) gate, docs/blueprints/B3-graphblas-kernels-prejit.md
+#      section 5 step 4): gen_gb.bp's op=5 (bfs) generated WHOLE-LOOP Beamer kernel vs an
+#      independent queue-BFS fold, both over the SAME 1k-node/4000-edge random_lcg() graph --
+#      driver bench/vs_rust/std_tests/gb_bfs_gen.bp builds its own store, prints the queue-BFS
+#      fold (queue_bfs_fold, the SAME fold formula as sgraph2.bp's bfs_from/bfs_frontier: sum
+#      over reached vertices of level+1), and writes the generated kernel file
+#      (gen_gb(dir,5,1,0,1,0), fmt=1 -> PATH main). This block then compiles+runs that
+#      generated file against the SAME store (argv[2]=store path, argv[3]=source vertex "0")
+#      and checks driver == generated before accepting the golden (997, == the python oracle
+#      bench/oracles/gb_bfs_gen.py). ----
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_bfs_gen.bp "$GBT/gb_bfs_gen_test.bin" >/dev/null 2>&1 && run 30 "$GBT/gb_bfs_gen_test.bin" "$GBT" | tail -1)
+./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$GBT/gb_bfs_1_0_1_0.bp" "$GBT/gb_bfs_1_0_1_0.bin" >/dev/null 2>&1 || r="COMPILEFAIL($r)"
+rg=$(run 30 "$GBT/gb_bfs_1_0_1_0.bin" "$GBT/gb_bfs_gen.store" 0 | tail -1)
+[ "$r" = "$rg" ] || r="MISMATCH($r/$rg)"
+gate gb_bfs_gen 997 "$r"
+
 # ---- G9b (B3 step 3, docs/blueprints/B3-graphblas-kernels-prejit.md section 5 step 3/section
 #      6): mxm/eWiseAdd/eWiseMult/select/apply/reduce tier-0 (selfhost/prelude/gb.bp) exercised
 #      by four LAGraph-style folds, oracle bench/oracles/gb_lagraph.py. gb_tc: triangle count via

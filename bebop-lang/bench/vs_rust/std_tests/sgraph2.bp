@@ -389,64 +389,214 @@ fn pull_step(base: [i64], g: ref G2, fr: [i64], vis: [i64], nx: [i64], level: [i
   };
   0
 }
-// bfs_frontier(base, g, n, s, level, fr, nx, vis): Beamer's direction-optimising BFS on
-// bitmaps: push while the frontier is small, pull when |frontier| * 14 > unvisited
-// (alpha = 14); returns reached + sum of levels like bfs_from. Pull is exact only when
-// the log holds no edges INTO unvisited vertices that push would find -- so pull is
-// used only for the L1 graph plus L0 out-edges of the pulled vertex; with a
-// symmetric L1 and the switch applied only while the log is empty, folds agree with
-// the queue BFS (the oracle). phase 'p' runs it BEFORE the log phase (build state).
-fn bfs_frontier(base: [i64], g: ref G2, n: i64, s: i64, level: [i64], fr: [i64], nx: [i64], vis: [i64]) -> i64 {
-  let nw = (n + 63) >> 6;
+// ---- B3 step 4 design item (f): bfs_frontier dispatches to the GENERATED whole-loop Beamer
+// kernel (selfhost/std/gen_gb.bp's op=5 "bfs" template, the SAME push/pull/alpha=14 algorithm
+// as push_step/pull_step above -- kept in this file as the reference implementation the
+// template was validated against, docs/blueprints/B3-graphblas-kernels-prejit.md section 5
+// step 4) instead of looping push_step/pull_step in process. Dispatch = ONE shell-compiled
+// program per BFS call (never per level, never per source-loop iteration beyond one dispatch
+// each): bench/vs_rust/sgraph2.sh compiles the generated _addr-variant kernel (gen_gb(dir, 5,
+// 1, 0, 2, 0), fmt=2) to the fixed path "sgraph2_bfs.bin" ONCE, ahead of every phase; NOT
+// gb_run.bp's own in-process gb_kernel_run/Pool machinery -- that path compiles-on-miss
+// inside a forked child via the FULL linked compiler (gb_compile1.bp/bebop.bp), which
+// B3c's own coordinator notes already measured as arena-constrained inside a sys_clone(17,
+// ...) child (~8-12 MiB window) and unnecessary here since the kernel's SOURCE is fixed and
+// known ahead of time -- a plain `seed compile` from the shell is simpler and needs no
+// compiler machinery linked into sgraph2.bp at all. bfs_matrix_wrap below builds a small
+// GbMatrix-shaped SCRATCH object (gb.bp's own field layout: field 0 = n, field 4 = ref rp,
+// field 5 = ref ci -- the only three fields the generated kernel's gb_row_lo/gb_row_hi/
+// gb_col/st_get(base,M,0) ever read) wrapping G2's OWN, ALREADY-SEALED RP/CI objects with NO
+// data copy (RP/CI share gb.bp's exact "count cell at 0, elements from 1" arr_get convention
+// push_step/pull_step already read raw via st_get -- verified field-for-field against
+// store.bp's st_ref/st_get). PRECONDITION (matches this fn's only caller/gate,
+// bench/vs_rust/sgraph2.sh's own "p"/"ph" phase, which never runs after the log/tombstone/
+// compaction phases on either store, docs/blueprints/B3-graphblas-kernels-prejit.md's own
+// DEVIATION paragraph): has0 == 0 (no L0 log yet) -- the generated kernel is unweighted,
+// unmasked, symmetric-CSR only (gen_gb.bp's own op=5 header comment) and does not see
+// tombstones or the L0 log the way push_step/pull_step above do; frontier BFS on a graph with
+// a live log or tombstones needs push_step/pull_step directly, not this dispatch.
+// bfs_itoa(dst, v): byte-per-cell decimal digits of v (v >= 0 -- every dispatch value here is
+// a store address, a store cell offset, or a vertex index) into dst[0..], returns the digit
+// count. LOCAL copy of gen_gb.bp's wr_i64 algorithm with sign handling dropped (ponytail:
+// `use`-ing gen_gb.bp/gb_run.bp here pulls in their whole flat-use chain -- sha256.bp/
+// store.bp/gb.bp/gen_gb.bp, ~1200 lines of template-generation code sgraph2.bp otherwise has
+// zero need for -- for two ~15-line helpers).
+fn bfs_itoa(dst: [i64], v: i64) -> i64 {
+  let p = 19;
+  let m = v;
+  let go = 1;
+  while go == 1 {
+    let d = m - (m / 10) * 10;
+    let _ = dst[p] = 48 + d;
+    let p = p - 1;
+    let m = m / 10;
+    let go = if m > 0 then 1 else 0;
+    0
+  };
+  let start = p + 1;
+  let len = 20 - start;
   let i = 0;
-  while i < nw {
-    let _ = fr[i] = 0;
-    let _ = nx[i] = 0;
-    let _ = vis[i] = 0;
+  while i < len {
+    let _ = dst[i] = dst[start + i];
     let i = i + 1;
     0
   };
-  let _ = setbit(fr, s);
-  let _ = setbit(vis, s);
-  let _ = level[s] = 0;
-  let acc = 1;
-  let reached = 1;
-  let lv = 1;
-  let nf = 1;
-  let cnt = zeros(1);
-  while nf > 0 {
-    let _ = cnt[0] = 0;
-    let pull = if nf * 14 > n - reached then 1 else 0;
-    let _ = if pull == 1 then pull_step(base, g, fr, vis, nx, level, lv, n, cnt) else push_step(base, g, fr, vis, nx, level, lv, nw, cnt);
-    let nf = cnt[0];
-    let reached = reached + nf;
-    let acc = acc + nf * (lv + 1);
-    let w = 0;
-    while w < nw {
-      let _ = fr[w] = nx[w];
-      let _ = nx[w] = 0;
-      let w = w + 1;
+  len
+}
+// bfs_pack(buf, v): tight-packed decimal string of v (8 ASCII bytes per i64 cell, little-
+// endian -- the real `str` layout char()/str_len() read) into buf (>= 4 cells). LOCAL copy of
+// gb_run.bp's gb_pack_tight, same ponytail rationale as bfs_itoa above.
+fn bfs_pack(buf: [i64], v: i64) -> i64 {
+  let digs = zeros(24);
+  let n = bfs_itoa(digs, v);
+  let w = 0;
+  while w < n / 8 + 1 {
+    let word = 0;
+    let k = 0;
+    while k < 8 {
+      let idx = w * 8 + k;
+      let b = if idx < n then digs[idx] else 0;
+      let word = word | (b << (k * 8));
+      let k = k + 1;
       0
     };
-    let lv = lv + 1;
+    let _ = buf[w] = word;
+    let w = w + 1;
     0
   };
-  acc
+  0
+}
+// bfs_kernel_size(path, plen) -> nb: chunked read-to-EOF just to discover a plain file's byte
+// size (no fstat/lseek builtin in this tree -- gb_run.bp's own gb_slurp_all does the same
+// "read until rc==0" loop for the identical reason; LOCAL copy, ponytail as above).
+fn bfs_kernel_size(path: [i64], plen: i64) -> i64 {
+  let fd = sys_open(path, plen, 0);
+  let chunk = zeros(8192);
+  let total = 0;
+  let go = 1;
+  while go == 1 {
+    let rc = sys_read(fd, chunk, 8192);
+    let total = total + rc;
+    let go = if rc > 0 then 1 else 0;
+    0
+  };
+  let _ = sys_close(fd);
+  total
+}
+// bfs_write_i64_file / bfs_read_i64_file: 8-byte LE64 round-trip through a scratch file -- how
+// a forked child (sys_clone flags 17, no CLONE_VM: shares nothing but a 1-byte exit code)
+// hands a full i64 fold back to its parent. LOCAL copy of gb_run.bp's gb_write_i64_file/
+// gb_read_i64_file, ponytail as above.
+fn bfs_write_i64_file(path: [i64], plen: i64, v: i64) -> i64 {
+  let buf = zeros(8);
+  let _ = buf[0] = v & 255;
+  let _ = buf[1] = (v >> 8) & 255;
+  let _ = buf[2] = (v >> 16) & 255;
+  let _ = buf[3] = (v >> 24) & 255;
+  let _ = buf[4] = (v >> 32) & 255;
+  let _ = buf[5] = (v >> 40) & 255;
+  let _ = buf[6] = (v >> 48) & 255;
+  let _ = buf[7] = (v >> 56) & 255;
+  let fd = sys_open(path, plen, 578);
+  let _ = sys_export(fd, buf, 8);
+  sys_close(fd)
+}
+fn bfs_read_i64_file(path: [i64], plen: i64) -> i64 {
+  let fd = sys_open(path, plen, 0);
+  let buf = zeros(8);
+  let _ = sys_read(fd, buf, 8);
+  let _ = sys_close(fd);
+  buf[0] | (buf[1] << 8) | (buf[2] << 16) | (buf[3] << 24) | (buf[4] << 32) | (buf[5] << 40) | (buf[6] << 48) | (buf[7] << 56)
+}
+// bfs_matrix_wrap(base, g, tmp) -> M: a scratch, NEVER-committed GbMatrix-shaped object (see
+// this block's header comment) bump-allocated past the store's current committed cursor
+// (st_begin is a plain superblock read, st_alloc only mutates the LOCAL tx, so skipping
+// st_commit leaves the store untouched -- the next st_begin anywhere, including this
+// function's own next call, reads the SAME cursor and simply reuses/overwrites this space).
+fn bfs_matrix_wrap(base: [i64], g: ref G2, tmp: [i64]) -> i64 {
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let M = st_alloc(base, tx, 6, 0);
+  let _ = st_put(base, M, 0, st_get(base, g, 0));
+  let _ = st_link(base, M, 4, st_ref(base, g, 2));
+  let _ = st_link(base, M, 5, st_ref(base, g, 3));
+  M
+}
+// bfs_kernel_child(args): pid==0 branch ONLY, ends with sys_exit (never returns). args (7
+// cells): 0=data-store base addr (inherited unchanged via the fork's COW duplication -- the
+// generated kernel must never st_map_ro a second time, gen_gb.bp's op=5 header has the full
+// story), 1=M (the scratch GbMatrix cell offset, object-relative so valid at this SAME
+// inherited address), 2=source vertex, 3=kernel image addr (ALSO inherited -- mmap'd ONCE by
+// phase_frontier, not re-mapped per dispatch), 4=kernel image byte size, 5=result path addr,
+// 6=result path len.
+fn bfs_kernel_child(args: [i64]) -> i64 {
+  let dummy0 = zeros(1);
+  let a0 = zeros(4);
+  let _ = bfs_pack(a0, args[0]);
+  let a1 = zeros(4);
+  let _ = bfs_pack(a1, args[1]);
+  let a2 = zeros(4);
+  let _ = bfs_pack(a2, args[2]);
+  let argv = zeros(5);
+  let _ = argv[0] = st_addr(dummy0);
+  let _ = argv[1] = st_addr(dummy0);
+  let _ = argv[2] = st_addr(a0);
+  let _ = argv[3] = st_addr(a1);
+  let _ = argv[4] = st_addr(a2);
+  let result = sys_run(args[3], args[4], 5, argv);
+  let _ = bfs_write_i64_file(st_cells(args[5]), args[6], result);
+  sys_exit(0)
+}
+// bfs_kernel_launch(args): only args + the new `pid` binding are live across the sys_clone
+// call (WORKER-CARD's <=8-live-symbols-across-a-clone rule), matching gb_run.bp's own
+// gb_kernel_run_launch shape.
+fn bfs_kernel_launch(args: [i64]) -> i64 {
+  let pid = sys_clone(17, sys_arena_base() + 16777216);
+  let _ = if pid == 0 then bfs_kernel_child(args) else 0;
+  let st = zeros(1);
+  let w = sys_wait4(pid, st, 0, 0);
+  bfs_read_i64_file(st_cells(args[5]), args[6])
+}
+// bfs_kernel_dispatch(base, M, s, kaddr, nb): ONE fork+sys_run dispatch of the already-mapped
+// generated kernel (kaddr/nb: mmap'd once by phase_frontier, reused for every source via fork
+// inheritance) against `base`/M/s -- never re-exports, never re-mmaps, never re-compiles.
+fn bfs_kernel_dispatch(base: [i64], M: i64, s: i64, kaddr: i64, nb: i64) -> i64 {
+  let respath = zeros(32);
+  let rn = st_str(respath, "sgraph2_bfs.res");
+  let args = zeros(7);
+  let _ = args[0] = st_addr(base);
+  let _ = args[1] = M;
+  let _ = args[2] = s;
+  let _ = args[3] = kaddr;
+  let _ = args[4] = nb;
+  let _ = args[5] = st_addr(respath);
+  let _ = args[6] = rn;
+  bfs_kernel_launch(args)
+}
+// bfs_frontier(base, g, n, s, kaddr, nb): see this block's header comment -- builds the
+// scratch GbMatrix wrapper then dispatches the generated whole-loop kernel once. Fold matches
+// bfs_from/the old push_step-pull_step loop (docs/blueprints/B3-graphblas-kernels-prejit.md
+// section 5 step 4(f) gate: bench/oracles/gb_bfs_gen.py / bench/oracles/sgraph2.py).
+fn bfs_frontier(base: [i64], g: ref G2, n: i64, s: i64, kaddr: i64, nb: i64) -> i64 {
+  let tmp = zeros(16);
+  let M = bfs_matrix_wrap(base, g, tmp);
+  bfs_kernel_dispatch(base, M, s, kaddr, nb)
 }
 fn phase_frontier(base: [i64], tmp: [i64], nsrc: i64) -> i64 {
   let g = st_root(base, tmp);
   let n = st_get(base, g, 0);
-  let level = zeros(n);
-  let nw = (n + 63) >> 6;
-  let fr = zeros(nw);
-  let nx = zeros(nw);
-  let vis = zeros(nw);
+  let kpath = zeros(32);
+  let kn = st_str(kpath, "sgraph2_bfs.bin");
+  let nb = bfs_kernel_size(kpath, kn);
+  let kfd = sys_open(kpath, kn, 0);
+  let kaddr = sys_mmap(0, nb, 5, 2, kfd, 0);
+  let _ = sys_close(kfd);
   let x = 31337;
   let q = 0;
   let acc = 0;
   while q < nsrc {
     let x = lcg(x);
-    let acc = acc + bfs_frontier(base, g, n, (x >> 20) % n, level, fr, nx, vis);
+    let acc = acc + bfs_frontier(base, g, n, (x >> 20) % n, kaddr, nb);
     let q = q + 1;
     0
   };
