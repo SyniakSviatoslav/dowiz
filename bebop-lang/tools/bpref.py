@@ -44,7 +44,7 @@ class ReturnSignal(Exception):
     def __init__(self, v): self.v = v
 class BreakSignal(Exception):
     pass
-RESERVED = set(['sys_msync', 'crc32x', 'crc32', 'clz', 'sys_setaffinity', 'let', 'while', 'if', 'then', 'else', 'in', 'fn', 'enum', 'struct', 'module', 'match', 'return', 'break', 'zeros', 'char', 'str_len', 'clock_ms', 'hvham', 'hvham2', 'some', 'none', 'many', 'sys_open', 'sys_read', 'sys_write', 'sys_close', 'sys_readbuf', 'sys_slurp', 'sys_mmap', 'sys_munmap', 'sys_ftruncate', 'sys_rename', 'sys_export', 'sys_exit', 'sys_arena_base', 'sys_arena_end', 'sys_clone', 'sys_cond_set', 'sys_futex_wait_guard', 'sys_futex_wake', 'sys_atomic_add', 'sys_exit_thread_guard', 'sys_run', 'sys_wait4'])
+RESERVED = set(['sys_msync', 'crc32x', 'crc32', 'clz', 'sys_setaffinity', 'let', 'while', 'if', 'then', 'else', 'in', 'fn', 'enum', 'struct', 'module', 'match', 'return', 'break', 'zeros', 'char', 'str_len', 'clock_ms', 'hvham', 'hvham2', 'some', 'none', 'many', 'sys_open', 'sys_read', 'sys_write', 'sys_close', 'sys_readbuf', 'sys_slurp', 'sys_mmap', 'sys_munmap', 'sys_ftruncate', 'sys_rename', 'sys_export', 'sys_exit', 'sys_arena_base', 'sys_arena_end', 'sys_clone', 'sys_cond_set', 'sys_futex_wait_guard', 'sys_futex_wake', 'sys_atomic_add', 'sys_exit_thread_guard', 'sys_run', 'sys_wait4', 'scan'])
 class DepthError(Exception):
     pass
 
@@ -525,6 +525,27 @@ class Interp:
             return zlib.crc32(bytes(x & 255 for x in args[0][:args[1]]))
         if name == 'clz':
             return 64 - (args[0] & 0xFFFFFFFFFFFFFFFF).bit_length()
+        if name == 'scan':
+            # scan(s, pos, class) -> new pos. Mirrors emit_sys_scan (bebop.bp) EXACTLY:
+            # the bound is the caller's pos[1] (NOT len(s)), the class is a runtime value,
+            # any class other than 0/1/2 behaves as 3 (not-newline), pos[0] is written back
+            # and the same value is returned. A divergence in any of those four points
+            # makes c78_scan mismatch.
+            sv, pos, classval = args[0], args[1], args[2]
+            p = pos[0]
+            lim = pos[1]
+            if classval == 0:      # whitespace: ' ' \t \n \r
+                ok = lambda b: b in (32, 9, 10, 13)
+            elif classval == 1:    # ident: [0-9A-Za-z_]
+                ok = lambda b: b == 95 or 48 <= b <= 57 or 65 <= b <= 90 or 97 <= b <= 122
+            elif classval == 2:    # not-quote-not-backslash
+                ok = lambda b: b != 34 and b != 92
+            else:                  # class 3 (and every other value): not-newline
+                ok = lambda b: b != 10
+            while p < lim and ok(sv[p] & 255):
+                p += 1
+            pos[0] = p
+            return p
         if name == 'clock_ms' or name.startswith('sys_'):
             return 0  # ponytail: stubs; real fs/mmap/run/wait4 syscalls are out of the fuzzed surface
         raise NameError('unknown fn %s' % name)

@@ -1,0 +1,33 @@
+// c78_scan (A9): the `scan(s, pos, class)` builtin against its tools/bpref.py stub.
+// The fold is over the RETURN VALUE of every call (so a block that leaves the new pos in a
+// scratch register instead of x0 mismatches at once) and ends with pos[0] (so a block that
+// forgets the write-back mismatches too). Steps 11/12 pin the two semantics the stub could
+// get wrong silently: the scan stops at pos[1] -- the CALLER's bound, not str_len(s) -- and
+// every class other than 0/1/2 behaves as class 3. Step 2 pins '_' as an ident byte (a
+// b.lt chain that jumps straight to `done` on `< 'a'` drops it). Not covered at runtime:
+// class 2's stop bytes, since a `"` cannot appear in a literal and `\` is not an escape in
+// bebop.bin but IS one in bpref's lexer -- step 9 covers class 2's bound path instead.
+fn main() -> i64 {
+  let s = "  ab_c9 1_2
+   ZZ_z9  ";
+  let pos = [0, 0];
+  let acc = [0];
+  let _ = pos[1] = str_len(s);
+  let _ = acc[0] = acc[0] * 131 + scan(s, pos, 0);
+  let _ = acc[0] = acc[0] * 131 + scan(s, pos, 1);
+  let _ = acc[0] = acc[0] * 131 + scan(s, pos, 1);
+  let _ = acc[0] = acc[0] * 131 + scan(s, pos, 0);
+  let _ = acc[0] = acc[0] * 131 + scan(s, pos, 1);
+  let _ = acc[0] = acc[0] * 131 + scan(s, pos, 3);
+  let _ = acc[0] = acc[0] * 131 + scan(s, pos, 0);
+  let _ = acc[0] = acc[0] * 131 + scan(s, pos, 1);
+  let _ = acc[0] = acc[0] * 131 + scan(s, pos, 2);
+  let _ = acc[0] = acc[0] * 131 + scan(s, pos, 2);
+  let _ = pos[0] = 0;
+  let _ = pos[1] = 3;
+  let _ = acc[0] = acc[0] * 131 + scan(s, pos, 3);
+  let _ = pos[0] = 0;
+  let _ = pos[1] = str_len(s);
+  let _ = acc[0] = acc[0] * 131 + scan(s, pos, 5);
+  acc[0] + pos[0]
+}

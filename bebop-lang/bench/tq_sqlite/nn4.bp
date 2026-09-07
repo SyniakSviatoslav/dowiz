@@ -20,7 +20,7 @@ fn fill(us: [i64], vs: [i64], n: i64) -> i64 {
   };
   x
 }
-fn scan(us: [i64], vs: [i64], n: i64, qu: i64, qv: i64) -> i64 {
+fn nn_scan(us: [i64], vs: [i64], n: i64, qu: i64, qv: i64) -> i64 {
   let best = 9223372036854775807;
   let bi = 0 - 1;
   let i = 0;
@@ -45,7 +45,7 @@ fn work(env: [i64], n: i64, q0: i64, q1: i64) -> i64 {
   let ans = env[3];
   let q = q0;
   while q < q1 {
-    let _ = ans[q] = scan(us, vs, n, qs[q * 2], qs[q * 2 + 1]);
+    let _ = ans[q] = nn_scan(us, vs, n, qs[q * 2], qs[q * 2 + 1]);
     let q = q + 1;
     0
   };

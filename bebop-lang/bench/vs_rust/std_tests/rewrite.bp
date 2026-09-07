@@ -261,7 +261,7 @@ fn bld(d: [i64], o: i64, st: [i64], v1: i64, v2: i64) -> i64 {
 
 // enumerate redexes of the rules in mask; record the which-th one
 // (which < 0: the last) in out[1..3] = rule, box, input. Returns count.
-fn scan(d: [i64], o: i64, mask: i64, which: i64, out: [i64]) -> i64 {
+fn rw_scan(d: [i64], o: i64, mask: i64, which: i64, out: [i64]) -> i64 {
   let nb = d[o + 1];
   let any = if which < 0 then 1 else 0;
   let m1 = mask & 1;
@@ -418,7 +418,7 @@ fn ap_fire(d: [i64], o: i64, b: i64, newlab: i64) -> i64 {
 
 // one rewrite step: apply the which-th redex; returns 1 if one existed
 fn red(d: [i64], o: i64, mask: i64, which: i64, out: [i64], tmp: [i64]) -> i64 {
-  let cnt = scan(d, o, mask, which, out);
+  let cnt = rw_scan(d, o, mask, which, out);
   let has = if cnt > 0 then 1 else 0;
   let rr = out[1] * has;
   let _ = if rr == 1 then ap_flat(d, o, out[2], out[3], tmp) else 0;
@@ -449,7 +449,7 @@ fn norm(d: [i64], o: i64, mask: i64, pick: i64, out: [i64], tmp: [i64]) -> i64 {
 // all one-step reducts of slot f, normalized in slot w; out[6] += pairs,
 // out[7] += joined pairs (equal canon)
 fn cpair(d: [i64], f: i64, w: i64, mask: i64, out: [i64], tmp: [i64], cp: [i64]) -> i64 {
-  let cnt = scan(d, f, mask, 0, out);
+  let cnt = rw_scan(d, f, mask, 0, out);
   let k = 0;
   while k < cnt {
     let _ = copy(d, f, w);

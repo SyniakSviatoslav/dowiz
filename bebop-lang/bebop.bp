@@ -1346,6 +1346,76 @@ fn emit_clz(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i
   n[0]
 }
 
+// scan(s, pos, class) -> new pos (A9 step 3, scalar form). Advances pos[0] over bytes whose
+// class matches: 0 = whitespace (' ' \t \n \r), 1 = ident [0-9A-Za-z_], 2 = not-'"'-not-'\\',
+// anything else = 3 = not-'\n'. x0 = s (raw byte base, same address form as char()), x1 = the
+// pos array, x2 = class (a runtime value, not a compile-time constant). The scan STOPS at
+// pos[1] -- the caller's length bound -- so no byte past pos[1] is ever read (the over-read
+// slack rule of the blueprint is not needed for the scalar form). pos[0] is written back and
+// the same value is returned in x0. bpref stub (tools/bpref.py 'scan') mirrors all of this,
+// bound included. Words: $BEBOP_TMP/words.objdump (as + objdump, 46 words).
+fn emit_sys_scan(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 3);
+  let _ = em(insns, n, -113246173);
+  let _ = em(insns, n, -113245148);
+  let _ = em(insns, n, -352059265);
+  let _ = em(insns, n, 1409287466);
+  let _ = em(insns, n, 946038789);
+  let _ = em(insns, n, -251658145);
+  let _ = em(insns, n, 1409286465);
+  let _ = em(insns, n, 1895858367);
+  let _ = em(insns, n, 1409287232);
+  let _ = em(insns, n, 1895834815);
+  let _ = em(insns, n, 1409287168);
+  let _ = em(insns, n, 1895835839);
+  let _ = em(insns, n, 1409287104);
+  let _ = em(insns, n, 1895838911);
+  let _ = em(insns, n, 1409287040);
+  let _ = em(insns, n, 335544349);
+  let _ = em(insns, n, -251657121);
+  let _ = em(insns, n, 1409286657);
+  let _ = em(insns, n, 1895922879);
+  let _ = em(insns, n, 1409286880);
+  let _ = em(insns, n, 1895874751);
+  let _ = em(insns, n, 1409286891);
+  let _ = em(insns, n, 1895883967);
+  let _ = em(insns, n, 1409286765);
+  let _ = em(insns, n, 1895892159);
+  let _ = em(insns, n, 1409286763);
+  let _ = em(insns, n, 1895917759);
+  let _ = em(insns, n, 1409286637);
+  let _ = em(insns, n, 1895924927);
+  let _ = em(insns, n, 1409286635);
+  let _ = em(insns, n, 1895950527);
+  let _ = em(insns, n, 1409286509);
+  let _ = em(insns, n, 335544332);
+  let _ = em(insns, n, -251656097);
+  let _ = em(insns, n, 1409286337);
+  let _ = em(insns, n, 1895860415);
+  let _ = em(insns, n, 1409286400);
+  let _ = em(insns, n, 1895919807);
+  let _ = em(insns, n, 1409286336);
+  let _ = em(insns, n, 335544323);
+  let _ = em(insns, n, 1895835839);
+  let _ = em(insns, n, 1409286240);
+  let _ = em(insns, n, -1862269853);
+  let _ = em(insns, n, 402653143);
+  let _ = em(insns, n, -117440477);
+  let _ = em(insns, n, -1442642976);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
 // crc32(cells, n): zlib crc32 of n bytes held one per cell (T109, 2026-09-05), on the
 // hardware CRC32B unit: pop x1 = n, pop x0 = cells; movn w2,#0; L: cbz x1,done;
 // ldr x3,[x0],#8; crc32b w2,w2,w3; sub x1,x1,#1; b L; done: orn w0,wzr,w2; push.
@@ -1539,6 +1609,7 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   else if name == 7221016679989100487 then emit_sys_atomic_add(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == 7304771531850188344 then emit_sys_setaffinity(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == 1713209 then emit_clz(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 260242221 then emit_sys_scan(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == 29413480223 then emit_crc32(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == -8392076200099613766 then emit_sys_msync(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == 3853165909333 then emit_crc32x(s, pos, insns, n, stab, selfname, selfstart, fntab)
@@ -5117,7 +5188,8 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   // (T31 journal) and return 0. Hash table = read_ident of each reserved word.
   let rsv1 = (if selfname == 1866735 then 1 else 0) + (if selfname == 35281108217 then 1 else 0) + (if selfname == 13857 then 1 else 0) + (if selfname == 262576641 then 1 else 0) + (if selfname == 228925745 then 1 else 0) + (if selfname == 13865 then 1 else 0) + (if selfname == 13472 then 1 else 0) + (if selfname == 228960337 then 1 else 0) + (if selfname == 4471061603997 then 1 else 0) + (if selfname == 4238080694376 then 1 else 0) + (if selfname == 32320559965 then 1 else 0) + (if selfname == 4428069113672 then 1 else 0) + (if selfname == 29119020707 then 1 else 0) + (if selfname == 36158018563 then 1 else 0) + (if selfname == 224358574 then 1 else 0) + (if selfname == 585709020818199 then 1 else 0) + (if selfname == 66094333908796503 then 1 else 0) + (if selfname == 30895064082 then 1 else 0) + (if selfname == 4047253394792 then 1 else 0) + (if selfname == 260449716 then 1 else 0) + (if selfname == 249209392 then 1 else 0);
   let rsv2 = (if selfname == 246721067 then 1 else 0) + (if selfname == 76753189879327100 then 1 else 0) + (if selfname == 76753189885882068 then 1 else 0) + (if selfname == -8392076197157136435 then 1 else 0) + (if selfname == -8392076203060520566 then 1 else 0) + (if selfname == -2688661736639986669 then 1 else 0) + (if selfname == -8392076198348418984 then 1 else 0) + (if selfname == 76753189874778913 then 1 else 0) + (if selfname == 7442662210087947144 then 1 else 0) + (if selfname == -5847879057653958070 then 1 else 0) + (if selfname == 7442662398273192292 then 1 else 0) + (if selfname == 7442661902340062434 then 1 else 0) + (if selfname == 76753189856984008 then 1 else 0) + (if selfname == 7040940390938053523 then 1 else 0) + (if selfname == -6282920175007517587 then 1 else 0) + (if selfname == -8392076203060521221 then 1 else 0) + (if selfname == -1736429998027255437 then 1 else 0) + (if selfname == -3153574141067785036 then 1 else 0) + (if selfname == 8779068393901189725 then 1 else 0) + (if selfname == 7221016679989100487 then 1 else 0) + (if selfname == 1084841420853388659 then 1 else 0);
-  let _ = if rsv1 + rsv2 > 0 then diag_exit(s, namepos, 99) else 0;
+  let rsv3 = (if selfname == 260242221 then 1 else 0);
+  let _ = if rsv1 + rsv2 + rsv3 > 0 then diag_exit(s, namepos, 99) else 0;
   let _ = skip_ws(s, pos);
   let pnames = zeros(14);
   let pparpos = zeros(14);

@@ -15,7 +15,7 @@ fn fill(us: [i64], vs: [i64], n: i64) -> i64 {
   };
   x
 }
-fn scan(us: [i64], vs: [i64], n: i64, qu: i64, qv: i64) -> i64 {
+fn nn_scan(us: [i64], vs: [i64], n: i64, qu: i64, qv: i64) -> i64 {
   let best = 9223372036854775807;
   let bi = 0 - 1;
   let i = 0;
@@ -47,7 +47,7 @@ fn main() -> i64 {
     let qu = (x >> 33) - 1073741824;
     let x = lcg(x);
     let qv = (x >> 33) - 1073741824;
-    let bi = scan(us, vs, n, qu, qv);
+    let bi = nn_scan(us, vs, n, qu, qv);
     let fold = (fold + (bi + 1000000007) * p) % 1000000007;
     let p = (p * 131) % 1000000007;
     let k = k + 1;
