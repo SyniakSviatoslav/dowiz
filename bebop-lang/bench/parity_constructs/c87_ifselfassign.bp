@@ -6,14 +6,13 @@
 // room for a brand-new `let` bound inside the arm; the blind restore
 // desynced the mask from where the value actually lives.
 //
-// MOVED to neg/ (2026-09-07, DIVERGE worker 2): RC2 is currently only
-// fail-closed (check_reg_collision now exits 89 on an arm-spanning
-// relocation instead of emitting a wrong value -- see its comment in
-// bebop.bp). This construct is EXPECT COMPILEFAIL:89 until RC2's real
-// fix (symmetric relocation across both arms / force arm-spanning
-// entries to temp slots, ROADMAP A14) lands; that fix moves this file
-// back to bench/parity_constructs/ with EXPECT=3 restored (the oracle
-// value, see bpref.py).
+// RESTORED to bench/parity_constructs/ (2026-09-07, ROADMAP A14): the real fix
+// landed -- emit_cond parks every pre-`if` value that a BRANCH arm could
+// collide with into temp slots (vs_park_move under fntab[4592] +
+// vs_span_to_slots), so no arm-spanning relocation can happen and
+// check_reg_collision's fail-closed exit 89 is unreachable here.
+// EXPECT=3 (the oracle value, tools/bpref.py).
+//
 fn main() -> i64 {
   let v0 = 5;
   let i0 = 1;

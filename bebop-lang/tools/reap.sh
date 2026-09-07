@@ -4,7 +4,7 @@
 # tools/ scripts, or a seed run) whose parent is 1 = orphaned from a dead Claude shell, plus
 # any process whose children are all zombies (an xargs/bash that stopped reaping). Zombies
 # themselves cannot be killed; their orphaned parent can. Never touches claude, node, proot,
-# sshd, runsv*, svlogd, boxguard, the fuzzd loop (its own proot; stop = `sv down fuzzd`).
+# sshd, runsv*, svlogd (boxguard and fuzzd no longer exist on the box — removed 2026-09-07 by operator decision).
 # Usage: tools/reap.sh [kill]   self-test: `REAP_PS=tools/reap.fixture tools/reap.sh` lists 29014 + 29083 (the 2026-09-06 orphan)
 # --check N (item 1, retro D13): print the total process count and exit non-zero above N --
 # the process-count gate the runners (chain.sh/battery.sh/fuzz.sh/fuzz_batch.py) call first.

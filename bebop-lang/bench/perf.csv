@@ -913,3 +913,15 @@ ts,commit,bin,metric,value,unit,n,valid,at_max_pct,temp_mc,note
 1788804361,449c5f7,05aa91ac,stub_words,131,words,1,1,,,
 1788804361,449c5f7,05aa91ac,bin_fns,272,fns,1,1,,,
 1788804361,449c5f7,05aa91ac,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788816730,f6da66d,7d8262a1,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788816731,f6da66d,7d8262a1,gate_run_ms,17176,ms,1,1,,,"sum of non-memo gate runs (83 runs, 40 memo hits)"
+1788816838,f6da66d,7d8262a1,bin_words,39688,words,1,1,,,bytes 160588
+1788816838,f6da66d,7d8262a1,stub_words,131,words,1,1,,,
+1788816838,f6da66d,7d8262a1,bin_fns,273,fns,1,1,,,
+1788816839,f6da66d,7d8262a1,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788819009,f6da66d,7d8262a1,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788819009,f6da66d,7d8262a1,gate_run_ms,5526,ms,1,1,,,"sum of non-memo gate runs (23 runs, 100 memo hits)"
+1788819359,f6da66d,7d8262a1,bin_words,39688,words,1,1,,,bytes 160588
+1788819359,f6da66d,7d8262a1,stub_words,131,words,1,1,,,
+1788819359,f6da66d,7d8262a1,bin_fns,273,fns,1,1,,,
+1788819359,f6da66d,7d8262a1,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired

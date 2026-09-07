@@ -1161,7 +1161,7 @@ fn emit_sys_clone(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let _ = em(insns, n, 3556769793);
   let _ = em(insns, n, 3036676256);
   let _ = em(insns, n, 2432959471);
-  let _ = em(insns, n, 2433483758);
+  let _ = em(insns, n, 2435056622);
   let _ = em(insns, n, 2437940219);
   // T118 (2026-09-05): the child arena is [sp+4 MiB, sp+12 MiB) -- the arena
   // trap exposed that x28 = sp+8 MiB left par_compile's in-thread compiler
@@ -1793,6 +1793,9 @@ fn vs_reset(fntab: [i64]) -> i64 {
   // A4 fuzz DIVERGE hunt (2026-09-07): -1 = "not inside an if-arm"; see
   // emit_cond_branch / check_reg_collision.
   let _ = fntab[4591] = 0 - 1;
+  // ROADMAP A14 (2026-09-07): 1 = "parks made right now must be path-independent"
+  // (set only around emit_cond's pre-`if` park); see vs_park_move.
+  let _ = fntab[4592] = 0;
   // A2 commit 2: hoist pairs are per-loop scratch, but ptab is REUSED across
   // functions on the planning pass (bebop.bp compile_fn's outer loop) -- a
   // stale pair from a previous fn's compile must never leak into the next.
@@ -2055,7 +2058,16 @@ fn vs_park_move(insns: [i64], n: [i64], fntab: [i64], stab: [i64], idx: i64, is_
   // `acc*131` MULC that sits below the if-expression on the window).
   let _ = if is_mulc_win == 1 then vs_mask_free(fntab, p0, 21) else 0;
   let cfi = cs_free_idx(fntab[4573], stab[0]);
-  if cfi < 8 then vs_park_to_cs(insns, n, fntab, idx, d0, cfi) else vs_park_to_slot(insns, n, fntab, idx, d0)
+  // ROADMAP A14 (2026-09-07): under fntab[4592] a cs REGISTER is not a legal
+  // park destination -- every binder inside the `if` arms about to be compiled
+  // (a `let`, a match payload, an inlined call's parameters) claims 19+S
+  // upward and collides with exactly those registers, and the relocation that
+  // would free one is emitted inside ONE arm only (check_reg_collision's
+  // arm_spanning exit 89, DIVERGE RC2's mechanism). A temp SLOT is read
+  // identically on both arms and after the join, and costs the same one word
+  // (str/ldr instead of mov/mov).
+  let to_cs = (if cfi < 8 then 1 else 0) * (1 - fntab[4592]);
+  if to_cs == 1 then vs_park_to_cs(insns, n, fntab, idx, d0, cfi) else vs_park_to_slot(insns, n, fntab, idx, d0)
 }
 
 fn vs_park_idx(insns: [i64], n: [i64], fntab: [i64], stab: [i64], idx: i64) -> i64 {
@@ -2075,6 +2087,27 @@ fn vs_park(insns: [i64], n: [i64], fntab: [i64], stab: [i64], keep: i64) -> i64 
   let i = 0;
   while i < target {
     let _ = vs_park_idx(insns, n, fntab, stab, i);
+    let i = i + 1;
+    0
+  };
+  0
+}
+// ROADMAP A14 (2026-09-07): the entries vs_park just moved are covered by
+// fntab[4592], but an entry ALREADY resident in a cs register when the `if` is
+// reached (parked by an earlier vs_alloc, before the flag was set) spans the
+// arms just the same -- move those to temp slots too. After this runs, NO
+// pre-`if` entry owns a register: no arm's binder can collide with one, no
+// vs_park_deepest/vs_evict inside an arm can pick one up (kind 5 is neither
+// parkable nor register-owning), and emit_cond_branch's counter-only restore
+// between the arms is sound.
+fn vs_span_to_slots(insns: [i64], n: [i64], fntab: [i64], stab: [i64], keep: i64) -> i64 {
+  let target = fntab[4547] - keep;
+  let i = 0;
+  while i < target {
+    let kind = vs_entry_kind(fntab, i);
+    let p0 = vs_entry_p0(fntab, i);
+    let is_cs = if kind == 4 then 1 else 0;
+    let _ = if is_cs == 1 then (let _ = vs_park_to_slot(insns, n, fntab, i, p0) in vs_cs_free(fntab, p0, 12)) else 0;
     let i = i + 1;
     0
   };
@@ -2994,7 +3027,6 @@ fn vs_loop_branch_reg(insns: [i64], n: [i64], fntab: [i64], stab: [i64], top: i6
 fn emit_cond(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 2;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
-  let _ = vs_park(insns, n, fntab, stab, 1);
   let strn = slen(s, pos);
   let peek = [pos[0], strn];
   let _ = skip_ws(s, peek);
@@ -3006,6 +3038,15 @@ fn emit_cond(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
   let else_start = peek2[0] + 4;
   let else_end = arm_end(s, else_start, strn);
   let pure = arm_is_pure(s, then_start, then_end, strn) * arm_is_pure(s, else_start, else_end, strn);
+  // ROADMAP A14 (2026-09-07): the pre-`if` park moved down here, below the
+  // (code-free, pos-free) arm pre-scan, so it can see `pure`. A csel arm binds
+  // nothing by construction (kw_bad_at rejects let/if/while/match/return/break
+  // and any call) and keeps the cheaper cs parks; a BRANCH arm can bind, so
+  // every value that must survive the join goes to a temp slot instead.
+  let _ = fntab[4592] = 1 - pure;
+  let _ = vs_park(insns, n, fntab, stab, 1);
+  let _ = if pure == 0 then vs_span_to_slots(insns, n, fntab, stab, 1) else 0;
+  let _ = fntab[4592] = 0;
   if pure == 1 then emit_cond_csel(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else emit_cond_branch(s, pos, insns, n, stab, selfname, selfstart, fntab)
 }
@@ -3605,7 +3646,8 @@ fn skip_to(s: str, pos: [i64], target: i64) -> i64 {
 // Prologue: save FP+LR, allocate a frame (spill slots + heap), save callee-saved
 // x19..x28, then set x15 (spill base) and x14 (heap bump pointer). The frame is
 // [sp, sp+16384): spills live at [x15, x15+…) (x15=sp+256), heap bumps up from
-// x14=sp+1024, and the eval stack grows down from sp. x19-x28 are preserved for
+// x14=sp+2304 (add x14,sp,#0x900 = 2435056622, as+objdump; sp+768 and 64 slots
+// before ROADMAP A14 2026-09-07), and the eval stack grows down from sp. x19-x28 are preserved for
 // recursion + cross-function `bl`.
 fn emit_prologue(insns: [i64], n: [i64]) -> i64 {
   let _ = em(insns, n, 2847898621);
@@ -3617,7 +3659,7 @@ fn emit_prologue(insns: [i64], n: [i64]) -> i64 {
   let _ = em(insns, n, 2835573753);
   let _ = em(insns, n, 2835641339);
   let _ = em(insns, n, 2432959471);
-  let _ = em(insns, n, 2433483758);
+  let _ = em(insns, n, 2435056622);
   n[0]
 }
 
@@ -3658,7 +3700,7 @@ fn emit_prologue_sized(insns: [i64], n: [i64], vc: i64, has_alloc: i64, cs_hi: i
   let needs15raw = (if vc > 8 then 1 else has_alloc) + (if tsp > 0 then 1 else 0);
   let needs15 = if needs15raw > 0 then 1 else 0;
   let _ = if needs15 == 1 then em(insns, n, 2432959471) else 0;
-  let _ = if has_alloc == 1 then em(insns, n, 2433483758) else 0;
+  let _ = if has_alloc == 1 then em(insns, n, 2435056622) else 0;
   n[0]
 }
 
@@ -4162,6 +4204,7 @@ fn hoist_scan(s: str, b0: i64, b1: i64, strn: i64, stab: [i64], vals: [i64]) -> 
   let nlets = 0;
   let depth = 0;
   let has_nested = 0;
+  let unknown = 0;
   let done = 0;
   while done == 0 {
     let at_end = if pos[0] >= b1 then 1 else 0;
@@ -4187,6 +4230,19 @@ fn hoist_scan(s: str, b0: i64, b1: i64, strn: i64, stab: [i64], vals: [i64]) -> 
     let ida5 = is_alpha(c5) + is_digit(c5) + (if c5 == 95 then 1 else 0);
     let is_whilekw = is_whilekw0 * (1 - ida5) * (1 - idb);
     let has_nested = if is_whilekw == 1 then 1 else has_nested;
+    // ROADMAP A14 (2026-09-07): `new_lets` is a text count of the body's own
+    // `let` names -- it does NOT see the permanent registers a match payload
+    // (`some(m0) =>`) or an INLINED call's parameters (emit_call binds every
+    // callee parameter as a symbol in THIS frame) bind. Under-counting them
+    // puts a body bind on a hoisted register: check_reg_collision then finds
+    // the cs bit taken with no window entry owning it and exits 89 (fail-
+    // closed -- 92 of the A14 corpus repros). Bail out of hoisting for such a
+    // body: correctness over the hoist. A call is `(` directly after an
+    // identifier character; missing a spaced `f (x)` costs at worst that same
+    // fail-closed 89, never a wrong value.
+    let is_matchkw = (if ch == 109 then 1 else 0) * (if ch1 == 97 then 1 else 0) * (if c2 == 116 then 1 else 0) * (if c3 == 99 then 1 else 0) * (if c4 == 104 then 1 else 0) * (1 - ida5) * (1 - idb);
+    let is_callp = (if ch == 40 then 1 else 0) * idb;
+    let unknown = if is_matchkw + is_callp > 0 then 1 else unknown;
     let _ = if is_lit == 1 then (let v = read_num_val(s, pos) in (let _ = if (v >= 65536) * (if depth == 0 then 1 else 0) == 1 then hoist_record(vals, nvals, v) else 0 in 0)) else 0;
     let _ = if is_letkw == 1 then (let _ = pos[0] = pos[0] + 3 in skip_ws(s, pos)) else 0;
     let namepos = pos[0];
@@ -4215,7 +4271,8 @@ fn hoist_scan(s: str, b0: i64, b1: i64, strn: i64, stab: [i64], vals: [i64]) -> 
     0
   };
   let _ = if has_nested == 1 then (let _ = vals[0] = 0 in (let _ = vals[1] = 0 in (let _ = vals[2] = 0 in (let _ = vals[3] = 0 in 0)))) else 0;
-  nlets
+  // 99 pushes hfrom past the 8 cs registers -> havail 0 -> hn 0 (no hoist).
+  nlets + 99 * unknown
 }
 
 // A2 commit 2: release `hn` hoisted pairs starting at cs index `hfrom`
@@ -4628,6 +4685,15 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     // must leave the window EMPTY, period.
     let must_be_empty = is_item * (1 - is_expr * (1 - more_ahead));
     let _ = if (must_be_empty == 1) * (if fntab[4547] != 0 then 1 else 0) == 1 then diag_exit(s, before, 107) else 0;
+    // ROADMAP A14 (2026-09-07): the window is EMPTY at every item boundary
+    // except the fn's own tail (the two asserts above), so every temp SLOT
+    // this item parked into is dead -- reset the cursor so the next item
+    // reuses them. Without it the cursor only grows, and A14's path-
+    // independent parks (vs_park_move / fntab[4592]) push a long function
+    // past `s0 + tsp0 > 64` in compile_fn_at_facts. fntab[4576] keeps the
+    // high-water mark, so the frame size is unchanged by the reuse, and both
+    // passes reset at the same published point.
+    let _ = if fntab[4547] == 0 then fntab[4574] = 0 else 0;
     // lastf = 1 exactly when the body leaves ONE value on the stack
     // (final item was an expr and no more items followed it): the while
     // and fn emitters pop that value, and must NOT pop otherwise
@@ -4998,9 +5064,13 @@ fn compile_fn_at_facts(s: str, fntab: [i64], fpos: i64, namepos: i64, is_emissio
   // S: the emission pass's spilled-symbol slot base (0 on the planning pass).
   let s0 = if vc0 > 8 then vc0 - 8 else 0;
   let _ = fntab[4577] = s0 * is_emission;
-  // overflow trap (§5): this compiler does not spill further than 64 temp
-  // slots beyond the spilled symbols.
-  let _ = if is_emission == 1 then (if s0 + tsp0 > 64 then diag_exit(s, namepos, 89) else 0) else 0;
+  // overflow trap (§5): this compiler does not spill further than 256 temp
+  // slots beyond the spilled symbols (ROADMAP A14 2026-09-07: 64 before --
+  // path-independent if-parks put values in slots that used to sit in cs
+  // registers, and 94 of the A14 corpus repros then hit the old bound; the
+  // x15 region grew 512 -> 2048 bytes, taken out of the frame heap, see
+  // emit_prologue).
+  let _ = if is_emission == 1 then (if s0 + tsp0 > 256 then diag_exit(s, namepos, 89) else 0) else 0;
   fw0
 }
 

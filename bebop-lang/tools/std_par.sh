@@ -58,7 +58,7 @@ if [ -s "$T/timing_names.txt" ]; then
   mkdir -p "$T/timing"
   while IFS= read -r name || [ -n "$name" ]; do  # `|| [ -n "$name" ]` so a missing final newline isn't dropped
     [ -z "$name" ] && continue
-    bstat=$(boxguard status 2>&1 | tr '\n' ' ')
+    bstat=$(command -v boxguard >/dev/null 2>&1 && boxguard status 2>&1 | tr '\n' ' ' || echo "absent (box daemons removed 2026-09-07, operator)")
     r=$(BEBOP_TMP=$T/timing BEBOP_BIN=$BIN ${BIG[0]:+taskset -c ${BIG[0]}} bash "$T/timing_$name.sh" 2>/dev/null | grep -E "^(PASS|FAIL) $name")
     echo "boxguard: $name -- $bstat"  # item 9: printed to std_par's own stdout (battery.sh surfaces it)
     echo "boxguard: $name -- $bstat" >> "$T/all.log"

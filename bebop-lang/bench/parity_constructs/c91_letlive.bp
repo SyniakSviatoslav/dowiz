@@ -1,0 +1,23 @@
+// ROADMAP A14 (2026-09-07): a value that is live across an `if` whose arms BIND
+// -- a `let` in the then-arm, a match payload and an inlined call's parameters
+// in the else-arm. Before A14 every one of these binders claimed the cs
+// register the pre-`if` park had put the live value in, and check_reg_collision
+// exited 89 (`let binding while a call temp is live`) -- 330 of the fuzz
+// corpus's repros are this shape. A14 parks such values to temp slots instead
+// (emit_cond / vs_park_move under fntab[4592] / vs_span_to_slots), so both arms
+// and the join read the same slot. Oracle: tools/bpref.py (host-free program).
+fn f0(a: i64, b: i64) -> i64 {
+  a * 3 + b
+}
+fn main() -> i64 {
+  let acc = 1;
+  let i = 0;
+  while i < 4 {
+    let g = acc + i;
+    acc += (if g >= 3 then (let t0 = f0(i, g) in t0 % 7) else (match some(g) { none => 0, some(m) => m + 1 }));
+    i += 1;
+    0
+  };
+  acc
+}
+enum opt { none, some }

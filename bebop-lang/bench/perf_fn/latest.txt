@@ -77,7 +77,7 @@ skip_ws 165
 cap_exit 208
 em 28
 check_reg_collision 244
-vs_reset 58
+vs_reset 61
 emit_half 129
 mat_const 70
 lsb_idx 16
@@ -97,9 +97,10 @@ mat_mulc 381
 cs_free_idx 36
 vs_park_to_cs 63
 vs_park_to_slot 60
-vs_park_move 111
+vs_park_move 124
 vs_park_idx 97
 vs_park 35
+vs_span_to_slots 69
 vs_find_parkable 106
 vs_park_deepest 34
 vs_find_owning 88
@@ -155,7 +156,7 @@ vs_cond_branch 40
 vs_cond_branch_reg 26
 vs_loop_branch 38
 vs_loop_branch_reg 26
-emit_cond 158
+emit_cond 180
 emit_cond_csel 213
 emit_cond_branch 282
 emit_let_in 259
@@ -173,7 +174,7 @@ emit_unary 57
 vs_neg 35
 vs_neg_const 21
 vs_neg_reg 93
-vs_not 66
+vs_not 79
 vs_not_reg 61
 emit_factor 565
 sum_words 22
@@ -201,14 +202,14 @@ ident_call_at 102
 arm_is_pure 327
 find_body_end 174
 hoist_record 52
-hoist_scan 655
+hoist_scan 737
 hoist_release 35
 emit_while_stmt 583
 emit_let_stmt 555
 emit_compound_stmt 200
 emit_compound_rhs 72
 emit_body_classify 417
-emit_body 774
+emit_body 785
 find_fn 269
 skip_args 166
 emit_call_resolve 168

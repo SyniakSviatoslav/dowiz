@@ -37,7 +37,7 @@ VERIFIED = {
     2835573753: ("stp x25,x26,[sp,#48]", "a9036bf9", "prologue"),
     2835641339: ("stp x27,x28,[sp,#64]", "a90473fb", "prologue"),
     2432959471: ("add x15,sp,#0x100", "910403ef", "prologue"),
-    2433483758: ("add x14,sp,#0x300", "910c03ee", "prologue"),
+    2435056622: ("add x14,sp,#0x900", "912403ee", "prologue"),
     3573751839: ("nop", "d503201f", "nop"),
     # call save/restore
     3506488319: ("sub sp,sp,#0x30", "d100c3ff", "call save"),

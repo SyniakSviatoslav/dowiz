@@ -7,7 +7,7 @@ Status: 2026-09-07 CURRENT (operator token-economy priority) -- the harness card
 - the chain runs in the FOREGROUND (Bash timeout 600000), never as a background job; a compiled program runs as `./seed/build/seed prog.bin [args]` (the .bin is not directly executable); a words-lane FAIL for new literals = `as` them + `objdump -d` into $BEBOP_TMP/words.objdump, then rerun `python3 tools/check_words.py`.
 - prefix compiles/runs with `nice -n 10 taskset -c 0-3`; timing rows `taskset -c 4` alone.
 - chain/battery ALWAYS `SERIAL=1 PROC_CAP=30`; exit 97 = cap: `tools/reap.sh`, then `tools/reap.sh kill`.
-- every forked child is wait4'ed; `tools/reap.sh` after each probe and at the end. fuzzd is paused.
+- every forked child is wait4'ed; `tools/reap.sh` after each probe and at the end. fuzz daemon and boxguard are REMOVED permanently (operator 2026-09-07); never start `tools/fuzzd.sh`, never install supervisor/daemon/wake-lock/cron on the box; fuzz batches run in FOREGROUND only.
 
 ## Gates
 - codegen change: `SERIAL=1 PROC_CAP=30 BEBOP_TMP=$OUT tools/chain.sh bebop.bp $OUT --codegen` (fixpoint = gen3 == gen4; FREEZE=1 implied; WORD_DELTA lines; census bcond/cbz/tbz never increase without a census_allow.txt line; bin_words growth needs a word_budget.txt line). Promote `cp $OUT/gen4.bin bebop.bin.tmp && mv bebop.bin.tmp bebop.bin` (never cp over bebop.bin), `bench/vs_rust/invariants.sh --freeze`, `SERIAL=1 BEBOP_TMP=$OUT FREEZE=1 SRC=bebop.bp tools/battery.sh ./bebop.bin $OUT/bat` -> `battery: GREEN`. New instruction words: `as` -> `objdump -d` -> python int into $OUT/words.objdump BEFORE editing (check_words.py).
