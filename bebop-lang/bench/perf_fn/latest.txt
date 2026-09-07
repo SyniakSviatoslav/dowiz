@@ -21,11 +21,11 @@ find_struct 183
 field_index 161
 struct_name_hash 68
 emit_struct_field 88
-emit_struct_lit 311
+emit_struct_lit 283
 emit_field_access 91
 find_enum 236
-emit_enum_ctor 135
-emit_enum_ctor_nullary 76
+emit_enum_ctor 107
+emit_enum_ctor_nullary 56
 emit_bl 58
 fntab_lookup 45
 fntab_fact_lookup 43
@@ -92,6 +92,7 @@ vs_cs_free 66
 hoist_lookup 46
 hoist_mask 33
 vs_alloc 37
+emit_heap_trap 61
 mat_mulc 381
 cs_free_idx 36
 vs_park_to_cs 63
@@ -115,7 +116,8 @@ vs_mat_slot 37
 vs_mat 202
 vs_reg 88
 vs_to 59
-vs_bind 106
+vs_settle_sym_alias 80
+vs_bind 119
 vs_bind_reg 363
 vs_pick_dest 60
 vs_try_fold 249
@@ -160,7 +162,7 @@ emit_let_in 259
 emit_let_plain 124
 emit_let_chain 137
 emit_str 75
-emit_array_lit 308
+emit_array_lit 280
 emit_array_get 125
 vs_array_get_reg 40
 emit_array_set 159
