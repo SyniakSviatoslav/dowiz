@@ -22,13 +22,29 @@ if len(sys.argv) > 1 and sys.argv[1] == '--parse':
         c = cells(sb, 16); return c[0] == MAGIC and (c[15] & M) == zlib.crc32(d[sb*8:(sb+15)*8])
     sbs = [sb for sb in (0, 512) if valid(sb)]
     assert sbs, 'no valid superblock'
-    sb = max(sbs, key=lambda s: cells(s, 16)[2]); c = cells(sb, 16); g = c[2]; cur = c[3]
-    acc = 0; n = 0
-    while cur:
-        h0, h1, val, ref = cells(cur, 4)
-        assert (h0 & 0xFFFFFFFF) == 2 and (h1 >> 32) & 0xFFFFFFFF == zlib.crc32(d[(cur+2)*8:(cur+4)*8]), ('torn object', cur)
-        acc = (acc * 31 + val) & M; n += 1; cur = cur + ref if ref else 0
-    assert n == 100 * g, (n, g)
+    # B1 harness fix (c), root-caused this session: a superblock can pass its OWN crc (a
+    # torn/zeroed PAYLOAD page leaves the superblock -- a separate page -- fully intact) while
+    # its root-chain walk hits a torn object; the real reader survives this via st_open's
+    # st_reopen_verify (store.bp:131), which re-verifies the picked superblock's payload arena
+    # and falls back to the other superblock on failure. This oracle had no equivalent fallback
+    # (bench/vs_rust/REPORT-g5b.md's 475/1000 "torn object" failures were exactly this gap,
+    # for a writer that has since started calling st_commit_sync) -- try superblocks highest
+    # generation first, fall back on a walk failure, exactly like st_reopen_verify.
+    last_err = None
+    for sb in sorted(sbs, key=lambda s: cells(s, 16)[2], reverse=True):
+        c = cells(sb, 16); g = c[2]; cur = c[3]
+        acc = 0; n = 0
+        try:
+            while cur:
+                h0, h1, val, ref = cells(cur, 4)
+                assert (h0 & 0xFFFFFFFF) == 2 and (h1 >> 32) & 0xFFFFFFFF == zlib.crc32(d[(cur+2)*8:(cur+4)*8]), ('torn object', cur)
+                acc = (acc * 31 + val) & M; n += 1; cur = cur + ref if ref else 0
+            assert n == 100 * g, (n, g)
+            break
+        except AssertionError as e:
+            last_err = e
+    else:
+        raise last_err
     other = [s for s in (0, 512) if s != sb][0]
     og = cells(other, 16)[2] if valid(other) else None
     assert og is None or og == g - 1 or (og == 0 and g <= 1), ('other superblock generation', og, g)

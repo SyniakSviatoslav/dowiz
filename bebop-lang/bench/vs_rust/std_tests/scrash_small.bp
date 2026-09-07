@@ -17,6 +17,45 @@ use "selfhost/prelude/store.bp"
 // val (wrap); 0 if any walked node fails its crc or the walk length != 100 *
 // generation. bench/oracles/scrash.py is generic in g (no scrash.bp-specific
 // constant) and is reused UNMODIFIED against this writer's store.
+// B1 step 1 audit trail: in writer mode, print per commit the page-aligned
+// [lo,hi) byte range st_commit_sync msyncs (before the superblock toggle) and
+// the superblock cell index it then writes (512 - tx[0]) -- lets the torn-write
+// harness's own closed-form range (scrash_torn.sh build_image) be checked
+// against the real writer instead of assumed (bench/vs_rust/scrash_torn.sh cd's
+// here and captures this to a log; not parsed by the harness itself, which
+// stays a closed-form reconstruction of scrash.store's deterministic layout).
+fn itoa(dst: [i64], n: i64) -> i64 {
+  let neg = if n < 0 then 1 else 0;
+  let m = if n < 0 then 0 - n else n;
+  let p = 23;
+  let m2 = m;
+  let go = 1;
+  while go == 1 {
+    let d = m2 - (m2 / 10) * 10;
+    let _ = dst[p] = 48 + d;
+    let p = p - 1;
+    let m2 = m2 / 10;
+    let go = if m2 > 0 then 1 else 0;
+    0
+  };
+  let start = p + 1;
+  let len = 24 - start;
+  let i = 0;
+  while i < len { let _ = dst[neg + i] = dst[start + i]; let i = i + 1; 0 };
+  let _ = if neg == 1 then (let _ = dst[0] = 45 in 0) else 0;
+  len + neg
+}
+fn say_num(n: i64, sep: i64, buf: [i64]) -> i64 {
+  let l = itoa(buf, n);
+  let _ = sys_write(1, buf, l);
+  let _ = buf[0] = sep;
+  sys_write(1, buf, 1)
+}
+fn say_commit(lo: i64, hi: i64, sbidx: i64, buf: [i64]) -> i64 {
+  let _ = say_num(lo, 32, buf);
+  let _ = say_num(hi, 32, buf);
+  say_num(sbidx, 10, buf)
+}
 fn walk(base: [i64], tmp: [i64]) -> i64 {
   let root = st_root(base, tmp);
   let gen = st_gen(base, tmp);
@@ -43,6 +82,7 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let base = st_open(path, pl, size, tmp);
   let tx = zeros(6);
   let d = st_digest("N{i64,ref N}");
+  let buf = zeros(24);
   let g = 0;
   let v = 42;
   let prev = 0;
@@ -59,7 +99,11 @@ fn main(argc: i64, argv: [str]) -> i64 {
       let k = k + 1;
       0
     };
+    let lo = (tx[1] * 8) - (tx[1] * 8) % 4096;
+    let hi = tx[2] * 8;
+    let sbidx = 512 - tx[0];
     let _ = st_commit_sync(base, tx, prev, tmp);
+    let _ = say_commit(lo, hi, sbidx, buf);
     let g = g + 1;
     0
   };

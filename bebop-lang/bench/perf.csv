@@ -875,3 +875,15 @@ ts,commit,bin,metric,value,unit,n,valid,at_max_pct,temp_mc,note
 1788790832,9822745,e9159318,sgraph2_bfs_ns,119,ns,1,1,,,"per edge slot, queue BFS before the log (3 sources)"
 1788790832,9822745,e9159318,sgraph2_log_ns,13934,ns,1,1,,,amortized per inserted edge through the log (max stall 289 ms)
 1788790832,9822745,e9159318,sgraph2_compact_ms,521,ms,1,1,,,
+1788794415,7d3e256,e9159318,sbench_insert,400,ms,1,1,,,sqlite 9754
+1788794415,7d3e256,e9159318,sbench_lookup,190,ns,1,1,,,sqlite 6531.0
+1788794416,7d3e256,e9159318,sbench_scan,1200,ns,1,1,,,sqlite 51397.8
+1788794416,7d3e256,e9159318,sbench_update,73,ms,1,1,,,sqlite 615
+1788794416,7d3e256,e9159318,sbench_reopen,24340,us,1,1,,,sqlite 2266.3
+1788794416,7d3e256,e9159318,sbench_size1,85197016,bytes,1,1,,,sqlite 34070528
+1788794416,7d3e256,e9159318,sbench_compact,397,ms,1,1,,,sqlite 329
+1788794416,7d3e256,e9159318,sbench_size2,72396960,bytes,1,1,,,sqlite 34070528
+1788794417,7d3e256,e9159318,sbench_durable,229,us,1,1,,,sqlite 62.6
+1788794417,7d3e256,e9159318,sbench_dbatch10,30,us,1,1,,,sqlite 44.2
+1788794417,7d3e256,e9159318,sbench_dbatch100,7,us,1,1,,,sqlite 10.9
+1788794417,7d3e256,e9159318,sbench_recover,44713.2,us,1,1,,,sqlite 3298.8

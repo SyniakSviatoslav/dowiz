@@ -239,6 +239,25 @@ fn st_commit_sync(base: [i64], tx: [i64], root: i64, tmp: [i64]) -> i64 {
   let _ = st_sync(base, 8192);
   g
 }
+// st_commit_batch(base, tx, first_mark, tmp): group commit (B1 blueprint section 3). The
+// caller runs N sub-transactions each committed with plain `st_commit` (no per-commit
+// sync -- st_begin picks the live sb and toggles it every time, so N commits alternate
+// slots and each one's root/gen/cursor is durable-ORDERED but not yet msync'ed), then
+// calls this ONCE: msync the union of every page appended across the whole batch
+// (`first_mark` = tx[1] right after the batch's FIRST st_begin, before any allocation --
+// tx[1] itself only holds the LAST sub-transaction's mark by the time this runs), THEN
+// msync both superblock pages (8192 bytes, same as st_commit_sync). Correctness: nothing
+// in the batch is durable until this one grouped msync of the superblock pages returns,
+// so a crash mid-batch can only ever reveal the pre-batch generation (self-consistent,
+// same guarantee st_commit_sync gives one commit at a time) -- never a torn mix of the
+// batch's N sub-commits, because none of their superblock writes were individually
+// synced (blueprint section 8: "group commit hides a torn middle transaction" -- it
+// can't, because "hidden" here means "not yet published to a crash image at all").
+fn st_commit_batch(base: [i64], tx: [i64], first_mark: i64, tmp: [i64]) -> i64 {
+  let lo = (first_mark * 8) - (first_mark * 8) % 4096;
+  let _ = sys_msync(st_addr(base) + lo, tx[2] * 8 - lo, 4);
+  st_sync(base, 8192)
+}
 fn st_abort(tx: [i64]) -> i64 {
   let _ = tx[2] = tx[1];
   let _ = tx[3] = 0;

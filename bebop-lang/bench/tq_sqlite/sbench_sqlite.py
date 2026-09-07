@@ -76,5 +76,49 @@ elif ph == 'durable_full':
     for k in range(1000):
         exe(db, 'BEGIN'); L.sqlite3_bind_int64(q, 1, k); L.sqlite3_step(q); L.sqlite3_reset(q); exe(db, 'COMMIT')
     print('durable_full', round((time.perf_counter() - t0) * 1e6 / 1000, 1), 0); L.sqlite3_close(db)
+elif ph in ('durable_batch10', 'durable_batch100'):
+    # B1 blueprint section 3 sqlite twin: N row updates per COMMIT (group commit) under
+    # synchronous=FULL (an fsync per COMMIT, not per row) -- the sqlite-native equivalent
+    # of st_commit_batch's one msync per N st_commit calls.
+    n = 10 if ph == 'durable_batch10' else 100
+    db = opendb(); exe(db, 'PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL')
+    q = prep(db, 'UPDATE p SET u=u+1 WHERE id=?'); t0 = time.perf_counter()
+    total = 1000; k = 0
+    while k < total:
+        exe(db, 'BEGIN')
+        for _ in range(n):
+            L.sqlite3_bind_int64(q, 1, k); L.sqlite3_step(q); L.sqlite3_reset(q); k += 1
+        exe(db, 'COMMIT')
+    print(ph, round((time.perf_counter() - t0) * 1e6 / total, 1), 0); L.sqlite3_close(db)
+elif ph == 'recover':
+    # B1 blueprint section 3 sqlite twin: "recovery = open with a non-empty -wal" -- commit
+    # under WAL with no checkpoint, snapshot the (db, -wal) bytes, then time N independent
+    # reopens from a FRESH copy of that same pair each trial (reopening the SAME files
+    # repeatedly would checkpoint the -wal away after trial 1 and understate the cost),
+    # median wall time in us -- the bebop side times a reopen after a torn image the same
+    # median-of-N way (bench/vs_rust/sbench.sh).
+    for f in (DB, DB + '-wal', DB + '-shm', DB + '-journal'):
+        try: os.remove(f)
+        except FileNotFoundError: pass
+    db = opendb(); exe(db, 'CREATE TABLE r(id INTEGER PRIMARY KEY, u INTEGER)')
+    exe(db, 'PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL'); exe(db, 'BEGIN')
+    for k in range(1000): exe(db, 'INSERT INTO r VALUES(%d,%d)' % (k, k))
+    exe(db, 'COMMIT')
+    db_bytes = open(DB, 'rb').read(); wal_bytes = open(DB + '-wal', 'rb').read()
+    assert wal_bytes, 'expected a non-empty -wal after a WAL commit with no checkpoint'
+    L.sqlite3_close(db)
+    times = []
+    for _ in range(11):
+        open(DB, 'wb').write(db_bytes); open(DB + '-wal', 'wb').write(wal_bytes)
+        try: os.remove(DB + '-shm')
+        except FileNotFoundError: pass
+        t0 = time.perf_counter()
+        db2 = ctypes.c_void_p(); L.sqlite3_open(DB.encode(), ctypes.byref(db2))
+        L.sqlite3_exec(db2, b'PRAGMA journal_mode=WAL;', None, None, None)
+        q2 = prep(db2, 'SELECT u FROM r WHERE id=1'); L.sqlite3_step(q2); L.sqlite3_column_int64(q2, 0)
+        L.sqlite3_close(db2)
+        times.append((time.perf_counter() - t0) * 1e6)
+    times.sort()
+    print('recover', round(times[len(times) // 2], 1), 0)
 elif ph == 'size':
     print('size', os.path.getsize(DB), 0)

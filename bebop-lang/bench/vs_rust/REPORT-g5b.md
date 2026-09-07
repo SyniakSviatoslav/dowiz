@@ -111,3 +111,99 @@ mkdir -p $OUT
 TRIALS=1000 BEBOP_TMP=$OUT BEBOP_BIN=./bebop.bin nice -n10 taskset -c0-3 bash bench/vs_rust/scrash_torn.sh
 TRIALS=1000 BEBOP_TMP=$OUT                        nice -n10 taskset -c0-3 bash bench/vs_rust/scrash_torn.sh --sqlite
 ```
+
+## 2026-09-07 — GAP CLOSED: G5b is GREEN, 0/1000 invalid reopens
+
+Status: B1 steps 1-3 non-codegen work (docs/blueprints/B1-durability-torn-write.md), HEAD
+7d3e256, bin e9159318 (FROZEN, untouched). `sys_fsync` / `st_compact` directory-fsync
+remain OUT of scope (deferred until the A4 fuzz window closes, per this task's own
+instructions) -- not needed to close this gap: `st_commit_sync`'s existing `sys_msync`
+ordering is what the torn-write proof exercises (a real device flush is unreachable
+under proot/f2fs nobarrier regardless, LANG-DB section 3).
+
+```
+VERDICT: GREEN
+torn_trials: 1000 failures 0 (bebop store, scrash_small.bp NGEN=1000) ; sqlite_wal: 1000/0 (0 invalid, NGEN=300 commits sampled)
+```
+
+### What changed since the 475/1000 RED run above
+
+The prep session's 475/1000 result (and its "the sys_fsync builtin ... is deferred, not
+closed here" framing) predates work already landed at this HEAD, found while root-causing
+the gap this session:
+
+1. **scrash_small.bp already commits via `st_commit_sync`** (store.bp:235: msync the
+   appended range, THEN toggle the superblock, THEN msync the superblock pages) --
+   confirmed NOT a leftover of the 475/1000 run; `git log`/diff shows this landed before
+   this session. `scrash.bp` itself (the separate G5 SIGKILL gate) intentionally still
+   uses plain `st_commit` -- SIGKILL has no torn-page model, so it has no ordering gap to
+   close; out of scope, unchanged.
+2. **`st_verify`/`st_reopen_verify` already exist and `st_open` already calls
+   `st_reopen_verify`** (store.bp:103,131,149) -- a torn/zeroed PAYLOAD page behind an
+   otherwise-valid-crc superblock is now self-healing: the real reader falls back to the
+   other superblock and stamps the bad one's magic word to 0 in the mapping.
+
+A fresh TRIALS=50 measurement at session start (this task's own dynamic-values line)
+already showed only 10/50 invalid -- not the 475/1000-style "torn object" failures, but a
+DIFFERENT pair of harness-model bugs and one oracle bug, root-caused and fixed this
+session (see the inline comments at each fix for the full mechanism):
+
+- **(b) harness bug #1 — durable-prefix tear.** `build_image`'s payload-page loop treated
+  the FIRST (straddling) page's pre-commit-k bytes `[page0,lo)` as unwritten (zero-filled
+  in `old_page`), so a `zeroed`/`torn` draw on that page could wipe an EARLIER,
+  already-durable generation's own root/objects even though commit k never touched those
+  bytes again. Empirically reproduced (seed 20260906, trial 0, k=910): page0's variant
+  drew `zeroed`, wiping gen 909's root cell (cell 364620, byte 2916960 < lo=2916992);
+  `bench/oracles/scrash.py --parse` raised `('torn object', 364620)` while walking gen
+  909 -- a generation commit 910 never touched. Fixed in `bench/vs_rust/scrash_torn.sh`:
+  only `[max(p,lo), pend)` (the bytes commit k actually appended) is subject to the
+  old|new|torn|zeroed draw; `[p, max(p,lo))` keeps its real, durable bytes.
+- **(b) harness bug #2 — superblock sector-tear/payload ordering not honoured.** The
+  superblock's crc-checked region (cells 0-14 + the crc word = 128 bytes) sits entirely
+  inside the first 512 B sector, so a `torn`+`first` draw is byte-indistinguishable from a
+  full `new` write (fully valid gen k), and `torn`+`last` is indistinguishable from full
+  `old` (gen k-2) -- confirmed empirically on the SAME trial 0 (sb draw was `torn`+`last`,
+  landing slot 0 as a fully valid gen 908). The harness didn't correlate this outcome with
+  the payload-page tear draws, so a durably-landed gen k superblock could coexist with an
+  independently-torn payload page inside k's OWN synced range -- a state `st_commit_sync`'s
+  ordering makes physically impossible (the superblock write is ordered strictly after the
+  payload msync it depends on). Fixed: when the superblock lands durably `new` (by this
+  crc-coincidence rule, not just `choice=='new'`), every payload page in `[page0,hi)` is
+  forced to `new` too.
+- **(c) oracle bug.** `bench/oracles/scrash.py --parse` picked the higher-gen crc-valid
+  superblock and walked its root chain with no fallback -- a payload-verify failure (even
+  one the real reader would self-heal via `st_reopen_verify`) was fatal
+  (`AssertionError`). Fixed: try superblocks highest-generation-first, fall back to the
+  other valid one on a walk failure, mirroring `st_reopen_verify`'s own fallback.
+
+An audit trail was added per this task's instructions: `scrash_small.bp` now prints
+`lo hi sbidx` per commit (the exact page-aligned msync range and superblock cell index
+`st_commit_sync` used), and `scrash_torn.sh` cross-checks all 1000 printed lines against
+its own closed-form `[lo,hi)`/superblock-index model after every writer run -- **0
+mismatches** in both the TRIALS=50 and TRIALS=1000 runs below, i.e. the harness's crash
+model is now verified byte-exact against the real writer, not merely assumed.
+
+### Report runs (this session, both at the 2-run-per-session cap)
+
+```
+$ TRIALS=1000 BEBOP_BIN=./bebop.bin BEBOP_TMP=$OUT nice -n10 taskset -c4 bash bench/vs_rust/scrash_torn.sh
+sync-range audit: 1000/1000 commits logged, 0 mismatches
+picked generations: 627 distinct, k-1/k pairs seen ok
+scrash_torn: 1000 trials, 0 invalid reopens (bebop store, NGEN=1000)
+
+$ TRIALS=1000 BEBOP_TMP=$OUT nice -n10 taskset -c4 bash bench/vs_rust/scrash_torn.sh --sqlite
+scrash_torn --sqlite: 1000 trials, 0 invalid reopens (NGEN=300 commits sampled)
+```
+
+| | trials | invalid | rate |
+|---|---|---|---|
+| bebop store (`scrash_small.bp`, st_commit_sync + st_reopen_verify) | 1000 | 0 | 0% |
+| sqlite WAL (`journal_mode=WAL`, `synchronous=NORMAL`) | 1000 | 0 | 0% |
+
+G5b's gate (0 invalid reopens) is now GREEN on both sides. `scrash_torn` is registered as
+a `std_golden.sh` gate (TRIALS=50, golden = 0) with `bench/oracles/scrash_torn.py`;
+`FORCE=1 J=1 bash bench/oracles/run_all.sh` -> `SUMMARY ok=111 self-frozen=0 mismatch=0
+missing=0` (scrash_torn included). B1 step 2 (`st_commit_batch`, sbench `durable batch
+10`/`durable batch 100`/`recover` rows) landed the same session -- see
+`bench/vs_rust/RESULT-sbench.md` for the measured numbers (durable batch100 well under
+the blueprint's 60 us/commit target).

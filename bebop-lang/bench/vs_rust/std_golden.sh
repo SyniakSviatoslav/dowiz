@@ -638,6 +638,12 @@ rm -f scrash.store
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/scrash.bp ${BEBOP_TMP:-/tmp/opencode}/scrash_test.bin >/dev/null 2>&1 && run 120 ${BEBOP_TMP:-/tmp/opencode}/scrash_test.bin w >/dev/null && run 120 ${BEBOP_TMP:-/tmp/opencode}/scrash_test.bin | tail -1)
 gate scrash 4231007695826602272 "$r"
 
+# ---- scrash_torn (B1 G5b, docs/blueprints/B1-durability-torn-write.md: page-tear crash
+# model, TRIALS=50 fast std-suite check -- the TRIALS=1000 report row lives in
+# bench/vs_rust/REPORT-g5b.md, run separately, not part of this gate) ----
+r=$(TRIALS=50 BEBOP_TMP=${BEBOP_TMP:-/tmp/opencode} BEBOP_BIN=${BEBOP_BIN:-bebop.bin} timeout 120 bash bench/vs_rust/scrash_torn.sh 2>/dev/null | tail -1 | awk '{print $4}')
+gate scrash_torn 0 "$r"
+
 # ---- sevolve (G3, T114: v1/v2 layouts, v1 reads v2, sha256-named migration + compaction) ----
 rm -f sevolve.store sevolve.store.tmp
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sevolve.bp ${BEBOP_TMP:-/tmp/opencode}/sevolve_test.bin >/dev/null 2>&1 && run 120 ${BEBOP_TMP:-/tmp/opencode}/sevolve_test.bin | tail -1)
