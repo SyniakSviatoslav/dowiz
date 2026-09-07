@@ -16,7 +16,7 @@ spec() {  # provider -> "base|model|needs_key"
     openrouter) echo "https://openrouter.ai/api/v1|nvidia/nemotron-3.5-lightning:free|1";;
     groq)       echo "https://api.groq.com/openai/v1|openai/gpt-oss-120b|1";;
     mistral)    echo "https://api.mistral.ai/v1|mistral-small-latest|1";;
-    gemini)     echo "https://generativelanguage.googleapis.com/v1beta/openai|gemini-2.5-flash|1";;
+    gemini)     echo "https://generativelanguage.googleapis.com/v1beta/openai|gemini-3.6-flash|1";;
     nim)        echo "https://integrate.api.nvidia.com/v1|nvidia/nemotron-3-super-120b-a12b|1";;
     *) return 1;;
   esac
@@ -31,6 +31,7 @@ one() {  # one provider [model] -> prints content, rc 0 on success
     | python3 -c "import sys,json
 try: j=json.load(sys.stdin)
 except Exception: sys.exit(2)
+if not isinstance(j, dict): print('llm_route['+'$pv'+'] error: '+json.dumps(j)[:200], file=sys.stderr); sys.exit(2)
 c=j.get('choices')
 if not c or not c[0].get('message',{}).get('content'): print('llm_route['+'$pv'+'] error: '+json.dumps(j.get('error') or j)[:200], file=sys.stderr); sys.exit(2)
 print(c[0]['message']['content'])"
