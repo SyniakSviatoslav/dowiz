@@ -1,0 +1,18 @@
+// A2 commit 2: K8H's loop shape -- two 64-bit LCG constants (>= 65536, hoisted out of the
+// loop entry into free cs registers) and a fold that depends on every iteration (acc/x/i
+// all carried across iterations). The `let bit`/`let acc` after the constants are used
+// (in `let x = ...`) exercises the §8 clobber risk: the hoisted registers must sit above
+// every register the body's own `let`s (x/bit/acc/i, one genuinely new: bit) will bind.
+fn main() -> i64 {
+  let acc = 0;
+  let x = 1;
+  let i = 1000;
+  while i > 0 {
+    let x = x * 6364136223846793005 + 1442695040888963407;
+    let bit = (x >> 60) & 1;
+    let acc = if bit == 1 then acc + x else acc - i;
+    let i = i - 1;
+    0
+  };
+  acc
+}

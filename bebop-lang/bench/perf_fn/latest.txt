@@ -77,7 +77,7 @@ skip_ws 165
 cap_exit 208
 em 28
 check_reg_collision 192
-vs_reset 28
+vs_reset 52
 emit_half 129
 mat_const 70
 lsb_idx 16
@@ -89,6 +89,8 @@ vs_mask_take 65
 vs_mask_free 62
 vs_cs_take 63
 vs_cs_free 66
+hoist_lookup 46
+hoist_mask 33
 vs_alloc 37
 mat_mulc 381
 cs_free_idx 36
@@ -104,7 +106,7 @@ vs_evict_move 93
 vs_evict_at 42
 vs_evict 38
 vs_settle_flags 56
-vs_push 64
+vs_push 98
 vs_pop 90
 vs_mat_reg 52
 vs_mat_sym 57
@@ -195,12 +197,16 @@ arm_end 250
 kw_bad_at 423
 ident_call_at 102
 arm_is_pure 327
-emit_while_stmt 363
+find_body_end 174
+hoist_record 52
+hoist_scan 655
+hoist_release 35
+emit_while_stmt 583
 emit_let_stmt 555
 emit_compound_stmt 200
 emit_compound_rhs 52
 emit_body_classify 417
-emit_body 765
+emit_body 774
 find_fn 269
 skip_args 166
 emit_call_resolve 168

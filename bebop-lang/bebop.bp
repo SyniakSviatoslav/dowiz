@@ -1784,6 +1784,17 @@ fn vs_reset(fntab: [i64]) -> i64 {
   let _ = fntab[4574] = 0;
   let _ = fntab[4575] = 0;
   let _ = fntab[4576] = 0;
+  // A2 commit 2: hoist pairs are per-loop scratch, but ptab is REUSED across
+  // functions on the planning pass (bebop.bp compile_fn's outer loop) -- a
+  // stale pair from a previous fn's compile must never leak into the next.
+  let _ = fntab[4578] = 0;
+  let _ = fntab[4579] = 0;
+  let _ = fntab[4580] = 0;
+  let _ = fntab[4581] = 0;
+  let _ = fntab[4582] = 0;
+  let _ = fntab[4583] = 0;
+  let _ = fntab[4584] = 0;
+  let _ = fntab[4585] = 0;
   0
 }
 
@@ -1865,6 +1876,44 @@ fn vs_cs_free(fntab: [i64], r: i64, site: i64) -> i64 {
   let _ = fntab[4573] = fntab[4573] - (fntab[4573] & (1 << (r - 19)));
   let _ = if (fntab[4573] & (0 - 256)) != 0 then sys_exit(119 + site) else 0;
   0
+}
+
+// A2 commit 2 (constant hoisting): 0 or a live hoisted pair's register for
+// value `v` (fntab 4578+2k/4579+2k, k<4 -- register 0 = unused slot, real cs
+// registers are 19..26). Single choke point so vs_push's CONST interception
+// stays a one-line check; the pairs are 0 whenever no loop is mid-hoist, so
+// this is a no-op everywhere except inside a hoisting loop's own body.
+fn hoist_lookup(fntab: [i64], v: i64) -> i64 {
+  let k = 0;
+  let found = 0;
+  while k < 4 {
+    let reg = fntab[4579 + 2 * k];
+    let found = if (if reg > 0 then 1 else 0) * (if fntab[4578 + 2 * k] == v then 1 else 0) == 1 then reg else found;
+    let k = k + 1;
+    0
+  };
+  found
+}
+
+// A2 commit 2: bitmask (bits 0-7 = x19-x26, same convention as fntab[4573]
+// itself) of the cs registers currently held by a live hoisted pair. A
+// hoisting loop's own body legitimately holds a cs register across many of
+// its own statement boundaries -- unlike every other cs use, which is
+// released again before the statement it was parked in ends -- so the
+// generic per-statement invariant (emit_body's "window empty implies cs
+// mask empty" check) must subtract this mask before comparing, or every
+// multi-statement hoisting loop body (K8H included: 4 lets per iteration)
+// would trip it on its own first statement.
+fn hoist_mask(fntab: [i64]) -> i64 {
+  let k = 0;
+  let m = 0;
+  while k < 4 {
+    let reg = fntab[4579 + 2 * k];
+    let m = if reg > 0 then m | (1 << (reg - 19)) else m;
+    let k = k + 1;
+    0
+  };
+  m
 }
 
 
@@ -2119,7 +2168,16 @@ fn vs_push(insns: [i64], n: [i64], fntab: [i64], stab: [i64], kind: i64, p0: i64
   // capacity itself.
   let _ = if fntab[4547] >= 512 then sys_exit(89) else 0;
   let w = fntab[4547];
-  let _ = vs_set_entry(fntab, w, kind, p0, p1);
+  // A2 commit 2 (constant hoisting): a CONST push whose value matches a live
+  // hoisted pair (fntab 4578+2k/4579+2k, only ever nonzero inside one
+  // `while` loop's own body compile) becomes a direct SYM(register) push
+  // instead -- byte-identical to referencing a permanent local, and a no-op
+  // everywhere hoist_lookup finds nothing (every construct outside a
+  // hoisting loop's body sees kindH==kind, p0H==p0, zero behaviour change).
+  let hreg = if kind == 1 then hoist_lookup(fntab, p0) else 0;
+  let kindH = if hreg > 0 then 3 else kind;
+  let p0H = if hreg > 0 then hreg else p0;
+  let _ = vs_set_entry(fntab, w, kindH, p0H, p1);
   let _ = fntab[4547] = w + 1;
   // A REG push always OWNS its register in the free mask. Most callers get
   // this for free (the register came from vs_alloc, whose bit is already
@@ -2127,7 +2185,7 @@ fn vs_push(insns: [i64], n: [i64], fntab: [i64], stab: [i64], kind: i64, p0: i64
   // a FIXED register (x0) without allocating it first; without this the
   // mask still showed it free and a later vs_alloc could hand the same
   // physical register to something else while this tag still owned it.
-  let _ = if kind == 2 then (if p0 < 8 then vs_mask_take(fntab, p0, 8) else 0) else 0;
+  let _ = if kindH == 2 then (if p0H < 8 then vs_mask_take(fntab, p0H, 8) else 0) else 0;
   0
 }
 
@@ -3911,6 +3969,176 @@ fn arm_is_pure(s: str, from: i64, to: i64, strn: i64) -> i64 {
   pure[0]
 }
 
+// A2 commit 2 (hoist): find the `}` matching the `{` at pos0-1 (pos0 is the
+// char right after that `{`, same convention as skip_while_cond's own
+// stopping point) -- depth-tracked over `{`/`}` only, strings/chars/`//`
+// comments skipped transparently so a stray brace inside one can't
+// mismatch the count. Used only for a text pre-scan (never touches the
+// caller's own `pos`); the real body compile finds its own end the normal
+// way (emit_body's own recursive-descent parse), so the two are never
+// compared -- only b0 need agree, and it does (both are skip_while_cond's
+// result + 1, read at the same pos before either pass has moved anything).
+fn find_body_end(s: str, pos0: i64, strn: i64) -> i64 {
+  let pos = [pos0, strn];
+  let depth = 1;
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let e1 = if pos[0] + 1 >= strn then 1 else 0;
+    let ch1 = if e1 == 1 then 0 else char(s, pos[0] + 1);
+    let is_str = if ch == 34 then 1 else 0;
+    let is_chr = if ch == 39 then 1 else 0;
+    let is_cm = (if ch == 47 then 1 else 0) * (if ch1 == 47 then 1 else 0);
+    let dopen = if ch == 123 then 1 else 0;
+    let dclose = if ch == 125 then 1 else 0;
+    let depth = depth + dopen - dclose;
+    let stop = if depth == 0 then 1 else 0;
+    let _ = if stop == 1 then 0
+      else if is_str == 1 then skip_string(s, pos)
+      else if is_chr == 1 then skip_char_lit(s, pos)
+      else if is_cm == 1 then skip_line_comment(s, pos)
+      else (let _ = pos[0] = pos[0] + 1 in 0);
+    let done = stop + at_end;
+    0
+  };
+  pos[0]
+}
+
+// A2 commit 2: record a hoist candidate value, deduped, capped at 4 (the
+// number of pair slots, fntab 4578..4585). `vals` is the caller's scratch
+// array (len >= 4); `nvals[0]` is the running count.
+fn hoist_record(vals: [i64], nvals: [i64], v: i64) -> i64 {
+  let i = 0;
+  let found = 0;
+  while i < nvals[0] {
+    let found = if vals[i] == v then 1 else found;
+    let i = i + 1;
+    0
+  };
+  let _ = if (found == 0) * (if nvals[0] < 4 then 1 else 0) == 1 then (let _ = vals[nvals[0]] = v in (let _ = nvals[0] = nvals[0] + 1 in 0)) else 0;
+  0
+}
+
+// A2 commit 2: scan a `while` body's text [b0, b1) once for (a) integer
+// literal tokens (decimal or `0x` hex, T99) whose value is >= 65536 AND sit
+// at BRACE DEPTH 0 relative to this body's own `{` -- recorded into `vals`
+// (deduped, up to 4, via hoist_record) -- and (b) the count of `let`-bound
+// names (ANY depth) that will consume a NEW permanent register (word-
+// boundary `let`; a `let ... in ...` expression can nest anywhere, not only
+// at statement level). The depth gate on (a) matters only for a NESTED
+// `while`: its own body is a fresh `{...}` at depth 1+, and a constant used
+// only there must be hoisted by ITS OWN emit_while_stmt call, not by this
+// (outer) one too -- std_tests/ptrless.bp and deltasync.bp both nest a
+// `while` with a >=65536 FNV multiplier one level in, and without this gate
+// the outer scan saw straight through the brace and tried to ALSO take a cs
+// register for it, colliding with the inner loop's own hoist (its entry
+// assertion, cs mask must be 0, then fires). (b) stays depth-independent:
+// a nested loop's own `let`s consume real registers too, so the outer
+// hoist's floor must still count them. A name already bound OUTSIDE the
+// loop -- `sym_lookup` against `stab`, the same lookup sym_bind itself uses
+// -- or already counted earlier in THIS scan (a body-local `seen` list, cap
+// 16) is a REBIND (sym_bind reuses its existing register, §1.1 "mutable
+// let"): K8H's own body rebinds x/acc/i and only genuinely introduces `bit`,
+// so counting every `let` keyword blindly (the first cut of this scanner)
+// starved the hoist of registers and only fit one of its two constants.
+// `_` (discard) never counts either, matching sym_bind's own is_discard.
+// Past the 16-name cap this over-counts, which stays SAFE (just a higher
+// hoist start register, §8), never unsafe. Strings/char literals/line
+// comments are skipped transparently; O(body length) once per `while`
+// (read_num_val/read_ident each advance `pos` themselves, so no token is
+// re-scanned char by char from this loop too).
+//
+// A NESTED `while` ANYWHERE in [b0, b1) (any depth, not just depth 0) turns
+// off hoisting for THIS loop entirely (vals cleared at the end): the depth
+// gate above stops this loop from hoisting a constant used only inside the
+// nested one, but a constant it legitimately owns at depth 0 -- e.g.
+// bench630/k1ht.bp's outer `while rep>0 { let i=1000000; while i>0 {...} }`,
+// 1000000 >= 65536, used before the inner loop even starts -- would still
+// stay live in the cs mask across the WHOLE outer body (released only once,
+// after the inner loop too), and the inner loop's own entry assertion (cs
+// mask must be 0 there) would fire. Declining whenever a body nests a
+// `while` sidesteps the whole class instead of threading a mask exception
+// through the nested entry check too; K8H/c72 have no nested loop, so this
+// costs nothing for the kernel this commit targets.
+fn hoist_scan(s: str, b0: i64, b1: i64, strn: i64, stab: [i64], vals: [i64]) -> i64 {
+  let pos = [b0, strn];
+  let nvals = [0];
+  let seen = zeros(16);
+  let nseen = 0;
+  let nlets = 0;
+  let depth = 0;
+  let has_nested = 0;
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= b1 then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let e1 = if pos[0] + 1 >= b1 then 1 else 0;
+    let ch1 = if e1 == 1 then 0 else char(s, pos[0] + 1);
+    let is_str = if ch == 34 then 1 else 0;
+    let is_chr = if ch == 39 then 1 else 0;
+    let is_cm = (if ch == 47 then 1 else 0) * (if ch1 == 47 then 1 else 0);
+    let dopen = if ch == 123 then 1 else 0;
+    let dclose = if ch == 125 then 1 else 0;
+    let depth = depth + dopen - dclose;
+    let cb = if pos[0] <= 0 then 0 else char(s, pos[0] - 1);
+    let idb = is_alpha(cb) + is_digit(cb) + (if cb == 95 then 1 else 0);
+    let is_lit = is_digit(ch) * (1 - idb);
+    let c2 = if pos[0] + 2 >= b1 then 0 else char(s, pos[0] + 2);
+    let c3 = if pos[0] + 3 >= b1 then 0 else char(s, pos[0] + 3);
+    let c4 = if pos[0] + 4 >= b1 then 0 else char(s, pos[0] + 4);
+    let c5 = if pos[0] + 5 >= b1 then 0 else char(s, pos[0] + 5);
+    let ida3 = is_alpha(c3) + is_digit(c3) + (if c3 == 95 then 1 else 0);
+    let is_letkw = (if ch == 108 then 1 else 0) * (if ch1 == 101 then 1 else 0) * (if c2 == 116 then 1 else 0) * (1 - ida3) * (1 - idb);
+    let is_whilekw0 = (if ch == 119 then 1 else 0) * (if ch1 == 104 then 1 else 0) * (if c2 == 105 then 1 else 0) * (if c3 == 108 then 1 else 0) * (if c4 == 101 then 1 else 0);
+    let ida5 = is_alpha(c5) + is_digit(c5) + (if c5 == 95 then 1 else 0);
+    let is_whilekw = is_whilekw0 * (1 - ida5) * (1 - idb);
+    let has_nested = if is_whilekw == 1 then 1 else has_nested;
+    let _ = if is_lit == 1 then (let v = read_num_val(s, pos) in (let _ = if (v >= 65536) * (if depth == 0 then 1 else 0) == 1 then hoist_record(vals, nvals, v) else 0 in 0)) else 0;
+    let _ = if is_letkw == 1 then (let _ = pos[0] = pos[0] + 3 in skip_ws(s, pos)) else 0;
+    let namepos = pos[0];
+    let name = if is_letkw == 1 then read_ident(s, pos) else 0;
+    let is_disc = if name == 95 then 1 else 0;
+    let prior = if is_letkw == 1 then sym_lookup(s, stab, name, namepos) else 0 - 1;
+    let si = 0;
+    let sdup = 0;
+    while si < nseen {
+      let sdup = if seen[si] == name then 1 else sdup;
+      let si = si + 1;
+      0
+    };
+    let is_newname = is_letkw * (1 - is_disc) * (if prior < 0 then 1 else 0) * (1 - sdup);
+    let nlets = nlets + is_newname;
+    let room = if nseen < 16 then 1 else 0;
+    let _ = if is_newname * room == 1 then (let _ = seen[nseen] = name in 0) else 0;
+    let nseen = nseen + is_newname * room;
+    let _ = if is_lit == 1 then 0
+      else if is_letkw == 1 then 0
+      else if is_str == 1 then skip_string(s, pos)
+      else if is_chr == 1 then skip_char_lit(s, pos)
+      else if is_cm == 1 then skip_line_comment(s, pos)
+      else (let _ = pos[0] = pos[0] + 1 in 0);
+    let done = if pos[0] >= b1 then 1 else 0;
+    0
+  };
+  let _ = if has_nested == 1 then (let _ = vals[0] = 0 in (let _ = vals[1] = 0 in (let _ = vals[2] = 0 in (let _ = vals[3] = 0 in 0)))) else 0;
+  nlets
+}
+
+// A2 commit 2: release `hn` hoisted pairs starting at cs index `hfrom`
+// (registers 19+hfrom .. 19+hfrom+hn-1) and clear their table cells.
+fn hoist_release(fntab: [i64], hfrom: i64, hn: i64) -> i64 {
+  let k = 0;
+  while k < hn {
+    let _ = vs_cs_free(fntab, 19 + hfrom + k, 31);
+    let _ = fntab[4578 + 2 * k] = 0;
+    let _ = fntab[4579 + 2 * k] = 0;
+    let k = k + 1;
+    0
+  };
+  0
+}
+
 // Emit one 'while cond { body };' statement: a real backward loop (no result).
 // B5 (D14 item 1, research S2): loop rotation, bottom test -- one branch per
 // iteration in steady state instead of two. The condition is parsed and
@@ -3935,6 +4163,46 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = vs_park(insns, n, fntab, stab, 0);
   let _ = if fntab[4548] != 255 then sys_exit(102) else 0;
   let _ = if fntab[4573] != 0 then sys_exit(105) else 0;
+  // A2 commit 2 (constant hoisting, §3 blueprint): pre-scan the body text
+  // (a throwaway copy of pos, never the real one) for 64-bit literals,
+  // materialise up to 4 of them ONCE here -- before pmark/pjump, so this
+  // code runs exactly once at loop entry, never inside the repeated body --
+  // into free cs registers strictly ABOVE every register the body's own
+  // `let`s will bind (§8 risk: cnt0 + new_lets, new_lets a conservative
+  // text-scan upper bound). cnt0 == stab[0] here (nothing has bound a
+  // target-program register yet), so it is available in both the planning
+  // and emission passes from the same published state, and vs_cs_take
+  // already bumps cs_hi (fntab[4575]) so the prologue saves them.
+  let strn0 = slen(s, pos);
+  let hpos = [pcond, strn0];
+  let _ = skip_while_cond(s, hpos);
+  let hb0 = hpos[0] + 1;
+  let hb1 = find_body_end(s, hb0, strn0);
+  let hvals = zeros(4);
+  let new_lets = hoist_scan(s, hb0, hb1, strn0, stab, hvals);
+  let hnv = (if hvals[0] != 0 then 1 else 0) + (if hvals[1] != 0 then 1 else 0) + (if hvals[2] != 0 then 1 else 0) + (if hvals[3] != 0 then 1 else 0);
+  let hfrom = cnt0 + new_lets;
+  let havail = if hfrom < 8 then 8 - hfrom else 0;
+  let hn = if hnv < havail then hnv else havail;
+  let _ = fntab[4578] = 0;
+  let _ = fntab[4579] = 0;
+  let _ = fntab[4580] = 0;
+  let _ = fntab[4581] = 0;
+  let _ = fntab[4582] = 0;
+  let _ = fntab[4583] = 0;
+  let _ = fntab[4584] = 0;
+  let _ = fntab[4585] = 0;
+  let hk = 0;
+  while hk < hn {
+    let hcr = 19 + hfrom + hk;
+    let _ = mat_const(insns, n, hvals[hk], hcr);
+    let _ = vs_cs_take(fntab, hcr, 30);
+    let _ = if hfrom + hk + 1 > fntab[4575] then fntab[4575] = hfrom + hk + 1 else 0;
+    let _ = fntab[4578 + 2 * hk] = hvals[hk];
+    let _ = fntab[4579 + 2 * hk] = hcr;
+    let hk = hk + 1;
+    0
+  };
   // T43 mark placeholder: a nop that becomes str x14,[sp,#80+8*depth]
   // (0xF90003EE + imm12<<10, as+objdump) once the body proves reset-safe.
   let pmark = n[0];
@@ -3956,6 +4224,12 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   // step 2b's dead-literal scan is obsolete: a bare trailing `0` is a CONST
   // tag that never emitted a word in the first place).
   let _ = if blastl == 1 then vs_pop(fntab) else 0;
+  // A2 commit 2: release the hoisted pairs right after the body compiles,
+  // before the bottom-test condition is recompiled below -- the existing
+  // sys_exit(106) invariant a few lines down requires the cs mask back at
+  // 0 there, and hoisting is scoped to the loop body's own text anyway
+  // (the condition is a separate reparse from pcond, not part of the body).
+  let _ = hoist_release(fntab, hfrom, hn);
   // T43 reset: only when the body allocated on x14 and the text scan proves
   // no allocated pointer can leave the iteration. Once per iteration, right
   // after the body, before falling into the bottom test (same position
@@ -4236,7 +4510,10 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     // happened, skip it for the one case (the tail item) where w==1 by
     // design (fntab[4547]!=0 guards exactly that case).
     let _ = if (fntab[4547] == 0) * (if fntab[4548] != 255 then 1 else 0) == 1 then diag_exit(s, before, 102) else 0;
-    let _ = if (fntab[4547] == 0) * (if fntab[4573] != 0 then 1 else 0) == 1 then diag_exit(s, before, 103) else 0;
+    // A2 commit 2: a live hoisted pair legitimately keeps a cs bit set
+    // across this item boundary (§ hoist_mask) -- subtract it before the
+    // leak check, everywhere else this is a no-op (hoist_mask is 0).
+    let _ = if (fntab[4547] == 0) * (if (fntab[4573] & (255 - hoist_mask(fntab))) != 0 then 1 else 0) == 1 then diag_exit(s, before, 103) else 0;
     // bug 9 hunt (2026-09-06): the check above only fires when w IS 0 -- a
     // leaked WINDOW ENTRY (not just leaked mask bits) leaves w != 0 after a
     // non-tail item and silently escapes it forever (every later item's

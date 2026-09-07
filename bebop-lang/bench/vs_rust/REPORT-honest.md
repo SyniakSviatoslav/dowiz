@@ -127,3 +127,47 @@ Status: measured after A2 commit 1 landed and promoted (R=11, pinned core 4, box
 | K6 nnidx scan 1M (bench/tq_sqlite/RESULT.md, Q=20) | 18.4 ms | sqlite scan 183 ms python / ~158 ms native (T100) | store faster |
 
 K8H's blueprint gate is <= 1.2x (docs/blueprints/A2-csel-and-const-hoist.md §0/§7), tighter than this table's generic <= 2.0x column: 2.2x is UNMET against 1.2x, down from the blueprint's stated 4.5x baseline (and from a 3.6x row two sections up) but csel alone does not clear it -- the blueprint's own contingency is commit 2 (hoist the two 64-bit LCG constants out of the loop body), not attempted this round per instructions. K5 self-compile reads 25.35s here vs 1.27s in the register-model row above; not re-measured against an A2-free bebop.bin in this session, so whether that gap is a real regression, a `bench/vs_rust/kernels/k1h.bp` measurement-script change, or box load between sessions is not established here -- flagged, not investigated, out of scope for this row's K8H gate.
+
+## A2 commit 2 row (2026-09-07): constant hoisting (docs/blueprints/A2-csel-and-const-hoist.md §3 "Commit 2"), bebop.bin 9694b780
+
+Status: K8H's blueprint gate stayed UNMET (2.2x/1.9x) after csel alone, so commit 2 landed per the blueprint's own
+contingency. `emit_while_stmt` now pre-scans the loop body's text once at loop entry (before the forward `b -> test`
+placeholder, so this runs exactly once, never inside the repeated body) for integer literals >= 65536 at brace depth
+0 -- K8H's two 64-bit LCG constants (6364136223846793005, 1442695040888963407) -- materialises up to 4 of them with
+the existing `mat_const` (movz+3movk) into free cs registers strictly above every register the body's own `let`s
+will bind (a text-scan count of NEW names only, via `sym_lookup` against the same `stab` `sym_bind` itself uses --
+K8H's body rebinds x/acc/i and only genuinely introduces `bit`, so counting blindly starved the hoist to 1 of 2
+constants before this fix), and `vs_push` swaps a matching `CONST` push for a direct register (`SYM`) reference for
+the rest of that loop's own compile -- zero new instruction words, zero new window/materialisation kind (kind 3 SYM
+already has exactly the right "permanent register, never freed on pop" contract; reusing kind 4 CS would have freed
+the register on the constant's first use, corrupting every later iteration). A loop whose body nests another `while`
+declines to hoist entirely (`bench630/k1ht.bp`/`k4t.bp`'s `while rep>0 { let i=1000000; while i>0 {...} }` and
+`std_tests/ptrless.bp`/`deltasync.bp`'s nested FNV loop all hit this: an outer-hoisted register stays live in the cs
+mask across the whole outer body, including the inner loop's own entry, which asserts the cs mask is 0 there) --
+K8H/c72_hoist have no nested loop, so this costs nothing for the kernel this commit targets. `k8h_loopwords` 22 -> 14
+(docs/PERF.md), exactly the predicted -8 (two 64-bit constants x 4 words each, moved out of the repeated body).
+Census: bcond 1113 -> 1116 (+3, the nested-`while` guard's own selector), cbz unchanged at 126; bin_words 38842 ->
+38975 (+133, the 6 new fns compiled into the compiler itself: hoist_lookup/hoist_mask/find_body_end/hoist_record/
+hoist_scan/hoist_release -- a one-time compiler-size cost, not per-target-program growth); prologue/epilogue grow by
+2 words in any hoisting fn (one more callee-saved pair, x23/x24) -- expected, `cs_hi` (fntab[4575]) already tracked
+this via the existing `vs_cs_take`. New construct c72_hoist (K8H's own loop shape, EXPECT 5504683299252448320 via
+bpref.py).
+
+| kernel | bebop med / p95 ms per rep | Rust honest med / p95 ms per rep | bebop / Rust | gate <= 2.0x (TG-DONE 1) | 1.0x (D1(a) long target) | bebop RSS MB |
+|---|---|---|---|---|---|---|
+| K1H | 1.22 / 1.27 | 1.212 / 1.275 | 1.0x | MET | 1.0x | 15.6 |
+| K2H | 0.83 / 0.91 | 0.451 / 0.526 | 1.8x | MET | 1.8x | 15.6 |
+| K3H | 0.31 / 0.40 | 0.229 / 0.345 | 1.4x | MET | 1.4x | 15.6 |
+| K4 | 4.37 / 4.47 | 3.294 / 3.400 | 1.3x | MET | 1.3x | 15.6 |
+| K8H | 0.14 / 0.14 | 0.072 / 0.073 | 1.9x | MET | 1.9x | 15.6 |
+| K5 self-compile of bebop.bp (cold, pinned, median of 3) | 1.92 s (1.914/1.944/1.921, deleting $OUT/k5.bin* between runs) | (no twin: rustc is not a fair twin of a 200 KB one-pass compiler) | |
+| K6 nnidx scan 1M (bench/tq_sqlite/RESULT.md, Q=20) | 18.4 ms | sqlite scan 183 ms python / ~158 ms native (T100) | store faster |
+
+K8H's blueprint gate is <= 1.2x (docs/blueprints/A2-csel-and-const-hoist.md §0/§7): 1.9x is a real, large drop from
+csel-only's 2.2x (loop words halved, wall time roughly halved too, 0.16 -> 0.14 ms/rep against a similarly-noisy
+0.072/0.073 ms Rust baseline) but still UNMET against the tight 1.2x target. The remaining gap is the branch itself
+(K8H's whole reason to exist: a genuinely ~50% data-dependent bit, `(x >> 60) & 1`, that csel already turned into a
+csel rather than a mispredicted branch -- so what is left is real ALU/memory work per iteration, not something
+constant hoisting or csel can remove) and possibly REPS-loop/clock_ms overhead LLVM's Rust twin does not pay the
+same way; per the task's "one variable" scope (constant hoisting at loop entry only, no other codegen change) this
+is not chased further this round -- reported honestly rather than widened.
