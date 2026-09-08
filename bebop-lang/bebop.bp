@@ -532,8 +532,8 @@ fn find_enum(s: str, out: [i64]) -> i64 {
     let found = if hit == 1 then 1 else found;
     let _ = spc[0] = j;
     let _ = cpc[0] = j;
-    let _ = if is_quote == 1 then skip_string(s, spc) else 0;
-    let _ = if is_comment == 1 then skip_line_comment(s, cpc) else 0;
+    let _ = if is_quote == 1 then skip_string_n(s, spc, strn) else 0;
+    let _ = if is_comment == 1 then skip_line_comment_n(s, cpc, strn) else 0;
     let jnext = (j + 1) * (1 - is_quote - is_comment - hit) + spc[0] * is_quote + cpc[0] * is_comment;
     let j = if hit == 1 then j + 5 else jnext;
     0
@@ -1782,8 +1782,13 @@ fn emit_match(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
 }
 
 // Skip a "//" line comment: advance pos to the newline (or end). pos is at '/'.
-fn skip_line_comment(s: str, pos: [i64]) -> i64 {
-  let strn = str_len(s);
+// PERF (2026-09-08): skip_line_comment/skip_string called str_len -- a byte-at-a-time
+// NUL scan of the WHOLE source -- once per call. The four whole-source scans call them
+// ~1,643 times each over a 337 KB self-source, i.e. 555 MB of NUL-scanning per scan to
+// skip 337 KB of text. The `_n` twins take strn from the caller (the discipline
+// docs/WORKER-CARD.md already states for text scanners); the bare names stay as wrappers
+// so the two dozen cold call sites are untouched.
+fn skip_line_comment_n(s: str, pos: [i64], strn: i64) -> i64 {
   let done = 0;
   while done == 0 {
     let at_end = if pos[0] >= strn then 1 else 0;
@@ -1796,11 +1801,11 @@ fn skip_line_comment(s: str, pos: [i64]) -> i64 {
   };
   0
 }
+fn skip_line_comment(s: str, pos: [i64]) -> i64 { skip_line_comment_n(s, pos, str_len(s)) }
 
 // Skip a "..." string literal: pos is at the opening '"', leave it after the
 // closing '"'.
-fn skip_string(s: str, pos: [i64]) -> i64 {
-  let strn = str_len(s);
+fn skip_string_n(s: str, pos: [i64], strn: i64) -> i64 {
   let _ = pos[0] = pos[0] + 1;
   let done = 0;
   while done == 0 {
@@ -1815,6 +1820,7 @@ fn skip_string(s: str, pos: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
   0
 }
+fn skip_string(s: str, pos: [i64]) -> i64 { skip_string_n(s, pos, str_len(s)) }
 
 fn skip_ws(s: str, pos: [i64]) -> i64 {
   let n = slen(s, pos);
@@ -5324,7 +5330,9 @@ fn compile_fn(s: str) -> i64 {
 fn collect_fns(s: str, fnames: [i64], fpos: [i64], cnt: [i64]) -> i64 {
   let strn = str_len(s);
   let j = 0;
-  let tpos_c = [0, 0];
+  // tpos_c[1] = strn is read_ident's slen cache: [0,0] made every one of the 282
+  // read_ident calls fall back to a full str_len.
+  let tpos_c = [0, strn];
   let spc = [0];
   let cpc = [0];
   while j + 2 < strn {
@@ -5346,9 +5354,9 @@ fn collect_fns(s: str, fnames: [i64], fpos: [i64], cnt: [i64]) -> i64 {
     let _ = if is_fn * capok == 1 then (let _ = fnames[cnt[0]] = name in (let _ = fpos[cnt[0]] = j in 0)) else 0;
     let _ = cnt[0] = cnt[0] + is_fn;
     let _ = spc[0] = j;
-    let _ = if is_quote == 1 then skip_string(s, spc) else 0;
+    let _ = if is_quote == 1 then skip_string_n(s, spc, strn) else 0;
     let _ = cpc[0] = j;
-    let _ = if is_comment == 1 then skip_line_comment(s, cpc) else 0;
+    let _ = if is_comment == 1 then skip_line_comment_n(s, cpc, strn) else 0;
     let jnext = (j + 1) * (1 - is_quote - is_comment - is_fn) + spc[0] * is_quote + cpc[0] * is_comment + tpos_c[0] * is_fn;
     let j = jnext;
     0
@@ -5556,7 +5564,9 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
 // completes (write_lit_cells); emit_str turns each literal into adr x0,<imm>.
 fn scan_literals(s: str, fntab: [i64], L: i64) -> i64 {
   let strn = str_len(s);
-  let pos = [0];
+  // pos[1] = strn: scan_one_lit calls slen(s,pos), which read pos[1] OUT OF BOUNDS on
+  // the old 1-cell [0] (unchecked) and then fell back to a full str_len per literal.
+  let pos = [0, strn];
   let lcnt = [0];
   let cum = [0];
   while pos[0] < strn {
@@ -5566,7 +5576,7 @@ fn scan_literals(s: str, fntab: [i64], L: i64) -> i64 {
     let is_sl = if c0 == 47 then 1 else 0;
     let is_sl2 = if c1 == 47 then 1 else 0;
     let is_cm = is_sl * is_sl2;
-    let _ = if is_cm == 1 then skip_line_comment(s, pos) else 0;
+    let _ = if is_cm == 1 then skip_line_comment_n(s, pos, strn) else 0;
     let is_q = if c0 == 34 then 1 else 0;
     let _ = if is_q == 1 then (let _ = pos[0] = pos[0] + 1 in (let _ = scan_one_lit(s, pos, fntab, L, lcnt, cum) in 0)) else 0;
     let adv = 1 - is_q - is_cm;
@@ -5720,10 +5730,10 @@ fn compile_program_offs(s: str, insns: [i64], n: [i64], offs: [i64]) -> i64 {
   let dcell_tot = fntab[4649];
   let dlitc = fntab[4650];
   let Lcode = n[0];
+  let strn = str_len(s);
   let sp = [0];
   let dli = [0];
   let dgo = if dlitc > 0 then 1 else 0;
-  let strn = str_len(s);
   while dgo == 1 {
     let c0 = if sp[0] >= strn then 0 else char(s, sp[0]);
     let e1 = if sp[0] + 1 >= strn then 1 else 0;
@@ -5731,11 +5741,11 @@ fn compile_program_offs(s: str, insns: [i64], n: [i64], offs: [i64]) -> i64 {
     let is_sl = if c0 == 47 then 1 else 0;
     let is_sl2 = if c1 == 47 then 1 else 0;
     let is_cm = is_sl * is_sl2;
-    let _ = if is_cm == 1 then skip_line_comment(s, sp) else 0;
+    let _ = if is_cm == 1 then skip_line_comment_n(s, sp, strn) else 0;
     let is_q = if c0 == 34 then 1 else 0;
     let adv = 1 - is_q - is_cm;
     let _ = sp[0] = sp[0] + adv;
-    let _ = if is_q == 1 then (let _ = sp[0] = sp[0] + 1 in (let _ = write_lit_cells(s, sp, insns, fntab, dli) in 0)) else 0;
+    let _ = if is_q == 1 then (let _ = sp[0] = sp[0] + 1 in (let _ = write_lit_cells(s, sp, insns, fntab, dli, strn) in 0)) else 0;
     let dgo = if dli[0] >= dlitc then 0 else 1;
     0
   };
@@ -5746,8 +5756,7 @@ fn compile_program_offs(s: str, insns: [i64], n: [i64], offs: [i64]) -> i64 {
 // Write literal li's bytes into cells starting at data word fntab[5000+li].
 // sp points INSIDE the literal (just after '"'). Advances sp past '"',
 // bumps dli. The trailing cell's unused bytes stay 0 -> NUL termination.
-fn write_lit_cells(s: str, sp: [i64], insns: [i64], fntab: [i64], dli: [i64]) -> i64 {
-  let strn = str_len(s);
+fn write_lit_cells(s: str, sp: [i64], insns: [i64], fntab: [i64], dli: [i64], strn: i64) -> i64 {
   let start = sp[0];
   let done = 0;
   while done == 0 {

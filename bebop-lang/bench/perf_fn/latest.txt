@@ -26,7 +26,7 @@ struct_name_hash 65
 emit_struct_field 86
 emit_struct_lit 273
 emit_field_access 91
-find_enum 212
+find_enum 214
 emit_enum_ctor 107
 emit_enum_ctor_nullary 56
 emit_bl 55
@@ -77,8 +77,10 @@ emit_var_or_ctor 80
 emit_match_payload 64
 emit_match_arm 65
 emit_match 317
-skip_line_comment 61
-skip_string 67
+skip_line_comment_n 54
+skip_line_comment 21
+skip_string_n 60
+skip_string 21
 skip_ws 145
 cap_exit 208
 em 28
@@ -224,7 +226,7 @@ skip_args 150
 emit_call_resolve 158
 emit_call 382
 compile_fn 552
-collect_fns 240
+collect_fns 241
 compile_fn_at_total_saved 128
 fw_vc 13
 fw_alloc 16
@@ -232,11 +234,11 @@ fw_cshi 20
 fw_tsp 15
 compile_fn_at_facts 95
 compile_fn_at 1031
-scan_literals 161
+scan_literals 163
 scan_one_lit 104
 compile_program_to 35
-compile_program_offs 889
-write_lit_cells 131
+compile_program_offs 891
+write_lit_cells 124
 compile_program 52
 self_check 502
 emit_expr_words 417
