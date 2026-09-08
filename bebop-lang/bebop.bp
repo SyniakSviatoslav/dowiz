@@ -2203,6 +2203,25 @@ fn vs_span_to_slots(insns: [i64], n: [i64], fntab: [i64], stab: [i64], keep: i64
     let p0 = vs_entry_p0(fntab, i);
     let is_cs = if kind == 4 then 1 else 0;
     let _ = if is_cs == 1 then (let _ = vs_park_to_slot(insns, n, fntab, i, p0) in vs_cs_free(fntab, p0, 12)) else 0;
+    // ROADMAP A14b (2026-09-08): a pending `SYM r` entry (kind 3) is not
+    // register-OWNING, so A14's park/demote left it alone -- but it is still
+    // arm-INVALIDATABLE, and that is the property that matters here. A write
+    // to symbol `r` inside one arm makes vs_settle_sym_alias (the RC2
+    // snapshot fix) materialise this entry into a window register from
+    // INSIDE that arm; the `mov` runs on one path only, and once the entry
+    // owns a register vs_park_deepest can park it to a cs register that a
+    // later `let` in the same arm then binds -- check_reg_collision's
+    // arm_spanning exit 89, corpus seed 100744 (docs/blueprints/
+    // A14b-corpus-leftovers.md). Snapshot SYM entries to a temp slot here
+    // too: a slot read is identical on both arms and after the join, and
+    // kind 5 is neither parkable nor register-owning, so nothing inside an
+    // arm can relocate it. Both words already exist (vs_park_to_slot's
+    // `str`, whose Rt field spans all 32 registers, and vs_mat_sym's own
+    // spilled-symbol `ldr`) -- no new instruction word.
+    let is_sym_r = (if kind == 3 then 1 else 0) * (if p0 < 100 then 1 else 0);
+    let is_sym_s = (if kind == 3 then 1 else 0) * (if p0 >= 100 then 1 else 0);
+    let _ = if is_sym_r == 1 then vs_park_to_slot(insns, n, fntab, i, p0) else 0;
+    let _ = if is_sym_s == 1 then (let t = vs_alloc(insns, n, fntab, stab) in (let _ = em(insns, n, 4181721568 + (p0 - 100) * 1024 + t) in (let _ = vs_park_to_slot(insns, n, fntab, i, t) in vs_mask_free(fntab, t, 41)))) else 0;
     let i = i + 1;
     0
   };

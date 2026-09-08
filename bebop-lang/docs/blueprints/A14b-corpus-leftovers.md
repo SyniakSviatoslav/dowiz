@@ -143,3 +143,41 @@ The exit 89 is a **false positive of a correct guard**. Two reasons a reviewer c
 the given binary and compares against the `expected=` value in each file's header. It prints one
 `SWEEP bin=… match=… mismatch=… compile89=… runtimeout=…` line and writes outliers to
 `<outdir>/sweep.txt` (~2.5 min for 330 files). Reuse it; do not write a second one.
+
+## Part 2 — LANDED (2026-09-08, on top of 42ce19e5 / 40418 words)
+
+The change is exactly the one specified above: `vs_span_to_slots` gains the kind-3 SYM demotion,
+no new instruction word, nothing else touched. Gates, verbatim:
+
+- `chain: fixpoint gen3 == gen4 88d3f50c`; promoted `bebop.bin` = `88d3f50cb375be1b155fde78e10796db`.
+- `census: bebop 40511 1145 126 0 869 1707 275` — words 40418 → **40511 (+93)**, matching the
+  scratch estimate. `word_budget.txt`: `bebop 40511` and `c71_csel_impure 182` (177 → 182, the only
+  construct that grew).
+- `battery: GREEN` (SERIAL=1, FREEZE=1, on the promoted bin): `std_golden: 111 pass, 0 fail`,
+  `construct parity: pass=76 fail=0`, `diag: 17 pass, 0 fail`, `parity: pass=13 fail=0 skip=1`,
+  `pool_parity: 5 pass, 0 fail`, `invariants: GREEN`, `words: PASS`, ABI ok.
+- `SWEEP bin=88d3f50c match=328 mismatch=2 compile89=0 compileother=0 runtimeout=0` — the two
+  mismatches are exactly `UNSUPPORTED-89-100671 exp=6 rc=81` and `-100828 exp=4 rc=81`, i.e. the
+  trap-81 pair that waits for A6. **compile89 = 0: the exit-89 class is empty over the corpus.**
+- Seed 100744 compiles on the promoted bin and runs to **10** (bpref). `c95_symspan` = 17,
+  `c91_letlive` = 12, `c90_symalias` = 0, `c92_letlive2` = `COMPILEFAIL:97` (re-derived from bpref,
+  not assumed).
+
+**Two corrections to the spec above, recorded because they cost gate cycles:**
+
+1. **A `census_allow.txt` line WAS needed** (`bebop bcond 1143 → 1145`), contrary to the card's
+   prediction. The prediction confused the words this change *emits* (only `str`/`ldr`, no branch)
+   with the compiler's *own* branch census, which counts the source `if`s the change adds to
+   `bebop.bp` — here the two impure `if (is_sym_r/is_sym_s)` arms, both of which call functions and
+   so cannot csel away. Any future card that adds a guarded arm to bebop.bp should budget +1 bcond
+   per impure `if` up front.
+2. The trap-81 headroom risk the card flagged did **not** materialise: the extra temp slots did not
+   move `s0 + tsp0` past 256 anywhere in the corpus (compile89 = 0) and did not change the trap-81
+   pair's behaviour.
+
+Also worth knowing for the next worker: the battery's `J=3`-sharded `std_golden` failed
+`gb_gen_specialised` with `MISMATCH(0)` on one run and passed on the next with the *same* gen4 bin.
+The 12 generated `gb_<op>_<sr>_0_1_0.bp/.bin` all live in one shared `$BEBOP_TMP`, so two shards
+clobber each other's files. Re-running `J=1 BEBOP_TMP=<fresh> BEBOP_BIN=<bin> nice -n 10 taskset -c 4
+bash bench/vs_rust/std_golden.sh` gave `111 pass, 0 fail`, and the SERIAL post-battery agrees. It is
+a harness race, not a codegen fault — but it is a real false-RED that will bite again.

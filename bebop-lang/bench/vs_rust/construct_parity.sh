@@ -104,6 +104,12 @@ for f in "$DIR"/*.bp; do
     c91_letlive) EXPECT=12;;
     c78_scan) EXPECT=-6715473280576199194;;
     c94_fsync) EXPECT=0;;
+    # A14b (2026-09-08): the regression guard for the SYM-entry span fix -- a pending `SYM v`
+    # operand below an `if` with impure arms, a write to `v` inside an arm (vs_settle_sym_alias
+    # materialises the pre-arm entry from INSIDE that arm) and a `let` binder in the same arm
+    # under window pressure. Exited 89 on 42ce19e5, runs 17 (bpref) once vs_span_to_slots also
+    # demotes kind-3 SYM entries. Drop either ingredient and it compiled clean before the fix.
+    c95_symspan) EXPECT=17;;
     *) EXPECT="";;
   esac
   [ "$FREEZE" = 1 ] && [ "$IVAL" = "$EXPECT" ] && cp "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin" "$FROZEN/${b}.bin"
@@ -134,11 +140,13 @@ for f in "${DIR%/}/neg"/*.bp; do
     c39_fnmatch) EXPECT=COMPILEFAIL:99;;
     c85_param15) EXPECT=COMPILEFAIL:100;;
     c93_unbound) EXPECT=COMPILEFAIL:101;;
-    # A14b part 1 (2026-09-08): the one corpus seed A14's path-independent park does NOT cover
-    # (a post-call temp from a sibling operand colliding with a nested let in a call argument).
-    # 89 records today's fail-closed behaviour, not a decision: A14b part 2 either lifts the case
-    # (EXPECT becomes bpref's 10) or documents it as permanent in REGISTER-MODEL-BLUEPRINT §1.1.
-    c92_letlive2) EXPECT=COMPILEFAIL:89;;
+    # A14b (2026-09-08): the shrunk seed-100744 repro. It used to exit 89 in the register
+    # allocator (a pre-arm SYM entry relocated inside one if-arm, then a colliding let binder);
+    # A14b removed that, so the compiler now reaches the parser and reports the program's REAL
+    # defect -- `main` has no tail expression. Re-derived, not assumed: `python3 tools/bpref.py
+    # bench/parity_constructs/neg/c92_letlive2.bp` says "fn main: body has no tail expression
+    # (bebop.bin exits 97)". The positive regression guard for the fix is c95_symspan.
+    c92_letlive2) EXPECT=COMPILEFAIL:97;;
     *) EXPECT="";;
   esac
   out="${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin"

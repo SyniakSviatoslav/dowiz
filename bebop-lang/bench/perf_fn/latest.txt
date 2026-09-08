@@ -30,13 +30,13 @@ emit_bl 58
 fntab_lookup 45
 fntab_fact_lookup 43
 ft_srcpos 46
-collect_ctors 188
+collect_ctors 190
 ft_ctor_tag 48
 ft_cache_slot 33
 ft_cache_get 35
 ft_cache_set 21
 emit_bl_call 293
-vs_place_args 227
+vs_place_args 229
 vs_find_unplaced 92
 vs_find_blocker 122
 vs_deliver 65
@@ -102,7 +102,7 @@ vs_park_to_slot 60
 vs_park_move 124
 vs_park_idx 97
 vs_park 35
-vs_span_to_slots 69
+vs_span_to_slots 158
 vs_find_parkable 106
 vs_park_deepest 34
 vs_find_owning 88

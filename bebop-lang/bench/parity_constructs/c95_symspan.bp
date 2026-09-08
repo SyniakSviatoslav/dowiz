@@ -1,0 +1,8 @@
+fn f8(a: i64, b: i64, c: i64, d: i64, e: i64, g: i64, h: i64, i: i64) -> i64 {
+  a + i
+}
+fn main() -> i64 {
+  let v = 3;
+  let r = f8(v, v, v, v, v, v, v, (if f8(1, 1, 1, 1, 1, 1, 1, 1) then (let _ = v = 9 in f8(v + 1, v + 2, v + 3, v + 4, v + 5, v + 6, v + 7, (let t = 4 in t))) else 5));
+  r
+}
