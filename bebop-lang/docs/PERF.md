@@ -76,7 +76,7 @@ Status: 2026-09-07 CURRENT (last 12 runs; `!` = alert: > T % and > 3 MAD vs the 
 | becache_cold_ms |  |  |  |  |  |  |  |  |  |  |  |  |  | first |
 | fuzz_trap82 | count |  |  |  | 0 | 0 |  | 0 | 0 |  | 0 |  | 0 | 0 TRAP-82 (SIGSEGV/SIGBUS) on 9694b780, 0 tolerated |
 | k8h_ms | ms/rep | 0.3 ? |  |  | 0.27 ? | 0.19 ? |  | 0.16 ? | 0.16 ? |  |  |  | 0.11 ? | invalid window |
-| k8h_loopwords | words | 25 |  |  | 25 | 25 |  | 22 | 22 |  |  |  | 14 | 22 -> 14 |
+| k8h_loopwords | words | 25 |  |  | 25 | 25 |  | 22 | 22 |  |  |  | 9 | 22 -> 14 was WRONG (stale, found 2026-09-08 by re-deriving with perf.py's own loop_words regex): the real A2 baseline was 12, and ROADMAP A2b step 2's three peepholes (madd / and-immediate / ubfx) took it 12 -> 11 -> 10 -> 9 on bebop.bin 7939ad7e. Same 9 for the honest twin bench630/k8ht.bp, which is the one honest.sh measures. Rust twin: 8 |
 | push_words | words | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 -> 0 |
 | cw:c55_vswindow | words |  |  |  | 51 |  |  |  |  |  |  |  |  | first |
 | cw:c56_nest | words |  |  |  | 62 |  |  |  |  |  |  |  |  | first |

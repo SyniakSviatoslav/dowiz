@@ -844,7 +844,22 @@ gate gb_gen_specialised -4783772994166464769 "$gb_gen_c"
 #      pool_parity-style: a main-stripped copy of bebop.bp concatenated ahead of it. ----
 awk '/^fn main\(/{skip=1} !skip{print} skip&&/^}/{skip=0}' bebop.bp > "$GBT/gb_pool_build.bp"
 cat bench/vs_rust/std_tests/gb_pool.bp >> "$GBT/gb_pool_build.bp"
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$GBT/gb_pool_build.bp" "$GBT/gb_pool_test.bin" >/dev/null 2>&1 && run 60 "$GBT/gb_pool_test.bin" ${BEBOP_BIN:-bebop.bin} "$GBT" "$GBT/gb_pool_gate.gbpool" | tail -1)
+# 2026-09-08: the pool file is keyed by the COMPILER's md5. It used to be a fixed
+# "$GBT/gb_pool_gate.gbpool", which made this gate non-idempotent across compilers sharing one
+# BEBOP_TMP: a second run with a DIFFERENT binary read the previous compiler's kernels out of
+# the stale pool, its forked children died with `trap 82: SIGSEGV/SIGBUS`, and the fold printed
+# 0 instead of the golden. Reproduced both ways on the promoted 29fe5c72 itself (fresh $GBT ->
+# golden; reused $GBT -> three trap-82 lines and 0), which is why chain 1 in a fresh $OUT was
+# green here and chains 2 and 3 in the same $OUT were red. Keying by md5 keeps the ACROSS-RUN
+# pool-hit path exercised for one compiler -- which `rm -f` would have thrown away -- while a
+# new binary simply gets its own pool.
+#
+# This makes the GATE deterministic; it does NOT explain the fault. gb_pool_abi asserts, and
+# passes, that a Kernel whose compiler_digest mismatches is a MISS (rebuilt, never run), so a
+# stale pool should have been rejected rather than executed. Why the file-backed path does not
+# reject it is OPEN and tracked on ROADMAP B3 -- do not treat this line as the fix for that.
+GBPOOL="$GBT/gb_pool_gate.$(md5sum < "${BEBOP_BIN:-bebop.bin}" | cut -c1-8).gbpool"
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$GBT/gb_pool_build.bp" "$GBT/gb_pool_test.bin" >/dev/null 2>&1 && run 60 "$GBT/gb_pool_test.bin" ${BEBOP_BIN:-bebop.bin} "$GBT" "$GBPOOL" | tail -1)
 gate gb_pool -4783772994166464769 "$r"
 
 # ---- gb_pool_abi (B3 step 4, design item (d)): a Kernel whose compiler_digest field mismatches

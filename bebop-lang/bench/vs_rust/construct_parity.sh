@@ -116,6 +116,18 @@ for f in "$DIR"/*.bp; do
     # cs-mask-must-be-0 assertion still holds) and the outer pair is re-materialised after the
     # inner loop's backward branch, so `m` reads correctly on BOTH sides of the nested loop.
     c73_hoistnest) EXPECT=24000282;;
+    # A2b step 2a: vs_try_madd folds `a * b + c` backwards into the multiply's own word by
+    # rewriting its Ra field, when the multiply is still the last word emitted and the addend
+    # needs no materialisation. Four folding shapes plus one that must DECLINE (a CONST addend,
+    # whose movz would land after the word being rewritten). EXPECT from tools/bpref.py.
+    c74_madd) EXPECT=82837312;;
+    # A2b step 2b: vs_try_and_imm emits `and Xd,Xn,#C` for C = 2^k - 1 and declines every other
+    # mask (6 = 110b, and 0) back to the old materialise-then-and path. EXPECT from tools/bpref.py.
+    c75_andimm) EXPECT=1477639;;
+    # A2b step 2c: vs_try_ubfx collapses `(e >> lsb) & (2^width - 1)` into the shift's own
+    # UBFM word, and declines when the extract would run off the top (60+8), when the shift is
+    # an asr (SBFM) and when it is a left shift (imms != 63). EXPECT from tools/bpref.py.
+    c76_ubfx) EXPECT=2271612;;
     *) EXPECT="";;
   esac
   [ "$FREEZE" = 1 ] && [ "$IVAL" = "$EXPECT" ] && cp "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin" "$FROZEN/${b}.bin"

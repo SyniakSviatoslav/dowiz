@@ -1,0 +1,21 @@
+// c75_andimm (ROADMAP A2b step 2b guard): the AND-immediate fold in vs_try_and_imm. The fold
+// only accepts a LOW RUN of ones, C = 2^k - 1, which is the whole bitmask-immediate sub-case
+// this tree writes; everything else must still take the old vs_binop_reg path (materialise the
+// mask into a register, then `and` two registers). Both sides are frozen here:
+//   m1  (v >> 60) & 1                       k = 1  -- K8H's own branch bit
+//   m2  v & 255                             k = 8
+//   m3  v & 4294967295                      k = 32, the widest common mask
+//   m4  v & 6                               NOT a low run (110b) -- must fall through
+//   m5  v & 0                               c > 0 fails -- must fall through, and must still
+//                                           be 0, not a mis-encoded imms of -1
+// v is the K8H LCG multiplier, so m1 is a real high-bit test on a real 64-bit constant rather
+// than something the folder could see through.
+fn main() -> i64 {
+  let v = 6364136223846793005;
+  let m1 = (v >> 60) & 1;
+  let m2 = v & 255;
+  let m3 = v & 4294967295;
+  let m4 = v & 6;
+  let m5 = v & 0;
+  m1 * 1000003 + m2 * 10007 + m3 % 100003 + m4 * 7 + m5
+}

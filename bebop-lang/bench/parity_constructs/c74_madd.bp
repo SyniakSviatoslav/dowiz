@@ -1,0 +1,25 @@
+// c74_madd (ROADMAP A2b step 2a guard): the MADD fold in vs_try_madd. Freezes the four
+// shapes that decide whether `a * b + c` may collapse into the multiply's own word:
+//   x  mul then add, addend a permanent symbol register (the fold fires)
+//   y  the operands in the other order, `c + a * b` (fires -- `+` is commutative and the
+//      fold looks at both window entries, not just the top)
+//   z  two multiplies under one `+`, only the LAST of which is still the last word emitted
+//      (fires on that one; the first mul is an ordinary REG operand by then)
+//   w  the multiplicand is itself computed, `a * (b + c) + b` (fires: the inner `+` is
+//      emitted before the mul, so the mul is still the last word when the outer `+` lands)
+// and one shape that must NOT fold: `v * b + 4242` materialises its addend with a movz,
+// which would land AFTER the mul and be read a word before it was written -- the addend's
+// entry is a CONST, not one of vs_reg's is_direct kinds, so the fold declines and
+// vs_binop_reg emits the plain add. All five are folded into one printed value so a
+// regression in any of them moves the number.
+fn main() -> i64 {
+  let a = 7;
+  let b = 11;
+  let c = 5;
+  let x = a * b + c;
+  let y = c + a * b;
+  let z = a * b + a * c;
+  let w = a * (b + c) + b;
+  let v = a * b + 4242;
+  x * 1000003 + y * 10007 + z * 101 + w * 7 + v
+}

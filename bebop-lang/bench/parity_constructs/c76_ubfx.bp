@@ -1,0 +1,20 @@
+// c76_ubfx (ROADMAP A2b step 2c guard): the shift-then-mask fold in vs_try_ubfx, which
+// collapses `(e >> lsb) & (2^width - 1)` into the shift's own word by rewriting its UBFM
+// imms field (63 -> lsb+width-1). Freezes one folding shape and three that must DECLINE:
+//   a  (v >> 60) & 1      folds -- K8H's own branch bit, 60 + 1 <= 64
+//   b  (v >> 8) & 255     folds -- a byte extract, 8 + 8 <= 64
+//   c  (v >> 60) & 255    MUST NOT fold: 60 + 8 = 68 runs off the top of the register, and
+//                         the zeros the mask keeps above bit 3 are only correct as two words
+//   d  (v >>> 60) & 1     MUST NOT fold: `>>>` is asr = SBFM (bits 31:22 = 589), not UBFM
+//   e  (v << 4) & 255     MUST NOT fold: a left shift is UBFM with imms != 63
+// v is the K8H LCG multiplier so the extracts run on a real 64-bit value, and every result is
+// folded into one printed number: a regression in any single arm moves it.
+fn main() -> i64 {
+  let v = 6364136223846793005;
+  let a = (v >> 60) & 1;
+  let b = (v >> 8) & 255;
+  let c = (v >> 60) & 255;
+  let d = (v >>> 60) & 1;
+  let e = (v << 4) & 255;
+  a * 1000003 + b * 10007 + c * 101 + d * 7 + e
+}

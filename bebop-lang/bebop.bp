@@ -2664,6 +2664,76 @@ fn vs_try_shift_imm(insns: [i64], n: [i64], fntab: [i64], stab: [i64], op: i64) 
   ok
 }
 
+// A2b step 2c (the last word of the K8H bit test that codegen can reach). After step 2b
+// `(x >> 60) & 1` is `lsr` + `and #1` -- two words where AArch64 has one, because a right
+// shift followed by a low-run mask IS a bitfield extract. Both are UBFM(64): `lsr Xd,Xn,#k`
+// is immr=k imms=63, and `ubfx Xd,Xn,#lsb,#width` is immr=lsb imms=lsb+width-1, so the mask
+// collapses into the shift by rewriting imms ALONE -- 63 -> lsb+width-1, i.e.
+// -63*1024 + (lsb+width-1)*1024. `as`+objdump ($BEBOP_TMP/words.objdump): lsr x22,x20,#60 =
+// 0xd37cfe96, ubfx x22,x20,#60,#1 = 0xd37cf296, exactly 3*1024 apart; lsr x0,x0,#0 =
+// 0xd340fc00, ubfx x0,x0,#0,#63 = 0xd340f800, exactly 1*1024 apart.
+//
+// Same backward rewrite as vs_try_madd, same three guards: the masked operand must be a REG
+// whose `p` still names the LAST word emitted (so nothing has run between), that word must
+// really be a 64-bit UBFM with imms == 63 (bits 31:22 == 845 -- this deliberately EXCLUDES
+// `>>>`/asr, which is SBFM 589 and whose sign bits an unsigned extract would drop), and its
+// Rd must be the entry's own register. The fourth guard is arithmetic: the extract may not
+// run off the top of the register, lsb + width <= 64. `(x >> 60) & 255` fails it (60 + 8 =
+// 68) and keeps the old two words, which are what actually preserve the zeros above bit 3.
+fn vs_try_ubfx(insns: [i64], n: [i64], fntab: [i64], stab: [i64], op: i64) -> i64 {
+  let w = fntab[4547];
+  let last = n[0] - 1;
+  let lidx = if last > 0 then last else 0;
+  let word = insns[lidx];
+  let c = vs_entry_p0(fntab, w - 1);
+  let r = vs_entry_p0(fntab, w - 2);
+  let kw = 64 - clz(c);
+  let lsb = (word >> 16) & 63;
+  let mask_ok = (if op == 12 then 1 else 0) * (if vs_entry_kind(fntab, w - 1) == 1 then 1 else 0)
+    * (if c > 0 then 1 else 0) * (if (c & (c + 1)) == 0 then 1 else 0);
+  let src_ok = (if last > 0 then 1 else 0) * (if vs_entry_kind(fntab, w - 2) == 2 then 1 else 0)
+    * (if vs_entry_p1(fntab, w - 2) == last then 1 else 0);
+  let word_ok = (if (word >> 22) == 845 then 1 else 0) * (if ((word >> 10) & 63) == 63 then 1 else 0)
+    * (if (word & 31) == r then 1 else 0);
+  let ok = mask_ok * src_ok * word_ok * (if lsb + kw < 65 then 1 else 0);
+  let _ = if ok == 1 then insns[lidx] = word - 64512 + (lsb + kw - 1) * 1024 else 0;
+  let _ = if ok == 1 then (let _ = vs_pop(fntab) in (let _ = vs_pop(fntab) in vs_push(insns, n, fntab, stab, 2, r, n[0] - 1))) else 0;
+  ok
+}
+
+// A2b step 2b (the K8H branch bit). `e & C` with C a CONST fell through every
+// vs_try_* above into vs_binop_reg, which materialises C into a register
+// first: K8H's `(x >> 60) & 1` compiled to `mov x1,#1` + `and x22,x0,x1`
+// where the Rust twin needs no register at all, and the same two-words-for-one
+// shows up on every mask in this tree (`& 1`, `& 7`, `& 31`, `& 63`, `& 255`
+// are all over bebop.bp itself). AArch64's logical instructions take a bitmask
+// immediate; the sub-case that matters is the low-run mask C = 2^k - 1, which
+// encodes as N=1, immr=0, imms=k-1, i.e. `and Xd,Xn,#C` = 0x92400000 +
+// (k-1)*1024 + Rn*32 + Rd. `as`+objdump ($BEBOP_TMP/words.objdump): and
+// x0,x0,#1 = 0x92400000 = 2453667840, and x0,x0,#255 = 0x92401c00 =
+// 2453667840 + 7*1024 (so imms really is at bits 15:10), and x1,x0,#1 = +1
+// (Rd), and x0,x1,#1 = +32 (Rn).
+//
+// The FULL bitmask encoder (rotated runs, replicated 2/4/8/16/32-bit element
+// widths) is deliberately not built: `c > 0 && (c & (c + 1)) == 0` is the
+// whole test for a low run of ones, it is two instructions, and it covers
+// every `&` constant this tree writes. c = 2^63-1 is included and is a legal
+// immediate (k = 63, imms = 62); c <= 0 -- including -1, whose `and` is a
+// no-op the fold above does not have -- is rejected and falls through to the
+// old mov+and, which stays correct for everything this does not take.
+fn vs_try_and_imm(insns: [i64], n: [i64], fntab: [i64], stab: [i64], op: i64) -> i64 {
+  let w = fntab[4547];
+  let c = vs_entry_p0(fntab, w - 1);
+  let ok = (if op == 12 then 1 else 0) * (if vs_entry_kind(fntab, w - 1) == 1 then 1 else 0)
+    * (if c > 0 then 1 else 0) * (if (c & (c + 1)) == 0 then 1 else 0);
+  let k = if ok == 1 then 64 - clz(c) else 1;
+  let d = if ok == 1 then vs_pick_dest(insns, n, fntab, stab) else 0;
+  let a = if ok == 1 then vs_reg(insns, n, fntab, stab, w - 2) else 0;
+  let _ = if ok == 1 then em(insns, n, 2453667840 + (k - 1) * 1024 + a * 32 + d) else 0;
+  let _ = if ok == 1 then (let _ = vs_pop(fntab) in (let _ = vs_pop(fntab) in vs_push(insns, n, fntab, stab, 2, d, n[0] - 1))) else 0;
+  ok
+}
+
 fn vs_try_mulc_add(insns: [i64], n: [i64], fntab: [i64], stab: [i64], op: i64) -> i64 {
   let w = fntab[4547];
   let is_add = if op == 2 then 1 else 0;
@@ -2706,6 +2776,60 @@ fn vs_try_mulc_sub(insns: [i64], n: [i64], fntab: [i64], stab: [i64], op: i64) -
   ok
 }
 
+// A2b step 2 (the K8H loop-carried recurrence). `x * C + K` compiled to a MUL
+// and then a separate ADD -- two words, and, worse, TWO links on the
+// loop-carried dependency chain (mul, then add) where the Rust twin emits one
+// MADD and carries one. vs_try_mulc_add above already fuses, but only while
+// the multiply is still PENDING as a MULC tag, and vs_try_mulc_new only ever
+// creates that tag for a constant in 1..65535 -- K8H's LCG multiplier
+// 6364136223846793005 is far outside it, and after A2's constant hoisting the
+// multiplier is a cs REGISTER rather than a CONST tag anyway, so the multiply
+// is a plain register-register MUL that vs_binop_reg has already EMITTED by
+// the time the `+` is seen.
+//
+// So fold backwards instead, with the retarget trick vs_bind_reg already uses:
+// a REG entry carries `p` = the index of the word that produced it, valid
+// exactly when that word's Rd field IS the entry's register. When one of the
+// add's two operands is such an entry whose producing word is STILL the last
+// word emitted, and that word is a MUL, the add is folded INTO the multiply by
+// rewriting that one word's Ra field. MUL *is* MADD with Ra = xzr (31):
+// `as`+objdump, $BEBOP_TMP/words.objdump -- mul x0,x0,x0 = 0x9b007c00 =
+// 2600500224, madd x0,x0,x0,x0 = 0x9b000000 = 2600468480, i.e. exactly
+// 31 * 1024 apart in the Ra field at bits 14:10, and the same base
+// vs_try_mulc_add already emits. Zero words emitted here, one word saved, one
+// fewer link on the chain. The word is identified by its own bits, not by
+// trusting `p`: bits 31:21 == 1240 (the MADD/MSUB family), bit 15 == 0 (MADD,
+// not MSUB -- vs_binop_reg's `%` path emits a real MSUB), Ra == 31 (a MUL, not
+// an already-fused MADD) and Rd == the entry's register.
+//
+// The addend must be readable WITHOUT emitting anything -- vs_reg's
+// `is_direct` set (REG, an unspilled SYM, a CS temp). If materialising it
+// emitted a word, that word would land after the MUL being rewritten and the
+// MADD would read the addend register a word before it was written. `p ==
+// n[0]-1` already guarantees nothing has been emitted since the MUL, so
+// testing the addend's KIND is the whole check; everything else falls through
+// to the plain ADD in vs_binop_reg, exactly as before.
+fn vs_try_madd(insns: [i64], n: [i64], fntab: [i64], stab: [i64], op: i64) -> i64 {
+  let w = fntab[4547];
+  let last = n[0] - 1;
+  let lidx = if last > 0 then last else 0;
+  let word = insns[lidx];
+  let mi = if vs_entry_p1(fntab, w - 1) == last then w - 1 else w - 2;
+  let oi = if mi == w - 1 then w - 2 else w - 1;
+  let mr = vs_entry_p0(fntab, mi);
+  let ent_ok = (if last > 0 then 1 else 0) * (if op == 2 then 1 else 0)
+    * (if vs_entry_kind(fntab, mi) == 2 then 1 else 0) * (if vs_entry_p1(fntab, mi) == last then 1 else 0);
+  let word_ok = (if (word >> 21) == 1240 then 1 else 0) * (if ((word >> 15) & 1) == 0 then 1 else 0)
+    * (if ((word >> 10) & 31) == 31 then 1 else 0) * (if (word & 31) == mr then 1 else 0);
+  let okind = vs_entry_kind(fntab, oi);
+  let op0 = vs_entry_p0(fntab, oi);
+  let direct = (if okind == 2 then 1 else 0) + (if okind == 3 then (if op0 < 100 then 1 else 0) else 0) + (if okind == 4 then 1 else 0);
+  let ok = ent_ok * word_ok * direct;
+  let _ = if ok == 1 then insns[lidx] = word - 31744 + op0 * 1024 else 0;
+  let _ = if ok == 1 then (let _ = vs_pop(fntab) in (let _ = vs_pop(fntab) in vs_push(insns, n, fntab, stab, 2, mr, n[0] - 1))) else 0;
+  ok
+}
+
 fn vs_binop_reg(insns: [i64], n: [i64], fntab: [i64], stab: [i64], op: i64) -> i64 {
   let d = vs_pick_dest(insns, n, fntab, stab);
   let w = fntab[4547];
@@ -2739,7 +2863,10 @@ fn vs_binop(insns: [i64], n: [i64], fntab: [i64], stab: [i64], op: i64) -> i64 {
   let d4 = if d1 + d2 + d3 > 0 then 1 else vs_try_shift_imm(insns, n, fntab, stab, op);
   let d5 = if d1 + d2 + d3 + d4 > 0 then 1 else vs_try_mulc_add(insns, n, fntab, stab, op);
   let d6 = if d1 + d2 + d3 + d4 + d5 > 0 then 1 else vs_try_mulc_sub(insns, n, fntab, stab, op);
-  let _ = if d1 + d2 + d3 + d4 + d5 + d6 == 0 then vs_binop_reg(insns, n, fntab, stab, op) else 0;
+  let d7 = if d1 + d2 + d3 + d4 + d5 + d6 > 0 then 1 else vs_try_madd(insns, n, fntab, stab, op);
+  let d8 = if d1 + d2 + d3 + d4 + d5 + d6 + d7 > 0 then 1 else vs_try_ubfx(insns, n, fntab, stab, op);
+  let d9 = if d1 + d2 + d3 + d4 + d5 + d6 + d7 + d8 > 0 then 1 else vs_try_and_imm(insns, n, fntab, stab, op);
+  let _ = if d1 + d2 + d3 + d4 + d5 + d6 + d7 + d8 + d9 == 0 then vs_binop_reg(insns, n, fntab, stab, op) else 0;
   0
 }
 
