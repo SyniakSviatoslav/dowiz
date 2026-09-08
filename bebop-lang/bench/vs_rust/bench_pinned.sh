@@ -74,7 +74,12 @@ for k in ['k0','k1','k2','k3','k4','k1h','k2h','k3h']:
     ok = (e is None) or (bpin[3]==e and rpin[3]==e)
     same = bpin[3]==rpin[3]
     res[k]=(bpin,bun,rpin,run_,ok,same)
-# in-process clock_ms (bench630 twins, 0.1 ms units), pinned & unpinned
+# in-process clock_ms (bench630 twins), pinned & unpinned. The divisor is per kernel and comes
+# from bench/vs_rust/kernel_reps.txt -- k1/k2/k3 return tenths of a ms from ONE run, k4 and the
+# `h` twins return the TOTAL ms over their rep count. This script used /10.0 for all seven,
+# so its k4/k1h/k2h/k3h rows read 10x too large (found 2026-09-08).
+DIV={l.split()[0]: float(l.split()[1]) for l in open('bench/vs_rust/kernel_reps.txt')
+     if l.strip() and not l.startswith('#')}
 inproc={}
 for k in ['k1','k2','k3','k4','k1h','k2h','k3h']:
     for pin,label in ((PIN,'pin'),('','unpin')):
@@ -82,7 +87,7 @@ for k in ['k1','k2','k3','k4','k1h','k2h','k3h']:
         run1([SEED,f'{T}/{k}t.bin'],pin)
         for _ in range(R):
             _,_,v=run1([SEED,f'{T}/{k}t.bin'],pin)
-            try: vals.append(int(v)/10.0)
+            try: vals.append(int(v)/DIV[k])
             except ValueError: vals.append(float('nan'))
         vals.sort(); inproc[(k,label)]=(statistics.median(vals), vals[min(len(vals)-1,int(round(0.95*(len(vals)-1))))])
 # self-compile RSS + wall (3 runs)

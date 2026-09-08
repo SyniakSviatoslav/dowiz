@@ -69,6 +69,24 @@ for this box, not tuning.
   sleeping mid-run and gives Termux a foreground notification, which lowers its kill priority.
   Re-acquire it at the start of any long session; `termux-wake-unlock` releases it.
 
+## Gap found 2026-09-08: not every heavy job takes a slot
+
+`tools/slot.sh` gates the runners that call it, but a heavy job started OUTSIDE one is invisible
+to the semaphore and still counts against Android's 32. Measured that day: a worker running
+`bench/oracles/run_all.sh` directly (it forks `cargo run --release`, and `rustc` on
+`dowiz_core` takes minutes) pushed the box to 30-31 procs with slot 1 FREE, so the main
+session's own `slot.sh` request sat at the `PHANTOM_CAP` ceiling for its full 300 s and refused
+with rc 95. `tools/reap.sh` said `clean` -- correctly, the processes were real work.
+
+So the ceiling did its job (nothing was SIGKILLed) but the slot could not be scheduled. Two
+consequences worth knowing:
+
+- `bench/oracles/run_all.sh` and anything else that shells out to `cargo`/`rustc` belongs
+  inside `tools/slot.sh` when run standalone; inside `tools/battery.sh` it already is.
+- With several agents active, a comparative TIMING run may simply be unschedulable. That is the
+  correct outcome -- taking the measurement anyway would produce a number that looks like a
+  result and is not one. Wait for the box, or say the row is unmeasured.
+
 ## Escape hatches
 
 `SERIAL=0` (parallel battery), `SLOTS=3` (the old three lanes) and `PHANTOM_CAP=<n>` all still

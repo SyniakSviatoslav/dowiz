@@ -1,9 +1,12 @@
 // K3h (D11-C honest twin of rust_once/k3h.rs): 300x300, a = a*3 + x*2 + y*3 wrapping
 // REPS=100 reps in-process, main returns the TOTAL ms (honest.sh / REPS); a carried across reps
+// REPS raised 100 -> 1500 on 2026-09-08: at 100 this ran well under the ~100 ms floor
+// bench/vs_rust/kernel_reps.txt now demands, so its bebop/Rust ratio was the box, not the
+// code. Keep this number and rust_once/k3h.rs and kernel_reps.txt in step.
 fn main() -> i64 {
   let t0 = clock_ms();
   let a = 0;
-  let rep = 100;
+  let rep = 1500;
   while rep > 0 {
     let x = 300;
     while x > 0 {

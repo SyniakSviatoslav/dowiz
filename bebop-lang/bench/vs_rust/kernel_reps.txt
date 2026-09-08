@@ -1,6 +1,15 @@
-# name reps   -- the in-process rep count baked into BOTH bench630/<name>t.bp and
-# rust_once/<name>.rs. Read by bench/vs_rust/honest.sh and tools/perf.py, which divide the
-# bebop kernel's returned TOTAL ms by this number. Change a row here and in BOTH sources.
+# name div    -- the number the bebop kernel's returned integer must be divided by to get
+# MILLISECONDS PER REP. Read by bench/vs_rust/honest.sh, tools/perf.py and
+# bench/vs_rust/bench_pinned.sh, so the three can never disagree about the divisor.
+#
+# TWO conventions share this one column, which is exactly how bench_pinned.sh came to be wrong
+# (found 2026-09-08 while trying to raise k2h/k3h):
+#   * k4 and the `h` twins return the TOTAL ms over `let rep = N` in-process reps, so div = N,
+#     and the row must be changed here AND in both bench630/<name>t.bp and rust_once/<name>.rs;
+#   * k1, k2, k3 run ONCE and return `(clock_ms() - t0) * 10`, i.e. tenths of a millisecond
+#     (bench630/k1t.bp:7), so div = 10 and there is no rep count to keep in sync.
+# bench_pinned.sh divided EVERY one of its seven in-process rows by 10, so its k4/k1h/k2h/k3h
+# rows read 10x too large until this table replaced the constant.
 #
 # The rule (2026-09-08): a run must last long enough that clock_ms's 1 ms granularity and the
 # process's own frequency ramp-up are noise, not signal. Below ~100 ms total the row measures
@@ -11,11 +20,15 @@
 # bebop / ~130 ms Rust). Rows measured at a different reps value are NOT comparable across the
 # change; docs/PERF.md notes where the K8H column changes units.
 #
-# k3h has the same disease (100 reps = ~30 ms, ratio swung 1.2x-1.6x) but bench_pinned.sh also
-# reads bench630/k3ht.bp with its own, older /10.0 divisor, so raising it needs that script
-# fixed in the same commit. Left at 100 deliberately; see ROADMAP A2b.
+# k2h and k3h were raised on 2026-09-08 once bench_pinned.sh was taught to read this file:
+# at 100 reps they ran 61-71 ms and ~20-30 ms, under the floor, and their ratios swung
+# 1.8x-2.2x and 1.2x-1.6x on unchanged code. 500 and 1500 put both above 300 ms.
+# k1h stays at 100 (~100 ms, exactly at the floor) and k4 at 100 (~370 ms, well clear).
+k1 10
+k2 10
+k3 10
 k1h 100
-k2h 100
-k3h 100
+k2h 500
+k3h 1500
 k4 100
 k8h 3000
