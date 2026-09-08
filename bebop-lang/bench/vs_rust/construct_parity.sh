@@ -110,6 +110,8 @@ for f in "$DIR"/*.bp; do
     # under window pressure. Exited 89 on 42ce19e5, runs 17 (bpref) once vs_span_to_slots also
     # demotes kind-3 SYM entries. Drop either ingredient and it compiled clean before the fix.
     c95_symspan) EXPECT=17;;
+    c110_fence) EXPECT=0;;
+    c111_kernelfn) EXPECT=315;;
     # A2b (2026-09-08): the regression guard for lifting A2's nested-`while` hoist ban --
     # an outer loop that hoists 1000003 at its own depth 0 AND nests a `while` that uses the
     # same literal. The nested loop releases the enclosing pairs at its entry (so its own
@@ -158,6 +160,7 @@ for f in "${DIR%/}/neg"/*.bp; do
     c39_fnmatch) EXPECT=COMPILEFAIL:99;;
     c85_param15) EXPECT=COMPILEFAIL:100;;
     c93_unbound) EXPECT=COMPILEFAIL:101;;
+    c112_kernelsys) EXPECT=COMPILEFAIL:102;;
     # A14b (2026-09-08): the shrunk seed-100744 repro. It used to exit 89 in the register
     # allocator (a pre-arm SYM entry relocated inside one if-arm, then a colliding let binder);
     # A14b removed that, so the compiler now reaches the parser and reports the program's REAL

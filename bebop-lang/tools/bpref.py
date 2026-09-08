@@ -44,7 +44,7 @@ class ReturnSignal(Exception):
     def __init__(self, v): self.v = v
 class BreakSignal(Exception):
     pass
-RESERVED = set(['sys_msync', 'sys_fsync', 'crc32x', 'crc32', 'clz', 'sys_setaffinity', 'let', 'while', 'if', 'then', 'else', 'in', 'fn', 'enum', 'struct', 'module', 'match', 'return', 'break', 'zeros', 'char', 'str_len', 'clock_ms', 'hvham', 'hvham2', 'some', 'none', 'many', 'sys_open', 'sys_read', 'sys_write', 'sys_close', 'sys_readbuf', 'sys_slurp', 'sys_mmap', 'sys_munmap', 'sys_ftruncate', 'sys_rename', 'sys_export', 'sys_exit', 'sys_arena_base', 'sys_arena_end', 'sys_clone', 'sys_cond_set', 'sys_futex_wait_guard', 'sys_futex_wake', 'sys_atomic_add', 'sys_exit_thread_guard', 'sys_run', 'sys_wait4', 'scan'])
+RESERVED = set(['sys_msync', 'sys_fsync', 'sys_mprotect', 'crc32x', 'crc32', 'clz', 'sys_setaffinity', 'let', 'while', 'if', 'then', 'else', 'in', 'fn', 'enum', 'struct', 'module', 'match', 'return', 'break', 'zeros', 'char', 'str_len', 'clock_ms', 'hvham', 'hvham2', 'some', 'none', 'many', 'sys_open', 'sys_read', 'sys_write', 'sys_close', 'sys_readbuf', 'sys_slurp', 'sys_mmap', 'sys_munmap', 'sys_ftruncate', 'sys_rename', 'sys_export', 'sys_exit', 'sys_arena_base', 'sys_arena_end', 'sys_clone', 'sys_cond_set', 'sys_futex_wait_guard', 'sys_futex_wake', 'sys_atomic_add', 'sys_exit_thread_guard', 'sys_run', 'sys_wait4', 'scan'])
 class DepthError(Exception):
     pass
 
@@ -157,7 +157,18 @@ class Parser:
     def program(self):
         while not self.at('<eof>'):
             v = self.peek()[1]
+            # ROADMAP C1 step 2 (2026-09-08): `kernel fn name(...)` marks the checked kernel
+            # dialect. Diagnostic only -- the marker changes nothing about how the fn runs,
+            # here or in bebop.bin -- so the only mirrored behaviour is the reject below.
+            kern = False
+            if v == 'kernel':
+                self.next()
+                kern = True
+                v = self.peek()[1]
+                if v != 'fn':
+                    raise SyntaxError('`kernel` must be followed by `fn`')
             if v == 'fn':
+                kstart = self.p
                 self.next()
                 name = self.ident()
                 if name in RESERVED:  # T122: bebop.bin exits 99 on such a fn
@@ -194,6 +205,14 @@ class Parser:
                 if not body or body[-1][0] != 'expr' or self.t[self.p - 1][1] == ';':
                     raise SyntaxError('fn %s: body has no tail expression (bebop.bin exits 97)' % name)
                 self.expect('}')
+                if kern:
+                    # bebop.bin's emit_ident rejects any `sys_` NAME inside a `kernel fn`
+                    # (exit 102, docs/TRAPS.md); the token range kstart..self.p is exactly
+                    # that fn, header included.
+                    for tk in self.t[kstart:self.p]:
+                        if tk[0] == 'i' and tk[1].startswith('sys_'):
+                            raise SyntaxError('fn %s: `%s` inside a kernel fn '
+                                              '(bebop.bin exits 102)' % (name, tk[1]))
                 self.fns[name] = (params, body)
             elif v == 'enum':
                 self.next(); self.ident(); self.expect('{')

@@ -25,6 +25,7 @@ Status: 2026-09-06 CURRENT (T120, decision D11-M; runtime traps 80/81/87 are one
 | 99 | bebop.bin | reserved word used as a function name (T122, planned) | compile_fn_at |
 | 100 | bebop.bin | fn with more than 14 parameters (parse_params) | bebop.bp |
 | 101 | bebop.bin | unbound symbol (emit_let_chain / emit_compound_stmt / emit_ident / emit_array_index) | bebop.bp |
+| 102 | bebop.bin | a `sys_` name inside a `kernel fn`: the C1 checked dialect forbids reaching the kernel from a kernel (ROADMAP C1 step 2, 2026-09-08); `<line>:<col>: sys_ name inside a kernel fn` on stderr. Marker-free fns are untouched — fntab[4643] is 0 for them, so an unmarked fn's emitted words are byte-identical | emit_ident, diag_exit |
 | 104 | bebop.bin | too many fns (cap 512): compile_program_offs guarding fnames/fpos/sizes/starts arrays (A13 second half; was exit 89) | bebop.bp |
 | 128+n | kernel | signal n: 11 = SIGSEGV (unchecked index, deep recursion), 7 = SIGBUS (misaligned sp — a compiler bug) | — |
 

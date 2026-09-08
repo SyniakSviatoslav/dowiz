@@ -1119,3 +1119,15 @@ ts,commit,bin,metric,value,unit,n,valid,at_max_pct,temp_mc,note
 1788878466,f05ee58,7ef614f1,stub_words,131,words,1,1,,,
 1788878467,f05ee58,7ef614f1,bin_fns,278,fns,1,1,,,
 1788878467,f05ee58,7ef614f1,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788879092,adbab98,7649a141,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788879092,adbab98,7649a141,gate_run_ms,6020,ms,1,1,,,"sum of non-memo gate runs (22 runs, 101 memo hits)"
+1788879155,adbab98,7649a141,bin_words,39756,words,1,1,,,bytes 160860
+1788879155,adbab98,7649a141,stub_words,131,words,1,1,,,
+1788879155,adbab98,7649a141,bin_fns,282,fns,1,1,,,
+1788879155,adbab98,7649a141,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788879272,adbab98,7649a141,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788879273,adbab98,7649a141,gate_run_ms,5336,ms,1,1,,,"sum of non-memo gate runs (22 runs, 101 memo hits)"
+1788879321,adbab98,7649a141,bin_words,39756,words,1,1,,,bytes 160860
+1788879321,adbab98,7649a141,stub_words,131,words,1,1,,,
+1788879321,adbab98,7649a141,bin_fns,282,fns,1,1,,,
+1788879321,adbab98,7649a141,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired

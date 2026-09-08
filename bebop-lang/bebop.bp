@@ -99,7 +99,8 @@ fn diag_exit(s: str, p: i64, code: i64) -> i64 {
   let _ = if code == 100 then diag_text(buf, at, [102, 110, 32, 119, 105, 116, 104, 32, 109, 111, 114, 101, 32, 116, 104, 97, 110, 32, 49, 52, 32, 112, 97, 114, 97, 109, 101, 116, 101, 114, 115], 31) else 0;
   let _ = if code == 101 then diag_text(buf, at, [117, 110, 98, 111, 117, 110, 100, 32, 115, 121, 109, 98, 111, 108], 14) else 0;
   let _ = if code == 104 then diag_text(buf, at, [116, 111, 111, 32, 109, 97, 110, 121, 32, 102, 110, 115, 32, 40, 99, 97, 112, 32, 53, 49, 50, 41], 22) else 0;
-  let mlen = (if code == 95 then 20 else 0) + (if code == 96 then 27 else 0) + (if code == 97 then 33 else 0) + (if code == 98 then 31 else 0) + (if code == 99 then 31 else 0) + (if code == 89 then 37 else 0) + (if code == 100 then 31 else 0) + (if code == 101 then 14 else 0) + (if code == 104 then 22 else 0);
+  let _ = if code == 102 then diag_text(buf, at, [115, 121, 115, 95, 32, 110, 97, 109, 101, 32, 105, 110, 115, 105, 100, 101, 32, 97, 32, 107, 101, 114, 110, 101, 108, 32, 102, 110], 28) else 0;
+  let mlen = (if code == 95 then 20 else 0) + (if code == 96 then 27 else 0) + (if code == 97 then 33 else 0) + (if code == 98 then 31 else 0) + (if code == 99 then 31 else 0) + (if code == 89 then 37 else 0) + (if code == 100 then 31 else 0) + (if code == 101 then 14 else 0) + (if code == 104 then 22 else 0) + (if code == 102 then 28 else 0);
   let _ = buf[at + mlen] = 10;
   let _ = sys_write(2, buf, at + mlen + 1);
   sys_exit(code)
@@ -111,6 +112,37 @@ fn slen(s: str, pos: [i64]) -> i64 {
   let c1 = if inr == 1 then char(s, L - 1) else 0;
   let ok = inr * (if c0 == 0 then 1 else 0) * (if c1 == 0 then 0 else 1);
   if ok == 1 then L else str_len(s)
+}
+// ROADMAP C1 step 2 (2026-09-08): `kernel fn name(...)`. kernel_marked(s, fpos) is 1 when
+// the token `kernel` sits immediately before the `fn` keyword at fpos ON THE SAME LINE. The
+// backward scan crosses spaces and tabs only, never a newline, so a comment line whose last
+// word is `kernel` cannot mark the next fn (collect_fns already skips `fn` inside a comment
+// or a string, so only the marker itself needs guarding); kernel_word_at then requires a
+// non-identifier byte before the `k`, so `mykernel fn` does not match either.
+fn kernel_word_at(s: str, e: i64) -> i64 {
+  let m = (if char(s, e) == 108 then 1 else 0) * (if char(s, e - 1) == 101 then 1 else 0) * (if char(s, e - 2) == 110 then 1 else 0) * (if char(s, e - 3) == 114 then 1 else 0) * (if char(s, e - 4) == 101 then 1 else 0) * (if char(s, e - 5) == 107 then 1 else 0);
+  let pc = if e >= 6 then char(s, e - 6) else 0;
+  let idc = is_alpha(pc) + is_digit(pc) + (if pc == 95 then 1 else 0);
+  m * (if idc > 0 then 0 else 1)
+}
+fn kernel_marked(s: str, fpos: i64) -> i64 {
+  let p = [fpos - 1];
+  let done = if fpos < 6 then 1 else 0;
+  while done == 0 {
+    let c = char(s, p[0]);
+    let is_sp = (if c == 32 then 1 else 0) + (if c == 9 then 1 else 0);
+    let _ = p[0] = p[0] - is_sp;
+    let done = (if is_sp == 1 then 0 else 1) + (if p[0] < 0 then 1 else 0);
+    0
+  };
+  if p[0] < 5 then 0 else kernel_word_at(s, p[0])
+}
+// sys_prefix_at(s, p, strn): 1 when the four bytes at p are `sys_`. The out-of-range case
+// reads index 0..3 instead and is multiplied out, so no byte past strn is ever touched.
+fn sys_prefix_at(s: str, p: i64, strn: i64) -> i64 {
+  let ok = if p + 3 < strn then 1 else 0;
+  let q = ok * p;
+  ok * (if char(s, q) == 115 then 1 else 0) * (if char(s, q + 1) == 121 then 1 else 0) * (if char(s, q + 2) == 115 then 1 else 0) * (if char(s, q + 3) == 95 then 1 else 0)
 }
 fn read_ident(s: str, pos: [i64]) -> i64 {
   let strn = slen(s, pos);
@@ -271,6 +303,11 @@ fn emit_ident(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   let name = read_ident(s, pos);
   let _ = skip_ws(s, pos);
   let strn = slen(s, pos);
+  // C1 step 2: inside a `kernel fn` (fntab[4643]) any `sys_` name is a compile-time reject,
+  // exit 102 (docs/TRAPS.md) -- the dialect's whole point is that a kernel cannot reach the
+  // kernel. DIAGNOSTIC ONLY: fntab[4643] is 0 for every fn that is not marked, so an
+  // unmarked fn's emitted word stream is unchanged, word for word.
+  let _ = if fntab[4643] == 1 then (if sys_prefix_at(s, npos, strn) == 1 then diag_exit(s, npos, 102) else 0) else 0;
   let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
   let is_lp = if ch == 40 then 1 else 0;
   let is_br = if ch == 123 then 1 else 0;
@@ -1490,6 +1527,29 @@ fn emit_sys_msync(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   n[0]
 }
 
+// sys_mprotect(addr, len, prot): mprotect (syscall 226) — ROADMAP C1 step 1's mapping
+// fence (docs/blueprints/C1-checked-kernel-dialect.md §3(v)). Same three-argument shape as
+// emit_sys_msync above: pop x2 = prot, pop x1 = len, pop x0 = addr; mov x8,#226; svc.
+// Words objdump-verified 2026-09-08 ($BEBOP_TMP/words.objdump: d2801c48 = mov x8,#0xe2,
+// d4000001 = svc #0 — the second is the word emit_sys_msync already emits).
+fn emit_sys_mprotect(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 3);
+  let _ = em(insns, n, 3531611208);
+  let _ = em(insns, n, 3556769793);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
 // sys_fsync(fd): fsync (syscall 82) — sync a file descriptor to disk.
 // Syscall 82 on aarch64 (/usr/include/asm-generic/unistd.h:218).
 // pop x0 = fd; mov x8,#82; svc.
@@ -1628,6 +1688,7 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   else if name == 29413480223 then emit_crc32(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == -8392076200099613766 then emit_sys_msync(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == -8392076202161113213 then emit_sys_fsync(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == -1729804160290675916 then emit_sys_mprotect(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == 3853165909333 then emit_crc32x(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == 10054667875361132632 then emit_sys_slurp(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == 585709020818199 then emit_str_len_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
@@ -5376,6 +5437,7 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   let _ = fntab[4411] = 0;  // T43: while nesting depth (frame-heap mark slot)
   let _ = fntab[4412] = 0;  // T99: pending `return` placeholders
   let _ = fntab[4430] = 0;  // T99: pending `break` placeholders
+  let _ = fntab[4643] = kernel_marked(s, fpos);  // C1 step 2: `kernel fn` dialect bit
   let pos = [fpos, str_len(s)];
   let stab = zeros(385);  // 1 + 3*128 (name,reg,srcpos) verified triples; overflow -> loud trap
   let _ = skip_ws(s, pos);
@@ -5388,7 +5450,7 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   // (T31 journal) and return 0. Hash table = read_ident of each reserved word.
   let rsv1 = (if selfname == 1866735 then 1 else 0) + (if selfname == 35281108217 then 1 else 0) + (if selfname == 13857 then 1 else 0) + (if selfname == 262576641 then 1 else 0) + (if selfname == 228925745 then 1 else 0) + (if selfname == 13865 then 1 else 0) + (if selfname == 13472 then 1 else 0) + (if selfname == 228960337 then 1 else 0) + (if selfname == 4471061603997 then 1 else 0) + (if selfname == 4238080694376 then 1 else 0) + (if selfname == 32320559965 then 1 else 0) + (if selfname == 4428069113672 then 1 else 0) + (if selfname == 29119020707 then 1 else 0) + (if selfname == 36158018563 then 1 else 0) + (if selfname == 224358574 then 1 else 0) + (if selfname == 585709020818199 then 1 else 0) + (if selfname == 66094333908796503 then 1 else 0) + (if selfname == 30895064082 then 1 else 0) + (if selfname == 4047253394792 then 1 else 0) + (if selfname == 260449716 then 1 else 0) + (if selfname == 249209392 then 1 else 0);
   let rsv2 = (if selfname == 246721067 then 1 else 0) + (if selfname == 76753189879327100 then 1 else 0) + (if selfname == 76753189885882068 then 1 else 0) + (if selfname == -8392076197157136435 then 1 else 0) + (if selfname == -8392076203060520566 then 1 else 0) + (if selfname == -2688661736639986669 then 1 else 0) + (if selfname == -8392076198348418984 then 1 else 0) + (if selfname == 76753189874778913 then 1 else 0) + (if selfname == 7442662210087947144 then 1 else 0) + (if selfname == -5847879057653958070 then 1 else 0) + (if selfname == 7442662398273192292 then 1 else 0) + (if selfname == 7442661902340062434 then 1 else 0) + (if selfname == 76753189856984008 then 1 else 0) + (if selfname == 7040940390938053523 then 1 else 0) + (if selfname == -6282920175007517587 then 1 else 0) + (if selfname == -8392076203060521221 then 1 else 0) + (if selfname == -1736429998027255437 then 1 else 0) + (if selfname == -3153574141067785036 then 1 else 0) + (if selfname == 8779068393901189725 then 1 else 0) + (if selfname == 7221016679989100487 then 1 else 0) + (if selfname == 1084841420853388659 then 1 else 0);
-  let rsv3 = (if selfname == 260242221 then 1 else 0) + (if selfname == -8392076202161113213 then 1 else 0);
+  let rsv3 = (if selfname == 260242221 then 1 else 0) + (if selfname == -8392076202161113213 then 1 else 0) + (if selfname == -1729804160290675916 then 1 else 0);
   let _ = if rsv1 + rsv2 + rsv3 > 0 then diag_exit(s, namepos, 99) else 0;
   let _ = skip_ws(s, pos);
   let pnames = zeros(14);

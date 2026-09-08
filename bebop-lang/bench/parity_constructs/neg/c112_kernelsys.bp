@@ -1,0 +1,8 @@
+// c112_kernelsys (ROADMAP C1 step 2): the NEGATIVE half -- any `sys_` name inside a
+// `kernel fn` is a compile-time reject, exit 102 (docs/TRAPS.md), and no .bin is produced.
+// `sys_close` is used because it is the least interesting syscall in the surface: the reject
+// is on the NAME's `sys_` prefix in emit_ident, not on any particular builtin, so a guard
+// that only knew about a list of builtins would pass this and fail a fn-local `sys_foo`.
+// bpref raises SyntaxError on the same shape (tools/bpref.py, program()).
+kernel fn kbad(fd: i64) -> i64 { sys_close(fd) }
+fn main() -> i64 { kbad(0) }

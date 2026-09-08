@@ -1,0 +1,21 @@
+// c111_kernelfn (ROADMAP C1 step 2, docs/blueprints/C1-checked-kernel-dialect.md §3(iii)):
+// the POSITIVE half of the `kernel fn` dialect -- a marked fn that uses no `sys_` name
+// compiles and runs exactly like an unmarked one. The marker is DIAGNOSTIC ONLY: it sets
+// fntab[4643] in compile_fn_at and nothing else reads it except emit_ident's reject, so the
+// word stream this construct freezes is the same one the twin without `kernel` produces
+// (proved byte-for-byte alongside the gate run, not asserted here).
+//
+// The body is deliberately ordinary -- a while fold over params -- so a regression in the
+// marker's backward scan (eating the fn header, or mis-setting the bit) shows up as a value
+// change or a compile failure, not as a silent no-op.
+kernel fn kfold(x: i64, n: i64) -> i64 {
+  let acc = 0;
+  let i = 0;
+  while i < n {
+    let acc = acc + x * i;
+    let i = i + 1;
+    0
+  };
+  acc
+}
+fn main() -> i64 { kfold(7, 10) }

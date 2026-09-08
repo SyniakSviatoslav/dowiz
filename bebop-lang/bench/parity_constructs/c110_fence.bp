@@ -1,0 +1,27 @@
+// c110_fence (ROADMAP C1 step 1, docs/blueprints/C1-checked-kernel-dialect.md §3(v)):
+// the `sys_mprotect(addr, len, prot)` builtin the mapping fence is built from.
+// Syscall number DERIVED, not guessed: /usr/include/asm-generic/unistd.h gives
+// `#define __NR_mprotect 226` for the generic (aarch64) table, so the emitter is
+// `mov x8,#226 ; svc #0` = 0xd2801c48 / 0xd4000001 -- `as` + `objdump -d` into
+// $BEBOP_TMP/words.objdump BEFORE the edit (L1), where 0xd4000001 is also the svc
+// word emit_sys_msync already emits, i.e. a second independent check on the pair.
+//
+// The construct fences an ANONYMOUS PRIVATE mapping (flags 34 = MAP_PRIVATE|
+// MAP_ANONYMOUS, the shape std_tests/mma.bp already uses) rather than a file: it
+// needs no scratch file in the tree, and it still exercises both directions of the
+// real fence -- drop to PROT_READ, restore to PROT_READ|PROT_WRITE.
+//
+// EXPECT DERIVATION (host-only builtin, both sides agree on 0):
+//   native: mprotect returns 0 on success and -errno otherwise; an anonymous
+//           PRIVATE mapping keeps VM_MAYWRITE, so BOTH calls succeed and the sum
+//           of the two return values is 0.
+//   bpref : tools/bpref.py stubs every `sys_*` to 0, so both are 0 and the sum is 0.
+//   => EXPECT=0. A wrong syscall number returns a negative errno (-ENOSYS/-EINVAL)
+//   and a missing dispatch entry is trap 87 (unresolved function): both fail here.
+fn main() -> i64 {
+  let a = sys_mmap(0, 4096, 3, 34, 0 - 1, 0);
+  let down = sys_mprotect(a, 4096, 1);
+  let up = sys_mprotect(a, 4096, 3);
+  let _ = sys_munmap(a, 4096);
+  down + up
+}
