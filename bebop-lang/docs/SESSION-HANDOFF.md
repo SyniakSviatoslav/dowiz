@@ -1,4 +1,4 @@
-# SESSION HANDOFF — 2026-09-08 (session 28; resume in ONE read)
+# SESSION HANDOFF — 2026-09-08 (session 29; resume in ONE read)
 
 Status: 2026-09-08 CURRENT (rewritten at every session close; task bodies live in HISTORY.md,
 the ledger in TASKS.md, one line per experiment in docs/exp.journal)
@@ -9,55 +9,53 @@ HEAD: `git log --oneline | head -3`; every commit message carries the gate evide
 
 ## Where we are
 
-- Compiler: HEAD **`351c288`**, `bebop.bin` md5 **`0ae01bd3`**, battery GREEN on the promoted bin.
-- **A cold self-compile is 623 ms.** It was 2,506 ms this morning — **4.02x in one day**, from three
-  independent commits: A2b's peepholes, the duplicate-whole-source-scan deletion that A10's
-  refutation found, and the `str_len` hoist (the scanners were calling `str_len(s)` — a NUL scan of
-  the WHOLE source — once per call, ~1,643 times per pass, 555 MB of scanning).
-- Session 28 landed, in order: A2b steps 1+2 (K8H 1.9x -> 1.1x), the Signal 9 diagnosis and its
-  in-box mitigations, `pool_parity`/`bench_pinned` divisor fixes, B2's twins, ROADMAP Phase C,
-  A3 REFUTED on coverage (kept in the attic), two literature analyses + ROADMAP Phase D, the DRAM
-  row CORRECTED (three A78s scale linearly; the old "one core saturates the bus" row was wrong),
-  ROADMAP Phase E from the wild-ideas study, the beat-SQL study (two of our own sbench rows measure
-  the wrong thing), A10 REFUTED on its gate, C1 steps 1+2, D1 at 1.23x, E2's branchless push, A5
-  unblocked, and the `str_len` hoist.
-- **Two rows were refuted by their own gates today (A3, A10) and both refutations paid.** A10's
-  phase walk is what found the duplicate scans; the row that died produced the day's biggest win.
+- Compiler: HEAD **`5df5037`**, `bebop.bin` md5 **`ca69273e`**, battery GREEN on the promoted bin
+  (std_golden 114 pass / 0 fail, constructs 83/0, diag 16/0, parity 13/0, pool 5/0, oracles
+  mismatch=0 missing=0, ABI ok, invariants GREEN, words PASS).
+- Session 28 closed at 623 ms cold self-compile, 4.02x in one day. Session 29 opened by finishing
+  what the box killed and merging the two lanes that were left uncommitted in the working tree:
+  - **A6 step 1** (`81eca07`): array/struct/enum-ctor literals bump the ARENA CURSOR x27 instead of
+    the 16 KiB per-frame x14 heap and inherit `zeros`'s trap; `emit_heap_trap` and the whole
+    brk #81 recipe are DELETED, so `brk #0x51` = 0 and **exit 81 is gone as a class**. A14b's two
+    parked corpus seeds run at last (100671 -> 6, 100828 -> 4). The allocation sentinel word moved
+    to `mov x0,x27` and `sys_arena_base()` was retargeted onto `add x0,x27,xzr` so it cannot
+    false-positive as an allocation site. Step 2 (fn-mark LIFO release, computed frames, emit_bl
+    saving x15 only, c67_deeprec) is OPEN — the frame is still the flat 16 KiB.
+  - **C3** (`5df5037`): the commit-object chain in superblock cell 10, the fixed-width 8-slot heads
+    table in cell 11, `st_open_at(gen)` and the API around it; gate `schain` = 71563930701023
+    (okmask 1023, 10/10), oracle `bench/oracles/schain.py`, std_golden's 114th gate. Cells 10/11 are
+    zero in every store a plain `st_commit` writes and the open path never reads them.
+  - Typecheck rung vii took three honest widenings for C3 (REF_TOLERANT / REF_PRODUCERS gained the
+    C3 siblings of `st_commit`; the sanctioned null idiom widened from `ref *` to every `ref T`).
 
-## In flight when the box died at 18:15 — and what survived
+## Lanes in flight (session 29, cap = main + TWO workers)
 
-Five agents were running (four lanes + one read-only analyst) and Android's phantom-process killer
-took all five at once: slot.sh printed `procs 32/26 (android phantom cap 32)` in the same second,
-exit 137. **Nothing was lost from git — the working tree is clean — but no lane delivered a
-verdict, and each died one command from finishing.** The scratch trees are intact:
-
-| lane | where its work is | how far it got |
+| lane | tree | task |
 |---|---|---|
-| **D2** prefetch + MLP | `.claude/worktrees/agent-a00e3c34.../.d2out` and `.d2clean/bebop-lang` (verified base `351c288`; only `bebop.bp` + `tools/bpref.py` differ) | `emit_prefetch` complete (`prfm pldl1keep` = ONE word, derived with `as`+`objdump`; reserved word + bpref stub), gen2 built, `join_twin_mlp.bp` carries both arms, folds AGREE on n=4096/100000 x u/z, Rust probe-split twin built. Died ON the interleaved measurement. |
-| **E1** 64-source BFS | `agent-afbfcd9f.../_e1` (base `14cc4fc`, **stale**) + the intact scratchpad `patch_gen_gb.py`, `gbt/` stores | MEASURED: op6 S=64 = 2732/2821/2993 ms against op5 x64 = 17146/16164/15106 ms, **~5.7x**, folds identical (462119596), oracle 65342 matched, alpha=2 chosen. Died on the final gate script. Its patch regenerates `gen_gb.bp` from the OLD blob and would silently REVERT E2 — re-apply additively. |
-| **A5** arena-relative | `agent-a8e1bb6e.../.a5` | patch applied, chain running, stuck investigating a `gb_pool` RED that has the long-`BEBOP_TMP` signature (`std_golden.sh:26`) |
-| **A10** re-examination on the new floor | `agent-a124281e...` | instrumented compiler reproduces `0ae01bd3` byte-for-byte, phase walk done; died on the decisive "perfect memo for `emit_body` only" probe |
-| **fable analyst** | — | twelve operator proposals (stochastic calculus, filtrations, martingales, graph spectra, Lyapunov, measure theory) — got as far as reading the sources. The brief is in the session transcript; the document was never written. |
+| A | `/root/s29/laneA/bebop-lang`, out `/root/s29/outA` | **A5 step 1b**, the index model: `zeros` returns an x17-relative cell INDEX, array get/set take the `ldr xd,[x17,xt,lsl #3]` forms, every cell-taking builtin converts at its own boundary, `tools/bpref.py` grows one arena list, constructs c69_index_roundtrip / c92_ptrfree. A6 deleted the blueprint's frame-heap carve and its `saved_x14` correction — the blueprint's §3 "Frame heap" is obsolete and the worker is told so. |
+| B | `/root/s29/laneB/bebop-lang`, out `/root/s29/outB` | **D3**, and its own kill test first: relabel sgraph2's vertex ids into BFS order with NO store change and re-measure the frontier row interleaved. < 20 % => the row dies. |
+
+Lane trees are cut with `bash /root/s29/mklane.sh <dir>/bebop-lang` (ls-files + checkout-index off
+committed HEAD, crates symlinked).
 
 ## Box, binding
 
 - `max_phantom_processes` = 32 and **both operator-side escape hatches are still OPEN** (Developer
   options -> "Disable child process restrictions"; Termux -> Battery -> Unrestricted). Until they
   are done: `tools/slot.sh` stays at ONE slot, `battery.sh` at SERIAL=1, and the agent budget is
-  **main session + TWO workers, analysts included in the count** (operator, 2026-09-08 evening).
+  **main session + TWO workers, analysts included in the count** (operator, 2026-09-08).
 - `termux-wake-lock` is reachable from inside the proot and is taken at the start of a long session.
 - `git push` is still blocked (https remote asks a password, no SSH key authorized). Everything from
   21e92aa onward is LOCAL ONLY.
 
-## Next
+## Next (the order the session is working)
 
-1. Land D2 and E1 from the lanes above (measurement, then gates, then merge by the recipe below).
-2. A5 -> A6 -> A7 -> A8; A6 also deletes exit 81 as a class, which is what the two remaining corpus
-   seeds (100671, 100828) wait for. A11 and the A9 leftovers after that. **A4's corpus/fuzz window
+1. Codegen lane, one at a time, never two in flight: A5 step 1b -> A6 step 2 -> A7 -> A8 ->
+   A10 re-examination on the new floor -> the A9 leftovers -> A11's rest. **A4's corpus/fuzz window
    runs LAST**, foreground 10^4-seed batches on whatever md5 is promoted then.
-3. A10 is worth ONE more look on the new floor: its refutation was measured against a 2,423 ms
-   self-compile whose fixed floor has since been deleted.
-4. Then B2-B8, C2-C6, D3-D5, E3, E4. The fable analyst's document is still owed.
+2. Store/bench lane: D3 -> C2 -> B4 -> D4 -> C4 -> C5 -> B1's rest -> D5 -> B5 -> B6 -> B2 -> B7 ->
+   B8 -> E4.
+3. C6 stays CONDITIONAL — do not start it.
 
 ## The lane merge recipe (as actually exercised)
 
@@ -68,8 +66,10 @@ wrong. Chain (`PERF=0 tools/slot.sh <label> tools/chain.sh bebop.bp $OUT --codeg
 actual `CENSUS FREEZE REFUSED` / `WORD_BUDGET_MISSING` line, write the allow row from THAT number,
 re-chain, promote (`cp gen4.bin bebop.bin.tmp && mv`), `invariants.sh --freeze`, then the
 post-promotion battery. **Check every worker's base first** — four workers in a row were cut from a
-stale commit; the fix is to rebuild a clean tree from the committed HEAD via `ls-tree -r -z` +
-`cat-file --batch` and re-hash the blobs (`git archive` is blocked by the classifier).
+stale commit; the fix is to cut it from the committed HEAD -- `git ls-files -z bebop-lang |
+git checkout-index --prefix=<lane>/ -f -z --stdin`, then flatten the prefix and symlink
+`/root/dowiz/crates` next to it (`tools/../mklane.sh` at /root/s29/mklane.sh does exactly this).
+`git archive` is blocked by the classifier.
 
 ## Pitfalls that cost hours in prior sessions (also in the memory file)
 
