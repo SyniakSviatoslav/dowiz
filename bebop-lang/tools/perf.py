@@ -27,7 +27,16 @@ from check_abi import load_bin, fn_starts, entry_stub  # noqa: E402
 
 CSV = "bench/perf.csv"
 COLS = ["ts", "commit", "bin", "metric", "value", "unit", "n", "valid", "at_max_pct", "temp_mc", "note"]
-PIN = os.environ.get("PIN", "4")           # one A78 core (cpu part 0xd41: 4-7); chain.sh uses 4-6
+# PIN: this tool wants ONE cpu number -- it goes into `taskset -c` AND into the
+# /sys/devices/system/cpu/cpu<N>/cpufreq/... paths below. tools/slot.sh (2026-09-08) exports the
+# same name as a COMMAND PREFIX ("taskset -c 4,5,6") because the shell benches use it as `$PIN
+# ./cmd`, which turned every run in kernels() into `taskset -c "taskset -c 4,5,6"` -> "failed to
+# parse CPU list" -> empty stdout -> ValueError on int(""), and silently sent every cpufreq read to
+# a path that does not exist. Accept either form and keep the first core: narrowing inside a slot's
+# core set is always allowed (sched_setaffinity can only widen into trouble, never narrowing).
+_PIN_ENV = os.environ.get("PIN", "4")
+_PIN_M = re.search(r"-c\s+([0-9,\-]+)", _PIN_ENV)
+PIN = (_PIN_M.group(1) if _PIN_M else _PIN_ENV).strip().split(",")[0].split("-")[0] or "4"
 SEED = "./seed/build/seed"
 T = os.environ.get("BEBOP_TMP", "/tmp/opencode") + "/perf"
 THRESH = {"selfcompile_wall": 5, "selfcompile_utime": 5, "selfcompile_stime": 15, "selfcompile_maxrss": 10,
@@ -253,6 +262,10 @@ def kernels(binpath, base=None, r=11):
             for k in KERNELS:
                 for b in bins:
                     v = run1([SEED, f"{T}/{md5(b)}_{k}.bin"])[4]
+                    # name the failure instead of dying in int(""): an empty last line means the
+                    # child printed nothing, which is a HARNESS fault (bad PIN, missing .bin, a
+                    # killed process), never a slow kernel.
+                    if v == "": raise SystemExit(f"perf: {k} on {b} produced no output (PIN={PIN!r}, bin={T}/{md5(b)}_{k}.bin)")
                     res[(b, k)].append(int(v) / float(KERNEL_REPS[k]))   # the kernel returns its TOTAL ms; divide by ITS rep count (bench/vs_rust/kernel_reps.txt)
     st = w.stamp()
     out = {}
