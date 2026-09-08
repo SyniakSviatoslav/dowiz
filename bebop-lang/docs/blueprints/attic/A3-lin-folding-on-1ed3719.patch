@@ -1,0 +1,532 @@
+--- a3-pristine2/bebop.bp	2026-09-08 11:18:23.000000000 +0200
++++ a3-base2/bebop.bp	2026-09-08 11:28:47.855678868 +0200
+@@ -4532,6 +4532,504 @@
+   0
+ }
+ 
++// ===========================================================================
++// ROADMAP A3 (2026-09-08, docs/blueprints/A3-lin-recurrence-folding.md):
++// folding a linear (affine) recurrence over k iterations.
++//
++// A `while` whose body is exactly
++//     let ACC = <affine in ACC, CTR, one invariant, literals>;
++//     let CTR = CTR +/- c;
++//     0
++// under a test `CTR OP BOUND` (OP in > >= < <=) computes, per iteration,
++//     ACC <- a*ACC + b*CTR + g*INV + e ,  CTR <- CTR + step .
++// That map is a matrix over Z/2^64, so k iterations compose into ONE map with
++// constant coefficients, computed at compile time by lin_pow. The folded loop
++// runs that map k times per trip and is followed by the ORIGINAL loop, which
++// mops up the 0..k-1 remaining iterations. Nothing is approximated: bebop's
++// `*` and `+` are the same wraparound i64 operations the emitted `mul`/`add`
++// perform, so the composed coefficients are exact for every input, including
++// the ones that overflow.
++//
++// Scope is deliberately one accumulator (m = 1) and one invariant. With m = 1
++// the "simultaneous update" the composition assumes is free as long as the
++// counter is updated LAST -- which lin_body requires -- because then the
++// accumulator's RHS reads the counter value the trip started with. A second
++// accumulator could read the first one's NEW value and would need window
++// temps; that is out of scope here and rejects.
++//
++// Rejection is the safe answer at every step: a call, an array index, an `if`,
++// a nested `while`, a `break`, a string, `/ % & | ^ << >>`, a comparison, a
++// third symbol, a body with anything but those two `let`s -- all return 0 and
++// the loop compiles through the completely unchanged path below.
++// ===========================================================================
++
++// A3: multiply two affine quadruples where one side is a bare constant (the
++// caller checked; `rc == 1` means the RIGHT side is the constant). The result
++// lands in sc[b..b+3], in place.
++fn lin_scale(sc: [i64], b: i64, e: i64, rc: i64) -> i64 {
++  let c = if rc == 1 then sc[e + 3] else sc[b + 3];
++  let f = if rc == 1 then b else e;
++  let v0 = sc[f];
++  let v1 = sc[f + 1];
++  let v2 = sc[f + 2];
++  let v3 = sc[f + 3];
++  let _ = sc[b] = v0 * c;
++  let _ = sc[b + 1] = v1 * c;
++  let _ = sc[b + 2] = v2 * c;
++  let _ = sc[b + 3] = v3 * c;
++  0
++}
++
++// A3: sc[b..b+3] += sg * sc[e..e+3]  (sg is +1 for `+`, -1 for `-`).
++fn lin_acc(sc: [i64], b: i64, e: i64, sg: i64) -> i64 {
++  let _ = sc[b] = sc[b] + sg * sc[e];
++  let _ = sc[b + 1] = sc[b + 1] + sg * sc[e + 1];
++  let _ = sc[b + 2] = sc[b + 2] + sg * sc[e + 2];
++  let _ = sc[b + 3] = sc[b + 3] + sg * sc[e + 3];
++  0
++}
++
++// A3: |v| < 65536, i.e. the coefficient fits ONE movz. This is the k = 4
++// admission test: a wider coefficient is not wrong, it just costs a movz/movk
++// chain inside the folded body and eats the win the fold is there to produce.
++// The `m >= 0` term is not redundant -- i64 MIN negates to itself.
++fn lin_fits(v: i64) -> i64 {
++  let m = if v < 0 then 0 - v else v;
++  (if m >= 0 then 1 else 0) * (if m < 65536 then 1 else 0)
++}
++
++// A3: one identifier as an affine operand. ctx carries the three symbols the
++// form may mention: [0,1] the accumulator's name hash and its binding source
++// position, [2,3] the counter's, [4,5] the invariant's once one has been seen,
++// [6] the flag that one has. The FIRST symbol that is neither of the first two
++// becomes the invariant if it is genuinely bound outside this loop; a second,
++// different one rejects.
++//
++// `f(` and `a[` reject: a call and an array index are not affine operands, and
++// they are exactly how the hash loops (`h * 131 + char(s, i)`) and every
++// pointer-walking scanner in the tree decline this optimisation.
++fn lin_name(s: str, pos: [i64], ctx: [i64], sc: [i64], d: i64, stab: [i64], cnt0: i64) -> i64 {
++  let np = pos[0];
++  let nm = read_ident(s, pos);
++  let strn = slen(s, pos);
++  let nx = if pos[0] >= strn then 0 else char(s, pos[0]);
++  let bad = (if nx == 40 then 1 else 0) + (if nx == 91 then 1 else 0);
++  let is_s = if nm == ctx[0] then ident_eq(s, ctx[1], np) else 0;
++  let is_i = (1 - is_s) * (if nm == ctx[2] then ident_eq(s, ctx[3], np) else 0);
++  let known = (1 - is_s) * (1 - is_i) * ctx[6];
++  let seen = if known == 1 then (if nm == ctx[4] then ident_eq(s, ctx[5], np) else 0) else 0;
++  let cand = (1 - is_s) * (1 - is_i) * (1 - ctx[6]);
++  let fresh = if cand == 1 then sym_is_outer(s, stab, nm, np, cnt0) else 0;
++  let _ = if fresh == 1 then (let _ = ctx[4] = nm in (let _ = ctx[5] = np in (let _ = ctx[6] = 1 in 0))) else 0;
++  let b = 4 * d;
++  let _ = sc[b] = is_s;
++  let _ = sc[b + 1] = is_i;
++  let _ = sc[b + 2] = seen + fresh;
++  let _ = sc[b + 3] = 0;
++  (is_s + is_i + seen + fresh) * (1 - bad)
++}
++
++// A3: `( expr )` -- the sub-expression is parsed one depth down and copied up.
++fn lin_paren(s: str, pos: [i64], ctx: [i64], sc: [i64], d: i64, stab: [i64], cnt0: i64) -> i64 {
++  let _ = pos[0] = pos[0] + 1;
++  let ok = lin_expr(s, pos, ctx, sc, d + 1, stab, cnt0);
++  let _ = skip_ws(s, pos);
++  let strn = slen(s, pos);
++  let cl = if pos[0] >= strn then 0 else char(s, pos[0]);
++  let closed = if cl == 41 then 1 else 0;
++  let _ = if closed == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
++  let b = 4 * d;
++  let e = b + 4;
++  let _ = sc[b] = sc[e];
++  let _ = sc[b + 1] = sc[e + 1];
++  let _ = sc[b + 2] = sc[e + 2];
++  let _ = sc[b + 3] = sc[e + 3];
++  ok * closed
++}
++
++// A3: unary minus (T99's own `- factor` form) negates the whole quadruple.
++fn lin_uneg(s: str, pos: [i64], ctx: [i64], sc: [i64], d: i64, stab: [i64], cnt0: i64) -> i64 {
++  let _ = pos[0] = pos[0] + 1;
++  let ok = lin_fact(s, pos, ctx, sc, d + 1, stab, cnt0);
++  let b = 4 * d;
++  let e = b + 4;
++  let _ = sc[b] = 0 - sc[e];
++  let _ = sc[b + 1] = 0 - sc[e + 1];
++  let _ = sc[b + 2] = 0 - sc[e + 2];
++  let _ = sc[b + 3] = 0 - sc[e + 3];
++  ok
++}
++
++// A3: one factor. Each level owns sc[4*d .. 4*d+3] and returns 1 (affine) or
++// 0 (reject). The scratch array with an explicit depth index, rather than a
++// `zeros(4)` per level, is L8: these functions call each other from inside
++// their own `while` bodies, where an allocation never resets on the back edge.
++// The depth cap keeps sc (48 cells, allocated once by lin_body) in bounds --
++// deeper parenthesisation rejects instead of scribbling past the array.
++fn lin_fact(s: str, pos: [i64], ctx: [i64], sc: [i64], d: i64, stab: [i64], cnt0: i64) -> i64 {
++  let _ = skip_ws(s, pos);
++  let strn = slen(s, pos);
++  let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
++  let b = 4 * d;
++  let _ = sc[b] = 0;
++  let _ = sc[b + 1] = 0;
++  let _ = sc[b + 2] = 0;
++  let _ = sc[b + 3] = 0;
++  let idc = is_alpha(ch) + (if ch == 95 then 1 else 0);
++  let kind = (if ch == 40 then 1 else 0) + 2 * (if ch == 45 then 1 else 0) + 3 * is_digit(ch) + 4 * idc;
++  let deep = if d >= 8 then 1 else 0;
++  if deep == 1 then 0
++    else if kind == 1 then lin_paren(s, pos, ctx, sc, d, stab, cnt0)
++    else if kind == 2 then lin_uneg(s, pos, ctx, sc, d, stab, cnt0)
++    else if kind == 3 then (let v = read_num_val(s, pos) in (let _ = sc[b + 3] = v in 1))
++    else if kind == 4 then lin_name(s, pos, ctx, sc, d, stab, cnt0)
++    else 0
++}
++
++// A3: term = factor ('*' factor)*. `/` and `%` are simply not `*`, so the loop
++// stops and the caller's `;` check rejects the leftover text -- there is no
++// affine form for them at all, and refusing is the only correct answer.
++// Affinity is enforced here: at least one side of every `*` must be a bare
++// constant after folding.
++fn lin_term(s: str, pos: [i64], ctx: [i64], sc: [i64], d: i64, stab: [i64], cnt0: i64) -> i64 {
++  let ok = lin_fact(s, pos, ctx, sc, d, stab, cnt0);
++  let b = 4 * d;
++  let e = b + 4;
++  let go = ok;
++  while go == 1 {
++    let _ = skip_ws(s, pos);
++    let strn = slen(s, pos);
++    let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
++    let is_mul = if ch == 42 then 1 else 0;
++    let _ = if is_mul == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
++    let r = if is_mul == 1 then lin_fact(s, pos, ctx, sc, d + 1, stab, cnt0) else 0;
++    let lc = (if sc[b] == 0 then 1 else 0) * (if sc[b + 1] == 0 then 1 else 0) * (if sc[b + 2] == 0 then 1 else 0);
++    let rc = (if sc[e] == 0 then 1 else 0) * (if sc[e + 1] == 0 then 1 else 0) * (if sc[e + 2] == 0 then 1 else 0);
++    let okm = r * (if lc + rc > 0 then 1 else 0);
++    let _ = if okm == 1 then lin_scale(sc, b, e, rc) else 0;
++    let ok = if is_mul == 1 then ok * okm else ok;
++    let go = is_mul * okm;
++    0
++  };
++  ok
++}
++
++// A3: expr = term (('+'|'-') term)*.
++fn lin_expr(s: str, pos: [i64], ctx: [i64], sc: [i64], d: i64, stab: [i64], cnt0: i64) -> i64 {
++  let ok = lin_term(s, pos, ctx, sc, d, stab, cnt0);
++  let b = 4 * d;
++  let e = b + 4;
++  let go = ok;
++  while go == 1 {
++    let _ = skip_ws(s, pos);
++    let strn = slen(s, pos);
++    let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
++    let is_add = if ch == 43 then 1 else 0;
++    let is_sub = if ch == 45 then 1 else 0;
++    let hit = is_add + is_sub;
++    let _ = if hit == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
++    let r = if hit == 1 then lin_term(s, pos, ctx, sc, d + 1, stab, cnt0) else 0;
++    let sg = 1 - 2 * is_sub;
++    let _ = if r == 1 then lin_acc(sc, b, e, sg) else 0;
++    let ok = if hit == 1 then ok * r else ok;
++    let go = hit * r;
++    0
++  };
++  ok
++}
++
++// A3: the loop condition, which must be EXACTLY `CTR OP BOUND` with OP one of
++// `> >= < <=` and BOUND a literal or an outer symbol. The completeness test is
++// the last line: after the bound, the next non-space character must be the
++// body's `{` (b0 is one past it). That one comparison is what rejects `&&`, a
++// second comparison, a call in the condition, `while done == 0`, and every
++// other shape in one stroke -- no separate scanner needed.
++// out[11] takes the aarch64 condition code vs_cmp uses: 10 ge, 11 lt, 12 gt,
++// 13 le; out[12]/out[13] the bound's push kind (1 CONST / 3 SYM) and payload;
++// out[16]/out[17] the counter's name hash and its source position.
++fn lin_cond(s: str, cpos: i64, b0: i64, strn: i64, stab: [i64], out: [i64]) -> i64 {
++  let p = [cpos, strn];
++  let _ = skip_ws(s, p);
++  let np = p[0];
++  let nm = read_ident(s, p);
++  let nx0 = if p[0] >= strn then 0 else char(s, p[0]);
++  let bad0 = (if nx0 == 40 then 1 else 0) + (if nx0 == 91 then 1 else 0);
++  let _ = out[16] = nm;
++  let _ = out[17] = np;
++  let _ = skip_ws(s, p);
++  let c0 = if p[0] >= strn then 0 else char(s, p[0]);
++  let c1 = if p[0] + 1 >= strn then 0 else char(s, p[0] + 1);
++  let eq = if c1 == 61 then 1 else 0;
++  let is_gt = if c0 == 62 then 1 else 0;
++  let is_lt = if c0 == 60 then 1 else 0;
++  let cond = is_gt * (12 - 2 * eq) + is_lt * (11 + 2 * eq);
++  let _ = out[11] = cond;
++  let _ = p[0] = p[0] + (is_gt + is_lt) * (1 + eq);
++  let _ = skip_ws(s, p);
++  let bc = if p[0] >= strn then 0 else char(s, p[0]);
++  let is_num = is_digit(bc);
++  let is_id = (1 - is_num) * (is_alpha(bc) + (if bc == 95 then 1 else 0));
++  let bp = p[0];
++  let bv = if is_num == 1 then read_num_val(s, p) else 0;
++  let bn = if is_id == 1 then read_ident(s, p) else 0;
++  let breg = if is_id == 1 then sym_lookup(s, stab, bn, bp) else 0;
++  let nx1 = if p[0] >= strn then 0 else char(s, p[0]);
++  let bad1 = is_id * ((if nx1 == 40 then 1 else 0) + (if nx1 == 91 then 1 else 0));
++  let bkind = if is_num == 1 then 1 else 3;
++  let bval = if is_num == 1 then bv else breg;
++  let _ = out[12] = bkind;
++  let _ = out[13] = bval;
++  let _ = skip_ws(s, p);
++  let exact = if p[0] == b0 - 1 then 1 else 0;
++  let opok = is_gt + is_lt;
++  let bok = is_num + is_id * (if breg >= 0 then 1 else 0);
++  opok * bok * exact * (1 - bad0) * (1 - bad1)
++}
++
++// A3: consume one `let NAME =` head, recording the name hash and its source
++// position at out[slot]/out[slot+1]. Word-boundary `let` (hoist_scan's own
++// discipline) and a single `=` (never `==`).
++fn lin_let_head(s: str, p: [i64], strn: i64, out: [i64], slot: i64) -> i64 {
++  let _ = skip_ws(s, p);
++  let c0 = if p[0] >= strn then 0 else char(s, p[0]);
++  let c1 = if p[0] + 1 >= strn then 0 else char(s, p[0] + 1);
++  let c2 = if p[0] + 2 >= strn then 0 else char(s, p[0] + 2);
++  let c3 = if p[0] + 3 >= strn then 0 else char(s, p[0] + 3);
++  let ida = is_alpha(c3) + is_digit(c3) + (if c3 == 95 then 1 else 0);
++  let iskw = (if c0 == 108 then 1 else 0) * (if c1 == 101 then 1 else 0) * (if c2 == 116 then 1 else 0) * (1 - ida);
++  let _ = if iskw == 1 then (let _ = p[0] = p[0] + 3 in skip_ws(s, p)) else 0;
++  let np = p[0];
++  let nm = if iskw == 1 then read_ident(s, p) else 0;
++  let _ = out[slot] = nm;
++  let _ = out[slot + 1] = np;
++  let _ = if iskw == 1 then skip_ws(s, p) else 0;
++  let ce = if p[0] >= strn then 0 else char(s, p[0]);
++  let ce1 = if p[0] + 1 >= strn then 0 else char(s, p[0] + 1);
++  let iseq = (if ce == 61 then 1 else 0) * (if ce1 == 61 then 0 else 1);
++  let ok = iskw * iseq;
++  let _ = if ok == 1 then (let _ = p[0] = p[0] + 1 in 0) else 0;
++  ok
++}
++
++// A3: the body, which must be exactly `let ACC = <affine>; let CTR = CTR +/- c; 0`.
++// The counter LAST is not a stylistic preference: the composed map assumes the
++// accumulator reads the counter value the trip started with, and a body that
++// decrements first is a genuinely different recurrence. Rejecting it here is
++// cheaper and safer than composing a second map for it.
++// Fills out[20] step, out[21..24] the per-iteration coefficients (a, b, g, e),
++// out[25]/out[26] the invariant's name/position, out[27]/out[28] the counter
++// binding's, out[18]/out[19] the accumulator's.
++fn lin_body(s: str, b0: i64, b1: i64, strn: i64, stab: [i64], cnt0: i64, out: [i64]) -> i64 {
++  let p = [b0, strn];
++  let sc = zeros(48);
++  let ctx = zeros(8);
++  let _ = ctx[2] = out[16];
++  let _ = ctx[3] = out[17];
++  let h1 = lin_let_head(s, p, strn, out, 18);
++  let _ = ctx[0] = out[18];
++  let _ = ctx[1] = out[19];
++  let e1 = if h1 == 1 then lin_expr(s, p, ctx, sc, 0, stab, cnt0) else 0;
++  let _ = skip_ws(s, p);
++  let t1 = if p[0] >= strn then 0 else char(s, p[0]);
++  let s1 = e1 * (if t1 == 59 then 1 else 0);
++  let _ = if s1 == 1 then (let _ = p[0] = p[0] + 1 in 0) else 0;
++  let _ = out[21] = sc[0];
++  let _ = out[22] = sc[1];
++  let _ = out[23] = sc[2];
++  let _ = out[24] = sc[3];
++  let _ = out[25] = ctx[4];
++  let _ = out[26] = ctx[5];
++  let h2 = if s1 == 1 then lin_let_head(s, p, strn, out, 27) else 0;
++  let hit = if h2 == 1 then (if out[27] == out[16] then ident_eq(s, out[17], out[28]) else 0) else 0;
++  let e2 = if hit == 1 then lin_expr(s, p, ctx, sc, 0, stab, cnt0) else 0;
++  let _ = skip_ws(s, p);
++  let t2 = if p[0] >= strn then 0 else char(s, p[0]);
++  let s2 = e2 * (if t2 == 59 then 1 else 0);
++  let _ = if s2 == 1 then (let _ = p[0] = p[0] + 1 in 0) else 0;
++  // the counter update must be `CTR +/- <literal>` and nothing else
++  let cok = s2 * (if sc[0] == 0 then 1 else 0) * (if sc[1] == 1 then 1 else 0) * (if sc[2] == 0 then 1 else 0);
++  let _ = out[20] = sc[3];
++  let _ = skip_ws(s, p);
++  let z = if p[0] >= strn then 0 else char(s, p[0]);
++  let zok = cok * (if z == 48 then 1 else 0);
++  let _ = if zok == 1 then (let _ = p[0] = p[0] + 1 in 0) else 0;
++  let _ = skip_ws(s, p);
++  let fin = zok * (if p[0] == b1 then 1 else 0);
++  fin
++}
++
++// A3: compose k iterations of  ACC <- a*ACC + b*CTR + g*INV + e,  CTR <- CTR + step
++// into  ACC <- A*ACC + B*CTR + G*INV + C.  Per step, from (A,B,G,C)=(1,0,0,0):
++//     C' = a*C + b*t*step + e ,  A' = a*A ,  B' = a*B + b ,  G' = a*G + g
++// (the b*t*step term is the counter's own drift: at step t the body reads
++// CTR + t*step, not CTR). Every operation is a plain i64 multiply/add, which is
++// the SAME wraparound arithmetic the emitted `mul`/`add` perform -- that is why
++// the fold is exact for coefficients that overflow, not merely for small ones.
++// Cross-checked against tools/lin_census.py's independent matrix power: K1H k=2
++// (9,4,-1) and k=4 (81,40,-18); K4 k=2 (9,84,-65); K3H k=2 (9a,12y,8x,-3).
++fn lin_pow(out: [i64], k: i64) -> i64 {
++  let a = out[21];
++  let b = out[22];
++  let g = out[23];
++  let e = out[24];
++  let st = out[20];
++  let ca = 1;
++  let cb = 0;
++  let cg = 0;
++  let cc = 0;
++  let t = 0;
++  while t < k {
++    let cc = a * cc + b * t * st + e;
++    let ca = a * ca;
++    let cb = a * cb + b;
++    let cg = a * cg + g;
++    let t = t + 1;
++    0
++  };
++  let _ = out[2] = ca;
++  let _ = out[3] = cb;
++  let _ = out[4] = cg;
++  let _ = out[5] = cc;
++  0
++}
++
++// A3: the whole detector. Returns 1 (and fills `out`) exactly when the loop at
++// `cpos` with body text [b0, b1) may be folded; 0 leaves emit_while_stmt on the
++// byte-identical unchanged path. `out` is a 32-cell scratch owned by the caller.
++fn lin_detect(s: str, cpos: i64, b0: i64, b1: i64, strn: i64, stab: [i64], cnt0: i64, out: [i64]) -> i64 {
++  let _ = out[0] = 0;
++  let cok = lin_cond(s, cpos, b0, strn, stab, out);
++  let bok = if cok == 1 then lin_body(s, b0, b1, strn, stab, cnt0, out) else 0;
++  // Both loop variables must be bound OUTSIDE this loop: the folded loop
++  // assigns them through the enclosing frame's registers, and a body-local
++  // binding has no register at the point the folded loop is emitted.
++  let iout = if bok == 1 then sym_is_outer(s, stab, out[16], out[17], cnt0) else 0;
++  let aout = if iout == 1 then sym_is_outer(s, stab, out[18], out[19], cnt0) else 0;
++  let ireg = if aout == 1 then sym_lookup(s, stab, out[16], out[17]) else 0 - 1;
++  let areg = if aout == 1 then sym_lookup(s, stab, out[18], out[19]) else 0 - 1;
++  let hasv = if out[23] != 0 then 1 else 0;
++  let vreg = if hasv == 1 then sym_lookup(s, stab, out[25], out[26]) else 0 - 1;
++  // Distinct registers: an invariant that aliases the accumulator or the
++  // counter would be read AFTER the folded body overwrote it.
++  let vok = (if vreg >= 0 then 1 else 0) * (if vreg != areg then 1 else 0) * (if vreg != ireg then 1 else 0);
++  let distinct = (if areg != ireg then 1 else 0) * (if areg >= 0 then 1 else 0) * (if hasv == 1 then vok else 1);
++  // Direction: a decreasing counter goes with `>`/`>=` (12/10), an increasing
++  // one with `<`/`<=` (11/13). The opposite pairing either never terminates or
++  // folds a trip that never ran, so it is not a fold, it is a bug.
++  let step = out[20];
++  let dec = if step < 0 then 1 else 0;
++  let cnd = out[11];
++  let gtge = (if cnd == 12 then 1 else 0) + (if cnd == 10 then 1 else 0);
++  let ltle = (if cnd == 11 then 1 else 0) + (if cnd == 13 then 1 else 0);
++  let dirok = dec * gtge + (1 - dec) * ltle;
++  let cmag = if dec == 1 then 0 - step else step;
++  // c < 1024 keeps (k-1)*c far inside cmp's imm12 range and makes the guard
++  // rewrite below provably free of wraparound.
++  let stepok = (if cmag > 0 then 1 else 0) * (if cmag < 1024 then 1 else 0);
++  // A symbolic bound that IS one of the loop variables is either degenerate
++  // (`i > i`) or changes under the fold (`i > s`).
++  let bsym = if out[12] == 3 then 1 else 0;
++  let bbad = bsym * ((if out[13] == ireg then 1 else 0) + (if out[13] == areg then 1 else 0));
++  let base = bok * iout * aout * distinct * dirok * stepok * (1 - bbad);
++  // k = 4 when every composed coefficient still fits one movz, else k = 2.
++  let _ = if base == 1 then lin_pow(out, 4) else 0;
++  let fit4 = base * lin_fits(out[2]) * lin_fits(out[3]) * lin_fits(out[4]) * lin_fits(out[5]);
++  let kk = if fit4 == 1 then 4 else 2;
++  let _ = if base == 1 then lin_pow(out, kk) else 0;
++  let goff = (kk - 1) * cmag;
++  let _ = out[1] = kk;
++  let _ = out[9] = kk * cmag;
++  let _ = out[14] = goff;
++  let _ = out[10] = dec;
++  let _ = out[6] = areg;
++  let _ = out[7] = ireg;
++  let _ = out[8] = vreg;
++  // Guard-immediate fold: the folded trip is legal iff all k iterations would
++  // have passed the original test, i.e. `CTR -/+ (k-1)c OP BOUND`. For a
++  // LITERAL bound that is one `cmp` instead of `sub`+`cmp`, because
++  //   decreasing:  i - (k-1)c >  L   <=>   i >  L + (k-1)c
++  //   increasing:  i + (k-1)c <  U   <=>   i <  U - (k-1)c
++  // and both sides are inside imm12 here, so the rewrite cannot wrap. One word
++  // per folded trip; the blueprint's own shape spends two.
++  let lit = if out[12] == 1 then 1 else 0;
++  let bv = out[13];
++  let adj = if dec == 1 then bv + goff else bv - goff;
++  let inr = lit * (if bv >= 0 then 1 else 0) * (if bv < 4096 then 1 else 0) * (if adj >= 0 then 1 else 0) * (if adj < 4096 then 1 else 0);
++  let _ = out[15] = inr;
++  let _ = if inr == 1 then (let _ = out[13] = adj in 0) else 0;
++  let _ = out[0] = base;
++  base
++}
++
++// A3: one `coef * SYM(reg)` term of the composed row, added to whatever the
++// window already holds unless it is the first term. coef == 1 skips the
++// multiply outright -- a MULC tag with constant 1 emits a real `mul`.
++fn lin_push(insns: [i64], n: [i64], fntab: [i64], stab: [i64], coef: i64, reg: i64, first: i64) -> i64 {
++  let _ = vs_push(insns, n, fntab, stab, 3, reg, 0);
++  let _ = if coef != 1 then (let _ = vs_push(insns, n, fntab, stab, 1, coef, 0) in vs_binop(insns, n, fntab, stab, 4)) else 0;
++  let _ = if first == 0 then vs_binop(insns, n, fntab, stab, 2) else 0;
++  0
++}
++
++// A3: `+ C`, spelled `- (-C)` when C is negative so vs_try_addsub_imm can fold
++// it into a single `sub #imm12`. i64 MIN has no positive negation and stays on
++// the add path (mat_const + add), which is correct, just one word longer.
++fn lin_addk(insns: [i64], n: [i64], fntab: [i64], stab: [i64], c: i64) -> i64 {
++  let neg = (if c < 0 then 1 else 0) * (if 0 - c > 0 then 1 else 0);
++  let v = if neg == 1 then 0 - c else c;
++  let _ = vs_push(insns, n, fntab, stab, 1, v, 0);
++  let op = if neg == 1 then 3 else 2;
++  vs_binop(insns, n, fntab, stab, op)
++}
++
++// A3: emit the folded loop -- B5 rotation, exactly the shape emit_while_stmt
++// uses for the real loop below it: one forward branch into the bottom test,
++// the body, the guard, one backward conditional branch. It allocates nothing,
++// so there is no T43 mark/reset pair; it binds no new symbol, so stab is
++// untouched; and it drains its own window, so the statement-boundary invariant
++// (free mask 255, cs mask 0) holds on exit exactly as it did on entry.
++fn lin_emit_fold(insns: [i64], n: [i64], fntab: [i64], stab: [i64], out: [i64]) -> i64 {
++  let areg = out[6];
++  let ireg = out[7];
++  let fj = n[0];
++  let _ = em(insns, n, 335544320);
++  let fbody = n[0];
++  let nA = if out[2] != 0 then 1 else 0;
++  let nB = if out[3] != 0 then 1 else 0;
++  let nG = if out[4] != 0 then 1 else 0;
++  let fB = 1 - nA;
++  let fG = (1 - nA) * (1 - nB);
++  let _ = if nA == 1 then lin_push(insns, n, fntab, stab, out[2], areg, 1) else 0;
++  let _ = if nB == 1 then lin_push(insns, n, fntab, stab, out[3], ireg, fB) else 0;
++  let _ = if nG == 1 then lin_push(insns, n, fntab, stab, out[4], out[8], fG) else 0;
++  let any = nA + nB + nG;
++  // a row with no variable term at all is a plain constant assignment
++  let _ = if any == 0 then vs_push(insns, n, fntab, stab, 1, out[5], 0) else 0;
++  let addc = (if any > 0 then 1 else 0) * (if out[5] != 0 then 1 else 0);
++  let _ = if addc == 1 then lin_addk(insns, n, fntab, stab, out[5]) else 0;
++  let _ = vs_bind(insns, n, fntab, stab, areg);
++  // the counter moves k steps at once, AFTER the accumulator has read it
++  let _ = vs_push(insns, n, fntab, stab, 3, ireg, 0);
++  let _ = vs_push(insns, n, fntab, stab, 1, out[9], 0);
++  let cop = if out[10] == 1 then 3 else 2;
++  let _ = vs_binop(insns, n, fntab, stab, cop);
++  let _ = vs_bind(insns, n, fntab, stab, ireg);
++  let ftest = n[0];
++  let _ = insns[fj] = 335544320 + (ftest - fj);
++  let _ = vs_push(insns, n, fntab, stab, 3, ireg, 0);
++  let gop = if out[10] == 1 then 3 else 2;
++  let _ = if out[15] == 0 then (let _ = vs_push(insns, n, fntab, stab, 1, out[14], 0) in vs_binop(insns, n, fntab, stab, gop)) else 0;
++  let _ = vs_push(insns, n, fntab, stab, out[12], out[13], 0);
++  let _ = vs_cmp(insns, n, fntab, stab, out[11]);
++  let bw = vs_loop_branch(insns, n, fntab, stab);
++  let _ = vs_pop(fntab);
++  // same imm19-at-bits[23:5] backward-branch encoding as the real loop below
++  let _ = em(insns, n, bw + 16777216 + (fbody - n[0]) * 32);
++  let _ = if fntab[4548] != 255 then sys_exit(102) else 0;
++  let _ = if fntab[4573] != 0 then sys_exit(106) else 0;
++  n[0]
++}
++
+ // Emit one 'while cond { body };' statement: a real backward loop (no result).
+ // B5 (D14 item 1, research S2): loop rotation, bottom test -- one branch per
+ // iteration in steady state instead of two. The condition is parsed and
+@@ -4595,6 +5093,24 @@
+   let _ = skip_while_cond(s, hpos);
+   let hb0 = hpos[0] + 1;
+   let hb1 = find_body_end(s, hb0, strn0);
++  // ROADMAP A3 (LIN recurrence folding): if this loop's body is an affine
++  // recurrence, emit a folded loop that does `k` iterations per trip FIRST; the
++  // unchanged loop below then runs the 0..k-1 remaining iterations as its tail.
++  // The detector is a pure text scan of the condition and the body -- no
++  // register-dependent decision -- so the planning and emission passes reach the
++  // same verdict from the same source and the folded loop's word count is
++  // identical in both.
++  //
++  // It runs HERE on purpose. A2b (2026-09-08) made a nested `while` RELEASE the
++  // enclosing loop's four hoisted pairs at its entry and re-take them after its
++  // backward branch; this point is inside that window, so the cs mask is 0 and
++  // no outer hoisted constant is live across the folded loop. It is also BEFORE
++  // this loop's own hoist materialisation below, so the folded loop and the
++  // hoist never contend for a cs register, and the folded loop's own exit
++  // assertion (cs mask 0) is the same one A2b's entry assertion enforces.
++  let lino = zeros(32);
++  let lfold = lin_detect(s, pcond, hb0, hb1, strn0, stab, cnt0, lino);
++  let _ = if lfold == 1 then lin_emit_fold(insns, n, fntab, stab, lino) else 0;
+   let hvals = zeros(4);
+   let new_lets = hoist_scan(s, hb0, hb1, strn0, stab, hvals);
+   let hnv = (if hvals[0] != 0 then 1 else 0) + (if hvals[1] != 0 then 1 else 0) + (if hvals[2] != 0 then 1 else 0) + (if hvals[3] != 0 then 1 else 0);
