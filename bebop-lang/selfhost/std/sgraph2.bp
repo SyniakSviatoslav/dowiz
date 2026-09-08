@@ -91,8 +91,8 @@ fn csr_build(base: [i64], tmp: [i64], src: [i64], dst: [i64], m: i64, n: i64, rp
   let _ = st_seal(base, ci, tmp);
   0
 }
-fn root_write(base: [i64], tx: [i64], tmp: [i64], dg: i64, n: i64, e: i64, rp: ref RP, ci: ref CI, log: ref LOG, rp0: ref RP, ci0: ref CI, tb: ref TB, nlog: i64) -> ref G2 {
-  let g = st_alloc(base, tx, 9, dg);
+fn root_write(base: [i64], tx: [i64], tmp: [i64], dg: i64, n: i64, e: i64, rp: ref RP, ci: ref CI, log: ref LOG, rp0: ref RP, ci0: ref CI, tb: ref TB, nlog: i64, tl: ref TL) -> ref G2 {
+  let g = st_alloc(base, tx, 10, dg);
   let _ = st_put(base, g, 0, n);
   let _ = st_put(base, g, 1, e);
   let _ = st_link(base, g, 2, rp);
@@ -102,8 +102,154 @@ fn root_write(base: [i64], tx: [i64], tmp: [i64], dg: i64, n: i64, e: i64, rp: r
   let _ = if ci0 == 0 then st_put(base, g, 6, 0) else st_link(base, g, 6, ci0);
   let _ = st_link(base, g, 7, tb);
   let _ = st_put(base, g, 8, nlog);
+  let _ = st_link(base, g, 9, tl);
   let _ = st_seal(base, g, tmp);
   g
+}
+// ---- B4 step 1 (docs/blueprints/B4-functional-tensor-updates.md §3): the tail tier ----
+// tl_cap(): capacity of the append-only COO tail chunk, in entries. TL{arr i64} = cell 0
+// cnt, then (row, col) pairs -- sgraph2's edges carry no value, so an entry is a pair, not
+// a triple. 4096 is the blueprint's figure; §8 risk 1 (phase 'a' + phase 'n') measures what
+// it costs on the read side, and phase_log's row measures what it buys on the write side.
+fn tl_cap() -> i64 { 100000 }
+// tail_new(base, tx, d, old, room, tmp): blueprint invariant (1) -- an object is written
+// only inside the transaction that allocated it. The tail carried over from the committed
+// version is SHARED, so the first append of a transaction copies it; `old` is never
+// written. Callers st_supersede `old` afterwards. The chunk is allocated VARIABLE-LENGTH
+// at what this transaction can actually reach (cnt + room, capped) rather than at tl_cap():
+// allocating the full capacity every commit appends 1 + 2*cap cells and crc32s them twice
+// per batch whatever the fill is, which is what made the cap-250000 arm SLOWER than
+// cap-100000 in the first sweep (1207 vs 1042 ns/edge).
+fn tail_new(base: [i64], tx: [i64], d: [i64], old: ref TL, room: i64, tmp: [i64]) -> ref TL {
+  let c0 = if old == 0 then 0 else st_get(base, old, 0);
+  let want = if c0 + room < tl_cap() then c0 + room else tl_cap();
+  let tl = st_alloc(base, tx, 1 + 2 * want, d[6]);
+  let c = c0;
+  let _ = st_put(base, tl, 0, c);
+  let i = 0;
+  while i < 2 * c {
+    let _ = st_put(base, tl, 1 + i, st_get(base, old, 1 + i));
+    let i = i + 1;
+    0
+  };
+  let _ = st_seal(base, tl, tmp);
+  tl
+}
+// tl_gen(base, tl, take, s, n): append `take` LCG-777 edges in place. s[0] carries the
+// generator state across sub-batches AND across phase invocations (the runner calls phase
+// `l` five times); the tail is already this transaction's own object, so this is in place.
+fn tl_gen(base: [i64], tl: ref TL, take: i64, s: [i64], n: i64) -> i64 {
+  let c = st_get(base, tl, 0);
+  let k = 0;
+  while k < take {
+    let _ = s[0] = lcg(s[0]);
+    let a = (s[0] >> 20) % n;
+    let _ = s[0] = lcg(s[0]);
+    let w = (s[0] >> 20) % n;
+    let _ = st_put(base, tl, 1 + 2 * (c + k), a);
+    let _ = st_put(base, tl, 2 + 2 * (c + k), w);
+    let k = k + 1;
+    0
+  };
+  let _ = st_put(base, tl, 0, c + take);
+  c + take
+}
+// tail_drain(base, tl, src, dst, m): move the tail into the plain edge mirror at offset m
+// and empty the chunk. The mirror is what csr_build re-runs over (D1: the counting sort
+// never scatters into MAP_SHARED memory).
+fn tail_drain(base: [i64], tl: ref TL, src: [i64], dst: [i64], m: i64) -> i64 {
+  let c = st_get(base, tl, 0);
+  let i = 0;
+  while i < c {
+    let _ = src[m + i] = st_get(base, tl, 1 + 2 * i);
+    let _ = dst[m + i] = st_get(base, tl, 2 + 2 * i);
+    let i = i + 1;
+    0
+  };
+  let _ = st_put(base, tl, 0, 0);
+  m + c
+}
+// tail_row(base, tl, v): sum of (1 + col) over the tail entries whose row is v -- the read
+// side of read_row (blueprint §3), applied as a delta after the L1 and L0 slices. Linear
+// in cnt: this is exactly the cost §8 risk 1 asks to measure.
+fn tail_row(base: [i64], tl: ref TL, v: i64) -> i64 {
+  let c = st_get(base, tl, 0);
+  let acc = 0;
+  let i = 0;
+  while i < c {
+    let hit = if st_get(base, tl, 1 + 2 * i) == v then 1 else 0;
+    let acc = acc + hit * (1 + st_get(base, tl, 2 + 2 * i));
+    let i = i + 1;
+    0
+  };
+  acc
+}
+// tail_bfs(base, tl, v, lv, level, q, t): the same delta for the traversal side -- visit
+// every tail neighbour of v. t[0] is the BFS queue tail (a cell, not a let, because the
+// enqueue happens inside this function).
+fn tail_bfs(base: [i64], tl: ref TL, v: i64, lv: i64, level: [i64], q: [i64], t: [i64]) -> i64 {
+  let c = st_get(base, tl, 0);
+  let i = 0;
+  while i < c {
+    let hit = if st_get(base, tl, 1 + 2 * i) == v then 1 else 0;
+    let w = st_get(base, tl, 2 + 2 * i);
+    let take = hit * (if level[w] < 0 then 1 else 0);
+    let _ = if take == 1 then (let _ = level[w] = lv + 1 in 0) else 0;
+    let _ = if take == 1 then (let _ = q[t[0]] = w in 0) else 0;
+    let _ = t[0] = t[0] + take;
+    let i = i + 1;
+    0
+  };
+  0
+}
+// l0_load(base, tmp, src, dst, n): rebuild the plain edge mirror from the committed L0 CSR,
+// so a promotion in THIS process can re-run csr_build over L0 union tail. Returns |L0|.
+fn l0_load(base: [i64], tmp: [i64], src: [i64], dst: [i64], n: i64) -> i64 {
+  let g = st_root(base, tmp);
+  let has0 = if st_get(base, g, 5) == 0 then 0 else 1;
+  let rp0 = st_ref(base, g, 5);
+  let ci0 = st_ref(base, g, 6);
+  let m = 0;
+  let v = 0;
+  while v < n * has0 {
+    let k = st_get(base, rp0, 1 + v);
+    let hi = st_get(base, rp0, 2 + v);
+    while k < hi {
+      let _ = src[m] = v;
+      let _ = dst[m] = st_get(base, ci0, 1 + k);
+      let m = m + 1;
+      let k = k + 1;
+      0
+    };
+    let v = v + 1;
+    0
+  };
+  m
+}
+// pub_rp / pub_ci: allocate one L0 CSR object and publish the counting-sort output into it
+// in a single ascending pass (D1 again). Split in two so the promotion site never holds
+// both a fresh RP and a fresh CI plus the scratch arrays live at once.
+fn pub_rp(base: [i64], tx: [i64], tmp: [i64], d: [i64], prp: [i64], n: i64) -> ref RP {
+  let rp = st_alloc(base, tx, n + 2, d[0]);
+  let p = 0;
+  while p < n + 2 {
+    let _ = st_put(base, rp, p, prp[p]);
+    let p = p + 1;
+    0
+  };
+  let _ = st_seal(base, rp, tmp);
+  rp
+}
+fn pub_ci(base: [i64], tx: [i64], tmp: [i64], d: [i64], pci: [i64], m: i64) -> ref CI {
+  let ci = st_alloc(base, tx, m + 1, d[1]);
+  let p = 0;
+  while p < m + 1 {
+    let _ = st_put(base, ci, p, pci[p]);
+    let p = p + 1;
+    0
+  };
+  let _ = st_seal(base, ci, tmp);
+  ci
 }
 // phase_build(base, tmp, d, skew): skew = 1 sends half of all destination endpoints to
 // the 1% hub set (nodes 0..9999): the skewed variant of §9.5 (row 'uniform + 1%-hub').
@@ -141,26 +287,33 @@ fn phase_build(base: [i64], tmp: [i64], d: [i64], skew: i64) -> i64 {
   let tb = st_alloc(base, tx, 156251, d[4]);
   let _ = st_put(base, tb, 0, 156250);
   let _ = st_seal(base, tb, tmp);
-  let g = root_write(base, tx, tmp, d[2], n, 2 * e, rp1, ci1, log, 0, 0, tb, 0);
+  let tl = tail_new(base, tx, d, 0, 0, tmp);
+  let g = root_write(base, tx, tmp, d[2], n, 2 * e, rp1, ci1, log, 0, 0, tb, 0, tl);
   st_commit(base, tx, g, tmp)
 }
-// phase_log(base, tmp, d, b0, nb, stall): log batches b0 .. b0+nb-1 (of 100); each batch
-// appends a chunk of 10^4 LCG-777 edges (the generator is advanced past the earlier
-// batches), rebuilds L0 from EVERY logged chunk, commits. stall[0] = max batch ms.
+// phase_log(base, tmp, d, b0, nb, stall): log batches b0 .. b0+nb-1 (of 100). B4 STEP 1
+// (docs/blueprints/B4-functional-tensor-updates.md §5 step 1): a batch's 10^4 LCG-777 edges
+// are APPENDED TO THE TAIL instead of being appended to the log and triggering a rebuild of
+// L0 over every logged edge; promote_tail (L0' = csr_build(L0 union tail), tail' empty)
+// fires whenever the chunk fills, and once more at the end of the phase so a later read
+// phase sees a committed version with an empty tail. The tail is CoW'd once per transaction
+// (invariant (1)) and appended in place after that. The redundant second copy of every edge
+// (the LOG chunk) is gone -- the tail and L0 are both durable, both committed; LOG stays in
+// the root as an empty array so the G2 layout and st_compact's walk are unchanged.
+// stall[0] = max batch ms.
 fn phase_log(base: [i64], tmp: [i64], d: [i64], b0: i64, nb: i64, stall: [i64]) -> i64 {
   let n = 1000000;
   let src = zeros(1000000);
   let dst = zeros(1000000);
   let cur = zeros(n);
-  // D1: the plain build buffers are allocated ONCE here, outside the batch loop (L8: an
-  // allocation inside a while body never resets the frame-heap bump). 100 batches x 10^4
-  // directed edges caps m at 10^6, so pci is sized for the largest L0 this phase can build.
   let prp = zeros(n + 2);
   let pci = zeros(1000001);
-  let x = 777;
+  let s = zeros(4);
+  let _ = s[0] = 777;
+  let _ = s[1] = l0_load(base, tmp, src, dst, n);
   let skip = 0;
   while skip < b0 * 20000 {
-    let x = lcg(x);
+    let _ = s[0] = lcg(s[0]);
     let skip = skip + 1;
     0
   };
@@ -170,54 +323,35 @@ fn phase_log(base: [i64], tmp: [i64], d: [i64], b0: i64, nb: i64, stall: [i64]) 
     let t0 = clock_ms();
     let _ = st_begin(base, tx, tmp);
     let g = st_root(base, tmp);
-    let chunk = st_alloc(base, tx, 20001, d[5]);
-    let _ = st_put(base, chunk, 0, 20000);
-    let k = 0;
-    while k < 10000 {
-      let x = lcg(x);
-      let a = (x >> 20) % n;
-      let x = lcg(x);
-      let c = (x >> 20) % n;
-      let _ = st_put(base, chunk, 1 + 2 * k, a);
-      let _ = st_put(base, chunk, 2 + 2 * k, c);
-      let k = k + 1;
+    let told = st_ref(base, g, 9);
+    let tl = tail_new(base, tx, d, told, 10000, tmp);
+    let _ = st_supersede(base, tx, told);
+    let nold = if st_get(base, g, 5) == 0 then 0 else 1;
+    let rp0 = if nold == 1 then st_ref(base, g, 5) else 0;
+    let ci0 = if nold == 1 then st_ref(base, g, 6) else 0;
+    let last = if b == b0 + nb - 1 then 1 else 0;
+    let done = 0;
+    while done < 10000 {
+      let room = tl_cap() - st_get(base, tl, 0);
+      let left = 10000 - done;
+      let take = if left < room then left else room;
+      let cnt = tl_gen(base, tl, take, s, n);
+      let done = done + take;
+      let full = if cnt == tl_cap() then 1 else 0;
+      let atend = if done == 10000 then last else 0;
+      let ne = if cnt > 0 then 1 else 0;
+      let go = if full == 1 then 1 else atend * ne;
+      let _ = if go == 1 then (let _ = s[1] = tail_drain(base, tl, src, dst, s[1]) in 0) else 0;
+      let _ = if go == 1 then csr_passes(src, dst, s[1], n, cur, prp, pci) else 0;
+      let _ = if go * nold == 1 then st_supersede(base, tx, rp0) else 0;
+      let _ = if go * nold == 1 then st_supersede(base, tx, ci0) else 0;
+      let rp0 = if go == 1 then pub_rp(base, tx, tmp, d, prp, n) else rp0;
+      let ci0 = if go == 1 then pub_ci(base, tx, tmp, d, pci, s[1]) else ci0;
+      let nold = if go == 1 then 1 else nold;
       0
     };
-    let _ = st_seal(base, chunk, tmp);
-    let oldlog = st_ref(base, g, 4);
-    let nl = st_get(base, oldlog, 0);
-    let log = st_alloc(base, tx, 101, d[3]);
-    let _ = st_put(base, log, 0, nl + 1);
-    let i = 0;
-    while i < nl {
-      let _ = st_link(base, log, 1 + i, st_ref(base, oldlog, 1 + i));
-      let i = i + 1;
-      0
-    };
-    let _ = st_link(base, log, 1 + nl, chunk);
-    let _ = st_seal(base, log, tmp);
-    let _ = st_supersede(base, tx, oldlog);
-    let m = 0;
-    let ch = 0;
-    while ch <= nl {
-      let cobj = st_ref(base, log, 1 + ch);
-      let q = 0;
-      while q < 10000 {
-        let _ = src[m] = st_get(base, cobj, 1 + 2 * q);
-        let _ = dst[m] = st_get(base, cobj, 2 + 2 * q);
-        let m = m + 1;
-        let q = q + 1;
-        0
-      };
-      let ch = ch + 1;
-      0
-    };
-    let rp0 = st_alloc(base, tx, n + 2, d[0]);
-    let ci0 = st_alloc(base, tx, m + 1, d[1]);
-    let _ = csr_build(base, tmp, src, dst, m, n, rp0, ci0, cur, prp, pci);
-    let _ = if st_get(base, g, 5) == 0 then 0 else st_supersede(base, tx, st_ref(base, g, 5));
-    let _ = if st_get(base, g, 6) == 0 then 0 else st_supersede(base, tx, st_ref(base, g, 6));
-    let g2 = root_write(base, tx, tmp, d[2], n, st_get(base, g, 1), st_ref(base, g, 2), st_ref(base, g, 3), log, rp0, ci0, st_ref(base, g, 7), (nl + 1) * 10000);
+    let _ = st_seal(base, tl, tmp);
+    let g2 = root_write(base, tx, tmp, d[2], n, st_get(base, g, 1), st_ref(base, g, 2), st_ref(base, g, 3), st_ref(base, g, 4), rp0, ci0, st_ref(base, g, 7), st_get(base, g, 8) + 10000, tl);
     let _ = st_supersede(base, tx, g);
     let _ = st_commit(base, tx, g2, tmp);
     let dt = clock_ms() - t0;
@@ -226,6 +360,60 @@ fn phase_log(base: [i64], tmp: [i64], d: [i64], b0: i64, nb: i64, stall: [i64]) 
     0
   };
   0
+}
+// phase_flush(base, tmp, d): promote whatever the tail holds into L0 and commit. This is
+// the probe half of the blueprint's RED condition (§7): the same fold read THROUGH the tail
+// delta and read after promotion must be identical -- a difference is a merge bug (a
+// duplicate or a dropped edge), never a new baseline.
+fn phase_flush(base: [i64], tmp: [i64], d: [i64]) -> i64 {
+  let n = 1000000;
+  let src = zeros(1200000);
+  let dst = zeros(1200000);
+  let cur = zeros(n);
+  let prp = zeros(n + 2);
+  let pci = zeros(1200001);
+  let m = l0_load(base, tmp, src, dst, n);
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let g = st_root(base, tmp);
+  let told = st_ref(base, g, 9);
+  let tl = tail_new(base, tx, d, told, 0, tmp);
+  let _ = st_supersede(base, tx, told);
+  let m2 = tail_drain(base, tl, src, dst, m);
+  let _ = csr_passes(src, dst, m2, n, cur, prp, pci);
+  let nold = if st_get(base, g, 5) == 0 then 0 else 1;
+  let _ = if nold == 1 then st_supersede(base, tx, st_ref(base, g, 5)) else 0;
+  let _ = if nold == 1 then st_supersede(base, tx, st_ref(base, g, 6)) else 0;
+  let rp0 = pub_rp(base, tx, tmp, d, prp, n);
+  let ci0 = pub_ci(base, tx, tmp, d, pci, m2);
+  let _ = st_seal(base, tl, tmp);
+  let g2 = root_write(base, tx, tmp, d[2], n, st_get(base, g, 1), st_ref(base, g, 2), st_ref(base, g, 3), st_ref(base, g, 4), rp0, ci0, st_ref(base, g, 7), st_get(base, g, 8), tl);
+  let _ = st_supersede(base, tx, g);
+  let _ = st_commit(base, tx, g2, tmp);
+  m2
+}
+// phase_tail(base, tmp, d, k): B4 §8 risk-1 probe -- leave exactly k entries (k <= tl_cap())
+// in the committed tail, never promoting, so the `n` phase can be timed against a loaded
+// tail. The edges are a different stream (LCG 999331) on purpose: this phase is a read-cost
+// probe, run after the folds, never part of the fold path.
+fn phase_tail(base: [i64], tmp: [i64], d: [i64], k: i64) -> i64 {
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let g = st_root(base, tmp);
+  let told = st_ref(base, g, 9);
+  let tl = tail_new(base, tx, d, told, k, tmp);
+  let _ = st_supersede(base, tx, told);
+  let s = zeros(4);
+  let _ = s[0] = 999331;
+  let _ = tl_gen(base, tl, k - st_get(base, tl, 0), s, 1000000);
+  let _ = st_seal(base, tl, tmp);
+  let nold = if st_get(base, g, 5) == 0 then 0 else 1;
+  let rp0 = if nold == 1 then st_ref(base, g, 5) else 0;
+  let ci0 = if nold == 1 then st_ref(base, g, 6) else 0;
+  let g2 = root_write(base, tx, tmp, d[2], st_get(base, g, 0), st_get(base, g, 1), st_ref(base, g, 2), st_ref(base, g, 3), st_ref(base, g, 4), rp0, ci0, st_ref(base, g, 7), st_get(base, g, 8), tl);
+  let _ = st_supersede(base, tx, g);
+  let _ = st_commit(base, tx, g2, tmp);
+  st_get(base, tl, 0)
 }
 fn tomb(base: [i64], tb: ref TB, slot: i64) -> i64 {
   (st_get(base, tb, 1 + (slot >> 6)) >> (slot & 63)) & 1
@@ -256,7 +444,7 @@ fn nbr_fold(base: [i64], g: ref G2, v: i64) -> i64 {
     let k = k + 1;
     0
   };
-  acc
+  acc + tail_row(base, st_ref(base, g, 9), v)
 }
 fn phase_nbr(base: [i64], tmp: [i64]) -> i64 {
   let g = st_root(base, tmp);
@@ -296,7 +484,7 @@ fn phase_del(base: [i64], tmp: [i64], d: [i64]) -> i64 {
   };
   let _ = st_seal(base, tb, tmp);
   let _ = st_supersede(base, tx, old);
-  let g2 = root_write(base, tx, tmp, d[2], st_get(base, g, 0), st_get(base, g, 1), st_ref(base, g, 2), st_ref(base, g, 3), st_ref(base, g, 4), st_ref(base, g, 5), st_ref(base, g, 6), tb, st_get(base, g, 8));
+  let g2 = root_write(base, tx, tmp, d[2], st_get(base, g, 0), st_get(base, g, 1), st_ref(base, g, 2), st_ref(base, g, 3), st_ref(base, g, 4), st_ref(base, g, 5), st_ref(base, g, 6), tb, st_get(base, g, 8), st_ref(base, g, 9));
   let _ = st_supersede(base, tx, g);
   st_commit(base, tx, g2, tmp)
 }
@@ -307,6 +495,8 @@ fn bfs_from(base: [i64], g: ref G2, n: i64, s: i64, level: [i64], queue: [i64]) 
   let has0 = if st_get(base, g, 5) == 0 then 0 else 1;
   let rp0 = st_ref(base, g, 5);
   let ci0 = st_ref(base, g, 6);
+  let tl = st_ref(base, g, 9);
+  let t = zeros(1);
   let i = 0;
   while i < n {
     let _ = level[i] = 0 - 1;
@@ -344,6 +534,10 @@ fn bfs_from(base: [i64], g: ref G2, n: i64, s: i64, level: [i64], queue: [i64]) 
       let k0 = k0 + 1;
       0
     };
+    let tc = st_get(base, tl, 0);
+    let _ = t[0] = tail;
+    let _ = if tc > 0 then tail_bfs(base, tl, v, lv, level, queue, t) else 0;
+    let tail = t[0];
     let head = head + 1;
     0
   };
@@ -687,28 +881,30 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let nsrc = if argc >= 5 then parse(argv[4]) else 3;
   let b0 = if argc >= 5 then parse(argv[4]) else 0;
   let nb = if argc >= 6 then parse(argv[5]) else 10;
-  let d = zeros(6);
+  let d = zeros(7);
   let _ = d[0] = st_digest("RP{arr i64}");
   let _ = d[1] = st_digest("CI{arr i64}");
-  let _ = d[2] = st_digest("G2{i64,i64,ref RP,ref CI,ref LOG,ref RP,ref CI,ref TB,i64}");
+  let _ = d[2] = st_digest("G2{i64,i64,ref RP,ref CI,ref LOG,ref RP,ref CI,ref TB,i64,ref TL}");
   let _ = d[3] = st_digest("LOG{arr ref E}");
   let _ = d[4] = st_digest("TB{arr i64}");
   let _ = d[5] = st_digest("E{arr i64}");
+  let _ = d[6] = st_digest("TL{arr i64}");
   let stall = zeros(1);
-  let lay = zeros(12);
+  let lay = zeros(14);
   let _ = lay[0] = d[0];
   let _ = lay[2] = d[1];
   let _ = lay[4] = d[2];
-  let _ = lay[5] = 252;
+  let _ = lay[5] = 764;
   let _ = lay[6] = d[3];
   let _ = lay[7] = 0 - 1;
   let _ = lay[8] = d[4];
   let _ = lay[10] = d[5];
+  let _ = lay[12] = d[6];
   let t0 = clock_ms();
-  let live = if ph == 99 then st_compact(path, pl, size, lay, 6, tmp) else 0;
+  let live = if ph == 99 then st_compact(path, pl, size, lay, 7, tmp) else 0;
   let base = st_open(path, pl, size, tmp);
   let t1 = clock_ms();
-  let r = if ph == 98 then phase_build(base, tmp, d, skew) else if ph == 108 then phase_log(base, tmp, d, b0, nb, stall) else if ph == 110 then phase_nbr(base, tmp) else if ph == 100 then phase_del(base, tmp, d) else if ph == 102 then phase_bfs(base, tmp, nsrc) else if ph == 112 then phase_frontier(base, tmp, nsrc) else 0;
+  let r = if ph == 98 then phase_build(base, tmp, d, skew) else if ph == 108 then phase_log(base, tmp, d, b0, nb, stall) else if ph == 110 then phase_nbr(base, tmp) else if ph == 100 then phase_del(base, tmp, d) else if ph == 102 then phase_bfs(base, tmp, nsrc) else if ph == 112 then phase_frontier(base, tmp, nsrc) else if ph == 97 then phase_tail(base, tmp, d, nsrc) else if ph == 103 then phase_flush(base, tmp, d) else 0;
   let t2 = clock_ms();
   let g = st_root(base, tmp);
   let used = st_gen(base, tmp) * 0 + base[st_pick(base, tmp) + 4] * 8;
