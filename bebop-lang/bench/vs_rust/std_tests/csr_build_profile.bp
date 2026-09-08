@@ -164,6 +164,19 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let t6 = clock_ms();
   let _ = say("st_commit ms ", t6 - t5, buf);
   let _ = say("total build ms ", t6 - t0, buf);
+
+  // Fold (added 2026-09-08, B2 row iii): sum of the filled ci range plus the final row pointer,
+  // printed AFTER the timed phases so it costs the profile nothing. It exists because a phase
+  // table on its own cannot be believed -- a pass that silently did less work (truncated loop,
+  // off-by-one range) shows up as a fast phase, not as an error. The plain-array control arm
+  // bench/vs_rust/std_tests/csr_build_plain.bp prints the SAME fold for the same n/e, so the
+  // store-vs-plain comparison is anchored on identical work, not just identical parameters.
+  // acc is a cell for the same reason join_twin.bp's probe uses cells: cross-loop state.
+  let acc = zeros(1);
+  let k = 0;
+  while k < m { let _ = acc[0] = acc[0] + st_get(base, ci, 1 + k); let k = k + 1; 0 };
+  let _ = say("fold ", acc[0] + st_get(base, rp, 1 + n), buf);
+
   let _ = sys_munmap(st_addr(base), size);
   t6 - t0
 }

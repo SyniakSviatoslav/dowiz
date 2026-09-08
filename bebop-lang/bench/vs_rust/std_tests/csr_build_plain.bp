@@ -1,0 +1,162 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+// csr_build_plain.bp — B2 decisive twin (iii), CONTROL ARM for csr_build_profile.bp
+// (docs/blueprints/B2-decisive-twins.md §3(iii)).
+//
+// Why this file exists. The first full-scale run of csr_build_profile.bp (n=1,000,000 nodes,
+// e=5,000,000 undirected edges = m=10,000,000 CSR slots) put 97 % of the build in ONE phase --
+// the fill pass, 28,958 ms of a 29,762 ms build, ~2,896 ns per edge slot. A counting sort's
+// fill pass is a scatter of one i64 per slot; ~2,900 ns for that is roughly 7,000 cycles, which
+// is two orders of magnitude past a cache miss. So the profile named a phase but not a CAUSE,
+// and the two candidate causes are not the same finding at all:
+//
+//   (a) the SCATTER itself -- 10M random writes over an 80 MB working set, i.e. TLB + cache +
+//       first-touch page faults, which any engine in any language would pay; or
+//   (b) the STORE -- `st_put` into a store object living in a 512 MB file-backed mmap, i.e. a
+//       file-backed fault and page write-back per freshly touched page, which is a property of
+//       the persistence layer and not of the algorithm.
+//
+// Distinguishing them decides what B4's "L0 rebuild <= 2 ms for 2^18 edges" budget is up
+// against: (a) would mean the budget needs a different algorithm, (b) that it needs a different
+// place to put the bytes. This file is the same counting sort at the same scale over PLAIN
+// `zeros()` arrays (anonymous memory, no store, no file), printing the same phase labels. The
+// difference between its fill pass and csr_build_profile.bp's is, by construction, the store.
+//
+// Everything else is held equal on purpose: the same LCG seed (4242) and the same pair
+// generation loop as csr_build_profile.bp, so the scatter pattern is bit-identical; the same
+// clock_ms differential timing; the same say() printer. It computes and prints a FOLD
+// (sum of ci over the filled range, plus the last rp entry) so that a run whose phases look
+// fast because it silently did less work fails loudly instead -- csr_build_profile.bp prints
+// the same fold for the same n/e.
+//
+// argv[2] = n (nodes, default 1000000), argv[3] = e (undirected edges, default 5000000).
+
+fn lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
+
+fn parse(s: str) -> i64 {
+  let n = str_len(s);
+  let i = 0;
+  let v = 0;
+  while i < n {
+    let v = v * 10 + (char(s, i) - 48);
+    let i = i + 1;
+    0
+  };
+  v
+}
+
+// itoa/say: identical to csr_build_profile.bp's (bebop main returns one i64, a differential
+// profile needs several numbers in order, so this file prints as it goes via sys_write).
+fn itoa(dst: [i64], n: i64) -> i64 {
+  let neg = if n < 0 then 1 else 0;
+  let m = if n < 0 then 0 - n else n;
+  let p = 23;
+  let m2 = m;
+  let go = 1;
+  while go == 1 {
+    let d = m2 - (m2 / 10) * 10;
+    let _ = dst[p] = 48 + d;
+    let p = p - 1;
+    let m2 = m2 / 10;
+    let go = if m2 > 0 then 1 else 0;
+    0
+  };
+  let start = p + 1;
+  let len = 24 - start;
+  let i = 0;
+  while i < len { let _ = dst[neg + i] = dst[start + i]; let i = i + 1; 0 };
+  let _ = if neg == 1 then (let _ = dst[0] = 45 in 0) else 0;
+  len + neg
+}
+
+fn say(label: str, ms: i64, buf: [i64]) -> i64 {
+  let n = st_str(buf, label);
+  let _ = sys_write(1, buf, n);
+  let l = itoa(buf, ms);
+  let _ = sys_write(1, buf, l);
+  let _ = buf[0] = 10;
+  sys_write(1, buf, 1)
+}
+
+// The same three passes as csr_build_profile.bp's csr_build_profiled, with `rp`/`ci` as plain
+// arrays instead of store objects: rp[1+v] here plays the role of st_get(base, rp, 1+v) there
+// (the store object's slot 0 holds its length, so its data starts at slot 1 -- the same +1/+2
+// index offsets are kept here so the two files' loops are line-for-line comparable).
+fn csr_build_plain(src: [i64], dst: [i64], m: i64, n: i64, rp: [i64], ci: [i64], cur: [i64], buf: [i64]) -> i64 {
+  let t0 = clock_ms();
+  let i = 0;
+  while i < m {
+    let a = src[i];
+    let _ = rp[2 + a] = rp[2 + a] + 1;
+    let i = i + 1;
+    0
+  };
+  let t1 = clock_ms();
+  let _ = say("counting pass ms ", t1 - t0, buf);
+  let v = 0;
+  while v < n {
+    let _ = rp[2 + v] = rp[2 + v] + rp[1 + v];
+    let _ = cur[v] = rp[1 + v];
+    let v = v + 1;
+    0
+  };
+  let t2 = clock_ms();
+  let _ = say("prefix sum ms ", t2 - t1, buf);
+  let j = 0;
+  while j < m {
+    let a = src[j];
+    let s = cur[a];
+    let _ = ci[1 + s] = dst[j];
+    let _ = cur[a] = s + 1;
+    let j = j + 1;
+    0
+  };
+  let t3 = clock_ms();
+  let _ = say("fill pass ms ", t3 - t2, buf);
+  0
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  let n = if argc >= 3 then parse(argv[2]) else 1000000;
+  let e = if argc >= 4 then parse(argv[3]) else 5000000;
+  let m = 2 * e;
+  let buf = zeros(64);
+
+  let t0 = clock_ms();
+  let src = zeros(m);
+  let dst = zeros(m);
+  let x = 4242;
+  let i = 0;
+  while i < e {
+    let x = lcg(x);
+    let a = (x >> 20) % n;
+    let x = lcg(x);
+    let b = (x >> 20) % n;
+    let _ = src[2 * i] = a;
+    let _ = dst[2 * i] = b;
+    let _ = src[2 * i + 1] = b;
+    let _ = dst[2 * i + 1] = a;
+    let i = i + 1;
+    0
+  };
+  let t1 = clock_ms();
+  let _ = say("pair generation ms ", t1 - t0, buf);
+
+  let cur = zeros(n);
+  let rp = zeros(n + 2);
+  let ci = zeros(m + 1);
+  let _ = csr_build_plain(src, dst, m, n, rp, ci, cur, buf);
+  let t6 = clock_ms();
+  let _ = say("total build ms ", t6 - t0, buf);
+
+  // Fold: sum of the filled ci range plus the final row pointer. Any pass that silently did
+  // less work (a truncated loop, an off-by-one range) moves this number, so a "fast" phase
+  // table cannot be believed without it. csr_build_profile.bp prints the same fold.
+  // acc is a cell, not a rebind: cross-loop state lives in cells here (join_twin.bp's probe
+  // carries the same note -- the two engines disagree on rebind visibility past a loop).
+  let acc = zeros(1);
+  let k = 0;
+  while k < m { let _ = acc[0] = acc[0] + ci[1 + k]; let k = k + 1; 0 };
+  let _ = say("fold ", acc[0] + rp[1 + n], buf);
+  t6 - t0
+}
