@@ -10,6 +10,13 @@
 #              store, printing a clock_ms delta per sub-phase.
 #   plain arm  bench/vs_rust/std_tests/csr_build_plain.bp — the IDENTICAL counting sort at the
 #              identical scale with rp/ci as plain `zeros()` arrays: no store, no file.
+#   ram arm    bench/vs_rust/std_tests/csr_build_ram.bp — D1
+#              (docs/blueprints/D1-build-in-ram-publish-sequentially.md): the plain arm's three
+#              passes, then the result copied into the SAME st_alloc'd store objects in one
+#              ascending pass, sealed and committed exactly as the store arm. It is the arm the
+#              D1 gate is stated against (ram total <= 1.3x plain total), and its extra
+#              `publish copy ms` row is the blueprint's own open question §3(1) -- whether a
+#              SEQUENTIAL write into the MAP_SHARED mapping pays the tax the scatter pays.
 #
 # Both arms print the same FOLD (sum of the filled ci range + the final row pointer), so the
 # difference between their phase tables is the store and nothing else. Running only the store
@@ -35,7 +42,7 @@ mkdir -p "$T"
 BIG=$(awk '/^processor/{p=$3} /CPU part/ && $NF=="0xd41"{print p}' /proc/cpuinfo | tr '\n' ' ')
 PIN=$(python3 -c "import os;u=sorted(os.sched_getaffinity(0));b=[int(x) for x in '$BIG'.split()];print(next((c for c in b if c in u),u[0]))")
 
-for f in csr_build_profile csr_build_plain; do
+for f in csr_build_profile csr_build_plain csr_build_ram; do
   echo "compiling $f.bp ($BB) ..."
   ./seed/build/seed "$BB" compile "bench/vs_rust/std_tests/$f.bp" "$T/$f.bin" >/dev/null 2>&1 \
     || { echo "COMPILEFAIL $f"; exit 1; }
@@ -45,15 +52,16 @@ done
 # absolute $T so nothing lands in the repo root, and start the store arm from a clean file each
 # run (a fresh build, not a reopen: a warm store file would hide exactly the cost being hunted).
 REPO=$(pwd)
-( cd "$T" && rm -f b2_csrprofile.store
+( cd "$T" && rm -f b2_csrprofile.store b2_csrram.store
   taskset -c "$PIN" "$REPO/seed/build/seed" "$T/csr_build_profile.bin" "$N" "$E" > store_out.txt
   taskset -c "$PIN" "$REPO/seed/build/seed" "$T/csr_build_plain.bin"   "$N" "$E" > plain_out.txt
-  cat store_out.txt plain_out.txt )
+  taskset -c "$PIN" "$REPO/seed/build/seed" "$T/csr_build_ram.bin"     "$N" "$E" > ram_out.txt
+  cat store_out.txt plain_out.txt ram_out.txt )
 
 TOTAL_SLOTS=$((2 * E))
-python3 - "$T/store_out.txt" "$T/plain_out.txt" "$TOTAL_SLOTS" <<'PY'
+python3 - "$T/store_out.txt" "$T/plain_out.txt" "$T/ram_out.txt" "$TOTAL_SLOTS" <<'PY'
 import sys
-store_path, plain_path, slots = sys.argv[1], sys.argv[2], int(sys.argv[3])
+store_path, plain_path, ram_path, slots = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
 
 
 def parse(path):
@@ -75,29 +83,44 @@ def parse(path):
 
 srows, sfold = parse(store_path)
 prows, pfold = parse(plain_path)
-pmap = dict(prows)
+rrows, rfold = parse(ram_path)
+pmap, rmap = dict(prows), dict(rrows)
+folds_ok = sfold == pfold == rfold
 print()
-print(f'fold: store {sfold}  plain {pfold}  -> {"EQUAL (arms comparable)" if sfold == pfold else "MISMATCH — STOP, the arms are not doing the same work"}')
+print(f'fold: store {sfold}  plain {pfold}  ram {rfold}  -> '
+      f'{"EQUAL (arms comparable)" if folds_ok else "MISMATCH — STOP, the arms are not doing the same work"}')
 print()
-print('| phase | store ms | store ns/slot | plain ms | plain ns/slot | store/plain |')
-print('|---|---|---|---|---|---|')
+# Every phase label either arm printed, in the store arm's order, then the ram-only rows
+# (`publish copy ms`) that the store arm has no counterpart for.
+labels = [l for l, _ in srows] + [l for l, _ in rrows if l not in dict(srows)]
+print('| phase | store ms | plain ms | ram ms | ram ns/slot | store/plain | ram/plain |')
+print('|---|---|---|---|---|---|---|')
 top = None
-for label, ms in srows:
+smap = dict(srows)
+for label in labels:
     if label == 'total build ms':
         continue
-    pms = pmap.get(label)
-    r = f'{ms / pms:.1f}x' if pms else '—'
-    pstr = f'{pms}' if pms is not None else '— (store only)'
-    pns = f'{pms * 1e6 / slots:.1f}' if pms is not None else '—'
-    print(f'| {label} | {ms} | {ms * 1e6 / slots:.1f} | {pstr} | {pns} | {r} |')
-    if top is None or ms > top[1]:
-        top = (label, ms)
+    sms, pms, rms = smap.get(label), pmap.get(label), rmap.get(label)
+    def cell(v):
+        return '—' if v is None else str(v)
+    sr = f'{sms / pms:.1f}x' if sms is not None and pms else '—'
+    rr = f'{rms / pms:.1f}x' if rms is not None and pms else '—'
+    rns = f'{rms * 1e6 / slots:.1f}' if rms is not None else '—'
+    print(f'| {label} | {cell(sms)} | {cell(pms)} | {cell(rms)} | {rns} | {sr} | {rr} |')
+    if sms is not None and (top is None or sms > top[1]):
+        top = (label, sms)
 stotal = next((ms for l, ms in srows if l == 'total build ms'), 0)
 ptotal = next((ms for l, ms in prows if l == 'total build ms'), 0)
-print(f'| **total build ms** | **{stotal}** | {stotal * 1e6 / slots:.1f} | **{ptotal}** | '
-      f'{ptotal * 1e6 / slots:.1f} | **{stotal / ptotal:.1f}x** |' if ptotal else '')
+rtotal = next((ms for l, ms in rrows if l == 'total build ms'), 0)
+if ptotal:
+    print(f'| **total build ms** | **{stotal}** | **{ptotal}** | **{rtotal}** | '
+          f'{rtotal * 1e6 / slots:.1f} | **{stotal / ptotal:.1f}x** | **{rtotal / ptotal:.1f}x** |')
 print()
 print(f'top phase (store arm): {top[0] if top else "?"} = {top[1] if top else 0} ms, '
       f'{(top[1] if top else 0) * 100.0 / stotal:.1f}% of the build')
+if ptotal and rtotal:
+    print(f'D1 gate (ram total <= 1.3x plain total): {rtotal}/{ptotal} = {rtotal / ptotal:.2f}x '
+          f'-> {"PASS" if rtotal <= 1.3 * ptotal else "FAIL"};  speedup over the store arm '
+          f'{stotal / rtotal:.1f}x')
 print(f'slots = 2*E = {slots}')
 PY

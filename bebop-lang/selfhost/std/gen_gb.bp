@@ -242,7 +242,16 @@ fn main(argc: i64, argv: [str]) -> i64 {
 // new parameter.
 fn gen_bfs_core(dst: [i64], pos: [i64]) -> i64 {
   wr_str(dst, pos, "
-fn gbfs_push(base: [i64], M: i64, fr: [i64], vis: [i64], nx: [i64], nw: i64, cnt: [i64]) -> i64 {
+// E2 (ROADMAP): the push inner loop is BRANCHLESS -- always write, subtract later. The old loop
+// read vis[u], then took two data-dependent branches per edge slot around two STORES, which is
+// the one shape A2's csel cannot cover (csel selects a value, it cannot suppress a store). Here
+// every neighbour is OR'ed into nx unconditionally and the level's bookkeeping is done once, in
+// gbfs_settle. The set of newly-discovered vertices is unchanged by construction: nx accumulates
+// N(frontier) with duplicates and already-visited vertices included, and nx & ~vis is exactly
+// N(frontier) minus everything seen up to and including this frontier -- the same set the old
+// per-slot test admitted, so the fold is identical. It also drops one random line touch per slot
+// (the vis read/write), so a speedup here is NOT attributable to the branches alone.
+fn gbfs_push(base: [i64], M: i64, fr: [i64], nx: [i64], nw: i64) -> i64 {
   let w = 0;
   while w < nw {
     while fr[w] != 0 {
@@ -254,13 +263,33 @@ fn gbfs_push(base: [i64], M: i64, fr: [i64], vis: [i64], nx: [i64], nw: i64, cnt
       let hi = gb_row_hi(base, M, v);
       while k < hi {
         let u = gb_col(base, M, k);
-        let take = 1 - gb_bit(vis, u);
-        let _ = if take == 1 then gb_setbit(vis, u) else 0;
-        let _ = if take == 1 then gb_setbit(nx, u) else 0;
-        let _ = cnt[0] = cnt[0] + take;
+        let _ = gb_setbit(nx, u);
         let k = k + 1;
         0
       };
+      0
+    };
+    let w = w + 1;
+    0
+  };
+  0
+}
+// gbfs_settle(vis, nx, nw, cnt): the once-per-level half of E2 -- nx &= ~vis, vis |= nx, and
+// count what survived. The count is a Kernighan drain (y &= y-1) rather than a popcount builtin:
+// it runs once per NEWLY DISCOVERED vertex, so it costs n over the whole BFS against the 2*e edge
+// slots the push loop walks, and it needs no new instruction word. cnt is a cell, not a rebind,
+// for the same reason push_step's is (cross-loop state, and the two engines disagree on rebind
+// visibility past a loop).
+fn gbfs_settle(vis: [i64], nx: [i64], nw: i64, cnt: [i64]) -> i64 {
+  let w = 0;
+  while w < nw {
+    let b = nx[w] & (0 - 1 - vis[w]);
+    let _ = nx[w] = b;
+    let _ = vis[w] = vis[w] | b;
+    let y = b;
+    while y != 0 {
+      let y = y & (y - 1);
+      let _ = cnt[0] = cnt[0] + 1;
       0
     };
     let w = w + 1;
@@ -312,7 +341,8 @@ fn gbfs_frontier(base: [i64], M: i64, n: i64, s: i64) -> i64 {
   while nf > 0 {
     let _ = cnt[0] = 0;
     let pull = if nf * 14 > n - reached then 1 else 0;
-    let _ = if pull == 1 then gbfs_pull(base, M, fr, vis, nx, n, cnt) else gbfs_push(base, M, fr, vis, nx, nw, cnt);
+    let _ = if pull == 1 then gbfs_pull(base, M, fr, vis, nx, n, cnt) else gbfs_push(base, M, fr, nx, nw);
+    let _ = if pull == 1 then 0 else gbfs_settle(vis, nx, nw, cnt);
     let nf = cnt[0];
     let reached = reached + nf;
     let acc = acc + nf * (lv + 1);

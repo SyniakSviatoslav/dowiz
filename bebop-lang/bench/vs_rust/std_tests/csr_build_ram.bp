@@ -1,0 +1,213 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+// csr_build_ram.bp — D1 arm ("build in RAM, publish sequentially",
+// docs/blueprints/D1-build-in-ram-publish-sequentially.md §3/§7), the THIRD arm of
+// bench/vs_rust/csr_profile_b2.sh next to csr_build_profile.bp (store) and
+// csr_build_plain.bp (plain). Same counting sort, same LCG seed (4242), same scale, same
+// say() phase printer, same FOLD — the only difference from the store arm is WHERE the
+// three passes write:
+//
+//   store arm  every counting/prefix/fill write is an st_put into a 512 MB MAP_SHARED
+//              file mapping — R1 measured that path at 22x MAP_PRIVATE on this shape
+//              (journal 1788872878; the mechanism inside the MAP_SHARED write path is
+//              undetermined here, /proc/vmstat is frozen under this proot, 1788875683).
+//   this arm   the three passes write plain `zeros()` arrays (anonymous memory, the
+//              csr_build_plain.bp cost), and the result is copied into the SAME
+//              st_alloc'd objects in ONE SEQUENTIAL PASS, then sealed and committed
+//              exactly as the store arm does.
+//
+// The store objects are allocated at the same point in the transaction as before, so the
+// arena layout, the object headers and the committed file bytes are identical to the
+// store arm's — which is why the fold is the fold of the STORE objects here (it re-reads
+// what the copy published, so a copy that dropped or mis-ordered cells fails loudly).
+//
+// The blueprint asks one question this file exists to answer and not assume: does the
+// SEQUENTIAL copy pay the same MAP_SHARED tax as the scatter? "publish copy ms" is its
+// own phase row for exactly that reason.
+//
+// argv[2] = n (nodes, default 1000000), argv[3] = e (undirected edges, default 5000000).
+
+fn lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
+
+fn parse(s: str) -> i64 {
+  let n = str_len(s);
+  let i = 0;
+  let v = 0;
+  while i < n {
+    let v = v * 10 + (char(s, i) - 48);
+    let i = i + 1;
+    0
+  };
+  v
+}
+
+// itoa/say: identical to csr_build_profile.bp's (bebop main returns one i64, a differential
+// profile needs several numbers in order, so this file prints as it goes via sys_write).
+fn itoa(dst: [i64], n: i64) -> i64 {
+  let neg = if n < 0 then 1 else 0;
+  let m = if n < 0 then 0 - n else n;
+  let p = 23;
+  let m2 = m;
+  let go = 1;
+  while go == 1 {
+    let d = m2 - (m2 / 10) * 10;
+    let _ = dst[p] = 48 + d;
+    let p = p - 1;
+    let m2 = m2 / 10;
+    let go = if m2 > 0 then 1 else 0;
+    0
+  };
+  let start = p + 1;
+  let len = 24 - start;
+  let i = 0;
+  while i < len { let _ = dst[neg + i] = dst[start + i]; let i = i + 1; 0 };
+  let _ = if neg == 1 then (let _ = dst[0] = 45 in 0) else 0;
+  len + neg
+}
+
+fn say(label: str, ms: i64, buf: [i64]) -> i64 {
+  let n = st_str(buf, label);
+  let _ = sys_write(1, buf, n);
+  let l = itoa(buf, ms);
+  let _ = sys_write(1, buf, l);
+  let _ = buf[0] = 10;
+  sys_write(1, buf, 1)
+}
+
+// csr_passes: the three counting-sort passes over PLAIN arrays. Its parameter list is
+// deliberately the same SHAPE as csr_build_plain.bp's csr_build_plain (8 params, no store
+// arguments at all) -- the first version of this file ran the passes and the publish in one
+// 12-param function and its fill pass measured 820 ms against the plain arm's 594 ms for
+// byte-identical work over byte-identical anonymous memory. Holding the store's base/tmp/rp/ci
+// live across the passes is what costs that: they are live-out into the publish, so the fill
+// loop's own inductions spill (>8 live symbols, AGENTS.md T2.1). Splitting the passes off makes
+// the store arguments dead during them and the difference is a codegen property, not a D1 one.
+// prp is zeroed first because a caller may reuse it across builds (the store arm gets its zeros
+// free from a fresh sparse arena); pci needs no clear, every cell 0..m of it is written.
+fn csr_passes(src: [i64], dst: [i64], m: i64, n: i64, prp: [i64], pci: [i64], cur: [i64], buf: [i64]) -> i64 {
+  let t0 = clock_ms();
+  let z = 0;
+  while z < n + 2 { let _ = prp[z] = 0; let z = z + 1; 0 };
+  let _ = prp[0] = n + 1;
+  let i = 0;
+  while i < m {
+    let a = src[i];
+    let _ = prp[2 + a] = prp[2 + a] + 1;
+    let i = i + 1;
+    0
+  };
+  let t1 = clock_ms();
+  let _ = say("counting pass ms ", t1 - t0, buf);
+  let v = 0;
+  while v < n {
+    let _ = prp[2 + v] = prp[2 + v] + prp[1 + v];
+    let _ = cur[v] = prp[1 + v];
+    let v = v + 1;
+    0
+  };
+  let t2 = clock_ms();
+  let _ = say("prefix sum ms ", t2 - t1, buf);
+  let _ = pci[0] = m;
+  let j = 0;
+  while j < m {
+    let a = src[j];
+    let s = cur[a];
+    let _ = pci[1 + s] = dst[j];
+    let _ = cur[a] = s + 1;
+    let j = j + 1;
+    0
+  };
+  let t3 = clock_ms();
+  let _ = say("fill pass ms ", t3 - t2, buf);
+  0
+}
+
+// csr_publish: one ascending pass per object into the store's MAP_SHARED mapping -- no reads of
+// the store, no random writes. This is the whole of what D1 adds to the plain build, and the
+// blueprint's open question section 3(1) is exactly whether THIS pass pays the tax the scatter pays.
+fn csr_publish(base: [i64], tmp: [i64], m: i64, n: i64, rp: ref RP, ci: ref CI, prp: [i64], pci: [i64], buf: [i64]) -> i64 {
+  let t3 = clock_ms();
+  let p = 0;
+  while p < n + 2 { let _ = st_put(base, rp, p, prp[p]); let p = p + 1; 0 };
+  let q = 0;
+  while q < m + 1 { let _ = st_put(base, ci, q, pci[q]); let q = q + 1; 0 };
+  let t4 = clock_ms();
+  let _ = say("publish copy ms ", t4 - t3, buf);
+  let _ = st_seal(base, rp, tmp);
+  let _ = st_seal(base, ci, tmp);
+  let t5 = clock_ms();
+  let _ = say("st_seal (rp+ci) ms ", t5 - t4, buf);
+  0
+}
+
+fn root_write(base: [i64], tx: [i64], tmp: [i64], dg: i64, rp: ref RP, ci: ref CI) -> ref PROF {
+  let g = st_alloc(base, tx, 2, dg);
+  let _ = st_link(base, g, 0, rp);
+  let _ = st_link(base, g, 1, ci);
+  let _ = st_seal(base, g, tmp);
+  g
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  let n = if argc >= 3 then parse(argv[2]) else 1000000;
+  let e = if argc >= 4 then parse(argv[3]) else 5000000;
+  let m = 2 * e;
+  let path = zeros(64);
+  let pl = st_str(path, "b2_csrram.store");
+  let tmp = zeros(256);
+  let size = 536870912;
+  let buf = zeros(64);
+  let dg_rp = st_digest("RP{arr i64}");
+  let dg_ci = st_digest("CI{arr i64}");
+  let dg_pf = st_digest("PROF{ref RP, ref CI}");
+
+  let base = st_open(path, pl, size, tmp);
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+
+  let t0 = clock_ms();
+  let src = zeros(m);
+  let dst = zeros(m);
+  let x = 4242;
+  let i = 0;
+  while i < e {
+    let x = lcg(x);
+    let a = (x >> 20) % n;
+    let x = lcg(x);
+    let b = (x >> 20) % n;
+    let _ = src[2 * i] = a;
+    let _ = dst[2 * i] = b;
+    let _ = src[2 * i + 1] = b;
+    let _ = dst[2 * i + 1] = a;
+    let i = i + 1;
+    0
+  };
+  let t1 = clock_ms();
+  let _ = say("pair generation ms ", t1 - t0, buf);
+
+  let cur = zeros(n);
+  let prp = zeros(n + 2);
+  let pci = zeros(m + 1);
+  let rp = st_alloc(base, tx, n + 2, dg_rp);
+  let ci = st_alloc(base, tx, m + 1, dg_ci);
+  let _ = csr_passes(src, dst, m, n, prp, pci, cur, buf);
+  let _ = csr_publish(base, tmp, m, n, rp, ci, prp, pci, buf);
+
+  let t5 = clock_ms();
+  let g = root_write(base, tx, tmp, dg_pf, rp, ci);
+  let _ = st_commit(base, tx, g, tmp);
+  let t6 = clock_ms();
+  let _ = say("st_commit ms ", t6 - t5, buf);
+  let _ = say("total build ms ", t6 - t0, buf);
+
+  // Fold read back out of the STORE objects (not out of prp/pci): identical to the store
+  // and plain arms' fold for the same n/e, and it is what proves the publish copy landed
+  // every cell where the scatter used to put it.
+  let acc = zeros(1);
+  let k = 0;
+  while k < m { let _ = acc[0] = acc[0] + st_get(base, ci, 1 + k); let k = k + 1; 0 };
+  let _ = say("fold ", acc[0] + st_get(base, rp, 1 + n), buf);
+
+  let _ = sys_munmap(st_addr(base), size);
+  t6 - t0
+}

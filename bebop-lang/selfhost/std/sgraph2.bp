@@ -19,32 +19,72 @@ use "selfhost/prelude/store.bp"
 //   p : frontier (SpMSpV, push/pull, alpha 14) BFS from argv[4] sources on the L1 graph
 //       (run before the log phase); fold == the queue BFS; t = ns per L1 edge slot
 fn lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
-// csr_build(base, tmp, src, dst, m, n, rp, ci, cur): fill the caller-allocated RP (n+2 cells)
-// and CI (m+1 cells) objects (refs stay refs: no i64 round trip through an out array).
-fn csr_build(base: [i64], tmp: [i64], src: [i64], dst: [i64], m: i64, n: i64, rp: ref RP, ci: ref CI, cur: [i64]) -> i64 {
-  let _ = st_put(base, rp, 0, n + 1);
+// csr_passes(src, dst, m, n, cur, prp, pci): the three counting-sort passes, over PLAIN arrays
+// only. It is a SEPARATE function from csr_build on purpose, and its parameter list carries no
+// store argument at all: measured on the D1 bench arm, running the passes and the publish in one
+// function put the fill pass at 820 ms against 592 ms for byte-identical work over byte-identical
+// anonymous memory, because base/tmp/rp/ci are live-out into the publish and the fill loop's own
+// inductions spill (AGENTS.md T2.1, >8 live symbols). Split, the fill pass matches the plain arm.
+fn csr_passes(src: [i64], dst: [i64], m: i64, n: i64, cur: [i64], prp: [i64], pci: [i64]) -> i64 {
+  let z = 0;
+  while z < n + 2 {
+    let _ = prp[z] = 0;
+    let z = z + 1;
+    0
+  };
+  let _ = prp[0] = n + 1;
   let i = 0;
   while i < m {
     let a = src[i];
-    let _ = st_put(base, rp, 2 + a, st_get(base, rp, 2 + a) + 1);
+    let _ = prp[2 + a] = prp[2 + a] + 1;
     let i = i + 1;
     0
   };
   let v = 0;
   while v < n {
-    let _ = st_put(base, rp, 2 + v, st_get(base, rp, 2 + v) + st_get(base, rp, 1 + v));
-    let _ = cur[v] = st_get(base, rp, 1 + v);
+    let _ = prp[2 + v] = prp[2 + v] + prp[1 + v];
+    let _ = cur[v] = prp[1 + v];
     let v = v + 1;
     0
   };
-  let _ = st_put(base, ci, 0, m);
+  let _ = pci[0] = m;
   let j = 0;
   while j < m {
     let a = src[j];
     let s = cur[a];
-    let _ = st_put(base, ci, 1 + s, dst[j]);
+    let _ = pci[1 + s] = dst[j];
     let _ = cur[a] = s + 1;
     let j = j + 1;
+    0
+  };
+  0
+}
+// csr_build(base, tmp, src, dst, m, n, rp, ci, cur, prp, pci): fill the caller-allocated RP
+// (n+2 cells) and CI (m+1 cells) objects (refs stay refs: no i64 round trip through an out
+// array). D1 (docs/blueprints/D1-build-in-ram-publish-sequentially.md): the three counting-sort
+// passes scatter into the caller's PLAIN prp/pci arrays -- anonymous memory -- and the result is
+// PUBLISHED into the store objects in one ascending pass each. R1 measured the same scatter
+// writing straight into the store's 512 MB MAP_SHARED file mapping at 22x its cost into
+// anonymous memory, single-variable, identical fold (journal 1788872878; WHICH mechanism inside
+// the MAP_SHARED write path is undetermined on this box -- /proc/vmstat is frozen under the
+// proot, 1788875683 -- and the fix does not depend on it). Nothing else moves: the caller still
+// st_alloc's rp/ci at the same point in the transaction, so the arena layout, the object headers
+// and the committed bytes are byte-identical to the scatter-in-place version. prp is zeroed here
+// because phase_log reuses one pair of arrays across batches (a freshly bump-allocated store
+// object got its zeros from the sparse file); pci needs no clear, every cell 0..m of it is
+// written. Callers must size prp >= n+2 and pci >= m+1.
+fn csr_build(base: [i64], tmp: [i64], src: [i64], dst: [i64], m: i64, n: i64, rp: ref RP, ci: ref CI, cur: [i64], prp: [i64], pci: [i64]) -> i64 {
+  let _ = csr_passes(src, dst, m, n, cur, prp, pci);
+  let p = 0;
+  while p < n + 2 {
+    let _ = st_put(base, rp, p, prp[p]);
+    let p = p + 1;
+    0
+  };
+  let q = 0;
+  while q < m + 1 {
+    let _ = st_put(base, ci, q, pci[q]);
+    let q = q + 1;
     0
   };
   let _ = st_seal(base, rp, tmp);
@@ -90,9 +130,11 @@ fn phase_build(base: [i64], tmp: [i64], d: [i64], skew: i64) -> i64 {
     0
   };
   let cur = zeros(n);
+  let prp = zeros(n + 2);
+  let pci = zeros(2 * e + 1);
   let rp1 = st_alloc(base, tx, n + 2, d[0]);
   let ci1 = st_alloc(base, tx, 2 * e + 1, d[1]);
-  let _ = csr_build(base, tmp, src, dst, 2 * e, n, rp1, ci1, cur);
+  let _ = csr_build(base, tmp, src, dst, 2 * e, n, rp1, ci1, cur, prp, pci);
   let log = st_alloc(base, tx, 101, d[3]);
   let _ = st_put(base, log, 0, 0);
   let _ = st_seal(base, log, tmp);
@@ -110,6 +152,11 @@ fn phase_log(base: [i64], tmp: [i64], d: [i64], b0: i64, nb: i64, stall: [i64]) 
   let src = zeros(1000000);
   let dst = zeros(1000000);
   let cur = zeros(n);
+  // D1: the plain build buffers are allocated ONCE here, outside the batch loop (L8: an
+  // allocation inside a while body never resets the frame-heap bump). 100 batches x 10^4
+  // directed edges caps m at 10^6, so pci is sized for the largest L0 this phase can build.
+  let prp = zeros(n + 2);
+  let pci = zeros(1000001);
   let x = 777;
   let skip = 0;
   while skip < b0 * 20000 {
@@ -167,7 +214,7 @@ fn phase_log(base: [i64], tmp: [i64], d: [i64], b0: i64, nb: i64, stall: [i64]) 
     };
     let rp0 = st_alloc(base, tx, n + 2, d[0]);
     let ci0 = st_alloc(base, tx, m + 1, d[1]);
-    let _ = csr_build(base, tmp, src, dst, m, n, rp0, ci0, cur);
+    let _ = csr_build(base, tmp, src, dst, m, n, rp0, ci0, cur, prp, pci);
     let _ = if st_get(base, g, 5) == 0 then 0 else st_supersede(base, tx, st_ref(base, g, 5));
     let _ = if st_get(base, g, 6) == 0 then 0 else st_supersede(base, tx, st_ref(base, g, 6));
     let g2 = root_write(base, tx, tmp, d[2], n, st_get(base, g, 1), st_ref(base, g, 2), st_ref(base, g, 3), log, rp0, ci0, st_ref(base, g, 7), (nl + 1) * 10000);
