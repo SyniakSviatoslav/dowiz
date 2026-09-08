@@ -1,0 +1,21 @@
+# name reps   -- the in-process rep count baked into BOTH bench630/<name>t.bp and
+# rust_once/<name>.rs. Read by bench/vs_rust/honest.sh and tools/perf.py, which divide the
+# bebop kernel's returned TOTAL ms by this number. Change a row here and in BOTH sources.
+#
+# The rule (2026-09-08): a run must last long enough that clock_ms's 1 ms granularity and the
+# process's own frequency ramp-up are noise, not signal. Below ~100 ms total the row measures
+# the box, not the kernel -- measured that day on unchanged code, K8H at reps=100 (4-9 ms per
+# run) gave a bebop/Rust ratio of 1.5x, 1.7x, 2.1x and 2.1x across four interleaved
+# invocations, with the RUST twin's own median swinging 0.023 -> 0.052 ms. A 1.2x gate cannot
+# be adjudicated by an instrument with that much spread, so K8H went to 3000 reps (~270 ms
+# bebop / ~130 ms Rust). Rows measured at a different reps value are NOT comparable across the
+# change; docs/PERF.md notes where the K8H column changes units.
+#
+# k3h has the same disease (100 reps = ~30 ms, ratio swung 1.2x-1.6x) but bench_pinned.sh also
+# reads bench630/k3ht.bp with its own, older /10.0 divisor, so raising it needs that script
+# fixed in the same commit. Left at 100 deliberately; see ROADMAP A2b.
+k1h 100
+k2h 100
+k3h 100
+k4 100
+k8h 3000

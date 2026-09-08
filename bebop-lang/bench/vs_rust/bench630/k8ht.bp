@@ -3,13 +3,16 @@
 // (i64 wrapping); the branch bit is a HIGH bit, (x >> 60) & 1 -- the low bit of an LCG
 // alternates and would be perfectly predicted, so this is a ~50% coin flip. The two arms do
 // different real work: acc = if bit==1 then acc+x else acc-i. 20000 inner iterations per rep,
-// REPS=100 (2M branches total); x and acc both carried across reps (like k3ht.bp's `a`).
+// REPS=3000 (60M branches total; was 100 = 2M until 2026-09-08, when 4-9 ms per run turned
+// out to be too short to adjudicate A2b's 1.2x gate -- see bench/vs_rust/kernel_reps.txt,
+// which honest.sh and tools/perf.py read for the divisor); x and acc both carried across
+// reps (like k3ht.bp's `a`).
 // main returns the TOTAL ms (honest.sh / REPS); acc is live via + r * 0.
 fn main() -> i64 {
   let t0 = clock_ms();
   let acc = 0;
   let x = 1;
-  let rep = 100;
+  let rep = 3000;
   while rep > 0 {
     let i = 20000;
     while i > 0 {

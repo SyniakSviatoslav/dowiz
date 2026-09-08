@@ -21,6 +21,11 @@ done
 T="$T" R="$R" PIN="$PIN" BB="$BEBOP_BIN" python3 - <<'PY'
 import os, subprocess, statistics, hashlib
 T=os.environ['T']; R=int(os.environ['R']); PIN=os.environ['PIN']; BB=os.environ['BB']
+# 2026-09-08: the rep count is per kernel now (bench/vs_rust/kernel_reps.txt is the single
+# source of truth, baked into both bench630/<k>t.bp and rust_once/<k>.rs). A kernel whose run
+# is only a few ms measures the box, not the code -- see the table's header for the numbers.
+REPS={l.split()[0]: int(l.split()[1]) for l in open('bench/vs_rust/kernel_reps.txt')
+      if l.strip() and not l.startswith('#')}
 def med(v): v=sorted(v); return v[len(v)//2], v[min(len(v)-1,int(round(0.95*(len(v)-1))))]
 rows=[]; rss={}
 for k in ['k1h','k2h','k3h','k4','k8h']:
@@ -28,18 +33,18 @@ for k in ['k1h','k2h','k3h','k4','k8h']:
     for _ in range(R):
         p=subprocess.Popen(['taskset','-c',PIN,'./seed/build/seed',f'{T}/{k}t.bin'],stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
         v=p.stdout.read().decode().strip().split('\n')[-1]; _,_,ru=os.wait4(p.pid,0); rss[k]=max(rss.get(k,0),ru.ru_maxrss)  # D12-D: RSS column (T97)
-        bb.append(int(v)/100.0)  # TOTAL ms over REPS=100 reps
+        bb.append(int(v)/float(REPS[k]))  # the kernel returns its TOTAL ms; divide by ITS rep count reps
         if True:
             e=subprocess.run(['taskset','-c',PIN,f'{T}/rust/{k}'],capture_output=True,text=True).stderr.strip().split('\n')[-1]
             rs.append(float(e))
     rows.append((k,med(bb),med(rs)))
 md5=hashlib.md5(open(BB,'rb').read()).hexdigest()[:8]
-print(f'# honest twins (D11-C), in-process pinned core {PIN}, R={R}, REPS=100 per run, bebop.bin {md5}')
+print(f'# honest twins (D11-C), in-process pinned core {PIN}, R={R}, reps per run ' + ' '.join(f'{k}={REPS[k]}' for k in ['k1h','k2h','k3h','k4','k8h']) + f', bebop.bin {md5}')
 print('| kernel | bebop med / p95 ms per rep | Rust honest med / p95 ms per rep | bebop / Rust | gate <= 2.0x (TG-DONE 1) | 1.0x (D1(a) long target) | bebop RSS MB |')
 print('|---|---|---|---|---|---|---|')
 for k,(bm,bp),(rm,rp) in rows:
     ratio = bm/rm if rm==rm and rm>0 else float('nan')
-    print(f'| {k.upper()} | {bm:.2f} / {bp:.2f} | {rm:.3f} / {rp:.3f} | {ratio:.1f}x | {"MET" if ratio <= 2.0 else "UNMET"} | {ratio:.1f}x | {rss.get(k,0)/1024:.1f} |')
+    print(f'| {k.upper()} | {bm:.3f} / {bp:.3f} | {rm:.3f} / {rp:.3f} | {ratio:.1f}x | {"MET" if ratio <= 2.0 else "UNMET"} | {ratio:.1f}x | {rss.get(k,0)/1024:.1f} |')
 import re
 try:
     k6=re.search(r'\| bebop scan nn\.bp \(Q=20\) \| ([0-9.]+) ms', open('bench/tq_sqlite/RESULT.md').read()).group(1)

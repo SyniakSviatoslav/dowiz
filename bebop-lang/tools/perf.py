@@ -40,6 +40,11 @@ EXACT = {"bin_words": "bebop", "stub_words": "stub", "push_words": "bebop", "k1h
 # invariants.sh fails when push_words != 0 for ./bebop.bin.
 PUSH_WORDS = {0xf90003e0, 0xf94003e0, 0xf94003e1, 0xd10043ff, 0x910043ff}
 KERNELS = ["k1h", "k2h", "k3h", "k4", "k8h"]
+# Per-kernel in-process rep count, baked into both bench630/<k>t.bp and rust_once/<k>.rs.
+# Single source of truth so honest.sh and this file can never disagree about the divisor;
+# raising a row changes that kernel's UNITS, so its historical perf.csv values do not compare.
+KERNEL_REPS = {l.split()[0]: int(l.split()[1]) for l in open("bench/vs_rust/kernel_reps.txt")
+               if l.strip() and not l.startswith("#")}
 
 
 # ---------- E7: validity ----------
@@ -248,7 +253,7 @@ def kernels(binpath, base=None, r=11):
             for k in KERNELS:
                 for b in bins:
                     v = run1([SEED, f"{T}/{md5(b)}_{k}.bin"])[4]
-                    res[(b, k)].append(int(v) / 100.0)   # TOTAL ms over REPS=100
+                    res[(b, k)].append(int(v) / float(KERNEL_REPS[k]))   # the kernel returns its TOTAL ms; divide by ITS rep count (bench/vs_rust/kernel_reps.txt)
     st = w.stamp()
     out = {}
     for k in KERNELS:
