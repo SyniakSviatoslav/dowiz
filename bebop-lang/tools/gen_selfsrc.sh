@@ -19,9 +19,15 @@ if [ "$1" = std ]; then
       # inside the gate source now (bebop.bin resolves them at compile time); the
       # std_tests copy is verbatim. The old `// prelude:` header concatenation is gone.
       cat "$src" > "$OUTDIR/$g"
-    else
+    elif [ "$t" != "$OUTDIR/$g" ]; then
       cat "$t" > "$OUTDIR/$g"
     fi
+    # 2026-09-08 (B4 lane): with the DEFAULT outdir the else-branch above read and wrote
+    # the SAME path -- the shell truncates the redirect target before `cat` opens it, so
+    # `gen_selfsrc.sh std` with no argument emptied every gate source that has no
+    # selfhost/std twin. It destroyed 21 of them in a lane tree; the symptom was
+    # COMPILEFAIL on an unrelated gate and a 696-byte kernel .bin. Self-expansion is a
+    # no-op, so the copy is simply skipped when source and destination are one file.
   done
   echo "$OUTDIR: $(ls "$OUTDIR"/*.bp | wc -l) gate sources expanded"
   exit 0
