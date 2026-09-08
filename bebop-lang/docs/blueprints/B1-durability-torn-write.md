@@ -111,3 +111,78 @@ python only in the harness and the sqlite twin </constraints>
 <output_format> the §9 block </output_format>
 <task> implement steps 1-3 of B1 and report the VERDICT block after each step </task>
 ```
+
+---
+
+## Follow-up card (2026-09-08, main session): the `recover` row, 44.7 ms -> O(last commit)
+
+**The gap.** `sbench.sh`'s `recover` row is 44.7 ms against sqlite's 3.3 ms. The cause is not
+the self-heal: it is that `st_reopen_verify` calls `st_verify(base, base[sb+4], tmp)`, which
+crc-scans the object arena from cell 1024 to the live cursor on EVERY open. The work is
+proportional to the whole store, while the damage a crash can do is proportional to the last
+commit.
+
+**What is actually at risk.** Commits are append-only and `st_commit_sync` msyncs the appended
+range [`tx[1]`, `tx[2]`) before toggling the superblock, so every object below the previous
+generation's cursor was made durable by an earlier, completed msync. A crash can therefore only
+tear pages that the LAST commit dirtied: the pages spanned by [`mark`, `cursor`). Note it is
+pages, not cells — the page containing `mark` also holds the tail of an OLDER object, which the
+append re-dirties, so that older object is at risk too and the verification must start at or
+before it.
+
+**Why the obvious fixes do not work.**
+- Starting the scan at `mark` is WRONG: it misses the older object sharing `mark`'s page.
+- Starting at `page_start(mark)` is not usable directly: the scan must begin on an object
+  boundary, and finding the boundary at or before an arbitrary page start needs the very scan
+  we are trying to avoid.
+- Page-aligning every commit is correct but costs up to 4 KiB per commit; B4's 1M single-row
+  updates would pay ~4 GB of padding.
+- Adding a cell to `tx` is NOT free: every caller in the tree allocates exactly `zeros(6)`
+  (25 sites across selfhost/std, selfhost/tools, bench/tq_sqlite, bench/vs_rust/std_tests --
+  verified 2026-09-08), and `tx[6]` would bump-write into the next arena cell. Same silent
+  overflow class as the old `starts[256]`.
+
+**The design: a page anchor in the superblock's free cells.** `st_sb_write_m` zeroes cells
+9..14; cell 9 becomes `anc`, the offset of the first object that TOUCHES the page containing
+this generation's cursor.
+
+Maintained at commit time by a walk over THIS commit's own objects only (they are contiguous,
+`o -> o + 2 + st_len(o)`), so the cost is O(objects in the commit), never O(store):
+
+    ps    = page_start_cell(cursor)              // (cursor*8 - (cursor*8) % 4096) / 8
+    anc_new = if ps <= mark then anc_prev         // the commit fits inside the cursor's page:
+                                                  // older objects share it, keep the old anchor
+              else the first o in [mark, cursor) with o + 2 + st_len(o) > ps
+
+`anc` must be written BEFORE `st_sb_write_m` takes its crc over cells sb..sb+14, so it becomes a
+parameter of `st_sb_write_m` (the fresh-store call in `st_open` passes 1024).
+
+**At reopen.** The generation being verified is `G` at `sb`; the OTHER superblock holds `P`, and
+`P.anc` is by construction the anchor for the page containing `P.cursor` = `G.mark`. So:
+
+    st_verify(base, from = base[other_sb + 9], upto = base[sb + 4])
+
+covers every page `G`'s commit could have dirtied, and nothing else. If the other superblock is
+invalid, or `P.anc` is 0 (a store written before this change), fall back to `from = 1024` -- the
+old full scan, still correct, just slow. The same fallback applies to the SECOND verification
+after a self-heal: once `G` is rejected and `P` is picked, the anchor for `page(P.mark)` lived in
+`P-1`'s superblock, which no longer exists.
+
+**Signature change.** `st_verify(base, upto, tmp)` -> `st_verify(base, from, upto, tmp)`.
+Every caller must be updated; `from = 1024` reproduces today's behaviour exactly.
+
+**Acceptance (all three, none optional).**
+1. `bench/vs_rust/scrash_torn.sh` with `TRIALS=1000`: 0 invalid reopens, same as today. This is
+   the gate the whole row exists for -- a faster verify that misses a tear is a regression, not
+   an optimisation.
+2. A NEW negative test that proves the narrowed scan still catches the case it must: tear a byte
+   in the page containing `mark` (the shared page, i.e. inside an object written by an EARLIER
+   generation) and confirm the reopen still rejects the generation. Without this, the anchor
+   could be off by one page and every existing gate would stay green.
+3. `sbench.sh`'s `recover` row measured before and after, on a quiet box, in the same
+   invocation pattern the honest rows now use -- and reported as a ratio to sqlite, not as an
+   absolute ms (the box drifts ~25 % between invocations; see docs/exp.journal 2026-09-08).
+
+**Not in scope.** `st_compact` rewrites the arena and legitimately invalidates the anchor; it
+must write `anc = 1024` (forcing one full verify on the next open) unless a separate argument
+shows otherwise.
