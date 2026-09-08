@@ -136,6 +136,45 @@ operator, never whole plans); and abolishing a WAL that does not exist (see C6).
 inside C2: "raw-byte components" (A7's `(off,len)` handle already gives bytes a home) and "no
 records" as a doctrine.
 
+### Phase D -- from the 2026-09-08 literature study
+
+Source: `docs/RESEARCH-LITERATURE-2026-09-08.md` and
+`docs/RESEARCH-CORPUS-IDEAS-2026-09-08.md`, two analysts over 85,663 arXiv
+records (cs.DS, cs.PL, cs.DC, cs.AR, cs.DB, all years) under deliberately
+different lenses. **Neither ranking carries a citation signal** -- the companion
+OpenAlex crawl was discarded because its topic ids were taken from memory and
+never resolved, and its 195,600 works turned out to be ML/AI. So these rows rest
+on mechanisms and on this box's own measurements, never on a paper's authority.
+
+The study's own headline is a rule-OUT: **one-pass codegen has no more gate to
+give.** TPDE and copy-and-patch put single-pass compilation at LLVM -O0 class,
+and bebop's honest rows against `rustc -O` are already past that band, so A2b-
+class work no longer moves a gate. Every row below is in the storage or
+scheduling layer instead.
+
+| # | task | blueprint | gate (the number) | depends on |
+|---|---|---|---|---|
+| D1 | **Build in RAM, publish sequentially.** Its mechanism is MEASURED, not argued: R1 isolated B2's "96 % in the store's page path" to one flag by single-variable elimination -- first touch refuted by 132x on arithmetic, the filesystem refuted by inversion (tmpfs 36.5x vs f2fs 12.8x, the RAM-backed store being 3x SLOWER), and then MAP_PRIVATE 1,239 ms against MAP_SHARED 27,404 ms back to back, identical fold. So the cost is dirty-page tracking on a shared writable file mapping, and MAP_PRIVATE lands within 2x of plain arrays. Build `rp`/`ci` in anonymous memory, copy into `st_alloc`'d objects in ONE sequential pass. The thesis sentence is preserved for every READ and narrowed for exactly one write shape, bulk construction -- which is the design of LMDB, SQLite-WAL, every LSM and Datomic, the survivors LANG-DB §1 lists | docs/blueprints/D1-build-in-ram-publish-sequentially.md | store arm <= 1.3x plain arm on the 1M/10M build (<= ~1 s where today is 18 s), fold identical | none; supersedes part of G8's 44.8 s CSR row and unblocks B8's ingest |
+| D2 | **Memory-level parallelism in the generated probe kernels.** The blind spot: every kernel row is about words, registers, cells or cores, and NONE is about misses in flight -- while frontier BFS runs 23-45 ns/edge-slot against a 0.67 ns bandwidth floor, i.e. 35-70x above it, and the join probe exposes three dependent random misses per row serially. One 1-word `prefetch` builtin (`prfm pldl1keep`) plus an unroll-by-G group-prefetch template in `gen_gb.bp`; the compiler gains one builtin and the schedule lives in the generator, so a one-pass emitter is well suited to it. Payoff is PREDICTED: the cited 20-360 % are x86 servers with large L3s, and the factor on a 3-core A78 is unknown | docs/blueprints/D2-mlp-probe-kernels.md | probe ns per R row <= 1.2x the Rust `HashMap` twin's probe (this is what decides B2 (i) `>= 0.7x best Rust`); frontier ns/edge-slot <= 0.6x of today's 45, fold unchanged | B3's templates; B2's twins for the gate |
+| D3 | **Locality relabelling, paid for by a pass the store already runs.** Renumber vertices so neighbours are near in memory (BFS order or RCM) DURING `st_compact`, which is already a Cheney copy assigning every live object a new offset -- so the permutation costs nothing extra. TLB matters here specifically: 4 KB pages, THP `[never]`, a 10M-slot `ci` spanning ~20,000 pages against an L2 TLB of order a thousand entries, and relabelling is the only TLB lever an unprivileged process has. Carries its own warning from the literature: hot-vertex reorderings can destroy community structure and LOSE | docs/blueprints/D3-locality-relabel-at-compaction.md | frontier ns/edge-slot <= 0.7x after relabel with fold identical; compaction wall <= 1.5x of today's 747 ms; PK lookup unchanged | B4 step 3 (which owns compaction of versions) |
+| D4 | **Sub-32-bit column indices.** After D3's relabel, "> 95 % of these matrices fit ... using 16 bit column indices" (2307.06305, abstract), so a `ci` slot costs 2 bytes instead of 8. This is the one place i64-only cells are expensively wrong, and it is storage, not arithmetic. Held back deliberately: a scalar `ldrh` may cost more cycles than it saves bytes -- the decode-throughput ridge sits at ~20-27 bits at 12 GB/s, so u32 is safely bandwidth-bound and 16-bit wants a vector decoder | docs/blueprints/D4-sub32-indices.md | bytes per slot <= 3 with ns/slot NOT above A8's u32 number, fold identical | A8 (u32 cells), A9 (NEON), D3 (the 95 % is conditional on the relabel) |
+| D5 | **The trust chain (revives T89, OPEN since TASKS.md:100).** No performance effect; this row buys honesty. `seed/seed.S` calls itself a "FROZEN Bebop loader" and its whole body is openat -> mmap(PROT_READ\|EXEC) -> call: 1,480 bytes that compile NOTHING, loading a 159,196-byte `bebop.bin` that is checked into git. So the trust root is a committed binary plus CPython for the bpref oracle -- not 159 lines of assembly, as this project's own wording has claimed. And `gen3 == gen4` proves self-consistency, not trustworthiness: Thompson's attack survives any fixpoint by construction. Diverse double-compiling is the answer and the witness already exists in-tree (`selfhost/expr_compile.bp`), so the fix ADDS NO DEPENDENCY -- which matters, because the commitment being defended is zero dependencies | docs/blueprints/D5-trust-chain-ddc.md | `tools/ddc.sh` prints W2 == the golden fixpoint byte-exact; `docs/TRUST-CHAIN.md` names every artifact hash from seed.S to the promoted binary | none; the cost is freezing the surface subset the witness accepts |
+
+**Order if all are taken: D1, then D2, then D5, then D3 and D4 once B4 and A8
+exist.** D1 first because it is the measured 96 %; D2 second because it decides
+B2's own gate; D5 third because it is documentation-only until the witness runs.
+
+**Flagged for B7's owner, not proposed as a row:** worst-case-optimal joins /
+leapfrog over sorted CSR for cyclic patterns (1503.04169, 2301.10841) are a
+competing ALGORITHM class with no row -- triangle counting as a three-way sorted
+intersection against `gb_tc`'s masked SpGEMM, same graph, is the comparison.
+**Two footnotes with no row:** a magic-multiply peephole for division by a
+literal (1.67-1.98x on the microbenchmark, ~150 words, one `vs_try_*` arm of
+A2b's kind; `itoa`/`parse` divide by 10 with `sdiv`, so it is measurable on K5),
+and a rank/select index over the tombstone bitmaps (engineered on ARM64 in
+2605.25528: "1.4x speedup in rank queries", ~80 lines) -- worth it only if a
+profile shows the bitmap-to-CSR conversion.
+
 ### Still open after A/B (design-bound, operator decision first): T61 (pool library + gate), T68-T70, T85 -> T86, T73, T76, T49/T50, T56, T59. Project-sized items stay under HISTORY.md `## PARKED` (D14 item 11).
 
 Parallel-safe at any time: docs, oracles, fuzz batches, honest.sh rows, T78/T79/T81/T82 tooling.
