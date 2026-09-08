@@ -46,9 +46,14 @@ That turns D1 from a discipline every bulk builder must remember into a
 process ever holds -- which also retires the C1 hazard where a forked kernel
 inherits a writable mapping of the file.
 
-Two things it does not cover, and they must be designed before it lands: writes
-that are NOT appends (the tombstone bitmaps, flipped in place) and the reader's
-view of a concurrent writer. Land §3's form first, measure, then decide.
+**SCOPED 2026-09-08, and the scoping is load-bearing.** The MAP_SHARED tax is a BULK-SCATTER tax: about 10 us of a
+229 us durable commit and none at all of the 0.73 us update row. So `pwrite`-the-tail would ADD a syscall to every
+commit to remove a cost single-row commits never pay -- it would help bulk builds and HURT the OLTP row this project
+is separately trying to win. **D1 as written (§3) is the right change; the stronger form applies to bulk builds only**
+and must never become the store's default commit path.
+
+Two further things it does not cover: writes that are NOT appends (tombstone bitmaps, flipped in place) and the
+reader's view of a concurrent writer.
 
 ## 2. Scope
 
