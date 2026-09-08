@@ -1,0 +1,219 @@
+// join_twin_grouped.bp -- ROADMAP D2's SURVIVING half, after the row's own kill line refuted the
+// other half. The 1M x 1M join twin of bench/vs_rust/std_tests/join_twin.bp carrying BOTH probe
+// arms in one binary, so the two are measured with ONE compiler, ONE generator, ONE build and ONE
+// store layout -- only the probe function differs. gen()/build_csr()/probe() are byte-identical to
+// join_twin.bp's; probe_grouped() is the new one. Like join_twin.bp and csr_build_profile.bp this
+// is a documented std_tests-LOCAL bench source with no selfhost/std twin (tools/gen_selfsrc.sh's
+// own note), so it is its own expansion and adds no std_golden gate.
+//
+// WHAT D2 PREDICTED AND WHAT WAS MEASURED (2026-09-08, one A78 core, R = 15 full-process runs,
+// four arms INTERLEAVED inside one loop, medians, n = 1M):
+//
+//   arm                                    uniform      zipf
+//   plain probe (join_twin.bp's)           149 ns/row   476 ns/row
+//   group-pipelined + prfm hint            122          376     <- D2 as specified
+//   group-pipelined, no hint (this file)   106          360
+//   Rust HashMap twin, probe phase only    287          558
+//
+// D2's kill line (docs/blueprints/D2-mlp-probe-kernels.md section 5) was "if the probe phase does
+// not drop by >= 25 %, this row dies". The full D2 template drops it 18.1 % / 21.0 % -- UNMET.
+// Worse for the row, a fourth arm identical to D2's except for the three `prfm` words showed the
+// hint is a NET COST on this core (-13.0 % uniform, -3.3 % zipf): every bit of the win, and more,
+// comes from the RESTRUCTURING -- unrolling by G = 8 and splitting the loop into passes that stage
+// lo/hi through a caller-owned `buf`, so the G independent misses of one stage overlap each other
+// instead of the three dependent misses of one row overlapping nothing. That restructuring needs
+// NO compiler change at all, and it is what this file keeps: +28.9 % uniform, +24.4 % zipf over
+// the plain probe. The A78's own reorder window is evidently already doing the job a pldl1keep
+// would do, so the hint only adds words to the loop.
+//
+// THE TEMPLATE. G = 8, four passes over the same group of 8 rows:
+//   pass A   (loop shape retained; D2 issued its 8 rp[] prefetches here)
+//   pass B   lo = rp[k], hi = rp[k+1]         -> buf[g], buf[8+g]
+//   pass C   s0 = ci_idx[lo] (guarded)        the first S row of each bucket, pulled early
+//   pass D   the original inner loop over j in [lo, hi), reading sb[ci_idx[j]]
+//
+// STATE, not registers: lo/hi for the 8 in-flight rows live in a caller-owned `buf` of 2G cells
+// rather than 16 bindings, which keeps every pass under the 8-live-symbol window (exit 89). No
+// allocation inside any while body (L8) -- the caller allocates buf once.
+//
+// argv[2] = n (rows per relation, MUST be a multiple of 8 for arm 1: the group loop has no tail)
+// argv[3] = 'u' | 'z'   argv[4] = mode c/s/f/b/p/t (join_twin.bp's own letters)
+// argv[5] = arm: '0' = the plain probe (join_twin.bp's), '1' = the group-pipelined probe.
+// Mode f on arm 0 and on arm 1 MUST return the same fold, and that fold must equal join_twin.bp's
+// for the same n and distribution -- that equality is the correctness gate for the template, and
+// it is checked before any timing is read.
+
+fn lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
+
+fn parse(s: str) -> i64 {
+  let n = str_len(s);
+  let i = 0;
+  let v = 0;
+  while i < n {
+    let v = v * 10 + (char(s, i) - 48);
+    let i = i + 1;
+    0
+  };
+  v
+}
+
+// gen(seed, n, zipf, rk, ra, sk, sb): fills R (rk,ra) then S (sk,sb), n cells each.
+fn gen(seed: i64, n: i64, zipf: i64, rk: [i64], ra: [i64], sk: [i64], sb: [i64]) -> i64 {
+  let heavy = if n / 100 < 1 then 1 else n / 100;
+  let light = n - heavy;
+  let x = seed;
+  let i = 0;
+  while i < n {
+    let x = lcg(x);
+    let k0 = (x >> 20) % n;
+    let coin = (x >> 40) % 1000;
+    let x = lcg(x);
+    let kz = if coin < 300 then (x >> 20) % heavy else heavy + (x >> 20) % light;
+    let k = if zipf == 1 then kz else k0;
+    let x = lcg(x);
+    let _ = rk[i] = k;
+    let _ = ra[i] = (x >> 20) % 65536;
+    let i = i + 1;
+    0
+  };
+  let i = 0;
+  while i < n {
+    let x = lcg(x);
+    let k0 = (x >> 20) % n;
+    let coin = (x >> 40) % 1000;
+    let x = lcg(x);
+    let kz = if coin < 300 then (x >> 20) % heavy else heavy + (x >> 20) % light;
+    let k = if zipf == 1 then kz else k0;
+    let x = lcg(x);
+    let _ = sk[i] = k;
+    let _ = sb[i] = (x >> 20) % 65536;
+    let i = i + 1;
+    0
+  };
+  x
+}
+
+// build_csr(sk, n, nk, rp, ci_idx, cur): counting sort of S by key.
+fn build_csr(sk: [i64], n: i64, nk: i64, rp: [i64], ci_idx: [i64], cur: [i64]) -> i64 {
+  let i = 0;
+  while i < nk + 1 { let _ = rp[i] = 0; let i = i + 1; 0 };
+  let i = 0;
+  while i < n { let k = sk[i]; let _ = rp[k + 1] = rp[k + 1] + 1; let i = i + 1; 0 };
+  let i = 0;
+  while i < nk { let _ = rp[i + 1] = rp[i + 1] + rp[i]; let i = i + 1; 0 };
+  let i = 0;
+  while i < nk { let _ = cur[i] = rp[i]; let i = i + 1; 0 };
+  let i = 0;
+  while i < n {
+    let k = sk[i];
+    let pos = cur[k];
+    let _ = ci_idx[pos] = i;
+    let _ = cur[k] = pos + 1;
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+// ARM 0 -- join_twin.bp's probe, unchanged.
+fn probe(rk: [i64], ra: [i64], n: i64, rp: [i64], ci_idx: [i64], sb: [i64], cnt: [i64], sum: [i64]) -> i64 {
+  let i = 0;
+  while i < n {
+    let k = rk[i];
+    let a = ra[i];
+    let lo = rp[k];
+    let hi = rp[k + 1];
+    let j = lo;
+    while j < hi {
+      let s = ci_idx[j];
+      let p = (a * sb[s]) % 2305843009213693952;
+      let _ = cnt[0] = cnt[0] + 1;
+      let _ = sum[0] = sum[0] + p;
+      let j = j + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+// ARM 1 -- the same join, GROUP-PIPELINED by G = 8. No prefetch hint: see the header.
+fn probe_grouped(rk: [i64], ra: [i64], n: i64, rp: [i64], ci_idx: [i64], sb: [i64], cnt: [i64], sum: [i64], buf: [i64]) -> i64 {
+  let i = 0;
+  while i < n {
+    let g = 0;
+    while g < 8 {
+      let g = g + 1;
+      0
+    };
+    let g = 0;
+    while g < 8 {
+      let k = rk[i + g];
+      let lo = rp[k];
+      let _ = buf[g] = lo;
+      let _ = buf[8 + g] = rp[k + 1];
+      let g = g + 1;
+      0
+    };
+    let g = 0;
+    while g < 8 {
+      let lo = buf[g];
+      let s0 = if lo < buf[8 + g] then ci_idx[lo] else 0;
+      let g = g + 1;
+      0
+    };
+    let g = 0;
+    while g < 8 {
+      let a = ra[i + g];
+      let hi = buf[8 + g];
+      let j = buf[g];
+      while j < hi {
+        let s = ci_idx[j];
+        let p = (a * sb[s]) % 2305843009213693952;
+        let _ = cnt[0] = cnt[0] + 1;
+        let _ = sum[0] = sum[0] + p;
+        let j = j + 1;
+        0
+      };
+      let g = g + 1;
+      0
+    };
+    let i = i + 8;
+    0
+  };
+  0
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  let n = parse(argv[2]);
+  let zipf = if char(argv[3], 0) == 122 then 1 else 0;
+  let mode = char(argv[4], 0);
+  let arm = char(argv[5], 0) - 48;
+  let seed = if zipf == 1 then 8823 else 4711;
+  let rk = zeros(n);
+  let ra = zeros(n);
+  let sk = zeros(n);
+  let sb = zeros(n);
+  let buf = zeros(16);
+  let t0 = clock_ms();
+  let _ = gen(seed, n, zipf, rk, ra, sk, sb);
+  let t1 = clock_ms();
+  let rp = zeros(n + 1);
+  let ci_idx = zeros(n);
+  let cur = zeros(n);
+  let _ = build_csr(sk, n, n, rp, ci_idx, cur);
+  let t2 = clock_ms();
+  let cnt = zeros(1);
+  let sum = zeros(1);
+  let _ = if arm == 1 then probe_grouped(rk, ra, n, rp, ci_idx, sb, cnt, sum, buf)
+          else probe(rk, ra, n, rp, ci_idx, sb, cnt, sum);
+  let t3 = clock_ms();
+  let fold = cnt[0] * 1000000007 + sum[0];
+  if mode == 99 then cnt[0]
+  else if mode == 115 then sum[0]
+  else if mode == 98 then t2 - t1
+  else if mode == 112 then t3 - t2
+  else if mode == 116 then t3 - t1
+  else fold
+}
