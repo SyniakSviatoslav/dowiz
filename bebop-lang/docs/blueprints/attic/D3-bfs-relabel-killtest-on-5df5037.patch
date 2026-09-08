@@ -1,0 +1,191 @@
+--- /dev/fd/63	2026-09-08 21:43:26.747664800 +0200
++++ bench/vs_rust/std_tests/sgraph2.bp	2026-09-08 21:39:21.099664894 +0200
+@@ -59,6 +59,108 @@
+   };
+   0
+ }
++// ---- D3 kill test (docs/blueprints/D3-locality-relabel-at-compaction.md §5) ----
++// Assign vertex ids in BFS order of the generated graph instead of the generator's LCG
++// order. NO store change: the permutation is applied to the generated pair list BEFORE the
++// CSR is built, so the stored graph is the same graph up to isomorphism and every BFS fold
++// is invariant -- PROVIDED the BFS sources map to themselves, which fix_srcs enforces by
++// transposing at most 8 of the 1M ranks (no measurable locality effect, exact fold effect).
++// bfs_expand(v, prp, pci, pi, q, cnt): enqueue every unranked neighbour of v. prp/pci are
++// csr_passes' layout: row v is pci[1 + prp[1+v] .. 1 + prp[2+v]). cnt[0]=head, cnt[1]=tail.
++fn bfs_expand(v: i64, prp: [i64], pci: [i64], pi: [i64], q: [i64], cnt: [i64]) -> i64 {
++  let k = prp[1 + v];
++  let hi = prp[2 + v];
++  while k < hi {
++    let w = pci[1 + k];
++    let t = cnt[1];
++    let take = if pi[w] < 0 then 1 else 0;
++    let _ = if take == 1 then (let _ = pi[w] = t in 0) else 0;
++    let _ = if take == 1 then (let _ = q[t] = w in 0) else 0;
++    let _ = cnt[1] = t + take;
++    let k = k + 1;
++    0
++  };
++  0
++}
++// bfs_comp(root, ...): rank one connected component in BFS order from root.
++fn bfs_comp(root: i64, prp: [i64], pci: [i64], pi: [i64], q: [i64], cnt: [i64]) -> i64 {
++  let t = cnt[1];
++  let _ = pi[root] = t;
++  let _ = q[t] = root;
++  let _ = cnt[1] = t + 1;
++  while cnt[0] < cnt[1] {
++    let h = cnt[0];
++    let _ = cnt[0] = h + 1;
++    let _ = bfs_expand(q[h], prp, pci, pi, q, cnt);
++    0
++  };
++  0
++}
++// fix_srcs(n, pi, q): force pi to fix the first 8 vertices of the LCG-31337 source stream
++// that phase_bfs/phase_frontier draw from, so source (x>>20)%n denotes the SAME vertex in
++// both arms. q is the rank->vertex inverse of pi; each fixup is one transposition.
++fn fix_srcs(n: i64, pi: [i64], q: [i64]) -> i64 {
++  let x = 31337;
++  let i = 0;
++  while i < 8 {
++    let x = lcg(x);
++    let s = (x >> 20) % n;
++    let r = pi[s];
++    let u = q[s];
++    let _ = q[s] = s;
++    let _ = q[r] = u;
++    let _ = pi[s] = s;
++    let _ = pi[u] = r;
++    let i = i + 1;
++    0
++  };
++  0
++}
++// perm_bfs(n, prp, pci, pi, q): pi[v] = BFS rank of v over the whole graph (components in
++// ascending root order), q[rank] = vertex; then the source fixup.
++fn perm_bfs(n: i64, prp: [i64], pci: [i64], pi: [i64], q: [i64]) -> i64 {
++  let v = 0;
++  while v < n {
++    let _ = pi[v] = 0 - 1;
++    let v = v + 1;
++    0
++  };
++  let cnt = zeros(2);
++  let r = 0;
++  while r < n {
++    let _ = if pi[r] < 0 then bfs_comp(r, prp, pci, pi, q, cnt) else 0;
++    let r = r + 1;
++    0
++  };
++  fix_srcs(n, pi, q)
++}
++fn apply_perm(a: [i64], m: i64, pi: [i64]) -> i64 {
++  let i = 0;
++  while i < m {
++    let _ = a[i] = pi[a[i]];
++    let i = i + 1;
++    0
++  };
++  0
++}
++// relabel_bfs(src, dst, m, n, cur, prp, pci): renumber both endpoint arrays in place by the
++// BFS order of the graph they describe. The scratch CSR uses the caller's cur/prp/pci, which
++// csr_build re-zeroes and re-fills afterwards; pi and the rank->vertex inverse come from two
++// 8 MB anonymous mmaps, NOT from zeros: the seed arena is 256 MB (seed/seed.S) and phase_build
++// already stands at src+dst+cur+prp+pci = 256 MB, so any zeros() here traps 80 (measured).
++fn relabel_apply(src: [i64], dst: [i64], m: i64, n: i64, prp: [i64], pci: [i64]) -> i64 {
++  let pa = sys_mmap(0, 8 * n, 3, 34, 0 - 1, 0);
++  let qa = sys_mmap(0, 8 * n, 3, 34, 0 - 1, 0);
++  let _ = perm_bfs(n, prp, pci, st_cells(pa), st_cells(qa));
++  let _ = sys_munmap(qa, 8 * n);
++  let _ = apply_perm(src, m, st_cells(pa));
++  let _ = apply_perm(dst, m, st_cells(pa));
++  sys_munmap(pa, 8 * n)
++}
++fn relabel_bfs(src: [i64], dst: [i64], m: i64, n: i64, cur: [i64], prp: [i64], pci: [i64]) -> i64 {
++  let _ = csr_passes(src, dst, m, n, cur, prp, pci);
++  relabel_apply(src, dst, m, n, prp, pci)
++}
+ // csr_build(base, tmp, src, dst, m, n, rp, ci, cur, prp, pci): fill the caller-allocated RP
+ // (n+2 cells) and CI (m+1 cells) objects (refs stay refs: no i64 round trip through an out
+ // array). D1 (docs/blueprints/D1-build-in-ram-publish-sequentially.md): the three counting-sort
+@@ -105,9 +207,10 @@
+   let _ = st_seal(base, g, tmp);
+   g
+ }
+-// phase_build(base, tmp, d, skew): skew = 1 sends half of all destination endpoints to
++// phase_build(base, tmp, d, skew, rel): rel = 1 renumbers the vertices in BFS
++// order (D3 kill test, sgraph2r.store); skew = 1 sends half of all destination endpoints to sends half of all destination endpoints to
+ // the 1% hub set (nodes 0..9999): the skewed variant of §9.5 (row 'uniform + 1%-hub').
+-fn phase_build(base: [i64], tmp: [i64], d: [i64], skew: i64) -> i64 {
++fn phase_build(base: [i64], tmp: [i64], d: [i64], skew: i64, rel: i64) -> i64 {
+   let n = 1000000;
+   let e = 5000000;
+   let tx = zeros(6);
+@@ -132,6 +235,7 @@
+   let cur = zeros(n);
+   let prp = zeros(n + 2);
+   let pci = zeros(2 * e + 1);
++  let _ = if rel == 1 then relabel_bfs(src, dst, 2 * e, n, cur, prp, pci) else 0;
+   let rp1 = st_alloc(base, tx, n + 2, d[0]);
+   let ci1 = st_alloc(base, tx, 2 * e + 1, d[1]);
+   let _ = csr_build(base, tmp, src, dst, 2 * e, n, rp1, ci1, cur, prp, pci);
+@@ -649,6 +753,39 @@
+   };
+   acc
+ }
++// loc_row / phase_loc: the D3 locality statistic on the committed L1 CSR -- mean |w - v|
++// over every edge slot and the fraction of slots with |w - v| < 4096 (one 32 KB window of
++// the i64 ci array = 8 pages). Returned packed as mean * 10^6 + ppm_near so one i64 carries
++// both. This is what says whether a relabelling actually MOVED the layout.
++fn loc_row(base: [i64], rp: ref RP, ci: ref CI, v: i64, acc: [i64]) -> i64 {
++  let k = st_get(base, rp, 1 + v);
++  let hi = st_get(base, rp, 2 + v);
++  while k < hi {
++    let w = st_get(base, ci, 1 + k);
++    let d = if w < v then v - w else w - v;
++    let near = if d < 4096 then 1 else 0;
++    let _ = acc[0] = acc[0] + d;
++    let _ = acc[1] = acc[1] + near;
++    let k = k + 1;
++    0
++  };
++  0
++}
++fn phase_loc(base: [i64], tmp: [i64]) -> i64 {
++  let g = st_root(base, tmp);
++  let n = st_get(base, g, 0);
++  let rp = st_ref(base, g, 2);
++  let ci = st_ref(base, g, 3);
++  let acc = zeros(2);
++  let v = 0;
++  while v < n {
++    let _ = loc_row(base, rp, ci, v, acc);
++    let v = v + 1;
++    0
++  };
++  let e = st_get(base, g, 1);
++  (acc[0] / e) * 1000000 + acc[1] * 1000000 / e
++}
+ fn phase_bfs(base: [i64], tmp: [i64], nsrc: i64) -> i64 {
+   let g = st_root(base, tmp);
+   let n = st_get(base, g, 0);
+@@ -679,7 +816,8 @@
+ fn main(argc: i64, argv: [str]) -> i64 {
+   let path = zeros(64);
+   let skew = if char(argv[2], 1) == 104 then 1 else 0;
+-  let pl = if skew == 1 then st_str(path, "sgraph2h.store") else st_str(path, "sgraph2.store");
++  let rel = if char(argv[2], 1) == 114 then 1 else 0;
++  let pl = if skew == 1 then st_str(path, "sgraph2h.store") else if rel == 1 then st_str(path, "sgraph2r.store") else st_str(path, "sgraph2.store");
+   let tmp = zeros(256);
+   let size = 536870912;
+   let ph = char(argv[2], 0);
+@@ -708,7 +846,7 @@
+   let live = if ph == 99 then st_compact(path, pl, size, lay, 6, tmp) else 0;
+   let base = st_open(path, pl, size, tmp);
+   let t1 = clock_ms();
+-  let r = if ph == 98 then phase_build(base, tmp, d, skew) else if ph == 108 then phase_log(base, tmp, d, b0, nb, stall) else if ph == 110 then phase_nbr(base, tmp) else if ph == 100 then phase_del(base, tmp, d) else if ph == 102 then phase_bfs(base, tmp, nsrc) else if ph == 112 then phase_frontier(base, tmp, nsrc) else 0;
++  let r = if ph == 98 then phase_build(base, tmp, d, skew, rel) else if ph == 108 then phase_log(base, tmp, d, b0, nb, stall) else if ph == 110 then phase_nbr(base, tmp) else if ph == 100 then phase_del(base, tmp, d) else if ph == 102 then phase_bfs(base, tmp, nsrc) else if ph == 112 then phase_frontier(base, tmp, nsrc) else if ph == 121 then phase_loc(base, tmp) else 0;
+   let t2 = clock_ms();
+   let g = st_root(base, tmp);
+   let used = st_gen(base, tmp) * 0 + base[st_pick(base, tmp) + 4] * 8;
