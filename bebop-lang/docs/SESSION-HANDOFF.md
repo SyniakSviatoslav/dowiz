@@ -8,8 +8,10 @@ SUBDIRECTORY of that repo: `git show HEAD:./bebop.bin`, commits carry `bebop-lan
 HEAD: `git log --oneline | head -3`; every commit message carries the gate evidence.
 
 ## Where we are
-- Compiler: fixpoint **42ce19e5**, bebop.bin 40418 words, census `bebop 40418 1143 126 0 867 1702 275`.
-  Battery GREEN on the promoted bin, invariants GREEN, construct parity 75/75.
+- Compiler: fixpoint **88d3f50c**, bebop.bin 40511 words, census `bebop 40511 1145 126 0 869 1707 275`.
+  Battery GREEN on the promoted bin, invariants GREEN, construct parity 76/76. The corpus exit-89
+  class is EMPTY (sweep 328 match, 0 compile89); the only 2 leftovers are the trap-81 pair
+  100671/100828, which A6 owns.
 - Session 27 landed four commits, each chain-gated and each with its evidence in the message:
   - `056ad43` A13 + A15 — compile-time diagnostics: exit 100 `fn with more than 14 parameters`
     (the two silent `brk #8` clamps in emit_call/compile_fn are DELETED), exit 101 `unbound symbol`
@@ -22,6 +24,8 @@ HEAD: `git log --oneline | head -3`; every commit message carries the gate evide
   - `abaab38` B1 step 1 `sys_fsync` (session-26 Lane C, rebased): syscall 82 derived from
     asm-generic/unistd.h, `st_fsync_dir` fsyncs the DIRECTORY after st_compact's publishing rename.
     scrash_torn TRIALS=50 = 0 invalid reopens.
+  - `0558c05` A14b part 2 LANDED — vs_span_to_slots also demotes kind-3 `SYM` entries (no new
+    instruction word). New guard c95_symspan EXPECT=17; c92_letlive2 re-derived to COMPILEFAIL:97.
   - `4a81b6b` A14b part 2 spec — root cause of the last corpus exit 89 (a pre-arm kind-3 `SYM`
     window entry relocated inside one if-arm; site is bebop.bp:1855 arm_spanning, and this CORRECTS
     part 1's journal attribution to :1861).
@@ -47,17 +51,14 @@ HEAD: `git log --oneline | head -3`; every commit message carries the gate evide
   atomic publish and the box restore had removed the directory; std_golden.sh now mkdir -p's it.
 
 ## Next
-1. A14b part 2 codegen — the card `docs/blueprints/A14b-corpus-leftovers.md` is executable:
-   vs_span_to_slots must also demote kind-3 SYM entries, no new instruction word. Repro
-   `c95_symspan` (bpref 17, rc 89 at 6:146 on 42ce19e5) is HELD OUT of bench/parity_constructs
-   until the fix lands — construct_parity.sh globs `*.bp`, so an EXPECT-less COMPILEFAIL there
-   turns the battery RED.
-2. Then A2b / A3 / A10 in their original order: **A12 is REFUTED** by its own measure-first probe
-   (Lane B, session 26 — rung 1 buys 0-2 % of K5, not the >= 5 % its gate required) and has left the
-   critical path.
-3. A5 / A6 next in Phase A; A6 also owns A14b's two trap-81 seeds (100671, 100828), which is why
-   A14b part 2 targets seed 100744 only.
-4. A4's corpus/fuzz window runs LAST, in foreground 10^4-seed batches on whatever md5 is promoted then.
+1. A2b / A3 / A10 in their original order (**A12 is REFUTED** by its own measure-first probe --
+   Lane B, session 26: rung 1 buys 0-2 % of K5, not the >= 5 % its gate required -- and has left
+   the critical path). A2b's blueprint exists; A3 has a lane card; A10 needs one.
+2. A5 then A6 in Phase A. A6 also deletes exit 81 as a class, which is what the two remaining
+   corpus seeds (100671, 100828) are waiting for.
+3. A4's corpus/fuzz window runs LAST, in foreground 10^4-seed batches on whatever md5 is promoted
+   then. Worth fixing first: the J=3 std_golden shard race (the 12 generated `gb_<op>_<sr>_0_1_0.*`
+   files share one BEBOP_TMP and clobber each other, giving a false RED that passes at J=1).
 
 ## Pitfalls that cost hours in prior sessions (also in the memory file)
 - An 8-deep parenthesised chain of calls `((((f(a)*16+f(b))*16+...` hits exit 95 — write a loop.
