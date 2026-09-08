@@ -5556,6 +5556,7 @@ fn compile_program_offs(s: str, insns: [i64], n: [i64], offs: [i64]) -> i64 {
   let cnt = [0];
   let _ = collect_fns(s, fnames, fpos, cnt);
   let _ = if cnt[0] >= 512 then diag_exit(s, 0, 104) else 0;
+  let _ = offs[0] = cnt[0] + (idx_of_main(fnames, cnt[0]) << 32);
   let sizes = zeros(512);
   let starts = zeros(512);
   let ptab = zeros(8192);
@@ -5613,7 +5614,6 @@ fn compile_program_offs(s: str, insns: [i64], n: [i64], offs: [i64]) -> i64 {
     let _ = k[0] = k[0] + 1;
     0
   };
-  let _ = offs[0] = cnt[0];
   let fntab = zeros(8192);
   let _ = fntab[0] = cnt[0];
   let _ = scan_literals(s, fntab, acc);
@@ -5633,16 +5633,14 @@ fn compile_program_offs(s: str, insns: [i64], n: [i64], offs: [i64]) -> i64 {
     0
   };
 
-  let enames_fz = zeros(256);
-  let ecnt_fz = [0];
-  let _ = collect_ctors(s, enames_fz, ecnt_fz);
-  let _ = if ecnt_fz[0] >= 256 then diag_exit(s, 0, 89) else 0;
   let eb_fz = cnt[0] + cnt[0] + cnt[0] + 1;
+  let ecnt_fz = [0];
+  let _ = ecnt_fz[0] = ptab[eb_fz];
   let _ = fntab[eb_fz] = ecnt_fz[0];
   let ez_fz = [0];
   let ed_fz = if ecnt_fz[0] == 0 then 1 else 0;
   while ed_fz == 0 {
-    let _ = fntab[eb_fz + 1 + ez_fz[0]] = enames_fz[ez_fz[0]];
+    let _ = fntab[eb_fz + 1 + ez_fz[0]] = ptab[eb_fz + 1 + ez_fz[0]];
     let _ = ez_fz[0] = ez_fz[0] + 1;
     let ed_fz = if ez_fz[0] >= ecnt_fz[0] then 1 else 0;
     0
@@ -6440,11 +6438,7 @@ fn cli_compile(argc: i64, argv: [str]) -> i64 {
   let offs = zeros(512);
   let words0 = emit_words_offs(srcv, offs);
   let n0 = words0[0];
-  let fnames = zeros(512);
-  let fpos = zeros(512);
-  let cnt = [0];
-  let _ = collect_fns(srcv, fnames, fpos, cnt);
-  let main_off = offs[idx_of_main(fnames, cnt[0]) + 1];
+  let main_off = offs[(offs[0] >> 32) + 1];
   let stub = zeros(131);
   let _ = entry_stub(stub);
   let _ = stub[42] = 335544320 + ((main_off - (n0 + 42)) & 67108863);

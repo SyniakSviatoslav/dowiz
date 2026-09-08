@@ -231,7 +231,7 @@ compile_fn_at 1012
 scan_literals 161
 scan_one_lit 104
 compile_program_to 35
-compile_program_offs 909
+compile_program_offs 889
 write_lit_cells 131
 compile_program 52
 self_check 502
@@ -259,7 +259,7 @@ cas_verify 126
 use_scan 453
 use_expand 266
 entry_stub 387
-cli_compile 1033
+cli_compile 978
 fill_check 20
 cli_check 177
 fill_cas 16
