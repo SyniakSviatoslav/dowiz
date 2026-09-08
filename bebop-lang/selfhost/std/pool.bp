@@ -33,7 +33,7 @@ fn par_sum(W: i64, per: i64) -> i64 {
   let base = sys_arena_base();
   let i = 0;
   while i < W {
-    let r = sys_clone(68864, base + 131072 + i * 65536);
+    let r = sys_clone(68864, base + 16384 + i * 8192);
     let is_child = if r == 0 then 1 else 0;
     let part = is_child * (i + 1) * per;
     let _ = sys_cond_set(is_child, cells, i, part);
@@ -75,7 +75,7 @@ fn par_merge(W: i64, per: i64) -> i64 {
   let base = sys_arena_base();
   let i = 0;
   while i < W {
-    let r = sys_clone(68864, base + 131072 + i * 65536);
+    let r = sys_clone(68864, base + 16384 + i * 8192);
     let is_child = if r == 0 then 1 else 0;
     let part = is_child * (i + 1) * per;
     let _ = sys_atomic_add(cells, W, part);
@@ -117,7 +117,7 @@ fn par_tids(W: i64) -> i64 {
   let base = sys_arena_base();
   let i = 0;
   while i < W {
-    let r = sys_clone(68864, base + 131072 + i * 65536);
+    let r = sys_clone(68864, base + 16384 + i * 8192);
     let is_child = if r == 0 then 1 else 0;
     let _ = sys_cond_set(1 - is_child, cells, W + i, r);
     let parked = if is_child == 0 then 1 else 0;

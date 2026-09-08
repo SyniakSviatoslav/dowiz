@@ -32,7 +32,7 @@ fn par_compile(W: i64, path_cells: [i64], path_len: i64) -> i64 {
   let i = 0;
   while i < W {
     let _ = cells[W * 2 + 1 + i] = i;
-    let r = sys_clone(68864, base + 16777216 + i * 16777216);
+    let r = sys_clone(68864, base + 2097152 + i * 2097152);
     let fd = sys_open(path_cells, path_len, 0);
     let srcv = sys_slurp(fd, (if r == 0 then 1 else 0) * 400000);
     let _ = sys_close(fd);

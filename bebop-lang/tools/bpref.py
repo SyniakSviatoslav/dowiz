@@ -33,11 +33,72 @@ import sys
 DEPTH_CAP = int(os.environ.get('BPREF_DEPTH', '5000'))
 
 
-class Arr(list):
-    """An array literal evaluated inside a `while` body (T43 frame-heap reset, 2026-09-06):
-    bebop releases it at the back-edge / loop exit, so a later read is a use-after-release
-    (DIVERGE-20056 was exactly this). bpref marks it released and refuses the access."""
-    released = False
+class Cells(object):
+    """ROADMAP A5 step 1b (2026-09-08): a `[i64]` VALUE is an OFFSET into ONE arena cell
+    list, exactly as the compiled program's x17-relative cell index is. `zeros` and every
+    array/struct/enum literal extend `Interp.arena` and hand back the starting offset, so
+    `let b = a + 3; b[0]` is real cell stepping and `t[0] = a; t[0][2]` reads through a
+    stored array VALUE -- both of which the old model (a fresh python list per `zeros`)
+    could not express at all. `n` stays the DECLARED length so an out-of-range read is
+    still an IndexError here (native leaves it unchecked; a bpref IndexError on a program
+    the compiler runs is a bug in the program, WORKER-CARD).
+
+    `released` keeps its old meaning: an array literal evaluated inside a `while` body
+    (T43 reset, 2026-09-06) is released at the back-edge / loop exit, so a later read is a
+    use-after-release (DIVERGE-20056)."""
+    __slots__ = ('arena', 'off', 'n', 'released')
+
+    def __init__(self, arena, off, n):
+        self.arena = arena
+        self.off = off
+        self.n = n
+        self.released = False
+
+    def __len__(self):
+        return self.n
+
+    def _at(self, i):
+        if i < 0 or i >= self.n:
+            raise IndexError('cell %d outside a %d-cell array' % (i, self.n))
+        return self.off + i
+
+    def __getitem__(self, i):
+        if isinstance(i, slice):
+            lo, hi, st = i.indices(self.n)
+            return [self.arena[self.off + k] for k in range(lo, hi, st)]
+        return self.arena[self._at(i)]
+
+    def __setitem__(self, i, v):
+        self.arena[self._at(i)] = v
+
+    def __iter__(self):
+        for k in range(self.n):
+            yield self.arena[self.off + k]
+
+    def __add__(self, k):
+        if not isinstance(k, int):
+            return NotImplemented
+        v = Cells(self.arena, self.off + k, self.n - k)
+        v.released = self.released
+        return v
+
+    __radd__ = __add__
+
+    def __sub__(self, k):
+        if not isinstance(k, int):
+            return NotImplemented
+        return self.__add__(-k)
+
+    def __repr__(self):
+        return 'cells@%d[%d]' % (self.off, self.n)
+
+
+def cells_alloc(it, vals):
+    """Bump-allocate `vals` on the interpreter's one arena and return its offset value."""
+    arena = it.arena
+    off = len(arena)
+    arena.extend(vals)
+    return Cells(arena, off, len(vals))
 
 
 class ReturnSignal(Exception):
@@ -52,6 +113,11 @@ MASK = (1 << 64) - 1
 
 
 def wrap(x):
+    # A5 step 1b: `a + k` on a [i64] VALUE is CELL stepping and yields a Cells view, not an
+    # i64 -- there is nothing to wrap, and the native form (`add xt,xbase,#k`) has no
+    # observable wrap either, since a cell index is 61 bits at most.
+    if not isinstance(x, int):
+        return x
     x &= MASK
     return x - (1 << 64) if x >> 63 else x
 
@@ -409,6 +475,8 @@ class Parser:
 class Interp:
     def __init__(self, fns, ctors, structs=None, first_struct=None):
         self.fns = fns
+        # A5 step 1b: ONE arena cell list; every [i64] VALUE is an offset into it (Cells).
+        self.arena = [0] * 16
         self.loop_arrs = []  # T43: per-iteration array literals of the running while bodies
         self.structs = structs or {}
         self.first_struct = first_struct
@@ -503,7 +571,7 @@ class Interp:
             arr[i] = self.ev(e[3], env)
             return 0
         if t == 'arr':
-            a = Arr(self.ev(x, env) for x in e[1])
+            a = cells_alloc(self, [self.ev(x, env) for x in e[1]])
             if self.loop_arrs:
                 self.loop_arrs[-1].append(a)
             return a
@@ -523,7 +591,7 @@ class Interp:
             self.arena_cells = getattr(self, 'arena_cells', 0) + max(args[0], 0)
             if self.arena_cells > (256 << 20) // 8 - 8192:
                 raise SystemExit(80)
-            return [0] * args[0]
+            return cells_alloc(self, [0] * max(args[0], 0))
         if name == 'str_len':
             return len(args[0])
         if name == 'char':
@@ -532,7 +600,7 @@ class Interp:
             raise SystemExit(args[0] & 255)
         if name == 'sys_write':
             fd, buf, n = args[0], args[1], args[2]
-            data = bytes(x & 255 for x in buf[:n]) if isinstance(buf, list) else buf[:n]
+            data = buf[:n] if isinstance(buf, bytes) else bytes(x & 255 for x in buf[:n])
             (sys.stdout.buffer if fd == 1 else sys.stderr.buffer).write(data)
             return n
         if name == 'crc32x':

@@ -115,6 +115,8 @@ for f in "$DIR"/*.bp; do
     # under window pressure. Exited 89 on 42ce19e5, runs 17 (bpref) once vs_span_to_slots also
     # demotes kind-3 SYM entries. Drop either ingredient and it compiled clean before the fix.
     c95_symspan) EXPECT=17;;
+    c69_index_roundtrip) EXPECT=3969009064380;;
+    c92_ptrfree) EXPECT=777920;;
     c110_fence) EXPECT=0;;
     c111_kernelfn) EXPECT=315;;
     # A2b (2026-09-08): the regression guard for lifting A2's nested-`while` hoist ban --

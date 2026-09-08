@@ -792,7 +792,7 @@ fn bfs_kernel_child(args: [i64]) -> i64 {
 // call (WORKER-CARD's <=8-live-symbols-across-a-clone rule), matching gb_run.bp's own
 // gb_kernel_run_launch shape.
 fn bfs_kernel_launch(args: [i64]) -> i64 {
-  let pid = sys_clone(17, sys_arena_base() + 16777216);
+  let pid = sys_clone(17, sys_arena_base() + 2097152);
   let _ = if pid == 0 then bfs_kernel_child(args) else 0;
   let st = zeros(1);
   let w = sys_wait4(pid, st, 0, 0);

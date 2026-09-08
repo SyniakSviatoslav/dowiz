@@ -11,7 +11,7 @@ module core { }
 fn main() -> i64 {
   let cells = zeros(4);
   let base = sys_arena_base();
-  let r = sys_clone(68864, base + 131072);
+  let r = sys_clone(68864, base + 16384);
   let is_child = if r == 0 then 1 else 0;
   let _ = sys_cond_set(is_child, cells, 0, 7);
   let park = sys_futex_wait_guard(r, cells, 2, 0);

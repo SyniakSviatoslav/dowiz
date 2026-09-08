@@ -488,6 +488,9 @@ fn emit_struct_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
     let _ = vs_pop(fntab);
     0
   };
+  // A5 step 1b: address -> cell index (sub x0,x0,x17 ; lsr x0,x0,#3).
+  let _ = em(insns, n, 3406888960);
+  let _ = em(insns, n, 3544448000);
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
   n[0]
 }
@@ -501,7 +504,11 @@ fn emit_field_access(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], fn
   let _ = find_struct(s, spos);
   let idx = field_index(s, spos[0], fname);
   let _ = vs_deliver(insns, n, fntab, stab, 1);
-  let _ = em(insns, n, 4181721088 + idx * 1024);
+  // A5 step 1b: the struct VALUE in x0 is a cell INDEX, so the field load is
+  // `add x0,x0,#idx ; ldr x0,[x17,x0,lsl #3]` (the add is dropped for field 0).
+  // Base and destination are both x0, so no scratch register is needed.
+  let _ = if idx > 0 then em(insns, n, 2432696320 + idx * 1024) else 0;
+  let _ = em(insns, n, 4167072288);
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
   n[0]
 }
@@ -555,6 +562,16 @@ fn find_enum(s: str, out: [i64]) -> i64 {
 fn emit_enum_ctor(s: str, tag: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
   let _ = em(insns, n, 3531603968 + tag * 32);
+  // OBSERVED, NOT FIXED HERE (A5 lane A, 2026-09-08): ROADMAP A6 retargeted the
+  // ctor's BUMP from x14 to x27 but left these two payload stores on
+  // `str x0,[x14]` / `str x0,[x14,#8]`, so a PAYLOAD ctor writes its block to the
+  // dead frame heap and hands back an uninitialised arena block. It is invisible
+  // today because the only consumption path the language supports is a match on a
+  // LITERAL ctor (emit_match_payload re-emits the payload expression; c11_enum is
+  // nullary), and `let v = some(7); match v {..}` is garbage on HEAD 5df5037 too
+  // (it printed 494710833280 there). Left byte-identical here so that this commit
+  // stays a single-variable diff (L14); it belongs in its own commit with the
+  // runtime-match path and a construct that covers it.
   let _ = em(insns, n, 4177527232);
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = vs_deliver(insns, n, fntab, stab, 1);
@@ -570,6 +587,9 @@ fn emit_enum_ctor(s: str, tag: i64, pos: [i64], insns: [i64], n: [i64], stab: [i
   let _ = em(insns, n, 3944481663);
   let _ = em(insns, n, 1409286217);
   let _ = em(insns, n, 3558869504);
+  // A5 step 1b: address -> cell index.
+  let _ = em(insns, n, 3406888960);
+  let _ = em(insns, n, 3544448000);
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
   n[0]
 }
@@ -577,6 +597,8 @@ fn emit_enum_ctor(s: str, tag: i64, pos: [i64], insns: [i64], n: [i64], stab: [i
 // Emit a nullary enum ctor: ctor -> [tag] block (no payload).
 fn emit_enum_ctor_nullary(insns: [i64], n: [i64], tag: i64, fntab: [i64], stab: [i64]) -> i64 {
   let _ = em(insns, n, 3531603968 + tag * 32);
+  // Same latent A6 defect as in emit_enum_ctor above (tag stored to the dead x14
+  // frame heap, arena block returned uninitialised); left byte-identical here.
   let _ = em(insns, n, 4177527232);
   let _ = em(insns, n, 2853897184);
   let _ = em(insns, n, 2432713595);
@@ -588,6 +610,9 @@ fn emit_enum_ctor_nullary(insns: [i64], n: [i64], tag: i64, fntab: [i64], stab: 
   let _ = em(insns, n, 3944481663);
   let _ = em(insns, n, 1409286217);
   let _ = em(insns, n, 3558869504);
+  // A5 step 1b: address -> cell index.
+  let _ = em(insns, n, 3406888960);
+  let _ = em(insns, n, 3544448000);
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
   n[0]
 }
@@ -933,6 +958,10 @@ fn emit_hvham(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = vs_deliver(insns, n, fntab, stab, 3);
+  // A5 step 1b: cell argument -> address, add x0,x17,x0,lsl #3.
+  let _ = em(insns, n, 2332036640);
+  // A5 step 1b: cell argument -> address, add x1,x17,x1,lsl #3.
+  let _ = em(insns, n, 2332102177);
   // ldp q0,q1 covers 32 BYTES = 4 words per iteration -> divide by 4
   let _ = em(insns, n, 3544382532);
   let _ = em(insns, n, 3019899236);
@@ -976,6 +1005,10 @@ fn emit_hvham2(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
   // deliver sequentially (a->x0, ao->x1, b->x2, bo->x3, n->x4) then shuffle
   // with plain register moves into the real targets.
   let _ = vs_deliver(insns, n, fntab, stab, 5);
+  // A5 step 1b: cell argument -> address, add x0,x17,x0,lsl #3.
+  let _ = em(insns, n, 2332036640);
+  // A5 step 1b: cell argument -> address, add x2,x17,x2,lsl #3.
+  let _ = em(insns, n, 2332167714);
   let _ = em(insns, n, 2852193254);
   let _ = em(insns, n, 2852258785);
   let _ = em(insns, n, 2852324325);
@@ -1017,6 +1050,8 @@ fn emit_sys_open(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = vs_deliver(insns, n, fntab, stab, 3);
+  // A5 step 1b: cell argument -> address, add x0,x17,x0,lsl #3.
+  let _ = em(insns, n, 2332036640);
   em(insns, n, 2852127723);
   em(insns, n, 2852193261);
   em(insns, n, 2852258796);
@@ -1053,6 +1088,8 @@ fn emit_sys_read(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = vs_deliver(insns, n, fntab, stab, 3);
+  // A5 step 1b: cell argument -> address, add x1,x17,x1,lsl #3.
+  let _ = em(insns, n, 2332102177);
   em(insns, n, 2852127723);
   em(insns, n, 2852193260);
   em(insns, n, 3531866122);
@@ -1087,6 +1124,8 @@ fn emit_sys_write(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = vs_deliver(insns, n, fntab, stab, 3);
+  // A5 step 1b: cell argument -> address, add x1,x17,x1,lsl #3.
+  let _ = em(insns, n, 2332102177);
   em(insns, n, 2852127723);
   em(insns, n, 2852258797);
   em(insns, n, 3531866122);
@@ -1186,7 +1225,11 @@ fn emit_sys_arena_base(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], 
   let _ = pos[0] = pos[0] + 1;
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = em(insns, n, 2334065504);
+  // A5 step 1b: the cursor is returned as a cell INDEX -- sub x0,x27,x17
+  // (3406889824) ; lsr x0,x0,#3 (3544448000). "base" still means CURSOR (the
+  // store and pool code read it that way); only the units changed.
+  let _ = em(insns, n, 3406889824);
+  let _ = em(insns, n, 3544448000);
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
   n[0]
 }
@@ -1196,7 +1239,10 @@ fn emit_sys_arena_end(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], s
   let _ = pos[0] = pos[0] + 1;
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = em(insns, n, 2853962720);
+  // A5 step 1b: the arena end as a cell INDEX -- sub x0,x28,x17 (3406889856) ;
+  // lsr x0,x0,#3 (3544448000).
+  let _ = em(insns, n, 3406889856);
+  let _ = em(insns, n, 3544448000);
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
   n[0]
 }
@@ -1215,6 +1261,8 @@ fn emit_sys_clone(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = vs_deliver(insns, n, fntab, stab, 2);
+  // A5 step 1b: cell argument -> address, add x1,x17,x1,lsl #3.
+  let _ = em(insns, n, 2332102177);
   let _ = em(insns, n, 2854159330);
   let _ = em(insns, n, 2854159331);
   let _ = em(insns, n, 2854159332);
@@ -1255,6 +1303,8 @@ fn emit_sys_cond_set(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], se
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = vs_deliver(insns, n, fntab, stab, 4);
+  // A5 step 1b: cell argument -> address, add x1,x17,x1,lsl #3.
+  let _ = em(insns, n, 2332102177);
   let _ = em(insns, n, 3019898976);
   let _ = em(insns, n, 2332167201);
   let _ = em(insns, n, 4177526819);
@@ -1284,6 +1334,8 @@ fn emit_sys_futex_wait_guard(s: str, pos: [i64], insns: [i64], n: [i64], stab: [
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = vs_deliver(insns, n, fntab, stab, 4);
+  // A5 step 1b: cell argument -> address, add x1,x17,x1,lsl #3.
+  let _ = em(insns, n, 2332102177);
   let _ = em(insns, n, 3036676352);
   let _ = em(insns, n, 2852193248);
   let _ = em(insns, n, 2332167168);
@@ -1312,6 +1364,8 @@ fn emit_sys_futex_wake(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], 
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = vs_deliver(insns, n, fntab, stab, 3);
+  // A5 step 1b: cell argument -> address, add x0,x17,x0,lsl #3.
+  let _ = em(insns, n, 2332036640);
   let _ = em(insns, n, 2332101632);
   let _ = em(insns, n, 3531604001);
   let _ = em(insns, n, 2854159331);
@@ -1338,6 +1392,8 @@ fn emit_sys_atomic_add(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], 
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = vs_deliver(insns, n, fntab, stab, 3);
+  // A5 step 1b: cell argument -> address, add x0,x17,x0,lsl #3.
+  let _ = em(insns, n, 2332036640);
   let _ = em(insns, n, 2332101632);
   let _ = em(insns, n, 4175560705);
   let _ = em(insns, n, 2852193248);
@@ -1380,6 +1436,8 @@ fn emit_sys_setaffinity(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64],
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = vs_deliver(insns, n, fntab, stab, 2);
+  // A5 step 1b: cell argument -> address, add x0,x17,x0,lsl #3.
+  let _ = em(insns, n, 2332036640);
   let _ = em(insns, n, 2332101632);
   let _ = em(insns, n, 2852127714);
   let _ = em(insns, n, 2854159328);
@@ -1423,6 +1481,8 @@ fn emit_sys_scan(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = vs_deliver(insns, n, fntab, stab, 3);
+  // A5 step 1b: cell argument -> address, add x1,x17,x1,lsl #3.
+  let _ = em(insns, n, 2332102177);
   let _ = em(insns, n, -113246173);
   let _ = em(insns, n, -113245148);
   let _ = em(insns, n, -352059265);
@@ -1487,6 +1547,8 @@ fn emit_crc32(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = vs_deliver(insns, n, fntab, stab, 2);
+  // A5 step 1b: cell argument -> address, add x0,x17,x0,lsl #3.
+  let _ = em(insns, n, 2332036640);
   let _ = em(insns, n, 310378498);
   let _ = em(insns, n, 3019899041);
   let _ = em(insns, n, 4164977667);
@@ -1515,6 +1577,8 @@ fn emit_crc32x(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = vs_deliver(insns, n, fntab, stab, 3);
+  // A5 step 1b: cell argument -> address, add x0,x17,x0,lsl #3.
+  let _ = em(insns, n, 2332036640);
   let _ = em(insns, n, 2332101632);
   let _ = em(insns, n, 310378499);
   let _ = em(insns, n, 3019899042);
@@ -1541,6 +1605,8 @@ fn emit_sys_msync(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = vs_deliver(insns, n, fntab, stab, 3);
+  // A5 step 1b: cell argument -> address, add x0,x17,x0,lsl #3.
+  let _ = em(insns, n, 2332036640);
   let _ = em(insns, n, 3531611240);
   let _ = em(insns, n, 3556769793);
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
@@ -1564,6 +1630,8 @@ fn emit_sys_mprotect(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], se
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = vs_deliver(insns, n, fntab, stab, 3);
+  // A5 step 1b: cell argument -> address, add x0,x17,x0,lsl #3.
+  let _ = em(insns, n, 2332036640);
   let _ = em(insns, n, 3531611208);
   let _ = em(insns, n, 3556769793);
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
@@ -3700,6 +3768,10 @@ fn emit_array_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
     let _ = vs_pop(fntab);
     0
   };
+  // A5 step 1b: the elements were filled through the ADDRESS in x0; the VALUE
+  // handed to the window is the cell INDEX (sub x0,x0,x17 ; lsr x0,x0,#3).
+  let _ = em(insns, n, 3406888960);
+  let _ = em(insns, n, 3544448000);
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
   n[0]
 }
@@ -3713,14 +3785,25 @@ fn emit_array_get(insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
   let is_cimm = (if idxk == 1 then 1 else 0) * (if idxc >= 0 then 1 else 0) * (if idxc < 4096 then 1 else 0);
   let d = vs_pick_dest(insns, n, fntab, stab);
   let base = vs_reg(insns, n, fntab, stab, w - 2);
-  let _ = if is_cimm == 1 then em(insns, n, 4181721088 + base * 32 + idxc * 1024 + d) else vs_array_get_reg(insns, n, fntab, stab, base, w - 1, d);
+  let _ = if is_cimm == 1 then vs_array_get_imm(insns, n, base, idxc, d) else vs_array_get_reg(insns, n, fntab, stab, base, w - 1, d);
   let _ = vs_pop(fntab);
   let _ = vs_pop(fntab);
   vs_push(insns, n, fntab, stab, 2, d, n[0] - 1)
 }
+// A5 step 1b: the base is a cell INDEX, so the effective index is base+idx and the
+// load is `ldr xd,[x17,xt,lsl #3]` (4167072288 = 0xf8607a20, Rn=x17). The scratch t
+// is the DESTINATION register: `add xd,xbase,xidx` reads both operands before it
+// writes xd, so d may alias base or idx safely and no vs_alloc is needed (which
+// would risk parking one of the two live window entries). Index 0 needs no add.
+fn vs_array_get_imm(insns: [i64], n: [i64], base: i64, idxc: i64, d: i64) -> i64 {
+  let _ = if idxc > 0 then em(insns, n, 2432696320 + idxc * 1024 + base * 32 + d) else 0;
+  let b = if idxc > 0 then d else base;
+  em(insns, n, 4167072288 + b * 65536 + d)
+}
 fn vs_array_get_reg(insns: [i64], n: [i64], fntab: [i64], stab: [i64], base: i64, idxidx: i64, d: i64) -> i64 {
   let idx = vs_reg(insns, n, fntab, stab, idxidx);
-  em(insns, n, 4167071744 + idx * 65536 + base * 32 + d)
+  let _ = em(insns, n, 2332033024 + idx * 65536 + base * 32 + d);
+  em(insns, n, 4167072288 + d * 65536 + d)
 }
 
 // Array set: base + index tags on the window; value emitted next, then the
@@ -3734,15 +3817,27 @@ fn emit_array_set(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let is_cimm = (if idxk == 1 then 1 else 0) * (if idxc >= 0 then 1 else 0) * (if idxc < 4096 then 1 else 0);
   let base = vs_reg(insns, n, fntab, stab, w - 3);
   let v = vs_reg(insns, n, fntab, stab, w - 1);
-  let _ = if is_cimm == 1 then em(insns, n, 4177526784 + base * 32 + idxc * 1024 + v) else vs_array_set_reg(insns, n, fntab, stab, base, v, w - 2);
+  let _ = if is_cimm == 1 then vs_array_set_imm(insns, n, base, idxc, v) else vs_array_set_reg(insns, n, fntab, stab, base, v, w - 2);
   let _ = vs_pop(fntab);
   let _ = vs_pop(fntab);
   let _ = vs_pop(fntab);
   vs_push(insns, n, fntab, stab, 1, 0, 0)
 }
+// A5 step 1b: `add x16,xbase,<idx> ; str xv,[x17,x16,lsl #3]` (4162877984 =
+// 0xf8207a20, Rn=x17). A store has no destination register to borrow, so the
+// scratch is x16 -- the register model's parallel-move scratch (REGISTER-MODEL
+// §1.1), dead at every array-set site because vs_reg/vs_mat have already
+// finished any move they needed. Taking one through vs_alloc instead could park
+// the deepest window entry, which at a 3-entry window IS the array base.
+fn vs_array_set_imm(insns: [i64], n: [i64], base: i64, idxc: i64, v: i64) -> i64 {
+  let _ = if idxc > 0 then em(insns, n, 2432696320 + idxc * 1024 + base * 32 + 16) else 0;
+  let b = if idxc > 0 then 16 else base;
+  em(insns, n, 4162877984 + b * 65536 + v)
+}
 fn vs_array_set_reg(insns: [i64], n: [i64], fntab: [i64], stab: [i64], base: i64, v: i64, idxidx: i64) -> i64 {
   let idx = vs_reg(insns, n, fntab, stab, idxidx);
-  em(insns, n, 4162877440 + idx * 65536 + base * 32 + v)
+  let _ = em(insns, n, 2332033024 + idx * 65536 + base * 32 + 16);
+  em(insns, n, 4162877984 + 16 * 65536 + v)
 }
 
 // Emit name[i] (get) or name[i] = v (set). `name` is a bound array variable;
@@ -5983,6 +6078,12 @@ fn emit_zeros(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   let _ = em(insns, n, 4160783455);
   let _ = em(insns, n, 3942842463);
   let _ = em(insns, n, 1426063297);
+  // ROADMAP A5 step 1b (2026-09-08): the VALUE of a [i64] is an x17-relative CELL
+  // INDEX, never an address -- sub x0,x0,x17 (3406888960) ; lsr x0,x0,#3
+  // (3544448000). Logical shift is right here: x27 >= x17 always, so the byte
+  // delta is non-negative. The T118 arena trap above is untouched.
+  let _ = em(insns, n, 3406888960);
+  let _ = em(insns, n, 3544448000);
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
   n[0]
 }
@@ -6338,14 +6439,36 @@ fn use_expand(srcv: str, tmpc: [i64], tmpl: i64) -> str {
 // stub, and exit_groups with the code. Assembled by as + objcopy + objdump (scratch
 // brk/stub.S), 131 words, verified standalone through the seed for 80/82/87/99.
 fn entry_stub(st: [i64]) -> i64 {
-  let _ = st[0] = 2852127717;
+  // ROADMAP A5 step 1b (2026-09-08): the stub is now IDEMPOTENT -- `cbnz x17,+37`
+  // at word 5 jumps to word 42, the same landing pad the two mmap/mremap failure
+  // branches already use, whenever x17 is ALREADY set. Words 0-7 were
+  // `mov x5,x0 ; mov x6,x1 ; mov x9,x5 ; mov x10,x6 ; mov x11,#0x10000000(2 words) ;
+  // sub x12,x28,x11 ; mov x17,x12`; `mov x10,x6` was dead and `mov x5,x0` only fed
+  // `mov x9,x5`, so folding those into a single `mov x9,x0` frees the slot for the
+  // test and keeps the stub at 172 words -- a length that is a literal in five
+  // places (cli_compile here, gb_compile1.bp x3, gb_run.bp) and is baked into every
+  // internal adr/b offset (`mov x10,x6` is kept at word 7 purely as the filler).
+  // Why: sys_run re-enters this stub with the CALLER's registers, so under step 1a
+  // every dispatched kernel reserved a second 4 GiB region and mremap'd the arena
+  // into it. Under the index model that moves x17 out from under every index the
+  // caller already handed the child -- gb_pool's `daddr` (a file map passed to the
+  // kernel as a decimal argv string) then pointed at the old base. Worse, sys_run is
+  // always issued from a sys_clone child, whose x28 is `sp + 12 MiB` and not the
+  // arena end, so `x28 - 256 MiB` is not the arena base there: the mremap failed,
+  // the failure path fell through with x17 = that garbage, and all 12 kernels died
+  // with trap 82 (measured on gen4 01e90e25: `FAIL gb_pool got=0`, 12 traps).
+  // `cbnz` and not `cmp x17,x28-256MiB` for exactly that reason -- x17 is 0 at a
+  // real process entry (AArch64 execve zeroes the GPRs and seed/seed.S never writes
+  // x17: `grep -c 'x1[78]' seed/seed.S` == 0) and non-zero in every re-entry,
+  // whatever the child did to x27/x28.
+  let _ = st[0] = 2852127721;
   let _ = st[1] = 2852193254;
-  let _ = st[2] = 2852455401;
-  let _ = st[3] = 2852520938;
-  let _ = st[4] = 3531735051;
-  let _ = st[5] = 4070703115;
-  let _ = st[6] = 3406496652;
-  let _ = st[7] = 2852914161;
+  let _ = st[2] = 3531735051;
+  let _ = st[3] = 4070703115;
+  let _ = st[4] = 3406496652;
+  let _ = st[5] = 3036677297;
+  let _ = st[6] = 2852914161;
+  let _ = st[7] = 2852520938;
   let _ = st[8] = 3531603968;
   let _ = st[9] = 3531604001;
   let _ = st[10] = 3546315809;
@@ -6380,7 +6503,11 @@ fn entry_stub(st: [i64]) -> i64 {
   let _ = st[39] = 4163008707;
   let _ = st[40] = 2432697410;
   let _ = st[41] = 402653178;
-  let _ = st[42] = 2852717541;
+  // ROADMAP A5 step 1b: `mov x5,x9` -> `sub x5,x6,x17` (3406889157). x5 was a
+  // dead copy of argc (x9 survives untouched to the tail), so the slot is reused
+  // to hold argv's BYTE offset from the arena base; st[81]/st[82] finish the
+  // conversion. Stub length is unchanged at 172 (it is a literal in five places).
+  let _ = st[42] = 3406889157;
   let _ = st[43] = 2853897191;
   let _ = st[44] = 268436738;
   let _ = st[45] = 4177527010;
@@ -6419,8 +6546,11 @@ fn entry_stub(st: [i64]) -> i64 {
   let _ = st[78] = 3531604227;
   let _ = st[79] = 3531608264;
   let _ = st[80] = 3556769793;
-  let _ = st[81] = 2852455392;
-  let _ = st[82] = 2852520929;
+  // `mov x0,x9` (argc, straight from the register that always holds it) then
+  // `lsr x1,x5,#3`: main's `argv: [str]` parameter is now an x17-relative CELL
+  // INDEX like every other [i64] value (A5 step 1b).
+  let _ = st[81] = 2852717536;
+  let _ = st[82] = 3544448161;
   let _ = st[83] = 335544320;
   let _ = st[84] = 1384122947;
   let _ = st[85] = 1895830559;
@@ -6775,6 +6905,8 @@ fn emit_sys_munmap(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = vs_deliver(insns, n, fntab, stab, 2);
+  // A5 step 1b: cell argument -> address, add x0,x17,x0,lsl #3.
+  let _ = em(insns, n, 2332036640);
   em(insns, n, 3531610856);
   em(insns, n, 3556769793);
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
@@ -6796,6 +6928,8 @@ fn emit_sys_export(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = vs_deliver(insns, n, fntab, stab, 3);
+  // A5 step 1b: cell argument -> address, add x1,x17,x1,lsl #3.
+  let _ = em(insns, n, 2332102177);
   em(insns, n, 2852127723);
   em(insns, n, 2852193260);
   em(insns, n, 2852258797);
@@ -6854,8 +6988,16 @@ fn emit_sys_mmap(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = vs_deliver(insns, n, fntab, stab, 6);
+  // A5 step 1b: cell argument -> address, add x0,x17,x0,lsl #3.
+  let _ = em(insns, n, 2332036640);
   em(insns, n, 3531611080);
   em(insns, n, 3556769793);
+  // A5 step 1b: the mapping's address -> a cell INDEX. ARITHMETIC shift, not
+  // logical: file maps are placed by the kernel and may land below the reserve,
+  // and `add x0,x17,x0,lsl #3` inverts an asr exactly for a negative index too
+  // (page-aligned => the low 3 bits are 0). A negative errno stays negative.
+  em(insns, n, 3406888960);
+  em(insns, n, 2470706176);
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
   n[0]
 }
@@ -6883,6 +7025,10 @@ fn emit_sys_rename(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = vs_deliver(insns, n, fntab, stab, 4);
+  // A5 step 1b: cell argument -> address, add x0,x17,x0,lsl #3.
+  let _ = em(insns, n, 2332036640);
+  // A5 step 1b: cell argument -> address, add x2,x17,x2,lsl #3.
+  let _ = em(insns, n, 2332167714);
   em(insns, n, 2852127723);
   em(insns, n, 2852193261);
   em(insns, n, 2852258800);
@@ -6936,6 +7082,8 @@ fn emit_sys_wait4(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = vs_deliver(insns, n, fntab, stab, 4);
+  // A5 step 1b: cell argument -> address, add x1,x17,x1,lsl #3.
+  let _ = em(insns, n, 2332102177);
   em(insns, n, 3531612296);
   em(insns, n, 3556769793);
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
@@ -6981,6 +7129,30 @@ fn emit_sys_run(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfnam
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = vs_deliver(insns, n, fntab, stab, 4);
+  // A5 step 1b: `addr` is a cell INDEX (it came from sys_mmap) -- add x0,x17,x0,lsl #3.
+  let _ = em(insns, n, 2332036640);
+  // A5 step 1b: argv is a cell INDEX too -- add x3,x17,x3,lsl #3 -- but its CELLS are
+  // `str` values, and a caller can only build them out of [i64] arrays, i.e. out of
+  // indices. So sys_run converts the argv VECTOR at its own boundary as well, in
+  // place, argc entries of it:
+  //   mov x9,xzr ; L: cmp x9,x2 ; b.ge +6 ; ldr x10,[x3,x9,lsl #3] ;
+  //   add x10,x17,x10,lsl #3 ; str x10,[x3,x9,lsl #3] ; add x9,x9,#1 ; b L
+  // The callee's entry stub then turns the vector itself back into an index for its
+  // `main(argc, argv: [str])`, and the raw pointers inside it are what `char()` and
+  // `str_len()` need. IN PLACE is safe for every caller in the corpus because sys_run
+  // is only ever issued from a sys_clone(17) fork child (gb_run.bp's own comment says
+  // why: entering another image's stub reconfigures the caller's arena registers), so
+  // the array converted is always that child's private COW copy -- gb_pool builds its
+  // argv2 once in the parent and 100 fork children each convert their own.
+  let _ = em(insns, n, 2332233251);
+  let _ = em(insns, n, 2854159337);
+  let _ = em(insns, n, 3942777151);
+  let _ = em(insns, n, 1409286346);
+  let _ = em(insns, n, 4167661674);
+  let _ = em(insns, n, 2332692010);
+  let _ = em(insns, n, 4163467370);
+  let _ = em(insns, n, 2432697641);
+  let _ = em(insns, n, 402653178);
   let _ = fntab[2712] = fntab[2712] + 1;
   let has_spills = 1 - fntab[2713];
   let _ = if has_spills == 1 then em(insns, n, 2847882223) else 0;

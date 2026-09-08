@@ -59,6 +59,6 @@ fn c84_parent(pid: i64) -> i64 {
 
 fn main() -> i64 {
   let base = sys_arena_base();
-  let pid = sys_clone(17, base + 16777216);
+  let pid = sys_clone(17, base + 2097152);
   if pid == 0 then c84_child() else c84_parent(pid)
 }

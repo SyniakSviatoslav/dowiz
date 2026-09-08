@@ -6,7 +6,7 @@ module core { }
 
 fn main() -> i64 {
   let base = sys_arena_base();
-  let r = sys_clone(68864, base + 131072);
+  let r = sys_clone(68864, base + 16384);
   let is_child = if r == 0 then 1 else 0;
   let _ = sys_exit_thread_guard(is_child, 0);
   r

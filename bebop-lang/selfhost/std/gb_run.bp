@@ -356,7 +356,7 @@ fn gb_kernel_run(base: [i64], K: i64, dir: str, path: [i64], respath: [i64], rep
 }
 fn gb_kernel_run_launch(args: [i64]) -> i64 {
   let _ = gb_fence_ro(args[7], args[8]);
-  let pid = sys_clone(17, sys_arena_base() + 16777216);
+  let pid = sys_clone(17, sys_arena_base() + 2097152);
   let _ = if pid == 0 then gb_kernel_run_child(st_cells(args[0]), args[1], args[2], st_cells(args[3]), args[4], st_cells(args[5]), args[6]) else 0;
   let st = zeros(1);
   let w = sys_wait4(pid, st, 0, 0);
@@ -531,7 +531,7 @@ fn gb_bg_child(args: [i64]) -> i64 {
 // records it and sys_wait4's it later (design item (c): "the parent records the child pid
 // so a later call can sys_wait4 it").
 fn gb_bg_launch(args: [i64]) -> i64 {
-  let pid = sys_clone(17, sys_arena_base() + 16777216);
+  let pid = sys_clone(17, sys_arena_base() + 2097152);
   let _ = if pid == 0 then gb_bg_child(args) else 0;
   pid
 }
@@ -609,7 +609,7 @@ fn gb_kernel_run_child2(args: [i64]) -> i64 {
 }
 fn gb_kernel_run_launch2(args: [i64]) -> i64 {
   let _ = gb_fence_ro(args[4], args[5]);
-  let pid = sys_clone(17, sys_arena_base() + 16777216);
+  let pid = sys_clone(17, sys_arena_base() + 2097152);
   let _ = if pid == 0 then gb_kernel_run_child2(args) else 0;
   let st = zeros(1);
   let w = sys_wait4(pid, st, 0, 0);
@@ -649,7 +649,7 @@ fn gb_kernel_run_fast(base: [i64], K: i64, dir: str, path: [i64], cache: [i64], 
 // sys_run is explicitly ruled out, not proposed here).
 fn gb_fork_floor_child() -> i64 { sys_exit(0) }
 fn gb_fork_floor_one() -> i64 {
-  let pid = sys_clone(17, sys_arena_base() + 16777216);
+  let pid = sys_clone(17, sys_arena_base() + 2097152);
   let _ = if pid == 0 then gb_fork_floor_child() else 0;
   let st = zeros(1);
   sys_wait4(pid, st, 0, 0)

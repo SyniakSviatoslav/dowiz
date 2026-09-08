@@ -10,7 +10,7 @@
 fn main() -> i64 {
   let b = sys_mmap(0, 1048576, 3, 34, 0 - 1, 0);
   let ok1 = if b > 0 then 1 else 0;
-  let al = if b - (b / 4096) * 4096 == 0 then 1 else 0;
+  let al = if b - (b / 512) * 512 == 0 then 1 else 0;
   let curs = b;
   let i = 0;
   let good = 1;

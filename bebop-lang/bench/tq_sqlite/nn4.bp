@@ -56,7 +56,7 @@ fn par(env: [i64], n: i64, cells: [i64], W: i64) -> i64 {
   let base = sys_arena_base();
   let i = 0;
   while i < W {
-    let r = sys_clone(68864, base + 131072 + i * 65536);
+    let r = sys_clone(68864, base + 16384 + i * 8192);
     // T72: the child pins itself to A78 core 4+i (cells[W*2+1+i] holds the mask)
     let _ = if r == 0 then sys_setaffinity(cells, W * 2 + 1 + i) else 0;
     let _ = if r == 0 then work(env, n, i * 8, i * 8 + 8) else 0;

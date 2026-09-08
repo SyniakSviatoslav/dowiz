@@ -1,0 +1,35 @@
+// c69_index_roundtrip (ROADMAP A5 step 1b, 2026-09-08): under the index model a `[i64]`
+// VALUE is an x17-relative CELL INDEX, so `a + k` is CELL stepping -- `b = a + 3` names
+// the same storage three cells in, and `b + 5` steps a stepped value again. The compiler
+// lowers every access to `add xt,xbase,<idx> ; ldr/str [x17,xt,lsl #3]`, so this construct
+// is the one that would break if the base were ever an address again (the byte/cell unit
+// confusion) or if the +index add were dropped. It also pins the index-0 fast path
+// (`b[0]`, no add) against the general form (`b[j]` in the fold loop).
+// No allocation inside any while body (L8); <= 8 live symbols per fn (exit 89).
+fn fill(a: [i64], n: i64) -> i64 {
+  let i = 0;
+  while i < n {
+    let _ = a[i] = i * i;
+    let i = i + 1;
+    0
+  };
+  n
+}
+fn foldc(b: [i64], n: i64) -> i64 {
+  let s = 0;
+  let j = 0;
+  while j < n {
+    let s = s + b[j];
+    let j = j + 1;
+    0
+  };
+  s
+}
+fn main() -> i64 {
+  let a = zeros(64);
+  let _ = fill(a, 64);
+  let b = a + 3;
+  let c = b + 5;
+  let s = foldc(b, 8);
+  a[63] * 1000000000 + b[0] * 1000000 + c[0] * 1000 + s
+}

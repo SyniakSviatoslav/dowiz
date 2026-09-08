@@ -43,10 +43,18 @@ class TC:
             return 'i64'
         if t == 'bin':
             a, b = self.ty(e[2], env, fn), self.ty(e[3], env, fn)
+            # ROADMAP A5 step 1b (2026-09-08): a `[i64]` VALUE is an x17-relative CELL
+            # INDEX, so `arr + k` / `arr - k` with an i64 step is CELL STEPPING and yields
+            # another `[i64]` -- the one arithmetic the blueprint's pointer census (§3,
+            # class (a)) declares meaningful in index units. Every OTHER operator on an
+            # array, and `+`/`-` between two arrays, stays a finding: those are the byte
+            # arithmetic (`a + 8`, `a * 8`) the model outlaws.
+            step = e[1] in ('+', '-') and (a == '[i64]') != (b == '[i64]') and 'str' not in (a, b) \
+                and not is_ref(a) and not is_ref(b)
             if e[1] in ('+', '-', '*', '/', '%', '&', '|', '^', '<<', '>>', '>>>'):
-                if '[i64]' in (a, b) or 'str' in (a, b): self.note(fn, 'arithmetic %s on %s / %s' % (e[1], a, b))
+                if ('[i64]' in (a, b) and not step) or 'str' in (a, b): self.note(fn, 'arithmetic %s on %s / %s' % (e[1], a, b))
                 if (is_ref(a) or is_ref(b)) and fn not in STORE_INTERNAL: self.note(fn, 'arithmetic %s on a ref (%s / %s): a ref is an object-relative offset, deref it with st_ref' % (e[1], a, b))
-            return 'i64'
+            return '[i64]' if step else 'i64'
         if t == 'if':
             self.ty(e[1], env, fn); a, b = self.ty(e[2], env, fn), self.ty(e[3], env, fn)
             return a if a == b else ('?' if '?' in (a, b) else a)

@@ -1,0 +1,23 @@
+// c92_ptrfree (ROADMAP A5 step 1b, 2026-09-08): no ADDRESS ever escapes into a cell. An
+// array VALUE is written into another array's cell, carried through a call, stepped, and
+// read back -- valid under the old pointer model and under the index model, and the two
+// must agree on the fold. Under the index model the value that travels through `t[0]` is
+// a small cell index, not a 2^47-ish pointer, which is the whole point of the row: the
+// same program, the same answer, with nothing pointer-shaped in the data.
+// `deref` takes the carried value back as `[i64]` so the typecheck census (rung vii)
+// still sees a typed array everywhere and never an i64 masquerading as one.
+fn deref(t: [i64], k: i64) -> i64 { t[k] }
+fn carry(t: [i64], a: [i64], b: [i64]) -> i64 {
+  let _ = t[0] = deref(a, 2);
+  let _ = t[1] = deref(b, 0);
+  t[0] + t[1]
+}
+fn main() -> i64 {
+  let a = zeros(8);
+  let _ = a[2] = 777;
+  let _ = a[5] = 13;
+  let b = a + 5;
+  let t = zeros(2);
+  let n = carry(t, a, b);
+  t[0] * 1000 + t[1] * 10 + n
+}

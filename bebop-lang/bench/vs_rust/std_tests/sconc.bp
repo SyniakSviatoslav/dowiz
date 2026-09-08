@@ -83,7 +83,7 @@ fn reader(base: [i64], cells: [i64], j: i64) -> i64 {
 // [sp + 4 MiB, sp + 12 MiB), T118). spawn() keeps <= 8 live symbols: a clone-spanning
 // fn must not spill (spill slots live in the shared frame, one per process, not per
 // thread -- the nn4 lesson).
-fn stk(w: i64) -> i64 { sys_arena_base() + 16777216 * (w + 1) }
+fn stk(w: i64) -> i64 { sys_arena_base() + 2097152 * (w + 1) }
 fn spawn(base: [i64], cells: [i64], dc: i64, dr: i64) -> i64 {
   let w = 0;
   while w < 8 {

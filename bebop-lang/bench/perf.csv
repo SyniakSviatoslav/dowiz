@@ -1335,3 +1335,169 @@ ts,commit,bin,metric,value,unit,n,valid,at_max_pct,temp_mc,note
 1788900665,e19ac9b,ca69273e,stub_words,172,words,1,1,,,
 1788900665,e19ac9b,ca69273e,bin_fns,283,fns,1,1,,,
 1788900665,e19ac9b,ca69273e,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788896809,,2e50a72f,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788896809,,2e50a72f,gate_run_ms,28835,ms,1,1,,,"sum of non-memo gate runs (128 runs, 0 memo hits)"
+1788896912,,2e50a72f,bin_words,41161,words,1,1,,,bytes 166644
+1788896912,,2e50a72f,stub_words,172,words,1,1,,,
+1788896912,,2e50a72f,bin_fns,285,fns,1,1,,,
+1788896912,,2e50a72f,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788897272,,2e50a72f,bin_words,41161,words,1,1,,,bytes 166644
+1788897272,,2e50a72f,stub_words,172,words,1,1,,,
+1788897272,,2e50a72f,bin_fns,285,fns,1,1,,,
+1788897272,,2e50a72f,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788897329,,2e50a72f,bin_words,41161,words,1,1,,,bytes 166644
+1788897329,,2e50a72f,stub_words,172,words,1,1,,,
+1788897329,,2e50a72f,bin_fns,285,fns,1,1,,,
+1788897329,,2e50a72f,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788897407,,2e50a72f,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788897408,,2e50a72f,gate_run_ms,8938,ms,1,1,,,"sum of non-memo gate runs (28 runs, 100 memo hits)"
+1788897508,,2e50a72f,bin_words,41161,words,1,1,,,bytes 166644
+1788897508,,2e50a72f,stub_words,172,words,1,1,,,
+1788897508,,2e50a72f,bin_fns,285,fns,1,1,,,
+1788897508,,2e50a72f,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788897864,,01e90e25,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788897865,,01e90e25,gate_run_ms,28372,ms,1,1,,,"sum of non-memo gate runs (128 runs, 0 memo hits)"
+1788897968,,01e90e25,bin_words,41161,words,1,1,,,bytes 166644
+1788897968,,01e90e25,stub_words,172,words,1,1,,,
+1788897968,,01e90e25,bin_fns,285,fns,1,1,,,
+1788897968,,01e90e25,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788899947,,15e272fc,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788899948,,15e272fc,gate_run_ms,29444,ms,1,1,,,"sum of non-memo gate runs (128 runs, 0 memo hits)"
+1788900053,,15e272fc,bin_words,41217,words,1,1,,,bytes 166868
+1788900053,,15e272fc,stub_words,172,words,1,1,,,
+1788900053,,15e272fc,bin_fns,285,fns,1,1,,,
+1788900053,,15e272fc,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788900178,,15e272fc,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788900179,,15e272fc,gate_run_ms,4566,ms,1,1,,,"sum of non-memo gate runs (14 runs, 114 memo hits)"
+1788900275,,15e272fc,bin_words,41217,words,1,1,,,bytes 166868
+1788900275,,15e272fc,stub_words,172,words,1,1,,,
+1788900275,,15e272fc,bin_fns,285,fns,1,1,,,
+1788900275,,15e272fc,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788900366,,15e272fc,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788900367,,15e272fc,gate_run_ms,8498,ms,1,1,,,"sum of non-memo gate runs (26 runs, 102 memo hits)"
+1788900459,,15e272fc,bin_words,41217,words,1,1,,,bytes 166868
+1788900459,,15e272fc,stub_words,172,words,1,1,,,
+1788900459,,15e272fc,bin_fns,285,fns,1,1,,,
+1788900459,,15e272fc,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788900522,,15e272fc,bin_words,41217,words,1,1,,,bytes 166868
+1788900522,,15e272fc,stub_words,172,words,1,1,,,
+1788900523,,15e272fc,bin_fns,285,fns,1,1,,,
+1788900523,,15e272fc,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788900716,,15e272fc,bin_words,41217,words,1,1,,,bytes 166868
+1788900716,,15e272fc,stub_words,172,words,1,1,,,
+1788900716,,15e272fc,bin_fns,285,fns,1,1,,,
+1788900716,,15e272fc,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788900768,,15e272fc,bin_words,41217,words,1,1,,,bytes 166868
+1788900768,,15e272fc,stub_words,172,words,1,1,,,
+1788900768,,15e272fc,bin_fns,285,fns,1,1,,,
+1788900768,,15e272fc,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788900829,,15e272fc,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788900830,,15e272fc,gate_run_ms,3009,ms,1,1,,,"sum of non-memo gate runs (14 runs, 114 memo hits)"
+1788900914,,15e272fc,bin_words,41217,words,1,1,,,bytes 166868
+1788900914,,15e272fc,stub_words,172,words,1,1,,,
+1788900914,,15e272fc,bin_fns,285,fns,1,1,,,
+1788900914,,15e272fc,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788901071,,15e272fc,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788901072,,15e272fc,gate_run_ms,2585,ms,1,1,,,"sum of non-memo gate runs (14 runs, 114 memo hits)"
+1788901150,,15e272fc,bin_words,41217,words,1,1,,,bytes 166868
+1788901150,,15e272fc,stub_words,172,words,1,1,,,
+1788901150,,15e272fc,bin_fns,285,fns,1,1,,,
+1788901150,,15e272fc,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788901291,,15e272fc,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788901292,,15e272fc,gate_run_ms,0,ms,1,1,,,"sum of non-memo gate runs (0 runs, 0 memo hits)"
+1788901378,,15e272fc,bin_words,41217,words,1,1,,,bytes 166868
+1788901378,,15e272fc,stub_words,172,words,1,1,,,
+1788901378,,15e272fc,bin_fns,285,fns,1,1,,,
+1788901378,,15e272fc,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788901453,,15e272fc,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788901454,,15e272fc,gate_run_ms,0,ms,1,1,,,"sum of non-memo gate runs (0 runs, 0 memo hits)"
+1788901534,,15e272fc,bin_words,41217,words,1,1,,,bytes 166868
+1788901534,,15e272fc,stub_words,172,words,1,1,,,
+1788901534,,15e272fc,bin_fns,285,fns,1,1,,,
+1788901534,,15e272fc,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788901542,,15e272fc,chain_wall,139,s,1,1,,,"chain + battery, CG=1"
+1788901542,,15e272fc,chain_cpu,82.377,s,1,1,,,children utime+stime of chain.sh
+1788901543,,15e272fc,bin_words,41217,words,1,1,,,bytes 166868
+1788901543,,15e272fc,stub_words,172,words,1,1,,,
+1788901543,,15e272fc,bin_fns,285,fns,1,1,,,
+1788901543,,15e272fc,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788901543,,15e272fc,cw:c110_fence,45,words,1,1,,,was 39
+1788901543,,15e272fc,cw:c13_array,32,words,1,1,,,was 29
+1788901544,,15e272fc,cw:c20_deep,46,words,1,1,,,was 45
+1788901544,,15e272fc,cw:c23_spillcall,116,words,1,1,,,was 115
+1788901544,,15e272fc,cw:c24_ifspill,82,words,1,1,,,was 81
+1788901544,,15e272fc,cw:c25_matchtail,29,words,1,1,,,was 28
+1788901544,,15e272fc,cw:c31_nested_lit,71,words,1,1,,,was 67
+1788901544,,15e272fc,cw:c33_loopalloc,58,words,1,1,,,was 56
+1788901544,,15e272fc,cw:c34_loopescape,59,words,1,1,,,was 58
+1788901544,,15e272fc,cw:c36_break,72,words,1,1,,,was 70
+1788901544,,15e272fc,cw:c38_frameheap,5461,words,1,1,,,first
+1788901544,,15e272fc,cw:c40_struct,120,words,1,1,,,was 115
+1788901544,,15e272fc,cw:c42_crc32,124,words,1,1,,,was 115
+1788901544,,15e272fc,cw:c43_arena_persist,135,words,1,1,,,was 126
+1788901544,,15e272fc,cw:c45_crc32x,108,words,1,1,,,was 105
+1788901544,,15e272fc,cw:c61_arrcall,54,words,1,1,,,was 53
+1788901544,,15e272fc,cw:c69_index_roundtrip,97,words,1,1,,,first
+1788901544,,15e272fc,cw:c78_scan,735,words,1,1,,,was 720
+1788901544,,15e272fc,cw:c84_run,284,words,1,1,,,was 258
+1788901544,,15e272fc,cw:c88_arrflags,49,words,1,1,,,was 47
+1788901545,,15e272fc,cw:c89_heaptrap,32,words,1,1,,,was 31
+1788901545,,15e272fc,cw:c90_symalias,42,words,1,1,,,was 41
+1788901545,,15e272fc,cw:c92_ptrfree,108,words,1,1,,,first
+1788901545,,15e272fc,cw:c94_fsync,111,words,1,1,,,was 107
+1788901545,,15e272fc,fuzz_seeds_on_bin,0,seeds,1,1,,,TG-DONE 8: 0 on 15e272fc; total 48100 over 9 bins
+1788901545,,15e272fc,fuzz_rate,0.0,prog/s,1,1,,,"median over the bin's batches (LITTLE cores, nice)"
+1788901545,,15e272fc,fuzz_trap_unpredicted,0,count,1,1,,,"TRAP-80/81/82 total; 81 by design, 82 is fuzz_trap82 (ALERT)"
+1788901545,,15e272fc,fuzz_trap82,0,count,1,1,,,"D12-C: SIGSEGV/SIGBUS, 0 tolerated, repros in $REPROS"
+1788901550,,15e272fc,selfcompile_wall,667.2193,ms,5,0,0.0,37500,
+1788901550,,15e272fc,selfcompile_utime,0.5863,s,5,0,0.0,37500,
+1788901550,,15e272fc,selfcompile_stime,0.0626,s,5,0,0.0,37500,
+1788901550,,15e272fc,selfcompile_maxrss,62024,kB,5,0,0.0,37500,
+1788901550,,15e272fc,selfcompile_energy,0.7029,core-s@fmax (proxy),5,0,0.0,37500,
+1788901568,,15e272fc,k1h_ms,1.11,ms/rep,11,0,0.0,37200,p95 1.160 
+1788901568,,15e272fc,k1h_loopwords,5,words,1,1,,,
+1788901568,,15e272fc,k2h_ms,0.65,ms/rep,11,0,0.0,37200,p95 0.662 
+1788901568,,15e272fc,k2h_loopwords,7,words,1,1,,,
+1788901568,,15e272fc,k3h_ms,0.185,ms/rep,11,0,0.0,37200,p95 0.188 
+1788901568,,15e272fc,k3h_loopwords,7,words,1,1,,,
+1788901568,,15e272fc,k4_ms,4.04,ms/rep,11,0,0.0,37200,p95 4.100 
+1788901568,,15e272fc,k4_loopwords,7,words,1,1,,,
+1788901569,,15e272fc,k8h_ms,0.029,ms/rep,11,0,0.0,37200,p95 0.032 
+1788901569,,15e272fc,k8h_loopwords,7,words,1,1,,,
+1788902855,06fd210,15e272fc,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788902856,06fd210,15e272fc,gate_run_ms,8931,ms,1,1,,,"sum of non-memo gate runs (26 runs, 102 memo hits)"
+1788902904,06fd210,15e272fc,bin_words,41217,words,1,1,,,bytes 166868
+1788902904,06fd210,15e272fc,stub_words,172,words,1,1,,,
+1788902904,06fd210,15e272fc,bin_fns,285,fns,1,1,,,
+1788902904,06fd210,15e272fc,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788902909,06fd210,15e272fc,chain_wall,107,s,1,1,,,"chain + battery, CG=1"
+1788902909,06fd210,15e272fc,chain_cpu,56.983,s,1,1,,,children utime+stime of chain.sh
+1788902909,06fd210,15e272fc,bin_words,41217,words,1,1,,,bytes 166868
+1788902909,06fd210,15e272fc,stub_words,172,words,1,1,,,
+1788902910,06fd210,15e272fc,bin_fns,285,fns,1,1,,,
+1788902910,06fd210,15e272fc,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788902910,06fd210,15e272fc,fuzz_seeds_on_bin,0,seeds,1,1,,,TG-DONE 8: 0 on 15e272fc; total 48100 over 9 bins
+1788902910,06fd210,15e272fc,fuzz_rate,0.0,prog/s,1,1,,,"median over the bin's batches (LITTLE cores, nice)"
+1788902910,06fd210,15e272fc,fuzz_trap_unpredicted,0,count,1,1,,,"TRAP-80/81/82 total; 81 by design, 82 is fuzz_trap82 (ALERT)"
+1788902910,06fd210,15e272fc,fuzz_trap82,0,count,1,1,,,"D12-C: SIGSEGV/SIGBUS, 0 tolerated, repros in $REPROS"
+1788902914,06fd210,15e272fc,selfcompile_wall,642.0816,ms,5,0,65.7,46300,
+1788902914,06fd210,15e272fc,selfcompile_utime,0.5586,s,5,0,65.7,46300,
+1788902914,06fd210,15e272fc,selfcompile_stime,0.0591,s,5,0,65.7,46300,
+1788902914,06fd210,15e272fc,selfcompile_maxrss,62020,kB,5,0,65.7,46300,
+1788902914,06fd210,15e272fc,selfcompile_energy,0.7361,core-s@fmax (proxy),5,0,65.7,46300,
+1788902928,06fd210,15e272fc,k1h_ms,0.91,ms/rep,11,0,70.2,43300,p95 1.080 
+1788902928,06fd210,15e272fc,k1h_loopwords,5,words,1,1,,,
+1788902928,06fd210,15e272fc,k2h_ms,0.566,ms/rep,11,0,70.2,43300,p95 0.632 
+1788902928,06fd210,15e272fc,k2h_loopwords,7,words,1,1,,,
+1788902929,06fd210,15e272fc,k3h_ms,0.161,ms/rep,11,0,70.2,43300,p95 0.179 
+1788902929,06fd210,15e272fc,k3h_loopwords,7,words,1,1,,,
+1788902929,06fd210,15e272fc,k4_ms,3.57,ms/rep,11,0,70.2,43300,p95 3.980 
+1788902929,06fd210,15e272fc,k4_loopwords,7,words,1,1,,,
+1788902929,06fd210,15e272fc,k8h_ms,0.024,ms/rep,11,0,70.2,43300,p95 0.027 
+1788902929,06fd210,15e272fc,k8h_loopwords,7,words,1,1,,,
+1788903058,06fd210,15e272fc,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788903058,06fd210,15e272fc,gate_run_ms,8392,ms,1,1,,,"sum of non-memo gate runs (26 runs, 102 memo hits)"
+1788903115,06fd210,15e272fc,bin_words,41217,words,1,1,,,bytes 166868
+1788903115,06fd210,15e272fc,stub_words,172,words,1,1,,,
+1788903115,06fd210,15e272fc,bin_fns,285,fns,1,1,,,
+1788903115,06fd210,15e272fc,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
