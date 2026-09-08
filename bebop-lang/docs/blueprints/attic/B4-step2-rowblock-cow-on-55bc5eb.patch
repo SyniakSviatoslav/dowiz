@@ -1,0 +1,368 @@
+--- /dev/fd/63	2026-09-08 23:19:02.035662612 +0200
++++ selfhost/std/sgraph2.bp	2026-09-08 23:03:59.983662956 +0200
+@@ -415,6 +415,327 @@
+   let _ = st_commit(base, tx, g2, tmp);
+   st_get(base, tl, 0)
+ }
++// ---- B4 STEP 2 (blueprint §3): L1 as RowBlocks under a page tree ----
++// BK{arr i64} = one RowBlock, 64 rows FIXED (a dense block is simply larger; blocks are
++// never split). Layout: 0 first_row, 1 base0, 2 no, 3 ne, 4..68 rpo[65], 69..133 rpe[65],
++// 134..134+no-1 cio, then cie.
++//   base0 = the GLOBAL L1 slot of cio[0]. The original region (rpo/cio) is copied verbatim
++//   by every merge and never moves, so the global slot of cio[j] stays base0 + j for the
++//   life of the block. That is not decoration: sgraph2's TB tombstone bitmap and the python
++//   oracle both index L1 by the flat csr_build slot number (phase_del tombstones 10^6 slots
++//   out of exactly 2*E), so a merge that renumbered the original edges -- which a literal
++//   sorted two-pointer merge into one ci array does -- would silently re-point every
++//   tombstone at a different edge and drift the fold. Merged-in L0 edges live in the
++//   SEPARATE extra region (rpe/cie) and carry no slot, matching the oracle, where log edges
++//   are never tombstoned. Cost of the split: 65 extra cells per block, 0.8 % of L1.
++//   Invariant (3) holds per region; invariant (2) is unchanged (the merge moves edges from
++//   L0 to L1 without creating or destroying any).
++// PG{arr ref BK} = a page, fan-out 512: cell 0 = live count, 1..512 = refs (refmask -1, so
++// st_compact skips cell 0 exactly as it does for LOG).
++// flat_fold(base, g, n): the same all-rows neighbour fold read straight off the flat L1
++// CSR. sel 11 == sel 8 is the check that splitting csr_build's output into RowBlocks is
++// lossless (base0 / rp_local arithmetic, and no edge lost at a block boundary).
++fn flat_fold(base: [i64], g: ref G2, n: i64) -> i64 {
++  let ci = st_ref(base, g, 3);
++  let m = st_get(base, g, 1);
++  let acc = 0;
++  let k = 0;
++  while k < m {
++    let acc = acc + 1 + st_get(base, ci, 1 + k);
++    let k = k + 1;
++    0
++  };
++  acc
++}
++fn sum_add(a: [i64], m: i64) -> i64 {
++  let acc = 0;
++  let i = 0;
++  while i < m {
++    let acc = acc + 1 + a[i];
++    let i = i + 1;
++    0
++  };
++  acc
++}
++fn gen_l0(src: [i64], dst: [i64], m: i64, n: i64) -> i64 {
++  let x = 777;
++  let i = 0;
++  while i < m {
++    let x = lcg(x);
++    let a = (x >> 20) % n;
++    let x = lcg(x);
++    let c = (x >> 20) % n;
++    let _ = src[i] = a;
++    let _ = dst[i] = c;
++    let i = i + 1;
++    0
++  };
++  0
++}
++// bk_new(...): split one 64-row slice of the committed flat L1 CSR into a RowBlock.
++fn bk_new(base: [i64], tx: [i64], tmp: [i64], d: [i64], rp: ref RP, ci: ref CI, fr: i64, res: [i64]) -> ref BK {
++  let lo = st_get(base, rp, 1 + fr);
++  let no = st_get(base, rp, 1 + fr + 64) - lo;
++  let bk = st_alloc(base, tx, 134 + no, d[7]);
++  let _ = st_put(base, bk, 0, fr);
++  let _ = st_put(base, bk, 1, lo);
++  let _ = st_put(base, bk, 2, no);
++  let _ = st_put(base, bk, 3, 0);
++  let r = 0;
++  while r < 65 {
++    let _ = st_put(base, bk, 4 + r, st_get(base, rp, 1 + fr + r) - lo);
++    let _ = st_put(base, bk, 69 + r, 0);
++    let r = r + 1;
++    0
++  };
++  let j = 0;
++  while j < no {
++    let _ = st_put(base, bk, 134 + j, st_get(base, ci, 1 + lo + j));
++    let j = j + 1;
++    0
++  };
++  let _ = st_seal(base, bk, tmp);
++  let _ = res[2] = res[2] + 134 + no;
++  bk
++}
++fn pg_new(base: [i64], tx: [i64], tmp: [i64], d: [i64], rp: ref RP, ci: ref CI, p: i64, nbk: i64, res: [i64]) -> ref PG {
++  let pg = st_alloc(base, tx, 513, d[8]);
++  let c = 0;
++  let i = 0;
++  while i < 512 {
++    let b = p * 512 + i;
++    let ok = if b < nbk then 1 else 0;
++    let bk = if ok == 1 then bk_new(base, tx, tmp, d, rp, ci, b * 64, res) else 0;
++    let _ = if ok == 1 then st_link(base, pg, 1 + i, bk) else st_put(base, pg, 1 + i, 0);
++    let c = c + ok;
++    let i = i + 1;
++    0
++  };
++  let _ = st_put(base, pg, 0, c);
++  let _ = st_seal(base, pg, tmp);
++  let _ = res[5] = res[5] + 513;
++  pg
++}
++fn bt_build(base: [i64], tx: [i64], tmp: [i64], d: [i64], g: ref G2, nbk: i64, res: [i64]) -> ref PG {
++  let rp = st_ref(base, g, 2);
++  let ci = st_ref(base, g, 3);
++  let np = (nbk + 511) / 512;
++  let rt = st_alloc(base, tx, 513, d[8]);
++  let _ = st_put(base, rt, 0, np);
++  let p = 0;
++  while p < np {
++    let pg = pg_new(base, tx, tmp, d, rp, ci, p, nbk, res);
++    let _ = st_link(base, rt, 1 + p, pg);
++    let p = p + 1;
++    0
++  };
++  let _ = st_seal(base, rt, tmp);
++  rt
++}
++// bk_extra(...): rebuild the extra region = old extras then the L0 edges of each local row,
++// grouped by row. prp/pci are csr_passes' output over the L0 sample, so the L0 slice of row
++// v is pci[1 + prp[1+v] .. 1 + prp[2+v]) -- already the two-pointer's sorted input.
++fn bk_extra(base: [i64], ob: ref BK, nbk: ref BK, fr: i64, no: i64, prp: [i64], pci: [i64]) -> i64 {
++  let w = 0;
++  let r = 0;
++  while r < 64 {
++    let _ = st_put(base, nbk, 69 + r, w);
++    let j = st_get(base, ob, 69 + r);
++    let b = st_get(base, ob, 70 + r);
++    while j < b {
++      let _ = st_put(base, nbk, 134 + no + w, st_get(base, ob, 134 + no + j));
++      let w = w + 1;
++      let j = j + 1;
++      0
++    };
++    let k = prp[1 + fr + r];
++    let e = prp[2 + fr + r];
++    while k < e {
++      let _ = st_put(base, nbk, 134 + no + w, pci[1 + k]);
++      let w = w + 1;
++      let k = k + 1;
++      0
++    };
++    let r = r + 1;
++    0
++  };
++  let _ = st_put(base, nbk, 133, w);
++  w
++}
++// bk_merge(...): RowBlock' = merge(RowBlock, L0 rows). Never in place -- a whole new block
++// object is appended (invariant 1), which is why the cost is the WHOLE block, not the delta.
++fn bk_merge(base: [i64], tx: [i64], tmp: [i64], d: [i64], ob: ref BK, fr: i64, prp: [i64], pci: [i64], res: [i64]) -> ref BK {
++  let no = st_get(base, ob, 2);
++  let ne = st_get(base, ob, 3) + prp[1 + fr + 64] - prp[1 + fr];
++  let nbk = st_alloc(base, tx, 134 + no + ne, d[7]);
++  let _ = st_put(base, nbk, 0, fr);
++  let _ = st_put(base, nbk, 1, st_get(base, ob, 1));
++  let _ = st_put(base, nbk, 2, no);
++  let _ = st_put(base, nbk, 3, ne);
++  let i = 0;
++  while i < 65 {
++    let _ = st_put(base, nbk, 4 + i, st_get(base, ob, 4 + i));
++    let i = i + 1;
++    0
++  };
++  let j = 0;
++  while j < no {
++    let _ = st_put(base, nbk, 134 + j, st_get(base, ob, 134 + j));
++    let j = j + 1;
++    0
++  };
++  let _ = bk_extra(base, ob, nbk, fr, no, prp, pci);
++  let _ = st_seal(base, nbk, tmp);
++  let _ = res[3] = res[3] + 1;
++  let _ = res[4] = res[4] + 134 + no + ne;
++  nbk
++}
++fn pg_rebuild(base: [i64], tx: [i64], tmp: [i64], d: [i64], opg: ref PG, p: i64, nbk: i64, prp: [i64], pci: [i64], res: [i64]) -> ref PG {
++  let npg = st_alloc(base, tx, 513, d[8]);
++  let _ = st_put(base, npg, 0, st_get(base, opg, 0));
++  let i = 0;
++  while i < 512 {
++    let b = p * 512 + i;
++    let ok = if b < nbk then 1 else 0;
++    let fr = b * 64;
++    let hit = ok * (if prp[1 + fr + 64] - prp[1 + fr] > 0 then 1 else 0);
++    let ob = if ok == 1 then st_ref(base, opg, 1 + i) else 0;
++    let nb2 = if hit == 1 then bk_merge(base, tx, tmp, d, ob, fr, prp, pci, res) else ob;
++    let _ = if ok == 1 then st_link(base, npg, 1 + i, nb2) else st_put(base, npg, 1 + i, 0);
++    let i = i + 1;
++    0
++  };
++  let _ = st_seal(base, npg, tmp);
++  let _ = res[4] = res[4] + 513;
++  let _ = res[6] = res[6] + 1;
++  npg
++}
++// bt_merge(...): promote_L0. A page whose 32768 rows carry no L0 edge is SHARED, not
++// rewritten -- that is the whole point of the blocktab, and res[6] counts how often it pays.
++fn bt_merge(base: [i64], tx: [i64], tmp: [i64], d: [i64], rt: ref PG, nbk: i64, prp: [i64], pci: [i64], res: [i64]) -> ref PG {
++  let np = st_get(base, rt, 0);
++  let nrt = st_alloc(base, tx, 513, d[8]);
++  let _ = st_put(base, nrt, 0, np);
++  let p = 0;
++  while p < np {
++    let opg = st_ref(base, rt, 1 + p);
++    let r0 = p * 32768;
++    let r1 = if r0 + 32768 < 1000000 then r0 + 32768 else 1000000;
++    let any = prp[1 + r1] - prp[1 + r0];
++    let npg = if any == 0 then opg else pg_rebuild(base, tx, tmp, d, opg, p, nbk, prp, pci, res);
++    let _ = st_link(base, nrt, 1 + p, npg);
++    let p = p + 1;
++    0
++  };
++  let _ = st_seal(base, nrt, tmp);
++  nrt
++}
++// bt_orig / bt_xtra / bt_row(base, rt, tb, v): read row v THROUGH the blocktab --
++// root page -> page (fan-out 512) -> RowBlock -> local row, then the original region (whose
++// global slot is base0 + j, so the TB bitmap still applies to exactly the edges the python
++// oracle tombstones) and the extra region (merged-in L0 edges, never tombstoned). Split in
++// three functions to keep each one inside the register budget.
++fn bt_orig(base: [i64], bk: ref BK, tb: ref TB, r: i64) -> i64 {
++  let b0 = st_get(base, bk, 1);
++  let j = st_get(base, bk, 4 + r);
++  let e = st_get(base, bk, 5 + r);
++  let acc = 0;
++  while j < e {
++    let live = 1 - tomb(base, tb, b0 + j);
++    let acc = acc + live * (1 + st_get(base, bk, 134 + j));
++    let j = j + 1;
++    0
++  };
++  acc
++}
++fn bt_xtra(base: [i64], bk: ref BK, r: i64) -> i64 {
++  let no = st_get(base, bk, 2);
++  let j = st_get(base, bk, 69 + r);
++  let e = st_get(base, bk, 70 + r);
++  let acc = 0;
++  while j < e {
++    let acc = acc + 1 + st_get(base, bk, 134 + no + j);
++    let j = j + 1;
++    0
++  };
++  acc
++}
++fn bt_row(base: [i64], rt: ref PG, tb: ref TB, v: i64) -> i64 {
++  let b = v >> 6;
++  let pg = st_ref(base, rt, 1 + (b >> 9));
++  let bk = st_ref(base, pg, 1 + (b & 511));
++  let r = v - st_get(base, bk, 0);
++  bt_orig(base, bk, tb, r) + bt_xtra(base, bk, r)
++}
++// bt_fold(base, rt, tb, n): the neighbour fold over EVERY row, read through the blocktab.
++fn bt_fold(base: [i64], rt: ref PG, tb: ref TB, n: i64) -> i64 {
++  let acc = 0;
++  let v = 0;
++  while v < n {
++    let acc = acc + bt_row(base, rt, tb, v);
++    let v = v + 1;
++    0
++  };
++  acc
++}
++// bt_probe(base, rt, tb, n): 10^5 LCG-4711 point reads through the blocktab -- the same
++// query stream phase `n` uses, so the ns/query is directly comparable to its 820 ns row.
++fn bt_probe(base: [i64], rt: ref PG, tb: ref TB, n: i64) -> i64 {
++  let x = 4711;
++  let q = 0;
++  let acc = 0;
++  while q < 100000 {
++    let x = lcg(x);
++    let acc = acc + bt_row(base, rt, tb, (x >> 20) % n);
++    let q = q + 1;
++    0
++  };
++  acc
++}
++// phase_blocks(base, tmp, d, sel): B4 step-2 probe. Builds L1 in block form from the
++// committed flat CSR (this IS phase_b's block split), then runs ONE promote_L0 of 2^18
++// LCG-777 edges through the blocktab and reports, by selector:
++//   0 build ms | 1 promote_L0 ms | 2 block-form L1 cells | 3 blocks touched
++//   4 cells appended by the promotion | 5 build page cells | 6 pages rewritten (of 31)
++//   7 ns per point read through the blocktab | 8 fold before the promotion (must equal
++//   phase `n` on the same store) | 9 fold after it | 10 what 9 must be = 8 + sum(1+col)
++//   over the promoted edges: 9 == 10 is the merge check (no duplicate, no dropped edge)
++// The tree is left UNREACHABLE from the root on purpose: the probe measures the write cost
++// of the structure and of one promotion without touching G2, any reader, or any fold.
++fn phase_blocks(base: [i64], tmp: [i64], d: [i64], sel: i64) -> i64 {
++  let n = 1000000;
++  let nbk = n / 64;
++  let res = zeros(16);
++  let src = zeros(262144);
++  let dst = zeros(262144);
++  let cur = zeros(n);
++  let prp = zeros(n + 2);
++  let pci = zeros(262145);
++  let _ = gen_l0(src, dst, 262144, n);
++  let _ = csr_passes(src, dst, 262144, n, cur, prp, pci);
++  let tx = zeros(6);
++  let _ = st_begin(base, tx, tmp);
++  let g = st_root(base, tmp);
++  let t0 = clock_ms();
++  let rt = bt_build(base, tx, tmp, d, g, nbk, res);
++  let _ = res[0] = clock_ms() - t0;
++  let t1 = clock_ms();
++  let nrt = bt_merge(base, tx, tmp, d, rt, nbk, prp, pci, res);
++  let _ = res[1] = clock_ms() - t1;
++  let tb = st_ref(base, g, 7);
++  let _ = res[8] = bt_fold(base, rt, tb, n);
++  let _ = res[9] = bt_fold(base, nrt, tb, n);
++  let _ = res[10] = res[8] + sum_add(dst, 262144);
++  let _ = res[11] = flat_fold(base, g, n);
++  let t2 = clock_ms();
++  let _ = bt_probe(base, nrt, tb, n);
++  let _ = res[7] = (clock_ms() - t2) * 10;
++  // deliberately NOT committed: the probe measures the WRITE cost of the structure and of
++  // one promotion, and an aborted transaction leaves arena_used where it was, so the seven
++  // selector runs do not each append 200 MB to a 512 MB store. The omitted cost is one
++  // superblock write, ~0 against 99 MB of block appends.
++  res[sel]
++}
+ fn tomb(base: [i64], tb: ref TB, slot: i64) -> i64 {
+   (st_get(base, tb, 1 + (slot >> 6)) >> (slot & 63)) & 1
+ }
+@@ -881,7 +1202,7 @@
+   let nsrc = if argc >= 5 then parse(argv[4]) else 3;
+   let b0 = if argc >= 5 then parse(argv[4]) else 0;
+   let nb = if argc >= 6 then parse(argv[5]) else 10;
+-  let d = zeros(7);
++  let d = zeros(10);
+   let _ = d[0] = st_digest("RP{arr i64}");
+   let _ = d[1] = st_digest("CI{arr i64}");
+   let _ = d[2] = st_digest("G2{i64,i64,ref RP,ref CI,ref LOG,ref RP,ref CI,ref TB,i64,ref TL}");
+@@ -889,8 +1210,10 @@
+   let _ = d[4] = st_digest("TB{arr i64}");
+   let _ = d[5] = st_digest("E{arr i64}");
+   let _ = d[6] = st_digest("TL{arr i64}");
++  let _ = d[7] = st_digest("BK{arr i64}");
++  let _ = d[8] = st_digest("PG{arr ref BK}");
+   let stall = zeros(1);
+-  let lay = zeros(14);
++  let lay = zeros(20);
+   let _ = lay[0] = d[0];
+   let _ = lay[2] = d[1];
+   let _ = lay[4] = d[2];
+@@ -900,11 +1223,14 @@
+   let _ = lay[8] = d[4];
+   let _ = lay[10] = d[5];
+   let _ = lay[12] = d[6];
++  let _ = lay[14] = d[7];
++  let _ = lay[16] = d[8];
++  let _ = lay[17] = 0 - 1;
+   let t0 = clock_ms();
+-  let live = if ph == 99 then st_compact(path, pl, size, lay, 7, tmp) else 0;
++  let live = if ph == 99 then st_compact(path, pl, size, lay, 9, tmp) else 0;
+   let base = st_open(path, pl, size, tmp);
+   let t1 = clock_ms();
+-  let r = if ph == 98 then phase_build(base, tmp, d, skew) else if ph == 108 then phase_log(base, tmp, d, b0, nb, stall) else if ph == 110 then phase_nbr(base, tmp) else if ph == 100 then phase_del(base, tmp, d) else if ph == 102 then phase_bfs(base, tmp, nsrc) else if ph == 112 then phase_frontier(base, tmp, nsrc) else if ph == 97 then phase_tail(base, tmp, d, nsrc) else if ph == 103 then phase_flush(base, tmp, d) else 0;
++  let r = if ph == 98 then phase_build(base, tmp, d, skew) else if ph == 108 then phase_log(base, tmp, d, b0, nb, stall) else if ph == 110 then phase_nbr(base, tmp) else if ph == 100 then phase_del(base, tmp, d) else if ph == 102 then phase_bfs(base, tmp, nsrc) else if ph == 112 then phase_frontier(base, tmp, nsrc) else if ph == 97 then phase_tail(base, tmp, d, nsrc) else if ph == 103 then phase_flush(base, tmp, d) else if ph == 107 then phase_blocks(base, tmp, d, nsrc) else 0;
+   let t2 = clock_ms();
+   let g = st_root(base, tmp);
+   let used = st_gen(base, tmp) * 0 + base[st_pick(base, tmp) + 4] * 8;
