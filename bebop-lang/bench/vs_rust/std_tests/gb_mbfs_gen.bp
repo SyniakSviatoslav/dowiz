@@ -1,0 +1,93 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+use "selfhost/prelude/gb.bp"
+use "selfhost/std/gen_gb.bp"
+// gb_mbfs_gen.bp -- ROADMAP E1 gate driver: proves selfhost/std/gen_gb.bp's op=6 (mbfs)
+// generated 64-source bit-parallel kernel against (a) an INDEPENDENT queue BFS run 64 separate
+// times below (mbfs_queue_fold -- the SAME fold formula as sgraph2.bp's bfs_from and as the
+// op=5 template's gbfs_frontier: sum over reached vertices of level+1, unreached contribute 0)
+// over the SAME 1k-node/4000-edge random_lcg() graph gb_bfs.bp/gb_bfs_gen.bp already gate
+// against, and (b) bench/oracles/gb_mbfs_gen.py. The point of the gate is the FOLD EQUALITY:
+// a bit-parallel traversal that silently drops a source is fast and wrong, so the golden is
+// the sum of 64 SEPARATE single-source folds and nothing else.
+// The source list is duplicated here on purpose rather than shared: mbfs_srcv below and the
+// template's own gmb_src are independent transcriptions of the same LCG(31337) rule, so a
+// template that walks a different list fails the gate instead of agreeing with itself.
+// argv[2] = dir (the store and the generated .bp land there). Returns the 64-source fold.
+
+fn mbfs_srcv(i: i64, n: i64) -> i64 {
+  let x = 31337;
+  let j = 0;
+  while j <= i {
+    let x = x * 6364136223846793005 + 1442695040888963407;
+    let j = j + 1;
+    0
+  };
+  (x >> 20) % n
+}
+fn mbfs_queue_fold(base: [i64], M: i64, n: i64, s: i64, level: [i64], queue: [i64]) -> i64 {
+  let i = 0;
+  while i < n {
+    let _ = level[i] = 0 - 1;
+    let i = i + 1;
+    0
+  };
+  let _ = level[s] = 0;
+  let _ = queue[0] = s;
+  let head = 0;
+  let tail = 1;
+  let acc = 0;
+  while head < tail {
+    let v = queue[head];
+    let lv = level[v];
+    let acc = acc + lv + 1;
+    let k = gb_row_lo(base, M, v);
+    let hi = gb_row_hi(base, M, v);
+    while k < hi {
+      let w = gb_col(base, M, k);
+      let take = if level[w] < 0 then 1 else 0;
+      let _ = if take == 1 then (let _ = level[w] = lv + 1 in 0) else 0;
+      let _ = if take == 1 then (let _ = queue[tail] = w in 0) else 0;
+      let tail = tail + take;
+      let k = k + 1;
+      0
+    };
+    let head = head + 1;
+    0
+  };
+  acc
+}
+fn mbfs_sep_fold(base: [i64], M: i64, n: i64, S: i64, level: [i64], queue: [i64]) -> i64 {
+  let i = 0;
+  let acc = 0;
+  while i < S {
+    let acc = acc + mbfs_queue_fold(base, M, n, mbfs_srcv(i, n), level, queue);
+    let i = i + 1;
+    0
+  };
+  acc
+}
+fn main(argc: i64, argv: [str]) -> i64 {
+  let dir = argv[2];
+  let path = zeros(256);
+  let ppos = zeros(1);
+  let _ = wr_str(path, ppos, dir);
+  let _ = wr_str(path, ppos, "/gb_mbfs_gen.store");
+  let tmp = zeros(1024);
+  let base = st_open(path, ppos[0], 4194304, tmp);
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let dg = zeros(6);
+  let _ = gb_digests(dg);
+  let A = gb_build_random_lcg(base, tx, tmp, dg);
+  let root = st_alloc(base, tx, 1, st_digest("GbMbfsGenRoot1{ref GbMatrix}"));
+  let _ = st_link(base, root, 0, A);
+  let _ = st_seal(base, root, tmp);
+  let _ = st_commit(base, tx, root, tmp);
+  let n = 1000;
+  let level = zeros(n);
+  let queue = zeros(n);
+  let fold = mbfs_sep_fold(base, A, n, 64, level, queue);
+  let _ = gen_gb(dir, 6, 1, 0, 1, 0);
+  fold
+}

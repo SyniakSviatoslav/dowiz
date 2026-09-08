@@ -93,6 +93,7 @@ fn wr_opname(dst: [i64], pos: [i64], op: i64) -> i64 {
   else if op == 3 then wr_str(dst, pos, "dmxv")
   else if op == 4 then wr_str(dst, pos, "dvxm")
   else if op == 5 then wr_str(dst, pos, "bfs")
+  else if op == 6 then wr_str(dst, pos, "mbfs")
   else wr_str(dst, pos, "mxv")
 }
 fn op_fieldidx(op: i64) -> i64 {
@@ -401,6 +402,322 @@ fn gen_bfs_text_addr(dst: [i64], pos: [i64]) -> i64 {
   gen_bfs_main_addr(dst, pos)
 }
 
+// ---- op 6 "mbfs": ROADMAP E1 -- S-source (S <= 64) BFS in ONE i64 cell per vertex, bit s of
+// fr[v] meaning "v is in source s's frontier". The push is `nx[u] |= fr[v]` under the (OR, AND)
+// semiring, so S traversals share every gather; the fold is IDENTICAL to the sum of S separate
+// op=5 single-source folds by construction (every reached (vertex, source) pair contributes
+// level+1). Same store GbMatrix, same push/pull shape and the SAME two main variants as op=5
+// (fmt == 2 selects _addr, anything else _path); _path takes the source COUNT in argv[3] where
+// op=5 takes a source vertex, because the source list is fixed (gmb_src: LCG 31337) so that the
+// two kernels' folds are comparable term by term.
+// MEASURED 2026-09-08 on 351c288 (so E2's branchless gbfs_push is underneath the op=5 baseline),
+// n = 10^6 / 10^7 CSR slots, SHIPPED generated kernels, process-included wall, core 4 inside
+// tools/slot.sh, 3 interleaved reps, fold 462119596 IDENTICAL in every arm: op=6 S=64 is
+// 2730/2776/2898 ms against 64 separate op=5 runs at 17318/17265/17316 ms (6.24x) and against
+// ONE op=5 run at 348/322/308 ms (8.6x). E1's gate is `64-source wall <= 4x a single-source BFS,
+// i.e. >= 16x the per-source cost of running them separately` and it is NOT met in either form.
+// The bit-parallel MECHANISM is not what fails -- it over-delivers. With the pull direction
+// disabled on both sides (alpha = 0) this same kernel runs 763 ms at S=1 and 2583 ms at S=64:
+// 64 traversals for 3.39x the time, an 18.9x sharing win, ABOVE the gate's 16x. What the gate
+// actually measures is that the BASELINE gets something a 64-source traversal cannot -- DIRECTION
+// OPTIMISATION. A single-source pull stops at the FIRST frontier neighbour; a 64-source pull must
+// keep reading until every still-missing source's bit turns up, so it degenerates to a full row
+// scan. That is worth 3.36x to op=5 (227 ms in-process against this kernel's 763 ms push-only
+// S=1), and 18.9 / 3.36 = 5.6x is the measured 4.9x (in-process) to 6.2x (wall).
+// alpha = 2 below, not op=5's 14: measured here, alpha 2 beats alpha 14 at EVERY S (S=1 228
+// against 918 ms, S=4 615 against 1778, S=16 2310 against 3662, S=64 2877 against 4117) and beats
+// alpha 0 by 3.3x at S=1 (228 against 763) while giving up 11 % to it at S=64 (2877 against
+// 2583) -- the pull direction is worth almost nothing once S is large, exactly as the mechanism
+// predicts. See the VERDICT line in docs/exp.journal.
+fn gen_mbfs_p1(dst: [i64], pos: [i64]) -> i64 {
+  wr_str(dst, pos, "
+// ---- E1: S-source (S <= 64) bit-parallel BFS, one i64 frontier cell per vertex ----
+// gmb_pc: SWAR popcount (no popcount builtin in this language; `>>` is LOGICAL, `>>>` is the
+// arithmetic form, so the masked-shift identities below are the plain textbook ones).
+fn gmb_pc(x: i64) -> i64 {
+  let a = x - ((x >> 1) & 6148914691236517205);
+  let b = (a & 3689348814741910323) + ((a >> 2) & 3689348814741910323);
+  let c = (b + (b >> 4)) & 1085102592571150095;
+  let d = c * 72340172838076673;
+  (d >> 56) & 255
+}
+// gmb_src(i, n): source vertex i of the fixed LCG(31337) list -- the SAME list the separate
+// single-source runs use, so the two folds are comparable term by term.
+fn gmb_src(i: i64, n: i64) -> i64 {
+  let x = 31337;
+  let j = 0;
+  while j <= i {
+    let x = x * 6364136223846793005 + 1442695040888963407;
+    let j = j + 1;
+    0
+  };
+  (x >> 20) % n
+}
+// gmb_push: for every vertex v carrying frontier bits, OR those bits into every neighbour's
+// next-frontier cell -- `nx[u] |= fr[v]` IS the (OR, AND) semiring push, S traversals sharing
+// one gather. RP/CI are the CSR arrays hoisted OUT of the loop (gb_row_lo/gb_col would redo
+// `st_ref(base, M, 4)` per slot, a second dependent load); `anx` is set UNCONDITIONALLY --
+// m is never 0 for a vertex in `act`, so nx[u] is always non-zero afterwards and the
+// data-dependent branch a conditional set would need is pure loss.
+")
+}
+fn gen_mbfs_p2(dst: [i64], pos: [i64]) -> i64 {
+  wr_str(dst, pos, "fn gmb_push(base: [i64], RP: ref GbArr, CI: ref GbArr, act: [i64], fr: [i64], nx: [i64], anx: [i64], nw: i64) -> i64 {
+  let w = 0;
+  while w < nw {
+    while act[w] != 0 {
+      let x = act[w];
+      let low = x & (0 - x);
+      let _ = act[w] = x - low;
+      let v = w * 64 + 63 - clz(low);
+      let m = fr[v];
+      let _ = fr[v] = 0;
+      let k = arr_get(base, RP, v);
+      let hi = arr_get(base, RP, v + 1);
+      while k < hi {
+        let u = arr_get(base, CI, k);
+        let _ = nx[u] = nx[u] | m;
+        let _ = anx[u >> 6] = anx[u >> 6] | (1 << (u & 63));
+        let k = k + 1;
+        0
+      };
+      0
+    };
+    let w = w + 1;
+    0
+  };
+  0
+}
+// gmb_pull_row: the bottom-up scan of u's row -- OR together the frontier bits of u's
+// neighbours, stopping early only once EVERY still-missing source has been found. That early
+// exit is the whole value of Beamer's pull direction and it WEAKENS as S grows: a single-source
+// pull stops at the first frontier neighbour, a 64-source pull usually reads the whole row.
+fn gmb_pull_row(base: [i64], RP: ref GbArr, CI: ref GbArr, fr: [i64], u: i64, need: i64) -> i64 {
+  let k = arr_get(base, RP, u);
+  let hi = arr_get(base, RP, u + 1);
+  let got = 0;
+  while k < hi {
+    let v = arr_get(base, CI, k);
+    let got = got | (fr[v] & need);
+    let k = if got == need then hi else k + 1;
+    0
+  };
+  got
+}
+fn gmb_pull(base: [i64], RP: ref GbArr, CI: ref GbArr, fr: [i64], vis: [i64], nx: [i64], anx: [i64], n: i64, full: i64) -> i64 {
+  let u = 0;
+  while u < n {
+    let need = full & (0 - 1 - vis[u]);
+    let got = if need != 0 then gmb_pull_row(base, RP, CI, fr, u, need) else 0;
+    let _ = if got != 0 then (let _ = nx[u] = got in 0) else 0;
+    let _ = if got != 0 then (let _ = anx[u >> 6] = anx[u >> 6] | (1 << (u & 63)) in 0) else 0;
+    let u = u + 1;
+    0
+  };
+  0
+}
+")
+}
+fn gen_mbfs_p3(dst: [i64], pos: [i64]) -> i64 {
+  wr_str(dst, pos, "// gmb_drain: zero the frontier cells the pull direction read but did not consume (the push
+// direction clears fr[v] as it drains act; the pull direction cannot).
+fn gmb_drain(act: [i64], fr: [i64], nw: i64) -> i64 {
+  let w = 0;
+  while w < nw {
+    while act[w] != 0 {
+      let x = act[w];
+      let low = x & (0 - x);
+      let _ = act[w] = x - low;
+      let _ = fr[w * 64 + 63 - clz(low)] = 0;
+      0
+    };
+    let w = w + 1;
+    0
+  };
+  0
+}
+// gmb_cell: settle one candidate cell. cnt[0] += newly discovered (vertex, source) PAIRS (the
+// fold's level term AND the emptiness test in one accumulator), cnt[1] += new frontier
+// VERTICES, cnt[2] += vertices that just became reached-from-every-source (the pull switch's
+// own denominator).
+fn gmb_cell(fr: [i64], vis: [i64], nx: [i64], act: [i64], u: i64, full: i64, cnt: [i64]) -> i64 {
+  let ov = vis[u];
+  let d = nx[u] & (0 - 1 - ov);
+  let _ = nx[u] = 0;
+  let _ = fr[u] = d;
+  let nv = ov | d;
+  let _ = vis[u] = nv;
+  let hit = if d != 0 then 1 else 0;
+  let fl = if nv == full then 1 else 0;
+  let _ = cnt[0] = cnt[0] + gmb_pc(d);
+  let _ = cnt[1] = cnt[1] + hit;
+  let _ = cnt[2] = cnt[2] + hit * fl;
+  let _ = act[u >> 6] = act[u >> 6] | (hit << (u & 63));
+  0
+}
+fn gmb_settle(fr: [i64], vis: [i64], nx: [i64], anx: [i64], act: [i64], nw: i64, full: i64, cnt: [i64]) -> i64 {
+  let w = 0;
+  while w < nw {
+    let av = anx[w];
+    let _ = anx[w] = 0;
+    while av != 0 {
+      let low = av & (0 - av);
+      let av = av - low;
+      let _ = gmb_cell(fr, vis, nx, act, w * 64 + 63 - clz(low), full, cnt);
+      0
+    };
+    let w = w + 1;
+    0
+  };
+  0
+}
+")
+}
+fn gen_mbfs_p4(dst: [i64], pos: [i64]) -> i64 {
+  wr_str(dst, pos, "fn gmb_step(base: [i64], RP: ref GbArr, CI: ref GbArr, fr: [i64], vis: [i64], nx: [i64], anx: [i64], act: [i64], n: i64, nw: i64, full: i64, pull: i64, cnt: [i64]) -> i64 {
+  let _ = if pull == 1 then gmb_pull(base, RP, CI, fr, vis, nx, anx, n, full) else gmb_push(base, RP, CI, act, fr, nx, anx, nw);
+  let _ = if pull == 1 then gmb_drain(act, fr, nw) else 0;
+  gmb_settle(fr, vis, nx, anx, act, nw, full, cnt)
+}
+fn gmb_clear(fr: [i64], vis: [i64], nx: [i64], anx: [i64], act: [i64], n: i64, nw: i64) -> i64 {
+  let i = 0;
+  while i < n {
+    let _ = fr[i] = 0;
+    let _ = vis[i] = 0;
+    let _ = nx[i] = 0;
+    let i = i + 1;
+    0
+  };
+  let w = 0;
+  while w < nw {
+    let _ = anx[w] = 0;
+    let _ = act[w] = 0;
+    let w = w + 1;
+    0
+  };
+  0
+}
+fn gmb_seed(fr: [i64], vis: [i64], act: [i64], n: i64, S: i64, off: i64) -> i64 {
+  let i = 0;
+  while i < S {
+    let v = gmb_src(off + i, n);
+    let b = 1 << i;
+    let _ = fr[v] = fr[v] | b;
+    let _ = vis[v] = vis[v] | b;
+    let _ = act[v >> 6] = act[v >> 6] | (1 << (v & 63));
+    let i = i + 1;
+    0
+  };
+  0
+}
+// gmb_run: S-source bit-parallel BFS over the source-list window off..off+S-1.
+// want 0 -> the fold, IDENTICAL by construction to the sum of the S separate single-source
+//           gbfs_frontier folds: every reached (vertex, source) pair contributes level+1, and
+//           each source contributes 1 for itself.
+// want 1 -> the number of lockstep LEVELS the loop ran (level 0 = the sources).
+")
+}
+fn gen_mbfs_p5(dst: [i64], pos: [i64]) -> i64 {
+  wr_str(dst, pos, "// The frontier is bits, so `is the frontier empty` is cnt[0] -- the popcount gmb_cell already
+// pays for the fold, one SWAR popcount per SETTLED CELL (not per vertex, not per edge), plus
+// the settle pass's own nw-word sweep of `anx`. Neither is a separate emptiness test.
+fn gmb_run(base: [i64], M: i64, n: i64, S: i64, off: i64, want: i64, alpha: i64, fr: [i64], vis: [i64], nx: [i64], anx: [i64], act: [i64], cnt: [i64]) -> i64 {
+  let nw = (n + 63) >> 6;
+  let full = (0 - 1) >> (64 - S);
+  let RP = st_ref(base, M, 4);
+  let CI = st_ref(base, M, 5);
+  let _ = gmb_clear(fr, vis, nx, anx, act, n, nw);
+  let _ = gmb_seed(fr, vis, act, n, S, off);
+  let acc = S;
+  let lv = 1;
+  let nfv = S;
+  let nfull = 0;
+  let go = 1;
+  while go == 1 {
+    let _ = cnt[0] = 0;
+    let _ = cnt[1] = 0;
+    let _ = cnt[2] = 0;
+    let pull = if nfv * alpha > n - nfull then 1 else 0;
+    let _ = gmb_step(base, RP, CI, fr, vis, nx, anx, act, n, nw, full, pull, cnt);
+    let acc = acc + cnt[0] * (lv + 1);
+    let nfv = cnt[1];
+    let nfull = nfull + cnt[2];
+    let go = if cnt[0] > 0 then 1 else 0;
+    let lv = lv + go;
+    0
+  };
+  if want == 1 then lv else acc
+}
+")
+}
+fn gen_mbfs_core(dst: [i64], pos: [i64]) -> i64 {
+  let _ = gen_mbfs_p1(dst, pos);
+  let _ = gen_mbfs_p2(dst, pos);
+  let _ = gen_mbfs_p3(dst, pos);
+  let _ = gen_mbfs_p4(dst, pos);
+  gen_mbfs_p5(dst, pos)
+}
+
+fn gen_mbfs_wrap(dst: [i64], pos: [i64]) -> i64 {
+  wr_str(dst, pos, "
+// gmbfs_frontier(base, M, n, S): the entry point -- allocate the five S-source buffers and run
+// the (OR, AND) traversal. alpha = 2, not op=5's 14: pull's early exit needs every still-missing
+// source's bit, so its value decays with S and the switch has to be later (measured, E1).
+fn gmbfs_frontier(base: [i64], M: i64, n: i64, S: i64) -> i64 {
+  let nw = (n + 63) >> 6;
+  let fr = zeros(n);
+  let vis = zeros(n);
+  let nx = zeros(n);
+  let anx = zeros(nw);
+  let act = zeros(nw);
+  let cnt = zeros(4);
+  gmb_run(base, M, n, S, 0, 0, 2, fr, vis, nx, anx, act, cnt)
+}
+")
+}
+fn gen_mbfs_main_path(dst: [i64], pos: [i64]) -> i64 {
+  wr_str(dst, pos, "
+fn main(argc: i64, argv: [str]) -> i64 {
+  let path = zeros(256);
+  let pl = st_str(path, argv[2]);
+  let tmp = zeros(1024);
+  let base = st_map_ro(path, pl, 536870912);
+  let root = st_root(base, tmp);
+  let M = st_ref(base, root, 0);
+  let n = st_get(base, M, 0);
+  let S = gb_atoi(argv[3]);
+  gmbfs_frontier(base, M, n, S)
+}
+")
+}
+fn gen_mbfs_main_addr(dst: [i64], pos: [i64]) -> i64 {
+  wr_str(dst, pos, "
+fn main(argc: i64, argv: [str]) -> i64 {
+  let base = st_cells(gb_atoi(argv[2]));
+  let M = gb_atoi(argv[3]);
+  let n = st_get(base, M, 0);
+  let S = gb_atoi(argv[4]);
+  gmbfs_frontier(base, M, n, S)
+}
+")
+}
+fn gen_mbfs_text_path(dst: [i64], pos: [i64]) -> i64 {
+  let _ = wr_use_line(dst, pos, "selfhost/prelude/sha256.bp");
+  let _ = wr_use_line(dst, pos, "selfhost/prelude/store.bp");
+  let _ = wr_use_line(dst, pos, "selfhost/prelude/gb.bp");
+  let _ = gen_mbfs_core(dst, pos);
+  let _ = gen_mbfs_wrap(dst, pos);
+  gen_mbfs_main_path(dst, pos)
+}
+fn gen_mbfs_text_addr(dst: [i64], pos: [i64]) -> i64 {
+  let _ = wr_use_line(dst, pos, "selfhost/prelude/sha256.bp");
+  let _ = wr_use_line(dst, pos, "selfhost/prelude/store.bp");
+  let _ = wr_use_line(dst, pos, "selfhost/prelude/gb.bp");
+  let _ = gen_mbfs_core(dst, pos);
+  let _ = gen_mbfs_wrap(dst, pos);
+  gen_mbfs_main_addr(dst, pos)
+}
+
 // gen_kernel_text: the whole compilable .bp program (3 `use` lines + gen_kernel_body).
 // fieldidx: which root ref carries the matrix to read (0 = A, mxv ; 1 = AT, vxm -- gen_gb.bp's
 // own store layout, see gb_gen.bp).
@@ -429,24 +746,26 @@ fn gen_path(dir: str, op: i64, sr: i64, mask: i64, fmt: i64, tr: i64, path: [i64
   let _ = wr_str(path, pos, ".bp");
   pos[0]
 }
-// gen_write: op 1-4 emit the row-reduce mxv/vxm body (gen_kernel_text); op 5 (bfs) emits the
-// whole generated Beamer-BFS program instead -- fmt==2 selects the _addr main (sgraph2.bp's
-// premapped-address dispatcher), any other fmt the _path main (direct shell-compiled dispatch,
-// std_golden.sh / gb_bfs_gen's gate). Flat else-if chain (no if-expression nested inside
-// another branch) -- WORKER-CARD's nested-if-as-call-argument trap.
+// gen_write: op 1-4 emit the row-reduce mxv/vxm body (gen_kernel_text); op 5 (bfs) and op 6
+// (mbfs, ROADMAP E1) emit the whole generated BFS program instead -- fmt==2 selects the _addr
+// main (sgraph2.bp's premapped-address dispatcher), any other fmt the _path main (direct
+// shell-compiled dispatch, std_golden.sh / the gb_bfs_gen and gb_mbfs_gen gates). Flat else-if
+// chain (no if-expression nested inside another branch) -- WORKER-CARD's
+// nested-if-as-call-argument trap.
 fn gen_write(path: [i64], plen: i64, sr: i64, op: i64, fmt: i64) -> i64 {
-  let text = zeros(8192);
+  let text = zeros(16384);
   let tpos = zeros(1);
   let bfsaddr = if op == 5 then fmt else 0;
-  let _ = if bfsaddr == 2 then gen_bfs_text_addr(text, tpos) else if op == 5 then gen_bfs_text_path(text, tpos) else gen_kernel_text(text, tpos, sr, op_fieldidx(op));
+  let mbaddr = if op == 6 then fmt else 0;
+  let _ = if bfsaddr == 2 then gen_bfs_text_addr(text, tpos) else if op == 5 then gen_bfs_text_path(text, tpos) else if mbaddr == 2 then gen_mbfs_text_addr(text, tpos) else if op == 6 then gen_mbfs_text_path(text, tpos) else gen_kernel_text(text, tpos, sr, op_fieldidx(op));
   let fd = sys_open(path, plen, 578);
   let _ = sys_export(fd, text, tpos[0]);
   sys_close(fd)
 }
-// gen_gb(dir, op, sr, mask, fmt, tr): op 1 mxv / 2 vxm / 3 dmxv / 4 dvxm / 5 bfs, sr 1..4 (sr
-// ignored by op 5) -- writes the kernel .bp file under dir and returns 0. Digest naming (step
-// 4's st_digest-keyed Kernel objects) is out of scope here; the filename itself IS the digest
-// for step 2's purposes.
+// gen_gb(dir, op, sr, mask, fmt, tr): op 1 mxv / 2 vxm / 3 dmxv / 4 dvxm / 5 bfs / 6 mbfs,
+// sr 1..4 (sr ignored by ops 5 and 6) -- writes the kernel .bp file under dir and returns 0.
+// Digest naming (step 4's st_digest-keyed Kernel objects) is out of scope here; the filename
+// itself IS the digest for step 2's purposes.
 fn gen_gb(dir: str, op: i64, sr: i64, mask: i64, fmt: i64, tr: i64) -> i64 {
   let path = zeros(512);
   let plen = gen_path(dir, op, sr, mask, fmt, tr, path);

@@ -896,6 +896,21 @@ rg=$(run 30 "$GBT/gb_bfs_1_0_1_0.bin" "$GBT/gb_bfs_gen.store" 0 | tail -1)
 [ "$r" = "$rg" ] || r="MISMATCH($r/$rg)"
 gate gb_bfs_gen 997 "$r"
 
+# ---- gb_mbfs_gen (ROADMAP E1): gen_gb.bp's op=6 (mbfs) generated 64-SOURCE bit-parallel BFS
+#      kernel -- one i64 frontier cell per vertex, bit s = "v is in source s's frontier", push
+#      = `nx[u] |= fr[v]` under the (OR, AND) semiring -- against 64 SEPARATE single-source
+#      queue-BFS folds, over the SAME 1k-node/4000-edge random_lcg() graph gb_bfs_gen already
+#      uses. The golden IS the fold equality: a bit-parallel traversal that silently drops a
+#      source is fast and wrong, so the driver bench/vs_rust/std_tests/gb_mbfs_gen.bp sums 64
+#      independent queue BFS runs (mbfs_queue_fold, the sgraph2.bp bfs_from formula) and this
+#      block checks driver == generated kernel (argv[2] = store path, argv[3] = source COUNT)
+#      before accepting 65342 (== bench/oracles/gb_mbfs_gen.py). ----
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_mbfs_gen.bp "$GBT/gb_mbfs_gen_test.bin" >/dev/null 2>&1 && run 30 "$GBT/gb_mbfs_gen_test.bin" "$GBT" | tail -1)
+./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$GBT/gb_mbfs_1_0_1_0.bp" "$GBT/gb_mbfs_1_0_1_0.bin" >/dev/null 2>&1 || r="COMPILEFAIL($r)"
+rg=$(run 30 "$GBT/gb_mbfs_1_0_1_0.bin" "$GBT/gb_mbfs_gen.store" 64 | tail -1)
+[ "$r" = "$rg" ] || r="MISMATCH($r/$rg)"
+gate gb_mbfs_gen 65342 "$r"
+
 # ---- G9b (B3 step 3, docs/blueprints/B3-graphblas-kernels-prejit.md section 5 step 3/section
 #      6): mxm/eWiseAdd/eWiseMult/select/apply/reduce tier-0 (selfhost/prelude/gb.bp) exercised
 #      by four LAGraph-style folds, oracle bench/oracles/gb_lagraph.py. gb_tc: triangle count via

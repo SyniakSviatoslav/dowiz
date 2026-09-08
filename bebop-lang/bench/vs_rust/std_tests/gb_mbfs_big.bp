@@ -1,0 +1,97 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+use "selfhost/prelude/gb.bp"
+// gb_mbfs_big.bp -- ROADMAP E1's TIMING graph builder (bench only, no golden gate). Writes
+// <dir>/gb_mbfs.store: root {ref GbMatrix} field 0 = A, a symmetric CSR over n vertices built
+// from e undirected LCG(4242) pairs, BOTH directions, self-loops and duplicate pairs KEPT
+// (selfhost/std/sgraph2.bp's own stage-1 convention -- the dedupe bitmap gb_build_pairs uses is
+// n*n bits and cannot exist at n = 10^6). Two passes over the SAME regenerated LCG stream
+// (count degrees, then scatter) instead of two 2e-cell src/dst arrays, so the builder's own
+// footprint is one n-cell array rather than 160 MB at n = 10^6.
+// argv[2] = store path, argv[3] = n, argv[4] = e (undirected pairs; 2e CSR slots). Returns
+// build ms.
+fn mb_lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
+// mb_count: degree of every endpoint over the e LCG pairs (both directions).
+fn mb_count(deg: [i64], n: i64, e: i64) -> i64 {
+  let x = 4242;
+  let i = 0;
+  while i < e {
+    let x = mb_lcg(x);
+    let a = (x >> 20) % n;
+    let x = mb_lcg(x);
+    let b = (x >> 20) % n;
+    let _ = deg[a] = deg[a] + 1;
+    let _ = deg[b] = deg[b] + 1;
+    let i = i + 1;
+    0
+  };
+  0
+}
+// mb_prefix: exclusive prefix sum of deg IN PLACE (deg becomes the fill cursor `cur`), and the
+// inclusive sums into rp's values 0..n. Returns 2e (the CSR slot count).
+fn mb_prefix(base: [i64], rp: ref GbArr, deg: [i64], n: i64) -> i64 {
+  let _ = arr_put(base, rp, 0, 0);
+  let acc = 0;
+  let v = 0;
+  while v < n {
+    let d = deg[v];
+    let _ = deg[v] = acc;
+    let acc = acc + d;
+    let _ = arr_put(base, rp, v + 1, acc);
+    let v = v + 1;
+    0
+  };
+  acc
+}
+// mb_fill: the scatter pass -- the SAME LCG stream regenerated, each pair written both ways.
+fn mb_fill(base: [i64], ci: ref GbArr, cur: [i64], n: i64, e: i64) -> i64 {
+  let x = 4242;
+  let i = 0;
+  while i < e {
+    let x = mb_lcg(x);
+    let a = (x >> 20) % n;
+    let x = mb_lcg(x);
+    let b = (x >> 20) % n;
+    let _ = arr_put(base, ci, cur[a], b);
+    let _ = cur[a] = cur[a] + 1;
+    let _ = arr_put(base, ci, cur[b], a);
+    let _ = cur[b] = cur[b] + 1;
+    let i = i + 1;
+    0
+  };
+  0
+}
+fn mb_build(base: [i64], tmp: [i64], n: i64, e: i64) -> i64 {
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let dg = zeros(6);
+  let _ = gb_digests(dg);
+  let deg = zeros(n);
+  let _ = mb_count(deg, n, e);
+  let rp = arr_alloc(base, tx, dg[0], n + 1);
+  let m = mb_prefix(base, rp, deg, n);
+  let ci = arr_alloc(base, tx, dg[1], m);
+  let _ = mb_fill(base, ci, deg, n, e);
+  let vv = arr_alloc(base, tx, dg[2], 1);
+  let _ = arr_put(base, vv, 0, 0);
+  let _ = st_seal(base, rp, tmp);
+  let _ = st_seal(base, ci, tmp);
+  let _ = st_seal(base, vv, tmp);
+  let A = gb_matrix_seal(base, tx, tmp, dg[3], n, n, m, 1, rp, ci, vv);
+  let root = st_alloc(base, tx, 1, st_digest("GbMbfsRoot1{ref GbMatrix}"));
+  let _ = st_link(base, root, 0, A);
+  let _ = st_seal(base, root, tmp);
+  st_commit(base, tx, root, tmp)
+}
+fn main(argc: i64, argv: [str]) -> i64 {
+  let path = zeros(256);
+  let pl = st_str(path, argv[2]);
+  let tmp = zeros(1024);
+  let n = gb_atoi(argv[3]);
+  let e = gb_atoi(argv[4]);
+  let size = (n + 2 * e + 100000) * 8;
+  let base = st_open(path, pl, size, tmp);
+  let t0 = clock_ms();
+  let _ = mb_build(base, tmp, n, e);
+  clock_ms() - t0
+}
