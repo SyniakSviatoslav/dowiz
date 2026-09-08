@@ -129,9 +129,11 @@ None is on the A/B critical path, and C6 must not be started at all until its tr
 | C6 | **CONDITIONAL -- do not start.** A `persist` builtin (`dc cvap` + `dsb`, and `dcpop` is present on all 8 cores here) replacing `sys_msync` at two call sites, IF a DAX-mapped device ever exists. This is all that survives "abolish the WAL for PMEM": there is no WAL, and the 44.7 ms recovery is `st_reopen_verify` scanning the whole arena, whose fix is B1's follow-up card and needs no hardware. "Recovery = 0" is false even on real PMEM (ADR does not flush CPU caches, so a torn multi-word commit is as possible as a torn page; PMDK replays logs at open), no `/dev/pmem*` or NFIT exists here, Optane was cancelled July 2022, and the target nodes are phones | docs/blueprints/C6-pmem-persist-builtin.md | none until the trigger fires: a target node with a DAX device AND a harness that can cut power to it | B1 follow-up card first |
 
 **REFUTED by the same review, with the evidence, so they are not re-proposed:** racing three JIT'd
-plans (cardinalities are already exact from `rp[k+1]-rp[k]`, one A78 already saturates DRAM at
-~12 GB/s so three memory-bound kernels each run ~3x slower, each fork costs 1.04 ms against a
-32-process cap -- and Rdb/VMS 1993, Vectorwise and SkinnerDB all race cheap variants of ONE
+plans (cardinalities are already exact from `rp[k+1]-rp[k]`, and each fork costs 1.04 ms against a
+32-process cap -- **the bandwidth half of this refutation is WITHDRAWN 2026-09-08**: it claimed one A78 saturates
+DRAM so three racing kernels would each run 3x slower, and a direct measurement shows three A78s
+scale linearly with zero contention, 28/28/28 ms against a solo 28 ms. The refutation stands on
+the fork cost, the process cap and the exact cardinalities; it no longer stands on bandwidth -- and Rdb/VMS 1993, Vectorwise and SkinnerDB all race cheap variants of ONE
 operator, never whole plans); and abolishing a WAL that does not exist (see C6). Also refuted
 inside C2: "raw-byte components" (A7's `(off,len)` handle already gives bytes a home) and "no
 records" as a doctrine.
@@ -268,7 +270,7 @@ pinned core 4, R=11 medians; bench/vs_rust/REPORT-honest.md has the p95 column a
 | platform | measured |
 |---|---|
 | usable A78 cores in this shell | 3 (cpus 4-6; cpu 7 refuses taskset) |
-| DRAM bandwidth, one A78 / three | ~12 GB/s / ~12 GB/s |
+| DRAM bandwidth, one A78 / three A78 / aggregate ceiling | **2.9 / 8.6 / ~12 GB/s** -- CORRECTED 2026-09-08. The old row read `~12 GB/s / ~12 GB/s` and was used to argue that memory bandwidth is already saturated by a single core. It is not. Measured that day with one sequential i64 sum over 80 MB, pinned, run solo and then concurrently: solo 28 ms; three instances on cores 4,5,6 **28 / 28 / 28 ms -- identical to solo, zero contention**, i.e. exactly 3x aggregate; seven instances give 28/29/43 on the A78s and 82/83/84/117 on the A55s. So ~12 GB/s is the AGGREGATE ceiling across all seven cores, and one core reaches under a quarter of it. `docs/LANG-DB-DESIGN.md:121` had it right all along -- "4 cores 1.0-1.4x on streams" and "bebop's scan is codegen-bound" -- and this row had compressed that into a claim the source never made |
 | process RSS K1-K4, bebop / Rust | 16-17 MB / 16-17 MB |
 | self-compile pinned (2026-09-05 re-measured, core 4: T109 binary / T126 binary) | 294.5 s, 94 MB / 292.9 s, 111 MB (the 108.7 s row of 2026-09-04 is not reproducible today; same box, same core) |
 | self-compile after the 2026-09-06 speed-ups (third pass removed, slen, str_len hoist a27b594), cold / warm .becache hit | 1.5-1.7 s / 0.07 s |
