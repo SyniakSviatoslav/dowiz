@@ -110,6 +110,12 @@ for f in "$DIR"/*.bp; do
     # under window pressure. Exited 89 on 42ce19e5, runs 17 (bpref) once vs_span_to_slots also
     # demotes kind-3 SYM entries. Drop either ingredient and it compiled clean before the fix.
     c95_symspan) EXPECT=17;;
+    # A2b (2026-09-08): the regression guard for lifting A2's nested-`while` hoist ban --
+    # an outer loop that hoists 1000003 at its own depth 0 AND nests a `while` that uses the
+    # same literal. The nested loop releases the enclosing pairs at its entry (so its own
+    # cs-mask-must-be-0 assertion still holds) and the outer pair is re-materialised after the
+    # inner loop's backward branch, so `m` reads correctly on BOTH sides of the nested loop.
+    c73_hoistnest) EXPECT=24000282;;
     *) EXPECT="";;
   esac
   [ "$FREEZE" = 1 ] && [ "$IVAL" = "$EXPECT" ] && cp "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin" "$FROZEN/${b}.bin"

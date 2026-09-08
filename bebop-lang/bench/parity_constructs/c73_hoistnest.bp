@@ -1,0 +1,23 @@
+// A2b (2026-09-08): an outer loop that hoists a >=65536 literal at depth 0 AND nests a
+// `while`. Before A2b, hoist_scan declined the whole body (the outer cs temp stayed live
+// across the inner loop's cs-mask-must-be-0 entry assertion). Now the nested loop releases
+// the enclosing pairs at its entry and re-takes them after its own code, so `m` is hoisted
+// once per outer iteration and read on BOTH sides of the inner loop.
+fn main() -> i64 {
+  let acc = 0;
+  let rep = 3;
+  while rep > 0 {
+    let m = 1000003;
+    let acc = acc + m;
+    let i = 4;
+    while i > 0 {
+      let acc = acc + i * 7 + 1000003;
+      let i = i - 1;
+      0
+    };
+    let acc = acc + m * 2 + 1000003;
+    let rep = rep - 1;
+    0
+  };
+  acc
+}

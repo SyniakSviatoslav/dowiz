@@ -1,5 +1,5 @@
 # name words bcond cbz tbz b bl ret  (tools/census.py; gate = bcond/cbz/tbz never increase)
-bebop 40511 1145 126 0 869 1707 275
+bebop 38800 1150 127 0 872 1710 275
 c01_lit 9 0 0 0 0 0 1
 c02_arith 7 0 0 0 0 0 1
 c03_precedence 7 0 0 0 0 0 1
@@ -18,7 +18,7 @@ c15_bitwise 7 0 0 0 0 0 1
 c16_compound 23 0 0 0 0 0 1
 c17_neg 10 0 0 0 0 0 1
 c18_bigconst 10 0 0 0 0 0 1
-c19_multi 53 1 0 0 1 2 3
+c19_multi 50 1 0 0 1 2 3
 c20_deep 45 1 0 0 0 1 2
 c21_param13 65 0 0 0 0 1 2
 c22_matchbind 10 0 0 0 0 0 1
@@ -37,10 +37,10 @@ c36_break 70 5 0 0 5 0 1
 c40_struct 115 4 0 0 1 1 2
 c41_clz 42 0 0 0 0 0 1
 c42_crc32 115 6 5 0 5 0 1
-c43_arena_persist 131 6 3 0 0 1 2
+c43_arena_persist 126 6 3 0 0 1 2
 c44_use24 297 0 0 0 0 3 25
 c45_crc32x 105 1 3 0 3 0 1
-c46_andor 89 0 0 0 0 0 1
+c46_andor 81 0 0 0 0 0 1
 c47_usenest 44 0 0 0 0 4 3
 c50_cas 28 0 0 0 0 2 2
 c53_param9 64 0 0 0 0 1 2
@@ -52,11 +52,12 @@ c59_evict 37 0 0 0 0 2 3
 c60_nestctor 31 2 0 0 0 0 1
 c61_arrcall 53 1 0 0 0 2 3
 c66_fncap 2582 0 0 0 0 5 258
-c70_csel 32 1 0 0 1 0 1
+c70_csel 30 1 0 0 1 0 1
 c71_csel_impure 49 2 0 0 2 1 2
-c72_hoist 40 1 0 0 1 0 1
+c72_hoist 38 1 0 0 1 0 1
+c73_hoistnest 39 2 0 0 2 0 1
 c78_scan 720 218 2 0 50 0 1
-c84_run 262 12 5 0 3 5 5
+c84_run 261 12 5 0 3 5 5
 c86_selfassign 13 0 0 0 0 0 1
 c87_ifselfassign 31 1 0 0 1 0 1
 c88_arrflags 47 2 0 0 0 0 1
@@ -74,8 +75,8 @@ k2h 32 1 0 0 1 3 2
 k3 27 2 0 0 2 0 1
 k3h 29 2 0 0 2 0 1
 k4 21 1 0 0 1 0 1
-k5 278 7 1 0 5 2 2
+k5 268 7 1 0 5 2 2
 k6 140 7 2 0 3 1 2
-k7 317 11 2 0 7 4 3
-k7neon 320 10 4 0 6 3 3
-k8h 40 1 0 0 1 0 1
+k7 309 11 2 0 7 4 3
+k7neon 312 10 4 0 6 3 3
+k8h 38 1 0 0 1 0 1

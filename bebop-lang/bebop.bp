@@ -2331,7 +2331,15 @@ fn vs_evict(insns: [i64], n: [i64], fntab: [i64], stab: [i64], r: i64) -> i64 {
 // the auto-materialise-on-push guard below.
 fn vs_settle_flags(insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
   let w = fntab[4547];
-  let is_flags = if w > 0 then (if vs_entry_kind(fntab, w - 1) == 7 then 1 else 0) else 0;
+  // ROADMAP A2b (2026-09-08): the suspension the comment above describes was
+  // never actually READ -- fntab[4450] was set and cleared by emit_cond_csel
+  // but no code consulted it, so every pure `if` still settled its condition
+  // with a `cset` at the first arm push and emit_cond_csel then had to REBUILD
+  // the flags with `cmp x<r>,#0` before the `csel`. Two dead words and a
+  // 4-deep serial dependency (cmp -> cset -> cmp -> csel) on every csel,
+  // including K8H's hot loop. Honouring the flag makes the FLAGS tag survive
+  // as the csel's own cond field: cmp -> csel.
+  let is_flags = if fntab[4450] == 1 then 0 else (if w > 0 then (if vs_entry_kind(fntab, w - 1) == 7 then 1 else 0) else 0);
   let _ = if is_flags == 1 then vs_mat(insns, n, fntab, stab, w - 1, vs_alloc(insns, n, fntab, stab)) else 0;
   0
 }
@@ -4300,18 +4308,15 @@ fn hoist_record(vals: [i64], nvals: [i64], v: i64) -> i64 {
 // (read_num_val/read_ident each advance `pos` themselves, so no token is
 // re-scanned char by char from this loop too).
 //
-// A NESTED `while` ANYWHERE in [b0, b1) (any depth, not just depth 0) turns
-// off hoisting for THIS loop entirely (vals cleared at the end): the depth
-// gate above stops this loop from hoisting a constant used only inside the
-// nested one, but a constant it legitimately owns at depth 0 -- e.g.
-// bench630/k1ht.bp's outer `while rep>0 { let i=1000000; while i>0 {...} }`,
-// 1000000 >= 65536, used before the inner loop even starts -- would still
-// stay live in the cs mask across the WHOLE outer body (released only once,
-// after the inner loop too), and the inner loop's own entry assertion (cs
-// mask must be 0 there) would fire. Declining whenever a body nests a
-// `while` sidesteps the whole class instead of threading a mask exception
-// through the nested entry check too; K8H/c72 have no nested loop, so this
-// costs nothing for the kernel this commit targets.
+// ROADMAP A2b (2026-09-08): a nested `while` no longer turns hoisting off for
+// this loop. A2 declined the whole class because an outer loop's hoisted cs
+// register stayed live across the inner loop's entry assertion (cs mask must
+// be 0 there) -- k1ht/k4t/ptrless/deltasync. The lift is the blueprint's own
+// suggestion: emit_while_stmt now RELEASES the enclosing loop's hoisted pairs
+// at its own entry and RE-TAKES them (one mat_const each) after the nested
+// loop's code, so the inner loop sees a clean cs mask and its own hoist may
+// even reuse those registers. The depth-0 literal gate above stays: a constant
+// used only inside the nested body is still hoisted by ITS OWN emit_while_stmt.
 fn hoist_scan(s: str, b0: i64, b1: i64, strn: i64, stab: [i64], vals: [i64]) -> i64 {
   let pos = [b0, strn];
   let nvals = [0];
@@ -4319,7 +4324,6 @@ fn hoist_scan(s: str, b0: i64, b1: i64, strn: i64, stab: [i64], vals: [i64]) -> 
   let nseen = 0;
   let nlets = 0;
   let depth = 0;
-  let has_nested = 0;
   let unknown = 0;
   let done = 0;
   while done == 0 {
@@ -4342,10 +4346,7 @@ fn hoist_scan(s: str, b0: i64, b1: i64, strn: i64, stab: [i64], vals: [i64]) -> 
     let c5 = if pos[0] + 5 >= b1 then 0 else char(s, pos[0] + 5);
     let ida3 = is_alpha(c3) + is_digit(c3) + (if c3 == 95 then 1 else 0);
     let is_letkw = (if ch == 108 then 1 else 0) * (if ch1 == 101 then 1 else 0) * (if c2 == 116 then 1 else 0) * (1 - ida3) * (1 - idb);
-    let is_whilekw0 = (if ch == 119 then 1 else 0) * (if ch1 == 104 then 1 else 0) * (if c2 == 105 then 1 else 0) * (if c3 == 108 then 1 else 0) * (if c4 == 101 then 1 else 0);
     let ida5 = is_alpha(c5) + is_digit(c5) + (if c5 == 95 then 1 else 0);
-    let is_whilekw = is_whilekw0 * (1 - ida5) * (1 - idb);
-    let has_nested = if is_whilekw == 1 then 1 else has_nested;
     // ROADMAP A14 (2026-09-07): `new_lets` is a text count of the body's own
     // `let` names -- it does NOT see the permanent registers a match payload
     // (`some(m0) =>`) or an INLINED call's parameters (emit_call binds every
@@ -4386,7 +4387,6 @@ fn hoist_scan(s: str, b0: i64, b1: i64, strn: i64, stab: [i64], vals: [i64]) -> 
     let done = if pos[0] >= b1 then 1 else 0;
     0
   };
-  let _ = if has_nested == 1 then (let _ = vals[0] = 0 in (let _ = vals[1] = 0 in (let _ = vals[2] = 0 in (let _ = vals[3] = 0 in 0)))) else 0;
   // 99 pushes hfrom past the 8 cs registers -> havail 0 -> hn 0 (no hoist).
   nlets + 99 * unknown
 }
@@ -4428,6 +4428,30 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   // result before a nested while, say).
   let _ = vs_park(insns, n, fntab, stab, 0);
   let _ = if fntab[4548] != 255 then sys_exit(102) else 0;
+  // ROADMAP A2b (2026-09-08): if an ENCLOSING loop is mid-hoist, its cs temps
+  // are live right now and the assertion below (cs mask must be 0 at a loop
+  // entry) would fire -- that is exactly why A2 declined to hoist any body
+  // containing a nested `while`. Release them here and re-take them after this
+  // loop's code (the tail of this fn), so the inner loop compiles against a
+  // clean mask and may reuse the very same registers. Cost is one mat_const per
+  // outer pair per OUTER iteration, paid outside the inner loop; the outer
+  // hoist's own `hfrom` floor (cnt0 + new_lets, new_lets counted at ANY depth)
+  // already sits above every symbol the whole outer body binds, including the
+  // inner loop's, so the re-take can never land on a bound symbol register.
+  let osave = zeros(8);
+  let oscan = 0;
+  let onh = 0;
+  while oscan < 4 {
+    let orv = fntab[4578 + 2 * oscan];
+    let orr = fntab[4579 + 2 * oscan];
+    let olive = if orr > 0 then 1 else 0;
+    let _ = if olive == 1 then (let _ = osave[2 * onh] = orv in (let _ = osave[2 * onh + 1] = orr in vs_cs_free(fntab, orr, 32))) else 0;
+    let onh = onh + olive;
+    let _ = fntab[4578 + 2 * oscan] = 0;
+    let _ = fntab[4579 + 2 * oscan] = 0;
+    let oscan = oscan + 1;
+    0
+  };
   let _ = if fntab[4573] != 0 then sys_exit(105) else 0;
   // A2 commit 2 (constant hoisting, §3 blueprint): pre-scan the body text
   // (a throwaway copy of pos, never the real one) for 64-bit literals,
@@ -4532,6 +4556,20 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = if do_reset == 1 then (let _ = em(insns, n, ldrw) in 0) else 0;
   let _ = if do_reset == 1 then (let _ = insns[pmark] = 4177527790 + (10 + ldepth) * 1024 in 0) else 0;
   let _ = fntab[4411] = ldepth;
+  // ROADMAP A2b: re-take the enclosing loop's hoisted constants (see the
+  // release above). Emitted AFTER this loop's backward branch, so it runs once
+  // per OUTER iteration, never inside this loop.
+  let orst = 0;
+  while orst < onh {
+    let rrv = osave[2 * orst];
+    let rrr = osave[2 * orst + 1];
+    let _ = mat_const(insns, n, rrv, rrr);
+    let _ = vs_cs_take(fntab, rrr, 33);
+    let _ = fntab[4578 + 2 * orst] = rrv;
+    let _ = fntab[4579 + 2 * orst] = rrr;
+    let orst = orst + 1;
+    0
+  };
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = skip_ws(s, pos);
