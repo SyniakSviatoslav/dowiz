@@ -101,3 +101,19 @@
 | 1%-hub skewed graph (sgraph2h.store): build ms / BFS queue vs frontier ns per slot / neighbours ns per query | 6472 / 107 vs 13 / 520 (folds DIFFER) |
 - folds: neighbours before/after the log and before/after compaction, BFS before/after compaction == python oracle
 - the hub variant's oracle is the same array BFS with the skewed generator (the log/tombstone phases run on the uniform graph only)
+
+## stage 2 (2026-09-08, 0ae01bd3, core 4): edge log, tombstones, compaction — folds equal
+
+| row | value |
+|---|---|
+| build L1 + empty log/L0/bitmap (ms) | 1266 |
+| BFS on L1 before the log, 3 sources: queue vs frontier SpMSpV (push/pull, alpha 14), ns per edge slot | 111 vs 26 (folds equal) |
+| insert 1M edges through the log, 100 batches with an L0 rebuild each (compaction every 20): amortized ns per edge / max batch stall ms | 8019 / 138 |
+| neighbours of v after the log, ns per query (L1 slice + L0 slice + tombstone bits, 3 slices) | 800 |
+| tombstone 10% of the L1 slots (one bitmap version) + commit (ms) | 32 |
+| BFS with tombstones + log, 3 sources, ns per edge slot | 131 |
+| logical size before / after compaction (bytes) | 122511752 / 121261640 |
+| compaction (ms) | 424 |
+| 1%-hub skewed graph (sgraph2h.store): build ms / BFS queue vs frontier ns per slot / neighbours ns per query | 1243 / 105 vs 12 / 490 (folds DIFFER) |
+- folds: neighbours before/after the log and before/after compaction, BFS before/after compaction == python oracle
+- the hub variant's oracle is the same array BFS with the skewed generator (the log/tombstone phases run on the uniform graph only)

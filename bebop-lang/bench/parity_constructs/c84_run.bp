@@ -17,6 +17,9 @@
 // arena instead of garbage.
 // Child: open + mmap (PROT_READ|PROT_EXEC=5, MAP_PRIVATE=2) the frozen
 // bench/parity_constructs/frozen/c01_lit.bin, run() it with argc=1, argv=["c01"], then
+// sys_exit(result & 255).  The 732 is frozen/c01_lit.bin's byte size: A5 step 1 grew the
+// entry stub 131 -> 172 words, so c01_lit is 183 words = 732 B (was 142 words = 568 B).  It is
+// a per-binary constant, so this literal moves with every entry-stub change -- see word_budget.
 // sys_exit(result & 255). Parent: sys_wait4(pid, st, 0, 0); exit code = (st[0]>>8)&255.
 // EXPECT derivation: c01_lit's value is 1000000065571; 1000000065571 & 255 = 35 (hand-
 // checked: 1000000065571 mod 256 = 35). Combined with a pid==child sanity check
@@ -39,12 +42,12 @@ fn c84_child() -> i64 {
   let path = zeros(42);
   let _ = pack_bytes(path, "bench/parity_constructs/frozen/c01_lit.bin", 42);
   let fd = sys_open(path, 42, 0);
-  let addr = sys_mmap(0, 568, 5, 2, fd, 0);
+  let addr = sys_mmap(0, 732, 5, 2, fd, 0);
   let name = zeros(4);
   let _ = pack_bytes(name, "c01", 3);
   let argv = zeros(1);
   let _ = argv[0] = addr_of(name);
-  let result = sys_run(addr, 568, 1, argv);
+  let result = sys_run(addr, 732, 1, argv);
   sys_exit(result & 255)
 }
 

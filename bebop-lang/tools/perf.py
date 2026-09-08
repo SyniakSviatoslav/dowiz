@@ -209,7 +209,7 @@ def selfcompile(binpath, base=None, n=5):
 def size(binpath):
     W, entry, end = load_bin(binpath)
     starts = fn_starts(W, end)
-    stub = len(entry_stub("bebop.bp"))   # T118b/T90: the stub words of THIS source (131 since T90 2c)
+    stub = len(entry_stub("bebop.bp"))   # T118b/T90: the stub words of THIS source (172 since ROADMAP A5 step 1; was 131 from T90 2c)
     names = re.findall(r"^fn (\w+)", open("bebop.bp").read(), re.M)
     if any(l.startswith('use "') for l in open("bebop.bp")):  # prelude fns come first in the stream
         for u in re.findall(r'^use "([^"]+)"', open("bebop.bp").read(), re.M):

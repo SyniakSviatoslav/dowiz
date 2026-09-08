@@ -264,7 +264,7 @@ hexval 19
 cas_verify 126
 use_scan 453
 use_expand 266
-entry_stub 387
+entry_stub 510
 cli_compile 978
 fill_check 20
 cli_check 177

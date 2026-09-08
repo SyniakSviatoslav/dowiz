@@ -412,10 +412,10 @@ fn gb_bg_compile_noexpand(path: [i64], plen: i64, outbuf: [i64], outcap: i64, sr
   let cnt = [0];
   let _ = collect_fns(srcv, fnames, fpos, cnt);
   let main_off = offs[idx_of_main(fnames, cnt[0]) + 1];
-  let stub = zeros(131);
+  let stub = zeros(172);
   let _ = entry_stub(stub);
-  let _ = stub[42] = 335544320 + ((main_off - (n0 + 42)) & 67108863);
-  let n = n0 + 131;
+  let _ = stub[83] = 335544320 + ((main_off - (n0 + 83)) & 67108863);
+  let n = n0 + 172;
   let nb = n * 4 + 8;
   let _ = if nb > outcap then sys_exit(89) else 0;
   let _ = gb_pack_code(outbuf, words0, n0);
