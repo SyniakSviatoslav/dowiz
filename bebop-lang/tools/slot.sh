@@ -21,22 +21,50 @@
 # gate must not refuse a legitimate third lane (25 idle + 3*13 = ~64 procs at the peak).
 # The MemAvailable floor below is the one hard refusal: it is the only failure mode that can take
 # the box down rather than merely slow it.
+#
+# 2026-09-08 (operator: "зроби так, щоб не отримувати Signal 9"): the box is Android 16 / SDK 36
+# (getprop ro.build.version.sdk = 36) under Termux + proot-distro, and the SIGKILLs that end a
+# session are NOT the kernel OOM killer -- they are Android's PHANTOM PROCESS KILLER, which caps
+# the processes an app forks outside ActivityManager's knowledge at `max_phantom_processes` = 32
+# by default and kills the excess with SIGKILL, oldest-heaviest first. Every process in this proot
+# is one of those. Measured here: 12 procs idle, a SERIAL=1 chain adds ~15 (peak ~27) and a
+# battery's fork storm more, so ONE heavy job already sits at the edge of 32 and two blow past it.
+# That is why SLOTS now defaults to 1 (serialise heavy jobs -- waiting on a slot is free) and why
+# a slot also waits on a live process-count ceiling below the Android cap. Neither knob can be
+# changed from inside: this proot runs as uid 10546, `device_config` is not reachable
+# ("Can't find service: device_config") and /proc/sys/vm/* is not readable, so raising
+# max_phantom_processes stays an on-device / ADB action for the operator (see docs/BOX.md).
+# What IS reachable from inside, and is used here: oom_score_adj can only be RAISED by an
+# unprivileged process, which is the direction we want -- a slot raises its own tree to 700 so
+# that if the kernel OOM killer does fire it eats the compile, not the claude session at 0.
 set -u
 LOCKDIR=${SLOT_DIR:-/root/.cache/bebop/slots}; mkdir -p "$LOCKDIR"
-N=${SLOTS:-3}
+N=${SLOTS:-1}   # was 3; see the phantom-process-killer note above -- heavy jobs serialise now
 CORES_1=${CORES_1:-4,5,6}; CORES_2=${CORES_2:-0,1}; CORES_3=${CORES_3:-2,3}  # slot 1 = the 3 A78 big cores, reserved for the main session's authoritative merge chain (SLOT_ONLY=1); lanes take 2 and 3
-MEM_FLOOR_MB=${MEM_FLOOR_MB:-600}
+MEM_FLOOR_MB=${MEM_FLOOR_MB:-1000}   # was 600: MemAvailable here already dips to ~3 GB with the session alone
+PHANTOM_CAP=${PHANTOM_CAP:-26}       # live `ps -e` ceiling a slot waits under; 26 + one chain's ~15 stays inside Android's 32
+PHANTOM_WAIT_S=${PHANTOM_WAIT_S:-300}
+SLOT_OOM_ADJ=${SLOT_OOM_ADJ:-700}    # raise-only for an unprivileged process; the claude session stays at 0
 
 if [ "${1:-}" = --status ]; then
   for i in $(seq 1 "$N"); do
     if flock -n "$LOCKDIR/slot$i" true 2>/dev/null; then echo "slot $i free"; else echo "slot $i BUSY $(cat "$LOCKDIR/slot$i.who" 2>/dev/null)"; fi
   done
-  echo "procs $(ps -e --no-headers | wc -l)  memavail $(awk '/MemAvailable/{print int($2/1024)"MB"}' /proc/meminfo)"
+  echo "procs $(ps -e --no-headers | wc -l)/$PHANTOM_CAP (android phantom cap 32)  memavail $(awk '/MemAvailable/{print int($2/1024)"MB"}' /proc/meminfo)"
   exit 0
 fi
 
 LABEL=${1:?usage: tools/slot.sh <label> <command ...>}; shift
 [ $# -gt 0 ] || { echo "slot: no command" >&2; exit 2; }
+
+# Wait (do not refuse) under the process ceiling: a slot that blocks costs nothing, a slot that
+# starts at 30 procs gets its tree SIGKILLed halfway through and costs the whole run.
+pw0=$(date +%s)
+while [ "$(ps -e --no-headers | wc -l)" -gt "$PHANTOM_CAP" ]; do
+  [ $(( $(date +%s) - pw0 )) -lt "$PHANTOM_WAIT_S" ] || {
+    echo "slot: REFUSED -- $(ps -e --no-headers | wc -l) procs still above the ${PHANTOM_CAP} ceiling after ${PHANTOM_WAIT_S}s (Android kills past 32); run tools/reap.sh kill" >&2; exit 95; }
+  sleep 5
+done
 
 avail=$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo)
 [ "$avail" -ge "$MEM_FLOOR_MB" ] || { echo "slot: REFUSED -- MemAvailable ${avail}MB < ${MEM_FLOOR_MB}MB floor (box safety)" >&2; exit 96; }
@@ -66,8 +94,15 @@ flock -u 8; exec 8>&-
 eval "CORES=\$CORES_$SLOT"
 echo "$LABEL pid=$$ started=$(date +%H:%M:%S) cores=$CORES" > "$LOCKDIR/slot$SLOT.who"
 echo "slot: acquired $SLOT (cores $CORES) for '$LABEL' at $(date +%H:%M:%S)"
-export PROC_CAP=${PROC_CAP:-70} SLOT_ID=$SLOT SLOT_CORES=$CORES
+# PROC_CAP was 70 to stop chain.sh refusing a legitimate third lane. There are no three lanes
+# any more (SLOTS=1) and 70 is above Android's phantom cap, so the gate was disabled in the
+# one direction that matters: 32 is now the real ceiling the platform enforces.
+export PROC_CAP=${PROC_CAP:-32} SLOT_ID=$SLOT SLOT_CORES=$CORES
 export PIN=${PIN:-taskset -c $CORES}  # chain.sh would otherwise re-pin to 4-6 and escape the slot (sched_setaffinity can always widen)
+# Make THIS tree the OOM killer's first choice instead of the session that is driving it.
+# Unprivileged processes may only raise oom_score_adj, which is exactly the direction we need;
+# children inherit it, so the whole heavy job is covered by this one write.
+echo "$SLOT_OOM_ADJ" > /proc/self/oom_score_adj 2>/dev/null || true
 t0=$(date +%s)
 taskset -c "$CORES" nice -n "${SLOT_NICE:-5}" "$@"; rc=$?
 echo "slot: released $SLOT after $(( $(date +%s) - t0 )) s, rc=$rc"

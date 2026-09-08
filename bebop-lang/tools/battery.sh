@@ -15,7 +15,14 @@ BIN=$(realpath -m "${1:?candidate .bin}"); export FREEZE=${FREEZE:-0}; SRC=${SRC
 [ -s "$BIN" ] || { echo "GUARD: $BIN missing or empty (L12)"; exit 1; }
 [ "${REAP_GATED:-}" ] || tools/reap.sh --check "${PROC_CAP:-30}" || { echo "GUARD: process cap exceeded (item 1, L19c)"; exit 97; }
 export REAP_GATED=1  # one gate per run tree (chain.sh already checked when it drives us)
-mkdir -p "$T"/{std,cp,pd,pool}; sw() { [ -z "${SERIAL:-}" ] || wait; }; [ "${SERIAL:-}" ] && J=${J:-1}  # SERIAL=1 (2026-09-06, box safety): lanes one after another, J=1 -- ~12 procs instead of ~40
+# SERIAL now DEFAULTS to 1 (2026-09-08, operator "no more Signal 9"): Android's phantom-process
+# killer SIGKILLs an app's forked processes past max_phantom_processes=32, and the parallel battery
+# peaks at ~40 -- it was the single biggest fork storm on the box. Serial lanes with J=1 peak at ~12.
+# It also retires the J=3 false RED the 2026-09-08 journal recorded (the 12 generated
+# gb_<op>_<sr>_0_1_0.* files share one BEBOP_TMP, so shards clobbered each other).
+# SERIAL=0 restores the old parallel battery -- only on a box where the phantom cap has been lifted.
+SERIAL=${SERIAL:-1}
+mkdir -p "$T"/{std,cp,pd,pool}; sw() { [ "$SERIAL" = 1 ] && wait; :; }; [ "$SERIAL" = 1 ] && J=${J:-1}  # lanes one after another, J=1 -- ~12 procs instead of ~40
 ( J=${J:-3} BEBOP_TMP=$T/std BEBOP_BIN=$BIN bash tools/std_par.sh > "$T/std.log" 2>&1 ) & sw  # sharded std_golden, one shard per A78 core
 ( BEBOP_TMP=$T/cp BEBOP_BIN=$BIN bash bench/vs_rust/construct_parity.sh > "$T/cp.log" 2>&1;
   BEBOP_TMP=$T/pd BEBOP_BIN=$BIN bash bench/vs_rust/parity_driver.sh > "$T/pd.log" 2>&1 ) & sw
