@@ -1,0 +1,163 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+// arena_map_modes.bp -- the A5 blocker probe. ROADMAP A5 proposes ONE reserved address space
+// whose base lives in x17, with the arena inside it and "arena image = file". R1 measured a 22x
+// penalty on a MAP_SHARED file mapping under random writes; if the A5 arena is that mapping then
+// EVERY zeros() scatter pays it, not only a CSR build. This file measures the arena mapping mode
+// as the single variable, at the shape csr_build_profile.bp uses (a ~128 MiB working region
+// inside a 512 MiB mapping), with the SAME random write stream in every arm.
+//
+// argv[2] = mode, argv[3] = log2(cells in the working region), argv[4] = scatter iterations.
+//   1  MAP_PRIVATE|MAP_ANONYMOUS            (today's arena: sys_arena_base, zeros())
+//   2  MAP_SHARED |MAP_ANONYMOUS            (shared, but no file: isolates "shared" from "file")
+//   3  MAP_PRIVATE, file-backed             (LMDB's read view; writes are CoW, never published)
+//   4  MAP_SHARED,  file-backed             (store.bp:146 today, and A5's "arena image = file")
+//   5  PROT_NONE 4 GiB reserve, then MAP_FIXED MAP_PRIVATE|MAP_ANONYMOUS inside it  (A5 shape,
+//      anonymous arena -- isolates the cost of the reserve itself from the cost of the file)
+//   6  PROT_NONE 4 GiB reserve, then MAP_FIXED MAP_SHARED file-backed inside it     (A5 as written)
+//
+// Three timed phases per run, in this order, so first-touch and steady-state are SEPARATE
+// numbers instead of one aggregate (R1 refuted first touch by arithmetic only; this measures it):
+//   cold scatter   random stores over a mapping whose pages have never been touched
+//   seq fill       one sequential store per cell over the whole region (the D1 "publish" pass)
+//   warm scatter   the SAME random stream again, every page now resident and already dirtied
+// A fold over a strided sample is printed last, untimed, so an arm that silently did less work
+// shows up as a wrong fold and not as a fast phase.
+//
+// flags: MAP_SHARED 1, MAP_PRIVATE 2, MAP_FIXED 16, MAP_ANONYMOUS 32, MAP_NORESERVE 16384.
+
+fn lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
+
+fn parse(s: str) -> i64 {
+  let n = str_len(s);
+  let i = 0;
+  let v = 0;
+  while i < n {
+    let v = v * 10 + (char(s, i) - 48);
+    let i = i + 1;
+    0
+  };
+  v
+}
+
+fn itoa(dst: [i64], n: i64) -> i64 {
+  let neg = if n < 0 then 1 else 0;
+  let m = if n < 0 then 0 - n else n;
+  let p = 23;
+  let m2 = m;
+  let go = 1;
+  while go == 1 {
+    let d = m2 - (m2 / 10) * 10;
+    let _ = dst[p] = 48 + d;
+    let p = p - 1;
+    let m2 = m2 / 10;
+    let go = if m2 > 0 then 1 else 0;
+    0
+  };
+  let start = p + 1;
+  let len = 24 - start;
+  let i = 0;
+  while i < len { let _ = dst[neg + i] = dst[start + i]; let i = i + 1; 0 };
+  let _ = if neg == 1 then (let _ = dst[0] = 45 in 0) else 0;
+  len + neg
+}
+
+fn say(label: str, ms: i64, buf: [i64]) -> i64 {
+  let n = st_str(buf, label);
+  let _ = sys_write(1, buf, n);
+  let l = itoa(buf, ms);
+  let _ = sys_write(1, buf, l);
+  let _ = buf[0] = 10;
+  sys_write(1, buf, 1)
+}
+
+fn arena_flags(mode: i64) -> i64 {
+  let f = 0;
+  let f = if mode == 1 then 34 else f;
+  let f = if mode == 2 then 33 else f;
+  let f = if mode == 3 then 2 else f;
+  let f = if mode == 4 then 1 else f;
+  let f = if mode == 5 then 50 else f;
+  let f = if mode == 6 then 17 else f;
+  f
+}
+
+// modes 3, 4, 6 are file-backed; 1, 2, 5 are anonymous (fd = -1).
+fn arena_fd(mode: i64, fd: i64) -> i64 {
+  let uses = if mode >= 3 then 1 else 0;
+  let uses = if mode == 5 then 0 else uses;
+  if uses == 1 then fd else 0 - 1
+}
+
+// scatter(a, mask, iters, seed): iters random single-cell stores over [0, mask].
+fn scatter(a: [i64], mask: i64, iters: i64, seed: i64) -> i64 {
+  let x = seed;
+  let i = 0;
+  while i < iters {
+    let x = lcg(x);
+    let k = (x >> 20) & mask;
+    let _ = a[k] = i;
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+fn seqfill(a: [i64], cells: i64) -> i64 {
+  let i = 0;
+  while i < cells { let _ = a[i] = i; let i = i + 1; 0 };
+  0
+}
+
+fn foldsample(a: [i64], cells: i64, step: i64, acc: [i64]) -> i64 {
+  let i = 0;
+  while i < cells { let _ = acc[0] = acc[0] + a[i]; let i = i + step; 0 };
+  acc[0]
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  let mode = if argc >= 3 then parse(argv[2]) else 1;
+  let lg = if argc >= 4 then parse(argv[3]) else 24;
+  let iters = if argc >= 5 then parse(argv[4]) else 4000000;
+  let cells = 1 << lg;
+  let mask = cells - 1;
+  let size = 536870912;
+  let resv = 4294967296;
+  let buf = zeros(64);
+  let acc = zeros(1);
+  let path = zeros(64);
+  let pl = st_str(path, "a5_arena.bin");
+
+  let needs_file = if mode >= 3 then 1 else 0;
+  let needs_file = if mode == 5 then 0 else needs_file;
+  let fd = if needs_file == 1 then sys_open(path, pl, 66) else 0 - 1;
+  let _ = if needs_file == 1 then sys_ftruncate(fd, size) else 0;
+
+  let needs_res = if mode >= 5 then 1 else 0;
+  let rb = if needs_res == 1 then sys_mmap(0, resv, 0, 16418, 0 - 1, 0) else 0;
+  let _ = say("reserve rc ", rb, buf);
+  let at = if needs_res == 1 then rb else 0;
+  let fl = arena_flags(mode);
+  let mfd = arena_fd(mode, fd);
+  let raw = sys_mmap(at, size, 3, fl, mfd, 0);
+  let _ = say("map rc ", raw, buf);
+  let _ = if needs_file == 1 then sys_close(fd) else 0;
+  let a = st_cells(raw);
+
+  let t0 = clock_ms();
+  let _ = scatter(a, mask, iters, 4242);
+  let t1 = clock_ms();
+  let _ = say("cold scatter ms ", t1 - t0, buf);
+  let _ = seqfill(a, cells);
+  let t2 = clock_ms();
+  let _ = say("seq fill ms ", t2 - t1, buf);
+  let _ = scatter(a, mask, iters, 4242);
+  let t3 = clock_ms();
+  let _ = say("warm scatter ms ", t3 - t2, buf);
+  let _ = say("total ms ", t3 - t0, buf);
+
+  let f = foldsample(a, cells, 4093, acc);
+  let _ = say("fold ", f, buf);
+  let _ = sys_munmap(raw, size);
+  t3 - t0
+}
