@@ -29,6 +29,27 @@ So the cost is the dirty-page tracking a shared writable file mapping performs
 on every store. MAP_PRIVATE lands within 2x of plain arrays, which is the
 headroom this row is claiming.
 
+## 1b. A stronger form of the same fix, found 2026-09-08
+
+The wild-ideas study proposes going further, and it is a better shape: **never map
+the store file writable at all.**
+
+The arena is append-only and objects are immutable once committed, so the dirty
+set of any transaction is **contiguous by construction** -- exactly
+`[old_tail, new_tail)`. The kernel's per-page bookkeeping is therefore tracking
+something the store already knows precisely. The alternative is LMDB's default
+design: a MAP_PRIVATE (or read-only) view for reading, one `pwrite` of the
+appended tail, then the superblock toggle.
+
+That turns D1 from a discipline every bulk builder must remember into a
+**property of the store**, and removes the only writable shared mapping the
+process ever holds -- which also retires the C1 hazard where a forked kernel
+inherits a writable mapping of the file.
+
+Two things it does not cover, and they must be designed before it lands: writes
+that are NOT appends (the tombstone bitmaps, flipped in place) and the reader's
+view of a concurrent writer. Land §3's form first, measure, then decide.
+
 ## 2. Scope
 
 **In.** The build path only: `rp`/`ci` allocated as plain arrays, filled, then
