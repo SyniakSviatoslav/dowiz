@@ -13,8 +13,8 @@ CASTS = {'st_cells', 'st_addr', 'addr_of'}
 # (they return 'ref *', compatible with every `ref T`) or by params/returns declared `ref T`;
 # arithmetic on a ref, an i64 where a `ref T` is declared, or a ref where a scalar is
 # declared are findings. The generic store helpers take a ref where they declare i64.
-REF_PRODUCERS = {'st_alloc', 'st_ref', 'st_root', 'st_mig', 'st_forward', 'st_copy_obj'}
-REF_TOLERANT = {'st_get', 'st_put', 'st_seal', 'st_check', 'st_len', 'st_link', 'st_supersede', 'st_ref', 'st_commit', 'st_commit_m', 'st_commit_sync', 'st_mig'}
+REF_PRODUCERS = {'st_alloc', 'st_ref', 'st_root', 'st_mig', 'st_forward', 'st_copy_obj', 'st_open_at', 'st_croot', 'st_head'}  # C3: st_open_at is st_root at a named generation, st_croot the root ref inside a commit object, st_head the commit ref a branch name points at -- all three return a ref through st_ref
+REF_TOLERANT = {'st_get', 'st_put', 'st_seal', 'st_check', 'st_len', 'st_link', 'st_supersede', 'st_ref', 'st_commit', 'st_commit_m', 'st_commit_sync', 'st_mig', 'st_cobj', 'st_publish', 'st_commit_c', 'st_croot', 'st_commit_at', 'st_heads_set', 'st_sb_write_ch'}  # C3's siblings of st_commit take the same root/commit ref against the same i64 declaration
 STORE_INTERNAL = {'st_compact', 'st_link', 'st_ref', 'st_forward', 'st_copy_obj'}  # the fns that DEFINE object-relative offsets
 def is_ref(t): return isinstance(t, str) and t.startswith('ref ')
 def ref_ok(pt, at): return pt == at or at == 'ref *' or pt == 'ref *'
@@ -99,12 +99,12 @@ class TC:
                 r = it[2]
                 if r[0] == 'assign':
                     tr = self.ty(r[2], env, fn)
-                    if r[1] in env and env[r[1]] != '?' and tr != '?' and env[r[1]] != tr:
+                    if r[1] in env and env[r[1]] != '?' and tr != '?' and env[r[1]] != tr and not (is_ref(env[r[1]]) and is_ref(tr) and ref_ok(env[r[1]], tr)):
                         self.note(fn, 'assign changes `%s` from %s to %s' % (r[1], env[r[1]], tr))
                 else:
                     tr = self.ty(r, env, fn)
                     if it[1] != '_':
-                        if it[1] in env and env[it[1]] not in ('?', tr) and tr != '?' and {env[it[1]], tr} != {'i64', 'ref *'}:  # `let prev = 0` then a ref: the null idiom
+                        if it[1] in env and env[it[1]] not in ('?', tr) and tr != '?' and not ('i64' in (env[it[1]], tr) and (is_ref(env[it[1]]) or is_ref(tr))) and not (is_ref(env[it[1]]) and is_ref(tr) and ref_ok(env[it[1]], tr)):  # `let prev = 0` then a ref: the null idiom; and `ref *` is compatible with every `ref T` (ref_ok)
                             self.note(fn, 'rebind changes `%s` from %s to %s' % (it[1], env[it[1]], tr))
                         env[it[1]] = tr
                 val = 'i64'

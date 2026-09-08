@@ -635,6 +635,19 @@ rm -f scompact.store scompact.store.tmp
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/scompact.bp ${BEBOP_TMP:-/tmp/opencode}/scompact_test.bin >/dev/null 2>&1 && run 300 ${BEBOP_TMP:-/tmp/opencode}/scompact_test.bin | tail -1)
 gate scompact -2246042833172211968 "$r"
 
+# ---- schain (C3, docs/blueprints/C3-commit-chain-and-heads.md: the commit-object chain
+#      in superblock cell 10, the heads table in cell 11 and st_open_at(gen). 1000
+#      generations, each one node committed as that generation's root through
+#      st_commit_c; reopen at gen 1 / 500 / 1000 by walking the chain and refold against
+#      the folds recorded at write time; the live root/generation and the exact arena
+#      cost (used 10060, live 9018, superseded 18); then compaction keeps only what the
+#      "main"/"keep" heads reach (live 4028) and frees exactly 5008 cells = 998*5 commit
+#      objects no head reaches + the 18-cell superseded heads table; "keep" still folds
+#      to generation 500 and generation 1 is gone. okmask 1023 = all 10 checks) ----
+rm -f schain.store schain.store.tmp
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/schain.bp ${BEBOP_TMP:-/tmp/opencode}/schain_test.bin >/dev/null 2>&1 && run 60 ${BEBOP_TMP:-/tmp/opencode}/schain_test.bin | tail -1)
+gate schain 71563930701023 "$r"
+
 # ---- scrash (G5, T113: 10^4 generations appended by the writer, then the reader's fold; the SIGKILL trials live in bench/vs_rust/scrash.sh) ----
 rm -f scrash.store
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/scrash.bp ${BEBOP_TMP:-/tmp/opencode}/scrash_test.bin >/dev/null 2>&1 && run 120 ${BEBOP_TMP:-/tmp/opencode}/scrash_test.bin w >/dev/null && run 120 ${BEBOP_TMP:-/tmp/opencode}/scrash_test.bin | tail -1)

@@ -1,0 +1,162 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+// schain.bp — C3 gate (docs/blueprints/C3-commit-chain-and-heads.md): the commit-object
+// chain in superblock cell 10, the heads table in cell 11, and st_open_at(gen).
+// 1000 generations; generation g appends ONE node N{i64 val, ref N prev} (val = LCG from
+// 42, prev = generation g-1's node) and commits it as that generation's root through
+// st_commit_c, so generation g's root chain is exactly g nodes and NOTHING is superseded
+// by the data writes. fold(g) = acc*31 + val walked from root_g back to root_1 (64-bit
+// wrap), recorded DURING the writing loop at g = 1, 500 and 1000, so the test is
+// self-checking. At g = 1000 the heads table is written twice in one transaction --
+// slot 0 "main" -> the g=1000 commit, then slot 1 "keep" -> the g=500 commit captured in
+// the loop -- and the intermediate table is st_supersede'd, which is the only superseded
+// object in the store (18 cells, so the store's own accounting is an exact known number).
+// Arena arithmetic, all exact: node 2+2, commit 2+3, heads table 2+16 cells.
+//   appended  = 999*(4+5) + (4+5+18+18) = 9036   -> arena_used = 10060
+//   live ctr  = 9036 - 18 = 9018, superseded ctr = 18
+//   after compaction: 1000 nodes + the 2 commits the heads name + the live heads table
+//                   = 4000 + 10 + 18 = 4028      -> arena_used = 5052, superseded = 0
+//   freed     = 9036 - 4028 = 5008 = 998*5 (the commit objects no head reaches) + 18
+//               (the superseded table) -- mvcc.bp's discipline: every freed cell is
+//               accounted for by an event, none by a scan.
+// Result = (h % 1e9) * 100000 + okmask, h = mix of fold(1), fold(500), fold(1000);
+// okmask = 10 checks = 1023 when all pass. Mirror: bench/oracles/schain.py.
+fn mixh(h: i64, x: i64) -> i64 { ((h * 1000003) + x) & 4611686018427387903 }
+fn bit(m: [i64], k: i64, v: i64) -> i64 {
+  let _ = m[0] = m[0] | (v << k);
+  v
+}
+fn fold_at(base: [i64], root: ref N) -> i64 {
+  let cur = root;
+  let acc = 0;
+  while cur != 0 {
+    let v = st_get(base, cur, 0);
+    let p = st_get(base, cur, 1);
+    let acc = acc * 31 + v;
+    let nx = if p == 0 then 0 else st_ref(base, cur, 1);
+    let cur = nx;
+    0
+  };
+  acc
+}
+fn init_d(d: [i64]) -> i64 {
+  let _ = d[0] = st_digest("N{i64,ref N}");
+  let _ = d[1] = st_digest("C{i64,ref N,ref C}");
+  let _ = d[2] = st_digest("H{ref C x8,i64 x8}");
+  let _ = d[3] = st_digest("main");
+  let _ = d[4] = st_digest("keep");
+  0
+}
+// heads_of: carry cell 11 unchanged for generations 1..999; at generation 1000 write the
+// table -- slot 0 "main" -> this commit, slot 1 "keep" -> the g=500 commit (s[5]).
+fn heads_of(base: [i64], tx: [i64], d: [i64], s: [i64], c: i64, tmp: [i64]) -> i64 {
+  let old = base[tx[0] + 11];
+  let last = if s[6] == 999 then 1 else 0;
+  let h = if last == 1 then st_heads_set(base, tx, old, 0, d[3], c, d[2], tmp) else old;
+  let h2 = if last == 1 then st_heads_set(base, tx, h, 1, d[4], s[5], d[2], tmp) else h;
+  let _ = if last == 1 then st_supersede(base, tx, h) else 0;
+  h2
+}
+// cap: record fold(1), fold(500), fold(1000) and the g=500 COMMIT offset, at write time.
+fn cap(base: [i64], s: [i64], f: i64, c: i64) -> i64 {
+  let _ = if s[6] == 1 then (let _ = s[2] = f in 0) else 0;
+  let _ = if s[6] == 500 then (let _ = s[3] = f in 0) else 0;
+  let _ = if s[6] == 500 then (let _ = s[5] = c in 0) else 0;
+  let _ = if s[6] == 1000 then (let _ = s[4] = f in 0) else 0;
+  0
+}
+fn step(base: [i64], tx: [i64], d: [i64], s: [i64], tmp: [i64]) -> i64 {
+  let _ = st_begin(base, tx, tmp);
+  let _ = s[1] = s[1] * 6364136223846793005 + 1442695040888963407;
+  let o = st_alloc(base, tx, 2, d[0]);
+  let _ = st_put(base, o, 0, s[1]);
+  let _ = if s[0] == 0 then st_put(base, o, 1, 0) else st_link(base, o, 1, s[0]);
+  let _ = st_seal(base, o, tmp);
+  let c = st_cobj(base, tx, o, d[1], tmp);
+  let h = heads_of(base, tx, d, s, c, tmp);
+  let _ = st_publish(base, tx, o, c, h, tmp);
+  let _ = s[0] = o;
+  let _ = s[6] = s[6] + 1;
+  let _ = cap(base, s, fold_at(base, o), c);
+  0
+}
+// phase_a (bits 0..4): reopen at gen 1 / N/2 / N through the chain and refold; the live
+// generation's root and generation are exactly what a plain st_root/st_gen saw before;
+// the arena cost of the chain is the exact predicted number. m[1] = arena_used.
+fn phase_a(base: [i64], s: [i64], m: [i64], tmp: [i64]) -> i64 {
+  let r = st_open_at(base, 1, tmp);
+  let v = fold_at(base, r);
+  let a = if v == s[2] then 1 else 0;
+  let _ = bit(m, 0, a);
+  let r = st_open_at(base, 500, tmp);
+  let v = fold_at(base, r);
+  let a = if v == s[3] then 1 else 0;
+  let _ = bit(m, 1, a);
+  let r = st_open_at(base, 1000, tmp);
+  let v = fold_at(base, r);
+  let a = if v == s[4] then 1 else 0;
+  let _ = bit(m, 2, a);
+  let g = st_gen(base, tmp);
+  let t = st_root(base, tmp);
+  let a = (if t == r then 1 else 0) * (if g == 1000 then 1 else 0) * (if r == s[0] then 1 else 0);
+  let _ = bit(m, 3, a);
+  let sb = st_pick(base, tmp);
+  let _ = m[1] = base[sb + 4];
+  let a = (if base[sb + 4] == 10060 then 1 else 0) * (if base[sb + 7] == 9018 then 1 else 0) * (if base[sb + 8] == 18 then 1 else 0);
+  let _ = bit(m, 4, a);
+  0
+}
+// phase_b (bits 5..9): compaction kept exactly the commits the heads name; the freed
+// cells are the 998 unreachable commit objects plus the one superseded heads table; the
+// "keep" head still resolves to generation 500's root with generation 500's fold; and
+// generation 1, which no head reaches, is gone while the live generation still folds.
+fn phase_b(b: [i64], d: [i64], s: [i64], m: [i64], live: i64, tmp: [i64]) -> i64 {
+  let a = if live == 4028 then 1 else 0;
+  let _ = bit(m, 5, a);
+  let sb = st_pick(b, tmp);
+  let a = (if b[sb + 4] == live + 1024 then 1 else 0) * (if b[sb + 8] == 0 then 1 else 0) * (if b[sb + 7] == live then 1 else 0);
+  let _ = bit(m, 6, a);
+  let a = if m[1] - 1024 - live == 5008 then 1 else 0;
+  let _ = bit(m, 7, a);
+  let c = st_head(b, d[4], tmp);
+  let r = st_croot(b, c);
+  let v = fold_at(b, r);
+  let cg = if c == 0 then 0 else st_get(b, c, 0);
+  let a = (if v == s[3] then 1 else 0) * (if cg == 500 then 1 else 0);
+  let _ = bit(m, 8, a);
+  let r = st_open_at(b, 1, tmp);
+  let q = st_open_at(b, 1000, tmp);
+  let v = fold_at(b, q);
+  let a = (if r == 0 then 1 else 0) * (if v == s[4] then 1 else 0);
+  let _ = bit(m, 9, a);
+  0
+}
+fn main() -> i64 {
+  let path = zeros(64);
+  let pl = st_str(path, "schain.store");
+  let tmp = zeros(256);
+  let size = 1048576;
+  let d = zeros(8);
+  let s = zeros(8);
+  let m = zeros(4);
+  let _ = init_d(d);
+  let _ = s[1] = 42;
+  let base = st_open(path, pl, size, tmp);
+  let tx = zeros(6);
+  let g = 0;
+  while g < 1000 {
+    let _ = step(base, tx, d, s, tmp);
+    let g = g + 1;
+    0
+  };
+  let _ = phase_a(base, s, m, tmp);
+  let _ = sys_munmap(st_addr(base), size);
+  let live = st_compact(path, pl, size, [d[0], 2, d[1], 6, d[2], 255], 3, tmp);
+  let b2 = st_map_ro(path, pl, size);
+  let _ = phase_b(b2, d, s, m, live, tmp);
+  let _ = sys_munmap(st_addr(b2), size);
+  let h = mixh(0, s[2]);
+  let h = mixh(h, s[3]);
+  let h = mixh(h, s[4]);
+  (h % 1000000000) * 100000 + m[0]
+}

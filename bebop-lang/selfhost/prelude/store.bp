@@ -8,7 +8,8 @@
 // i64 <-> [i64] casts in the tree (the mapping base), allowlisted by name in
 // tools/typecheck.py; everything else stays under the T48 census. Superblock (16 cells): 0 magic
 // "BEBOPST1", 1 version, 2 generation, 3 root, 4 arena_used, 5 layout_table,
-// 6 migration_table, 7 live_cells, 8 superseded_cells, 9..14 zero, 15 crc32 of
+// 6 migration_table, 7 live_cells, 8 superseded_cells, 9 reserved (B1 `anc`),
+// 10 commit-object offset (C3), 11 heads-table offset (C3), 12..14 zero, 15 crc32 of
 // cells 0..14. A reader picks the valid superblock with the higher generation.
 // Transaction tx (6 cells): 0 live sb, 1 mark, 2 cursor, 3 live delta,
 // 4 superseded delta, 5 next generation. Commit = write the OTHER superblock.
@@ -283,6 +284,166 @@ fn st_digest(s: str) -> i64 {
   let n = st_str(b, s);
   sha256_lo64(b, n) & 4294967295
 }
+// ---- C3: commit chain (superblock cell 10), heads table (cell 11), st_open_at(gen) ----
+// "Memory as Git" is ALREADY this store's design (append-only arena, two superblocks,
+// root swap, CoW MVCC with a `prev` edge, Cheney compaction, the mapping itself as the
+// reader token). This block closes the three gaps only: the superblock kept generation g
+// and g-1 alone, so "check out generation k" was not expressible for the store as a
+// whole; there was one unnamed root; and a reader could take the live root or nothing.
+// Reader registration is deliberately NOT here -- the kernel's inode refcount already
+// releases a reader's mapping -- and there is no undo log, no redo log and no reader
+// table to make MVCC expensive (docs/blueprints/C3-commit-chain-and-heads.md:24-28).
+// Cell ORDER: B1's follow-up card claims cell 9 for its `anc` verification anchor
+// (docs/blueprints/B1-durability-torn-write.md:146,163), so C3 starts at 10. Cells 9,
+// 12, 13 and 14 stay zero.
+//   cell 10 = `commit` : offset of the live generation's commit OBJECT.
+//   cell 11 = `heads`  : offset of the heads table, 0 = one unnamed head (today).
+// Commit object C: payload [gen, ref root, ref prev_commit] (3 cells), refmask 6.
+// Heads table  H: payload [ref C x 8 | name x 8] (16 cells), refmask 255 -- FIXED width
+// so the table is ONE object with a CONSTANT refmask under st_compact's layout rules (a
+// mask is per-digest, so a variable-length name/ref interleave has no legal mask); an
+// empty slot holds ref 0 and `name` is an st_digest of the branch name. 8 branches cap.
+// Both cells are ZERO in every store written by plain st_commit/st_commit_m, so this row
+// changes no existing store's bytes, and it adds nothing to the open path: st_open,
+// st_pick, st_verify and st_reopen_verify are UNCHANGED and never read cell 10 or 11 --
+// the chain is written, never read, on the hot path.
+fn st_sb_write_ch(base: [i64], sb: i64, com: i64, heads: i64, tmp: [i64]) -> i64 {
+  let _ = base[sb + 10] = com;
+  let _ = base[sb + 11] = heads;
+  let _ = base[sb + 15] = st_crc(base, sb, 15, tmp);
+  0
+}
+// st_cobj(base, tx, root, cdig, tmp): append this transaction's commit object, chained to
+// the live superblock's commit (cell 10). Sealed like any other object, so st_verify and
+// st_check cover it and a torn commit object is caught at reopen exactly like a torn node.
+fn st_cobj(base: [i64], tx: [i64], root: i64, cdig: i64, tmp: [i64]) -> i64 {
+  let p = base[tx[0] + 10];
+  let c = st_alloc(base, tx, 3, cdig);
+  let _ = st_put(base, c, 0, tx[5]);
+  let _ = if root == 0 then st_put(base, c, 1, 0) else st_link(base, c, 1, root);
+  let _ = if p == 0 then st_put(base, c, 2, 0) else st_link(base, c, 2, p);
+  let _ = st_seal(base, c, tmp);
+  c
+}
+// st_publish(base, tx, root, c, heads, tmp): st_commit, then stamp cells 10/11 into the
+// superblock that commit just wrote and re-seal its crc (cell 15) LAST. Crash windows:
+// before the stamp -> a valid superblock whose cell 10 is 0 (st_sb_write_m zeroes 9..14),
+// i.e. the new generation is live with no chain entry; between the stamp and the crc ->
+// that superblock fails its own crc, st_pick skips it and the PREVIOUS generation stays
+// live. Neither state is torn, so this is never worse than a plain st_commit.
+fn st_publish(base: [i64], tx: [i64], root: i64, c: i64, heads: i64, tmp: [i64]) -> i64 {
+  let sb = tx[0];
+  let _ = st_commit(base, tx, root, tmp);
+  let _ = st_sb_write_ch(base, 512 - sb, c, heads, tmp);
+  tx[5]
+}
+// st_commit_c: commit + chain, heads table carried over unchanged.
+fn st_commit_c(base: [i64], tx: [i64], root: i64, cdig: i64, tmp: [i64]) -> i64 {
+  let c = st_cobj(base, tx, root, cdig, tmp);
+  let h = base[tx[0] + 11];
+  st_publish(base, tx, root, c, h, tmp)
+}
+// st_head_slot(base, heads, name): the slot already holding `name`, else the first free
+// slot, else -1 (all 8 branches used). heads == 0 -> slot 0.
+fn st_head_slot(base: [i64], heads: i64, name: i64) -> i64 {
+  let i = 0;
+  let hit = 0 - 1;
+  let fre = 0 - 1;
+  while i < 8 {
+    let r = if heads == 0 then 0 else st_get(base, heads, i);
+    let nm = if heads == 0 then 0 else st_get(base, heads, 8 + i);
+    let same = if r == 0 then 0 else (if nm == name then 1 else 0);
+    let hit = if same == 1 then i else hit;
+    let emp = if r == 0 then (if fre < 0 then 1 else 0) else 0;
+    let fre = if emp == 1 then i else fre;
+    let i = i + 1;
+    0
+  };
+  if hit >= 0 then hit else fre
+}
+// st_heads_set(base, tx, old, slot, name, c, hdig, tmp): append a NEW heads table (CoW,
+// like every other object here) = `old` with `slot` repointed at commit c under `name`.
+// Returns its offset; hand it to st_publish. old == 0 starts an empty table.
+fn st_heads_set(base: [i64], tx: [i64], old: i64, slot: i64, name: i64, c: i64, hdig: i64, tmp: [i64]) -> i64 {
+  let h = st_alloc(base, tx, 16, hdig);
+  let i = 0;
+  while i < 8 {
+    let r = if old == 0 then 0 else st_get(base, old, i);
+    let e = if r == 0 then 0 else st_ref(base, old, i);
+    let t = if i == slot then c else e;
+    let _ = if t == 0 then st_put(base, h, i, 0) else st_link(base, h, i, t);
+    let nm = if old == 0 then 0 else st_get(base, old, 8 + i);
+    let nv = if i == slot then name else nm;
+    let _ = st_put(base, h, 8 + i, nv);
+    let i = i + 1;
+    0
+  };
+  let _ = st_seal(base, h, tmp);
+  h
+}
+// st_head(base, name, tmp): the commit object the named head points at, 0 if absent.
+fn st_head(base: [i64], name: i64, tmp: [i64]) -> i64 {
+  let h = base[st_pick(base, tmp) + 11];
+  let s = st_head_slot(base, h, name);
+  let ok = if h == 0 then 0 else (if s < 0 then 0 else (if st_get(base, h, s) == 0 then 0 else 1));
+  if ok == 1 then st_ref(base, h, s) else 0
+}
+// st_commit_head(base, tmp): the live generation's commit object (cell 10), 0 = no chain.
+fn st_commit_head(base: [i64], tmp: [i64]) -> i64 { base[st_pick(base, tmp) + 10] }
+// st_croot(base, c): the root a commit object points at (0 = null commit or null root).
+fn st_croot(base: [i64], c: i64) -> i64 {
+  let r = if c == 0 then 0 else st_get(base, c, 1);
+  if r == 0 then 0 else st_ref(base, c, 1)
+}
+// st_commit_at(base, c, gen): walk the chain back from commit c to generation `gen`; 0 if
+// the chain does not reach it. `cur` never becomes 0 INSIDE the loop on purpose: stepping
+// onto 0 and then reading st_get(base, 0, 0) would read superblock A's cell 2, which IS a
+// generation number and would match by accident.
+fn st_commit_at(base: [i64], c: i64, gen: i64) -> i64 {
+  let cur = c;
+  let go = if c == 0 then 0 else 1;
+  while go == 1 {
+    let g = st_get(base, cur, 0);
+    let p = st_get(base, cur, 2);
+    let hit = if g == gen then 1 else 0;
+    let nxt = if p == 0 then 0 else st_ref(base, cur, 2);
+    let step = (1 - hit) * (if nxt == 0 then 0 else 1);
+    let cur = if step == 1 then nxt else cur;
+    let go = step;
+    0
+  };
+  let g = if c == 0 then 0 - 1 else st_get(base, cur, 0);
+  cur * (if g == gen then 1 else 0)
+}
+// st_open_at(base, gen, tmp): the ROOT of generation `gen`, reached by walking the commit
+// chain back from the live commit. 0 when the chain does not reach that generation --
+// never written, or dropped by a compaction that no head protected. O(commits walked):
+// the honest cost of a linked list, and the reason a heads table exists at all.
+fn st_open_at(base: [i64], gen: i64, tmp: [i64]) -> i64 {
+  let c = st_commit_at(base, base[st_pick(base, tmp) + 10], gen);
+  st_croot(base, c)
+}
+// st_sever(old, c, h): zero the `prev` cell (payload cell 2 = old[c + 4]) of the live
+// commit and of every commit a head names, in st_compact's MAP_PRIVATE view of the OLD
+// file only (CoW; the old inode is never modified, same channel the forwarding pointers
+// already use). Compaction therefore retains exactly the commits a head names plus the
+// live one and drops the history behind them: keeping every ancestor would pin every
+// generation forever and compaction would free nothing at all
+// (docs/RESEARCH-BYOK-ECS-DATAFLOW-2026-09-08.md:272). The severed 0 is a null ref, so
+// st_compact's scan does not follow it, and the crc the scan recomputes over the copy
+// covers the severed payload.
+fn st_sever(old: [i64], c: i64, h: i64) -> i64 {
+  let _ = if c == 0 then 0 else (let _ = old[c + 4] = 0 in 0);
+  let i = 0;
+  while i < 8 {
+    let r = if h == 0 then 0 else st_get(old, h, i);
+    let e = if r == 0 then 0 else st_ref(old, h, i);
+    let _ = if e == 0 then 0 else (let _ = old[e + 4] = 0 in 0);
+    let i = i + 1;
+    0
+  };
+  0
+}
 // ---- compaction = Cheney copy into <store>.tmp + rename (T113, §4e) ----
 // lay = [digest32, refmask] pairs (nlay pairs): bit i of refmask = payload cell i is
 // a ref; refmask -1 = a ref ARRAY (cell 0 = count, cells 1.. are refs). Forwarding is
@@ -360,6 +521,9 @@ fn st_compact(path: [i64], plen: i64, size: i64, lay: [i64], nlay: i64, tmp: [i6
   let root = old[sb + 3];
   let gen = old[sb + 2];
   let mig = old[sb + 6];
+  let com = old[sb + 10];
+  let hds = old[sb + 11];
+  let _ = st_sever(old, com, hds);
   let tp = zeros(plen + 5);
   let i = 0;
   while i < plen {
@@ -377,6 +541,8 @@ fn st_compact(path: [i64], plen: i64, size: i64, lay: [i64], nlay: i64, tmp: [i6
   let cur = [1024];
   let nroot = if root == 0 then 0 else st_copy_obj(old, new, cur, root);
   let nmig = if mig == 0 then 0 else st_copy_obj(old, new, cur, mig);
+  let ncom = if com == 0 then 0 else st_copy_obj(old, new, cur, com);
+  let nhds = if hds == 0 then 0 else st_copy_obj(old, new, cur, hds);
   let scan = 1024;
   while scan < cur[0] {
     let len = st_len(new, scan);
@@ -400,6 +566,7 @@ fn st_compact(path: [i64], plen: i64, size: i64, lay: [i64], nlay: i64, tmp: [i6
   };
   let live = cur[0] - 1024;
   let _ = st_sb_write_m(new, 0, gen + 1, nroot, cur[0], live, 0, nmig, tmp);
+  let _ = st_sb_write_ch(new, 0, ncom, nhds, tmp);
   let k = 512;
   while k < 528 {
     let _ = new[k] = 0;
