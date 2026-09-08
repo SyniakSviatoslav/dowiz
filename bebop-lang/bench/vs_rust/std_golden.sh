@@ -844,23 +844,44 @@ gate gb_gen_specialised -4783772994166464769 "$gb_gen_c"
 #      pool_parity-style: a main-stripped copy of bebop.bp concatenated ahead of it. ----
 awk '/^fn main\(/{skip=1} !skip{print} skip&&/^}/{skip=0}' bebop.bp > "$GBT/gb_pool_build.bp"
 cat bench/vs_rust/std_tests/gb_pool.bp >> "$GBT/gb_pool_build.bp"
-# 2026-09-08: the pool file is keyed by the COMPILER's md5. It used to be a fixed
-# "$GBT/gb_pool_gate.gbpool", which made this gate non-idempotent across compilers sharing one
-# BEBOP_TMP: a second run with a DIFFERENT binary read the previous compiler's kernels out of
-# the stale pool, its forked children died with `trap 82: SIGSEGV/SIGBUS`, and the fold printed
-# 0 instead of the golden. Reproduced both ways on the promoted 29fe5c72 itself (fresh $GBT ->
-# golden; reused $GBT -> three trap-82 lines and 0), which is why chain 1 in a fresh $OUT was
-# green here and chains 2 and 3 in the same $OUT were red. Keying by md5 keeps the ACROSS-RUN
-# pool-hit path exercised for one compiler -- which `rm -f` would have thrown away -- while a
-# new binary simply gets its own pool.
+# 2026-09-08: the pool file is keyed by the COMPILER's md5, which bounds how many kernel
+# generations one $BEBOP_TMP accumulates (gb_pool_cap() is 48 = four compilers' worth of the 12
+# this driver builds). It was introduced as a determinism WORKAROUND for the defect below and is
+# kept only for that bound; the defect itself is now FIXED, and gb_pool_reuse just below is the
+# gate that proves it -- it deliberately re-reads this same pool file, including with a foreign
+# compiler_digest.
 #
-# This makes the GATE deterministic; it does NOT explain the fault. gb_pool_abi asserts, and
-# passes, that a Kernel whose compiler_digest mismatches is a MISS (rebuilt, never run), so a
-# stale pool should have been rejected rather than executed. Why the file-backed path does not
-# reject it is OPEN and tracked on ROADMAP B3 -- do not treat this line as the fix for that.
+# The fault, root-caused 2026-09-08: NOT a missing compiler_digest check. gb_pool_lookup does
+# compare it and gb_pool_abi is right about that -- the two controls that decide it are "SAME
+# compiler, REUSED pool" (7 x trap 82, so the traps are not about compiler identity) and "FOREIGN
+# compiler, FRESH pool" (golden, so the check is not missing). What actually happened: the pool
+# store was a fixed 4 MiB while a Kernel's `words` array stores the .bin image ONE BYTE PER CELL
+# (a 29628-byte kernel = 237048 store bytes), so ONE run's 12 kernels filled 2.85 MB and the
+# next run's unconditional re-append bump-allocated past the end of the MAP_SHARED mapping --
+# store.bp's st_alloc never checks its cursor -- killing the writer children with trap 82. The
+# kernels they never appended then came back from gb_pool_lookup as its MISS answer, 0, which
+# every dispatch site passed straight to gb_kernel_digest/sys_run: the check was not missing,
+# its ANSWER was unread. Fixed in selfhost/std/gb_run.bp by gb_pool_size (one definition, 16 MiB
+# -- 4 MiB never held the 48 kernels gb_pool_cap advertises), gb_pool_room (a loud exit 89
+# instead of a wild store), gb_bg_have (a rebuild child that already has the kernel is a no-op,
+# so a re-run stops growing the pool at all) and gb_kernel_require (exit 107 rather than
+# dispatching a null Kernel).
 GBPOOL="$GBT/gb_pool_gate.$(md5sum < "${BEBOP_BIN:-bebop.bin}" | cut -c1-8).gbpool"
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$GBT/gb_pool_build.bp" "$GBT/gb_pool_test.bin" >/dev/null 2>&1 && run 60 "$GBT/gb_pool_test.bin" ${BEBOP_BIN:-bebop.bin} "$GBT" "$GBPOOL" | tail -1)
 gate gb_pool -4783772994166464769 "$r"
+
+# ---- gb_pool_reuse (ROADMAP B3's OPEN DEFECT, closed 2026-09-08): the gate the defect never
+#      had. The pool file the gb_pool block above just wrote is read AGAIN twice -- once by the
+#      SAME compiler_digest and once by a FOREIGN one (argv[2] is the file gb_pool.bp sha256s
+#      into `cmd`; ./seed/build/seed is a different file from bebop.bin, so this is a genuine
+#      cross-compiler read without needing a second committed compiler) -- and both must return
+#      the same golden the fresh-pool run did. On the unpatched tree this is RED in both cells:
+#      224 x trap 82 and a fold of 0 on a twice-used pool, 7 x trap 82 and -367455298937407970 on
+#      a once-used one. Cheap: the .bin is already compiled and one run is ~2 s. ----
+rr1=$(run 60 "$GBT/gb_pool_test.bin" ${BEBOP_BIN:-bebop.bin} "$GBT" "$GBPOOL" | tail -1)
+rr2=$(run 60 "$GBT/gb_pool_test.bin" ./seed/build/seed "$GBT" "$GBPOOL" | tail -1)
+[ "$rr1" = "$rr2" ] || rr2="MISMATCH(same=$rr1/foreign=$rr2)"
+gate gb_pool_reuse -4783772994166464769 "$rr2"
 
 # ---- gb_pool_abi (B3 step 4, design item (d)): a Kernel whose compiler_digest field mismatches
 #      is a MISS (rebuilt, never run) -- bench/vs_rust/std_tests/gb_pool_abi.bp forges a tiny

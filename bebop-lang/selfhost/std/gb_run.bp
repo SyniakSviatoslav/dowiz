@@ -36,6 +36,15 @@ fn gb_kernel_digest(base: [i64], K: i64) -> i64 { st_get(base, K, 0) }
 fn gb_kernel_cmd(base: [i64], K: i64) -> i64 { st_get(base, K, 9) }
 fn gb_kernel_entry(base: [i64], K: i64) -> i64 { st_get(base, K, 7) }
 fn gb_kernel_words(base: [i64], K: i64) -> ref GbArr { st_ref(base, K, 6) }
+// gb_kernel_require(K): 0 is gb_pool_lookup's MISS answer (T48b's null-ref idiom), never a
+// Kernel offset -- the store's own arena starts at cell 1024. Every dispatch entry point calls
+// this FIRST. ROADMAP B3 (2026-09-08): nothing used to, so a miss was dispatched as if it were a
+// Kernel -- gb_kernel_digest(base, 0) reads store cell 2 (a superblock word) as the digest, the
+// export/mmap then hands sys_run whatever that names, and the forked child dies with `trap 82:
+// SIGSEGV/SIGBUS`. That is the "its kernels are dispatched" half of the defect, and it is not a
+// missing compiler_digest check but an UNREAD ANSWER from the check that already exists: the
+// caller is contractually required to have rebuilt on a miss before dispatching. Exit 107.
+fn gb_kernel_require(K: i64) -> i64 { if K == 0 then sys_exit(107) else 0 }
 
 // gb_pool_key(buf, op, sr, mask, fmt, tr) -> digest: buf is a caller-owned scratch byte
 // buffer (>= 64 cells), wr_str/wr_i64 (selfhost/std/gen_gb.bp) build the text, sha256_lo64
@@ -59,9 +68,27 @@ fn gb_pool_key(buf: [i64], op: i64, sr: i64, mask: i64, fmt: i64, tr: i64) -> i6
   sha256_lo64(buf, pos[0])
 }
 
-// gb_pool_open_rw / _ro: the pool's OWN store file, 4 MiB (plenty for 48 small kernels).
-fn gb_pool_open_rw(path: [i64], plen: i64, tmp: [i64]) -> [i64] { st_open(path, plen, 4194304, tmp) }
-fn gb_pool_open_ro(path: [i64], plen: i64) -> [i64] { st_map_ro(path, plen, 4194304) }
+// gb_pool_size(): the pool store file's byte size -- ONE definition, read by every site that
+// opens, maps or fences it (gb_pool_open_rw/_ro and both dispatch fences below). It used to be
+// the literal 4194304 in four places, under a comment claiming "4 MiB (plenty for 48 small
+// kernels)". That claim was FALSE, and it is what ROADMAP B3's OPEN DEFECT actually was
+// (reproduced 2026-09-08 -- see gb_pool_room): a Kernel's `words` array holds the .bin image
+// ONE BYTE PER CELL, so a 29628-byte kernel costs 29631 cells = 237048 bytes of store, and
+// gb_pool_cap() = 48 of them need 11.4 MB, not 4. Twelve kernels -- ONE run of the B3 gate --
+// already fill 2.85 MB, so the SECOND run overflowed. 16 MiB holds the advertised cap with slack.
+fn gb_pool_size() -> i64 { 16777216 }
+// gb_pool_room(tx, cells): does an in-flight transaction still have `cells` cells of arena left
+// inside the mapping? st_alloc (store.bp) is a bare bump allocator -- it never compares its
+// cursor with the mapping's end -- so without this an append walks off the end of a MAP_SHARED
+// mapping and the WRITING process dies with `trap 82: SIGSEGV/SIGBUS`. That, not a missing
+// compiler_digest check, is the mechanism behind every trap-82 line B3 recorded: gb_pool_lookup
+// does compare compiler_digest, and gb_pool_abi is right about it (proof: with a foreign
+// compiler_digest and a FRESH pool the B3 gate returns the golden; with the SAME compiler_digest
+// and a REUSED pool it traps 7 times).
+fn gb_pool_room(tx: [i64], cells: i64) -> i64 { if tx[2] + cells < gb_pool_size() / 8 then 1 else 0 }
+// gb_pool_open_rw / _ro: the pool's OWN store file, gb_pool_size() bytes.
+fn gb_pool_open_rw(path: [i64], plen: i64, tmp: [i64]) -> [i64] { st_open(path, plen, gb_pool_size(), tmp) }
+fn gb_pool_open_ro(path: [i64], plen: i64) -> [i64] { st_map_ro(path, plen, gb_pool_size()) }
 
 // gb_pool_fresh(base, tx, tmp): allocate+seal an EMPTY Pool object (count 0), return its
 // offset -- caller commits root = this offset (a fresh/first-ever pool file).
@@ -100,6 +127,10 @@ fn gb_pool_append(base: [i64], tx: [i64], tmp: [i64], P: i64, key: i64, op: i64,
   let cap = gb_pool_cap();
   let cnt = gb_pool_count(base, P);
   let _ = if cnt >= cap then sys_exit(89) else 0;
+  // B3 (2026-09-08): the Kernel (12 cells) + the fresh Pool (2 + 1 + cap) must still fit inside
+  // the mapping. Exit 89 is the same code the count ceiling above already uses -- both are "this
+  // pool is full"; a wild store past the mapping is not an acceptable third answer.
+  let _ = if gb_pool_room(tx, 128 + cap) == 0 then sys_exit(89) else 0;
   let K = st_alloc(base, tx, 10, st_digest("Kernel{i64,i64,i64,i64,i64,i64,ref GbKW,i64,i64,i64}"));
   let _ = st_put(base, K, 0, key);
   let _ = st_put(base, K, 1, op);
@@ -300,6 +331,7 @@ fn gb_kernel_run_child(path: [i64], plen: i64, nb: i64, dpath: [i64], dplen: i64
 // pool_compile.bp/par_compile already uses for its own clone). st_cells is store.bp's own
 // i64<->[i64] cast, reused rather than adding a new one (typecheck's CASTS allowlist).
 fn gb_kernel_run(base: [i64], K: i64, dir: str, path: [i64], respath: [i64], replen: i64, dpath: [i64], dplen: i64) -> i64 {
+  let _ = gb_kernel_require(K);
   let kdigest = gb_kernel_digest(base, K);
   let plen = gb_kernel_cache_path(dir, kdigest, path);
   let probe = sys_open(path, plen, 0);
@@ -319,7 +351,7 @@ fn gb_kernel_run(base: [i64], K: i64, dir: str, path: [i64], respath: [i64], rep
   // C1 step 1: cells 7/8 are the fence's operands -- this parent's own store mapping and
   // the size gb_pool_open_rw/gb_pool_open_ro both map. `base` is that mapping.
   let _ = args[7] = addr_of(base);
-  let _ = args[8] = 4194304;
+  let _ = args[8] = gb_pool_size();
   gb_kernel_run_launch(args)
 }
 fn gb_kernel_run_launch(args: [i64]) -> i64 {
@@ -429,6 +461,9 @@ fn gb_bg_compile_append(base: [i64], tx: [i64], tmp: [i64], P: i64, dir: str, op
   let plen = gen_path(dir, op, sr, 0, 1, 0, path);
   let _ = gb_lib_write(libtext, sr, fieldidx, path, plen, libbuf);
   let nb = gb_bg_compile_noexpand(path, plen, outbuf, 131072, str_len(libtext) + 3000);
+  // B3 (2026-09-08): the words array alone is nb + 3 cells (ONE BYTE PER CELL -- ~29.6 KB of
+  // .bin becomes ~237 KB of store). Refuse loudly rather than bump past the mapping's end.
+  let _ = if gb_pool_room(tx, nb + 256) == 0 then sys_exit(89) else 0;
   let words = arr_alloc(base, tx, st_digest("GbKW{arr i64}"), nb);
   let i = 0;
   while i < nb {
@@ -452,6 +487,17 @@ fn gb_bg_compile_append(base: [i64], tx: [i64], tmp: [i64], P: i64, dir: str, op
 // below, before this was called), so the "<=8 live symbols across a clone" rule does not
 // constrain this function's own (larger) local count -- it mirrors gb_kernel_run_child's
 // already-proven shape instead.
+// gb_bg_have(base, P, op, sr, cmd): does the pool ALREADY hold this exact (op, sr) kernel built
+// by this exact compiler? A "rebuild on miss" child that appends unconditionally is not a cache:
+// re-running the same driver against the same pool file appended a SECOND full set of 12 kernels
+// (2.85 MB) and overflowed the store (ROADMAP B3, 2026-09-08). Both halves of the key are
+// compared, exactly as gb_pool_lookup does for a dispatch -- so a DIFFERENT compiler still gets
+// its own kernels built, which is the behaviour gb_pool_abi asserts.
+fn gb_bg_have(base: [i64], P: i64, op: i64, sr: i64, cmd: i64) -> i64 {
+  let keyb = zeros(64);
+  let k = gb_pool_key(keyb, op, sr, 0, 1, 0);
+  gb_pool_lookup(base, P, k, cmd)
+}
 fn gb_bg_child(args: [i64]) -> i64 {
   let dir = gb_str_from_file(st_cells(args[0]), args[1], args[2]);
   let ppath = st_cells(args[3]);
@@ -468,6 +514,8 @@ fn gb_bg_child(args: [i64]) -> i64 {
   let Proot = st_root(base, tmp);
   let P0 = gb_pool_ref_i64(Proot);
   let P = if P0 == 0 then gb_pool_fresh(base, tx, tmp) else P0;
+  let have = gb_bg_have(base, P, op, sr, cmd);
+  let _ = if have != 0 then sys_exit(0) else 0;
   let outbuf = zeros(131072);
   let P2 = gb_bg_compile_append(base, tx, tmp, P, dir, op, sr, cmd, outbuf, libtext, fieldidx);
   let _ = st_commit(base, tx, P2, tmp);
@@ -574,6 +622,7 @@ fn gb_kernel_run_launch2(args: [i64]) -> i64 {
 // thereafter); every call pays exactly sys_clone + sys_run + sys_wait4 -- the fork floor
 // (see gb_fork_floor_one below), nothing else.
 fn gb_kernel_run_fast(base: [i64], K: i64, dir: str, path: [i64], cache: [i64], argv2addr: i64, resmemaddr: i64) -> i64 {
+  let _ = gb_kernel_require(K);
   let idx = gb_cache_find(cache, K);
   let out = zeros(2);
   let _ = if idx < 0 then gb_kernel_mmap_into(base, K, dir, path, out) else 0;
@@ -587,7 +636,7 @@ fn gb_kernel_run_fast(base: [i64], K: i64, dir: str, path: [i64], cache: [i64], 
   let _ = args[2] = argv2addr;
   let _ = args[3] = resmemaddr;
   let _ = args[4] = addr_of(base);   // C1 step 1: the fence's operands, as in gb_kernel_run
-  let _ = args[5] = 4194304;
+  let _ = args[5] = gb_pool_size();
   gb_kernel_run_launch2(args)
 }
 
