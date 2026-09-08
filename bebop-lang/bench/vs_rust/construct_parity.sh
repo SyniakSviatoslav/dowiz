@@ -74,6 +74,11 @@ for f in "$DIR"/*.bp; do
     c34_loopescape) EXPECT=74;;
     c35_return) EXPECT=15041;;
     c36_break) EXPECT=4950014;;
+    # ROADMAP A6 (2026-09-08): was a NEGATIVE gate (neg/c38_frameheap.bp,
+    # EXPECT=RUNFAIL:81). A6 deletes the frame heap and with it exit 81, so the
+    # 20 KiB of single-activation aggregates this program allocates now RUN on the
+    # arena cursor. Re-derived with `python3 tools/bpref.py`, not assumed: 2559.
+    c38_frameheap) EXPECT=2559;;
     c40_struct) EXPECT=6420822;;
     c41_clz) EXPECT=64631045;;
     c42_crc32) EXPECT=1001269;;
@@ -153,7 +158,6 @@ for f in "${DIR%/}/neg"/*.bp; do
     c28_plusplus) EXPECT=COMPILEFAIL:96;;
     c29_emptybody) EXPECT=COMPILEFAIL:97;;
     c37_arenafull) EXPECT=RUNFAIL:80;;
-    c38_frameheap) EXPECT=RUNFAIL:81;;
     c48_stackovf) EXPECT=RUNFAIL:82;;
     c52_undef) EXPECT=RUNFAIL:87;;
     c51_casbad) EXPECT=COMPILEFAIL:88;;

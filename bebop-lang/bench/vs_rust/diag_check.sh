@@ -38,7 +38,14 @@ else echo "FAIL check c53_param9 want exit 0 and no .bin, got exit $rc: $out"; f
 # T90 step 2c (2026-09-06): runtime traps are `brk #code`; the entry stub's SIGTRAP handler
 # writes `trap NN: <text>` on stderr and exits with the code (82 = the SIGSEGV/SIGBUS handler).
 printf 'fn main() -> i64 {\n  let a = zeros(40000000);\n  a[0]\n}\n' > "$T/t80.bp"
-python3 -c 'lit="["+",".join(["1"]*511)+"]"; print("fn main() -> i64 {"); [print("  let a%d = %s;" % (i,lit)) for i in range(4)]; print("  a0[0] + a1[1] + a2[2] + a3[3]\n}")' > "$T/t81.bp"
+# ROADMAP A6 (2026-09-08): the t81 generator (4 x 511-cell array literals = 16 KiB
+# in one activation) and its `81 frame heap exhausted` row are DELETED. A6 moves
+# aggregates off the per-activation frame heap onto the arena cursor x27, so no
+# `brk #81` word is emitted by any path and the trap cannot be provoked -- exit 81
+# is not a trap with a bigger budget, it is a trap that no longer exists. The
+# aggregate-volume coverage the program gave moved to the (now positive) construct
+# bench/parity_constructs/c38_frameheap.bp, EXPECT=2559; overflow of the ARENA is
+# still covered here by t80 and by neg/c37_arenafull.
 printf 'fn r(n: i64) -> i64 {\n  r(n + 1)\n}\nfn main() -> i64 {\n  r(0)\n}\n' > "$T/t82.bp"
 printf 'fn main() -> i64 {\n  nosuch(1)\n}\n' > "$T/t87.bp"
 while read -r code text; do
@@ -48,7 +55,6 @@ while read -r code text; do
   else echo "FAIL trap $code want exit $code + 'trap $code: $text', got exit $rc: $err"; fail=$((fail+1)); fi
 done <<'TRAPS'
 80 arena exhausted (zeros crossed x28)
-81 frame heap exhausted (array literal or enum ctor)
 82 SIGSEGV/SIGBUS (stack overflow or wild access)
 87 call to an unresolved function
 TRAPS

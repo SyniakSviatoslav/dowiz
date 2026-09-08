@@ -470,9 +470,16 @@ fn emit_struct_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = vs_park(insns, n, fntab, stab, fcnt);
   let _ = vs_evict(insns, n, fntab, stab, 0);
   let _ = vs_mask_take(fntab, 0, 2);
-  let _ = em(insns, n, 2853045216);
-  let _ = em(insns, n, 2432696320 + fcnt * 8192 + 462);
-  let _ = emit_heap_trap(insns, n, fntab, stab);
+  let _ = em(insns, n, 2853897184);
+  let _ = em(insns, n, 2432696320 + fcnt * 8192 + 891);
+  // ROADMAP A6 (2026-09-08): aggregates allocate at the ARENA CURSOR x27, the
+  // same bump `zeros` uses, and inherit its capacity trap -- cmp x27,x28 ;
+  // b.ls +2 ; brk #80. The T118 frame-heap trap (brk #81) and its helper
+  // emit_heap_trap are DELETED: there is no frame heap any more, so exit 81
+  // cannot be reached and the class is gone rather than merely under budget.
+  let _ = em(insns, n, 3944481663);
+  let _ = em(insns, n, 1409286217);
+  let _ = em(insns, n, 3558869504);
   let k = [fcnt];
   while k[0] > 0 {
     let _ = k[0] = k[0] - 1;
@@ -553,13 +560,16 @@ fn emit_enum_ctor(s: str, tag: i64, pos: [i64], insns: [i64], n: [i64], stab: [i
   let _ = vs_deliver(insns, n, fntab, stab, 1);
   let _ = em(insns, n, 4177528256);
   let _ = pos[0] = pos[0] + 1;
-  let _ = em(insns, n, 2853045216);
-  let _ = em(insns, n, 2432713166);
-  // T118 (D11-D): frame-heap capacity trap -- the frame is 16 KiB from the
-  // prologue sp and x15 = sp+256, so the heap end is x15 + 16128:
-  // add x2,x15,#12288 ; add x2,x2,#3840 ; cmp x14,x2 ; b.ls +2 ; brk #81
-  // (exit 81 = frame heap exhausted; T90 2c: the entry stub's SIGTRAP handler prints the text)
-  let _ = emit_heap_trap(insns, n, fntab, stab);
+  let _ = em(insns, n, 2853897184);
+  let _ = em(insns, n, 2432713595);
+  // ROADMAP A6 (2026-09-08): aggregates allocate at the ARENA CURSOR x27, the
+  // same bump `zeros` uses, and inherit its capacity trap -- cmp x27,x28 ;
+  // b.ls +2 ; brk #80. The T118 frame-heap trap (brk #81) and its helper
+  // emit_heap_trap are DELETED: there is no frame heap any more, so exit 81
+  // cannot be reached and the class is gone rather than merely under budget.
+  let _ = em(insns, n, 3944481663);
+  let _ = em(insns, n, 1409286217);
+  let _ = em(insns, n, 3558869504);
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
   n[0]
 }
@@ -568,13 +578,16 @@ fn emit_enum_ctor(s: str, tag: i64, pos: [i64], insns: [i64], n: [i64], stab: [i
 fn emit_enum_ctor_nullary(insns: [i64], n: [i64], tag: i64, fntab: [i64], stab: [i64]) -> i64 {
   let _ = em(insns, n, 3531603968 + tag * 32);
   let _ = em(insns, n, 4177527232);
-  let _ = em(insns, n, 2853045216);
-  let _ = em(insns, n, 2432713166);
-  // T118 (D11-D): frame-heap capacity trap -- the frame is 16 KiB from the
-  // prologue sp and x15 = sp+256, so the heap end is x15 + 16128:
-  // add x2,x15,#12288 ; add x2,x2,#3840 ; cmp x14,x2 ; b.ls +2 ; brk #81
-  // (exit 81 = frame heap exhausted; T90 2c: the entry stub's SIGTRAP handler prints the text)
-  let _ = emit_heap_trap(insns, n, fntab, stab);
+  let _ = em(insns, n, 2853897184);
+  let _ = em(insns, n, 2432713595);
+  // ROADMAP A6 (2026-09-08): aggregates allocate at the ARENA CURSOR x27, the
+  // same bump `zeros` uses, and inherit its capacity trap -- cmp x27,x28 ;
+  // b.ls +2 ; brk #80. The T118 frame-heap trap (brk #81) and its helper
+  // emit_heap_trap are DELETED: there is no frame heap any more, so exit 81
+  // cannot be reached and the class is gone rather than merely under budget.
+  let _ = em(insns, n, 3944481663);
+  let _ = em(insns, n, 1409286217);
+  let _ = em(insns, n, 3558869504);
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
   n[0]
 }
@@ -1162,11 +1175,18 @@ fn emit_clock_ms(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
 // (post-argv). x27/x28 are reserved by the register protocol and survive
 // into the program; callers derive shared cell addresses as
 // sys_arena_base() + idx * 8. Assembler-verified (m6.s).
+// ROADMAP A6 (2026-09-08): this used the ORR form `mov x0,x27` (2853897184).
+// A6 makes that exact word the SENTINEL for "this fn allocates an aggregate on
+// the arena cursor" (count_word in emit_while_stmt / compile_fn_at_total_saved
+// is an exact 32-bit match), so sys_arena_base() would have false-positived as
+// an allocation. Retargeted onto the ADD alias `add x0,x27,xzr` (2334065504),
+// which is bit-identical in effect, sets no flags, and is already the word
+// emit_zeros uses for the same move -- so it is not, and never was, a sentinel.
 fn emit_sys_arena_base(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = em(insns, n, 2853897184);
+  let _ = em(insns, n, 2334065504);
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
   n[0]
 }
@@ -2098,32 +2118,17 @@ fn vs_alloc(insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
   r
 }
 
-// BUGFIX (A4 fuzz DIVERGE round 2, 2026-09-07): the T118 frame-heap
-// capacity trap (add x2,x15,#12288 ; add x2,x2,#3840 ; cmp x14,x2 ; b.ls
-// +2 ; brk #81) hardcoded x2 as scratch WITHOUT reserving it in the window
-// mask. emit_array_lit/emit_struct_lit/emit_enum_ctor/emit_enum_ctor_nullary
-// all run this check AFTER vs_evict(0) has already relocated whatever owned
-// x0 (typically an array/struct element materialised earlier in the same
-// literal) to the next free window register -- x2 whenever x0 and x1 were
-// both already taken. The two `add`s then clobber that LIVE value before
-// the fill loop ever stores it (repro: `let a0=[(if(if v1 then i0 else
-// v1)then i0 else v1), v1/i0]; a0[1]` -- oracle 33, was a raw stack/heap
-// address leaking through, e.g. 549069983631/0x7fd71f0f8f). Fix: allocate
-// the scratch register through vs_alloc (so it can never collide with a
-// live window entry, parking one if the mask is exhausted) and free it
-// right after. Words: `as`+objdump-verified parameterised forms (Rd at
-// bits[4:0] = +1/unit, Rn at bits[9:5] = +32/unit, Rm at bits[20:16] =
-// +65536/unit; t=3 -> 2436894179/2436628579/3942842847, t=5 ->
-// 2436894181/2436628645/3942973919, both exact matches).
-fn emit_heap_trap(insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
-  let t = vs_alloc(insns, n, fntab, stab);
-  let _ = em(insns, n, 2436894176 + t);
-  let _ = em(insns, n, 2436628480 + 33 * t);
-  let _ = em(insns, n, 3942646239 + t * 65536);
-  let _ = em(insns, n, 1409286217);
-  let _ = em(insns, n, 3558869536);
-  vs_mask_free(fntab, t, 40)
-}
+// ROADMAP A6 (2026-09-08): emit_heap_trap (the T118 frame-heap capacity trap,
+// `add x2,x15,#12288 ; add x2,x2,#3840 ; cmp x14,x2 ; b.ls +2 ; brk #81`) lived
+// here and was called from emit_array_lit / emit_struct_lit / emit_enum_ctor /
+// emit_enum_ctor_nullary. All four now allocate on the arena cursor x27 and use
+// `zeros`'s own trap (brk #80) instead, so the helper, the frame heap it guarded
+// and exit 81 are all deleted. The A4-round-2 bugfix it carried (take the scratch
+// register through vs_alloc, never a hardcoded x2) is moot: the replacement needs
+// no scratch register at all -- `cmp x27,x28` reads two process registers. What
+// DOES survive from that bugfix is the vs_settle_flags call in emit_array_lit:
+// the new `cmp` clobbers NZCV exactly like the trap it replaces, so a trailing
+// FLAGS element must still be settled before it.
 
 // MULC r,c materialisation into x<d> (spec §2 fusion table): all 5 cases
 // merged into one function (each was a single-caller helper) to keep the
@@ -3285,7 +3290,9 @@ fn emit_term(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
 //       or expression nesting / pending operands > 512 (vs_push: the
 //       window's 512-entry list at fntab[2800..4335] is full)
 // Runtime capacity traps (T118, exit_group from the compiled program):
-//   80  arena exhausted (zeros past x28)     81  frame heap exhausted (x14 past
+//   80  arena exhausted (zeros or an aggregate literal past x28; ROADMAP A6
+//       2026-09-08 folded the former exit 81 into this one)   [81 DELETED: was
+//       frame heap exhausted (x14 past
 //   the 16 KiB frame)                         82  stack overflow (guard, T118 b)
 // A trap fires before the output is opened (cli_compile), so no .bin is
 // produced; bench/vs_rust/construct_parity.sh gates them as
@@ -3675,13 +3682,16 @@ fn emit_array_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let _ = vs_park(insns, n, fntab, stab, cnt);
   let _ = vs_evict(insns, n, fntab, stab, 0);
   let _ = vs_mask_take(fntab, 0, 16);
-  let _ = em(insns, n, 2853045216);
-  let _ = em(insns, n, 2432696320 + cnt * 8192 + 462);
-  // T118 (D11-D): frame-heap capacity trap -- the frame is 16 KiB from the
-  // prologue sp and x15 = sp+256, so the heap end is x15 + 16128:
-  // add x2,x15,#12288 ; add x2,x2,#3840 ; cmp x14,x2 ; b.ls +2 ; brk #81
-  // (exit 81 = frame heap exhausted; T90 2c: the entry stub's SIGTRAP handler prints the text)
-  let _ = emit_heap_trap(insns, n, fntab, stab);
+  let _ = em(insns, n, 2853897184);
+  let _ = em(insns, n, 2432696320 + cnt * 8192 + 891);
+  // ROADMAP A6 (2026-09-08): aggregates allocate at the ARENA CURSOR x27, the
+  // same bump `zeros` uses, and inherit its capacity trap -- cmp x27,x28 ;
+  // b.ls +2 ; brk #80. The T118 frame-heap trap (brk #81) and its helper
+  // emit_heap_trap are DELETED: there is no frame heap any more, so exit 81
+  // cannot be reached and the class is gone rather than merely under budget.
+  let _ = em(insns, n, 3944481663);
+  let _ = em(insns, n, 1409286217);
+  let _ = em(insns, n, 3558869504);
   let k = [cnt];
   while k[0] > 0 {
     let _ = k[0] = k[0] - 1;
@@ -4034,11 +4044,13 @@ fn emit_epilogue_sized(insns: [i64], n: [i64], vc: i64, cs_hi: i64) -> i64 {
   n[0]
 }
 
-// ---- T43 (2026-09-04): per-iteration frame-heap reset around `while` bodies.
-// A body that allocates on x14 (array literal / enum ctor: the stream contains
-// `mov x0,x14` = 2853045216) leaked 16 bytes+ per iteration and overflowed the
-// 15 KiB frame heap (L8 "no allocations inside while bodies"). Now the loop
-// saves x14 once before loop_start and restores it at the back-edge and at
+// ---- T43 (2026-09-04): per-iteration allocation reset around `while` bodies.
+// A body that allocates (array literal / enum ctor: the stream contains the
+// sentinel `mov x0,x27` = 2853897184; ROADMAP A6 2026-09-08 moved these off the
+// frame heap's `mov x0,x14` = 2853045216 onto the arena cursor) leaked 16 bytes+
+// per iteration and overflowed the 15 KiB frame heap (L8 "no allocations inside
+// while bodies"). Now the loop saves x27 once before loop_start (the mark cell
+// at [sp,#80+8*depth], unchanged) and restores it at the back-edge and at
 // the exit, PROVIDED the body cannot leak an allocated pointer: a
 // conservative TEXT scan of the body says no `let` at paren-depth 0 binds an
 // OUTER symbol (bound before the loop) to a BARE right-hand side (no
@@ -4718,10 +4730,10 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   // no allocated pointer can leave the iteration. Once per iteration, right
   // after the body, before falling into the bottom test (same position
   // relative to the body as the old top-test loop's pre-backward-branch reset).
-  let allocs = count_word(insns, body_start, n[0], 2853045216);
+  let allocs = count_word(insns, body_start, n[0], 2853897184);
   let safe = if allocs > 0 then loop_alloc_safe(s, b0, b1, stab, cnt0) else 0;
   let do_reset = slot_ok * (if allocs > 0 then 1 else 0) * safe;
-  let ldrw = 4181722094 + (10 + ldepth) * 1024;
+  let ldrw = 4181722107 + (10 + ldepth) * 1024;
   let _ = if do_reset == 1 then (let _ = em(insns, n, ldrw) in 0) else 0;
   // bottom test: parse+emit the condition here (once), then jump the text
   // pointer straight to b1 instead of re-scanning the already-emitted body.
@@ -4748,7 +4760,7 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let endl = n[0];
   let _ = patch_jumps(insns, fntab, 4430, brk0, endl);
   let _ = if do_reset == 1 then (let _ = em(insns, n, ldrw) in 0) else 0;
-  let _ = if do_reset == 1 then (let _ = insns[pmark] = 4177527790 + (10 + ldepth) * 1024 in 0) else 0;
+  let _ = if do_reset == 1 then (let _ = insns[pmark] = 4177527803 + (10 + ldepth) * 1024 in 0) else 0;
   let _ = fntab[4411] = ldepth;
   // ROADMAP A2b: re-take the enclosing loop's hoisted constants (see the
   // release above). Emitted AFTER this loop's backward branch, so it runs once
@@ -5382,7 +5394,7 @@ fn collect_fns(s: str, fnames: [i64], fpos: [i64], cnt: [i64]) -> i64 {
 // also publishes fntab[2714] as a side effect, same as before.
 fn compile_fn_at_total_saved(insns: [i64], n: [i64], fntab: [i64], stab: [i64], pbase: i64, is_emission: i64) -> i64 {
   let real_vc = stab[0];
-  let real_alloc = if count_word(insns, pbase, n[0], 2853045216) > 0 then 1 else 0;
+  let real_alloc = if count_word(insns, pbase, n[0], 2853897184) > 0 then 1 else 0;
   // cs_hi/tsp: the max cs-temp register index and temp-slot count this fn's
   // OWN emission actually used (fntab[4575]/[3826], live-tracked by vs_park*
   // since vs_reset zeroed them at entry -- valid on either pass).
@@ -5532,7 +5544,7 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   // spilled (real_vc > 8) and drives the same per-pair keep/drop the old
   // OPT-A loop used (pair k kept iff real_vc > k*2; pair 4 = x27/x28 the
   // arena registers is never a symbol register, T126, always dropped);
-  // real_alloc is an EXACT word match (2853045216 = "mov x0,x14", only ever
+  // real_alloc is an EXACT word match (2853897184 = "mov x0,x27", only ever
   // emitted by an allocation site) rather than a generic decode, so it
   // cannot alias a call site's own stp/ldp x15,x14.
   //

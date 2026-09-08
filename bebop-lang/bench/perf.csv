@@ -1291,3 +1291,41 @@ ts,commit,bin,metric,value,unit,n,valid,at_max_pct,temp_mc,note
 1788889429,3005040,3a827a3f,stub_words,172,words,1,1,,,
 1788889429,3005040,3a827a3f,bin_fns,284,fns,1,1,,,
 1788889429,3005040,3a827a3f,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788890294,257e71b,ca69273e,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788890295,257e71b,ca69273e,gate_run_ms,14313,ms,1,1,,,"sum of non-memo gate runs (59 runs, 66 memo hits)"
+1788890355,257e71b,ca69273e,bin_words,39678,words,1,1,,,bytes 160712
+1788890355,257e71b,ca69273e,stub_words,172,words,1,1,,,
+1788890355,257e71b,ca69273e,bin_fns,283,fns,1,1,,,
+1788890355,257e71b,ca69273e,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788890418,257e71b,3a827a3f,bin_words,39907,words,1,1,,,bytes 161628
+1788890418,257e71b,3a827a3f,stub_words,172,words,1,1,,,
+1788890418,257e71b,3a827a3f,bin_fns,284,fns,1,1,,,
+1788890418,257e71b,3a827a3f,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788890469,257e71b,3a827a3f,bin_words,39907,words,1,1,,,bytes 161628
+1788890469,257e71b,3a827a3f,stub_words,172,words,1,1,,,
+1788890469,257e71b,3a827a3f,bin_fns,284,fns,1,1,,,
+1788890469,257e71b,3a827a3f,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788890519,257e71b,3a827a3f,bin_words,39907,words,1,1,,,bytes 161628
+1788890519,257e71b,3a827a3f,stub_words,172,words,1,1,,,
+1788890519,257e71b,3a827a3f,bin_fns,284,fns,1,1,,,
+1788890519,257e71b,3a827a3f,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788890754,257e71b,ca69273e,bin_words,39678,words,1,1,,,bytes 160712
+1788890754,257e71b,ca69273e,stub_words,172,words,1,1,,,
+1788890754,257e71b,ca69273e,bin_fns,283,fns,1,1,,,
+1788890754,257e71b,ca69273e,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788890927,257e71b,ca69273e,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788890928,257e71b,ca69273e,gate_run_ms,21005,ms,1,1,,,"sum of non-memo gate runs (74 runs, 178 memo hits)"
+1788890986,257e71b,ca69273e,bin_words,39678,words,1,1,,,bytes 160712
+1788890986,257e71b,ca69273e,stub_words,172,words,1,1,,,
+1788890986,257e71b,ca69273e,bin_fns,283,fns,1,1,,,
+1788890986,257e71b,ca69273e,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788895029,63626eb,ca69273e,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788895030,63626eb,ca69273e,gate_run_ms,8079,ms,1,1,,,"sum of non-memo gate runs (26 runs, 102 memo hits)"
+1788895170,63626eb,ca69273e,bin_words,39678,words,1,1,,,bytes 160712
+1788895170,63626eb,ca69273e,stub_words,172,words,1,1,,,
+1788895170,63626eb,ca69273e,bin_fns,283,fns,1,1,,,
+1788895170,63626eb,ca69273e,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788895479,63626eb,ca69273e,bin_words,39678,words,1,1,,,bytes 160712
+1788895479,63626eb,ca69273e,stub_words,172,words,1,1,,,
+1788895479,63626eb,ca69273e,bin_fns,283,fns,1,1,,,
+1788895479,63626eb,ca69273e,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired

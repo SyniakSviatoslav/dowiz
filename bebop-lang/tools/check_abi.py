@@ -117,10 +117,25 @@ def is_cond_branch(w):
             or (w & 0x7E000000) == 0x36000000)
 
 
+# ROADMAP A6 (2026-09-08): T43's per-iteration allocation reset. Aggregates now
+# bump the ARENA cursor x27 (the frame heap and its x14 are gone), so the `while`
+# mark/reset pair that used to save and restore x14 saves and restores x27:
+#   pmark  str x27,[sp,#80+8*d]      (a STORE -- writes memory, never a register,
+#                                     so the x27/x28 rule below never saw it)
+#   reset  ldr x27,[sp,#80+8*d]      (a LOAD into x27 -- this is the new form)
+# emit_while_stmt gates the slot on `ldepth <= 20`, so d is 0..20 and the offset
+# is 80..240; the words are `ldr x27,[sp,#0]` = 0xf94003fb + (10+d)*1024, derived
+# with as+objdump. Allowlisting the exact 21 words (not the opcode shape) keeps
+# the invariant that x27 is only ever restored from a mark THIS fn wrote: any
+# other `ldr x27,[sp,#imm]` -- a different offset, a different base -- still FAILs.
+T43_X27_RESET = {0xf94003fb + (10 + d) * 1024 for d in range(21)}
+
+
 def sys_allow(bp):
-    """Words emitted by `em(insns, n, <int>)` inside every `fn emit_sys_*` of bp."""
+    """Words emitted by `em(insns, n, <int>)` inside every `fn emit_sys_*` of bp,
+    plus T43's x27 mark-reset loads (A6)."""
     src = open(bp).read()
-    allow = set()
+    allow = set(T43_X27_RESET)
     for m in re.finditer(r"^fn emit_sys_\w+\(.*?\n}\n", src, re.S | re.M):
         allow |= {int(x) for x in re.findall(r"em\(insns, n, (\d+)\)", m.group(0))}
     return allow
