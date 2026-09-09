@@ -1,0 +1,311 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+// segtail.bp — B4 step 2'' probe: SEGMENTED TAIL vs today's whole-tail CoW.
+// PROBE ONLY. Its own store (segtail.store), its own root, no gate row, nothing reachable
+// from sgraph2's root -- selfhost/std/sgraph2.bp is NOT touched, so every existing fold and
+// gate row stays where it is.
+//
+// What is isolated: the NON-PROMOTION FLOOR of sgraph2's phase_log, measured at 426 ns/edge
+// (B4 step 2' refutation, journal 1788936449) = 85 % of the whole 500 ns/edge gate budget.
+// The floor is paid by tail_new (sgraph2.bp:123) copying the WHOLE shared tail every batch
+// plus st_seal's crc32 over it -- twice per batch, since tail_new seals and the batch seals
+// again after tl_gen appends. Both arms below run the SAME LCG-777 stream, the SAME 100
+// batches of 10^4 entries, the SAME per-batch st_begin/root/st_commit, and the SAME tail cap;
+// the ONLY difference is how the tail is CoW'd.
+//   arm W (`w`): TL{arr i64} -- cell 0 cnt, then (row,col) pairs. Verbatim tail_new: allocate
+//     cnt+room, copy every entry, seal; append; seal again. O(|tail|) per batch.
+//   arm S (`s`): TH{arr ref TG} header -- cell 0 nseg, then nseg segment refs; TG{arr i64}
+//     segment -- cell 0 cnt, then up to capS (row,col) pairs. A batch CoWs the header
+//     (nseg = |tail|/capS refs) and ONLY THE LAST, PARTIAL segment (<= capS entries); every
+//     FULL segment is immutable and stays shared BY REFERENCE. O(capS + |tail|/capS).
+// Invariant (1) (blueprint §3): an object is written only inside the transaction that
+// allocated it. Segmenting preserves it exactly -- a full segment is never written again, so
+// two live transactions may share it; the partial one is the only mutable object and it is
+// copied before the append. Phase `v` PROVES this rather than asserting it: it keeps the
+// header batch 1 committed, runs all 100 batches on top, and re-folds through that old header
+// at the end. If any segment had been written in place the old fold would move.
+// argv[2] = phase (w|s), argv[3] = t (ns per entry) | f (fold of the final tail) | v (the
+// batch-1 fold re-read at the end -- the invariant), argv[4] = capS (arm S segment size),
+// argv[5] = tail cap in entries, argv[6] = batches (default 100, 10^4 entries each).
+fn lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
+fn parse_i64(s: str) -> i64 {
+  let n = str_len(s);
+  let i = 0;
+  let v = 0;
+  while i < n {
+    let v = v * 10 + (char(s, i) - 48);
+    let i = i + 1;
+    0
+  };
+  v
+}
+// ---------------- arm W: sgraph2.bp:123 tail_new, verbatim ----------------
+fn tw_new(base: [i64], tx: [i64], dtl: i64, old: ref TL, keep: i64, room: i64, cap: i64, tmp: [i64]) -> ref TL {
+  let c0 = st_get(base, old, 0) * keep;
+  let want = if c0 + room < cap then c0 + room else cap;
+  let tl = st_alloc(base, tx, 1 + 2 * want, dtl);
+  let _ = st_put(base, tl, 0, c0);
+  let i = 0;
+  while i < 2 * c0 {
+    let _ = st_put(base, tl, 1 + i, st_get(base, old, 1 + i));
+    let i = i + 1;
+    0
+  };
+  let _ = st_seal(base, tl, tmp);
+  tl
+}
+fn tw_gen(base: [i64], tl: ref TL, take: i64, s: [i64]) -> i64 {
+  let c = st_get(base, tl, 0);
+  let k = 0;
+  while k < take {
+    let _ = s[0] = lcg(s[0]);
+    let a = (s[0] >> 20) % 1000000;
+    let _ = s[0] = lcg(s[0]);
+    let w = (s[0] >> 20) % 1000000;
+    let _ = st_put(base, tl, 1 + 2 * (c + k), a);
+    let _ = st_put(base, tl, 2 + 2 * (c + k), w);
+    let k = k + 1;
+    0
+  };
+  let _ = st_put(base, tl, 0, c + take);
+  c + take
+}
+fn tw_fold(base: [i64], tl: ref TL) -> i64 {
+  let c = st_get(base, tl, 0);
+  let acc = 0;
+  let i = 0;
+  while i < c {
+    let acc = acc + (1 + st_get(base, tl, 1 + 2 * i)) * (1 + st_get(base, tl, 2 + 2 * i));
+    let i = i + 1;
+    0
+  };
+  acc
+}
+// ---------------- arm S: the segmented tail ----------------
+// p[0] = segment digest, p[1] = capS, p[2] = header digest, p[3] = tail cap, p[4] = root digest
+fn ts_hdr_new(base: [i64], tx: [i64], oldh: ref TH, keep: i64, extra: i64, p: [i64]) -> ref TH {
+  let ns = st_get(base, oldh, 0) * keep;
+  let nh = st_alloc(base, tx, 1 + ns + extra, p[2]);
+  let _ = st_put(base, nh, 0, ns);
+  let i = 1;
+  while i <= ns {
+    let _ = st_link(base, nh, i, st_ref(base, oldh, i));
+    let i = i + 1;
+    0
+  };
+  nh
+}
+// ts_seg_new: a fresh EMPTY segment, appended to the header. Owned by this transaction.
+fn ts_seg_new(base: [i64], tx: [i64], h: ref TH, p: [i64]) -> ref TG {
+  let idx = st_get(base, h, 0) + 1;
+  let nl = st_alloc(base, tx, 1 + 2 * p[1], p[0]);
+  let _ = st_put(base, nl, 0, 0);
+  let _ = st_link(base, h, idx, nl);
+  let _ = st_put(base, h, 0, idx);
+  nl
+}
+// ts_open_last: THE CoW, once per batch. The last segment is the only one this transaction
+// can append to, and it belongs to the previous transaction, so it is copied (<= capS
+// entries) and the copy replaces it in this transaction's header. A FULL last segment is
+// not copied at all -- a fresh empty one is appended instead. Every other segment stays
+// shared by reference, which is the entire difference from arm W.
+fn ts_open_last(base: [i64], tx: [i64], h: ref TH, p: [i64]) -> i64 {
+  let ns = st_get(base, h, 0);
+  let lsg = if ns == 0 then 0 else st_ref(base, h, ns);
+  let c0 = if ns == 0 then p[1] else st_get(base, lsg, 0);
+  let cc = if c0 < p[1] then c0 else 0;
+  let idx = if c0 < p[1] then ns else ns + 1;
+  let nl = st_alloc(base, tx, 1 + 2 * p[1], p[0]);
+  let _ = st_put(base, nl, 0, cc);
+  let i = 0;
+  while i < 2 * cc {
+    let _ = st_put(base, nl, 1 + i, st_get(base, lsg, 1 + i));
+    let i = i + 1;
+    0
+  };
+  let _ = st_link(base, h, idx, nl);
+  let _ = st_put(base, h, 0, idx);
+  idx
+}
+fn ts_put1(base: [i64], tx: [i64], h: ref TH, p: [i64], a: i64, w: i64) -> i64 {
+  let cur = st_ref(base, h, st_get(base, h, 0));
+  let c0 = st_get(base, cur, 0);
+  let hit = if c0 < p[1] then 1 else 0;
+  let sg = if hit == 1 then cur else ts_seg_new(base, tx, h, p);
+  let c = c0 * hit;
+  let _ = st_put(base, sg, 1 + 2 * c, a);
+  let _ = st_put(base, sg, 2 + 2 * c, w);
+  let _ = st_put(base, sg, 0, c + 1);
+  0
+}
+fn ts_batch(base: [i64], tx: [i64], h: ref TH, p: [i64], take: i64, s: [i64], tmp: [i64]) -> i64 {
+  let i0 = st_get(base, h, 0);
+  let k = 0;
+  while k < take {
+    let _ = s[0] = lcg(s[0]);
+    let a = (s[0] >> 20) % 1000000;
+    let _ = s[0] = lcg(s[0]);
+    let w = (s[0] >> 20) % 1000000;
+    let _ = ts_put1(base, tx, h, p, a, w);
+    let k = k + 1;
+    0
+  };
+  let i1 = st_get(base, h, 0);
+  let j = i0;
+  while j <= i1 {
+    let _ = st_seal(base, st_ref(base, h, j), tmp);
+    let j = j + 1;
+    0
+  };
+  i1
+}
+fn ts_fold(base: [i64], h: ref TH) -> i64 {
+  let ns = st_get(base, h, 0);
+  let acc = 0;
+  let j = 1;
+  while j <= ns {
+    let sg = st_ref(base, h, j);
+    let c = st_get(base, sg, 0);
+    let i = 0;
+    while i < c {
+      let acc = acc + (1 + st_get(base, sg, 1 + 2 * i)) * (1 + st_get(base, sg, 2 + 2 * i));
+      let i = i + 1;
+      0
+    };
+    let j = j + 1;
+    0
+  };
+  acc
+}
+// ---------------- batches, one store transaction each (exactly phase_log's shape) ----------------
+// s[0] = LCG state, s[1] = entries in the tail, s[2] = "batch 1 is done" (the pin).
+// Root SG{ref X, ref X}: cell 0 = the live tail, cell 1 = the tail batch 1 committed, PINNED
+// so phase `v` can re-read it after 100 more batches -- the invariant-(1) proof.
+// The tail is emptied when it reaches the cap: this probe measures the FLOOR, so the drain is
+// the only thing a promotion does here (no L0, no csr_build) -- identical in both arms.
+fn w_batch(base: [i64], tmp: [i64], p: [i64], s: [i64], tx: [i64]) -> ref TL {
+  let _ = st_begin(base, tx, tmp);
+  let g = st_root(base, tmp);
+  let old = st_ref(base, g, 0);
+  let keep = if s[1] < p[3] then 1 else 0;
+  let _ = s[1] = s[1] * keep;
+  let tl = tw_new(base, tx, p[5], old, keep, 10000, p[3], tmp);
+  let _ = st_supersede(base, tx, old);
+  let _ = tw_gen(base, tl, 10000, s);
+  let _ = st_seal(base, tl, tmp);
+  let _ = s[1] = s[1] + 10000;
+  let g2 = st_alloc(base, tx, 2, p[4]);
+  let _ = st_link(base, g2, 0, tl);
+  let pin = if s[2] == 0 then tl else st_ref(base, g, 1);
+  let _ = st_link(base, g2, 1, pin);
+  let _ = s[2] = 1;
+  let _ = st_seal(base, g2, tmp);
+  let _ = st_supersede(base, tx, g);
+  let _ = st_commit(base, tx, g2, tmp);
+  tl
+}
+fn s_batch(base: [i64], tmp: [i64], p: [i64], s: [i64], tx: [i64]) -> ref TH {
+  let _ = st_begin(base, tx, tmp);
+  let g = st_root(base, tmp);
+  let oldh = st_ref(base, g, 0);
+  let keep = if s[1] < p[3] then 1 else 0;
+  let _ = s[1] = s[1] * keep;
+  let h = ts_hdr_new(base, tx, oldh, keep, 10000 / p[1] + 2, p);
+  let _ = st_supersede(base, tx, oldh);
+  let _ = ts_open_last(base, tx, h, p);
+  let _ = ts_batch(base, tx, h, p, 10000, s, tmp);
+  let _ = st_seal(base, h, tmp);
+  let _ = s[1] = s[1] + 10000;
+  let g2 = st_alloc(base, tx, 2, p[4]);
+  let _ = st_link(base, g2, 0, h);
+  let pin = if s[2] == 0 then h else st_ref(base, g, 1);
+  let _ = st_link(base, g2, 1, pin);
+  let _ = s[2] = 1;
+  let _ = st_seal(base, g2, tmp);
+  let _ = st_supersede(base, tx, g);
+  let _ = st_commit(base, tx, g2, tmp);
+  h
+}
+fn phase_w(base: [i64], tmp: [i64], p: [i64], s: [i64]) -> i64 {
+  let tx = zeros(6);
+  let b = 0;
+  while b < p[6] {
+    let _ = w_batch(base, tmp, p, s, tx);
+    let b = b + 1;
+    0
+  };
+  0
+}
+fn phase_s(base: [i64], tmp: [i64], p: [i64], s: [i64]) -> i64 {
+  let tx = zeros(6);
+  let b = 0;
+  while b < p[6] {
+    let _ = s_batch(base, tmp, p, s, tx);
+    let b = b + 1;
+    0
+  };
+  0
+}
+fn init_w(base: [i64], tmp: [i64], p: [i64]) -> i64 {
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let tl = st_alloc(base, tx, 1, p[5]);
+  let _ = st_put(base, tl, 0, 0);
+  let _ = st_seal(base, tl, tmp);
+  let g = st_alloc(base, tx, 2, p[4]);
+  let _ = st_link(base, g, 0, tl);
+  let _ = st_link(base, g, 1, tl);
+  let _ = st_seal(base, g, tmp);
+  st_commit(base, tx, g, tmp)
+}
+fn init_s(base: [i64], tmp: [i64], p: [i64]) -> i64 {
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let h = st_alloc(base, tx, 1, p[2]);
+  let _ = st_put(base, h, 0, 0);
+  let _ = st_seal(base, h, tmp);
+  let g = st_alloc(base, tx, 2, p[4]);
+  let _ = st_link(base, g, 0, h);
+  let _ = st_link(base, g, 1, h);
+  let _ = st_seal(base, g, tmp);
+  st_commit(base, tx, g, tmp)
+}
+fn main(argc: i64, argv: [str]) -> i64 {
+  let path = zeros(64);
+  let pl = st_str(path, "segtail.store");
+  let tmp = zeros(256);
+  let size = 1073741824;
+  let ph = char(argv[2], 0);
+  let want = char(argv[3], 0);
+  let p = zeros(8);
+  let _ = p[0] = st_digest("TG{arr i64}");
+  let _ = p[1] = parse_i64(argv[4]);
+  let _ = p[2] = st_digest("TH{arr ref TG}");
+  let _ = p[3] = parse_i64(argv[5]);
+  let _ = p[4] = st_digest("SG{ref TH,ref TH}");
+  let _ = p[5] = st_digest("TL{arr i64}");
+  let _ = p[6] = if argc >= 7 then parse_i64(argv[6]) else 100;
+  let base = st_open(path, pl, size, tmp);
+  let isw = if ph == 119 then 1 else 0;
+  let fresh = if st_root(base, tmp) == 0 then 1 else 0;
+  let _ = if fresh * isw == 1 then init_w(base, tmp, p) else 0;
+  let _ = if fresh * (1 - isw) == 1 then init_s(base, tmp, p) else 0;
+  let s = zeros(4);
+  let _ = s[0] = 777;
+  let _ = s[1] = 0;
+  let _ = s[2] = 0;
+  let t0 = clock_ms();
+  let _ = if isw == 1 then phase_w(base, tmp, p, s) else phase_s(base, tmp, p, s);
+  let t1 = clock_ms();
+  let g = st_root(base, tmp);
+  let cur = st_ref(base, g, 0);
+  let pin = st_ref(base, g, 1);
+  let obj = if want == 118 then pin else cur;
+  let fold = if isw == 1 then tw_fold(base, obj) else ts_fold(base, obj);
+  let snap = zeros(32);
+  let _ = st_snapshot(base, snap, tmp);
+  let used = snap[4] * 8;
+  let _ = sys_munmap(st_addr(base), size);
+  let ns = (t1 - t0) * 1000000 / (p[6] * 10000);
+  if want == 116 then ns else if want == 122 then used else fold
+}
