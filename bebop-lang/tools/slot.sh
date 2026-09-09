@@ -59,11 +59,24 @@ LABEL=${1:?usage: tools/slot.sh <label> <command ...>}; shift
 
 # Wait (do not refuse) under the process ceiling: a slot that blocks costs nothing, a slot that
 # starts at 30 procs gets its tree SIGKILLed halfway through and costs the whole run.
-pw0=$(date +%s)
-while [ "$(ps -e --no-headers | wc -l)" -gt "$PHANTOM_CAP" ]; do
-  [ $(( $(date +%s) - pw0 )) -lt "$PHANTOM_WAIT_S" ] || {
-    echo "slot: REFUSED -- $(ps -e --no-headers | wc -l) procs still above the ${PHANTOM_CAP} ceiling after ${PHANTOM_WAIT_S}s (Android kills past 32); run tools/reap.sh kill" >&2; exit 95; }
-  sleep 5
+# 2026-09-09 (operator decision 0.4): a WAITING lane used to cost five processes, and the
+# guard was the worst offender -- `$(ps -e --no-headers | wc -l)` forks a subshell, a ps and a
+# wc EVERY five seconds, `$(date +%s)` forks twice more per iteration, and `sleep 5` holds a
+# process for the whole interval. Three lanes waiting therefore churned ~12 concurrent
+# processes against a 32 ceiling, so the guard MANUFACTURED the pressure it measures. It also
+# over-counts: measured the same instant, `ps -e | wc -l` said 7 while the fork-free glob said
+# 5, because the pipeline counts its own apparatus. Everything below is bash builtins only:
+# the glob is expanded internally, SECONDS is a builtin counter, and the nap is a read that
+# times out on a fifo nobody writes to. A waiting lane now costs ONE blocked process.
+procn() { set -- /proc/[0-9]*; PROCN=$#; }          # no fork; also does not count itself
+[ -p "$LOCKDIR/tick" ] || mkfifo "$LOCKDIR/tick" 2>/dev/null   # one fork, once per box, ever
+exec 7<>"$LOCKDIR/tick" 2>/dev/null || true          # O_RDWR on a fifo: read blocks, never EOFs
+nap() { read -t "$1" -u 7 _ 2>/dev/null || :; }      # no fork
+SECONDS=0; procn
+while [ "$PROCN" -gt "$PHANTOM_CAP" ]; do
+  [ "$SECONDS" -lt "$PHANTOM_WAIT_S" ] || {
+    echo "slot: REFUSED -- $PROCN procs still above the ${PHANTOM_CAP} ceiling after ${PHANTOM_WAIT_S}s (Android kills past 32); run tools/reap.sh kill" >&2; exit 95; }
+  nap 5; procn
 done
 
 avail=$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo)
@@ -88,7 +101,18 @@ while [ -z "$SLOT" ]; do
     if flock -n 9; then SLOT=$i; break; fi
     exec 9>&-
   done
-  [ -n "$SLOT" ] || flock -w 10 -x "$LOCKDIR/slot${FIRST:-$(echo $ORDER | cut -d" " -f1)}" true 2>/dev/null  # blocking wait, no busy loop
+  # 0.4: `$(echo $ORDER | cut -d" " -f1)` forked a subshell and a cut on EVERY retry; ${ORDER%% *}
+  # is pure parameter expansion. And with a single slot there is nothing else to re-scan for, so
+  # block in the kernel indefinitely instead of waking every 10 s -- one process, zero churn.
+  if [ -z "$SLOT" ]; then
+    # ${ORDER%% *} alone is WRONG here and busy-spins: with N=1 `seq 2 1` is empty, so ORDER is
+    # " 1" and %% strips to the empty string -- flock then locks a file named "slot", which is
+    # never contended, and the loop spins instead of blocking. The old `echo $ORDER | cut` hid
+    # this because unquoted echo collapses whitespace. Strip leading blanks first, still no fork.
+    O=$ORDER; while [ "${O# }" != "$O" ]; do O=${O# }; done
+    if [ "$N" = 1 ]; then flock -x "$LOCKDIR/slot${FIRST:-${O%% *}}" true 2>/dev/null
+    else flock -w 10 -x "$LOCKDIR/slot${FIRST:-${O%% *}}" true 2>/dev/null; fi
+  fi
 done
 flock -u 8; exec 8>&-
 eval "CORES=\$CORES_$SLOT"
