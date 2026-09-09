@@ -115,6 +115,10 @@ for f in "$DIR"/*.bp; do
     # under window pressure. Exited 89 on 42ce19e5, runs 17 (bpref) once vs_span_to_slots also
     # demotes kind-3 SYM entries. Drop either ingredient and it compiled clean before the fix.
     c95_symspan) EXPECT=17;;
+    # ROADMAP A16 prerequisite (2026-09-09): 521 fns, i.e. PAST the old 512 cap.
+    # Guards the b1_facts/b1_scratch collision the cap raise exposed -- no other
+    # construct, kernel or std_test comes near 512 fns, so nothing else can.
+    c122_manyfns) EXPECT=1035;;
     # ROADMAP A6 step 2 (2026-09-09): 10^5-deep recursion on the computed frame.
     # EXPECT is the CLOSED FORM d(n) = n, derived by hand -- tools/bpref.py cannot
     # be the oracle (recursive interpreter, DEPTH_CAP 5000), see the .bp header.

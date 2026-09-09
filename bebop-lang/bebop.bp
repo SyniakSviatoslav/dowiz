@@ -98,7 +98,7 @@ fn diag_exit(s: str, p: i64, code: i64) -> i64 {
   let _ = if code == 89 then diag_text(buf, at, [108, 101, 116, 32, 98, 105, 110, 100, 105, 110, 103, 32, 119, 104, 105, 108, 101, 32, 97, 32, 99, 97, 108, 108, 32, 116, 101, 109, 112, 32, 105, 115, 32, 108, 105, 118, 101], 37) else 0;
   let _ = if code == 100 then diag_text(buf, at, [102, 110, 32, 119, 105, 116, 104, 32, 109, 111, 114, 101, 32, 116, 104, 97, 110, 32, 49, 52, 32, 112, 97, 114, 97, 109, 101, 116, 101, 114, 115], 31) else 0;
   let _ = if code == 101 then diag_text(buf, at, [117, 110, 98, 111, 117, 110, 100, 32, 115, 121, 109, 98, 111, 108], 14) else 0;
-  let _ = if code == 104 then diag_text(buf, at, [116, 111, 111, 32, 109, 97, 110, 121, 32, 102, 110, 115, 32, 40, 99, 97, 112, 32, 53, 49, 50, 41], 22) else 0;
+  let _ = if code == 104 then diag_text(buf, at, [116, 111, 111, 32, 109, 97, 110, 121, 32, 102, 110, 115, 32, 40, 99, 97, 112, 32, 53, 54, 48, 41], 22) else 0;
   let _ = if code == 102 then diag_text(buf, at, [115, 121, 115, 95, 32, 110, 97, 109, 101, 32, 105, 110, 115, 105, 100, 101, 32, 97, 32, 107, 101, 114, 110, 101, 108, 32, 102, 110], 28) else 0;
   let mlen = (if code == 95 then 20 else 0) + (if code == 96 then 27 else 0) + (if code == 97 then 33 else 0) + (if code == 98 then 31 else 0) + (if code == 99 then 31 else 0) + (if code == 89 then 37 else 0) + (if code == 100 then 31 else 0) + (if code == 101 then 14 else 0) + (if code == 104 then 22 else 0) + (if code == 102 then 28 else 0);
   let _ = buf[at + mlen] = 10;
@@ -669,7 +669,7 @@ fn fntab_lookup(fntab: [i64], name: i64) -> i64 {
 // caller with no lookup hit behaves as if vc=0/has_alloc=0, i.e. does not
 // need x15/x14 -- only used during the emission pass, where every fn's own
 // source position is guaranteed to have been published by the planning pass
-// first). A2 step 0 (2026-09-06/07) relayout: indices 2200..2711 are free
+// first). A2 step 0 (2026-09-06/07) relayout: indices 2200..2763 are free
 // (fn cap raised 300 -> 512; the ctor/name/start/fpos zones + ft_cache top
 // out at 2046 worst case, cnt=511/ecnt=255), and 4410+ is claimed by
 // unrelated per-fn scratch (loop/mask/struct/literal cells, window moved to
@@ -845,12 +845,12 @@ fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i6
   };
   let tgt0 = fntab_lookup(fntab, name);
   let target = if name == selfname then selfstart else tgt0;
-  // B1 (2026-09-06): fntab[2712]/[1801] are the current fn's own call-site
+  // B1 (2026-09-06): fntab[2764]/[1801] are the current fn's own call-site
   // counter and skip-save flag (0 = save, matches the pre-B1 unconditional
   // behaviour and is the default in any fntab this mechanism never touches;
   // 1 = the caller's own facts say it never needs x15/x14 preserved).
-  let _ = fntab[2712] = fntab[2712] + 1;
-  let _ = emit_bl(insns, n, target, 1 - fntab[2713]);
+  let _ = fntab[2764] = fntab[2764] + 1;
+  let _ = emit_bl(insns, n, target, 1 - fntab[2765]);
   // x1..x7 are free (parked); x0 holds the result. `bl` has no destination
   // field to retarget, so p = -1.
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
@@ -3572,7 +3572,10 @@ fn emit_term(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
 //       the register sym_bind needs collides with a live cs temp -- bind the
 //       call result with a let first), S+tsp > 64 (§5), or fn table full
 //       (512, A2 step 0 2026-09-06/07: compile_program_offs/cli_compile's own
-//       fnames/fpos/sizes/starts/offs arrays are fixed-size zeros(512); silently
+//       fnames/fpos/sizes/starts/offs arrays are fixed-size (zeros(576) since the
+//       2026-09-09 cap raise to 560 -- ALL FIVE of the `offs` sites had to widen,
+//       including cli_compile's, which is the ordinary `bebop.bin compile` path);
+//       silently
 //       tolerating a 513th fn overflowed starts[512] into the next arena
 //       cell and shifted every later word by one -- SIGILL, T96-class bug),
 //       or expression nesting / pending operands > 512 (vs_push: the
@@ -4229,11 +4232,23 @@ fn compile(s: str) -> i64 {
   let stab = zeros(385);  // 1 + 3*128 (name,reg,srcpos) verified triples; overflow -> loud trap
   let selfname = 0 - 1;
   let selfstart = 0;
-  let fnames_l = zeros(512);
-  let fpos_l = zeros(512);
+  let fnames_l = zeros(576);
+  let fpos_l = zeros(576);
   let cnt_l = [0];
   let _ = collect_fns(s, fnames_l, fpos_l, cnt_l);
-  let _ = if cnt_l[0] >= 512 then diag_exit(s, 0, 89) else 0;
+  // ROADMAP A16 prerequisite (2026-09-09): the fn cap is 560, not 512. RAISING IT
+  // REQUIRED MOVING b1_scratch: fntab[2200+i] is the per-fn facts table and was
+  // sized 512, so fn index 512..514 would have written straight through the
+  // b1_scratch cells at 2712/2713/2714 -- the call-site counter and the skip-save
+  // flag -- i.e. a wrong `bl` target, silently, on any program with 513+ fns. The
+  // battery would not have caught it: no gate program has that many. b1_scratch
+  // now lives at 2764..2766, leaving b1_facts 2200..2763 = 564 cells for a cap of
+  // 560, still clear of the window zone at 2800. This
+  // site now reports 104 like the other cap site instead of 89. 89 already means
+  // three different things (register pressure, S+tsp > 64, window full), and a
+  // cap that reported TWO codes is why A1b's gate passed with the wrong
+  // diagnostic text -- one condition, one code.
+  let _ = if cnt_l[0] >= 560 then diag_exit(s, 0, 104) else 0;
   let fntab = zeros(8192);
   let _ = fntab[0] = cnt_l[0];
   let _ = vs_reset(fntab);
@@ -5711,7 +5726,7 @@ fn collect_fns(s: str, fnames: [i64], fpos: [i64], cnt: [i64]) -> i64 {
     let is_fn = isf * isn * issp * is_alpha(cafter);
     let _ = tpos_c[0] = j + 3;
     let name = if is_fn == 1 then read_ident(s, tpos_c) else 0;
-    let capok = if cnt[0] < 512 then 1 else 0;
+    let capok = if cnt[0] < 560 then 1 else 0;
     let _ = if is_fn * capok == 1 then (let _ = fnames[cnt[0]] = name in (let _ = fpos[cnt[0]] = j in 0)) else 0;
     let _ = cnt[0] = cnt[0] + is_fn;
     let _ = spc[0] = j;
@@ -5740,7 +5755,7 @@ fn collect_fns(s: str, fnames: [i64], fpos: [i64], cnt: [i64]) -> i64 {
 // planning-pass arithmetic correction (B1's "what emission will not emit")
 // only needs (insns,n,fntab,stab,pbase,is_emission) and doesn't interact
 // with anything else in compile_fn_at, so it moves to its own frame --
-// also publishes fntab[2714] as a side effect, same as before.
+// also publishes fntab[2766] as a side effect, same as before.
 fn compile_fn_at_total_saved(insns: [i64], n: [i64], fntab: [i64], stab: [i64], pbase: i64, is_emission: i64) -> i64 {
   let real_vc = stab[0];
   let real_alloc = if count_word(insns, pbase, n[0], 2853897184) > 0 then 1 else 0;
@@ -5759,13 +5774,13 @@ fn compile_fn_at_total_saved(insns: [i64], n: [i64], fntab: [i64], stab: [i64], 
   // against still does -- so the emission pass saves that word on every fn,
   // unconditionally, where it used to save it only when real_alloc was 0.
   let saved_x14 = 1;
-  let saved_calls = fntab[2712] * 2 * (1 - real_needs_save);
+  let saved_calls = fntab[2764] * 2 * (1 - real_needs_save);
   let total_saved = (saved_pairs01 * 2 + 2 + saved_x15 + saved_x14 + saved_calls) * (1 - is_emission);
   // A6 step 2: `marks` joins the packed fact word at 2^22 (5 bits). It CANNOT
   // go at 2^20 as the blueprint first drafted: since A14 tsp reaches 256, the
   // 8192*tsp field occupies bits 13..21 and 2^20 sits inside it.
   let real_marks = if fntab[4800] > 21 then 21 else fntab[4800];
-  let _ = fntab[2714] = real_vc + 256 * real_alloc + 512 * real_cs_hi + 8192 * real_tsp + 4194304 * real_marks;
+  let _ = fntab[2766] = real_vc + 256 * real_alloc + 512 * real_cs_hi + 8192 * real_tsp + 4194304 * real_marks;
   total_saved
 }
 
@@ -5786,7 +5801,7 @@ fn compile_fn_at_facts(s: str, fntab: [i64], fpos: i64, namepos: i64, is_emissio
   let tsp0 = fw_tsp(fw0);
   let needs_save0raw = (if vc0 > 8 then 1 else 0) + (if tsp0 > 0 then 1 else 0);
   let needs_save0 = if needs_save0raw > 0 then 1 else 0;
-  let _ = fntab[2713] = (1 - needs_save0) * is_emission;
+  let _ = fntab[2765] = (1 - needs_save0) * is_emission;
   // S: the emission pass's spilled-symbol slot base (0 on the planning pass).
   let s0 = if vc0 > 8 then vc0 - 8 else 0;
   let _ = fntab[4577] = s0 * is_emission;
@@ -5858,12 +5873,12 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   let tkbuf = tkb;
   let _ = cx[26] = selfname;
   let _ = cx[27] = selfstart;
-  // B1: own-fn facts. fntab[2712] = call-site counter (this compile only,
+  // B1: own-fn facts. fntab[2764] = call-site counter (this compile only,
   // read by the end-of-fn arithmetic adjustment on the planning pass);
-  // fntab[2713] = skip-save flag read by emit_bl_call at every bl in this
+  // fntab[2765] = skip-save flag read by emit_bl_call at every bl in this
   // fn's body (0 = save, the safe default; is_emission==0 forces 0 so the
   // planning pass reproduces today's unconditional call-site form exactly).
-  let _ = fntab[2712] = 0;
+  let _ = fntab[2764] = 0;
   let _ = vs_reset(fntab);
   let fw0 = compile_fn_at_facts(s, fntab, fpos, namepos, is_emission);
   let pbase = n[0];
@@ -5918,12 +5933,12 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   //
   // On the emission pass (is_emission==1) the words above were already
   // right-sized from the start via emit_prologue_sized/emit_epilogue_sized
-  // and fntab[2713], using vc0/alloc0 published by the PRECEDING planning
+  // and fntab[2765], using vc0/alloc0 published by the PRECEDING planning
   // run -- nothing more to do here. On the planning pass (is_emission==0)
   // emit_prologue/emit_epilogue/the call sites still emitted today's full,
   // unshrunk form (its buffer is thrown away; only the size matters), so
   // n[0] is corrected by exactly what emission will not emit, and the
-  // just-computed real facts are published in fntab[2714] for
+  // just-computed real facts are published in fntab[2766] for
   // compile_program_offs to copy into the real fntab[2200+i] the emission
   // pass will read.
   let _ = n[0] = n[0] - compile_fn_at_total_saved(insns, n, fntab, stab, pbase, is_emission);
@@ -5999,18 +6014,18 @@ fn scan_one_lit(s: str, pos: [i64], fntab: [i64], L: i64, lcnt: [i64], cum: [i64
 // used to run a THIRD full pass (emit_offsets) to learn main's offset. offs[0] = cnt,
 // offs[1 + i] = start of fn i in source order.
 fn compile_program_to(s: str, insns: [i64], n: [i64]) -> i64 {
-  let offs = zeros(512);
+  let offs = zeros(576);
   compile_program_offs(s, insns, n, offs)
 }
 fn compile_program_offs(s: str, insns: [i64], n: [i64], offs: [i64]) -> i64 {
-  let fnames = zeros(512);
-  let fpos = zeros(512);
+  let fnames = zeros(576);
+  let fpos = zeros(576);
   let cnt = [0];
   let _ = collect_fns(s, fnames, fpos, cnt);
-  let _ = if cnt[0] >= 512 then diag_exit(s, 0, 104) else 0;
+  let _ = if cnt[0] >= 560 then diag_exit(s, 0, 104) else 0;
   let _ = offs[0] = cnt[0] + (idx_of_main(fnames, cnt[0]) << 32);
-  let sizes = zeros(512);
-  let starts = zeros(512);
+  let sizes = zeros(576);
+  let starts = zeros(576);
   let ptab = zeros(8192);
   let _ = ptab[0] = cnt[0];
   let pm = [0];
@@ -6043,17 +6058,17 @@ fn compile_program_offs(s: str, insns: [i64], n: [i64], offs: [i64]) -> i64 {
   };
   let stk_a = zeros(1088);
     let tmp = zeros(65536);
-  // B1 (2026-09-06): factbuf[i] harvests fn i's own facts (fntab[2714],
+  // B1 (2026-09-06): factbuf[i] harvests fn i's own facts (fntab[2766],
   // packed vc*2+has_alloc) right after its planning-pass compile, in the
   // same fn-index order as fnames/fpos/sizes/starts -- copied into the real
   // fntab[2200+i] below once fntab exists, for the emission pass to look up.
-  let factbuf = zeros(512);
+  let factbuf = zeros(576);
   let i = [0];
   while i[0] < cnt[0] {
     let tn = [0, 65536];
     let _ = compile_fn_at(s, fpos[i[0]], 0, ptab, tmp, tn, stk_a, 0);
     let _ = sizes[i[0]] = tn[0];
-    let _ = factbuf[i[0]] = ptab[2714];
+    let _ = factbuf[i[0]] = ptab[2766];
     let _ = i[0] = i[0] + 1;
     0
   };
@@ -6225,8 +6240,8 @@ fn emit_expr_words(src: str) -> [i64] {
   let stab = zeros(512);
   let selfname = 0 - 1;
   let selfstart = 0;
-  let fnames_l = zeros(512);
-  let fpos_l = zeros(512);
+  let fnames_l = zeros(576);
+  let fpos_l = zeros(576);
   let cnt_l = [0];
   let _ = collect_fns(src, fnames_l, fpos_l, cnt_l);
   let fntab = zeros(8192);
@@ -6278,7 +6293,7 @@ fn emit_expr_words(src: str) -> [i64] {
 // Entry for beboSelf.bin: the frozen compiler compiling other programs.
 // BENCH: two-pass compile of a whole fn-main program; returns [count, words...]
 fn emit_words(src: str) -> [i64] {
-  let offs = zeros(512);
+  let offs = zeros(576);
   emit_words_offs(src, offs)
 }
 fn emit_words_offs(src: str, offs: [i64]) -> [i64] {
@@ -6962,7 +6977,7 @@ fn cli_compile(argc: i64, argv: [str]) -> i64 {
     return 0;
     0
   };
-  let offs = zeros(512);
+  let offs = zeros(576);
   let words0 = emit_words_offs(srcv, offs);
   let n0 = words0[0];
   let main_off = offs[(offs[0] >> 32) + 1];
@@ -7057,7 +7072,7 @@ fn cli_check(argc: i64, argv: [str]) -> i64 {
   let _ = tmpc[ls + 2] = 115;
   let _ = tmpc[ls + 3] = 101;
   let srcv = use_expand(srcv0, tmpc, ls + 4);
-  let offs = zeros(512);
+  let offs = zeros(576);
   let words0 = emit_words_offs(srcv, offs);
   words0[0] * 0
 }
@@ -7381,7 +7396,7 @@ fn emit_sys_wait4(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
 // and x15 (spill base) from ITS OWN sp -- exactly what a plain `bl` callee does (emit_bl's
 // own comment) -- so this call site needs the identical caller-side save/restore of
 // x14/x15 around it, keyed off the same conservative has_spills fact as every `bl` site
-// in this fn, and the same call-site counter bump (fntab[2712]) so the planning pass's
+// in this fn, and the same call-site counter bump (fntab[2764]) so the planning pass's
 // end-of-fn word-count correction (compile_fn_at_total_saved) accounts for this stp/ldp
 // pair too. x9 is scratch (entry-offset arithmetic); named emit_sys_run so check_abi.py's
 // sys_allow (regex over `fn emit_sys_\w+`) auto-allows its x9 writes the same way it
@@ -7426,8 +7441,8 @@ fn emit_sys_run(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfnam
   let _ = em(insns, n, 4163467370);
   let _ = em(insns, n, 2432697641);
   let _ = em(insns, n, 402653178);
-  let _ = fntab[2712] = fntab[2712] + 1;
-  let has_spills = 1 - fntab[2713];
+  let _ = fntab[2764] = fntab[2764] + 1;
+  let has_spills = 1 - fntab[2765];
   let _ = if has_spills == 1 then em(insns, n, 4162785263) else 0;
   em(insns, n, 3506446377);
   em(insns, n, 4167657481);

@@ -202,7 +202,7 @@ def check_bin(path, allow, stub=()):
 # index 2046, past the old b1_facts base (1500) -- every fixed zone below
 # moved to make room; fntab (and ptab, the planning-pass twin) grew
 # zeros(4096) -> zeros(8192).
-ZONES = [(0, 1, "fntab"), (2200, 2711, "b1_facts"), (2712, 2714, "b1_scratch"),
+ZONES = [(0, 1, "fntab"), (2200, 2763, "b1_facts"), (2764, 2766, "b1_scratch"),
          (2800, 4335, "window"), (4405, 4411, "fold"), (4412, 4449, "jumps"),
          (4450, 4546, "slots"), (4547, 4548, "window_hdr"),
          (4573, 4577, "window_cs"), (4578, 4585, "hoist"), (4591, 4591, "arm_base"), (4592, 4592, "span_slots"),
