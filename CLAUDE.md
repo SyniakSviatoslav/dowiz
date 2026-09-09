@@ -149,10 +149,17 @@ bug existed and is closed; back performance claims with a measured benchmark num
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
 
 Rules:
-- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- For codebase questions use `graphify explain "<name>"` and `graphify path "<A>" "<B>" [--undirected]`
+  against `bebop-lang/graphify-out/graph.json`. **There is NO `graphify query` command in this version** --
+  the CLAUDE.md line that told every agent to run it was wrong from 2026-09-04 to 2026-09-09.
+  The index covers `.bp` only because `bebop-lang/tools/bp_graph.py` supplies the extractor graphify lacks;
+  after editing `.bp`, refresh with `tools/bp_graph.py bebop-lang -o /tmp/bp.json && graphify merge-graphs
+  bebop-lang/graphify-out/graph.json /tmp/bp.json --out bebop-lang/graphify-out/graph.json`.
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+- After modifying code, run `graphify update bebop-lang --no-cluster` for the harness, then the
+  `bp_graph.py` + `merge-graphs` pair above for `.bp` -- `graphify update` ALONE silently drops every
+  `.bp` node, which is how the index sat at 0 of 63,257 lines of Bebop for five days.
 
 ## Token-economy toolstack (RE-VERIFIED 2026-09-09 — the table said "always on, verified 2026-09-04"
 ## and five of its six entries were not installed on this box; the absent rows are struck rather than
@@ -161,10 +168,13 @@ Rules:
 | Tool | How it is active | What you must do |
 |---|---|---|
 | **rtk** 0.42 — ABSENT 2026-09-09 (not on PATH); the `PreToolUse` rewrite this row claims is not in effect | global `PreToolUse` hook rewrites Bash to `rtk …` (63.8% measured savings) | prefer `rtk read/grep/git/ls/find/diff` explicitly for large outputs; never `cat` a big file |
-| **graphify** 0.9 — PRESENT, verified 2026-09-09 at /usr/local/bin/graphify | project hooks (`hook-guard`) + `## graphify` rule above + `/graphify` skill | `graphify query/path/explain` before grep; `graphify update .` after code edits (AST-only) |
+| **graphify** 0.9 — PRESENT, but it had ZERO `.bp` nodes until 2026-09-09: no extractor exists for the project's own language, and `graphify query` does not exist in this version (use `explain`/`path`). Fixed by `bebop-lang/tools/bp_graph.py` + `graphify merge-graphs` — 2,615 -> 5,740 nodes, 3,366 -> 24,105 edges | project hooks (`hook-guard`) + `## graphify` rule above + `/graphify` skill | `graphify query/path/explain` before grep; `graphify update .` after code edits (AST-only) |
 | **mempalace** 3.x — plugin INSTALLED (`memory-palace@mempalace`) but its MCP server failed to connect 2026-09-09 and no `mempalace` CLI is on PATH | global plugin; PreCompact/SessionEnd hooks mine the session | `mempalace search <words>` before re-reading history; re-mine journals after commits |
 | **ponytail** 4.9 — ABSENT 2026-09-09 (not on PATH) | global plugin (lazy-senior mode: simplest working solution) | do not add unrequested abstractions |
-| **tb** — ABSENT 2026-09-09 (not on PATH) | `tb h <path>` crc32 content-address, `tb s <needle> <path>` hit lines | re-read a file only when its hash changed |
+| **tb** — WRITTEN 2026-09-09 as `bebop-lang/tools/tb.py` because it was absent; `h` content-address, `s`/`n` hits, `d` changed-or-not (prints NOTHING when unchanged) | `tb h <path>` crc32 content-address, `tb s <needle> <path>` hit lines | re-read a file only when its hash changed |
 
 Rules: compile/test output to `/dev/null` and read `tail -1`; one deterministic run is proof;
+**re-read a file only when its hash moved: `tools/tb.py d <path> <crc>` prints nothing and exits 0 when it
+has not (measured 2026-09-09 against reading bebop.bp whole: `tb s` 3,028x fewer bytes, `tb n` 22,709x,
+`tb h` 12,977x, `tb d` on the unchanged path infinite);**
 scratch lives in the session scratchpad, never `/tmp` root. Details: `bebop-lang/docs/TOKEN-ECONOMY.md`.
