@@ -1595,3 +1595,7 @@ ts,commit,bin,metric,value,unit,n,valid,at_max_pct,temp_mc,note
 1788948470,5be7adf,2fcb63d3,stub_words,172,words,1,1,,,
 1788948470,5be7adf,2fcb63d3,bin_fns,295,fns,1,1,,,
 1788948471,5be7adf,2fcb63d3,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788948669,fe06c54,2fcb63d3,bin_words,42123,words,1,1,,,bytes 170492
+1788948669,fe06c54,2fcb63d3,stub_words,172,words,1,1,,,
+1788948669,fe06c54,2fcb63d3,bin_fns,295,fns,1,1,,,
+1788948669,fe06c54,2fcb63d3,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired

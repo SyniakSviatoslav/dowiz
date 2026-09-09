@@ -111,7 +111,14 @@ fn root_write(base: [i64], tx: [i64], tmp: [i64], dg: i64, n: i64, e: i64, rp: r
 // cnt, then (row, col) pairs -- sgraph2's edges carry no value, so an entry is a pair, not
 // a triple. 4096 is the blueprint's figure; §8 risk 1 (phase 'a' + phase 'n') measures what
 // it costs on the read side, and phase_log's row measures what it buys on the write side.
-fn tl_cap() -> i64 { 200000 }
+// tl_cap(): 500000 since B4 candidate (b) (step 2''''). The run count R = 1e6 / tl_cap() is the
+// L0 merge policy and it was SWEPT, medians of 3 on this box: R=5 (cap 200000, the committed
+// policy) 593 ns/edge / 74 ms stall; R=3 495 / 86; R=2 443 / 101; R=1 370 / 141. R=2 is shipped:
+// it is the first point that clears the <= 500 ns/edge gate with real margin (worst rep 469)
+// while holding the stall regression to +36 % instead of R=1's +91 %. The stall RISES as R falls
+// because the last promotion also has to drain a 1e6/R-entry tail out of the segments, measured
+// at 61.6 ns per tail entry -- a term the arithmetic missed and the sweep caught.
+fn tl_cap() -> i64 { 500000 }
 // tl_seg(): entries per SEGMENT (B4 step 2'''). The tail is no longer one chunk: TH{arr ref TG}
 // is the header (cell 0 = nseg, cells 1..nseg = segment refs) over TG{arr i64} segments (cell 0
 // = cnt, then (row,col) pairs, capacity tl_seg()). Segments 1..nseg-1 are always FULL, so the
@@ -411,7 +418,24 @@ fn phase_build(base: [i64], tmp: [i64], d: [i64], skew: i64) -> i64 {
 // (the LOG chunk) is gone -- the tail and L0 are both durable, both committed; LOG stays in
 // the root as an empty array so the G2 layout and st_compact's walk are unchanged.
 // stall[0] = max batch ms.
-fn phase_log(base: [i64], tmp: [i64], d: [i64], b0: i64, nb: i64, stall: [i64]) -> i64 {
+// B4 candidate (b), step 2'''': the L0 RUN COUNT is a policy, and cap0/fl0 make it measurable.
+// The tail caps at cap0 (or tl_cap() when cap0 == 0) and the end-of-invocation flush fires only
+// on the FINAL invocation -- argv[7] = 1 restores the pre-2'''' flush-every-invocation policy,
+// so `l t <b0> 20 200000 1` reproduces the COMMITTED control row from this same binary.
+// The run count is R = 1e6 / cap and promotion p rewrites the whole L0 so far (an EAGER merge).
+// Arithmetic, from the step 2''' fit promotion = 39.2 ms + 33.0 ns per L0 edge: total promotion
+// = R*F + M*1e6*(R+1)/2, i.e. 295/239/184/128/72 ms at R = 5/4/3/2/1 -- MONOTONE DOWN in
+// decreasing R, because F is the n-proportional rp0 write (n+2 cells = 8 MB) and does NOT shrink
+// with the run size. That is also why LAZY sorted runs (write a run now, merge at the end) are
+// strictly WORSE here at every R: they pay R*F_run AND the final F + M*1e6 (420-577 ns/edge with
+// a dense per-run rp, 394-443 with a compact per-run directory) against R=1's 358. LSM
+// amortisation assumes a run's cost is spread over later work; here the per-run cost is a
+// constant independent of the run, so the amortisation constant is NEGATIVE -- cost per edge
+// RISES with the run count.
+// The <= 10 ms stall half is UNREACHABLE at any R, and this predicts it: the last promotion
+// always materialises all 1e6 edges, writing 1e6 ci cells = 8 MB = 33.0 ms of marginal alone,
+// 3.3x the gate, BEFORE the 39.2 ms fixed term.
+fn phase_log(base: [i64], tmp: [i64], d: [i64], b0: i64, nb: i64, stall: [i64], cap0: i64, fl0: i64) -> i64 {
   let n = 1000000;
   let src = zeros(1000000);
   let dst = zeros(1000000);
@@ -421,6 +445,8 @@ fn phase_log(base: [i64], tmp: [i64], d: [i64], b0: i64, nb: i64, stall: [i64]) 
   let s = zeros(4);
   let _ = s[0] = 777;
   let _ = s[1] = l0_load(base, tmp, src, dst, n);
+  let _ = s[2] = if fl0 == 1 then 1 else (if b0 + nb >= 100 then 1 else 0);
+  let _ = s[3] = if cap0 == 0 then tl_cap() else cap0;
   let skip = 0;
   while skip < b0 * 20000 {
     let _ = s[0] = lcg(s[0]);
@@ -439,15 +465,15 @@ fn phase_log(base: [i64], tmp: [i64], d: [i64], b0: i64, nb: i64, stall: [i64]) 
     let nold = if st_get(base, g, 5) == 0 then 0 else 1;
     let rp0 = if nold == 1 then st_ref(base, g, 5) else 0;
     let ci0 = if nold == 1 then st_ref(base, g, 6) else 0;
-    let last = if b == b0 + nb - 1 then 1 else 0;
+    let last = if b == b0 + nb - 1 then s[2] else 0;
     let done = 0;
     while done < 10000 {
-      let room = tl_cap() - tl_count(base, tl);
+      let room = s[3] - tl_count(base, tl);
       let left = 10000 - done;
       let take = if left < room then left else room;
       let cnt = tl_gen(base, tx, d, tl, take, s, n, tmp);
       let done = done + take;
-      let full = if cnt == tl_cap() then 1 else 0;
+      let full = if cnt == s[3] then 1 else 0;
       let atend = if done == 10000 then last else 0;
       let ne = if cnt > 0 then 1 else 0;
       let go = if full == 1 then 1 else atend * ne;
@@ -993,6 +1019,8 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let nsrc = if argc >= 5 then parse(argv[4]) else 3;
   let b0 = if argc >= 5 then parse(argv[4]) else 0;
   let nb = if argc >= 6 then parse(argv[5]) else 10;
+  let cap0 = if argc >= 7 then parse(argv[6]) else 0;
+  let fl0 = if argc >= 8 then parse(argv[7]) else 0;
   let d = zeros(8);
   let _ = d[0] = st_digest("RP{arr i64}");
   let _ = d[1] = st_digest("CI{arr i64}");
@@ -1019,7 +1047,7 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let live = if ph == 99 then st_compact(path, pl, size, lay, 8, tmp) else 0;
   let base = st_open(path, pl, size, tmp);
   let t1 = clock_ms();
-  let r = if ph == 98 then phase_build(base, tmp, d, skew) else if ph == 108 then phase_log(base, tmp, d, b0, nb, stall) else if ph == 110 then phase_nbr(base, tmp) else if ph == 100 then phase_del(base, tmp, d) else if ph == 102 then phase_bfs(base, tmp, nsrc) else if ph == 112 then phase_frontier(base, tmp, nsrc) else if ph == 97 then phase_tail(base, tmp, d, nsrc) else if ph == 103 then phase_flush(base, tmp, d) else 0;
+  let r = if ph == 98 then phase_build(base, tmp, d, skew) else if ph == 108 then phase_log(base, tmp, d, b0, nb, stall, cap0, fl0) else if ph == 110 then phase_nbr(base, tmp) else if ph == 100 then phase_del(base, tmp, d) else if ph == 102 then phase_bfs(base, tmp, nsrc) else if ph == 112 then phase_frontier(base, tmp, nsrc) else if ph == 97 then phase_tail(base, tmp, d, nsrc) else if ph == 103 then phase_flush(base, tmp, d) else 0;
   let t2 = clock_ms();
   let g = st_root(base, tmp);
   let used = st_gen(base, tmp) * 0 + base[st_pick(base, tmp) + 4] * 8;
