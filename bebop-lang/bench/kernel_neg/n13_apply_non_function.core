@@ -1,0 +1,15 @@
+% n13: applying a NON-FUNCTION. `a : A` applied to `b : A`.
+% Added because mutation testing showed that removing the "head must be a pi"
+% check broke nothing in the corpus -- every existing application test had a
+% well-typed function at the head, so the check was untested.
+1 sort 0
+axiom A : 1
+2 const A
+axiom a : 2
+3 const A
+axiom b : 3
+4 const a
+5 const b
+6 app 4 5
+7 const A
+check 6 : 7

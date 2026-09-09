@@ -1,0 +1,13 @@
+% p01: the polymorphic identity, the smallest term that exercises every rule.
+% def id : Pi (A : Sort 0). Pi (_ : A). A := fun A => fun x => x
+1 sort 0
+2 var 0
+3 var 1
+4 pi 2 3
+5 pi 1 4
+6 sort 0
+7 var 0
+8 var 0
+9 lam 7 8
+10 lam 6 9
+def id : 5 := 10

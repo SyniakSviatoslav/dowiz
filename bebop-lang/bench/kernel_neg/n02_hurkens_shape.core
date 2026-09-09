@@ -1,0 +1,12 @@
+% n02: HURKENS/impredicativity. `Pi (X : Sort 0). X` claimed to live in Sort 0.
+% Predicatively pi lands at max(u,v) = max(1,0) = 1, so this is REJECTED.
+% Under Lean-style `imax u v` (which is 0 whenever v is 0 -- the rule that makes
+% Prop impredicative) it lands at 0 and is ACCEPTED. That is the door Hurkens
+% and Girard walk through, and this file is the discriminator between the two
+% rules. A first version of this test used a Pow-shaped U and did NOT
+% discriminate -- mutation testing found that, see n11.
+1 sort 0
+2 var 0
+3 pi 1 2
+4 sort 0
+check 3 : 4

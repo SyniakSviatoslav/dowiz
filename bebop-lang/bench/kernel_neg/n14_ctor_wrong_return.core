@@ -1,0 +1,7 @@
+% n14: an inductive whose constructor does NOT return the type being declared.
+% `Foo : Sort 0 | bad : Sort 0` -- `bad` builds a Sort, not a Foo, so it is not
+% a constructor of Foo at all. Added because mutation testing showed the
+% constructor-return rule was untested: removing it broke nothing.
+1 sort 0
+2 sort 0
+inductive Foo : 1 | bad : 2

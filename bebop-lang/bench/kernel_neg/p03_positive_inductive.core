@@ -1,0 +1,9 @@
+% p03: a STRICTLY POSITIVE inductive must be ACCEPTED. The twin of n03:
+% `succ : Nat -> Nat` has Nat as an argument, which is an ordinary recursive
+% occurrence, not a negative one. A kernel that rejects this is too strict.
+1 sort 0
+2 const Nat
+3 const Nat
+4 const Nat
+5 pi 3 4
+inductive Nat : 1 | zero : 2 | succ : 5

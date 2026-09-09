@@ -1,0 +1,6 @@
+% n01: GIRARD. Claims Sort 0 : Sort 0. The rule `Sort n : Sort (n+1)` is the
+% single line that keeps the system consistent; a kernel with `Type : Type`
+% accepts this and can then prove False.
+1 sort 0
+2 sort 0
+check 1 : 2

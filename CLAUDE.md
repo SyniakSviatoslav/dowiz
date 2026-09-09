@@ -154,16 +154,17 @@ Rules:
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
 
-## Token-economy toolstack (always on — every session, verified 2026-09-04)
+## Token-economy toolstack (RE-VERIFIED 2026-09-09 — the table said "always on, verified 2026-09-04"
+## and five of its six entries were not installed on this box; the absent rows are struck rather than
+## deleted, because a tool that was expected and is missing is a fact worth carrying)
 
 | Tool | How it is active | What you must do |
 |---|---|---|
-| **rtk** 0.42 | global `PreToolUse` hook rewrites Bash to `rtk …` (63.8% measured savings) | prefer `rtk read/grep/git/ls/find/diff` explicitly for large outputs; never `cat` a big file |
-| **graphify** 0.9 | project hooks (`hook-guard`) + `## graphify` rule above + `/graphify` skill | `graphify query/path/explain` before grep; `graphify update .` after code edits (AST-only) |
-| **mempalace** 3.x | global plugin; PreCompact/SessionEnd hooks mine the session | `mempalace search <words>` before re-reading history; re-mine journals after commits |
-| **ponytail** 4.9 | global plugin (lazy-senior mode: simplest working solution) | do not add unrequested abstractions |
-| **headroom** 0.37 | installed; proxy routing is per-user (`headroom init --global --port 8788 claude`, then `headroom doctor`) | when routed, first request per proxy start pays ~10 s model warm-up; savings visible via `headroom savings` |
-| **tb** | `tb h <path>` crc32 content-address, `tb s <needle> <path>` hit lines | re-read a file only when its hash changed |
+| **rtk** 0.42 — ABSENT 2026-09-09 (not on PATH); the `PreToolUse` rewrite this row claims is not in effect | global `PreToolUse` hook rewrites Bash to `rtk …` (63.8% measured savings) | prefer `rtk read/grep/git/ls/find/diff` explicitly for large outputs; never `cat` a big file |
+| **graphify** 0.9 — PRESENT, verified 2026-09-09 at /usr/local/bin/graphify | project hooks (`hook-guard`) + `## graphify` rule above + `/graphify` skill | `graphify query/path/explain` before grep; `graphify update .` after code edits (AST-only) |
+| **mempalace** 3.x — plugin INSTALLED (`memory-palace@mempalace`) but its MCP server failed to connect 2026-09-09 and no `mempalace` CLI is on PATH | global plugin; PreCompact/SessionEnd hooks mine the session | `mempalace search <words>` before re-reading history; re-mine journals after commits |
+| **ponytail** 4.9 — ABSENT 2026-09-09 (not on PATH) | global plugin (lazy-senior mode: simplest working solution) | do not add unrequested abstractions |
+| **tb** — ABSENT 2026-09-09 (not on PATH) | `tb h <path>` crc32 content-address, `tb s <needle> <path>` hit lines | re-read a file only when its hash changed |
 
 Rules: compile/test output to `/dev/null` and read `tail -1`; one deterministic run is proof;
 scratch lives in the session scratchpad, never `/tmp` root. Details: `bebop-lang/docs/TOKEN-ECONOMY.md`.

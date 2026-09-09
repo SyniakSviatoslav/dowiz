@@ -1,0 +1,17 @@
+% p02: application at a declared type. Exercises conv and substitution.
+1 sort 0
+axiom A : 1
+2 const A
+3 const A
+4 pi 2 3
+5 const A
+6 var 0
+7 lam 5 6
+def idA : 4 := 7
+8 const A
+axiom a : 8
+9 const idA
+10 const a
+11 app 9 10
+12 const A
+check 11 : 12

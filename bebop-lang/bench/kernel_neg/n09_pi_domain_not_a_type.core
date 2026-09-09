@@ -1,0 +1,10 @@
+% n09: a pi whose DOMAIN is a value, not a type.
+1 sort 0
+axiom A : 1
+2 const A
+axiom a : 2
+3 const a
+4 sort 0
+5 pi 3 4
+6 sort 0
+check 5 : 6

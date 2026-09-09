@@ -1,0 +1,7 @@
+% n08: a SHARED subterm. With de Bruijn indices a node`s meaning depends on
+% its binder depth, so one node used at two depths is unsound. The format
+% forbids sharing outright and this is the test that pins it.
+1 sort 0
+2 var 0
+3 pi 1 2
+4 pi 1 2

@@ -1,0 +1,16 @@
+% n04: an ill-typed application -- f : A -> A applied to b : B.
+1 sort 0
+axiom A : 1
+2 sort 0
+axiom B : 2
+3 const A
+4 const A
+5 pi 3 4
+axiom f : 5
+6 const B
+axiom b : 6
+7 const f
+8 const b
+9 app 7 8
+10 const A
+check 9 : 10

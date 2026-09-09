@@ -1,0 +1,6 @@
+% n07: a forward reference. Arguments must refer to STRICTLY smaller ids --
+% that invariant is what makes one forward pass enough to establish both
+% well-formedness and acyclicity.
+1 sort 0
+2 pi 1 3
+3 sort 0

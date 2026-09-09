@@ -1,0 +1,8 @@
+% n12: a reference to a LARGER id that is nevertheless already defined --
+% node 3 is written before node 2, so the "undefined node" check does not fire
+% and only the STRICTLY-SMALLER rule can catch it. Added because mutation
+% testing showed n07 was caught by the undefined-node check instead, so it did
+% not discriminate the ordering invariant at all.
+1 sort 0
+3 sort 0
+2 pi 3 1

@@ -1,0 +1,19 @@
+% n11: the Pow-shaped U of the Hurkens construction, claimed at Sort 0.
+% U = Pi (X : Sort 0). ((X -> Sort 0) -> X) -> (X -> Sort 0)
+% Kept because it exercises nested pi levels at depth, but NOTE: measured by
+% mutation testing, it does NOT discriminate the impredicative rule on its own
+% -- n02 is the test that does. Keeping a non-discriminating test and saying so
+% is better than keeping it and believing it works.
+1 sort 0
+2 var 0
+3 sort 0
+4 pi 2 3
+5 var 1
+6 pi 4 5
+7 var 1
+8 sort 0
+9 pi 7 8
+10 pi 6 9
+11 pi 1 10
+12 sort 0
+check 11 : 12

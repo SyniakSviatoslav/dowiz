@@ -1,0 +1,5 @@
+% n06: a de Bruijn index with no binder. Must not read off the end of the
+% context; a kernel that returns garbage here types anything.
+1 var 3
+2 sort 0
+check 1 : 2

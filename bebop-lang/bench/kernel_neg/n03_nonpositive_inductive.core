@@ -1,0 +1,9 @@
+% n03: a NON-POSITIVE inductive. `mk : (Bad -> Bad) -> Bad` has Bad to the
+% LEFT of an arrow inside an argument, which makes the system inconsistent.
+1 sort 0
+2 const Bad
+3 const Bad
+4 pi 2 3
+5 const Bad
+6 pi 4 5
+inductive Bad : 1 | mk : 6

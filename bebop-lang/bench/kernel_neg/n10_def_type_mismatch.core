@@ -1,0 +1,7 @@
+% n10: a def whose body does not have its declared type.
+% declared Sort 0, body is `fun A => A` which is a pi.
+1 sort 0
+2 sort 0
+3 var 0
+4 lam 2 3
+def bad : 1 := 4
