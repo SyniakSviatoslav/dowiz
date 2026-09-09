@@ -1,0 +1,530 @@
+use "selfhost/prelude/sha256.bp"
+
+// selfhost/tcheck.bp — F6: standalone certificate checker for Bebop's
+// certificate format (docs/CERTIFICATE-FORMAT.md).
+//
+// This is a TRUSTED program: it reads a text certificate (p/c/r/d/x records),
+// walks the hinted resolution chains, and verifies the sha256 obligation
+// binding (15.1). No unit propagation, no search, no watched literals --
+// hints make checking a loop.
+//
+// Usage: tcheck <certificate> [<obligation.obl>]
+//
+// With an obligation file the 15.1 binding is enforced: sha256 over the
+// obligation's canonical text must equal the certificate's `x` line.
+// Without it the derivation is still checked but the certificate is unbound.
+//
+// Standalone program, own 511-fn cap, never inside bebop.bp.
+// Target audience: the gate chain (tools/chain.sh), not the compiler.
+
+module core { }
+
+// caps (SCAFFOLD: sized for the QF_ABV bit-blasted certificates we expect;
+// literals inline, Bebop has no top-level consts)
+//   nvars       <= 8192
+//   clauses     <= 16384
+//   lits/clause <= 32
+//   hints/step  <= 64
+//   line        <= 4096 bytes
+
+// --- hex ---
+fn nibble_to_hex(v: i64) -> i64 {
+  let lo = if v < 10 then 1 else 0;
+  lo * (v + 48) + (1 - lo) * (v - 10 + 97)
+}
+
+fn hex_u32(val: i64, buf: [i64], at: i64) -> i64 {
+  let v = val & 4294967295;
+  let i = 0;
+  while i < 8 {
+    let sh = (7 - i) * 4;
+    let _ = buf[at + i] = nibble_to_hex((v >> sh) & 15);
+    let i = i + 1;
+    0
+  };
+  at + 8
+}
+
+// --- text-buffer writers (wr_s/wr_num: the gen_gb.bp:47-88 idiom verbatim).
+// `pos` is a caller-owned 1-cell cursor; `dst` caller-owned and pre-sized;
+// no allocation in here. sys_write packs low bytes of the cells. ---
+fn wr_s(dst: [i64], pos: [i64], s: str) -> i64 {
+  let off = pos[0];
+  let n = str_len(s);
+  let i = 0;
+  while i < n {
+    let _ = dst[off + i] = char(s, i);
+    let i = i + 1;
+    0
+  };
+  let _ = pos[0] = off + n;
+  0
+}
+
+fn wr_num(dst: [i64], pos: [i64], v: i64) -> i64 {
+  let off = pos[0];
+  let neg = if v < 0 then 1 else 0;
+  let m = if v < 0 then 0 - v else v;
+  let p = off + 23;
+  let m2 = m;
+  let go = 1;
+  while go == 1 {
+    let d = m2 - (m2 / 10) * 10;
+    let _ = dst[p] = 48 + d;
+    let p = p - 1;
+    let m2 = m2 / 10;
+    let go = if m2 > 0 then 1 else 0;
+    0
+  };
+  let start = p + 1;
+  let len = (off + 24) - start;
+  let i = 0;
+  while i < len {
+    let _ = dst[off + neg + i] = dst[start + i];
+    let i = i + 1;
+    0
+  };
+  let _ = if neg == 1 then (let _ = dst[off] = 45 in 0) else 0;
+  let _ = pos[0] = off + len + neg;
+  0
+}
+
+fn wr_ch(dst: [i64], pos: [i64], c: i64) -> i64 {
+  let off = pos[0];
+  let _ = dst[off] = c;
+  let _ = pos[0] = off + 1;
+  0
+}
+
+// --- line reader ---
+// read one line (without the newline) from src into line[0..maxlen), NUL
+// terminate, advance pos[0] past the newline; returns the byte count
+fn read_line(src: str, pos: [i64], line: [i64], maxlen: i64) -> i64 {
+  let started = pos[0];
+  let n = 0;
+  let src_len = str_len(src);
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= src_len then 1 else 0;
+    let c = if at_end == 1 then 10 else char(src, pos[0]);
+    let is_nl = if c == 10 then 1 else 0;
+    let keep = (1 - is_nl) * (1 - at_end);
+    let room = if n < maxlen then 1 else 0;
+    let _ = if keep * room == 1 then (let _ = line[n] = c in 0) else 0;
+    let n = n + keep * room;
+    let _ = pos[0] = pos[0] + keep + is_nl * (1 - at_end);
+    let done = is_nl + at_end;
+    0
+  };
+  let _ = line[n] = 0;
+  // -1 = EOF (no chars consumed); 0 = legitimate blank line
+  if pos[0] == started then (0 - 1) else n
+}
+
+// --- tokenizer ---
+// split a NUL-terminated line into whitespace-separated tokens; store token
+// start offsets in toks[0..n), return the token count
+fn tokenize(line: [i64], toks: [i64], maxtok: i64) -> i64 {
+  let n = 0;
+  let i = 0;
+  let in_tok = 0;
+  let done = 0;
+  while done == 0 {
+    let c = line[i];
+    let is_end = if c == 0 then 1 else 0;
+    let is_sp = (if c == 32 then 1 else 0) + (if c == 9 then 1 else 0);
+    let entering = (1 - in_tok) * (1 - is_sp) * (1 - is_end);
+    let _ = if entering == 1 then (if n < maxtok then (let _ = toks[n] = i in 0) else 0) else 0;
+    let n = n + entering * (if n < maxtok then 1 else 0);
+    let in_tok = entering + in_tok * (1 - is_sp) * (1 - is_end);
+    let i = i + 1;
+    let done = is_end;
+    0
+  };
+  n
+}
+
+// --- integer parsing ---
+// parse a decimal integer (optionally negative) from line starting at
+// line[at]; the token must be a digit or '-'
+fn parse_int(line: [i64], at: i64) -> i64 {
+  let neg = if line[at] == 45 then 1 else 0;
+  let at = at + neg;
+  let v = 0;
+  let done = 0;
+  while done == 0 {
+    let c = line[at];
+    let is_d = (if c >= 48 then 1 else 0) * (if c <= 57 then 1 else 0);
+    let v = v * 10 + (c - 48) * is_d;
+    let at = at + is_d;
+    let done = 1 - is_d;
+    0
+  };
+  if neg == 1 then (0 - v) else v
+}
+
+// --- clause database ---
+// slot-layered flat arrays: c_id[slot], c_len[slot],
+// c_lits[slot*32 + 0..len). deleted slots keep c_id = -1.
+fn clause_lookup(c_id: [i64], n: i64, id: i64) -> i64 {
+  let i = 0;
+  let found = 0 - 1;
+  while i < n {
+    let _ = if c_id[i] == id then (let _ = found = i in 0) else 0;
+    let i = i + 1;
+    0
+  };
+  found
+}
+
+fn clause_del(c_id: [i64], n: i64, id: i64) -> i64 {
+  let i = 0;
+  while i < n {
+    let _ = if c_id[i] == id then (let _ = c_id[i] = 0 - 1 in 0) else 0;
+    let i = i + 1;
+    0
+  };
+  n
+}
+
+// --- assignment (direct-mapped: assign[var] in {-1,0,1}) ---
+fn asgn_get(a: [i64], v: i64) -> i64 {
+  let idx = if v >= 0 then v else (0 - v);
+  if idx >= 8192 then 0 else a[idx]
+}
+
+fn asgn_set(a: [i64], v: i64, val: i64) -> i64 {
+  let idx = if v >= 0 then v else (0 - v);
+  let _ = if idx < 8192 then a[idx] = val else 0;
+  0
+}
+
+// extend the assignment with the single unassigned literal of clause slot
+fn asgn_unit(assign: [i64], c_lits: [i64], slot: i64) -> i64 {
+  let j = 0;
+  while j < 32 {
+    let lv = c_lits[slot * 32 + j];
+    let sv = if lv > 0 then lv else (0 - lv);
+    let cur = asgn_get(assign, sv);
+    let _ = if (lv != 0) * (cur == 0) == 1 then (let _ = asgn_set(assign, sv, if lv > 0 then 1 else (0 - 1)) in 0) else 0;
+    let j = j + 1;
+    0
+  };
+  0
+}
+
+// --- the whole check, and it is a loop ---
+// assume the negation of the claimed clause, walk each hint in order: it must
+// be unit (extend assignment) or falsified (conflict -> chain verified)
+fn check_chain(c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64],
+               lits: [i64], nl: i64, hints: [i64], nh: i64, assign: [i64]) -> i64 {
+  let k = 0;
+  while k < 8192 {
+    let _ = assign[k] = 0;
+    let k = k + 1;
+    0
+  };
+  let i = 0;
+  while i < nl {
+    let v = lits[i];
+    let _ = asgn_set(assign, v, if v > 0 then (0 - 1) else 1);
+    let i = i + 1;
+    0
+  };
+  let conflict = 0;
+  let hi = 0;
+  while (hi < nh) * (conflict == 0) == 1 {
+    let hid = hints[hi];
+    let slot = clause_lookup(c_id, n_cl[0], hid);
+    let _ = if slot >= 0 then 0 else sys_exit(2);
+    let hc_len = if slot >= 0 then c_len[slot] else 0;
+    let satisfied = 0;
+    let unassigned = 0;
+    let j = 0;
+    while j < hc_len {
+      let lv = c_lits[slot * 32 + j];
+      let sv = if lv >= 0 then lv else (0 - lv);
+      let want = if lv > 0 then 1 else (0 - 1);
+      let cur = asgn_get(assign, sv);
+      let is_sat = (if cur == want then 1 else 0) * (1 - satisfied);
+      let satisfied = satisfied + is_sat;
+      let unassigned = unassigned + (if cur == 0 then 1 else 0);
+      let j = j + 1;
+      0
+    };
+    let _ = if satisfied == 0 then 0 else sys_exit(2);
+    let _ = if unassigned > 1 then sys_exit(2) else 0;
+    let conflict = conflict + (1 - conflict) * (if unassigned == 0 then 1 else 0);
+    let _ = if (conflict == 0) * (unassigned == 1) == 1 then (let _ = asgn_unit(assign, c_lits, slot) in 0) else 0;
+    let hi = hi + 1;
+    0
+  };
+  let _ = if conflict == 1 then 0 else sys_exit(2);
+  0
+}
+
+// --- record processors ---
+
+fn add_input(c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64],
+             line: [i64], toks: [i64], nt: i64) -> i64 {
+  let cid = parse_int(line, toks[1]);
+  let nl = 0;
+  let k = 2;
+  while k < nt {
+    let v = parse_int(line, toks[k]);
+    let isz = if v == 0 then 1 else 0;
+    let _ = if (isz == 0) * (nl < 32) == 1 then (let _ = c_lits[n_cl[0] * 32 + nl] = v in 0) else 0;
+    let nl = nl + (if isz == 0 then 1 else 0) * (if nl < 32 then 1 else 0);
+    let k = k + 1;
+    0
+  };
+  let _ = c_id[n_cl[0]] = cid;
+  let _ = c_len[n_cl[0]] = nl;
+  let _ = n_cl[0] = n_cl[0] + 1;
+  0
+}
+
+fn add_derived(c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64],
+               assign: [i64], st: [i64], lits: [i64], hints: [i64],
+               line: [i64], toks: [i64], nt: i64) -> i64 {
+  let cid = parse_int(line, toks[1]);
+  let nl = 0;
+  let nh = 0;
+  let in_h = 0;
+  let k = 2;
+  while k < nt {
+    let v = parse_int(line, toks[k]);
+    let isz = if v == 0 then 1 else 0;
+    let _ = if in_h == 0 then (if isz == 1 then (let _ = in_h = 1 in 0) else (if nl < 32 then (let _ = lits[nl] = v in 0) else 0)) else (if isz == 1 then 0 else (if nh < 64 then (let _ = hints[nh] = v in 0) else 0));
+    let _ = if (isz == 0) * (in_h == 0) * (nl < 32) == 1 then (let _ = nl = nl + 1 in 0) else 0;
+    let _ = if (isz == 0) * (in_h == 1) * (nh < 64) == 1 then (let _ = nh = nh + 1 in 0) else 0;
+    let k = k + 1;
+    0
+  };
+  let _ = if nh > 0 then 0 else sys_exit(2);
+  let _ = check_chain(c_id, c_len, c_lits, n_cl, lits, nl, hints, nh, assign);
+  let _ = c_id[n_cl[0]] = cid;
+  let _ = c_len[n_cl[0]] = nl;
+  let j = 0;
+  while j < nl {
+    let _ = c_lits[n_cl[0] * 32 + j] = lits[j];
+    let j = j + 1;
+    0
+  };
+  let _ = st[3] = st[3] + 1;
+  let _ = if nl == 0 then (let _ = st[2] = 1 in 0) else 0;
+  let _ = n_cl[0] = n_cl[0] + 1;
+  0
+}
+
+fn del_clauses(c_id: [i64], line: [i64], toks: [i64], nt: i64, n_cl: [i64]) -> i64 {
+  let k = 1;
+  while k < nt {
+    let id = parse_int(line, toks[k]);
+    let _ = clause_del(c_id, n_cl[0], id);
+    let k = k + 1;
+    0
+  };
+  0
+}
+
+fn set_oid(line: [i64], toks: [i64], nt: i64, oid: [i64], oid_len: [i64]) -> i64 {
+  let n = if nt >= 2 then 64 else 0;
+  let j = 0;
+  while j < n {
+    let _ = oid[j] = line[toks[1] + j];
+    let j = j + 1;
+    0
+  };
+  let _ = if n == 64 then (let _ = oid_len[0] = 64 in 0) else 0;
+  0
+}
+
+fn process_rec(c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64], assign: [i64],
+               lits: [i64], hints: [i64], line: [i64], toks: [i64], nt: i64,
+               oid: [i64], oid_len: [i64], st: [i64]) -> i64 {
+  let tag = if nt > 0 then line[toks[0]] else 0;
+  let _ = if tag == 112 then (let _ = st[0] = parse_int(line, toks[1]) in (let _ = st[1] = parse_int(line, toks[2]) in 0)) else 0;
+  let _ = if tag == 99 then add_input(c_id, c_len, c_lits, n_cl, line, toks, nt) else 0;
+  let _ = if tag == 114 then add_derived(c_id, c_len, c_lits, n_cl, assign, st, lits, hints, line, toks, nt) else 0;
+  let _ = if tag == 100 then del_clauses(c_id, line, toks, nt, n_cl) else 0;
+  let _ = if tag == 120 then set_oid(line, toks, nt, oid, oid_len) else 0;
+  let unk = (if tag == 112 then 1 else 0) + (if tag == 37 then 1 else 0) + (if tag == 99 then 1 else 0) + (if tag == 114 then 1 else 0) + (if tag == 100 then 1 else 0) + (if tag == 120 then 1 else 0);
+  let _ = if unk == 0 then sys_exit(2) else 0;
+  0
+}
+
+// --- canonical text (15.1) ---
+// MUST match tools/certgen.py and tools/certcheck.py exactly: LF only,
+// comments and blank lines removed, single spaces between tokens.
+fn wout(out: [i64], oat: [i64], c: i64, maxout: i64) -> i64 {
+  let _ = if oat[0] < maxout then (let _ = out[oat[0]] = c in (let _ = oat[0] = oat[0] + 1 in 0)) else 0;
+  0
+}
+
+fn copy_token(lineb: [i64], s: i64, out: [i64], oat: [i64], maxout: i64) -> i64 {
+  let j = s;
+  let done = 0;
+  while done == 0 {
+    let c = lineb[j];
+    let is_sp = (if c == 32 then 1 else 0) + (if c == 9 then 1 else 0);
+    let is_end = if c == 0 then 1 else 0;
+    let _ = if (is_sp == 0) * (is_end == 0) == 1 then wout(out, oat, c, maxout) else 0;
+    let j = j + 1;
+    let done = is_sp + is_end;
+    0
+  };
+  0
+}
+
+fn wjoin_line(lineb: [i64], toks: [i64], nt: i64, out: [i64], oat: [i64], maxout: i64) -> i64 {
+  let t = 0;
+  while t < nt {
+    let _ = if t > 0 then wout(out, oat, 32, maxout) else 0;
+    let _ = copy_token(lineb, toks[t], out, oat, maxout);
+    let t = t + 1;
+    0
+  };
+  0
+}
+
+fn canonical_text(src: str, out: [i64], maxout: i64) -> i64 {
+  let src_len = str_len(src);
+  let ip = [0];
+  let oat = [0];
+  let lineb = zeros(4096);
+  let toks = zeros(256);
+  let any = 0;
+  while ip[0] < src_len {
+    let nline = read_line(src, ip, lineb, 4096);
+    let nt = if nline > 0 then tokenize(lineb, toks, 256) else 0;
+    let is_comment = if nt > 0 then (if lineb[toks[0]] == 37 then 1 else 0) else 0;
+    let skip = is_comment + (if nt > 0 then 0 else 1);
+    let _ = if skip == 0 then (let _ = if any == 1 then wout(out, oat, 10, maxout) else 0 in (let _ = wjoin_line(lineb, toks, nt, out, oat, maxout) in 0)) else 0;
+    let any = any + (1 - any) * (1 - skip);
+    0
+  };
+  let _ = wout(out, oat, 10, maxout);
+  oat[0]
+}
+
+fn bind_oid(obl: str, oid: [i64]) -> i64 {
+  let ob_ct = zeros(1048576);
+  let clen = canonical_text(obl, ob_ct, 1048576);
+  let h = zeros(8);
+  let _ = sha256_words(ob_ct, clen, h);
+  let obuf = zeros(65);
+  let _ = hex_u32(h[0], obuf, 0);
+  let _ = hex_u32(h[1], obuf, 8);
+  let _ = hex_u32(h[2], obuf, 16);
+  let _ = hex_u32(h[3], obuf, 24);
+  let _ = hex_u32(h[4], obuf, 32);
+  let _ = hex_u32(h[5], obuf, 40);
+  let _ = hex_u32(h[6], obuf, 48);
+  let _ = hex_u32(h[7], obuf, 56);
+  let j = 0;
+  while j < 64 {
+    let _ = if obuf[j] == oid[j] then 0 else sys_exit(2);
+    let j = j + 1;
+    0
+  };
+  1
+}
+
+// --- main verification ---
+fn verify_cert(cert: str, obl: str, obl_given: i64) -> i64 {
+  let c_id = zeros(16384);
+  let c_len = zeros(16384);
+  let c_lits = zeros(524288);
+  let assign = zeros(8192);
+  let st = zeros(8);
+  let n_cl = [0];
+  let oid = zeros(65);
+  let oid_len = [0];
+  let pos = [0];
+  let line = zeros(4096);
+  let toks = zeros(512);
+  let lits = zeros(32);
+  let hints = zeros(64);
+  let done = 0;
+  while done == 0 {
+    let nread = read_line(cert, pos, line, 4096);
+    let done = if nread < 0 then 1 else 0;
+    let _ = if nread > 0 then (let nt = tokenize(line, toks, 512) in (let _ = process_rec(c_id, c_len, c_lits, n_cl, assign, lits, hints, line, toks, nt, oid, oid_len, st) in 0)) else 0;
+    0
+  };
+  // post-loop checks: p header seen, empty clause derived, x line present
+  let _ = if st[0] >= 0 then 0 else sys_exit(2);
+  let _ = if st[2] == 1 then 0 else sys_exit(2);
+  let _ = if oid_len[0] == 64 then 0 else sys_exit(2);
+  let bound = if obl_given == 1 then bind_oid(obl, oid) else 0;
+  // output
+  let obuf = zeros(256);
+  let opos = [0];
+  let _ = wr_s(obuf, opos, "certcheck: OK");
+  let _ = wr_ch(obuf, opos, 10);
+  let _ = wr_s(obuf, opos, "steps=");
+  let _ = wr_num(obuf, opos, st[3]);
+  let _ = wr_s(obuf, opos, " (hinted)");
+  let _ = wr_ch(obuf, opos, 10);
+  let _ = wr_s(obuf, opos, "empty=yes");
+  let _ = wr_ch(obuf, opos, 10);
+  let _ = wr_s(obuf, opos, "oid=");
+  let a5 = opos[0];
+  let j = 0;
+  while j < 64 {
+    let _ = obuf[a5 + j] = oid[j];
+    let j = j + 1;
+    0
+  };
+  let _ = opos[0] = a5 + 64;
+  let _ = wr_ch(obuf, opos, 10);
+  let _ = wr_s(obuf, opos, "binding=");
+  let _ = if bound == 1 then wr_s(obuf, opos, "bound") else wr_s(obuf, opos, "UNBOUND");
+  let _ = wr_ch(obuf, opos, 10);
+  let _ = sys_write(1, obuf, opos[0]);
+  0
+}
+
+// --- path helpers ---
+fn str_to_cells(dst: [i64], src: str) -> i64 {
+  let i = 0;
+  let done = 0;
+  while done == 0 {
+    let c = char(src, i);
+    let _ = dst[i] = c;
+    let done = if c == 0 then 1 else 0;
+    let i = i + 1;
+    0
+  };
+  i
+}
+
+fn load_obl(path: str) -> str {
+  let lp = str_len(path);
+  let pp = zeros(lp + 1);
+  let _ = str_to_cells(pp, path);
+  let fd = sys_open(pp, lp, 0);
+  let _ = if fd >= 0 then 0 else sys_exit(90);
+  let s = sys_slurp(fd, 4000000);
+  let _ = sys_close(fd);
+  s
+}
+
+// --- entry point ---
+// argv[0] = seed loader, argv[1] = this .bin (see gbpool.bp:22 convention), so
+// the user certificate starts at argv[2].
+fn main(argc: i64, argv: [str]) -> i64 {
+  let _ = if argc >= 3 then 0 else sys_exit(64);
+  let cpath = argv[2];
+  let lc = str_len(cpath);
+  let pc = zeros(lc + 1);
+  let _ = str_to_cells(pc, cpath);
+  let fd = sys_open(pc, lc, 0);
+  let _ = if fd >= 0 then 0 else sys_exit(90);
+  let cert = sys_slurp(fd, 4000000);
+  let _ = sys_close(fd);
+  let og = if argc >= 4 then 1 else 0;
+  let obl = if og == 1 then load_obl(argv[3]) else 0;
+  verify_cert(cert, obl, og)
+}
