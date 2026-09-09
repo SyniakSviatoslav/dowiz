@@ -625,23 +625,25 @@ fn emit_enum_ctor_nullary(insns: [i64], n: [i64], tag: i64, fntab: [i64], stab: 
 
 // Dispatch name( ... ): enum ctor (with payload) or a function call.
 fn emit_bl(insns: [i64], n: [i64], target: i64, has_spills: i64) -> i64 {
-  // x14 (frame-heap cursor) and x15 (spill base) are caller-saved: callees
-  // rebind both from their own sp. A caller that allocates cells AFTER a
-  // call (let k = [0] post-bl) or reads its own spill slots must get them
-  // back. T103 (2026-09-05): one pair instead of the old 48-byte frame with
-  // x15 saved twice -- stp x15,x14,[sp,#-16]! ; bl ; ldp x15,x14,[sp],#16
-  // (0xA9BF3BEF / 0xA8C13BEF, as+objdump): 9 -> 3 words per call site.
+  // x15 (spill base) is caller-saved: callees rebind it from their own sp, so
+  // a caller that reads its own spill slots after a call must get it back.
+  // T103 (2026-09-05) made this ONE pair instead of the old 48-byte frame.
+  // ROADMAP A6 step 2 commit B (2026-09-09): x14 was the frame-heap cursor and
+  // A6 step 1 deleted the frame heap, so x14 is written by nothing and read by
+  // nothing -- `stp x15,x14,[sp,#-16]!` / `ldp x15,x14,[sp],#16` (2847882223 /
+  // 2831236079) become `str x15,[sp,#-16]!` / `ldr x15,[sp],#16` (4162785263 /
+  // 4165011439, as+objdump). STILL TWO WORDS, so saved_calls' arithmetic keeps
+  // its shape; what changes is has_spills' CONDITION, below.
   // B1 (2026-09-06): has_spills is the CALLER's own published fact (does the
-  // caller itself bind a spill or allocate on x14 anywhere in its body) --
-  // not the callee's. The save is a conservative superset: it fires whenever
-  // the caller might need x15/x14 preserved across ANY call, regardless of
-  // what the specific callee does.
-  let _ = if has_spills == 1 then em(insns, n, 2847882223) else 0;
+  // caller itself bind a spill anywhere in its body) -- not the callee's. The
+  // save is a conservative superset: it fires whenever the caller might need
+  // x15 preserved across ANY call, regardless of what the specific callee does.
+  let _ = if has_spills == 1 then em(insns, n, 4162785263) else 0;
   let offset = target - n[0];
   let is_back = if offset < 0 then 1 else 0;
   let word = 2483027968 + offset + is_back * 67108864;
   let _ = em(insns, n, word);
-  let _ = if has_spills == 1 then em(insns, n, 2831236079) else 0;
+  let _ = if has_spills == 1 then em(insns, n, 4165011439) else 0;
   n[0]
 }
 
@@ -1276,9 +1278,19 @@ fn emit_sys_clone(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let _ = em(insns, n, 2457660449);
   let _ = em(insns, n, 3531611016);
   let _ = em(insns, n, 3556769793);
-  let _ = em(insns, n, 3036676256);
+  // A6 step 2 commit B (2026-09-09): the clone child no longer re-homes x14 --
+  // it is a dead register since step 1 deleted the frame heap. x15/x27/x28 still
+  // are. The child's x15 stays sp+256: that is a FRESH 12 MiB stack, not this
+  // fn's frame, so it is deliberately independent of frame_x15off.
+  // THE SKIP LENGTH IS COUPLED TO THE BLOCK: this `cbnz x0` is the PARENT's
+  // branch OVER the child's re-home words, so dropping one word must shorten it
+  // from `.+20` (3036676256) to `.+16` (3036676224), as+objdump-derived. Getting
+  // this wrong is silent -- the parent lands one word past the block, mid-stream:
+  // bisected 2026-09-09 from c84_run (got 0, want 1035) and the two gb_pool
+  // gates, all three of which go through sys_run/sys_clone, with a two-variant
+  // control that cleared the has_spills change of any part in it.
+  let _ = em(insns, n, 3036676224);
   let _ = em(insns, n, 2432959471);
-  let _ = em(insns, n, 2435056622);
   let _ = em(insns, n, 2437940219);
   // T118 (2026-09-05): the child arena is [sp+4 MiB, sp+12 MiB) -- the arena
   // trap exposed that x28 = sp+8 MiB left par_compile's in-thread compiler
@@ -4294,10 +4306,19 @@ fn emit_prologue_sized(insns: [i64], n: [i64], vc: i64, has_alloc: i64, cs_hi: i
   let _ = if mvc > 2 then em(insns, n, 2835438581) else 0;
   let _ = if mvc > 4 then em(insns, n, 2835506167) else 0;
   let _ = if mvc > 6 then em(insns, n, 2835573753) else 0;
-  let needs15raw = (if vc > 8 then 1 else has_alloc) + (if tsp > 0 then 1 else 0);
+  // A6 step 2 commit B: `alloc` no longer implies a live x15 -- aggregates are
+  // on x27 and there is no frame heap. x15 is needed exactly when this fn has
+  // spilled symbols (vc > 8) or temp slots (tsp > 0).
+  let needs15raw = (if vc > 8 then 1 else 0) + (if tsp > 0 then 1 else 0);
   let needs15 = if needs15raw > 0 then 1 else 0;
   let _ = if needs15 == 1 then em(insns, n, 2432697327 + frame_x15off(marks) * 1024) else 0;
-  let _ = if has_alloc == 1 then em(insns, n, 2435056622) else 0;
+  // A6 step 2 commit B: `add x14,sp,#0x900` is GONE. It pointed at a frame heap
+  // that step 1 deleted, and under the computed frame sp+0x900 is past the top
+  // of the frame entirely. The emission pass now saves this word on EVERY fn,
+  // not just the non-allocating ones -- see saved_x14 in
+  // compile_fn_at_total_saved, which becomes an unconditional 1. `has_alloc`
+  // stays in the signature: it is still a real published fact and the fn-mark
+  // LIFO release is the next thing that reads it.
   n[0]
 }
 
@@ -5677,11 +5698,15 @@ fn compile_fn_at_total_saved(insns: [i64], n: [i64], fntab: [i64], stab: [i64], 
   let real_cs_hi = fntab[4575];
   let real_tsp = fntab[4576];
   let real_mvc = if real_vc > real_cs_hi then real_vc else real_cs_hi;
-  let real_needs_save_raw = (if real_vc > 8 then 1 else real_alloc) + (if real_tsp > 0 then 1 else 0);
+  let real_needs_save_raw = (if real_vc > 8 then 1 else 0) + (if real_tsp > 0 then 1 else 0);
   let real_needs_save = if real_needs_save_raw > 0 then 1 else 0;
   let saved_pairs01 = (if real_mvc <= 0 then 1 else 0) + (if real_mvc <= 2 then 1 else 0) + (if real_mvc <= 4 then 1 else 0) + (if real_mvc <= 6 then 1 else 0);
   let saved_x15 = 1 - real_needs_save;
-  let saved_x14 = 1 - real_alloc;
+  // A6 step 2 commit B: emit_prologue_sized NEVER emits `add x14,sp,#0x900`
+  // any more, while the unsized emit_prologue this correction is measured
+  // against still does -- so the emission pass saves that word on every fn,
+  // unconditionally, where it used to save it only when real_alloc was 0.
+  let saved_x14 = 1;
   let saved_calls = fntab[2712] * 2 * (1 - real_needs_save);
   let total_saved = (saved_pairs01 * 2 + 2 + saved_x15 + saved_x14 + saved_calls) * (1 - is_emission);
   // A6 step 2: `marks` joins the packed fact word at 2^22 (5 bits). It CANNOT
@@ -5707,7 +5732,7 @@ fn compile_fn_at_facts(s: str, fntab: [i64], fpos: i64, namepos: i64, is_emissio
   let vc0 = fw_vc(fw0);
   let alloc0 = fw_alloc(fw0);
   let tsp0 = fw_tsp(fw0);
-  let needs_save0raw = (if vc0 > 8 then 1 else alloc0) + (if tsp0 > 0 then 1 else 0);
+  let needs_save0raw = (if vc0 > 8 then 1 else 0) + (if tsp0 > 0 then 1 else 0);
   let needs_save0 = if needs_save0raw > 0 then 1 else 0;
   let _ = fntab[2713] = (1 - needs_save0) * is_emission;
   // S: the emission pass's spilled-symbol slot base (0 on the planning pass).
@@ -7342,14 +7367,14 @@ fn emit_sys_run(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfnam
   let _ = em(insns, n, 402653178);
   let _ = fntab[2712] = fntab[2712] + 1;
   let has_spills = 1 - fntab[2713];
-  let _ = if has_spills == 1 then em(insns, n, 2847882223) else 0;
+  let _ = if has_spills == 1 then em(insns, n, 4162785263) else 0;
   em(insns, n, 3506446377);
   em(insns, n, 4167657481);
   em(insns, n, 2332622857);
   em(insns, n, 2852258784);
   em(insns, n, 2852324321);
   em(insns, n, 3594453280);
-  let _ = if has_spills == 1 then em(insns, n, 2831236079) else 0;
+  let _ = if has_spills == 1 then em(insns, n, 4165011439) else 0;
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
   n[0]
 }
