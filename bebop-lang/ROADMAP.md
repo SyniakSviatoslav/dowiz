@@ -7,20 +7,20 @@ ledger; docs/exp.journal = one line per experiment; AGENTS.md = the laws L1-L17)
 
 ## Thesis (binding since D11-A, 2026-09-05)
 
-Bebop is a self-hosting, integer-only language for AArch64 with no C anywhere in the
-toolchain: a 1.5 KB assembly loader runs `bebop.bin`, which compiles `.bp` source to
-raw machine words and compiles itself to a byte-exact fixpoint. Its purpose is one
-measurable thing: **the language's object model is its persistent store.** A Bebop
-program's persisted objects are its in-memory objects (same layout, object-relative
-offsets, no pointers on disk), queries are ordinary compiled functions, and the
-compiled code runs within a small factor of Rust on honest kernels. **Second purpose,
-binding 2026-09-09: Bebop must become what Lean is -- a language whose claims are
-machine-checked theorems -- WITHOUT breaking the zero-dependency rule.** Lean 4 and any
-SMT solver are SCAFFOLDING and untrusted producers, never load-bearing: they emit
-certificates, the checker is written in Bebop itself, and the end state is Bebop
-producing AND checking its own proofs. The test applied to every artifact of Phase F is
-"if Lean disappeared tomorrow, what would still hold?". Everything in the
-plan serves those two sentences and is judged by a number in a committed script:
+Bebop is ONE language for everything, and the thesis is that three things usually built as
+separate systems are one system here (operator, 2026-09-09): it **compiles itself**, it
+**proves itself**, and it **is its own database** -- no C anywhere in the toolchain and no
+dependency outside the tree. A 1.5 KB assembly loader runs `bebop.bin`, which compiles `.bp`
+to raw machine words and compiles itself to a byte-exact fixpoint (DONE, gated: gen3 == gen4).
+Its object model IS its persistent store: persisted objects are the in-memory objects, same
+layout, object-relative offsets, no pointers on disk, queries are ordinary compiled functions,
+and compiled code runs within a small factor of Rust on honest kernels (measured, G1-G8). And
+its claims are machine-checked theorems -- dependent types over an infinite universe hierarchy
+with higher-order abstraction, ONE grammar, elaboration a compiler PHASE and never a second
+language, the checker written in Bebop itself (Phase F, OPEN). Lean 4 and any SMT solver are a
+CROSS-CHECK ORACLE only, never load-bearing, and every Phase F artifact is tested by "if Lean
+disappeared tomorrow, what would still hold?". Everything in the plan serves that sentence and
+is judged by a number in a committed script:
 
 1. a one-pass compiler whose loops carry no stack-machine words (T96 done: K1 loop
    51 -> 14 words), then the register model (2026-09-06: tags over x0..x7, no runtime push/pop, retarget
