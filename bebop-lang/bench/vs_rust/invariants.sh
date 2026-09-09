@@ -46,12 +46,17 @@ TC=$(python3 tools/typecheck.py "$SRC" bench/vs_rust/std_tests/*.bp bench/vs_rus
 echo "$TC"; [ "$TC" = "typecheck census: 0 findings" ] || { echo "TYPECHECK FAIL (see tools/typecheck.py output)"; fail=1; }
 NEG=$(python3 tools/typecheck.py bench/typecheck_neg/*.bp 2>&1 | tail -1)
 echo "negative sample: $NEG (T48b: must NOT be 0 findings)"; [ "$NEG" != "typecheck census: 0 findings" ] || { echo "TYPECHECK NEG FAIL: bench/typecheck_neg/*.bp type-checked clean"; fail=1; }
-echo "== (v) gate-source expansion identity (prelude + selfhost/std == std_tests)"
-rm -rf "$OUT/std_expand"; sh tools/gen_selfsrc.sh std "$OUT/std_expand" >/dev/null || fail=1
-for t in bench/vs_rust/std_tests/*.bp; do
-  cmp -s "$t" "$OUT/std_expand/$(basename "$t")" || { echo "EXPANSION-DRIFT $(basename "$t" .bp): std_tests copy != prelude+selfhost/std (rerun tools/gen_selfsrc.sh std)"; fail=1; }
-done
-echo "expansion: $(ls bench/vs_rust/std_tests/*.bp | wc -l) gate sources checked"
+echo "== (v) gate-source expansion identity + declared authority (bench/vs_rust/std_tests/GENERATED.txt)"
+# 2026-09-09 (lane C5): this rung used to regenerate into a temp dir and cmp, which
+# detected a byte difference and nothing else. Four lanes lost a gate to a drift that
+# was COMMITTED by a fifth, and the message named the generated copy rather than the
+# source to edit. The comparison now lives in ONE place -- gen_selfsrc.sh std --check --
+# so the checker and the fixer cannot disagree, and it additionally rejects an
+# UNREGISTERED gate source, a `generated` entry whose twin has been deleted (which used
+# to promote the copy to authoritative in silence), and a `local` entry that has grown
+# a twin. A byte comparison alone can catch none of those three.
+rm -rf "$OUT/std_expand_check"
+BEBOP_TMP="$OUT" sh tools/gen_selfsrc.sh std --check || fail=1
 
 echo "== (viii) seed loader rebuild (D12-D): as seed/seed.S | ld -static | .text == .text of the committed seed/build/seed"
 mkdir -p "$OUT/seed"; if as seed/seed.S -o "$OUT/seed/seed.o" 2>/dev/null && ld -static -o "$OUT/seed/seed" "$OUT/seed/seed.o" 2>/dev/null \

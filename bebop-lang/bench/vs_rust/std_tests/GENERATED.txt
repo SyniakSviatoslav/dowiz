@@ -1,0 +1,128 @@
+# GENERATED.txt -- which bench/vs_rust/std_tests sources are generated and from where.
+# Written by `sh tools/gen_selfsrc.sh manifest`; checked by `gen_selfsrc.sh std --check`
+# and by bench/vs_rust/invariants.sh rung (v). A `generated` copy is NOT to be edited:
+# edit the twin named on its line. A `local` source has no twin and IS the truth.
+arena_map_modes.bp local
+attn.bp generated selfhost/std/attn.bp
+attnt.bp generated selfhost/std/attnt.bp
+base64.bp generated selfhost/std/base64.bp
+bitmat.bp generated selfhost/std/bitmat.bp
+bitset.bp generated selfhost/std/bitset.bp
+bt.bp generated selfhost/std/bt.bp
+cache.bp generated selfhost/std/cache.bp
+calcbound.bp generated selfhost/std/calcbound.bp
+checksum.bp generated selfhost/std/checksum.bp
+cl41.bp generated selfhost/std/cl41.bp
+crc.bp generated selfhost/std/crc.bp
+csheaf.bp generated selfhost/std/csheaf.bp
+csr.bp generated selfhost/std/csr.bp
+csr_build_plain.bp local
+csr_build_profile.bp local
+csr_build_ram.bp local
+deltasync.bp generated selfhost/std/deltasync.bp
+dispatcher.bp generated selfhost/std/dispatcher.bp
+dp.bp generated selfhost/std/dp.bp
+dpll.bp generated selfhost/std/dpll.bp
+drift.bp generated selfhost/std/drift.bp
+entcol.bp generated selfhost/std/entcol.bp
+fiber.bp generated selfhost/std/fiber.bp
+fir.bp generated selfhost/std/fir.bp
+fno.bp generated selfhost/std/fno.bp
+foldx.bp generated selfhost/std/foldx.bp
+gb_bfs.bp local
+gb_bfs_gen.bp local
+gb_bfs_gen_addr.bp local
+gb_cc.bp local
+gb_gen.bp local
+gb_mbfs_big.bp local
+gb_mbfs_gen.bp local
+gb_pool.bp local
+gb_pool_abi.bp local
+gb_pr.bp local
+gb_roundtrip.bp local
+gb_sssp.bp local
+gb_tc.bp local
+genarena.bp generated selfhost/std/genarena.bp
+grass.bp generated selfhost/std/grass.bp
+haar.bp generated selfhost/std/haar.bp
+hex.bp generated selfhost/std/hex.bp
+holo.bp generated selfhost/std/holo.bp
+hv.bp generated selfhost/std/hv.bp
+join_twin.bp local
+join_twin_grouped.bp local
+kalman.bp generated selfhost/std/kalman.bp
+lcjit.bp generated selfhost/std/lcjit.bp
+lcres.bp generated selfhost/std/lcres.bp
+lod.bp generated selfhost/std/lod.bp
+lsm.bp generated selfhost/std/lsm.bp
+lsys.bp generated selfhost/std/lsys.bp
+mma.bp generated selfhost/std/mma.bp
+modular.bp generated selfhost/std/modular.bp
+money.bp generated selfhost/std/money.bp
+morph.bp generated selfhost/std/morph.bp
+msuper.bp generated selfhost/std/msuper.bp
+mutlsys.bp generated selfhost/std/mutlsys.bp
+mvcc.bp generated selfhost/std/mvcc.bp
+ntt.bp generated selfhost/std/ntt.bp
+ordfsm.bp generated selfhost/std/ordfsm.bp
+petri.bp generated selfhost/std/petri.bp
+phant.bp generated selfhost/std/phant.bp
+pieblock.bp generated selfhost/std/pieblock.bp
+ptrless.bp generated selfhost/std/ptrless.bp
+qlora.bp generated selfhost/std/qlora.bp
+r3x.bp generated selfhost/std/r3x.bp
+rev.bp generated selfhost/std/rev.bp
+rewrite.bp generated selfhost/std/rewrite.bp
+ringvsa.bp generated selfhost/std/ringvsa.bp
+rle.bp generated selfhost/std/rle.bp
+rng.bp generated selfhost/std/rng.bp
+rns.bp generated selfhost/std/rns.bp
+rnsrot.bp generated selfhost/std/rnsrot.bp
+sbench.bp generated selfhost/std/sbench.bp
+schain.bp local
+scolp.bp local
+scompact.bp generated selfhost/std/scompact.bp
+sconc.bp generated selfhost/std/sconc.bp
+scoord.bp generated selfhost/std/scoord.bp
+scrash.bp generated selfhost/std/scrash.bp
+scrash_small.bp local
+sdiag.bp generated selfhost/std/sdiag.bp
+search.bp generated selfhost/std/search.bp
+segtail.bp local
+seigtime.bp generated selfhost/std/seigtime.bp
+set.bp generated selfhost/std/set.bp
+sevolve.bp generated selfhost/std/sevolve.bp
+sgamma.bp generated selfhost/std/sgamma.bp
+sgraph.bp generated selfhost/std/sgraph.bp
+sgraph2.bp generated selfhost/std/sgraph2.bp
+sha256.bp generated selfhost/std/sha256.bp
+sheaf.bp generated selfhost/std/sheaf.bp
+sheafh0.bp generated selfhost/std/sheafh0.bp
+sinc.bp generated selfhost/std/sinc.bp
+slayout.bp generated selfhost/std/slayout.bp
+snn.bp generated selfhost/std/snn.bp
+sort.bp generated selfhost/std/sort.bp
+spacetime.bp generated selfhost/std/spacetime.bp
+spectral.bp generated selfhost/std/spectral.bp
+spike.bp generated selfhost/std/spike.bp
+srepl.bp generated selfhost/std/srepl.bp
+sround.bp generated selfhost/std/sround.bp
+stm.bp generated selfhost/std/stm.bp
+store.bp generated selfhost/std/store.bp
+stride.bp generated selfhost/std/stride.bp
+substrate.bp generated selfhost/std/substrate.bp
+swpmu.bp generated selfhost/std/swpmu.bp
+tb.bp generated selfhost/std/tb.bp
+tdg.bp generated selfhost/std/tdg.bp
+tdgcurv.bp generated selfhost/std/tdgcurv.bp
+tdgforms.bp generated selfhost/std/tdgforms.bp
+tdggeo.bp generated selfhost/std/tdggeo.bp
+tdgstokes.bp generated selfhost/std/tdgstokes.bp
+tern.bp generated selfhost/std/tern.bp
+thr.bp generated selfhost/std/thr.bp
+tq.bp generated selfhost/std/tq.bp
+usemod.bp generated selfhost/std/usemod.bp
+vecinv.bp generated selfhost/std/vecinv.bp
+whileb.bp generated selfhost/std/whileb.bp
+wht.bp generated selfhost/std/wht.bp
+zgrade.bp generated selfhost/std/zgrade.bp
