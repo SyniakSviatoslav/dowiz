@@ -32,6 +32,7 @@ foldx.bp generated selfhost/std/foldx.bp
 gb_bfs.bp local
 gb_bfs_gen.bp local
 gb_bfs_gen_addr.bp local
+gb_bfs_gen_addr_gate.bp local
 gb_cc.bp local
 gb_gen.bp local
 gb_mbfs_big.bp local

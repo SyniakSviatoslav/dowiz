@@ -937,6 +937,23 @@ rg=$(run 30 "$GBT/gb_bfs_1_0_1_0.bin" "$GBT/gb_bfs_gen.store" 0 | tail -1)
 [ "$r" = "$rg" ] || r="MISMATCH($r/$rg)"
 gate gb_bfs_gen 997 "$r"
 
+# ---- gb_bfs_gen_addr (B3 step 4 design item (f) gate: the _addr (fmt=2) variant of
+#      gen_gb.bp's op=5 (bfs) kernel -- the shape selfhost/std/sgraph2.bp's bfs_frontier
+#      dispatches via fork+sys_run, and the SOLE consumer of that shape, which is why a
+#      broken _addr variant sat in a tree reporting std_golden 114/0. gb_bfs_gen.bp above
+#      gates only the _path (fmt=1) variant. This block reuses gb_bfs_gen.bp's own store
+#      (same 1k-node/4000-edge random_lcg graph, queue fold $r above) and dispatches the
+#      fmt=2 kernel through bench/vs_rust/std_tests/gb_bfs_gen_addr_gate.bp -- an
+#      already-mmap'd store base + GbMatrix cell offset as decimal argv via fork+sys_run,
+#      the exact sgraph2 dispatch shape -- checking driver == _addr kernel before accepting
+#      the golden (997, == bench/oracles/gb_bfs_gen_addr.py, source 0). ----
+./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_bfs_gen_addr.bp "$GBT/gb_bfs_gen_addr.bin" >/dev/null 2>&1 && run 30 "$GBT/gb_bfs_gen_addr.bin" "$GBT" >/dev/null 2>&1 || r="COMPILEFAIL($r)"
+./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$GBT/gb_bfs_1_0_2_0.bp" "$GBT/gb_bfs_1_0_2_0.bin" >/dev/null 2>&1 || r="COMPILEFAIL($r)"
+./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_bfs_gen_addr_gate.bp "$GBT/gb_bfs_gen_addr_gate.bin" >/dev/null 2>&1 || r="COMPILEFAIL($r)"
+ra=$(run 30 "$GBT/gb_bfs_gen_addr_gate.bin" "$GBT" | tail -1)
+[ "$r" = "$ra" ] || r="MISMATCH($r/$ra)"
+gate gb_bfs_gen_addr 997 "$r"
+
 # ---- gb_mbfs_gen (ROADMAP E1): gen_gb.bp's op=6 (mbfs) generated 64-SOURCE bit-parallel BFS
 #      kernel -- one i64 frontier cell per vertex, bit s = "v is in source s's frontier", push
 #      = `nx[u] |= fr[v]` under the (OR, AND) semiring -- against 64 SEPARATE single-source

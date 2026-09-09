@@ -1,0 +1,169 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+use "selfhost/prelude/gb.bp"
+// gb_bfs_gen_addr_gate.bp -- B3 step 4 design item (f) gate driver for the _addr (fmt=2)
+// variant of gen_gb.bp's op=5 (bfs) generated kernel. gb_bfs_gen.bp gates only the _path
+// (fmt=1) variant ("PATH main -- direct shell-compiled dispatch, no sys_run" per its own
+// header), so the _addr shape sgraph2.bp's bfs_frontier dispatches had NO gate -- the hole
+// a broken _addr variant hid in while the tree reported std_golden 114/0.
+// This driver closes it: it maps the SAME gb_bfs_gen.store gb_bfs_gen.bp builds (same
+// 1k-node/4000-edge random_lcg graph), mmaps the fmt=2 kernel binary the shell compiled
+// from gb_bfs_gen_addr.bp's output, and dispatches it ONCE via fork+sys_run with the
+// already-mapped store base + GbMatrix cell offset as decimal argv -- the exact shape of
+// sgraph2.bp's bfs_kernel_dispatch/bfs_kernel_launch/bfs_kernel_child. argv[2] = dir
+// holding gb_bfs_gen.store + gb_bfs_1_0_2_0.bin; prints the kernel's fold, which must
+// equal gb_bfs_gen.bp's queue fold and bench/oracles/gb_bfs_gen_addr.py (997, source 0).
+// Dispatch helpers are local copies of sgraph2.bp's bfs_* (same ponytail rationale as
+// sgraph2.bp's own header: avoid pulling gen_gb/gb_run's whole flat-use chain here).
+fn ap_str(dst: [i64], off: i64, s: str) -> i64 {
+  let n = str_len(s);
+  let i = 0;
+  while i < n {
+    let _ = dst[off + i] = char(s, i);
+    let i = i + 1;
+    0
+  };
+  off + n
+}
+fn gate_itoa(dst: [i64], v: i64) -> i64 {
+  let p = 19;
+  let m = v;
+  let go = 1;
+  while go == 1 {
+    let d = m - (m / 10) * 10;
+    let _ = dst[p] = 48 + d;
+    let p = p - 1;
+    let m = m / 10;
+    let go = if m > 0 then 1 else 0;
+    0
+  };
+  let start = p + 1;
+  let len = 20 - start;
+  let i = 0;
+  while i < len {
+    let _ = dst[i] = dst[start + i];
+    let i = i + 1;
+    0
+  };
+  len
+}
+fn gate_pack(buf: [i64], v: i64) -> i64 {
+  let digs = zeros(24);
+  let n = gate_itoa(digs, v);
+  let w = 0;
+  while w < n / 8 + 1 {
+    let word = 0;
+    let k = 0;
+    while k < 8 {
+      let idx = w * 8 + k;
+      let b = if idx < n then digs[idx] else 0;
+      let word = word | (b << (k * 8));
+      let k = k + 1;
+      0
+    };
+    let _ = buf[w] = word;
+    let w = w + 1;
+    0
+  };
+  0
+}
+fn gate_kernel_size(path: [i64], plen: i64) -> i64 {
+  let fd = sys_open(path, plen, 0);
+  let chunk = zeros(8192);
+  let total = 0;
+  let go = 1;
+  while go == 1 {
+    let rc = sys_read(fd, chunk, 8192);
+    let total = total + rc;
+    let go = if rc > 0 then 1 else 0;
+    0
+  };
+  let _ = sys_close(fd);
+  total
+}
+fn gate_write_i64_file(path: [i64], plen: i64, v: i64) -> i64 {
+  let buf = zeros(8);
+  let _ = buf[0] = v & 255;
+  let _ = buf[1] = (v >> 8) & 255;
+  let _ = buf[2] = (v >> 16) & 255;
+  let _ = buf[3] = (v >> 24) & 255;
+  let _ = buf[4] = (v >> 32) & 255;
+  let _ = buf[5] = (v >> 40) & 255;
+  let _ = buf[6] = (v >> 48) & 255;
+  let _ = buf[7] = (v >> 56) & 255;
+  let fd = sys_open(path, plen, 578);
+  let _ = sys_export(fd, buf, 8);
+  sys_close(fd)
+}
+fn gate_read_i64_file(path: [i64], plen: i64) -> i64 {
+  let fd = sys_open(path, plen, 0);
+  let buf = zeros(8);
+  let _ = sys_read(fd, buf, 8);
+  let _ = sys_close(fd);
+  buf[0] | (buf[1] << 8) | (buf[2] << 16) | (buf[3] << 24) | (buf[4] << 32) | (buf[5] << 40) | (buf[6] << 48) | (buf[7] << 56)
+}
+fn gate_child(args: [i64]) -> i64 {
+  let dummy0 = zeros(1);
+  let a0 = zeros(4);
+  let _ = gate_pack(a0, args[0]);
+  let a1 = zeros(4);
+  let _ = gate_pack(a1, args[1]);
+  let a2 = zeros(4);
+  let _ = gate_pack(a2, args[2]);
+  let argv = zeros(5);
+  let _ = argv[0] = st_addr(dummy0);
+  let _ = argv[1] = st_addr(dummy0);
+  let _ = argv[2] = st_addr(a0);
+  let _ = argv[3] = st_addr(a1);
+  let _ = argv[4] = st_addr(a2);
+  let result = sys_run(args[3], args[4], 5, argv);
+  let _ = gate_write_i64_file(st_cells(args[5]), args[6], result);
+  sys_exit(0)
+}
+fn gate_launch(args: [i64]) -> i64 {
+  let pid = sys_clone(17, sys_arena_base() + 2097152);
+  let _ = if pid == 0 then gate_child(args) else 0;
+  let st = zeros(1);
+  let w = sys_wait4(pid, st, 0, 0);
+  gate_read_i64_file(st_cells(args[5]), args[6])
+}
+// gate_matrix_cell(base, root) -> M: the GbMatrix cell offset the _addr (fmt=2)
+// kernel takes as its matrix argument. Mirrors sgraph2.bp's bfs_matrix_wrap,
+// which is likewise declared -> i64: a ref never leaves the store helpers as a
+// number (T48 census rung vii), so the st_ref stays inside a helper whose
+// declared contract is i64 -- the same shape the blessed file uses.
+fn gate_matrix_cell(base: [i64], root: ref GBM) -> i64 {
+  st_ref(base, root, 0)
+}
+fn gate_dispatch(base: [i64], M: i64, s: i64, kaddr: i64, nb: i64, respath: [i64], rn: i64) -> i64 {
+  let args = zeros(7);
+  let _ = args[0] = st_addr(base);
+  let _ = args[1] = M;
+  let _ = args[2] = s;
+  let _ = args[3] = kaddr;
+  let _ = args[4] = nb;
+  let _ = args[5] = st_addr(respath);
+  let _ = args[6] = rn;
+  gate_launch(args)
+}
+fn main(argc: i64, argv: [str]) -> i64 {
+  let dir = argv[2];
+  let spath = zeros(256);
+  let sp = ap_str(spath, 0, dir);
+  let sp = ap_str(spath, sp, "/gb_bfs_gen.store");
+  let kpath = zeros(256);
+  let kp = ap_str(kpath, 0, dir);
+  let kp = ap_str(kpath, kp, "/gb_bfs_1_0_2_0.bin");
+  let respath = zeros(256);
+  let rn = ap_str(respath, 0, dir);
+  let rn = ap_str(respath, rn, "/gb_bfs_addr_gate.res");
+  let base = st_map_ro(spath, sp, 4194304);
+  let tmp = zeros(1024);
+  let root = st_root(base, tmp);
+  let M = gate_matrix_cell(base, root);
+  let nb = gate_kernel_size(kpath, kp);
+  let kfd = sys_open(kpath, kp, 0);
+  let kaddr = sys_mmap(0, nb, 5, 2, kfd, 0);
+  let _ = sys_close(kfd);
+  gate_dispatch(base, M, 0, kaddr, nb, respath, rn)
+}
