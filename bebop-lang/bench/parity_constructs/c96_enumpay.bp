@@ -1,0 +1,12 @@
+// ROADMAP A6 step 1: a PAYLOAD enum ctor bound to a variable and consumed by a
+// RUNTIME match. Both halves of the open A6 defect in one program: (i)
+// emit_enum_ctor stored the tag and the payload to the dead frame-heap x14
+// while RETURNING the x27 arena block, so the block was uninitialised; (ii)
+// `match <var>` emitted no code at all -- emit_match compared each arm name
+// against the scrutinee TEXT, so a variable never matched any arm and the
+// match evaluated to whatever was left in the result register. The roadmap
+// repro (`let v = some(7); match v { none => 0, some(x) => x + 1 }` -> 8) is
+// the `ra` term; `rb`/`rc` add a second payload tag and the nullary tag so the
+// tag compare, not just the payload load, is covered.
+fn main() -> i64 { let a = some(7); let ra = match a { none => 0, some(x) => x + 1, many(y) => y }; let b = many(500); let rb = match b { none => 0, some(x) => x, many(y) => y + 3 }; let c = none; let rc = match c { none => 9, some(x) => x, many(y) => y }; ra * 1000000 + rb * 1000 + rc }
+enum opt { none, some, many }

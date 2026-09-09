@@ -27,7 +27,7 @@ emit_struct_field 87
 emit_struct_lit 305
 emit_field_access 103
 find_enum 214
-emit_enum_ctor 135
+emit_enum_ctor 142
 emit_enum_ctor_nullary 76
 emit_bl 55
 fntab_lookup 43
@@ -76,7 +76,14 @@ emit_call_or_ctor 770
 emit_var_or_ctor 80
 emit_match_payload 64
 emit_match_arm 65
-emit_match 317
+emit_match 75
+emit_match_lit 303
+vs_restore 30
+patch_b 26
+emit_match_var 175
+emit_match_rt_arm 91
+emit_match_rt_bind 77
+emit_match_rt 394
 skip_line_comment_n 54
 skip_line_comment 21
 skip_string_n 60

@@ -115,6 +115,9 @@ for f in "$DIR"/*.bp; do
     # under window pressure. Exited 89 on 42ce19e5, runs 17 (bpref) once vs_span_to_slots also
     # demotes kind-3 SYM entries. Drop either ingredient and it compiled clean before the fix.
     c95_symspan) EXPECT=17;;
+    # ROADMAP A6 step 1 (2026-09-09): payload ctor + RUNTIME match on a variable.
+    # EXPECT from python3 tools/bpref.py bench/parity_constructs/c96_enumpay.bp.
+    c96_enumpay) EXPECT=8503009;;
     c69_index_roundtrip) EXPECT=3969009064380;;
     c92_ptrfree) EXPECT=777920;;
     c110_fence) EXPECT=0;;

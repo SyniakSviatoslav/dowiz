@@ -561,23 +561,23 @@ fn find_enum(s: str, out: [i64]) -> i64 {
 // Emit an enum ctor with a payload: ctor(expr) -> [tag, payload] block.
 fn emit_enum_ctor(s: str, tag: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
-  let _ = em(insns, n, 3531603968 + tag * 32);
-  // OBSERVED, NOT FIXED HERE (A5 lane A, 2026-09-08): ROADMAP A6 retargeted the
-  // ctor's BUMP from x14 to x27 but left these two payload stores on
-  // `str x0,[x14]` / `str x0,[x14,#8]`, so a PAYLOAD ctor writes its block to the
-  // dead frame heap and hands back an uninitialised arena block. It is invisible
-  // today because the only consumption path the language supports is a match on a
-  // LITERAL ctor (emit_match_payload re-emits the payload expression; c11_enum is
-  // nullary), and `let v = some(7); match v {..}` is garbage on HEAD 5df5037 too
-  // (it printed 494710833280 there). Left byte-identical here so that this commit
-  // stays a single-variable diff (L14); it belongs in its own commit with the
-  // runtime-match path and a construct that covers it.
-  let _ = em(insns, n, 4177527232);
+  // ROADMAP A6 step 1 defect, FIXED 2026-09-09: A6 moved the ctor's BUMP from
+  // the frame heap x14 to the arena cursor x27 and left the two payload stores
+  // on `str x0,[x14]` / `str x0,[x14,#8]`, so a payload ctor handed back an
+  // UNINITIALISED arena block. The fix is an order change, not a register
+  // rename: the payload expression must be evaluated FIRST (it may itself be a
+  // ctor -- c60_nestctor -- and bump x27 out from under us), and only then is
+  // the block reserved. `mov x16,x27` snapshots the base into the register
+  // model's parallel-move scratch (x16, dead here exactly as at every
+  // vs_array_set_imm site), the cursor is bumped and capacity-checked, the
+  // payload (still in x0 from vs_deliver) is stored at [x16,#8], the tag
+  // overwrites x0 and is stored at [x16], and the block index is
+  // `mov x0,x16 ; sub x0,x0,x17 ; lsr x0,x0,#3` -- A5 step 1b's cell index,
+  // which is what emit_match_rt then reads through `ldr xd,[x17,xi,lsl #3]`.
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = vs_deliver(insns, n, fntab, stab, 1);
-  let _ = em(insns, n, 4177528256);
   let _ = pos[0] = pos[0] + 1;
-  let _ = em(insns, n, 2853897184);
+  let _ = em(insns, n, 2853897200);
   let _ = em(insns, n, 2432713595);
   // ROADMAP A6 (2026-09-08): aggregates allocate at the ARENA CURSOR x27, the
   // same bump `zeros` uses, and inherit its capacity trap -- cmp x27,x28 ;
@@ -587,6 +587,10 @@ fn emit_enum_ctor(s: str, tag: i64, pos: [i64], insns: [i64], n: [i64], stab: [i
   let _ = em(insns, n, 3944481663);
   let _ = em(insns, n, 1409286217);
   let _ = em(insns, n, 3558869504);
+  let _ = em(insns, n, 4177528320);
+  let _ = em(insns, n, 3531603968 + tag * 32);
+  let _ = em(insns, n, 4177527296);
+  let _ = em(insns, n, 2853176288);
   // A5 step 1b: address -> cell index.
   let _ = em(insns, n, 3406888960);
   let _ = em(insns, n, 3544448000);
@@ -597,9 +601,11 @@ fn emit_enum_ctor(s: str, tag: i64, pos: [i64], insns: [i64], n: [i64], stab: [i
 // Emit a nullary enum ctor: ctor -> [tag] block (no payload).
 fn emit_enum_ctor_nullary(insns: [i64], n: [i64], tag: i64, fntab: [i64], stab: [i64]) -> i64 {
   let _ = em(insns, n, 3531603968 + tag * 32);
-  // Same latent A6 defect as in emit_enum_ctor above (tag stored to the dead x14
-  // frame heap, arena block returned uninitialised); left byte-identical here.
-  let _ = em(insns, n, 4177527232);
+  // A6 step 1 defect (2026-09-09): was `str x0,[x14]` -- the dead frame-heap
+  // register -- while the block returned came from x27. Nothing runs between
+  // the tag store and the bump, so the nullary form needs no x16 snapshot:
+  // store straight through the cursor.
+  let _ = em(insns, n, 4177527648);
   let _ = em(insns, n, 2853897184);
   let _ = em(insns, n, 2432713595);
   // ROADMAP A6 (2026-09-08): aggregates allocate at the ARENA CURSOR x27, the
@@ -1827,10 +1833,20 @@ fn emit_match_arm(s: str, ppos: i64, has_var: i64, vname: i64, vpos: i64, bodypo
 // The arm loop stops at the closing brace and consumes ONLY it (T42 2026-09-04:
 // it used to run the arm tail at "}" and scan into the enclosing expression).
 fn emit_match(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
-  let strn = slen(s, pos);
   let _ = pos[0] = pos[0] + 5;
   let _ = skip_ws(s, pos);
+  let cpos = pos[0];
   let cname = read_ident(s, pos);
+  // A6 step 1 (2026-09-09): the scrutinee is a CTOR NAME (compile-time arm
+  // selection, unchanged) or anything else, which is a bound variable holding
+  // a ctor block -- the runtime path below.
+  let ctag = ft_ctor_tag(fntab, cname);
+  if ctag >= 0 then emit_match_lit(s, cname, pos, insns, n, stab, selfname, selfstart, fntab)
+  else emit_match_var(s, cpos, cname, pos, insns, n, stab, selfname, selfstart, fntab)
+}
+
+fn emit_match_lit(s: str, cname: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let strn = slen(s, pos);
   let _ = skip_ws(s, pos);
   let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
   let is_lp = if ch == 40 then 1 else 0;
@@ -1868,6 +1884,146 @@ fn emit_match(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   };
   n[0]
 }
+
+// Restore the whole register-model state an if/match arm may have changed, so
+// the next arm compiles from byte-identical bookkeeping (emit_cond_branch does
+// this inline for its two arms; a match has N).
+fn vs_restore(fntab: [i64], sw: i64, smask: i64, scs: i64, sslot: i64) -> i64 {
+  let _ = fntab[4547] = sw;
+  let _ = fntab[4548] = smask;
+  let _ = fntab[4573] = scs;
+  let _ = fntab[4574] = sslot;
+  0
+}
+
+// Patch an already-emitted unconditional `b` placeholder at word p to `target`
+// (imm26, forward). p < 0 = nothing to patch.
+fn patch_b(insns: [i64], p: i64, target: i64) -> i64 {
+  let _ = if p >= 0 then (let _ = insns[p] = 335544320 + (target - p) in 0) else 0;
+  0
+}
+
+// RUNTIME match (A6 step 1, 2026-09-09) -- the second half of the ctor defect.
+// `match v { a => .., b(x) => .. }` where v is a bound variable was emitting
+// NOTHING at all (emit_match compared each arm name against the scrutinee TEXT,
+// so no arm ever matched a variable) and the match evaluated to whatever was
+// left in the result register -- the 8209 that remained after the two ctor
+// stores were fixed. The block is [tag, payload] at the x17-relative CELL INDEX
+// the variable holds, so the tag is read with the A5 step-1b index form
+// (`ldr xtg,[x17,xsc,lsl #3]`, idx 0) and the payload with
+// `add xp,xsc,#1 ; ldr xp,[x17,xp,lsl #3]` -- NOT an address dereference.
+// sc (block index), tg (tag) and d (join) are held as free-mask reservations
+// and NOT as window entries: an arm that parked a window entry would emit the
+// park inside its own conditionally-executed code, which is exactly the
+// arm-spanning fault emit_cond_branch's fntab[4591] guard exists for. Every arm
+// compiles from the SAME saved window/cs/slot state and converges on d.
+fn emit_match_var(s: str, cpos: i64, cname: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let vreg = sym_lookup(s, stab, cname, cpos);
+  let _ = if vreg < 0 then diag_exit(s, cpos, 101) else 0;
+  let _ = emit_var(insns, n, vreg, fntab, stab);
+  // fntab[4592]: arms can bind, so surviving values go to temp SLOTS, not cs
+  // registers (same rule emit_cond applies to a branch-shaped `if`).
+  let _ = fntab[4592] = 1;
+  let _ = vs_park(insns, n, fntab, stab, 1);
+  let _ = vs_span_to_slots(insns, n, fntab, stab, 1);
+  let _ = fntab[4592] = 0;
+  let sc = vs_alloc(insns, n, fntab, stab);
+  let _ = vs_to(insns, n, fntab, stab, sc);
+  let _ = vs_pop(fntab);
+  let _ = vs_mask_take(fntab, sc, 16);
+  let tg = vs_alloc(insns, n, fntab, stab);
+  let _ = vs_array_get_imm(insns, n, sc, 0, tg);
+  let d = vs_alloc(insns, n, fntab, stab);
+  let _ = emit_match_rt(s, pos, insns, n, stab, selfname, selfstart, fntab, sc, tg, d);
+  let _ = vs_mask_free(fntab, sc, 16);
+  let _ = vs_mask_free(fntab, tg, 16);
+  let _ = vs_mask_free(fntab, d, 16);
+  let _ = vs_push(insns, n, fntab, stab, 2, d, 0 - 1);
+  n[0]
+}
+
+// One runtime arm: bind the payload (if the arm names one), compile the body
+// from `bodypos` and converge it on the join register d.
+fn emit_match_rt_arm(s: str, pos: [i64], bodypos: i64, vname: i64, vpos: i64, insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], sc: i64, d: i64) -> i64 {
+  let saved = pos[0];
+  let saved_arm = fntab[4591];
+  let _ = fntab[4591] = fntab[4547];
+  let _ = if vname != 0 then emit_match_rt_bind(s, vname, vpos, insns, n, stab, fntab, sc) else 0;
+  let _ = pos[0] = bodypos;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = vs_to(insns, n, fntab, stab, d);
+  let _ = vs_pop(fntab);
+  let _ = fntab[4591] = saved_arm;
+  let _ = pos[0] = saved;
+  n[0]
+}
+
+// Bind an arm's payload variable: cell sc+1 of the block, through the index
+// form, then the ordinary symbol bind every `let` uses.
+fn emit_match_rt_bind(s: str, vname: i64, vpos: i64, insns: [i64], n: [i64], stab: [i64], fntab: [i64], sc: i64) -> i64 {
+  let p = vs_alloc(insns, n, fntab, stab);
+  let _ = vs_array_get_imm(insns, n, sc, 1, p);
+  let _ = vs_push(insns, n, fntab, stab, 2, p, n[0] - 1);
+  let reg = sym_bind(s, stab, vname, vpos);
+  let _ = check_reg_collision(s, insns, n, fntab, stab, reg, vpos);
+  vs_bind(insns, n, fntab, stab, reg)
+}
+
+// The arm chain: `cmp xtg,#tag ; b.ne <next arm>` per arm, the arm body, then a
+// `b` to the join. The exit branches are CHAINED (arm i jumps to arm i+1's own
+// exit branch, the last one to the join) so no per-match fixup list is needed --
+// only the previous arm's word index is carried across the loop.
+fn emit_match_rt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], sc: i64, tg: i64, d: i64) -> i64 {
+  let strn = slen(s, pos);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let sw = fntab[4547];
+  let smask = fntab[4548];
+  let scs = fntab[4573];
+  let sslot = fntab[4574];
+  let prevb = 0 - 1;
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch0 = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_rb = if ch0 == 125 then 1 else 0;
+    let stop = if is_rb + at_end >= 1 then 1 else 0;
+    let aname = read_ident(s, pos);
+    let _ = skip_ws(s, pos);
+    let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_lp2 = if ch2 == 40 then 1 else 0;
+    let vpos = if is_lp2 == 1 then (let _ = pos[0] = pos[0] + 1 in pos[0]) else 0;
+    let vname = if is_lp2 == 1 then read_ident(s, pos) else 0;
+    let _ = if is_lp2 == 1 then (let _ = skip_ws(s, pos) in (let _ = pos[0] = pos[0] + 1 in 0)) else 0;
+    let _ = skip_ws(s, pos);
+    let adv = if stop == 1 then is_rb else 2;
+    let _ = pos[0] = pos[0] + adv;
+    let bodypos = pos[0];
+    let _ = if stop == 0 then skip_to_field_delim(s, pos) else 0;
+    let atag = if stop == 0 then ft_ctor_tag(fntab, aname) else 0;
+    let _ = if atag < 0 then diag_exit(s, bodypos, 101) else 0;
+    let _ = if stop == 0 then vs_restore(fntab, sw, smask, scs, sslot) else 0;
+    let _ = if stop == 0 then em(insns, n, 4043309087 + atag * 1024 + tg * 32) else 0;
+    let pne = n[0];
+    let _ = if stop == 0 then em(insns, n, 1409286145) else 0;
+    let _ = if stop == 0 then emit_match_rt_arm(s, pos, bodypos, vname, vpos, insns, n, stab, selfname, selfstart, fntab, sc, d) else 0;
+    let q = n[0];
+    let _ = if stop == 0 then em(insns, n, 335544320) else 0;
+    let _ = if stop == 0 then patch_b(insns, prevb, q) else 0;
+    let _ = if stop == 0 then (let _ = insns[pne] = insns[pne] + (n[0] - pne) * 32 in 0) else 0;
+    let prevb = if stop == 0 then q else prevb;
+    let ch3 = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_comma = if ch3 == 44 then 1 - stop else 0;
+    let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let done = stop;
+    0
+  };
+  let _ = patch_b(insns, prevb, n[0]);
+  let _ = vs_restore(fntab, sw, smask, scs, sslot);
+  n[0]
+}
+
 
 // Skip a "//" line comment: advance pos to the newline (or end). pos is at '/'.
 // PERF (2026-09-08): skip_line_comment/skip_string called str_len -- a byte-at-a-time

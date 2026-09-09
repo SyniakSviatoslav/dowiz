@@ -452,6 +452,7 @@ class Parser:
             self.next(); payload = self.cmp(); self.expect(')')
         self.expect('{')
         chosen = None
+        arms = []
         while not self.at('}'):
             aname = self.ident()
             var = None
@@ -459,13 +460,23 @@ class Parser:
                 self.next(); var = self.ident(); self.expect(')')
             self.expect('=>')
             b = self.cmp()
+            arms.append((aname, var, b))
             if aname == cname and chosen is None:
                 chosen = (var, b)
             if self.at(','):
                 self.next()
         self.expect('}')
         if chosen is None:
-            raise SyntaxError('match: no arm for %s' % cname)
+            # ROADMAP A6 step 1 (2026-09-09): no arm names the scrutinee, so the
+            # scrutinee is not a ctor literal but a VARIABLE holding a ctor value
+            # -- the runtime match the compiler now emits (emit_match_var). The
+            # ctor set is not known at parse time (an `enum` decl may follow
+            # `fn main`), so the decision is made here on the arm names alone and
+            # the node is resolved against self.ctors at eval time. A scrutinee
+            # WITH a payload is a literal by construction, so that stays an error.
+            if payload is not None:
+                raise SyntaxError('match: no arm for %s' % cname)
+            return ('match', cname, arms)
         var, b = chosen
         if var is not None and payload is not None:
             return ('letin', var, payload, b)
@@ -577,6 +588,18 @@ class Interp:
             return a
         if t == 'str':
             return e[1]
+        if t == 'match':
+            # runtime match: the scrutinee variable holds a ('ctor', tag, args)
+            # value; pick the arm whose ctor name has that tag and bind its
+            # payload exactly as `letin` would.
+            v = self.ev(('var', e[1]), env)
+            tag = v[1]
+            for aname, var, b in e[2]:
+                if self.ctors.get(aname) == tag:
+                    if var is not None and v[2]:
+                        env[var] = v[2][0]
+                    return self.ev(b, env)
+            raise RuntimeError('match: no arm for tag %d' % tag)
         raise RuntimeError('bad node %r' % (t,))
 
     def builtin_or_call(self, name, args):
