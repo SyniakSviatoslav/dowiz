@@ -207,6 +207,7 @@ ZONES = [(0, 1, "fntab"), (2900, 3667, "b1_facts"), (3668, 3670, "b1_scratch"),
          (5290, 5386, "slots"), (5387, 5388, "window_hdr"),
          (5389, 5393, "window_cs"), (5394, 5401, "hoist"), (5402, 5402, "arm_base"),
          (5403, 5403, "span_slots"), (5404, 5404, "frame"),
+         (5410, 5537, "arrlen"),
          (5540, 5548, "bank"), (5549, 5599, "literals"), (5600, 5600, "budget"),
          (6000, 6999, "lit_table")]
 # A16 prerequisite RELAYOUT (2026-09-09): the fn cap is 768, so the FLOATING fn zone
@@ -223,6 +224,51 @@ ZONES = [(0, 1, "fntab"), (2900, 3667, "b1_facts"), (3668, 3670, "b1_scratch"),
 # under 512 fns. And `offs`, the fn-indexed start table, has FIVE zeros() sites including
 # cli_compile's, the ordinary compile path; widening one is not widening it.
 # So: read the cap out of bebop.bp and refuse any per-fn zone or array smaller than it.
+# ---- every constant base must be REGISTERED, not merely inside some zone ------
+# THE GAP THIS CLOSES (found 2026-09-09, one row after the zone map was relaid out):
+# F3 commit 1 introduced the per-symbol array-length table at fntab[4810 + k]. Under
+# the OLD layout 4810 was free space; under the relayout it falls INSIDE the window
+# zone (3700..5235). The membership check passed -- 4810 is "in the zone map" -- while
+# the table would have been writing through window entries, silently, with exactly the
+# shape of the b1_facts defect. Membership is not enough: a base has to be the base we
+# SAID it was. Adding one is now a deliberate act, which is the point.
+REGISTERED = {
+    0: "fntab", 1: "fntab",
+    2900: "b1_facts",
+    3668: "b1_scratch", 3669: "b1_scratch", 3670: "b1_scratch",
+    3700: "window", 3701: "window", 3702: "window",
+    5245: "fold", 5246: "fold",
+    5247: "jumps", 5248: "jumps", 5265: "jumps", 5266: "jumps",
+    5290: "slots",
+    5387: "window_hdr", 5388: "window_hdr",
+    5389: "window_cs", 5390: "window_cs", 5391: "window_cs", 5392: "window_cs", 5393: "window_cs",
+    5394: "hoist", 5395: "hoist", 5396: "hoist", 5397: "hoist",
+    5398: "hoist", 5399: "hoist", 5400: "hoist", 5401: "hoist",
+    5402: "arm_base", 5403: "span_slots", 5404: "frame",
+    5410: "arrlen",
+    5540: "bank", 5541: "bank", 5542: "bank", 5543: "bank",
+    5549: "literals", 5550: "literals", 5551: "literals", 5552: "literals",
+    5600: "budget",
+    6000: "lit_table",
+}
+
+
+def check_registered(bases):
+    bad = []
+    byname = {n: (lo, hi) for lo, hi, n in ZONES}
+    for b in sorted(bases):
+        z = REGISTERED.get(b)
+        if z is None:
+            bad.append("REGISTRY FAIL: fntab[%d] is not a registered base -- it may fall inside "
+                       "a zone and still be the wrong one; add it to REGISTERED with its zone" % b)
+        else:
+            lo, hi = byname[z]
+            if not (lo <= b <= hi):
+                bad.append("REGISTRY FAIL: fntab[%d] is registered to %s (%d..%d) but does not "
+                           "lie in it" % (b, z, lo, hi))
+    return bad
+
+
 PERFN_ZONES = ["b1_facts"]
 PERFN_ARRAYS = ["fnames", "fpos", "offs", "sizes", "starts", "factbuf", "fnames_l", "fpos_l"]
 
@@ -325,6 +371,9 @@ def check_fntab(bp, extra):
         errs.append(f"fntab allocation {sizes} does not cover index {LIT_END}")
     trap = [ln for ln, l in enumerate(src, 1) if f"fntab[{LIT_BASE} + lcnt[0]] =" in l]
     guarded = any(str(LIT_END) in l for ln in trap for l in src[ln - 3:ln])
+    for e in check_registered(used):
+        print(e)
+        errs.append(e)
     if check_perfn(bp):
         errs.append("per-fn zone or array narrower than the fn cap (see PERFN FAIL above)")
     print(f"fntab zones: {len(used)} constant bases, all in "

@@ -115,6 +115,10 @@ for f in "$DIR"/*.bp; do
     # under window pressure. Exited 89 on 42ce19e5, runs 17 (bpref) once vs_span_to_slots also
     # demotes kind-3 SYM entries. Drop either ingredient and it compiled clean before the fix.
     c95_symspan) EXPECT=17;;
+    # ROADMAP F3 commit 1 (re-landed 2026-09-09 onto the relayout): the BOUNDARY of
+    # the static bounds check -- last legal index, dynamic index, rebinding, a call
+    # inside an array literal, and a parameter whose length is not statically known.
+    c121_boundsok) EXPECT=396534;;
     # ROADMAP A16 prerequisite (2026-09-09): 521 fns, i.e. PAST the old 512 cap.
     # Guards the b1_facts/b1_scratch collision the cap raise exposed -- no other
     # construct, kernel or std_test comes near 512 fns, so nothing else can.
@@ -188,6 +192,8 @@ for f in "${DIR%/}/neg"/*.bp; do
     c114_shadowwait4) EXPECT=COMPILEFAIL:99;;
     c85_param15) EXPECT=COMPILEFAIL:100;;
     c93_unbound) EXPECT=COMPILEFAIL:101;;
+    # ROADMAP F3 commit 1: literal index past a statically known length.
+    c120_oobstatic) EXPECT=COMPILEFAIL:65;;
     c112_kernelsys) EXPECT=COMPILEFAIL:102;;
     # A14b (2026-09-08): the shrunk seed-100744 repro. It used to exit 89 in the register
     # allocator (a pre-arm SYM entry relocated inside one if-arm, then a colliding let binder);

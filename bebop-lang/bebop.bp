@@ -98,9 +98,10 @@ fn diag_exit(s: str, p: i64, code: i64) -> i64 {
   let _ = if code == 89 then diag_text(buf, at, [108, 101, 116, 32, 98, 105, 110, 100, 105, 110, 103, 32, 119, 104, 105, 108, 101, 32, 97, 32, 99, 97, 108, 108, 32, 116, 101, 109, 112, 32, 105, 115, 32, 108, 105, 118, 101], 37) else 0;
   let _ = if code == 100 then diag_text(buf, at, [102, 110, 32, 119, 105, 116, 104, 32, 109, 111, 114, 101, 32, 116, 104, 97, 110, 32, 49, 52, 32, 112, 97, 114, 97, 109, 101, 116, 101, 114, 115], 31) else 0;
   let _ = if code == 101 then diag_text(buf, at, [117, 110, 98, 111, 117, 110, 100, 32, 115, 121, 109, 98, 111, 108], 14) else 0;
+  let _ = if code == 65 then diag_text(buf, at, [105, 110, 100, 101, 120, 32, 112, 97, 115, 116, 32, 116, 104, 101, 32, 101, 110, 100], 18) else 0;
   let _ = if code == 104 then diag_text(buf, at, [116, 111, 111, 32, 109, 97, 110, 121, 32, 102, 110, 115, 32, 40, 99, 97, 112, 32, 55, 54, 56, 41], 22) else 0;
   let _ = if code == 102 then diag_text(buf, at, [115, 121, 115, 95, 32, 110, 97, 109, 101, 32, 105, 110, 115, 105, 100, 101, 32, 97, 32, 107, 101, 114, 110, 101, 108, 32, 102, 110], 28) else 0;
-  let mlen = (if code == 95 then 20 else 0) + (if code == 96 then 27 else 0) + (if code == 97 then 33 else 0) + (if code == 98 then 31 else 0) + (if code == 99 then 31 else 0) + (if code == 89 then 37 else 0) + (if code == 100 then 31 else 0) + (if code == 101 then 14 else 0) + (if code == 104 then 22 else 0) + (if code == 102 then 28 else 0);
+  let mlen = (if code == 95 then 20 else 0) + (if code == 96 then 27 else 0) + (if code == 97 then 33 else 0) + (if code == 98 then 31 else 0) + (if code == 99 then 31 else 0) + (if code == 89 then 37 else 0) + (if code == 100 then 31 else 0) + (if code == 101 then 14 else 0) + (if code == 104 then 22 else 0) + (if code == 102 then 28 else 0) + (if code == 65 then 18 else 0);
   let _ = buf[at + mlen] = 10;
   let _ = sys_write(2, buf, at + mlen + 1);
   sys_exit(code)
@@ -3839,6 +3840,9 @@ fn emit_let_in(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = skip_ws(s, pos);
+  // F3: same length publication as emit_let_stmt (see rhs_len_p1).
+  let lk = if reg >= 19 then (if reg <= 26 then reg - 19 else 0 - 1) else (if reg >= 100 then reg - 92 else 0 - 1);
+  let _ = if lk >= 0 then fntab[5410 + lk] = rhs_len_p1(s, pos[0], slen(s, pos)) else 0;
   // chain detection: ident followed by '=' (but not '=='/'=>')
   let strq = slen(s, pos);
   let c0 = if pos[0] >= strq then 0 else char(s, pos[0]);
@@ -4065,12 +4069,103 @@ fn vs_array_set_reg(insns: [i64], n: [i64], fntab: [i64], stab: [i64], base: i64
 
 // Emit name[i] (get) or name[i] = v (set). `name` is a bound array variable;
 // pos is at '['. Emit base (push), emit index (push), then get or set.
+// ROADMAP F3 (2026-09-09) -- STATIC BOUNDS CHECK, exit 65, ZERO machine words.
+// docs/LANGUAGE.md:68 documents reading past the end as UNDEFINED and :129 lists
+// bounds checks among what the language does not have. The census calls this the
+// one open row whose fix costs emitted words -- but only the DYNAMIC half does.
+// Where the length is fixed by the `let` AND the index is a literal, both
+// operands are TEXT at compile time, the check discharges in the compiler, and
+// it emits nothing at all.
+// The table is fntab[5410 + k] = length PLUS ONE (0 = unknown), keyed by the
+// symbol's REGISTER, not its table index: sym_lookup already returns the
+// register at both the `let` and the index site, so keying on it costs no extra
+// scan -- k = reg - 19 for a cs register (19..26) and reg - 92 for a spill slot
+// (100+, i.e. reg - 100 + 8). That key is written INLINE at its three sites as a
+// single nested-if expression rather than as a fourth function: gb_pool leaves
+// exactly TWO functions of headroom (measured 2026-09-09 -- +2 compiles, +3 gives
+// `too many fns (cap 512)`) and this block already spends both. Only two right-hand sides publish a length, `zeros(<literal>)`
+// and an array literal, because those are the two the grammar fixes at the
+// `let`; a parameter, a call result or `zeros(n)` records 0 and is never
+// guessed at. Every `let` writes the entry, so a rebinding that replaces the
+// array replaces its length too and a stale length cannot outlive its name.
+// FN BUDGET: this block is deliberately THREE functions. gb_pool compiles a
+// main-stripped bebop.bp concatenated with gb_pool.bp and its six `use` files,
+// which sits close to the 512-fn cap -- an eight-function first draft compiled
+// bebop.bp fine and then failed that gate with `too many fns (cap 512)`.
+// The literal value of the text from `at` up to the next unnested `closer`, or
+// -1 if any byte before it is not a digit. One scanner serves the index site
+// (`closer` = `]`) and `zeros(...)` (`closer` = `)`); merging them is what keeps
+// this block inside the fn budget.
+fn lit_upto(s: str, at: i64, strn: i64, closer: i64) -> i64 {
+  let i = at;
+  let v = 0;
+  let any = 0;
+  let bad = 0;
+  let done = 0;
+  while done == 0 {
+    let c = if i >= strn then 0 else char(s, i);
+    let atend = if i >= strn then 1 else 0;
+    let hit = if c == closer then 1 else 0;
+    let d = (if c >= 48 then 1 else 0) * (if c <= 57 then 1 else 0);
+    let v = if d == 1 then v * 10 + (c - 48) else v;
+    let any = if d == 1 then 1 else any;
+    let sp = (if c == 32 then 1 else 0) + (if c == 10 then 1 else 0) + (if c == 9 then 1 else 0);
+    let bad = if d + sp + hit + atend == 0 then 1 else bad;
+    let done = hit + atend;
+    let i = i + 1;
+    0
+  };
+  if any * (1 - bad) == 1 then v else 0 - 1
+}
+
+// The static length published by the right-hand side at `at`, PLUS ONE, or 0.
+// `zeros(<literal>)` gives its argument; an array literal gives its element
+// count, with commas counted at bracket AND paren depth 0 so `[f(a, b), c]` is
+// two elements and not three. Anything else -- including an empty `[]` or a
+// literal the scan cannot see the end of -- gives 0, meaning "unknown".
+fn rhs_len_p1(s: str, at: i64, strn: i64) -> i64 {
+  let isz = if at + 6 <= strn then (if char(s, at) == 122 then 1 else 0) * (if char(s, at + 1) == 101 then 1 else 0) * (if char(s, at + 2) == 114 then 1 else 0) * (if char(s, at + 3) == 111 then 1 else 0) * (if char(s, at + 4) == 115 then 1 else 0) * (if char(s, at + 5) == 40 then 1 else 0) else 0;
+  let zl = if isz == 1 then lit_upto(s, at + 6, strn, 41) else 0 - 1;
+  let isarr = if at < strn then (if char(s, at) == 91 then 1 else 0) else 0;
+  let i = at + 1;
+  let db = 0;
+  let dp = 0;
+  let cnt = 1;
+  let seen = 0;
+  let done = 1 - isarr;
+  let res = 0 - 1;
+  while done == 0 {
+    let c = if i >= strn then 0 else char(s, i);
+    let atend = if i >= strn then 1 else 0;
+    let ise = if c == 93 then 1 else 0;
+    let close = ise * (if db + dp == 0 then 1 else 0);
+    let db = db + (if c == 91 then 1 else 0) - ise;
+    let dp = dp + (if c == 40 then 1 else 0) - (if c == 41 then 1 else 0);
+    let cnt = cnt + (if c == 44 then 1 else 0) * (if db + dp == 0 then 1 else 0);
+    let ws = (if c == 32 then 1 else 0) + (if c == 10 then 1 else 0) + (if c == 9 then 1 else 0) + (if c == 13 then 1 else 0);
+    let seen = if ws + close == 0 then 1 else seen;
+    let res = if close * seen == 1 then cnt else res;
+    let done = close + atend;
+    let i = i + 1;
+    0
+  };
+  let v = if zl >= 0 then zl else res;
+  if v >= 0 then v + 1 else 0
+}
+
 fn emit_array_index(s: str, name: i64, npos: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let strn = slen(s, pos);
   let reg = sym_lookup(s, stab, name, npos);
   let _ = if reg < 0 then diag_exit(s, npos, 101) else 0;
   let _ = emit_var(insns, n, reg, fntab, stab);
   let _ = pos[0] = pos[0] + 1;
+  // F3: discharge the bound HERE, before the index is emitted -- both operands
+  // are text at this point, so the whole check is compile-time and costs no word.
+  let bidx = lit_upto(s, pos[0], strn, 93);
+  let bkey = if reg >= 19 then (if reg <= 26 then reg - 19 else 0 - 1) else (if reg >= 100 then reg - 92 else 0 - 1);
+  let blen = if bkey >= 0 then fntab[5410 + bkey] else 0;
+  let bbad = (if bidx >= 0 then 1 else 0) * (if blen > 0 then 1 else 0) * (if bidx >= blen - 1 then 1 else 0);
+  let _ = if bbad == 1 then diag_exit(s, pos[0], 65) else 0;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
@@ -5160,6 +5255,11 @@ fn emit_let_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   let _ = check_reg_collision(s, insns, n, fntab, stab, reg, npos);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
+  // F3: publish this name's static cell length (0 = unknown). Written on EVERY
+  // let, so a rebinding that changes the array also replaces the length.
+  let _ = skip_ws(s, pos);
+  let lk = if reg >= 19 then (if reg <= 26 then reg - 19 else 0 - 1) else (if reg >= 100 then reg - 92 else 0 - 1);
+  let _ = if lk >= 0 then fntab[5410 + lk] = rhs_len_p1(s, pos[0], slen(s, pos)) else 0;
   // ---- chained discard-assign: `let _ = NAME = RHS;` lowers to NAME<-RHS ----
   let _ = skip_ws(s, pos);
   let sq0 = pos[0];
@@ -5828,7 +5928,14 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   // words late, SIGBUS). -1 never equals a position.
   let _ = fntab[5245] = 0 - 1;
   let _ = fntab[5246] = 0;  // T43: while nesting depth (frame-heap mark slot)
-  let _ = fntab[5404] = 0;  // A6 step 2: per-fn marks high-water (frame sizing)
+  let _ = fntab[5404] = 0;
+  // F3: clear the per-symbol static-length table (fntab[5410..5537]).
+  let fz = [0];
+  while fz[0] < 128 {
+    let _ = fntab[5410 + fz[0]] = 0;
+    let _ = fz[0] = fz[0] + 1;
+    0
+  };  // A6 step 2: per-fn marks high-water (frame sizing)
   let _ = fntab[5247] = 0;  // T99: pending `return` placeholders
   let _ = fntab[5265] = 0;  // T99: pending `break` placeholders
   let _ = fntab[5543] = kernel_marked(s, fpos);  // C1 step 2: `kernel fn` dialect bit

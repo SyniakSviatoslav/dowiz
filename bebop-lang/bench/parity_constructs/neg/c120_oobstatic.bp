@@ -1,0 +1,9 @@
+// ROADMAP F3 (2026-09-09): STATIC BOUNDS CHECK, exit 65, zero machine words.
+// docs/LANGUAGE.md:68 documents reading past the end as UNDEFINED and :129 lists
+// bounds checks among what the language does NOT have. That is true of the
+// DYNAMIC case; it was never true of this one. Here the length is fixed by the
+// `let` and the index is a literal, so both operands are text at compile time
+// and the check discharges in the compiler, emitting nothing. Before this row
+// `a[3]` on a 3-cell literal read the next arena object and returned whatever
+// was there. Now exit 65, `index past the end`, with the source position.
+fn main() -> i64 { let a = [1, 2, 3]; a[3] }

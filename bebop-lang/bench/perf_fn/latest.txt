@@ -7,7 +7,7 @@ is_digit 20
 is_alpha 32
 put_num 73
 diag_text 28
-diag_exit 929
+diag_exit 991
 slen 75
 kernel_word_at 106
 kernel_marked 75
@@ -177,7 +177,7 @@ vs_loop_branch_reg 26
 emit_cond 181
 emit_cond_csel 218
 emit_cond_branch 301
-emit_let_in 246
+emit_let_in 298
 emit_let_plain 120
 emit_let_chain 145
 emit_str 79
@@ -188,7 +188,9 @@ vs_array_get_reg 51
 emit_array_set 149
 vs_array_set_imm 45
 vs_array_set_reg 47
-emit_array_index 162
+lit_upto 123
+rhs_len_p1 274
+emit_array_index 246
 emit_negnum 36
 emit_unary 57
 vs_neg 36
@@ -227,7 +229,7 @@ hoist_record 50
 hoist_scan 603
 hoist_release 37
 emit_while_stmt 760
-emit_let_stmt 552
+emit_let_stmt 609
 emit_compound_stmt 200
 emit_compound_rhs 73
 emit_body_classify 372
@@ -245,7 +247,7 @@ fw_cshi 20
 fw_tsp 19
 fw_marks 16
 compile_fn_at_facts 98
-compile_fn_at 1158
+compile_fn_at 1186
 scan_literals 166
 scan_one_lit 105
 compile_program_to 37

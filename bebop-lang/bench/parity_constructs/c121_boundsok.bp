@@ -1,0 +1,13 @@
+// ROADMAP F3 (2026-09-09): the BOUNDARY of the static bounds check in
+// c120_oobstatic. Every shape here must stay legal, because a check that is
+// even slightly too eager turns working programs into compile errors:
+//   a[2]      the last legal index of a 3-cell literal (off-by-one guard)
+//   b[i]      a DYNAMIC index -- no literal, so nothing is discharged
+//   c rebind  a `let` that replaces the array must replace its length too,
+//             or the old, shorter length would condemn a legal index
+//   d[1]      an array literal containing a CALL, so the element count must be
+//             counted at paren depth 0 or `f(1, 2)` reads as two elements
+//   g(p)[7]   a PARAMETER has no statically known length: never guessed
+fn f(x: i64, y: i64) -> i64 { x + y }
+fn g(p: [i64]) -> i64 { p[7] }
+fn main() -> i64 { let a = [1, 2, 3]; let b = zeros(4); let i = 3; let _ = b[i] = 9; let c = zeros(2); let c = zeros(8); let _ = c[5] = 6; let d = [f(1, 2), 5]; let e = zeros(8); let _ = e[7] = 4; a[2] * 100000 + b[3] * 10000 + c[5] * 1000 + d[1] * 100 + d[0] * 10 + g(e) }
