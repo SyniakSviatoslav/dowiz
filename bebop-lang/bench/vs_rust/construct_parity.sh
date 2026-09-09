@@ -85,6 +85,9 @@ for f in "$DIR"/*.bp; do
     c43_arena_persist) EXPECT=16048003;;
     c44_use24) EXPECT=131;;
     c45_crc32x) EXPECT=1001978;;
+    # ROADMAP A7 step 1 (2026-09-09): strings as values (call/array/str_len/char
+    # ends/handle-shape integers/substr idiom/crc32b). EXPECT from tools/bpref.py.
+    c68_strval) EXPECT=101017189;;
     c46_andor) EXPECT=111100;;
     c47_usenest) EXPECT=51071;;
     c50_cas) EXPECT=7136;;

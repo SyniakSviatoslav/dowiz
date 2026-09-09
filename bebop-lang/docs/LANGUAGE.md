@@ -94,6 +94,7 @@ match CTOR(payload) { CTOR => expr, CTOR(x) => expr, ... }   -- COMPILE-TIME: th
 | `clz(x)` | count leading zeros of the 64-bit word, clz(0) = 64 (T105; seeds the Newton isqrt) |
 | `crc32(cells, n)` | zlib crc32 of n bytes held one per cell (CRC32B loop, T109) |
 | `crc32x(cells, off, n)` | zlib crc32 of the raw little-endian bytes of n cells from cells[off] (CRC32X, 8 B per step, T109b; the store's integrity crc) |
+| `crc32b(s)` | zlib crc32 of the bytes of the NUL-terminated string `s` (A7 step 1; repr-independent contract: crc over exactly `str_len(s)` bytes, valid for raw pointers today and handles after the migration) |
 | `sys_msync(addr, len, flags)` | msync (227), the store's durable-commit call (T110) |
 | `sys_setaffinity(arr, idx)` | sched_setaffinity(0, 8, &arr[idx]) — pin the calling thread to the mask in arr[idx] (T72) |
 | `scan(s, pos, class)` | advance `pos[0]` over bytes of one class and return the new pos: 0 = whitespace, 1 = ident `[0-9A-Za-z_]`, 2 = not-`"`-not-`\`, anything else = not-newline. Stops at the `pos[1]` length bound, so it never reads past it (A9 step 3, scalar form) |

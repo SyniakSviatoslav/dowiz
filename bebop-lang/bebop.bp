@@ -1610,6 +1610,32 @@ fn emit_crc32x(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
   n[0]
 }
 
+// crc32b(s): zlib crc32 of the bytes of the NUL-terminated string s (ROADMAP A7
+// step 1, 2026-09-09) -- the first handle-shaped string builtin. Under today's
+// raw-pointer strings s is a byte pointer already, so unlike crc32/crc32x there
+// is NO x17 cell-index conversion: movn w1,#0; L: ldrb w2,[x0],#1; cbz w2,done;
+// crc32b w1,w1,w2; b L; done: orn w0,wzr,w1; push. The contract (crc over
+// exactly str_len(s) bytes) is repr-independent: when A7 step 2 makes `str` a
+// handle the loop gains an lsr/add prologue and this EXPECT stays valid.
+// Words as+objdump-verified (0x12800001 movn w1, 0x38401402 ldrb w2,[x0],#1,
+// 0x34000062 cbz w2,+3, 0x1ac24021 crc32b w1,w1,w2, 0x17fffffd b -3,
+// 0x2a2103e0 orn w0,wzr,w1).
+fn emit_crc32b(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 1);
+  let _ = em(insns, n, 310378497);
+  let _ = em(insns, n, 943723522);
+  let _ = em(insns, n, 872415330);
+  let _ = em(insns, n, 448938017);
+  let _ = em(insns, n, 402653181);
+  let _ = em(insns, n, 706806752);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
 // sys_msync(addr, len, flags): msync (syscall 227) — the store's durability row
 // (T110, 2026-09-05). pop x2 = flags, pop x1 = len, pop x0 = addr; mov x8,#227; svc.
 fn emit_sys_msync(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
@@ -1793,6 +1819,7 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   else if name == 1713209 then emit_clz(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == 260242221 then emit_sys_scan(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == 29413480223 then emit_crc32(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 3853165909311 then emit_crc32b(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == -8392076200099613766 then emit_sys_msync(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == -8392076202161113213 then emit_sys_fsync(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == -1729804160290675916 then emit_sys_mprotect(s, pos, insns, n, stab, selfname, selfstart, fntab)
@@ -5960,7 +5987,7 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   // literals as written reports 16 shadowable builtins instead of 7.
   let rsv1 = (if selfname == 1866735 then 1 else 0) + (if selfname == 35281108217 then 1 else 0) + (if selfname == 13857 then 1 else 0) + (if selfname == 262576641 then 1 else 0) + (if selfname == 228925745 then 1 else 0) + (if selfname == 13865 then 1 else 0) + (if selfname == 13472 then 1 else 0) + (if selfname == 228960337 then 1 else 0) + (if selfname == 4471061603997 then 1 else 0) + (if selfname == 4238080694376 then 1 else 0) + (if selfname == 32320559965 then 1 else 0) + (if selfname == 4428069113672 then 1 else 0) + (if selfname == 29119020707 then 1 else 0) + (if selfname == 36158018563 then 1 else 0) + (if selfname == 224358574 then 1 else 0) + (if selfname == 585709020818199 then 1 else 0) + (if selfname == 66094333908796503 then 1 else 0) + (if selfname == 30895064082 then 1 else 0) + (if selfname == 4047253394792 then 1 else 0) + (if selfname == 260449716 then 1 else 0) + (if selfname == 249209392 then 1 else 0);
   let rsv2 = (if selfname == 246721067 then 1 else 0) + (if selfname == 76753189879327100 then 1 else 0) + (if selfname == 76753189885882068 then 1 else 0) + (if selfname == -8392076197157136435 then 1 else 0) + (if selfname == -8392076203060520566 then 1 else 0) + (if selfname == -2688661736639986669 then 1 else 0) + (if selfname == -8392076198348418984 then 1 else 0) + (if selfname == 76753189874778913 then 1 else 0) + (if selfname == 7442662210087947144 then 1 else 0) + (if selfname == -5847879057653958070 then 1 else 0) + (if selfname == 7442662398273192292 then 1 else 0) + (if selfname == 7442661902340062434 then 1 else 0) + (if selfname == 76753189856984008 then 1 else 0) + (if selfname == 7040940390938053523 then 1 else 0) + (if selfname == -6282920175007517587 then 1 else 0) + (if selfname == -8392076203060521221 then 1 else 0) + (if selfname == -1736429998027255437 then 1 else 0) + (if selfname == -3153574141067785036 then 1 else 0) + (if selfname == 8779068393901189725 then 1 else 0) + (if selfname == 7221016679989100487 then 1 else 0) + (if selfname == 1084841420853388659 then 1 else 0);
-  let rsv3 = (if selfname == 260242221 then 1 else 0) + (if selfname == -8392076202161113213 then 1 else 0) + (if selfname == -1729804160290675916 then 1 else 0) + (if selfname == 1713209 then 1 else 0) + (if selfname == 29413480223 then 1 else 0) + (if selfname == 3853165909333 then 1 else 0) + (if selfname == -8392076200099613766 then 1 else 0) + (if selfname == 585902212871437 then 1 else 0) + (if selfname == 7304771531850188344 then 1 else 0) + (if selfname == -8392076197195354031 then 1 else 0);
+  let rsv3 = (if selfname == 260242221 then 1 else 0) + (if selfname == -8392076202161113213 then 1 else 0) + (if selfname == -1729804160290675916 then 1 else 0) + (if selfname == 1713209 then 1 else 0) + (if selfname == 29413480223 then 1 else 0) + (if selfname == 3853165909311 then 1 else 0) + (if selfname == 3853165909333 then 1 else 0) + (if selfname == -8392076200099613766 then 1 else 0) + (if selfname == 585902212871437 then 1 else 0) + (if selfname == 7304771531850188344 then 1 else 0) + (if selfname == -8392076197195354031 then 1 else 0);
   let _ = if rsv1 + rsv2 + rsv3 > 0 then diag_exit(s, namepos, 99) else 0;
   let _ = skip_ws(s, pos);
   let pnames = zeros(14);

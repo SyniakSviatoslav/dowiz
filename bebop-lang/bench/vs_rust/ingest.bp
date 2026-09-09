@@ -1,0 +1,42 @@
+// ROADMAP A7 step 3 (2026-09-09): scaled ingest twin, bebop CELLS row.
+// sys_slurp the file (legacy byte-per-cell path) and parse lines
+// `id,u,v,cell,label` via char; fold = lines * 1000003 + sum(id).
+// argv[2] = file path (seed convention: argv[0]=emulator, argv[1]=program).
+fn main(argc: i64, argv: [str]) -> i64 {
+  let p = zeros(256);
+  let pn = str_len(argv[2]);
+  let k = 0;
+  while k < pn {
+    let _ = p[k] = char(argv[2], k);
+    let k = k + 1;
+    0
+  };
+  let fd = sys_open(p, pn, 0);
+  let s = sys_slurp(fd, 16777216);
+  let n = str_len(s);
+  let i = 0;
+  let lines = 0;
+  let sum = 0;
+  while i < n {
+    let id = 0;
+    let c = char(s, i);
+    while c != 44 {
+      let id = id * 10 + (c - 48);
+      let i = i + 1;
+      let c = char(s, i);
+      0
+    };
+    let sum = sum + id;
+    let d = char(s, i);
+    while d != 10 {
+      let i = i + 1;
+      let d = char(s, i);
+      0
+    };
+    let i = i + 1;
+    let lines = lines + 1;
+    0
+  };
+  let _ = sys_close(fd);
+  lines * 1000003 + sum
+}

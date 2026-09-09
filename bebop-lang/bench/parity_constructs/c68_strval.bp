@@ -1,0 +1,23 @@
+// ROADMAP A7 step 1 (2026-09-09): construct c68_strval -- strings as values.
+// Exercises, under today's raw-pointer strings AND unchanged after the handle
+// migration: a string passed through a call, stored in an array, str_len of a
+// literal, char at both ends, the (off<<32|len) handle-shape integer split and
+// the substr idiom ((off+i)<<32|n) as pure integers, and crc32b of a literal
+// vs the python zlib.crc32 value ("abc" -> 891568578, "" -> 0).
+// EXPECT from `python3 tools/bpref.py` (the oracle), not assumed.
+fn id(s: str) -> str { s }
+fn main() -> i64 {
+  let b = id("hello");
+  let n = str_len(b);
+  let f = char(b, 0);
+  let l = char(b, n - 1);
+  let acc = (n == 5) * 100000000 + (f == 104) * 1000000 + (l == 111) * 10000;
+  let t = [b];
+  let acc = acc + (t[0] == b) * 100;
+  let h = (128 << 32) | 5;
+  let acc = acc + ((h >> 32) == 128) * 10 + ((h & 0xffffffff) == 5);
+  let sub = (((h >> 32) + 1) << 32) | 3;
+  let acc = acc + ((sub >> 32) == 129) * 7000 + ((sub & 0xffffffff) == 3) * 70;
+  let acc = acc + (crc32b("abc") == 891568578) * 7 + (crc32b("") == 0);
+  acc
+}

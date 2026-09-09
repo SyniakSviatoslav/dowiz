@@ -105,7 +105,7 @@ class ReturnSignal(Exception):
     def __init__(self, v): self.v = v
 class BreakSignal(Exception):
     pass
-RESERVED = set(['sys_msync', 'sys_fsync', 'sys_mprotect', 'crc32x', 'crc32', 'clz', 'sys_setaffinity', 'let', 'while', 'if', 'then', 'else', 'in', 'fn', 'enum', 'struct', 'module', 'match', 'return', 'break', 'zeros', 'char', 'str_len', 'clock_ms', 'hvham', 'hvham2', 'some', 'none', 'many', 'sys_open', 'sys_read', 'sys_write', 'sys_close', 'sys_readbuf', 'sys_slurp', 'sys_mmap', 'sys_munmap', 'sys_ftruncate', 'sys_rename', 'sys_export', 'sys_exit', 'sys_arena_base', 'sys_arena_end', 'sys_clone', 'sys_cond_set', 'sys_futex_wait_guard', 'sys_futex_wake', 'sys_atomic_add', 'sys_exit_thread_guard', 'sys_run', 'sys_wait4', 'scan'])
+RESERVED = set(['sys_msync', 'sys_fsync', 'sys_mprotect', 'crc32x', 'crc32', 'clz', 'sys_setaffinity', 'let', 'while', 'if', 'then', 'else', 'in', 'fn', 'enum', 'struct', 'module', 'match', 'return', 'break', 'zeros', 'char', 'str_len', 'clock_ms', 'hvham', 'hvham2', 'some', 'none', 'many', 'sys_open', 'sys_read', 'sys_write', 'sys_close', 'sys_readbuf', 'sys_slurp', 'sys_mmap', 'sys_munmap', 'sys_ftruncate', 'sys_rename', 'sys_export', 'sys_exit', 'sys_arena_base', 'sys_arena_end', 'sys_clone', 'sys_cond_set', 'sys_futex_wait_guard', 'sys_futex_wake', 'sys_atomic_add', 'sys_exit_thread_guard', 'sys_run', 'sys_wait4', 'scan', 'crc32b'])
 class DepthError(Exception):
     pass
 
@@ -626,6 +626,12 @@ class Interp:
             data = buf[:n] if isinstance(buf, bytes) else bytes(x & 255 for x in buf[:n])
             (sys.stdout.buffer if fd == 1 else sys.stderr.buffer).write(data)
             return n
+        if name == 'crc32b':
+            # ROADMAP A7 step 1 (2026-09-09): zlib crc32 of a string's bytes.
+            # Repr-independent contract (crc over exactly str_len bytes), so this
+            # mirror survives the raw-pointer -> handle migration unchanged.
+            import zlib
+            return zlib.crc32(args[0])
         if name == 'crc32x':
             import zlib, struct
             c = args[0][args[1]:args[1] + args[2]]
