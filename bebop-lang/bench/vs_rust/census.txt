@@ -14,6 +14,7 @@ c110_fence 45 0 0 0 0 0 1
 c111_kernelfn 30 1 0 0 1 1 2
 c11_enum 7 0 0 0 0 0 1
 c122_manyfns 5218 0 0 0 0 3 521
+c123_capfns 7568 0 0 0 0 3 756
 c12_match 10 0 0 0 0 0 1
 c13_array 30 1 0 0 0 0 1
 c14_string 11 0 0 0 0 0 1

@@ -119,6 +119,10 @@ for f in "$DIR"/*.bp; do
     # Guards the b1_facts/b1_scratch collision the cap raise exposed -- no other
     # construct, kernel or std_test comes near 512 fns, so nothing else can.
     c122_manyfns) EXPECT=1035;;
+    # RELAYOUT (2026-09-09): 756 fns, just under the new cap of 768. c122 guards the
+    # OLD boundary (512), this guards the NEW one -- b1_scratch is immediately above
+    # b1_facts again at 3668, so the same silent overrun is one cell away.
+    c123_capfns) EXPECT=1507;;
     # ROADMAP A6 step 2 (2026-09-09): 10^5-deep recursion on the computed frame.
     # EXPECT is the CLOSED FORM d(n) = n, derived by hand -- tools/bpref.py cannot
     # be the oracle (recursive interpreter, DEPTH_CAP 5000), see the .bp header.

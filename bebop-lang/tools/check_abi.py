@@ -202,21 +202,58 @@ def check_bin(path, allow, stub=()):
 # index 2046, past the old b1_facts base (1500) -- every fixed zone below
 # moved to make room; fntab (and ptab, the planning-pass twin) grew
 # zeros(4096) -> zeros(8192).
-ZONES = [(0, 1, "fntab"), (2200, 2763, "b1_facts"), (2764, 2766, "b1_scratch"),
-         (2800, 4335, "window"), (4405, 4411, "fold"), (4412, 4449, "jumps"),
-         (4450, 4546, "slots"), (4547, 4548, "window_hdr"),
-         (4573, 4577, "window_cs"), (4578, 4585, "hoist"), (4591, 4591, "arm_base"), (4592, 4592, "span_slots"),
-         # ROADMAP A6 step 2 (2026-09-09): the per-fn `marks` HIGH-WATER (max
-         # while-nesting + 1) that sizes the computed frame. It cannot share the
-         # `fold` zone with fntab[4411] -- that cell is the LIVE depth, restored
-         # on the way out of every loop, so it is 0 by the time the frame is
-         # sized -- and 4412 is already the jumps base, so it takes its own zone.
-         # The blueprint drafted fntab[4578]/[4579]; those are the A2 hoist
-         # pairs today, hence 4800.
-         (4800, 4800, "frame"),
-         (4640, 4648, "bank"),
-         (4649, 4699, "literals"), (4750, 4750, "budget"),
-         (5000, 5999, "lit_table")]
+ZONES = [(0, 1, "fntab"), (2900, 3667, "b1_facts"), (3668, 3670, "b1_scratch"),
+         (3700, 5235, "window"), (5240, 5246, "fold"), (5247, 5284, "jumps"),
+         (5290, 5386, "slots"), (5387, 5388, "window_hdr"),
+         (5389, 5393, "window_cs"), (5394, 5401, "hoist"), (5402, 5402, "arm_base"),
+         (5403, 5403, "span_slots"), (5404, 5404, "frame"),
+         (5540, 5548, "bank"), (5549, 5599, "literals"), (5600, 5600, "budget"),
+         (6000, 6999, "lit_table")]
+# A16 prerequisite RELAYOUT (2026-09-09): the fn cap is 768, so the FLOATING fn zone
+# (3*cnt + ecnt + 258 cells = 0..2816 at cnt=768, ecnt=255) needs everything above it
+# to move. b1_facts is 768 cells because IT IS INDEXED BY FN INDEX -- see PERFN below,
+# which is the gate that makes that structural instead of remembered. Top index 6999
+# still fits fntab's zeros(8192), so no widening: the relayout costs ~0 bin_words.
+
+# ---- per-fn zones and arrays must be >= the fn cap ------------------------
+# THE DEFECT THIS EXISTS TO PREVENT (found 2026-09-09 by audit, not by a gate): raising
+# the cap 512 -> 560 while b1_facts stayed 512 cells let fn index 512..514 write straight
+# through b1_scratch -- the B1 call-site counter and skip-save flag -- i.e. a WRONG `bl`
+# TARGET, silently. No gate could catch it: every construct, kernel and std_test is far
+# under 512 fns. And `offs`, the fn-indexed start table, has FIVE zeros() sites including
+# cli_compile's, the ordinary compile path; widening one is not widening it.
+# So: read the cap out of bebop.bp and refuse any per-fn zone or array smaller than it.
+PERFN_ZONES = ["b1_facts"]
+PERFN_ARRAYS = ["fnames", "fpos", "offs", "sizes", "starts", "factbuf", "fnames_l", "fpos_l"]
+
+
+def check_perfn(src_path):
+    import re as _re
+    src = open(src_path, encoding="utf-8", errors="replace").read()
+    caps = {int(m) for m in _re.findall(r">= (\d+) then diag_exit\(s, 0, 104\)", src)}
+    caps |= {int(m) for m in _re.findall(r"cnt\[0\] < (\d+)", src)}
+    if not caps:
+        print("PERFN FAIL: no fn cap found in %s -- this gate is blind, fix the pattern" % src_path)
+        return 1
+    if len(caps) > 1:
+        print("PERFN FAIL: the fn cap disagrees with itself: %s" % sorted(caps))
+        return 1
+    cap = caps.pop()
+    bad = 0
+    for lo, hi, name in ZONES:
+        if name in PERFN_ZONES and hi - lo + 1 < cap:
+            print("PERFN FAIL: zone %s is %d cells for a fn cap of %d -- fn index %d would "
+                  "write past it, silently" % (name, hi - lo + 1, cap, hi - lo + 1))
+            bad = 1
+    for m in _re.finditer(r"let\s+([A-Za-z_]\w*)\s*=\s*zeros\((\d+)\)", src):
+        nm, n = m.group(1), int(m.group(2))
+        if nm in PERFN_ARRAYS and n < cap:
+            print("PERFN FAIL: array `%s` is zeros(%d) for a fn cap of %d -- an OOB store "
+                  "at fn index %d" % (nm, n, cap, n))
+            bad = 1
+    if not bad:
+        print("perfn: fn cap %d; every per-fn zone and array is at least that wide" % cap)
+    return bad
 # window (2026-09-06, REGISTER-MODEL-BLUEPRINT; raised 128->512 2026-09-06 --
 # emit_cond's parkable-`d` fix needs one extra live entry per nested if-level
 # for the whole else-branch compile; moved 2000+3i -> 2800+3i in the A2 step 0
@@ -251,7 +288,7 @@ ZONES = [(0, 1, "fntab"), (2200, 2763, "b1_facts"), (2764, 2766, "b1_scratch"),
 # literals/lit_table (moved 3899-3903+ -> 4649-4652 headers / 5000+i table,
 # cap raised 193 -> 1000 entries): headers [4649] cum cells, [4650] lcnt,
 # [4651] L, [4652] cursor; table entries at fntab[5000+i].
-LIT_BASE, LIT_END = 5000, 6000
+LIT_BASE, LIT_END = 6000, 7000   # A16 relayout 2026-09-09: lit_table moved 5000..5999 -> 6000..6999
 
 
 def zone_of(b):
@@ -288,6 +325,8 @@ def check_fntab(bp, extra):
         errs.append(f"fntab allocation {sizes} does not cover index {LIT_END}")
     trap = [ln for ln, l in enumerate(src, 1) if f"fntab[{LIT_BASE} + lcnt[0]] =" in l]
     guarded = any(str(LIT_END) in l for ln in trap for l in src[ln - 3:ln])
+    if check_perfn(bp):
+        errs.append("per-fn zone or array narrower than the fn cap (see PERFN FAIL above)")
     print(f"fntab zones: {len(used)} constant bases, all in "
           + "/".join(z for _, _, z in ZONES))
     print(f"literal trap ({LIT_BASE} + nlits >= {LIT_END}): "
