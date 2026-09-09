@@ -21,6 +21,13 @@ MEMO=${BEBOP_MEMO:-${HOME:-/tmp}/.cache/bebop/gate-memo}; [ "$MEMO" = 0 ] || mkd
 SEEDMD5=$(md5sum < ./seed/build/seed | cut -c1-32); : > "$BEBOP_TMP/memo.log"; : > "$BEBOP_TMP/memo.keys"
 run() {  # run <timeout-s> <bin> [args...]  -- stdout is the program's stdout (or its replay)
   local t="$1" bin="$2" b k rc; shift 2
+  # L12 (artifact identity before use), 2026-09-08: a GENERATED .bin that is missing used to
+  # fail silently -- `md5sum < "$bin"` produced a garbage memo key, the timeout ran a file that
+  # is not there, and the gate reported `got=` empty, which reads as a miscompile. Three such
+  # false REDs cost the A5 lane real time. The generated kernels (gb_<op>_<sr>_*.bin,
+  # gb_*_gen.store) are side effects of an EARLIER `run` in the same block, so they are exactly
+  # the artifacts a replayed or reordered run can leave absent. Say so instead of printing nothing.
+  [ -s "$bin" ] || { echo "GUARD: $bin missing or empty -- a producer run in this block did not create it (memo replay or reorder), not a wrong value"; return 90; }
   [ "$MEMO" = 0 ] && { timeout "$t" ./seed/build/seed "$bin" "$@"; return; }
   # args become part of the key as an md5 prefix: embedding them (a store DIR arg, B3 gates) made the memo filename
   # exceed NAME_MAX under a long BEBOP_TMP -> `cat` failed -> gb_pool "got=" empty (pre-existing since B3 step 4)
