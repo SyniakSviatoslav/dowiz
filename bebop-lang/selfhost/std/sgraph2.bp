@@ -91,8 +91,16 @@ fn csr_build(base: [i64], tmp: [i64], src: [i64], dst: [i64], m: i64, n: i64, rp
   let _ = st_seal(base, ci, tmp);
   0
 }
+// C4 (2026-09-09): cell 10 is a DECLARED MATERIALISED VIEW, maintained at commit time from the
+// delta the B4 tail already carries. VW{arr i64} = cell 0 K, cells 1..K bucket counts; the bucket
+// of an edge (a,w) is w >> 10, so K = 1024 covers w in [0,10^6). It holds VALUES ONLY, which is
+// the whole reason it is safe: refmask 0, so st_compact copies and re-crcs it and never walks it,
+// and it cannot reproduce step 2'''s stale-ref-slot hazard (that hazard is specific to an
+// `arr ref X` header whose live slot count shrinks). Hanging it off the root versions it with the
+// root for free, so C3's commit chain and st_open_at(gen) get the view as of that generation with
+// no new invariant.
 fn root_write(base: [i64], tx: [i64], tmp: [i64], dg: i64, n: i64, e: i64, rp: ref RP, ci: ref CI, log: ref LOG, rp0: ref RP, ci0: ref CI, tb: ref TB, nlog: i64, tl: ref TH) -> ref G2 {
-  let g = st_alloc(base, tx, 10, dg);
+  let g = st_alloc(base, tx, 11, dg);
   let _ = st_put(base, g, 0, n);
   let _ = st_put(base, g, 1, e);
   let _ = st_link(base, g, 2, rp);
@@ -103,8 +111,17 @@ fn root_write(base: [i64], tx: [i64], tmp: [i64], dg: i64, n: i64, e: i64, rp: r
   let _ = st_link(base, g, 7, tb);
   let _ = st_put(base, g, 8, nlog);
   let _ = st_link(base, g, 9, tl);
+  let _ = st_put(base, g, 10, 0);
   let _ = st_seal(base, g, tmp);
   g
+}
+// root_view(base, g, vw, tmp): attach the view to a root already written, and re-seal. A SEPARATE
+// function because root_write is at bebop's hard 14-parameter limit (docs/TRAPS.md:26, exit 100) --
+// a 15th argument does not compile. Re-sealing an 11-cell object costs nothing and keeps
+// root_write's signature frozen for every caller that has no view.
+fn root_view(base: [i64], g: ref G2, vw: ref VW, tmp: [i64]) -> i64 {
+  let _ = st_link(base, g, 10, vw);
+  st_seal(base, g, tmp)
 }
 // ---- B4 step 1 (docs/blueprints/B4-functional-tensor-updates.md §3): the tail tier ----
 // tl_cap(): capacity of the append-only COO tail chunk, in entries. TL{arr i64} = cell 0
@@ -216,6 +233,9 @@ fn tl_gen(base: [i64], tx: [i64], d: [i64], h: ref TH, take: i64, s: [i64], n: i
     let a = (s[0] >> 20) % n;
     let _ = s[0] = lcg(s[0]);
     let w = (s[0] >> 20) % n;
+    // C4: the view is maintained HERE, on the delta this loop is already walking -- one increment
+    // per appended edge into s[4 ..], costing no extra pass and no extra parameter.
+    let _ = s[4 + (w >> 10)] = s[4 + (w >> 10)] + 1;
     let _ = tl_put1(base, tx, d, h, a, w);
     let k = k + 1;
     0
@@ -368,6 +388,105 @@ fn pub_ci(base: [i64], tx: [i64], tmp: [i64], d: [i64], pci: [i64], m: i64) -> r
   let _ = st_seal(base, ci, tmp);
   ci
 }
+fn vw_k() -> i64 { 1024 }
+fn vw_pub(base: [i64], tx: [i64], tmp: [i64], d: [i64], s: [i64]) -> ref VW {
+  let v = st_alloc(base, tx, 1 + vw_k(), d[10]);
+  let _ = st_put(base, v, 0, vw_k());
+  let i = 0;
+  while i < vw_k() {
+    let _ = st_put(base, v, 1 + i, s[4 + i]);
+    let i = i + 1;
+    0
+  };
+  let _ = st_seal(base, v, tmp);
+  v
+}
+fn vw_load(base: [i64], tmp: [i64], s: [i64]) -> i64 {
+  let g = st_root(base, tmp);
+  let has = if st_get(base, g, 10) == 0 then 0 else 1;
+  let v = st_ref(base, g, 10);
+  let i = 0;
+  while i < vw_k() * has {
+    let _ = s[4 + i] = st_get(base, v, 1 + i);
+    let i = i + 1;
+    0
+  };
+  0
+}
+fn vw_fold(base: [i64], v: ref VW) -> i64 {
+  let acc = 0;
+  let b = 0;
+  while b < vw_k() {
+    let acc = acc + (1 + b) * st_get(base, v, 1 + b);
+    let b = b + 1;
+    0
+  };
+  acc
+}
+fn vw_hfold(c: [i64]) -> i64 {
+  let acc = 0;
+  let b = 0;
+  while b < vw_k() {
+    let acc = acc + (1 + b) * c[b];
+    let b = b + 1;
+    0
+  };
+  acc
+}
+fn vw_seg(base: [i64], sg: ref TG, c: [i64]) -> i64 {
+  let cc = st_get(base, sg, 0);
+  let i = 0;
+  while i < cc {
+    let w = st_get(base, sg, 2 + 2 * i);
+    let _ = c[w >> 10] = c[w >> 10] + 1;
+    let i = i + 1;
+    0
+  };
+  0
+}
+// vw_recompute: the SAME view computed the slow way -- every edge of L0 (ci0 cell 0 is the edge
+// count and every entry is one edge's destination) plus every entry still in the tail. Phase `W`
+// folds this and phase `V` folds the maintained object; the gate is that they are EQUAL, which is
+// fold equality over all 1024 buckets, not a spot check.
+fn vw_recompute(base: [i64], tmp: [i64], c: [i64]) -> i64 {
+  let g = st_root(base, tmp);
+  let has0 = if st_get(base, g, 5) == 0 then 0 else 1;
+  let ci0 = st_ref(base, g, 6);
+  let m = if has0 == 1 then st_get(base, ci0, 0) else 0;
+  let k = 0;
+  while k < m {
+    let w = st_get(base, ci0, 1 + k);
+    let _ = c[w >> 10] = c[w >> 10] + 1;
+    let k = k + 1;
+    0
+  };
+  let tl = st_ref(base, g, 9);
+  let ns = st_get(base, tl, 0);
+  let j = 1;
+  while j <= ns {
+    let _ = vw_seg(base, st_ref(base, tl, j), c);
+    let j = j + 1;
+    0
+  };
+  vw_hfold(c)
+}
+fn phase_view(base: [i64], tmp: [i64]) -> i64 {
+  let g = st_root(base, tmp);
+  let has = if st_get(base, g, 10) == 0 then 0 else 1;
+  let v = st_ref(base, g, 10);
+  let q = 0;
+  let acc = 0;
+  while q < 1000 {
+    let acc = if has == 1 then vw_fold(base, v) else 0;
+    let q = q + 1;
+    0
+  };
+  acc
+}
+fn phase_recompute(base: [i64], tmp: [i64]) -> i64 {
+  let c = zeros(1024);
+  vw_recompute(base, tmp, c)
+}
 // phase_build(base, tmp, d, skew): skew = 1 sends half of all destination endpoints to
 // the 1% hub set (nodes 0..9999): the skewed variant of §9.5 (row 'uniform + 1%-hub').
 fn phase_build(base: [i64], tmp: [i64], d: [i64], skew: i64) -> i64 {
@@ -442,9 +561,10 @@ fn phase_log(base: [i64], tmp: [i64], d: [i64], b0: i64, nb: i64, stall: [i64], 
   let cur = zeros(n);
   let prp = zeros(n + 2);
   let pci = zeros(1000001);
-  let s = zeros(4);
+  let s = zeros(1028);
   let _ = s[0] = 777;
   let _ = s[1] = l0_load(base, tmp, src, dst, n);
+  let _ = vw_load(base, tmp, s);
   let _ = s[2] = if fl0 == 1 then 1 else (if b0 + nb >= 100 then 1 else 0);
   let _ = s[3] = if cap0 == 0 then tl_cap() else cap0;
   let skip = 0;
@@ -487,7 +607,9 @@ fn phase_log(base: [i64], tmp: [i64], d: [i64], b0: i64, nb: i64, stall: [i64], 
       0
     };
     let _ = st_seal(base, tl, tmp);
+    let vwo = vw_pub(base, tx, tmp, d, s);
     let g2 = root_write(base, tx, tmp, d[2], n, st_get(base, g, 1), st_ref(base, g, 2), st_ref(base, g, 3), st_ref(base, g, 4), rp0, ci0, st_ref(base, g, 7), st_get(base, g, 8) + 10000, tl);
+    let _ = root_view(base, g2, vwo, tmp);
     let _ = st_supersede(base, tx, g);
     let _ = st_commit(base, tx, g2, tmp);
     let dt = clock_ms() - t0;
@@ -523,7 +645,10 @@ fn phase_flush(base: [i64], tmp: [i64], d: [i64]) -> i64 {
   let rp0 = pub_rp(base, tx, tmp, d, prp, n);
   let ci0 = pub_ci(base, tx, tmp, d, pci, m2);
   let _ = st_seal(base, tl, tmp);
+  let hv = if st_get(base, g, 10) == 0 then 0 else 1;
+  let vw = if hv == 1 then st_ref(base, g, 10) else 0;
   let g2 = root_write(base, tx, tmp, d[2], n, st_get(base, g, 1), st_ref(base, g, 2), st_ref(base, g, 3), st_ref(base, g, 4), rp0, ci0, st_ref(base, g, 7), st_get(base, g, 8), tl);
+  let _ = if vw == 0 then 0 else root_view(base, g2, vw, tmp);
   let _ = st_supersede(base, tx, g);
   let _ = st_commit(base, tx, g2, tmp);
   m2
@@ -539,14 +664,17 @@ fn phase_tail(base: [i64], tmp: [i64], d: [i64], k: i64) -> i64 {
   let told = st_ref(base, g, 9);
   let tl = tail_new(base, tx, d, told, k, tmp);
   let _ = st_supersede(base, tx, told);
-  let s = zeros(4);
+  let s = zeros(1028);
   let _ = s[0] = 999331;
   let _ = tl_gen(base, tx, d, tl, k - tl_count(base, tl), s, 1000000, tmp);
   let _ = st_seal(base, tl, tmp);
   let nold = if st_get(base, g, 5) == 0 then 0 else 1;
   let rp0 = if nold == 1 then st_ref(base, g, 5) else 0;
   let ci0 = if nold == 1 then st_ref(base, g, 6) else 0;
+  let hv = if st_get(base, g, 10) == 0 then 0 else 1;
+  let vw = if hv == 1 then st_ref(base, g, 10) else 0;
   let g2 = root_write(base, tx, tmp, d[2], st_get(base, g, 0), st_get(base, g, 1), st_ref(base, g, 2), st_ref(base, g, 3), st_ref(base, g, 4), rp0, ci0, st_ref(base, g, 7), st_get(base, g, 8), tl);
+  let _ = if vw == 0 then 0 else root_view(base, g2, vw, tmp);
   let _ = st_supersede(base, tx, g);
   let _ = st_commit(base, tx, g2, tmp);
   tl_count(base, tl)
@@ -620,7 +748,10 @@ fn phase_del(base: [i64], tmp: [i64], d: [i64]) -> i64 {
   };
   let _ = st_seal(base, tb, tmp);
   let _ = st_supersede(base, tx, old);
+  let hv = if st_get(base, g, 10) == 0 then 0 else 1;
+  let vw = if hv == 1 then st_ref(base, g, 10) else 0;
   let g2 = root_write(base, tx, tmp, d[2], st_get(base, g, 0), st_get(base, g, 1), st_ref(base, g, 2), st_ref(base, g, 3), st_ref(base, g, 4), st_ref(base, g, 5), st_ref(base, g, 6), tb, st_get(base, g, 8), st_ref(base, g, 9));
+  let _ = if vw == 0 then 0 else root_view(base, g2, vw, tmp);
   let _ = st_supersede(base, tx, g);
   st_commit(base, tx, g2, tmp)
 }
@@ -1021,21 +1152,28 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let nb = if argc >= 6 then parse(argv[5]) else 10;
   let cap0 = if argc >= 7 then parse(argv[6]) else 0;
   let fl0 = if argc >= 8 then parse(argv[7]) else 0;
-  let d = zeros(8);
+  let d = zeros(11);
   let _ = d[0] = st_digest("RP{arr i64}");
   let _ = d[1] = st_digest("CI{arr i64}");
-  let _ = d[2] = st_digest("G2{i64,i64,ref RP,ref CI,ref LOG,ref RP,ref CI,ref TB,i64,ref TH}");
+  let _ = d[2] = st_digest("G2{i64,i64,ref RP,ref CI,ref LOG,ref RP,ref CI,ref TB,i64,ref TH,ref VW}");
   let _ = d[3] = st_digest("LOG{arr ref E}");
   let _ = d[4] = st_digest("TB{arr i64}");
   let _ = d[5] = st_digest("E{arr i64}");
   let _ = d[6] = st_digest("TH{arr ref TG}");
   let _ = d[7] = st_digest("TG{arr i64}");
+  let _ = d[10] = st_digest("VW{arr i64}");
   let stall = zeros(1);
-  let lay = zeros(16);
+  let lay = zeros(22);
   let _ = lay[0] = d[0];
   let _ = lay[2] = d[1];
   let _ = lay[4] = d[2];
-  let _ = lay[5] = 764;
+  // 764 -> 1788: G2's refmask MUST gain bit 10 for the C4 view, or st_compact walks the root
+  // without following cell 10, the view is never copied into the compacted file, and cell 10 is
+  // left holding an offset into the OLD file's coordinates. Measured symptom before the fix: the
+  // maintained fold came back 3554557677048121137 (the superblock magic's neighbourhood) against
+  // a correct recompute of 489029643, and the read TRAPPED after a compaction. This is the
+  // refmask discipline the row asked about, and it bites the moment a root cell is added.
+  let _ = lay[5] = 1788;
   let _ = lay[6] = d[3];
   let _ = lay[7] = 0 - 1;
   let _ = lay[8] = d[4];
@@ -1043,17 +1181,18 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let _ = lay[12] = d[6];
   let _ = lay[13] = 0 - 1;
   let _ = lay[14] = d[7];
+  let _ = lay[20] = d[10];
   let t0 = clock_ms();
-  let live = if ph == 99 then st_compact(path, pl, size, lay, 8, tmp) else 0;
+  let live = if ph == 99 then st_compact(path, pl, size, lay, 11, tmp) else 0;
   let base = st_open(path, pl, size, tmp);
   let t1 = clock_ms();
-  let r = if ph == 98 then phase_build(base, tmp, d, skew) else if ph == 108 then phase_log(base, tmp, d, b0, nb, stall, cap0, fl0) else if ph == 110 then phase_nbr(base, tmp) else if ph == 100 then phase_del(base, tmp, d) else if ph == 102 then phase_bfs(base, tmp, nsrc) else if ph == 112 then phase_frontier(base, tmp, nsrc) else if ph == 97 then phase_tail(base, tmp, d, nsrc) else if ph == 103 then phase_flush(base, tmp, d) else 0;
+  let r = if ph == 98 then phase_build(base, tmp, d, skew) else if ph == 108 then phase_log(base, tmp, d, b0, nb, stall, cap0, fl0) else if ph == 110 then phase_nbr(base, tmp) else if ph == 100 then phase_del(base, tmp, d) else if ph == 102 then phase_bfs(base, tmp, nsrc) else if ph == 112 then phase_frontier(base, tmp, nsrc) else if ph == 97 then phase_tail(base, tmp, d, nsrc) else if ph == 103 then phase_flush(base, tmp, d) else if ph == 86 then phase_view(base, tmp) else if ph == 87 then phase_recompute(base, tmp) else 0;
   let t2 = clock_ms();
   let g = st_root(base, tmp);
   let used = st_gen(base, tmp) * 0 + base[st_pick(base, tmp) + 4] * 8;
   let e1 = st_get(base, g, 1);
   let _ = sys_munmap(st_addr(base), size);
   let ms = if ph == 99 then t1 - t0 else t2 - t1;
-  let val = if ph == 108 then (ms * 1000000 / (nb * 10000)) * 1000 + stall[0] else if ph == 102 then ms * 1000000 / ((e1 + 1000000) * nsrc) else if ph == 112 then ms * 1000000 / (e1 * nsrc) else if ph == 110 then ms * 1000000 / 100000 else ms;
+  let val = if ph == 108 then (ms * 1000000 / (nb * 10000)) * 1000 + stall[0] else if ph == 102 then ms * 1000000 / ((e1 + 1000000) * nsrc) else if ph == 112 then ms * 1000000 / (e1 * nsrc) else if ph == 110 then ms * 1000000 / 100000 else if ph == 86 then ms * 1000000 / 1000 else ms;
   if ph == 122 then used else if ph == 109 then stall[0] else if ph == 99 then (if want_t == 1 then ms else live) else if want_t == 1 then val else r
 }

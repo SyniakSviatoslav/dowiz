@@ -25,6 +25,10 @@ Status: 2026-09-07 CURRENT (operator token-economy priority) -- the harness card
 - before calling anything a compiler bug: run the repro through `git show <sha>:./bebop.bin` for the last 3 landed compilers -- identical outputs = your program's bug; a real one goes to $OUT/repro_<n>.bp (<= 15 lines), `open:`, stop.
 - never `pkill -f <literal>`; never edit a bash script while it runs; never prefix a command with `S=`; `&&`-lists followed by `&` background the whole list; guard file variables before `sed -n ... $F` (an empty $F blocks on stdin forever).
 
+## Modelling (added 2026-09-09 after the same error twice in one day)
+- **Model the READ side, not only the write side.** Two rows were predicted correctly on writes and wrongly on reads in the same day. D4: packing L0 to u32 halved the promotion write exactly as predicted (-8,009,384 B, to the byte) and the log row went the WRONG WAY, +28 %, because `l0_load` reads L0 back ~3e6 times per run at ~53 ns per unpacked entry. C4: the view's break-even was predicted at 0.052 queries and measured 1.15, a 22x miss, because the recompute was sized against a full-graph traversal (110 ms) when the view's base is the DELTA (5 ms). Both times the write model was right. Before predicting, write down who reads the thing you changed, how often, and what the read costs -- and if you cannot, say the prediction covers writes only.
+- A structure that assumes sparsity this workload does not have has now died FIVE times: step 2's blocks, 2''s row directory, 2'''s per-segment ranges, (b)'s lazy runs, C4's dense per-row views. Check the actual density first -- the binding promotion touches 0.632n distinct rows, not a small fraction.
+
 ## Token economy (operator priority 2026-09-07)
 - hard cap: the prompt names N tool calls; at the cap write $OUT/STATE.md (files touched, md5s, goldens, what is RED, next step) and STOP with the VERDICT block -- no further reflection.
 - no chatting, no progress narration; the VERDICT block is the whole report. Do not re-verify what the gate already proved.

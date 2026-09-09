@@ -101,8 +101,18 @@ fn st_pick(base: [i64], tmp: [i64]) -> i64 {
 // st_len/st_check (via st_crc, already defined above) rather than calling
 // them, so this can sit before st_open without a forward reference.
 // Returns (bad_count << 32) | objects_visited.
-fn st_verify(base: [i64], upto: i64, tmp: [i64]) -> i64 {
-  let off = 1024;
+// st_verify_range(base, from, upto, tmp): the same walk, bounded BELOW as well (B1 recovery,
+// 2026-09-09). `from` must be an object boundary; the only value ever passed is the OTHER
+// superblock's arena_used cell, which IS that generation's bump cursor and therefore always one.
+// Why a lower bound is sound: the arena is append-only and a commit's range is made durable
+// BEFORE the superblock that names it (st_commit_sync: msync range, toggle superblock, msync
+// superblock). So when the fallback generation's superblock is crc-valid, every byte below its
+// cursor was durable before the failing commit's crash window even opened, and the only bytes a
+// crash can leave inconsistent with a valid superblock are [fallback_cursor, live_cursor).
+// Re-crc-ing everything below that on EVERY open is paranoia, not durability: it is the same
+// bytes, re-read, every time the file is opened.
+fn st_verify_range(base: [i64], from: i64, upto: i64, tmp: [i64]) -> i64 {
+  let off = from;
   let bad = 0;
   let n = 0;
   while off < upto {
@@ -115,6 +125,19 @@ fn st_verify(base: [i64], upto: i64, tmp: [i64]) -> i64 {
     0
   };
   (bad << 32) | n
+}
+// st_verify: the WHOLE arena, unchanged in meaning and still the fail-stop check used on the
+// fallback path and by any caller that wants full coverage (a fsck, not a reopen).
+fn st_verify(base: [i64], upto: i64, tmp: [i64]) -> i64 { st_verify_range(base, 1024, upto, tmp) }
+// st_reopen_lo(base, sb, tmp): the lower bound for the reopen scan -- the OTHER superblock's
+// cursor when that superblock is crc-valid and its cursor does not run past ours, else 1024
+// (full scan). A generation with no valid sibling has no evidence below its own cursor, so it
+// gets the whole scan; that is the conservative direction.
+fn st_reopen_lo(base: [i64], sb: i64, tmp: [i64]) -> i64 {
+  let other = if sb == 0 then 512 else 0;
+  let ov = st_sb_valid(base, other, tmp);
+  let ou = if ov == 1 then base[other + 4] else 1024;
+  if ou >= 1024 then (if ou <= base[sb + 4] then ou else 1024) else 1024
 }
 // st_reopen_verify(base, tmp): called by st_open on every non-fresh open.
 // st_pick only checks a superblock's OWN crc -- it will happily pick a
@@ -131,9 +154,14 @@ fn st_verify(base: [i64], upto: i64, tmp: [i64]) -> i64 {
 // return convention, -1 if both copies fail verification).
 fn st_reopen_verify(base: [i64], tmp: [i64]) -> i64 {
   let sb = st_pick(base, tmp);
-  let bad = st_verify(base, base[sb + 4], tmp) >> 32;
+  let bad = st_verify_range(base, st_reopen_lo(base, sb, tmp), base[sb + 4], tmp) >> 32;
   let _ = if bad > 0 then base[sb] = 0 else 0;
   let sb2 = if bad > 0 then st_pick(base, tmp) else sb;
+  // The FALLBACK is scanned in FULL on purpose: we have just proved that a valid superblock did
+  // NOT imply a durable payload for the generation we rejected, so the ordering argument that
+  // licenses the bounded scan no longer applies to this file, and the fallback's own crcs are
+  // the only evidence left. This is why the `recover` row cannot be made fast without weakening
+  // the guarantee, while the clean `reopen` row can.
   let bad2 = if bad > 0 then (if sb2 < 0 then 0 else st_verify(base, base[sb2 + 4], tmp) >> 32) else 0;
   let _ = if bad2 > 0 then base[sb2] = 0 else 0;
   sb2
