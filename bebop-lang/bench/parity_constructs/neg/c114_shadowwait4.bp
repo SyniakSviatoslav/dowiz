@@ -1,0 +1,9 @@
+// F2 prerequisite (2026-09-09): the same T122 gap, on the builtin whose hash
+// WRAPS. bebop.bp spells a wrapped 64-bit hash SIGNED in the reserved table and
+// UNSIGNED in the dispatch ladder, so the two only agree modulo 2^64 -- compare
+// the literals as written and the audit reports 16 shadowable builtins instead
+// of 7. sys_wait4 hashes to 10054667876514197585 unsigned = -8392076197195354031
+// signed, and it is the signed spelling that had to be added. This construct
+// fails closed if anyone ever re-derives that table in the wrong width.
+fn sys_wait4(a: i64, b: i64, c: i64, d: i64) -> i64 { 5 }
+fn main() -> i64 { sys_wait4(1, 2, 3, 4) }

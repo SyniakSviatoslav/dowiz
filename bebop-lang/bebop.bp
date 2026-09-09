@@ -2118,6 +2118,40 @@ fn cap_exit(n: [i64]) -> i64 {
   let _ = sys_write(2, buf, a3);
   sys_exit(83)
 }
+// ROADMAP F2 prerequisite (2026-09-09): THE EXIT-CODE SPACE IS PARTITIONED.
+// Before this, vs_mask_take/vs_mask_free/vs_cs_take/vs_cs_free exited with
+// `99 + site` / `100 + site` / `119 + site` / `120 + site` for a caller-chosen
+// site in 1..20, so the compiler could emit ANY code in 99..140 -- a span that
+// contains every documented compile-time diagnostic. Two codes were live
+// ALIASES (102 = the kernel-fn diagnostic AND a window-mask self-check; 104 =
+// "too many fns" AND a cs-mask self-check) and 103/105/106/107 were emitted and
+// documented nowhere, against a table whose first line says a code not in it is
+// a bug. The partition is now: USER-FACING DIAGNOSTICS BELOW 99 (plus the
+// grandfathered 99..104 the gates and docs already pin), COMPILER SELF-CHECKS AT
+// 201 -- one code, with the site printed on stderr, the same trade cap_exit and
+// diag_exit already make. The site is not lost, it moves from the exit code
+// (where it collided with real diagnostics) to the message (where it is free).
+// kind: 1 window-mask register out of range   2 window mask corrupt past bit 7
+//       3 cs-mask register out of range       4 cs mask corrupt past bit 7
+//       5 window free-mask not fully released at a boundary
+//       6 cs mask not released at a boundary
+//       7 cs mask non-zero at a statement boundary (was diag_exit 103)
+//       8 window not empty where it must be (was diag_exit 107)
+// Kinds 7 and 8 give up diag_exit's line:col for the kind.site pair: for an
+// invariant that can only be a bug in THIS compiler, the failing check names the
+// bug better than the user source position that tripped over it.
+fn selfcheck_exit(kind: i64, site: i64) -> i64 {
+  let buf = zeros(64);
+  let m = [99, 111, 109, 112, 105, 108, 101, 114, 32, 115, 101, 108, 102, 45, 99, 104, 101, 99, 107, 32];
+  let a1 = diag_text(buf, 0, m, 20);
+  let a2 = put_num(buf, a1, kind);
+  let _ = buf[a2] = 46;
+  let a3 = put_num(buf, a2 + 1, site);
+  let _ = buf[a3] = 10;
+  let _ = sys_write(2, buf, a3 + 1);
+  sys_exit(201)
+}
+
 fn em(insns: [i64], n: [i64], w: i64) -> i64 {
   let _ = if n[0] >= n[1] then cap_exit(n) else 0;
   let _ = insns[n[0]] = w;
@@ -2275,20 +2309,21 @@ fn vs_set_entry(fntab: [i64], i: i64, kind: i64, p0: i64, p1: i64) -> i64 {
 // coordinator's bug-9 postmortem: `1 << r` for r < 0 is `1 << (r mod 64)`
 // on this target (lslv), so a stray -1 sets bit 63, not "no bit" -- the
 // exact corruption chased across this session. `site` (1..20 window,
-// 1..20 cs) is a caller-chosen constant so the exit code alone names the
-// call site: range violation -> 100+site (window) / 120+site (cs); a
-// mask that somehow still carries a bit >=8 after a legal write ->
-// 99+site / 119+site. Two words of cost, kept permanently.
+// 1..20 cs) is a caller-chosen constant that names the call site. F2
+// prerequisite (2026-09-09): it no longer names it through the EXIT CODE --
+// that spanned 99..140 and collided with every real diagnostic -- but through
+// selfcheck_exit's stderr line, `compiler self-check <kind>.<site>`, with a
+// single exit code 201. Two words of cost, kept permanently.
 fn vs_mask_take(fntab: [i64], r: i64, site: i64) -> i64 {
-  let _ = if (if r < 0 then 1 else 0) + (if r >= 8 then 1 else 0) > 0 then sys_exit(100 + site) else 0;
+  let _ = if (if r < 0 then 1 else 0) + (if r >= 8 then 1 else 0) > 0 then selfcheck_exit(1, site) else 0;
   let _ = fntab[4548] = fntab[4548] - (fntab[4548] & (1 << r));
-  let _ = if (fntab[4548] & (0 - 256)) != 0 then sys_exit(99 + site) else 0;
+  let _ = if (fntab[4548] & (0 - 256)) != 0 then selfcheck_exit(2, site) else 0;
   0
 }
 fn vs_mask_free(fntab: [i64], r: i64, site: i64) -> i64 {
-  let _ = if (if r < 0 then 1 else 0) + (if r >= 8 then 1 else 0) > 0 then sys_exit(100 + site) else 0;
+  let _ = if (if r < 0 then 1 else 0) + (if r >= 8 then 1 else 0) > 0 then selfcheck_exit(1, site) else 0;
   let _ = fntab[4548] = fntab[4548] | (1 << r);
-  let _ = if (fntab[4548] & (0 - 256)) != 0 then sys_exit(99 + site) else 0;
+  let _ = if (fntab[4548] & (0 - 256)) != 0 then selfcheck_exit(2, site) else 0;
   0
 }
 // cs mask polarity is the OPPOSITE of the window mask: bit SET means the
@@ -2296,15 +2331,15 @@ fn vs_mask_free(fntab: [i64], r: i64, site: i64) -> i64 {
 // (release it) CLEARS it -- mirrored from vs_mask_take/vs_mask_free's
 // window convention (bit SET = free) on purpose; do not swap these.
 fn vs_cs_take(fntab: [i64], r: i64, site: i64) -> i64 {
-  let _ = if (if r < 19 then 1 else 0) + (if r > 26 then 1 else 0) > 0 then sys_exit(120 + site) else 0;
+  let _ = if (if r < 19 then 1 else 0) + (if r > 26 then 1 else 0) > 0 then selfcheck_exit(3, site) else 0;
   let _ = fntab[4573] = fntab[4573] | (1 << (r - 19));
-  let _ = if (fntab[4573] & (0 - 256)) != 0 then sys_exit(119 + site) else 0;
+  let _ = if (fntab[4573] & (0 - 256)) != 0 then selfcheck_exit(4, site) else 0;
   0
 }
 fn vs_cs_free(fntab: [i64], r: i64, site: i64) -> i64 {
-  let _ = if (if r < 19 then 1 else 0) + (if r > 26 then 1 else 0) > 0 then sys_exit(120 + site) else 0;
+  let _ = if (if r < 19 then 1 else 0) + (if r > 26 then 1 else 0) > 0 then selfcheck_exit(3, site) else 0;
   let _ = fntab[4573] = fntab[4573] - (fntab[4573] & (1 << (r - 19)));
-  let _ = if (fntab[4573] & (0 - 256)) != 0 then sys_exit(119 + site) else 0;
+  let _ = if (fntab[4573] & (0 - 256)) != 0 then selfcheck_exit(4, site) else 0;
   0
 }
 
@@ -3510,7 +3545,24 @@ fn emit_term(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
 }
 
 // Compile-time trap exit codes of bebop.bin (the seed loader owns 90-94:
-// 90 open, 91 read, 92 mmap, 94 fail -- seed/seed.S):
+// 90 open, 91 read, 92 mmap, 94 fail -- seed/seed.S).
+//
+// F2 prerequisite (2026-09-09) -- THE SPACE IS PARTITIONED, and a code outside
+// these two bands is a bug:
+//   < 99 .. 104   user-facing diagnostics (this table). 99..104 are grandfathered
+//                 because docs/TRAPS.md and construct_parity.sh's COMPILEFAIL
+//                 expectations already pin them; everything NEW goes below 99.
+//   201           compiler self-check, ONE code, with `compiler self-check
+//                 <kind>.<site>` on stderr (selfcheck_exit). It replaces the old
+//                 `99 + site` / `100 + site` / `119 + site` / `120 + site`
+//                 families, which spanned 99..140 and could collide with any
+//                 diagnostic in this table, and the bare 102/104/105/106 and the
+//                 diag_exit 103/107 boundary checks.
+//   FREE below 99, verified against this table + docs/TRAPS.md + the emitted
+//   brk traps 2026-09-09: 65-79, 84, 85, 86 (18 codes). NOT 93: bebop.bp's own
+//   line above gives 90-94 to the seed loader as a block, and 93 being unassigned
+//   inside it is not the same as it being ours. NOT 81: retired by A6, not free.
+//   102 and 104 are no longer ALIASES -- each now means only its diagnostic:
 //   95  expected `)` (emit_paren) or `in` (emit_let_plain / emit_let_chain)
 //   96  `++` in an expression: string concat is not in the surface (T42(d))
 //   97  fn body without a tail expression (compile_fn_at; DIVERGE-81/128)
@@ -4930,7 +4982,7 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   // exact for the inline-call path (a `let` binding an inlined call's
   // result before a nested while, say).
   let _ = vs_park(insns, n, fntab, stab, 0);
-  let _ = if fntab[4548] != 255 then sys_exit(102) else 0;
+  let _ = if fntab[4548] != 255 then selfcheck_exit(5, 1) else 0;
   // ROADMAP A2b (2026-09-08): if an ENCLOSING loop is mid-hoist, its cs temps
   // are live right now and the assertion below (cs mask must be 0 at a loop
   // entry) would fire -- that is exactly why A2 declined to hoist any body
@@ -4955,7 +5007,7 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
     let oscan = oscan + 1;
     0
   };
-  let _ = if fntab[4573] != 0 then sys_exit(105) else 0;
+  let _ = if fntab[4573] != 0 then selfcheck_exit(6, 5) else 0;
   // A2 commit 2 (constant hoisting, §3 blueprint): pre-scan the body text
   // (a throwaway copy of pos, never the real one) for 64-bit literals,
   // materialise up to 4 of them ONCE here -- before pmark/pjump, so this
@@ -5019,7 +5071,7 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = if blastl == 1 then vs_pop(fntab) else 0;
   // A2 commit 2: release the hoisted pairs right after the body compiles,
   // before the bottom-test condition is recompiled below -- the existing
-  // sys_exit(106) invariant a few lines down requires the cs mask back at
+  // selfcheck_exit(6, 4) invariant a few lines down requires the cs mask back at
   // 0 there, and hoisting is scoped to the loop body's own text anyway
   // (the condition is a separate reparse from pcond, not part of the body).
   let _ = hoist_release(fntab, hfrom, hn);
@@ -5042,8 +5094,8 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = fntab[4642] = 0;
   let bw = vs_loop_branch(insns, n, fntab, stab);
   let _ = vs_pop(fntab);
-  let _ = if fntab[4548] != 255 then sys_exit(102) else 0;
-  let _ = if fntab[4573] != 0 then sys_exit(106) else 0;
+  let _ = if fntab[4548] != 255 then selfcheck_exit(5, 2) else 0;
+  let _ = if fntab[4573] != 0 then selfcheck_exit(6, 6) else 0;
   // The bottom branch continues the loop on its OWN (non-inverted) tag and
   // is backward to body_start; the target is already fixed, so it is
   // emitted directly instead of placeholder+patch (the old `b loop_start`
@@ -5343,7 +5395,7 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     // A2 commit 2: a live hoisted pair legitimately keeps a cs bit set
     // across this item boundary (§ hoist_mask) -- subtract it before the
     // leak check, everywhere else this is a no-op (hoist_mask is 0).
-    let _ = if (fntab[4547] == 0) * (if (fntab[4573] & (255 - hoist_mask(fntab))) != 0 then 1 else 0) == 1 then diag_exit(s, before, 103) else 0;
+    let _ = if (fntab[4547] == 0) * (if (fntab[4573] & (255 - hoist_mask(fntab))) != 0 then 1 else 0) == 1 then selfcheck_exit(7, 1) else 0;
     // bug 9 hunt (2026-09-06): the check above only fires when w IS 0 -- a
     // leaked WINDOW ENTRY (not just leaked mask bits) leaves w != 0 after a
     // non-tail item and silently escapes it forever (every later item's
@@ -5351,7 +5403,7 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     // the stronger form: any item that is not the fn's own final tail expr
     // must leave the window EMPTY, period.
     let must_be_empty = is_item * (1 - is_expr * (1 - more_ahead));
-    let _ = if (must_be_empty == 1) * (if fntab[4547] != 0 then 1 else 0) == 1 then diag_exit(s, before, 107) else 0;
+    let _ = if (must_be_empty == 1) * (if fntab[4547] != 0 then 1 else 0) == 1 then selfcheck_exit(8, 1) else 0;
     // ROADMAP A14 (2026-09-07): the window is EMPTY at every item boundary
     // except the fn's own tail (the two asserts above), so every temp SLOT
     // this item parked into is dead -- reset the cursor so the next item
@@ -5626,8 +5678,8 @@ fn compile_fn(s: str) -> i64 {
   // means emit_body's own lastf flag: a real tail expression left a tag).
   let _ = if blast_t == 1 then vs_to(insns, n, fntab, stab, 0) else 0;
   let _ = if blast_t == 1 then vs_pop(fntab) else 0;
-  let _ = if fntab[4548] != 255 then sys_exit(102) else 0;
-  let _ = if fntab[4573] != 0 then sys_exit(104) else 0;
+  let _ = if fntab[4548] != 255 then selfcheck_exit(5, 3) else 0;
+  let _ = if fntab[4573] != 0 then selfcheck_exit(6, 1) else 0;
   let _ = patch_jumps(insns, fntab, 4412, 0, n[0]);
   let _ = emit_epilogue(insns, n);
   sum_words(insns, n[0])
@@ -5775,9 +5827,18 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   // T122 (D11-M, 2026-09-05): a fn named like a keyword or a builtin is REJECTED
   // (exit 99) -- `fn match` used to compile into a call of the match keyword
   // (T31 journal) and return 0. Hash table = read_ident of each reserved word.
+  // F2 prerequisite (2026-09-09): the table was short by SEVEN of the 36 builtins
+  // emit_call_or_ctor actually dispatches -- clz, crc32, crc32x, sys_msync,
+  // sys_run, sys_setaffinity, sys_wait4 -- so `fn clz(x: i64) -> i64 { 5 }`
+  // compiled rc=0 and `clz(8)` returned 60: the builtin ladder runs BEFORE the
+  // user-fn lookup, so the user's function became silent dead code where T122
+  // intends exit 99. The seven are appended to rsv3 below. NOTE THE SPELLING:
+  // this table writes a wrapped hash SIGNED while the dispatch ladder writes the
+  // same hash UNSIGNED, so the two must be compared modulo 2^64 -- comparing the
+  // literals as written reports 16 shadowable builtins instead of 7.
   let rsv1 = (if selfname == 1866735 then 1 else 0) + (if selfname == 35281108217 then 1 else 0) + (if selfname == 13857 then 1 else 0) + (if selfname == 262576641 then 1 else 0) + (if selfname == 228925745 then 1 else 0) + (if selfname == 13865 then 1 else 0) + (if selfname == 13472 then 1 else 0) + (if selfname == 228960337 then 1 else 0) + (if selfname == 4471061603997 then 1 else 0) + (if selfname == 4238080694376 then 1 else 0) + (if selfname == 32320559965 then 1 else 0) + (if selfname == 4428069113672 then 1 else 0) + (if selfname == 29119020707 then 1 else 0) + (if selfname == 36158018563 then 1 else 0) + (if selfname == 224358574 then 1 else 0) + (if selfname == 585709020818199 then 1 else 0) + (if selfname == 66094333908796503 then 1 else 0) + (if selfname == 30895064082 then 1 else 0) + (if selfname == 4047253394792 then 1 else 0) + (if selfname == 260449716 then 1 else 0) + (if selfname == 249209392 then 1 else 0);
   let rsv2 = (if selfname == 246721067 then 1 else 0) + (if selfname == 76753189879327100 then 1 else 0) + (if selfname == 76753189885882068 then 1 else 0) + (if selfname == -8392076197157136435 then 1 else 0) + (if selfname == -8392076203060520566 then 1 else 0) + (if selfname == -2688661736639986669 then 1 else 0) + (if selfname == -8392076198348418984 then 1 else 0) + (if selfname == 76753189874778913 then 1 else 0) + (if selfname == 7442662210087947144 then 1 else 0) + (if selfname == -5847879057653958070 then 1 else 0) + (if selfname == 7442662398273192292 then 1 else 0) + (if selfname == 7442661902340062434 then 1 else 0) + (if selfname == 76753189856984008 then 1 else 0) + (if selfname == 7040940390938053523 then 1 else 0) + (if selfname == -6282920175007517587 then 1 else 0) + (if selfname == -8392076203060521221 then 1 else 0) + (if selfname == -1736429998027255437 then 1 else 0) + (if selfname == -3153574141067785036 then 1 else 0) + (if selfname == 8779068393901189725 then 1 else 0) + (if selfname == 7221016679989100487 then 1 else 0) + (if selfname == 1084841420853388659 then 1 else 0);
-  let rsv3 = (if selfname == 260242221 then 1 else 0) + (if selfname == -8392076202161113213 then 1 else 0) + (if selfname == -1729804160290675916 then 1 else 0);
+  let rsv3 = (if selfname == 260242221 then 1 else 0) + (if selfname == -8392076202161113213 then 1 else 0) + (if selfname == -1729804160290675916 then 1 else 0) + (if selfname == 1713209 then 1 else 0) + (if selfname == 29413480223 then 1 else 0) + (if selfname == 3853165909333 then 1 else 0) + (if selfname == -8392076200099613766 then 1 else 0) + (if selfname == 585902212871437 then 1 else 0) + (if selfname == 7304771531850188344 then 1 else 0) + (if selfname == -8392076197195354031 then 1 else 0);
   let _ = if rsv1 + rsv2 + rsv3 > 0 then diag_exit(s, namepos, 99) else 0;
   let _ = skip_ws(s, pos);
   let pnames = zeros(14);
@@ -5837,8 +5898,8 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   // means emit_body's own lastf flag: a real tail expression left a tag).
   let _ = if blast_t == 1 then vs_to(insns, n, fntab, stab, 0) else 0;
   let _ = if blast_t == 1 then vs_pop(fntab) else 0;
-  let _ = if fntab[4548] != 255 then sys_exit(102) else 0;
-  let _ = if fntab[4573] != 0 then sys_exit(104) else 0;
+  let _ = if fntab[4548] != 255 then selfcheck_exit(5, 4) else 0;
+  let _ = if fntab[4573] != 0 then selfcheck_exit(6, 2) else 0;
   let _ = patch_jumps(insns, fntab, 4412, 0, n[0]);
   let _ = if is_emission == 1 then emit_epilogue_sized(insns, n, fw_vc(fw0), fw_cshi(fw0), fw_tsp(fw0), fw_marks(fw0)) else emit_epilogue(insns, n);
   // B1 (2026-09-06): replaces OPT-A's post-hoc NOP patch of unused

@@ -171,6 +171,13 @@ for f in "${DIR%/}/neg"/*.bp; do
     c52_undef) EXPECT=RUNFAIL:87;;
     c51_casbad) EXPECT=COMPILEFAIL:88;;
     c39_fnmatch) EXPECT=COMPILEFAIL:99;;
+    # F2 prerequisite (2026-09-09): T122 rejects a fn named like a BUILTIN too --
+    # its table was short by seven of the 36 dispatched builtins. c113 is `clz`
+    # (compiled rc=0 and returned the BUILTIN's 60 before the fix); c114 is
+    # `sys_wait4`, the one whose hash wraps, so it also guards the signed/unsigned
+    # spelling the reserved table and the dispatch ladder disagree on.
+    c113_shadowclz) EXPECT=COMPILEFAIL:99;;
+    c114_shadowwait4) EXPECT=COMPILEFAIL:99;;
     c85_param15) EXPECT=COMPILEFAIL:100;;
     c93_unbound) EXPECT=COMPILEFAIL:101;;
     c112_kernelsys) EXPECT=COMPILEFAIL:102;;

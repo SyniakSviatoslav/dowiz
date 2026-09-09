@@ -1,0 +1,9 @@
+// F2 prerequisite (2026-09-09): T122 rejects a fn named like a BUILTIN, not just
+// like a keyword -- but its hash table was short by seven of the 36 builtins
+// emit_call_or_ctor dispatches, and `clz` was one of them. Before the fix this
+// file compiled rc=0 and `clz(8)` returned 60: the builtin ladder runs BEFORE the
+// user-fn lookup, so the user's `clz` became silent dead code and the 5 was never
+// reachable. That is the failure this construct exists to keep dead -- a
+// mechanism with no negative construct is one refactor from vanishing.
+fn clz(x: i64) -> i64 { 5 }
+fn main() -> i64 { clz(8) }
