@@ -173,6 +173,18 @@ Rules:
 | **ponytail** 4.9 — ABSENT 2026-09-09 (not on PATH) | global plugin (lazy-senior mode: simplest working solution) | do not add unrequested abstractions |
 | **tb** — WRITTEN 2026-09-09 as `bebop-lang/tools/tb.py` because it was absent; `h` content-address, `s`/`n` hits, `d` changed-or-not (prints NOTHING when unchanged) | `tb h <path>` crc32 content-address, `tb s <needle> <path>` hit lines | re-read a file only when its hash changed |
 
+**FREE-MODEL ROUTING for mechanical worker text (2026-09-09): `bebop-lang/tools/freellm.py`.** The
+per-worker model selector accepts four Anthropic models and nothing else, so a subagent CANNOT be pointed
+at a free provider; `ANTHROPIC_BASE_URL` routes the WHOLE session including merge decisions and is the
+operator's to set. What a worker CAN do is shell out. `freellm.py` routes one prompt to the first
+configured free provider with fallback across six (groq, cerebras, google, openrouter, mistral, together),
+all six TLS-reachable from this box as measured 2026-09-09. It REFUSES rather than degrades: no key exits 3
+naming the providers, every provider failing exits 4 with each error, and a truncated or empty completion
+exits rather than being passed off as an answer. **The only missing input is an API key** -- the
+environment has none. A LOCAL model is refuted by measurement, not preference: 1,619 MB available RAM
+against a 3B-Q4's ~2 GB, with procs at 33 against a 32-process ceiling. Send mechanical text work there
+(summarise a log, extract a table, reformat); judgement and merges stay where they are.
+
 Rules: compile/test output to `/dev/null` and read `tail -1`; one deterministic run is proof;
 **re-read a file only when its hash moved: `tools/tb.py d <path> <crc>` prints nothing and exits 0 when it
 has not (measured 2026-09-09 against reading bebop.bp whole: `tb s` 3,028x fewer bytes, `tb n` 22,709x,
