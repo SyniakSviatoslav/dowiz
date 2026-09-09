@@ -47,10 +47,20 @@ fn main(argc: i64, argv: i64) -> i64 {
   let words = emit_words(srcv);
   let n = words[0];
   let offs = emit_offsets(srcv);
-  let fnames = zeros(256);
-  let fpos = zeros(256);
+  // D5b step 2 (2026-09-09): these two tables were zeros(256) while bebop.bp has
+  // 287 top-level fns, and Bebop array bounds are UNCHECKED -- collect_fns simply
+  // wrote past the end and clobbered the next arena object, so the driver produced
+  // a wrong entry offset with no diagnostic at all. compile_program_to (in
+  // expr_compile.bp) already traps loudly on this; the driver did not. Raised to
+  // EC_FNCAP and given the SAME loud failure, so the class of bug is now
+  // unrepresentable in the one place it was still silent.
+  //   exit 103 = ec_driver fn-table overflow (distinct from the compiler's brk #0x57)
+  let fncap = 1024;
+  let fnames = zeros(fncap);
+  let fpos = zeros(fncap);
   let cnt = [0];
   let _ = collect_fns(srcv, fnames, fpos, cnt);
+  let _ = if cnt[0] >= fncap then sys_exit(103) else 0;
   let entry = offs[ec_idx_of_main(fnames, cnt[0]) + 1];
   let e4 = entry * 4;
   let nb = n * 4 + 8;

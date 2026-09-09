@@ -1,4 +1,4 @@
-Status: 2026-09-09 CURRENT (D5 / T89, lane C, session 30). Grounded at HEAD 982855f. Every number below was measured on this box on 2026-09-09 by `tools/ddc.sh` (`--chain`, `--why`, `--measure`, `--full`); nothing is quoted from an older document, and where an older document's number is now wrong this file says so. This file is the authority on what the project's trust claim IS. The MANIFESTO and the ROADMAP must not exceed it.
+Status: 2026-09-09 CURRENT (D5 landed as d166006; D5b step 1 in progress, lane C, session 30). Grounded at HEAD 982855f. Every number below was measured on this box on 2026-09-09 by `tools/ddc.sh` (`--chain`, `--why`, `--measure`, `--full`); nothing is quoted from an older document, and where an older document's number is now wrong this file says so. This file is the authority on what the project's trust claim IS. The MANIFESTO and the ROADMAP must not exceed it.
 
 # The trust chain
 
@@ -16,13 +16,25 @@ itself reproduces that backdoor byte-for-byte and the md5s agree (Thompson 1984;
 arXiv:1004.5534).
 
 **D5 set out to close that with diverse double-compiling and it did not, because
-the row's central premise is false.** The row says the witness "already exists
-in-tree (`selfhost/expr_compile.bp`), so the fix ADDS NO DEPENDENCY". Measured:
-the witness emits code for the **retired `exec_words` stack machine** and its
-output does not run — it fails on `fn main() -> i64 { 42 }` with SIGBUS (§4).
-What D5 delivers is therefore this document, the measurement behind it, and
-`tools/ddc.sh`, which is **RED by design** and says so rather than printing a
-green line. The chain is better documented and **no more witnessed than before**.
+the row's central premise was false as written.** The row said the witness
+"already exists in-tree (`selfhost/expr_compile.bp`), so the fix ADDS NO
+DEPENDENCY". Measured 2026-09-09: the witness emitted code for the retired
+`exec_words` stack machine and failed on `fn main() -> i64 { 42 }` with SIGBUS —
+**1 of 75** frozen constructs "agreed", and that one only because its frozen
+`EXPECT` is 0, which a broken binary also yields, so the non-vacuous count was
+**0 of 72**.
+
+**D5b (2026-09-09) repaired the witness and it now runs.** Steps 1-2 and part of
+step 4 have landed; the non-vacuous count went **0 → 46 of 72**. Step 3 (`use`)
+is scoped but NOT done (§7.2a). The full step ledger is §4a.
+
+**D5b step 1 repaired the calling contract.** `emit_epilogue` never popped the function result off the eval stack
+(§4a). One `pop(insns, n, 0)` moved the measurement to **44 of 75 raw, 43 of 72
+non-vacuous**, and `fn main() -> i64 { 42 }` now returns 42 under the seed. That
+is a working second code generator over a real subset — it is **not** yet
+diverse double-compiling, because the two-stage form still cannot run (§4b-c)
+and 29 non-vacuous constructs still diverge. `tools/ddc.sh --gate` stays RED and
+stays out of `battery.sh` until the count is total.
 
 ## 1. Every artifact, named and hashed
 
@@ -99,23 +111,34 @@ Wheeler's DDC is two-stage, and byte-exactness comes from the second stage:
 
 Stage 2 exists only if stage 1 succeeds. Three independent reasons it does not:
 
-**(a) The witness targets a retired execution model.** `selfhost/attic/expr_compile.bp`
+**(a) The witness targeted a retired execution model. REPAIRED, D5b step 1.** `selfhost/attic/expr_compile.bp`
 was written against the `exec_words` stack machine, where "the stack machine only
 clobbers x0/x1" and a runner holds the arena in x27/x28. For the smallest program
-in the language, `fn main() -> i64 { 42 }`, it emits 92 bytes that push the
-result and never pop it:
+in the language, `fn main() -> i64 { 42 }`, it emitted 92 bytes that pushed the
+result and never popped it:
 
     stp x29,x30,[sp,#-16]!  ;  mov x29,sp  ;  sub sp,sp,#0x4000
     mov x0,#42  ;  sub sp,sp,#0x10  ;  str x0,[sp]        <-- pushed, never popped
     add sp,sp,#0x4000  ;  ldp x29,x30,[sp],#16  ;  ret    <-- x30 = the pushed 42
 
-`sp` is 16 bytes low across the epilogue, `ldp` reloads x29/x30 from the wrong
+`sp` was 16 bytes low across the epilogue, `ldp` reloaded x29/x30 from the wrong
 slot, and the seed dies with **SIGBUS (exit 135)**. `bench/vs_rust/invariants.sh`
 step **(ix)** records the model as retired: `push_words == 0`
 (REGISTER-MODEL-BLUEPRINT §7). Measured over the frozen construct corpus:
-**1 of 75 constructs agree** with the reference compiler, and the one that agrees
-(`c90_symalias`) has frozen `EXPECT=0`, which a broken binary also produces. The
-honest count of constructs this witness witnesses is **zero**.
+**1 of 75 constructs agreed** with the reference compiler, and the one that
+agreed (`c90_symalias`) has frozen `EXPECT=0`, which a broken binary also
+produces — so the honest count was **zero**.
+
+**Step 1 -- the repair is one line**: `emit_epilogue` now begins with `pop(insns, n, 0)`,
+which puts the body's value in x0 (the register the seed prints) *and* restores
+`sp` so the teardown lines up with `emit_prologue`. Re-measured on the same
+corpus: **44 of 75 raw, 43 of 72 non-vacuous** (and `c90_symalias`, the old
+vacuous agreement, now correctly shows as a divergence — confirming it was
+worth nothing). The 31 remaining divergences fall into four classes: 11 produce
+no output at all (frame/spill model drift), 5 return 0 because the feature is
+absent (`use` ×2, `cas`, `sys_run`, enum payload), and 15 return a wrong value,
+most of them surface added after the witness was retired (`return`, `break`,
+unary `-`/`!`, `clz`, `crc32`/`crc32x`, `scan`).
 
 **(b) It cannot read `bebop.bp` even in principle.** It has **no `use` support**
 (zero matches for a use handler in its 3,128 lines) and `bebop.bp` line 1 is
@@ -147,6 +170,55 @@ this row removes it. `tools/bpref.py` remains the semantic oracle for every std
 gate, construct row and fuzz case; `tools/typecheck.py`, `tools/census.py`,
 `tools/bpref.py` and `seed/pack.py` are all CPython. D5 must not be quoted as if
 it changed that.
+
+### 4a. The D5b repair ledger
+
+Each step was measured on its own before the next was started, so every number
+below is attributable. Headline is the NON-VACUOUS count -- agreements on the
+three constructs whose frozen `EXPECT` is 0 are excluded, because a binary that
+traps or prints nothing also yields 0.
+
+| step | change | raw | **non-vacuous** |
+|---|---|---|---|
+| — | before D5b | 1/75 | **0/72** |
+| 1 | `emit_epilogue`: one `pop(insns, n, 0)` — the body's value was left on the eval stack and the teardown ran 16 B low | 44/75 | **43/72** |
+| 2 | `ec_driver.bp` fn tables 256 → 1024 **with the loud trap the compiler already had** (`sys_exit(103)`); `compile_program_to` cap 256 → 1024, keeping its existing `brk #0x57` | 44/75 | **43/72** (no regression) |
+| 4a | unary `-`, unary `!`, `0x` hex literals (T99) — all three fell through to `emit_num`, which consumed no characters and emitted literal 0 | 46/75 | **45/72** |
+| 4b | array-literal allocation order + `clz` (T105) | 47/75 | **46/72** |
+| 4c | `>>>` arithmetic shift (T42(b)) — correct surface, **net zero constructs**: `c32_asr` moved 100011 → 96148 against a frozen 96138 and still diverges on a precedence detail | 47/75 | **46/72** |
+
+Step 2 is worth naming precisely because the scope was corrected mid-flight:
+`compile_program_to` **already trapped loudly** on fn-table overflow; only
+`ec_driver.bp`'s `zeros(256)` was silent. One trap was added, not two — and the
+cap itself was wrong in both places (256 against `bebop.bp`'s 287 fns), so the
+witness could never have read its own target even with `use` support.
+
+### 4b. What was deliberately NOT repaired, and why
+
+The witness is worth something **only because it is architecturally different
+from `bebop.bp`** — a stack machine against a register model. Every repair that
+makes it more like the compiler under test buys agreements and sells diversity.
+Each change above keeps the witness's own model: evaluate, `pop` into x0, apply,
+`push`. The array-literal fix is the clearest case — it was fixed by pushing the
+base on the eval stack and using a post-indexed store, which is *more*
+stack-machine, not less. No register-model behaviour was imported.
+
+The 28 remaining divergences are therefore left standing, in three groups:
+
+1. **10 produce no output** (`c23_spillcall`, `c25_matchtail`, `c26_selfrec`,
+   `c33_loopalloc`, `c36_break`, `c38_frameheap`, `c78_scan`, `c90_symalias`,
+   `c91_letlive`, `c94_fsync`) plus the wrong-value frame cases (`c21_param13`,
+   `c43_arena_persist`, `c66_fncap`, `c69_index_roundtrip`, `c92_ptrfree`,
+   `c95_symspan`). These are the witness's `x14`/`x15` frame-heap and spill model
+   against the current one. **They are the ones that cannot be closed without
+   importing the register model, and so they should stay divergent.** A
+   construct made to agree by adopting the compiler-under-test's model agrees
+   falsely: it no longer constitutes independent evidence about that model.
+2. **6 need absent builtins/statements** — `crc32`/`crc32x` (a hardware CRC loop
+   emitter), `cas`, `sys_run`, enum payload, and `return`/`break` (both need a
+   forward branch patched to the epilogue). Additive, model-preserving, and the
+   next cheapest work after `use`.
+3. **2 need `use`** (`c44_use24`, `c47_usenest`) — §7.2a.
 
 ## 5. Exactly what is witnessed, and what is not
 
@@ -205,6 +277,20 @@ In increasing order of cost. None is an afternoon, and that is the finding:
    turns `tools/ddc.sh --measure` from 1/75 into a real number. It is a change to
    a *retired* file targeting a *retired* execution model, so it is worth doing
    only as step 1 of item 2.
+2a. **`use` handling (D5b step 3) — scoped, costed, NOT done.** The witness has
+   no `use`, and `bebop.bp` line 1 is one. It cannot be added inside the
+   compiler as a text substitution: the witness scans a `str` with
+   `char`/`str_len` and Bebop has no string concatenation, so there is nowhere
+   to splice the included source. The workable design is at the DRIVER level —
+   `ec_driver.bp` already slurps the source, so it would scan for `use "..."`,
+   build each path as cells, `sys_open` it and `sys_readbuf` the contents into
+   ONE contiguous buffer ahead of the main source, then hand that single buffer
+   to `compile_program_to`. That is ~60-80 lines of dense Bebop plus several
+   correctness iterations. Doing it in the harness instead (as
+   `tools/ddc.sh --full` does with `sed`) would be cheating: it would move a
+   language feature into the test rig and make `c44_use24`/`c47_usenest` agree
+   without the witness understanding anything.
+
 2. **Widen the witness until it accepts `bebop.bp`** — add `use`, raise the
    driver's fn table past 287, port the post-T45 builtins, and make it fast
    enough to finish 359 KB of source. Then run the real two-stage DDC.

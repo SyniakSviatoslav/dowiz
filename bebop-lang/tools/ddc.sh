@@ -8,30 +8,31 @@
 # Compiling"). DDC answers that by building the same source with a SECOND,
 # independently written compiler and comparing.
 #
-# WHAT THIS SCRIPT REPORTS, AND WHY IT IS RED BY DESIGN TODAY.
-# The D5 row says the witness "already exists in-tree (selfhost/expr_compile.bp),
-# so the fix ADDS NO DEPENDENCY". Measured on this box 2026-09-09, that premise
-# does not hold: the witness is retired code for a RETIRED EXECUTION MODEL.
-# It still compiles (bebop.bin builds it), it still emits AArch64, and the code
-# it emits does not run under the seed's calling contract -- for the smallest
-# possible program, `fn main() -> i64 { 42 }`, it emits a stack-machine body
-# that pushes the result and returns without popping it, leaving sp 16 bytes
-# low across the epilogue:
-#     stp x29,x30,[sp,#-16]!  ;  sub sp,sp,#0x4000
-#     mov x0,#42  ;  sub sp,sp,#0x10  ;  str x0,[sp]      <-- push, never popped
-#     add sp,sp,#0x4000  ;  ldp x29,x30,[sp],#16  ;  ret  <-- reads the pushed
-#                                                             value as x30
-# and the seed dies with SIGBUS. That is the `exec_words` stack machine, which
-# `bench/vs_rust/invariants.sh` (ix) records as retired (push_words == 0,
-# REGISTER-MODEL-BLUEPRINT §7). So there is no working second code generator in
-# this tree, and this script says so instead of printing a green line.
+# WHAT THIS SCRIPT REPORTS.
+# The D5 row said the witness "already exists in-tree (selfhost/expr_compile.bp),
+# so the fix ADDS NO DEPENDENCY". Measured 2026-09-09 (D5), that premise did not
+# hold: the witness emitted code for the retired `exec_words` stack machine and
+# its output did not run -- `fn main() -> i64 { 42 }` died with SIGBUS, and 1 of
+# 75 frozen constructs "agreed", that one only because its frozen EXPECT is 0,
+# which a broken binary also yields.
 #
-# Therefore: `--gate` MEASURES the witness against the frozen construct corpus
-# and exits NON-ZERO with "DDC: NOT ESTABLISHED" until a witness actually
-# witnesses something. It is not wired into battery.sh or std_golden.sh; it is
-# the falsifiable record behind docs/TRUST-CHAIN.md, which states the guarantee.
-# Do not quote this script as "the trust chain is closed": it is not, and
-# docs/TRUST-CHAIN.md §4-§5 says exactly where it is open.
+# D5b (2026-09-09) repaired the calling contract: `emit_epilogue` never popped
+# the function result off the eval stack, so the frame teardown ran 16 bytes low
+# and `ret` branched into the result. One `pop(insns, n, 0)` fixed it. The
+# measurement is now real -- see `--measure` for today's number.
+#
+# It is still NOT diverse double-compiling, and this script will not say it is
+# until every frozen construct agrees AND the two-stage form in `--full` runs.
+# Two counts are printed and both matter:
+#   agree      -- the witness's binary printed the same value as the reference's
+#   non-vacuous-- the same, EXCLUDING constructs whose frozen EXPECT is 0, since
+#                 a binary that traps or prints nothing can also yield 0 and such
+#                 an agreement is worth nothing. Quote the non-vacuous number.
+#
+# `--gate` exits non-zero until the count is total. It is deliberately NOT wired
+# into `battery.sh` or `std_golden.sh`: a red gate nobody can turn green is a
+# broken build, and this finding belongs in docs/TRUST-CHAIN.md, which states the
+# guarantee. Do not quote this script as "the trust chain is closed".
 #
 # Usage:  tools/ddc.sh              the chain, the evidence, and the measurement
 #         tools/ddc.sh --chain      artifact hashes only, no compiles
@@ -124,7 +125,7 @@ smoke() {
   vw=$($SEED "$OUT/smoke.wit.bin" 2>/dev/null | tail -1); rw=$?
   [ -n "$vr" ] || { echo "GUARD: the REFERENCE compiler printed nothing for 42 -- fix the tree, not this script"; exit 1; }
   echo "  ref     $(sz "$OUT/smoke.ref.bin") B -> '$vr'"
-  echo "  witness $(sz "$OUT/smoke.wit.bin") B -> '$vw' (seed exit $rw; 135 = SIGBUS, the unpopped stack slot)"
+  echo "  witness $(sz "$OUT/smoke.wit.bin") B -> '$vw' (seed exit $rw; 0 = the D5b epilogue repair holds, 135 = SIGBUS regression)"
 }
 
 expect_of() {  # expect_of <name> -> the frozen EXPECT from construct_parity.sh
@@ -134,12 +135,13 @@ expect_of() {  # expect_of <name> -> the frozen EXPECT from construct_parity.sh
 measure() {  # measure <mode>  mode=report | recut
   local mode=$1 names f name exp a b va vb
   names=$(ls bench/parity_constructs/*.bp 2>/dev/null | xargs -n1 basename 2>/dev/null | sed 's/\.bp$//')
-  local agree=0 diverge=0 skip=0 accepted=""
+  local agree=0 diverge=0 skip=0 accepted="" agree_vac=0 total_vac=0
   for name in $names; do
     f=bench/parity_constructs/$name.bp
     [ -s "$f" ] || { skip=$((skip+1)); continue; }
     exp=$(expect_of "$name")
     case "$exp" in ''|*COMPILEFAIL*|*RUNFAIL*) skip=$((skip+1)); continue;; esac
+    [ "$exp" = 0 ] && total_vac=$((total_vac+1))
     a=$OUT/$name.ref.bin; b=$OUT/$name.wit.bin
     run $SEED "$BEBOP_BIN" compile "$f" "$a" >/dev/null 2>&1 || { echo "REFFAIL $name"; diverge=$((diverge+1)); continue; }
     va=$(timeout 120 $SEED "$a" 2>/dev/null | tail -1)
@@ -150,7 +152,8 @@ measure() {  # measure <mode>  mode=report | recut
     vb=$(timeout 120 $SEED "$b" 2>/dev/null | tail -1)
     if [ "$vb" = "$va" ]; then
       agree=$((agree+1)); accepted="$accepted $name"
-      [ "$mode" = report ] && echo "AGREE     $name = $va (ref $(sz "$a") B, witness $(sz "$b") B -- different code, same value)"
+      [ "$exp" = 0 ] && agree_vac=$((agree_vac+1))
+      [ "$mode" = report ] && echo "AGREE     $name = $va (ref $(sz "$a") B, witness $(sz "$b") B -- different code, same value)$([ "$exp" = 0 ] && echo '  [VACUOUS: EXPECT=0]')"
     else
       diverge=$((diverge+1))
       [ "$mode" = report ] && echo "DIVERGE   $name frozen=$exp ref=$va witness='$vb'"
@@ -170,6 +173,8 @@ measure() {  # measure <mode>  mode=report | recut
   fi
   echo
   echo "ddc measurement: $agree of $total frozen constructs agree; $diverge diverge; $skip skipped (no numeric EXPECT)"
+  echo "                 non-vacuous: $((agree-agree_vac)) of $((total-total_vac)) (EXCLUDING $total_vac constructs whose frozen EXPECT is 0,"
+  echo "                 where $agree_vac agreed -- a trapping or silent binary also yields 0). QUOTE THIS NUMBER." 
   if [ "$agree" -lt "$total" ]; then
     echo "DDC: NOT ESTABLISHED. The in-tree witness does not compile the language it"
     echo "     is supposed to witness, so no diverse double-compiling has taken place."

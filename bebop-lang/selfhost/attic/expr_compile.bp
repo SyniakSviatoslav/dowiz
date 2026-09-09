@@ -1040,6 +1040,21 @@ fn emit_sys_readbuf(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], sel
 }
 
 // str_len(s): NUL-scan over a raw byte pointer (JIT string contract).
+// D5b step 4 (2026-09-09): `clz(x)` (T105) -- absent from the witness, so
+// c41_clz compiled to a call to an undefined fn. One instruction, evaluated in
+// the witness's own stack discipline: pop into x0, clz, push.
+//   clz x0, x0 = 3670020096 (dac01000), assembler-verified 2026-09-09.
+fn emit_clz_fn(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 0);
+  let _ = em(insns, n, 3670020096);
+  let _ = push(insns, n);
+  n[0]
+}
+
 fn emit_str_len_fn(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
@@ -1294,6 +1309,7 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   let tgt = fntab_lookup(fntab, name);
   let is_fn = if tgt >= 0 then 1 else 0;
   let is_zw = if name == 36158018563 then 1 else 0;
+  let is_clz = if name == 1713209 then 1 else 0;
   let is_hh = if name == 30895064082 then 1 else 0;
   let is_hh2 = if name == 4047253394792 then 1 else 0;
   let is_so = if name == 76753189879327100 then 1 else 0;
@@ -1319,7 +1335,8 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   let is_ata = if name == 7221016679989100487 then 1 else 0;
   let is_fwg = if name == 15293169932641766580 then 1 else 0;
   let is_cs = if name == 16710314075682296179 then 1 else 0;
-  if is_hh == 1 then emit_hvham(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  if is_clz == 1 then emit_clz_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if is_hh == 1 then emit_hvham(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_hh2 == 1 then emit_hvham2(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_sp == 1 then emit_sys_slurp(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_sln == 1 then emit_str_len_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
@@ -1544,10 +1561,15 @@ fn emit_binop(insns: [i64], n: [i64], op: i64) -> i64 {
   let weor = if op == 14 then 3389063168 else 0;
   let wshl = if op == 15 then 2596347904 else 0;
   let wshr = if op == 16 then 2596348928 else 0;
+  // D5b step 4 (2026-09-09): op 17 = `>>>`, the ARITHMETIC shift (T42(b)/D9(5)).
+  // The witness had lslv/lsrv only, so `a >>> 2` parsed as `a >> (>2)` garbage.
+  //   asrv x0, x0, x1 = 2596349952 (9ac12800), assembler-verified 2026-09-09
+  //   (cross-checked against the lsrv constant already in this line, 9ac12400).
+  let wasr = if op == 17 then 2596349952 else 0;
   // modulo (op 11): a % b via mov x2,x0; sdiv x0,x0,x1; msub x0,x0,x1,x2
   let is_md = if op == 11 then 1 else 0;
   let _ = if is_md == 1 then (let _ = em(insns, n, 2852127714) in (let _ = em(insns, n, 2596342784) in (let _ = em(insns, n, 2600568832) in 0))) else 0;
-  let _ = if is_md == 0 then (let _ = em(insns, n, wadd + wsub + wmul + wdiv + wand + worr + weor + wshl + wshr) in 0) else 0;
+  let _ = if is_md == 0 then (let _ = em(insns, n, wadd + wsub + wmul + wdiv + wand + worr + weor + wshl + wshr + wasr) in 0) else 0;
   let _ = push(insns, n);
   n[0]
 }
@@ -1590,21 +1612,72 @@ fn bind_reg(insns: [i64], n: [i64], reg: i64) -> i64 {
 }
 
 // Read digits, emit their literal; returns the parsed value.
+// Value of one hex digit, or -1 when c is not one. (D5b step 4.)
+fn hexval(c: i64) -> i64 {
+  let d = (if c >= 48 then 1 else 0) * (if c <= 57 then 1 else 0);
+  let l = (if c >= 97 then 1 else 0) * (if c <= 102 then 1 else 0);
+  let u = (if c >= 65 then 1 else 0) * (if c <= 70 then 1 else 0);
+  let ok = d + l + u;
+  let v = d * (c - 48) + l * (c - 87) + u * (c - 55);
+  ok * (v + 1) - 1
+}
+
+// D5b step 4 (2026-09-09): added `0x` literals (T99). This loop used to accept
+// decimal digits ONLY, so `0x10` read the 0, stopped at the 'x', emitted literal
+// 0 and left "x10" to be parsed as an identifier.
 fn emit_num(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
   let strn = str_len(s);
+  let c0 = if pos[0] >= strn then 0 else char(s, pos[0]);
+  let c1 = if pos[0] + 1 >= strn then 0 else char(s, pos[0] + 1);
+  let z0 = if c0 == 48 then 1 else 0;
+  let xl = if c1 == 120 then 1 else 0;
+  let xu = if c1 == 88 then 1 else 0;
+  let is_hex = z0 * (xl + xu);
+  let _ = pos[0] = pos[0] + is_hex * 2;
+  let base = if is_hex == 1 then 16 else 10;
   let v = 0;
   let done = 0;
   while done == 0 {
     let at_end = if pos[0] >= strn then 1 else 0;
     let ch = if at_end == 1 then 0 else char(s, pos[0]);
-    let dg = if at_end == 1 then 0 else is_digit(ch);
-    let v = if dg == 1 then (v * 10) + (ch - 48) else v;
-    let adv = if dg == 1 then 1 else 0;
-    let _ = pos[0] = pos[0] + adv;
-    let done = if dg == 1 then 0 else 1;
+    let hv = if at_end == 1 then 0 - 1 else hexval(ch);
+    let okh = if hv >= 0 then 1 else 0;
+    let lt = if hv < base then 1 else 0;
+    let use = okh * lt;
+    let v = if use == 1 then v * base + hv else v;
+    let _ = pos[0] = pos[0] + use;
+    let done = 1 - use;
     0
   };
   let _ = emit_lit(insns, n, v);
+  n[0]
+}
+
+// D5b step 4 (2026-09-09): the unary prefix forms (T99) the witness never had.
+// '-' (45) and '!' (33) are none of the tokens emit_factor's chain tests for, so
+// they already fall through to its final `else` -- which was emit_num, and
+// emit_num consumed NO characters for them and emitted literal 0. Hooking here
+// instead of widening the chain keeps the chain's nesting depth unchanged.
+// Stack-machine discipline is preserved: evaluate, pop into x0, apply, push.
+//   neg  x0, x0   = 3405775840   (cb0003e0)
+//   cmp  x0, #0   = 4043309087   (f100001f)
+//   cset x0, eq   = 2594117600   (9a9f17e0)   -- `!e` is (e == 0)
+// all three assembler-verified: as | objdump -d, 2026-09-09.
+fn emit_prefix_or_num(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let strn = str_len(s);
+  let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+  let c1 = if pos[0] + 1 >= strn then 0 else char(s, pos[0] + 1);
+  let is_neg = if ch == 45 then 1 else 0;
+  let ne = if c1 == 61 then 1 else 0;
+  let is_not = (if ch == 33 then 1 else 0) * (1 - ne);
+  let un = is_neg + is_not;
+  let _ = pos[0] = pos[0] + un;
+  let _ = if un == 1 then emit_factor(s, pos, insns, n, stab, selfname, selfstart, fntab) else emit_num(s, pos, insns, n);
+  let _ = if un == 1 then pop(insns, n, 0) else 0;
+  let _ = if is_neg == 1 then em(insns, n, 3405775840) else 0;
+  let _ = if is_not == 1 then em(insns, n, 4043309087) else 0;
+  let _ = if is_not == 1 then em(insns, n, 2594117600) else 0;
+  let _ = if un == 1 then push(insns, n) else 0;
   n[0]
 }
 
@@ -1672,11 +1745,14 @@ fn emit_bitlvl(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
     let gt62 = if ch == 62 then 1 else 0;
     let nxt60 = if nch == 60 then 1 else 0;
     let nxt62 = if nch == 62 then 1 else 0;
+    let n2ch = if pos[0] + 2 >= strn then 0 else char(s, pos[0] + 2);
+    let nx2_62 = if n2ch == 62 then 1 else 0;
     let isshl = lt60 * nxt60;
-    let isshr = gt62 * nxt62;
-    let isop = isand + isorr + iseor + isshl + isshr;
-    let op = isand * 12 + isorr * 13 + iseor * 14 + isshl * 15 + isshr * 16;
-    let adv = isshl * 2 + isshr * 2 + (isand + isorr + iseor);
+    let isasr = gt62 * nxt62 * nx2_62;
+    let isshr = gt62 * nxt62 * (1 - nx2_62);
+    let isop = isand + isorr + iseor + isshl + isshr + isasr;
+    let op = isand * 12 + isorr * 13 + iseor * 14 + isshl * 15 + isshr * 16 + isasr * 17;
+    let adv = isshl * 2 + isshr * 2 + isasr * 3 + (isand + isorr + iseor);
     let _ = if isop == 1 then emit_apply_bits(s, pos, insns, n, op, adv, stab, selfname, selfstart, fntab) else 0;
     let done = if isop == 1 then 0 else 1;
     0
@@ -1831,6 +1907,19 @@ fn emit_str(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
 fn emit_array_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let strn = str_len(s);
   let _ = pos[0] = pos[0] + 1;
+  // D5b step 4 (2026-09-09): this used to store every element at [x14 + i*8] and
+  // bump x14 only AFTER the loop, so a nested literal (or any allocating call) in
+  // an element allocated from the SAME unbumped x14 and overwrote the outer
+  // elements -- exactly the defect bench/parity_constructs/c31_nested_lit.bp was
+  // frozen to catch, and the witness still had it.
+  //   mov x0, x14        = 2853045216  (aa0e03e0)  -- the base IS the value
+  //   str x0, [x14], #8  = 4160783808  (f80085c0)  -- post-index: bump per element
+  // both assembler-verified: as | objdump -d, 2026-09-09.
+  // This keeps the witness's OWN model: the base sits on the eval stack while the
+  // elements are evaluated, each element is popped into x0 and stored, and the
+  // base is the value left on the stack. No register-model import.
+  let _ = em(insns, n, 2853045216);
+  let _ = push(insns, n);
   let cnt = 0;
   let done = 0;
   while done == 0 {
@@ -1842,7 +1931,7 @@ fn emit_array_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
     let is_rb = if ch == 93 then 1 else 0;
     let _ = if is_rb == 0 then emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
     let _ = if is_rb == 0 then pop(insns, n, 0) else 0;
-    let _ = if is_rb == 0 then em(insns, n, 4177527232 + cnt * 1024) else 0;
+    let _ = if is_rb == 0 then em(insns, n, 4160783808) else 0;
     let cnt = if is_rb == 0 then cnt + 1 else cnt;
     let _ = skip_ws(s, pos);
     let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
@@ -1853,9 +1942,6 @@ fn emit_array_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
     0
   };
   let _ = pos[0] = pos[0] + 1;
-  let _ = em(insns, n, 2853045216);
-  let _ = em(insns, n, 2432696320 + cnt * 8192 + 462);
-  let _ = push(insns, n);
   n[0]
 }
 
@@ -1945,7 +2031,7 @@ fn emit_factor(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
     else if is_lb == 1 then emit_array_lit(s, pos, insns, n, stab, selfname, selfstart, fntab)
     else if is_quote == 1 then emit_str(s, pos, insns, n)
     else if is_letter == 1 then emit_ident(s, pos, insns, n, stab, selfname, selfstart, fntab)
-    else emit_num(s, pos, insns, n);
+    else emit_prefix_or_num(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let fd = 0;
   while fd == 0 {
     // progress guard: '.' that fails to consume input must not spin forever
@@ -2060,8 +2146,21 @@ fn emit_prologue(insns: [i64], n: [i64]) -> i64 {
   n[0]
 }
 
-// Epilogue: restore x19..x28 (offset ldp), free the frame, restore FP+LR, ret.
+// Epilogue: POP THE RESULT INTO x0, restore x19..x28 (offset ldp), free the
+// frame, restore FP+LR, ret.
+//
+// D5b (2026-09-09): the pop was missing. Every expression path in this compiler
+// ends by PUSHING its value (sub sp,#16 ; str x0,[sp]), so a function body left
+// its result on the eval stack and the epilogue tore the frame down over it:
+// `add sp,sp,#0x4000` then `ldp x29,x30,[sp],#16` reloaded x29/x30 from 16 bytes
+// below where the prologue saved them, so x30 came back as the RESULT and `ret`
+// branched into it -- SIGBUS on `fn main() -> i64 { 42 }`. That is why
+// tools/ddc.sh measured 1 of 75 constructs agreeing: the witness never returned
+// a value to the seed at all. `pop(insns, n, 0)` both puts the value in x0 (the
+// return register the seed prints) and restores sp, so the teardown below lines
+// up with emit_prologue again.
 fn emit_epilogue(insns: [i64], n: [i64]) -> i64 {
+  let _ = pop(insns, n, 0);
   let _ = em(insns, n, 2839835643);
   let _ = em(insns, n, 2839768057);
   let _ = em(insns, n, 2839700471);
@@ -2700,13 +2799,20 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
 // AND every inline site finds the callee source position in O(#fns)
 // (was: full-source rescan per call site -> superquadratic selfcompile).
 fn compile_program_to(s: str, insns: [i64], n: [i64]) -> i64 {
-  let fnames = zeros(256);
-  let fpos = zeros(256);
+  // D5b step 2 (2026-09-09): the fn cap was 256 and bebop.bp has 287 top-level
+  // fns, so the witness could never have read its own target even with `use`
+  // support. Raised to 1024. The loud brk #0x57 below is kept and moved to the
+  // new cap -- it was already correct, only the number was wrong.
+  // ptab budget at cnt=1024: 1 + 3*1024 = 3073 names/offsets/srcpos, + 1+256 ctor
+  // zone = 3330, + 128 two-word cache slots = 3586, and compile_fn_at reserves
+  // ptab[4000] for the scan budget. 3586 < 4000 < 4096, so zeros(4096) still fits.
+  let fnames = zeros(1024);
+  let fpos = zeros(1024);
   let cnt = [0];
   let _ = collect_fns(s, fnames, fpos, cnt);
-  let _ = if cnt[0] >= 256 then em(insns, n, 3558866944) else 0;
-  let sizes = zeros(256);
-  let starts = zeros(256);
+  let _ = if cnt[0] >= 1024 then em(insns, n, 3558866944) else 0;
+  let sizes = zeros(1024);
+  let starts = zeros(1024);
   let ptab = zeros(4096);
   let _ = ptab[0] = cnt[0];
   let pm = [0];
