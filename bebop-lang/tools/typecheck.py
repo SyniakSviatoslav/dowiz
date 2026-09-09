@@ -63,8 +63,22 @@ class TC:
                 and not is_ref(a) and not is_ref(b)
             if e[1] in ('+', '-', '*', '/', '%', '&', '|', '^', '<<', '>>', '>>>'):
                 if ('[i64]' in (a, b) and not step) or 'str' in (a, b): self.note(fn, 'arithmetic %s on %s / %s' % (e[1], a, b))
+                # ROADMAP F3 commit 2 (2026-09-09): CELL STEPPING IS NOT IN THE LANGUAGE.
+                # It was legal under A5 as "class (a) stepping", and this is the one line
+                # that retires it. The reason is not tidiness: a bounds check needs the
+                # LENGTH to travel with the array, and the only place to put it is a header
+                # cell at data-1 -- which `b = a + 1` makes unsound, because b-1 is then a
+                # DATA cell and the length read there is garbage. So the header is not an
+                # alternative to banning stepping, it is only sound afterwards.
+                # A PARTIAL BAN IS WORTHLESS: catching only the `let b = a + k` form still
+                # leaves `f(a + 1)`, and one surviving stepped value is enough to make every
+                # header unsound. It is enforced HERE, over bpref's AST, because this is the
+                # only checker that infers array-ness for every expression position.
+                # Measured before landing: 3 sites in 207 files, both of them A5's own
+                # constructs, which are rewritten in this commit and keep their exact values.
+                if step: self.note(fn, 'cell stepping (%s %s i64): an array value names a whole allocation, not a slice of one -- index it instead' % (a if a == '[i64]' else b, e[1]))
                 if (is_ref(a) or is_ref(b)) and fn not in STORE_INTERNAL: self.note(fn, 'arithmetic %s on a ref (%s / %s): a ref is an object-relative offset, deref it with st_ref' % (e[1], a, b))
-            return '[i64]' if step else 'i64'
+            return 'i64'
         if t == 'if':
             self.ty(e[1], env, fn); a, b = self.ty(e[2], env, fn), self.ty(e[3], env, fn)
             return a if a == b else ('?' if '?' in (a, b) else a)

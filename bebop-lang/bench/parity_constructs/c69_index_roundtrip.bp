@@ -1,10 +1,19 @@
-// c69_index_roundtrip (ROADMAP A5 step 1b, 2026-09-08): under the index model a `[i64]`
-// VALUE is an x17-relative CELL INDEX, so `a + k` is CELL stepping -- `b = a + 3` names
-// the same storage three cells in, and `b + 5` steps a stepped value again. The compiler
-// lowers every access to `add xt,xbase,<idx> ; ldr/str [x17,xt,lsl #3]`, so this construct
-// is the one that would break if the base were ever an address again (the byte/cell unit
-// confusion) or if the +index add were dropped. It also pins the index-0 fast path
-// (`b[0]`, no add) against the general form (`b[j]` in the fold loop).
+// c69_index_roundtrip (ROADMAP A5 step 1b, 2026-09-08; REWRITTEN 2026-09-09 for F3
+// commit 2, which makes cell stepping unrepresentable). A `[i64]` VALUE is an
+// x17-relative CELL INDEX and an address exists only inside the instruction that
+// reads or writes. This construct pins that, and it pins it WITHOUT `a + k`.
+// What it still exercises, which is everything the row actually claims:
+//   a[63]  a large literal index -- the sharpest byte/cell unit check there is, since
+//          a base that had regressed to an ADDRESS would read cell 63*8 here
+//   a[0]   the index-0 fast path (no `add`) against the general form below
+//   a[i] / a[j] in two different fns -- the general `add xt,xbase,<idx> ;
+//          ldr/str [x17,xt,lsl #3]` form, and the array VALUE carried across a call
+// What it no longer pins: that `b = a + 3` names the same storage three cells in.
+// That is correct rather than a loss -- after F3 commit 2 stepping is not a property
+// of the language, so a construct must not assert it.
+// THE VALUE IS UNCHANGED, 3969009064380, and that is the point: the same cells are
+// named directly (a[3], a[8]) instead of through a stepped alias (b[0], c[0]), so the
+// evidence A5 landed is preserved exactly rather than weakened.
 // No allocation inside any while body (L8); <= 8 live symbols per fn (exit 89).
 fn fill(a: [i64], n: i64) -> i64 {
   let i = 0;
@@ -15,9 +24,9 @@ fn fill(a: [i64], n: i64) -> i64 {
   };
   n
 }
-fn foldc(b: [i64], n: i64) -> i64 {
+fn foldc(b: [i64], from: i64, n: i64) -> i64 {
   let s = 0;
-  let j = 0;
+  let j = from;
   while j < n {
     let s = s + b[j];
     let j = j + 1;
@@ -28,8 +37,6 @@ fn foldc(b: [i64], n: i64) -> i64 {
 fn main() -> i64 {
   let a = zeros(64);
   let _ = fill(a, 64);
-  let b = a + 3;
-  let c = b + 5;
-  let s = foldc(b, 8);
-  a[63] * 1000000000 + b[0] * 1000000 + c[0] * 1000 + s
+  let s = foldc(a, 3, 11);
+  a[63] * 1000000000 + a[3] * 1000000 + a[8] * 1000 + s
 }
