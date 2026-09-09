@@ -1,0 +1,216 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+// scolp.bp — C2 refutation probe (ROADMAP C2, docs/blueprints/C2-column-storage.md §5 step 1).
+// PROBE ONLY: nothing here is reachable from bebop.bp's root, no live-path switch, no
+// codegen change, no std_golden gate row. Two stores holding the SAME 1M three-field
+// records under the two layouts the C2 row argues about:
+//   OBJECT arm (scolp_o.store): R{i64,i64,i64} per row (2 header cells + 3 payload = 5
+//     cells = 40 B, of which 16 B is header) + T{arr ref R} (1M+1 cells) + H{ref T}.
+//   COLUMN arm (scolp_c.store): three CO{arr i64} columns of 1M cells each, one 16-byte
+//     header PER COLUMN, plus K{i64,ref CO,ref CO,ref CO} and H{ref K}. A row's identity
+//     is its index, so the T ref table disappears with it.
+// Row i is a pure function of i in BOTH arms (fu/fv/fw), so the two stores hold identical
+// data and every fold below is identical between the arms by construction.
+// argv[2] = phase, argv[3] = f (fold) or t (ns per op / bytes):
+//   o / c : build the object / column store (fresh, one commit; no update phase, so the
+//           arena is already in its compacted steady state -- nothing is superseded)
+//   a / A : 10^6 point lookups reading k=1 of the 3 fields, object / column arm
+//   e / E : the same reading k=2
+//   b / B : 10^6 point lookups reading k=3 (the whole record), object / column arm
+//   z / Z : logical store size = arena_used * 8 bytes (the file is preallocated)
+// bench/vs_rust/scolp.sh drives the arms interleaved on one pinned core and medians them.
+fn lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
+fn fu(i: i64) -> i64 { (lcg(i * 2654435761) >> 33) - 1073741824 }
+fn fv(i: i64) -> i64 { (lcg(i * 40503 + 7) >> 33) - 1073741824 }
+fn fw(i: i64) -> i64 { ((fu(i) + 1073741824) >> 21) * 1024 + ((fv(i) + 1073741824) >> 21) }
+fn build_obj(base: [i64], tmp: [i64], dr: i64, dt: i64, dh: i64) -> i64 {
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let t = st_alloc(base, tx, 1000001, dt);
+  let _ = st_put(base, t, 0, 1000000);
+  let i = 0;
+  while i < 1000000 {
+    let p = st_alloc(base, tx, 3, dr);
+    let _ = st_put(base, p, 0, fu(i));
+    let _ = st_put(base, p, 1, fv(i));
+    let _ = st_put(base, p, 2, fw(i));
+    let _ = st_seal(base, p, tmp);
+    let _ = st_link(base, t, 1 + i, p);
+    let i = i + 1;
+    0
+  };
+  let _ = st_seal(base, t, tmp);
+  let h = st_alloc(base, tx, 1, dh);
+  let _ = st_link(base, h, 0, t);
+  let _ = st_seal(base, h, tmp);
+  st_commit(base, tx, h, tmp)
+}
+fn fill_col(base: [i64], col: ref CO, which: i64) -> i64 {
+  let i = 0;
+  while i < 1000000 {
+    let v = if which == 0 then fu(i) else if which == 1 then fv(i) else fw(i);
+    let _ = st_put(base, col, 1 + i, v);
+    let i = i + 1;
+    0
+  };
+  0
+}
+fn build_col(base: [i64], tmp: [i64], dc: i64, dk: i64) -> i64 {
+  let dh = st_digest("HC{ref K}");
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let cu = st_alloc(base, tx, 1000001, dc);
+  let _ = st_put(base, cu, 0, 1000000);
+  let _ = fill_col(base, cu, 0);
+  let _ = st_seal(base, cu, tmp);
+  let cv = st_alloc(base, tx, 1000001, dc);
+  let _ = st_put(base, cv, 0, 1000000);
+  let _ = fill_col(base, cv, 1);
+  let _ = st_seal(base, cv, tmp);
+  let cw = st_alloc(base, tx, 1000001, dc);
+  let _ = st_put(base, cw, 0, 1000000);
+  let _ = fill_col(base, cw, 2);
+  let _ = st_seal(base, cw, tmp);
+  let k = st_alloc(base, tx, 4, dk);
+  let _ = st_put(base, k, 0, 1000000);
+  let _ = st_link(base, k, 1, cu);
+  let _ = st_link(base, k, 2, cv);
+  let _ = st_link(base, k, 3, cw);
+  let _ = st_seal(base, k, tmp);
+  let h = st_alloc(base, tx, 1, dh);
+  let _ = st_link(base, h, 0, k);
+  let _ = st_seal(base, h, tmp);
+  st_commit(base, tx, h, tmp)
+}
+fn look_obj1(base: [i64], tmp: [i64]) -> i64 {
+  let h = st_root(base, tmp);
+  let t = st_ref(base, h, 0);
+  let x = 777;
+  let q = 0;
+  let acc = 0;
+  while q < 1000000 {
+    let x = lcg(x);
+    let id = (x >> 20) % 1000000;
+    let p = st_ref(base, t, 1 + id);
+    let acc = acc + st_get(base, p, 0);
+    let q = q + 1;
+    0
+  };
+  acc
+}
+fn look_obj3(base: [i64], tmp: [i64]) -> i64 {
+  let h = st_root(base, tmp);
+  let t = st_ref(base, h, 0);
+  let x = 777;
+  let q = 0;
+  let acc = 0;
+  while q < 1000000 {
+    let x = lcg(x);
+    let id = (x >> 20) % 1000000;
+    let p = st_ref(base, t, 1 + id);
+    let acc = acc + st_get(base, p, 0);
+    let acc = acc + st_get(base, p, 1);
+    let acc = acc + st_get(base, p, 2);
+    let q = q + 1;
+    0
+  };
+  acc
+}
+fn look_col1(base: [i64], tmp: [i64]) -> i64 {
+  let h = st_root(base, tmp);
+  let k = st_ref(base, h, 0);
+  let cu = st_ref(base, k, 1);
+  let x = 777;
+  let q = 0;
+  let acc = 0;
+  while q < 1000000 {
+    let x = lcg(x);
+    let id = (x >> 20) % 1000000;
+    let acc = acc + st_get(base, cu, 1 + id);
+    let q = q + 1;
+    0
+  };
+  acc
+}
+fn look_col3(base: [i64], tmp: [i64]) -> i64 {
+  let h = st_root(base, tmp);
+  let k = st_ref(base, h, 0);
+  let cu = st_ref(base, k, 1);
+  let cv = st_ref(base, k, 2);
+  let cw = st_ref(base, k, 3);
+  let x = 777;
+  let q = 0;
+  let acc = 0;
+  while q < 1000000 {
+    let x = lcg(x);
+    let id = (x >> 20) % 1000000;
+    let acc = acc + st_get(base, cu, 1 + id);
+    let acc = acc + st_get(base, cv, 1 + id);
+    let acc = acc + st_get(base, cw, 1 + id);
+    let q = q + 1;
+    0
+  };
+  acc
+}
+fn look_obj2(base: [i64], tmp: [i64]) -> i64 {
+  let h = st_root(base, tmp);
+  let t = st_ref(base, h, 0);
+  let x = 777;
+  let q = 0;
+  let acc = 0;
+  while q < 1000000 {
+    let x = lcg(x);
+    let id = (x >> 20) % 1000000;
+    let p = st_ref(base, t, 1 + id);
+    let acc = acc + st_get(base, p, 0);
+    let acc = acc + st_get(base, p, 1);
+    let q = q + 1;
+    0
+  };
+  acc
+}
+fn look_col2(base: [i64], tmp: [i64]) -> i64 {
+  let h = st_root(base, tmp);
+  let k = st_ref(base, h, 0);
+  let cu = st_ref(base, k, 1);
+  let cv = st_ref(base, k, 2);
+  let x = 777;
+  let q = 0;
+  let acc = 0;
+  while q < 1000000 {
+    let x = lcg(x);
+    let id = (x >> 20) % 1000000;
+    let acc = acc + st_get(base, cu, 1 + id);
+    let acc = acc + st_get(base, cv, 1 + id);
+    let q = q + 1;
+    0
+  };
+  acc
+}
+fn main(argc: i64, argv: [str]) -> i64 {
+  let ph = char(argv[2], 0);
+  let want_t = if char(argv[3], 0) == 116 then 1 else 0;
+  let is_col = if ph == 99 then 1 else if ph == 65 then 1 else if ph == 66 then 1 else if ph == 69 then 1 else if ph == 90 then 1 else 0;
+  let path = zeros(64);
+  let pl = if is_col == 1 then st_str(path, "scolp_c.store") else st_str(path, "scolp_o.store");
+  let tmp = zeros(256);
+  let size = 134217728;
+  let dr = st_digest("R{i64,i64,i64}");
+  let dt = st_digest("T{arr ref R}");
+  let dc = st_digest("CO{arr i64}");
+  let dk = st_digest("K{i64,ref CO,ref CO,ref CO}");
+  let dh = st_digest("HO{ref T}");
+  let base = st_open(path, pl, size, tmp);
+  let snap = zeros(32);
+  let _ = st_snapshot(base, snap, tmp);
+  let t0 = clock_ms();
+  let r = if ph == 111 then build_obj(base, tmp, dr, dt, dh) else if ph == 99 then build_col(base, tmp, dc, dk) else if ph == 97 then look_obj1(base, tmp) else if ph == 98 then look_obj3(base, tmp) else if ph == 65 then look_col1(base, tmp) else if ph == 66 then look_col3(base, tmp) else if ph == 101 then look_obj2(base, tmp) else if ph == 69 then look_col2(base, tmp) else 0;
+  let t1 = clock_ms();
+  let _ = st_snapshot(base, snap, tmp);
+  let _ = sys_munmap(st_addr(base), size);
+  let used = snap[4] * 8;
+  let is_size = if ph == 122 then 1 else if ph == 90 then 1 else 0;
+  let is_look = if ph == 97 then 1 else if ph == 98 then 1 else if ph == 101 then 1 else if ph == 65 then 1 else if ph == 66 then 1 else if ph == 69 then 1 else 0;
+  let val = if is_look == 1 then (t1 - t0) * 1000000 / 1000000 else t1 - t0;
+  if is_size == 1 then used else if want_t == 1 then val else r
+}
