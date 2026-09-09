@@ -403,3 +403,20 @@ the Opus-5 prompting rules: goal + intent stated once, only the constraints the 
 no filler or verification nudges, concrete reference material in a <context> block, tags in the
 order <context> <constraints> <output_format> <task>, one scope sentence. L19(c) caps still
 hold: at most two agents at once, procs < 30.
+
+L23. NOTHING IS "UNREACHABLE" UNTIL IT HAS BEEN TRIED (operator rule, 2026-09-09, binding):
+     no row, report, journal line or commit message may call a goal unreachable, impossible or
+     out of reach unless it has been attempted IN PRACTICE at least several times BY DIFFERENT
+     METHODS. Arithmetic that bounds one mechanism bounds that mechanism, not the goal: say
+     "this method gives X against a gate of Y" and name the methods not yet tried. A measured
+     REFUTATION of a specific mechanism is not covered by this law and stays as it is -- what is
+     banned is generalising from it to the goal.
+     The rule was written because two live claims failed it the day it was made. D5 said
+     two-stage DDC was "structurally impossible, not merely slow" because the witness had no
+     `use` handling; one line to `emit_epilogue` then took the witness from 0 to 46 of 73
+     non-vacuous agreements, and `use` was costed at 60-80 lines rather than being impossible.
+     B4 said the ns/edge half was "unreachable by fixing promotion alone"; it is GREEN at 435.
+     And the 2026-09-09 design study filed a self-verified checker as multi-year and out of
+     reach by pricing row F4's cost into row F7's item, when F4 is paid for anyway.
+     The honest forms are: "not attempted", "attempted by <methods>, best <number>", or
+     "costed at <number> and not scheduled". Never "impossible" without the attempts behind it.
