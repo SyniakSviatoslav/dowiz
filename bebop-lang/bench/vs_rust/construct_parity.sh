@@ -115,6 +115,10 @@ for f in "$DIR"/*.bp; do
     # under window pressure. Exited 89 on 42ce19e5, runs 17 (bpref) once vs_span_to_slots also
     # demotes kind-3 SYM entries. Drop either ingredient and it compiled clean before the fix.
     c95_symspan) EXPECT=17;;
+    # ROADMAP A6 step 2 (2026-09-09): 10^5-deep recursion on the computed frame.
+    # EXPECT is the CLOSED FORM d(n) = n, derived by hand -- tools/bpref.py cannot
+    # be the oracle (recursive interpreter, DEPTH_CAP 5000), see the .bp header.
+    c67_deeprec) EXPECT=100000;;
     # ROADMAP A6 step 1 (2026-09-09): payload ctor + RUNTIME match on a variable.
     # EXPECT from python3 tools/bpref.py bench/parity_constructs/c96_enumpay.bp.
     c96_enumpay) EXPECT=8503009;;

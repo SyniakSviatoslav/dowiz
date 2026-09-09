@@ -1,0 +1,12 @@
+// ROADMAP A6 step 2: 10^5-deep recursion. Under the flat 16 KiB frame this is
+// 1.6 GB of stack and dies on the guard page (TRAP-82); with the computed frame
+// F = 80 + 8*marks + 8 + 8*(S + tsp) the leaf fn `d` measures vc=1, marks=0,
+// S=0, tsp=0 -> F = 88 rounded to 96 B, i.e. 9.6 MB for 10^5 activations,
+// inside construct_parity.sh's own `ulimit -s 65536`.
+// EXPECT is the closed form N, derived by hand: d(n) = 1 + d(n-1), d(0) = 0,
+// so d(100000) = 100000. tools/bpref.py cannot be the oracle here -- it is a
+// recursive-descent interpreter with DEPTH_CAP 5000 (and CPython's own limit
+// below that), so the reference value is the closed form, per WORKER-CARD's
+// "host-only / out-of-range: derive by hand, show it in the comment".
+fn d(n: i64) -> i64 { if n == 0 then 0 else 1 + d(n - 1) }
+fn main() -> i64 { d(100000) }

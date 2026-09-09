@@ -206,6 +206,14 @@ ZONES = [(0, 1, "fntab"), (2200, 2711, "b1_facts"), (2712, 2714, "b1_scratch"),
          (2800, 4335, "window"), (4405, 4411, "fold"), (4412, 4449, "jumps"),
          (4450, 4546, "slots"), (4547, 4548, "window_hdr"),
          (4573, 4577, "window_cs"), (4578, 4585, "hoist"), (4591, 4591, "arm_base"), (4592, 4592, "span_slots"),
+         # ROADMAP A6 step 2 (2026-09-09): the per-fn `marks` HIGH-WATER (max
+         # while-nesting + 1) that sizes the computed frame. It cannot share the
+         # `fold` zone with fntab[4411] -- that cell is the LIVE depth, restored
+         # on the way out of every loop, so it is 0 by the time the frame is
+         # sized -- and 4412 is already the jumps base, so it takes its own zone.
+         # The blueprint drafted fntab[4578]/[4579]; those are the A2 hoist
+         # pairs today, hence 4800.
+         (4800, 4800, "frame"),
          (4640, 4648, "bank"),
          (4649, 4699, "literals"), (4750, 4750, "budget"),
          (5000, 5999, "lit_table")]

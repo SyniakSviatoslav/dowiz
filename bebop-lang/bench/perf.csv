@@ -1541,3 +1541,25 @@ ts,commit,bin,metric,value,unit,n,valid,at_max_pct,temp_mc,note
 1788937196,9149ce9,a5858877,stub_words,172,words,1,1,,,
 1788937196,9149ce9,a5858877,bin_fns,292,fns,1,1,,,
 1788937196,9149ce9,a5858877,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788942089,d166006,3673596e,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788942089,d166006,3673596e,gate_run_ms,0,ms,1,1,,,"sum of non-memo gate runs (0 runs, 0 memo hits)"
+1788942137,d166006,3673596e,bin_words,42219,words,1,1,,,bytes 170876
+1788942137,d166006,3673596e,stub_words,172,words,1,1,,,
+1788942137,d166006,3673596e,bin_fns,295,fns,1,1,,,
+1788942137,d166006,3673596e,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788942617,d166006,3673596e,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788942618,d166006,3673596e,gate_run_ms,0,ms,1,1,,,"sum of non-memo gate runs (0 runs, 0 memo hits)"
+1788942650,d166006,3673596e,bin_words,42219,words,1,1,,,bytes 170876
+1788942650,d166006,3673596e,stub_words,172,words,1,1,,,
+1788942650,d166006,3673596e,bin_fns,295,fns,1,1,,,
+1788942650,d166006,3673596e,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788942758,d166006,3673596e,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1788942758,d166006,3673596e,gate_run_ms,0,ms,1,1,,,"sum of non-memo gate runs (0 runs, 0 memo hits)"
+1788942795,d166006,3673596e,bin_words,42219,words,1,1,,,bytes 170876
+1788942795,d166006,3673596e,stub_words,172,words,1,1,,,
+1788942795,d166006,3673596e,bin_fns,295,fns,1,1,,,
+1788942795,d166006,3673596e,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1788943254,d166006,3673596e,bin_words,42219,words,1,1,,,bytes 170876
+1788943254,d166006,3673596e,stub_words,172,words,1,1,,,
+1788943254,d166006,3673596e,bin_fns,295,fns,1,1,,,
+1788943254,d166006,3673596e,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired

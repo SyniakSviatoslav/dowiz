@@ -4265,31 +4265,49 @@ fn emit_epilogue(insns: [i64], n: [i64]) -> i64 {
 // facts aren't known yet: chicken-and-egg within one compile) and by the
 // legacy single-fn compile_fn path, both of which must keep today's exact
 // word count.
-fn emit_prologue_sized(insns: [i64], n: [i64], vc: i64, has_alloc: i64, cs_hi: i64, tsp: i64) -> i64 {
+// ROADMAP A6 step 2 (2026-09-09): COMPUTED FRAME. The flat `sub sp,sp,#16384`
+// was 14080 B of frame heap (deleted in step 1, so it was dead weight on every
+// activation) plus the 80 B save area, 21 mark cells, the fn-mark cell and the
+// x15 slot region. What is left is exactly F = 80 + 8*marks + 8 + 8*(S + tsp),
+// rounded up to 16 for the AArch64 sp alignment rule, and x15 = sp + 80 +
+// 8*marks + 8 -- which is today's constant sp+256 when marks = 21, the sanity
+// check the blueprint asks for. compile_fn_at_facts already traps exit 89 at
+// S + tsp > 256, so F <= 80 + 168 + 8 + 2048 = 2304 and the single-word
+// `sub sp,sp,#F` imm12 (< 4096) can never overflow; no two-word fallback is
+// emitted, and none is needed. WORD COUNT IS UNCHANGED by this step -- only the
+// two immediates and the x15 offset move -- so compile_fn_at_total_saved's
+// arithmetic correction, and with it the two-pass bl agreement, is untouched.
+fn frame_x15off(marks: i64) -> i64 { 88 + 8 * marks }
+fn frame_size(vc: i64, tsp: i64, marks: i64) -> i64 {
+  let s0 = if vc > 8 then vc - 8 else 0;
+  let raw = frame_x15off(marks) + 8 * (s0 + tsp);
+  ((raw + 15) / 16) * 16
+}
+fn emit_prologue_sized(insns: [i64], n: [i64], vc: i64, has_alloc: i64, cs_hi: i64, tsp: i64, marks: i64) -> i64 {
   // callee-saved pairs: pair k kept iff max(vc, cs_hi) > 2k (a cs temp in
   // x20 needs pair 0 only, same as a symbol there).
   let mvc = if vc > cs_hi then vc else cs_hi;
   let _ = em(insns, n, 2847898621);
   let _ = em(insns, n, 2432697341);
-  let _ = em(insns, n, 3510637567);
+  let _ = em(insns, n, 3506439167 + frame_size(vc, tsp, marks) * 1024);
   let _ = if mvc > 0 then em(insns, n, 2835370995) else 0;
   let _ = if mvc > 2 then em(insns, n, 2835438581) else 0;
   let _ = if mvc > 4 then em(insns, n, 2835506167) else 0;
   let _ = if mvc > 6 then em(insns, n, 2835573753) else 0;
   let needs15raw = (if vc > 8 then 1 else has_alloc) + (if tsp > 0 then 1 else 0);
   let needs15 = if needs15raw > 0 then 1 else 0;
-  let _ = if needs15 == 1 then em(insns, n, 2432959471) else 0;
+  let _ = if needs15 == 1 then em(insns, n, 2432697327 + frame_x15off(marks) * 1024) else 0;
   let _ = if has_alloc == 1 then em(insns, n, 2435056622) else 0;
   n[0]
 }
 
-fn emit_epilogue_sized(insns: [i64], n: [i64], vc: i64, cs_hi: i64) -> i64 {
+fn emit_epilogue_sized(insns: [i64], n: [i64], vc: i64, cs_hi: i64, tsp: i64, marks: i64) -> i64 {
   let mvc = if vc > cs_hi then vc else cs_hi;
   let _ = if mvc > 6 then em(insns, n, 2839768057) else 0;
   let _ = if mvc > 4 then em(insns, n, 2839700471) else 0;
   let _ = if mvc > 2 then em(insns, n, 2839632885) else 0;
   let _ = if mvc > 0 then em(insns, n, 2839565299) else 0;
-  let _ = em(insns, n, 2436895743);
+  let _ = em(insns, n, 2432697343 + frame_size(vc, tsp, marks) * 1024);
   let _ = em(insns, n, 2831252477);
   let _ = em(insns, n, 3596551104);
   n[0]
@@ -4879,6 +4897,13 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let brk0 = fntab[4430];
   let ldepth = fntab[4411];
   let _ = fntab[4411] = ldepth + 1;
+  // ROADMAP A6 step 2 (2026-09-09): fntab[4411] is the LIVE depth and is
+  // restored on the way out, so it cannot size the frame. fntab[4800] is the
+  // per-fn HIGH-WATER (max nesting + 1 = the number of mark cells the frame
+  // must carry), published as the `marks` fact by compile_fn_at_total_saved.
+  // 4800 is free in the register-model map (4547/4548, 4573-4577, 4578-4585
+  // hoist pairs, 4591/4592 arm bases, 4640-4652, 4750 are all taken).
+  let _ = if ldepth + 1 > fntab[4800] then fntab[4800] = ldepth + 1 else 0;
   let slot_ok = if ldepth <= 20 then 1 else 0;
   // statement context: the window is normally empty here; park makes it
   // exact for the inline-call path (a `let` binding an inlined call's
@@ -5659,7 +5684,11 @@ fn compile_fn_at_total_saved(insns: [i64], n: [i64], fntab: [i64], stab: [i64], 
   let saved_x14 = 1 - real_alloc;
   let saved_calls = fntab[2712] * 2 * (1 - real_needs_save);
   let total_saved = (saved_pairs01 * 2 + 2 + saved_x15 + saved_x14 + saved_calls) * (1 - is_emission);
-  let _ = fntab[2714] = real_vc + 256 * real_alloc + 512 * real_cs_hi + 8192 * real_tsp;
+  // A6 step 2: `marks` joins the packed fact word at 2^22 (5 bits). It CANNOT
+  // go at 2^20 as the blueprint first drafted: since A14 tsp reaches 256, the
+  // 8192*tsp field occupies bits 13..21 and 2^20 sits inside it.
+  let real_marks = if fntab[4800] > 21 then 21 else fntab[4800];
+  let _ = fntab[2714] = real_vc + 256 * real_alloc + 512 * real_cs_hi + 8192 * real_tsp + 4194304 * real_marks;
   total_saved
 }
 
@@ -5670,7 +5699,8 @@ fn compile_fn_at_total_saved(insns: [i64], n: [i64], fntab: [i64], stab: [i64], 
 fn fw_vc(fw: i64) -> i64 { fw - (fw / 256) * 256 }
 fn fw_alloc(fw: i64) -> i64 { (fw / 256) - ((fw / 256) / 2) * 2 }
 fn fw_cshi(fw: i64) -> i64 { ((fw / 256) / 2) - (((fw / 256) / 2) / 16) * 16 }
-fn fw_tsp(fw: i64) -> i64 { ((fw / 256) / 2) / 16 }
+fn fw_tsp(fw: i64) -> i64 { let t = ((fw / 256) / 2) / 16; t - (t / 512) * 512 }
+fn fw_marks(fw: i64) -> i64 { let m = fw / 4194304; m - (m / 32) * 32 }
 
 fn compile_fn_at_facts(s: str, fntab: [i64], fpos: i64, namepos: i64, is_emission: i64) -> i64 {
   let fw0 = fntab_fact_lookup(fntab, fpos) * is_emission;
@@ -5706,6 +5736,7 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   // words late, SIGBUS). -1 never equals a position.
   let _ = fntab[4410] = 0 - 1;
   let _ = fntab[4411] = 0;  // T43: while nesting depth (frame-heap mark slot)
+  let _ = fntab[4800] = 0;  // A6 step 2: per-fn marks high-water (frame sizing)
   let _ = fntab[4412] = 0;  // T99: pending `return` placeholders
   let _ = fntab[4430] = 0;  // T99: pending `break` placeholders
   let _ = fntab[4643] = kernel_marked(s, fpos);  // C1 step 2: `kernel fn` dialect bit
@@ -5750,7 +5781,7 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   let _ = vs_reset(fntab);
   let fw0 = compile_fn_at_facts(s, fntab, fpos, namepos, is_emission);
   let pbase = n[0];
-  let _ = if is_emission == 1 then emit_prologue_sized(insns, n, fw_vc(fw0), fw_alloc(fw0), fw_cshi(fw0), fw_tsp(fw0)) else emit_prologue(insns, n);
+  let _ = if is_emission == 1 then emit_prologue_sized(insns, n, fw_vc(fw0), fw_alloc(fw0), fw_cshi(fw0), fw_tsp(fw0), fw_marks(fw0)) else emit_prologue(insns, n);
   // Params 1..8 -> x19..x26; params 9+ -> spill slots (sym_bind maps cnt>=8
   // to 100+slot). A register move for j>=8 emitted `mov x27,x8`-class words:
   // it CLOBBERED the reserved arena register AND left the spill slot unwritten
@@ -5784,7 +5815,7 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   let _ = if fntab[4548] != 255 then sys_exit(102) else 0;
   let _ = if fntab[4573] != 0 then sys_exit(104) else 0;
   let _ = patch_jumps(insns, fntab, 4412, 0, n[0]);
-  let _ = if is_emission == 1 then emit_epilogue_sized(insns, n, fw_vc(fw0), fw_cshi(fw0)) else emit_epilogue(insns, n);
+  let _ = if is_emission == 1 then emit_epilogue_sized(insns, n, fw_vc(fw0), fw_cshi(fw0), fw_tsp(fw0), fw_marks(fw0)) else emit_epilogue(insns, n);
   // B1 (2026-09-06): replaces OPT-A's post-hoc NOP patch of unused
   // callee-saved pairs and OPT-G1's generic register-field scan of the
   // emitted words (the DIVERGE-42122 bug: that scan false-positived on
