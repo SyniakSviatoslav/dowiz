@@ -1026,10 +1026,22 @@ fn bfs_read_i64_file(path: [i64], plen: i64) -> i64 {
 fn bfs_matrix_wrap(base: [i64], g: ref G2, tmp: [i64]) -> i64 {
   let tx = zeros(6);
   let _ = st_begin(base, tx, tmp);
-  let M = st_alloc(base, tx, 6, 0);
+  // A GbMatrix is TEN fields (gb.bp:8-10: n, m, nnz, fmt, rp, ci, vv, mask, gen, prev). This
+  // wrapper allocated only SIX, so fields 6..9 -- vv, mask, gen, prev -- lay OUTSIDE the object's
+  // payload and read whatever the next arena cells happen to hold. Allocate all ten and write
+  // every one of them, so the scratch matrix is a well-formed GbMatrix rather than a prefix of
+  // one (B13 diagnosis of the frontier row that could not be re-derived).
+  let M = st_alloc(base, tx, 10, 0);
   let _ = st_put(base, M, 0, st_get(base, g, 0));
+  let _ = st_put(base, M, 1, st_get(base, g, 0));
+  let _ = st_put(base, M, 2, st_get(base, g, 1));
+  let _ = st_put(base, M, 3, 1);
   let _ = st_link(base, M, 4, st_ref(base, g, 2));
   let _ = st_link(base, M, 5, st_ref(base, g, 3));
+  let _ = st_put(base, M, 6, 0);
+  let _ = st_put(base, M, 7, 0);
+  let _ = st_put(base, M, 8, 0);
+  let _ = st_put(base, M, 9, 0);
   M
 }
 // bfs_kernel_child(args): pid==0 branch ONLY, ends with sys_exit (never returns). args (7
