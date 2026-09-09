@@ -115,3 +115,6 @@ kernel/src/trader.rs
 # bebop .becache (compiler cache scratch, machine-local)
 .becache/
 .becache.bak/
+
+# agent lane worktrees (git worktrees under .claude/, machine-local and disposable)
+.claude/worktrees/
