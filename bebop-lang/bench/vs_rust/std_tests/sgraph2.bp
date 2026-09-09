@@ -91,7 +91,7 @@ fn csr_build(base: [i64], tmp: [i64], src: [i64], dst: [i64], m: i64, n: i64, rp
   let _ = st_seal(base, ci, tmp);
   0
 }
-fn root_write(base: [i64], tx: [i64], tmp: [i64], dg: i64, n: i64, e: i64, rp: ref RP, ci: ref CI, log: ref LOG, rp0: ref RP, ci0: ref CI, tb: ref TB, nlog: i64, tl: ref TL) -> ref G2 {
+fn root_write(base: [i64], tx: [i64], tmp: [i64], dg: i64, n: i64, e: i64, rp: ref RP, ci: ref CI, log: ref LOG, rp0: ref RP, ci0: ref CI, tb: ref TB, nlog: i64, tl: ref TH) -> ref G2 {
   let g = st_alloc(base, tx, 10, dg);
   let _ = st_put(base, g, 0, n);
   let _ = st_put(base, g, 1, e);
@@ -111,93 +111,203 @@ fn root_write(base: [i64], tx: [i64], tmp: [i64], dg: i64, n: i64, e: i64, rp: r
 // cnt, then (row, col) pairs -- sgraph2's edges carry no value, so an entry is a pair, not
 // a triple. 4096 is the blueprint's figure; §8 risk 1 (phase 'a' + phase 'n') measures what
 // it costs on the read side, and phase_log's row measures what it buys on the write side.
-fn tl_cap() -> i64 { 100000 }
-// tail_new(base, tx, d, old, room, tmp): blueprint invariant (1) -- an object is written
-// only inside the transaction that allocated it. The tail carried over from the committed
-// version is SHARED, so the first append of a transaction copies it; `old` is never
-// written. Callers st_supersede `old` afterwards. The chunk is allocated VARIABLE-LENGTH
-// at what this transaction can actually reach (cnt + room, capped) rather than at tl_cap():
-// allocating the full capacity every commit appends 1 + 2*cap cells and crc32s them twice
-// per batch whatever the fill is, which is what made the cap-250000 arm SLOWER than
-// cap-100000 in the first sweep (1207 vs 1042 ns/edge).
-fn tail_new(base: [i64], tx: [i64], d: [i64], old: ref TL, room: i64, tmp: [i64]) -> ref TL {
-  let c0 = if old == 0 then 0 else st_get(base, old, 0);
-  let want = if c0 + room < tl_cap() then c0 + room else tl_cap();
-  let tl = st_alloc(base, tx, 1 + 2 * want, d[6]);
-  let c = c0;
-  let _ = st_put(base, tl, 0, c);
-  let i = 0;
-  while i < 2 * c {
-    let _ = st_put(base, tl, 1 + i, st_get(base, old, 1 + i));
+fn tl_cap() -> i64 { 200000 }
+// tl_seg(): entries per SEGMENT (B4 step 2'''). The tail is no longer one chunk: TH{arr ref TG}
+// is the header (cell 0 = nseg, cells 1..nseg = segment refs) over TG{arr i64} segments (cell 0
+// = cnt, then (row,col) pairs, capacity tl_seg()). Segments 1..nseg-1 are always FULL, so the
+// total is (nseg-1)*tl_seg() + cnt(last) -- tl_count, O(1).
+// WHY: step 2' measured phase_log's non-promotion floor at 426 ns/edge, 85 % of the whole
+// 500 ns/edge gate budget, and it was tail_new copying the WHOLE shared tail plus st_seal's
+// crc32 over it, twice per batch. Step 2'' measured a segmented probe at 4.0x less
+// (291 -> 72 ns/entry) with a floor FLAT in the cap where the whole-chunk floor is LINEAR in it
+// (307/545/1257 ns/entry at cap 100k/200k/500k) -- which is why the cap is 200000 here and was
+// 100000 before: a bigger tail used to cost more per batch and now it does not, while the
+// promotion total falls as the cap rises (at cap 200000 the tail fills exactly at the end of a
+// 20-batch invocation, so there are 5 promotions over the run instead of 10).
+// 256 is the measured optimum region (72-85 ns/entry flat over capS 64..1024, 143 at 16384).
+fn tl_seg() -> i64 { 256 }
+// tail_new(base, tx, d, old, room, tmp): blueprint invariant (1) -- an object is written only
+// inside the transaction that allocated it. Segmenting keeps that EXACTLY: a FULL segment is
+// immutable (nothing ever writes it again), so any number of live transactions and committed
+// versions may share it BY REFERENCE; the PARTIAL last segment is the only mutable object and
+// tl_open copies it into a segment allocated by THIS transaction before any append, leaving the
+// old header pointing at the untouched original. The header itself is always fresh.
+// st_compact PRESERVES that sharing rather than duplicating it: st_copy_obj leaves a forwarding
+// pointer in the old object (store.bp:465-478, old[o] = 0 and old[o + 2] = at) and st_forward
+// returns it, so a segment named by k versions is copied ONCE. bench/vs_rust/segtail.sh's
+// Cheney block gates that with a pinned version re-folded AFTER a compaction.
+fn tail_new(base: [i64], tx: [i64], d: [i64], old: ref TH, room: i64, tmp: [i64]) -> ref TH {
+  let ns = if old == 0 then 0 else st_get(base, old, 0);
+  let h = st_alloc(base, tx, 1 + ns + room / tl_seg() + 4, d[6]);
+  let _ = st_put(base, h, 0, ns);
+  let i = 1;
+  while i <= ns {
+    let _ = st_link(base, h, i, st_ref(base, old, i));
     let i = i + 1;
     0
   };
-  let _ = st_seal(base, tl, tmp);
-  tl
+  let _ = tl_open(base, tx, d, h, tmp);
+  let _ = st_seal(base, h, tmp);
+  h
 }
-// tl_gen(base, tl, take, s, n): append `take` LCG-777 edges in place. s[0] carries the
-// generator state across sub-batches AND across phase invocations (the runner calls phase
-// `l` five times); the tail is already this transaction's own object, so this is in place.
-fn tl_gen(base: [i64], tl: ref TL, take: i64, s: [i64], n: i64) -> i64 {
-  let c = st_get(base, tl, 0);
+// tl_open: THE CoW, once per transaction. A partial last segment is copied (<= tl_seg()
+// entries) and the copy replaces it in this transaction's header; a FULL last segment is not
+// copied at all -- a fresh empty one is appended instead.
+fn tl_open(base: [i64], tx: [i64], d: [i64], h: ref TH, tmp: [i64]) -> i64 {
+  let ns = st_get(base, h, 0);
+  let lsg = if ns == 0 then 0 else st_ref(base, h, ns);
+  let c0 = if ns == 0 then tl_seg() else st_get(base, lsg, 0);
+  let cc = if c0 < tl_seg() then c0 else 0;
+  let idx = if c0 < tl_seg() then ns else ns + 1;
+  let nl = st_alloc(base, tx, 1 + 2 * tl_seg(), d[7]);
+  let _ = st_put(base, nl, 0, cc);
+  let i = 0;
+  while i < 2 * cc {
+    let _ = st_put(base, nl, 1 + i, st_get(base, lsg, 1 + i));
+    let i = i + 1;
+    0
+  };
+  let _ = st_seal(base, nl, tmp);
+  let _ = st_link(base, h, idx, nl);
+  let _ = st_put(base, h, 0, idx);
+  idx
+}
+fn tl_count(base: [i64], h: ref TH) -> i64 {
+  let ns = st_get(base, h, 0);
+  let lsg = if ns == 0 then 0 else st_ref(base, h, ns);
+  let c = if ns == 0 then 0 else st_get(base, lsg, 0);
+  if ns == 0 then 0 else (ns - 1) * tl_seg() + c
+}
+fn tl_addseg(base: [i64], tx: [i64], d: [i64], h: ref TH) -> ref TG {
+  let idx = st_get(base, h, 0) + 1;
+  let nl = st_alloc(base, tx, 1 + 2 * tl_seg(), d[7]);
+  let _ = st_put(base, nl, 0, 0);
+  let _ = st_link(base, h, idx, nl);
+  let _ = st_put(base, h, 0, idx);
+  nl
+}
+fn tl_put1(base: [i64], tx: [i64], d: [i64], h: ref TH, a: i64, w: i64) -> i64 {
+  let cur = st_ref(base, h, st_get(base, h, 0));
+  let c0 = st_get(base, cur, 0);
+  let hit = if c0 < tl_seg() then 1 else 0;
+  let sg = if hit == 1 then cur else tl_addseg(base, tx, d, h);
+  let c = c0 * hit;
+  let _ = st_put(base, sg, 1 + 2 * c, a);
+  let _ = st_put(base, sg, 2 + 2 * c, w);
+  let _ = st_put(base, sg, 0, c + 1);
+  0
+}
+// tl_gen: append `take` LCG-777 edges. s[0] carries the generator state across sub-batches AND
+// across phase invocations (the runner calls phase `l` five times). Every segment this call
+// touched is sealed at the end -- the crc is over ONE segment, never over the whole tail, which
+// is the other half of the step 2'' win.
+fn tl_gen(base: [i64], tx: [i64], d: [i64], h: ref TH, take: i64, s: [i64], n: i64, tmp: [i64]) -> i64 {
+  let i0 = st_get(base, h, 0);
   let k = 0;
   while k < take {
     let _ = s[0] = lcg(s[0]);
     let a = (s[0] >> 20) % n;
     let _ = s[0] = lcg(s[0]);
     let w = (s[0] >> 20) % n;
-    let _ = st_put(base, tl, 1 + 2 * (c + k), a);
-    let _ = st_put(base, tl, 2 + 2 * (c + k), w);
+    let _ = tl_put1(base, tx, d, h, a, w);
     let k = k + 1;
     0
   };
-  let _ = st_put(base, tl, 0, c + take);
-  c + take
-}
-// tail_drain(base, tl, src, dst, m): move the tail into the plain edge mirror at offset m
-// and empty the chunk. The mirror is what csr_build re-runs over (D1: the counting sort
-// never scatters into MAP_SHARED memory).
-fn tail_drain(base: [i64], tl: ref TL, src: [i64], dst: [i64], m: i64) -> i64 {
-  let c = st_get(base, tl, 0);
-  let i = 0;
-  while i < c {
-    let _ = src[m + i] = st_get(base, tl, 1 + 2 * i);
-    let _ = dst[m + i] = st_get(base, tl, 2 + 2 * i);
-    let i = i + 1;
+  let i1 = st_get(base, h, 0);
+  let j = i0;
+  while j <= i1 {
+    let _ = st_seal(base, st_ref(base, h, j), tmp);
+    let j = j + 1;
     0
   };
-  let _ = st_put(base, tl, 0, 0);
-  m + c
+  tl_count(base, h)
 }
-// tail_row(base, tl, v): sum of (1 + col) over the tail entries whose row is v -- the read
-// side of read_row (blueprint §3), applied as a delta after the L1 and L0 slices. Linear
-// in cnt: this is exactly the cost §8 risk 1 asks to measure.
-fn tail_row(base: [i64], tl: ref TL, v: i64) -> i64 {
-  let c = st_get(base, tl, 0);
+fn tl_copyout(base: [i64], h: ref TH, ns: i64, src: [i64], dst: [i64], m: i64) -> i64 {
+  let j = 1;
+  let p = m;
+  while j <= ns {
+    let sg = st_ref(base, h, j);
+    let c = st_get(base, sg, 0);
+    let i = 0;
+    while i < c {
+      let _ = src[p + i] = st_get(base, sg, 1 + 2 * i);
+      let _ = dst[p + i] = st_get(base, sg, 2 + 2 * i);
+      let i = i + 1;
+      0
+    };
+    let p = p + c;
+    let j = j + 1;
+    0
+  };
+  p
+}
+// tail_drain: move the tail into the plain edge mirror at offset m and empty it. The segments
+// are NOT written (older versions still name the full ones -- invariant (1)); only THIS
+// transaction's header is reset, and its now-stale slots are ZEROED so st_compact's mask -1
+// walk cannot resurrect drained segments through them.
+fn tail_drain(base: [i64], tx: [i64], d: [i64], h: ref TH, src: [i64], dst: [i64], m: i64, tmp: [i64]) -> i64 {
+  let ns = st_get(base, h, 0);
+  let p = tl_copyout(base, h, ns, src, dst, m);
+  let z = 1;
+  while z <= ns {
+    let _ = st_put(base, h, z, 0);
+    let z = z + 1;
+    0
+  };
+  let _ = st_put(base, h, 0, 0);
+  let _ = tl_open(base, tx, d, h, tmp);
+  p
+}
+fn tail_row_seg(base: [i64], sg: ref TG, v: i64) -> i64 {
+  let c = st_get(base, sg, 0);
   let acc = 0;
   let i = 0;
   while i < c {
-    let hit = if st_get(base, tl, 1 + 2 * i) == v then 1 else 0;
-    let acc = acc + hit * (1 + st_get(base, tl, 2 + 2 * i));
+    let hit = if st_get(base, sg, 1 + 2 * i) == v then 1 else 0;
+    let acc = acc + hit * (1 + st_get(base, sg, 2 + 2 * i));
     let i = i + 1;
     0
   };
   acc
 }
-// tail_bfs(base, tl, v, lv, level, q, t): the same delta for the traversal side -- visit
-// every tail neighbour of v. t[0] is the BFS queue tail (a cell, not a let, because the
-// enqueue happens inside this function).
-fn tail_bfs(base: [i64], tl: ref TL, v: i64, lv: i64, level: [i64], q: [i64], t: [i64]) -> i64 {
-  let c = st_get(base, tl, 0);
+// tail_row(base, h, v): sum of (1 + col) over the tail entries whose row is v -- the read side
+// of read_row (blueprint section 3), applied as a delta after the L1 and L0 slices. STILL
+// linear in the total entry count: segmenting is a WRITE-side win and buys the read side
+// nothing. The read cost is why the cap can only be raised as far as the flush discipline
+// allows -- phase_log promotes at the end of every invocation, so every committed version a
+// read phase sees has an EMPTY tail (B4 step 2''' read-index arithmetic).
+fn tail_row(base: [i64], h: ref TH, v: i64) -> i64 {
+  let ns = st_get(base, h, 0);
+  let acc = 0;
+  let j = 1;
+  while j <= ns {
+    let acc = acc + tail_row_seg(base, st_ref(base, h, j), v);
+    let j = j + 1;
+    0
+  };
+  acc
+}
+fn tail_bfs_seg(base: [i64], sg: ref TG, v: i64, lv: i64, level: [i64], q: [i64], t: [i64]) -> i64 {
+  let c = st_get(base, sg, 0);
   let i = 0;
   while i < c {
-    let hit = if st_get(base, tl, 1 + 2 * i) == v then 1 else 0;
-    let w = st_get(base, tl, 2 + 2 * i);
+    let hit = if st_get(base, sg, 1 + 2 * i) == v then 1 else 0;
+    let w = st_get(base, sg, 2 + 2 * i);
     let take = hit * (if level[w] < 0 then 1 else 0);
     let _ = if take == 1 then (let _ = level[w] = lv + 1 in 0) else 0;
     let _ = if take == 1 then (let _ = q[t[0]] = w in 0) else 0;
     let _ = t[0] = t[0] + take;
     let i = i + 1;
+    0
+  };
+  0
+}
+fn tail_bfs(base: [i64], h: ref TH, v: i64, lv: i64, level: [i64], q: [i64], t: [i64]) -> i64 {
+  let ns = st_get(base, h, 0);
+  let j = 1;
+  while j <= ns {
+    let _ = tail_bfs_seg(base, st_ref(base, h, j), v, lv, level, q, t);
+    let j = j + 1;
     0
   };
   0
@@ -332,16 +442,16 @@ fn phase_log(base: [i64], tmp: [i64], d: [i64], b0: i64, nb: i64, stall: [i64]) 
     let last = if b == b0 + nb - 1 then 1 else 0;
     let done = 0;
     while done < 10000 {
-      let room = tl_cap() - st_get(base, tl, 0);
+      let room = tl_cap() - tl_count(base, tl);
       let left = 10000 - done;
       let take = if left < room then left else room;
-      let cnt = tl_gen(base, tl, take, s, n);
+      let cnt = tl_gen(base, tx, d, tl, take, s, n, tmp);
       let done = done + take;
       let full = if cnt == tl_cap() then 1 else 0;
       let atend = if done == 10000 then last else 0;
       let ne = if cnt > 0 then 1 else 0;
       let go = if full == 1 then 1 else atend * ne;
-      let _ = if go == 1 then (let _ = s[1] = tail_drain(base, tl, src, dst, s[1]) in 0) else 0;
+      let _ = if go == 1 then (let _ = s[1] = tail_drain(base, tx, d, tl, src, dst, s[1], tmp) in 0) else 0;
       let _ = if go == 1 then csr_passes(src, dst, s[1], n, cur, prp, pci) else 0;
       let _ = if go * nold == 1 then st_supersede(base, tx, rp0) else 0;
       let _ = if go * nold == 1 then st_supersede(base, tx, ci0) else 0;
@@ -379,7 +489,7 @@ fn phase_flush(base: [i64], tmp: [i64], d: [i64]) -> i64 {
   let told = st_ref(base, g, 9);
   let tl = tail_new(base, tx, d, told, 0, tmp);
   let _ = st_supersede(base, tx, told);
-  let m2 = tail_drain(base, tl, src, dst, m);
+  let m2 = tail_drain(base, tx, d, tl, src, dst, m, tmp);
   let _ = csr_passes(src, dst, m2, n, cur, prp, pci);
   let nold = if st_get(base, g, 5) == 0 then 0 else 1;
   let _ = if nold == 1 then st_supersede(base, tx, st_ref(base, g, 5)) else 0;
@@ -405,7 +515,7 @@ fn phase_tail(base: [i64], tmp: [i64], d: [i64], k: i64) -> i64 {
   let _ = st_supersede(base, tx, told);
   let s = zeros(4);
   let _ = s[0] = 999331;
-  let _ = tl_gen(base, tl, k - st_get(base, tl, 0), s, 1000000);
+  let _ = tl_gen(base, tx, d, tl, k - tl_count(base, tl), s, 1000000, tmp);
   let _ = st_seal(base, tl, tmp);
   let nold = if st_get(base, g, 5) == 0 then 0 else 1;
   let rp0 = if nold == 1 then st_ref(base, g, 5) else 0;
@@ -413,7 +523,7 @@ fn phase_tail(base: [i64], tmp: [i64], d: [i64], k: i64) -> i64 {
   let g2 = root_write(base, tx, tmp, d[2], st_get(base, g, 0), st_get(base, g, 1), st_ref(base, g, 2), st_ref(base, g, 3), st_ref(base, g, 4), rp0, ci0, st_ref(base, g, 7), st_get(base, g, 8), tl);
   let _ = st_supersede(base, tx, g);
   let _ = st_commit(base, tx, g2, tmp);
-  st_get(base, tl, 0)
+  tl_count(base, tl)
 }
 fn tomb(base: [i64], tb: ref TB, slot: i64) -> i64 {
   (st_get(base, tb, 1 + (slot >> 6)) >> (slot & 63)) & 1
@@ -508,6 +618,9 @@ fn bfs_from(base: [i64], g: ref G2, n: i64, s: i64, level: [i64], queue: [i64]) 
   let head = 0;
   let tail = 1;
   let acc = 0;
+  // tl_count is O(1) but it is a call plus three loads, and this loop runs once per DEQUEUED
+  // vertex, so it is hoisted: the tail cannot change during a read phase (B4 step 2''').
+  let tc = tl_count(base, tl);
   while head < tail {
     let v = queue[head];
     let lv = level[v];
@@ -534,7 +647,6 @@ fn bfs_from(base: [i64], g: ref G2, n: i64, s: i64, level: [i64], queue: [i64]) 
       let k0 = k0 + 1;
       0
     };
-    let tc = st_get(base, tl, 0);
     let _ = t[0] = tail;
     let _ = if tc > 0 then tail_bfs(base, tl, v, lv, level, queue, t) else 0;
     let tail = t[0];
@@ -881,16 +993,17 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let nsrc = if argc >= 5 then parse(argv[4]) else 3;
   let b0 = if argc >= 5 then parse(argv[4]) else 0;
   let nb = if argc >= 6 then parse(argv[5]) else 10;
-  let d = zeros(7);
+  let d = zeros(8);
   let _ = d[0] = st_digest("RP{arr i64}");
   let _ = d[1] = st_digest("CI{arr i64}");
-  let _ = d[2] = st_digest("G2{i64,i64,ref RP,ref CI,ref LOG,ref RP,ref CI,ref TB,i64,ref TL}");
+  let _ = d[2] = st_digest("G2{i64,i64,ref RP,ref CI,ref LOG,ref RP,ref CI,ref TB,i64,ref TH}");
   let _ = d[3] = st_digest("LOG{arr ref E}");
   let _ = d[4] = st_digest("TB{arr i64}");
   let _ = d[5] = st_digest("E{arr i64}");
-  let _ = d[6] = st_digest("TL{arr i64}");
+  let _ = d[6] = st_digest("TH{arr ref TG}");
+  let _ = d[7] = st_digest("TG{arr i64}");
   let stall = zeros(1);
-  let lay = zeros(14);
+  let lay = zeros(16);
   let _ = lay[0] = d[0];
   let _ = lay[2] = d[1];
   let _ = lay[4] = d[2];
@@ -900,8 +1013,10 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let _ = lay[8] = d[4];
   let _ = lay[10] = d[5];
   let _ = lay[12] = d[6];
+  let _ = lay[13] = 0 - 1;
+  let _ = lay[14] = d[7];
   let t0 = clock_ms();
-  let live = if ph == 99 then st_compact(path, pl, size, lay, 7, tmp) else 0;
+  let live = if ph == 99 then st_compact(path, pl, size, lay, 8, tmp) else 0;
   let base = st_open(path, pl, size, tmp);
   let t1 = clock_ms();
   let r = if ph == 98 then phase_build(base, tmp, d, skew) else if ph == 108 then phase_log(base, tmp, d, b0, nb, stall) else if ph == 110 then phase_nbr(base, tmp) else if ph == 100 then phase_del(base, tmp, d) else if ph == 102 then phase_bfs(base, tmp, nsrc) else if ph == 112 then phase_frontier(base, tmp, nsrc) else if ph == 97 then phase_tail(base, tmp, d, nsrc) else if ph == 103 then phase_flush(base, tmp, d) else 0;

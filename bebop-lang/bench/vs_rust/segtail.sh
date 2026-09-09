@@ -14,6 +14,9 @@ g() { rm -f segtail.store segtail.store.tmp
       local v; v=$($RUN ./seed/build/seed "$T/segtail.bin" "$1" "$2" "$3" "$4" 100 | tail -1)
       [ -n "$v" ] || { echo "EMPTY OUTPUT arm=$1 want=$2 capS=$3 cap=$4" >&2; exit 2; }
       printf '%s' "$v"; }
+# k <arm> <want> <capS> <cap> <nb> <pin> -- keeps the store (no rm), for the compaction gate
+k() { local v; v=$($RUN ./seed/build/seed "$T/segtail.bin" "$1" "$2" "$3" "$4" "$5" "$6" | tail -1)
+      [ -n "$v" ] || { echo "EMPTY OUTPUT $*" >&2; exit 2; }; printf '%s' "$v"; }
 echo "== headline: 100 batches x 10^4 entries, cap 100000, arms interleaved x$REPS (ns per entry) =="
 W=(); S=()
 for r in $(seq 1 "$REPS"); do W+=("$(g w t 256 100000)"); S+=("$(g s t 256 100000)"); done
@@ -44,4 +47,27 @@ for b in range(100):
 print("  oracle_final_fold", sum((1+a)*(1+w) for a,w in tail))
 print("  oracle_pin_fold  ", sum((1+a)*(1+w) for a,w in first))
 PY
+echo "== Cheney: st_compact with segments SHARED between a pinned version and the live tail =="
+for pinf in 1 0; do
+  rm -f segtail.store segtail.store.tmp
+  k s t 256 200000 6 $pinf >/dev/null
+  echo "  pin=$pinf  pre:  pin_fold=$(k s v 256 200000 0 $pinf)  live_fold=$(k s f 256 200000 0 $pinf)  size=$(k s z 256 200000 0 $pinf)"
+  pf=$(k s k 256 200000 0 $pinf)
+  echo "  pin=$pinf  post: pin_fold=$pf  live_fold=$(k s f 256 200000 0 $pinf)  size=$(k s z 256 200000 0 $pinf)"
+done
+echo "  (pin=1 minus pin=0 post-size = what retaining the pinned version costs; if a shared full"
+echo "   segment were copied per referrer instead of once it would be ~165 KB, not ~5 KB)"
+echo "== oracle for the 6-batch build (60000 entries, cap 200000: no reset) =="
+$RUN python3 - <<'PY2'
+M=(1<<64)-1
+def lcg(x): return (x*6364136223846793005+1442695040888963407)&M
+x=777; ent=[]
+for b in range(6):
+    for kk in range(10000):
+        x=lcg(x); a=(x>>20)%1000000
+        x=lcg(x); w=(x>>20)%1000000
+        ent.append((a,w))
+print("  oracle_6batch_live_fold", sum((1+a)*(1+w) for a,w in ent))
+print("  oracle_batch1_pin_fold ", sum((1+a)*(1+w) for a,w in ent[:10000]))
+PY2
 echo "== done =="

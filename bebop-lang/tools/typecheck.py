@@ -27,7 +27,17 @@ BUILTIN = {'zeros': (['i64'], '[i64]'), 'str_len': (['str'], 'i64'), 'char': (['
            'sys_exit_thread_guard': (['i64', 'i64'], 'i64'), 'sys_readbuf': (['i64', 'i64'], 'str'), 'sys_mmap': (['i64'] * 6, 'i64'),
            'sys_munmap': (['i64', 'i64'], 'i64'), 'sys_ftruncate': (['i64', 'i64'], 'i64'), 'sys_rename': (['[i64]', 'i64', '[i64]', 'i64'], 'i64'),
            'sys_arena_end': ([], 'i64'), 'sys_setaffinity': (['[i64]', 'i64'], 'i64'), 'clz': (['i64'], 'i64'), 'crc32': (['[i64]', 'i64'], 'i64'), 'crc32x': (['[i64]', 'i64', 'i64'], 'i64'), 'sys_msync': (['i64', 'i64', 'i64'], 'i64'), 'sys_mprotect': (['i64', 'i64', 'i64'], 'i64'), 'sys_fsync': (['i64'], 'i64'), 'hvham': (['[i64]', '[i64]', 'i64'], 'i64'), 'hvham2': (['[i64]', 'i64', '[i64]', 'i64', 'i64'], 'i64'),
-           'sys_run': (['i64', 'i64', 'i64', '[i64]'], 'i64'), 'sys_wait4': (['i64', '[i64]', 'i64', 'i64'], 'i64')}
+           'sys_run': (['i64', 'i64', 'i64', '[i64]'], 'i64'), 'sys_wait4': (['i64', '[i64]', 'i64', 'i64'], 'i64'),
+           # A9 step 3 scalar form, added to this table 2026-09-09 -- it had been
+           # dispatched by the compiler (emit_sys_scan, 46 words) and implemented by
+           # bpref since it landed, but was absent HERE, so every `scan(...)` call
+           # typed `?` and no rung ever looked at it. Signature from bebop.bp's own
+           # emitter comment: scan(s, pos, class) -> new pos; x0 = s (raw byte base,
+           # the same address form char() takes), x1 = the pos ARRAY (pos[0] is
+           # advanced and written back, pos[1] is the length bound), x2 = class, a
+           # runtime value. tools/builtin_surface.py is the gate that makes an
+           # omission like this RED instead of silent.
+           'scan': (['str', '[i64]', 'i64'], 'i64')}
 class TC:
     def __init__(self, p, fname):
         self.p, self.fname, self.findings = p, fname, []

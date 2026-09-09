@@ -24,6 +24,13 @@ use "selfhost/prelude/store.bp"
 // copied before the append. Phase `v` PROVES this rather than asserting it: it keeps the
 // header batch 1 committed, runs all 100 batches on top, and re-folds through that old header
 // at the end. If any segment had been written in place the old fold would move.
+// argv[7] = 1 to PIN the batch-1 tail in root cell 1 (default), 0 to let cell 1 track the live
+// one -- the control arm for the compaction-size discriminator. argv[6] = 0 runs no batches, so
+// a later invocation can fold or compact the store an earlier one left.
+// want `k` = st_compact then fold the PIN, `K` = st_compact then fold the LIVE tail, `y` =
+// st_compact then print the compacted size. The Cheney case: a FULL segment named by BOTH the
+// pinned version and the live one must be copied ONCE (store.bp st_copy_obj leaves a forwarding
+// pointer, st_forward returns it), and the pin must still fold correctly afterwards.
 // argv[2] = phase (w|s), argv[3] = t (ns per entry) | f (fold of the final tail) | v (the
 // batch-1 fold re-read at the end -- the invariant), argv[4] = capS (arm S segment size),
 // argv[5] = tail cap in entries, argv[6] = batches (default 100, 10^4 entries each).
@@ -196,7 +203,8 @@ fn w_batch(base: [i64], tmp: [i64], p: [i64], s: [i64], tx: [i64]) -> ref TL {
   let _ = s[1] = s[1] + 10000;
   let g2 = st_alloc(base, tx, 2, p[4]);
   let _ = st_link(base, g2, 0, tl);
-  let pin = if s[2] == 0 then tl else st_ref(base, g, 1);
+  let pinq = if s[2] == 0 then 1 else 1 - p[7];
+  let pin = if pinq == 1 then tl else st_ref(base, g, 1);
   let _ = st_link(base, g2, 1, pin);
   let _ = s[2] = 1;
   let _ = st_seal(base, g2, tmp);
@@ -218,7 +226,8 @@ fn s_batch(base: [i64], tmp: [i64], p: [i64], s: [i64], tx: [i64]) -> ref TH {
   let _ = s[1] = s[1] + 10000;
   let g2 = st_alloc(base, tx, 2, p[4]);
   let _ = st_link(base, g2, 0, h);
-  let pin = if s[2] == 0 then h else st_ref(base, g, 1);
+  let pinq = if s[2] == 0 then 1 else 1 - p[7];
+  let pin = if pinq == 1 then h else st_ref(base, g, 1);
   let _ = st_link(base, g2, 1, pin);
   let _ = s[2] = 1;
   let _ = st_seal(base, g2, tmp);
@@ -285,6 +294,15 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let _ = p[4] = st_digest("SG{ref TH,ref TH}");
   let _ = p[5] = st_digest("TL{arr i64}");
   let _ = p[6] = if argc >= 7 then parse_i64(argv[6]) else 100;
+  let _ = p[7] = if argc >= 8 then parse_i64(argv[7]) else 1;
+  let lay = zeros(6);
+  let _ = lay[0] = p[0];
+  let _ = lay[2] = if ph == 119 then p[5] else p[2];
+  let _ = lay[3] = if ph == 119 then 0 else 0 - 1;
+  let _ = lay[4] = p[4];
+  let _ = lay[5] = 3;
+  let doc = if want == 107 then 1 else if want == 75 then 1 else if want == 121 then 1 else 0;
+  let _ = if doc == 1 then st_compact(path, pl, size, lay, 3, tmp) else 0;
   let base = st_open(path, pl, size, tmp);
   let isw = if ph == 119 then 1 else 0;
   let fresh = if st_root(base, tmp) == 0 then 1 else 0;
@@ -300,12 +318,15 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let g = st_root(base, tmp);
   let cur = st_ref(base, g, 0);
   let pin = st_ref(base, g, 1);
-  let obj = if want == 118 then pin else cur;
+  let ispin = if want == 118 then 1 else if want == 107 then 1 else 0;
+  let obj = if ispin == 1 then pin else cur;
   let fold = if isw == 1 then tw_fold(base, obj) else ts_fold(base, obj);
   let snap = zeros(32);
   let _ = st_snapshot(base, snap, tmp);
   let used = snap[4] * 8;
   let _ = sys_munmap(st_addr(base), size);
-  let ns = (t1 - t0) * 1000000 / (p[6] * 10000);
-  if want == 116 then ns else if want == 122 then used else fold
+  let den = if p[6] == 0 then 1 else p[6] * 10000;
+  let ns = (t1 - t0) * 1000000 / den;
+  let issz = if want == 122 then 1 else if want == 121 then 1 else 0;
+  if want == 116 then ns else if issz == 1 then used else fold
 }
