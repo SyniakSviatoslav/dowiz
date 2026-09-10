@@ -11,6 +11,24 @@
 // 6 migration_table, 7 live_cells, 8 superseded_cells, 9 reserved (B1 `anc`),
 // 10 commit-object offset (C3), 11 heads-table offset (C3), 12..14 zero, 15 crc32 of
 // cells 0..14. A reader picks the valid superblock with the higher generation.
+//
+// PartTab (B5 step 1, P=1 degenerate case): the live superblock's `root` cell (3)
+// points at a PartTab object. PartTab = 16 + 3*P cells; for P=1 that is 19 cells.
+//   cells 0..15   = exactly the live superblock's 16 cells (magic..crc) — a snapshot
+//                    of the superblock AS WRITTEN by the committing thread, so a reader
+//                    that copies PartTab gets a self-consistent superblock + partition
+//                    table in one object whose crc covers both.
+//   cells 16..18  = P=1 partition entry: [root_p, used_p, gen_p] (3 cells).
+//                    root_p = the partition's root object offset (== superblock root
+//                    for P=1), used_p = the partition's arena cursor (== superblock
+//                    arena_used for P=1), gen_p = the partition's generation (==
+//                    superblock generation for P=1).
+// The superblock's cell 3 (root) names this PartTab; cells 4 (arena_used) and 2
+// (generation) are now DERIVED from PartTab for P=1 (same values, read-through
+// for byte-identical behaviour). st_begin reads used_p from PartTab; st_commit
+// writes a new PartTab' with (root_p, used_p, gen_p+1) and bumps the global
+// superblock generation too (still gen+1, same as today).
+//
 // Transaction tx (6 cells): 0 live sb, 1 mark, 2 cursor, 3 live delta,
 // 4 superseded delta, 5 next generation. Commit = write the OTHER superblock.
 // crc32 is crc32x over the raw little-endian bytes of the cells (no staging).
@@ -185,14 +203,74 @@ fn st_map_ro(path: [i64], plen: i64, size: i64) -> [i64] {
   let _ = sys_close(fd);
   base
 }
+// st_parttab_cells(p: i64): number of cells in a PartTab for P=p partitions (16 + 3*P).
+fn st_parttab_cells(p: i64) -> i64 { 16 + p * 3 }
+
+// st_parttab_write(base, pt_off, sb, gen, root, used, tmp): write a PartTab object
+// at pt_off. For P=1: cells 0..15 = superblock copy (magic..crc), cell 16 = root_p,
+// cell 17 = used_p, cell 18 = gen_p. The crc (cell 15) covers ALL 19 cells.
+// pt_off is an arena object offset (same type as st_alloc returns).
+fn st_parttab_write(base: [i64], pt_off: i64, sb: i64, gen: i64, root: i64, used: i64, tmp: [i64]) -> i64 {
+  // superblock copy into PartTab cells 0..15
+  let _ = base[pt_off] = base[sb];
+  let _ = base[pt_off + 1] = base[sb + 1];
+  let _ = base[pt_off + 2] = base[sb + 2];
+  let _ = base[pt_off + 3] = base[sb + 3];
+  let _ = base[pt_off + 4] = base[sb + 4];
+  let _ = base[pt_off + 5] = base[sb + 5];
+  let _ = base[pt_off + 6] = base[sb + 6];
+  let _ = base[pt_off + 7] = base[sb + 7];
+  let _ = base[pt_off + 8] = base[sb + 8];
+  let _ = base[pt_off + 9] = base[sb + 9];
+  let _ = base[pt_off + 10] = base[sb + 10];
+  let _ = base[pt_off + 11] = base[sb + 11];
+  let _ = base[pt_off + 12] = base[sb + 12];
+  let _ = base[pt_off + 13] = base[sb + 13];
+  let _ = base[pt_off + 14] = base[sb + 14];
+  let _ = base[pt_off + 15] = base[sb + 15];
+  // P=1 partition entry at cells 16..18
+  let _ = base[pt_off + 16] = root;   // root_p
+  let _ = base[pt_off + 17] = used;   // used_p
+  let _ = base[pt_off + 18] = gen;    // gen_p
+  // re-crc over all 19 cells (the superblock copy is now stale; crc must cover
+  // the full PartTab including the partition entry)
+  let _ = base[pt_off + 15] = st_crc(base, pt_off, 19, tmp);
+  pt_off
+}
+
+// st_parttab_used(base, sb, pt_off: i64): read used_p from a PartTab (cell 17 for P=1).
+// When pt_off == 0 (no PartTab yet, e.g. fresh store before first commit),
+// fall back to the superblock's cell 4 directly for byte-identical behaviour.
+// `sb` is the live superblock index (0 or 512), already picked.
+fn st_parttab_used(base: [i64], sb: i64, pt_off: i64) -> i64 {
+  if pt_off == 0 then base[sb + 4] else base[pt_off + 17]
+}
+
+// st_parttab_gen(base, sb, pt_off: i64): read gen_p from a PartTab (cell 18 for P=1).
+// When pt_off == 0, fall back to the superblock's cell 2.
+fn st_parttab_gen(base: [i64], sb: i64, pt_off: i64) -> i64 {
+  if pt_off == 0 then base[sb + 2] else base[pt_off + 18]
+}
+
+// st_parttab_root(base, pt_off: i64): read root_p from a PartTab (cell 16 for P=1).
+// When pt_off == 0, return 0 (no root yet).
+fn st_parttab_root(base: [i64], pt_off: i64) -> i64 {
+  if pt_off == 0 then 0 else base[pt_off + 16]
+}
+
 fn st_begin(base: [i64], tx: [i64], tmp: [i64]) -> i64 {
   let sb = st_pick(base, tmp);
   let _ = tx[0] = sb;
-  let _ = tx[1] = base[sb + 4];
-  let _ = tx[2] = base[sb + 4];
+  // B5 step 1: read used_p from PartTab instead of sb+4 directly.
+  // For P=1, PartTab is at base[sb+3] (the root cell), and used_p (cell 17)
+  // equals the old sb+4 value — byte-identical behaviour.
+  let pt = base[sb + 3];
+  let _ = tx[1] = st_parttab_used(base, sb, pt);
+  let _ = tx[2] = st_parttab_used(base, sb, pt);
   let _ = tx[3] = 0;
   let _ = tx[4] = 0;
-  let _ = tx[5] = base[sb + 2] + 1;
+  // next generation: gen_p + 1 (== sb+2 + 1 for P=1)
+  let _ = tx[5] = st_parttab_gen(base, sb, pt) + 1;
   sb
 }
 // st_alloc(base, tx, len, digest): bump-allocate an object of len payload cells;
@@ -227,7 +305,22 @@ fn st_commit_m(base: [i64], tx: [i64], root: i64, mig: i64, tmp: [i64]) -> i64 {
   let sb = tx[0];
   let live = base[sb + 7] + tx[3] - tx[4];
   let sup = base[sb + 8] + tx[4];
-  let _ = st_sb_write_m(base, 512 - sb, tx[5], root, tx[2], live, sup, mig, tmp);
+  // B5 step 1: write a new PartTab object in the arena (allocated in the OTHER
+  // superblock's region, since we're toggling). The PartTab carries the new
+  // (root, used, gen+1) for P=1. For P=1, root_p = root, used_p = tx[2] (the
+  // new cursor after all allocations), gen_p = tx[5] (the new generation).
+  //
+  // The PartTab replaces the superblock's root cell: the new superblock's cell 3
+  // points at this PartTab. Cells 4 (used) and 2 (gen) in the superblock are
+  // still set to the same values for backward compatibility (readers that don't
+  // know about PartTab still see correct values), but the authority for P>=1
+  // moves to the PartTab.
+  let pt = st_alloc(base, tx, st_parttab_cells(1), st_digest("PartTab"));
+  let _ = st_parttab_write(base, pt, sb, tx[5], root, tx[2], tmp);
+  let _ = st_seal(base, pt, tmp);
+  // Write the OTHER superblock with root = PartTab offset, used = tx[2] (same
+  // as before for byte-compat), gen = tx[5] (same as before).
+  let _ = st_sb_write_m(base, 512 - sb, tx[5], pt, tx[2], live, sup, mig, tmp);
   tx[5]
 }
 fn st_mig(base: [i64], tmp: [i64]) -> i64 { base[st_pick(base, tmp) + 6] }
@@ -235,6 +328,12 @@ fn st_mig(base: [i64], tmp: [i64]) -> i64 { base[st_pick(base, tmp) + 6] }
 // validate the crc on the COPY -- a reader racing a writer's superblock toggle sees
 // either a whole superblock or a torn one that fails its crc (then the other is
 // tried). Returns the superblock index taken, -1 if neither copy validated.
+//
+// B5 step 1: this function copies ONLY the superblock (32 cells: two copies).
+// The PartTab copy is done by st_snapshot_pt, which requires a 51-cell snap buffer
+// (32 superblock + 19 PartTab). Old callers (G5/G6/G7/G8) keep using st_snapshot
+// with zeros(32) — their behaviour is byte-identical. New B5 code uses
+// st_snapshot_pt to get the PartTab too.
 fn st_snapshot(base: [i64], snap: [i64], tmp: [i64]) -> i64 {
   let k = 0;
   while k < 32 {
@@ -252,6 +351,34 @@ fn st_snapshot(base: [i64], snap: [i64], tmp: [i64]) -> i64 {
     0
   };
   pick
+}
+
+// st_snapshot_pt(base, snap, tmp): full snapshot including PartTab (B5 step 1).
+// snap must have at least 51 cells: 32 for two superblock copies, 19 for the
+// PartTab (P=1). Copies the live superblock (as st_snapshot), then copies the
+// live PartTab (from the root cell) into snap[32..50] and validates its crc
+// (cell 15 of PartTab = snap[47], crc over 19 cells starting at snap[32]).
+// If the PartTab crc fails, the superblock copy is invalidated (snap[0] = 0)
+// so the caller retries. Returns the superblock index taken.
+fn st_snapshot_pt(base: [i64], snap: [i64], tmp: [i64]) -> i64 {
+  let pick = st_snapshot(base, snap, tmp);
+  let pt = snap[3];
+  // Copy PartTab cells 0..18 into snap[32..50] when pt != 0.
+  // When pt == 0, the loop bound is 0 so nothing is copied.
+  let q = 0;
+  while q < (if pt == 0 then 0 else 19) {
+    let _ = snap[32 + q] = base[pt + q];
+    let q = q + 1;
+    0
+  };
+  // Validate PartTab crc on the copy when pt != 0; invalidate snapshot on failure.
+  let _ = if pt != 0 then (
+    if snap[47] != st_crc(snap, 32, 19, tmp) then snap[0] = 0 else 0
+  ) else 0;
+  // If snapshot was invalidated, return -1.
+  if pick < 0 then pick else (
+    if snap[0] == st_magic() then pick else 0 - 1
+  )
 }
 // st_sync(base, nbytes): msync(MS_SYNC = 4) the first nbytes of the mapping (T110) — the
 // durable-commit row: call it on the appended range before st_commit and on the
