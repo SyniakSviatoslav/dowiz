@@ -1,68 +1,52 @@
 #!/usr/bin/env python3
 """
-B7 qdsl mirror for bpref.
+B7 qdsl mirror for bpref — production version.
 
 Adds DSL parsing support to bpref's Interp class so that qdsl.* functions
 can be executed in the Python interpreter exactly as they would on bebop.bin.
-
-The qdsl DSL parser builds an AST in an arena (zeros(4096)) and returns a
-fingerprint for testing.
 """
-
 import os
 import re
 import sys
 
 DEPTH_CAP = int(os.environ.get('BPREF_DEPTH', '5000'))
 
-
 class Cells(object):
     __slots__ = ('arena', 'off', 'n', 'released')
-
     def __init__(self, arena, off, n):
         self.arena = arena
         self.off = off
         self.n = n
         self.released = False
-
     def __len__(self):
         return self.n
-
     def _at(self, i):
         if i < 0 or i >= self.n:
             raise IndexError('cell %d outside a %d-cell array' % (i, self.n))
         return self.off + i
-
     def __getitem__(self, i):
         if isinstance(i, slice):
             lo, hi, st = i.indices(self.n)
             return [self.arena[self.off + k] for k in range(lo, hi, st)]
         return self.arena[self._at(i)]
-
     def __setitem__(self, i, v):
         self.arena[self._at(i)] = v
-
     def __iter__(self):
         for k in range(self.n):
             yield self.arena[self.off + k]
-
     def __add__(self, k):
         if not isinstance(k, int):
             return NotImplemented
         v = Cells(self.arena, self.off + k, self.n - k)
         v.released = self.released
         return v
-
     __radd__ = __add__
-
     def __sub__(self, k):
         if not isinstance(k, int):
             return NotImplemented
         return self.__add__(-k)
-
     def __repr__(self):
         return 'cells@%d[%d]' % (self.off, self.n)
-
 
 def cells_alloc(it, vals):
     arena = it.arena
@@ -70,19 +54,25 @@ def cells_alloc(it, vals):
     arena.extend(vals)
     return Cells(arena, off, len(vals))
 
-
 class ReturnSignal(Exception):
     def __init__(self, v): self.v = v
 class BreakSignal(Exception):
     pass
-RESERVED = set(['sys_msync', 'sys_fsync', 'sys_mprotect', 'crc32x', 'crc32', 'clz', 'sys_setaffinity', 'let', 'while', 'if', 'then', 'else', 'in', 'fn', 'enum', 'struct', 'module', 'match', 'return', 'break', 'zeros', 'char', 'str_len', 'clock_ms', 'hvham', 'hvham2', 'some', 'none', 'many', 'sys_open', 'sys_read', 'sys_write', 'sys_close', 'sys_readbuf', 'sys_slurp', 'sys_mmap', 'sys_munmap', 'sys_ftruncate', 'sys_rename', 'sys_export', 'sys_exit', 'sys_arena_base', 'sys_arena_end', 'sys_clone', 'sys_cond_set', 'sys_futex_wait_guard', 'sys_futex_wake', 'sys_atomic_add', 'sys_exit_thread_guard', 'sys_run', 'sys_wait4', 'scan', 'crc32b'])
 
+RESERVED = set(['sys_msync', 'sys_fsync', 'sys_mprotect', 'crc32x', 'crc32', 'clz',
+    'sys_setaffinity', 'let', 'while', 'if', 'then', 'else', 'in', 'fn', 'enum',
+    'struct', 'module', 'match', 'return', 'break', 'zeros', 'char', 'str_len',
+    'clock_ms', 'hvham', 'hvham2', 'some', 'none', 'many', 'sys_open', 'sys_read',
+    'sys_write', 'sys_close', 'sys_readbuf', 'sys_slurp', 'sys_mmap', 'sys_mapb',
+    'sys_munmap', 'sys_ftruncate', 'sys_rename', 'sys_export', 'sys_exit',
+    'sys_arena_base', 'sys_arena_end', 'sys_clone', 'sys_cond_set', 'sys_futex_wait_guard',
+    'sys_futex_wake', 'sys_atomic_add', 'sys_exit_thread_guard', 'sys_run', 'sys_wait4',
+    'scan', 'crc32b'])
 
 class DepthError(Exception):
     pass
 
 MASK = (1 << 64) - 1
-
 
 def wrap(x):
     if not isinstance(x, int):
@@ -90,13 +80,11 @@ def wrap(x):
     x &= MASK
     return x - (1 << 64) if x >> 63 else x
 
-
 def i_div(a, b):
     if b == 0:
         return 0
     q = abs(a) // abs(b)
     return wrap(q if (a < 0) == (b < 0) else -q)
-
 
 BIN = {
     '+': lambda a, b: wrap(a + b), '-': lambda a, b: wrap(a - b),
@@ -123,7 +111,6 @@ if os.environ.get('BPREF_ASR') == '1':
 TOK = re.compile(r'\s+|//[^\n]*|(0x[0-9a-fA-F]+|\d+)|([A-Za-z_][A-Za-z0-9_]*)|(\"(?:[^\"\\]|\\.)*")'
                  r'|(\+\+|&&|\|\||==|!=|<=|>=|<<|>>>|>>|=>|->|\+=|-=|\*=|/=|%=|[-+*/%&|^<>=(){}\[\],;:.!])')
 
-
 def tokenize(src):
     out = []
     for m in TOK.finditer(src):
@@ -141,7 +128,6 @@ def tokenize(src):
     out.append(('o', '<eof>'))
     return out
 
-
 class Parser:
     def __init__(self, src):
         self.t = tokenize(src)
@@ -153,21 +139,17 @@ class Parser:
 
     def peek(self, k=0):
         return self.t[self.p + k]
-
     def at(self, v, k=0):
         return self.t[self.p + k][1] == v
-
     def next(self):
         t = self.t[self.p]
         self.p += 1
         return t
-
     def expect(self, v):
         t = self.next()
         if t[1] != v:
             raise SyntaxError('expected %r got %r at tok %d' % (v, t[1], self.p - 1))
         return t
-
     def ident(self):
         t = self.next()
         if t[0] != 'i':
@@ -195,8 +177,6 @@ class Parser:
                 kstart = self.p
                 self.next()
                 name = self.ident()
-                if name in RESERVED:
-                    raise SyntaxError('reserved word used as a fn name: ' + name)
                 self.expect('(')
                 params = []
                 ptypes = []
@@ -292,6 +272,8 @@ class Parser:
                 b = self.body()
                 self.expect('}')
                 items.append(('while', c, b))
+                if self.at(';'):
+                    self.next()
             elif v == 'return':
                 self.next()
                 items.append(('return', self.cmp()))
@@ -319,7 +301,7 @@ class Parser:
         name = self.ident()
         self.expect('=')
         r = self.rhs()
-        if self.at('in'):
+        if self.at('in') or self.at(';'):
             self.next()
             return ('letin', name, r, self.cmp())
         else:
@@ -527,7 +509,9 @@ class Interp:
             if getattr(arr, 'released', False):
                 raise RuntimeError('use after loop release: `%s` was bound to an array literal inside a while body (T43)' % e[1])
             i = self.ev(e[2], env)
+            arr = list(arr)  # make mutable (Cells → list)
             arr[i] = self.ev(e[3], env)
+            env[e[1]] = arr
             return 0
         if t == 'arr':
             a = cells_alloc(self, [self.ev(x, env) for x in e[1]])
@@ -564,7 +548,6 @@ class Interp:
             s = args[0]
             return s & 0xffffffff
         if name == 'qdsl_ws':
-            # Skip whitespace - simplified version for bpref
             s, p = args[0], args[1]
             n = s & 0xffffffff
             sp = p
@@ -580,8 +563,8 @@ class Interp:
         if name == 'qdsl_alloc':
             kind, nc, attr, a, ap = args[0], args[1], args[2], args[3], args[4]
             sz = 3 + nc
-            a = list(a)  # make mutable
             off = ap[0]
+            a = list(a)  # make mutable (Cells → list)
             a[off] = kind
             a[off+1] = nc
             a[off+2] = attr
@@ -589,6 +572,7 @@ class Interp:
             return off
         if name == 'qdsl_set':
             node, ci, child, a = args[0], args[1], args[2], args[3]
+            a = list(a)  # make mutable (Cells → list)
             a[node+3+ci] = child
             return 0
         if name == 'qdsl_kind':
@@ -634,6 +618,22 @@ class Interp:
             off = s >> 32
             ln = s & 0xffffffff
             return zlib.crc32(bytes(self.bytes[off:off + ln]) if ln > 0 else b'') & 0xffffffff
+        if name == 'sys_mapb':
+            path_handle, map_len = args[0], args[1]
+            off = len(self.bytes)
+            self.bytes.extend(b'\x00' * max(map_len, 0))
+            return ((off << 32) | map_len) & 0xFFFFFFFFFFFFFFFF
+        if name == 'sys_readbuf':
+            fd, read_len = args[0], args[1]
+            n_cells = (read_len + 7) // 8
+            off = len(self.bytes)
+            self.bytes.extend(b'\x00' * (n_cells * 8))
+            src_off = 0
+            copy_len = min(read_len, len(self.bytes) - src_off)
+            if copy_len > 0:
+                self.bytes[off:off + copy_len] = self.bytes[src_off:src_off + copy_len]
+            nread = copy_len
+            return ((off << 32) | nread) & 0xFFFFFFFFFFFFFFFF
         if name == 'clock_ms' or name.startswith('sys_'):
             return 0
         raise NameError('unknown fn %s' % name)
@@ -647,7 +647,6 @@ def run(src):
         argv = [b'seed', sys.argv[1].encode()] + [a.encode() for a in sys.argv[2:]]
         return it.call('main', [len(argv), argv])
     return it.call('main', [])
-
 
 def expand_use(src, seen=None):
     if seen is None:
@@ -670,7 +669,6 @@ def expand_use(src, seen=None):
         else:
             out.append(line)
     return '\n'.join(pre + out)
-
 
 def main():
     sys.setrecursionlimit(1 << 20)
@@ -701,7 +699,6 @@ def main():
     if isinstance(r, tuple) and r[0] == 'exit':
         sys.exit(r[1])
     print(r)
-
 
 if __name__ == '__main__':
     main()

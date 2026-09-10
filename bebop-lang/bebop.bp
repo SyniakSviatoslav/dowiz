@@ -1700,8 +1700,10 @@ fn emit_sys_fsync(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   n[0]
 }
 
-// sys_readbuf(fd,len): raw read into the IO scratch zone, returns its
-// address — the standard handoff for feeding source text to emit_words.
+// sys_readbuf(fd,len): allocate zeros(ceil(len/8)) in the byte region,
+// read(fd, x17+off, len), return (off<<32)|nread handle. This replaces the
+// old IO-scratch-zone version — the returned handle feeds char()/str_len()
+// directly (A7 step 3).
 fn emit_sys_readbuf(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
@@ -1711,15 +1713,34 @@ fn emit_sys_readbuf(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], sel
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = vs_deliver(insns, n, fntab, stab, 2);
-  em(insns, n, 2852193250);
-  em(insns, n, 3531866122);
-  em(insns, n, 3406431114);
-  em(insns, n, 2852783073);
+  // x0=fd, x1=len. Save both in callee-saved regs, compute n_cells,
+  // bump arena, zero, read, construct handle. 26 words + vs_push.
+  em(insns, n, 2852127731);
+  em(insns, n, 2852193268);
+  em(insns, n, 2432704149);
+  em(insns, n, 3544448693);
+  em(insns, n, 3548246689);
+  em(insns, n, 2853897206);
+  em(insns, n, 2332099287);
+  em(insns, n, 3944154015);
+  em(insns, n, 1409286377);
+  em(insns, n, 2332099451);
+  em(insns, n, 2853569507);
+  em(insns, n, 335544322);
+  em(insns, n, 4160783487);
+  em(insns, n, 3944153215);
+  em(insns, n, 1426063307);
+  em(insns, n, 3406889665);
+  em(insns, n, 2332099108);
+  em(insns, n, 2853372896);
+  em(insns, n, 2852193251);
+  em(insns, n, 2852389857);
+  em(insns, n, 2853438434);
   em(insns, n, 3531605992);
   em(insns, n, 3556769793);
-  em(insns, n, 2852127725);
-  em(insns, n, 942500191);
-  em(insns, n, 2852783072);
+  em(insns, n, 2852127735);
+  em(insns, n, 3546315872);
+  em(insns, n, 2853634048);
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
   n[0]
 }
@@ -1833,6 +1854,7 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   else if name == 15758082337069564947 then emit_sys_readbuf(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == 76753189879327100 then emit_sys_open(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == 76753189885882068 then emit_sys_read(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 76753189874574932 then emit_sys_mapb(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == 10054667876552415181 then emit_sys_write(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == 10054667870649031050 then emit_sys_close(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == 76753189856984008 then emit_sys_exit(s, pos, insns, n, stab, selfname, selfstart, fntab)
@@ -7422,6 +7444,51 @@ fn emit_sys_mmap(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   // (page-aligned => the low 3 bits are 0). A negative errno stays negative.
   em(insns, n, 3406888960);
   em(insns, n, 2470706176);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// sys_mapb(path, len): mmap a file into the reserve — path is a str handle
+// (off<<32|len), len is the map length. openat the path, mmap PROT_READ,
+// close the fd, return ((addr-x17)<<32)|len as a str handle. The caller reads
+// the mapped bytes through char(addr_handle, i) like any other handle (A7 step 3).
+fn emit_sys_mapb(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 2);
+  // x0=path_handle, x1=map_len. Extract path, openat, mmap, close, build handle.
+  // 26 words + vs_push.
+  em(insns, n, 3546348546);
+  em(insns, n, 2332164642);
+  em(insns, n, 2453699587);
+  em(insns, n, 2852193252);
+  em(insns, n, 2457865312);
+  em(insns, n, 2852258785);
+  em(insns, n, 2852324322);
+  em(insns, n, 3531603971);
+  em(insns, n, 3531605768);
+  em(insns, n, 3556769793);
+  em(insns, n, 2852127717);
+  em(insns, n, 3531603968);
+  em(insns, n, 2852389857);
+  em(insns, n, 3531604002);
+  em(insns, n, 3531604035);
+  em(insns, n, 2852455396);
+  em(insns, n, 3531603973);
+  em(insns, n, 3531611080);
+  em(insns, n, 3556769793);
+  em(insns, n, 2852127714);
+  em(insns, n, 2852455392);
+  em(insns, n, 3531605800);
+  em(insns, n, 3556769793);
+  em(insns, n, 3406889024);
+  em(insns, n, 3546315776);
+  em(insns, n, 2852388864);
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
   n[0]
 }
