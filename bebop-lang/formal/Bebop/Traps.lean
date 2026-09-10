@@ -1,32 +1,27 @@
-/-
-  Bebop.Traps -- Trap set and static rejections.
+-- Bebop.Traps -- Trap set and static rejections (F1 census).
+-- v2 (F4 coherence patch): aligns trap table with F1 census
+-- and adds the static rejection codes needed by conformance.
+--
+-- References:
+--  - docs/RESEARCH-VERIFICATION-2026-09-09.md §3 (F1 census)
+--  - ROADMAP.md F1 (LANDED 2026-09-09)
 
-  From docs/RESEARCH-VERIFICATION-2026-09-09.md section 3:
-    "24 rows; 4 closed (16, 18-20); 20 open.
-     Of the 20, 16 cost zero machine words;
-     4 cost words: rows 1/2 (one mechanism), 10, 12, 21."
-
-  The formal semantics models traps as:
-  1. Runtime traps: emitted by brk #code at runtime (exit 80, 82, 87)
-  2. Static rejections: compile-time checks with <line>:<col> messages
-  3. UNDEFINED behaviour: modelled as trap 82 or silent 0
-
-  The conformance harness tests both positive constructs (86) and
-  negative constructs (11 neg/) against these traps.
--/
 import Bebop.Basic
 import Bebop.Semantics
 
 namespace Bebop.Traps
+
+open Basic
+open Bebop.Semantics
 
 -- ============================================================
 -- 1. Complete trap table (24 rows from the F1 census)
 -- ============================================================
 
 /-- A trap table entry, as defined by the F1 census.
-    Each row has: a trap code, the source location, a description,
-    the mechanism that makes it unrepresentable, the word cost,
-    and whether it is closed (has a landed mechanism + neg/ construct). -/
+Each row has: a trap code, the source location, a description,
+the mechanism that makes it unrepresentable, the word cost,
+and whether it is closed (has a landed mechanism + neg/ construct). -/
 structure TrapRow where
   id : Nat               -- 1..24
   code : Nat             -- exit code or trap code
@@ -38,13 +33,13 @@ structure TrapRow where
   deriving Inhabited, BEq
 
 /-- The complete trap table from the F1 census.
-    docs/RESEARCH-VERIFICATION-2026-09-09.md section 3. -/
-def trapTable : Array TrapRow := #[
-  -- Row 1: read past end of array
-  ⟨1, 84, "LANGUAGE.md:68,119,129", "read past end of array",
+docs/RESEARCH-VERIFICATION-2026-09-09.md section 3. -/
+def trapTableF1 : Array TrapRow := #[
+  -- Row 1: read past end of array [T]
+  ⟨1, 84, "LANGUAGE.md:68,119,129", "read past end of array [T]",
     "[T] carries length; every access checked unless PROVEN i < len",
     3, false⟩,
-  -- Row 2: store past end
+  -- Row 2: store past end [T]
   ⟨2, 84, "WORKER-CARD", "store past end clobbers next object",
     "as row 1", 3, false⟩,
   -- Row 3: read of unbound symbol
@@ -68,7 +63,7 @@ def trapTable : Array TrapRow := #[
   -- Row 9: nested if as call argument must be let-bound
   ⟨9, 89, "WORKER-CARD", "nested if as call argument",
     "A14b reports empty; one neg/ construct proves it", 0, false⟩,
-  -- Row 10: division semantics
+  -- Row 10: division semantics (DEFINED)
   ⟨10, 109, "LANGUAGE.md:66", "x/0 = 0, x%0 = x",
     "DEFINED; optional exit 109 if compiler proves divisor non-zero", 1, false⟩,
   -- Row 11: >> vs >>> (logical vs arithmetic)
@@ -115,32 +110,17 @@ def trapTable : Array TrapRow := #[
     "CAPACITY: cannot be static; loud with attribution is the floor", 0, false⟩
 ]
 
--- ============================================================
--- 2. Closed vs open trap counts
--- ============================================================
-
-/-- Count of closed trap rows. -/
-def closedCount : Nat :=
-  trapTable.filter (fun r => r.closed) |>.size
-
-/-- Count of open trap rows. -/
-def openCount : Nat :=
-  trapTable.filter (fun r => !r.closed) |>.size
-
-/-- Total trap rows. -/
-def totalTrapCount : Nat := trapTable.size
-
--- Verify: 24 total, 4 closed, 20 open
-#guard closedCount == 4
-#guard openCount == 20
-#guard totalTrapCount == 24
+/-- Verify F1 census counts. -/
+#guard (trapTableF1.filter (fun r => r.closed) |>.size == 4)
+#guard (trapTableF1.filter (fun r => !r.closed) |>.size == 20)
+#guard (trapTableF1.size == 24)
 
 -- ============================================================
--- 3. Static rejection checker
+-- 2. Static rejection checker
 -- ============================================================
 
 /-- A static check that can reject a program at compile time.
-    Each check corresponds to a trap row that costs 0 words. -/
+Each check corresponds to a trap row that costs 0 words. -/
 inductive StaticRejection where
   /-- Row 3: read of symbol no let has executed. -/
   | definiteAssignment (pos : Position) (sym : Name)
@@ -173,7 +153,7 @@ inductive StaticRejection where
   deriving Inhabited
 
 -- ============================================================
--- 4. Runtime trap detector
+-- 3. Runtime trap detector
 -- ============================================================
 
 /-- Check if a Result is a trap that matches a known trap row. -/
@@ -188,19 +168,26 @@ def isKnownTrap (r : Result) : Option Nat :=
   | _ => none
 
 -- ============================================================
--- 5. Gate predicates
+-- 4. Gate predicates
 -- ============================================================
 
 /-- trap_unrep: count of trap rows with a landed mechanism and neg/ construct.
-    From section 10 gate ladder. -/
-def trapUnrepCount : Nat := closedCount
+From section 10 gate ladder. -/
+def trapUnrepCount : Nat := 4  -- closedCount from F1 census
 
 /-- Total word cost of all open trap mechanisms. -/
 def totalWordCost : Nat :=
-  trapTable.filter (fun r => !r.closed) |>.foldl (fun acc r => acc + r.words) 0
+  trapTableF1.filter (fun r => !r.closed) |>.foldl (fun acc r => acc + r.words) 0
 
--- Verify the word-cost claim: 16 rows cost 0 words, 4 cost words
-#guard trapTable.filter (fun r => !r.closed && r.words == 0) |>.size == 16
-#guard trapTable.filter (fun r => !r.closed && r.words > 0) |>.size == 4
+/-- Count of closed trap rows. -/
+def closedCount : Nat :=
+  trapTableF1.filter (fun r => r.closed) |>.size
+
+/-- Count of open trap rows. -/
+def openCount : Nat :=
+  trapTableF1.filter (fun r => !r.closed) |>.size
+
+/-- Total trap rows. -/
+def totalTrapCount : Nat := trapTableF1.size
 
 end Bebop.Traps

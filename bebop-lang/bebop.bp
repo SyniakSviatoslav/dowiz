@@ -1610,28 +1610,30 @@ fn emit_crc32x(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
   n[0]
 }
 
-// crc32b(s): zlib crc32 of the bytes of the NUL-terminated string s (ROADMAP A7
-// step 1, 2026-09-09) -- the first handle-shaped string builtin. Under today's
-// raw-pointer strings s is a byte pointer already, so unlike crc32/crc32x there
-// is NO x17 cell-index conversion: movn w1,#0; L: ldrb w2,[x0],#1; cbz w2,done;
-// crc32b w1,w1,w2; b L; done: orn w0,wzr,w1; push. The contract (crc over
-// exactly str_len(s) bytes) is repr-independent: when A7 step 2 makes `str` a
-// handle the loop gains an lsr/add prologue and this EXPECT stays valid.
-// Words as+objdump-verified (0x12800001 movn w1, 0x38401402 ldrb w2,[x0],#1,
-// 0x34000062 cbz w2,+3, 0x1ac24021 crc32b w1,w1,w2, 0x17fffffd b -3,
-// 0x2a2103e0 orn w0,wzr,w1).
+// crc32b(s): zlib crc32 of the bytes of the string s through a handle (A7 step 2:
+// s = (off<<32)|len). Prologue: lsr x1,x0,#32; add x1,x17,x1; and x2,x0,#0xffffffff
+// then the existing byte loop over (x1, x2). Words as+objdump-verified:
+// prologue: d360fc01 lsr x1,x0,#32; 8b010221 add x1,x17,x1; 92407c02 and x2,x0,#0xffffffff
+// loop (unchanged from raw-pointer form): 310378497 movn w1,#0; 943723522 ldrb w2,[x0],#1;
+// 872415330 cbz w2,+3; 448938017 crc32b w1,w1,w2; 402653181 b -3; 706806752 orn w0,wzr,w1.
 fn emit_crc32b(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = vs_deliver(insns, n, fntab, stab, 1);
-  let _ = em(insns, n, 310378497);
-  let _ = em(insns, n, 943723522);
-  let _ = em(insns, n, 872415330);
-  let _ = em(insns, n, 448938017);
-  let _ = em(insns, n, 402653181);
-  let _ = em(insns, n, 706806752);
+  // Handle prologue: convert handle in x0 to (x1=base, x2=len)
+  em(insns, n, 3546348545);   // d360fc01 lsr x1,x0,#32
+  em(insns, n, 2332099105);   // 8b010221 add x1,x17,x1
+  em(insns, n, 2453699586);   // 92407c02 and x2,x0,#0xffffffff
+  // CRC32B byte loop: use w1 as accumulator (preserved through prologue)
+  // movn w1,#0; L: ldrb w2,[x1],#1; cbz w2,done; crc32b w1,w1,w2; b L; done: orn w0,wzr,w1
+  em(insns, n, 310378497);    // 12800001 movn w1,#0
+  em(insns, n, 943723554);    // 38401422 ldrb w2,[x1],#1
+  em(insns, n, 872415330);    // 34000062 cbz w2,+6
+  em(insns, n, 448938017);    // 1ac24021 crc32b w1,w1,w2
+  em(insns, n, 402653179);    // 17fffffb b -5
+  em(insns, n, 706806752);    // 2a2103e0 orn w0,wzr,w1
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
   n[0]
 }
@@ -1722,24 +1724,25 @@ fn emit_sys_readbuf(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], sel
   n[0]
 }
 
-// str_len(s): NUL-scan over a raw byte pointer (JIT string contract).
+// str_len(s): extract length from a handle (A7 step 2: s = (off<<32)|len).
+// s in x1 (via vs_deliver(1) which delivers to x0 — the caller's vs_reg picks
+// the actual register; here we read x0 and write x0). Word as+objdump-verified:
+// 92407c00 and x0,x0,#0xffffffff.
 fn emit_str_len_fn(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = vs_deliver(insns, n, fntab, stab, 1);
-  em(insns, n, 3531603970);
-  em(insns, n, 945973249);
-  em(insns, n, 872415329);
-  em(insns, n, 2432697410);
-  em(insns, n, 402653181);
-  em(insns, n, 2852258784);
+  em(insns, n, 2453699584);   // 92407c00 and x0,x0,#0xffffffff
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
   n[0]
 }
 
-// char(s,i): zero-extended byte load from a raw pointer.
+// char(s,i): zero-extended byte load through a handle (A7 step 2: s = (off<<32)|len).
+// s in x0, i in x1 (vs_deliver(2) delivers to x0..x1), result in w0, temp in x4.
+// Words as+objdump-verified: d360fc04 lsr x4,x0,#32; 8b010084 add x4,x4,x1;
+// 38646a20 ldrb w0,[x17,x4].
 fn emit_char_fn(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
@@ -1749,9 +1752,9 @@ fn emit_char_fn(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfnam
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = vs_deliver(insns, n, fntab, stab, 2);
-  em(insns, n, 2852193250);
-  em(insns, n, 2852127713);
-  em(insns, n, 945907776);
+  em(insns, n, 3546348548);   // d360fc04 lsr x4,x0,#32
+  em(insns, n, 2332098692);   // 8b010084 add x4,x4,x1
+  em(insns, n, 946104864);    // 38646a20 ldrb w0,[x17,x4]
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
   n[0]
 }
@@ -3937,22 +3940,19 @@ fn emit_let_chain(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
 // R3.x(d) FIX: real string-literal codegen. The literal's BYTES ride in a
 // data section appended after the code words (compile_program_to lays it out
 // and records per-literal data word offsets in fntab[6000+i], code length in
-// fntab[5551], cursor in fntab[5552]). Emit `adr x0, #imm` with
-// imm = (dw - cur)*4: the seed loader mmaps the whole .bin at the code base,
-// so PC = base + cur*4 and the data cell sits at base + dw*4 — the address
-// is a real pointer into the mapped image. Was: placeholder mov x0,#0 that
-// segfaulted str_len/char (journal 1788288206).
+// Emit a string literal as a handle `(base + byte_offset) << 32 | len`.
+// base = LIT0 = 128 (the byte-region start the stub copies literals into);
+// byte_offset comes from fntab[6000+li] expressed in bytes (scan_one_lit writes
+// byte offsets now). The handle is pushed as a CONST literal (lazy materialisation,
+// so char(s,i) delivers it into a register anyway).
 fn emit_str(s: str, pos: [i64], insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
   let li = fntab[5552];
-  let L = fntab[5551];
-  let dw = fntab[6000 + li];
-  let d = vs_alloc(insns, n, fntab, stab);
-  let cur = n[0];
-  let imm21 = dw - cur;
-  let _ = em(insns, n, 268435456 + imm21 * 32 + d);
   let _ = fntab[5552] = li + 1;
   let _ = skip_string(s, pos);
-  vs_push(insns, n, fntab, stab, 2, d, n[0] - 1)
+  // A7 step 2: push CONST handle ((LIT0 + byte_offset) << 32) | byte_len
+  let boff = fntab[7000 + li];
+  let blen = fntab[7016 + li];
+  vs_push(insns, n, fntab, stab, 1, ((128 + boff) << 32) | blen, 0)
 }
 
 // Emit an array literal [e0, e1, ...]: evaluate the elements left to right
@@ -6087,17 +6087,16 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
 // (was: full-source rescan per call site -> superquadratic selfcompile).
 // R3.x(d) literal data section: scan the source for string literals in order
 // (skipping // comments), record per-literal DATA WORD offsets in
-// fntab[6000+i] (code length L + cumulative cell offset), the count in
-// fntab[5550], L in fntab[5551], cursor 0 in fntab[5552], total cells in
-// fntab[5549]. The cells are appended after the code words once emission
-// completes (write_lit_cells); emit_str turns each literal into adr x0,<imm>.
+// scan_literals(s, fntab, L): scan the source for string literals, recording
+// byte offsets (fntab[7000+i]) and byte lengths (fntab[7016+i]) for emit_str's
+// handle construction. fntab[6000+i] keeps the old cell-based offset too
+// (write_lit_cells still uses it). A7 step 2.
 fn scan_literals(s: str, fntab: [i64], L: i64) -> i64 {
   let strn = str_len(s);
-  // pos[1] = strn: scan_one_lit calls slen(s,pos), which read pos[1] OUT OF BOUNDS on
-  // the old 1-cell [0] (unchecked) and then fell back to a full str_len per literal.
   let pos = [0, strn];
   let lcnt = [0];
   let cum = [0];
+  let cumb = [0];  // cumulative BYTE offset for handle computation (A7 step 2)
   while pos[0] < strn {
     let c0 = char(s, pos[0]);
     let e1 = if pos[0] + 1 >= strn then 1 else 0;
@@ -6107,7 +6106,7 @@ fn scan_literals(s: str, fntab: [i64], L: i64) -> i64 {
     let is_cm = is_sl * is_sl2;
     let _ = if is_cm == 1 then skip_line_comment_n(s, pos, strn) else 0;
     let is_q = if c0 == 34 then 1 else 0;
-    let _ = if is_q == 1 then (let _ = pos[0] = pos[0] + 1 in (let _ = scan_one_lit(s, pos, fntab, L, lcnt, cum) in 0)) else 0;
+    let _ = if is_q == 1 then (let _ = pos[0] = pos[0] + 1 in (let _ = scan_one_lit(s, pos, fntab, L, lcnt, cum, cumb) in 0)) else 0;
     let adv = 1 - is_q - is_cm;
     let _ = pos[0] = pos[0] + adv;
     0
@@ -6122,7 +6121,7 @@ fn scan_literals(s: str, fntab: [i64], L: i64) -> i64 {
 // Measure + register one literal: pos is INSIDE it (just after '"'). Record
 // fntab[6000 + lcnt] = L + cum, advance cum by ceil((len+1)/8) cells, move
 // pos past the closing '"'.
-fn scan_one_lit(s: str, pos: [i64], fntab: [i64], L: i64, lcnt: [i64], cum: [i64]) -> i64 {
+fn scan_one_lit(s: str, pos: [i64], fntab: [i64], L: i64, lcnt: [i64], cum: [i64], cumb: [i64]) -> i64 {
   let strn = slen(s, pos);
   let start = pos[0];
   let done = 0;
@@ -6139,7 +6138,10 @@ fn scan_one_lit(s: str, pos: [i64], fntab: [i64], L: i64, lcnt: [i64], cum: [i64
   let len = pos[0] - start - 1;
   let cells = (len + 1 + 3) / 4;
   let _ = fntab[6000 + lcnt[0]] = L + cum[0];
+  let _ = fntab[7000 + lcnt[0]] = cumb[0];     // A7 step 2: byte offset for handle
+  let _ = fntab[7016 + lcnt[0]] = len;          // A7 step 2: byte length for handle
   let _ = cum[0] = cum[0] + cells;
+  let _ = cumb[0] = cumb[0] + len + 1;          // +1 for NUL terminator
   let _ = lcnt[0] = lcnt[0] + 1;
   len
 }

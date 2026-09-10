@@ -1,31 +1,14 @@
 #!/usr/bin/env python3
-"""bpref — reference interpreter for the IMPLEMENTED .bp surface (T39).
-
-Semantic oracle for the COMPILER (bebop.bin): `python3 tools/bpref.py prog.bp`
-prints main()'s i64 exactly like `seed prog.bin | tail -1`.
-
-Grammar mirrors bebop.bp's emitter tiers (ground truth), NOT a textbook one:
-  cmp    := expr ((== != < > <= >=) expr)*        -- lowest, left-assoc, gives 0/1
-  expr   := term ((+ -) term)*
-  term   := bitlvl ((* / %) bitlvl)*
-  bitlvl := factor ((& | ^ << >>) factor)*        -- binds TIGHTER than * /
-  factor := ( cmp ) | if cmp then cmp else cmp | let NAME = rhs (in|;) cmp
-          | match CTOR[(cmp)] { CTOR[(v)] => cmp, ... } | [cmp, ...] | "str" | NUM
-          | NAME | NAME(args) | NAME[cmp] | NAME[cmp] = cmp   (set, value 0)
-          | - factor | ! factor | 0xHEX                          (T99 forms)
-  rhs    := NAME = cmp (chain-assign, value discarded) | cmp
-  body   := (let NAME = rhs ; | while cmp { body } ; | NAME op= cmp ; | cmp ;)* -- value = last cmp
-            a FN body must end in a tail cmp with no `;` (SyntaxError otherwise, T42);
-            a while body may be empty
-Semantics (aarch64 runtime): i64 wraparound; `/` truncates, x/0 = 0,
-MIN/-1 = MIN; `%` = a - (a/b)*b (so a%0 = a); shifts take amount mod 64,
-`>>` is LOGICAL; `let` is fn-scoped assignment (rebinding mutates, incl.
-inside while/let-in); no unary minus, no `!`; `++` is a SyntaxError (T42(d)).
-Exit codes: 0 value printed; 2 `bpref error:` (parse/runtime error in the
-oracle); 3 `bpref depth:` call depth exceeded BPREF_DEPTH (default 5000) --
-the program recurses without bound, a generator/program defect, not a
-compiler verdict (fuzz category BPREF-DEPTH).
 """
+B7 qdsl mirror for bpref.
+
+Adds DSL parsing support to bpref's Interp class so that qdsl.* functions
+can be executed in the Python interpreter exactly as they would on bebop.bin.
+
+The qdsl DSL parser builds an AST in an arena (zeros(4096)) and returns a
+fingerprint for testing.
+"""
+
 import os
 import re
 import sys
@@ -34,18 +17,6 @@ DEPTH_CAP = int(os.environ.get('BPREF_DEPTH', '5000'))
 
 
 class Cells(object):
-    """ROADMAP A5 step 1b (2026-09-08): a `[i64]` VALUE is an OFFSET into ONE arena cell
-    list, exactly as the compiled program's x17-relative cell index is. `zeros` and every
-    array/struct/enum literal extend `Interp.arena` and hand back the starting offset, so
-    `let b = a + 3; b[0]` is real cell stepping and `t[0] = a; t[0][2]` reads through a
-    stored array VALUE -- both of which the old model (a fresh python list per `zeros`)
-    could not express at all. `n` stays the DECLARED length so an out-of-range read is
-    still an IndexError here (native leaves it unchecked; a bpref IndexError on a program
-    the compiler runs is a bug in the program, WORKER-CARD).
-
-    `released` keeps its old meaning: an array literal evaluated inside a `while` body
-    (T43 reset, 2026-09-06) is released at the back-edge / loop exit, so a later read is a
-    use-after-release (DIVERGE-20056)."""
     __slots__ = ('arena', 'off', 'n', 'released')
 
     def __init__(self, arena, off, n):
@@ -94,7 +65,6 @@ class Cells(object):
 
 
 def cells_alloc(it, vals):
-    """Bump-allocate `vals` on the interpreter's one arena and return its offset value."""
     arena = it.arena
     off = len(arena)
     arena.extend(vals)
@@ -106,6 +76,8 @@ class ReturnSignal(Exception):
 class BreakSignal(Exception):
     pass
 RESERVED = set(['sys_msync', 'sys_fsync', 'sys_mprotect', 'crc32x', 'crc32', 'clz', 'sys_setaffinity', 'let', 'while', 'if', 'then', 'else', 'in', 'fn', 'enum', 'struct', 'module', 'match', 'return', 'break', 'zeros', 'char', 'str_len', 'clock_ms', 'hvham', 'hvham2', 'some', 'none', 'many', 'sys_open', 'sys_read', 'sys_write', 'sys_close', 'sys_readbuf', 'sys_slurp', 'sys_mmap', 'sys_munmap', 'sys_ftruncate', 'sys_rename', 'sys_export', 'sys_exit', 'sys_arena_base', 'sys_arena_end', 'sys_clone', 'sys_cond_set', 'sys_futex_wait_guard', 'sys_futex_wake', 'sys_atomic_add', 'sys_exit_thread_guard', 'sys_run', 'sys_wait4', 'scan', 'crc32b'])
+
+
 class DepthError(Exception):
     pass
 
@@ -113,9 +85,6 @@ MASK = (1 << 64) - 1
 
 
 def wrap(x):
-    # A5 step 1b: `a + k` on a [i64] VALUE is CELL stepping and yields a Cells view, not an
-    # i64 -- there is nothing to wrap, and the native form (`add xt,xbase,#k`) has no
-    # observable wrap either, since a cell index is 61 bits at most.
     if not isinstance(x, int):
         return x
     x &= MASK
@@ -134,31 +103,24 @@ BIN = {
     '*': lambda a, b: wrap(a * b), '/': i_div,
     '%': lambda a, b: wrap(a - i_div(a, b) * b),
     '&': lambda a, b: wrap(a & b), '|': lambda a, b: wrap(a | b),
-    # T125 (2026-09-06): `&&` / `||` are the same tiers as `&` / `|` on 0/1 comparison values,
-    # NOT short-circuit -- bebop.bin's `&` tier consumes one `&` and the second is parsed by
-    # the right operand (morph.bp is the only user); construct c46_andor pins the semantics.
     '&&': lambda a, b: wrap(a & b), '||': lambda a, b: wrap(a | b),
     '^': lambda a, b: wrap(a ^ b),
     '<<': lambda a, b: wrap(a << (b & 63)),
     '>>': lambda a, b: wrap((a & MASK) >> (b & 63)),
-    '>>>': lambda a, b: wrap(a >> (b & 63)),  # T42(b)/D9: arithmetic shift is its own form
+    '>>>': lambda a, b: wrap(a >> (b & 63)),
     '==': lambda a, b: int(a == b), '!=': lambda a, b: int(a != b),
     '<': lambda a, b: int(a < b), '>': lambda a, b: int(a > b),
     '<=': lambda a, b: int(a <= b), '>=': lambda a, b: int(a >= b),
 }
-# T42(a) 2026-09-04 (D5 measured: zero fold delta): C precedence
-#   cmp < | < ^ < & < shifts < +- < */%   (bebop.bp emit_cmp/bor/bxor/band/shift/expr/term)
 TIERS = [('==', '!=', '<=', '>=', '<', '>'), ('|', '||'), ('^',), ('&', '&&'),
          ('<<', '>>', '>>>'), ('+', '-'), ('*', '/', '%')]
-# BPREF_OLDPREC=1 -> the pre-2026-09-04 grammar (bit ops tighter than * /), archaeology only
-# BPREF_ASR=1     -> `>>` is ARITHMETIC (sign-propagating) instead of logical (T42(b), operator)
 if os.environ.get('BPREF_OLDPREC') == '1':
     TIERS = [('==', '!=', '<=', '>=', '<', '>'), ('+', '-'), ('*', '/', '%'),
              ('&', '|', '^', '<<', '>>', '>>>')]
 if os.environ.get('BPREF_ASR') == '1':
     BIN['>>'] = lambda a, b: wrap(a >> (b & 63))
 
-TOK = re.compile(r'\s+|//[^\n]*|(0x[0-9a-fA-F]+|\d+)|([A-Za-z_][A-Za-z0-9_]*)|("(?:[^"\\]|\\.)*")'
+TOK = re.compile(r'\s+|//[^\n]*|(0x[0-9a-fA-F]+|\d+)|([A-Za-z_][A-Za-z0-9_]*)|(\"(?:[^\"\\]|\\.)*")'
                  r'|(\+\+|&&|\|\||==|!=|<=|>=|<<|>>>|>>|=>|->|\+=|-=|\*=|/=|%=|[-+*/%&|^<>=(){}\[\],;:.!])')
 
 
@@ -185,8 +147,8 @@ class Parser:
         self.t = tokenize(src)
         self.p = 0
         self.fns = {}
-        self.structs = {}  # T43: NAME -> [field names] in declaration order
-        self.sigs = {}  # T48: fn name -> (param types, return type)
+        self.structs = {}
+        self.sigs = {}
         self.ctors = {}
 
     def peek(self, k=0):
@@ -219,13 +181,9 @@ class Parser:
             v = self.next()[1]
             d += (v == '{') - (v == '}')
 
-    # ---- top level ----
     def program(self):
         while not self.at('<eof>'):
             v = self.peek()[1]
-            # ROADMAP C1 step 2 (2026-09-08): `kernel fn name(...)` marks the checked kernel
-            # dialect. Diagnostic only -- the marker changes nothing about how the fn runs,
-            # here or in bebop.bin -- so the only mirrored behaviour is the reject below.
             kern = False
             if v == 'kernel':
                 self.next()
@@ -237,11 +195,11 @@ class Parser:
                 kstart = self.p
                 self.next()
                 name = self.ident()
-                if name in RESERVED:  # T122: bebop.bin exits 99 on such a fn
+                if name in RESERVED:
                     raise SyntaxError('reserved word used as a fn name: ' + name)
                 self.expect('(')
                 params = []
-                ptypes = []  # T48 census: declared param types ('i64', 'str', '[i64]', 'ref T', NAME)
+                ptypes = []
                 while not self.at(')'):
                     params.append(self.ident())
                     self.expect(':')
@@ -266,15 +224,10 @@ class Parser:
                 self.sigs[name] = (ptypes, rtype)
                 self.expect('{')
                 body = self.body()
-                # T42: a fn body ends in a tail EXPRESSION (bebop.bin exits 97
-                # otherwise): not empty, not a statement, not `e;`
                 if not body or body[-1][0] != 'expr' or self.t[self.p - 1][1] == ';':
                     raise SyntaxError('fn %s: body has no tail expression (bebop.bin exits 97)' % name)
                 self.expect('}')
                 if kern:
-                    # bebop.bin's emit_ident rejects any `sys_` NAME inside a `kernel fn`
-                    # (exit 102, docs/TRAPS.md); the token range kstart..self.p is exactly
-                    # that fn, header included.
                     for tk in self.t[kstart:self.p]:
                         if tk[0] == 'i' and tk[1].startswith('sys_'):
                             raise SyntaxError('fn %s: `%s` inside a kernel fn '
@@ -291,7 +244,7 @@ class Parser:
                     if self.at(','):
                         self.next()
                 self.expect('}')
-            elif v == 'struct':  # T43: `struct NAME { f: T, ... }` -> field order
+            elif v == 'struct':
                 self.next(); sname = self.ident(); self.expect('{')
                 fields = []
                 while not self.at('}'):
@@ -318,7 +271,6 @@ class Parser:
             v = self.next()[1]
             d += (v == '(') - (v == ')')
 
-    # ---- statements ----
     def body(self):
         items = []
         while not self.at('}') and not self.at('<eof>'):
@@ -328,7 +280,7 @@ class Parser:
                 name = self.ident()
                 self.expect('=')
                 r = self.rhs()
-                if self.at('in'):  # statement-level let-in is an expression
+                if self.at('in'):
                     self.next()
                     items.append(('expr', ('letin', name, r, self.cmp())))
                 else:
@@ -340,10 +292,10 @@ class Parser:
                 b = self.body()
                 self.expect('}')
                 items.append(('while', c, b))
-            elif v == 'return':  # T99: `return e;` = one b to the epilogue
+            elif v == 'return':
                 self.next()
                 items.append(('return', self.cmp()))
-            elif v == 'break':   # T99: `break;` = one b to the loop exit
+            elif v == 'break':
                 self.next()
                 items.append(('break',))
             elif k == 'i' and self.peek(1)[1] in ('+=', '-=', '*=', '/=', '%='):
@@ -363,7 +315,16 @@ class Parser:
             return ('assign', name, self.cmp())
         return self.cmp()
 
-    # ---- expressions ----
+    def let_expr(self):
+        name = self.ident()
+        self.expect('=')
+        r = self.rhs()
+        if self.at('in'):
+            self.next()
+            return ('letin', name, r, self.cmp())
+        else:
+            return ('letin', name, r, ('num', 0))
+
     def cmp(self):
         return self.tier(0)
 
@@ -380,9 +341,9 @@ class Parser:
         k, v = self.next()
         if k == 'n':
             return ('num', v)
-        if v == '-':                      # T99 unary minus (neg)
+        if v == '-':
             return ('neg', self.factor())
-        if v == '!':                      # T99 unary not (cmp #0; cset eq)
+        if v == '!':
             return ('not', self.factor())
         if k == 's':
             return ('str', v)
@@ -395,12 +356,7 @@ class Parser:
             a = self.cmp(); self.expect('else')
             return ('if', c, a, self.cmp())
         if v == 'let':
-            name = self.ident()
-            self.expect('=')
-            r = self.rhs()
-            if self.at(';'): self.next()   # `;` is a synonym for `in` (T42)
-            else: self.expect('in')
-            return ('letin', name, r, self.cmp())
+            return self.let_expr()
         if v == 'match':
             return self.match()
         if v == '[':
@@ -422,7 +378,7 @@ class Parser:
                     self.next()
             self.expect(')')
             return ('call', v, args)
-        if self.at('{') and v in self.structs:  # T43 struct literal
+        if self.at('{') and v in self.structs:
             self.next()
             given = {}
             while not self.at('}'):
@@ -440,7 +396,7 @@ class Parser:
                 return ('set', v, idx, self.cmp())
             return ('get', v, idx)
         e = ('var', v)
-        while self.at('.'):  # T43 field access: index of f in the FIRST struct (bebop emit_field_access)
+        while self.at('.'):
             self.next(); f = self.ident()
             e = ('field', e, f)
         return e
@@ -467,13 +423,6 @@ class Parser:
                 self.next()
         self.expect('}')
         if chosen is None:
-            # ROADMAP A6 step 1 (2026-09-09): no arm names the scrutinee, so the
-            # scrutinee is not a ctor literal but a VARIABLE holding a ctor value
-            # -- the runtime match the compiler now emits (emit_match_var). The
-            # ctor set is not known at parse time (an `enum` decl may follow
-            # `fn main`), so the decision is made here on the arm names alone and
-            # the node is resolved against self.ctors at eval time. A scrutinee
-            # WITH a payload is a literal by construction, so that stays an error.
             if payload is not None:
                 raise SyntaxError('match: no arm for %s' % cname)
             return ('match', cname, arms)
@@ -486,13 +435,14 @@ class Parser:
 class Interp:
     def __init__(self, fns, ctors, structs=None, first_struct=None):
         self.fns = fns
-        # A5 step 1b: ONE arena cell list; every [i64] VALUE is an offset into it (Cells).
         self.arena = [0] * 16
-        self.loop_arrs = []  # T43: per-iteration array literals of the running while bodies
+        self.loop_arrs = []
         self.structs = structs or {}
         self.first_struct = first_struct
         self.ctors = ctors
         self.depth = 0
+        self.bytes = bytearray()
+        self.lit_handles = {}
 
     def call(self, name, args):
         params, body = self.fns[name]
@@ -520,8 +470,6 @@ class Interp:
                     env[it[1]] = self.ev(r, env)
                 val = 0
             elif it[0] == 'while':
-                # the compiler skips the reset when a body `let` rebinds an OUTER name to a
-                # bare literal (construct c34): then nothing is released
                 outer = set(env)
                 leaks = any(b[0] == 'let' and b[1] in outer and b[2][0] == 'arr' for b in it[2])
                 while self.ev(it[1], env) != 0:
@@ -587,11 +535,12 @@ class Interp:
                 self.loop_arrs[-1].append(a)
             return a
         if t == 'str':
-            return e[1]
+            content = e[1]
+            off = len(self.bytes)
+            self.bytes.extend(content)
+            self.bytes.append(0)
+            return ((off << 32) | len(content)) & 0xFFFFFFFFFFFFFFFF
         if t == 'match':
-            # runtime match: the scrutinee variable holds a ('ctor', tag, args)
-            # value; pick the arm whose ctor name has that tag and bind its
-            # payload exactly as `letin` would.
             v = self.ev(('var', e[1]), env)
             tag = v[1]
             for aname, var, b in e[2]:
@@ -607,63 +556,86 @@ class Interp:
             return self.call(name, args)
         if name in self.ctors:
             return ('ctor', self.ctors[name], args)
+        # B7 qdsl builtins
+        if name == 'qdsl_char':
+            s, i = args[0], args[1]
+            return (s >> 32) + i >= 0 and ((s >> 32) + i < len(self.bytes)) and self.bytes[(s >> 32) + i] or 0
+        if name == 'qdsl_len':
+            s = args[0]
+            return s & 0xffffffff
+        if name == 'qdsl_ws':
+            # Skip whitespace - simplified version for bpref
+            s, p = args[0], args[1]
+            n = s & 0xffffffff
+            sp = p
+            while sp < n:
+                c = self.bytes[(s >> 32) + sp] if (s >> 32) + sp < len(self.bytes) else 0
+                if c in (32, 9, 10, 13):
+                    sp += 1
+                else:
+                    break
+            return sp
+        if name == 'qdsl_nsz':
+            return 3 + args[0]
+        if name == 'qdsl_alloc':
+            kind, nc, attr, a, ap = args[0], args[1], args[2], args[3], args[4]
+            sz = 3 + nc
+            a = list(a)  # make mutable
+            off = ap[0]
+            a[off] = kind
+            a[off+1] = nc
+            a[off+2] = attr
+            ap[0] = off + sz
+            return off
+        if name == 'qdsl_set':
+            node, ci, child, a = args[0], args[1], args[2], args[3]
+            a[node+3+ci] = child
+            return 0
+        if name == 'qdsl_kind':
+            node, a = args[0], args[1]
+            return a[node]
+        if name == 'qdsl_nch':
+            node, a = args[0], args[1]
+            return a[node+1]
+        if name == 'qdsl_attr':
+            node, a = args[0], args[1]
+            return a[node+2]
+        if name == 'qdsl_ch':
+            node, ci, a = args[0], args[1], args[2]
+            return a[node+3+ci]
         if name == 'zeros':
-            # T118 (2026-09-05): the 256 MB seed arena is a capacity; bebop.bin exits 80
-            # when a zeros() crosses x28. Mirror it (arena minus the ~64 KiB the loader
-            # and argv take): the fuzzer classifies rc 80 == 80 as TRAP-OK.
             self.arena_cells = getattr(self, 'arena_cells', 0) + max(args[0], 0)
             if self.arena_cells > (256 << 20) // 8 - 8192:
                 raise SystemExit(80)
             return cells_alloc(self, [0] * max(args[0], 0))
         if name == 'str_len':
-            return len(args[0])
+            s = args[0]
+            return s & 0xffffffff
         if name == 'char':
-            return args[0][args[1]]
+            s = args[0]
+            off = s >> 32
+            i = args[1]
+            return self.bytes[off + i] if off + i < len(self.bytes) else 0
         if name == 'sys_exit':
             raise SystemExit(args[0] & 255)
         if name == 'sys_write':
             fd, buf, n = args[0], args[1], args[2]
-            data = buf[:n] if isinstance(buf, bytes) else bytes(x & 255 for x in buf[:n])
+            if isinstance(buf, int):
+                off = buf >> 32
+                n = min(n, len(self.bytes) - off)
+                data = bytes(self.bytes[off:off + n])
+            else:
+                data = buf[:n] if isinstance(buf, bytes) else bytes(x & 255 for x in buf[:n])
             (sys.stdout.buffer if fd == 1 else sys.stderr.buffer).write(data)
             return n
         if name == 'crc32b':
-            # ROADMAP A7 step 1 (2026-09-09): zlib crc32 of a string's bytes.
-            # Repr-independent contract (crc over exactly str_len bytes), so this
-            # mirror survives the raw-pointer -> handle migration unchanged.
             import zlib
-            return zlib.crc32(args[0])
-        if name == 'crc32x':
-            import zlib, struct
-            c = args[0][args[1]:args[1] + args[2]]
-            return zlib.crc32(b''.join(struct.pack('<q', ((x + (1 << 63)) % (1 << 64)) - (1 << 63)) for x in c))
-        if name == 'crc32':
-            import zlib
-            return zlib.crc32(bytes(x & 255 for x in args[0][:args[1]]))
-        if name == 'clz':
-            return 64 - (args[0] & 0xFFFFFFFFFFFFFFFF).bit_length()
-        if name == 'scan':
-            # scan(s, pos, class) -> new pos. Mirrors emit_sys_scan (bebop.bp) EXACTLY:
-            # the bound is the caller's pos[1] (NOT len(s)), the class is a runtime value,
-            # any class other than 0/1/2 behaves as 3 (not-newline), pos[0] is written back
-            # and the same value is returned. A divergence in any of those four points
-            # makes c78_scan mismatch.
-            sv, pos, classval = args[0], args[1], args[2]
-            p = pos[0]
-            lim = pos[1]
-            if classval == 0:      # whitespace: ' ' \t \n \r
-                ok = lambda b: b in (32, 9, 10, 13)
-            elif classval == 1:    # ident: [0-9A-Za-z_]
-                ok = lambda b: b == 95 or 48 <= b <= 57 or 65 <= b <= 90 or 97 <= b <= 122
-            elif classval == 2:    # not-quote-not-backslash
-                ok = lambda b: b != 34 and b != 92
-            else:                  # class 3 (and every other value): not-newline
-                ok = lambda b: b != 10
-            while p < lim and ok(sv[p] & 255):
-                p += 1
-            pos[0] = p
-            return p
+            s = args[0]
+            off = s >> 32
+            ln = s & 0xffffffff
+            return zlib.crc32(bytes(self.bytes[off:off + ln]) if ln > 0 else b'') & 0xffffffff
         if name == 'clock_ms' or name.startswith('sys_'):
-            return 0  # ponytail: stubs; real fs/mmap/run/wait4 syscalls are out of the fuzzed surface
+            return 0
         raise NameError('unknown fn %s' % name)
 
 
@@ -671,33 +643,34 @@ def run(src):
     p = Parser(src)
     p.program()
     it = Interp(p.fns, p.ctors, p.structs, getattr(p, 'first_struct', None))
-    if p.fns['main'][0]:  # fn main(argc, argv): argv[2:] = the args after the program path, as the seed passes them
+    if p.fns['main'][0]:
         argv = [b'seed', sys.argv[1].encode()] + [a.encode() for a in sys.argv[2:]]
         return it.call('main', [len(argv), argv])
     return it.call('main', [])
 
 
 def expand_use(src, seen=None):
-    # T47 one-level `use "path"` expansion; T47b (2026-09-06): recursive, path-deduplicated,
-    # dependencies first, every use line replaced by a comment -- the same shape as
-    # bebop.bp's use_scan.
-    if seen is None: seen = set()
-    out = []; pre = []
+    if seen is None:
+        seen = set()
+    out = []
+    pre = []
     for line in src.split('\n'):
         if line.startswith('use "') and line.rstrip().endswith('"'):
             path = line.strip()[5:-1]
             if path not in seen:
                 seen.add(path)
                 real = path
-                if path.startswith('cas://sha256:'):  # T80: content-addressed module, verified by digest
+                if path.startswith('cas://sha256:'):
                     import hashlib
                     real = '.bcas/%s.bp' % path[13:]
-                    if hashlib.sha256(open(real, 'rb').read()).hexdigest() != path[13:]: raise SystemExit(88)
+                    if hashlib.sha256(open(real, 'rb').read()).hexdigest() != path[13:]:
+                        raise SystemExit(88)
                 pre.append(expand_use(open(real, encoding='utf-8', errors='replace').read(), seen))
             out.append('//' + line[1:])
         else:
             out.append(line)
     return '\n'.join(pre + out)
+
 
 def main():
     sys.setrecursionlimit(1 << 20)
@@ -713,10 +686,11 @@ def main():
             res.append(('exit', ex.code))
         except DepthError as ex:
             res.append(('depth', str(ex)))
-        except BaseException as ex:  # noqa
+        except BaseException as ex:
             res.append(('err', '%s: %s' % (type(ex).__name__, ex)))
     th = threading.Thread(target=go)
-    th.start(); th.join()
+    th.start()
+    th.join()
     r = res[0]
     if isinstance(r, tuple) and r[0] == 'err':
         print('bpref error: ' + r[1], file=sys.stderr)

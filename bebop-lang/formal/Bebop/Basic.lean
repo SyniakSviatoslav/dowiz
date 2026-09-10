@@ -48,7 +48,7 @@ abbrev Name := String
 inductive Ty where
   | i64
   | str
-  | arr      -- [i64], an array of i64
+  | arr      -- [i64]
   | named    -- user-defined enum/struct name
   | ref_t    -- ref T
   deriving BEq, Inhabited
@@ -86,6 +86,10 @@ mutual
     | ite (c t f : Expr)
     | letIn (n : Name) (e body : Expr)
     | matchExpr (arms : Array MatchArm)
+    | structLit (name : Name) (fields : Array (Name × Expr))  -- struct literal
+    | enumLit (name : Name) (arg : Option Expr)                -- enum ctor
+    | fieldAcc (structExpr : Expr) (field : Name)              -- s.f
+    | builtin (name : Name) (args : Array Expr)                -- builtin call
   deriving Inhabited
 
   structure MatchArm where
@@ -144,14 +148,19 @@ structure Program where
   deriving Inhabited
 
 -- ============================================================
--- 7. Arena and memory model
+-- 7. Arena and memory model (single one-cell-array, 64-bit cells)
 -- ============================================================
 
 /-- The arena: one 256 MB anonymous mapping. LANGUAGE.md:106-109.
-    `zeros` bumps it; nothing is freed; crossing the end exits 80. -/
+    `zeros` bumps it; nothing is freed; crossing the end exits 80.
+    Frame heap is the arena itself (A6: no separate frame heap). -/
 structure Arena where
   cells : Array Val
   capacity : Nat := 33554432  -- 256 MiB / 8
+
+/-- A frame-allocated array is just an offset (start index) into the arena.
+    The length is tracked separately via the struct field list or enum arity. -/
+abbrev FrameArray := Nat  -- offset into arena
 
 -- ============================================================
 -- 8. Trap codes and runtime state
@@ -204,15 +213,13 @@ structure Footprint where
 
 /-- The complete runtime state. -/
 structure State where
-  env : Array (Name × Val) := #[]
-  arena : Array Val := #[]
-  arenaCapacity : Nat := 33554432
-  frame : Array Val := #[]
-  frameCapacity : Nat := 2048
-  enumTags : Array (Name × Nat) := #[]
-  enumArities : Array (Name × Nat) := #[]
+  env : Array (Name × Val) := #[]            -- fn-scoped bindings
+  arena : Arena := { cells := #[], capacity := 33554432 }
+  frameArrays : Array (Name × FrameArray × Nat) := #[]  -- name -> (base_offset, length)
+  enumTags : Array (Name × Nat) := #[]      -- ctor name -> tag
+  enumArities : Array (Name × Nat) := #[]   -- ctor name -> arity (0 or 1)
   fns : Array FnDecl := #[]
-  structs : Array (Name × Array Name) := #[]
+  structs : Array (Name × Array Name) := #[] -- struct name -> field list
   clockMs : Val := 0
   deriving Inhabited
 
