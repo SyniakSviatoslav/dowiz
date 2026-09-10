@@ -9,9 +9,14 @@ fn main() {
     let mut i = 0;
     while i < d.len() {
         let mut id: i64 = 0;
-        while d[i] != b',' { id = id * 10 + (d[i] - b'0') as i64; i += 1; }
+        while d[i] != b',' {
+            id = id * 10 + (d[i] - b'0') as i64;
+            i += 1;
+        }
         sum += id;
-        while d[i] != b'\n' { i += 1; }
+        while d[i] != b'\n' {
+            i += 1;
+        }
         i += 1;
         lines += 1;
     }
