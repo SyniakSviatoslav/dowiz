@@ -1,0 +1,80 @@
+// qplan.bp — B7 step 2: the planner
+// Translates a qdsl AST (from qdsl.bp) into an execution plan:
+//   - access path per table (scan / bucket / spgemm-probe)
+//   - join order for k <= 4 tables (enumerate k! orders, pick cheapest)
+//   - group-by strategy (dense accumulators if |keys| <= 4096, else counting-sort)
+//   - order-by / limit (radix sort / heap top-k)
+//   - rank-n mode choice (pick the most selective CSR)
+//
+// The planner is a LIBRARY (no main). It operates on the qdsl AST cell layout
+// (kind, nch, attr, children...) and produces a plan cell tree that gen_gb's
+// query templates consume.
+
+use "selfhost/prelude/store.bp"
+
+// ---- planner constants ----
+// Cost model (ns/row, measured in B2/B6 — kept tiny by design)
+fn qplan_cost_scan() -> i64 { 1 }
+fn qplan_cost_bucket() -> i64 { 20 }
+fn qplan_cost_spgemm() -> i64 { 15 }
+
+// access_path: 0 = scan, 1 = bucket, 2 = spgemm-probe
+// For now we only handle scan (the Q6/Q1 shape); bucket/spgemm need indexes
+// that B7 step 3 (rank-3 construct) builds.
+fn qplan_access(ast_node: i64, a: [i64]) -> i64 {
+  // default: scan the whole table
+  0
+}
+
+// qplan_join_order: for k <= 2 tables, returns the cheaper order as a
+// 2-element array in out_order[0..1] (table indices) and the cost in out_cost[0].
+// Cost = rows-of-first * access_cost + rows-of-second * probe_cost.
+// For k == 1, out_order[0] = 0, cost = rows * scan_cost.
+fn qplan_join_order(n_tables: i64, rows: [i64], out_order: [i64], out_cost: [i64], a: [i64]) -> i64 {
+  if n_tables <= 1 then
+    let _ = out_order[0] = 0 in
+    let _ = out_cost[0] = rows[0] * qplan_cost_scan() in
+    0
+  else if n_tables == 2 then
+    // order (0,1): scan R, probe S
+    let c01 = rows[0] * qplan_cost_scan() + rows[1] * qplan_cost_spgemm() in
+    // order (1,0): scan S, probe R
+    let c10 = rows[1] * qplan_cost_scan() + rows[0] * qplan_cost_spgemm() in
+    if c01 <= c10 then
+      let _ = out_order[0] = 0 in
+      let _ = out_order[1] = 1 in
+      let _ = out_cost[0] = c01 in
+      0
+    else
+      let _ = out_order[0] = 1 in
+      let _ = out_order[1] = 0 in
+      let _ = out_cost[0] = c10 in
+      0
+  else
+    // k > 2: unsupported for step 2 (only Q6/Q1, no join in the gate yet)
+    // Return scan-everything cost as a ceiling
+    let c = rows[0] * qplan_cost_scan() in
+    let _ = out_order[0] = 0 in
+    let _ = out_cost[0] = c in
+    0
+}
+
+// qplan_group_strategy: 0 = dense accumulators (for small key count), 1 = counting-sort
+fn qplan_group_strategy(n_keys: i64) -> i64 {
+  if n_keys <= 4096 then 0 else 1
+}
+
+// qplan_explain: returns a fingerprint of the plan (stable across constants —
+// what B7's digest-stability requirement needs).
+// For step 2: fingerprint = access_path * 100 + group_strategy * 10 + n_tables
+fn qplan_fingerprint(n_tables: i64, access: i64, group_strat: i64) -> i64 {
+  access * 100 + group_strat * 10 + n_tables
+}
+
+// qplan_validate: returns 1 if the plan is supported, 0 if not.
+// Step 2 supports: scan-filter-agg (Q6 shape) and scan-group-agg (Q1 shape).
+fn qplan_validate(ast_root: i64, a: [i64]) -> i64 {
+  let nc = a[ast_root + 1] in
+  // nc >= 1 always (from). nc <= 6 means no join (max: from + where + group + order + limit)
+  if nc <= 6 then 1 else 0
+}

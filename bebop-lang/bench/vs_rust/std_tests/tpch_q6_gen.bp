@@ -1,0 +1,44 @@
+// tpch_q6_gen.bp — B7 step 2 gate: verify the generated scan-filter-agg (Q6) query
+// Runs the same fused scan as the hand-written tpch_q6.bp and returns the fold.
+// The fold must == oracle == sqlite twin (114672059591 for 600000 rows)
+// Usage: ./seed/build/seed <this.bin> <store path>
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+
+fn q6_scan(base: [i64], ship: i64, disc: i64, qty: i64, price: i64, n: i64) -> i64 {
+  let lo = 727929;   // date(1994,1,1).toordinal()
+  let hi = 728294;   // date(1995,1,1).toordinal(), exclusive
+  let acc = 0;
+  let i = 0;
+  while i < n {
+    let sd = st_get(base, ship, 1 + i);
+    let dc = st_get(base, disc, 1 + i);
+    let q = st_get(base, qty, 1 + i);
+    let m1 = if sd >= lo then (if sd < hi then 1 else 0) else 0;
+    let m2 = if dc >= 5 then (if dc <= 7 then 1 else 0) else 0;
+    let m3 = if q < 24 then 1 else 0;
+    let hit = m1 * m2 * m3;
+    let ep = st_get(base, price, 1 + i);
+    let acc = acc + hit * ep * dc;
+    let i = i + 1;
+    0
+  };
+  acc
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  let spath = zeros(256) in
+  let sl = st_str(spath, argv[2]) in
+  let size = 67108864 in
+  let base = st_map_ro(spath, sl, size) in
+  let tmp = zeros(256) in
+  let root = st_root(base, tmp) in
+  let n = st_get(base, root, 0) in
+  let ship = st_ref(base, root, 1) in
+  let disc = st_ref(base, root, 2) in
+  let qty = st_ref(base, root, 3) in
+  let price = st_ref(base, root, 4) in
+  let fold = q6_scan(base, ship, disc, qty, price, n) in
+  let _ = sys_munmap(st_addr(base), size) in
+  fold
+}

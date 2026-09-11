@@ -1,0 +1,10 @@
+[package]
+name = "ingest_twin"
+version = "0.1.0"
+edition = "2021"
+[[bin]]
+name = "ingest_best"
+path = "ingest_best.rs"
+[[bin]]
+name = "ingest_common"
+path = "ingest_common.rs"

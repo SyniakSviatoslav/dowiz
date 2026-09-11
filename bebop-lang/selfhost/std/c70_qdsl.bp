@@ -1,0 +1,32 @@
+// c70_qdsl.bp — B7 step 1 construct: parse + explain string fold
+use "selfhost/std/qdsl.bp"
+
+fn fold_str(s: str) -> i64 {
+  let n = qdsl_len(s);
+  let h = 5381;
+  let i = 0;
+  while i < n {
+    let _ = h = h * 33 + char(s, i);
+    let i = i + 1;
+    0
+  };
+  h
+}
+
+fn main() -> i64 {
+  let q = "q { from orders where amount > 100 group by cust sum(amount), count(order) order by cust limit 10 }";
+  let fp = qdsl_parse(q);
+  let ok1 = if fp == 0 then 0 else 1;
+  let expl = qdsl_explain(q);
+  let expl_len = qdsl_len(expl);
+  let ok2 = if expl_len > 0 then 1 else 0;
+  let fp2 = qdsl_parse(q);
+  let ok3 = if fp == fp2 then 1 else 0;
+  let bad = "q { from }";
+  let fp_bad = qdsl_parse(bad);
+  let ok4 = if fp_bad == 0 then 1 else 0;
+  let expl2 = qdsl_explain("q { from T where x = 1 }");
+  let ok5 = if qdsl_len(expl2) > 0 then 1 else 0;
+  let h = fold_str(expl);
+  ok1 * 100000 + ok2 * 10000 + ok3 * 1000 + ok4 * 100 + ok5 * 10 + (if h == 0 then 0 else 1)
+}

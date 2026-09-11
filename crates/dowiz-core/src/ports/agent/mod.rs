@@ -79,6 +79,10 @@ pub enum AgentError {
     DepthExceeded,
     /// A typed refusal with context.
     Refused(String),
+    /// Configuration error: missing API key, malformed manifest, etc.
+    ConfigError(String),
+    /// Backend returned an error (non-JSON-RPC, or HTTP-layer failure).
+    BackendError(String),
 }
 
 /// The unit of work a bridged agent is asked to perform.

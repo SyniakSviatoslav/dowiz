@@ -441,8 +441,8 @@ def corpus(d):
     print('kernel_internal: %d of %d  (a CRASH is not a rejection and is never '
           'scored as one)' % (len(internal), total))
     print('kernel_pos: %d rejected of %d' % (len(rejected_pos), len(pos)))
-    print('kernel_parity: 0/%d  (no tcheck.bp exists yet -- 0/N is the honest '
-          'STARTING value, not a failure)' % total)
+    print('kernel_parity: 0/%d  (tcheck.bp is the CERTIFICATE layer only -- '
+          'the term layer is F7, so 0/N is the honest STARTING value)' % total)
     return 1 if (accepted or rejected_pos or internal) else 0
 
 

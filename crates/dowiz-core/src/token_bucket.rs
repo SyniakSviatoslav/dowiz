@@ -104,6 +104,7 @@ struct Inner {
 /// A monotonic-clock token bucket. `capacity` caps the burst; `refill_rate` is tokens/second.
 /// `now_ns` (monotonic nanoseconds) is injected by the caller; the kernel shim stamps
 /// `crate::clock::now_ns()`.
+#[derive(Debug)]
 pub struct TokenBucket {
     capacity: f64,
     refill_rate: f64,
@@ -121,6 +122,11 @@ impl TokenBucket {
                 last_refill_ns: 0,
             }),
         }
+    }
+
+    /// The capacity of this bucket (read-only view for debugging/tests).
+    pub fn capacity(&self) -> f64 {
+        self.capacity
     }
 
     /// Lazy monotonic refill: `tokens = min(capacity, tokens + refill_rate * elapsed_secs)`.

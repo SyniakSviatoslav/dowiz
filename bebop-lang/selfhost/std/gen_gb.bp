@@ -822,3 +822,134 @@ fn build_directed_lt(base: [i64], tx: [i64], tmp: [i64], dg: [i64], psrc: [i64],
   let _ = st_seal(base, vv, tmp);
   gb_matrix_seal(base, tx, tmp, dg[3], n, n, cnt, 1, rp, ci, vv)
 }
+
+// ---- B7 step 2: query templates (scan-filter-agg / scan-group-agg) ----
+// gen_gb_query(dir, op, query_id): op 10 = scan-filter-agg (Q6 shape), op 11 = scan-group-agg (Q1 shape)
+// query_id: 0 = default constants (for gate), or a small integer for variant constants.
+// Writes a self-contained .bp program that reads the store, runs the fused scan,
+// and returns the fold. These are the generated forms of the hand-written
+// bench/tq_sqlite/tpch_q6.bp / tpch_q1.bp — same fused loop, baked constants,
+// branchless mask-multiply-accumulate.
+fn gen_q6_text(dst: [i64], pos: [i64]) -> i64 {
+  let _ = wr_use_line(dst, pos, "selfhost/prelude/sha256.bp") in
+  let _ = wr_use_line(dst, pos, "selfhost/prelude/store.bp") in
+  let _ = wr_str(dst, pos, "
+fn q6_scan(base: [i64], ship: i64, disc: i64, qty: i64, price: i64, n: i64) -> i64 {
+  let lo = 727929;   // date(1994,1,1).toordinal()
+  let hi = 728294;   // date(1995,1,1).toordinal(), exclusive
+  let acc = 0;
+  let i = 0;
+  while i < n {
+    let sd = st_get(base, ship, 1 + i);
+    let dc = st_get(base, disc, 1 + i);
+    let q = st_get(base, qty, 1 + i);
+    let m1 = if sd >= lo then (if sd < hi then 1 else 0) else 0;
+    let m2 = if dc >= 5 then (if dc <= 7 then 1 else 0) else 0;
+    let m3 = if q < 24 then 1 else 0;
+    let hit = m1 * m2 * m3;
+    let ep = st_get(base, price, 1 + i);
+    let acc = acc + hit * ep * dc;
+    let i = i + 1;
+    0
+  };
+  acc
+}
+fn main(argc: i64, argv: [str]) -> i64 {
+  let spath = zeros(256);
+  let sl = st_str(spath, argv[2]);
+  let size = 67108864;
+  let base = st_map_ro(spath, sl, size);
+  let tmp = zeros(256);
+  let root = st_root(base, tmp);
+  let n = st_get(base, root, 0);
+  let ship = st_ref(base, root, 1);
+  let disc = st_ref(base, root, 2);
+  let qty = st_ref(base, root, 3);
+  let price = st_ref(base, root, 4);
+  let fold = q6_scan(base, ship, disc, qty, price, n);
+  let _ = sys_munmap(st_addr(base), size);
+  fold
+}
+") in
+  0
+}
+
+fn gen_q1_text(dst: [i64], pos: [i64]) -> i64 {
+  let _ = wr_use_line(dst, pos, "selfhost/prelude/sha256.bp") in
+  let _ = wr_use_line(dst, pos, "selfhost/prelude/store.bp") in
+  let _ = wr_str(dst, pos, "
+fn upd(ga: [i64], flag: i64, ls: i64, q: i64, ep: i64, dc: i64) -> i64 {
+  let g = flag * 2 + ls;
+  let b = g * 4;
+  let _ = ga[b] = ga[b] + 1;
+  let _ = ga[b + 1] = ga[b + 1] + q;
+  let _ = ga[b + 2] = ga[b + 2] + ep;
+  let _ = ga[b + 3] = ga[b + 3] + ep * (100 - dc);
+  0
+}
+fn q1_scan(base: [i64], ship: i64, disc: i64, qty: i64, price: i64, rf: i64, ls: i64, n: i64, ga: [i64]) -> i64 {
+  let cutoff = 729634;
+  let i = 0;
+  while i < n {
+    let sd = st_get(base, ship, 1 + i);
+    let ok = if sd <= cutoff then 1 else 0;
+    let flag = st_get(base, rf, 1 + i);
+    let lst = st_get(base, ls, 1 + i);
+    let q = st_get(base, qty, 1 + i);
+    let ep = st_get(base, price, 1 + i);
+    let dc = st_get(base, disc, 1 + i);
+    let _ = if ok == 1 then upd(ga, flag, lst, q, ep, dc) else 0;
+    let i = i + 1;
+    0
+  };
+  0
+}
+fn combine24(ga: [i64]) -> i64 {
+  let acc = 0;
+  let k = 0;
+  while k < 24 {
+    let acc = acc * 1000003 + ga[k];
+    let k = k + 1;
+    0
+  };
+  acc
+}
+fn main(argc: i64, argv: [str]) -> i64 {
+  let spath = zeros(256);
+  let sl = st_str(spath, argv[2]);
+  let size = 67108864;
+  let base = st_map_ro(spath, sl, size);
+  let tmp = zeros(256);
+  let root = st_root(base, tmp);
+  let n = st_get(base, root, 0);
+  let ship = st_ref(base, root, 1);
+  let disc = st_ref(base, root, 2);
+  let qty = st_ref(base, root, 3);
+  let price = st_ref(base, root, 4);
+  let rf = st_ref(base, root, 5);
+  let ls = st_ref(base, root, 6);
+  let ga = zeros(24);
+  let _ = q1_scan(base, ship, disc, qty, price, rf, ls, n, ga);
+  let fold = combine24(ga);
+  let _ = sys_munmap(st_addr(base), size);
+  fold
+}
+") in
+  0
+}
+
+// gen_gb_query: writes a query-kernel .bp file. op 10 = Q6 (scan-filter-agg),
+// op 11 = Q1 (scan-group-agg). query_id is reserved for future constant variation.
+fn gen_gb_query(dir: str, op: i64, query_id: i64) -> i64 {
+  let path = zeros(512) in
+  let pos = zeros(1) in
+  let _ = wr_str(path, pos, dir) in
+  let _ = if op == 11 then wr_str(path, pos, "/q1_query.bp") else wr_str(path, pos, "/q6_query.bp") in
+  let plen = pos[0] in
+  let text = zeros(16384) in
+  let tpos = zeros(1) in
+  let _ = if op == 11 then gen_q1_text(text, tpos) else gen_q6_text(text, tpos) in
+  let fd = sys_open(path, plen, 578) in
+  let _ = sys_export(fd, text, tpos[0]) in
+  sys_close(fd)
+}

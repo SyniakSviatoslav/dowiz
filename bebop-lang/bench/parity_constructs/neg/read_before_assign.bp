@@ -1,0 +1,4 @@
+// F2 (exit 105): read before assignment — identifier hash collision
+// Two identifiers with same hash but different spellings; binding one
+// then reading the other triggers exit 105
+fn main() -> i64 { let abcdefg = 5; let _ = abcdefh in abcdefh }

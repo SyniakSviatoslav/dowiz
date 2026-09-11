@@ -33,6 +33,7 @@ python3 tools/census.py "$BIN" | tail -n 1 > "$T/census.txt" 2>&1
 python3 tools/check_abi.py "$BIN" > "$T/abi.txt" 2>&1
 BEBOP_TMP=$T/diag BEBOP_BIN=$BIN bash bench/vs_rust/diag_check.sh > "$T/diag.log" 2>&1  # T90: line:col diagnostics
 python3 tools/check_words.py > "$T/words.log" 2>&1  # item 7: hand-typed em()/st[] literals (L1)
+python3 tools/f8_dt.py "$BIN" > "$T/f8_dt.log" 2>&1  # F8: dependent surface types parsing + erasure
 wait
 red=0
 line() { local l; l=$(grep -E "$2" "$T/$1" | tail -n 1); [ -n "$l" ] || { l="MISSING ($1)"; red=1; }; echo "$l" | grep -qE "$3" || red=1; echo "  $l"; }
@@ -47,6 +48,7 @@ line abi.txt 'ABI' '^ABI ok'
 line inv.log '^invariants:' 'GREEN'
 line words.log '^words:' 'PASS'
 line std.log '^boxguard:' '.'  # item 9: the timing stage (lcjit) runs last, single-threaded, boxguard status logged next to it
+line f8_dt.log '^f8_dt gate:' 'PASS'  # F8: dependent surface types parsing + erasure
 echo "  census: $(cat "$T/census.txt")"
 grep -h '^FAIL\|MISMATCH\|COMPILEFAIL\|WORD_BUDGET_MISSING\|VALUE_MISMATCH' "$T"/*.log | head -n 20 | sed 's/^/  /'
 [ $red = 0 ] && echo "battery: GREEN" || { echo "battery: RED"; exit 1; }

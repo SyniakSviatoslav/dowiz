@@ -1,0 +1,7 @@
+// c70_qdsl_neg.bp — B7 step 1 negative construct: malformed query exits 89
+use "selfhost/std/qdsl.bp"
+
+fn main() -> i64 {
+  let r = qdsl_parse("q { from }");
+  if r == 0 then 89 else 99
+}

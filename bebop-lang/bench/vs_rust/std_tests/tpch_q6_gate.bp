@@ -1,0 +1,66 @@
+// tpch_q6_gate.bp — B7 step 2 gate: scan-filter-agg (Q6) fold
+// Generates 1000 rows of deterministic lineitem data in-memory,
+// runs the Q6 scan, and returns the fold.
+// Expected: 178699374 (matches bench/oracles/tpch.py q6_fold for n=1000
+// and the Rust twin bench/vs_rust/rust_once/q6q1.rs).
+//
+// Unsigned-mod note (docs/LANGUAGE.md:66: `%` is SIGNED): the LCG stream wraps
+// mod 2^64, so a raw `x % m` on a negative i64 disagrees with the oracle's
+// `nxt() % m` over [0,2^64). umod() reconstructs the exact unsigned remainder
+// from the logical-shift high half and the low 32 bits with c32 = 2^32 mod m.
+fn lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
+
+fn umod(x: i64, m: i64, c32: i64) -> i64 {
+  let hi = x >> 32;
+  let lo = x - (hi << 32);
+  ((hi % m) * c32 + (lo % m)) % m
+}
+
+fn main() -> i64 {
+  let n = 1000;
+  let ship = zeros(n);
+  let disc = zeros(n);
+  let qty = zeros(n);
+  let price = zeros(n);
+  // Generate data (same LCG stream as the oracle/Rust twin, seed 20260906)
+  let x = 20260906;
+  let i = 0;
+  while i < n {
+    let x = lcg(x);
+    let _ = ship[i] = 727198 + umod(x, 2557, 2523);
+    let x = lcg(x);
+    let _ = disc[i] = umod(x, 11, 4);
+    let x = lcg(x);
+    let _ = qty[i] = 1 + umod(x, 50, 46);
+    let x = lcg(x);
+    let upc = 90000 + umod(x, 120100, 71196);
+    let _ = price[i] = qty[i] * upc;
+    let x = lcg(x);
+    let _ = x = x + umod(x, 3, 1) - umod(x, 3, 1);
+    let x = lcg(x);
+    let _ = x = x + umod(x, 2, 0) - umod(x, 2, 0);
+    let x = lcg(x);
+    let _ = x = x + umod(x, 9, 4) - umod(x, 9, 4);
+    let i = i + 1;
+    0
+  };
+  // Q6 scan: shipdate in [1994,1995), discount in [5,7], quantity < 24
+  let lo = 727929;
+  let hi = 728294;
+  let acc = 0;
+  let i = 0;
+  while i < n {
+    let sd = ship[i];
+    let dc = disc[i];
+    let q = qty[i];
+    let m1 = if sd >= lo then (if sd < hi then 1 else 0) else 0;
+    let m2 = if dc >= 5 then (if dc <= 7 then 1 else 0) else 0;
+    let m3 = if q < 24 then 1 else 0;
+    let hit = m1 * m2 * m3;
+    let ep = price[i];
+    let acc = acc + hit * ep * dc;
+    let i = i + 1;
+    0
+  };
+  acc
+}

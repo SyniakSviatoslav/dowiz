@@ -1,0 +1,40 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+// svrf.bp — B1 recovery follow-up gate (test reopen only)
+fn main() -> i64 {
+  let path = zeros(64);
+  let pl = st_str(path, "svrf.store");
+  let tmp = zeros(256);
+  let size = 4194304;
+  let base = st_open(path, pl, size, tmp);
+  let tx = zeros(6);
+  let d = st_digest("N{i64,ref N}");
+
+  // Commit 1: one object
+  let _ = st_begin(base, tx, tmp);
+  let o1 = st_alloc(base, tx, 2, d);
+  let _ = st_put(base, o1, 0, 42);
+  let _ = st_put(base, o1, 1, 0);
+  let _ = st_seal(base, o1, tmp);
+  let _ = st_commit(base, tx, o1, tmp);
+
+  // Commit 2: another object
+  let _ = st_begin(base, tx, tmp);
+  let o2 = st_alloc(base, tx, 2, d);
+  let _ = st_put(base, o2, 0, 43);
+  let _ = st_link(base, o2, 1, o1);
+  let _ = st_seal(base, o2, tmp);
+  let _ = st_commit(base, tx, o2, tmp);
+
+  // Reopen (triggers st_reopen_verify internally)
+  let _ = sys_munmap(st_addr(base), size);
+  let base = st_open(path, pl, size, tmp);
+
+  let sb = st_pick(base, tmp);
+  let live_cursor = base[sb + 4];
+
+  let _ = sys_munmap(st_addr(base), size);
+
+  // Return: live_cursor
+  live_cursor
+}

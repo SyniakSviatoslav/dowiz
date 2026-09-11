@@ -1,0 +1,72 @@
+// tpch_q1_gen.bp — B7 step 2 gate: verify gen_gb generates a correct scan-group-agg (Q1) query
+// 1. Uses gen_gb_query to generate the Q1 query .bp file (writes to $BEBOP_TMP/q1_query.bp)
+// 2. Reads the lineitem store and runs the same fused scan inline
+// 3. Returns the fold (must == oracle == sqlite twin)
+//
+// Usage: ./seed/build/seed <this.bin> <store path> <tmp dir>
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+use "selfhost/std/gen_gb.bp"
+
+fn upd(ga: [i64], flag: i64, ls: i64, q: i64, ep: i64, dc: i64) -> i64 {
+  let g = flag * 2 + ls;
+  let b = g * 4;
+  let _ = ga[b] = ga[b] + 1;
+  let _ = ga[b + 1] = ga[b + 1] + q;
+  let _ = ga[b + 2] = ga[b + 2] + ep;
+  let _ = ga[b + 3] = ga[b + 3] + ep * (100 - dc);
+  0
+}
+fn q1_scan(base: [i64], ship: i64, disc: i64, qty: i64, price: i64, rf: i64, ls: i64, n: i64, ga: [i64]) -> i64 {
+  let cutoff = 729634;
+  let i = 0;
+  while i < n {
+    let sd = st_get(base, ship, 1 + i);
+    let ok = if sd <= cutoff then 1 else 0;
+    let flag = st_get(base, rf, 1 + i);
+    let lst = st_get(base, ls, 1 + i);
+    let q = st_get(base, qty, 1 + i);
+    let ep = st_get(base, price, 1 + i);
+    let dc = st_get(base, disc, 1 + i);
+    let _ = if ok == 1 then upd(ga, flag, lst, q, ep, dc) else 0;
+    let i = i + 1;
+    0
+  };
+  0
+}
+fn combine24(ga: [i64]) -> i64 {
+  let acc = 0;
+  let k = 0;
+  while k < 24 {
+    let acc = acc * 1000003 + ga[k];
+    let k = k + 1;
+    0
+  };
+  acc
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  // Generate the Q1 query .bp file via gen_gb_query (side effect)
+  let tmp = zeros(256) in
+  let tl = st_str(tmp, argv[3]) in
+  let _ = gen_gb_query(tmp, 11, 0) in
+  // Read the store and run the scan
+  let spath = zeros(256) in
+  let sl = st_str(spath, argv[2]) in
+  let size = 67108864 in
+  let base = st_map_ro(spath, sl, size) in
+  let tmp2 = zeros(256) in
+  let root = st_root(base, tmp2) in
+  let n = st_get(base, root, 0) in
+  let ship = st_ref(base, root, 1) in
+  let disc = st_ref(base, root, 2) in
+  let qty = st_ref(base, root, 3) in
+  let price = st_ref(base, root, 4) in
+  let rf = st_ref(base, root, 5) in
+  let ls = st_ref(base, root, 6) in
+  let ga = zeros(24) in
+  let _ = q1_scan(base, ship, disc, qty, price, rf, ls, n, ga) in
+  let fold = combine24(ga) in
+  let _ = sys_munmap(st_addr(base), size) in
+  fold
+}

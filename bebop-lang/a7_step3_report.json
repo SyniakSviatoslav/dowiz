@@ -1,0 +1,19 @@
+{
+  "bin_words_delta": "+341 (71390 - 71049)",
+  "errors": [
+    "Bootstrap failure: original bebop.bin (7c03111) compiles modified bebop.bp into gen2.bin (exit 0), but gen2.bin exits 64 for ALL CLI commands (version, compile, check) -- old compiler produces broken binary from new source",
+    "gen2.bin compile bebop.bp produces gen3b.bin (175404 bytes) which also exits 64 for all commands",
+    "gen3b.bin compile bebop.bp -> trap 80 (arena exhausted), cannot self-compile",
+    "gen3b.bin compile k1.bp -> exit 64, not a functional compiler",
+    "bpref.py sys_readbuf mirror (line 626-636) copies bytes from position 0 instead of reading from fd -- stub implementation",
+    "bpref.py sys_mapb mirror (line 621-625) ignores path handle, just extends self.bytes with zeros -- stub implementation",
+    "bpref.py fails to run ingest.bp: 'str_to_cells' not registered as builtin callable from parsed user code (NameError: unknown fn str_to_cells)",
+    "Ingest test binary (compiled by original bebop.bin with new ingest.bp) crashes with trap 82 (SIGSEGV/SIGBUS) on 1MB file -- old sys_readbuf returns IO scratch zone address, not byte-region handle, so char()/str_len() on the result fails",
+    "Cannot test 100MB ingest: bootstrap failure blocks compilation of working ingest binary"
+  ],
+  "ingest_results": "BLOCKED -- cannot compile working ingest binary. gen2.bin (compiled from modified bebop.bp) is non-functional (exit 64 for all commands). Old bebop.bin compiles new ingest.bp but old sys_readbuf returns IO scratch zone address incompatible with char()/str_len() handle protocol, causing trap 82 on run.",
+  "sys_mapb_ok": "SOURCE_OK BINARY_BAD -- emit_sys_mapb source added to bebop.bp (lines 7455-7494) and wired into dispatch (line 1857). bpref.py mirror exists (lines 621-625) but is a stub. Cannot verify binary execution: gen2.bin/gen3b.bin are non-functional (exit 64).",
+  "sys_readbuf_ok": "SOURCE_OK BINARY_BAD -- emit_sys_readbuf rewritten in bebop.bp (lines 1707-1746) and wired into dispatch (line 1854). bpref.py mirror exists (lines 626-636) but incorrectly copies from position 0. Cannot verify binary execution: gen2.bin/gen3b.bin are non-functional (exit 64).",
+  "str_to_cells_ok": "SOURCE_OK -- str_to_cells in bebop.bp (lines 6634-6646) handles path correctly: lsr/add/ldr per byte via char(src,i) loop. Used in cli_compile (lines 7098-7099, 7105, 7112, 7123). bpref.py does NOT register str_to_cells as a builtin callable from parsed code -- fails with NameError when ingest.bp tries to call it. The bpref.py Interp.builtin_or_call (line 538-639) has no 'str_to_cells' handler.",
+  "verdict": "RED"
+}

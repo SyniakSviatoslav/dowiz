@@ -145,6 +145,24 @@ impl RpcChannel for MockChannel {
     }
 }
 
+/// Build a JSON-RPC 2.0 request frame, injecting the API key as a
+/// header field (paid-API convention). The frame is identical for
+/// every agent bridge — method + params carry the domain semantics.
+pub fn build_json_rpc_request(
+    method: &str,
+    params: Value,
+    api_key: &str,
+) -> Vec<u8> {
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": 0u64,
+        "method": method,
+        "params": params,
+        "x-api-key": api_key,
+    });
+    serde_json::to_vec(&req).unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

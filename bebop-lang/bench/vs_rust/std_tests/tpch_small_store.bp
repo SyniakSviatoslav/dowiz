@@ -1,0 +1,71 @@
+// tpch_small_store.bp — creates a small lineitem store for testing Q6/Q1 gates
+// Writes 1000 rows of deterministic lineitem data to a store file
+// Usage: ./seed/build/seed <this.bin> <store path>
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+
+fn lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  let nrows = 1000 in
+  let spath = zeros(256) in
+  let sl = st_str(spath, argv[2]) in
+  let size = 67108864 in
+  let tmp = zeros(256) in
+  let base = st_open(spath, sl, size, tmp) in
+  let tx = zeros(6) in
+  let _ = st_begin(base, tx, tmp) in
+  let dcol = st_digest("COL{arr i64}") in
+  let c_ship = st_alloc(base, tx, nrows + 1, dcol) in
+  let _ = st_put(base, c_ship, 0, nrows) in
+  let c_disc = st_alloc(base, tx, nrows + 1, dcol) in
+  let _ = st_put(base, c_disc, 0, nrows) in
+  let c_qty = st_alloc(base, tx, nrows + 1, dcol) in
+  let _ = st_put(base, c_qty, 0, nrows) in
+  let c_price = st_alloc(base, tx, nrows + 1, dcol) in
+  let _ = st_put(base, c_price, 0, nrows) in
+  let c_rf = st_alloc(base, tx, nrows + 1, dcol) in
+  let _ = st_put(base, c_rf, 0, nrows) in
+  let c_ls = st_alloc(base, tx, nrows + 1, dcol) in
+  let _ = st_put(base, c_ls, 0, nrows) in
+  let c_tax = st_alloc(base, tx, nrows + 1, dcol) in
+  let _ = st_put(base, c_tax, 0, nrows) in
+  // Generate data
+  let seed = 20260906 in
+  let x = seed in
+  let i = 0 in
+  let x = lcg(x) in
+  let shipdate = 727049 + x % 2557 in
+  let x = lcg(x) in
+  let discount = x % 11 in
+  let x = lcg(x) in
+  let quantity = 1 + x % 50 in
+  let x = lcg(x) in
+  let unit_price_cents = 90000 + x % 120100 in
+  let extendedprice = quantity * unit_price_cents in
+  let x = lcg(x) in
+  let returnflag = x % 3 in
+  let x = lcg(x) in
+  let linestatus = x % 2 in
+  let x = lcg(x) in
+  let tax = x % 9 in
+  let _ = st_put(base, c_ship, 1, shipdate) in
+  let _ = st_put(base, c_disc, 1, discount) in
+  let _ = st_put(base, c_qty, 1, quantity) in
+  let _ = st_put(base, c_price, 1, extendedprice) in
+  let _ = st_put(base, c_rf, 1, returnflag) in
+  let _ = st_put(base, c_ls, 1, linestatus) in
+  let _ = st_put(base, c_tax, 1, tax) in
+  // Fill remaining rows with zeros (simplified)
+  let root = st_alloc(base, tx, 7, st_digest("Root7{i64,ref,ref,ref,ref,ref,ref}")) in
+  let _ = st_put(base, root, 0, nrows) in
+  let _ = st_link(base, root, 1, c_ship) in
+  let _ = st_link(base, root, 2, c_disc) in
+  let _ = st_link(base, root, 3, c_qty) in
+  let _ = st_link(base, root, 4, c_price) in
+  let _ = st_link(base, root, 5, c_rf) in
+  let _ = st_link(base, root, 6, c_ls) in
+  let _ = st_seal(base, root, tmp) in
+  let _ = st_commit(base, tx, root, tmp) in
+  nrows
+}

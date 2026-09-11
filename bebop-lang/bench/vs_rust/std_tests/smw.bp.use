@@ -1,0 +1,1433 @@
+// selfhost/prelude/sha256.bp — SHA-256 (FIPS 180-4), exact port of sha256.c; the
+// `use` module behind the sha256 gate (T47c split, 2026-09-05) and the store's
+// layout digests (T111/T112, docs/LANG-DB-DESIGN.md §4a: types-only, sha256, FNV banned).
+// i64 cells carry u32 words; every addition is masked & 0xffffffff; >> is logical.
+// API: sha256_words(data, n, h) fills h[0..8); sha256_fold(data, n) = acc*31 + word
+// over the 8 words (u64 wrap, the golden driver's fold_u64); sha256_lo64(data, n) =
+// the digest's last 8 bytes big-endian = (h6 << 32) | h7.
+// rotr32: 32-bit right rotate over the low 32 bits (masked).
+fn rotr32(x: i64, n: i64) -> i64 {
+  ((x >> n) | (x << (32 - n))) & 4294967295
+}
+
+// sha_transform: compress one 64-byte block into state h[0..8) in place.
+// w[0..16) must hold the block as 16 big-endian u32 cells; w[16..64) is
+// the message schedule scratch. ktab = the 64-entry round-constant table.
+fn sha_transform(h: [i64], w: [i64], ktab: [i64]) -> i64 {
+  let i = 16;
+  while i < 64 {
+    let w15 = w[i - 15];
+    let w2 = w[i - 2];
+    let s0 = rotr32(w15, 7) ^ rotr32(w15, 18) ^ (w15 >> 3);
+    let s1 = rotr32(w2, 17) ^ rotr32(w2, 19) ^ (w2 >> 10);
+    let _ = w[i] = (w[i - 16] + s0 + w[i - 7] + s1) & 4294967295;
+    let i = i + 1;
+    0
+  };
+  let a = h[0];
+  let b = h[1];
+  let c = h[2];
+  let d = h[3];
+  let e = h[4];
+  let f = h[5];
+  let g = h[6];
+  let hh = h[7];
+  let j = 0;
+  while j < 64 {
+    let S1 = rotr32(e, 6) ^ rotr32(e, 11) ^ rotr32(e, 25);
+    let ch = (e & f) ^ ((0 - 1 - e) & g);
+    let t1 = (hh + S1 + ch + ktab[j] + w[j]) & 4294967295;
+    let S0 = rotr32(a, 2) ^ rotr32(a, 13) ^ rotr32(a, 22);
+    let maj = (a & b) ^ (a & c) ^ (b & c);
+    let t2 = (S0 + maj) & 4294967295;
+    let hh = g;
+    let g = f;
+    let f = e;
+    let e = (d + t1) & 4294967295;
+    let d = c;
+    let c = b;
+    let b = a;
+    let a = (t1 + t2) & 4294967295;
+    let j = j + 1;
+    0
+  };
+  let _ = h[0] = (h[0] + a) & 4294967295;
+  let _ = h[1] = (h[1] + b) & 4294967295;
+  let _ = h[2] = (h[2] + c) & 4294967295;
+  let _ = h[3] = (h[3] + d) & 4294967295;
+  let _ = h[4] = (h[4] + e) & 4294967295;
+  let _ = h[5] = (h[5] + f) & 4294967295;
+  let _ = h[6] = (h[6] + g) & 4294967295;
+  let _ = h[7] = (h[7] + hh) & 4294967295;
+  0
+}
+
+// sha256_fold: SHA-256 of byte cells data[0..n), folded to one i64.
+// sha256_words(data, n, h): SHA-256 of byte cells data[0..n) -> 8 u32 words in h[0..8).
+fn sha256_words(data: [i64], n: i64, h: [i64]) -> i64 {
+  let size = ((n + 9 + 63) / 64) * 64;
+  let pad = zeros(size);
+  let k = 0;
+  while k < n {
+    let _ = pad[k] = data[k];
+    let k = k + 1;
+    0
+  };
+  let _ = pad[n] = 128;
+  let tl = n * 8;
+  let _ = pad[size - 8] = (tl >> 56) & 255;
+  let _ = pad[size - 7] = (tl >> 48) & 255;
+  let _ = pad[size - 6] = (tl >> 40) & 255;
+  let _ = pad[size - 5] = (tl >> 32) & 255;
+  let _ = pad[size - 4] = (tl >> 24) & 255;
+  let _ = pad[size - 3] = (tl >> 16) & 255;
+  let _ = pad[size - 2] = (tl >> 8) & 255;
+  let _ = pad[size - 1] = tl & 255;
+  let _ = h[0] = 1779033703;
+  let _ = h[1] = 3144134277;
+  let _ = h[2] = 1013904242;
+  let _ = h[3] = 2773480762;
+  let _ = h[4] = 1359893119;
+  let _ = h[5] = 2600822924;
+  let _ = h[6] = 528734635;
+  let _ = h[7] = 1541459225;
+  let w = zeros(64);
+  let ktab = [1116352408, 1899447441, 3049323471, 3921009573, 961987163, 1508970993, 2453635748, 2870763221, 3624381080, 310598401, 607225278, 1426881987, 1925078388, 2162078206, 2614888103, 3248222580, 3835390401, 4022224774, 264347078, 604807628, 770255983, 1249150122, 1555081692, 1996064986, 2554220882, 2821834349, 2952996808, 3210313671, 3336571891, 3584528711, 113926993, 338241895, 666307205, 773529912, 1294757372, 1396182291, 1695183700, 1986661051, 2177026350, 2456956037, 2730485921, 2820302411, 3259730800, 3345764771, 3516065817, 3600352804, 4094571909, 275423344, 430227734, 506948616, 659060556, 883997877, 958139571, 1322822218, 1537002063, 1747873779, 1955562222, 2024104815, 2227730452, 2361852424, 2428436474, 2756734187, 3204031479, 3329325298];
+  let bi = 0;
+  let nb = size / 64;
+  while bi < nb {
+    let o = bi * 64;
+    let j = 0;
+    while j < 16 {
+      let b0 = pad[o + j * 4];
+      let b1 = pad[o + j * 4 + 1];
+      let b2 = pad[o + j * 4 + 2];
+      let b3 = pad[o + j * 4 + 3];
+      let _ = w[j] = ((b0 * 256 + b1) * 256 + b2) * 256 + b3;
+      let j = j + 1;
+      0
+    };
+    let _ = sha_transform(h, w, ktab);
+    let bi = bi + 1;
+    0
+  };
+  0
+}
+
+fn sha256_fold(data: [i64], n: i64) -> i64 {
+  let h = zeros(8);
+  let _ = sha256_words(data, n, h);
+  let i = 0;
+  let acc = 0;
+  while i < 8 {
+    let acc = acc * 31 + h[i];
+    let i = i + 1;
+    0
+  };
+  acc
+}
+fn sha256_lo64(data: [i64], n: i64) -> i64 {
+  let h = zeros(8);
+  let _ = sha256_words(data, n, h);
+  (h[6] << 32) | h[7]
+}
+
+// selfhost/prelude/store.bp — T111 store library (docs/LANG-DB-DESIGN.md §4, D10/D11-H).
+// The file: page 0 = superblock A (cells 0..15), page 1 = superblock B (cells
+// 512..527), cells 1024.. = append-only bump arena of objects. Every object =
+// h0 (layout_digest_lo32 << 32 | length_in_cells), h1 (crc32(payload LE bytes)
+// << 32 | generation), payload. A `ref` field = OBJECT-relative signed cell
+// offset (target = this_object_start + off), 0 = null. Nothing in the file is an
+// address: the mapping may land at any base. st_cells/st_addr are the ONLY
+// i64 <-> [i64] casts in the tree (the mapping base), allowlisted by name in
+// tools/typecheck.py; everything else stays under the T48 census. Superblock (16 cells): 0 magic
+// "BEBOPST1", 1 version, 2 generation, 3 root, 4 arena_used, 5 layout_table,
+// 6 migration_table, 7 live_cells, 8 superseded_cells, 9 reserved (B1 `anc`),
+// 10 commit-object offset (C3), 11 heads-table offset (C3), 12..14 zero, 15 crc32 of
+// cells 0..14. A reader picks the valid superblock with the higher generation.
+//
+// PartTab (B5 step 1, P=1 degenerate case): the live superblock's `root` cell (3)
+// points at a PartTab object. PartTab = 16 + 3*P cells; for P=1 that is 19 cells.
+//   cells 0..15   = exactly the live superblock's 16 cells (magic..crc) — a snapshot
+//                    of the superblock AS WRITTEN by the committing thread, so a reader
+//                    that copies PartTab gets a self-consistent superblock + partition
+//                    table in one object whose crc covers both.
+//   cells 16..18  = P=1 partition entry: [root_p, used_p, gen_p] (3 cells).
+//                    root_p = the partition's root object offset (== superblock root
+//                    for P=1), used_p = the partition's arena cursor (== superblock
+//                    arena_used for P=1), gen_p = the partition's generation (==
+//                    superblock generation for P=1).
+// The superblock's cell 3 (root) names this PartTab; cells 4 (arena_used) and 2
+// (generation) are now DERIVED from PartTab for P=1 (same values, read-through
+// for byte-identical behaviour). st_begin reads used_p from PartTab; st_commit
+// writes a new PartTab' with (root_p, used_p, gen_p+1) and bumps the global
+// superblock generation too (still gen+1, same as today).
+//
+// Transaction tx (6 cells): 0 live sb, 1 mark, 2 cursor, 3 live delta,
+// 4 superseded delta, 5 next generation. Commit = write the OTHER superblock.
+// crc32 is crc32x over the raw little-endian bytes of the cells (no staging).
+fn st_cells(a: i64) -> [i64] { a }
+fn st_addr(base: [i64]) -> i64 { base }
+fn st_magic() -> i64 { 3554557610294396226 }
+fn st_str(dst: [i64], s: str) -> i64 {
+  let n = str_len(s);
+  let i = 0;
+  while i < n {
+    let _ = dst[i] = char(s, i);
+    let i = i + 1;
+    0
+  };
+  n
+}
+fn st_bytes(src: [i64], off: i64, n: i64, out: [i64]) -> i64 {
+  let i = 0;
+  while i < n {
+    let v = src[off + i];
+    let j = 0;
+    while j < 8 {
+      let _ = out[i * 8 + j] = (v >> (j * 8)) & 255;
+      let j = j + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  n * 8
+}
+// st_crc: zlib crc32 of the raw little-endian bytes of n cells (crc32x, T109b); tmp is
+// kept in the signatures for the API but no longer used (staging 8*len bytes into a
+// 256-cell tmp overflowed the arena on the first million-slot root, G4).
+fn st_crc(src: [i64], off: i64, n: i64, tmp: [i64]) -> i64 {
+  crc32x(src, off, n)
+}
+fn st_sb_write(base: [i64], sb: i64, gen: i64, root: i64, used: i64, live: i64, sup: i64, tmp: [i64]) -> i64 {
+  st_sb_write_m(base, sb, gen, root, used, live, sup, 0, tmp)
+}
+// st_sb_write_m: the same with the migration-table object offset (cell 6, T114).
+fn st_sb_write_m(base: [i64], sb: i64, gen: i64, root: i64, used: i64, live: i64, sup: i64, mig: i64, tmp: [i64]) -> i64 {
+  let _ = base[sb] = st_magic();
+  let _ = base[sb + 1] = 1;
+  let _ = base[sb + 2] = gen;
+  let _ = base[sb + 3] = root;
+  let _ = base[sb + 4] = used;
+  let _ = base[sb + 5] = 0;
+  let _ = base[sb + 6] = mig;
+  let _ = base[sb + 7] = live;
+  let _ = base[sb + 8] = sup;
+  let k = 9;
+  while k < 15 {
+    let _ = base[sb + k] = 0;
+    let k = k + 1;
+    0
+  };
+  let _ = base[sb + 15] = st_crc(base, sb, 15, tmp);
+  0
+}
+fn st_sb_valid(base: [i64], sb: i64, tmp: [i64]) -> i64 {
+  if base[sb] == st_magic() then (if base[sb + 15] == st_crc(base, sb, 15, tmp) then 1 else 0) else 0
+}
+// st_pick(base, tmp): the live superblock cell index (0 or 512), -1 if neither is valid.
+fn st_pick(base: [i64], tmp: [i64]) -> i64 {
+  let va = st_sb_valid(base, 0, tmp);
+  let vb = st_sb_valid(base, 512, tmp);
+  if va + vb == 2 then (if base[514] > base[2] then 512 else 0) else if va == 1 then 0 else if vb == 1 then 512 else 0 - 1
+}
+// st_verify(base, upto, tmp): reopen-time trust check for one superblock's whole
+// object arena, cells 1024..upto (append-only, so this is every object that
+// generation's root chain could ever reach -- no per-type ref/layout table
+// needed, and it is strictly stronger than a root-only walk since it also
+// covers superseded objects, harmless since those are only ever written once).
+// Closes the B1 torn-write gap (docs/blueprints/B1-durability-torn-write.md):
+// a torn/zeroed PAYLOAD page can leave a superblock whose OWN crc is fully
+// valid (two independent pages -- st_pick alone cannot see this). A torn
+// object HEADER (h0's length word) is itself untrusted: `len >= 1` is
+// required (st_compact enforces the same invariant elsewhere, exit 84 on
+// len < 1 -- no real object is ever length 0), which is what actually
+// catches a zeroed page: an all-zero h0/h1 looks like a trivially "valid"
+// zero-length object whose crc-of-nothing (0) matches its own zeroed crc
+// field, so without this check a torn/zeroed run is silently stepped over
+// two cells at a time and never flagged. A length that would run the scan
+// past `upto` (torn to something merely large, not zero) also stops it
+// immediately and counts as bad -- the scan can never read past the
+// caller's own arena bound, however garbled the length word. Inlines
+// st_len/st_check (via st_crc, already defined above) rather than calling
+// them, so this can sit before st_open without a forward reference.
+// Returns (bad_count << 32) | objects_visited.
+// st_verify_range(base, from, upto, tmp): the same walk, bounded BELOW as well (B1 recovery,
+// 2026-09-09). `from` must be an object boundary; the only value ever passed is the OTHER
+// superblock's arena_used cell, which IS that generation's bump cursor and therefore always one.
+// Why a lower bound is sound: the arena is append-only and a commit's range is made durable
+// BEFORE the superblock that names it (st_commit_sync: msync range, toggle superblock, msync
+// superblock). So when the fallback generation's superblock is crc-valid, every byte below its
+// cursor was durable before the failing commit's crash window even opened, and the only bytes a
+// crash can leave inconsistent with a valid superblock are [fallback_cursor, live_cursor).
+// Re-crc-ing everything below that on EVERY open is paranoia, not durability: it is the same
+// bytes, re-read, every time the file is opened.
+fn st_verify_range(base: [i64], from: i64, upto: i64, tmp: [i64]) -> i64 {
+  let off = from;
+  let bad = 0;
+  let n = 0;
+  while off < upto {
+    let len = base[off] & 4294967295;
+    let fits = if len >= 1 then (if off + 2 + len <= upto then 1 else 0) else 0;
+    let ok = if fits == 1 then (if (base[off + 1] >> 32) == st_crc(base, off + 2, len, tmp) then 1 else 0) else 0;
+    let bad = bad + (1 - ok);
+    let n = n + 1;
+    let off = if fits == 1 then off + 2 + len else upto;
+    0
+  };
+  (bad << 32) | n
+}
+// st_verify: the WHOLE arena, unchanged in meaning and still the fail-stop check used on the
+// fallback path and by any caller that wants full coverage (a fsck, not a reopen).
+fn st_verify(base: [i64], upto: i64, tmp: [i64]) -> i64 { st_verify_range(base, 1024, upto, tmp) }
+// st_reopen_lo(base, sb, tmp): the lower bound for the reopen scan -- the OTHER superblock's
+// cursor when that superblock is crc-valid and its cursor does not run past ours, else 1024
+// (full scan). A generation with no valid sibling has no evidence below its own cursor, so it
+// gets the whole scan; that is the conservative direction.
+fn st_reopen_lo(base: [i64], sb: i64, tmp: [i64]) -> i64 {
+  let other = if sb == 0 then 512 else 0;
+  let ov = st_sb_valid(base, other, tmp);
+  let ou = if ov == 1 then base[other + 4] else 1024;
+  if ou >= 1024 then (if ou <= base[sb + 4] then ou else 1024) else 1024
+}
+// st_reopen_verify(base, tmp): called by st_open on every non-fresh open.
+// st_pick only checks a superblock's OWN crc -- it will happily pick a
+// generation whose superblock survived a crash intact while its payload was
+// independently torn (the B1 gap). Re-verify the picked superblock's object
+// arena; on failure, stamp that superblock's magic word to 0 IN THE MAPPING
+// (self-heals the file: every future reader, this process or any other,
+// including a tool that only checks a superblock's own crc, now sees it as
+// invalid and skips it -- MAP_SHARED writes are visible to any process that
+// reads the same file afterward, no fsync needed for that, only for crash
+// durability) and re-pick. One retry is enough: the fallback generation's
+// payload range was written and made durable several commits before the one
+// that tore. Returns the superblock finally selected (matches st_pick's
+// return convention, -1 if both copies fail verification).
+fn st_reopen_verify(base: [i64], tmp: [i64]) -> i64 {
+  let sb = st_pick(base, tmp);
+  let bad = st_verify_range(base, st_reopen_lo(base, sb, tmp), base[sb + 4], tmp) >> 32;
+  let _ = if bad > 0 then base[sb] = 0 else 0;
+  let sb2 = if bad > 0 then st_pick(base, tmp) else sb;
+  // The FALLBACK is scanned in FULL on purpose: we have just proved that a valid superblock did
+  // NOT imply a durable payload for the generation we rejected, so the ordering argument that
+  // licenses the bounded scan no longer applies to this file, and the fallback's own crcs are
+  // the only evidence left. This is why the `recover` row cannot be made fast without weakening
+  // the guarantee, while the clean `reopen` row can.
+  let bad2 = if bad > 0 then (if sb2 < 0 then 0 else st_verify(base, base[sb2 + 4], tmp) >> 32) else 0;
+  let _ = if bad2 > 0 then base[sb2] = 0 else 0;
+  sb2
+}
+// st_open(path, plen, size, tmp): create/extend, map MAP_SHARED RW, init superblock A
+// when the file is fresh; on a real (non-fresh) open, verify-and-heal per
+// st_reopen_verify above. Returns the base (index it as cells).
+fn st_open(path: [i64], plen: i64, size: i64, tmp: [i64]) -> [i64] {
+  let fd = sys_open(path, plen, 66);
+  let _ = sys_ftruncate(fd, size);
+  let base = st_cells(sys_mmap(0, size, 3, 1, fd, 0));
+  let _ = sys_close(fd);
+  let fresh = if st_pick(base, tmp) < 0 then 1 else 0;
+  let _ = if fresh == 1 then st_sb_write(base, 0, 0, 0, 1024, 0, 0, tmp) else st_reopen_verify(base, tmp);
+  base
+}
+// st_map_ro(path, plen, size): a reader's mapping (PROT_READ, MAP_SHARED).
+fn st_map_ro(path: [i64], plen: i64, size: i64) -> [i64] {
+  let fd = sys_open(path, plen, 0);
+  let base = st_cells(sys_mmap(0, size, 1, 1, fd, 0));
+  let _ = sys_close(fd);
+  base
+}
+// st_parttab_cells(p: i64): number of cells in a PartTab for P=p partitions (16 + 3*P).
+fn st_parttab_cells(p: i64) -> i64 { 16 + p * 3 }
+
+// st_parttab_write(base, pt_off, sb, gen, roots, useds, gens, P, tmp): write a
+// PartTab object at pt_off for P partitions. cells 0..15 = superblock copy,
+// then P entries of 3 cells each: root_p, used_p, gen_p. The crc (cell 15)
+// covers ALL cells (16 + 3*P). pt_off is an arena object offset.
+fn st_parttab_write(base: [i64], pt_off: i64, sb: i64, gen: i64, roots: [i64], useds: [i64], gens: [i64], P: i64, tmp: [i64]) -> i64 {
+  // superblock copy into PartTab cells 0..15
+  let _ = base[pt_off] = base[sb];
+  let _ = base[pt_off + 1] = base[sb + 1];
+  let _ = base[pt_off + 2] = base[sb + 2];
+  let _ = base[pt_off + 3] = base[sb + 3];
+  let _ = base[pt_off + 4] = base[sb + 4];
+  let _ = base[pt_off + 5] = base[sb + 5];
+  let _ = base[pt_off + 6] = base[sb + 6];
+  let _ = base[pt_off + 7] = base[sb + 7];
+  let _ = base[pt_off + 8] = base[sb + 8];
+  let _ = base[pt_off + 9] = base[sb + 9];
+  let _ = base[pt_off + 10] = base[sb + 10];
+  let _ = base[pt_off + 11] = base[sb + 11];
+  let _ = base[pt_off + 12] = base[sb + 12];
+  let _ = base[pt_off + 13] = base[sb + 13];
+  let _ = base[pt_off + 14] = base[sb + 14];
+  let _ = base[pt_off + 15] = base[sb + 15];
+  // P partition entries at cells 16..16+3*P-1
+  let q = 0;
+  while q < P {
+    let off = pt_off + 16 + q * 3;
+    let _ = base[off] = roots[q];
+    let _ = base[off + 1] = useds[q];
+    let _ = base[off + 2] = gens[q];
+    let q = q + 1;
+    0
+  };
+  // re-crc over all cells (16 + 3*P)
+  let _ = base[pt_off + 15] = st_crc(base, pt_off, 16 + P * 3, tmp);
+  pt_off
+}
+
+
+
+// st_parttab_used(base, sb, pt_off: i64): read used_p from a PartTab (cell 17 for P=1).
+// When pt_off == 0 (no PartTab yet, e.g. fresh store before first commit),
+// fall back to the superblock's cell 4 directly for byte-identical behaviour.
+// `sb` is the live superblock index (0 or 512), already picked.
+fn st_parttab_used(base: [i64], sb: i64, pt_off: i64) -> i64 {
+  if pt_off == 0 then base[sb + 4] else base[pt_off + 17]
+}
+
+// st_parttab_gen(base, sb, pt_off: i64): read gen_p from a PartTab (cell 18 for P=1).
+// When pt_off == 0, fall back to the superblock's cell 2.
+fn st_parttab_gen(base: [i64], sb: i64, pt_off: i64) -> i64 {
+  if pt_off == 0 then base[sb + 2] else base[pt_off + 18]
+}
+
+// st_parttab_root(base, pt_off: i64): read root_p from a PartTab (cell 16 for P=1).
+// When pt_off == 0, return 0 (no root yet).
+fn st_parttab_root(base: [i64], pt_off: i64) -> i64 {
+  if pt_off == 0 then 0 else base[pt_off + 16]
+}
+
+// st_parttab_used_p(base, pt_off: i64, p: i64): read used_p[p] from a multi-partition PartTab.
+fn st_parttab_used_p(base: [i64], pt_off: i64, p: i64) -> i64 {
+  if pt_off == 0 then 1024 else base[pt_off + 16 + p * 3 + 1]
+}
+
+// st_parttab_root_p(base, pt_off: i64, p: i64): read root_p[p] from a multi-partition PartTab.
+fn st_parttab_root_p(base: [i64], pt_off: i64, p: i64) -> i64 {
+  if pt_off == 0 then 0 else base[pt_off + 16 + p * 3]
+}
+
+// st_parttab_gen_p(base, pt_off: i64, p: i64): read gen_p[p] from a multi-partition PartTab.
+fn st_parttab_gen_p(base: [i64], pt_off: i64, p: i64) -> i64 {
+  if pt_off == 0 then 0 else base[pt_off + 16 + p * 3 + 2]
+}
+
+// st_parttab_p(base: i64): read P (partition count) from the live PartTab via superblock.
+fn st_parttab_p(base: [i64]) -> i64 {
+  let sb = st_pick(base, [0]);
+  let pt = base[sb + 3];
+  if pt == 0 then 1 else base[pt]
+}
+
+fn st_begin(base: [i64], tx: [i64], tmp: [i64]) -> i64 {
+  let sb = st_pick(base, tmp);
+  let _ = tx[0] = sb;
+  // B5 step 1: read used_p from PartTab instead of sb+4 directly.
+  // For P=1, PartTab is at base[sb+3] (the root cell), and used_p (cell 17)
+  // equals the old sb+4 value — byte-identical behaviour.
+  let pt = base[sb + 3];
+  let _ = tx[1] = st_parttab_used(base, sb, pt);
+  let _ = tx[2] = st_parttab_used(base, sb, pt);
+  let _ = tx[3] = 0;
+  let _ = tx[4] = 0;
+  // next generation: gen_p + 1 (== sb+2 + 1 for P=1)
+  let _ = tx[5] = st_parttab_gen(base, sb, pt) + 1;
+  sb
+}
+// st_alloc(base, tx, len, digest): bump-allocate an object of len payload cells;
+// writes h0 and h1 (crc 0 until st_seal). Returns the object's cell offset.
+fn st_alloc(base: [i64], tx: [i64], len: i64, digest: i64) -> i64 {
+  let off = tx[2];
+  let _ = base[off] = ((digest & 4294967295) << 32) | len;
+  let _ = base[off + 1] = tx[5];
+  let _ = tx[2] = off + 2 + len;
+  let _ = tx[3] = tx[3] + 2 + len;
+  off
+}
+fn st_len(base: [i64], off: i64) -> i64 { base[off] & 4294967295 }
+fn st_seal(base: [i64], off: i64, tmp: [i64]) -> i64 {
+  let crc = st_crc(base, off + 2, st_len(base, off), tmp);
+  let _ = base[off + 1] = (crc << 32) | (base[off + 1] & 4294967295);
+  crc
+}
+fn st_check(base: [i64], off: i64, tmp: [i64]) -> i64 {
+  if (base[off + 1] >> 32) == st_crc(base, off + 2, st_len(base, off), tmp) then 1 else 0
+}
+// st_supersede(base, tx, off): accounting for an object replaced by a new version.
+fn st_supersede(base: [i64], tx: [i64], off: i64) -> i64 {
+  let _ = tx[4] = tx[4] + 2 + st_len(base, off);
+  0
+}
+fn st_commit(base: [i64], tx: [i64], root: i64, tmp: [i64]) -> i64 {
+  st_commit_m(base, tx, root, base[tx[0] + 6], tmp)
+}
+// st_commit_m: commit with a (new) migration-table object offset; 0 clears it.
+fn st_commit_m(base: [i64], tx: [i64], root: i64, mig: i64, tmp: [i64]) -> i64 {
+  let sb = tx[0];
+  let live = base[sb + 7] + tx[3] - tx[4];
+  let sup = base[sb + 8] + tx[4];
+  // B5 step 1: write a new PartTab object in the arena (allocated in the OTHER
+  // superblock's region, since we're toggling). The PartTab carries the new
+  // (root, used, gen+1) for P=1. For P=1, root_p = root, used_p = tx[2] (the
+  // new cursor after all allocations), gen_p = tx[5] (the new generation).
+  //
+  // The PartTab replaces the superblock's root cell: the new superblock's cell 3
+  // points at this PartTab. Cells 4 (used) and 2 (gen) in the superblock are
+  // still set to the same values for backward compatibility (readers that don't
+  // know about PartTab still see correct values), but the authority for P>=1
+  // moves to the PartTab.
+  let pt = st_alloc(base, tx, st_parttab_cells(1), st_digest("PartTab"));
+  let _ = st_parttab_write(base, pt, sb, tx[5], root, tx[2], tmp);
+  let _ = st_seal(base, pt, tmp);
+  // Write the OTHER superblock with root = PartTab offset, used = tx[2] (same
+  // as before for byte-compat), gen = tx[5] (same as before).
+  let _ = st_sb_write_m(base, 512 - sb, tx[5], pt, tx[2], live, sup, mig, tmp);
+  tx[5]
+}
+fn st_mig(base: [i64], tmp: [i64]) -> i64 { base[st_pick(base, tmp) + 6] }
+// st_snapshot(base, snap, tmp): copy the live superblock into snap (16 cells) and
+// validate the crc on the COPY -- a reader racing a writer's superblock toggle sees
+// either a whole superblock or a torn one that fails its crc (then the other is
+// tried). Returns the superblock index taken, -1 if neither copy validated.
+//
+// B5 step 1: this function copies ONLY the superblock (32 cells: two copies).
+// The PartTab copy is done by st_snapshot_pt, which requires a 51-cell snap buffer
+// (32 superblock + 19 PartTab). Old callers (G5/G6/G7/G8) keep using st_snapshot
+// with zeros(32) — their behaviour is byte-identical. New B5 code uses
+// st_snapshot_pt to get the PartTab too.
+fn st_snapshot(base: [i64], snap: [i64], tmp: [i64]) -> i64 {
+  let k = 0;
+  while k < 32 {
+    let _ = snap[k] = base[(k / 16) * 512 + k % 16];
+    let k = k + 1;
+    0
+  };
+  let va = if snap[0] == st_magic() then (if snap[15] == st_crc(snap, 0, 15, tmp) then 1 else 0) else 0;
+  let vb = if snap[16] == st_magic() then (if snap[31] == st_crc(snap, 16, 15, tmp) then 1 else 0) else 0;
+  let pick = if va + vb == 2 then (if snap[18] > snap[2] then 512 else 0) else if va == 1 then 0 else if vb == 1 then 512 else 0 - 1;
+  let j = 0;
+  while j < 16 * (if pick == 512 then 1 else 0) {
+    let _ = snap[j] = snap[16 + j];
+    let j = j + 1;
+    0
+  };
+  pick
+}
+
+// st_snapshot_pt(base, snap, tmp): full snapshot including PartTab (B5 step 1).
+// snap must have at least 51 cells: 32 for two superblock copies, 19 for the
+// PartTab (P=1). Copies the live superblock (as st_snapshot), then copies the
+// live PartTab (from the root cell) into snap[32..50] and validates its crc
+// (cell 15 of PartTab = snap[47], crc over 19 cells starting at snap[32]).
+// If the PartTab crc fails, the superblock copy is invalidated (snap[0] = 0)
+// so the caller retries. Returns the superblock index taken.
+fn st_snapshot_pt(base: [i64], snap: [i64], tmp: [i64]) -> i64 {
+  let pick = st_snapshot(base, snap, tmp);
+  let pt = snap[3];
+  // Copy PartTab cells 0..18 into snap[32..50] when pt != 0.
+  // When pt == 0, the loop bound is 0 so nothing is copied.
+  let q = 0;
+  while q < (if pt == 0 then 0 else 19) {
+    let _ = snap[32 + q] = base[pt + q];
+    let q = q + 1;
+    0
+  };
+  // Validate PartTab crc on the copy when pt != 0; invalidate snapshot on failure.
+  let _ = if pt != 0 then (
+    if snap[47] != st_crc(snap, 32, 19, tmp) then snap[0] = 0 else 0
+  ) else 0;
+  // If snapshot was invalidated, return -1.
+  if pick < 0 then pick else (
+    if snap[0] == st_magic() then pick else 0 - 1
+  )
+}
+// st_sync(base, nbytes): msync(MS_SYNC = 4) the first nbytes of the mapping (T110) — the
+// durable-commit row: call it on the appended range before st_commit and on the
+// superblock pages after (process-crash consistency never needs it, §4g).
+fn st_sync(base: [i64], nbytes: i64) -> i64 {
+  sys_msync(st_addr(base), nbytes, 4)
+}
+// st_commit_sync: msync the pages appended by this transaction [mark, cursor), toggle
+// the superblock, msync pages 0-1 (msync of the whole arena cost 444 us per commit).
+fn st_commit_sync(base: [i64], tx: [i64], root: i64, tmp: [i64]) -> i64 {
+  let lo = (tx[1] * 8) - (tx[1] * 8) % 4096;
+  let _ = sys_msync(st_addr(base) + lo, tx[2] * 8 - lo, 4);
+  let g = st_commit(base, tx, root, tmp);
+  let _ = st_sync(base, 8192);
+  g
+}
+// st_commit_batch(base, tx, first_mark, tmp): group commit (B1 blueprint section 3). The
+// caller runs N sub-transactions each committed with plain `st_commit` (no per-commit
+// sync -- st_begin picks the live sb and toggles it every time, so N commits alternate
+// slots and each one's root/gen/cursor is durable-ORDERED but not yet msync'ed), then
+// calls this ONCE: msync the union of every page appended across the whole batch
+// (`first_mark` = tx[1] right after the batch's FIRST st_begin, before any allocation --
+// tx[1] itself only holds the LAST sub-transaction's mark by the time this runs), THEN
+// msync both superblock pages (8192 bytes, same as st_commit_sync). Correctness: nothing
+// in the batch is durable until this one grouped msync of the superblock pages returns,
+// so a crash mid-batch can only ever reveal the pre-batch generation (self-consistent,
+// same guarantee st_commit_sync gives one commit at a time) -- never a torn mix of the
+// batch's N sub-commits, because none of their superblock writes were individually
+// synced (blueprint section 8: "group commit hides a torn middle transaction" -- it
+// can't, because "hidden" here means "not yet published to a crash image at all").
+fn st_commit_batch(base: [i64], tx: [i64], first_mark: i64, tmp: [i64]) -> i64 {
+  let lo = (first_mark * 8) - (first_mark * 8) % 4096;
+  let _ = sys_msync(st_addr(base) + lo, tx[2] * 8 - lo, 4);
+  st_sync(base, 8192)
+}
+fn st_abort(tx: [i64]) -> i64 {
+  let _ = tx[2] = tx[1];
+  let _ = tx[3] = 0;
+  let _ = tx[4] = 0;
+  0
+}
+fn st_root(base: [i64], tmp: [i64]) -> i64 { base[st_pick(base, tmp) + 3] }
+fn st_gen(base: [i64], tmp: [i64]) -> i64 { base[st_pick(base, tmp) + 2] }
+fn st_get(base: [i64], obj: i64, i: i64) -> i64 { base[obj + 2 + i] }
+fn st_put(base: [i64], obj: i64, i: i64, v: i64) -> i64 {
+  let _ = base[obj + 2 + i] = v;
+  v
+}
+// st_ref(base, obj, i): deref field i of obj (an object-relative offset) -> target offset.
+fn st_ref(base: [i64], obj: i64, i: i64) -> i64 { obj + base[obj + 2 + i] }
+fn st_link(base: [i64], obj: i64, i: i64, target: i64) -> i64 {
+  let _ = base[obj + 2 + i] = target - obj;
+  target - obj
+}
+// st_digest(s): layout digest of a types-only layout string, low 32 bits of sha256.
+fn st_digest(s: str) -> i64 {
+  let b = zeros(256);
+  let n = st_str(b, s);
+  sha256_lo64(b, n) & 4294967295
+}
+// ---- C3: commit chain (superblock cell 10), heads table (cell 11), st_open_at(gen) ----
+// "Memory as Git" is ALREADY this store's design (append-only arena, two superblocks,
+// root swap, CoW MVCC with a `prev` edge, Cheney compaction, the mapping itself as the
+// reader token). This block closes the three gaps only: the superblock kept generation g
+// and g-1 alone, so "check out generation k" was not expressible for the store as a
+// whole; there was one unnamed root; and a reader could take the live root or nothing.
+// Reader registration is deliberately NOT here -- the kernel's inode refcount already
+// releases a reader's mapping -- and there is no undo log, no redo log and no reader
+// table to make MVCC expensive (docs/blueprints/C3-commit-chain-and-heads.md:24-28).
+// Cell ORDER: B1's follow-up card claims cell 9 for its `anc` verification anchor
+// (docs/blueprints/B1-durability-torn-write.md:146,163), so C3 starts at 10. Cells 9,
+// 12, 13 and 14 stay zero.
+//   cell 10 = `commit` : offset of the live generation's commit OBJECT.
+//   cell 11 = `heads`  : offset of the heads table, 0 = one unnamed head (today).
+// Commit object C: payload [gen, ref root, ref prev_commit] (3 cells), refmask 6.
+// Heads table  H: payload [ref C x 8 | name x 8] (16 cells), refmask 255 -- FIXED width
+// so the table is ONE object with a CONSTANT refmask under st_compact's layout rules (a
+// mask is per-digest, so a variable-length name/ref interleave has no legal mask); an
+// empty slot holds ref 0 and `name` is an st_digest of the branch name. 8 branches cap.
+// Both cells are ZERO in every store written by plain st_commit/st_commit_m, so this row
+// changes no existing store's bytes, and it adds nothing to the open path: st_open,
+// st_pick, st_verify and st_reopen_verify are UNCHANGED and never read cell 10 or 11 --
+// the chain is written, never read, on the hot path.
+fn st_sb_write_ch(base: [i64], sb: i64, com: i64, heads: i64, tmp: [i64]) -> i64 {
+  let _ = base[sb + 10] = com;
+  let _ = base[sb + 11] = heads;
+  let _ = base[sb + 15] = st_crc(base, sb, 15, tmp);
+  0
+}
+// st_cobj(base, tx, root, cdig, tmp): append this transaction's commit object, chained to
+// the live superblock's commit (cell 10). Sealed like any other object, so st_verify and
+// st_check cover it and a torn commit object is caught at reopen exactly like a torn node.
+fn st_cobj(base: [i64], tx: [i64], root: i64, cdig: i64, tmp: [i64]) -> i64 {
+  let p = base[tx[0] + 10];
+  let c = st_alloc(base, tx, 3, cdig);
+  let _ = st_put(base, c, 0, tx[5]);
+  let _ = if root == 0 then st_put(base, c, 1, 0) else st_link(base, c, 1, root);
+  let _ = if p == 0 then st_put(base, c, 2, 0) else st_link(base, c, 2, p);
+  let _ = st_seal(base, c, tmp);
+  c
+}
+// st_publish(base, tx, root, c, heads, tmp): st_commit, then stamp cells 10/11 into the
+// superblock that commit just wrote and re-seal its crc (cell 15) LAST. Crash windows:
+// before the stamp -> a valid superblock whose cell 10 is 0 (st_sb_write_m zeroes 9..14),
+// i.e. the new generation is live with no chain entry; between the stamp and the crc ->
+// that superblock fails its own crc, st_pick skips it and the PREVIOUS generation stays
+// live. Neither state is torn, so this is never worse than a plain st_commit.
+fn st_publish(base: [i64], tx: [i64], root: i64, c: i64, heads: i64, tmp: [i64]) -> i64 {
+  let sb = tx[0];
+  let _ = st_commit(base, tx, root, tmp);
+  let _ = st_sb_write_ch(base, 512 - sb, c, heads, tmp);
+  tx[5]
+}
+// st_commit_c: commit + chain, heads table carried over unchanged.
+fn st_commit_c(base: [i64], tx: [i64], root: i64, cdig: i64, tmp: [i64]) -> i64 {
+  let c = st_cobj(base, tx, root, cdig, tmp);
+  let h = base[tx[0] + 11];
+  st_publish(base, tx, root, c, h, tmp)
+}
+// st_head_slot(base, heads, name): the slot already holding `name`, else the first free
+// slot, else -1 (all 8 branches used). heads == 0 -> slot 0.
+fn st_head_slot(base: [i64], heads: i64, name: i64) -> i64 {
+  let i = 0;
+  let hit = 0 - 1;
+  let fre = 0 - 1;
+  while i < 8 {
+    let r = if heads == 0 then 0 else st_get(base, heads, i);
+    let nm = if heads == 0 then 0 else st_get(base, heads, 8 + i);
+    let same = if r == 0 then 0 else (if nm == name then 1 else 0);
+    let hit = if same == 1 then i else hit;
+    let emp = if r == 0 then (if fre < 0 then 1 else 0) else 0;
+    let fre = if emp == 1 then i else fre;
+    let i = i + 1;
+    0
+  };
+  if hit >= 0 then hit else fre
+}
+// st_heads_set(base, tx, old, slot, name, c, hdig, tmp): append a NEW heads table (CoW,
+// like every other object here) = `old` with `slot` repointed at commit c under `name`.
+// Returns its offset; hand it to st_publish. old == 0 starts an empty table.
+fn st_heads_set(base: [i64], tx: [i64], old: i64, slot: i64, name: i64, c: i64, hdig: i64, tmp: [i64]) -> i64 {
+  let h = st_alloc(base, tx, 16, hdig);
+  let i = 0;
+  while i < 8 {
+    let r = if old == 0 then 0 else st_get(base, old, i);
+    let e = if r == 0 then 0 else st_ref(base, old, i);
+    let t = if i == slot then c else e;
+    let _ = if t == 0 then st_put(base, h, i, 0) else st_link(base, h, i, t);
+    let nm = if old == 0 then 0 else st_get(base, old, 8 + i);
+    let nv = if i == slot then name else nm;
+    let _ = st_put(base, h, 8 + i, nv);
+    let i = i + 1;
+    0
+  };
+  let _ = st_seal(base, h, tmp);
+  h
+}
+// st_head(base, name, tmp): the commit object the named head points at, 0 if absent.
+fn st_head(base: [i64], name: i64, tmp: [i64]) -> i64 {
+  let h = base[st_pick(base, tmp) + 11];
+  let s = st_head_slot(base, h, name);
+  let ok = if h == 0 then 0 else (if s < 0 then 0 else (if st_get(base, h, s) == 0 then 0 else 1));
+  if ok == 1 then st_ref(base, h, s) else 0
+}
+// st_commit_head(base, tmp): the live generation's commit object (cell 10), 0 = no chain.
+fn st_commit_head(base: [i64], tmp: [i64]) -> i64 { base[st_pick(base, tmp) + 10] }
+// st_croot(base, c): the root a commit object points at (0 = null commit or null root).
+fn st_croot(base: [i64], c: i64) -> i64 {
+  let r = if c == 0 then 0 else st_get(base, c, 1);
+  if r == 0 then 0 else st_ref(base, c, 1)
+}
+// st_commit_at(base, c, gen): walk the chain back from commit c to generation `gen`; 0 if
+// the chain does not reach it. `cur` never becomes 0 INSIDE the loop on purpose: stepping
+// onto 0 and then reading st_get(base, 0, 0) would read superblock A's cell 2, which IS a
+// generation number and would match by accident.
+fn st_commit_at(base: [i64], c: i64, gen: i64) -> i64 {
+  let cur = c;
+  let go = if c == 0 then 0 else 1;
+  while go == 1 {
+    let g = st_get(base, cur, 0);
+    let p = st_get(base, cur, 2);
+    let hit = if g == gen then 1 else 0;
+    let nxt = if p == 0 then 0 else st_ref(base, cur, 2);
+    let step = (1 - hit) * (if nxt == 0 then 0 else 1);
+    let cur = if step == 1 then nxt else cur;
+    let go = step;
+    0
+  };
+  let g = if c == 0 then 0 - 1 else st_get(base, cur, 0);
+  cur * (if g == gen then 1 else 0)
+}
+// st_open_at(base, gen, tmp): the ROOT of generation `gen`, reached by walking the commit
+// chain back from the live commit. 0 when the chain does not reach that generation --
+// never written, or dropped by a compaction that no head protected. O(commits walked):
+// the honest cost of a linked list, and the reason a heads table exists at all.
+fn st_open_at(base: [i64], gen: i64, tmp: [i64]) -> i64 {
+  let c = st_commit_at(base, base[st_pick(base, tmp) + 10], gen);
+  st_croot(base, c)
+}
+// st_sever(old, c, h): zero the `prev` cell (payload cell 2 = old[c + 4]) of the live
+// commit and of every commit a head names, in st_compact's MAP_PRIVATE view of the OLD
+// file only (CoW; the old inode is never modified, same channel the forwarding pointers
+// already use). Compaction therefore retains exactly the commits a head names plus the
+// live one and drops the history behind them: keeping every ancestor would pin every
+// generation forever and compaction would free nothing at all
+// (docs/RESEARCH-BYOK-ECS-DATAFLOW-2026-09-08.md:272). The severed 0 is a null ref, so
+// st_compact's scan does not follow it, and the crc the scan recomputes over the copy
+// covers the severed payload.
+fn st_sever(old: [i64], c: i64, h: i64) -> i64 {
+  let _ = if c == 0 then 0 else (let _ = old[c + 4] = 0 in 0);
+  let i = 0;
+  while i < 8 {
+    let r = if h == 0 then 0 else st_get(old, h, i);
+    let e = if r == 0 then 0 else st_ref(old, h, i);
+    let _ = if e == 0 then 0 else (let _ = old[e + 4] = 0 in 0);
+    let i = i + 1;
+    0
+  };
+  0
+}
+// ---- compaction = Cheney copy into <store>.tmp + rename (T113, §4e) ----
+// lay = [digest32, refmask] pairs (nlay pairs): bit i of refmask = payload cell i is
+// a ref; refmask -1 = a ref ARRAY (cell 0 = count, cells 1.. are refs). Forwarding is
+// written into the OLD file's MAP_PRIVATE view (h0 := 0, payload cell 0 := new
+// offset; CoW pages vanish at munmap, the old inode is never modified), so every
+// object must have >= 1 payload cell (exit 84 otherwise). While an object waits in
+// the new arena its h1 holds (old_offset << 32 | generation); the scan rewrites its
+// refs, recomputes the crc and restores h1 = crc << 32 | generation.
+fn st_refmask(lay: [i64], nlay: i64, digest: i64) -> i64 {
+  let i = 0;
+  let m = 0;
+  while i < nlay {
+    let m = if lay[i * 2] == digest then lay[i * 2 + 1] else m;
+    let i = i + 1;
+    0
+  };
+  m
+}
+fn st_copy_obj(old: [i64], new: [i64], cur: [i64], o: i64) -> i64 {
+  let len = st_len(old, o);
+  let _ = if len < 1 then sys_exit(84) else 0;
+  let at = cur[0];
+  let _ = new[at] = old[o];
+  let _ = new[at + 1] = (o << 32) | (old[o + 1] & 4294967295);
+  let i = 0;
+  while i < len {
+    let _ = new[at + 2 + i] = old[o + 2 + i];
+    let i = i + 1;
+    0
+  };
+  let _ = old[o] = 0;
+  let _ = old[o + 2] = at;
+  let _ = cur[0] = at + 2 + len;
+  at
+}
+// st_forward(old, new, cur, o): the new offset of old object o, copying it on demand.
+fn st_forward(old: [i64], new: [i64], cur: [i64], o: i64) -> i64 {
+  if old[o] == 0 then old[o + 2] else st_copy_obj(old, new, cur, o)
+}
+// Fsync the directory that holds `path` (B1 step 1). The `sys_rename` at the end of
+// `st_compact` publishes the compacted store by name; the NAME lives in the directory's inode block, so
+// only an fsync of the DIRECTORY fd makes the publish survive a power cut --
+// fsyncing the file itself flushes data, never the parent's entry. dlen = one
+// past the last '/', so "/a/b" -> "/a/" and "a/b" -> "a/"; no '/' at all -> ".".
+// The fd is closed on every path (fsync/close of a negative fd are harmless
+// EBADF no-ops, so an sys_open failure leaks nothing). Returns the fsync result.
+fn st_fsync_dir(path: [i64], plen: i64) -> i64 {
+  let dpath = zeros(plen + 2);
+  let dlen = 0;
+  let i = 0;
+  while i < plen {
+    let dlen = if path[i] == 47 then i + 1 else dlen;
+    let i = i + 1;
+    0
+  };
+  let j = 0;
+  while j < dlen {
+    let _ = dpath[j] = path[j];
+    let j = j + 1;
+    0
+  };
+  let _ = if dlen == 0 then (let _ = dpath[0] = 46 in 0) else 0;
+  let n = if dlen == 0 then 1 else dlen;
+  let dfd = sys_open(dpath, n, 0);
+  let rc = sys_fsync(dfd);
+  let _ = sys_close(dfd);
+  rc
+}
+
+// ---- B5 step 2: partition locks and multi-writer commit ----
+
+// lock_cells(pcount): allocate shared cells for P partition locks + 1 global lock.
+// Layout: cells[0..pcount) = partition lock words, cells[pcount] = global lock word.
+fn lock_cells(pcount: i64) -> [i64] {
+  zeros(pcount + 1)
+}
+
+// lock_partition(locks: [i64], p: i64): acquire partition p's lock via CAS-loop
+// (G6 ticket-lock pattern: sys_atomic_add returns old value; 0 = got lock).
+fn lock_partition(locks: [i64], p: i64) -> i64 {
+  let spin = 1;
+  while spin == 1 {
+    let old = sys_atomic_add(locks, p, 1);
+    let spin = if old == 0 then 0 else 1;
+    let _ = if spin == 1 then sys_atomic_add(locks, p, 0 - 1) else 0;
+    0
+  };
+  0
+}
+
+// unlock_partition(locks: [i64], p: i64): release partition p's lock, wake waiters.
+fn unlock_partition(locks: [i64], p: i64) -> i64 {
+  let _ = sys_atomic_add(locks, p, 0 - 1);
+  let _ = sys_futex_wake(locks, p, 64);
+  0
+}
+
+// lock_global(locks: [i64], pcount: i64): acquire the global superblock lock.
+fn lock_global(locks: [i64], pcount: i64) -> i64 {
+  let spin = 1;
+  while spin == 1 {
+    let old = sys_atomic_add(locks, pcount, 1);
+    let spin = if old == 0 then 0 else 1;
+    let _ = if spin == 1 then sys_atomic_add(locks, pcount, 0 - 1) else 0;
+    0
+  };
+  0
+}
+
+// unlock_global(locks: [i64], pcount: i64): release global lock, wake all.
+fn unlock_global(locks: [i64], pcount: i64) -> i64 {
+  let _ = sys_atomic_add(locks, pcount, 0 - 1);
+  let _ = sys_futex_wake(locks, pcount, 64);
+  0
+}
+
+// st_begin_p(base, tx, p, tmp): like st_begin but sets tx[6]=p and reads
+// partition-specific cursor/root/gen from PartTab.
+fn st_begin_p(base: [i64], tx: [i64], p: i64, tmp: [i64]) -> i64 {
+  let sb = st_pick(base, tmp);
+  let _ = tx[0] = sb;
+  let pt = base[sb + 3];
+  let _ = tx[1] = st_parttab_used_p(base, pt, p);
+  let _ = tx[2] = st_parttab_used_p(base, pt, p);
+  let _ = tx[3] = st_parttab_root_p(base, pt, p);
+  let _ = tx[4] = 0;
+  let _ = tx[5] = st_parttab_gen_p(base, pt, p) + 1;
+  let _ = tx[6] = p;
+  sb
+}
+
+// st_alloc_p(base, tx, p, len, digest): bump-allocate in partition p.
+// Checks region boundary: region_size = arena_cells / pcount.
+fn st_alloc_p(base: [i64], tx: [i64], p: i64, len: i64, digest: i64, pcount: i64, arena_cells: i64) -> i64 {
+  let off = tx[2];
+  let region_size = arena_cells / pcount;
+  let region_start = 1024 + p * region_size;
+  let region_end = region_start + region_size;
+  let _ = if off + 2 + len >= region_end then sys_exit(80) else 0;
+  let _ = base[off] = ((digest & 4294967295) << 32) | len;
+  let _ = base[off + 1] = tx[5];
+  let _ = tx[2] = off + 2 + len;
+  let _ = tx[3] = tx[3] + 2 + len;
+  off
+}
+
+// st_commit_p(base, tx, p, root, locks, pcount, arena_cells, tmp): single-partition commit
+// with partition lock + global lock for superblock toggle.
+fn st_commit_p(base: [i64], tx: [i64], p: i64, root: i64, locks: [i64], pcount: i64, arena_cells: i64, tmp: [i64]) -> i64 {
+  let sb = tx[0];
+  let _ = lock_partition(locks, p);
+  let pt = base[sb + 3];
+  let new_gen = tx[5];
+  let new_used = tx[2];
+  let new_root = root;
+  // Read other partitions' live values
+  let roots = zeros(pcount);
+  let useds = zeros(pcount);
+  let gens = zeros(pcount);
+  let q = 0;
+  while q < pcount {
+    let _ = roots[q] = st_parttab_root_p(base, pt, q);
+    let _ = useds[q] = st_parttab_used_p(base, pt, q);
+    let _ = gens[q] = st_parttab_gen_p(base, pt, q);
+    let q = q + 1;
+    0
+  };
+  let _ = roots[p] = new_root;
+  let _ = useds[p] = new_used;
+  let _ = gens[p] = new_gen;
+  // Allocate new PartTab in partition p
+  let pt_off = st_alloc_p(base, tx, p, 16 + pcount * 3, st_digest("PartTab"), pcount, arena_cells);
+  let _ = st_parttab_write(base, pt_off, sb, new_gen, roots, useds, gens, pcount, tmp);
+  let _ = st_seal(base, pt_off, tmp);
+  // Global lock + toggle superblock
+  let _ = lock_global(locks, pcount);
+  let other = 512 - sb;
+  let _ = base[other] = base[sb];
+  let _ = base[other + 1] = 1;
+  let _ = base[other + 2] = new_gen;
+  let _ = base[other + 3] = pt_off;
+  let _ = base[other + 4] = new_used;
+  let _ = base[other + 5] = 0;
+  let _ = base[other + 6] = 0;
+  let _ = base[other + 7] = base[sb + 7] + tx[3] - tx[4];
+  let _ = base[other + 8] = base[sb + 8] + tx[4];
+  let k = 9;
+  while k < 15 {
+    let _ = base[other + k] = 0;
+    let k = k + 1;
+    0
+  };
+  let _ = base[other + 15] = st_crc(base, other, 15, tmp);
+  // msync region p + superblock
+  let lo = (new_used * 8) - (new_used * 8) % 4096;
+  let _ = sys_msync(st_addr(base) + lo, (new_used - lo / 8) * 8, 4);
+  let _ = sys_msync(st_addr(base), 8192, 4);
+  let _ = unlock_global(locks, pcount);
+  let _ = unlock_partition(locks, p);
+  new_gen
+}
+
+// st_commit_2pc(base, txs[], roots[], useds[], gens[], pcount, locks, arena_cells, tmp):
+// Cross-partition 2PC: prepare (lock+msync+unlock each), then commit (global lock,
+// unified PartTab', toggle, msync, unlock all).
+fn st_commit_2pc(base: [i64], txs: [i64], roots: [i64], useds: [i64], gens: [i64], pcount: i64, locks: [i64], arena_cells: i64, tmp: [i64]) -> i64 {
+  let p = 0;
+  // PREPARE: lock + msync each partition (keep locked for commit)
+  while p < pcount {
+    let _ = lock_partition(locks, p);
+    let cursor = txs[p * 6 + 2];
+    let lo = (cursor * 8) - (cursor * 8) % 4096;
+    let _ = sys_msync(st_addr(base) + lo, (cursor - lo / 8) * 8, 4);
+    let p = p + 1;
+    0
+  };
+  // COMMIT: global lock, build unified PartTab', toggle, msync, unlock all
+  let _ = lock_global(locks, pcount);
+  let sb = txs[0];
+  let new_gens = zeros(pcount);
+  let q = 0;
+  while q < pcount {
+    let _ = new_gens[q] = gens[q] + 1;
+    let q = q + 1;
+    0
+  };
+  // Allocate PartTab' in partition 0
+  let pt_off = st_alloc_p(base, txs, 0, 16 + pcount * 3, st_digest("PartTab"), pcount, arena_cells);
+  let _ = st_parttab_write(base, pt_off, sb, new_gens[0], roots, useds, new_gens, pcount, tmp);
+  let _ = st_seal(base, pt_off, tmp);
+  // Toggle superblock: global gen = max of all gen_p
+  let max_gen = new_gens[0];
+  let q2 = 1;
+  while q2 < pcount {
+    let max_gen = if new_gens[q2] > max_gen then new_gens[q2] else max_gen;
+    let q2 = q2 + 1;
+    0
+  };
+  let max_used = useds[0];
+  let q3 = 1;
+  while q3 < pcount {
+    let max_used = if useds[q3] > max_used then useds[q3] else max_used;
+    let q3 = q3 + 1;
+    0
+  };
+  let other = 512 - sb;
+  let _ = base[other] = base[sb];
+  let _ = base[other + 1] = 1;
+  let _ = base[other + 2] = max_gen;
+  let _ = base[other + 3] = pt_off;
+  let _ = base[other + 4] = max_used;
+  let _ = base[other + 5] = 0;
+  let _ = base[other + 6] = 0;
+  let _ = base[other + 7] = base[sb + 7];
+  let _ = base[other + 8] = base[sb + 8];
+  let kq = 9;
+  while kq < 15 {
+    let _ = base[other + kq] = 0;
+    let kq = kq + 1;
+    0
+  };
+  let _ = base[other + 15] = st_crc(base, other, 15, tmp);
+  let _ = sys_msync(st_addr(base), 8192, 4);
+  let _ = unlock_global(locks, pcount);
+  let q4 = 0;
+  while q4 < pcount {
+    let _ = unlock_partition(locks, q4);
+    let q4 = q4 + 1;
+    0
+  };
+  max_gen
+}
+
+// st_snapshot_pt_multi(base, snap, pcount, tmp): snapshot including multi-part PartTab.
+// snap needs 32 + (16 + 3*pcount) cells. Returns sb index or -1.
+fn st_snapshot_pt_multi(base: [i64], snap: [i64], pcount: i64, tmp: [i64]) -> i64 {
+  let pick = st_snapshot(base, snap, tmp);
+  let pt = snap[3];
+  let total = 16 + pcount * 3;
+  let q = 0;
+  while q < total {
+    let _ = snap[32 + q] = if pt == 0 then 0 else base[pt + q];
+    let q = q + 1;
+    0
+  };
+  let _ = if pt != 0 then (
+    if snap[32 + 15] != st_crc(snap, 32, total, tmp) then snap[0] = 0 else 0
+  ) else 0;
+  if pick < 0 then pick else (
+    if snap[0] == st_magic() then pick else 0 - 1
+  )
+}
+
+// st_fold_count(base, tmp): count committed transactions (gen - 1 for P=1 compat).
+fn st_fold_count(base: [i64], tmp: [i64]) -> i64 {
+  let sb = st_pick(base, tmp);
+  let pt = base[sb + 3];
+  if pt == 0 then base[sb + 2] else base[pt + 18]
+}
+
+
+// selfhost/std/pool.bp — worker pool over the shared seed arena.
+//
+// M6: parallelism in pure .bp. Each worker is a clone'd thread (CLONE_VM |
+// CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_THREAD = 68864) with its
+// own 64 KiB stack carved from the arena above the cursor. Shared cells
+// live in frame-heap arrays (register-held base pointers — keep <= 8 live
+// symbols across a parallel region; spilled slots are per-thread stack
+// memory and are NOT shared).
+//
+// The publish/wait idiom uses real-branch guarded builtins so the
+// emitter's branchless speculation cannot race:
+//   sys_cond_set(cond, arr, idx, val)        — publish iff cond
+//   sys_futex_wait_guard(cond, arr, idx, v)  — FUTEX_WAIT iff cond == 0
+//   sys_futex_wake(arr, idx, n)              — FUTEX_WAKE (harmless both)
+// Workers PARK on a never-woken futex cell instead of exiting (raw svc 94
+// followed by another clone breaks under ptrace sandboxes; the parked
+// thread dies with the process's exit_group). Standard futex pattern:
+// wait on the CURRENT flag value, re-check in a loop (no lost wakeups).
+//
+// Interp mirror: sequential emulation — sys_clone returns 0 (the worker
+// path runs inline), futex waits mark the cell and return 0. The
+// deterministic work-split yields the identical result. Both engines
+// verified by the pool gate (bench/vs_rust/pool_parity.sh).
+
+module core { }
+
+// par_sum(W, per): W workers; worker i contributes (i+1)*per into cells[i];
+// the merge phase sums cells[0..W) after every done flag is set. cells
+// holds W results + W done flags + 1 park cell. No allocations inside
+// loops (L8).
+fn par_sum(W: i64, per: i64) -> i64 {
+  let cells = zeros(W * 2 + 1);
+  let base = sys_arena_base();
+  let i = 0;
+  while i < W {
+    let r = sys_clone(68864, base + 16384 + i * 8192);
+    let is_child = if r == 0 then 1 else 0;
+    let part = is_child * (i + 1) * per;
+    let _ = sys_cond_set(is_child, cells, i, part);
+    let _ = sys_cond_set(is_child, cells, W + i, 1);
+    let _ = sys_futex_wake(cells, W + i, 64);
+    let parked = if is_child == 0 then 1 else 0;
+    while parked == 0 {
+      let w = sys_futex_wait_guard(1 - is_child, cells, W * 2, 0);
+      let parked = if cells[W * 2] == 1 then 1 else 0;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  let k = 0;
+  let acc = 0;
+  while k < W {
+    let d = 0;
+    while d == 0 {
+      let w = sys_futex_wait_guard(0, cells, W + k, 0);
+      let d = if cells[W + k] == 1 then 1 else 0;
+      0
+    };
+    let acc = acc + cells[k];
+    let k = k + 1;
+    0
+  };
+  acc
+}
+
+// par_merge(W, per): same work-split as par_sum, but workers publish into
+// ONE shared sum cell via sys_atomic_add (LDADDAL fetch-and-add) instead
+// of private result cells; per-worker done flags + park cell as in
+// par_sum. Real threads race on cells[W] — the atomic merge must not lose
+// updates; the interp runs the child paths sequentially (sys_clone==0) and
+// must reach the same total. Layout: sum=W, flags=W+1..2W, park=2W+1.
+fn par_merge(W: i64, per: i64) -> i64 {
+  let cells = zeros(W * 2 + 2);
+  let base = sys_arena_base();
+  let i = 0;
+  while i < W {
+    let r = sys_clone(68864, base + 16384 + i * 8192);
+    let is_child = if r == 0 then 1 else 0;
+    let part = is_child * (i + 1) * per;
+    let _ = sys_atomic_add(cells, W, part);
+    let _ = sys_cond_set(is_child, cells, W + 1 + i, 1);
+    let _ = sys_futex_wake(cells, W + 1 + i, 64);
+    let parked = if is_child == 0 then 1 else 0;
+    while parked == 0 {
+      let w = sys_futex_wait_guard(1 - is_child, cells, W * 2 + 1, 0);
+      let parked = if cells[W * 2 + 1] == 1 then 1 else 0;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  let k = 0;
+  while k < W {
+    let d = 0;
+    while d == 0 {
+      let w = sys_futex_wait_guard(0, cells, W + 1 + k, 0);
+      let d = if cells[W + 1 + k] == 1 then 1 else 0;
+      0
+    };
+    let k = k + 1;
+    0
+  };
+  cells[W]
+}
+
+// par_tids(W): real-thread evidence without /proc. sys_clone returns the
+// child tid in the PARENT (0 in the child) — the parent records each r
+// into cells[W+i] via sys_cond_set(1 - is_child, ...), the dispatcher
+// counts nonzero entries. Real threads (seed): every iteration's clone
+// produces a kernel tid -> count == W. Sequential emulation (interp):
+// sys_clone always returns 0, the parent path never runs -> count == 0.
+// No done flags needed: the parent writes the tids inline during the
+// spawn loop, before the dispatcher counts.
+fn par_tids(W: i64) -> i64 {
+  let cells = zeros(W * 2 + 1);
+  let base = sys_arena_base();
+  let i = 0;
+  while i < W {
+    let r = sys_clone(68864, base + 16384 + i * 8192);
+    let is_child = if r == 0 then 1 else 0;
+    let _ = sys_cond_set(1 - is_child, cells, W + i, r);
+    let parked = if is_child == 0 then 1 else 0;
+    while parked == 0 {
+      let w = sys_futex_wait_guard(1 - is_child, cells, W * 2, 0);
+      let parked = if cells[W * 2] == 1 then 1 else 0;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  let k = 0;
+  let cnt = 0;
+  while k < W {
+    let cnt = cnt + (if cells[W + k] != 0 then 1 else 0);
+    let k = k + 1;
+    0
+  };
+  cnt
+}
+
+// smw.bp — G10: multi-writer store. P writers on disjoint partitions,
+// 10^5 updates each, cross-partition tx every 100th.
+// Uses sys_clone (68864) for threads, partition locks via sys_atomic_add.
+// Fold = total sum of all counter payloads across all partitions.
+
+//e "selfhost/prelude/sha256.bp"
+//e "selfhost/prelude/store.bp"
+//e "selfhost/std/pool.bp"
+
+// stk(writer_id): stack top for writer thread, 16MiB-pitched above arena.
+fn stk(w: i64) -> i64 { sys_arena_base() + 2097152 * (w + 1) }
+
+// read_partition_state(base, tx, P, roots, useds, gens): read all partition state
+// from the live PartTab. Helper to keep the clone-spanning fn <=8 live symbols.
+fn read_partition_state(base: [i64], tx: [i64], P: i64, roots: [i64], useds: [i64], gens: [i64]) -> i64 {
+  let q = 0;
+  while q < P {
+    let pt = base[base[tx[0] + 3]];
+    let _ = roots[q] = st_parttab_root_p(base, pt, q);
+    let _ = useds[q] = st_parttab_used_p(base, pt, q);
+    let _ = gens[q] = st_parttab_gen_p(base, pt, q);
+    let q = q + 1;
+    0
+  };
+  0
+}
+
+// do_cross_commit(base, tx, tx2, p, cp, off, off2, P, locks, arena_cells, tmp):
+// Execute a cross-partition 2PC commit. Helper to keep writer <=8 live symbols.
+fn do_cross_commit(base: [i64], tx: [i64], tx2: [i64], p: i64, cp: i64, off: i64, off2: i64, P: i64, locks: [i64], arena_cells: i64, tmp: [i64]) -> i64 {
+  let roots = zeros(P);
+  let useds = zeros(P);
+  let gens = zeros(P);
+  let _ = read_partition_state(base, tx, P, roots, useds, gens);
+  let _ = roots[p] = off;
+  let _ = useds[p] = tx[2];
+  let _ = gens[p] = tx[5] - 1;
+  let _ = roots[cp] = off2;
+  let _ = useds[cp] = tx2[2];
+  let _ = gens[cp] = tx2[5] - 1;
+  // Build cross_txs: tx array for each partition
+  let crosstxs = zeros(P * 6);
+  let _ = crosstxs[p * 6] = tx[0];
+  let _ = crosstxs[p * 6 + 1] = tx[1];
+  let _ = crosstxs[p * 6 + 2] = tx[2];
+  let _ = crosstxs[p * 6 + 3] = tx[3];
+  let _ = crosstxs[p * 6 + 4] = tx[4];
+  let _ = crosstxs[p * 6 + 5] = tx[5];
+  let _ = crosstxs[cp * 6] = tx2[0];
+  let _ = crosstxs[cp * 6 + 1] = tx2[1];
+  let _ = crosstxs[cp * 6 + 2] = tx2[2];
+  let _ = crosstxs[cp * 6 + 3] = tx2[3];
+  let _ = crosstxs[cp * 6 + 4] = tx2[4];
+  let _ = crosstxs[cp * 6 + 5] = tx2[5];
+  st_commit_2pc(base, crosstxs, roots, useds, gens, P, locks, arena_cells, tmp)
+}
+
+// writer(base, locks, p, P, arena_cells, tmp, N, cross_every):
+// Writer thread for partition p. Does N updates of a counter object.
+// Every cross_every-th update touches partition (p+1)%P via 2PC.
+fn writer(base: [i64], locks: [i64], p: i64, P: i64, arena_cells: i64, tmp: [i64], N: i64, cross_every: i64) -> i64 {
+  let tx = zeros(6);
+  let k = 0;
+  while k < N {
+    let _ = st_begin_p(base, tx, p, tmp);
+    // Allocate counter update object in partition p (1 payload cell)
+    let dig = st_digest("C{i64}");
+    let off = st_alloc_p(base, tx, p, 1, dig, P, arena_cells);
+    let _ = base[off + 2] = k + 1;  // payload = update sequence number
+    let _ = st_seal(base, off, tmp);
+    let is_cross = if (k + 1) % cross_every == 0 then 1 else 0;
+    let _ = if is_cross == 1 then (
+      let cp = (p + 1) % P;
+      let tx2 = zeros(6);
+      let _ = st_begin_p(base, tx2, cp, tmp);
+      let off2 = st_alloc_p(base, tx2, cp, 1, dig, P, arena_cells);
+      let _ = base[off2 + 2] = k + 1;
+      let _ = st_seal(base, off2, tmp);
+      let _ = do_cross_commit(base, tx, tx2, p, cp, off, off2, P, locks, arena_cells, tmp);
+      0
+    ) else (
+      let _ = st_commit_p(base, tx, p, off, locks, P, arena_cells, tmp);
+      0
+    );
+    let k = k + 1;
+    0
+  };
+  0
+}
+
+// main(P): P is the partition count. Fold = sum of all counter payloads.
+// init_partition_state(P, roots, useds, gens): initialize partition state arrays.
+// Helper to keep the clone-spanning fn <=8 live symbols.
+fn init_partition_state(P: i64, roots: [i64], useds: [i64], gens: [i64]) -> i64 {
+  let q = 0;
+  while q < P {
+    let _ = roots[q] = 0;
+    let _ = useds[q] = 1024;
+    let _ = gens[q] = 0;
+    let q = q + 1;
+    0
+  };
+  0
+}
+
+// write_superblock(base, other, pt_off, tmp): write the other superblock.
+// Helper to keep the clone-spanning fn <=8 live symbols.
+fn write_superblock(base: [i64], other: i64, pt_off: i64, tmp: [i64]) -> i64 {
+  let _ = base[other + 1] = 1;
+  let _ = base[other + 2] = 1;
+  let _ = base[other + 3] = pt_off;
+  let _ = base[other + 4] = 1024;
+  let _ = base[other + 5] = 0;
+  let _ = base[other + 6] = 0;
+  let _ = base[other + 7] = 0;
+  let _ = base[other + 8] = 0;
+  let kq = 9;
+  while kq < 15 {
+    let _ = base[other + kq] = 0;
+    let kq = kq + 1;
+    0
+  };
+  let _ = base[other + 15] = st_crc(base, other, 15, tmp);
+  0
+}
+
+// fold_partition(base, P, arena_cells, dc): compute the fold (sum of C{i64} payloads).
+fn fold_partition(base: [i64], P: i64, arena_cells: i64, dc: i64) -> i64 {
+  let total = 0;
+  let region_size = arena_cells / P;
+  let rp = 0;
+  while rp < P {
+    let off = 1024 + rp * region_size;
+    let end = off + region_size;
+    let o = off;
+    while o < end {
+      let len = base[o] & 4294967295;
+      let digest = base[o] >> 32;
+      let is_obj = if len >= 1 then 1 else 0;
+      let is_counter = if digest == dc then 1 else 0;
+      let add = if is_obj * is_counter == 1 then base[o + 2] else 0;
+      let _ = total = total + add;
+      let advance = if is_obj == 1 then 2 + len else 1;
+      let o = o + advance;
+      0
+    };
+    let rp = rp + 1;
+    0
+  };
+  total
+}
+
+fn main(P: i64) -> i64 {
+  let path = zeros(64);
+  let pl = st_str(path, "smw.store");
+  let tmp = zeros(256);
+  let size = 67108864;
+  let arena_cells = size / 8;  // 8388608 cells
+  // Open/create store
+  let base = st_open(path, pl, size, tmp);
+  // Initialize lock cells
+  let locks = lock_cells(P);
+  // Check if store is fresh (no PartTab yet)
+  let sb = st_pick(base, tmp);
+  let pt = base[sb + 3];
+  // If fresh, create initial PartTab
+  let _ = if pt == 0 then (
+    let tx = zeros(6);
+    let _ = st_begin_p(base, tx, 0, tmp);
+    let roots = zeros(P);
+    let useds = zeros(P);
+    let gens = zeros(P);
+    let _ = init_partition_state(P, roots, useds, gens);
+    let pt_off = st_alloc_p(base, tx, 0, 16 + P * 3, st_digest("PartTab"), P, arena_cells);
+    let _ = st_parttab_write(base, pt_off, tx[0], 1, roots, useds, gens, P, tmp);
+    let _ = st_seal(base, pt_off, tmp);
+    // Write other superblock
+    let other = 512 - tx[0];
+    let _ = base[other] = base[tx[0]];
+    let _ = write_superblock(base, other, pt_off, tmp);
+    let _ = sys_msync(st_addr(base), 8192, 4);
+    0
+  ) else 0;
+  // Spawn P writer threads
+  let w = 0;
+  let cells = zeros(P * 2 + 1);  // P done flags + P tids + 1 park cell
+  while w < P {
+    let r = sys_clone(68864, stk(w));
+    let is_child = if r == 0 then 1 else 0;
+    let _ = if is_child == 1 then writer(base, locks, w, P, arena_cells, tmp, 100000, 100) else 0;
+    let _ = sys_cond_set(is_child, cells, w, 1);       // done flag
+    let _ = sys_cond_set(is_child, cells, P + w, r);    // tid (0 in child)
+    let _ = sys_futex_wake(cells, w, 64);
+    let _ = sys_exit_thread_guard(is_child, 0);
+    let w = w + 1;
+    0
+  };
+  // Wait for all writers to finish
+  let w2 = 0;
+  while w2 < P {
+    let d = 0;
+    while d == 0 {
+      let _ = sys_futex_wait_guard(0, cells, w2, 0);
+      let d = if cells[w2] == 1 then 1 else 0;
+      0
+    };
+    let w2 = w2 + 1;
+    0
+  };
+  // Compute fold: walk ALL partitions, sum payloads of C{i64} objects only
+  let total = 0;
+  let region_size = arena_cells / P;
+  let rp = 0;
+  let dc = st_digest("C{i64}");
+  let total = fold_partition(base, P, arena_cells, dc);
+  // Expected fold:
+  // P=2: each writer does 100000 own + 1000 cross = 101000 objects per partition
+  //   own payloads: sum(1..100000) = 5000050000 per partition
+  //   cross payloads: sum(100,200,...,100000) = 100*sum(1..1000) = 50050000 per partition
+  //   per partition total = 5050100000; grand total = 10100200000
+  // P=3: each partition gets own from one writer + cross from another = same per partition
+  //   grand total = 3 * 5050100000 = 15150300000
+  let expected = if P == 2 then 10100200000 else (if P == 3 then 15150300000 else 0);
+  let result = if total == expected then total else 0 - total;
+  let _ = sys_munmap(st_addr(base), size);
+  result
+}

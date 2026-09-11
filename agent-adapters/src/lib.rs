@@ -23,6 +23,7 @@ pub mod dispatch;
 pub mod fuel;
 pub mod manifest;
 pub mod mcp;
+pub mod paid_api;
 pub mod quirks;
 pub mod transport;
 
@@ -31,8 +32,9 @@ pub use dispatch::{AgentDispatchError, AgentDispatcher, HarvestSink, TrackRecord
 pub use fuel::{DeterministicFuelMeter, FuelError, FuelMeter, FuelTrancheRunner, SliceOutcome};
 pub use manifest::draft_manifest;
 pub use mcp::McpServerBridge;
+pub use paid_api::{BudgetGate, BudgetToken, PaidApiClient, api_key_from_env};
 pub use quirks::{AgentQuirks, TransportKind};
-pub use transport::{JsonRpcTransport, MockChannel, RpcChannel};
+pub use transport::{build_json_rpc_request, JsonRpcTransport, MockChannel, RpcChannel};
 
 // Re-export the kernel agent-port surface so callers pick it from one crate (as
 // llm-adapters re-exports `CachePolicy`).

@@ -1,0 +1,228 @@
+// smw.bp — G10: multi-writer store. P writers on disjoint partitions,
+// 10^5 updates each, cross-partition tx every 100th.
+// Uses sys_clone (68864) for threads, partition locks via sys_atomic_add.
+// Fold = total sum of all counter payloads across all partitions.
+
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+use "selfhost/std/pool.bp"
+
+// stk(writer_id): stack top for writer thread, 16MiB-pitched ABOVE the arena.
+// Arena is 64MB, so stacks start at base + 64MB.
+fn stk(w: i64) -> i64 { sys_arena_base() + 67108864 + 2097152 * (w + 1) }
+
+// read_partition_state(base, tx, P, roots, useds, gens): read all partition state
+// from the live PartTab. Helper to keep the clone-spanning fn <=8 live symbols.
+fn read_partition_state(base: [i64], tx: [i64], P: i64, roots: [i64], useds: [i64], gens: [i64]) -> i64 {
+  let q = 0;
+  while q < P {
+    let pt = base[base[tx[0] + 3]];
+    let _ = roots[q] = st_parttab_root_p(base, pt, q);
+    let _ = useds[q] = st_parttab_used_p(base, pt, q);
+    let _ = gens[q] = st_parttab_gen_p(base, pt, q);
+    let q = q + 1;
+    0
+  };
+  0
+}
+
+// do_cross_commit(base, tx, tx2, p, cp, off, off2, P, locks, arena_cells, tmp):
+// Execute a cross-partition 2PC commit. Helper to keep writer <=8 live symbols.
+fn do_cross_commit(base: [i64], tx: [i64], tx2: [i64], p: i64, cp: i64, off: i64, off2: i64, P: i64, locks: [i64], arena_cells: i64, tmp: [i64]) -> i64 {
+  let roots = zeros(P);
+  let useds = zeros(P);
+  let gens = zeros(P);
+  let _ = read_partition_state(base, tx, P, roots, useds, gens);
+  let _ = roots[p] = off;
+  let _ = useds[p] = tx[2];
+  let _ = gens[p] = tx[5] - 1;
+  let _ = roots[cp] = off2;
+  let _ = useds[cp] = tx2[2];
+  let _ = gens[cp] = tx2[5] - 1;
+  // Build cross_txs: tx array for each partition
+  let crosstxs = zeros(P * 6);
+  let _ = crosstxs[p * 6] = tx[0];
+  let _ = crosstxs[p * 6 + 1] = tx[1];
+  let _ = crosstxs[p * 6 + 2] = tx[2];
+  let _ = crosstxs[p * 6 + 3] = tx[3];
+  let _ = crosstxs[p * 6 + 4] = tx[4];
+  let _ = crosstxs[p * 6 + 5] = tx[5];
+  let _ = crosstxs[cp * 6] = tx2[0];
+  let _ = crosstxs[cp * 6 + 1] = tx2[1];
+  let _ = crosstxs[cp * 6 + 2] = tx2[2];
+  let _ = crosstxs[cp * 6 + 3] = tx2[3];
+  let _ = crosstxs[cp * 6 + 4] = tx2[4];
+  let _ = crosstxs[cp * 6 + 5] = tx2[5];
+  st_commit_2pc(base, crosstxs, roots, useds, gens, P, locks, arena_cells, tmp)
+}
+
+// writer(base, locks, p, P, arena_cells, tmp, N, cross_every):
+// Writer thread for partition p. Does N updates of a counter object.
+// Every cross_every-th update touches partition (p+1)%P via 2PC.
+fn writer(base: [i64], locks: [i64], p: i64, P: i64, arena_cells: i64, tmp: [i64], N: i64, cross_every: i64) -> i64 {
+  let tx = zeros(6);
+  let k = 0;
+  while k < N {
+    let _ = st_begin_p(base, tx, p, tmp);
+    // Allocate counter update object in partition p (1 payload cell)
+    let dig = st_digest("C{i64}");
+    let off = st_alloc_p(base, tx, p, 1, dig, P, arena_cells);
+    let _ = base[off + 2] = k + 1;  // payload = update sequence number
+    let _ = st_seal(base, off, tmp);
+    let is_cross = if (k + 1) % cross_every == 0 then 1 else 0;
+    let _ = if is_cross == 1 then (
+      let cp = (p + 1) % P;
+      let tx2 = zeros(6);
+      let _ = st_begin_p(base, tx2, cp, tmp);
+      let off2 = st_alloc_p(base, tx2, cp, 1, dig, P, arena_cells);
+      let _ = base[off2 + 2] = k + 1;
+      let _ = st_seal(base, off2, tmp);
+      let _ = do_cross_commit(base, tx, tx2, p, cp, off, off2, P, locks, arena_cells, tmp);
+      0
+    ) else (
+      let _ = st_commit_p(base, tx, p, off, locks, P, arena_cells, tmp);
+      0
+    );
+    let k = k + 1;
+    0
+  };
+  0
+}
+
+// main(P): P is the partition count. Fold = sum of all counter payloads.
+// init_partition_state(P, roots, useds, gens): initialize partition state arrays.
+// Helper to keep the clone-spanning fn <=8 live symbols.
+fn init_partition_state(P: i64, roots: [i64], useds: [i64], gens: [i64]) -> i64 {
+  let q = 0;
+  while q < P {
+    let _ = roots[q] = 0;
+    let _ = useds[q] = 1024;
+    let _ = gens[q] = 0;
+    let q = q + 1;
+    0
+  };
+  0
+}
+
+// write_superblock(base, other, pt_off, tmp): write the other superblock.
+// Helper to keep the clone-spanning fn <=8 live symbols.
+fn write_superblock(base: [i64], other: i64, pt_off: i64, tmp: [i64]) -> i64 {
+  let _ = base[other + 1] = 1;
+  let _ = base[other + 2] = 1;
+  let _ = base[other + 3] = pt_off;
+  let _ = base[other + 4] = 1024;
+  let _ = base[other + 5] = 0;
+  let _ = base[other + 6] = 0;
+  let _ = base[other + 7] = 0;
+  let _ = base[other + 8] = 0;
+  let kq = 9;
+  while kq < 15 {
+    let _ = base[other + kq] = 0;
+    let kq = kq + 1;
+    0
+  };
+  let _ = base[other + 15] = st_crc(base, other, 15, tmp);
+  0
+}
+
+// fold_partition(base, P, arena_cells, dc): compute the fold (sum of C{i64} payloads).
+fn fold_partition(base: [i64], P: i64, arena_cells: i64, dc: i64) -> i64 {
+  let total = 0;
+  let region_size = arena_cells / P;
+  let rp = 0;
+  while rp < P {
+    let off = 1024 + rp * region_size;
+    let end = off + region_size;
+    let o = off;
+    while o < end {
+      let len = base[o] & 4294967295;
+      let digest = base[o] >> 32;
+      let is_obj = if len >= 1 then 1 else 0;
+      let is_counter = if digest == dc then 1 else 0;
+      let add = if is_obj * is_counter == 1 then base[o + 2] else 0;
+      let _ = total = total + add;
+      let advance = if is_obj == 1 then 2 + len else 1;
+      let o = o + advance;
+      0
+    };
+    let rp = rp + 1;
+    0
+  };
+  total
+}
+
+fn main(P: i64) -> i64 {
+  let path = zeros(64);
+  let pl = st_str(path, "smw.store");
+  let tmp = zeros(256);
+  let size = 67108864 + 16777216 * P;  // 64MB arena + 16MB per thread for stacks
+  let arena_cells = 67108864 / 8;  // 8388608 cells (64MB arena)
+  // Open/create store
+  let base = st_open(path, pl, size, tmp);
+  // Initialize lock cells
+  let locks = lock_cells(P);
+  // Check if store is fresh (no PartTab yet)
+  let sb = st_pick(base, tmp);
+  let pt = base[sb + 3];
+  // If fresh, create initial PartTab
+  let _ = if pt == 0 then (
+    let tx = zeros(6);
+    let _ = st_begin_p(base, tx, 0, tmp);
+    let roots = zeros(P);
+    let useds = zeros(P);
+    let gens = zeros(P);
+    let _ = init_partition_state(P, roots, useds, gens);
+    let pt_off = st_alloc_p(base, tx, 0, 16 + P * 3, st_digest("PartTab"), P, arena_cells);
+    let _ = st_parttab_write(base, pt_off, tx[0], 1, roots, useds, gens, P, tmp);
+    let _ = st_seal(base, pt_off, tmp);
+    // Write other superblock
+    let other = 512 - tx[0];
+    let _ = base[other] = base[tx[0]];
+    let _ = write_superblock(base, other, pt_off, tmp);
+    let _ = sys_msync(st_addr(base), 8192, 4);
+    0
+  ) else 0;
+  // Spawn P writer threads
+  let w = 0;
+  let cells = zeros(P * 2 + 1);  // P done flags + P tids + 1 park cell
+  while w < P {
+    let r = sys_clone(68864, stk(w));
+    let is_child = if r == 0 then 1 else 0;
+    let _ = if is_child == 1 then writer(base, locks, w, P, arena_cells, tmp, 100000, 100) else 0;
+    let _ = sys_cond_set(is_child, cells, w, 1);       // done flag
+    let _ = sys_cond_set(is_child, cells, P + w, r);    // tid (0 in child)
+    let _ = sys_futex_wake(cells, w, 64);
+    let _ = sys_exit_thread_guard(is_child, 0);
+    let w = w + 1;
+    0
+  };
+  // Wait for all writers to finish
+  let w2 = 0;
+  while w2 < P {
+    let d = 0;
+    while d == 0 {
+      let _ = sys_futex_wait_guard(0, cells, w2, 0);
+      let d = if cells[w2] == 1 then 1 else 0;
+      0
+    };
+    let w2 = w2 + 1;
+    0
+  };
+  // Compute fold: walk ALL partitions, sum payloads of C{i64} objects only
+  let total = 0;
+  let region_size = arena_cells / P;
+  let rp = 0;
+  let dc = st_digest("C{i64}");
+  let total = fold_partition(base, P, arena_cells, dc);
+  // Expected fold:
+  // P=2: each writer does 100000 own + 1000 cross = 101000 objects per partition
+  //   own payloads: sum(1..100000) = 5000050000 per partition
+  //   cross payloads: sum(100,200,...,100000) = 100*sum(1..1000) = 50050000 per partition
+  //   per partition total = 5050100000; grand total = 10100200000
+  // P=3: each partition gets own from one writer + cross from another = same per partition
+  //   grand total = 3 * 5050100000 = 15150300000
+  let expected = if P == 2 then 10100200000 else (if P == 3 then 15150300000 else 0);
+  let result = if total == expected then total else 0 - total;
+  let _ = sys_munmap(st_addr(base), size);
+  result
+}

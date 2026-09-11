@@ -1723,3 +1723,9 @@ ts,commit,bin,metric,value,unit,n,valid,at_max_pct,temp_mc,note
 1788976625,ae1cfb4,24b98f90,stub_words,172,words,1,1,,,
 1788976625,ae1cfb4,24b98f90,bin_fns,299,fns,1,1,,,
 1788976625,ae1cfb4,24b98f90,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1789120692,d0cbdfb,24b98f90,sgraph2_build_ms,,ms,1,1,,,L1 + empty log/L0/bitmap
+1789120692,d0cbdfb,24b98f90,sgraph2_bfs_ns,,ns,1,1,,,"per edge slot, queue BFS before the log (3 sources)"
+1789120692,d0cbdfb,24b98f90,sgraph2_log_ns,0,ns,1,1,,,amortized per inserted edge through the log (max stall 0 ms)
+1789120693,d0cbdfb,24b98f90,sgraph2_compact_ms,87,ms,1,1,,,
+1789140769,d0cbdfb,1136681c,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1789140770,d0cbdfb,1136681c,gate_run_ms,10597,ms,1,1,,,"sum of non-memo gate runs (40 runs, 89 memo hits)"

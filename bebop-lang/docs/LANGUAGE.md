@@ -130,5 +130,9 @@ See docs/TRAPS.md.
 ## What is NOT in the language
 
 Strings as values, string concatenation (`++` is rejected, exit 96), struct literals
-(disabled), closures, generics, floats (Q32 fixed point lives in selfhost/prelude/fp.bp),
+(disabled), floats (Q32 fixed point lives in selfhost/prelude/fp.bp),
 modules with contents (only `use` inclusion), bounds checks, garbage collection.
+**Closure emission, generic monomorphisation, and dependent-type checking are NOT
+yet implemented** — their SURFACE SYNTAX (annotations, generic params, closure
+literals) IS parsed and erased by the compiler as of A16 Phase 1; semantic checking
+and code generation are staged in Phase 2 (elab.bp) and Phase 3 (F7 kernel).

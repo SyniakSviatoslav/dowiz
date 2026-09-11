@@ -1,0 +1,40 @@
+// ROADMAP A7 step 3 (2026-09-10): ingest_test -- small-file ingest twin for std_golden.
+// Same parsing logic as bench/vs_rust/ingest.bp. argv[2] = file path. fold = lines * 1000003 + sum(id).
+fn main(argc: i64, argv: [str]) -> i64 {
+  let p = zeros(256);
+  let pn = str_len(argv[2]);
+  let k = 0;
+  while k < pn {
+    let _ = p[k] = char(argv[2], k);
+    let k = k + 1;
+    0
+  };
+  let fd = sys_open(p, pn, 0);
+  let s = sys_readbuf(fd, 65536);
+  let _ = sys_close(fd);
+  let n = str_len(s);
+  let i = 0;
+  let lines = 0;
+  let sum = 0;
+  while i < n {
+    let id = 0;
+    let c = char(s, i);
+    while c != 44 {
+      let id = id * 10 + (c - 48);
+      let i = i + 1;
+      let c = char(s, i);
+      0
+    };
+    let sum = sum + id;
+    let d = char(s, i);
+    while d != 10 {
+      let i = i + 1;
+      let d = char(s, i);
+      0
+    };
+    let i = i + 1;
+    let lines = lines + 1;
+    0
+  };
+  lines * 1000003 + sum
+}

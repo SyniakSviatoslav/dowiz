@@ -1,0 +1,119 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+use "selfhost/prelude/gb.bp"
+// gb_par_reduce.bp -- B6 step 2: par_run over reduce_scalar, 3 A78 cores (4-6).
+// Sequential vs parallel fold + timing. Returns ok*1e12 + seq_ms*1e6 + par_ms.
+// par_run: W workers pinned to cores 4..6; each sums its own row range into a
+// private accumulator; merge via sys_atomic_add on the shared accumulator.
+
+fn wr_str(dst: [i64], pos: [i64], s: str) -> i64 {
+  let off = pos[0];
+  let n = str_len(s);
+  let i = 0;
+  while i < n {
+    let _ = dst[off + i] = char(s, i);
+    let i = i + 1;
+    0
+  };
+  let _ = pos[0] = off + n;
+  0
+}
+
+// par_reduce: row-range partitioning of reduce_scalar over W workers.
+fn par_reduce(base: [i64], A: i64, n: i64, W: i64, cells: [i64], q: [i64], acc_shared: [i64]) -> i64 {
+  let chunk = (n + W * 4 - 1) / (W * 4);
+  let base2 = sys_arena_base();
+  let i = 0;
+  while i < W {
+    let r = sys_clone(68864, base2 + 16384 + i * 8192);
+    let _ = if r == 0 then sys_setaffinity(cells, W * 2 + 1 + i) else 0;
+    let _ = if r == 0 then reduce_worker(base, A, n, W, q, acc_shared, chunk) else 0;
+    let _ = sys_cond_set(if r == 0 then 1 else 0, cells, W + i, 1);
+    let _ = sys_futex_wake(cells, W + i, 64);
+    let parked = if r == 0 then 0 else 1;
+    while parked == 0 {
+      let _ = sys_futex_wait_guard(if r == 0 then 0 else 1, cells, W * 2, 0);
+      let parked = if cells[W * 2] == 1 then 1 else 0;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  let k = 0;
+  while k < W {
+    let parked = 0;
+    while parked == 0 {
+      let _ = sys_futex_wait_guard(0, cells, W + k, 0);
+      let parked = if cells[W + k] == 1 then 1 else 0;
+      0
+    };
+    let k = k + 1;
+    0
+  };
+  0
+}
+
+// reduce_worker: sum values in row range into shared accumulator.
+fn reduce_worker(base: [i64], A: i64, n: i64, W: i64, q: [i64], acc_shared: [i64], chunk: i64) -> i64 {
+  let go = 1;
+  while go == 1 {
+    let c = sys_atomic_add(q, 0, 1);
+    let _ = if c >= W * 4 then go = 0 else 0;
+    let _ = if go == 1 then {
+      let lo = c * chunk;
+      let hi = if lo + chunk < n then lo + chunk else n;
+      let i = lo;
+      let acc = 0;
+      while i < hi {
+        let acc = acc + gb_reduce_row(base, A, i);
+        let i = i + 1;
+        0
+      };
+      let _ = sys_atomic_add(acc_shared, 0, acc);
+      0
+    } else 0;
+    0
+  };
+  0
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  let dir = argv[2];
+  let path = zeros(256);
+  let ppos = zeros(1);
+  let _ = wr_str(path, ppos, dir);
+  let _ = wr_str(path, ppos, "/b6_reduce.store");
+  let tmp = zeros(1024);
+  let base = st_open(path, ppos[0], 4194304, tmp);
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let dg = zeros(6);
+  let _ = gb_digests(dg);
+  let A = gb_build_random_lcg(base, tx, tmp, dg);
+  let n = 1000;
+  let root = st_alloc(base, tx, 1, st_digest("GbReduceRoot1{ref GbMatrix}"));
+  let _ = st_link(base, root, 0, A);
+  let _ = st_seal(base, root, tmp);
+  let _ = st_commit(base, tx, root, tmp);
+
+  // sequential reduce
+  let t0 = clock_ms();
+  let fold_seq = gb_reduce_scalar(base, A);
+  let seq_ms = clock_ms() - t0;
+
+  // parallel reduce (W=3 workers on cores 4,5,6)
+  let W = 3;
+  let cells = zeros(W * 2 + 1 + W);
+  let _ = cells[W * 2 + 1] = 16;
+  let _ = cells[W * 2 + 2] = 32;
+  let _ = cells[W * 2 + 3] = 64;
+  let q = zeros(1);
+  let acc_shared = zeros(1);
+  let t1 = clock_ms();
+  let _ = par_reduce(base, A, n, W, cells, q, acc_shared);
+  let par_ms = clock_ms() - t1;
+  let fold_par = acc_shared[0];
+
+  let ok = if fold_par == fold_seq then 1 else 0;
+  ok * 1000000000000 + seq_ms * 1000000 + par_ms
+}
