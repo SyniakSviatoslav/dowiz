@@ -194,7 +194,7 @@ def check_object_header_writes(r):
         fail("object-header", "only st_alloc/st_seal may write cells 0 and 1 of an object: "
              + "; ".join(sorted(set(bad))[:8]))
     else:
-        note("object-header: no writer touches cells 0/1 of an allocated object")
+        note("object-header: 0 writers touch cells 0/1 of an allocated object")
 
 # --- CHECK 8: a gate expectation must be a DERIVATION, not a magic number ---------
 # Incidents 2026-09-12 (4383f77, b8c6887, e0e6384): schain, sevolve and scompact each hid a
@@ -402,7 +402,7 @@ def check_syscall_comments(r):
         fail("syscall-comment", "%d syscall emitter(s) with no register table in the 12 lines "
              "above them (ratchet %d): %s" % (len(bad), worst, ", ".join(bad[:8])))
     else:
-        note("syscall-comment: every emit_sys_* carries its register table")
+        note("syscall-comment: %d emitter(s) without a register table (ratchet %d)" % (len(bad), worst))
 
 # --- CHECK 16: journal entries carry all four fields (laws L10, L20) ----------------
 # A journal line without GOT: is an opinion; without VERDICT: it is an unfinished thought.
@@ -456,7 +456,7 @@ def check_scripted_patch_assert(r):
         fail("scripted-patch-assert", "%d tool(s) rewrite source with .replace() and never "
              "assert the anchor is unique (ratchet %d): %s" % (len(bad), worst, ", ".join(bad[:8])))
     else:
-        note("scripted-patch-assert: every source-rewriting tool asserts its anchor")
+        note("scripted-patch-assert: %d tool(s) without an anchor assert (ratchet %d)" % (len(bad), worst))
 
 # --- CHECK 18: no function is defined and never called ------------------------------
 # Operator rule, 2026-09-12: "code that never executes is a huge cause of bugs". It is, and
@@ -498,6 +498,50 @@ def check_no_dead_functions(r):
              % (len(defs), len(dead), worst))
 
 
+# --- CHECK 20: at most 8 symbols kept across a sys_clone ----------------------------
+# The concurrency class (31 journal entries) and the single worst failure mode this project
+# has: past eight KEPT symbols across a spawn the children are lost SILENTLY -- sys_clone
+# returns valid TIDs and nothing ever writes. Measured 2026-09-12: 8 correct, 9 loses one
+# child, 11 loses both. Constants do not count, because the allocator rematerialises them;
+# what counts is anything that must be KEPT, i.e. array handles and call results.
+#
+# The compiler cannot tell these apart cheaply -- the withdrawn binary tried, counted
+# constants too, and refused programs that were fine. Counting them syntactically here is
+# conservative in the right direction: it may flag a program the compiler would accept, and
+# it never lets a silently-broken one through unremarked.
+def check_clone_kept_symbols(r):
+    cap = r.get("max_clone_kept_symbols", 8)
+    bad = []
+    for p in bp_sources():
+        lines = open(p, errors="replace").read().split("\n")
+        fn_start, params = None, 0
+        for i, line in enumerate(lines):
+            m = re.match(r"^fn\s+\w+\s*\(([^)]*)\)", line)
+            if m:
+                fn_start = i
+                params = len([q for q in m.group(1).split(",") if ":" in q])
+            # a real spawn, not the compiler's own `emit_sys_clone(` dispatch line
+            if not re.search(r"(?<!emit_)\bsys_clone\s*\(", line.split("//")[0]) or fn_start is None: continue
+            kept = params
+            for l in lines[fn_start + 1:i]:
+                code = l.split("//")[0]
+                mm = re.match(r"\s*let\s+(\w+)\s*=\s*(.*)", code)
+                if not mm or mm.group(1) == "_": continue
+                rhs = mm.group(2).strip()
+                # a bare integer or a simple arithmetic of integers is rematerialised
+                if re.fullmatch(r"[-+*/%()\d\s]+;?", rhs): continue
+                kept += 1
+            if kept > cap:
+                bad.append("%s:%d keeps ~%d across the spawn"
+                           % (os.path.relpath(p, ROOT), i + 1, kept))
+    worst = r.get("max_clone_violations", 0)
+    if len(bad) > worst:
+        fail("clone-symbols", "%d spawn site(s) over the %d kept-symbol limit (ratchet %d) -- "
+             "past it the children are lost SILENTLY, with no trap and no diagnostic: %s"
+             % (len(bad), cap, worst, "; ".join(bad[:6])))
+    else:
+        note("clone-symbols: every spawn site keeps <= %d symbols across it" % cap)
+
 def main():
     r = load_ratchet()
     check_no_nested_fn()
@@ -517,6 +561,7 @@ def main():
     check_journal_format(r)
     check_scripted_patch_assert(r)
     check_no_dead_functions(r)
+    check_clone_kept_symbols(r)
     check_laws_have_enforcement(r)
     for n in notes: print("  note: " + n)
     if fails:
