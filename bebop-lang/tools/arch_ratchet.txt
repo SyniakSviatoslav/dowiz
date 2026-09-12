@@ -26,3 +26,10 @@ bp_exempt:selfhost/std/gen_gb.bp = 1         # SPLIT: template emission / semiri
 loud_exempt:tools/fuzzd.sh = 1            # fuzzer: failures are classified by exit code, counted, not printed
 loud_exempt:tools/ddc.sh = 1              # delta debugger: every candidate is expected to fail
 loud_exempt:tools/mutate_gate.sh = 1      # mutation gate: a mutant that dies is the PASS condition
+#
+# Documents citing files that do not exist. 20 as of 2026-09-12 -- DEBT, not permission.
+# A citation that points at nothing reads as evidence; every one removed lowers this line.
+max_missing_citations = 20
+#
+# A gate comparison below this value is a fold or a small count, not a layout assumption.
+magic_literal_min = 1000

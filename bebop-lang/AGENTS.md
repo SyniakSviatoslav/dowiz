@@ -304,6 +304,38 @@ via `tools/arch_check.py` — read that file, do not re-derive these by hand.**
 | 13 | **Files no one can review** | `bebop.bp` is 7700 lines; three prelude files passed 900 | `arch_check` **file-size** with a RATCHET in `tools/arch_ratchet.txt`: new files cap at 800 lines, existing offenders are listed as DEBT with the split that retires them, and the numbers may only ever go DOWN |
 | 14 | **Nested function definitions** | bebop has no closures, so an indented `fn` is always a scope mistake | `arch_check` **nested-fn** |
 
+## DEFECT TAXONOMY, PART 2 — the whole record, not one session
+
+Mined 2026-09-12 from all 938 `docs/exp.journal` entries and 2937 lines of `HISTORY.md`.
+Frequencies are journal GOT-field matches, so they measure how often a class was WRITTEN
+ABOUT, which is a fair proxy for how often it cost time.
+
+| Class | Journal hits | The shape it takes here | What catches it |
+|---|---|---|---|
+| **codegen / miscompile** | 69 | the largest class by far, and 38 % of HISTORY's defects. Characteristic form: two calls in ONE expression clobber each other — `sys_arena_end() + sys_arena_base()` evaluated to `base + base`, and one expression gave 0 where two `let`s gave the right answer. Also: register-window corruption between generations, array double-write producing zero output | differential testing against `tools/bpref.py` (the reference interpreter) over the construct corpus; `bench/parity_constructs`; the fuzzer. A miscompile that only shows in ONE spelling of an expression is invisible to a gate that uses the other spelling — vary the SPELLING, not just the value |
+| **layout / off-by-N** | 39 | an offset convention broken by one writer while every reader keeps the old one. The PartTab header off-by-two is the type specimen: `st_alloc` writes a header at `off`, a writer wrote payload from `off`, and `st_len` then returned the low word of the store magic | `arch_check` **object-header**: only `st_alloc`/`st_seal` may write cells 0 and 1 of an object |
+| **concurrency / race** | 31 | silent child loss above 8 kept symbols across a `sys_clone`; a probe whose parent read shared cells without waiting and measured a race; two writers sharing one spill frame | discipline: every threaded measurement waits, and runs at least twice. The 8-symbol rule is in `docs/TRAPS.md` and `WORKER-CARD.md` with its measurement |
+| **memory / bounds** | 25 | `zeros()` past `x28`; an object written past its length clobbering the next one; a store mapped at a size the file no longer has | the traps themselves (80, 82) — but only once they are LOUD at the point of failure, see the law above |
+| **silent failure** | 24 | a call to an undefined function compiled with rc=0; a literal past 2^63 silently accepted; an arena overflow that corrupted instead of trapping | each one was fixed by ADDING A TRAP (T130, trap 80, trap 87). That is the pattern: the fix for a silent failure is a diagnostic, not a workaround |
+| **stale constant or doc** | 24 | `<= 8 live symbols`; `KNOWN RED: compiler miscompile` on a gate that passes; a harness model predicting 400 cells per commit when it was 421; a docstring describing gate behaviour it no longer had | `arch_check` **magic-constant** forces layout assumptions to be written as the arithmetic they are, so the next layout change can be checked against them |
+| **stale artifact** | 21 | a `.store` from an earlier run that `st_open` cannot match; a `.gbpool` written by a different compiler; a promoted binary that is not the source's | `arch_check` **artifact-identity** and **stale-store**, plus the battery clearing generated stores |
+| **no-op that reports success** | 11 | `st_commit_2pc` re-read the committed state, wrote it back and returned a generation number; partitions that all began at the same cursor and "successfully" overwrote each other | discipline: a function that publishes must be tested by READING BACK what it published, in a separate probe. `rc=0` proves nothing about a write |
+| **hang / deadlock** | 10 | a child died and the parent waited on a flag for ever; a bounded resource exhausted inside a thread | the LOUD FAILURES law: bound every wait, name what it waited for |
+| **fitted or unverified claim** | 10 | a roadmap row citing a commit that does not exist; a gate made green by reverting semantics rather than fixing a bug; a lane reporting a number it never ran | discipline: two independent sides must agree — gate and oracle, or measurement and derivation — before a number is believed |
+
+**The three checks that would have caught the most, historically**: an identity gate on the
+compiled artifact (the promoted binary IS the source's compiler — `arch_check`
+artifact-identity); a loud trap wherever the compiler currently accepts something invalid;
+and a version or shape field validated before any structured read, so a stale-layout read
+announces itself instead of silently misinterpreting bytes.
+
+**What the frequencies say about where to spend effort.** Codegen is the biggest class and
+the hardest to mechanise, which is exactly why this project has a reference interpreter, a
+construct corpus and a fuzzer — those three are the defence, and a new construct without a
+`bench/parity_constructs` entry is an untested construct. Everything below codegen in that
+table is now either mechanically checked or has a named discipline, and the checks live in
+`tools/arch_check.py` inside `bench/vs_rust/invariants.sh`, not in this file.
+
 ## HOW TO WRITE THE NEXT FILE (architecture, not style)
 
 1. **A new `.bp` file caps at 800 lines.** `arch_check` enforces it. If you are approaching

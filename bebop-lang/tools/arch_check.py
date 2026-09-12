@@ -159,6 +159,102 @@ def check_loud_failures(r):
     else:
         note("loud-failure: no silenced runs in gate or tool scripts")
 
+# --- CHECK 7: object header cells are off-limits to writers -----------------------
+# Incident 2026-09-12 (24fcb57): st_alloc lays an object out as header at `off`, crc cell
+# at `off+1`, payload from `off+2` -- the convention st_get/st_ref/st_len/st_seal all share.
+# st_parttab_write wrote its 19 cells from base[pt_off + 0], overwriting the header st_alloc
+# had just written, so st_len returned the low word of the store magic (1329743170) and
+# st_seal crc'd 10.6 GB out of a 64 KB mapping. One off-by-two, nine red gates, a day to find.
+# Only st_alloc and st_seal may write cells 0 and 1 of an object.
+def check_object_header_writes(r):
+    allow = {"st_alloc", "st_alloc_p", "st_seal", "st_sb_write", "st_sb_write_m",
+             "st_sb_write_ch", "st_commit_m", "st_commit_p", "st_commit_2pc_go",
+             "st_init_p", "st_compact", "st_cobj", "st_publish"}
+    bad = []
+    for p in bp_sources():
+        fn, params = None, set()
+        for i, line in enumerate(open(p, errors="replace"), 1):
+            m = re.match(r"^fn\s+(\w+)\s*\(([^)]*)\)", line)
+            if m:
+                fn = m.group(1)
+                # only PARAMETERS can be an object offset handed in from an allocator;
+                # a local `let off = pt_off + 18 + q * 3` is a payload cursor, not a header.
+                params = {q.split(":")[0].strip() for q in m.group(2).split(",") if ":" in q}
+                params = {q for q in params if q == "off" or q.endswith("_off") or q == "obj"}
+            if fn in allow or not params: continue
+            for q in params:
+                if re.search(r"\b\w*base\w*\[\s*" + re.escape(q) + r"\s*(\+\s*[01]\s*)?\]\s*=", line) \
+                   or re.search(r"\b(new|old|b2)\[\s*" + re.escape(q) + r"\s*(\+\s*[01]\s*)?\]\s*=", line):
+                    bad.append("%s:%d fn %s writes header cell of param `%s`" %
+                               (os.path.relpath(p, ROOT), i, fn, q))
+    if bad:
+        fail("object-header", "only st_alloc/st_seal may write cells 0 and 1 of an object: "
+             + "; ".join(sorted(set(bad))[:8]))
+    else:
+        note("object-header: no writer touches cells 0/1 of an allocated object")
+
+# --- CHECK 8: a gate expectation must be a DERIVATION, not a magic number ---------
+# Incidents 2026-09-12 (4383f77, b8c6887, e0e6384): schain, sevolve and scompact each hid a
+# layout assumption inside a bare integer -- `live == 4028`, `== 10060`, `== 5008`. When B5
+# step 1 changed the layout, nothing could tell those numbers apart from a fold value, and
+# each one was found separately, by hand, hours apart. Written as `2000 * 4 + 2003 + 5 + 21`
+# the same constant states what it is made of and the next layout change can be checked
+# against it.
+def check_gate_constants_are_derived(r):
+    cap = r.get("magic_literal_min", 1000)
+    bad = []
+    for p in sorted(glob_bp(os.path.join(ROOT, "bench", "vs_rust", "std_tests"))):
+        rel = os.path.relpath(p, ROOT)
+        if ("magic_exempt:" + rel) in r: continue
+        for i, line in enumerate(open(p, errors="replace"), 1):
+            if line.lstrip().startswith("//"): continue
+            # Only comparisons that carry a LAYOUT assumption. A gate comparing against its
+            # expected FOLD is normal and must not be flagged; a gate comparing a cell
+            # count, a cursor or a superblock field is asserting the file format.
+            if re.search(r"\bcrc\w*\(", line): continue        # a crc is a fold, not a cell count
+            if not re.search(r"\b(live|used|sup|superseded|freed|sb\s*\+)\b", line): continue
+            for mm in re.finditer(r"==\s*(\d{4,})\b", line):
+                v = int(mm.group(1))
+                if v < cap: continue
+                tail = line[mm.end():mm.end() + 40]
+                if re.match(r"\s*[-+*/]", tail): continue      # already a derivation
+                bad.append("%s:%d compares against bare %d" % (rel, i, v))
+    if bad:
+        fail("magic-constant", "a gate expectation hides a layout assumption in a bare number; "
+             "write it as the arithmetic it is: " + "; ".join(bad[:8]))
+    else:
+        note("magic-constant: gate expectations are written as derivations")
+
+def glob_bp(d):
+    import glob as _g
+    return _g.glob(os.path.join(d, "*.bp"))
+
+# --- CHECK 9: a document may not cite a file that does not exist --------------------
+# Incident (HISTORY.md:1900, found in the 2026-09-12 full-record analysis): a task cited a
+# precedent file "BUG-LEDGER-WEEK" that was never in the tree, and the citation stood as
+# evidence. Same class as the roadmap row that cited commit c2f943e, which is not a valid
+# object. A claim that points at nothing is worse than no claim, because it reads as proof.
+def check_cited_files_exist(r):
+    import glob as _g
+    docs = [os.path.join(ROOT, f) for f in ("ROADMAP.md", "TASKS.md", "AGENTS.md")]
+    docs += _g.glob(os.path.join(ROOT, "docs", "*.md"))
+    pat = re.compile(r"\b((?:bench|tools|selfhost|docs|formal|seed)/[A-Za-z0-9_./-]+\.(?:sh|py|bp|md|lean|txt))")
+    missing = {}
+    for d in docs:
+        if not os.path.exists(d): continue
+        for i, line in enumerate(open(d, errors="replace"), 1):
+            for m in pat.finditer(line):
+                rel = m.group(1)
+                if os.path.exists(os.path.join(ROOT, rel)): continue
+                missing.setdefault(rel, []).append("%s:%d" % (os.path.basename(d), i))
+    worst = r.get("max_missing_citations", 0)
+    if len(missing) > worst:
+        fail("cited-file", "%d cited file(s) do not exist (ratchet %d) -- a citation that points "
+             "at nothing reads as evidence: %s" % (len(missing), worst,
+             "; ".join("%s (%s)" % (k, v[0]) for k, v in sorted(missing.items())[:6])))
+    else:
+        note("cited-file: %d missing citations (ratchet %d)" % (len(missing), worst))
+
 def main():
     r = load_ratchet()
     check_no_nested_fn()
@@ -167,6 +263,9 @@ def main():
     check_gates_clean_their_stores()
     check_producers_not_memoised()
     check_loud_failures(r)
+    check_object_header_writes(r)
+    check_gate_constants_are_derived(r)
+    check_cited_files_exist(r)
     for n in notes: print("  note: " + n)
     if fails:
         print("\narch_check: %d INVARIANT(S) VIOLATED" % len(fails))

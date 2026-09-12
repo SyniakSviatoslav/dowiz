@@ -193,6 +193,18 @@ fn st_open(path: [i64], plen: i64, size: i64, tmp: [i64]) -> [i64] {
   let base = st_cells(sys_mmap(0, size, 3, 1, fd, 0));
   let _ = sys_close(fd);
   let fresh = if st_pick(base, tmp) < 0 then 1 else 0;
+  // LOUD (trap 86), and it must come BEFORE st_reopen_verify: that walks the object chain,
+  // so on a store whose content was cut off it dies with trap 82 inside the walk, one
+  // function away from the cause. Checking the claimed extent first turns the same failure
+  // into a named one at the line that caused it.
+  // fires when an existing file is opened at the WRONG size -- st_open ftruncates to `size`,
+  // so that silently cuts the arena off mid-object and every later read traps 82 somewhere
+  // far from the cause. Measured 2026-09-12: nine gb gates were red for exactly this, and the
+  // fires when an existing file is opened at the WRONG size -- st_open ftruncates to `size`,
+  // so that silently cuts the arena off mid-object. Measured 2026-09-12: nine gb gates were
+  // red for exactly this and the symptom was an empty `got=`, which reads as a miscompile.
+  let live_sb = if fresh == 1 then 0 else st_pick(base, tmp);
+  let _ = if fresh == 0 then (if base[live_sb + 4] * 8 > size then sys_exit(86) else 0) else 0;
   let _ = if fresh == 1 then st_sb_write(base, 0, 0, 0, 1024, 0, 0, tmp) else st_reopen_verify(base, tmp);
   base
 }
@@ -285,7 +297,14 @@ fn st_alloc(base: [i64], tx: [i64], len: i64, digest: i64) -> i64 {
 }
 fn st_len(base: [i64], off: i64) -> i64 { base[off] & 4294967295 }
 fn st_seal(base: [i64], off: i64, tmp: [i64]) -> i64 {
-  let crc = st_crc(base, off + 2, st_len(base, off), tmp);
+  // LOUD (trap 85): a length this large is not an object length, it is a header cell that
+  // something overwrote. Without this guard st_crc simply walks it: measured 2026-09-12, a
+  // clobbered PartTab header gave len = 1329743170 -- the low word of the store magic -- and
+  // the crc walked 10.6 GB out of a 64 KB mapping, so the process died with trap 82 in a
+  // completely different function from the one with the bug.
+  let n = st_len(base, off);
+  let _ = if n > 268435456 then sys_exit(85) else 0;
+  let crc = st_crc(base, off + 2, n, tmp);
   let _ = base[off + 1] = (crc << 32) | (base[off + 1] & 4294967295);
   crc
 }
