@@ -441,7 +441,11 @@ fn st_begin_p(base: [i64], tx: [i64], p: i64, tmp: [i64]) -> i64 {
   let pt = base[sb + 3];
   let _ = tx[1] = st_parttab_used_p(base, pt, p);
   let _ = tx[2] = st_parttab_used_p(base, pt, p);
-  let _ = tx[3] = st_parttab_root_p(base, pt, p);
+  // tx[3] is the ALLOCATED-CELLS accumulator (st_alloc_p does tx[3] = tx[3] + 2 + len),
+  // exactly as in st_begin/st_alloc. It used to be seeded with the partition's current
+  // root, which st_alloc_p then overwrote on the first allocation -- the root was never
+  // readable from the tx and 2PC had nowhere to get it from.
+  let _ = tx[3] = 0;
   let _ = tx[4] = 0;
   let _ = tx[5] = st_parttab_gen_p(base, pt, p) + 1;
   sb
@@ -542,12 +546,24 @@ fn st_commit_p(base: [i64], tx: [i64], p: i64, root: i64, locks: [i64], pcount: 
   new_gen
 }
 
-// st_commit_2pc(base, txs, roots, useds, gens, pcount, locks, arena_cells, tmp):
-// Cross-partition 2PC commit
-fn st_commit_2pc(base: [i64], txs: [i64], locks: [i64], pcount: i64, arena_cells: i64, tmp: [i64], ptdig: i64) -> i64 {
+// st_commit_2pc(base, txs, roots, locks, pcount, arena_cells, tmp, ptdig):
+// cross-partition commit. `txs` holds pcount transactions of 6 cells each (tx q at
+// txs[q*6..q*6+5]); `roots[q]` is partition q's NEW root, or 0 to leave that partition
+// unchanged. Every participating partition's root, cursor and generation move together
+// under ONE global lock and ONE superblock toggle, so a reader sees either all of the
+// transaction or none of it.
+//
+// What was here before (measured 2026-09-12): the function re-read every partition's
+// root/used/gen out of the CURRENT PartTab, wrote those same values back, and toggled the
+// superblock. It took no roots argument and read nothing from `txs` except partition 0's
+// cursor, so it committed NOTHING. A probe that staged a new root in partition 0 and in
+// partition 1 and then read both back returned 00 -- neither root moved.
+fn st_commit_2pc(base: [i64], txs: [i64], roots: [i64], locks: [i64], pcount: i64, arena_cells: i64, tmp: [i64], ptdig: i64) -> i64 {
   let _ = st_lock_g(locks, pcount);
   let sb = st_pick(base, tmp);
   let pt = base[sb + 3];
+  let new_gen = base[sb + 2] + 1;
+  // Phase 1 -- collect: start from the committed state, then overlay each participant.
   let q = 0;
   while q < pcount {
     let _ = locks[pcount + 1 + q] = st_parttab_root_p(base, pt, q);
@@ -556,9 +572,20 @@ fn st_commit_2pc(base: [i64], txs: [i64], locks: [i64], pcount: i64, arena_cells
     let q = q + 1;
     0
   };
+  let q = 0;
+  while q < pcount {
+    let takes = if roots[q] == 0 then 0 else 1;
+    let _ = if takes == 1 then (let _ = locks[pcount + 1 + q] = roots[q] in 0) else 0;
+    let _ = if takes == 1 then (let _ = locks[2 * pcount + 1 + q] = txs[q * 6 + 2] in 0) else 0;
+    let _ = if takes == 1 then (let _ = locks[3 * pcount + 1 + q] = new_gen in 0) else 0;
+    let q = q + 1;
+    0
+  };
+  // Phase 2 -- publish: one PartTab carrying every participant's new state, then one
+  // superblock toggle. The PartTab is allocated in partition 0's region, so partition 0's
+  // recorded cursor has to be taken AFTER the allocation.
   let pt_off = st_alloc_p(base, txs, 0, st_parttab_cells(pcount), ptdig, pcount, arena_cells);
-  let new_gen = base[sb + 2] + 1;
-  let _ = locks[2 * pcount + 1 + 0] = txs[0 * 6 + 2];
+  let _ = locks[2 * pcount + 1 + 0] = txs[2];
   let _ = st_parttab_write_p(base, pt_off, sb, locks, pcount, tmp);
   let _ = st_seal(base, pt_off, tmp);
   let other = 512 - sb;
@@ -566,7 +593,7 @@ fn st_commit_2pc(base: [i64], txs: [i64], locks: [i64], pcount: i64, arena_cells
   let _ = base[other + 1] = 1;
   let _ = base[other + 2] = new_gen;
   let _ = base[other + 3] = pt_off;
-  let _ = base[other + 4] = locks[2 * pcount + 1 + 0];
+  let _ = base[other + 4] = txs[2];
   let _ = base[other + 5] = 0;
   let _ = base[other + 6] = 0;
   let _ = base[other + 7] = base[sb + 7];
