@@ -1,3 +1,5 @@
+**SUPERSEDED 2026-09-12 by `A16-closures-generics-hof.md`.** The "IMPLEMENTATION BEGUN" status below was not backed by code: `bebop.bp` has zero matches for annotation, generic or closure syntax, and `docs/LANGUAGE.md`'s claim that the surface syntax is "parsed and erased as of A16 Phase 1" was measured false -- the parser DISCARDS everything between a signature's `)` and its `{`, so `requires @@@ %%% not_a_thing` compiles. Kept for its history, not as a plan.
+
 # A16 — Closures, Generics, Dependent Types: Parsing & Annotation Support
 
 **Status:** IMPLEMENTATION BEGUN (2026-09-11)

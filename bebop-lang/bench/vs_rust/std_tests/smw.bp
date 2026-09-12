@@ -43,7 +43,7 @@ fn setup(env: [i64]) -> i64 {
 // st_commit_2pc as a single atomic superblock toggle. Both partition locks are taken in
 // index order, never in call order, so two writers crossing in opposite directions cannot
 // deadlock. Each side gets its own counter, so a cross transaction contributes 2 to the fold.
-fn cross_commit(env: [i64], p: i64) -> i64 {
+fn cross_commit(env: [i64], p: i64, k: i64) -> i64 {
   let base = st_cells(env[0]);
   let locks = st_cells(env[1]);
   let cp = (p + 1) % env[3];
@@ -62,11 +62,11 @@ fn cross_commit(env: [i64], p: i64) -> i64 {
   let tb = st_cells(env[11] + cp * 6);
   let _ = st_begin_p(base, ta, p, tmp);
   let a = st_alloc_p(base, ta, p, 1, env[7], env[3], env[5]);
-  let _ = st_put(base, a, 0, 1);
+  let _ = st_put(base, a, 0, k + 1);
   let _ = st_seal(base, a, tmp);
   let _ = st_begin_p(base, tb, cp, tmp);
   let b = st_alloc_p(base, tb, cp, 1, env[7], env[3], env[5]);
-  let _ = st_put(base, b, 0, 1);
+  let _ = st_put(base, b, 0, k + 1);
   let _ = st_seal(base, b, tmp);
   let _ = roots[p] = a;
   let _ = roots[cp] = b;
@@ -89,11 +89,11 @@ fn writer(env: [i64], p: i64) -> i64 {
   let k = 0;
   while k < env[4] {
     let cross = if (k + 1) % env[8] == 0 then 1 else 0;
-    let _ = if cross == 1 then cross_commit(env, p) else 0;
+    let _ = if cross == 1 then cross_commit(env, p, k) else 0;
     let _ = if cross == 0 then st_lock_p(locks, p) else 0;
     let _ = if cross == 0 then st_begin_p(base, tx, p, tmp) else 0;
     let c = if cross == 0 then st_alloc_p(base, tx, p, 1, env[7], env[3], env[5]) else 0;
-    let _ = if cross == 0 then st_put(base, c, 0, 1) else 0;
+    let _ = if cross == 0 then st_put(base, c, 0, k + 1) else 0;
     let _ = if cross == 0 then st_seal(base, c, tmp) else 0;
     let _ = if cross == 0 then st_commit_p(base, tx, p, c, locks, env[3], env[5], tmp, env[6]) else 0;
     let _ = if cross == 0 then st_unlock_p(locks, p) else 0;
@@ -128,6 +128,32 @@ fn fold_partition(base: [i64], P: i64, arena_cells: i64, dc: i64) -> i64 {
   total
 }
 
+// count_partition: measure mode 0 — walk arena and count objects (not sum values)
+fn count_partition(base: [i64], P: i64, arena_cells: i64, dc: i64) -> i64 {
+  let total = 0;
+  let region_size = arena_cells / P;
+  let rp = 0;
+  while rp < P {
+    let off = 1024 + rp * region_size;
+    let end = off + region_size;
+    let o = off;
+    while o < end {
+      let len = base[o] & 4294967295;
+      let digest = base[o] >> 32;
+      let is_obj = if len >= 1 then 1 else 0;
+      let is_counter = if digest == dc then 1 else 0;
+      let count = if is_obj * is_counter == 1 then 1 else 0;
+      let _ = total = total + count;
+      let advance = if is_obj == 1 then 2 + len else 1;
+      let o = o + advance;
+      0
+    };
+    let rp = rp + 1;
+    0
+  };
+  total
+}
+
 fn sm_atoi(t: str) -> i64 {
   let n = str_len(t);
   let i = 0;
@@ -145,6 +171,7 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let env = zeros(16);
   let _ = env[3] = if argc >= 3 then sm_atoi(argv[2]) else 1;
   let _ = env[4] = if argc >= 4 then sm_atoi(argv[3]) else 1000;
+  let mode = if argc >= 5 then sm_atoi(argv[4]) else 0;
   // arena_cells must describe the WHOLE mapping, not just its first 64 MB. st_open maps
   // 67108864 + 16777216 * P bytes; leaving this at 8388608 cells (= 64 MB / 8) confined
   // every partition region to the first 64 MB, so at P=3 a writer exhausted its region
@@ -186,5 +213,5 @@ fn main(argc: i64, argv: [str]) -> i64 {
     let w2 = w2 + 1;
     0
   };
-  fold_partition(st_cells(env[0]), env[3], env[5], env[7])
+  if mode == 1 then fold_partition(st_cells(env[0]), env[3], env[5], env[7]) else count_partition(st_cells(env[0]), env[3], env[5], env[7])
 }

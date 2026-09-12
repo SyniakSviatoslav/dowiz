@@ -718,14 +718,25 @@ gate scrash_torn 0 "$r"
 # the arena by fold_partition; the closed form is absent from the program by design, so the
 # golden is the only place P*N + P*N/100 appears. 3 writers x 100000 = 300000 + 3000. ----
 rm -f smw.store
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/smw.bp ${BEBOP_TMP:-/tmp/opencode}/smw_test.bin >/dev/null 2>&1 && run 120 ${BEBOP_TMP:-/tmp/opencode}/smw_test.bin 3 100000 | tail -1)
-gate smw 303000 "$r"
+# The golden is a COMMITTED LITERAL, not $(python3 bench/oracles/smw.py). bench/oracles/run_all.sh
+# selects gates with `grep -E '^gate [A-Za-z0-9_]+ -?[0-9]+ '` -- a shell variable does not match,
+# so a computed golden silently DROPS the gate out of the oracle check instead of failing it
+# (measured 2026-09-12: ok went 115 with mismatch 0 because smw and b6core stopped being checked
+# at all). Derivation: python3 bench/oracles/smw.py -> 15150300000, which is
+# P*(N*(N+1)/2) + P*(100*M*(M+1)/2) at P=3 N=100000 M=1000; the cross term is absent at P=1.
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/smw.bp ${BEBOP_TMP:-/tmp/opencode}/smw_test.bin >/dev/null 2>&1 && run 120 ${BEBOP_TMP:-/tmp/opencode}/smw_test.bin 3 100000 1 | tail -1)
+gate smw 15150300000 "$r"
+
 
 # ---- b6core (B6, ROADMAP B6: multi-core kernels, SCAN and GATHER shapes, W pinned to A78,
 # fold identity check at W=1 as a deterministic gate) ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/b6core.bp ${BEBOP_TMP:-/tmp/opencode}/b6core_test.bin >/dev/null 2>&1 && run 120 ${BEBOP_TMP:-/tmp/opencode}/b6core_test.bin 0 1 | tail -1)
-ok=$(( r / 1000000000000000 ))
-gate b6core 1 "$ok"
+# Committed literal, for the reason spelled out at the smw gate above.
+# Derivation: python3 bench/oracles/b6core.py -> -9207164868073128640, the SCAN fold of the
+# LCG fill at n = 10^7 as a signed i64. Mode 1 makes the program return the fold instead of its
+# packed status, so this gate compares a value the oracle derives independently -- the old
+# `ok == 1` form compared the program to ITSELF (fold_par == fold_seq) and was self-frozen.
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/b6core.bp ${BEBOP_TMP:-/tmp/opencode}/b6core_test.bin >/dev/null 2>&1 && run 120 ${BEBOP_TMP:-/tmp/opencode}/b6core_test.bin 0 1 1 | tail -1)
+gate b6core -9207164868073128640 "$r"
 
 # ---- sevolve (G3, T114: v1/v2 layouts, v1 reads v2, sha256-named migration + compaction) ----
 rm -f sevolve.store sevolve.store.tmp

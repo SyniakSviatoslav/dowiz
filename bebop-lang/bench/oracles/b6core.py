@@ -14,7 +14,9 @@ def fill_scan(n):
         x = lcg(x)
         val = x if x < (1 << 63) else x - (1 << 64)
         fold = fold + val
-    return fold & ((1 << 64) - 1)
+    fold_unsigned = fold & ((1 << 64) - 1)
+    # Convert to signed i64
+    return fold_unsigned if fold_unsigned < (1 << 63) else fold_unsigned - (1 << 64)
 
 def fill_gather(n):
     """Fill array and idx with LCG, return sum (fold_gather)"""
@@ -37,7 +39,9 @@ def fill_gather(n):
     for i in range(n):
         fold = fold + a[idx[i] & (n - 1)]
 
-    return fold & ((1 << 64) - 1)
+    fold_unsigned = fold & ((1 << 64) - 1)
+    # Convert to signed i64
+    return fold_unsigned if fold_unsigned < (1 << 63) else fold_unsigned - (1 << 64)
 
 n = 10000000
 # Compute both folds (golden is SCAN at W=1 for std_golden registration)

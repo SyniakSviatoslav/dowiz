@@ -1,4 +1,4 @@
-Status: 2026-09-05 CURRENT (T119, decision D11-M; describes the surface bebop.bin accepts at fixpoint 4c454e21+; tools/bpref.py is the executable grammar and semantics reference; keep the two in step)
+Status: 2026-09-05 CURRENT (T119, decision D11-M; describes the surface bebop.bin accepts at fixpoint 4c454e21+; tools/bpref.py is a DIFFERENTIAL CHECKER over the subset its docstring declares, not the semantics reference -- `bebop.bp` defines the language, and A23 is the row that makes the division explicit; corrected 2026-09-12 after bpref's `set` node was found copying arrays on write, disagreeing with the compiler for four days with nothing in the battery running its evaluator)
 
 # The Bebop language surface
 
@@ -17,7 +17,7 @@ program := (use | enum | struct | fn | module)*  -- top level, any order
 use     := 'use' '"' PATH '"'                     -- line-initial; textual inclusion (T47)
 fn      := 'fn' NAME '(' (NAME ':' TYPE (',' NAME ':' TYPE)*)? ')' '->' TYPE '{' body '}'
 enum    := 'enum' NAME '{' CTOR ('(' TYPE ')')? (',' CTOR ('(' TYPE ')')?)* '}'
-struct  := 'struct' NAME '{' NAME ':' TYPE (',' NAME ':' TYPE)* '}'   -- literals disabled (T43 rest)
+struct  := 'struct' NAME '{' NAME ':' TYPE (',' NAME ':' TYPE)* '}'   -- literals enabled for the FIRST declared struct ONLY: find_struct returns the first match and emit_field_access resolves every `.f` against it, so a second struct is silently mis-resolved (A22)
 module  := 'module' NAME '{' '}'                 -- inert
 TYPE    := 'i64' | 'str' | '[' 'i64' ']' | NAME
 ```

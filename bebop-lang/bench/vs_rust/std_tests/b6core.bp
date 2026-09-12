@@ -120,6 +120,7 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let n = 10000000;
   let shape = if argc >= 3 then atoi(argv[2]) else 0;
   let W = if argc >= 4 then atoi(argv[3]) else 0;
+  let mode = if argc >= 5 then atoi(argv[4]) else 0;
   let W_actual = if W == 0 then 1 else W;
 
   let a = zeros(n);
@@ -179,5 +180,5 @@ fn main(argc: i64, argv: [str]) -> i64 {
   };
   let noalloc = if W == 0 then 1 else noalloc;
 
-  ok * 1000000000000000 + pin * 100000000000000 + noalloc * 10000000000000 + ms0 * 10000000 + msW
+  if mode == 1 then sum_cells else ok * 1000000000000000 + pin * 100000000000000 + noalloc * 10000000000000 + ms0 * 10000000 + msW
 }

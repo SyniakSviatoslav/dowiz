@@ -2894,6 +2894,30 @@ DEPS: T57. BLOCKERS: energy measurement (forward-port).
 
 ## Measured speed and memory (2026-09-04; replaces the projection table per decision D8(5))
 
+(moved from ROADMAP.md 2026-09-12 to pay for the language-ergonomics rows A17-A24; both tables are
+2026-09-04/05 measurements superseded by docs/PERF.md's per-commit series)
+
+| kernel (bench/vs_rust/bench_pinned.sh) | before T96 (364009e9) | after T96 (3aae4ad8) | Rust twin (black_box in loop) | after / twin |
+|---|---|---|---|---|
+| K1 sum 1M | 10.0 ms | 3.0 ms | 2.41 ms | 1.24x |
+| K2 fib(25) | 2.85 ms | 1.5 ms | 0.277 ms (inlined) | 5.4x |
+| K3 300x300 | 1.2-1.5 ms | 0.5 ms | 0.213 ms | 2.3x |
+| K4 chain 2M | 32 ms | 12.0 ms | 2.85 ms | 4.2x |
+| K1 loop words/iteration | 51 | 14 | 3 | |
+| isqrt / fp_div, 1M calls (T105, scratch micro-bench, pinned A78) | 286 ms / 253 ms (restoring loops) | 41 ms / 22 ms (clz Newton / sdiv base-2^k) | | 7x / 10x faster |
+
+| substrate (bench/substrate_spike/run.sh, T55 spike) | ms | vs linear |
+|---|---|---|
+| 12-op fn x 300k, bebop linear | 18 | 1.0x |
+| same as runtime cells (bebop sweep) | 738 | 41x slower |
+| same sweep engine in Rust (model floor) | 39 | 39x slower than Rust linear (1.0 ms) |
+
+| incremental curve, 2^16-cell DAG (bench/substrate_spike/incr.sh, T107) | sweep / full, us per rep | crossover |
+|---|---|---|
+| bebop k=1 / 16 / 256 / 4096 | 15/1031, 234/984, 1828/1078, 5281/1109 | k = 256 (0.39% of N) |
+| Rust twin k=1 / 16 / 256 / 4096 | 4/132, 50/127, 525/129, 1446/135 | k = 256 (0.39% of N) |
+
+
 Every row below is a measurement with its script; there is no projected
 row. "Rust twin" = bench/vs_rust/rust_once/k*.rs (K1/K3 carry an in-loop
 black_box, K4 is the only honest twin — docs/SPEEDUP-ANALYSIS.md §2).
