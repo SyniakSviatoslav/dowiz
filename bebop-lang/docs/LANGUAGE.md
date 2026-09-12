@@ -133,6 +133,13 @@ Strings as values, string concatenation (`++` is rejected, exit 96), struct lite
 (disabled), floats (Q32 fixed point lives in selfhost/prelude/fp.bp),
 modules with contents (only `use` inclusion), bounds checks, garbage collection.
 **Closure emission, generic monomorphisation, and dependent-type checking are NOT
-yet implemented** — their SURFACE SYNTAX (annotations, generic params, closure
-literals) IS parsed and erased by the compiler as of A16 Phase 1; semantic checking
-and code generation are staged in Phase 2 (elab.bp) and Phase 3 (F7 kernel).
+yet implemented, and NEITHER IS THEIR SURFACE SYNTAX.** This paragraph used to claim the
+syntax "IS parsed and erased by the compiler as of A16 Phase 1". Measured 2026-09-12 and
+false: `bebop.bp` has no code for `requires` / `ensures` / `theorem` at all. The parser
+DISCARDS everything between a signature's `)` and its `{`, and discards unrecognised
+top-level text, so
+`fn add(x: i64, y: i64) -> i64 requires @@@ %%% not_a_thing ensures 1 2 3 ][ { x + y }`
+compiles and runs, as does a top-level `theorem <nonsense> ][ @@@`. That is not erasure of
+parsed syntax, it is silent acceptance of invalid text -- and `tools/f8_dt.py` passes on it
+because it only asks whether such a program compiles. Tracked on ROADMAP row F8; the first
+deliverable there is a NEGATIVE construct that must COMPILEFAIL.
