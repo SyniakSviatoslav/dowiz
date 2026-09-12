@@ -563,6 +563,29 @@ fn st_commit_2pc(base: [i64], txs: [i64], roots: [i64], locks: [i64], pcount: i6
   let sb = st_pick(base, tmp);
   let pt = base[sb + 3];
   let new_gen = base[sb + 2] + 1;
+  // Phase 0 -- VALIDATE the read set (ROADMAP B5: "STM validation of read-sets for
+  // cross-partition transactions"). st_begin_p recorded, in tx[5], one past the generation
+  // the transaction OBSERVED for its partition. If any participant's generation has moved
+  // since, another writer committed underneath this transaction and publishing would lose
+  // that writer's work. Abort instead, returning 0, and leave the store untouched; the
+  // caller retries. This is what makes the cross-partition path safe without holding every
+  // partition's lock for the whole transaction.
+  let stale = 0;
+  let q = 0;
+  while q < pcount {
+    let takes = if roots[q] == 0 then 0 else 1;
+    let seen = txs[q * 6 + 5] - 1;
+    let now = st_parttab_gen_p(base, pt, q);
+    let stale = stale + takes * (if now == seen then 0 else 1);
+    let q = q + 1;
+    0
+  };
+  let _ = if stale > 0 then st_unlock_g(locks, pcount) else 0;
+  if stale > 0 then 0 else st_commit_2pc_go(base, txs, roots, locks, pcount, arena_cells, tmp, ptdig, sb, pt, new_gen)
+}
+
+// st_commit_2pc_go: the publish half, reached only when the read set validated.
+fn st_commit_2pc_go(base: [i64], txs: [i64], roots: [i64], locks: [i64], pcount: i64, arena_cells: i64, tmp: [i64], ptdig: i64, sb: i64, pt: i64, new_gen: i64) -> i64 {
   // Phase 1 -- collect: start from the committed state, then overlay each participant.
   let q = 0;
   while q < pcount {
