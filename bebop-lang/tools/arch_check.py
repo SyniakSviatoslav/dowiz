@@ -98,6 +98,35 @@ def check_binary_matches_source():
              "mv bebop.bin.tmp bebop.bin" % (a, b))
     else: note("artifact-identity: bebop.bin == compile(bebop.bp) == %s" % a)
 
+# --- CHECK 3b: the hook git RUNS is the hook the repo committed --------------------
+# Incident 2026-09-12: tools/hooks/pre-commit in the repo was 3710 bytes carrying two guards;
+# .git/hooks/pre-commit -- the file git actually executes -- was a 1367-byte older copy with
+# Guard 2 missing, and nothing installed or compared them. A committed guard that is not the
+# installed guard is prose with a shebang, which is the same class as L24/L25: an enforcement
+# pointing at nothing. Law L26.
+def check_hook_installed():
+    src = os.path.join(ROOT, "tools", "hooks", "pre-commit")
+    gitdir = os.path.join(ROOT, "..", ".git")
+    if not os.path.isdir(gitdir):
+        return note("hook-installed: skipped, no .git here (a lane checkout is not a work tree)")
+    if not os.path.exists(src):
+        return fail("hook-installed", "tools/hooks/pre-commit is missing")
+    dst = os.path.join(gitdir, "hooks", "pre-commit")
+    if not os.path.exists(dst):
+        return fail("hook-installed", ".git/hooks/pre-commit is NOT installed -- the committed "
+                    "guard never runs. Install: cp bebop-lang/tools/hooks/pre-commit "
+                    ".git/hooks/pre-commit && chmod +x .git/hooks/pre-commit")
+    a = hashlib.md5(open(src, "rb").read()).hexdigest()[:8]
+    b = hashlib.md5(open(dst, "rb").read()).hexdigest()[:8]
+    if a != b:
+        return fail("hook-installed", ".git/hooks/pre-commit is %s but tools/hooks/pre-commit is "
+                    "%s -- git is running a different guard than the one in the tree. Re-install: "
+                    "cp bebop-lang/tools/hooks/pre-commit .git/hooks/pre-commit" % (b, a))
+    if not os.access(dst, os.X_OK):
+        return fail("hook-installed", ".git/hooks/pre-commit matches the repo copy but is not "
+                    "executable, so git skips it silently. chmod +x .git/hooks/pre-commit")
+    note("hook-installed: .git/hooks/pre-commit == tools/hooks/pre-commit == %s, executable" % a)
+
 # --- CHECK 4: a gate's store is removed before the gate runs ----------------------
 # Incident 2026-09-12 (09944f7, d3445fb): nine gb gates were RED because of stale .store
 # files -- st_open maps a file it does not match and traps 82 with no output. Eight were
@@ -656,6 +685,7 @@ def main():
     check_no_nested_fn()
     check_file_size(r)
     check_binary_matches_source()
+    check_hook_installed()
     check_gates_clean_their_stores()
     check_producers_not_memoised()
     check_loud_failures(r)

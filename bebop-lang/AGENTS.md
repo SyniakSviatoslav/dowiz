@@ -557,3 +557,12 @@ L25. A RATCHET NOBODY READS IS NOT A SAFEGUARD (2026-09-12). `max_unbounded_wait
      tools/arch_ratchet.txt must be read by a check, and `tools/arch_check.py`
      **ratchet-orphan** fails if one is not. (The orphan is now adopted: **unbounded-wait**
      reads it, and the tree measures 0.)
+
+L26. THE GUARD GIT RUNS IS THE GUARD THE REPO COMMITTED (2026-09-12). `tools/hooks/pre-commit`
+     carried two guards in 3710 bytes; `.git/hooks/pre-commit`, the file git actually executes,
+     was a 1367-byte older copy with Guard 2 missing, and nothing in the tree installed or
+     compared them. A committed guard that is not the installed guard is prose with a shebang --
+     the same class as L24 and L25, aimed at the hook directory. `tools/arch_check.py`
+     **hook-installed** fails when the two differ, when the hook is absent, or when it is present
+     but not executable (git skips a non-executable hook SILENTLY, which is the worst of the
+     three). It skips in a lane checkout, which has no `.git` and runs no hooks.

@@ -32,3 +32,4 @@ L22 | MANUAL: role separation is a property of who runs what, not of the code
 L23 | MANUAL: "nothing is unreachable until tried" is a disposition; the journal's REFUTED entries are its evidence
 L24 | arch_check:prereq-guard                     | a gate consuming a producer artifact asserts it exists, so a missing input names itself instead of trapping 82
 L25 | arch_check:ratchet-orphan                   | every ratchet is read by a check; the adopted one is enforced by arch_check:unbounded-wait
+L26 | arch_check:hook-installed                  | the pre-commit hook git executes is byte-identical to the one committed in tools/hooks/, and executable
