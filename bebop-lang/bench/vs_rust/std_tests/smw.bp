@@ -47,10 +47,15 @@ fn cross_commit(env: [i64], p: i64) -> i64 {
   let base = st_cells(env[0]);
   let locks = st_cells(env[1]);
   let cp = (p + 1) % env[3];
+  // P=1 makes the partner OURSELVES, and st_lock_p is a non-recursive spin lock, so taking
+  // it twice is a self-deadlock: measured 2026-09-12, smw at P=1 N=10000 went from 856 ms to
+  // a 200 s timeout because every 100th transaction hung here. The battery only ever ran
+  // P=3, so nothing saw it. One lock when there is only one partition.
+  let two = if cp == p then 0 else 1;
   let lo = if p < cp then p else cp;
   let hi = if p < cp then cp else p;
   let _ = st_lock_p(locks, lo);
-  let _ = st_lock_p(locks, hi);
+  let _ = if two == 1 then st_lock_p(locks, hi) else 0;
   let tmp = st_tmp_p(st_cells(env[2]), p);
   let roots = st_cells(env[10]);
   let ta = st_cells(env[11] + p * 6);
@@ -68,7 +73,7 @@ fn cross_commit(env: [i64], p: i64) -> i64 {
   let _ = st_commit_2pc(base, st_cells(env[11]), roots, locks, env[3], env[5], tmp, env[6]);
   let _ = roots[p] = 0;
   let _ = roots[cp] = 0;
-  let _ = st_unlock_p(locks, hi);
+  let _ = if two == 1 then st_unlock_p(locks, hi) else 0;
   let _ = st_unlock_p(locks, lo);
   0
 }

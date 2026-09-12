@@ -23,6 +23,7 @@ SEED = os.path.join(ROOT, "seed", "build", "seed")
 SRC = os.path.join(ROOT, "bebop.bp")
 OUTDB = os.path.join(ROOT, "tools", "mutation_coverage.txt")
 TMP = "/tmp/mutc"
+THREAD_BASE = None
 
 def sites():
     """One mutable literal word per emitter: the first `em(insns, n, <literal>)` in each."""
@@ -42,6 +43,26 @@ def build(text, out):
     r = subprocess.run([SEED, os.path.join(ROOT, "bebop.bin"), "compile", p, out],
                        capture_output=True, cwd=ROOT)
     return r.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 0
+
+def threads(binpath):
+    """A gate that actually SPAWNS: construct_parity does not, so every concurrency emitter
+    survived its mutants -- cond_set, futex_wake, futex_wait_guard, atomic_add,
+    exit_thread_guard were all invisible to it. smw exercises all of them in one run: three
+    writer threads, real futex handshakes, per-partition atomics. Its fold is P*N + P*(N/100)
+    and any corruption of those primitives moves it or hangs it."""
+    out = os.path.join(TMP, "smw_mut.bin")
+    src = os.path.join(ROOT, "bench", "vs_rust", "std_tests", "smw.bp")
+    for f in ("smw.store",):
+        try: os.remove(os.path.join(ROOT, f))
+        except OSError: pass
+    r = subprocess.run([SEED, binpath, "compile", src, out], capture_output=True, cwd=ROOT)
+    if r.returncode != 0 or not os.path.exists(out): return "compile-failed"
+    try:
+        rr = subprocess.run([SEED, out, "2", "200"], capture_output=True, text=True,
+                            cwd=ROOT, timeout=90)
+    except subprocess.TimeoutExpired:
+        return "hang"
+    return (rr.stdout.strip().split("\n") or [""])[-1]
 
 def parity(binpath):
     """Return the gate pass count, or -1 if the harness could not run at all."""
@@ -66,6 +87,9 @@ def main():
         for l in open(OUTDB):
             if l.strip() and not l.startswith("#"): done.add(l.split()[0])
     base_text = open(SRC, errors="replace").read()
+    global THREAD_BASE
+    THREAD_BASE = threads(os.path.join(ROOT, "bebop.bin"))
+    print("thread-gate baseline: %s" % THREAD_BASE)
     base = a.baseline
     if not base:
         assert build(base_text, os.path.join(TMP, "base.bin")), "the UNMUTATED source must build"
@@ -90,7 +114,14 @@ def main():
                 if p == -2:   verdict, detail = "KILLED", "hang"
                 elif p == -1: verdict, detail = "KILLED", "harness-failed"
                 elif p < base: verdict, detail = "KILLED", "pass=%d<%d" % (p, base)
-                else:          verdict, detail = "SURVIVED", "pass=%d==%d" % (p, base)
+                else:
+                    # construct_parity does not spawn, so a concurrency emitter needs a gate
+                    # that does before its mutant can be called dead.
+                    t = threads(os.path.join(TMP, "mut.bin"))
+                    if t != THREAD_BASE:
+                        verdict, detail = "KILLED", "threads=%s!=%s" % (t[:14], THREAD_BASE)
+                    else:
+                        verdict, detail = "SURVIVED", "pass=%d, threads ok" % p
             db.write("%s %s %s %.1fs\n" % (fn, verdict, detail, time.time() - t0))
             db.flush()
             print("%-28s %-9s %-22s %.1fs" % (fn, verdict, detail, time.time() - t0))

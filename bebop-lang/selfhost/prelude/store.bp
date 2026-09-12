@@ -440,7 +440,11 @@ fn st_lock_p(locks: [i64], p: i64) -> i64 {
 // st_unlock_p(locks, p): release partition p's lock
 fn st_unlock_p(locks: [i64], p: i64) -> i64 {
   let _ = sys_atomic_add(locks, p, 0 - 1);
-  let _ = sys_futex_wake(locks, p, 64);
+  // No futex_wake here: st_lock_p/st_lock_g are pure spin loops on sys_atomic_add and
+  // there is no sys_futex_wait anywhere in this file, so this syscall woke nobody --
+  // and under proot it costs ~27 us, twice per commit, against an 85.6 us transaction.
+  // If a waiting lock is ever added, the wake comes back WITH it, not before it.
+
   0
 }
 
@@ -459,7 +463,11 @@ fn st_lock_g(locks: [i64], pcount: i64) -> i64 {
 // st_unlock_g(locks, pcount): release global lock
 fn st_unlock_g(locks: [i64], pcount: i64) -> i64 {
   let _ = sys_atomic_add(locks, pcount, 0 - 1);
-  let _ = sys_futex_wake(locks, pcount, 64);
+  // No futex_wake here: st_lock_p/st_lock_g are pure spin loops on sys_atomic_add and
+  // there is no sys_futex_wait anywhere in this file, so this syscall woke nobody --
+  // and under proot it costs ~27 us, twice per commit, against an 85.6 us transaction.
+  // If a waiting lock is ever added, the wake comes back WITH it, not before it.
+
   0
 }
 
