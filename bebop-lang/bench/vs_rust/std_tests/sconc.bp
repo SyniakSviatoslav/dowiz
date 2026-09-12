@@ -12,9 +12,13 @@ use "selfhost/prelude/store.bp"
 // before that it was exit_group and ended the whole process).
 // Result = 40000 iff every counter == 10^4, sum == 40000 == generation - 1, and no
 // reader ever saw an inconsistent generation; else the failing quantity.
+// env layout: 0 base, 1 cells, 2 tx, 3 tmp_w, 4 snap, 5 tmp_r, 6 dc, 7 dr
+// All buffers pre-allocated per-worker: writers get tx(6) and tmp_w(256);
+// readers get snap(32) and tmp_r(256)
 // read_sum: a torn superblock copy (both copies failed their crc because the writer was
 // mid-toggle on both, in turn) is not an inconsistency -- retry, up to 1000 times.
-fn read_sum(base: [i64], snap: [i64], tmp: [i64]) -> i64 {
+fn read_sum(env: [i64], snap: [i64], tmp: [i64]) -> i64 {
+  let base = st_cells(env[0]);
   let sb = st_snapshot(base, snap, tmp);
   let tries = 0;
   while sb < 0 {
@@ -27,9 +31,13 @@ fn read_sum(base: [i64], snap: [i64], tmp: [i64]) -> i64 {
   let s = st_get(base, st_ref(base, root, 1), 0) + st_get(base, st_ref(base, root, 2), 0) + st_get(base, st_ref(base, root, 3), 0) + st_get(base, st_ref(base, root, 4), 0);
   if sb < 0 then 0 - 1 else if s == gen - 1 then 0 else 1
 }
-fn writer(base: [i64], cells: [i64], w: i64, dc: i64, dr: i64) -> i64 {
-  let tx = zeros(6);
-  let tmp = zeros(8);
+fn writer(env: [i64], w: i64) -> i64 {
+  let base = st_cells(env[0]);
+  let cells = st_cells(env[1]);
+  let tx = st_cells(env[2] + w * 6);
+  let tmp = st_cells(env[3] + w * 256);
+  let dc = env[6];
+  let dr = env[7];
   let k = 0;
   while k < 10000 {
     let spin = 1;
@@ -65,13 +73,14 @@ fn writer(base: [i64], cells: [i64], w: i64, dc: i64, dr: i64) -> i64 {
   };
   0
 }
-fn reader(base: [i64], cells: [i64], j: i64) -> i64 {
-  let snap = zeros(32);
-  let tmp = zeros(8);
+fn reader(env: [i64], j: i64) -> i64 {
+  let cells = st_cells(env[1]);
+  let snap = st_cells(env[4] + j * 32);
+  let tmp = st_cells(env[5] + j * 256);
   let k = 0;
   let bad = 0;
   while k < 10000 {
-    let r = read_sum(base, snap, tmp);
+    let r = read_sum(env, snap, tmp);
     let bad = bad + (if r == 0 then 0 else 1);
     let k = k + 1;
     0
@@ -79,24 +88,20 @@ fn reader(base: [i64], cells: [i64], j: i64) -> i64 {
   let _ = cells[8 + j] = bad;
   bad
 }
-// stk(w): the worker's stack top, 16 MiB-pitched above the arena cursor (child arena =
-// [sp + 4 MiB, sp + 12 MiB), T118). spawn() keeps <= 8 live symbols: a clone-spanning
-// fn must not spill (spill slots live in the shared frame, one per process, not per
-// thread -- the nn4 lesson).
-// stk(cur, w): the worker's stack top, pitched from a cursor sampled ONCE. It used to call
-// sys_arena_base() per worker, and that returns the arena CURSOR, which MOVES between
-// calls -- so the eight stacks were never actually pitched by the constant at all.
-// smw.bp carries the same lesson above its own stk.
-fn stk(cur: i64, w: i64) -> i64 { cur + 2097152 * (w + 1) }
-fn spawn(base: [i64], cells: [i64], dc: i64, dr: i64) -> i64 {
+// stk(cur, w): the worker's stack top, pitched from cursor sampled ONCE (smw pattern).
+// No arena allocations in children now -- they use pre-allocated env buffers.
+// Pitch: 8192 cells (64 KB) per child; only stack grows, no arena growth needed.
+fn stk(cur: i64, w: i64) -> i64 { cur + 16384 + w * 8192 }
+fn spawn(env: [i64]) -> i64 {
   let cur = sys_arena_base();
   let w = 0;
   while w < 8 {
     let r = sys_clone(68864, stk(cur, w));
     let is_child = if r == 0 then 1 else 0;
     let job = is_child * (if w < 4 then 1 else 2);
-    let _ = if job == 1 then writer(base, cells, w, dc, dr) else 0;
-    let _ = if job == 2 then reader(base, cells, w - 4) else 0;
+    let _ = if job == 1 then writer(env, w) else 0;
+    let _ = if job == 2 then reader(env, w - 4) else 0;
+    let cells = st_cells(env[1]);
     let _ = sys_cond_set(is_child, cells, 16 + w, 1);
     let _ = sys_futex_wake(cells, 16 + w, 64);
     let _ = sys_exit_thread_guard(is_child, 0);
@@ -129,7 +134,22 @@ fn main() -> i64 {
   let _ = st_seal(base, r0, tmp);
   let _ = st_commit(base, tx, r0, tmp);
   let cells = zeros(32);
-  let _ = spawn(base, cells, dc, dr);
+  let scratch_tx = zeros(4 * 6);
+  let scratch_tmp_w = zeros(4 * 8);
+  let scratch_snap = zeros(4 * 32);
+  let scratch_tmp_r = zeros(4 * 8);
+  let env = zeros(8);
+  let _ = env[0] = st_addr(base);
+  let _ = env[1] = st_addr(cells);
+  let _ = env[2] = st_addr(scratch_tx);
+  let _ = env[3] = st_addr(scratch_tmp_w);
+  let _ = env[4] = st_addr(scratch_snap);
+  let _ = env[5] = st_addr(scratch_tmp_r);
+  let dc = st_digest("C{i64}");
+  let dr = st_digest("R{arr ref C}");
+  let _ = env[6] = dc;
+  let _ = env[7] = dr;
+  let _ = spawn(env);
   let k = 0;
   while k < 8 {
     let d = 0;

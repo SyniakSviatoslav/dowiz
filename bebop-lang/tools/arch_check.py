@@ -10,7 +10,7 @@ the commit that earns the reduction.
 Run: python3 tools/arch_check.py [--update-ratchet]
 Exit 0 = all invariants hold. Exit 1 = at least one violated.
 """
-import hashlib, os, re, subprocess, sys
+import collections, hashlib, os, re, subprocess, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RATCHET = os.path.join(ROOT, "tools", "arch_ratchet.txt")
@@ -31,7 +31,10 @@ def load_ratchet():
 
 def bp_sources():
     """Every .bp we author. Excludes generated and vendored trees."""
-    skip = ("/.claude/", "/attic/", "/bench/fuzz/repros/", "/bench/wip/", "/seed/")
+    # Negative fixtures exist precisely to be REJECTED, and their functions are never
+    # meant to be called; counting them as dead code would drown the real signal.
+    skip = ("/.claude/", "/attic/", "/bench/fuzz/", "/bench/wip/", "/seed/",
+            "/typecheck_neg/", "/parity_constructs/neg/", "/kernel_neg/", "/repros/")
     out = []
     for dirpath, dirnames, filenames in os.walk(ROOT):
         dirnames[:] = [d for d in dirnames if d not in (".git", "__pycache__", ".becache")]
@@ -255,6 +258,246 @@ def check_cited_files_exist(r):
     else:
         note("cited-file: %d missing citations (ratchet %d)" % (len(missing), worst))
 
+# --- CHECK 10: every builtin the compiler emits is exercised somewhere -------------
+# codegen/miscompile is the largest defect class in this project (69 journal entries, 38 %
+# of HISTORY's defects) and the only defence against it is differential testing. A builtin
+# that no corpus program calls has never been compared against tools/bpref.py or run at all,
+# so a miscompile in it is invisible by construction. This check names those.
+def check_builtin_coverage(r):
+    import glob as _g
+    src = open(os.path.join(ROOT, "bebop.bp"), errors="replace").read()
+    emitted = set(re.findall(r"^fn emit_(sys_\w+)\(", src, re.M))
+    corpus = []
+    for d in ("bench/parity_constructs", "bench/vs_rust/std_tests", "selfhost/std",
+              "selfhost/prelude", "bench/tq_sqlite"):
+        corpus += _g.glob(os.path.join(ROOT, d, "*.bp"))
+        corpus += _g.glob(os.path.join(ROOT, d, "**", "*.bp"), recursive=True)
+    text = "".join(open(f, errors="replace").read() for f in set(corpus))
+    # the surface name may drop the sys_ prefix: emit_sys_scan dispatches `scan(...)`.
+    # Accept either spelling before calling a builtin uncovered.
+    def called(b):
+        return (b + "(") in text or (b[4:] + "(") in text
+    uncovered = sorted(b for b in emitted if not called(b))
+    worst = r.get("max_uncovered_builtins", 0)
+    if len(uncovered) > worst:
+        fail("builtin-coverage", "%d builtin(s) the compiler emits are called by NO corpus "
+             "program, so no differential test can ever see a miscompile in them (ratchet %d): %s"
+             % (len(uncovered), worst, ", ".join(uncovered[:10])))
+    else:
+        note("builtin-coverage: %d emitted builtins, %d uncovered (ratchet %d)"
+             % (len(emitted), len(uncovered), worst))
+
+# --- CHECK 11: every compile-time trap is documented and has a negative fixture ----
+# docs/TRAPS.md opens by saying "a code that is not here is a bug" and then, by its own
+# admission, the compiler emits codes the table does not carry (105, 106, 107). An
+# undocumented trap is a failure whose meaning has to be reverse-engineered at 2am.
+def check_traps_documented(r):
+    src = open(os.path.join(ROOT, "bebop.bp"), errors="replace").read()
+    codes = set(int(c) for c in re.findall(r"diag_exit\(\s*\w+\s*,\s*\w+\s*,\s*(\d+)\s*\)", src))
+    traps = open(os.path.join(ROOT, "docs", "TRAPS.md"), errors="replace").read()
+    documented = set(int(c) for c in re.findall(r"^\|\s*(\d+)\s*\|", traps, re.M))
+    undoc = sorted(codes - documented)
+    worst = r.get("max_undocumented_traps", 0)
+    if len(undoc) > worst:
+        fail("trap-doc", "compiler emits trap code(s) that docs/TRAPS.md does not carry "
+             "(ratchet %d): %s" % (worst, ", ".join(map(str, undoc))))
+    else:
+        note("trap-doc: %d compile-time trap codes, all documented" % len(codes))
+
+# --- CHECK 12: no `zeros()` inside a loop body (law L8) -----------------------------
+# AGENTS.md law L8, prose until now: an allocation inside a loop body grows the arena
+# monotonically and the failure lands as trap 80 far from the cause. This is the
+# memory/bounds class (25 journal entries) and it is purely syntactic, so it should never
+# have been a matter of remembering.
+def check_no_alloc_in_loop(r):
+    bad = []
+    for p in bp_sources():
+        depth, loop_at = 0, []
+        for i, line in enumerate(open(p, errors="replace"), 1):
+            code = line.split("//")[0]
+            if re.search(r"\bwhile\b.*\{", code): loop_at.append(depth)
+            opens, closes = code.count("{"), code.count("}")
+            if loop_at and re.search(r"\bzeros\s*\(", code):
+                bad.append("%s:%d" % (os.path.relpath(p, ROOT), i))
+            depth += opens - closes
+            while loop_at and depth <= loop_at[-1]: loop_at.pop()
+    worst = r.get("max_alloc_in_loop", 0)
+    if len(bad) > worst:
+        fail("alloc-in-loop", "%d `zeros()` inside a loop body (law L8, ratchet %d) -- the arena "
+             "grows monotonically and trap 80 lands far from the cause: %s"
+             % (len(bad), worst, ", ".join(bad[:8])))
+    else:
+        note("alloc-in-loop: %d zeros() inside a loop body (ratchet %d)" % (len(bad), worst))
+
+# --- CHECK 13: a gate line is accepted only with a committed oracle (law L17) -------
+# Ranked the single highest-value check by the 2026-09-12 full-history analysis: it would
+# have caught four separate defects where a row was called DONE and the gate behind it had
+# no independent check at all. A gate whose expected value has no oracle is a number that
+# agrees with itself.
+def check_gate_has_oracle(r):
+    g = os.path.join(ROOT, "bench", "vs_rust", "std_golden.sh")
+    if not os.path.exists(g): return
+    names = re.findall(r"^\s*gate\s+([A-Za-z0-9_]+)\s", open(g, errors="replace").read(), re.M)
+    missing = [n for n in sorted(set(names))
+               if not os.path.exists(os.path.join(ROOT, "bench", "oracles", n + ".py"))]
+    worst = r.get("max_gates_without_oracle", 0)
+    if len(missing) > worst:
+        fail("gate-oracle", "%d gate(s) have no bench/oracles/<name>.py (ratchet %d) -- a gate "
+             "without an oracle is a number that agrees with itself: %s"
+             % (len(missing), worst, ", ".join(missing[:10])))
+    else:
+        note("gate-oracle: %d gates, %d without an oracle (ratchet %d)"
+             % (len(set(names)), len(missing), worst))
+
+# --- CHECK 14: every prose law names its enforcement --------------------------------
+# Operator rule, 2026-09-12: for every line of prose in the rules there must be a concrete
+# safeguard in the code. This is the check that keeps that true: a law added to AGENTS.md
+# without an entry in tools/law_manifest.txt fails the battery, so prose cannot outrun
+# enforcement. `MANUAL:` is allowed and must carry a reason.
+def check_laws_have_enforcement(r):
+    a = open(os.path.join(ROOT, "AGENTS.md"), errors="replace").read()
+    laws = set(re.findall(r"^(L\d+)\.", a, re.M))
+    man = os.path.join(ROOT, "tools", "law_manifest.txt")
+    if not os.path.exists(man): return fail("law-manifest", "tools/law_manifest.txt is missing")
+    listed, unjustified = set(), []
+    for line in open(man, errors="replace"):
+        if line.startswith("#") or "|" not in line: continue
+        law = line.split("|")[0].strip()
+        listed.add(law)
+        body = line.split("|", 1)[1]
+        if "MANUAL:" in body and len(body.split("MANUAL:")[1].strip()) < 25:
+            unjustified.append(law)
+    orphans = sorted(laws - listed)
+    if orphans:
+        fail("law-manifest", "law(s) in AGENTS.md with no enforcement named in "
+             "tools/law_manifest.txt: " + ", ".join(orphans))
+    if unjustified:
+        fail("law-manifest", "law(s) marked MANUAL without a real reason: " + ", ".join(unjustified))
+    named = set(re.findall(r"arch_check:([a-z-]+)", open(man, errors="replace").read()))
+    have = set(re.findall(r'fail\("([a-z-]+)"', open(os.path.join(ROOT, "tools", "arch_check.py"),
+                                                     errors="replace").read()))
+    have |= set(re.findall(r'note\("([a-z-]+):', open(os.path.join(ROOT, "tools", "arch_check.py"),
+                                                      errors="replace").read()))
+    ghosts = sorted(named - have)
+    if ghosts:
+        fail("law-manifest", "the manifest names check(s) that do not exist in arch_check.py -- "
+             "prose pointing at an imaginary safeguard is worse than prose alone: " + ", ".join(ghosts))
+    if not orphans and not unjustified and not ghosts:
+        note("law-manifest: %d laws, all with a named enforcement" % len(laws))
+
+# --- CHECK 15: every syscall emitter carries its register table (law L2) ------------
+# A syscall emitter writes raw words; the register contract is the only thing that makes
+# them reviewable. L2 has required the table since the beginning and nothing checked it.
+def check_syscall_comments(r):
+    src = open(os.path.join(ROOT, "bebop.bp"), errors="replace").read().split("\n")
+    bad = []
+    for i, line in enumerate(src):
+        m = re.match(r"^fn (emit_sys_\w+)\(", line)
+        if not m: continue
+        window = "\n".join(src[max(0, i - 12):i])
+        if not re.search(r"\bx[0-9]+\b", window):
+            bad.append("%s (bebop.bp:%d)" % (m.group(1), i + 1))
+    worst = r.get("max_syscall_no_regtable", 0)
+    if len(bad) > worst:
+        fail("syscall-comment", "%d syscall emitter(s) with no register table in the 12 lines "
+             "above them (ratchet %d): %s" % (len(bad), worst, ", ".join(bad[:8])))
+    else:
+        note("syscall-comment: every emit_sys_* carries its register table")
+
+# --- CHECK 16: journal entries carry all four fields (laws L10, L20) ----------------
+# A journal line without GOT: is an opinion; without VERDICT: it is an unfinished thought.
+# The journal is this project's only durable record of what was MEASURED, so its shape is
+# load-bearing.
+def check_journal_format(r):
+    p = os.path.join(ROOT, "docs", "exp.journal")
+    if not os.path.exists(p): return
+    # COST:<seconds> is the time from FIRST SYMPTOM to NAMED CAUSE, not the time to fix.
+    # Operator rule, 2026-09-12: the claim that loud failures speed development up must be
+    # measurable rather than asserted, and this is the number that measures it. Required on
+    # every entry written from COST_SINCE onward; older entries predate the field.
+    cost_since = r.get("journal_cost_since", 0)
+    bad, nocost = [], []
+    for i, line in enumerate(open(p, errors="replace"), 1):
+        if not line.strip(): continue
+        if not all(f in line for f in ("H:", "DID:", "GOT:", "VERDICT:")):
+            bad.append(str(i))
+        m = re.match(r"\s*(\d{10})\s", line)
+        if m and cost_since and int(m.group(1)) >= cost_since and "COST:" not in line:
+            nocost.append(str(i))
+    if nocost:
+        fail("journal-cost", "%d journal entr(ies) written after the cost field was introduced "
+             "carry no COST:<seconds-from-symptom-to-cause>, so the speed-up claim stays an "
+             "opinion: lines %s" % (len(nocost), ",".join(nocost[:10])))
+    worst = r.get("max_malformed_journal", 0)
+    if len(bad) > worst:
+        fail("journal-format", "%d journal entries missing one of H:/DID:/GOT:/VERDICT: "
+             "(ratchet %d), lines %s" % (len(bad), worst, ",".join(bad[:10])))
+    else:
+        note("journal-format: %d entries, %d missing a field (ratchet %d), %d written since the "
+             "cost field and all carrying COST:"
+             % (sum(1 for _ in open(p, errors="replace") if _.strip()), len(bad), worst,
+                sum(1 for l in open(p, errors="replace")
+                    for m in [re.match(r"\s*(\d{10})\s", l)] if m and cost_since and int(m.group(1)) >= cost_since)))
+
+# --- CHECK 17: a scripted source patch asserts its anchor is unique (law L3) --------
+# Every edit this project makes to a big source file is a scripted string replacement. An
+# anchor that matches twice silently edits the wrong place; an anchor that matches zero
+# times silently edits nothing and the commit claims a change it did not make.
+def check_scripted_patch_assert(r):
+    import glob as _g
+    bad = []
+    for p in sorted(_g.glob(os.path.join(ROOT, "tools", "*.py"))):
+        txt = open(p, errors="replace").read()
+        if ".replace(" not in txt: continue
+        if "count(" not in txt and "assert" not in txt:
+            bad.append(os.path.relpath(p, ROOT))
+    worst = r.get("max_unasserted_patchers", 0)
+    if len(bad) > worst:
+        fail("scripted-patch-assert", "%d tool(s) rewrite source with .replace() and never "
+             "assert the anchor is unique (ratchet %d): %s" % (len(bad), worst, ", ".join(bad[:8])))
+    else:
+        note("scripted-patch-assert: every source-rewriting tool asserts its anchor")
+
+# --- CHECK 18: no function is defined and never called ------------------------------
+# Operator rule, 2026-09-12: "code that never executes is a huge cause of bugs". It is, and
+# for a specific reason: an uncalled function is never compiled through the real path, never
+# differentially tested, and never trapped -- so it rots silently and then someone wires it
+# up and inherits every defect it accumulated. The 2026-09-12 history analysis found an
+# audit reporting 50 of 116 modules unused, with fp_mul defined 14 times over.
+def check_no_dead_functions(r):
+    # Read every source ONCE. The first version re-read the whole corpus per name, which is
+    # quadratic: it took over five minutes and was therefore a check nobody could afford to
+    # run. A safeguard that is too slow to run is not a safeguard.
+    # DEFINITIONS are only counted for the library and compiler surface: a gate program or
+    # a parity construct may legitimately define helpers it does not call (c66_fncap.bp
+    # defines a hundred functions on purpose, to test the fn cap). USES are counted over
+    # the whole corpus, because a library function called only from a gate is alive.
+    owned = ("bebop.bp", "selfhost/prelude/", "selfhost/std/", "selfhost/tools/")
+    texts, defs = [], {}
+    for p in bp_sources():
+        rel = os.path.relpath(p, ROOT)
+        txt = open(p, errors="replace").read()
+        texts.append(txt)
+        if not any(rel == o or rel.startswith(o) for o in owned): continue
+        for i, line in enumerate(txt.split("\n"), 1):
+            m = re.match(r"^fn\s+(\w+)\s*\(", line)
+            if m: defs.setdefault(m.group(1), []).append("%s:%d" % (rel, i))
+    uses = collections.Counter(re.findall(r"\b(\w+)\s*\(", "\n".join(texts)))
+    entry = {"main", "kernel_main"}
+    # `fn foo(` also matches the call pattern, so a function is dead when its only
+    # occurrences in the whole corpus are its own definitions.
+    dead = sorted("%s (%s)" % (n, w[0]) for n, w in defs.items()
+                  if n not in entry and uses[n] <= len(w))
+    worst = r.get("max_dead_functions", 0)
+    if len(dead) > worst:
+        fail("dead-function", "%d function(s) defined and never called (ratchet %d) -- uncalled "
+             "code is never differentially tested and rots until someone wires it up: %s"
+             % (len(dead), worst, ", ".join(dead[:10])))
+    else:
+        note("dead-function: %d defined, %d never called (ratchet %d)"
+             % (len(defs), len(dead), worst))
+
+
 def main():
     r = load_ratchet()
     check_no_nested_fn()
@@ -266,6 +509,15 @@ def main():
     check_object_header_writes(r)
     check_gate_constants_are_derived(r)
     check_cited_files_exist(r)
+    check_builtin_coverage(r)
+    check_traps_documented(r)
+    check_no_alloc_in_loop(r)
+    check_gate_has_oracle(r)
+    check_syscall_comments(r)
+    check_journal_format(r)
+    check_scripted_patch_assert(r)
+    check_no_dead_functions(r)
+    check_laws_have_enforcement(r)
     for n in notes: print("  note: " + n)
     if fails:
         print("\narch_check: %d INVARIANT(S) VIOLATED" % len(fails))

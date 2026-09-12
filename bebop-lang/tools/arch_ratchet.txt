@@ -33,3 +33,16 @@ max_missing_citations = 20
 #
 # A gate comparison below this value is a fold or a small count, not a layout assumption.
 magic_literal_min = 1000
+#
+# DEBT recorded 2026-09-12, each line may only go DOWN.
+max_dead_functions = 18            # uncalled library/compiler functions; wire them up or delete them
+max_uncovered_builtins = 1         # sys_mapb has no corpus caller: A7 step 3 landed it untested
+max_syscall_no_regtable = 8        # emit_sys_{write,close,exit,exit_thread_guard,slurp,ftruncate,munmap,mmap}
+max_malformed_journal = 519        # entries predating the H:/DID:/GOT:/VERDICT: format
+max_unasserted_patchers = 5        # tools/{retro_extract,split_roadmap,tmp_emit,tmp_emit2,tmp_step3_emit}.py
+max_unbounded_waits = 0
+#
+# Journal entries written from this unix time onward must carry COST:<seconds from first
+# symptom to named cause>. That number is what turns "loud failures make us faster" from a
+# claim into a curve. Older entries predate the field and are not retro-fitted.
+journal_cost_since = 1789229455

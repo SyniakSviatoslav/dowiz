@@ -1,0 +1,32 @@
+# Every prose law in AGENTS.md must name its enforcement here. Operator rule, 2026-09-12:
+# "for every line of prose in the rules there must be a concrete safeguard in the code, for
+# old code as well as new". tools/arch_check.py CHECK 14 fails if a law is missing from this
+# file, so the manifest cannot silently fall behind the prose.
+#
+# Format:  <law> | <enforced-by check or gate>              | <one line>
+# A law that genuinely cannot be mechanised uses `MANUAL:` and must say WHY, in one line.
+# "MANUAL: hard" is not a reason and will be rejected in review.
+#
+L1  | invariants.sh:(ix) push_words + construct_parity | emitted words are verified by disassembly and by the parity corpus
+L2  | arch_check:syscall-comment                  | every emit_sys_* carries its register table above it
+L3  | arch_check:scripted-patch-assert            | a scripted source patch asserts its anchor occurs exactly once
+L4  | MANUAL: no static signal distinguishes a kernel buffer from any other array; the traps that catch a bad one are 80/82
+L5  | arch_check:builtin-coverage                 | a builtin no corpus program calls can never be differentially tested
+L6  | MANUAL: reading the design corpus before editing is a research step with no artifact to check
+L7  | MANUAL: a str-vs-int comparison is only wrong when the two sides MEAN the same thing; no static rule separates that from a legitimate type test
+L8  | arch_check:alloc-in-loop                    | no zeros()/ctor inside a while body
+L9  | arch_check:artifact-identity                | a generated artifact must equal what its source produces
+L10 | arch_check:journal-format                   | every journal entry carries H:/DID:/GOT:/VERDICT:
+L11 | MANUAL: entry identity is a property of a packed .bin, checked by the chain's fixpoint rather than statically
+L12 | arch_check:artifact-identity                | bebop.bin IS compile(bebop.bp)
+L13 | arch_check:cited-file                       | a golden baseline that is cited must exist
+L14 | MANUAL: "one variable per diff" is a property of a commit's intent, not of its text
+L15 | MANUAL: requiring a falsifiable probe before an edit is a sequencing rule, invisible after the fact
+L16 | invariants.sh:(ix) push_words               | push/pop emit exactly their canonical words
+L17 | arch_check:gate-oracle                      | a gate line is accepted only with a committed oracle
+L18 | MANUAL: idle waiting is a property of the session, not of the tree
+L19 | MANUAL: the box watchdog lives outside the repository, on the Termux side
+L20 | arch_check:journal-format                   | the experiment loop's output is the journal entry, and its shape is checked
+L21 | MANUAL: process reaping is an operating-system action with no artifact in the tree
+L22 | MANUAL: role separation is a property of who runs what, not of the code
+L23 | MANUAL: "nothing is unreachable until tried" is a disposition; the journal's REFUTED entries are its evidence
