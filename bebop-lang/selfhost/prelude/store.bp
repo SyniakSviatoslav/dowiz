@@ -211,30 +211,30 @@ fn st_parttab_cells(p: i64) -> i64 { 16 + p * 3 }
 // cell 17 = used_p, cell 18 = gen_p. The crc (cell 15) covers ALL 19 cells.
 // pt_off is an arena object offset (same type as st_alloc returns).
 fn st_parttab_write(base: [i64], pt_off: i64, sb: i64, gen: i64, root: i64, used: i64, tmp: [i64]) -> i64 {
-  // superblock copy into PartTab cells 0..15
-  let _ = base[pt_off] = base[sb];
-  let _ = base[pt_off + 1] = base[sb + 1];
-  let _ = base[pt_off + 2] = base[sb + 2];
-  let _ = base[pt_off + 3] = base[sb + 3];
-  let _ = base[pt_off + 4] = base[sb + 4];
-  let _ = base[pt_off + 5] = base[sb + 5];
-  let _ = base[pt_off + 6] = base[sb + 6];
-  let _ = base[pt_off + 7] = base[sb + 7];
-  let _ = base[pt_off + 8] = base[sb + 8];
-  let _ = base[pt_off + 9] = base[sb + 9];
-  let _ = base[pt_off + 10] = base[sb + 10];
-  let _ = base[pt_off + 11] = base[sb + 11];
-  let _ = base[pt_off + 12] = base[sb + 12];
-  let _ = base[pt_off + 13] = base[sb + 13];
-  let _ = base[pt_off + 14] = base[sb + 14];
-  let _ = base[pt_off + 15] = base[sb + 15];
-  // P=1 partition entry at cells 16..18
-  let _ = base[pt_off + 16] = root;   // root_p
-  let _ = base[pt_off + 17] = used;   // used_p
-  let _ = base[pt_off + 18] = gen;    // gen_p
-  // re-crc over all 19 cells (the superblock copy is now stale; crc must cover
+  // superblock copy into PartTab payload cells 0..15 (with +2 skip for header)
+  let _ = base[pt_off + 2] = base[sb];
+  let _ = base[pt_off + 3] = base[sb + 1];
+  let _ = base[pt_off + 4] = base[sb + 2];
+  let _ = base[pt_off + 5] = base[sb + 3];
+  let _ = base[pt_off + 6] = base[sb + 4];
+  let _ = base[pt_off + 7] = base[sb + 5];
+  let _ = base[pt_off + 8] = base[sb + 6];
+  let _ = base[pt_off + 9] = base[sb + 7];
+  let _ = base[pt_off + 10] = base[sb + 8];
+  let _ = base[pt_off + 11] = base[sb + 9];
+  let _ = base[pt_off + 12] = base[sb + 10];
+  let _ = base[pt_off + 13] = base[sb + 11];
+  let _ = base[pt_off + 14] = base[sb + 12];
+  let _ = base[pt_off + 15] = base[sb + 13];
+  let _ = base[pt_off + 16] = base[sb + 14];
+  let _ = base[pt_off + 17] = base[sb + 15];
+  // P=1 partition entry at payload cells 16..18 (with +2 skip)
+  let _ = base[pt_off + 18] = root;   // root_p
+  let _ = base[pt_off + 19] = used;   // used_p
+  let _ = base[pt_off + 20] = gen;    // gen_p
+  // re-crc over all 19 payload cells (the superblock copy is now stale; crc must cover
   // the full PartTab including the partition entry)
-  let _ = base[pt_off + 15] = st_crc(base, pt_off, 19, tmp);
+  let _ = base[pt_off + 2 + 15] = st_crc(base, pt_off + 2, 19, tmp);
   pt_off
 }
 
@@ -243,19 +243,19 @@ fn st_parttab_write(base: [i64], pt_off: i64, sb: i64, gen: i64, root: i64, used
 // fall back to the superblock's cell 4 directly for byte-identical behaviour.
 // `sb` is the live superblock index (0 or 512), already picked.
 fn st_parttab_used(base: [i64], sb: i64, pt_off: i64) -> i64 {
-  if pt_off == 0 then base[sb + 4] else base[pt_off + 17]
+  if pt_off == 0 then base[sb + 4] else base[pt_off + 19]
 }
 
 // st_parttab_gen(base, sb, pt_off: i64): read gen_p from a PartTab (cell 18 for P=1).
 // When pt_off == 0, fall back to the superblock's cell 2.
 fn st_parttab_gen(base: [i64], sb: i64, pt_off: i64) -> i64 {
-  if pt_off == 0 then base[sb + 2] else base[pt_off + 18]
+  if pt_off == 0 then base[sb + 2] else base[pt_off + 20]
 }
 
 // st_parttab_root(base, pt_off: i64): read root_p from a PartTab (cell 16 for P=1).
 // When pt_off == 0, return 0 (no root yet).
 fn st_parttab_root(base: [i64], pt_off: i64) -> i64 {
-  if pt_off == 0 then 0 else base[pt_off + 16]
+  if pt_off == 0 then 0 else base[pt_off + 18]
 }
 
 fn st_begin(base: [i64], tx: [i64], tmp: [i64]) -> i64 {
@@ -332,48 +332,48 @@ fn st_commit_m(base: [i64], tx: [i64], root: i64, mig: i64, tmp: [i64]) -> i64 {
 // Write a PartTab object for P partitions at pt_off.
 // Cells 0..15 = superblock copy, then pcount entries of 3 cells: [root_p, used_p, gen_p].
 fn st_parttab_write_p(base: [i64], pt_off: i64, sb: i64, locks: [i64], pcount: i64, tmp: [i64]) -> i64 {
-  let _ = base[pt_off] = base[sb];
-  let _ = base[pt_off + 1] = base[sb + 1];
-  let _ = base[pt_off + 2] = base[sb + 2];
-  let _ = base[pt_off + 3] = base[sb + 3];
-  let _ = base[pt_off + 4] = base[sb + 4];
-  let _ = base[pt_off + 5] = base[sb + 5];
-  let _ = base[pt_off + 6] = base[sb + 6];
-  let _ = base[pt_off + 7] = base[sb + 7];
-  let _ = base[pt_off + 8] = base[sb + 8];
-  let _ = base[pt_off + 9] = base[sb + 9];
-  let _ = base[pt_off + 10] = base[sb + 10];
-  let _ = base[pt_off + 11] = base[sb + 11];
-  let _ = base[pt_off + 12] = base[sb + 12];
-  let _ = base[pt_off + 13] = base[sb + 13];
-  let _ = base[pt_off + 14] = base[sb + 14];
-  let _ = base[pt_off + 15] = base[sb + 15];
+  let _ = base[pt_off + 2] = base[sb];
+  let _ = base[pt_off + 3] = base[sb + 1];
+  let _ = base[pt_off + 4] = base[sb + 2];
+  let _ = base[pt_off + 5] = base[sb + 3];
+  let _ = base[pt_off + 6] = base[sb + 4];
+  let _ = base[pt_off + 7] = base[sb + 5];
+  let _ = base[pt_off + 8] = base[sb + 6];
+  let _ = base[pt_off + 9] = base[sb + 7];
+  let _ = base[pt_off + 10] = base[sb + 8];
+  let _ = base[pt_off + 11] = base[sb + 9];
+  let _ = base[pt_off + 12] = base[sb + 10];
+  let _ = base[pt_off + 13] = base[sb + 11];
+  let _ = base[pt_off + 14] = base[sb + 12];
+  let _ = base[pt_off + 15] = base[sb + 13];
+  let _ = base[pt_off + 16] = base[sb + 14];
+  let _ = base[pt_off + 17] = base[sb + 15];
   let q = 0;
   while q < pcount {
-    let off = pt_off + 16 + q * 3;
+    let off = pt_off + 18 + q * 3;
     let _ = base[off] = locks[pcount + 1 + q];
     let _ = base[off + 1] = locks[2 * pcount + 1 + q];
     let _ = base[off + 2] = locks[3 * pcount + 1 + q];
     let q = q + 1;
     0
   };
-  let _ = base[pt_off + 15] = st_crc(base, pt_off, 16 + pcount * 3, tmp);
+  let _ = base[pt_off + 2 + 15] = st_crc(base, pt_off + 2, 16 + pcount * 3, tmp);
   pt_off
 }
 
 // st_parttab_root_p(base, pt_off, p): read root_p[p] from multi-partition PartTab
 fn st_parttab_root_p(base: [i64], pt_off: i64, p: i64) -> i64 {
-  if pt_off == 0 then 0 else base[pt_off + 16 + p * 3]
+  if pt_off == 0 then 0 else base[pt_off + 18 + p * 3]
 }
 
 // st_parttab_used_p(base, pt_off, p): read used_p[p] from multi-partition PartTab
 fn st_parttab_used_p(base: [i64], pt_off: i64, p: i64) -> i64 {
-  if pt_off == 0 then 1024 else base[pt_off + 16 + p * 3 + 1]
+  if pt_off == 0 then 1024 else base[pt_off + 18 + p * 3 + 1]
 }
 
 // st_parttab_gen_p(base, pt_off, p): read gen_p[p] from multi-partition PartTab
 fn st_parttab_gen_p(base: [i64], pt_off: i64, p: i64) -> i64 {
-  if pt_off == 0 then 0 else base[pt_off + 16 + p * 3 + 2]
+  if pt_off == 0 then 0 else base[pt_off + 18 + p * 3 + 2]
 }
 
 // st_region_start(p, pcount, arena_cells): start cell of partition p's region
@@ -646,7 +646,11 @@ fn st_abort(tx: [i64]) -> i64 {
   let _ = tx[4] = 0;
   0
 }
-fn st_root(base: [i64], tmp: [i64]) -> i64 { base[st_pick(base, tmp) + 3] }
+fn st_root(base: [i64], tmp: [i64]) -> i64 {
+  let sb = st_pick(base, tmp);
+  let pt = base[sb + 3];
+  st_parttab_root(base, pt)
+}
 fn st_gen(base: [i64], tmp: [i64]) -> i64 { base[st_pick(base, tmp) + 2] }
 fn st_get(base: [i64], obj: i64, i: i64) -> i64 { base[obj + 2 + i] }
 fn st_put(base: [i64], obj: i64, i: i64, v: i64) -> i64 {
