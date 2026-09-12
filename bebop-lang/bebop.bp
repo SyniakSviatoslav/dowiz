@@ -1174,7 +1174,15 @@ fn emit_sys_exit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = vs_deliver(insns, n, fntab, stab, 1);
-  let _ = em(insns, n, 3531606952);
+  // 2026-09-12: this word was 3531606952 = 0xd2800ba8 = `movz x8,#93`, and syscall 93 is
+  // EXIT -- it ends the calling THREAD only -- while the comment above has always claimed
+  // exit_group. Inside a CLONE_THREAD child (flags 68864) that meant st_alloc_p's
+  // sys_exit(80) killed just the thread, its done flag was never set, and the parent waited
+  // for ever: a dead thread indistinguishable from a slow one, the costliest failure shape
+  // in this project's record. 3531606984 = 0xd2800bc8 = `movz x8,#94` = exit_group, derived
+  // by as+objdump per law L1 and never from memory. emit_sys_exit_thread_guard keeps #93
+  // deliberately -- that one IS meant to end only its own thread.
+  let _ = em(insns, n, 3531606984);
   let _ = em(insns, n, 3556769793);
   // BUGFIX (2026-09-06, bug 9 hunt, exit-107): sys_exit(...) is a NORETURN
   // builtin (raw svc, never returns to the caller) so it used to push
