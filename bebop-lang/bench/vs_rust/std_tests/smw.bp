@@ -30,11 +30,46 @@ fn setup(env: [i64]) -> i64 {
   let _ = env[2] = st_addr(zeros(P * 2048));
   let _ = env[9] = st_addr(zeros(P * 64));
   let _ = env[10] = st_addr(zeros(P + 1));
+  let _ = env[11] = st_addr(zeros(P * 6));
   let _ = env[6] = st_digest("PartTab");
   let _ = env[7] = st_digest("C{i64}");
   // Without this every partition's cursor starts at 1024 and the writers allocate on top
   // of each other; partition disjointness is the whole premise of G10.
   let _ = st_init_p(st_cells(env[0]), st_cells(env[1]), P, env[5], tmp, env[6]);
+  0
+}
+
+// cross_commit: one CROSS-PARTITION transaction, p together with (p+1) % P, published by
+// st_commit_2pc as a single atomic superblock toggle. Both partition locks are taken in
+// index order, never in call order, so two writers crossing in opposite directions cannot
+// deadlock. Each side gets its own counter, so a cross transaction contributes 2 to the fold.
+fn cross_commit(env: [i64], p: i64) -> i64 {
+  let base = st_cells(env[0]);
+  let locks = st_cells(env[1]);
+  let cp = (p + 1) % env[3];
+  let lo = if p < cp then p else cp;
+  let hi = if p < cp then cp else p;
+  let _ = st_lock_p(locks, lo);
+  let _ = st_lock_p(locks, hi);
+  let tmp = st_tmp_p(st_cells(env[2]), p);
+  let roots = st_cells(env[10]);
+  let ta = st_cells(env[11] + p * 6);
+  let tb = st_cells(env[11] + cp * 6);
+  let _ = st_begin_p(base, ta, p, tmp);
+  let a = st_alloc_p(base, ta, p, 1, env[7], env[3], env[5]);
+  let _ = st_put(base, a, 0, 1);
+  let _ = st_seal(base, a, tmp);
+  let _ = st_begin_p(base, tb, cp, tmp);
+  let b = st_alloc_p(base, tb, cp, 1, env[7], env[3], env[5]);
+  let _ = st_put(base, b, 0, 1);
+  let _ = st_seal(base, b, tmp);
+  let _ = roots[p] = a;
+  let _ = roots[cp] = b;
+  let _ = st_commit_2pc(base, st_cells(env[11]), roots, locks, env[3], env[5], tmp, env[6]);
+  let _ = roots[p] = 0;
+  let _ = roots[cp] = 0;
+  let _ = st_unlock_p(locks, hi);
+  let _ = st_unlock_p(locks, lo);
   0
 }
 
@@ -48,13 +83,15 @@ fn writer(env: [i64], p: i64) -> i64 {
   let tx = st_tx_p(st_cells(env[9]), p);
   let k = 0;
   while k < env[4] {
-    let _ = st_lock_p(locks, p);
-    let _ = st_begin_p(base, tx, p, tmp);
-    let c = st_alloc_p(base, tx, p, 1, env[7], env[3], env[5]);
-    let _ = st_put(base, c, 0, 1);
-    let _ = st_seal(base, c, tmp);
-    let _ = st_commit_p(base, tx, p, c, locks, env[3], env[5], tmp, env[6]);
-    let _ = st_unlock_p(locks, p);
+    let cross = if (k + 1) % env[8] == 0 then 1 else 0;
+    let _ = if cross == 1 then cross_commit(env, p) else 0;
+    let _ = if cross == 0 then st_lock_p(locks, p) else 0;
+    let _ = if cross == 0 then st_begin_p(base, tx, p, tmp) else 0;
+    let c = if cross == 0 then st_alloc_p(base, tx, p, 1, env[7], env[3], env[5]) else 0;
+    let _ = if cross == 0 then st_put(base, c, 0, 1) else 0;
+    let _ = if cross == 0 then st_seal(base, c, tmp) else 0;
+    let _ = if cross == 0 then st_commit_p(base, tx, p, c, locks, env[3], env[5], tmp, env[6]) else 0;
+    let _ = if cross == 0 then st_unlock_p(locks, p) else 0;
     let k = k + 1;
     0
   };

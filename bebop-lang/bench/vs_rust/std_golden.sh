@@ -675,6 +675,14 @@ gate scrash 4231007695826602272 "$r"
 r=$(TRIALS=50 BEBOP_TMP=${BEBOP_TMP:-/tmp/opencode} BEBOP_BIN=${BEBOP_BIN:-bebop.bin} timeout 120 bash bench/vs_rust/scrash_torn.sh 2>/dev/null | tail -1 | awk '{print $4}')
 gate scrash_torn 0 "$r"
 
+# ---- smw (G10, ROADMAP B5: P writer THREADS on disjoint partitions, N updates each,
+# a cross-partition 2PC transaction every 100th. Fold = every C{i64} payload walked out of
+# the arena by fold_partition; the closed form is absent from the program by design, so the
+# golden is the only place P*N + P*N/100 appears. 3 writers x 100000 = 300000 + 3000. ----
+rm -f smw.store
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/smw.bp ${BEBOP_TMP:-/tmp/opencode}/smw_test.bin >/dev/null 2>&1 && run 120 ${BEBOP_TMP:-/tmp/opencode}/smw_test.bin 3 100000 | tail -1)
+gate smw 303000 "$r"
+
 # ---- sevolve (G3, T114: v1/v2 layouts, v1 reads v2, sha256-named migration + compaction) ----
 rm -f sevolve.store sevolve.store.tmp
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sevolve.bp ${BEBOP_TMP:-/tmp/opencode}/sevolve_test.bin >/dev/null 2>&1 && run 120 ${BEBOP_TMP:-/tmp/opencode}/sevolve_test.bin | tail -1)
