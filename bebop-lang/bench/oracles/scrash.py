@@ -33,6 +33,17 @@ if len(sys.argv) > 1 and sys.argv[1] == '--parse':
     last_err = None
     for sb in sorted(sbs, key=lambda s: cells(s, 16)[2], reverse=True):
         c = cells(sb, 16); g = c[2]; cur = c[3]
+        # B5 step 1: cell 3 now points to a PartTab object, not a root object.
+        # Dereference the PartTab to get root_p (at payload cell 18 with +2 header skip).
+        # PartTab object format: cells 0-1 (header) + 19 cells payload (superblock copy + partition entry).
+        if cur:
+            pt_h0, pt_h1 = cells(cur, 2)
+            pt_len = pt_h0 & 0xFFFFFFFF
+            # PartTab for P=1 has len 19 (= 16 + 1*3 payload cells)
+            if pt_len == 19:
+                # Extract root_p from PartTab payload cell 18 (offset + 2 + 16)
+                cur = cells(cur + 2 + 16, 1)[0]  # Read root_p directly
+
         acc = 0; n = 0
         try:
             while cur:

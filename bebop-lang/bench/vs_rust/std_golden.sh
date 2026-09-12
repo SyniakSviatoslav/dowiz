@@ -830,6 +830,9 @@ gate usemod 5450099284205820388 "$r"
 #      later full-range fill-loop shape (selfhost/prelude/gb.bp's gb_build_pairs) corrupts the
 #      first row's ci/vv -- repro $OUT/repro_1.bp (bebop.bin md5 9694b78060201b6caffc09d256acd43f
 #      unchanged), see docs/exp.journal.) ----
+# gb_roundtrip writes its store into the CWD, not $BEBOP_TMP, so the blanket clean above
+# does not reach it. A stale one traps 82 and the gate prints nothing.
+rm -f gb_roundtrip.store
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_roundtrip.bp ${BEBOP_TMP:-/tmp/opencode}/gb_roundtrip_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/gb_roundtrip_test.bin | tail -1)
 gate gb_roundtrip 775084997 "$r"
 
