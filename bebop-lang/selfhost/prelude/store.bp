@@ -904,7 +904,8 @@ fn st_compact(path: [i64], plen: i64, size: i64, lay: [i64], nlay: i64, tmp: [i6
   let _ = sys_close(fd);
   let sb = st_pick(old, tmp);
   let pt0 = old[sb + 3];
-  let root = st_parttab_root(old, pt0);
+  let is_pt = if pt0 == 0 then 0 else (if (old[pt0] >> 32) == st_digest("PartTab") then 1 else 0);
+  let root = if is_pt == 1 then st_parttab_root(old, pt0) else pt0;
   let gen = old[sb + 2];
   let mig = old[sb + 6];
   let com = old[sb + 10];
