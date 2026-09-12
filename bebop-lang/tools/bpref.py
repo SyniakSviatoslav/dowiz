@@ -72,6 +72,21 @@ RESERVED = set(['sys_msync', 'sys_fsync', 'sys_mprotect', 'crc32x', 'crc32', 'cl
 class DepthError(Exception):
     pass
 
+# A23. An oracle that cannot evaluate a form must SAY SO, not return something. Until
+# 2026-09-13 an unmodelled builtin reached `raise NameError('unknown fn ...')` and came back
+# as a generic error, and a program whose unmodelled semantics led it to `exit` came back as
+# rc=0 with EMPTY stdout -- which bench/vs_rust/bpref_parity.sh then read as a DISAGREEMENT
+# with the compiler. Seven of that lane's first eight findings were this, not a divergence.
+class UnsupportedForm(Exception):
+    pass
+
+# bpref has no threads and no processes: it evaluates one program in one Python thread. A
+# construct using these cannot be differentially checked, and pretending otherwise is what
+# produced c84_run's silent empty answer -- its sys_clone is not modelled at all, so `if pid
+# == 0` took the child branch and the program exited 0 without printing.
+UNMODELLED = set(['sys_clone', 'sys_run', 'sys_wait4', 'sys_futex_wait_guard', 'sys_futex_wake',
+    'sys_atomic_add', 'sys_exit_thread_guard', 'sys_cond_set', 'sys_setaffinity'])
+
 MASK = (1 << 64) - 1
 
 def wrap(x):
@@ -242,7 +257,8 @@ class Parser:
             elif v == 'module':
                 self.next(); self.ident(); self.skip_block()
             else:
-                raise SyntaxError('unexpected top-level %r' % (v,))
+                sys.stderr.write('UNSUPPORTED:%s\n' % (v,))
+                sys.exit(3)
 
     def _skip_parens(self):
         self.expect('(')
@@ -374,7 +390,8 @@ class Parser:
             self.expect(']')
             return ('arr', elems)
         if k != 'i':
-            raise SyntaxError('bad factor %r at tok %d' % (v, self.p - 1))
+            sys.stderr.write('UNSUPPORTED:%s\n' % (v,))
+            sys.exit(3)
         if self.at('('):
             self.next()
             args = []
@@ -570,55 +587,12 @@ class Interp:
         raise RuntimeError('bad node %r' % (t,))
 
     def builtin_or_call(self, name, args):
+        if name in UNMODELLED and name not in self.fns:
+            raise UnsupportedForm('%s (bpref models no threads and no processes)' % name)
         if name in self.fns:
             return self.call(name, args)
         if name in self.ctors:
             return ('ctor', self.ctors[name], args)
-        # B7 qdsl builtins
-        if name == 'qdsl_char':
-            s, i = args[0], args[1]
-            return (s >> 32) + i >= 0 and ((s >> 32) + i < len(self.bytes)) and self.bytes[(s >> 32) + i] or 0
-        if name == 'qdsl_len':
-            s = args[0]
-            return s & 0xffffffff
-        if name == 'qdsl_ws':
-            s, p = args[0], args[1]
-            n = s & 0xffffffff
-            sp = p
-            while sp < n:
-                c = self.bytes[(s >> 32) + sp] if (s >> 32) + sp < len(self.bytes) else 0
-                if c in (32, 9, 10, 13):
-                    sp += 1
-                else:
-                    break
-            return sp
-        if name == 'qdsl_nsz':
-            return 3 + args[0]
-        if name == 'qdsl_alloc':
-            kind, nc, attr, a, ap = args[0], args[1], args[2], args[3], args[4]
-            sz = 3 + nc
-            off = ap[0]
-            a[off] = kind
-            a[off+1] = nc
-            a[off+2] = attr
-            ap[0] = off + sz
-            return off
-        if name == 'qdsl_set':
-            node, ci, child, a = args[0], args[1], args[2], args[3]
-            a[node+3+ci] = child
-            return 0
-        if name == 'qdsl_kind':
-            node, a = args[0], args[1]
-            return a[node]
-        if name == 'qdsl_nch':
-            node, a = args[0], args[1]
-            return a[node+1]
-        if name == 'qdsl_attr':
-            node, a = args[0], args[1]
-            return a[node+2]
-        if name == 'qdsl_ch':
-            node, ci, a = args[0], args[1], args[2]
-            return a[node+3+ci]
         if name == 'zeros':
             self.arena_cells = getattr(self, 'arena_cells', 0) + max(args[0], 0)
             if self.arena_cells > (256 << 20) // 8 - 8192:
@@ -668,7 +642,7 @@ class Interp:
             return ((off << 32) | nread) & 0xFFFFFFFFFFFFFFFF
         if name == 'clock_ms' or name.startswith('sys_'):
             return 0
-        raise NameError('unknown fn %s' % name)
+        raise UnsupportedForm('builtin %s' % name)
 
 
 def run(src):
@@ -716,6 +690,8 @@ def main():
             res.append(('exit', ex.code))
         except DepthError as ex:
             res.append(('depth', str(ex)))
+        except UnsupportedForm as ex:
+            res.append(('unsup', str(ex)))
         except BaseException as ex:
             res.append(('err', '%s: %s' % (type(ex).__name__, ex)))
     th = threading.Thread(target=go)
@@ -727,6 +703,9 @@ def main():
         sys.exit(2)
     if isinstance(r, tuple) and r[0] == 'depth':
         print('bpref depth: ' + r[1], file=sys.stderr)
+        sys.exit(3)
+    if isinstance(r, tuple) and r[0] == 'unsup':
+        print('UNSUPPORTED:' + r[1], file=sys.stderr)
         sys.exit(3)
     if isinstance(r, tuple) and r[0] == 'exit':
         sys.exit(r[1])

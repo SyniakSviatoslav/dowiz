@@ -1,0 +1,12 @@
+// c140_mapb_refused (2026-09-12, ROADMAP A7): `sys_mapb` must be REFUSED at compile time,
+// not emitted. Its emitter passed the path's LENGTH as openat's FLAGS and took the path
+// pointer from a `str` handle whose bytes nothing copies into the arena, so it wrote files
+// whose names were raw addresses -- nine of them, ~160 MB, into git history. The builtin has
+// no call site anywhere in the tree, so refusing it costs no program anything.
+// This construct exists so the refusal cannot be silently removed: exit 108.
+
+fn main() -> i64 {
+  let h = sys_mapb("x", 4096);
+  h
+}
+// EXPECT: COMPILEFAIL:108

@@ -96,12 +96,13 @@ fn diag_exit(s: str, p: i64, code: i64) -> i64 {
   let _ = if code == 98 then diag_text(buf, at, [116, 111, 111, 32, 109, 97, 110, 121, 32, 114, 101, 116, 117, 114, 110, 47, 98, 114, 101, 97, 107, 32, 105, 110, 32, 111, 110, 101, 32, 102, 110], 31) else 0;
   let _ = if code == 99 then diag_text(buf, at, [114, 101, 115, 101, 114, 118, 101, 100, 32, 119, 111, 114, 100, 32, 117, 115, 101, 100, 32, 97, 115, 32, 97, 32, 102, 110, 32, 110, 97, 109, 101], 31) else 0;
   let _ = if code == 89 then diag_text(buf, at, [108, 101, 116, 32, 98, 105, 110, 100, 105, 110, 103, 32, 119, 104, 105, 108, 101, 32, 97, 32, 99, 97, 108, 108, 32, 116, 101, 109, 112, 32, 105, 115, 32, 108, 105, 118, 101], 37) else 0;
+  let _ = if code == 108 then diag_text(buf, at, [115, 121, 115, 95, 109, 97, 112, 98, 32, 105, 115, 32, 114, 101, 102, 117, 115, 101, 100, 32, 40, 82, 79, 65, 68, 77, 65, 80, 32, 65, 55, 41], 32) else 0;
   let _ = if code == 100 then diag_text(buf, at, [102, 110, 32, 119, 105, 116, 104, 32, 109, 111, 114, 101, 32, 116, 104, 97, 110, 32, 49, 52, 32, 112, 97, 114, 97, 109, 101, 116, 101, 114, 115], 31) else 0;
   let _ = if code == 101 then diag_text(buf, at, [117, 110, 98, 111, 117, 110, 100, 32, 115, 121, 109, 98, 111, 108], 14) else 0;
   let _ = if code == 65 then diag_text(buf, at, [105, 110, 100, 101, 120, 32, 112, 97, 115, 116, 32, 116, 104, 101, 32, 101, 110, 100], 18) else 0;
   let _ = if code == 104 then diag_text(buf, at, [116, 111, 111, 32, 109, 97, 110, 121, 32, 102, 110, 115, 32, 40, 99, 97, 112, 32, 55, 54, 56, 41], 22) else 0;
   let _ = if code == 102 then diag_text(buf, at, [115, 121, 115, 95, 32, 110, 97, 109, 101, 32, 105, 110, 115, 105, 100, 101, 32, 97, 32, 107, 101, 114, 110, 101, 108, 32, 102, 110], 28) else 0;
-  let mlen = (if code == 95 then 20 else 0) + (if code == 96 then 27 else 0) + (if code == 97 then 33 else 0) + (if code == 98 then 31 else 0) + (if code == 99 then 31 else 0) + (if code == 89 then 37 else 0) + (if code == 100 then 31 else 0) + (if code == 101 then 14 else 0) + (if code == 104 then 22 else 0) + (if code == 102 then 28 else 0) + (if code == 65 then 18 else 0);
+  let mlen = (if code == 95 then 20 else 0) + (if code == 96 then 27 else 0) + (if code == 97 then 33 else 0) + (if code == 98 then 31 else 0) + (if code == 99 then 31 else 0) + (if code == 89 then 37 else 0) + (if code == 108 then 32 else 0) + (if code == 100 then 31 else 0) + (if code == 101 then 14 else 0) + (if code == 104 then 22 else 0) + (if code == 102 then 28 else 0) + (if code == 65 then 18 else 0);
   let _ = buf[at + mlen] = 10;
   let _ = sys_write(2, buf, at + mlen + 1);
   sys_exit(code)
@@ -7481,54 +7482,23 @@ fn emit_sys_mmap(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfna
 // close the fd, return ((addr-x17)<<32)|len as a str handle. The caller reads
 // the mapped bytes through char(addr_handle, i) like any other handle (A7 step 3).
 fn emit_sys_mapb(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
-  let _ = pos[0] = pos[0] + 1;
-  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
-  let _ = skip_ws(s, pos);
-  let _ = pos[0] = pos[0] + 1;
-  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
-  let _ = skip_ws(s, pos);
-  let _ = pos[0] = pos[0] + 1;
-  let _ = vs_deliver(insns, n, fntab, stab, 2);
-  // x0=path_handle, x1=map_len. Extract path, openat, mmap, close, build handle.
-  // 26 words + vs_push.
-  em(insns, n, 3546348546);
-  em(insns, n, 2332164642);
-  em(insns, n, 2453699587);
-  em(insns, n, 2852193252);
-  em(insns, n, 2457865312);
-  em(insns, n, 2852258785);
-  em(insns, n, 2852324322);
-  em(insns, n, 3531603971);
-  em(insns, n, 3531605768);
-  em(insns, n, 3556769793);
-  em(insns, n, 2852127717);
-  em(insns, n, 3531603968);
-  em(insns, n, 2852389857);
-  em(insns, n, 3531604002);
-  em(insns, n, 3531604035);
-  em(insns, n, 2852455396);
-  em(insns, n, 3531603973);
-  em(insns, n, 3531611080);
-  em(insns, n, 3556769793);
-  em(insns, n, 2852127714);
-  em(insns, n, 2852455392);
-  em(insns, n, 3531605800);
-  em(insns, n, 3556769793);
-  em(insns, n, 3406889024);
-  em(insns, n, 3546315776);
-  em(insns, n, 2852388864);
-  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
-  n[0]
+  // REFUSED, 2026-09-12 (ROADMAP A7). This emitter was WRONG and its wrongness was silent.
+  // Disassembled from its own words: `lsr x2,x0,#32; add x2,x17,x2; and x3,x0,#0xffffffff`
+  // then `openat(-100, x2, x3, 0)` -- so it passed the path's LENGTH as openat's FLAGS, and
+  // took the path pointer from a `str` handle whose bytes NOTHING copies into the arena
+  // (A7 step 2 landed the consumers and never landed the producer; `LIT0` appears twice in
+  // the tree, in a comment and in a formula). emit_sys_open and emit_sys_rename both marshal
+  // a byte-per-cell path into the 8 KiB IO scratch below x28 and NUL-terminate it first
+  // (`sub x10,x28,#0x2000` ... `strb wzr,[x10,x13]`); this had no copy loop at all.
+  // The consequence was measured: an A7 step 3 run wrote NINE files whose names were raw
+  // `0xa8`-prefixed ADDRESSES, ~160 MB, into the repository, and they are in git history
+  // still -- GitHub warns on every push. `sys_mapb` has ZERO call sites in the whole tree,
+  // so refusing it costs no program anything and turns a silent wrong-file-write into a
+  // compile error. It returns when A7 step 2 re-lands WHOLE (producer copy + a literal table
+  // that does not collide + every consumer), with a path length argument and a construct.
+  let _ = selfname; let _ = selfstart; let _ = insns; let _ = n; let _ = stab; let _ = fntab;
+  diag_exit(s, pos[0], 108)
 }
-
-// sys_rename(old, oldlen, new, newlen): pack both byte-per-cell paths into
-// the IO scratch zone (x28-8192, offsets 0..oldlen and oldlen+1..) with NUL
-// termination (like sys_open), then renameat(AT_FDCWD, old, AT_FDCWD, new).
-// Register table: x0=old ptr (pop0), x1=old len (pop1), x2=new ptr (pop2),
-// x3=new len (pop3); x11/x13/x16/x12 hold the four args across packing;
-// x10=scratch base old, x11=scratch base new (x11 is dead after the old-path
-// copy loop; x17 is the A5 arena base and must never be clobbered), x9=loop i,
-// x7=byte temp; x8=38 renameat; return errno-style negative on failure.
 fn emit_sys_rename(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);

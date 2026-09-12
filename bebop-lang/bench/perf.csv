@@ -1886,3 +1886,37 @@ ts,commit,bin,metric,value,unit,n,valid,at_max_pct,temp_mc,note
 1789248458,096e7d0,1d1e634f,bin_fns,300,fns,1,1,,,
 1789248458,096e7d0,1d1e634f,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
 1789249701,6d19ec4,1d1e634f,fast_wall,29871,ms,1,1,,,"A20 fast lane, median of 3 wall times 32153/29871/26874 ms on bebop.bin 1d1e634f; gate is <= 30 s and this MEETS it by 0.4 % with 1 of 3 runs over -- construct_parity is ~70 % of the cost"
+1789250122,aba5a82,f0747bfc,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1789250123,aba5a82,f0747bfc,gate_run_ms,9112,ms,1,1,,,"sum of non-memo gate runs (25 runs, 104 memo hits)"
+1789250186,aba5a82,f0747bfc,bin_words,43398,words,1,1,,,bytes 175592
+1789250186,aba5a82,f0747bfc,stub_words,172,words,1,1,,,
+1789250186,aba5a82,f0747bfc,bin_fns,300,fns,1,1,,,
+1789250186,aba5a82,f0747bfc,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1789250527,aba5a82,1d1e634f,bin_words,43491,words,1,1,,,bytes 175964
+1789250527,aba5a82,1d1e634f,stub_words,172,words,1,1,,,
+1789250528,aba5a82,1d1e634f,bin_fns,300,fns,1,1,,,
+1789250528,aba5a82,1d1e634f,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1789250704,aba5a82,9f744a99,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1789250704,aba5a82,9f744a99,gate_run_ms,8613,ms,1,1,,,"sum of non-memo gate runs (25 runs, 104 memo hits)"
+1789250810,aba5a82,9f744a99,bin_words,43405,words,1,1,,,bytes 175620
+1789250810,aba5a82,9f744a99,stub_words,172,words,1,1,,,
+1789250810,aba5a82,9f744a99,bin_fns,300,fns,1,1,,,
+1789250810,aba5a82,9f744a99,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1789252345,aba5a82,9f744a99,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1789252345,aba5a82,9f744a99,gate_run_ms,9468,ms,1,1,,,"sum of non-memo gate runs (25 runs, 104 memo hits)"
+1789252472,aba5a82,9f744a99,bin_words,43405,words,1,1,,,bytes 175620
+1789252472,aba5a82,9f744a99,stub_words,172,words,1,1,,,
+1789252472,aba5a82,9f744a99,bin_fns,300,fns,1,1,,,
+1789252472,aba5a82,9f744a99,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1789252718,aba5a82,9f744a99,bin_words,43405,words,1,1,,,bytes 175620
+1789252719,aba5a82,9f744a99,stub_words,172,words,1,1,,,
+1789252719,aba5a82,9f744a99,bin_fns,300,fns,1,1,,,
+1789252719,aba5a82,9f744a99,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1789252773,aba5a82,9f744a99,bin_words,43405,words,1,1,,,bytes 175620
+1789252773,aba5a82,9f744a99,stub_words,172,words,1,1,,,
+1789252773,aba5a82,9f744a99,bin_fns,300,fns,1,1,,,
+1789252773,aba5a82,9f744a99,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1789252824,aba5a82,9f744a99,bin_words,43405,words,1,1,,,bytes 175620
+1789252824,aba5a82,9f744a99,stub_words,172,words,1,1,,,
+1789252824,aba5a82,9f744a99,bin_fns,300,fns,1,1,,,
+1789252824,aba5a82,9f744a99,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired

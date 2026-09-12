@@ -7,7 +7,7 @@ is_digit 20
 is_alpha 32
 put_num 73
 diag_text 28
-diag_exit 991
+diag_exit 1081
 slen 75
 kernel_word_at 106
 kernel_marked 75
@@ -293,7 +293,7 @@ emit_sys_ftruncate 86
 emit_sys_munmap 91
 emit_sys_export 233
 emit_sys_mmap 173
-emit_sys_mapb 203
+emit_sys_mapb 27
 emit_sys_rename 268
 emit_sys_wait4 118
 emit_sys_run 272

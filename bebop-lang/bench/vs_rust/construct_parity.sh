@@ -236,6 +236,12 @@ for f in "${DIR%/}/neg"/*.bp; do
     # agree, and the file is a duplicate of c93_unbound; the exit-105 path it was written for
     # is covered by NO construct.
     read_before_assign) EXPECT=COMPILEFAIL:101;;
+    # ROADMAP A7 (2026-09-12): sys_mapb's emitter passed the path LENGTH as openat's FLAGS and
+    # took the path pointer from a `str` handle whose bytes nothing copies into the arena. It wrote
+    # nine files named after raw addresses, ~160 MB, into git history. The builtin has no call site
+    # in the tree; the emitter now refuses with 108 so the wrong write cannot happen silently, and
+    # this construct exists so the refusal cannot be silently removed.
+    c140_mapb_refused) EXPECT=COMPILEFAIL:108;;
     *) EXPECT="";;
   esac
   out="${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin"

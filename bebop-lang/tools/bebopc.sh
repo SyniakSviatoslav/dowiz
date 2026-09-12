@@ -122,7 +122,12 @@ cmd_save() {
   source_md5_val=$(source_md5)
 
   local source_commit
-  source_commit=$(git log -1 --format=%h -- bebop.bp 2>/dev/null || echo "unknown")  # short, as the seeded rows are
+  # The last commit that TOUCHED bebop.bp is not the provenance of this binary when the source
+  # is dirty -- a save during an uncommitted edit would name a commit whose source produces a
+  # DIFFERENT compiler, which is the exact confusion this file exists to end. Record HEAD, and
+  # say `+dirty` when bebop.bp differs from it; the commit that lands the pair then supersedes it.
+  source_commit=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+  git diff --quiet HEAD -- bebop.bp 2>/dev/null || source_commit="${source_commit}+dirty"
 
   local short_sha
   short_sha=$(git rev-parse --short HEAD)
@@ -130,25 +135,23 @@ cmd_save() {
   local date
   date=$(date +%Y-%m-%d)
 
-  # Check if this digest is already cached
-  if [ -f "$CACHE_DIR/${current_digest}.bin" ]; then
-    local existing_digest
-    existing_digest=$(digest "$CACHE_DIR/${current_digest}.bin")
-    if [ "$existing_digest" = "$current_digest" ]; then
-      echo "digest $current_digest already in cache (no change)"
-      return 0
+  # Cache presence and MANIFEST presence are independent, and conflating them hid a defect:
+  # cmd_promote copies the candidate into the cache BEFORE calling save, so save always found
+  # it cached, returned early, and never wrote the manifest row. The tool's own main path
+  # recorded no provenance -- found 2026-09-12 promoting f0747bfc. Cache first, then ALWAYS
+  # fall through to the manifest.
+  if [ -f "$CACHE_DIR/${current_digest}.bin" ] && [ "$(digest "$CACHE_DIR/${current_digest}.bin")" = "$current_digest" ]; then
+    echo "cache: $current_digest already present"
+  else
+    cp "$CURRENT_BIN" "$CACHE_DIR/${current_digest}.bin"
+
+    local copy_digest
+    copy_digest=$(digest "$CACHE_DIR/${current_digest}.bin")
+    if [ "$copy_digest" != "$current_digest" ]; then
+      echo "ERROR: copy failed to match digest" >&2
+      return 1
     fi
-  fi
-
-  # Copy bebop.bin to cache with digest as filename
-  cp "$CURRENT_BIN" "$CACHE_DIR/${current_digest}.bin"
-
-  # Verify the copy
-  local copy_digest
-  copy_digest=$(digest "$CACHE_DIR/${current_digest}.bin")
-  if [ "$copy_digest" != "$current_digest" ]; then
-    echo "ERROR: copy failed to match digest" >&2
-    return 1
+    echo "cache: $current_digest written"
   fi
 
   # Add to manifest if not present

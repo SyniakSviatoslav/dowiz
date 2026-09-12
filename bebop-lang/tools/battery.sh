@@ -31,12 +31,13 @@ export REAP_GATED=1  # one gate per run tree (chain.sh already checked when it d
 # gb_<op>_<sr>_0_1_0.* files share one BEBOP_TMP, so shards clobbered each other).
 # SERIAL=0 restores the old parallel battery -- only on a box where the phantom cap has been lifted.
 SERIAL=${SERIAL:-1}
-mkdir -p "$T"/{std,cp,pd,pool}; sw() { [ "$SERIAL" = 1 ] && wait; :; }; [ "$SERIAL" = 1 ] && { J=${J:-1}; export J; }  # EXPORT: run_all.sh is a fresh `bash`, an unexported J left it at xargs -P 4  # lanes one after another, J=1 -- ~12 procs instead of ~40
+mkdir -p "$T"/{std,cp,pd,pool,bpp}; sw() { [ "$SERIAL" = 1 ] && wait; :; }; [ "$SERIAL" = 1 ] && { J=${J:-1}; export J; }  # EXPORT: run_all.sh is a fresh `bash`, an unexported J left it at xargs -P 4  # lanes one after another, J=1 -- ~12 procs instead of ~40
 ( J=${J:-3} BEBOP_TMP=$T/std BEBOP_BIN=$BIN bash tools/std_par.sh > "$T/std.log" 2>&1 ) & sw  # sharded std_golden, one shard per A78 core
 ( BEBOP_TMP=$T/cp BEBOP_BIN=$BIN bash bench/vs_rust/construct_parity.sh > "$T/cp.log" 2>&1;
   BEBOP_TMP=$T/pd BEBOP_BIN=$BIN bash bench/vs_rust/parity_driver.sh > "$T/pd.log" 2>&1 ) & sw
 ( BEBOP_TMP=$T/pool BEBOP_BIN=$BIN bash bench/vs_rust/pool_parity.sh > "$T/pool.log" 2>&1 ) & sw
 ( bash bench/oracles/run_all.sh > "$T/oracles.log" 2>&1 ) & sw  # little cores, memoized
+( BEBOP_TMP=$T/bpp BEBOP_BIN=$BIN bash bench/vs_rust/bpref_parity.sh > "$T/bpp.log" 2>&1 ) & sw  # A23 differential lane: bpref's evaluator ran in no battery lane until 2026-09-13
 ( BEBOP_TMP=$T/inv BEBOP_BIN=$BIN BEBOP_SRC=$SRC bash bench/vs_rust/invariants.sh $([ "$FREEZE" = 1 ] && echo --freeze) > "$T/inv.log" 2>&1 ) & sw
 python3 tools/census.py "$BIN" | tail -n 1 > "$T/census.txt" 2>&1
 python3 tools/check_abi.py "$BIN" > "$T/abi.txt" 2>&1
@@ -53,6 +54,7 @@ line diag.log '^diag:' ' 0 fail'
 line pd.log '^parity:' 'fail=0'
 line pool.log '^pool_parity:' ' 0 fail'
 line oracles.log '^SUMMARY' 'self-frozen=0 mismatch=0 missing=0'
+line bpp.log '^bpref_parity:' 'disagree=0 error=0'  # A23: agreement between the two implementations
 line abi.txt 'ABI' '^ABI ok'
 line inv.log '^invariants:' 'GREEN'
 line words.log '^words:' 'PASS'
