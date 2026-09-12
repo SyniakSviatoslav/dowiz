@@ -468,6 +468,40 @@ fn st_alloc_p(base: [i64], tx: [i64], p: i64, len: i64, digest: i64, pcount: i64
 // already held p spun forever on its own lock. It also has to be the caller's,
 // because the cross-partition path must acquire two partition locks in ascending
 // order BEFORE the transaction begins.
+// st_init_p(base, locks, pcount, arena_cells, tmp, ptdig): seed a store for MULTI-PARTITION
+// use. Call ONCE after st_open and BEFORE any writer starts.
+//
+// Why this has to exist (measured 2026-09-12). st_begin_p reads partition p's cursor with
+// st_parttab_used_p, whose no-PartTab fallback is the single-partition constant 1024. On a
+// fresh store every partition therefore begins at 1024 -- a two-partition probe returned
+// used_p(0) = 1024 AND used_p(1) = 1024 -- so every writer allocates from the start of
+// partition 0's region and the partitions overwrite each other. Disjointness, which is the
+// whole premise of B5's G10 gate, never held.
+//
+// This writes the initial PartTab with each partition's cursor at ITS OWN region start
+// (st_region_start), so st_begin_p returns a disjoint cursor per partition from the first
+// transaction onward. The PartTab itself lives at the base of partition 0's region, so
+// partition 0's cursor starts just past it.
+fn st_init_p(base: [i64], locks: [i64], pcount: i64, arena_cells: i64, tmp: [i64], ptdig: i64) -> i64 {
+  let sb = st_pick(base, tmp);
+  let pt_off = 1024;
+  let n = st_parttab_cells(pcount);
+  let _ = base[pt_off] = ((ptdig & 4294967295) << 32) | n;
+  let _ = base[pt_off + 1] = base[sb + 2] + 1;
+  let q = 0;
+  while q < pcount {
+    let _ = locks[pcount + 1 + q] = 0;
+    let _ = locks[2 * pcount + 1 + q] = if q == 0 then pt_off + 2 + n else st_region_start(q, pcount, arena_cells);
+    let _ = locks[3 * pcount + 1 + q] = base[sb + 2] + 1;
+    let q = q + 1;
+    0
+  };
+  let _ = st_parttab_write_p(base, pt_off, sb, locks, pcount, tmp);
+  let _ = st_seal(base, pt_off, tmp);
+  let _ = st_sb_write_m(base, 512 - sb, base[sb + 2] + 1, pt_off, pt_off + 2 + n, n + 2, 0, 0, tmp);
+  pt_off
+}
+
 fn st_commit_p(base: [i64], tx: [i64], p: i64, root: i64, locks: [i64], pcount: i64, arena_cells: i64, tmp: [i64], ptdig: i64) -> i64 {
   let _ = st_lock_g(locks, pcount);
   let sb = st_pick(base, tmp);
