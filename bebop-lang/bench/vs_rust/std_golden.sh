@@ -896,11 +896,10 @@ GBT=${BEBOP_TMP:-/tmp/opencode}
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_gen.bp "$GBT/gb_gen_test.bin" >/dev/null 2>&1 && timeout 60 ./seed/build/seed "$GBT/gb_gen_test.bin" "$GBT" | tail -1)
 gate gb_gen_tier0 -4783772994166464769 "$r"
 gb_gen_ok=1; gb_gen_c=""
-need_file gb_gen_specialised "$GBT/gb_gen.store" || gb_gen_ok=0
 for combo in mxv_1 mxv_2 mxv_3 mxv_4 vxm_1 vxm_2 vxm_3 vxm_4 dmxv_1 dmxv_4 dvxm_1 dvxm_4; do
   op=${combo%_*}; sr=${combo#*_}
   ./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$GBT/gb_${op}_${sr}_0_1_0.bp" "$GBT/gb_${op}_${sr}_0_1_0.bin" >/dev/null 2>&1 || gb_gen_ok=0
-  rr=$(run 30 "$GBT/gb_${op}_${sr}_0_1_0.bin" "$GBT/gb_gen.store" | tail -1)
+  rr=$(need_file gb_gen_specialised "$GBT/gb_gen.store" && run 30 "$GBT/gb_${op}_${sr}_0_1_0.bin" "$GBT/gb_gen.store" | tail -1)
   # rolling combine of the 12 specialised folds (gen_gb.bp combine12: c*1000003+v, i64 wrap = bash's) -> the same golden as the tier-0 driver, oracle bench/oracles/gb_gen_specialised.py
   case "$rr" in ''|*[!0-9-]*) gb_gen_ok=0; rr=0;; esac
   if [ -z "$gb_gen_c" ]; then gb_gen_c=$rr; else gb_gen_c=$(( gb_gen_c * 1000003 + rr )); fi
@@ -995,9 +994,12 @@ gate gb_bfs -3 "$r"
 #      generated file against the SAME store (argv[2]=store path, argv[3]=source vertex "0")
 #      and checks driver == generated before accepting the golden (997, == the python oracle
 #      bench/oracles/gb_bfs_gen.py). ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_bfs_gen.bp "$GBT/gb_bfs_gen_test.bin" >/dev/null 2>&1 && run 30 "$GBT/gb_bfs_gen_test.bin" "$GBT" | tail -1)
+# NOT through `run`: this driver is a PRODUCER of the .store the line below reads. A memo
+# replay prints the cached stdout WITHOUT executing the binary, so the store is never
+# written and the consumer reads a missing file. Same reason gb_gen is direct (see above).
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_bfs_gen.bp "$GBT/gb_bfs_gen_test.bin" >/dev/null 2>&1 && timeout 30 ./seed/build/seed "$GBT/gb_bfs_gen_test.bin" "$GBT" | tail -1)
 ./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$GBT/gb_bfs_1_0_1_0.bp" "$GBT/gb_bfs_1_0_1_0.bin" >/dev/null 2>&1 || r="COMPILEFAIL($r)"
-rg=$(run 30 "$GBT/gb_bfs_1_0_1_0.bin" "$GBT/gb_bfs_gen.store" 0 | tail -1)
+rg=$(need_file gb_bfs_gen "$GBT/gb_bfs_gen.store" && run 30 "$GBT/gb_bfs_1_0_1_0.bin" "$GBT/gb_bfs_gen.store" 0 | tail -1)
 [ "$r" = "$rg" ] || r="MISMATCH($r/$rg)"
 gate gb_bfs_gen 997 "$r"
 
@@ -1027,9 +1029,12 @@ gate gb_bfs_gen_addr 997 "$r"
 #      independent queue BFS runs (mbfs_queue_fold, the sgraph2.bp bfs_from formula) and this
 #      block checks driver == generated kernel (argv[2] = store path, argv[3] = source COUNT)
 #      before accepting 65342 (== bench/oracles/gb_mbfs_gen.py). ----
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_mbfs_gen.bp "$GBT/gb_mbfs_gen_test.bin" >/dev/null 2>&1 && run 30 "$GBT/gb_mbfs_gen_test.bin" "$GBT" | tail -1)
+# NOT through `run`: this driver is a PRODUCER of the .store the line below reads. A memo
+# replay prints the cached stdout WITHOUT executing the binary, so the store is never
+# written and the consumer reads a missing file. Same reason gb_gen is direct (see above).
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_mbfs_gen.bp "$GBT/gb_mbfs_gen_test.bin" >/dev/null 2>&1 && timeout 30 ./seed/build/seed "$GBT/gb_mbfs_gen_test.bin" "$GBT" | tail -1)
 ./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$GBT/gb_mbfs_1_0_1_0.bp" "$GBT/gb_mbfs_1_0_1_0.bin" >/dev/null 2>&1 || r="COMPILEFAIL($r)"
-rg=$(run 30 "$GBT/gb_mbfs_1_0_1_0.bin" "$GBT/gb_mbfs_gen.store" 64 | tail -1)
+rg=$(need_file gb_mbfs_gen "$GBT/gb_mbfs_gen.store" && run 30 "$GBT/gb_mbfs_1_0_1_0.bin" "$GBT/gb_mbfs_gen.store" 64 | tail -1)
 [ "$r" = "$rg" ] || r="MISMATCH($r/$rg)"
 gate gb_mbfs_gen 65342 "$r"
 

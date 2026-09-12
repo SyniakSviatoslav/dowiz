@@ -35,7 +35,7 @@ max_missing_citations = 20
 magic_literal_min = 1000
 #
 # DEBT recorded 2026-09-12, each line may only go DOWN.
-max_dead_functions = 18            # uncalled library/compiler functions; wire them up or delete them
+max_dead_functions = 11            # uncalled library/compiler functions; wire them up or delete them
 max_uncovered_builtins = 1         # sys_mapb has no corpus caller: A7 step 3 landed it untested
 max_syscall_no_regtable = 8        # emit_sys_{write,close,exit,exit_thread_guard,slurp,ftruncate,munmap,mmap}
 max_malformed_journal = 519        # entries predating the H:/DID:/GOT:/VERDICT: format
@@ -46,3 +46,7 @@ max_unbounded_waits = 0
 # symptom to named cause>. That number is what turns "loud failures make us faster" from a
 # claim into a curve. Older entries predate the field and are not retro-fitted.
 journal_cost_since = 1789229455
+
+# a gate that reads a producer's .store/.gbpool must assert it exists (need_file);
+# a missing prerequisite otherwise surfaces as trap 82 and names the wrong subsystem
+max_unguarded_prereqs = 0

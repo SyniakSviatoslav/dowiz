@@ -274,6 +274,13 @@ So:
    expiry report WHICH worker never arrived.
 5. **A guard that annihilates a value must be able to say which factor was false.** A fold
    of 0 from a product of five checks is a bug report with the useful part removed.
+6. **A missing PREREQUISITE must name itself, never trap.** A gate that consumes an artifact an
+   earlier block produced must assert the artifact is there before it runs. MEASURED 2026-09-12,
+   one unchanged binary both ways: `gb_pool_test.bin` against a warm `$GBT` returns the golden
+   `-4783772994166464769`; with `gb_gen.store` absent it dies `rc=82 trap: SIGSEGV/SIGBUS`. A
+   missing input file was reported as a wild memory access — the diagnosis named the wrong
+   subsystem, and that is worse than no diagnosis. `std_golden.sh`'s `need_file()` is the
+   mechanism; `tools/arch_check.py` **prereq-guard** enforces it.
 6. **An exit code is not a result.** `rc=0` with a fold of 0 is a failure. Quote the value.
 7. **When two things must agree, print BOTH on disagreement**, never just the verdict —
    `MISMATCH(same=.../foreign=...)` is the shape to copy.

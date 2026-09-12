@@ -124,7 +124,11 @@ def check_producers_not_memoised():
     produced = {}
     for i, line in enumerate(lines):
         for m in re.finditer(r"\$GBT/([A-Za-z0-9_]+)\.store", line):
-            produced.setdefault(m.group(1), []).append(i)
+            # dedupe by LINE: need_file guards name the artifact on the same line as the run
+            # that consumes it, and two mentions on one line are ONE site, not a producer and
+            # a consumer. Without this the guard added 2026-09-12 flags itself.
+            w = produced.setdefault(m.group(1), [])
+            if i not in w: w.append(i)
     for name, where in produced.items():
         if len(where) < 2: continue          # written and read in one place: self-test
         first = where[0]
@@ -542,6 +546,39 @@ def check_clone_kept_symbols(r):
     else:
         note("clone-symbols: every spawn site keeps <= %d symbols across it" % cap)
 
+
+def check_prereq_guarded(r):
+    """A gate that CONSUMES a producer's artifact must assert the artifact exists.
+
+    MEASURED 2026-09-12 with one unchanged binary: gb_pool_test.bin against a warm
+    $GBT returns the golden -4783772994166464769; against a $GBT whose gb_gen.store
+    is absent it dies `rc=82 trap: SIGSEGV/SIGBUS`. So a missing INPUT FILE was
+    reported as a wild memory access -- the diagnosis pointed at the wrong subsystem
+    entirely. run()'s own GUARD covered only the .bin, and its L12 comment named the
+    other half of the hazard without implementing it.
+
+    The rule: any `run` whose arguments name a .store or .gbpool must be guarded by
+    need_file on the same command, so the missing prerequisite names itself.
+    """
+    gold = os.path.join(ROOT, "bench/vs_rust/std_golden.sh")
+    if not os.path.exists(gold):
+        note("prereq-guard: std_golden.sh absent, nothing to check"); return
+    bad = []
+    for i, line in enumerate(open(gold, errors="replace").read().split("\n")):
+        code = line.split("#")[0]
+        if not re.search(r"\brun\s+\d+", code): continue
+        if not re.search(r"\.(store|gbpool)\b", code): continue
+        if "need_file" in code: continue
+        bad.append("std_golden.sh:%d" % (i + 1))
+    worst = r.get("max_unguarded_prereqs", 0)
+    if len(bad) > worst:
+        fail("prereq-guard", "%d gate(s) consume a producer artifact with no need_file "
+             "(ratchet %d) -- a missing prerequisite then surfaces as trap 82, naming the "
+             "wrong subsystem: %s" % (len(bad), worst, "; ".join(bad[:6])))
+    else:
+        note("prereq-guard: %d unguarded producer-artifact consumer(s) (ratchet %d)"
+             % (len(bad), worst))
+
 def main():
     r = load_ratchet()
     check_no_nested_fn()
@@ -562,6 +599,7 @@ def main():
     check_scripted_patch_assert(r)
     check_no_dead_functions(r)
     check_clone_kept_symbols(r)
+    check_prereq_guarded(r)
     check_laws_have_enforcement(r)
     for n in notes: print("  note: " + n)
     if fails:
