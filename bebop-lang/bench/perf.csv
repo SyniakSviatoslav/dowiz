@@ -1885,3 +1885,4 @@ ts,commit,bin,metric,value,unit,n,valid,at_max_pct,temp_mc,note
 1789248458,096e7d0,1d1e634f,stub_words,172,words,1,1,,,
 1789248458,096e7d0,1d1e634f,bin_fns,300,fns,1,1,,,
 1789248458,096e7d0,1d1e634f,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1789249701,6d19ec4,1d1e634f,fast_wall,29871,ms,1,1,,,"A20 fast lane, median of 3 wall times 32153/29871/26874 ms on bebop.bin 1d1e634f; gate is <= 30 s and this MEETS it by 0.4 % with 1 of 3 runs over -- construct_parity is ~70 % of the cost"
