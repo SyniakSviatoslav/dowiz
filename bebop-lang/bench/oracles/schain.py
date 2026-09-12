@@ -30,7 +30,7 @@ h = mix(0, fold(1))
 h = mix(h, fold(N // 2))
 h = mix(h, fold(N))
 # B5 step 1: PartTab (2-cell header + 19-cell payload = 21 cells) added to every committed store
-LIVE = N * 4 + 2 * 5 + 18 + 21
+LIVE = N * 4 + 2 * 5 + 18
 if os.path.exists('schain.store'):
     c = struct.unpack('<16q', open('schain.store', 'rb').read(16 * 8))
     assert c[0] == int.from_bytes(b'BEBOPST1', 'little'), c[0]

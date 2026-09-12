@@ -315,7 +315,17 @@ fn st_commit_m(base: [i64], tx: [i64], root: i64, mig: i64, tmp: [i64]) -> i64 {
   // still set to the same values for backward compatibility (readers that don't
   // know about PartTab still see correct values), but the authority for P>=1
   // moves to the PartTab.
-  let pt = st_alloc(base, tx, st_parttab_cells(1), st_digest("PartTab"));
+  // The PartTab lives in the FREE TAIL OF ITS OWN SUPERBLOCK'S PAGE, not in the arena.
+  // A superblock occupies 16 of the 512 cells reserved for it, so cells sb+16 .. sb+511 are
+  // free, and 2 + st_parttab_cells(1) = 21 fits with room to spare. Three consequences, all
+  // of them the reason for doing it this way (operator decision 2026-09-12, architecture over
+  // expedience): the arena layout is unchanged by B5 step 1, so every golden frozen before it
+  // is correct again; nothing grows by 21 cells per commit; and consecutive generations'
+  // PartTabs land on DIFFERENT PAGES, exactly as the two superblocks do, so a single page tear
+  // can no longer destroy both -- which is what made scrash_torn 50 invalid reopens out of 50.
+  let pt = (512 - sb) + 16;
+  let _ = base[pt] = ((st_digest("PartTab") & 4294967295) << 32) | st_parttab_cells(1);
+  let _ = base[pt + 1] = tx[5];
   let _ = st_parttab_write(base, pt, sb, tx[5], root, tx[2], tmp);
   let _ = st_seal(base, pt, tmp);
   // Write the OTHER superblock with root = PartTab offset, used = tx[2] (same
@@ -488,21 +498,21 @@ fn st_alloc_p(base: [i64], tx: [i64], p: i64, len: i64, digest: i64, pcount: i64
 // partition 0's cursor starts just past it.
 fn st_init_p(base: [i64], locks: [i64], pcount: i64, arena_cells: i64, tmp: [i64], ptdig: i64) -> i64 {
   let sb = st_pick(base, tmp);
-  let pt_off = 1024;
+  let pt_off = (512 - sb) + 16;
   let n = st_parttab_cells(pcount);
   let _ = base[pt_off] = ((ptdig & 4294967295) << 32) | n;
   let _ = base[pt_off + 1] = base[sb + 2] + 1;
   let q = 0;
   while q < pcount {
     let _ = locks[pcount + 1 + q] = 0;
-    let _ = locks[2 * pcount + 1 + q] = if q == 0 then pt_off + 2 + n else st_region_start(q, pcount, arena_cells);
+    let _ = locks[2 * pcount + 1 + q] = st_region_start(q, pcount, arena_cells);
     let _ = locks[3 * pcount + 1 + q] = base[sb + 2] + 1;
     let q = q + 1;
     0
   };
   let _ = st_parttab_write_p(base, pt_off, sb, locks, pcount, tmp);
   let _ = st_seal(base, pt_off, tmp);
-  let _ = st_sb_write_m(base, 512 - sb, base[sb + 2] + 1, pt_off, pt_off + 2 + n, n + 2, 0, 0, tmp);
+  let _ = st_sb_write_m(base, 512 - sb, base[sb + 2] + 1, pt_off, 1024, 0, 0, 0, tmp);
   pt_off
 }
 
@@ -519,7 +529,10 @@ fn st_commit_p(base: [i64], tx: [i64], p: i64, root: i64, locks: [i64], pcount: 
     0
   };
   let _ = locks[pcount + 1 + p] = root;
-  let pt_off = st_alloc_p(base, tx, p, st_parttab_cells(pcount), ptdig, pcount, arena_cells);
+  // PartTab in the free tail of its own superblock's page (see st_commit_m).
+  let pt_off = (512 - sb) + 16;
+  let _ = base[pt_off] = ((ptdig & 4294967295) << 32) | st_parttab_cells(pcount);
+  let _ = base[pt_off + 1] = base[sb + 2] + 1;
   let _ = locks[2 * pcount + 1 + p] = tx[2];
   let _ = locks[3 * pcount + 1 + p] = base[sb + 2] + 1;
   let _ = st_parttab_write_p(base, pt_off, sb, locks, pcount, tmp);
@@ -618,7 +631,10 @@ fn st_commit_2pc_go(base: [i64], txs: [i64], roots: [i64], locks: [i64], pcount:
     0
   };
   let th = st_cells(st_addr(txs) + home * 6);
-  let pt_off = st_alloc_p(base, th, home, st_parttab_cells(pcount), ptdig, pcount, arena_cells);
+  // PartTab in the free tail of its own superblock's page (see st_commit_m).
+  let pt_off = (512 - sb) + 16;
+  let _ = base[pt_off] = ((ptdig & 4294967295) << 32) | st_parttab_cells(pcount);
+  let _ = base[pt_off + 1] = new_gen;
   let _ = locks[2 * pcount + 1 + home] = th[2];
   let _ = st_parttab_write_p(base, pt_off, sb, locks, pcount, tmp);
   let _ = st_seal(base, pt_off, tmp);
@@ -1053,15 +1069,13 @@ fn st_compact(path: [i64], plen: i64, size: i64, lay: [i64], nlay: i64, tmp: [i6
   // the compacted file, and st_len on it trapped 82). Write a FRESH PartTab describing
   // the compacted file instead, the way st_commit_m does. It is appended AFTER the scan
   // loop, so its own cells are never walked by the relocation pass.
-  let npt = cur[0];
-  let used_after = npt + 2 + st_parttab_cells(1);
-  let live = used_after - 1024;
-  let _ = st_sb_write_m(new, 0, gen + 1, npt, used_after, live, 0, nmig, tmp);
+  let live = cur[0] - 1024;
+  let _ = st_sb_write_m(new, 0, gen + 1, 16, cur[0], live, 0, nmig, tmp);
+  let npt = 16;
   let _ = new[npt] = ((st_digest("PartTab") & 4294967295) << 32) | st_parttab_cells(1);
   let _ = new[npt + 1] = gen + 1;
-  let _ = st_parttab_write(new, npt, 0, gen + 1, nroot, used_after, tmp);
+  let _ = st_parttab_write(new, npt, 0, gen + 1, nroot, cur[0], tmp);
   let _ = st_seal(new, npt, tmp);
-  let _ = cur[0] = used_after;
 
   let _ = st_sb_write_ch(new, 0, ncom, nhds, tmp);
   let k = 512;

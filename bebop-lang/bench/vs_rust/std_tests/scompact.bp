@@ -76,7 +76,7 @@ fn main() -> i64 {
   let b2 = st_map_ro(path, pl, size);
   let f2 = fold_live(b2, tmp);
   let sb2 = st_pick(b2, tmp);
-  let ok = (f1 == f2) * (b2[sb2 + 8] == 0) * (b2[sb2 + 4] == live + 1024) * (sup_before > 0) * (live == n * 3 + n + 3 + 21);
+  let ok = (f1 == f2) * (b2[sb2 + 8] == 0) * (b2[sb2 + 4] == live + 1024) * (sup_before > 0) * (live == n * 3 + n + 3);
   let _ = sys_munmap(st_addr(b2), size);
   f1 * ok
 }

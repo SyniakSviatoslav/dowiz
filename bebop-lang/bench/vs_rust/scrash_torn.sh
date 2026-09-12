@@ -147,9 +147,9 @@ for k, (lo, hi, sb) in enumerate(lines, 1):
     lo, hi, sb = int(lo), int(hi), int(sb)
     # +21 cells of PartTab per preceding commit (B5 step 1), on BOTH ends: the low end is
     # page-aligned down, so omitting it puts the expected start a whole 4096-byte page early.
-    exp_lo_cell, exp_hi_cell = 1024 + 400 * (k - 1) + 21 * (k - 1), 1024 + 400 * k
+    exp_lo_cell, exp_hi_cell = 1024 + 400 * (k - 1), 1024 + 400 * k
     exp_lo = (exp_lo_cell * 8) - (exp_lo_cell * 8) % 4096
-    exp_hi = exp_hi_cell * 8 + (k - 1) * 21 * 8  # same cumulative term on the high end
+    exp_hi = exp_hi_cell * 8
     exp_sb = 512 if k % 2 == 1 else 0  # sbidx is a CELL index (0/512)
     if (lo, hi, sb) != (exp_lo, exp_hi, exp_sb):
         bad += 1

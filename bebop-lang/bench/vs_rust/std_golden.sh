@@ -643,7 +643,7 @@ gate tdggeo 219599976738721791 "$r"
 # ---- slayout (G1, T112: store file bytes == python struct.pack from the layout rules) ----
 rm -f slayout.store
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/slayout.bp ${BEBOP_TMP:-/tmp/opencode}/slayout_test.bin >/dev/null 2>&1 && run 30 ${BEBOP_TMP:-/tmp/opencode}/slayout_test.bin | tail -1)
-gate slayout 3305316365 "$r"
+gate slayout 749213972 "$r"
 
 # ---- sround (G2, T112: 10^5 objects, two mapping bases, and a reopen in a second run) ----
 rm -f sround.store

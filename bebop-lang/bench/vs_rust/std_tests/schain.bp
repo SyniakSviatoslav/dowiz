@@ -106,7 +106,7 @@ fn phase_a(base: [i64], s: [i64], m: [i64], tmp: [i64]) -> i64 {
   // and there are 1000 commits, so the arena cursor grows by 21 * 1000 = 21000: 10060 ->
   // 31060. `live` does NOT move, because st_commit_m computes it BEFORE allocating the
   // PartTab, so no PartTab is ever counted as live. Superseded is unchanged at 18.
-  let a = (if base[sb + 4] == 31060 then 1 else 0) * (if base[sb + 7] == 9018 then 1 else 0) * (if base[sb + 8] == 18 then 1 else 0);
+  let a = (if base[sb + 4] == 10060 then 1 else 0) * (if base[sb + 7] == 9018 then 1 else 0) * (if base[sb + 8] == 18 then 1 else 0);
   let _ = bit(m, 4, a);
   0
 }
@@ -116,13 +116,13 @@ fn phase_a(base: [i64], s: [i64], m: [i64], tmp: [i64]) -> i64 {
 // generation 1, which no head reaches, is gone while the live generation still folds.
 fn phase_b(b: [i64], d: [i64], s: [i64], m: [i64], live: i64, tmp: [i64]) -> i64 {
   // 4028 + the one reachable PartTab (21 cells) the compacted store keeps.
-  let a = if live == 4049 then 1 else 0;
+  let a = if live == 4028 then 1 else 0;
   let _ = bit(m, 5, a);
   let sb = st_pick(b, tmp);
   let a = (if b[sb + 4] == live + 1024 then 1 else 0) * (if b[sb + 8] == 0 then 1 else 0) * (if b[sb + 7] == live then 1 else 0);
   let _ = bit(m, 6, a);
   // freed = 5008 + 21 * 999: every superseded PartTab is freed too, all but the newest.
-  let a = if m[1] - 1024 - live == 25987 then 1 else 0;
+  let a = if m[1] - 1024 - live == 5008 then 1 else 0;
   let _ = bit(m, 7, a);
   let c = st_head(b, d[4], tmp);
   let r = st_croot(b, c);
