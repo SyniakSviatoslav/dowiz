@@ -14,6 +14,12 @@ ulimit -s 65536 2>/dev/null || true  # eval recursion: 113+ fn self-compile need
 set -u
 BEBOP_TMP=${BEBOP_TMP:-/tmp/opencode}; mkdir -p "$BEBOP_TMP"  # per-agent scratch namespace (AGENTS.md parallel protocol)
 mkdir -p /tmp/opencode  # store.bp hardcodes /tmp/opencode for atomic publish (trap 82 fix, 2026-09-08)
+# Generated store artifacts are NOT inputs -- every gb gate's driver builds its own. A stale
+# one left by an earlier run (a different size, or a layout from before B5 step 1 added the
+# PartTab) makes st_open map a file it does not match and the gate traps 82 with no output.
+# Measured 2026-09-12: clearing these took the battery from 101 pass/15 fail to 112 pass/4
+# fail -- eight gb gates that looked like code failures were stale files on disk.
+rm -f "$BEBOP_TMP"/gb_*.store "$BEBOP_TMP"/*.gbpool 2>/dev/null
 GUARD="GUARD: bebop.bin is missing or empty (silent-artifact class, journal 1788288248)"
 [ -s "${BEBOP_BIN:-bebop.bin}" ] || { echo "$GUARD"; exit 1; }
 
