@@ -856,7 +856,12 @@ gate gb_roundtrip 775084997 "$r"
 #      root-field-1 read). gb.bp's own gb_gen_random_lcg's `%` fix (signed-vs-unsigned, gb.bp's
 #      header correction) now lives in gb.bp itself -- no local duplicate in gen_gb.bp. ----
 GBT=${BEBOP_TMP:-/tmp/opencode}
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_gen.bp "$GBT/gb_gen_test.bin" >/dev/null 2>&1 && run 60 "$GBT/gb_gen_test.bin" "$GBT" | tail -1)
+# NOT through `run`: this driver is a PRODUCER -- the twelve specialised kernels below and
+# gb_pool/gb_pool_reuse all read the gb_gen.store it writes. A memo replay prints the
+# cached stdout WITHOUT executing the binary, so the store is never created, and every
+# consumer then reads a missing file and folds to 0. That is what made gb_gen_specialised
+# pass on one run and fail on the next (2026-09-12).
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_gen.bp "$GBT/gb_gen_test.bin" >/dev/null 2>&1 && timeout 60 ./seed/build/seed "$GBT/gb_gen_test.bin" "$GBT" | tail -1)
 gate gb_gen_tier0 -4783772994166464769 "$r"
 gb_gen_ok=1; gb_gen_c=""
 for combo in mxv_1 mxv_2 mxv_3 mxv_4 vxm_1 vxm_2 vxm_3 vxm_4 dmxv_1 dmxv_4 dvxm_1 dvxm_4; do
