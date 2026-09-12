@@ -1,75 +1,59 @@
-// smw.bp — G10: multi-writer store. P writers on disjoint partitions,
-// 10^5 updates each, cross-partition tx every 100th.
-// Uses sys_clone (68864) for threads, partition locks via sys_atomic_add.
-// Fold = total sum of all counter payloads across all partitions.
-
+// smw.bp — G10: multi-writer store. P writers on disjoint partitions, N updates each.
+// Fold = total of all counter payloads across all partitions, walked out of the arena.
+//
+// THE SHAPE OF THIS FILE IS FORCED BY A MEASURED COMPILER LIMIT. A fn spanning a
+// sys_clone may keep at most EIGHT symbols across the spawn; at nine one child is
+// silently lost, at eleven both are, and there is no trap or diagnostic -- sys_clone
+// returns valid child TIDs and the children simply never write (measured 2026-09-12,
+// docs/TRAPS.md, docs/WORKER-CARD.md). Constants do not count; anything the register
+// allocator must KEEP does, because spill slots live in the process-shared frame rather
+// than per thread. main therefore keeps exactly FOUR across its loop -- env, cells, acur,
+// w -- and everything else travels in `env` as an i64, arrays included: `[i64]` values are
+// cell indices and st_addr/st_cells are identities, so a handle packs into a slot exactly.
 use "selfhost/prelude/sha256.bp"
 use "selfhost/prelude/store.bp"
-use "selfhost/std/pool.bp"
 
-// stk(w, P): stack top for writer thread, 8KiB-pitched LOW per pool.bp pattern
-// Thread stacks: the units here are CELLS, not bytes. sys_arena_base() is the
-// arena CURSOR as a cell index (emit_sys_arena_base: sub x0,x27,x17; lsr #3) and
-// sys_clone converts its stack argument from cells to an address (add x1,x17,x1,
-// lsl #3). So this is pool.bp's proven placement verbatim: 16384 cells (128 KB)
-// of cushion past the cursor, 8192 cells (64 KB) per worker. Two ways this was
-// wrong before (2026-09-12): a "byte" offset of 131072 was really 1 MB of cells
-// and threw the stacks past the arena end, which killed every child instantly and
-// left the parent waiting on a flag nobody would ever set; and calling
-// sys_arena_base() once per stack let the cursor MOVE between calls, so sample it
-// once in main and pass it in.
+// env layout: 0 base, 1 locks, 2 scratch(tmp), 3 P, 4 N, 5 arena_cells, 6 ptdig,
+//             7 cdig, 8 cross_every, 9 txs, 10 roots
 fn stk(cur: i64, w: i64) -> i64 { cur + 16384 + w * 8192 }
 
-// lock_cells(pcount): allocate lock cells with layout:
-//   [0..pcount-1] partition locks, [pcount] global lock
-//   [pcount+1+q] roots[q], [2*pcount+1+q] useds[q], [3*pcount+1+q] gens[q]
-fn lock_cells(pcount: i64) -> [i64] {
-  zeros(4 * pcount + 1)
-}
-
-// read_partition_state(base, tx, P, roots, useds, gens): read all partition state
-// from the live PartTab. Helper to keep the clone-spanning fn <=8 live symbols.
-fn read_partition_state(base: [i64], tx: [i64], P: i64, roots: [i64], useds: [i64], gens: [i64]) -> i64 {
-  let q = 0;
-  while q < P {
-    let pt = base[base[tx[0] + 3]];
-    let _ = roots[q] = st_parttab_root_p(base, pt, q);
-    let _ = useds[q] = st_parttab_used_p(base, pt, q);
-    let _ = gens[q] = st_parttab_gen_p(base, pt, q);
-    let q = q + 1;
-    0
-  };
+// setup: every allocation and every store call that main would otherwise have to keep
+// live across the spawn. Nothing here survives into main except through env.
+fn setup(env: [i64]) -> i64 {
+  let P = env[3];
+  let path = zeros(64);
+  let pl = st_str(path, "smw.store");
+  let tmp = zeros(256);
+  let base = st_open(path, pl, 67108864 + 16777216 * P, tmp);
+  let _ = env[0] = st_addr(base);
+  let _ = env[1] = st_addr(zeros(4 * P + 1));
+  let _ = env[2] = st_addr(zeros(P * 2048));
+  let _ = env[9] = st_addr(zeros(P * 64));
+  let _ = env[10] = st_addr(zeros(P + 1));
+  let _ = env[6] = st_digest("PartTab");
+  let _ = env[7] = st_digest("C{i64}");
+  // Without this every partition's cursor starts at 1024 and the writers allocate on top
+  // of each other; partition disjointness is the whole premise of G10.
+  let _ = st_init_p(st_cells(env[0]), st_cells(env[1]), P, env[5], tmp, env[6]);
   0
 }
 
-// do_cross_commit(base, tx, tx2, p, cp, off, off2, P, locks, arena_cells, crosstxs, ptdig, tmp):
-// Execute a cross-partition 2PC commit. Helper to keep writer <=8 live symbols.
-fn do_cross_commit(base: [i64], tx: [i64], tx2: [i64], p: i64, cp: i64, off: i64, off2: i64, P: i64, locks: [i64], arena_cells: i64, crosstxs: [i64], ptdig: i64, tmp: [i64]) -> i64 {
-  // Build cross_txs: tx array for each partition (reusing crosstxs parameter)
-  let _ = crosstxs[p * 6] = tx[0];
-  let _ = crosstxs[p * 6 + 1] = tx[1];
-  let _ = crosstxs[p * 6 + 2] = tx[2];
-  let _ = crosstxs[p * 6 + 3] = tx[3];
-  let _ = crosstxs[p * 6 + 4] = tx[4];
-  let _ = crosstxs[p * 6 + 5] = tx[5];
-  let _ = crosstxs[cp * 6] = tx2[0];
-  let _ = crosstxs[cp * 6 + 1] = tx2[1];
-  let _ = crosstxs[cp * 6 + 2] = tx2[2];
-  let _ = crosstxs[cp * 6 + 3] = tx2[3];
-  let _ = crosstxs[cp * 6 + 4] = tx2[4];
-  let _ = crosstxs[cp * 6 + 5] = tx2[5];
-  st_commit_2pc(base, crosstxs, locks, P, arena_cells, tmp, ptdig)
-}
-
-// writer(base, locks, p, P, arena_cells, tmps, txs, txs2, crosstxs, N, cross_every, ptdig, cdig):
-// Writer thread for partition p. Does N updates of a counter object.
-// Every cross_every-th update touches partition (p+1)%P via 2PC.
-// ptdig and cdig are precomputed digests passed from parent.
-fn writer(base: [i64], locks: [i64], p: i64, P: i64, arena_cells: i64, tmps: [i64], txs: [i64], txs2: [i64], crosstxs: [i64], N: i64, cross_every: i64, ptdig: i64, cdig: i64) -> i64 {
-  // BISECT STEP 1: just lock/unlock, no store operations
+// writer: N transactions in partition p, each allocating and committing one C{i64}
+// counter carrying 1. The fold below sums those payloads out of the arena; the closed
+// form is deliberately absent from this file.
+fn writer(env: [i64], p: i64) -> i64 {
+  let base = st_cells(env[0]);
+  let locks = st_cells(env[1]);
+  let tmp = st_tmp_p(st_cells(env[2]), p);
+  let tx = st_tx_p(st_cells(env[9]), p);
   let k = 0;
-  while k < N {
+  while k < env[4] {
     let _ = st_lock_p(locks, p);
+    let _ = st_begin_p(base, tx, p, tmp);
+    let c = st_alloc_p(base, tx, p, 1, env[7], env[3], env[5]);
+    let _ = st_put(base, c, 0, 1);
+    let _ = st_seal(base, c, tmp);
+    let _ = st_commit_p(base, tx, p, c, locks, env[3], env[5], tmp, env[6]);
     let _ = st_unlock_p(locks, p);
     let k = k + 1;
     0
@@ -77,43 +61,6 @@ fn writer(base: [i64], locks: [i64], p: i64, P: i64, arena_cells: i64, tmps: [i6
   0
 }
 
-// main(P): P is the partition count. Fold = sum of all counter payloads.
-// init_partition_state(P, roots, useds, gens): initialize partition state arrays.
-// Helper to keep the clone-spanning fn <=8 live symbols.
-fn init_partition_state(P: i64, roots: [i64], useds: [i64], gens: [i64]) -> i64 {
-  let q = 0;
-  while q < P {
-    let _ = roots[q] = 0;
-    let _ = useds[q] = 1024;
-    let _ = gens[q] = 0;
-    let q = q + 1;
-    0
-  };
-  0
-}
-
-// write_superblock(base, other, pt_off, tmp): write the other superblock.
-// Helper to keep the clone-spanning fn <=8 live symbols.
-fn write_superblock(base: [i64], other: i64, pt_off: i64, tmp: [i64]) -> i64 {
-  let _ = base[other + 1] = 1;
-  let _ = base[other + 2] = 1;
-  let _ = base[other + 3] = pt_off;
-  let _ = base[other + 4] = 1024;
-  let _ = base[other + 5] = 0;
-  let _ = base[other + 6] = 0;
-  let _ = base[other + 7] = 0;
-  let _ = base[other + 8] = 0;
-  let kq = 9;
-  while kq < 15 {
-    let _ = base[other + kq] = 0;
-    let kq = kq + 1;
-    0
-  };
-  let _ = base[other + 15] = st_crc(base, other, 15, tmp);
-  0
-}
-
-// fold_partition(base, P, arena_cells, dc): compute the fold (sum of C{i64} payloads).
 fn fold_partition(base: [i64], P: i64, arena_cells: i64, dc: i64) -> i64 {
   let total = 0;
   let region_size = arena_cells / P;
@@ -139,8 +86,6 @@ fn fold_partition(base: [i64], P: i64, arena_cells: i64, dc: i64) -> i64 {
   total
 }
 
-// atoi over a str handle: argv entries are strings, and there is no int-arg
-// convention in this harness. 48 is '0'.
 fn sm_atoi(t: str) -> i64 {
   let n = str_len(t);
   let i = 0;
@@ -153,72 +98,45 @@ fn sm_atoi(t: str) -> i64 {
   v
 }
 
-// argv[0] is the seed loader and argv[1] the .bin, so the first user argument is
-// argv[2]: P = writers, argv[3] = N = updates per writer. main previously took a
-// bare , which silently received ARGC -- every run was P=argc with N nailed
-// to 100000, so no shape on the command line ever reached the program (2026-09-12).
+// argv[0] is the seed loader and argv[1] the .bin, so the first user argument is argv[2].
 fn main(argc: i64, argv: [str]) -> i64 {
-  let P = if argc >= 3 then sm_atoi(argv[2]) else 1;
-  let N = if argc >= 4 then sm_atoi(argv[3]) else 1000;
-  // BUG FIX: Sample arena cursor BEFORE st_open to avoid interference
-  // st_open does sys_mmap which may corrupt arena state, so capture baseline first
+  let env = zeros(16);
+  let _ = env[3] = if argc >= 3 then sm_atoi(argv[2]) else 1;
+  let _ = env[4] = if argc >= 4 then sm_atoi(argv[3]) else 1000;
+  let _ = env[5] = 8388608;
+  let _ = env[8] = 100;
+  let _ = setup(env);
+  // sampled AFTER every allocation, so no stack lands in allocated arena
   let acur = sys_arena_base();
-  let path = zeros(64);
-  let pl = st_str(path, "smw.store");
-  let tmp = zeros(256);
-  let size = 67108864 + 16777216 * P;  // 64MB arena + 16MB per thread for stacks
-  let arena_cells = 67108864 / 8;  // 8388608 cells (64MB arena)
-  // Open/create store
-  let base = st_open(path, pl, size, tmp);
-  // Initialize lock cells
-  let locks = lock_cells(P);
-  // Compute digests once (before spawn loop per L8)
-  let ptdig = st_digest("PartTab");
-  let cdig = st_digest("C{i64}");
-  // Allocate scratch arrays for all writers (before spawn loop per L8)
-  let tmps = zeros(P * 256);
-  let txs = zeros(P * 8);
-  let txs2 = zeros(P * 8);
-  let crosstxs = zeros(P * 6);
-  // BUG FIX: Removed initialization loop before spawn (compiler hang with pre-spawn loops)
-  // Original loop initialized locks[P+1..3P+1] but those aren't used in spawn, so skip it
-  // Check if store is fresh (no PartTab yet)
-  let sb = st_pick(base, tmp);
-  let pt = base[sb + 3];
+  let cells = zeros(env[3] * 2 + 1);
   let w = 0;
-  let cells = zeros(P * 2 + 1);  // P result cells + P done flags + 1 park cell
-  while w < P {
+  while w < env[3] {
     let r = sys_clone(68864, stk(acur, w));
     let is_child = if r == 0 then 1 else 0;
-    let _ = sys_cond_set(is_child, cells, w, w + 100);  // child sets result as proof marker
-    let _ = if is_child == 1 then writer(base, locks, w, P, arena_cells, tmps, txs, txs2, crosstxs, N, 100, ptdig, cdig) else 0;
-    let _ = sys_cond_set(is_child, cells, P + w, 1);  // done flag at cells[P+w]
-    let _ = sys_futex_wake(cells, P + w, 64);
+    let _ = sys_cond_set(is_child, cells, w, w + 100);
+    let _ = if is_child == 1 then writer(env, w) else 0;
+    let _ = sys_cond_set(is_child, cells, env[3] + w, 1);
+    let _ = sys_futex_wake(cells, env[3] + w, 64);
     let parked = if is_child == 0 then 1 else 0;
     while parked == 0 {
-      let _ = sys_futex_wait_guard(1 - is_child, cells, P * 2, 0);  // child parks on never-woken cell
-      let parked = if cells[P * 2] == 1 then 1 else 0;
+      let _ = sys_futex_wait_guard(1 - is_child, cells, env[3] * 2, 0);
+      let parked = if cells[env[3] * 2] == 1 then 1 else 0;
       0
     };
     let _ = sys_exit_thread_guard(is_child, 0);
     let w = w + 1;
     0
   };
-  // Wait for all writers to finish (done flags at cells[P..2P-1])
   let w2 = 0;
-  while w2 < P {
+  while w2 < env[3] {
     let d = 0;
     while d == 0 {
-      let _ = sys_futex_wait_guard(0, cells, P + w2, 0);
-      let d = if cells[P + w2] == 1 then 1 else 0;
+      let _ = sys_futex_wait_guard(0, cells, env[3] + w2, 0);
+      let d = if cells[env[3] + w2] == 1 then 1 else 0;
       0
     };
     let w2 = w2 + 1;
     0
   };
-  // Compute fold: walk ALL partitions, sum payloads of C{i64} objects only
-  let dc = st_digest("C{i64}");
-  let total = fold_partition(base, P, arena_cells, dc);
-  let _ = sys_munmap(st_addr(base), size);
-  total
+  fold_partition(st_cells(env[0]), env[3], env[5], env[7])
 }
