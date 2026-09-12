@@ -49,6 +49,7 @@ haar.bp generated selfhost/std/haar.bp
 hex.bp generated selfhost/std/hex.bp
 holo.bp generated selfhost/std/holo.bp
 hv.bp generated selfhost/std/hv.bp
+ingest_test.bp local
 join_twin.bp local
 join_twin_grouped.bp local
 kalman.bp generated selfhost/std/kalman.bp
@@ -101,6 +102,7 @@ sheaf.bp generated selfhost/std/sheaf.bp
 sheafh0.bp generated selfhost/std/sheafh0.bp
 sinc.bp generated selfhost/std/sinc.bp
 slayout.bp generated selfhost/std/slayout.bp
+smw.bp local
 snn.bp generated selfhost/std/snn.bp
 sort.bp generated selfhost/std/sort.bp
 spacetime.bp generated selfhost/std/spacetime.bp
@@ -113,6 +115,7 @@ store.bp generated selfhost/std/store.bp
 stride.bp generated selfhost/std/stride.bp
 substrate.bp generated selfhost/std/substrate.bp
 swpmu.bp generated selfhost/std/swpmu.bp
+svrf.bp local
 tb.bp generated selfhost/std/tb.bp
 tdg.bp generated selfhost/std/tdg.bp
 tdgcurv.bp generated selfhost/std/tdgcurv.bp
@@ -121,6 +124,10 @@ tdggeo.bp generated selfhost/std/tdggeo.bp
 tdgstokes.bp generated selfhost/std/tdgstokes.bp
 tern.bp generated selfhost/std/tern.bp
 thr.bp generated selfhost/std/thr.bp
+tpch_q1_gen.bp local
+tpch_q6_gate.bp local
+tpch_q6_gen.bp local
+tpch_small_store.bp local
 tq.bp generated selfhost/std/tq.bp
 usemod.bp generated selfhost/std/usemod.bp
 vecinv.bp generated selfhost/std/vecinv.bp

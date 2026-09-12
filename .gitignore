@@ -118,3 +118,4 @@ kernel/src/trader.rs
 
 # agent lane worktrees (git worktrees under .claude/, machine-local and disposable)
 .claude/worktrees/
+.lanes/

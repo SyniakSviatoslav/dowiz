@@ -413,6 +413,73 @@ def run_file(path):
         return None, 'INTERNAL %s: %s' % (type(e).__name__, e)
 
 
+def run_kernel_on_fixture(kernel_bin, fixture_path, seed_path='./seed/build/seed'):
+    """Run the kernel binary on a fixture and return the verdict code.
+    Returns: (verdict_code, is_internal)
+    - verdict_code: the number printed by the kernel (0, 10-31, 71, or None for crash)
+    - is_internal: True if the kernel output 71 or crashed (should not be scored as rejection)
+    """
+    try:
+        import subprocess
+        # Run via seed binary to avoid permission issues
+        result = subprocess.run([seed_path, kernel_bin, fixture_path],
+                              capture_output=True, text=True, timeout=5)
+        output = result.stdout.strip()
+        if not output:
+            return None, True  # No output = internal error
+        lines = output.split('\n')
+        last_line = lines[-1].strip()
+        try:
+            verdict = int(last_line)
+            is_internal = verdict == 71
+            return verdict, is_internal
+        except ValueError:
+            return None, True  # Can't parse output = internal error
+    except Exception as e:
+        # Timeout, exception, etc. = internal error
+        return None, True
+
+
+def measure_kernel_parity(kernel_bin_path, corpus_dir):
+    """Measure agreement between twin and kernel on all fixtures.
+    Returns: (agreement_count, total_count, internal_count, internals_list)
+    """
+    import subprocess
+
+    # Get all fixtures
+    neg = sorted(f for f in os.listdir(corpus_dir) if f.startswith('n') and f.endswith('.core'))
+    pos = sorted(f for f in os.listdir(corpus_dir) if f.startswith('p') and f.endswith('.core'))
+    fixtures = neg + pos
+    total = len(fixtures)
+
+    agreement_count = 0
+    internals = []
+
+    for f in fixtures:
+        fixture_path = os.path.join(corpus_dir, f)
+
+        # Get twin's verdict from our checker
+        ok, msg = run_file(fixture_path)
+        # ok=True means accepted (verdict 0), ok=False means rejected, ok=None means internal
+
+        # Run kernel
+        kernel_verdict, is_internal = run_kernel_on_fixture(kernel_bin_path, fixture_path)
+
+        # Check agreement:
+        # - Twin accepted (ok=True) and kernel printed 0
+        # - Twin rejected (ok=False) and kernel printed 10..31
+        # - If kernel outputs 71 or crashes, it's internal (don't count as agreement)
+        if is_internal or kernel_verdict is None or kernel_verdict == 71:
+            internals.append(f)
+        elif ok and kernel_verdict == 0:
+            agreement_count += 1  # Both accepted
+        elif not ok and 10 <= kernel_verdict <= 31:
+            agreement_count += 1  # Both rejected
+        # else: disagreement (don't increment agreement_count)
+
+    return agreement_count, total, len(internals), internals
+
+
 def corpus(d):
     neg = sorted(f for f in os.listdir(d) if f.startswith('n') and f.endswith('.core'))
     pos = sorted(f for f in os.listdir(d) if f.startswith('p') and f.endswith('.core'))
@@ -441,8 +508,18 @@ def corpus(d):
     print('kernel_internal: %d of %d  (a CRASH is not a rejection and is never '
           'scored as one)' % (len(internal), total))
     print('kernel_pos: %d rejected of %d' % (len(rejected_pos), len(pos)))
-    print('kernel_parity: 0/%d  (tcheck.bp is the CERTIFICATE layer only -- '
-          'the term layer is F7, so 0/N is the honest STARTING value)' % total)
+
+    # Measure kernel_parity if kernel binary is available
+    kernel_bin = os.environ.get('TKERNEL_BIN', '/tmp/tk.bin')
+    if os.path.exists(kernel_bin):
+        agreement, parity_total, parity_internal, internals = measure_kernel_parity(kernel_bin, d)
+        if parity_internal > 0:
+            print('kernel_parity: %d/%d  (kernel_internal: %d)' % (agreement, parity_total, parity_internal))
+        else:
+            print('kernel_parity: %d/%d' % (agreement, parity_total))
+    else:
+        print('kernel_parity: 0/%d (kernel binary absent)' % total)
+
     return 1 if (accepted or rejected_pos or internal) else 0
 
 

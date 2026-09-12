@@ -335,8 +335,32 @@ class Parser:
             return e
         if v == 'if':
             c = self.cmp(); self.expect('then')
-            a = self.cmp(); self.expect('else')
-            return ('if', c, a, self.cmp())
+            # Support blocks in then-branch
+            if self.at('{'):
+                self.next()
+                exprs = []
+                while not self.at('}'):
+                    exprs.append(self.cmp())
+                    if self.at(';'):
+                        self.next()
+                self.expect('}')
+                a = ('block', exprs) if len(exprs) > 1 else exprs[0] if exprs else ('lit', 0)
+            else:
+                a = self.cmp()
+            self.expect('else')
+            # Support blocks in else-branch too
+            if self.at('{'):
+                self.next()
+                exprs = []
+                while not self.at('}'):
+                    exprs.append(self.cmp())
+                    if self.at(';'):
+                        self.next()
+                self.expect('}')
+                e = ('block', exprs) if len(exprs) > 1 else exprs[0] if exprs else ('lit', 0)
+            else:
+                e = self.cmp()
+            return ('if', c, a, e)
         if v == 'let':
             return self.let_expr()
         if v == 'match':
@@ -490,6 +514,11 @@ class Interp:
             return int(self.ev(e[1], env) == 0)
         if t == 'if':
             return self.ev(e[2] if self.ev(e[1], env) != 0 else e[3], env)
+        if t == 'block':
+            result = 0
+            for expr in e[1]:
+                result = self.ev(expr, env)
+            return result
         if t == 'letin':
             r = e[2]
             if r[0] == 'assign':

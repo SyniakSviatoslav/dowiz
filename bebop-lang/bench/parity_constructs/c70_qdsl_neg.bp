@@ -130,13 +130,14 @@ fn qdsl_ckw(s: str, p: i64, n: i64, c0: i64, c1: i64, c2: i64, c3: i64, c4: i64)
   1
 }
 
-fn qdsl_cc(s: str, p: i64, c0: i64, c1: i64, c2: i64, c3: i64, kl: i64) -> i64 {
+fn qdsl_cc(s: str, p: i64, c0: i64, c1: i64, c2: i64, c3: i64, c4: i64, kl: i64) -> i64 {
   let n = qdsl_len(s);
   let _ = if p+kl > n then 0 else 0;
   let _ = if kl > 0 && char(s,p) != c0 then 0 else 0;
   let _ = if kl > 1 && char(s,p+1) != c1 then 0 else 0;
   let _ = if kl > 2 && char(s,p+2) != c2 then 0 else 0;
   let _ = if kl > 3 && char(s,p+3) != c3 then 0 else 0;
+  let _ = if kl > 4 && char(s,p+4) != c4 then 0 else 0;
   1
 }
 
@@ -206,7 +207,7 @@ fn qdsl_query(s: str, a: [i64], ap: [i64], sb: [i64], sp: [i64]) -> i64 {
   let _ = if ok == 1 then
     (let _ = p = p + 5 in let p = qdsl_ws(s, p) in
      let _ = if p+2 > n then (let _ = ok = 0 in 0) else 0;
-     let _ = if ok == 1 then (let _ = if qdsl_cc(s, p, 98, 121, 0, 0, 2) == 0 then (let _ = ok = 0 in 0) else 0 in 0) else 0;
+     let _ = if ok == 1 then (let _ = if qdsl_cc(s, p, 98, 121, 0, 0, 0, 2) == 0 then (let _ = ok = 0 in 0) else 0 in 0) else 0;
      let _ = if ok == 0 then 0 else 0;
      let _ = p = p + 2; let p = qdsl_ws(s, p) in
      let r = qdsl_ident(s, p, a, ap, sb, sp) in
@@ -235,7 +236,7 @@ fn qdsl_query(s: str, a: [i64], ap: [i64], sb: [i64], sp: [i64]) -> i64 {
   let _ = if ok == 1 then
     (let _ = p = p + 5 in let p = qdsl_ws(s, p) in
      let _ = if p+2 > n then (let _ = ok = 0 in 0) else 0;
-     let _ = if ok == 1 then (let _ = if qdsl_cc(s, p, 98, 121, 0, 0, 2) == 0 then (let _ = ok = 0 in 0) else 0 in 0) else 0;
+     let _ = if ok == 1 then (let _ = if qdsl_cc(s, p, 98, 121, 0, 0, 0, 2) == 0 then (let _ = ok = 0 in 0) else 0 in 0) else 0;
      let _ = if ok == 0 then 0 else 0;
      let _ = p = p + 2; let p = qdsl_ws(s, p) in
      let r = qdsl_ident(s, p, a, ap, sb, sp) in

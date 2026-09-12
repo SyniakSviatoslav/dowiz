@@ -51,10 +51,10 @@ emit_sys_read 178
 emit_sys_write 168
 emit_sys_close 68
 emit_sys_exit 67
-emit_clock_ms 108
-emit_sys_arena_base 53
-emit_sys_arena_end 53
-emit_sys_clone 133
+emit_clock_ms 114
+emit_sys_arena_base 59
+emit_sys_arena_end 59
+emit_sys_clone 172
 emit_sys_cond_set 128
 emit_sys_futex_wait_guard 153
 emit_sys_futex_wake 123
@@ -69,11 +69,11 @@ emit_crc32b 88
 emit_sys_msync 103
 emit_sys_mprotect 103
 emit_sys_fsync 68
-emit_sys_readbuf 118
+emit_sys_readbuf 203
 emit_str_len_fn 88
 emit_char_fn 88
 emit_sys_slurp 138
-emit_call_or_ctor 788
+emit_call_or_ctor 807
 emit_var_or_ctor 80
 emit_match_payload 64
 emit_match_arm 65
@@ -293,6 +293,7 @@ emit_sys_ftruncate 86
 emit_sys_munmap 91
 emit_sys_export 233
 emit_sys_mmap 173
+emit_sys_mapb 203
 emit_sys_rename 268
 emit_sys_wait4 118
 emit_sys_run 272

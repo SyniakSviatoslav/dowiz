@@ -323,6 +323,232 @@ fn st_commit_m(base: [i64], tx: [i64], root: i64, mig: i64, tmp: [i64]) -> i64 {
   let _ = st_sb_write_m(base, 512 - sb, tx[5], pt, tx[2], live, sup, mig, tmp);
   tx[5]
 }
+
+// B5 step 2: Multi-partition store API
+// New functions for P-partition transactional store with per-partition locking
+// and 2-phase cross-partition commit.
+
+// st_parttab_write_p(base, pt_off, sb, roots, useds, gens, pcount, tmp):
+// Write a PartTab object for P partitions at pt_off.
+// Cells 0..15 = superblock copy, then pcount entries of 3 cells: [root_p, used_p, gen_p].
+fn st_parttab_write_p(base: [i64], pt_off: i64, sb: i64, locks: [i64], pcount: i64, tmp: [i64]) -> i64 {
+  let _ = base[pt_off] = base[sb];
+  let _ = base[pt_off + 1] = base[sb + 1];
+  let _ = base[pt_off + 2] = base[sb + 2];
+  let _ = base[pt_off + 3] = base[sb + 3];
+  let _ = base[pt_off + 4] = base[sb + 4];
+  let _ = base[pt_off + 5] = base[sb + 5];
+  let _ = base[pt_off + 6] = base[sb + 6];
+  let _ = base[pt_off + 7] = base[sb + 7];
+  let _ = base[pt_off + 8] = base[sb + 8];
+  let _ = base[pt_off + 9] = base[sb + 9];
+  let _ = base[pt_off + 10] = base[sb + 10];
+  let _ = base[pt_off + 11] = base[sb + 11];
+  let _ = base[pt_off + 12] = base[sb + 12];
+  let _ = base[pt_off + 13] = base[sb + 13];
+  let _ = base[pt_off + 14] = base[sb + 14];
+  let _ = base[pt_off + 15] = base[sb + 15];
+  let q = 0;
+  while q < pcount {
+    let off = pt_off + 16 + q * 3;
+    let _ = base[off] = locks[pcount + 1 + q];
+    let _ = base[off + 1] = locks[2 * pcount + 1 + q];
+    let _ = base[off + 2] = locks[3 * pcount + 1 + q];
+    let q = q + 1;
+    0
+  };
+  let _ = base[pt_off + 15] = st_crc(base, pt_off, 16 + pcount * 3, tmp);
+  pt_off
+}
+
+// st_parttab_root_p(base, pt_off, p): read root_p[p] from multi-partition PartTab
+fn st_parttab_root_p(base: [i64], pt_off: i64, p: i64) -> i64 {
+  if pt_off == 0 then 0 else base[pt_off + 16 + p * 3]
+}
+
+// st_parttab_used_p(base, pt_off, p): read used_p[p] from multi-partition PartTab
+fn st_parttab_used_p(base: [i64], pt_off: i64, p: i64) -> i64 {
+  if pt_off == 0 then 1024 else base[pt_off + 16 + p * 3 + 1]
+}
+
+// st_parttab_gen_p(base, pt_off, p): read gen_p[p] from multi-partition PartTab
+fn st_parttab_gen_p(base: [i64], pt_off: i64, p: i64) -> i64 {
+  if pt_off == 0 then 0 else base[pt_off + 16 + p * 3 + 2]
+}
+
+// st_region_start(p, pcount, arena_cells): start cell of partition p's region
+fn st_region_start(p: i64, pcount: i64, arena_cells: i64) -> i64 {
+  1024 + p * (arena_cells / pcount)
+}
+
+// st_region_end(p, pcount, arena_cells): end cell of partition p's region
+fn st_region_end(p: i64, pcount: i64, arena_cells: i64) -> i64 {
+  st_region_start(p, pcount, arena_cells) + arena_cells / pcount
+}
+
+// st_tmp_p(tmps, p): get the per-writer scratch buffer (256 cells = 2048 bytes)
+fn st_tmp_p(tmps: [i64], p: i64) -> [i64] {
+  st_cells(st_addr(tmps) + p * 2048)
+}
+
+// st_tx_p(txs, p): get the per-writer tx buffer (8 cells = 64 bytes)
+fn st_tx_p(txs: [i64], p: i64) -> [i64] {
+  st_cells(st_addr(txs) + p * 64)
+}
+
+// st_lock_p(locks, p): acquire partition p's lock via CAS-loop
+fn st_lock_p(locks: [i64], p: i64) -> i64 {
+  let spin = 1;
+  while spin == 1 {
+    let old = sys_atomic_add(locks, p, 1);
+    let spin = if old == 0 then 0 else 1;
+    let _ = if spin == 1 then sys_atomic_add(locks, p, 0 - 1) else 0;
+    0
+  };
+  0
+}
+
+// st_unlock_p(locks, p): release partition p's lock
+fn st_unlock_p(locks: [i64], p: i64) -> i64 {
+  let _ = sys_atomic_add(locks, p, 0 - 1);
+  let _ = sys_futex_wake(locks, p, 64);
+  0
+}
+
+// st_lock_g(locks, pcount): acquire the global superblock lock
+fn st_lock_g(locks: [i64], pcount: i64) -> i64 {
+  let spin = 1;
+  while spin == 1 {
+    let old = sys_atomic_add(locks, pcount, 1);
+    let spin = if old == 0 then 0 else 1;
+    let _ = if spin == 1 then sys_atomic_add(locks, pcount, 0 - 1) else 0;
+    0
+  };
+  0
+}
+
+// st_unlock_g(locks, pcount): release global lock
+fn st_unlock_g(locks: [i64], pcount: i64) -> i64 {
+  let _ = sys_atomic_add(locks, pcount, 0 - 1);
+  let _ = sys_futex_wake(locks, pcount, 64);
+  0
+}
+
+// st_begin_p(base, tx, p, tmp): begin transaction for partition p
+fn st_begin_p(base: [i64], tx: [i64], p: i64, tmp: [i64]) -> i64 {
+  let sb = st_pick(base, tmp);
+  let _ = tx[0] = sb;
+  let pt = base[sb + 3];
+  let _ = tx[1] = st_parttab_used_p(base, pt, p);
+  let _ = tx[2] = st_parttab_used_p(base, pt, p);
+  let _ = tx[3] = st_parttab_root_p(base, pt, p);
+  let _ = tx[4] = 0;
+  let _ = tx[5] = st_parttab_gen_p(base, pt, p) + 1;
+  sb
+}
+
+// st_alloc_p(base, tx, p, len, digest, pcount, arena_cells): allocate in partition p
+fn st_alloc_p(base: [i64], tx: [i64], p: i64, len: i64, digest: i64, pcount: i64, arena_cells: i64) -> i64 {
+  let off = tx[2];
+  let region_end = st_region_end(p, pcount, arena_cells);
+  let _ = if off + 2 + len >= region_end then sys_exit(80) else 0;
+  let _ = base[off] = ((digest & 4294967295) << 32) | len;
+  let _ = base[off + 1] = tx[5];
+  let _ = tx[2] = off + 2 + len;
+  let _ = tx[3] = tx[3] + 2 + len;
+  off
+}
+
+// st_commit_p(base, tx, p, root, locks, pcount, arena_cells, roots, useds, gens, tmp):
+// Single-partition commit with partition lock + global lock for superblock toggle
+// CONTRACT (2026-09-12): the CALLER holds partition p's lock across the whole
+// transaction (begin -> alloc -> commit) and this function only takes the GLOBAL
+// lock, exactly like st_commit_2pc. Taking st_lock_p here as well self-deadlocked
+// every writer: st_lock_p is a non-recursive fetch-add spin lock, so a caller that
+// already held p spun forever on its own lock. It also has to be the caller's,
+// because the cross-partition path must acquire two partition locks in ascending
+// order BEFORE the transaction begins.
+fn st_commit_p(base: [i64], tx: [i64], p: i64, root: i64, locks: [i64], pcount: i64, arena_cells: i64, tmp: [i64], ptdig: i64) -> i64 {
+  let _ = st_lock_g(locks, pcount);
+  let sb = st_pick(base, tmp);
+  let pt = base[sb + 3];
+  let q = 0;
+  while q < pcount {
+    let _ = locks[pcount + 1 + q] = st_parttab_root_p(base, pt, q);
+    let _ = locks[2 * pcount + 1 + q] = st_parttab_used_p(base, pt, q);
+    let _ = locks[3 * pcount + 1 + q] = st_parttab_gen_p(base, pt, q);
+    let q = q + 1;
+    0
+  };
+  let _ = locks[pcount + 1 + p] = root;
+  let pt_off = st_alloc_p(base, tx, p, st_parttab_cells(pcount), ptdig, pcount, arena_cells);
+  let _ = locks[2 * pcount + 1 + p] = tx[2];
+  let _ = locks[3 * pcount + 1 + p] = base[sb + 2] + 1;
+  let _ = st_parttab_write_p(base, pt_off, sb, locks, pcount, tmp);
+  let _ = st_seal(base, pt_off, tmp);
+  let other = 512 - sb;
+  let new_gen = base[sb + 2] + 1;
+  let _ = base[other] = base[sb];
+  let _ = base[other + 1] = 1;
+  let _ = base[other + 2] = new_gen;
+  let _ = base[other + 3] = pt_off;
+  let _ = base[other + 4] = tx[2];
+  let _ = base[other + 5] = 0;
+  let _ = base[other + 6] = 0;
+  let _ = base[other + 7] = base[sb + 7];
+  let _ = base[other + 8] = base[sb + 8];
+  let k = 9;
+  while k < 15 {
+    let _ = base[other + k] = 0;
+    let k = k + 1;
+    0
+  };
+  let _ = base[other + 15] = st_crc(base, other, 15, tmp);
+  let _ = st_unlock_g(locks, pcount);
+  new_gen
+}
+
+// st_commit_2pc(base, txs, roots, useds, gens, pcount, locks, arena_cells, tmp):
+// Cross-partition 2PC commit
+fn st_commit_2pc(base: [i64], txs: [i64], locks: [i64], pcount: i64, arena_cells: i64, tmp: [i64], ptdig: i64) -> i64 {
+  let _ = st_lock_g(locks, pcount);
+  let sb = st_pick(base, tmp);
+  let pt = base[sb + 3];
+  let q = 0;
+  while q < pcount {
+    let _ = locks[pcount + 1 + q] = st_parttab_root_p(base, pt, q);
+    let _ = locks[2 * pcount + 1 + q] = st_parttab_used_p(base, pt, q);
+    let _ = locks[3 * pcount + 1 + q] = st_parttab_gen_p(base, pt, q);
+    let q = q + 1;
+    0
+  };
+  let pt_off = st_alloc_p(base, txs, 0, st_parttab_cells(pcount), ptdig, pcount, arena_cells);
+  let new_gen = base[sb + 2] + 1;
+  let _ = locks[2 * pcount + 1 + 0] = txs[0 * 6 + 2];
+  let _ = st_parttab_write_p(base, pt_off, sb, locks, pcount, tmp);
+  let _ = st_seal(base, pt_off, tmp);
+  let other = 512 - sb;
+  let _ = base[other] = base[sb];
+  let _ = base[other + 1] = 1;
+  let _ = base[other + 2] = new_gen;
+  let _ = base[other + 3] = pt_off;
+  let _ = base[other + 4] = locks[2 * pcount + 1 + 0];
+  let _ = base[other + 5] = 0;
+  let _ = base[other + 6] = 0;
+  let _ = base[other + 7] = base[sb + 7];
+  let _ = base[other + 8] = base[sb + 8];
+  let k = 9;
+  while k < 15 {
+    let _ = base[other + k] = 0;
+    let k = k + 1;
+    0
+  };
+  let _ = base[other + 15] = st_crc(base, other, 15, tmp);
+  let _ = sys_msync(st_addr(base), 8192, 4);
+  let _ = st_unlock_g(locks, pcount);
+  new_gen
+}
+
 fn st_mig(base: [i64], tmp: [i64]) -> i64 { base[st_pick(base, tmp) + 6] }
 // st_snapshot(base, snap, tmp): copy the live superblock into snap (16 cells) and
 // validate the crc on the COPY -- a reader racing a writer's superblock toggle sees

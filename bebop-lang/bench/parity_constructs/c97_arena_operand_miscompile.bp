@@ -1,0 +1,12 @@
+// c97_arena_operand_miscompile (2026-09-12): zero-argument builtins must call
+// vs_deliver(0) before emitting, so they don't clobber a pending left operand in
+// a binary expression. Before the fix, str_len("abcd") - clock_ms() * 0 would
+// return 0 instead of 4 because clock_ms() emits directly to x0 without
+// preserving the left operand. Same issue affected sys_arena_base() and
+// sys_arena_end(): they destroyed left operands, turning binary operations
+// with these builtins on the right-hand side into silent wrong values.
+
+fn main() -> i64 {
+  str_len("abcd") - clock_ms() * 0
+}
+// EXPECT: 4

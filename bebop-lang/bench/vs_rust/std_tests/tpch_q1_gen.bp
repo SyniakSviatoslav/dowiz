@@ -47,9 +47,12 @@ fn combine24(ga: [i64]) -> i64 {
 
 fn main(argc: i64, argv: [str]) -> i64 {
   // Generate the Q1 query .bp file via gen_gb_query (side effect)
-  let tmp = zeros(256) in
-  let tl = st_str(tmp, argv[3]) in
-  let _ = gen_gb_query(tmp, 11, 0) in
+  // 2026-09-12: this used to convert argv[3] into a byte-per-cell buffer with
+  // st_str and hand the BUFFER to gen_gb_query, whose `dir` is declared `str` and
+  // goes straight into wr_str(dst, pos, s: str). The conversion was not only
+  // unnecessary, it was the type error the T48 census reported; argv[3] is already
+  // a str. tmp/tl were used nowhere else.
+  let _ = gen_gb_query(argv[3], 11, 0) in
   // Read the store and run the scan
   let spath = zeros(256) in
   let sl = st_str(spath, argv[2]) in

@@ -1,0 +1,15 @@
+Census summary (method: /proc polling)
+======================================
+Elapsed time: 86ms
+Peak concurrent processes: 14
+Baseline processes: 14
+Estimated spawns: 0
+Final process count: 11
+
+Process breakdown (final state):
+      6 bash
+      1 svlogd
+      1 runsv
+      1 proot
+      1 head
+      1 claude

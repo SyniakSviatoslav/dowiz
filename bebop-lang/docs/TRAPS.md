@@ -26,6 +26,7 @@ Status: 2026-09-09 CURRENT (F1 census; supersedes the 2026-09-06 T120 header. Tw
 | 100 | bebop.bin | fn with more than 14 parameters (parse_params) | bebop.bp |
 | 101 | bebop.bin | unbound symbol (emit_let_chain / emit_compound_stmt / emit_ident / emit_array_index) | bebop.bp |
 | 102 | bebop.bin | a `sys_` name inside a `kernel fn`: the C1 checked dialect forbids reaching the kernel from a kernel (ROADMAP C1 step 2, 2026-09-08); `<line>:<col>: sys_ name inside a kernel fn` on stderr. Marker-free fns are untouched — fntab[4643] is 0 for them, so an unmarked fn's emitted words are byte-identical | emit_ident, diag_exit |
+| 103 | bebop.bin | parallel region: too many live symbols across a `sys_clone` spawn (ROADMAP B6, 2026-09-12): the child thread dies silently if more than 8 symbols are live when the spawn happens; the compiler refuses such programs at compile time | emit_sys_clone, diag_exit |
 | 104 | bebop.bin | too many fns (cap 512): compile_program_offs guarding fnames/fpos/sizes/starts arrays (A13 second half; was exit 89) | bebop.bp |
 | 128+n | kernel | signal n: 11 = SIGSEGV (unchecked index, deep recursion), 7 = SIGBUS (misaligned sp — a compiler bug) | — |
 
@@ -41,12 +42,13 @@ run-time traps with `EXPECT=RUNFAIL:<code>` (bench/vs_rust/construct_parity.sh);
 This table opens by saying "a code that is not here is a bug". By its own rule
 the compiler contains dozens. Derived with `python3 tools/trap_census.py --codes`:
 
-**Fixed codes bebop.bp emits that this table does not carry:** 103
-(`bebop.bp:5325`), 105 (`4937`), 106 (`5001`, `5025`), 107 (`5333`). All four
+**Fixed codes bebop.bp emits that this table does not carry:** 105 (`4937`), 106 (`5001`, `5025`), 107 (`5333`). All three
 are register-model **self-checks** — assertions that the window mask
 `fntab[4548]` is 255 and the cs mask `fntab[4573]` is 0 at a statement or loop
 boundary. They are compiler-bug detectors, not language traps, and they are
-invisible to every worker who has been told this table is complete.
+invisible to every worker who has been told this table is complete. (Code 103
+was a self-check at `bebop.bp:5325` but is now a user-facing diagnostic for the
+parallel region live-symbol check at `emit_sys_clone`, landing ROADMAP B6.)
 
 **Computed codes: four sites span forty.** `vs_mask_take` / `vs_mask_free` /
 `vs_cs_take` / `vs_cs_free` (`bebop.bp:2271-2295`) exit with

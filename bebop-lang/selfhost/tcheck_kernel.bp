@@ -1,607 +1,285 @@
-// selfhost/tcheck_kernel.bp — F7: dependent calculus kernel
-// Loaded by tcheck.bp. Re-checks structural terms from .core files.
-// Universe polymorphism + impredicative Prop (imax) both required.
-// ~170 fns; lives in tcheck.bp's 511-fn cap.
+// selfhost/tcheck_kernel.bp -- F7: the structural kernel of tcheck, written in Bebop.
+//
+// CONTRACT (2026-09-12, rewritten from scratch; the previous file had never compiled,
+// exit 101, because ttag/targ1/targ2 read tm_tag/tm_a/tm_b as GLOBALS and this language
+// has none):
+//
+//   * NO IO, NO sys_exit, NO printing. The kernel returns results and records a
+//     rejection in K[4]; the driver does every side effect. That is what makes a
+//     rejection a RESULT rather than a crash, which is exactly what the twin's
+//     `kernel_internal` counter measures.
+//   * ALL state travels in ONE flat array K, allocated once by the caller. There are
+//     no globals and the 14-parameter cap makes a bag of arrays impossible.
+//   * `return` is a STATEMENT ONLY in this language -- `(return v)` inside an `if` arm
+//     does not parse (bebop.bp:4862/5469 classify it, the expression path never sees
+//     it), which is why `return` appears in ZERO selfhost sources. So every branch is
+//     written as `let res = if cond then <value> else res;` and errors propagate by
+//     being recorded, never by early exit.
+//   * Law L8: no allocation of any kind inside a `while` body. This file allocates
+//     nothing at all.
+//   * uid 0 is a reserved sentinel with tag 0. Nothing may hand out uid 0.
+//
+// K layout (cells):
+//   K[0]  next uid high-water        K[2]  level rule (0=max, 1=imax)
+//   K[3]  ctx depth                  K[4]  reject code, set-once
+//   K[5]  checks completed
+//   tag   at K[16    + uid]          uid < 8192
+//   arg a at K[8208  + uid]
+//   arg b at K[16400 + uid]
+//   id2uid at K[24592 + fileid]      fileid < 1024
+//   ctx    at K[27408 + depth]       depth < 256, outermost at 0
+//
+// Tags: 1 sort, 2 var (de Bruijn), 3 const, 4 pi, 5 lam, 6 app.
+// Reject codes: 13 undefined reference, 20 var unbound, 22 expected a type,
+//               26 check mismatch, 71 capacity.
 
-module kernel { }
-
-// === Capacities ===
-// Terms: 4096, Definitions: 256, Context depth: 256, Worklist: 512
-
-// === Term table (parallel arrays) ===
-// tm_tag[uid]: 1=sort, 2=var, 3=const, 4=pi, 5=lam, 6=app
-// tm_a[uid]: level | de Bruijn index | name_hash | domain_uid | domain_uid | fn_uid
-// tm_b[uid]: 0 | 0 | 0 | codomain_uid | body_uid | arg_uid
-
-fn tk_sort(l: i64) -> i64 { 1 }
-fn tk_var(i: i64) -> i64 { 2 }
-fn tk_const(name: i64) -> i64 { 3 }
-fn tk_pi(a: i64) -> i64 { 4 }
-fn tk_lam(a: i64) -> i64 { 5 }
-fn tk_app(a: i64) -> i64 { 6 }
-
-fn ttag(uid: i64) -> i64 { tm_tag[uid] }
-fn targ1(uid: i64) -> i64 { tm_a[uid] }
-fn targ2(uid: i64) -> i64 { tm_b[uid] }
-
-fn tnew(tag: i64, a: i64, b: i64, tm_count: [i64],
-        tm_tag: [i64], tm_a: [i64], tm_b: [i64]) -> i64 {
-  let c = tm_count[0];
-  let _ = if c >= 4096 then sys_exit(2) else 0;
-  let _ = tm_tag[c] = tag;
-  let _ = tm_a[c] = a;
-  let _ = tm_b[c] = b;
-  let _ = tm_count[0] = c + 1;
-  c
+fn k_rej(K: [i64], code: i64) -> i64 {
+  let _ = if K[4] == 0 then (let _ = K[4] = code in 0) else 0;
+  0
 }
 
-// === Definitions table ===
-// def_name[idx]: name_hash
-// def_type[idx]: type_uid
-// def_body[idx]: body_uid (-1 for axioms)
-// def_count: number of definitions
+fn k_tag(K: [i64], u: i64) -> i64 { K[16 + u] }
+fn k_a(K: [i64], u: i64) -> i64 { K[8208 + u] }
+fn k_b(K: [i64], u: i64) -> i64 { K[16400 + u] }
 
-fn def_add(name: i64, ty: i64, body: i64,
-           def_name: [i64], def_type: [i64], def_body: [i64],
-           def_count: [i64]) -> i64 {
-  let c = def_count[0];
-  let _ = if c >= 256 then sys_exit(2) else 0;
-  let _ = def_name[c] = name;
-  let _ = def_type[c] = ty;
-  let _ = def_body[c] = body;
-  let _ = def_count[0] = c + 1;
-  c
+// k_new: allocate a node. uid 0 stays reserved, so the first uid handed out is 1.
+fn k_new(K: [i64], tag: i64, a: i64, b: i64) -> i64 {
+  let u = K[0] + 1;
+  let over = if u >= 8192 then 1 else 0;
+  let _ = if over == 1 then k_rej(K, 71) else 0;
+  let u = if over == 1 then 0 else u;
+  let _ = if over == 0 then (let _ = K[0] = u in 0) else 0;
+  let _ = if over == 0 then (let _ = K[16 + u] = tag in 0) else 0;
+  let _ = if over == 0 then (let _ = K[8208 + u] = a in 0) else 0;
+  let _ = if over == 0 then (let _ = K[16400 + u] = b in 0) else 0;
+  u
 }
 
-fn def_find(name: i64, def_name: [i64], def_count: i64) -> i64 {
+// k_shift: add d to every var index at or above cut. Sorts and consts are closed,
+// so they come back unchanged; pi and lam raise the cutoff under their binder.
+fn k_shift(K: [i64], t: i64, d: i64, cut: i64) -> i64 {
+  let tg = k_tag(K, t);
+  let res = t;
+  let vi = k_a(K, t);
+  let up = if tg == 2 then (if vi >= cut then 1 else 0) else 0;
+  let res = if up == 1 then k_new(K, 2, vi + d, 0) else res;
+  let res = if tg == 4 then k_new(K, 4, k_shift(K, k_a(K, t), d, cut), k_shift(K, k_b(K, t), d, cut + 1)) else res;
+  let res = if tg == 5 then k_new(K, 5, k_shift(K, k_a(K, t), d, cut), k_shift(K, k_b(K, t), d, cut + 1)) else res;
+  let res = if tg == 6 then k_new(K, 6, k_shift(K, k_a(K, t), d, cut), k_shift(K, k_b(K, t), d, cut)) else res;
+  res
+}
+
+// k_subst: substitute var j with term s inside t. As we descend past binders, we shift s
+// to account for the increased binder depth, and we adjust free variables above j.
+// Follows k_shift's recursive shape: sorts and consts are closed, pi/lam/app recurse,
+// vars are checked and adjusted.
+fn k_subst(K: [i64], t: i64, j: i64, s: i64) -> i64 {
+  let tg = k_tag(K, t);
+  let res = t;
+  let vi = k_a(K, t);
+  // Var case: check if this is the var we're replacing
+  let is_match = if tg == 2 then (if vi == j then 1 else 0) else 0;
+  let is_above = if tg == 2 then (if vi > j then 1 else 0) else 0;
+  let res = if is_match == 1 then s else res;
+  let res = if is_above == 1 then k_new(K, 2, vi - 1, 0) else res;
+  // Pi case: shift s by 1 when entering the binder, recurse with j+1 in codomain
+  let res = if tg == 4 then k_new(K, 4, k_subst(K, k_a(K, t), j, s), k_subst(K, k_b(K, t), j + 1, k_shift(K, s, 1, 0))) else res;
+  // Lam case: same as pi
+  let res = if tg == 5 then k_new(K, 5, k_subst(K, k_a(K, t), j, s), k_subst(K, k_b(K, t), j + 1, k_shift(K, s, 1, 0))) else res;
+  // App case: no binder, so no shift needed
+  let res = if tg == 6 then k_new(K, 6, k_subst(K, k_a(K, t), j, s), k_subst(K, k_b(K, t), j, s)) else res;
+  res
+}
+
+// k_conv: conversion. Structural for now -- beta and delta are not reachable from
+// the fixtures this step covers, and a stub that silently accepted them would be
+// worse than one that is honestly absent.
+fn k_conv(K: [i64], a: i64, b: i64) -> i64 {
+  let ta = k_tag(K, a);
+  let tb = k_tag(K, b);
+  let same = if ta == tb then 1 else 0;
+  let leaf = if ta == 1 then 1 else 0;
+  let leaf = if ta == 2 then 1 else leaf;
+  let leaf = if ta == 3 then 1 else leaf;
+  let r = 0;
+  let r = if same == 1 then (if leaf == 1 then (if k_a(K, a) == k_a(K, b) then 1 else 0) else r) else r;
+  let deep = if same == 1 then (if leaf == 0 then 1 else 0) else 0;
+  let r = if deep == 1 then (if k_conv(K, k_a(K, a), k_a(K, b)) == 1 then k_conv(K, k_b(K, a), k_b(K, b)) else 0) else r;
+  r
+}
+
+// k_infer_pi: pi A B lives in sort (max u v), where A : sort u and B : sort v under
+// the context extended by A. The extension is why this is its own function: an `if`
+// arm cannot carry the push/pop sequence.
+fn k_infer_pi(K: [i64], t: i64) -> i64 {
+  let dom = k_a(K, t);
+  let cod = k_b(K, t);
+  let ta = k_infer(K, dom);
+  let _ = if k_tag(K, ta) == 1 then 0 else k_rej(K, 22);
+  let u = k_a(K, ta);
+  let d = K[3];
+  let _ = K[27408 + d] = dom;
+  let _ = K[3] = d + 1;
+  let tb = k_infer(K, cod);
+  let _ = K[3] = d;
+  let _ = if k_tag(K, tb) == 1 then 0 else k_rej(K, 22);
+  let v = k_a(K, tb);
+  // Level rule: under imax (K[2]==1), if codomain is Prop (v==0), result is Prop
+  let is_imax = K[2];
+  let m = if u > v then u else v;
+  let m = if is_imax == 1 then (if v == 0 then 0 else m) else m;
+  k_new(K, 1, m, 0)
+}
+
+// k_infer_lam: lam A b : pi A (type of b under A).
+fn k_infer_lam(K: [i64], t: i64) -> i64 {
+  let dom = k_a(K, t);
+  let bod = k_b(K, t);
+  let ta = k_infer(K, dom);
+  let _ = if k_tag(K, ta) == 1 then 0 else k_rej(K, 22);
+  let d = K[3];
+  let _ = K[27408 + d] = dom;
+  let _ = K[3] = d + 1;
+  let tb = k_infer(K, bod);
+  let _ = K[3] = d;
+  k_new(K, 4, dom, tb)
+}
+
+// k_infer_app: app f a needs f's type to be a pi and a's type to convert to its
+// domain. The codomain may depend on the argument, in which case we substitute.
+fn k_infer_app(K: [i64], t: i64) -> i64 {
+  let fu = k_a(K, t);
+  let au = k_b(K, t);
+  let tf = k_infer(K, fu);
+  let isp = if k_tag(K, tf) == 4 then 1 else 0;
+  let _ = if isp == 1 then 0 else k_rej(K, 23);
+  let ta = k_infer(K, au);
+  let dom = if isp == 1 then k_a(K, tf) else 0;
+  let ok = if isp == 1 then k_conv(K, ta, dom) else 0;
+  let _ = if isp == 1 then (if ok == 1 then 0 else k_rej(K, 24)) else 0;
+  let cod = if isp == 1 then k_b(K, tf) else 0;
+  // Substitute the argument into the codomain to handle dependent types
+  let cod = if isp == 1 then k_subst(K, cod, 0, au) else cod;
+  cod
+}
+
+// k_def_add / k_def_find: the constant table. `axiom n : T` records a name with no
+// body; `def n : T := b` records one with a body after b has been checked against T.
+// Names arrive from a file, so they are compared as hashes -- string VALUES cannot be
+// built at run time here.
+fn k_def_add(K: [i64], h: i64, ty: i64, body: i64) -> i64 {
+  let i = K[1];
+  let over = if i >= 256 then 1 else 0;
+  let _ = if over == 1 then k_rej(K, 71) else 0;
+  let _ = if over == 0 then (let _ = K[26640 + i] = h in 0) else 0;
+  let _ = if over == 0 then (let _ = K[26896 + i] = ty in 0) else 0;
+  let _ = if over == 0 then (let _ = K[27152 + i] = body in 0) else 0;
+  let _ = if over == 0 then (let _ = K[1] = i + 1 in 0) else 0;
+  0
+}
+
+// returns the declared type uid, or 0 and reject 21 when the name was never declared
+fn k_def_type(K: [i64], h: i64) -> i64 {
   let i = 0;
-  let found = 0 - 1;
-  while i < def_count {
-    let _ = if def_name[i] == name then (let _ = found = i in 0) else 0;
-    let i = i + 1;
+  let cnt = K[1];
+  let found = 0;
+  while i < cnt {
+    let hit = if K[26640 + i] == h then 1 else 0;
+    let found = if hit == 1 then K[26896 + i] else found;
+    let i = if hit == 1 then cnt else i + 1;
     0
   };
+  let _ = if found == 0 then k_rej(K, 21) else 0;
   found
 }
 
-// === Context (during type-checking) ===
-// ctx[depth]: type of de Bruijn index (0 = most recent)
-// ctx_depth: current depth
-
-fn ctx_push(ty: i64, ctx: [i64], ctx_depth: [i64]) -> i64 {
-  let d = ctx_depth[0];
-  let _ = if d >= 256 then sys_exit(2) else 0;
-  let _ = ctx[d] = ty;
-  let _ = ctx_depth[0] = d + 1;
-  d
+// k_infer: the one rule that keeps the system consistent is the first line --
+// Sort n : Sort (n+1). A kernel with Type : Type accepts n01 and can then prove False.
+fn k_infer(K: [i64], t: i64) -> i64 {
+  let bad = if K[4] != 0 then 1 else 0;
+  let t = t * (1 - bad);
+  let tg = k_tag(K, t);
+  let res = 0;
+  let _ = if tg == 0 then k_rej(K, 13) else 0;
+  let res = if tg == 1 then k_new(K, 1, k_a(K, t) + 1, 0) else res;
+  let d = K[3];
+  let vi = k_a(K, t);
+  let inb = if tg == 2 then (if vi < d then 1 else 0) else 0;
+  let _ = if tg == 2 then (if inb == 1 then 0 else k_rej(K, 20)) else 0;
+  let res = if inb == 1 then k_shift(K, K[27408 + d - 1 - vi], vi + 1, 0) else res;
+  let res = if tg == 3 then k_def_type(K, k_a(K, t)) else res;
+  let res = if tg == 4 then k_infer_pi(K, t) else res;
+  let res = if tg == 5 then k_infer_lam(K, t) else res;
+  let res = if tg == 6 then k_infer_app(K, t) else res;
+  res
 }
 
-fn ctx_pop(ctx_depth: [i64]) -> i64 {
-  let d = ctx_depth[0];
-  let _ = ctx_depth[0] = d - 1;
-  d - 1
+// k_check: the claimed type must itself be a type before anything is compared --
+// that is the half of `check` a kernel is tempted to skip.
+fn k_check(K: [i64], t: i64, ty: i64) -> i64 {
+  let tt = k_infer(K, t);
+  let tty = k_infer(K, ty);
+  let _ = if k_tag(K, tty) == 1 then 0 else k_rej(K, 22);
+  let ok = k_conv(K, tt, ty);
+  let _ = if ok == 1 then 0 else k_rej(K, 26);
+  let _ = K[5] = K[5] + 1;
+  0
 }
 
-fn ctx_get(idx: i64, ctx: [i64], ctx_depth: i64) -> i64 {
-  let actual = ctx_depth - 1 - idx;
-  if actual < 0 then (0 - 1) else ctx[actual]
-}
-
-// === Name hashing ===
-fn name_hash(s: str) -> i64 {
-  let h = 0;
-  let i = 0;
-  let done = 0;
-  while done == 0 {
-    let c = char(s, i);
-    let _ = if c == 0 then (let done = 1 in 0) else 0;
-    let _ = h = h * 31 + c;
-    let _ = i = i + 1;
+// k_ctor_ret: walk a constructor type's pi spine to its RETURN type. `zero : Nat`
+// has an empty spine and returns itself; `succ : Nat -> Nat` returns the codomain.
+fn k_ctor_ret(K: [i64], t: i64) -> i64 {
+  let cur = t;
+  while k_tag(K, cur) == 4 {
+    let cur = k_b(K, cur);
     0
   };
-  h
+  cur
 }
 
-// === Substitution: subst(tm, idx, repl, cutoff) ===
-// Substitute repl for var idx in tm, with cutoff for binder depth.
-// Var(n): if n == idx + cutoff → repl; if n > idx + cutoff → var(n-1); else var(n)
-// Pi(dom,cod): pi(subst(dom,...), subst(cod,...,cutoff+1))
-// Lam(dom,body): lam(subst(dom,...), subst(body,...,cutoff+1))
-// App(fn,arg): app(subst(fn,...), subst(arg,...))
-// Sort/Const: unchanged
+// k_occurs: does the const with hash h appear anywhere inside t?
+fn k_occurs(K: [i64], t: i64, h: i64) -> i64 {
+  let tg = k_tag(K, t);
+  let r = 0;
+  let r = if tg == 3 then (if k_a(K, t) == h then 1 else 0) else r;
+  let deep = if tg >= 4 then 1 else 0;
+  let r = if deep == 1 then (if k_occurs(K, k_a(K, t), h) == 1 then 1 else k_occurs(K, k_b(K, t), h)) else r;
+  r
+}
 
-fn subst(tm: i64, idx: i64, repl: i64, cutoff: i64,
-         tm_tag: [i64], tm_a: [i64], tm_b: [i64],
-         tm_count: [i64],
-         new_tag: [i64], new_a: [i64], new_b: [i64],
-         new_count: [i64]) -> i64 {
-  // Worklist: process terms bottom-up
-  // wl_uid[i]: original uid to process
-  // wl_result[i]: result uid (after substitution)
-  // wl_state[i]: 0 = unprocessed, 1 = children processed
-  
-  let wl_uid = zeros(512);
-  let wl_result = zeros(512);
-  let wl_state = zeros(512);
-  let wl_sp = [0];
-  
-  let _ = wl_uid[0] = tm;
-  let _ = wl_state[0] = 0;
-  let _ = wl_sp[0] = 1;
-  
-  let done = 0;
-  while done == 0 {
-    let sp0 = wl_sp[0];
-    let _ = if sp0 == 0 then (let done = 1 in 0) else 0;
-    let pos = sp0 - 1;
-    let old_uid = wl_uid[pos];
-    let tag = tm_tag[old_uid];
-    
-    // Check if already processed
-    let already = wl_state[pos];
-    let _ = if already == 1 then (
-      let _ = wl_sp[0] = sp0 - 1;
-      0
-    ) else 0;
-    
-    // For sort, var, const: no children, process directly
-    let is_simple = (if tag == 1 then 1 else 0) + (if tag == 2 then 1 else 0) + (if tag == 3 then 1 else 0);
-    let _ = if is_simple == 1 then (
-      let result = 0;
-      let _ = if tag == 1 then (let _ = result = old_uid in 0) else 0;  // sort unchanged
-      let _ = if tag == 2 then (
-        let n = tm_a[old_uid];
-        let n2 = n - cutoff;
-        let _ = if n2 == idx then (let _ = result = repl in 0) else 0;
-        let _ = if n2 != idx then (
-          if n2 > idx then (let _ = result = tnew(2, n2 - 1, 0, new_count, new_tag, new_a, new_b) in 0)
-          else (let _ = result = tnew(2, n2, 0, new_count, new_tag, new_a, new_b) in 0)
-        ) else 0;
-        let _ = wl_result[pos] = result;
-        let _ = wl_state[pos] = 1;
-        let _ = wl_sp[0] = sp0 - 1;
-      ) else 0;
-      let _ = if tag == 3 then (let _ = result = old_uid in 0) else 0;  // const unchanged
-      let _ = if tag == 3 then (let _ = wl_result[pos] = result; let _ = wl_state[pos] = 1; let _ = wl_sp[0] = sp0 - 1) else 0;
-      0
-    ) else 0;
-    
-    // For pi, lam, app: push children onto worklist
-    let is_compound = (if tag == 4 then 1 else 0) + (if tag == 5 then 1 else 0) + (if tag == 6 then 1 else 0);
-    let _ = if is_compound == 1 then (
-      let a_uid = tm_a[old_uid];
-      let b_uid = tm_b[old_uid];
-      let new_cutoff = cutoff;
-      let _ = if tag == 4 then (let _ = new_cutoff = cutoff + 1 in 0) else 0;  // pi: cod needs +1
-      let _ = if tag == 5 then (let _ = new_cutoff = cutoff + 1 in 0) else 0;  // lam: body needs +1
-      // Push b first (processed first = result available first)
-      let _ = wl_uid[sp0] = b_uid;
-      let _ = wl_state[sp0] = 0;
-      let _ = wl_sp[0] = sp0 + 1;
-      // Push a
-      let _ = wl_uid[sp0] = a_uid;
-      let _ = wl_state[sp0] = 0;
-      let _ = wl_sp[0] = sp0 + 1;
-      // Push marker for this node
-      let _ = wl_uid[sp0] = old_uid;
-      let _ = wl_state[sp0] = 2;  // marker: children being processed
-      let _ = wl_sp[0] = sp0 + 1;
-      0
-    ) else 0;
-    
-    // Check if marker reached (children processed)
-    let state = wl_state[pos];
-    let _ = if state == 2 then (
-      let a_uid = tm_a[old_uid];
-      let b_uid = tm_b[old_uid];
-      // Find results of children (they're in wl_result, but we need to find them)
-      // Actually, children results are stored at their positions; we need to find them
-      // For simplicity, scan the worklist for the child uids
-      let child_a_result = 0;
-      let child_b_result = 0;
-      let i = 0;
-      while i < 512 {
-        let _ = if wl_uid[i] == a_uid then (let _ = child_a_result = wl_result[i] in 0) else 0;
-        let _ = if wl_uid[i] == b_uid then (let _ = child_b_result = wl_result[i] in 0) else 0;
-        let i = i + 1;
-        0
-      };
-      let result = 0;
-      let _ = if tag == 4 then (let _ = result = tnew(4, child_a_result, child_b_result, new_count, new_tag, new_a, new_b) in 0) else 0;
-      let _ = if tag == 5 then (let _ = result = tnew(5, child_a_result, child_b_result, new_count, new_tag, new_a, new_b) in 0) else 0;
-      let _ = if tag == 6 then (let _ = result = tnew(6, child_a_result, child_b_result, new_count, new_tag, new_a, new_b) in 0) else 0;
-      let _ = wl_result[pos] = result;
-      let _ = wl_state[pos] = 1;
-      let _ = wl_sp[0] = sp0 - 1;
-      0
-    ) else 0;
-  };
-  
-  // Find the result for tm
-  let i = 0;
-  let result = 0;
-  while i < 512 {
-    let _ = if wl_uid[i] == tm then (let _ = result = wl_result[i] in 0) else 0;
-    let i = i + 1;
+// k_arg_pos: strict positivity of ONE constructor argument. The rule is applied to
+// that argument's OWN pi spine, never to the constructor's top-level spine -- which
+// is the entire difference between p03 and n03. In `succ : Nat -> Nat` the argument
+// IS Nat, an ordinary recursive occurrence, and must be accepted. In
+// `mk : (Bad -> Bad) -> Bad` the argument is itself a pi whose DOMAIN mentions Bad,
+// and a domain is a negative position, which is what makes the system inconsistent.
+// Returns 1 when the argument is positive, 0 when a negative occurrence was found.
+fn k_arg_pos(K: [i64], a: i64, h: i64) -> i64 {
+  let cur = a;
+  let ok = 1;
+  while k_tag(K, cur) == 4 {
+    let ok = if k_occurs(K, k_a(K, cur), h) == 1 then 0 else ok;
+    let cur = k_b(K, cur);
     0
   };
-  result
+  ok
 }
 
-// === Whnf: weak head normal form ===
-fn whnf(tm: i64,
-        tm_tag: [i64], tm_a: [i64], tm_b: [i64],
-        def_name: [i64], def_type: [i64], def_body: [i64],
-        def_count: i64) -> i64 {
-  let current = tm;
-  let changed = 1;
-  while changed == 1 {
-    let changed = 0;
-    let tag = tm_tag[current];
-    
-    // app(lam(dom, body), arg) → subst(body, 0, arg, 0)
-    if tag == 6 {
-      let fn_uid = tm_a[current];
-      let arg_uid = tm_b[current];
-      let fn_tag = tm_tag[fn_uid];
-      let _ = if fn_tag == 5 then (
-        let dom = tm_a[fn_uid];
-        let body = tm_b[fn_uid];
-        // Need to compute subst(body, 0, arg_uid, 0)
-        // Use a fresh substitution context
-        let new_tag = zeros(4096);
-        let new_a = zeros(4096);
-        let new_b = zeros(4096);
-        let new_count = [0];
-        let reduced = subst(body, 0, arg_uid, 0,
-                            tm_tag, tm_a, tm_b, [0],
-                            new_tag, new_a, new_b, new_count);
-        let _ = current = reduced;
-        let _ = changed = 1;
-      ) else 0;
-    } else if tag == 3 {
-      // const(name) → unfold if definition exists and is not an axiom
-      let name = tm_a[current];
-      let def_idx = def_find(name, def_name, def_count);
-      let _ = if def_idx >= 0 then (
-        let body = def_body[def_idx];
-        let _ = if body >= 0 then (
-          let _ = current = body;
-          let _ = changed = 1;
-        ) else 0;
-      ) else 0;
-    };
-  };
-  current
-}
-
-// === Structural equality ===
-fn tm_equal(t1: i64, t2: i64) -> i64 {
-  let tag1 = tm_tag[t1];
-  let tag2 = tm_tag[t2];
-  if tag1 != tag2 then 0 else (
-    let a1 = tm_a[t1];
-    let a2 = tm_a[t2];
-    let b1 = tm_b[t1];
-    let b2 = tm_b[t2];
-    if a1 != a2 then 0 else (
-      if b1 != b2 then 0 else 1
-    )
-  )
-}
-
-// === Conversion: conv(t1, t2) = whnf(t1) == whnf(t2) ===
-fn conv(t1: i64, t2: i64,
-        tm_tag: [i64], tm_a: [i64], tm_b: [i64],
-        def_name: [i64], def_type: [i64], def_body: [i64],
-        def_count: i64) -> i64 {
-  let w1 = whnf(t1, tm_tag, tm_a, tm_b, def_name, def_type, def_body, def_count);
-  let w2 = whnf(t2, tm_tag, tm_a, tm_b, def_name, def_type, def_body, def_count);
-  tm_equal(w1, w2)
-}
-
-// === Universe level arithmetic ===
-// level_imax(u, v) = if v == 0 then 0 else max(u, v)
-// This makes Prop (Sort 0) impredicative
-
-fn level_max(u: i64, v: i64) -> i64 {
-  if u > v then u else v
-}
-
-fn level_imax(u: i64, v: i64) -> i64 {
-  if v == 0 then 0 else level_max(u, v)
-}
-
-// Compute the universe level of a term
-fn term_level(tm: i64,
-              tm_tag: [i64], tm_a: [i64], tm_b: [i64],
-              def_name: [i64], def_type: [i64], def_body: [i64],
-              def_count: i64) -> i64 {
-  let tag = tm_tag[tm];
-  if tag == 1 {
-    // sort: level is the argument
-    tm_a[tm]
-  } else if tag == 3 {
-    // const: look up its type and compute its level
-    let name = tm_a[tm];
-    let def_idx = def_find(name, def_name, def_count);
-    if def_idx >= 0 then (
-      let ty = def_type[def_idx];
-      term_level(ty, tm_tag, tm_a, tm_b, def_name, def_type, def_body, def_count)
-    ) else 0  // unknown const: assume Type 0
-  } else if tag == 4 {
-    // pi: level = imax(level(dom), level(cod))
-    let dom = tm_a[tm];
-    let cod = tm_b[tm];
-    let l_dom = term_level(dom, tm_tag, tm_a, tm_b, def_name, def_type, def_body, def_count);
-    let l_cod = term_level(cod, tm_tag, tm_a, tm_b, def_name, def_type, def_body, def_count);
-    level_imax(l_dom, l_cod)
-  } else if tag == 5 {
-    // lam: level of the body (the type of the lambda is pi(dom, body_type))
-    let body = tm_b[tm];
-    // The level of a lambda is the level of its pi type
-    // which is imax(level(dom), level(body))
-    // But we don't have the body type here; we need to compute it
-    // For simplicity, return 0 (assume Type 0)
-    0
-  } else if tag == 6 {
-    // app: level of the result type
-    0  // simplified
-  } else {
-    // var: assume Type 0
-    0
-  }
-}
-
-// === Type synthesis ===
-// synth(tm) → type_uid or error code (negative)
-// Uses global context (ctx, ctx_depth) and term/def tables
-
-fn synth(tm: i64,
-          tm_tag: [i64], tm_a: [i64], tm_b: [i64],
-          def_name: [i64], def_type: [i64], def_body: [i64],
-          def_count: i64,
-          ctx: [i64], ctx_depth: i64) -> i64 {
-  let tag = tm_tag[tm];
-  
-  // sort(l): type is sort(l+1)
-  if tag == 1 {
-    let l = tm_a[tm];
-    let _ = if l < 0 then sys_exit(2) else 0;  // negative level is an error
-    tnew(1, l + 1, 0, [0], tm_tag, tm_a, tm_b)  // return sort(l+1)
-    // Actually, we can't allocate new terms during synth; we need to return existing terms
-    // For simplicity, return a special encoding
-    // Let me use a different approach: return the level + 1000 as a sentinel
-    l + 1000
-  } else if tag == 2 {
-    // var(i): look up in context
-    ctx_get(tm_a[tm], ctx, ctx_depth)
-  } else if tag == 3 {
-    // const(name): look up in definitions
-    let name = tm_a[tm];
-    let def_idx = def_find(name, def_name, def_count);
-    if def_idx >= 0 then def_type[def_idx] else (0 - 1)  // error: unbound
-  } else if tag == 4 {
-    // pi(dom, cod):
-    // 1. synth(dom) → must be a sort
-    // 2. extend context with dom's level
-    // 3. synth(cod) in extended context → must be a sort
-    // 4. return sort(level_imax(level(dom), level(cod)))
-    let dom = tm_a[tm];
-    let cod = tm_b[tm];
-    let dom_ty = synth(dom, tm_tag, tm_a, tm_b, def_name, def_type, def_body, def_count, ctx, ctx_depth);
-    let _ = if dom_ty < 0 then sys_exit(2) else 0;  // dom must be a type
-    // dom_ty should be sort(l) for some l
-    let dom_level = if tm_tag[dom_ty] == 1 then tm_a[dom_ty] else 0;
-    // Extend context
-    let old_depth = ctx_depth;
-    let _ = ctx_push(dom_ty, ctx, [old_depth]);  // this doesn't work; ctx_depth is immutable
-    // ... need to handle context properly
-    // For now, assume the context is handled externally
-    dom_ty  // placeholder
-  } else if tag == 5 {
-    // lam(dom, body):
-    // 1. synth(dom) → must be a sort
-    // 2. extend context
-    // 3. synth(body) → body_type
-    // 4. return pi(dom, body_type)
-    let dom = tm_a[tm];
-    let body = tm_b[tm];
-    let dom_ty = synth(dom, tm_tag, tm_a, tm_b, def_name, def_type, def_body, def_count, ctx, ctx_depth);
-    let _ = if dom_ty < 0 then sys_exit(2) else 0;
-    dom_ty  // placeholder
-  } else if tag == 6 {
-    // app(fn, arg):
-    // 1. synth(fn) → pi_type
-    // 2. synth(arg) → arg_type
-    // 3. check arg_type == pi_domain(pi_type)
-    // 4. return subst(pi_codomain, 0, arg, 0)
-    let fn_uid = tm_a[tm];
-    let arg_uid = tm_b[tm];
-    let fn_ty = synth(fn_uid, tm_tag, tm_a, tm_b, def_name, def_type, def_body, def_count, ctx, ctx_depth);
-    let _ = if fn_ty < 0 then sys_exit(2) else 0;
-    let _ = if tm_tag[fn_ty] != 4 then sys_exit(2) else 0;  // fn must have pi type
-    let dom = tm_a[fn_ty];
-    let cod = tm_b[fn_ty];
-    let arg_ty = synth(arg_uid, tm_tag, tm_a, tm_b, def_name, def_type, def_body, def_count, ctx, ctx_depth);
-    let _ = if arg_ty < 0 then sys_exit(2) else 0;
-    // Check arg_type == dom (conversion)
-    let _ = if conv(arg_ty, dom, tm_tag, tm_a, tm_b, def_name, def_type, def_body, def_count) == 0 then sys_exit(2) else 0;
-    // Return substituted codomain
-    let new_tag = zeros(4096);
-    let new_a = zeros(4096);
-    let new_b = zeros(4096);
-    let new_count = [0];
-    subst(cod, 0, arg_uid, 0, tm_tag, tm_a, tm_b, [0], new_tag, new_a, new_b, new_count)
-  } else {
-    0 - 1  // unknown term
-  }
-}
-
-// === Type checking ===
-fn check_type(tm: i64, expected: i64,
-              tm_tag: [i64], tm_a: [i64], tm_b: [i64],
-              def_name: [i64], def_type: [i64], def_body: [i64],
-              def_count: i64,
-              ctx: [i64], ctx_depth: i64) -> i64 {
-  let ty = synth(tm, tm_tag, tm_a, tm_b, def_name, def_type, def_body, def_count, ctx, ctx_depth);
-  if ty < 0 then 0 else (
-    conv(ty, expected, tm_tag, tm_a, tm_b, def_name, def_type, def_body, def_count)
-  )
-}
-
-// === Inductive checking ===
-// check_positive(tm, ind_name): returns 1 if OK (no negative occurrence), 0 if BAD
-fn check_positive(tm: i64, ind_name: i64,
-                  tm_tag: [i64], tm_a: [i64], tm_b: [i64]) -> i64 {
-  let tag = tm_tag[tm];
-  if tag == 1 { 1 }  // sort: OK
-  else if tag == 2 { 1 }  // var: OK
-  else if tag == 3 {
-    let name = tm_a[tm];
-    if name == ind_name { 1 } else { 1 }  // const: OK (either the inductive itself or other)
-  } else if tag == 4 {
-    // pi(dom, cod):
-    let dom = tm_a[tm];
-    let cod = tm_b[tm];
-    // Check domain for negative occurrences
-    if check_negative_in(dom, ind_name, tm_tag, tm_a, tm_b) == 0 then (
-      check_positive(cod, ind_name, tm_tag, tm_a, tm_b)
-    ) else 0
-  } else { 1 }
-}
-
-// check_negative_in(tm, ind_name): returns 1 if negative occurrence found, 0 if OK
-fn check_negative_in(tm: i64, ind_name: i64,
-                     tm_tag: [i64], tm_a: [i64], tm_b: [i64]) -> i64 {
-  let tag = tm_tag[tm];
-  if tag == 1 { 0 }  // sort: no negative occurrence
-  else if tag == 2 { 0 }  // var: no negative occurrence
-  else if tag == 3 {
-    let name = tm_a[tm];
-    // const is never a negative occurrence by itself
-    0
-  } else if tag == 4 {
-    // pi(dom, cod): dom is a negative position
-    let dom = tm_a[tm];
-    let cod = tm_b[tm];
-    // Check if ind_name appears in dom (which is a negative position)
-    if appears(dom, ind_name, tm_tag, tm_a, tm_b) == 1 then 1
-    else check_negative_in(cod, ind_name, tm_tag, tm_a, tm_b)
-  } else { 0 }
-}
-
-// appears(tm, ind_name): returns 1 if ind_name appears in tm
-fn appears(tm: i64, ind_name: i64,
-          tm_tag: [i64], tm_a: [i64], tm_b: [i64]) -> i64 {
-  let tag = tm_tag[tm];
-  if tag == 1 { 0 }
-  else if tag == 2 { 0 }
-  else if tag == 3 {
-    let name = tm_a[tm];
-    if name == ind_name then 1 else 0
-  } else if tag == 4 {
-    let dom = tm_a[tm];
-    let cod = tm_b[tm];
-    if appears(dom, ind_name, tm_tag, tm_a, tm_b) == 1 then 1
-    else appears(cod, ind_name, tm_tag, tm_a, tm_b)
-  } else if tag == 5 {
-    let dom = tm_a[tm];
-    let body = tm_b[tm];
-    if appears(dom, ind_name, tm_tag, tm_a, tm_b) == 1 then 1
-    else appears(body, ind_name, tm_tag, tm_a, tm_b)
-  } else if tag == 6 {
-    let fn = tm_a[tm];
-    let arg = tm_b[tm];
-    if appears(fn, ind_name, tm_tag, tm_a, tm_b) == 1 then 1
-    else appears(arg, ind_name, tm_tag, tm_a, tm_b)
-  } else { 0 }
-}
-
-// === .core parser ===
-// parse_core(cert) → 0 on success, exits on failure
-
-fn parse_core(cert: str) -> i64 {
-  // Allocate data structures
-  let tm_tag = zeros(4096);
-  let tm_a = zeros(4096);
-  let tm_b = zeros(4096);
-  let tm_count = [0];
-  
-  let def_name = zeros(256);
-  let def_type = zeros(256);
-  let def_body = zeros(256);
-  let def_count = [0];
-  
-  let ctx = zeros(256);
-  let ctx_depth = [0];
-  
-  // Parse state
-  let pos = [0];
-  let src_len = str_len(cert);
-  let line = zeros(4096);
-  let toks = zeros(256);
-  let n_failed = [0];
-  let n_passed = [0];
-  
-  let done = 0;
-  while done == 0 {
-    let nread = read_line(cert, pos, line, 4096);
-    let _ = if nread < 0 then (let done = 1 in 0) else 0;
-    let _ = if nread == 0 then 0 else 0;  // blank line
-    let nt = tokenize(line, toks, 256);
-    let _ = if nt == 0 then 0 else 0;  // empty line
-    
-    let first = toks[0];
-    let ftc = char(line, first);
-    
-    // Comment line: skip
-    let _ = if ftc == 37 then 0 else 0;  // '%'
-    
-    // Term definition: UID CONSTRUCTOR ARGS...
-    let is_term = (if ftc == 115 then 1 else 0) + (if ftc == 118 then 1 else 0) +  // 's' = sort, 'v' = var
-                  (if ftc == 99 then 1 else 0) + (if ftc == 112 then 1 else 0) +  // 'c' = const, 'p' = pi
-                  (if ftc == 108 then 1 else 0) + (if ftc == 97 then 1 else 0);   // 'l' = lam, 'a' = app
-    let _ = if is_term == 1 then (
-      let uid = parse_int(line, toks[1]);
-      let cmd = line[first];  // first char of command
-      let _ = if cmd == 115 then (  // 's' = sort
-        let lvl = parse_int(line, toks[2]);
-        let _ = tnew(1, lvl, 0, tm_count, tm_tag, tm_a, tm_b);
-        0
-      ) else 0;
-      let _ = if cmd == 118 then (  // 'v' = var
-        let idx = parse_int(line, toks[2]);
-        let _ = tnew(2, idx, 0, tm_count, tm_tag, tm_a, tm_b);
-        0
-      ) else 0;
-      let _ = if cmd == 99 then (  // 'c' = const
-        // Get the name from the line
-        let name_start = toks[2];
-        // Find the end of the name (next token or end of line)
-        let name_end = if nt > 2 then toks[3] else (str_len(line) + 1);
-        // Extract the name as a substring... but Bebop doesn't have substring
-        // For simplicity, use the token offset as a hash
-        // Actually, we need the actual name string. Let me use a different approach.
-        // Store the name as the token offset (this is fragile but works for tests)
-        let name_hash_val = name_hash(line + name_start);  // Bebop doesn't support pointer arithmetic
-        // ... this approach won't work in Bebop
-        // Let me use a simpler approach: hash the entire token
-        0
-      ) else 0;
-      0
-    ) else 0;
-    
-    // ... more parsing
-    
+// k_check_inductive_ctor: the arity must be a type, the constructor must RETURN the
+// inductive being declared (31), and every argument must be strictly positive (30).
+fn k_check_inductive_ctor(K: [i64], indtype_hash: i64, arity: i64, ctor_type: i64) -> i64 {
+  let arity_type = k_infer(K, arity);
+  let _ = if k_tag(K, arity_type) == 1 then 0 else k_rej(K, 22);
+  let r = k_ctor_ret(K, ctor_type);
+  let okret = if k_tag(K, r) == 3 then (if k_a(K, r) == indtype_hash then 1 else 0) else 0;
+  let _ = if okret == 1 then 0 else k_rej(K, 31);
+  let cur = ctor_type;
+  let neg = 0;
+  while k_tag(K, cur) == 4 {
+    let neg = if k_arg_pos(K, k_a(K, cur), indtype_hash) == 0 then 1 else neg;
+    let cur = k_b(K, cur);
     0
   };
-  
-  // Check results
-  if n_failed[0] > 0 then sys_exit(2) else 0
-}
-
-// === Main kernel entry ===
-fn kernel_check(cert: str) -> i64 {
-  parse_core(cert)
+  let _ = if neg == 1 then k_rej(K, 30) else 0;
+  0
 }

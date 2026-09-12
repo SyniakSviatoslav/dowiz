@@ -1,0 +1,241 @@
+// selfhost/tkernel.bp -- F7 driver: reads a .core file, hands it to the kernel, and
+// returns the kernel's verdict. ALL IO lives here; the kernel does none.
+//
+// Usage: seed tkernel.bin <file.core>
+//   argv[0] is the seed loader and argv[1] the .bin, so the file is argv[2].
+// Return value: 0 accepted, otherwise the kernel's reject code. The seed prints
+// main's return value, so the verdict IS the printed line.
+//
+// The previous version of this file began with `module main { }` -- there is no
+// `module` construct in this language -- and had no `use` line, so none of the k_*
+// functions were in the binary and it died with trap 87, "call to an unresolved
+// function". A call to a function that does not exist COMPILES here and traps at run
+// time, which is why "it compiles" proves nothing in this tree.
+//
+// Reject codes owned by this file (format invariants, checked before typing):
+//   12 an argument id is not strictly smaller than its own node id
+//   13 an argument id was never defined
+//   14 sharing: a node has more than one parent
+
+use "selfhost/tcheck_kernel.bp"
+
+fn kp_path(dst: [i64], s: str) -> i64 {
+  let n = str_len(s);
+  let i = 0;
+  while i < n {
+    let _ = dst[i] = char(s, i);
+    let i = i + 1;
+    0
+  };
+  n
+}
+
+// spaces and tabs only: a newline is a token, because a line's first byte is the
+// grammar -- digit means a node line, letter means a declaration.
+fn kp_ws(s: str, pos: [i64], n: i64) -> i64 {
+  let go = 1;
+  while go == 1 {
+    let c = if pos[0] < n then char(s, pos[0]) else 0;
+    let sp = if c == 32 then 1 else 0;
+    let sp = if c == 9 then 1 else sp;
+    let _ = if sp == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let go = sp;
+    0
+  };
+  0
+}
+
+fn kp_int(s: str, pos: [i64], n: i64) -> i64 {
+  let _ = kp_ws(s, pos, n);
+  let v = 0;
+  let go = 1;
+  while go == 1 {
+    let c = if pos[0] < n then char(s, pos[0]) else 0;
+    let isd = if c >= 48 then (if c <= 57 then 1 else 0) else 0;
+    let v = if isd == 1 then v * 10 + (c - 48) else v;
+    let _ = if isd == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let go = isd;
+    0
+  };
+  v
+}
+
+// consume one token, return its FIRST byte -- enough to classify every keyword:
+// s(ort) v(ar) c(onst|heck) p(i) l(am) a(pp|xiom) d(ef) i(nductive)
+fn kp_word(s: str, pos: [i64], n: i64) -> i64 {
+  let _ = kp_ws(s, pos, n);
+  let c0 = if pos[0] < n then char(s, pos[0]) else 0;
+  let go = 1;
+  while go == 1 {
+    let c = if pos[0] < n then char(s, pos[0]) else 0;
+    let inw = if c > 32 then 1 else 0;
+    let _ = if inw == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let go = inw;
+    0
+  };
+  c0
+}
+
+// djb2 over one token: names come from a file, and a string VALUE cannot be built at
+// run time here, so a name is only ever compared as a hash.
+fn kp_hash(s: str, pos: [i64], n: i64) -> i64 {
+  let _ = kp_ws(s, pos, n);
+  let h = 5381;
+  let go = 1;
+  while go == 1 {
+    let c = if pos[0] < n then char(s, pos[0]) else 0;
+    let inw = if c > 32 then 1 else 0;
+    let h = if inw == 1 then h * 33 + c else h;
+    let _ = if inw == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let go = inw;
+    0
+  };
+  h
+}
+
+fn kp_eol(s: str, pos: [i64], n: i64) -> i64 {
+  let go = 1;
+  while go == 1 {
+    let c = if pos[0] < n then char(s, pos[0]) else 10;
+    let _ = if c != 10 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let go = if c != 10 then 1 else 0;
+    0
+  };
+  let _ = if pos[0] < n then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+  0
+}
+
+// kp_ref: resolve one argument id, enforcing the two format invariants a typing rule
+// can never recover from. STRICTLY SMALLER (12) is not redundant with "undefined"
+// (13): ids may appear out of order, so a larger id can already be defined -- n12 is
+// exactly that shape and only this rule catches it. NO SHARING (14): with de Bruijn
+// indices a node's meaning depends on its binder depth, so one node with two parents
+// is unsound; the refcount at K[25616 + fileid] is what pins it.
+fn kp_ref(K: [i64], rid: i64, own: i64) -> i64 {
+  let small = if rid < own then 1 else 0;
+  let _ = if small == 1 then 0 else k_rej(K, 12);
+  let u = K[24592 + rid];
+  let _ = if u == 0 then k_rej(K, 13) else 0;
+  let rc = K[25616 + rid];
+  let _ = if rc > 0 then k_rej(K, 14) else 0;
+  let _ = K[25616 + rid] = rc + 1;
+  u
+}
+
+fn kp_node(K: [i64], s: str, pos: [i64], n: i64) -> i64 {
+  let fid = kp_int(s, pos, n);
+  let kw = kp_word(s, pos, n);
+  let two = if kw == 112 then 1 else 0;
+  let two = if kw == 108 then 1 else two;
+  let two = if kw == 97 then 1 else two;
+  let lit = if kw == 115 then 1 else 0;
+  let lit = if kw == 118 then 1 else lit;
+  let a1 = if lit == 1 then kp_int(s, pos, n) else 0;
+  let a1 = if kw == 99 then kp_hash(s, pos, n) else a1;
+  let r1 = if two == 1 then kp_int(s, pos, n) else 0;
+  let r2 = if two == 1 then kp_int(s, pos, n) else 0;
+  let u1 = if two == 1 then kp_ref(K, r1, fid) else 0;
+  let u2 = if two == 1 then kp_ref(K, r2, fid) else 0;
+  let tag = 0;
+  let tag = if kw == 115 then 1 else tag;
+  let tag = if kw == 118 then 2 else tag;
+  let tag = if kw == 99 then 3 else tag;
+  let tag = if kw == 112 then 4 else tag;
+  let tag = if kw == 108 then 5 else tag;
+  let tag = if kw == 97 then 6 else tag;
+  let pa = if two == 1 then u1 else a1;
+  let pb = if two == 1 then u2 else 0;
+  let uid = k_new(K, tag, pa, pb);
+  let _ = K[24592 + fid] = uid;
+  0
+}
+
+// Parse one constructor in an inductive. Format: `| <name> : <id>`
+// Consume the `|`, then name, then `:`, then constructor type id.
+fn kp_ctor(K: [i64], s: str, pos: [i64], n: i64) -> i64 {
+  let _ = kp_word(s, pos, n);  // consume the `|`
+  let ch = kp_hash(s, pos, n);  // constructor name (TODO: register in def table)
+  let _ = kp_word(s, pos, n);  // consume the `:`
+  let cid = kp_int(s, pos, n);  // constructor type id
+  K[24592 + cid]  // return the uid of the constructor type
+}
+
+// `check <t> : <ty>` / `def <name> : <ty> := <body>` / `axiom <name> : <ty>` /
+// `inductive <name> : <arity> | <ctor> : <type> ...`
+fn kp_decl(K: [i64], s: str, pos: [i64], n: i64) -> i64 {
+  let kw = kp_word(s, pos, n);
+  let ischk = if kw == 99 then 1 else 0;
+  let isdef = if kw == 100 then 1 else 0;
+  let isax = if kw == 97 then 1 else 0;
+  let isind = if kw == 105 then 1 else 0;
+  let nh = if isdef == 1 then kp_hash(s, pos, n) else 0;
+  let nh = if isax == 1 then kp_hash(s, pos, n) else nh;
+  let nh = if isind == 1 then kp_hash(s, pos, n) else nh;
+  let _ = if isind == 1 then (let _ = kp_word(s, pos, n) in 0) else 0;  // consume `:` for inductive
+  let t1 = if ischk == 1 then kp_int(s, pos, n) else 0;
+  let _ = if ischk == 1 then (let _ = kp_word(s, pos, n) in 0) else 0;
+  let t2 = if ischk == 1 then kp_int(s, pos, n) else 0;
+  let _ = if isdef == 1 then (let _ = kp_word(s, pos, n) in 0) else 0;
+  let d1 = if isdef == 1 then kp_int(s, pos, n) else 0;
+  let _ = if isdef == 1 then (let _ = kp_word(s, pos, n) in 0) else 0;
+  let d2 = if isdef == 1 then kp_int(s, pos, n) else 0;
+  let _ = if isax == 1 then (let _ = kp_word(s, pos, n) in 0) else 0;
+  let x1 = if isax == 1 then kp_int(s, pos, n) else 0;
+  let ari = if isind == 1 then kp_int(s, pos, n) else 0;
+  let ct = if ischk == 1 then K[24592 + t1] else 0;
+  let cy = if ischk == 1 then K[24592 + t2] else 0;
+  let dy = if isdef == 1 then K[24592 + d1] else 0;
+  let db = if isdef == 1 then K[24592 + d2] else 0;
+  let xy = if isax == 1 then K[24592 + x1] else 0;
+  let ind_arity = if isind == 1 then K[24592 + ari] else 0;
+  let _ = if ischk == 1 then k_check(K, ct, cy) else 0;
+  let _ = if isdef == 1 then k_check(K, db, dy) else 0;
+  let _ = if isdef == 1 then k_def_add(K, nh, dy, db) else 0;
+  let _ = if isax == 1 then k_def_add(K, nh, xy, 0) else 0;
+  let _ = if isind == 1 then k_def_add(K, nh, ind_arity, 0) else 0;
+  // For inductive, parse constructors and check each one
+  let go = isind;
+  while go == 1 {
+    let _ = kp_ws(s, pos, n);
+    let c = if pos[0] < n then char(s, pos[0]) else 10;
+    let ispipe = if c == 124 then 1 else 0;  // `|` character
+    let isnl = if c == 10 then 1 else 0;
+    let go = if ispipe == 1 then 1 else 0;
+    let _ = if ispipe == 1 then (
+      let ctor_type_uid = kp_ctor(K, s, pos, n);
+      let _ = k_check_inductive_ctor(K, nh, ind_arity, ctor_type_uid);
+      0
+    ) else 0;
+    0
+  };
+  0
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  let few = if argc < 3 then 1 else 0;
+  let path = zeros(512);
+  let pl = if few == 1 then 0 else kp_path(path, argv[2]);
+  let fd = if few == 1 then 0 - 1 else sys_open(path, pl, 0);
+  let bad = if fd < 0 then 1 else 0;
+  let src = if bad == 1 then "" else sys_slurp(fd, 1000000);
+  let _ = if bad == 1 then 0 else sys_close(fd);
+  let K = zeros(32768);
+  let pos = zeros(2);
+  // Set level rule: K[2] = 0 for max (default), K[2] = 1 for imax
+  let level_rule = 0;
+  let level_rule = if argc >= 4 then (if char(argv[3], 0) == 105 then 1 else 0) else level_rule;
+  let _ = K[2] = level_rule;
+  let n = if bad == 1 then 0 else str_len(src);
+  while pos[0] < n {
+    let _ = kp_ws(src, pos, n);
+    let c = if pos[0] < n then char(src, pos[0]) else 10;
+    let isd = if c >= 48 then (if c <= 57 then 1 else 0) else 0;
+    let isal = if c >= 97 then (if c <= 122 then 1 else 0) else 0;
+    let _ = if isd == 1 then kp_node(K, src, pos, n) else 0;
+    let _ = if isal == 1 then kp_decl(K, src, pos, n) else 0;
+    let _ = kp_eol(src, pos, n);
+    0
+  };
+  let _ = if bad == 1 then k_rej(K, 10) else 0;
+  K[4]
+}
