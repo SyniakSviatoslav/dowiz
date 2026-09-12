@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 # M7 std twin golden gate: compile with bebop.bin, run with seed,
 # compare output against frozen expected values (no C compiler, no interp).
+# --- one-compile guard (operator 2026-09-12) -----------------------------------
+# Not inside a slot? Re-exec through it. tools/slot.sh runs SLOTS=1 against ONE global flock
+# in /root/.cache/bebop/slots, shared by every lane worktree, so at most one heavy job -- one
+# compilation -- exists on the box at any instant. NO_SLOT=1 opts out (main-session triage only).
+if [ "${BEBOP_SLOT_HELD:-0}" != 1 ] && [ "${NO_SLOT:-0}" != 1 ]; then
+  _slot="$(dirname "$0")/../../tools/slot.sh"
+  [ -f "$_slot" ] || _slot=/root/dowiz/bebop-lang/tools/slot.sh
+  [ -f "$_slot" ] && exec bash "$_slot" "auto:$(basename "$0")" bash "$0" "$@"
+fi
 ulimit -s 65536 2>/dev/null || true  # eval recursion: 113+ fn self-compile needs >8MB stack
 set -u
 BEBOP_TMP=${BEBOP_TMP:-/tmp/opencode}; mkdir -p "$BEBOP_TMP"  # per-agent scratch namespace (AGENTS.md parallel protocol)

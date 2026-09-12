@@ -5,6 +5,15 @@
 # gets that gate re-run ONCE standalone and pinned (timing-flag gates such as lcjit miss
 # under load): the line then reads `PASS name (RETRIED)`; a second miss stays a FAIL.
 # env: BEBOP_BIN, BEBOP_TMP, J (default 3). Exit 1 on any FAIL.
+# --- one-compile guard (operator 2026-09-12) -----------------------------------
+# Not inside a slot? Re-exec through it. tools/slot.sh runs SLOTS=1 against ONE global flock
+# in /root/.cache/bebop/slots, shared by every lane worktree, so at most one heavy job -- one
+# compilation -- exists on the box at any instant. NO_SLOT=1 opts out (main-session triage only).
+if [ "${BEBOP_SLOT_HELD:-0}" != 1 ] && [ "${NO_SLOT:-0}" != 1 ]; then
+  _slot="$(dirname "$0")/../tools/slot.sh"
+  [ -f "$_slot" ] || _slot=/root/dowiz/bebop-lang/tools/slot.sh
+  [ -f "$_slot" ] && exec bash "$_slot" "auto:$(basename "$0")" bash "$0" "$@"
+fi
 cd "$(dirname "$0")/.." || exit 1
 ulimit -s 65536 2>/dev/null
 J=${J:-3}; BIN=${BEBOP_BIN:-./bebop.bin}; T=${BEBOP_TMP:-/tmp/opencode}/stdpar; mkdir -p "$T"

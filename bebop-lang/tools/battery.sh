@@ -8,6 +8,15 @@
 # --freeze when FREEZE=1: nothing is left to run after promotion.
 # item 8 (self-copy exec): copy into $T before doing any work, so editing this file while a
 # run is in progress cannot change that run. item 1 (process-count gate): refuse above ${PROC_CAP:-30} procs (calibrated 2026-09-06, see chain.sh).
+# --- one-compile guard (operator 2026-09-12) -----------------------------------
+# Not inside a slot? Re-exec through it. tools/slot.sh runs SLOTS=1 against ONE global flock
+# in /root/.cache/bebop/slots, shared by every lane worktree, so at most one heavy job -- one
+# compilation -- exists on the box at any instant. NO_SLOT=1 opts out (main-session triage only).
+if [ "${BEBOP_SLOT_HELD:-0}" != 1 ] && [ "${NO_SLOT:-0}" != 1 ]; then
+  _slot="$(dirname "$0")/../tools/slot.sh"
+  [ -f "$_slot" ] || _slot=/root/dowiz/bebop-lang/tools/slot.sh
+  [ -f "$_slot" ] && exec bash "$_slot" "auto:$(basename "$0")" bash "$0" "$@"
+fi
 [ "${SELF_COPY:-}" ] || cd "$(dirname "$0")/.." || exit 1  # the copy is exec'd with cwd already at repo root; re-deriving it from $0 there would resolve against $T instead
 T=${2:?tmp root}; mkdir -p "$T"
 [ "${SELF_COPY:-}" ] || { cp "$0" "$T/.battery.sh"; SELF_COPY=1 exec bash "$T/.battery.sh" "$@"; }
@@ -22,7 +31,7 @@ export REAP_GATED=1  # one gate per run tree (chain.sh already checked when it d
 # gb_<op>_<sr>_0_1_0.* files share one BEBOP_TMP, so shards clobbered each other).
 # SERIAL=0 restores the old parallel battery -- only on a box where the phantom cap has been lifted.
 SERIAL=${SERIAL:-1}
-mkdir -p "$T"/{std,cp,pd,pool}; sw() { [ "$SERIAL" = 1 ] && wait; :; }; [ "$SERIAL" = 1 ] && J=${J:-1}  # lanes one after another, J=1 -- ~12 procs instead of ~40
+mkdir -p "$T"/{std,cp,pd,pool}; sw() { [ "$SERIAL" = 1 ] && wait; :; }; [ "$SERIAL" = 1 ] && { J=${J:-1}; export J; }  # EXPORT: run_all.sh is a fresh `bash`, an unexported J left it at xargs -P 4  # lanes one after another, J=1 -- ~12 procs instead of ~40
 ( J=${J:-3} BEBOP_TMP=$T/std BEBOP_BIN=$BIN bash tools/std_par.sh > "$T/std.log" 2>&1 ) & sw  # sharded std_golden, one shard per A78 core
 ( BEBOP_TMP=$T/cp BEBOP_BIN=$BIN bash bench/vs_rust/construct_parity.sh > "$T/cp.log" 2>&1;
   BEBOP_TMP=$T/pd BEBOP_BIN=$BIN bash bench/vs_rust/parity_driver.sh > "$T/pd.log" 2>&1 ) & sw

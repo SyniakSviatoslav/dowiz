@@ -9,6 +9,15 @@
 # env (2026-09-06, battery lane): BEBOP_BIN = the candidate compiler (default ./bebop.bin;
 # census rows are named by basename, so a candidate is copied to $OUT/bebop.bin first),
 # BEBOP_SRC = its source (default bebop.bp), BEBOP_TMP. Compiles run J at a time.
+# --- one-compile guard (operator 2026-09-12) -----------------------------------
+# Not inside a slot? Re-exec through it. tools/slot.sh runs SLOTS=1 against ONE global flock
+# in /root/.cache/bebop/slots, shared by every lane worktree, so at most one heavy job -- one
+# compilation -- exists on the box at any instant. NO_SLOT=1 opts out (main-session triage only).
+if [ "${BEBOP_SLOT_HELD:-0}" != 1 ] && [ "${NO_SLOT:-0}" != 1 ]; then
+  _slot="$(dirname "$0")/../../tools/slot.sh"
+  [ -f "$_slot" ] || _slot=/root/dowiz/bebop-lang/tools/slot.sh
+  [ -f "$_slot" ] && exec bash "$_slot" "auto:$(basename "$0")" bash "$0" "$@"
+fi
 set -u
 mkdir -p "${BEBOP_TMP:-/tmp/opencode}"
 cd "$(dirname "$0")/../.."

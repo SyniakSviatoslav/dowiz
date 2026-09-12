@@ -11,6 +11,15 @@
 # Measured 2026-09-06: a chain adds +15 procs (ps -e 26 -> 41 peak, box survived); the gate reads ~+3
 # over idle. 30 = idle box without a fuzzd batch; `tools/fuzzd.sh pause` first.
 # item 4: --codegen implies FREEZE=1 for the battery it drives (no more forgotten env var).
+# --- one-compile guard (operator 2026-09-12) -----------------------------------
+# Not inside a slot? Re-exec through it. tools/slot.sh runs SLOTS=1 against ONE global flock
+# in /root/.cache/bebop/slots, shared by every lane worktree, so at most one heavy job -- one
+# compilation -- exists on the box at any instant. NO_SLOT=1 opts out (main-session triage only).
+if [ "${BEBOP_SLOT_HELD:-0}" != 1 ] && [ "${NO_SLOT:-0}" != 1 ]; then
+  _slot="$(dirname "$0")/../tools/slot.sh"
+  [ -f "$_slot" ] || _slot=/root/dowiz/bebop-lang/tools/slot.sh
+  [ -f "$_slot" ] && exec bash "$_slot" "auto:$(basename "$0")" bash "$0" "$@"
+fi
 [ "${SELF_COPY:-}" ] || cd "$(dirname "$0")/.." || exit 1  # the copy is exec'd with cwd already at repo root; re-deriving it from $0 there would resolve against $OUT instead
 SRC=${1:?src.bp}; OUT=${2:?out dir}; mkdir -p "$OUT"
 [ "${SELF_COPY:-}" ] || { cp "$0" "$OUT/.chain.sh"; SELF_COPY=1 exec bash "$OUT/.chain.sh" "$@"; }
@@ -24,6 +33,9 @@ PIN=${PIN:-taskset -c 4-6}  # the 3 A78 cores; PIN="" to unpin
 gen() { $PIN ./seed/build/seed "$1" compile "$SRC" "$2" >/dev/null 2>&1; local rc=$?; [ $rc = 0 ] && [ -s "$2" ] || { echo "gen $2 FAILED rc=$rc"; exit 1; }; }
 t0=$(date +%s); gen "$BIN0" "$OUT/gen2.bin"; echo "gen2 $(md5sum < "$OUT/gen2.bin" | cut -c1-8) $(( $(date +%s) - t0 )) s"
 ( gen "$OUT/gen2.bin" "$OUT/gen3.bin"; echo "gen3 $(md5sum < "$OUT/gen3.bin" | cut -c1-8)"; gen "$OUT/gen3.bin" "$OUT/gen4.bin"; echo "gen4 $(md5sum < "$OUT/gen4.bin" | cut -c1-8)" ) > "$OUT/chain.log" 2>&1 &
+# ONECC=1 (default, operator 2026-09-12): the gen3->gen4 chain and the battery are both
+# compilations; running them concurrently put TWO inside one slot. Wait for the chain first.
+[ "${ONECC:-1}" = 1 ] && wait
 if [ $CG = 0 ]; then SRC=$SRC bash tools/battery.sh "$OUT/gen2.bin" "$OUT/bat" > "$OUT/battery.log" 2>&1; fi
 wait; cat "$OUT/chain.log"
 if [ $CG = 1 ]; then SRC=$SRC bash tools/battery.sh "$OUT/gen4.bin" "$OUT/bat" > "$OUT/battery.log" 2>&1; fi

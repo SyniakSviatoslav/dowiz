@@ -122,6 +122,12 @@ echo "slot: acquired $SLOT (cores $CORES) for '$LABEL' at $(date +%H:%M:%S)"
 # any more (SLOTS=1) and 70 is above Android's phantom cap, so the gate was disabled in the
 # one direction that matters: 32 is now the real ceiling the platform enforces.
 export PROC_CAP=${PROC_CAP:-32} SLOT_ID=$SLOT SLOT_CORES=$CORES
+# ONE COMPILE AT A TIME (operator 2026-09-12, "лише одна компіляція в процесі, ніколи не
+# більше"): heavy entry points (chain.sh, battery.sh, std_par.sh, std_golden.sh,
+# invariants.sh, cc.sh) re-exec themselves through this script unless this flag says a slot
+# is already held. Serialisation is then structural -- a worker cannot forget it -- and the
+# flag also keeps a nested heavy job from deadlocking on the non-reentrant flock.
+export BEBOP_SLOT_HELD=1
 export PIN=${PIN:-taskset -c $CORES}  # chain.sh would otherwise re-pin to 4-6 and escape the slot (sched_setaffinity can always widen)
 # Make THIS tree the OOM killer's first choice instead of the session that is driving it.
 # Unprivileged processes may only raise oom_score_adj, which is exactly the direction we need;
