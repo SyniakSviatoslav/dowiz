@@ -1,0 +1,28 @@
+# Ratchet values for tools/arch_check.py. These may only ever go DOWN, in the commit
+# that earns the reduction. Raising one is how a codebase rots; if a change needs a
+# higher number, split the file instead.
+#
+# The cap a NEW .bp file must satisfy. Small files with named helpers, not one long one.
+max_new_bp_lines = 800
+#
+# The largest .bp we currently have. bebop.bp is the self-hosting compiler and is the
+# reason this is not 800 yet; every extraction out of it should lower this line.
+max_bp_lines = 8500
+#
+# Files that exceed max_new_bp_lines today, each with the reason it is allowed to.
+bp_exempt:bebop.bp = 1                       # the self-hosting compiler; split is task T-split
+bp_exempt:gb_pool_build.bp = 1               # generated aggregate, not hand-written
+bp_exempt:selfhost/std/sgraph2.bp = 1        # B3c graph kernels; split tracked separately
+bp_exempt:bench/vs_rust/std_tests/sgraph2.bp = 1
+#
+# Over the cap as of 2026-09-12, each with the split that retires it. These are DEBT:
+# the exemption is the record of it, not permission. Remove the line when the file is split.
+bp_exempt:selfhost/prelude/store.bp = 1      # SPLIT: superblock+PartTab / objects+alloc / commit paths / compaction
+bp_exempt:selfhost/prelude/gb.bp = 1         # SPLIT: matrix build / traversal kernels / semiring plumbing
+bp_exempt:selfhost/std/gen_gb.bp = 1         # SPLIT: template emission / semiring tables
+#
+# Scripts allowed to discard a run's stderr, each with the reason. A fuzzer or a delta
+# debugger runs thousands of programs whose failure IS the signal and is counted, not read.
+loud_exempt:tools/fuzzd.sh = 1            # fuzzer: failures are classified by exit code, counted, not printed
+loud_exempt:tools/ddc.sh = 1              # delta debugger: every candidate is expected to fail
+loud_exempt:tools/mutate_gate.sh = 1      # mutation gate: a mutant that dies is the PASS condition

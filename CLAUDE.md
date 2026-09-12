@@ -190,3 +190,28 @@ Rules: compile/test output to `/dev/null` and read `tail -1`; one deterministic 
 has not (measured 2026-09-09 against reading bebop.bp whole: `tb s` 3,028x fewer bytes, `tb n` 22,709x,
 `tb h` 12,977x, `tb d` on the unchanged path infinite);**
 scratch lives in the session scratchpad, never `/tmp` root. Details: `bebop-lang/docs/TOKEN-ECONOMY.md`.
+
+## bebop-lang: three laws that override convenience
+
+Distilled 2026-09-12 from the full defect record. `bebop-lang/AGENTS.md` carries the
+taxonomy and the reasoning; `bebop-lang/tools/arch_check.py` enforces what can be enforced
+and runs inside `bench/vs_rust/invariants.sh`.
+
+1. **FAILURES ARE LOUD.** Never let a failure look like success or like slowness. Never
+   discard stderr on a run. Never report an empty result as empty — name its exit code.
+   Bound every wait and say what it waited for. If you had to add instrumentation to find
+   out what happened, that instrumentation stays.
+2. **A NUMBER IS EITHER MEASURED OR IT IS A HYPOTHESIS.** A constant in a comment, a
+   "KNOWN RED" label, a limit in a doc — all have dates on them and all have been wrong
+   here. Re-measure before building on one. A gate's value is the deliverable, not its exit
+   code, and every claim quotes the line it came from. When a gate and a golden disagree,
+   the ORACLE decides which side is stale; never edit a golden to match a program.
+3. **SMALL FILES, NAMED HELPERS, NO NESTED FUNCTIONS.** New `.bp` files cap at 800 lines
+   (`arch_check` file-size, with a ratchet that may only go down). Top-level functions only
+   — the language has no closures. Derive constants in the source (`2000 * 4 + 2003 + 5 + 21`,
+   never `10029`) so the next layout change can be checked against them. A function spanning
+   a `sys_clone` keeps at most EIGHT symbols across the spawn; constants do not count.
+
+A change to a written format is not finished until every reader, oracle, golden and harness
+model is re-derived in the SAME commit. B5 step 1 skipped that and cost five gates, two
+oracles and a harness model, found one at a time over a day.

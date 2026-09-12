@@ -78,5 +78,13 @@ PW=$(python3 tools/perf.py size --bin "$BIN" 2>/dev/null | python3 -c "import as
 echo "push_words: $PW"
 [ "$PW" = 0 ] || { echo "PUSH_WORDS NONZERO: $PW stack-machine words remain in $BIN (want 0)"; fail=1; }
 
+# --- mechanical architecture and process invariants (tools/arch_check.py) ----------
+# Every check there exists because a specific defect cost this project real time: a
+# promoted binary that was not the source's compiler, stale .store files that read as
+# miscompiles, a memo replay that skipped writing a file other gates consume, files that
+# grew past the point where a change to them can be reviewed.
+echo "== (x) arch_check: architecture and process invariants"
+python3 tools/arch_check.py || fail=1
+
 [ $fail = 0 ] && echo "invariants: GREEN" || echo "invariants: RED"
 exit $fail

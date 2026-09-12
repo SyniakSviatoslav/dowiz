@@ -243,6 +243,87 @@ L7. str-vs-int comparisons in any analysis mirror of .bp code are banned:
     char() returns ints in Bebop; python mirrors must compare ord()s. The
     138-names=0 bug was exactly this class.
 
+## LAW: FAILURES ARE LOUD (operator, 2026-09-12 — binding, no exceptions)
+
+The dominant cost on this project is not fixing defects. It is finding out where a
+symptom came from. Nearly every defect that cost a day was SILENT rather than subtle:
+
+- a child hit `sys_exit(80)` and died; the parent waited on a flag for ever, so a dead
+  thread and a slow one were indistinguishable and it was written off as "performance";
+- past 8 kept symbols across a `sys_clone` the children are lost with NO trap and NO
+  diagnostic — `sys_clone` returns valid TIDs and nothing ever writes;
+- `got=` empty had THREE different causes in one day — a trap, a stale artifact, and the
+  missing-binary guard — and all three printed identically;
+- a fold of exactly 0 named none of the five guard factors that could have produced it;
+- `st_commit_2pc` committed nothing at all and reported success;
+- partitions wrote over each other and every write "succeeded".
+
+So:
+
+1. **Never let a failure be indistinguishable from success or from slowness.** If a thing
+   can fail, its failure must SAY SO, with a code or a name, at the point it happens.
+2. **Never discard stderr on a run.** `tools/arch_check.py` **loud-failure** enforces this
+   for every gate and tool script; a fuzzer that classifies failures by exit code is the
+   only exemption, and it is listed in `tools/arch_ratchet.txt` with its reason.
+3. **Never report an empty result as empty.** `std_golden.sh`'s `gate()` turns an empty
+   value into a NAMED cause using the run's exit code — `EMPTY(rc=82 trap ...)`,
+   `EMPTY(rc=124 TIMEOUT -- a hang, or a child died and the parent waits for ever)`.
+   Anything else that collects a result owes the same.
+4. **A wait must be bounded and must name what it waited for.** An unbounded wait on a flag
+   another thread sets converts every child-side failure into a hang. Bound it, and on
+   expiry report WHICH worker never arrived.
+5. **A guard that annihilates a value must be able to say which factor was false.** A fold
+   of 0 from a product of five checks is a bug report with the useful part removed.
+6. **An exit code is not a result.** `rc=0` with a fold of 0 is a failure. Quote the value.
+7. **When two things must agree, print BOTH on disagreement**, never just the verdict —
+   `MISMATCH(same=.../foreign=...)` is the shape to copy.
+
+The test of this law is simple: if a failure required you to add instrumentation before you
+could tell what happened, the instrumentation belongs in the code permanently.
+
+## DEFECT TAXONOMY — every class that has cost this project time, and what now catches it
+
+Written 2026-09-12 from the whole record. Each row is a class we have actually been bitten
+by, not a hypothetical. **Where a check exists, it is mechanical and runs in `invariants.sh`
+via `tools/arch_check.py` — read that file, do not re-derive these by hand.**
+
+| # | Defect class | What it looked like | Caught by |
+|---|---|---|---|
+| 1 | **Claimed work that does not exist** | a roadmap row marked LANDED citing commit `c2f943e`, which is not a valid object; a dozen rows with no code behind them | no automatic check possible — require BOTH a roadmap marker AND a grep/commit in the tree, and say CONFIRMED / CLAIMED-ONLY / ROADMAP-OPEN per row |
+| 2 | **The promoted artifact is not the source's** | `bebop.bin` was `292b8953` while `compile(bebop.bp)` was `7c7d1f77`; every gate number was measured against a compiler no source produces | `arch_check` **artifact-identity**. Note `chain.sh`'s fixpoint does NOT catch this: it proves the SOURCE has a fixpoint, not that the promoted binary IS it |
+| 3 | **A number taken from a comment** | `<= 8 live symbols across a clone`; `KNOWN RED: compiler miscompile` on a gate that now passes; a harness model that predicted 400 cells per commit when it was 421 | discipline: a number in a comment is a HYPOTHESIS with a date on it. Re-measure before building on it |
+| 4 | **Stale generated artifacts** | nine gb gates RED because a leftover `.store` no longer matched what `st_open` maps; trap 82, no output, reads exactly like a miscompile | `arch_check` **stale-store**, plus the battery clearing `$BEBOP_TMP/gb_*.store` before it starts |
+| 5 | **A memo replay that skips a side effect** | the memo prints a PASSed gate's cached stdout WITHOUT running it, so the store other gates read is never written and they all fold to 0 | `arch_check` **producer-memo** |
+| 6 | **Fitting a golden instead of deriving one** | setting a frozen expected value to whatever the program prints destroys the only independent check the gate has | discipline: build/run the ORACLE first. It decides which side is stale. slayout's oracle moved to meet bebop; schain's, sevolve's and scompact's agreed with the golden and bebop was wrong |
+| 7 | **A probe that measures a race** | a parent read shared cells immediately after the spawn loop; its "201" was luck. Three conclusions were built on it, and all three were wrong | discipline: the parent MUST wait for what it reads, and every threaded measurement runs at least twice |
+| 8 | **A probe that varies the wrong thing** | padding with `let a1 = 1;` proves nothing about spill pressure — constants are rematerialised. With symbols that must be KEPT the limit is 8, not 32 | discipline: vary the KIND as well as the count |
+| 9 | **A guard factor annihilating a result** | a fold of exactly 0 is almost never arithmetic; it is a product of checks with one false factor | discipline: when a gate prints 0, print each factor separately before anything else |
+| 10 | **A layout change without its dependents** | B5 step 1 added a 21-cell PartTab per commit and updated nothing that depended on it: five gates, two oracles and one harness model, found one at a time over a day | discipline: a change to a written format is not done until every reader, oracle, golden and harness model is re-derived in the SAME commit |
+| 11 | **A gate that goes green for the wrong reason** | a `live` change made sevolve match its golden by restoring pre-B5 semantics — and broke schain, because `used` still counted the PartTab and `live` no longer did | discipline: any change that makes one gate agree while making another disagree is fitting, not fixing. Run the WHOLE battery before believing a single gate |
+| 12 | **Wrong argument positions** | `seed smw.bin x 2 1000` makes `argv[2]` the string `"x"`, and `sm_atoi("x")` is 72 — so a "2 writer" run spawned 72. Every measurement taken that way was void | discipline: argv[0] is the seed loader, argv[1] the .bin, argv[2] the first user argument. Echo the parsed values back before trusting a run |
+| 13 | **Files no one can review** | `bebop.bp` is 7700 lines; three prelude files passed 900 | `arch_check` **file-size** with a RATCHET in `tools/arch_ratchet.txt`: new files cap at 800 lines, existing offenders are listed as DEBT with the split that retires them, and the numbers may only ever go DOWN |
+| 14 | **Nested function definitions** | bebop has no closures, so an indented `fn` is always a scope mistake | `arch_check` **nested-fn** |
+
+## HOW TO WRITE THE NEXT FILE (architecture, not style)
+
+1. **A new `.bp` file caps at 800 lines.** `arch_check` enforces it. If you are approaching
+   the cap, you are writing two files: split along the seam you can NAME, not at the middle.
+2. **Top-level functions only.** No nested definitions; the language has no closures and the
+   register model has no frame for them.
+3. **One named helper per concept, and give it the concept's name.** `st_region_start`,
+   `st_parttab_root_p`, `do_cross_commit` are readable from their call sites. A block of
+   inline arithmetic repeated twice is a helper you have not written yet.
+4. **A function that spans a `sys_clone` keeps at most EIGHT symbols across the spawn**, and
+   constants do not count — only what must be KEPT. Pack the rest into one `[i64]`; array
+   handles are cell indices and `st_addr`/`st_cells` are identities, so a handle fits in a
+   slot exactly. Over the line, children are lost SILENTLY: no trap, no diagnostic.
+5. **Derive constants in the source, not in your head.** Write `2000 * 4 + 2003 + 5 + 21`,
+   never `10029`. The derivation is what lets the next reader check it against a layout change.
+6. **A gate's value is the deliverable, not its exit code.** `rc=0` with a fold of 0 is a
+   failure. Quote the printed number, always.
+7. **Show the gate can fail.** Break the feature on purpose, watch the number move, put it
+   back, and quote all three values. A number that does not move is not measuring anything.
+
 ## KEEP (positive patterns, session-proven)
 
 Distinct exit codes per failure branch + errno propagation (`neg x0`);

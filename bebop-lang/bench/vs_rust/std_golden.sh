@@ -42,17 +42,18 @@ run() {  # run <timeout-s> <bin> [args...]  -- stdout is the program's stdout (o
   # false REDs cost the A5 lane real time. The generated kernels (gb_<op>_<sr>_*.bin,
   # gb_*_gen.store) are side effects of an EARLIER `run` in the same block, so they are exactly
   # the artifacts a replayed or reordered run can leave absent. Say so instead of printing nothing.
-  [ -s "$bin" ] || { echo "GUARD: $bin missing or empty -- a producer run in this block did not create it (memo replay or reorder), not a wrong value"; return 90; }
-  [ "$MEMO" = 0 ] && { timeout "$t" ./seed/build/seed "$bin" "$@"; return; }
+  [ -s "$bin" ] || { echo "GUARD: $bin missing or empty -- a producer run in this block did not create it (memo replay or reorder), not a wrong value"; echo 90 > "$BEBOP_TMP/last_rc"; return 90; }
+  [ "$MEMO" = 0 ] && { timeout "$t" ./seed/build/seed "$bin" "$@"; rc=$?; echo "$rc" > "$BEBOP_TMP/last_rc"; return $rc; }
   # args become part of the key as an md5 prefix: embedding them (a store DIR arg, B3 gates) made the memo filename
   # exceed NAME_MAX under a long BEBOP_TMP -> `cat` failed -> gb_pool "got=" empty (pre-existing since B3 step 4)
   local a=""; [ $# -gt 0 ] && a=".$(printf '%s' "$*" | md5sum | cut -c1-8)"
   b=$(md5sum < "$bin" | cut -c1-32); k="$b.$SEEDMD5.$(grep -c "^$b " "$BEBOP_TMP/memo.log")$a"
   echo "$b $k" >> "$BEBOP_TMP/memo.log"
   # E4 (D12-A): one line per run in $BEBOP_TMP/gates.txt -- `<gate> <ms> hit|miss rc=N` (std_par.sh sums them)
-  if [ -f "$MEMO/$k" ]; then echo "$k hit" >> "$BEBOP_TMP/memo.keys"; cat "$MEMO/$k"; echo "$(basename "$bin" .bin) 0 hit rc=0" >> "$BEBOP_TMP/gates.txt"; return 0; fi
+  if [ -f "$MEMO/$k" ]; then echo "$k hit" >> "$BEBOP_TMP/memo.keys"; cat "$MEMO/$k"; echo "$(basename "$bin" .bin) 0 hit rc=0" >> "$BEBOP_TMP/gates.txt"; echo 0 > "$BEBOP_TMP/last_rc"; return 0; fi
   echo "$k miss" >> "$BEBOP_TMP/memo.keys"; local t0=$(date +%s%N)
   timeout "$t" ./seed/build/seed "$bin" "$@" > "$BEBOP_TMP/memo.$k"; rc=$?
+  echo "$rc" > "$BEBOP_TMP/last_rc"   # VISIBILITY: gate() turns an empty result into a NAMED cause
   echo "$(basename "$bin" .bin) $(( ($(date +%s%N) - t0) / 1000000 )) miss rc=$rc" >> "$BEBOP_TMP/gates.txt"; cat "$BEBOP_TMP/memo.$k"; return $rc
 }
 
@@ -70,6 +71,22 @@ gate() {
       while read -r k s; do [ "$s" = miss ] && cp "$BEBOP_TMP/memo.$k" "$MEMO/$k"; done < "$BEBOP_TMP/memo.keys"
     fi
     : > "$BEBOP_TMP/memo.keys"
+  fi
+  # VISIBILITY (2026-09-12): `got=` empty had THREE different causes in one day -- a trap,
+  # a stale artifact, and the missing-binary guard -- and all three printed identically.
+  # Naming the exit code turns "it produced nothing" into a diagnosis at a glance.
+  if [ -z "$result" ]; then
+    local rc; rc=$(cat "$BEBOP_TMP/last_rc" 2>/dev/null || echo "?")
+    case "$rc" in
+      0)   result="EMPTY(ran, printed nothing)" ;;
+      80)  result="EMPTY(rc=80 arena exhausted: zeros crossed x28)" ;;
+      82)  result="EMPTY(rc=82 trap: SIGSEGV/SIGBUS -- often a STALE .store that st_open cannot match)" ;;
+      89)  result="EMPTY(rc=89 register pressure)" ;;
+      90)  result="EMPTY(rc=90 guard: the .bin was missing -- a producer in this block did not run)" ;;
+      103) result="EMPTY(rc=103 too many live symbols across a sys_clone)" ;;
+      124) result="EMPTY(rc=124 TIMEOUT -- a hang, or a child died and the parent waits for ever)" ;;
+      *)   result="EMPTY(rc=$rc)" ;;
+    esac
   fi
   if [ "$result" = "$golden" ]; then
     echo "PASS $name ($golden)$tag"
