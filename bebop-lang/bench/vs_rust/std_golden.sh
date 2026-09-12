@@ -57,6 +57,21 @@ run() {  # run <timeout-s> <bin> [args...]  -- stdout is the program's stdout (o
   echo "$(basename "$bin" .bin) $(( ($(date +%s%N) - t0) / 1000000 )) miss rc=$rc" >> "$BEBOP_TMP/gates.txt"; cat "$BEBOP_TMP/memo.$k"; return $rc
 }
 
+# need_file <gate-name> <path>... -- assert a block's PREREQUISITE artifacts exist before the
+# block runs. The `run` GUARD above checks only the .bin; its own L12 comment names the other
+# half of the hazard ("gb_*_gen.store ... are exactly the artifacts a replayed or reordered run
+# can leave absent") and never implemented it. Measured 2026-09-12: with $GBT/gb_gen.store absent,
+# gb_pool_test.bin dies `rc=82 trap: SIGSEGV/SIGBUS` -- a diagnosis that points at memory
+# corruption when the cause is a missing input file. Same binary against a warm $GBT returns the
+# golden -4783772994166464769. A missing PREREQUISITE must name itself, not trap.
+need_file() {
+  local name="$1" p; shift
+  for p in "$@"; do
+    [ -s "$p" ] || { echo "PREREQ $name: $p missing or empty -- a producer block above did not run (memo replay, reorder, or a failed producer). NOT a miscompile."; return 1; }
+  done
+  return 0
+}
+
 run_test() {
   local f="$1" out_bin="$2"
   ./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$f" "$out_bin" >/dev/null 2>&1 || return 1
@@ -881,6 +896,7 @@ GBT=${BEBOP_TMP:-/tmp/opencode}
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_gen.bp "$GBT/gb_gen_test.bin" >/dev/null 2>&1 && timeout 60 ./seed/build/seed "$GBT/gb_gen_test.bin" "$GBT" | tail -1)
 gate gb_gen_tier0 -4783772994166464769 "$r"
 gb_gen_ok=1; gb_gen_c=""
+need_file gb_gen_specialised "$GBT/gb_gen.store" || gb_gen_ok=0
 for combo in mxv_1 mxv_2 mxv_3 mxv_4 vxm_1 vxm_2 vxm_3 vxm_4 dmxv_1 dmxv_4 dvxm_1 dvxm_4; do
   op=${combo%_*}; sr=${combo#*_}
   ./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$GBT/gb_${op}_${sr}_0_1_0.bp" "$GBT/gb_${op}_${sr}_0_1_0.bin" >/dev/null 2>&1 || gb_gen_ok=0
@@ -935,7 +951,7 @@ cat bench/vs_rust/std_tests/gb_pool.bp >> "$GBT/gb_pool_build.bp"
 # so a re-run stops growing the pool at all) and gb_kernel_require (exit 107 rather than
 # dispatching a null Kernel).
 GBPOOL="$GBT/gb_pool_gate.$(md5sum < "${BEBOP_BIN:-bebop.bin}" | cut -c1-8).gbpool"
-r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$GBT/gb_pool_build.bp" "$GBT/gb_pool_test.bin" >/dev/null 2>&1 && run 60 "$GBT/gb_pool_test.bin" ${BEBOP_BIN:-bebop.bin} "$GBT" "$GBPOOL" | tail -1)
+r=$(need_file gb_pool "$GBT/gb_gen.store" && ./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$GBT/gb_pool_build.bp" "$GBT/gb_pool_test.bin" >/dev/null 2>&1 && run 60 "$GBT/gb_pool_test.bin" ${BEBOP_BIN:-bebop.bin} "$GBT" "$GBPOOL" | tail -1)
 gate gb_pool -4783772994166464769 "$r"
 
 # ---- gb_pool_reuse (ROADMAP B3's OPEN DEFECT, closed 2026-09-08): the gate the defect never
@@ -946,8 +962,8 @@ gate gb_pool -4783772994166464769 "$r"
 #      the same golden the fresh-pool run did. On the unpatched tree this is RED in both cells:
 #      224 x trap 82 and a fold of 0 on a twice-used pool, 7 x trap 82 and -367455298937407970 on
 #      a once-used one. Cheap: the .bin is already compiled and one run is ~2 s. ----
-rr1=$(run 60 "$GBT/gb_pool_test.bin" ${BEBOP_BIN:-bebop.bin} "$GBT" "$GBPOOL" | tail -1)
-rr2=$(run 60 "$GBT/gb_pool_test.bin" ./seed/build/seed "$GBT" "$GBPOOL" | tail -1)
+rr1=$(need_file gb_pool_reuse "$GBT/gb_gen.store" "$GBPOOL" && run 60 "$GBT/gb_pool_test.bin" ${BEBOP_BIN:-bebop.bin} "$GBT" "$GBPOOL" | tail -1)
+rr2=$(need_file gb_pool_reuse "$GBT/gb_gen.store" "$GBPOOL" && run 60 "$GBT/gb_pool_test.bin" ./seed/build/seed "$GBT" "$GBPOOL" | tail -1)
 [ "$rr1" = "$rr2" ] || rr2="MISMATCH(same=$rr1/foreign=$rr2)"
 gate gb_pool_reuse -4783772994166464769 "$rr2"
 
