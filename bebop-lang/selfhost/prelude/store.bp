@@ -582,10 +582,21 @@ fn st_commit_2pc(base: [i64], txs: [i64], roots: [i64], locks: [i64], pcount: i6
     0
   };
   // Phase 2 -- publish: one PartTab carrying every participant's new state, then one
-  // superblock toggle. The PartTab is allocated in partition 0's region, so partition 0's
-  // recorded cursor has to be taken AFTER the allocation.
-  let pt_off = st_alloc_p(base, txs, 0, st_parttab_cells(pcount), ptdig, pcount, arena_cells);
-  let _ = locks[2 * pcount + 1 + 0] = txs[2];
+  // superblock toggle. The PartTab is allocated in the LOWEST PARTICIPATING partition, not
+  // in partition 0: a transaction between partitions 1 and 2 leaves partition 0's tx slot
+  // untouched, so txs[0*6+2] is 0 and the PartTab would be written at offset 0, straight
+  // over the superblock. Measured 2026-09-12: a 1+2 cross-partition commit returned 00,
+  // neither root committed, until the home partition was taken from `roots`.
+  let home = 0 - 1;
+  let q = pcount - 1;
+  while q >= 0 {
+    let home = if roots[q] == 0 then home else q;
+    let q = q - 1;
+    0
+  };
+  let th = st_cells(st_addr(txs) + home * 6);
+  let pt_off = st_alloc_p(base, th, home, st_parttab_cells(pcount), ptdig, pcount, arena_cells);
+  let _ = locks[2 * pcount + 1 + home] = th[2];
   let _ = st_parttab_write_p(base, pt_off, sb, locks, pcount, tmp);
   let _ = st_seal(base, pt_off, tmp);
   let other = 512 - sb;
@@ -593,7 +604,7 @@ fn st_commit_2pc(base: [i64], txs: [i64], roots: [i64], locks: [i64], pcount: i6
   let _ = base[other + 1] = 1;
   let _ = base[other + 2] = new_gen;
   let _ = base[other + 3] = pt_off;
-  let _ = base[other + 4] = txs[2];
+  let _ = base[other + 4] = th[2];
   let _ = base[other + 5] = 0;
   let _ = base[other + 6] = 0;
   let _ = base[other + 7] = base[sb + 7];
