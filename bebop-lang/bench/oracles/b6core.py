@@ -43,7 +43,7 @@ def fill_gather(n):
     # Convert to signed i64
     return fold_unsigned if fold_unsigned < (1 << 63) else fold_unsigned - (1 << 64)
 
-n = 10000000
+n = 8388608  # 1<<23: `idx[i] & (n-1)` is only a MASK when n is a power of two (see b6core.bp)
 # Compute both folds (golden is SCAN at W=1 for std_golden registration)
 fold_scan = fill_scan(n)
 print(fold_scan)

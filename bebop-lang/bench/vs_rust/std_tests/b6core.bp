@@ -117,7 +117,15 @@ fn atoi(t: str) -> i64 {
   v
 }
 fn main(argc: i64, argv: [str]) -> i64 {
-  let n = 10000000;
+  // n MUST be a power of two. `b6_gather` indexes with `idx[i] & (n - 1)`, and that is only a
+  // mask when n-1 is all-ones. At n = 10^7 the mask was 0x98967F -- 14 bits set -- so the index
+  // took at most 2^14 = 16384 DISTINCT values, ~1 MiB of cache lines out of an 80 MB array. The
+  // gather arm was therefore measuring an L2-resident access pattern, not a gather: it read
+  // 2.7 ns/gather where a real one measures 13.3 (journal 852), and a W=2 run once came back 9x
+  // faster than sequential, which no two cores can do. 1<<23 = 8388608 cells = 64 MiB per array,
+  // mask 0x7FFFFF, every one of the 8388608 indices reachable. Changed 2026-09-13; every timing
+  // number on this row moves with it, which is why it is its own change.
+  let n = 8388608;
   let shape = if argc >= 3 then atoi(argv[2]) else 0;
   let W = if argc >= 4 then atoi(argv[3]) else 0;
   let mode = if argc >= 5 then atoi(argv[4]) else 0;

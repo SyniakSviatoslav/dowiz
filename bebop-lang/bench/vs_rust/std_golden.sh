@@ -731,12 +731,13 @@ gate smw 15150300000 "$r"
 # ---- b6core (B6, ROADMAP B6: multi-core kernels, SCAN and GATHER shapes, W pinned to A78,
 # fold identity check at W=1 as a deterministic gate) ----
 # Committed literal, for the reason spelled out at the smw gate above.
-# Derivation: python3 bench/oracles/b6core.py -> -9207164868073128640, the SCAN fold of the
-# LCG fill at n = 10^7 as a signed i64. Mode 1 makes the program return the fold instead of its
+# Derivation: python3 bench/oracles/b6core.py -> 485239494593740800, the SCAN fold of the
+# LCG fill at n = 1<<23 as a signed i64 (n must be a power of two: `idx[i] & (n-1)` is only a
+# mask when it is, and at 10^7 the gather arm was reading 16384 distinct cells, i.e. L2). Mode 1 makes the program return the fold instead of its
 # packed status, so this gate compares a value the oracle derives independently -- the old
 # `ok == 1` form compared the program to ITSELF (fold_par == fold_seq) and was self-frozen.
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/b6core.bp ${BEBOP_TMP:-/tmp/opencode}/b6core_test.bin >/dev/null 2>&1 && run 120 ${BEBOP_TMP:-/tmp/opencode}/b6core_test.bin 0 1 1 | tail -1)
-gate b6core -9207164868073128640 "$r"
+gate b6core 485239494593740800 "$r"
 
 # ---- sevolve (G3, T114: v1/v2 layouts, v1 reads v2, sha256-named migration + compaction) ----
 rm -f sevolve.store sevolve.store.tmp
