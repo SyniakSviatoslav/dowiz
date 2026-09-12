@@ -903,7 +903,8 @@ fn st_compact(path: [i64], plen: i64, size: i64, lay: [i64], nlay: i64, tmp: [i6
   let old = st_cells(sys_mmap(0, size, 3, 2, fd, 0));
   let _ = sys_close(fd);
   let sb = st_pick(old, tmp);
-  let root = old[sb + 3];
+  let pt0 = old[sb + 3];
+  let root = st_parttab_root(old, pt0);
   let gen = old[sb + 2];
   let mig = old[sb + 6];
   let com = old[sb + 10];
@@ -949,8 +950,23 @@ fn st_compact(path: [i64], plen: i64, size: i64, lay: [i64], nlay: i64, tmp: [i6
     let scan = scan + 2 + len;
     0
   };
-  let live = cur[0] - 1024;
-  let _ = st_sb_write_m(new, 0, gen + 1, nroot, cur[0], live, 0, nmig, tmp);
+  // B5 step 1 put a PartTab's offset in superblock cell 3, not the root's. The old
+  // PartTab must NOT be copied verbatim: its root_p is an offset into the OLD file, and
+  // st_refmask returns 0 for a digest absent from the layout table, so the relocation
+  // loop never touches it (measured 2026-09-12: root_p came back 21077, out of bounds in
+  // the compacted file, and st_len on it trapped 82). Write a FRESH PartTab describing
+  // the compacted file instead, the way st_commit_m does. It is appended AFTER the scan
+  // loop, so its own cells are never walked by the relocation pass.
+  let npt = cur[0];
+  let used_after = npt + 2 + st_parttab_cells(1);
+  let live = used_after - 1024;
+  let _ = st_sb_write_m(new, 0, gen + 1, npt, used_after, live, 0, nmig, tmp);
+  let _ = new[npt] = ((st_digest("PartTab") & 4294967295) << 32) | st_parttab_cells(1);
+  let _ = new[npt + 1] = gen + 1;
+  let _ = st_parttab_write(new, npt, 0, gen + 1, nroot, used_after, tmp);
+  let _ = st_seal(new, npt, tmp);
+  let _ = cur[0] = used_after;
+
   let _ = st_sb_write_ch(new, 0, ncom, nhds, tmp);
   let k = 512;
   while k < 528 {
