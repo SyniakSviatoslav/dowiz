@@ -80,7 +80,7 @@ git checkout-index --prefix=<lane>/ -f -z --stdin`, then flatten the prefix and 
 - TASKS.md is GENERATED (edit HISTORY.md headers, not the table). ROADMAP section headers are binding.
 - OPT-G1 bugs: "is this register used" scans must cover prologue param stores, not body alone.
 - Derive instruction words with `python3 int(hex,16)` and objdump -d the .bin: hand-typed clz became `rev`.
-- Clone-spanning fn keeps <= 8 live symbols; exit via sys_exit_thread_guard (svc 93 since T127).
+- Clone-spanning fn: there is no live-symbol limit worth planning around. Measured 2026-09-12 on the source-built compiler 7c7d1f77, spawn regions with 13, 16, 22 and 32 live symbols all compile, run, and return the child's marker. The old `<= 8` was real before A14/A14b's spill machinery; trap 103 in the withdrawn binary 292b8953 enforced it and no source file ever contained that check. Exit via sys_exit_thread_guard (svc 93 since T127).
 - `&&`-lists followed by `&` background the whole list. st_open ftruncates to size; report size =
   arena_used*8. store's crc is crc32x over raw words; crc32(cells,n) is byte-per-cell.
 - A `std_golden` gate that goes RED under a long `BEBOP_TMP` is the memo-cache filename artifact
