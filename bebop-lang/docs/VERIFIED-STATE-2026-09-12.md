@@ -7,15 +7,23 @@ Method: every claim below was checked against the object database and the workin
 carried-over session summary. Where a row body and the tree disagree, **the tree wins** (`.claude/CLAUDE.md`
 rule 3). Row bodies further down were NOT rewritten except A6 -- read them with this section in hand.
 
-**Ground truth.** HEAD = `4286ec1` (2026-09-11 21:48). That commit carried 9 pointer-named binary blobs,
-~260 MB, that an A7-step3 run wrote into the repo root -- their names are raw `0xa8`-prefixed addresses, so a
-filename argument was handed a pointer instead of a string; **that emitter path is an open defect, tracked
-under A7**. On 2026-09-12 the blobs were removed from the index and moved out of the repo (along with
-`sbench.sqlite-wal` and a stray control-char filename, and `*.sqlite-wal` / `*.sqlite-shm` were added to
-`.gitignore`); they existed in no other commit, so amending `4286ec1` removes them from history entirely. Local `main` is **95 commits ahead of `origin/main`
-(`f6da66d`)**, 0 behind; push is blocked for want of a key, so *nothing since 2026-09-07 is on the remote*.
-13 stale `.claude/worktrees/agent-*` checkouts are detached at ancestors of `main` -- dangling lanes, no
-divergent work.
+**Ground truth, RE-DERIVED 2026-09-13.** Every number in the paragraph this replaces had gone stale or was
+wrong, which for a document the roadmap tells readers to open FIRST is the same defect it was written to
+catch. What it said, and what is true:
+
+| it said | measured 2026-09-13 |
+|---|---|
+| HEAD = `4286ec1` (2026-09-11) | HEAD = `bc06e5a`; thirteen commits landed on 2026-09-12/13 alone |
+| "95 commits ahead of `origin/main`, push is blocked for want of a key" | **0 ahead.** The key on the box was fine; `~/.ssh/id_ed25519.pub` was STALE -- it held a public key whose private half is not on this machine, and `identity_sign: private key contents do not match public` named it once a push was actually attempted. The operator added the real key, and everything through `bc06e5a` is on the remote |
+| the blobs "existed in no other commit, so amending `4286ec1` removes them from history entirely" | **false, and it matters.** `git log --find-object` puts them in TWO commits, `4286ec1` and `e5b64f7`, so amending one would never have removed them -- and they are now PUSHED. Two survive at `bebop-lang/<raw bytes>`: **64 MB** and **96 MB**. GitHub warns on every push. Removing them now needs a history rewrite (`git filter-repo`) AND a force-push over a published branch: the operator's call, not a session's |
+| 13 stale `.claude/worktrees/agent-*` | still 13, still detached at ancestors, still no divergent work |
+
+**The emitter that wrote them is CLOSED as of `bc06e5a`**, though not the way this document assumed. Its
+words disassemble to `lsr x2,x0,#32; add x2,x17,x2; and x3,x0,#0xffffffff` then `openat(-100, x2, x3, 0)` --
+the path's LENGTH went into openat's FLAGS, and the pointer came from a `str` handle whose bytes nothing
+copies into the arena. `sys_mapb` has no call site anywhere in the tree, so it is now REFUSED at compile time
+(diag 108, `neg/c140_mapb_refused`) rather than marshalled onto a producer that does not exist; it returns
+when A7 step 2 re-lands whole.
 
 **Counts.** 53 task rows (A 19, B 8, C 6, D 6, E 4, F 10), classified by the rows' own
 LANDED / REFUTED / CLOSED / OPEN markers: **27 done, 13 in progress, 11 not started, 2 deliberately parked**
@@ -53,6 +61,31 @@ Two further claims from the same summary also fail: "B7 step2 GREEN" (only step 
 "10+ uncommitted files" (the tree is clean). "B4 GREEN" is half-true at best -- B4's own body says step 3 is
 its only open half. "F4 = 121/121 oracle entries" is true only as *declared fixtures* in `Conformance.lean`;
 the Lean semantics have not been run against them, and F4 carries no LANDED marker.
+
+**What the table above got RIGHT, and what moved since (2026-09-13, each re-checked, not assumed).**
+The table's verdicts held up: every row it called NOT IMPLEMENTED was still not implemented a day later,
+which is the point of writing verdicts down. Four have moved, and two moved because this document's own
+method was applied to them:
+
+- **B5 steps 2-3: NOT IMPLEMENTED -> LANDED.** `st_commit_2pc` and the `_p` API exist and G10 is GREEN --
+  `smw` at 3 writers x 10^5 updates. Its fold now sums the update INDEX rather than the constant 1, because
+  a fold of ones is a count by another name and cannot detect a lost update; proved by mutation (one update
+  written as 0 moved the fold 500500 -> 500495, exactly the index skipped).
+- **F8: "GATE WITHOUT A COMPILER" -> the gate PASSES VACUOUSLY, measured.**
+  `fn add(x: i64, y: i64) -> i64 requires @@@ %%% not_a_thing ensures 1 2 3 ][ { x + y }` COMPILES and runs,
+  and so does a top-level `theorem <nonsense> ][ @@@`. `bebop.bp` has zero code for requires/ensures/theorem.
+  So it is not "a gate whose compiler is missing" -- the compiler SILENTLY ACCEPTS invalid text in two
+  syntactic positions, which is a loud-failure violation in the compiler itself. `docs/LANGUAGE.md` claimed
+  the syntax was "parsed and erased as of A16 Phase 1"; corrected.
+- **B6: NOT IMPLEMENTED -> partly landed, honestly RED.** `b6core` terminates at every (shape, W) after its
+  join was found waiting on a done-flag nothing ever set. Its TIMING arm stays red and its gather arm is
+  measuring the wrong thing: `idx[i] & (n-1)` with n = 10^7 masks with 0x98967F, 14 bits set, so the index
+  takes at most 16384 distinct values -- ~1 MiB of cache lines, L2-resident by construction.
+- **B7 step 1: real, and defective.** The parser ACCEPTS a malformed query: `qdsl_query` writes
+  `let _ = if ok == 0 then 0 else 0;` fifteen times, in `selfhost/std/qdsl.bp` as well as the constructs,
+  where an early return was meant. Honouring the flag at the return fixes the negative test (89 on both
+  sides) and BREAKS the positive one (41000 -> 1), because every optional clause sets `ok = 0` merely by
+  being absent -- so the fix is a presence flag per clause, not a return.
 
 **What that means for the critical path:** the whole of Phase F is earlier than it looks. F7 is the load-bearing
 row -- F9 cannot become real proofs until the kernel exists, and F8's gate cannot pass until `bebop.bp` parses
