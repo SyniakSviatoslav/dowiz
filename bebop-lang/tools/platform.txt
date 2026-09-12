@@ -1,0 +1,19 @@
+# Platform assumptions frozen at commit 08cd9e46 (2026-09-13).
+# Format: key=value
+# After value: explanation of what breaks if it changes.
+pagesize=4096
+lse_atomics=8
+crc32=8
+tracer_pid=18519
+fsync_mode=nobarrier
+kernel_release=6.17.0-PRoot-Distro
+core_count=8
+
+# WHAT BREAKS when value changes:
+# pagesize: 16 KiB-page kernel makes msync() return EINVAL for the store ranges; st_commit_sync discards rc so durability silently switches off
+# lse_atomics: cores without LSE atomics (ldaddal) take SIGILL on sys_atomic_add with no handler
+# crc32: cores without CRC32 extension take SIGILL if acceleration attempted
+# tracer_pid: nonzero means proot/debugger; inflates latency 10-100x, invalidating timing gates
+# fsync_mode: nobarrier means writes not durable to device; barrier-enabled changes durability model
+# kernel_release: version skips or AArch64→x86 breaks syscall numbers, instruction encoding, page layout
+# core_count: changes parallelism assumptions; may expose races or unpredictable perf

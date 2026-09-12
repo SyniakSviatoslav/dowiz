@@ -1,7 +1,9 @@
 # G4 scompact oracle (T113): live fold from the spec; when scompact.store exists after a
 # run, its size must be <= live*8 + 3 pages and its superblock must say superseded == 0.
 import os, struct, zlib
-M = (1 << 64) - 1
+from storelib import mask64, cells
+
+M = mask64()
 def s64(x): x &= M; return x - (1 << 64) if x >> 63 else x
 n = 1000000; v = 42; acc = 0
 for i in range(n):

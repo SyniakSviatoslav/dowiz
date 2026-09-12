@@ -83,6 +83,17 @@ echo "push_words: $PW"
 # promoted binary that was not the source's compiler, stale .store files that read as
 # miscompiles, a memo replay that skipped writing a file other gates consume, files that
 # grew past the point where a change to them can be reviewed.
+# --- platform identity, FIRST: every assumption below is about this machine -----------
+# ldaddal and crc32x are OPTIONAL ARMv8 extensions assembled under a plain .arch armv8-a;
+# a 16 KiB-page kernel makes msync return EINVAL for these ranges; every latency number on
+# this box is inflated 10-100x because TracerPid is non-zero; and the mount is nobarrier,
+# so "durable" writes are not. A change in any of these invalidates results silently.
+echo "== (0) platform identity"
+if [ -f tools/platform.txt ]; then
+  diff <(bash tools/platform.sh) <(grep -v '^#' tools/platform.txt | grep -v '^$') \
+    || { echo "PLATFORM CHANGED: the frozen assumptions above no longer hold"; fail=1; }
+fi
+
 echo "== (x) arch_check: architecture and process invariants"
 python3 tools/arch_check.py || fail=1
 

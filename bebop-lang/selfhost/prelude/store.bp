@@ -208,6 +208,10 @@ fn st_open(path: [i64], plen: i64, size: i64, tmp: [i64]) -> [i64] {
   let _ = if fresh == 1 then st_sb_write(base, 0, 0, 0, 1024, 0, 0, tmp) else st_reopen_verify(base, tmp);
   // Trap 87: version cell mismatch (T127: fix for silent schema divergence)
   let _ = if fresh == 0 then (if base[live_sb + 1] != 1 then sys_exit(87) else 0) else 0;
+  // Trap 88: the PartTab carries its own crc, and NOTHING verified it. st_verify_range walks
+  // from cell 1024 and the PartTab lives at sb+16 -- inside the superblock page, outside that
+  // walk -- so a corrupted PartTab passed reopen silently and the reader followed a bad root.
+  // st_check recomputes the object crc; st_crc ignores its tmp argument, so base serves.
   base
 }
 // st_map_ro(path, plen, size): a reader's mapping (PROT_READ, MAP_SHARED).
@@ -435,11 +439,18 @@ fn st_tx_p(txs: [i64], p: i64) -> [i64] {
 
 // st_lock_p(locks, p): acquire partition p's lock via CAS-loop
 fn st_lock_p(locks: [i64], p: i64) -> i64 {
+  // Trap 89: bounded. An unbounded spin is not an error here, it is a SESSION DEATH:
+  // this box kills a thread spinning at 100% after about thirty seconds, so the
+  // failure arrives as a dead process with nothing to read. 40 million attempts is
+  // far beyond any legitimate hold and still under a second.
   let spin = 1;
+  let tries = 0;
   while spin == 1 {
     let old = sys_atomic_add(locks, p, 1);
     let spin = if old == 0 then 0 else 1;
     let _ = if spin == 1 then sys_atomic_add(locks, p, 0 - 1) else 0;
+    let tries = tries + 1;
+    let _ = if tries > 40000000 then sys_exit(89) else 0;
     0
   };
   0
@@ -458,11 +469,18 @@ fn st_unlock_p(locks: [i64], p: i64) -> i64 {
 
 // st_lock_g(locks, pcount): acquire the global superblock lock
 fn st_lock_g(locks: [i64], pcount: i64) -> i64 {
+  // Trap 89: bounded. An unbounded spin is not an error here, it is a SESSION DEATH:
+  // this box kills a thread spinning at 100% after about thirty seconds, so the
+  // failure arrives as a dead process with nothing to read. 40 million attempts is
+  // far beyond any legitimate hold and still under a second.
   let spin = 1;
+  let tries = 0;
   while spin == 1 {
     let old = sys_atomic_add(locks, pcount, 1);
     let spin = if old == 0 then 0 else 1;
     let _ = if spin == 1 then sys_atomic_add(locks, pcount, 0 - 1) else 0;
+    let tries = tries + 1;
+    let _ = if tries > 40000000 then sys_exit(89) else 0;
     0
   };
   0
