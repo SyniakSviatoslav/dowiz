@@ -60,12 +60,12 @@ fn par(env: [i64], n: i64, cells: [i64], W: i64) -> i64 {
     // T72: the child pins itself to A78 core 4+i (cells[W*2+1+i] holds the mask)
     let _ = if r == 0 then sys_setaffinity(cells, W * 2 + 1 + i) else 0;
     let _ = if r == 0 then work(env, n, i * 8, i * 8 + 8) else 0;
-    let _ = sys_cond_set(if r == 0 then 1 else 0, cells, W + i, 1);
+    let _ = sys_atomic_add(cells, W + i, if r == 0 then 1 else 0);
     let _ = sys_futex_wake(cells, W + i, 64);
     let parked = if r == 0 then 0 else 1;
     while parked == 0 {
       let _ = sys_futex_wait_guard(if r == 0 then 0 else 1, cells, W * 2, 0);
-      let parked = if cells[W * 2] == 1 then 1 else 0;
+      let parked = if sys_atomic_add(cells, W * 2, 0) == 1 then 1 else 0;
       0
     };
     let i = i + 1;
@@ -76,7 +76,7 @@ fn par(env: [i64], n: i64, cells: [i64], W: i64) -> i64 {
     let parked = 0;
     while parked == 0 {
       let _ = sys_futex_wait_guard(0, cells, W + i, 0);
-      let parked = if cells[W + i] == 1 then 1 else 0;
+      let parked = if sys_atomic_add(cells, W + i, 0) == 1 then 1 else 0;
       0
     };
     let i = i + 1;

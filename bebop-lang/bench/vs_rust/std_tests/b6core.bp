@@ -1,0 +1,170 @@
+// b6core.bp — B6 multi-core kernel gate: two shapes (SCAN, GATHER) × W ∈ {0,1,2,3}
+// Returns: ok*10^15 + pin*10^14 + noalloc*10^13 + ms0*10^7 + msW
+fn lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
+fn fill(a: [i64], n: i64) -> i64 {
+  let x = 12345;
+  let i = 0;
+  while i < n {
+    let x = lcg(x);
+    let _ = a[i] = x;
+    let i = i + 1;
+    0
+  };
+  x
+}
+fn b6_scan(env: [i64], lo: i64, hi: i64) -> i64 {
+  let a = env[0];
+  let sum = 0;
+  let i = lo;
+  while i < hi {
+    let sum = sum + a[i];
+    let i = i + 1;
+    0
+  };
+  sum
+}
+fn b6_gather(env: [i64], lo: i64, hi: i64) -> i64 {
+  let a = env[0];
+  let idx = env[1];
+  let n = env[2];
+  let sum = 0;
+  let i = lo;
+  while i < hi {
+    let sum = sum + a[idx[i] & (n - 1)];
+    let i = i + 1;
+    0
+  };
+  sum
+}
+fn work(env: [i64], shape: i64, lo: i64, hi: i64) -> i64 {
+  if shape == 0 then b6_scan(env, lo, hi) else b6_gather(env, lo, hi)
+}
+fn b6_par(env: [i64], cells: [i64], W: i64) -> i64 {
+  let cur = sys_arena_base();
+  let w = 0;
+  while w < W {
+    let r = sys_clone(68864, cur + 16384 + w * 8192);
+    let is_child = if r == 0 then 1 else 0;
+    let pin_result = sys_setaffinity(cells, 2 * W + 1 + w);
+    let _ = sys_cond_set(is_child, cells, 3 * W + 1 + w, pin_result);
+    let arena_start = sys_arena_base();
+    let _ = if is_child == 1 then sys_cond_set(1, cells, 4 * W + 1 + w, arena_start) else 0;
+    let lo = w * (env[2] / W);
+    let hi = if w == W - 1 then env[2] else (w + 1) * (env[2] / W);
+    let part = if is_child == 1 then work(env, env[3], lo, hi) else 0;
+    let arena_end = sys_arena_base();
+    let _ = if is_child == 1 then sys_cond_set(1, cells, 5 * W + 1 + w, arena_end) else 0;
+    let _ = sys_atomic_add(cells, w, is_child * part);
+    let _ = sys_futex_wake(cells, W + w, 64);
+    let parked = if is_child == 0 then 1 else 0;
+    while parked == 0 {
+      let _ = sys_futex_wait_guard(if is_child == 0 then 1 else 0, cells, 2 * W, 0);
+      let parked = if cells[2 * W] == 1 then 1 else 0;
+      0
+    };
+    let _ = sys_exit_thread_guard(is_child, 0);
+    let w = w + 1;
+    0
+  };
+  let w = 0;
+  while w < W {
+    let d = 0;
+    while d == 0 {
+      let _ = sys_futex_wait_guard(0, cells, W + w, 0);
+      let d = if sys_atomic_add(cells, W + w, 0) == 1 then 1 else 0;
+      0
+    };
+    let w = w + 1;
+    0
+  };
+  0
+}
+fn fold_scan(a: [i64], n: i64) -> i64 {
+  let sum = 0;
+  let i = 0;
+  while i < n {
+    let sum = sum + a[i];
+    let i = i + 1;
+    0
+  };
+  sum
+}
+fn fold_gather(a: [i64], idx: [i64], n: i64) -> i64 {
+  let sum = 0;
+  let i = 0;
+  while i < n {
+    let sum = sum + a[idx[i] & (n - 1)];
+    let i = i + 1;
+    0
+  };
+  sum
+}
+fn atoi(t: str) -> i64 {
+  let n = str_len(t);
+  let i = 0;
+  let v = 0;
+  while i < n {
+    let v = v * 10 + (char(t, i) - 48);
+    let i = i + 1;
+    0
+  };
+  v
+}
+fn main(argc: i64, argv: [str]) -> i64 {
+  let n = 10000000;
+  let shape = if argc >= 3 then atoi(argv[2]) else 0;
+  let W = if argc >= 4 then atoi(argv[3]) else 0;
+  let W_actual = if W == 0 then 1 else W;
+
+  let a = zeros(n);
+  let idx = zeros(n);
+  let x = fill(a, n);
+  let x = x;
+  let i = 0;
+  while i < n {
+    let x = lcg(x);
+    let _ = idx[i] = x;
+    let i = i + 1;
+    0
+  };
+
+  let env = [a, idx, n, shape, 0, 0, 0, 0];
+  let cells = zeros(W_actual + W_actual + 1 + W_actual + W_actual + W_actual + W_actual);
+  let _ = cells[2 * W_actual + 1] = 16;
+  let _ = cells[2 * W_actual + 2] = 32;
+  let _ = cells[2 * W_actual + 3] = 64;
+
+  let t0 = clock_ms();
+  let fold_seq = if shape == 0 then fold_scan(a, n) else fold_gather(a, idx, n);
+  let ms0 = clock_ms() - t0;
+
+  let t1 = clock_ms();
+  let _ = if W > 0 then b6_par(env, cells, W_actual) else 0;
+  let msW = clock_ms() - t1;
+
+  let fold_par = if W == 0 then fold_seq else if shape == 0 then fold_scan(a, n) else fold_gather(a, idx, n);
+  let ok = if fold_par == fold_seq then 1 else 0;
+
+  let pin = 1;
+  let w = 0;
+  while w < W_actual {
+    let pin_val = if w < W then cells[3 * W + 1 + w] else 0;
+    let pin = if pin_val == 0 then pin else 0;
+    let w = w + 1;
+    0
+  };
+  let pin = if W == 0 then 1 else pin;
+
+  let noalloc = 1;
+  let w = 0;
+  while w < W_actual {
+    let arena_start = if w < W then cells[4 * W + 1 + w] else 0;
+    let arena_end = if w < W then cells[5 * W + 1 + w] else 0;
+    let noalloc = if arena_start == arena_end then noalloc else 0;
+    let w = w + 1;
+    0
+  };
+  let noalloc = if W == 0 then 1 else noalloc;
+
+  ok * 1000000000000000 + pin * 100000000000000 + noalloc * 10000000000000 + ms0 * 10000000 + msW
+}

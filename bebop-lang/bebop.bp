@@ -6931,7 +6931,18 @@ fn entry_stub(st: [i64]) -> i64 {
   let _ = st[4] = 3406496652;
   let _ = st[5] = 3036677297;
   let _ = st[6] = 2852914161;
-  let _ = st[7] = 2852520938;
+  // STEP 1: telemetry blueprint (2026-09-12 L13)
+  // Reserve 64 KiB (65536 bytes = 8192 cells) telemetry ring at the arena top.
+  // Derivation: sys_arena_end() returns (x28-x17)/8 = 33554944 cells. x28 is the
+  // mmap end (seed/seed.S line 55). Lowering x28 by 16*4096 = 65536 bytes protects
+  // the slab at zero words per allocation: emit_zeros already traps at x28, so this
+  // adjustment makes the existing cmp x27,x28 at bebop.bp:6527 guard the slab.
+  // Provenance: as + objdump of `sub x28,x28,#16,lsl#12`:
+  //   0: d140439c    sub x28, x28, #0x10, lsl #12
+  // Word 0xd140439c = 3510649756 (decimal). Replaces `mov x10,x6` which was the
+  // filler at word 7. The stub length stays 172 words (all five places: bebop.bp
+  // lines 6913-6915 and the two .bp files they cite).
+  let _ = st[7] = 3510649756;
   let _ = st[8] = 3531603968;
   let _ = st[9] = 3531604001;
   let _ = st[10] = 3546315809;

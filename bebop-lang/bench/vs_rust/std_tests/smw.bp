@@ -163,12 +163,12 @@ fn main(argc: i64, argv: [str]) -> i64 {
     let is_child = if r == 0 then 1 else 0;
     let _ = sys_cond_set(is_child, cells, w, w + 100);
     let _ = if is_child == 1 then writer(env, w) else 0;
-    let _ = sys_cond_set(is_child, cells, env[3] + w, 1);
+    let _ = sys_atomic_add(cells, env[3] + w, is_child);
     let _ = sys_futex_wake(cells, env[3] + w, 64);
     let parked = if is_child == 0 then 1 else 0;
     while parked == 0 {
       let _ = sys_futex_wait_guard(1 - is_child, cells, env[3] * 2, 0);
-      let parked = if cells[env[3] * 2] == 1 then 1 else 0;
+      let parked = if sys_atomic_add(cells, env[3] * 2, 0) == 1 then 1 else 0;
       0
     };
     let _ = sys_exit_thread_guard(is_child, 0);
@@ -180,7 +180,7 @@ fn main(argc: i64, argv: [str]) -> i64 {
     let d = 0;
     while d == 0 {
       let _ = sys_futex_wait_guard(0, cells, env[3] + w2, 0);
-      let d = if cells[env[3] + w2] == 1 then 1 else 0;
+      let d = if sys_atomic_add(cells, env[3] + w2, 0) == 1 then 1 else 0;
       0
     };
     let w2 = w2 + 1;

@@ -721,6 +721,12 @@ rm -f smw.store
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/smw.bp ${BEBOP_TMP:-/tmp/opencode}/smw_test.bin >/dev/null 2>&1 && run 120 ${BEBOP_TMP:-/tmp/opencode}/smw_test.bin 3 100000 | tail -1)
 gate smw 303000 "$r"
 
+# ---- b6core (B6, ROADMAP B6: multi-core kernels, SCAN and GATHER shapes, W pinned to A78,
+# fold identity check at W=1 as a deterministic gate) ----
+r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/b6core.bp ${BEBOP_TMP:-/tmp/opencode}/b6core_test.bin >/dev/null 2>&1 && run 120 ${BEBOP_TMP:-/tmp/opencode}/b6core_test.bin 0 1 | tail -1)
+ok=$(( r / 1000000000000000 ))
+gate b6core 1 "$ok"
+
 # ---- sevolve (G3, T114: v1/v2 layouts, v1 reads v2, sha256-named migration + compaction) ----
 rm -f sevolve.store sevolve.store.tmp
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/sevolve.bp ${BEBOP_TMP:-/tmp/opencode}/sevolve_test.bin >/dev/null 2>&1 && run 120 ${BEBOP_TMP:-/tmp/opencode}/sevolve_test.bin | tail -1)

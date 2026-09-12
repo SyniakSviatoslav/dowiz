@@ -540,3 +540,20 @@ L23. NOTHING IS "UNREACHABLE" UNTIL IT HAS BEEN TRIED (operator rule, 2026-09-09
      reach by pricing row F4's cost into row F7's item, when F4 is paid for anyway.
      The honest forms are: "not attempted", "attempted by <methods>, best <number>", or
      "costed at <number> and not scheduled". Never "impossible" without the attempts behind it.
+
+L24. A GATE THAT CONSUMES A PRODUCER'S ARTIFACT MUST ASSERT IT EXISTS (2026-09-12, from a
+     measurement). One unchanged binary, both ways: `gb_pool_test.bin` against a warm `$GBT`
+     returns the golden `-4783772994166464769`; with `gb_gen.store` absent it dies
+     `rc=82 trap: SIGSEGV/SIGBUS`. A missing INPUT FILE was reported as a wild memory access,
+     so the diagnosis named the wrong subsystem -- worse than no diagnosis, because it sends
+     the reader into the allocator looking for a bug that is not there. The artifacts at risk
+     are exactly the ones a memo replay or a reordered block can leave absent. `need_file()`
+     in std_golden.sh is the mechanism; `tools/arch_check.py` **prereq-guard** enforces it.
+
+L25. A RATCHET NOBODY READS IS NOT A SAFEGUARD (2026-09-12). `max_unbounded_waits` sat in
+     tools/arch_ratchet.txt looking like an enforced bound, and no check anywhere read it --
+     it bounded nothing. This is the same defect as a law manifest pointing at an imaginary
+     check, which L-manifest already forbids, aimed at the ratchet file instead. Every key in
+     tools/arch_ratchet.txt must be read by a check, and `tools/arch_check.py`
+     **ratchet-orphan** fails if one is not. (The orphan is now adopted: **unbounded-wait**
+     reads it, and the tree measures 0.)

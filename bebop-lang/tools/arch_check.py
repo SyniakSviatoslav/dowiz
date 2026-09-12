@@ -382,11 +382,18 @@ def check_laws_have_enforcement(r):
                                                      errors="replace").read()))
     have |= set(re.findall(r'note\("([a-z-]+):', open(os.path.join(ROOT, "tools", "arch_check.py"),
                                                       errors="replace").read()))
+    # symmetric to `orphans`: a manifest row naming a law that does not exist in AGENTS.md is
+    # the same failure in the other direction -- an enforcement pointing at nothing. Found
+    # 2026-09-12 when an L24 row was added before the L24 law was written.
+    phantom = sorted(l for l in listed if l not in laws and re.fullmatch(r"L\d+", l))
+    if phantom:
+        fail("law-manifest", "the manifest names law(s) that do not exist in AGENTS.md -- an "
+             "enforcement pointing at no rule: " + ", ".join(phantom))
     ghosts = sorted(named - have)
     if ghosts:
         fail("law-manifest", "the manifest names check(s) that do not exist in arch_check.py -- "
              "prose pointing at an imaginary safeguard is worse than prose alone: " + ", ".join(ghosts))
-    if not orphans and not unjustified and not ghosts:
+    if not orphans and not unjustified and not ghosts and not phantom:
         note("law-manifest: %d laws, all with a named enforcement" % len(laws))
 
 # --- CHECK 15: every syscall emitter carries its register table (law L2) ------------
@@ -579,6 +586,71 @@ def check_prereq_guarded(r):
         note("prereq-guard: %d unguarded producer-artifact consumer(s) (ratchet %d)"
              % (len(bad), worst))
 
+
+def check_ratchets_are_read(r):
+    """Every ratchet must be READ by a check. A number nobody reads is not a safeguard.
+
+    Found 2026-09-12: max_unbounded_waits sat in tools/arch_ratchet.txt with no check
+    anywhere reading it. It looked like an enforced bound and bounded nothing -- the same
+    failure as prose pointing at an imaginary safeguard, which check 14 already forbids in
+    the law manifest. This is that rule pointed at the ratchet file.
+    """
+    src = open(os.path.join(ROOT, "tools", "arch_check.py"), errors="replace").read()
+    read = set(re.findall(r'r\.get\("([a-z_:]+)"', src)) | set(re.findall(r'r\["([a-z_:]+)"\]', src))
+    # a prefixed family is "read" if the source mentions the prefix at all -- some are
+    # consumed by k.startswith(), others by a direct ("prefix:" + name) membership test
+    prefixes = set(re.findall(r'"([a-z_]+:)"', src))
+    orphans = sorted(k for k in r
+                     if k not in read and not any(k.startswith(p) for p in prefixes))
+    if orphans:
+        fail("ratchet-orphan", "ratchet(s) in tools/arch_ratchet.txt that NO check reads -- a "
+             "number nobody enforces is not a safeguard, it is prose with a digit in it: "
+             + ", ".join(orphans))
+    else:
+        note("ratchet-orphan: all %d ratchets are read by a check" % len(r))
+
+
+def check_waits_are_bounded(r):
+    """A wait on memory another thread writes must be BOUNDED (law: failures are loud, 4).
+
+    An unbounded spin on a flag converts every child-side failure into a hang: the child
+    died, nobody set the flag, and the parent waits for ever, so a dead worker and a slow
+    one are indistinguishable. That is the `hang` class in AGENTS.md's defect table.
+    A wait counts as bounded if it can trap 89, if it compares a counter against a literal
+    bound, or if it parks in sys_futex_wait_guard (which carries its own timeout).
+
+    This check adopts max_unbounded_waits, which sat in the ratchet file with NO check
+    reading it -- see ratchet-orphan for why that is the same defect as unenforced prose.
+    """
+    hits = []
+    for p in bp_sources():
+        lines = open(p, errors="replace").read().split("\n")
+        for i, line in enumerate(lines):
+            code = line.split("//")[0]
+            m = re.search(r"\bwhile\s+(.+?)\s*\{", code)
+            if not m: continue
+            cond = m.group(1)
+            if not re.search(r"\b(cells|base|locks)\s*\[", cond): continue
+            ind = len(code) - len(code.lstrip())
+            body = []
+            for j in range(i + 1, min(i + 80, len(lines))):
+                sline = lines[j]
+                if sline.strip().startswith("}") and (len(sline) - len(sline.lstrip())) <= ind: break
+                body.append(sline)
+            b = "\n".join(body)
+            if re.search(r"sys_exit\(\s*89\s*\)", b): continue
+            if re.search(r"\b\w+\s*[<>]\s*\d{2,}", b): continue
+            if "sys_futex_wait_guard" in b: continue
+            hits.append("%s:%d" % (os.path.relpath(p, ROOT), i + 1))
+    worst = r.get("max_unbounded_waits", 0)
+    if len(hits) > worst:
+        fail("unbounded-wait", "%d wait(s) on another thread's memory with no bound (ratchet %d) "
+             "-- an unbounded spin turns a dead child into a hang, and a hang names nothing: %s"
+             % (len(hits), worst, "; ".join(hits[:6])))
+    else:
+        note("unbounded-wait: %d unbounded wait(s) on shared memory (ratchet %d)"
+             % (len(hits), worst))
+
 def main():
     r = load_ratchet()
     check_no_nested_fn()
@@ -600,6 +672,8 @@ def main():
     check_no_dead_functions(r)
     check_clone_kept_symbols(r)
     check_prereq_guarded(r)
+    check_waits_are_bounded(r)
+    check_ratchets_are_read(r)
     check_laws_have_enforcement(r)
     for n in notes: print("  note: " + n)
     if fails:

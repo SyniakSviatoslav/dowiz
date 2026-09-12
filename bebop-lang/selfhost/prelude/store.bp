@@ -282,6 +282,28 @@ fn st_parttab_root(base: [i64], pt_off: i64) -> i64 {
   if pt_off == 0 then 0 else base[pt_off + 18]
 }
 
+// ---- seqlock reads (2026-09-12) ------------------------------------------------------
+// A lock-free reader takes a snapshot of the superblock, then follows it to the PartTab and
+// through the root to the objects. Two things were never checked, and both are B5 step 1's
+// doing, because before it the root WAS the superblock cell and there was nothing to follow:
+//   1. st_snapshot verifies the SUPERBLOCK's crc and nothing verified the PartTab it points
+//      at, so a reader could follow a half-written PartTab;
+//   2. the superblock alternation reuses each page every OTHER commit, so a writer overwrites
+//      the very snapshot a slow reader is still walking -- an ABA, invisible because the
+//      overwritten PartTab passes its crc perfectly well, just for a later generation.
+// Measured in sconc (4 writers x 10^4 commits, 4 concurrent readers): (1) alone accounted for
+// 40000 of 40000 reads reading garbage, and (2) for single-digit mixed-generation reads that
+// survived it. st_snap_begin and st_snap_end are the two halves of a seqlock: begin returns a
+// VALIDATED snapshot, end says whether it is still the one you began with. Between them the
+// caller may read whatever it likes; if end returns 0 the values are a mix of generations and
+// must be discarded and retried, NOT reported as an inconsistency.
+fn st_snap_begin(base: [i64], snap: [i64], tmp: [i64]) -> i64 {
+  let sb = st_snapshot(base, snap, tmp);
+  if sb < 0 then sb else if snap[3] == 0 then sb else if st_check(base, snap[3], tmp) == 1 then sb else 0 - 3
+}
+fn st_snap_end(base: [i64], snap: [i64], tmp: [i64]) -> i64 {
+  if snap[3] == 0 then 1 else if st_check(base, snap[3], tmp) == 0 then 0 else if st_parttab_gen(base, 0, snap[3]) == snap[2] then 1 else 0
+}
 fn st_begin(base: [i64], tx: [i64], tmp: [i64]) -> i64 {
   let sb = st_pick(base, tmp);
   let _ = tx[0] = sb;
@@ -321,7 +343,13 @@ fn st_seal(base: [i64], off: i64, tmp: [i64]) -> i64 {
   crc
 }
 fn st_check(base: [i64], off: i64, tmp: [i64]) -> i64 {
-  if (base[off + 1] >> 32) == st_crc(base, off + 2, st_len(base, off), tmp) then 1 else 0
+  // Same impossible-length hazard st_seal traps on (85), but a CHECKER must answer, not die:
+  // an object whose header says 1329743170 cells is not valid, and saying so is the whole
+  // point of being asked. Without this st_crc walks gigabytes out of the mapping and the
+  // process dies with trap 82 in a different function -- and callers that exist to SURVIVE a
+  // corrupt object (st_pick's fallback, scrash_torn) would never get their answer.
+  let n = st_len(base, off);
+  if n > 268435456 then 0 else if (base[off + 1] >> 32) == st_crc(base, off + 2, n, tmp) then 1 else 0
 }
 // st_supersede(base, tx, off): accounting for an object replaced by a new version.
 fn st_supersede(base: [i64], tx: [i64], off: i64) -> i64 {
@@ -332,7 +360,22 @@ fn st_commit(base: [i64], tx: [i64], root: i64, tmp: [i64]) -> i64 {
   st_commit_m(base, tx, root, base[tx[0] + 6], tmp)
 }
 // st_commit_m: commit with a (new) migration-table object offset; 0 clears it.
+// Delegates to st_commit_d_m, computing the PartTab digest itself, so every existing
+// caller is byte-identical to before this split.
 fn st_commit_m(base: [i64], tx: [i64], root: i64, mig: i64, tmp: [i64]) -> i64 {
+  st_commit_d_m(base, tx, root, mig, st_digest("PartTab"), tmp)
+}
+// st_commit_d(base, tx, root, ptdig, tmp): commit with a PRE-COMPUTED PartTab digest.
+// MEASURED 2026-09-12: st_digest opens `zeros(256)` = 2048 bytes of arena, and a cloned
+// child's arena is [sp+4 MiB, sp+12 MiB) = 8 MiB, so a child that commits in a loop dies at
+// 8 MiB / 2048 B = 4096 commits with `trap 80: arena exhausted`. sconc does 10^4 and did
+// exactly that; smw never did because it hoists the digest into env[6]. Hoisting is therefore
+// not an optimisation here, it is the difference between finishing and trapping.
+fn st_commit_d(base: [i64], tx: [i64], root: i64, ptdig: i64, tmp: [i64]) -> i64 {
+  st_commit_d_m(base, tx, root, base[tx[0] + 6], ptdig, tmp)
+}
+// st_commit_d_m: st_commit_m's body with the PartTab digest passed in rather than computed.
+fn st_commit_d_m(base: [i64], tx: [i64], root: i64, mig: i64, ptdig: i64, tmp: [i64]) -> i64 {
   let sb = tx[0];
   let live = base[sb + 7] + tx[3] - tx[4];
   let sup = base[sb + 8] + tx[4];
@@ -355,7 +398,7 @@ fn st_commit_m(base: [i64], tx: [i64], root: i64, mig: i64, tmp: [i64]) -> i64 {
   // PartTabs land on DIFFERENT PAGES, exactly as the two superblocks do, so a single page tear
   // can no longer destroy both -- which is what made scrash_torn 50 invalid reopens out of 50.
   let pt = (512 - sb) + 16;
-  let _ = base[pt] = ((st_digest("PartTab") & 4294967295) << 32) | st_parttab_cells(1);
+  let _ = base[pt] = ((ptdig & 4294967295) << 32) | st_parttab_cells(1);
   let _ = base[pt + 1] = tx[5];
   let _ = st_parttab_write(base, pt, sb, tx[5], root, tx[2], tmp);
   let _ = st_seal(base, pt, tmp);

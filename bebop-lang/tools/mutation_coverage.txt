@@ -15,17 +15,24 @@ emit_clock_ms KILLED pass=93<95 27.3s
 emit_sys_arena_base KILLED pass=94<95 28.4s
 emit_sys_arena_end SURVIVED pass=95==95 24.3s
 emit_sys_clone KILLED pass=94<95 16.7s
-emit_sys_cond_set SURVIVED pass=95==95 18.1s
-emit_sys_futex_wait_guard SURVIVED pass=95==95 21.2s
-emit_sys_futex_wake SURVIVED pass=95==95 19.8s
-emit_sys_atomic_add SURVIVED pass=95==95 18.6s
-emit_sys_exit_thread_guard SURVIVED pass=95==95 16.5s
-emit_sys_setaffinity SURVIVED pass=95==95 17.6s
 emit_clz KILLED pass=94<95 19.3s
 emit_sys_scan KILLED pass=94<95 18.8s
 emit_crc32 KILLED pass=94<95 19.5s
 emit_crc32x KILLED pass=94<95 18.2s
 emit_crc32b KILLED pass=94<95 16.4s
-emit_sys_msync SURVIVED pass=95==95 18.0s
 emit_sys_mprotect KILLED pass=94<95 18.2s
 emit_sys_fsync KILLED pass=94<95 19.5s
+emit_sys_cond_set KILLED threads=!=404 23.7s
+emit_sys_futex_wait_guard SURVIVED pass=95, threads ok 23.4s
+emit_sys_futex_wake KILLED threads=hang!=404 113.3s
+emit_sys_atomic_add KILLED threads=!=404 21.3s
+emit_sys_exit_thread_guard SURVIVED pass=95, threads ok 23.1s
+emit_sys_setaffinity SURVIVED pass=95, threads ok 24.5s
+emit_sys_msync SURVIVED pass=95, threads ok 23.3s
+
+# Step 0 re-derivation (2026-09-12): Baseline thread-gate 404 (smw 2*(200+2))
+# Per blueprint §0c, sites() (tools/mutate_compiler.py:28-38) mutates only the FIRST 
+# literal `em(insns, n, N)` per emitter. For emit_sys_cond_set, that is 2332102177 
+# (bebop.bp:1338, "add x1,x17,x1,lsl #3"). The word that actually publishes is 
+# 4177526819 = 0xF9000023 = `str x3,[x1]` (bebop.bp:1341) and has NEVER been mutated 
+# by sites().

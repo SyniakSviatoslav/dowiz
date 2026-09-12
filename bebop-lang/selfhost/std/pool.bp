@@ -36,13 +36,13 @@ fn par_sum(W: i64, per: i64) -> i64 {
     let r = sys_clone(68864, base + 16384 + i * 8192);
     let is_child = if r == 0 then 1 else 0;
     let part = is_child * (i + 1) * per;
-    let _ = sys_cond_set(is_child, cells, i, part);
-    let _ = sys_cond_set(is_child, cells, W + i, 1);
+    let _ = sys_atomic_add(cells, i, is_child * part);
+    let _ = sys_atomic_add(cells, W + i, is_child);
     let _ = sys_futex_wake(cells, W + i, 64);
     let parked = if is_child == 0 then 1 else 0;
     while parked == 0 {
       let w = sys_futex_wait_guard(1 - is_child, cells, W * 2, 0);
-      let parked = if cells[W * 2] == 1 then 1 else 0;
+      let parked = if sys_atomic_add(cells, W * 2, 0) == 1 then 1 else 0;
       0
     };
     let i = i + 1;
@@ -54,7 +54,7 @@ fn par_sum(W: i64, per: i64) -> i64 {
     let d = 0;
     while d == 0 {
       let w = sys_futex_wait_guard(0, cells, W + k, 0);
-      let d = if cells[W + k] == 1 then 1 else 0;
+      let d = if sys_atomic_add(cells, W + k, 0) == 1 then 1 else 0;
       0
     };
     let acc = acc + cells[k];
@@ -79,12 +79,12 @@ fn par_merge(W: i64, per: i64) -> i64 {
     let is_child = if r == 0 then 1 else 0;
     let part = is_child * (i + 1) * per;
     let _ = sys_atomic_add(cells, W, part);
-    let _ = sys_cond_set(is_child, cells, W + 1 + i, 1);
+    let _ = sys_atomic_add(cells, W + 1 + i, is_child);
     let _ = sys_futex_wake(cells, W + 1 + i, 64);
     let parked = if is_child == 0 then 1 else 0;
     while parked == 0 {
       let w = sys_futex_wait_guard(1 - is_child, cells, W * 2 + 1, 0);
-      let parked = if cells[W * 2 + 1] == 1 then 1 else 0;
+      let parked = if sys_atomic_add(cells, W * 2 + 1, 0) == 1 then 1 else 0;
       0
     };
     let i = i + 1;
@@ -95,7 +95,7 @@ fn par_merge(W: i64, per: i64) -> i64 {
     let d = 0;
     while d == 0 {
       let w = sys_futex_wait_guard(0, cells, W + 1 + k, 0);
-      let d = if cells[W + 1 + k] == 1 then 1 else 0;
+      let d = if sys_atomic_add(cells, W + 1 + k, 0) == 1 then 1 else 0;
       0
     };
     let k = k + 1;
