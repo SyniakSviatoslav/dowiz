@@ -103,7 +103,13 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let env = zeros(16);
   let _ = env[3] = if argc >= 3 then sm_atoi(argv[2]) else 1;
   let _ = env[4] = if argc >= 4 then sm_atoi(argv[3]) else 1000;
-  let _ = env[5] = 8388608;
+  // arena_cells must describe the WHOLE mapping, not just its first 64 MB. st_open maps
+  // 67108864 + 16777216 * P bytes; leaving this at 8388608 cells (= 64 MB / 8) confined
+  // every partition region to the first 64 MB, so at P=3 a writer exhausted its region
+  // after ~93206 transactions -- st_alloc_p's bound check fires sys_exit(80), the child
+  // dies without setting its done flag, and the parent waits for ever. Measured
+  // 2026-09-12: N=85000 completes (fold 255000, 7.2 s), N=96000 hangs.
+  let _ = env[5] = (67108864 + 16777216 * env[3]) / 8;
   let _ = env[8] = 100;
   let _ = setup(env);
   // sampled AFTER every allocation, so no stack lands in allocated arena
