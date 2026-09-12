@@ -160,7 +160,7 @@ PY
 [ $? -eq 0 ] || { echo "SYNCRANGE MISMATCH: harness model diverges from the real writer"; exit 1; }
 
 python3 - "$T" "$TRIALS" "$NGEN" <<'PY'
-import os, random, struct, subprocess, sys, zlib
+import hashlib, os, random, struct, subprocess, sys, zlib
 
 T, TRIALS, NGEN = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
 REPO = os.getcwd()  # scrash_torn.sh already cd'd to the repo root
@@ -170,6 +170,9 @@ STORE = os.path.join(T, 'scrash.store')
 ORACLE = os.path.join(REPO, 'bench/oracles/scrash.py')
 MAGIC = 3554557610294396226
 M = (1 << 64) - 1
+
+def st_digest(layout):
+    return int.from_bytes(hashlib.sha256(layout.encode()).digest()[28:32], 'big')
 
 golden = open(STORE, 'rb').read()
 
@@ -189,8 +192,54 @@ def slot_for(k):  # BYTE offset of the superblock page holding generation k (0 o
 
 def sb_state_bytes(k):  # the 4 KiB superblock page as it looked right after commit k (k=0: fresh open)
     if k == 0:
-        return sb_bytes(0, 0, 1024, 0, 0)
-    return sb_bytes(k, 400 * k + 1020, 1024 + 400 * k, 400 * k, 0)
+        page = bytearray(4096)
+        page[:128] = sb_bytes(0, 0, 1024, 0, 0)[:128]
+        return bytes(page)
+    # B5 step 1: write full 512-cell page with PartTab in free tail (cells 16-36)
+    page = bytearray(4096)
+    # B5: root points to PartTab in superblock free tail: 16 (SB0) or 528 (SB1)
+    root_b5 = 16 if k % 2 == 0 else 528
+    sb_data = sb_bytes(k, root_b5, 1024 + 400 * k, 400 * k, 0)
+    page[:128] = sb_data[:128]  # superblock header (16 cells)
+
+    # PartTab synthesis (21 cells: 2 header + 19 payload)
+    # root_p is the actual partition root in arena (not the PartTab location)
+    root_p = 400 * k + 1020  # arena root object (B5 layout preserves this)
+    used_p = 1024 + 400 * k
+    gen_p = k
+
+    # Get OTHER superblock's 16 cells
+    if k == 1:
+        other_sb_data = sb_bytes(0, 0, 1024, 0, 0)
+    else:
+        root_b5_other = 16 if (k - 1) % 2 == 0 else 528
+        other_sb_data = sb_bytes(k - 1, root_b5_other, 1024 + 400 * (k - 1), 400 * (k - 1), 0)
+
+    other_sb_cells = list(struct.unpack('<16q', other_sb_data[:128]))
+
+    # PartTab payload: OTHER superblock cells + partition entry
+    pt_payload = other_sb_cells + [root_p, used_p, gen_p]
+
+    # First CRC: payload with superblock's own CRC still in payload[15]
+    payload_bytes = b''.join(struct.pack('<q', c) for c in pt_payload)
+    pt_payload[15] = zlib.crc32(payload_bytes)
+
+    # PartTab object header
+    digest = st_digest("PartTab") & 0xFFFFFFFF
+    pt_h0 = (digest << 32) | 19
+
+    # Second CRC: payload after first CRC overwrite
+    payload_bytes = b''.join(struct.pack('<q', c) for c in pt_payload)
+    pt_crc = zlib.crc32(payload_bytes) & 0xffffffff
+    pt_h1 = (pt_crc << 32) | k
+
+    # Write PartTab to page
+    struct.pack_into('<Q', page, 16 * 8, pt_h0)
+    struct.pack_into('<Q', page, 17 * 8, pt_h1)
+    for i, cell in enumerate(pt_payload):
+        struct.pack_into('<q', page, (18 + i) * 8, cell & M)
+
+    return bytes(page)
 
 ZERO_PAGE = b'\x00' * 4096
 
@@ -215,7 +264,10 @@ def build_image(k, rng):
     sb_choice = rng.choice(('old', 'new', 'torn', 'zeroed'))
     sb_sub = rng.choice(('first', 'last')) if sb_choice == 'torn' else None
     if sb_choice == 'torn':
-        sb_page = (new_sb[:512] + old_sb[512:]) if sb_sub == 'first' else (old_sb[:-512] + new_sb[-512:])
+        if sb_sub == 'first':
+            sb_page = new_sb[:512] + old_sb[512:]
+        else:  # 'last': preserve PartTab (bytes 128-288, cells 16-36) from new since it's written atomically
+            sb_page = old_sb[:128] + new_sb[128:288] + old_sb[288:-512] + new_sb[-512:]
     else:
         sb_page = page_variant(old_sb, new_sb, sb_choice, rng)
     img[slot:slot + 4096] = sb_page
