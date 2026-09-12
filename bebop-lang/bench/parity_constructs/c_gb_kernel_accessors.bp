@@ -1,0 +1,41 @@
+// gb_kernel_cmd and gb_kernel_entry: Kernel struct field accessors.
+// Kernel is a 10-field struct: {digest, op, sr, mask, fmt, tr, ref words, entry, gen, compiler_digest}
+// gb_kernel_cmd reads field 9 (technically returns field 9 which is gen, not cmd per the struct)
+// gb_kernel_entry reads field 7 (entry byte offset)
+//
+// DERIVED EXPECTED VALUE:
+// Create a Kernel object with known values:
+// - Set field 7 (entry) = 172 (standard entry stub size)
+// - Set field 9 (gen) = 42 (some generation number)
+// Read both values and fold: 172 + 42 = 214
+
+use "selfhost/prelude/store.bp"
+use "selfhost/std/gb_run.bp"
+
+fn main() -> i64 {
+  let base = zeros(1000);
+  let tx = zeros(64);
+  let dg = 0;           // digest gen
+  
+  // Allocate a Kernel object (10 fields)
+  let K = st_alloc(base, tx, 10, dg);
+  
+  // Set field values
+  let _ = st_put(base, K, 0, 0xDEADBEEF);  // digest
+  let _ = st_put(base, K, 1, 1);            // op
+  let _ = st_put(base, K, 2, 1);            // sr
+  let _ = st_put(base, K, 3, 0);            // mask
+  let _ = st_put(base, K, 4, 1);            // fmt
+  let _ = st_put(base, K, 5, 0);            // tr
+  let _ = st_put(base, K, 6, 0);            // words (ref)
+  let _ = st_put(base, K, 7, 172);          // entry = standard entry stub
+  let _ = st_put(base, K, 8, 1);            // gen
+  let _ = st_put(base, K, 9, 42);           // compiler_digest
+  
+  // Read using accessors
+  let entry = gb_kernel_entry(base, K);      // Should read field 7 = 172
+  let cmd = gb_kernel_cmd(base, K);          // Should read field 9 = 42
+  
+  // Expected: 172 + 42 = 214
+  entry + cmd
+}

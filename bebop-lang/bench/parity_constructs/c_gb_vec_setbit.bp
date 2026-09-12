@@ -1,0 +1,51 @@
+// gb_vec_setbit: bitmap vector allocation, two setbit calls per loop iteration,
+// and read-back verification. This reproduces the "two setbit calls per loop
+// iteration" shape mentioned in gb_roundtrip's harness comment about a suspected
+// miscompile.
+//
+// DERIVED EXPECTED VALUE: The closed form calculation.
+// Pattern: allocate vector for 128 elements. Set bits at indices:
+// - Loop i from 0..32: setbit at (2*i) and (2*i+1)
+//   So we set bits 0,1,2,3,4,5,...,62,63 (64 consecutive bits)
+// Read them all back and sum: 64 bits set -> fold = 64.
+
+use "selfhost/prelude/store.bp"
+use "selfhost/prelude/gb.bp"
+
+fn main() -> i64 {
+  let n = 128;
+  let base = zeros(10000);
+  let tx = zeros(64);
+  let tmp = zeros(64);
+  let dg = zeros(4);
+  
+  // Allocate bitmap vector for 128 elements
+  let V = gb_vec_bitmap_alloc(base, tx, dg[0], dg[1], n);
+  
+  // Set 64 bits: two setbit calls per loop iteration (i from 0..32)
+  // Sets bits at positions 0-63
+  let i = 0;
+  while i < 32 {
+    let _ = gb_vec_setbit(base, V, 2 * i);        // First setbit
+    let _ = gb_vec_setbit(base, V, 2 * i + 1);    // Second setbit
+    let i = i + 1;
+    0
+  };
+  
+  // Seal the vector
+  let _ = gb_vec_seal(base, V, tmp);
+  
+  // Read back all bits and fold into a count
+  let acc = 0;
+  let j = 0;
+  while j < n {
+    let bit = gb_vec_bit(base, V, j);
+    let acc = acc + bit;
+    let j = j + 1;
+    0
+  };
+  
+  // Expected: 64 bits set (bits 0-63, from loop iterations 0-31)
+  // If miscompile exists, this may return wrong value
+  acc
+}

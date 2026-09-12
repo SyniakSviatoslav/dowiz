@@ -160,6 +160,11 @@ for f in "$DIR"/*.bp; do
     # UBFM word, and declines when the extract would run off the top (60+8), when the shift is
     # an asr (SBFM) and when it is a left shift (imms != 63). EXPECT from tools/bpref.py.
     c76_ubfx) EXPECT=2271612;;
+    # L08 dead-function parity constructs (type-c: public API with no test)
+    c_gb_vec_setbit) EXPECT=64;;           # bitmap vector: set 64 bits (2 setbit/iter), fold count
+    c_gb_degree) EXPECT=6;;                # row degree accessor: deg[0]=2, deg[1]=3, deg[2]=1
+    c_st_bytes) EXPECT=36;;                # byte extraction: sum of 8 bytes 08+07+06+05+04+03+02+01
+    c_gb_kernel_accessors) EXPECT=214;;    # kernel field accessors: entry(172) + cmd(42)
     *) EXPECT="";;
   esac
   [ "$FREEZE" = 1 ] && [ "$IVAL" = "$EXPECT" ] && cp "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin" "$FROZEN/${b}.bin"

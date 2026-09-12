@@ -1,0 +1,35 @@
+// st_bytes: extracts raw bytes from i64 cells.
+// Each i64 cell produces 8 bytes (little-endian).
+//
+// DERIVED EXPECTED VALUE:
+// Input: one i64 cell with a known pattern
+// Extract 8 bytes in little-endian order
+// Sum the byte values
+
+use "selfhost/prelude/store.bp"
+
+fn main() -> i64 {
+  let base = zeros(1000);
+  let src = zeros(2);      // 2 i64 cells: [count, value]
+  let out = zeros(16);     // 16 bytes (2 cells * 8 bytes)
+  
+  // Set up source: array in store convention
+  let _ = src[0] = 1;           // count = 1
+  let _ = src[1] = 72623859790382856;  // decimal equivalent of 0x0102030405060708
+  
+  // Extract bytes using st_bytes
+  let n_bytes = st_bytes(src, 1, 1, out);
+  
+  // Sum the extracted bytes
+  let result = 0;
+  let i = 0;
+  while i < 8 {
+    let byte_val = out[i];
+    let result = result + byte_val;
+    let i = i + 1;
+    0
+  };
+  
+  // Expected: sum of bytes should be 0x08+0x07+0x06+0x05+0x04+0x03+0x02+0x01 = 36
+  result
+}

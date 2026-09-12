@@ -1,0 +1,59 @@
+// gb_degree: row degree accessor for CSR matrix.
+// Returns the count of nonzeros in a row (difference of row pointers).
+//
+// DERIVED EXPECTED VALUE:
+// We build a 3x3 matrix with known structure:
+// Row 0: 2 elements (nonzeros at columns 0, 1)
+// Row 1: 3 elements (nonzeros at columns 0, 1, 2)  
+// Row 2: 1 element  (nonzero at column 1)
+// We extract degrees using gb_degree accessor:
+// - gb_degree(base, A, 0) = rp[1] - rp[0] = 2 - 0 = 2
+// - gb_degree(base, A, 1) = rp[2] - rp[1] = 5 - 2 = 3
+// - gb_degree(base, A, 2) = rp[3] - rp[2] = 6 - 5 = 1
+// Fold: 2 + 3 + 1 = 6
+
+use "selfhost/prelude/store.bp"
+use "selfhost/prelude/gb.bp"
+
+fn main() -> i64 {
+  let base = zeros(10000);
+  let tx = zeros(64);
+  let tmp = zeros(64);
+  let dg = zeros(4);
+  
+  // Build 3x3 CSR matrix with 6 nonzeros
+  let rp = arr_alloc(base, tx, dg[0], 4);   // 4 row pointers for 3 rows
+  let ci = arr_alloc(base, tx, dg[1], 6);   // 6 columns
+  let vv = arr_alloc(base, tx, dg[2], 6);   // 6 values
+  
+  // Row pointers: [0, 2, 5, 6]
+  let _ = arr_put(base, rp, 0, 0);
+  let _ = arr_put(base, rp, 1, 2);
+  let _ = arr_put(base, rp, 2, 5);
+  let _ = arr_put(base, rp, 3, 6);
+  
+  // Column indices and values (doesn't matter for degree calculation)
+  let i = 0;
+  while i < 6 {
+    let _ = arr_put(base, ci, i, i);
+    let _ = arr_put(base, vv, i, i + 1);
+    let i = i + 1;
+    0
+  };
+  
+  // Seal arrays
+  let _ = st_seal(base, rp, tmp);
+  let _ = st_seal(base, ci, tmp);
+  let _ = st_seal(base, vv, tmp);
+  
+  // Create matrix
+  let A = gb_matrix_seal(base, tx, tmp, dg[3], 3, 3, 6, 1, rp, ci, vv);
+  
+  // Test gb_degree accessor on all rows
+  let deg0 = gb_degree(base, A, 0);
+  let deg1 = gb_degree(base, A, 1);
+  let deg2 = gb_degree(base, A, 2);
+  
+  // Expected: 2 + 3 + 1 = 6
+  deg0 + deg1 + deg2
+}
