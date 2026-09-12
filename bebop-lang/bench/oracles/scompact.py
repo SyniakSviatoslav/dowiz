@@ -8,7 +8,7 @@ for i in range(n):
     v = (v * 6364136223846793005 + 1442695040888963407) & M
     val = (v + 1) & M if i < 600000 else v
     acc = (acc + val * (i + 1)) & M
-live = n * 3 + n + 3
+live = n * 3 + n + 3 + 21  # +21 for fresh PartTab allocated by st_compact
 if os.path.exists('scompact.store'):
     sz = os.path.getsize('scompact.store')
     assert sz <= live * 8 + 3 * 4096, (sz, live * 8)
