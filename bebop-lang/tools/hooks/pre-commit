@@ -1,7 +1,40 @@
 #!/usr/bin/env bash
-# pre-commit (D12-D, 2026-09-06): TASKS.md is GENERATED from HISTORY.md headers; regenerate and stage it
-# so the ledger can never drift from the headers (it did on T90/T77/T101-T108 before this hook).
+# pre-commit: two independent guards, both of which exist because the thing they
+# guard has already drifted once.
+#
 # Enable once per clone: git config core.hooksPath bebop-lang/tools/hooks
+#
+# GUARD 1 (2026-09-12): refuse a commit that stages an UNCHAINED compiler.
+#   Written after a `git add -A` swept a lane's in-flight bebop.bp edit into an
+#   unrelated commit. arch_check's artifact-identity check caught it -- loudly and
+#   correctly -- but only when it was run AFTER the commit. A safeguard that depends
+#   on someone remembering to run it is prose. This is the same check at the one
+#   moment it cannot be skipped.
+#   bebop.bp is the self-hosting compiler: a staged change to it that has not been
+#   chained to a fixpoint and promoted means bebop.bin is no longer compile(bebop.bp),
+#   and every gate from then on measures a compiler nobody built.
+#   Bypass deliberately with `git commit --no-verify` -- and say so in the message.
+#
+# GUARD 2 (D12-D, 2026-09-06): TASKS.md is GENERATED from HISTORY.md headers;
+#   regenerate and stage it so the ledger can never drift from the headers (it did on
+#   T90/T77/T101-T108 before this hook).
+
+# --- Guard 1: unchained compiler -------------------------------------------------
+staged=$(git diff --cached --name-only)
+if printf '%s\n' "$staged" | grep -q '^bebop-lang/bebop\.bp$'; then
+  if ! printf '%s\n' "$staged" | grep -q '^bebop-lang/bebop\.bin$'; then
+    echo "pre-commit REFUSED: bebop.bp is staged but bebop.bin is not."
+    echo "  A compiler source change that is not accompanied by a re-promoted binary"
+    echo "  leaves bebop.bin != compile(bebop.bp). Chain it to a fixpoint (gen3 == gen4)"
+    echo "  and promote, or commit with --no-verify and say in the message that the"
+    echo "  compiler is deliberately left unpromoted."
+    exit 1
+  fi
+fi
+
+# --- Guard 2: TASKS.md regenerated from HISTORY.md headers -----------------------
+printf '%s\n' "$staged" | grep -q '^bebop-lang/HISTORY\.md$' || exit 0
 cd "$(git rev-parse --show-toplevel)/bebop-lang" || exit 0
-git diff --cached --quiet -- HISTORY.md && exit 0
-python3 tools/split_roadmap.py --from HISTORY.md > /dev/null && git add TASKS.md && echo "pre-commit: TASKS.md regenerated from HISTORY.md headers"
+python3 tools/split_roadmap.py --from HISTORY.md > /dev/null \
+  && git add TASKS.md \
+  && echo "pre-commit: TASKS.md regenerated from HISTORY.md headers"
