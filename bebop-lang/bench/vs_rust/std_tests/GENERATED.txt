@@ -5,6 +5,7 @@
 arena_map_modes.bp local
 attn.bp generated selfhost/std/attn.bp
 attnt.bp generated selfhost/std/attnt.bp
+b6core.bp local
 base64.bp generated selfhost/std/base64.bp
 bitmat.bp generated selfhost/std/bitmat.bp
 bitset.bp generated selfhost/std/bitset.bp
@@ -114,8 +115,8 @@ stm.bp generated selfhost/std/stm.bp
 store.bp generated selfhost/std/store.bp
 stride.bp generated selfhost/std/stride.bp
 substrate.bp generated selfhost/std/substrate.bp
-swpmu.bp generated selfhost/std/swpmu.bp
 svrf.bp local
+swpmu.bp generated selfhost/std/swpmu.bp
 tb.bp generated selfhost/std/tb.bp
 tdg.bp generated selfhost/std/tdg.bp
 tdgcurv.bp generated selfhost/std/tdgcurv.bp

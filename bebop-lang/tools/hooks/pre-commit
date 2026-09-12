@@ -19,7 +19,7 @@
 #   regenerate and stage it so the ledger can never drift from the headers (it did on
 #   T90/T77/T101-T108 before this hook).
 
-# --- Guard 1: unchained compiler -------------------------------------------------
+# --- Guard 1a: unchained compiler -------------------------------------------------
 staged=$(git diff --cached --name-only)
 if printf '%s\n' "$staged" | grep -q '^bebop-lang/bebop\.bp$'; then
   if ! printf '%s\n' "$staged" | grep -q '^bebop-lang/bebop\.bin$'; then
@@ -28,6 +28,31 @@ if printf '%s\n' "$staged" | grep -q '^bebop-lang/bebop\.bp$'; then
     echo "  leaves bebop.bin != compile(bebop.bp). Chain it to a fixpoint (gen3 == gen4)"
     echo "  and promote, or commit with --no-verify and say in the message that the"
     echo "  compiler is deliberately left unpromoted."
+    exit 1
+  fi
+fi
+
+# --- Guard 1b: the promoted digest must have a manifest row -----------------------
+# The first draft of this guard only checked that compilers/MANIFEST.tsv EXISTS. An
+# enforcement that points at a file rather than at a fact is the law_manifest failure mode
+# one layer down (AGENTS L25): it would have passed every commit that ever drifted. This
+# checks the DIGEST -- the one thing that identifies a compiler -- and it resolves the
+# manifest from the repo root, where the hook actually runs, not from bebop-lang/.
+if printf '%s\n' "$staged" | grep -q '^bebop-lang/bebop\.bin$'; then
+  MAN=bebop-lang/compilers/MANIFEST.tsv
+  if [ ! -f "$MAN" ]; then
+    echo "pre-commit REFUSED: bebop.bin is staged but $MAN does not exist."
+    echo "  Every promoted compiler needs a row naming its source commit and whether its"
+    echo "  fixpoint was MEASURED. Create it with: bebop-lang/tools/bebopc.sh save <note>"
+    exit 1
+  fi
+  # The digest of the STAGED bytes, not of the working tree -- they can differ.
+  d=$(git show :bebop-lang/bebop.bin | md5sum | cut -c1-8)
+  if ! grep -v '^#' "$MAN" | cut -f1 | grep -qx "$d"; then
+    echo "pre-commit REFUSED: bebop.bin being committed is $d, which has no row in $MAN."
+    echo "  Add one with: bebop-lang/tools/bebopc.sh save <why this binary was promoted>"
+    echo "  A promoted compiler with no recorded provenance is how 08cd9e46 shipped against"
+    echo "  a source that produced 2822d7b5 (see the 08cd9e46 row)."
     exit 1
   fi
 fi

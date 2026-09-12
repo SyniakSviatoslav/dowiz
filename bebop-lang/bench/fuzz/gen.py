@@ -7,7 +7,8 @@ zeros / calls / 1-arg direct recursion / comparisons / arithmetic / bitwise /
 shifts, i64-only. Caps: <=128 binds per fn (params + unique locals),
 <=14 params, <=8 array binds per fn, <=511-element literal arrays, no
 allocation inside while bodies (L8), no str literals / ++ (R3.x d), no
-clock_ms (R3.x e), no unary - / !, no return / break.
+unary - / !, no return / break. (clock_ms, sys_arena_base, sys_arena_end
+now emitted, always multiplied by 0, so the value stays deterministic.)
 
 Every array has a power-of-two "mask" (len >= 8) and every index is a literal
 < 8, a loop var whose bound <= 8, or `((E) & mask)`, so no run is ever
@@ -120,6 +121,11 @@ class Ctx:
             return self.binop(d, simple)
         if r < 0.78:                                  # T99 unary - / !
             return '%s(%s)' % (self.r.choice(['-', '!']), self.expr(d + 1, simple))
+        if r < 0.81:                                  # c97/c98/c99: zero-arg builtins in
+            # right-operand position must not clobber a pending left operand. Multiplied
+            # by 0 so the program's VALUE stays deterministic while the emit path is covered.
+            builtin = self.r.choice(['clock_ms()', 'sys_arena_base()', 'sys_arena_end()'])
+            return '%s * 0' % builtin
         if r < 0.85:
             return '(if %s then %s else %s)' % (self.expr(d + 1, simple), self.expr(d + 1, simple), self.expr(d + 1, simple))
         if r < 0.90 and not simple:

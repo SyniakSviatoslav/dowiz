@@ -538,9 +538,14 @@ class Interp:
             if getattr(arr, 'released', False):
                 raise RuntimeError('use after loop release: `%s` was bound to an array literal inside a while body (T43)' % e[1])
             i = self.ev(e[2], env)
-            arr = list(arr)  # make mutable (Cells → list)
+            # `[i64]` is a HANDLE (a cell index), never a value: a write through one binding
+            # is visible through every other binding, the caller's included, because
+            # Cells.__setitem__ writes into the shared arena. The `arr = list(arr)` that stood
+            # here rebound this name to a PRIVATE COPY, so a callee's write was invisible to
+            # its caller -- `fn poke(a: [i64]) -> i64 { let _ = a[0] = 9; 0 }` returned 0 here
+            # and 9 on bebop.bin. That is what made c70_qdsl / c70_qdsl_neg red (2026-09-12):
+            # the oracle was wrong, not the compiler.
             arr[i] = self.ev(e[3], env)
-            env[e[1]] = arr
             return 0
         if t == 'arr':
             a = cells_alloc(self, [self.ev(x, env) for x in e[1]])
@@ -593,7 +598,6 @@ class Interp:
             kind, nc, attr, a, ap = args[0], args[1], args[2], args[3], args[4]
             sz = 3 + nc
             off = ap[0]
-            a = list(a)  # make mutable (Cells → list)
             a[off] = kind
             a[off+1] = nc
             a[off+2] = attr
@@ -601,7 +605,6 @@ class Interp:
             return off
         if name == 'qdsl_set':
             node, ci, child, a = args[0], args[1], args[2], args[3]
-            a = list(a)  # make mutable (Cells → list)
             a[node+3+ci] = child
             return 0
         if name == 'qdsl_kind':

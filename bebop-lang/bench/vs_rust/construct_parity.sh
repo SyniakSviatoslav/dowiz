@@ -138,6 +138,24 @@ for f in "$DIR"/*.bp; do
     # EXPECT from python3 tools/bpref.py bench/parity_constructs/c96_enumpay.bp.
     c96_enumpay) EXPECT=8503009;;
     c97_arena_operand_miscompile) EXPECT=4;;
+    # EXPECT from python3 tools/bpref.py bench/parity_constructs/c98_arena_base_operand.bp (11 = both paths agree)
+    c98_arena_base_operand) EXPECT=11;;
+    c99_arena_end_operand) EXPECT=11;;
+    # B7 step 1 (c99cddb) landed these two constructs with NO EXPECT row, so construct_parity
+    # has been RED on them ever since. Re-derived 2026-09-12 with tools/bpref.py AFTER fixing
+    # that oracle's array-aliasing defect (a write rebound the name to a private copy, so a
+    # callee's write into an array parameter was invisible to its caller -- see the comment at
+    # tools/bpref.py `set`). Oracle and bebop.bin now agree on both numbers.
+    # 41000 = fingerprint of the tree for `q { from T }`: root kind 1 -> 1*1000, one child
+    # (the `from` ident, kind 10, attr 0) -> 10000, folded as h*31 + child = 31000 + 10000.
+    c70_qdsl) EXPECT=41000;;
+    # 1 = qdsl_parse did NOT reject `invalid query that should fail`. The file's header wants
+    # 89 (rejected). That is a REAL, OPEN B7 DEFECT and not a parity defect: qdsl_query writes
+    # `let _ = if ok == 0 then 0 else 0;` at every point an early return was meant, so the `ok`
+    # flag is computed and then never acted on, and a garbage query still builds a tree. bebop
+    # and the oracle agree on 1, which is the only thing this gate measures; the functional bug
+    # is carried on the ROADMAP B7 row.
+    c70_qdsl_neg) EXPECT=1;;
     c69_index_roundtrip) EXPECT=3969009064380;;
     c92_ptrfree) EXPECT=777920;;
     c110_fence) EXPECT=0;;
@@ -211,6 +229,13 @@ for f in "${DIR%/}/neg"/*.bp; do
     # bench/parity_constructs/neg/c92_letlive2.bp` says "fn main: body has no tail expression
     # (bebop.bin exits 97)". The positive regression guard for the fix is c95_symspan.
     c92_letlive2) EXPECT=COMPILEFAIL:97;;
+    # Added by 4286ec1 with no EXPECT row, so the negative loop has been RED on it since.
+    # Its header claims exit 105 ("read before assignment") reached through an identifier-hash
+    # collision, but `abcdefg` and `abcdefh` do NOT collide under the current hash: bebop.bin
+    # exits 101 (unbound identifier) and tools/bpref.py raises KeyError 'abcdefh'. Both sides
+    # agree, and the file is a duplicate of c93_unbound; the exit-105 path it was written for
+    # is covered by NO construct.
+    read_before_assign) EXPECT=COMPILEFAIL:101;;
     *) EXPECT="";;
   esac
   out="${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin"

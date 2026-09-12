@@ -83,6 +83,12 @@ c94_fsync 109 5 1 0 2 1 2
 c95_symspan 90 0 1 0 1 3 2
 c96_enumpay 115 12 0 0 9 0 1
 c97_arena_operand_miscompile 32 0 1 0 1 0 1
+c98_arena_base_operand 26 0 0 0 0 0 1
+c99_arena_end_operand 26 0 0 0 0 0 1
+c_gb_degree 10472 280 45 0 197 456 144
+c_gb_kernel_accessors 8165 244 44 0 174 289 128
+c_gb_vec_setbit 10393 281 45 0 198 445 144
+c_st_bytes 5003 134 8 0 123 169 83
 hv_stdlib 136 2 0 0 2 1 4
 io_probe 299 10 3 0 4 0 1
 k1 18 1 0 0 1 0 1

@@ -1,0 +1,14 @@
+# compilers/MANIFEST.tsv -- one row per bebop.bin that was ever promoted into this tree.
+# Columns: digest source_commit source_md5 date fixpoint note
+#   digest        md5sum of the binary, first 8 hex chars (the identity used everywhere else)
+#   source_commit the commit whose bebop.bin IS this binary (`git log -- bebop-lang/bebop.bin`)
+#   source_md5    md5-8 of bebop.bp AT that commit -- the source the binary was built from
+#   fixpoint      yes | no | unverified. `yes` means a MEASURED compile(bebop.bp) == digest.
+#                 `unverified` is the honest value for a historical row nobody re-compiled;
+#                 it is never a synonym for `yes`.
+# Written by tools/bebopc.sh save/promote; read by tools/hooks/pre-commit (Guard 1b).
+digest	source_commit	source_md5	date	fixpoint	note
+1d1e634f	d75172c	2797db3c	2026-09-12	yes	promoted 2026-09-12 by the main session; measured fixpoint gen3 == gen4 == 1d1e634f in a 516 s chain, and tools/arch_check.py artifact-identity agrees
+08cd9e46	a209f70	6e807b00	2026-09-12	no	promoted at a209f70 against bebop.bp 6e807b00 and UNCHAINED by 05fcc0f, which moved bebop.bp to 2797db3c without re-promoting; compile(bebop.bp) was then 2822d7b5 and the fixpoint 1d1e634f -- three live digests at once, and every number measured in between was measured against an artifact no source produced
+7c7d1f77	a18fa8b	unverified	2026-09-12	unverified	re-promotion that a18fa8b performed ("the promoted compiler was not the source's compiler -- re-promote 7c7d1f77"); its own message claims the fixpoint, nobody has re-measured it since
+292b8953	e5b64f7	unverified	2026-09-12	no	the binary a18fa8b replaced: e5b64f7 reverted A7 step 2 in the SOURCE and committed a binary built BEFORE the revert, so it shipped a `parallel region: too many live symbols` diagnostic (exit 103) that no source file contains

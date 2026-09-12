@@ -1,0 +1,19 @@
+// c98_arena_base_operand (2026-09-12): the zero-argument builtin sys_arena_base()
+// must call vs_deliver(0) before emitting, so it cannot clobber a pending left
+// operand in a binary expression. c97 covers clock_ms(); this covers the arena
+// pair, which was the same defect and the same fix site.
+//
+// The value is deliberately independent of the arena address itself: both sides
+// subtract the SAME base, once through a let-bound intermediate (which forces the
+// operand into a register the allocator must keep) and once directly in
+// right-operand position (the shape that miscompiled). Agreement encodes as 11,
+// disagreement as 1, so the number names which happened.
+
+fn main() -> i64 {
+  let base_via_let = sys_arena_base();
+  let result_via_let = 100 - base_via_let;
+  let result_direct = 100 - sys_arena_base();
+  let ok1 = if result_via_let == result_direct then 1 else 0;
+  ok1 * 10 + 1
+}
+// EXPECT: 11

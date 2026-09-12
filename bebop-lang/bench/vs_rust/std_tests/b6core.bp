@@ -39,27 +39,33 @@ fn b6_gather(env: [i64], lo: i64, hi: i64) -> i64 {
 fn work(env: [i64], shape: i64, lo: i64, hi: i64) -> i64 {
   if shape == 0 then b6_scan(env, lo, hi) else b6_gather(env, lo, hi)
 }
+fn b6_stk(cur: i64, w: i64) -> i64 { cur + 16384 + w * 8192 }
+fn b6_work(env: [i64], cells: [i64], w: i64, W: i64) -> i64 {
+  let pin_result = sys_setaffinity(cells, 2 * W + 1 + w);
+  let _ = sys_cond_set(1, cells, 3 * W + 1 + w, pin_result);
+  let arena_start = sys_arena_base();
+  let _ = sys_cond_set(1, cells, 4 * W + 1 + w, arena_start);
+  let lo = w * (env[2] / W);
+  let hi = if w == W - 1 then env[2] else (w + 1) * (env[2] / W);
+  let part = work(env, env[3], lo, hi);
+  let arena_end = sys_arena_base();
+  let _ = sys_cond_set(1, cells, 5 * W + 1 + w, arena_end);
+  let _ = sys_atomic_add(cells, w, part);
+  part
+}
 fn b6_par(env: [i64], cells: [i64], W: i64) -> i64 {
   let cur = sys_arena_base();
   let w = 0;
   while w < W {
-    let r = sys_clone(68864, cur + 16384 + w * 8192);
+    let r = sys_clone(68864, b6_stk(cur, w));
     let is_child = if r == 0 then 1 else 0;
-    let pin_result = sys_setaffinity(cells, 2 * W + 1 + w);
-    let _ = sys_cond_set(is_child, cells, 3 * W + 1 + w, pin_result);
-    let arena_start = sys_arena_base();
-    let _ = if is_child == 1 then sys_cond_set(1, cells, 4 * W + 1 + w, arena_start) else 0;
-    let lo = w * (env[2] / W);
-    let hi = if w == W - 1 then env[2] else (w + 1) * (env[2] / W);
-    let part = if is_child == 1 then work(env, env[3], lo, hi) else 0;
-    let arena_end = sys_arena_base();
-    let _ = if is_child == 1 then sys_cond_set(1, cells, 5 * W + 1 + w, arena_end) else 0;
-    let _ = sys_atomic_add(cells, w, is_child * part);
+    let _ = if is_child == 1 then b6_work(env, cells, w, W) else 0;
+    let _ = sys_atomic_add(cells, W + w, is_child);
     let _ = sys_futex_wake(cells, W + w, 64);
     let parked = if is_child == 0 then 1 else 0;
     while parked == 0 {
-      let _ = sys_futex_wait_guard(if is_child == 0 then 1 else 0, cells, 2 * W, 0);
-      let parked = if cells[2 * W] == 1 then 1 else 0;
+      let _ = sys_futex_wait_guard(if is_child == 0 then 1 else 0, cells, W + w, 0);
+      let parked = if cells[W + w] == 1 then 1 else 0;
       0
     };
     let _ = sys_exit_thread_guard(is_child, 0);
@@ -142,7 +148,14 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let _ = if W > 0 then b6_par(env, cells, W_actual) else 0;
   let msW = clock_ms() - t1;
 
-  let fold_par = if W == 0 then fold_seq else if shape == 0 then fold_scan(a, n) else fold_gather(a, idx, n);
+  let sum_cells = 0;
+  let w = 0;
+  while w < W_actual {
+    let sum_cells = sum_cells + (if w < W then cells[w] else 0);
+    let w = w + 1;
+    0
+  };
+  let fold_par = if W == 0 then fold_seq else sum_cells;
   let ok = if fold_par == fold_seq then 1 else 0;
 
   let pin = 1;

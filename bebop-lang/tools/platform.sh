@@ -16,8 +16,12 @@ lse_atomics=$(grep -c '^Features.*atomics' /proc/cpuinfo || echo 0)
 # CRC32 extension (crc32x for optional acceleration)
 crc32=$(grep -c '^Features.*crc32' /proc/cpuinfo || echo 0)
 
-# TracerPid from /proc/self/status (nonzero means under debugger/proot)
-tracer_pid=$(grep '^TracerPid:' /proc/self/status | awk '{print $2}')
+# TracerPid from /proc/self/status: nonzero means under debugger/proot.
+# Emitted as a BOOLEAN, not as the pid (2026-09-12). The pid is the proot process's, so it
+# changes with every session -- freezing it made rung (0) print "PLATFORM CHANGED" and turn
+# invariants RED in every fresh session, for a value no gate depends on. What the gates
+# actually assume is `are we traced at all`, because tracing is what inflates latency 10-100x.
+traced=$([ "$(grep '^TracerPid:' /proc/self/status | awk '{print $2}')" = 0 ] && echo 0 || echo 1)
 
 # Mount options for the filesystem holding stores
 # (This store may be /tmp/L07/scrash.store; check /tmp mount or current working directory)
@@ -28,7 +32,7 @@ mount_opts=$(mount | grep " $store_mount " | grep -o 'nobarrier' || echo 'barrie
 echo "pagesize=$pagesize"
 echo "lse_atomics=$lse_atomics"
 echo "crc32=$crc32"
-echo "tracer_pid=$tracer_pid"
+echo "traced=$traced"
 echo "fsync_mode=$mount_opts"
 echo "kernel_release=$kernel_release"
 echo "core_count=$core_count"
