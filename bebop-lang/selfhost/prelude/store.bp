@@ -206,6 +206,8 @@ fn st_open(path: [i64], plen: i64, size: i64, tmp: [i64]) -> [i64] {
   let live_sb = if fresh == 1 then 0 else st_pick(base, tmp);
   let _ = if fresh == 0 then (if base[live_sb + 4] * 8 > size then sys_exit(86) else 0) else 0;
   let _ = if fresh == 1 then st_sb_write(base, 0, 0, 0, 1024, 0, 0, tmp) else st_reopen_verify(base, tmp);
+  // Trap 87: version cell mismatch (T127: fix for silent schema divergence)
+  let _ = if fresh == 0 then (if base[live_sb + 1] != 1 then sys_exit(87) else 0) else 0;
   base
 }
 // st_map_ro(path, plen, size): a reader's mapping (PROT_READ, MAP_SHARED).
@@ -213,6 +215,12 @@ fn st_map_ro(path: [i64], plen: i64, size: i64) -> [i64] {
   let fd = sys_open(path, plen, 0);
   let base = st_cells(sys_mmap(0, size, 1, 1, fd, 0));
   let _ = sys_close(fd);
+  // Trap 87: version cell check on read-only open (T127)
+  // st_crc ignores its tmp argument (it is a thin wrapper over the crc32x builtin), so
+  // st_pick needs no scratch. Allocating one here would put a zeros(256) in a function
+  // readers call in loops -- the same per-call arena growth that cost this project a day.
+  let live_sb = st_pick(base, base);
+  let _ = if live_sb >= 0 then (if base[live_sb + 1] != 1 then sys_exit(87) else 0) else 0;
   base
 }
 // st_parttab_cells(p: i64): number of cells in a PartTab for P=p partitions (16 + 3*P).
