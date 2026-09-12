@@ -148,7 +148,7 @@ fn main() -> i64 {
   let f4 = fold_q(b2, tmp);
   let mig = st_mig(b2, tmp);
   let sb = st_pick(b2, tmp);
-  let ok = (f4 == f4a) * (if mig == 0 then 0 else 1) * (b2[sb + 8] == 0) * (if mig == 0 then 0 else (st_get(b2, mig, 1) == dq)) * (live == 2000 * 4 + 2003 + 5);
+  let ok = (f4 == f4a) * (if mig == 0 then 0 else 1) * (b2[sb + 8] == 0) * (if mig == 0 then 0 else (st_get(b2, mig, 1) == dq)) * (live == 2000 * 4 + 2003 + 5 + 21);
   let _ = sys_munmap(st_addr(b2), size);
   (((f1 * 31 + f2) * 31 + f3) * 31 + f4) * ok
 }
