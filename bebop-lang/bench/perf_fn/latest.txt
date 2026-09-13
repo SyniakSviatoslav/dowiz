@@ -92,6 +92,7 @@ skip_string 21
 skip_ws 145
 cap_exit 81
 selfcheck_exit 79
+src_slurp_cap 8
 cli_exit 83
 em 30
 check_reg_collision 228
@@ -281,16 +282,16 @@ cas_prefix 68
 cas_path 68
 hexval 19
 cas_verify 135
-use_scan 465
+use_scan 495
 use_expand 280
 entry_stub 681
-cli_compile 1061
+cli_compile 1085
 fill_check 24
-cli_check 193
+cli_check 216
 fill_cas 18
 fill_add 18
 hexdig 15
-cli_cas 452
+cli_cas 476
 cli_size 177
 cli_run 10
 emit_sys_ftruncate 86
@@ -301,4 +302,4 @@ emit_sys_mapb 27
 emit_sys_rename 268
 emit_sys_wait4 118
 emit_sys_run 272
-main 1008
+main 1104

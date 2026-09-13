@@ -2247,6 +2247,21 @@ fn selfcheck_exit(kind: i64, site: i64) -> i64 {
   let _ = sys_write(2, buf, a3 + 1);
   sys_exit(201)
 }
+// The source slurp cap, as ONE definition rather than a literal at four call sites.
+// sys_slurp(fd, N) reads at most N bytes and NUL-terminates at nread, so a file
+// LARGER than N is silently truncated and the compiler then parses a program that
+// ends mid-expression. Measured 2026-09-13: bench/vs_rust/std_tests/gb_pool.bp
+// concatenated onto a main-stripped bebop.bp reached 401529 bytes against this
+// 400000 cap, the .use expansion ended inside `let P = pool_ref_i64(`, and the only
+// symptom was `12247:25: error[E97]: fn body without a tail expression` at a line
+// number PAST THE END of an 8253-line file. That is a capacity failing quietly and
+// then lying about where, which is the L1 violation this trap closes.
+// NOT raised here: sys_slurp allocates round16(N*8) bytes, so N is already 3.2 MB of
+// the 8 MiB par_compile CHILD arena ([sp+4 MiB, sp+12 MiB), T118 at :1344) which must
+// also hold insns ~2 MB plus tables. Raising N raises the child arena pitch with it;
+// that is a measured decision and it is NOT made here. Loud first.
+fn src_slurp_cap() -> i64 { 400000 }
+
 fn cli_exit(code: i64, m: str) -> i64 {
   let buf = zeros(256);
   let a1 = diag_str(buf, 0, "0:0: error[E");
@@ -7063,7 +7078,8 @@ fn use_scan(srcv: str, buf: [i64], off: [i64], seen: [i64], nseen: [i64]) -> i64
     let src_path = if is_cas == 1 then real else pathc;
     let fd = if fresh == 1 then sys_open(src_path, rl, 0) else 0 - 1;
     let _ = if fd < 0 then (if fresh == 1 then cli_exit(90, "open failed (source, output or binary file)") else 0) else 0;
-    let inc = if fresh == 1 then sys_slurp(fd, 400000) else srcv;
+    let inc = if fresh == 1 then sys_slurp(fd, src_slurp_cap()) else srcv;
+    let _ = if fresh == 1 then (if str_len(inc) >= src_slurp_cap() then cli_exit(113, "included file too large -- it reached the slurp cap and would be silently truncated mid-program") else 0) else 0;
     let _ = if fresh == 1 then sys_close(fd) else 0;
     let _ = if fresh * is_cas == 1 then cas_verify(inc, pathc) else 0;
     let _ = if fresh == 1 then use_scan(inc, buf, off, seen, nseen) else 0;
@@ -7343,7 +7359,8 @@ fn cli_compile(argc: i64, argv: [str]) -> i64 {
   // an invalid fd, compiled the resulting empty program and exited 0 -- a silent failure on a
   // mistyped filename, and it made TRAPS.md row 90's "source" case a claim nothing could produce.
   let _ = if fd < 0 then cli_exit(90, "open failed (source, output or binary file)") else 0;
-  let srcv0 = sys_slurp(fd, 400000);
+  let srcv0 = sys_slurp(fd, src_slurp_cap());
+  let _ = if str_len(srcv0) >= src_slurp_cap() then cli_exit(113, "source file too large -- it reached the slurp cap and would be silently truncated mid-program") else 0;
   let _ = sys_close(fd);
   // T47: `<out>.use` is the scratch file of the expansion (rewritten each compile)
   let tmpc = zeros(lo + 5);
@@ -7466,7 +7483,8 @@ fn cli_check(argc: i64, argv: [str]) -> i64 {
   let _ = str_to_cells(psrc, src);
   let fd = sys_open(psrc, ls, 0);
   let _ = if fd < 0 then cli_exit(90, "open failed (source, output or binary file)") else 0;
-  let srcv0 = sys_slurp(fd, 400000);
+  let srcv0 = sys_slurp(fd, src_slurp_cap());
+  let _ = if str_len(srcv0) >= src_slurp_cap() then cli_exit(113, "source file too large -- it reached the slurp cap and would be silently truncated mid-program") else 0;
   let _ = sys_close(fd);
   let tmpc = zeros(ls + 5);
   let _ = str_to_cells(tmpc, src);
@@ -7505,7 +7523,8 @@ fn cli_cas(argc: i64, argv: [str]) -> i64 {
   let _ = str_to_cells(pf, f);
   let fd = sys_open(pf, lf, 0);
   let _ = if fd < 0 then cli_exit(90, "open failed (source, output or binary file)") else 0;
-  let src = sys_slurp(fd, 400000);
+  let src = sys_slurp(fd, src_slurp_cap());
+  let _ = if str_len(src) >= src_slurp_cap() then cli_exit(113, "source file too large -- it reached the slurp cap and would be silently truncated mid-program") else 0;
   let _ = sys_close(fd);
   let n = str_len(src);
   let bytes = zeros(n + 1);
