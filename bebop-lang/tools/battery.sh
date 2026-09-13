@@ -61,8 +61,8 @@ line pd.log '^parity:' 'fail=0'
 line pool.log '^pool_parity:' ' 0 fail'
 line oracles.log '^SUMMARY' 'self-frozen=0 mismatch=0 missing=0'
 line bpp.log '^bpref_parity:' 'disagree=0 error=0'  # A23: agreement between the two implementations
-line f7_kcheck.log '^kernel_neg:' ' 0 accepted of 13'  # F7: twin soundness (Python reference)
-line f7_kcheck.log '^kernel_parity:' '17/17'  # F7: kernel parity measurement (must be real, not "NOT MEASURED")
+line f7_kcheck.log '^kernel_neg:' ' 0 accepted of 14'  # F7: twin soundness (Python reference)
+line f7_kcheck.log '^kernel_parity:' '18/18'  # F7: kernel parity measurement (must be real, not "NOT MEASURED")
 line abi.txt 'ABI' '^ABI ok'
 line inv.log '^invariants:' 'GREEN'
 line words.log '^words:' 'PASS'

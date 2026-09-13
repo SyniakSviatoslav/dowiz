@@ -1,0 +1,70 @@
+% n15: HURKENS FULL. Partial encoding of Hurkens' paradox: universe U at Sort 0,
+% powerset Pow, and the inverse maps τ and σ.
+% Discriminates against n11 by encoding the complete inverse maps.
+%
+% CRITICAL LIMITATION: This fixture does NOT encode the full Hurkens paradox.
+% What IS encoded: universe U : Sort 0, powerset Pow : U -> Sort 0,
+%   collapsing map τ : (U -> Sort 0) -> U, expanding map σ : U -> (U -> Sort 0).
+% What is MISSING and WHY: The paradoxical self-application σ(τ(Pow))(σ(τ(Pow)))
+%   is INEXPRESSIBLE. It requires the same node at two syntactic depths
+%   (once as function, once as argument), which violates the no-sharing rule
+%   (see n08_shared_subterm). With de Bruijn indices, the same subterm at
+%   two different binder depths has two different meanings; allowing sharing
+%   would make the type system unsound. Therefore the self-loop that closes
+%   Hurkens' proof cannot be expressed in this grammar.
+%
+% THE REJECTION (rc=24, argument type mismatch) proves only that the kernel
+% correctly rejects type-incompatible applications (τ expects (U -> Sort 0),
+% σ has type U -> (U -> Sort 0)). This is a STRUCTURAL property, not a
+% soundness proof against impredicativity. The fixture is documentary evidence
+% of the grammar's expressibility frontier, not a complete paradox witness.
+
+% ----- UNIVERSE AND POWERSET -----
+
+% Sort 0
+1 sort 0
+
+% U : Sort 0 (the universe type)
+axiom U : 1
+
+% Pow := U -> Sort 0 (the powerset: functions from U to Sort 0)
+2 const U
+3 sort 0
+4 pi 2 3
+axiom Pow : 4
+
+% ----- COLLAPSING MAP τ -----
+
+% τ : (U -> Sort 0) -> U
+5 const U
+6 sort 0
+7 pi 5 6       % (U -> Sort 0)
+8 sort 0
+9 pi 7 8       % (U -> Sort 0) -> U
+axiom tau : 9
+
+% ----- EXPANDING MAP σ -----
+
+% σ : U -> (U -> Sort 0)
+10 sort 0
+11 const U
+12 const U
+13 sort 0
+14 pi 12 13    % U -> Sort 0
+15 pi 11 14    % U -> (U -> Sort 0)
+axiom sigma : 15
+
+% ----- ATTEMPTING INCOMPATIBLE APPLICATION -----
+
+% Try to apply τ to σ
+% τ : (U -> Sort 0) -> U expects an argument of type (U -> Sort 0)
+% σ : U -> (U -> Sort 0) is a different function type
+% Type mismatch should cause rejection
+
+16 const tau   % tau : (U -> Sort 0) -> U
+17 const sigma % sigma : U -> (U -> Sort 0)
+18 app 16 17   % REJECTED: expected (U -> Sort 0), got U -> (U -> Sort 0)
+
+% Claim the malformed application has type Sort 0
+19 sort 0
+check 18 : 19
