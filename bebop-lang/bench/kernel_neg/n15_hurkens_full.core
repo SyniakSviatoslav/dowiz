@@ -5,14 +5,25 @@
 % CRITICAL LIMITATION: This fixture does NOT encode the full Hurkens paradox.
 % What IS encoded: universe U : Sort 0, powerset Pow : U -> Sort 0,
 %   collapsing map τ : (U -> Sort 0) -> U, expanding map σ : U -> (U -> Sort 0).
-% What is MISSING and WHY: The paradoxical self-application σ(τ(Pow))(σ(τ(Pow)))
-%   is INEXPRESSIBLE. It requires the same node at two syntactic depths
-%   (once as function, once as argument), which violates the no-sharing rule
-%   (see n08_shared_subterm). With de Bruijn indices, the same subterm at
-%   two different binder depths has two different meanings; allowing sharing
-%   would make the type system unsound. Therefore the self-loop that closes
-%   Hurkens' proof cannot be expressed in this grammar.
-%
+% What is MISSING, and the FIRST answer here was WRONG -- corrected 2026-09-13.
+%   This fixture originally claimed the self-application sigma(tau(Pow))(sigma(tau(Pow)))
+%   is INEXPRESSIBLE because it needs one node at two binder depths, which the
+%   no-sharing rule (n08_shared_subterm) forbids. That is NOT the blocker.
+%   tools/kcheck.py:125 raises that error and its own message says what to do:
+%   "Duplicate it in the elaborator." Emitting fresh ids per node encodes the
+%   whole of Hurkens' U/tau/sigma in 78 nodes, measured. So sharing costs nodes,
+%   not expressibility.
+% THE REAL BLOCKER IS DELTA UNFOLDING, measured in selfhost/tcheck_kernel.bp:
+%   k_infer_app (:150-164) infers the head, then does
+%     let isp = if k_tag(K, tf) == 4 then 1 else 0;   % 4 = pi
+%     let _ = if isp == 1 then 0 else k_rej(K, 23);
+%   so it demands a LITERAL pi and cannot unfold a `const`. On the 78-node
+%   encoding the kernel stops at tau with 23, never reaching the paradox.
+%   The Python twin gets further -- it accepts U and tau and rejects sigma at
+%   `s U` with "expected Sort 1, got Sort 2", the universe check, under BOTH
+%   arms -- so the two implementations fail this witness at DIFFERENT points.
+%   Delta unfolding in k_infer_app is what must land first.
+
 % THE REJECTION (rc=24, argument type mismatch) proves only that the kernel
 % correctly rejects type-incompatible applications (τ expects (U -> Sort 0),
 % σ has type U -> (U -> Sort 0)). This is a STRUCTURAL property, not a
