@@ -22,7 +22,7 @@ abbrev Val := Int64
 
 namespace Val
 
-/-- Signed truncating division. LANGUAGE.md:66: x/0 = 0, MIN/-1 = MIN. -/
+/-- Signed truncating division. LANGUAGE.md:66: x/0 = 0, MIN / -1 = MIN. -/
 def sdiv (a b : Val) : Val :=
   if b == 0 then 0 else a / b
 
