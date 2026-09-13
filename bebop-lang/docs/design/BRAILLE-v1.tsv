@@ -1,0 +1,96 @@
+class	cell	hex	ascii	dots	note
+space	⠀	00	<space>		space
+letter	⠁	01	a	1	Grade-1 braille
+punct	⠂	02	,	2	punct
+letter	⠃	03	b	1-2	Grade-1 braille
+punct	⠄	04	'	3	punct
+letter	⠅	05	k	1-3	Grade-1 braille
+punct	⠆	06	;	2-3	punct
+letter	⠇	07	l	1-2-3	Grade-1 braille
+punct	⠈	08	#	4	punct
+letter	⠉	09	c	1-4	Grade-1 braille
+letter	⠊	0A	i	2-4	Grade-1 braille
+letter	⠋	0B	f	1-2-4	Grade-1 braille
+punct	⠌	0C	/	3-4	punct
+letter	⠍	0D	m	1-3-4	Grade-1 braille
+letter	⠎	0E	s	2-3-4	Grade-1 braille
+letter	⠏	0F	p	1-2-3-4	Grade-1 braille
+punct	⠐	10	$	5	punct
+letter	⠑	11	e	1-5	Grade-1 braille
+punct	⠒	12	:	2-5	punct
+letter	⠓	13	h	1-2-5	Grade-1 braille
+punct	⠔	14	?	3-5	punct
+letter	⠕	15	o	1-3-5	Grade-1 braille
+punct	⠖	16	+	2-3-5	punct
+letter	⠗	17	r	1-2-3-5	Grade-1 braille
+punct	⠘	18	^	4-5	punct
+letter	⠙	19	d	1-4-5	Grade-1 braille
+letter	⠚	1A	j	2-4-5	Grade-1 braille
+letter	⠛	1B	g	1-2-4-5	Grade-1 braille
+punct	⠜	1C	)	3-4-5	punct
+letter	⠝	1D	n	1-3-4-5	Grade-1 braille
+letter	⠞	1E	t	2-3-4-5	Grade-1 braille
+letter	⠟	1F	q	1-2-3-4-5	Grade-1 braille
+punct	⠠	20	@	6	punct
+punct	⠡	21	*	1-6	punct
+punct	⠢	22	<	2-6	punct
+punct	⠣	23	(	1-2-6	punct
+punct	⠤	24	-	3-6	punct
+letter	⠥	25	u	1-3-6	Grade-1 braille
+punct	⠦	26	"	2-3-6	punct
+letter	⠧	27	v	1-2-3-6	Grade-1 braille
+punct	⠨	28	>	4-6	punct
+punct	⠩	29	%	1-4-6	punct
+punct	⠪	2A	\	2-4-6	punct
+punct	⠫	2B	`	1-2-4-6	punct
+punct	⠬	2C	~	3-4-6	punct
+letter	⠭	2D	x	1-3-4-6	Grade-1 braille
+punct	⠮	2E	!	2-3-4-6	punct
+punct	⠯	2F	&	1-2-3-4-6	punct
+punct	⠲	32	.	2-5-6	punct
+punct	⠳	33	|	1-2-5-6	punct
+letter	⠵	35	z	1-3-5-6	Grade-1 braille
+punct	⠶	36	=	2-3-5-6	punct
+punct	⠸	38	_	4-5-6	punct
+letter	⠺	3A	w	2-4-5-6	Grade-1 braille
+letter	⠽	3D	y	1-3-4-5-6	Grade-1 braille
+capital	⡁	41	A	1-7	dot7 (0x40)
+capital	⡃	43	B	1-2-7	dot7 (0x40)
+capital	⡅	45	K	1-3-7	dot7 (0x40)
+capital	⡇	47	L	1-2-3-7	dot7 (0x40)
+capital	⡉	49	C	1-4-7	dot7 (0x40)
+capital	⡊	4A	I	2-4-7	dot7 (0x40)
+capital	⡋	4B	F	1-2-4-7	dot7 (0x40)
+capital	⡍	4D	M	1-3-4-7	dot7 (0x40)
+capital	⡎	4E	S	2-3-4-7	dot7 (0x40)
+capital	⡏	4F	P	1-2-3-4-7	dot7 (0x40)
+capital	⡑	51	E	1-5-7	dot7 (0x40)
+capital	⡓	53	H	1-2-5-7	dot7 (0x40)
+capital	⡕	55	O	1-3-5-7	dot7 (0x40)
+capital	⡗	57	R	1-2-3-5-7	dot7 (0x40)
+capital	⡙	59	D	1-4-5-7	dot7 (0x40)
+capital	⡚	5A	J	2-4-5-7	dot7 (0x40)
+capital	⡛	5B	G	1-2-4-5-7	dot7 (0x40)
+punct	⡜	5C	}	3-4-5-7	punct
+capital	⡝	5D	N	1-3-4-5-7	dot7 (0x40)
+capital	⡞	5E	T	2-3-4-5-7	dot7 (0x40)
+capital	⡟	5F	Q	1-2-3-4-5-7	dot7 (0x40)
+punct	⡣	63	{	1-2-6-7	punct
+capital	⡥	65	U	1-3-6-7	dot7 (0x40)
+capital	⡧	67	V	1-2-3-6-7	dot7 (0x40)
+capital	⡭	6D	X	1-3-4-6-7	dot7 (0x40)
+capital	⡵	75	Z	1-3-5-6-7	dot7 (0x40)
+capital	⡺	7A	W	2-4-5-6-7	dot7 (0x40)
+capital	⡽	7D	Y	1-3-4-5-6-7	dot7 (0x40)
+digit	⢁	81	1	1-8	dot8 (0x80)
+digit	⢃	83	2	1-2-8	dot8 (0x80)
+digit	⢉	89	3	1-4-8	dot8 (0x80)
+digit	⢊	8A	9	2-4-8	dot8 (0x80)
+digit	⢋	8B	6	1-2-4-8	dot8 (0x80)
+digit	⢑	91	5	1-5-8	dot8 (0x80)
+digit	⢓	93	8	1-2-5-8	dot8 (0x80)
+digit	⢙	99	4	1-4-5-8	dot8 (0x80)
+digit	⢚	9A	0	2-4-5-8	dot8 (0x80)
+digit	⢛	9B	7	1-2-4-5-8	dot8 (0x80)
+punct	⢜	9C	]	3-4-5-8	punct
+punct	⢣	A3	[	1-2-6-8	punct

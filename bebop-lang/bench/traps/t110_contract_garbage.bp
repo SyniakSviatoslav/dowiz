@@ -1,0 +1,7 @@
+fn add(x: i64, y: i64) -> i64 requires @@@ nonsense ensures 1 2 3 {
+  x + y
+}
+
+fn main() -> i64 {
+  0
+}

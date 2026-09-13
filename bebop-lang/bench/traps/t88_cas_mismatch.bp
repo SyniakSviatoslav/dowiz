@@ -1,0 +1,5 @@
+use "cas://sha256:e170dbeeb65ba00d3c4fcfaaf8e66c995929ad10f0d15b3d00783190db7a8298"
+
+fn main() -> i64 {
+  0
+}
