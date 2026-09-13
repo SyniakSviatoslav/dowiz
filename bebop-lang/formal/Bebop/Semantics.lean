@@ -17,6 +17,9 @@
   - While loops reset the frame heap per iteration (T43/A6).
   - Struct/enum literals allocate on arena; field access reads from arena.
   - 10 builtins + 5 sys_* dispatched via Builtins/Syscalls modules.
+  - Import DAG: Basic <- {Builtins, Syscalls} <- Semantics. State.lookup,
+    State.zeros, State.arenaRead/Write live in Basic so nothing below
+    this module needs the evaluator.
 -/
 import Bebop.Basic
 import Bebop.Builtins
@@ -24,59 +27,16 @@ import Bebop.Syscalls
 
 namespace Bebop.Semantics
 
-open Basic
 open Bebop.Builtins
 open Bebop.Syscalls
 
 -- ============================================================
--- 1. Environment operations
+-- 1-2. Environment and arena operations
+--      These live in Bebop.Basic (State.lookup/bind/zeros/arenaRead/
+--      arenaWrite/...): Builtins and Syscalls need them, and importing
+--      them from here was the import cycle that kept `lake build` from
+--      ever succeeding.
 -- ============================================================
-
-/-- Look up a binding (most recent wins; fn-scoped rebind).
-    LANGUAGE.md:41-43: let rebinds the same register, no shadowing. -/
-def State.lookup (s : State) (n : Name) : Option Val :=
-  s.env.find? (fun p => p.1 == n) |>.map .snd
-
-/-- Bind or rebind a name (fn-scoped, no shadowing). LANGUAGE.md:41-43. -/
-def State.bind (s : State) (n : Name) (v : Val) : State :=
-  { s with env := s.env.push (n, v) }
-
-/-- Look up a frame-allocated array by name. -/
-def State.lookupFrameArray (s : State) (n : Name) : Option (FrameArray × Nat) :=
-  s.frameArrays.find? (fun p => p.1 == n)
-
-/-- Look up a frame-allocated array by base offset. -/
-def State.lookupFrameArrayAny (s : State) (base : Nat) : Option (FrameArray × Nat) :=
-  s.frameArrays.find? (fun p => p.2 == base)
-
-/-- Register a frame-allocated array (base offset + length). -/
-def State.registerFrameArray (s : State) (n : Name) (base : FrameArray) (len : Nat) : State :=
-  { s with frameArrays := s.frameArrays.push (n, base, len) }
-
--- ============================================================
--- 2. Arena allocation
--- ============================================================
-
-/-- zeros(n): allocate n zeroed i64 cells. Exit 80 if exhausted. -/
-def State.zeros (s : State) (n : Nat) : State × Option TrapCode :=
-  let newLen := s.arena.cells.size + n
-  if h : newLen ≤ s.arena.capacity then
-    let newCells := s.arena.cells ++ Array.mkArray n (0 : Val)
-    ({ s with arena := { cells := newCells, capacity := s.arena.capacity } }, none)
-  else
-    (s, some TrapCode.arenaExhausted)
-
-/-- Read a cell from the arena. Returns none if OOB. -/
-def State.arenaRead (s : State) (off : Nat) : Option Val :=
-  if h : off < s.arena.cells.size then
-    some (s.arena.cells.get ⟨off, h⟩)
-  else none
-
-/-- Write a cell to the arena. Returns none if OOB. -/
-def State.arenaWrite (s : State) (off : Nat) (v : Val) : Option State :=
-  if h : off < s.arena.cells.size then
-    some { s with arena := { cells := s.arena.cells.set off v, capacity := s.arena.capacity } }
-  else none
 
 -- ============================================================
 -- 3. Binary operation dispatch
@@ -91,9 +51,9 @@ def evalBinOp (op : BinOp) (a b : Val) : Val :=
   | .mul  => a * b
   | .sdiv => Val.sdiv a b
   | .srem => Val.srem a b
-  | .lsl  => a <<< (b.toNat % 64)
-  | .lsr  => (a.toU >>> (b.toNat % 64)).toInt
-  | .asr  => a >>> (b.toNat % 64)
+  | .lsl  => a <<< Int64.ofNat (b.toNatClampNeg % 64)
+  | .lsr  => (a.toUInt64 >>> UInt64.ofNat (b.toNatClampNeg % 64)).toInt64
+  | .asr  => a >>> Int64.ofNat (b.toNatClampNeg % 64)
   | .band => a &&& b
   | .bor  => a ||| b
   | .bxor => a ^^^ b
@@ -107,8 +67,22 @@ def evalBinOp (op : BinOp) (a b : Val) : Val :=
   | .sge  => if a ≥ b then 1 else 0
 
 -- ============================================================
+-- 3b. Helpers: enum tag/payload of an encoded value (used by match)
+-- ============================================================
+
+/-- Extract the tag from an encoded enum value (tag << 32). -/
+def extractEnumTag (v : Val) : Nat :=
+  (v.toUInt64 >>> 32).toNat
+
+/-- Extract the payload offset from an encoded enum value. -/
+def extractEnumPayload (v : Val) : Nat :=
+  (v.toUInt64 &&& 0xFFFFFFFF).toNat
+
+-- ============================================================
 -- 4. Expression evaluation (fuel-bounded)
 -- ============================================================
+
+mutual
 
 /-- Evaluate an array literal, returning values and updated state. -/
 partial def evalArrLitAux (es : Array Expr) (fuel : Fuel) (s : State)
@@ -119,7 +93,7 @@ partial def evalArrLitAux (es : Array Expr) (fuel : Fuel) (s : State)
     let rec go (es : Array Expr) (idx : Nat) (acc : Array Val) (s : State)
         : Array Val × State :=
       if h : idx < es.size then
-        let (v, s') := evalExpr fuel es[idx] s
+        let (s', v) := evalExpr fuel es[idx] s
         match v with
         | none => (acc, s')
         | some v' => go es (idx + 1) (acc.push v') s'
@@ -185,7 +159,7 @@ partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val 
             let st' := st.arenaWrite idx v
             match st' with
             | some s'' => st := s''
-            | none => pure st
+            | none => pure ()
           return st
         (s3, some (Int64.ofNat base))
 
@@ -199,8 +173,8 @@ partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val 
         match vi with
         | none => (s2, none)
         | some vi =>
-          let base := va.toNat
-          let index := vi.toNat
+          let base := va.toNatClampNeg
+          let index := vi.toNatClampNeg
           -- Check if base is a frame-allocated array; if so use its length
           let result := s2.lookupFrameArrayAny base
           match result with
@@ -235,8 +209,8 @@ partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val 
           match vv with
           | none => (s3, none)
           | some vv =>
-            let base := va.toNat
-            let index := vi.toNat
+            let base := va.toNatClampNeg
+            let index := vi.toNatClampNeg
             let off := base + index
             match s3.arenaWrite off vv with
             | some s4 => (s4, some 0)
@@ -248,7 +222,7 @@ partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val 
       let rec evalArgs (args : Array Expr) (idx : Nat) (acc : Array Val) (s : State)
           : Array Val × State :=
         if h : idx < args.size then
-          let (v, s') := evalExpr fuel args[idx] s
+          let (s', v) := evalExpr fuel args[idx] s
           match v with
           | none => (acc, s')
           | some v' => evalArgs args (idx + 1) (acc.push v') s'
@@ -257,11 +231,11 @@ partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val 
       let (argVals, s1) := evalArgs args 0 #[] s
       -- Check for builtin first
       match dispatchBuiltin fnName argVals s1 with
-      | some (v, s') => (s', some v)
+      | some (s', v) => (s', some v)
       | none =>
         -- Check for syscall
         match dispatchSyscall fnName argVals s1 with
-        | some (v, s') => (s', some v)
+        | some (s', v) => (s', some v)
         | none =>
           -- User function call
           let fnOpt := s1.fns.find? (fun f => f.name == fnName)
@@ -278,10 +252,10 @@ partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val 
                 return env
               let s2 := { s1 with env := newEnv }
               -- Execute body statements
-              let (signal, s3) := execStmts fuel fn.body s2
-              match signal with
-              | .ret v => (s3, some v)
-              | _      => (s3, some 0)
+              let r := execStmts fuel fn.body s2
+              match r.signal with
+              | .ret v => (r.state, some v)
+              | _      => (r.state, some 0)
 
     -- If-then-else
     | .ite c t f =>
@@ -335,8 +309,8 @@ partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val 
                 let st' := st.arenaWrite (base + i) v
                 match st' with
                 | some s'' => st := s''
-                | none => pure st
-              | none => pure st  -- missing field: leave as 0
+                | none => pure ()
+              | none => pure ()  -- missing field: leave as 0
             return st
           -- Register as frame array so field access can find it
           let s4 := s3.registerFrameArray name base structFields.size
@@ -381,7 +355,7 @@ partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val 
       match sval with
       | none => (s1, none)
       | some sval =>
-        let base := sval.toNat
+        let base := sval.toNatClampNeg
         -- Look up struct definition to find field index
         match s1.structs.find? (fun p => p.1 == field) with
         -- Try to find struct that has this field
@@ -391,7 +365,7 @@ partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val 
               : Option Nat :=
             if h : idx < structs.size then
               let (_, fields) := structs[idx]!
-              match fields.find? (fun f => f == field) with
+              match fields.findIdx? (fun f => f == field) with
               | some fi => some fi
               | none => findField structs (idx + 1)
             else none
@@ -409,39 +383,37 @@ partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val 
 
     -- Builtin call (explicit form, e.g. char(s, i))
     | .builtin name args =>
-      match dispatchBuiltin name args s with
-      | some (v, s') => (s', some v)
+      -- Evaluate arguments left to right (same helper the array literal uses),
+      -- then dispatch on the VALUES; the scaffold passed the unevaluated Exprs.
+      let (argVals, s1) := evalArrLitAux args fuel s
+      match dispatchBuiltin name argVals s1 with
+      | some (s', v) => (s', some v)
       | none =>
         -- Try syscall
-        match dispatchSyscall name args s with
-        | some (v, s') => (s', some v)
-        | none => (s, none)
+        match dispatchSyscall name argVals s1 with
+        | some (s', v) => (s', some v)
+        | none => (s1, none)
 
-    -- Match expression: match <scrutinee> { ctor1 => body1, ctor2 => body2, ... }
-    | .matchExpr arms =>
-      -- A match expression in Bebop takes a scrutinee (the enum value to match on).
-      -- In the AST, the scrutinee is implicit: it must be a variable or the last
-      -- evaluated expression. For the formal model, we require the scrutinee to be
-      -- provided as the first arm's ctor (a simplification for the scaffold).
-      --
-      -- Real Bebop match semantics (LANGUAGE.md, bpref):
-      -- 1. Evaluate the scrutinee expression to get an enum-encoded value.
-      -- 2. Extract the tag (high 32 bits) from the value.
-      -- 3. Find the arm whose ctor name matches the tag.
-      -- 4. If the arm has a binder, bind the payload (low 32 bits) to it.
-      -- 5. Evaluate the matching arm's body.
-      --
-      -- For the scaffold, we take the scrutinee from the environment under the
-      -- key "_scrutinee" (set by the caller), or fail if not present.
-      match s.lookup "_scrutinee" with
+    -- Match expression: match scrut { ctor1 => body1, ctor2 => body2, ... }
+    -- 1. Evaluate the scrutinee to an enum-encoded value (tag << 32 | payload).
+    -- 2. Find the arm whose ctor's tag equals the scrutinee's tag.
+    -- 3. If the arm has a binder, bind the payload offset to it.
+    -- 4. Evaluate that arm's body.
+    -- (Earlier scaffold read the scrutinee from an env key "_scrutinee" that
+    -- nothing bound, so every match evaluated to none. The scrutinee is now
+    -- an AST field: Basic.lean `Expr.matchExpr (scrut : Expr) (arms ...)`.)
+    | .matchExpr scrut arms =>
+      let (s0, scrutOpt) := evalExpr fuel scrut s
+      match scrutOpt with
+      | none => (s0, none)
       | some scrutVal =>
         let tag := extractEnumTag scrutVal
         -- Find matching arm by tag index
         let rec findArm (idx : Nat) : Option MatchArm :=
           if h : idx < arms.size then
-            let arm := arms[idx]!
+            let arm := arms[idx]
             -- The arm's ctor name maps to a tag via enumTags
-            match s.enumTags.find? (fun p => p.1 == arm.ctor) with
+            match s0.enumTags.find? (fun p => p.1 == arm.ctor) with
             | some (_, armTag) =>
               if armTag == tag then some arm
               else findArm (idx + 1)
@@ -452,11 +424,10 @@ partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val 
           match arm.binder with
           | some bName =>
             let payload := extractEnumPayload scrutVal
-            let s' := s.bind bName (Int64.ofNat payload)
-            evalExpr fuel arm.body s'
-          | none => evalExpr fuel arm.body s
-        | none => (s, none)  -- no matching arm
-      | none => (s, none)  -- no scrutinee
+            let s1 := s0.bind bName (Int64.ofNat payload)
+            evalExpr fuel arm.body s1
+          | none => evalExpr fuel arm.body s0
+        | none => (s0, none)  -- no matching arm
 
 -- ============================================================
 -- 5. Statement execution (fuel-bounded)
@@ -474,7 +445,7 @@ partial def execStmt (fuel : Fuel) (stmt : Stmt) (s : State) : StmtResult :=
       | none => { signal := .cont, state := s' }
       | some v' => { signal := .cont, state := s'.bind n v' }
     | .drop e =>
-      let (_, s') := evalExpr fuel e s
+      let (s', _) := evalExpr fuel e s
       { signal := .cont, state := s' }
     | .arrStore arr idx val =>
       let (s1, va) := evalExpr fuel arr s
@@ -489,8 +460,8 @@ partial def execStmt (fuel : Fuel) (stmt : Stmt) (s : State) : StmtResult :=
           match vv with
           | none => { signal := .cont, state := s3 }
           | some vv =>
-            let base := va.toNat
-            let index := vi.toNat
+            let base := va.toNatClampNeg
+            let index := vi.toNatClampNeg
             let off := base + index
             match s3.arenaWrite off vv with
             | some s4 => { signal := .cont, state := s4 }
@@ -531,7 +502,7 @@ partial def execStmt (fuel : Fuel) (stmt : Stmt) (s : State) : StmtResult :=
       | some v' => { signal := .ret v', state := s' }
     | .brk => { signal := .brk, state := s }
     | .exprStmt e =>
-      let (_, s') := evalExpr fuel e s
+      let (s', _) := evalExpr fuel e s
       { signal := .cont, state := s' }
 
 /-- Execute a sequence of statements, propagating control flow signals. -/
@@ -548,6 +519,8 @@ partial def execStmts (fuel : Fuel) (stmts : Array Stmt) (s : State) : StmtResul
       else
         { signal := .cont, state := s }
     go fuel 0 s
+
+end
 
 -- ============================================================
 -- 6. Program evaluation
@@ -587,21 +560,9 @@ def evalProgram (fuel : Fuel) (prog : Program) (clockMs : Val := 0) : Result :=
     if main.params.size != 0 && main.params.size != 2 then
       .rejected 100 ⟨0, 0⟩ "main has wrong param count"
     else
-      let (signal, _) := execStmts fuel main.body s
-      match signal with
+      let r := execStmts fuel main.body s
+      match r.signal with
       | .ret v => .ok v
       | _      => .ok 0
-
--- ============================================================
--- 7. Helper: extract enum tag from encoded value
--- ============================================================
-
-/-- Extract the tag from an encoded enum value (tag << 32). -/
-def extractEnumTag (v : Val) : Nat :=
-  (v.toU >>> 32).toNat
-
-/-- Extract the payload offset from an encoded enum value. -/
-def extractEnumPayload (v : Val) : Nat :=
-  (v.toU & 0xFFFFFFFF).toNat
 
 end Bebop.Semantics

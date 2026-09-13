@@ -9,8 +9,10 @@
   - docs/LANGUAGE.md (status 2026-09-05, T119)
   - docs/RESEARCH-VERIFICATION-2026-09-09.md section 5.2
   - tools/bpref.py (727 lines, the executable reference semantics)
+
+  This module imports nothing beyond Init (which already provides Int64):
+  it is the leaf of the import DAG and every other Bebop module imports it.
 -/
-import Lean
 
 -- ============================================================
 -- 1. Machine integers (Z/2^64 wrapping arithmetic)
@@ -85,7 +87,7 @@ mutual
     | call (fn : Name) (args : Array Expr)
     | ite (c t f : Expr)
     | letIn (n : Name) (e body : Expr)
-    | matchExpr (arms : Array MatchArm)
+    | matchExpr (scrut : Expr) (arms : Array MatchArm)     -- match scrut { arms }
     | structLit (name : Name) (fields : Array (Name × Expr))  -- struct literal
     | enumLit (name : Name) (arg : Option Expr)                -- enum ctor
     | fieldAcc (structExpr : Expr) (field : Name)              -- s.f
@@ -222,6 +224,59 @@ structure State where
   structs : Array (Name × Array Name) := #[] -- struct name -> field list
   clockMs : Val := 0
   deriving Inhabited
+
+
+-- ============================================================
+-- 10b. State operations (environment and arena)
+--      Hoisted from Semantics.lean so that Builtins/Syscalls can use
+--      them without importing the evaluator (this breaks the
+--      Builtins <-> Semantics <-> Syscalls import cycles). They live
+--      in the root namespace because `State` does: dot-notation
+--      `s.lookup` only resolves `State.lookup`, not
+--      `Bebop.Semantics.State.lookup`.
+-- ============================================================
+
+/-- Look up a binding (most recent wins; fn-scoped rebind).
+    LANGUAGE.md:41-43: let rebinds the same register, no shadowing. -/
+def State.lookup (s : State) (n : Name) : Option Val :=
+  s.env.find? (fun p => p.1 == n) |>.map (·.2)
+
+/-- Bind or rebind a name (fn-scoped, no shadowing). LANGUAGE.md:41-43. -/
+def State.bind (s : State) (n : Name) (v : Val) : State :=
+  { s with env := s.env.push (n, v) }
+
+/-- Look up a frame-allocated array by name. -/
+def State.lookupFrameArray (s : State) (n : Name) : Option (FrameArray × Nat) :=
+  s.frameArrays.find? (fun p => p.1 == n) |>.map (·.2)
+
+/-- Look up a frame-allocated array by base offset. -/
+def State.lookupFrameArrayAny (s : State) (base : Nat) : Option (FrameArray × Nat) :=
+  s.frameArrays.find? (fun p => p.2.1 == base) |>.map (·.2)
+
+/-- Register a frame-allocated array (base offset + length). -/
+def State.registerFrameArray (s : State) (n : Name) (base : FrameArray) (len : Nat) : State :=
+  { s with frameArrays := s.frameArrays.push (n, base, len) }
+
+/-- zeros(n): allocate n zeroed i64 cells. Exit 80 if exhausted. -/
+def State.zeros (s : State) (n : Nat) : State × Option TrapCode :=
+  let newLen := s.arena.cells.size + n
+  if newLen ≤ s.arena.capacity then
+    let newCells := s.arena.cells ++ Array.replicate n (0 : Val)
+    ({ s with arena := { cells := newCells, capacity := s.arena.capacity } }, none)
+  else
+    (s, some TrapCode.arenaExhausted)
+
+/-- Read a cell from the arena. Returns none if OOB. -/
+def State.arenaRead (s : State) (off : Nat) : Option Val :=
+  if h : off < s.arena.cells.size then
+    some (s.arena.cells[off]'h)
+  else none
+
+/-- Write a cell to the arena. Returns none if OOB. -/
+def State.arenaWrite (s : State) (off : Nat) (v : Val) : Option State :=
+  if off < s.arena.cells.size then
+    some { s with arena := { cells := s.arena.cells.set! off v, capacity := s.arena.capacity } }
+  else none
 
 -- ============================================================
 -- 11. Control flow signals

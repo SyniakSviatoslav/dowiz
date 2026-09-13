@@ -1,19 +1,16 @@
 /-  Bebop.Builtins -- 10 executable builtins + dispatch.
     Replaces stub/sorry versions with real implementations where possible.
+    Imports only Bebop.Basic (State.zeros/arenaRead live there); the
+    evaluator in Bebop.Semantics imports THIS module, never the reverse.
     References:
     - docs/RESEARCH-VERIFICATION-2026-09-09.md section 5.2
     - tools/bpref.py (727 lines, the executable reference semantics)
 -/
 
 import Bebop.Basic
-import Bebop.Semantics
-import Bebop.Syscalls
 
 namespace Bebop.Builtins
 
-open Basic
-open Bebop.Semantics
-open Bebop.Syscalls
 
 -- ============================================================
 -- 1. zeros(n) -- allocate n zeroed i64 cells (already done, keep)
@@ -25,7 +22,7 @@ open Bebop.Syscalls
     In the formal model, this returns the base offset of the
     newly allocated region. -/
 def builtinZeros (n : Val) (s : State) : State × Val :=
-  let count := Nat.abs n.toNat
+  let count := n.toNatClampNeg
   let (s', err) := s.zeros count
   match err with
   | some e => (s', 0)  -- trap; caller should check
@@ -44,7 +41,7 @@ def builtinZeros (n : Val) (s : State) : State × Val :=
     The high 32 bits hold the offset into the byte buffer (not modelled here).
     str_len returns the length encoded in the low 32 bits. -/
 def builtinStrLen (s : Val) : Val :=
-  s & 0xFFFFFFFF
+  s &&& 0xFFFFFFFF
 
 -- ============================================================
 -- 3. char(s, i) -- byte at position i of string literal
@@ -61,9 +58,9 @@ def builtinStrLen (s : Val) : Val :=
     (sufficient for short inline literals; the full model would read from a
     separate byte buffer). -/
 def builtinChar (s i : Val) : Val :=
-  let off := (s.toU >>> 32).toNat
-  let idx := Nat.abs i.toNat
-  let len := (s.toU & 0xFFFFFFFF).toNat
+  let off := (s.toUInt64 >>> 32).toNat
+  let idx := i.toNatClampNeg
+  let len := (s.toUInt64 &&& 0xFFFFFFFF).toNat
   if idx < len then
     -- Extract byte at position idx.
     -- For an inline literal encoded as (off << 32) | len, the byte data
@@ -75,7 +72,7 @@ def builtinChar (s i : Val) : Val :=
     -- and for idx == 0 return the low byte of the full value (which works
     -- for the specific test patterns in the conformance suite).
     if idx == 0 then
-      (s.toU & 0xFF).toInt
+      (s.toUInt64 &&& 0xFF).toInt64
     else
       0
   else
@@ -98,8 +95,9 @@ def builtinClockMs (s : State) : State × Val :=
 /- clz(x): count leading zeros of the 64-bit word.
     LANGUAGE.md:94: clz(0) = 64 (T105; seeds the Newton isqrt). -/
 def builtinClz (x : Val) (s : State) : State × Val :=
+  -- clz(x) = 63 - floor(log2 x) for x != 0; Init has UInt64.log2 but no clz.
   (s, if x == 0 then Int64.ofNat 64
-       else Int64.ofNat x.toU.clz)
+       else Int64.ofNat (63 - x.toUInt64.log2.toNat))
 
 -- ============================================================
 -- 6. crc32(cells, n) -- zlib crc32 of n bytes held one per cell
@@ -112,15 +110,16 @@ def builtinClz (x : Val) (s : State) : State × Val :=
     We read n cells from the arena starting at address `cells`,
     treat each as a byte (low 8 bits), and compute CRC32. -/
 def builtinCrc32 (cells n : Val) (s : State) : State × Val :=
-  let start := cells.toNat
-  let count := Nat.abs n.toNat
+  let start := cells.toNatClampNeg
+  let count := n.toNatClampNeg
   -- Read count cells from arena starting at start
   let rec readCells (addr : Nat) (k : Nat) (acc : List Val) (st : State)
       : List Val × State :=
-    if k == 0 then (acc.reverse, st)
-    else
+    match k with
+    | 0 => (acc.reverse, st)
+    | k' + 1 =>
       match st.arenaRead addr with
-      | some v => readCells (addr + 1) (k - 1) (v :: acc) st
+      | some v => readCells (addr + 1) k' (v :: acc) st
       | none => (acc.reverse, st)  -- OOB: stop reading
   let (byteVals, s') := readCells start count [] s
   -- Compute CRC32 over the bytes
@@ -129,26 +128,26 @@ def builtinCrc32 (cells n : Val) (s : State) : State × Val :=
 
 where
   -- CRC32 computation over a list of bytes (each byte is the low 8 bits of a Val)
-  def crc32List (bytes : List Val) (s : State) : Val :=
+  crc32List (bytes : List Val) (s : State) : Val :=
     let rec go (xs : List Val) (crc : UInt32) : UInt32 :=
       match xs with
       | [] => crc
       | b :: bs =>
-        let byte := (b.toU & 0xFF).toUInt32
-        let idx := (crc ^^^ byte) & 0xFF
+        let byte := (b.toUInt64 &&& 0xFF).toUInt32
+        let idx := (crc ^^^ byte) &&& 0xFF
         go bs (crc32Table idx ^^^ (crc >>> 8))
     Int64.ofNat (go bytes 0xFFFFFFFF).toNat
 
   -- CRC32 lookup table (reflected polynomial 0xEDB88320)
-  def crc32Table (i : UInt32) : UInt32 :=
-    let rec build (j : UInt32) (k : Nat) : UInt32 :=
-      if k == 8 then j
-      else
+  crc32Table (i : UInt32) : UInt32 :=
+    let rec build (j : UInt32) : Nat → UInt32
+      | 0 => j
+      | k + 1 =>
         let msb := j >>> 7
-        let j' := (j <<< 1) & 0xFF
+        let j' := (j <<< 1) &&& 0xFF
         let j'' := if msb == 1 then j' ^^^ 0xEDB88320 else j'
-        build j'' (k + 1)
-    build i 0
+        build j'' k
+    build i 8
 
 -- ============================================================
 -- 7. crc32x(cells, off, n) -- zlib crc32 of raw LE bytes
@@ -160,50 +159,47 @@ where
     Reads n cells from arena starting at cells+off, treats each cell's
     8 bytes (LE order) as input to CRC32. -/
 def builtinCrc32x (cells off n : Val) (s : State) : State × Val :=
-  let start := (cells + off).toNat
-  let count := Nat.abs n.toNat
+  let start := (cells + off).toNatClampNeg
+  let count := n.toNatClampNeg
   let rec readCells (addr : Nat) (k : Nat) (acc : List Val) (st : State)
       : List Val × State :=
-    if k == 0 then (acc.reverse, st)
-    else
+    match k with
+    | 0 => (acc.reverse, st)
+    | k' + 1 =>
       match st.arenaRead addr with
-      | some v => readCells (addr + 1) (k - 1) (v :: acc) st
+      | some v => readCells (addr + 1) k' (v :: acc) st
       | none => (acc.reverse, st)
   let (cellVals, s') := readCells start count [] s
   -- Expand each cell into 8 LE bytes
-  let bytes := cellVals.flatMap (fun cv =>
-    #[ cv.toU & 0xFF,
-       (cv.toU >>> 8) & 0xFF,
-       (cv.toU >>> 16) & 0xFF,
-       (cv.toU >>> 24) & 0xFF,
-       (cv.toU >>> 32) & 0xFF,
-       (cv.toU >>> 40) & 0xFF,
-       (cv.toU >>> 48) & 0xFF,
-       (cv.toU >>> 56) & 0xFF ])
+  let byteAt (w : UInt64) (k : UInt64) : UInt64 := (w >>> k) &&& 0xFF
+  let bytes : List UInt64 := cellVals.flatMap (fun cv =>
+    let w := cv.toUInt64
+    [ byteAt w 0, byteAt w 8, byteAt w 16, byteAt w 24,
+      byteAt w 32, byteAt w 40, byteAt w 48, byteAt w 56 ])
   let crc := crc32xList bytes s'
   (s', crc)
 
 where
-  def crc32xList (bytes : List UInt64) (s : State) : Val :=
+  crc32xList (bytes : List UInt64) (s : State) : Val :=
     let rec go (xs : List UInt64) (crc : UInt32) : UInt32 :=
       match xs with
       | [] => crc
       | b :: bs =>
         -- Process byte b (already masked to 8 bits)
-        let byte := (b & 0xFF).toUInt32
-        let idx := (crc ^^^ byte) & 0xFF
+        let byte := (b &&& 0xFF).toUInt32
+        let idx := (crc ^^^ byte) &&& 0xFF
         go bs (crc32xTable idx ^^^ (crc >>> 8))
     Int64.ofNat (go bytes 0xFFFFFFFF).toNat
 
-  def crc32xTable (i : UInt32) : UInt32 :=
-    let rec build (j : UInt32) (k : Nat) : UInt32 :=
-      if k == 8 then j
-      else
+  crc32xTable (i : UInt32) : UInt32 :=
+    let rec build (j : UInt32) : Nat → UInt32
+      | 0 => j
+      | k + 1 =>
         let msb := j >>> 7
-        let j' := (j <<< 1) & 0xFF
+        let j' := (j <<< 1) &&& 0xFF
         let j'' := if msb == 1 then j' ^^^ 0xEDB88320 else j'
-        build j'' (k + 1)
-    build i 0
+        build j'' k
+    build i 8
 
 -- ============================================================
 -- 8. hvham(a, b, n) -- NEON popcount of a^b over n words
@@ -213,10 +209,18 @@ where
     LANGUAGE.md:95: hvham/hvham2.
     In the formal model, we use a scalar popcount (since NEON is not modelled).
     For each i in 0..n-1, compute popcount(a[i] XOR b[i]) and sum. -/
+/-- Population count of a 64-bit word (scalar; Init has no popcount). -/
+def popCount64 (x : UInt64) : Nat :=
+  let rec go (k : Nat) (w : UInt64) (acc : Nat) : Nat :=
+    match k with
+    | 0 => acc
+    | k + 1 => go k (w >>> 1) (acc + (w &&& 1).toNat)
+  go 64 x 0
+
 def builtinHvham (a b n : Val) (s : State) : State × Val :=
-  let baseA := a.toNat
-  let baseB := b.toNat
-  let count := Nat.abs n.toNat
+  let baseA := a.toNatClampNeg
+  let baseB := b.toNatClampNeg
+  let count := n.toNatClampNeg
   let rec loop (i : Nat) (acc : Nat) (st : State) : State × Val :=
     if i >= count then (st, Int64.ofNat acc)
     else
@@ -225,7 +229,7 @@ def builtinHvham (a b n : Val) (s : State) : State × Val :=
         match st.arenaRead (baseB + i) with
         | some vb =>
           let xorVal := va ^^^ vb
-          let pop := xorVal.toU.popCount.toNat
+          let pop := popCount64 xorVal.toUInt64
           loop (i + 1) (acc + pop) st
         | none => (st, Int64.ofNat acc)  -- OOB: stop
       | none => (st, Int64.ofNat acc)  -- OOB: stop
@@ -258,21 +262,21 @@ def builtinHvham2 (a b n : Val) (s : State) : State × Val :=
     value directly for the common case where the string data is accessible.
     For a full model, the string data would be read from arena cells at the offset
     stored in the high 32 bits of s. -/
-def builtinScan (s pos class : Val) : Val :=
-  let strLen := (s.toU & 0xFFFFFFFF).toNat
-  let posStart := (pos & 0xFFFFFFFF).toNat
-  let posEnd := ((pos.toU >>> 32) & 0xFFFFFFFF).toNat
-  -- Clamp end to string length
-  let end := min posEnd strLen
+def builtinScan (s pos cls : Val) : Val :=
+  let strLen := (s.toUInt64 &&& 0xFFFFFFFF).toNat
+  let posStart := (pos &&& 0xFFFFFFFF).toNatClampNeg
+  let posEnd := ((pos.toUInt64 >>> 32) &&& 0xFFFFFFFF).toNat
+  -- Clamp end to string length (`end` is a Lean keyword, hence `stop`)
+  let stop := min posEnd strLen
   -- Scan forward from posStart to end
   let rec scanFwd (pos : Nat) : Nat :=
-    if pos >= end then pos
+    if pos >= stop then pos
     else
       -- In the formal model without a byte buffer, we cannot read the actual byte.
       -- We model this as: always stop at posStart (no advancement).
       -- A full model would read the byte from arena cells at s.toNat + pos.
       pos  -- stop immediately (conservative: no byte matching possible)
-  scanFwd posStart
+  Int64.ofNat (scanFwd posStart)
 
 -- ============================================================
 -- 11. Dispatch table for all 10 executable builtins

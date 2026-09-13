@@ -11,7 +11,6 @@ import Bebop.Semantics
 
 namespace Bebop.Traps
 
-open Basic
 open Bebop.Semantics
 
 -- ============================================================
@@ -110,9 +109,9 @@ def trapTableF1 : Array TrapRow := #[
     "CAPACITY: cannot be static; loud with attribution is the floor", 0, false⟩
 ]
 
-/-- Verify F1 census counts. -/
-#guard (trapTableF1.filter (fun r => r.closed) |>.size == 4)
-#guard (trapTableF1.filter (fun r => !r.closed) |>.size == 20)
+/- Verify F1 census counts. -/
+#guard ((trapTableF1.filter (fun r => r.closed)).size == 4)
+#guard ((trapTableF1.filter (fun r => !r.closed)).size == 20)
 #guard (trapTableF1.size == 24)
 
 -- ============================================================

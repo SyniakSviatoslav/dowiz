@@ -19,7 +19,6 @@ import Bebop.Syscalls
 import Bebop.Traps
 import Bebop.Conformance
 
-open Bebop.Basic
 open Bebop.Semantics
 open Bebop.Builtins
 open Bebop.Syscalls
@@ -33,7 +32,7 @@ open Bebop.Conformance
 def printResult (r : Result) : String :=
   match r with
   | .ok v => "ok " ++ toString v
-  | .trap c => "trap(" ++ toString c ++ ")"
+  | .trap c => "trap(" ++ reprStr c ++ ")"
   | .rejected code pos msg => "rejected(" ++ toString code ++ "," ++ msg ++ ")"
 
 -- ============================================================

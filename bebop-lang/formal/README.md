@@ -7,30 +7,40 @@ part of the F4 gate in the Phase F verification ladder.
 
 **Gate:** `lean_conformance: 86/86`, `builtin_spec: 36/36`
 
-**Status:** SCAFFOLD -- architecture complete, core types and interpreter implemented,
-builtins/syscalls/traps/conformance as stubs with `sorry` for unimplemented parts.
+**Status (measured 2026-09-13):** all 8 modules ELABORATE on-box under Lean 4.33.1
+with the plain `lean` binary (see Building). Before that date nothing under
+`formal/` had ever elaborated: a nested-comment token in Basic.lean, two import
+cycles (Builtins <-> Semantics <-> Syscalls), a toolchain pin naming a Lean that
+is not on the box, ~60 API/keyword/typing errors from code that was never run, and
+one `#guard` that was false. The conformance harness now RUNS and reports
+**0 of 5 samples PASS** -- every sample returns `ok 0` because the evaluator has
+no tail-expression rule (`Stmt.exprStmt` discards its value; `evalProgram`
+answers 0 unless a `ret` fires). The gate numbers are therefore still 0.
 
-**Runs OFF-BOX:** Lean 4 cannot run under the box's 3GB/32-process caps.
-The Lean run emits a results file bound by sha256 to the `.lean` sources;
-the chain-side Python step recomputes the comparison.
+**Runs ON-BOX:** one `lean` process per module, 4-9 s and ~0.5 GB each.
+The "cannot host Lean under the 3GB/32-process caps" claim that used to stand
+here was never measured and is refuted (docs/blueprints/F3-lean-semantics.md §3).
 
 ## Files
 
-| File | Lines | Status | Purpose |
-|------|-------|--------|---------|
-| `Bebop/Basic.lean` | ~200 | Compiles | Core types: Val, Expr, Stmt, Program, State, TrapCode, Result |
-| `Bebop/Semantics.lean` | ~230 | Compiles | Fuel-bounded definitional interpreter (evalExpr, execStmt, evalProgram) |
-| `Bebop/Builtins.lean` | ~170 | 6 sorry | 10 executable builtins (zeros, clz, clock_ms fully defined; rest stubs) |
-| `Bebop/Syscalls.lean` | ~150 | All sorry | 26 axiomatised sys_* with declared footprints |
-| `Bebop/Traps.lean` | ~180 | Compiles | 24-row trap table, static rejection checker, gate predicates |
-| `Bebop/Conformance.lean` | ~200 | 2 sorry | 86-construct harness + 121 oracle interface |
-| `Bebop.lean` | ~12 | Compiles | Root module importing all |
-| `lakefile.lean` | ~7 | Compiles | Lake project config |
-| `lean-toolchain` | 1 | -- | Pinned Lean version (v4.12.0) |
+| File | Elaborates (lean 4.33.1, 2026-09-13) | Purpose |
+|------|------|---------|
+| `Bebop/Basic.lean` | rc=0 | Core types: Val, Expr, Stmt, Program, State (+ State.lookup/bind/zeros/arenaRead/arenaWrite), TrapCode, Result |
+| `Bebop/Builtins.lean` | rc=0 | 10 executable builtins + dispatch (imports Basic only) |
+| `Bebop/Syscalls.lean` | rc=0 | 26 `axiom` sys_* specs, 5 footprints, `dispatchSyscall` placeholder returning `(s, 0)` (imports Basic only) |
+| `Bebop/Semantics.lean` | rc=0 | Fuel-bounded evaluator (4 `partial def` in one `mutual` block) |
+| `Bebop/Traps.lean` | rc=0 | 24-row trap table, `#guard` x3 |
+| `Bebop/Conformance.lean` | rc=0 | 80 + 14 EXPECT rows, 97 oracle entries (the `oracleCount` constant says 121), 5 inline-AST samples |
+| `Bebop/Theorems.lean` | rc=0 | 7 `axiom` statements + 5 `#guard` sample checks; 0 `theorem` |
+| `Bebop.lean` | rc=0 | Root module importing all |
+| `harness.lean` | rc=0 (`lean --run`) | Prints the 5 sample verdicts: 0/5 PASS today |
+| `lakefile.lean` | not exercised | Lake project config |
+| `lean-toolchain` | -- | `leanprover/lean4:v4.33.1` (the Lean on the box; v4.12.0 predates `Int64`) |
 
-**Total Lean code:** ~1,150 lines
-**Compiles without sorry:** Basic.lean, Semantics.lean, Traps.lean, Bepop.lean, lakefile.lean
-**Contains sorry:** Builtins.lean (6), Syscalls.lean (26 axioms), Conformance.lean (2)
+Counts by `grep -c` on 2026-09-13: `sorry` 0 in code (the word occurs in two
+comments), `axiom` 26 (Syscalls) + 7 (Theorems), `theorem` 0, `partial def` 4,
+`#guard` 3 (Traps) + 5 (Theorems). The old "Compiles" / "6 sorry" table was
+written without a build and was wrong in both directions.
 
 ## Architecture
 
@@ -69,25 +79,40 @@ the chain-side Python step recomputes the comparison.
 ## Building
 
 ```bash
-# Requires Lean 4 (runs off-box)
+# On-box. Lean 4.33.1 at /root/s30/outC4/lean/bin (the only Lean here).
 cd formal
-lake build
+export LEAN_PATH=$PWD/.lake/build/lib/lean
+mkdir -p .lake/build/lib/lean/Bebop
+for m in Basic Builtins Syscalls Semantics Traps Conformance Theorems; do
+  /root/s30/outC4/lean/bin/lean -o .lake/build/lib/lean/Bebop/$m.olean Bebop/$m.lean || break
+done
+/root/s30/outC4/lean/bin/lean -o .lake/build/lib/lean/Bebop.olean Bebop.lean
+/root/s30/outC4/lean/bin/lean --run harness.lean      # prints the 5 sample verdicts
 ```
 
-## What Compiles vs What Has sorry
+`lake build` (Lake 5.0.0 from the same toolchain) also works on-box: measured
+2026-09-13, rc=0, "Build completed successfully (10 jobs)", 79 s wall, no
+process left behind. Lake 5 has no jobs flag, but the import DAG is a chain
+with one fork (Builtins || Syscalls), so at most two `lean` processes run at
+once. `.lake/` is the build directory and is not part of the source.
 
-### Compiles (no sorry)
-- `Basic.lean`: All types, enums, structures
-- `Semantics.lean`: evalExpr, execStmt, execStmts, evalProgram (fuel-bounded)
-- `Traps.lean`: 24-row trap table, gate predicates, static rejection types
-- `Bebop.lean`: Root import
+## Known content defects (elaborate, but wrong or vacuous) -- measured 2026-09-13
 
-### Contains sorry (stubs)
-- `Builtins.lean`: `builtinCrc32`, `builtinCrc32x`, `builtinHvham`,
-  `builtinHvham2`, `builtinScan` (5 sorry in implementations)
-- `Syscalls.lean`: 26 axiom declarations + `dispatchSyscall` stub
-- `Conformance.lean`: `runTestCase` (parser not yet implemented),
-  `checkResult` (needs full Result matching)
+- No tail-expression rule: `execStmt (.exprStmt e)` drops the value and
+  `evalProgram` returns `.ok 0` unless a `ret` signal fires, so all 5 harness
+  samples print `ok 0`. This is the first thing to fix before any gate number
+  can be non-zero.
+- `dispatchSyscall` returns `some (s, 0)` for every `sys_*` name (Syscalls.lean,
+  section 7): a silent oracle, the defect A23 removed from bpref.
+- `builtinCrc32`/`builtinCrc32x` table generation is not the reflected CRC32
+  algorithm and the final XOR is missing; they will not agree with zlib.
+- `builtinChar` returns 0 for any index > 0; `builtinScan` never advances
+  (no byte arena is modelled).
+- `Conformance.lean` header says 75 + 11 constructs / 121 oracles / 36 builtins;
+  the tables hold 80 + 14 rows and 97 oracle entries; `oracleCount` (121) and
+  `builtinCount` (36) are typed constants, not sizes.
+  The tree has 100 + 20 constructs and 38 builtins (F3 blueprint §2.5).
+- `Theorems.lean` proves nothing: 7 `axiom`s checked by `#guard` on sample values.
 
 ## Relationship to Other Phases
 

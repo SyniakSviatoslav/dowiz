@@ -20,7 +20,6 @@ import Bebop.Traps
 
 namespace Bebop.Conformance
 
-open Basic
 open Bebop.Semantics
 open Bebop.Builtins
 open Bebop.Syscalls
@@ -538,7 +537,7 @@ def summarise (name : String) (got : Result) (exp : Expected) : String :=
   let gotStr :=
     match got with
     | .ok v => "ok " ++ toString v
-    | .trap c => "trap " ++ toString c
+    | .trap c => "trap " ++ reprStr c
     | .rejected code _ msg => "rejected " ++ toString code ++ " (" ++ msg ++ ")"
   if pass then
     "PASS: " ++ name ++ " => " ++ gotStr ++ " (expected " ++ exp.verdict ++ ")"
@@ -567,12 +566,12 @@ def sample_c01 : Result × Expected :=
   (got, exp)
 
 /-- SAMPLE 2: c02_arith — arithmetic operators.
-EXPECT=34 from construct_parity.sh:44.
-fn main() -> i64 { let a = 10; let b = 3; a + b * 2 }
-Wait — construct_parity.sh says c02_arith EXPECT=34.
-But `10 + 3 * 2 = 16`, not 34.
-Let me re-read the .bp file.
--/
+EXPECT=34 from bench/parity_constructs/c02_arith.bp:2 (`// EXPECT 34`).
+The program (c02_arith.bp:3) is
+  fn main() -> i64 { 20 + 22 - 2 * 5 / 2 - 7 % 4 }
+C precedence, left-assoc: ((20 + 22) - ((2 * 5) / 2)) - (7 % 4) = 42 - 5 - 3 = 34.
+(The earlier scaffold encoded a different program, `10 + 3 * 2` = 16, against
+this same EXPECT; that encoding, not the expectation, was wrong.) -/
 def sample_c02 : Result × Expected :=
   let prog : Program := {
     enums := #[]
@@ -580,10 +579,14 @@ def sample_c02 : Result × Expected :=
     fns := #[
       { name := "main", params := #[], paramTypes := #[], returnType := Ty.i64,
         body := #[
-          Stmt.let_ "a" (Expr.lit 10),
-          Stmt.let_ "b" (Expr.lit 3),
-          Stmt.exprStmt (Expr.binop BinOp.add (Expr.var "a")
-                              (Expr.binop BinOp.mul (Expr.var "b") (Expr.lit 2)))
+          Stmt.exprStmt
+            (Expr.binop BinOp.sub
+              (Expr.binop BinOp.sub
+                (Expr.binop BinOp.add (Expr.lit 20) (Expr.lit 22))
+                (Expr.binop BinOp.sdiv
+                  (Expr.binop BinOp.mul (Expr.lit 2) (Expr.lit 5))
+                  (Expr.lit 2)))
+              (Expr.binop BinOp.srem (Expr.lit 7) (Expr.lit 4)))
         ] }
     ]
   }

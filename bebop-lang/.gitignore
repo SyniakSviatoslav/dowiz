@@ -46,3 +46,7 @@ sgraph2_bfs.res
 tkernel.bin
 tkernel.bin.becache
 tkernel.bin.use
+
+# Lake build directory and manifest for formal/ (2026-09-13)
+formal/.lake/
+formal/lake-manifest.json
