@@ -186,14 +186,31 @@ def main():
                      '' if ok else '<-- gap'))
         for hv, sym in unresolved:
             print('UNRESOLVED hash %d dispatched to %s -- no source names it' % (hv, sym))
+        missing = [r for r in rows if not r[6]]  # r[6] is ok
+        if missing:
+            print('MISSING BUILTINS (not in all four):')
+            for nm, sym, in_tc, bp, in_lang, in_rsv, ok in missing:
+                gaps = []
+                if not in_tc:
+                    gaps.append('typecheck')
+                if bp == 'ABSENT':
+                    gaps.append('bpref')
+                if not in_lang:
+                    gaps.append('LANGUAGE')
+                print('  %s - missing from: %s' % (nm, ', '.join(gaps)))
         extra_tc = sorted(tc - {r[0] for r in rows})
         extra_lang = sorted(lang - {r[0] for r in rows})
         if extra_tc:
             print('typecheck BUILTIN keys the compiler does NOT dispatch: %s' % ', '.join(extra_tc))
         if extra_lang:
             print('LANGUAGE.md names the compiler does NOT dispatch: %s' % ', '.join(extra_lang))
-        dup = [n for n in set(re.findall(r'`([a-z0-9_]+)\s*\(', lang_body))
-               if len(re.findall(r'`%s\s*\(' % re.escape(n), lang_body)) > 1]
+        # Count ENTRIES, not mentions. This scanned the whole Builtins body, so a legitimate
+        # cross-reference inside another row's DESCRIPTION -- crc32b's "crc over exactly
+        # `str_len(s)` bytes" -- was reported as a duplicate ENTRY for str_len. A lane then
+        # "fixed" it by weakening that description to `str_len`, which edited the DOC to satisfy
+        # the TOOL. The doc was right; this scan was wrong. Only the leading name column counts.
+        names_col = re.findall(r'^\s*\|\s*`([a-z0-9_]+)\s*\(', lang_body, re.M)
+        dup = sorted({n for n in names_col if names_col.count(n) > 1})
         if dup:
             print('LANGUAGE.md Builtins lists these MORE THAN ONCE: %s' % ', '.join(sorted(dup)))
         print('compiler dispatches %d, resolved %d, unresolved %d; typecheck %d, bpref impl %d / stub %d / absent %d, LANGUAGE %d'
