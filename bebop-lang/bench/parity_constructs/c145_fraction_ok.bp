@@ -1,0 +1,12 @@
+// ROADMAP WAVE 0 POSITIVE control (2026-09-13). Integer literals must still compile.
+// The numeric literal is an integer (1) without a decimal point.
+// This should compile successfully and run, returning 1.
+// Without this control, a compiler that refused all numeric literals would satisfy c145 negatively.
+// EXPECT 1 from: hand: bare integer literal (ROADMAP WAVE 0 positive control)
+
+module core { }
+
+fn main() -> i64 {
+  let x = 1;
+  x
+}

@@ -1,0 +1,12 @@
+// ROADMAP WAVE 0 POSITIVE control (2026-09-13). Empty module declarations must still compile.
+// The module is empty (no contents between braces).
+// This should compile successfully and run, returning 7.
+// 43 files in the tree carry `module core { }` declarations that must remain valid.
+// Without this control, a compiler that refused all modules would satisfy c146 negatively.
+// EXPECT 7 from: hand: empty module declaration (ROADMAP WAVE 0 positive control)
+
+module core { }
+
+fn main() -> i64 {
+  7
+}

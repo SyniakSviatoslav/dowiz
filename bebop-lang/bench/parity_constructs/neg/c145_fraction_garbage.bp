@@ -1,0 +1,11 @@
+// ROADMAP WAVE 0 NEGATIVE control (2026-09-13). Fraction literals with decimal points must be rejected.
+// The numeric literal contains a decimal point (1.5) which should not be allowed.
+// This should REJECT with exit code 111.
+// EXPECT COMPILEFAIL:111 from: decimal point in numeric literal is refused (ROADMAP WAVE 0)
+
+module core { }
+
+fn main() -> i64 {
+  let x = 1.5;
+  x
+}

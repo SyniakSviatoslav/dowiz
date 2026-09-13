@@ -1,0 +1,12 @@
+// ROADMAP WAVE 0 NEGATIVE control (2026-09-13). Module declarations with non-whitespace contents must be rejected.
+// The module contains identifier text (abc) which is not allowed.
+// This should REJECT with exit code 112.
+// EXPECT COMPILEFAIL:112 from: module with contents is refused (ROADMAP WAVE 0)
+
+module m { abc }
+
+module core { }
+
+fn main() -> i64 {
+  7
+}

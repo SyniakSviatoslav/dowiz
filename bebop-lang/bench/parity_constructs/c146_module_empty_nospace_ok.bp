@@ -1,0 +1,11 @@
+// ROADMAP WAVE 0 POSITIVE control variant (2026-09-13). Empty module with no space must still compile.
+// The module is empty with no space between braces (different from c146_module_empty_ok.bp which has a space).
+// This should compile successfully and run, returning 7.
+// The whitespace check must accept empty ranges, so both `{ }` and `{}` are valid.
+// EXPECT 7 from: hand: empty module without space (ROADMAP WAVE 0 positive control)
+
+module core{}
+
+fn main() -> i64 {
+  7
+}
