@@ -1,9 +1,13 @@
--- harness.lean — F4 conformance driver (OFF-BOX)
--- #eval-driven: runs 5 sample constructs through the Lean interpreter
--- and prints PASS/FAIL against construct_parity.sh EXPECT rows.
+-- harness.lean — F4 conformance driver (runs ON-BOX, measured 2026-09-13)
+-- Runs 5 sample constructs (ASTs transcribed from bench/parity_constructs/*.bp)
+-- through the Lean interpreter and prints PASS/FAIL against the EXPECT rows.
+-- 5/5 PASS since the tail-expression rule (Semantics.lean execBody) landed;
+-- 0/5 (`ok 0` everywhere) before it.
 --
--- Usage (off-box, on a machine with lean 4 + mathlib):
---   cd formal && lake build && lean --run harness.lean
+-- Usage (no mathlib needed; LEAN_PATH is required because `lean --run` does
+-- not read lakefile.lean):
+--   cd formal && lake build && \
+--     LEAN_PATH=$PWD/.lake/build/lib/lean lean --run harness.lean
 --
 -- The output is captured to formal/results.json, whose hash is
 -- bound to the .lean sources and checked by the chain-side Python step.
@@ -33,7 +37,8 @@ def printResult (r : Result) : String :=
   match r with
   | .ok v => "ok " ++ toString v
   | .trap c => "trap(" ++ reprStr c ++ ")"
-  | .rejected code pos msg => "rejected(" ++ toString code ++ "," ++ msg ++ ")"
+  | .rejected code _ msg => "rejected(" ++ toString code ++ "," ++ msg ++ ")"
+  | .stuck msg => "stuck(" ++ msg ++ ")"
 
 -- ============================================================
 -- Helper: run a sample and print PASS/FAIL

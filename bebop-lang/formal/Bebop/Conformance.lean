@@ -539,6 +539,7 @@ def summarise (name : String) (got : Result) (exp : Expected) : String :=
     | .ok v => "ok " ++ toString v
     | .trap c => "trap " ++ reprStr c
     | .rejected code _ msg => "rejected " ++ toString code ++ " (" ++ msg ++ ")"
+    | .stuck msg => "stuck (" ++ msg ++ ")"
   if pass then
     "PASS: " ++ name ++ " => " ++ gotStr ++ " (expected " ++ exp.verdict ++ ")"
   else
@@ -548,17 +549,29 @@ def summarise (name : String) (got : Result) (exp : Expected) : String :=
 -- 5. Sample conformance tests (5 constructs, executable in Lean)
 -- ============================================================
 
-/-- SAMPLE 1: c01_lit — integer literals and wrapping.
-EXPECT=1000000065571 from construct_parity.sh:43.
-This test builds the AST inline and runs it through evalProgram. -/
+/-- SAMPLE 1: c01_lit -- integer literals and wrapping.
+EXPECT=1000000065571 from bench/parity_constructs/c01_lit.bp:2 (`// EXPECT 1000000065571`).
+The program (c01_lit.bp:3) is
+  fn main() -> i64 { 42 + 65536 + 1000000000000 + (0 - 7) }
+left-assoc: ((42 + 65536) + 1000000000000) + (0 - 7) = 1000000065571.
+(The earlier encoding was one Lean literal `1000000000000 + 65536 + 36 + 1`
+= 1000000065573, which is neither the program nor its EXPECT; it printed
+`ok 0` until the tail rule landed and `ok 1000000065573` after -- measured
+2026-09-13. The encoding, not the expectation, was wrong.) -/
 def sample_c01 : Result × Expected :=
   let prog : Program := {
     enums := #[]
     structs := #[]
     fns := #[
       { name := "main", params := #[], paramTypes := #[], returnType := Ty.i64,
-        body := #[ Stmt.exprStmt (Expr.lit (Int64.ofNat 1000000000000 +
-                                          65536 + 36 + 1)) ] }
+        body := #[
+          Stmt.exprStmt
+            (Expr.binop BinOp.add
+              (Expr.binop BinOp.add
+                (Expr.binop BinOp.add (Expr.lit 42) (Expr.lit 65536))
+                (Expr.lit (Int64.ofNat 1000000000000)))
+              (Expr.paren (Expr.binop BinOp.sub (Expr.lit 0) (Expr.lit 7))))
+        ] }
     ]
   }
   let got := runProgram prog
@@ -594,10 +607,26 @@ def sample_c02 : Result × Expected :=
   let exp := positiveExpectations[1]!
   (got, exp)
 
-/-- SAMPLE 3: c07_while — while loop.
-EXPECT=45 from construct_parity.sh:49.
-fn main() -> i64 { let s = 0; let i = 1; while i <= 10 { s += i; i += 1; }; s }
--/
+/-- SAMPLE 3: c07_while -- while loop.
+EXPECT=45 from bench/parity_constructs/c07_while.bp:2 (`// EXPECT 45`).
+The program (c07_while.bp:3-11) is
+  fn main() -> i64 {
+    let i = 0;
+    let acc = 0;
+    while i < 10 {
+      let acc = acc + i;
+      let i = i + 1;
+      0
+    };
+    acc
+  }
+sum 0..9 = 45. The loop body REBINDS `acc` and `i` with `let` (LANGUAGE.md:41-43:
+function-scoped, a later `let x` updates the same register) and ends with the
+tail `0`, which a while body discards (LANGUAGE.md:47).
+(The earlier encoding was `let s = 0; let i = 1; while i <= 10 { s += i; i += 1 }; s`
+= 55 against EXPECT 45 -- a different program; measured 2026-09-13 it printed
+`ok 0` because `State.bind` pushed and `State.lookup` found the FIRST entry, so
+`i` never advanced and the loop ran to fuel exhaustion.) -/
 def sample_c07 : Result × Expected :=
   let prog : Program := {
     enums := #[]
@@ -605,12 +634,13 @@ def sample_c07 : Result × Expected :=
     fns := #[
       { name := "main", params := #[], paramTypes := #[], returnType := Ty.i64,
         body := #[
-          Stmt.let_ "s" (Expr.lit 0),
-          Stmt.let_ "i" (Expr.lit 1),
-          Stmt.while_ (Expr.binop BinOp.sle (Expr.var "i") (Expr.lit 10))
-            #[ Stmt.compound "s" BinOp.add (Expr.var "i"),
-               Stmt.compound "i" BinOp.add (Expr.lit 1) ],
-          Stmt.exprStmt (Expr.var "s")
+          Stmt.let_ "i" (Expr.lit 0),
+          Stmt.let_ "acc" (Expr.lit 0),
+          Stmt.while_ (Expr.binop BinOp.slt (Expr.var "i") (Expr.lit 10))
+            #[ Stmt.let_ "acc" (Expr.binop BinOp.add (Expr.var "acc") (Expr.var "i")),
+               Stmt.let_ "i" (Expr.binop BinOp.add (Expr.var "i") (Expr.lit 1)),
+               Stmt.exprStmt (Expr.lit 0) ],
+          Stmt.exprStmt (Expr.var "acc")
         ] }
     ]
   }
@@ -618,20 +648,27 @@ def sample_c07 : Result × Expected :=
   let exp := positiveExpectations[6]!
   (got, exp)
 
-/-- SAMPLE 4: c08_call — function call.
-EXPECT=6 from construct_parity.sh:50.
-fn add(a: i64, b: i64) -> i64 { a + b } fn main() -> i64 { add(3, 4) }
--/
+/-- SAMPLE 4: c08_call -- function call.
+EXPECT=6 from bench/parity_constructs/c08_call.bp:2 (`// EXPECT 6`).
+The program (c08_call.bp:3-4) is
+  fn main() -> i64 { add3(1, 2, 3) }
+  fn add3(a: i64, b: i64, c: i64) -> i64 { a + b + c }
+(The earlier encoding was `fn add(a, b) { a + b }  fn main() { add(3, 4) }` = 7
+against EXPECT 6 -- a different program; it printed `ok 7` once the tail rule
+landed, measured 2026-09-13.) -/
 def sample_c08 : Result × Expected :=
   let prog : Program := {
     enums := #[]
     structs := #[]
     fns := #[
-      { name := "add", params := #["a", "b"], paramTypes := #[Ty.i64, Ty.i64],
-        returnType := Ty.i64,
-        body := #[ Stmt.exprStmt (Expr.binop BinOp.add (Expr.var "a") (Expr.var "b")) ] },
       { name := "main", params := #[], paramTypes := #[], returnType := Ty.i64,
-        body := #[ Stmt.exprStmt (Expr.call "add" #[Expr.lit 3, Expr.lit 4]) ] }
+        body := #[ Stmt.exprStmt (Expr.call "add3" #[Expr.lit 1, Expr.lit 2, Expr.lit 3]) ] },
+      { name := "add3", params := #["a", "b", "c"],
+        paramTypes := #[Ty.i64, Ty.i64, Ty.i64], returnType := Ty.i64,
+        body := #[ Stmt.exprStmt
+                     (Expr.binop BinOp.add
+                       (Expr.binop BinOp.add (Expr.var "a") (Expr.var "b"))
+                       (Expr.var "c")) ] }
     ]
   }
   let got := runProgram prog

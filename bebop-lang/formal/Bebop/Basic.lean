@@ -194,6 +194,12 @@ inductive Result where
   | ok (v : Val)
   | trap (code : TrapCode)
   | rejected (code : Nat) (pos : Position) (msg : String)
+  /-- The evaluator produced no value: the function body's tail expression
+      (or a `ret`) evaluated to `none` -- unbound symbol, unresolved call,
+      arena fault, fuel exhausted, or a body with no tail expression. Kept
+      distinct from `ok` so a failed evaluation can never print as `ok 0`
+      (which is what every harness sample printed until 2026-09-13). -/
+  | stuck (msg : String)
   deriving Inhabited
 
 -- ============================================================
@@ -241,9 +247,16 @@ structure State where
 def State.lookup (s : State) (n : Name) : Option Val :=
   s.env.find? (fun p => p.1 == n) |>.map (·.2)
 
-/-- Bind or rebind a name (fn-scoped, no shadowing). LANGUAGE.md:41-43. -/
+/-- Bind or REBIND a name (fn-scoped, no shadowing). LANGUAGE.md:41-43: "a later
+    `let x` updates the same register". An existing entry is updated in place;
+    only a new name is pushed. (Until 2026-09-13 this always pushed while
+    `State.lookup` returned the FIRST match, so every rebind -- `let x = x + 1`,
+    `x += 1` -- was invisible: c07_while looped on `i = 0` to fuel exhaustion
+    and printed `ok 0`. Measured, then fixed.) -/
 def State.bind (s : State) (n : Name) (v : Val) : State :=
-  { s with env := s.env.push (n, v) }
+  match s.env.findIdx? (fun p => p.1 == n) with
+  | some i => { s with env := s.env.setIfInBounds i (n, v) }
+  | none   => { s with env := s.env.push (n, v) }
 
 /-- Look up a frame-allocated array by name. -/
 def State.lookupFrameArray (s : State) (n : Name) : Option (FrameArray × Nat) :=

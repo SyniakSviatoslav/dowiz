@@ -10,7 +10,11 @@
   formal verification infrastructure (F4 gate: lean_conformance 86/86).
 
   Key design decisions:
-  - Fuel-bounded: every recursive call decrements fuel; 0 fuel = Trap.
+  - Fuel-bounded: every recursive call decrements fuel. 0 fuel is NOT a trap:
+    execStmts/loop answer `.cont` and evalExpr answers `none`, so a
+    non-terminating loop followed by a tail evaluates (probed 2026-09-13,
+    `while 1 { 0 }; 0` = ok 0 at fuel 1000). Still to fix.
+  - A function body's value is its tail expression: execBody (section 5).
   - All arithmetic is Int64 wrapping (Z/2^64).
   - Arena is a flat Array Val; frame heap is the arena itself (A6).
   - Function-scoped bindings; no block scoping, no shadowing.
@@ -251,11 +255,10 @@ partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val 
                   env := env.push (fn.params[i]!, argVals[i]!)
                 return env
               let s2 := { s1 with env := newEnv }
-              -- Execute body statements
-              let r := execStmts fuel fn.body s2
-              match r.signal with
-              | .ret v => (r.state, some v)
-              | _      => (r.state, some 0)
+              -- Execute the body: its value is the tail expression (or a `ret`).
+              -- A body that yields no value propagates `none`; it was `some 0`
+              -- until 2026-09-13, which hid every failed call as a 0.
+              execBody fuel fn.body s2
 
     -- If-then-else
     | .ite c t f =>
@@ -520,6 +523,44 @@ partial def execStmts (fuel : Fuel) (stmts : Array Stmt) (s : State) : StmtResul
         { signal := .cont, state := s }
     go fuel 0 s
 
+/-- Execute a FUNCTION BODY: statements followed by ONE tail expression
+    (LANGUAGE.md:27-28). The body's value is the tail expression's value; a
+    `ret` anywhere overrides it. This is the ONLY place a statement sequence
+    yields a value: `execStmts` never does, because a `while` body's tail is
+    discarded (LANGUAGE.md:47) and every non-final `exprStmt` really is
+    dropped. Mirrors bpref.py `run_body` (tools/bpref.py:528-560): `val` is
+    the last executed statement's value when that statement is an
+    expression; `return` overrides; the parser refuses a body whose last
+    item is not an expression (exit 97), so that case yields `none` here
+    rather than bpref's unreachable 0.
+    Returns `none` when the tail (or the `ret`) fails to evaluate -- unbound
+    symbol, unresolved call, arena fault, fuel exhausted -- so no caller can
+    read a failed body as 0. (Until 2026-09-13 there was no tail rule at all:
+    `execStmt (.exprStmt e)` dropped the value and both callers answered 0.) -/
+partial def execBody (fuel : Fuel) (body : Array Stmt) (s : State) : State × Option Val :=
+  match fuel with
+  | 0 => (s, none)
+  | fuel + 1 =>
+    if body.size == 0 then (s, none)  -- no tail expression: compile-time exit 97
+    else
+      let stmts := body.pop        -- every statement but the last
+      let last := body.back!       -- the tail
+      let r := execStmts fuel stmts s
+      match r.signal with
+      | .ret v => (r.state, some v)
+      | .brk   => (r.state, some 0)  -- `break` outside a loop: LANGUAGE.md calls
+                                     -- the shape undefined; pre-2026-09-13 answer kept
+      | .cont  =>
+        match last with
+        | .exprStmt e => evalExpr fuel e r.state
+        | stmt =>
+          -- Last item is not an expression (the parser rejects this, exit 97).
+          -- Run it for its `ret`, otherwise there is no value.
+          let r2 := execStmt fuel stmt r.state
+          match r2.signal with
+          | .ret v => (r2.state, some v)
+          | _      => (r2.state, none)
+
 end
 
 -- ============================================================
@@ -560,9 +601,11 @@ def evalProgram (fuel : Fuel) (prog : Program) (clockMs : Val := 0) : Result :=
     if main.params.size != 0 && main.params.size != 2 then
       .rejected 100 ⟨0, 0⟩ "main has wrong param count"
     else
-      let r := execStmts fuel main.body s
-      match r.signal with
-      | .ret v => .ok v
-      | _      => .ok 0
+      -- main's value is its tail expression (or a `ret`), via execBody.
+      -- A body that yields no value is reported as `stuck`, never as `ok 0`.
+      let (_, v) := execBody fuel main.body s
+      match v with
+      | some v => .ok v
+      | none   => .stuck "main yielded no value (unbound symbol, unresolved call, arena fault, fuel exhausted, or no tail expression)"
 
 end Bebop.Semantics
