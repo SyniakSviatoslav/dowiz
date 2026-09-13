@@ -52,6 +52,12 @@ def bp_sources():
 def check_no_nested_fn():
     bad = []
     for p in bp_sources():
+        # Skip trap code fixtures: bench/traps/t<NN>_*.bp are negative probes that test
+        # the compiler's ability to reject certain constructs. Their job is to be rejected,
+        # so they legitimately contain the structures we forbid elsewhere.
+        rel = "/" + os.path.relpath(p, ROOT)
+        if re.search(r"/bench/traps/t\d+_[^/]*\.bp$", rel):
+            continue
         for i, line in enumerate(open(p, errors="replace"), 1):
             if re.match(r"^[ \t]+fn\s+\w+\s*\(", line):
                 bad.append("%s:%d" % (os.path.relpath(p, ROOT), i))
@@ -483,14 +489,55 @@ def check_journal_format(r):
 # Every edit this project makes to a big source file is a scripted string replacement. An
 # anchor that matches twice silently edits the wrong place; an anchor that matches zero
 # times silently edits nothing and the commit claims a change it did not make.
+# This check flags ONLY .replace() calls that result in writes to repo files, not string
+# formatting, filename derivation, or other incidental uses of .replace().
 def check_scripted_patch_assert(r):
     import glob as _g
     bad = []
     for p in sorted(_g.glob(os.path.join(ROOT, "tools", "*.py"))):
-        txt = open(p, errors="replace").read()
-        if ".replace(" not in txt: continue
-        if "count(" not in txt and "assert" not in txt:
-            bad.append(os.path.relpath(p, ROOT))
+        lines = open(p, errors="replace").readlines()
+        for i, line in enumerate(lines):
+            # COMMENT LINES DO NOT PATCH ANYTHING, and skipping them is not cosmetic:
+            # without it this check FLAGS ITSELF. Its own explanatory comment on the
+            # same-line branch below contains the literal text `.replace(...).write(`,
+            # which matches the very regex it documents -- so the checker was reported as
+            # an unasserted patcher (measured 2026-09-14: `1 tool(s) ... tools/arch_check.py`
+            # at ratchet 0). A detector that matches on its own pattern strings is not
+            # measuring the corpus.
+            if line.lstrip().startswith("#"): continue
+            # Look for .replace(...) on this line
+            if ".replace(" not in line: continue
+            # Check if the result is written to a file on this line or within 3 lines after
+            writes_to_file = False
+            # Check same line: .replace(...).write( or open(...).write(.replace(...))
+            if re.search(r"\.replace\([^)]*\).*\.write\(", line) or \
+               re.search(r"open\([^)]*\)\.write\(.*\.replace\(", line):
+                writes_to_file = True
+            else:
+                # Check if result flows to a write in the next few lines
+                # Look for: var = text.replace(...) or similar, then look for var written
+                m = re.search(r"(\w+)\s*=\s*.*\.replace\(", line)
+                if m:
+                    var = m.group(1)
+                    for j in range(i+1, min(i+5, len(lines))):
+                        if f"open(" in lines[j] and ("write(" in lines[j] or "write(" in "".join(lines[i:j+1])):
+                            # Check if the variable is used in the write
+                            if var in "".join(lines[i:j+1]):
+                                writes_to_file = True
+                                break
+            if not writes_to_file: continue
+            # This .replace() writes to a file. Check if it asserts the anchor is unique.
+            # Look for patterns: count(...) == 1 or assert ... count(...) or .count(...) >= 1
+            anchor_check_found = False
+            # Check this line and the next line for uniqueness assertions
+            context = "\n".join(lines[max(0,i-1):min(len(lines),i+3)])
+            if re.search(r"count\s*\([^)]*\)\s*==\s*1", context) or \
+               re.search(r"count\s*\([^)]*\)\s*[>!=]", context) or \
+               re.search(r"assert", context):
+                anchor_check_found = True
+            if not anchor_check_found:
+                bad.append(os.path.relpath(p, ROOT))
+                break  # Report this file once even if multiple .replace()s are found
     worst = r.get("max_unasserted_patchers", 0)
     if len(bad) > worst:
         fail("scripted-patch-assert", "%d tool(s) rewrite source with .replace() and never "

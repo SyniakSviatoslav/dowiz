@@ -43,7 +43,7 @@ max_dead_functions = 11            # uncalled library/compiler functions; wire t
 max_uncovered_builtins = 1         # sys_mapb has no corpus caller: A7 step 3 landed it untested
 max_syscall_no_regtable = 8        # emit_sys_{write,close,exit,exit_thread_guard,slurp,ftruncate,munmap,mmap}
 max_malformed_journal = 519        # entries predating the H:/DID:/GOT:/VERDICT: format
-max_unasserted_patchers = 5        # tools/{retro_extract,split_roadmap,tmp_emit,tmp_emit2,tmp_step3_emit}.py
+max_unasserted_patchers = 0        # tightened 2026-09-14: the check now looks only at a .replace() whose result is WRITTEN to a repo file, and none of the six previously-listed tools do that. The old 5 was the count under the broad text heuristic; leaving it there would have permitted five real regressions.
 max_unbounded_waits = 0
 #
 # Journal entries written from this unix time onward must carry COST:<seconds from first
