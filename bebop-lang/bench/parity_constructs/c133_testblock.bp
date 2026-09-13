@@ -1,0 +1,3 @@
+// EXPECT 42 from: hand: fn main returns 42; test block with string literal must be skipped during compile
+fn main() -> i64 { 42 }
+test c133_testblock { let n = str_len("a string inside a test block"); n + 42 }

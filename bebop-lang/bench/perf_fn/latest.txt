@@ -20,13 +20,13 @@ skip_to_delim 68
 parse_params 157
 emit_ident 202
 skip_to_field_delim 68
-find_struct 162
+find_struct 240
 field_index 148
 struct_name_hash 59
 emit_struct_field 86
 emit_struct_lit 304
 emit_field_access 102
-find_enum 213
+find_enum 301
 emit_enum_ctor 142
 emit_enum_ctor_nullary 76
 emit_bl 55
@@ -241,7 +241,7 @@ skip_args 150
 emit_call_resolve 160
 emit_call 392
 compile_fn 580
-collect_fns 242
+collect_fns 366
 compile_fn_at_total_saved 149
 fw_vc 13
 fw_alloc 16
@@ -250,7 +250,7 @@ fw_tsp 19
 fw_marks 16
 compile_fn_at_facts 98
 compile_fn_at 1197
-scan_literals 166
+scan_literals 294
 scan_one_lit 105
 compile_program_to 37
 compile_program_offs 942

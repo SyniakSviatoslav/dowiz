@@ -1,0 +1,2 @@
+// EXPECT 42 from: hand: fn main returns 42; identical to c134_testfn_inside but without test block
+fn main() -> i64 { 42 }

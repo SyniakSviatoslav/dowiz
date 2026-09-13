@@ -1,0 +1,2 @@
+// EXPECT 42 from: hand: the byte-identity control for c135_testblock_braces -- same program, no test block
+fn main() -> i64 { 42 }

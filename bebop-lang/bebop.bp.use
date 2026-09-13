@@ -492,6 +492,7 @@ fn find_struct(s: str, out: [i64]) -> i64 {
   let j = 0;
   let found = 0;
   let best = 0;
+  let skip_pos = [0];
   while j + 6 < strn {
     let c0 = char(s, j);
     let c1 = char(s, j + 1);
@@ -500,6 +501,13 @@ fn find_struct(s: str, out: [i64]) -> i64 {
     let c4 = char(s, j + 4);
     let c5 = char(s, j + 5);
     let c6 = char(s, j + 6);
+    let at_bol = if j == 0 then 1 else (if char(s, j - 1) == 10 then 1 else 0);
+    let ist = if c0 == 116 then 1 else 0;
+    let ise = if c1 == 101 then 1 else 0;
+    let iss = if c2 == 115 then 1 else 0;
+    let ist2 = if c3 == 116 then 1 else 0;
+    let issp = if c4 == 32 then 1 else 0;
+    let is_test = ist * ise * iss * ist2 * issp * at_bol;
     let is_s = if c0 == 115 then 1 else 0;
     let is_t1 = if c1 == 116 then 1 else 0;
     let is_r = if c2 == 114 then 1 else 0;
@@ -509,11 +517,12 @@ fn find_struct(s: str, out: [i64]) -> i64 {
     let is_sp = if c6 == 32 then 1 else 0;
     // T43 rest: a declaration starts a line -- `struct ` inside a comment or a
     // string is not one (bebop.bp's own comments say "struct literal")
-    let at_bol = if j == 0 then 1 else (if char(s, j - 1) == 10 then 1 else 0);
     let hit = is_s * is_t1 * is_r * is_u * is_c * is_t2 * is_sp * at_bol;
     let best = if hit == 1 then j else best;
     let found = if hit == 1 then 1 else found;
-    let j = j + 1;
+    let _ = skip_pos[0] = if is_test == 1 then find_body_end(s, j + 5, strn) else j;
+    let jnext = if is_test == 1 then skip_pos[0] + 1 else j + 1;
+    let j = jnext;
     0
   };
   let _ = out[0] = best;
@@ -663,6 +672,7 @@ fn find_enum(s: str, out: [i64]) -> i64 {
   let best = strn;
   let spc = [0];
   let cpc = [0];
+  let tpc = [0];
   while j + 4 < strn {
     let c0 = char(s, j);
     let c1 = char(s, j + 1);
@@ -679,13 +689,21 @@ fn find_enum(s: str, out: [i64]) -> i64 {
     let is_m = if c3 == 109 then 1 else 0;
     let is_sp = if c4 == 32 then 1 else 0;
     let hit = is_e * is_n * is_u * is_m * is_sp * (1 - is_quote) * (1 - is_comment);
+    let ist = if c0 == 116 then 1 else 0;
+    let ise = if c1 == 101 then 1 else 0;
+    let iss = if c2 == 115 then 1 else 0;
+    let ist2 = if c3 == 116 then 1 else 0;
+    let issp = if c4 == 32 then 1 else 0;
+    let is_test = ist * ise * iss * ist2 * issp;
     let best = if hit == 1 then j else best;
     let found = if hit == 1 then 1 else found;
     let _ = spc[0] = j;
     let _ = cpc[0] = j;
+    let _ = tpc[0] = j;
     let _ = if is_quote == 1 then skip_string_n(s, spc, strn) else 0;
     let _ = if is_comment == 1 then skip_line_comment_n(s, cpc, strn) else 0;
-    let jnext = (j + 1) * (1 - is_quote - is_comment - hit) + spc[0] * is_quote + cpc[0] * is_comment;
+    let _ = if is_test == 1 then (let _ = tpc[0] = find_body_end(s, j + 5, strn) in (let _ = tpc[0] = if tpc[0] >= strn then strn else tpc[0] + 1 in 0)) else 0;
+    let jnext = (j + 1) * (1 - is_quote - is_comment - hit - is_test) + spc[0] * is_quote + cpc[0] * is_comment + tpc[0] * is_test;
     let j = if hit == 1 then j + 5 else jnext;
     0
   };
@@ -6032,6 +6050,7 @@ fn collect_fns(s: str, fnames: [i64], fpos: [i64], cnt: [i64]) -> i64 {
   let tpos_c = [0, strn];
   let spc = [0];
   let cpc = [0];
+  let tpc = [0];
   while j + 2 < strn {
     let c0 = char(s, j);
     let c1 = char(s, j + 1);
@@ -6045,6 +6064,16 @@ fn collect_fns(s: str, fnames: [i64], fpos: [i64], cnt: [i64]) -> i64 {
     let issp = if c2 == 32 then 1 else 0;
     let cafter = if isf * isn * issp == 1 then char(s, j + 3) else 0;
     let is_fn = isf * isn * issp * is_alpha(cafter);
+    let ist = if c0 == 116 then 1 else 0;
+    let ise = if c1 == 101 then 1 else 0;
+    let iss = if c2 == 115 then 1 else 0;
+    let e3 = if j + 3 >= strn then 1 else 0;
+    let c3 = if e3 == 1 then 0 else char(s, j + 3);
+    let ist2 = if c3 == 116 then 1 else 0;
+    let e4 = if j + 4 >= strn then 1 else 0;
+    let c4 = if e4 == 1 then 0 else char(s, j + 4);
+    let issp2 = if c4 == 32 then 1 else 0;
+    let is_test = ist * ise * iss * ist2 * issp2;
     let _ = tpos_c[0] = j + 3;
     let name = if is_fn == 1 then read_ident(s, tpos_c) else 0;
     let capok = if cnt[0] < 768 then 1 else 0;
@@ -6054,7 +6083,9 @@ fn collect_fns(s: str, fnames: [i64], fpos: [i64], cnt: [i64]) -> i64 {
     let _ = if is_quote == 1 then skip_string_n(s, spc, strn) else 0;
     let _ = cpc[0] = j;
     let _ = if is_comment == 1 then skip_line_comment_n(s, cpc, strn) else 0;
-    let jnext = (j + 1) * (1 - is_quote - is_comment - is_fn) + spc[0] * is_quote + cpc[0] * is_comment + tpos_c[0] * is_fn;
+    let _ = tpc[0] = j;
+    let _ = if is_test == 1 then (let _ = tpc[0] = find_body_end(s, j + 5, strn) in (let _ = tpc[0] = if tpc[0] >= strn then strn else tpc[0] + 1 in 0)) else 0;
+    let jnext = (j + 1) * (1 - is_quote - is_comment - is_fn - is_test) + spc[0] * is_quote + cpc[0] * is_comment + tpos_c[0] * is_fn + tpc[0] * is_test;
     let j = jnext;
     0
   };
@@ -6304,7 +6335,20 @@ fn scan_literals(s: str, fntab: [i64], L: i64) -> i64 {
     let _ = if is_cm == 1 then skip_line_comment_n(s, pos, strn) else 0;
     let is_q = if c0 == 34 then 1 else 0;
     let _ = if is_q == 1 then (let _ = pos[0] = pos[0] + 1 in (let _ = scan_one_lit(s, pos, fntab, L, lcnt, cum) in 0)) else 0;
-    let adv = 1 - is_q - is_cm;
+    let ist = if c0 == 116 then 1 else 0;
+    let ise = if c1 == 101 then 1 else 0;
+    let e2 = if pos[0] + 2 >= strn then 1 else 0;
+    let c2 = if e2 == 1 then 0 else char(s, pos[0] + 2);
+    let iss = if c2 == 115 then 1 else 0;
+    let e3 = if pos[0] + 3 >= strn then 1 else 0;
+    let c3 = if e3 == 1 then 0 else char(s, pos[0] + 3);
+    let ist2 = if c3 == 116 then 1 else 0;
+    let e4 = if pos[0] + 4 >= strn then 1 else 0;
+    let c4 = if e4 == 1 then 0 else char(s, pos[0] + 4);
+    let issp = if c4 == 32 then 1 else 0;
+    let is_test = ist * ise * iss * ist2 * issp;
+    let _ = if is_test == 1 then (let _ = pos[0] = find_body_end(s, pos[0] + 5, strn) in (let _ = pos[0] = if pos[0] >= strn then strn else pos[0] + 1 in 0)) else 0;
+    let adv = 1 - is_q - is_cm - is_test;
     let _ = pos[0] = pos[0] + adv;
     0
   };

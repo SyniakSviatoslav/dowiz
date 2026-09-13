@@ -1,0 +1,11 @@
+// EXPECT 42 from: hand: fn main returns 42; the test block is skipped, so the `fn sneaky` text inside its string never becomes a function
+// ROADMAP A24 step 1. The property c133 and c134 do NOT test: the skip must be BRACE-MATCHED and
+// string-aware, not pattern-matched. This block's string contains a CLOSING BRACE followed by a
+// complete function definition. A skip that scans for the next `}` ends early here, and `sneaky`
+// is then collected as a real fn -- which changes the binary and breaks byte-identity with the twin.
+fn main() -> i64 { 42 }
+
+test c135_testblock_braces {
+  let a = str_len("} fn sneaky() -> i64 { 9 }");
+  a + 42
+}

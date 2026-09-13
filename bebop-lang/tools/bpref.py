@@ -256,6 +256,8 @@ class Parser:
                     self.first_struct = sname
             elif v == 'module':
                 self.next(); self.ident(); self.skip_block()
+            elif v == 'test':
+                self.next(); self.ident(); self.skip_block()
             else:
                 sys.stderr.write('UNSUPPORTED:%s\n' % (v,))
                 sys.exit(3)

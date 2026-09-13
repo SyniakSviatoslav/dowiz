@@ -1,0 +1,3 @@
+// EXPECT 42 from: hand: fn main returns 42; test block with "fn " string must not parse as function
+fn main() -> i64 { 42 }
+test c134_testfn_inside { str_len("fn ") }
