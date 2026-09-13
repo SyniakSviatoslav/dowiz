@@ -104,17 +104,42 @@ def scan_documented_codes():
 
 
 def scan_neg_expects():
-    """{code: [construct, ...]} from construct_parity.sh, restricted to
-    constructs that actually exist under bench/parity_constructs/neg/."""
+    """{code: [construct, ...]} from // EXPECT headers in .bp files under
+    bench/parity_constructs/neg/. Each construct may have multiple EXPECT lines."""
     negdir = os.path.join(ROOT, 'bench/parity_constructs/neg')
-    have = set()
-    if os.path.isdir(negdir):
-        have = {f[:-3] for f in os.listdir(negdir) if f.endswith('.bp')}
     out = {}
-    for ln in lines('bench/vs_rust/construct_parity.sh'):
-        m = re.match(r'\s*(\w+)\)\s*EXPECT=(COMPILEFAIL|RUNFAIL):(\d+);;', ln)
-        if m and m.group(1) in have:
-            out.setdefault(int(m.group(3)), []).append(m.group(1))
+    if not os.path.isdir(negdir):
+        return out
+
+    # Read each .bp file and extract // EXPECT headers
+    for fname in os.listdir(negdir):
+        if not fname.endswith('.bp'):
+            continue
+        construct_name = fname[:-3]  # strip .bp
+        filepath = os.path.join(negdir, fname)
+        try:
+            with open(filepath, encoding='utf-8', errors='replace') as f:
+                content = f.read()
+        except IOError:
+            continue
+
+        # Parse both EXPECT forms:
+        # Form 1: // EXPECT (COMPILEFAIL|RUNFAIL):<code> from: ...
+        for m in re.finditer(r'//\s*EXPECT\s+(COMPILEFAIL|RUNFAIL):(\d+)\s+from:', content):
+            code = int(m.group(2))
+            out.setdefault(code, []).append(construct_name)
+
+        # Form 2: // EXPECT: (COMPILEFAIL|RUNFAIL):<code>
+        for m in re.finditer(r'//\s*EXPECT:\s+(COMPILEFAIL|RUNFAIL):(\d+)', content):
+            code = int(m.group(2))
+            out.setdefault(code, []).append(construct_name)
+
+    # A construct whose header matches BOTH forms was appended twice (c140_mapb_refused
+    # did). De-duplicate per code, keeping first-seen order so the column stays stable.
+    for code in out:
+        seen = set()
+        out[code] = [c for c in out[code] if not (c in seen or seen.add(c))]
+
     return out
 
 
@@ -555,6 +580,14 @@ def build(argv):
     card = scan_card_hazards()
     undef = scan_undefined()
     reserved, dispatched, shadowable = scan_shadowable()
+
+    # Guard: if neg/ directory is non-empty but we found zero expectations,
+    # the scanner is broken, not the tree. Report loudly and exit non-zero.
+    negdir = os.path.join(ROOT, 'bench/parity_constructs/neg')
+    has_neg_dir = os.path.isdir(negdir) and os.listdir(negdir)
+    if has_neg_dir and not negs:
+        die('NOT MEASURED: neg/ directory has constructs but no EXPECT headers were parsed. '
+            'Scanner is broken -- check format of // EXPECT lines in .bp files.')
 
     rows = []
     for rid, src, cls, mech, code, cost, negname in ROWS:
