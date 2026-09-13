@@ -1962,3 +1962,29 @@ ts,commit,bin,metric,value,unit,n,valid,at_max_pct,temp_mc,note
 1789278376,332602c,f636d4a3,stub_words,172,words,1,1,,,
 1789278376,332602c,f636d4a3,bin_fns,300,fns,1,1,,,
 1789278376,332602c,f636d4a3,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1789279114,ef4c37f,99e65780,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1789279114,ef4c37f,99e65780,gate_run_ms,9426,ms,1,1,,,"sum of non-memo gate runs (25 runs, 104 memo hits)"
+1789279257,ef4c37f,99e65780,bin_words,42594,words,1,1,,,bytes 173544
+1789279257,ef4c37f,99e65780,stub_words,172,words,1,1,,,
+1789279257,ef4c37f,99e65780,bin_fns,301,fns,1,1,,,
+1789279257,ef4c37f,99e65780,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1789279480,ef4c37f,10b36b9d,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1789279480,ef4c37f,10b36b9d,gate_run_ms,9374,ms,1,1,,,"sum of non-memo gate runs (25 runs, 104 memo hits)"
+1789279623,ef4c37f,10b36b9d,bin_words,42605,words,1,1,,,bytes 173632
+1789279623,ef4c37f,10b36b9d,stub_words,172,words,1,1,,,
+1789279623,ef4c37f,10b36b9d,bin_fns,301,fns,1,1,,,
+1789279624,ef4c37f,10b36b9d,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1789279756,ef4c37f,10b36b9d,bin_words,42605,words,1,1,,,bytes 173632
+1789279756,ef4c37f,10b36b9d,stub_words,172,words,1,1,,,
+1789279756,ef4c37f,10b36b9d,bin_fns,301,fns,1,1,,,
+1789279756,ef4c37f,10b36b9d,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1789279911,ef4c37f,10b36b9d,bin_words,42605,words,1,1,,,bytes 173632
+1789279911,ef4c37f,10b36b9d,stub_words,172,words,1,1,,,
+1789279911,ef4c37f,10b36b9d,bin_fns,301,fns,1,1,,,
+1789279911,ef4c37f,10b36b9d,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1789279986,ef4c37f,10b36b9d,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1789279986,ef4c37f,10b36b9d,gate_run_ms,9652,ms,1,1,,,"sum of non-memo gate runs (25 runs, 104 memo hits)"
+1789280131,ef4c37f,10b36b9d,bin_words,42605,words,1,1,,,bytes 173632
+1789280131,ef4c37f,10b36b9d,stub_words,172,words,1,1,,,
+1789280131,ef4c37f,10b36b9d,bin_fns,301,fns,1,1,,,
+1789280131,ef4c37f,10b36b9d,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired

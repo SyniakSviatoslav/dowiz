@@ -1,0 +1,19 @@
+# Test Fixtures for trap_census.py --texts
+
+This directory contains hand-built test fixtures for the `--texts` flag of `trap_census.py`.
+
+## Fixtures
+
+- `fixture_green_simple.bp` — A minimal Bebop source file using the str-literal form
+  (`diag_str`) for diagnostic texts. This matches the post-L30 format (after step 1 lands).
+
+- `fixture_green_simple.bin` — A BYTE FIXTURE (not a compiled binary artifact). Contains
+  the raw byte strings of the texts used in the corresponding `.bp` file, allowing the
+  check to verify texts are present in the binary. Hand-built with NUL padding.
+
+- `fixture_red_perturbed.bin` — A BYTE FIXTURE with one text string missing from
+  `fixture_green_simple.bin`, used to verify the check detects disagreement and reports
+  which code is missing.
+
+These `.bin` files are NOT compiled artifacts from the Bebop compiler. They are plain
+byte containers used to test the text-search logic in isolation from compilation.

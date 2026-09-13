@@ -2226,6 +2226,16 @@ fn selfcheck_exit(kind: i64, site: i64) -> i64 {
   let _ = sys_write(2, buf, a3 + 1);
   sys_exit(201)
 }
+fn cli_exit(code: i64, m: str) -> i64 {
+  let buf = zeros(256);
+  let a1 = diag_str(buf, 0, "0:0: error[E");
+  let a2 = put_num(buf, a1, code);
+  let a3 = diag_str(buf, a2, "]: ");
+  let a4 = diag_str(buf, a3, m);
+  let _ = buf[a4] = 10;
+  let _ = sys_write(2, buf, a4 + 1);
+  sys_exit(code)
+}
 
 fn em(insns: [i64], n: [i64], w: i64) -> i64 {
   let _ = if n[0] >= n[1] then cap_exit(n) else 0;
@@ -6820,7 +6830,7 @@ fn cas_verify(inc: str, p: [i64]) -> i64 {
     let w = w + 1;
     0
   };
-  let _ = if ok == 0 then sys_exit(88) else 0;
+  let _ = if ok == 0 then cli_exit(88, "CAS module hash does not match its name") else 0;
   ok
 }
 // use_scan(srcv, buf, off, seen, nseen): T47b (2026-09-06) nested `use`: for every
@@ -6863,7 +6873,7 @@ fn use_scan(srcv: str, buf: [i64], off: [i64], seen: [i64], nseen: [i64]) -> i64
     let rl = if is_cas == 1 then cas_path(pathc, real) else pl;
     let src_path = if is_cas == 1 then real else pathc;
     let fd = if fresh == 1 then sys_open(src_path, rl, 0) else 0 - 1;
-    let _ = if fd < 0 then (if fresh == 1 then sys_exit(90) else 0) else 0;
+    let _ = if fd < 0 then (if fresh == 1 then cli_exit(90, "open failed (source, output or binary file)") else 0) else 0;
     let inc = if fresh == 1 then sys_slurp(fd, 400000) else srcv;
     let _ = if fresh == 1 then sys_close(fd) else 0;
     let _ = if fresh * is_cas == 1 then cas_verify(inc, pathc) else 0;
@@ -6891,7 +6901,7 @@ fn use_expand(srcv: str, tmpc: [i64], tmpl: i64) -> str {
   let _ = use_comment(buf, base, srcv);
   let total = off[0];
   let ofd = if nuse > 0 then sys_open(tmpc, tmpl, 578) else 0 - 1;
-  let _ = if nuse > 0 then (if ofd < 0 then sys_exit(90) else 0) else 0;
+  let _ = if nuse > 0 then (if ofd < 0 then cli_exit(90, "open failed (source, output or binary file)") else 0) else 0;
   let _ = if nuse > 0 then sys_export(ofd, buf, total) else 0;
   let _ = if nuse > 0 then sys_close(ofd) else 0;
   let rfd = if nuse > 0 then sys_open(tmpc, tmpl, 0) else 0 - 1;
@@ -7139,6 +7149,11 @@ fn cli_compile(argc: i64, argv: [str]) -> i64 {
   let _ = str_to_cells(psrc, src);
   let _ = str_to_cells(pout, out);
   let fd = sys_open(psrc, ls, 0);
+  // Found 2026-09-13 while TRIGGERING code 90 rather than trusting that it fired: this open
+  // was the one file open in the compiler with no guard, so `compile /typo.bp out.bin` slurped
+  // an invalid fd, compiled the resulting empty program and exited 0 -- a silent failure on a
+  // mistyped filename, and it made TRAPS.md row 90's "source" case a claim nothing could produce.
+  let _ = if fd < 0 then cli_exit(90, "open failed (source, output or binary file)") else 0;
   let srcv0 = sys_slurp(fd, 400000);
   let _ = sys_close(fd);
   // T47: `<out>.use` is the scratch file of the expansion (rewritten each compile)
@@ -7234,7 +7249,7 @@ fn cli_compile(argc: i64, argv: [str]) -> i64 {
   let tg = if publish == 1 then ptmp else pout;
   let tl = if publish == 1 then ptl[0] else lo;
   let ofd = sys_open(tg, tl, 578);
-  let _ = if ofd < 0 then sys_exit(90) else 0;
+  let _ = if ofd < 0 then cli_exit(90, "open failed (source, output or binary file)") else 0;
   let rc2 = sys_export(ofd, buf, nb);
   let _ = sys_close(ofd);
   let kfd1 = if nocache == 1 then 0 - 1 else sys_open(pcomp, lc, 0);
@@ -7255,13 +7270,13 @@ fn fill_check(p: [i64]) -> i64 {
   5
 }
 fn cli_check(argc: i64, argv: [str]) -> i64 {
-  let _ = if argc >= 4 then 0 else sys_exit(64);
+  let _ = if argc >= 4 then 0 else cli_exit(64, "unknown CLI command (compile, check, size, version, run-via-exec, cas) or check without a file");
   let src = argv[3];
   let ls = str_len(src);
   let psrc = zeros(ls + 1);
   let _ = str_to_cells(psrc, src);
   let fd = sys_open(psrc, ls, 0);
-  let _ = if fd < 0 then sys_exit(90) else 0;
+  let _ = if fd < 0 then cli_exit(90, "open failed (source, output or binary file)") else 0;
   let srcv0 = sys_slurp(fd, 400000);
   let _ = sys_close(fd);
   let tmpc = zeros(ls + 5);
@@ -7294,13 +7309,13 @@ fn cli_cas(argc: i64, argv: [str]) -> i64 {
   let badd = zeros(8);
   let _ = fill_add(badd);
   let is_add = if argc >= 5 then strequals(argv[3], badd) else 0;
-  let _ = if is_add == 0 then sys_exit(64) else 0;
+  let _ = if is_add == 0 then cli_exit(64, "unknown CLI command (compile, check, size, version, run-via-exec, cas) or check without a file") else 0;
   let f = argv[4];
   let lf = str_len(f);
   let pf = zeros(lf + 1);
   let _ = str_to_cells(pf, f);
   let fd = sys_open(pf, lf, 0);
-  let _ = if fd < 0 then sys_exit(90) else 0;
+  let _ = if fd < 0 then cli_exit(90, "open failed (source, output or binary file)") else 0;
   let src = sys_slurp(fd, 400000);
   let _ = sys_close(fd);
   let n = str_len(src);
@@ -7331,7 +7346,7 @@ fn cli_cas(argc: i64, argv: [str]) -> i64 {
   let real = zeros(80);
   let rl = cas_path(addr, real);
   let ofd = sys_open(real, rl, 578);
-  let _ = if ofd < 0 then sys_exit(90) else 0;
+  let _ = if ofd < 0 then cli_exit(90, "open failed (source, output or binary file)") else 0;
   let _ = sys_export(ofd, bytes, n);
   let _ = sys_close(ofd);
   let _ = sys_write(1, addr, 78);

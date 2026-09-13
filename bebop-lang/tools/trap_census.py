@@ -253,7 +253,302 @@ ROWS = [
 ]
 
 
+def scan_source_texts(src_path):
+    """Extract text strings from diag_exit, cap_exit, selfcheck_exit.
+    Returns {code: text} for all texts found in source.
+    Handles both i64-array form [101,120,...] and str-literal form "...".
+    """
+    src = rd(src_path) or ''
+    texts = {}
+
+    # Pattern 1: i64 arrays in diag_exit, cap_exit, selfcheck_exit
+    # Form: diag_text(buf, at, [101, 120, ...], length)
+    for m in re.finditer(r'if code == (\d+) then diag_text\(buf, at, \[([^\]]+)\], (\d+)\)', src):
+        code = int(m.group(1))
+        array_str = m.group(2)
+        try:
+            arr = [int(x.strip()) for x in array_str.split(',')]
+            text = bytes(arr).decode()
+            texts[code] = text
+        except (ValueError, UnicodeDecodeError):
+            pass
+
+    # Pattern 2: string literals in diag_exit (new form post-L30)
+    # Form: if code == N then diag_str(buf, at, "text")
+    for m in re.finditer(r'if code == (\d+) then diag_str\(buf, at, "([^"]*)"', src):
+        code = int(m.group(1))
+        text = m.group(2)
+        texts[code] = text
+
+    # Pattern 3: `cli_exit(N, "text")` -- the CLI exits carry the code and its text in ONE
+    # call, which is the cheapest form for this census to read: site and text together.
+    for m in re.finditer(r'cli_exit\s*\(\s*(\d+)\s*,\s*"([^"]*)"', src):
+        texts[int(m.group(1))] = m.group(2)
+
+    # Extract cap_exit text
+    cap_m = re.search(r'fn cap_exit\(.*?\) -> i64 \{(.*?)sys_exit\(\s*83\s*\)', src, re.S)
+    if cap_m:
+        cap_fn = cap_m.group(1)
+        # Try to find i64 array first
+        array_m = re.search(r'let m = \[([^\]]+)\]', cap_fn)
+        if array_m:
+            try:
+                arr = [int(x.strip()) for x in array_m.group(1).split(',')]
+                text = bytes(arr).decode()
+                texts[83] = text
+            except (ValueError, UnicodeDecodeError):
+                pass
+        # Also try to find string literal (flexible pattern for any first argument)
+        str_m = re.search(r'diag_str\(buf, [^,]*, "([^"]*)"\)', cap_fn)
+        if str_m:
+            texts[83] = str_m.group(1)
+
+    # Extract selfcheck_exit text
+    selfcheck_m = re.search(r'fn selfcheck_exit\(.*?\) -> i64 \{(.*?)sys_exit\(\s*201\s*\)', src, re.S)
+    if selfcheck_m:
+        selfcheck_fn = selfcheck_m.group(1)
+        # Try to find i64 array first
+        array_m = re.search(r'let m = \[([^\]]+)\]', selfcheck_fn)
+        if array_m:
+            try:
+                arr = [int(x.strip()) for x in array_m.group(1).split(',')]
+                text = bytes(arr).decode()
+                texts[201] = text
+            except (ValueError, UnicodeDecodeError):
+                pass
+        # Also try to find string literal (flexible pattern for any first argument)
+        str_m = re.search(r'diag_str\(buf, [^,]*, "([^"]*)"\)', selfcheck_fn)
+        if str_m:
+            texts[201] = str_m.group(1)
+
+    return texts
+
+
+def scan_binary_texts(bin_path, texts):
+    """Check which texts from source are actually present in the binary.
+    Returns set of codes whose text is in the binary."""
+    try:
+        with open(bin_path, 'rb') as f:
+            binary = f.read()
+    except (IOError, OSError):
+        return set()
+
+    codes_in_binary = set()
+    for code, text in texts.items():
+        # Check if the text bytes are present in the binary
+        # Use a minimum of 8 bytes to avoid false positives (strings -n 8)
+        if len(text) >= 8 and text.encode() in binary:
+            codes_in_binary.add(code)
+
+    return codes_in_binary
+
+
+def extract_compile_time_codes(src_path):
+    """Extract only compile-time diagnostic codes from diag_exit, cap_exit, selfcheck_exit.
+    Returns set of codes that have compile-time diagnostic exit sites."""
+    src_content = rd(src_path) or ''
+    codes = set()
+
+    # Extract codes from diag_exit function (old form: diag_text)
+    for m in re.finditer(r'if code == (\d+) then diag_text', src_content):
+        codes.add(int(m.group(1)))
+
+    # Extract codes from diag_exit function (new form: diag_str)
+    for m in re.finditer(r'if code == (\d+) then diag_str', src_content):
+        codes.add(int(m.group(1)))
+
+    # Check for cap_exit (exits with 83)
+    if re.search(r'fn cap_exit\(.*?\) -> i64 \{', src_content):
+        codes.add(83)
+
+    # Check for selfcheck_exit (exits with 201)
+    if re.search(r'fn selfcheck_exit\(.*?\) -> i64 \{', src_content):
+        codes.add(201)
+
+    return codes
+
+
+def scan_documented_compile_time_codes(traps_path='docs/TRAPS.md'):
+    """Extract live compile-time diagnostic codes from a TRAPS.md table.
+    A code is live compile-time if it has 'bebop.bin' in the 'who' column or is in the self-check section,
+    AND is not marked WITHDRAWN or RESERVED. Returns (live_codes, reserved_codes, how_reserved)."""
+    live = {}
+    reserved = {}
+    in_self_check = False
+
+    for i, ln in enumerate(lines(traps_path), 1):
+        # Check for section headers
+        if '## Compiler self-check exit codes' in ln:
+            in_self_check = True
+            continue
+        if '## Store program exit codes' in ln or '## The exit-code space' in ln or '## The trap census' in ln:
+            in_self_check = False
+            continue
+
+        # Parse code rows - check the 'who' column (second column)
+        m = re.match(r'\|\s*(\d+[\w\+\.]*)\s*\|\s*([^\|]+)\|', ln)
+        if m:
+            code_str = m.group(1)
+            who = m.group(2).strip()
+
+            # Skip ranges
+            if '..' in code_str:
+                continue
+
+            try:
+                code = int(code_str)
+            except ValueError:
+                continue
+
+            # Check if row is marked RESERVED by looking for "stays RESERVED"
+            # This phrase indicates the code number is intentionally kept reserved, not reused
+            is_withdrawn = 'stays RESERVED' in ln
+
+            # Include if in self-check section or if 'bebop.bin' is mentioned in the "who" column
+            # (handle multiple processes separated by '/')
+            is_compile_time = in_self_check or 'bebop.bin' in who
+            if is_compile_time:
+                if is_withdrawn:
+                    # Extract how it's marked reserved
+                    how = 'WITHDRAWN' if 'WITHDRAWN' in ln else 'RESERVED'
+                    reserved[code] = how
+                else:
+                    live[code] = 'docs/TRAPS.md:%d' % i
+
+    return live, reserved
+
+
+def handle_texts(argv):
+    """Handle --texts flag: verify diagnostic codes across four sources."""
+
+    # Parse command line arguments
+    src_path = 'bebop.bp'
+    bin_path = 'bebop.bin'
+    traps_path = 'docs/TRAPS.md'
+
+    i = 0
+    while i < len(argv):
+        if argv[i] == '--src' and i + 1 < len(argv):
+            src_path = argv[i + 1]
+            i += 2
+        elif argv[i] == '--bin' and i + 1 < len(argv):
+            bin_path = argv[i + 1]
+            i += 2
+        elif argv[i] == '--traps' and i + 1 < len(argv):
+            traps_path = argv[i + 1]
+            i += 2
+        else:
+            i += 1
+
+    # Scan all exit sites from the specified source file
+    # Strip // comments before scanning to avoid false positives
+    src_content = rd(src_path) or ''
+    exits_fixed = {}
+    for i, ln in enumerate(src_content.split('\n'), 1):
+        # Remove line comment (everything after //)
+        code_part = ln.split('//')[0]
+        for m in re.finditer(r'diag_exit\s*\([^,]*,[^,]*,\s*(\d+)\s*\)', code_part):
+            exits_fixed.setdefault(int(m.group(1)), []).append(f'{src_path}:{i}')
+        for m in re.finditer(r'sys_exit\s*\(\s*(\d+)\s*\)', code_part):
+            c = int(m.group(1))
+            if c != 0:
+                exits_fixed.setdefault(c, []).append(f'{src_path}:{i}')
+        # A17 (2026-09-13): the CLI exits route through a shared `cli_exit(code, m: str)`
+        # helper, so the code is an ARGUMENT and there is no literal `sys_exit(N)` left to
+        # find. Without this pattern the census reported 64/88/90 as "documented but not
+        # emitted" -- the exact opposite of the truth -- the moment they gained texts.
+        for m in re.finditer(r'cli_exit\s*\(\s*(\d+)\s*,', code_part):
+            exits_fixed.setdefault(int(m.group(1)), []).append(f'{src_path}:{i}')
+
+    all_exit_codes = set(exits_fixed.keys())
+
+    # Extract texts from source
+    source_texts = scan_source_texts(src_path)
+
+    # Scan documented codes from specified TRAPS file
+    live_documented, reserved_codes = scan_documented_compile_time_codes(traps_path)
+
+    # Read binary with error checking
+    bin_content = None
+    bin_error = None
+    try:
+        with open(bin_path, 'rb') as f:
+            bin_content = f.read()
+    except (IOError, OSError) as e:
+        bin_error = str(e)
+
+    # Check which texts are in binary
+    codes_in_binary = set()
+    if bin_content is not None:
+        for code, text in source_texts.items():
+            if text.encode() in bin_content:
+                codes_in_binary.add(code)
+
+    # Count from each source
+    n = len(all_exit_codes)  # codes emitted (all exit sites)
+    m = len(source_texts)  # codes with text in source
+    k = len(codes_in_binary) if bin_content is not None else 0  # codes with text in binary
+    d = len(live_documented)  # live documented compile-time codes
+
+    # Print the status line
+    print(f'diag_texts: {n} codes, {m} in source, {k} in binary, {d} documented')
+
+    # Report disagreements and findings
+    exit_code = 0
+
+    # If binary could not be read, report it LOUDLY
+    if bin_error is not None:
+        print(f'  binary error: {bin_path}: {bin_error}')
+        exit_code = 1
+
+    # Codes emitted with NO text in source (A17 real finding)
+    emitted_no_text = all_exit_codes - set(source_texts.keys())
+    for code in sorted(emitted_no_text):
+        sites = ', '.join(exits_fixed[code])
+        print(f'  code {code}: emitted at {sites} with NO diagnostic text')
+        exit_code = 1
+
+    # Codes with text in source but not in binary
+    if bin_content is not None:
+        missing_from_binary = set(source_texts.keys()) - codes_in_binary
+        for code in sorted(missing_from_binary):
+            print(f'  code {code}: missing from binary')
+            exit_code = 1
+
+    # Codes documented (live) but never emitted
+    documented_not_emitted = set(live_documented.keys()) - all_exit_codes
+    for code in sorted(documented_not_emitted):
+        print(f'  code {code}: documented but not emitted')
+        exit_code = 1
+
+    # Codes emitted but NOT documented as compile-time exits
+    emitted_not_documented = all_exit_codes - set(live_documented.keys())
+    for code in sorted(emitted_not_documented):
+        if code not in source_texts and code not in codes_in_binary:
+            # This is a code emitted with no text and not documented
+            print(f'  code {code}: emitted but not documented')
+            exit_code = 1
+
+    # Reserved/withdrawn codes that are still documented
+    for code in sorted(reserved_codes.keys()):
+        if code in all_exit_codes:
+            print(f'  code {code}: {reserved_codes[code]} but still emitted')
+            exit_code = 1
+
+    # Exit with appropriate code
+    if n == m == k == d and not bin_error and not emitted_no_text and not documented_not_emitted:
+        exit_code = 0
+    else:
+        exit_code = 1
+
+    return exit_code
+
+
 def build(argv):
+    # Handle --texts flag
+    if '--texts' in argv:
+        return handle_texts(argv)
+
     exits_fixed, exits_computed = scan_exit_sites()
     documented = scan_documented_codes()
     negs = scan_neg_expects()

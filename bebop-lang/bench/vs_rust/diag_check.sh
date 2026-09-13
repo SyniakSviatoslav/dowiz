@@ -60,4 +60,16 @@ done <<'TRAPS'
 82 SIGSEGV/SIGBUS (stack overflow or wild access)
 87 call to an unresolved function
 TRAPS
+# A17 (2026-09-13): the CLI exits that print a line rather than nothing. Found by TRIGGERING
+# them instead of trusting that they fired -- code 64's "unknown CLI command" half is a RETURN
+# value from main (`r5 = if known == 0 then 64`), not an exit, so only `check` without a file
+# actually exits 64; and cli_compile's SOURCE open was the one unguarded file open in the
+# compiler, so a mistyped source compiled an empty program and exited 0.
+for spec in "64|check|check without a file" "90|compile /nonexistent_dir_xyz/missing.bp $T/o90.bin|missing source" "90|compile bench/parity_constructs/c01_lit.bp /nonexistent_dir_xyz/o.bin|unwritable output"; do
+  want=${spec%%|*}; rest=${spec#*|}; args=${rest%%|*}; what=${rest#*|}
+  err=$(./seed/build/seed "$BIN" $args 2>&1 >/dev/null); rc=$?
+  tok=$(echo "$err" | tail -n 1 | grep -o "error\[E[0-9]*\]" | sed 's/.*E//;s/\].*//')
+  if [ "$rc" = "$want" ] && [ "$tok" = "$want" ]; then echo "PASS cli $want ($what): $(echo "$err" | tail -n 1)"; pass=$((pass+1));
+  else echo "FAIL cli $want ($what): want exit $want + token E$want, got exit $rc token E$tok: $err"; fail=$((fail+1)); fi
+done
 echo "diag: $pass pass, $fail fail"; [ "$fail" = 0 ]

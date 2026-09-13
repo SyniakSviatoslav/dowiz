@@ -1,0 +1,25 @@
+// Test fixture for --texts flag: shows the check goes GREEN
+// when texts are in both source and binary (post-step-1 format)
+// Uses only documented codes 95, 96, 97.
+
+fn diag_exit(buf: [i64], code: i64) -> i64 {
+  let at = 0;
+  let _ = if code == 95 then diag_str(buf, at, "expected `)` or `in`") else 0;
+  let _ = if code == 96 then diag_str(buf, at, "`++` is not in the language") else 0;
+  let _ = if code == 97 then diag_str(buf, at, "fn body without a tail expression") else 0;
+  let _ = if code == 95 then sys_exit(95) else 0;
+  let _ = if code == 96 then sys_exit(96) else 0;
+  let _ = if code == 97 then sys_exit(97) else 0;
+  0
+};
+
+fn diag_str(buf: [i64], at: i64, m: str) -> i64 {
+  let n = str_len(m);
+  let i = 0;
+  while i < n {
+    let _ = buf[at + i] = char(m, i);
+    let i = i + 1;
+    0
+  };
+  at + n
+}

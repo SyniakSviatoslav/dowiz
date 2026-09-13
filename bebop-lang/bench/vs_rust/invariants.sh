@@ -55,6 +55,63 @@ TC=$(python3 tools/typecheck.py "$SRC" bench/vs_rust/std_tests/*.bp bench/vs_rus
 echo "$TC"; [ "$TC" = "typecheck census: 0 findings" ] || { echo "TYPECHECK FAIL (see tools/typecheck.py output)"; fail=1; }
 NEG=$(python3 tools/typecheck.py bench/typecheck_neg/*.bp 2>&1 | tail -1)
 echo "negative sample: $NEG (T48b: must NOT be 0 findings)"; [ "$NEG" != "typecheck census: 0 findings" ] || { echo "TYPECHECK NEG FAIL: bench/typecheck_neg/*.bp type-checked clean"; fail=1; }
+
+echo "== (texts) diagnostic code texts in four places (A17 step 2: source, binary, TRAPS.md, exit sites)"
+# Run the tool and capture full output
+TEXTS_OUT=$(python3 tools/trap_census.py --texts --src "$SRC" --bin "$BIN" 2>&1)
+TEXTS_RC=$?
+echo "$TEXTS_OUT"
+
+# Extract the first line (diag_texts: n codes, m in source, k in binary, d documented)
+DT=$(echo "$TEXTS_OUT" | head -1)
+
+# Extract count of codes with no diagnostic text (lines matching "with NO diagnostic text")
+NO_TEXT_COUNT=$(echo "$TEXTS_OUT" | grep -c "with NO diagnostic text")
+
+# The ratchet lives HERE, as a literal, and deliberately NOT in tools/arch_ratchet.txt:
+# arch_check's `ratchet-orphan` invariant FAILS any number in that file that no
+# arch_check check reads ("a number nobody enforces is not a safeguard, it is prose
+# with a digit in it"), and this one is read by this rung instead. 3 = codes 64, 88
+# and 90, which the compiler exits with while printing NOTHING -- a bare sys_exit,
+# so the user gets an exit code and no line. Lower it as they gain texts; it must
+# never rise. A rise means a new SILENT compiler exit was added.
+#
+# 2026-09-13, same day: it is **0**. The three codes it was opened at (64, 88, 90) were given
+# texts in this commit, so every compiler exit now prints a line and all four counts agree at
+# 18. The ratchet stays wired at 0 precisely because the count reached it: it is now a guard
+# against REGRESSION -- the next bare `sys_exit(N)` with no text breaks this rung instead of
+# shipping silently, which is how 64, 88 and 90 got in.
+RATCHET_VALUE=0
+
+# Check if any other failures occurred (binary errors, documented but not emitted, etc.)
+HAS_OTHER_FAILURES=0
+if echo "$TEXTS_OUT" | grep -q "binary error:"; then
+  HAS_OTHER_FAILURES=1
+fi
+if echo "$TEXTS_OUT" | grep -q "documented but not emitted"; then
+  HAS_OTHER_FAILURES=1
+fi
+if echo "$TEXTS_OUT" | grep -q "missing from binary"; then
+  HAS_OTHER_FAILURES=1
+fi
+if echo "$TEXTS_OUT" | grep -q "RESERVED but still emitted"; then
+  HAS_OTHER_FAILURES=1
+fi
+
+# Report ratchet status
+if [ "$NO_TEXT_COUNT" -gt "$RATCHET_VALUE" ]; then
+  echo "codes emitted with no diagnostic text: $NO_TEXT_COUNT (RATCHET BROKEN: was $RATCHET_VALUE) -- codes 64, 88, 90 need text in bebop.bp"
+  fail=1
+elif [ "$NO_TEXT_COUNT" -lt "$RATCHET_VALUE" ]; then
+  echo "codes emitted with no diagnostic text: $NO_TEXT_COUNT (ratchet improved from $RATCHET_VALUE) -- lower max_codes_emitted_no_text in tools/arch_ratchet.txt"
+  fail=1
+else
+  echo "codes emitted with no diagnostic text: $NO_TEXT_COUNT (ratchet $RATCHET_VALUE)"
+fi
+
+# Fail if there are other failures
+[ "$HAS_OTHER_FAILURES" -eq 0 ] || fail=1
+
 echo "== (v) gate-source expansion identity + declared authority (bench/vs_rust/std_tests/GENERATED.txt)"
 # 2026-09-09 (lane C5): this rung used to regenerate into a temp dir and cmp, which
 # detected a byte difference and nothing else. Four lanes lost a gate to a drift that
