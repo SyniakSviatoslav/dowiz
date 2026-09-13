@@ -83,6 +83,13 @@ fn main() { 99 }
 
     positive_pass = 0
     negative_accepted = 0  # Count of garbage-accepting probes that compile without error
+    # 2026-09-13 (battery audit): with bebop.bin ABSENT the loader failed every probe with rc=90, every
+    # negative counted as "REJECTED", every positive was "DISCARDED (compile failed)" and skipped, and the
+    # gate printed PASS -- measuring nothing. A rejection is the compiler's own diagnostic exit (110, the
+    # F8 step-0 code); any other non-zero rc is not a verdict, and a positive that does not compile means
+    # the compiler under test is absent or broken. Either way: NOT MEASURED, exit 2.
+    REJECT_RC = 110
+    not_verdict = 0
 
     # Run positive tests (they should compile and run)
     for name, src in positive_tests:
@@ -113,9 +120,12 @@ fn main() { 99 }
         try:
             result = subprocess.run([seed, bebop_bin, "compile", path, "/tmp/f8_gate_test.bin"],
                                     capture_output=True, text=True, timeout=60)
-            if result.returncode != 0:
-                # GOOD: compiler rejected this garbage
+            if result.returncode == REJECT_RC:
+                # GOOD: compiler rejected this garbage with its diagnostic exit
                 print(f"REJECTED [{name}]: compile exit {result.returncode}")
+            elif result.returncode != 0:
+                print(f"NOT A VERDICT [{name}]: compile exit {result.returncode} is not the diagnostic exit {REJECT_RC} (loader/compiler failure, not a rejection)")
+                not_verdict += 1
             else:
                 # BAD: compiler accepted garbage
                 print(f"ACCEPTED (discarded unread, SHOULD BE REJECTED) [{name}]: no diagnostic")
@@ -126,6 +136,10 @@ fn main() { 99 }
             os.unlink(path)
 
     print()
+    if positive_pass < len(positive_tests) or not_verdict:
+        print(f"f8_dt: {positive_pass}/{len(positive_tests)} positive probes compiled, {not_verdict} negative probes gave no verdict")
+        print(f"f8_dt gate: NOT MEASURED -- the compiler under test ({bebop_bin}) did not compile the positive probes or did not answer the negatives; nothing here is a PASS")
+        sys.exit(2)
     # Report honestly: 0 forms genuinely parsed, N forms accept garbage
     print(f"f8_dt: {positive_pass} discarded (not parsed), {negative_accepted} garbage-accepting positions (ratchet {RATCHET_VALUE})")
 

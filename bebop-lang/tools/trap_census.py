@@ -584,6 +584,10 @@ def build(argv):
     # Guard: if neg/ directory is non-empty but we found zero expectations,
     # the scanner is broken, not the tree. Report loudly and exit non-zero.
     negdir = os.path.join(ROOT, 'bench/parity_constructs/neg')
+    if not os.path.isdir(negdir):
+        # 2026-09-13 (battery audit): with the directory gone this printed `trap_unrep: 0/20` at rc=0 --
+        # a number-shaped string for a scan that had nothing to scan.
+        die('NOT MEASURED: bench/parity_constructs/neg/ is absent; the neg half of every row cannot be scanned.')
     has_neg_dir = os.path.isdir(negdir) and os.listdir(negdir)
     if has_neg_dir and not negs:
         die('NOT MEASURED: neg/ directory has constructs but no EXPECT headers were parsed. '

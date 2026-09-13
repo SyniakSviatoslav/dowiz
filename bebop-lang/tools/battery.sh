@@ -50,25 +50,27 @@ python3 tools/check_abi.py "$BIN" > "$T/abi.txt" 2>&1
 BEBOP_TMP=$T/diag BEBOP_BIN=$BIN bash bench/vs_rust/diag_check.sh > "$T/diag.log" 2>&1  # T90: line:col diagnostics
 python3 tools/check_words.py > "$T/words.log" 2>&1  # item 7: hand-typed em()/st[] literals (L1)
 python3 tools/f8_dt.py "$BIN" > "$T/f8_dt.log" 2>&1  # F8: dependent surface types parsing + erasure
+python3 tools/trap_census.py > "$T/trap.log" 2>&1  # F1: trap census, derived from the tree (neg/ EXPECT headers + mechanisms); exits 2 NOT MEASURED when the neg/ scan is empty -- it ran in NO battery lane until 2026-09-13
 wait
 red=0
 line() { local l; l=$(grep -E "$2" "$T/$1" | tail -n 1); [ -n "$l" ] || { l="MISSING ($1)"; red=1; }; echo "$l" | grep -qE "$3" || red=1; echo "  $l"; }
 echo "battery for $BIN ($(md5sum "$BIN" | cut -c1-8)):"
-line std.log '^std_golden:' ' 0 fail'
-line cp.log '^construct parity:' 'fail=0'
-line diag.log '^diag:' ' 0 fail'
-line pd.log '^parity:' 'fail=0'
-line pool.log '^pool_parity:' ' 0 fail'
-line oracles.log '^SUMMARY' 'self-frozen=0 mismatch=0 missing=0'
-line bpp.log '^bpref_parity:' 'disagree=0 error=0'  # A23: agreement between the two implementations
-line f7_kcheck.log '^kernel_neg:' ' 0 accepted of 21'  # F7: twin soundness (Python reference)
+line std.log '^std_golden:' '^std_golden: [1-9][0-9]* pass, 0 fail'  # 2026-09-13 audit: `0 pass, 0 fail` (splitter failure) used to read green; std_par now prints NOT MEASURED there and this expects >= 1 pass
+line cp.log '^construct parity:' '^construct parity: pass=[1-9][0-9]* fail=0'
+line diag.log '^diag:' '^diag: [1-9][0-9]* pass, 0 fail'
+line pd.log '^parity:' '^parity: pass=[1-9][0-9]* fail=0'  # 2026-09-13 audit: an empty kernels dir printed `pass=0 fail=0 skip=1` and matched the old 'fail=0'
+line pool.log '^pool_parity:' '^pool_parity: [1-9][0-9]* pass, 0 fail'
+line oracles.log '^SUMMARY' '^SUMMARY ok=[1-9][0-9]* self-frozen=0 mismatch=0 missing=0'
+line bpp.log '^bpref_parity:' '^bpref_parity: agree=[1-9][0-9]* .*disagree=0 error=0'  # A23: agreement between the two implementations; 2026-09-13 audit: an ABSENT tools/bpref.py read `agree=0 unsupported=100 disagree=0 error=0` and matched the old expect
+line f7_kcheck.log '^kernel_neg:' ' 0 accepted of 21'  # F7: twin soundness (Python reference) -- NOTE this number is computed by tools/kcheck.py's PYTHON twin, not by tkernel.bin; the kernel's own acceptance is the next line (kernel_neg_bin), which caught two soundness holes on 2026-09-13 while this line stayed green
 line f7_kcheck.log '^kernel_neg_bin:' ' 0 accepted of 21'  # F7: kernel binary soundness (must reject all unsound terms)
 line f7_kcheck.log '^kernel_parity:' '28/28'  # F7: kernel parity measurement (must be real, not "NOT MEASURED")
 line abi.txt 'ABI' '^ABI ok'
 line inv.log '^invariants:' 'GREEN'
-line words.log '^words:' 'PASS'
-line std.log '^boxguard:' '.'  # item 9: the timing stage (lcjit) runs last, single-threaded, boxguard status logged next to it
-line f8_dt.log '^f8_dt gate:' 'PASS'  # F8: dependent surface types parsing + erasure
+line words.log '^words:' '^words: PASS'  # 2026-09-13 audit: in a lane tree (no .git) this was an empty `git diff` against the MAIN repo = PASS measuring nothing; check_words.py now prints NOT MEASURED there unless WORDS_BASE=<base bebop.bp> is set
+line std.log '^boxguard:' '.'  # item 9: the timing stage (lcjit) runs last, single-threaded, boxguard status logged next to it. PRESENCE ONLY, by design: this row records that the timing stage ran (it goes MISSING when std_par's timing loop does not); it asserts nothing about the value and cannot go red on one
+line f8_dt.log '^f8_dt gate:' '^f8_dt gate: PASS'  # F8: dependent surface types parsing + erasure; 2026-09-13 audit: with bebop.bin ABSENT every probe 'REJECTED' at loader rc=90 and this read PASS -- f8_dt.py now prints NOT MEASURED unless the positives compile and every rejection is the diagnostic exit 110
+line trap.log '^trap_unrep:' '^trap_unrep: 16/35$'  # F1: closed/counted census rows, the REAL number (2026-09-13); a `NOT MEASURED` scan has no trap_unrep: line and reads MISSING
 echo "  census: $(cat "$T/census.txt")"
-grep -h '^FAIL\|MISMATCH\|COMPILEFAIL\|WORD_BUDGET_MISSING\|VALUE_MISMATCH' "$T"/*.log | head -n 20 | sed 's/^/  /'
+grep -h '^FAIL\|MISMATCH\|COMPILEFAIL\|WORD_BUDGET_MISSING\|VALUE_MISMATCH\|NOT MEASURED' "$T"/*.log | head -n 20 | sed 's/^/  /'
 [ $red = 0 ] && echo "battery: GREEN" || { echo "battery: RED"; exit 1; }

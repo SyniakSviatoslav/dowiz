@@ -27,6 +27,10 @@ BEBOP_BIN=${BEBOP_BIN:-./bebop.bin}
 T=${BEBOP_TMP:-/tmp/opencode}/bpref_parity; mkdir -p "$T"
 BPREF_T=${BPREF_TIMEOUT:-120}
 
+# 2026-09-13 (battery audit): with tools/bpref.py DELETED, `python3 tools/bpref.py` exits 2 ("can't open
+# file"), the rc switch below scored every construct UNSUPPORTED, and the line read
+# `agree=0 unsupported=100 disagree=0 error=0` -- green. An absent oracle is NOT MEASURED.
+[ -s tools/bpref.py ] || { echo "bpref_parity: NOT MEASURED -- tools/bpref.py absent or empty"; exit 2; }
 agree=0; unsupported=0; disagree=0; error=0; total=0
 : > "$T/disagreements.txt"; : > "$T/unsupported.txt"
 
@@ -68,6 +72,7 @@ for f in bench/parity_constructs/*.bp; do
   fi
 done
 
+[ "$agree" -gt 0 ] || { echo "bpref_parity: NOT MEASURED -- 0 constructs agreed (total=$total unsupported=$unsupported disagree=$disagree error=$error): the oracle answered nothing"; exit 2; }
 echo "bpref_parity: agree=$agree unsupported=$unsupported disagree=$disagree error=$error total=$total"
 [ -s "$T/disagreements.txt" ] && { echo "--- disagreements ---"; cat "$T/disagreements.txt"; }
 [ -s "$T/unsupported.txt" ] && { echo "--- unsupported (bpref cannot answer; the reason is kept, not discarded) ---"; cat "$T/unsupported.txt"; }

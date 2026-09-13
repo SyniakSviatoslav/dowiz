@@ -42,9 +42,26 @@ def verified(n, text):
 def main(argv):
     if argv:
         diff_text = open(argv[0]).read()
-    else:
+    elif os.environ.get('WORDS_BASE'):
+        # a lane tree has no .git: diff against the base bebop.bp the lane runner hands us, no git at all
+        import difflib
+        base = os.environ['WORDS_BASE']
+        diff_text = ''.join(difflib.unified_diff(open(base).readlines(), open(os.path.join(ROOT, 'bebop.bp')).readlines(),
+                                                 'a/bebop.bp', 'b/bebop.bp'))
+    elif subprocess.run(['git', 'ls-files', '--error-unmatch', 'bebop.bp'], cwd=ROOT,
+                        capture_output=True, text=True).returncode == 0:
+        # TRACKEDNESS, not a local .git: bebop-lang/ is a SUBDIRECTORY of the repo at
+        # /root/dowiz, so it has no .git of its own and an isdir() test rejects the real
+        # tree. A lane tree fails this test for the right reason -- .gitignore lists
+        # .claude/lanes/, so bebop.bp there is untracked and the diff would be empty.
         diff_text = subprocess.run(['git', 'diff', 'HEAD', '--', 'bebop.bp'], cwd=ROOT,
                                     capture_output=True, text=True).stdout
+    else:
+        # 2026-09-13 (battery audit): from a lane tree `git` walked up to the MAIN repo, whose .gitignore
+        # lists .claude/lanes/, so `git diff HEAD -- bebop.bp` was EMPTY and this printed PASS in every
+        # lane battery while measuring nothing (and took a read lock on the main index to do it).
+        print(f"words: NOT MEASURED -- {ROOT} is not a git repository; pass a diff file, or WORDS_BASE=<the base bebop.bp> to diff against")
+        return 2
     lits = new_literals(diff_text)
     if not lits:
         print("words: PASS (no bebop.bp diff, or no new em()/st[] literal >= 0x1000)")

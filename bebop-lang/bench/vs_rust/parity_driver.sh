@@ -68,5 +68,8 @@ for f in "$DIR"/*.bp; do
   fi
 done
 
+# 2026-09-13 (battery audit): with an empty or missing $DIR this printed `parity: pass=0 fail=0
+# skip=1` at rc=0 and the battery read it as green. Zero programs measured is not a pass.
+if [ $((PASS + FAIL)) = 0 ]; then echo "parity: NOT MEASURED -- 0 programs ran under $DIR ($SKIP skipped without fn main)"; exit 2; fi
 echo "parity: pass=$PASS fail=$FAIL skip=$SKIP"
 [ "$FAIL" = 0 ]

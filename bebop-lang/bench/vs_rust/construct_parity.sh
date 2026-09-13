@@ -26,6 +26,7 @@ extract_expect() {
 }
 
 for f in "$DIR"/*.bp; do
+  [ -e "$f" ] || continue  # unexpanded glob (empty/missing $DIR): fall through to the NOT MEASURED guard below
   b=$(basename "$f" .bp)
 
   # Extract EXPECT from file header
@@ -109,5 +110,7 @@ for f in "${DIR%/}/neg"/*.bp; do
   fi
 done
 
+# 2026-09-13 (battery audit): zero constructs measured is NOT MEASURED, not `pass=0 fail=0`.
+if [ $((PASS + FAIL)) = 0 ]; then echo "construct parity: NOT MEASURED -- 0 constructs ran under $DIR"; exit 2; fi
 echo "construct parity: pass=$PASS fail=$FAIL no_expect=$NO_EXPECT"
 [ "$FAIL" = 0 ]

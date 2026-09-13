@@ -45,6 +45,10 @@ for b in timing:
     open('%s/timing_%s.sh' % (T, name), 'w').write('\n'.join(head + b + footer))
 open('%s/timing_names.txt' % T, 'w').write(''.join(n + '\n' for n in names))
 PY
+# 2026-09-13 (battery audit): the splitter used to fail silently (no `# ---- ` blocks -> IndexError),
+# the shard files were never written, all.log stayed empty and the footer printed
+# `std_golden: 0 pass, 0 fail` at rc=0 -- a green line that measured nothing.
+[ $? = 0 ] && [ -s "$T/shard0.sh" ] || { echo "std_golden: NOT MEASURED -- shard split of bench/vs_rust/std_golden.sh failed (no shard files)"; exit 2; }
 for k in $(seq 0 $((J - 1))); do
   mkdir -p "$T/$k"; cpu=${BIG[$((k % ${#BIG[@]}))]:-}
   ( BEBOP_TMP=$T/$k BEBOP_BIN=$BIN ${cpu:+taskset -c $cpu} bash "$T/shard$k.sh" > "$T/shard$k.log" 2>&1 ) &
@@ -80,5 +84,6 @@ cat "$T"/[0-9]*/gates.txt "$T"/timing/gates.txt 2>/dev/null | sort > "$T/gates.t
 python3 tools/perf.py record --bin "$BIN" battery_flakes "$(grep -c RETRIED "$T/all.log")" count "FAILs that passed standalone (timing-flag gates under load)"
 python3 tools/perf.py record --bin "$BIN" gate_run_ms "$(awk '$3=="miss"{s+=$2} END{print s+0}' "$T/gates.txt")" ms "sum of non-memo gate runs ($(grep -c ' miss ' "$T/gates.txt") runs, $(grep -c ' hit ' "$T/gates.txt") memo hits)"
 P=$(grep -c '^PASS ' "$T/all.log"); F=$(grep -c '^FAIL ' "$T/all.log")
+[ $((P + F)) -gt 0 ] || { echo "std_golden: NOT MEASURED -- 0 gates produced a PASS/FAIL line across $J shards"; exit 2; }
 echo "std_golden: $P pass, $F fail (J=$J shards)"
 [ "$F" = 0 ]
