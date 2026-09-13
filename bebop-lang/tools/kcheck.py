@@ -510,7 +510,7 @@ def corpus(d):
     print('kernel_pos: %d rejected of %d' % (len(rejected_pos), len(pos)))
 
     # Measure kernel_parity if kernel binary is available
-    kernel_bin = os.environ.get('TKERNEL_BIN', '/tmp/tk.bin')
+    kernel_bin = os.environ.get('TKERNEL_BIN', './tkernel.bin')
     if os.path.exists(kernel_bin):
         agreement, parity_total, parity_internal, internals = measure_kernel_parity(kernel_bin, d)
         if parity_internal > 0:
@@ -518,7 +518,8 @@ def corpus(d):
         else:
             print('kernel_parity: %d/%d' % (agreement, parity_total))
     else:
-        print('kernel_parity: 0/%d (kernel binary absent)' % total)
+        print('kernel_parity: NOT MEASURED (kernel binary absent)')
+        return 1  # Exit non-zero when instrument is absent
 
     return 1 if (accepted or rejected_pos or internal) else 0
 
