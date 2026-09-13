@@ -1,0 +1,27 @@
+// ROADMAP A19 step 1 POSITIVE control (2026-09-13). The compiler refuses a sys_clone whose
+// enclosing fn has more than 8 symbols bound at the spawn point (diag 109). This construct sits
+// ONE BELOW that boundary and must COMPILE and RUN: 7 lets plus the pending `let r` binder = 8.
+//
+// It is the control the gate was missing. Without it a compiler that refused EVERY sys_clone
+// would satisfy neg/c141_clone9 and the whole row would look green.
+//
+// The child exits immediately via sys_exit_thread_guard, so the value is the parent's alone and
+// there is no shared cell and no race to lose.
+
+module core { }
+
+fn spawn8() -> i64 {
+  let base = sys_arena_base();
+  let a1 = 1;
+  let a2 = 2;
+  let a3 = 4;
+  let a4 = 8;
+  let a5 = 16;
+  let a6 = 32;
+  let r = sys_clone(68864, base + 16384);
+  let is_child = if r == 0 then 1 else 0;
+  let _ = sys_exit_thread_guard(is_child, 0);
+  a1 + a2 + a3 + a4 + a5 + a6 + 138
+}
+
+fn main() -> i64 { spawn8() }

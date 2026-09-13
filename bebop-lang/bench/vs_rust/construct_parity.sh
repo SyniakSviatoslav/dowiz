@@ -38,7 +38,19 @@ for f in "$DIR"/*.bp; do
     fi
   fi
   # Execution value check
-  IVAL=$(timeout 30 ./seed/build/seed "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin" | tail -1)
+  # A construct that TRAPS and still prints the right number used to MATCH: only the last line of
+  # stdout was read, and neither the exit code nor stderr was looked at. Measured 2026-09-13 with
+  # a construct that called sys_clone with non-thread flags and a garbage stack -- it printed its
+  # correct 36 and left `trap 82: SIGSEGV` in stderr, and this gate called it a pass.
+  timeout 30 ./seed/build/seed "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin" \
+      > "${BEBOP_TMP:-/tmp/opencode}/${b}.out" 2> "${BEBOP_TMP:-/tmp/opencode}/${b}.err"; RRC=$?
+  IVAL=$(tail -1 "${BEBOP_TMP:-/tmp/opencode}/${b}.out")
+  if [ "$RRC" != 0 ]; then
+    echo "RUNFAIL $b (exit $RRC, stdout tail '$IVAL'): $(tail -1 "${BEBOP_TMP:-/tmp/opencode}/${b}.err" 2>/dev/null)"; FAIL=$((FAIL+1)); continue
+  fi
+  if [ -s "${BEBOP_TMP:-/tmp/opencode}/${b}.err" ]; then
+    echo "RUNNOISE $b (exit 0 but wrote to stderr): $(tail -1 "${BEBOP_TMP:-/tmp/opencode}/${b}.err")"; FAIL=$((FAIL+1)); continue
+  fi
   case "$b" in
     c01_lit) EXPECT=1000000065571;;
     c02_arith) EXPECT=34;;
@@ -138,6 +150,13 @@ for f in "$DIR"/*.bp; do
     # EXPECT from python3 tools/bpref.py bench/parity_constructs/c96_enumpay.bp.
     c96_enumpay) EXPECT=8503009;;
     c97_arena_operand_miscompile) EXPECT=4;;
+    # ROADMAP A19 step 1 (2026-09-13) POSITIVE control, and the one the row was missing.
+    # 7 lets plus the pending `let r` binder = 8 symbols bound at the spawn: one BELOW the
+    # refusal boundary, so it must compile and run. Its twin neg/c141_clone9 sits at 9 and must
+    # refuse with 109. Without this row a compiler that refused EVERY sys_clone passed the row.
+    # 1+2+4+8+16+32+138 = 201; the child exits via sys_exit_thread_guard so there is no race.
+    # tools/bpref.py reports UNSUPPORTED:sys_clone (rc=3) and bpref_parity counts it unsupported.
+    c142_clone8) EXPECT=201;;
     # EXPECT from python3 tools/bpref.py bench/parity_constructs/c98_arena_base_operand.bp (11 = both paths agree)
     c98_arena_base_operand) EXPECT=11;;
     c99_arena_end_operand) EXPECT=11;;
@@ -222,6 +241,8 @@ for f in "${DIR%/}/neg"/*.bp; do
     # ROADMAP F3 commit 1: literal index past a statically known length.
     c120_oobstatic) EXPECT=COMPILEFAIL:65;;
     c112_kernelsys) EXPECT=COMPILEFAIL:102;;
+    # ROADMAP A19 step 1 (2026-09-13): sys_clone refuses > 8 kept symbols
+    c141_clone9) EXPECT=COMPILEFAIL:109;;
     # A14b (2026-09-08): the shrunk seed-100744 repro. It used to exit 89 in the register
     # allocator (a pre-arm SYM entry relocated inside one if-arm, then a colliding let binder);
     # A14b removed that, so the compiler now reaches the parser and reports the program's REAL

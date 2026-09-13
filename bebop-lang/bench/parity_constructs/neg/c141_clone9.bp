@@ -1,0 +1,26 @@
+// ROADMAP A19 step 1 NEGATIVE control (2026-09-13). One symbol ABOVE the boundary: 8 lets plus
+// the pending `let r` binder = 9 bound at the spawn point, so the compiler must refuse with 109.
+// Its positive twin, c142_clone8, sits at exactly 8 and must compile — together they bracket the
+// boundary, so neither a compiler that accepts everything nor one that refuses everything passes.
+//
+// The kept symbols are ARRAY HANDLES on purpose: that is the kind the 8/9/11 experiment measured
+// losing silently in the child (8 kept -> both children correct, 9 -> one lost, 11 -> both).
+
+module core { }
+
+fn test_clone_9() -> i64 {
+  let h1 = zeros(1);
+  let h2 = zeros(1);
+  let h3 = zeros(1);
+  let h4 = zeros(1);
+  let h5 = zeros(1);
+  let h6 = zeros(1);
+  let h7 = zeros(1);
+  let base = sys_arena_base();
+  let r = sys_clone(68864, base + 16384);
+  h1[0] + h2[0] + h3[0] + h4[0] + h5[0] + h6[0] + h7[0] + r
+}
+
+fn main() -> i64 {
+  test_clone_9()
+}

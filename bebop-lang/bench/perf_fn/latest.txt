@@ -7,7 +7,7 @@ is_digit 20
 is_alpha 32
 put_num 73
 diag_text 28
-diag_exit 1081
+diag_exit 1177
 slen 75
 kernel_word_at 106
 kernel_marked 75
@@ -54,7 +54,7 @@ emit_sys_exit 67
 emit_clock_ms 114
 emit_sys_arena_base 59
 emit_sys_arena_end 59
-emit_sys_clone 172
+emit_sys_clone 184
 emit_sys_cond_set 128
 emit_sys_futex_wait_guard 153
 emit_sys_futex_wake 123

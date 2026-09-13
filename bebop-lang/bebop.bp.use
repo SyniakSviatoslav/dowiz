@@ -236,7 +236,9 @@ fn diag_exit(s: str, p: i64, code: i64) -> i64 {
   let _ = if code == 65 then diag_text(buf, at, [105, 110, 100, 101, 120, 32, 112, 97, 115, 116, 32, 116, 104, 101, 32, 101, 110, 100], 18) else 0;
   let _ = if code == 104 then diag_text(buf, at, [116, 111, 111, 32, 109, 97, 110, 121, 32, 102, 110, 115, 32, 40, 99, 97, 112, 32, 55, 54, 56, 41], 22) else 0;
   let _ = if code == 102 then diag_text(buf, at, [115, 121, 115, 95, 32, 110, 97, 109, 101, 32, 105, 110, 115, 105, 100, 101, 32, 97, 32, 107, 101, 114, 110, 101, 108, 32, 102, 110], 28) else 0;
-  let mlen = (if code == 95 then 20 else 0) + (if code == 96 then 27 else 0) + (if code == 97 then 33 else 0) + (if code == 98 then 31 else 0) + (if code == 99 then 31 else 0) + (if code == 89 then 37 else 0) + (if code == 100 then 31 else 0) + (if code == 101 then 14 else 0) + (if code == 104 then 22 else 0) + (if code == 102 then 28 else 0) + (if code == 65 then 18 else 0);
+  // A19 step 1: code 109 for sys_clone keeping > 8 symbols
+  let _ = if code == 109 then diag_text(buf, at, [115, 121, 115, 95, 99, 108, 111, 110, 101, 58, 32, 62, 32, 56, 32, 107, 101, 112, 116, 32, 115, 121, 109, 98, 111, 108, 115, 32, 40, 109, 97, 120, 32, 56, 41], 35) else 0;
+  let mlen = (if code == 95 then 20 else 0) + (if code == 96 then 27 else 0) + (if code == 97 then 33 else 0) + (if code == 98 then 31 else 0) + (if code == 99 then 31 else 0) + (if code == 89 then 37 else 0) + (if code == 108 then 32 else 0) + (if code == 100 then 31 else 0) + (if code == 101 then 14 else 0) + (if code == 104 then 22 else 0) + (if code == 102 then 28 else 0) + (if code == 65 then 18 else 0) + (if code == 109 then 35 else 0);
   let _ = buf[at + mlen] = 10;
   let _ = sys_write(2, buf, at + mlen + 1);
   sys_exit(code)
@@ -1409,6 +1411,19 @@ fn emit_sys_arena_end(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], s
 // Register table: x0=flags (arg0), x1=stack_top (arg1), x2..x5=xzr, x8=220.
 fn emit_sys_clone(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let srcpos = pos[0];
+  // A19 step 1 (2026-09-13). MEASURED, not assumed: 8 symbols kept across a sys_clone -> both
+  // children correct; 9 -> one child silently lost; 11 -> both. The mechanism is now measured
+  // too -- lane L22's probe read the 9th symbol as 0 in the child on all five runs, which is the
+  // FRESH x15 frame (the child re-homes x15 onto its own stack, so a symbol the allocator
+  // SPILLED before the spawn reads 0 there). It is NOT the "shared frame" story that circulated
+  // for a day: selfhost/std/pool.bp:6-7 says spilled slots are per-thread, and it is right.
+  //
+  // The metric is `stab[0]`, the number of symbols bound SO FAR -- which in a one-pass compiler
+  // is exactly the set bound BEFORE this spawn, i.e. tools/arch_check.py CHECK 20's rule. The
+  // withdrawn trap 103 used FUNCTION-WIDE counters (fntab[5393] + fntab[5391]) and that is why
+  // it refused working programs and had to be removed; a function-wide count is not a
+  // point-specific one, and re-deriving it here would repeat the same mistake.
+  let _ = if stab[0] > 8 then diag_exit(s, srcpos, 109) else 0;
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
