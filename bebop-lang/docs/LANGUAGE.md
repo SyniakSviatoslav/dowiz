@@ -129,9 +129,42 @@ See docs/TRAPS.md.
 
 ## What is NOT in the language
 
-Strings as values, string concatenation (`++` is rejected, exit 96), struct literals
-(disabled), floats (Q32 fixed point lives in selfhost/prelude/fp.bp),
-modules with contents (only `use` inclusion), bounds checks, garbage collection.
+**THREE OF THE ENTRIES BELOW ARE NOW REQUIRED FEATURES, NOT PERMANENT EXCLUSIONS (operator,
+2026-09-13, binding): FRACTIONS, STRINGS AS VALUES, and MODULE CONTENTS.** The operator's
+reasoning, recorded because it decides the DESIGN and not just the priority: the problem was
+never the concepts, it was the industrial implementations of them -- heaps, rounding
+indeterminacy and dynamic expansion. Constrained instead to bit-exactness, zero allocation and
+compile-time folding, all three fit the substrate:
+
+- **Fractions: Q32 fixed point, NOT IEEE-754 and NOT posit.** IEEE's five basic ops are
+  deterministic on one ISA, but the verification bill is Lean's opaque `Float`, an unverifiable
+  hardware axiom and a second register file; posit costs ~75-80 words per software multiply
+  against 8-10 for a hardware-backed Q32 form, and its `clz` and variable shifts close F6's
+  `ring` proof route. Q32 already has the clean bit structure, the first theorem and 25 oracles.
+  Lands as ROADMAP A8's already-reserved type tag 6 `fp`, not as a new row.
+- **Strings: a `str` is a VIEW and a `[u8; N]` is the BUFFER**, both on the same linear arena,
+  with no allocation the program did not write. There is no dynamic concatenation and no
+  collector. This is already how the tree writes strings by hand -- `diag_str(buf, at, m: str)`
+  writes into a caller-owned destination, and `qdsl_explain`/`qdsl_int_to_str` are hand-rolled
+  `buf`/`bp[0]` writers. Lands as A7 step 2 (the producer) + A8 tag 7 `[u8]` + F3's declared
+  length at cell width 1, not as a new row.
+- **Module contents: pure namespace flattening at elaboration**, fully expanded before emission,
+  zero words in the binary. No dynamic import and no runtime linking, ever. Reference syntax is
+  `::` (`m::f`), which is lexically free today -- `m::f()` exits 101 with a proper diagnostic --
+  while `m.f` would collide with field access. Lands on ROADMAP A25's textual rewriter.
+
+What Bebop refuses is the LUXURY these features are usually chosen for: strings that live as long
+as the program, and fractions whose behaviour depends on the machine. See
+`docs/RESEARCH-LANG-EXPANSION-2026-09-13.md` for the full costing.
+
+**Until those rows land, two forms are SILENTLY ACCEPTED and both are defects (MEASURED
+2026-09-13, ROADMAP WAVE 0):** `let x = 1.5; x` compiles rc=0 and prints garbage that is not
+stable across compilers (516661588010 on `89f889a4`, 495807598623 on `0780f16f`), and
+`module m { fn f() -> i64 { 7 } }` compiles and prints 7 with the braces invisible and `f` leaked
+to global scope. `tools/bpref.py` refuses both, so the oracle is right and the compiler is wrong.
+
+Still genuinely not in the language: string concatenation (`++` is rejected, exit 96), struct
+literals (disabled), bounds checks, garbage collection.
 **Closure emission, generic monomorphisation, and dependent-type checking are NOT
 yet implemented, and NEITHER IS THEIR SURFACE SYNTAX.** This paragraph used to claim the
 syntax "IS parsed and erased by the compiler as of A16 Phase 1". Measured 2026-09-12 and
