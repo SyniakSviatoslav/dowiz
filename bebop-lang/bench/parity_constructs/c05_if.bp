@@ -1,2 +1,3 @@
 // if/then/else + nested
+// EXPECT 111 from: hand: if-else conditional
 fn main() -> i64 { if 5 > 3 then (if 2 > 1 then 111 else 0) else 222 }

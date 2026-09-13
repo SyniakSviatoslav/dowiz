@@ -1,6 +1,7 @@
 // T109 2026-09-05: `crc32(cells, n)` builtin = zlib crc32 of n bytes held one per
 // cell (hardware CRC32B loop). Values from python zlib.crc32: "" -> 0,
 // "123456789" -> 3421780262 (cbf43926), bytes 0..255 -> 688229491.
+// EXPECT 1001269 from: hand: CRC32 checksum
 fn main() -> i64 {
   let a = zeros(256);
   let i = 0;

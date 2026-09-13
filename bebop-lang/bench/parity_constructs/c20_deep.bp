@@ -1,3 +1,4 @@
 // deep expression mix + call + array
+// EXPECT 43 from: hand: deeply nested expressions
 fn main() -> i64 { 1 + 2 * (3 + 4 % 2) * 5 - 6 / 2 + (if 7 == 7 then 8 else 0) + arr(2) }
 fn arr(i: i64) -> i64 { let a = [5, 6, 7]; a[i] }

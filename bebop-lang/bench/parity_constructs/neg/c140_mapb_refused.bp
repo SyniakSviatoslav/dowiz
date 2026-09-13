@@ -4,6 +4,7 @@
 // whose names were raw addresses -- nine of them, ~160 MB, into git history. The builtin has
 // no call site anywhere in the tree, so refusing it costs no program anything.
 // This construct exists so the refusal cannot be silently removed: exit 108.
+// EXPECT COMPILEFAIL:108 from: sys_mapb emitter refused (ROADMAP A7)
 
 fn main() -> i64 {
   let h = sys_mapb("x", 4096);

@@ -7,6 +7,7 @@
 // `add`s into x2 then clobber that value before the fill loop stores it.
 // Two array elements before the literal (i0 in x0-ish position via the
 // nested if, i1 pinned) force exactly that eviction-into-x2 shape.
+// EXPECT 33 from: hand: heap trap handling
 fn main() -> i64 {
   let v1 = 100;
   let i0 = 3;

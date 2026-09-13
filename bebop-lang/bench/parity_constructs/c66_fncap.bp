@@ -2,6 +2,7 @@
 // collect_fns still stopped recording at 256: the 257th fn -- main, when it is
 // last -- was silently dropped and the program compiled to garbage that exited 0).
 // Falsifiable probe: the pre-fix compiler yields a wrong value / no output here.
+// EXPECT 1519 from: hand: function capture
 fn f1(a: i64) -> i64 { a + 1 }
 fn f2(a: i64) -> i64 { a + 2 }
 fn f3(a: i64) -> i64 { a + 3 }

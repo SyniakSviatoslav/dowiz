@@ -5,6 +5,7 @@
 // preserving the left operand. Same issue affected sys_arena_base() and
 // sys_arena_end(): they destroyed left operands, turning binary operations
 // with these builtins on the right-hand side into silent wrong values.
+// EXPECT 4 from: hand: arena operand miscompile
 
 fn main() -> i64 {
   str_len("abcd") - clock_ms() * 0

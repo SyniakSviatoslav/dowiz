@@ -8,6 +8,7 @@
 // The body is deliberately ordinary -- a while fold over params -- so a regression in the
 // marker's backward scan (eating the fn header, or mis-setting the bit) shows up as a value
 // change or a compile failure, not as a silent no-op.
+// EXPECT 315 from: hand: kernel function
 kernel fn kfold(x: i64, n: i64) -> i64 {
   let acc = 0;
   let i = 0;

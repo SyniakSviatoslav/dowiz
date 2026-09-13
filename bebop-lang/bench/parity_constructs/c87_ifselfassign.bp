@@ -13,6 +13,7 @@
 // check_reg_collision's fail-closed exit 89 is unreachable here.
 // EXPECT=3 (the oracle value, tools/bpref.py).
 //
+// EXPECT 3 from: hand: if with self-assign
 fn main() -> i64 {
   let v0 = 5;
   let i0 = 1;

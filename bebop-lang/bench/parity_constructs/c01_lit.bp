@@ -1,2 +1,3 @@
 // literals: small, big, negative-computed
+// EXPECT 1000000065571 from: hand: 42 + 65536 + 1000000000000 + (0 - 7)
 fn main() -> i64 { 42 + 65536 + 1000000000000 + (0 - 7) }

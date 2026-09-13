@@ -1,3 +1,4 @@
+// EXPECT COMPILEFAIL:101 from: unbound identifier
 fn main() -> i64 {
   let _ = v0 = 0 in 0
 }

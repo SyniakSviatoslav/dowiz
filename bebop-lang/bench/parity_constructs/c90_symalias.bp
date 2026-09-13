@@ -6,6 +6,7 @@
 // the pending `SYM r` tag then reads the NEW value instead of the value it
 // held when pushed. Same snapshot hazard as RC1 (emit_compound_rhs), one
 // level more general: RC1 only guarded op='s own implicit left operand.
+// EXPECT 0 from: hand: symbol aliasing
 fn main() -> i64 {
   let v0 = 0;
   let a0 = [16, 1, 2, 3, 4, 5, 6, 15];

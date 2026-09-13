@@ -1,2 +1,3 @@
 // 64-bit constants
+// EXPECT -8392076198348418983 from: hand: large negative constant
 fn main() -> i64 { 10054667875361132632 + 1 }

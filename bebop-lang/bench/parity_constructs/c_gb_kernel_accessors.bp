@@ -8,6 +8,7 @@
 // - Set field 7 (entry) = 172 (standard entry stub size)
 // - Set field 9 (gen) = 42 (some generation number)
 // Read both values and fold: 172 + 42 = 214
+// EXPECT 214 from: hand: kernel field accessors (L08 dead-function parity)
 
 use "selfhost/prelude/store.bp"
 use "selfhost/std/gb_run.bp"

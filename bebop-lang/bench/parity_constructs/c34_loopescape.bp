@@ -1,6 +1,7 @@
 // T43 negative-safety twin of c33: the loop REBINDS an outer name to a bare
 // array literal (a pointer escapes the iteration), so the scan must refuse the
 // reset; the allocation after the loop must not overwrite k. Expect 4 + 70 = 74.
+// EXPECT 74 from: hand: loop with escape
 fn main() -> i64 {
   let k = [0, 0];
   let i = 0;

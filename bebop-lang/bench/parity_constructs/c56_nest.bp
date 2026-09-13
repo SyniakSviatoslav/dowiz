@@ -1,4 +1,5 @@
 // IR-RUNG-BLUEPRINT §5 row 4: deep right-nesting, 8 symbols + a 9th (h) in an x15 slot.
+// EXPECT 240 from: hand: nested structures
 fn nest(p: i64) -> i64 {
   let a = p+1; let b = p+2; let c = p+3; let d = p+4;
   let e = p+5; let f = p+6; let g = p+7; let h = p+8;

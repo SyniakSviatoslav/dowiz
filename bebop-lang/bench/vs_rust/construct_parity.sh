@@ -2,6 +2,7 @@
 # M7 construct parity gate: compile with bebop.bin (no C compiler),
 # compare word-for-byte against frozen .bin artifacts, and verify
 # execution values against frozen expected values.
+# EXPECT headers are read from construct file comments (// EXPECT <value> from:)
 ulimit -s 65536 2>/dev/null || true  # eval recursion: 113+ fn self-compile needs >8MB stack
 set -u
 mkdir -p "${BEBOP_TMP:-/tmp/opencode}"
@@ -16,10 +17,23 @@ GUARD="GUARD: bebop.bin is missing or empty (silent-artifact class, journal 1788
 
 DIR=${1:-bench/parity_constructs}
 FROZEN=bench/parity_constructs/frozen
-PASS=0; FAIL=0
+PASS=0; FAIL=0; NO_EXPECT=0
+
+# Helper: extract EXPECT from file header (// EXPECT <value> from:)
+extract_expect() {
+  local file="$1"
+  grep -E '// EXPECT [^ ]+ from:' "$file" | head -1 | sed 's|.*// EXPECT \([^ ]*\).*|\1|'
+}
 
 for f in "$DIR"/*.bp; do
   b=$(basename "$f" .bp)
+
+  # Extract EXPECT from file header
+  EXPECT=$(extract_expect "$f")
+  if [ -z "$EXPECT" ]; then
+    echo "NO_EXPECT $b (missing // EXPECT header)"; NO_EXPECT=$((NO_EXPECT+1)); FAIL=$((FAIL+1)); continue
+  fi
+
   ./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile "$f" "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin" 2>/dev/null || {
     echo "COMPILEFAIL $b"; FAIL=$((FAIL+1)); continue
   }
@@ -51,159 +65,7 @@ for f in "$DIR"/*.bp; do
   if [ -s "${BEBOP_TMP:-/tmp/opencode}/${b}.err" ]; then
     echo "RUNNOISE $b (exit 0 but wrote to stderr): $(tail -1 "${BEBOP_TMP:-/tmp/opencode}/${b}.err")"; FAIL=$((FAIL+1)); continue
   fi
-  case "$b" in
-    c01_lit) EXPECT=1000000065571;;
-    c02_arith) EXPECT=34;;
-    c03_precedence) EXPECT=7;;
-    c04_cmp) EXPECT=310;;
-    c05_if) EXPECT=111;;
-    c06_let) EXPECT=7;;
-    c07_while) EXPECT=45;;
-    c08_call) EXPECT=6;;
-    c09_recursion) EXPECT=720;;
-    c10_struct) EXPECT=11;;
-    c11_enum) EXPECT=5;;
-    c12_match) EXPECT=6;;
-    c13_array) EXPECT=119;;
-    c14_string) EXPECT=8;;
-    c15_bitwise) EXPECT=27;;
-    c16_compound) EXPECT=3;;
-    c17_neg) EXPECT=-103;;
-    c18_bigconst) EXPECT=-8392076198348418983;;
-    c19_multi) EXPECT=115;;
-    c20_deep) EXPECT=43;;
-    c21_param13) EXPECT=91;;
-    c22_matchbind) EXPECT=7;;
-    c23_spillcall) EXPECT=110;;
-    c24_ifspill) EXPECT=99;;
-    c25_matchtail) EXPECT=42;;
-    c26_selfrec) EXPECT=60943;;
-    c27_zeroarg) EXPECT=7;;
-    c30_unary) EXPECT=16351;;
-    c31_nested_lit) EXPECT=1222;;
-    c32_asr) EXPECT=96138;;
-    c33_loopalloc) EXPECT=24999750000;;
-    c34_loopescape) EXPECT=74;;
-    c35_return) EXPECT=15041;;
-    c36_break) EXPECT=4950014;;
-    # ROADMAP A6 (2026-09-08): was a NEGATIVE gate (neg/c38_frameheap.bp,
-    # EXPECT=RUNFAIL:81). A6 deletes the frame heap and with it exit 81, so the
-    # 20 KiB of single-activation aggregates this program allocates now RUN on the
-    # arena cursor. Re-derived with `python3 tools/bpref.py`, not assumed: 2559.
-    c38_frameheap) EXPECT=2559;;
-    c40_struct) EXPECT=6420822;;
-    c41_clz) EXPECT=64631045;;
-    c42_crc32) EXPECT=1001269;;
-    c43_arena_persist) EXPECT=16048003;;
-    c44_use24) EXPECT=131;;
-    c45_crc32x) EXPECT=1001978;;
-    # ROADMAP A7 step 1 (2026-09-09): strings as values (call/array/str_len/char
-    # ends/handle-shape integers/substr idiom/crc32b). EXPECT from tools/bpref.py.
-    c68_strval) EXPECT=101017189;;
-    c46_andor) EXPECT=111100;;
-    c47_usenest) EXPECT=51071;;
-    c50_cas) EXPECT=7136;;
-    c53_param9) EXPECT=73;;
-    c70_csel) EXPECT=-162834;;
-    c71_csel_impure) EXPECT=-164832;;
-    c55_vswindow) EXPECT=312;;
-    c56_nest) EXPECT=240;;
-    c57_flags) EXPECT=13;;
-    c58_callmix) EXPECT=241;;
-    c59_evict) EXPECT=25;;
-    c60_nestctor) EXPECT=1;;
-    c61_arrcall) EXPECT=3;;
-    c66_fncap) EXPECT=1519;;
-    c72_hoist) EXPECT=5504683299252448320;;
-    c84_run) EXPECT=1035;;
-    c86_selfassign) EXPECT=103;;
-    c89_heaptrap) EXPECT=33;;
-    c90_symalias) EXPECT=0;;
-    c88_arrflags) EXPECT=1;;
-    c87_ifselfassign) EXPECT=3;;
-    c91_letlive) EXPECT=12;;
-    c78_scan) EXPECT=-6715473280576199194;;
-    c94_fsync) EXPECT=0;;
-    # A14b (2026-09-08): the regression guard for the SYM-entry span fix -- a pending `SYM v`
-    # operand below an `if` with impure arms, a write to `v` inside an arm (vs_settle_sym_alias
-    # materialises the pre-arm entry from INSIDE that arm) and a `let` binder in the same arm
-    # under window pressure. Exited 89 on 42ce19e5, runs 17 (bpref) once vs_span_to_slots also
-    # demotes kind-3 SYM entries. Drop either ingredient and it compiled clean before the fix.
-    c95_symspan) EXPECT=17;;
-    # ROADMAP F3 commit 1 (re-landed 2026-09-09 onto the relayout): the BOUNDARY of
-    # the static bounds check -- last legal index, dynamic index, rebinding, a call
-    # inside an array literal, and a parameter whose length is not statically known.
-    c121_boundsok) EXPECT=396534;;
-    # ROADMAP A16 prerequisite (2026-09-09): 521 fns, i.e. PAST the old 512 cap.
-    # Guards the b1_facts/b1_scratch collision the cap raise exposed -- no other
-    # construct, kernel or std_test comes near 512 fns, so nothing else can.
-    c122_manyfns) EXPECT=1035;;
-    # RELAYOUT (2026-09-09): 756 fns, just under the new cap of 768. c122 guards the
-    # OLD boundary (512), this guards the NEW one -- b1_scratch is immediately above
-    # b1_facts again at 3668, so the same silent overrun is one cell away.
-    c123_capfns) EXPECT=1507;;
-    # ROADMAP A6 step 2 (2026-09-09): 10^5-deep recursion on the computed frame.
-    # EXPECT is the CLOSED FORM d(n) = n, derived by hand -- tools/bpref.py cannot
-    # be the oracle (recursive interpreter, DEPTH_CAP 5000), see the .bp header.
-    c67_deeprec) EXPECT=100000;;
-    # ROADMAP A6 step 1 (2026-09-09): payload ctor + RUNTIME match on a variable.
-    # EXPECT from python3 tools/bpref.py bench/parity_constructs/c96_enumpay.bp.
-    c96_enumpay) EXPECT=8503009;;
-    c97_arena_operand_miscompile) EXPECT=4;;
-    # ROADMAP A19 step 1 (2026-09-13) POSITIVE control, and the one the row was missing.
-    # 7 lets plus the pending `let r` binder = 8 symbols bound at the spawn: one BELOW the
-    # refusal boundary, so it must compile and run. Its twin neg/c141_clone9 sits at 9 and must
-    # refuse with 109. Without this row a compiler that refused EVERY sys_clone passed the row.
-    # 1+2+4+8+16+32+138 = 201; the child exits via sys_exit_thread_guard so there is no race.
-    # tools/bpref.py reports UNSUPPORTED:sys_clone (rc=3) and bpref_parity counts it unsupported.
-    c142_clone8) EXPECT=201;;
-    # EXPECT from python3 tools/bpref.py bench/parity_constructs/c98_arena_base_operand.bp (11 = both paths agree)
-    c98_arena_base_operand) EXPECT=11;;
-    c99_arena_end_operand) EXPECT=11;;
-    # B7 step 1 (c99cddb) landed these two constructs with NO EXPECT row, so construct_parity
-    # has been RED on them ever since. Re-derived 2026-09-12 with tools/bpref.py AFTER fixing
-    # that oracle's array-aliasing defect (a write rebound the name to a private copy, so a
-    # callee's write into an array parameter was invisible to its caller -- see the comment at
-    # tools/bpref.py `set`). Oracle and bebop.bin now agree on both numbers.
-    # 41000 = fingerprint of the tree for `q { from T }`: root kind 1 -> 1*1000, one child
-    # (the `from` ident, kind 10, attr 0) -> 10000, folded as h*31 + child = 31000 + 10000.
-    c70_qdsl) EXPECT=41000;;
-    # 1 = qdsl_parse did NOT reject `invalid query that should fail`. The file's header wants
-    # 89 (rejected). That is a REAL, OPEN B7 DEFECT and not a parity defect: qdsl_query writes
-    # `let _ = if ok == 0 then 0 else 0;` at every point an early return was meant, so the `ok`
-    # flag is computed and then never acted on, and a garbage query still builds a tree. bebop
-    # and the oracle agree on 1, which is the only thing this gate measures; the functional bug
-    # is carried on the ROADMAP B7 row.
-    c70_qdsl_neg) EXPECT=1;;
-    c69_index_roundtrip) EXPECT=3969009064380;;
-    c92_ptrfree) EXPECT=777920;;
-    c110_fence) EXPECT=0;;
-    c111_kernelfn) EXPECT=315;;
-    # A2b (2026-09-08): the regression guard for lifting A2's nested-`while` hoist ban --
-    # an outer loop that hoists 1000003 at its own depth 0 AND nests a `while` that uses the
-    # same literal. The nested loop releases the enclosing pairs at its entry (so its own
-    # cs-mask-must-be-0 assertion still holds) and the outer pair is re-materialised after the
-    # inner loop's backward branch, so `m` reads correctly on BOTH sides of the nested loop.
-    c73_hoistnest) EXPECT=24000282;;
-    # A2b step 2a: vs_try_madd folds `a * b + c` backwards into the multiply's own word by
-    # rewriting its Ra field, when the multiply is still the last word emitted and the addend
-    # needs no materialisation. Four folding shapes plus one that must DECLINE (a CONST addend,
-    # whose movz would land after the word being rewritten). EXPECT from tools/bpref.py.
-    c74_madd) EXPECT=82837312;;
-    # A2b step 2b: vs_try_and_imm emits `and Xd,Xn,#C` for C = 2^k - 1 and declines every other
-    # mask (6 = 110b, and 0) back to the old materialise-then-and path. EXPECT from tools/bpref.py.
-    c75_andimm) EXPECT=1477639;;
-    # A2b step 2c: vs_try_ubfx collapses `(e >> lsb) & (2^width - 1)` into the shift's own
-    # UBFM word, and declines when the extract would run off the top (60+8), when the shift is
-    # an asr (SBFM) and when it is a left shift (imms != 63). EXPECT from tools/bpref.py.
-    c76_ubfx) EXPECT=2271612;;
-    # L08 dead-function parity constructs (type-c: public API with no test)
-    c_gb_vec_setbit) EXPECT=64;;           # bitmap vector: set 64 bits (2 setbit/iter), fold count
-    c_gb_degree) EXPECT=6;;                # row degree accessor: deg[0]=2, deg[1]=3, deg[2]=1
-    c_st_bytes) EXPECT=36;;                # byte extraction: sum of 8 bytes 08+07+06+05+04+03+02+01
-    c_gb_kernel_accessors) EXPECT=214;;    # kernel field accessors: entry(172) + cmd(42)
-    *) EXPECT="";;
-  esac
+
   [ "$FREEZE" = 1 ] && [ "$IVAL" = "$EXPECT" ] && cp "${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin" "$FROZEN/${b}.bin"
   if [ "$IVAL" = "$EXPECT" ]; then
     echo "MATCH $b (value $IVAL)"
@@ -221,50 +83,13 @@ done
 for f in "${DIR%/}/neg"/*.bp; do
   [ -e "$f" ] || continue
   b=$(basename "$f" .bp)
-  case "$b" in
-    c28_plusplus) EXPECT=COMPILEFAIL:96;;
-    c29_emptybody) EXPECT=COMPILEFAIL:97;;
-    c37_arenafull) EXPECT=RUNFAIL:80;;
-    c48_stackovf) EXPECT=RUNFAIL:82;;
-    c52_undef) EXPECT=RUNFAIL:87;;
-    c51_casbad) EXPECT=COMPILEFAIL:88;;
-    c39_fnmatch) EXPECT=COMPILEFAIL:99;;
-    # F2 prerequisite (2026-09-09): T122 rejects a fn named like a BUILTIN too --
-    # its table was short by seven of the 36 dispatched builtins. c113 is `clz`
-    # (compiled rc=0 and returned the BUILTIN's 60 before the fix); c114 is
-    # `sys_wait4`, the one whose hash wraps, so it also guards the signed/unsigned
-    # spelling the reserved table and the dispatch ladder disagree on.
-    c113_shadowclz) EXPECT=COMPILEFAIL:99;;
-    c114_shadowwait4) EXPECT=COMPILEFAIL:99;;
-    c85_param15) EXPECT=COMPILEFAIL:100;;
-    c93_unbound) EXPECT=COMPILEFAIL:101;;
-    # ROADMAP F3 commit 1: literal index past a statically known length.
-    c120_oobstatic) EXPECT=COMPILEFAIL:65;;
-    c112_kernelsys) EXPECT=COMPILEFAIL:102;;
-    # ROADMAP A19 step 1 (2026-09-13): sys_clone refuses > 8 kept symbols
-    c141_clone9) EXPECT=COMPILEFAIL:109;;
-    # A14b (2026-09-08): the shrunk seed-100744 repro. It used to exit 89 in the register
-    # allocator (a pre-arm SYM entry relocated inside one if-arm, then a colliding let binder);
-    # A14b removed that, so the compiler now reaches the parser and reports the program's REAL
-    # defect -- `main` has no tail expression. Re-derived, not assumed: `python3 tools/bpref.py
-    # bench/parity_constructs/neg/c92_letlive2.bp` says "fn main: body has no tail expression
-    # (bebop.bin exits 97)". The positive regression guard for the fix is c95_symspan.
-    c92_letlive2) EXPECT=COMPILEFAIL:97;;
-    # Added by 4286ec1 with no EXPECT row, so the negative loop has been RED on it since.
-    # Its header claims exit 105 ("read before assignment") reached through an identifier-hash
-    # collision, but `abcdefg` and `abcdefh` do NOT collide under the current hash: bebop.bin
-    # exits 101 (unbound identifier) and tools/bpref.py raises KeyError 'abcdefh'. Both sides
-    # agree, and the file is a duplicate of c93_unbound; the exit-105 path it was written for
-    # is covered by NO construct.
-    read_before_assign) EXPECT=COMPILEFAIL:101;;
-    # ROADMAP A7 (2026-09-12): sys_mapb's emitter passed the path LENGTH as openat's FLAGS and
-    # took the path pointer from a `str` handle whose bytes nothing copies into the arena. It wrote
-    # nine files named after raw addresses, ~160 MB, into git history. The builtin has no call site
-    # in the tree; the emitter now refuses with 108 so the wrong write cannot happen silently, and
-    # this construct exists so the refusal cannot be silently removed.
-    c140_mapb_refused) EXPECT=COMPILEFAIL:108;;
-    *) EXPECT="";;
-  esac
+
+  # Extract EXPECT from file header
+  EXPECT=$(extract_expect "$f")
+  if [ -z "$EXPECT" ]; then
+    echo "NO_EXPECT $b (missing // EXPECT header)"; NO_EXPECT=$((NO_EXPECT+1)); FAIL=$((FAIL+1)); continue
+  fi
+
   out="${BEBOP_TMP:-/tmp/opencode}/${b}_test.bin"
   rm -f "$out"
   # RUNFAIL:<code> (T118): the program must COMPILE and then exit with <code> at run time
@@ -284,5 +109,5 @@ for f in "${DIR%/}/neg"/*.bp; do
   fi
 done
 
-echo "construct parity: pass=$PASS fail=$FAIL"
+echo "construct parity: pass=$PASS fail=$FAIL no_expect=$NO_EXPECT"
 [ "$FAIL" = 0 ]

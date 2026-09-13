@@ -52,9 +52,20 @@ dead fn is deleted under the dead-function ratchet (`arch_check` CHECK 19).
    test); `RUNFAIL` likewise.
 5. **Two constructs**: `c133_testblock` (a program with a `test` block whose `compile` output is
    byte-identical to a twin file without it -- the `c111_kernelfn` "marked/unmarked twins are the same
-   652 bytes" precedent, ROADMAP C1) and `neg/c134_testfn_inside` (a `test` block containing the text
+   652 bytes" precedent, ROADMAP C1) and `c134_testfn_inside` (a `test` block containing the text
    `fn ` in a string; under `compile` it must NOT become a function: the program must compile and run
    to its twin's value, and `strings` of the two `.bin`s must match).
+
+   > **CORRECTED 2026-09-13: this said `neg/c134_testfn_inside`, and `neg/` is the wrong lane for it.**
+   > `construct_parity.sh` iterates `neg/*.bp` expecting a `COMPILEFAIL:<code>` (or `RUNFAIL`)
+   > outcome (`:221`), so a construct that must COMPILE AND RUN -- which is exactly what this row
+   > asks of c134 -- fails that lane by construction. It belongs in the positive set with a twin,
+   > like c133. Two further constraints, both from the language rather than from taste: a `str`
+   > literal is "only valid as an argument" (`docs/LANGUAGE.md:91`), so the `fn ` bytes must appear
+   > as a CALL ARGUMENT (e.g. `str_len("fn ")`) and not as a bare statement, which does not parse;
+   > and **c133's test block must itself contain a string literal**, or assertion A never exercises
+   > the `scan_literals` half of the skip -- a block holding only `42` shifts no literal table and
+   > would pass with that scanner untouched, which is the one failure mode §2.3 A calls out.
 
 ### A24 IS NOT
 

@@ -1,2 +1,3 @@
 // match
+// EXPECT 6 from: hand: pattern match expression
 fn main() -> i64 { match some(5) { none => 0, some(x) => x + 1 } } enum opt { none, some }

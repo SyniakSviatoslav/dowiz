@@ -1,3 +1,4 @@
+// EXPECT 25 from: hand: register eviction
 fn g(a: i64) -> i64 { a * 2 }
 fn h(a: i64) -> i64 { a + 1 }
 fn main() -> i64 { let k = 4; g(k) + h(k) + k * 3 }

@@ -5,6 +5,7 @@
 // Input: one i64 cell with a known pattern
 // Extract 8 bytes in little-endian order
 // Sum the byte values
+// EXPECT 36 from: hand: byte extraction sum (L08 dead-function parity)
 
 use "selfhost/prelude/store.bp"
 

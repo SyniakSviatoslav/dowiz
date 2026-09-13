@@ -24,6 +24,7 @@
 // EXPECT derivation: c01_lit's value is 1000000065571; 1000000065571 & 255 = 35 (hand-
 // checked: 1000000065571 mod 256 = 35). Combined with a pid==child sanity check
 // (w == pid) weighted by 1000: EXPECT = 35 + 1000*1 = 1035.
+// EXPECT 1035 from: hand: run construct
 fn addr_of(a: [i64]) -> i64 { a }
 
 // Byte-per-cell packer (sys_open's path convention): dst[i] = char(src, i) for i < n.

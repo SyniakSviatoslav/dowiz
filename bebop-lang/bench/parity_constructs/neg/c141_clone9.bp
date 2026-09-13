@@ -5,6 +5,7 @@
 //
 // The kept symbols are ARRAY HANDLES on purpose: that is the kind the 8/9/11 experiment measured
 // losing silently in the child (8 kept -> both children correct, 9 -> one lost, 11 -> both).
+// EXPECT COMPILEFAIL:109 from: sys_clone refuses > 8 kept symbols (ROADMAP A19)
 
 module core { }
 

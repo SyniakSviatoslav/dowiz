@@ -1,4 +1,5 @@
 // call composition + multi-arg chains (supported path)
+// EXPECT 11 from: hand: struct field access
 fn main() -> i64 { add(mul(2, 3), add(1, 4)) }
 fn add(a: i64, b: i64) -> i64 { a + b }
 fn mul(a: i64, b: i64) -> i64 { a * b }

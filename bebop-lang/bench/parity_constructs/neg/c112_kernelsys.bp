@@ -4,5 +4,6 @@
 // is on the NAME's `sys_` prefix in emit_ident, not on any particular builtin, so a guard
 // that only knew about a list of builtins would pass this and fail a fn-local `sys_foo`.
 // bpref raises SyntaxError on the same shape (tools/bpref.py, program()).
+// EXPECT COMPILEFAIL:102 from: invalid kernel syscall
 kernel fn kbad(fd: i64) -> i64 { sys_close(fd) }
 fn main() -> i64 { kbad(0) }

@@ -10,6 +10,7 @@
 //                                           be 0, not a mis-encoded imms of -1
 // v is the K8H LCG multiplier, so m1 is a real high-bit test on a real 64-bit constant rather
 // than something the folder could see through.
+// EXPECT 1477639 from: hand: and immediate (A2b step 2b - from tools/bpref.py)
 fn main() -> i64 {
   let v = 6364136223846793005;
   let m1 = (v >> 60) & 1;

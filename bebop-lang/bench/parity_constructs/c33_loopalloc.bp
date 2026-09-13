@@ -2,6 +2,7 @@
 // heap — x14 is marked before the loop and restored at the back-edge/exit
 // when the body cannot leak a pointer. 100000 iterations x two array
 // literals (48 bytes) used to overflow the 15 KiB frame heap (SIGSEGV).
+// EXPECT 24999750000 from: hand: loop allocation
 fn main() -> i64 {
   let s = 0;
   let i = 0;

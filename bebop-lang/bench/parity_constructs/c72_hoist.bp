@@ -3,6 +3,7 @@
 // all carried across iterations). The `let bit`/`let acc` after the constants are used
 // (in `let x = ...`) exercises the §8 clobber risk: the hoisted registers must sit above
 // every register the body's own `let`s (x/bit/acc/i, one genuinely new: bit) will bind.
+// EXPECT 5504683299252448320 from: hand: loop hoisting
 fn main() -> i64 {
   let acc = 0;
   let x = 1;

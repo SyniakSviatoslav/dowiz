@@ -2,6 +2,7 @@
 // must survive its return (the prologue used to save/restore x27/x28 for such
 // fns, rolling the arena cursor back; the caller's next zeros() then overwrote
 // the returned array). bpref (no registers) defines the value.
+// EXPECT 16048003 from: hand: arena persistence
 fn big(a: i64, b: i64, c: i64) -> [i64] {
   let d = a + 1;
   let e = b + 2;

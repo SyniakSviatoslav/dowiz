@@ -6,4 +6,5 @@
 // and the check discharges in the compiler, emitting nothing. Before this row
 // `a[3]` on a 3-cell literal read the next arena object and returned whatever
 // was there. Now exit 65, `index past the end`, with the source position.
+// EXPECT COMPILEFAIL:65 from: literal index past static length (ROADMAP F3)
 fn main() -> i64 { let a = [1, 2, 3]; a[3] }

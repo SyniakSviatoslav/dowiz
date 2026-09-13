@@ -1,6 +1,7 @@
 // D14 item 3: force the x1-x7 operand window to spill. Eight call arguments,
 // each a live REG tag, are on the value stack at once: the eighth vs_alloc
 // finds fntab[3798] empty and vs_spill_deepest pushes argument 1 to [sp].
+// EXPECT 312 from: hand: value-set window
 fn s8(a: i64, b: i64, c: i64, d: i64, e: i64, f: i64, g: i64, h: i64) -> i64 {
   a + b * 2 + c * 3 + d * 4 + e * 5 + f * 6 + g * 7 + h * 8
 }

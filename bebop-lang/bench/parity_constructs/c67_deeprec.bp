@@ -8,5 +8,6 @@
 // recursive-descent interpreter with DEPTH_CAP 5000 (and CPython's own limit
 // below that), so the reference value is the closed form, per WORKER-CARD's
 // "host-only / out-of-range: derive by hand, show it in the comment".
+// EXPECT 100000 from: hand: 10^5-deep recursion (CLOSED FORM d(n)=n)
 fn d(n: i64) -> i64 { if n == 0 then 0 else 1 + d(n - 1) }
 fn main() -> i64 { d(100000) }

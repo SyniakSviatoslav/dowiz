@@ -9,6 +9,7 @@
 //   e  (v << 4) & 255     MUST NOT fold: a left shift is UBFM with imms != 63
 // v is the K8H LCG multiplier so the extracts run on a real 64-bit value, and every result is
 // folded into one printed number: a regression in any single arm moves it.
+// EXPECT 2271612 from: hand: ubfx folding (A2b step 2c - from tools/bpref.py)
 fn main() -> i64 {
   let v = 6364136223846793005;
   let a = (v >> 60) & 1;

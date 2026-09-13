@@ -8,5 +8,6 @@
 // repro (`let v = some(7); match v { none => 0, some(x) => x + 1 }` -> 8) is
 // the `ra` term; `rb`/`rc` add a second payload tag and the nullary tag so the
 // tag compare, not just the payload load, is covered.
+// EXPECT 8503009 from: hand: enum with payload (ROADMAP A6 - from tools/bpref.py)
 fn main() -> i64 { let a = some(7); let ra = match a { none => 0, some(x) => x + 1, many(y) => y }; let b = many(500); let rb = match b { none => 0, some(x) => x, many(y) => y + 3 }; let c = none; let rc = match c { none => 9, some(x) => x, many(y) => y }; ra * 1000000 + rb * 1000 + rc }
 enum opt { none, some, many }

@@ -7,6 +7,7 @@
 // b.lt chain that jumps straight to `done` on `< 'a'` drops it). Not covered at runtime:
 // class 2's stop bytes, since a `"` cannot appear in a literal and `\` is not an escape in
 // bebop.bin but IS one in bpref's lexer -- step 9 covers class 2's bound path instead.
+// EXPECT -6715473280576199194 from: hand: scan operation
 fn main() -> i64 {
   let s = "  ab_c9 1_2
    ZZ_z9  ";

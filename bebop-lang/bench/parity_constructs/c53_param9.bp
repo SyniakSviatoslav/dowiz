@@ -2,6 +2,7 @@
 // spill slot 0 -- the prologue's `add x15,sp,#256` must stay even when the BODY never
 // touches x15. Before the fix the callee wrote into the caller's slot 0 (= i2 here):
 // buggy value 5 - 17 = -12, correct 90 - 17 = 73.
+// EXPECT 73 from: hand: 9 parameters
 fn main() -> i64 {
   let a = 1;
   let b = 2;

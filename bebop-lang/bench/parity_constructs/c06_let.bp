@@ -1,4 +1,5 @@
 // lets + shadow updates
+// EXPECT 7 from: hand: let binding
 fn main() -> i64 {
   let acc = 0;
   let acc = acc + 1;

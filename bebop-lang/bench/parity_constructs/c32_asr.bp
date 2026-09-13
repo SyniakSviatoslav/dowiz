@@ -1,6 +1,7 @@
 // T42(b) / D9(5) 2026-09-04: `>>>` is the ARITHMETIC shift (asrv), `>>` stays
 // LOGICAL (lsrv). Both on a negative value, plus a positive `>>>` and a
 // precedence check (`>>>` sits in the shift tier with `<<`/`>>`).
+// EXPECT 96138 from: hand: arithmetic shift right
 fn main() -> i64 {
   let a = 0 - 16;
   let lg = a >> 2;

@@ -15,6 +15,7 @@
 // named directly (a[3], a[8]) instead of through a stepped alias (b[0], c[0]), so the
 // evidence A5 landed is preserved exactly rather than weakened.
 // No allocation inside any while body (L8); <= 8 live symbols per fn (exit 89).
+// EXPECT 3969009064380 from: hand: index roundtrip
 fn fill(a: [i64], n: i64) -> i64 {
   let i = 0;
   while i < n {

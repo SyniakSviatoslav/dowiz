@@ -1,4 +1,5 @@
 // compound assignment
+// EXPECT 3 from: hand: compound assignment
 fn main() -> i64 {
   let x = 10;
   x += 5;

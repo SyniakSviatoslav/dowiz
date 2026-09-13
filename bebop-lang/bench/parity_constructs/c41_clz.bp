@@ -1,5 +1,6 @@
 // T105 2026-09-05: `clz(x)` builtin = AArch64 clz (count leading zeros of the
 // 64-bit word); clz(0) = 64, clz(1) = 63, negative values have bit 63 set.
+// EXPECT 64631045 from: hand: count leading zeros
 fn main() -> i64 {
   let a = clz(0);
   let b = clz(1);

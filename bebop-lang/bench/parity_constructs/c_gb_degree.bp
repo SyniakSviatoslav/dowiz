@@ -11,6 +11,7 @@
 // - gb_degree(base, A, 1) = rp[2] - rp[1] = 5 - 2 = 3
 // - gb_degree(base, A, 2) = rp[3] - rp[2] = 6 - 5 = 1
 // Fold: 2 + 3 + 1 = 6
+// EXPECT 6 from: hand: GB degree accessor (L08 dead-function parity)
 
 use "selfhost/prelude/store.bp"
 use "selfhost/prelude/gb.bp"

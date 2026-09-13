@@ -12,6 +12,7 @@
 // entry is a CONST, not one of vs_reg's is_direct kinds, so the fold declines and
 // vs_binop_reg emits the plain add. All five are folded into one printed value so a
 // regression in any of them moves the number.
+// EXPECT 82837312 from: hand: multiply-add folding (A2b step 2a - from tools/bpref.py)
 fn main() -> i64 {
   let a = 7;
   let b = 11;

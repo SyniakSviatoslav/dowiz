@@ -5,6 +5,7 @@
 // entry may be FLAGS and vs_park(cnt) never touches the kept elements),
 // the deferred `cset` that finally reads it sees the trap check's flags
 // instead. Two elements exercise both outcomes (false then true).
+// EXPECT 1 from: hand: array flags
 fn main() -> i64 {
   let i0 = 95;
   let i1 = 2;

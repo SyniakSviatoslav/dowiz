@@ -11,6 +11,7 @@
 // `deref` takes the carried value back as `[i64]` so the typecheck census (rung vii)
 // still sees a typed array everywhere and never an i64 masquerading as one.
 // THE VALUE IS UNCHANGED, 777920.
+// EXPECT 777920 from: hand: pointer-free region
 fn deref(t: [i64], k: i64) -> i64 { t[k] }
 fn carry(t: [i64], a: [i64], b: [i64]) -> i64 {
   let _ = t[0] = deref(a, 2);

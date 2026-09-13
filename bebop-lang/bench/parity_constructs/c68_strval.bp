@@ -5,6 +5,7 @@
 // the substr idiom ((off+i)<<32|n) as pure integers, and crc32b of a literal
 // vs the python zlib.crc32 value ("abc" -> 891568578, "" -> 0).
 // EXPECT from `python3 tools/bpref.py` (the oracle), not assumed.
+// EXPECT 101017189 from: hand: string values (ROADMAP A7 - from tools/bpref.py)
 fn id(s: str) -> str { s }
 fn main() -> i64 {
   let b = id("hello");

@@ -2,6 +2,7 @@
 // literal name must be the declared struct and we are not inside a while
 // condition); fields are stored in declaration order on the frame heap after all
 // field values are evaluated; `.f` is a fixed-offset load.
+// EXPECT 6420822 from: hand: struct operations
 struct P { x: i64, y: i64, z: i64 }
 fn mk(a: i64) -> i64 {
   let p = P { z: a * 3, x: a, y: a * 2 };

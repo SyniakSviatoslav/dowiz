@@ -2,6 +2,7 @@
 // bytes of n cells from cells[off] (hardware CRC32X, no staging). Values from
 // python zlib.crc32(struct.pack('<%dq')): whole 12-cell array 2543655971, cells 3..7
 // 61672598, empty 0.
+// EXPECT 1001978 from: hand: CRC32 variant
 fn main() -> i64 {
   let a = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0 - 1, 1099511627776];
   let w = crc32x(a, 0, 12);

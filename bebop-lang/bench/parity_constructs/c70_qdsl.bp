@@ -1,5 +1,6 @@
 // c70_qdsl.bp — c70 construct: verify qdsl parsing via bpref
 // Tests that qdsl_parse returns correct fingerprints for various queries
+// EXPECT 41000 from: hand: QDSL query (fingerprint B7)
 
 fn qdsl_char(s: str, i: i64) -> i64 { char(s, i) }
 fn qdsl_len(s: str) -> i64 { str_len(s) }

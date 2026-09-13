@@ -2,5 +2,6 @@
 // each element at [x14+i*8] BEFORE bumping x14, so a nested literal (or an
 // allocating call) inside an element reused the same cells and overwrote
 // the outer elements (a[2] read 0). Expected [1,2,18,4] -> 1222.
+// EXPECT 1222 from: hand: nested literals
 fn g(a: [i64], b: i64) -> i64 { a[1] + b }
 fn main() -> i64 { let a = [1, 2, g([7, 8, 9], 10), 4]; a[0] * 1000 + a[1] * 100 + a[2] + a[3] }

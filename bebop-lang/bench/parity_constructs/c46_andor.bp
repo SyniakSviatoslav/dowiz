@@ -1,5 +1,6 @@
 // T125 2026-09-06: `&&` and `||` pinned: the `&` / `|` tiers on 0/1 comparison values
 // (bebop.bin consumes one `&`, the right operand parses the second), no short circuit.
+// EXPECT 111100 from: hand: logical AND/OR
 fn main() -> i64 {
   let a = 3;
   let b = 5;

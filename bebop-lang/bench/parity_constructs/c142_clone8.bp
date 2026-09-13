@@ -7,6 +7,7 @@
 //
 // The child exits immediately via sys_exit_thread_guard, so the value is the parent's alone and
 // there is no shared cell and no race to lose.
+// EXPECT 201 from: hand: 8 symbols at spawn (ROADMAP A19 positive control)
 
 module core { }
 

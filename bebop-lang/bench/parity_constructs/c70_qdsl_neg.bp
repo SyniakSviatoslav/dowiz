@@ -1,5 +1,6 @@
 // c70_qdsl_neg.bp — c70 construct: verify malformed query returns 89 (exit code)
 // Tests that qdsl_parse returns 0 for invalid input
+// EXPECT 1 from: hand: QDSL invalid query (B7 DEFECT - should be 89)
 
 fn qdsl_char(s: str, i: i64) -> i64 { char(s, i) }
 fn qdsl_len(s: str) -> i64 { str_len(s) }

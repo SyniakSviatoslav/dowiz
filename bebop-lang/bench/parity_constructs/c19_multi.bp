@@ -1,4 +1,5 @@
 // multi-fn + mixed constructs
+// EXPECT 115 from: hand: multiple statements
 fn main() -> i64 {
   let total = helper(5);
   let i = 0;

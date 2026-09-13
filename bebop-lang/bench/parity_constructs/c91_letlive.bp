@@ -6,6 +6,7 @@
 // corpus's repros are this shape. A14 parks such values to temp slots instead
 // (emit_cond / vs_park_move under fntab[4592] / vs_span_to_slots), so both arms
 // and the join read the same slot. Oracle: tools/bpref.py (host-free program).
+// EXPECT 12 from: hand: let liveness
 fn f0(a: i64, b: i64) -> i64 {
   a * 3 + b
 }

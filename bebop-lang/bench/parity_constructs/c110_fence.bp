@@ -18,6 +18,7 @@
 //   bpref : tools/bpref.py stubs every `sys_*` to 0, so both are 0 and the sum is 0.
 //   => EXPECT=0. A wrong syscall number returns a negative errno (-ENOSYS/-EINVAL)
 //   and a missing dispatch entry is trap 87 (unresolved function): both fail here.
+// EXPECT 0 from: hand: sys_mprotect fence (host-only builtin)
 fn main() -> i64 {
   let a = sys_mmap(0, 4096, 3, 34, 0 - 1, 0);
   let down = sys_mprotect(a, 4096, 1);

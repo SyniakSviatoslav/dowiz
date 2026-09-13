@@ -3,5 +3,6 @@
 // used to compile silently and return whatever x0 held (stale register or
 // heap garbage); the compiler now exits 97 and writes no .bin. bpref.py
 // raises SyntaxError on the same shape.
+// EXPECT COMPILEFAIL:97 from: empty function body
 fn main() -> i64 { let i = 0; while i < 1 { let i = i + 1; }; }
 fn f0(n: i64) -> i64 { }

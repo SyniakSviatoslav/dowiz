@@ -1,3 +1,4 @@
 // cross-fn call
+// EXPECT 6 from: hand: function call
 fn main() -> i64 { add3(1, 2, 3) }
 fn add3(a: i64, b: i64, c: i64) -> i64 { a + b + c }

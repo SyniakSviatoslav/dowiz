@@ -1,3 +1,4 @@
 // T130 2026-09-06: a call to a function that never resolves is a runtime trap (exit 87),
 // not a silent 0 (the one-level `use` expander used to produce exactly that).
+// EXPECT RUNFAIL:87 from: undefined reference at runtime
 fn main() -> i64 { nowhere(3) + 1 }

@@ -8,6 +8,7 @@
 // - Loop i from 0..32: setbit at (2*i) and (2*i+1)
 //   So we set bits 0,1,2,3,4,5,...,62,63 (64 consecutive bits)
 // Read them all back and sum: 64 bits set -> fold = 64.
+// EXPECT 64 from: hand: GB vec setbit (L08 dead-function parity)
 
 use "selfhost/prelude/store.bp"
 use "selfhost/prelude/gb.bp"

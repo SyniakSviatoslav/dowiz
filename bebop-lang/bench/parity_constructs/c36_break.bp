@@ -1,6 +1,7 @@
 // T99 (2026-09-04): `break;` = one `b` to the enclosing loop's exit; the
 // inner break must not leave the outer loop; the T43 frame-heap reset at the
 // loop exit still runs (the inner body allocates).
+// EXPECT 4950014 from: hand: loop break
 fn main() -> i64 {
   let s = 0;
   let i = 0;

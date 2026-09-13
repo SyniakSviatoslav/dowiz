@@ -1,3 +1,4 @@
 // match payload binding guard: 4-arg pop from a 13-param spilled frame
 // segfaulted before the inline-pop fix (journal 1788288249)
+// EXPECT 7 from: hand: match with bindings
 fn main() -> i64 { match some(5) { some(x) => 7 } } enum opt { none, some }

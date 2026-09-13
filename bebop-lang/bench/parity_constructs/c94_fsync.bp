@@ -18,6 +18,7 @@
 //   => EXPECT=0. A regression that emits the wrong syscall number returns a
 //   negative errno (fsync of a bad number is -ENOSYS/-EBADF), and a missing
 //   dispatch entry is trap 87 (unresolved function) -- both fail the gate.
+// EXPECT 0 from: hand: file sync (builtin)
 
 // Byte-per-cell packer (sys_open's path convention): dst[i] = char(src, i).
 fn pack_bytes(dst: [i64], src: str, n: i64) -> i64 {

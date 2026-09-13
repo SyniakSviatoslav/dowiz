@@ -1,2 +1,3 @@
 // enum + match on nullary ctor (supported consumption path)
+// EXPECT 5 from: hand: enum variant match
 fn main() -> i64 { match none { none => 5, some(x) => x + 1 } } enum opt { none, some }

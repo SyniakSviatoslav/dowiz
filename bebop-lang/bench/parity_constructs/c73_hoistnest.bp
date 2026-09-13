@@ -3,6 +3,7 @@
 // across the inner loop's cs-mask-must-be-0 entry assertion). Now the nested loop releases
 // the enclosing pairs at its entry and re-takes them after its own code, so `m` is hoisted
 // once per outer iteration and read on BOTH sides of the inner loop.
+// EXPECT 24000282 from: hand: hoist with nesting (A2b regression guard)
 fn main() -> i64 {
   let acc = 0;
   let rep = 3;

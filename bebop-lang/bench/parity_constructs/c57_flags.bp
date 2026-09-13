@@ -1,1 +1,2 @@
+// EXPECT 13 from: hand: flag operations
 fn main() -> i64 { let i = 3; let n = 5; let b = i < n; let c = !(i == n); b + c * 2 + (if b then 10 else 20) }

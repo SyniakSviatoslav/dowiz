@@ -8,6 +8,7 @@
 // operand into a register the allocator must keep) and once directly in
 // right-operand position (the shape that miscompiled). Agreement encodes as 11,
 // disagreement as 1, so the number names which happened.
+// EXPECT 11 from: hand: arena end operand (from tools/bpref.py)
 
 fn main() -> i64 {
   let base_via_let = sys_arena_end();

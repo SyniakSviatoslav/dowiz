@@ -1,6 +1,7 @@
 // T99 (2026-09-04): `return e;` is a statement = one `b` to the fn epilogue
 // with e in x0: early exit from inside a loop (`early`) and before the tail
 // expression (`nested`); the value after `return` is dead code.
+// EXPECT 15041 from: hand: early return
 fn early(limit: i64) -> i64 {
   let i = 0;
   while i < 1000 {

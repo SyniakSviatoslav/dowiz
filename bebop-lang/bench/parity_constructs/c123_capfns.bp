@@ -8,6 +8,7 @@
 // 754, so the b1_facts entries nearest that edge are the ones under test.
 // tools/check_abi.py's `perfn` gate is what makes the SIZE structural; this is
 // what makes the BEHAVIOUR observable.
+// EXPECT 1507 from: hand: 756 functions (RELAYOUT)
 fn m0(x: i64) -> i64 { x + 0 }
 fn m1(x: i64) -> i64 { x + 1 }
 fn m2(x: i64) -> i64 { x + 2 }

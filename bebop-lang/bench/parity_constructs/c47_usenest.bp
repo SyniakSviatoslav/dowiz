@@ -1,3 +1,4 @@
+// EXPECT 51071 from: hand: nested structure use
 use "bench/parity_constructs/mods/outer.bp"
 // T47b 2026-09-06: nested `use`: main uses outer only; outer uses inner (mods/). The
 // one-level expander left outer's use line raw and inner undefined.
