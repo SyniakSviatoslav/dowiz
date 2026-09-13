@@ -745,8 +745,21 @@ class Interp:
                 self.bytes[off:off + copy_len] = self.bytes[src_off:src_off + copy_len]
             nread = copy_len
             return ((off << 32) | nread) & 0xFFFFFFFFFFFFFFFF
-        if name == 'clock_ms' or name.startswith('sys_'):
-            return 0
+        # Explicit rejection of unmodelled builtins: raise rather than fabricate answers.
+        # Some builtins return 0 deterministically (e.g., a clock in a deterministic test),
+        # but UNMODELLED builtins should declare they are unsupported, not guess.
+        # sys_* family: system calls not modelled by bpref (memory map, file I/O, process control)
+        # clock_ms: wall-clock time (modelled as unsupported to force tests to mock it explicitly)
+        if name.startswith('sys_') or name == 'clock_ms':
+            # INSTRUMENTATION: trace unmodelled calls when BPREF_TRACE_UNMODELLED is set
+            trace_file = os.environ.get('BPREF_TRACE_UNMODELLED')
+            if trace_file:
+                try:
+                    with open(trace_file, 'a') as f:
+                        f.write(name + '\n')
+                except:
+                    pass  # silently ignore trace failures
+            raise UnsupportedForm('builtin %s (unmodelled)' % name)
         raise UnsupportedForm('builtin %s' % name)
 
 
