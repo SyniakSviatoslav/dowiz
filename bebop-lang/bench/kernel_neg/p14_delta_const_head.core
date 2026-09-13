@@ -1,0 +1,19 @@
+% p14: delta unfolding of const head. g has type F (a const). F's type is Sort 0
+% but F's body is a pi (A -> A). The kernel must unfold F to see the pi.
+% We apply g to an element x of type A.
+% Discriminates against n13_apply_non_function.
+1 sort 0
+axiom A : 1
+2 const A
+3 const A
+4 pi 2 3
+5 sort 0
+def F : 5 := 4
+6 const F
+axiom g : 6
+7 const A
+axiom x : 7
+8 const g
+9 const x
+10 app 8 9
+check 10 : 2

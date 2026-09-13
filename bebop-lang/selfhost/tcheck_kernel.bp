@@ -147,11 +147,31 @@ fn k_infer_lam(K: [i64], t: i64) -> i64 {
 
 // k_infer_app: app f a needs f's type to be a pi and a's type to convert to its
 // domain. The codomain may depend on the argument, in which case we substitute.
+// DELTA UNFOLDING: if the inferred head type is a const, unfold it to its body
+// and infer the body's type. Repeat until we find a pi (tag 4) or can't unfold.
+// Fuel-bounded to prevent infinite loops from circular definitions.
 fn k_infer_app(K: [i64], t: i64) -> i64 {
   let fu = k_a(K, t);
   let au = k_b(K, t);
   let tf = k_infer(K, fu);
-  let isp = if k_tag(K, tf) == 4 then 1 else 0;
+  // Delta unfolding loop: unfold consts to their bodies until we find a pi.
+  // When tf is a const, replace it with the body (not the body's type).
+  let fuel = 256;
+  let isp = 0;
+  while fuel > 0 {
+    let tag = k_tag(K, tf);
+    let isp_check = if tag == 4 then 1 else 0;
+    let is_const = if tag == 3 then 1 else 0;
+    let isp = if isp_check == 1 then 1 else isp;
+    let should_unfold = if isp_check == 1 then 0 else is_const;
+    // Unfold: replace const with its body (the body term itself, not its type)
+    let body = if should_unfold == 1 then k_def_body(K, k_a(K, tf)) else 0;
+    let tf = if should_unfold == 1 then body else tf;
+    // Break if we found a pi or if we can't unfold further
+    let continue_loop = if isp_check == 1 then 0 else (if should_unfold == 1 then 1 else 0);
+    let fuel = if continue_loop == 1 then fuel - 1 else 0;
+    0
+  };
   let _ = if isp == 1 then 0 else k_rej(K, 23);
   let ta = k_infer(K, au);
   let dom = if isp == 1 then k_a(K, tf) else 0;
@@ -190,6 +210,20 @@ fn k_def_type(K: [i64], h: i64) -> i64 {
     0
   };
   let _ = if found == 0 then k_rej(K, 21) else 0;
+  found
+}
+
+// returns the body uid of a const (def only; axioms have no body), or 0 if not found
+fn k_def_body(K: [i64], h: i64) -> i64 {
+  let i = 0;
+  let cnt = K[1];
+  let found = 0;
+  while i < cnt {
+    let hit = if K[26640 + i] == h then 1 else 0;
+    let found = if hit == 1 then K[27152 + i] else found;
+    let i = if hit == 1 then cnt else i + 1;
+    0
+  };
   found
 }
 
