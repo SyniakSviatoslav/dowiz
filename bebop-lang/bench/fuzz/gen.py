@@ -124,7 +124,8 @@ class Ctx:
         if r < 0.81:                                  # c97/c98/c99: zero-arg builtins in
             # right-operand position must not clobber a pending left operand. Multiplied
             # by 0 so the program's VALUE stays deterministic while the emit path is covered.
-            builtin = self.r.choice(['clock_ms()', 'sys_arena_base()', 'sys_arena_end()'])
+            # clz() added to cover count-leading-zeros builtin; crc32/crc32x/crc32b skipped (oracle limitation).
+            builtin = self.r.choice(['clock_ms()', 'sys_arena_base()', 'sys_arena_end()', 'clz(1)'])
             return '%s * 0' % builtin
         if r < 0.85:
             return '(if %s then %s else %s)' % (self.expr(d + 1, simple), self.expr(d + 1, simple), self.expr(d + 1, simple))
