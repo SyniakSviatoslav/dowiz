@@ -161,6 +161,12 @@ PY
 
 python3 - "$T" "$TRIALS" "$NGEN" <<'PY'
 import hashlib, os, random, struct, subprocess, sys, zlib
+import re as _re
+# the ONE source of truth for the store size: the program under test
+_bp = open('bench/vs_rust/std_tests/scrash_small.bp').read()
+_m = _re.search(r'let\s+size\s*=\s*(\d+)\s*;', _bp)
+assert _m, 'scrash_small.bp: could not find `let size = <n>;` -- the store size moved'
+STORE_CELLS = int(_m.group(1)) // 8
 
 T, TRIALS, NGEN = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
 REPO = os.getcwd()  # scrash_torn.sh already cd'd to the repo root
@@ -177,7 +183,12 @@ def st_digest(layout):
 golden = open(STORE, 'rb').read()
 
 def sb15(gen, root, cursor, live, sup):
-    c = [MAGIC, 1, gen, root, cursor, 0, 0, live, sup, 0, 0, 0, 0, 0, 0]
+    # B3 (2026-09-13): the capacity is a REAL superblock field (cell 12), inside the crc'd
+    # range 0..14, so this model must carry it or every reopen is judged invalid. The store
+    # size is NOT duplicated here -- it is read from the program that opens the store, because
+    # a layout constant copied into a second file is exactly what turned four store gates red
+    # on 2026-09-12 (ROADMAP A22, the +21 PartTab constant).
+    c = [MAGIC, 2, gen, root, cursor, 0, 0, live, sup, 0, 0, 0, STORE_CELLS - 1024, 0, 0]
     return c
 
 def sb_bytes(gen, root, cursor, live, sup):

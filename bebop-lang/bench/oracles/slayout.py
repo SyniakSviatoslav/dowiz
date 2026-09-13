@@ -4,7 +4,8 @@ import hashlib, struct, zlib
 MAGIC = int.from_bytes(b'BEBOPST1', 'little')
 def digest32(layout): return int.from_bytes(hashlib.sha256(layout.encode()).digest()[28:32], 'big')
 def sb(gen, root, used, live, sup):
-    cells = [MAGIC, 1, gen, root, used, 0, 0, live, sup] + [0] * 6
+    arena_capacity_cells = 65536 // 8 - 1024
+    cells = [MAGIC, 2, gen, root, used, 0, 0, live, sup, 0, 0, 0, arena_capacity_cells, 0, 0]
     b = b''.join(struct.pack('<q', c) for c in cells)
     return b + struct.pack('<Q', zlib.crc32(b))
 def obj(layout, gen, payload):
