@@ -1,0 +1,15 @@
+// T84: hello.bp (ASCII) and hello_glyph.bp (glyphs) are ONE program in two spellings;
+// both compile to a byte-identical binary. Glyphs are canonical, ASCII is the projection.
+★ main() → ℤ {
+  ◐ buf = zeros(16);
+  ◐ n = str_len("Hello, world!");
+  ◐ i = 0;
+  ↺ i < n {
+    ◐ _ = buf[i] = char("Hello, world!", i);
+    ◐ i = i + 1;
+    0
+  };
+  ◐ _ = buf[n] = 10;
+  ◐ _ = sys_write(1, buf, n + 1);
+  0
+}

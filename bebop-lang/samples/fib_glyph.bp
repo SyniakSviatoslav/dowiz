@@ -1,0 +1,16 @@
+// T84: fib.bp (ASCII) and fib_glyph.bp (glyphs) are ONE program in two spellings;
+// both compile to a byte-identical binary. Glyphs are canonical, ASCII is the projection.
+★ main() → ℤ {
+  ◐ n = 30;
+  ◐ a = 0;
+  ◐ b = 1;
+  ◐ i = 0;
+  ↺ i < n {
+    ◐ tmp = a + b;
+    ◐ a = b;
+    ◐ b = tmp;
+    ◐ i = i + 1;
+    0
+  };
+  a
+}

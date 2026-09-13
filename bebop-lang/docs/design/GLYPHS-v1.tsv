@@ -1,0 +1,132 @@
+tier	glyph	ascii	category	note
+A	★	fn	decl	v0.2
+A	◈	module	decl	v0.2 (inert in bebop.bp)
+A	◇	struct	decl	v0.2
+A	△	enum	decl	v0.2 renamed from `data`
+A	⇐	use	decl	v0.2
+A	⊙	contract	decl	v0.2 (c144)
+A	⚗	test	decl	NEW (c133 test block)
+A	⎔	kernel	decl	NEW (C1 `kernel fn`)
+A	◐	let	stmt	v0.2
+A	∴	in	stmt	NEW (let-in terminator)
+A	◒	if	stmt	v0.2
+A	⊸	then	stmt	NEW
+A	⋄	else	stmt	NEW
+A	↺	while	stmt	v0.2
+A	⊘	break	stmt	NEW (T99)
+A	↯	return	stmt	v0.2 (T99)
+A	❖	match	stmt	v0.2
+A	ℤ	i64	type	v0.2 `Z`; bebop's only numeric type
+A	▤	str	type	NEW
+A	≡	==	cmp	v0.2 renamed from `===`
+A	≠	!=	cmp	NEW
+A	≤	<=	cmp	NEW
+A	≥	>=	cmp	NEW
+A	∧	&&	logic	v0.2 (logical and)
+A	∨	||	logic	v0.2 (logical or)
+A	⊻	^	bit	NEW (bit-xor)
+A	≪	<<	shift	v0.2
+A	≫	>>	shift	v0.2 (logical, lsrv)
+A	⋙	>>>	shift	NEW (arithmetic, asrv)
+A	×	*	arith	v0.2
+A	÷	/	arith	v0.2 (signed, x/0=0)
+A	∤	%	arith	v0.2 (signed, x%0=x)
+A	¬	!	unary	v0.2
+A	→	->	arrow	v0.2
+A	⇒	=>	arrow	NEW (match arm)
+I	<	<	cmp	identity
+I	>	>	cmp	identity
+I	+	+	arith	identity (v0.2 U+FF0B dropped: homoglyph)
+I	-	-	arith	identity (v0.2 U+2212 dropped: homoglyph)
+I	&	&	bit	identity (bit-and)
+I	|	|	bit	identity (bit-or)
+I	=	=	assign	identity
+I	:	:	punct	identity
+I	;	;	punct	identity
+I	,	,	punct	identity
+I	.	.	punct	identity
+I	(	(	punct	identity
+I	)	)	punct	identity
+I	{	{	punct	identity
+I	}	}	punct	identity
+I	[	[	punct	identity
+I	]	]	punct	identity
+I	"	"	punct	identity
+I	_	_	punct	identity
+C	×=	*=	compound	derived: op glyph + `=`
+C	÷=	/=	compound	derived
+C	∤=	%=	compound	derived
+C	+=	+=	compound	derived (identity op)
+C	-=	-=	compound	derived (identity op)
+B	¤	const	reserved	no bebop keyword yet
+B	⌘	type	reserved	type alias, not in grammar
+B	◑	mut	reserved	no mut in bebop
+B	◉	val	reserved	
+B	↻	loop	reserved	only `while` exists
+B	♒	for	reserved	
+B	✦	trait	reserved	REJECTED for good (traits/generics)
+B	♁	impl	reserved	REJECTED for good
+B	◎	quotient	reserved	T85 postponed (D5/D7/D8)
+B	λ	\	reserved	no lambdas in bebop
+B	∏	Pi	reserved	T85 proof kernel
+B	∑	Sigma	reserved	T85
+B	⊢	|-	reserved	T85 typing judgement
+B	⊨	|=	reserved	T85 proof obligation
+B	∀	forall	reserved	T85
+B	∃	exists	reserved	T85
+B	⊃	implies	reserved	T85 logical implication (renamed from `=>`, which is the A/⇒ match arm)
+B	⊥	bottom	reserved	T85
+B	⊤	top	reserved	T85
+B	≅	~=	reserved	T85 quotient equiv
+B	≈	~~	reserved	T85 propositional eq
+B	::	::	reserved	no cons/member in bebop; identity if ever adopted, no glyph needed
+B	∅	0	reserved	T68 QTT quantity 0 (erased/proof-only)
+B	·	1	reserved	T68 QTT linear
+B	∞	w	reserved	T68 QTT unrestricted
+B	⏱	clock	reserved	T70 effect
+B	⚄	rng	reserved	T70 effect
+B	⬡	env	reserved	T70 effect
+B	⟡	float	reserved	T70/T87 effect
+B	⌁	net	reserved	T70 effect
+B	⚙	io	reserved	T70 effect
+B	○	pure	reserved	T70 effect: no capability (was ∅, which collided with QTT `0`)
+X	ℕ	N	out	numeric tower: no naturals type
+X	𝔽ₚ	Fp	out	no prime field type
+X	ℤₘ	Zm	out	no ring-mod type
+X	u64	u64	out	no unsigned type; identity if ever adopted, no glyph needed
+X	f64	f64	out	T87 = builtins only, no type; identity if ever adopted, no glyph needed
+X	♾	inf	out	no infinity
+X	ωₙ	w_n	out	NTT: no roadmap row
+X	⟲	ntt	out	NTT
+X	⟳	intt	out	NTT
+X	⊛	conv	out	NTT
+X	⧉	hv	out	hypervector = builtins, not tokens
+X	⊕	bundle	out	hypervector
+X	⊗	bind	out	hypervector
+X	⊖	unbind	out	hypervector
+X	∘	shift	out	hypervector
+X	⊚	sim	out	hypervector
+X	⋔	xor	out	hypervector — duplicates ⊻
+X	⋏	maj	out	hypervector
+X	ψ	state	out	quantum: no roadmap row
+X	|⟩	ket	out	quantum; multi-codepoint
+X	⟨|	bra	out	quantum; multi-codepoint
+X	⨁	super	out	quantum
+X	⨂	tensor	out	quantum
+X	𝐇	H	out	quantum
+X	𝐌	M	out	quantum
+X	⌾	node	out	living-memory (T76)
+X	⤳	edge	out	living-memory
+X	⋈	join	out	relational join
+X	⊑	sub	out	living-memory
+X	≺	pre	out	living-memory
+X	⤴	neigh	out	living-memory
+X	⇝	search	out	living-memory (T79)
+X	∥	par	out	parallelism = builtins
+X	⋉	fork	out	parallelism
+X	⋊	pjoin	out	parallelism: parallel join (renamed from `join`, which is X/⋈ relational)
+X	⚛	atomic	out	parallelism
+X	⤫	branchless	out	parallelism
+X	⟕	spawn	out	parallelism
+X	⟖	sync	out	parallelism
+X	⧗	barrier	out	parallelism

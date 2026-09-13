@@ -45,6 +45,8 @@ mkdir -p "$T"/{std,cp,pd,pool,bpp}; sw() { [ "$SERIAL" = 1 ] && wait; :; }; [ "$
 ( BEBOP_TMP=$T/bpp BEBOP_BIN=$BIN bash bench/vs_rust/bpref_parity.sh > "$T/bpp.log" 2>&1 ) & sw  # A23 differential lane: bpref's evaluator ran in no battery lane until 2026-09-13
 ( TKERNEL_BIN=./tkernel.bin python3 tools/kcheck.py --corpus bench/kernel_neg > "$T/f7_kcheck.log" 2>&1 ) & sw  # F7: kernel certificate checker vs twin
 ( bash tools/no_andand.sh > "$T/andand.log" 2>&1 ) & sw  # A26: `&&` is a CONSTANT ZERO in this language and binds tighter than comparison, so every live site is a defect. Source-level ban, one allowlist (c46_andor pins the behaviour deliberately). Cheap: no compile, just a scan
+( python3 tools/glyph_check.py docs/design/GLYPHS-v1.tsv > "$T/glyph.log" 2>&1 ) & sw  # T84 G1: the glyph alphabet must stay bijective and CLOSED over the 54 tokens bebop.bin accepts -- a token added to the language with no glyph is a silent hole in the canonical surface. Cheap: no compile, just a table scan
+( python3 tools/glyphshow.py --audit > "$T/glyph_audit.log" 2>&1 ) & sw  # T84 G4: pins the tier-A rendering profile. wide/unnamed MUST stay 0; tier_a/ambiguous are pinned exactly on purpose (census-ALLOW discipline) so adding or changing a glyph is a conscious edit here, not a silent drift
 ( BEBOP_TMP=$T/inv BEBOP_BIN=$BIN BEBOP_SRC=$SRC bash bench/vs_rust/invariants.sh $([ "$FREEZE" = 1 ] && echo --freeze) > "$T/inv.log" 2>&1 ) & sw
 python3 tools/census.py "$BIN" | tail -n 1 > "$T/census.txt" 2>&1
 python3 tools/check_abi.py "$BIN" > "$T/abi.txt" 2>&1
@@ -62,6 +64,8 @@ line cp.log '^construct parity:' '^construct parity: pass=[1-9][0-9]* fail=0'
 line diag.log '^diag:' '^diag: [1-9][0-9]* pass, 0 fail'
 line pd.log '^parity:' '^parity: pass=[1-9][0-9]* fail=0'  # 2026-09-13 audit: an empty kernels dir printed `pass=0 fail=0 skip=1` and matched the old 'fail=0'
 line pool.log '^pool_parity:' '^pool_parity: [1-9][0-9]* pass, 0 fail'
+line glyph.log '^glyph_check:' '^glyph_check: [1-9][0-9]* PASS 0 FAIL'  # >= 1 PASS, not the literal 5: a table with every check skipped would print `0 PASS 0 FAIL` and match a bare '0 FAIL'
+line glyph_audit.log '^glyph_audit' '^glyph_audit tier_a=35 wide=0 ambiguous=20 unnamed=0$'
 line oracles.log '^SUMMARY' '^SUMMARY ok=[1-9][0-9]* self-frozen=0 mismatch=0 missing=0'
 line bpp.log '^bpref_parity:' '^bpref_parity: agree=[1-9][0-9]* .*disagree=0 error=0'  # A23: agreement between the two implementations; 2026-09-13 audit: an ABSENT tools/bpref.py read `agree=0 unsupported=100 disagree=0 error=0` and matched the old expect
 line f7_kcheck.log '^kernel_neg:' ' 0 accepted of 21'  # F7: twin soundness (Python reference) -- NOTE this number is computed by tools/kcheck.py's PYTHON twin, not by tkernel.bin; the kernel's own acceptance is the next line (kernel_neg_bin), which caught two soundness holes on 2026-09-13 while this line stayed green
