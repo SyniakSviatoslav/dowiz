@@ -6,7 +6,12 @@
 # Categories (classifier = bench/fuzz/shrink.py --classify, shared with the
 # T77 shrinker): OK DIVERGE COMPILEFAIL CRASH TIMEOUT BPREF-ERROR
 # BPREF-DEPTH (oracle call depth > 5000: unbounded recursion = generator
-# defect, not a compiler verdict) GENFAIL (generator bug) TRAP-OK (T118: the
+# defect, not a compiler verdict) BPREF-UNSUPPORTED (the oracle models no such
+# builtin -- SPLIT OUT of BPREF-DEPTH 2026-09-14, because bpref exits 3 for BOTH
+# and this file called both of them depth; the old classifier printed the line
+# `BPREF-DEPTH  UNSUPPORTED:builtin sys_arena_base (unmodelled)`, a label
+# contradicting its own payload, and it hid 50 of 60 seeds)
+# GENFAIL (generator bug) TRAP-OK (T118: the
 # oracle predicted a capacity trap and bebop exited with the same code)
 # TRAP-80/81/82 (bebop trapped, the oracle did not predict it: frame heap is
 # not modelled by bpref).
@@ -41,7 +46,7 @@ one() {
   python3 bench/fuzz/gen.py --seed "$s" --out "$d/p.bp" 2>"$d/gerr" || { echo "GENFAIL $s"; return; }
   IFS=$'\t' read -r cat exp got < <(python3 bench/fuzz/shrink.py --classify "$d/p.bp")
   case "$cat" in
-    OK|BPREF-DEPTH|UNSUPPORTED-89) ;;  # UNSUPPORTED-89: documented register-model restriction (ROADMAP A14), no repro file
+    OK|BPREF-DEPTH|BPREF-UNSUPPORTED|UNSUPPORTED-89) ;;  # UNSUPPORTED-89: documented register-model restriction (ROADMAP A14), no repro file
     *) { echo "// $cat seed=$s expected=$exp got=$got"; cat "$d/p.bp"; } >"$REPROS/$cat-$s.bp" ;;
   esac
   echo "${cat:-HARNESS-ERROR} $s"
@@ -65,11 +70,22 @@ t1=$(date +%s.%N)
 awk -v n="$N" -v s="$START" -v t0="$t0" -v t1="$t1" -v bin="$(md5sum "$BEBOP_BIN" | cut -c1-8)" '
   { c[$1]++ }
   END { t = t1 - t0
-        printf "fuzz: N=%d START=%d OK=%d DIVERGE=%d COMPILEFAIL=%d CRASH=%d TIMEOUT=%d BPREF-ERROR=%d BPREF-DEPTH=%d BPREF-TIMEOUT=%d GENFAIL=%d STRAY=%d TRAP-OK=%d TRAP-UNPREDICTED=%d TRAP-81=%d TRAP-82=%d UNSUPPORTED-89=%d wall=%.1fs rate=%.2f/s bin=%s\n",
-        n, s, c["OK"], c["DIVERGE"], c["COMPILEFAIL"], c["CRASH"], c["TIMEOUT"], c["BPREF-ERROR"], c["BPREF-DEPTH"], c["BPREF-TIMEOUT"], c["GENFAIL"], c["STRAY"], c["TRAP-OK"], c["TRAP-80"] + c["TRAP-81"] + c["TRAP-82"], c["TRAP-81"], c["TRAP-82"], c["UNSUPPORTED-89"], t, n / (t > 0 ? t : 1), bin }' "$TMP/results"
-grep -v -E '^(OK|GENFAIL|BPREF-DEPTH|BPREF-TIMEOUT|TRAP-OK|TRAP-TIMEOUT|UNSUPPORTED-89) ' "$TMP/results" | sort -k2 -n | head -40
+        printf "fuzz: N=%d START=%d OK=%d DIVERGE=%d COMPILEFAIL=%d CRASH=%d TIMEOUT=%d BPREF-ERROR=%d BPREF-DEPTH=%d BPREF-UNSUPPORTED=%d BPREF-TIMEOUT=%d GENFAIL=%d STRAY=%d TRAP-OK=%d TRAP-UNPREDICTED=%d TRAP-81=%d TRAP-82=%d UNSUPPORTED-89=%d wall=%.1fs rate=%.2f/s bin=%s\n",
+        n, s, c["OK"], c["DIVERGE"], c["COMPILEFAIL"], c["CRASH"], c["TIMEOUT"], c["BPREF-ERROR"], c["BPREF-DEPTH"], c["BPREF-UNSUPPORTED"], c["BPREF-TIMEOUT"], c["GENFAIL"], c["STRAY"], c["TRAP-OK"], c["TRAP-80"] + c["TRAP-81"] + c["TRAP-82"], c["TRAP-81"], c["TRAP-82"], c["UNSUPPORTED-89"], t, n / (t > 0 ? t : 1), bin }' "$TMP/results"
+grep -v -E '^(OK|GENFAIL|BPREF-DEPTH|BPREF-UNSUPPORTED|BPREF-TIMEOUT|TRAP-OK|TRAP-TIMEOUT|UNSUPPORTED-89) ' "$TMP/results" | sort -k2 -n | head -40
 # D12-C: TRAP-81 (frame heap) is by design and stays a pass; TRAP-82 (SIGSEGV/SIGBUS) is
 # a real bug and is never excluded here, so it alone fails the run.
-rc=$([ "$(grep -v -c -E '^(OK|GENFAIL|BPREF-DEPTH|TRAP-81|UNSUPPORTED-89) ' "$TMP/results")" = 0 ]; echo $?)
+rc=$([ "$(grep -v -c -E '^(OK|GENFAIL|BPREF-DEPTH|BPREF-UNSUPPORTED|TRAP-81|UNSUPPORTED-89) ' "$TMP/results")" = 0 ]; echo $?)
+# ROADMAP A18 sweep (2026-09-14): THE COVERAGE FLOOR. Every skip category above counts as a
+# pass, so a run that COMPARED almost nothing still printed DIVERGE=0 and exited 0. Measured:
+# 300 seeds, OK=59, and the gate was green -- 80 % of the corpus was never put to the oracle at
+# all, and the giveaway was the rate (36 seeds/s against the 0.56-1.13 in docs/DEV-LOOP.md).
+# DIVERGE=0 means nothing without the number of seeds it is over, so that number is now an
+# assertion. FUZZ_FLOOR_PCT=0 opts out for a deliberate skip-heavy run.
+okc=$(grep -c '^OK ' "$TMP/results"); floor=$(( N * ${FUZZ_FLOOR_PCT:-80} / 100 ))
+if [ "$okc" -lt "$floor" ]; then
+  echo "FUZZ_COVERAGE_LOW: OK=$okc of N=$N, floor is $floor (${FUZZ_FLOOR_PCT:-80} %) -- DIVERGE=0 over $okc compared seeds is not a result; read the BPREF-* counts above for which category ate them"
+  rc=1
+fi
 rm -rf "$TMP"
 exit $rc

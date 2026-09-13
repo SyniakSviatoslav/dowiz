@@ -65,7 +65,17 @@ def classify(src=None, bp=None, wd=None):
     bn = bp[:-3] + '.bin'
     rc, out, err = oracle(bp, wd)
     if rc == 3:
-        return 'BPREF-DEPTH', err.strip()[-120:], ''
+        # ROADMAP A18 sweep (2026-09-14): rc 3 has TWO causes in bpref.py and this line
+        # called both of them BPREF-DEPTH. DepthError prints 'bpref depth: ...' (:820) and
+        # UnsupportedForm prints 'UNSUPPORTED:...' (:822) -- 'the oracle recursed too deep'
+        # was being reported for 'the oracle does not model this builtin'. MEASURED: 50 of 60
+        # seeds were labelled BPREF-DEPTH when the real cause was sys_arena_base/sys_arena_end/
+        # clock_ms, which bpref refuses; the true depth count was 0. A label that names the
+        # wrong cause sends every future reader to the wrong file.
+        e = err.strip()
+        if e.startswith('UNSUPPORTED:'):
+            return 'BPREF-UNSUPPORTED', e[-120:], ''
+        return 'BPREF-DEPTH', e[-120:], ''
     if rc == 124:  # the oracle timed out: generator too heavy, not a compiler verdict
         return 'BPREF-TIMEOUT', 'bpref > 20 s', ''
     if rc in (80, 81, 82):  # T118: the oracle predicts a capacity trap
