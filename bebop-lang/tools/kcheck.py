@@ -45,7 +45,10 @@ The calculus (predicative, concrete levels, de Bruijn):
     lam A b           : pi A B              where, under A, b : B
     app f a           : B[a]                where f : pi A B and typeof(a) == A up to conversion
 
-**There is no `imax` and there are no level variables.** The elaborator
+**By default there is no `imax`, and there are no level variables.** (Since
+2026-09-13 `KCHECK_LEVEL=imax` switches this twin to the kernel's second arm --
+Sort 0 impredicative, nothing above it -- so both arms can be measured here as
+well as in `tkernel.bin`; the default and every gate stay on `max`.) The elaborator
 instantiates concrete levels. What that costs is worth stating plainly, because
 it is the question under adversarial review: dropping `imax` does NOT shorten
 the hierarchy -- `Sort 0 : Sort 1 : Sort 2 : ...` is still infinite -- it removes
@@ -73,6 +76,7 @@ import re
 import sys
 
 MAXFUEL = 100000          # conversion fuel; exhaustion FAILS LOUDLY, never accepts
+LEVEL_RULE = os.environ.get('KCHECK_LEVEL', 'max')   # 'max' (default) or 'imax'; see infer's pi case
 
 
 class KError(Exception):
@@ -250,7 +254,15 @@ def infer(env, ctx, t, fuel):
     if tag == 'pi':
         u = sort_of(env, ctx, t[1], fuel)
         v = sort_of(env, [t[1]] + ctx, t[2], fuel)
-        return ('sort', max(u, v))      # predicative: no imax, no impredicative Prop
+        # Default: predicative `max`. KCHECK_LEVEL=imax mirrors the kernel's second
+        # arm (tkernel.bp:224-226 selects it by a 4th argv starting with `i`;
+        # tcheck_kernel.bp:127-130 is the rule): a pi whose codomain is Sort 0 lands
+        # in Sort 0 whatever its domain's level. ONLY Sort 0 is impredicative -- there
+        # is no (Sort 2, Sort 1) rule, which is exactly why n18_hurkens_witness is
+        # rejected under this arm. Added 2026-09-13 so the twin can measure both arms.
+        if LEVEL_RULE == 'imax' and v == 0:
+            return ('sort', 0)
+        return ('sort', max(u, v))
     if tag == 'lam':
         sort_of(env, ctx, t[1], fuel)   # the domain must be a type
         b = infer(env, [t[1]] + ctx, t[2], fuel)
