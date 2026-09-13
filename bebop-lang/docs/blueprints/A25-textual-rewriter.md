@@ -29,13 +29,25 @@ This is also a textual rewrite: copy the module's content, prefix the names, ren
 
 All three transformations use exactly two operations:
 - **`src_copy_range(dst, s, from, to)`**: copy bytes from source `s` starting at position `from` to position `to` (exclusive) into destination buffer `dst`. This is what A24 step 2 called "in no file".
-- **`src_rename_idents(dst, s, from, to, table)`**: copy bytes from `s[from..to]` into `dst`, but rewrite every identifier whose 131-rolling hash (bebop.bp:151-163) is a key in `table` to the corresponding value. Skip strings (anything between `"` ... `"`) and comments (`//` to end of line) exactly as `collect_fns` does (bebop.bp:5978-5999).
+> **Anchors re-derived against `e08194f` on 2026-09-13.** Every `bebop.bp` line number in this
+> blueprint as first written was stale, and two of them named a function that is not there:
+> `use_expand` was cited at 7030-7049 (that range is `use_scan`; it is at **7081**),
+> `use_append_str` at 6882 (**6927**), the 131-rolling hash at 151-163 (**153-169**, in
+> `read_ident`, the accumulator being `let h = if is_id == 1 then (h * 131 + ch) else h;`),
+> and the string/comment skipping at 5978-5999 (that is inside `compile_fn_at`; the real
+> thing is `collect_fns` at **6008** with the skip at **6075-6078** --
+> `spc[0] = j; if is_quote == 1 then skip_string_n(s, spc, strn)` plus the `cpc` /
+> `skip_line_comment_n` pair, cursor advance at **6094**, helpers `skip_line_comment_n` at
+> **2145** and `skip_string_n` at **2162**). A citation that points at the wrong function
+> reads as evidence exactly the way one pointing at nothing does.
+
+- **`src_rename_idents(dst, s, from, to, table)`**: copy bytes from `s[from..to]` into `dst`, but rewrite every identifier whose 131-rolling hash (bebop.bp:153-169) is a key in `table` to the corresponding value. Skip strings (anything between `"` ... `"`) and comments (`//` to end of line) exactly as `collect_fns` does (bebop.bp:6075-6078).
 
 With these two primitives and a driver (one `if` statement per transformation type), A16 step 4, A24 step 2, and module flattening all land in ONE row instead of three, with one `.use`-writing path and one position-remapping rule for diagnostics.
 
 ## 2. The existing foundation: `use_expand` in bebop.bp
 
-The compiler already writes a `.use` file containing the flattened program text (docs/LANGUAGE.md:32-33: "`use` includes the file once... the compiler writes the expanded program to `<out>.use`"). The function `use_expand` at bebop.bp:7030-7049 implements this today:
+The compiler already writes a `.use` file containing the flattened program text (docs/LANGUAGE.md:32-33: "`use` includes the file once... the compiler writes the expanded program to `<out>.use`"). The function `use_expand` at bebop.bp:7081 (this blueprint said 7030-7049 when written on 2026-09-13; that range is `use_scan`, re-derived against e08194f) implements this today:
 
 ```
 fn use_expand(srcv: str, tmpc: [i64], tmpl: i64) -> str {
@@ -101,11 +113,11 @@ The diagnostic system reports errors as `<line>:<col>` (bebop.bp:43-44), extract
 
 Copy bytes `s[from..to]` into `dst` starting at the current write offset, returning the new offset. Bounds-checked: if `to > len(s)` or `from > to`, exit 84. Used by all three drivers to efficiently copy source text ranges without character-by-character loops.
 
-**Anchor**: this primitive implements what ROADMAP.md:110 called "in no file" for A24 step 2. The function `use_append_str` (bebop.bp:6882) is the whole-string special case of it.
+**Anchor**: this primitive implements what ROADMAP.md:110 called "in no file" for A24 step 2. The function `use_append_str` (bebop.bp:6927; was cited as 6882) is the whole-string special case of it.
 
 ### 4.2 `src_rename_idents(dst, s, from, to, table) -> new_off`
 
-Copy bytes `s[from..to]` into `dst`, but rewrite every identifier whose 131-rolling hash (bebop.bp:151-163, the same hash `collect_fns` uses) is a key in `table` to the value in `table`. Skip strings (quoted regions) and comments (`//` ... newline) exactly as `collect_fns` does (bebop.bp:5978-5999). Bounds-checked: if `to > len(s)` or `from > to`, exit 84.
+Copy bytes `s[from..to]` into `dst`, but rewrite every identifier whose 131-rolling hash (bebop.bp:153-169, the same hash `collect_fns` uses) is a key in `table` to the value in `table`. Skip strings (quoted regions) and comments (`//` ... newline) exactly as `collect_fns` does (bebop.bp:6075-6078). Bounds-checked: if `to > len(s)` or `from > to`, exit 84.
 
 **Usage**: Module flattening passes a table `{hash(f) -> "m__f", hash(g) -> "m__g", ...}` to rename function definitions and calls. Monomorphisation passes a table `{hash(f) -> "f__u32", ...}` to rename instantiated functions. Test expansion does not use renaming (test functions are new).
 
@@ -135,7 +147,7 @@ Before A25, the four implementations (compiler, bpref, typecheck, Lean) each han
 
 | file:fn | change | anchor |
 |---|---|---|
-| bebop.bp: new `src_copy_range`, `src_rename_idents` + driver selection | textual primitives + module/generic/test routing | bebop.bp:7030 (use_expand entry) |
+| bebop.bp: new `src_copy_range`, `src_rename_idents` + driver selection | textual primitives + module/generic/test routing | bebop.bp:7081 (use_expand entry; was cited as 7030, which is `use_scan`) |
 | bebop.bp: `use_expand` extension | call the driver; write `.use`; (future: position map) | use_expand |
 | bebop.bp:emit_call_or_ctor, T122 table | route `m::f` calls to the flattened `m__f` | 1527 (emit_call_or_ctor) |
 | tools/bpref.py, tools/typecheck.py | read `.use` text, not raw source | unchanged core logic; switched input source |
@@ -172,7 +184,7 @@ A25's output is the one program text consumed by all four implementations. This 
 ## 12. House style: attribution and formalism
 
 - `.use` file output: docs/LANGUAGE.md:32-33
-- 131-rolling hash: bebop.bp:151-163 (the same hash `collect_fns` and `src_rename_idents` use)
+- 131-rolling hash: bebop.bp:153-169 (the same hash `collect_fns` and `src_rename_idents` use)
 - Position tracking already implemented: bebop.bp:43-44 (`diag_exit` uses source positions)
 - Module syntax decision: ROADMAP.md (operator 2026-09-13)
 - Monomorphisation shape: A16-closures-generics-hof.md:78-80, :222-224 (`use_expand` shape)
