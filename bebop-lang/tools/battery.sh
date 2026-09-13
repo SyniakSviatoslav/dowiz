@@ -64,13 +64,14 @@ line oracles.log '^SUMMARY' '^SUMMARY ok=[1-9][0-9]* self-frozen=0 mismatch=0 mi
 line bpp.log '^bpref_parity:' '^bpref_parity: agree=[1-9][0-9]* .*disagree=0 error=0'  # A23: agreement between the two implementations; 2026-09-13 audit: an ABSENT tools/bpref.py read `agree=0 unsupported=100 disagree=0 error=0` and matched the old expect
 line f7_kcheck.log '^kernel_neg:' ' 0 accepted of 21'  # F7: twin soundness (Python reference) -- NOTE this number is computed by tools/kcheck.py's PYTHON twin, not by tkernel.bin; the kernel's own acceptance is the next line (kernel_neg_bin), which caught two soundness holes on 2026-09-13 while this line stayed green
 line f7_kcheck.log '^kernel_neg_bin:' ' 0 accepted of 21'  # F7: kernel binary soundness (must reject all unsound terms)
+line f7_kcheck.log '^kernel_pos:' ' 0 rejected of [1-9][0-9]*'  # F7: a kernel that REJECTS EVERYTHING passes kernel_neg and kernel_neg_bin (rejecting all = accepting none); this is the complement that catches it
 line f7_kcheck.log '^kernel_parity:' '28/28'  # F7: kernel parity measurement (must be real, not "NOT MEASURED")
 line abi.txt 'ABI' '^ABI ok'
 line inv.log '^invariants:' 'GREEN'
 line words.log '^words:' '^words: PASS'  # 2026-09-13 audit: in a lane tree (no .git) this was an empty `git diff` against the MAIN repo = PASS measuring nothing; check_words.py now prints NOT MEASURED there unless WORDS_BASE=<base bebop.bp> is set
 line std.log '^boxguard:' '.'  # item 9: the timing stage (lcjit) runs last, single-threaded, boxguard status logged next to it. PRESENCE ONLY, by design: this row records that the timing stage ran (it goes MISSING when std_par's timing loop does not); it asserts nothing about the value and cannot go red on one
 line f8_dt.log '^f8_dt gate:' '^f8_dt gate: PASS'  # F8: dependent surface types parsing + erasure; 2026-09-13 audit: with bebop.bin ABSENT every probe 'REJECTED' at loader rc=90 and this read PASS -- f8_dt.py now prints NOT MEASURED unless the positives compile and every rejection is the diagnostic exit 110
-line trap.log '^trap_unrep:' '^trap_unrep: 16/35$'  # F1: closed/counted census rows, the REAL number (2026-09-13); a `NOT MEASURED` scan has no trap_unrep: line and reads MISSING
+line trap.log '^trap_unrep:' '^trap_unrep: (1[6-9]|[2-9][0-9]|[1-9][0-9][0-9])/'  # F1: closed/counted census rows, a RATCHET at >=16 closed, not a freeze: pinning `16/35` meant the first trap F2 closes would turn the battery RED, and the denominator moves with the numerator anyway. A `NOT MEASURED` scan has no trap_unrep: line and reads MISSING
 echo "  census: $(cat "$T/census.txt")"
 grep -h '^FAIL\|MISMATCH\|COMPILEFAIL\|WORD_BUDGET_MISSING\|VALUE_MISMATCH\|NOT MEASURED' "$T"/*.log | head -n 20 | sed 's/^/  /'
 [ $red = 0 ] && echo "battery: GREEN" || { echo "battery: RED"; exit 1; }
