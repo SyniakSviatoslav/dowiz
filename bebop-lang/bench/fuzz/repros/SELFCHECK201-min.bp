@@ -1,0 +1,18 @@
+enum opt { none, some, many }
+fn f2(p0: [i64], p1: [i64]) -> i64 { 0 }
+fn f0(n: i64) -> i64 {
+  let v0 = match none { many => 3474 + ((n) * n != (n)) <= n, none => n, some => n };
+  let i0 = 0;
+  while i0 < 5 {
+    v0 *= (let t1 = clz(1) * 0 in 17);
+    let i0 = i0 + 1;
+    0
+  };
+  if n < 1 then 0 else v0 + f0(n - 1)
+}
+fn f1(p0: i64) -> i64 {
+  (if p0 then 1 else 0)
+}
+fn main() -> i64 {
+  f0(1)
+}
