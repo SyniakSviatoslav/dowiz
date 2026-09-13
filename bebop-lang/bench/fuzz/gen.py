@@ -7,8 +7,19 @@ zeros / calls / 1-arg direct recursion / comparisons / arithmetic / bitwise /
 shifts, i64-only. Caps: <=128 binds per fn (params + unique locals),
 <=14 params, <=8 array binds per fn, <=511-element literal arrays, no
 allocation inside while bodies (L8), no str literals / ++ (R3.x d), no
-unary - / !, no return / break. (clock_ms, sys_arena_base, sys_arena_end
-now emitted, always multiplied by 0, so the value stays deterministic.)
+unary - / !.
+
+ROADMAP A18 (2026-09-14): `return` and `break` ARE now emitted, in ARM position
+(the then-arm of an `if`), at ~10 % of ifs -- this docstring said 'no return /
+break' until today. They are NEVER emitted inside the RHS of a `let NAME = ...`:
+if the arm is taken the binding never happens, and reading a symbol whose `let`
+did not execute is UNDEFINED (docs/LANGUAGE.md). The generator tracks that with a
+save/restore flag across the whole RHS subtree, not just its top level -- a
+shallow version leaked through nested ifs and call arguments and produced six
+programs bpref refused with KeyError.
+clock_ms, sys_arena_base and sys_arena_end are NO LONGER emitted: bpref models
+none of them, so every seed containing one was discarded unread -- 50 of 60 on one
+measured range -- and mislabelled BPREF-DEPTH because both causes exit 3.
 
 Every array has a power-of-two "mask" (len >= 8) and every index is a literal
 < 8, a loop var whose bound <= 8, or `((E) & mask)`, so no run is ever
@@ -56,6 +67,7 @@ class Ctx:
         self.nstmt = 0
         self.ntmp = 0
         self.heavy = heavy
+        self.in_let_rhs = False  # True when generating RHS of let NAME = ..., disallow break/return
 
     # ---- helpers ----
     def can_bind(self, name):
@@ -125,10 +137,26 @@ class Ctx:
             # right-operand position must not clobber a pending left operand. Multiplied
             # by 0 so the program's VALUE stays deterministic while the emit path is covered.
             # clz() added to cover count-leading-zeros builtin; crc32/crc32x/crc32b skipped (oracle limitation).
-            builtin = self.r.choice(['clock_ms()', 'sys_arena_base()', 'sys_arena_end()', 'clz(1)'])
-            return '%s * 0' % builtin
+            # Only clz() is fully implemented in bpref's oracle. All sys_* (sys_arena_base, sys_arena_end, etc.)
+            # and clock_ms are unmodelled by bpref and trigger UnsupportedForm errors, which are
+            # mislabelled as BPREF-DEPTH due to sharing exit code 3 with genuine depth-limit errors.
+            return 'clz(1) * 0'
         if r < 0.85:
-            return '(if %s then %s else %s)' % (self.expr(d + 1, simple), self.expr(d + 1, simple), self.expr(d + 1, simple))
+            cond = self.expr(d + 1, simple)
+            # A18 (2026-09-14): ~10% chance of `return` or `break` in then-arm
+            # BUT: never emit break/return in let-binding RHS (would skip the binding, making the
+            # bound name undefined). These forms are only safe in discarded positions or top-level statements.
+            if not self.in_let_rhs and self.r.random() < 0.10:
+                if self.loop_depth > 0 and self.r.random() < 0.5:
+                    # `break` only inside a while body
+                    then_arm = 'break'
+                else:
+                    # `return expr` in any fn
+                    then_arm = 'return %s' % self.expr(d + 1, simple)
+            else:
+                then_arm = self.expr(d + 1, simple)
+            else_arm = self.expr(d + 1, simple)
+            return '(if %s then %s else %s)' % (cond, then_arm, else_arm)
         if r < 0.90 and not simple:
             return self.letin(d)
         if r < 0.94 and not simple:
@@ -151,19 +179,40 @@ class Ctx:
 
     def letin(self, d):
         k = self.r.random()
+        # A18 safety guard: disable break/return in let-binding RHS to prevent undefined bindings.
+        # The RHS must not have break/return because it could skip the binding entirely.
+        # Use try/finally to ensure the flag persists through all nested expr() calls in the RHS.
+        saved_in_let = self.in_let_rhs
+
         if k < 0.35 and self.assignable():
             v = self.r.choice(self.assignable())
             if self.can_bind('_'):
                 self.bind('_')
-                return '(let _ = %s = %s in %s)' % (v, self.expr(d + 1), self.expr(d + 1))
+                try:
+                    self.in_let_rhs = True
+                    rhs = self.expr(d + 1)
+                finally:
+                    self.in_let_rhs = saved_in_let
+                body = self.expr(d + 1)
+                return '(let _ = %s = %s in %s)' % (v, rhs, body)
         if k < 0.6 and self.arrays and self.can_bind('_'):
             self.bind('_')
             a = self.r.choice(list(self.arrays))
-            return '(let _ = %s[%s] = %s in %s)' % (a, self.index(a, False, d), self.expr(d + 1), self.expr(d + 1))
+            try:
+                self.in_let_rhs = True
+                rhs = self.expr(d + 1)
+            finally:
+                self.in_let_rhs = saved_in_let
+            body = self.expr(d + 1)
+            return '(let _ = %s[%s] = %s in %s)' % (a, self.index(a, False, d), rhs, body)
         t = 't%d' % self.r.randint(0, 3)
         if not self.can_bind(t):
             return self.lit()
-        rhs = self.expr(d + 1)
+        try:
+            self.in_let_rhs = True
+            rhs = self.expr(d + 1)
+        finally:
+            self.in_let_rhs = saved_in_let
         self.bind(t)
         saved = self.scalars
         self.scalars = self.scalars + [t]  # visible only inside the body (untaken-branch safety)
@@ -226,7 +275,12 @@ class Ctx:
             v = self.new_scalar() if new else self.r.choice(asg)
             if not self.can_bind(v):
                 return '%s;' % self.expr(0)
-            rhs = self.expr(0)
+            saved_in_let = self.in_let_rhs
+            try:
+                self.in_let_rhs = True
+                rhs = self.expr(0)
+            finally:
+                self.in_let_rhs = saved_in_let
             self.bind(v)
             if v not in self.scalars:
                 self.scalars.append(v)
@@ -235,41 +289,64 @@ class Ctx:
             # D11-D: an array literal INSIDE a loop body (T43 frame-heap reset path)
             a = 'a%d' % len(self.arrays)
             n = self.r.choice([8, 8, 16])
-            rhs = '[%s]' % ', '.join(self.expr(1) for _ in range(n))
+            saved_in_let = self.in_let_rhs
+            try:
+                self.in_let_rhs = True
+                rhs = '[%s]' % ', '.join(self.expr(1) for _ in range(n))
+            finally:
+                self.in_let_rhs = saved_in_let
             self.bind(a)
             self.arrays[a] = n - 1
             return 'let %s = %s;' % (a, rhs)
         if r < 0.40 and not self.loop_depth and len(self.arrays) < 8 and len(self.binds) < self.budget:
             a = 'a%d' % len(self.arrays)
             k = self.r.random()
-            if k < 0.5:
-                n = self.r.choice([8, 8, 16, 32])
-                rhs = '[%s]' % ', '.join(self.expr(1) for _ in range(n))
-                mask = n - 1
-            elif k < 0.9:
-                n = self.r.choice([8, 16, 64, 256, 512])
-                rhs = 'zeros(%d)' % n
-                mask = n - 1
-            else:
-                n = 511
-                rhs = '[%s]' % ', '.join(self.lit() for _ in range(n))
-                mask = 255
+            saved_in_let = self.in_let_rhs
+            try:
+                self.in_let_rhs = True
+                if k < 0.5:
+                    n = self.r.choice([8, 8, 16, 32])
+                    rhs = '[%s]' % ', '.join(self.expr(1) for _ in range(n))
+                    mask = n - 1
+                elif k < 0.9:
+                    n = self.r.choice([8, 16, 64, 256, 512])
+                    rhs = 'zeros(%d)' % n
+                    mask = n - 1
+                else:
+                    n = 511
+                    rhs = '[%s]' % ', '.join(self.lit() for _ in range(n))
+                    mask = 255
+            finally:
+                self.in_let_rhs = saved_in_let
             self.bind(a)
             self.arrays[a] = mask
             return 'let %s = %s;' % (a, rhs)
         if r < 0.55 and self.arrays:
             a = self.r.choice(list(self.arrays))
-            s = '%s[%s] = %s' % (a, self.index(a), self.expr(0))
+            saved_in_let = self.in_let_rhs
             if self.r.random() < 0.5 and self.can_bind('_'):
                 self.bind('_')
+                try:
+                    self.in_let_rhs = True  # Assignment inside let-binding RHS
+                    s = '%s[%s] = %s' % (a, self.index(a), self.expr(0))
+                finally:
+                    self.in_let_rhs = saved_in_let
                 return 'let _ = %s;' % s
+            else:
+                s = '%s[%s] = %s' % (a, self.index(a), self.expr(0))
             return '%s;' % s
         if r < 0.65 and asg:
             v = self.r.choice(asg)
             return '%s %s= %s;' % (v, self.r.choice(ARITH), self.expr(0))
         if r < 0.72 and asg and self.can_bind('_'):
             self.bind('_')
-            return 'let _ = %s = %s;' % (self.r.choice(asg), self.expr(0))
+            saved_in_let = self.in_let_rhs
+            try:
+                self.in_let_rhs = True  # Assignment inside let-binding RHS
+                rhs = self.expr(0)
+            finally:
+                self.in_let_rhs = saved_in_let
+            return 'let _ = %s = %s;' % (self.r.choice(asg), rhs)
         if r < 0.88 and depth < 2 and self.loop_depth < 2:
             return self.loop(depth)
         return '%s;' % self.expr(0)

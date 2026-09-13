@@ -1,0 +1,96 @@
+// COMPILEFAIL seed=41082 expected=-585 got=compile rc=201 0:0: error[E201]: compiler self-check 7.1
+// gen.py --seed 41082
+fn main() -> i64 {
+  let v0 = (17) > (((if ((0) - 8 & (3 == 1686 | 17 - (8))) % 0 then 1534 >= (6) else 10)) / 20 < ((16 % (-578) >>> (16)) == (50)) >>> (((((13) + 1) % (4076) - 7) << (4294967296)) & (((5) > 3514) * (8) != (1) ^ ((7) > -284) >= ((5) >>> (9223372036854775807)))) & ((7) % (17) + 10 >> ((15) | 9) >> -4891 & 2147483647 >>> (4) - ((3) + (2))));
+  v0 /= 18446744073709551615;
+  (f0(((!(clz(1) * 0)) & 63))) | (v0);
+  let v0 = v0;
+  let _ = v0 = 10;
+  let i0 = 0;
+  while i0 <= 2 {
+    let i1 = 0;
+    while i1 <= 1 {
+      v0;
+      v0 *= 10;
+      let _ = v0 = v0;
+      (let t3 = -((2) % (i1) + (i0)) in (15) * (4303)) / (7);
+      i1 += 1;
+    };
+    v0 %= (if i0 then i1 << i1 else 15);
+    let v1 = i1;
+    let i2 = 0;
+    while i2 != 6 {
+      5;
+      i2 += 1;
+      0
+    };
+    let i0 = i0 + 1;
+    0
+  };
+  let i3 = 0;
+  while i3 < 5 {
+    let i4 = 0;
+    while i4 < 4 {
+      let v2 = v0;
+      let a0 = [i3, (if v0 then (if !(i0) then !(65536) else (i0) + (3)) else v0 & match none(i4) { none(m0) => m0, many => v1 }), i0, i2, !(i2), ((0x146cd) >>> (i3)) >> ((clz(1) * 0) >> (0)), ((let _ = v0 = 17 in 19)) - i2, 17, i2, i1 >> (-(i2 <= (i1) == i1)), i3, (if (v1) * (i3 * (i3)) then 2 else -(-(v1))), i0, i2, (let t3 = i3 in i1), i3];
+      v0 += i4;
+      i4 += 1;
+      0
+    };
+    let i5 = 0;
+    while i5 <= 1 {
+      v0 += i2;
+      f1(i5);
+      let a0 = [f1(17), v1 << i4 >= v0 * 7, i0, i2, (if 1320 then (i5) >= (clz(1) * 0) else 216), (if (((((v0) <= (i3) % v1) << ((v2) / v1 * (v2))) + v0) ^ (i1)) + (let t0 = v1 in i1) then match many { some => clz(1) * 0, many => 4095 } else clz(1) * 0), (if 16 then v1 else f0(((i2) & 63))) / (let t2 = (0xae2ae) / (i1) in (let t3 = ((i1) >>> (v1)) << (14) in 19)), (5) | ((if i4 | (i4) / (10) >> (16) % i3 then 2147483647 else i1)) <= (9) / -3582, match many(0x2b562) { many(m1) => clz(1) * 0, some => 9 }, v2, (if (if i4 / ((3) >> ((v1) | (2660))) then 1 else ((i2) >> (i3) < v1 * 12) | (i0)) then i1 else i2), v0, 9, f0(((i3) & 63)), i5 - 10, i0];
+      i5 += 1;
+      0
+    };
+    v2 -= 17;
+    let _ = v1 = v2 - (4948);
+    let _ = i3 = i3 + 1;
+    0
+  };
+  let v3 = !(f1(1586) & ((5) % i2) * (v1));
+  (let t1 = !(i2 * (0x38a62)) >>> ((12) / f0(((8) & 63))) in v2);
+  -585
+}
+fn f0(n: i64) -> i64 {
+  let v0 = match none { many => 3474 + ((n) * n != (n)) <= n, none => n, some => n };
+  let i0 = 0;
+  while i0 < 5 {
+    v0 *= (let t1 = clz(1) * 0 in 17);
+    v0;
+    4;
+    let i0 = i0 + 1;
+    0
+  };
+  v0 += i0;
+  v0 -= (f2([i0, n, (n) < i0, 15, 12, v0 / (5), i0, 8], [(i0 & 6 * (v0) - (v0)) & i0, (12 < (i0)) + v0 % n, 1808, 1, 16, 3182, 11, i0]) - (i0)) - ((n) << (f1(14)) < ((v0) | n) * ((v0) != (i0)));
+  if n < 1 then (i0) >>> ((2388) % n) - match none(i0 - 4835) { none(m0) => m0, some => i0 + (v0) } else v0 + f0(n - 1)
+}
+fn f1(p0: i64) -> i64 {
+  p0 -= p0;
+  let p0 = (let t2 = (match none { many => clz(1) * 0, none => p0 - ((p0) % p0 >= (p0)) ^ p0 }) > (p0) in match none(16) { many => t2 <= p0, none => 7 });
+  p0 %= p0;
+  p0 *= (let t1 = p0 << (if p0 then match none(p0) { many => 1263, none => p0 } else p0) in ((let t1 = t1 != 0 in p0)) | ((p0) % t1 & (1779)));
+  return (if (p0) - -(f2([20, p0 % 0xc915f, p0, p0, p0, p0, p0, (p0) >>> (p0) + 10], [6, (p0) < (p0 != (12)), p0, p0, p0, 17, (613) << p0 >>> (15 * p0), p0])) then (p0) + p0 else -(!(p0)));
+  (f2([f2([p0, (0x1f668 * p0 * (p0)) % (1) | (18), p0, p0, 11, (p0) > p0, 16, p0 - (p0) + ((p0) ^ (p0))], [p0, p0, p0, p0 | p0, p0, 1238 | (3), 7 == 1134 > p0, 19]), 17, !(0xca1c2), (let t0 = p0 in 12), (p0) > (p0), p0, p0 >= 14 + (-4382), 15], [p0, (0x28238) ^ (3811), p0, p0, p0, -((p0) + (p0) + (p0)), 4377, p0])) >>> 2990
+}
+fn f2(p0: [i64], p1: [i64]) -> i64 {
+  let i0 = 0;
+  while i0 < 89 {
+    (-((i0) * (i0) / clz(1) * 0)) == (4);
+    let a2 = [10, 17, 1, 15, ((18446744073709551615) < (5)) ^ ((10) + (i0)), -(i0), (16) % (i0), 17];
+    p0[3] = i0;
+    i0 += 1;
+    0
+  };
+  let i1 = 0;
+  while i1 < 3 {
+    let v0 = i1;
+    let i1 = i1 + 1;
+  };
+  let _ = v0 = i1;
+  p0[i1]
+}
+enum opt { none, some, many }
