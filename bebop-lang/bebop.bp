@@ -63,14 +63,11 @@ fn put_num(buf: [i64], at: i64, v: i64) -> i64 {
   };
   at + k
 }
-fn diag_text(buf: [i64], at: i64, m: [i64], len: i64) -> i64 {
+fn diag_str(buf: [i64], at: i64, m: str) -> i64 {
+  let n = str_len(m);
   let i = 0;
-  while i < len {
-    let _ = buf[at + i] = m[i];
-    let i = i + 1;
-    0
-  };
-  at + len
+  while i < n { let _ = buf[at + i] = char(m, i); let i = i + 1; 0 };
+  at + n
 }
 fn diag_exit(s: str, p: i64, code: i64) -> i64 {
   let line = 1;
@@ -83,30 +80,32 @@ fn diag_exit(s: str, p: i64, code: i64) -> i64 {
     let i = i + 1;
     0
   };
-  let buf = zeros(128);
+  let buf = zeros(256);
   let a1 = put_num(buf, 0, line);
   let _ = buf[a1] = 58;
   let a2 = put_num(buf, a1 + 1, col);
   let _ = buf[a2] = 58;
   let _ = buf[a2 + 1] = 32;
-  let at = a2 + 2;
-  let _ = if code == 95 then diag_text(buf, at, [101, 120, 112, 101, 99, 116, 101, 100, 32, 96, 41, 96, 32, 111, 114, 32, 96, 105, 110, 96], 20) else 0;
-  let _ = if code == 96 then diag_text(buf, at, [96, 43, 43, 96, 32, 105, 115, 32, 110, 111, 116, 32, 105, 110, 32, 116, 104, 101, 32, 108, 97, 110, 103, 117, 97, 103, 101], 27) else 0;
-  let _ = if code == 97 then diag_text(buf, at, [102, 110, 32, 98, 111, 100, 121, 32, 119, 105, 116, 104, 111, 117, 116, 32, 97, 32, 116, 97, 105, 108, 32, 101, 120, 112, 114, 101, 115, 115, 105, 111, 110], 33) else 0;
-  let _ = if code == 98 then diag_text(buf, at, [116, 111, 111, 32, 109, 97, 110, 121, 32, 114, 101, 116, 117, 114, 110, 47, 98, 114, 101, 97, 107, 32, 105, 110, 32, 111, 110, 101, 32, 102, 110], 31) else 0;
-  let _ = if code == 99 then diag_text(buf, at, [114, 101, 115, 101, 114, 118, 101, 100, 32, 119, 111, 114, 100, 32, 117, 115, 101, 100, 32, 97, 115, 32, 97, 32, 102, 110, 32, 110, 97, 109, 101], 31) else 0;
-  let _ = if code == 89 then diag_text(buf, at, [108, 101, 116, 32, 98, 105, 110, 100, 105, 110, 103, 32, 119, 104, 105, 108, 101, 32, 97, 32, 99, 97, 108, 108, 32, 116, 101, 109, 112, 32, 105, 115, 32, 108, 105, 118, 101], 37) else 0;
-  let _ = if code == 108 then diag_text(buf, at, [115, 121, 115, 95, 109, 97, 112, 98, 32, 105, 115, 32, 114, 101, 102, 117, 115, 101, 100, 32, 40, 82, 79, 65, 68, 77, 65, 80, 32, 65, 55, 41], 32) else 0;
-  let _ = if code == 100 then diag_text(buf, at, [102, 110, 32, 119, 105, 116, 104, 32, 109, 111, 114, 101, 32, 116, 104, 97, 110, 32, 49, 52, 32, 112, 97, 114, 97, 109, 101, 116, 101, 114, 115], 31) else 0;
-  let _ = if code == 101 then diag_text(buf, at, [117, 110, 98, 111, 117, 110, 100, 32, 115, 121, 109, 98, 111, 108], 14) else 0;
-  let _ = if code == 65 then diag_text(buf, at, [105, 110, 100, 101, 120, 32, 112, 97, 115, 116, 32, 116, 104, 101, 32, 101, 110, 100], 18) else 0;
-  let _ = if code == 104 then diag_text(buf, at, [116, 111, 111, 32, 109, 97, 110, 121, 32, 102, 110, 115, 32, 40, 99, 97, 112, 32, 55, 54, 56, 41], 22) else 0;
-  let _ = if code == 102 then diag_text(buf, at, [115, 121, 115, 95, 32, 110, 97, 109, 101, 32, 105, 110, 115, 105, 100, 101, 32, 97, 32, 107, 101, 114, 110, 101, 108, 32, 102, 110], 28) else 0;
-  // A19 step 1: code 109 for sys_clone keeping > 8 symbols
-  let _ = if code == 109 then diag_text(buf, at, [115, 121, 115, 95, 99, 108, 111, 110, 101, 58, 32, 62, 32, 56, 32, 107, 101, 112, 116, 32, 115, 121, 109, 98, 111, 108, 115, 32, 40, 109, 97, 120, 32, 56, 41], 35) else 0;
-  let mlen = (if code == 95 then 20 else 0) + (if code == 96 then 27 else 0) + (if code == 97 then 33 else 0) + (if code == 98 then 31 else 0) + (if code == 99 then 31 else 0) + (if code == 89 then 37 else 0) + (if code == 108 then 32 else 0) + (if code == 100 then 31 else 0) + (if code == 101 then 14 else 0) + (if code == 104 then 22 else 0) + (if code == 102 then 28 else 0) + (if code == 65 then 18 else 0) + (if code == 109 then 35 else 0);
-  let _ = buf[at + mlen] = 10;
-  let _ = sys_write(2, buf, at + mlen + 1);
+  let a2b = diag_str(buf, a2 + 2, "error[E");
+  let a3 = put_num(buf, a2b, code);
+  let at = diag_str(buf, a3, "]: ");
+  let at1 = if code == 95 then diag_str(buf, at, "expected `)` or `in`") else at;
+  let at2 = if code == 96 then diag_str(buf, at, "`++` is not in the language") else at1;
+  let at3 = if code == 97 then diag_str(buf, at, "fn body without a tail expression -- fn should return a value") else at2;
+  let at4 = if code == 98 then diag_str(buf, at, "too many return/break in one fn") else at3;
+  let at5 = if code == 99 then diag_str(buf, at, "reserved word used as a fn name") else at4;
+  let at6 = if code == 89 then diag_str(buf, at, "let binding while a call temp is live -- bind the call result with a let first") else at5;
+  let at7 = if code == 108 then diag_str(buf, at, "sys_mapb is refused (ROADMAP A7)") else at6;
+  let at8 = if code == 100 then diag_str(buf, at, "fn with more than 14 parameters -- fn must have <= 14 parameters") else at7;
+  let at9 = if code == 101 then diag_str(buf, at, "unbound symbol -- this name was not declared in this function") else at8;
+  let at10 = if code == 65 then diag_str(buf, at, "index past the end") else at9;
+  let at11 = if code == 104 then diag_str(buf, at, "too many fns (cap 768)") else at10;
+  let at12 = if code == 102 then diag_str(buf, at, "sys_ name inside a kernel fn") else at11;
+  let at13 = if code == 109 then diag_str(buf, at, "sys_clone: > 8 kept symbols (max 8)") else at12;
+  let mlen = at13 - at;
+  let final_at = at + mlen;
+  let _ = buf[final_at] = 10;
+  let _ = sys_write(2, buf, final_at + 1);
   sys_exit(code)
 }
 fn slen(s: str, pos: [i64]) -> i64 {
@@ -2187,13 +2186,12 @@ fn skip_ws(s: str, pos: [i64]) -> i64 {
 // (planning tmp 65536 words per fn, program buffers 262144; roadmap 1b, 2026-09-06).
 fn cap_exit(n: [i64]) -> i64 {
   let buf = zeros(64);
-  let m = [99, 111, 100, 101, 32, 98, 117, 102, 102, 101, 114, 32, 101, 120, 104, 97, 117, 115, 116, 101, 100, 32, 97, 116, 32];
-  let a1 = diag_text(buf, 0, m, 25);
+  let a1 = diag_str(buf, 0, "code buffer exhausted at ");
   let a2 = put_num(buf, a1, n[1]);
   let _ = buf[a2] = 32;
-  let m2 = [119, 111, 114, 100, 115, 32, 40, 111, 110, 101, 32, 102, 110, 32, 111, 114, 32, 116, 104, 101, 32, 112, 114, 111, 103, 114, 97, 109, 41, 10];
-  let a3 = diag_text(buf, a2 + 1, m2, 30);
-  let _ = sys_write(2, buf, a3);
+  let a3 = diag_str(buf, a2 + 1, "words (one fn or the program)");
+  let _ = buf[a3] = 10;
+  let _ = sys_write(2, buf, a3 + 1);
   sys_exit(83)
 }
 // ROADMAP F2 prerequisite (2026-09-09): THE EXIT-CODE SPACE IS PARTITIONED.
@@ -2220,8 +2218,7 @@ fn cap_exit(n: [i64]) -> i64 {
 // bug better than the user source position that tripped over it.
 fn selfcheck_exit(kind: i64, site: i64) -> i64 {
   let buf = zeros(64);
-  let m = [99, 111, 109, 112, 105, 108, 101, 114, 32, 115, 101, 108, 102, 45, 99, 104, 101, 99, 107, 32];
-  let a1 = diag_text(buf, 0, m, 20);
+  let a1 = diag_str(buf, 0, "0:0: error[E201]: compiler self-check ");
   let a2 = put_num(buf, a1, kind);
   let _ = buf[a2] = 46;
   let a3 = put_num(buf, a2 + 1, site);

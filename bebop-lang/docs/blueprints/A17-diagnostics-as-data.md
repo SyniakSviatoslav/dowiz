@@ -162,9 +162,31 @@ RED on day one: A (no token), B (0 of 11), C (TRAPS.md says 512), D (81 present)
 ### Step 1 -- literals and the line shape (one codegen commit, compiler words only)
 
 **Do:** add `diag_str`; rewrite the eleven arms of `diag_exit`, `cap_exit`, `selfcheck_exit` to
-literals; prefix `<file>:` (pass the path cells into `diag_exit` via a fntab cell set by `cli_compile`/
-`cli_check` -- `fntab[5601]` is free per `check_abi.py:205-212`; verify with `check_abi.py --fntab`);
-insert `error[E<code>]: ` after the position; append the repair sentence to 89, 97, 100, 101.
+literals; insert `error[E<code>]: ` after the position; append the repair sentence to 89, 97, 100, 101.
+
+> **CORRECTION 2026-09-13, measured while step 1 was being implemented: the `<file>:` prefix is NOT
+> part of step 1, because the mechanism this blueprint specified for it cannot work.** The original
+> text said to "pass the path cells into `diag_exit` via a fntab cell set by `cli_compile`/`cli_check`
+> -- `fntab[5601]` is free". `fntab[5601]` IS free, and that is the half that was checked; the half
+> that was not is that **`diag_exit(s: str, p: i64, code: i64)` has no `fntab` parameter at all**, so
+> it cannot read any fntab cell. Arrays are passed explicitly in this language, so delivering one
+> means threading a new parameter through **35 `diag_exit(` call sites**, each of which must itself
+> have `fntab` in scope — a cascade this row never costed.
+>
+> The obvious cheap alternative was examined and REJECTED, not merely skipped: have `cli_compile`
+> leave the path at a fixed arena offset (it already holds it in cells — `str_to_cells(psrc, src)`,
+> `bebop.bp:7148`) and have `diag_exit` read it back through `sys_arena_base()`, which needs no
+> parameter. Two measured facts kill it for now: `sys_arena_base()` occurs in `bebop.bp` **only inside
+> comments** (`:1242-1249`) and is never actually called there, so this would be its first use in the
+> compiler's own source; and `AGENTS.md:46` records that the IO scratch zone below x28 **overlaps live
+> data**, which is the hazard class a fixed-offset convention walks straight into.
+>
+> So the line shape that step 1 delivers is `<line>:<col>: error[E<code>]: <text>`, and
+> `diag_check.sh` keeps parsing the position with `cut -d: -f1,2` (NOT the `-f2,3` §2.1 predicts).
+> The `<file>:` prefix becomes **step 1c**, whose real first question is which of the two routes
+> above to pay for — threading 35 call sites, or establishing a reserved arena offset and proving it
+> cannot collide. Until it lands, assertion A in §2.3 can check the code token and the position but
+> not the file, and §2.1's row for `diag_check.sh` overstates what changes.
 **Chain:** `tools/chain.sh bebop.bp $OUT --codegen`. Expected: gen3 == gen4; **WORD_DELTA 0 on all 104
 constructs** (no program word changes); `bebop` words DOWN by 400-800.
 **Kills the step:** any construct WORD_DELTA != 0 (the change leaked into program emission -- most

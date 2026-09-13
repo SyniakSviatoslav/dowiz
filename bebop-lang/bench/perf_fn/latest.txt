@@ -6,8 +6,8 @@ sha256_lo64 41
 is_digit 20
 is_alpha 32
 put_num 73
-diag_text 28
-diag_exit 1177
+diag_str 39
+diag_exit 318
 slen 75
 kernel_word_at 106
 kernel_marked 75
@@ -90,8 +90,8 @@ skip_line_comment 21
 skip_string_n 60
 skip_string 21
 skip_ws 145
-cap_exit 205
-selfcheck_exit 129
+cap_exit 81
+selfcheck_exit 79
 em 30
 check_reg_collision 228
 vs_reset 77
@@ -297,4 +297,4 @@ emit_sys_mapb 27
 emit_sys_rename 268
 emit_sys_wait4 118
 emit_sys_run 272
-main 652
+main 815

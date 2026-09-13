@@ -11,8 +11,9 @@ for f in bench/diag_neg/*.bp; do
   b=$(basename "$f" .bp); read -r _ _ want code < <(head -n 1 "$f")
   err=$(./seed/build/seed "$BIN" compile "$f" "$T/$b.bin" 2>&1 >/dev/null); rc=$?
   got=$(echo "$err" | tail -n 1 | cut -d: -f1,2)
-  if [ "$rc" = "$code" ] && [ "$got" = "$want" ]; then echo "PASS $b $got exit $rc: $(echo "$err" | tail -n 1 | cut -d: -f3-)"; pass=$((pass+1));
-  else echo "FAIL $b want $want exit $code, got '$got' exit $rc: $err"; fail=$((fail+1)); fi
+  errtok=$(echo "$err" | tail -n 1 | grep -o "error\[E[0-9]*\]" | sed 's/.*E//;s/\].*//')
+  if [ "$rc" = "$code" ] && [ "$got" = "$want" ] && [ "$errtok" = "$code" ]; then echo "PASS $b $got exit $rc: $(echo "$err" | tail -n 1 | cut -d: -f3-)"; pass=$((pass+1));
+  else echo "FAIL $b want $want exit $code, got '$got' exit $rc, token E$errtok: $err"; fail=$((fail+1)); fi
 done
 # d99 (generated, roadmap 1b 2026-09-06): one fn emits > 65536 words -> the
 # planning buffer traps 83 with a message (it was a SIGSEGV = exit 82 before).
@@ -30,8 +31,9 @@ if [ "$rc" = 83 ] && [ "$err" = "code buffer exhausted at 65536 words (one fn or
 else echo "FAIL d99_cap want exit 83 + message, got exit $rc: $err"; fail=$((fail+1)); fi
 # T90 step 2b (2026-09-06): `check <src>` = the same diagnostics, no output file
 err=$(./seed/build/seed "$BIN" check bench/diag_neg/d01_paren.bp 2>&1 >/dev/null); rc=$?
-if [ "$rc" = 95 ] && [ "$(echo "$err" | tail -n 1 | cut -d: -f1,2)" = 4:17 ]; then echo "PASS check d01 4:17 exit 95"; pass=$((pass+1));
-else echo "FAIL check d01 want 4:17 exit 95, got exit $rc: $err"; fail=$((fail+1)); fi
+errtok=$(echo "$err" | tail -n 1 | grep -o "error\[E[0-9]*\]" | sed 's/.*E//;s/\].*//')
+if [ "$rc" = 95 ] && [ "$(echo "$err" | tail -n 1 | cut -d: -f1,2)" = 4:17 ] && [ "$errtok" = 95 ]; then echo "PASS check d01 4:17 exit 95"; pass=$((pass+1));
+else echo "FAIL check d01 want 4:17 exit 95, got exit $rc, token E$errtok: $err"; fail=$((fail+1)); fi
 rm -f "$T/c53.bin"; out=$(./seed/build/seed "$BIN" check bench/parity_constructs/c53_param9.bp 2>&1); rc=$?
 if [ "$rc" = 0 ] && [ ! -e bench/parity_constructs/c53_param9.bin ]; then echo "PASS check c53_param9 exit 0, no .bin written"; pass=$((pass+1));
 else echo "FAIL check c53_param9 want exit 0 and no .bin, got exit $rc: $out"; fail=$((fail+1)); fi
