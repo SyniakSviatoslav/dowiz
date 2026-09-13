@@ -266,7 +266,8 @@ fn k_arg_pos(K: [i64], a: i64, h: i64) -> i64 {
 }
 
 // k_check_inductive_ctor: the arity must be a type, the constructor must RETURN the
-// inductive being declared (31), and every argument must be strictly positive (30).
+// inductive being declared (31), every pi domain must be a type (22), and every
+// argument must be strictly positive (30).
 fn k_check_inductive_ctor(K: [i64], indtype_hash: i64, arity: i64, ctor_type: i64) -> i64 {
   let arity_type = k_infer(K, arity);
   let _ = if k_tag(K, arity_type) == 1 then 0 else k_rej(K, 22);
@@ -276,7 +277,10 @@ fn k_check_inductive_ctor(K: [i64], indtype_hash: i64, arity: i64, ctor_type: i6
   let cur = ctor_type;
   let neg = 0;
   while k_tag(K, cur) == 4 {
-    let neg = if k_arg_pos(K, k_a(K, cur), indtype_hash) == 0 then 1 else neg;
+    let dom = k_a(K, cur);
+    let neg = if k_arg_pos(K, dom, indtype_hash) == 0 then 1 else neg;
+    let dom_type = k_infer(K, dom);
+    let _ = if k_tag(K, dom_type) == 1 then 0 else k_rej(K, 22);
     let cur = k_b(K, cur);
     0
   };

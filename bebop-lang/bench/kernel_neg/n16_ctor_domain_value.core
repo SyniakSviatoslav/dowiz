@@ -1,0 +1,13 @@
+% n16: an inductive with a constructor whose domain is a VALUE, not a type.
+% Twin of n09: the twin rejects a pi with a value domain when it stands alone,
+% and rejects it here when inside an inductive constructor. The kernel was observed
+% to accept n09 in k_infer (no domain check in k_infer_pi), so it accepts n16 too
+% because k_check_inductive_ctor never calls k_infer on each pi domain.
+1 sort 0
+axiom A : 1
+2 const A
+axiom a : 2
+3 const a
+4 const Foo
+5 pi 3 4
+inductive Foo : 1 | ctor : 5

@@ -440,6 +440,26 @@ def run_kernel_on_fixture(kernel_bin, fixture_path, seed_path='./seed/build/seed
         return None, True
 
 
+def measure_kernel_neg_bin(kernel_bin_path, corpus_dir):
+    """Measure how many NEGATIVE fixtures the kernel binary ACCEPTS.
+    Returns: count of unsound acceptances by the kernel.
+    """
+    import subprocess
+
+    neg = sorted(f for f in os.listdir(corpus_dir) if f.startswith('n') and f.endswith('.core'))
+    accepted_count = 0
+
+    for f in neg:
+        fixture_path = os.path.join(corpus_dir, f)
+        kernel_verdict, is_internal = run_kernel_on_fixture(kernel_bin_path, fixture_path)
+
+        # If kernel prints 0 and it's not internal, it accepted an unsound term
+        if not is_internal and kernel_verdict == 0:
+            accepted_count += 1
+
+    return accepted_count, len(neg)
+
+
 def measure_kernel_parity(kernel_bin_path, corpus_dir):
     """Measure agreement between twin and kernel on all fixtures.
     Returns: (agreement_count, total_count, internal_count, internals_list)
@@ -509,15 +529,21 @@ def corpus(d):
           'scored as one)' % (len(internal), total))
     print('kernel_pos: %d rejected of %d' % (len(rejected_pos), len(pos)))
 
-    # Measure kernel_parity if kernel binary is available
+    # Measure kernel metrics if kernel binary is available
     kernel_bin = os.environ.get('TKERNEL_BIN', './tkernel.bin')
     if os.path.exists(kernel_bin):
+        # Measure kernel_neg_bin: how many negatives does the kernel binary accept?
+        kernel_neg_bin, neg_total = measure_kernel_neg_bin(kernel_bin, d)
+        print('kernel_neg_bin: %d accepted of %d' % (kernel_neg_bin, neg_total))
+
+        # Measure kernel_parity: agreement between twin and kernel
         agreement, parity_total, parity_internal, internals = measure_kernel_parity(kernel_bin, d)
         if parity_internal > 0:
             print('kernel_parity: %d/%d  (kernel_internal: %d)' % (agreement, parity_total, parity_internal))
         else:
             print('kernel_parity: %d/%d' % (agreement, parity_total))
     else:
+        print('kernel_neg_bin: NOT MEASURED (kernel binary absent)')
         print('kernel_parity: NOT MEASURED (kernel binary absent)')
         return 1  # Exit non-zero when instrument is absent
 
