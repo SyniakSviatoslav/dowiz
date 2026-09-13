@@ -513,7 +513,6 @@ class Interp:
         self.first_struct = first_struct
         self.ctors = ctors
         self.depth = 0
-        self.max_depth = 0  # Track maximum depth reached
         self.bytes = bytearray()
         self.lit_handles = {}
 
@@ -521,10 +520,8 @@ class Interp:
         params, body = self.fns[name]
         env = dict(zip(params, args))
         self.depth += 1
-        if self.depth > self.max_depth:
-            self.max_depth = self.depth
         if self.depth > DEPTH_CAP:
-            raise DepthError('call depth > %d (max reached: %d) in %s' % (DEPTH_CAP, self.max_depth, name))
+            raise DepthError('call depth > %d in %s' % (DEPTH_CAP, name))
         try:
             return self.run_body(body, env)
         except ReturnSignal as r:
