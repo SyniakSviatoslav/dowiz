@@ -1,8 +1,8 @@
 # Phase F Status Report (2026-09-09)
 
-**Source:** ROADMAP.md §Phase F (lines 181-193), commit 7de7922, and all F-phase artifacts in `formal/` + `selfhost/tcheck.bp`.
+**Source:** ROADMAP.md §Phase F (lines 181-193 on 2026-09-09; **191-203 at `97895d9`**, re-derived 2026-09-13: F0 194, F1 195, F2 196, F3 197, F4 198, F5 199, F6 200, F7 201, F8 202, F9 203 -- every `line NNN` below is the 2026-09-09 number), commit 7de7922, and all F-phase artifacts in `formal/` + `selfhost/tcheck.bp`.
 
-**Note on blueprints:** The F-phase blueprints named in the ROADMAP (`F1-unrepresentable-zero-word.md`, `F2-bounds-by-type.md`, `F3-lean-semantics.md`, `F4-fragment-validation.md`, `F7-dependent-types.md`, `F8-first-theorems.md`) do **not exist** in `docs/blueprints/`. The ROADMAP §Phase F rows ARE the live specification — the named files were either never written, written-out-then-deleted, or superseded by inline spec. This report uses the ROADMAP rows as the primary source, cross-checked against existing `formal/` files and `tcheck.bp`.
+**Note on blueprints:** The F-phase blueprints named in the ROADMAP (`F1-unrepresentable-zero-word.md`, `F2-bounds-by-type.md`, `F3-lean-semantics.md`, `F4-fragment-validation.md`, `F7-dependent-types.md`, `F8-first-theorems.md`) do **not exist** in `docs/blueprints/`. The ROADMAP §Phase F rows ARE the live specification — the named files were either never written, written-out-then-deleted, or superseded by inline spec. This report uses the ROADMAP rows as the primary source, cross-checked against existing `formal/` files and `tcheck.bp`. (Re-derived 2026-09-13: all six EXIST in `docs/blueprints/` at `97895d9` -- `ls docs/blueprints/F*.md`.)
 
 **Key reality check:** The user context says F4 = "IN PROGRESS (7de7922: 68/121 oracle entries, builtins fixed)" but commit 7de7922 is `fix(formal): F4 builtin stubs — str_len/char/scan implementations` which touches Builtins.lean only. The formal/ scaffold (from d46c752 + 7c03111) reports 86/86 construct entries + 121/121 oracle entries in Conformance.lean. The "68/121" figure is unverified and may be stale; this report records the actual file contents.
 
@@ -40,7 +40,7 @@
 - Free codes below 99: 65-79, 84, 85, 86, 93 = 19 against F2's 12
 - Builtin shadowing probed: T122 mechanism CORRECT, table short by 7 of 36
 
-**Blueprint referenced:** `docs/blueprints/F1-unrepresentable-zero-word.md` — does NOT exist on disk
+**Blueprint referenced:** `docs/blueprints/F1-unrepresentable-zero-word.md` — does NOT exist on disk (re-derived 2026-09-13: EXISTS at `97895d9`)
 
 **Dependencies:** F0
 
@@ -50,7 +50,7 @@
 
 **Status:** NOT STARTED
 
-**Evidence:** None on disk. The ROADMAP row at line 186 describes the plan only:
+**Evidence:** None on disk. The ROADMAP row at line 186 (195 at `97895d9`) describes the plan only:
 - 16 zero-word traps to make representable
 - definite assignment bitmask over 64-symbol cap (exit 105)
 - loop-literal escape via `loop_alloc_safe` (exit 106; verify A6 per-iteration status first)
@@ -66,7 +66,7 @@
 - ~300 lines, ~3 weeks, bebop.bp lane
 - Gate: `trap_unrep >= 12/20`; construct parity 86+12/0; fixpoint gen3 == gen4; bin_words delta <= 0; `gen_avoid` shrinks by 12; battery GREEN
 
-**Blueprint referenced:** `docs/blueprints/F1-unrepresentable-zero-word.md` (referenced from F1 row) — does NOT exist
+**Blueprint referenced:** `docs/blueprints/F1-unrepresentable-zero-word.md` (referenced from F1 row) — does NOT exist (re-derived 2026-09-13: EXISTS at `97895d9`)
 
 **Dependencies:** F1 (F1's exit-code partitioning finding must be resolved first — codes 105/106/107 already assigned)
 
@@ -76,7 +76,7 @@
 
 **Status:** NOT STARTED
 
-**Evidence:** None on disk. ROADMAP row at line 187 describes the plan only:
+**Evidence:** None on disk. ROADMAP row at line 187 (F2 196 / F3 197 at `97895d9`) describes the plan only:
 - Amends A8's gate, does NOT replace A8
 - Arm (i): header cell at `data-1`, check `sub;ldr;cmp;b.hs` (4 words reg + 3 literal) → trap 84 with pc in stub text; store-level `st_len` check in `st_get`/`st_put`; cursor check in `st_alloc`; cell stepping made UNREPRESENTABLE (typecheck finding + rewrite of stepping sites)
 - Arm (ii): declared lengths `[i64; k]`/`[i64; n]` on params/locals in A8's tag side channel; discharge literal indices below declared length (87.5% of bebop.bp sites) at zero words; actual length checked once at call site
@@ -85,7 +85,7 @@
 - ~2 weeks arm (i) + ~3 weeks arms (ii)-(iii), bebop.bp lane
 - Gate: `bounds_census: checked+proven+hoisted = 100%`; `bin_words <= 48,700` after (i), `<= 43,400` after (ii), `<= 42,600` after (iii); `K5 <= +15%` after (i), `<= +3%` after (ii); `K6 <= 1.2x` with HOISTED check on sgraph2 frontier loop; fuzz OOB → 100% trap 84, TRAP-82 = 0; `stepping_sites: 0`; `trap_unrep >= 18/20`
 
-**Blueprints referenced:** `docs/blueprints/A8-typed-tables-u32.md` (amended §"length") + `docs/blueprints/F2-bounds-by-type.md` — the F2 file does NOT exist; A8 exists in blueprints
+**Blueprints referenced:** `docs/blueprints/A8-typed-tables-u32.md` (amended §"length") + `docs/blueprints/F2-bounds-by-type.md` — the F2 file does NOT exist; A8 exists in blueprints (re-derived 2026-09-13: `F2-bounds-by-type.md` EXISTS at `97895d9`)
 
 **Dependencies:** F1; A8 (A8 must land first since F3 amends its gate)
 
@@ -98,9 +98,9 @@
 **Evidence:**
 - `formal/` directory exists with 11 files, ~1,150 lines total Lean 4
 - `formal/README.md`: "SCAFFOLD — architecture complete, core types and interpreter implemented, builtins/syscalls/traps/conformance as stubs with `sorry`"
-- **Compiles without sorry:** Basic.lean, Semantics.lean, Traps.lean, Bebop.lean, lakefile.lean
-- **Contains sorry:** Builtins.lean (6), Syscalls.lean (26 axioms), Conformance.lean (2)
-- File breakdown from README:
+- **Compiles without sorry** -- REFUTED 2026-09-13: nothing under `formal/` had elaborated before `23d2d39` (a `/-` inside a Basic.lean docstring opened a nested comment that swallowed the file); at `97895d9` `lake build` is rc=0, 8/8 modules. The 2026-09-09 list follows, written without a build: Basic.lean, Semantics.lean, Traps.lean, Bebop.lean, lakefile.lean
+- **Contains sorry:** Builtins.lean (6), Syscalls.lean (26 axioms), Conformance.lean (2) (re-derived 2026-09-13: `sorry` 0 in code, `axiom` 26 + 7, `theorem` 0 -- formal/README.md, counts by `grep -c`)
+- File breakdown from README (the per-file COMPILES marks below are the 2026-09-09 claim; see the refutation above):
   - `Bebop/Basic.lean` ~200 lines: core types Val, Expr, Stmt, Program, State, TrapCode, Result — COMPILES
   - `Bebop/Semantics.lean` ~230 lines (actually 607 on disk): fuel-bounded definitional interpreter evalExpr/execStmt/evalProgram — COMPILES
   - `Bebop/Builtins.lean` ~170 lines (actually 324 on disk): 10 executable builtins — 6 sorry
@@ -108,7 +108,7 @@
   - `Bebop/Traps.lean` ~180 lines (actually 193 on disk): 24-row trap table (F1 census), static rejection checker — COMPILES
   - `Bebop/Conformance.lean` ~200 lines (actually 609 on disk): 86-construct harness + 121 oracle interface — 2 sorry
   - `Bebop.lean` ~12 lines: root import — COMPILES
-  - `harness.lean` 89 lines: OFF-BOX #eval driver, runs 5 sample constructs
+  - `harness.lean` 89 lines: OFF-BOX #eval driver, runs 5 sample constructs (re-derived 2026-09-13: runs ON-BOX with `lean --run harness.lean`; 0/5 PASS because the evaluator has no tail-expression rule)
   - `lakefile.lean` 9 lines: Lake project — COMPILES
   - `lean-toolchain`: pinned v4.12.0
 
@@ -121,7 +121,7 @@
 
 - Commit 7de7922 (`fix(formal): F4 builtin stubs — str_len/char/scan implementations`): fixes str_len, char, scan implementations in Builtins.lean — these were the "F4 builtin stubs" being fixed. The user's "68/121 oracle entries" figure is not corroborated by file inspection; Conformance.lean declares all 121 oracle entries as a data structure regardless of whether the interpreter can run them (the 2 `sorry` are in `runTestCase` parser and `checkResult`).
 
-- Runs OFF-BOX: Lean 4 cannot run under the box's 3GB/32-process caps — first off-box gate in the tree
+- Runs OFF-BOX: Lean 4 cannot run under the box's 3GB/32-process caps — first off-box gate in the tree -- **REFUTED 2026-09-13 (`97895d9`): never measured, and false. `lake build` runs ON-BOX, rc=0, 8/8 modules, 5-7 s and ~500 MB per module, at most 2 `lean` processes (commit message of `97895d9`; formal/README.md §Building)**
 
 **Gate:** `lean_conformance: c/86` (landable at any c; end 86/86); `builtin_spec: b/36` (10 exec + 26 axiom; end 36/36); `bpref_diff: 0` over 86 + 121 + >= 10^4 seeds; `lean_results_hash == sha256(formal/*.lean)` checked on-box
 
@@ -133,9 +133,9 @@
 
 ## F5 — Translation validation from one-pass trace
 
-**Status:** NOT STARTED
+**Status:** NOT STARTED (re-derived 2026-09-13: the instrument exists, the measurement does not yet -- see Evidence)
 
-**Evidence:** None on disk. ROADMAP row at line 189 describes the plan only:
+**Evidence:** None on disk (REFUTED 2026-09-13: `tools/tv_fragments.py` exists, rewritten in `a4c9301` to fail loudly instead of printing PASS over an empty measurement; it has no rc=0 path until a trace zone exists in `bebop.bin`, and none does). ROADMAP row at line 189 (199 at `97895d9`) describes the plan:
 - Emitter writes `(pos, first word, last word, window-before digest, window-after digest, patch list)` per construct into side zone of `.bin` (A10's reloc zone; ~30 emitter sites, ~50-100 lines, 0 code words, fixpoint md5 unchanged by zone)
 - Lean semantics of emitted AArch64 subset (inventory = check_words.py's allowlist over 532 emission sites; a few dozen forms)
 - Validator symbolically executes each fragment (<= ~20 words; loops as diamonds with register model's "cs mask 0 at loop entry" invariant), normalises, sends residual (`vs_try_ubfx`/`and_imm`/`madd`, csel) to QF_BV with certificates through F5
@@ -143,7 +143,7 @@
 - 6-10 weeks: decoder/semantics parallel, trace slice bebop.bp lane after F2
 - Gate: `tv_fragments: v/t` over 86 constructs (end t/t), then over self-compile; `trace_zone_words: 0` in code; fixpoint gen3 == gen4 unchanged; `bounds_census` re-derived from trace agrees with F2's static census
 
-**Blueprint referenced:** `docs/blueprints/F4-fragment-validation.md` — does NOT exist on disk (despite ROADMAP saying blueprint=F4-fragment-validation.md)
+**Blueprint referenced:** `docs/blueprints/F4-fragment-validation.md` — does NOT exist on disk (despite ROADMAP saying blueprint=F4-fragment-validation.md) (re-derived 2026-09-13: EXISTS at `97895d9`)
 
 **Dependencies:** F2 (checks change the fragments), F3 (rules); F5 for the residual (self-referential: F5 produces certificates consumed by F5 — this is the loop-closing structure)
 
@@ -186,9 +186,9 @@
 
 ## F7 — Kernel module of tcheck.bp (structural layer)
 
-**Status:** NOT STARTED
+**Status:** NOT STARTED (superseded: ROADMAP row F7, line 201 at `97895d9`, LANDED 2026-09-12)
 
-**Evidence:** None on disk. ROADMAP row at line 191 describes the plan only:
+**Evidence:** None on disk (REFUTED 2026-09-13: `selfhost/tcheck_kernel.bp`, `selfhost/tkernel.bp`, `tools/kcheck.py` and `bench/kernel_neg/*.core` exist -- ROADMAP row F7). ROADMAP row at line 191 (201 at `97895d9`) describes the plan:
 - Checker for minimal dependent calculus: terms, substitution, whnf, conversion, fixed universe hierarchy, inductives with eliminators
 - Bit-level obligations of F6 admitted as certified oracle step
 - MINIMAL: research costed Lean-subset kernel at 150-400 fns against bebop.bp's 287 and 511 cap
@@ -208,16 +208,16 @@
 
 ## F8 — Dependent types directly in Bebop
 
-**Status:** NOT STARTED
+**Status:** NOT STARTED (superseded: ROADMAP row F8, line 202 at `97895d9` -- step 0 landed 2026-09-13: exit 110, `tools/f8_dt.py`, constructs c143/c144)
 
-**Evidence:** None on disk. ROADMAP row at line 192 describes the plan only:
+**Evidence:** None on disk (re-derived 2026-09-13: see the Status clause). ROADMAP row at line 192 (202 at `97895d9`) describes the plan:
 - (a) bebop.bp parses `[T; n]`, `{x : T | p}`, `requires`/`ensures`/`invariant`, `theorem` as INERT syntax erased before emission; emits VCs into F4's side zone (~2-3 weeks, bebop.bp lane)
 - (b) UNTRUSTED elaborator — standalone `elab.bp` or Lean itself elaborating Bebop annotations to exported terms (cheaper path) — produces terms F6's kernel re-checks (8-16 weeks, parallel)
 - (c) checker renames every `let` (Bebop `let` REBINDS fn-scoped register, LANGUAGE.md:41-43); requires loop `invariant` for every rebound variable that a type mentions — Verus/Dafny shape, unavoidable over mutable state
 - Full dependent surface types (`Fin n`, length-indexed tensors for B7) after (c)
 - Gate: `dt_fns: n/833` selfhost fns with checked types (first: fp.bp 2/2, money.bp 17/17, store.bp 52/52); `elab_neg: 0 accepted of N` ill-typed programs; `K5_typed <= 1.5x K5` (annotation parsing + erasure only; checking is chain gate); fixpoint unchanged; every rejected program carries `<line>:<col>`
 
-**Blueprints referenced:** `docs/blueprints/F7-dependent-types.md` — does NOT exist on disk
+**Blueprints referenced:** `docs/blueprints/F7-dependent-types.md` — does NOT exist on disk (re-derived 2026-09-13: EXISTS at `97895d9`)
 
 **Dependencies:** F6; F2 arm (ii) (declared lengths are the first dependent types)
 
@@ -227,7 +227,7 @@
 
 **Status:** NOT STARTED
 
-**Evidence:** None on disk. ROADMAP row at line 193 describes the plan only:
+**Evidence:** None on disk (re-derived 2026-09-13: `formal/Bebop/Theorems.lean` states the F9 targets as 7 `axiom`s and proves nothing -- 0 `theorem`). ROADMAP row at line 193 (203 at `97895d9`) describes the plan:
 - First theorems:
   - `fp_mul(a, b) = sign * floor(|a| * |b| / 2^32)` (tested on 1.2M values, fp.bp comment)
   - `isqrt(s)^2 <= s < (isqrt(s)+1)^2`
@@ -236,7 +236,7 @@
 - 3-5 weeks after F5-F7
 - Gate: `theorems: >= 3` then growing, each with kernel-checked term and LRAT certificate; `theorem-sample.bp`/`theorem-false.bp` retired or re-homed on F6 (their C-era kernel is a stub per bench/VERIFICATION.md)
 
-**Blueprints referenced:** `docs/blueprints/F8-first-theorems.md` — does NOT exist on disk
+**Blueprints referenced:** `docs/blueprints/F8-first-theorems.md` — does NOT exist on disk (re-derived 2026-09-13: EXISTS at `97895d9`)
 
 **Dependencies:** F7 (needs kernel to check terms); F5-F7 all need to exist before F9 can produce theorems
 
@@ -261,28 +261,28 @@ F6 ──→ F7 (NOT STARTED) ──→ F8 (NOT STARTED) ──→ F9 (NOT START
          (F8 also needs F2 arm (ii))
 ```
 
-**Phase F runs BEFORE B5 and B7** (per ROADMAP line 181).
+**Phase F runs BEFORE B5 and B7** (per ROADMAP line 181; 191 at `97895d9`).
 
 ---
 
 ## Missing blueprints summary
 
-The ROADMAP §Phase F names these blueprint files that do NOT exist in `docs/blueprints/`:
+The ROADMAP §Phase F names these blueprint files that do NOT exist in `docs/blueprints/` (re-derived 2026-09-13: ALL SIX EXIST at `97895d9`; the `Exists?` column is the 2026-09-09 answer, the current one is appended):
 
 | ROADMAP row | Blueprint name in ROADMAP | Exists? |
 |---|---|---|
-| F1 (line 186) | `docs/blueprints/F1-unrepresentable-zero-word.md` | NO |
-| F2/F3 (line 187) | `docs/blueprints/F2-bounds-by-type.md` | NO |
-| F4 (line 188) | `docs/blueprints/F3-lean-semantics.md` | NO |
-| F5 (line 189) | `docs/blueprints/F4-fragment-validation.md` | NO |
-| F8 (line 192) | `docs/blueprints/F7-dependent-types.md` | NO |
-| F9 (line 193) | `docs/blueprints/F8-first-theorems.md` | NO |
+| F1 (line 186; 195 at `97895d9`) | `docs/blueprints/F1-unrepresentable-zero-word.md` | NO on 2026-09-09; YES 2026-09-13 |
+| F2/F3 (line 187; F3 197 at `97895d9`) | `docs/blueprints/F2-bounds-by-type.md` | NO on 2026-09-09; YES 2026-09-13 |
+| F4 (line 188; 198 at `97895d9`) | `docs/blueprints/F3-lean-semantics.md` | NO on 2026-09-09; YES 2026-09-13 |
+| F5 (line 189; 199 at `97895d9`) | `docs/blueprints/F4-fragment-validation.md` | NO on 2026-09-09; YES 2026-09-13 |
+| F8 (line 192; 202 at `97895d9`) | `docs/blueprints/F7-dependent-types.md` | NO on 2026-09-09; YES 2026-09-13 |
+| F9 (line 193; 203 at `97895d9`) | `docs/blueprints/F8-first-theorems.md` | NO on 2026-09-09; YES 2026-09-13 |
 
-**F3 row at line 187 ALSO references `docs/blueprints/A8-typed-tables-u32.md`** which DOES exist (it's an A-phase blueprint).
+**F3 row at line 187 (197 at `97895d9`) ALSO references `docs/blueprints/A8-typed-tables-u32.md`** which DOES exist (it's an A-phase blueprint).
 
 **Non-F blueprints found in docs/blueprints/ (38 total):** A1-A15, B1-B8, C1-C6, D1-D5, D1-D5b, E1-E4, plus attic/ patches and PARALLEL-LANES. None are F-phase.
 
-The F-phase specification lives entirely in ROADMAP.md §Phase F rows (lines 181-193) plus `formal/` + `selfhost/tcheck.bp` + `tools/certcheck.py`.
+The F-phase specification lives entirely in ROADMAP.md §Phase F rows (lines 181-193; 191-203 at `97895d9`) plus `formal/` + `selfhost/tcheck.bp` + `tools/certcheck.py`.
 
 ---
 
@@ -307,7 +307,7 @@ The F-phase specification lives entirely in ROADMAP.md §Phase F rows (lines 181
 ## Verdict
 
 **READY** — analysis complete. All evidence gathered from:
-- ROADMAP.md §Phase F (lines 181-193), commit 7de7922
+- ROADMAP.md §Phase F (lines 181-193; 191-203 at `97895d9`), commit 7de7922
 - `formal/` directory: 11 files, ~1,150 lines Lean 4 (README, 6 Lean modules, harness, lakefile, toolchain)
 - `selfhost/tcheck.bp`: 529-line standalone certificate checker
 - `tools/certcheck.py`: 358-line Python reference checker

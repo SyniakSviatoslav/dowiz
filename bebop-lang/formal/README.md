@@ -121,14 +121,14 @@ once. `.lake/` is the build directory and is not part of the source.
 - F4 (this) produces the normative semantics for the whole language.
 - F3's differential testing against bpref is the runtime gate.
 - F4's Lean semantics is the compile-time/definitional gate.
-- The certificate checker (F5) consumes QF_BV obligations discharged here.
+- The certificate checker (F5 in this file's numbering; row F6 in ROADMAP.md at `97895d9` -- the drift is explained in docs/blueprints/F7-dependent-types.md §1) consumes QF_BV obligations discharged here.
 
 ## Trust Boundary
 
 This Lean semantics is NOT in the trust root for the final system.
 The trust root is:
-1. `seed/seed.S` (1,480 bytes): loads and jumps
-2. `bebop.bin` (171,320 bytes): the compiler
+1. `seed/build/seed` (1,480 bytes, assembled from `seed/seed.S`, whose source is 4,370 bytes; re-derived 2026-09-13): loads and jumps
+2. `bebop.bin` (179,888 bytes at `97895d9` by `wc -c`; re-derived 2026-09-13, was 171,320): the compiler
 3. `tcheck.bp` (future): the certificate checker
 
 The Lean semantics is a PRODUCER: a wrong semantics yields a rejected

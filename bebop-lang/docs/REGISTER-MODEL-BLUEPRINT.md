@@ -62,7 +62,7 @@ TG-DONE 8).
 
 ### 1.2 Tags
 
-The window is a compile-time list of `w` entries (`fntab[3797]`), entry `i` = 0 (deepest) ..
+The window is a compile-time list of `w` entries (`fntab[3797]`; re-derived 2026-09-13: `fntab[5387]` since the A2 step 0 relayout, `bebop.bp:2288`), entry `i` = 0 (deepest) ..
 `w-1` (top). Every expression emitter leaves **exactly one new entry** on top; statement
 emitters leave none.
 
@@ -86,22 +86,24 @@ owned until the `MULC` is consumed or materialised. A `REG` register is owned by
 Correction 2026-09-06 (session 18, after the worker hit it): the window is a compile-time LIST --
 only REG / MULC-on-window / FLAGS entries need a register, and a call has up to 14 pending
 arguments (emit_body takes 10) while an array literal may have ~99 pending elements. The entry
-array is therefore NOT tied to the 8 registers: it lives in the free zone fntab[2000..2383]
+array is therefore NOT tied to the 8 registers: it lives in the free zone fntab[2000..2383] (re-derived 2026-09-13: moved to fntab[3700 + 3i], 512 entries, `bebop.bp:2813-2819`)
 (nothing is written between 1803 and 3654: fn zones end below ~1100 with 256 fns, facts are
 1500+i and 1800-1802) with capacity 128 entries.
 
 ```
-fntab[3797]        w                       window entry count, 0..128 (a push at 128 = compile-time exit 89)
-fntab[3798]        free mask over x0..x7   bit r set = free; reset = 255
-fntab[2000 + 3i]   kind of entry i         i = 0..127
+fntab[3797]        w                       window entry count, 0..128 (a push at 128 = compile-time exit 89)   [2026-09-13: fntab[5387], cap 512, `bebop.bp:2824`]
+fntab[3798]        free mask over x0..x7   bit r set = free; reset = 255   [2026-09-13: fntab[5388]]
+fntab[2000 + 3i]   kind of entry i         i = 0..127   [2026-09-13: fntab[3700 + 3i], i = 0..511]
 fntab[2001 + 3i]   payload0
 fntab[2002 + 3i]   payload1
-fntab[3823]        cs mask                 bit (r-19) set = cs temp r LIVE (owned); reset = 0
-fntab[3824]        temp slot cursor k      next free temp slot; reset = 0
-fntab[3825]        cs_hi                   highest cs register index used (r-18, 0 = none), max over the fn
-fntab[3826]        tsp                     max temp slots used, max over the fn
-fntab[3827]        S                       spilled-symbol count the emission pass uses for slot addresses (planning pass: 0)
+fntab[3823]        cs mask                 bit (r-19) set = cs temp r LIVE (owned); reset = 0   [re-derived 2026-09-13: fntab[5389], `bebop.bp:2292`; this table said 3823]
+fntab[3824]        temp slot cursor k      next free temp slot; reset = 0   [2026-09-13: fntab[5390]]
+fntab[3825]        cs_hi                   highest cs register index used (r-18, 0 = none), max over the fn   [2026-09-13: fntab[5391]]
+fntab[3826]        tsp                     max temp slots used, max over the fn   [2026-09-13: fntab[5392]]
+fntab[3827]        S                       spilled-symbol count the emission pass uses for slot addresses (planning pass: 0)   [2026-09-13: fntab[5393]]
 ```
+
+Re-derived 2026-09-13 against `97895d9`: the bracketed indices above come from the comment at `bebop.bp:2288-2297` and the guards `vs_mask_take`/`vs_cs_take` (`bebop.bp:2438-2463`); the A2 step 0 relayout (2026-09-06/07) moved the whole block after this blueprint was written at 69e0eb5. The statement-boundary checks of §"exits loudly" below now exit **201** via `selfcheck_exit` (`bebop.bp:2240`, kinds 5/6 at `:5312`/`:5337`), not 102 -- docs/TRAPS.md row 201.
 
 `tools/check_abi.py:167` zones: `(3655, 3661, "fold")` becomes `(3661, 3661, "whiledepth")`,
 `(3700, 3796, "slots")` becomes `(3797, 3798, "window_hdr")`, plus `(2000, 2383, "window")` and
@@ -325,7 +327,7 @@ arm body leaves its entry. `fold_clear` call goes.
 Every window-mask / cs-mask bit change goes through one helper pair (`vs_mask_take/free`,
 `vs_cs_take/free`) that exits loudly on a register outside its range (window 0..7, cs 19..26; a
 `1 << -1` would set bit 63 because `lslv` takes the amount mod 64). At every statement boundary
-(w == 0 at the end of an emit_body item, and at vs_reset) `fntab[3798] == 255` and `fntab[3823] == 0`,
+(w == 0 at the end of an emit_body item, and at vs_reset) `fntab[3798] == 255` and `fntab[3823] == 0` (2026-09-13: fntab[5388]/fntab[5389], exit 201 kinds 5/6 -- `bebop.bp:5312`, `:5337`),
 else compile-time exit 102: a temp obtained by vs_alloc must be owned by a window entry or freed
 in the same emitter -- the multiplier of the general MULC form, the sdiv temp of `mod`, both
 operands of a `cmp` (FLAGS owns nothing), constant temps of and/orr/eor/shifts, a MULC's own
@@ -383,7 +385,7 @@ Functions: `push`, `pop`, `flush_on_bl`, `str_reg`, `pop_back`, `ldr_reg`, `fold
 bookkeeping. `count_word` stays (T43 + B1 use it).
 
 Cells: 3655-3660 (fold + barrier), 3700-3796 (legacy depth), 3890 (bank). `check_abi.py` zones
-per §1.3. `self_check`'s `compile("…") == <checksum>` constants (bebop.bp:4232-4240) are
+per §1.3. `self_check`'s `compile("…") == <checksum>` constants (bebop.bp:4232-4240 at 69e0eb5; `fn self_check` is at `bebop.bp:6595` on `97895d9`, re-derived 2026-09-13) are
 re-derived from the new emitter (they are word checksums, not values) and the diag lane that
 runs them must stay green.
 

@@ -1,3 +1,3 @@
 // arithmetic: + - * / %
-// EXPECT 34 from: hand: 10 + 2*3 + 8/2
+// EXPECT 34 from: hand: 20 + 22 - 2*5/2 - 7%4 = 42 - 5 - 3 (note re-derived 2026-09-13 from the program below; it said 10 + 2*3 + 8/2, which is 20 and was what a Lean encoding transcribed)
 fn main() -> i64 { 20 + 22 - 2 * 5 / 2 - 7 % 4 }
