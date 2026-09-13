@@ -85,7 +85,7 @@ fn fill(n: i64, c0: [i64], c1: [i64], c2: [i64]) -> i64 {{
 // branchless (the same shape scan_const.rs's `(c0>=LO) as i64 * ...` compiles to), and the
 // aggregate column is fixed. Nothing here is read from a descriptor at run time — that is the
 // whole point of the row.
-fn scan(n: i64, c0: [i64], c1: [i64], c2: [i64]) -> i64 {{
+fn b2_scan(n: i64, c0: [i64], c1: [i64], c2: [i64]) -> i64 {{
   let sum = 0;
   let i = 0;
   while i < n {{
@@ -114,7 +114,7 @@ fn main(argc: i64, argv: [str]) -> i64 {{
   let t0 = clock_ms();
   let r = 0;
   while r < reps {{
-    let _ = sm[0] = scan(n, c0, c1, c2);
+    let _ = sm[0] = b2_scan(n, c0, c1, c2);
     let r = r + 1;
     0
   }};

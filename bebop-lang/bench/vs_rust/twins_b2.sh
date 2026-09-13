@@ -194,9 +194,19 @@ for i in range(R):
     if os.path.exists(b_i):
         os.remove(b_i)
     t0 = time.perf_counter()
-    subprocess.run(['taskset', '-c', PIN, './seed/build/seed', BB, 'compile', p_i, b_i],
-                   capture_output=True)
+    cp = subprocess.run(['taskset', '-c', PIN, './seed/build/seed', BB, 'compile', p_i, b_i],
+                        capture_output=True)
     compile_ms.append((time.perf_counter() - t0) * 1000)
+    # LOUD: this result went unchecked until 2026-09-13, and that is why this gate had not run
+    # since 2026-09-09. gen_scan.py emitted `fn scan`, `scan` became a RESERVED WORD, every
+    # compile died at `error[E99]: reserved word used as a fn name` rc=99 -- and because nothing
+    # looked at rc, the next line's os.remove(b_i) raised FileNotFoundError instead. The harness
+    # reported `rc=1` after 475 s with NO diagnostic at all, which reads as a flaky benchmark
+    # rather than a one-word compile error.
+    if cp.returncode != 0 or not os.path.exists(b_i):
+        sys.stderr.write('COMPILEFAIL scan rep %d rc=%d: %s\n'
+                         % (i, cp.returncode, cp.stderr.decode('utf-8', 'replace').strip()[-400:]))
+        raise SystemExit(1)
     os.remove(b_i)
     os.remove(p_i)
 
@@ -204,8 +214,12 @@ try:
     os.remove(bin_path)
 except FileNotFoundError:
     pass
-subprocess.run(['taskset', '-c', PIN, './seed/build/seed', BB, 'compile', bp_path, bin_path],
-               capture_output=True)
+cp2 = subprocess.run(['taskset', '-c', PIN, './seed/build/seed', BB, 'compile', bp_path, bin_path],
+                     capture_output=True)
+if cp2.returncode != 0 or not os.path.exists(bin_path):
+    sys.stderr.write('COMPILEFAIL scan rc=%d: %s\n'
+                     % (cp2.returncode, cp2.stderr.decode('utf-8', 'replace').strip()[-400:]))
+    raise SystemExit(1)
 
 oracle_sum = stw.scan(N_SCAN)
 out, _ = run(['./seed/build/seed', bin_path, 's', '1'])
