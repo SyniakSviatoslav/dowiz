@@ -1,6 +1,6 @@
 // c70_qdsl.bp — c70 construct: verify qdsl parsing via bpref
 // Tests that qdsl_parse returns correct fingerprints for various queries
-// EXPECT 41000 from: hand: QDSL query (fingerprint B7)
+// EXPECT 286389246398 from: hand: QDSL query (fingerprint B7) — includes identifier text
 
 fn qdsl_char(s: str, i: i64) -> i64 { char(s, i) }
 fn qdsl_len(s: str) -> i64 { str_len(s) }
@@ -317,13 +317,19 @@ fn qdsl_query(s: str, a: [i64], ap: [i64], sb: [i64], sp: [i64]) -> i64 {
   root
 }
 
-fn qdsl_fingerprint(node: i64, a: [i64]) -> i64 {
+fn qdsl_ident_hash(off: i64, h: i64, sb: [i64]) -> i64 {
+  let byte = sb[off];
+  if byte == 0 then h else qdsl_ident_hash(off + 1, h * 31 + byte, sb)
+}
+
+fn qdsl_fingerprint(node: i64, a: [i64], sb: [i64]) -> i64 {
   let kind = a[node]; let nc = a[node+1]; let attr = a[node+2];
   let h = kind * 1000 + attr;
+  let h = if kind == 10 then qdsl_ident_hash(attr, h, sb) else h;
   let ci = 0;
   while ci < nc {
     let child = a[node+3+ci];
-    let _ = h = h * 31 + qdsl_fingerprint(child, a);
+    let _ = h = h * 31 + qdsl_fingerprint(child, a, sb);
     let _ = ci = ci + 1;
   };
   h
@@ -332,7 +338,7 @@ fn qdsl_fingerprint(node: i64, a: [i64]) -> i64 {
 fn qdsl_parse(query: str) -> i64 {
   let a = zeros(4096); let ap = zeros(1); let sb = zeros(512); let sp = zeros(1);
   let root = qdsl_query(query, a, ap, sb, sp);
-  if root == 0 then 0 else qdsl_fingerprint(root, a)
+  if root == 0 then 0 else qdsl_fingerprint(root, a, sb)
 }
 
 fn main() -> i64 {
