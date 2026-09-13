@@ -371,6 +371,13 @@ def check_fntab(bp, extra):
         errs.append(f"fntab allocation {sizes} does not cover index {LIT_END}")
     trap = [ln for ln, l in enumerate(src, 1) if f"fntab[{LIT_BASE} + lcnt[0]] =" in l]
     guarded = any(str(LIT_END) in l for ln in trap for l in src[ln - 3:ln])
+    # 2026-09-13 provenance audit: `guarded` was computed here and used ONLY in the
+    # print below -- never appended to errs, unlike every sibling check two lines down.
+    # So this printed `literal trap (...): MISSING` inside a log whose gate still said
+    # `invariants: GREEN`, and fntab overflow past the registered zone map was unguarded.
+    if not guarded:
+        errs.append(f"literal trap ({LIT_BASE} + nlits >= {LIT_END}) MISSING -- "
+                    f"fntab overflow past the registered zone map is unguarded")
     for e in check_registered(used):
         print(e)
         errs.append(e)

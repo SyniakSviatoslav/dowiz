@@ -602,6 +602,7 @@ def measure_kernel_neg_bin(kernel_bin_path, corpus_dir):
 
     neg = sorted(f for f in os.listdir(corpus_dir) if f.startswith('n') and f.endswith('.core'))
     accepted_count = 0
+    unanswered = 0
 
     for f in neg:
         fixture_path = os.path.join(corpus_dir, f)
@@ -610,8 +611,21 @@ def measure_kernel_neg_bin(kernel_bin_path, corpus_dir):
         # If kernel prints 0 and it's not internal, it accepted an unsound term
         if not is_internal and kernel_verdict == 0:
             accepted_count += 1
+        # 2026-09-13 provenance audit: an instrument that ANSWERS NOTHING was being
+        # scored as having rejected everything. `TKERNEL_BIN=./bebop.bin` (the compiler,
+        # not the kernel) produced `0 accepted of 21` -- green -- because every fixture
+        # came back internal/None and only `verdict == 0` was counted. That is the exact
+        # defect kernel_neg_bin was ADDED to fix, reproduced inside its own replacement.
+        # A VERDICT is 0 (accept) or 10..31 (reject). Anything else is not this
+        # instrument answering: `TKERNEL_BIN=./bebop.bin` makes the COMPILER print 64,
+        # its unknown-verb code, which parses as an int, is not 71, and is not 0 -- so it
+        # was scored as a rejection and the line read `0 accepted of 21`, green. Counting
+        # "not 0" as "rejected" is the same defect kernel_neg_bin was added to fix.
+        if (is_internal or kernel_verdict is None
+                or not (kernel_verdict == 0 or 10 <= kernel_verdict <= 31)):
+            unanswered += 1
 
-    return accepted_count, len(neg)
+    return accepted_count, len(neg), unanswered
 
 
 def measure_kernel_parity(kernel_bin_path, corpus_dir):
@@ -687,8 +701,14 @@ def corpus(d):
     kernel_bin = os.environ.get('TKERNEL_BIN', './tkernel.bin')
     if os.path.exists(kernel_bin):
         # Measure kernel_neg_bin: how many negatives does the kernel binary accept?
-        kernel_neg_bin, neg_total = measure_kernel_neg_bin(kernel_bin, d)
-        print('kernel_neg_bin: %d accepted of %d' % (kernel_neg_bin, neg_total))
+        kernel_neg_bin, neg_total, unanswered = measure_kernel_neg_bin(kernel_bin, d)
+        if unanswered:
+            # Say NOT MEASURED rather than a number: a binary that answers nothing has
+            # rejected nothing, and the old wording read as perfect soundness.
+            print('kernel_neg_bin: NOT MEASURED (%d of %d fixtures got no verdict from %s)'
+                  % (unanswered, neg_total, kernel_bin))
+        else:
+            print('kernel_neg_bin: %d accepted of %d' % (kernel_neg_bin, neg_total))
 
         # Measure kernel_parity: agreement between twin and kernel
         agreement, parity_total, parity_internal, internals = measure_kernel_parity(kernel_bin, d)
