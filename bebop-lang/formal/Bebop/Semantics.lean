@@ -10,10 +10,12 @@
   formal verification infrastructure (F4 gate: lean_conformance 86/86).
 
   Key design decisions:
-  - Fuel-bounded: every recursive call decrements fuel. 0 fuel is NOT a trap:
-    execStmts/loop answer `.cont` and evalExpr answers `none`, so a
-    non-terminating loop followed by a tail evaluates (probed 2026-09-13,
-    `while 1 { 0 }; 0` = ok 0 at fuel 1000). Still to fix.
+  - Fuel-bounded: every recursive call decrements fuel. Every fuel-0 arm sets
+    the sticky `State.fuelOut`, and `evalProgram` reports
+    `Result.fuelExhausted` when it is set -- whatever value came out after.
+    (Until 2026-09-13 the arms answered `.cont`/`none` and the run carried on:
+    `while 1 { 0 }; 0` was `ok 0` at fuel 1000, probed; a diverging program
+    could pass. Same rule as tools/kcheck.py `whnf`: exhaustion is loud.)
   - A function body's value is its tail expression: execBody (section 5).
   - All arithmetic is Int64 wrapping (Z/2^64).
   - Arena is a flat Array Val; frame heap is the arena itself (A6).
@@ -92,7 +94,7 @@ mutual
 partial def evalArrLitAux (es : Array Expr) (fuel : Fuel) (s : State)
     : Array Val × State :=
   match fuel with
-  | 0 => (#[], s)
+  | 0 => (#[], { s with fuelOut := true })
   | fuel + 1 =>
     let rec go (es : Array Expr) (idx : Nat) (acc : Array Val) (s : State)
         : Array Val × State :=
@@ -109,7 +111,7 @@ partial def evalArrLitAux (es : Array Expr) (fuel : Fuel) (s : State)
     LANGUAGE.md:57-82. The evaluator is fuel-bounded for termination. -/
 partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val :=
   match fuel with
-  | 0 => (s, none)
+  | 0 => ({ s with fuelOut := true }, none)
   | fuel + 1 =>
     match e with
     -- Literals
@@ -258,7 +260,14 @@ partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val 
               -- Execute the body: its value is the tail expression (or a `ret`).
               -- A body that yields no value propagates `none`; it was `some 0`
               -- until 2026-09-13, which hid every failed call as a 0.
-              execBody fuel fn.body s2
+              let (s3, v) := execBody fuel fn.body s2
+              -- Leave the activation: the CALLER's bindings come back (bpref.py
+              -- `call` builds a fresh env dict and the caller's is untouched);
+              -- arena and the sticky fuel flag are the callee's. Until
+              -- 2026-09-13 the callee's env was returned, so
+              -- `let x = 5; let y = f(1); x + y` was `stuck` (`ok 0` before
+              -- `stuck` existed) where bpref gives 7.
+              ({ s3 with env := s1.env }, v)
 
     -- If-then-else
     | .ite c t f =>
@@ -439,7 +448,7 @@ partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val 
 /-- Execute a single statement. -/
 partial def execStmt (fuel : Fuel) (stmt : Stmt) (s : State) : StmtResult :=
   match fuel with
-  | 0 => { signal := .cont, state := s }
+  | 0 => { signal := .cont, state := { s with fuelOut := true } }
   | fuel + 1 =>
     match stmt with
     | .let_ n e =>
@@ -479,7 +488,7 @@ partial def execStmt (fuel : Fuel) (stmt : Stmt) (s : State) : StmtResult :=
     | .while_ cond body =>
       let rec loop (fuel : Fuel) (s : State) : StmtResult :=
         match fuel with
-        | 0 => { signal := .cont, state := s }
+        | 0 => { signal := .cont, state := { s with fuelOut := true } }
         | fuel + 1 =>
           let (s1, vc) := evalExpr fuel cond s
           match vc with
@@ -511,7 +520,7 @@ partial def execStmt (fuel : Fuel) (stmt : Stmt) (s : State) : StmtResult :=
 /-- Execute a sequence of statements, propagating control flow signals. -/
 partial def execStmts (fuel : Fuel) (stmts : Array Stmt) (s : State) : StmtResult :=
   match fuel with
-  | 0 => { signal := .cont, state := s }
+  | 0 => { signal := .cont, state := { s with fuelOut := true } }
   | fuel + 1 =>
     let rec go (fuel : Fuel) (idx : Nat) (s : State) : StmtResult :=
       if h : idx < stmts.size then
@@ -539,7 +548,7 @@ partial def execStmts (fuel : Fuel) (stmts : Array Stmt) (s : State) : StmtResul
     `execStmt (.exprStmt e)` dropped the value and both callers answered 0.) -/
 partial def execBody (fuel : Fuel) (body : Array Stmt) (s : State) : State × Option Val :=
   match fuel with
-  | 0 => (s, none)
+  | 0 => ({ s with fuelOut := true }, none)
   | fuel + 1 =>
     if body.size == 0 then (s, none)  -- no tail expression: compile-time exit 97
     else
@@ -603,9 +612,13 @@ def evalProgram (fuel : Fuel) (prog : Program) (clockMs : Val := 0) : Result :=
     else
       -- main's value is its tail expression (or a `ret`), via execBody.
       -- A body that yields no value is reported as `stuck`, never as `ok 0`.
-      let (_, v) := execBody fuel main.body s
-      match v with
-      | some v => .ok v
-      | none   => .stuck "main yielded no value (unbound symbol, unresolved call, arena fault, fuel exhausted, or no tail expression)"
+      let (s', v) := execBody fuel main.body s
+      -- Fuel first: a run that hit fuel 0 anywhere is NOT answered with the
+      -- value it produced afterwards (kcheck.py `whnf`: exhaustion raises).
+      if s'.fuelOut then .fuelExhausted fuel
+      else
+        match v with
+        | some v => .ok v
+        | none   => .stuck "main yielded no value (unbound symbol, unresolved call, arena fault, or no tail expression)"
 
 end Bebop.Semantics

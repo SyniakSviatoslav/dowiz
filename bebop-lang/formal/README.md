@@ -16,7 +16,11 @@ one `#guard` that was false. The conformance harness RUNS and, since the
 tail-expression rule landed later the same day, reports **5 of 5 samples PASS**
 with real values (`ok 1000000065571`, `ok 34`, `ok 45`, `ok 6`, `ok 119`), each
 sample re-encoded from its `bench/parity_constructs/*.bp` rather than from the
-construct's derivation comment. Before the rule every sample printed `ok 0`
+construct's derivation comment. Later the same day the three fakes that could
+make a wrong evaluator look right (syscalls answering 0, silent fuel exhaustion,
+caller env lost after a call) were closed and pinned by 5 probe fixtures
+(`lean_probes: 5/5`); the 5/5 did not move, because none of the five samples
+touched any of the three. Before the rule every sample printed `ok 0`
 (`Stmt.exprStmt` discarded its value; `evalProgram` answered 0 unless a `ret`
 fired), so 0/5 -> 5/5 is one rule plus one rebind fix, not five. The gate
 numbers are still 0: nothing in `tools/` runs this, and 5 hand-built ASTs are
@@ -32,13 +36,13 @@ here was never measured and is refuted (docs/blueprints/F3-lean-semantics.md §3
 |------|------|---------|
 | `Bebop/Basic.lean` | rc=0 | Core types: Val, Expr, Stmt, Program, State (+ State.lookup/bind/zeros/arenaRead/arenaWrite), TrapCode, Result (with `stuck` for a body that yields no value) |
 | `Bebop/Builtins.lean` | rc=0 | 10 executable builtins + dispatch (imports Basic only) |
-| `Bebop/Syscalls.lean` | rc=0 | 26 `axiom` sys_* specs, 5 footprints, `dispatchSyscall` placeholder returning `(s, 0)` (imports Basic only) |
-| `Bebop/Semantics.lean` | rc=0 | Fuel-bounded evaluator (5 `partial def` in one `mutual` block; `execBody` is the tail-expression rule) |
+| `Bebop/Syscalls.lean` | rc=0 | 26 `axiom` sys_* specs, 5 footprints, `dispatchSyscall` = `none` for every name (nothing modelled; was `some (s, 0)` for any `sys_*` until 2026-09-13) (imports Basic only) |
+| `Bebop/Semantics.lean` | rc=0 | Fuel-bounded evaluator (5 `partial def` in one `mutual` block; `execBody` is the tail-expression rule; every fuel-0 arm sets `State.fuelOut` and `evalProgram` reports `Result.fuelExhausted`; the `.call` arm restores the caller's env) |
 | `Bebop/Traps.lean` | rc=0 | 24-row trap table, `#guard` x3 |
-| `Bebop/Conformance.lean` | rc=0 | 80 + 14 EXPECT rows, 97 oracle entries (the `oracleCount` constant says 121), 5 inline-AST samples transcribed from the `.bp` files |
+| `Bebop/Conformance.lean` | rc=0 | 80 + 14 EXPECT rows, 97 oracle entries (the `oracleCount` constant says 121), 5 inline-AST samples transcribed from the `.bp` files, 5 probe fixtures (§5b) pinning the three fakes closed 2026-09-13 |
 | `Bebop/Theorems.lean` | rc=0 | 7 `axiom` statements + 5 `#guard` sample checks; 0 `theorem` |
 | `Bebop.lean` | rc=0 | Root module importing all |
-| `harness.lean` | rc=0 (`lean --run`) | Prints the 5 sample verdicts: 5/5 PASS (2026-09-13, after the tail rule); 4.6 s |
+| `harness.lean` | rc=0 (`lean --run`) | Prints the 5 sample verdicts and the 5 probe verdicts as `lean_conformance: 5/5` and `lean_probes: 5/5`; exits 1 if either is short |
 | `lakefile.lean` | not exercised | Lake project config |
 | `lean-toolchain` | -- | `leanprover/lean4:v4.33.1` (the Lean on the box; v4.12.0 predates `Int64`) |
 
@@ -96,6 +100,18 @@ LEAN_PATH=$PWD/.lake/build/lib/lean /root/s30/outC4/lean/bin/lean --run harness.
 # prints the 5 sample verdicts (LEAN_PATH is needed: `lean --run` does not read lakefile.lean)
 ```
 
+Both `lake build` and `lean --run` are heavy jobs (lake ~1 GB, lean ~0.25-0.5 GB
+per process) and must go through the box's slot, or three lanes end up computing
+at once and the Android phantom-process killer picks a victim (it happened
+2026-09-13 at 37 procs):
+
+```bash
+cd formal
+PERF=0 ../tools/slot.sh lean-build /root/s30/outC4/lean/bin/lake build
+PERF=0 ../tools/slot.sh lean-harness env LEAN_PATH=$PWD/.lake/build/lib/lean \
+  /root/s30/outC4/lean/bin/lean --run harness.lean
+```
+
 `lake build` (Lake 5.0.0 from the same toolchain) also works on-box: measured
 2026-09-13, rc=0, "Build completed successfully (10 jobs)", 79 s wall, no
 process left behind. Lake 5 has no jobs flag, but the import DAG is a chain
@@ -120,20 +136,34 @@ once. `.lake/` is the build directory and is not part of the source.
   visible. Re-transcribed from the `.bp` files. The `oracleEntries` strings for
   c01/c02 still carry the old wrong programs (data only; the blueprint deletes
   that table).
-- STILL FAKE -- fuel exhaustion is invisible: `execStmts`/`loop` answer `.cont`
-  at fuel 0, so `while 1 { 0 }; 0` evaluates to `ok 0` (probed with fuel 1000)
-  where `bebop.bin` never terminates. A non-terminating program can "pass".
-- STILL WRONG -- the caller's environment is lost after a call: the `.call` arm
-  returns the callee's state, so `let x = 5; let y = f(1); x + y` is `stuck`
-  (probed; was `ok 0` before `stuck` existed). Any construct that reads a local
-  after a call will disagree with `bebop.bin`. One-line fix in the `.call` arm
-  (`env := s1.env` on the way out), not applied: outside the tail-rule row.
+- FIXED 2026-09-13 -- `dispatchSyscall` answered `some (s, 0)` for every name
+  beginning `sys_`, real or invented (probed: `sys_this_does_not_exist [] =
+  some 0`, `sys_exit [7] = some 0`), and was consulted BEFORE user functions,
+  so `fn sys_x() { 42 }` ran as `ok 0` (bpref: 42). It is now `none` for every
+  name: a syscall call is `stuck`, never a value, until that syscall is modelled
+  (F3 blueprint §4.4 names `sys_write`/`sys_exit` as the two to model first).
+  None of the 5 samples calls a `sys_*`, so the count did not move; 8 of the
+  100 positive constructs do and will be `stuck` until modelled. Probes
+  p01a/p01b/p01c. NOTE: `tools/bpref.py:748` still has its own
+  `startswith('sys_') -> 0` fallback (run 2026-09-13: `sys_this_does_not_exist()`
+  prints 0); the blueprint's "A23 removed it" is not true on this tree.
+- FIXED 2026-09-13 -- fuel exhaustion was invisible: every fuel-0 arm answered
+  `.cont`/`none` and the run carried on, so `while 1 { 0 }; 0` was `ok 0` at
+  fuel 1000 where `bebop.bin` never terminates (bpref: 5 s timeout, rc=124).
+  Now every fuel-0 arm sets the sticky `State.fuelOut` and `evalProgram`
+  reports `Result.fuelExhausted fuel` whatever value came out afterwards --
+  the tools/kcheck.py `whnf` rule ("a checker that timed out into 'yes' would
+  be unsound"). It is not a `.trap`, so the lax trap arm below cannot accept
+  it. Probe p02.
+- FIXED 2026-09-13 -- the caller's environment was lost after a call: the
+  `.call` arm returned the callee's state, so `let x = 5; let y = f(1); x + y`
+  was `stuck` (`ok 0` before `stuck` existed; bpref: 7). The arm now restores
+  `env := s1.env` on the way out (arena and `fuelOut` stay the callee's), as
+  bpref's `call` does by building a fresh env dict. Probe p03.
 - STILL FAKE -- `checkExpected` accepts ANY `.trap` or ANY `.rejected` when the
   expectation is `none`; a negative construct expecting exit 97 passes on exit 100.
-- `dispatchSyscall` returns `some (s, 0)` for every `sys_*` name, including
-  names that are not syscalls (probed: `sys_this_does_not_exist [] = some 0`,
-  `sys_exit [7] = some 0`): a silent oracle, the defect A23 removed from bpref.
-  It is consulted BEFORE user functions, so a user `fn sys_x` is shadowed too.
+  (The two arms added for the probes, `stuck`/`fuel exhausted`, match the verdict
+  string exactly and widen nothing.)
 - `builtinCrc32`/`builtinCrc32x`: the table builder shifts LEFT, tests bit 7 and
   masks to 8 bits before XORing a 32-bit polynomial, and the final XOR is
   missing. Probed: crc32("123456789") = 15579374; zlib gives 3421780262

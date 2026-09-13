@@ -382,15 +382,16 @@ def sys_mmap_footprint (addr len : Val) : Footprint :=
     specifications above are the normative semantics. -/
 def dispatchSyscall (name : Name) (args : Array Val) (s : State)
     : Option (State × Val) :=
-  -- All syscalls are axiomatised. In the formal model, we
-  -- return 0 (success) as a placeholder for testing purposes.
-  -- The real semantics is the axiom declarations above.
-  if name.startsWith "sys_" then
-    -- For the 5 syscalls with declared footprints, we use the
-    -- footprint to determine which cells are read/written, but
-    -- we still return a placeholder value (0 for success).
-    some (s, 0)
-  else
-    none
+  -- NOTHING is modelled yet, so this is `none` for every name, including the
+  -- 26 axiomatised `sys_*` above. Until 2026-09-13 it answered `some (s, 0)`
+  -- for ANY name beginning `sys_` -- real, invented (`sys_this_does_not_exist`)
+  -- or user-defined (`fn sys_x` was shadowed, probed `ok 0` where bpref gives
+  -- 42) -- which let any program touching a syscall "pass" regardless of the
+  -- evaluator: the silent-oracle defect the F3 blueprint (§4.4) says this
+  -- placeholder must lose. `none` here makes the call `stuck`, never a value.
+  -- When `sys_write`/`sys_exit` are modelled (the two bpref implements),
+  -- match them here by name and keep the default `none`.
+  let _ := (name, args, s)
+  none
 
 end Bebop.Syscalls

@@ -529,6 +529,9 @@ def checkExpected (got : Result) (exp : Expected) : Bool :=
   | .ok v, some expected => v == expected
   | .trap _, none => true  -- trap expected: any trap is OK for negative tests
   | .rejected _ _ _, none => true  -- rejection expected
+  -- Probe-fixture verdicts (exact string match, so this widens nothing):
+  | .stuck _, none => exp.verdict == "stuck"
+  | .fuelExhausted _, none => exp.verdict == "fuel exhausted"
   | _, _ => false
 
 /-- Summarise a check result as a String. -/
@@ -540,6 +543,7 @@ def summarise (name : String) (got : Result) (exp : Expected) : String :=
     | .trap c => "trap " ++ reprStr c
     | .rejected code _ msg => "rejected " ++ toString code ++ " (" ++ msg ++ ")"
     | .stuck msg => "stuck (" ++ msg ++ ")"
+    | .fuelExhausted f => "FUEL EXHAUSTED (" ++ toString f ++ ")"
   if pass then
     "PASS: " ++ name ++ " => " ++ gotStr ++ " (expected " ++ exp.verdict ++ ")"
   else
@@ -697,6 +701,82 @@ def sample_c13 : Result × Expected :=
   let got := runProgram prog
   let exp := positiveExpectations[12]!
   (got, exp)
+
+-- ============================================================
+-- 5b. Probe fixtures (2026-09-13) -- one per closed fake, so it cannot
+--     come back silently.
+-- ============================================================
+-- These are NOT conformance samples. A PASS means the named fake is ABSENT:
+-- the evaluator either refuses (`stuck`, `fuel exhausted`) or answers what
+-- bpref answers. It does NOT mean the value was checked against bebop.bin.
+-- The harness counts them on their own `lean_probes:` line and never in
+-- `lean_conformance:`. The verdict strings "stuck" and "fuel exhausted" are
+-- matched EXACTLY by `checkExpected`; `ok _` never satisfies either.
+
+/-- Shared shape: a `main` with the given body and any extra functions. -/
+private def probeProgram (mainBody : Array Stmt) (extra : Array FnDecl := #[]) : Program :=
+  { enums := #[], structs := #[],
+    fns := #[{ name := "main", params := #[], paramTypes := #[], returnType := Ty.i64,
+               body := mainBody }] ++ extra }
+
+/-- PROBE 1a -- an unmodelled syscall must never evaluate to a value.
+  fn main() -> i64 { sys_this_does_not_exist() }
+Measured 2026-09-13 before the fix: `ok 0` (`dispatchSyscall` answered
+`some (s, 0)` for ANY name beginning `sys_`). After: `stuck`.
+bebop.bin: unresolved call (trap 87). bpref.py:748 STILL answers 0 here (its
+own `startswith('sys_')` fallback; the blueprint says A23 removed it -- not on
+this tree). If the evaluator learns to report the trap, move this verdict to
+the trap; it must never become `ok`. -/
+def probe_p01a_syscall_unmodelled : Result × Expected :=
+  let prog := probeProgram #[ Stmt.exprStmt (Expr.call "sys_this_does_not_exist" #[]) ]
+  (runProgram prog, ⟨"p01a_syscall_unmodelled", none, "stuck"⟩)
+
+/-- PROBE 1b -- a REAL syscall that is not modelled must not evaluate either.
+  fn main() -> i64 { sys_exit(7) }
+Before the fix: `ok 0`. After: `stuck`. bebop.bin and bpref: exit 7. When
+`sys_exit` is modelled (F3 blueprint §4.4 names it and `sys_write` as the two
+to model) this verdict becomes exit 7; it must never be `ok`. -/
+def probe_p01b_sys_exit_unmodelled : Result × Expected :=
+  let prog := probeProgram #[ Stmt.exprStmt (Expr.call "sys_exit" #[Expr.lit 7]) ]
+  (runProgram prog, ⟨"p01b_sys_exit_unmodelled", none, "stuck"⟩)
+
+/-- PROBE 1c -- a user function whose name begins `sys_` is not shadowed.
+  fn main() -> i64 { sys_x() }
+  fn sys_x() -> i64 { 42 }
+bpref (run 2026-09-13): 42. Before the fix: `ok 0` (the dispatcher was
+consulted BEFORE user functions and claimed every `sys_*`). After: `ok 42`. -/
+def probe_p01c_user_fn_sys_prefix : Result × Expected :=
+  let prog := probeProgram #[ Stmt.exprStmt (Expr.call "sys_x" #[]) ]
+    #[{ name := "sys_x", params := #[], paramTypes := #[], returnType := Ty.i64,
+        body := #[ Stmt.exprStmt (Expr.lit 42) ] }]
+  (runProgram prog, ⟨"p01c_user_fn_sys_prefix", some 42, "ok 42"⟩)
+
+/-- PROBE 2 -- fuel exhaustion is loud.
+  fn main() -> i64 { while 1 { 0 }; 0 }
+Run at fuel 1000 (the probe's number; `runProgram`'s 1_000_000 would also
+exhaust, slowly). bpref: does not terminate (5 s timeout, rc=124). Before the
+fix: `ok 0` -- the loop's fuel-0 arm answered `.cont` and the tail `0` was
+taken as main's value, so a diverging program passed. After:
+`fuelExhausted 1000`, which `checkExpected` accepts ONLY against this verdict. -/
+def probe_p02_fuel_exhaustion : Result × Expected :=
+  let prog := probeProgram #[ Stmt.while_ (Expr.lit 1) #[ Stmt.exprStmt (Expr.lit 0) ],
+                              Stmt.exprStmt (Expr.lit 0) ]
+  (evalProgram 1000 prog, ⟨"p02_fuel_exhaustion", none, "fuel exhausted"⟩)
+
+/-- PROBE 3 -- the caller's bindings survive a call.
+  fn main() -> i64 { let x = 5; let y = f(1); x + y }
+  fn f(a: i64) -> i64 { a + 1 }
+bpref (run 2026-09-13): 7. Before the fix: `stuck` (the `.call` arm returned
+the callee's env, so `x` was unbound afterwards; `ok 0` before `stuck`
+existed). After: `ok 7`. -/
+def probe_p03_caller_env : Result × Expected :=
+  let prog := probeProgram
+    #[ Stmt.let_ "x" (Expr.lit 5),
+       Stmt.let_ "y" (Expr.call "f" #[Expr.lit 1]),
+       Stmt.exprStmt (Expr.binop BinOp.add (Expr.var "x") (Expr.var "y")) ]
+    #[{ name := "f", params := #["a"], paramTypes := #[Ty.i64], returnType := Ty.i64,
+        body := #[ Stmt.exprStmt (Expr.binop BinOp.add (Expr.var "a") (Expr.lit 1)) ] }]
+  (runProgram prog, ⟨"p03_caller_env", some 7, "ok 7"⟩)
 
 -- ============================================================
 -- 6. Summary statistics

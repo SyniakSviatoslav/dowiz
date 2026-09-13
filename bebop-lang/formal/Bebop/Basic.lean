@@ -200,6 +200,14 @@ inductive Result where
       distinct from `ok` so a failed evaluation can never print as `ok 0`
       (which is what every harness sample printed until 2026-09-13). -/
   | stuck (msg : String)
+  /-- The evaluator ran out of fuel somewhere in the run. Reported INSTEAD of
+      whatever value the run produced afterwards: until 2026-09-13 every
+      fuel-0 arm answered `.cont`/`none` and the run carried on, so
+      `while 1 { 0 }; 0` was `ok 0` at fuel 1000 where `bebop.bin` never
+      terminates -- a diverging program could pass. Mirrors tools/kcheck.py
+      `whnf`: exhaustion RAISES, "a checker that timed out into 'yes' would be
+      unsound". Not a `.trap`, so `checkExpected`'s any-trap arm cannot accept it. -/
+  | fuelExhausted (fuel : Nat)
   deriving Inhabited
 
 -- ============================================================
@@ -229,6 +237,10 @@ structure State where
   fns : Array FnDecl := #[]
   structs : Array (Name × Array Name) := #[] -- struct name -> field list
   clockMs : Val := 0
+  /-- Sticky: set by every fuel-0 arm of the evaluator, never cleared, read by
+      `evalProgram`. A run that touched fuel 0 is reported as
+      `Result.fuelExhausted`, whatever value it went on to produce. -/
+  fuelOut : Bool := false
   deriving Inhabited
 
 

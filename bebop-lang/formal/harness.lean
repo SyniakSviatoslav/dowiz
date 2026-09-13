@@ -1,20 +1,25 @@
 -- harness.lean — F4 conformance driver (runs ON-BOX, measured 2026-09-13)
 -- Runs 5 sample constructs (ASTs transcribed from bench/parity_constructs/*.bp)
--- through the Lean interpreter and prints PASS/FAIL against the EXPECT rows.
--- 5/5 PASS since the tail-expression rule (Semantics.lean execBody) landed;
--- 0/5 (`ok 0` everywhere) before it.
+-- through the Lean interpreter and prints PASS/FAIL against the EXPECT rows,
+-- then 5 PROBE fixtures (Conformance.lean §5b), one per fake closed on
+-- 2026-09-13: syscalls answering `some 0`, silent fuel exhaustion, caller env
+-- lost after a call. Probes are counted on their own line and are NOT
+-- conformance: a probe PASS means the fake is absent, not that bebop.bin agrees.
+--
+-- Prints two grep-able lines and exits 1 if either count is short:
+--   lean_conformance: N/5      (samples whose value matches the EXPECT row)
+--   lean_probes: M/5           (fakes shown absent)
 --
 -- Usage (no mathlib needed; LEAN_PATH is required because `lean --run` does
--- not read lakefile.lean):
---   cd formal && lake build && \
---     LEAN_PATH=$PWD/.lake/build/lib/lean lean --run harness.lean
---
--- The output is captured to formal/results.json, whose hash is
--- bound to the .lean sources and checked by the chain-side Python step.
+-- not read lakefile.lean). Both steps are heavy jobs and go through the slot:
+--   cd formal && PERF=0 ../tools/slot.sh lean-build /root/s30/outC4/lean/bin/lake build
+--   PERF=0 ../tools/slot.sh lean-harness env LEAN_PATH=$PWD/.lake/build/lib/lean \
+--     /root/s30/outC4/lean/bin/lean --run harness.lean
 --
 -- References:
 --  - bench/vs_rust/construct_parity.sh (EXPECT rows)
---  - docs/RESEARCH-VERIFICATION-2026-09-09.md §5.3 (F3 blueprint)
+--  - docs/blueprints/F3-lean-semantics.md §4.4 (syscall placeholder must be `none`)
+--  - tools/kcheck.py whnf (fuel exhaustion raises; the pattern mirrored here)
 
 import Bebop.Basic
 import Bebop.Semantics
@@ -39,17 +44,26 @@ def printResult (r : Result) : String :=
   | .trap c => "trap(" ++ reprStr c ++ ")"
   | .rejected code _ msg => "rejected(" ++ toString code ++ "," ++ msg ++ ")"
   | .stuck msg => "stuck(" ++ msg ++ ")"
+  | .fuelExhausted f => "FUEL EXHAUSTED(" ++ toString f ++ ")"
 
 -- ============================================================
 -- Helper: run a sample and print PASS/FAIL
 -- ============================================================
 
-def runSample (name : String) (got : Result) (exp : Expected) : IO Unit :=
+def runSample (name : String) (got : Result) (exp : Expected) : IO Bool := do
   let pass := checkExpected got exp
   if pass then
     IO.println s!"✓ {name}: {printResult got}  (expected {exp.verdict})"
   else
     IO.println s!"✗ {name}: {printResult got}  (expected {exp.verdict})"
+  return pass
+
+/-- Run a list of (name, got, expected) rows; return the pass count. -/
+def runRows (rows : List (String × Result × Expected)) : IO Nat := do
+  let mut n := 0
+  for (name, got, exp) in rows do
+    if (← runSample name got exp) then n := n + 1
+  return n
 
 -- ============================================================
 -- Main: run 5 sample constructs
@@ -58,29 +72,29 @@ def runSample (name : String) (got : Result) (exp : Expected) : IO Unit :=
 def main : IO Unit := do
   IO.println "=== F4 Conformance Harness (sample run) ==="
   IO.println ""
+  IO.println "--- Samples (EXPECT rows from bench/parity_constructs) ---"
+  let samples : List (String × Result × Expected) := [
+    ("c01_lit",   sample_c01.1, sample_c01.2),
+    ("c02_arith", sample_c02.1, sample_c02.2),
+    ("c07_while", sample_c07.1, sample_c07.2),
+    ("c08_call",  sample_c08.1, sample_c08.2),
+    ("c13_array", sample_c13.1, sample_c13.2) ]
+  let nSamples ← runRows samples
 
-  -- Sample 1: c01_lit — integer literals and wrapping
-  let (got1, exp1) := sample_c01
-  runSample "c01_lit" got1 exp1
-
-  -- Sample 2: c02_arith — arithmetic operators
-  let (got2, exp2) := sample_c02
-  runSample "c02_arith" got2 exp2
-
-  -- Sample 3: c07_while — while loop
-  let (got3, exp3) := sample_c07
-  runSample "c07_while" got3 exp3
-
-  -- Sample 4: c08_call — function call
-  let (got4, exp4) := sample_c08
-  runSample "c08_call" got4 exp4
-
-  -- Sample 5: c13_array — array literal + index + set
-  let (got5, exp5) := sample_c13
-  runSample "c13_array" got5 exp5
+  IO.println ""
+  IO.println "--- Probes (a PASS means the named fake is absent; not conformance) ---"
+  let probes : List (String × Result × Expected) := [
+    ("p01a_syscall_unmodelled",  probe_p01a_syscall_unmodelled.1,  probe_p01a_syscall_unmodelled.2),
+    ("p01b_sys_exit_unmodelled", probe_p01b_sys_exit_unmodelled.1, probe_p01b_sys_exit_unmodelled.2),
+    ("p01c_user_fn_sys_prefix",  probe_p01c_user_fn_sys_prefix.1,  probe_p01c_user_fn_sys_prefix.2),
+    ("p02_fuel_exhaustion",      probe_p02_fuel_exhaustion.1,      probe_p02_fuel_exhaustion.2),
+    ("p03_caller_env",           probe_p03_caller_env.1,           probe_p03_caller_env.2) ]
+  let nProbes ← runRows probes
 
   IO.println ""
   IO.println s!"--- Summary ---"
+  IO.println s!"lean_conformance: {nSamples}/{samples.length}"
+  IO.println s!"lean_probes: {nProbes}/{probes.length}"
   IO.println s!"Positive constructs: {positiveConstructCount}"
   IO.println s!"Negative constructs: {negativeConstructCount}"
   IO.println s!"Total constructs: {totalConstructCount}"
@@ -91,3 +105,6 @@ def main : IO Unit := do
   IO.println s!"Trap rows (F1): {trapCount} (closed {closedTrapCount}, open {openTrapCount})"
   IO.println ""
   IO.println "=== Done ==="
+  -- Fail loud: a short count is a non-zero exit, never a green rc with a red line.
+  if nSamples != samples.length || nProbes != probes.length then
+    IO.Process.exit 1
