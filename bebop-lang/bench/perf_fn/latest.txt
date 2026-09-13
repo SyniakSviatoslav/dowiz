@@ -7,7 +7,7 @@ is_digit 20
 is_alpha 32
 put_num 73
 diag_str 39
-diag_exit 331
+diag_exit 357
 slen 75
 kernel_word_at 106
 kernel_marked 75
@@ -158,7 +158,7 @@ emit_lit 26
 emit_var 110
 hex_val 49
 read_num_val 143
-emit_num 31
+emit_num 74
 emit_apply_op 51
 emit_apply_mul 51
 emit_apply_mod 40
@@ -204,6 +204,7 @@ emit_factor 517
 sum_words 23
 compile 388
 skip_to 68
+scan_nonspace 74
 scan_inert 259
 find_line_end 55
 emit_prologue 61
@@ -243,7 +244,7 @@ skip_args 150
 emit_call_resolve 160
 emit_call 392
 compile_fn 580
-collect_fns 557
+collect_fns 759
 compile_fn_at_total_saved 149
 fw_vc 13
 fw_alloc 16
@@ -300,4 +301,4 @@ emit_sys_mapb 27
 emit_sys_rename 268
 emit_sys_wait4 118
 emit_sys_run 272
-main 977
+main 1008
