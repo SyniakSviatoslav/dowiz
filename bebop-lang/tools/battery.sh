@@ -44,6 +44,7 @@ mkdir -p "$T"/{std,cp,pd,pool,bpp}; sw() { [ "$SERIAL" = 1 ] && wait; :; }; [ "$
 ( bash bench/oracles/run_all.sh > "$T/oracles.log" 2>&1 ) & sw  # little cores, memoized
 ( BEBOP_TMP=$T/bpp BEBOP_BIN=$BIN bash bench/vs_rust/bpref_parity.sh > "$T/bpp.log" 2>&1 ) & sw  # A23 differential lane: bpref's evaluator ran in no battery lane until 2026-09-13
 ( TKERNEL_BIN=./tkernel.bin python3 tools/kcheck.py --corpus bench/kernel_neg > "$T/f7_kcheck.log" 2>&1 ) & sw  # F7: kernel certificate checker vs twin
+( bash tools/no_andand.sh > "$T/andand.log" 2>&1 ) & sw  # A26: `&&` is a CONSTANT ZERO in this language and binds tighter than comparison, so every live site is a defect. Source-level ban, one allowlist (c46_andor pins the behaviour deliberately). Cheap: no compile, just a scan
 ( BEBOP_TMP=$T/inv BEBOP_BIN=$BIN BEBOP_SRC=$SRC bash bench/vs_rust/invariants.sh $([ "$FREEZE" = 1 ] && echo --freeze) > "$T/inv.log" 2>&1 ) & sw
 python3 tools/census.py "$BIN" | tail -n 1 > "$T/census.txt" 2>&1
 python3 tools/check_abi.py "$BIN" > "$T/abi.txt" 2>&1
@@ -69,6 +70,7 @@ line f7_kcheck.log '^kernel_pos:' ' 0 rejected of [1-9][0-9]*'  # F7: a kernel t
 line f7_kcheck.log '^kernel_parity:' '28/28'  # F7: kernel parity measurement (must be real, not "NOT MEASURED")
 line abi.txt 'ABI' '^ABI ok'
 line inv.log '^invariants:' 'GREEN'
+line andand.log '^no_andand:' '^no_andand: PASS'  # A26: fails on any live `&&` outside the allowlist. Comment- and string-aware (a `//` inside a string literal used to hide a real `&&` on the same line -- measured false negative, fixed 2026-09-13). Triggered: adding one live `&&` to a scratch .bp turns this red, removing it turns it green
 line words.log '^words:' '^words: PASS'  # 2026-09-13 audit: in a lane tree (no .git) this was an empty `git diff` against the MAIN repo = PASS measuring nothing; check_words.py now prints NOT MEASURED there unless WORDS_BASE=<base bebop.bp> is set
 line std.log '^boxguard:' '.'  # item 9: the timing stage (lcjit) runs last, single-threaded, boxguard status logged next to it. PRESENCE ONLY, by design: this row records that the timing stage ran (it goes MISSING when std_par's timing loop does not); it asserts nothing about the value and cannot go red on one
 line f8_dt.log '^f8_dt gate:' '^f8_dt gate: PASS'  # F8: dependent surface types parsing + erasure; 2026-09-13 audit: with bebop.bin ABSENT every probe 'REJECTED' at loader rc=90 and this read PASS -- f8_dt.py now prints NOT MEASURED unless the positives compile and every rejection is the diagnostic exit 110
