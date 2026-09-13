@@ -252,7 +252,7 @@ ROWS = [
     ('builtin-shadowing', 'bebop.bp:5753-5756 (T122 rsv table)', 'U',
      'PARTIAL, and that is the precise defect: the mechanism exists and is correct, '
      'the TABLE is short. `fn char(...)` is rejected exit 99; `fn clz(...)` compiles '
-     'rc=0 and clz(8) returns 60. Count derived by hash diff, see --shadow', 99, 'zero', None),
+     'rc=0 and clz(8) returns 60. Count derived by hash diff, see --shadow', 99, 'zero', 'c113_shadowclz'),
     ('traps-md-stale', 'docs/TRAPS.md:exit-89 row vs bebop.bp:3506-3516', 'C',
      'two exit-code tables exist and disagree: TRAPS.md says the fn cap is 256 and '
      'the nesting cap 128 at fntab[2000..2383]; bebop.bp\'s own table says 512 and '
@@ -264,7 +264,7 @@ ROWS = [
      'produce ANY code in 99..140 -- aliasing every documented compile-time code', None, 'zero', None),
     ('exit-102-overloaded', 'bebop.bp:310 vs bebop.bp:4912', 'C',
      'code 102 means BOTH "sys_ name inside a kernel fn" (documented, user-facing) '
-     'and a register-model window-mask self-check (undocumented, compiler-internal)', 102, 'zero', None),
+     'and a register-model window-mask self-check (undocumented, compiler-internal)', 102, 'zero', 'c112_kernelsys'),
     ('exit-105-106-undocumented', 'bebop.bp:4937,5025', 'C',
      'sys_exit(105) and sys_exit(106) are emitted as cs-mask self-checks but appear '
      'in no table -- and ROADMAP F2 plans to ASSIGN 105 and 106 to new user-facing '
@@ -611,7 +611,7 @@ def build(argv):
     # the language already makes unrepresentable-or-caught. They are in the
     # census so the gate has a baseline -- a progress counter with no closed
     # rows in the denominator cannot reach 100 %.
-    curated_codes = {r['code'] for r in rows if r['closed']}
+    curated_codes = {r['code'] for r in rows if r['code'] is not None}
     for code in sorted(negs):
         if code in curated_codes:
             continue
