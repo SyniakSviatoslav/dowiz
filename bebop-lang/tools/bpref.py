@@ -8,6 +8,8 @@ can be executed in the Python interpreter exactly as they would on bebop.bin.
 import os
 import re
 import sys
+import zlib
+import struct
 
 DEPTH_CAP = int(os.environ.get('BPREF_DEPTH', '5000'))
 
@@ -67,7 +69,7 @@ RESERVED = set(['sys_msync', 'sys_fsync', 'sys_mprotect', 'crc32x', 'crc32', 'cl
     'sys_munmap', 'sys_ftruncate', 'sys_rename', 'sys_export', 'sys_exit',
     'sys_arena_base', 'sys_arena_end', 'sys_clone', 'sys_cond_set', 'sys_futex_wait_guard',
     'sys_futex_wake', 'sys_atomic_add', 'sys_exit_thread_guard', 'sys_run', 'sys_wait4',
-    'scan', 'crc32b'])
+    'scan', 'crc32b', 'requires', 'ensures', 'theorem', 'result'])
 
 class DepthError(Exception):
     pass
@@ -178,6 +180,46 @@ class Parser:
             v = self.next()[1]
             d += (v == '{') - (v == '}')
 
+    def skip_contract(self):
+        # Skip requires/ensures/theorem clauses until we see '{'
+        while not self.at('{'):
+            if self.at('requires') or self.at('ensures'):
+                self.next()  # skip requires/ensures keyword
+                # Skip the expression after requires/ensures
+                # We need to find the next keyword or '{'
+                depth = 0
+                while True:
+                    if self.at('{') and depth == 0:
+                        break
+                    if self.at('requires', 0) and depth == 0:
+                        break
+                    if self.at('ensures', 0) and depth == 0:
+                        break
+                    if self.at('theorem', 0) and depth == 0:
+                        break
+                    v = self.peek()[1]
+                    depth += (v == '(' or v == '[') - (v == ')' or v == ']')
+                    self.next()
+            elif self.at('theorem'):
+                self.next()  # skip 'theorem'
+                self.ident()  # skip theorem name
+                # Skip the theorem expression
+                depth = 0
+                while True:
+                    if self.at('{') and depth == 0:
+                        break
+                    if self.at('requires', 0) and depth == 0:
+                        break
+                    if self.at('ensures', 0) and depth == 0:
+                        break
+                    if self.at('theorem', 0) and depth == 0:
+                        break
+                    v = self.peek()[1]
+                    depth += (v == '(' or v == '[') - (v == ')' or v == ']')
+                    self.next()
+            else:
+                break
+
     def program(self):
         while not self.at('<eof>'):
             v = self.peek()[1]
@@ -217,6 +259,7 @@ class Parser:
                     else:
                         rtype = self.next()[1]
                 self.sigs[name] = (ptypes, rtype)
+                self.skip_contract()  # Skip any requires/ensures/theorem clauses
                 self.expect('{')
                 body = self.body()
                 if not body or body[-1][0] != 'expr' or self.t[self.p - 1][1] == ';':
@@ -621,11 +664,71 @@ class Interp:
             (sys.stdout.buffer if fd == 1 else sys.stderr.buffer).write(data)
             return n
         if name == 'crc32b':
-            import zlib
             s = args[0]
             off = s >> 32
             ln = s & 0xffffffff
             return zlib.crc32(bytes(self.bytes[off:off + ln]) if ln > 0 else b'') & 0xffffffff
+        if name == 'clz':
+            # clz(x): count leading zeros of 64-bit word, clz(0) = 64
+            x = args[0] & 0xffffffffffffffff
+            if x == 0:
+                return 64
+            return 63 - (x.bit_length() - 1)
+        if name == 'crc32':
+            # crc32(cells, n): zlib crc32 of n bytes held one per cell
+            cells = args[0]
+            n = args[1]
+            # cells is a Cells object; extract n bytes one per cell
+            data = bytes(cells[i] & 0xff for i in range(n))
+            return zlib.crc32(data) & 0xffffffff
+        if name == 'crc32x':
+            # crc32x(cells, off, n): zlib crc32 of raw little-endian bytes of n cells from cells[off]
+            cells = args[0]
+            off = args[1]
+            n = args[2]
+            # Pack n cells starting at off as little-endian 64-bit integers
+            data = b''
+            for i in range(n):
+                cell_val = cells[off + i] & 0xffffffffffffffff
+                data += struct.pack('<q', cell_val if cell_val < (1 << 63) else cell_val - (1 << 64))
+            return zlib.crc32(data) & 0xffffffff
+        if name == 'scan':
+            # scan(s, pos, class): advance pos[0] over bytes matching class
+            # class 0 = whitespace, 1 = ident, 2 = not-quote-not-backslash, 3 = not-newline
+            s = args[0]
+            pos = args[1]
+            class_code = args[2]
+
+            # Extract string bounds from pos array
+            off = s >> 32
+            str_len_val = s & 0xffffffff
+            current_pos = pos[0]
+            limit = pos[1]
+
+            # Advance pos[0] while bytes match class
+            while current_pos < limit and current_pos < str_len_val:
+                byte_val = self.bytes[off + current_pos]
+                matches = False
+
+                if class_code == 0:  # whitespace: space, tab, newline, carriage return
+                    matches = byte_val in (32, 9, 10, 13)
+                elif class_code == 1:  # ident: [0-9A-Za-z_]
+                    matches = (48 <= byte_val <= 57 or  # 0-9
+                               65 <= byte_val <= 90 or  # A-Z
+                               97 <= byte_val <= 122 or # a-z
+                               byte_val == 95)          # _
+                elif class_code == 2:  # not-quote-not-backslash
+                    matches = byte_val != 34 and byte_val != 92
+                else:  # class 3 and any other: not-newline
+                    matches = byte_val != 10
+
+                if not matches:
+                    break
+                current_pos += 1
+
+            # Update pos[0] and return it
+            pos[0] = current_pos
+            return current_pos
         if name == 'sys_mapb':
             path_handle, map_len = args[0], args[1]
             off = len(self.bytes)
