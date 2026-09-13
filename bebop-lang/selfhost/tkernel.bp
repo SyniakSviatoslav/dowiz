@@ -61,7 +61,7 @@ fn kp_int(s: str, pos: [i64], n: i64) -> i64 {
 }
 
 // consume one token, return its FIRST byte -- enough to classify every keyword:
-// s(ort) v(ar) c(onst|heck) p(i) l(am) a(pp|xiom) d(ef) i(nductive)
+// s(ort) v(ar) c(onst|heck) p(i) l(am) a(pp|xiom) d(ef) i(nductive) e(lim)
 fn kp_word(s: str, pos: [i64], n: i64) -> i64 {
   let _ = kp_ws(s, pos, n);
   let c0 = if pos[0] < n then char(s, pos[0]) else 0;
@@ -150,27 +150,40 @@ fn kp_node(K: [i64], s: str, pos: [i64], n: i64) -> i64 {
   0
 }
 
-// Parse one constructor in an inductive. Format: `| <name> : <id>`
-// Consume the `|`, then name, then `:`, then constructor type id.
-fn kp_ctor(K: [i64], s: str, pos: [i64], n: i64) -> i64 {
+// Parse, check and REGISTER one constructor of an inductive. Format: `| <name> : <id>`.
+// Registration (k_ind_ctor_add) puts the name in the def table and the record in the
+// inductive table; before 2026-09-13 the name was parsed and dropped, so `const zero`
+// after `inductive Nat` was 21 here and accepted by the twin -- a parity hole nothing
+// in the corpus exercised until an eliminator needed to mention a constructor.
+fn kp_ctor(K: [i64], s: str, pos: [i64], n: i64, nh: i64, arity: i64) -> i64 {
   let _ = kp_word(s, pos, n);  // consume the `|`
-  let ch = kp_hash(s, pos, n);  // constructor name (TODO: register in def table)
+  let ch = kp_hash(s, pos, n);  // constructor name
   let _ = kp_word(s, pos, n);  // consume the `:`
   let cid = kp_int(s, pos, n);  // constructor type id
-  K[24592 + cid]  // return the uid of the constructor type
+  let cty = K[24592 + cid];
+  let _ = if cty == 0 then k_rej(K, 13) else 0;
+  let _ = k_check_inductive_ctor(K, nh, arity, cty);
+  let _ = k_ind_ctor_add(K, ch, cty);
+  0
 }
 
 // `check <t> : <ty>` / `def <name> : <ty> := <body>` / `axiom <name> : <ty>` /
-// `inductive <name> : <arity> | <ctor> : <type> ...`
+// `inductive <name> : <arity> | <ctor> : <type> ...` /
+// `elim <name> <inductive> <v>` -- declares <name> as the case-analysis eliminator of
+// <inductive> with motive `<inductive> -> Sort <v>`; the type is built by the kernel.
 fn kp_decl(K: [i64], s: str, pos: [i64], n: i64) -> i64 {
   let kw = kp_word(s, pos, n);
   let ischk = if kw == 99 then 1 else 0;
   let isdef = if kw == 100 then 1 else 0;
   let isax = if kw == 97 then 1 else 0;
   let isind = if kw == 105 then 1 else 0;
+  let isel = if kw == 101 then 1 else 0;
   let nh = if isdef == 1 then kp_hash(s, pos, n) else 0;
   let nh = if isax == 1 then kp_hash(s, pos, n) else nh;
   let nh = if isind == 1 then kp_hash(s, pos, n) else nh;
+  let nh = if isel == 1 then kp_hash(s, pos, n) else nh;
+  let eh = if isel == 1 then kp_hash(s, pos, n) else 0;
+  let ev = if isel == 1 then kp_int(s, pos, n) else 0;
   let _ = if isind == 1 then (let _ = kp_word(s, pos, n) in 0) else 0;  // consume `:` for inductive
   let t1 = if ischk == 1 then kp_int(s, pos, n) else 0;
   let _ = if ischk == 1 then (let _ = kp_word(s, pos, n) in 0) else 0;
@@ -193,19 +206,16 @@ fn kp_decl(K: [i64], s: str, pos: [i64], n: i64) -> i64 {
   let _ = if isdef == 1 then k_def_add(K, nh, dy, db) else 0;
   let _ = if isax == 1 then k_def_add(K, nh, xy, 0) else 0;
   let _ = if isind == 1 then k_def_add(K, nh, ind_arity, 0) else 0;
+  let _ = if isind == 1 then k_ind_add(K, nh, ind_arity) else 0;
+  let _ = if isel == 1 then k_elim(K, nh, eh, ev) else 0;
   // For inductive, parse constructors and check each one
   let go = isind;
   while go == 1 {
     let _ = kp_ws(s, pos, n);
     let c = if pos[0] < n then char(s, pos[0]) else 10;
     let ispipe = if c == 124 then 1 else 0;  // `|` character
-    let isnl = if c == 10 then 1 else 0;
     let go = if ispipe == 1 then 1 else 0;
-    let _ = if ispipe == 1 then (
-      let ctor_type_uid = kp_ctor(K, s, pos, n);
-      let _ = k_check_inductive_ctor(K, nh, ind_arity, ctor_type_uid);
-      0
-    ) else 0;
+    let _ = if ispipe == 1 then kp_ctor(K, s, pos, n, nh, ind_arity) else 0;
     0
   };
   0

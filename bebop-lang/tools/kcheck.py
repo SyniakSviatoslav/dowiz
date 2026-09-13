@@ -38,7 +38,15 @@ The calculus (predicative, concrete levels, de Bruijn):
     pi A B                dependent function type; B is checked under A.
     lam A b               abstraction with domain annotation.
     app f a               application.
-    const c               a previously DECLARED name (def or axiom).
+    const c               a previously DECLARED name (def, axiom, inductive,
+                          constructor or eliminator).
+
+    inductive I : Sort u | c_1 : T_1 | .. | c_n : T_n
+                          T_i closed, strictly positive, ending in I, living at or
+                          below Sort u. No parameters, no indices.
+    elim E I v            E is the CASE-ANALYSIS eliminator of I with motive
+                          I -> Sort v (see elim_type); Sort 0 eliminates into
+                          Sort 0 only (see check_elim). Added 2026-09-13.
 
     Sort n            : Sort (n+1)
     pi A B            : Sort (max u v)      where A : Sort u and, under A, B : Sort v
@@ -100,7 +108,7 @@ def parse(path):
         if not t or t.startswith('%'):
             continue
         w = t.split()
-        if w[0] in ('def', 'axiom', 'inductive', 'check'):
+        if w[0] in ('def', 'axiom', 'inductive', 'check', 'elim'):
             decls.append((lineno, w))
             continue
         try:
@@ -189,10 +197,60 @@ class Env:
     def __init__(self):
         self.types = {}      # const name -> type term
         self.bodies = {}     # const name -> body term (defs only; axioms have none)
+        self.inductives = {} # inductive name -> (arity term, [(ctor name, ctor type)])
+        self.elims = {}      # eliminator name -> inductive name
+
+
+def spine(t):
+    """('app', ('app', h, a1), a2) -> (h, [a1, a2]). Head is NOT normalised."""
+    args = []
+    while t[0] == 'app':
+        args.append(t[2])
+        t = t[1]
+    args.reverse()
+    return t, args
+
+
+def iota(env, t, fuel):
+    """ONE iota step, or None. `E P b_1 .. b_n (c_i a_1 .. a_k)` -> `b_i a_1 .. a_k`
+    when E is the eliminator of I, I has n constructors and c_i is its i-th. The
+    scrutinee is put in whnf first so `E P b.. (id true)` reduces too. Extra
+    arguments beyond the scrutinee are kept. Spec-level as of 2026-09-13: the
+    kernel's k_conv is structural and has no whnf at all (tcheck_kernel.bp:97), so
+    no corpus fixture may DEPEND on this rule until k_conv grows one -- a fixture
+    that needs iota is a parity break, not a test. It is written here because the
+    twin is the spec and a rule the spec does not state cannot be argued with."""
+    h, args = spine(t)
+    if h[0] != 'const' or h[1] not in env.elims:
+        return None
+    ind = env.elims[h[1]]
+    _, ctors = env.inductives[ind]
+    n = len(ctors)
+    if len(args) < n + 2:
+        return None
+    ch, cargs = spine(whnf(env, args[n + 1], fuel))
+    if ch[0] != 'const':
+        return None
+    for i, (cname, ctype) in enumerate(ctors):
+        if ch[1] == cname:
+            k = sum(1 for _ in pi_spine(ctype))
+            if len(cargs) != k:
+                return None
+            r = args[1 + i]
+            for a in cargs + args[n + 2:]:
+                r = ('app', r, a)
+            return r
+    return None
+
+
+def pi_spine(t):
+    while t[0] == 'pi':
+        yield t[1]
+        t = t[2]
 
 
 def whnf(env, t, fuel):
-    """Weak head normal form: beta + delta. Fuel exhaustion RAISES -- a kernel
+    """Weak head normal form: beta + delta + iota. Fuel exhaustion RAISES -- a kernel
     that gives up and accepts is the failure mode this file exists to prevent."""
     while True:
         if fuel[0] <= 0:
@@ -207,6 +265,10 @@ def whnf(env, t, fuel):
             f = whnf(env, t[1], fuel)
             if f[0] == 'lam':
                 t = subst(f[2], 0, t[2])
+                continue
+            r = iota(env, ('app', f, t[2]), fuel)
+            if r is not None:
+                t = r
                 continue
             return ('app', f, t[2])
         return t
@@ -344,10 +406,17 @@ def strictly_positive(name, ctype):
 
 
 def check_inductive(env, name, arity, ctors, fuel):
-    sort_of(env, [], arity, fuel)
+    # The arity must be a LITERAL `Sort u` (2026-09-13): the eliminator needs u as a
+    # number, and an arity hidden behind a def would need delta here. Before this
+    # the twin took any type and the kernel took anything at all (a pi arity with a
+    # bare-const constructor was kernel 0 / twin rejected -- kernel code 28 now).
+    if arity[0] != 'sort':
+        raise KError('inductive %s: the arity must be a literal Sort, got %s'
+                     % (name, show(arity)))
+    u = arity[1]
     env.types[name] = arity
     for cname, ctype in ctors:
-        sort_of(env, [], ctype, fuel)
+        w = sort_of(env, [], ctype, fuel)
         if not strictly_positive(name, ctype):
             del env.types[name]
             raise KError('inductive %s: constructor %s has a NON-POSITIVE '
@@ -360,8 +429,78 @@ def check_inductive(env, name, arity, ctors, fuel):
             del env.types[name]
             raise KError('inductive %s: constructor %s does not return %s'
                          % (name, cname, name))
+        # LEVEL (2026-09-13, kernel code 29): the constructor type must live at or
+        # below Sort u. Both sides accepted `U : Sort 1 | mk : Pi (A : Sort 2). U`
+        # before this; harmless with nothing to eliminate, and Type : Type the moment
+        # `decode : U -> Sort 2` exists with `decode (mk A) = A`. Under imax a
+        # codomain in Sort 0 pulls the pi to Sort 0, so the impredicative existential
+        # passes here and is fenced by the elimination restriction instead.
+        if w > u:
+            del env.types[name]
+            raise KError('inductive %s: constructor %s has type in Sort %d, above '
+                         'the inductive\'s Sort %d -- a large constructor in a small '
+                         'type is Type : Type once an eliminator exists'
+                         % (name, cname, w, u))
         env.types[cname] = ctype
+    env.inductives[name] = (arity, list(ctors))
     return True
+
+
+# ---------------------------------------------------------------- the eliminator
+# CASE ANALYSIS ONLY (2026-09-13): no recursive branch arguments. For
+#   inductive I : Sort u | c_1 : A_11 -> .. -> A_1k -> I | .. | c_n : ..
+# `elim E I v` declares the bodiless constant
+#   E : Pi (P : I -> Sort v).
+#         Pi (b_1 : Pi (a.. : A_1..). P (c_1 a..)). .. Pi (b_n : ..).
+#           Pi (x : I). P x
+# and the iota rule above computes with it. De Bruijn, innermost first: at the tail
+# P = var (n+1), x = var 0; inside branch i0 (0-based) under its k argument binders
+# P = var (k + i0) and the arguments are var (k-1) .. var 0. A constructor type is
+# closed, so the shift of its domains by (i0+1) above cutoff k is an identity in
+# practice; it is what the rule says, so it is what is written -- and the kernel
+# builds the same term by the same bookkeeping (tcheck_kernel.bp k_elim_type), which
+# is what p15/p16 compare against a hand-written type.
+
+def elim_branch(ctype, cname, i0, k):
+    if ctype[0] == 'pi':
+        return ('pi', shift(ctype[1], i0 + 1, k), elim_branch(ctype[2], cname, i0, k + 1))
+    t = ('const', cname)
+    for j in range(k - 1, -1, -1):
+        t = ('app', t, ('var', j))
+    return ('app', ('var', k + i0), t)
+
+
+def elim_type(ind, ctors, v):
+    n = len(ctors)
+    tail = ('pi', ('const', ind), ('app', ('var', n + 1), ('var', 0)))
+    for i0 in range(n - 1, -1, -1):
+        cname, ctype = ctors[i0]
+        tail = ('pi', elim_branch(ctype, cname, i0, 0), tail)
+    return ('pi', ('pi', ('const', ind), ('sort', v)), tail)
+
+
+def check_elim(env, ename, ind, v, fuel):
+    """THE ELIMINATION RESTRICTION lives here and nowhere else (kernel code 27): an
+    inductive in Sort 0 may only be eliminated into Sort 0. Under imax Sort 0 is
+    impredicative, and a motive `I -> Sort v` with v > 0 on an `I : Sort 0` is
+    exactly large elimination from Prop -- the standard route from an impredicative
+    universe to inconsistency. Applied under BOTH arms: the max arm loses nothing it
+    cannot recover by declaring the inductive in Sort 1, and one rule that holds
+    everywhere is one rule to audit."""
+    if ind not in env.inductives:
+        raise KError('elim %s: %s is not a declared inductive' % (ename, ind))
+    arity, ctors = env.inductives[ind]
+    u = arity[1]
+    if u == 0 and v > 0:
+        raise KError('elim %s: LARGE ELIMINATION -- %s lives in Sort 0 and the motive '
+                     'targets Sort %d. An inductive in Sort 0 eliminates into Sort 0 '
+                     'only; under imax anything else is the route to inconsistency.'
+                     % (ename, ind, v))
+    ty = elim_type(ind, ctors, v)
+    sort_of(env, [], ty, fuel)   # a self-check on the builder: the type must be a type
+    env.types[ename] = ty
+    env.elims[ename] = ind
+    return ty
 
 
 # --------------------------------------------------------------------- driver
@@ -396,6 +535,9 @@ def run_file(path):
                     ctors.append((rest[1], nodes[int(rest[3])]))
                     rest = rest[4:]
                 check_inductive(env, nm, arity, ctors, fuel)
+            elif kind == 'elim':
+                # `elim <name> <inductive> <v>` -- see check_elim.
+                check_elim(env, w[1], w[2], int(w[3]), fuel)
             elif kind == 'check':
                 term, ty = nodes[int(w[1])], nodes[int(w[3])]
                 # The CLAIMED type must itself be a type. Added 2026-09-09 after

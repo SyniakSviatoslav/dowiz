@@ -1,0 +1,13 @@
+% n20: a LARGE CONSTRUCTOR in a SMALL type -- the shape that makes the eliminator
+% load-bearing. `U : Sort 1` with `mk : Pi (A : Sort 2). U` was accepted by kernel AND
+% twin on 2026-09-13 (measured before this fixture existed: both 0). Nothing could use
+% it -- until `elim decode U 2` gives `decode : U -> Sort 2` with `decode (mk A) = A`,
+% a Sort 2 packed inside Sort 1: Type : Type by another name, and Hurkens follows.
+% The constructor type is Sort 3 under max AND imax (its codomain is Sort 1, not 0),
+% above U's Sort 1, so the INDUCTIVE is refused (29) on both arms before `elim`.
+1 sort 1
+2 sort 2
+3 const U
+4 pi 2 3
+inductive U : 1 | mk : 4
+elim decode U 2

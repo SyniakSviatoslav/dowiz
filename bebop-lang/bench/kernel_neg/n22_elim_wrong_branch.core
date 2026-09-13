@@ -1,0 +1,30 @@
+% n22: the eliminator's BRANCH types are checked. Same declarations as p15, but the
+% `true` branch is fed `f : P false` where `P true` is demanded. If the builder put
+% the branches in the wrong order, or the codomain substitution were wrong, this
+% would slip through. It must be 24 (argument type mismatch) on both arms.
+1 sort 0
+2 const Bool
+3 const Bool
+inductive Bool : 1 | true : 2 | false : 3
+elim Bool_cases Bool 0
+4 const Bool
+5 sort 0
+6 pi 4 5
+axiom P : 6
+7 const P
+8 const true
+9 app 7 8
+axiom t : 9
+10 const P
+11 const false
+12 app 10 11
+axiom f : 12
+13 const Bool_cases
+14 const P
+15 app 13 14
+16 const f
+17 app 15 16
+18 const P
+19 const false
+20 app 18 19
+check 17 : 20

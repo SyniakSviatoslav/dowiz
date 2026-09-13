@@ -28,10 +28,16 @@
 //   arg b at K[16400 + uid]
 //   id2uid at K[24592 + fileid]      fileid < 1024
 //   ctx    at K[27408 + depth]       depth < 256, outermost at 0
+//   K[6]  inductive count            K[7]  constructor record count
+//   ind hash K[27664+i] arity K[27728+i] first-ctor K[27792+i] nctors K[27856+i]   i < 64
+//   ctor hash K[27920+j]  ctor type K[28176+j]                                     j < 256
 //
 // Tags: 1 sort, 2 var (de Bruijn), 3 const, 4 pi, 5 lam, 6 app.
 // Reject codes: 13 undefined reference, 20 var unbound, 22 expected a type,
-//               26 check mismatch, 71 capacity.
+//               26 check mismatch, 27 large elimination from Sort 0,
+//               28 elim of something that is not a declared inductive with a
+//               literal Sort arity, 29 constructor type above the inductive's
+//               sort, 71 capacity.
 
 fn k_rej(K: [i64], code: i64) -> i64 {
   let _ = if K[4] == 0 then (let _ = K[4] = code in 0) else 0;
@@ -299,12 +305,22 @@ fn k_arg_pos(K: [i64], a: i64, h: i64) -> i64 {
   ok
 }
 
-// k_check_inductive_ctor: the arity must be a type, the constructor must RETURN the
-// inductive being declared (31), every pi domain must be a type (22), and every
-// argument must be strictly positive (30).
+// k_check_inductive_ctor: the arity must be a LITERAL Sort u (28) -- the eliminator
+// needs u as a number, and an arity hidden behind a def would need delta here --
+// the constructor must RETURN the inductive being declared (31), every pi domain must
+// be a type (22), every argument must be strictly positive (30), and the constructor
+// type as a whole must be a type (22) living at or below Sort u (29).
+//
+// 29 is the check that the ELIMINATOR makes load-bearing. Without it
+// `inductive U : Sort 1 | mk : Pi (A : Sort 2). U` is accepted (it was, 2026-09-13,
+// by kernel and twin alike), and with a large eliminator `decode : U -> Sort 2`,
+// `decode (mk A) = A` makes U a Sort 2 that lives in Sort 1 -- Type : Type by another
+// name. Under imax the codomain `U : Sort 0` pulls the whole pi to Sort 0, so the same
+// rule leaves the impredicative existential alone; 27 is what fences THAT one.
 fn k_check_inductive_ctor(K: [i64], indtype_hash: i64, arity: i64, ctor_type: i64) -> i64 {
-  let arity_type = k_infer(K, arity);
-  let _ = if k_tag(K, arity_type) == 1 then 0 else k_rej(K, 22);
+  let arity_lit = if k_tag(K, arity) == 1 then 1 else 0;
+  let _ = if arity_lit == 1 then 0 else k_rej(K, 28);
+  let u = k_a(K, arity);
   let r = k_ctor_ret(K, ctor_type);
   let okret = if k_tag(K, r) == 3 then (if k_a(K, r) == indtype_hash then 1 else 0) else 0;
   let _ = if okret == 1 then 0 else k_rej(K, 31);
@@ -319,5 +335,134 @@ fn k_check_inductive_ctor(K: [i64], indtype_hash: i64, arity: i64, ctor_type: i6
     0
   };
   let _ = if neg == 1 then k_rej(K, 30) else 0;
+  let cty_sort = k_infer(K, ctor_type);
+  let is_sort = if k_tag(K, cty_sort) == 1 then 1 else 0;
+  let _ = if is_sort == 1 then 0 else k_rej(K, 22);
+  let above = if is_sort == 1 then (if k_a(K, cty_sort) > u then 1 else 0) else 0;
+  let _ = if above == 1 then k_rej(K, 29) else 0;
+  0
+}
+
+// ---------------------------------------------------------------- inductive table
+// The def table knows a name and a type; an eliminator needs the SHAPE -- which
+// constructors, in which order, with which types -- so inductives get their own table.
+// A constructor record is appended to the MOST RECENT inductive: declarations are
+// parsed in order and a `| c : T` belongs to the `inductive` line it follows.
+
+fn k_ind_add(K: [i64], h: i64, arity: i64) -> i64 {
+  let i = K[6];
+  let over = if i >= 64 then 1 else 0;
+  let _ = if over == 1 then k_rej(K, 71) else 0;
+  let _ = if over == 0 then (let _ = K[27664 + i] = h in 0) else 0;
+  let _ = if over == 0 then (let _ = K[27728 + i] = arity in 0) else 0;
+  let _ = if over == 0 then (let _ = K[27792 + i] = K[7] in 0) else 0;
+  let _ = if over == 0 then (let _ = K[27856 + i] = 0 in 0) else 0;
+  let _ = if over == 0 then (let _ = K[6] = i + 1 in 0) else 0;
+  0
+}
+
+// registers the constructor in the def table too, so `const zero` types as Nat --
+// before 2026-09-13 the driver parsed the name and dropped it (kernel 21, twin accept).
+fn k_ind_ctor_add(K: [i64], ch: i64, cty: i64) -> i64 {
+  let j = K[7];
+  let i = K[6] - 1;
+  let over = if j >= 256 then 1 else 0;
+  let over = if i < 0 then 1 else over;
+  let _ = if over == 1 then k_rej(K, 71) else 0;
+  let _ = if over == 0 then (let _ = K[27920 + j] = ch in 0) else 0;
+  let _ = if over == 0 then (let _ = K[28176 + j] = cty in 0) else 0;
+  let _ = if over == 0 then (let _ = K[27856 + i] = K[27856 + i] + 1 in 0) else 0;
+  let _ = if over == 0 then (let _ = K[7] = j + 1 in 0) else 0;
+  let _ = if over == 0 then k_def_add(K, ch, cty, 0) else 0;
+  0
+}
+
+// 1-based index of the inductive named h; 0 when there is none (uid-0 style sentinel).
+fn k_ind_find(K: [i64], h: i64) -> i64 {
+  let i = 0;
+  let cnt = K[6];
+  let found = 0;
+  while i < cnt {
+    let hit = if K[27664 + i] == h then 1 else 0;
+    let found = if hit == 1 then i + 1 else found;
+    let i = if hit == 1 then cnt else i + 1;
+    0
+  };
+  found
+}
+
+// ---------------------------------------------------------------- the eliminator
+// CASE ANALYSIS ONLY (no recursive branch arguments, no iota in k_conv -- see the
+// F7 verdict of 2026-09-13). For `inductive I : Sort u | c_1 : A_1 -> .. -> I | ..`
+// with n constructors, `elim E I v` declares
+//
+//   E : Pi (P : I -> Sort v).
+//         Pi (b_1 : Pi (a..: A_1..). P (c_1 a..)). ... Pi (b_n : ...).
+//           Pi (x : I). P x
+//
+// as a bodiless const. De Bruijn, innermost first: at the tail P = var (n+1), x = var 0;
+// inside branch i0 (0-based) under its k argument binders P = var (k + i0) and the
+// arguments are var (k-1) .. var 0. A constructor type is closed, so the k_shift of
+// its domains by (i0 + 1) above cutoff k is an identity in practice; it is what the
+// rule says, so it is what is written.
+
+// app (.. (app (const c) (var k-1)) ..) (var 0)
+fn k_ctor_app(K: [i64], ch: i64, k: i64) -> i64 {
+  let cur = k_new(K, 3, ch, 0);
+  let j = k;
+  while j > 0 {
+    let cur = k_new(K, 6, cur, k_new(K, 2, j - 1, 0));
+    let j = j - 1;
+    0
+  };
+  cur
+}
+
+fn k_elim_branch(K: [i64], cty: i64, ch: i64, i0: i64, k: i64) -> i64 {
+  let ispi = if k_tag(K, cty) == 4 then 1 else 0;
+  let res = if ispi == 1 then k_new(K, 4, k_shift(K, k_a(K, cty), i0 + 1, k), k_elim_branch(K, k_b(K, cty), ch, i0, k + 1)) else 0;
+  let res = if ispi == 0 then k_new(K, 6, k_new(K, 2, k + i0, 0), k_ctor_app(K, ch, k)) else res;
+  res
+}
+
+// i is the 0-based inductive index. Built inside out: the tail first, then each
+// branch pi wrapped around it from the last constructor to the first, then the motive.
+fn k_elim_type(K: [i64], ih: i64, i: i64, v: i64) -> i64 {
+  let first = K[27792 + i];
+  let n = K[27856 + i];
+  let tail = k_new(K, 4, k_new(K, 3, ih, 0), k_new(K, 6, k_new(K, 2, n + 1, 0), k_new(K, 2, 0, 0)));
+  let i0 = n - 1;
+  while i0 >= 0 {
+    let br = k_elim_branch(K, K[28176 + first + i0], K[27920 + first + i0], i0, 0);
+    let tail = k_new(K, 4, br, tail);
+    let i0 = i0 - 1;
+    0
+  };
+  k_new(K, 4, k_new(K, 4, k_new(K, 3, ih, 0), k_new(K, 1, v, 0)), tail)
+}
+
+// THE ELIMINATION RESTRICTION lives here and nowhere else: an inductive in Sort 0 may
+// only be eliminated into Sort 0 (27). Under imax Sort 0 is impredicative, and a
+// motive `I -> Sort v` with v > 0 on an `I : Sort 0` is exactly large elimination from
+// Prop, the standard route from an impredicative universe to inconsistency. The rule
+// is applied under BOTH arms: the max arm loses nothing it cannot recover by declaring
+// the inductive in Sort 1, and one rule that holds everywhere is one rule to audit.
+// (Relaxing it to the imax arm alone is a one-token change: guard `large` with K[2].)
+fn k_elim(K: [i64], eh: i64, ih: i64, v: i64) -> i64 {
+  let f = k_ind_find(K, ih);
+  let _ = if f == 0 then k_rej(K, 28) else 0;
+  let i = if f == 0 then 0 else f - 1;
+  let arity = if f == 0 then 0 else K[27728 + i];
+  let issort = if k_tag(K, arity) == 1 then 1 else 0;
+  let _ = if issort == 1 then 0 else k_rej(K, 28);
+  let u = k_a(K, arity);
+  let large = if issort == 1 then (if u == 0 then (if v > 0 then 1 else 0) else 0) else 0;
+  let _ = if large == 1 then k_rej(K, 27) else 0;
+  let ok = if f == 0 then 0 else issort;
+  let ok = if large == 1 then 0 else ok;
+  let ty = if ok == 1 then k_elim_type(K, ih, i, v) else 0;
+  let tty = if ok == 1 then k_infer(K, ty) else 0;
+  let _ = if ok == 1 then (if k_tag(K, tty) == 1 then 0 else k_rej(K, 22)) else 0;
+  let _ = if ok == 1 then k_def_add(K, eh, ty, 0) else 0;
   0
 }

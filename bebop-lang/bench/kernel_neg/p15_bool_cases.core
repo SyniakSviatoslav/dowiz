@@ -1,0 +1,38 @@
+% p15: the case-analysis eliminator, USED. `Bool : Sort 0` with two constructors;
+% `elim Bool_cases Bool 0` declares
+%   Bool_cases : Pi (P : Bool -> Sort 0). P true -> P false -> Pi (x : Bool). P x.
+% Applied to a motive P (an AXIOM, so no beta is needed -- k_conv is structural), the
+% branches t f and the scrutinee `true`, it must have type `P true`: four dependent
+% applications, three of them substituting into a codomain the kernel built itself.
+% Also the first fixture to name a constructor: `const true` was 21 in the kernel
+% before 2026-09-13 (kp_ctor parsed the name and dropped it) while the twin accepted.
+1 sort 0
+2 const Bool
+3 const Bool
+inductive Bool : 1 | true : 2 | false : 3
+elim Bool_cases Bool 0
+4 const Bool
+5 sort 0
+6 pi 4 5
+axiom P : 6
+7 const P
+8 const true
+9 app 7 8
+axiom t : 9
+10 const P
+11 const false
+12 app 10 11
+axiom f : 12
+13 const Bool_cases
+14 const P
+15 app 13 14
+16 const t
+17 app 15 16
+18 const f
+19 app 17 18
+20 const true
+21 app 19 20
+22 const P
+23 const true
+24 app 22 23
+check 21 : 24

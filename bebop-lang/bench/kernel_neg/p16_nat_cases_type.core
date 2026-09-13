@@ -1,0 +1,37 @@
+% p16: the eliminator's TYPE, compared against a hand-written one. `succ : Nat -> Nat`
+% gives a branch with a binder, so this is the fixture that checks the de Bruijn
+% bookkeeping of the builder (P = var (k + i0) inside branch i0 under k argument
+% binders, P = var (n+1) at the tail) against a term written by hand. k_conv is
+% structural, so the kernel must build EXACTLY this tree:
+%   Pi (P : Nat -> Sort 0). Pi (bz : P zero). Pi (bs : Pi (m : Nat). P (succ m)).
+%     Pi (x : Nat). P x
+1 sort 0
+2 const Nat
+3 const Nat
+4 const Nat
+5 pi 3 4
+inductive Nat : 1 | zero : 2 | succ : 5
+elim Nat_cases Nat 0
+6 const Nat
+7 sort 0
+8 pi 6 7
+9 var 0
+10 const zero
+11 app 9 10
+12 const Nat
+13 var 2
+14 const succ
+15 var 0
+16 app 14 15
+17 app 13 16
+18 pi 12 17
+19 const Nat
+20 var 3
+21 var 0
+22 app 20 21
+23 pi 19 22
+24 pi 18 23
+25 pi 11 24
+26 pi 8 25
+27 const Nat_cases
+check 27 : 26

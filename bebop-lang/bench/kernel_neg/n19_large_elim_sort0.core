@@ -1,0 +1,10 @@
+% n19: LARGE ELIMINATION from Sort 0. Bool lives in Sort 0; a motive `Bool -> Sort 1`
+% would let case analysis on a Bool compute a TYPE. Under imax Sort 0 is impredicative
+% and this is the textbook route to inconsistency (large elimination from Prop). The
+% restriction is applied under BOTH arms (k_elim / check_elim), so this is 27 under
+% max and imax alike. The same declaration with v = 0 is p15 and is accepted.
+1 sort 0
+2 const Bool
+3 const Bool
+inductive Bool : 1 | true : 2 | false : 3
+elim Bool_rect Bool 1
