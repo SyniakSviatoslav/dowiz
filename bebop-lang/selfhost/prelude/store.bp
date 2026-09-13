@@ -330,7 +330,7 @@ fn st_alloc(base: [i64], tx: [i64], len: i64, digest: i64) -> i64 {
   let sb = tx[0];
   let arena_capacity_cells = base[sb + 12];
   let arena_end = 1024 + arena_capacity_cells;
-  let _ = if off + 2 + len >= arena_end then sys_exit(80) else 0;
+  let _ = if (off + 2 + len) > arena_end then sys_exit(80) else 0;
   let _ = base[off] = ((digest & 4294967295) << 32) | len;
   let _ = base[off + 1] = tx[5];
   let _ = tx[2] = off + 2 + len;
