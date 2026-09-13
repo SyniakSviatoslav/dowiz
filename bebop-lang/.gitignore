@@ -41,3 +41,8 @@ sgraph2_bfs.bin*
 sgraph2_bfs.res
 *.sqlite-wal
 *.sqlite-shm
+
+# F7 kernel binary: a build artifact produced by tools/build_tkernel.sh (2026-09-13)
+tkernel.bin
+tkernel.bin.becache
+tkernel.bin.use
