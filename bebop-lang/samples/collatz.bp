@@ -1,0 +1,14 @@
+// collatz.bp: Count steps in the Collatz sequence
+// Sequence: if n is even: n/2, if n is odd: 3n+1, until n=1
+// Starting with n=6, the sequence is 6 -> 3 -> 10 -> 5 -> 16 -> 8 -> 4 -> 2 -> 1
+// Expected: 8 steps (returns 8)
+fn main() -> i64 {
+  let n = 6;
+  let count = 0;
+  while n != 1 {
+    let n = if n & 1 then 3 * n + 1 else n / 2;
+    let count = count + 1;
+    0
+  };
+  count
+}

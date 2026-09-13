@@ -1,0 +1,14 @@
+// gcd.bp: Euclid's algorithm with % in a while loop
+// Computes gcd(120, 80) = 40
+// Uses the modulo operator in a while condition
+fn main() -> i64 {
+  let a = 120;
+  let b = 80;
+  while b {
+    let tmp = b;
+    let b = a % b;
+    let a = tmp;
+    0
+  };
+  a
+}
