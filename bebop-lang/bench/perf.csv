@@ -2092,3 +2092,25 @@ ts,commit,bin,metric,value,unit,n,valid,at_max_pct,temp_mc,note
 1789335576,a2e45bd,072c01d1,stub_words,172,words,1,1,,,
 1789335576,a2e45bd,072c01d1,bin_fns,305,fns,1,1,,,
 1789335576,a2e45bd,072c01d1,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1789339144,8fcf0a7,ea9adfdf,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1789339144,8fcf0a7,ea9adfdf,gate_run_ms,3882,ms,1,1,,,"sum of non-memo gate runs (22 runs, 104 memo hits)"
+1789339261,8fcf0a7,ea9adfdf,bin_words,44432,words,1,1,,,bytes 181536
+1789339261,8fcf0a7,ea9adfdf,stub_words,172,words,1,1,,,
+1789339261,8fcf0a7,ea9adfdf,bin_fns,307,fns,1,1,,,
+1789339261,8fcf0a7,ea9adfdf,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1789339907,8fcf0a7,8e3833af,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1789339907,8fcf0a7,8e3833af,gate_run_ms,4058,ms,1,1,,,"sum of non-memo gate runs (22 runs, 104 memo hits)"
+1789340040,8fcf0a7,8e3833af,bin_words,44447,words,1,1,,,bytes 181596
+1789340040,8fcf0a7,8e3833af,stub_words,172,words,1,1,,,
+1789340040,8fcf0a7,8e3833af,bin_fns,307,fns,1,1,,,
+1789340040,8fcf0a7,8e3833af,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1789340195,8fcf0a7,c9d826c8,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1789340196,8fcf0a7,c9d826c8,gate_run_ms,4412,ms,1,1,,,"sum of non-memo gate runs (22 runs, 104 memo hits)"
+1789340336,8fcf0a7,c9d826c8,bin_words,44460,words,1,1,,,bytes 181728
+1789340336,8fcf0a7,c9d826c8,stub_words,172,words,1,1,,,
+1789340336,8fcf0a7,c9d826c8,bin_fns,307,fns,1,1,,,
+1789340336,8fcf0a7,c9d826c8,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1789340568,8fcf0a7,c9d826c8,bin_words,44460,words,1,1,,,bytes 181728
+1789340568,8fcf0a7,c9d826c8,stub_words,172,words,1,1,,,
+1789340568,8fcf0a7,c9d826c8,bin_fns,307,fns,1,1,,,
+1789340568,8fcf0a7,c9d826c8,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired

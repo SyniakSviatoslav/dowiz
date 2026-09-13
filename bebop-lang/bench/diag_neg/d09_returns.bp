@@ -1,4 +1,10 @@
-// EXPECT 20:3 98
+// EXPECT 73:3 98
+// ROADMAP A18 (2026-09-14): the per-fn pending-`return` cap moved 17 -> 64, because
+// `return` became an EXPRESSION -- every `if` arm in a fn can now hold one, so one fn
+// carries far more placeholders than the 17 the statement form ever needed. This
+// program is the cap PLUS ONE: `return 0` .. `return 63` fill the list and the 65th,
+// `return 64`, is the one that must trap 98. It was 18 returns (trap at 20:3) until
+// today; the EXPECT line below moved with the cap, it was not re-fitted to output.
 fn main() -> i64 {
   return 0;
   return 1;
@@ -18,5 +24,52 @@ fn main() -> i64 {
   return 15;
   return 16;
   return 17;
+  return 18;
+  return 19;
+  return 20;
+  return 21;
+  return 22;
+  return 23;
+  return 24;
+  return 25;
+  return 26;
+  return 27;
+  return 28;
+  return 29;
+  return 30;
+  return 31;
+  return 32;
+  return 33;
+  return 34;
+  return 35;
+  return 36;
+  return 37;
+  return 38;
+  return 39;
+  return 40;
+  return 41;
+  return 42;
+  return 43;
+  return 44;
+  return 45;
+  return 46;
+  return 47;
+  return 48;
+  return 49;
+  return 50;
+  return 51;
+  return 52;
+  return 53;
+  return 54;
+  return 55;
+  return 56;
+  return 57;
+  return 58;
+  return 59;
+  return 60;
+  return 61;
+  return 62;
+  return 63;
+  return 64;
   1
 }

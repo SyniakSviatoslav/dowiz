@@ -105,7 +105,8 @@ fn diag_exit(s: str, p: i64, code: i64) -> i64 {
   let at14 = if code == 110 then diag_str(buf, at, "invalid syntax in contract position -- use only identifiers, type names, and operators") else at13;
   let at15 = if code == 111 then diag_str(buf, at, "decimal point in numeric literal -- use integer literals only") else at14;
   let at16 = if code == 112 then diag_str(buf, at, "module with contents -- module declarations must be empty") else at15;
-  let mlen = at16 - at;
+  let at17 = if code == 114 then diag_str(buf, at, "too many string literals -- the literal table holds 1000 (fntab[6000..6999])") else at16;
+  let mlen = at17 - at;
   let final_at = at + mlen;
   let _ = buf[final_at] = 10;
   let _ = sys_write(2, buf, final_at + 1);
@@ -4383,9 +4384,13 @@ fn emit_factor(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
   let e2 = if pos[0] + 2 >= strn then 1 else 0;
   let e3 = if pos[0] + 3 >= strn then 1 else 0;
   let e4 = if pos[0] + 4 >= strn then 1 else 0;
+  let e5 = if pos[0] + 5 >= strn then 1 else 0;
+  let e6 = if pos[0] + 6 >= strn then 1 else 0;
   let ch2 = if e2 == 1 then 0 else char(s, pos[0] + 2);
   let ch3 = if e3 == 1 then 0 else char(s, pos[0] + 3);
   let ch4 = if e4 == 1 then 0 else char(s, pos[0] + 4);
+  let ch5 = if e5 == 1 then 0 else char(s, pos[0] + 5);
+  let ch6 = if e6 == 1 then 0 else char(s, pos[0] + 6);
   let is_m = if ch == 109 then 1 else 0;
   let is_a = if ch1 == 97 then 1 else 0;
   let is_t = if ch2 == 116 then 1 else 0;
@@ -4399,6 +4404,12 @@ fn emit_factor(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
   let is_lb = if ch == 91 then 1 else 0;
   let is_quote = if ch == 34 then 1 else 0;
   let is_letter = is_alpha(ch);
+  // A18 (2026-09-14): `return` and `break` in expression position.
+  // Same product-of-flags style as emit_body_classify (line 5637/5638).
+  let id5 = is_alpha(ch5) + is_digit(ch5) + (if ch5 == 95 then 1 else 0);
+  let id6 = is_alpha(ch6) + is_digit(ch6) + (if ch6 == 95 then 1 else 0);
+  let is_ret = (if ch == 114 then 1 else 0) * (if ch1 == 101 then 1 else 0) * (if ch2 == 116 then 1 else 0) * (if ch3 == 117 then 1 else 0) * (if ch4 == 114 then 1 else 0) * (if ch5 == 110 then 1 else 0) * (1 - id6);
+  let is_brk = (if ch == 98 then 1 else 0) * (if ch1 == 114 then 1 else 0) * (if ch2 == 101 then 1 else 0) * (if ch3 == 97 then 1 else 0) * (if ch4 == 107 then 1 else 0) * (1 - id5);
   // T99 (2026-09-04) unary literal forms: `-x` = neg x0,x0; `!x` = cmp
   // x0,#0; cset x0,eq (`!=` stays a comparison token). `-<digits>` is a
   // negative literal (single movn/movk, fold model intact).
@@ -4412,6 +4423,8 @@ fn emit_factor(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
     else if is_ifkw == 1 then emit_cond(s, pos, insns, n, stab, selfname, selfstart, fntab)
     else if is_letkw == 1 then emit_let_in(s, pos, insns, n, stab, selfname, selfstart, fntab)
     else if is_matchkw == 1 then emit_match(s, pos, insns, n, stab, selfname, selfstart, fntab)
+    else if is_ret == 1 then (let _ = emit_return_core(s, pos, insns, n, stab, selfname, selfstart, fntab) in vs_push(insns, n, fntab, stab, 1, 0, 0))
+    else if is_brk == 1 then (let _ = emit_break_core(s, pos, insns, n, fntab) in vs_push(insns, n, fntab, stab, 1, 0, 0))
     else if is_lb == 1 then emit_array_lit(s, pos, insns, n, stab, selfname, selfstart, fntab)
     else if is_quote == 1 then emit_str(s, pos, insns, n, fntab, stab)
     else if is_letter == 1 then emit_ident(s, pos, insns, n, stab, selfname, selfstart, fntab)
@@ -4852,37 +4865,49 @@ fn count_word(insns: [i64], a: i64, b: i64, w: i64) -> i64 {
   c
 }
 
+// A18 (2026-09-14): `return e;` and `break;` now legal in expression position.
+// Core forms emit the branch and placeholder without consuming the semicolon.
 // T99 (2026-09-04): `return e;` -> e in x0, one placeholder `b` recorded in
-// fntab[5247] (count) / 4413..4429 (positions), patched to the epilogue by
-// compile_fn_at; `break;` -> placeholder `b` recorded in fntab[5265] / 4431..
-// 4448, patched to the enclosing loop's exit by emit_while_stmt (which
-// remembers the count at entry). More than 17 returns / 18 pending breaks in
+// fntab[5601] (count) / 5602..5665 (positions, 64 slots), patched to the epilogue by
+// compile_fn_at; `break;` -> placeholder `b` recorded in fntab[5666] / 5667..
+// 5730 (64 slots), patched to the enclosing loop's exit by emit_while_stmt (which
+// remembers the count at entry). More than 64 returns / 64 pending breaks in
 // one fn traps loudly (exit 98, exit-code table at emit_paren).
-fn emit_return_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+fn emit_return_core(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let stmt_at = pos[0];
   let _ = pos[0] = pos[0] + 6;
   let _ = skip_ws(s, pos);
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = vs_deliver(insns, n, fntab, stab, 1);
-  let k = fntab[5247];
-  let _ = if k >= 17 then diag_exit(s, stmt_at, 98) else 0;
-  let _ = fntab[5248 + k] = n[0];
-  let _ = fntab[5247] = k + 1;
+  let k = fntab[5601];
+  let _ = if k >= 64 then diag_exit(s, stmt_at, 98) else 0;
+  let _ = fntab[5602 + k] = n[0];
+  let _ = fntab[5601] = k + 1;
   let _ = em(insns, n, 335544320);
+  n[0]
+}
+
+fn emit_return_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = emit_return_core(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let cs = if pos[0] >= slen(s, pos) then 0 else char(s, pos[0]);
   let _ = if cs == 59 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
   n[0]
 }
 
-fn emit_break_stmt(s: str, pos: [i64], insns: [i64], n: [i64], fntab: [i64]) -> i64 {
+fn emit_break_core(s: str, pos: [i64], insns: [i64], n: [i64], fntab: [i64]) -> i64 {
   let stmt_at = pos[0];
   let _ = pos[0] = pos[0] + 5;
-  let k = fntab[5265];
-  let _ = if k >= 18 then diag_exit(s, stmt_at, 98) else 0;
-  let _ = fntab[5266 + k] = n[0];
-  let _ = fntab[5265] = k + 1;
+  let k = fntab[5666];
+  let _ = if k >= 64 then diag_exit(s, stmt_at, 98) else 0;
+  let _ = fntab[5667 + k] = n[0];
+  let _ = fntab[5666] = k + 1;
   let _ = em(insns, n, 335544320);
+  n[0]
+}
+
+fn emit_break_stmt(s: str, pos: [i64], insns: [i64], n: [i64], fntab: [i64]) -> i64 {
+  let _ = emit_break_core(s, pos, insns, n, fntab);
   let _ = skip_ws(s, pos);
   let cs = if pos[0] >= slen(s, pos) then 0 else char(s, pos[0]);
   let _ = if cs == 59 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
@@ -5219,9 +5244,11 @@ fn hoist_scan(s: str, b0: i64, b1: i64, strn: i64, stab: [i64], vals: [i64]) -> 
     let c3 = if pos[0] + 3 >= b1 then 0 else char(s, pos[0] + 3);
     let c4 = if pos[0] + 4 >= b1 then 0 else char(s, pos[0] + 4);
     let c5 = if pos[0] + 5 >= b1 then 0 else char(s, pos[0] + 5);
+    let c6 = if pos[0] + 6 >= b1 then 0 else char(s, pos[0] + 6);
     let ida3 = is_alpha(c3) + is_digit(c3) + (if c3 == 95 then 1 else 0);
     let is_letkw = (if ch == 108 then 1 else 0) * (if ch1 == 101 then 1 else 0) * (if c2 == 116 then 1 else 0) * (1 - ida3) * (1 - idb);
     let ida5 = is_alpha(c5) + is_digit(c5) + (if c5 == 95 then 1 else 0);
+    let ida6 = is_alpha(c6) + is_digit(c6) + (if c6 == 95 then 1 else 0);
     // ROADMAP A14 (2026-09-07): `new_lets` is a text count of the body's own
     // `let` names -- it does NOT see the permanent registers a match payload
     // (`some(m0) =>`) or an INLINED call's parameters (emit_call binds every
@@ -5234,7 +5261,10 @@ fn hoist_scan(s: str, b0: i64, b1: i64, strn: i64, stab: [i64], vals: [i64]) -> 
     // fail-closed 89, never a wrong value.
     let is_matchkw = (if ch == 109 then 1 else 0) * (if ch1 == 97 then 1 else 0) * (if c2 == 116 then 1 else 0) * (if c3 == 99 then 1 else 0) * (if c4 == 104 then 1 else 0) * (1 - ida5) * (1 - idb);
     let is_callp = (if ch == 40 then 1 else 0) * idb;
-    let unknown = if is_matchkw + is_callp > 0 then 1 else unknown;
+    // A18 (2026-09-14): bail on return/break in arms to avoid hoisting issues
+    let is_ret = (if ch == 114 then 1 else 0) * (if ch1 == 101 then 1 else 0) * (if c2 == 116 then 1 else 0) * (if c3 == 117 then 1 else 0) * (if c4 == 114 then 1 else 0) * (if c5 == 110 then 1 else 0) * (1 - ida6) * (1 - idb);
+    let is_brk = (if ch == 98 then 1 else 0) * (if ch1 == 114 then 1 else 0) * (if c2 == 101 then 1 else 0) * (if c3 == 97 then 1 else 0) * (if c4 == 107 then 1 else 0) * (1 - ida5) * (1 - idb);
+    let unknown = if is_matchkw + is_callp + is_ret + is_brk > 0 then 1 else unknown;
     let _ = if is_lit == 1 then (let v = read_num_val(s, pos) in (let _ = if (v >= 65536) * (if depth == 0 then 1 else 0) == 1 then hoist_record(vals, nvals, v) else 0 in 0)) else 0;
     let _ = if is_letkw == 1 then (let _ = pos[0] = pos[0] + 3 in skip_ws(s, pos)) else 0;
     let namepos = pos[0];
@@ -5294,7 +5324,7 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = skip_ws(s, pos);
   let pcond = pos[0];
   let cnt0 = stab[0];
-  let brk0 = fntab[5265];
+  let brk0 = fntab[5666];
   let ldepth = fntab[5246];
   let _ = fntab[5246] = ldepth + 1;
   // ROADMAP A6 step 2 (2026-09-09): fntab[5246] is the LIVE depth and is
@@ -5434,7 +5464,7 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = em(insns, n, bw + 16777216 + (body_start - n[0]) * 32);
   let _ = pos[0] = b1;
   let endl = n[0];
-  let _ = patch_jumps(insns, fntab, 5265, brk0, endl);
+  let _ = patch_jumps(insns, fntab, 5666, brk0, endl);
   let _ = if do_reset == 1 then (let _ = em(insns, n, ldrw) in 0) else 0;
   let _ = if do_reset == 1 then (let _ = insns[pmark] = 4177527803 + (10 + ldepth) * 1024 in 0) else 0;
   let _ = fntab[5246] = ldepth;
@@ -6012,7 +6042,7 @@ fn compile_fn(s: str) -> i64 {
   let _ = if blast_t == 1 then vs_pop(fntab) else 0;
   let _ = if fntab[5388] != 255 then selfcheck_exit(5, 3) else 0;
   let _ = if fntab[5389] != 0 then selfcheck_exit(6, 1) else 0;
-  let _ = patch_jumps(insns, fntab, 5247, 0, n[0]);
+  let _ = patch_jumps(insns, fntab, 5601, 0, n[0]);
   let _ = emit_epilogue(insns, n);
   sum_words(insns, n[0])
 }
@@ -6209,8 +6239,8 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
     let _ = fz[0] = fz[0] + 1;
     0
   };  // A6 step 2: per-fn marks high-water (frame sizing)
-  let _ = fntab[5247] = 0;  // T99: pending `return` placeholders
-  let _ = fntab[5265] = 0;  // T99: pending `break` placeholders
+  let _ = fntab[5601] = 0;  // T99: pending `return` placeholders
+  let _ = fntab[5666] = 0;  // T99: pending `break` placeholders
   let _ = fntab[5543] = kernel_marked(s, fpos);  // C1 step 2: `kernel fn` dialect bit
   let pos = [fpos, str_len(s)];
   let stab = zeros(385);  // 1 + 3*128 (name,reg,srcpos) verified triples; overflow -> loud trap
@@ -6300,7 +6330,7 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   let _ = if blast_t == 1 then vs_pop(fntab) else 0;
   let _ = if fntab[5388] != 255 then selfcheck_exit(5, 4) else 0;
   let _ = if fntab[5389] != 0 then selfcheck_exit(6, 2) else 0;
-  let _ = patch_jumps(insns, fntab, 5247, 0, n[0]);
+  let _ = patch_jumps(insns, fntab, 5601, 0, n[0]);
   let _ = if is_emission == 1 then emit_epilogue_sized(insns, n, fw_vc(fw0), fw_cshi(fw0), fw_tsp(fw0), fw_marks(fw0)) else emit_epilogue(insns, n);
   // B1 (2026-09-06): replaces OPT-A's post-hoc NOP patch of unused
   // callee-saved pairs and OPT-G1's generic register-field scan of the
@@ -6404,6 +6434,12 @@ fn scan_one_lit(s: str, pos: [i64], fntab: [i64], L: i64, lcnt: [i64], cum: [i64
   let _ = pos[0] = pos[0] + 1;
   let len = pos[0] - start - 1;
   let cells = (len + 1 + 3) / 4;
+  // INHERITED GATE RED, closed 2026-09-14: check_abi.py's `literal trap (6000 + nlits
+  // >= 7000)` check has read MISSING ever since the 2026-09-13 provenance audit made it
+  // an error instead of a print -- the lit_table zone (fntab[6000..6999]) was the ONE
+  // registered zone whose overflow was unguarded, and a 1000th string literal would have
+  // written straight through the end of fntab silently. Now exit 114.
+  let _ = if 6000 + lcnt[0] >= 7000 then diag_exit(s, start, 114) else 0;
   let _ = fntab[6000 + lcnt[0]] = L + cum[0];
   let _ = cum[0] = cum[0] + cells;
   let _ = lcnt[0] = lcnt[0] + 1;

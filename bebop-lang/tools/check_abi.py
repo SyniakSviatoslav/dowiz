@@ -203,12 +203,20 @@ def check_bin(path, allow, stub=()):
 # moved to make room; fntab (and ptab, the planning-pass twin) grew
 # zeros(4096) -> zeros(8192).
 ZONES = [(0, 1, "fntab"), (2900, 3667, "b1_facts"), (3668, 3670, "b1_scratch"),
-         (3700, 5235, "window"), (5240, 5246, "fold"), (5247, 5284, "jumps"),
+         (3700, 5235, "window"), (5240, 5246, "fold"),
          (5290, 5386, "slots"), (5387, 5388, "window_hdr"),
          (5389, 5393, "window_cs"), (5394, 5401, "hoist"), (5402, 5402, "arm_base"),
          (5403, 5403, "span_slots"), (5404, 5404, "frame"),
          (5410, 5537, "arrlen"),
          (5540, 5548, "bank"), (5549, 5599, "literals"), (5600, 5600, "budget"),
+         # ROADMAP A18 (2026-09-14): the pending-jump lists MOVED out of the 38-cell
+         # 5247..5284 "jumps" zone, which is now free space and is deliberately NOT
+         # left registered. `return`/`break` became EXPRESSIONS, so a single fn can
+         # carry many more of them; the caps went 17 returns / 18 breaks -> 64 each
+         # (bebop.bp emit_return_core / emit_break_core, both still exit 98 on
+         # overflow) and the two lists need 2 + 64 + 64 = 130 cells, which do not fit
+         # below 5285. 5601..5730 is the free run between "budget" and "lit_table".
+         (5601, 5730, "jumps"),
          (6000, 6999, "lit_table")]
 # A16 prerequisite RELAYOUT (2026-09-09): the fn cap is 768, so the FLOATING fn zone
 # (3*cnt + ecnt + 258 cells = 0..2816 at cnt=768, ecnt=255) needs everything above it
@@ -238,7 +246,7 @@ REGISTERED = {
     3668: "b1_scratch", 3669: "b1_scratch", 3670: "b1_scratch",
     3700: "window", 3701: "window", 3702: "window",
     5245: "fold", 5246: "fold",
-    5247: "jumps", 5248: "jumps", 5265: "jumps", 5266: "jumps",
+    5601: "jumps", 5602: "jumps", 5666: "jumps", 5667: "jumps",  # A18: was 5247/5248/5265/5266
     5290: "slots",
     5387: "window_hdr", 5388: "window_hdr",
     5389: "window_cs", 5390: "window_cs", 5391: "window_cs", 5392: "window_cs", 5393: "window_cs",

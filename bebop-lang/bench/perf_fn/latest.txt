@@ -7,7 +7,7 @@ is_digit 20
 is_alpha 32
 put_num 73
 diag_str 39
-diag_exit 357
+diag_exit 370
 slen 75
 kernel_word_at 106
 kernel_marked 75
@@ -201,7 +201,7 @@ vs_neg_const 21
 vs_neg_reg 91
 vs_not 78
 vs_not_reg 61
-emit_factor 517
+emit_factor 740
 sum_words 23
 compile 388
 skip_to 68
@@ -220,8 +220,10 @@ rhs_end 130
 loop_alloc_safe 416
 store_eq_pos 104
 count_word 31
-emit_return_stmt 121
-emit_break_stmt 88
+emit_return_core 87
+emit_return_stmt 69
+emit_break_core 50
+emit_break_stmt 54
 patch_jumps 40
 skip_char_lit 63
 skip_while_cond 142
@@ -232,7 +234,7 @@ ident_call_at 94
 arm_is_pure 294
 find_body_end 155
 hoist_record 50
-hoist_scan 603
+hoist_scan 741
 hoist_release 37
 emit_while_stmt 760
 emit_let_stmt 609
@@ -255,7 +257,7 @@ fw_marks 16
 compile_fn_at_facts 98
 compile_fn_at 1222
 scan_literals 294
-scan_one_lit 105
+scan_one_lit 120
 compile_program_to 37
 compile_program_offs 942
 write_lit_cells 127
@@ -302,4 +304,4 @@ emit_sys_mapb 27
 emit_sys_rename 268
 emit_sys_wait4 118
 emit_sys_run 272
-main 1104
+main 1124

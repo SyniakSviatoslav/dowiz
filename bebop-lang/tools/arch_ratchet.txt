@@ -12,6 +12,10 @@ max_bp_lines = 8500
 # Files that exceed max_new_bp_lines today, each with the reason it is allowed to.
 bp_exempt:bebop.bp = 1                       # the self-hosting compiler; split is task T-split
 bp_exempt:gb_pool_build.bp = 1               # generated aggregate, not hand-written
+bp_exempt:bench/traps/t114_literal_table_full.bp = 1  # GENERATED, and its size IS the assertion:
+#   trap 114 fires only past 1000 string literals (fntab[6000..6999]), so a probe under the 800-line
+#   cap cannot trigger it. A 1000-literal version was tried first and compiles rc=0 -- measured -- which
+#   is why this file carries 1001. Splitting it would destroy the property under test.
 bp_exempt:selfhost/std/sgraph2.bp = 1        # B3c graph kernels; split tracked separately
 bp_exempt:bench/vs_rust/std_tests/sgraph2.bp = 1
 #

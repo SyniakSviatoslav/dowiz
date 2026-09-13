@@ -426,6 +426,10 @@ class Parser:
             return self.let_expr()
         if v == 'match':
             return self.match()
+        if v == 'return':
+            return ('retexpr', self.cmp())
+        if v == 'break':
+            return ('brkexpr',)
         if v == '[':
             elems = []
             while not self.at(']'):
@@ -509,6 +513,7 @@ class Interp:
         self.first_struct = first_struct
         self.ctors = ctors
         self.depth = 0
+        self.max_depth = 0  # Track maximum depth reached
         self.bytes = bytearray()
         self.lit_handles = {}
 
@@ -516,8 +521,10 @@ class Interp:
         params, body = self.fns[name]
         env = dict(zip(params, args))
         self.depth += 1
+        if self.depth > self.max_depth:
+            self.max_depth = self.depth
         if self.depth > DEPTH_CAP:
-            raise DepthError('call depth > %d in %s' % (DEPTH_CAP, name))
+            raise DepthError('call depth > %d (max reached: %d) in %s' % (DEPTH_CAP, self.max_depth, name))
         try:
             return self.run_body(body, env)
         except ReturnSignal as r:
@@ -588,6 +595,10 @@ class Interp:
             else:
                 env[e[1]] = self.ev(r, env)
             return self.ev(e[3], env)
+        if t == 'retexpr':
+            raise ReturnSignal(self.ev(e[1], env))
+        if t == 'brkexpr':
+            raise BreakSignal()
         if t == 'call':
             return self.builtin_or_call(e[1], [self.ev(a, env) for a in e[2]])
         if t == 'get':

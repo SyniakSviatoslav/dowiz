@@ -1,0 +1,51 @@
+// ROADMAP A18 (2026-09-14): `return` and `break` in EXPRESSION position -- inside
+// an `if` arm, which is an expression whose arms are delivered into one register.
+// Before this row the same text exited 101 (unbound symbol) because emit_factor
+// knew only `if`/`let`/`match`.  Three shapes are exercised: an arm-position
+// `return` BEFORE a loop (`n < 2`), one INSIDE a `while` inside a fn that is
+// called 100 times, and an arm-position `break` that leaves the innermost loop.
+// `first_div(n)` = the first k in 2..n-1 dividing n, or n itself when none does.
+// EXPECT 1257028 from: hand: sum(first_div(n), n=0..99) * 1000 + (0+1+..+7).
+//   The 1257 is the smallest-prime-factor table, NOT this program's own division:
+//   primes below 100 sum to 1060 and each returns itself; the 48 even composites
+//   4..98 return 2 (96); the 16 odd multiples of 3 from 9 to 99 return 3 (48);
+//   25,35,55,65,85,95 return 5 (30); 49,77,91 return 7 (21); n=0 and n=1 return 1
+//   by the pre-loop arm return (2).  1060+96+48+30+21+2 = 1257.
+//   The break half stops at the first i with i*i > 50, i.e. i=8 (7*7=49 <= 50),
+//   so it sums 0..7 = 28.
+
+module core { }
+
+fn first_div(n: i64) -> i64 {
+  let _ = if n < 2 then return 1 else 0;
+  let k = 2;
+  while k < n {
+    let _ = if n % k == 0 then return k else 0;
+    let k = k + 1;
+    0
+  };
+  n
+}
+
+fn brk_sum() -> i64 {
+  let s = 0;
+  let i = 0;
+  while i < 100 {
+    let _ = if i * i > 50 then break else 0;
+    let s = s + i;
+    let i = i + 1;
+    0
+  };
+  s
+}
+
+fn main() -> i64 {
+  let t = 0;
+  let n = 0;
+  while n < 100 {
+    let t = t + first_div(n);
+    let n = n + 1;
+    0
+  };
+  t * 1000 + brk_sum()
+}

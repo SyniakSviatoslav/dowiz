@@ -31,6 +31,9 @@ expected_msg[111]="decimal point in numeric literal"
 
 expected_rc[112]="112"
 expected_msg[112]="module with contents"
+# ROADMAP A18 sweep (2026-09-14): the lit_table (fntab[6000..6999]) overflow guard.
+expected_rc[114]="114"
+expected_msg[114]="too many string literals"
 
 expected_rc[80]="80"
 expected_msg[80]="arena exhausted"
@@ -182,6 +185,7 @@ test_compile_trap 109
 test_compile_trap 110
 test_compile_trap 111
 test_compile_trap 112
+test_compile_trap 114
 
 echo ""
 echo "=== Testing additional compile-time traps ==="
