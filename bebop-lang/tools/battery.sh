@@ -51,6 +51,7 @@ BEBOP_TMP=$T/diag BEBOP_BIN=$BIN bash bench/vs_rust/diag_check.sh > "$T/diag.log
 python3 tools/check_words.py > "$T/words.log" 2>&1  # item 7: hand-typed em()/st[] literals (L1)
 python3 tools/f8_dt.py "$BIN" > "$T/f8_dt.log" 2>&1  # F8: dependent surface types parsing + erasure
 python3 tools/trap_census.py > "$T/trap.log" 2>&1  # F1: trap census, derived from the tree (neg/ EXPECT headers + mechanisms); exits 2 NOT MEASURED when the neg/ scan is empty -- it ran in NO battery lane until 2026-09-13
+python3 tools/certcheck_census.py > "$T/certs.log" 2>&1  # F6: LRAT certificate soundness; certgen/certcheck had NO automatic caller and the row's four 2026-09-09 negatives left no artifact at all -- bench/cert_pos + bench/cert_neg are that corpus, committed so the measurement is reproducible
 wait
 red=0
 line() { local l; l=$(grep -E "$2" "$T/$1" | tail -n 1); [ -n "$l" ] || { l="MISSING ($1)"; red=1; }; echo "$l" | grep -qE "$3" || red=1; echo "  $l"; }
@@ -72,6 +73,8 @@ line words.log '^words:' '^words: PASS'  # 2026-09-13 audit: in a lane tree (no 
 line std.log '^boxguard:' '.'  # item 9: the timing stage (lcjit) runs last, single-threaded, boxguard status logged next to it. PRESENCE ONLY, by design: this row records that the timing stage ran (it goes MISSING when std_par's timing loop does not); it asserts nothing about the value and cannot go red on one
 line f8_dt.log '^f8_dt gate:' '^f8_dt gate: PASS'  # F8: dependent surface types parsing + erasure; 2026-09-13 audit: with bebop.bin ABSENT every probe 'REJECTED' at loader rc=90 and this read PASS -- f8_dt.py now prints NOT MEASURED unless the positives compile and every rejection is the diagnostic exit 110
 line trap.log '^trap_unrep:' '^trap_unrep: (1[6-9]|[2-9][0-9]|[1-9][0-9][0-9])/'  # F1: closed/counted census rows, a RATCHET at >=16 closed, not a freeze: pinning `16/35` meant the first trap F2 closes would turn the battery RED, and the denominator moves with the numerator anyway. A `NOT MEASURED` scan has no trap_unrep: line and reads MISSING
+line certs.log '^cert_checked:' '^cert_checked: [1-9][0-9]*/[1-9][0-9]*'  # F6: at least one real obligation+certificate pair verified; a NOT MEASURED run has no ratio here and reads MISSING
+line certs.log '^checker_neg:' '^checker_neg: 0/[1-9][0-9]*'  # F6: corrupted certificates WRONGLY ACCEPTED, must be 0 of a non-empty corpus -- the kernel_neg convention. The denominator is pinned >=1 so an empty cert_neg/ cannot read 0/0 and pass
 echo "  census: $(cat "$T/census.txt")"
 grep -h '^FAIL\|MISMATCH\|COMPILEFAIL\|WORD_BUDGET_MISSING\|VALUE_MISMATCH\|NOT MEASURED' "$T"/*.log | head -n 20 | sed 's/^/  /'
 [ $red = 0 ] && echo "battery: GREEN" || { echo "battery: RED"; exit 1; }
