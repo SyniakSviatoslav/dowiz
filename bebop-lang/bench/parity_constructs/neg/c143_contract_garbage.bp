@@ -1,0 +1,12 @@
+// ROADMAP F8 step 0 NEGATIVE control (2026-09-13). Garbage in contract positions must be rejected.
+// The fn header contains invalid characters (@@@ %%%) between the closing paren and the opening brace,
+// in the requires/ensures region that is normally discarded. This should REJECT with exit code 110.
+// EXPECT COMPILEFAIL:110 from: garbage in the requires/ensures position is refused (ROADMAP F8 step 0)
+
+module core { }
+
+fn add(x: i64, y: i64) -> i64 requires @@@ %%% not_a_thing ensures 1 2 3 ][ { x + y }
+
+fn main() -> i64 {
+  add(1, 2)
+}

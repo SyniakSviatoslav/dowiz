@@ -1,0 +1,13 @@
+// ROADMAP F8 step 0 POSITIVE control (2026-09-13). Valid contract syntax must still compile.
+// The fn header contains valid requires/ensures syntax with type operations and punctuation.
+// This should compile successfully and run, with the contract discarded at compile time.
+// Without this control, a compiler that refused EVERY fn header would satisfy c143 negatively.
+// EXPECT 3 from: hand: add(1,2) = 3 (ROADMAP F8 positive control)
+
+module core { }
+
+fn add(x: i64, y: i64) -> i64 requires true ensures result > x { x + y }
+
+fn main() -> i64 {
+  add(1, 2)
+}

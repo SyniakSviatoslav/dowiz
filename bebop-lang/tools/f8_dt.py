@@ -20,7 +20,8 @@ def main():
     # Ratchet: count of syntactic positions where garbage is ACCEPTED (should be 0).
     # Compiler accepts without error: requires/ensures (positions 1-2) and theorem (positions 1-2).
     # Recorded 2026-09-13 from the ROADMAP F8 defect: bebop.bin silently discards garbage.
-    RATCHET_VALUE = 4  # four garbage probes accepted (should be rejected per bebop.bp's role as parser)
+    # UPDATED 2026-09-13: ROADMAP F8 step 0 COMPLETE. scan_inert validates both positions.
+    RATCHET_VALUE = 0  # zero garbage-accepting positions (all rejected with exit 110)
 
     # Positive tests: valid forms that COMPILE and RUN (discarded unread, not parsed)
     test1 = """
