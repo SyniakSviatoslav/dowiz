@@ -174,6 +174,10 @@ fn kp_ctor(K: [i64], s: str, pos: [i64], n: i64, nh: i64, arity: i64) -> i64 {
 // `elim <name> <inductive> <v>` -- declares <name> as the case-analysis eliminator of
 // <inductive> with motive `<inductive> -> Sort <v>`; the type is built by the kernel.
 fn kp_decl(K: [i64], s: str, pos: [i64], n: i64) -> i64 {
+  // K-delta: refill the conversion budget once per declaration, so the bound is per
+  // `check` rather than per file.  Without this K[9] starts at 0 and the first
+  // reduction step would exhaust immediately and reject everything with 34.
+  let _ = K[9] = k_fuel_cap();
   let kw = kp_word(s, pos, n);
   let ischk = if kw == 99 then 1 else 0;
   let isdef = if kw == 100 then 1 else 0;
