@@ -117,7 +117,8 @@ fn diag_exit(s: str, p: i64, code: i64) -> i64 {
   let at23 = if code == 120 then diag_str(buf, at, "multi-value fn called outside a destructuring let -- x1 and up would be dropped") else at22;
   let at24 = if code == 121 then diag_str(buf, at, "more than 3 return values -- the convention is x0..x2") else at23;
   let at25 = if code == 122 then diag_str(buf, at, "call_fn takes a function value plus 0..13 arguments") else at24;
-  let mlen = at25 - at;
+  let at26 = if code == 123 then diag_str(buf, at, "call_packed takes a packed closure plus 0..12 arguments") else at25;
+  let mlen = at26 - at;
   let final_at = at + mlen;
   let _ = buf[final_at] = 10;
   let _ = sys_write(2, buf, final_at + 1);
@@ -288,6 +289,22 @@ fn skip_to_delim(s: str, pos: [i64]) -> i64 {
 // advance pos past ')', return the count.
 fn parse_params(s: str, pos: [i64], pnames: [i64], ppos: [i64]) -> i64 {
   let strn = slen(s, pos);
+  // ---- ROADMAP A16 step 3 (2026-09-14): generics are ERASURE ----
+  // A `[T]` / `[T, U]` between the fn name and the parameter list is SKIPPED and
+  // NOTHING is emitted: `[T]` is `[i64]` for every T, and stays so until cell widths
+  // actually differ -- which is A8's `[u32]` and step 4's monomorphisation, costed and
+  // NOT scheduled. So a type parameter costs ZERO words by construction, not by
+  // measurement. Param types and return types already admit type variables for free:
+  // `x: T` and `x: [T]` are consumed by skip_to_delim below, `-> T` by compile_fn_at's
+  // skip_to('{'), and `-> (T, U)` by fn_ret_arity_tuple, which counts commas and never
+  // reads a type name.
+  // UNAMBIGUOUS: `fn NAME[` occurs 0 times tree-wide for any other reason, so no
+  // program that parses today changes meaning. Done here rather than at compile_fn_at
+  // so that BOTH parse_params call sites (:6639 and :6906) get it from one place.
+  let _ = skip_ws(s, pos);
+  let tv = if pos[0] >= strn then 0 else (if char(s, pos[0]) == 91 then 1 else 0);
+  let _ = if tv == 1 then skip_to(s, pos, 93) else 0;
+  let _ = if tv == 1 then (let _ = pos[0] = pos[0] + 1 in (let _ = skip_ws(s, pos) in 0)) else 0;
   let _ = pos[0] = pos[0] + 1;
   let pcnt = 0;
   let done = 0;
@@ -2146,10 +2163,102 @@ fn emit_call_fn(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfnam
   vs_push(insns, n, fntab, stab, 2, 0, 0 - 1)
 }
 
+// ---- ROADMAP A16 step 2 (2026-09-14): closures = fn value + EXPLICIT env ----
+// A closure here is a PAIR, not an inferred capture: the callee takes its environment
+// as an ordinary FIRST parameter and the caller passes it explicitly. That is the shape
+// 22 fns in the tree already use, and capture inference (`|x| x + a`) is the human-
+// legibility trade the row names and does NOT schedule -- it is not built here.
+// `pack_fn(v, env)` is the SUGAR that makes the pair fit one cell: `(v << 40) | env`.
+//   v   is `&f`, one-based, 19 bits at the 262144-word program cap -> bits 40..58.
+//   env is an ARENA CELL INDEX (A5 step 1b: no pointers; an array literal's value IS
+//       such an index since A6), 26 bits for the 256 MiB arena -> bits 0..39.
+// ONE word: `orr x0, x1, x0, lsl #40` (as + objdump: aa00a020), operands delivered
+// x0 = v, x1 = env by the ordinary builtin path.
+fn emit_pack_fn(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 2);
+  let _ = em(insns, n, 2852167712);
+  vs_push(insns, n, fntab, stab, 2, 0, 0 - 1)
+}
+
+// `call_packed(c, a0, .., ak-1)`, k <= 12: unpack c and call f(env, a0, .., ak-1).
+// The ENV IS THE FIRST PARAMETER, so the k arguments must land in x1..xk -- and
+// vs_place_args' mapping is fixed at "window entry base+i goes to x(i)", with no
+// offset. A zero CONST is therefore pushed as the first operand purely to occupy x0;
+// its `movz x0,#0` is one dead word that the `and` below overwrites, and it is the
+// honest price of keeping env FIRST (env-LAST would save that word but would need the
+// link register as a scratch and would disagree with the unpacked `call_fn(v, env, x)`
+// spelling). 8 words, 10 under has_spills; the blueprint budgeted 7.
+//   and x0, x<j>, #0xFFFFFFFFFF   env  (as + objdump: 92409c20 for j=1)
+//   lsr x<j>, x<j>, #40           fn, IN PLACE -- x<j> is one past the callee's last
+//                                 parameter, so scribbling on it is free and no extra
+//                                 scratch register is needed
+//   cbnz x<j>, +2 ; brk #87       a packed 0, i.e. an uninitialised cell, is the
+//                                 existing "unresolved function" trap; sound only
+//                                 because `&f` is ONE-BASED
+//   adr x16 ; add x16, x16, x<j>, lsl #2 ; blr x16      step 1's sequence verbatim
+fn emit_call_packed(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let strn = slen(s, pos);
+  let cpos = pos[0];
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_push(insns, n, fntab, stab, 1, 0, 0);
+  let nops = 1;
+  let done = 0;
+  while done == 0 {
+    let before = pos[0];
+    let _ = skip_ws(s, pos);
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_rp = if ch == 41 then 1 else 0;
+    let _ = if is_rp == 0 then emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
+    let nops = nops + (1 - is_rp);
+    let _ = skip_ws(s, pos);
+    let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_comma = if ch2 == 44 then 1 else 0;
+    let at_end2 = if pos[0] >= strn then 1 else 0;
+    let bad2 = (1 - is_comma) * (if ch2 == 41 then 0 else 1) * (1 - at_end2);
+    let _ = if bad2 == 1 then diag_exit(s, pos[0], 95) else 0;
+    let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let stuck = if pos[0] > before then 0 else 1;
+    let done = if is_rp + at_end + stuck >= 1 then 1 else 0;
+    0
+  };
+  let _ = pos[0] = pos[0] + 1;
+  // nops counts the placeholder + c + k args; the callee sees env + k, so k <= 12.
+  let okn = (if nops >= 2 then 1 else 0) * (if nops <= 14 then 1 else 0);
+  let _ = if okn == 1 then 0 else diag_exit(s, cpos, 123);
+  let j = nops - 1;
+  // the window is [zero, c, a0..ak-1]; rotating the ZERO to the top would be wrong --
+  // it is `c` that must reach x<j>, so rotate the top nops-1 entries (c and the args)
+  // and leave the placeholder where it is.
+  let _ = vs_rot_up(fntab, nops - 1);
+  let _ = vs_deliver(insns, n, fntab, stab, nops);
+  let has_spills = 1 - fntab[3669];
+  let _ = fntab[3668] = fntab[3668] + 1;
+  let _ = em(insns, n, 2453707776 + j * 32);
+  let _ = em(insns, n, 3546872832 + j * 33);
+  let _ = em(insns, n, 3036676160 + j);
+  let _ = em(insns, n, 3558869728);
+  let _ = if has_spills == 1 then em(insns, n, 4162785263) else 0;
+  let _ = em(insns, n, 268435456 + ((524288 - n[0] - 1) & 524287) * 32 + 16);
+  let _ = em(insns, n, 2332035600 + j * 65536);
+  let _ = em(insns, n, 3594453504);
+  let _ = if has_spills == 1 then em(insns, n, 4165011439) else 0;
+  vs_push(insns, n, fntab, stab, 2, 0, 0 - 1)
+}
+
 fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let tag = ft_ctor_tag(fntab, name);
   let tgt = fntab_lookup(fntab, name);
   if name == 504111662209029 then emit_call_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 569809880337302 then emit_pack_fn(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 1448390905445389245 then emit_call_packed(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == 30895064082 then emit_hvham(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == 4047253394792 then emit_hvham2(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == 76753189874778913 then emit_sys_mmap(s, pos, insns, n, stab, selfname, selfstart, fntab)
@@ -5928,6 +6037,32 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
 // way. Caller cost is ZERO words: emit_bl_call already left x1/x2 live and unowned,
 // so claiming them is two window pushes and no instruction. A `_` component is
 // popped instead of bound, like `let _ = e;`.
+// A16 step 2, closing the hole A16 step 1 opened: when a `call_fn`'s FIRST OPERAND is
+// written LITERALLY as `&f`, the target is statically known and so is its declared
+// return arity, so A21's E119 check applies again -- at zero runtime cost and with no
+// bits stolen from the fn value. Returns 0 for "not knowable", which is a computed
+// target (a table slot, a parameter) and is the only genuinely dynamic case left.
+// WHY NOT CARRY THE ARITY IN THE VALUE: it would have to be masked off before the
+// `add x16, x16, x<k>, lsl #2`, i.e. one extra word at EVERY indirect call including
+// the great majority that do not destructure; `add ..., w<k>, uxtw #2` avoids the mask
+// but then the arity bits sit at 32.. and `(v << 40) | env` needs 76 bits. Two
+// representations of one fn value is the failure this row exists to avoid.
+fn call_fn_lit_arity(s: str, after: i64, strn: i64, fntab: [i64]) -> i64 {
+  let q = [after, strn];
+  let _ = skip_ws(s, q);
+  let c0 = if q[0] >= strn then 0 else char(s, q[0]);
+  let is_lp = if c0 == 40 then 1 else 0;
+  let _ = if is_lp == 1 then (let _ = q[0] = q[0] + 1 in 0) else 0;
+  let _ = skip_ws(s, q);
+  let c1 = if q[0] >= strn then 0 else char(s, q[0]);
+  let is_amp = if c1 == 38 then 1 else 0;
+  let _ = if is_amp == 1 then (let _ = q[0] = q[0] + 1 in 0) else 0;
+  let _ = skip_ws(s, q);
+  let nm = if is_lp * is_amp == 1 then read_ident(s, q) else 0;
+  let sp = if nm == 0 then 0 - 1 else ft_srcpos(fntab, nm);
+  if sp < 0 then 0 else fn_ret_arity_at(s, sp, strn)
+}
+
 fn emit_let_tuple(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
   let regs = zeros(3);
@@ -5961,11 +6096,16 @@ fn emit_let_tuple(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let rpos = pos[0];
   let pk = [rpos, slen(s, pos)];
   let rname = read_ident(s, pk);
-  // A16 step 1 interop: an INDIRECT call's return arity is not knowable statically --
-  // the target is a value. So `let (a, b) = call_fn(..)` is exempt from the E119 check
-  // and the pairing is the programmer's claim, not the compiler's. Every DIRECT callee
-  // is still checked, which is where the silent-x1 failure actually came from.
-  let want = if rname == 504111662209029 then k[0] else fn_ret_arity(s, rname, fntab, pk[1]);
+  // A16 interop. An indirect call's arity is not knowable in general, so `call_fn` and
+  // `call_packed` are exempt -- EXCEPT that A16 step 2 recovers the common case: a
+  // `call_fn` whose first operand is a literal `&f` is checked like a direct call
+  // (call_fn_lit_arity above). A packed closure's target is inside the word and is
+  // never syntactically visible, so call_packed stays exempt.
+  let is_cfn = if rname == 504111662209029 then 1 else 0;
+  let is_cpk = if rname == 1448390905445389245 then 1 else 0;
+  let lita = if is_cfn == 1 then call_fn_lit_arity(s, pk[0], pk[1], fntab) else 0;
+  let dyn_ok = (is_cfn + is_cpk) * (if lita == 0 then 1 else 0);
+  let want = if dyn_ok >= 1 then k[0] else (if lita > 0 then lita else fn_ret_arity(s, rname, fntab, pk[1]));
   let _ = if want == k[0] then 0 else diag_exit(s, rpos, 119);
   let _ = fntab[7102] = rname;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
@@ -6774,7 +6914,7 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   // literals as written reports 16 shadowable builtins instead of 7.
   let rsv1 = (if selfname == 1866735 then 1 else 0) + (if selfname == 35281108217 then 1 else 0) + (if selfname == 13857 then 1 else 0) + (if selfname == 262576641 then 1 else 0) + (if selfname == 228925745 then 1 else 0) + (if selfname == 13865 then 1 else 0) + (if selfname == 13472 then 1 else 0) + (if selfname == 228960337 then 1 else 0) + (if selfname == 4471061603997 then 1 else 0) + (if selfname == 4238080694376 then 1 else 0) + (if selfname == 32320559965 then 1 else 0) + (if selfname == 4428069113672 then 1 else 0) + (if selfname == 29119020707 then 1 else 0) + (if selfname == 36158018563 then 1 else 0) + (if selfname == 224358574 then 1 else 0) + (if selfname == 585709020818199 then 1 else 0) + (if selfname == 66094333908796503 then 1 else 0) + (if selfname == 30895064082 then 1 else 0) + (if selfname == 4047253394792 then 1 else 0) + (if selfname == 260449716 then 1 else 0) + (if selfname == 249209392 then 1 else 0);
   let rsv2 = (if selfname == 246721067 then 1 else 0) + (if selfname == 76753189879327100 then 1 else 0) + (if selfname == 76753189885882068 then 1 else 0) + (if selfname == -8392076197157136435 then 1 else 0) + (if selfname == -8392076203060520566 then 1 else 0) + (if selfname == -2688661736639986669 then 1 else 0) + (if selfname == -8392076198348418984 then 1 else 0) + (if selfname == 76753189874778913 then 1 else 0) + (if selfname == 7442662210087947144 then 1 else 0) + (if selfname == -5847879057653958070 then 1 else 0) + (if selfname == 7442662398273192292 then 1 else 0) + (if selfname == 7442661902340062434 then 1 else 0) + (if selfname == 76753189856984008 then 1 else 0) + (if selfname == 7040940390938053523 then 1 else 0) + (if selfname == -6282920175007517587 then 1 else 0) + (if selfname == -8392076203060521221 then 1 else 0) + (if selfname == -1736429998027255437 then 1 else 0) + (if selfname == -3153574141067785036 then 1 else 0) + (if selfname == 8779068393901189725 then 1 else 0) + (if selfname == 7221016679989100487 then 1 else 0) + (if selfname == 1084841420853388659 then 1 else 0);
-  let rsv3 = (if selfname == 504111662209029 then 1 else 0) + (if selfname == 260242221 then 1 else 0) + (if selfname == -8392076202161113213 then 1 else 0) + (if selfname == -1729804160290675916 then 1 else 0) + (if selfname == 1713209 then 1 else 0) + (if selfname == 29413480223 then 1 else 0) + (if selfname == 3853165909311 then 1 else 0) + (if selfname == 3853165909333 then 1 else 0) + (if selfname == -8392076200099613766 then 1 else 0) + (if selfname == 585902212871437 then 1 else 0) + (if selfname == 7304771531850188344 then 1 else 0) + (if selfname == -8392076197195354031 then 1 else 0);
+  let rsv3 = (if selfname == 504111662209029 then 1 else 0) + (if selfname == 569809880337302 then 1 else 0) + (if selfname == 1448390905445389245 then 1 else 0) + (if selfname == 260242221 then 1 else 0) + (if selfname == -8392076202161113213 then 1 else 0) + (if selfname == -1729804160290675916 then 1 else 0) + (if selfname == 1713209 then 1 else 0) + (if selfname == 29413480223 then 1 else 0) + (if selfname == 3853165909311 then 1 else 0) + (if selfname == 3853165909333 then 1 else 0) + (if selfname == -8392076200099613766 then 1 else 0) + (if selfname == 585902212871437 then 1 else 0) + (if selfname == 7304771531850188344 then 1 else 0) + (if selfname == -8392076197195354031 then 1 else 0);
   let _ = if rsv1 + rsv2 + rsv3 > 0 then diag_exit(s, namepos, 99) else 0;
   let _ = skip_ws(s, pos);
   let pnames = zeros(14);
