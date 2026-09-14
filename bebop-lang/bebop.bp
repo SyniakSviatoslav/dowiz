@@ -2314,11 +2314,12 @@ fn selfcheck_exit(kind: i64, site: i64) -> i64 {
 // symptom was `12247:25: error[E97]: fn body without a tail expression` at a line
 // number PAST THE END of an 8253-line file. That is a capacity failing quietly and
 // then lying about where, which is the L1 violation this trap closes.
-// NOT raised here: sys_slurp allocates round16(N*8) bytes, so N is already 3.2 MB of
-// the 8 MiB par_compile CHILD arena ([sp+4 MiB, sp+12 MiB), T118 at :1344) which must
-// also hold insns ~2 MB plus tables. Raising N raises the child arena pitch with it;
-// that is a measured decision and it is NOT made here. Loud first.
-fn src_slurp_cap() -> i64 { 400000 }
+// RAISED 2026-09-14, 400000 -> 1200000. The old "moves the child arena pitch" reason was
+// WRONG: [sp+4 MiB, sp+12 MiB) is a CLONE CHILD's arena (emit_sys_clone), but every
+// src_slurp_cap() slurp is CLI-side (cli_compile/check/cas, use_scan) in the seed's MAIN
+// arena -- measured 33546736 cells free at entry, one slurp costs exactly N cells. Bound
+// by use_expand's zeros(1600000); at 1200000 up to 24 includes fit (deepest real: 7).
+fn src_slurp_cap() -> i64 { 1200000 }
 
 fn cli_exit(code: i64, m: str) -> i64 {
   let buf = zeros(256);
