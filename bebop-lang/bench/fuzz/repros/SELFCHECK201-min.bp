@@ -1,18 +1,18 @@
-enum opt { none, some, many }
-fn f2(p0: [i64], p1: [i64]) -> i64 { 0 }
-fn f0(n: i64) -> i64 {
-  let v0 = match none { many => 3474 + ((n) * n != (n)) <= n, none => n, some => n };
-  let i0 = 0;
-  while i0 < 5 {
-    v0 *= (let t1 = clz(1) * 0 in 17);
-    let i0 = i0 + 1;
-    0
-  };
-  if n < 1 then 0 else v0 + f0(n - 1)
-}
-fn f1(p0: i64) -> i64 {
-  (if p0 then 1 else 0)
-}
+// INHERITED COMPILER DEFECT, characterised 2026-09-14 (ROADMAP A27). Five lines.
+//   ./seed/build/seed ./bebop.bin compile <this> out.bin   ->  rc=201
+//   0:0: error[E201]: compiler self-check 7.1
+// The self-check is bebop.bp:5760: at a statement boundary the window is EMPTY
+// (fntab[5387] == 0) while the callee-saved mask (fntab[5389]) still has non-hoist
+// bits set -- a cs register marked live with nothing on the window.
+// ISOLATED, not inferred. `*=` is the ONLY compound assignment that does it:
+// += -= /= %= all give rc=0 on the identical program. The RHS must be a `let ... in`
+// whose binding contains a CALL (builtin or user -- clz and a user fn both do it);
+// `let t1 = 0 in 17` gives rc=0. No second function, no loop, no match, no recursion
+// and no enum are needed -- an earlier 18-line version carried all of them.
+// PRE-A18: the pre-A18 compiler 072c01d1 gives the identical message, so this is NOT
+// caused by `return`/`break` in expression position, which it was first blamed on.
 fn main() -> i64 {
-  f0(1)
+  let v0 = 1;
+  v0 *= (let t1 = clz(1) in 17);
+  v0
 }
