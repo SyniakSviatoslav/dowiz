@@ -123,7 +123,7 @@ Total paths extracted: **151** (after removing trailing punctuation)
 ### Other missing/unclear entries (4 items)
 
 - `docs/RESEARCH-DEPS` — historical research report referenced in critical-path prose (line 65)
-- `selfhost/expr_compile.bp` — noted in A5 as being in attic (archived or deleted)
+- `selfhost/attic/expr_compile.bp` — noted in A5 as being in attic (archived or deleted)
 - `tools/stdump` — cited in tool context; creation status unclear
 - `bebop.bin/stub/per-fn` — invalid path (bebop.bin is a binary file, not a directory)
 

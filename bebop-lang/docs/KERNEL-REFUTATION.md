@@ -44,7 +44,7 @@ The brief specifies the calculus by reference to "the report's section 4". **Tha
 report is not in this tree.** No file under `docs/` mentions Hurkens, Girard,
 non-positivity or `imax`. This is the fourth cited-but-absent source in a day,
 after `docs/RESEARCH-VERIFICATION-2026-09-09.md` (since added),
-`docs/blueprints/F0-trap-census.md`, and now the Fable design report.
+`docs/blueprints/F0-trap-census.md` (planned, never written -- the census script re-derives it), and now the Fable design report.
 
 So the calculus is **specified in `tools/kcheck.py`'s docstring**, from the
 constraints that were actually stated, and it is the thing to argue with. It is

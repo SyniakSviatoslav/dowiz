@@ -17,7 +17,7 @@ arXiv:1004.5534).
 
 **D5 set out to close that with diverse double-compiling and it did not, because
 the row's central premise was false as written.** The row said the witness
-"already exists in-tree (`selfhost/expr_compile.bp`), so the fix ADDS NO
+"already exists in-tree (`selfhost/attic/expr_compile.bp`), so the fix ADDS NO
 DEPENDENCY". Measured 2026-09-09: the witness emitted code for the retired
 `exec_words` stack machine and failed on `fn main() -> i64 { 42 }` with SIGBUS —
 **1 of 75** frozen constructs "agreed", and that one only because its frozen

@@ -68,7 +68,7 @@ re-chain, promote (`cp gen4.bin bebop.bin.tmp && mv`), `invariants.sh --freeze`,
 post-promotion battery. **Check every worker's base first** — four workers in a row were cut from a
 stale commit; the fix is to cut it from the committed HEAD -- `git ls-files -z bebop-lang |
 git checkout-index --prefix=<lane>/ -f -z --stdin`, then flatten the prefix and symlink
-`/root/dowiz/crates` next to it (`tools/../mklane.sh` at /root/s29/mklane.sh does exactly this).
+`/root/dowiz/crates` next to it (an external script, /root/s29/mklane.sh, does exactly this).
 `git archive` is blocked by the classifier.
 
 ## Pitfalls that cost hours in prior sessions (also in the memory file)

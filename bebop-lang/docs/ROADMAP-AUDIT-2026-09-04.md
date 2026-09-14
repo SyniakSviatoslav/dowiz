@@ -422,7 +422,7 @@ bans still in Design laws (L212-217); fuzzer at N=450 with a generator
 bug, not 10^5; new defect found and not fixed (fn named `match`, T31
 journal). Design laws block still lists bans.
 
-> 5. **Single compiler, single language**: `selfhost/expr_compile.bp` is
+> 5. **Single compiler, single language**: `selfhost/attic/expr_compile.bp` is
 >    retired; every construct the language accepts is in construct_parity;
 >    every std module is gated or in an explicit attic.
 

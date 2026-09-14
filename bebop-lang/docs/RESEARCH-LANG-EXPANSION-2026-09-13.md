@@ -268,7 +268,7 @@ near 1.0. What it costs is ~10x the words per multiply, ~30-100x the cycles of h
 "no dependency outside the tree", ROADMAP.md:12-13). No gate in the tree has asked for the range. A
 rational pair `(num, den)` is exact but needs gcd normalisation per op and overflows in a few multiplies;
 not a kernel format. **Verdict: posit does NOT earn its complexity over Q32 in this tree today.** If a
-workload needs the range, posit is a LIBRARY (`selfhost/std/posit.bp`, a `fn` per op over i64, the exact
+workload needs the range, posit is a LIBRARY (`selfhost/std/posit.bp` (planned), a `fn` per op over i64, the exact
 shape fp.bp has) with a hand-written python oracle -- zero compiler change, zero F4/F5/F6 change.
 
 ### Deterministic fixed point, Q31.32, with a hardware multiply (recommended)
@@ -416,7 +416,7 @@ hand-rolled form stops being hand-rolled:
    header would be a second place for the same number, and the store's object header already has one,
    LANG-DB-DESIGN:146-152).
 3. **Loops write, views read**: `put_num(b, at, v) -> at'`, `put_str(b, at, s) -> at'`, `str_eq(a, b)`,
-   `str_cmp(a, b)` in a new `selfhost/prelude/fmt.bp` (the existing `diag_str`/`put_num` bodies moved out of
+   `str_cmp(a, b)` in a new `selfhost/prelude/fmt.bp` (planned) (the existing `diag_str`/`put_num` bodies moved out of
    bebop.bp and the qdsl copies deleted), and `sys_write(fd, s)` accepting a handle (bpref already does,
    bpref.py:611-618). `str_eq` as a builtin is optional: ~20 words of `ldrb` loop; as a prelude fn it is 0
    compiler words. With A9's `scan` (46 words, already landed for class scans) the parser-side loops get
@@ -569,7 +569,7 @@ one capture-inference-closure (~2 weeks) plus a few days.
 | FP1 | A8 tag 6 on params/returns/lets; literal `1.5`; exit 84 on mixing | typed fp with zero words in programs | `typecheck_gate: 0 findings both sides`; `c_fp_lit` MATCH; `neg/c_fp_mix` COMPILEFAIL:84; `neg/c_fp_dotlit` COMPILEFAIL:<free code>; WORD_DELTA 0 on 115/115 |
 | FP2 | `vs_binop` dispatch: `*` inline, `/` -> `bl fp_div`, `+ - cmp` untouched | `a * b` on fp values | `c_fp_ops` MATCH incl. `(-1) * 1 == 0`; fixpoint gen3 == gen4; census +2-3 allow lines |
 | FP3 | honest row `kfp` (Q32 axpy + dot, 10^6 elements) vs Rust-Q32 AND vs Rust-f64 | the speed number the operator must see | `kfp <= 1.5x` vs the Q32 twin (the gate); `kfp_f64` REPORTED (report-only, D1(a) shape) |
-| FP4 (only if a workload needs 2^248 range) | `selfhost/std/posit.bp` + hand-written oracle | posit as a library | `posit: N/N` ops vs oracle; 0 compiler change |
+| FP4 (only if a workload needs 2^248 range) | `selfhost/std/posit.bp` (planned) + hand-written oracle | posit as a library | `posit: N/N` ops vs oracle; 0 compiler change |
 | F4/F9 | +1 Lean function, +1 bridge theorem | -- | `theorems >= 3` unchanged in statement |
 
 ## 5.2 Strings
@@ -580,7 +580,7 @@ one capture-inference-closure (~2 weeks) plus a few days.
 | S1 | A8 tag 7 `[u8]` + `bytes(n)` + `ldrb/strb` forms + F3 declared length `[u8; N]` | buffers with static bounds | `c_u8buf` MATCH; `neg/c_u8_oob` COMPILEFAIL:65; `bounds_census` counts byte sites; WORD_DELTA 0 on 115/115 |
 | S2 | `slice`/`str_eq`/`str_cmp` (prelude or builtin) + `sys_write(fd, s)` on a handle | reading strings without hand loops | `c_str_views` MATCH; `bpref_parity: disagree=0` |
 | S3 | store byte column + object-relative `str` field | text in the database | `sstr` G-gate: roundtrip byte-identical at two mapping bases; G7 size row re-run and REPORTED |
-| S4 | `selfhost/prelude/fmt.bp` (`put_num`, `put_str`); bebop.bp's `diag_str`/`put_num` moved out; qdsl copies deleted; `qdsl_explain` returns a real view | the hand-rolls retired | `arch_check` dead-function ratchet unchanged; `diag: 19 pass 0 fail`; c70_qdsl re-frozen with a real fold; bebop words DOWN with a word_budget line |
+| S4 | `selfhost/prelude/fmt.bp` (planned) (`put_num`, `put_str`); bebop.bp's `diag_str`/`put_num` moved out; qdsl copies deleted; `qdsl_explain` returns a real view | the hand-rolls retired | `arch_check` dead-function ratchet unchanged; `diag: 19 pass 0 fail`; c70_qdsl re-frozen with a real fold; bebop words DOWN with a word_budget line |
 
 ## 5.3 Modules (with A25)
 

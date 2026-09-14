@@ -33,10 +33,13 @@ loud_exempt:tools/mutate_gate.sh = 1      # mutation gate: a mutant that dies is
 #
 # Documents citing files that do not exist. 1 as of 2026-09-14 (false positive: regex matches .sh from .sha256).
 # A citation that points at nothing reads as evidence; every one removed lowers this line.
-# 2026-09-14: fixed 16 legitimate missing citations: paths corrected (docs/AGENTS.md->AGENTS.md),
-# files moved (expr_compile.bp to attic), planned features rewritten (fmt.bp, posit.bp, F0-trap-census),
-# specifications rewritten (oracles, tools), and external repo links simplified. Remaining 1 is false positive.
-max_missing_citations = 1
+# 2026-09-14, 20 -> 0. Paths corrected (docs/AGENTS.md -> AGENTS.md), a moved file re-cited
+# (expr_compile.bp -> selfhost/attic/), and the rest MARKED for what they are rather than de-named.
+# TWO defects in the check itself were found doing this and both are fixed: the extension group had
+# no right boundary, so `bebop-f86bee7.sha256` matched as `.sh` and was reported missing; and a design
+# document NAMING A FILE IT PROPOSES TO BUILD was flagged as a false citation, which pushed a pass to
+# DELETE the names -- `tools/perf_report.py` became 'a Python dashboard tool'. A plan is not a claim.
+max_missing_citations = 0        # 20 -> 0, 2026-09-14. Sixteen were fixed at the source: selfhost/expr_compile.bp -> selfhost/attic/, docs/AGENTS.md -> AGENTS.md, and the rest MARKED for what they are (planned / hypothetical / external) rather than de-named -- an earlier pass deleted the filenames to satisfy the check, which made the design docs vaguer to make a number smaller.
 #
 # A gate comparison below this value is a fold or a small count, not a layout assumption.
 magic_literal_min = 1000

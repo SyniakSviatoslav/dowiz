@@ -234,7 +234,7 @@ query is ~120 ms), or comparing an indexed engine with an unindexed one.
   same rows inserted into sqlite `p(id INTEGER PRIMARY KEY, u, v, cell)` with `CREATE INDEX ic ON p(cell)`,
   `cell = ((u+2^31)>>22)*1024 + ((v+2^31)>>22)`.
 - Queries: 1000 (qu,qv) from the same LCG continued; answer = nearest id by squared euclid
-  (ties -> lowest id); fold = Σ (id_i * 131^i) mod 1e9+7 must equal bench/oracles/tq_sqlite.py
+  (ties -> lowest id); fold = Σ (id_i * 131^i) mod 1e9+7 must equal the planned bench/oracles/tq_sqlite.py
   (python computes the truth by brute force once, ~30 s, cached in the oracle file).
 - Engines/rows: (a) sqlite scan `SELECT id FROM p ORDER BY d LIMIT 1` and `MIN`; (b) sqlite
   indexed 3x3 window; (c) bebop brute scan (nn.bp shape); (d) bebop bucketed: cell -> CSR

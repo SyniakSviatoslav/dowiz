@@ -280,7 +280,20 @@ def check_cited_files_exist(r):
     import glob as _g
     docs = [os.path.join(ROOT, f) for f in ("ROADMAP.md", "TASKS.md", "AGENTS.md")]
     docs += _g.glob(os.path.join(ROOT, "docs", "*.md"))
-    pat = re.compile(r"\b((?:bench|tools|selfhost|docs|formal|seed)/[A-Za-z0-9_./-]+\.(?:sh|py|bp|md|lean|txt))")
+    # (i) the extension group had no right boundary, so `bebop-f86bee7.sha256` matched as
+    #     `bebop-f86bee7.sh` and was reported missing -- a false positive that survived because
+    #     nobody ever looked up the one name it produced. `(?![A-Za-z0-9])` ends the match.
+    pat = re.compile(r"\b((?:bench|tools|selfhost|docs|formal|seed)/[A-Za-z0-9_./-]+\.(?:sh|py|bp|md|lean|txt))(?![A-Za-z0-9])")
+    # (ii) a design document NAMING A FILE IT PROPOSES TO BUILD is a plan, not a citation, and
+    #     flagging it pushed a lane to DELETE the names -- `tools/perf_report.py` became "a Python
+    #     dashboard tool", which satisfies the check and makes the design vaguer. The right answer
+    #     is that the doc says so. The rule is one sentence: a line that MARKS the path as not
+    #     being a file in this tree -- planned, proposed, never written, hypothetical, or
+    #     belonging to an external/upstream project -- is not claiming it exists, and no reader
+    #     is misled. Everything else still fails, and the marker has to be on the same line, so
+    #     it cannot be waved at a whole document.
+    planned = re.compile(r"planned|proposed|never written|never created|never existed|does not exist"
+                         r"|not in tree|to be built|NOT YET|hypothetical|external|upstream", re.I)
     missing = {}
     for d in docs:
         if not os.path.exists(d): continue
@@ -288,6 +301,7 @@ def check_cited_files_exist(r):
             for m in pat.finditer(line):
                 rel = m.group(1)
                 if os.path.exists(os.path.join(ROOT, rel)): continue
+                if planned.search(line): continue
                 missing.setdefault(rel, []).append("%s:%d" % (os.path.basename(d), i))
     worst = r.get("max_missing_citations", 0)
     if len(missing) > worst:
