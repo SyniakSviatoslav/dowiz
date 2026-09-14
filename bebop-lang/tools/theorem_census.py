@@ -9,10 +9,20 @@ whether each has been kernel-checked. A theorem is kernel-checked only when:
 Since no elaborator exists in this tree to derive Core terms from .bp theorems,
 the numerator is structurally locked at 0 today.
 
+WHY THIS NUMBER IS ONLY HALF THE PICTURE. A `theorems: n/m` gate says how much has
+been PROVED. It says nothing about what has been ASSUMED, and the two are not
+independent: from an inconsistent axiom set every goal is derivable, so a rising
+numerator over a false axiom set measures nothing at all. That is not
+hypothetical here -- two of the seven axioms in formal/Bebop/Theorems.lean were
+FALSE as stated (measured 2026-09-14), which made every goal in that file and in
+any importer derivable. So this instrument also prints the ASSUMPTION side, from
+tools/axiom_ledger.py, and the two lines are meant to be read together.
+
 Output:
   Line 1: gate line: `theorems: <kernel_checked>/<declared>`
   Line 2: diagnostic line: `theorem_bridge: <status>`
-  Lines 3+: for each UNCHECKED theorem: <file>:<line>: <declaration>
+  Line 3: `assumptions: lean_axioms=<n> bp_rule_axioms=<n> ...` (from the axiom ledger)
+  Lines 4+: for each UNCHECKED theorem: <file>:<line>: <declaration>
 
 Exit codes:
   0 = success, all theorems are kernel-checked (only possible after elaborator exists)
@@ -171,6 +181,29 @@ def measure_theorems(bp_root_dirs):
     return kernel_checked, len(declared), unchecked, bridge_status
 
 
+def assumption_summary():
+    """One line of counts from tools/axiom_ledger.py, or a loud NOT MEASURED.
+
+    Imported rather than shelled out, so a broken ledger is a traceback here and
+    not a silently empty string."""
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import axiom_ledger
+        entries, cores = axiom_ledger.build()
+    except Exception as e:                          # noqa: BLE001 -- any failure is loud
+        return "NOT MEASURED -- tools/axiom_ledger.py: %s" % e
+    n_lean = sum(1 for e in entries if e["kind"] == "lean_axiom")
+    n_exists = sum(1 for e in entries
+                   if e["kind"] == "lean_axiom" and e.get("shape") == "exists")
+    n_bp = sum(1 for e in entries if e["kind"] == "bp_rule_axiom")
+    n_comp = sum(1 for e in entries
+                 if e["computable"] in (axiom_ledger.COMPUTABLE, axiom_ledger.EXHAUSTIVE))
+    return ("lean_axioms=%d (of which %d are Sigma_1 existentials that assert nothing) "
+            "bp_rule_axioms=%d kernel_axiom_decls=%d ledger_entries=%d computable=%d "
+            "-- sweep them with `python3 tools/axiom_refute.py`"
+            % (n_lean, n_exists, n_bp, len(cores), len(entries), n_comp))
+
+
 def main():
     # Directories to search for theorems
     bp_root_dirs = ['samples', 'selfhost', 'bench']
@@ -189,6 +222,12 @@ def main():
 
     # Print diagnostic line (explains why numerator is 0)
     print(f"theorem_bridge: {bridge_status}")
+
+    # Print the ASSUMPTION side. A proved count next to an unexamined axiom set is
+    # the reading error this line exists to prevent. Any failure to reach the ledger
+    # is printed as NOT MEASURED, never omitted -- a missing line would read as
+    # "nothing is assumed".
+    print("assumptions: %s" % assumption_summary())
 
     # Print unchecked theorems
     for filepath, lineno, decl_text in unchecked_list:
