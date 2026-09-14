@@ -134,17 +134,90 @@ def md5(path):
 def commit():
     return subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
 
+# Units whose value is a TIME. A thermal window is meaningful for exactly these; for a word
+# count, an fn count or a seed tally it is not, and demanding one would be a category error.
+TIMING_UNITS = {"ms", "ns", "us", "s", "ms/rep", "ns/edge", "ns/slot", "prog/s"}
+
+
+def is_valid(r):
+    """A `valid=1` on a TIMING is only valid if the evidence for it is in the row.
+
+    `report()` already refuses to print a delta when the latest row is valid=0, and `check()`
+    already filters its baseline to valid=1 -- that machinery was never the problem. The hole
+    was that valid=1 was FREE: `record()` defaulted it to 1 and wrote blank criteria, so a row
+    could claim validity with none of the three tests (temp < 60000, at_max_pct >= 80,
+    busy == 0) ever evaluated. MEASURED 2026-09-14 over bench/perf.csv: 383 rows carry a
+    timing unit, 260 say valid=1, and only 125 have any criteria at all -- so 135 timing rows
+    could print a delta no window ever certified. `docs/PERF.md`'s `sgraph2_build_ms ...
+    1.648e+04 -> 1266 (-92.3 %)` is one: bench/perf.csv:1279 is valid=1 with both criteria
+    empty.
+
+    THE TEST IS BY UNIT, and getting that wrong is measured too. A first version demanded
+    criteria from every row and took the delta away from 110 of 121 metrics -- including
+    `bin_words`, `bin_fns` and every `cw:*` construct-word row, whose deltas are exact and
+    have nothing to do with temperature. Those are DETERMINISTIC: the same binary gives the
+    same number at any clock. So a timing needs its window and a count does not, and the unit
+    column is what says which. "n/a" also counts as evidence, for a future count that declares
+    itself through record()."""
+    if str(r.get("valid", "")).strip() != "1": return False
+    if str(r.get("unit", "")).strip() not in TIMING_UNITS: return True
+    amp, tmc = str(r.get("at_max_pct", "")).strip(), str(r.get("temp_mc", "")).strip()
+    return amp != "" and tmc != ""
+
+
 def rows():
     if not os.path.exists(CSV): return []
     return list(csv.DictReader(open(CSV)))
 
+class RecordRefused(Exception):
+    pass
+
 def record(binpath, metric, value, unit, n, st, note=""):
+    """Append one row. REFUSES two shapes that used to be accepted silently.
+
+    THE DEFECT, measured 2026-09-14: `bench/perf.csv:1726` and `:1727` hold sgraph2_build_ms
+    and sgraph2_bfs_ns with an EMPTY value, `valid=1`, and empty at_max_pct/temp_mc -- so the
+    validity criteria were never even evaluated and the file records the ABSENCE of a
+    measurement as a valid measurement. Both came from the CLI `record` subcommand, which
+    passed a bare {"valid": 1} stamp and never looked at the value it was handed.
+
+    (1) An empty value is refused unconditionally. There is no row of any kind for which
+        "no number" is a legitimate datum.
+    (2) A `valid=1` claim needs the evidence for it. `valid` is computed by Window.__exit__
+        from temp < 60000, at_max_pct >= 80 and busy == 0; a stamp with no at_max_pct and no
+        temp_mc has evaluated none of those, so claiming 1 asserts something nobody checked.
+        Such a row is written `valid=0` instead of refused -- the datum is kept, only the
+        claim is dropped -- and the refusal is printed so it is not silent.
+
+    A COUNT is not a timing, and the distinction has to exist or this check is either
+    toothless or it blocks legitimate writes. bin_words, bin_fns, loop words and construct
+    words are deterministic: the same binary gives the same number at any temperature, and no
+    thermal window is meaningful. Those callers pass criteria="n/a", which writes "n/a" in
+    both columns rather than blank -- so "no thermal data because none is needed" stops being
+    indistinguishable from "no thermal data because nobody looked", which is what the 1946
+    blank-criteria rows in this file cannot tell you.
+    """
+    if value is None or str(value).strip() == "":
+        raise RecordRefused(
+            "perf.py record REFUSED: metric %r has an empty value. A row with no number is "
+            "not a measurement; it is the absence of one, and bench/perf.csv:1726/:1727 are "
+            "what happens when that is stamped valid=1." % metric)
+    na = st.get("criteria") == "n/a"
+    amp = st.get("at_max_pct", "n/a" if na else "")
+    tmc = st.get("temp_mc", "n/a" if na else "")
+    valid = st.get("valid", 1)
+    if str(valid) == "1" and not na and (str(amp).strip() == "" or str(tmc).strip() == ""):
+        print("perf.py: valid=1 REFUSED for %s -- no at_max_pct/temp_mc, so none of the three "
+              "validity criteria (temp < 60000, at_max_pct >= 80, busy == 0) was evaluated. "
+              "Recorded valid=0. Wrap the measurement in `with Window() as w` and pass "
+              "w.stamp(), or pass criteria=\"n/a\" if the metric is deterministic." % metric)
+        valid = 0
     new = not os.path.exists(CSV)
     with open(CSV, "a", newline="") as f:
         w = csv.writer(f, lineterminator="\n")
         if new: w.writerow(COLS)
-        w.writerow([int(time.time()), commit(), md5(binpath), metric, value, unit, n, st.get("valid", 1),
-                    st.get("at_max_pct", ""), st.get("temp_mc", ""), note])
+        w.writerow([int(time.time()), commit(), md5(binpath), metric, value, unit, n, valid,
+                    amp, tmc, note])
 
 def budget_ok(name, words):
     return any(l.split()[:2] == [name, str(words)] for l in open("bench/parity_constructs/word_budget.txt") if l.strip() and not l.startswith("#"))
@@ -154,7 +227,7 @@ def check(metric, value, binm, hist):
     if metric == "fuzz_trap82":  # D12-C: 0 tolerated, any count on the current binary alerts
         v = int(float(value))
         return v > 0, f"{v} TRAP-82 (SIGSEGV/SIGBUS) on {binm}, 0 tolerated"
-    prev = [r for r in hist if r["metric"] == metric and r["valid"] == "1"]
+    prev = [r for r in hist if r["metric"] == metric and is_valid(r)]
     if metric in EXACT:
         last = [r for r in prev if r["bin"] != binm] or prev
         if not last: return False, "first"
@@ -219,7 +292,7 @@ def size(binpath):
     for i, s in enumerate(starts):
         nxt = starts[i + 1] if i + 1 < len(starts) else (entry if entry > s else end)
         fnw[names[i] if i < len(names) and len(names) == len(starts) else f"fn{i}"] = nxt - s
-    st = {"valid": 1}
+    st = {"valid": 1, "criteria": "n/a"}   # word/fn counts are deterministic: no thermal window applies
     record(binpath, "bin_words", end, "words", 1, st, f"bytes {os.path.getsize(binpath)}")
     record(binpath, "stub_words", stub, "words", 1, st)
     record(binpath, "bin_fns", len(starts), "fns", 1, st)
@@ -276,7 +349,7 @@ def kernels(binpath, base=None, r=11):
         if base in bins:
             bm, bp = med(res[(base, k)]); note = f"base {md5(base)} {bm:.2f}/{bp:.2f} loop {loop_words(f'{T}/{md5(base)}_{k}_plain.bin')}"
         record(binpath, f"{k}_ms", round(m, 3), "ms/rep", r, st, f"p95 {p95:.3f} {note}")
-        record(binpath, f"{k}_loopwords", lw, "words", 1, {"valid": 1}, note)
+        record(binpath, f"{k}_loopwords", lw, "words", 1, {"valid": 1, "criteria": "n/a"}, note)
         out[k] = (m, p95, lw)
     return out, st
 
@@ -291,7 +364,7 @@ def constructs(binpath):
         except ValueError: continue
         prev = [r for r in hist if r["metric"] == f"cw:{name}"]
         if not prev or int(float(prev[-1]["value"])) != end:
-            record(binpath, f"cw:{name}", end, "words", 1, {"valid": 1}, f"was {prev[-1]['value']}" if prev else "first"); changed += 1
+            record(binpath, f"cw:{name}", end, "words", 1, {"valid": 1, "criteria": "n/a"}, f"was {prev[-1]['value']}" if prev else "first"); changed += 1
     return changed
 
 # ---------- E8: fuzz throughput / coverage per promoted binary (docs/exp.journal reader) ----------
@@ -311,10 +384,16 @@ def fuzz(binpath):
         d["rates"].append(float(rate))
     cur = md5(binpath); d = per.get(cur, {"seeds": 0, "bad": 0, "trap": 0, "trap82": 0, "rates": [0.0]})
     st = {"valid": 1}
-    record(binpath, "fuzz_seeds_on_bin", d["seeds"], "seeds", len(d["rates"]), st, f"TG-DONE 8: {d['seeds']} on {cur}; total {sum(x['seeds'] for x in per.values())} over {len(per)} bins")
+    # SPLIT 2026-09-14: the three COUNTS below are deterministic tallies of a completed run
+    # and declare so; `fuzz_rate` is a THROUGHPUT in prog/s, i.e. a genuine timing, and it is
+    # left with the bare stamp on purpose -- it has no thermal window, its validity was never
+    # evaluated, and the honest record of that is valid=0 with the refusal printed. Making it
+    # valid would mean measuring it inside a Window, which is a change to fuzzd's own harness.
+    cnt = {"valid": 1, "criteria": "n/a"}
+    record(binpath, "fuzz_seeds_on_bin", d["seeds"], "seeds", len(d["rates"]), cnt, f"TG-DONE 8: {d['seeds']} on {cur}; total {sum(x['seeds'] for x in per.values())} over {len(per)} bins")
     record(binpath, "fuzz_rate", round(statistics.median(d["rates"]), 2), "prog/s", len(d["rates"]), st, "median over the bin's batches (LITTLE cores, nice)")
-    record(binpath, "fuzz_trap_unpredicted", d["trap"], "count", 1, st, "TRAP-80/81/82 total; 81 by design, 82 is fuzz_trap82 (ALERT)")
-    record(binpath, "fuzz_trap82", d["trap82"], "count", 1, st, "D12-C: SIGSEGV/SIGBUS, 0 tolerated, repros in $REPROS")
+    record(binpath, "fuzz_trap_unpredicted", d["trap"], "count", 1, cnt, "TRAP-80/81/82 total; 81 by design, 82 is fuzz_trap82 (ALERT)")
+    record(binpath, "fuzz_trap82", d["trap82"], "count", 1, cnt, "D12-C: SIGSEGV/SIGBUS, 0 tolerated, repros in $REPROS")
     return per
 
 # ---------- E11 ----------
@@ -342,10 +421,12 @@ def report(last=12):
             v = r["value"]
             try: v = f"{float(v):.4g}" if "." in v else v
             except ValueError: pass
-            cells.append(v + ("" if r["valid"] == "1" else " ?"))
+            cells.append(v + ("" if is_valid(r) else " ?"))
         latest = [r for r in R if r["metric"] == m][-1]
         hist = [r for r in R if r["metric"] == m and int(r["ts"]) < int(latest["ts"])]
-        alert, txt = check(m, latest["value"], latest["bin"], hist) if latest["valid"] == "1" else (False, "invalid window")
+        alert, txt = check(m, latest["value"], latest["bin"], hist) if is_valid(latest) else (
+            False, "invalid window" if str(latest["valid"]).strip() != "1"
+            else "no validity evidence (valid=1 with no at_max_pct/temp_mc)")
         if alert: alerts.append(f"{m}: {txt}")
         L.append(f"| {m} | {unit} | " + " | ".join(cells) + f" | {'! ' if alert else ''}{txt} |")
     L += ["", "Energy is a proxy (A78 core-seconds weighted by freq/fmax on the pinned core, no RAPL/power_supply under proot).",
@@ -385,8 +466,21 @@ def main(a):
         per = fuzz(b)
         for k, v in sorted(per.items(), key=lambda x: -x[1]["seeds"])[:6]: print(k, v["seeds"], "seeds", v["bad"], "bad", v["trap"], "trap-unpredicted", v.get("trap82", 0), "trap82")
         return 0
-    if cmd == "record":   # scripts (E4/E9/E14): perf.py record <metric> <value> <unit> [note]
-        record(b, a[1], a[2], a[3], 1, {"valid": 1}, a[4] if len(a) > 4 else ""); return 0
+    if cmd == "record":   # scripts (E4/E9/E14): perf.py record <metric> <value> <unit> [note] [--deterministic]
+        # THE SITE THAT WROTE bench/perf.csv:1726 AND :1727. It passed a bare {"valid": 1} and
+        # never looked at the value, so `perf.py record sgraph2_build_ms "" ms` appended an
+        # empty number stamped valid=1 with no criteria -- twice. A caller here has no thermal
+        # window by construction, so it cannot certify validity: the row now records valid=0
+        # (loudly) unless the metric is declared deterministic. An empty value is refused
+        # outright, with a non-zero exit so a script cannot ignore it.
+        det = "--deterministic" in a
+        st = {"valid": 1, "criteria": "n/a"} if det else {"valid": 1}
+        note = next((x for x in a[4:] if not x.startswith("--")), "")
+        try:
+            record(b, a[1], a[2], a[3], 1, st, note)
+        except RecordRefused as e:
+            print(e); return 1
+        return 0
     if cmd == "run":
         size(b); constructs(b); fuzz(b); selfcompile(b, base, int(opt("--n", 5))); kernels(b, base, int(opt("--r", 11)))
         return report(int(opt("--last", 12)))

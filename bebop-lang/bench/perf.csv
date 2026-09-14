@@ -1723,8 +1723,8 @@ ts,commit,bin,metric,value,unit,n,valid,at_max_pct,temp_mc,note
 1788976625,ae1cfb4,24b98f90,stub_words,172,words,1,1,,,
 1788976625,ae1cfb4,24b98f90,bin_fns,299,fns,1,1,,,
 1788976625,ae1cfb4,24b98f90,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
-1789120692,d0cbdfb,24b98f90,sgraph2_build_ms,,ms,1,1,,,L1 + empty log/L0/bitmap
-1789120692,d0cbdfb,24b98f90,sgraph2_bfs_ns,,ns,1,1,,,"per edge slot, queue BFS before the log (3 sources)"
+1789120692,d0cbdfb,24b98f90,sgraph2_build_ms,,ms,1,0,,,"L1 + empty log/L0/bitmap | CORRECTED 2026-09-14: this row's `valid=1` was FALSE and is now 0. The value is EMPTY -- the measurement never produced a number -- and at_max_pct/temp_mc are absent, so none of the three validity criteria was evaluated. NOT DELETED: the ts/commit/bin record that a measurement was attempted here is real and worth keeping, and deleting rows to make a file look clean is how a history stops being one. Only the false claim is withdrawn. tools/perf.py now refuses this write outright (empty value -> rc=1), so it cannot recur."
+1789120692,d0cbdfb,24b98f90,sgraph2_bfs_ns,,ns,1,0,,,"per edge slot, queue BFS before the log (3 sources) | CORRECTED 2026-09-14: this row's `valid=1` was FALSE and is now 0. The value is EMPTY -- the measurement never produced a number -- and at_max_pct/temp_mc are absent, so none of the three validity criteria was evaluated. NOT DELETED: the ts/commit/bin record that a measurement was attempted here is real and worth keeping, and deleting rows to make a file look clean is how a history stops being one. Only the false claim is withdrawn. tools/perf.py now refuses this write outright (empty value -> rc=1), so it cannot recur."
 1789120692,d0cbdfb,24b98f90,sgraph2_log_ns,0,ns,1,1,,,amortized per inserted edge through the log (max stall 0 ms)
 1789120693,d0cbdfb,24b98f90,sgraph2_compact_ms,87,ms,1,1,,,
 1789140769,d0cbdfb,1136681c,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
@@ -2178,3 +2178,9 @@ ts,commit,bin,metric,value,unit,n,valid,at_max_pct,temp_mc,note
 1789396434,731efed,501fbc96,stub_words,172,words,1,1,,,
 1789396434,731efed,501fbc96,bin_fns,337,fns,1,1,,,
 1789396434,731efed,501fbc96,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired
+1789400097,015f193,97e729a6,battery_flakes,0,count,1,1,,,FAILs that passed standalone (timing-flag gates under load)
+1789400098,015f193,97e729a6,gate_run_ms,5880,ms,1,1,,,"sum of non-memo gate runs (25 runs, 104 memo hits)"
+1789400305,015f193,97e729a6,bin_words,49621,words,1,1,,,bytes 203024
+1789400305,015f193,97e729a6,stub_words,172,words,1,1,,,
+1789400305,015f193,97e729a6,bin_fns,345,fns,1,1,,,
+1789400305,015f193,97e729a6,push_words,0,words,1,1,,,register model: 0 = stack machine fully retired

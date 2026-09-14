@@ -1,0 +1,186 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+// csr_part_scatter.bp — the partitioned-scatter experiment for csr_passes' fill pass.
+//
+// THE CLAIM UNDER TEST. `csr_passes` (selfhost/std/sgraph2.bp:28) ends in a counting-sort fill
+// that is a random read-modify-write of `cur` (n cells, 8 MB at n=1e6) driving a random scatter
+// into `ci` (m+1 cells, 80 MB at m=1e7). Measured by D1's own control arm at ~630 ms for 1e7
+// slots = ~63 ns/slot, against a streaming floor of ~0.85 ns/slot measured by E4 on this box --
+// about 75x, which is the signature of a locality-bound loop and not an arithmetic-bound one.
+// The textbook remedy is propagation blocking: process the destination range in windows small
+// enough to be cache-resident.
+//
+// WHY THIS NEEDS NO NEW DATA STRUCTURE, which is the whole reason the experiment is honest.
+// A counting sort already places every edge whose source is in [lo,hi) CONTIGUOUSLY in ci. So
+// restricting one pass to sources in a window restricts BOTH working sets at once -- `cur` to
+// the window's W cells, and `ci` to the slice [rp[1+lo], rp[2+hi-1]) of about m/P cells. The
+// partitioned arm therefore allocates NOTHING the baseline does not. The two arms differ in
+// traversal order and in nothing else, which is also forced here: at n=1e6/m=1e7 the five
+// arrays are 3.2e7 cells = 256 MB, i.e. the entire arena, so a scratch buffer was not an
+// option even if it had been desirable.
+//
+// WHY THE FOLD MUST MATCH EXACTLY, and it is not luck. The baseline walks j ascending, so row
+// a's neighbours land in ascending j. Each row belongs to exactly ONE window, and the
+// partitioned arm also walks j ascending within its window, so every row's neighbours land in
+// the same order. `ci` is therefore BIT-IDENTICAL between the arms, not merely equal in sum.
+// Anything less and the "faster" loop would be computing something else.
+//
+// argv[2] = n (default 1000000), argv[3] = e undirected edges (default 5000000),
+// argv[4] = k, the window is 2^k cells (default 15 = 32768 cells = 256 KB), argv[5] = reps
+// (default 3). The arms run INTERLEAVED A,B,A,B,... inside one process so they share thermal
+// state; every rep is printed, not just the median.
+//
+// WHAT THIS CANNOT SHOW: `security.perf_harden` is 1 on this box, so `perf_event_open` returns
+// EACCES and there are NO cache-miss counters. Locality is INFERRED from ns/slot against the
+// streaming floor; nothing here observes a miss. A win is evidence that the loop was bound by
+// something a smaller working set fixes -- it is not a measurement of cache behaviour.
+
+fn lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
+
+fn parse(s: str) -> i64 {
+  let n = str_len(s); let i = 0; let v = 0;
+  while i < n { let v = v * 10 + (char(s, i) - 48); let i = i + 1; 0 };
+  v
+}
+fn itoa(dst: [i64], n: i64) -> i64 {
+  let neg = if n < 0 then 1 else 0;
+  let m = if n < 0 then 0 - n else n;
+  let p = 23; let m2 = m; let go = 1;
+  while go == 1 {
+    let d = m2 - (m2 / 10) * 10;
+    let _ = dst[p] = 48 + d; let p = p - 1; let m2 = m2 / 10;
+    let go = if m2 > 0 then 1 else 0; 0
+  };
+  let start = p + 1; let len = 24 - start; let i = 0;
+  while i < len { let _ = dst[neg + i] = dst[start + i]; let i = i + 1; 0 };
+  let _ = if neg == 1 then (let _ = dst[0] = 45 in 0) else 0;
+  len + neg
+}
+fn say(label: str, v: i64, buf: [i64]) -> i64 {
+  let n = st_str(buf, label); let _ = sys_write(1, buf, n);
+  let l = itoa(buf, v); let _ = sys_write(1, buf, l);
+  let _ = buf[0] = 10; sys_write(1, buf, 1)
+}
+
+// reset the cursors to the row starts: both arms need it, and it is timed out of both.
+fn cur_reset(cur: [i64], rp: [i64], n: i64) -> i64 {
+  let v = 0;
+  while v < n { let _ = cur[v] = rp[1 + v]; let v = v + 1; 0 };
+  0
+}
+
+// ARM A — the baseline, byte-for-byte csr_passes' fill loop (sgraph2.bp:50-57).
+fn fill_base(src: [i64], dst: [i64], m: i64, ci: [i64], cur: [i64]) -> i64 {
+  let j = 0;
+  while j < m {
+    let a = src[j];
+    let s = cur[a];
+    let _ = ci[1 + s] = dst[j];
+    let _ = cur[a] = s + 1;
+    let j = j + 1;
+    0
+  };
+  0
+}
+
+// ARM B — the same scatter, windowed. One pass per window over the whole input; a pass writes
+// only the edges whose source falls in its window, so `cur` touches W cells and `ci` touches
+// one contiguous slice. The guard is two nested `if`s rather than one `&&`: the operators are
+// real since A26, but nesting keeps the comparison tiers out of the question entirely.
+fn fill_part(src: [i64], dst: [i64], m: i64, n: i64, ci: [i64], cur: [i64], k: i64) -> i64 {
+  let w = 1 << k;
+  let lo = 0;
+  while lo < n {
+    let hi = lo + w;
+    let j = 0;
+    while j < m {
+      let a = src[j];
+      let _ = if a >= lo then
+        (if a < hi then
+          (let s = cur[a] in
+           let _ = ci[1 + s] = dst[j] in
+           let _ = cur[a] = s + 1 in 0)
+         else 0)
+        else 0;
+      let j = j + 1;
+      0
+    };
+    let lo = lo + w;
+    0
+  };
+  0
+}
+
+fn fold_ci(ci: [i64], m: i64, rp: [i64], n: i64) -> i64 {
+  let acc = zeros(1);
+  let k = 0;
+  while k < m { let _ = acc[0] = acc[0] + ci[1 + k]; let k = k + 1; 0 };
+  acc[0] + rp[1 + n]
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  let n = if argc >= 3 then parse(argv[2]) else 1000000;
+  let e = if argc >= 4 then parse(argv[3]) else 5000000;
+  let k = if argc >= 5 then parse(argv[4]) else 15;
+  let reps = if argc >= 6 then parse(argv[5]) else 3;
+  let m = 2 * e;
+  let buf = zeros(64);
+  let _ = say("n ", n, buf);
+  let _ = say("m ", m, buf);
+  let _ = say("k ", k, buf);
+  let _ = say("window_cells ", 1 << k, buf);
+  let _ = say("passes ", (n + (1 << k) - 1) / (1 << k), buf);
+
+  let src = zeros(m);
+  let dst = zeros(m);
+  let x = 4242;
+  let i = 0;
+  while i < e {
+    let x = lcg(x);
+    let a = (x >> 20) % n;
+    let x = lcg(x);
+    let b = (x >> 20) % n;
+    let _ = src[2 * i] = a;
+    let _ = dst[2 * i] = b;
+    let _ = src[2 * i + 1] = b;
+    let _ = dst[2 * i + 1] = a;
+    let i = i + 1;
+    0
+  };
+
+  // the two passes both arms share, run ONCE: histogram + prefix sum.
+  let cur = zeros(n);
+  let rp = zeros(n + 2);
+  let ci = zeros(m + 1);
+  let h = 0;
+  while h < m { let a = src[h]; let _ = rp[2 + a] = rp[2 + a] + 1; let h = h + 1; 0 };
+  let v = 0;
+  while v < n { let _ = rp[2 + v] = rp[2 + v] + rp[1 + v]; let v = v + 1; 0 };
+
+  // INTERLEAVED A,B,A,B,... in one process. Every rep printed.
+  let r = 0;
+  let foldA = zeros(1);
+  let foldB = zeros(1);
+  while r < reps {
+    let _ = cur_reset(cur, rp, n);
+    let a0 = clock_ms();
+    let _ = fill_base(src, dst, m, ci, cur);
+    let a1 = clock_ms();
+    let _ = say("repA_ms ", a1 - a0, buf);
+    let _ = foldA[0] = fold_ci(ci, m, rp, n);
+
+    let _ = cur_reset(cur, rp, n);
+    let b0 = clock_ms();
+    let _ = fill_part(src, dst, m, n, ci, cur, k);
+    let b1 = clock_ms();
+    let _ = say("repB_ms ", b1 - b0, buf);
+    let _ = foldB[0] = fold_ci(ci, m, rp, n);
+
+    let r = r + 1;
+    0
+  };
+  let _ = say("foldA ", foldA[0], buf);
+  let _ = say("foldB ", foldB[0], buf);
+  let _ = say("folds_equal ", if foldA[0] == foldB[0] then 1 else 0, buf);
+  0
+}
