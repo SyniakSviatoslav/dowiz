@@ -677,6 +677,223 @@ def check_prereq_guarded(r):
              % (len(bad), worst))
 
 
+# --- CHECK 24: ROADMAP.md must not disagree with the code it describes -------------
+# Incident (this file's own header, and the 2026-09-14 l5audit audit): fourteen commits
+# landed without a single ROADMAP row moving, and an audit against the tree found 14 rows
+# STALE and 3 outright FALSE. `tools/hooks/pre-commit:63` already enforces TASKS.md against
+# HISTORY.md -- and NOTHING enforced ROADMAP.md against the code, which is exactly how a row
+# could go on asserting `kernel_parity: 21/21` while `tools/battery.sh` asserted `28/28`.
+#
+# CHECK 9 (cited-file) answers "does this path exist". This answers the next question:
+# "is the NUMBER next to it still true". Five classes, each one a defect actually found:
+#
+#   (a) commit    a 7-hex-digit backticked token is a git abbreviation and must resolve.
+#                 The roadmap's own header records a status summary citing `c2f943e`, which
+#                 is not a valid object. EIGHT-digit tokens are bebop.bin md5 prefixes by
+#                 tree convention (`15e272fc`, `a5858877`, ...) and are NOT commits; they
+#                 are exempt, and they cannot be checked here at all, because a historical
+#                 promotion digest is not recoverable from the current tree. Said out loud
+#                 rather than silently skipped.
+#   (b) cite      `path:line` must be inside the file. Found: A24 cites
+#                 `construct_parity.sh:238` and the file is 116 lines.
+#   (c) count     "`f` is N lines" / "`f.bp` is N fns" must match `wc -l` / `grep -c '^fn '`.
+#                 Found: kcheck.py 562 (real 736), tcheck_kernel.bp 20 fns (real 29),
+#                 bpref.py 736 (real 841), Semantics.lean 607 (real 662).
+#   (d) golden    a construct's value quoted in the roadmap must equal its `// EXPECT`
+#                 header. Found: `c70_qdsl still 41000` where the header now reads
+#                 286389246398 -- B7's frozen golden, re-derived and never written back.
+#   (e) gate      the FIRST non-historical reading of a battery gate inside a row must match
+#                 what `tools/battery.sh` asserts for that gate. The headline is what a
+#                 reader acts on; a correction buried 1,200 characters later does not undo
+#                 it. Found: F7's row carries `kernel_parity: 21/21` AND `28/28`, in that
+#                 order. A reading introduced by a past-tense marker (`was`, `used to`,
+#                 `HARDCODED`, `superseded`, ...) is history, not a claim, and is exempt --
+#                 the same distinction CHECK 9 had to learn between a citation and a plan.
+#
+# Two boundary defects CHECK 9 paid for are pre-empted here rather than rediscovered:
+# a number is not read as a value if `^`, `x`, `%`, `.` or another digit follows it
+# (`c67_deeprec at 10^5 recursion` is an exponent, and was a live false positive while
+# writing this), and a marker must sit near the number, not anywhere in the document.
+def _wc_l(fp):
+    """Lines the way `wc -l` counts them: newlines. A row that says "`wc -l` says N" must
+    be checked by the same command it cites -- Python's line count is N+1 on a file with no
+    trailing newline, and that one-off made this check contradict its own message."""
+    with open(fp, "rb") as f: return f.read().count(b"\n")
+
+def check_roadmap_matches_code(r):
+    rm = os.path.join(ROOT, "ROADMAP.md")
+    if not os.path.exists(rm):
+        note("roadmap-drift: no ROADMAP.md"); return
+    text = open(rm, errors="replace").read()
+    lines = text.split("\n")
+    drift = []          # (class, message)
+    # A lane worktree is a `git checkout-index` copy and is NOT a repository, so a naive
+    # `git -C ROOT` reports EVERY hash as missing -- 36 false failures, measured while
+    # writing this. Resolve the repo once and say plainly when there is none; BEBOP_GIT_REPO
+    # lets a lane point at the real one.
+    repo = os.environ.get("BEBOP_GIT_REPO", ROOT)
+    if subprocess.run(["git", "-C", repo, "rev-parse", "--git-dir"],
+                      capture_output=True).returncode != 0:
+        repo = None
+    # a same-line/near marker saying the thing is NOT a current claim
+    NOTCLAIM = re.compile(r"does not exist|is not a valid|never existed|never written|planned"
+                          r"|proposed|hypothetical|external|upstream", re.I)
+    HIST = re.compile(r"\bwas\b|used to|\bbefore\b|\bpre-|hardcoded|\bstale\b|wrong"
+                      r"|superseded|had been|no longer|\bold\b|earlier|\bthen\b"
+                      r"|CLAIMED|claimed|\bFALSE\b|incorrect|should read|\bnot\b"
+                      r"|corrected", re.I)
+    def refuted(line, at):
+        """True if the 90 characters BEFORE position `at` mark the number as history or as
+        a claim being refuted. Before-only, deliberately: see the comment above."""
+        return bool(HIST.search(line[max(0, at - 90):at]))
+
+    # (a) commit hashes -------------------------------------------------------------
+    exempt8 = 0
+    for i, line in enumerate(lines, 1):
+        for m in re.finditer(r"`([0-9a-f]{7,40})`", line):
+            h = m.group(1)
+            if re.fullmatch(r"[0-9]+", h):      # a pure-decimal fold value, not a hash
+                continue
+            if len(h) == 8:                     # bebop.bin md5 prefix by tree convention
+                exempt8 += 1; continue
+            if NOTCLAIM.search(line):           # the line itself says it is not an object
+                continue
+            if repo is None:
+                continue
+            p = subprocess.run(["git", "-C", repo, "cat-file", "-e", h + "^{commit}"],
+                               capture_output=True)
+            if p.returncode != 0:
+                drift.append(("commit", "ROADMAP.md:%d cites `%s`, which is not a commit in "
+                              "this repository" % (i, h)))
+
+    # (b) path:line citations -------------------------------------------------------
+    basenames = {}
+    for dp, dn, fn in os.walk(ROOT):
+        # The exclusion MUST be relative to ROOT. Testing the absolute path meant that
+        # running the checker from any directory whose name contains "tmp" -- e.g. a lane's
+        # own tmp/tip staging tree -- skipped EVERY directory, left the basename index
+        # empty, and silently resolved nothing: the check reported 6 drifted claims where
+        # it should have reported 9. Measured 2026-09-14 while demonstrating this gate. A
+        # gate that quietly measures less than it appears to is the failure this tree has
+        # been burned by most (tools/tv_fragments.py printed PASS (0/0) for its whole life).
+        rel = os.path.relpath(dp, ROOT)
+        parts = rel.split(os.sep)
+        if ".git" in parts or "tmp" in parts: continue
+        for f in fn: basenames.setdefault(f, []).append(os.path.join(dp, f))
+    CITE = re.compile(r"\b((?:bench|tools|selfhost|docs|formal|seed)/[A-Za-z0-9_./-]+"
+                      r"\.(?:sh|py|bp|md|lean|txt)|[A-Za-z0-9_-]+\.(?:bp|py|sh|lean)):"
+                      r"(\d+)(?:-(\d+))?")
+    unresolved = 0
+    for i, line in enumerate(lines, 1):
+        for m in CITE.finditer(line):
+            p, lo, hi = m.group(1), int(m.group(2)), m.group(3)
+            hi = int(hi) if hi else lo
+            fp = os.path.join(ROOT, p)
+            if not os.path.exists(fp):
+                cand = basenames.get(os.path.basename(p), [])
+                if len(cand) != 1: unresolved += 1; continue
+                fp = cand[0]
+            n = sum(1 for _ in open(fp, errors="replace"))
+            if hi > n:
+                drift.append(("cite", "ROADMAP.md:%d cites %s:%d and %s has %d lines"
+                              % (i, p, hi, os.path.relpath(fp, ROOT), n)))
+
+    # (c) counted artifacts ---------------------------------------------------------
+    def resolve(p):
+        fp = os.path.join(ROOT, p)
+        if os.path.exists(fp): return fp
+        cand = basenames.get(os.path.basename(p), [])
+        return cand[0] if len(cand) == 1 else None
+    for i, line in enumerate(lines, 1):
+        for m in re.finditer(r"`([A-Za-z0-9_./-]+\.(?:py|sh|bp|lean|md))`\s+(?:is\s+)?"
+                             r"\*{0,2}(\d[\d,]*)\*{0,2}\s+lines(?![A-Za-z0-9])", line):
+            fp = resolve(m.group(1))
+            if not fp: continue
+            claim = int(m.group(2).replace(",", ""))
+            real = _wc_l(fp)
+            if claim != real and not refuted(line, m.start()):
+                drift.append(("count", "ROADMAP.md:%d says %s is %d lines; `wc -l` says %d"
+                              % (i, m.group(1), claim, real)))
+        for m in re.finditer(r"`([A-Za-z0-9_./-]+\.bp)`\s+(?:is\s+)?\*{0,2}(\d+)\*{0,2}"
+                             r"\s+fns(?![A-Za-z0-9])", line):
+            fp = resolve(m.group(1))
+            if not fp: continue
+            claim = int(m.group(2))
+            real = sum(1 for l in open(fp, errors="replace") if l.startswith("fn "))
+            if claim != real and not refuted(line, m.start()):
+                drift.append(("count", "ROADMAP.md:%d says %s is %d fns; `grep -c '^fn '` "
+                              "says %d" % (i, m.group(1), claim, real)))
+
+    # (d) construct goldens ---------------------------------------------------------
+    cons = {}
+    for sub in ("", "neg"):
+        d = os.path.join(ROOT, "bench", "parity_constructs", sub)
+        if not os.path.isdir(d): continue
+        for bn in os.listdir(d):
+            if bn.endswith(".bp") and re.match(r"c\d+", bn):
+                cons.setdefault(bn[:-3], os.path.join(d, bn))
+    def expect_of(c):
+        fp = cons.get(c)
+        if fp is None:
+            cand = [k for k in cons if k.startswith(c + "_")]   # exact name wins first
+            if len(cand) != 1: return None
+            fp = cons[cand[0]]
+        m = re.search(r"//\s*EXPECT\s+(-?\d+)", open(fp, errors="replace").read())
+        return m.group(1) if m else None
+    GOLD = re.compile(r"\b(c\d+[A-Za-z0-9_]*)`?((?:\s|,|is|are|still|now|at|EXPECT|=|golden"
+                      r"|frozen|gives|prints|back to|to|the|and|its|`|\*){1,40}?)"
+                      r"(-?\d{1,20})(?![\^%x\d.])")
+    for i, line in enumerate(lines, 1):
+        for m in GOLD.finditer(line):
+            c, v = m.group(1), m.group(3)
+            e = expect_of(c)
+            if e is None or e == v or refuted(line, m.start()): continue
+            drift.append(("golden", "ROADMAP.md:%d quotes %s as %s; its own `// EXPECT` "
+                          "header says %s" % (i, c, v, e)))
+
+    # (e) battery gate readings -----------------------------------------------------
+    bat = os.path.join(ROOT, "tools", "battery.sh")
+    asserts = {}
+    if os.path.exists(bat):
+        for m in re.finditer(r"line\s+\S+\s+'\^([a-z_0-9]+):'\s+'([^']*)'",
+                             open(bat, errors="replace").read()):
+            asserts[m.group(1)] = m.group(2)
+    META = set("[]()*+?|\\{}")
+    for i, line in enumerate(lines, 1):
+        if not line.startswith("|"): continue
+        row = line.split("|")[1].strip()
+        for name, exp in sorted(asserts.items()):
+            if META & set(exp): continue        # a regex expectation pins no single number
+            want = re.findall(r"\d+", exp)
+            if not want: continue
+            for m in re.finditer(re.escape(name) + r":\s*([0-9/ a-z]{1,28})", line):
+                got = re.findall(r"\d+", m.group(1))
+                if not got: continue
+                if refuted(line, m.start()):
+                    continue                    # a past reading or a refuted claim
+                if got[:len(want)] != want:
+                    drift.append(("gate", "row %s reads `%s: %s` but tools/battery.sh "
+                                  "asserts %r for that gate" % (row, name,
+                                  m.group(1).strip(), exp.strip())))
+                break                           # only the row's FIRST live reading
+
+    worst = r.get("max_roadmap_drift", 0)
+    if len(drift) > worst:
+        by = collections.Counter(c for c, _ in drift)
+        fail("roadmap-drift", "%d ROADMAP.md claim(s) disagree with the tree (ratchet %d) "
+             "[%s] -- a row's number is what the next lane schedules from: %s"
+             % (len(drift), worst, ", ".join("%s=%d" % kv for kv in sorted(by.items())),
+                "; ".join(m for _, m in drift[:8])))
+    else:
+        if repo is None:
+            note("roadmap-drift: the COMMIT class did not run -- %s is not a git work tree "
+                 "(set BEBOP_GIT_REPO). The other four classes did." % ROOT)
+        note("roadmap-drift: %d drifted claims (ratchet %d); %d eight-hex bebop.bin digests "
+             "exempt (not commits, and a historical promotion digest is unrecoverable from "
+             "the tree), %d path:line citations unresolvable by basename"
+             % (len(drift), worst, exempt8, unresolved))
+
+
 def check_ratchets_are_read(r):
     """Every ratchet must be READ by a check. A number nobody reads is not a safeguard.
 
@@ -766,6 +983,7 @@ def main():
     check_waits_are_bounded(r)
     check_ratchets_are_read(r)
     check_laws_have_enforcement(r)
+    check_roadmap_matches_code(r)
     for n in notes: print("  note: " + n)
     if fails:
         print("\narch_check: %d INVARIANT(S) VIOLATED" % len(fails))
