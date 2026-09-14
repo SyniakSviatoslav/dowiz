@@ -19,6 +19,8 @@ import Bebop.Basic
 import Bebop.Lexer
 import Bebop.Parser
 import Bebop.Semantics
+import Bebop.Reject
+import Bebop.Sha256
 import Bebop.Builtins
 import Bebop.Syscalls
 import Bebop.Traps

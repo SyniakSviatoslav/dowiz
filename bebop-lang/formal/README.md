@@ -11,25 +11,54 @@ The `86` denominator is STALE. Counted 2026-09-14:
 `ls bench/parity_constructs/neg/*.bp | wc -l` = **20**, i.e. a **121**-construct
 suite, all 121 carrying a `// EXPECT <v> from:` header. Measure against 121.
 
-**Where this stands, 2026-09-14 (lane l4lean), all figures measured:**
+**Where this stands, 2026-09-14 (lane f4lean), all figures measured:**
 
 | quantity | value | how |
 |---|---|---|
-| `lake build` | **rc=0**, clean, 81 s, 10 jobs | `rm -rf .lake/build && lake build` |
-| modules elaborating standalone | 9 of 9 (incl. `harness.lean`) | `lean <file>` per file, all rc=0 |
-| import cycles | **none** | the graph is a DAG; the 2026-09-13 "still open" claim was already false at 7edffdf |
-| constructs PARSED from disk | **109 of 121** | `lake exe parityrun`, reading `bench/parity_constructs/` |
-| constructs evaluating to their `// EXPECT` | **87 of 121** | same run, eval fuel 2000000 |
-| whole-corpus wall clock | **797 ms** (was 37840 ms) | 121 files, fuel 20000, before/after the sparse arena on the identical corpus |
-| positive constructs the parser REJECTS as illegal | **0** | all 6 `INVALID` rows are `neg/*.bp`, which should be refused |
-| constructs run from an inline AST | 10 of 121 | the older `#guard`ed samples, KEPT alongside the parser |
-| builtins executable | **10 of 37** | `zeros str_len char clock_ms clz crc32 crc32x hvham hvham2 scan` |
-| builtins with an axiom spec only | 26 (`dispatchSyscall` returns `none` for all) | `Syscalls.lean` |
-| builtins absent entirely | 1 (`crc32b`) | grep over `formal/` |
-| statement forms modelled | 8 of 8 | every `Stmt` has an `execStmt` arm |
-| expression forms modelled | 28 of 28 | 19 operators + 7 primaries + 2 postfix |
-| type checking | **0** | `Ty` is declared and never read; `grep -n 'Ty\.' Semantics.lean` is empty |
-| F9 theorems | **6 proved, 1 axiom, 0 sorry** | `#print axioms` on each, in the build log |
+| `lake build` | **rc=0**, "Build completed successfully (14 jobs)" | `lake build` through `tools/slot.sh` |
+| constructs PARSED from disk | **121 of 121** | `lake exe parityrun <repo-root>` |
+| constructs matching their `// EXPECT` | **120 of 121** | same run, eval fuel 4000000 |
+| the one that does not | `c84_run` | STUCK at `sys_wait4`; see "c84_run" below |
+| results file | `formal/results.txt`, emitted by `parityrun` | `lean_conformance 120/121` + the source hash |
+| `lean_sources_sha256` reproducible outside Lean | yes | `find formal -name '*.lean' \| LC_ALL=C sort \| xargs sha256sum \| sha256sum` |
+| theorems gaining a `sorryAx` | **0** | `grep -c sorryAx` over the build log |
+| builtins executable | **13 of 41** | `zeros str_len char clock_ms clz crc32 crc32b crc32x hvham hvham2 scan` + the 13 modelled `sys_*` |
+| builtin surface | **41**, from the compiler | `python3 tools/builtin_surface.py` ("compiler dispatches 41") |
+| static rejection rules | **7**, in `Bebop/Reject.lean` | exits 65, 99, 100, 101, 102, 108, 109 |
+| runtime traps raised | **3** | 80 (arena), 82 (call depth), 87 (unresolved call) |
+
+**THE PROGRESSION, 87 -> 120, each number from a full 121-file run** (the group
+names are lane f4lean's card):
+
+| after | passes | what closed |
+|---|---|---|
+| base `fbe60a6` | 87 | -- |
+| group 1, negative scoring | 94 | 7 `neg/` that the harness already refused correctly and scored as failures |
+| group 2, `return`/`break` as expressions | 95 | c124_condreturn (c70_qdsl x2 moved UNSUPPORTED -> STUCK) |
+| group 3, `Bebop/Reject.lean` | 106 | c113 c114 c120 c85 c93 c37 + c112 c140 c141 c52 read_before_assign |
+| group 4+5, byte arena + syscalls + crc/scan | 117 | c68 c70 x2 c94 c97 c98 c99 c110 + c42 c45 c78 |
+| group 6+7, `cas://` + call depth | 120 | c50_cas c51_casbad c48_stackovf |
+
+**c84_run, the one left open, and the space searched.** Its value is
+`((st[0] >> 8) & 255) + 1000 * (w == pid)` = 1035, where `st[0]` is the wait
+status of a child that `sys_run` executed. Three ways to produce the 35 were
+considered and all three are either out of reach or dishonest:
+
+1. *Execute the image.* `sys_run(addr, size, argc, argv)` runs the aarch64
+   machine code that `sys_mmap` mapped from `frozen/c01_lit.bin`. That needs an
+   instruction-set model and a loader. This is a semantics of the LANGUAGE;
+   machine code is not in it.
+2. *Identify the `.bin` with the `.bp` of the same stem and evaluate that.* This
+   assumes the compiler is correct, which is the property F4 exists to check.
+   Circular.
+3. *Read the number out of `c01_lit.bp`'s own `// EXPECT` header.* Fabrication.
+
+A second, independent gap sits on top of the first: `sys_clone` is modelled as
+the PARENT's view of a fork and the child is not executed, so even with
+`sys_run` the model would have no child status to report. Both gaps are named
+at the exact syscall that needs them (`Bebop/Syscalls.lean`'s default arm), and
+the construct reports
+`STUCK unmodelled builtin `sys_wait4``, never a value.
 
 **Status (measured 2026-09-13):** all 8 modules ELABORATE on-box under Lean 4.33.1
 with the plain `lean` binary (see Building). Before that date nothing under
@@ -60,10 +89,12 @@ here was never measured and is refuted (docs/blueprints/F3-lean-semantics.md §3
 |------|------|---------|
 | `Bebop/Lexer.lean` | rc=0 | Tokenizer; 9 `#guard`s pinning longest-match (`>>>` before `>>`, `&&` vs `&`, `=>` vs `=`) |
 | `Bebop/Parser.lean` | rc=0 | Recursive-descent `.bp` -> AST, TOTAL (fuel-recursive, no `partial` on the parse path), `ParseError` separating "unsupported by this parser" from "not a legal program"; 28 `#guard` grammar pins |
-| `ParityRun.lean` | rc=0 (`lake exe parityrun`) | Reads the real `.bp` files + their `// EXPECT`, expands plain `use`, scores every file into exactly one bucket, exits 1 below the pass floor |
+| `ParityRun.lean` | rc=0 (`lake exe parityrun`) | Reads the real `.bp` files + their `// EXPECT`, expands `use` INCLUDING `cas://` with its digest check, runs `Bebop.Reject` before evaluation, scores every file into exactly one bucket, COMPARES a negative's exit code against its `COMPILEFAIL:`/`RUNFAIL:` header, writes `results.txt`, exits 1 below the pass floor (now 120) |
 | `Bebop/Basic.lean` | rc=0 | Core types: Val, Expr, Stmt, Program, State (+ State.lookup/bind/zeros/arenaRead/arenaWrite), TrapCode, Result (with `stuck` for a body that yields no value) |
 | `Bebop/Builtins.lean` | rc=0 | 10 executable builtins + dispatch (imports Basic only) |
-| `Bebop/Syscalls.lean` | rc=0 | 26 `axiom` sys_* specs, 5 footprints, `dispatchSyscall` = `none` for every name (nothing modelled; was `some (s, 0)` for any `sys_*` until 2026-09-13) (imports Basic only) |
+| `Bebop/Syscalls.lean` | rc=0 | 26 `axiom` sys_* specs, 5 footprints, and since 2026-09-14 a MODELLED `dispatchSyscall`: 13 names with a declared effect and value (`sys_arena_base/_end`, `open/close/fsync/msync`, `mmap/munmap/mprotect`, `clone` (parent view), `exit_thread_guard` (guard = 0 only), `write`), every other name `none` -- which is `stuck` with the name printed. NOT "0 for everything": that is one of the three fakes this directory closed |
+| `Bebop/Reject.lean` | rc=0 | NEW 2026-09-14. The STATIC rejection pass, 7 rules: builtin-named `fn` (99), >14 params (100), `sys_*` in a `kernel fn` (102), `sys_mapb` (108), >8 symbols at a `sys_clone` (109), unbound symbol (101), literal index past a static length (65). Each rule's docstring names the negative it refuses AND the positive control that must survive it |
+| `Bebop/Sha256.lean` | rc=0 | NEW 2026-09-14. SHA-256, pinned to three NIST vectors by `#guard`. Needed twice: to resolve `use "cas://sha256:<hex>"` (the two `.bcas` files in this tree are byte-identical, so ONLY the digest tells c50_cas from neg/c51_casbad) and to compute `results.txt`'s source hash |
 | `Bebop/Semantics.lean` | rc=0 | Fuel-bounded evaluator (5 `partial def` in one `mutual` block; `execBody` is the tail-expression rule; every fuel-0 arm sets `State.fuelOut` and `evalProgram` reports `Result.fuelExhausted`; the `.call` arm restores the caller's env) |
 | `Bebop/Traps.lean` | rc=0 | 24-row trap table, `#guard` x3 |
 | `Bebop/Conformance.lean` | rc=0 | 80 + 14 EXPECT rows, 97 program entries now carrying the **verbatim** `.bp` source (88 of 97 were invented programs until 2026-09-14), **10** inline-AST samples each with a `#guard`, 5 probe fixtures (§5b) pinning the three fakes closed 2026-09-13. `oracleCount` is now `oracleEntries.size`, not a typed 121 |
@@ -191,13 +222,20 @@ once. `.lake/` is the build directory and is not part of the source.
   expectation is `none`; a negative construct expecting exit 97 passes on exit 100.
   (The two arms added for the probes, `stuck`/`fuel exhausted`, match the verdict
   string exactly and widen nothing.)
-- `builtinCrc32`/`builtinCrc32x`: the table builder shifts LEFT, tests bit 7 and
-  masks to 8 bits before XORing a 32-bit polynomial, and the final XOR is
-  missing. Probed: crc32("123456789") = 15579374; zlib gives 3421780262
-  (0xCBF43926). Visibly wrong, so it cannot fake a pass.
-- `builtinChar` returns the handle's low byte for index 0 and 0 after (probed:
-  3 0 0 for a length-3 handle where bpref reads 97 98 99); `builtinScan` never
-  advances (probed: 0 where bpref gives 3). No byte arena is modelled.
+- FIXED 2026-09-14 -- `builtinCrc32`/`builtinCrc32x` were the MSB-first update
+  written with the reflected polynomial and truncated to 8 bits, with no final
+  XOR: crc32("123456789") came back 15579374 where zlib gives 3421780262.
+  There is now ONE reflected table (`crc32Table`/`crc32Step`/`crc32Of`) shared
+  by crc32, crc32x and the newly added crc32b, pinned at elaboration time by
+  `#guard` against zlib's values for "", "123456789" and "abc".
+- FIXED 2026-09-14 -- **the byte arena exists**. `State.bytes` is an append-only
+  `Array UInt8`; a string literal interns its UTF-8 bytes plus a NUL and
+  evaluates to `(offset << 32) | length`, exactly as bpref's `'str'` node does.
+  So `char` reads a real byte (it returned the handle's low byte for index 0
+  and 0 after), `crc32b` exists at all, and `builtinScan` -- which used to read
+  `pos` as if the pair were packed into the handle and then decline to read any
+  byte, returning `posStart` unchanged -- is now bpref's loop rule for rule,
+  both bounds and the write-back included.
 - FIXED 2026-09-14 -- `Conformance.lean`'s counts. The header said 75 + 11
   constructs / 121 oracles; the tables held 80 + 14 rows and 97 entries.
   `oracleCount` is now `oracleEntries.size` (derived), the 121 lives in
@@ -270,7 +308,12 @@ once. `.lake/` is the build directory and is not part of the source.
   0` -> compile exit 101, "unbound symbol"). The parser here follows the
   refusal and rejects a variable assignment in expression position; it has no
   production for the bare statement form, so that shape is `invalid` here.
-- SCORE, measured `lake exe parityrun /root/... 20000`, all 121 files:
+- SCORE, measured `lake exe parityrun <lane root>` at the default fuel, all 121
+  files, 2026-09-14 after lane f4lean: **120 PASS · 1 STUCK** (`c84_run`).
+  The 20 negatives all pass as REFUSALS and each prints its diagnosis in the
+  run's "refusal diagnoses" section, because a refusal for the wrong reason
+  scores the same as one for the right reason and the score cannot show it.
+  The PREVIOUS score, for comparison:
   84 PASS · 14 STUCK · 10 VALUE_MISMATCH · 6 INVALID (all negative) ·
   3 FUEL · 2 UNSUPPORTED:`use` cas:// · 1 UNSUPPORTED:`return` in expression
   position · 1 LEX (the `@` in `neg/c143_contract_garbage`, correctly refused).
@@ -316,13 +359,31 @@ once. `.lake/` is the build directory and is not part of the source.
   slower -- 37840 ms -> 797 ms over all 121 files at fuel 20000, same corpus,
   same fuel, with an IDENTICAL pass set (36 non-PASS before, 36 after, empty
   diff in both directions).
+- FIXED 2026-09-14 -- **a MODEL GAP could be hidden by an unused binding.**
+  `c142_clone8.bp` scored `ok 201` while `sys_arena_base()` was entirely
+  unmodelled: its `let base = sys_arena_base();` evaluated to `none`,
+  `Stmt.let_` answered `.cont` and simply did not bind, and the tail never read
+  `base`. `State.gap` is now set at every unmodelled-builtin site and
+  `evalProgram` reports `stuck` even when a value came out. Controlled by
+  mutation: inserting an unused `let zz = sys_slurp(0, 0);` into c27_zeroarg
+  turns its `ok 7` into `STUCK unmodelled builtin `sys_slurp``.
+- FIXED 2026-09-14 -- **`STUCK main yielded no value (unbound symbol,
+  unresolved call, arena fault, or no tail expression)` named four causes at
+  once**, and 12 constructs carried it simultaneously, which is why none of
+  them was ever closed. `State.stuckWhy` is recorded at the SITE that first
+  produced no value (first writer wins) and printed instead.
 - The three FUEL rows resolved three different ways, which is why they were
   reported separately: `c33_loopalloc` was the quadratic one and now gives
   `ok 24999750000` -- its exact EXPECT -- at fuel 150000 in **1071 ms**, where
   before it did not finish in 60 s at fuel 100000; `c67_deeprec` was genuinely
   depth-bound and gives `ok 100000` at fuel 2000000 in 339 ms; and
-  `neg/c48_stackovf` is still FUEL at 2000000 and always will be, because it is
-  an unbounded-recursion construct expecting RUNFAIL:82.
+  `neg/c48_stackovf` was still FUEL at 2000000, and the claim that it "always
+  will be" was WRONG: the construct expects RUNFAIL:82, a stack overflow, and
+  a model with no bounded stack cannot produce it.
+  `Bebop.Semantics.callDepthLimit` (131072 activations) is that bound, separate
+  from fuel, and c48 now reports `trap stackOverflow (exit 82)`. The control is
+  in the lane verdict: a program that merely needs a lot of fuel (a
+  10^9-iteration `while`) still reports FUEL, not 82.
 - STILL OPEN -- 21 positive and 6 negative construct names have no row:
   positive `c124_condreturn c133_testblock(+_twin) c134_testfn_inside(+_twin)
   c135_testblock_braces(+_twin) c142_clone8 c144_contract_ok c145_fraction_ok

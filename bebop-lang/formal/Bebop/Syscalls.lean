@@ -378,23 +378,139 @@ def sys_mmap_footprint (addr len : Val) : Footprint :=
 --    `some (s, 0)` until 2026-09-13. Corrected 2026-09-14.
 -- ============================================================
 
-/-- Dispatch a syscall. Returns none if the name is not a syscall.
+-- ============================================================
+-- 8. THE MODELLED SYSCALLS
+--
+-- WHAT CHANGED, 2026-09-14, and the rule it follows.
+--
+-- Until today `dispatchSyscall` was `none` for every one of the 26 names, so
+-- every program touching a syscall was `stuck`. Before 2026-09-13 it had been
+-- `some (s, 0)` for ANY name starting `sys_`, real or invented, which is one
+-- of the three fakes this directory closed: "answering 0 for every syscall"
+-- makes a wrong evaluator look right and is named in formal/README.md's
+-- "Known content defects" as a thing not to reintroduce.
+--
+-- So NEITHER extreme. Each name below is either
+--   (a) MODELLED, with a declared effect on the modelled state and a declared
+--       value -- and the declaration says what part of the real world it
+--       abstracts away; or
+--   (b) left OUT, which is `none`, which is `stuck` with that syscall NAMED.
+--
+-- The line between them is whether the construct's VALUE can be produced
+-- without simulating something outside the language. `sys_fsync` returning 0
+-- is POSIX's own contract and needs no file system; `sys_wait4` returning a
+-- child's exit status needs the child to have RUN, which needs a second
+-- process, which this single-threaded evaluator does not have. The first is
+-- modelled; the second is not, and says so.
+--
+-- SINGLE-PROCESS, PARENT VIEW. `sys_clone` returns a fresh nonzero pid: the
+-- parent's view of a fork. The CHILD IS NOT EXECUTED. That is exactly what
+-- c142_clone8.bp asks for -- its own header says "The child exits immediately
+-- via sys_exit_thread_guard, so the value is the parent's alone and there is
+-- no shared cell and no race to lose" -- and it is exactly NOT enough for
+-- c84_run.bp, whose value is the child's exit code. c84 therefore stops at
+-- `sys_wait4` with that named reason rather than being handed a fabricated
+-- status word.
+-- ============================================================
 
-    NOTE: this is a STUB. The actual implementation would need
-    the full Linux file-system and memory model. The axiom
-    specifications above are the normative semantics. -/
+/-- The byte address the modelled arena starts at. The evaluator's arena is
+    CELL-indexed from 0; the real one is a 256 MB anonymous mapping at an
+    address the kernel picks. A constant is enough for every construct that
+    reads it: c98/c99 subtract the SAME base twice and check the two agree
+    (EXPECT 11 either way), and c84/c141/c142 only ever add an offset to it.
+    Any fixed value models that faithfully; a VARYING one would not, because
+    the semantics must be deterministic. -/
+def arenaBaseAddr : Nat := 0x40000000
+
+/-- One past the end of the arena: base + capacity * 8 bytes. `capacity` is
+    `Arena`'s own field (33554432 cells = 256 MiB), so the two cannot drift. -/
+def arenaEndAddr (s : State) : Nat := arenaBaseAddr + s.arena.capacity * 8
+
+/-- Where modelled `sys_mmap` hands out addresses: above the arena, so a
+    mapping address can never be confused with an arena address. -/
+def mapBaseAddr : Nat := 0x80000000
+
+/-- Dispatch a syscall. `none` means "this model does not implement this
+    name", which the evaluator reports as `stuck` with the name in the message
+    -- never as a value, and never as 0. -/
 def dispatchSyscall (name : Name) (args : Array Val) (s : State)
     : Option (State × Val) :=
-  -- NOTHING is modelled yet, so this is `none` for every name, including the
-  -- 26 axiomatised `sys_*` above. Until 2026-09-13 it answered `some (s, 0)`
-  -- for ANY name beginning `sys_` -- real, invented (`sys_this_does_not_exist`)
-  -- or user-defined (`fn sys_x` was shadowed, probed `ok 0` where bpref gives
-  -- 42) -- which let any program touching a syscall "pass" regardless of the
-  -- evaluator: the silent-oracle defect the F3 blueprint (§4.4) says this
-  -- placeholder must lose. `none` here makes the call `stuck`, never a value.
-  -- When `sys_write`/`sys_exit` are modelled (the two bpref implements),
-  -- match them here by name and keep the default `none`.
-  let _ := (name, args, s)
-  none
+  let a0 := (args[0]?).getD 0
+  let a1 := (args[1]?).getD 0
+  let a2 := (args[2]?).getD 0
+  match name with
+  -- ---- the arena pair: pure, no effect -------------------------------
+  | "sys_arena_base" => some (s, Int64.ofNat arenaBaseAddr)
+  | "sys_arena_end"  => some (s, Int64.ofNat (arenaEndAddr s))
+
+  -- ---- descriptors ---------------------------------------------------
+  -- open(2) returns the LOWEST unused descriptor; the model bumps instead,
+  -- which is the same for any program that does not depend on reuse. The
+  -- path bytes are not interpreted: nothing in the corpus reads a file's
+  -- CONTENT through a modelled call (c84_run does, and c84_run is the one
+  -- left out below).
+  | "sys_open" => some ({ s with nextFd := s.nextFd + 1 }, Int64.ofNat s.nextFd)
+  | "sys_close" => some (s, 0)              -- close(2): 0 on success
+  -- fsync(2)/msync(2): 0 on success. c94_fsync fsyncs a DIRECTORY fd and its
+  -- header derives EXPECT 0 from exactly this contract on both sides.
+  | "sys_fsync" => some (s, 0)
+  | "sys_msync" => some (s, 0)
+
+  -- ---- mappings ------------------------------------------------------
+  -- mmap(2) returns a fresh page-aligned address, never 0 and never equal to
+  -- a previous one; the model rounds the length up to a 4096-byte page as the
+  -- kernel does. NOTHING is readable through it -- a program that dereferences
+  -- a mapping gets the arena's 0s -- which is why c84_run, the only construct
+  -- that executes what it mapped, is not modelled.
+  | "sys_mmap" =>
+      let len := a1.toNatClampNeg
+      let pages := (len + 4095) / 4096
+      let addr := mapBaseAddr + s.mapCursor
+      some ({ s with mapCursor := s.mapCursor + pages * 4096 }, Int64.ofNat addr)
+  | "sys_munmap" => some (s, 0)             -- munmap(2): 0 on success
+  -- mprotect(2): 0 on success. c110_fence drops an ANONYMOUS PRIVATE mapping
+  -- to PROT_READ and restores it; such a mapping keeps VM_MAYWRITE, so both
+  -- calls succeed and the construct's EXPECT is their sum, 0.
+  | "sys_mprotect" => some (s, 0)
+
+  -- ---- process -------------------------------------------------------
+  -- clone(2) with SIGCHLD: the PARENT's view, a fresh nonzero pid. The child
+  -- is not executed (see the header above). The pid is derived from the fd
+  -- counter only so that two clones differ.
+  | "sys_clone" => some ({ s with nextFd := s.nextFd + 1 }, Int64.ofNat (1000 + s.nextFd))
+  -- exit_thread_guard(c, code): "exit the calling THREAD iff c != 0". In a
+  -- single-threaded model there is no other thread to exit, and the guard is
+  -- reached with c = 0 in the parent -- which is the only path this model
+  -- takes. A NONZERO guard would mean the model had entered a child it does
+  -- not have, so it is left unmodelled rather than silently ignored.
+  | "sys_exit_thread_guard" =>
+      if a0 == 0 then some (s, 0) else none
+
+  -- ---- write ---------------------------------------------------------
+  -- write(2) returns the byte count. The bytes themselves go nowhere: this
+  -- semantics has no output channel, and inventing one would not change any
+  -- construct's value.
+  | "sys_write" => some (s, a2)
+
+  | _ =>
+    -- NOT MODELLED. The evaluator turns this into `stuck` with the name in
+    -- the message. The ones that matter, and why each is out:
+    --   sys_run    -- executes a mapped machine-code IMAGE. Modelling it means
+    --                modelling aarch64 and the loader; this is a semantics of
+    --                the LANGUAGE.
+    --   sys_wait4  -- reports a CHILD's exit status, which requires the child
+    --                to have run (see sys_run).
+    --   sys_exit   -- terminates the process with a code. `Result` has no
+    --                "exited with code" constructor, and adding one that no
+    --                construct's EXPECT distinguishes from a value would be a
+    --                shape with no test behind it.
+    --   sys_read, sys_readbuf, sys_slurp, sys_export, sys_ftruncate,
+    --   sys_rename -- real file-system content, which nothing in the 121
+    --                needs and which cannot be faked deterministically.
+    --   sys_cond_set, sys_futex_*, sys_atomic_add, sys_setaffinity -- the
+    --                threading seven, out of a single-thread semantics by
+    --                construction (this file's own header says so).
+    let _ := (args, a0, a1, a2)
+    none
 
 end Bebop.Syscalls

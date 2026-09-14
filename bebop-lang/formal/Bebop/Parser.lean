@@ -80,8 +80,16 @@ inductive ParseError where
       count in the score table. -/
   | unsupported (feature : String) (line col : Nat)
   /-- The text is not a legal program under the grammar in LANGUAGE.md. This IS
-      a claim about the input -- which for `neg/*.bp` is the expected outcome. -/
+      a claim about the input -- which for `neg/*.bp` is the expected outcome.
+      No compiler exit code is attached: the refusal is a GRAMMAR refusal and
+      this parser does not know which of `bebop.bin`'s codes it would carry. -/
   | invalid (msg : String) (line col : Nat)
+  /-- The text is refused by a rule that DOES name a compiler exit code -- the
+      tail-expression rule (97), and every rule in `Bebop.Reject`. Kept apart
+      from `.invalid` so `ParityRun` can ASSERT the code against a negative
+      construct's `COMPILEFAIL:<code>` header instead of accepting any refusal
+      for any code. A refusal with the wrong code is a FAILURE, loudly. -/
+  | refused (code : Nat) (msg : String) (line col : Nat)
   /-- The step budget ran out. Loud on purpose: it means the parser is looping
       or the input is pathological, and it must never be confused with either
       of the above. -/
@@ -92,6 +100,7 @@ def ParseError.render : ParseError → String
   | .lex e => s!"LEX {e.render}"
   | .unsupported f l c => s!"UNSUPPORTED {l}:{c}: {f}"
   | .invalid m l c => s!"INVALID {l}:{c}: {m}"
+  | .refused n m l c => s!"REJECTED {n} {l}:{c}: {m}"
   | .outOfFuel l c => s!"OUT-OF-FUEL near {l}:{c}"
 
 /-- The bucket name used by the score table. Keeps "we cannot parse it" and
@@ -100,6 +109,7 @@ def ParseError.kind : ParseError → String
   | .lex _ => "lex"
   | .unsupported _ _ _ => "unsupported"
   | .invalid _ _ _ => "invalid"
+  | .refused _ _ _ _ => "rejected"
   | .outOfFuel _ _ => "out-of-fuel"
 
 /-- Everything the expression parser needs to know that it cannot see locally.
@@ -369,13 +379,30 @@ def pPrimary (c : Ctx) (fuel i : Nat) : Except ParseError (Expr × Nat) :=
             match pArms c fuel j with
             | .error er => .error er
             | .ok (arms, j) => .ok (Expr.matchExpr scrut arms, j)
+    -- `return e` / `break` IN EXPRESSION POSITION. Real, and undocumented:
+    -- `let _ = if n < 2 then return 1 else 0;` and
+    -- `let _ = if i * i > 50 then break else 0;` are both
+    -- `bench/parity_constructs/c124_condreturn.bp`, and `c70_qdsl.bp` uses the
+    -- `return` form 40 times. ROADMAP A18 step 1 (2026-09-14, `788b8dc`,
+    -- promoted `c9d826c8`) is what made them expressions. docs/LANGUAGE.md in
+    -- THIS tree still lists both under `stmt`, and ONLY there -- read
+    -- 2026-09-14, lines 48-49 verbatim:
+    --     return expr ;                 -- leave the function with expr (T99)
+    --     break ;                       -- leave the innermost while (T99)
+    -- The expression grammar at :57-82 does not mention either word. The
+    -- compiler moved and the doc did not, so the doc is the stale side; this
+    -- production follows the compiler and the gap is REPORTED, not resolved
+    -- here (docs/ is not this lane's tree).
+    --
+    -- The operand is parsed at `pBin ... 0`, which is LOOSER than every
+    -- operator and TIGHTER than `else`: `if c then return k else 0` therefore
+    -- groups as `if c then (return k) else 0`, which is the only reading that
+    -- makes c124's `first_div` return `k` rather than `k else 0`.
     | .ident "return" =>
-        -- `let _ = if n < 2 then return 1 else 0;` is real (c124_condreturn),
-        -- so `return` DOES occur in expression position -- which LANGUAGE.md:49
-        -- does not say (it lists `return expr ;` as a statement only). The AST
-        -- has `Stmt.ret` and no expression-level counterpart, so this is a gap
-        -- in formal/, not a bad program: `unsupported`, never `invalid`.
-        .error (c.unsup i "`return` in expression position (undocumented; LANGUAGE.md:49 lists it as a statement)")
+        (match pBin c fuel 0 (i + 1) with
+         | .error e => .error e
+         | .ok (e, j) => .ok (Expr.retExpr e, j))
+    | .ident "break" => .ok (Expr.brkExpr, i + 1)
     | .ident nm =>
         if keywords.contains nm then
           .error (c.err i s!"`{nm}` is a keyword and cannot start an expression")
@@ -457,7 +484,11 @@ def pLetIn (c : Ctx) (fuel i : Nat) : Except ParseError (Expr × Nat) :=
                 | .error e => .error e
                 | .ok (b, m) =>
                   match v with
-                  | .var tgt => .ok (Expr.letIn tgt rhs b, m)
+                  -- ASSIGNMENT, not a binding: `Expr.assignIn`. It evaluates
+                  -- identically to `letIn`; the distinction is static
+                  -- (neg/c93_unbound is exit 101 because `v0` is assigned
+                  -- without ever having been bound).
+                  | .var tgt => .ok (Expr.assignIn tgt rhs b, m)
                   | .arrGet arr idx => .ok (Expr.letIn "_" (Expr.arrSet arr idx rhs) b, m)
                   | _ => .error (c.err j "left of `=` is not a variable or an array element")
               else .error (c.err k "expected `in` or `;` after `let _ = <lhs> = <rhs>`")
@@ -638,13 +669,13 @@ def pLet (c : Ctx) (fuel i : Nat) : Except ParseError (Stmt × Nat) :=
                 | .error e => .error e
                 | .ok (b, m) =>
                   match v with
-                  | .var tgt => .ok (Stmt.exprStmt (Expr.letIn tgt rhs b), m)
+                  | .var tgt => .ok (Stmt.exprStmt (Expr.assignIn tgt rhs b), m)
                   | .arrGet arr idx =>
                       .ok (Stmt.exprStmt (Expr.letIn "_" (Expr.arrSet arr idx rhs) b), m)
                   | _ => .error (c.err j "left of `=` is not a variable or an array element")
               else
                 match v with
-                | .var tgt => .ok (Stmt.let_ tgt rhs, k)
+                | .var tgt => .ok (Stmt.assign tgt rhs, k)
                 | .arrGet arr idx => .ok (Stmt.arrStore arr idx rhs, k)
                 | _ => .error (c.err j "left of `=` is not a variable or an array element")
           else if c.isI j "in" || (c.isP j ";" && false) then
@@ -760,7 +791,7 @@ def pFn (c : Ctx) (fuel i : Nat) : Except ParseError (FnDecl × Nat) := do
                                  returnType := rt, body := body }, i)
   | some (.ret _) => .ok ({ name := nm, params := ns, paramTypes := tys,
                             returnType := rt, body := body }, i)
-  | _ => .error (.invalid s!"fn `{nm}` has no tail expression (LANGUAGE.md:31-34, compiler exits 97)"
+  | _ => .error (.refused 97 s!"fn `{nm}` has no tail expression (LANGUAGE.md:31-34, compiler exits 97)"
                    (c.line i) (c.col i))
 
 /-- `enum NAME { CTOR ('(' TYPE ')')? , ... }` -/
@@ -848,7 +879,7 @@ def pProgramFrom (c : Ctx) (fuel i : Nat) (p : Program) : Except ParseError Prog
       -- quietly passing.
       if c.isI (i + 1) "fn" then
         (do let (f, j) ← pFn c fuel (i + 1)
-            pProgramFrom c fuel j { p with fns := p.fns.push f })
+            pProgramFrom c fuel j { p with fns := p.fns.push { f with isKernel := true } })
       else .error (c.err i "`kernel` must be followed by `fn`")
   | .ident "test" =>
       -- `test NAME { ... }` is SKIPPED by the compiler (c133_testblock's own
@@ -952,6 +983,9 @@ partial def sexp : Expr → String
   | .fieldAcc e f => s!"(field {sexp e} {f})"
   | .builtin n as => s!"(builtin {n}" ++ String.join (as.toList.map (fun a => " " ++ sexp a)) ++ ")"
   | .strLit str => "\"" ++ str ++ "\""
+  | .retExpr e => s!"(return {sexp e})"
+  | .brkExpr => "(break)"
+  | .assignIn n e b => s!"(assign {n} {sexp e} {sexp b})"
 
 /-- Parse `fn main() -> i64 { <e> }` and render main's tail expression, or the
     error kind. Used only by the pins below. -/
@@ -1043,14 +1077,18 @@ def pinProg (src : String) : String :=
 #guard (match parse "fn add(x: i64, y: i64) -> i64 requires true ensures y > x { x + y } fn main() -> i64 { add(1,2) }" with
         | .ok p => p.fns.size == 2
         | .error _ => false)
-/- A body with no tail expression is INVALID -- the compiler exits 97. -/
+/- A body with no tail expression is REFUSED with the compiler's own exit code
+   97, not merely `invalid`: `ParityRun` compares that 97 against
+   `neg/c29_emptybody.bp`'s `COMPILEFAIL:97` header. -/
 #guard (match parse "fn main() -> i64 { let x = 1; }" with
-        | .error (.invalid _ _ _) => true
+        | .error (.refused 97 _ _ _) => true
         | _ => false)
-/- `return` in expression position is UNSUPPORTED, not invalid: the construct is
-   real (c124_condreturn) and it is the AST that lacks a node for it. -/
-#guard (match parse "fn main() -> i64 { let _ = if 1 then return 1 else 0; 2 }" with
-        | .error (.unsupported _ _ _) => true
-        | _ => false)
+/- `return` and `break` in EXPRESSION position parse (ROADMAP A18 step 1).
+   The grouping pin is the point: the operand stops at `else`, so the `then`
+   arm is `(return 1)` and not `(return (1 else 0))` -- which would not parse
+   at all -- nor `return` swallowing the whole conditional. -/
+#guard pinOf "if 1 then return 1 else 0" == "(if 1 (return 1) 0)"
+#guard pinOf "if 1 then break else 0" == "(if 1 (break) 0)"
+#guard pinOf "if n % k == 0 then return k else 0" == "(if (eq (srem n k) 0) (return k) 0)"
 
 end Bebop.Parser

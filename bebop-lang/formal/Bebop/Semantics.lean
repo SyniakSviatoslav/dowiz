@@ -37,6 +37,47 @@ open Bebop.Builtins
 open Bebop.Syscalls
 
 -- ============================================================
+-- 0. THE CALL-DEPTH BOUND -- a resource, and NOT the same one as fuel
+-- ============================================================
+
+/-- How many user-function activations the modelled stack holds. Crossing it is
+    trap 82, `neg/c48_stackovf.bp`'s `RUNFAIL:82`.
+
+    WHY A SECOND RESOURCE AT ALL. Before this, `c48_stackovf` reported FUEL and
+    `ParityRun.defaultFuel`'s own comment said it "stays FUEL at any budget and
+    should". It should not: the construct asserts that unbounded recursion is a
+    LOUD trap 82 (docs/TRAPS.md:13 -- "SIGSEGV or SIGBUS in the program: stack
+    overflow (deep recursion...)"; the entry stub's handler turns the fault into
+    exit 82). Relabelling FUEL as trap 82 would have been the wrong fix twice
+    over: `c33_loopalloc` and `c67_deeprec` were BOTH once FUEL and are both
+    legal programs that simply needed more budget, and a genuinely slow program
+    must keep reporting FUEL. So exhaustion and overflow stay two different
+    verdicts with two different counters, and the control for that is a program
+    that needs a lot of fuel and no depth (a long `while`): it must still say
+    FUEL. It does.
+
+    THE VALUE IS A MODEL PARAMETER, and here is the range it has to sit in.
+    The real bound is per-FUNCTION, because A6 made the frame size depend on
+    the function:
+      * `bench/vs_rust/construct_parity.sh:6` runs the corpus under
+        `ulimit -s 65536`, i.e. a 64 MiB stack.
+      * docs/TRAPS.md:13 describes trap 82 as "deep recursion at 16 KiB per
+        frame" -- the FLAT frame, which gives 64 MiB / 16 KiB = 4096
+        activations.
+      * `c67_deeprec.bp`'s own header computes A6's frame for its leaf fn `d`
+        as F = 80 + 8*marks + 8 + 8*(S + tsp) = 88, rounded to 96 B, i.e.
+        "9.6 MB for 10^5 activations, inside construct_parity.sh's own
+        ulimit -s 65536" -- which gives 64 MiB / 96 B = 699050 activations.
+    So the true bound is somewhere in [4096, 699050] and depends on which
+    function is recursing. This model uses ONE number, which must be above the
+    deepest LEGAL recursion in the corpus -- c67_deeprec's 100001 activations,
+    a construct that must keep passing -- and inside that range. 131072 = 2^17
+    is both. It is not measured, it is CHOSEN, and it is written here rather
+    than buried so that the next person can see it is a parameter and not a
+    fact. -/
+def callDepthLimit : Nat := 131072
+
+-- ============================================================
 -- 1-2. Environment and arena operations
 --      These live in Bebop.Basic (State.lookup/bind/zeros/arenaRead/
 --      arenaWrite/...): Builtins and Syscalls need them, and importing
@@ -137,22 +178,52 @@ partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val 
   match fuel with
   | 0 => ({ s with fuelOut := true }, none)
   | fuel + 1 =>
+    -- THE UNWIND. `return e` / `break` in expression position set
+    -- `State.pending`; while it is set NOTHING further evaluates, which is
+    -- what an exception would do in bpref.py (`ReturnSignal`/`BreakSignal`)
+    -- and what this evaluator has to do by hand because it is a pure
+    -- state-threading function. Without this line the right operand of a
+    -- `binop`, the remaining arguments of a call and the rest of an array
+    -- literal would all still run after a `return` fired.
+    -- ... and the same for a RUNTIME TRAP. Nothing catches `trapped`, so once
+    -- it is set the whole run is over and no further expression may evaluate:
+    -- `let a = zeros(40000000); a[0]` must report trap 80, not read a[0].
+    if s.pending.isSome || s.trapped.isSome then (s, none) else
     match e with
     -- Literals
     | .lit v => (s, some v)
+
+    -- `return e` in expression position: evaluate `e`, then RAISE. The
+    -- expression itself has NO value (`none`), so nothing downstream can read
+    -- a `return` as a number; the value travels in the signal.
+    | .retExpr e' =>
+      let (s1, v) := evalExpr fuel e' s
+      match v with
+      | none => (s1, none)      -- the operand itself got stuck or unwound
+      | some v' => ({ s1 with pending := some (.ret v') }, none)
+
+    -- `break` in expression position: raise, no operand, no value.
+    | .brkExpr => ({ s with pending := some .brk }, none)
 
     -- String literal: NOT modelled, and loudly so. `formal/` has no byte
     -- arena, `builtinStrLen`/`builtinChar` are known-wrong (README §defects),
     -- and returning any number here would make a wrong evaluator look right on
     -- the 22 corpus programs that contain a string. `none` propagates to
     -- `Result.stuck`, which `checkExpected` cannot mistake for a value.
-    | .strLit _ => (s, none)
+    -- STRING LITERAL. There IS a byte arena now (`State.bytes`), so this
+    -- returns a real `(offset << 32) | length` handle instead of the `none`
+    -- that stood here while "no byte arena is modelled" was true. It is the
+    -- `State.internStr` rule, which is bpref.py's `'str'` node verbatim,
+    -- terminator included.
+    | .strLit str =>
+      let (s1, h) := s.internStr str
+      (s1, some h)
 
     -- Variable reference
     | .var n =>
       match s.lookup n with
       | some v => (s, some v)
-      | none => (s, none)  -- unbound: trap 101
+      | none => (s.why s!"unbound symbol `{n}`", none)
 
     -- Parenthesized expression
     | .paren e' => evalExpr fuel e' s
@@ -281,9 +352,24 @@ partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val 
           -- User function call
           let fnOpt := s1.fns.find? (fun f => f.name == fnName)
           match fnOpt with
-          | none => (s1, none)  -- unresolved call -> trap 87
+          | none =>
+            -- UNRESOLVED CALL. The two reasons are kept apart, because one is
+            -- a fact about the program and the other is a gap in this model:
+            --   * the name is not a declared `fn` and not in the language's
+            --     BUILTIN surface at all -- `nowhere(3)` in neg/c52_undef.
+            --     That is trap 87 (T130: "a call to a function that never
+            --     resolves is a runtime trap (exit 87), not a silent 0").
+            --   * the name IS a builtin (`Bebop.builtinSurface`, measured from
+            --     bebop.bp) that `dispatchBuiltin`/`dispatchSyscall` does not
+            --     implement. Calling that a trap would report OUR gap as the
+            --     program's defect, so it stays `stuck` -- loud, and in the
+            --     bucket that names formal/ as the incomplete side.
+            if builtinSurface.contains fnName then
+              (s1.noteGap s!"unmodelled builtin `{fnName}` (it IS in the language's builtin surface; `formal/` does not implement it -- see Bebop/Syscalls.lean's default arm for why)", none)
+            else ({ s1 with trapped := some TrapCode.unresolvedCall }, none)
           | some fn =>
-            if argVals.size != fn.params.size then (s1, none)
+            if argVals.size != fn.params.size then
+              (s1.why s!"call to `{fnName}` with {argVals.size} args, but it declares {fn.params.size}", none)
             else
               -- Create new activation: bind params
               let newEnv := Id.run do
@@ -291,7 +377,11 @@ partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val 
                 for i in [:fn.params.size] do
                   env := env.push (fn.params[i]!, argVals[i]!)
                 return env
-              let s2 := { s1 with env := newEnv }
+              if s1.depth ≥ callDepthLimit then
+                -- STACK OVERFLOW, trap 82. Loud, and distinct from fuel.
+                ({ s1 with trapped := some TrapCode.stackOverflow }, none)
+              else
+              let s2 := { s1 with env := newEnv, depth := s1.depth + 1 }
               -- Execute the body: its value is the tail expression (or a `ret`).
               -- A body that yields no value propagates `none`; it was `some 0`
               -- until 2026-09-13, which hid every failed call as a 0.
@@ -302,7 +392,7 @@ partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val 
               -- 2026-09-13 the callee's env was returned, so
               -- `let x = 5; let y = f(1); x + y` was `stuck` (`ok 0` before
               -- `stuck` existed) where bpref gives 7.
-              ({ s3 with env := s1.env }, v)
+              ({ s3 with env := s1.env, depth := s1.depth }, v)
 
     -- If-then-else
     | .ite c t f =>
@@ -315,6 +405,16 @@ partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val 
 
     -- Let-in: let x = e in body
     | .letIn n e' body =>
+      let (s1, ve) := evalExpr fuel e' s
+      match ve with
+      | none => (s1, none)
+      | some ve => evalExpr fuel body (s1.bind n ve)
+
+    -- `let _ = NAME = e in body`. EVALUATES exactly like `letIn` -- `let` is
+    -- fn-scoped with no shadowing (LANGUAGE.md:41-43), so binding and
+    -- rebinding are the same operation on the same register. The two are
+    -- separate AST nodes because the STATIC rule differs; see Bebop.Reject.
+    | .assignIn n e' body =>
       let (s1, ve) := evalExpr fuel e' s
       match ve with
       | none => (s1, none)
@@ -506,13 +606,34 @@ partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val 
 -- 5. Statement execution (fuel-bounded)
 -- ============================================================
 
-/-- Execute a single statement. -/
+/-- Execute a single statement, and CATCH any `return`/`break` raised from
+    expression position inside it.
+
+    `execStmtRaw` runs the statement; `State.pending`, if set, is then turned
+    into this statement's control-flow signal and CLEARED. That is the whole
+    unwind: `evalExpr` refuses to evaluate anything while `pending` is set, so
+    the signal travels up the expression tree untouched, and the first
+    enclosing statement is where it becomes an ordinary `Signal` that
+    `execStmts` and the `while` arm already know how to handle. Clearing it
+    here is what keeps it from leaking past its catcher. -/
 partial def execStmt (fuel : Fuel) (stmt : Stmt) (s : State) : StmtResult :=
+  let r := execStmtRaw fuel stmt s
+  match r.state.pending with
+  | some sg => { signal := sg, state := { r.state with pending := none } }
+  | none => r
+
+partial def execStmtRaw (fuel : Fuel) (stmt : Stmt) (s : State) : StmtResult :=
   match fuel with
   | 0 => { signal := .cont, state := { s with fuelOut := true } }
   | fuel + 1 =>
     match stmt with
     | .let_ n e =>
+      let (s', v) := evalExpr fuel e s
+      match v with
+      | none => { signal := .cont, state := s' }
+      | some v' => { signal := .cont, state := s'.bind n v' }
+    -- `let _ = NAME = e ;` -- same rebind as `let_`, different static rule.
+    | .assign n e =>
       let (s', v) := evalExpr fuel e s
       match v with
       | none => { signal := .cont, state := s' }
@@ -611,7 +732,13 @@ partial def execBody (fuel : Fuel) (body : Array Stmt) (s : State) : State × Op
   match fuel with
   | 0 => ({ s with fuelOut := true }, none)
   | fuel + 1 =>
-    if body.size == 0 then (s, none)  -- no tail expression: compile-time exit 97
+    -- A body starts with no pending signal and must LEAVE with none: a
+    -- callee's `return` is caught by the callee's own body rule, and letting
+    -- one escape would freeze the caller's evaluator (nothing evaluates while
+    -- `pending` is set). The clear is on the way IN; every exit path below
+    -- either never set it or cleared it.
+    let s := { s with pending := none }
+    if body.size == 0 then (s.why "empty body: no tail expression", none)
     else
       let stmts := body.pop        -- every statement but the last
       let last := body.back!       -- the tail
@@ -622,14 +749,24 @@ partial def execBody (fuel : Fuel) (body : Array Stmt) (s : State) : State × Op
                                      -- the shape undefined; pre-2026-09-13 answer kept
       | .cont  =>
         match last with
-        | .exprStmt e => evalExpr fuel e r.state
+        | .exprStmt e =>
+          -- The TAIL expression can itself raise: `fn f() { if c then return 1
+          -- else 2 }` is legal. `evalExpr` yields `none` in that case and puts
+          -- the value in `pending`, so the tail rule has to catch it here as
+          -- well -- otherwise a body whose tail returns would read as `stuck`.
+          let (s', v) := evalExpr fuel e r.state
+          (match s'.pending with
+           | some (.ret rv) => ({ s' with pending := none }, some rv)
+           | some .brk      => ({ s' with pending := none }, some 0)
+           | some .cont     => ({ s' with pending := none }, v)
+           | none           => (s', v))
         | stmt =>
           -- Last item is not an expression (the parser rejects this, exit 97).
           -- Run it for its `ret`, otherwise there is no value.
           let r2 := execStmt fuel stmt r.state
           match r2.signal with
           | .ret v => (r2.state, some v)
-          | _      => (r2.state, none)
+          | _      => (r2.state.why "body's last item is not an expression and did not `return`", none)
 
 end
 
@@ -678,8 +815,19 @@ def evalProgram (fuel : Fuel) (prog : Program) (clockMs : Val := 0) : Result :=
       -- value it produced afterwards (kcheck.py `whnf`: exhaustion raises).
       if s'.fuelOut then .fuelExhausted fuel
       else
+        match s'.trapped with
+        | some tc => .trap tc
+        | none =>
+        -- A MODEL GAP the run TOUCHED is reported even when a value came out.
+        -- Measured 2026-09-14: c142_clone8 scored `ok 201` while
+        -- `sys_arena_base()` was unmodelled, because its `let base = ...`
+        -- quietly failed to bind and the tail never read `base`. A gap that an
+        -- unused binding can hide is a gap that can hide anywhere.
+        match s'.gap with
+        | some g => .stuck s!"{g} [the run produced a value anyway; it is NOT reported, because the value was computed with this gap in it]"
+        | none =>
         match v with
         | some v => .ok v
-        | none   => .stuck "main yielded no value (unbound symbol, unresolved call, arena fault, or no tail expression)"
+        | none   => .stuck (s'.stuckWhy.getD "no value, and no site recorded a reason (report this: every `none` site should call State.why)")
 
 end Bebop.Semantics

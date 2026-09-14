@@ -1,0 +1,154 @@
+# formal/results.txt -- EMITTED by `lake exe parityrun <repo-root>`.
+# Do not hand-edit: the next run overwrites it, and the hash below is
+# over the .lean SOURCES, so an edited file cannot agree with a tree it
+# was not produced from. Shape: docs/blueprints/F3-lean-semantics.md 4.6.
+#
+# Recompute lean_sources_sha256 from the repo root with:
+#   find formal -name '*.lean' | LC_ALL=C sort | xargs sha256sum | sha256sum
+#
+# Per-construct token is <value|exit:N|unsupported:<why>>; the verdict
+# column says whether that token matched the construct's `// EXPECT`.
+toolchain Lean (version 4.33.1, aarch64-unknown-linux-gnu, commit 819816b2e0a3bf405af45ae5c7af2491d8f5bee6, Release)
+eval_fuel 4000000
+call_depth_limit 131072
+lean_conformance 120/122
+lean_sources_sha256 f1ffede24adc675d571491b0848f98c3cb44f98ef8060148e6cb489776e70746
+lean_source_count 16
+ab56f6448bd37a70703484857736ac098687cc69d9f1ea9ce2538c6f8ed94952  formal/Bebop.lean
+fff4f8b733ae6c906091bd63d38ef1936684abc75ca48149bc753fa66b031731  formal/Bebop/Basic.lean
+e65d395bd9262ca910da28d813196ca2e5a7fb4d4bdbc6b704c59480dabfb716  formal/Bebop/Builtins.lean
+4ca9ce6a2150ce65432760ca1eb12233fb2b36bda0520e7c6436e68beadba90b  formal/Bebop/Conformance.lean
+179a1085bcb1152c224ac82289049b592ee985cf190a95c61d48072727321e61  formal/Bebop/Lexer.lean
+d3444b0482ddf3255bfa06ef55f3e7ef48b4aae28ca84dba0c11686b833e54a2  formal/Bebop/Parser.lean
+929fa442cff52c12ef090a5af7cfc2b91a87af15a5b236f02eae3cd4156dbae6  formal/Bebop/Reject.lean
+05fc8c4d1c8ca07e778f5c4ecd204950c7d158c304d6f1f5491b2b260481174a  formal/Bebop/Semantics.lean
+f0c74eddf82f5d575423f5aeac464e8688f2c9067019769b7a0264f73c5ac02a  formal/Bebop/Sha256.lean
+a3b8225a68ddf089581034e99939c58f22b542aeb6a06dfaee04079a7d1c734e  formal/Bebop/Syscalls.lean
+21e820a6b99385ff86e3ed9813426a07639b8ae5c87235af610652bf91a492d3  formal/Bebop/Theorems.lean
+4089d16b9e6236c7d6fb7cd991bf65631b71e18242624bfbf19ac39299e7d163  formal/Bebop/Traps.lean
+38db2ee727a9189f98c371f1f0b7077b796035f22cbc520ce4662e10085e907b  formal/ParityRun.lean
+1585492b12a26d036dbea5fe16f35db6598b3e73664b48b25584e3fae1557f84  formal/TimeOne.lean
+4952f14860f6fd492d02662f819e334081475815ad8916d68eab214c7bf0c032  formal/harness.lean
+7dd67d0e59362d66eb61a49d2fe92b415275a15b0690ea5597a749cf5ae180a4  formal/lakefile.lean
+positive/c01_lit PASS 1000000065571
+positive/c02_arith PASS 34
+positive/c03_precedence PASS 7
+positive/c04_cmp PASS 310
+positive/c05_if PASS 111
+positive/c06_let PASS 7
+positive/c07_while PASS 45
+positive/c08_call PASS 6
+positive/c09_recursion PASS 720
+positive/c10_struct PASS 11
+positive/c110_fence PASS 0
+positive/c111_kernelfn PASS 315
+positive/c11_enum PASS 5
+positive/c121_boundsok PASS 396534
+positive/c122_manyfns PASS 1035
+positive/c123_capfns PASS 1507
+positive/c124_condreturn PASS 1257028
+positive/c12_match PASS 6
+positive/c133_testblock PASS 42
+positive/c133_testblock_twin PASS 42
+positive/c134_testfn_inside PASS 42
+positive/c134_testfn_inside_twin PASS 42
+positive/c135_testblock_braces PASS 42
+positive/c135_testblock_braces_twin PASS 42
+positive/c13_array PASS 119
+positive/c142_clone8 PASS 201
+positive/c144_contract_ok PASS 3
+positive/c145_fraction_ok PASS 1
+positive/c146_module_empty_nospace_ok PASS 7
+positive/c146_module_empty_ok PASS 7
+positive/c14_string PASS 8
+positive/c15_bitwise PASS 27
+positive/c16_compound PASS 3
+positive/c17_neg PASS -103
+positive/c18_bigconst PASS -8392076198348418983
+positive/c19_multi PASS 115
+positive/c20_deep PASS 43
+positive/c21_param13 PASS 91
+positive/c22_matchbind PASS 7
+positive/c23_spillcall PASS 110
+positive/c24_ifspill PASS 99
+positive/c25_matchtail PASS 42
+positive/c26_selfrec PASS 60943
+positive/c27_zeroarg PASS 7
+positive/c30_unary PASS 16351
+positive/c31_nested_lit PASS 1222
+positive/c32_asr PASS 96138
+positive/c33_loopalloc PASS 24999750000
+positive/c34_loopescape PASS 74
+positive/c35_return PASS 15041
+positive/c36_break PASS 4950014
+positive/c38_frameheap PASS 2559
+positive/c40_struct PASS 6420822
+positive/c41_clz PASS 64631045
+positive/c42_crc32 PASS 1001269
+positive/c43_arena_persist PASS 16048003
+positive/c44_use24 PASS 131
+positive/c45_crc32x PASS 1001978
+positive/c46_andor PASS 101100
+positive/c47_usenest PASS 51071
+positive/c50_cas PASS 7136
+positive/c53_param9 PASS 73
+positive/c55_vswindow PASS 312
+positive/c56_nest PASS 240
+positive/c57_flags PASS 13
+positive/c58_callmix PASS 241
+positive/c59_evict PASS 25
+positive/c60_nestctor PASS 1
+positive/c61_arrcall PASS 3
+positive/c66_fncap PASS 1519
+positive/c67_deeprec PASS 100000
+positive/c68_strval PASS 101017189
+positive/c69_index_roundtrip PASS 3969009064380
+positive/c70_csel PASS -162834
+positive/c70_qdsl PASS 9643636
+positive/c70_qdsl_neg PASS 89
+positive/c71_csel_impure PASS -164832
+positive/c72_hoist PASS 5504683299252448320
+positive/c73_hoistnest PASS 24000282
+positive/c74_madd PASS 82837312
+positive/c75_andimm PASS 1477639
+positive/c76_ubfx PASS 2271612
+positive/c77_u32 FAIL unsupported:19:13: expected `i64` inside `[ ]`, found ident(u32)
+positive/c78_scan PASS -6715473280576199194
+positive/c84_run FAIL unsupported:unmodelled builtin `sys_wait4` (it IS in the language's builtin surface; `formal/` does not implement it -- see Bebop/Syscalls.lean's default arm for why) [the run produced a value anyway; it is NOT reported, because the value was computed with this gap in it]
+positive/c86_selfassign PASS 103
+positive/c87_ifselfassign PASS 3
+positive/c88_arrflags PASS 1
+positive/c89_heaptrap PASS 33
+positive/c90_symalias PASS 0
+positive/c91_letlive PASS 12
+positive/c92_ptrfree PASS 777920
+positive/c94_fsync PASS 0
+positive/c95_symspan PASS 17
+positive/c96_enumpay PASS 8503009
+positive/c97_arena_operand_miscompile PASS 4
+positive/c98_arena_base_operand PASS 11
+positive/c99_arena_end_operand PASS 11
+positive/c_gb_degree PASS 6
+positive/c_gb_kernel_accessors PASS 214
+positive/c_gb_vec_setbit PASS 64
+positive/c_st_bytes PASS 36
+negative/c112_kernelsys PASS exit:102
+negative/c113_shadowclz PASS exit:99
+negative/c114_shadowwait4 PASS exit:99
+negative/c120_oobstatic PASS exit:65
+negative/c140_mapb_refused PASS exit:108
+negative/c141_clone9 PASS exit:109
+negative/c143_contract_garbage PASS unsupported:refused statically: LEX 8:39: cannot start a token: '@' (want exit 110; LEX names no code)
+negative/c145_fraction_garbage PASS unsupported:refused statically: INVALID 9:12: expected an identifier, found num(5) (want exit 111; this refusal names no code)
+negative/c146_module_contents_garbage PASS unsupported:refused statically: INVALID 6:11: expected '}', found ident(abc) (want exit 112; this refusal names no code)
+negative/c28_plusplus PASS unsupported:refused statically: INVALID 5:33: expected an expression, found '+' (want exit 96; this refusal names no code)
+negative/c29_emptybody PASS exit:97
+negative/c37_arenafull PASS exit:80
+negative/c39_fnmatch PASS unsupported:refused statically: INVALID 6:26: expected ')', found ',' (want exit 99; this refusal names no code)
+negative/c48_stackovf PASS exit:82
+negative/c51_casbad PASS exit:88
+negative/c52_undef PASS exit:87
+negative/c85_param15 PASS exit:100
+negative/c92_letlive2 PASS exit:97
+negative/c93_unbound PASS exit:101
+negative/read_before_assign PASS exit:101

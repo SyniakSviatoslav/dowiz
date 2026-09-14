@@ -102,6 +102,28 @@ mutual
         no byte arena is modelled, so `Bebop.Semantics` reports `stuck` here
         (see `evalExpr`'s `.strLit` arm) rather than inventing a handle. -/
     | strLit (s : String)
+    /-- `return e` and `break` in EXPRESSION position. ROADMAP A18 step 1
+        landed 2026-09-14 (`788b8dc`, promoted `c9d826c8`) and made both of
+        these expressions, which `bench/parity_constructs/c124_condreturn.bp`
+        exercises in an `if` ARM (`let _ = if n < 2 then return 1 else 0;`).
+        docs/LANGUAGE.md:49 still lists `return` only as a statement; the
+        compiler is the side that moved, so the doc is the stale one and this
+        AST follows the compiler.
+
+        Neither has a VALUE: evaluating one raises a control-flow signal
+        (`State.pending`) and yields `none`, which is why they are not modelled
+        as "an expression returning 0". -/
+    | retExpr (e : Expr)
+    | brkExpr
+    /-- `let _ = NAME = e in body` -- an ASSIGNMENT to an existing binding,
+        spelled through a throwaway `let` binder. It EVALUATES exactly like
+        `letIn` (rebind, then body; `let` is fn-scoped with no shadowing), and
+        it is a separate constructor only because the two differ STATICALLY:
+        `let v0 = 0 in ...` introduces `v0`, while `let _ = v0 = 0 in ...`
+        requires `v0` to exist already and is exit 101 when it does not. That
+        is `bench/parity_constructs/neg/c93_unbound.bp` exactly, and collapsing
+        the two into `letIn` is why it used to evaluate to `ok 0`. -/
+    | assignIn (n : Name) (e body : Expr)
   deriving Inhabited
 
   structure MatchArm where
@@ -117,6 +139,10 @@ end
 
 inductive Stmt where
   | let_ (n : Name) (e : Expr)
+  /-- `let _ = NAME = e ;` -- assignment to an existing binding (c86_selfassign,
+      c90_symalias, c95_symspan). Same evaluation as `let_`, different static
+      rule: the target must already be bound. See `Expr.assignIn`. -/
+  | assign (n : Name) (e : Expr)
   | drop (e : Expr)
   | arrStore (arr idx val : Expr)
   | compound (n : Name) (op : BinOp) (e : Expr)
@@ -151,6 +177,11 @@ structure FnDecl where
   paramTypes : Array Ty
   returnType : Ty
   body : Array Stmt
+  /-- `kernel fn f(...)`. Undocumented in LANGUAGE.md and real: c111_kernelfn
+      compiles and neg/c112_kernelsys must be REFUSED with exit 102 for naming
+      a `sys_*` inside one. The modifier used to be consumed and thrown away,
+      which is why that refusal could not be modelled. -/
+  isKernel : Bool := false
   deriving Inhabited
 
 structure Program where
@@ -286,6 +317,44 @@ inductive TrapCode where
   | stringConcat      -- exit 96
   deriving Inhabited, BEq, Repr
 
+/-- The process exit code the runtime reports for each trap. Taken from the
+    comments on the constructors above, which come from docs/TRAPS.md. It is a
+    FUNCTION rather than a comment because `ParityRun` now ASSERTS a negative
+    construct's `RUNFAIL:<code>` against it: a trap raised with the wrong code
+    is a failure, not a pass. `frameOverflow` maps to 80 because A6 retired
+    exit 81 and folded it into the arena trap. -/
+def TrapCode.exitCode : TrapCode → Nat
+  | .arenaExhausted => 80
+  | .frameOverflow  => 80
+  | .segfault       => 82
+  | .codeBufferFull => 83
+  | .boundsCheck    => 84
+  | .unresolvedCall => 87
+  | .stackOverflow  => 82
+  | .tooManyFns     => 104
+  | .tooManyParams  => 100
+  | .unboundSymbol  => 101
+  | .reservedWord   => 99
+  | .sysInKernelFn  => 102
+  | .noTailExpr     => 97
+  | .stringConcat   => 96
+
+def TrapCode.name : TrapCode → String
+  | .arenaExhausted => "arenaExhausted"
+  | .frameOverflow  => "frameOverflow"
+  | .segfault       => "segfault"
+  | .codeBufferFull => "codeBufferFull"
+  | .boundsCheck    => "boundsCheck"
+  | .unresolvedCall => "unresolvedCall"
+  | .stackOverflow  => "stackOverflow"
+  | .tooManyFns     => "tooManyFns"
+  | .tooManyParams  => "tooManyParams"
+  | .unboundSymbol  => "unboundSymbol"
+  | .reservedWord   => "reservedWord"
+  | .sysInKernelFn  => "sysInKernelFn"
+  | .noTailExpr     => "noTailExpr"
+  | .stringConcat   => "stringConcat"
+
 structure Position where
   line : Nat
   col : Nat
@@ -325,6 +394,57 @@ structure Footprint where
   deriving Inhabited
 
 -- ============================================================
+-- 9a. The BUILTIN SURFACE, measured
+--     `python3 tools/builtin_surface.py` in this tree, 2026-09-14: the
+--     authority is bebop.bp's `emit_call_or_ctor` dispatch arms, recovered by
+--     the compiler's own 131-rolling hash, and it reports
+--         "compiler dispatches 41, resolved 41, unresolved 0"
+--     Two consumers need it and they need it for OPPOSITE reasons, which is
+--     why it lives here rather than in either:
+--       * Bebop.Semantics: a call to one of these names that this model does
+--         not implement is `stuck` -- a gap in formal/. A call to a name that
+--         is NOT here and is not a declared `fn` is trap 87 -- a fact about
+--         the program (neg/c52_undef).
+--       * Bebop.Reject: a user `fn` named like one of these is exit 99 (T122).
+--     The same run reports `sys_mapb` as the one name MISSING from bebop.bp's
+--     T122 reserved table, so `fn sys_mapb` is shadowable where the other 40
+--     are not; `reservedAgainstFn` below records that asymmetry rather than
+--     smoothing it over.
+-- ============================================================
+
+def builtinSurface : Array String := #[
+  "call_fn", "call_packed", "char", "clock_ms", "clz", "crc32", "crc32b",
+  "crc32x", "hvham", "hvham2", "pack_fn", "scan", "str_len",
+  "sys_arena_base", "sys_arena_end", "sys_atomic_add", "sys_clone",
+  "sys_close", "sys_cond_set", "sys_exit", "sys_exit_thread_guard",
+  "sys_export", "sys_fsync", "sys_ftruncate", "sys_futex_wait_guard",
+  "sys_futex_wake", "sys_mapb", "sys_mmap", "sys_mprotect", "sys_msync",
+  "sys_munmap", "sys_open", "sys_read", "sys_readbuf", "sys_rename",
+  "sys_run", "sys_setaffinity", "sys_slurp", "sys_wait4", "sys_write",
+  "zeros" ]
+
+/-- The 40 of those 41 that bebop.bp's T122 table refuses as a `fn` name. -/
+def reservedAgainstFn : Array String :=
+  builtinSurface.filter (fun n => n != "sys_mapb")
+
+#guard builtinSurface.size == 41
+#guard reservedAgainstFn.size == 40
+
+-- ============================================================
+-- 9b. Control flow signals
+--     Hoisted above `State` (2026-09-14) because `State` now carries a
+--     PENDING signal: `return`/`break` in expression position have no value,
+--     so `evalExpr` reports them by raising a signal in the state rather than
+--     by inventing one.
+-- ============================================================
+
+inductive Signal where
+  | cont
+  | brk
+  | ret (v : Val)
+  deriving Inhabited
+
+-- ============================================================
 -- 10. Runtime state
 -- ============================================================
 
@@ -342,7 +462,103 @@ structure State where
       `evalProgram`. A run that touched fuel 0 is reported as
       `Result.fuelExhausted`, whatever value it went on to produce. -/
   fuelOut : Bool := false
+  /-- A control-flow signal raised by `return e` / `break` in EXPRESSION
+      position (`Expr.retExpr` / `Expr.brkExpr`). While it is set, `evalExpr`
+      evaluates NOTHING further -- that is the unwind, done without an
+      exception monad -- and the first enclosing statement converts it into a
+      `StmtResult.signal` and clears it (`Bebop.Semantics.takeSignal`). It is
+      therefore never observable outside the statement that catches it; an
+      unmatched one cannot leak into a value, because these expressions yield
+      `none`, not 0. Mirrors bpref.py's `ReturnSignal`/`BreakSignal`. -/
+  pending : Option Signal := none
+  /-- A RUNTIME trap, raised and then sticky. Like `pending` it stops the
+      evaluator dead (`evalExpr` evaluates nothing further while it is set),
+      but unlike `pending` NOTHING catches it: it travels all the way to
+      `evalProgram`, which reports `Result.trap`. Three raise it today --
+      `zeros` past the arena capacity (80), a call to a name that is neither a
+      builtin nor a declared fn (87), and the call-depth bound (82) -- and each
+      is a construct's `RUNFAIL:<code>` expectation, compared by exit code.
+      Kept apart from `stuck` on purpose: `stuck` is a gap in THIS model and a
+      trap is a fact about the program. -/
+  trapped : Option TrapCode := none
+  /-- WHY the evaluator produced no value, recorded at the site that first
+      produced `none`. Until 2026-09-14 `evalProgram` printed ONE message for
+      four different causes --
+        "main yielded no value (unbound symbol, unresolved call, arena fault,
+         or no tail expression)"
+      -- and 12 constructs carried it at once, which is why none of them was
+      ever closed: the message named the whole class instead of the case.
+      FIRST writer wins (`State.why`), so it is the site that actually stopped
+      the run, not the outermost frame that noticed. -/
+  stuckWhy : Option String := none
+  /-- A MODEL GAP that the run actually touched: a string literal before the
+      byte arena existed, or a call to a builtin in `Bebop.builtinSurface` that
+      this model does not implement. It is reported even when the run went on
+      to produce a value, and that is the point.
+
+      MEASURED 2026-09-14, which is why it exists: `c142_clone8.bp` PASSED with
+      `ok 201` while `sys_arena_base()` was entirely unmodelled. Its
+      `let base = sys_arena_base();` evaluated to `none`, `Stmt.let_` answered
+      `{ signal := .cont }` and simply did not bind, and the tail expression
+      `a1 + ... + a6 + 138` never reads `base` -- so the construct scored a
+      PASS for a program three of whose statements did nothing. A gap that can
+      be hidden by an unused binding is a gap that can hide anywhere. -/
+  gap : Option String := none
+  /-- The BYTE arena. Separate from the cell arena because Bebop strings are
+      byte-addressed: a `str` is the integer `(offset << 32) | length` into
+      THIS buffer (tools/bpref.py `ev` for a `'str'` node, and `str_len`/`char`
+      read it back). A string literal appends its UTF-8 bytes plus a NUL, as
+      bpref does, so two occurrences of the same literal get different offsets
+      -- which is what makes `t[0] == b` in c68_strval a test of handle
+      identity rather than of content. -/
+  bytes : Array UInt8 := #[]
+  /-- Next file descriptor a modelled `sys_open` will hand out. 3 because 0/1/2
+      are stdin/stdout/stderr. -/
+  nextFd : Nat := 3
+  /-- Bump pointer for modelled `sys_mmap` addresses, in bytes. -/
+  mapCursor : Nat := 0
+  /-- Number of user-function activations currently on the modelled stack.
+      See `Bebop.Semantics.callDepthLimit`. -/
+  depth : Nat := 0
   deriving Inhabited
+
+/-- Record why evaluation produced no value, if nothing has yet. -/
+def State.why (s : State) (msg : String) : State :=
+  if s.stuckWhy.isSome then s else { s with stuckWhy := some msg }
+
+/-- Record a MODEL GAP the run touched, and the reason, if nothing has yet.
+    Also records the reason as the stuck reason. -/
+def State.noteGap (s : State) (msg : String) : State :=
+  let s := s.why msg
+  if s.gap.isSome then s else { s with gap := some msg }
+
+-- ============================================================
+-- 10c. Strings: the byte arena
+--      A Bebop `str` VALUE is the integer `(offset << 32) | length` into
+--      `State.bytes`. Mirrors tools/bpref.py exactly:
+--          off = len(self.bytes); self.bytes.extend(content); self.bytes.append(0)
+--          return ((off << 32) | len(content))
+--      and `str_len` = `s & 0xffffffff`, `char(s,i)` = `self.bytes[off+i]`.
+-- ============================================================
+
+/-- Intern a string literal: append its UTF-8 bytes plus the NUL terminator and
+    return the handle. Two evaluations of the same literal get DIFFERENT
+    offsets, exactly as bpref does -- the buffer is append-only. -/
+def State.internStr (s : State) (str : String) : State × Val :=
+  let bs := str.toUTF8.toList.toArray
+  let off := s.bytes.size
+  let s' := { s with bytes := (s.bytes ++ bs).push 0 }
+  (s', Int64.ofNat (off * 4294967296 + bs.size))
+
+/-- The byte offset encoded in a `str` handle (the high 32 bits). -/
+def strOff (h : Val) : Nat := (h.toUInt64 >>> 32).toNat
+
+/-- The length encoded in a `str` handle (the low 32 bits). -/
+def strLen (h : Val) : Nat := (h.toUInt64 &&& 0xFFFFFFFF).toNat
+
+/-- Read one byte of the byte arena; 0 past the end, which is what bpref's
+    `char` does (`... if off + i < len(self.bytes) else 0`). -/
+def State.byteAt (s : State) (i : Nat) : UInt8 := s.bytes.getD i 0
 
 
 -- ============================================================
@@ -407,14 +623,8 @@ def State.arenaWrite (s : State) (off : Nat) (v : Val) : Option State :=
   | none => none
 
 -- ============================================================
--- 11. Control flow signals
+-- 11. Statement results
 -- ============================================================
-
-inductive Signal where
-  | cont
-  | brk
-  | ret (v : Val)
-  deriving Inhabited
 
 structure StmtResult where
   signal : Signal

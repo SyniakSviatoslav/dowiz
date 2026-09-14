@@ -25,7 +25,14 @@ def builtinZeros (n : Val) (s : State) : State × Val :=
   let count := n.toNatClampNeg
   let (s', err) := s.zeros count
   match err with
-  | some e => (s', 0)  -- trap; caller should check
+  | some tc =>
+    -- ARENA EXHAUSTED. This used to answer `(s', 0)` and leave "caller should
+    -- check" in a comment -- no caller did, so `neg/c37_arenafull.bp`
+    -- (`let a = zeros(40000000); a[0]`, EXPECT RUNFAIL:80) evaluated to
+    -- `ok 0`: the trap the construct exists to pin was silently a value.
+    -- It now RAISES: `State.trapped` stops the evaluator and `evalProgram`
+    -- reports `Result.trap` with exit code 80.
+    ({ s' with trapped := some tc }, 0)
   | none =>
     let offset := s.arena.cursor
     (s', Int64.ofNat offset)
@@ -43,40 +50,82 @@ def builtinZeros (n : Val) (s : State) : State × Val :=
 def builtinStrLen (s : Val) : Val :=
   s &&& 0xFFFFFFFF
 
+
+-- ============================================================
+-- 2b. zlib CRC-32, ONE implementation, used by crc32 / crc32x / crc32b
+-- ============================================================
+
+/-  THE BUG THIS REPLACES, and why it produced a plausible number.
+
+    `crc32Table` used to be built by shifting LEFT, testing bit 7 and masking
+    to 8 bits before XORing the 32-bit polynomial:
+        let msb := j >>> 7 ; let j' := (j <<< 1) &&& 0xFF
+        let j'' := if msb == 1 then j' ^^^ 0xEDB88320 else j'
+    That is the NON-reflected (MSB-first) update written with the REFLECTED
+    polynomial and then truncated to 8 bits, so the polynomial's own high bits
+    were thrown away every round; and the final `^ 0xFFFFFFFF` was missing
+    entirely. It still returned a 32-bit number for every input, which is why
+    it survived: `crc32("123456789")` came back 15579374 where zlib gives
+    3421780262, and nothing compared the two until the constructs did.
+
+    The correct reflected update, which is what zlib's table builder is:
+        c := i ; repeat 8: c := if c &&& 1 == 1 then 0xEDB88320 ^^^ (c >>> 1)
+                                else c >>> 1
+    and the running CRC starts at 0xFFFFFFFF and is complemented at the end.
+
+    Pinned below by three `#guard`s against values this tree already carries:
+    `zlib.crc32(b"") = 0` and `zlib.crc32(b"123456789") = 3421780262` (the
+    header of c42_crc32.bp) and `zlib.crc32(b"abc") = 891568578` (the header of
+    c68_strval.bp). Those run at elaboration time, so `lake build` fails if the
+    polynomial or the final XOR is ever changed back. -/
+def crc32Table (i : UInt32) : UInt32 :=
+  let rec build : Nat → UInt32 → UInt32
+    | 0, c => c
+    | k + 1, c => build k (if c &&& 1 == 1 then (0xEDB88320 : UInt32) ^^^ (c >>> 1) else c >>> 1)
+  build 8 i
+
+/-- Update a running CRC with one byte (only the low 8 bits are used). -/
+def crc32Step (crc : UInt32) (b : UInt8) : UInt32 :=
+  crc32Table ((crc ^^^ b.toUInt32) &&& 0xFF) ^^^ (crc >>> 8)
+
+/-- zlib CRC-32 of a byte list: init 0xFFFFFFFF, reflected table, final XOR. -/
+def crc32Of (bytes : List UInt8) : UInt32 :=
+  (bytes.foldl crc32Step 0xFFFFFFFF) ^^^ 0xFFFFFFFF
+
+private def crcOfString (s : String) : Nat := (crc32Of s.toUTF8.toList).toNat
+
+-- zlib.crc32(b"") = 0
+#guard crcOfString "" == 0
+-- zlib.crc32(b"123456789") = 3421780262 (0xCBF43926) -- c42_crc32.bp's header
+#guard crcOfString "123456789" == 3421780262
+-- zlib.crc32(b"abc") = 891568578 -- c68_strval.bp's header
+#guard crcOfString "abc" == 891568578
+
 -- ============================================================
 -- 3. char(s, i) -- byte at position i of string literal
 -- ============================================================
 
-/- char(s, i): byte of a string literal at position i.
-    LANGUAGE.md:89: "length / byte of a string literal".
-    In bpref.py:
-      s = args[0]; off = s >> 32; i = args[1]
-      return self.bytes[off + i] if off + i < len(self.bytes) else 0
-    The string value encodes offset in the high 32 bits (into a byte buffer)
-    and length in the low 32 bits. char() reads the i-th byte from the buffer.
-    In the formal model, we extract the byte from the encoded value's low bits
-    (sufficient for short inline literals; the full model would read from a
-    separate byte buffer). -/
-def builtinChar (s i : Val) : Val :=
-  let off := (s.toUInt64 >>> 32).toNat
-  let idx := i.toNatClampNeg
-  let len := (s.toUInt64 &&& 0xFFFFFFFF).toNat
-  if idx < len then
-    -- Extract byte at position idx.
-    -- For an inline literal encoded as (off << 32) | len, the byte data
-    -- is NOT in the value itself. In the formal model without a byte buffer,
-    -- we return 0 for non-zero offsets (matching the "out of range" behavior).
-    -- For off == 0 (the common case in tests), the byte is in the low bits
-    -- only if the string fits in the remaining bits after the length field,
-    -- which is not generally true. We model this as: return 0 for idx > 0,
-    -- and for idx == 0 return the low byte of the full value (which works
-    -- for the specific test patterns in the conformance suite).
-    if idx == 0 then
-      (s.toUInt64 &&& 0xFF).toInt64
-    else
-      0
-  else
-    0  -- Out of bounds: return 0 (matching bpref.py behavior for OOB)
+/-- `char(s, i)`: the i-th byte of a string, read from the BYTE ARENA.
+
+    Was: "return the low byte of the handle for i = 0 and 0 after", with a
+    comment saying a full model "would read from a separate byte buffer".
+    Probed at the time: 3 0 0 for a length-3 handle where bpref reads 97 98 99.
+    There is a byte buffer now (`State.bytes`), so this is bpref's rule
+    verbatim -- `self.bytes[off + i] if off + i < len(self.bytes) else 0`. Note
+    it is bounded by the BUFFER, not by the handle's length: `char(s, 5)` on a
+    5-byte string reads the NUL terminator, and that is deliberate on both
+    sides. -/
+def builtinChar (h i : Val) (s : State) : Val :=
+  Int64.ofNat (s.byteAt (strOff h + i.toNatClampNeg)).toNat
+
+/-- `crc32b(s)`: zlib CRC-32 of a STRING's bytes (bpref: `zlib.crc32(
+    bytes(self.bytes[off:off+ln]))`). It was absent from `formal/` entirely --
+    the one builtin of the 41 modelled nowhere -- and c68_strval checks two of
+    its values. -/
+def builtinCrc32b (h : Val) (s : State) : Val :=
+  let off := strOff h
+  let ln := strLen h
+  Int64.ofNat (crc32Of ((List.range ln).map (fun k => s.byteAt (off + k)))).toNat
 
 -- ============================================================
 -- 4. clock_ms() -- CLOCK_MONOTONIC in milliseconds
@@ -112,94 +161,49 @@ def builtinClz (x : Val) (s : State) : State × Val :=
 def builtinCrc32 (cells n : Val) (s : State) : State × Val :=
   let start := cells.toNatClampNeg
   let count := n.toNatClampNeg
-  -- Read count cells from arena starting at start
-  let rec readCells (addr : Nat) (k : Nat) (acc : List Val) (st : State)
-      : List Val × State :=
+  -- bpref: `data = bytes(cells[i] & 0xff for i in range(n))`. A cell outside
+  -- the arena reads 0 through `arenaRead`'s `getD`, and reading past the
+  -- ALLOCATION stops the loop rather than inventing bytes.
+  let rec go (addr k : Nat) (crc : UInt32) (st : State) : UInt32 :=
     match k with
-    | 0 => (acc.reverse, st)
+    | 0 => crc
     | k' + 1 =>
       match st.arenaRead addr with
-      | some v => readCells (addr + 1) k' (v :: acc) st
-      | none => (acc.reverse, st)  -- OOB: stop reading
-  let (byteVals, s') := readCells start count [] s
-  -- Compute CRC32 over the bytes
-  let crc := crc32List byteVals s'
-  (s', crc)
-
-where
-  -- CRC32 computation over a list of bytes (each byte is the low 8 bits of a Val)
-  crc32List (bytes : List Val) (s : State) : Val :=
-    let rec go (xs : List Val) (crc : UInt32) : UInt32 :=
-      match xs with
-      | [] => crc
-      | b :: bs =>
-        let byte := (b.toUInt64 &&& 0xFF).toUInt32
-        let idx := (crc ^^^ byte) &&& 0xFF
-        go bs (crc32Table idx ^^^ (crc >>> 8))
-    Int64.ofNat (go bytes 0xFFFFFFFF).toNat
-
-  -- CRC32 lookup table (reflected polynomial 0xEDB88320)
-  crc32Table (i : UInt32) : UInt32 :=
-    let rec build (j : UInt32) : Nat → UInt32
-      | 0 => j
-      | k + 1 =>
-        let msb := j >>> 7
-        let j' := (j <<< 1) &&& 0xFF
-        let j'' := if msb == 1 then j' ^^^ 0xEDB88320 else j'
-        build j'' k
-    build i 8
+      | some v => go (addr + 1) k' (crc32Step crc (v.toUInt64 &&& 0xFF).toUInt8) st
+      | none => crc
+  (s, Int64.ofNat ((go start count 0xFFFFFFFF s) ^^^ 0xFFFFFFFF).toNat)
 
 -- ============================================================
 -- 7. crc32x(cells, off, n) -- zlib crc32 of raw LE bytes
 -- ============================================================
 
-/- crc32x(cells, off, n): zlib crc32 of the raw little-endian bytes
-    of n cells from cells[off].
-    LANGUAGE.md:96: CRC32X, 8 B per step (T109b).
-    Reads n cells from arena starting at cells+off, treats each cell's
-    8 bytes (LE order) as input to CRC32. -/
+/-- `crc32x(cells, off, n)`: zlib CRC-32 of the raw LITTLE-ENDIAN bytes of n
+    cells starting at `cells[off]` (bpref packs each cell with `struct.pack(
+    '<q', ...)`).
+
+    IT IS THE SAME POLYNOMIAL AND THE SAME BIT ORDER AS `crc32`, and that was
+    worth checking rather than assuming: c45_crc32x's own header says the
+    values come from `python zlib.crc32(struct.pack('<%dq'))`, i.e. plain zlib
+    over a different BYTE SEQUENCE, not a different CRC. (The ARMv8 `crc32x`
+    INSTRUCTION is what the emitter uses -- it consumes 8 bytes per step
+    instead of 1 -- but it computes the same reflected CRC-32, which is why one
+    table serves both.) So the only difference from `crc32` above is how each
+    cell becomes bytes: 8 LE bytes here, one masked byte there. -/
 def builtinCrc32x (cells off n : Val) (s : State) : State × Val :=
   let start := (cells + off).toNatClampNeg
   let count := n.toNatClampNeg
-  let rec readCells (addr : Nat) (k : Nat) (acc : List Val) (st : State)
-      : List Val × State :=
+  let rec go (addr k : Nat) (crc : UInt32) (st : State) : UInt32 :=
     match k with
-    | 0 => (acc.reverse, st)
+    | 0 => crc
     | k' + 1 =>
       match st.arenaRead addr with
-      | some v => readCells (addr + 1) k' (v :: acc) st
-      | none => (acc.reverse, st)
-  let (cellVals, s') := readCells start count [] s
-  -- Expand each cell into 8 LE bytes
-  let byteAt (w : UInt64) (k : UInt64) : UInt64 := (w >>> k) &&& 0xFF
-  let bytes : List UInt64 := cellVals.flatMap (fun cv =>
-    let w := cv.toUInt64
-    [ byteAt w 0, byteAt w 8, byteAt w 16, byteAt w 24,
-      byteAt w 32, byteAt w 40, byteAt w 48, byteAt w 56 ])
-  let crc := crc32xList bytes s'
-  (s', crc)
-
-where
-  crc32xList (bytes : List UInt64) (s : State) : Val :=
-    let rec go (xs : List UInt64) (crc : UInt32) : UInt32 :=
-      match xs with
-      | [] => crc
-      | b :: bs =>
-        -- Process byte b (already masked to 8 bits)
-        let byte := (b &&& 0xFF).toUInt32
-        let idx := (crc ^^^ byte) &&& 0xFF
-        go bs (crc32xTable idx ^^^ (crc >>> 8))
-    Int64.ofNat (go bytes 0xFFFFFFFF).toNat
-
-  crc32xTable (i : UInt32) : UInt32 :=
-    let rec build (j : UInt32) : Nat → UInt32
-      | 0 => j
-      | k + 1 =>
-        let msb := j >>> 7
-        let j' := (j <<< 1) &&& 0xFF
-        let j'' := if msb == 1 then j' ^^^ 0xEDB88320 else j'
-        build j'' k
-    build i 8
+      | some v =>
+        let w := v.toUInt64
+        let crc := [0, 8, 16, 24, 32, 40, 48, 56].foldl
+                     (fun c (sh : UInt64) => crc32Step c ((w >>> sh) &&& 0xFF).toUInt8) crc
+        go (addr + 1) k' crc st
+      | none => crc
+  (s, Int64.ofNat ((go start count 0xFFFFFFFF s) ^^^ 0xFFFFFFFF).toNat)
 
 -- ============================================================
 -- 8. hvham(a, b, n) -- NEON popcount of a^b over n words
@@ -220,7 +224,13 @@ def popCount64 (x : UInt64) : Nat :=
 def builtinHvham (a b n : Val) (s : State) : State × Val :=
   let baseA := a.toNatClampNeg
   let baseB := b.toNatClampNeg
-  let count := n.toNatClampNeg
+  -- LANGUAGE.md:93, read 2026-09-14: the count is "n rounded DOWN to a
+  -- multiple of 4 words -- the last `n mod 4` words are SILENTLY IGNORED",
+  -- measured that day by triggering it (a[0]=255,b=0 gives 0 at n=1,2,3 and 8
+  -- at n>=4). This model used all n. No construct in the 121 calls hvham, so
+  -- this changes no score; it is corrected because the doc records a MEASURED
+  -- fact that the model contradicted.
+  let count := (n.toNatClampNeg / 4) * 4
   let rec loop (i : Nat) (acc : Nat) (st : State) : State × Val :=
     if i >= count then (st, Int64.ofNat acc)
     else
@@ -251,32 +261,54 @@ def builtinHvham2 (a b n : Val) (s : State) : State × Val :=
 -- 10. scan(s, pos, class) -- advance pos over bytes of one class
 -- ============================================================
 
-/- scan(s, pos, class): advance pos[0] over bytes of one class and
-    return the new pos.
-    LANGUAGE.md:99: 0 = whitespace, 1 = ident [0-9A-Za-z_], 2 = not-'"' not-'\\',
-    anything else = not-newline. Stops at the pos[1] length bound.
-    In bpref.py, s is a string value (offset in high 32, length in low 32),
-    pos is a 2-cell array [start, end], and the scan reads from the byte buffer.
-    In the formal model, we implement a basic scan. Since the Lean model does not
-    have a separate byte buffer, we model scan as operating on the encoded string
-    value directly for the common case where the string data is accessible.
-    For a full model, the string data would be read from arena cells at the offset
-    stored in the high 32 bits of s. -/
-def builtinScan (s pos cls : Val) : Val :=
-  let strLen := (s.toUInt64 &&& 0xFFFFFFFF).toNat
-  let posStart := (pos &&& 0xFFFFFFFF).toNatClampNeg
-  let posEnd := ((pos.toUInt64 >>> 32) &&& 0xFFFFFFFF).toNat
-  -- Clamp end to string length (`end` is a Lean keyword, hence `stop`)
-  let stop := min posEnd strLen
-  -- Scan forward from posStart to end
-  let rec scanFwd (pos : Nat) : Nat :=
-    if pos >= stop then pos
-    else
-      -- In the formal model without a byte buffer, we cannot read the actual byte.
-      -- We model this as: always stop at posStart (no advancement).
-      -- A full model would read the byte from arena cells at s.toNat + pos.
-      pos  -- stop immediately (conservative: no byte matching possible)
-  Int64.ofNat (scanFwd posStart)
+/-- `scan(s, pos, class)`: advance `pos[0]` over bytes of one class and return
+    the new position. LANGUAGE.md:100 (read 2026-09-14, verbatim):
+
+      advance `pos[0]` over bytes of one class and return the new pos:
+      0 = whitespace, 1 = ident `[0-9A-Za-z_]`, 2 = not-`"`-not-`\`,
+      anything else = not-newline. Stops at the `pos[1]` length bound, so it
+      never reads past it (A9 step 3, scalar form)
+
+    WHAT WAS HERE, and why it scored 0 rather than failing. The old version
+    read `pos` as if the pair were PACKED INTO THE HANDLE
+    (`posStart = pos & 0xffffffff`, `posEnd = pos >>> 32`) -- but `pos` is an
+    ARRAY of two cells, so those were the low and high halves of an arena
+    offset, not a position and a bound. It then declined to read any byte at
+    all ("conservative: no byte matching possible") and returned `posStart`
+    unchanged, so `c78_scan` evaluated to `ok 0`: the classifier never
+    advanced and the program's whole 131-fold collapsed.
+
+    This is bpref.py's loop (`builtin_or_call`, `name == 'scan'`) rule for
+    rule: both bounds are checked (`pos[1]` AND the string's own length), the
+    write-back to `pos[0]` happens whether or not anything moved, and the
+    return value is the new position -- c78's header says it folds over the
+    RETURN of every call AND ends with `pos[0]`, precisely so a model that got
+    either half right and the other wrong still mismatches. -/
+def scanMatches (cls : Val) (b : UInt8) : Bool :=
+  let v := b.toNat
+  if cls == 0 then v == 32 || v == 9 || v == 10 || v == 13
+  else if cls == 1 then
+    (48 ≤ v && v ≤ 57) || (65 ≤ v && v ≤ 90) || (97 ≤ v && v ≤ 122) || v == 95
+  else if cls == 2 then v != 34 && v != 92
+  else v != 10
+
+def builtinScan (h pos cls : Val) (s : State) : State × Val :=
+  let off := strOff h
+  let len := strLen h
+  let base := pos.toNatClampNeg
+  let start := (s.arenaRead base).getD 0 |>.toNatClampNeg
+  let limit := (s.arenaRead (base + 1)).getD 0 |>.toNatClampNeg
+  let stop := min limit len
+  let rec go (p : Nat) (steps : Nat) : Nat :=
+    match steps with
+    | 0 => p
+    | steps + 1 =>
+      if p ≥ stop then p
+      else if scanMatches cls (s.byteAt (off + p)) then go (p + 1) steps
+      else p
+  let p' := go start (stop + 1)
+  let s' := (s.arenaWrite base (Int64.ofNat p')).getD s
+  (s', Int64.ofNat p')
 
 -- ============================================================
 -- 11. Dispatch table for all 10 executable builtins
@@ -296,8 +328,12 @@ def dispatchBuiltin (name : Name) (args : Array Val) (s : State)
     | none => none
   | "char" =>
     match args[0]?, args[1]? with
-    | some c, some i => some (s, builtinChar c i)
+    | some c, some i => some (s, builtinChar c i s)
     | _, _ => none
+  | "crc32b" =>
+    match args[0]? with
+    | some h => some (s, builtinCrc32b h s)
+    | none => none
   | "clock_ms" => some (builtinClockMs s)
   | "clz" =>
     match args[0]? with
@@ -321,7 +357,7 @@ def dispatchBuiltin (name : Name) (args : Array Val) (s : State)
     | _, _, _ => none
   | "scan" =>
     match args[0]?, args[1]?, args[2]? with
-    | some s', some pos, some cls => some (s, builtinScan s' pos cls)
+    | some h, some pos, some cls => some (builtinScan h pos cls s)
     | _, _, _ => none
   | _ => none
 
