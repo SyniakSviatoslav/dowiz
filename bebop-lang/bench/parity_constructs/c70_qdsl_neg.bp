@@ -81,6 +81,7 @@ fn qdsl_pred(s: str, p: i64, a: [i64], ap: [i64], sb: [i64], sp: [i64]) -> i64 {
   // iterative loop instead of qdsl_pred_rec
   let done = 0; let result = 0;
   while done == 0 {
+    let p = qdsl_ws(s, p);
     let _ = if p+3 > n || char(s,p) != 97 || char(s,p+1) != 110 || char(s,p+2) != 100 then
       (let _ = done = 1 in let _ = result = (p << 32) | root in 0) else 0;
     let p2 = p + 3; let p2 = qdsl_ws(s, p2);
