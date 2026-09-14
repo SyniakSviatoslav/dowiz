@@ -112,7 +112,11 @@ fn diag_exit(s: str, p: i64, code: i64) -> i64 {
   let at18 = if code == 115 then diag_str(buf, at, "too many structs (cap 32)") else at17;
   let at19 = if code == 116 then diag_str(buf, at, "too many fields in one struct (max 16)") else at18;
   let at20 = if code == 117 then diag_str(buf, at, "ambiguous field name -- structs disagree on its offset") else at19;
-  let mlen = at20 - at;
+  let at21 = if code == 118 then diag_str(buf, at, "tuple width does not match the fn's declared return arity") else at20;
+  let at22 = if code == 119 then diag_str(buf, at, "destructuring let does not match the callee's declared return arity") else at21;
+  let at23 = if code == 120 then diag_str(buf, at, "multi-value fn called outside a destructuring let -- x1 and up would be dropped") else at22;
+  let at24 = if code == 121 then diag_str(buf, at, "more than 3 return values -- the convention is x0..x2") else at23;
+  let mlen = at24 - at;
   let final_at = at + mlen;
   let _ = buf[final_at] = 10;
   let _ = sys_write(2, buf, final_at + 1);
@@ -801,6 +805,115 @@ fn ft_srcpos(tab: [i64], name: i64) -> i64 {
   sp
 }
 
+// ---- ROADMAP A21 step 1 (2026-09-14): the return-arity table ----
+// A fn's DECLARED return arity, read off its own header at the source offset
+// collect_fns already recorded (ft_srcpos above, the table's 3rd zone). That table
+// is complete before ANY fn is compiled, so the answer is order-independent BY
+// CONSTRUCTION -- `divmod` may be declared after `main` -- and no new fntab zone is
+// needed. 1 when the name is not a known fn (the legacy single-fn path passes
+// cnt = 0) or when the header declares no tuple.
+// THE `(` MUST FOLLOW `->` IMMEDIATELY, whitespace and `//` comments aside: the
+// contract region between `)` and `{` may legally contain parens and commas
+// (scan_inert permits both, bebop.bp:4697), so anchoring on `->` is what stops
+// `requires (x > 0)` being read as a 2-tuple. > 3 is E121 at the header.
+fn fn_ret_arity_tuple(s: str, arrow: i64, strn: i64) -> i64 {
+  let j = [arrow];
+  let cm = [0];
+  let opened = [0];
+  let k = [1];
+  let go = 1;
+  while go == 1 {
+    let at_end = if j[0] >= strn then 1 else 0;
+    let c = if at_end == 1 then 0 else char(s, j[0]);
+    let c1 = if j[0] + 1 >= strn then 0 else char(s, j[0] + 1);
+    let is_cmt = (if c == 47 then 1 else 0) * (if c1 == 47 then 1 else 0);
+    let _ = cm[0] = j[0];
+    let _ = if is_cmt == 1 then skip_line_comment_n(s, cm, strn) else 0;
+    let is_ws = (if c == 32 then 1 else 0) + (if c == 9 then 1 else 0) + (if c == 10 then 1 else 0) + (if c == 13 then 1 else 0);
+    let is_lp = if c == 40 then 1 else 0;
+    let _ = if is_lp * (1 - opened[0]) == 1 then (let _ = opened[0] = 1 in 0) else 0;
+    let _ = if (if c == 44 then 1 else 0) * opened[0] == 1 then (let _ = k[0] = k[0] + 1 in 0) else 0;
+    // before the `(` only whitespace and comments may intervene
+    let bail = (1 - opened[0]) * (1 - is_cmt) * (1 - is_ws) * (1 - is_lp);
+    let stop = at_end + bail + (if c == 41 then 1 else 0) * opened[0] + (if c == 123 then 1 else 0);
+    let go = if stop >= 1 then 0 else 1;
+    let _ = j[0] = if is_cmt == 1 then cm[0] else j[0] + 1;
+    0
+  };
+  if opened[0] == 1 then k[0] else 1
+}
+
+// `strn` is the CALLER's cached source length (slen's pos[1] cache): calling
+// str_len here instead cost a full O(source) scan at every call site -- measured
+// +25% on bebop.bp's own self-compile (0.965 s -> 1.203 s) before this parameter.
+fn fn_ret_arity_at(s: str, sp: i64, strn: i64) -> i64 {
+  let p = [sp, strn];
+  let _ = skip_to(s, p, 40);
+  let _ = skip_to(s, p, 41);
+  let j = [p[0] + 1];
+  let cm = [0];
+  let arrow = [0 - 1];
+  let go = 1;
+  while go == 1 {
+    let at_end = if j[0] >= strn then 1 else 0;
+    let c = if at_end == 1 then 0 else char(s, j[0]);
+    let c1 = if j[0] + 1 >= strn then 0 else char(s, j[0] + 1);
+    let is_cmt = (if c == 47 then 1 else 0) * (if c1 == 47 then 1 else 0);
+    let _ = cm[0] = j[0];
+    let _ = if is_cmt == 1 then skip_line_comment_n(s, cm, strn) else 0;
+    let is_arrow = (1 - is_cmt) * (if c == 45 then 1 else 0) * (if c1 == 62 then 1 else 0);
+    let _ = if is_arrow == 1 then (let _ = arrow[0] = j[0] + 2 in 0) else 0;
+    let stop = at_end + (if c == 123 then 1 else 0) + is_arrow;
+    let go = if stop >= 1 then 0 else 1;
+    let _ = j[0] = if is_cmt == 1 then cm[0] else j[0] + 1;
+    0
+  };
+  let k = if arrow[0] < 0 then 1 else fn_ret_arity_tuple(s, arrow[0], strn);
+  let _ = if k > 3 then diag_exit(s, sp, 121) else 0;
+  k
+}
+
+fn fn_ret_arity(s: str, name: i64, fntab: [i64], strn: i64) -> i64 {
+  let sp = ft_srcpos(fntab, name);
+  if sp < 0 then 1 else fn_ret_arity_at(s, sp, strn)
+}
+
+// Does this compilation unit declare any tuple-returning fn? ONE source scan, cached in
+// fntab[7101] (0 = not scanned, 1 = no, 2 = yes; a fresh fntab is zeros so the
+// lifetime is the unit, exactly like A22's fntab[7000]). WHY IT EXISTS: emit_bl_call's
+// arity guard needs ft_srcpos, an O(#fns) scan at EVERY call site on top of the
+// fntab_lookup it already does, so this bounds that to programs that can actually
+// have a multi-value callee. HONEST MEASUREMENT, 2026-09-14: it bought no measurable
+// time -- bebop.bp self-compile is 1.128 s for the pre-A21 source and 1.227 s for
+// this one either way, and that 8.8% is the 3.1% source growth and the extra fns,
+// not the guard. It is kept because it bounds the cost, not because it moved a number.
+// Conservative by design: an arrow-then-paren pair inside a comment or a string turns
+// the guard ON, which costs time and changes no answer (bebop.bp's own comments had
+// to stop spelling the pair literally for the flag to stay off for itself).
+fn unit_tuple_scan(s: str, strn: i64) -> i64 {
+  let j = [0];
+  let hit = [0];
+  let go = 1;
+  while go == 1 {
+    let c = if j[0] >= strn then 0 else char(s, j[0]);
+    let c1 = if j[0] + 1 >= strn then 0 else char(s, j[0] + 1);
+    let is_arrow = (if c == 45 then 1 else 0) * (if c1 == 62 then 1 else 0);
+    let q = [j[0] + 2, strn];
+    let _ = if is_arrow == 1 then skip_ws(s, q) else 0;
+    let ca = if q[0] >= strn then 0 else char(s, q[0]);
+    let _ = if is_arrow * (if ca == 40 then 1 else 0) == 1 then (let _ = hit[0] = 1 in 0) else 0;
+    let _ = j[0] = j[0] + 1;
+    let go = (1 - hit[0]) * (if j[0] + 1 < strn then 1 else 0);
+    0
+  };
+  hit[0]
+}
+
+fn unit_has_tuple_fn(s: str, fntab: [i64], strn: i64) -> i64 {
+  let _ = if fntab[7101] == 0 then (let _ = fntab[7101] = 1 + unit_tuple_scan(s, strn) in 0) else 0;
+  fntab[7101] - 1
+}
+
 // Collect ctor names of the FIRST enum decl into names[0..): single scan.
 // Returns 1 when an enum decl exists, else 0 (cnt[0] stays 0).
 fn collect_ctors(s: str, names: [i64], cnt: [i64]) -> i64 {
@@ -887,6 +1000,12 @@ fn ft_cache_set(tab: [i64], name: i64, val: i64) -> i64 {
 // A real cross-function call via bl: eval args -> x0..x(n-1), bl target, push.
 fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let strn = slen(s, pos);
+  // A21 step 1: a fn declared with k > 1 return values may only be called as the
+  // whole RHS of a destructuring `let`, which publishes its name in fntab[7102].
+  // Anywhere else x1..x(k-1) would be dropped silently -- exactly the "reads
+  // garbage" failure the arity table exists to make impossible.
+  let cpos = pos[0];
+  let _ = if unit_has_tuple_fn(s, fntab, strn) == 1 then (if name == fntab[7102] then 0 else (if fn_ret_arity(s, name, fntab, strn) > 1 then diag_exit(s, cpos, 120) else 0)) else 0;
   let _ = pos[0] = pos[0] + 1;
   let nargs = 0;
   let done = 0;
@@ -3849,12 +3968,53 @@ fn emit_term(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
 // assumed -- a statement sequence inside parens (`( let i = 0; while ... ; r )`,
 // the attic "if-while" shape) is outside the surface (`( cmp )`) and used to
 // compile silently to garbage; now the compiler exits 95 (expected `)`).
+// A21 step 2: the `, e1[, e2]` tail of a tuple in return / fn-tail position.
+// Delivers k values to x0..x(k-1) through vs_deliver -- the SAME parallel move
+// every builtin's operand list already uses, so there is NO new callee machinery --
+// and then pushes ONE `REG x0` entry, so from the window's point of view a tuple is
+// indistinguishable from an ordinary single-value expression. That is what makes the
+// two legal positions need no code of their own: `return`'s own vs_deliver(1) is a
+// no-op on a REG-x0 top, the fn tail's vs_to(x0)/vs_pop is a no-op, and a non-final
+// tuple item is drained by emit_body's ordinary non-final-item pop.
+// x1/x2 SURVIVE to the `ret` because emit_epilogue_sized restores only x19..x26 /
+// sp / fp / lr and nothing emitted between here and the branch allocates a register.
+fn emit_tuple_rest(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let tpos = pos[0];
+  let k = [1];
+  let go = 1;
+  while go == 1 {
+    let _ = pos[0] = pos[0] + 1;
+    let _ = skip_ws(s, pos);
+    let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+    let _ = k[0] = k[0] + 1;
+    let _ = skip_ws(s, pos);
+    let cc = if pos[0] >= slen(s, pos) then 0 else char(s, pos[0]);
+    let go = (if cc == 44 then 1 else 0) * (if k[0] < 3 then 1 else 0);
+    0
+  };
+  let want = fn_ret_arity(s, selfname, fntab, slen(s, pos));
+  let _ = if k[0] == want then 0 else diag_exit(s, tpos, 118);
+  let _ = vs_deliver(insns, n, fntab, stab, k[0]);
+  vs_push(insns, n, fntab, stab, 2, 0, 0 - 1)
+}
+
 fn emit_paren(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  // A21 step 2: this paren is a TUPLE only when it is the very paren the enclosing
+  // statement offered as a tuple position -- fntab[7100], set by emit_return_core
+  // for `return (` and by emit_body for an item-initial `(` (the fn's own tail
+  // expression is one of those). So `let t = (a, b)` keeps exit 95, which is what
+  // A21 "IS NOT #1" asks for. Cleared immediately: in `((a), b)` the inner paren
+  // must not inherit the offer.
+  let is_tp = if pos[0] == fntab[7100] then 1 else 0;
+  let _ = fntab[7100] = 0 - 1;
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = skip_ws(s, pos);
   let cp = if pos[0] >= slen(s, pos) then 0 else char(s, pos[0]);
-  let _ = if cp == 41 then 0 else diag_exit(s, pos[0], 95);
+  let is_tup = is_tp * (if cp == 44 then 1 else 0);
+  let _ = if is_tup == 1 then emit_tuple_rest(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
+  let cp2 = if is_tup == 1 then (if pos[0] >= slen(s, pos) then 0 else char(s, pos[0])) else cp;
+  let _ = if cp2 == 41 then 0 else diag_exit(s, pos[0], 95);
   let _ = pos[0] = pos[0] + 1;
   n[0]
 }
@@ -5007,6 +5167,8 @@ fn emit_return_core(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], sel
   let stmt_at = pos[0];
   let _ = pos[0] = pos[0] + 6;
   let _ = skip_ws(s, pos);
+  // A21 step 2: offer TUPLE position to a `(` that opens the returned expression.
+  let _ = fntab[7100] = if (if pos[0] >= slen(s, pos) then 0 else char(s, pos[0])) == 40 then pos[0] else 0 - 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let _ = vs_deliver(insns, n, fntab, stab, 1);
   let k = fntab[5601];
@@ -5623,9 +5785,82 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
 
 // Emit one 'let x = value;' statement: emit value, pop x0, mov x<reg>,x0
 // (bind the single-letter var x to reg 19+(x-'a')).
+// A21 step 2: `let (a, b[, c]) = f(args);` binds k <= 3 names from x0..x(k-1).
+// The CALLEE's declared arity must equal k (E119) -- that check is the whole reason
+// a silent x1 read cannot happen. Names are sym_bind'd BEFORE the RHS is emitted,
+// exactly as a scalar `let` does, so `let (a, b) = f(a, b)` shadow-rebinds the same
+// way. Caller cost is ZERO words: emit_bl_call already left x1/x2 live and unowned,
+// so claiming them is two window pushes and no instruction. A `_` component is
+// popped instead of bound, like `let _ = e;`.
+fn emit_let_tuple(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let regs = zeros(3);
+  let k = [0];
+  let go = 1;
+  while go == 1 {
+    let _ = skip_ws(s, pos);
+    let npos = pos[0];
+    let nm = read_ident(s, pos);
+    let _ = if k[0] >= 3 then diag_exit(s, npos, 121) else 0;
+    let rg = sym_bind(s, stab, nm, npos);
+    let _ = check_reg_collision(s, insns, n, fntab, stab, rg, npos);
+    let _ = regs[k[0]] = if nm == 95 then 0 - 1 else rg;
+    let _ = k[0] = k[0] + 1;
+    let _ = skip_ws(s, pos);
+    let cc = if pos[0] >= slen(s, pos) then 0 else char(s, pos[0]);
+    let _ = if cc == 44 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let go = if cc == 44 then 1 else 0;
+    0
+  };
+  let _ = skip_ws(s, pos);
+  let crp = if pos[0] >= slen(s, pos) then 0 else char(s, pos[0]);
+  let _ = if crp == 41 then 0 else diag_exit(s, pos[0], 95);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = skip_ws(s, pos);
+  let ceqc = if pos[0] >= slen(s, pos) then 0 else char(s, pos[0]);
+  let _ = if ceqc == 61 then 0 else diag_exit(s, pos[0], 95);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = skip_ws(s, pos);
+  // the RHS must name a fn whose declared arity is exactly k
+  let rpos = pos[0];
+  let pk = [rpos, slen(s, pos)];
+  let rname = read_ident(s, pk);
+  let want = fn_ret_arity(s, rname, fntab, pk[1]);
+  let _ = if want == k[0] then 0 else diag_exit(s, rpos, 119);
+  let _ = fntab[7102] = rname;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = fntab[7102] = 0;
+  // x1 (and x2) still hold components 1..k-1: claim them, then bind TOP-DOWN so
+  // component j lands in name j.
+  let q = [1];
+  while q[0] < k[0] {
+    let _ = vs_push(insns, n, fntab, stab, 2, q[0], 0 - 1);
+    let _ = q[0] = q[0] + 1;
+    0
+  };
+  let b = [k[0] - 1];
+  while b[0] >= 0 {
+    let _ = if regs[b[0]] < 0 then vs_pop(fntab) else vs_bind(insns, n, fntab, stab, regs[b[0]]);
+    let _ = b[0] = b[0] - 1;
+    0
+  };
+  let _ = skip_ws(s, pos);
+  let csm = if pos[0] >= slen(s, pos) then 0 else char(s, pos[0]);
+  let _ = if csm == 59 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+  n[0]
+}
+
+// A21 step 2: `let` dispatches on the character after the keyword -- `(` is the
+// destructuring form, anything else is the scalar `let` this fn always was.
 fn emit_let_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], cx: [i64], st: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 3;
   let _ = skip_ws(s, pos);
+  let c0t = if pos[0] >= slen(s, pos) then 0 else char(s, pos[0]);
+  if c0t == 40 then emit_let_tuple(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else emit_let_scalar(s, pos, insns, n, stab, selfname, selfstart, fntab, cx, st)
+}
+
+fn emit_let_scalar(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], cx: [i64], st: [i64]) -> i64 {
   let npos = pos[0];
   let name = read_ident(s, pos);
   let reg = sym_bind(s, stab, name, npos);
@@ -5865,6 +6100,10 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     // deleted; was_fast is the constant 0) -- every flag is fixed BEFORE
     // the emitter below runs, so guard and codegen can never desync
     let was_fast = 0;
+    // A21 step 2: offer TUPLE position to an item-initial `(`. The fn's own tail
+    // expression is exactly such an item, so this is the tuple-tail form; a
+    // NON-final one is legal too and is drained by the non-final pop below.
+    let _ = fntab[7100] = if is_expr * (if cE == 40 then 1 else 0) == 1 then pos[0] else 0 - 1;
     let _ = if is_expr == 1 then emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
     // non-final legacy items must not leave values on the stack
     let _ = skip_ws(s, pos);
@@ -6369,6 +6608,8 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
     let _ = fz[0] = fz[0] + 1;
     0
   };  // A6 step 2: per-fn marks high-water (frame sizing)
+  let _ = fntab[7100] = 0 - 1;  // A21: no paren is in tuple position yet
+  let _ = fntab[7102] = 0;      // A21: no callee is exempt from the arity guard
   let _ = fntab[5601] = 0;  // T99: pending `return` placeholders
   let _ = fntab[5666] = 0;  // T99: pending `break` placeholders
   let _ = fntab[5543] = kernel_marked(s, fpos);  // C1 step 2: `kernel fn` dialect bit
