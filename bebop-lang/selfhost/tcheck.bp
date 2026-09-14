@@ -155,7 +155,15 @@ fn parse_int(line: [i64], at: i64) -> i64 {
   while done == 0 {
     let c = line[at];
     let is_d = (if c >= 48 then 1 else 0) * (if c <= 57 then 1 else 0);
-    let v = v * 10 + (c - 48) * is_d;
+    // BUG FIXED 2026-09-14: this was `v = v * 10 + (c - 48) * is_d`, which multiplies
+    // by ten ONE MORE TIME on the terminating non-digit, so parse_int returned TEN
+    // TIMES the written number -- parse_int("1") was 10.  It survived since the reader
+    // was written because every consumer used the values only RELATIVE to each other:
+    // clause ids, literals and hints were all inflated by the same factor, so lookups
+    // matched and `v == 0` stayed 0.  The first consumer to compare a parsed number
+    // against an independently computed one -- a trace file's declared step count
+    // against the number of step lines actually read -- caught it immediately.
+    let v = if is_d == 1 then v * 10 + (c - 48) else v;
     let at = at + is_d;
     let done = 1 - is_d;
     0
@@ -754,6 +762,12 @@ fn bb_shl64(a: [i64], a_base: i64, shamt: [i64], shamt_base: i64, r: [i64], r_ba
     let i = i + 1;
     0
   };
+  // LAW L8: `next_stage` was allocated INSIDE this loop -- 6 zeros(64) calls per
+  // shifter call, 3 shifters, flagged by arch_check as alloc-in-loop.  Hoisted
+  // 2026-09-14.  Safe because every one of the 64 entries is written before the copy
+  // back into `stage`, so one reused buffer is exactly equivalent -- proven by the
+  // 106-row selftest staying byte-identical, every clause and variable count included.
+  let next_stage = zeros(64);
   let shift_bit = 0;
   while shift_bit < 6 {
     let shift_amt = 1;
@@ -764,7 +778,6 @@ fn bb_shl64(a: [i64], a_base: i64, shamt: [i64], shamt_base: i64, r: [i64], r_ba
       0
     };
     let sel = shamt[shamt_base + shift_bit];
-    let next_stage = zeros(64);
     let i = 0;
     while i < 64 {
       let shifted_idx = i - shift_amt;
@@ -800,6 +813,12 @@ fn bb_lshr64(a: [i64], a_base: i64, shamt: [i64], shamt_base: i64, r: [i64], r_b
     let i = i + 1;
     0
   };
+  // LAW L8: `next_stage` was allocated INSIDE this loop -- 6 zeros(64) calls per
+  // shifter call, 3 shifters, flagged by arch_check as alloc-in-loop.  Hoisted
+  // 2026-09-14.  Safe because every one of the 64 entries is written before the copy
+  // back into `stage`, so one reused buffer is exactly equivalent -- proven by the
+  // 106-row selftest staying byte-identical, every clause and variable count included.
+  let next_stage = zeros(64);
   let shift_bit = 0;
   while shift_bit < 6 {
     let shift_amt = 1;
@@ -810,7 +829,6 @@ fn bb_lshr64(a: [i64], a_base: i64, shamt: [i64], shamt_base: i64, r: [i64], r_b
       0
     };
     let sel = shamt[shamt_base + shift_bit];
-    let next_stage = zeros(64);
     let i = 0;
     while i < 64 {
       let shifted_idx = i + shift_amt;
@@ -847,6 +865,12 @@ fn bb_ashr64(a: [i64], a_base: i64, shamt: [i64], shamt_base: i64, r: [i64], r_b
     0
   };
   let sign = a[a_base + 63];
+  // LAW L8: `next_stage` was allocated INSIDE this loop -- 6 zeros(64) calls per
+  // shifter call, 3 shifters, flagged by arch_check as alloc-in-loop.  Hoisted
+  // 2026-09-14.  Safe because every one of the 64 entries is written before the copy
+  // back into `stage`, so one reused buffer is exactly equivalent -- proven by the
+  // 106-row selftest staying byte-identical, every clause and variable count included.
+  let next_stage = zeros(64);
   let shift_bit = 0;
   while shift_bit < 6 {
     let shift_amt = 1;
@@ -857,7 +881,6 @@ fn bb_ashr64(a: [i64], a_base: i64, shamt: [i64], shamt_base: i64, r: [i64], r_b
       0
     };
     let sel = shamt[shamt_base + shift_bit];
-    let next_stage = zeros(64);
     let i = 0;
     while i < 64 {
       let shifted_idx = i + shift_amt;
@@ -3342,6 +3365,48 @@ fn str_has(hay: str, needle: str) -> i64 {
   found
 }
 
+// `ringgen <obl> <out.trace>` -- derive, trace, and WRITE the artifact.  Hoisted out
+// of main: main's local count had grown past what the compiler binds in one function
+// and the symptom was `str_has` reported as an unbound symbol in the THIRD mode block
+// while the identical call in the first compiled fine.
+fn ring_gen(R: [i64], cells: i64, T: [i64], obuf: [i64], opos: [i64], oblpath: str, outpath: str) -> i64 {
+  let obl = load_obl(oblpath);
+  let O = zeros(65);
+  let _ = tr_oid(obl, O);
+  let ismul = str_has(obl, "mulov_const100");
+  let isfp = str_has(obl, "fp_mul_q32");
+  let _ = if ismul + isfp == 1 then 0 else sys_exit(64);
+  let dec = if ismul == 1 then ob_mulov_const(R, cells, 1) else fp_magnitude(R, cells, 1, 4294967296);
+  let _ = tr_setoid(R, O);
+  let ns = tr_export(R, T);
+  let wbuf = zeros(262144);
+  let wpos = [0];
+  let nb = tw_write(T, outpath, wbuf, wpos);
+  let _ = tr_row(obuf, opos, "ringgen wrote bytes", nb, R, ns);
+  let _ = if dec == 1 then sys_exit(0) else sys_exit(2);
+  0
+}
+
+// `ringverify <trace> <obl>` -- READ the artifact and check it, having produced
+// nothing.  This is the process the round trip is proven with: it never calls a
+// derivation, only the parser and the replay.
+fn ring_verify(R: [i64], cells: i64, T: [i64], M: [i64], obuf: [i64], opos: [i64], tracepath: str, oblpath: str) -> i64 {
+  let tsrc = load_obl(tracepath);
+  let obl = load_obl(oblpath);
+  let _ = rg_init(R, cells);
+  let ns = tw_read(R, tsrc, T);
+  let pr = R[1];
+  let ver = if pr == 0 then tr_replay_bound(R, T, M, cells, obl) else 0;
+  let _ = if pr == 0 then 0 else (let _ = R[1] = pr in 0);
+  let _ = tr_row(obuf, opos, "ringverify", ver, R, ns);
+  let _ = if ver == 1 then sys_exit(0) else sys_exit(2);
+  0
+}
+
+fn arg_is(a: str, b: str) -> i64 {
+  if str_len(a) == str_len(b) then str_has(a, b) else 0
+}
+
 fn tr_row(obuf: [i64], opos: [i64], nm: str, val: i64, R: [i64], steps: i64) -> i64 {
   let _ = opos[0] = 0;
   let _ = wr_s(obuf, opos, nm);
@@ -3455,6 +3520,125 @@ fn tr_selftest(obuf: [i64], opos: [i64], R: [i64], cells: i64, T: [i64], M: [i64
   0
 }
 
+// --- the trace as a FILE: written, re-parsed, re-checked by another process ---
+// Until now the trace was an in-memory array and `ringcheck` was producer and checker
+// in one program, so nothing on disk carried the oid and the steps the way a `.cert`
+// does.  That made the binding a demonstration rather than a stored artifact.  This is
+// the artifact.
+//
+// TEXT IS NORMATIVE, for the same reason it is in the certificate format: the sha256
+// of 15.1 must cover the bytes a checker actually reads.  The `x <oid>` line is
+// literally the certificate format's binding line, so a reader of either artifact
+// looks for the same thing in the same place.
+//
+//   % comment                     header, not parsed
+//   t <nsteps>                    declared step count, checked against the s lines
+//   s <rule> <out> <a> <b> <c>    one step, exactly five fields
+//   x <oid>                       64 hex chars: sha256 of the obligation TEXT
+//
+// Reject codes: 88 a malformed line (wrong arity, or an unknown kind), 89 the declared
+//   step count does not match the number of s lines, 90 no x line.
+fn tw_write(T: [i64], path: str, buf: [i64], pos: [i64]) -> i64 {
+  let n = T[0];
+  let _ = pos[0] = 0;
+  let _ = wr_s(buf, pos, "% bebop ring trace, text form (NORMATIVE -- the oid on the x line is over");
+  let _ = wr_ch(buf, pos, 10);
+  let _ = wr_s(buf, pos, "% the obligation TEXT, by the same canonical_text + sha256_words the LRAT");
+  let _ = wr_ch(buf, pos, 10);
+  let _ = wr_s(buf, pos, "% certificate format uses, so ONE gate number covers both routes.");
+  let _ = wr_ch(buf, pos, 10);
+  let _ = wr_s(buf, pos, "t ");
+  let _ = wr_num(buf, pos, n);
+  let _ = wr_ch(buf, pos, 10);
+  let i = 0;
+  while i < n {
+    let _ = wr_s(buf, pos, "s ");
+    let j = 0;
+    while j < 5 {
+      let _ = if j > 0 then wr_ch(buf, pos, 32) else 0;
+      let _ = wr_num(buf, pos, tr_get(T, i, j));
+      let j = j + 1;
+      0
+    };
+    let _ = wr_ch(buf, pos, 10);
+    let i = i + 1;
+    0
+  };
+  let _ = wr_s(buf, pos, "x ");
+  let i = 0;
+  while i < 64 {
+    let _ = wr_ch(buf, pos, T[1 + i]);
+    let i = i + 1;
+    0
+  };
+  let _ = wr_ch(buf, pos, 10);
+  let lp = str_len(path);
+  let pp = zeros(lp + 1);
+  let _ = str_to_cells(pp, path);
+  let fd = sys_open(pp, lp, 578);
+  let _ = if fd >= 0 then 0 else sys_exit(91);
+  let _ = sys_write(fd, buf, pos[0]);
+  let _ = sys_close(fd);
+  pos[0]
+}
+
+// parse a trace file into T.  Every line kind is named explicitly and anything else is
+// REFUSED: a reader that skips what it does not recognise is the hole that lets a
+// corrupted artifact through.
+// The oid copy needs a loop, and a `while` is a STATEMENT in this language: it does
+// not parse in the middle of a `let ... in` chain.  That is what sent the parser past
+// EOF and surfaced as an "unbound symbol" on a line number BEYOND the end of the file
+// -- a diagnostic that points nowhere near the cause.
+fn tw_oidcopy(T: [i64], line: [i64], st: i64) -> i64 {
+  let j = 0;
+  while j < 64 {
+    let _ = T[1 + j] = line[st + j];
+    let j = j + 1;
+    0
+  };
+  0
+}
+
+fn tw_read(R: [i64], src: str, T: [i64]) -> i64 {
+  let pos = [0];
+  let line = zeros(4096);
+  let toks = zeros(64);
+  let ns = 0;
+  let declared = 0 - 1;
+  let gotoid = 0;
+  let done = 0;
+  while done == 0 {
+    let nread = read_line(src, pos, line, 4096);
+    let _ = if nread < 0 then (let _ = done = 1 in 0) else 0;
+    let nt = if nread > 0 then tokenize(line, toks, 64) else 0;
+    let k = if nt > 0 then line[toks[0]] else 0;
+    // 37 '%' comment, 116 't', 115 's', 120 'x'
+    let iscm = if k == 37 then 1 else 0;
+    let ist = if k == 116 then 1 else 0;
+    let iss = if k == 115 then 1 else 0;
+    let isx = if k == 120 then 1 else 0;
+    let known = iscm + ist + iss + isx;
+    let _ = if nt > 0 then (if known == 1 then 0 else tr_rej(R, 88)) else 0;
+    let _ = if ist == 1 then (if nt == 2 then (let _ = declared = parse_int(line, toks[1]) in 0) else tr_rej(R, 88)) else 0;
+    let _ = if iss == 1 then (if nt == 6 then (
+        let at = 65 + ns * 5 in
+        let _ = T[at] = parse_int(line, toks[1]) in
+        let _ = T[at + 1] = parse_int(line, toks[2]) in
+        let _ = T[at + 2] = parse_int(line, toks[3]) in
+        let _ = T[at + 3] = parse_int(line, toks[4]) in
+        let _ = T[at + 4] = parse_int(line, toks[5]) in
+        let _ = ns = ns + 1 in 0) else tr_rej(R, 88)) else 0;
+    let _ = if isx == 1 then (if nt == 2 then (
+        let _ = tw_oidcopy(T, line, toks[1]) in
+        let _ = gotoid = 1 in 0) else tr_rej(R, 88)) else 0;
+    0
+  };
+  let _ = T[0] = ns;
+  let _ = if declared == ns then 0 else tr_rej(R, 89);
+  let _ = if gotoid == 1 then 0 else tr_rej(R, 90);
+  ns
+}
+
 // --- path helpers ---
 fn str_to_cells(dst: [i64], src: str) -> i64 {
   let i = 0;
@@ -3498,7 +3682,13 @@ fn main(argc: i64, argv: [str]) -> i64 {
   // optional argv[4] is the obligation the CHECKER is handed, which is how the
   // replay-against-the-wrong-claim test is run.
   let rc_mode = if lc == 9 then (if pc[0] == 114 then (if pc[1] == 105 then (if pc[2] == 110 then (if pc[3] == 103 then 1 else 0) else 0) else 0) else 0) else 0;
-  let anym = if st_mode == 1 then 1 else rc_mode;
+  // every mode that needs the ring arena must be counted here.  `ringgen` and
+  // `ringverify` were added to the dispatch and NOT to this line, so sz_r came out 1,
+  // rg_new returned the overflow sentinel for every allocation, and the trace it wrote
+  // had `out` = 8 on every step with reject=71 -- a fail-closed failure that still
+  // produced a file.  That is the shape to watch for: the artifact was written, and it
+  // was written by a derivation that never ran.
+  let anym = if st_mode == 1 then 1 else (if rc_mode == 1 then 1 else (if arg_is(cpath, "ringgen") == 1 then 1 else arg_is(cpath, "ringverify")));
   // The selftest arena, sized for the widest single obligation the blaster
   // builds -- a symbolic 64x64 bb_mul64, whose folded demand is measured in
   // the SIZE row below.  sz_l MUST be sz_c * 32 (bb_emit's clause stride).
@@ -3540,6 +3730,8 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let _ = if st_mode == 1 then ob_satsize(sobuf, sopos, sc_id, sc_len, sc_lits, sn_cl, sassign, snv, sa, sb, sr, ssh) else 0;
   let _ = if st_mode == 1 then tr_selftest(sobuf, sopos, sring, sz_r, strace, smap) else 0;
   let _ = if st_mode == 1 then sys_exit(0) else 0;
+  let _ = if arg_is(cpath, "ringgen") == 1 then ring_gen(sring, sz_r, strace, sobuf, sopos, argv[3], argv[4]) else 0;
+  let _ = if arg_is(cpath, "ringverify") == 1 then ring_verify(sring, sz_r, strace, smap, sobuf, sopos, argv[3], argv[4]) else 0;
   let _ = if rc_mode == 1 then (
       let _ = if argc >= 4 then 0 else sys_exit(64) in
       let obl = load_obl(argv[3]) in
