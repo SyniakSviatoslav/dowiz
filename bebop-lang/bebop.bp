@@ -2858,8 +2858,18 @@ fn vs_pop(fntab: [i64]) -> i64 {
   let is_reg = (if kind == 2 then 1 else 0) * (if p0 < 8 then 1 else 0);
   let is_mulc_win = if kind == 6 then (if p0 < 8 then 1 else 0) else 0;
   let is_cs = if kind == 4 then 1 else 0;
+  // ROADMAP A27 (2026-09-14): a kind-6 MULC tag can own a CALLEE-SAVED register, not
+  // only a window one. vs_try_mulc_new takes that bit itself (`vs_cs_take(fntab, r, 5)`
+  // when the other operand is a kind-4 CS entry) and vs_mat already releases it with
+  // exactly this 19..26 guard (:2923) -- but vs_pop only had the p0<8 window branch, so
+  // popping such a tag freed NOTHING and left fntab[5389] dirty forever. At the next
+  // statement boundary the window is 0 and the mask is not, which is self-check 7.1.
+  // Five lines reproduce it: `let v0 = 1; v0 *= (let t1 = clz(1) in 17); v0` -- the call
+  // parks the LHS in a cs register and the constant RHS takes the mulc fold. `*=` only:
+  // += -= /= %= never reach vs_try_mulc_new.
+  let is_mulc_cs = if kind == 6 then ((if p0 >= 19 then 1 else 0) * (if p0 <= 26 then 1 else 0)) else 0;
   let _ = if is_reg + is_mulc_win == 1 then vs_mask_free(fntab, p0, 9) else 0;
-  let _ = if is_cs == 1 then vs_cs_free(fntab, p0, 2) else 0;
+  let _ = if is_cs + is_mulc_cs > 0 then vs_cs_free(fntab, p0, 2) else 0;
   let _ = fntab[5387] = top;
   // statement boundary: the temp-slot cursor is bump-allocated per
   // expression statement and resets once the window is fully drained.

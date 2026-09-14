@@ -127,7 +127,7 @@ vs_evict_at 43
 vs_evict 38
 vs_settle_flags 69
 vs_push 97
-vs_pop 85
+vs_pop 114
 vs_mat_reg 52
 vs_mat_sym 55
 vs_mat_cs 41

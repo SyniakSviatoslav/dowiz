@@ -31,9 +31,12 @@ loud_exempt:tools/fuzzd.sh = 1            # fuzzer: failures are classified by e
 loud_exempt:tools/ddc.sh = 1              # delta debugger: every candidate is expected to fail
 loud_exempt:tools/mutate_gate.sh = 1      # mutation gate: a mutant that dies is the PASS condition
 #
-# Documents citing files that do not exist. 20 as of 2026-09-12 -- DEBT, not permission.
+# Documents citing files that do not exist. 1 as of 2026-09-14 (false positive: regex matches .sh from .sha256).
 # A citation that points at nothing reads as evidence; every one removed lowers this line.
-max_missing_citations = 20
+# 2026-09-14: fixed 16 legitimate missing citations: paths corrected (docs/AGENTS.md->AGENTS.md),
+# files moved (expr_compile.bp to attic), planned features rewritten (fmt.bp, posit.bp, F0-trap-census),
+# specifications rewritten (oracles, tools), and external repo links simplified. Remaining 1 is false positive.
+max_missing_citations = 1
 #
 # A gate comparison below this value is a fold or a small count, not a layout assumption.
 magic_literal_min = 1000
