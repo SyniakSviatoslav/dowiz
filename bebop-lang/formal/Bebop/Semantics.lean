@@ -63,7 +63,19 @@ def evalBinOp (op : BinOp) (a b : Val) : Val :=
   | .band => a &&& b
   | .bor  => a ||| b
   | .bxor => a ^^^ b
-  | .lor  => a ||| b   -- T125: non-short-circuit
+  -- `||` / `&&`. MEASURED-AGAINST-NOTHING, and flagged so 2026-09-14.
+  -- LANGUAGE.md's precedence table (lines 59-67) does NOT list `&&` or `||` at
+  -- all: it goes comparison, `|`, `^`, `&`, shifts, additive, multiplicative.
+  -- So these two rules model a construct the language reference does not
+  -- document, and they model it the way tools/bpref.py does (pre-A26: `||` = `|`,
+  -- `&&` = `&`, non-short-circuit, T125). The compiler is reported to disagree --
+  -- `&&` there behaves as a constant zero, binding tighter than comparison --
+  -- so this rule agrees with the oracle and not with bebop.bin. Do not treat it
+  -- as settled: F4 cannot claim "the WHOLE language" while LANGUAGE.md, the
+  -- compiler and the oracle give three answers. Fixing that is a bebop.bp /
+  -- LANGUAGE.md decision, not a Lean one; this comment exists so the
+  -- disagreement is visible from inside the semantics.
+  | .lor  => a ||| b
   | .land => a &&& b
   | .eq   => if a == b then 1 else 0
   | .neq  => if a != b then 1 else 0
@@ -407,13 +419,36 @@ partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val 
         | none => (s1, none)
 
     -- Match expression: match scrut { ctor1 => body1, ctor2 => body2, ... }
-    -- 1. Evaluate the scrutinee to an enum-encoded value (tag << 32 | payload).
+    -- 1. Evaluate the scrutinee to an enum-encoded value (tag << 32 | offset).
     -- 2. Find the arm whose ctor's tag equals the scrutinee's tag.
-    -- 3. If the arm has a binder, bind the payload offset to it.
+    -- 3. If the arm has a binder, bind the payload VALUE -- i.e. READ the
+    --    arena cell that the low 32 bits point at (see `.enumLit` above:
+    --    a payload ctor does `zeros 1`, writes the argument to that cell and
+    --    returns `(tag <<< 32) ||| base`). Binding `base` itself is wrong.
     -- 4. Evaluate that arm's body.
-    -- (Earlier scaffold read the scrutinee from an env key "_scrutinee" that
-    -- nothing bound, so every match evaluated to none. The scrutinee is now
-    -- an AST field: Basic.lean `Expr.matchExpr (scrut : Expr) (arms ...)`.)
+    --
+    -- TWO defects have been fixed here, both measured before the fix:
+    -- (a) the original scaffold read the scrutinee from an env key
+    --     "_scrutinee" that nothing bound, so every match evaluated to
+    --     `none`. The scrutinee is now an AST field, `Expr.matchExpr
+    --     (scrut : Expr) (arms ...)` in Basic.lean.
+    -- (b) MEASURED 2026-09-14: the binder was then bound to
+    --     `extractEnumPayload scrutVal`, which is the arena OFFSET, not the
+    --     value stored there. bench/parity_constructs/c12_match.bp
+    --     (`match some(5) { none => 0, some(x) => x + 1 }`, EXPECT 6)
+    --     evaluated to `ok 1`, because `some(5)` allocated arena cell 0 and
+    --     `x` was bound to 0 rather than to 5. Only a payload-binding arm was
+    --     affected, so c11_enum (nullary) was `ok 5` and looked fine. Fixed
+    --     by `arenaRead`; a payload cell that is out of range now yields
+    --     `none` (stuck) rather than a silently wrong number.
+    --
+    -- Note on scope: LANGUAGE.md:78-79 says `match` is COMPILE-TIME and the
+    -- scrutinee must be a literal constructor. This rule is deliberately more
+    -- general -- it evaluates an arbitrary scrutinee expression, which is what
+    -- c96_enumpay.bp (`let a = some(7); match a { ... }`) needs. That is a
+    -- SUPERSET of the documented language, so a program this rule accepts may
+    -- be rejected by bebop.bin; the F1 static-rejection side, not this rule,
+    -- is where that restriction belongs.
     | .matchExpr scrut arms =>
       let (s0, scrutOpt) := evalExpr fuel scrut s
       match scrutOpt with
@@ -435,9 +470,12 @@ partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val 
         | some arm =>
           match arm.binder with
           | some bName =>
-            let payload := extractEnumPayload scrutVal
-            let s1 := s0.bind bName (Int64.ofNat payload)
-            evalExpr fuel arm.body s1
+            -- The low 32 bits are an arena OFFSET; the payload is the cell.
+            let payloadOff := extractEnumPayload scrutVal
+            match s0.arenaRead payloadOff with
+            | none => (s0, none)   -- payload cell out of range: stuck, not 0
+            | some payloadVal =>
+              evalExpr fuel arm.body (s0.bind bName payloadVal)
           | none => evalExpr fuel arm.body s0
         | none => (s0, none)  -- no matching arm
 

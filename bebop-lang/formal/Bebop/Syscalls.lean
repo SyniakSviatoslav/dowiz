@@ -372,7 +372,10 @@ def sys_mmap_footprint (addr len : Val) : Footprint :=
   ⟨#[], (Array.range len.toNatClampNeg).map (fun i => addr.toNatClampNeg + i), #[ -12, -13, -17, -22, -27, -35 ]⟩
 
 -- ============================================================
--- 7. Dispatch (stub: returns sorry for all)
+-- 7. Dispatch: returns `none` for every name (not `sorry`, and not `0`).
+--    The word "sorry" in the old heading here was wrong in both directions:
+--    there is no `sorry` in this file, and the stub it describes answered
+--    `some (s, 0)` until 2026-09-13. Corrected 2026-09-14.
 -- ============================================================
 
 /-- Dispatch a syscall. Returns none if the name is not a syscall.

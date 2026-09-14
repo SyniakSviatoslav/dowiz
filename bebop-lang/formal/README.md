@@ -5,7 +5,28 @@
 This directory contains a Lean 4 definitional semantics for the Bebop language,
 part of the F4 gate in the Phase F verification ladder.
 
-**Gate:** `lean_conformance: 86/86`, `builtin_spec: 36/36`
+**Gate:** `lean_conformance: 86/86`, `builtin_spec: 36/36` (ROADMAP F4 wording).
+The `86` denominator is STALE. Counted 2026-09-14:
+`ls bench/parity_constructs/*.bp | wc -l` = **101** and
+`ls bench/parity_constructs/neg/*.bp | wc -l` = **20**, i.e. a **121**-construct
+suite, all 121 carrying a `// EXPECT <v> from:` header. Measure against 121.
+
+**Where this stands, 2026-09-14 (lane l4lean), all figures measured:**
+
+| quantity | value | how |
+|---|---|---|
+| `lake build` | **rc=0**, clean, 81 s, 10 jobs | `rm -rf .lake/build && lake build` |
+| modules elaborating standalone | 9 of 9 (incl. `harness.lean`) | `lean <file>` per file, all rc=0 |
+| import cycles | **none** | the graph is a DAG; the 2026-09-13 "still open" claim was already false at 7edffdf |
+| constructs actually RUN | **10 of 121** | 10 `#guard`ed inline-AST samples; there is no `.bp` parser |
+| constructs declared as data | 94 of 121 (80 pos + 14 neg rows) | 21 positive + 6 negative names missing |
+| builtins executable | **10 of 37** | `zeros str_len char clock_ms clz crc32 crc32x hvham hvham2 scan` |
+| builtins with an axiom spec only | 26 (`dispatchSyscall` returns `none` for all) | `Syscalls.lean` |
+| builtins absent entirely | 1 (`crc32b`) | grep over `formal/` |
+| statement forms modelled | 8 of 8 | every `Stmt` has an `execStmt` arm |
+| expression forms modelled | 28 of 28 | 19 operators + 7 primaries + 2 postfix |
+| type checking | **0** | `Ty` is declared and never read; `grep -n 'Ty\.' Semantics.lean` is empty |
+| F9 theorems | **6 proved, 1 axiom, 0 sorry** | `#print axioms` on each, in the build log |
 
 **Status (measured 2026-09-13):** all 8 modules ELABORATE on-box under Lean 4.33.1
 with the plain `lean` binary (see Building). Before that date nothing under
@@ -39,17 +60,17 @@ here was never measured and is refuted (docs/blueprints/F3-lean-semantics.md §3
 | `Bebop/Syscalls.lean` | rc=0 | 26 `axiom` sys_* specs, 5 footprints, `dispatchSyscall` = `none` for every name (nothing modelled; was `some (s, 0)` for any `sys_*` until 2026-09-13) (imports Basic only) |
 | `Bebop/Semantics.lean` | rc=0 | Fuel-bounded evaluator (5 `partial def` in one `mutual` block; `execBody` is the tail-expression rule; every fuel-0 arm sets `State.fuelOut` and `evalProgram` reports `Result.fuelExhausted`; the `.call` arm restores the caller's env) |
 | `Bebop/Traps.lean` | rc=0 | 24-row trap table, `#guard` x3 |
-| `Bebop/Conformance.lean` | rc=0 | 80 + 14 EXPECT rows, 97 oracle entries (the `oracleCount` constant says 121), 5 inline-AST samples transcribed from the `.bp` files, 5 probe fixtures (§5b) pinning the three fakes closed 2026-09-13 |
-| `Bebop/Theorems.lean` | rc=0 | 7 `axiom` statements + 5 `#guard` sample checks; 0 `theorem` |
+| `Bebop/Conformance.lean` | rc=0 | 80 + 14 EXPECT rows, 97 program entries now carrying the **verbatim** `.bp` source (88 of 97 were invented programs until 2026-09-14), **10** inline-AST samples each with a `#guard`, 5 probe fixtures (§5b) pinning the three fakes closed 2026-09-13. `oracleCount` is now `oracleEntries.size`, not a typed 121 |
+| `Bebop/Theorems.lean` | rc=0 | **6 `theorem` + 1 `axiom`**, 0 `sorry`; `#print axioms` on all 6 in the build log. Two of the old 7 axioms were FALSE and are now theorems with the hypotheses that make them true |
 | `Bebop.lean` | rc=0 | Root module importing all |
 | `harness.lean` | rc=0 (`lean --run`) | Prints the 5 sample verdicts and the 5 probe verdicts as `lean_conformance: 5/5` and `lean_probes: 5/5`; exits 1 if either is short |
 | `lakefile.lean` | not exercised | Lake project config |
 | `lean-toolchain` | -- | `leanprover/lean4:v4.33.1` (the Lean on the box; v4.12.0 predates `Int64`) |
 
-Counts by `grep -c` on 2026-09-13: `sorry` 0 in code (the word occurs in two
-comments), `axiom` 26 (Syscalls) + 7 (Theorems), `theorem` 0, `partial def` 4,
-`#guard` 3 (Traps) + 5 (Theorems). The old "Compiles" / "6 sorry" table was
-written without a build and was wrong in both directions.
+Counts by `grep -c` on 2026-09-14: `sorry` 0 in code, `axiom` 26 (Syscalls) +
+**1** (Theorems), `theorem` **9** (6 F9 statements + `st_len_masks_digest` +
+2 bridging lemmas), `partial def` 4, `#guard` 3 (Traps) + 5 + 4 (Theorems) +
+**10** (Conformance samples). `grep -c sorryAx` over the whole build log: 0.
 
 ## Architecture
 
@@ -118,7 +139,7 @@ process left behind. Lake 5 has no jobs flag, but the import DAG is a chain
 with one fork (Builtins || Syscalls), so at most two `lean` processes run at
 once. `.lake/` is the build directory and is not part of the source.
 
-## Known content defects (elaborate, but wrong or vacuous) -- measured 2026-09-13
+## Known content defects (elaborate, but wrong or vacuous) -- measured 2026-09-13, updated 2026-09-14
 
 - FIXED 2026-09-13 -- tail-expression rule. `Semantics.lean` `execBody` runs a
   function body as statements + ONE tail expression (LANGUAGE.md:27-28; mirrors
@@ -171,11 +192,66 @@ once. `.lake/` is the build directory and is not part of the source.
 - `builtinChar` returns the handle's low byte for index 0 and 0 after (probed:
   3 0 0 for a length-3 handle where bpref reads 97 98 99); `builtinScan` never
   advances (probed: 0 where bpref gives 3). No byte arena is modelled.
-- `Conformance.lean` header says 75 + 11 constructs / 121 oracles / 36 builtins;
-  the tables hold 80 + 14 rows and 97 oracle entries; `oracleCount` (121) and
-  `builtinCount` (36) are typed constants, not sizes.
-  The tree has 100 + 20 constructs and 38 builtins (F3 blueprint §2.5).
-- `Theorems.lean` proves nothing: 7 `axiom`s checked by `#guard` on sample values.
+- FIXED 2026-09-14 -- `Conformance.lean`'s counts. The header said 75 + 11
+  constructs / 121 oracles; the tables held 80 + 14 rows and 97 entries.
+  `oracleCount` is now `oracleEntries.size` (derived), the 121 lives in
+  `oracleProgramTarget` where it cannot be mistaken for a measurement, and
+  `suiteConstructCount = 121` / `executedConstructCount = 10` record what is on
+  disk versus what actually runs. `builtinCount` (36) is still a typed constant;
+  LANGUAGE.md's table lists 37 call names and one of them (`crc32b`) is modelled
+  nowhere, which is where the 36-vs-37-vs-38 disagreement comes from.
+- FIXED 2026-09-14 -- **88 of 97 `oracleEntries.source` strings were invented
+  programs**, not the files they name. Only 8 of the 96 that have a real `.bp`
+  matched it (whitespace/comment-normalised). Some were not even in the
+  language: `c05_if` used brace `if` arms where Bebop has `if c then a else b`.
+  Others disagreed with their own recorded value: `c08_call` was `add(3,4)`
+  against 6, `c14_string` `str_len("hello")` against 8, `c02_arith` `a + b * 2`
+  = 16 against 34 (the same mis-transcription already fixed in `sample_c02` and
+  left standing here). The VALUES were all right -- 76 of 76 agreed with the
+  real `.bp`'s `// EXPECT` -- so every source was replaced, by script, with the
+  byte-for-byte file content.
+- FIXED 2026-09-14 -- **`match` bound its payload binder to the arena OFFSET,
+  not the payload value.** `c12_match` (`match some(5) { none => 0,
+  some(x) => x + 1 }`, EXPECT 6) evaluated to `ok 1`. Only payload-binding arms
+  were affected, so the nullary `c11_enum` looked fine. Fixed by `arenaRead`;
+  `c11 c12 c22 c25 c96` are now `#guard`ed samples and `c96_enumpay`, the
+  runtime match on a VARIABLE, gives `ok 8503009`.
+- FIXED 2026-09-14 -- **`Theorems.lean`'s axiom set was INCONSISTENT.**
+  `isqrt_correct` asserted `r*r <= s` with no sign hypothesis (false at s = -1)
+  and `s < (r+1)^2` over wrapping Int64 (false at s = i64::MAX, where
+  `(r+1)*(r+1)` wraps to -9223372036709301616); `cursor_monotone` asserted
+  `old + 2 + len >= old` with no hypothesis on `len` (false at len = -10, and
+  at old = i64::MAX). A false axiom proves anything, so nothing in the file or
+  in any importer was safe. Both are now theorems over `Int64.toInt` with the
+  needed hypotheses, and their counterexamples are kept as `#guard`s.
+- STILL OPEN -- `fp_mul_correct` is the one remaining `axiom`. 64x64
+  multiplication is out of `bv_decide`'s reach and the limb argument is
+  unwritten; `sorry` was deliberately NOT used. A 1024-pair LCG differential
+  (`fp_mul_sweep`) agrees, which refutes nothing and proves nothing.
+- STILL OPEN -- `addov_correct` and `st_len_masks_digest` are proved by
+  `bv_decide`, which in Lean v4.33.1 checks its LRAT certificate by COMPILED
+  evaluation (`nativeEqTrue`) and records a generated axiom
+  (`..._native.bv_decide.ax_*`). They are machine-checked with the Lean
+  compiler and cadical in the trust root, NOT kernel-checked. The F9 gate asks
+  for both; only the certificate half is there.
+- STILL OPEN -- **no type checking at all.** `Ty` is declared in `Basic.lean`
+  and never read by the evaluator (`grep -n 'Ty\.' Bebop/Semantics.lean` is
+  empty). Every F1 static rejection that is a type error is therefore
+  unmodelled, and the 6 missing negative rows include the ones that need it.
+- STILL OPEN -- `.lor` / `.land` (`||` / `&&`) are modelled as plain bitwise
+  `|||` / `&&&`, i.e. the pre-A26 bpref language. LANGUAGE.md's precedence
+  table does not list `&&` or `||` at all, and the compiler's `&&` is reported
+  to be a constant zero, so this rule matches neither document. It belongs to
+  whoever owns `bebop.bp`, but F4 cannot be "the WHOLE language" until the
+  three agree.
+- STILL OPEN -- 21 positive and 6 negative construct names have no row:
+  positive `c124_condreturn c133_testblock(+_twin) c134_testfn_inside(+_twin)
+  c135_testblock_braces(+_twin) c142_clone8 c144_contract_ok c145_fraction_ok
+  c146_module_empty_ok c146_module_empty_nospace_ok c70_qdsl c70_qdsl_neg
+  c97_arena_operand_miscompile c98_arena_base_operand c99_arena_end_operand
+  c_gb_degree c_gb_kernel_accessors c_gb_vec_setbit c_st_bytes`;
+  negative `c140_mapb_refused c141_clone9 c143_contract_garbage
+  c145_fraction_garbage c146_module_contents_garbage read_before_assign`.
 
 ## Relationship to Other Phases
 
