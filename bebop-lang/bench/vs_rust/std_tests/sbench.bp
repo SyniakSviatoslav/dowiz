@@ -294,7 +294,7 @@ fn main(argc: i64, argv: [str]) -> i64 {
     let _ = if k > 0 then sys_munmap(st_addr(last), size) else 0;
     let b = if k > 0 then st_open(path, pl, size, tmp) else base0;
     let _ = st_snapshot(b, snap, tmp);
-    let one = st_get(b, st_ref(b, st_ref(b, snap[3], 0), 1), 1);
+    let one = st_get(b, st_ref(b, st_ref(b, st_root(b, tmp), 0), 1), 1);
     let last = b;
     let k = k + 1;
     0

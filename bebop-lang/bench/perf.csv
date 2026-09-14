@@ -2196,3 +2196,16 @@ ts,commit,bin,metric,value,unit,n,valid,at_max_pct,temp_mc,note
 1789411414,4a982be,4121aaa8,stub_words,172,words,1,1,n/a,n/a,
 1789411414,4a982be,4121aaa8,bin_fns,351,fns,1,1,n/a,n/a,
 1789411414,4a982be,4121aaa8,push_words,0,words,1,1,n/a,n/a,register model: 0 = stack machine fully retired
+1789415294,8f5ff75,4121aaa8,sbench_insert,386,ms,1,0,,,sqlite 8565
+1789415480,8f5ff75,4121aaa8,sbench_insert,370,ms,1,0,,,sqlite 9604
+1789415481,8f5ff75,4121aaa8,sbench_lookup,190,ns,1,0,,,sqlite 6542.5
+1789415481,8f5ff75,4121aaa8,sbench_scan,1100,ns,1,0,,,sqlite 50801.6
+1789415482,8f5ff75,4121aaa8,sbench_update,75,ms,1,0,,,sqlite 629
+1789415482,8f5ff75,4121aaa8,sbench_reopen,4040,us,1,0,,,sqlite 2292.5
+1789415483,8f5ff75,4121aaa8,sbench_size1,85197016,bytes,1,0,,,sqlite 34070528
+1789415483,8f5ff75,4121aaa8,sbench_compact,395,ms,1,0,,,sqlite 344
+1789415484,8f5ff75,4121aaa8,sbench_size2,72396960,bytes,1,0,,,sqlite 34070528
+1789415484,8f5ff75,4121aaa8,sbench_durable,153,us,1,0,,,sqlite 80.7
+1789415485,8f5ff75,4121aaa8,sbench_dbatch10,31,us,1,0,,,sqlite 58.0
+1789415485,8f5ff75,4121aaa8,sbench_dbatch100,16,us,1,0,,,sqlite 14.2
+1789415485,8f5ff75,4121aaa8,sbench_recover,39163.2,us,1,0,,,sqlite 4006.0
