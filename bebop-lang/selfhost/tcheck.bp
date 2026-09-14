@@ -3295,7 +3295,11 @@ fn tr_replay(R: [i64], T: [i64], M: [i64], cells: i64) -> i64 {
         tr_bind(M, ou, rb)) else 0;
     // 14 eq / 15 exact: the DECISION, recomputed and compared with what was claimed
     let _ = if ru == 14 then (
-        let d2 = rg_eq(R, tr_look(R, M, aa), tr_look(R, M, bb)) in
+        let xa = tr_look(R, M, aa) in
+        let xb = tr_look(R, M, bb) in
+        let _ = R[tr_base(R) + 4] = xa in
+        let _ = R[tr_base(R) + 5] = xb in
+        let d2 = rg_eq(R, xa, xb) in
         let _ = if d2 == cc then 0 else tr_rej(R, 84) in
         let _ = decided = cc in 0) else 0;
     let _ = if ru == 17 then (let _ = csn = aa in 0) else 0;
@@ -3398,7 +3402,12 @@ fn ring_verify(R: [i64], cells: i64, T: [i64], M: [i64], obuf: [i64], opos: [i64
   let pr = R[1];
   let ver = if pr == 0 then tr_replay_bound(R, T, M, cells, obl) else 0;
   let _ = if pr == 0 then 0 else (let _ = R[1] = pr in 0);
-  let _ = tr_row(obuf, opos, "ringverify", ver, R, ns);
+  // the goal check runs ONLY on a trace that already replayed and bound: it answers a
+  // different question -- did this derivation prove what the obligation says?
+  let G = zeros(1040);
+  let gk = if ver == 1 then og_goalcheck(R, obl, G) else 0;
+  let _ = tr_row(obuf, opos, "ringverify", ver * gk, R, ns);
+  let ver = ver * gk;
   let _ = if ver == 1 then sys_exit(0) else sys_exit(2);
   0
 }
@@ -3517,7 +3526,134 @@ fn tr_selftest(obuf: [i64], opos: [i64], R: [i64], cells: i64, T: [i64], M: [i64
   let _ = rg_init(R, cells);
   let _ = tr_row(obuf, opos, "A14n binding WRONG claim        NEG  want 0",
                  tr_bindcheck(R, T, "obligation yyy 1 var c prove 1"), R, nb1);
+
+  // A15n/A16n: the obligation parser's two refusals, in the scanned rows.  A multi-line
+  // obligation cannot be a string literal here (the lexer processes no escapes at all,
+  // so there is no way to write a newline), so the file-based goal check lives in
+  // `ringverify`; these two use single-line obligations, which is enough to fire both.
+  let G = zeros(1040);
+  let _ = rg_init(R, cells);
+  let _ = og_parse(R, "3 xor 1 2", G);
+  let _ = tr_row(obuf, opos, "A15n obligation op xor          NEG  want 0 reject=92",
+                 if R[1] == 0 then 1 else 0, R, 0);
+  let _ = rg_init(R, cells);
+  let _ = og_parse(R, "1 var c", G);
+  let _ = tr_row(obuf, opos, "A16n obligation with no prove   NEG  want 0 reject=94",
+                 if R[1] == 0 then 1 else 0, R, 0);
   0
+}
+
+// --- the obligation parser, and the GOAL check ---
+// The oid proves the checker was handed the right TEXT.  It does not prove the trace
+// derived what that text says -- a trace whose every step checks can still be a proof
+// of something else entirely, and nothing before this caught it.  This walks the
+// obligation DAG, builds the goal, and compares it against the operands of the trace's
+// final `eq`.
+//
+// DOES ONE PARSER SERVE BOTH ROUTES?  The DAG WALK does; the EVALUATORS do not, and
+// they cannot, because they refuse COMPLEMENTARY op subsets.  The ring evaluator below
+// handles var/const/add/sub/mul/fdiv/eq and refuses and/or/xor/not/shl/lshr (92) --
+// they are not polynomial.  The SAT route is the mirror image: `certgen`'s blaster
+// handles and/or/xor/not/add/shl/lshr and has no divider, so it refuses `fdiv`.  A
+// single evaluator over both would be an abstraction over two disjoint capabilities.
+// The shared part is this line-and-token walk, which is why the fix for the LRAT side
+// is the same walk with the bit-blaster underneath it -- named in the verdict, not
+// built here.
+//
+// Variables are numbered in ORDER OF APPEARANCE, and quotient atoms come from the same
+// nd_qvar registry in the same order, which is what makes the parser's polynomials
+// comparable with the producer's rather than merely isomorphic.
+// Reject codes: 92 an op the ring evaluator cannot express, 93 the trace's goal is not
+//   the obligation's goal, 94 the obligation has no `prove` line or no `eq` goal.
+fn og_node(R: [i64], line: [i64], toks: [i64], nt: i64, G: [i64], nv: [i64]) -> i64 {
+  let id = parse_int(line, toks[0]);
+  let k0 = line[toks[1]];
+  let k1 = line[toks[1] + 1];
+  let isvar = if k0 == 118 then 1 else 0;
+  let iscon = if k0 == 99 then 1 else 0;
+  let isadd = if k0 == 97 then (if k1 == 100 then 1 else 0) else 0;
+  let issub = if k0 == 115 then (if k1 == 117 then 1 else 0) else 0;
+  let ismul = if k0 == 109 then 1 else 0;
+  let isfd = if k0 == 102 then 1 else 0;
+  let iseq = if k0 == 101 then 1 else 0;
+  let known = isvar + iscon + isadd + issub + ismul + isfd + iseq;
+  let _ = if known == 1 then 0 else tr_rej(R, 92);
+  let a1 = if nt > 2 then parse_int(line, toks[2]) else 0;
+  let a2 = if nt > 3 then parse_int(line, toks[3]) else 0;
+  // WHICH operands are NODE IDS, and a bound check on each.  The first version read
+  // G[8 + a1] for every op, so `const 4294967296` indexed G four billion cells past its
+  // end -- a wild read from parsed input, in a checker, which SIGSEGV'd on fp_mul's
+  // obligation and would have silently returned garbage on a smaller constant (mulov's
+  // `const 100` read G[108], inside the array, and passed).  Only ops that take node
+  // arguments resolve them, and the index is range-checked before use.
+  let usesa = isadd + issub + ismul + isfd + iseq;
+  let usesb = isadd + issub + ismul + iseq;
+  let aok = if usesa >= 1 then (if a1 >= 1 then (if a1 < 1024 then 1 else 0) else 0) else 0;
+  let bok = if usesb >= 1 then (if a2 >= 1 then (if a2 < 1024 then 1 else 0) else 0) else 0;
+  let _ = if usesa >= 1 then (if aok == 1 then 0 else tr_rej(R, 94)) else 0;
+  let _ = if usesb >= 1 then (if bok == 1 then 0 else tr_rej(R, 94)) else 0;
+  let pa = if aok == 1 then G[8 + a1] else 0;
+  let pb = if bok == 1 then G[8 + a2] else 0;
+  let out = 0;
+  let out = if isvar == 1 then rg_var(R, rg_new(R, 8), nv[0]) else out;
+  let _ = if isvar == 1 then (let _ = nv[0] = nv[0] + 1 in 0) else 0;
+  let out = if iscon == 1 then rg_const(R, rg_new(R, 8), a1) else out;
+  let out = if isadd == 1 then rg_add(R, pa, pb, rg_new(R, 64)) else out;
+  let out = if issub == 1 then rg_sub(R, pa, pb, rg_new(R, 64), rg_new(R, 64)) else out;
+  let out = if ismul == 1 then rg_mul(R, pa, pb, rg_new(R, 64)) else out;
+  // `fdiv` takes the general floor route, not nd_floor directly: nd_floor only handles
+  // power-of-two divisors (76), and mulov's divisor is 100.  D1 first -- if the
+  // remainder is identically zero the quotient IS the floor by D2, which is exactly
+  // what the mulov derivation relies on; otherwise hand it to nd_floor.
+  let out = if isfd == 1 then (
+      let fq = rg_new(R, 64) in
+      let fr = rg_new(R, 64) in
+      let _ = dv_split(R, pa, a2, fq, fr) in
+      if R[fr] == 0 then fq else (let o = rg_new(R, 64) in let _ = nd_floor(R, pa, a2, o) in o)) else out;
+  // an `eq` node is the GOAL, not a polynomial: record both sides
+  let _ = if iseq == 1 then (let _ = G[0] = pa in let _ = G[1] = pb in let _ = G[2] = 1 in 0) else 0;
+  let _ = if id < 1024 then (let _ = G[8 + id] = out in 0) else tr_rej(R, 94);
+  0
+}
+
+fn og_parse(R: [i64], src: str, G: [i64]) -> i64 {
+  let pos = [0];
+  let line = zeros(4096);
+  let toks = zeros(64);
+  let nv = [0];
+  let _ = G[2] = 0;
+  let goal = 0 - 1;
+  let done = 0;
+  while done == 0 {
+    let nread = read_line(src, pos, line, 4096);
+    let _ = if nread < 0 then (let _ = done = 1 in 0) else 0;
+    let nt = if nread > 0 then tokenize(line, toks, 64) else 0;
+    let c0 = if nt > 0 then line[toks[0]] else 0;
+    let isnode = if c0 >= 48 then (if c0 <= 57 then 1 else 0) else 0;
+    let ispr = if c0 == 112 then 1 else 0;
+    let _ = if ispr == 1 then (let _ = goal = parse_int(line, toks[1]) in 0) else 0;
+    let _ = if isnode == 1 then og_node(R, line, toks, nt, G, nv) else 0;
+    0
+  };
+  let _ = if goal >= 0 then 0 else tr_rej(R, 94);
+  let _ = if G[2] == 1 then 0 else tr_rej(R, 94);
+  goal
+}
+
+// compare the trace's final `eq` operands with the obligation's goal.  Either order is
+// accepted, because `Eq` is symmetric and a producer may orient it either way.
+fn og_goalcheck(R: [i64], obl: str, G: [i64]) -> i64 {
+  let tb = tr_base(R);
+  let lt = R[tb + 4];
+  let rt = R[tb + 5];
+  let _ = og_parse(R, obl, G);
+  let lg = G[0];
+  let rg = G[1];
+  let d1 = rg_eq(R, lt, lg) * rg_eq(R, rt, rg);
+  let d2 = rg_eq(R, lt, rg) * rg_eq(R, rt, lg);
+  let ok = if d1 + d2 >= 1 then 1 else 0;
+  let _ = if ok == 1 then 0 else tr_rej(R, 93);
+  ok
 }
 
 // --- the trace as a FILE: written, re-parsed, re-checked by another process ---
@@ -3537,7 +3673,8 @@ fn tr_selftest(obuf: [i64], opos: [i64], R: [i64], cells: i64, T: [i64], M: [i64
 //   x <oid>                       64 hex chars: sha256 of the obligation TEXT
 //
 // Reject codes: 88 a malformed line (wrong arity, or an unknown kind), 89 the declared
-//   step count does not match the number of s lines, 90 no x line.
+//   step count does not match the number of s lines, 90 no x line, 92/93/94 see the
+//   obligation parser above.
 fn tw_write(T: [i64], path: str, buf: [i64], pos: [i64]) -> i64 {
   let n = T[0];
   let _ = pos[0] = 0;
