@@ -1,0 +1,288 @@
+use "selfhost/prelude/store.bp"
+use "selfhost/prelude/sha256.bp"
+use "selfhost/std/ordfsm.bp"
+use "selfhost/std/money.bp"
+
+// CSR three-pass counting sort
+fn csr_passes(src: [i64], dst: [i64], m: i64, n: i64, cur: [i64], prp: [i64], pci: [i64]) -> i64 {
+  let z = 0;
+  while z < n + 2 {
+    let _ = prp[z] = 0;
+    let z = z + 1;
+    0
+  };
+  let _ = prp[0] = n + 1;
+  let i = 0;
+  while i < m {
+    let a = src[i];
+    let _ = prp[2 + a] = prp[2 + a] + 1;
+    let i = i + 1;
+    0
+  };
+  let v = 0;
+  while v < n {
+    let _ = prp[2 + v] = prp[2 + v] + prp[1 + v];
+    let _ = cur[v] = prp[1 + v];
+    let v = v + 1;
+    0
+  };
+  let _ = pci[0] = m;
+  let j = 0;
+  while j < m {
+    let a = src[j];
+    let s = cur[a];
+    let _ = pci[1 + s] = dst[j];
+    let _ = cur[a] = s + 1;
+    let j = j + 1;
+    0
+  };
+  0
+}
+
+// pick_set(m, r): the index of the r-th SET bit of m (12-bit masks).
+fn pick_set(m: i64, r: i64) -> i64 {
+  let kk = zeros(1);
+  let chosen = zeros(1);
+  let j = 0;
+  while j < 12 {
+    let bit = (m >> j) & 1;
+    let _ = if bit == 1 then (
+      let _ = if kk[0] == r then (let _ = chosen[0] = j in 0) else 0 in
+      let _ = kk[0] = kk[0] + 1 in
+      0
+    ) else 0;
+    let j = j + 1;
+    0
+  };
+  chosen[0]
+}
+
+// gen_events: WALK the FSM from state 0 per order, ~1% injected illegal steps.
+// A legal step picks from adj[cur]'s set bits, so decide() returns 0.
+// An illegal step picks from the FORBIDDEN pool = complement of adj[cur], minus the
+// current state (decide would say 1 SameStatus) and minus state 8 (it would say 2
+// ScaffoldDisabled) -- 3839 is exactly the non-scaffold 12-bit mask. So an injected
+// step returns 3 IllegalTransition and nothing else does, which is what makes
+// injected == found a real equality. An illegal step does NOT advance cur.
+fn gen_events(order_id: [i64], from: [i64], to: [i64], t: [i64], amount: [i64],
+              n: i64, k: i64, adj: [i64], illegal_count: [i64]) -> i64 {
+  let ev = zeros(1);
+  let oid = zeros(1);
+  let cur = zeros(1);
+  let lcg_st = zeros(1);
+  let _ = lcg_st[0] = 1234;
+  while oid[0] < n {
+    let _ = cur[0] = 0;
+    let ek = 0;
+    while ek < k {
+      let _ = if adj[cur[0]] == 0 then (let _ = cur[0] = 0 in 0) else 0;
+      let mask = adj[cur[0]];
+      let _ = lcg_st[0] = ((lcg_st[0] * 1103515245) + 12345) & 2147483647;
+      let lv = lcg_st[0];
+      let ill = if (lv % 100) == 0 then 1 else 0;
+      let selfbit = 1 << cur[0];
+      let forb = ((mask ^ 4095) & (selfbit ^ 4095)) & 3839;
+      let pool = if ill == 1 then forb else mask;
+      let np = pc12(pool);
+      let r = if np == 0 then 0 else (lv / 100) % np;
+      let nxt = pick_set(pool, r);
+      let _ = order_id[ev[0]] = oid[0];
+      let _ = from[ev[0]] = cur[0];
+      let _ = to[ev[0]] = nxt;
+      let _ = t[ev[0]] = (ek * 1000) + (lv % 1000);
+      let _ = amount[ev[0]] = (lv % 100) + 1;
+      let _ = if ill == 1 then (let _ = illegal_count[0] = illegal_count[0] + 1 in 0) else 0;
+      let _ = if ill == 0 then (let _ = cur[0] = nxt in 0) else 0;
+      let _ = ev[0] = ev[0] + 1;
+      let ek = ek + 1;
+      0
+    };
+    let _ = oid[0] = oid[0] + 1;
+    0
+  };
+  ev[0]
+}
+
+// Phase q1: fold through events using CSR,  return sum of final states
+fn phase_q1(base: [i64], tmp: [i64], n: i64, adj: [i64]) -> i64 {
+  let g = st_root(base, tmp);
+  let m = st_get(base, g, 0);
+  let order_id = st_ref(base, g, 1);
+  let from_st = st_ref(base, g, 2);
+  let to_st = st_ref(base, g, 3);
+  let rp = st_ref(base, g, 6);
+  let ci = st_ref(base, g, 7);
+  let state = zeros(n);
+  let oid = 0;
+  while oid < n {
+    let lo = st_get(base, rp, 1 + oid);
+    let hi = st_get(base, rp, 2 + oid);
+    let ev_idx = lo;
+    while ev_idx < hi {
+      let ev = st_get(base, ci, 1 + ev_idx);
+      let f = st_get(base, from_st, ev);
+      let t = st_get(base, to_st, ev);
+      let ok_code = decide(adj, f, t);
+      let _ = if ok_code == 0 then state[oid] = t else 0;
+      let ev_idx = ev_idx + 1;
+      0
+    };
+    let oid = oid + 1;
+    0
+  };
+  let fold_h = 0;
+  let i = 0;
+  while i < n {
+    let fold_h = fold_h + state[i];
+    let i = i + 1;
+    0
+  };
+  fold_h
+}
+
+// Phase q3: count decide codes per argv[3]: '0'=ok, '1'=same, '2'=scaffold, '3'=illegal
+fn phase_q3(base: [i64], tmp: [i64], adj: [i64], which: i64) -> i64 {
+  let g = st_root(base, tmp);
+  let m = st_get(base, g, 0);
+  let from_st = st_ref(base, g, 2);
+  let to_st = st_ref(base, g, 3);
+  let c = zeros(4);
+  let ev = 0;
+  while ev < m {
+    let f = st_get(base, from_st, ev);
+    let t = st_get(base, to_st, ev);
+    let code = decide(adj, f, t);
+    let idx = if code == 0 then 0 else (if code == 1 then 1 else (if code == 2 then 2 else 3));
+    let _ = c[idx] = c[idx] + 1;
+    let ev = ev + 1;
+    0
+  };
+  if which == 48 then c[0] else (if which == 49 then c[1] else (if which == 50 then c[2] else (if which == 51 then c[3] else 0)))
+}
+
+// Phase i: ingest, build store objects, CSR, commit
+fn phase_ingest(base: [i64], tmp: [i64], d: [i64], n: i64, k: i64, adj: [i64]) -> i64 {
+  let m = n * k;
+  let order_id = zeros(m + 1);
+  let from = zeros(m + 1);
+  let to = zeros(m + 1);
+  let et = zeros(m + 1);
+  let amount = zeros(m + 1);
+  let illegal_count = zeros(1);
+  let oid_for_csr = zeros(m + 1);
+  let evt_idx = zeros(m + 1);
+
+  let _ = gen_events(order_id, from, to, et, amount, n, k, adj, illegal_count);
+
+  let i = 0;
+  while i < m {
+    let _ = oid_for_csr[i] = order_id[i];
+    let _ = evt_idx[i] = i;
+    let i = i + 1;
+    0
+  };
+
+  let cur = zeros(n);
+  let prp = zeros(n + 2);
+  let pci = zeros(m + 1);
+  let _ = csr_passes(oid_for_csr, evt_idx, m, n, cur, prp, pci);
+
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+
+  let oid_obj = st_alloc(base, tx, m + 1, d[1]);
+  let from_obj = st_alloc(base, tx, m + 1, d[1]);
+  let to_obj = st_alloc(base, tx, m + 1, d[1]);
+  let t_obj = st_alloc(base, tx, m + 1, d[1]);
+  let amt_obj = st_alloc(base, tx, m + 1, d[1]);
+  let rp_obj = st_alloc(base, tx, n + 2, d[1]);
+  let ci_obj = st_alloc(base, tx, m + 1, d[1]);
+
+  let j = 0;
+  while j < m {
+    let _ = st_put(base, oid_obj, j, order_id[j]);
+    let _ = st_put(base, from_obj, j, from[j]);
+    let _ = st_put(base, to_obj, j, to[j]);
+    let _ = st_put(base, t_obj, j, et[j]);
+    let _ = st_put(base, amt_obj, j, amount[j]);
+    let j = j + 1;
+    0
+  };
+
+  let p = 0;
+  while p < n + 2 {
+    let _ = st_put(base, rp_obj, p, prp[p]);
+    let p = p + 1;
+    0
+  };
+
+  let q = 0;
+  while q < m + 1 {
+    let _ = st_put(base, ci_obj, q, pci[q]);
+    let q = q + 1;
+    0
+  };
+
+  let _ = st_seal(base, oid_obj, tmp);
+  let _ = st_seal(base, from_obj, tmp);
+  let _ = st_seal(base, to_obj, tmp);
+  let _ = st_seal(base, t_obj, tmp);
+  let _ = st_seal(base, amt_obj, tmp);
+  let _ = st_seal(base, rp_obj, tmp);
+  let _ = st_seal(base, ci_obj, tmp);
+
+  let root = st_alloc(base, tx, 8, d[0]);
+  let _ = st_put(base, root, 0, m);
+  let _ = st_link(base, root, 1, oid_obj);
+  let _ = st_link(base, root, 2, from_obj);
+  let _ = st_link(base, root, 3, to_obj);
+  let _ = st_link(base, root, 4, t_obj);
+  let _ = st_link(base, root, 5, amt_obj);
+  let _ = st_link(base, root, 6, rp_obj);
+  let _ = st_link(base, root, 7, ci_obj);
+  let _ = st_seal(base, root, tmp);
+
+  let _ = st_commit(base, tx, root, tmp);
+
+  illegal_count[0]
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  let path = zeros(64);
+  let pl = st_str(path, "wlog.store");
+  let tmp = zeros(256);
+  let size = 536870912;
+  let ph_first = char(argv[2], 0);
+  let ph_second = char(argv[2], 1);
+  let want_t = if char(argv[3], 0) == 116 then 1 else 0;
+  let which_q3 = char(argv[3], 0);
+  let n = if argc >= 5 then parse(argv[4]) else 10000;
+  let k = if argc >= 6 then parse(argv[5]) else 8;
+
+  let adj = zeros(12);
+  let _ = adj[0] = 194;
+  let _ = adj[1] = 1044;
+  let _ = adj[2] = 1032;
+  let _ = adj[3] = 1552;
+  let _ = adj[4] = 1056;
+  let _ = adj[10] = 2048;
+
+  let d = zeros(2);
+  let _ = d[0] = st_digest("ROOT{i64,ref [i64],ref [i64],ref [i64],ref [i64],ref [i64],ref [i64],ref [i64]}");
+  let _ = d[1] = st_digest("arr i64");
+
+  let base = st_open(path, pl, size, tmp);
+  let t0 = clock_ms();
+
+  let r_i = phase_ingest(base, tmp, d, n, k, adj);
+  let r_q1 = phase_q1(base, tmp, n, adj);
+  let r_q3 = phase_q3(base, tmp, adj, which_q3);
+  let result = if ph_first == 105 then r_i else (if ph_second == 49 then r_q1 else (if ph_second == 51 then r_q3 else 0));
+
+  let t1 = clock_ms();
+  let ms = t1 - t0;
+  let final_result = if want_t == 1 then ms else result;
+
+  let _ = sys_munmap(st_addr(base), size);
+  final_result
+}
