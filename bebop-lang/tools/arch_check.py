@@ -923,6 +923,89 @@ def check_roadmap_matches_code(r):
              % (len(drift), worst, exempt8, unresolved))
 
 
+# --- CHECK 25: the axiom layer's hygiene -------------------------------------------
+# Incident (A29, `66f6060`): the Lean proof layer carried 27 axioms and a ground refuter found
+# that **26 of the 27 assert NOTHING** -- they are Sigma_1 existentials, satisfied by one
+# witness, so no counterexample to them can exist -- while **one live axiom is FALSE**. An
+# axiom that asserts nothing is dead trusted surface: it is counted as an assumption and buys
+# no content. An axiom that is false makes every goal in every importer derivable. Neither is
+# visible to any other check here, because both are properties of what a statement MEANS and
+# not of whether a file parses.
+#
+# This gate is deliberately built out of the axiom lane's OWN tools rather than re-deriving
+# their numbers: `tools/axiom_ledger.py` counts the surface, `tools/axiom_refute.py` sweeps it.
+# Five assertions, and the last three exist because the first two are worthless without them:
+#   (1) the axiom COUNT may not grow             -- max_lean_axioms
+#   (2) the REFUTED count may not grow           -- max_axioms_refuted
+#   (3) the sweep must have actually swept       -- `axiom_sweep_points` > 0. A refuter that
+#       examines zero points reports "0 refuted" and looks identical to a clean one. This is
+#       the `tv_fragments.py` failure (PASS (0/0) for its whole life) pointed at an axiom
+#       sweep, and it is the assertion that makes (2) mean anything.
+#   (4) all six CONTROLS must fire               -- `--controls` is a set of deliberately
+#       false predicates the refuter MUST catch. A control that stops firing means the sweep
+#       has gone blind, which (3) cannot detect because the points are still being counted.
+#   (5) the ACCEPTANCE test must return 0        -- `--historical` re-runs the refuter against
+#       the two axioms already KNOWN false and requires it to find both at the documented
+#       points. (4) proves it can catch a synthetic error; (5) proves it catches the two real
+#       ones this tree actually shipped.
+def check_axiom_hygiene(r):
+    import subprocess as _sp
+    def run(args):
+        p = _sp.run([sys.executable] + args, cwd=ROOT, capture_output=True, text=True, timeout=900)
+        return p.returncode, p.stdout + p.stderr
+    def num(txt, pat, d=None):
+        # re.M is load-bearing: these markers are LINES inside a long report, and without it
+        # `^` anchors to the start of the whole capture and every lookup silently returns the
+        # default. Measured while writing this -- the check reported "printed no
+        # `axiom_refuted:` line" against a report that printed exactly that line.
+        m = re.search(pat, txt, re.M)
+        return int(m.group(1)) if m else d
+    if not os.path.exists(os.path.join(ROOT, "tools", "axiom_refute.py")):
+        note("axiom-hygiene: tools/axiom_refute.py absent, not measured"); return
+    bad = []
+    # (1) the surface count
+    rc, out = run(["tools/axiom_ledger.py"])
+    n_ax = num(out, r"^lean_axioms:\s*(\d+)", None)
+    cap = r.get("max_lean_axioms", 27)
+    if n_ax is None:
+        bad.append("axiom_ledger.py printed no `lean_axioms:` line (rc=%d)" % rc)
+    elif n_ax > cap:
+        bad.append("lean_axioms %d > ratchet %d -- the trusted surface grew" % (n_ax, cap))
+    # (2) refuted, and (3) the sweep must have swept
+    rc, out = run(["tools/axiom_refute.py"])
+    refuted = num(out, r"^axiom_refuted:\s*(\d+)/", None)
+    swept = num(out, r"^axiom_sweep_points:\s*(\d+)", None)
+    rcap = r.get("max_axioms_refuted", 1)
+    if refuted is None:
+        bad.append("axiom_refute.py printed no `axiom_refuted:` line (rc=%d)" % rc)
+    elif refuted > rcap:
+        bad.append("axiom_refuted %d > ratchet %d -- a NEW axiom is false" % (refuted, rcap))
+    if swept is None:
+        bad.append("axiom_refute.py printed no `axiom_sweep_points:` line")
+    elif swept == 0:
+        bad.append("axiom_sweep_points == 0 -- the refuter examined NOTHING, so its "
+                   "`axiom_refuted` number is not evidence of anything")
+    # (4) the controls
+    rc, out = run(["tools/axiom_refute.py", "--controls"])
+    m = re.search(r"^axiom_controls:\s*(\d+)/(\d+) fired", out, re.M)
+    if not m:
+        bad.append("--controls printed no `axiom_controls: n/m fired` line (rc=%d)" % rc)
+    elif m.group(1) != m.group(2) or int(m.group(2)) < 6:
+        bad.append("axiom_controls %s/%s fired (want 6/6) -- a control that stops firing means "
+                   "the sweep has gone blind on that shape" % (m.group(1), m.group(2)))
+    # (5) the acceptance test
+    rc, out = run(["tools/axiom_refute.py", "--historical"])
+    if rc != 0:
+        bad.append("--historical (acceptance) returned %d, want 0 -- the refuter no longer "
+                   "finds the two axioms already known false at their documented points" % rc)
+    if bad:
+        fail("axiom-hygiene", "; ".join(bad))
+    else:
+        note("axiom-hygiene: lean_axioms %s (ratchet %s), axiom_refuted %s (ratchet %s), "
+             "%s sweep points, controls 6/6, acceptance rc=0"
+             % (n_ax, cap, refuted, rcap, swept))
+
+
 def check_ratchets_are_read(r):
     """Every ratchet must be READ by a check. A number nobody reads is not a safeguard.
 
@@ -1013,6 +1096,7 @@ def main():
     check_ratchets_are_read(r)
     check_laws_have_enforcement(r)
     check_roadmap_matches_code(r)
+    check_axiom_hygiene(r)
     for n in notes: print("  note: " + n)
     if fails:
         print("\narch_check: %d INVARIANT(S) VIOLATED" % len(fails))

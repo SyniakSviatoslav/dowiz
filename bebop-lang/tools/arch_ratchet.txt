@@ -89,3 +89,17 @@ journal_cost_since = 1789229455
 # a gate that reads a producer's .store/.gbpool must assert it exists (need_file);
 # a missing prerequisite otherwise surfaces as trap 82 and names the wrong subsystem
 max_unguarded_prereqs = 0
+
+# The Lean proof layer's axiom surface, read by CHECK 25 (axiom-hygiene). BOTH lines land with
+# that check, because `ratchet-orphan` fails any number here that no check reads -- a ratchet
+# nobody enforces is prose with a digit in it.
+# 27 as of A29 (`66f6060`), and the number is not a target: 26 of those 27 are Sigma_1
+# EXISTENTIALS that assert nothing, so the honest reading is 1 axiom of content and 26 of dead
+# trusted surface. Turning an existential into the theorem it already is lowers this line for
+# free; adding a genuine assumption must not raise it.
+max_lean_axioms = 27
+# One live axiom is FALSE (found by tools/axiom_refute.py's boundary sweep). This is DEBT at 1,
+# not permission for a second: a false axiom makes every goal in every importer derivable, so
+# the only direction this line may move is down, and it reaches 0 when that axiom is fixed or
+# withdrawn.
+max_axioms_refuted = 1

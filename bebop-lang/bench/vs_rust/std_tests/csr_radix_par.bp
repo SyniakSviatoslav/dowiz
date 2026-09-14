@@ -1,0 +1,243 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+// csr_radix_par.bp — experiment 7b arm 2: the radix fill across 3 A78 cores.
+//
+// WHY PARALLELISM IS THE RIGHT QUESTION FOR THIS LOOP, and it is not about arithmetic. The fill
+// is bound by memory LATENCY, not by compute: 36.8 ns/slot against E4's measured ~0.85 ns/slot
+// streaming floor is the signature of only two or three misses outstanding. Each extra thread
+// contributes its OWN independent stream of misses, so more requests are in flight and more of
+// the memory system's parallelism is used. That is a different mechanism from spreading work.
+//
+// THE COUNTER-FACT THIS IS WEIGHED AGAINST, stated before any number: B6's multi-core scan
+// measures 1.00x -- no speedup at all from multiple cores on this box. So the parallel machinery
+// here has already failed to deliver once. If this arm also lands at ~1.00x, the finding is
+// about sys_clone / futex / the arena and NOT about this loop, and that is worth more than the
+// experiment that produced it.
+//
+// DISJOINTNESS, ARGUED BEFORE THE NUMBERS -- the fold equality must be evidence, not a lucky
+// interleaving. After the serial partition, pk2 is bucket-ordered, and `bs[b]` holds bucket b's
+// start. Thread t owns the contiguous BUCKET RANGE [t*nb/W, (t+1)*nb/W), hence the contiguous
+// pk2 slice [bs[t_lo], bs[t_hi]). Then:
+//   * every element in that slice has its source row in [t_lo << k, t_hi << k) -- a row range
+//     that is disjoint from every other thread's by construction;
+//   * so the `cur[a]` cells it touches are disjoint: `a` is in that row range;
+//   * so the `ci[1 + s]` cells it writes are disjoint AND contiguous: a counting sort lays rows
+//     out in ascending order, so thread t writes exactly [rp[1 + (t_lo << k)], rp[1 + (t_hi << k)]).
+// No two threads address one cell of `cur`, `ci` or `bs`. There are no per-thread cursor copies
+// and no merge pass, because none is needed -- the partition already separated the data.
+//
+// env[] carries ARRAY HANDLES as i64, which is legal since A5 made every `[i64]` value an
+// x17-relative cell index (b6core.bp uses the same convention). That is what keeps the worker at
+// four parameters and well under the 8-kept-symbol clone limit (exit 109).
+//
+// argv[2]=n, argv[3]=e, argv[4]=k, argv[5]=W threads (0 = serial control), argv[6]=reps.
+
+fn lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
+fn parse(s: str) -> i64 {
+  let n = str_len(s); let i = 0; let v = 0;
+  while i < n { let v = v * 10 + (char(s, i) - 48); let i = i + 1; 0 };
+  v
+}
+fn itoa(dst: [i64], n: i64) -> i64 {
+  let neg = if n < 0 then 1 else 0;
+  let m = if n < 0 then 0 - n else n;
+  let p = 23; let m2 = m; let go = 1;
+  while go == 1 {
+    let d = m2 - (m2 / 10) * 10;
+    let _ = dst[p] = 48 + d; let p = p - 1; let m2 = m2 / 10;
+    let go = if m2 > 0 then 1 else 0; 0
+  };
+  let start = p + 1; let len = 24 - start; let i = 0;
+  while i < len { let _ = dst[neg + i] = dst[start + i]; let i = i + 1; 0 };
+  let _ = if neg == 1 then (let _ = dst[0] = 45 in 0) else 0;
+  len + neg
+}
+fn say(label: str, v: i64, buf: [i64]) -> i64 {
+  let n = st_str(buf, label); let _ = sys_write(1, buf, n);
+  let l = itoa(buf, v); let _ = sys_write(1, buf, l);
+  let _ = buf[0] = 10; sys_write(1, buf, 1)
+}
+fn cur_reset(cur: [i64], rp: [i64], n: i64) -> i64 {
+  let v = 0;
+  while v < n { let _ = cur[v] = rp[1 + v]; let v = v + 1; 0 };
+  0
+}
+fn fill_base(pk: [i64], m: i64, ci: [i64], cur: [i64]) -> i64 {
+  let j = 0;
+  while j < m {
+    let e = pk[j]; let a = e >> 32; let s = cur[a];
+    let _ = ci[1 + s] = e & 4294967295;
+    let _ = cur[a] = s + 1;
+    let j = j + 1; 0
+  };
+  0
+}
+fn bkt_hist(pk: [i64], m: i64, bc: [i64], k: i64) -> i64 {
+  let j = 0;
+  while j < m { let b = (pk[j] >> 32) >> k; let _ = bc[1 + b] = bc[1 + b] + 1; let j = j + 1; 0 };
+  0
+}
+fn bkt_prefix(bc: [i64], bs: [i64], nb: i64) -> i64 {
+  let b = 0;
+  while b < nb { let _ = bc[1 + b] = bc[1 + b] + bc[b]; let b = b + 1; 0 };
+  let b = 0;
+  while b < nb + 1 { let _ = bs[b] = bc[b]; let b = b + 1; 0 };
+  0
+}
+fn bkt_part(pk: [i64], m: i64, pk2: [i64], bc: [i64], k: i64) -> i64 {
+  let j = 0;
+  while j < m {
+    let e = pk[j]; let b = (e >> 32) >> k; let s = bc[b];
+    let _ = pk2[s] = e; let _ = bc[b] = s + 1;
+    let j = j + 1; 0
+  };
+  0
+}
+// the fill over one contiguous pk2 slice -- the whole slice serially, or one thread's share.
+fn rx_fill(pk2: [i64], lo: i64, hi: i64, ci: [i64], cur: [i64]) -> i64 {
+  let j = lo;
+  while j < hi {
+    let e = pk2[j]; let a = e >> 32; let s = cur[a];
+    let _ = ci[1 + s] = e & 4294967295;
+    let _ = cur[a] = s + 1;
+    let j = j + 1; 0
+  };
+  0
+}
+// ---- the worker ----
+// The fill is INLINED here rather than calling rx_fill, and that is forced rather than stylistic.
+// A8's expression-type walk (landed 3a5c2e4) refuses to pass an env handle as a declared `[i64]`
+// PARAMETER -- `rx_fill(pk2, ...)` with `let pk2 = env[0]` is `error[E84]: type error: a declared
+// type does not match its use here`. Measured: b6core.bp, which uses the same env convention,
+// still compiles rc=0, because it only ever INDEXES the handle inline (`let a = env[0]; a[i]`)
+// and never passes it. So the A5 handle-as-i64 convention survives indexing and not argument
+// passing. Inlining keeps the worker at four parameters, well under the 8-kept-symbol clone
+// limit (exit 109).
+fn rx_work(env: [i64], cells: [i64], w: i64, W: i64) -> i64 {
+  let pk2 = env[0];
+  let ci = env[1];
+  let cur = env[2];
+  let bs = env[3];
+  let nb = env[4];
+  let tlo = w * (nb / W);
+  let thi = if w == W - 1 then nb else (w + 1) * (nb / W);
+  let j = bs[tlo];
+  let hi = bs[thi];
+  while j < hi {
+    let e = pk2[j];
+    let a = e >> 32;
+    let s = cur[a];
+    let _ = ci[1 + s] = e & 4294967295;
+    let _ = cur[a] = s + 1;
+    let j = j + 1;
+    0
+  };
+  let _ = sys_atomic_add(cells, w, 1);
+  0
+}
+fn rx_par(env: [i64], cells: [i64], W: i64) -> i64 {
+  let cur0 = sys_arena_base();
+  let w = 0;
+  while w < W {
+    let r = sys_clone(68864, cur0 + 16384 + w * 8192);
+    let is_child = if r == 0 then 1 else 0;
+    let _ = if is_child == 1 then rx_work(env, cells, w, W) else 0;
+    let _ = sys_atomic_add(cells, W + w, is_child);
+    let _ = sys_futex_wake(cells, W + w, 64);
+    let parked = if is_child == 0 then 1 else 0;
+    while parked == 0 {
+      let _ = sys_futex_wait_guard(if is_child == 0 then 1 else 0, cells, W + w, 0);
+      let parked = if cells[W + w] == 1 then 1 else 0;
+      0
+    };
+    let _ = sys_exit_thread_guard(is_child, 0);
+    let w = w + 1;
+    0
+  };
+  let w = 0;
+  while w < W {
+    let d = 0;
+    while d == 0 {
+      let _ = sys_futex_wait_guard(0, cells, W + w, 0);
+      let d = if sys_atomic_add(cells, W + w, 0) == 1 then 1 else 0;
+      0
+    };
+    let w = w + 1;
+    0
+  };
+  0
+}
+fn fold_ci(ci: [i64], m: i64, rp: [i64], n: i64) -> i64 {
+  let acc = zeros(1);
+  let k = 0;
+  while k < m { let _ = acc[0] = acc[0] + ci[1 + k]; let k = k + 1; 0 };
+  acc[0] + rp[1 + n]
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  let n = if argc >= 3 then parse(argv[2]) else 1000000;
+  let e = if argc >= 4 then parse(argv[3]) else 5000000;
+  let k = if argc >= 5 then parse(argv[4]) else 10;
+  let W = if argc >= 6 then parse(argv[5]) else 3;
+  let reps = if argc >= 7 then parse(argv[6]) else 3;
+  let m = 2 * e;
+  let nb = (n >> k) + 1;
+  let buf = zeros(64);
+  let _ = say("n ", n, buf); let _ = say("m ", m, buf);
+  let _ = say("k ", k, buf); let _ = say("buckets ", nb, buf); let _ = say("W ", W, buf);
+
+  let pk = zeros(m);
+  let x = 4242; let i = 0;
+  while i < e {
+    let x = lcg(x); let a = (x >> 20) % n;
+    let x = lcg(x); let b = (x >> 20) % n;
+    let _ = pk[2 * i] = (a << 32) | b;
+    let _ = pk[2 * i + 1] = (b << 32) | a;
+    let i = i + 1; 0
+  };
+  let cur = zeros(n); let rp = zeros(n + 2); let ci = zeros(m + 1);
+  let h = 0;
+  while h < m { let a = pk[h] >> 32; let _ = rp[2 + a] = rp[2 + a] + 1; let h = h + 1; 0 };
+  let v = 0;
+  while v < n { let _ = rp[2 + v] = rp[2 + v] + rp[1 + v]; let v = v + 1; 0 };
+  let pk2 = zeros(m);
+  let bc = zeros(nb + 2);
+  let bs = zeros(nb + 2);
+  let env = zeros(8);
+  let cells = zeros(64);
+  let _ = env[0] = pk2; let _ = env[1] = ci; let _ = env[2] = cur;
+  let _ = env[3] = bs; let _ = env[4] = nb;
+
+  let fa = zeros(1); let fb = zeros(1);
+  let r = 0;
+  while r < reps {
+    let _ = cur_reset(cur, rp, n);
+    let a0 = clock_ms();
+    let _ = fill_base(pk, m, ci, cur);
+    let a1 = clock_ms();
+    let _ = say("repA_ms ", a1 - a0, buf);
+    let _ = fa[0] = fold_ci(ci, m, rp, n);
+
+    let _ = cur_reset(cur, rp, n);
+    let z = 0;
+    while z < nb + 2 { let _ = bc[z] = 0; let _ = bs[z] = 0; let z = z + 1; 0 };
+    let z = 0;
+    while z < 64 { let _ = cells[z] = 0; let z = z + 1; 0 };
+    let b0 = clock_ms();
+    let _ = bkt_hist(pk, m, bc, k);
+    let _ = bkt_prefix(bc, bs, nb);
+    let _ = bkt_part(pk, m, pk2, bc, k);
+    let b1 = clock_ms();
+    let _ = if W == 0 then rx_fill(pk2, 0, m, ci, cur) else rx_par(env, cells, W);
+    let b2 = clock_ms();
+    let _ = say("repB_prep_ms ", b1 - b0, buf);
+    let _ = say("repB_fill_ms ", b2 - b1, buf);
+    let _ = say("repB_ms ", b2 - b0, buf);
+    let _ = fb[0] = fold_ci(ci, m, rp, n);
+    let r = r + 1; 0
+  };
+  let _ = say("foldA ", fa[0], buf);
+  let _ = say("foldB ", fb[0], buf);
+  let _ = say("folds_equal ", if fa[0] == fb[0] then 1 else 0, buf);
+  0
+}

@@ -1,0 +1,214 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+// csr_radix.bp — experiment 7b: SINGLE-PASS radix partition with per-bucket cursors, against
+// csr_passes' fill pass. Follow-up to csr_part_scatter.bp, which tested the OTHER algorithm.
+//
+// WHAT WAS WRONG WITH THE LAST ATTEMPT, and why this is a different loop. csr_part_scatter.bp
+// tested multi-pass PROPAGATION BLOCKING: one pass per window, each skipping the elements
+// outside it. Measured: the guard alone cost +39.0 ns/slot against a 36.8 ns/slot scatter --
+// the remedy's overhead matched the defect -- because a body holding a load and two stores
+// cannot fold into a `csel`, so every element paid a branch. The textbook radix partition has
+// NO guard: compute `b = key >> k`, then `pk2[bc[b]] = elem; bc[b] = bc[b] + 1`,
+// unconditionally, every element written exactly once. One random write stream becomes
+// `2^(bits-k)` sequential-ish streams, which is what write-combining is for.
+//
+// LAYOUT, and it is forced. At n=1e6 / m=1e7 the baseline's five arrays are already 3.2e7 cells
+// = 256 MB, the whole arena, so a scratch buffer looks impossible. It is affordable only by
+// PACKING: `pk[j] = (src << 32) | dst` is one array where the baseline had two (src < 2^20 and
+// dst < 2^20 here, so 52 bits of an i64 and no sign games), and the cell that buys pays for the
+// partition scratch `pk2`. Footprint is therefore pk + pk2 + ci + cur + rp = 3m + 2n = the same
+// 3.2e7 cells the baseline used. BOTH arms read from `pk`, so the packing cost is paid
+// identically on both sides and the comparison is not contaminated by it.
+//
+// WHY THE FOLD IS BIT-IDENTICAL, stated before any number. Arm A walks j ascending, so row a's
+// neighbours land in ascending original j. Arm B's partition is STABLE (B3 also walks j
+// ascending), so within a bucket the elements keep their original relative order; a row belongs
+// to exactly ONE bucket; and B4 walks pk2 ascending. So every row's neighbours land in the same
+// order in `ci` as in arm A -- the arrays are equal cell by cell, not merely equal in sum.
+//
+// argv[2] = n (default 1000000), argv[3] = e undirected edges (default 5000000),
+// argv[4] = k, the bucket is 2^k consecutive rows (default 12), argv[5] = reps (default 3).
+// Arms run INTERLEAVED A,B,A,B in one process so they share thermal state; every rep printed.
+//
+// A BUG THIS FILE HAD, kept because it is the language fact that causes it: the first draft
+// wrote `(x >>> 20) % n` in the pair generator. `>>` in Bebop is the LOGICAL shift and `>>>` is
+// the ARITHMETIC one (docs/LANGUAGE.md:64) -- the opposite of C -- and the LCG value is signed,
+// so the arithmetic shift kept the sign, `% n` went NEGATIVE, and `rp[2 + a]` wrote below the
+// array. The symptom was a program that printed its five header lines and then produced nothing
+// at all. Every shift here is now `>>`, logical, which is what the D1 control arm uses.
+//
+// NOT MEASURED HERE: cache misses. `security.perf_harden` is 1 on this box so
+// `perf_event_open` gives EACCES. Locality is INFERRED from ns/slot against E4's measured
+// ~0.85 ns/slot streaming floor; nothing observes a miss.
+
+fn lcg(x: i64) -> i64 { x * 6364136223846793005 + 1442695040888963407 }
+fn parse(s: str) -> i64 {
+  let n = str_len(s); let i = 0; let v = 0;
+  while i < n { let v = v * 10 + (char(s, i) - 48); let i = i + 1; 0 };
+  v
+}
+fn itoa(dst: [i64], n: i64) -> i64 {
+  let neg = if n < 0 then 1 else 0;
+  let m = if n < 0 then 0 - n else n;
+  let p = 23; let m2 = m; let go = 1;
+  while go == 1 {
+    let d = m2 - (m2 / 10) * 10;
+    let _ = dst[p] = 48 + d; let p = p - 1; let m2 = m2 / 10;
+    let go = if m2 > 0 then 1 else 0; 0
+  };
+  let start = p + 1; let len = 24 - start; let i = 0;
+  while i < len { let _ = dst[neg + i] = dst[start + i]; let i = i + 1; 0 };
+  let _ = if neg == 1 then (let _ = dst[0] = 45 in 0) else 0;
+  len + neg
+}
+fn say(label: str, v: i64, buf: [i64]) -> i64 {
+  let n = st_str(buf, label); let _ = sys_write(1, buf, n);
+  let l = itoa(buf, v); let _ = sys_write(1, buf, l);
+  let _ = buf[0] = 10; sys_write(1, buf, 1)
+}
+fn cur_reset(cur: [i64], rp: [i64], n: i64) -> i64 {
+  let v = 0;
+  while v < n { let _ = cur[v] = rp[1 + v]; let v = v + 1; 0 };
+  0
+}
+
+// ---- ARM A: the baseline, csr_passes' fill (sgraph2.bp:50-57), reading the packed array ----
+fn fill_base(pk: [i64], m: i64, ci: [i64], cur: [i64]) -> i64 {
+  let j = 0;
+  while j < m {
+    let e = pk[j];
+    let a = e >> 32;
+    let s = cur[a];
+    let _ = ci[1 + s] = e & 4294967295;
+    let _ = cur[a] = s + 1;
+    let j = j + 1;
+    0
+  };
+  0
+}
+
+// ---- ARM B ----
+// B1: bucket histogram. nb cursors only, so this table is cache-resident by construction.
+fn bkt_hist(pk: [i64], m: i64, bc: [i64], k: i64) -> i64 {
+  let j = 0;
+  while j < m {
+    let b = (pk[j] >> 32) >> k;
+    let _ = bc[1 + b] = bc[1 + b] + 1;
+    let j = j + 1;
+    0
+  };
+  0
+}
+// B2: prefix sum over the bucket counts -> bc[b] is bucket b's write cursor.
+fn bkt_prefix(bc: [i64], nb: i64) -> i64 {
+  let b = 0;
+  while b < nb { let _ = bc[1 + b] = bc[1 + b] + bc[b]; let b = b + 1; 0 };
+  0
+}
+// B3: THE PARTITION. Unconditional -- no guard, no branch, one write per element.
+fn bkt_part(pk: [i64], m: i64, pk2: [i64], bc: [i64], k: i64) -> i64 {
+  let j = 0;
+  while j < m {
+    let e = pk[j];
+    let b = (e >> 32) >> k;
+    let s = bc[b];
+    let _ = pk2[s] = e;
+    let _ = bc[b] = s + 1;
+    let j = j + 1;
+    0
+  };
+  0
+}
+// B4: the fill, over bucket-ordered input. `cur` touches one 2^k-cell window at a time and the
+// `ci` writes are near-contiguous, because a counting sort already groups a bucket's rows.
+fn bkt_fill(pk2: [i64], lo: i64, hi: i64, ci: [i64], cur: [i64]) -> i64 {
+  let j = lo;
+  while j < hi {
+    let e = pk2[j];
+    let a = e >> 32;
+    let s = cur[a];
+    let _ = ci[1 + s] = e & 4294967295;
+    let _ = cur[a] = s + 1;
+    let j = j + 1;
+    0
+  };
+  0
+}
+fn fold_ci(ci: [i64], m: i64, rp: [i64], n: i64) -> i64 {
+  let acc = zeros(1);
+  let k = 0;
+  while k < m { let _ = acc[0] = acc[0] + ci[1 + k]; let k = k + 1; 0 };
+  acc[0] + rp[1 + n]
+}
+
+fn main(argc: i64, argv: [str]) -> i64 {
+  let n = if argc >= 3 then parse(argv[2]) else 1000000;
+  let e = if argc >= 4 then parse(argv[3]) else 5000000;
+  let k = if argc >= 5 then parse(argv[4]) else 12;
+  let reps = if argc >= 6 then parse(argv[5]) else 3;
+  let m = 2 * e;
+  let nb = (n >> k) + 1;
+  let buf = zeros(64);
+  let _ = say("n ", n, buf);
+  let _ = say("m ", m, buf);
+  let _ = say("k ", k, buf);
+  let _ = say("buckets ", nb, buf);
+  let _ = say("rows_per_bucket ", 1 << k, buf);
+
+  let pk = zeros(m);
+  let x = 4242;
+  let i = 0;
+  while i < e {
+    let x = lcg(x);
+    let a = (x >> 20) % n;
+    let x = lcg(x);
+    let b = (x >> 20) % n;
+    let _ = pk[2 * i] = (a << 32) | b;
+    let _ = pk[2 * i + 1] = (b << 32) | a;
+    let i = i + 1;
+    0
+  };
+  let cur = zeros(n);
+  let rp = zeros(n + 2);
+  let ci = zeros(m + 1);
+  let h = 0;
+  while h < m { let a = pk[h] >> 32; let _ = rp[2 + a] = rp[2 + a] + 1; let h = h + 1; 0 };
+  let v = 0;
+  while v < n { let _ = rp[2 + v] = rp[2 + v] + rp[1 + v]; let v = v + 1; 0 };
+  let pk2 = zeros(m);
+  let bc = zeros(nb + 2);
+
+  let fa = zeros(1); let fb = zeros(1);
+  let r = 0;
+  while r < reps {
+    let _ = cur_reset(cur, rp, n);
+    let a0 = clock_ms();
+    let _ = fill_base(pk, m, ci, cur);
+    let a1 = clock_ms();
+    let _ = say("repA_ms ", a1 - a0, buf);
+    let _ = fa[0] = fold_ci(ci, m, rp, n);
+
+    let _ = cur_reset(cur, rp, n);
+    let z = 0;
+    while z < nb + 2 { let _ = bc[z] = 0; let z = z + 1; 0 };
+    let b0 = clock_ms();
+    let _ = bkt_hist(pk, m, bc, k);
+    let _ = bkt_prefix(bc, nb);
+    let b1 = clock_ms();
+    let _ = bkt_part(pk, m, pk2, bc, k);
+    let b2 = clock_ms();
+    let _ = bkt_fill(pk2, 0, m, ci, cur);
+    let b3 = clock_ms();
+    let _ = say("repB_hist_ms ", b1 - b0, buf);
+    let _ = say("repB_part_ms ", b2 - b1, buf);
+    let _ = say("repB_fill_ms ", b3 - b2, buf);
+    let _ = say("repB_ms ", b3 - b0, buf);
+    let _ = fb[0] = fold_ci(ci, m, rp, n);
+    let r = r + 1;
+    0
+  };
+  let _ = say("foldA ", fa[0], buf);
+  let _ = say("foldB ", fb[0], buf);
+  let _ = say("folds_equal ", if fa[0] == fb[0] then 1 else 0, buf);
+  0
+}
