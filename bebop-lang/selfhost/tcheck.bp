@@ -281,8 +281,12 @@ fn add_input(c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64],
   while k < nt {
     let v = parse_int(line, toks[k]);
     let isz = if v == 0 then 1 else 0;
-    let _ = if (isz == 0) * (nl < 32) == 1 then (let _ = c_lits[n_cl[0] * 32 + nl] = v in 0) else 0;
-    let nl = nl + (if isz == 0 then 1 else 0) * (if nl < 32 then 1 else 0);
+    // 32 is the clause STRIDE of c_lits, so a longer clause cannot be stored
+    // at all.  Refuse it (exit 2) rather than truncating: a truncated clause is
+    // a DIFFERENT clause, and checking against it would be checking the wrong
+    // formula.  Measured on the first real `mul` obligation: 17 literals max.
+    let _ = if isz == 0 then (if nl < 32 then (let _ = c_lits[n_cl[0] * 32 + nl] = v in 0) else sys_exit(2)) else 0;
+    let nl = nl + (if isz == 0 then 1 else 0);
     let k = k + 1;
     0
   };
@@ -306,9 +310,16 @@ fn add_derived(c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64],
   while k < nt {
     let v = parse_int(line, toks[k]);
     let isz = if v == 0 then 1 else 0;
-    let _ = if in_h == 0 then (if isz == 1 then (let _ = in_h = 1 in 0) else (if nl < 32 then (let _ = lits[nl] = v in 0) else 0)) else (if isz == 1 then 0 else (if nh < 64 then (let _ = hints[nh] = v in 0) else 0));
-    let _ = if (isz == 0) * (in_h == 0) * (nl < 32) == 1 then (let _ = nl = nl + 1 in 0) else 0;
-    let _ = if (isz == 0) * (in_h == 1) * (nh < 64) == 1 then (let _ = nh = nh + 1 in 0) else 0;
+    // HINT CAP, raised 64 -> 1024 and made LOUD, 2026-09-14.  The first real
+    // multiplication obligation (x*3 == x + (x<<1), 2846 input + 1712 derived
+    // clauses) has a step with 497 antecedents.  At 64 this reader TRUNCATED the
+    // hint list in silence, then failed to reach a conflict and exited 2 -- a
+    // valid certificate refused for a reason nothing printed, while the Python
+    // reference checker verified all 1712 steps.  A cap that is too small must
+    // SAY SO, so both buffers now refuse instead of truncating.
+    let _ = if in_h == 0 then (if isz == 1 then (let _ = in_h = 1 in 0) else (if nl < 32 then (let _ = lits[nl] = v in 0) else sys_exit(2))) else (if isz == 1 then 0 else (if nh < 1024 then (let _ = hints[nh] = v in 0) else sys_exit(2)));
+    let _ = if (isz == 0) * (in_h == 0) == 1 then (let _ = nl = nl + 1 in 0) else 0;
+    let _ = if (isz == 0) * (in_h == 1) == 1 then (let _ = nh = nh + 1 in 0) else 0;
     let k = k + 1;
     0
   };
@@ -974,7 +985,7 @@ fn verify_cert(cert: str, obl: str, obl_given: i64) -> i64 {
   let line = zeros(4096);
   let toks = zeros(512);
   let lits = zeros(32);
-  let hints = zeros(64);
+  let hints = zeros(1024);
   let done = 0;
   while done == 0 {
     let nread = read_line(cert, pos, line, 4096);
@@ -1417,6 +1428,42 @@ fn bb_selftest(obuf: [i64], opos: [i64], c_id: [i64], c_len: [i64], c_lits: [i64
 //            polynomials start at offset 16; poly at `base` is
 //            R[base] = nterms, R[base+1] = cap, then key/coeff pairs.
 // Reject codes: 71 arena/term capacity, 72 monomial exponent overflow.
+// MONOMIAL REPRESENTATION (widened 2026-09-14, operator ruling): a monomial is
+// mn_w() consecutive i64 cells, each packing mn_nv() exponents as base-16
+// nibbles.  Raising mn_w() is the ONE change that widens the variable budget:
+// 1 word -> 15 variables, 2 -> 30, 3 -> 45.  Why 15 nibbles and not 16: the
+// canonical sort orders monomials with `>` on each word, so a word must stay
+// NON-NEGATIVE, and a 16th nibble occupies the sign bit.  Why fixed width
+// rather than a sparse (variable, exponent) pair list: fixed-width records keep
+// rg_canon's sort an in-place swap of equal-sized slots and keep the arena a
+// flat bump allocator with no monomial pool and no compaction -- a pair list
+// would need both, and Law L8 (no allocation inside a while body) makes a pool
+// with per-term offsets the only shape it could take.  The price of the widening
+// is paid in exactly two places: mn_cmp turns rg_canon's single integer compare
+// into an mn_w()-word lexicographic loop, and mn_mul turns the single integer
+// add of two packed keys into mn_w() * mn_nv() nibble adds -- which is the loop
+// the previous key-multiply already ran over 4 nibbles, so it is a widening of
+// an existing loop, not a new algorithm.  At mn_w() = 1 a term record is 1
+// monomial word plus 1 coefficient = 2 cells, exactly the old (key, coeff)
+// pair, and variable vi still occupies nibble vi, so every key, every sort
+// order and every arena figure is bit-for-bit what it was before the widening.
+fn mn_w() -> i64 { 1 }
+fn mn_nv() -> i64 { 15 }
+
+// R layout:  R[0] next free offset   R[1] reject code (0 = clean)
+//            R[2] arena cells        R[3] monomial-overflow count
+//            R[4] R[5] R[6] row diagnostics
+//            offset 8 is the NULL polynomial (cap 0: every append to it is
+//            refused, so an exhausted arena cannot write out of bounds)
+//            offset 10..15 is the TRASH monomial a refused append returns, so a
+//            caller that fills it without checking corrupts nothing.  That is 6
+//            cells, so mn_w() <= 6 without moving the polynomial start.
+//            polynomials start at offset 16; poly at `base` is
+//            R[base] = nterms, R[base+1] = cap, then nterms records of
+//            mn_w() monomial words followed by one coefficient.
+// Reject codes: 71 arena/term capacity, 72 monomial exponent or variable
+//               overflow, 73 zero divisor, 74 floor-bound violation,
+//               75 order transfer not licensed.
 fn rg_init(R: [i64], cells: i64) -> i64 {
   let _ = R[0] = 16;
   let _ = R[1] = 0;
@@ -1427,9 +1474,76 @@ fn rg_init(R: [i64], cells: i64) -> i64 {
   0
 }
 
+fn mn_zero(R: [i64], p: i64) -> i64 {
+  let w = 0;
+  while w < mn_w() { let _ = R[p + w] = 0; let w = w + 1; 0 };
+  0
+}
+
+fn mn_copy(R: [i64], src: i64, dst: i64) -> i64 {
+  let w = 0;
+  while w < mn_w() { let _ = R[dst + w] = R[src + w]; let w = w + 1; 0 };
+  0
+}
+
+// lexicographic, most significant word first: 1 if a > b, -1 if a < b, 0 equal
+fn mn_cmp(R: [i64], pa: i64, pb: i64) -> i64 {
+  let res = 0;
+  let w = mn_w() - 1;
+  while w >= 0 {
+    let av = R[pa + w];
+    let bv = R[pb + w];
+    let _ = if res == 0 then (
+        let _ = if av > bv then (let _ = res = 1 in 0) else 0 in
+        let _ = if av < bv then (let _ = res = 0 - 1 in 0) else 0 in 0)
+      else 0;
+    let w = w - 1;
+    0
+  };
+  res
+}
+
+fn mn_eq(R: [i64], pa: i64, pb: i64) -> i64 {
+  if mn_cmp(R, pa, pb) == 0 then 1 else 0
+}
+
+// variable vi to the first power: nibble (vi mod mn_nv()) of word (vi / mn_nv())
+fn mn_setvar(R: [i64], p: i64, vi: i64) -> i64 {
+  let _ = mn_zero(R, p);
+  let w = vi / mn_nv();
+  let nb = vi - w * mn_nv();
+  let _ = R[p + w] = 1 << (nb * 4);
+  0
+}
+
+// multiply two monomials: add the nibbles word by word, and LOUDLY record any
+// exponent that would leave its nibble rather than letting it carry into the
+// next variable's exponent.  po must not alias pa or pb.
+fn mn_mul(R: [i64], pa: i64, pb: i64, po: i64) -> i64 {
+  let w = 0;
+  while w < mn_w() {
+    let ka = R[pa + w];
+    let kb = R[pb + w];
+    let key = 0;
+    let i = 0;
+    while i < mn_nv() {
+      let sh = i * 4;
+      let e = ((ka >> sh) & 15) + ((kb >> sh) & 15);
+      let _ = if e > 15 then (let _ = R[1] = 72 in let _ = R[3] = R[3] + 1 in 0) else 0;
+      let _ = key = key + ((e & 15) << sh);
+      let i = i + 1;
+      0
+    };
+    let _ = R[po + w] = key;
+    let w = w + 1;
+    0
+  };
+  0
+}
+
 fn rg_new(R: [i64], cap: i64) -> i64 {
   let base = R[0];
-  let need = base + 2 + cap * 2;
+  let need = base + 2 + cap * (mn_w() + 1);
   let over = if need > R[2] then 1 else 0;
   let _ = if over == 1 then (let _ = R[1] = 71 in 0) else (
       let _ = R[0] = need in
@@ -1438,51 +1552,59 @@ fn rg_new(R: [i64], cap: i64) -> i64 {
   if over == 1 then 8 else base
 }
 
-fn rg_push(R: [i64], base: i64, key: i64, coeff: i64) -> i64 {
+// append a term with coefficient `coeff` and a ZEROED monomial; return the new
+// term's MONOMIAL offset, which the caller then fills.  A refused append
+// returns the trash monomial at offset 10 and records 71.
+fn rg_term(R: [i64], base: i64, coeff: i64) -> i64 {
   let n = R[base];
   let cap = R[base + 1];
-  let _ = if n < cap then (
-      let _ = R[base + 2 + n * 2] = key in
-      let _ = R[base + 3 + n * 2] = coeff in
-      let _ = R[base] = n + 1 in 0)
-    else (let _ = R[1] = 71 in 0);
-  0
+  let ok = if n < cap then 1 else 0;
+  let _ = if ok == 0 then (let _ = R[1] = 71 in 0) else 0;
+  let toff = if ok == 1 then (base + 2 + n * (mn_w() + 1)) else 10;
+  let _ = if ok == 1 then (
+      let _ = R[toff + mn_w()] = coeff in
+      let _ = R[base] = n + 1 in 0) else 0;
+  let _ = mn_zero(R, toff);
+  toff
 }
 
-// sort by monomial key, then combine equal keys and drop zero coefficients.
-// The write cursor w never overtakes the read cursor i, so this is in place.
+// sort by monomial, then combine equal monomials and drop zero coefficients.
+// The sort is insertion by ADJACENT SWAP, which needs no scratch monomial; the
+// write cursor w never overtakes the read cursor i, so the combine is in place.
 fn rg_canon(R: [i64], base: i64) -> i64 {
   let n = R[base];
+  let st = mn_w() + 1;
   let i = 1;
   while i < n {
-    let k = R[base + 2 + i * 2];
-    let v = R[base + 3 + i * 2];
     let j = i;
-    while (if j > 0 then 1 else 0) * (if R[base + 2 + (j - 1) * 2] > k then 1 else 0) == 1 {
-      let _ = R[base + 2 + j * 2] = R[base + 2 + (j - 1) * 2];
-      let _ = R[base + 3 + j * 2] = R[base + 3 + (j - 1) * 2];
+    while (if j > 0 then 1 else 0) * (if mn_cmp(R, base + 2 + (j - 1) * st, base + 2 + j * st) > 0 then 1 else 0) == 1 {
+      let c = 0;
+      while c < st {
+        let t = R[base + 2 + (j - 1) * st + c];
+        let _ = R[base + 2 + (j - 1) * st + c] = R[base + 2 + j * st + c];
+        let _ = R[base + 2 + j * st + c] = t;
+        let c = c + 1;
+        0
+      };
       let j = j - 1;
       0
     };
-    let _ = R[base + 2 + j * 2] = k;
-    let _ = R[base + 3 + j * 2] = v;
     let i = i + 1;
     0
   };
   let w = 0;
   let i = 0;
   while i < n {
-    let k = R[base + 2 + i * 2];
-    let acc = R[base + 3 + i * 2];
+    let acc = R[base + 2 + i * st + mn_w()];
     let j = i + 1;
-    while (if j < n then 1 else 0) * (if R[base + 2 + j * 2] == k then 1 else 0) == 1 {
-      let _ = acc = acc + R[base + 3 + j * 2];
+    while (if j < n then 1 else 0) * (if mn_eq(R, base + 2 + i * st, base + 2 + j * st) == 1 then 1 else 0) == 1 {
+      let _ = acc = acc + R[base + 2 + j * st + mn_w()];
       let j = j + 1;
       0
     };
     let _ = if acc != 0 then (
-        let _ = R[base + 2 + w * 2] = k in
-        let _ = R[base + 3 + w * 2] = acc in
+        let _ = mn_copy(R, base + 2 + i * st, base + 2 + w * st) in
+        let _ = R[base + 2 + w * st + mn_w()] = acc in
         let _ = w = w + 1 in 0) else 0;
     let i = j;
     0
@@ -1493,46 +1615,33 @@ fn rg_canon(R: [i64], base: i64) -> i64 {
 
 fn rg_const(R: [i64], out: i64, c: i64) -> i64 {
   let _ = R[out] = 0;
-  let _ = if c != 0 then rg_push(R, out, 0, c) else 0;
+  let _ = if c != 0 then (let _ = rg_term(R, out, c) in 0) else 0;
   out
 }
 
-// variable vi (0..3) to the first power: its exponent lives in nibble vi.
 fn rg_var(R: [i64], out: i64, vi: i64) -> i64 {
   let _ = R[out] = 0;
-  let _ = if vi < 4 then rg_push(R, out, 1 << (vi * 4), 1) else (let _ = R[1] = 72 in 0);
+  let cap = mn_w() * mn_nv();
+  let _ = if vi < cap then (let t = rg_term(R, out, 1) in let _ = mn_setvar(R, t, vi) in 0)
+          else (let _ = R[1] = 72 in 0);
   out
-}
-
-// multiply two monomial keys: add the nibbles, and LOUDLY record any exponent
-// that would leave its nibble rather than letting it carry into the next
-// variable's exponent.
-fn rg_kmul(R: [i64], ka: i64, kb: i64) -> i64 {
-  let key = 0;
-  let i = 0;
-  while i < 4 {
-    let sh = i * 4;
-    let e = ((ka >> sh) & 15) + ((kb >> sh) & 15);
-    let _ = if e > 15 then (let _ = R[1] = 72 in let _ = R[3] = R[3] + 1 in 0) else 0;
-    let _ = key = key + ((e & 15) << sh);
-    let i = i + 1;
-    0
-  };
-  key
 }
 
 // out must not alias x or y.
 fn rg_add(R: [i64], x: i64, y: i64, out: i64) -> i64 {
+  let st = mn_w() + 1;
   let _ = R[out] = 0;
   let i = 0;
   while i < R[x] {
-    let _ = rg_push(R, out, R[x + 2 + i * 2], R[x + 3 + i * 2]);
+    let t = rg_term(R, out, R[x + 2 + i * st + mn_w()]);
+    let _ = mn_copy(R, x + 2 + i * st, t);
     let i = i + 1;
     0
   };
   let i = 0;
   while i < R[y] {
-    let _ = rg_push(R, out, R[y + 2 + i * 2], R[y + 3 + i * 2]);
+    let t = rg_term(R, out, R[y + 2 + i * st + mn_w()]);
+    let _ = mn_copy(R, y + 2 + i * st, t);
     let i = i + 1;
     0
   };
@@ -1541,10 +1650,12 @@ fn rg_add(R: [i64], x: i64, y: i64, out: i64) -> i64 {
 }
 
 fn rg_scale(R: [i64], x: i64, k: i64, out: i64) -> i64 {
+  let st = mn_w() + 1;
   let _ = R[out] = 0;
   let i = 0;
   while i < R[x] {
-    let _ = rg_push(R, out, R[x + 2 + i * 2], R[x + 3 + i * 2] * k);
+    let t = rg_term(R, out, R[x + 2 + i * st + mn_w()] * k);
+    let _ = mn_copy(R, x + 2 + i * st, t);
     let i = i + 1;
     0
   };
@@ -1559,13 +1670,14 @@ fn rg_sub(R: [i64], x: i64, y: i64, neg: i64, out: i64) -> i64 {
 
 // out must not alias x or y.
 fn rg_mul(R: [i64], x: i64, y: i64, out: i64) -> i64 {
+  let st = mn_w() + 1;
   let _ = R[out] = 0;
   let i = 0;
   while i < R[x] {
     let j = 0;
     while j < R[y] {
-      let k = rg_kmul(R, R[x + 2 + i * 2], R[y + 2 + j * 2]);
-      let _ = rg_push(R, out, k, R[x + 3 + i * 2] * R[y + 3 + j * 2]);
+      let t = rg_term(R, out, R[x + 2 + i * st + mn_w()] * R[y + 2 + j * st + mn_w()]);
+      let _ = mn_mul(R, x + 2 + i * st, y + 2 + j * st, t);
       let j = j + 1;
       0
     };
@@ -1581,6 +1693,7 @@ fn rg_mul(R: [i64], x: i64, y: i64, out: i64) -> i64 {
 // never 1, so an exhausted arena or an overflowed exponent can never manufacture
 // a proof.
 fn rg_eq(R: [i64], x: i64, y: i64) -> i64 {
+  let st = mn_w() + 1;
   let _ = rg_canon(R, x);
   let _ = rg_canon(R, y);
   let nx = R[x];
@@ -1589,8 +1702,8 @@ fn rg_eq(R: [i64], x: i64, y: i64) -> i64 {
   let i = 0;
   while i < nx {
     let _ = if i < ny then (
-        let _ = if R[x + 2 + i * 2] != R[y + 2 + i * 2] then (let _ = same = 0 in 0) else 0 in
-        let _ = if R[x + 3 + i * 2] != R[y + 3 + i * 2] then (let _ = same = 0 in 0) else 0 in 0)
+        let _ = if mn_eq(R, x + 2 + i * st, y + 2 + i * st) == 0 then (let _ = same = 0 in 0) else 0 in
+        let _ = if R[x + 2 + i * st + mn_w()] != R[y + 2 + i * st + mn_w()] then (let _ = same = 0 in 0) else 0 in 0)
       else 0;
     let i = i + 1;
     0
@@ -1773,18 +1886,20 @@ fn dv_split(R: [i64], x: i64, d: i64, q: i64, r: i64) -> i64 {
   let dd = if d == 0 then 1 else d;
   let _ = R[q] = 0;
   let _ = R[r] = 0;
+  let st = mn_w() + 1;
   let i = 0;
   while i < R[x] {
-    let k = R[x + 2 + i * 2];
-    let c = R[x + 3 + i * 2];
+    let c = R[x + 2 + i * st + mn_w()];
     let qc = dv_fdiv(c, dd);
     let rc = c - qc * dd;
     // live bound check -- this FIRES if the floor correction above is ever wrong
     let bad = if dd > 0 then ((if rc < 0 then 1 else 0) + (if rc >= dd then 1 else 0))
                         else ((if rc > 0 then 1 else 0) + (if rc <= dd then 1 else 0));
     let _ = if bad > 0 then (let _ = R[1] = 74 in 0) else 0;
-    let _ = rg_push(R, q, k, qc);
-    let _ = rg_push(R, r, k, rc);
+    let tq = rg_term(R, q, qc);
+    let _ = mn_copy(R, x + 2 + i * st, tq);
+    let tr = rg_term(R, r, rc);
+    let _ = mn_copy(R, x + 2 + i * st, tr);
     let i = i + 1;
     0
   };
@@ -2028,6 +2143,252 @@ fn ob_satsize(obuf: [i64], opos: [i64], c_id: [i64], c_len: [i64], c_lits: [i64]
   0
 }
 
+// --- the widened key, and fp_mul ---
+// W1/W2 exercise the representation itself: variable 14 is the top nibble of
+// word 0 and must work exactly like variable 0, and variable 15 is past
+// mn_w() * mn_nv() and must be REFUSED (72) rather than aliasing variable 0 of
+// the next word that does not exist.
+//
+// F1..F5 put `fp_mul` (selfhost/prelude/fp.bp:6-29) through the rule.  fp_mul is
+// a Q32 fixed-point multiply: it splits both operands at bit 32, then splits the
+// low halves again at bit 16, and every one of those splits is a FLOOR DIVISION,
+// so lemma D1 introduces a fresh quotient variable per split.  Free variables
+// after full substitution: a1, ah, al, b1, bh, bl, plus q1 = floor(al*bl/2^16),
+// q2 = floor((ah*bl + al*bh + q1)/2^16), and Q = floor(a0*b0/2^32) -- NINE, at
+// degree 2.  That is why the 4-variable key had to be widened, and it is also
+// why widening was not sufficient: see F3.
+fn fp_selftest(obuf: [i64], opos: [i64], R: [i64], cells: i64) -> i64 {
+  // W1: the top variable of the word behaves like any other
+  let _ = rg_init(R, cells);
+  let px = rg_var(R, rg_new(R, 4), 0);
+  let pw = rg_var(R, rg_new(R, 4), 14);
+  let sxw = rg_add(R, px, pw, rg_new(R, 8));
+  let lhs = rg_mul(R, sxw, sxw, rg_new(R, 16));
+  let xx = rg_mul(R, px, px, rg_new(R, 8));
+  let ww = rg_mul(R, pw, pw, rg_new(R, 8));
+  let xw = rg_mul(R, px, pw, rg_new(R, 8));
+  let xw2 = rg_scale(R, xw, 2, rg_new(R, 8));
+  let t1 = rg_add(R, xx, xw2, rg_new(R, 16));
+  let rhs = rg_add(R, t1, ww, rg_new(R, 16));
+  let _ = R[4] = R[lhs];
+  let _ = rg_row(obuf, opos, "W1 key var14 (x+v14)^2 expands    want 1", rg_eq(R, lhs, rhs), R);
+
+  // W2 NEG: variable 15 is out of the 15-variable budget and must be refused
+  let _ = rg_init(R, cells);
+  let px = rg_var(R, rg_new(R, 4), 0);
+  let pv = rg_var(R, rg_new(R, 4), 15);
+  let _ = R[4] = R[pv];
+  let _ = rg_row(obuf, opos, "W2 key var15 past budget  NEG     want 0 reject=72", rg_eq(R, pv, px), R);
+
+  // F1: the bit-32 split recombines, AND the high half vanishes.  Over Z/2^64 the
+  // a1*b1 term carries 2^32 * 2^32 == 2^64 == 0, so it is dropped by canon -- the
+  // ring rule demonstrating, rather than being told, that it cannot see overflow.
+  let _ = rg_init(R, cells);
+  let a1 = rg_var(R, rg_new(R, 4), 0);
+  let ah = rg_var(R, rg_new(R, 4), 1);
+  let al = rg_var(R, rg_new(R, 4), 2);
+  let b1 = rg_var(R, rg_new(R, 4), 3);
+  let bh = rg_var(R, rg_new(R, 4), 4);
+  let bl = rg_var(R, rg_new(R, 4), 5);
+  let ahs = rg_scale(R, ah, 65536, rg_new(R, 4));
+  let a0 = rg_add(R, ahs, al, rg_new(R, 8));
+  let bhs = rg_scale(R, bh, 65536, rg_new(R, 4));
+  let b0 = rg_add(R, bhs, bl, rg_new(R, 8));
+  let a1s = rg_scale(R, a1, 4294967296, rg_new(R, 4));
+  let aa = rg_add(R, a1s, a0, rg_new(R, 8));
+  let b1s = rg_scale(R, b1, 4294967296, rg_new(R, 4));
+  let ab = rg_add(R, b1s, b0, rg_new(R, 8));
+  let lhs = rg_mul(R, aa, ab, rg_new(R, 32));
+  let a1b0 = rg_mul(R, a1, b0, rg_new(R, 8));
+  let a0b1 = rg_mul(R, a0, b1, rg_new(R, 8));
+  let mid = rg_add(R, a1b0, a0b1, rg_new(R, 16));
+  let mids = rg_scale(R, mid, 4294967296, rg_new(R, 16));
+  let a0b0 = rg_mul(R, a0, b0, rg_new(R, 16));
+  let rhs = rg_add(R, mids, a0b0, rg_new(R, 32));
+  let _ = R[4] = R[lhs];
+  let _ = rg_row(obuf, opos, "F1 fp split aa*ab == mid*2^32+a0*b0  want 1", rg_eq(R, lhs, rhs), R);
+
+  // F1n NEG: one off and the recombination is gone
+  let _ = rg_init(R, cells);
+  let a1 = rg_var(R, rg_new(R, 4), 0);
+  let ah = rg_var(R, rg_new(R, 4), 1);
+  let al = rg_var(R, rg_new(R, 4), 2);
+  let b1 = rg_var(R, rg_new(R, 4), 3);
+  let bh = rg_var(R, rg_new(R, 4), 4);
+  let bl = rg_var(R, rg_new(R, 4), 5);
+  let ahs = rg_scale(R, ah, 65536, rg_new(R, 4));
+  let a0 = rg_add(R, ahs, al, rg_new(R, 8));
+  let bhs = rg_scale(R, bh, 65536, rg_new(R, 4));
+  let b0 = rg_add(R, bhs, bl, rg_new(R, 8));
+  let a1s = rg_scale(R, a1, 4294967296, rg_new(R, 4));
+  let aa = rg_add(R, a1s, a0, rg_new(R, 8));
+  let b1s = rg_scale(R, b1, 4294967296, rg_new(R, 4));
+  let ab = rg_add(R, b1s, b0, rg_new(R, 8));
+  let lhs = rg_mul(R, aa, ab, rg_new(R, 32));
+  let a1b0 = rg_mul(R, a1, b0, rg_new(R, 8));
+  let a0b1 = rg_mul(R, a0, b1, rg_new(R, 8));
+  let mid = rg_add(R, a1b0, a0b1, rg_new(R, 16));
+  let mids = rg_scale(R, mid, 4294967296, rg_new(R, 16));
+  let a0b0 = rg_mul(R, a0, b0, rg_new(R, 16));
+  let one = rg_const(R, rg_new(R, 4), 1);
+  let t = rg_add(R, mids, a0b0, rg_new(R, 32));
+  let rhs = rg_add(R, t, one, rg_new(R, 32));
+  let _ = R[4] = R[lhs];
+  let _ = rg_row(obuf, opos, "F1n fp split off by one   NEG        want 0", rg_eq(R, lhs, rhs), R);
+
+  // F2: the bit-16 split of the low halves recombines
+  let _ = rg_init(R, cells);
+  let ah = rg_var(R, rg_new(R, 4), 1);
+  let al = rg_var(R, rg_new(R, 4), 2);
+  let bh = rg_var(R, rg_new(R, 4), 4);
+  let bl = rg_var(R, rg_new(R, 4), 5);
+  let ahs = rg_scale(R, ah, 65536, rg_new(R, 4));
+  let a0 = rg_add(R, ahs, al, rg_new(R, 8));
+  let bhs = rg_scale(R, bh, 65536, rg_new(R, 4));
+  let b0 = rg_add(R, bhs, bl, rg_new(R, 8));
+  let lhs = rg_mul(R, a0, b0, rg_new(R, 16));
+  let ahbh = rg_mul(R, ah, bh, rg_new(R, 8));
+  let hi = rg_scale(R, ahbh, 4294967296, rg_new(R, 8));
+  let ahbl = rg_mul(R, ah, bl, rg_new(R, 8));
+  let albh = rg_mul(R, al, bh, rg_new(R, 8));
+  let cr = rg_add(R, ahbl, albh, rg_new(R, 16));
+  let crs = rg_scale(R, cr, 65536, rg_new(R, 16));
+  let albl = rg_mul(R, al, bl, rg_new(R, 8));
+  let t = rg_add(R, hi, crs, rg_new(R, 16));
+  let rhs = rg_add(R, t, albl, rg_new(R, 16));
+  let _ = R[4] = R[lhs];
+  let _ = rg_row(obuf, opos, "F2 fp split a0*b0 at bit 16          want 1", rg_eq(R, lhs, rhs), R);
+
+  // F2n NEG: the cross term really is required
+  let _ = rg_init(R, cells);
+  let ah = rg_var(R, rg_new(R, 4), 1);
+  let al = rg_var(R, rg_new(R, 4), 2);
+  let bh = rg_var(R, rg_new(R, 4), 4);
+  let bl = rg_var(R, rg_new(R, 4), 5);
+  let ahs = rg_scale(R, ah, 65536, rg_new(R, 4));
+  let a0 = rg_add(R, ahs, al, rg_new(R, 8));
+  let bhs = rg_scale(R, bh, 65536, rg_new(R, 4));
+  let b0 = rg_add(R, bhs, bl, rg_new(R, 8));
+  let lhs = rg_mul(R, a0, b0, rg_new(R, 16));
+  let ahbh = rg_mul(R, ah, bh, rg_new(R, 8));
+  let hi = rg_scale(R, ahbh, 4294967296, rg_new(R, 8));
+  let albl = rg_mul(R, al, bl, rg_new(R, 8));
+  let rhs = rg_add(R, hi, albl, rg_new(R, 16));
+  let _ = R[4] = R[lhs];
+  let _ = rg_row(obuf, opos, "F2n fp split no cross term  NEG      want 0", rg_eq(R, lhs, rhs), R);
+
+  // F3 THE MITER, and the real answer for fp_mul.  fp_mul's result is
+  //   p    = a1*b1*2^32 + (a1*b0 + a0*b1) + (ah*bh + q2)
+  // and the claim compares it against
+  //   (aa*ab) >> 32 = a1*b1*2^32 + (a1*b0 + a0*b1) + Q,   Q = floor(a0*b0/2^32).
+  // Everything cancels except `ah*bh + q2 == Q`, which is NOT a polynomial
+  // identity: q2 and Q are independent D1 quotient variables and equating them
+  // needs the NESTED-FLOOR law floor(floor(x/m)/n) == floor(x/(m*n)), an ORDER
+  // fact about remainder bounds.  So the rule REFUSES, and the term count below
+  // is the residual it is left holding.
+  let _ = rg_init(R, cells);
+  let a1 = rg_var(R, rg_new(R, 4), 0);
+  let ah = rg_var(R, rg_new(R, 4), 1);
+  let al = rg_var(R, rg_new(R, 4), 2);
+  let b1 = rg_var(R, rg_new(R, 4), 3);
+  let bh = rg_var(R, rg_new(R, 4), 4);
+  let bl = rg_var(R, rg_new(R, 4), 5);
+  let q2 = rg_var(R, rg_new(R, 4), 7);
+  let bq = rg_var(R, rg_new(R, 4), 8);
+  let ahs = rg_scale(R, ah, 65536, rg_new(R, 4));
+  let a0 = rg_add(R, ahs, al, rg_new(R, 8));
+  let bhs = rg_scale(R, bh, 65536, rg_new(R, 4));
+  let b0 = rg_add(R, bhs, bl, rg_new(R, 8));
+  let a1b1 = rg_mul(R, a1, b1, rg_new(R, 8));
+  let hi = rg_scale(R, a1b1, 4294967296, rg_new(R, 8));
+  let a1b0 = rg_mul(R, a1, b0, rg_new(R, 8));
+  let a0b1 = rg_mul(R, a0, b1, rg_new(R, 8));
+  let mid = rg_add(R, a1b0, a0b1, rg_new(R, 16));
+  let ahbh = rg_mul(R, ah, bh, rg_new(R, 8));
+  let low = rg_add(R, ahbh, q2, rg_new(R, 8));
+  let t = rg_add(R, hi, mid, rg_new(R, 16));
+  let pfp = rg_add(R, t, low, rg_new(R, 32));
+  let tg = rg_add(R, t, bq, rg_new(R, 32));
+  let res = rg_sub(R, pfp, tg, rg_new(R, 32), rg_new(R, 32));
+  let _ = R[4] = R[res];
+  let _ = rg_row(obuf, opos, "F3 fp_mul p == (a*b)>>32 MITER       want 0", rg_eq(R, pfp, tg), R);
+
+  // F4 RESIDUAL ISOLATION (a diagnostic, NOT a proof): hand the rule the
+  // nested-floor law's conclusion Q := ah*bh + q2 and the miter closes.  F3 = 0
+  // and F4 = 1 together say the residual after ring + D1 is EXACTLY that one
+  // law and nothing else -- and that the rule cannot get there itself, because
+  // deciding identity is not the same as reasoning from hypotheses.
+  let _ = rg_init(R, cells);
+  let a1 = rg_var(R, rg_new(R, 4), 0);
+  let ah = rg_var(R, rg_new(R, 4), 1);
+  let al = rg_var(R, rg_new(R, 4), 2);
+  let b1 = rg_var(R, rg_new(R, 4), 3);
+  let bh = rg_var(R, rg_new(R, 4), 4);
+  let bl = rg_var(R, rg_new(R, 4), 5);
+  let q2 = rg_var(R, rg_new(R, 4), 7);
+  let ahs = rg_scale(R, ah, 65536, rg_new(R, 4));
+  let a0 = rg_add(R, ahs, al, rg_new(R, 8));
+  let bhs = rg_scale(R, bh, 65536, rg_new(R, 4));
+  let b0 = rg_add(R, bhs, bl, rg_new(R, 8));
+  let a1b1 = rg_mul(R, a1, b1, rg_new(R, 8));
+  let hi = rg_scale(R, a1b1, 4294967296, rg_new(R, 8));
+  let a1b0 = rg_mul(R, a1, b0, rg_new(R, 8));
+  let a0b1 = rg_mul(R, a0, b1, rg_new(R, 8));
+  let mid = rg_add(R, a1b0, a0b1, rg_new(R, 16));
+  let ahbh = rg_mul(R, ah, bh, rg_new(R, 8));
+  let low = rg_add(R, ahbh, q2, rg_new(R, 8));
+  let t = rg_add(R, hi, mid, rg_new(R, 16));
+  let pfp = rg_add(R, t, low, rg_new(R, 32));
+  let tg = rg_add(R, t, low, rg_new(R, 32));
+  let _ = R[4] = R[pfp];
+  let _ = rg_row(obuf, opos, "F4 fp_mul with nested-floor GIVEN    want 1", rg_eq(R, pfp, tg), R);
+
+  // F4n NEG: a wrong residual must not close it
+  let _ = rg_init(R, cells);
+  let ah = rg_var(R, rg_new(R, 4), 1);
+  let bh = rg_var(R, rg_new(R, 4), 4);
+  let q2 = rg_var(R, rg_new(R, 4), 7);
+  let ahbh = rg_mul(R, ah, bh, rg_new(R, 8));
+  let low = rg_add(R, ahbh, q2, rg_new(R, 8));
+  let one = rg_const(R, rg_new(R, 4), 1);
+  let bad = rg_add(R, low, one, rg_new(R, 8));
+  let _ = R[4] = R[low];
+  let _ = rg_row(obuf, opos, "F4n fp_mul wrong residual  NEG       want 0", rg_eq(R, low, bad), R);
+
+  // F5: the missing law, CHECKED where it is checkable -- on a constant, with
+  // the floor lemmas that already exist.  floor(floor(x/2^16)/2^16) computed by
+  // two D1 splits must equal floor(x/2^32) computed by one.  This is the law
+  // fp_mul needs; what the rule cannot do is establish it SYMBOLICALLY.
+  let _ = rg_init(R, cells);
+  let x = rg_const(R, rg_new(R, 4), 123456789012345);
+  let q1 = rg_new(R, 4);
+  let r1 = rg_new(R, 4);
+  let _ = dv_split(R, x, 65536, q1, r1);
+  let q2 = rg_new(R, 4);
+  let r2 = rg_new(R, 4);
+  let _ = dv_split(R, q1, 65536, q2, r2);
+  let q3 = rg_new(R, 4);
+  let r3 = rg_new(R, 4);
+  let _ = dv_split(R, x, 4294967296, q3, r3);
+  let _ = rg_row(obuf, opos, "F5 nested floor /2^16/2^16 == /2^32  want 1", rg_eq(R, q2, q3), R);
+
+  // F5n NEG: the composition is 2^16 * 2^16, not 2^31
+  let _ = rg_init(R, cells);
+  let x = rg_const(R, rg_new(R, 4), 123456789012345);
+  let q1 = rg_new(R, 4);
+  let r1 = rg_new(R, 4);
+  let _ = dv_split(R, x, 65536, q1, r1);
+  let q2 = rg_new(R, 4);
+  let r2 = rg_new(R, 4);
+  let _ = dv_split(R, q1, 65536, q2, r2);
+  let q4 = rg_new(R, 4);
+  let r4 = rg_new(R, 4);
+  let _ = dv_split(R, x, 2147483648, q4, r4);
+  let _ = rg_row(obuf, opos, "F5n nested floor vs /2^31   NEG      want 0", rg_eq(R, q2, q4), R);
+
+  0
+}
+
 // --- path helpers ---
 fn str_to_cells(dst: [i64], src: str) -> i64 {
   let i = 0;
@@ -2095,6 +2456,7 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let _ = if st_mode == 1 then rg_selftest(sobuf, sopos, sring, sz_r) else 0;
   let _ = if st_mode == 1 then dv_selftest(sobuf, sopos, sring, sz_r) else 0;
   let _ = if st_mode == 1 then ob_selftest(sobuf, sopos, sring, sz_r) else 0;
+  let _ = if st_mode == 1 then fp_selftest(sobuf, sopos, sring, sz_r) else 0;
   let _ = if st_mode == 1 then ob_satsize(sobuf, sopos, sc_id, sc_len, sc_lits, sn_cl, sassign, snv, sa, sb, sr, ssh) else 0;
   let _ = if st_mode == 1 then sys_exit(0) else 0;
   let fd = sys_open(pc, lc, 0);

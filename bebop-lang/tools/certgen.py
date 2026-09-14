@@ -44,11 +44,17 @@ so ONE forward pass checks well-formedness and acyclicity together):
     obligation <name>
     <id> var <name>                   a fresh 64-bit variable
     <id> const <decimal>              a 64-bit constant (two's complement)
-    <id> add|and|or|xor <a> <b>
+    <id> add|sub|mul|and|or|xor <a> <b>
     <id> not <a>
     <id> shl|lshr <a> <k>             k a literal shift amount 0..63
     <id> eq <a> <b>                   a boolean node
     prove <id>
+
+  There is deliberately NO sdiv/srem. Nothing in the tree can bit-blast a
+  64-bit division -- `tcheck.bp` has no divider -- and a producer that emits an
+  obligation no checker can discharge is worse than one that refuses. `mul` is
+  here because `bb_mul64` works and its cost is known (33,777 clauses for one
+  symbolic 64x64 multiply, measured 2026-09-14); a divider has neither.
 
 Usage:
     tools/certgen.py <obligation.obl> <out.cert> [--cadical <path>]
@@ -110,7 +116,7 @@ def parse(path):
         if nid in nodes:
             die('line %d: duplicate node id %d' % (i, nid))
         for a in args:
-            if re.fullmatch(r'-?\d+', a) and op in ('add', 'and', 'or', 'xor', 'not', 'eq'):
+            if re.fullmatch(r'-?\d+', a) and op in ('add', 'sub', 'mul', 'and', 'or', 'xor', 'not', 'eq'):
                 if int(a) >= nid:
                     die('line %d: node %d refers to %s -- args must be STRICTLY smaller '
                         '(this is what makes one forward pass enough)' % (i, nid, a))
@@ -157,6 +163,67 @@ class CNF:
         self.add(-a, -b, -o); self.add(a, b, -o); self.add(a, -b, o); self.add(-a, b, o)
         return o
 
+    # --- constant-folding gates, used ONLY by the mul/sub path -------------
+    # gate_and/gate_or/gate_xor above are deliberately left alone, so every
+    # obligation that predates `mul` emits a byte-identical CNF (checked by
+    # regenerating arith_add.cert and comparing).  A folded gate costs no
+    # variable and no clause, which is what makes a shift-and-add multiplier
+    # affordable here for the same reason it does in selfhost/tcheck.bp.
+    def fand(self, a, b):
+        T, F = self.true, -self.true
+        if a == F or b == F: return F
+        if a == T: return b
+        if b == T: return a
+        if a == b: return a
+        if a == -b: return F
+        return self.gate_and(a, b)
+
+    def for_(self, a, b):
+        T, F = self.true, -self.true
+        if a == T or b == T: return T
+        if a == F: return b
+        if b == F: return a
+        if a == b: return a
+        if a == -b: return T
+        return self.gate_or(a, b)
+
+    def fxor(self, a, b):
+        T, F = self.true, -self.true
+        if a == F: return b
+        if b == F: return a
+        if a == T: return -b
+        if b == T: return -a
+        if a == b: return F
+        if a == -b: return T
+        return self.gate_xor(a, b)
+
+    def addc(self, a, b, cin):
+        """Ripple-carry add, low 64 bits, explicit carry-in. The carry OUT of
+        bit 63 is never computed: a wrapping 64-bit add discards it."""
+        out = []
+        for k in range(W):
+            axb = self.fxor(a[k], b[k])
+            out.append(self.fxor(axb, cin))
+            if k < W - 1:
+                cin = self.for_(self.fand(a[k], b[k]), self.fand(cin, axb))
+        return out
+
+    def mul(self, a, b):
+        """Shift and add, low 64 bits only -- the same structure as
+        selfhost/tcheck.bp's bb_mul64 and folded the same way: a CONST_FALSE
+        multiplier bit contributes no gates at all, and column j of row `bit`
+        comes from a[j - bit], so the partial products that would only have fed
+        bits 64..127 are never built."""
+        F = -self.true
+        acc = [F] * W
+        for bit in range(W):
+            sel = b[bit]
+            if sel == F:
+                continue
+            row = [F] * bit + [self.fand(a[j], sel) for j in range(W - bit)]
+            acc = self.addc(acc, row, F)
+        return acc
+
 
 def blast(nodes, order, cnf):
     """Each 64-bit term becomes a list of 64 literals, LSB first."""
@@ -190,6 +257,12 @@ def blast(nodes, order, cnf):
                 die('node %d: shift amount %d out of range' % (nid, k))
             z = cnf.const(0)
             bits[nid] = ([z] * k + a[:W - k]) if op == 'shl' else (a[k:] + [z] * k)
+        elif op == 'sub':
+            a, b = bits[int(args[0])], bits[int(args[1])]
+            bits[nid] = cnf.addc(a, [-l for l in b], cnf.const(1))
+        elif op == 'mul':
+            a, b = bits[int(args[0])], bits[int(args[1])]
+            bits[nid] = cnf.mul(a, b)
         elif op == 'eq':
             a, b = bits[int(args[0])], bits[int(args[1])]
             acc = cnf.const(1)
