@@ -11,7 +11,5 @@ error signature. file is repo-relative.
 
 | TRIGGER | file |
 |---------|------|
-| apps/api/src/routes/auth/** | docs/lessons/2026-06-22-inline-vs-plugin-local-login.md |
-| packages/db/migrations/**read*public*menu** | docs/lessons/2026-06-22-read-public-menu-redefine.md |
-| packages/ui/src/theme/**.css | docs/lessons/2026-06-23-css-comment-star-slash.md |
 | e2e/tests/behavioural-invariants.spec.ts | docs/lessons/2026-06-23-contrast-gate-skip-images.md |
+| tools/loop-signals/** | docs/lessons/2026-07-13-loop-detector-markov-model.md |
