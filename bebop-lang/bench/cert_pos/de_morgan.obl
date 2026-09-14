@@ -1,0 +1,16 @@
+% Obligation: ~(x & y) == (~x) | (~y), for every pair of 64-bit words.
+% The rewrite every peephole pass wants to make. It is also the cheapest
+% obligation in the corpus that exercises THREE different gate definitions
+% (bb_and, bb_or, bb_not) against each other in one claim: bb_not is pure literal
+% negation and emits no clauses at all, so a sign error there is invisible to any
+% test that only ever negates twice.
+obligation de_morgan_and
+1 var x
+2 var y
+3 and 1 2
+4 not 3
+5 not 1
+6 not 2
+7 or 5 6
+8 eq 4 7
+prove 8

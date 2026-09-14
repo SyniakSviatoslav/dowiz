@@ -1,0 +1,10 @@
+% bebop certificate, text form (NORMATIVE -- the oid below is over the
+% obligation text, and this file is what a checker reads).
+% obligation: mul8_is_shl3
+% produced by tools/certgen.py, an UNTRUSTED bridge producer, via cadical
+% Nothing here is believed; the checker re-derives every step.
+p 65 2
+c 1 1 0
+c 2 -1 0
+r 3 0 1 2 0
+x e599c1d040baa5f290b16cce3092af9ce742de62fe1edcc05c46317842136c29

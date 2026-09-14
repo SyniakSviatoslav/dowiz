@@ -1,0 +1,13 @@
+% Obligation: x * 8 == x << 3, for every 64-bit word x.
+% The strength reduction a compiler performs silently. Wrong by one bit and every
+% multiply-by-power-of-two in the tree is wrong, and nothing else would notice --
+% the two sides are built by completely different hardware here (bb_mul64's
+% partial-product rows and ripple-carry adds versus the shifter's pure literal
+% renaming), so agreement is not an artefact of a shared path.
+obligation mul8_is_shl3
+1 var x
+2 const 8
+3 mul 1 2
+4 shl 1 3
+5 eq 3 4
+prove 5

@@ -1,0 +1,8 @@
+% Obligation: and is commutative on 64-bit words
+obligation and_comm_words
+1 var x
+2 var y
+3 and 1 2
+4 and 2 1
+5 eq 3 4
+prove 5

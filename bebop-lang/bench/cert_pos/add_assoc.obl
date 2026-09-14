@@ -1,0 +1,32 @@
+% Obligation: (x + y) + z == x + (y + z), for every triple of 64-bit words.
+% Wrapping 64-bit addition is associative; it is what lets money.bp's ledger sum
+% postings in any order and still net to exactly zero, which is a stated
+% invariant rather than a convenience.
+%
+% THERE IS DELIBERATELY NO add_assoc.cert, AND THE MEASUREMENT IS THE POINT.
+% cadical discharges this obligation (2026-09-14, CaDiCaL 2.1.2): 1080 vars,
+% 3979 input clauses, 20839 hinted steps, 2,719,424 bytes.  The certificate is
+% then REFUSED by both checkers, and for the same reason on both sides:
+%
+%   certcheck.py: line 5299: derived clause 5293 carries 179 literals, past the
+%                 clause stride of 64.                                    rc=2
+%   tcheck.bin  : (add_input/add_derived refuse past cl_stride)           rc=2
+%
+% So the binding limit on what `cert_checked` can count is NOT the solver and NOT
+% the 16384-clause store -- it is the certificate path's 64-literal CLAUSE
+% STRIDE, and a four-adder obligation is already 2.8x past it.  Raising the
+% stride is an arena change in the TRUSTED checker (c_lits is 16384 * stride),
+% so it is a decision for the row, not something a certificate should force.
+% Recorded here rather than deleted, because an obligation that is true, cheap
+% for the solver, and still uncertifiable is the most useful fact this corpus has
+% about the format's reach.
+obligation add_assoc_words
+1 var x
+2 var y
+3 var z
+4 add 1 2
+5 add 4 3
+6 add 2 3
+7 add 1 6
+8 eq 5 7
+prove 8

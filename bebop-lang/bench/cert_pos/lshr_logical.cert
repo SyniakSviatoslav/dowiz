@@ -1,0 +1,10 @@
+% bebop certificate, text form (NORMATIVE -- the oid below is over the
+% obligation text, and this file is what a checker reads).
+% obligation: lshr_is_logical
+% produced by tools/certgen.py, an UNTRUSTED bridge producer, via cadical
+% Nothing here is believed; the checker re-derives every step.
+p 65 2
+c 1 1 0
+c 2 -1 0
+r 3 0 1 2 0
+x 1ff229056e134807e79132133661daaa93d9049798a0a95c1e071be747f3b0c5
