@@ -2074,15 +2074,31 @@ fn dv_selftest(obuf: [i64], opos: [i64], R: [i64], cells: i64) -> i64 {
 // ring, so `a*100` never "overflows" there.  What the rule discharges is the
 // no-overflow branch; the overflow branch is decided by the instances below,
 // where the wrapped coefficient is computed in the ring and compared to `a`.
-fn ob_selftest(obuf: [i64], opos: [i64], R: [i64], cells: i64) -> i64 {
-  // M1 SYMBOLIC, the generic-branch identity: (100*c1)/100 == c1
+// THE mulov constant-divisor obligation, and the only copy of it.  `tron` turns the
+// trace on; with it off every tr_emit below is one comparison and a return, which is
+// why the M1 row prints exactly what it printed before the trace existed.
+fn ob_mulov_const(R: [i64], cells: i64, tron: i64) -> i64 {
   let _ = rg_init(R, cells);
+  let _ = if tron == 1 then tr_on(R) else 0;
   let pc = rg_var(R, rg_new(R, 4), 0);
+  let _ = tr_emit(R, 1, pc, 0, 0, 0);
   let x = rg_scale(R, pc, 100, rg_new(R, 4));
+  let _ = tr_emit(R, 4, x, pc, 100, 0);
   let q = rg_new(R, 4);
   let r = rg_new(R, 4);
   let _ = dv_split(R, x, 100, q, r);
-  let _ = dv_row(obuf, opos, "M1 mulov(c1,100) no-ovf (100c)/100==c  want 1", dv_exact(R, r) * rg_eq(R, q, pc), R);
+  let _ = tr_emit(R, 7, q, x, 100, r);
+  let ex = dv_exact(R, r);
+  let _ = tr_emit(R, 15, 0, r, 0, ex);
+  let eq = rg_eq(R, q, pc);
+  let _ = tr_emit(R, 14, 0, q, pc, eq);
+  ex * eq
+}
+
+fn ob_selftest(obuf: [i64], opos: [i64], R: [i64], cells: i64) -> i64 {
+  // M1 SYMBOLIC, the generic-branch identity: (100*c1)/100 == c1.  The derivation is
+  // ob_mulov_const -- one copy, shared with the traced run.
+  let _ = dv_row(obuf, opos, "M1 mulov(c1,100) no-ovf (100c)/100==c  want 1", ob_mulov_const(R, cells, 0), R);
 
   // M2 CONCRETE, no overflow: a = 12345, p = 1234500, q = 12345 == a -> ok
   let _ = rg_init(R, cells);
@@ -2340,16 +2356,21 @@ fn nd_floor(R: [i64], x: i64, d: i64, out: i64) -> i64 {
 // Layout, in cells above the cs block at the top of the arena:
 //   tr[0] enabled (0 = OFF, and OFF is the default: every emit is one compare)
 //   tr[1] step count   tr[2] capacity in steps   tr[3] overflow flag
-//   steps from tr[8], FIVE cells each: rule, out, a, b, c
+//   tr[8..71] the OID: the 64 hex characters of the sha256 of the obligation TEXT
+//     this trace claims to discharge, computed by the SAME canonical_text +
+//     sha256_words the LRAT route uses -- see tr_oid
+//   steps from tr[72], FIVE cells each: rule, out, a, b, c
 // Rule ids: 1 var, 2 const, 3 add, 4 scale, 5 mul, 6 sub, 7 split (D1),
 //   9 floorA constant, 10 floorB exact, 11 floorC peel, 12 floorD compose (carries
 //   the chosen m), 13 atom (carries the variable), 14 eq decision, 15 exact
 //   decision, 16 case-split branch.
 // Reject codes: 81 trace overflow, 82 unknown rule in a trace, 83 a step references
 //   a slot that was never produced, 84 a step's local check failed, 85 the trace's
-//   final decision is not 1.
+//   final decision is not 1, 86 the trace's oid does not bind to the obligation it is
+//   filed against, 87 a recorded case split is not exhaustive, not once-each, or does
+//   not hold in every branch.
 fn tr_cap() -> i64 { 512 }
-fn tr_cells() -> i64 { 8 + 5 * tr_cap() }
+fn tr_cells() -> i64 { 72 + 5 * tr_cap() }
 fn tr_base(R: [i64]) -> i64 { cs_base(R) + cs_cells() }
 
 fn tr_on(R: [i64]) -> i64 {
@@ -2372,7 +2393,7 @@ fn tr_emit(R: [i64], rule: i64, out: i64, a: i64, b: i64, c: i64) -> i64 {
   let n = R[tb + 1];
   let room = if n < R[tb + 2] then 1 else 0;
   let _ = if on == 1 then (if room == 1 then (
-      let at = tb + 8 + n * 5 in
+      let at = tb + 72 + n * 5 in
       let _ = R[at] = rule in
       let _ = R[at + 1] = out in
       let _ = R[at + 2] = a in
@@ -2390,15 +2411,75 @@ fn tr_export(R: [i64], T: [i64]) -> i64 {
   let n = R[tb + 1];
   let _ = T[0] = n;
   let i = 0;
-  while i < n * 5 {
+  while i < 64 {
     let _ = T[1 + i] = R[tb + 8 + i];
+    let i = i + 1;
+    0
+  };
+  let i = 0;
+  while i < n * 5 {
+    let _ = T[65 + i] = R[tb + 72 + i];
     let i = i + 1;
     0
   };
   n
 }
 
-fn tr_get(T: [i64], i: i64, f: i64) -> i64 { T[1 + i * 5 + f] }
+fn tr_get(T: [i64], i: i64, f: i64) -> i64 { T[65 + i * 5 + f] }
+
+// --- 15.1 for the ring route: the oid is over the obligation TEXT ---
+// WHY TEXT AND NOT A SERIALISED GOAL: 15.1 requires the hash to cover the artifact a
+// checker actually READS, and nobody reads an array of monomial keys.  Hashing the
+// rule's internal encoding would also pin every oid to the representation -- change
+// mn_nv() and every oid moves -- and would leave the claim unreadable.  Hashing an
+// `.obl`-shaped statement instead means the two routes share the obligation LANGUAGE,
+// not merely the hash kind, which is what makes ONE gate number real rather than
+// analogous: this is literally canonical_text + sha256_words, the same two functions
+// verify_cert calls, so a mismatch cannot come from a different convention.
+fn tr_oid(obl: str, oid: [i64]) -> i64 {
+  let ct = zeros(1048576);
+  let clen = canonical_text(obl, ct, 1048576);
+  let h = zeros(8);
+  let _ = sha256_words(ct, clen, h);
+  let _ = hex_u32(h[0], oid, 0);
+  let _ = hex_u32(h[1], oid, 8);
+  let _ = hex_u32(h[2], oid, 16);
+  let _ = hex_u32(h[3], oid, 24);
+  let _ = hex_u32(h[4], oid, 32);
+  let _ = hex_u32(h[5], oid, 40);
+  let _ = hex_u32(h[6], oid, 48);
+  let _ = hex_u32(h[7], oid, 56);
+  0
+}
+
+// the producer stamps the trace with the oid of the obligation it CLAIMS to discharge
+fn tr_setoid(R: [i64], O: [i64]) -> i64 {
+  let tb = tr_base(R);
+  let i = 0;
+  while i < 64 {
+    let _ = R[tb + 8 + i] = O[i];
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+// and the checker compares it against the obligation it was HANDED.  A trace that
+// checks perfectly against the wrong claim is refused (86) -- the replay test the
+// LRAT side already has as n02_wrong_oid.
+fn tr_bindcheck(R: [i64], T: [i64], obl: str) -> i64 {
+  let O = zeros(65);
+  let _ = tr_oid(obl, O);
+  let same = 1;
+  let i = 0;
+  while i < 64 {
+    let _ = if T[1 + i] == O[i] then 0 else (let _ = same = 0 in 0);
+    let i = i + 1;
+    0
+  };
+  let _ = if same == 1 then 0 else tr_rej(R, 86);
+  same
+}
 
 // --- the widened key, and fp_mul ---
 // W1/W2 exercise the representation itself: variable 14 is the top nibble of
@@ -2768,87 +2849,15 @@ fn nd_selftest(obuf: [i64], opos: [i64], R: [i64], cells: i64) -> i64 {
   let _ = R[4] = R[f];
   let _ = rg_row(obuf, opos, "N5 D3 (2^32-1)/2^32 == 0             want 1", rg_eq(R, f, z), R);
 
-  // F6: THE fp_mul MITER, with NOTHING handed to the rule.  fp_mul's own
-  // computation on the left (fp.bp:6-29: split at 32, split the low halves at 16,
-  // ll_l>>16 then >>16 again), the claim (a*b)>>32 on the right, and the only
-  // bridge is lemma D3 plus the hash-consing.  F3 above is the same miter
-  // WITHOUT D3 and answers 0; F4 is the same miter with the hypothesis given by
-  // hand.  This row is the one that matters.
-  let _ = rg_init(R, cells);
-  let a1 = rg_var(R, rg_new(R, 4), 0);
-  let ah = rg_var(R, rg_new(R, 4), 1);
-  let al = rg_var(R, rg_new(R, 4), 2);
-  let b1 = rg_var(R, rg_new(R, 4), 3);
-  let bh = rg_var(R, rg_new(R, 4), 4);
-  let bl = rg_var(R, rg_new(R, 4), 5);
-  let ahs = rg_scale(R, ah, 65536, rg_new(R, 4));
-  let a0 = rg_add(R, ahs, al, rg_new(R, 8));
-  let bhs = rg_scale(R, bh, 65536, rg_new(R, 4));
-  let b0 = rg_add(R, bhs, bl, rg_new(R, 8));
-  let a1b1 = rg_mul(R, a1, b1, rg_new(R, 8));
-  let hi = rg_scale(R, a1b1, 4294967296, rg_new(R, 8));
-  let a1b0 = rg_mul(R, a1, b0, rg_new(R, 8));
-  let a0b1 = rg_mul(R, a0, b1, rg_new(R, 8));
-  let mid = rg_add(R, a1b0, a0b1, rg_new(R, 16));
-  let tt = rg_add(R, hi, mid, rg_new(R, 32));
-  let ahbh = rg_mul(R, ah, bh, rg_new(R, 8));
-  let ahbl = rg_mul(R, ah, bl, rg_new(R, 8));
-  let albh = rg_mul(R, al, bh, rg_new(R, 8));
-  let sS = rg_add(R, ahbl, albh, rg_new(R, 16));
-  let pP = rg_mul(R, al, bl, rg_new(R, 8));
-  let q1 = rg_new(R, 32);
-  let _ = nd_floor(R, pP, 65536, q1);
-  let inner = rg_add(R, sS, q1, rg_new(R, 32));
-  let q2 = rg_new(R, 32);
-  let _ = nd_floor(R, inner, 65536, q2);
-  let low = rg_add(R, ahbh, q2, rg_new(R, 16));
-  let pfp = rg_add(R, tt, low, rg_new(R, 32));
-  let a0b0 = rg_mul(R, a0, b0, rg_new(R, 16));
-  let bq = rg_new(R, 32);
-  let _ = nd_floor(R, a0b0, 4294967296, bq);
-  let tgt = rg_add(R, tt, bq, rg_new(R, 32));
-  let _ = R[4] = R[pfp];
-  let _ = R[5] = R[7];
-  let _ = rg_row(obuf, opos, "F6 fp_mul MITER via D3, no hypothesis  want 1", rg_eq(R, pfp, tgt), R);
+  // F6: THE fp_mul MITER, with NOTHING handed to the rule.  The derivation is
+  // fp_magnitude -- ONE copy, shared with T1 and with the traced run, so no caller can
+  // drift from another.  It sets R[4]/R[5] itself so this row prints what it always did.
+  let _ = rg_row(obuf, opos, "F6 fp_mul MITER via D3, no hypothesis  want 1", fp_magnitude(R, cells, 0, 4294967296), R);
 
-  // F6n NEG: the target's divisor must be 2^32.  With 2^31 the miter must fail,
-  // which is what shows F6 is not closing for a trivial reason.
-  let _ = rg_init(R, cells);
-  let a1 = rg_var(R, rg_new(R, 4), 0);
-  let ah = rg_var(R, rg_new(R, 4), 1);
-  let al = rg_var(R, rg_new(R, 4), 2);
-  let b1 = rg_var(R, rg_new(R, 4), 3);
-  let bh = rg_var(R, rg_new(R, 4), 4);
-  let bl = rg_var(R, rg_new(R, 4), 5);
-  let ahs = rg_scale(R, ah, 65536, rg_new(R, 4));
-  let a0 = rg_add(R, ahs, al, rg_new(R, 8));
-  let bhs = rg_scale(R, bh, 65536, rg_new(R, 4));
-  let b0 = rg_add(R, bhs, bl, rg_new(R, 8));
-  let a1b1 = rg_mul(R, a1, b1, rg_new(R, 8));
-  let hi = rg_scale(R, a1b1, 4294967296, rg_new(R, 8));
-  let a1b0 = rg_mul(R, a1, b0, rg_new(R, 8));
-  let a0b1 = rg_mul(R, a0, b1, rg_new(R, 8));
-  let mid = rg_add(R, a1b0, a0b1, rg_new(R, 16));
-  let tt = rg_add(R, hi, mid, rg_new(R, 32));
-  let ahbh = rg_mul(R, ah, bh, rg_new(R, 8));
-  let ahbl = rg_mul(R, ah, bl, rg_new(R, 8));
-  let albh = rg_mul(R, al, bh, rg_new(R, 8));
-  let sS = rg_add(R, ahbl, albh, rg_new(R, 16));
-  let pP = rg_mul(R, al, bl, rg_new(R, 8));
-  let q1 = rg_new(R, 32);
-  let _ = nd_floor(R, pP, 65536, q1);
-  let inner = rg_add(R, sS, q1, rg_new(R, 32));
-  let q2 = rg_new(R, 32);
-  let _ = nd_floor(R, inner, 65536, q2);
-  let low = rg_add(R, ahbh, q2, rg_new(R, 16));
-  let pfp = rg_add(R, tt, low, rg_new(R, 32));
-  let a0b0 = rg_mul(R, a0, b0, rg_new(R, 16));
-  let bq = rg_new(R, 32);
-  let _ = nd_floor(R, a0b0, 2147483648, bq);
-  let tgt = rg_add(R, tt, bq, rg_new(R, 32));
-  let _ = R[4] = R[pfp];
-  let _ = R[5] = R[7];
-  let _ = rg_row(obuf, opos, "F6n fp_mul MITER target /2^31  NEG   want 0", rg_eq(R, pfp, tgt), R);
+  // F6n NEG: the target's divisor must be 2^32.  With 2^31 the miter must fail, which
+  // is what shows F6 is not closing for a trivial reason -- the SAME derivation with one
+  // argument changed, which is only possible now that there is one of it.
+  let _ = rg_row(obuf, opos, "F6n fp_mul MITER target /2^31  NEG   want 0", fp_magnitude(R, cells, 0, 2147483648), R);
 
   // --- WHY IDEAL MEMBERSHIP IS THE WRONG TOOL, in three measured rows ---
   // The alternative design was to keep the D1 relations as HYPOTHESES and decide
@@ -2926,6 +2935,7 @@ fn cs_open(R: [i64], nvar: i64) -> i64 {
   let _ = R[b + 1] = 0;
   let _ = R[b + 2] = 0;
   let _ = R[b + 3] = 0;
+  let _ = tr_emit(R, 17, 0, nvar, 0, 0);
   0
 }
 
@@ -2999,8 +3009,9 @@ fn fp_specneg(na: i64, nb: i64) -> i64 { if na != nb then 1 else 0 }
 // exhaustiveness check would be redundant with the visit COUNT -- measured: with
 // the bitmap test removed, S6n and T1n keep their value and lose only their
 // reject code, so the count was carrying them.
-fn fp_signsplit(R: [i64], cells: i64, drop: i64, dup: i64, bad: i64, oor: i64) -> i64 {
+fn fp_signsplit(R: [i64], cells: i64, drop: i64, dup: i64, bad: i64, oor: i64, tron: i64) -> i64 {
   let _ = rg_init(R, cells);
+  let _ = if tron == 1 then tr_on(R) else 0;
   let _ = cs_open(R, 2);
   let k = 0;
   while k < 4 {
@@ -3020,119 +3031,14 @@ fn fp_signsplit(R: [i64], cells: i64, drop: i64, dup: i64, bad: i64, oor: i64) -
 
 // the magnitude half, identical in construction to F6 (which stays byte-identical
 // where it is); factored so the theorem row can multiply the two halves.
-fn fp_magnitude(R: [i64], cells: i64) -> i64 {
+// THE fp_mul miter, and now the ONLY copy of it.  Until 2026-09-14 this derivation
+// existed three times -- here, inline in nd_selftest's F6 row, and again in a traced
+// twin -- so a trace could have certified a copy that had drifted from the row that
+// claims the theorem.  One function, four callers; `tron` turns the trace on and `dq`
+// selects the target divisor, which is the only thing F6n's negative changes.
+fn fp_magnitude(R: [i64], cells: i64, tron: i64, dq: i64) -> i64 {
   let _ = rg_init(R, cells);
-  let a1 = rg_var(R, rg_new(R, 4), 0);
-  let ah = rg_var(R, rg_new(R, 4), 1);
-  let al = rg_var(R, rg_new(R, 4), 2);
-  let b1 = rg_var(R, rg_new(R, 4), 3);
-  let bh = rg_var(R, rg_new(R, 4), 4);
-  let bl = rg_var(R, rg_new(R, 4), 5);
-  let ahs = rg_scale(R, ah, 65536, rg_new(R, 4));
-  let a0 = rg_add(R, ahs, al, rg_new(R, 8));
-  let bhs = rg_scale(R, bh, 65536, rg_new(R, 4));
-  let b0 = rg_add(R, bhs, bl, rg_new(R, 8));
-  let a1b1 = rg_mul(R, a1, b1, rg_new(R, 8));
-  let hi = rg_scale(R, a1b1, 4294967296, rg_new(R, 8));
-  let a1b0 = rg_mul(R, a1, b0, rg_new(R, 8));
-  let a0b1 = rg_mul(R, a0, b1, rg_new(R, 8));
-  let mid = rg_add(R, a1b0, a0b1, rg_new(R, 16));
-  let tt = rg_add(R, hi, mid, rg_new(R, 32));
-  let ahbh = rg_mul(R, ah, bh, rg_new(R, 8));
-  let ahbl = rg_mul(R, ah, bl, rg_new(R, 8));
-  let albh = rg_mul(R, al, bh, rg_new(R, 8));
-  let sS = rg_add(R, ahbl, albh, rg_new(R, 16));
-  let pP = rg_mul(R, al, bl, rg_new(R, 8));
-  let q1 = rg_new(R, 32);
-  let _ = nd_floor(R, pP, 65536, q1);
-  let inner = rg_add(R, sS, q1, rg_new(R, 32));
-  let q2 = rg_new(R, 32);
-  let _ = nd_floor(R, inner, 65536, q2);
-  let low = rg_add(R, ahbh, q2, rg_new(R, 16));
-  let pfp = rg_add(R, tt, low, rg_new(R, 32));
-  let a0b0 = rg_mul(R, a0, b0, rg_new(R, 16));
-  let bq = rg_new(R, 32);
-  let _ = nd_floor(R, a0b0, 4294967296, bq);
-  let tgt = rg_add(R, tt, bq, rg_new(R, 32));
-  rg_eq(R, pfp, tgt)
-}
-
-fn cs_selftest(obuf: [i64], opos: [i64], R: [i64], cells: i64) -> i64 {
-  // S1..S4: the four sign branches of fp.bp:26-28, one row each
-  let _ = rg_init(R, cells);
-  let _ = cs_open(R, 2);
-  let k = 0;
-  while k < 4 {
-    let na = cs_bit(k, 0);
-    let nb = cs_bit(k, 1);
-    let fl = fp_codeflip(na, nb);
-    let sp = fp_specneg(na, nb);
-    let ok = if fl == sp then 1 else 0;
-    let _ = cs_note(R, k, ok);
-    let _ = cs_row(obuf, opos, "S? sign branch codeflip == specneg   want 1", ok, R, na, nb, fl, sp);
-    let k = k + 1;
-    0
-  };
-  let _ = cs_row(obuf, opos, "S5 sign split EXHAUSTIVE + all hold  want 1", cs_done(R), R, 0, 0, 0, 0);
-
-  // S6n NEG: drop branch 3 -- the positive must stop being positive
-  let _ = cs_row(obuf, opos, "S6n sign split branch 3 DROPPED  NEG want 0 reject=80",
-                 fp_signsplit(R, cells, 1, 0, 0, 0), R, 0, 0, 0, 0);
-  // S7n NEG: visit branch 2 twice and drop branch 3
-  let _ = cs_row(obuf, opos, "S7n sign split branch 2 TWICE    NEG want 0 reject=79",
-                 fp_signsplit(R, cells, 0, 1, 0, 0), R, 0, 0, 0, 0);
-  // S8n NEG: exhaustive, but the flip formula is wrong in some branch
-  let _ = cs_row(obuf, opos, "S8n sign split wrong flip rule   NEG want 0",
-                 fp_signsplit(R, cells, 0, 0, 1, 0), R, 0, 0, 0, 0);
-  // S10n NEG: four distinct notes, but one of them is an out-of-range branch --
-  // only the exhaustiveness BITMAP can see that branch 3 was never reached.
-  let _ = cs_row(obuf, opos, "S10n sign split OUT-OF-RANGE br  NEG want 0 reject=80",
-                 fp_signsplit(R, cells, 0, 0, 0, 1), R, 0, 0, 0, 0);
-  // S9: the honest split, through the same helper, must still hold
-  let _ = cs_row(obuf, opos, "S9 sign split via helper             want 1",
-                 fp_signsplit(R, cells, 0, 0, 0, 0), R, 0, 0, 0, 0);
-
-  // T1: THE THEOREM, both halves.  Magnitude is F6's identity; sign is the
-  // exhaustive four-branch split.  Precondition, which the ROADMAP statement does
-  // not carry and now must: the true value sign*floor(|a|*|b|/2^32) is
-  // REPRESENTABLE in i64.  Measured boundary (tmp/fprange.bp): fp_mul(MIN, 2^32)
-  // == MIN is right, fp_mul(MIN, 2^32+1) returns 9223372034707292160 where the
-  // true value is -9223372039002259456 -- the low 64 bits, not the value.
-  let mg = fp_magnitude(R, cells);
-  let sg = fp_signsplit(R, cells, 0, 0, 0, 0);
-  let _ = cs_row(obuf, opos, "T1 fp_mul THEOREM mag AND sign       want 1", mg * sg, R, 0, 0, mg, sg);
-  // T1n NEG: the theorem must not survive a missing sign branch
-  let mg = fp_magnitude(R, cells);
-  let sg = fp_signsplit(R, cells, 1, 0, 0, 0);
-  let _ = cs_row(obuf, opos, "T1n fp_mul THEOREM dropped branch NEG want 0", mg * sg, R, 0, 0, mg, sg);
-  0
-}
-
-// --- traced derivations, and the replay that checks them ---
-// The producer emits its own rg_* steps; nd_floor emits its case steps from inside.
-// Nothing here changes a decision: every ob_trace_* returns exactly what the
-// untraced derivation returns, which is what the M1/F6 rows still show.
-fn ob_trace_mulov(R: [i64], cells: i64) -> i64 {
-  let _ = rg_init(R, cells);
-  let _ = tr_on(R);
-  let pc = rg_var(R, rg_new(R, 4), 0);
-  let _ = tr_emit(R, 1, pc, 0, 0, 0);
-  let x = rg_scale(R, pc, 100, rg_new(R, 4));
-  let _ = tr_emit(R, 4, x, pc, 100, 0);
-  let q = rg_new(R, 4);
-  let r = rg_new(R, 4);
-  let _ = dv_split(R, x, 100, q, r);
-  let _ = tr_emit(R, 7, q, x, 100, r);
-  let ex = dv_exact(R, r);
-  let _ = tr_emit(R, 15, 0, r, 0, ex);
-  let eq = rg_eq(R, q, pc);
-  let _ = tr_emit(R, 14, 0, q, pc, eq);
-  ex * eq
-}
-
-fn ob_trace_fpmul(R: [i64], cells: i64) -> i64 {
-  let _ = rg_init(R, cells);
-  let _ = tr_on(R);
+  let _ = if tron == 1 then tr_on(R) else 0;
   let a1 = rg_var(R, rg_new(R, 4), 0);
   let _ = tr_emit(R, 1, a1, 0, 0, 0);
   let ah = rg_var(R, rg_new(R, 4), 1);
@@ -3188,13 +3094,72 @@ fn ob_trace_fpmul(R: [i64], cells: i64) -> i64 {
   let a0b0 = rg_mul(R, a0, b0, rg_new(R, 16));
   let _ = tr_emit(R, 5, a0b0, a0, b0, 0);
   let bq = rg_new(R, 32);
-  let _ = nd_floor(R, a0b0, 4294967296, bq);
+  let _ = nd_floor(R, a0b0, dq, bq);
   let tgt = rg_add(R, tt, bq, rg_new(R, 32));
   let _ = tr_emit(R, 3, tgt, tt, bq, 0);
-  let eq = rg_eq(R, pfp, tgt);
-  let _ = tr_emit(R, 14, 0, pfp, tgt, eq);
-  eq
+  let _ = R[4] = R[pfp];
+  let _ = R[5] = R[7];
+  let dec = rg_eq(R, pfp, tgt);
+  let _ = tr_emit(R, 14, 0, pfp, tgt, dec);
+  dec
 }
+
+fn cs_selftest(obuf: [i64], opos: [i64], R: [i64], cells: i64) -> i64 {
+  // S1..S4: the four sign branches of fp.bp:26-28, one row each
+  let _ = rg_init(R, cells);
+  let _ = cs_open(R, 2);
+  let k = 0;
+  while k < 4 {
+    let na = cs_bit(k, 0);
+    let nb = cs_bit(k, 1);
+    let fl = fp_codeflip(na, nb);
+    let sp = fp_specneg(na, nb);
+    let ok = if fl == sp then 1 else 0;
+    let _ = cs_note(R, k, ok);
+    let _ = cs_row(obuf, opos, "S? sign branch codeflip == specneg   want 1", ok, R, na, nb, fl, sp);
+    let k = k + 1;
+    0
+  };
+  let _ = cs_row(obuf, opos, "S5 sign split EXHAUSTIVE + all hold  want 1", cs_done(R), R, 0, 0, 0, 0);
+
+  // S6n NEG: drop branch 3 -- the positive must stop being positive
+  let _ = cs_row(obuf, opos, "S6n sign split branch 3 DROPPED  NEG want 0 reject=80",
+                 fp_signsplit(R, cells, 1, 0, 0, 0, 0), R, 0, 0, 0, 0);
+  // S7n NEG: visit branch 2 twice and drop branch 3
+  let _ = cs_row(obuf, opos, "S7n sign split branch 2 TWICE    NEG want 0 reject=79",
+                 fp_signsplit(R, cells, 0, 1, 0, 0, 0), R, 0, 0, 0, 0);
+  // S8n NEG: exhaustive, but the flip formula is wrong in some branch
+  let _ = cs_row(obuf, opos, "S8n sign split wrong flip rule   NEG want 0",
+                 fp_signsplit(R, cells, 0, 0, 1, 0, 0), R, 0, 0, 0, 0);
+  // S10n NEG: four distinct notes, but one of them is an out-of-range branch --
+  // only the exhaustiveness BITMAP can see that branch 3 was never reached.
+  let _ = cs_row(obuf, opos, "S10n sign split OUT-OF-RANGE br  NEG want 0 reject=80",
+                 fp_signsplit(R, cells, 0, 0, 0, 1, 0), R, 0, 0, 0, 0);
+  // S9: the honest split, through the same helper, must still hold
+  let _ = cs_row(obuf, opos, "S9 sign split via helper             want 1",
+                 fp_signsplit(R, cells, 0, 0, 0, 0, 0), R, 0, 0, 0, 0);
+
+  // T1: THE THEOREM, both halves.  Magnitude is F6's identity; sign is the
+  // exhaustive four-branch split.  Precondition, which the ROADMAP statement does
+  // not carry and now must: the true value sign*floor(|a|*|b|/2^32) is
+  // REPRESENTABLE in i64.  Measured boundary (tmp/fprange.bp): fp_mul(MIN, 2^32)
+  // == MIN is right, fp_mul(MIN, 2^32+1) returns 9223372034707292160 where the
+  // true value is -9223372039002259456 -- the low 64 bits, not the value.
+  let mg = fp_magnitude(R, cells, 0, 4294967296);
+  let sg = fp_signsplit(R, cells, 0, 0, 0, 0, 0);
+  let _ = cs_row(obuf, opos, "T1 fp_mul THEOREM mag AND sign       want 1", mg * sg, R, 0, 0, mg, sg);
+  // T1n NEG: the theorem must not survive a missing sign branch
+  let mg = fp_magnitude(R, cells, 0, 4294967296);
+  let sg = fp_signsplit(R, cells, 1, 0, 0, 0, 0);
+  let _ = cs_row(obuf, opos, "T1n fp_mul THEOREM dropped branch NEG want 0", mg * sg, R, 0, 0, mg, sg);
+  0
+}
+
+// --- the replay that checks a trace ---
+// There are no traced COPIES any more: the functions that emit traces are the same
+// ones the M1, F6, F6n and T1 rows call, with `tron` = 1.  A trace therefore cannot
+// certify a twin that has drifted from the row claiming the result.
+
 
 // --- the replay ---
 // M is the producer-base -> replay-base map: M[0] count, then pairs.  A linear scan
@@ -3246,6 +3211,13 @@ fn tr_replay(R: [i64], T: [i64], M: [i64], cells: i64) -> i64 {
   let _ = M[0] = 0;
   let n = T[0];
   let decided = 0;
+  // case-split accumulators: a trace that records branches must satisfy the SAME three
+  // conditions cs_done computes -- exhaustive, each branch once, every branch holding
+  // -- re-derived here from the trace alone rather than taken from cs_done's word.
+  let csn = 0 - 1;
+  let csmap = 0;
+  let cscnt = 0;
+  let csok = 0;
   let i = 0;
   while i < n {
     let ru = tr_get(T, i, 0);
@@ -3260,7 +3232,9 @@ fn tr_replay(R: [i64], T: [i64], M: [i64], cells: i64) -> i64 {
     let _ = if ru == 3 then (let rb = rg_add(R, tr_look(R, M, aa), tr_look(R, M, bb), rg_new(R, 64)) in tr_bind(M, ou, rb)) else 0;
     let _ = if ru == 4 then (let rb = rg_scale(R, tr_look(R, M, aa), bb, rg_new(R, 64)) in tr_bind(M, ou, rb)) else 0;
     let _ = if ru == 5 then (let rb = rg_mul(R, tr_look(R, M, aa), tr_look(R, M, bb), rg_new(R, 64)) in tr_bind(M, ou, rb)) else 0;
-    let _ = if ru == 6 then (let rb = rg_sub(R, tr_look(R, M, aa), tr_look(R, M, bb), rg_new(R, 64), rg_new(R, 64)) in tr_bind(M, ou, rb)) else 0;
+    // rule 6 (sub) was implemented here and emitted by NOTHING.  Removed 2026-09-14:
+    // an unreachable branch in a checker is trusted surface that no control can fire
+    // on, and rg_sub is reachable as scale-by--1 plus add if a producer ever needs it.
     // 7 split (D1): recompute, bind both halves.  dv_split's own bound check (74) is
     // the remainder condition, so re-running it IS the local test.
     let _ = if ru == 7 then (
@@ -3301,6 +3275,14 @@ fn tr_replay(R: [i64], T: [i64], M: [i64], cells: i64) -> i64 {
         let d2 = rg_eq(R, tr_look(R, M, aa), tr_look(R, M, bb)) in
         let _ = if d2 == cc then 0 else tr_rej(R, 84) in
         let _ = decided = cc in 0) else 0;
+    let _ = if ru == 17 then (let _ = csn = aa in 0) else 0;
+    let _ = if ru == 16 then (
+        let inr = if aa >= 0 then (if aa < 32 then 1 else 0) else 0 in
+        let _ = if inr == 1 then 0 else tr_rej(R, 84) in
+        let seen = if inr == 1 then ((csmap >> aa) & 1) else 1 in
+        let _ = if seen == 0 then (let _ = csmap = csmap + (1 << aa) in 0) else 0 in
+        let _ = cscnt = cscnt + 1 in
+        let _ = csok = csok + bb in 0) else 0;
     let _ = if ru == 15 then (
         let rr = tr_look(R, M, aa) in
         let d2 = if R[rr] == 0 then 1 else 0 in
@@ -3311,16 +3293,53 @@ fn tr_replay(R: [i64], T: [i64], M: [i64], cells: i64) -> i64 {
     // rather than nested: a 13-deep if-chain is one misplaced paren from a silent
     // change of meaning, and this one already cost a compile.
     let known = (if ru == 1 then 1 else 0) + (if ru == 2 then 1 else 0) + (if ru == 3 then 1 else 0)
-              + (if ru == 4 then 1 else 0) + (if ru == 5 then 1 else 0) + (if ru == 6 then 1 else 0)
+              + (if ru == 4 then 1 else 0) + (if ru == 5 then 1 else 0)
               + (if ru == 7 then 1 else 0) + fc + (if ru == 12 then 1 else 0)
+              + (if ru == 17 then 1 else 0)
               + (if ru == 13 then 1 else 0) + (if ru == 14 then 1 else 0)
               + (if ru == 15 then 1 else 0) + (if ru == 16 then 1 else 0);
     let _ = if known >= 1 then 0 else tr_rej(R, 82);
     let i = i + 1;
     0
   };
+  // a case-split trace has no `eq` step; its decision IS the three conditions holding
+  let _ = if csn >= 0 then (
+      let nb = 1 << csn in
+      let full = (1 << nb) - 1 in
+      let okx = if csmap == full then 1 else 0 in
+      let oko = if cscnt == nb then 1 else 0 in
+      let oka = if csok == nb then 1 else 0 in
+      let _ = if okx * oko * oka == 1 then (let _ = decided = decided + 1 in 0) else tr_rej(R, 87) in 0) else 0;
   let _ = if decided >= 1 then 0 else tr_rej(R, 85);
   if R[1] == 0 then 1 else 0
+}
+
+// the binding is checked FIRST: a trace filed against the wrong claim is refused
+// before a single step is replayed, so a perfect proof of the wrong thing cannot pass.
+fn tr_replay_bound(R: [i64], T: [i64], M: [i64], cells: i64, obl: str) -> i64 {
+  let _ = rg_init(R, cells);
+  let ok = tr_bindcheck(R, T, obl);
+  if ok == 1 then tr_replay(R, T, M, cells) else 0
+}
+
+fn str_has(hay: str, needle: str) -> i64 {
+  let hn = str_len(hay);
+  let nn = str_len(needle);
+  let found = 0;
+  let i = 0;
+  while i + nn <= hn {
+    let all = 1;
+    let j = 0;
+    while j < nn {
+      let _ = if char(hay, i + j) == char(needle, j) then 0 else (let _ = all = 0 in 0);
+      let j = j + 1;
+      0
+    };
+    let _ = if all == 1 then (let _ = found = 1 in 0) else 0;
+    let i = if all == 1 then hn else i + 1;
+    0
+  };
+  found
 }
 
 fn tr_row(obuf: [i64], opos: [i64], nm: str, val: i64, R: [i64], steps: i64) -> i64 {
@@ -3338,42 +3357,41 @@ fn tr_row(obuf: [i64], opos: [i64], nm: str, val: i64, R: [i64], steps: i64) -> 
 }
 
 fn tr_selftest(obuf: [i64], opos: [i64], R: [i64], cells: i64, T: [i64], M: [i64]) -> i64 {
-  // A1: mulov's constant-divisor obligation, traced and replayed
-  let dec = ob_trace_mulov(R, cells);
+  // A1/A2: mulov's constant-divisor obligation -- the SAME function the M1 row calls
+  let dec = ob_mulov_const(R, cells, 1);
   let ns = tr_export(R, T);
   let _ = tr_row(obuf, opos, "A1 trace mulov(c,100) decision       want 1", dec, R, ns);
   let _ = tr_row(obuf, opos, "A2 replay mulov trace                want 1", tr_replay(R, T, M, cells), R, ns);
 
-  // A3: the fp_mul miter, traced and replayed
-  let dec = ob_trace_fpmul(R, cells);
+  // A3/A4: the fp_mul miter -- the SAME function the F6, F6n and T1 rows call
+  let dec = fp_magnitude(R, cells, 1, 4294967296);
   let nf = tr_export(R, T);
   let _ = tr_row(obuf, opos, "A3 trace fp_mul miter decision       want 1", dec, R, nf);
   let _ = tr_row(obuf, opos, "A4 replay fp_mul trace               want 1", tr_replay(R, T, M, cells), R, nf);
 
-  // A5n..A8n NEGATIVE CONTROLS: corrupt one field of one step.  A replay that
-  // accepts a corrupted trace is the entire failure mode of this mechanism.
-  let _ = ob_trace_mulov(R, cells);
+  // A5n..A11n: corrupt one field of one step.  A replay that accepts a corrupted
+  // trace is the entire failure mode of this mechanism.
+  let _ = ob_mulov_const(R, cells, 1);
   let _ = tr_export(R, T);
-  let _ = T[1 + 1 * 5 + 0] = 5;
+  let _ = T[65 + 1 * 5 + 0] = 5;
   let _ = tr_row(obuf, opos, "A5n corrupt RULE id (4->5)      NEG  want 0", tr_replay(R, T, M, cells), R, ns);
 
-  let _ = ob_trace_mulov(R, cells);
+  let _ = ob_mulov_const(R, cells, 1);
   let _ = tr_export(R, T);
-  let _ = T[1 + 1 * 5 + 1] = 9999;
+  let _ = T[65 + 1 * 5 + 1] = 9999;
   let _ = tr_row(obuf, opos, "A6n corrupt TARGET slot         NEG  want 0", tr_replay(R, T, M, cells), R, ns);
 
-  let _ = ob_trace_mulov(R, cells);
+  let _ = ob_mulov_const(R, cells, 1);
   let _ = tr_export(R, T);
-  let _ = T[1 + 1 * 5 + 3] = 101;
+  let _ = T[65 + 1 * 5 + 3] = 101;
   let _ = tr_row(obuf, opos, "A7n corrupt ARGUMENT (100->101) NEG  want 0", tr_replay(R, T, M, cells), R, ns);
 
-  let _ = ob_trace_mulov(R, cells);
+  let _ = ob_mulov_const(R, cells, 1);
   let _ = tr_export(R, T);
-  let _ = T[1 + 0 * 5 + 0] = 77;
+  let _ = T[65 + 0 * 5 + 0] = 77;
   let _ = tr_row(obuf, opos, "A8n UNKNOWN rule id (77)        NEG  want 0", tr_replay(R, T, M, cells), R, ns);
 
-  // A9n: the composition factorisation must actually divide -- corrupt fp_mul's m
-  let _ = ob_trace_fpmul(R, cells);
+  let _ = fp_magnitude(R, cells, 1, 4294967296);
   let nf2 = tr_export(R, T);
   let i = 0;
   let hit = 0 - 1;
@@ -3382,33 +3400,58 @@ fn tr_selftest(obuf: [i64], opos: [i64], R: [i64], cells: i64, T: [i64], M: [i64
     let i = i + 1;
     0
   };
-  let _ = if hit >= 0 then (let _ = T[1 + hit * 5 + 4] = 3 in 0) else 0;
+  let _ = if hit >= 0 then (let _ = T[65 + hit * 5 + 4] = 3 in 0) else 0;
   let _ = tr_row(obuf, opos, "A9n corrupt COMPOSE m (2^16->3) NEG  want 0", tr_replay(R, T, M, cells), R, nf2);
 
-  // A10n and A11n exist because MUTATING THE REPLAY showed two of its checks were not
-  // load-bearing against the controls above: removing the decision comparison moved
-  // NOTHING, and removing the unknown-rule check only changed which code was printed.
-  // These two are the controls those checks actually need.
-  //
-  // A10n: point the final `eq` at a bound but WRONG slot (100c instead of c), so the
-  // recomputed decision is 0 while the trace still claims 1.
-  let _ = ob_trace_mulov(R, cells);
+  let _ = ob_mulov_const(R, cells, 1);
   let n10 = tr_export(R, T);
-  let _ = T[1 + 4 * 5 + 2] = tr_get(T, 1, 1);
+  let _ = T[65 + 4 * 5 + 2] = tr_get(T, 1, 1);
   let _ = tr_row(obuf, opos, "A10n eq on the WRONG slot       NEG  want 0", tr_replay(R, T, M, cells), R, n10);
 
-  // A11n: append an unknown rule AFTER the decision, where nothing references it and
-  // the decision has already been established -- the one shape a replay would wave
-  // through if it skipped rules it did not recognise.
-  let _ = ob_trace_mulov(R, cells);
+  let _ = ob_mulov_const(R, cells, 1);
   let n11 = tr_export(R, T);
-  let _ = T[1 + n11 * 5 + 0] = 77;
-  let _ = T[1 + n11 * 5 + 1] = 0;
-  let _ = T[1 + n11 * 5 + 2] = 0;
-  let _ = T[1 + n11 * 5 + 3] = 0;
-  let _ = T[1 + n11 * 5 + 4] = 0;
+  let _ = T[65 + n11 * 5 + 0] = 77;
+  let _ = T[65 + n11 * 5 + 1] = 0;
+  let _ = T[65 + n11 * 5 + 2] = 0;
+  let _ = T[65 + n11 * 5 + 3] = 0;
+  let _ = T[65 + n11 * 5 + 4] = 0;
   let _ = T[0] = n11 + 1;
   let _ = tr_row(obuf, opos, "A11n junk rule AFTER decision   NEG  want 0", tr_replay(R, T, M, cells), R, n11 + 1);
+
+  // A12/A13n: the CASE SPLIT, traced.  Rule 16 was in the replay and emitted by no
+  // trace until now; this is the derivation that exercises it, and the replay
+  // re-derives exhaustiveness from the trace instead of trusting cs_done's word.
+  let dec = fp_signsplit(R, cells, 0, 0, 0, 0, 1);
+  let nc = tr_export(R, T);
+  let _ = tr_row(obuf, opos, "A12 trace sign split + replay        want 1", dec * tr_replay(R, T, M, cells), R, nc);
+
+  let _ = fp_signsplit(R, cells, 0, 0, 0, 0, 1);
+  let nc2 = tr_export(R, T);
+  let i = 0;
+  let hb = 0 - 1;
+  while i < nc2 {
+    let _ = if hb < 0 then (if tr_get(T, i, 0) == 16 then (if tr_get(T, i, 2) == 3 then (let _ = hb = i in 0) else 0) else 0) else 0;
+    let i = i + 1;
+    0
+  };
+  let _ = if hb >= 0 then (let _ = T[65 + hb * 5 + 2] = 2 in 0) else 0;
+  let _ = tr_row(obuf, opos, "A13n trace split branch 3 -> 2  NEG  want 0", tr_replay(R, T, M, cells), R, nc2);
+
+  // A14/A14n: the 15.1 BINDING, in the scanned rows.  The selftest cannot open files,
+  // so these use a one-line obligation literal -- enough to exercise tr_bindcheck both
+  // ways.  The file-based replay test (mulov's trace filed against fp_mul's obligation,
+  // refused on 86) is the `ringcheck` mode.
+  let _ = ob_mulov_const(R, cells, 1);
+  let O = zeros(65);
+  let _ = tr_oid("obligation zzz 1 var c prove 1", O);
+  let _ = tr_setoid(R, O);
+  let nb1 = tr_export(R, T);
+  let _ = rg_init(R, cells);
+  let _ = tr_row(obuf, opos, "A14 binding oid matches              want 1",
+                 tr_bindcheck(R, T, "obligation zzz 1 var c prove 1"), R, nb1);
+  let _ = rg_init(R, cells);
+  let _ = tr_row(obuf, opos, "A14n binding WRONG claim        NEG  want 0",
+                 tr_bindcheck(R, T, "obligation yyy 1 var c prove 1"), R, nb1);
   0
 }
 
@@ -3450,6 +3493,12 @@ fn main(argc: i64, argv: [str]) -> i64 {
   // certificate check.  Every array the selftest needs is allocated HERE:
   // nothing below main calls zeros().
   let st_mode = if lc == 8 then (if pc[0] == 115 then (if pc[1] == 101 then (if pc[2] == 108 then (if pc[3] == 102 then 1 else 0) else 0) else 0) else 0) else 0;
+  // argv[2] == "ringcheck" -- discharge a RING obligation and replay its trace, with
+  // the 15.1 binding enforced.  argv[3] is the obligation the trace claims; an
+  // optional argv[4] is the obligation the CHECKER is handed, which is how the
+  // replay-against-the-wrong-claim test is run.
+  let rc_mode = if lc == 9 then (if pc[0] == 114 then (if pc[1] == 105 then (if pc[2] == 110 then (if pc[3] == 103 then 1 else 0) else 0) else 0) else 0) else 0;
+  let anym = if st_mode == 1 then 1 else rc_mode;
   // The selftest arena, sized for the widest single obligation the blaster
   // builds -- a symbolic 64x64 bb_mul64, whose folded demand is measured in
   // the SIZE row below.  sz_l MUST be sz_c * 32 (bb_emit's clause stride).
@@ -3476,7 +3525,7 @@ fn main(argc: i64, argv: [str]) -> i64 {
   // the ring arena, widened for nd_floor's recursion scratch.  Only the LIMIT
   // moves; R[0] still starts at 16, so every pre-existing `arena=` figure is
   // unchanged.
-  let sz_r = if st_mode == 1 then 65536 else 1;
+  let sz_r = if anym == 1 then 65536 else 1;
   let sring = zeros(sz_r);
   let _ = if st_mode == 1 then bb_selftest(sobuf, sopos, sc_id, sc_len, sc_lits, sn_cl, sassign, snv, sa, sb, sr, ssh) else 0;
   let _ = if st_mode == 1 then rg_selftest(sobuf, sopos, sring, sz_r) else 0;
@@ -3485,12 +3534,28 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let _ = if st_mode == 1 then fp_selftest(sobuf, sopos, sring, sz_r) else 0;
   let _ = if st_mode == 1 then nd_selftest(sobuf, sopos, sring, sz_r) else 0;
   let _ = if st_mode == 1 then cs_selftest(sobuf, sopos, sring, sz_r) else 0;
-  let sz_t = if st_mode == 1 then (1 + 5 * tr_cap()) else 1;
+  let sz_t = if anym == 1 then (65 + 5 * tr_cap()) else 1;
   let strace = zeros(sz_t);
   let smap = zeros(2 * tr_cap() + 2);
   let _ = if st_mode == 1 then ob_satsize(sobuf, sopos, sc_id, sc_len, sc_lits, sn_cl, sassign, snv, sa, sb, sr, ssh) else 0;
   let _ = if st_mode == 1 then tr_selftest(sobuf, sopos, sring, sz_r, strace, smap) else 0;
   let _ = if st_mode == 1 then sys_exit(0) else 0;
+  let _ = if rc_mode == 1 then (
+      let _ = if argc >= 4 then 0 else sys_exit(64) in
+      let obl = load_obl(argv[3]) in
+      let bobl = if argc >= 5 then load_obl(argv[4]) else load_obl(argv[3]) in
+      let O = zeros(65) in
+      let _ = tr_oid(obl, O) in
+      let ismul = str_has(obl, "mulov_const100") in
+      let isfp = str_has(obl, "fp_mul_q32") in
+      let _ = if ismul + isfp == 1 then 0 else sys_exit(64) in
+      let dec = if ismul == 1 then ob_mulov_const(sring, sz_r, 1) else fp_magnitude(sring, sz_r, 1, 4294967296) in
+      let _ = tr_setoid(sring, O) in
+      let ns = tr_export(sring, strace) in
+      let _ = tr_row(sobuf, sopos, "ring decision", dec, sring, ns) in
+      let ver = tr_replay_bound(sring, strace, smap, sz_r, bobl) in
+      let _ = tr_row(sobuf, sopos, "ring replay  ", ver, sring, ns) in
+      let _ = if dec * ver == 1 then sys_exit(0) else sys_exit(2) in 0) else 0;
   let fd = sys_open(pc, lc, 0);
   let _ = if fd >= 0 then 0 else sys_exit(90);
   let cert = sys_slurp(fd, 4000000);
