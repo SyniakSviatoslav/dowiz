@@ -640,7 +640,13 @@ fn emit_ident(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   // element load are i64; a struct literal is a cell array; a bare name is its own
   // recorded type. Written AFTER the dispatch because a builtin's arguments run through
   // emit_factor and would otherwise leave the last argument's type standing.
-  let ety = if is_lp == 1 then fn_ret_type(s, name, fntab, strn)
+  // A8 step 2: a BUILTIN has no `fn` header, so fn_ret_type returns 0 (unknown) for it and
+  // overwrites whatever the builtin's own emitter published in fntab[7110] -- MEASURED
+  // 2026-09-14: `fn f(x: i64); let t = zeros(3); f(t)` compiles rc=0 today, so emit_zeros's
+  // ety_set(257) never survives to the `let`. zeros32 is named here because its tag is what
+  // SELECTS the 4-byte load/store forms; the ladder is left alone for every other builtin so
+  // no accepted program changes its verdict.
+  let ety = if is_lp == 1 then (if name == 620507756566374 then 260 else fn_ret_type(s, name, fntab, strn))
     else if const_ok == 1 then 256
     else if is_br * struct_ok == 1 then 257
     else if is_lb == 1 then (if (sy_type_get(s, stab, name, npos) & 255) == 5 then 258 else 0)
@@ -2153,6 +2159,36 @@ fn emit_crc32x(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
   n[0]
 }
 
+// A8 step 2 / A9 (2026-09-14): smulh(a,b) / umulh(a,b) -- the HIGH 64 bits of a 128-bit
+// product, signed and unsigned. Two-argument register builtins, i.e. emit_crc32x's shape
+// with one (emit_cmp, skip_ws, pos+1) triple dropped and vs_deliver's arity 2 (x0, x1).
+// smulh x0,x0,x1 = 0x9b417c00, umulh x0,x0,x1 = 0x9bc17c00 -- both assembler-verified
+// with `as` + `objdump -d` (AGENTS.md T3).
+fn emit_smulh(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 2);
+  let _ = em(insns, n, 2604760064);
+  vs_push(insns, n, fntab, stab, 2, 0, 0 - 1)
+}
+fn emit_umulh(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = vs_deliver(insns, n, fntab, stab, 2);
+  let _ = em(insns, n, 2613148672);
+  vs_push(insns, n, fntab, stab, 2, 0, 0 - 1)
+}
+
 // crc32b(s): zlib crc32 of the bytes of the NUL-terminated string s (ROADMAP A7
 // step 1, 2026-09-09) -- the first handle-shaped string builtin. Under today's
 // raw-pointer strings s is a byte pointer already, so unlike crc32/crc32x there
@@ -2545,6 +2581,9 @@ fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab
   else if name == 76753189856984008 then emit_sys_exit(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == 66094333908796503 then emit_clock_ms(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == 36158018563 then emit_zeros(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 620507756566374 then emit_zeros32(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 34114554923 then emit_smulh(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else if name == 34703554765 then emit_umulh(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if tag >= 0 then emit_enum_ctor(s, tag, pos, insns, n, stab, selfname, selfstart, fntab)
   else if name == selfname then emit_self_call(s, pos, insns, n, stab, selfname, selfstart, fntab)
   else if tgt >= 0 then emit_bl_call(s, name, pos, insns, n, stab, selfname, selfstart, fntab)
@@ -2684,7 +2723,7 @@ fn emit_match_var(s: str, cpos: i64, cname: i64, pos: [i64], insns: [i64], n: [i
   let _ = vs_pop(fntab);
   let _ = vs_mask_take(fntab, sc, 16);
   let tg = vs_alloc(insns, n, fntab, stab);
-  let _ = vs_array_get_imm(insns, n, sc, 0, tg);
+  let _ = vs_array_get_imm(insns, n, sc, 0, tg, 0);
   let d = vs_alloc(insns, n, fntab, stab);
   let _ = emit_match_rt(s, pos, insns, n, stab, selfname, selfstart, fntab, sc, tg, d);
   let _ = vs_mask_free(fntab, sc, 16);
@@ -2714,7 +2753,7 @@ fn emit_match_rt_arm(s: str, pos: [i64], bodypos: i64, vname: i64, vpos: i64, in
 // form, then the ordinary symbol bind every `let` uses.
 fn emit_match_rt_bind(s: str, vname: i64, vpos: i64, insns: [i64], n: [i64], stab: [i64], fntab: [i64], sc: i64) -> i64 {
   let p = vs_alloc(insns, n, fntab, stab);
-  let _ = vs_array_get_imm(insns, n, sc, 1, p);
+  let _ = vs_array_get_imm(insns, n, sc, 1, p, 0);
   let _ = vs_push(insns, n, fntab, stab, 2, p, n[0] - 1);
   let reg = sym_bind(s, stab, vname, vpos);
   let _ = check_reg_collision(s, insns, n, fntab, stab, reg, vpos);
@@ -4920,14 +4959,14 @@ fn emit_array_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
 
 // Array get: base + index tags already on the window (base pushed first).
 // index CONST c<4096 -> ldr x<d>,[x<base>,#c*8]; else ldr x<d>,[x<base>,x<idx>,lsl#3].
-fn emit_array_get(insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
+fn emit_array_get(insns: [i64], n: [i64], fntab: [i64], stab: [i64], w32: i64) -> i64 {
   let w = fntab[5387];
   let idxk = vs_entry_kind(fntab, w - 1);
   let idxc = vs_entry_p0(fntab, w - 1);
   let is_cimm = (if idxk == 1 then 1 else 0) * (if idxc >= 0 then 1 else 0) * (if idxc < 4096 then 1 else 0);
   let d = vs_pick_dest(insns, n, fntab, stab);
   let base = vs_reg(insns, n, fntab, stab, w - 2);
-  let _ = if is_cimm == 1 then vs_array_get_imm(insns, n, base, idxc, d) else vs_array_get_reg(insns, n, fntab, stab, base, w - 1, d);
+  let _ = if is_cimm == 1 then vs_array_get_imm(insns, n, base, idxc, d, w32) else vs_array_get_reg(insns, n, fntab, stab, base, w - 1, d, w32);
   let _ = vs_pop(fntab);
   let _ = vs_pop(fntab);
   vs_push(insns, n, fntab, stab, 2, d, n[0] - 1)
@@ -4937,20 +4976,26 @@ fn emit_array_get(insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
 // is the DESTINATION register: `add xd,xbase,xidx` reads both operands before it
 // writes xd, so d may alias base or idx safely and no vs_alloc is needed (which
 // would risk parking one of the two live window entries). Index 0 needs no add.
-fn vs_array_get_imm(insns: [i64], n: [i64], base: i64, idxc: i64, d: i64) -> i64 {
+// A8 step 2: w32 == 1 picks `ldr wd,[x17,xm,lsl #2]` (0xb8607a20 = 3093330464), which
+// ZERO-extends a 4-byte cell into the 64-bit destination; w32 == 0 keeps the 8-byte
+// `ldr xd,[x17,xm,lsl #3]` (0xf8607a20 = 4167072288). Both are assembler-verified and both
+// take the same + Rm*65536 + Rd encoding, so ONE constant is the whole difference.
+fn vs_array_get_imm(insns: [i64], n: [i64], base: i64, idxc: i64, d: i64, w32: i64) -> i64 {
+  let ldw = if w32 == 1 then 3093330464 else 4167072288;
   let _ = if idxc > 0 then em(insns, n, 2432696320 + idxc * 1024 + base * 32 + d) else 0;
   let b = if idxc > 0 then d else base;
-  em(insns, n, 4167072288 + b * 65536 + d)
+  em(insns, n, ldw + b * 65536 + d)
 }
-fn vs_array_get_reg(insns: [i64], n: [i64], fntab: [i64], stab: [i64], base: i64, idxidx: i64, d: i64) -> i64 {
+fn vs_array_get_reg(insns: [i64], n: [i64], fntab: [i64], stab: [i64], base: i64, idxidx: i64, d: i64, w32: i64) -> i64 {
+  let ldw = if w32 == 1 then 3093330464 else 4167072288;
   let idx = vs_reg(insns, n, fntab, stab, idxidx);
   let _ = em(insns, n, 2332033024 + idx * 65536 + base * 32 + d);
-  em(insns, n, 4167072288 + d * 65536 + d)
+  em(insns, n, ldw + d * 65536 + d)
 }
 
 // Array set: base + index tags on the window; value emitted next, then the
 // three are popped and CONST 0 is pushed (the statement's discard value).
-fn emit_array_set(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+fn emit_array_set(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], w32: i64) -> i64 {
   let _ = pos[0] = pos[0] + 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let w = fntab[5387];
@@ -4959,7 +5004,7 @@ fn emit_array_set(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   let is_cimm = (if idxk == 1 then 1 else 0) * (if idxc >= 0 then 1 else 0) * (if idxc < 4096 then 1 else 0);
   let base = vs_reg(insns, n, fntab, stab, w - 3);
   let v = vs_reg(insns, n, fntab, stab, w - 1);
-  let _ = if is_cimm == 1 then vs_array_set_imm(insns, n, base, idxc, v) else vs_array_set_reg(insns, n, fntab, stab, base, v, w - 2);
+  let _ = if is_cimm == 1 then vs_array_set_imm(insns, n, base, idxc, v, w32) else vs_array_set_reg(insns, n, fntab, stab, base, v, w - 2, w32);
   let _ = vs_pop(fntab);
   let _ = vs_pop(fntab);
   let _ = vs_pop(fntab);
@@ -4971,15 +5016,19 @@ fn emit_array_set(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
 // §1.1), dead at every array-set site because vs_reg/vs_mat have already
 // finished any move they needed. Taking one through vs_alloc instead could park
 // the deepest window entry, which at a 3-entry window IS the array base.
-fn vs_array_set_imm(insns: [i64], n: [i64], base: i64, idxc: i64, v: i64) -> i64 {
+// A8 step 2: w32 == 1 picks `str wv,[x17,xm,lsl #2]` (0xb8207a20 = 3089136160), which
+// TRUNCATES the 64-bit source to 4 bytes; w32 == 0 keeps 0xf8207a20 = 4162877984.
+fn vs_array_set_imm(insns: [i64], n: [i64], base: i64, idxc: i64, v: i64, w32: i64) -> i64 {
+  let stw = if w32 == 1 then 3089136160 else 4162877984;
   let _ = if idxc > 0 then em(insns, n, 2432696320 + idxc * 1024 + base * 32 + 16) else 0;
   let b = if idxc > 0 then 16 else base;
-  em(insns, n, 4162877984 + b * 65536 + v)
+  em(insns, n, stw + b * 65536 + v)
 }
-fn vs_array_set_reg(insns: [i64], n: [i64], fntab: [i64], stab: [i64], base: i64, v: i64, idxidx: i64) -> i64 {
+fn vs_array_set_reg(insns: [i64], n: [i64], fntab: [i64], stab: [i64], base: i64, v: i64, idxidx: i64, w32: i64) -> i64 {
+  let stw = if w32 == 1 then 3089136160 else 4162877984;
   let idx = vs_reg(insns, n, fntab, stab, idxidx);
   let _ = em(insns, n, 2332033024 + idx * 65536 + base * 32 + 16);
-  em(insns, n, 4162877984 + 16 * 65536 + v)
+  em(insns, n, stw + 16 * 65536 + v)
 }
 
 // Emit name[i] (get) or name[i] = v (set). `name` is a bound array variable;
@@ -5083,6 +5132,11 @@ fn emit_array_index(s: str, name: i64, npos: i64, pos: [i64], insns: [i64], n: [
   let sigd = (tw / 512) & 1;
   let tg = tw & 255;
   let scalarish = (if tg == 0 then 1 else 0) + (if tg == 2 then 1 else 0) + (if tg == 6 then 1 else 0);
+  // A8 step 2: tag 4 is `[u32]` -- 4-byte cells. This flag is the ONLY thing that selects the
+  // 4-byte load/store form; the add that computes base+index is byte-identical either way
+  // because both are in ELEMENT units. tg is 4 only for a [u32] declaration or a zeros32
+  // `let`, so every existing program keeps w32 == 0 and the same words.
+  let w32 = if tg == 4 then 1 else 0;
   let _ = if sigd * scalarish >= 1 then diag_exit(s, npos, 84) else 0;
   let _ = emit_var(insns, n, reg, fntab, stab);
   let _ = pos[0] = pos[0] + 1;
@@ -5103,7 +5157,7 @@ fn emit_array_index(s: str, name: i64, npos: i64, pos: [i64], insns: [i64], n: [
   let is_eq = if ch == 61 then 1 else 0;
   let is_eq2 = if ch1 == 61 then 1 else 0;
   let is_set = is_eq * (1 - is_eq2);
-  let _ = if is_set == 1 then emit_array_set(s, pos, insns, n, stab, selfname, selfstart, fntab) else emit_array_get(insns, n, fntab, stab);
+  let _ = if is_set == 1 then emit_array_set(s, pos, insns, n, stab, selfname, selfstart, fntab, w32) else emit_array_get(insns, n, fntab, stab, w32);
   n[0]
 }
 
@@ -7196,9 +7250,11 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   // this table writes a wrapped hash SIGNED while the dispatch ladder writes the
   // same hash UNSIGNED, so the two must be compared modulo 2^64 -- comparing the
   // literals as written reports 16 shadowable builtins instead of 7.
+  // A8 step 2 (2026-09-14): zeros32 / smulh / umulh join the table, same spelling as the
+  // neighbouring UNSIGNED entries (all three hashes are below 2^63, so signed == unsigned).
   let rsv1 = (if selfname == 1866735 then 1 else 0) + (if selfname == 35281108217 then 1 else 0) + (if selfname == 13857 then 1 else 0) + (if selfname == 262576641 then 1 else 0) + (if selfname == 228925745 then 1 else 0) + (if selfname == 13865 then 1 else 0) + (if selfname == 13472 then 1 else 0) + (if selfname == 228960337 then 1 else 0) + (if selfname == 4471061603997 then 1 else 0) + (if selfname == 4238080694376 then 1 else 0) + (if selfname == 32320559965 then 1 else 0) + (if selfname == 4428069113672 then 1 else 0) + (if selfname == 29119020707 then 1 else 0) + (if selfname == 36158018563 then 1 else 0) + (if selfname == 224358574 then 1 else 0) + (if selfname == 585709020818199 then 1 else 0) + (if selfname == 66094333908796503 then 1 else 0) + (if selfname == 30895064082 then 1 else 0) + (if selfname == 4047253394792 then 1 else 0) + (if selfname == 260449716 then 1 else 0) + (if selfname == 249209392 then 1 else 0);
   let rsv2 = (if selfname == 246721067 then 1 else 0) + (if selfname == 76753189879327100 then 1 else 0) + (if selfname == 76753189885882068 then 1 else 0) + (if selfname == -8392076197157136435 then 1 else 0) + (if selfname == -8392076203060520566 then 1 else 0) + (if selfname == -2688661736639986669 then 1 else 0) + (if selfname == -8392076198348418984 then 1 else 0) + (if selfname == 76753189874778913 then 1 else 0) + (if selfname == 7442662210087947144 then 1 else 0) + (if selfname == -5847879057653958070 then 1 else 0) + (if selfname == 7442662398273192292 then 1 else 0) + (if selfname == 7442661902340062434 then 1 else 0) + (if selfname == 76753189856984008 then 1 else 0) + (if selfname == 7040940390938053523 then 1 else 0) + (if selfname == -6282920175007517587 then 1 else 0) + (if selfname == -8392076203060521221 then 1 else 0) + (if selfname == -1736429998027255437 then 1 else 0) + (if selfname == -3153574141067785036 then 1 else 0) + (if selfname == 8779068393901189725 then 1 else 0) + (if selfname == 7221016679989100487 then 1 else 0) + (if selfname == 1084841420853388659 then 1 else 0);
-  let rsv3 = (if selfname == 504111662209029 then 1 else 0) + (if selfname == 569809880337302 then 1 else 0) + (if selfname == 1448390905445389245 then 1 else 0) + (if selfname == 260242221 then 1 else 0) + (if selfname == -8392076202161113213 then 1 else 0) + (if selfname == -1729804160290675916 then 1 else 0) + (if selfname == 1713209 then 1 else 0) + (if selfname == 29413480223 then 1 else 0) + (if selfname == 3853165909311 then 1 else 0) + (if selfname == 3853165909333 then 1 else 0) + (if selfname == -8392076200099613766 then 1 else 0) + (if selfname == 585902212871437 then 1 else 0) + (if selfname == 7304771531850188344 then 1 else 0) + (if selfname == -8392076197195354031 then 1 else 0);
+  let rsv3 = (if selfname == 620507756566374 then 1 else 0) + (if selfname == 34114554923 then 1 else 0) + (if selfname == 34703554765 then 1 else 0) + (if selfname == 504111662209029 then 1 else 0) + (if selfname == 569809880337302 then 1 else 0) + (if selfname == 1448390905445389245 then 1 else 0) + (if selfname == 260242221 then 1 else 0) + (if selfname == -8392076202161113213 then 1 else 0) + (if selfname == -1729804160290675916 then 1 else 0) + (if selfname == 1713209 then 1 else 0) + (if selfname == 29413480223 then 1 else 0) + (if selfname == 3853165909311 then 1 else 0) + (if selfname == 3853165909333 then 1 else 0) + (if selfname == -8392076200099613766 then 1 else 0) + (if selfname == 585902212871437 then 1 else 0) + (if selfname == 7304771531850188344 then 1 else 0) + (if selfname == -8392076197195354031 then 1 else 0);
   let _ = if rsv1 + rsv2 + rsv3 > 0 then diag_exit(s, namepos, 99) else 0;
   let _ = skip_ws(s, pos);
   let pnames = zeros(14);
@@ -7748,6 +7804,69 @@ fn emit_zeros(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   let _ = em(insns, n, 3406888960);
   let _ = em(insns, n, 3544448000);
   let _ = ety_set(fntab, 257);
+  let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
+  n[0]
+}
+
+// A8 step 2 (2026-09-14): zeros32(n) allocates n 4-byte cells and returns an x17-relative
+// U32 index (units of 4 bytes), exactly as zeros(n) returns an 8-byte cell index.
+// Blueprint docs/blueprints/A8-typed-tables-u32.md section 3 "[u32] forms": zeros32(n) ==
+// zeros(ceil(n/2)) and the returned cell index i becomes 2*i. The body is emit_zeros's,
+// copied literally with exactly two insertions and one changed type word -- NOT refactored
+// into a shared helper, because a shared helper changes emit_zeros's own emitted words.
+fn emit_zeros32(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let base = fntab[5387] - 1;
+  let _ = vs_park(insns, n, fntab, stab, 1);
+  let _ = vs_evict(insns, n, fntab, stab, 1);
+  let _ = vs_mat(insns, n, fntab, stab, base, 1);
+  let _ = vs_pop(fntab);
+  // A8 step 2: zeros32(n) == zeros(ceil(n/2)). x1 holds the ELEMENT count at this
+  // point (emit_zeros then shifts it to bytes); ceil(n/2) is add x1,x1,#1 ; lsr x1,x1,#1.
+  // Assembler-verified: 0x91000421 / 0xd341fc21.
+  let _ = em(insns, n, 2432697377);
+  let _ = em(insns, n, 3544316961);
+  // lsl x1,x1,#3 (bytes): assembler-verified 0xD37DF421? no —
+  // 0xD3400000-family UBFM alias; 3548246049 == true LSL #3.
+  let _ = em(insns, n, 3548246049);
+  let _ = em(insns, n, 2432711713);
+  let _ = em(insns, n, 3544513569);
+  let _ = em(insns, n, 3548179489);
+  let _ = em(insns, n, 2334065504);
+  let _ = em(insns, n, 2332099451);
+  // T118 (D11-D, 2026-09-05): arena capacity trap -- cmp x27,x28 ; b.ls +2 ; brk #80
+  // (exit 80 = arena exhausted, was a silent walk past the mapping and a SIGSEGV later;
+  // T90 2c: the entry stub's SIGTRAP handler prints `trap 80: ...`)
+  let _ = em(insns, n, 3944481663);
+  let _ = em(insns, n, 1409286217);
+  let _ = em(insns, n, 3558869504);
+  // Interpreter zeros(n) zeroes every element (qtt.c TERM_ZEROS eval); the
+  // JIT must too: exec_words resets the bump-arena cursor to its base on
+  // every call_jit, so a second invocation re-allocates the SAME addresses
+  // and would observe stale counts/pointers (stab[0] garbage -> sym_lookup
+  // runs away). Zero the rounded region: sub x2,x27,x1; add x3,x27,#0;
+  // cbz x1,+3; str xzr,[x2],#8; cmp x2,x3; b.ne -2. All assembler-verified.
+  // T118d (2026-09-12): compute block start as x27-x1 (not x0), and block end
+  // as x27 (not x0+x1), so the trap 80 check prevents SIGSEGV on overflow.
+  let _ = em(insns, n, 3405841250);
+  let _ = em(insns, n, 2432697187);
+  let _ = em(insns, n, 3019899009);
+  let _ = em(insns, n, 4160783455);
+  let _ = em(insns, n, 3942842463);
+  let _ = em(insns, n, 1426063297);
+  // ROADMAP A5 step 1b (2026-09-08): the VALUE of a [i64] is an x17-relative CELL
+  // INDEX, never an address -- sub x0,x0,x17 (3406888960) ; lsr x0,x0,#3
+  // (3544448000). Logical shift is right here: x27 >= x17 always, so the byte
+  // delta is non-negative. The T118 arena trap above is untouched.
+  let _ = em(insns, n, 3406888960);
+  let _ = em(insns, n, 3544448000);
+  // The pair above turned the address into an 8-BYTE CELL index. A [u32] value is a
+  // 4-byte index, so double it: lsl x0,x0,#1 == 0xd37ff800, assembler-verified.
+  let _ = em(insns, n, 3548379136);
+  let _ = ety_set(fntab, 260);
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
   n[0]
 }

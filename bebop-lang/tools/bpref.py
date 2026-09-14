@@ -14,12 +14,19 @@ import struct
 DEPTH_CAP = int(os.environ.get('BPREF_DEPTH', '5000'))
 
 class Cells(object):
-    __slots__ = ('arena', 'off', 'n', 'released')
-    def __init__(self, arena, off, n):
+    # A8 step 2 (2026-09-14): `width` is the cell width in BYTES -- 8 for zeros()/[i64]
+    # (the only width that existed before) and 4 for zeros32()/[u32]. It exists so that a
+    # STORE can truncate: the compiler emits `str wv,[x17,xm,lsl #2]`, which drops every
+    # bit above 31, and the oracle must model that or it stops being an oracle. A LOAD
+    # needs no mask because the value in the arena is already the truncated one, exactly
+    # as `ldr wd,...` zero-extends whatever the 4 bytes hold.
+    __slots__ = ('arena', 'off', 'n', 'released', 'width')
+    def __init__(self, arena, off, n, width=8):
         self.arena = arena
         self.off = off
         self.n = n
         self.released = False
+        self.width = width
     def __len__(self):
         return self.n
     def _at(self, i):
@@ -32,14 +39,14 @@ class Cells(object):
             return [self.arena[self.off + k] for k in range(lo, hi, st)]
         return self.arena[self._at(i)]
     def __setitem__(self, i, v):
-        self.arena[self._at(i)] = v
+        self.arena[self._at(i)] = (v & 0xffffffff) if self.width == 4 else v
     def __iter__(self):
         for k in range(self.n):
             yield self.arena[self.off + k]
     def __add__(self, k):
         if not isinstance(k, int):
             return NotImplemented
-        v = Cells(self.arena, self.off + k, self.n - k)
+        v = Cells(self.arena, self.off + k, self.n - k, self.width)
         v.released = self.released
         return v
     __radd__ = __add__
@@ -50,11 +57,11 @@ class Cells(object):
     def __repr__(self):
         return 'cells@%d[%d]' % (self.off, self.n)
 
-def cells_alloc(it, vals):
+def cells_alloc(it, vals, width=8):
     arena = it.arena
     off = len(arena)
     arena.extend(vals)
-    return Cells(arena, off, len(vals))
+    return Cells(arena, off, len(vals), width)
 
 class ReturnSignal(Exception):
     def __init__(self, v): self.v = v
@@ -63,7 +70,8 @@ class BreakSignal(Exception):
 
 RESERVED = set(['sys_msync', 'sys_fsync', 'sys_mprotect', 'crc32x', 'crc32', 'clz',
     'sys_setaffinity', 'let', 'while', 'if', 'then', 'else', 'in', 'fn', 'enum',
-    'struct', 'module', 'match', 'return', 'break', 'zeros', 'char', 'str_len',
+    'struct', 'module', 'match', 'return', 'break', 'zeros', 'zeros32', 'char', 'str_len',
+    'smulh', 'umulh',
     'clock_ms', 'hvham', 'hvham2', 'some', 'none', 'many', 'sys_open', 'sys_read',
     'sys_write', 'sys_close', 'sys_readbuf', 'sys_slurp', 'sys_mmap', 'sys_mapb',
     'sys_munmap', 'sys_ftruncate', 'sys_rename', 'sys_export', 'sys_exit',
@@ -670,6 +678,24 @@ class Interp:
             if self.arena_cells > (256 << 20) // 8 - 8192:
                 raise SystemExit(80)
             return cells_alloc(self, [0] * max(args[0], 0))
+        if name == 'zeros32':
+            # A8 step 2: zeros32(n) is n FOUR-byte cells. The compiler implements it as
+            # zeros(ceil(n/2)) with a doubled index, so it charges the arena half as much;
+            # bpref models VALUES, so it keeps n slots and charges ceil(n/2) 8-byte cells
+            # against the same trap-80 budget the compiler's arena has.
+            m = max(args[0], 0)
+            self.arena_cells = getattr(self, 'arena_cells', 0) + (m + 1) // 2
+            if self.arena_cells > (256 << 20) // 8 - 8192:
+                raise SystemExit(80)
+            return cells_alloc(self, [0] * m, 4)
+        if name == 'smulh':
+            # smulh(a, b): the high 64 bits of the SIGNED 128-bit product a*b.
+            a = wrap(args[0]); b = wrap(args[1])
+            return wrap((a * b) >> 64)
+        if name == 'umulh':
+            # umulh(a, b): the high 64 bits of the UNSIGNED 128-bit product a*b.
+            a = args[0] & 0xffffffffffffffff; b = args[1] & 0xffffffffffffffff
+            return wrap((a * b) >> 64)
         if name == 'str_len':
             s = args[0]
             return s & 0xffffffff

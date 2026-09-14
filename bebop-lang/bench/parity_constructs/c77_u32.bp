@@ -1,0 +1,33 @@
+// ROADMAP A8 step 2 (2026-09-14): [u32] is REAL CODEGEN, not just a type tag.
+// docs/blueprints/A8-typed-tables-u32.md section 6 names this construct; everything
+// it lists is exercised here in one program:
+//   zeros32(10)   a table of 4-BYTE cells; the value is an x17-relative u32 index
+//   t[0] = 2^32+5 a WRAPPING store -- `str wv,[x17,xm,lsl #2]` drops bits 32..63,
+//                 so the cell holds 5 and the 2^32 is gone
+//   t[1] = -1     the same truncation from the other side: the cell holds
+//                 0xFFFFFFFF and the ZERO-extending `ldr wd,...` reads it back as
+//                 4294967295, NOT as -1 (which is what a sign-extending load would
+//                 give and what an 8-byte cell would give)
+//   t[1]          a CONSTANT index (the `add xt,xbase,#c` imm form)
+//   t[i]          a REGISTER index (the `add xt,xbase,xidx` reg form), i = 9
+//   sum32(t, i)   the table crosses a call boundary into a param DECLARED [u32],
+//                 so the callee selects the 4-byte forms from its SIGNATURE tag
+//                 rather than from a zeros32 `let`
+// The i64 path is untouched: every one of the 121 existing constructs compiles to
+// the same bytes (construct parity pass=121 fail=0, 2026-09-14).
+// EXPECT 43073129744 from: python3 tools/bpref.py bench/parity_constructs/c77_u32.bp
+fn sum32(t: [u32], k: i64) -> i64 {
+  let a = t[0];
+  let b = t[k];
+  a + b
+}
+fn main() -> i64 {
+  let t = zeros32(10);
+  let _ = t[0] = 4294967296 + 5;
+  let _ = t[1] = 0 - 1;
+  let i = 9;
+  let _ = t[i] = 123456789;
+  let c = t[1];
+  let r = sum32(t, i);
+  c * 10 + r
+}

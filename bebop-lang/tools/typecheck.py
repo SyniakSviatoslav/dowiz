@@ -18,7 +18,13 @@ REF_TOLERANT = {'st_get', 'st_put', 'st_seal', 'st_check', 'st_len', 'st_link', 
 STORE_INTERNAL = {'st_compact', 'st_link', 'st_ref', 'st_forward', 'st_copy_obj'}  # the fns that DEFINE object-relative offsets
 def is_ref(t): return isinstance(t, str) and t.startswith('ref ')
 def ref_ok(pt, at): return pt == at or at == 'ref *' or pt == 'ref *'
-BUILTIN = {'zeros': (['i64'], '[i64]'), 'str_len': (['str'], 'i64'), 'char': (['str', 'i64'], 'i64'), 'clock_ms': ([], 'i64'),
+# A8 step 2 (2026-09-14): `zeros32(n)` is the [u32] producer -- a table of 4-byte cells.
+# `[u32]` is a type this table can now NAME; the rules below are unchanged, so a `[u32]`
+# value is simply not one of the four strings the arg/return comparisons look at and the
+# oracle stays SILENT about it rather than inventing a rule the compiler does not have.
+# smulh/umulh are scalar 2-arg builtins (the high half of a 128-bit product).
+BUILTIN = {'zeros32': (['i64'], '[u32]'), 'smulh': (['i64', 'i64'], 'i64'), 'umulh': (['i64', 'i64'], 'i64'),
+           'zeros': (['i64'], '[i64]'), 'str_len': (['str'], 'i64'), 'char': (['str', 'i64'], 'i64'), 'clock_ms': ([], 'i64'),
            'sys_open': (['[i64]', 'i64', 'i64'], 'i64'), 'sys_slurp': (['i64', 'i64'], 'str'), 'sys_close': (['i64'], 'i64'),
            'sys_read': (['i64', '[i64]', 'i64'], 'i64'), 'sys_write': (['i64', '?', 'i64'], 'i64'), 'sys_exit': (['i64'], 'i64'),
            'sys_export': (['i64', '[i64]', 'i64'], 'i64'), 'sys_arena_base': ([], 'i64'), 'sys_clone': (['i64', 'i64'], 'i64'),
