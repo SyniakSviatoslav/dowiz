@@ -237,17 +237,23 @@ STATIC = [
 
     E("dispatch_syscall_none",
       "formal/Bebop/Syscalls.lean",
-      r"^  -- NOTHING is modelled yet, so this is `none` for every name, including the",
-      "dispatchSyscall returns `none` for every name, so no syscall axiom is CONNECTED to "
-      "the operational semantics",
+      r"^-- WHAT CHANGED, 2026-09-14, and the rule it follows\.",
+      "13 of the 26 syscalls are now MODELLED in dispatchSyscall, but NONE of them is "
+      "proven against its `_spec` axiom, so the axioms are still CONNECTED to nothing",
       "trust_gap", NOT,
-      discharge="Model sys_write and sys_exit in dispatchSyscall (the two bpref "
-                "implements) and prove each against its `_spec` axiom. Until then the 26 "
-                "specs are unreachable from any evaluation.",
-      note="FINDING. MEASURED: `grep -rn sys_open_spec formal/ | grep -v Syscalls.lean` "
-           "is EMPTY, and so is the same grep for sys_read_spec, sys_write_spec and "
-           "sys_clone_spec. The 26 axioms are referenced by NOTHING outside their own "
-           "declarations."),
+      discharge="Prove each modelled dispatchSyscall arm against its `_spec` axiom. "
+                "Modelling narrowed this gap but did not close it: a modelled arm and an "
+                "axiom that are never related are two independent claims, not one checked "
+                "one.",
+      note="FINDING, NARROWED 2026-09-14 (F4, `82866a6`) and re-anchored in the same "
+           "commit because the old anchor asserted `NOTHING is modelled yet`, which the "
+           "same change made false -- the ledger REFUSED to measure rather than reporting "
+           "a stale number, which is the behaviour this instrument is for. What changed: "
+           "dispatchSyscall was `none` for all 26; 13 now have a declared effect and a "
+           "declared value, and the other 13 stay `none` and are NAMED in the STUCK "
+           "message. What did NOT change: no `_spec` axiom is referenced outside its own "
+           "declaration in any hand-written `.lean` file, so the specs remain unreachable "
+           "from any evaluation and the trust gap stands."),
 ]
 
 
