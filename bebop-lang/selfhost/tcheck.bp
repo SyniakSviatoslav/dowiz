@@ -3373,7 +3373,7 @@ fn str_has(hay: str, needle: str) -> i64 {
 // of main: main's local count had grown past what the compiler binds in one function
 // and the symptom was `str_has` reported as an unbound symbol in the THIRD mode block
 // while the identical call in the first compiled fine.
-fn ring_gen(R: [i64], cells: i64, T: [i64], obuf: [i64], opos: [i64], oblpath: str, outpath: str) -> i64 {
+fn ring_gen(R: [i64], cells: i64, T: [i64], M: [i64], obuf: [i64], opos: [i64], oblpath: str, outpath: str) -> i64 {
   let obl = load_obl(oblpath);
   let O = zeros(65);
   let _ = tr_oid(obl, O);
@@ -3383,11 +3383,20 @@ fn ring_gen(R: [i64], cells: i64, T: [i64], obuf: [i64], opos: [i64], oblpath: s
   let dec = if ismul == 1 then ob_mulov_const(R, cells, 1) else fp_magnitude(R, cells, 1, 4294967296);
   let _ = tr_setoid(R, O);
   let ns = tr_export(R, T);
-  let wbuf = zeros(262144);
-  let wpos = [0];
-  let nb = tw_write(T, outpath, wbuf, wpos);
+  // VALIDATE BEFORE WRITING.  The previous version wrote the file and then reported
+  // the decision, so an obligation the ring cannot express produced a trace at rc=0
+  // and only `ringverify` refused it -- the third time in this file that an artifact
+  // existed before anything validated it.  Now the producer runs its own checker
+  // first, and a file appears only if the trace replays, binds AND proves the
+  // obligation's goal.
+  let ok = tr_replay_bound(R, T, M, cells, obl);
+  let G = zeros(1040);
+  let gk = if ok == 1 then og_goalcheck(R, obl, G) else 0;
+  let good = dec * ok * gk;
+  let _ = tr_row(obuf, opos, "ringgen self-check", good, R, ns);
+  let nb = if good == 1 then (let wbuf = zeros(262144) in let wpos = [0] in tw_write(T, outpath, wbuf, wpos)) else 0;
   let _ = tr_row(obuf, opos, "ringgen wrote bytes", nb, R, ns);
-  let _ = if dec == 1 then sys_exit(0) else sys_exit(2);
+  let _ = if good == 1 then sys_exit(0) else sys_exit(2);
   0
 }
 
@@ -3533,13 +3542,18 @@ fn tr_selftest(obuf: [i64], opos: [i64], R: [i64], cells: i64, T: [i64], M: [i64
   // `ringverify`; these two use single-line obligations, which is enough to fire both.
   let G = zeros(1040);
   let _ = rg_init(R, cells);
+  // These assert the reject CODE, not merely that something was rejected.  As written
+  // first -- `R[1] == 0`? -- A15n passed under a mutation that deleted the op check,
+  // because the missing-prove-line check (94) fired instead and the row could not tell
+  // the difference.  A negative that cannot name its cause cannot detect a change of
+  // cause.
   let _ = og_parse(R, "3 xor 1 2", G);
-  let _ = tr_row(obuf, opos, "A15n obligation op xor          NEG  want 0 reject=92",
-                 if R[1] == 0 then 1 else 0, R, 0);
+  let _ = tr_row(obuf, opos, "A15n obligation op xor is REFUSED    want 92",
+                 R[1], R, 0);
   let _ = rg_init(R, cells);
   let _ = og_parse(R, "1 var c", G);
-  let _ = tr_row(obuf, opos, "A16n obligation with no prove   NEG  want 0 reject=94",
-                 if R[1] == 0 then 1 else 0, R, 0);
+  let _ = tr_row(obuf, opos, "A16n obligation with no prove REFUSED  want 94",
+                 R[1], R, 0);
   0
 }
 
@@ -3867,7 +3881,7 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let _ = if st_mode == 1 then ob_satsize(sobuf, sopos, sc_id, sc_len, sc_lits, sn_cl, sassign, snv, sa, sb, sr, ssh) else 0;
   let _ = if st_mode == 1 then tr_selftest(sobuf, sopos, sring, sz_r, strace, smap) else 0;
   let _ = if st_mode == 1 then sys_exit(0) else 0;
-  let _ = if arg_is(cpath, "ringgen") == 1 then ring_gen(sring, sz_r, strace, sobuf, sopos, argv[3], argv[4]) else 0;
+  let _ = if arg_is(cpath, "ringgen") == 1 then ring_gen(sring, sz_r, strace, smap, sobuf, sopos, argv[3], argv[4]) else 0;
   let _ = if arg_is(cpath, "ringverify") == 1 then ring_verify(sring, sz_r, strace, smap, sobuf, sopos, argv[3], argv[4]) else 0;
   let _ = if rc_mode == 1 then (
       let _ = if argc >= 4 then 0 else sys_exit(64) in
@@ -3882,7 +3896,10 @@ fn main(argc: i64, argv: [str]) -> i64 {
       let _ = tr_setoid(sring, O) in
       let ns = tr_export(sring, strace) in
       let _ = tr_row(sobuf, sopos, "ring decision", dec, sring, ns) in
-      let ver = tr_replay_bound(sring, strace, smap, sz_r, bobl) in
+      let ver0 = tr_replay_bound(sring, strace, smap, sz_r, bobl) in
+      let G = zeros(1040) in
+      let gk = if ver0 == 1 then og_goalcheck(sring, bobl, G) else 0 in
+      let ver = ver0 * gk in
       let _ = tr_row(sobuf, sopos, "ring replay  ", ver, sring, ns) in
       let _ = if dec * ver == 1 then sys_exit(0) else sys_exit(2) in 0) else 0;
   let fd = sys_open(pc, lc, 0);
