@@ -232,6 +232,7 @@ fn qdsl_query(s: str, a: [i64], ap: [i64], sb: [i64], sp: [i64]) -> i64 {
   else 0;
   
   let group_node = 0;
+  let g_key = 0; let g_na = 0; let g_aggs = zeros(8);
   let p = qdsl_ws(s, p);
   let has_group = if p+5 > n then 0 else qdsl_cc(s, p, 103, 114, 111, 117, 112, 5);
   let _ = if (if ok == 1 then 1 else 0) * (if has_group == 1 then 1 else 0) == 1 then
@@ -253,10 +254,40 @@ fn qdsl_query(s: str, a: [i64], ap: [i64], sb: [i64], sp: [i64]) -> i64 {
      let _ = if (r2 & 0xffffffff) == 0 then (let _ = ok = 0 in 0) else 0;
      let _ = if ok == 0 then 0 else 0;
      let agg_node = r2 & 0xffffffff; let _ = p = r2 >> 32;
-     let gn = qdsl_alloc(5, 2, 0, a, ap);
-     let _ = a[gn+3] = gk; let _ = a[gn+4] = agg_node;
-     let _ = group_node = gn; 0)
+     let _ = g_key = gk; let _ = g_aggs[0] = agg_node; let _ = g_na = 1; 0)
   else 0;
+  // comma-separated aggregate list -- `agg sum(x), count(y), max(z)`.  The group node's
+  // arity is 1 + the number of aggregates, so it is allocated only AFTER the list is read.
+  // qdsl_agg signals a failed parse by returning p == n (it has no separate error value),
+  // which is the same failure channel the closing-brace check already uses.
+  let more = if ok == 1 then (if g_na > 0 then 1 else 0) else 0;
+  while more == 1 {
+    let p2 = qdsl_ws(s, p);
+    let _ = if p2 >= n then (let _ = more = 0 in 0) else 0;
+    let _ = if more == 1 then (let _ = if char(s,p2) != 44 then (let _ = more = 0 in 0) else 0 in 0) else 0;
+    let _ = if more == 1 then
+      (let p3 = qdsl_ws(s, p2 + 1) in
+       let r3 = qdsl_agg(s, p3, a, ap, sb, sp) in
+       let an = r3 & 0xffffffff in
+       let np = r3 >> 32 in
+       let _ = p = np in
+       let _ = if np >= n then (let _ = ok = 0 in let _ = more = 0 in 0)
+               else (if g_na >= 8 then (let _ = ok = 0 in let _ = more = 0 in 0)
+                     else (let _ = g_aggs[g_na] = an in let _ = g_na = g_na + 1 in 0)) in 0)
+    else 0;
+    0
+  };
+  let _ = if g_na > 0 then
+    (let gn = qdsl_alloc(5, 1 + g_na, 0, a, ap) in
+     let _ = a[gn+3] = g_key in
+     let _ = group_node = gn in 0)
+  else 0;
+  let ai = 0;
+  while ai < g_na {
+    let _ = a[group_node+4+ai] = g_aggs[ai];
+    let ai = ai + 1;
+    0
+  };
   
   let order_node = 0;
   let p = qdsl_ws(s, p);
