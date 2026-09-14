@@ -1,0 +1,78 @@
+use "selfhost/std/qplan.bp"
+// qplan_cover.bp — coverage for selfhost/std/qplan.bp (B7 step 2's planner).
+//
+// WHY THIS EXISTS: arch_check's dead-function invariant named six qplan_* functions as
+// "defined and never called". They were: `grep -rln qplan` over the whole tree returned
+// exactly one file, qplan.bp itself. The planner is a LIBRARY with no main, written ahead
+// of B7 step 2, and nothing had ever executed a line of it. This is the wire-up rather
+// than the deletion, because the row it belongs to is planned, not abandoned -- and because
+// a planner nobody has run is exactly the thing that rots.
+//
+// This is a COVERAGE test, not a correctness gate for the planner: the cost model's numbers
+// are B2/B6's business. What it pins is that every function is reachable, returns, and
+// answers the one thing about it that is decidable today. Two of those answers are
+// unflattering and are pinned deliberately:
+//   * qplan_access is a STUB -- its body is `0` for every input, so "scan" is the only
+//     access path the planner can ever choose. Pinned at 0 so that when bucket/spgemm
+//     land, this number MOVES and someone has to look.
+//   * qplan_validate reads only the child COUNT (nc <= 6), so it accepts any AST shape
+//     with few enough children. Pinned on a 7-child node to show it rejects on arity
+//     alone, which is all it does.
+//
+// The join-order arithmetic IS decidable and is the one real assertion here: with
+// scan_cost = 1 and spgemm_cost = 15, order (0,1) costs rows0*1 + rows1*15 and (1,0) costs
+// rows1*1 + rows0*15, so the planner must put the LARGER table first. Derived from the cost
+// model, not from running the planner: rows = (1000, 10) gives c01 = 1000 + 150 = 1150 and
+// c10 = 10 + 15000 = 15010, so order (0,1) wins at 1150.
+fn main() -> i64 {
+  let a = zeros(64);
+  let order = zeros(4);
+  let cost = zeros(2);
+  let rows = zeros(4);
+
+  // (1) qplan_access: the stub. 0 = scan, for every input.
+  let acc = qplan_access(0, a);
+
+  // (2) qplan_join_order, k = 1: cost = rows * scan_cost = 7 * 1.
+  let _ = rows[0] = 7;
+  let _ = qplan_join_order(1, rows, order, cost, a);
+  let k1_ok = if cost[0] == 7 then (if order[0] == 0 then 1 else 0) else 0;
+
+  // (3) qplan_join_order, k = 2, larger table first: 1000 + 10*15 = 1150.
+  let _ = rows[0] = 1000; let _ = rows[1] = 10;
+  let _ = qplan_join_order(2, rows, order, cost, a);
+  let k2_ok = if cost[0] == 1150 then (if order[0] == 0 then (if order[1] == 1 then 1 else 0) else 0) else 0;
+
+  // (4) the SAME two tables the other way round must pick the other order and the same cost.
+  let _ = rows[0] = 10; let _ = rows[1] = 1000;
+  let _ = qplan_join_order(2, rows, order, cost, a);
+  let k2r_ok = if cost[0] == 1150 then (if order[0] == 1 then (if order[1] == 0 then 1 else 0) else 0) else 0;
+
+  // (5) k = 3 is unsupported and returns the scan-everything CEILING, not a real plan.
+  let _ = rows[0] = 5;
+  let _ = qplan_join_order(3, rows, order, cost, a);
+  let k3_ok = if cost[0] == 5 then 1 else 0;
+
+  // (6) qplan_group_strategy: the boundary is 4096 inclusive.
+  let g_lo = qplan_group_strategy(4096);
+  let g_hi = qplan_group_strategy(4097);
+  let g_ok = if g_lo == 0 then (if g_hi == 1 then 1 else 0) else 0;
+
+  // (7) qplan_cost_bucket is the one cost constant nothing else reads.
+  let cb_ok = if qplan_cost_bucket() == 20 then 1 else 0;
+
+  // (8) qplan_fingerprint: access*100 + group*10 + n_tables, order-sensitive by construction.
+  let fp_ok = if qplan_fingerprint(2, 1, 0) == 102 then (if qplan_fingerprint(0, 2, 1) == 210 then 1 else 0) else 0;
+
+  // (9) qplan_validate on a 6-child node (accept) and a 7-child node (reject on arity alone).
+  let _ = a[1] = 6;
+  let v6 = qplan_validate(0, a);
+  let _ = a[1] = 7;
+  let v7 = qplan_validate(0, a);
+  let v_ok = if v6 == 1 then (if v7 == 0 then 1 else 0) else 0;
+
+  // one digit per check, most significant first; 0 anywhere is a failure that names itself.
+  (if acc == 0 then 1 else 0) * 100000000
+    + k1_ok * 10000000 + k2_ok * 1000000 + k2r_ok * 100000 + k3_ok * 10000
+    + g_ok * 1000 + cb_ok * 100 + fp_ok * 10 + v_ok
+}

@@ -217,7 +217,22 @@ ZONES = [(0, 1, "fntab"), (2900, 3667, "b1_facts"), (3668, 3670, "b1_scratch"),
          # overflow) and the two lists need 2 + 64 + 64 = 130 cells, which do not fit
          # below 5285. 5601..5730 is the free run between "budget" and "lit_table".
          (5601, 5730, "jumps"),
-         (6000, 6999, "lit_table")]
+         (6000, 6999, "lit_table"),
+         # ROADMAP A22 step 1 (2026-09-14): the program-wide struct table. bebop.bp:516-526
+         # states the layout and its own top cell: 7000 scanned flag, 7001 count S (0..32),
+         # 7002+i name hash (32 cells -> 7033), 7034+i the byte offset of struct i's
+         # `struct` keyword (32 cells -> 7065). "Top cell 7065, inside zeros(8192)." It sits
+         # ABOVE lit_table deliberately -- trap E114 caps the literal table below 7000, so
+         # the two cannot collide by construction rather than by remembering.
+         (7000, 7065, "struct_table"),
+         # ROADMAP A21 steps 1+2 (2026-09-14): three scalar cells, not a zone of arrays.
+         # 7100 = the source offset of the paren currently OFFERED as a tuple position
+         # (emit_paren reads it and immediately clears it to -1, so `((a), b)`'s inner paren
+         # cannot inherit the offer); 7101 = the unit-wide "declares any tuple-returning fn"
+         # answer, memoised as 0 not-scanned / 1 no / 2 yes so a fresh zeros() fntab reads
+         # as not-scanned; 7102 = the callee NAME exempted from the E120 guard, which is the
+         # by-name exemption A21's own commit named as a hole (`let (a,b) = f(f(1))` escapes).
+         (7100, 7102, "tuple_abi")]
 # A16 prerequisite RELAYOUT (2026-09-09): the fn cap is 768, so the FLOATING fn zone
 # (3*cnt + ecnt + 258 cells = 0..2816 at cnt=768, ecnt=255) needs everything above it
 # to move. b1_facts is 768 cells because IT IS INDEXED BY FN INDEX -- see PERFN below,
@@ -248,6 +263,14 @@ REGISTERED = {
     5245: "fold", 5246: "fold",
     5601: "jumps", 5602: "jumps", 5666: "jumps", 5667: "jumps",  # A18: was 5247/5248/5265/5266
     5290: "slots",
+    # A22 step 1: all four bases registered, not just the zone. 7002 and 7034 are ARRAY
+    # bases inside struct_table and are exactly the pair the REGISTERED rule exists for --
+    # each is "inside the zone map" on its own, and being inside is not being the base we
+    # said it was (that is the F3 fntab[4810] defect this dict was added to prevent).
+    7000: "struct_table", 7001: "struct_table",
+    7002: "struct_table", 7034: "struct_table",
+    # A21 steps 1+2.
+    7100: "tuple_abi", 7101: "tuple_abi", 7102: "tuple_abi",
     5387: "window_hdr", 5388: "window_hdr",
     5389: "window_cs", 5390: "window_cs", 5391: "window_cs", 5392: "window_cs", 5393: "window_cs",
     5394: "hoist", 5395: "hoist", 5396: "hoist", 5397: "hoist",

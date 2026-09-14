@@ -46,6 +46,34 @@ def bp_sources():
             out.append(p)
     return sorted(out)
 
+def bp_call_sites():
+    """Every .bp that can CALL something, for counting USES. Wider than bp_sources().
+
+    CHECK 19 says in its own comment that "USES are counted over the whole corpus, because a
+    library function called only from a gate is alive" -- and they were not. bp_sources()
+    strips /bench/wip/ before that distinction can apply, so a function called ONLY from
+    work-in-progress was reported as never called. MEASURED 2026-09-14: `gb_reduce_scalar`
+    has three real callers (bench/wip/gb_par_reduce.bp:101, bench/wip/gb_par_mxm.bp:191 and
+    :203) and the check named it dead. A safeguard that reports a function with three callers
+    as uncalled spends the reader's trust on a false positive, which is how a ratchet ends up
+    raised instead of earned.
+
+    Negative fixtures stay out on their own merit: their functions exist to be REJECTED and
+    are never called, so counting them would add noise in the other direction. /attic/ stays
+    out too, deliberately -- a call from retired code does not make a function alive, which is
+    the whole point of having an attic."""
+    skip = ("/.claude/", "/attic/", "/bench/fuzz/", "/seed/",
+            "/typecheck_neg/", "/parity_constructs/neg/", "/kernel_neg/", "/repros/")
+    out = []
+    for dirpath, dirnames, filenames in os.walk(ROOT):
+        dirnames[:] = [d for d in dirnames if d not in (".git", "__pycache__", ".becache")]
+        for fn in filenames:
+            if not fn.endswith(".bp"): continue
+            p = os.path.join(dirpath, fn)
+            if any(s in "/" + os.path.relpath(p, ROOT) for s in skip): continue
+            out.append(p)
+    return sorted(out)
+
 # --- CHECK 1: no nested function definitions -------------------------------------
 # Incident: nested/indented definitions make a file unreadable and hide scope bugs.
 # bebop has no closures (docs/LANGUAGE.md), so an indented `fn` is always a mistake.
@@ -574,15 +602,16 @@ def check_no_dead_functions(r):
     # defines a hundred functions on purpose, to test the fn cap). USES are counted over
     # the whole corpus, because a library function called only from a gate is alive.
     owned = ("bebop.bp", "selfhost/prelude/", "selfhost/std/", "selfhost/tools/")
-    texts, defs = [], {}
+    defs = {}
     for p in bp_sources():
         rel = os.path.relpath(p, ROOT)
-        txt = open(p, errors="replace").read()
-        texts.append(txt)
         if not any(rel == o or rel.startswith(o) for o in owned): continue
-        for i, line in enumerate(txt.split("\n"), 1):
+        for i, line in enumerate(open(p, errors="replace").read().split("\n"), 1):
             m = re.match(r"^fn\s+(\w+)\s*\(", line)
             if m: defs.setdefault(m.group(1), []).append("%s:%d" % (rel, i))
+    # USES over bp_call_sites(), which is what "the whole corpus" in the comment above
+    # always meant -- see that function's docstring for the false positive this fixes.
+    texts = [open(p, errors="replace").read() for p in bp_call_sites()]
     uses = collections.Counter(re.findall(r"\b(\w+)\s*\(", "\n".join(texts)))
     entry = {"main", "kernel_main"}
     # `fn foo(` also matches the call pattern, so a function is dead when its only

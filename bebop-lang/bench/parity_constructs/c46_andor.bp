@@ -1,6 +1,22 @@
-// T125 2026-09-06: `&&` and `||` pinned: the `&` / `|` tiers on 0/1 comparison values
-// (bebop.bin consumes one `&`, the right operand parses the second), no short circuit.
-// EXPECT 111100 from: hand: logical AND/OR
+// T125 2026-09-06: `&&` and `||` pinned. REDERIVED 2026-09-14 for A26 (compiler half
+// `0cb2c23`): they are REAL LOGICAL OPERATORS now -- value 0/1, both operands through
+// `vs_to_bool`, still NO short circuit (that half of T125 is unchanged) -- and their
+// precedence is `|| < && < cmp` (`bebop.bp:3853`), LOOSER than comparison rather than
+// tighter.
+//
+// The old header said 111100 and that number was the PRE-A26 MIS-PARSE, not a measurement
+// of anything correct. Both readings derived by hand with a = 3, b = 5, and `q` is the only
+// term that moves:
+//   post-A26 (correct): q = (3>5) && (5<9) = 0 && 1 = 0
+//   pre-A26           : `&&` was `&` and bound tighter, so `a > b && b < 9` parsed as
+//                       `a > (b & b) < 9` = `(3>5) < 9` = `0 < 9` = 1
+//   post-A26 total: 1*100000 + 0*10000 + 1*1000 + 0*100 + 100 = 101100
+//   pre-A26  total: 1*100000 + 1*10000 + 1*1000 + 0*100 + 100 = 111100
+// bebop.bin printed 101100 all along; `tools/bpref.py` printed 111100 because it still had
+// `&&`/`||` aliased to `&`/`|` in the `&`/`|` tiers, so the oracle AGREED WITH THE STALE
+// HEADER and the two implementations genuinely disagreed. bpref was brought to A26 in the
+// same commit as this header; `BPREF_PREA26=1` still reproduces 111100.
+// EXPECT 101100 from: hand: logical AND/OR (A26; q is the discriminating term)
 fn main() -> i64 {
   let a = 3;
   let b = 5;

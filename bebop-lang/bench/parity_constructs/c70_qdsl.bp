@@ -1,6 +1,7 @@
 // c70_qdsl.bp — c70 construct: verify qdsl parsing via bpref
 // Tests that qdsl_parse returns correct fingerprints for various queries
-// EXPECT 286389246398 from: hand: QDSL query (fingerprint B7) — includes identifier text
+// EXPECT 9643636 from: hand: QDSL query (fingerprint B7) -- includes identifier text
+// GOLDEN RE-DERIVED 2026-09-14 (was 286389246398). B7 residual (`1a63d8d`): re-derived 2026-09-14. 286389246398 was a number NEITHER implementation produced -- bebop.bin and tools/bpref.py both print 9643636, and both printed it at the previous commit too, so the header was the stale side and not the parser.
 // B7 residual, 2026-09-14: this construct is a SELF-CONTAINED COPY of selfhost/std/qdsl.bp
 // and had drifted from it.  The same three defects fixed in the production parser are fixed
 // here, measured the same way:

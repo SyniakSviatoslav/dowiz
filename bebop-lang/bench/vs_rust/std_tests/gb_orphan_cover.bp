@@ -1,0 +1,127 @@
+use "selfhost/prelude/sha256.bp"
+use "selfhost/prelude/store.bp"
+use "selfhost/prelude/gb.bp"
+// gb_orphan_cover.bp — coverage for three gb.bp functions that had never executed.
+//
+// WHY THIS EXISTS: arch_check's dead-function invariant named `gb_apply`,
+// `gb_build_grid10x10` and `gb_reduce_col` as defined and never called. Measured
+// 2026-09-14: each had exactly ONE mention in the whole tree, its own definition. They are
+// real GraphBLAS operations in the PRELUDE, not speculative code, so this is the wire-up.
+// (A fourth, `gb_reduce_scalar`, was on that list and should not have been: it has three
+// callers under bench/wip/, which arch_check could not see because bp_sources() stripped
+// that directory before counting USES. That was a defect in the check and is fixed in the
+// same commit as this file.)
+//
+// Every number below is DERIVED from the grid, not read off a run:
+//   * nnz == 360, DERIVED: gb_gen_grid10x10 walks 100 cells emitting 2 pairs each = 200
+//     pairs, but a cell with no right (or down) neighbour emits a SELF-LOOP (`pdst = i`,
+//     gb.bp:330 and :334), and there are 10 of each. So 180 of the 200 pairs are real
+//     undirected edges -- which is exactly 2*10*9 -- and gb_build_pairs symmetrises them
+//     and drops the 20 self-loops via its dedup bitmap, giving 2*180 = 360.
+//     MEASURED FIRST DRAFT OF THIS FILE ASSERTED nnz <= 200 AND FAILED: the bound
+//     contradicted the derivation three lines above it in the same comment. The function was
+//     right; the assertion was wrong. Recorded because it is the whole argument for deriving
+//     a number before running anything -- the run is what caught the arithmetic, not the code.
+//   * EVERY assertion below is WEIGHT-INDEPENDENT, and that is the second thing this file
+//     had to learn. The first draft assumed gb_build_pairs assigns value 1 per edge and
+//     asserted row-sum == nnz; it does not -- the value is `gb_edge_weight(u, v)`
+//     (gb.bp:206), so the sums are weighted and the assertion failed. Rewritten to assert
+//     the INVARIANTS instead of the weights, which is both correct for any weight function
+//     and the property that actually matters:
+//       - sum over rows of gb_reduce_row(A, i)  == gb_reduce_scalar(A)   (every value once)
+//       - sum over cols of gb_reduce_col(AT, j) == gb_reduce_scalar(A)   (the same values,
+//         reached through the TRANSPOSE -- two independent paths agreeing on one number,
+//         which is exactly what makes the gb_reduce_col alias worth testing)
+//       - gb_apply op 2 (v -> v+1) adds exactly 1 per stored value: S + nnz
+//       - gb_apply op 3 (negate): -S
+//       - op 1 and any unrecognised op are identity: S
+//     Pinning weights instead would have made this file a transcription of one run.
+//   * apply never touches the sparsity pattern (its own comment says so), so nnz must be
+//     unchanged by both applies.
+fn sum_rows(base: [i64], A: i64, n: i64) -> i64 {
+  let i = 0; let acc = 0;
+  while i < n {
+    let acc = acc + gb_reduce_row(base, A, i);
+    let i = i + 1;
+    0
+  };
+  acc
+}
+fn sum_cols(base: [i64], AT: i64, n: i64) -> i64 {
+  let j = 0; let acc = 0;
+  while j < n {
+    let acc = acc + gb_reduce_col(base, AT, j);
+    let j = j + 1;
+    0
+  };
+  acc
+}
+fn main() -> i64 {
+  let path = zeros(64);
+  let pl = st_str(path, "gb_orphan_cover.store");
+  let tmp = zeros(1024);
+  let base = st_open(path, pl, 131072, tmp);
+  let tx = zeros(6);
+  let _ = st_begin(base, tx, tmp);
+  let dg = zeros(6);
+  let _ = gb_digests(dg);
+
+  // (1) gb_build_grid10x10 — first execution of this function in the tree's history.
+  let A = gb_build_grid10x10(base, tx, tmp, dg);
+  let n = st_get(base, A, 0);
+  let nnz = st_get(base, A, 2);
+  let n_ok = if n == 100 then 1 else 0;
+  let m = st_get(base, A, 1);
+  let nnz_ok = if nnz == 360 then (if m == 100 then 1 else 0) else 0;
+
+  // S is the total stored weight -- the reference every assertion below is relative to.
+  let S = gb_reduce_scalar(base, A);
+
+  // (2) summing gb_reduce_row over every row visits every stored value exactly once.
+  let rs = sum_rows(base, A, n);
+  let rs_ok = if rs == S then 1 else 0;
+
+  // (3) gb_reduce_col over the TRANSPOSE reaches the same total by the other axis.
+  let AT = gb_transpose(base, tx, tmp, A, dg);
+  let cs = sum_cols(base, AT, n);
+  let cs_ok = if cs == S then 1 else 0;
+
+  // (4) gb_apply op 2 (v -> v+1): adds exactly 1 per stored value; pattern unchanged.
+  let A2 = gb_apply(base, tx, tmp, A, 2, dg);
+  let s2 = gb_reduce_scalar(base, A2);
+  let a2_ok = if s2 == S + nnz then (if st_get(base, A2, 2) == nnz then 1 else 0) else 0;
+
+  // (5) gb_apply op 3 (negate): -S; pattern unchanged.
+  let A3 = gb_apply(base, tx, tmp, A, 3, dg);
+  let s3 = gb_reduce_scalar(base, A3);
+  let a3_ok = if s3 == 0 - S then (if st_get(base, A3, 2) == nnz then 1 else 0) else 0;
+
+  // (6) op 1 is identity, and so is any unrecognised op — pinned because gb_apply_op's
+  //     `else v` makes every op outside {2,3} an identity, which a caller could mistake
+  //     for a rejection.
+  let A1 = gb_apply(base, tx, tmp, A, 1, dg);
+  let A9 = gb_apply(base, tx, tmp, A, 9, dg);
+  let id_ok = if gb_reduce_scalar(base, A1) == S then (if gb_reduce_scalar(base, A9) == S then 1 else 0) else 0;
+
+  // (7) st_commit_c — the fifth orphan, and the only one whose disposition is NOT obvious.
+  // It is `st_cobj` + carry the heads table over unchanged + `st_publish`, and C3's row says
+  // the `schain` gate covers it. It does NOT: `bench/vs_rust/std_tests/schain.bp:7` names
+  // st_commit_c in a COMMENT and then calls st_cobj/st_publish directly at :75-77, because
+  // it needs the commit OFFSET back for its "keep" head and st_commit_c returns st_publish's
+  // value instead. That is a real design defect -- the function is unusable by the one gate
+  // written for it -- and it is reported rather than worked around. Here it is exercised on
+  // the path it IS right for: a root with no heads-table change. The assertion is that the
+  // chain advanced by exactly one generation and the root round-trips.
+  let root = st_alloc(base, tx, 3, st_digest("GbOrph3{ref GbMatrix,ref GbMatrix,ref GbMatrix}"));
+  let _ = st_link(base, root, 0, A);
+  let _ = st_link(base, root, 1, AT);
+  let _ = st_link(base, root, 2, A2);
+  let _ = st_seal(base, root, tmp);
+  let g0 = st_gen(base, tmp);
+  let _ = st_commit_c(base, tx, root, st_digest("GbOrphCommit"), tmp);
+  let g1 = st_gen(base, tmp);
+  let cc_ok = if g1 == g0 + 1 then (if st_root(base, tmp) == root then 1 else 0) else 0;
+
+  n_ok * 10000000 + nnz_ok * 1000000 + rs_ok * 100000 + cs_ok * 10000
+    + a2_ok * 1000 + a3_ok * 100 + id_ok * 10 + cc_ok
+}

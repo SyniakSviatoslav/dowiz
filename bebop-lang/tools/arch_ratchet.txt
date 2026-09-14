@@ -25,6 +25,18 @@ bp_exempt:selfhost/prelude/store.bp = 1      # SPLIT: superblock+PartTab / objec
 bp_exempt:selfhost/prelude/gb.bp = 1         # SPLIT: matrix build / traversal kernels / semiring plumbing
 bp_exempt:selfhost/std/gen_gb.bp = 1         # SPLIT: template emission / semiring tables
 #
+# selfhost/tcheck.bp is the F6 certificate checker: a STANDALONE trusted artifact with its own
+# 511-fn cap, deliberately never inside bebop.bp, and the only new thing in the trust root.
+# It is exempt on a different ground from the debt lines above -- not "we will split this
+# later" but "splitting it would enlarge the trusted surface". A checker's trust argument is
+# per-ARTIFACT: one file, one digest, one thing to read end to end. Splitting it into four
+# files means four digests to pin and four places a reader must look before believing a
+# verdict, which is a worse trade than the line count. Added 2026-09-14 at 3566 lines; it
+# grew from ~1000 as F6 landed bb_mul64, the two floor lemmas, lemma D3 and the case splits,
+# and it will keep growing while F6 does. The line count is therefore NOT the number to watch
+# here -- the fn count against its own 511 cap is, and that has its own guard inside the file.
+bp_exempt:selfhost/tcheck.bp = 1
+#
 # Scripts allowed to discard a run's stderr, each with the reason. A fuzzer or a delta
 # debugger runs thousands of programs whose failure IS the signal and is counted, not read.
 loud_exempt:tools/fuzzd.sh = 1            # fuzzer: failures are classified by exit code, counted, not printed
@@ -45,7 +57,24 @@ max_missing_citations = 0        # 20 -> 0, 2026-09-14. Sixteen were fixed at th
 magic_literal_min = 1000
 #
 # DEBT recorded 2026-09-12, each line may only go DOWN.
-max_dead_functions = 11            # uncalled library/compiler functions; wire them up or delete them
+# 11 -> 1, 2026-09-14, EARNED not moved. Of the 12 the check reported, one was a FALSE
+# POSITIVE the check itself caused: gb_reduce_scalar has three callers under bench/wip/, and
+# bp_sources() stripped that directory before counting USES even though CHECK 19's own comment
+# says "USES are counted over the whole corpus". Fixed by adding bp_call_sites(). The other
+# ten were real and were WIRED UP, not deleted, because each belongs to a planned row:
+#   6 qplan_* -> bench/vs_rust/std_tests/qplan_cover.bp (B7 step 2's planner had never
+#     executed a line; the whole tree had exactly one mention of it, its own file)
+#   3 gb_*    -> bench/vs_rust/std_tests/gb_orphan_cover.bp (gb_apply, gb_build_grid10x10,
+#     gb_reduce_col; first execution in the tree's history, and it took two wrong assertions
+#     of mine to get right -- see that file's header)
+#   1 st_commit_c -> the same file. C3's row claims the `schain` gate covers it; schain names
+#     it in a COMMENT and calls st_cobj/st_publish directly, because st_commit_c returns
+#     st_publish's value instead of the commit offset its only plausible caller needs.
+# The remaining 1 is src_rename_idents (bebop.bp:7786), A25's deliberate loud stub -- it is
+# `cli_exit(84, "src_rename_idents: NOT IMPLEMENTED")` and is owed an implementation, not a
+# caller. It stays at 1 until A25 step 1b lands, and it is in bebop.bp, which the lane that
+# lowered this line did not own.
+max_dead_functions = 1             # uncalled library/compiler functions; wire them up or delete them
 max_uncovered_builtins = 1         # sys_mapb has no corpus caller: A7 step 3 landed it untested
 max_syscall_no_regtable = 8        # emit_sys_{write,close,exit,exit_thread_guard,slurp,ftruncate,munmap,mmap}
 max_malformed_journal = 519        # entries predating the H:/DID:/GOT:/VERDICT: format

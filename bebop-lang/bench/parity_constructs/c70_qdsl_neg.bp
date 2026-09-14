@@ -1,6 +1,7 @@
 // c70_qdsl_neg.bp — c70 construct: verify malformed query returns 89 (exit code)
 // Tests that qdsl_parse returns 0 for invalid input
-// EXPECT 1 from: hand: QDSL invalid query (B7 DEFECT - should be 89) — fingerprint enhanced with identifier text
+// EXPECT 89 from: hand: QDSL invalid query correctly REFUSED (89 = rejected)
+// GOLDEN RE-DERIVED 2026-09-14 (was 1). B7 residual (`1a63d8d`): re-derived 2026-09-14. This construct returns 89 when the parse is CORRECTLY REJECTED and 1 when it is accepted, so the old `EXPECT 1` froze the DEFECT. Both implementations print 89, and both printed it at the previous commit -- the fix that made it reject landed earlier and the header was never re-derived.
 // B7 residual, 2026-09-14: this construct is a SELF-CONTAINED COPY of selfhost/std/qdsl.bp
 // and had drifted from it.  The same three defects fixed in the production parser are fixed
 // here, measured the same way:

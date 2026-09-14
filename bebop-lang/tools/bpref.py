@@ -108,7 +108,13 @@ BIN = {
     '*': lambda a, b: wrap(a * b), '/': i_div,
     '%': lambda a, b: wrap(a - i_div(a, b) * b),
     '&': lambda a, b: wrap(a & b), '|': lambda a, b: wrap(a | b),
-    '&&': lambda a, b: wrap(a & b), '||': lambda a, b: wrap(a | b),
+    # A26 (compiler half landed 0cb2c23): `&&` and `||` are LOGICAL operators returning
+    # 0/1, not the bitwise `&`/`|` they used to alias. The compiler puts BOTH operands
+    # through `vs_to_bool` and then combines (bebop.bp:emit_apply_land / emit_apply_lor),
+    # so a non-zero operand contributes 1 whatever its value. MEASURED 2026-09-14, this is
+    # the case that separates the two readings: `(2 || 0) == 1` is 1 under bebop.bin and was
+    # 0 here, because 2 | 0 = 2. Fixed 2026-09-14 by the gate-catch-up lane.
+    '&&': lambda a, b: int(a != 0 and b != 0), '||': lambda a, b: int(a != 0 or b != 0),
     '^': lambda a, b: wrap(a ^ b),
     '<<': lambda a, b: wrap(a << (b & 63)),
     '>>': lambda a, b: wrap((a & MASK) >> (b & 63)),
@@ -117,11 +123,24 @@ BIN = {
     '<': lambda a, b: int(a < b), '>': lambda a, b: int(a > b),
     '<=': lambda a, b: int(a <= b), '>=': lambda a, b: int(a >= b),
 }
-TIERS = [('==', '!=', '<=', '>=', '<', '>'), ('|', '||'), ('^',), ('&', '&&'),
+# A26 precedence, taken from the compiler's own statement of it at bebop.bp:3853:
+#   `|| < && < cmp < | < ^ < & < shifts < + - < * / %`
+# `&&` and `||` used to share tiers with `&` and `|`, which put them TIGHTER than comparison
+# -- so `a > b && b < 9` parsed as `a > (b & b) < 9` and evaluated to 1 instead of 0. That
+# mis-parse is what `bench/parity_constructs/c46_andor.bp`'s old `// EXPECT 111100` header
+# recorded; the correct value under this grammar is 101100, and `q` is the term that moves.
+TIERS = [('||',), ('&&',), ('==', '!=', '<=', '>=', '<', '>'), ('|',), ('^',), ('&',),
          ('<<', '>>', '>>>'), ('+', '-'), ('*', '/', '%')]
 if os.environ.get('BPREF_OLDPREC') == '1':
     TIERS = [('==', '!=', '<=', '>=', '<', '>'), ('+', '-'), ('*', '/', '%'),
              ('&', '|', '^', '<<', '>>', '>>>')]
+# BPREF_PREA26=1 restores the pre-A26 reading (bitwise, tighter than comparison) so the old
+# behaviour stays reproducible for anything that needs to re-derive a pre-A26 number.
+if os.environ.get('BPREF_PREA26') == '1':
+    BIN['&&'] = lambda a, b: wrap(a & b)
+    BIN['||'] = lambda a, b: wrap(a | b)
+    TIERS = [('==', '!=', '<=', '>=', '<', '>'), ('|', '||'), ('^',), ('&', '&&'),
+             ('<<', '>>', '>>>'), ('+', '-'), ('*', '/', '%')]
 if os.environ.get('BPREF_ASR') == '1':
     BIN['>>'] = lambda a, b: wrap(a >> (b & 63))
 
