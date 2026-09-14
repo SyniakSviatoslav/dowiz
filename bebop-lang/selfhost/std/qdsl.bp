@@ -369,9 +369,9 @@ fn qdsl_fingerprint(node: i64, a: [i64]) -> i64 {
 }
 
 fn qdsl_explain_ident(node: i64, a: [i64], sb: [i64], buf: [i64], bp: [i64]) -> i64 {
-  let bu = a[node+2]; let sp = a[node+1];  // attr=bu, nch=sp (name length+1)
+  let bu = a[node+2];  // attr=bu (start of identifier string in sb)
   let k = 0;
-  while k < sp - 1 {
+  while sb[bu+k] != 0 {
     let _ = buf[bp[0]] = sb[bu+k];
     let _ = bp[0] = bp[0] + 1;
     let k = k + 1;
