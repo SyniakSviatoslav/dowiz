@@ -7061,6 +7061,40 @@ fn use_append_str(dst: [i64], off: i64, src: str) -> i64 {
   off + i - 1
 }
 
+// ---- A25: Textual rewriter primitives ----
+// src_copy_range(dst, off, s, from, to) -> new_off
+// Copy bytes s[from..to) into dst starting at offset off.
+// Returns the new offset after the copied bytes.
+// Bounds-checked: if to > len(s) or from > to, exit 84.
+fn src_copy_range(dst: [i64], off: i64, s: str, from: i64, to: i64) -> i64 {
+  let strn = str_len(s);
+  let oob = (if from < 0 then 1 else 0) + (if to > strn then 1 else 0) + (if from > to then 1 else 0);
+  let _ = if oob > 0 then cli_exit(84, "src_copy_range: bounds check failed") else 0;
+  let i = from;
+  let out = off;
+  while i < to {
+    let c = char(s, i);
+    let _ = dst[out] = c;
+    let i = i + 1;
+    let out = out + 1;
+    0
+  };
+  out
+}
+
+// src_rename_idents: NOT IMPLEMENTED -- a LOUD trap on purpose, never a silent copy.
+// The shape it needs is a FLAT while loop over [from, to) with a four-way branch, not
+// nested lets: at each position dispatch on string start (skip_string_n, :2162), `//`
+// comment start (skip_line_comment_n, :2146), identifier start (read_ident's 131-rolling
+// hash, :154/:164 -- compare the hash plus a length rather than characters), else copy one
+// byte. collect_fns (:6125) already skips strings and comments in exactly that shape at
+// :6189-6190; copy its structure. The earlier attempt failed on exit 101 `unbound symbol`,
+// which is a scoping mistake (a `let` inside an `if` arm does not escape the arm), not a
+// limit of the language.
+fn src_rename_idents(dst: [i64], off: i64, s: str, from: i64, to: i64, old: str, new: str) -> i64 {
+  cli_exit(84, "src_rename_idents: NOT IMPLEMENTED")
+}
+
 // Expand `use` lines of srcv into a fresh source string (or return srcv when
 // there are none). tmpc/tmpl = the scratch file path cells/length.
 // use_comment(buf, base, txt): overwrite every line-initial `use "` in buf[base..] (a copy
