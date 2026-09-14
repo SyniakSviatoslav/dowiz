@@ -72,19 +72,54 @@ fn diag_str(buf: [i64], at: i64, m: str) -> i64 {
   while i < n { let _ = buf[at + i] = char(m, i); let i = i + 1; 0 };
   at + n
 }
+// Copy `len` bytes of `s` from offset `from` into buf at `at`. diag_str only copies a
+// whole str from 0, and the `use` marker's path is a SPAN inside the expanded buffer.
+fn diag_span(buf: [i64], at: i64, s: str, from: i64, len: i64) -> i64 {
+  let k = [0];
+  while k[0] < len {
+    let _ = buf[at + k[0]] = char(s, from + k[0]);
+    let _ = k[0] = k[0] + 1;
+    0
+  };
+  at + len
+}
 fn diag_exit(s: str, p: i64, code: i64) -> i64 {
   let line = 1;
   let col = 1;
   let i = 0;
+  // A25: the SAME single pass that counts lines also picks up the last `//@path` marker
+  // before p, so positions cost no extra scan. Seeing a marker at a line start sets line to
+  // 0; the marker's own newline then makes the first real line of that segment line 1, so
+  // the number printed is the line WITHIN the original file.
+  let mp = 0 - 1;
   while i < p {
+    let atb = if i == 0 then 1 else ceq(s, i - 1, 10);
+    let mk = atb * ceq(s, i, 47) * ceq(s, i + 1, 47) * ceq(s, i + 2, 64);
+    let line = if mk == 1 then 0 else line;
+    let mp = if mk == 1 then i + 3 else mp;
     let nl = ceq(s, i, 10);
     let line = line + nl;
     let col = if nl == 1 then 1 else col + 1;
     let i = i + 1;
     0
   };
-  let buf = zeros(256);
-  let a1 = put_num(buf, 0, line);
+  let mlen = [0];
+  let mg = if mp >= 0 then 1 else 0;
+  while mg == 1 {
+    let cc = char(s, mp + mlen[0]);
+    let stop = (if cc == 10 then 1 else 0) + (if cc == 0 then 1 else 0);
+    let _ = if stop == 0 then (let _ = mlen[0] = mlen[0] + 1 in 0) else 0;
+    let mg = 1 - stop;
+    0
+  };
+  let buf = zeros(512);
+  // The path prefix appears ONLY for a position inside an included file. A top-level
+  // position keeps the bare `line:col:` form the CLI has always printed -- which is also
+  // what keeps bench/vs_rust/diag_check.sh's `cut -d: -f1,2` reading line:col.
+  let pb = if mlen[0] > 0 then diag_span(buf, 0, s, mp, mlen[0]) else 0;
+  let _ = if mlen[0] > 0 then (let _ = buf[pb] = 58 in 0) else 0;
+  let st = if mlen[0] > 0 then pb + 1 else 0;
+  let a1 = put_num(buf, st, line);
   let _ = buf[a1] = 58;
   let a2 = put_num(buf, a1 + 1, col);
   let _ = buf[a2] = 58;
@@ -183,34 +218,28 @@ fn read_ident(s: str, pos: [i64]) -> i64 {
 
 // Symbol table: stab[0] = count; pairs (name, reg) at stab[1+2i], stab[2+2i].
 // Lookup name -> register (or -1 if unbound).
-// ---- ROADMAP A8 section 3.1 (2026-09-14): the stab gained a 4TH CELL ----
-// Entries were (name, reg, srcpos) triples; they are now QUADRUPLES, the 4th cell being
-// the symbol's TYPE WORD. The blueprint amends the layout ONCE, for every tag it
-// reserves, precisely so that this arithmetic is never re-derived per tag; it lives in
-// exactly four places (sym_lookup, sym_bind, sym_is_outer, sy_type_get/set) and the
-// three `zeros(513)` allocations.
+// ---- A8 section 3.1: the stab gained a 4TH CELL ----
+// Entries were (name, reg, srcpos) triples; they are now QUADRUPLES, the 4th cell holding
+// the symbol's TYPE WORD. Sized ONCE for every tag the blueprint reserves so the stride is
+// never re-derived per tag; it lives in four places (sym_lookup, sym_bind, sym_is_outer,
+// sy_type_get/set) plus the three `zeros(513)` allocations.
 // THE TYPE WORD, and what is RESERVED in it for the rows that share this cell:
 //   bits  0..7   type tag: 0 i64, 1 [i64], 2 str, 3 ref T, 4 [u32], 5 [str], 6 fp,
 //                7 [u8] -- exactly the blueprint's tag list, 248 values still free
 //   bit   8      KNOWN: the walk or `let` inference is confident about this tag. A zero
 //                word therefore means "nothing known", which is what an unrecorded symbol
 //                has always meant, so every existing program is unaffected
-//   bit   9      FROM A SIGNATURE, as opposed to inferred. The two are NOT the same and
-//                conflating them broke the b6core gate: tools/typecheck.py's index rule is
+//   bit   9      FROM A SIGNATURE, as opposed to inferred -- NOT the same thing, and
+//                conflating them broke the b6core gate: typecheck.py's index rule is
 //                `if base == 'i64' and e[1] in self.declared`, so indexing an INFERRED i64
-//                is not a finding -- and it must not be, because `let a = env[0]; a[i]` is
-//                the A5 step 1b model (a cell holds a cell INDEX) and the explicit-env
-//                closure shape A16 step 2 just landed. Only bit 9 gates the index check;
-//                bit 8 gates the argument and return comparisons
-//   bits 10..41  32-bit payload: `ref T`'s T hash for tag 3, the declared length for
-//                tag 7 `[u8]`. Unused by the other tags
-//   bits 42..55  RESERVED, 14 bits, for A22 STEP 2's per-symbol struct index (the
-//                struct cap is 32, so 15 bits is room to spare). A22 step 2 currently
-//                has nowhere to put it; this is that place
-//   bits 56..62  RESERVED, 7 bits, for F3's per-symbol static length, which lives in
-//                fntab[5410 + lk] today -- a parallel 128-cell table keyed by register
-//                rather than by symbol, which is why it cannot see a spilled symbol
-//                past slot 35. Moving it here retires that table
+//                is not a finding. Only bit 9 gates the index check; bit 8 gates the
+//                argument and return comparisons
+//   bits 10..41  32-bit payload: `ref T`'s T hash (tag 3), `[u8]`'s declared length (tag 7)
+//   bits 42..55  RESERVED for A22 STEP 2's per-symbol struct index: 14 bits against a
+//                32-struct cap, and A22 step 2 has nowhere else to put it
+//   bits 56..62  RESERVED for F3's per-symbol static length, today in fntab[5410 + lk] --
+//                a 128-cell table keyed by REGISTER, not by symbol, which is why it cannot
+//                see a symbol spilled past slot 35. Moving it here retires that table
 //   bit   63     left clear: the word is read with `&` masks and compared as signed
 fn sym_lookup(s: str, stab: [i64], name: i64, srcpos: i64) -> i64 {
   let cnt = stab[0];
@@ -381,6 +410,18 @@ fn param_type_at(s: str, npos: i64, strn: i64) -> i64 {
 // "unknown" rather than a stale sibling's type -- fail-safe by construction. A partial
 // checker must be silent where it cannot see, not loud.
 // Known words used below: 256 = i64, 257 = [i64], 258 = str.
+// AN ELEMENT READ OUT OF AN ARRAY IS *UNKNOWN*, NOT i64 -- corrected after a live
+// regression. Under A5 step 1b an `[i64]` VALUE *is* a cell index, so a cell may hold a
+// HANDLE, and `let a = env[0]; sum_it(a, n)` against a declared `[i64]` param is how this
+// language does indirection -- it is what A16 step 2's closures rest on, where
+// `(fn << 40) | env` hands env around as an i64. A handle and an integer are
+// REPRESENTATIONALLY IDENTICAL here, so unknown is the only sound answer and it is
+// fail-safe: a literal, an array literal, a param and a call result stay known, so every
+// negative still fires. `[str]` is the exception and stays `str` (that is what makes
+// `argv[2]` into a `str` param legal). The blueprint names `array get on [u32] -> i64` and
+// says nothing about `[i64]`, so this deviates from nothing. tools/typecheck.py has the
+// SAME bug -- its get rule returns 'i64' for any non-[str] base -- and reports 0 findings
+// only because nothing in the corpus passes a handle. Fix it there with the equality gate.
 fn ety_set(fntab: [i64], t: i64) -> i64 { let _ = fntab[7110] = t in 0 }
 
 // Do two type words CONFLICT? Only when BOTH are known and their tags differ. Tag 3
@@ -602,7 +643,7 @@ fn emit_ident(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   let ety = if is_lp == 1 then fn_ret_type(s, name, fntab, strn)
     else if const_ok == 1 then 256
     else if is_br * struct_ok == 1 then 257
-    else if is_lb == 1 then (if (sy_type_get(s, stab, name, npos) & 255) == 5 then 258 else 256)
+    else if is_lb == 1 then (if (sy_type_get(s, stab, name, npos) & 255) == 5 then 258 else 0)
     else sy_type_get(s, stab, name, npos);
   let _ = ety_set(fntab, ety);
   rr
@@ -659,9 +700,9 @@ fn field_index(s: str, spos: i64, fname: i64, fcnt: [i64]) -> i64 {
 }
 
 // ---- A22 step 1: the program-wide struct table ----
-// fntab[5541] held ONE struct name hash, so every other struct was invisible: its
-// literal parsed as a block, its `.f` resolved against the cached layout. Now ONE
-// pre-pass per unit, above the literal table (E114 caps that below 7000):
+// fntab[5541] held ONE struct name hash, so every other struct was invisible: its literal
+// parsed as a block and its `.f` resolved against the cached layout. Now ONE pre-pass per
+// unit, above the literal table (E114 caps that below 7000):
 //   fntab[7000]      scanned flag: 0 = not built, 1 = built
 //   fntab[7001]      struct count S (0..32)
 //   fntab[7002 + i]  struct i: name hash (read_ident hash)
@@ -1141,17 +1182,13 @@ fn fn_ret_arity(s: str, name: i64, fntab: [i64], strn: i64) -> i64 {
 }
 
 // Does this compilation unit declare any tuple-returning fn? ONE source scan, cached in
-// fntab[7101] (0 = not scanned, 1 = no, 2 = yes; a fresh fntab is zeros so the
-// lifetime is the unit, exactly like A22's fntab[7000]). WHY IT EXISTS: emit_bl_call's
-// arity guard needs ft_srcpos, an O(#fns) scan at EVERY call site on top of the
-// fntab_lookup it already does, so this bounds that to programs that can actually
-// have a multi-value callee. HONEST MEASUREMENT, 2026-09-14: it bought no measurable
-// time -- bebop.bp self-compile is 1.128 s for the pre-A21 source and 1.227 s for
-// this one either way, and that 8.8% is the 3.1% source growth and the extra fns,
-// not the guard. It is kept because it bounds the cost, not because it moved a number.
-// Conservative by design: an arrow-then-paren pair inside a comment or a string turns
-// the guard ON, which costs time and changes no answer (bebop.bp's own comments had
-// to stop spelling the pair literally for the flag to stay off for itself).
+// fntab[7101] (0 = not scanned, 1 = no, 2 = yes; a fresh fntab is zeros so the lifetime is
+// the unit, like A22's fntab[7000]). It bounds emit_bl_call's arity guard -- an O(#fns)
+// ft_srcpos at every call site -- to programs that can have a multi-value callee. HONEST
+// MEASUREMENT: it bought no measurable time (1.128 s pre-A21 vs 1.227 s after, either way;
+// that 8.8% is source growth), and is kept because it bounds the cost, not because it moved
+// a number. Conservative: an arrow-then-paren pair in a comment turns the guard ON, which
+// costs time and changes no answer -- hence this file never spells the pair literally.
 fn unit_tuple_scan(s: str, strn: i64) -> i64 {
   let j = [0];
   let hit = [0];
@@ -1259,20 +1296,19 @@ fn ft_cache_set(tab: [i64], name: i64, val: i64) -> i64 {
   0
 }
 
-// A real cross-function call via bl: eval args -> x0..x(n-1), bl target, push.
-fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+// ---- ONE operand-list parser for all three call forms (2026-09-14) ----
+// `pos` is on the `(`; on return it is past the `)` and the result is the operand count.
+// This body existed THREE times (emit_bl_call, emit_call_fn, emit_call_packed) -- a
+// file-size cost and three places for one fix to be applied twice. `cname` is the DIRECT
+// callee's name for A8's argument check, or 0 for an indirect call whose target is a value
+// and whose param types are unknowable. `start`: call_packed pushes a placeholder first.
+fn parse_operands(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64], cname: i64, start: i64) -> i64 {
   let strn = slen(s, pos);
-  // A21 step 1: a fn declared with k > 1 return values may only be called as the
-  // whole RHS of a destructuring `let`, which publishes its name in fntab[7102].
-  // Anywhere else x1..x(k-1) would be dropped silently -- exactly the "reads
-  // garbage" failure the arity table exists to make impossible.
-  let cpos = pos[0];
-  let _ = if unit_has_tuple_fn(s, fntab, strn) == 1 then (if name == fntab[7102] then 0 else (if fn_ret_arity(s, name, fntab, strn) > 1 then diag_exit(s, cpos, 120) else 0)) else 0;
   let _ = pos[0] = pos[0] + 1;
-  let nargs = 0;
+  let nops = start;
   let done = 0;
   while done == 0 {
-    // progress guard: a malformed argument (e.g. "(3,{") must not spin forever
+    // progress guard: a malformed operand (e.g. "(3,{") must not spin forever
     let before = pos[0];
     let _ = skip_ws(s, pos);
     let at_end = if pos[0] >= strn then 1 else 0;
@@ -1282,16 +1318,17 @@ fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i6
     let _ = if is_rp == 0 then emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
     // A8 check (3), which also IS check (5): the argument's inferred type against the
     // callee's DECLARED parameter type. `[u32]` (tag 4) where `[i64]` (tag 1) is declared
-    // is the same comparison as `str` where `i64` is declared -- one rule, five gaps
-    // closed. Silent whenever either side is unknown (ty_clash).
-    let _ = if is_rp == 0 then (if ty_clash(fntab[7110], callee_param_type(s, name, nargs, fntab, strn)) == 1 then diag_exit(s, apos0, 84) else 0) else 0;
-    let nargs = nargs + (1 - is_rp);
+    // is the same comparison as `str` where `i64` is declared. Silent when either side is
+    // unknown, and skipped entirely for an indirect call.
+    let chk = (1 - is_rp) * (if cname == 0 then 0 else 1);
+    let _ = if chk == 1 then (if ty_clash(fntab[7110], callee_param_type(s, cname, nops, fntab, strn)) == 1 then diag_exit(s, apos0, 84) else 0) else 0;
+    let nops = nops + (1 - is_rp);
     let _ = skip_ws(s, pos);
     let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
     let is_comma = if ch2 == 44 then 1 else 0;
-    // T90 step 2 (2026-09-06): after an argument only `,` or `)` may follow (lax d08:
-    // `g(k, e]` compiled -- the progress guard consumed `]` as the closing paren)
     let at_end2 = if pos[0] >= strn then 1 else 0;
+    // T90 step 2: after an operand only `,` or `)` may follow (lax d08: `g(k, e]`
+    // compiled -- the progress guard consumed `]` as the closing paren)
     let bad2 = (1 - is_comma) * (if ch2 == 41 then 0 else 1) * (1 - at_end2);
     let _ = if bad2 == 1 then diag_exit(s, pos[0], 95) else 0;
     let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
@@ -1300,6 +1337,19 @@ fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i6
     0
   };
   let _ = pos[0] = pos[0] + 1;
+  nops
+}
+
+// A real cross-function call via bl: eval args -> x0..x(n-1), bl target, push.
+fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let strn = slen(s, pos);
+  // A21 step 1: a fn declared with k > 1 return values may only be called as the
+  // whole RHS of a destructuring `let`, which publishes its name in fntab[7102].
+  // Anywhere else x1..x(k-1) would be dropped silently -- exactly the "reads
+  // garbage" failure the arity table exists to make impossible.
+  let cpos = pos[0];
+  let _ = if unit_has_tuple_fn(s, fntab, strn) == 1 then (if name == fntab[7102] then 0 else (if fn_ret_arity(s, name, fntab, strn) > 1 then diag_exit(s, cpos, 120) else 0)) else 0;
+  let nargs = parse_operands(s, pos, insns, n, stab, selfname, selfstart, fntab, name, 0);
   // Every window temp deeper than the args survives the call in cs/slot;
   // then a parallel move places the args into x0..x(nargs-1) (params 9-14
   // arrive in x8..x13, so target register == argument index uniformly).
@@ -2309,24 +2359,18 @@ fn emit_sys_slurp(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
 // pre-binding a symbol per case -- same dispatch, vc back down near the
 // param count, S small again (the nesting depth itself, and its tsp cost,
 // is unchanged and still within budget once S shrinks).
-// ---- ROADMAP A16 step 1 (2026-09-14): function values and indirect calls ----
-// T50 "functions as cells", open since HISTORY.md:1749. `&f` is a COMPILE-TIME
-// CONSTANT: f's start offset in WORDS from the image base, which is exactly what
-// fntab_lookup returns and exactly the coordinate emit_bl's `target - n[0]` works in.
-// EMITTED AS A FIXED TWO-WORD movz/movk, deliberately, even though every real offset
-// fits in the movz alone: mat_const would emit ONE word for the planning pass (where
-// the start table is not final and the value reads 0) and one for emission too only
-// by luck of magnitude, and a per-pass word count is the T96-class desync that moves
-// every later `bl`. Two words are unconditional, so both passes agree by construction
-// and the VALUE only has to be right on the emission pass -- the pass that ships.
-// Two words cover offsets to 2^32 words, against a program cap of 262144.
-// THE VALUE IS ONE-BASED: `&f` is f's word offset PLUS ONE. Measured 2026-09-14 the
-// hard way -- the FIRST declared fn starts at image word 0 (the entry stub is APPENDED,
-// cli_compile puts it at words n0..n0+171 and points the footer's entry there), so a
-// zero-based fn value cannot be distinguished from a never-initialised cell and the
-// trap below would have rejected `&f0`. It did, loudly, which is how this was found.
-// The bias costs ZERO words: call_fn's `adr` aims one word BELOW the image base and
-// the `lsl #2` add puts it back.
+// ---- A16 step 1: function values and indirect calls (T50, HISTORY.md:1749) ----
+// `&f` is a COMPILE-TIME CONSTANT: f's start offset in WORDS from the image base, which is
+// what fntab_lookup returns and the coordinate emit_bl's `target - n[0]` works in.
+// EMITTED AS A FIXED TWO-WORD movz/movk deliberately: mat_const's word count depends on the
+// VALUE's magnitude and the planning pass sees 0 where emission sees the real offset, so a
+// per-pass count is the T96-class desync that moves every later `bl`. Two words are
+// unconditional, cover offsets to 2^32, and only emission's VALUE has to be right.
+// THE VALUE IS ONE-BASED: `&f` is f's word offset PLUS ONE. The FIRST declared fn starts
+// at image word 0 (the entry stub is APPENDED at n0..n0+171), so a zero-based fn value is
+// indistinguishable from a never-initialised cell and the trap below rejected `&f0` --
+// loudly, which is how this was found. The bias costs ZERO words: call_fn's `adr` aims one
+// word BELOW the image base and the `lsl #2` add puts it back.
 fn emit_fnref(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], fntab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
   let _ = skip_ws(s, pos);
@@ -2373,29 +2417,7 @@ fn emit_fnref(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], fntab: [i
 fn emit_call_fn(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let strn = slen(s, pos);
   let cpos = pos[0];
-  let _ = pos[0] = pos[0] + 1;
-  let nops = 0;
-  let done = 0;
-  while done == 0 {
-    let before = pos[0];
-    let _ = skip_ws(s, pos);
-    let at_end = if pos[0] >= strn then 1 else 0;
-    let ch = if at_end == 1 then 0 else char(s, pos[0]);
-    let is_rp = if ch == 41 then 1 else 0;
-    let _ = if is_rp == 0 then emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
-    let nops = nops + (1 - is_rp);
-    let _ = skip_ws(s, pos);
-    let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
-    let is_comma = if ch2 == 44 then 1 else 0;
-    let at_end2 = if pos[0] >= strn then 1 else 0;
-    let bad2 = (1 - is_comma) * (if ch2 == 41 then 0 else 1) * (1 - at_end2);
-    let _ = if bad2 == 1 then diag_exit(s, pos[0], 95) else 0;
-    let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
-    let stuck = if pos[0] > before then 0 else 1;
-    let done = if is_rp + at_end + stuck >= 1 then 1 else 0;
-    0
-  };
-  let _ = pos[0] = pos[0] + 1;
+  let nops = parse_operands(s, pos, insns, n, stab, selfname, selfstart, fntab, 0, 0);
   let okn = (if nops >= 1 then 1 else 0) * (if nops <= 14 then 1 else 0);
   let _ = if okn == 1 then 0 else diag_exit(s, cpos, 122);
   let k = nops - 1;
@@ -2438,13 +2460,11 @@ fn emit_pack_fn(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfnam
 }
 
 // `call_packed(c, a0, .., ak-1)`, k <= 12: unpack c and call f(env, a0, .., ak-1).
-// The ENV IS THE FIRST PARAMETER, so the k arguments must land in x1..xk -- and
-// vs_place_args' mapping is fixed at "window entry base+i goes to x(i)", with no
-// offset. A zero CONST is therefore pushed as the first operand purely to occupy x0;
-// its `movz x0,#0` is one dead word that the `and` below overwrites, and it is the
-// honest price of keeping env FIRST (env-LAST would save that word but would need the
-// link register as a scratch and would disagree with the unpacked `call_fn(v, env, x)`
-// spelling). 8 words, 10 under has_spills; the blueprint budgeted 7.
+// ENV IS THE FIRST PARAMETER, so the k args must land in x1..xk -- but vs_place_args maps
+// entry base+i to x(i) with no offset, so a zero CONST is pushed first purely to occupy
+// x0. Its `movz x0,#0` is one dead word the `and` below overwrites: the honest price of
+// keeping env FIRST (env-LAST saves it but needs the link register as scratch and would
+// disagree with the unpacked `call_fn(v, env, x)`). 8 words, 10 under has_spills.
 //   and x0, x<j>, #0xFFFFFFFFFF   env  (as + objdump: 92409c20 for j=1)
 //   lsr x<j>, x<j>, #40           fn, IN PLACE -- x<j> is one past the callee's last
 //                                 parameter, so scribbling on it is free and no extra
@@ -2456,30 +2476,8 @@ fn emit_pack_fn(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfnam
 fn emit_call_packed(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let strn = slen(s, pos);
   let cpos = pos[0];
-  let _ = pos[0] = pos[0] + 1;
   let _ = vs_push(insns, n, fntab, stab, 1, 0, 0);
-  let nops = 1;
-  let done = 0;
-  while done == 0 {
-    let before = pos[0];
-    let _ = skip_ws(s, pos);
-    let at_end = if pos[0] >= strn then 1 else 0;
-    let ch = if at_end == 1 then 0 else char(s, pos[0]);
-    let is_rp = if ch == 41 then 1 else 0;
-    let _ = if is_rp == 0 then emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
-    let nops = nops + (1 - is_rp);
-    let _ = skip_ws(s, pos);
-    let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
-    let is_comma = if ch2 == 44 then 1 else 0;
-    let at_end2 = if pos[0] >= strn then 1 else 0;
-    let bad2 = (1 - is_comma) * (if ch2 == 41 then 0 else 1) * (1 - at_end2);
-    let _ = if bad2 == 1 then diag_exit(s, pos[0], 95) else 0;
-    let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
-    let stuck = if pos[0] > before then 0 else 1;
-    let done = if is_rp + at_end + stuck >= 1 then 1 else 0;
-    0
-  };
-  let _ = pos[0] = pos[0] + 1;
+  let nops = parse_operands(s, pos, insns, n, stab, selfname, selfstart, fntab, 0, 1);
   // nops counts the placeholder + c + k args; the callee sees env + k, so k <= 12.
   let okn = (if nops >= 2 then 1 else 0) * (if nops <= 14 then 1 else 0);
   let _ = if okn == 1 then 0 else diag_exit(s, cpos, 123);
@@ -4463,16 +4461,14 @@ fn emit_term(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
 // assumed -- a statement sequence inside parens (`( let i = 0; while ... ; r )`,
 // the attic "if-while" shape) is outside the surface (`( cmp )`) and used to
 // compile silently to garbage; now the compiler exits 95 (expected `)`).
-// A21 step 2: the `, e1[, e2]` tail of a tuple in return / fn-tail position.
-// Delivers k values to x0..x(k-1) through vs_deliver -- the SAME parallel move
-// every builtin's operand list already uses, so there is NO new callee machinery --
-// and then pushes ONE `REG x0` entry, so from the window's point of view a tuple is
-// indistinguishable from an ordinary single-value expression. That is what makes the
-// two legal positions need no code of their own: `return`'s own vs_deliver(1) is a
-// no-op on a REG-x0 top, the fn tail's vs_to(x0)/vs_pop is a no-op, and a non-final
-// tuple item is drained by emit_body's ordinary non-final-item pop.
-// x1/x2 SURVIVE to the `ret` because emit_epilogue_sized restores only x19..x26 /
-// sp / fp / lr and nothing emitted between here and the branch allocates a register.
+// A21 step 2: the `, e1[, e2]` tail of a tuple in return / fn-tail position. Delivers k
+// values to x0..x(k-1) through vs_deliver -- the SAME parallel move every builtin's operand
+// list uses, so no new callee machinery -- then pushes ONE `REG x0` entry, so a tuple looks
+// like an ordinary single-value expression to the window. That is why both legal positions
+// need no code of their own: `return`'s vs_deliver(1) is a no-op on a REG-x0 top, the fn
+// tail's vs_to(x0)/vs_pop is a no-op, and a non-final tuple item is drained by the ordinary
+// non-final pop. x1/x2 survive to the `ret`: the epilogue restores only x19..x26/sp/fp/lr
+// and nothing between here and the branch allocates a register.
 fn emit_tuple_rest(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let tpos = pos[0];
   let k = [1];
@@ -6307,23 +6303,18 @@ fn emit_while_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
 
 // Emit one 'let x = value;' statement: emit value, pop x0, mov x<reg>,x0
 // (bind the single-letter var x to reg 19+(x-'a')).
-// A21 step 2: `let (a, b[, c]) = f(args);` binds k <= 3 names from x0..x(k-1).
-// The CALLEE's declared arity must equal k (E119) -- that check is the whole reason
-// a silent x1 read cannot happen. Names are sym_bind'd BEFORE the RHS is emitted,
-// exactly as a scalar `let` does, so `let (a, b) = f(a, b)` shadow-rebinds the same
-// way. Caller cost is ZERO words: emit_bl_call already left x1/x2 live and unowned,
-// so claiming them is two window pushes and no instruction. A `_` component is
-// popped instead of bound, like `let _ = e;`.
-// A16 step 2, closing the hole A16 step 1 opened: when a `call_fn`'s FIRST OPERAND is
-// written LITERALLY as `&f`, the target is statically known and so is its declared
-// return arity, so A21's E119 check applies again -- at zero runtime cost and with no
-// bits stolen from the fn value. Returns 0 for "not knowable", which is a computed
-// target (a table slot, a parameter) and is the only genuinely dynamic case left.
-// WHY NOT CARRY THE ARITY IN THE VALUE: it would have to be masked off before the
-// `add x16, x16, x<k>, lsl #2`, i.e. one extra word at EVERY indirect call including
-// the great majority that do not destructure; `add ..., w<k>, uxtw #2` avoids the mask
-// but then the arity bits sit at 32.. and `(v << 40) | env` needs 76 bits. Two
-// representations of one fn value is the failure this row exists to avoid.
+// A21 step 2: `let (a, b[, c]) = f(args);` binds k <= 3 names from x0..x(k-1). The CALLEE's
+// declared arity must equal k (E119) -- the reason a silent x1 read cannot happen. Names are
+// sym_bind'd BEFORE the RHS, as a scalar `let` does, so `let (a, b) = f(a, b)` shadow-rebinds
+// the same way. ZERO caller words: emit_bl_call left x1/x2 live and unowned, so claiming them
+// is two window pushes. A `_` component is popped instead of bound.
+// A16 step 2, closing the hole step 1 opened: when a `call_fn`'s FIRST OPERAND is written
+// LITERALLY as `&f` the target is statically known, so A21's E119 check applies again at
+// zero runtime cost. Returns 0 for a computed target -- the only genuinely dynamic case.
+// NOT carried in the fn VALUE: the arity would need masking off before
+// `add x16, x16, x<k>, lsl #2`, one extra word at every indirect call; `uxtw #2` avoids the
+// mask but puts the bits at 32.., and `(v << 40) | env` then needs 76. Two representations
+// of one fn value is the failure this row exists to avoid.
 fn call_fn_lit_arity(s: str, after: i64, strn: i64, fntab: [i64]) -> i64 {
   let q = [after, strn];
   let _ = skip_ws(s, q);
@@ -7271,14 +7262,7 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   let _ = pos[0] = pos[0] + 1;
   // fn tail: materialise the body's final value into x0 (blast_t == 1
   // means emit_body's own lastf flag: a real tail expression left a tag).
-  // A8 check (4) IS NOT APPLIED AT THE FN TAIL, and the reason is measured, not stylistic.
-  // fntab[7110] is ONE scratch cell; it survives a single expression reliably (which is
-  // why `return e` IS checked, in emit_return_core) but not emit_body's whole item loop.
-  // With the tail checked, 4 corpus files were rejected -- qdsl / c70_qdsl / c70_qdsl_neg
-  // at `qdsl_explain`'s `bp[0]` tail, and sbench -- and NO minimal extraction reproduces
-  // it: that same fn compiled standalone is accepted, so the cell is carrying something
-  // from elsewhere in the body. Silence here is the honest partial position; the fix is a
-  // type per WINDOW ENTRY (one cell per entry, in the free run above 7110) instead of one cell.
+  // A8 check (4) is not applied at the fn tail; see compile_fn_at for why.
   let _ = if blast_t == 1 then vs_to(insns, n, fntab, stab, 0) else 0;
   let _ = if blast_t == 1 then vs_pop(fntab) else 0;
   let _ = if fntab[5388] != 255 then selfcheck_exit(5, 4) else 0;
@@ -7929,6 +7913,31 @@ fn use_path_hash(cells: [i64], n: i64) -> i64 {
 }
 
 // Copy the bytes of str src (NUL-terminated) into dst cells at off; returns the new off.
+// ---- A25 / diagnostics: POSITIONS SURVIVE `use` EXPANSION ----
+// use_expand concatenates every include ahead of the main text and diag_exit reported
+// offsets into THAT buffer, so a diagnostic in an included file named a line in a buffer
+// nobody has (a lane reconstructed the expansion by hand to find store.bp:188). Fix: a
+// `#line`-style MARKER `//@<path>` on its own line before each appended segment, written
+// where the expansion happens so there is ONE of them -- the "three sets of position
+// remaps" the A25 row exists to avoid. Not a side table: diag_exit takes only
+// (s, p, code) across ~40 call sites and there is no global state to reach it through;
+// the buffer is the one thing it already has. A comment, so nothing is emitted for it.
+// `pl` = 0 writes the bare `//@` meaning "top-level": the line count resets but no path is
+// printed, which keeps the 19 bench/diag_neg cases byte-identical.
+fn use_mark(buf: [i64], at: i64, pathc: [i64], pl: i64) -> i64 {
+  let _ = buf[at] = 47;
+  let _ = buf[at + 1] = 47;
+  let _ = buf[at + 2] = 64;
+  let k = [0];
+  while k[0] < pl {
+    let _ = buf[at + 3 + k[0]] = pathc[k[0]];
+    let _ = k[0] = k[0] + 1;
+    0
+  };
+  let _ = buf[at + 3 + pl] = 10;
+  at + 4 + pl
+}
+
 fn use_append_str(dst: [i64], off: i64, src: str) -> i64 {
   let i = 0;
   let done = 0;
@@ -8107,6 +8116,7 @@ fn use_scan(srcv: str, buf: [i64], off: [i64], seen: [i64], nseen: [i64]) -> i64
     let _ = if fresh == 1 then sys_close(fd) else 0;
     let _ = if fresh * is_cas == 1 then cas_verify(inc, pathc) else 0;
     let _ = if fresh == 1 then use_scan(inc, buf, off, seen, nseen) else 0;
+    let _ = if fresh == 1 then (let _ = off[0] = use_mark(buf, off[0], pathc, pl) in 0) else 0;
     let base = off[0];
     let _ = if fresh == 1 then (let _ = off[0] = use_append_str(buf, base, inc) in 0) else 0;
     let _ = if fresh == 1 then use_comment(buf, base, inc) else 0;
@@ -8124,7 +8134,11 @@ fn use_expand(srcv: str, tmpc: [i64], tmpl: i64) -> str {
   let buf = zeros(1600000);
   let off = zeros(1);
   let nuse = use_scan(srcv, buf, off, seen, nseen);
-  // main text, with every `use` line commented out in place
+  // main text, with every `use` line commented out in place. The bare marker resets
+  // diag_exit's line count to the top-level file's own numbering -- without it the main
+  // text's positions were ALSO wrong in any program that has includes, by the total length
+  // of every include. `buf` is passed as the path array only because pl = 0 reads none of it.
+  let _ = off[0] = use_mark(buf, off[0], buf, 0);
   let base = off[0];
   let _ = off[0] = use_append_str(buf, base, srcv);
   let _ = use_comment(buf, base, srcv);
