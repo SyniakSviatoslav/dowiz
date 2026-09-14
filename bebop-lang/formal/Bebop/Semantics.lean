@@ -181,12 +181,16 @@ partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val 
     -- Array literal: [e0, e1, ...]
     | .arrLit es =>
       let (vals, s1) := evalArrLitAux es fuel s
-      -- Allocate on arena; frame heap is the arena (A6)
+      -- Allocate on arena; frame heap is the arena (A6).
+      -- `base` is read BEFORE `zeros`, on purpose. Reading it afterwards (from
+      -- `s1`, while `s2` also existed) kept two states live and was one of the
+      -- two causes of the quadratic arena -- see the `Arena` docstring. It is a
+      -- `Nat` now, so nothing of `s1` survives the call.
+      let base := s1.arena.cursor
       let (s2, err) := s1.zeros vals.size
       match err with
       | some e => (s2, none)  -- arena exhausted
       | none =>
-        let base := s1.arena.cells.size
         -- Write values into arena at base
         let s3 := Id.run do
           let mut st := s2
@@ -336,7 +340,7 @@ partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val 
       | none => (s1, none)  -- undefined struct
       | some (_, structFields) =>
         -- Allocate on arena: store field values in order
-        let base := s1.arena.cells.size
+        let base := s1.arena.cursor
         let (s2, err) := s1.zeros structFields.size
         match err with
         | some _ => (s2, none)
@@ -376,7 +380,7 @@ partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val 
             match err with
             | some _ => (s3, none)
             | none =>
-              let base := s3.arena.cells.size - 1
+              let base := s3.arena.cursor - 1
               let s4 := s3.arenaWrite base argVal |>.getD s3
               -- Return encoded enum value: (tag << 32) | payload_offset
               (s4, some ((Int64.ofNat tag <<< 32) ||| Int64.ofNat base))
@@ -638,7 +642,7 @@ end
 def evalProgram (fuel : Fuel) (prog : Program) (clockMs : Val := 0) : Result :=
   let s : State := {
     env := #[]
-    arena := { cells := #[], capacity := 33554432 }
+    arena := {}
     frameArrays := #[]
     enumTags := Id.run do
       let mut tags : Array (Name × Nat) := #[]

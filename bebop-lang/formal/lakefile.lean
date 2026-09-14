@@ -13,3 +13,8 @@ lean_lib Bebop where
 -- elaboration also means a parser bug can never hang `lake build`.
 lean_exe parityrun where
   root := `ParityRun
+
+-- An INSTRUMENT: times one program at one fuel. Used to measure the arena's
+-- scaling exponent rather than infer it from reading the code.
+lean_exe timeone where
+  root := `TimeOne

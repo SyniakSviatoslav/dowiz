@@ -18,8 +18,9 @@ suite, all 121 carrying a `// EXPECT <v> from:` header. Measure against 121.
 | `lake build` | **rc=0**, clean, 81 s, 10 jobs | `rm -rf .lake/build && lake build` |
 | modules elaborating standalone | 9 of 9 (incl. `harness.lean`) | `lean <file>` per file, all rc=0 |
 | import cycles | **none** | the graph is a DAG; the 2026-09-13 "still open" claim was already false at 7edffdf |
-| constructs PARSED from disk | **111 of 121** | `lake exe parityrun`, reading `bench/parity_constructs/` |
-| constructs evaluating to their `// EXPECT` | **84 of 121** | same run, eval fuel 20000 |
+| constructs PARSED from disk | **109 of 121** | `lake exe parityrun`, reading `bench/parity_constructs/` |
+| constructs evaluating to their `// EXPECT` | **87 of 121** | same run, eval fuel 2000000 |
+| whole-corpus wall clock | **797 ms** (was 37840 ms) | 121 files, fuel 20000, before/after the sparse arena on the identical corpus |
 | positive constructs the parser REJECTS as illegal | **0** | all 6 `INVALID` rows are `neg/*.bp`, which should be refused |
 | constructs run from an inline AST | 10 of 121 | the older `#guard`ed samples, KEPT alongside the parser |
 | builtins executable | **10 of 37** | `zeros str_len char clock_ms clz crc32 crc32x hvham hvham2 scan` |
@@ -278,14 +279,50 @@ once. `.lake/` is the build directory and is not part of the source.
   6 VALUE_MISMATCH are `neg/*.bp` that this model does not refuse because the
   static check involved (reserved-word shadowing, 15-parameter arity, static
   OOB, unbound symbol) is not implemented.
-- STILL OPEN -- the evaluator cannot execute allocation-heavy constructs at
-  useful fuel. `State.zeros` is `cells ++ Array.replicate n 0` and
-  `arenaWrite` is `Array.set!`, so a loop of allocations is O(n^2):
-  `c33_loopalloc` alone does not finish in 60 s at fuel 100000, while
-  `c67_deeprec` and `neg/c48_stackovf` return FUEL in under a second (they
-  genuinely need deeper fuel; c48 is a stack-overflow construct by design).
-  The fix is a linear or persistent arena, and it is the next thing after the
-  parser if the score is to pass 83.
+- FIXED 2026-09-14 -- **the arena was quadratic; it is now sparse and
+  persistent.** `State.zeros` was `cells ++ Array.replicate n 0` (materialising
+  n zeros) and `arenaWrite` was `Array.set!` (which copies whenever the
+  reference is not unique). `Arena` is now `cursor : Nat` plus
+  `cells : Std.TreeMap Nat Val`, where an allocated-but-unwritten cell READS as
+  0 -- which is what `zeros` means -- so no zero is ever stored:
+
+  | operation | was | now |
+  |---|---|---|
+  | `zeros(n)` | Theta(n), materialises n zeros | **O(1)**, `cursor += n` |
+  | write | O(1) if uniquely referenced, O(n) if not | **O(log n) always** |
+  | read | O(1) array index | **O(log n) always** |
+
+  THE REPRESENTATION CHOICE WAS MEASURED, NOT REASONED. `Std.HashMap` was tried
+  first and was WORSE than the array. Wall clock on a loop doing two 3-cell
+  array literals per iteration (`c33_loopalloc`'s shape), timed from outside the
+  process, ~160 ms of which is startup:
+
+  | iterations | 2000 | 4000 | 8000 | 16000 | 32000 |
+  |---|---|---|---|---|---|
+  | `Array Val` (before) | 346 ms | 1195 ms | 4436 ms | 21703 ms | -- |
+  | `Std.HashMap` | 457 ms | 1800 ms | 8065 ms | 47295 ms | 246918 ms |
+  | `Std.TreeMap` (now) | 177 ms | 171 ms | 338 ms | **281 ms** | **494 ms** |
+
+  The same loop with NO allocation was FLAT at 150-170 ms across the whole range
+  in every version, so the interpreter was never the cost. `Array.set!` and
+  `Std.HashMap.insert` are both copy-on-write-WHEN-SHARED, and this evaluator
+  threads `State` functionally -- the `.while_` arm holds `result` while
+  building `s3` from `result.state` -- so uniqueness is lost nearly every
+  iteration and the amortised O(1) never applies. `Std.TreeMap` is a PERSISTENT
+  balanced tree: `insert` allocates O(log n) nodes and shares every untouched
+  subtree, so its cost does not depend on what else holds a reference. O(log n)
+  guaranteed beats O(1)-if-unique/O(n)-in-practice. The O(log n) READ is the
+  knowing cost of that trade; it is paid because the corpus got 47x FASTER, not
+  slower -- 37840 ms -> 797 ms over all 121 files at fuel 20000, same corpus,
+  same fuel, with an IDENTICAL pass set (36 non-PASS before, 36 after, empty
+  diff in both directions).
+- The three FUEL rows resolved three different ways, which is why they were
+  reported separately: `c33_loopalloc` was the quadratic one and now gives
+  `ok 24999750000` -- its exact EXPECT -- at fuel 150000 in **1071 ms**, where
+  before it did not finish in 60 s at fuel 100000; `c67_deeprec` was genuinely
+  depth-bound and gives `ok 100000` at fuel 2000000 in 339 ms; and
+  `neg/c48_stackovf` is still FUEL at 2000000 and always will be, because it is
+  an unbounded-recursion construct expecting RUNFAIL:82.
 - STILL OPEN -- 21 positive and 6 negative construct names have no row:
   positive `c124_condreturn c133_testblock(+_twin) c134_testfn_inside(+_twin)
   c135_testblock_braces(+_twin) c142_clone8 c144_contract_ok c145_fraction_ok

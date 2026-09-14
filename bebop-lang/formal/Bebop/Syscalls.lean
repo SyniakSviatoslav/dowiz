@@ -63,7 +63,7 @@ axiom sys_open_spec (cells len flags : Val) (s : State) :
     -- Returns -errno on failure
     (result < 0 → result ∈ #[ -2, -5, -13, -21, -27, -71 ]) ∧
     -- No arena cells read or written
-    (∀ i, i < s.arena.cells.size → s.arena.cells[i]? == s'.arena.cells[i]?) ∧
+    (∀ i, i < s.arena.size → s.arena.get? i == s'.arena.get? i) ∧
     True
 
 /-- sys_read(fd, buf, n): read from a file descriptor.
@@ -80,8 +80,8 @@ axiom sys_read_spec (fd buf n : Val) (s : State) :
     (result < 0 → result ∈ #[ -3, -5, -9, -11, -14 ]) ∧
     -- Writes to the buffer region: arena[buf..buf+result-1] may be modified
     -- (the content is non-deterministic)
-    (∀ i, (i < buf.toNatClampNeg ∨ i >= (buf + result).toNatClampNeg ∨ i >= s.arena.cells.size) →
-           s.arena.cells[i]? == s'.arena.cells[i]?) ∧
+    (∀ i, (i < buf.toNatClampNeg ∨ i >= (buf + result).toNatClampNeg ∨ i >= s.arena.size) →
+           s.arena.get? i == s'.arena.get? i) ∧
     True
 
 /-- sys_write(fd, buf, n): write to a file descriptor.
@@ -96,7 +96,7 @@ axiom sys_write_spec (fd buf n : Val) (s : State) :
     -- Returns -errno on failure
     (result < 0 → result ∈ #[ -3, -5, -9, -11, -14 ]) ∧
     -- No arena cells written (data goes to fd, not arena)
-    (∀ i, i < s.arena.cells.size → s.arena.cells[i]? == s'.arena.cells[i]?) ∧
+    (∀ i, i < s.arena.size → s.arena.get? i == s'.arena.get? i) ∧
     True
 
 /-- sys_close(fd): close a file descriptor.
@@ -106,7 +106,7 @@ axiom sys_write_spec (fd buf n : Val) (s : State) :
 axiom sys_close_spec (fd : Val) (s : State) :
   ∃ (result : Val) (s' : State),
     (result == 0 ∨ result ∈ #[ -3, -9, -11 ]) ∧
-    (∀ i, i < s.arena.cells.size → s.arena.cells[i]? == s'.arena.cells[i]?) ∧
+    (∀ i, i < s.arena.size → s.arena.get? i == s'.arena.get? i) ∧
     True
 
 /-- sys_readbuf(fd, len): read into a buffer.
@@ -117,8 +117,8 @@ axiom sys_readbuf_spec (fd len : Val) (s : State) :
   ∃ (result : Val) (s' : State),
     (result >= 0 → result ≤ len ∧ result ≤ 8192) ∧
     (result < 0 → result ∈ #[ -3, -5, -9, -11, -14 ]) ∧
-    (∀ i, (i >= len.toNatClampNeg ∨ i >= s.arena.cells.size) →
-           s.arena.cells[i]? == s'.arena.cells[i]?) ∧
+    (∀ i, (i >= len.toNatClampNeg ∨ i >= s.arena.size) →
+           s.arena.get? i == s'.arena.get? i) ∧
     True
 
 /-- sys_slurp(fd, len): read entire file.
@@ -127,10 +127,10 @@ axiom sys_readbuf_spec (fd len : Val) (s : State) :
     Returns the data pointer (arena base offset) on success, or -errno on failure. -/
 axiom sys_slurp_spec (fd len : Val) (s : State) :
   ∃ (result : Val) (s' : State),
-    (result >= 0 → result == Int64.ofNat s.arena.cells.size) ∧  -- returns arena offset
+    (result >= 0 → result == Int64.ofNat s.arena.size) ∧  -- returns arena offset
     (result < 0 → result ∈ #[ -3, -5, -9, -11, -14 ]) ∧
-    (∀ i, (i >= len.toNatClampNeg ∨ i >= s.arena.cells.size) →
-           s.arena.cells[i]? == s'.arena.cells[i]?) ∧
+    (∀ i, (i >= len.toNatClampNeg ∨ i >= s.arena.size) →
+           s.arena.get? i == s'.arena.get? i) ∧
     True
 
 /-- sys_mmap(addr, len, prot, flags, fd, off): memory-mapped I/O.
@@ -141,8 +141,8 @@ axiom sys_mmap_spec (addr len prot flags fd off : Val) (s : State) :
   ∃ (result : Val) (s' : State),
     (result >= 0 → result == addr) ∧
     (result < 0 → result ∈ #[ -12, -13, -17, -22, -27, -35 ]) ∧
-    (∀ i, (i < addr.toNatClampNeg ∨ i >= (addr + len).toNatClampNeg ∨ i >= s.arena.cells.size) →
-           s.arena.cells[i]? == s'.arena.cells[i]?) ∧
+    (∀ i, (i < addr.toNatClampNeg ∨ i >= (addr + len).toNatClampNeg ∨ i >= s.arena.size) →
+           s.arena.get? i == s'.arena.get? i) ∧
     True
 
 /-- sys_munmap(a, len): unmap memory.
@@ -152,7 +152,7 @@ axiom sys_mmap_spec (addr len prot flags fd off : Val) (s : State) :
 axiom sys_munmap_spec (a len : Val) (s : State) :
   ∃ (result : Val) (s' : State),
     (result == 0 ∨ result ∈ #[ -12, -13, -17 ]) ∧
-    (∀ i, i < s.arena.cells.size → s.arena.cells[i]? == s'.arena.cells[i]?) ∧
+    (∀ i, i < s.arena.size → s.arena.get? i == s'.arena.get? i) ∧
     True
 
 /-- sys_ftruncate(fd, len): truncate file.
@@ -162,7 +162,7 @@ axiom sys_munmap_spec (a len : Val) (s : State) :
 axiom sys_ftruncate_spec (fd len : Val) (s : State) :
   ∃ (result : Val) (s' : State),
     (result == 0 ∨ result ∈ #[ -3, -5, -9, -11, -14, -22 ]) ∧
-    (∀ i, i < s.arena.cells.size → s.arena.cells[i]? == s'.arena.cells[i]?) ∧
+    (∀ i, i < s.arena.size → s.arena.get? i == s'.arena.get? i) ∧
     True
 
 /-- sys_rename(a, la, b, lb): rename file.
@@ -173,7 +173,7 @@ axiom sys_ftruncate_spec (fd len : Val) (s : State) :
 axiom sys_rename_spec (a la b lb : Val) (s : State) :
   ∃ (result : Val) (s' : State),
     (result == 0 ∨ result ∈ #[ -2, -5, -13, -21, -39 ]) ∧
-    (∀ i, i < s.arena.cells.size → s.arena.cells[i]? == s'.arena.cells[i]?) ∧
+    (∀ i, i < s.arena.size → s.arena.get? i == s'.arena.get? i) ∧
     True
 
 /-- sys_export(cells, n, path, len): export data.
@@ -183,8 +183,8 @@ axiom sys_rename_spec (a la b lb : Val) (s : State) :
 axiom sys_export_spec (cells n path len : Val) (s : State) :
   ∃ (result : Val) (s' : State),
     (result == 0 ∨ result ∈ #[ -2, -5, -13, -21, -27 ]) ∧
-    (∀ i, (i < cells.toNatClampNeg ∨ i >= (cells + n).toNatClampNeg ∨ i >= s.arena.cells.size) →
-           s.arena.cells[i]? == s'.arena.cells[i]?) ∧
+    (∀ i, (i < cells.toNatClampNeg ∨ i >= (cells + n).toNatClampNeg ∨ i >= s.arena.size) →
+           s.arena.get? i == s'.arena.get? i) ∧
     True
 
 /-- sys_msync(addr, len, flags): msync (227), durable-commit call (T110).
@@ -194,7 +194,7 @@ axiom sys_export_spec (cells n path len : Val) (s : State) :
 axiom sys_msync_spec (addr len flags : Val) (s : State) :
   ∃ (result : Val) (s' : State),
     (result == 0 ∨ result ∈ #[ -22, -27, -35 ]) ∧
-    (∀ i, i < s.arena.cells.size → s.arena.cells[i]? == s'.arena.cells[i]?) ∧
+    (∀ i, i < s.arena.size → s.arena.get? i == s'.arena.get? i) ∧
     True
 
 /-- sys_mprotect(addr, len, prot): mprotect (226).
@@ -204,7 +204,7 @@ axiom sys_msync_spec (addr len flags : Val) (s : State) :
 axiom sys_mprotect_spec (addr len prot : Val) (s : State) :
   ∃ (result : Val) (s' : State),
     (result == 0 ∨ result ∈ #[ -22, -27, -35 ]) ∧
-    (∀ i, i < s.arena.cells.size → s.arena.cells[i]? == s'.arena.cells[i]?) ∧
+    (∀ i, i < s.arena.size → s.arena.get? i == s'.arena.get? i) ∧
     True
 
 /-- sys_fsync(fd): fsync (74), durable-commit partner to sys_msync.
@@ -214,7 +214,7 @@ axiom sys_mprotect_spec (addr len prot : Val) (s : State) :
 axiom sys_fsync_spec (fd : Val) (s : State) :
   ∃ (result : Val) (s' : State),
     (result == 0 ∨ result ∈ #[ -22, -27, -35 ]) ∧
-    (∀ i, i < s.arena.cells.size → s.arena.cells[i]? == s'.arena.cells[i]?) ∧
+    (∀ i, i < s.arena.size → s.arena.get? i == s'.arena.get? i) ∧
     True
 
 -- ============================================================
@@ -233,7 +233,7 @@ axiom sys_arena_base_spec (s : State) :
     Footprint: reads/writes no arena cells.
     Returns the arena end address (arena_size * 8) on success. -/
 axiom sys_arena_end_spec (s : State) :
-  ∃ (result : Val), result == Int64.ofNat (s.arena.cells.size * 8) ∧ True
+  ∃ (result : Val), result == Int64.ofNat (s.arena.size * 8) ∧ True
 
 -- ============================================================
 -- 4. Process syscalls (3 total)
@@ -259,7 +259,7 @@ axiom sys_wait4_spec (pid status opts rusage : Val) (s : State) :
   ∃ (result : Val) (s' : State),
     (result >= 0 → result == pid) ∧
     (result < 0 → result ∈ #[ -3, -5, -11, -14, -22 ]) ∧
-    (∀ i, i < s.arena.cells.size → s.arena.cells[i]? == s'.arena.cells[i]?) ∧
+    (∀ i, i < s.arena.size → s.arena.get? i == s'.arena.get? i) ∧
     True
 
 /-- sys_exit(code): exit the process with code.

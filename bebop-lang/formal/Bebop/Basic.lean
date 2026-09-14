@@ -14,6 +14,8 @@
   it is the leaf of the import DAG and every other Bebop module imports it.
 -/
 
+import Std.Data.TreeMap
+
 -- ============================================================
 -- 1. Machine integers (Z/2^64 wrapping arithmetic)
 -- ============================================================
@@ -163,10 +165,101 @@ structure Program where
 
 /-- The arena: one 256 MB anonymous mapping. LANGUAGE.md:106-109.
     `zeros` bumps it; nothing is freed; crossing the end exits 80.
-    Frame heap is the arena itself (A6: no separate frame heap). -/
+    Frame heap is the arena itself (A6: no separate frame heap).
+
+    SPARSE, since 2026-09-14. `cells` was `Array Val` and the arena was
+    physically materialised, which made allocation QUADRATIC. Measured before
+    the change with `lake exe timeone`, on a loop doing two 3-cell array
+    literals per iteration (`c33_loopalloc`'s exact shape), wall clock taken
+    from OUTSIDE the process, of which ~155 ms is startup:
+
+        iterations   2000     4000      8000      16000
+        wall         346 ms   1195 ms   4436 ms   21703 ms
+        ratio                 3.45x     3.71x     4.89x
+
+    Doubling the iteration count multiplied the time by 3.5-4.9x, i.e.
+    Theta(n^2). The identical loop with NO allocation was FLAT at 150-160 ms
+    from 2000 to 16000 iterations, so the interpreter is linear and the arena
+    was the whole cost. Two independent factors produced it:
+
+      1. `zeros` was `cells ++ Array.replicate n 0`, which MATERIALISES n
+         zeros, and `Array.append` copies its left argument whenever that array
+         is not uniquely referenced.
+      2. Uniqueness was routinely lost. `evalExpr`'s `.arrLit` arm read
+         `s1.arena.cells.size` AFTER deriving `s2` from `s1`, so both states
+         were live and every append copied the whole arena.
+
+    This representation removes both -- and removes the second BY CONSTRUCTION
+    rather than by care, since there is no array left to copy:
+
+    THE STRUCTURE IS A PERSISTENT TREE, NOT A HASH MAP, AND THAT IS THE POINT.
+    `Std.HashMap` was tried FIRST and measured WORSE than the array -- same
+    quadratic shape, roughly twice the constant:
+
+        iterations    2000     4000      8000      16000     32000
+        Array         346 ms   1195 ms   4436 ms   21703 ms   (not run)
+        Std.HashMap   457 ms   1800 ms   8065 ms   47295 ms   246918 ms
+        Std.TreeMap   see the table in formal/README.md
+
+    The reason is that `Array.set!` and `Std.HashMap.insert` are both
+    COPY-ON-WRITE-WHEN-SHARED: they mutate in place only while the reference is
+    unique, and copy the whole structure otherwise. This evaluator threads
+    `State` functionally and routinely keeps two versions live at once -- the
+    `.while_` arm alone holds `result` while building `s3` from
+    `result.state` -- so uniqueness is lost on essentially every iteration and
+    the "amortised O(1)" never applies. Making it apply would mean auditing
+    reference uniqueness across all 680 lines of the evaluator and preserving
+    it under every future edit, which is not a property a reader can check.
+
+    `Std.TreeMap` is a PERSISTENT balanced tree: `insert` allocates O(log n)
+    new nodes and SHARES every untouched subtree, so its cost does not depend
+    on whether anything else holds a reference. That turns the per-operation
+    cost from "O(1) if unique, O(n) if not" into "O(log n), always" -- which is
+    worse than the best case and enormously better than the actual case.
+
+        operation    was                                    now
+        zeros(n)     Theta(n), materialises n zeros          O(1): `cursor += n`
+        write        O(1) if unique, O(n) when shared        O(log n) ALWAYS
+        read         O(1) array index                        O(log n) ALWAYS
+
+    The read path is the deliberate cost: reads are the common case in an
+    evaluator and O(log n) is not O(1). It is paid knowingly, because the
+    alternative measured quadratic. log2(600000) is about 20 comparisons on
+    `Nat` keys, and the corpus wall-clock before and after is in
+    formal/README.md so the trade is visible rather than asserted.
+
+    `cursor` is the bump pointer: cells `[0, cursor)` are ALLOCATED. `cells`
+    holds only the cells that have been WRITTEN; an allocated cell that was
+    never written reads as 0, which is not an approximation -- it is what
+    `zeros` MEANS (LANGUAGE.md:85, "allocate n zeroed i64 cells"). So no zero is
+    ever stored and `zeros(n)` does no work proportional to n at all.
+
+    Bounds behaviour is UNCHANGED, which is what keeps the trap set intact:
+    `off < cursor` is in bounds and reads 0 if unwritten; `off >= cursor` is out
+    of bounds and `get?` is `none`, exactly as the old `off < cells.size` test
+    behaved. `capacity` is still checked against `cursor + n`, so
+    `zeros(40000000)` still traps `arenaExhausted` without touching memory. -/
 structure Arena where
-  cells : Array Val
+  /-- Only the WRITTEN cells. Absent means "allocated but never written" = 0. -/
+  cells : Std.TreeMap Nat Val := ∅
+  /-- Bump pointer: cells `[0, cursor)` are allocated. -/
+  cursor : Nat := 0
   capacity : Nat := 33554432  -- 256 MiB / 8
+
+/-- Number of ALLOCATED cells. This was spelled `arena.cells.size`; that now
+    means the number of WRITTEN cells, a different and much smaller number, so
+    every caller must use this instead. -/
+def Arena.size (a : Arena) : Nat := a.cursor
+
+/-- Read one cell. `none` iff the offset is not allocated -- the same
+    out-of-bounds condition the `Array` version had. An allocated cell that was
+    never written reads as 0. -/
+def Arena.get? (a : Arena) (off : Nat) : Option Val :=
+  if off < a.cursor then some (a.cells.getD off 0) else none
+
+/-- Write one cell, or `none` if the offset is not allocated. -/
+def Arena.set? (a : Arena) (off : Nat) (v : Val) : Option Arena :=
+  if off < a.cursor then some { a with cells := a.cells.insert off v } else none
 
 /-- A frame-allocated array is just an offset (start index) into the arena.
     The length is tracked separately via the struct field list or enum arity. -/
@@ -238,7 +331,7 @@ structure Footprint where
 /-- The complete runtime state. -/
 structure State where
   env : Array (Name × Val) := #[]            -- fn-scoped bindings
-  arena : Arena := { cells := #[], capacity := 33554432 }
+  arena : Arena := {}
   frameArrays : Array (Name × FrameArray × Nat) := #[]  -- name -> (base_offset, length)
   enumTags : Array (Name × Nat) := #[]      -- ctor name -> tag
   enumArities : Array (Name × Nat) := #[]   -- ctor name -> arity (0 or 1)
@@ -290,26 +383,28 @@ def State.lookupFrameArrayAny (s : State) (base : Nat) : Option (FrameArray × N
 def State.registerFrameArray (s : State) (n : Name) (base : FrameArray) (len : Nat) : State :=
   { s with frameArrays := s.frameArrays.push (n, base, len) }
 
-/-- zeros(n): allocate n zeroed i64 cells. Exit 80 if exhausted. -/
+/-- zeros(n): allocate n zeroed i64 cells. Exit 80 if exhausted.
+
+    O(1) IN n: it advances `cursor` and stores nothing. The zeros are not
+    materialised because an unwritten allocated cell already READS as 0 (see
+    `Arena.get?`). The capacity test is on the cursor, so an allocation larger
+    than the arena still traps without touching memory. -/
 def State.zeros (s : State) (n : Nat) : State × Option TrapCode :=
-  let newLen := s.arena.cells.size + n
-  if newLen ≤ s.arena.capacity then
-    let newCells := s.arena.cells ++ Array.replicate n (0 : Val)
-    ({ s with arena := { cells := newCells, capacity := s.arena.capacity } }, none)
+  let newCursor := s.arena.cursor + n
+  if newCursor ≤ s.arena.capacity then
+    ({ s with arena := { s.arena with cursor := newCursor } }, none)
   else
     (s, some TrapCode.arenaExhausted)
 
-/-- Read a cell from the arena. Returns none if OOB. -/
+/-- Read a cell from the arena. Returns none if OOB (off >= cursor). -/
 def State.arenaRead (s : State) (off : Nat) : Option Val :=
-  if h : off < s.arena.cells.size then
-    some (s.arena.cells[off]'h)
-  else none
+  s.arena.get? off
 
-/-- Write a cell to the arena. Returns none if OOB. -/
+/-- Write a cell to the arena. Returns none if OOB (off >= cursor). -/
 def State.arenaWrite (s : State) (off : Nat) (v : Val) : Option State :=
-  if off < s.arena.cells.size then
-    some { s with arena := { cells := s.arena.cells.set! off v, capacity := s.arena.capacity } }
-  else none
+  match s.arena.set? off v with
+  | some a => some { s with arena := a }
+  | none => none
 
 -- ============================================================
 -- 11. Control flow signals

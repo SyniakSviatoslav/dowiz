@@ -38,14 +38,22 @@ open Bebop Bebop.Parser Bebop.Semantics
 
 /-- Default evaluation fuel per program; override with argv[2].
 
-    MEASURED 2026-09-14, and the reason this is a knob rather than a constant:
-    the evaluator's arena is a Lean `Array` written through `Array.set!`, so a
-    construct that does `zeros(10000)` and then loops over it costs O(n) per
-    store when the array is not held linearly. At fuel 400000 the corpus did
-    not finish in 10 minutes. The fuel is printed with every run and `FUEL` is
-    its own bucket, so a program that needs more is never confused with one
-    that computes the wrong answer. -/
-def defaultFuel : Nat := 20000
+    RAISED from 20000 to 2000000 on 2026-09-14, because the reason it had to be
+    small is gone. It was small because the arena was an `Array` whose
+    allocation was quadratic: at fuel 400000 the corpus did not finish in ten
+    minutes. With the sparse arena (see `Arena` in Bebop/Basic.lean) the whole
+    121-file corpus runs in 797 ms at fuel 20000 and 2310 ms at 2000000, so the
+    fuel can be set where the CONSTRUCTS need it instead of where the arena
+    tolerated it. Two constructs move from FUEL to PASS as a result:
+    `c33_loopalloc` (100000 iterations, so it needs > 100000 fuel) and
+    `c67_deeprec`. `neg/c48_stackovf` stays FUEL at any budget and should: it is
+    an unbounded-recursion construct expecting RUNFAIL:82, so exhaustion is the
+    correct outcome, not a shortfall.
+
+    The fuel is printed with every run and `FUEL` is its own bucket, so a
+    program that needs more is never confused with one that computes the wrong
+    answer. -/
+def defaultFuel : Nat := 2000000
 
 /-- The `// EXPECT <v> from:` header, which `bench/vs_rust/construct_parity.sh`
     also reads (it greps `// EXPECT [^ ]+ from:`). Same pattern, so the two
@@ -215,9 +223,13 @@ def baseName (p : String) : String :=
       83  after `ARR[i] = v` was allowed as an expression (store.bp:188)
       84  after a BARE `ARR[i] = v` was allowed as a body item and a tail
           expression (gb.bp ends a function with `cache[0] = cnt + 1`)
-    At 84, NO positive construct is in the INVALID bucket any more: all six
-    remaining INVALIDs are `neg/*.bp`, i.e. programs that SHOULD be refused. -/
-def passFloor : Nat := 84
+      85  after the tree fixed `c46_andor`'s stale EXPECT header -- that one is
+          the corpus catching up with this semantics, not a change here
+      87  after the SPARSE ARENA let the default fuel rise to 2000000, which
+          brings in `c33_loopalloc` and `c67_deeprec`
+    No positive construct is in the INVALID bucket: all six remaining INVALIDs
+    are `neg/*.bp`, i.e. programs that SHOULD be refused. -/
+def passFloor : Nat := 87
 
 def main (args : List String) : IO UInt32 := do
   let root := args.headD "."

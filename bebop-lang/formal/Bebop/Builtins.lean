@@ -27,7 +27,7 @@ def builtinZeros (n : Val) (s : State) : State × Val :=
   match err with
   | some e => (s', 0)  -- trap; caller should check
   | none =>
-    let offset := s.arena.cells.size
+    let offset := s.arena.cursor
     (s', Int64.ofNat offset)
 
 -- ============================================================
