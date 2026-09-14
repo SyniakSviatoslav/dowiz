@@ -118,7 +118,7 @@ fn diag_exit(s: str, p: i64, code: i64) -> i64 {
   let at24 = if code == 121 then diag_str(buf, at, "more than 3 return values -- the convention is x0..x2") else at23;
   let at25 = if code == 122 then diag_str(buf, at, "call_fn takes a function value plus 0..13 arguments") else at24;
   let at26 = if code == 123 then diag_str(buf, at, "call_packed takes a packed closure plus 0..12 arguments") else at25;
-  let at27 = if code == 84 then diag_str(buf, at, "type error: this symbol's declared type is not an array -- it cannot be indexed") else at26;
+  let at27 = if code == 84 then diag_str(buf, at, "type error: a declared type does not match its use here (index / argument / return)") else at26;
   let mlen = at27 - at;
   let final_at = at + mlen;
   let _ = buf[final_at] = 10;
@@ -192,12 +192,19 @@ fn read_ident(s: str, pos: [i64]) -> i64 {
 // THE TYPE WORD, and what is RESERVED in it for the rows that share this cell:
 //   bits  0..7   type tag: 0 i64, 1 [i64], 2 str, 3 ref T, 4 [u32], 5 [str], 6 fp,
 //                7 [u8] -- exactly the blueprint's tag list, 248 values still free
-//   bit   8      DECLARED: the type came from a SIGNATURE, not from inference. A zero
-//                word therefore means "nothing known", which is what an unrecorded
-//                symbol has always meant, so every existing program is unaffected
-//   bits  9..40  32-bit payload: `ref T`'s T hash for tag 3, the declared length for
+//   bit   8      KNOWN: the walk or `let` inference is confident about this tag. A zero
+//                word therefore means "nothing known", which is what an unrecorded symbol
+//                has always meant, so every existing program is unaffected
+//   bit   9      FROM A SIGNATURE, as opposed to inferred. The two are NOT the same and
+//                conflating them broke the b6core gate: tools/typecheck.py's index rule is
+//                `if base == 'i64' and e[1] in self.declared`, so indexing an INFERRED i64
+//                is not a finding -- and it must not be, because `let a = env[0]; a[i]` is
+//                the A5 step 1b model (a cell holds a cell INDEX) and the explicit-env
+//                closure shape A16 step 2 just landed. Only bit 9 gates the index check;
+//                bit 8 gates the argument and return comparisons
+//   bits 10..41  32-bit payload: `ref T`'s T hash for tag 3, the declared length for
 //                tag 7 `[u8]`. Unused by the other tags
-//   bits 41..55  RESERVED, 15 bits, for A22 STEP 2's per-symbol struct index (the
+//   bits 42..55  RESERVED, 14 bits, for A22 STEP 2's per-symbol struct index (the
 //                struct cap is 32, so 15 bits is room to spare). A22 step 2 currently
 //                has nowhere to put it; this is that place
 //   bits 56..62  RESERVED, 7 bits, for F3's per-symbol static length, which lives in
@@ -348,7 +355,7 @@ fn param_type_word(s: str, from: i64, to: i64) -> i64 {
   let ntag = (if nm == 1988825 then 2 else 0) + (if nm == 13474 then 6 else 0) + (if nm == 1969687 then 3 else 0);
   let tag = if is_arr == 1 then atag else ntag;
   let decl = if is_arr == 1 then 1 else known;
-  tag + decl * 256
+  tag + decl * 768
 }
 
 // A8: the declared type of the param whose NAME starts at npos. Deliberately re-derives
@@ -365,6 +372,132 @@ fn param_type_at(s: str, npos: i64, strn: i64) -> i64 {
   let from = q[0];
   let _ = skip_to_delim(s, q);
   param_type_word(s, from, q[0])
+}
+
+// ---- A8: the expression-type walk (blueprint section 3's scratch cell) ----
+// fntab[7110] = the type word of the most recently COMPLETED expression, in the same
+// encoding as a stab type cell (tag in bits 0..7, bit 8 = known). 0 means NOTHING KNOWN,
+// and emit_factor sets 0 on entry, so any producer this walk does not instrument leaves
+// "unknown" rather than a stale sibling's type -- fail-safe by construction. A partial
+// checker must be silent where it cannot see, not loud.
+// Known words used below: 256 = i64, 257 = [i64], 258 = str.
+fn ety_set(fntab: [i64], t: i64) -> i64 { let _ = fntab[7110] = t in 0 }
+
+// Do two type words CONFLICT? Only when BOTH are known and their tags differ. Tag 3
+// `ref T` is compatible with everything here: typecheck.py needs a 40-name tolerance
+// list (REF_TOLERANT) because the store passes refs into i64 declarations everywhere, and
+// being silent on refs is the honest partial position rather than re-deriving that list.
+// A8: the three SANCTIONED i64 <-> [i64] casts, mirrored from tools/typecheck.py's
+// `CASTS = {'st_cells', 'st_addr', 'addr_of'}` -- the store's mapping base (T111). The
+// oracle is the specification, so mirroring its rules includes mirroring its exemptions;
+// inventing a different exemption set would put the compiler and the oracle out of step,
+// which is the one thing the equality gate exists to prevent.
+fn ty_cast_fn(name: i64) -> i64 {
+  (if name == 76727149879263727 then 1 else 0) + (if name == 585703429678467 then 1 else 0) + (if name == 494117231879769 then 1 else 0)
+}
+
+fn ty_clash(a: i64, b: i64) -> i64 {
+  let da = (a / 256) & 1;
+  let db = (b / 256) & 1;
+  // tag 6 `fp` normalises to tag 0: docs/LANG-DB-DESIGN.md:154 -- "`fp` (Q32) is an i64
+  // with a type tag in the layout, zero cost" -- so an fp and an i64 are the same VALUE
+  // class and only the layout distinguishes them. Without this an `fp` parameter would be
+  // uncallable until fp literals exist, which is a later step. `fp` is still not
+  // INDEXABLE: that check is tag-based and separate.
+  let ta0 = a & 255;
+  let tb0 = b & 255;
+  let ta = if ta0 == 6 then 0 else ta0;
+  let tb = if tb0 == 6 then 0 else tb0;
+  let refy = (if ta == 3 then 1 else 0) + (if tb == 3 then 1 else 0);
+  da * db * (if ta == tb then 0 else 1) * (if refy >= 1 then 0 else 1)
+}
+
+// The declared type word of parameter `idx` (0-based) of the fn whose `fn` keyword is at
+// sp. Walks the header text at the offset collect_fns already recorded -- the same reader
+// A21's arity check uses, so there is no second scanner and no new fntab zone.
+fn callee_param_type_at(s: str, sp: i64, idx: i64, strn: i64) -> i64 {
+  let q = [sp, strn];
+  let _ = skip_to(s, q, 40);
+  let _ = q[0] = q[0] + 1;
+  let k = [0];
+  let ty = [0];
+  let go = 1;
+  while go == 1 {
+    let _ = skip_ws(s, q);
+    let c = if q[0] >= strn then 0 else char(s, q[0]);
+    let is_rp = if c == 41 then 1 else 0;
+    let npos = q[0];
+    let hit = (1 - is_rp) * (if k[0] == idx then 1 else 0);
+    let _ = if hit == 1 then (let _ = ty[0] = param_type_at(s, npos, strn) in 0) else 0;
+    let _ = if is_rp == 0 then (let _ = read_ident(s, q) in (let _ = skip_to_delim(s, q) in 0)) else 0;
+    let c2 = if q[0] >= strn then 0 else char(s, q[0]);
+    let _ = if c2 == 44 then (let _ = q[0] = q[0] + 1 in 0) else 0;
+    let _ = k[0] = k[0] + (1 - is_rp);
+    let go = (1 - is_rp) * (if k[0] <= idx then 1 else 0);
+    0
+  };
+  ty[0]
+}
+// How many fns in the table carry this name? A8 will not type-check a call whose callee is
+// AMBIGUOUS, and the reason is concrete: `ft_srcpos` returns the LAST match while
+// `fntab_lookup` picks the `bl` target, so with two definitions the checker can be reading
+// a different signature from the one the call actually reaches. `fntab_fact_lookup`'s own
+// comment records the same hazard for B1's facts. Silence, not a guess.
+// FOUND BY THIS GUARD, 2026-09-14: selfhost/std/qdsl.bp declares `qdsl_explain` TWICE --
+// :371 as (i64, [i64], [i64], [i64]) -> i64 and :537 as (str) -> str -- so its own
+// recursive call at :382 passes FOUR arguments to whichever the table resolves. See the
+// verdict; that is a corpus defect, not a checker limitation.
+fn ft_name_count(tab: [i64], name: i64) -> i64 {
+  let cnt = tab[0];
+  let i = 0;
+  let k = 0;
+  while i < cnt {
+    let k = k + (if tab[1 + i] == name then 1 else 0);
+    let i = i + 1;
+    0
+  };
+  k
+}
+
+fn callee_param_type(s: str, name: i64, idx: i64, fntab: [i64], strn: i64) -> i64 {
+  let amb = if ft_name_count(fntab, name) > 1 then 1 else 0;
+  let sp = if amb == 1 then 0 - 1 else ft_srcpos(fntab, name);
+  if sp < 0 then 0 else callee_param_type_at(s, sp, idx, strn)
+}
+
+// The declared RETURN type word of the fn at sp: the text after `->`, classified by the
+// same param_type_word. A tuple return `-> (T, U)` opens with `(`, which classifies as
+// unknown, so a multi-value return is never checked here -- A21's arity check owns it.
+fn fn_ret_type_at(s: str, sp: i64, strn: i64) -> i64 {
+  let q = [sp, strn];
+  let _ = skip_to(s, q, 40);
+  let _ = skip_to(s, q, 41);
+  let j = [q[0] + 1];
+  let cm = [0];
+  let arrow = [0 - 1];
+  let go = 1;
+  while go == 1 {
+    let at_end = if j[0] >= strn then 1 else 0;
+    let c = if at_end == 1 then 0 else char(s, j[0]);
+    let c1 = if j[0] + 1 >= strn then 0 else char(s, j[0] + 1);
+    let is_cmt = (if c == 47 then 1 else 0) * (if c1 == 47 then 1 else 0);
+    let _ = cm[0] = j[0];
+    let _ = if is_cmt == 1 then skip_line_comment_n(s, cm, strn) else 0;
+    let is_arrow = (1 - is_cmt) * (if c == 45 then 1 else 0) * (if c1 == 62 then 1 else 0);
+    let _ = if is_arrow == 1 then (let _ = arrow[0] = j[0] + 2 in 0) else 0;
+    let stop = at_end + (if c == 123 then 1 else 0) + is_arrow;
+    let go = if stop >= 1 then 0 else 1;
+    let _ = j[0] = if is_cmt == 1 then cm[0] else j[0] + 1;
+    0
+  };
+  let e = [if arrow[0] < 0 then 0 else arrow[0], strn];
+  let _ = if arrow[0] >= 0 then skip_to(s, e, 123) else 0;
+  if arrow[0] < 0 then 0 else param_type_word(s, arrow[0], e[0])
+}
+fn fn_ret_type(s: str, name: i64, fntab: [i64], strn: i64) -> i64 {
+  let amb = if ft_name_count(fntab, name) > 1 then 1 else 0;
+  let sp = if amb == 1 then 0 - 1 else ft_srcpos(fntab, name);
+  if sp < 0 then 0 else fn_ret_type_at(s, sp, strn)
 }
 
 // Skip over a param's type annotation up to the next ',' or ')'.
@@ -456,11 +589,23 @@ fn emit_ident(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   // words, folds into `add #imm`). A bound symbol of that spelling wins first.
   let is_dot = if ch == 46 then 1 else 0;
   let const_ok = if is_dot * is_sname == 1 then (if sym_lookup(s, stab, name, npos) < 0 then 1 else 0) else 0;
-  if is_lp == 1 then emit_call_or_ctor(s, name, pos, insns, n, stab, selfname, selfstart, fntab)
+  let rr = if is_lp == 1 then emit_call_or_ctor(s, name, pos, insns, n, stab, selfname, selfstart, fntab)
   else if const_ok == 1 then emit_struct_const(s, si, pos, insns, n, fntab, stab)
   else if is_br * struct_ok == 1 then emit_struct_lit(s, si, pos, insns, n, stab, selfname, selfstart, fntab)
   else if is_lb == 1 then emit_array_index(s, name, npos, pos, insns, n, stab, selfname, selfstart, fntab)
-  else emit_var_or_ctor(s, name, npos, insns, n, stab, fntab)
+  else emit_var_or_ctor(s, name, npos, insns, n, stab, fntab);
+  // A8: publish this factor's type. A CALL takes the callee's declared return type (0 for
+  // a builtin, which ft_srcpos does not know -- unknown, so unchecked); `T.f` and an
+  // element load are i64; a struct literal is a cell array; a bare name is its own
+  // recorded type. Written AFTER the dispatch because a builtin's arguments run through
+  // emit_factor and would otherwise leave the last argument's type standing.
+  let ety = if is_lp == 1 then fn_ret_type(s, name, fntab, strn)
+    else if const_ok == 1 then 256
+    else if is_br * struct_ok == 1 then 257
+    else if is_lb == 1 then (if (sy_type_get(s, stab, name, npos) & 255) == 5 then 258 else 256)
+    else sy_type_get(s, stab, name, npos);
+  let _ = ety_set(fntab, ety);
+  rr
 }
 
 
@@ -1133,7 +1278,13 @@ fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i6
     let at_end = if pos[0] >= strn then 1 else 0;
     let ch = if at_end == 1 then 0 else char(s, pos[0]);
     let is_rp = if ch == 41 then 1 else 0;
+    let apos0 = pos[0];
     let _ = if is_rp == 0 then emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
+    // A8 check (3), which also IS check (5): the argument's inferred type against the
+    // callee's DECLARED parameter type. `[u32]` (tag 4) where `[i64]` (tag 1) is declared
+    // is the same comparison as `str` where `i64` is declared -- one rule, five gaps
+    // closed. Silent whenever either side is unknown (ty_clash).
+    let _ = if is_rp == 0 then (if ty_clash(fntab[7110], callee_param_type(s, name, nargs, fntab, strn)) == 1 then diag_exit(s, apos0, 84) else 0) else 0;
     let nargs = nargs + (1 - is_rp);
     let _ = skip_ws(s, pos);
     let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
@@ -2442,8 +2593,10 @@ fn emit_match(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   // selection, unchanged) or anything else, which is a bound variable holding
   // a ctor block -- the runtime path below.
   let ctag = ft_ctor_tag(fntab, cname);
-  if ctag >= 0 then emit_match_lit(s, cname, pos, insns, n, stab, selfname, selfstart, fntab)
-  else emit_match_var(s, cpos, cname, pos, insns, n, stab, selfname, selfstart, fntab)
+  let rm0 = if ctag >= 0 then emit_match_lit(s, cname, pos, insns, n, stab, selfname, selfstart, fntab)
+  else emit_match_var(s, cpos, cname, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = ety_set(fntab, 0);
+  rm0
 }
 
 fn emit_match_lit(s: str, cname: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
@@ -3848,6 +4001,7 @@ fn vs_binop_reg(insns: [i64], n: [i64], fntab: [i64], stab: [i64], op: i64) -> i
 }
 
 fn vs_binop(insns: [i64], n: [i64], fntab: [i64], stab: [i64], op: i64) -> i64 {
+  let _ = ety_set(fntab, 256);
   let d1 = vs_try_fold(insns, n, fntab, stab, op);
   let d2 = if d1 == 1 then 1 else vs_try_addsub_imm(insns, n, fntab, stab, op);
   let d3 = if d1 + d2 > 0 then 1 else vs_try_mulc_new(insns, n, fntab, stab, op);
@@ -3868,6 +4022,7 @@ fn vs_binop(insns: [i64], n: [i64], fntab: [i64], stab: [i64], op: i64) -> i64 {
 // function (each sub-case was a single-caller helper) to stay under the
 // bootstrap compiler's 256-fn table cap.
 fn vs_cmp(insns: [i64], n: [i64], fntab: [i64], stab: [i64], cond: i64) -> i64 {
+  let _ = ety_set(fntab, 256);
   let w = fntab[5387];
   let ak = vs_entry_kind(fntab, w - 2);
   let bk = vs_entry_kind(fntab, w - 1);
@@ -3990,6 +4145,7 @@ fn read_num_val(s: str, pos: [i64]) -> i64 {
 }
 
 fn emit_num(s: str, pos: [i64], insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
+  let _ = ety_set(fntab, 256);
   let num_start = pos[0];
   let v = read_num_val(s, pos);
   let strn = slen(s, pos);
@@ -4417,8 +4573,10 @@ fn emit_cond(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
   let _ = vs_park(insns, n, fntab, stab, 1);
   let _ = if pure == 0 then vs_span_to_slots(insns, n, fntab, stab, 1) else 0;
   let _ = fntab[5403] = 0;
-  if pure == 1 then emit_cond_csel(s, pos, insns, n, stab, selfname, selfstart, fntab)
-  else emit_cond_branch(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  let rc0 = if pure == 1 then emit_cond_csel(s, pos, insns, n, stab, selfname, selfstart, fntab)
+  else emit_cond_branch(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = ety_set(fntab, 0);
+  rc0
 }
 
 // A2 commit 1: csel path for two pure arms. `condw` is the cond entry's
@@ -4619,6 +4777,7 @@ fn emit_let_in(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname
   let nw = if wq2 + 1 >= strq then 0 else char(s, wq2 + 1);
   let is_chain = is_id * (if cw == 61 then 1 else 0) * (if nw == 61 then 0 else 1);
   let _ = if is_chain == 1 then emit_let_chain(s, pos, insns, n, stab, selfname, selfstart, fntab) else emit_let_plain(s, pos, insns, n, stab, selfname, selfstart, fntab, reg, name);
+  let _ = ety_set(fntab, 0);
   n[0]
 }
 
@@ -4674,6 +4833,7 @@ fn emit_let_chain(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
 // is a real pointer into the mapped image. Was: placeholder mov x0,#0 that
 // segfaulted str_len/char (journal 1788288206).
 fn emit_str(s: str, pos: [i64], insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
+  let _ = ety_set(fntab, 258);
   let li = fntab[5552];
   let L = fntab[5551];
   let dw = fntab[6000 + li];
@@ -4757,6 +4917,7 @@ fn emit_array_lit(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfn
   // handed to the window is the cell INDEX (sub x0,x0,x17 ; lsr x0,x0,#3).
   let _ = em(insns, n, 3406888960);
   let _ = em(insns, n, 3544448000);
+  let _ = ety_set(fntab, 257);
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
   n[0]
 }
@@ -4923,10 +5084,10 @@ fn emit_array_index(s: str, name: i64, npos: i64, pos: [i64], insns: [i64], n: [
   // The check is compile-time: an ACCEPTED program gets the same words as before, which
   // is why the whole corpus stays byte-identical.
   let tw = sy_type_get(s, stab, name, npos);
-  let decl = (tw / 256) & 1;
+  let sigd = (tw / 512) & 1;
   let tg = tw & 255;
   let scalarish = (if tg == 0 then 1 else 0) + (if tg == 2 then 1 else 0) + (if tg == 6 then 1 else 0);
-  let _ = if decl * scalarish >= 1 then diag_exit(s, npos, 84) else 0;
+  let _ = if sigd * scalarish >= 1 then diag_exit(s, npos, 84) else 0;
   let _ = emit_var(insns, n, reg, fntab, stab);
   let _ = pos[0] = pos[0] + 1;
   // F3: discharge the bound HERE, before the index is emitted -- both operands
@@ -4952,6 +5113,7 @@ fn emit_array_index(s: str, name: i64, npos: i64, pos: [i64], insns: [i64], n: [
 
 // `-<digits>`: negative literal (T99). pos is on the `-`.
 fn emit_negnum(s: str, pos: [i64], insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
+  let _ = ety_set(fntab, 256);
   let _ = pos[0] = pos[0] + 1;
   let v = read_num_val(s, pos);
   let _ = emit_lit(insns, n, 0 - v, fntab, stab);
@@ -5009,6 +5171,7 @@ fn vs_not_reg(insns: [i64], n: [i64], fntab: [i64], stab: [i64], top: i64) -> i6
 
 // factor = number | letter | ( expr ) | cond expr then expr else expr
 fn emit_factor(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = ety_set(fntab, 0);
   let _ = skip_ws(s, pos);
   let strn = slen(s, pos);
   let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
@@ -5526,6 +5689,9 @@ fn emit_return_core(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], sel
   // A21 step 2: offer TUPLE position to a `(` that opens the returned expression.
   let _ = fntab[7100] = if (if pos[0] >= slen(s, pos) then 0 else char(s, pos[0])) == 40 then pos[0] else 0 - 1;
   let _ = emit_cmp(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  // A8 check (4): the returned expression against the declared return type. A tuple
+  // return classifies as unknown, so A21's arity check keeps sole ownership of it.
+  let _ = if ty_cast_fn(selfname) == 0 then (if ty_clash(fntab[7110], fn_ret_type(s, selfname, fntab, slen(s, pos))) == 1 then diag_exit(s, stmt_at, 84) else 0) else 0;
   let _ = vs_deliver(insns, n, fntab, stab, 1);
   let k = fntab[5601];
   let _ = if k >= 64 then diag_exit(s, stmt_at, 98) else 0;
@@ -6326,6 +6492,13 @@ fn emit_let_scalar(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], self
   let _ = if inV == 1 then (let _ = pos[0] = pos[0] + 2 in 0) else 0;
   // `let _ = e;` (name hash 95, discard): drop the value, no word, no register.
   let is_discard = (1 - is_chain) * (if name == 95 then 1 else 0);
+  // A8: INFER this `let`'s type from its RHS -- fntab[7110] is the walk's verdict on the
+  // expression just emitted. Only the plain form: a chained `let _ = NAME = RHS` retargets
+  // an existing binding whose declared type must not be silently replaced, and `_` has no
+  // entry. An unknown RHS writes 0, which is what sym_bind already put there, so nothing
+  // is claimed that the walk cannot see. THIS is what makes check (3) reach beyond
+  // literals: before it, `let v = [1,2]; f(v)` against an `i64` param was unchecked.
+  let _ = if (1 - is_chain) * (1 - is_discard) == 1 then sy_type_set(s, stab, name, npos, fntab[7110]) else 0;
   let _ = if is_discard == 1 then vs_pop(fntab) else vs_bind(insns, n, fntab, stab, treg_i);
   n[0]
 }
@@ -6799,6 +6972,14 @@ fn compile_fn(s: str) -> i64 {
   let _ = pos[0] = pos[0] + 1;
   // fn tail: materialise the body's final value into x0 (blast_t == 1
   // means emit_body's own lastf flag: a real tail expression left a tag).
+  // A8 check (4) IS NOT APPLIED AT THE FN TAIL, and the reason is measured, not stylistic.
+  // fntab[7110] is ONE scratch cell; it survives a single expression reliably (which is
+  // why `return e` IS checked, in emit_return_core) but not emit_body's whole item loop.
+  // With the tail checked, 4 corpus files were rejected -- qdsl / c70_qdsl / c70_qdsl_neg
+  // at `qdsl_explain`'s `bp[0]` tail, and sbench -- and NO minimal extraction reproduces
+  // it: that same fn compiled standalone is accepted, so the cell is carrying something
+  // from elsewhere in the body. Silence here is the honest partial position; the fix is a
+  // type per WINDOW ENTRY (one cell per entry, in the free run above 7110) instead of one cell.
   let _ = if blast_t == 1 then vs_to(insns, n, fntab, stab, 0) else 0;
   let _ = if blast_t == 1 then vs_pop(fntab) else 0;
   let _ = if fntab[5388] != 255 then selfcheck_exit(5, 3) else 0;
@@ -7090,6 +7271,14 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   let _ = pos[0] = pos[0] + 1;
   // fn tail: materialise the body's final value into x0 (blast_t == 1
   // means emit_body's own lastf flag: a real tail expression left a tag).
+  // A8 check (4) IS NOT APPLIED AT THE FN TAIL, and the reason is measured, not stylistic.
+  // fntab[7110] is ONE scratch cell; it survives a single expression reliably (which is
+  // why `return e` IS checked, in emit_return_core) but not emit_body's whole item loop.
+  // With the tail checked, 4 corpus files were rejected -- qdsl / c70_qdsl / c70_qdsl_neg
+  // at `qdsl_explain`'s `bp[0]` tail, and sbench -- and NO minimal extraction reproduces
+  // it: that same fn compiled standalone is accepted, so the cell is carrying something
+  // from elsewhere in the body. Silence here is the honest partial position; the fix is a
+  // type per WINDOW ENTRY (one cell per entry, in the free run above 7110) instead of one cell.
   let _ = if blast_t == 1 then vs_to(insns, n, fntab, stab, 0) else 0;
   let _ = if blast_t == 1 then vs_pop(fntab) else 0;
   let _ = if fntab[5388] != 255 then selfcheck_exit(5, 4) else 0;
@@ -7574,6 +7763,7 @@ fn emit_zeros(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname:
   // delta is non-negative. The T118 arena trap above is untouched.
   let _ = em(insns, n, 3406888960);
   let _ = em(insns, n, 3544448000);
+  let _ = ety_set(fntab, 257);
   let _ = vs_push(insns, n, fntab, stab, 2, 0, 0 - 1);
   n[0]
 }
