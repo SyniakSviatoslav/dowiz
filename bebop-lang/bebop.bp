@@ -118,7 +118,8 @@ fn diag_exit(s: str, p: i64, code: i64) -> i64 {
   let at24 = if code == 121 then diag_str(buf, at, "more than 3 return values -- the convention is x0..x2") else at23;
   let at25 = if code == 122 then diag_str(buf, at, "call_fn takes a function value plus 0..13 arguments") else at24;
   let at26 = if code == 123 then diag_str(buf, at, "call_packed takes a packed closure plus 0..12 arguments") else at25;
-  let mlen = at26 - at;
+  let at27 = if code == 84 then diag_str(buf, at, "type error: this symbol's declared type is not an array -- it cannot be indexed") else at26;
+  let mlen = at27 - at;
   let final_at = at + mlen;
   let _ = buf[final_at] = 10;
   let _ = sys_write(2, buf, final_at + 1);
@@ -182,14 +183,36 @@ fn read_ident(s: str, pos: [i64]) -> i64 {
 
 // Symbol table: stab[0] = count; pairs (name, reg) at stab[1+2i], stab[2+2i].
 // Lookup name -> register (or -1 if unbound).
+// ---- ROADMAP A8 section 3.1 (2026-09-14): the stab gained a 4TH CELL ----
+// Entries were (name, reg, srcpos) triples; they are now QUADRUPLES, the 4th cell being
+// the symbol's TYPE WORD. The blueprint amends the layout ONCE, for every tag it
+// reserves, precisely so that this arithmetic is never re-derived per tag; it lives in
+// exactly four places (sym_lookup, sym_bind, sym_is_outer, sy_type_get/set) and the
+// three `zeros(513)` allocations.
+// THE TYPE WORD, and what is RESERVED in it for the rows that share this cell:
+//   bits  0..7   type tag: 0 i64, 1 [i64], 2 str, 3 ref T, 4 [u32], 5 [str], 6 fp,
+//                7 [u8] -- exactly the blueprint's tag list, 248 values still free
+//   bit   8      DECLARED: the type came from a SIGNATURE, not from inference. A zero
+//                word therefore means "nothing known", which is what an unrecorded
+//                symbol has always meant, so every existing program is unaffected
+//   bits  9..40  32-bit payload: `ref T`'s T hash for tag 3, the declared length for
+//                tag 7 `[u8]`. Unused by the other tags
+//   bits 41..55  RESERVED, 15 bits, for A22 STEP 2's per-symbol struct index (the
+//                struct cap is 32, so 15 bits is room to spare). A22 step 2 currently
+//                has nowhere to put it; this is that place
+//   bits 56..62  RESERVED, 7 bits, for F3's per-symbol static length, which lives in
+//                fntab[5410 + lk] today -- a parallel 128-cell table keyed by register
+//                rather than by symbol, which is why it cannot see a spilled symbol
+//                past slot 35. Moving it here retires that table
+//   bit   63     left clear: the word is read with `&` masks and compared as signed
 fn sym_lookup(s: str, stab: [i64], name: i64, srcpos: i64) -> i64 {
   let cnt = stab[0];
   let i = 0;
   let reg = 0 - 1;
   while i < cnt {
-    let nm = stab[1 + 3 * i];
-    let rg = stab[2 + 3 * i];
-    let sp = stab[3 + 3 * i];
+    let nm = stab[1 + 4 * i];
+    let rg = stab[2 + 4 * i];
+    let sp = stab[3 + 4 * i];
     let hhit = if nm == name then 1 else 0;
     let bhit = if hhit == 1 then ident_eq(s, sp, srcpos) else 0;
     let reg = if hhit * bhit == 1 then rg else reg;
@@ -197,6 +220,36 @@ fn sym_lookup(s: str, stab: [i64], name: i64, srcpos: i64) -> i64 {
     0
   };
   reg
+}
+
+// A8: read / write a symbol's type word by name. Keyed on the same (hash, spelling)
+// pair sym_lookup uses, so it can never alias two names onto one type. 0 = nothing known.
+fn sy_type_get(s: str, stab: [i64], name: i64, srcpos: i64) -> i64 {
+  let cnt = stab[0];
+  let i = 0;
+  let ty = 0;
+  while i < cnt {
+    let nm = stab[1 + 4 * i];
+    let sp = stab[3 + 4 * i];
+    let hit = if nm == name then ident_eq(s, sp, srcpos) else 0;
+    let ty = if hit == 1 then stab[4 + 4 * i] else ty;
+    let i = i + 1;
+    0
+  };
+  ty
+}
+fn sy_type_set(s: str, stab: [i64], name: i64, srcpos: i64, ty: i64) -> i64 {
+  let cnt = stab[0];
+  let i = 0;
+  while i < cnt {
+    let nm = stab[1 + 4 * i];
+    let sp = stab[3 + 4 * i];
+    let hit = if nm == name then ident_eq(s, sp, srcpos) else 0;
+    let _ = if hit == 1 then (let _ = stab[4 + 4 * i] = ty in 0) else 0;
+    let i = i + 1;
+    0
+  };
+  0
 }
 
 // Byte-compare two identifier spellings at source offsets pa/pb: equal if
@@ -262,10 +315,56 @@ fn sym_bind(s: str, stab: [i64], name: i64, srcpos: i64) -> i64 {
   let is_new = if existing < 0 then 1 else 0;
   let reg = if is_new == 1 then newreg else existing;
   let full = is_new * is_full;
-  let _ = if is_new * ok * (1 - full) == 1 then (let _ = stab[1 + 3 * cnt] = name in (let _ = stab[2 + 3 * cnt] = reg in (let _ = stab[3 + 3 * cnt] = srcpos in 0))) else 0;
+  let _ = if is_new * ok * (1 - full) == 1 then (let _ = stab[1 + 4 * cnt] = name in (let _ = stab[2 + 4 * cnt] = reg in (let _ = stab[3 + 4 * cnt] = srcpos in (let _ = stab[4 + 4 * cnt] = 0 in 0)))) else 0;
   let _ = stab[0] = cnt + is_new * ok * (1 - full);
   let ret = if full == 1 then 0 - 2 else reg;
   if is_discard == 1 then 0 - 1 else ret
+}
+
+// A8: classify ONE parameter's declared type text, the span [from, to) that
+// skip_to_delim consumes today, into a type word (see sym_lookup's map).
+// `[` opens an array: `[u32]` -> 4, `[u8]` -> 7, `[str]` -> 5, anything else -> 1
+// ([i64], and `[T]` too -- A16 step 3's erasure says a generic array IS an i64 array).
+// A bare name: i64 -> 0, str -> 2, fp -> 6, ref -> 3. ANY OTHER bare name is a TYPE
+// VARIABLE and yields 0 WITHOUT the declared bit -- an unrecognised scalar type must
+// not be checked, or `fn f[T](x: T)` would reject a caller that passes an array.
+fn param_type_word(s: str, from: i64, to: i64) -> i64 {
+  let q = [from, to];
+  let _ = skip_ws(s, q);
+  let c0 = if q[0] >= to then 0 else char(s, q[0]);
+  let is_colon = if c0 == 58 then 1 else 0;
+  let _ = if is_colon == 1 then (let _ = q[0] = q[0] + 1 in (let _ = skip_ws(s, q) in 0)) else 0;
+  let c1 = if q[0] >= to then 0 else char(s, q[0]);
+  let is_arr = if c1 == 91 then 1 else 0;
+  let a1 = if q[0] + 1 >= to then 0 else char(s, q[0] + 1);
+  let a2 = if q[0] + 2 >= to then 0 else char(s, q[0] + 2);
+  let is_u32 = (if a1 == 117 then 1 else 0) * (if a2 == 51 then 1 else 0);
+  let is_u8 = (if a1 == 117 then 1 else 0) * (if a2 == 56 then 1 else 0);
+  let is_bstr = (if a1 == 115 then 1 else 0) * (if a2 == 116 then 1 else 0);
+  let atag = 1 + is_u32 * 3 + is_u8 * 6 + is_bstr * 4;
+  let _ = if is_arr == 1 then 0 else (let _ = q[1] = to in 0);
+  let nm = if is_arr == 1 then 0 else read_ident(s, q);
+  let known = (if nm == 1809031 then 1 else 0) + (if nm == 1988825 then 1 else 0) + (if nm == 13474 then 1 else 0) + (if nm == 1969687 then 1 else 0);
+  let ntag = (if nm == 1988825 then 2 else 0) + (if nm == 13474 then 6 else 0) + (if nm == 1969687 then 3 else 0);
+  let tag = if is_arr == 1 then atag else ntag;
+  let decl = if is_arr == 1 then 1 else known;
+  tag + decl * 256
+}
+
+// A8: the declared type of the param whose NAME starts at npos. Deliberately re-derives
+// the span from the name position instead of having parse_params report it, because
+// MEASURED 2026-09-14: adding ANY call inside parse_params' loop changed the compiled
+// output of 5 corpus files and made 3 of them fail with trap 83 (`code buffer exhausted
+// at 0 words`, i.e. a clobbered [n, cap] pair). Bisected to the CALL, not to what the
+// callee computes -- a stub returning 0 failed identically, and removing only the call
+// site restored all 122. parse_params stays call-free; the re-parse is 14 idents per fn.
+// THAT IS A LATENT COMPILER BUG, NOT A PROPERTY OF THIS ROW: see the verdict's open list.
+fn param_type_at(s: str, npos: i64, strn: i64) -> i64 {
+  let q = [npos, strn];
+  let _ = read_ident(s, q);
+  let from = q[0];
+  let _ = skip_to_delim(s, q);
+  param_type_word(s, from, q[0])
 }
 
 // Skip over a param's type annotation up to the next ',' or ')'.
@@ -4816,6 +4915,18 @@ fn emit_array_index(s: str, name: i64, npos: i64, pos: [i64], insns: [i64], n: [
   let strn = slen(s, pos);
   let reg = sym_lookup(s, stab, name, npos);
   let _ = if reg < 0 then diag_exit(s, npos, 101) else 0;
+  // A8: the FIRST place a declared type changes a compilation. Indexing a symbol whose
+  // SIGNATURE declares it scalar (i64 / fp) or `str` is exit 84 -- the two rules
+  // tools/typecheck.py applies to its `get`/`set` nodes ("index into `x` declared i64",
+  // "index into str `x`"). They need only the BASE symbol's declared type, so they need
+  // no expression-type walk at all, which is why they are the two that land first.
+  // The check is compile-time: an ACCEPTED program gets the same words as before, which
+  // is why the whole corpus stays byte-identical.
+  let tw = sy_type_get(s, stab, name, npos);
+  let decl = (tw / 256) & 1;
+  let tg = tw & 255;
+  let scalarish = (if tg == 0 then 1 else 0) + (if tg == 2 then 1 else 0) + (if tg == 6 then 1 else 0);
+  let _ = if decl * scalarish >= 1 then diag_exit(s, npos, 84) else 0;
   let _ = emit_var(insns, n, reg, fntab, stab);
   let _ = pos[0] = pos[0] + 1;
   // F3: discharge the bound HERE, before the index is emitted -- both operands
@@ -5000,7 +5111,7 @@ fn compile(s: str) -> i64 {
   let insns = zeros(256);
   let n = [0, 256];
   let pos = [0, 0];
-  let stab = zeros(385);  // 1 + 3*128 (name,reg,srcpos) verified triples; overflow -> loud trap
+  let stab = zeros(513);  // A8 3.1: 1 + 4*128 (name,reg,srcpos,type) quadruples; overflow -> loud trap
   let selfname = 0 - 1;
   let selfstart = 0;
   let fnames_l = zeros(784);
@@ -5280,8 +5391,8 @@ fn sym_is_outer(s: str, stab: [i64], name: i64, srcpos: i64, cnt0: i64) -> i64 {
   let i = 0;
   let hit = 0;
   while i < cnt0 {
-    let nm = stab[1 + 3 * i];
-    let sp = stab[3 + 3 * i];
+    let nm = stab[1 + 4 * i];
+    let sp = stab[3 + 4 * i];
     let h = if nm == name then ident_eq(s, sp, srcpos) else 0;
     let hit = hit + h;
     let i = i + 1;
@@ -6617,7 +6728,7 @@ fn compile_fn(s: str) -> i64 {
   let insns = zeros(256);
   let n = [0, 256];
   let pos = [0, 0];
-  let stab = zeros(385);  // 1 + 3*128 (name,reg,srcpos) verified triples; overflow -> loud trap
+  let stab = zeros(513);  // A8 3.1: 1 + 4*128 (name,reg,srcpos,type) quadruples; overflow -> loud trap
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 2;
   let _ = skip_ws(s, pos);
@@ -6657,6 +6768,7 @@ fn compile_fn(s: str) -> i64 {
   let mvdone = if nparams == 0 then 1 else 0;
   while mvdone == 0 {
     let _ = sym_bind(s, stab, pnames[i[0]], pparpos[i[0]]);
+    let _ = sy_type_set(s, stab, pnames[i[0]], pparpos[i[0]], param_type_at(s, pparpos[i[0]], slen(s, pos)));
     let _ = i[0] = i[0] + 1;
     let mvdone = if i[0] >= nparams then 1 else 0;
     0
@@ -6894,7 +7006,7 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   let _ = fntab[5666] = 0;  // T99: pending `break` placeholders
   let _ = fntab[5543] = kernel_marked(s, fpos);  // C1 step 2: `kernel fn` dialect bit
   let pos = [fpos, str_len(s)];
-  let stab = zeros(385);  // 1 + 3*128 (name,reg,srcpos) verified triples; overflow -> loud trap
+  let stab = zeros(513);  // A8 3.1: 1 + 4*128 (name,reg,srcpos,type) quadruples; overflow -> loud trap
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 2;
   let _ = skip_ws(s, pos);
@@ -6924,6 +7036,7 @@ fn compile_fn_at(s: str, fpos: i64, selfstart: i64, fntab: [i64], insns: [i64], 
   let mvdone = if nparams == 0 then 1 else 0;
   while mvdone == 0 {
     let _ = sym_bind(s, stab, pnames[i[0]], pparpos[i[0]]);
+    let _ = sy_type_set(s, stab, pnames[i[0]], pparpos[i[0]], param_type_at(s, pparpos[i[0]], slen(s, pos)));
     let _ = i[0] = i[0] + 1;
     let mvdone = if i[0] >= nparams then 1 else 0;
     0
