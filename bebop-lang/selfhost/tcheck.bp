@@ -431,6 +431,426 @@ fn bind_oid(obl: str, oid: [i64]) -> i64 {
   1
 }
 
+// --- bit-blaster and Tseitin encoder ---
+
+fn fresh_var(nv: [i64]) -> i64 {
+  let v = nv[0];
+  let cap = if nv[1] > 0 then nv[1] else 8192;
+  let _ = if v < cap then (let _ = nv[0] = v + 1 in 0) else sys_exit(1);
+  v + 1
+}
+
+// the ONE clause appender.  It always advances n_cl[0] -- so n_cl[0] is the
+// true clause DEMAND -- but only writes while the slot is inside the store,
+// which turns an overflow into a measurable number instead of a stray write.
+// ln is the literal count (1..3); unused literal slots are ignored.
+fn bb_emit(c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64], ln: i64, l0: i64, l1: i64, l2: i64) -> i64 {
+  let slot = n_cl[0];
+  let _ = if slot < 16384 then (let _ = c_id[slot] = 0 - (slot + 1) in
+                                let _ = c_len[slot] = ln in
+                                let _ = c_lits[slot * 32 + 0] = l0 in
+                                let _ = if ln > 1 then (let _ = c_lits[slot * 32 + 1] = l1 in 0) else 0 in
+                                let _ = if ln > 2 then (let _ = c_lits[slot * 32 + 2] = l2 in 0) else 0 in 0) else 0;
+  let _ = n_cl[0] = slot + 1;
+  0
+}
+
+fn bb_not(a: i64) -> i64 { 0 - a }
+
+fn bb_and(a: i64, b: i64, nv: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
+  let o = fresh_var(nv);
+  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, 0 - a, 0 - b, o);
+  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 2, a, 0 - o, 0);
+  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 2, b, 0 - o, 0);
+  o
+}
+
+fn bb_or(a: i64, b: i64, nv: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
+  let o = fresh_var(nv);
+  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, a, b, 0 - o);
+  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 2, 0 - a, o, 0);
+  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 2, 0 - b, o, 0);
+  o
+}
+
+fn bb_xor(a: i64, b: i64, nv: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
+  let o = fresh_var(nv);
+  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, 0 - a, 0 - b, 0 - o);
+  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, a, b, 0 - o);
+  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, a, 0 - b, o);
+  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, 0 - a, b, o);
+  o
+}
+
+fn bb_mux(s: i64, t: i64, e: i64, nv: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
+  let o = fresh_var(nv);
+  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, 0 - s, t, 0 - o);
+  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, 0 - s, 0 - t, o);
+  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, s, e, 0 - o);
+  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, s, 0 - e, o);
+  o
+}
+
+fn bb_not64(a: [i64], a_base: i64, r: [i64], r_base: i64) -> i64 {
+  let i = 0;
+  while i < 64 {
+    let _ = r[r_base + i] = bb_not(a[a_base + i]);
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+fn bb_and64(a: [i64], a_base: i64, b: [i64], b_base: i64, r: [i64], r_base: i64, nv: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
+  let i = 0;
+  while i < 64 {
+    let _ = r[r_base + i] = bb_and(a[a_base + i], b[b_base + i], nv, c_id, c_len, c_lits, n_cl);
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+fn bb_or64(a: [i64], a_base: i64, b: [i64], b_base: i64, r: [i64], r_base: i64, nv: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
+  let i = 0;
+  while i < 64 {
+    let _ = r[r_base + i] = bb_or(a[a_base + i], b[b_base + i], nv, c_id, c_len, c_lits, n_cl);
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+fn bb_xor64(a: [i64], a_base: i64, b: [i64], b_base: i64, r: [i64], r_base: i64, nv: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
+  let i = 0;
+  while i < 64 {
+    let _ = r[r_base + i] = bb_xor(a[a_base + i], b[b_base + i], nv, c_id, c_len, c_lits, n_cl);
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+fn bb_add64(a: [i64], a_base: i64, b: [i64], b_base: i64, r: [i64], r_base: i64, nv: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
+  let cin = 0 - 1;
+  let i = 0;
+  while i < 64 {
+    let a_i = a[a_base + i];
+    let b_i = b[b_base + i];
+    let axb = bb_xor(a_i, b_i, nv, c_id, c_len, c_lits, n_cl);
+    let sum = bb_xor(axb, cin, nv, c_id, c_len, c_lits, n_cl);
+    let _ = r[r_base + i] = sum;
+    let ab = bb_and(a_i, b_i, nv, c_id, c_len, c_lits, n_cl);
+    let cin_axb = bb_and(cin, axb, nv, c_id, c_len, c_lits, n_cl);
+    let cin = bb_or(ab, cin_axb, nv, c_id, c_len, c_lits, n_cl);
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+fn bb_sub64(a: [i64], a_base: i64, b: [i64], b_base: i64, r: [i64], r_base: i64, nv: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
+  let bnot = zeros(64);
+  let _ = bb_not64(b, b_base, bnot, 0);
+  let temp = zeros(64);
+  let _ = bb_add64(a, a_base, bnot, 0, temp, 0, nv, c_id, c_len, c_lits, n_cl);
+  let one = zeros(64);
+  let i = 0;
+  while i < 64 {
+    let _ = one[i] = 0 - 1;
+    let i = i + 1;
+    0
+  };
+  let _ = one[0] = 1;
+  let _ = bb_add64(temp, 0, one, 0, r, r_base, nv, c_id, c_len, c_lits, n_cl);
+  0
+}
+
+fn bb_eq64(a: [i64], a_base: i64, b: [i64], b_base: i64, nv: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
+  let i = 0;
+  let eq = 1;
+  while i < 64 {
+    let a_i = a[a_base + i];
+    let b_i = b[b_base + i];
+    let xor_i = bb_xor(a_i, b_i, nv, c_id, c_len, c_lits, n_cl);
+    let not_xor = bb_not(xor_i);
+    let eq = bb_and(eq, not_xor, nv, c_id, c_len, c_lits, n_cl);
+    let i = i + 1;
+    0
+  };
+  eq
+}
+
+fn bb_ult64(a: [i64], a_base: i64, b: [i64], b_base: i64, nv: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
+  let i = 63;
+  let lt = 0 - 1;
+  let eq = 1;
+  while i >= 0 {
+    let a_i = a[a_base + i];
+    let b_i = b[b_base + i];
+    let not_a_i = bb_not(a_i);
+    let lt_i = bb_and(not_a_i, b_i, nv, c_id, c_len, c_lits, n_cl);
+    let xor_i = bb_xor(a_i, b_i, nv, c_id, c_len, c_lits, n_cl);
+    let not_xor = bb_not(xor_i);
+    let eq_i = not_xor;
+    let lt_here = bb_and(eq, lt_i, nv, c_id, c_len, c_lits, n_cl);
+    let lt = bb_or(lt, lt_here, nv, c_id, c_len, c_lits, n_cl);
+    let eq = bb_and(eq, eq_i, nv, c_id, c_len, c_lits, n_cl);
+    let i = i - 1;
+    0
+  };
+  lt
+}
+
+fn bb_slt64(a: [i64], a_base: i64, b: [i64], b_base: i64, nv: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
+  let i = 62;
+  let lt = 0 - 1;
+  let eq = 1;
+  while i >= 0 {
+    let a_i = a[a_base + i];
+    let b_i = b[b_base + i];
+    let not_a_i = bb_not(a_i);
+    let lt_i = bb_and(not_a_i, b_i, nv, c_id, c_len, c_lits, n_cl);
+    let xor_i = bb_xor(a_i, b_i, nv, c_id, c_len, c_lits, n_cl);
+    let not_xor = bb_not(xor_i);
+    let eq_i = not_xor;
+    let lt_here = bb_and(eq, lt_i, nv, c_id, c_len, c_lits, n_cl);
+    let lt = bb_or(lt, lt_here, nv, c_id, c_len, c_lits, n_cl);
+    let eq = bb_and(eq, eq_i, nv, c_id, c_len, c_lits, n_cl);
+    let i = i - 1;
+    0
+  };
+  let a_sign = a[a_base + 63];
+  let b_sign = b[b_base + 63];
+  // signed: if the signs DIFFER the negative one is smaller, so the answer is
+  // a_sign itself; if they agree the low-63-bit unsigned compare decides.
+  let signs_differ = bb_xor(a_sign, b_sign, nv, c_id, c_len, c_lits, n_cl);
+  bb_mux(signs_differ, a_sign, lt, nv, c_id, c_len, c_lits, n_cl)
+}
+
+fn bb_shl64(a: [i64], a_base: i64, shamt: [i64], shamt_base: i64, r: [i64], r_base: i64, nv: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
+  let stage = zeros(64);
+  let i = 0;
+  while i < 64 {
+    let _ = stage[i] = a[a_base + i];
+    let i = i + 1;
+    0
+  };
+  let shift_bit = 0;
+  while shift_bit < 6 {
+    let shift_amt = 1;
+    let j = 0;
+    while j < shift_bit {
+      let _ = shift_amt = shift_amt * 2;
+      let j = j + 1;
+      0
+    };
+    let sel = shamt[shamt_base + shift_bit];
+    let next_stage = zeros(64);
+    let i = 0;
+    while i < 64 {
+      let shifted_idx = i - shift_amt;
+      let val_if_shifted = if shifted_idx >= 0 then stage[shifted_idx] else (0 - 1);
+      let next_val = bb_mux(sel, val_if_shifted, stage[i], nv, c_id, c_len, c_lits, n_cl);
+      let _ = next_stage[i] = next_val;
+      let i = i + 1;
+      0
+    };
+    let i = 0;
+    while i < 64 {
+      let _ = stage[i] = next_stage[i];
+      let i = i + 1;
+      0
+    };
+    let shift_bit = shift_bit + 1;
+    0
+  };
+  let i = 0;
+  while i < 64 {
+    let _ = r[r_base + i] = stage[i];
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+fn bb_lshr64(a: [i64], a_base: i64, shamt: [i64], shamt_base: i64, r: [i64], r_base: i64, nv: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
+  let stage = zeros(64);
+  let i = 0;
+  while i < 64 {
+    let _ = stage[i] = a[a_base + i];
+    let i = i + 1;
+    0
+  };
+  let shift_bit = 0;
+  while shift_bit < 6 {
+    let shift_amt = 1;
+    let j = 0;
+    while j < shift_bit {
+      let _ = shift_amt = shift_amt * 2;
+      let j = j + 1;
+      0
+    };
+    let sel = shamt[shamt_base + shift_bit];
+    let next_stage = zeros(64);
+    let i = 0;
+    while i < 64 {
+      let shifted_idx = i + shift_amt;
+      let val_if_shifted = if shifted_idx < 64 then stage[shifted_idx] else (0 - 1);
+      let next_val = bb_mux(sel, val_if_shifted, stage[i], nv, c_id, c_len, c_lits, n_cl);
+      let _ = next_stage[i] = next_val;
+      let i = i + 1;
+      0
+    };
+    let i = 0;
+    while i < 64 {
+      let _ = stage[i] = next_stage[i];
+      let i = i + 1;
+      0
+    };
+    let shift_bit = shift_bit + 1;
+    0
+  };
+  let i = 0;
+  while i < 64 {
+    let _ = r[r_base + i] = stage[i];
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+fn bb_ashr64(a: [i64], a_base: i64, shamt: [i64], shamt_base: i64, r: [i64], r_base: i64, nv: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
+  let stage = zeros(64);
+  let i = 0;
+  while i < 64 {
+    let _ = stage[i] = a[a_base + i];
+    let i = i + 1;
+    0
+  };
+  let sign = a[a_base + 63];
+  let shift_bit = 0;
+  while shift_bit < 6 {
+    let shift_amt = 1;
+    let j = 0;
+    while j < shift_bit {
+      let _ = shift_amt = shift_amt * 2;
+      let j = j + 1;
+      0
+    };
+    let sel = shamt[shamt_base + shift_bit];
+    let next_stage = zeros(64);
+    let i = 0;
+    while i < 64 {
+      let shifted_idx = i + shift_amt;
+      let val_if_shifted = if shifted_idx < 64 then stage[shifted_idx] else sign;
+      let next_val = bb_mux(sel, val_if_shifted, stage[i], nv, c_id, c_len, c_lits, n_cl);
+      let _ = next_stage[i] = next_val;
+      let i = i + 1;
+      0
+    };
+    let i = 0;
+    while i < 64 {
+      let _ = stage[i] = next_stage[i];
+      let i = i + 1;
+      0
+    };
+    let shift_bit = shift_bit + 1;
+    0
+  };
+  let i = 0;
+  while i < 64 {
+    let _ = r[r_base + i] = stage[i];
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+fn bb_mux64(s: i64, t: [i64], t_base: i64, e: [i64], e_base: i64, r: [i64], r_base: i64, nv: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
+  let i = 0;
+  while i < 64 {
+    let _ = r[r_base + i] = bb_mux(s, t[t_base + i], e[e_base + i], nv, c_id, c_len, c_lits, n_cl);
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+fn bb_mul64(a: [i64], a_base: i64, b: [i64], b_base: i64, r: [i64], r_base: i64, nv: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
+  let acc = zeros(64);
+  let i = 0;
+  while i < 64 {
+    let _ = acc[i] = 0 - 1;
+    let i = i + 1;
+    0
+  };
+  let bit = 0;
+  while bit < 64 {
+    let sel = b[b_base + bit];
+    let pp = zeros(64);
+    let j = 0;
+    while j < 64 {
+      let _ = pp[j] = bb_and(a[a_base + j], sel, nv, c_id, c_len, c_lits, n_cl);
+      let j = j + 1;
+      0
+    };
+    let shifted = zeros(64);
+    let j = 0;
+    while j < 64 {
+      let idx = j - bit;
+      let val = if idx >= 0 then pp[idx] else (0 - 1);
+      let _ = shifted[j] = val;
+      let j = j + 1;
+      0
+    };
+    let _ = bb_add64(acc, 0, shifted, 0, acc, 0, nv, c_id, c_len, c_lits, n_cl);
+    let bit = bit + 1;
+    0
+  };
+  let i = 0;
+  while i < 64 {
+    let _ = r[r_base + i] = acc[i];
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+fn bb_bcp(assign: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
+  let changed = 1;
+  let rounds = 0;
+  while (changed * (if rounds < 200 then 1 else 0)) == 1 {
+    let _ = changed = 0;
+    let i = 0;
+    while i < n_cl[0] {
+      let nfalse = 0;
+      let nunassigned = 0;
+      let lastfree = 0;
+      let sat = 0;
+      let j = 0;
+      while j < c_len[i] {
+        let lv = c_lits[i * 32 + j];
+        let sv = if lv > 0 then lv else (0 - lv);
+        let want = if lv > 0 then 1 else (0 - 1);
+        let cur = asgn_get(assign, sv);
+        let _ = if cur == 0 then (let _ = nunassigned = nunassigned + 1 in let _ = lastfree = lv in 0) else 0;
+        let _ = if cur == want then (let _ = sat = 1 in 0) else 0;
+        let _ = if (if cur != 0 then 1 else 0) * (if cur != want then 1 else 0) == 1 then (let _ = nfalse = nfalse + 1 in 0) else 0;
+        let j = j + 1;
+        0
+      };
+      let force = (if sat == 0 then 1 else 0) * (if nunassigned == 1 then 1 else 0);
+      let _ = if force == 1 then (let sv2 = if lastfree > 0 then lastfree else (0 - lastfree) in (let _ = asgn_set(assign, sv2, if lastfree > 0 then 1 else (0 - 1)) in let _ = changed = 1 in 0)) else 0;
+      let i = i + 1;
+      0
+    };
+    let rounds = rounds + 1;
+    0
+  };
+  rounds
+}
+
 // --- main verification ---
 fn verify_cert(cert: str, obl: str, obl_given: i64) -> i64 {
   let c_id = zeros(16384);
@@ -486,6 +906,330 @@ fn verify_cert(cert: str, obl: str, obl_given: i64) -> i64 {
   0
 }
 
+// --- bit-blaster selftest infrastructure ---
+
+fn bb_reset(c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64], assign: [i64], nv: [i64], used: i64) -> i64 {
+  let i = 0;
+  while i < used {
+    let _ = c_id[i] = 0;
+    let _ = c_len[i] = 0;
+    let i = i + 1;
+    0
+  };
+  let i = 0;
+  while i < used * 32 {
+    let _ = c_lits[i] = 0;
+    let i = i + 1;
+    0
+  };
+  let i = 0;
+  while i < 8192 {
+    let _ = assign[i] = 0;
+    let i = i + 1;
+    0
+  };
+  let _ = n_cl[0] = 0;
+  let _ = nv[0] = 0;
+  // Variable 1 is CONST_TRUE for the whole encoder: it is allocated first and
+  // pinned by a unit clause, so from here on literal 1 IS constant-true and
+  // literal -1 IS constant-false.  Raw ints 0/1 are NOT literals; before this
+  // existed, `let eq = 1` meant "variable 1" and `let lt = 0` meant nothing at
+  // all (0 is not a variable, so BCP could never assign it).
+  let _ = fresh_var(nv);
+  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 1, 1, 0, 0);
+  1
+}
+
+fn bb_pin_const(c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64], base: i64, val: i64) -> i64 {
+  let bit = 0;
+  while bit < 64 {
+    let bit_val = (val >> bit) & 1;
+    let var_idx = base + bit;
+    let lit = if bit_val == 1 then var_idx else (0 - var_idx);
+    let _ = bb_emit(c_id, c_len, c_lits, n_cl, 1, lit, 0, 0);
+    let bit = bit + 1;
+    0
+  };
+  0
+}
+
+fn bb_pin_bit(c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64], lit: i64) -> i64 {
+  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 1, lit, 0, 0);
+  0
+}
+
+fn bb_lit_val(assign: [i64], lit: i64) -> i64 {
+  let sv = if lit > 0 then lit else (0 - lit);
+  let v = asgn_get(assign, sv);
+  let want = if lit > 0 then 1 else (0 - 1);
+  if v == want then 1 else 0
+}
+
+// read a 64-bit result out of an array of OUTPUT LITERALS (not a contiguous
+// variable range: every bb_*64 op overwrites r[] with freshly allocated
+// Tseitin outputs).  bit 63 carries the two's-complement sign weight.
+fn bb_eval_word(assign: [i64], lits: [i64]) -> i64 {
+  let result = 0;
+  let bit = 0;
+  while bit < 63 {
+    let bv = bb_lit_val(assign, lits[bit]);
+    let _ = result = result + (bv * (1 << bit));
+    let bit = bit + 1;
+    0
+  };
+  let hb = bb_lit_val(assign, lits[63]);
+  let _ = result = result + (hb * (0 - 4611686018427387904 - 4611686018427387904));
+  result
+}
+
+// allocate 64 consecutive fresh variables into w[0..64); returns the base var
+fn bb_alloc_word(w: [i64], nv: [i64]) -> i64 {
+  let base = nv[0] + 1;
+  let i = 0;
+  while i < 64 {
+    let _ = w[i] = base + i;
+    let _ = fresh_var(nv);
+    let i = i + 1;
+    0
+  };
+  base
+}
+
+fn bb_row(obuf: [i64], opos: [i64], nm: str, val: i64, ncl: i64, nvr: i64, rds: i64) -> i64 {
+  let _ = opos[0] = 0;
+  let _ = wr_s(obuf, opos, nm);
+  let _ = wr_s(obuf, opos, " = ");
+  let _ = wr_num(obuf, opos, val);
+  let _ = wr_s(obuf, opos, "  clauses=");
+  let _ = wr_num(obuf, opos, ncl);
+  let _ = wr_s(obuf, opos, " vars=");
+  let _ = wr_num(obuf, opos, nvr);
+  let _ = wr_s(obuf, opos, " bcp_rounds=");
+  let _ = wr_num(obuf, opos, rds);
+  let _ = wr_ch(obuf, opos, 10);
+  let _ = sys_write(1, obuf, opos[0]);
+  0
+}
+
+fn bb_selftest(obuf: [i64], opos: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64], assign: [i64], nv: [i64], a: [i64], b: [i64], r: [i64], sh: [i64]) -> i64 {
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let b_base = bb_alloc_word(b, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 5);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, b_base, 3);
+  let _ = bb_add64(a, 0, b, 0, r, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "01 bb_add64(5,3)  want 8", bb_eval_word(assign, r), n_cl[0], nv[0], rd);
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let b_base = bb_alloc_word(b, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 5);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, b_base, 3);
+  let _ = bb_sub64(a, 0, b, 0, r, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "02 bb_sub64(5,3)  want 2", bb_eval_word(assign, r), n_cl[0], nv[0], rd);
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let b_base = bb_alloc_word(b, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 6);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, b_base, 3);
+  let _ = bb_and64(a, 0, b, 0, r, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "03 bb_and64(6,3)  want 2", bb_eval_word(assign, r), n_cl[0], nv[0], rd);
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let b_base = bb_alloc_word(b, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 6);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, b_base, 3);
+  let _ = bb_or64(a, 0, b, 0, r, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "04 bb_or64(6,3)   want 7", bb_eval_word(assign, r), n_cl[0], nv[0], rd);
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let b_base = bb_alloc_word(b, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 6);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, b_base, 3);
+  let _ = bb_xor64(a, 0, b, 0, r, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "05 bb_xor64(6,3)  want 5", bb_eval_word(assign, r), n_cl[0], nv[0], rd);
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 0);
+  let _ = bb_not64(a, 0, r, 0);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "06 bb_not64(0)    want -1", bb_eval_word(assign, r), n_cl[0], nv[0], rd);
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let b_base = bb_alloc_word(b, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 7);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, b_base, 7);
+  let ol = bb_eq64(a, 0, b, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "07 bb_eq64(7,7)   want 1", bb_lit_val(assign, ol), n_cl[0], nv[0], rd);
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let b_base = bb_alloc_word(b, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 7);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, b_base, 8);
+  let ol = bb_eq64(a, 0, b, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "08 bb_eq64(7,8)   want 0", bb_lit_val(assign, ol), n_cl[0], nv[0], rd);
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let b_base = bb_alloc_word(b, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 3);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, b_base, 5);
+  let ol = bb_ult64(a, 0, b, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "09 bb_ult64(3,5)  want 1", bb_lit_val(assign, ol), n_cl[0], nv[0], rd);
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let b_base = bb_alloc_word(b, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 5);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, b_base, 3);
+  let ol = bb_ult64(a, 0, b, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "10 bb_ult64(5,3)  want 0", bb_lit_val(assign, ol), n_cl[0], nv[0], rd);
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let b_base = bb_alloc_word(b, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 0 - 1);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, b_base, 1);
+  let ol = bb_slt64(a, 0, b, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "11 bb_slt64(-1,1) want 1", bb_lit_val(assign, ol), n_cl[0], nv[0], rd);
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let s_base = bb_alloc_word(sh, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 1);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, s_base, 4);
+  let _ = bb_shl64(a, 0, sh, 0, r, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "12 bb_shl64(1,4)  want 16", bb_eval_word(assign, r), n_cl[0], nv[0], rd);
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let s_base = bb_alloc_word(sh, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 16);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, s_base, 4);
+  let _ = bb_lshr64(a, 0, sh, 0, r, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "13 bb_lshr64(16,4) want 1", bb_eval_word(assign, r), n_cl[0], nv[0], rd);
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let s_base = bb_alloc_word(sh, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 0 - 16);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, s_base, 4);
+  let _ = bb_ashr64(a, 0, sh, 0, r, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "14 bb_ashr64(-16,4) want -1", bb_eval_word(assign, r), n_cl[0], nv[0], rd);
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let b_base = bb_alloc_word(b, nv);
+  let sl = fresh_var(nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 7);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, b_base, 9);
+  let _ = bb_pin_bit(c_id, c_len, c_lits, n_cl, sl);
+  let _ = bb_mux64(sl, a, 0, b, 0, r, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "15 bb_mux64(1,7,9) want 7", bb_eval_word(assign, r), n_cl[0], nv[0], rd);
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let b_base = bb_alloc_word(b, nv);
+  let sl = fresh_var(nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 7);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, b_base, 9);
+  let _ = bb_pin_bit(c_id, c_len, c_lits, n_cl, 0 - sl);
+  let _ = bb_mux64(sl, a, 0, b, 0, r, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "16 bb_mux64(0,7,9) want 9", bb_eval_word(assign, r), n_cl[0], nv[0], rd);
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let b_base = bb_alloc_word(b, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 0 - 1);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, b_base, 0 - 1);
+  let _ = bb_and64(a, 0, b, 0, r, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "16a pin probe bb_and64(-1,-1)  want -1", bb_eval_word(assign, r), n_cl[0], nv[0], rd);
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let b_base = bb_alloc_word(b, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 0 - 16);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, b_base, 0 - 1);
+  let _ = bb_and64(a, 0, b, 0, r, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "16b pin probe bb_and64(-16,-1) want -16", bb_eval_word(assign, r), n_cl[0], nv[0], rd);
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let b_base = bb_alloc_word(b, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 1);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, b_base, 0 - 1);
+  let ol = bb_slt64(a, 0, b, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "11a bb_slt64(1,-1)  want 0", bb_lit_val(assign, ol), n_cl[0], nv[0], rd);
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let b_base = bb_alloc_word(b, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 0 - 2);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, b_base, 0 - 1);
+  let ol = bb_slt64(a, 0, b, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "11b bb_slt64(-2,-1) want 1", bb_lit_val(assign, ol), n_cl[0], nv[0], rd);
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let b_base = bb_alloc_word(b, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 1);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, b_base, 0);
+  let _ = bb_add64(a, 0, b, 0, r, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "01a carry-in probe bb_add64(1,0) want 1", bb_eval_word(assign, r), n_cl[0], nv[0], rd);
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let b_base = bb_alloc_word(b, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 6);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, b_base, 7);
+  // SIZING RUN: lift the fresh_var cap so it COUNTS instead of exiting.
+  // bb_emit already counts every clause and only writes the in-bounds
+  // ones, so n_cl[0]/nv[0] below are the true demand of bb_mul64.  No
+  // bcp: assign is only 8192 wide and only the counts are wanted.
+  let _ = nv[1] = 1000000000;
+  let _ = bb_mul64(a, 0, b, 0, r, 0, nv, c_id, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "SIZE bb_mul64(6,7) true demand, no bcp", 0, n_cl[0], nv[0], 0);
+  let _ = nv[1] = 0;
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let b_base = bb_alloc_word(b, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 6);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, b_base, 7);
+  let _ = bb_row(obuf, opos, "17 bb_mul64(6,7)  ENTERING (pre-call counts)", 0, n_cl[0], nv[0], 0);
+  let _ = bb_mul64(a, 0, b, 0, r, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "17 bb_mul64(6,7)  want 42", bb_eval_word(assign, r), n_cl[0], nv[0], rd);
+
+  0
+}
+
 // --- path helpers ---
 fn str_to_cells(dst: [i64], src: str) -> i64 {
   let i = 0;
@@ -520,6 +1264,28 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let lc = str_len(cpath);
   let pc = zeros(lc + 1);
   let _ = str_to_cells(pc, cpath);
+  // argv[2] == "selftest" runs the bit-blaster selftest instead of the
+  // certificate check.  Every array the selftest needs is allocated HERE:
+  // nothing below main calls zeros().
+  let st_mode = if lc == 8 then (if pc[0] == 115 then (if pc[1] == 101 then (if pc[2] == 108 then (if pc[3] == 102 then 1 else 0) else 0) else 0) else 0) else 0;
+  let sz_c = if st_mode == 1 then 16384 else 1;
+  let sz_l = if st_mode == 1 then 524288 else 1;
+  let sz_a = if st_mode == 1 then 8192 else 1;
+  let sz_w = if st_mode == 1 then 64 else 1;
+  let sc_id = zeros(sz_c);
+  let sc_len = zeros(sz_c);
+  let sc_lits = zeros(sz_l);
+  let sassign = zeros(sz_a);
+  let sobuf = zeros(256);
+  let sopos = [0];
+  let snv = zeros(2);
+  let sn_cl = [0];
+  let sa = zeros(sz_w);
+  let sb = zeros(sz_w);
+  let sr = zeros(sz_w);
+  let ssh = zeros(sz_w);
+  let _ = if st_mode == 1 then bb_selftest(sobuf, sopos, sc_id, sc_len, sc_lits, sn_cl, sassign, snv, sa, sb, sr, ssh) else 0;
+  let _ = if st_mode == 1 then sys_exit(0) else 0;
   let fd = sys_open(pc, lc, 0);
   let _ = if fd >= 0 then 0 else sys_exit(90);
   let cert = sys_slurp(fd, 4000000);
