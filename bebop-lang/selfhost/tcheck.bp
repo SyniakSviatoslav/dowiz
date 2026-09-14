@@ -331,6 +331,10 @@ fn add_derived(c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64],
     let k = k + 1;
     0
   };
+  // the INPUT clause count, captured at the first derived clause: the format writes
+  // every `c` line before any `r` line, so n_cl[0] here is exactly the number of
+  // clauses the goal check must compare against the obligation's blast.
+  let _ = if st[4] == 0 then (let _ = st[4] = n_cl[0] in 0) else 0;
   let _ = if nh > 0 then 0 else sys_exit(2);
   let _ = check_chain(c_id, c_len, c_lits, n_cl, lits, nl, hints, nh, assign);
   let _ = c_id[n_cl[0]] = cid;
@@ -994,6 +998,187 @@ fn bb_bcp(assign: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
   rounds
 }
 
+// --- THE LRAT GOAL CHECK: blast the obligation, compare with the certificate ---
+// Until now `verify_cert` proved only that SOME CNF was refuted.  Nothing connected
+// the `c` lines to the obligation, so a certificate for one claim was accepted as
+// discharging another -- demonstrated by splicing two genuine certificates, which the
+// checker accepted while printing `binding=bound`.  The oid proves the checker was
+// handed the right TEXT; this proves the clauses encode it.
+//
+// The encoding here is NORMATIVE (operator ruling 2026-09-14, F6's trust root): this
+// file defines it and `tools/certgen.py` was made to match, not the reverse.  Which is
+// why the blaster below is nothing new -- it reuses bb_and64/bb_or64/bb_xor64/bb_not64/
+// bb_add64/bb_sub64/bb_mul64/bb_eq64 unchanged, with a word table indexed by node id.
+// Constants become +-1 literals (CONST_TRUE/CONST_FALSE) and cost no variables, and a
+// literal shift is a literal shuffle, both matching the producer exactly.
+// st[5] carries the blast's refusal: 95 an op with no blaster (this is where `fdiv`
+//   lands, the mirror of certgen refusing it), 96 a node id out of range or undefined,
+//   97 no goal, 98 the certificate's clauses are not the obligation's.
+fn ob_wb(nid: i64) -> i64 { nid * 64 }
+
+fn ob_const_word(wt: [i64], nid: i64, v: i64) -> i64 {
+  let b = ob_wb(nid);
+  let i = 0;
+  while i < 64 {
+    let _ = wt[b + i] = if ((v >> i) & 1) == 1 then 1 else (0 - 1);
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+fn ob_var_word(wt: [i64], nid: i64, nv: [i64]) -> i64 {
+  let b = ob_wb(nid);
+  let base = nv[0] + 1;
+  let i = 0;
+  while i < 64 {
+    let _ = wt[b + i] = base + i;
+    let _ = fresh_var(nv);
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+fn ob_shift_word(wt: [i64], nid: i64, src: i64, k: i64, left: i64) -> i64 {
+  let b = ob_wb(nid);
+  let s = ob_wb(src);
+  let i = 0;
+  while i < 64 {
+    let j = if left == 1 then (i - k) else (i + k);
+    let inr = if j >= 0 then (if j < 64 then 1 else 0) else 0;
+    let _ = wt[b + i] = if inr == 1 then wt[s + j] else (0 - 1);
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+fn ob_notw(wt: [i64], nid: i64, src: i64) -> i64 {
+  let b = ob_wb(nid);
+  let s = ob_wb(src);
+  let i = 0;
+  while i < 64 {
+    let _ = wt[b + i] = 0 - wt[s + i];
+    let i = i + 1;
+    0
+  };
+  0
+}
+
+fn ob_op(st: [i64], line: [i64], toks: [i64], nt: i64, wt: [i64], nv: [i64],
+         c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
+  let id = parse_int(line, toks[0]);
+  let k0 = line[toks[1]];
+  let k1 = line[toks[1] + 1];
+  let _ = if id >= 1 then (if id < 256 then 0 else (let _ = st[5] = 96 in 0)) else (let _ = st[5] = 96 in 0);
+  let ok = if id >= 1 then (if id < 256 then 1 else 0) else 0;
+  let a1 = if nt > 2 then parse_int(line, toks[2]) else 0;
+  let a2 = if nt > 3 then parse_int(line, toks[3]) else 0;
+  let isv = if k0 == 118 then 1 else 0;
+  let isc = if k0 == 99 then 1 else 0;
+  let isadd = if k0 == 97 then (if k1 == 100 then 1 else 0) else 0;
+  let isand = if k0 == 97 then (if k1 == 110 then 1 else 0) else 0;
+  let issub = if k0 == 115 then (if k1 == 117 then 1 else 0) else 0;
+  let isshl = if k0 == 115 then (if k1 == 104 then 1 else 0) else 0;
+  let ismul = if k0 == 109 then 1 else 0;
+  let isnot = if k0 == 110 then 1 else 0;
+  let isor = if k0 == 111 then 1 else 0;
+  let isxor = if k0 == 120 then 1 else 0;
+  let islsr = if k0 == 108 then 1 else 0;
+  let iseq = if k0 == 101 then 1 else 0;
+  let known = isv + isc + isadd + isand + issub + isshl + ismul + isnot + isor + isxor + islsr + iseq;
+  let _ = if known == 1 then 0 else (let _ = st[5] = 95 in 0);
+  // every op but var/const takes node ids, and an out-of-range one is refused
+  let needa = known - isv - isc;
+  let aok = if needa == 1 then (if a1 >= 1 then (if a1 < 256 then 1 else 0) else 0) else 1;
+  let _ = if needa == 1 then (if aok == 1 then 0 else (let _ = st[5] = 96 in 0)) else 0;
+  let needb = isadd + isand + issub + ismul + isor + isxor + iseq;
+  let bok = if needb == 1 then (if a2 >= 1 then (if a2 < 256 then 1 else 0) else 0) else 1;
+  let _ = if needb == 1 then (if bok == 1 then 0 else (let _ = st[5] = 96 in 0)) else 0;
+  let go = if st[5] == 0 then (ok * aok * bok) else 0;
+  let ab = ob_wb(a1);
+  let bb = ob_wb(a2);
+  let rb = ob_wb(id);
+  let _ = if go * isv == 1 then ob_var_word(wt, id, nv) else 0;
+  let _ = if go * isc == 1 then ob_const_word(wt, id, a1) else 0;
+  let _ = if go * isnot == 1 then ob_notw(wt, id, a1) else 0;
+  let _ = if go * isshl == 1 then ob_shift_word(wt, id, a1, a2, 1) else 0;
+  let _ = if go * islsr == 1 then ob_shift_word(wt, id, a1, a2, 0) else 0;
+  let _ = if go * isand == 1 then bb_and64(wt, ab, wt, bb, wt, rb, nv, c_id, c_len, c_lits, n_cl) else 0;
+  let _ = if go * isor == 1 then bb_or64(wt, ab, wt, bb, wt, rb, nv, c_id, c_len, c_lits, n_cl) else 0;
+  let _ = if go * isxor == 1 then bb_xor64(wt, ab, wt, bb, wt, rb, nv, c_id, c_len, c_lits, n_cl) else 0;
+  let _ = if go * isadd == 1 then bb_add64(wt, ab, wt, bb, wt, rb, nv, c_id, c_len, c_lits, n_cl) else 0;
+  let _ = if go * issub == 1 then bb_sub64(wt, ab, wt, bb, wt, rb, nv, c_id, c_len, c_lits, n_cl) else 0;
+  let _ = if go * ismul == 1 then bb_mul64(wt, ab, wt, bb, wt, rb, nv, c_id, c_len, c_lits, n_cl) else 0;
+  // an `eq` node is a BOOLEAN, one literal, and it is the goal candidate
+  let _ = if go * iseq == 1 then (let e = bb_eq64(wt, ab, wt, bb, nv, c_id, c_len, c_lits, n_cl) in
+                                 let _ = wt[rb] = e in 0) else 0;
+  0
+}
+
+// blast the obligation into a FRESH clause store and return the goal literal.
+fn ob_blast(st: [i64], src: str, wt: [i64], nv: [i64],
+            c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
+  let pos = [0];
+  let line = zeros(4096);
+  let toks = zeros(64);
+  // the same preamble bb_reset installs: variable 1 is CONST_TRUE, pinned by a unit
+  // clause, so from here literal 1 IS constant-true and -1 IS constant-false.
+  let _ = nv[0] = 0;
+  let _ = n_cl[0] = 0;
+  let _ = fresh_var(nv);
+  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 1, 1, 0, 0);
+  let goalid = 0 - 1;
+  let done = 0;
+  while done == 0 {
+    let nread = read_line(src, pos, line, 4096);
+    let _ = if nread < 0 then (let _ = done = 1 in 0) else 0;
+    let nt = if nread > 0 then tokenize(line, toks, 64) else 0;
+    let c0 = if nt > 0 then line[toks[0]] else 0;
+    let isnode = if c0 >= 48 then (if c0 <= 57 then 1 else 0) else 0;
+    let ispr = if c0 == 112 then 1 else 0;
+    let _ = if ispr == 1 then (let _ = goalid = parse_int(line, toks[1]) in 0) else 0;
+    let _ = if isnode == 1 then ob_op(st, line, toks, nt, wt, nv, c_id, c_len, c_lits, n_cl) else 0;
+    0
+  };
+  let gok = if goalid >= 1 then (if goalid < 256 then 1 else 0) else 0;
+  let _ = if gok == 1 then 0 else (let _ = st[5] = 97 in 0);
+  let g = if gok == 1 then wt[ob_wb(goalid)] else 0;
+  // the negated goal, exactly as the producer appends it
+  let _ = if st[5] == 0 then bb_emit(c_id, c_len, c_lits, n_cl, 1, 0 - g, 0, 0) else 0;
+  g
+}
+
+// positional comparison of the certificate's input clauses against the blast.  Same
+// count, same length, same literals in the same order -- the producer and this file
+// emit gates in the same sequence, which is what the alignment bought.
+// one clause: same literals in the same order
+fn ob_cmpcl(ln: i64, c_lits1: [i64], c_lits2: [i64], slot: i64) -> i64 {
+  let same = 1;
+  let j = 0;
+  while j < ln {
+    let _ = if c_lits1[slot * 32 + j] != c_lits2[slot * 32 + j] then (let _ = same = 0 in 0) else 0;
+    let j = j + 1;
+    0
+  };
+  same
+}
+
+fn ob_cmp(n1: i64, c_len1: [i64], c_lits1: [i64], n2: i64, c_len2: [i64], c_lits2: [i64]) -> i64 {
+  let same = if n1 == n2 then 1 else 0;
+  let i = 0;
+  while i < n1 {
+    let _ = if i < n2 then (
+        let _ = if c_len1[i] != c_len2[i] then (let _ = same = 0 in 0) else 0 in
+        let _ = if ob_cmpcl(c_len1[i], c_lits1, c_lits2, i) == 0 then (let _ = same = 0 in 0) else 0 in 0)
+      else 0;
+    let i = i + 1;
+    0
+  };
+  same
+}
+
 // --- main verification ---
 fn verify_cert(cert: str, obl: str, obl_given: i64) -> i64 {
   let c_id = zeros(16384);
@@ -1021,6 +1206,22 @@ fn verify_cert(cert: str, obl: str, obl_given: i64) -> i64 {
   let _ = if st[2] == 1 then 0 else sys_exit(2);
   let _ = if oid_len[0] == 64 then 0 else sys_exit(2);
   let bound = if obl_given == 1 then bind_oid(obl, oid) else 0;
+  // THE GOAL CHECK.  Re-blast the obligation into a fresh store and compare it with the
+  // certificate's input clauses.  Without this a certificate refutes SOME CNF and the
+  // oid says only that the right text was handed over; with it the clauses must encode
+  // that text.  Only runs when an obligation was supplied -- with no obligation there is
+  // nothing to compare against, and that is already reported as binding=UNBOUND.
+  let g_id = zeros(16384);
+  let g_len = zeros(16384);
+  let g_lits = zeros(524288);
+  let g_ncl = zeros(2);
+  let g_nv = zeros(2);
+  let g_wt = zeros(16384);
+  let _ = g_nv[1] = 8192;
+  let _ = if obl_given == 1 then ob_blast(st, obl, g_wt, g_nv, g_id, g_len, g_lits, g_ncl) else 0;
+  let gm = if obl_given == 1 then (if st[5] == 0 then ob_cmp(st[4], c_len, c_lits, g_ncl[0], g_len, g_lits) else 0) else 1;
+  let _ = if obl_given == 1 then (if st[5] == 0 then 0 else sys_exit(3)) else 0;
+  let _ = if gm == 1 then 0 else (let _ = st[5] = 98 in sys_exit(3));
   // output
   let obuf = zeros(256);
   let opos = [0];

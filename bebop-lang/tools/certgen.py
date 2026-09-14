@@ -148,46 +148,41 @@ class CNF:
     def const(self, b):
         return self.true if b else -self.true
 
+    # --- THE NORMATIVE GATE SET ---------------------------------------------
+    # `selfhost/tcheck.bp` DEFINES the encoding: the F6 row makes the
+    # bit-blaster's operator definitions part of the trust root, so the trusted
+    # artifact fixes the encoding and this untrusted producer is made to match
+    # it -- not the other way round (operator ruling 2026-09-14).  Every method
+    # below mirrors a named function in that file, folding cases included and in
+    # the same order, so the two blasters emit the same clauses in the same
+    # sequence and a checker can re-derive and compare.
+    #   gate_and  <- bb_and  + bb_and_fold      gate_or  <- bb_or  + bb_or_fold
+    #   gate_xor  <- bb_xor  + bb_xor_fold      gate_maj <- bb_maj
+    #   addc/add64 <- bb_addc64/bb_add64        sub64    <- bb_sub64
+    #   mul64     <- bb_mul64                   eq64     <- bb_eq64
     def gate_and(self, a, b):
-        o = self.fresh()
-        self.add(-a, -b, o); self.add(a, -o); self.add(b, -o)
-        return o
-
-    def gate_or(self, a, b):
-        o = self.fresh()
-        self.add(a, b, -o); self.add(-a, o); self.add(-b, o)
-        return o
-
-    def gate_xor(self, a, b):
-        o = self.fresh()
-        self.add(-a, -b, -o); self.add(a, b, -o); self.add(a, -b, o); self.add(-a, b, o)
-        return o
-
-    # --- constant-folding gates, used ONLY by the mul/sub path -------------
-    # gate_and/gate_or/gate_xor above are deliberately left alone, so every
-    # obligation that predates `mul` emits a byte-identical CNF (checked by
-    # regenerating arith_add.cert and comparing).  A folded gate costs no
-    # variable and no clause, which is what makes a shift-and-add multiplier
-    # affordable here for the same reason it does in selfhost/tcheck.bp.
-    def fand(self, a, b):
         T, F = self.true, -self.true
         if a == F or b == F: return F
         if a == T: return b
         if b == T: return a
         if a == b: return a
         if a == -b: return F
-        return self.gate_and(a, b)
+        o = self.fresh()
+        self.add(-a, -b, o); self.add(a, -o); self.add(b, -o)
+        return o
 
-    def for_(self, a, b):
+    def gate_or(self, a, b):
         T, F = self.true, -self.true
         if a == T or b == T: return T
         if a == F: return b
         if b == F: return a
         if a == b: return a
         if a == -b: return T
-        return self.gate_or(a, b)
+        o = self.fresh()
+        self.add(a, b, -o); self.add(-a, o); self.add(-b, o)
+        return o
 
-    def fxor(self, a, b):
+    def gate_xor(self, a, b):
         T, F = self.true, -self.true
         if a == F: return b
         if b == F: return a
@@ -195,38 +190,75 @@ class CNF:
         if b == T: return -a
         if a == b: return F
         if a == -b: return T
-        return self.gate_xor(a, b)
+        o = self.fresh()
+        self.add(-a, -b, -o); self.add(a, b, -o); self.add(a, -b, o); self.add(-a, b, o)
+        return o
+
+    # majority-of-three: the carry OUT of a full adder. 6 ternary clauses and ONE
+    # variable where and/and/or is 9 and THREE.
+    def gate_maj(self, a, b, c):
+        T, F = self.true, -self.true
+        if c == F: return self.gate_and(a, b)
+        if c == T: return self.gate_or(a, b)
+        if a == F: return self.gate_and(b, c)
+        if a == T: return self.gate_or(b, c)
+        if b == F: return self.gate_and(a, c)
+        if b == T: return self.gate_or(a, c)
+        if a == b: return a
+        if a == -b: return c
+        if a == c: return a
+        if a == -c: return b
+        if b == c: return b
+        if b == -c: return a
+        o = self.fresh()
+        self.add(a, b, -o); self.add(a, c, -o); self.add(b, c, -o)
+        self.add(-a, -b, o); self.add(-a, -c, o); self.add(-b, -c, o)
+        return o
 
     def addc(self, a, b, cin):
-        """Ripple-carry add, low 64 bits, explicit carry-in. The carry OUT of
-        bit 63 is never computed: a wrapping 64-bit add discards it."""
+        """bb_addc64: axb computed ONCE and reused, and the carry out of bit 63 is
+        never computed because a wrapping add discards it."""
         out = []
         for k in range(W):
-            axb = self.fxor(a[k], b[k])
-            out.append(self.fxor(axb, cin))
+            axb = self.gate_xor(a[k], b[k])
+            out.append(self.gate_xor(axb, cin))
             if k < W - 1:
-                cin = self.for_(self.fand(a[k], b[k]), self.fand(cin, axb))
+                cin = self.gate_maj(a[k], b[k], cin)
         return out
 
-    def mul(self, a, b):
-        """Shift and add, low 64 bits only -- the same structure as
-        selfhost/tcheck.bp's bb_mul64 and folded the same way: a CONST_FALSE
-        multiplier bit contributes no gates at all, and column j of row `bit`
-        comes from a[j - bit], so the partial products that would only have fed
-        bits 64..127 are never built."""
+    def add64(self, a, b):
+        return self.addc(a, b, -self.true)
+
+    def sub64(self, a, b):
+        """bb_sub64: a + ~b + 1, as two adds, with 1 built from literals."""
+        t = self.add64(a, [-l for l in b])
+        one = [self.const(1 if k == 0 else 0) for k in range(W)]
+        return self.add64(t, one)
+
+    def mul64(self, a, b):
+        """bb_mul64: shift and add, low 64 bits, CONST_FALSE rows skipped and only
+        the columns that can reach bit 63 built."""
         F = -self.true
         acc = [F] * W
         for bit in range(W):
             sel = b[bit]
             if sel == F:
                 continue
-            row = [F] * bit + [self.fand(a[j], sel) for j in range(W - bit)]
-            acc = self.addc(acc, row, F)
+            row = [F] * bit + [self.gate_and(a[j], sel) for j in range(W - bit)]
+            acc = self.add64(acc, row)
+        return acc
+
+    def eq64(self, a, b):
+        """bb_eq64: an AND chain over the negated per-bit XORs, from CONST_TRUE."""
+        acc = self.true
+        for k in range(W):
+            acc = self.gate_and(acc, -self.gate_xor(a[k], b[k]))
         return acc
 
 
 def blast(nodes, order, cnf):
-    """Each 64-bit term becomes a list of 64 literals, LSB first."""
+    """Each 64-bit term becomes a list of 64 literals, LSB first.  Variables are
+    allocated 64 at a time in node order, exactly as bb_alloc_word does."""
     bits = {}
     for nid in order:
         op, args = nodes[nid]
@@ -242,33 +274,19 @@ def blast(nodes, order, cnf):
         elif op == 'not':
             bits[nid] = [-l for l in bits[int(args[0])]]
         elif op == 'add':
-            a, b = bits[int(args[0])], bits[int(args[1])]
-            out, carry = [], cnf.const(0)
-            for k in range(W):                      # ripple-carry, 64 full adders
-                s = cnf.gate_xor(cnf.gate_xor(a[k], b[k]), carry)
-                c1 = cnf.gate_and(a[k], b[k])
-                c2 = cnf.gate_and(cnf.gate_xor(a[k], b[k]), carry)
-                carry = cnf.gate_or(c1, c2)
-                out.append(s)
-            bits[nid] = out
+            bits[nid] = cnf.add64(bits[int(args[0])], bits[int(args[1])])
+        elif op == 'sub':
+            bits[nid] = cnf.sub64(bits[int(args[0])], bits[int(args[1])])
+        elif op == 'mul':
+            bits[nid] = cnf.mul64(bits[int(args[0])], bits[int(args[1])])
         elif op in ('shl', 'lshr'):
             a, k = bits[int(args[0])], int(args[1])
             if not 0 <= k < W:
                 die('node %d: shift amount %d out of range' % (nid, k))
             z = cnf.const(0)
             bits[nid] = ([z] * k + a[:W - k]) if op == 'shl' else (a[k:] + [z] * k)
-        elif op == 'sub':
-            a, b = bits[int(args[0])], bits[int(args[1])]
-            bits[nid] = cnf.addc(a, [-l for l in b], cnf.const(1))
-        elif op == 'mul':
-            a, b = bits[int(args[0])], bits[int(args[1])]
-            bits[nid] = cnf.mul(a, b)
         elif op == 'eq':
-            a, b = bits[int(args[0])], bits[int(args[1])]
-            acc = cnf.const(1)
-            for k in range(W):
-                acc = cnf.gate_and(acc, -cnf.gate_xor(a[k], b[k]))
-            bits[nid] = [acc]                        # a boolean node: one literal
+            bits[nid] = [cnf.eq64(bits[int(args[0])], bits[int(args[1])])]
         else:
             die('node %d: unknown op %r' % (nid, op))
     return bits
