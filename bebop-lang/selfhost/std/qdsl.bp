@@ -516,22 +516,17 @@ fn qdsl_int_to_str(v: i64, buf: [i64], bp: [i64]) -> i64 {
   bp[0]
 }
 
-fn qdsl_explain(query: str) -> str {
+fn qdsl_explain_into(query: str, buf: [i64]) -> i64 {
   let n = qdsl_len(query);
   let a = zeros(4096); let ap = zeros(1); let sb = zeros(512); let sp = zeros(1);
   let root = qdsl_query(query, a, ap, sb, sp);
-  if root == 0 then
-    let empty = zeros(1) in
-    let _ = empty[0] = 0 in
-    (0 << 32) | 0
+  if root == 0 then 0
   else
-    let buf = zeros(4096) in
     let bp = zeros(1) in
     let _ = bp[0] = 0 in
     let _ = qdsl_explain_query(root, a, sb, buf, bp) in
     let _ = buf[bp[0]] = 0 in
-    let _ = bp[0] = bp[0] + 1 in
-    ((bp[0] - 1) << 32) | (bp[0] - 1)
+    bp[0]
 }
 
 fn qdsl_parse(query: str) -> i64 {
