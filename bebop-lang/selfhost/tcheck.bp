@@ -190,12 +190,12 @@ fn clause_del(c_id: [i64], n: i64, id: i64) -> i64 {
 // --- assignment (direct-mapped: assign[var] in {-1,0,1}) ---
 fn asgn_get(a: [i64], v: i64) -> i64 {
   let idx = if v >= 0 then v else (0 - v);
-  if idx >= 8192 then 0 else a[idx]
+  if idx >= 32768 then 0 else a[idx]
 }
 
 fn asgn_set(a: [i64], v: i64, val: i64) -> i64 {
   let idx = if v >= 0 then v else (0 - v);
-  let _ = if idx < 8192 then a[idx] = val else 0;
+  let _ = if idx < 32768 then a[idx] = val else 0;
   0
 }
 
@@ -219,7 +219,7 @@ fn asgn_unit(assign: [i64], c_lits: [i64], slot: i64) -> i64 {
 fn check_chain(c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64],
                lits: [i64], nl: i64, hints: [i64], nh: i64, assign: [i64]) -> i64 {
   let k = 0;
-  while k < 8192 {
+  while k < 32768 {
     let _ = assign[k] = 0;
     let k = k + 1;
     0
@@ -267,6 +267,14 @@ fn check_chain(c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64],
 
 fn add_input(c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64],
              line: [i64], toks: [i64], nt: i64) -> i64 {
+  // The clause store is a FIXED window and these three writers index it by
+  // n_cl[0] with no bound of their own -- c_id[n_cl[0]], c_len[n_cl[0]] and
+  // c_lits[n_cl[0] * 32 + j] all walked past the end once a certificate carried
+  // more than the store holds.  A certificate that overruns the store is
+  // REFUSED (exit 2), which is the same answer the checker already gives every
+  // other malformed input; it is never accepted on a truncated read.
+  let ccap = if n_cl[1] > 0 then n_cl[1] else 16384;
+  let _ = if n_cl[0] < ccap then 0 else sys_exit(2);
   let cid = parse_int(line, toks[1]);
   let nl = 0;
   let k = 2;
@@ -287,6 +295,9 @@ fn add_input(c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64],
 fn add_derived(c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64],
                assign: [i64], st: [i64], lits: [i64], hints: [i64],
                line: [i64], toks: [i64], nt: i64) -> i64 {
+  // same fixed-window refusal as add_input, for the derived-clause writer.
+  let ccap = if n_cl[1] > 0 then n_cl[1] else 16384;
+  let _ = if n_cl[0] < ccap then 0 else sys_exit(2);
   let cid = parse_int(line, toks[1]);
   let nl = 0;
   let nh = 0;
@@ -435,7 +446,7 @@ fn bind_oid(obl: str, oid: [i64]) -> i64 {
 
 fn fresh_var(nv: [i64]) -> i64 {
   let v = nv[0];
-  let cap = if nv[1] > 0 then nv[1] else 8192;
+  let cap = if nv[1] > 0 then nv[1] else 32768;
   let _ = if v < cap then (let _ = nv[0] = v + 1 in 0) else sys_exit(1);
   v + 1
 }
@@ -446,7 +457,11 @@ fn fresh_var(nv: [i64]) -> i64 {
 // ln is the literal count (1..3); unused literal slots are ignored.
 fn bb_emit(c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64], ln: i64, l0: i64, l1: i64, l2: i64) -> i64 {
   let slot = n_cl[0];
-  let _ = if slot < 16384 then (let _ = c_id[slot] = 0 - (slot + 1) in
+  // n_cl[1] carries the clause-store capacity (0 = the 16384 the certificate
+  // format documents).  main sets it to sz_c, so a bigger arena widens the
+  // window that is actually WRITTEN while the count above stays the true demand.
+  let cap = if n_cl[1] > 0 then n_cl[1] else 16384;
+  let _ = if slot < cap then (let _ = c_id[slot] = 0 - (slot + 1) in
                                 let _ = c_len[slot] = ln in
                                 let _ = c_lits[slot * 32 + 0] = l0 in
                                 let _ = if ln > 1 then (let _ = c_lits[slot * 32 + 1] = l1 in 0) else 0 in
@@ -457,38 +472,122 @@ fn bb_emit(c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64], ln: i64, l0: i
 
 fn bb_not(a: i64) -> i64 { 0 - a }
 
+// --- Tseitin-level constant folding ---
+// Literal 1 is CONST_TRUE and literal -1 is CONST_FALSE for the whole encoder
+// (bb_reset allocates variable 1 first and pins it with a unit clause).  Each
+// *_fold below returns the DETERMINED output literal, or 0 -- never a legal
+// literal, since variable numbering starts at 1 -- meaning "emit the gate".
+// A folded gate costs no variable and no clause, which is what makes a
+// shift-and-add multiplier affordable: every row whose multiplier bit is
+// CONST_FALSE, and every low bit of every partial-product add, vanishes.
+fn bb_and_fold(a: i64, b: i64) -> i64 {
+  let f = 0 - 1;
+  if a == f then f else (
+  if b == f then f else (
+  if a == 1 then b else (
+  if b == 1 then a else (
+  if a == b then a else (
+  if a == (0 - b) then f else 0)))))
+}
+
+fn bb_or_fold(a: i64, b: i64) -> i64 {
+  let f = 0 - 1;
+  if a == 1 then 1 else (
+  if b == 1 then 1 else (
+  if a == f then b else (
+  if b == f then a else (
+  if a == b then a else (
+  if a == (0 - b) then 1 else 0)))))
+}
+
+fn bb_xor_fold(a: i64, b: i64) -> i64 {
+  let f = 0 - 1;
+  if a == f then b else (
+  if b == f then a else (
+  if a == 1 then (0 - b) else (
+  if b == 1 then (0 - a) else (
+  if a == b then f else (
+  if a == (0 - b) then 1 else 0)))))
+}
+
+fn bb_mux_fold(s: i64, t: i64, e: i64) -> i64 {
+  let f = 0 - 1;
+  if s == 1 then t else (
+  if s == f then e else (
+  if t == e then t else (
+  if t == 1 then (if e == f then s else 0) else (
+  if t == f then (if e == 1 then (0 - s) else 0) else 0))))
+}
+
 fn bb_and(a: i64, b: i64, nv: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
-  let o = fresh_var(nv);
-  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, 0 - a, 0 - b, o);
-  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 2, a, 0 - o, 0);
-  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 2, b, 0 - o, 0);
-  o
+  let fd = bb_and_fold(a, b);
+  if fd != 0 then fd else (
+    let o = fresh_var(nv) in
+    let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, 0 - a, 0 - b, o) in
+    let _ = bb_emit(c_id, c_len, c_lits, n_cl, 2, a, 0 - o, 0) in
+    let _ = bb_emit(c_id, c_len, c_lits, n_cl, 2, b, 0 - o, 0) in
+    o)
 }
 
 fn bb_or(a: i64, b: i64, nv: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
-  let o = fresh_var(nv);
-  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, a, b, 0 - o);
-  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 2, 0 - a, o, 0);
-  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 2, 0 - b, o, 0);
-  o
+  let fd = bb_or_fold(a, b);
+  if fd != 0 then fd else (
+    let o = fresh_var(nv) in
+    let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, a, b, 0 - o) in
+    let _ = bb_emit(c_id, c_len, c_lits, n_cl, 2, 0 - a, o, 0) in
+    let _ = bb_emit(c_id, c_len, c_lits, n_cl, 2, 0 - b, o, 0) in
+    o)
 }
 
 fn bb_xor(a: i64, b: i64, nv: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
-  let o = fresh_var(nv);
-  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, 0 - a, 0 - b, 0 - o);
-  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, a, b, 0 - o);
-  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, a, 0 - b, o);
-  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, 0 - a, b, o);
-  o
+  let fd = bb_xor_fold(a, b);
+  if fd != 0 then fd else (
+    let o = fresh_var(nv) in
+    let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, 0 - a, 0 - b, 0 - o) in
+    let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, a, b, 0 - o) in
+    let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, a, 0 - b, o) in
+    let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, 0 - a, b, o) in
+    o)
 }
 
 fn bb_mux(s: i64, t: i64, e: i64, nv: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
-  let o = fresh_var(nv);
-  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, 0 - s, t, 0 - o);
-  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, 0 - s, 0 - t, o);
-  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, s, e, 0 - o);
-  let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, s, 0 - e, o);
-  o
+  let fd = bb_mux_fold(s, t, e);
+  if fd != 0 then fd else (
+    let o = fresh_var(nv) in
+    let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, 0 - s, t, 0 - o) in
+    let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, 0 - s, 0 - t, o) in
+    let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, s, e, 0 - o) in
+    let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, s, 0 - e, o) in
+    o)
+}
+
+// majority-of-three -- the carry OUT of a full adder.  Direct Tseitin costs 6
+// ternary clauses and ONE variable where and/and/or costs 9 and THREE, and any
+// constant input collapses it to a single two-input gate (which then folds in
+// turn).  BCP-complete: with all three inputs assigned, one of the six clauses
+// is always unit on o.
+fn bb_maj(a: i64, b: i64, c: i64, nv: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
+  let f = 0 - 1;
+  if c == f then bb_and(a, b, nv, c_id, c_len, c_lits, n_cl) else (
+  if c == 1 then bb_or(a, b, nv, c_id, c_len, c_lits, n_cl) else (
+  if a == f then bb_and(b, c, nv, c_id, c_len, c_lits, n_cl) else (
+  if a == 1 then bb_or(b, c, nv, c_id, c_len, c_lits, n_cl) else (
+  if b == f then bb_and(a, c, nv, c_id, c_len, c_lits, n_cl) else (
+  if b == 1 then bb_or(a, c, nv, c_id, c_len, c_lits, n_cl) else (
+  if a == b then a else (
+  if a == (0 - b) then c else (
+  if a == c then a else (
+  if a == (0 - c) then b else (
+  if b == c then b else (
+  if b == (0 - c) then a else (
+    let o = fresh_var(nv) in
+    let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, a, b, 0 - o) in
+    let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, a, c, 0 - o) in
+    let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, b, c, 0 - o) in
+    let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, 0 - a, 0 - b, o) in
+    let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, 0 - a, 0 - c, o) in
+    let _ = bb_emit(c_id, c_len, c_lits, n_cl, 3, 0 - b, 0 - c, o) in
+    o))))))))))))
 }
 
 fn bb_not64(a: [i64], a_base: i64, r: [i64], r_base: i64) -> i64 {
@@ -531,8 +630,12 @@ fn bb_xor64(a: [i64], a_base: i64, b: [i64], b_base: i64, r: [i64], r_base: i64,
   0
 }
 
-fn bb_add64(a: [i64], a_base: i64, b: [i64], b_base: i64, r: [i64], r_base: i64, nv: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
-  let cin = 0 - 1;
+// ripple-carry add with an explicit carry-in literal.  cin0 = -1 (CONST_FALSE)
+// is a plain add; cin0 = 1 (CONST_TRUE) together with a complemented b word is
+// a subtract, and the constant folding above makes every bit where b is a
+// constant collapse to nothing.
+fn bb_addc64(a: [i64], a_base: i64, b: [i64], b_base: i64, cin0: i64, r: [i64], r_base: i64, nv: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
+  let cin = cin0;
   let i = 0;
   while i < 64 {
     let a_i = a[a_base + i];
@@ -540,13 +643,17 @@ fn bb_add64(a: [i64], a_base: i64, b: [i64], b_base: i64, r: [i64], r_base: i64,
     let axb = bb_xor(a_i, b_i, nv, c_id, c_len, c_lits, n_cl);
     let sum = bb_xor(axb, cin, nv, c_id, c_len, c_lits, n_cl);
     let _ = r[r_base + i] = sum;
-    let ab = bb_and(a_i, b_i, nv, c_id, c_len, c_lits, n_cl);
-    let cin_axb = bb_and(cin, axb, nv, c_id, c_len, c_lits, n_cl);
-    let cin = bb_or(ab, cin_axb, nv, c_id, c_len, c_lits, n_cl);
+    // a wrapping 64-bit add discards the carry out of bit 63, so do not pay
+    // three gates to compute it.
+    let cin = if i < 63 then bb_maj(a_i, b_i, cin, nv, c_id, c_len, c_lits, n_cl) else (0 - 1);
     let i = i + 1;
     0
   };
   0
+}
+
+fn bb_add64(a: [i64], a_base: i64, b: [i64], b_base: i64, r: [i64], r_base: i64, nv: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
+  bb_addc64(a, a_base, b, b_base, 0 - 1, r, r_base, nv, c_id, c_len, c_lits, n_cl)
 }
 
 fn bb_sub64(a: [i64], a_base: i64, b: [i64], b_base: i64, r: [i64], r_base: i64, nv: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
@@ -785,26 +892,28 @@ fn bb_mul64(a: [i64], a_base: i64, b: [i64], b_base: i64, r: [i64], r_base: i64,
     let i = i + 1;
     0
   };
+  // one scratch row, reused: a fresh zeros(64) per multiplier bit was 128
+  // dead arrays per multiply.
+  let shifted = zeros(64);
   let bit = 0;
   while bit < 64 {
     let sel = b[b_base + bit];
-    let pp = zeros(64);
+    // A CONST_FALSE multiplier bit contributes NOTHING -- not even the AND
+    // gates -- so skip the whole row.  (A CONST_TRUE one needs no ANDs either;
+    // bb_and_fold returns a[j] for it.)
+    let skip = if sel == (0 - 1) then 1 else 0;
     let j = 0;
     while j < 64 {
-      let _ = pp[j] = bb_and(a[a_base + j], sel, nv, c_id, c_len, c_lits, n_cl);
+      // Only the low 64 bits of the product are mul64's result, so column j of
+      // row `bit` comes from a[j - bit] and the columns below `bit` are
+      // CONST_FALSE: exactly 64-bit AND gates per row instead of 64, and the
+      // partial products that would only have fed bits 64..127 are never built.
+      let lo = if j < bit then 1 else 0;
+      let _ = shifted[j] = if (skip + lo) > 0 then (0 - 1) else bb_and(a[a_base + j - bit], sel, nv, c_id, c_len, c_lits, n_cl);
       let j = j + 1;
       0
     };
-    let shifted = zeros(64);
-    let j = 0;
-    while j < 64 {
-      let idx = j - bit;
-      let val = if idx >= 0 then pp[idx] else (0 - 1);
-      let _ = shifted[j] = val;
-      let j = j + 1;
-      0
-    };
-    let _ = bb_add64(acc, 0, shifted, 0, acc, 0, nv, c_id, c_len, c_lits, n_cl);
+    let _ = if skip == 1 then 0 else bb_add64(acc, 0, shifted, 0, acc, 0, nv, c_id, c_len, c_lits, n_cl);
     let bit = bit + 1;
     0
   };
@@ -856,9 +965,9 @@ fn verify_cert(cert: str, obl: str, obl_given: i64) -> i64 {
   let c_id = zeros(16384);
   let c_len = zeros(16384);
   let c_lits = zeros(524288);
-  let assign = zeros(8192);
+  let assign = zeros(32768);
   let st = zeros(8);
-  let n_cl = [0];
+  let n_cl = zeros(2);
   let oid = zeros(65);
   let oid_len = [0];
   let pos = [0];
@@ -923,7 +1032,7 @@ fn bb_reset(c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64], assign: [i64]
     0
   };
   let i = 0;
-  while i < 8192 {
+  while i < 32768 {
     let _ = assign[i] = 0;
     let i = i + 1;
     0
@@ -1227,6 +1336,386 @@ fn bb_selftest(obuf: [i64], opos: [i64], c_id: [i64], c_len: [i64], c_lits: [i64
   let rd = bb_bcp(assign, c_len, c_lits, n_cl);
   let _ = bb_row(obuf, opos, "17 bb_mul64(6,7)  want 42", bb_eval_word(assign, r), n_cl[0], nv[0], rd);
 
+  // mul64 beyond the one pair: a zero row, an identity row, a two-bit
+  // multiplier, both signs of all-ones, and a product that crosses bit 32 so
+  // the carry chain past the word midpoint is exercised rather than assumed.
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let b_base = bb_alloc_word(b, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 0);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, b_base, 7);
+  let _ = bb_mul64(a, 0, b, 0, r, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "18 bb_mul64(0,7)   want 0", bb_eval_word(assign, r), n_cl[0], nv[0], rd);
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let b_base = bb_alloc_word(b, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 1);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, b_base, 7);
+  let _ = bb_mul64(a, 0, b, 0, r, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "19 bb_mul64(1,7)   want 7", bb_eval_word(assign, r), n_cl[0], nv[0], rd);
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let b_base = bb_alloc_word(b, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 3);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, b_base, 5);
+  let _ = bb_mul64(a, 0, b, 0, r, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "20 bb_mul64(3,5)   want 15", bb_eval_word(assign, r), n_cl[0], nv[0], rd);
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let b_base = bb_alloc_word(b, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 0 - 1);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, b_base, 1);
+  let _ = bb_mul64(a, 0, b, 0, r, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "21 bb_mul64(-1,1)  want -1", bb_eval_word(assign, r), n_cl[0], nv[0], rd);
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let b_base = bb_alloc_word(b, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 0 - 1);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, b_base, 0 - 1);
+  let _ = bb_mul64(a, 0, b, 0, r, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "22 bb_mul64(-1,-1) want 1", bb_eval_word(assign, r), n_cl[0], nv[0], rd);
+
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let b_base = bb_alloc_word(b, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 65537);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, b_base, 65537);
+  let _ = bb_mul64(a, 0, b, 0, r, 0, nv, c_id, c_len, c_lits, n_cl);
+  let rd = bb_bcp(assign, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "23 bb_mul64(65537,65537) want 4295098369", bb_eval_word(assign, r), n_cl[0], nv[0], rd);
+
+  0
+}
+
+// --- the word-level `ring` rule: polynomial normal form over Z/2^64 ---
+// Operator ruling 2026-09-09: the three flagship theorems (`fp_mul`, `isqrt`,
+// `money.bp`'s `mulov`) are multiplier-equivalence miters, the known-hard case
+// for CDCL, so the kernel carries ONE word-level rule alongside the SAT route.
+// This is that rule.  A polynomial is a SPARSE, CANONICAL list of
+// (monomial key, coefficient) pairs in one flat arena R.  The key packs four
+// exponents as four base-16 nibbles, so multiplying two monomials is ONE
+// integer add of their keys -- and an exponent overflowing its nibble is
+// RECORDED (R[1], R[3]) instead of silently wrapping into a different
+// monomial.  Coefficients are plain i64, which IS Z/2^64: two's-complement
+// wraparound is the ring itself, not an approximation of it, so polynomial
+// identity over i64 arithmetic is decided by comparing canonical forms.
+//
+// R layout:  R[0] next free offset   R[1] reject code (0 = clean)
+//            R[2] arena cells        R[3] monomial-overflow count
+//            offset 8 is the NULL polynomial (cap 0: every push to it is
+//            refused, so an exhausted arena cannot write out of bounds)
+//            polynomials start at offset 16; poly at `base` is
+//            R[base] = nterms, R[base+1] = cap, then key/coeff pairs.
+// Reject codes: 71 arena/term capacity, 72 monomial exponent overflow.
+fn rg_init(R: [i64], cells: i64) -> i64 {
+  let _ = R[0] = 16;
+  let _ = R[1] = 0;
+  let _ = R[2] = cells;
+  let _ = R[3] = 0;
+  let _ = R[8] = 0;
+  let _ = R[9] = 0;
+  0
+}
+
+fn rg_new(R: [i64], cap: i64) -> i64 {
+  let base = R[0];
+  let need = base + 2 + cap * 2;
+  let over = if need > R[2] then 1 else 0;
+  let _ = if over == 1 then (let _ = R[1] = 71 in 0) else (
+      let _ = R[0] = need in
+      let _ = R[base] = 0 in
+      let _ = R[base + 1] = cap in 0);
+  if over == 1 then 8 else base
+}
+
+fn rg_push(R: [i64], base: i64, key: i64, coeff: i64) -> i64 {
+  let n = R[base];
+  let cap = R[base + 1];
+  let _ = if n < cap then (
+      let _ = R[base + 2 + n * 2] = key in
+      let _ = R[base + 3 + n * 2] = coeff in
+      let _ = R[base] = n + 1 in 0)
+    else (let _ = R[1] = 71 in 0);
+  0
+}
+
+// sort by monomial key, then combine equal keys and drop zero coefficients.
+// The write cursor w never overtakes the read cursor i, so this is in place.
+fn rg_canon(R: [i64], base: i64) -> i64 {
+  let n = R[base];
+  let i = 1;
+  while i < n {
+    let k = R[base + 2 + i * 2];
+    let v = R[base + 3 + i * 2];
+    let j = i;
+    while (if j > 0 then 1 else 0) * (if R[base + 2 + (j - 1) * 2] > k then 1 else 0) == 1 {
+      let _ = R[base + 2 + j * 2] = R[base + 2 + (j - 1) * 2];
+      let _ = R[base + 3 + j * 2] = R[base + 3 + (j - 1) * 2];
+      let j = j - 1;
+      0
+    };
+    let _ = R[base + 2 + j * 2] = k;
+    let _ = R[base + 3 + j * 2] = v;
+    let i = i + 1;
+    0
+  };
+  let w = 0;
+  let i = 0;
+  while i < n {
+    let k = R[base + 2 + i * 2];
+    let acc = R[base + 3 + i * 2];
+    let j = i + 1;
+    while (if j < n then 1 else 0) * (if R[base + 2 + j * 2] == k then 1 else 0) == 1 {
+      let _ = acc = acc + R[base + 3 + j * 2];
+      let j = j + 1;
+      0
+    };
+    let _ = if acc != 0 then (
+        let _ = R[base + 2 + w * 2] = k in
+        let _ = R[base + 3 + w * 2] = acc in
+        let _ = w = w + 1 in 0) else 0;
+    let i = j;
+    0
+  };
+  let _ = R[base] = w;
+  w
+}
+
+fn rg_const(R: [i64], out: i64, c: i64) -> i64 {
+  let _ = R[out] = 0;
+  let _ = if c != 0 then rg_push(R, out, 0, c) else 0;
+  out
+}
+
+// variable vi (0..3) to the first power: its exponent lives in nibble vi.
+fn rg_var(R: [i64], out: i64, vi: i64) -> i64 {
+  let _ = R[out] = 0;
+  let _ = if vi < 4 then rg_push(R, out, 1 << (vi * 4), 1) else (let _ = R[1] = 72 in 0);
+  out
+}
+
+// multiply two monomial keys: add the nibbles, and LOUDLY record any exponent
+// that would leave its nibble rather than letting it carry into the next
+// variable's exponent.
+fn rg_kmul(R: [i64], ka: i64, kb: i64) -> i64 {
+  let key = 0;
+  let i = 0;
+  while i < 4 {
+    let sh = i * 4;
+    let e = ((ka >> sh) & 15) + ((kb >> sh) & 15);
+    let _ = if e > 15 then (let _ = R[1] = 72 in let _ = R[3] = R[3] + 1 in 0) else 0;
+    let _ = key = key + ((e & 15) << sh);
+    let i = i + 1;
+    0
+  };
+  key
+}
+
+// out must not alias x or y.
+fn rg_add(R: [i64], x: i64, y: i64, out: i64) -> i64 {
+  let _ = R[out] = 0;
+  let i = 0;
+  while i < R[x] {
+    let _ = rg_push(R, out, R[x + 2 + i * 2], R[x + 3 + i * 2]);
+    let i = i + 1;
+    0
+  };
+  let i = 0;
+  while i < R[y] {
+    let _ = rg_push(R, out, R[y + 2 + i * 2], R[y + 3 + i * 2]);
+    let i = i + 1;
+    0
+  };
+  let _ = rg_canon(R, out);
+  out
+}
+
+fn rg_scale(R: [i64], x: i64, k: i64, out: i64) -> i64 {
+  let _ = R[out] = 0;
+  let i = 0;
+  while i < R[x] {
+    let _ = rg_push(R, out, R[x + 2 + i * 2], R[x + 3 + i * 2] * k);
+    let i = i + 1;
+    0
+  };
+  let _ = rg_canon(R, out);
+  out
+}
+
+fn rg_sub(R: [i64], x: i64, y: i64, neg: i64, out: i64) -> i64 {
+  let _ = rg_scale(R, y, 0 - 1, neg);
+  rg_add(R, x, neg, out)
+}
+
+// out must not alias x or y.
+fn rg_mul(R: [i64], x: i64, y: i64, out: i64) -> i64 {
+  let _ = R[out] = 0;
+  let i = 0;
+  while i < R[x] {
+    let j = 0;
+    while j < R[y] {
+      let k = rg_kmul(R, R[x + 2 + i * 2], R[y + 2 + j * 2]);
+      let _ = rg_push(R, out, k, R[x + 3 + i * 2] * R[y + 3 + j * 2]);
+      let j = j + 1;
+      0
+    };
+    let i = i + 1;
+    0
+  };
+  let _ = rg_canon(R, out);
+  out
+}
+
+// THE rule: two word-level terms are equal over Z/2^64 iff their canonical
+// polynomials are identical.  Any internal rejection answers 0 ("not proved"),
+// never 1, so an exhausted arena or an overflowed exponent can never manufacture
+// a proof.
+fn rg_eq(R: [i64], x: i64, y: i64) -> i64 {
+  let _ = rg_canon(R, x);
+  let _ = rg_canon(R, y);
+  let nx = R[x];
+  let ny = R[y];
+  let same = if nx == ny then 1 else 0;
+  let i = 0;
+  while i < nx {
+    let _ = if i < ny then (
+        let _ = if R[x + 2 + i * 2] != R[y + 2 + i * 2] then (let _ = same = 0 in 0) else 0 in
+        let _ = if R[x + 3 + i * 2] != R[y + 3 + i * 2] then (let _ = same = 0 in 0) else 0 in 0)
+      else 0;
+    let i = i + 1;
+    0
+  };
+  if R[1] == 0 then same else 0
+}
+
+fn rg_row(obuf: [i64], opos: [i64], nm: str, val: i64, R: [i64]) -> i64 {
+  let _ = opos[0] = 0;
+  let _ = wr_s(obuf, opos, nm);
+  let _ = wr_s(obuf, opos, " = ");
+  let _ = wr_num(obuf, opos, val);
+  let _ = wr_s(obuf, opos, "  reject=");
+  let _ = wr_num(obuf, opos, R[1]);
+  let _ = wr_s(obuf, opos, " terms=");
+  let _ = wr_num(obuf, opos, R[4]);
+  let _ = wr_s(obuf, opos, " arena=");
+  let _ = wr_num(obuf, opos, R[0]);
+  let _ = wr_s(obuf, opos, " monovf=");
+  let _ = wr_num(obuf, opos, R[3]);
+  let _ = wr_ch(obuf, opos, 10);
+  let _ = sys_write(1, obuf, opos[0]);
+  0
+}
+
+// Every row prints the DECISION (1 = proved equal, 0 = not proved), the reject
+// code, the canonical term count of the left side, the arena cells consumed and
+// the monomial-overflow count.  The R4/R5 rows are NEGATIVE controls: a rule
+// that answered 1 to everything would be caught by them, not by the positives.
+fn rg_selftest(obuf: [i64], opos: [i64], R: [i64], cells: i64) -> i64 {
+  // R1: (x+y)*(x+y) == x*x + 2*x*y + y*y
+  let _ = rg_init(R, cells);
+  let px = rg_var(R, rg_new(R, 4), 0);
+  let py = rg_var(R, rg_new(R, 4), 1);
+  let sxy = rg_add(R, px, py, rg_new(R, 8));
+  let lhs = rg_mul(R, sxy, sxy, rg_new(R, 16));
+  let xx = rg_mul(R, px, px, rg_new(R, 8));
+  let yy = rg_mul(R, py, py, rg_new(R, 8));
+  let xy = rg_mul(R, px, py, rg_new(R, 8));
+  let xy2 = rg_scale(R, xy, 2, rg_new(R, 8));
+  let t1 = rg_add(R, xx, xy2, rg_new(R, 16));
+  let rhs = rg_add(R, t1, yy, rg_new(R, 16));
+  let _ = R[4] = R[lhs];
+  let _ = rg_row(obuf, opos, "R1 ring (x+y)^2 == x^2+2xy+y^2   want 1", rg_eq(R, lhs, rhs), R);
+
+  // R2: x*(y+z) == x*y + x*z
+  let _ = rg_init(R, cells);
+  let px = rg_var(R, rg_new(R, 4), 0);
+  let py = rg_var(R, rg_new(R, 4), 1);
+  let pz = rg_var(R, rg_new(R, 4), 2);
+  let syz = rg_add(R, py, pz, rg_new(R, 8));
+  let lhs = rg_mul(R, px, syz, rg_new(R, 16));
+  let xy = rg_mul(R, px, py, rg_new(R, 8));
+  let xz = rg_mul(R, px, pz, rg_new(R, 8));
+  let rhs = rg_add(R, xy, xz, rg_new(R, 16));
+  let _ = R[4] = R[lhs];
+  let _ = rg_row(obuf, opos, "R2 ring x*(y+z) == x*y+x*z       want 1", rg_eq(R, lhs, rhs), R);
+
+  // R3: (x+1)*(x-1) == x*x - 1  -- the shape of an overflow-free mulov miter
+  let _ = rg_init(R, cells);
+  let px = rg_var(R, rg_new(R, 4), 0);
+  let c1 = rg_const(R, rg_new(R, 4), 1);
+  let cm1 = rg_const(R, rg_new(R, 4), 0 - 1);
+  let xp1 = rg_add(R, px, c1, rg_new(R, 8));
+  let xm1 = rg_add(R, px, cm1, rg_new(R, 8));
+  let lhs = rg_mul(R, xp1, xm1, rg_new(R, 16));
+  let xx = rg_mul(R, px, px, rg_new(R, 8));
+  let rhs = rg_add(R, xx, cm1, rg_new(R, 16));
+  let _ = R[4] = R[lhs];
+  let _ = rg_row(obuf, opos, "R3 ring (x+1)*(x-1) == x^2-1     want 1", rg_eq(R, lhs, rhs), R);
+
+  // R4 NEGATIVE CONTROL: x*y is NOT y*y
+  let _ = rg_init(R, cells);
+  let px = rg_var(R, rg_new(R, 4), 0);
+  let py = rg_var(R, rg_new(R, 4), 1);
+  let lhs = rg_mul(R, px, py, rg_new(R, 8));
+  let rhs = rg_mul(R, py, py, rg_new(R, 8));
+  let _ = R[4] = R[lhs];
+  let _ = rg_row(obuf, opos, "R4 ring x*y == y*y  NEG           want 0", rg_eq(R, lhs, rhs), R);
+
+  // R5 NEGATIVE CONTROL: the cross term really is required
+  let _ = rg_init(R, cells);
+  let px = rg_var(R, rg_new(R, 4), 0);
+  let py = rg_var(R, rg_new(R, 4), 1);
+  let sxy = rg_add(R, px, py, rg_new(R, 8));
+  let lhs = rg_mul(R, sxy, sxy, rg_new(R, 16));
+  let xx = rg_mul(R, px, px, rg_new(R, 8));
+  let yy = rg_mul(R, py, py, rg_new(R, 8));
+  let rhs = rg_add(R, xx, yy, rg_new(R, 16));
+  let _ = R[4] = R[lhs];
+  let _ = rg_row(obuf, opos, "R5 ring (x+y)^2 == x^2+y^2  NEG   want 0", rg_eq(R, lhs, rhs), R);
+
+  // R6: the coefficient ring really is Z/2^64 -- 2^63 * 2 == 0
+  let _ = rg_init(R, cells);
+  let hi = rg_const(R, rg_new(R, 4), 0 - 4611686018427387904 - 4611686018427387904);
+  let two = rg_const(R, rg_new(R, 4), 2);
+  let lhs = rg_mul(R, hi, two, rg_new(R, 8));
+  let zero = rg_const(R, rg_new(R, 4), 0);
+  let _ = R[4] = R[lhs];
+  let _ = rg_row(obuf, opos, "R6 ring 2^63*2 == 0 (mod 2^64)   want 1", rg_eq(R, lhs, zero), R);
+
+  // R7: x*(y-z) == x*y - x*z, with a subtraction built through rg_sub
+  let _ = rg_init(R, cells);
+  let px = rg_var(R, rg_new(R, 4), 0);
+  let py = rg_var(R, rg_new(R, 4), 1);
+  let pz = rg_var(R, rg_new(R, 4), 2);
+  let dyz = rg_sub(R, py, pz, rg_new(R, 8), rg_new(R, 8));
+  let lhs = rg_mul(R, px, dyz, rg_new(R, 16));
+  let xy = rg_mul(R, px, py, rg_new(R, 8));
+  let xz = rg_mul(R, px, pz, rg_new(R, 8));
+  let rhs = rg_sub(R, xy, xz, rg_new(R, 8), rg_new(R, 16));
+  let _ = R[4] = R[lhs];
+  let _ = rg_row(obuf, opos, "R7 ring x*(y-z) == x*y-x*z       want 1", rg_eq(R, lhs, rhs), R);
+
+  // R8: the exponent guard FIRES rather than wrapping x^16 into a lie.
+  // want 0 with monovf > 0 -- the rule refuses, it does not answer wrongly.
+  let _ = rg_init(R, cells);
+  let px = rg_var(R, rg_new(R, 4), 0);
+  let x2 = rg_mul(R, px, px, rg_new(R, 4));
+  let x4 = rg_mul(R, x2, x2, rg_new(R, 4));
+  let x8 = rg_mul(R, x4, x4, rg_new(R, 4));
+  let x16 = rg_mul(R, x8, x8, rg_new(R, 4));
+  let _ = R[4] = R[x16];
+  let _ = rg_row(obuf, opos, "R8 ring x^16 degree guard        want 0 monovf>0", rg_eq(R, x16, px), R);
+
   0
 }
 
@@ -1268,9 +1757,14 @@ fn main(argc: i64, argv: [str]) -> i64 {
   // certificate check.  Every array the selftest needs is allocated HERE:
   // nothing below main calls zeros().
   let st_mode = if lc == 8 then (if pc[0] == 115 then (if pc[1] == 101 then (if pc[2] == 108 then (if pc[3] == 102 then 1 else 0) else 0) else 0) else 0) else 0;
-  let sz_c = if st_mode == 1 then 16384 else 1;
-  let sz_l = if st_mode == 1 then 524288 else 1;
-  let sz_a = if st_mode == 1 then 8192 else 1;
+  // The selftest arena, sized for the widest single obligation the blaster
+  // builds -- a symbolic 64x64 bb_mul64, whose folded demand is measured in
+  // the SIZE row below.  sz_l MUST be sz_c * 32 (bb_emit's clause stride).
+  // These are arena numbers only; the certificate FORMAT limits in the header
+  // comment are unchanged.
+  let sz_c = if st_mode == 1 then 65536 else 1;
+  let sz_l = if st_mode == 1 then 2097152 else 1;
+  let sz_a = if st_mode == 1 then 32768 else 1;
   let sz_w = if st_mode == 1 then 64 else 1;
   let sc_id = zeros(sz_c);
   let sc_len = zeros(sz_c);
@@ -1279,12 +1773,17 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let sobuf = zeros(256);
   let sopos = [0];
   let snv = zeros(2);
-  let sn_cl = [0];
+  let sn_cl = zeros(2);
+  let _ = sn_cl[1] = sz_c;
+  let _ = snv[1] = sz_a;
   let sa = zeros(sz_w);
   let sb = zeros(sz_w);
   let sr = zeros(sz_w);
   let ssh = zeros(sz_w);
+  let sz_r = if st_mode == 1 then 8192 else 1;
+  let sring = zeros(sz_r);
   let _ = if st_mode == 1 then bb_selftest(sobuf, sopos, sc_id, sc_len, sc_lits, sn_cl, sassign, snv, sa, sb, sr, ssh) else 0;
+  let _ = if st_mode == 1 then rg_selftest(sobuf, sopos, sring, sz_r) else 0;
   let _ = if st_mode == 1 then sys_exit(0) else 0;
   let fd = sys_open(pc, lc, 0);
   let _ = if fd >= 0 then 0 else sys_exit(90);
