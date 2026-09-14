@@ -1719,6 +1719,315 @@ fn rg_selftest(obuf: [i64], opos: [i64], R: [i64], cells: i64) -> i64 {
   0
 }
 
+// --- the two floor-division lemmas ---
+// The other half of the operator's 2026-09-09 ruling.  The `ring` rule above
+// decides polynomial identity over Z/2^64; it has no notion of DIVISION, and
+// the three flagship theorems each compare a 64x64 multiplication OR A 64-BIT
+// DIVISION against a different arithmetic decomposition (docs/
+// RESEARCH-PROOF-DESIGN-2026-09-09.md:280 for `mulov`: "`a * b / bs == a`
+// compared to the 128-bit product fits ... `ring` + floor lemmas route").  Two
+// lemmas bridge the gap, and they are the standard div/mod pair:
+//
+//   LEMMA D1 (floor Euclidean decomposition) -- for d != 0,
+//       x == d * (x fdiv d) + (x fmod d)   with   0 <= (x fmod d) < d  for d > 0
+//                                          and   d < (x fmod d) <= 0  for d < 0.
+//     This is what ELIMINATES the division operator: the quotient becomes an
+//     ordinary polynomial and the leftover is a bounded remainder, both of which
+//     the ring rule can normalise.
+//
+//   LEMMA D2 (exact cancellation and order transfer) -- for d > 0,
+//       (a * d) fdiv d == a          whenever the remainder is identically 0,
+//       q <= x fdiv d   <==>   q * d <= x.
+//     This is what DISCHARGES the result without re-introducing a division:
+//     the equality half is exactly the shape `mulov` tests, and the order half
+//     rewrites a comparison-against-a-quotient into a division-free comparison.
+//
+// MEASURED PREREQUISITE (tmp/divprobe.bp, this box, today): Bebop's `/`
+// TRUNCATES toward zero -- 7/3=2 r=1, -7/3=-2 r=-1, -1/3=0 r=-1, 7/-3=-2 r=1 --
+// so the FLOOR quotient is NOT the machine quotient and the correction below is
+// the arithmetic content of D1, not decoration.  Without it the r bound is
+// violated on every negative dividend, which is why dv_split re-checks the
+// bound on every coefficient and records 74 if it ever fails.
+//
+// SCOPE, stated rather than discovered later: the divisor is an integer
+// CONSTANT.  Division of a polynomial by another polynomial is not in the ring,
+// so a symbolic divisor (`mulov`'s general `b`) is out of scope and is reported,
+// not approximated.  Reject codes: 73 zero divisor, 74 floor-bound violation,
+// 75 order transfer not licensed (divisor not positive).
+fn dv_fdiv(a: i64, d: i64) -> i64 {
+  let qt = a / d;
+  let rt = a - qt * d;
+  let sr = if rt < 0 then 1 else 0;
+  let sd = if d < 0 then 1 else 0;
+  let opp = (if rt != 0 then 1 else 0) * (if sr != sd then 1 else 0);
+  qt - opp
+}
+
+fn dv_frem(a: i64, d: i64) -> i64 { a - dv_fdiv(a, d) * d }
+
+// LEMMA D1 machinery: split polynomial x by the integer constant d into a
+// quotient polynomial q and a remainder polynomial r, coefficient by
+// coefficient, with FLOOR semantics.  q and r must not alias x.
+fn dv_split(R: [i64], x: i64, d: i64, q: i64, r: i64) -> i64 {
+  let _ = if d == 0 then (let _ = R[1] = 73 in 0) else 0;
+  let dd = if d == 0 then 1 else d;
+  let _ = R[q] = 0;
+  let _ = R[r] = 0;
+  let i = 0;
+  while i < R[x] {
+    let k = R[x + 2 + i * 2];
+    let c = R[x + 3 + i * 2];
+    let qc = dv_fdiv(c, dd);
+    let rc = c - qc * dd;
+    // live bound check -- this FIRES if the floor correction above is ever wrong
+    let bad = if dd > 0 then ((if rc < 0 then 1 else 0) + (if rc >= dd then 1 else 0))
+                        else ((if rc > 0 then 1 else 0) + (if rc <= dd then 1 else 0));
+    let _ = if bad > 0 then (let _ = R[1] = 74 in 0) else 0;
+    let _ = rg_push(R, q, k, qc);
+    let _ = rg_push(R, r, k, rc);
+    let i = i + 1;
+    0
+  };
+  let _ = rg_canon(R, q);
+  let _ = rg_canon(R, r);
+  let _ = R[5] = R[q];
+  let _ = R[6] = R[r];
+  0
+}
+
+// LEMMA D1 decision: does the decomposition actually hold?  x == d*q + r,
+// decided by the ring rule.  s1 and s2 are scratch polynomials.
+fn dv_euclid(R: [i64], x: i64, d: i64, q: i64, r: i64, s1: i64, s2: i64) -> i64 {
+  let _ = rg_scale(R, q, d, s1);
+  let _ = rg_add(R, s1, r, s2);
+  rg_eq(R, x, s2)
+}
+
+// LEMMA D2, equality half: the division is EXACT (remainder identically zero),
+// so x fdiv d == q with no rounding at all.  This is the `(a*b)/b == a`
+// cancellation that `mulov`'s generic branch is built on.
+fn dv_exact(R: [i64], r: i64) -> i64 {
+  let _ = rg_canon(R, r);
+  let z = if R[r] == 0 then 1 else 0;
+  if R[1] == 0 then z else 0
+}
+
+// LEMMA D2, order half: rewrite `q <= x fdiv d` into the division-free
+// `q * d <= x`, licensed only for d > 0.  `out` receives x - q*d, whose SIGN is
+// the rewritten comparison.  Deciding that sign symbolically is NOT the ring
+// rule's job -- a polynomial normal form has no order -- so this returns only
+// whether the ELIMINATION is licensed, and the division-free comparison it
+// produces is what the SAT route is then handed.
+fn dv_transfer(R: [i64], q: i64, d: i64, x: i64, s1: i64, s2: i64, out: i64) -> i64 {
+  let lic = if d > 0 then 1 else 0;
+  let _ = if lic == 1 then 0 else (let _ = R[1] = 75 in 0);
+  let _ = rg_scale(R, q, d, s1);
+  let _ = rg_sub(R, x, s1, s2, out);
+  let _ = R[5] = R[out];
+  let _ = R[6] = 0;
+  if R[1] == 0 then lic else 0
+}
+
+fn dv_row(obuf: [i64], opos: [i64], nm: str, val: i64, R: [i64]) -> i64 {
+  let _ = opos[0] = 0;
+  let _ = wr_s(obuf, opos, nm);
+  let _ = wr_s(obuf, opos, " = ");
+  let _ = wr_num(obuf, opos, val);
+  let _ = wr_s(obuf, opos, "  reject=");
+  let _ = wr_num(obuf, opos, R[1]);
+  let _ = wr_s(obuf, opos, " qterms=");
+  let _ = wr_num(obuf, opos, R[5]);
+  let _ = wr_s(obuf, opos, " rterms=");
+  let _ = wr_num(obuf, opos, R[6]);
+  let _ = wr_s(obuf, opos, " arena=");
+  let _ = wr_num(obuf, opos, R[0]);
+  let _ = wr_ch(obuf, opos, 10);
+  let _ = sys_write(1, obuf, opos[0]);
+  0
+}
+
+// D3, D4, D6 and D8 are NEGATIVE CONTROLS: without them D1/D2/D5/D7 are just a
+// procedure that prints 1, which is the failure shape this file has paid for.
+fn dv_selftest(obuf: [i64], opos: [i64], R: [i64], cells: i64) -> i64 {
+  // D1: x = 7a + 5 split by 3 -> q = 2a+1, r = a+2, and 3*q + r == x
+  let _ = rg_init(R, cells);
+  let pa = rg_var(R, rg_new(R, 4), 0);
+  let x7 = rg_scale(R, pa, 7, rg_new(R, 4));
+  let c5 = rg_const(R, rg_new(R, 4), 5);
+  let x = rg_add(R, x7, c5, rg_new(R, 8));
+  let q = rg_new(R, 8);
+  let r = rg_new(R, 8);
+  let _ = dv_split(R, x, 3, q, r);
+  let _ = dv_row(obuf, opos, "D1 fdiv Euclid (7a+5) = 3*q + r      want 1", dv_euclid(R, x, 3, q, r, rg_new(R, 16), rg_new(R, 16)), R);
+
+  // D2: the TRUNCATION TRAP.  x = -1, d = 3.  Bebop's `/` gives q=0 r=-1, which
+  // breaks 0 <= r < d; the floor correction gives q=-1 r=2 and the identity holds.
+  let _ = rg_init(R, cells);
+  let x = rg_const(R, rg_new(R, 4), 0 - 1);
+  let q = rg_new(R, 4);
+  let r = rg_new(R, 4);
+  let _ = dv_split(R, x, 3, q, r);
+  let _ = dv_row(obuf, opos, "D2 fdiv Euclid (-1) = 3*(-1) + 2     want 1", dv_euclid(R, x, 3, q, r, rg_new(R, 8), rg_new(R, 8)), R);
+
+  // D3 NEG: a WRONG quotient (doubled) must not satisfy the decomposition
+  let _ = rg_init(R, cells);
+  let pa = rg_var(R, rg_new(R, 4), 0);
+  let x7 = rg_scale(R, pa, 7, rg_new(R, 4));
+  let c5 = rg_const(R, rg_new(R, 4), 5);
+  let x = rg_add(R, x7, c5, rg_new(R, 8));
+  let q = rg_new(R, 8);
+  let r = rg_new(R, 8);
+  let _ = dv_split(R, x, 3, q, r);
+  let qbad = rg_scale(R, q, 2, rg_new(R, 8));
+  let _ = dv_row(obuf, opos, "D3 fdiv Euclid wrong q  NEG          want 0", dv_euclid(R, x, 3, qbad, r, rg_new(R, 16), rg_new(R, 16)), R);
+
+  // D4 NEG: a zero divisor is refused, not divided by
+  let _ = rg_init(R, cells);
+  let x = rg_const(R, rg_new(R, 4), 7);
+  let q = rg_new(R, 4);
+  let r = rg_new(R, 4);
+  let _ = dv_split(R, x, 0, q, r);
+  let _ = dv_row(obuf, opos, "D4 fdiv zero divisor  NEG            want 0 reject=73", dv_euclid(R, x, 1, q, r, rg_new(R, 8), rg_new(R, 8)), R);
+
+  // D5 LEMMA D2: (100*a) fdiv 100 == a exactly -- the `mulov` cancellation shape
+  let _ = rg_init(R, cells);
+  let pa = rg_var(R, rg_new(R, 4), 0);
+  let x = rg_scale(R, pa, 100, rg_new(R, 4));
+  let q = rg_new(R, 4);
+  let r = rg_new(R, 4);
+  let _ = dv_split(R, x, 100, q, r);
+  let ex = dv_exact(R, r);
+  let _ = dv_row(obuf, opos, "D5 exact (100a)/100 == a  r==0       want 1", ex * rg_eq(R, q, pa), R);
+
+  // D6 NEG: one off the multiple and the cancellation is gone
+  let _ = rg_init(R, cells);
+  let pa = rg_var(R, rg_new(R, 4), 0);
+  let x100 = rg_scale(R, pa, 100, rg_new(R, 4));
+  let c1 = rg_const(R, rg_new(R, 4), 1);
+  let x = rg_add(R, x100, c1, rg_new(R, 8));
+  let q = rg_new(R, 8);
+  let r = rg_new(R, 8);
+  let _ = dv_split(R, x, 100, q, r);
+  let _ = dv_row(obuf, opos, "D6 exact (100a+1)/100  NEG           want 0", dv_exact(R, r), R);
+
+  // D7 LEMMA D2 order half: q <= x/3 becomes q*3 <= x, licensed for d > 0.
+  // qterms below is the term count of the division-free difference x - q*3.
+  let _ = rg_init(R, cells);
+  let pa = rg_var(R, rg_new(R, 4), 0);
+  let x = rg_scale(R, pa, 7, rg_new(R, 4));
+  let qq = rg_var(R, rg_new(R, 4), 1);
+  let _ = dv_row(obuf, opos, "D7 transfer q<=x/3 -> q*3<=x         want 1", dv_transfer(R, qq, 3, x, rg_new(R, 8), rg_new(R, 8), rg_new(R, 8)), R);
+
+  // D8 NEG: a non-positive divisor flips the inequality, so the rewrite is NOT
+  // licensed and must be refused rather than silently applied
+  let _ = rg_init(R, cells);
+  let pa = rg_var(R, rg_new(R, 4), 0);
+  let x = rg_scale(R, pa, 7, rg_new(R, 4));
+  let qq = rg_var(R, rg_new(R, 4), 1);
+  let _ = dv_row(obuf, opos, "D8 transfer d=-3 not licensed  NEG   want 0 reject=75", dv_transfer(R, qq, 0 - 3, x, rg_new(R, 8), rg_new(R, 8), rg_new(R, 8)), R);
+
+  0
+}
+
+// --- ONE REAL OBLIGATION PUT THROUGH THE RULE ---
+// Chosen: `mulov`'s generic branch, selfhost/std/money.bp:30-41, at the literal
+// call site money.bp:98 `mulov(c1, 100)`.  mulov computes p = a*b (WRAPPING),
+// q = p / b, and reports overflow when q != a.  So its correctness claim on the
+// no-overflow side is exactly `(a * 100) / 100 == a`, which is LEMMA D2 with a
+// CONSTANT divisor -- the one shape the lemmas cover.  The general `mulov(a,b)`
+// with symbolic b is NOT covered and is reported, not faked.
+//
+// The wrapping is the whole point and the ring rule cannot see it: Z/2^64 IS the
+// ring, so `a*100` never "overflows" there.  What the rule discharges is the
+// no-overflow branch; the overflow branch is decided by the instances below,
+// where the wrapped coefficient is computed in the ring and compared to `a`.
+fn ob_selftest(obuf: [i64], opos: [i64], R: [i64], cells: i64) -> i64 {
+  // M1 SYMBOLIC, the generic-branch identity: (100*c1)/100 == c1
+  let _ = rg_init(R, cells);
+  let pc = rg_var(R, rg_new(R, 4), 0);
+  let x = rg_scale(R, pc, 100, rg_new(R, 4));
+  let q = rg_new(R, 4);
+  let r = rg_new(R, 4);
+  let _ = dv_split(R, x, 100, q, r);
+  let _ = dv_row(obuf, opos, "M1 mulov(c1,100) no-ovf (100c)/100==c  want 1", dv_exact(R, r) * rg_eq(R, q, pc), R);
+
+  // M2 CONCRETE, no overflow: a = 12345, p = 1234500, q = 12345 == a -> ok
+  let _ = rg_init(R, cells);
+  let pa = rg_const(R, rg_new(R, 4), 12345);
+  let x = rg_scale(R, pa, 100, rg_new(R, 4));
+  let q = rg_new(R, 4);
+  let r = rg_new(R, 4);
+  let _ = dv_split(R, x, 100, q, r);
+  let _ = dv_row(obuf, opos, "M2 mulov(12345,100) q==a  no ovf       want 1", dv_exact(R, r) * rg_eq(R, q, pa), R);
+
+  // M3 CONCRETE, OVERFLOWS: a = 2^62+1, a*100 wraps to 100, so q = 1 != a and
+  // mulov's `gen` flag is 1 -- overflow correctly reported.
+  let _ = rg_init(R, cells);
+  let pa = rg_const(R, rg_new(R, 4), 4611686018427387905);
+  let x = rg_scale(R, pa, 100, rg_new(R, 4));
+  let q = rg_new(R, 4);
+  let r = rg_new(R, 4);
+  let _ = dv_split(R, x, 100, q, r);
+  let _ = dv_row(obuf, opos, "M3 mulov(2^62+1,100) q==a  OVF        want 0", rg_eq(R, q, pa), R);
+
+  // M4 CONCRETE, OVERFLOWS to exactly zero: a = 2^62, a*100 == 25 * 2^64 == 0,
+  // so q = 0 != a.  The degenerate wrap, which a coefficient-only rule could
+  // have mistaken for an exact division.
+  let _ = rg_init(R, cells);
+  let pa = rg_const(R, rg_new(R, 4), 4611686018427387904);
+  let x = rg_scale(R, pa, 100, rg_new(R, 4));
+  let q = rg_new(R, 4);
+  let r = rg_new(R, 4);
+  let _ = dv_split(R, x, 100, q, r);
+  let _ = dv_row(obuf, opos, "M4 mulov(2^62,100) q==a  OVF wrap=0   want 0", rg_eq(R, q, pa), R);
+
+  // M5/M6 THE SOUNDNESS SEPARATION, in two numbers.  3 is a UNIT in Z/2^64, so
+  // the ring rule proves 3 * inv3 == 1 (M5 = 1).  If the floor lemma were
+  // implemented by multiplying by that inverse -- the obvious mistake -- it
+  // would answer `1/3 == inv3`.  It divides COEFFICIENTS instead, so it refuses
+  // (M6 = 0, remainder 1).  M5 and M6 together are why the two rules must stay
+  // separate: modular inversion is not floor division.
+  let _ = rg_init(R, cells);
+  let c3 = rg_const(R, rg_new(R, 4), 3);
+  let ci = rg_const(R, rg_new(R, 4), 0 - 6148914691236517205);
+  let pr = rg_mul(R, c3, ci, rg_new(R, 4));
+  let c1 = rg_const(R, rg_new(R, 4), 1);
+  let _ = R[5] = R[pr];
+  let _ = R[6] = 0;
+  let _ = dv_row(obuf, opos, "M5 ring 3*inv3 == 1 in Z/2^64         want 1", rg_eq(R, pr, c1), R);
+
+  let _ = rg_init(R, cells);
+  let x = rg_const(R, rg_new(R, 4), 1);
+  let q = rg_new(R, 4);
+  let r = rg_new(R, 4);
+  let _ = dv_split(R, x, 3, q, r);
+  let _ = dv_row(obuf, opos, "M6 fdiv 1/3 exact?  NEG (not inv3)   want 0", dv_exact(R, r), R);
+
+  0
+}
+
+// The SAT route's side of the SAME obligation, as a DEMAND measurement only.
+// `mulov` compares a 64x64 multiply AND a 64-bit divide against a 128-bit
+// product; the bit-blaster has no divider at all, so this measures the cheapest
+// lower bound that exists in the tree -- the two symbolic 64x64 multiplies the
+// miter's two sides need.  NO bcp: past sz_c the clauses are COUNTED but not
+// WRITTEN (bb_emit's documented design), so only the counts are meaningful, and
+// this changes neither bb_mul64 nor any cap.
+fn ob_satsize(obuf: [i64], opos: [i64], c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64], assign: [i64], nv: [i64], a: [i64], b: [i64], r: [i64], r2: [i64]) -> i64 {
+  let _ = bb_reset(c_id, c_len, c_lits, n_cl, assign, nv, 4096);
+  let a_base = bb_alloc_word(a, nv);
+  let b_base = bb_alloc_word(b, nv);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, a_base, 6);
+  let _ = bb_pin_const(c_id, c_len, c_lits, n_cl, b_base, 7);
+  let _ = nv[1] = 1000000000;
+  let _ = bb_mul64(a, 0, b, 0, r, 0, nv, c_id, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "SAT1 mulov miter, ONE symbolic mul, demand", 0, n_cl[0], nv[0], 0);
+  let _ = bb_mul64(a, 0, b, 0, r2, 0, nv, c_id, c_len, c_lits, n_cl);
+  let _ = bb_row(obuf, opos, "SAT2 mulov miter, TWO symbolic muls, demand", 0, n_cl[0], nv[0], 0);
+  let _ = nv[1] = 32768;
+  0
+}
+
 // --- path helpers ---
 fn str_to_cells(dst: [i64], src: str) -> i64 {
   let i = 0;
@@ -1784,6 +2093,9 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let sring = zeros(sz_r);
   let _ = if st_mode == 1 then bb_selftest(sobuf, sopos, sc_id, sc_len, sc_lits, sn_cl, sassign, snv, sa, sb, sr, ssh) else 0;
   let _ = if st_mode == 1 then rg_selftest(sobuf, sopos, sring, sz_r) else 0;
+  let _ = if st_mode == 1 then dv_selftest(sobuf, sopos, sring, sz_r) else 0;
+  let _ = if st_mode == 1 then ob_selftest(sobuf, sopos, sring, sz_r) else 0;
+  let _ = if st_mode == 1 then ob_satsize(sobuf, sopos, sc_id, sc_len, sc_lits, sn_cl, sassign, snv, sa, sb, sr, ssh) else 0;
   let _ = if st_mode == 1 then sys_exit(0) else 0;
   let fd = sys_open(pc, lc, 0);
   let _ = if fd >= 0 then 0 else sys_exit(90);
