@@ -1,6 +1,16 @@
 -- Bebop.Conformance -- F4 conformance harness (v2)
 -- Replaces the scaffold's Conformance.lean.
 --
+-- SUPERSESSION IN PROGRESS (2026-09-14). `ParityRun.lean` + `Bebop/Parser.lean`
+-- now READ `bench/parity_constructs/*.bp` and their `// EXPECT` headers from
+-- disk, which is what the embedded tables below were a hand-typed stand-in for.
+-- Measured with `lake exe parityrun`: 110 of 121 files parse, 83 of 121
+-- evaluate to their EXPECT. The tables here are DELIBERATELY KEPT until the
+-- parser's score covers them: two harnesses agreeing is how a regression in
+-- either becomes visible, and deleting the old one while the new one is at
+-- 83/121 would remove the only thing the new one can be checked against.
+-- Nothing below is authoritative any more -- the files on disk are.
+--
 -- This module:
 --  (a) Declares the EXPECT rows for 80 positive + 14 negative constructs
 --      as a Lean structure. COUNTED 2026-09-14: those are 80 and 14, not the

@@ -63,20 +63,32 @@ def evalBinOp (op : BinOp) (a b : Val) : Val :=
   | .band => a &&& b
   | .bor  => a ||| b
   | .bxor => a ^^^ b
-  -- `||` / `&&`. MEASURED-AGAINST-NOTHING, and flagged so 2026-09-14.
-  -- LANGUAGE.md's precedence table (lines 59-67) does NOT list `&&` or `||` at
-  -- all: it goes comparison, `|`, `^`, `&`, shifts, additive, multiplicative.
-  -- So these two rules model a construct the language reference does not
-  -- document, and they model it the way tools/bpref.py does (pre-A26: `||` = `|`,
-  -- `&&` = `&`, non-short-circuit, T125). The compiler is reported to disagree --
-  -- `&&` there behaves as a constant zero, binding tighter than comparison --
-  -- so this rule agrees with the oracle and not with bebop.bin. Do not treat it
-  -- as settled: F4 cannot claim "the WHOLE language" while LANGUAGE.md, the
-  -- compiler and the oracle give three answers. Fixing that is a bebop.bp /
-  -- LANGUAGE.md decision, not a Lean one; this comment exists so the
-  -- disagreement is visible from inside the semantics.
-  | .lor  => a ||| b
-  | .land => a &&& b
+  -- `||` / `&&` -- LOGICAL, and MEASURED 2026-09-14 on the promoted bebop.bin
+  -- (sha256 3af3250...). This REPLACES the bitwise rules that stood here, and
+  -- it also retires this tree's older note that `&&` is a constant zero: that
+  -- was measured on an earlier compiler and is false for the promoted binary.
+  --
+  --   (2 && 1)*1000 + (2 || 1)*100 + (0 || 7)*10 + (0 && 7)   ->  1110
+  --
+  -- Bitwise would give 370 (2&1 = 0, 2|1 = 3, 0|7 = 7). So the VALUE is 0 or 1.
+  --
+  -- Evaluation, however, is NOT short-circuit -- both operands always run:
+  --   fn bump(a: i64) -> i64 { let _ = a[0] = 7; 1 }
+  --   let a = zeros(1); let r = 0 && bump(a); a[0] * 10 + r   ->  70
+  -- a[0] is 7, so `bump` ran under a false left operand (and `1 || bump(a)`
+  -- gives 71). That is T125's non-short-circuit rule, still true; it is the
+  -- VALUE that changed. `evalBinOp` is applied AFTER `evalExpr` has already
+  -- run both sides in `.binop`, so this function is exactly the right place
+  -- for the value rule and the eager evaluation is inherited for free.
+  --
+  -- Precedence (`||` loosest, then `&&`, both ABOVE comparison) lives in
+  -- Bebop/Parser.lean §0, with the probe for each row.
+  --
+  -- STILL A DOC DISAGREEMENT, NOT RESOLVED HERE: LANGUAGE.md:57-67 does not
+  -- list `&&` or `||` at all. The compiler has them; the reference does not.
+  -- Reported rather than picked.
+  | .lor  => if a != 0 || b != 0 then 1 else 0
+  | .land => if a != 0 && b != 0 then 1 else 0
   | .eq   => if a == b then 1 else 0
   | .neq  => if a != b then 1 else 0
   | .slt  => if a < b then 1 else 0
@@ -128,6 +140,13 @@ partial def evalExpr (fuel : Fuel) (e : Expr) (s : State) : State × Option Val 
     match e with
     -- Literals
     | .lit v => (s, some v)
+
+    -- String literal: NOT modelled, and loudly so. `formal/` has no byte
+    -- arena, `builtinStrLen`/`builtinChar` are known-wrong (README §defects),
+    -- and returning any number here would make a wrong evaluator look right on
+    -- the 22 corpus programs that contain a string. `none` propagates to
+    -- `Result.stuck`, which `checkExpected` cannot mistake for a value.
+    | .strLit _ => (s, none)
 
     -- Variable reference
     | .var n =>

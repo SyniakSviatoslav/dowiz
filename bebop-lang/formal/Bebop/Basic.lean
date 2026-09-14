@@ -92,6 +92,14 @@ mutual
     | enumLit (name : Name) (arg : Option Expr)                -- enum ctor
     | fieldAcc (structExpr : Expr) (field : Name)              -- s.f
     | builtin (name : Name) (args : Array Expr)                -- builtin call
+    /-- A string literal. LANGUAGE.md:80 allows `"..."` ONLY as a call
+        argument (`str_len(s)`, `char(s, i)`). It is an AST node rather than a
+        parse error so that a program containing one PARSES -- the syntax is
+        understood -- and then fails at EVALUATION with a named reason. Those
+        are different defects and the conformance score must not merge them:
+        no byte arena is modelled, so `Bebop.Semantics` reports `stuck` here
+        (see `evalExpr`'s `.strLit` arm) rather than inventing a handle. -/
+    | strLit (s : String)
   deriving Inhabited
 
   structure MatchArm where

@@ -16,6 +16,8 @@
 -/
 
 import Bebop.Basic
+import Bebop.Lexer
+import Bebop.Parser
 import Bebop.Semantics
 import Bebop.Builtins
 import Bebop.Syscalls

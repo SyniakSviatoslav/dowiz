@@ -18,8 +18,10 @@ suite, all 121 carrying a `// EXPECT <v> from:` header. Measure against 121.
 | `lake build` | **rc=0**, clean, 81 s, 10 jobs | `rm -rf .lake/build && lake build` |
 | modules elaborating standalone | 9 of 9 (incl. `harness.lean`) | `lean <file>` per file, all rc=0 |
 | import cycles | **none** | the graph is a DAG; the 2026-09-13 "still open" claim was already false at 7edffdf |
-| constructs actually RUN | **10 of 121** | 10 `#guard`ed inline-AST samples; there is no `.bp` parser |
-| constructs declared as data | 94 of 121 (80 pos + 14 neg rows) | 21 positive + 6 negative names missing |
+| constructs PARSED from disk | **111 of 121** | `lake exe parityrun`, reading `bench/parity_constructs/` |
+| constructs evaluating to their `// EXPECT` | **84 of 121** | same run, eval fuel 20000 |
+| positive constructs the parser REJECTS as illegal | **0** | all 6 `INVALID` rows are `neg/*.bp`, which should be refused |
+| constructs run from an inline AST | 10 of 121 | the older `#guard`ed samples, KEPT alongside the parser |
 | builtins executable | **10 of 37** | `zeros str_len char clock_ms clz crc32 crc32x hvham hvham2 scan` |
 | builtins with an axiom spec only | 26 (`dispatchSyscall` returns `none` for all) | `Syscalls.lean` |
 | builtins absent entirely | 1 (`crc32b`) | grep over `formal/` |
@@ -55,6 +57,9 @@ here was never measured and is refuted (docs/blueprints/F3-lean-semantics.md §3
 
 | File | Elaborates (lean 4.33.1, 2026-09-13) | Purpose |
 |------|------|---------|
+| `Bebop/Lexer.lean` | rc=0 | Tokenizer; 9 `#guard`s pinning longest-match (`>>>` before `>>`, `&&` vs `&`, `=>` vs `=`) |
+| `Bebop/Parser.lean` | rc=0 | Recursive-descent `.bp` -> AST, TOTAL (fuel-recursive, no `partial` on the parse path), `ParseError` separating "unsupported by this parser" from "not a legal program"; 28 `#guard` grammar pins |
+| `ParityRun.lean` | rc=0 (`lake exe parityrun`) | Reads the real `.bp` files + their `// EXPECT`, expands plain `use`, scores every file into exactly one bucket, exits 1 below the pass floor |
 | `Bebop/Basic.lean` | rc=0 | Core types: Val, Expr, Stmt, Program, State (+ State.lookup/bind/zeros/arenaRead/arenaWrite), TrapCode, Result (with `stuck` for a body that yields no value) |
 | `Bebop/Builtins.lean` | rc=0 | 10 executable builtins + dispatch (imports Basic only) |
 | `Bebop/Syscalls.lean` | rc=0 | 26 `axiom` sys_* specs, 5 footprints, `dispatchSyscall` = `none` for every name (nothing modelled; was `some (s, 0)` for any `sys_*` until 2026-09-13) (imports Basic only) |
@@ -238,12 +243,49 @@ once. `.lake/` is the build directory and is not part of the source.
   and never read by the evaluator (`grep -n 'Ty\.' Bebop/Semantics.lean` is
   empty). Every F1 static rejection that is a type error is therefore
   unmodelled, and the 6 missing negative rows include the ones that need it.
-- STILL OPEN -- `.lor` / `.land` (`||` / `&&`) are modelled as plain bitwise
-  `|||` / `&&&`, i.e. the pre-A26 bpref language. LANGUAGE.md's precedence
-  table does not list `&&` or `||` at all, and the compiler's `&&` is reported
-  to be a constant zero, so this rule matches neither document. It belongs to
-  whoever owns `bebop.bp`, but F4 cannot be "the WHOLE language" until the
-  three agree.
+- FIXED 2026-09-14 -- `||` and `&&` were modelled as plain bitwise `|||` /
+  `&&&` (the pre-A26 bpref language). MEASURED on the promoted `bebop.bin`
+  (sha256 3af3250...): `(2 && 1)*1000 + (2 || 1)*100 + (0 || 7)*10 + (0 && 7)`
+  = **1110**, where bitwise gives 370 -- so the VALUE is logical, 0 or 1. But
+  `let a = zeros(1); let r = 0 && bump(a); a[0] * 10 + r` = **70**, so both
+  operands still run: NOT short-circuit (T125 unchanged). Both halves are now
+  in `evalBinOp`. This also retires this tree's older note that `&&` is a
+  constant zero -- false for the promoted binary.
+- STILL A DOC GAP -- LANGUAGE.md:57-67 does not list `&&` or `||` at all, and
+  their level had to be measured: `||` loosest, then `&&`, both ABOVE
+  comparison (C-like), while comparison stays above `|`/`^`/`&` (NOT C).
+  Every row is recorded with its probe in `Bebop/Parser.lean` §0.
+- **NEW FINDING 2026-09-14 -- `bench/parity_constructs/c46_andor.bp`'s EXPECT
+  header is STALE.** The file says `// EXPECT 111100`; the promoted compiler
+  prints **101100**, and so does this Lean semantics. 111100 is exactly the
+  value the program has under the PRE-A26 reading `&&` = `&`, `||` = `|` at
+  bitwise precedence (checked arm by arm). So the header, not the semantics, is
+  wrong -- and `construct_parity.sh` compares a run value against that header,
+  so that construct's gate should be failing. `bench/` is not this lane's tree,
+  so it is reported, not edited.
+- OBSERVED, not this lane's to fix -- a bare `x = 5;` statement COMPILES and is
+  a silent no-op: `fn main() -> i64 { let x = 1; x = 5; x }` prints **1**.
+  In expression position the same assignment is refused (`if 1 then x = 9 else
+  0` -> compile exit 101, "unbound symbol"). The parser here follows the
+  refusal and rejects a variable assignment in expression position; it has no
+  production for the bare statement form, so that shape is `invalid` here.
+- SCORE, measured `lake exe parityrun /root/... 20000`, all 121 files:
+  84 PASS · 14 STUCK · 10 VALUE_MISMATCH · 6 INVALID (all negative) ·
+  3 FUEL · 2 UNSUPPORTED:`use` cas:// · 1 UNSUPPORTED:`return` in expression
+  position · 1 LEX (the `@` in `neg/c143_contract_garbage`, correctly refused).
+  The 14 STUCK and 4 of the VALUE_MISMATCH are SEMANTICS gaps already listed
+  above (unmodelled `sys_*`, no byte arena, the wrong `crc32`/`crc32x`/`scan`);
+  6 VALUE_MISMATCH are `neg/*.bp` that this model does not refuse because the
+  static check involved (reserved-word shadowing, 15-parameter arity, static
+  OOB, unbound symbol) is not implemented.
+- STILL OPEN -- the evaluator cannot execute allocation-heavy constructs at
+  useful fuel. `State.zeros` is `cells ++ Array.replicate n 0` and
+  `arenaWrite` is `Array.set!`, so a loop of allocations is O(n^2):
+  `c33_loopalloc` alone does not finish in 60 s at fuel 100000, while
+  `c67_deeprec` and `neg/c48_stackovf` return FUEL in under a second (they
+  genuinely need deeper fuel; c48 is a stack-overflow construct by design).
+  The fix is a linear or persistent arena, and it is the next thing after the
+  parser if the score is to pass 83.
 - STILL OPEN -- 21 positive and 6 negative construct names have no row:
   positive `c124_condreturn c133_testblock(+_twin) c134_testfn_inside(+_twin)
   c135_testblock_braces(+_twin) c142_clone8 c144_contract_ok c145_fraction_ok
