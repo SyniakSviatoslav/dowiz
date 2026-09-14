@@ -3368,6 +3368,13 @@ fn vs_cmp(insns: [i64], n: [i64], fntab: [i64], stab: [i64], cond: i64) -> i64 {
   let _ = if both == 0 then vs_cmp_emit(insns, n, fntab, stab, cond, ak, bk, b0) else 0;
   n[0]
 }
+
+// A26: normalise the top window entry to 0/1 (`v != 0`) for the logical tier.
+fn vs_to_bool(insns: [i64], n: [i64], fntab: [i64], stab: [i64]) -> i64 {
+  let _ = vs_push(insns, n, fntab, stab, 1, 0, 0);
+  vs_cmp(insns, n, fntab, stab, 1)
+}
+
 fn vs_cmp_emit(insns: [i64], n: [i64], fntab: [i64], stab: [i64], cond: i64, ak: i64, bk: i64, b0: i64) -> i64 {
   let w = fntab[5387];
   let b_fits = (if bk == 1 then 1 else 0) * (if b0 >= 0 then 1 else 0) * (if b0 < 4096 then 1 else 0);
@@ -3530,7 +3537,8 @@ fn emit_bor(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i
     let _ = skip_ws(s, pos);
     let strn = slen(s, pos);
     let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
-    let isop = if ch == 124 then 1 else 0;
+    let nch = if pos[0] + 1 >= strn then 0 else char(s, pos[0] + 1);
+    let isop = (if ch == 124 then 1 else 0) * (if nch == 124 then 0 else 1);
     let _ = if isop == 1 then emit_apply_bits(s, pos, insns, n, 13, 1, 3, stab, selfname, selfstart, fntab) else 0;
     let done = 1 - isop;
     0
@@ -3562,7 +3570,8 @@ fn emit_band(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: 
     let _ = skip_ws(s, pos);
     let strn = slen(s, pos);
     let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
-    let isop = if ch == 38 then 1 else 0;
+    let nch = if pos[0] + 1 >= strn then 0 else char(s, pos[0] + 1);
+    let isop = (if ch == 38 then 1 else 0) * (if nch == 38 then 0 else 1);
     let _ = if isop == 1 then emit_apply_bits(s, pos, insns, n, 12, 1, 1, stab, selfname, selfstart, fntab) else 0;
     let done = 1 - isop;
     0
@@ -3605,7 +3614,7 @@ fn emit_apply_cmp(s: str, pos: [i64], insns: [i64], n: [i64], cond: i64, adv: i6
 }
 
 // cmp = bor (('=='|'!='|'<'|'>'|'<='|'>=') bor)*
-fn emit_cmp(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+fn emit_rel(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
   let _ = emit_bor(s, pos, insns, n, stab, selfname, selfstart, fntab);
   let done = 0;
   while done == 0 {
@@ -3634,6 +3643,59 @@ fn emit_cmp(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i
     0
   };
   0
+}
+
+// A26: land = rel ('&&' rel)*   -- logical AND, value 0/1, NO short circuit
+// (T125 pinned non-short-circuit semantics; that half is unchanged).
+fn emit_land(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = emit_rel(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let strn = slen(s, pos);
+    let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let nch = if pos[0] + 1 >= strn then 0 else char(s, pos[0] + 1);
+    let isop = (if ch == 38 then 1 else 0) * (if nch == 38 then 1 else 0);
+    let _ = if isop == 1 then emit_apply_land(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
+    let done = 1 - isop;
+    0
+  };
+  0
+}
+
+fn emit_apply_land(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = vs_to_bool(insns, n, fntab, stab);
+  let _ = pos[0] = pos[0] + 2;
+  let _ = emit_rel(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = vs_to_bool(insns, n, fntab, stab);
+  vs_binop(insns, n, fntab, stab, 12)
+}
+
+// A26: cmp = land ('||' land)*  -- this is the ENTRY point of the expression
+// grammar; the old relational tier is now `emit_rel`. Precedence is C's:
+// || < && < cmp < | < ^ < & < shifts < + - < * / %.
+fn emit_cmp(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = emit_land(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let strn = slen(s, pos);
+    let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let nch = if pos[0] + 1 >= strn then 0 else char(s, pos[0] + 1);
+    let isop = (if ch == 124 then 1 else 0) * (if nch == 124 then 1 else 0);
+    let _ = if isop == 1 then emit_apply_lor(s, pos, insns, n, stab, selfname, selfstart, fntab) else 0;
+    let done = 1 - isop;
+    0
+  };
+  0
+}
+
+fn emit_apply_lor(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64], selfname: i64, selfstart: i64, fntab: [i64]) -> i64 {
+  let _ = vs_to_bool(insns, n, fntab, stab);
+  let _ = pos[0] = pos[0] + 2;
+  let _ = emit_land(s, pos, insns, n, stab, selfname, selfstart, fntab);
+  let _ = vs_to_bool(insns, n, fntab, stab);
+  vs_binop(insns, n, fntab, stab, 13)
 }
 
 // expr = term ((+|-) term)*
