@@ -208,10 +208,19 @@ fn asgn_set(a: [i64], v: i64, val: i64) -> i64 {
 }
 
 // extend the assignment with the single unassigned literal of clause slot
-fn asgn_unit(assign: [i64], c_lits: [i64], slot: i64) -> i64 {
+// THE CLAUSE STRIDE, as a runtime value in n_cl[2] rather than a constant repeated at
+// nine sites.  Two places that had to agree about an encoding is exactly how the
+// certgen/tcheck divergence happened; one cell read by everything is what stops it
+// recurring.  0 means the historical 32, so anything that does not set it behaves
+// exactly as before -- which is why the 108 selftest rows stay byte-identical.
+// The certificate path sets 64, because the ALIGNED encoding produces proofs with
+// clauses wider than 32: mul_three's needs 33 literals and tpl_mul3's needs 67.
+fn cl_stride(n_cl: [i64]) -> i64 { if n_cl[2] > 0 then n_cl[2] else 32 }
+
+fn asgn_unit(assign: [i64], c_lits: [i64], slot: i64, stride: i64) -> i64 {
   let j = 0;
-  while j < 32 {
-    let lv = c_lits[slot * 32 + j];
+  while j < stride {
+    let lv = c_lits[slot * stride + j];
     let sv = if lv > 0 then lv else (0 - lv);
     let cur = asgn_get(assign, sv);
     let _ = if (lv != 0) * (cur == 0) == 1 then (let _ = asgn_set(assign, sv, if lv > 0 then 1 else (0 - 1)) in 0) else 0;
@@ -250,7 +259,7 @@ fn check_chain(c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64],
     let unassigned = 0;
     let j = 0;
     while j < hc_len {
-      let lv = c_lits[slot * 32 + j];
+      let lv = c_lits[slot * cl_stride(n_cl) + j];
       let sv = if lv >= 0 then lv else (0 - lv);
       let want = if lv > 0 then 1 else (0 - 1);
       let cur = asgn_get(assign, sv);
@@ -263,7 +272,7 @@ fn check_chain(c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64],
     let _ = if satisfied == 0 then 0 else sys_exit(2);
     let _ = if unassigned > 1 then sys_exit(2) else 0;
     let conflict = conflict + (1 - conflict) * (if unassigned == 0 then 1 else 0);
-    let _ = if (conflict == 0) * (unassigned == 1) == 1 then (let _ = asgn_unit(assign, c_lits, slot) in 0) else 0;
+    let _ = if (conflict == 0) * (unassigned == 1) == 1 then (let _ = asgn_unit(assign, c_lits, slot, cl_stride(n_cl)) in 0) else 0;
     let hi = hi + 1;
     0
   };
@@ -293,7 +302,7 @@ fn add_input(c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64],
     // at all.  Refuse it (exit 2) rather than truncating: a truncated clause is
     // a DIFFERENT clause, and checking against it would be checking the wrong
     // formula.  Measured on the first real `mul` obligation: 17 literals max.
-    let _ = if isz == 0 then (if nl < 32 then (let _ = c_lits[n_cl[0] * 32 + nl] = v in 0) else sys_exit(2)) else 0;
+    let _ = if isz == 0 then (if nl < cl_stride(n_cl) then (let _ = c_lits[n_cl[0] * cl_stride(n_cl) + nl] = v in 0) else sys_exit(2)) else 0;
     let nl = nl + (if isz == 0 then 1 else 0);
     let k = k + 1;
     0
@@ -325,7 +334,7 @@ fn add_derived(c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64],
     // valid certificate refused for a reason nothing printed, while the Python
     // reference checker verified all 1712 steps.  A cap that is too small must
     // SAY SO, so both buffers now refuse instead of truncating.
-    let _ = if in_h == 0 then (if isz == 1 then (let _ = in_h = 1 in 0) else (if nl < 32 then (let _ = lits[nl] = v in 0) else sys_exit(2))) else (if isz == 1 then 0 else (if nh < 1024 then (let _ = hints[nh] = v in 0) else sys_exit(2)));
+    let _ = if in_h == 0 then (if isz == 1 then (let _ = in_h = 1 in 0) else (if nl < cl_stride(n_cl) then (let _ = lits[nl] = v in 0) else sys_exit(2))) else (if isz == 1 then 0 else (if nh < 1024 then (let _ = hints[nh] = v in 0) else sys_exit(2)));
     let _ = if (isz == 0) * (in_h == 0) == 1 then (let _ = nl = nl + 1 in 0) else 0;
     let _ = if (isz == 0) * (in_h == 1) == 1 then (let _ = nh = nh + 1 in 0) else 0;
     let k = k + 1;
@@ -341,7 +350,7 @@ fn add_derived(c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64],
   let _ = c_len[n_cl[0]] = nl;
   let j = 0;
   while j < nl {
-    let _ = c_lits[n_cl[0] * 32 + j] = lits[j];
+    let _ = c_lits[n_cl[0] * cl_stride(n_cl) + j] = lits[j];
     let j = j + 1;
     0
   };
@@ -486,9 +495,9 @@ fn bb_emit(c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64], ln: i64, l0: i
   let cap = if n_cl[1] > 0 then n_cl[1] else 16384;
   let _ = if slot < cap then (let _ = c_id[slot] = 0 - (slot + 1) in
                                 let _ = c_len[slot] = ln in
-                                let _ = c_lits[slot * 32 + 0] = l0 in
-                                let _ = if ln > 1 then (let _ = c_lits[slot * 32 + 1] = l1 in 0) else 0 in
-                                let _ = if ln > 2 then (let _ = c_lits[slot * 32 + 2] = l2 in 0) else 0 in 0) else 0;
+                                let _ = c_lits[slot * cl_stride(n_cl) + 0] = l0 in
+                                let _ = if ln > 1 then (let _ = c_lits[slot * cl_stride(n_cl) + 1] = l1 in 0) else 0 in
+                                let _ = if ln > 2 then (let _ = c_lits[slot * cl_stride(n_cl) + 2] = l2 in 0) else 0 in 0) else 0;
   let _ = n_cl[0] = slot + 1;
   0
 }
@@ -977,7 +986,7 @@ fn bb_bcp(assign: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64]) -> i64 {
       let sat = 0;
       let j = 0;
       while j < c_len[i] {
-        let lv = c_lits[i * 32 + j];
+        let lv = c_lits[i * cl_stride(n_cl) + j];
         let sv = if lv > 0 then lv else (0 - lv);
         let want = if lv > 0 then 1 else (0 - 1);
         let cur = asgn_get(assign, sv);
@@ -1154,24 +1163,24 @@ fn ob_blast(st: [i64], src: str, wt: [i64], nv: [i64],
 // count, same length, same literals in the same order -- the producer and this file
 // emit gates in the same sequence, which is what the alignment bought.
 // one clause: same literals in the same order
-fn ob_cmpcl(ln: i64, c_lits1: [i64], c_lits2: [i64], slot: i64) -> i64 {
+fn ob_cmpcl(ln: i64, c_lits1: [i64], c_lits2: [i64], slot: i64, stride: i64) -> i64 {
   let same = 1;
   let j = 0;
   while j < ln {
-    let _ = if c_lits1[slot * 32 + j] != c_lits2[slot * 32 + j] then (let _ = same = 0 in 0) else 0;
+    let _ = if c_lits1[slot * stride + j] != c_lits2[slot * stride + j] then (let _ = same = 0 in 0) else 0;
     let j = j + 1;
     0
   };
   same
 }
 
-fn ob_cmp(n1: i64, c_len1: [i64], c_lits1: [i64], n2: i64, c_len2: [i64], c_lits2: [i64]) -> i64 {
+fn ob_cmp(n1: i64, c_len1: [i64], c_lits1: [i64], n2: i64, c_len2: [i64], c_lits2: [i64], stride: i64) -> i64 {
   let same = if n1 == n2 then 1 else 0;
   let i = 0;
   while i < n1 {
     let _ = if i < n2 then (
         let _ = if c_len1[i] != c_len2[i] then (let _ = same = 0 in 0) else 0 in
-        let _ = if ob_cmpcl(c_len1[i], c_lits1, c_lits2, i) == 0 then (let _ = same = 0 in 0) else 0 in 0)
+        let _ = if ob_cmpcl(c_len1[i], c_lits1, c_lits2, i, stride) == 0 then (let _ = same = 0 in 0) else 0 in 0)
       else 0;
     let i = i + 1;
     0
@@ -1183,16 +1192,18 @@ fn ob_cmp(n1: i64, c_len1: [i64], c_lits1: [i64], n2: i64, c_len2: [i64], c_lits
 fn verify_cert(cert: str, obl: str, obl_given: i64) -> i64 {
   let c_id = zeros(16384);
   let c_len = zeros(16384);
-  let c_lits = zeros(524288);
+  // 16384 slots at the certificate path's stride of 64
+  let c_lits = zeros(1048576);
   let assign = zeros(32768);
   let st = zeros(8);
-  let n_cl = zeros(2);
+  let n_cl = zeros(3);
+  let _ = n_cl[2] = 64;
   let oid = zeros(65);
   let oid_len = [0];
   let pos = [0];
   let line = zeros(4096);
   let toks = zeros(512);
-  let lits = zeros(32);
+  let lits = zeros(64);
   let hints = zeros(1024);
   let done = 0;
   while done == 0 {
@@ -1213,13 +1224,14 @@ fn verify_cert(cert: str, obl: str, obl_given: i64) -> i64 {
   // nothing to compare against, and that is already reported as binding=UNBOUND.
   let g_id = zeros(16384);
   let g_len = zeros(16384);
-  let g_lits = zeros(524288);
-  let g_ncl = zeros(2);
+  let g_lits = zeros(1048576);
+  let g_ncl = zeros(3);
+  let _ = g_ncl[2] = 64;
   let g_nv = zeros(2);
   let g_wt = zeros(16384);
   let _ = g_nv[1] = 8192;
   let _ = if obl_given == 1 then ob_blast(st, obl, g_wt, g_nv, g_id, g_len, g_lits, g_ncl) else 0;
-  let gm = if obl_given == 1 then (if st[5] == 0 then ob_cmp(st[4], c_len, c_lits, g_ncl[0], g_len, g_lits) else 0) else 1;
+  let gm = if obl_given == 1 then (if st[5] == 0 then ob_cmp(st[4], c_len, c_lits, g_ncl[0], g_len, g_lits, 64) else 0) else 1;
   let _ = if obl_given == 1 then (if st[5] == 0 then 0 else sys_exit(3)) else 0;
   let _ = if gm == 1 then 0 else (let _ = st[5] = 98 in sys_exit(3));
   // output
@@ -1261,7 +1273,7 @@ fn bb_reset(c_id: [i64], c_len: [i64], c_lits: [i64], n_cl: [i64], assign: [i64]
     0
   };
   let i = 0;
-  while i < used * 32 {
+  while i < used * cl_stride(n_cl) {
     let _ = c_lits[i] = 0;
     let i = i + 1;
     0
@@ -4057,7 +4069,7 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let sobuf = zeros(256);
   let sopos = [0];
   let snv = zeros(2);
-  let sn_cl = zeros(2);
+  let sn_cl = zeros(3);
   let _ = sn_cl[1] = sz_c;
   let _ = snv[1] = sz_a;
   let sa = zeros(sz_w);

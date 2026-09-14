@@ -1,0 +1,15 @@
+% Obligation: x * 3 == x + (x << 1)
+% The first obligation in the tree that uses `mul`. It is a real
+% multiplier-vs-adder miter: mul(x,3) builds two partial-product rows and one
+% 64-bit ripple-carry add, and the right-hand side reaches the same value
+% through the shifter and the adder. Before `mul` existed, no .obl could state
+% a multiplication at all (tools/certgen.py blast(): var/const/and/or/xor/not/
+% add/shl/lshr/eq).
+obligation mul_three_is_x_plus_shl1
+1 var x
+2 const 3
+3 mul 1 2
+4 shl 1 1
+5 add 1 4
+6 eq 3 5
+prove 6
