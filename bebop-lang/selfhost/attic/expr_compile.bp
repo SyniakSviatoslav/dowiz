@@ -3119,11 +3119,12 @@ fn emit_offsets(src: str) -> [i64] {
     let ed_pz = if ez_pz[0] >= ecnt_pz[0] then 1 else 0;
     0
   };
+  let stk_q = zeros(1088);
   let i = zeros(1024);
   while i[0] < cnt[0] {
     let tmp = zeros(65536);
     let tn = zeros(1024);
-    let _ = compile_fn_at(src, fpos[i[0]], 0, ptab, tmp, tn);
+    let _ = compile_fn_at(src, fpos[i[0]], 0, ptab, tmp, tn, stk_q);
     let _ = sizes[i[0]] = tn[0];
     let _ = i[0] = i[0] + 1;
     0

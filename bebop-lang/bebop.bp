@@ -147,14 +147,15 @@ fn diag_exit(s: str, p: i64, code: i64) -> i64 {
   let at18 = if code == 115 then diag_str(buf, at, "too many structs (cap 32)") else at17;
   let at19 = if code == 116 then diag_str(buf, at, "too many fields in one struct (max 16)") else at18;
   let at20 = if code == 117 then diag_str(buf, at, "ambiguous field name -- structs disagree on its offset") else at19;
-  let at21 = if code == 118 then diag_str(buf, at, "tuple width does not match the fn's declared return arity") else at20;
-  let at22 = if code == 119 then diag_str(buf, at, "destructuring let does not match the callee's declared return arity") else at21;
-  let at23 = if code == 120 then diag_str(buf, at, "multi-value fn called outside a destructuring let -- x1 and up would be dropped") else at22;
-  let at24 = if code == 121 then diag_str(buf, at, "more than 3 return values -- the convention is x0..x2") else at23;
-  let at25 = if code == 122 then diag_str(buf, at, "call_fn takes a function value plus 0..13 arguments") else at24;
-  let at26 = if code == 123 then diag_str(buf, at, "call_packed takes a packed closure plus 0..12 arguments") else at25;
-  let at27 = if code == 84 then diag_str(buf, at, "type error: a declared type does not match its use here (index / argument / return)") else at26;
-  let mlen = at27 - at;
+  let at21 = if code == 93 then diag_str(buf, at, "call argument count does not match fn declaration") else at20;
+  let at22 = if code == 118 then diag_str(buf, at, "tuple width does not match the fn's declared return arity") else at21;
+  let at23 = if code == 119 then diag_str(buf, at, "destructuring let does not match the callee's declared return arity") else at22;
+  let at24 = if code == 120 then diag_str(buf, at, "multi-value fn called outside a destructuring let -- x1 and up would be dropped") else at23;
+  let at25 = if code == 121 then diag_str(buf, at, "more than 3 return values -- the convention is x0..x2") else at24;
+  let at26 = if code == 122 then diag_str(buf, at, "call_fn takes a function value plus 0..13 arguments") else at25;
+  let at27 = if code == 123 then diag_str(buf, at, "call_packed takes a packed closure plus 0..12 arguments") else at26;
+  let at28 = if code == 84 then diag_str(buf, at, "type error: a declared type does not match its use here (index / argument / return)") else at27;
+  let mlen = at28 - at;
   let final_at = at + mlen;
   let _ = buf[final_at] = 10;
   let _ = sys_write(2, buf, final_at + 1);
@@ -1187,6 +1188,43 @@ fn fn_ret_arity(s: str, name: i64, fntab: [i64], strn: i64) -> i64 {
   if sp < 0 then 1 else fn_ret_arity_at(s, sp, strn)
 }
 
+// ---- ROADMAP F2 step 3+4: parameter-arity lookup ----
+// A fn's DECLARED parameter arity, read off its own header at the source offset
+// Same pattern as A21's return-arity table but counts parameters between `(` and `)`
+// Count is 0 if next non-space after `(` is `)`, otherwise commas+1. Mirrors fn_ret_arity_tuple.
+fn fn_param_arity_at(s: str, sp: i64, strn: i64) -> i64 {
+  let p = [sp, strn];
+  let _ = skip_to(s, p, 40);
+  let j = [p[0] + 1];
+  let cm = [0];
+  let count = [0];
+  let has_content = [0];
+  let go = 1;
+  while go == 1 {
+    let at_end = if j[0] >= strn then 1 else 0;
+    let c = if at_end == 1 then 0 else char(s, j[0]);
+    let c1 = if j[0] + 1 >= strn then 0 else char(s, j[0] + 1);
+    let is_cmt = (if c == 47 then 1 else 0) * (if c1 == 47 then 1 else 0);
+    let _ = cm[0] = j[0];
+    let _ = if is_cmt == 1 then skip_line_comment_n(s, cm, strn) else 0;
+    let is_ws = (if c == 32 then 1 else 0) + (if c == 9 then 1 else 0) + (if c == 10 then 1 else 0) + (if c == 13 then 1 else 0);
+    let is_rp = if c == 41 then 1 else 0;
+    let is_comma = if c == 44 then 1 else 0;
+    let _ = if is_comma == 1 then (let _ = count[0] = count[0] + 1 in 0) else 0;
+    let _ = if (1 - is_rp) * (1 - is_ws) * (1 - is_cmt) == 1 then (let _ = has_content[0] = 1 in 0) else 0;
+    let stop = at_end + is_rp + (if c == 123 then 1 else 0);
+    let go = if stop >= 1 then 0 else 1;
+    let _ = j[0] = if is_cmt == 1 then cm[0] else j[0] + 1;
+    0
+  };
+  if has_content[0] == 0 then 0 else (if count[0] == 0 then 1 else count[0] + 1)
+}
+
+fn fn_param_arity(s: str, name: i64, fntab: [i64], strn: i64) -> i64 {
+  let sp = ft_srcpos(fntab, name);
+  if sp < 0 then 0 else fn_param_arity_at(s, sp, strn)
+}
+
 // Does this compilation unit declare any tuple-returning fn? ONE source scan, cached in
 // fntab[7101] (0 = not scanned, 1 = no, 2 = yes; a fresh fntab is zeros so the lifetime is
 // the unit, like A22's fntab[7000]). It bounds emit_bl_call's arity guard -- an O(#fns)
@@ -1356,6 +1394,9 @@ fn emit_bl_call(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i6
   let cpos = pos[0];
   let _ = if unit_has_tuple_fn(s, fntab, strn) == 1 then (if name == fntab[7102] then 0 else (if fn_ret_arity(s, name, fntab, strn) > 1 then diag_exit(s, cpos, 120) else 0)) else 0;
   let nargs = parse_operands(s, pos, insns, n, stab, selfname, selfstart, fntab, name, 0);
+  // F2: check parameter arity -- user fns only (builtins have no fntab entry)
+  let sp = ft_srcpos(fntab, name);
+  let _ = if sp >= 0 then (let parity = fn_param_arity(s, name, fntab, strn) in if nargs != parity then diag_exit(s, cpos, 93) else 0) else 0;
   // Every window temp deeper than the args survives the call in cs/slot;
   // then a parallel move places the args into x0..x(nargs-1) (params 9-14
   // arrive in x8..x13, so target register == argument index uniformly).

@@ -368,24 +368,6 @@ fn qdsl_fingerprint(node: i64, a: [i64]) -> i64 {
   h
 }
 
-fn qdsl_explain(node: i64, a: [i64], buf: [i64], bp: [i64]) -> i64 {
-  let kind = a[node]; let nc = a[node+1]; let attr = a[node+2];
-  let _ = if kind == 1 then
-    (let _ = buf[bp[0]] = 113 in let _ = bp[0] = bp[0] + 1 in 0)  // 'q'
-  else 0;
-  let _ = if kind == 1 then
-    (let _ = buf[bp[0]] = 32 in let _ = bp[0] = bp[0] + 1 in 0)  // ' '
-  else 0;
-  let ci = 0;
-  while ci < nc {
-    let child = a[node+3+ci];
-    let _ = qdsl_explain(child, a, buf, bp);
-    let ci = ci + 1;
-    0
-  };
-  bp[0]
-}
-
 fn qdsl_explain_ident(node: i64, a: [i64], sb: [i64], buf: [i64], bp: [i64]) -> i64 {
   let bu = a[node+2]; let sp = a[node+1];  // attr=bu, nch=sp (name length+1)
   let k = 0;
