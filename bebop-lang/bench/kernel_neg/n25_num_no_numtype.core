@@ -1,0 +1,15 @@
+% n25_num_no_numtype -- a numeral with NOTHING NOMINATED has no type and is
+% refused (kernel 32). The alternative, a built-in default type, would let a
+% file state a theorem about numerals it never declared a home for.
+% Note there is deliberately NO `numtype` line here.
+0 sort 0
+axiom I64 : 0
+1 const I64
+2 sort 0
+3 pi 1 2
+axiom P : 3
+4 const P
+5 num 7
+6 app 4 5
+7 sort 0
+check 6 : 7

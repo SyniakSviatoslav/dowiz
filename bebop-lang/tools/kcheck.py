@@ -86,9 +86,48 @@ import sys
 MAXFUEL = 100000          # conversion fuel; exhaustion FAILS LOUDLY, never accepts
 LEVEL_RULE = os.environ.get('KCHECK_LEVEL', 'max')   # 'max' (default) or 'imax'; see infer's pi case
 
+# STRUCTURAL FUEL (2026-09-14, mirroring tcheck_kernel.bp's k_burn in shift/subst/
+# conv/occurs).  The kernel spends structural steps from the SAME cell as reduction
+# (K[9], k_fuel_cap() = 4096, refilled once per declaration); this twin keeps a
+# SEPARATE cell with the same cap and the same refill point, because its reduction
+# budget is an independent implementation choice (MAXFUEL, per file) and mirroring
+# the RULE -- "structural recursion is bounded and exhaustion fails closed" -- is
+# what the twin is for.  MEASURED 2026-09-14: neither side's structural bound is
+# reachable from a `.core` file, because the id2uid table caps a file at
+# (25616 - 24592) = 1024 nodes, so a declaration cannot present more than ~1024
+# structural steps.  Both bounds are therefore defence in depth, not live gates --
+# which is a fact worth stating rather than a reason to omit them.
+STRUCTFUEL = 4096
+
+# THE VERDICT RANGE WAS STALE (2026-09-14).  It read 10..31 in two places while the
+# kernel's own header already documented 32 (a numeral with no nominated numeral
+# type), 33 (the nominated type is not a type) and 34 (conversion fuel exhausted).
+# A kernel that answered 34 was therefore scored as NOT ANSWERING: `kernel_neg_bin`
+# would print NOT MEASURED and `kernel_parity` would drop a fixture -- an instrument
+# reporting a correct rejection as a broken instrument.  71 stays OUT of the range
+# on purpose: it is capacity, which is the kernel failing to answer, not answering.
+REJECT_LO, REJECT_HI = 10, 34
+
+
 
 class KError(Exception):
     """A rejection. The kernel saying no is a RESULT, not a crash."""
+
+
+SF = [STRUCTFUEL]         # the structural cell; refill_struct() is the kp_decl mirror
+
+
+def refill_struct():
+    SF[0] = STRUCTFUEL
+
+
+def burn(sf):
+    """One structural step. Exhaustion RAISES, i.e. REJECTS -- never accepts."""
+    if sf[0] <= 0:
+        raise KError('structural fuel exhausted (%d steps). shift/subst/conv/occurs '
+                     'are bounded; the kernel records code 34 here and rejects.'
+                     % STRUCTFUEL)
+    sf[0] -= 1
 
 
 # ---------------------------------------------------------------- term syntax
@@ -108,7 +147,7 @@ def parse(path):
         if not t or t.startswith('%'):
             continue
         w = t.split()
-        if w[0] in ('def', 'axiom', 'inductive', 'check', 'elim'):
+        if w[0] in ('def', 'axiom', 'inductive', 'check', 'elim', 'numtype'):
             decls.append((lineno, w))
             continue
         try:
@@ -153,6 +192,12 @@ def parse(path):
             nodes[nid] = ('app', ref(args[0]), ref(args[1]))
         elif tag == 'const':
             nodes[nid] = ('const', args[0])
+        elif tag == 'num':
+            # TAG 7 `num` (tcheck_kernel.bp:36-68), taught to the twin 2026-09-14.
+            # A NUMERAL: one field, its value.  The kernel's driver classifies a
+            # node word by its FIRST BYTE only (tkernel.bp kp_node, `n` -> tag 7),
+            # so `num` is the spelling both sides read.
+            nodes[nid] = ('num', int(args[0]))
         else:
             raise KError('line %d: unknown tag %r' % (lineno, tag))
     return nodes, decls, checks
@@ -161,10 +206,12 @@ def parse(path):
 # ------------------------------------------------------------- de Bruijn shift
 
 def shift(t, d, cutoff=0):
+    burn(SF)
     tag = t[0]
     if tag == 'var':
         return ('var', t[1] + d) if t[1] >= cutoff else t
-    if tag in ('sort', 'const'):
+    # a NUMERAL is closed, exactly like sort and const, so shifting leaves it alone
+    if tag in ('sort', 'const', 'num'):
         return t
     if tag == 'pi':
         return ('pi', shift(t[1], d, cutoff), shift(t[2], d, cutoff + 1))
@@ -177,10 +224,11 @@ def shift(t, d, cutoff=0):
 
 def subst(t, j, s):
     """t[j := s], with s shifted as it goes under binders."""
+    burn(SF)
     tag = t[0]
     if tag == 'var':
         return s if t[1] == j else (('var', t[1] - 1) if t[1] > j else t)
-    if tag in ('sort', 'const'):
+    if tag in ('sort', 'const', 'num'):
         return t
     if tag == 'pi':
         return ('pi', subst(t[1], j, s), subst(t[2], j + 1, shift(s, 1)))
@@ -199,6 +247,11 @@ class Env:
         self.bodies = {}     # const name -> body term (defs only; axioms have none)
         self.inductives = {} # inductive name -> (arity term, [(ctor name, ctor type)])
         self.elims = {}      # eliminator name -> inductive name
+        # THE NUMERAL TYPE IS NOMINATED, NOT BUILT IN (tcheck_kernel.bp:60-66).
+        # A file says `numtype I64`; None = nothing nominated, and a numeral with
+        # nothing nominated has NO type and is REFUSED (kernel code 32) rather
+        # than being handed a default.  Mirrored here 2026-09-14.
+        self.numtype = None
 
 
 def spine(t):
@@ -279,10 +332,17 @@ def conv(env, a, b, fuel):
     No eta -- deliberately: eta costs the kernel a case and buys nothing the
     elaborator cannot do, and every rule the kernel does not have is a rule
     nobody has to verify."""
+    burn(SF)
     a, b = whnf(env, a, fuel), whnf(env, b, fuel)
     if a[0] != b[0]:
         return False
     if a[0] == 'sort':
+        return a[1] == b[1]
+    # TWO NUMERALS ARE CONVERTIBLE IFF THEIR VALUES ARE EQUAL -- the same leaf
+    # comparison sort/var/const use (tcheck_kernel.bp k_conv's `leaf` set).  Sound
+    # only because `num` is a ONE-FIELD node; a two-field node kind placed in this
+    # set would silently ignore half of itself.
+    if a[0] == 'num':
         return a[1] == b[1]
     if a[0] == 'var':
         return a[1] == b[1]
@@ -313,6 +373,15 @@ def infer(env, ctx, t, fuel):
         if t[1] not in env.types:
             raise KError('const %s is not declared' % t[1])
         return env.types[t[1]]
+    if tag == 'num':
+        # ONE typing rule: a numeral inhabits the NOMINATED numeral type. Kernel
+        # code 32 is the refusal when nothing was nominated.
+        if env.numtype is None:
+            raise KError('numeral %d: no numeral type has been nominated. A file '
+                         'must say `numtype <name>` before a numeral has a type; '
+                         'giving one a default type would let a theorem be stated '
+                         'about numerals the file never declared a home for.' % t[1])
+        return ('const', env.numtype)
     if tag == 'pi':
         u = sort_of(env, ctx, t[1], fuel)
         v = sort_of(env, [t[1]] + ctx, t[2], fuel)
@@ -351,6 +420,8 @@ def sort_of(env, ctx, t, fuel):
 
 def show(t):
     tag = t[0]
+    if tag == 'num':
+        return '%d' % t[1]
     if tag == 'sort':
         return 'Sort %d' % t[1]
     if tag == 'var':
@@ -369,6 +440,13 @@ def show(t):
 # ------------------------------------------------------------ positivity check
 
 def occurs(name, t):
+    # Bounded since 2026-09-14, and the structural tags are named EXPLICITLY here
+    # for the reason the kernel's k_occurs learned the hard way: it tested
+    # `tag >= 4`, which enrolled tag 7 `num` into the two-field set and followed a
+    # numeral's VALUE as a node id -- `bench/kernel_neg/n23_occurs_cycle.core`
+    # closed a cycle through that forged edge and the kernel died with trap 82.
+    # A numeral contains no constant, so it is a leaf and does not occur.
+    burn(SF)
     if t[0] == 'const':
         return t[1] == name
     if t[0] in ('pi', 'lam', 'app'):
@@ -515,7 +593,25 @@ def run_file(path):
         n_checked = 0
         for lineno, w in decls:
             kind = w[0]
-            if kind == 'axiom':
+            # kp_decl refills K[9] once per declaration; the twin's structural cell
+            # is refilled at the same point, so the bound is per `check`, not per file.
+            refill_struct()
+            if kind == 'numtype':
+                # CHECKED, NOT TRUSTED (tcheck_kernel.bp k_numtype_set): the name
+                # must already be declared, and its declared type must be a SORT --
+                # so `numtype b` for a VALUE `b : A` is refused (kernel code 33)
+                # even though A is itself a type.
+                nm = w[1]
+                if nm not in env.types:
+                    raise KError('line %d: numtype %s -- %s is not declared'
+                                 % (lineno, nm, nm))
+                ty = env.types[nm]
+                if ty[0] != 'sort':
+                    raise KError('line %d: numtype %s -- what was nominated is not a '
+                                 'type; its declared type is %s'
+                                 % (lineno, nm, show(ty)))
+                env.numtype = nm
+            elif kind == 'axiom':
                 nm, ty = w[1], nodes[int(w[3])]
                 sort_of(env, [], ty, fuel)
                 env.types[nm] = ty
@@ -575,9 +671,19 @@ def run_kernel_on_fixture(kernel_bin, fixture_path, seed_path='./seed/build/seed
     """
     try:
         import subprocess
-        # Run via seed binary to avoid permission issues
-        result = subprocess.run([seed_path, kernel_bin, fixture_path],
-                              capture_output=True, text=True, timeout=5)
+        # THE ARM WAS NEVER PASSED THROUGH (found and fixed 2026-09-14). This call
+        # built argv = [seed, tkernel.bin, fixture], so argc = 3, and tkernel.bp's
+        # `if argc >= 4` left K[2] = 0 -- the kernel ran under predicative `max`
+        # whatever KCHECK_LEVEL said. So `KCHECK_LEVEL=imax --corpus` switched the
+        # TWIN only, and both kernel lines it printed (`kernel_neg_bin`,
+        # `kernel_parity`) were an imax twin compared against a max kernel. The
+        # imax column of this instrument measured nothing about the second arm; on
+        # n02, whose whole purpose is to separate the arms, it would have reported
+        # a parity BREAK that was the harness's, not the kernel's.
+        argv = [seed_path, kernel_bin, fixture_path]
+        if LEVEL_RULE == 'imax':
+            argv.append('imax')
+        result = subprocess.run(argv, capture_output=True, text=True, timeout=5)
         output = result.stdout.strip()
         if not output:
             return None, True  # No output = internal error
@@ -622,7 +728,7 @@ def measure_kernel_neg_bin(kernel_bin_path, corpus_dir):
         # was scored as a rejection and the line read `0 accepted of 21`, green. Counting
         # "not 0" as "rejected" is the same defect kernel_neg_bin was added to fix.
         if (is_internal or kernel_verdict is None
-                or not (kernel_verdict == 0 or 10 <= kernel_verdict <= 31)):
+                or not (kernel_verdict == 0 or REJECT_LO <= kernel_verdict <= REJECT_HI)):
             unanswered += 1
 
     return accepted_count, len(neg), unanswered
@@ -661,7 +767,7 @@ def measure_kernel_parity(kernel_bin_path, corpus_dir):
             internals.append(f)
         elif ok and kernel_verdict == 0:
             agreement_count += 1  # Both accepted
-        elif not ok and 10 <= kernel_verdict <= 31:
+        elif not ok and REJECT_LO <= kernel_verdict <= REJECT_HI:
             agreement_count += 1  # Both rejected
         # else: disagreement (don't increment agreement_count)
 

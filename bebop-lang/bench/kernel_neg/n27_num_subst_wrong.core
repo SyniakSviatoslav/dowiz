@@ -1,0 +1,24 @@
+% n27_num_subst_wrong -- THE discriminator for p22. `f 7` claimed at `P 8`.
+% A kernel that substituted the argument but then compared numerals loosely,
+% or that dropped the substitution entirely, would accept one of these two
+% fixtures wrongly. Rejected (kernel 26).
+0 sort 0
+axiom I64 : 0
+numtype I64
+1 const I64
+2 sort 0
+3 pi 1 2
+axiom P : 3
+4 const I64
+5 const P
+6 var 0
+7 app 5 6
+8 pi 4 7
+axiom f : 8
+9 const f
+10 num 7
+11 app 9 10
+12 const P
+13 num 8
+14 app 12 13
+check 11 : 14

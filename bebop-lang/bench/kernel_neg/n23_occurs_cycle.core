@@ -1,0 +1,29 @@
+% n23_occurs_cycle -- THE UNBOUNDED RECURSION, reproduced rather than reviewed.
+%
+% ROADMAP F7 said `k_conv`, `k_shift`, `k_subst` and `k_occurs` "recurse with NO
+% fuel bound, so a crafted deep term can still crash the kernel".  DEPTH is not the
+% reachable route (a .core file caps at 1024 nodes, so a term caps at ~512 deep and
+% 2000-deep recursion was measured NOT to overflow the stack).  The reachable route
+% is a CYCLE, and only k_occurs had one, because it alone selected its structural
+% tags by a RANGE -- `tg >= 4` -- which silently enrolled tag 7 `num`.
+%
+% Node 1 is a NUMERAL whose value is 4.  A numeral's k_a is its VALUE, but k_occurs
+% read it as a node id, and 4 is the uid of node 3 -- the `pi` whose own domain is
+% node 1.  k_occurs(num) -> k_occurs(pi) -> k_occurs(num) -> ... forever.
+% Reached through positivity: k_check_inductive_ctor -> k_arg_pos -> k_occurs.
+%
+% BEFORE the fix: `./seed/build/seed ./tkernel.bin bench/kernel_neg/n23_occurs_cycle.core`
+%   -> `trap 82: SIGSEGV/SIGBUS (stack overflow or wild access)`, rc=82.
+% AFTER:  rejected 22 -- a numeral is a VALUE, so a `pi` cannot take one as its
+% domain.  The twin rejects it for the same rule, reached without the cycle: its
+% terms are trees, so the forged edge is unrepresentable there at all.
+0 sort 0
+axiom I64 : 0
+numtype I64
+1 num 4
+2 const Bad
+3 pi 1 2
+4 const Bad
+5 pi 3 4
+6 sort 0
+inductive Bad : 6 | mk : 5

@@ -1,0 +1,19 @@
+% p21_num_conv_equal -- discriminates the CONVERSION case: two numerals are
+% convertible iff their VALUES are equal. The two `7`s are distinct nodes
+% (sharing is forbidden), so accepting this requires comparing values, not ids.
+0 sort 0
+axiom I64 : 0
+numtype I64
+1 const I64
+2 sort 0
+3 pi 1 2
+axiom P : 3
+4 const P
+5 num 7
+6 app 4 5
+axiom pf : 6
+7 const pf
+8 const P
+9 num 7
+10 app 8 9
+check 7 : 10

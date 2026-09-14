@@ -1,0 +1,25 @@
+% p23_num_shift -- discriminates SHIFTING past a numeral. Inferring `var 0`
+% shifts its context type `Q 7` by 1; a numeral must come back UNCHANGED.
+% If k_shift treated tag 7 as a var or as a two-field node the copy would
+% differ from the written type and conversion would fail, so acceptance here
+% is the shift rule, not a coincidence.
+0 sort 0
+axiom I64 : 0
+numtype I64
+1 const I64
+2 sort 0
+3 pi 1 2
+axiom Q : 3
+4 const Q
+5 num 7
+6 app 4 5
+7 var 0
+8 lam 6 7
+9 const Q
+10 num 7
+11 app 9 10
+12 const Q
+13 num 7
+14 app 12 13
+15 pi 11 14
+check 8 : 15

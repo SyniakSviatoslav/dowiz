@@ -114,6 +114,18 @@ fn kp_eol(s: str, pos: [i64], n: i64) -> i64 {
 fn kp_ref(K: [i64], rid: i64, own: i64) -> i64 {
   let small = if rid < own then 1 else 0;
   let _ = if small == 1 then 0 else k_rej(K, 12);
+  // CAPACITY, MADE LOUD (2026-09-14).  The id2uid table is (25616 - 24592) = 1024
+  // cells wide and the refcount table starts where it ends, so file id 1024 IS
+  // refcount 0 -- and refcount 1024 is def-table entry 0 (26640 - 25616 = 1024).
+  // Nothing checked the width, so a file with 1024+ nodes did not fail, it LIED:
+  // measured 2026-09-14, a 1027-node file returned **14 (sharing)**, and moving its
+  // single `axiom` line after the nodes -- which empties the def table while the
+  // high ids are parsed -- flipped the same file to **0 (accepted)**.  A verdict
+  // that depends on where a declaration sits in the file is not a verdict.  71 is
+  // the capacity code k_new already uses, so overflow now reads as capacity.
+  let cap = if rid >= (25616 - 24592) then 1 else 0;
+  let _ = if cap == 1 then k_rej(K, 71) else 0;
+  let rid = if cap == 1 then 0 else rid;
   let u = K[24592 + rid];
   let _ = if u == 0 then k_rej(K, 13) else 0;
   let rc = K[25616 + rid];
@@ -148,6 +160,10 @@ fn kp_node(K: [i64], s: str, pos: [i64], n: i64) -> i64 {
   let pa = if two == 1 then u1 else a1;
   let pb = if two == 1 then u2 else 0;
   let uid = k_new(K, tag, pa, pb);
+  // same 1024-cell ceiling from the writing side; see kp_ref
+  let cap = if fid >= (25616 - 24592) then 1 else 0;
+  let _ = if cap == 1 then k_rej(K, 71) else 0;
+  let fid = if cap == 1 then 0 else fid;
   let _ = K[24592 + fid] = uid;
   0
 }

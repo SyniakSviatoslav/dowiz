@@ -94,7 +94,17 @@ fn k_new(K: [i64], tag: i64, a: i64, b: i64) -> i64 {
 // k_shift: add d to every var index at or above cut. Sorts and consts are closed,
 // so they come back unchanged; pi and lam raise the cutoff under their binder.
 fn k_shift(K: [i64], t: i64, d: i64, cut: i64) -> i64 {
-  let tg = k_tag(K, t);
+  // STRUCTURAL FUEL (2026-09-14).  k_shift recurses on TERM STRUCTURE, and until
+  // now nothing stopped it: the bound was the host's stack, which is not a bound
+  // the kernel states.  Every entry now spends from the SAME budget k_whnf uses.
+  // WHY RETURNING `t` UNCHANGED IS THE SAFE DEFAULT HERE: k_shift returns a TERM,
+  // and there is no term that means "refused", so the refusal is carried by K[4]
+  // instead -- k_burn has already recorded 34, K[4] is set-once and non-zero
+  // forever after, k_infer's `bad` guard collapses every later inference to the
+  // uid-0 sentinel, and the driver returns 34.  So an exhausted shift cannot make
+  // the kernel ACCEPT a wrong term; the file is rejected whatever this term is.
+  let fuelok = k_burn(K);
+  let tg = if fuelok == 1 then k_tag(K, t) else 0;
   let res = t;
   let vi = k_a(K, t);
   let up = if tg == 2 then (if vi >= cut then 1 else 0) else 0;
@@ -110,7 +120,13 @@ fn k_shift(K: [i64], t: i64, d: i64, cut: i64) -> i64 {
 // Follows k_shift's recursive shape: sorts and consts are closed, pi/lam/app recurse,
 // vars are checked and adjusted.
 fn k_subst(K: [i64], t: i64, j: i64, s: i64) -> i64 {
-  let tg = k_tag(K, t);
+  // STRUCTURAL FUEL (2026-09-14), same budget and same argument as k_shift: an
+  // exhausted substitution returns `t` unchanged with 34 already recorded, so the
+  // only reachable outcome is a REJECTION.  Note the direction that matters --
+  // returning the UNSUBSTITUTED term is not "assume the substitution succeeded",
+  // it is "the reject code is already set", and nothing downstream can clear it.
+  let fuelok = k_burn(K);
+  let tg = if fuelok == 1 then k_tag(K, t) else 0;
   let res = t;
   let vi = k_a(K, t);
   // Var case: check if this is the var we're replacing
@@ -176,8 +192,16 @@ fn k_whnf(K: [i64], t: i64) -> i64 {
 }
 
 fn k_conv(K: [i64], a: i64, b: i64) -> i64 {
-  let ta = k_tag(K, a);
-  let tb = k_tag(K, b);
+  // STRUCTURAL FUEL (2026-09-14).  k_whnf already spent from K[9]; the STRUCTURAL
+  // recursion of k_conv did not, so a deep pair of terms recursed unbounded.
+  // Exhaustion answers 0 = NOT CONVERTIBLE, which is the conservative direction
+  // for a checker: k_check turns a 0 into reject 26 and k_infer_app into 24, so
+  // running out of budget can only ever make the kernel reject MORE.  The two
+  // forced tags differ (0 and -1) so `same` is 0 without relying on the tag of
+  // whatever uid was passed in.
+  let fuelok = k_burn(K);
+  let ta = if fuelok == 1 then k_tag(K, a) else 0;
+  let tb = if fuelok == 1 then k_tag(K, b) else 0 - 1;
   let same = if ta == tb then 1 else 0;
   let leaf = if ta == 1 then 1 else 0;
   let leaf = if ta == 2 then 1 else leaf;
@@ -205,6 +229,8 @@ fn k_conv(K: [i64], a: i64, b: i64) -> i64 {
   let na = if r == 0 then k_whnf(K, a) else a;
   let nb = if r == 0 then k_whnf(K, b) else b;
   let moved = if r == 0 then (if na != a then 1 else (if nb != b then 1 else 0)) else 0;
+  // with the budget gone there is no retry: the answer stays 0, not convertible
+  let moved = if fuelok == 1 then moved else 0;
   let r = if moved == 1 then k_conv(K, na, nb) else r;
   r
 }
@@ -396,11 +422,36 @@ fn k_ctor_ret(K: [i64], t: i64) -> i64 {
 }
 
 // k_occurs: does the const with hash h appear anywhere inside t?
+//
+// TWO DEFECTS WERE FIXED HERE ON 2026-09-14, and only the second is a fuel bound.
+//
+// (1) `deep = if tg >= 4 then 1 else 0` walked TAG 7 `num` as a two-field node.
+//     A numeral's k_a is its VALUE, not a uid, so k_occurs followed a number into
+//     the node arrays.  This is the SAME hole the k_conv comment above describes,
+//     left open in the one function that named the structural tags by a RANGE
+//     instead of by name -- `>= 4` silently enrols every tag added after it.
+//     Reproduced, not reviewed: `bench/kernel_neg/n23_occurs_cycle.core` sets a
+//     numeral's value to the uid of the `pi` node that contains it, which closes a
+//     CYCLE through the forged edge; the recursion never terminates and the kernel
+//     died with `trap 82: SIGSEGV/SIGBUS`, rc=82.  Naming 4/5/6 explicitly makes an
+//     unrecognised tag a LEAF that does not occur, which is safe here for the same
+//     reason it is safe in k_conv: a leaf can only make positivity reject more.
+//     Note this ALSO makes the term graph acyclic again, which is what bounds the
+//     other three recursions by the uid cap.
+// (2) NO FUEL BOUND.  Every entry now spends from the same budget k_whnf uses.
+//     EXHAUSTION ANSWERS 1 = OCCURS, and the direction is load-bearing: k_occurs
+//     feeds k_arg_pos, which answers "this constructor argument is positive" only
+//     when the inductive does NOT occur in a pi domain.  "Does not occur" is the
+//     ACCEPTING answer, so defaulting to it on exhaustion would turn a resource
+//     limit into an admission of a non-positive inductive -- the exact unsoundness
+//     n03 exists to pin.  Answering OCCURS makes the argument look negative, the
+//     inductive is rejected 30, and the budget can only ever reject more.
 fn k_occurs(K: [i64], t: i64, h: i64) -> i64 {
-  let tg = k_tag(K, t);
-  let r = 0;
+  let fuelok = k_burn(K);
+  let tg = if fuelok == 1 then k_tag(K, t) else 0;
+  let r = if fuelok == 1 then 0 else 1;
   let r = if tg == 3 then (if k_a(K, t) == h then 1 else 0) else r;
-  let deep = if tg >= 4 then 1 else 0;
+  let deep = if tg == 4 then 1 else (if tg == 5 then 1 else (if tg == 6 then 1 else 0));
   let r = if deep == 1 then (if k_occurs(K, k_a(K, t), h) == 1 then 1 else k_occurs(K, k_b(K, t), h)) else r;
   r
 }

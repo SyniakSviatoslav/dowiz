@@ -1,0 +1,11 @@
+% n29_num_applied -- applying a numeral as if it were a function. Its type is
+% the nominated `I64`, which is not a pi and has no body to unfold, so the
+% application is refused (kernel 23).
+0 sort 0
+axiom I64 : 0
+numtype I64
+1 num 7
+2 num 8
+3 app 1 2
+4 const I64
+check 3 : 4

@@ -1,0 +1,17 @@
+% n26_numtype_not_a_type -- the nomination is CHECKED, not trusted. `v : I64`
+% is a VALUE, so `numtype v` is refused (kernel 33) even though I64 is itself
+% a type. Without this rule any constant could be nominated.
+0 sort 0
+axiom I64 : 0
+1 const I64
+axiom v : 1
+numtype v
+2 const I64
+3 sort 0
+4 pi 2 3
+axiom P : 4
+5 const P
+6 num 7
+7 app 5 6
+8 sort 0
+check 7 : 8

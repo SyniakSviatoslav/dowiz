@@ -1,0 +1,11 @@
+% n28_num_as_pi_domain -- a numeral is a VALUE, not a type, so it cannot be a
+% pi domain (kernel 22). This is n23's shape with the forged cycle removed:
+% n23 pins the CRASH, this pins the RULE, and the two are separate facts.
+0 sort 0
+axiom I64 : 0
+numtype I64
+1 num 7
+2 sort 0
+3 pi 1 2
+4 sort 1
+check 3 : 4
