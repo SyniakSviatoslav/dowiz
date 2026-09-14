@@ -1467,8 +1467,13 @@ fn mn_nv() -> i64 { 15 }
 fn rg_init(R: [i64], cells: i64) -> i64 {
   let _ = R[0] = 16;
   let _ = R[1] = 0;
-  let _ = R[2] = cells;
+  // The quotient registry (nd_* below) occupies the TOP of the arena, 3 cells per
+  // entry, and R[2] -- the bump allocator's limit -- is lowered to its base, so
+  // the allocator cannot reach it.  R[0] still starts at 16 and bumps exactly as
+  // before, which is why no `arena=` figure in any pre-existing row moves.
+  let _ = R[2] = cells - 3 * nd_cap();
   let _ = R[3] = 0;
+  let _ = R[7] = 0;
   let _ = R[8] = 0;
   let _ = R[9] = 0;
   0
@@ -1661,6 +1666,19 @@ fn rg_scale(R: [i64], x: i64, k: i64, out: i64) -> i64 {
   };
   let _ = rg_canon(R, out);
   out
+}
+
+fn rg_copy(R: [i64], src: i64, dst: i64) -> i64 {
+  let st = mn_w() + 1;
+  let _ = R[dst] = 0;
+  let i = 0;
+  while i < R[src] {
+    let t = rg_term(R, dst, R[src + 2 + i * st + mn_w()]);
+    let _ = mn_copy(R, src + 2 + i * st, t);
+    let i = i + 1;
+    0
+  };
+  0
 }
 
 fn rg_sub(R: [i64], x: i64, y: i64, neg: i64, out: i64) -> i64 {
@@ -2143,6 +2161,149 @@ fn ob_satsize(obuf: [i64], opos: [i64], c_id: [i64], c_len: [i64], c_lits: [i64]
   0
 }
 
+// --- LEMMA D3: nested-division composition, and symbolic floor terms ---
+// The third floor lemma the F3 miter was missing:
+//     floor(floor(x/m)/n) == floor(x/(m*n))        for m, n > 0.
+// Together with two facts that already existed it makes `floor(x/d)` a
+// NORMALISABLE symbolic expression rather than an opaque variable:
+//   A (constant)  a constant dividend needs no rule at all -- dv_split's
+//                 coefficient-wise floor IS the value floor for a constant.
+//   B (exact)     r == 0 -> floor(x/d) == q                     [D2]
+//   C (peel)      x == d*q + r -> floor(x/d) == q + floor(r/d)   [from D1, valid
+//                 for ANY integer polynomial q, which is why it can be applied
+//                 before anything is known about r]
+//   D (compose)   q == 0 -> split d = m*n at the granularity the coefficients
+//                 actually reach and recurse                     [THIS LEMMA]
+// and the resulting atoms floor(X/d) are HASH-CONSED in a registry, so two
+// independently derived quotients of the same dividend and divisor become the
+// SAME variable.  That consing is what closes the fp_mul miter: `q2` on fp_mul's
+// side and the inner quotient of `Q` on the target's side are built by different
+// routes and land on one variable.
+//
+// WHAT IS AXIOM AND WHAT IS CHECKED, stated plainly: lemma D is an AXIOM of this
+// rule, exactly as D1's remainder bound and the Tseitin clause sets are axioms.
+// It is not proved here.  What IS checked: that it is applied consistently
+// (hash-consing rows), that it agrees with ground truth wherever ground truth is
+// computable (the constant rows, and F5/F5n which already compare a two-step
+// floor against a one-step one), and that it makes the miter close.
+// Reject codes: 76 divisor not a power of two >= 2, 77 registry or quotient
+// variable budget exhausted.
+fn nd_cap() -> i64 { 64 }
+
+// k such that d == 2^k (k >= 1), else -1
+fn nd_pow2(d: i64) -> i64 {
+  let k = 0;
+  let v = 1;
+  while (if v < d then 1 else 0) * (if k < 62 then 1 else 0) == 1 {
+    let v = v * 2;
+    let k = k + 1;
+    0
+  };
+  if v == d then k else (0 - 1)
+}
+
+// structural compare of two CANONICAL polynomials, with no reject side effects
+fn nd_same(R: [i64], x: i64, y: i64) -> i64 {
+  let st = mn_w() + 1;
+  let nx = R[x];
+  let same = if nx == R[y] then 1 else 0;
+  let i = 0;
+  while i < nx {
+    let _ = if i < R[y] then (
+        let _ = if mn_eq(R, x + 2 + i * st, y + 2 + i * st) == 0 then (let _ = same = 0 in 0) else 0 in
+        let _ = if R[x + 2 + i * st + mn_w()] != R[y + 2 + i * st + mn_w()] then (let _ = same = 0 in 0) else 0 in 0)
+      else 0;
+    let i = i + 1;
+    0
+  };
+  same
+}
+
+fn nd_isconst(R: [i64], x: i64) -> i64 {
+  let st = mn_w() + 1;
+  if R[x] == 0 then 1 else (
+  if R[x] == 1 then (if R[x + 2] == 0 then 1 else 0) else 0)
+}
+
+// the quotient variable for the atom floor(x/d), hash-consed.  Quotient variables
+// are handed out from the TOP of the budget downwards, so a caller's own
+// variables (numbered from 0 up) and the rule's stay apart until they meet.
+fn nd_qvar(R: [i64], x: i64, d: i64) -> i64 {
+  let reg = R[2];
+  let n = R[7];
+  let found = 0 - 1;
+  let i = 0;
+  while i < n {
+    let _ = if found < 0 then (
+        let _ = if R[reg + i * 3] == d then (
+            let _ = if nd_same(R, R[reg + i * 3 + 1], x) == 1 then (let _ = found = R[reg + i * 3 + 2] in 0) else 0 in 0)
+          else 0 in 0)
+      else 0;
+    let i = i + 1;
+    0
+  };
+  let vi = mn_w() * mn_nv() - 1 - n;
+  let _ = if found < 0 then (
+      if (if n < nd_cap() then 1 else 0) * (if vi >= 0 then 1 else 0) == 1 then (
+          let _ = R[reg + n * 3] = d in
+          let _ = R[reg + n * 3 + 1] = x in
+          let _ = R[reg + n * 3 + 2] = vi in
+          let _ = R[7] = n + 1 in
+          let _ = found = vi in 0)
+      else (let _ = R[1] = 77 in 0))
+    else 0;
+  if found < 0 then 0 else found
+}
+
+// the granularity lemma D splits at: the largest power of two m with
+// 2 <= m < d that some coefficient of x actually reaches.  Below 2 there is no
+// progress to make and the term is atomic.
+fn nd_gran(R: [i64], x: i64, d: i64) -> i64 {
+  let st = mn_w() + 1;
+  let mx = 0;
+  let i = 0;
+  while i < R[x] {
+    let c = R[x + 2 + i * st + mn_w()];
+    let ac = if c < 0 then (0 - c) else c;
+    let _ = if ac > mx then (let _ = mx = ac in 0) else 0;
+    let i = i + 1;
+    0
+  };
+  let m = 1;
+  let v = 2;
+  while (if v <= mx then 1 else 0) * (if v < d then 1 else 0) == 1 {
+    let m = v;
+    let v = v * 2;
+    0
+  };
+  m
+}
+
+// floor(x/d) as a canonical polynomial, written into `out`.
+// Recursion terminates because case C's recursive call has q == 0 (dv_split's
+// remainder coefficients are all in [0,d)) and case D's two calls both use a
+// STRICTLY smaller divisor.
+fn nd_floor(R: [i64], x: i64, d: i64, out: i64) -> i64 {
+  let k = nd_pow2(d);
+  if k < 1 then (let _ = R[1] = 76 in let _ = R[out] = 0 in 0) else (
+    let q = rg_new(R, 32) in
+    let r = rg_new(R, 32) in
+    let _ = dv_split(R, x, d, q, r) in
+    if nd_isconst(R, x) == 1 then rg_copy(R, q, out) else (
+    if R[r] == 0 then rg_copy(R, q, out) else (
+    if R[q] != 0 then (
+      let t = rg_new(R, 32) in
+      let _ = nd_floor(R, r, d, t) in
+      let _ = rg_add(R, q, t, out) in 0)
+    else (
+      let m = nd_gran(R, x, d) in
+      if m < 2 then (let v = nd_qvar(R, x, d) in let _ = rg_var(R, out, v) in 0)
+      else (
+        let inner = rg_new(R, 32) in
+        let _ = nd_floor(R, x, m, inner) in
+        nd_floor(R, inner, d / m, out))))))
+}
+
 // --- the widened key, and fp_mul ---
 // W1/W2 exercise the representation itself: variable 14 is the top nibble of
 // word 0 and must work exactly like variable 0, and variable 15 is past
@@ -2389,6 +2550,257 @@ fn fp_selftest(obuf: [i64], opos: [i64], R: [i64], cells: i64) -> i64 {
   0
 }
 
+// --- lemma D3 rows, and the fp_mul miter WITHOUT a hand-given hypothesis ---
+fn nd_selftest(obuf: [i64], opos: [i64], R: [i64], cells: i64) -> i64 {
+  // N1 (peel, symbolic): floor((S*2^16 + P)/2^16) == S + floor(P/2^16).
+  // The left side goes through dv_split and case C; the right side is built by
+  // hand out of S and the quotient atom.  They must land on the same polynomial.
+  let _ = rg_init(R, cells);
+  let ah = rg_var(R, rg_new(R, 4), 1);
+  let al = rg_var(R, rg_new(R, 4), 2);
+  let bh = rg_var(R, rg_new(R, 4), 4);
+  let bl = rg_var(R, rg_new(R, 4), 5);
+  let ahbl = rg_mul(R, ah, bl, rg_new(R, 8));
+  let albh = rg_mul(R, al, bh, rg_new(R, 8));
+  let sS = rg_add(R, ahbl, albh, rg_new(R, 8));
+  let pP = rg_mul(R, al, bl, rg_new(R, 8));
+  let sSs = rg_scale(R, sS, 65536, rg_new(R, 8));
+  let xx = rg_add(R, sSs, pP, rg_new(R, 16));
+  let lhs = rg_new(R, 32);
+  let _ = nd_floor(R, xx, 65536, lhs);
+  let q1 = rg_new(R, 32);
+  let _ = nd_floor(R, pP, 65536, q1);
+  let rhs = rg_add(R, sS, q1, rg_new(R, 32));
+  let _ = R[4] = R[lhs];
+  let _ = rg_row(obuf, opos, "N1 D3 peel floor((S*2^16+P)/2^16)    want 1", rg_eq(R, lhs, rhs), R);
+
+  // N1n NEG: the inner divisor must be the same 2^16
+  let _ = rg_init(R, cells);
+  let ah = rg_var(R, rg_new(R, 4), 1);
+  let al = rg_var(R, rg_new(R, 4), 2);
+  let bh = rg_var(R, rg_new(R, 4), 4);
+  let bl = rg_var(R, rg_new(R, 4), 5);
+  let ahbl = rg_mul(R, ah, bl, rg_new(R, 8));
+  let albh = rg_mul(R, al, bh, rg_new(R, 8));
+  let sS = rg_add(R, ahbl, albh, rg_new(R, 8));
+  let pP = rg_mul(R, al, bl, rg_new(R, 8));
+  let sSs = rg_scale(R, sS, 65536, rg_new(R, 8));
+  let xx = rg_add(R, sSs, pP, rg_new(R, 16));
+  let lhs = rg_new(R, 32);
+  let _ = nd_floor(R, xx, 65536, lhs);
+  let q1 = rg_new(R, 32);
+  let _ = nd_floor(R, pP, 32768, q1);
+  let rhs = rg_add(R, sS, q1, rg_new(R, 32));
+  let _ = R[4] = R[lhs];
+  let _ = rg_row(obuf, opos, "N1n D3 peel wrong divisor  NEG       want 0", rg_eq(R, lhs, rhs), R);
+
+  // N2: HASH-CONSING.  Two structurally equal dividends, built by separate
+  // routes, must map to ONE quotient variable -- this is what closes F6.
+  let _ = rg_init(R, cells);
+  let al = rg_var(R, rg_new(R, 4), 2);
+  let bl = rg_var(R, rg_new(R, 4), 5);
+  let p1 = rg_mul(R, al, bl, rg_new(R, 8));
+  let p2 = rg_mul(R, bl, al, rg_new(R, 8));
+  let f1 = rg_new(R, 32);
+  let _ = nd_floor(R, p1, 65536, f1);
+  let f2 = rg_new(R, 32);
+  let _ = nd_floor(R, p2, 65536, f2);
+  let _ = R[4] = R[7];
+  let _ = rg_row(obuf, opos, "N2 D3 hash-cons al*bl == bl*al       want 1", rg_eq(R, f1, f2), R);
+
+  // N2n NEG: a different dividend must get a different variable
+  let _ = rg_init(R, cells);
+  let al = rg_var(R, rg_new(R, 4), 2);
+  let bl = rg_var(R, rg_new(R, 4), 5);
+  let p1 = rg_mul(R, al, bl, rg_new(R, 8));
+  let p2 = rg_mul(R, al, al, rg_new(R, 8));
+  let f1 = rg_new(R, 32);
+  let _ = nd_floor(R, p1, 65536, f1);
+  let f2 = rg_new(R, 32);
+  let _ = nd_floor(R, p2, 65536, f2);
+  let _ = R[4] = R[7];
+  let _ = rg_row(obuf, opos, "N2n D3 hash-cons different  NEG      want 0", rg_eq(R, f1, f2), R);
+
+  // N3: GROUND TRUTH.  On a constant the floor is computable, so nd_floor's
+  // answer is checkable against dv_split's direct quotient.
+  let _ = rg_init(R, cells);
+  let xc = rg_const(R, rg_new(R, 4), 123456789012345);
+  let f = rg_new(R, 32);
+  let _ = nd_floor(R, xc, 4294967296, f);
+  let dq = rg_new(R, 8);
+  let dr = rg_new(R, 8);
+  let _ = dv_split(R, xc, 4294967296, dq, dr);
+  let _ = R[4] = R[f];
+  let _ = rg_row(obuf, opos, "N3 D3 const /2^32 == ground truth    want 1", rg_eq(R, f, dq), R);
+
+  // N3n NEG: against the wrong divisor
+  let _ = rg_init(R, cells);
+  let xc = rg_const(R, rg_new(R, 4), 123456789012345);
+  let f = rg_new(R, 32);
+  let _ = nd_floor(R, xc, 4294967296, f);
+  let dq = rg_new(R, 8);
+  let dr = rg_new(R, 8);
+  let _ = dv_split(R, xc, 2147483648, dq, dr);
+  let _ = R[4] = R[f];
+  let _ = rg_row(obuf, opos, "N3n D3 const vs /2^31  NEG           want 0", rg_eq(R, f, dq), R);
+
+  // N4: an exact multiple plus a residue -- floor((3*2^32 + 5)/2^32) == 3
+  let _ = rg_init(R, cells);
+  let xc = rg_const(R, rg_new(R, 4), 12884901893);
+  let f = rg_new(R, 32);
+  let _ = nd_floor(R, xc, 4294967296, f);
+  let three = rg_const(R, rg_new(R, 4), 3);
+  let _ = R[4] = R[f];
+  let _ = rg_row(obuf, opos, "N4 D3 (3*2^32+5)/2^32 == 3           want 1", rg_eq(R, f, three), R);
+
+  // N4n NEG
+  let _ = rg_init(R, cells);
+  let xc = rg_const(R, rg_new(R, 4), 12884901893);
+  let f = rg_new(R, 32);
+  let _ = nd_floor(R, xc, 4294967296, f);
+  let four = rg_const(R, rg_new(R, 4), 4);
+  let _ = R[4] = R[f];
+  let _ = rg_row(obuf, opos, "N4n D3 (3*2^32+5)/2^32 == 4  NEG     want 0", rg_eq(R, f, four), R);
+
+  // N5: just under the divisor -- floor((2^32-1)/2^32) == 0, and the rule must
+  // return the ZERO polynomial rather than inventing a quotient atom.
+  let _ = rg_init(R, cells);
+  let xc = rg_const(R, rg_new(R, 4), 4294967295);
+  let f = rg_new(R, 32);
+  let _ = nd_floor(R, xc, 4294967296, f);
+  let z = rg_const(R, rg_new(R, 4), 0);
+  let _ = R[4] = R[f];
+  let _ = rg_row(obuf, opos, "N5 D3 (2^32-1)/2^32 == 0             want 1", rg_eq(R, f, z), R);
+
+  // F6: THE fp_mul MITER, with NOTHING handed to the rule.  fp_mul's own
+  // computation on the left (fp.bp:6-29: split at 32, split the low halves at 16,
+  // ll_l>>16 then >>16 again), the claim (a*b)>>32 on the right, and the only
+  // bridge is lemma D3 plus the hash-consing.  F3 above is the same miter
+  // WITHOUT D3 and answers 0; F4 is the same miter with the hypothesis given by
+  // hand.  This row is the one that matters.
+  let _ = rg_init(R, cells);
+  let a1 = rg_var(R, rg_new(R, 4), 0);
+  let ah = rg_var(R, rg_new(R, 4), 1);
+  let al = rg_var(R, rg_new(R, 4), 2);
+  let b1 = rg_var(R, rg_new(R, 4), 3);
+  let bh = rg_var(R, rg_new(R, 4), 4);
+  let bl = rg_var(R, rg_new(R, 4), 5);
+  let ahs = rg_scale(R, ah, 65536, rg_new(R, 4));
+  let a0 = rg_add(R, ahs, al, rg_new(R, 8));
+  let bhs = rg_scale(R, bh, 65536, rg_new(R, 4));
+  let b0 = rg_add(R, bhs, bl, rg_new(R, 8));
+  let a1b1 = rg_mul(R, a1, b1, rg_new(R, 8));
+  let hi = rg_scale(R, a1b1, 4294967296, rg_new(R, 8));
+  let a1b0 = rg_mul(R, a1, b0, rg_new(R, 8));
+  let a0b1 = rg_mul(R, a0, b1, rg_new(R, 8));
+  let mid = rg_add(R, a1b0, a0b1, rg_new(R, 16));
+  let tt = rg_add(R, hi, mid, rg_new(R, 32));
+  let ahbh = rg_mul(R, ah, bh, rg_new(R, 8));
+  let ahbl = rg_mul(R, ah, bl, rg_new(R, 8));
+  let albh = rg_mul(R, al, bh, rg_new(R, 8));
+  let sS = rg_add(R, ahbl, albh, rg_new(R, 16));
+  let pP = rg_mul(R, al, bl, rg_new(R, 8));
+  let q1 = rg_new(R, 32);
+  let _ = nd_floor(R, pP, 65536, q1);
+  let inner = rg_add(R, sS, q1, rg_new(R, 32));
+  let q2 = rg_new(R, 32);
+  let _ = nd_floor(R, inner, 65536, q2);
+  let low = rg_add(R, ahbh, q2, rg_new(R, 16));
+  let pfp = rg_add(R, tt, low, rg_new(R, 32));
+  let a0b0 = rg_mul(R, a0, b0, rg_new(R, 16));
+  let bq = rg_new(R, 32);
+  let _ = nd_floor(R, a0b0, 4294967296, bq);
+  let tgt = rg_add(R, tt, bq, rg_new(R, 32));
+  let _ = R[4] = R[pfp];
+  let _ = R[5] = R[7];
+  let _ = rg_row(obuf, opos, "F6 fp_mul MITER via D3, no hypothesis  want 1", rg_eq(R, pfp, tgt), R);
+
+  // F6n NEG: the target's divisor must be 2^32.  With 2^31 the miter must fail,
+  // which is what shows F6 is not closing for a trivial reason.
+  let _ = rg_init(R, cells);
+  let a1 = rg_var(R, rg_new(R, 4), 0);
+  let ah = rg_var(R, rg_new(R, 4), 1);
+  let al = rg_var(R, rg_new(R, 4), 2);
+  let b1 = rg_var(R, rg_new(R, 4), 3);
+  let bh = rg_var(R, rg_new(R, 4), 4);
+  let bl = rg_var(R, rg_new(R, 4), 5);
+  let ahs = rg_scale(R, ah, 65536, rg_new(R, 4));
+  let a0 = rg_add(R, ahs, al, rg_new(R, 8));
+  let bhs = rg_scale(R, bh, 65536, rg_new(R, 4));
+  let b0 = rg_add(R, bhs, bl, rg_new(R, 8));
+  let a1b1 = rg_mul(R, a1, b1, rg_new(R, 8));
+  let hi = rg_scale(R, a1b1, 4294967296, rg_new(R, 8));
+  let a1b0 = rg_mul(R, a1, b0, rg_new(R, 8));
+  let a0b1 = rg_mul(R, a0, b1, rg_new(R, 8));
+  let mid = rg_add(R, a1b0, a0b1, rg_new(R, 16));
+  let tt = rg_add(R, hi, mid, rg_new(R, 32));
+  let ahbh = rg_mul(R, ah, bh, rg_new(R, 8));
+  let ahbl = rg_mul(R, ah, bl, rg_new(R, 8));
+  let albh = rg_mul(R, al, bh, rg_new(R, 8));
+  let sS = rg_add(R, ahbl, albh, rg_new(R, 16));
+  let pP = rg_mul(R, al, bl, rg_new(R, 8));
+  let q1 = rg_new(R, 32);
+  let _ = nd_floor(R, pP, 65536, q1);
+  let inner = rg_add(R, sS, q1, rg_new(R, 32));
+  let q2 = rg_new(R, 32);
+  let _ = nd_floor(R, inner, 65536, q2);
+  let low = rg_add(R, ahbh, q2, rg_new(R, 16));
+  let pfp = rg_add(R, tt, low, rg_new(R, 32));
+  let a0b0 = rg_mul(R, a0, b0, rg_new(R, 16));
+  let bq = rg_new(R, 32);
+  let _ = nd_floor(R, a0b0, 2147483648, bq);
+  let tgt = rg_add(R, tt, bq, rg_new(R, 32));
+  let _ = R[4] = R[pfp];
+  let _ = R[5] = R[7];
+  let _ = rg_row(obuf, opos, "F6n fp_mul MITER target /2^31  NEG   want 0", rg_eq(R, pfp, tgt), R);
+
+  // --- WHY IDEAL MEMBERSHIP IS THE WRONG TOOL, in three measured rows ---
+  // The alternative design was to keep the D1 relations as HYPOTHESES and decide
+  // whether the goal lies in the ideal they generate.  These rows show the goal
+  // is NOT a consequence of those equations, so a complete ideal-membership
+  // engine would correctly answer "no" and fp_mul would still be open.  Take
+  // ah = bh = 0 and al = bl = 1, so P = al*bl = 1 and S = 0.  The true bounded
+  // decomposition is q1 = 0, r1 = 1, and the conclusion floor((S+q1)/2^16) = 0.
+  // I1: the EQUATION P == 2^16*q1 + r1 is also satisfied by q1' = 2^16 and
+  //     r1' = 1 - 2^32 -- an equation has no opinion about the size of r1.
+  let _ = rg_init(R, cells);
+  let one = rg_const(R, rg_new(R, 4), 1);
+  let qbad = rg_const(R, rg_new(R, 4), 65536);
+  let rbad = rg_const(R, rg_new(R, 4), 0 - 4294967295);
+  let qs = rg_scale(R, qbad, 65536, rg_new(R, 4));
+  let recon = rg_add(R, qs, rbad, rg_new(R, 8));
+  let _ = R[4] = R[recon];
+  let _ = rg_row(obuf, opos, "I1 ideal: 1 == 2^16*2^16 + (1-2^32)  want 1", rg_eq(R, recon, one), R);
+
+  // I2: D1's BOUNDED decomposition is unique and is not that one -- the bound is
+  //     carrying information the equation does not.
+  let _ = rg_init(R, cells);
+  let one = rg_const(R, rg_new(R, 4), 1);
+  let qbad = rg_const(R, rg_new(R, 4), 65536);
+  let dq = rg_new(R, 8);
+  let dr = rg_new(R, 8);
+  let _ = dv_split(R, one, 65536, dq, dr);
+  let _ = R[4] = R[dq];
+  let _ = rg_row(obuf, opos, "I2 ideal: bounded q == 2^16  NEG     want 0", rg_eq(R, dq, qbad), R);
+
+  // I3: and the CONCLUSION changes under the unbounded witness -- 1 instead of
+  //     0 -- so the goal is false in a model of the equations.  Ideal membership
+  //     would answer "not in the ideal", correctly, and fp_mul would be no
+  //     closer.  That is why the bounds live in the RULE (nd_floor never
+  //     introduces an unconstrained quotient) and not in a hypothesis set.
+  let _ = rg_init(R, cells);
+  let qbad = rg_const(R, rg_new(R, 4), 65536);
+  let zero = rg_const(R, rg_new(R, 4), 0);
+  let cbad = rg_new(R, 16);
+  let _ = nd_floor(R, qbad, 65536, cbad);
+  let cgood = rg_new(R, 16);
+  let _ = nd_floor(R, zero, 65536, cgood);
+  let _ = R[4] = R[cbad];
+  let _ = rg_row(obuf, opos, "I3 ideal: conclusion agrees  NEG     want 0", rg_eq(R, cbad, cgood), R);
+
+  0
+}
+
 // --- path helpers ---
 fn str_to_cells(dst: [i64], src: str) -> i64 {
   let i = 0;
@@ -2450,13 +2862,17 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let sb = zeros(sz_w);
   let sr = zeros(sz_w);
   let ssh = zeros(sz_w);
-  let sz_r = if st_mode == 1 then 8192 else 1;
+  // the ring arena, widened for nd_floor's recursion scratch.  Only the LIMIT
+  // moves; R[0] still starts at 16, so every pre-existing `arena=` figure is
+  // unchanged.
+  let sz_r = if st_mode == 1 then 65536 else 1;
   let sring = zeros(sz_r);
   let _ = if st_mode == 1 then bb_selftest(sobuf, sopos, sc_id, sc_len, sc_lits, sn_cl, sassign, snv, sa, sb, sr, ssh) else 0;
   let _ = if st_mode == 1 then rg_selftest(sobuf, sopos, sring, sz_r) else 0;
   let _ = if st_mode == 1 then dv_selftest(sobuf, sopos, sring, sz_r) else 0;
   let _ = if st_mode == 1 then ob_selftest(sobuf, sopos, sring, sz_r) else 0;
   let _ = if st_mode == 1 then fp_selftest(sobuf, sopos, sring, sz_r) else 0;
+  let _ = if st_mode == 1 then nd_selftest(sobuf, sopos, sring, sz_r) else 0;
   let _ = if st_mode == 1 then ob_satsize(sobuf, sopos, sc_id, sc_len, sc_lits, sn_cl, sassign, snv, sa, sb, sr, ssh) else 0;
   let _ = if st_mode == 1 then sys_exit(0) else 0;
   let fd = sys_open(pc, lc, 0);
