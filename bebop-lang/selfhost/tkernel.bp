@@ -130,6 +130,7 @@ fn kp_node(K: [i64], s: str, pos: [i64], n: i64) -> i64 {
   let two = if kw == 97 then 1 else two;
   let lit = if kw == 115 then 1 else 0;
   let lit = if kw == 118 then 1 else lit;
+  let lit = if kw == 110 then 1 else lit;  // A21-era F7: `n <id> <value>` numeral node (tag 7)
   let a1 = if lit == 1 then kp_int(s, pos, n) else 0;
   let a1 = if kw == 99 then kp_hash(s, pos, n) else a1;
   let r1 = if two == 1 then kp_int(s, pos, n) else 0;
@@ -143,6 +144,7 @@ fn kp_node(K: [i64], s: str, pos: [i64], n: i64) -> i64 {
   let tag = if kw == 112 then 4 else tag;
   let tag = if kw == 108 then 5 else tag;
   let tag = if kw == 97 then 6 else tag;
+  let tag = if kw == 110 then 7 else tag;
   let pa = if two == 1 then u1 else a1;
   let pb = if two == 1 then u2 else 0;
   let uid = k_new(K, tag, pa, pb);
@@ -178,11 +180,14 @@ fn kp_decl(K: [i64], s: str, pos: [i64], n: i64) -> i64 {
   let isax = if kw == 97 then 1 else 0;
   let isind = if kw == 105 then 1 else 0;
   let isel = if kw == 101 then 1 else 0;
+  let isnt = if kw == 110 then 1 else 0;  // `numtype <name>` nominates the numeral type
   let nh = if isdef == 1 then kp_hash(s, pos, n) else 0;
   let nh = if isax == 1 then kp_hash(s, pos, n) else nh;
   let nh = if isind == 1 then kp_hash(s, pos, n) else nh;
   let nh = if isel == 1 then kp_hash(s, pos, n) else nh;
   let eh = if isel == 1 then kp_hash(s, pos, n) else 0;
+  let nth = if isnt == 1 then kp_hash(s, pos, n) else 0;
+  let _ = if isnt == 1 then k_numtype_set(K, nth) else 0;
   let ev = if isel == 1 then kp_int(s, pos, n) else 0;
   let _ = if isind == 1 then (let _ = kp_word(s, pos, n) in 0) else 0;  // consume `:` for inductive
   let t1 = if ischk == 1 then kp_int(s, pos, n) else 0;

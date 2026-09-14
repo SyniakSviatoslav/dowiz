@@ -29,15 +29,43 @@
 //   id2uid at K[24592 + fileid]      fileid < 1024
 //   ctx    at K[27408 + depth]       depth < 256, outermost at 0
 //   K[6]  inductive count            K[7]  constructor record count
+//   K[8]  nominated numeral type hash (0 = none declared)
 //   ind hash K[27664+i] arity K[27728+i] first-ctor K[27792+i] nctors K[27856+i]   i < 64
 //   ctor hash K[27920+j]  ctor type K[28176+j]                                     j < 256
 //
-// Tags: 1 sort, 2 var (de Bruijn), 3 const, 4 pi, 5 lam, 6 app.
+// Tags: 1 sort, 2 var (de Bruijn), 3 const, 4 pi, 5 lam, 6 app, 7 num.
+//
+// TAG 7 `num` -- a NUMERAL, added 2026-09-14 so an arithmetic theorem can be
+// STATED rather than approximated.  Everything else the statement needs (the type
+// `I64`, the machine operators, `Eq`, a precondition predicate) is an ordinary
+// `axiom` and therefore costs ZERO new trusted surface; a numeral is the one part
+// an axiom cannot carry, because `axiom 4294967296 : I64` pins the number by
+// NAMING CONVENTION outside the kernel, and a trusted artifact should not have its
+// statements mean things by convention.  The whole addition is:
+//   * one typing rule -- a numeral inhabits the NOMINATED numeral type (below);
+//   * one conversion case -- two numerals are convertible iff their VALUES are
+//     equal, the same leaf comparison `sort` and `var` already use.  That is sound
+//     here ONLY because `num` is a one-field node: k_conv's leaf path compares k_a
+//     and ignores k_b, so a two-field node kind added to that set would silently
+//     ignore half of itself.
+//   * NOTHING in k_shift or k_subst: a numeral is closed, exactly like `sort` and
+//     `const`, so their default "return t unchanged" is already the right rule --
+//     demonstrated by a substitution fixture rather than assumed.
+// What the kernel still does NOT know: what the operators MEAN.  `mul`, `fdiv`,
+// `absv` are axioms, so `mul (num 2) (num 3)` does not reduce to `num 6`.  Stating
+// the theorem needs no such reduction; CHECKING it would, and that is a
+// primitive-reduction rule per operator, not one typing rule.
+//
+// THE NUMERAL TYPE IS NOMINATED, NOT BUILT IN.  The kernel has no reserved name:
+// a file says `numtype I64` and the kernel records the hash after checking that
+// what was nominated is a type.  A numeral with nothing nominated has NO type and
+// is refused (32) rather than being given one.  K[8] holds the hash, 0 = none.
 // Reject codes: 13 undefined reference, 20 var unbound, 22 expected a type,
 //               26 check mismatch, 27 large elimination from Sort 0,
 //               28 elim of something that is not a declared inductive with a
 //               literal Sort arity, 29 constructor type above the inductive's
-//               sort, 71 capacity.
+//               sort, 32 a numeral with no nominated numeral type, 33 the
+//               nominated numeral type is not a type, 71 capacity.
 
 fn k_rej(K: [i64], code: i64) -> i64 {
   let _ = if K[4] == 0 then (let _ = K[4] = code in 0) else 0;
@@ -107,9 +135,20 @@ fn k_conv(K: [i64], a: i64, b: i64) -> i64 {
   let leaf = if ta == 1 then 1 else 0;
   let leaf = if ta == 2 then 1 else leaf;
   let leaf = if ta == 3 then 1 else leaf;
+  // a numeral is a leaf compared by VALUE -- k_a holds the number and k_b is
+  // unused, which is what makes this leaf case correct rather than lossy
+  let leaf = if ta == 7 then 1 else leaf;
   let r = 0;
   let r = if same == 1 then (if leaf == 1 then (if k_a(K, a) == k_a(K, b) then 1 else 0) else r) else r;
-  let deep = if same == 1 then (if leaf == 0 then 1 else 0) else 0;
+  // The structural path is named by TAG, not by "whatever is not a leaf".  Found by
+  // mutation 2026-09-14: with tag 7 removed from the leaf set, `deep` fired on a
+  // numeral and k_conv recursed into k_a -- which for a numeral is its VALUE, not a
+  // uid -- giving K[16 + 4294967296], a wild access that SIGSEGVs (trap 82).  So a
+  // one-field node kind that someone forgets to add to `leaf` would not merely be
+  // judged inconvertible, it would crash the kernel.  Listing 4/5/6 explicitly makes
+  // an unrecognised tag answer "not convertible" instead, which is the safe default
+  // for a checker: it can only ever reject more.
+  let deep = if same == 1 then (if ta == 4 then 1 else (if ta == 5 then 1 else (if ta == 6 then 1 else 0))) else 0;
   let r = if deep == 1 then (if k_conv(K, k_a(K, a), k_a(K, b)) == 1 then k_conv(K, k_b(K, a), k_b(K, b)) else 0) else r;
   r
 }
@@ -233,6 +272,28 @@ fn k_def_body(K: [i64], h: i64) -> i64 {
   found
 }
 
+// k_numtype_set: nominate the constant numerals inhabit.  Checked, not trusted:
+// the name must already be declared (k_def_type rejects 21 otherwise) and its
+// declared type must be a SORT, so `numtype b` for a value `b : A` is refused 33
+// even though A is itself a type.  K[8] is only written when the nomination passes.
+fn k_numtype_set(K: [i64], h: i64) -> i64 {
+  let ty = k_def_type(K, h);
+  let issort = if ty == 0 then 0 else (if k_tag(K, ty) == 1 then 1 else 0);
+  let _ = if ty == 0 then 0 else (if issort == 1 then 0 else k_rej(K, 33));
+  let _ = if issort == 1 then (let _ = K[8] = h in 0) else 0;
+  0
+}
+
+// the type of a numeral is the nominated constant, built fresh each time.  With
+// nothing nominated a numeral has no type and is REFUSED: the alternative -- a
+// default type -- would let a file state a theorem about numerals it never
+// declared a home for.
+fn k_num_type(K: [i64]) -> i64 {
+  let h = K[8];
+  let _ = if h == 0 then k_rej(K, 32) else 0;
+  if h == 0 then 0 else k_new(K, 3, h, 0)
+}
+
 // k_infer: the one rule that keeps the system consistent is the first line --
 // Sort n : Sort (n+1). A kernel with Type : Type accepts n01 and can then prove False.
 fn k_infer(K: [i64], t: i64) -> i64 {
@@ -251,6 +312,7 @@ fn k_infer(K: [i64], t: i64) -> i64 {
   let res = if tg == 4 then k_infer_pi(K, t) else res;
   let res = if tg == 5 then k_infer_lam(K, t) else res;
   let res = if tg == 6 then k_infer_app(K, t) else res;
+  let res = if tg == 7 then k_num_type(K) else res;
   res
 }
 
