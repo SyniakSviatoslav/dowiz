@@ -915,3 +915,29 @@ Durable Object at deploy.
 **DEPLOY REMAINS BLOCKED** on the Cloudflare token: it authenticates but holds no
 account-level permission (workers/scripts 403, d1/database 401) even after edits.
 Everything else for it is measured and ready.
+
+## 2026-09-15 — the service runs, and both operator surfaces now reach it
+
+**Working, verified by running it (not by compiling it):**
+- **Hub on a VPS (P67)** — `tools/native-spa-server --hub-dir <dir>`. Four bebop images:
+  `orders.store` (EvLog), `catalog.store` (Kv), `subs.store` (Kv), `roster.store` (Kv),
+  plus `signing.key` (0600). Atomic writes by rename; one process = one writer via a mutex.
+- **Customer** → menu, order, track. Money computed server-side (2×900 + 200 fee = 2000);
+  the request's `unit_price` is ignored.
+- **Notifications** — Telegram, written onto the TLS stream directly (`hyper`'s client
+  feature pulls `want`/`try-lock`, which the zero-dep gate refuses). Staff ticket carries
+  PII; the customer's message carries none. Binding is real state: `t.me/<bot>?start=<order_id>`.
+- **Owner** — `/api/auth/login`, orders queue, dashboard, actions (kernel-decided),
+  stop-list, open/close, courier list, assign.
+- **Courier** — `/api/courier/auth/login`, tasks, accept (first-writer-wins), pickup,
+  deliver, position, shift.
+- **Identity** — PBKDF2-HMAC-SHA256 600k + HMAC tokens, both built on `sha2` because
+  `hmac`/`argon2`/RNG crates are outside the allowlist. RFC 4231 + PBKDF2 vectors pass.
+  Login 0.67 s release; miss 0.659 s (indistinguishable, measured).
+
+**Still open:** local AI, voice/STT, menu import from a file, social autoposting,
+per-owner API & MCP, AR, P67 provider implementations (Hetzner/Cloudflare Tunnel),
+customer order history, delivery-zone check, scheduled orders, 43/50 product images 404,
+and the admin UI has no button for the assign endpoint that now exists.
+
+**Branch:** `bebop/main-2026-09-15` @ 4f6620c. No deploy yet (by instruction).
