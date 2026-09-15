@@ -1,5 +1,11 @@
 # Faster builds: link with LLD (mold not available in this environment; LLD is
-# ~5-40x faster than the default GNU ld, and it's already present). Applies to
-# every cargo build/test in this tree.
-[build]
+# ~5-40x faster than the default GNU ld, and it's already present).
+#
+# HOST-SCOPED ON PURPOSE. This lived under `[build]`, which applies rustflags to
+# EVERY target -- including wasm32-unknown-unknown, whose linker already IS
+# rust-lld and which rejects the flag outright:
+#     rust-lld: error: unknown argument: -fuse-ld=lld
+# That made every wasm32 build fail at the link step even after the code compiled
+# clean. Keep the speedup on the native host; leave other targets untouched.
+[target.aarch64-unknown-linux-gnu]
 rustflags = ["-C", "link-arg=-fuse-ld=lld"]

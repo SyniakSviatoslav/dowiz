@@ -173,17 +173,23 @@ pub const fn is_power_of_two(x: usize) -> bool {
     x != 0 && (x & (x.wrapping_sub(1))) == 0
 }
 
-/// Branchless next power of two — O(1), no branch.
+/// Next power of two — O(1) bit-smear, width-portable.
+///
+/// The smear width is derived from `usize::BITS`, NOT hardcoded: the previous
+/// form ended in a literal `x >> 32`, which is a 64-bit-`usize` assumption and a
+/// hard `arithmetic_overflow` error on any 32-bit target (wasm32 — the Cloudflare
+/// Worker target — is where it surfaced). Semantics are unchanged on 64-bit,
+/// wrapping (not panicking) past `2^(BITS-1)`, which is why this keeps the smear
+/// instead of delegating to `core`'s panicking `next_power_of_two`.
 #[inline(always)]
 pub const fn next_power_of_two(x: usize) -> usize {
     if x == 0 { return 1; }
-    let x = x.wrapping_sub(1);
-    let x = x | (x >> 1);
-    let x = x | (x >> 2);
-    let x = x | (x >> 4);
-    let x = x | (x >> 8);
-    let x = x | (x >> 16);
-    let x = x | (x >> 32);
+    let mut x = x.wrapping_sub(1);
+    let mut shift = 1usize;
+    while shift < usize::BITS as usize {
+        x |= x >> shift;
+        shift <<= 1;
+    }
     x.wrapping_add(1)
 }
 
