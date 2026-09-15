@@ -772,3 +772,66 @@ cover cash + crypto + Stripe + Google/Apple Pay; OpenTelemetry everywhere.
   `tools/native-spa-server` while it path-depends on kernel→dowiz-core→(dev)eqc-rs + intake-adapters;
   and `FROM scratch` requires a static binary that `rust:1` + `aws-lc-sys` does not produce.
 - Backup pushed: `origin/bebop/main-2026-09-15` = `4b7f67a` (137 previously-unpushed commits).
+
+## Session note 2026-09-15 part 2 (architecture reconciled, not overlaid)
+
+**The operator surfaced the design/architecture corpus mid-session and it changed three things.**
+
+**1. HUB PER TENANT, not a central service.** `hub_provisioning.rs` is BLUEPRINT **P67**: each
+restaurant gets its OWN hub which the owner *claims*, with `TunnelProvider`/`VpsProvider` traits
+whose Wave-0 adapters are literally `CloudflareTunnel` and `HetznerVps`. `hub_supervisor.rs` is
+**P68**: A/B atomic self-update with a health gate, plus a sovereign backup envelope dowiz cannot
+decrypt. `owner_surface` G7 merges across multiple owner-run hubs CLIENT-SIDE. `DECISIONS.md` D0
+makes decentralized + local-first non-negotiable.
+I had built a **single central Worker over one shared D1 holding every tenant** — the opposite.
+Operator ruling: **hub per tenant on Cloudflare**. One Worker + one store per restaurant, claimed
+per P67. Cloudflare stays the host (P67 always intended it); the `memberships` multi-tenancy I
+started becomes unnecessary complexity. **Nothing was lost: at N=1 the two shapes are identical,
+and the divergence only begins at the second restaurant.**
+
+**2. BEBOP STORE, not SQL.** Operator: "замість pgrust, sql - bebop store". Measured, not assumed:
+- `bebop-store` builds for `wasm32-unknown-unknown`, **rc=0**. Its earlier 77-error failure this
+  session was ENTIRELY the broken toolchain, re-measured after the fix rather than carried forward.
+- The file API looked like a blocker on a Worker. It is not: the format is pointer-free, so the
+  byte image IS the in-memory image. Added `create_bytes`/`from_bytes`/`to_bytes`/`commit_bytes`
+  beside the file API, **proven format-identical** (8 tests, 3 new).
+- `evlog.rs` gives the order log **O(1)** per append; the KV layout is O(n) per put, which is
+  irrelevant at one restaurant's 50 products and would not be at platform scale.
+
+**3. THE UI ARCHITECTURE IS A FIELD, NOT A DOM — and its blocker is STALE.**
+`physics-ui-capture-blueprint.md`: the UI is one graph-Laplacian operator drawn on `wgpu`, shapes as
+SDF, text via outline math, **no DOM**, AccessKit for a11y. `BLUEPRINT-W21` marks it **BLOCKED
+OFFLINE** — "wgpu uncached", "No fake-green: we do NOT claim GPU render works" — with the unblock
+trigger stated as network `cargo add wgpu`.
+**Measured 2026-09-15: wgpu is still 0 in the cargo cache, but crates.io serves 30.0.1 and this
+box's network works.** The ceiling was measured air-gapped and that condition no longer holds. The
+DOM storefront occupies the documented interim legitimately; whether to unblock W21 is an operator
+gate, not my call.
+
+**4. THE CRITIQUE THAT APPLIES TO ME.** `BRAIN-TOPOLOGY-ORG-PSYCH-EMERGENCE-RESEARCH-2026-07-16`:
+governance/memory/code in dowiz "grow only by adding, never by reconciling", four suspended
+governance gates as the fourth instance of the same overlay-not-rewrite move, and a
+self-certification pattern (a 1610-line diff marked GREEN 52s after landing). That is a description
+of how I worked for most of this session: a new Worker, a new schema and a new UI added BESIDE the
+tree, never checked against `MASTER-EXECUTION-PLAN`, and marked verified by me. Recorded here
+because the research's whole point is that this pattern is invisible from inside it.
+
+**Also: I skipped the plan's phase order.** `MASTER-EXECUTION-PLAN` sequences ФАЗА 0 (ops +
+docker-swap) → ФАЗА 1 (mesh-real → integration-ports) → ФАЗА 2 (interface) → ФАЗА 3. I went
+straight to the interface. Named rather than quietly continued.
+
+**DESIGN, now written down** — `docs/design/STOREFRONT-DESIGN-2026-09-15.md`. The storefront answers
+the storefront-polish CONSISTENCY-AUDIT finding by finding ("the design system is good; adoption is
+partial"): one global heading rule, one type scale, one CTA, one card radius, the 4px grid. Colour
+is the TENANT'S live theme (`#e11d48` on `#fdf2f8`), not a preset. One measured departure from
+DESIGN.md: its `--brand-text-muted` `#6B7280` is **4.43:1** on that ground and fails AA for body
+text; `#6b5f66` measures 5.57:1. Two red lines of my own making were found and fixed: emoji as UI
+elements, and no dark mode.
+
+**Cloudflare state:** D1 `dowiz` (WEUR) holds 18 tables + 14 indexes and the catalog/identity/courier
+schema is applied. **Deploy is still blocked**: the API token authenticates but has NO account-level
+permission (workers/scripts 403, d1/database 401) even after an edit. The token's `Account Resources`
+block is the usual cause. Everything else for deploy is ready and measured: bundle 447 KB wasm +
+22 KB JS against a 64 MiB limit, the `strip = true` → wasm-bindgen externref failure diagnosed
+against a control, and `worker-build` installed after finding that Termux's pkg-config poisons every
+glibc build on this box (`PKG_CONFIG_LIBDIR` is the one-variable fix).
