@@ -1069,9 +1069,6 @@ pub(crate) fn carry_over(old: &Value, updated: &mut Value) {
         // The customer's note. It is written after the order is over, so
         // nothing should follow it -- but "should" is how fields get lost.
         "feedback",
-        // The photo at the door, taken BEFORE the order is marked delivered --
-        // so a transition certainly does follow it.
-        "proof",
     ] {
         if let Some(v) = old.get(k) {
             updated[k] = v.clone();
@@ -1497,7 +1494,19 @@ impl HubState {
         let _guard = self.write_lock.lock().await;
         let mut roster = self.read_roster()?;
         let out = f(&mut roster)?;
-        let bytes = roster.to_bytes().map_err(|e| HubHttpError::Io(format!("{e:?}")))?;
+        // A FULL ARENA IS SAID IN WORDS. This surfaced on a live stand as
+        // `Store(ArenaFull { need: 67700, capacity: 64512 })` on the LOGIN
+        // route -- a 503 that locks everybody out of the hub, including the
+        // person who would fix it, and names nothing they could act on. The
+        // cause (unswept sessions) is fixed at the source; this is what the
+        // next cause, whatever it turns out to be, will say instead.
+        let bytes = roster.to_bytes().map_err(|e| match e.arena_full() {
+            Some((need, capacity)) => HubHttpError::Io(format!(
+                "this hub's roster is full: it needs {need} cells and has {capacity}. \
+                 Nobody can sign in until it is compacted or enlarged."
+            )),
+            None => HubHttpError::Io(format!("{e:?}")),
+        })?;
         atomic_write(&self.paths.roster, &bytes)?;
         Ok(out)
     }

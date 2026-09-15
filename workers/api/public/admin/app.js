@@ -932,10 +932,6 @@ function row(o, newIdx){
       ${o.promo?.code ? `<span class="muted"><i class="ti ti-ticket i" aria-hidden="true"></i>${esc(o.promo.code)} −<span class="money">${money(o.discount || 0)}</span></span>` : ''}
     </div>
     ${said}
-    ${o.proof?.url ? `<a class="proof" href="${esc(o.proof.url)}" target="_blank" rel="noopener">
-      <img src="${esc(o.proof.url)}" alt="Фото біля дверей" loading="lazy" decoding="async"
-           width="56" height="56">
-      <span class="hint">фото біля дверей</span></a>` : ''}
     <div class="acts">${actions(o)}</div>
   </article>`;
 }

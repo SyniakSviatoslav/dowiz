@@ -401,6 +401,22 @@ impl Roster {
         now_ms: i64,
         label: &str,
     ) -> Result<String, HubError> {
+        // ── SESSIONS ARE SWEPT ON THE WAY IN ──
+        //
+        // Every login wrote a session and nothing ever removed one. On a live
+        // stand the roster arena filled and LOGIN ITSELF started answering
+        // `ArenaFull { need: 67700, capacity: 64512 }` -- a 503 that locks
+        // every person out of the hub and says nothing anyone could act on.
+        // At one restaurant that is years away and it still arrives, and it
+        // arrives at the worst possible moment: nobody can get in to fix it.
+        //
+        // A session outlives its refresh token by definition -- once the
+        // refresh has expired the session can never mint anything again -- so
+        // sweeping past that point removes records that are already dead
+        // rather than logging anybody out. Done HERE because a login is the
+        // one moment we are already holding the write lock and rewriting the
+        // roster anyway.
+        self.sweep_sessions(now_ms);
         let id = hex(&random_bytes(16).map_err(|_| HubError::NotAHub)?);
         let rec = format!(
             r#"{{"person":"{}","issued":{},"revoked":0,"label":"{}"}}"#,
@@ -417,6 +433,42 @@ impl Roster {
     /// The ID IS RETURNED, not the token. A session id names a credential well
     /// enough to revoke it and is useless for authenticating, which is exactly
     /// the split a "manage your keys" screen needs.
+    /// How long a session record is kept after it is issued.
+    ///
+    /// The refresh token's own lifetime plus a day. The day is not politeness:
+    /// clocks disagree, and a record removed a minute before its token expires
+    /// logs somebody out mid-shift for no reason anybody could explain.
+    pub const SESSION_KEEP_MS: i64 = crate::token::REFRESH_TTL_MS + 24 * 60 * 60 * 1000;
+
+    /// Drop sessions that can no longer mint anything. Returns how many went.
+    pub fn sweep_sessions(&mut self, now_ms: i64) -> usize {
+        let dead: Vec<String> = self
+            .kv
+            .keys()
+            .into_iter()
+            .filter(|k| k.starts_with(P_SESSION))
+            .filter(|k| {
+                let Some(v) = self.kv.get(k) else { return false };
+                let Ok(rec) = String::from_utf8(v) else { return true };
+                // A record we cannot read is swept too: it can never
+                // authenticate anybody, so keeping it only costs arena.
+                let issued = int_field(&rec, "issued").unwrap_or(0);
+                let revoked = int_field(&rec, "revoked").unwrap_or(0) == 1;
+                revoked || now_ms.saturating_sub(issued) > Self::SESSION_KEEP_MS
+            })
+            .collect();
+        for k in &dead {
+            self.kv.remove(k);
+        }
+        dead.len()
+    }
+
+    /// How many session records the roster is holding. Exposed so the arena
+    /// pressure this caused is measurable rather than inferred.
+    pub fn live_session_count(&self) -> usize {
+        self.kv.keys().into_iter().filter(|k| k.starts_with(P_SESSION)).count()
+    }
+
     pub fn sessions_of(&self, person_id: &str) -> Vec<(String, String, i64)> {
         self.kv
             .entries
@@ -831,5 +883,72 @@ mod invite_tests {
         assert_eq!(back.invites().len(), 1);
         assert_eq!(back.invites()[0].name, "Ana");
         assert!(back.claim_invite("+355690000008", "ROUNDTRIPROUND12", "pw", NOW).is_ok());
+    }
+}
+
+#[cfg(test)]
+mod sweep_tests {
+    use super::*;
+
+    const NOW: i64 = 1_789_000_000_000;
+
+    /// THE FAILURE THIS PREVENTS, measured on a live stand: every login wrote a
+    /// session, nothing ever removed one, and the roster arena filled. Login
+    /// then answered `ArenaFull { need: 67700, capacity: 64512 }` -- which locks
+    /// every person out of the hub, including whoever would fix it.
+    #[test]
+    fn a_thousand_logins_do_not_fill_the_roster() {
+        let mut r = Roster::create().unwrap();
+        r.set_iterations(64);
+        r.upsert_person("ana@dubin.al", Role::Owner, "Ana", "pw").unwrap();
+
+        let day = 24 * 60 * 60 * 1000;
+        for i in 0..1000i64 {
+            // A login a day for nearly three years.
+            r.open_session("ana@dubin.al", NOW + i * day).expect("session");
+        }
+        // Only the ones that can still mint anything are kept.
+        let live = r.live_session_count();
+        assert!(live <= 32, "{live} sessions kept; the sweep is not working");
+        // And the image still commits, which is the thing that actually broke.
+        assert!(r.to_bytes().is_ok(), "the roster arena filled");
+    }
+
+    /// A sweep must never log anybody out. A session is only dropped once its
+    /// refresh token could no longer mint anything.
+    #[test]
+    fn a_live_session_survives_the_sweep() {
+        let mut r = Roster::create().unwrap();
+        r.set_iterations(64);
+        r.upsert_person("ana@dubin.al", Role::Owner, "Ana", "pw").unwrap();
+        let s = r.open_session("ana@dubin.al", NOW).unwrap();
+
+        // A second login one day later must not touch the first session.
+        r.open_session("ana@dubin.al", NOW + 24 * 60 * 60 * 1000).unwrap();
+        assert_eq!(r.session_owner(&s).as_deref(), Some("ana@dubin.al"));
+
+        // Nor one a day before the refresh expires.
+        r.open_session("ana@dubin.al", NOW + crate::token::REFRESH_TTL_MS - 1).unwrap();
+        assert_eq!(r.session_owner(&s).as_deref(), Some("ana@dubin.al"),
+                   "a session was dropped while its refresh token still worked");
+
+        // Past the keep window it goes.
+        r.open_session("ana@dubin.al", NOW + Roster::SESSION_KEEP_MS + 1).unwrap();
+        assert_eq!(r.session_owner(&s), None);
+    }
+
+    /// A revoked session is dead the moment it is revoked, so it is swept at
+    /// the next opportunity rather than kept as a tombstone for ever.
+    #[test]
+    fn a_revoked_session_is_swept() {
+        let mut r = Roster::create().unwrap();
+        r.set_iterations(64);
+        r.upsert_person("ana@dubin.al", Role::Owner, "Ana", "pw").unwrap();
+        let s = r.open_session("ana@dubin.al", NOW).unwrap();
+        r.revoke_session(&s);
+        assert_eq!(r.session_owner(&s), None);
+        let swept = r.sweep_sessions(NOW);
+        assert_eq!(swept, 1);
+        assert_eq!(r.live_session_count(), 0);
     }
 }

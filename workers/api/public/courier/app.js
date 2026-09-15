@@ -1,4 +1,3 @@
-import { shrinkImage } from '/lib/shrink.js';
 // Courier app. One job on screen at a time, because the person holding this
 // phone is on a scooter. Every status change is the server's answer -- there is
 // no ordered list of statuses in this file.
@@ -695,12 +694,6 @@ function renderActive(o){
            <span class="slide-hint" aria-hidden="true">проведіть →</span>
          </div>`
       : `<button class="cta" id="pick" type="button">${icon('package')}Забрав</button>`}
-    ${picked && !o.proof ? `
-      <label class="ghost shoot">
-        ${icon('camera')}<span>Фото біля дверей</span>
-        <input type="file" accept="image/*" capture="environment" id="proofPic">
-      </label>` : ''}
-    ${o.proof ? `<p class="hint2 done-proof">${icon('camera-check')}Фото збережено</p>` : ''}
     <div class="row2">
       ${addr ? `<a class="ghost" target="_blank" rel="noopener"
           href="https://www.openstreetmap.org/search?query=${encodeURIComponent(addr)}">${icon('external-link')}У картах</a>` : ''}
@@ -732,25 +725,6 @@ function renderActive(o){
       b.disabled = false; b.removeAttribute('aria-busy'); b.innerHTML = had;
     }
   };
-  // ── the photo ──
-  //
-  // Optional, and deliberately not measured. A courier who does not take one
-  // is not flagged or asked why: a "proof rate" is a ranking, and dowiz does
-  // not rank the people who work through it.
-  const pic = $('#proofPic');
-  if (pic) pic.onchange = async () => {
-    const file = pic.files?.[0]; if (!file) return;
-    const cell = pic.closest('.shoot');
-    cell.classList.add('busy');
-    try {
-      const blob = await shrinkImage(file);
-      await api(`/courier/orders/${encodeURIComponent(o.id)}/proof`, {
-        method:'POST', headers:{ 'content-type':'image/jpeg' }, body: blob });
-      toast('Фото збережено', 'camera-check');
-      await load();
-    } catch (e) { cell.classList.remove('busy'); toast(String(e.message || e), 'alert-circle'); }
-  };
-
   // ── swipe to complete ──
   //
   // "Delivered" is irreversible and sits under a thumb that has been holding a

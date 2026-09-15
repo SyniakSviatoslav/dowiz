@@ -114,6 +114,21 @@ pub enum HubError {
     OrderIdTooLong,
 }
 
+impl HubError {
+    /// Is this "the image has no room left", and how much was wanted?
+    ///
+    /// Exposed as a method rather than left to the caller to pattern-match,
+    /// because `bebop_store` is this crate's dependency and not everybody
+    /// else's -- and a caller reduced to matching on a Debug string would be
+    /// one rename away from silently losing the case.
+    pub fn arena_full(&self) -> Option<(i64, i64)> {
+        match self {
+            HubError::Store(StoreError::ArenaFull { need, capacity }) => Some((*need, *capacity)),
+            _ => None,
+        }
+    }
+}
+
 impl From<StoreError> for HubError {
     fn from(e: StoreError) -> Self {
         HubError::Store(e)
