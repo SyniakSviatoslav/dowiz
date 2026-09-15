@@ -170,3 +170,167 @@ impl Store {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Write path.
+//
+// The commit protocol, mirrored from `st_begin` / `st_alloc` / `st_seal` /
+// `st_commit_d_m`:
+//   1. pick the live superblock; the cursor and generation come from the PartTab it names
+//   2. bump-allocate objects from that cursor, writing h0 then h1, sealing each with its CRC
+//   3. write a NEW PartTab into the OTHER superblock's page free tail, at (512 - sb) + 16 --
+//      NOT into the arena, so consecutive generations' PartTabs land on different pages and a
+//      single page tear cannot destroy both
+//   4. write the OTHER superblock last; that write IS the commit point
+//
+// Writes go to disk in that same order, so a crash between any two of them leaves the
+// previous generation's superblock intact and the store readable at gen k-1.
+// ---------------------------------------------------------------------------
+
+use std::io::{Seek, SeekFrom, Write};
+
+/// An open write transaction.
+#[derive(Debug, Clone, Copy)]
+pub struct Tx {
+    pub sb: usize,
+    pub mark: i64,
+    pub cursor: i64,
+    pub live_delta: i64,
+    pub sup_delta: i64,
+    pub next_gen: i64,
+}
+
+/// Number of cells in a P=1 PartTab: 16 + 3*1.
+pub const PARTTAB_CELLS: i64 = 19;
+
+#[derive(Debug)]
+pub enum StoreError {
+    NoSuperblock,
+    ArenaFull { need: i64, capacity: i64 },
+    Io(io::Error),
+}
+
+impl From<io::Error> for StoreError {
+    fn from(e: io::Error) -> Self { StoreError::Io(e) }
+}
+
+impl Store {
+    /// Open a transaction: cursor and generation come from the live PartTab, exactly as
+    /// `st_begin` reads `used_p` and `gen_p` rather than the superblock's own cells.
+    pub fn begin(&self) -> Result<Tx, StoreError> {
+        let sb = self.pick().ok_or(StoreError::NoSuperblock)?;
+        let pt = self.cells[sb.at + 3];
+        let (used, gen) = if pt == 0 {
+            (self.cells[sb.at + 4], self.cells[sb.at + 2])
+        } else {
+            (self.cells[pt as usize + 19], self.cells[pt as usize + 20])
+        };
+        Ok(Tx { sb: sb.at, mark: used, cursor: used, live_delta: 0, sup_delta: 0, next_gen: gen + 1 })
+    }
+
+    /// Bump-allocate an object of `len` payload cells. Writes h0 and h1; the CRC half of h1
+    /// stays zero until `seal`.
+    pub fn alloc(&mut self, tx: &mut Tx, len: i64, digest: i64) -> Result<usize, StoreError> {
+        let off = tx.cursor;
+        let capacity = self.cells[tx.sb + 12];
+        if off + 2 + len > ARENA as i64 + capacity {
+            return Err(StoreError::ArenaFull { need: off + 2 + len, capacity });
+        }
+        let o = off as usize;
+        if o + 2 + len as usize > self.cells.len() {
+            self.cells.resize(o + 2 + len as usize, 0);
+        }
+        self.cells[o] = ((digest & 0xFFFF_FFFF) << 32) | len;
+        self.cells[o + 1] = tx.next_gen;
+        tx.cursor = off + 2 + len;
+        tx.live_delta += 2 + len;
+        Ok(o)
+    }
+
+    /// Set payload cell `i` of `obj`.
+    pub fn put_cell(&mut self, obj: usize, i: usize, v: i64) {
+        self.cells[obj + 2 + i] = v;
+    }
+
+    /// Write an object-relative ref into payload cell `i`, as `st_link` does.
+    pub fn link(&mut self, obj: usize, i: usize, target: usize) {
+        self.cells[obj + 2 + i] = target as i64 - obj as i64;
+    }
+
+    /// Seal an object: CRC-32 of its payload into the high half of h1.
+    pub fn seal(&mut self, obj: usize) {
+        let len = self.obj_len(obj) as usize;
+        let crc = crc32_cells(&self.cells, obj + 2, len) as i64;
+        self.cells[obj + 1] = (crc << 32) | (self.cells[obj + 1] & 0xFFFF_FFFF);
+    }
+
+    /// Stage a commit in memory: write the new PartTab and the other superblock.
+    /// Returns (parttab_offset, other_superblock_offset).
+    pub fn stage_commit(&mut self, tx: &Tx, root: usize) -> (usize, usize) {
+        let sb = tx.sb;
+        let live = self.cells[sb + 7] + tx.live_delta - tx.sup_delta;
+        let sup = self.cells[sb + 8] + tx.sup_delta;
+        let mig = self.cells[sb + 6];
+        let capacity = self.cells[sb + 12];
+        // the PartTab digest is reused from the live PartTab rather than recomputed, so the
+        // Rust side never needs sha256; schema creation stays bebop's job.
+        let old_pt = self.cells[sb + 3] as usize;
+        let ptdig = if old_pt != 0 { self.obj_digest(old_pt) } else { 0 };
+
+        let pt = (SB_B - sb) + 16;
+        self.cells[pt] = ((ptdig & 0xFFFF_FFFF) << 32) | PARTTAB_CELLS;
+        self.cells[pt + 1] = tx.next_gen;
+        for i in 0..16 {
+            self.cells[pt + 2 + i] = self.cells[sb + i];
+        }
+        self.cells[pt + 18] = root as i64;
+        self.cells[pt + 19] = tx.cursor;
+        self.cells[pt + 20] = tx.next_gen;
+        // payload cell 15 carries a CRC over all 19 payload cells, written after the fold --
+        // the same shape st_parttab_write uses.
+        self.cells[pt + 2 + 15] = crc32_cells(&self.cells, pt + 2, PARTTAB_CELLS as usize) as i64;
+        self.seal(pt);
+
+        let osb = SB_B - sb;
+        self.cells[osb] = MAGIC;
+        self.cells[osb + 1] = 2;
+        self.cells[osb + 2] = tx.next_gen;
+        self.cells[osb + 3] = pt as i64;
+        self.cells[osb + 4] = tx.cursor;
+        self.cells[osb + 5] = 0;
+        self.cells[osb + 6] = mig;
+        self.cells[osb + 7] = live;
+        self.cells[osb + 8] = sup;
+        for k in 9..12 { self.cells[osb + k] = 0; }
+        self.cells[osb + 12] = capacity;
+        self.cells[osb + 13] = 0;
+        self.cells[osb + 14] = 0;
+        self.cells[osb + 15] = crc32_cells(&self.cells, osb, 15) as i64;
+        (pt, osb)
+    }
+
+    /// Commit to disk in protocol order: new objects, then the PartTab page, then the
+    /// superblock LAST. A crash between any two leaves generation k-1 intact.
+    pub fn commit(&mut self, tx: &Tx, root: usize, path: &str) -> Result<i64, StoreError> {
+        let (pt, osb) = self.stage_commit(tx, root);
+        let mut f = std::fs::OpenOptions::new().write(true).open(path)?;
+        self.write_cells(&mut f, tx.mark as usize, (tx.cursor - tx.mark) as usize)?;
+        f.sync_data()?;
+        self.write_cells(&mut f, pt, PARTTAB_CELLS as usize + 2)?;
+        f.sync_data()?;
+        self.write_cells(&mut f, osb, 16)?;
+        f.sync_data()?;
+        Ok(tx.next_gen)
+    }
+
+    fn write_cells(&self, f: &mut std::fs::File, off: usize, n: usize) -> io::Result<()> {
+        if n == 0 { return Ok(()); }
+        let mut buf = Vec::with_capacity(n * 8);
+        for i in 0..n {
+            buf.extend_from_slice(&self.cells[off + i].to_le_bytes());
+        }
+        f.seek(SeekFrom::Start((off * 8) as u64))?;
+        f.write_all(&buf)
+    }
+}
+pub mod kv;

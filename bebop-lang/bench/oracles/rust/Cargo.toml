@@ -20,5 +20,9 @@ path = "src/bin/ordfsm.rs"
 name = "wlog"
 path = "src/bin/wlog.rs"
 
+[[bin]]
+name = "kvroot"
+path = "src/bin/kvroot.rs"
+
 [profile.release]
 opt-level = 3
