@@ -1999,3 +1999,86 @@ async fn modifiers_are_validated_and_priced_by_the_server() {
     assert_eq!(code, 200);
     assert_eq!(order(json!([])).0, 200, "no rules means nothing to break");
 }
+
+/// What a courier did and what they are holding — facts from the log, never a
+/// wage this hub invented.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_courier_can_see_their_runs_and_their_cash() {
+    let s = boot("earnings").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+    let tok = |phone: &str, pw: &str| {
+        let (_, c) = post(&s.base, "/api/courier/auth/login", None,
+                          json!({ "phone": phone, "password": pw }));
+        c["jwt"].as_str().expect("jwt").to_string()
+    };
+    let eni = tok("+355691112233", "courier-pw");
+    let blerim = tok("+355694445566", "courier-pw-2");
+
+    // Nothing yet, and that is zeros rather than an error.
+    let (code, v) = get(&s.base, "/api/courier/earnings", Some(&eni));
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["today"]["deliveries"], 0);
+    assert_eq!(v["today"]["cash"], 0);
+    assert!(v["note"].as_str().unwrap().contains("does not compute pay"),
+            "the payload must say what it is not: {v}");
+    let (_, h) = get(&s.base, "/api/courier/history", Some(&eni));
+    assert!(h["history"].as_array().unwrap().is_empty());
+
+    // Two runs for Eni: one delivered with a short payment, one still open.
+    let mut delivered = Vec::new();
+    for (i, cash) in [(0, Some(700)), (1, None)] {
+        let (_, order) = post(&s.base, "/api/public/locations/dubin/orders", None, json!({
+            "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 1 }],
+            "contact": { "name": "C", "phone": "+355690000000" },
+            "fulfilment": { "kind": "delivery", "address": { "line": "Rruga Taulantia 12, ap 4" } },
+            "payment": "cash"
+        }));
+        let id = order["id"].as_str().unwrap().to_string();
+        for a in ["confirm", "preparing", "ready"] {
+            post(&s.base, &format!("/api/owner/orders/{id}/action"), Some(&owner), json!({ "action": a }));
+        }
+        post(&s.base, &format!("/api/courier/orders/{id}/accept"), Some(&eni), json!({}));
+        if let Some(c) = cash {
+            post(&s.base, &format!("/api/courier/orders/{id}/pickup"), Some(&eni), json!({}));
+            post(&s.base, &format!("/api/courier/orders/{id}/deliver"), Some(&eni),
+                 json!({ "cash_collected": c }));
+            delivered.push(id);
+        }
+        let _ = i;
+    }
+
+    let (_, v) = get(&s.base, "/api/courier/earnings", Some(&eni));
+    assert_eq!(v["today"]["deliveries"], 1);
+    assert_eq!(v["today"]["cash"], 700, "what was actually collected, not the total");
+    assert_eq!(v["cashInHand"], 700);
+    // The order still out for delivery is counted separately, so the two are
+    // never added together by mistake.
+    assert_eq!(v["expectedCash"], 1100, "the open cash order's total: {v}");
+    assert_eq!(v["week"]["deliveries"], 1);
+    assert_eq!(v["month"]["deliveries"], 1);
+
+    // History holds the finished run and nothing else.
+    let (_, h) = get(&s.base, "/api/courier/history", Some(&eni));
+    let rows = h["history"].as_array().unwrap();
+    assert_eq!(rows.len(), 1, "only the finished one: {h}");
+    assert_eq!(rows[0]["id"], delivered[0].as_str());
+    assert_eq!(rows[0]["cashCollected"], 700);
+    // THE STREET ONLY. A finished run needs no way to contact the customer
+    // again, and a history screen left open on a table should not be a list of
+    // door numbers.
+    assert_eq!(rows[0]["street"], "Rruga Taulantia 12");
+    assert!(h.to_string().find("ap 4").is_none(), "the door number must not survive: {h}");
+    assert!(h.to_string().find("+355690000000").is_none(), "nor the phone: {h}");
+
+    // Another courier sees none of it.
+    let (_, v) = get(&s.base, "/api/courier/earnings", Some(&blerim));
+    assert_eq!(v["today"]["deliveries"], 0);
+    assert_eq!(v["cashInHand"], 0);
+    assert!(get(&s.base, "/api/courier/history", Some(&blerim)).1["history"]
+        .as_array().unwrap().is_empty());
+
+    // And the owner is not a courier.
+    assert_eq!(get(&s.base, "/api/courier/earnings", Some(&owner)).0, 403);
+    assert_eq!(get(&s.base, "/api/courier/history", None).0, 401);
+}

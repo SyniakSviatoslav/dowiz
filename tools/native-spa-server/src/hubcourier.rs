@@ -334,6 +334,8 @@ pub fn routes(state: Shared) -> Router {
         .route("/api/courier/position", post(position))
         .route("/api/courier/shift", post(shift))
         .route("/api/courier/assist", post(courier_assist))
+        .route("/api/courier/earnings", get(earnings))
+        .route("/api/courier/history", get(history))
         .with_state(state)
 }
 
@@ -382,4 +384,136 @@ pub async fn courier_assist(
         &body.question,
     )
     .await
+}
+
+// ── what a courier did, and what they are holding ────────────────────────────
+
+/// Midnight in the venue's timezone, and the two windows before it.
+fn day_start(now: i64) -> i64 {
+    let offset_min: i64 = std::env::var("TZ_OFFSET_MINUTES")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(120);
+    let day = 24 * 60 * 60 * 1000;
+    let local = now + offset_min * 60 * 1000;
+    local - local.rem_euclid(day) - offset_min * 60 * 1000
+}
+
+/// `GET /api/courier/earnings`
+///
+/// NOT A PAYOUT, and the naming is deliberate. dowiz has no settlement model
+/// wired -- P47's rails are designed and not built -- so a figure called
+/// "earnings" would be a number this hub invented about somebody's wages. What
+/// it can report is fact: how many deliveries were completed and how much CASH
+/// the courier is holding on the venue's behalf. Both come from the order log.
+///
+/// The cash figure is the one that matters day to day: it is what has to be
+/// handed over at the end of a shift, and a courier who cannot see it is
+/// reconciling from memory.
+pub async fn earnings(
+    State(st): State<Shared>,
+    who: CourierCaller,
+) -> Result<Json<Value>, HubHttpError> {
+    let me = who.0.person.id.clone();
+    let now = now_ms();
+    let today = day_start(now);
+    let week = today - 6 * 24 * 60 * 60 * 1000;
+    let month = today - 29 * 24 * 60 * 60 * 1000;
+
+    let hub = st.read_log()?;
+    let (mut d_today, mut d_week, mut d_month) = (0i64, 0i64, 0i64);
+    let (mut c_today, mut c_week, mut c_month) = (0i64, 0i64, 0i64);
+    let mut open_cash = 0i64;
+
+    for ev in hub.orders() {
+        let Ok(o) = serde_json::from_str::<Value>(&ev.order_json) else { continue };
+        if o.get("courier_id").and_then(Value::as_str) != Some(me.as_str()) {
+            continue;
+        }
+        let status = o.get("status").and_then(Value::as_str).unwrap_or("");
+        let at = o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(0);
+        let cash = o.get("cash_collected").and_then(Value::as_i64).unwrap_or(0);
+
+        if status == "DELIVERED" {
+            if at >= month {
+                d_month += 1;
+                c_month += cash;
+            }
+            if at >= week {
+                d_week += 1;
+                c_week += cash;
+            }
+            if at >= today {
+                d_today += 1;
+                c_today += cash;
+            }
+        } else if !matches!(status, "CANCELLED" | "REJECTED")
+            && o.get("payment").and_then(Value::as_str) == Some("cash")
+        {
+            // Still out for delivery and payable in cash: what they are ABOUT
+            // to be holding. Shown separately from what they already hold, so
+            // the two are never added together by mistake.
+            open_cash += o.get("total").and_then(Value::as_i64).unwrap_or(0);
+        }
+    }
+
+    Ok(Json(json!({
+        "today":  { "deliveries": d_today, "cash": c_today },
+        "week":   { "deliveries": d_week,  "cash": c_week },
+        "month":  { "deliveries": d_month, "cash": c_month },
+        // Cash on this shift that has not been handed over. The number a
+        // courier is asked for at the end of the night.
+        "cashInHand": c_today,
+        "expectedCash": open_cash,
+        "currency": "ALL",
+        // Said out loud in the payload rather than only in a doc: nothing here
+        // is a wage, and a surface that renders it as one is wrong.
+        "note": "deliveries and cash collected; dowiz does not compute pay",
+    })))
+}
+
+/// `GET /api/courier/history` — the runs that are finished.
+pub async fn history(
+    State(st): State<Shared>,
+    who: CourierCaller,
+) -> Result<Json<Value>, HubHttpError> {
+    let me = who.0.person.id.clone();
+    let hub = st.read_log()?;
+    let mut rows: Vec<Value> = hub
+        .orders()
+        .iter()
+        .filter_map(|ev| serde_json::from_str::<Value>(&ev.order_json).ok())
+        .filter(|o| o.get("courier_id").and_then(Value::as_str) == Some(me.as_str()))
+        .filter(|o| {
+            matches!(
+                o.get("status").and_then(Value::as_str),
+                Some("DELIVERED") | Some("CANCELLED") | Some("REJECTED")
+            )
+        })
+        .map(|o| {
+            json!({
+                "id": o.get("id").cloned().unwrap_or(Value::Null),
+                "status": o.get("status").cloned().unwrap_or(Value::Null),
+                "total": o.get("total").cloned().unwrap_or(Value::Null),
+                "payment": o.get("payment").cloned().unwrap_or(Value::Null),
+                "cashCollected": o.get("cash_collected").cloned().unwrap_or(Value::Null),
+                "at": o.get("created_at_ms").cloned().unwrap_or(Value::Null),
+                // The STREET only, not the door number, and no phone. A
+                // finished run does not need a way to contact the customer
+                // again, and a history screen left open on a table should not
+                // be a list of addresses.
+                "street": o.get("fulfilment")
+                    .and_then(|f| f.get("address"))
+                    .and_then(|a| a.get("line"))
+                    .and_then(Value::as_str)
+                    .map(|l| l.split(',').next().unwrap_or(l).trim().to_string())
+                    .map(Value::String)
+                    .unwrap_or(Value::Null),
+                "note": o.get("courier_note").cloned().unwrap_or(Value::Null),
+            })
+        })
+        .collect();
+    rows.sort_by_key(|r| -r["at"].as_i64().unwrap_or(0));
+    rows.truncate(100);
+    Ok(Json(json!({ "history": rows })))
 }

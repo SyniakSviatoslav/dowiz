@@ -346,6 +346,24 @@ a.tel{color:var(--brand-text);font-weight:var(--weight-semibold);text-decoration
 /* The courier's ask box. Sized from --tap like every other control here: this
    is used outdoors, one-handed, sometimes with gloves, and a control smaller
    than the others is the one that gets missed. */
+/* ── a panel inside the sheet ──
+   Not a second navigation model: the sheet stays the sheet, its content is
+   replaced, and a back button returns to the one job on screen. */
+.phead{display:flex;align-items:center;gap:var(--space-2);width:100%;
+      margin-bottom:var(--space-3);font-size:var(--text-lg)}
+.ecash{display:flex;align-items:baseline;justify-content:space-between;width:100%;
+      padding:var(--space-4);margin-bottom:var(--space-2);
+      border-radius:var(--radius-lg);background:var(--brand-surface-raised)}
+.ecash .k{color:var(--brand-text-muted);font-size:var(--text-sm)}
+.ecash .v{font-size:var(--text-2xl);font-weight:var(--weight-bold)}
+.elist{display:grid;gap:var(--space-1);width:100%;margin-bottom:var(--space-3)}
+.erow{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);
+      min-height:var(--tap);padding:0 var(--space-3);
+      border:1px solid var(--brand-border);border-radius:var(--radius-md);
+      background:var(--brand-surface);font-size:var(--text-base)}
+.hint2{width:100%;margin:0 0 var(--space-3);color:var(--brand-text-muted);
+      font-size:var(--text-sm);line-height:1.5}
+
 .askrow{display:flex;gap:var(--space-2);width:100%;margin-bottom:var(--space-3)}
 .ask{flex:1 1 auto;min-width:0;min-height:var(--tap);padding:0 var(--space-3);
      border:1px solid var(--brand-border);border-radius:var(--radius-md);

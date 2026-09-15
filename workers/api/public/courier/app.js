@@ -390,8 +390,14 @@ function render(){
         <button class="ghost narrow" id="askGo" type="button">${icon('send')}</button>
       </div>
       <p id="answer" class="answer" hidden></p>
+      <div class="row2">
+        <button class="ghost" id="earn" type="button">${icon('coins')}Мої зміни</button>
+        <button class="ghost" id="hist" type="button">${icon('history')}Історія</button>
+      </div>
       <button class="ghost" id="endShift" type="button">${icon('power')}Завершити зміну</button>`;
     $('#endShift').onclick = () => setShift(false);
+    $('#earn').onclick = openEarnings;
+    $('#hist').onclick = openHistory;
     bindAsk();
     return;
   }
@@ -569,6 +575,61 @@ function bindAsk(){
   };
   go.onclick = ask;
   box.onkeydown = e => { if (e.key === 'Enter') ask(); };
+}
+
+// ── what I did, and what I am holding ──
+//
+// Reachable only from the WAITING state, like the ask box, and for the same
+// reason: this app shows one job at a time and a permanent tab bar would
+// compete with the address and the call button on a live delivery. A courier
+// checks their cash between runs, not while riding.
+//
+// `sheet()` is the app's existing panel; these replace its content and put a
+// back button on it rather than introducing a second navigation model.
+async function panel(title, bodyHtml){
+  $('#app').innerHTML = `
+    <div class="phead">
+      <button class="icon-btn" id="pback" type="button" aria-label="Назад">${icon('arrow-left')}</button>
+      <b>${esc(title)}</b>
+    </div>
+    ${bodyHtml}`;
+  $('#pback').onclick = () => render();
+}
+
+async function openEarnings(){
+  await panel('Мої зміни', `<div class="skel" style="height:5rem"></div>`);
+  let d;
+  try { d = await api('/courier/earnings'); }
+  catch (e) { return panel('Мої зміни', `<p class="answer">${esc(String(e.message || e))}</p>`); }
+  const row = (label, w) => `
+    <div class="erow"><span>${esc(label)}</span>
+      <span><b>${w.deliveries}</b> · <span class="money">${money(w.cash)}</span></span></div>`;
+  await panel('Мої зміни', `
+    <div class="ecash">
+      <span class="k">Готівка на руках</span>
+      <span class="v money">${money(d.cashInHand)}</span>
+    </div>
+    ${d.expectedCash ? `<p class="hint2">Ще в дорозі: <span class="money">${money(d.expectedCash)}</span></p>` : ''}
+    <div class="elist">
+      ${row('Сьогодні', d.today)}${row('7 днів', d.week)}${row('30 днів', d.month)}
+    </div>
+    <p class="hint2">Доставки й зібрана готівка. Розрахунок оплати dowiz не веде.</p>`);
+}
+
+async function openHistory(){
+  await panel('Історія', `<div class="skel" style="height:4rem"></div>`);
+  let d;
+  try { d = await api('/courier/history'); }
+  catch (e) { return panel('Історія', `<p class="answer">${esc(String(e.message || e))}</p>`); }
+  const rows = d.history || [];
+  await panel('Історія', rows.length ? `
+    <div class="elist">${rows.map(r => `
+      <div class="erow">
+        <span>${esc(r.street || '—')}<br>
+          <small class="hint2">${new Date(r.at || 0).toLocaleDateString('uk', { day:'numeric', month:'short' })} · ${esc(r.status)}</small></span>
+        <span class="money">${money(r.cashCollected ?? r.total ?? 0)}</span>
+      </div>`).join('')}</div>`
+    : `<div class="empty">${icon('history')}<b>Поки порожньо</b>Завершені доставки з'являться тут</div>`);
 }
 
 function renderActive(o){
