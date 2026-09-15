@@ -7,7 +7,12 @@
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#061b1a">
 <title>dowiz · кур'єр</title>
-<link href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.9.0/dist/maplibre-gl.css" rel="stylesheet">
+<!-- The map library (932 KB raw, 245 KB gzipped, measured) is fetched only when
+     a delivery is actually on screen -- see loadMapLibrary in app.js. It used to
+     be a <script> tag here, paid for on every page load including the login and
+     off-shift screens, neither of which has a map. preconnect keeps that later
+     fetch fast without paying for the payload up front. -->
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -274,6 +279,24 @@ a.tel{color:var(--brand-text);font-weight:var(--weight-semibold);text-decoration
 
 .empty{text-align:center;padding:var(--space-5) var(--space-3);color:var(--brand-text-muted);font-size:var(--text-base)}
 
+/* Loading and error, for a screen held outdoors.
+   The skeleton mirrors the real layout -- a heading band and two task cards --
+   so the first paint is the shape of the answer, not a spinner in a void. */
+.spin{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+.loadwrap{display:grid;gap:var(--space-3);width:100%;padding:var(--space-4) 0}
+.skel{position:relative;overflow:hidden;background:var(--brand-surface-raised);
+      border-radius:var(--radius-md)}
+.skel::after{content:"";position:absolute;inset:0;transform:translateX(-100%);
+      background:linear-gradient(90deg,transparent,
+                 color-mix(in srgb,var(--brand-surface) 70%,transparent),transparent);
+      animation:sweep 1.3s ease-in-out infinite}
+@keyframes sweep{to{transform:translateX(100%)}}
+@media (prefers-reduced-motion:reduce){.skel::after{animation:none}}
+.empty .reason{display:block;margin-top:var(--space-2);font-size:var(--text-xs);
+      opacity:.8;word-break:break-word}
+
 /* The courier's ask box. Sized from --tap like every other control here: this
    is used outdoors, one-handed, sometimes with gloves, and a control smaller
    than the others is the one that gets missed. */
@@ -338,8 +361,9 @@ input.money{font-size:var(--text-2xl)}
   <div class="grab" aria-hidden="true"></div>
   <div class="sheet-in" id="app" aria-live="polite"></div>
 </section>
-<div class="toast" id="toast" role="status" hidden></div>
-<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.9.0/dist/maplibre-gl.js"></script>
+<!-- aria-live: this is the only notice of a failed action for a courier
+     who is looking at the road, not the screen. -->
+<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 <script type="module" src="/courier/app.js"></script>
 </body>
 </html>

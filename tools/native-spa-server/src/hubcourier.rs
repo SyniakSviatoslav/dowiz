@@ -74,17 +74,72 @@ pub async fn tasks(
         match o.get("courier_id").and_then(Value::as_str) {
             Some(c) if c == me => {
                 if !matches!(status, "DELIVERED" | "CANCELLED" | "REJECTED") {
-                    mine.push(o);
+                    mine.push(task_shape(&o));
                 }
             }
             // Unassigned and ready to leave the kitchen: anyone on shift may
             // take it. This is what makes the venue workable without the owner
             // hand-assigning every order during a rush.
-            None if status == OrderStatus::Ready.as_str() => offered.push(o),
+            None if status == OrderStatus::Ready.as_str() => offered.push(task_shape(&o)),
             _ => {}
         }
     }
-    Ok(Json(json!({ "tasks": mine, "available": offered, "courier": { "id": me } })))
+    // THE KEYS THE APP READS, and this is the second half of a break worth
+    // naming. The courier app does:
+    //
+    //     S.onShift = d.onShift; S.mine = d.mine; S.available = d.available;
+    //
+    // and this endpoint answered `{tasks, available, courier}`. `onShift` came
+    // back undefined, which is falsy, so the app rendered "you are offline" --
+    // permanently, for every courier, no matter what. It never showed a single
+    // task. The integration tests checked the API's own shape and passed, which
+    // is exactly the gap between testing a response and testing a surface.
+    //
+    // `tasks` is kept alongside `mine` so anything written against the newer
+    // spelling keeps working; they are the same list.
+    let on_shift = st.shifts().await.iter().any(|c| c == &me);
+    Ok(Json(json!({
+        "onShift": on_shift,
+        "mine": mine,
+        "tasks": mine,
+        "available": offered,
+        "shift": if on_shift { json!({ "open": true }) } else { Value::Null },
+        "courier": { "id": me, "name": who.0.person.name }
+    })))
+}
+
+/// The order, shaped the way the courier app reads it.
+///
+/// A PROJECTION, not the raw envelope, and it fixes a real break: the app reads
+/// `o.address.line`, while the order carries the address under
+/// `fulfilment.address`. Handing it the envelope meant the delivery screen
+/// showed NO address and no maps link at all -- the one thing a courier
+/// actually needs from it.
+///
+/// Flattening here rather than teaching the app two shapes keeps the surface's
+/// contract intact: it was written against an API that put these at the top
+/// level, and that contract is fine. `lat_udeg`/`lon_udeg` ride along so the
+/// map can drop a pin.
+fn task_shape(o: &Value) -> Value {
+    let addr = o.get("fulfilment").and_then(|f| f.get("address"));
+    json!({
+        "id": o.get("id").cloned().unwrap_or(Value::Null),
+        "status": o.get("status").cloned().unwrap_or(Value::Null),
+        "total": o.get("total").cloned().unwrap_or(Value::Null),
+        "subtotal": o.get("subtotal").cloned().unwrap_or(Value::Null),
+        "delivery_fee": o.get("delivery_fee").cloned().unwrap_or(Value::Null),
+        "payment": o.get("payment").cloned().unwrap_or(Value::Null),
+        "items": o.get("items").cloned().unwrap_or(Value::Null),
+        "contact": o.get("contact").cloned().unwrap_or(Value::Null),
+        "created_at_ms": o.get("created_at_ms").cloned().unwrap_or(Value::Null),
+        "address": addr.cloned().unwrap_or(Value::Null),
+        // The venue may not be able to verify where this goes; the courier is
+        // the one who finds out at the door, so they are told in advance.
+        "delivery_area_unverified": o
+            .get("delivery_area_unverified")
+            .cloned()
+            .unwrap_or(Value::Bool(false)),
+    })
 }
 
 /// One place where "this order is mine and still open" is decided.

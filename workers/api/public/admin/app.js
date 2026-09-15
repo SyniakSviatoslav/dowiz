@@ -18,7 +18,12 @@ const store = {
   set loc(v){ try { v ? localStorage.setItem('dw_loc', v) : localStorage.removeItem('dw_loc'); } catch {} },
 };
 
-let S = { tab:'orders', orders:[], stats:null, products:[], venue:null, couriers:[], seen:new Set(), fresh:new Set(), booted:false };
+// `phase` is what stops an empty state from lying. 'loading' is NOT 'nothing
+// here' -- an owner shown "no orders" during the first fetch believes the
+// kitchen is quiet, which during a rush is the worst thing this screen can say.
+let S = { tab:'orders', orders:[], stats:null, products:[], venue:null, couriers:[],
+          phase:'loading', error:null, menuPhase:'idle', menuError:null,
+          seen:new Set(), fresh:new Set(), booted:false };
 
 function toast(m){ const el = $('#toast'); el.textContent = m; el.classList.add('show');
   clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove('show'), 2600); }
@@ -26,6 +31,27 @@ function toast(m){ const el = $('#toast'); el.textContent = m; el.classList.add(
 // Money is an integer the server sent, formatted and SET as text. There is no
 // animated path to an amount anywhere in this file (DESIGN plan §2.5).
 const money = n => new Intl.NumberFormat('uk', { style:'currency', currency:'ALL', maximumFractionDigits:0 }).format(n || 0);
+
+// EVERY button that waits on the network shows that it is waiting.
+//
+// Disabling alone is ambiguous -- a greyed control reads as "not allowed" as
+// readily as "working" -- so the label is replaced by a spinner and restored
+// afterwards, and `aria-busy` says the same thing to a screen reader. The
+// original label is kept on the element rather than in a closure so that a
+// re-render between start and finish cannot lose it.
+async function busy(el, fn){
+  if (!el || el.disabled) return;
+  const had = el.innerHTML;
+  el.disabled = true;
+  el.setAttribute('aria-busy', 'true');
+  el.innerHTML = `<i class="ti ti-loader-2 i spin" aria-hidden="true"></i>`;
+  try { return await fn(); }
+  finally {
+    el.disabled = false;
+    el.removeAttribute('aria-busy');
+    el.innerHTML = had;
+  }
+}
 
 // ── SEA ─────────────────────────────────────────────────────────────────────
 // The dowiz ambient layer, the same shipped module the storefront wires
@@ -132,10 +158,28 @@ async function boot(){
   if (!store.t || !store.loc) return renderLogin();
   $('#top').hidden = false;
   S.booted = true;
-  render();
-  await Promise.all([loadStats(), loadOrders(), loadVenue(), loadCouriers()]);
-  render();
+  S.phase = 'loading';
+  render();                                   // skeletons, not an empty queue
+  await reload();
   poll();
+}
+
+// One load, one verdict. `loadOrders` is the one that decides the phase: the
+// queue is what this screen exists for, and stats or the courier list failing
+// is a degraded pane rather than a broken one.
+async function reload(){
+  try {
+    await loadOrders({ strict:true });
+    S.phase = 'ready'; S.error = null;
+  } catch (e) {
+    S.phase = 'error';
+    S.error = String(e.message || e);
+  }
+  // These three may fail quietly: none of them is the reason the owner opened
+  // this page, and blanking the queue because the courier list timed out would
+  // be trading the important thing for the incidental one.
+  await Promise.all([loadStats(), loadVenue(), loadCouriers()]);
+  render();
 }
 
 const LIVE = ['PENDING','CONFIRMED','PREPARING','READY','IN_DELIVERY'];
@@ -146,10 +190,12 @@ function render(){
   const s = S.stats;
   $('#app').innerHTML = `
     <div class="stats">
-      <div class="stat"><div class="k">Замовлень сьогодні</div><div class="v" data-k="todayOrders">${s ? s.todayOrders : '—'}</div></div>
-      <div class="stat"><div class="k">Чекають</div><div class="v" data-k="pending">${s ? s.pending : '—'}</div></div>
-      <div class="stat"><div class="k">В роботі</div><div class="v" data-k="active">${s ? s.active : '—'}</div></div>
-      <div class="stat"><div class="k">Виручка</div><div class="v" data-k="todayRevenue">${s ? money(s.todayRevenue) : '—'}</div></div>
+      ${[['todayOrders','Замовлень сьогодні'],['pending','Чекають'],
+         ['active','В роботі'],['todayRevenue','Виручка']].map(([k, label]) => `
+        <div class="stat"><div class="k">${label}</div>
+          <div class="v" data-k="${k}">${s
+            ? (k === 'todayRevenue' ? money(s[k]) : s[k])
+            : `<span class="skel" style="display:inline-block;width:3rem;height:1.4rem;vertical-align:-.2em"></span>`}</div></div>`).join('')}
     </div>
     <div class="tabs" role="tablist" aria-label="Розділи">
       <button class="tab" role="tab" id="tab-orders" aria-controls="pane" data-t="orders" aria-selected="${S.tab==='orders'}" tabindex="${S.tab==='orders' ? 0 : -1}">Замовлення <span class="n" id="liveN">${liveOrders().length}</span></button>
@@ -169,6 +215,14 @@ function render(){
   });
   $('#pane').innerHTML = S.tab === 'orders' ? ordersView() : S.tab === 'menu' ? menuView() : setupView();
   if (S.tab === 'orders') bindOrders(); else if (S.tab === 'menu') bindMenu(); else bindSetup();
+  const retry = $('#retry');
+  if (retry) retry.onclick = async () => {
+    retry.disabled = true; S.phase = 'loading'; render(); await reload();
+  };
+  const retryMenu = $('#retryMenu');
+  if (retryMenu) retryMenu.onclick = () => loadMenu();
+  const toSetup = $('#toSetup');
+  if (toSetup) toSetup.onclick = () => { S.tab = 'setup'; render(); };
   S.fresh.clear();                                // the entrance runs once, on the render that introduced the row
   paintVenue();
 }
@@ -178,10 +232,45 @@ const STATUS_LABEL = { PENDING:'Нове', CONFIRMED:'Підтверджено',
                        IN_DELIVERY:'В дорозі', DELIVERED:'Доставлено', REJECTED:'Відхилено', CANCELLED:'Скасовано',
                        SCHEDULED:'Заплановано', PICKED_UP:'Забрано' };
 function ordersView(){
+  // ORDER MATTERS. Loading and error are checked BEFORE emptiness, because an
+  // empty list is only meaningful once we know the list arrived.
+  if (S.phase === 'loading') return skeletonOrders();
+  if (S.phase === 'error') return `
+    <div class="panel"><div class="empty" role="alert">
+      <i class="ti ti-alert-triangle i" aria-hidden="true"></i>
+      <b>Не вдалося завантажити замовлення</b>
+      <span class="reason">${esc(S.error || '')}</span>
+      <button class="btn" id="retry" style="margin-top:12px">Спробувати ще раз</button>
+    </div></div>`;
   const live = liveOrders();
   if (!live.length) return `<div class="panel"><div class="empty"><i class="ti ti-inbox i" aria-hidden="true"></i><b>Поки тихо</b>Нові замовлення з'являться тут автоматично</div></div>`;
   let i = 0;
   return `<div class="panel">${live.map(o => row(o, S.fresh.has(o.id) ? i++ : -1)).join('')}</div>`;
+}
+
+// Placeholders shaped like the rows they stand in for -- same height, same
+// three bands -- so the queue does not jump when the real orders land.
+function skeletonMenu(){
+  return `<div class="panel" aria-busy="true" aria-label="Завантажуємо меню">
+    <div class="panel-h"><span class="skel" style="width:8rem;height:1rem"></span></div>
+    ${`<div class="prod">
+        <span class="n"><span class="skel" style="width:9rem;height:1rem"></span></span>
+        <span class="skel" style="width:5rem;height:var(--tap)"></span>
+        <span class="skel" style="width:3rem;height:1.5rem"></span>
+      </div>`.repeat(4)}
+  </div>`;
+}
+
+function skeletonOrders(){
+  return `<div class="panel" aria-busy="true" aria-label="Завантажуємо замовлення">
+    ${`<article class="order sk">
+        <div class="o-h"><span class="skel" style="width:5rem;height:1rem"></span>
+          <span class="skel" style="width:7rem;height:1.5rem"></span>
+          <span class="skel" style="width:4rem;height:1rem;margin-left:auto"></span></div>
+        <div class="skel" style="width:70%;height:1rem;margin:10px 0"></div>
+        <div class="skel" style="width:45%;height:1rem"></div>
+      </article>`.repeat(3)}
+  </div>`;
 }
 
 function row(o, newIdx){
@@ -260,16 +349,22 @@ function bindOrders(){
       reason = prompt('Причина відмови (побачить клієнт):', 'Немає в наявності');
       if (reason === null) return;
     }
-    document.querySelectorAll('[data-o="' + CSS.escape(id) + '"]').forEach(x => x.disabled = true);
+    // Every button on THIS order goes dead together -- confirming and rejecting
+    // the same order are mutually exclusive, and a second tap during the first
+    // request is how an order gets confirmed twice. The one that was pressed
+    // shows the spinner, so it is clear WHICH action is in flight.
+    const siblings = [...document.querySelectorAll('[data-o="' + CSS.escape(id) + '"]')]
+      .filter(x => x !== btn);
+    siblings.forEach(x => { x.disabled = true; });
     try {
-      await api(`/owner/orders/${encodeURIComponent(id)}/action`, { method:'POST',
-        body: JSON.stringify({ location_id: store.loc, action, reason }) });
+      await busy(btn, () => api(`/owner/orders/${encodeURIComponent(id)}/action`, { method:'POST',
+        body: JSON.stringify({ location_id: store.loc, action, reason }) }));
       const ev = SEA_FOR_ACTION[action]; if (ev) seaEvent(ev[0], ev[1]);
       await Promise.all([loadOrders(), loadStats(), loadCouriers()]);
       render();
     } catch (e) {
       toast(String(e.message || e));
-      document.querySelectorAll('[data-o="' + CSS.escape(id) + '"]').forEach(x => x.disabled = false);
+      siblings.forEach(x => { x.disabled = false; });
     }
   });
 
@@ -294,7 +389,7 @@ function bindOrders(){
   });
 }
 
-async function loadOrders(){
+async function loadOrders(opts = {}){
   try {
     const d = await api(`/owner/orders?location_id=${encodeURIComponent(store.loc)}`);
     const first = S.seen.size === 0;            // the first load is not "new orders", it is the queue
@@ -303,7 +398,14 @@ async function loadOrders(){
     S.orders = d.orders || [];
     if (!first) fresh.forEach(o => S.fresh.add(o.id));
     if (fresh.length && S.stats) alert_new(fresh.length);
-  } catch (e) { if (String(e.message) !== 'session expired') toast(String(e.message || e)); }
+  } catch (e) {
+    // `strict` is the first load, where a failure must become a visible state.
+    // On a later poll it is a toast: the queue on screen is still the last
+    // truth we had, and replacing it with an error panel would throw away
+    // information the owner is actively using.
+    if (opts.strict) throw e;
+    if (String(e.message) !== 'session expired') toast(String(e.message || e));
+  }
 }
 async function loadStats(){ try { S.stats = await api(`/owner/dashboard?location_id=${encodeURIComponent(store.loc)}`); } catch {} }
 // Who is available to carry an order. Failing quietly is right here: a missing
@@ -332,11 +434,19 @@ function alert_new(n){
 
 // ── menu ──
 async function loadMenu(){
+  S.menuPhase = 'loading'; S.menuError = null;
+  if (S.tab === 'menu') render();
   try {
-    const d = await fetch(`${API}/public/locations/demo/menu`).then(r => r.json());
+    const r = await fetch(`${API}/public/locations/demo/menu`);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
     S.products = (d.categories || []).flatMap(c => (c.products || []).map(p => ({ ...p, cat: c.name })));
-    S.venue = d.location; render();
-  } catch (e) { toast(String(e.message || e)); }
+    S.venue = d.location;
+    S.menuPhase = 'ready';
+  } catch (e) {
+    S.menuPhase = 'error'; S.menuError = String(e.message || e);
+  }
+  render();
 }
 // One panel per category, product ROWS inside it. The old view put a card
 // inside a card for every dish; nested cards are always wrong.
@@ -355,7 +465,7 @@ function setupView(){
          <b>Розділ</b>, <b>Опис</b> і <b>Наявність</b> — за бажанням.
          Ціни — цілими числами, без копійок.</p>
       <div class="row">
-        <label class="btn btn-ghost file">
+        <label class="btn file">
           <i class="ti ti-file-spreadsheet i" aria-hidden="true"></i>
           <span>Обрати файл</span>
           <input type="file" id="csvFile" accept=".csv,text/csv,text/plain">
@@ -392,7 +502,7 @@ function setupView(){
          Адреса MCP: <code>${esc(location.origin)}/mcp</code></p>
       <div class="row">
         <input id="keyLabel" class="ask" type="text" placeholder="Для чого цей ключ…" autocomplete="off">
-        <button class="btn btn-ghost" id="keyNew"><i class="ti ti-key i" aria-hidden="true"></i>Створити</button>
+        <button class="btn" id="keyNew"><i class="ti ti-key i" aria-hidden="true"></i>Створити</button>
       </div>
       <div id="keyShown" class="report" hidden></div>
       <ul id="keyList" class="keys"></ul>
@@ -403,7 +513,7 @@ function setupView(){
       <p class="hint">Завантажте логотип або фото меню — кольори візьмемо звідти.
          Контраст перевіряємо автоматично: нечитабельну пару не приймемо.</p>
       <div class="row">
-        <label class="btn btn-ghost file">
+        <label class="btn file">
           <i class="ti ti-photo i" aria-hidden="true"></i>
           <span>Обрати зображення</span>
           <input type="file" id="imgFile" accept="image/*">
@@ -518,7 +628,7 @@ async function renderKeys(){
     <li>
       <span>${esc(k.label || 'ключ')}</span>
       ${k.current ? '<span class="hint">поточна сесія</span>'
-                  : `<button class="btn btn-ghost narrow" data-revoke="${esc(k.session)}">Відкликати</button>`}
+                  : `<button class="btn narrow" data-revoke="${esc(k.session)}">Відкликати</button>`}
     </li>`).join('') || '<li class="hint">Ключів ще немає</li>';
   el.querySelectorAll('[data-revoke]').forEach(b => {
     b.onclick = async () => {
@@ -585,24 +695,21 @@ function bindSetup(){
   const apply = $('#csvApply');
   if (apply) apply.onclick = async () => {
     if (!csvText) return;
-    apply.disabled = true;
     try {
       const q = $('#csvRetire').checked ? '?apply=true&retire_missing=true' : '?apply=true';
-      const d = await api('/owner/menu/import' + q, { method:'POST',
-        headers:{ 'content-type':'text/csv' }, body: csvText });
+      const d = await busy(apply, () => api('/owner/menu/import' + q, { method:'POST',
+        headers:{ 'content-type':'text/csv' }, body: csvText }));
       toast(`Меню оновлено: ${d.products} страв`);
       S.products = []; await loadMenu(); await loadVenue();
     } catch (e) { toast(String(e.message || e)); }
-    apply.disabled = false;
   };
 
   renderKeys();
   const keyNew = $('#keyNew');
   if (keyNew) keyNew.onclick = async () => {
-    keyNew.disabled = true;
     try {
-      const d = await api('/owner/apikeys', { method:'POST',
-        body: JSON.stringify({ label: $('#keyLabel').value.trim() }) });
+      const d = await busy(keyNew, () => api('/owner/apikeys', { method:'POST',
+        body: JSON.stringify({ label: $('#keyLabel').value.trim() }) }));
       // Shown ONCE, in a field the owner can select and copy. Not a toast:
       // a toast disappears, and this is the only time this value exists.
       const box = $('#keyShown');
@@ -613,7 +720,6 @@ function bindSetup(){
       $('#keyLabel').value = '';
       await renderKeys();
     } catch (e) { toast(String(e.message || e)); }
-    keyNew.disabled = false;
   };
 
   const img = $('#imgFile');
@@ -658,7 +764,25 @@ function bindSetup(){
 }
 
 function menuView(){
-  if (!S.products.length) return `<div class="skel"></div><div class="skel"></div>`;
+  // THREE STATES, and the bug this replaces is worth naming: the old code showed
+  // a skeleton whenever the list was empty, so a venue that genuinely has no
+  // dishes sat on a loading animation forever, and the skeleton itself had no
+  // height so it collapsed to nothing anyway.
+  if (S.menuPhase === 'loading' || S.menuPhase === 'idle') return skeletonMenu();
+  if (S.menuPhase === 'error') return `
+    <div class="panel"><div class="empty" role="alert">
+      <i class="ti ti-alert-triangle i" aria-hidden="true"></i>
+      <b>Меню не завантажилось</b>
+      <span class="reason">${esc(S.menuError || '')}</span>
+      <button class="btn" id="retryMenu" style="margin-top:12px">Спробувати ще раз</button>
+    </div></div>`;
+  if (!S.products.length) return `
+    <div class="panel"><div class="empty">
+      <i class="ti ti-tools-kitchen-2 i" aria-hidden="true"></i>
+      <b>У меню ще немає страв</b>
+      Завантажте CSV у розділі «Налаштування» — і меню з'явиться тут
+      <button class="btn" id="toSetup" style="margin-top:12px">До налаштувань</button>
+    </div></div>`;
   let cat = null; const out = [];
   for (const p of S.products) {
     if (p.cat !== cat) {

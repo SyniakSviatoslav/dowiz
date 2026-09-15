@@ -288,13 +288,13 @@ async fn an_order_travels_from_the_customer_to_the_door() {
         tasks["available"].as_array().unwrap().iter().any(|o| o["id"] == id.as_str()),
         "a READY unassigned delivery must be offered: {tasks}"
     );
-    assert!(tasks["tasks"].as_array().unwrap().is_empty(), "nothing is theirs yet");
+    assert!(tasks["mine"].as_array().unwrap().is_empty(), "nothing is theirs yet");
 
     // They take it.
     let (code, v) = post(&s.base, &format!("/api/courier/orders/{id}/accept"), Some(&courier), json!({}));
     assert_eq!(code, 200, "{v}");
     let (_, tasks) = get(&s.base, "/api/courier/tasks", Some(&courier));
-    assert_eq!(tasks["tasks"].as_array().unwrap().len(), 1, "now it is theirs");
+    assert_eq!(tasks["mine"].as_array().unwrap().len(), 1, "now it is theirs");
     assert!(tasks["available"].as_array().unwrap().is_empty(), "and no longer offered");
 
     // Pickup, then delivery.
@@ -315,7 +315,7 @@ async fn an_order_travels_from_the_customer_to_the_door() {
 
     // And it leaves the courier's list.
     let (_, tasks) = get(&s.base, "/api/courier/tasks", Some(&courier));
-    assert!(tasks["tasks"].as_array().unwrap().is_empty(), "delivered work is not open work");
+    assert!(tasks["mine"].as_array().unwrap().is_empty(), "delivered work is not open work");
 }
 
 /// A courier must not be able to touch an order that is not theirs.
@@ -363,7 +363,7 @@ async fn a_courier_cannot_move_another_couriers_order() {
 
     // It never appeared in Blerim's list in the first place.
     let (_, tasks) = get(&s.base, "/api/courier/tasks", Some(&blerim));
-    assert!(tasks["tasks"].as_array().unwrap().is_empty(), "not their work: {tasks}");
+    assert!(tasks["mine"].as_array().unwrap().is_empty(), "not their work: {tasks}");
     assert!(tasks["available"].as_array().unwrap().is_empty(), "and not on offer: {tasks}");
 
     // The order is untouched by any of that.
@@ -1177,4 +1177,119 @@ async fn a_session_that_is_not_yours_cannot_be_revoked() {
     assert_eq!(code, 404);
     // The courier is still logged in.
     assert_eq!(get(&s.base, "/api/courier/tasks", Some(&courier)).0, 200);
+}
+
+/// THE KEYS THE COURIER APP ACTUALLY READS.
+///
+/// This test exists because of a bug that every other test passed through. The
+/// app does `S.onShift = d.onShift; S.mine = d.mine; ...` and this endpoint
+/// answered `{tasks, available, courier}`. `onShift` was undefined, which is
+/// falsy, so the screen rendered "you are offline" permanently -- for every
+/// courier, regardless of their shift, showing no tasks ever. The API tests
+/// asserted the API's own shape and were all green.
+///
+/// The address had the same fault one level down: the app reads
+/// `o.address.line`, the order carries `fulfilment.address`, so the delivery
+/// screen displayed no address and no maps link -- the one thing a courier
+/// needs from it.
+///
+/// So this asserts the CONTRACT THE SURFACE DEPENDS ON, field by field, named
+/// as the JavaScript names them. If a field here is renamed, this fails; a test
+/// that only reads the response cannot.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_courier_payload_matches_what_the_courier_app_reads() {
+    let s = boot("courier_contract").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+    let (_, c) = post(&s.base, "/api/courier/auth/login", None,
+                      json!({ "phone": "+355691112233", "password": "courier-pw" }));
+    let courier = c["jwt"].as_str().unwrap().to_string();
+
+    // Off shift to begin with.
+    let (_, d) = get(&s.base, "/api/courier/tasks", Some(&courier));
+    assert_eq!(d["onShift"], false, "`onShift` must exist and be false: {d}");
+    assert!(d["mine"].is_array(), "`mine` must be an array: {d}");
+    assert!(d["available"].is_array(), "`available` must be an array: {d}");
+
+    // On shift, it must say so -- this is the value whose absence blanked the
+    // whole screen.
+    assert_eq!(post(&s.base, "/api/courier/shift", Some(&courier), json!({ "open": true })).0, 200);
+    let (_, d) = get(&s.base, "/api/courier/tasks", Some(&courier));
+    assert_eq!(d["onShift"], true, "a courier who opened a shift must read as on shift: {d}");
+
+    // An order with a full address and coordinates.
+    let (_, order) = post(&s.base, "/api/public/locations/dubin/orders", None, json!({
+        "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 1 }],
+        "contact": { "name": "Ana", "phone": "+355691234567" },
+        "fulfilment": { "kind": "delivery", "address": {
+            "line": "Rruga Taulantia 12", "note": "ring twice",
+            "lat_udeg": 41_323_000, "lon_udeg": 19_441_000 } }
+    }));
+    let id = order["id"].as_str().unwrap().to_string();
+    for a in ["confirm", "preparing", "ready"] {
+        post(&s.base, &format!("/api/owner/orders/{id}/action"), Some(&owner), json!({ "action": a }));
+    }
+    post(&s.base, &format!("/api/courier/orders/{id}/accept"), Some(&courier), json!({}));
+
+    let (_, d) = get(&s.base, "/api/courier/tasks", Some(&courier));
+    let task = &d["mine"][0];
+
+    // Every field `renderActive`, `orderHead` and `renderCash` dereference.
+    assert_eq!(task["id"], id.as_str());
+    assert_eq!(task["status"], "READY");
+    // 900 for the dish plus the 200 delivery fee: this order is under the 2000
+    // free-delivery threshold. `o.total` is what the courier collects at the
+    // door, so it must be the total and not the subtotal.
+    assert_eq!(task["total"], 1100, "`o.total` drives the cash screen");
+    assert_eq!(task["subtotal"], 900);
+    assert_eq!(task["delivery_fee"], 200);
+    assert_eq!(task["payment"], "cash", "`o.payment` decides whether cash is collected");
+    assert!(task["items"].is_array(), "`o.items` is rendered on the card");
+    assert_eq!(task["contact"]["phone"], "+355691234567", "`o.contact?.phone` is the call button");
+    // The address, at the TOP LEVEL, which is the break this test was written for.
+    assert_eq!(task["address"]["line"], "Rruga Taulantia 12", "`o.address?.line`: {task}");
+    assert_eq!(task["address"]["note"], "ring twice", "`o.address?.note`");
+    assert_eq!(task["address"]["lat_udeg"], 41_323_000, "`o.address?.lat_udeg` drops the map pin");
+    assert_eq!(task["address"]["lon_udeg"], 19_441_000, "`o.address?.lon_udeg`");
+
+    // Closing the shift must be visible too, or the screen cannot get back.
+    assert_eq!(post(&s.base, "/api/courier/shift", Some(&courier), json!({ "open": false })).0, 200);
+    let (_, d) = get(&s.base, "/api/courier/tasks", Some(&courier));
+    assert_eq!(d["onShift"], false);
+}
+
+/// The admin pane's contract, for the same reason.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_owner_payloads_match_what_the_admin_pane_reads() {
+    let s = boot("admin_contract").await;
+    let (code, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    assert_eq!(code, 200);
+    // `store.t = d.access_token; store.r = d.refresh_token; store.loc = d.user.locationId;`
+    assert!(o["access_token"].as_str().is_some_and(|t| !t.is_empty()));
+    assert!(o["refresh_token"].as_str().is_some_and(|t| !t.is_empty()));
+    assert!(o["user"]["locationId"].as_str().is_some(), "store.loc comes from here: {o}");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+
+    // `S.orders = d.orders || []`
+    let (_, d) = get(&s.base, "/api/owner/orders", Some(&owner));
+    assert!(d["orders"].is_array(), "{d}");
+
+    // `s.todayOrders / s.pending / s.active / s.todayRevenue`
+    let (_, d) = get(&s.base, "/api/owner/dashboard", Some(&owner));
+    for k in ["todayOrders", "pending", "active", "todayRevenue"] {
+        assert!(d[k].is_i64(), "the stats row reads {k}: {d}");
+    }
+
+    // `S.couriers` -> `c.id / c.name / c.active / c.onShift`
+    let (_, d) = get(&s.base, "/api/owner/couriers", Some(&owner));
+    let c = &d["couriers"][0];
+    assert!(c["id"].is_string() && c["name"].is_string(), "{d}");
+    assert!(c["active"].is_boolean() && c["onShift"].is_boolean(), "the picker filters on these: {d}");
+
+    // `S.products` is flattened from the public menu: `p.id/name/price/available`
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    let p = &menu["categories"][0]["products"][0];
+    for k in ["id", "name", "price", "available"] {
+        assert!(!p[k].is_null(), "the menu tab reads {k}: {p}");
+    }
 }

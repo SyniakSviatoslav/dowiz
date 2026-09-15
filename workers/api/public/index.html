@@ -306,6 +306,12 @@ input:focus,textarea:focus,select:focus{border-color:var(--brand-primary);outlin
   animation:sweep 1.3s ease-in-out infinite}
 @keyframes sweep{to{transform:translateX(100%)}}
 .empty{text-align:center;padding:var(--space-12) var(--space-5);color:var(--brand-text-muted)}
+/* The technical reason, under the human sentence. Small and muted because it is
+   for the one customer in fifty who will read it out over the phone, not for
+   the other forty-nine. */
+.empty .reason{display:block;margin-top:var(--space-2);font-size:var(--text-xs);
+       opacity:.8;word-break:break-word}
+.empty .btn{max-width:20rem;margin-inline:auto}
 .empty b{display:block;font-family:var(--brand-font-heading);font-size:var(--text-lg);
          font-weight:var(--weight-normal);color:var(--brand-text);margin-bottom:var(--space-2)}
 .notice{display:flex;gap:var(--space-3);align-items:flex-start;padding:var(--space-3) var(--space-4);
@@ -352,7 +358,10 @@ input:focus,textarea:focus,select:focus{border-color:var(--brand-primary);outlin
 </div></div>
 <div class="scrim" id="scrim"></div>
 <div class="sheet" id="sheet" role="dialog" aria-modal="true"><div class="grab"></div><div class="sheet-in" id="sheetIn"></div></div>
-<div class="toast" id="toast"></div>
+<!-- role=status + aria-live: a toast is the only notice of several actions
+     (order sent, address checked, poll failing) and a silent one is no notice
+     at all for anyone not looking at that corner of the screen. -->
+<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 <!-- Stripe.js is loaded ONLY when the card rail is configured (app.js injects it
      after the menu says so), so a cash-only venue ships no payment SDK at all. -->
 <script type="module" src="/app.js"></script>

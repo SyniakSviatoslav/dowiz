@@ -258,6 +258,16 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
 .setup .pairs li{display:flex;align-items:center;gap:var(--space-2)}
 .setup .pairs .ok{color:var(--brand-text-muted)}
 .setup .pairs .bad{color:var(--danger-ink);font-weight:var(--weight-semibold)}
+/* The technical reason under a human sentence, on every error panel in this
+   pane. Muted and small: it exists so the owner can read it out to whoever can
+   act on it, not so they have to understand it. */
+.empty .reason{display:block;margin-top:var(--space-2);font-size:var(--text-xs);
+       color:var(--brand-text-muted);opacity:.85;word-break:break-word}
+/* Placeholder rows must occupy the space their real rows will, or the queue
+   jumps under the owner's thumb the moment the data lands. */
+.order.sk{pointer-events:none}
+.order.sk .o-h{display:flex;align-items:center;gap:var(--space-2)}
+
 .setup .keys{margin:0;padding:0;list-style:none;display:grid;gap:var(--space-1)}
 .setup .keys li{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);
        min-height:var(--tap);padding:0 var(--space-3);border:1px solid var(--brand-border);

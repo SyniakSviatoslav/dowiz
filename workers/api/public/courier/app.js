@@ -21,7 +21,11 @@ const store = {
   get theme(){ try { return localStorage.getItem('dw_c_theme') || ''; } catch { return ''; } },
   set theme(v){ try { v ? localStorage.setItem('dw_c_theme', v) : localStorage.removeItem('dw_c_theme'); } catch {} },
 };
+// `phase` exists because `onShift:false` is a LIE until the first load answers.
+// Rendering it as fact told a courier their shift was closed -- the one screen
+// state that makes them stop working -- while the request was still in flight.
 let S = { onShift:false, mine:[], available:[], shift:null, watchId:null, wake:null, booted:false,
+          phase:'loading', error:null,
           loadedOnce:false, sel:null, cashFor:null, moving:false, hiddenAt:0, inflight:0 };
 
 // ── theme ──
@@ -57,7 +61,42 @@ mqDark.addEventListener('change', () => { if (!store.theme) syncMapStyle(); });
 const STYLE = { light:'https://tiles.openfreemap.org/styles/bright', dark:'https://tiles.openfreemap.org/styles/dark' };
 let map = null, meMarker = null, dropMarker = null, mapDark = null;
 const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-function initMap(){
+// THE MAP LIBRARY ARRIVES WHEN THERE IS A MAP, not when the page loads.
+//
+// maplibre-gl is 932 KB raw / 245 KB gzipped -- measured, not estimated -- and
+// it was being fetched on every single page load, including the login screen
+// and the off-shift screen, neither of which contains a map. A courier opening
+// this on a phone at the edge of coverage paid for it every time before seeing
+// anything at all.
+//
+// Loaded once, cached by the promise so two callers race safely, and its
+// stylesheet comes with it rather than sitting in the document head.
+let mapLibPromise = null;
+function loadMapLibrary(){
+  if (window.maplibregl) return Promise.resolve();
+  if (mapLibPromise) return mapLibPromise;
+  mapLibPromise = new Promise((resolve, reject) => {
+    const css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = 'https://cdn.jsdelivr.net/npm/maplibre-gl@5.9.0/dist/maplibre-gl.css';
+    document.head.appendChild(css);
+    const js = document.createElement('script');
+    js.src = 'https://cdn.jsdelivr.net/npm/maplibre-gl@5.9.0/dist/maplibre-gl.js';
+    js.async = true;
+    js.onload = () => resolve();
+    // A failed load must REJECT rather than hang: the delivery screen has to
+    // fall back to the address and the call button, and it can only do that if
+    // it is told. A courier with no map still has a job.
+    js.onerror = () => { mapLibPromise = null; reject(new Error('map unavailable')); };
+    document.head.appendChild(js);
+  });
+  return mapLibPromise;
+}
+
+async function initMap(){
+  if (map) return;
+  try { await loadMapLibrary(); }
+  catch { return; }
   if (map || !window.maplibregl) return;
   mapDark = isDark();
   map = new maplibregl.Map({
@@ -85,8 +124,9 @@ function markMe(lon, lat){
   }
   meMarker.setLngLat([lon, lat]).addTo(map);
 }
-// Kept for the day the task card carries coordinates: today `address` is
-// `{line, note}` only (storefront AddressIn), so nothing calls this yet.
+// The drop pin. This was dead code with a note saying the task card carried no
+// coordinates -- true until the delivery-zone work put `lat_udeg`/`lon_udeg` on
+// the address. It is called from `renderActive` now.
 function markDrop(lon, lat){
   if (!map) return;
   if (!dropMarker) dropMarker = new maplibregl.Marker({ color: cssVar('--brand-primary') });
@@ -275,8 +315,17 @@ async function load(){
       ping(); seaEvent('order_created', 80);
     }
     S.loadedOnce = true;
+    S.phase = 'ready'; S.error = null;
     render();
-  } catch (e) { if (String(e.message) !== 'unauthorised') toast(String(e.message || e), 'alert-circle'); }
+  } catch (e) {
+    if (String(e.message) === 'unauthorised') return;
+    // FIRST load failing is a state; a later one is a toast. After the first
+    // success the screen holds real work -- an address, a phone number, a
+    // button that says delivered -- and replacing that with an error panel
+    // because one poll timed out would take away the thing being used.
+    if (!S.loadedOnce) { S.phase = 'error'; S.error = String(e.message || e); render(); }
+    else toast(String(e.message || e), 'alert-circle');
+  }
 }
 
 function setShiftTag(){
@@ -289,6 +338,28 @@ function setShiftTag(){
 
 function render(){
   setShiftTag();
+
+  // BEFORE anything is claimed about the shift. A skeleton here is not
+  // decoration: the alternative is asserting "you are offline" on no evidence.
+  if (S.phase === 'loading' && !S.loadedOnce) {
+    $('#app').innerHTML = `<div class="loadwrap" aria-busy="true" aria-label="Завантажуємо">
+      <div class="skel" style="height:1.2rem;width:9rem"></div>
+      <div class="skel" style="height:4.5rem"></div>
+      <div class="skel" style="height:4.5rem"></div>
+      <div class="skel" style="height:var(--tap);width:60%"></div>
+    </div>`;
+    return;
+  }
+  if (S.phase === 'error' && !S.loadedOnce) {
+    $('#app').innerHTML = `<div class="empty" role="alert">${icon('plug-connected-x')}
+      <b>Немає зв'язку із закладом</b>
+      <span class="reason">${esc(S.error || '')}</span></div>
+      <button class="cta go" id="retry" type="button">${icon('refresh')}Спробувати ще раз</button>`;
+    $('#retry').onclick = async () => {
+      S.phase = 'loading'; render(); await load();
+    };
+    return;
+  }
 
   if (!S.onShift) {
     stopTracking(); keepAwake(false); S.cashFor = null;
@@ -402,10 +473,30 @@ function renderActive(o){
       ${o.contact?.phone ? `<a class="ghost" href="tel:${esc(o.contact.phone)}">${icon('phone')}Подзвонити</a>` : ''}
     </div>`;
 
+  // THE DESTINATION ON THE MAP. Micro-degrees back to degrees here and nowhere
+  // else: the wire and the store hold integers, and this is the single boundary
+  // where a float is correct because maplibre speaks degrees.
+  //
+  // Awaited rather than fired blind, because `initMap` may still be fetching the
+  // library on a slow connection and a marker added to a null map is silently
+  // lost -- which would leave the courier looking at a map with no destination
+  // on it and no way to know why.
+  const lat = o.address?.lat_udeg, lon = o.address?.lon_udeg;
+  if (Number.isFinite(lat) && Number.isFinite(lon)) {
+    initMap().then(() => markDrop(lon / 1e6, lat / 1e6)).catch(() => {});
+  }
+
   if ($('#pick')) $('#pick').onclick = async () => {
-    $('#pick').disabled = true;
+    const b = $('#pick');
+    const had = b.innerHTML;
+    b.disabled = true; b.setAttribute('aria-busy', 'true');
+    b.innerHTML = `${icon('loader-2')}Записуємо…`;
+    b.querySelector('.ti')?.classList.add('spin');
     try { await api(`/courier/orders/${encodeURIComponent(o.id)}/pickup`, { method:'POST', attend:true }); await load(); }
-    catch (e) { toast(String(e.message || e), 'alert-circle'); $('#pick').disabled = false; }
+    catch (e) {
+      toast(String(e.message || e), 'alert-circle');
+      b.disabled = false; b.removeAttribute('aria-busy'); b.innerHTML = had;
+    }
   };
   if ($('#done')) $('#done').onclick = () => {
     // Short handovers happen. Record what was actually taken rather than
@@ -459,7 +550,12 @@ async function setShift(open){
   catch (e) { toast(String(e.message || e), 'alert-circle'); }
 }
 
-async function boot(){ S.booted = true; initMap(); await load();
+async function boot(){ S.booted = true;
+  // NOT awaited. The task list is what this screen is for; the map is how the
+  // task is easier. Blocking the first paint on a 245 KB download would make
+  // the important thing wait for the helpful one.
+  initMap();
+  await load();
   clearInterval(boot._i);
   boot._i = setInterval(() => { if (!document.hidden && S.booted) load(); }, 12000); }
 

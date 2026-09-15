@@ -18,6 +18,7 @@ const T = {
         sent:'Porosia u dërgua', track:'Ndiqni porosinë', offline:'Jeni offline — telefononi',
         required:'E detyrueshme', badPhone:'Numër i pavlefshëm', ordering:'Duke dërguar…',
         checkArea:'Kontrolloni adresën', checking:'Po kontrollojmë…',
+        retry:'Provo përsëri', loadFail:'Menuja nuk u ngarkua', loading:'Po ngarkohet…',
         inArea:'Ne dërgojmë këtu', outArea:'Jashtë zonës sonë të dërgesës', noGeo:'Nuk morëm dot vendndodhjen',
         notify:'Merrni njoftime në Telegram', notifyHint:'Ju njoftojmë sa herë ndryshon porosia',
         st:{PENDING:'Duke pritur konfirmimin',CONFIRMED:'U konfirmua',PREPARING:'Po gatuhet',
@@ -32,6 +33,7 @@ const T = {
         sent:'Order placed', track:'Track your order', offline:'You are offline — call instead',
         required:'Required', badPhone:'Invalid number', ordering:'Sending…',
         checkArea:'Check this address', checking:'Checking…',
+        retry:'Try again', loadFail:'The menu did not load', loading:'Loading…',
         inArea:'We deliver here', outArea:'Outside our delivery area', noGeo:'Could not get your location',
         notify:'Get updates on Telegram', notifyHint:'We\u2019ll message you each time this order moves',
         st:{PENDING:'Awaiting confirmation',CONFIRMED:'Confirmed',PREPARING:'Being prepared',
@@ -46,6 +48,7 @@ const T = {
         sent:'Замовлення прийнято', track:'Стежити за замовленням', offline:'Немає зв’язку — телефонуйте',
         required:'Обов’язкове поле', badPhone:'Некоректний номер', ordering:'Надсилаємо…',
         checkArea:'Перевірити адресу', checking:'Перевіряємо…',
+        retry:'Спробувати ще раз', loadFail:'Меню не завантажилось', loading:'Завантажуємо…',
         inArea:'Сюди доставляємо', outArea:'Поза зоною доставки', noGeo:'Не вдалося визначити місце',
         notify:'Сповіщення в Telegram', notifyHint:'Напишемо щоразу, коли статус зміниться',
         st:{PENDING:'Очікує підтвердження',CONFIRMED:'Підтверджено',PREPARING:'Готується',
@@ -185,9 +188,24 @@ async function load(){
     renderMenu();
     initSea().then(() => seaEvent('pending_aging', 40));
   } catch (e) {
-    // An honest error naming the real fallback -- the venue's own phone.
-    render(`<div class="empty"><b>${esc(t('offline'))}</b>
-      ${state.loc?.phone ? `<a class="btn" style="margin-top:14px" href="tel:${esc(state.loc.phone)}">${esc(state.loc.phone)}</a>` : ''}</div>`);
+    // AN ERROR STATE, not an empty one. The distinction matters: "we have no
+    // menu" and "we could not fetch the menu" look identical to a customer and
+    // lead to opposite actions. This one says which, offers the way out that
+    // actually works, and keeps the reason instead of swallowing it.
+    //
+    // Being offline is named separately because it is the one cause the
+    // customer can fix themselves, and because a retry button is useless until
+    // they do.
+    const off = !navigator.onLine;
+    render(`<div class="empty" role="alert">
+      <i class="ti ti-${off ? 'wifi-off' : 'alert-triangle'}" aria-hidden="true"
+         style="font-size:2rem;display:block;margin-bottom:8px"></i>
+      <b>${esc(off ? t('offline') : t('loadFail'))}</b>
+      <span class="reason">${esc(String(e.message || e))}</span>
+      <button class="btn" style="margin-top:14px" id="retry">${esc(t('retry'))}</button>
+      ${state.loc?.phone ? `<a class="btn btn-ghost" style="margin-top:8px" href="tel:${esc(state.loc.phone)}">${esc(state.loc.phone)}</a>` : ''}
+    </div>`);
+    $('#retry').onclick = load;
   }
 }
 const render = html => { $('#app').innerHTML = html; };
@@ -522,9 +540,21 @@ function openTracking(order){
     // Poll: the order's state belongs to the server, so ask it rather than
     // guessing locally. A socket comes later; this is honest in the meantime.
     openTracking._t = setTimeout(async () => {
-      try { const r = await fetch(`${API}/order/${encodeURIComponent(order.id)}`);
-            if (r.ok) { const d = await r.json(); if ($('#sheet').classList.contains('show')) openTracking(d); } }
-      catch {}
+      try {
+        const r = await fetch(`${API}/order/${encodeURIComponent(order.id)}`);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const d = await r.json();
+        openTracking._fails = 0;
+        if ($('#sheet').classList.contains('show')) openTracking(d);
+      } catch {
+        // A poll that fails forever in silence leaves the customer watching a
+        // status that stopped being true. After three misses -- around
+        // forty seconds -- say so, and keep trying, because the usual cause is
+        // a tunnel and it ends.
+        openTracking._fails = (openTracking._fails || 0) + 1;
+        if (openTracking._fails === 3) toast(t('loadFail'));
+        if ($('#sheet').classList.contains('show')) openTracking(order);
+      }
     }, 12000);
   }
 }
