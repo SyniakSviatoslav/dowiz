@@ -30,6 +30,7 @@ pub mod palette;
 pub mod roster;
 pub mod settings;
 pub mod subs;
+pub mod zone;
 pub mod token;
 
 use bebop_store::evlog::{EvLog, Record};

@@ -311,6 +311,13 @@ input:focus,textarea:focus,select:focus{border-color:var(--brand-primary);outlin
 .notice{display:flex;gap:var(--space-3);align-items:flex-start;padding:var(--space-3) var(--space-4);
         border-radius:var(--radius-card);background:var(--brand-primary-light);
         border:1px solid var(--brand-border);font-size:var(--text-sm);margin-block:var(--space-3)}
+/* The delivery-area answer. Colour is NOT the only signal -- the text says
+   which it is -- because a red/green pair is invisible to about one man in
+   twelve, and this one decides whether someone can order at all. */
+.geo{margin:0 0 var(--space-3);font-size:var(--text-sm);color:var(--brand-text-muted)}
+.geo.ok{color:var(--color-success)}
+.geo.bad{color:var(--color-danger)}
+
 .notice a{color:var(--brand-primary);font-weight:var(--weight-bold)}
 .offline{position:fixed;left:0;right:0;top:0;z-index:var(--z-toast);background:var(--color-warning);
          color:#fff;text-align:center;padding:var(--space-2) var(--space-4);

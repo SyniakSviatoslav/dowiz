@@ -910,3 +910,123 @@ async fn an_unreachable_model_fails_loudly() {
     // An empty question never reaches a model at all.
     assert_eq!(post(&s.base, "/api/owner/assist", Some(&owner), json!({ "question": "  " })).0, 400);
 }
+
+/// A venue that draws a service area must not take orders outside it.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_order_outside_the_delivery_area_is_refused() {
+    let s = boot("zones").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+
+    const LAT: i64 = 41_323_000; // Durrës
+    const LON: i64 = 19_441_000;
+
+    let order_at = |lat: Option<i64>, lon: Option<i64>| {
+        let mut addr = json!({ "line": "Rruga Taulantia 12" });
+        if let (Some(a), Some(b)) = (lat, lon) {
+            addr["lat_udeg"] = json!(a);
+            addr["lon_udeg"] = json!(b);
+        }
+        post(
+            &s.base,
+            "/api/public/locations/dubin/orders",
+            None,
+            json!({
+                "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 1 }],
+                "contact": { "name": "C", "phone": "+355690000000" },
+                "fulfilment": { "kind": "delivery", "address": addr }
+            }),
+        )
+    };
+
+    // Before any zone exists, everywhere is served -- a venue that has not drawn
+    // an area has not asked for one to be enforced.
+    assert_eq!(order_at(Some(LAT + 900_000), Some(LON)).0, 200);
+
+    // Draw a 3 km circle.
+    let (code, v) = post(
+        &s.base,
+        "/api/owner/zones",
+        Some(&owner),
+        json!({ "zones": [{ "kind": "circle", "lat": LAT, "lon": LON, "radius_m": 3000 }] }),
+    );
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["zones"], 1);
+
+    // Inside: accepted.
+    let (code, v) = order_at(Some(LAT + 9_000), Some(LON));
+    assert_eq!(code, 200, "1 km away must be served: {v}");
+    assert!(v.get("delivery_area_unverified").is_none(), "it WAS verified: {v}");
+
+    // Outside: refused, with how far.
+    let (code, v) = order_at(Some(LAT + 900_000), Some(LON));
+    assert_eq!(code, 409, "100 km away must be refused: {v}");
+    let msg = v["error"].as_str().unwrap();
+    assert!(msg.contains("outside the delivery area"), "{msg}");
+    assert!(msg.contains(" m"), "the customer must be told how far: {msg}");
+
+    // No coordinates: ACCEPTED and flagged, because there is no geocoder and
+    // refusing would refuse everyone who declined the location prompt.
+    let (code, v) = order_at(None, None);
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["delivery_area_unverified"], true, "the venue must see it was unchecked: {v}");
+
+    // A PICKUP order is never zone-checked: where the customer lives is not the
+    // venue's problem.
+    let (code, v) = post(
+        &s.base,
+        "/api/public/locations/dubin/orders",
+        None,
+        json!({
+            "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 1 }],
+            "contact": { "name": "C", "phone": "+355690000000" },
+            "fulfilment": { "kind": "pickup" }
+        }),
+    );
+    assert_eq!(code, 200, "{v}");
+
+    // The storefront learns that a zone exists, so it knows to ask for location.
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    assert_eq!(menu["location"]["hasDeliveryZones"], true);
+
+    // And a customer can ask BEFORE filling a basket.
+    let (code, v) = get(&s.base, &format!("/api/public/reach?lat_udeg={}&lon_udeg={LON}", LAT + 9_000), None);
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["deliverable"], true);
+    let (_, v) = get(&s.base, &format!("/api/public/reach?lat_udeg={}&lon_udeg={LON}", LAT + 900_000), None);
+    assert_eq!(v["deliverable"], false);
+    assert!(v["nearestMetres"].as_i64().unwrap() > 90_000, "{v}");
+
+    // Removing every zone turns the check off again.
+    let (code, v) = post(&s.base, "/api/owner/zones", Some(&owner), json!({ "zones": [] }));
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(order_at(Some(LAT + 900_000), Some(LON)).0, 200);
+}
+
+/// A zone the reader cannot understand would silently mean "no restriction".
+/// It must be refused at the point it is set, not discovered later.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_unreadable_zone_is_refused_rather_than_stored() {
+    let s = boot("zones_guard").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+
+    for bad in [
+        json!({ "kind": "circle", "lat": 1 }),
+        json!({ "kind": "circle", "lat": 1, "lon": 2, "radius_m": 0 }),
+        json!({ "kind": "polygon", "points": [[0, 0]] }),
+        json!({ "kind": "nonsense" }),
+    ] {
+        let (code, v) = post(&s.base, "/api/owner/zones", Some(&owner), json!({ "zones": [bad] }));
+        assert_eq!(code, 400, "must be refused: {v}");
+    }
+    // And a courier may not draw the venue's service area.
+    let (_, c) = post(&s.base, "/api/courier/auth/login", None,
+                      json!({ "phone": "+355691112233", "password": "courier-pw" }));
+    let courier = c["jwt"].as_str().unwrap().to_string();
+    assert_eq!(
+        post(&s.base, "/api/owner/zones", Some(&courier),
+             json!({ "zones": [{ "kind": "circle", "lat": 1, "lon": 2, "radius_m": 5 }] })).0,
+        403
+    );
+}

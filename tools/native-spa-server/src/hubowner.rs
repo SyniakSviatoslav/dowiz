@@ -615,6 +615,8 @@ pub fn routes(state: Shared) -> Router {
         .route("/api/owner/settings", get(settings))
         .route("/api/owner/settings", post(set_setting))
         .route("/api/owner/assist", post(owner_assist))
+        .route("/api/owner/zones", post(set_zones))
+        .route("/api/public/reach", get(public_reach))
         .with_state(state)
 }
 
@@ -788,4 +790,84 @@ pub async fn owner_assist(
 ) -> Result<Json<Value>, HubHttpError> {
     let facts = owner_facts(&st).await?;
     assist_public(&st, crate::ai::SYSTEM_OWNER, facts, &body.question).await
+}
+
+#[derive(Deserialize)]
+pub struct ZonesIn {
+    /// The service area, as the owner drew it. An EMPTY list removes every
+    /// restriction, which is how a venue turns the check off.
+    pub zones: Vec<Value>,
+}
+
+/// `POST /api/owner/zones` — where this venue delivers.
+pub async fn set_zones(
+    State(st): State<Shared>,
+    _who: OwnerCaller,
+    Json(body): Json<ZonesIn>,
+) -> Result<Json<Value>, HubHttpError> {
+    let raw = serde_json::to_string(&body.zones).unwrap_or_else(|_| "[]".into());
+    // PARSED BACK before it is stored. A zone the reader cannot understand is
+    // treated as no zone at all -- which ACCEPTS every order -- so a
+    // configuration that silently means nothing would quietly turn the check
+    // off while the owner believed they had switched it on.
+    let parsed = dowiz_hub::zone::from_json(&raw);
+    if parsed.len() != body.zones.len() {
+        return Err(HubHttpError::Invalid(format!(
+            "{} of {} zones could not be read; a circle needs lat, lon and radius_m, \
+             a polygon needs at least three points",
+            body.zones.len() - parsed.len(),
+            body.zones.len()
+        )));
+    }
+
+    let zones = body.zones.clone();
+    st.with_catalog(move |cat| {
+        let raw = cat.location().ok_or(HubHttpError::NotFound("venue"))?;
+        let mut loc: Value =
+            serde_json::from_str(&raw).map_err(|_| HubHttpError::Corrupt("catalogue venue"))?;
+        loc["delivery_zones"] = Value::Array(zones);
+        cat.set_location(&serde_json::to_string(&loc).unwrap_or(raw));
+        Ok(())
+    })
+    .await?;
+    Ok(Json(json!({ "zones": parsed.len() })))
+}
+
+#[derive(Deserialize)]
+pub struct ReachQuery {
+    pub lat_udeg: i64,
+    pub lon_udeg: i64,
+}
+
+/// `GET /api/public/reach?lat_udeg=&lon_udeg=` — can you be delivered to?
+///
+/// PUBLIC on purpose. A customer should learn this before filling a basket, not
+/// at checkout after choosing thirty euros of food. It reveals only whether the
+/// venue serves a point, which is information the venue wants advertised.
+pub async fn public_reach(
+    State(st): State<Shared>,
+    Query(q): Query<ReachQuery>,
+) -> Result<Json<Value>, HubHttpError> {
+    let loc = st
+        .read_catalog()?
+        .location()
+        .ok_or(HubHttpError::NotFound("venue"))?;
+    let loc: Value = serde_json::from_str(&loc).map_err(|_| HubHttpError::Corrupt("venue"))?;
+    let zones = loc
+        .get("delivery_zones")
+        .map(|z| dowiz_hub::zone::from_json(&z.to_string()))
+        .unwrap_or_default();
+    let out = match dowiz_hub::zone::reach(&zones, Some((q.lat_udeg, q.lon_udeg))) {
+        dowiz_hub::zone::Reach::Inside => json!({ "deliverable": true }),
+        dowiz_hub::zone::Reach::Unrestricted => json!({ "deliverable": true, "unrestricted": true }),
+        dowiz_hub::zone::Reach::Unknown => json!({ "deliverable": true, "unverified": true }),
+        dowiz_hub::zone::Reach::Outside { nearest_m } => json!({
+            "deliverable": false,
+            // Rounded to 100 m: a metre-exact distance implies a precision the
+            // flat-earth approximation does not have, and invites an argument
+            // about whether someone is 47 or 52 metres outside.
+            "nearestMetres": (nearest_m / 100) * 100
+        }),
+    };
+    Ok(Json(out))
 }

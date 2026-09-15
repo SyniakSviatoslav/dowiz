@@ -31,6 +31,7 @@ use dowiz_hub::catalog::Catalog;
 use dowiz_hub::roster::Roster;
 use dowiz_hub::settings::Settings;
 use dowiz_hub::subs::Subs;
+use dowiz_hub::zone::{self, Reach};
 use dowiz_hub::{EventKind, Hub};
 use dowiz_kernel::json_api;
 
@@ -260,6 +261,16 @@ pub struct AddressIn {
     pub line: String,
     #[serde(default)]
     pub note: Option<String>,
+    /// Micro-degrees, when the customer's browser supplied them.
+    ///
+    /// OPTIONAL, and the delivery-zone check is written around that: there is
+    /// no geocoder here, so an address typed by someone who declined the
+    /// location prompt has no position and cannot be checked. Those are
+    /// accepted and flagged rather than refused.
+    #[serde(default)]
+    pub lat_udeg: Option<i64>,
+    #[serde(default)]
+    pub lon_udeg: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -360,6 +371,14 @@ pub async fn menu(State(st): State<Shared>, _slug: Option<AxPath<String>>) -> Re
             "menuVersion": loc.get("menu_version").cloned().unwrap_or(json!(1)),
             "supportedLocales": loc.get("supported_locales").cloned().unwrap_or(json!(["sq"])),
             "defaultLocale": loc.get("default_locale").cloned().unwrap_or(json!("sq")),
+            // Whether a service area is configured at all. The storefront uses
+            // this to decide whether asking for the customer's location is
+            // worth the interruption -- a venue with no zones must not prompt.
+            "hasDeliveryZones": !loc
+                .get("delivery_zones")
+                .map(|z| zone::from_json(&z.to_string()))
+                .unwrap_or_default()
+                .is_empty(),
             // The bot handle, so the storefront can offer a follow link. Absent
             // when no bot is configured, and the storefront then shows no
             // button -- rather than a link to a bot that does not exist.
@@ -443,6 +462,33 @@ pub async fn place(
         _ => loc.get("delivery_fee").and_then(|x| x.as_i64()).unwrap_or(0),
     };
 
+    // WILL THIS ACTUALLY BE DELIVERED? Checked here, before an order exists,
+    // because the alternative is a courier sent forty minutes out of town and
+    // every order behind it late. A refusal costs one sale; an accepted order
+    // the venue cannot serve costs it the evening.
+    let zones = loc
+        .get("delivery_zones")
+        .map(|z| zone::from_json(&z.to_string()))
+        .unwrap_or_default();
+    let point = body
+        .fulfilment
+        .address
+        .as_ref()
+        .and_then(|a| Some((a.lat_udeg?, a.lon_udeg?)));
+    let reach = if body.fulfilment.kind == "delivery" {
+        zone::reach(&zones, point)
+    } else {
+        // A pickup order is the customer's own journey; where they live is not
+        // the venue's problem.
+        Reach::Unrestricted
+    };
+    if let Reach::Outside { nearest_m } = reach {
+        return Err(HubHttpError::Refused(format!(
+            "outside the delivery area by about {} m",
+            (nearest_m / 100) * 100
+        )));
+    }
+
     let id = new_order_id();
     let created_at_ms = now_ms();
     let order_json = json_api::place_order_at(
@@ -464,9 +510,18 @@ pub async fn place(
     envelope["contact"] = json!({ "name": body.contact.name, "phone": body.contact.phone });
     envelope["fulfilment"] = json!({
         "kind": body.fulfilment.kind,
-        "address": body.fulfilment.address.as_ref().map(|a| json!({ "line": a.line, "note": a.note })),
+        "address": body.fulfilment.address.as_ref().map(|a| json!({
+            "line": a.line, "note": a.note,
+            "lat_udeg": a.lat_udeg, "lon_udeg": a.lon_udeg
+        })),
         "fee": fee
     });
+    // An address the hub could NOT check is marked on the order, so the venue
+    // sees it before dispatching rather than after. Silence here would present
+    // an unverified address as a verified one.
+    if reach == Reach::Unknown {
+        envelope["delivery_area_unverified"] = json!(true);
+    }
     envelope["payment"] = json!(body.payment.unwrap_or_else(|| "cash".into()));
 
     let stored = serde_json::to_string(&envelope).unwrap_or(order_json);

@@ -17,6 +17,8 @@ const T = {
         closedHint:'Telefononi për të porositur', soldOut:'S’ka', min:'Porosia minimale',
         sent:'Porosia u dërgua', track:'Ndiqni porosinë', offline:'Jeni offline — telefononi',
         required:'E detyrueshme', badPhone:'Numër i pavlefshëm', ordering:'Duke dërguar…',
+        checkArea:'Kontrolloni adresën', checking:'Po kontrollojmë…',
+        inArea:'Ne dërgojmë këtu', outArea:'Jashtë zonës sonë të dërgesës', noGeo:'Nuk morëm dot vendndodhjen',
         notify:'Merrni njoftime në Telegram', notifyHint:'Ju njoftojmë sa herë ndryshon porosia',
         st:{PENDING:'Duke pritur konfirmimin',CONFIRMED:'U konfirmua',PREPARING:'Po gatuhet',
             READY:'Gati',IN_DELIVERY:'Në rrugë',DELIVERED:'U dorëzua',
@@ -29,6 +31,8 @@ const T = {
         closedHint:'Call to order', soldOut:'Sold out', min:'Minimum order',
         sent:'Order placed', track:'Track your order', offline:'You are offline — call instead',
         required:'Required', badPhone:'Invalid number', ordering:'Sending…',
+        checkArea:'Check this address', checking:'Checking…',
+        inArea:'We deliver here', outArea:'Outside our delivery area', noGeo:'Could not get your location',
         notify:'Get updates on Telegram', notifyHint:'We\u2019ll message you each time this order moves',
         st:{PENDING:'Awaiting confirmation',CONFIRMED:'Confirmed',PREPARING:'Being prepared',
             READY:'Ready',IN_DELIVERY:'On the way',DELIVERED:'Delivered',
@@ -41,6 +45,8 @@ const T = {
         closedHint:'Зателефонуйте, щоб замовити', soldOut:'Немає', min:'Мінімальне замовлення',
         sent:'Замовлення прийнято', track:'Стежити за замовленням', offline:'Немає зв’язку — телефонуйте',
         required:'Обов’язкове поле', badPhone:'Некоректний номер', ordering:'Надсилаємо…',
+        checkArea:'Перевірити адресу', checking:'Перевіряємо…',
+        inArea:'Сюди доставляємо', outArea:'Поза зоною доставки', noGeo:'Не вдалося визначити місце',
         notify:'Сповіщення в Telegram', notifyHint:'Напишемо щоразу, коли статус зміниться',
         st:{PENDING:'Очікує підтвердження',CONFIRMED:'Підтверджено',PREPARING:'Готується',
             READY:'Готове',IN_DELIVERY:'У дорозі',DELIVERED:'Доставлено',
@@ -326,6 +332,10 @@ function openCheckout(){
     <input id="f-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+355…" value="${esc(safeGet('dw_phone') || '')}">
     <label for="f-addr">${esc(t('address'))}</label>
     <textarea id="f-addr" autocomplete="street-address">${esc(safeGet('dw_addr') || '')}</textarea>
+    ${state.loc?.hasDeliveryZones ? `
+      <button type="button" class="btn btn-ghost" id="f-geo" style="margin-bottom:8px">
+        <i class="ti ti-map-pin-check" aria-hidden="true"></i><span>${esc(t('checkArea'))}</span></button>
+      <p id="f-geo-out" class="geo" hidden></p>` : ''}
     <label for="f-note">${esc(t('note'))}</label>
     <input id="f-note">
     <label>${esc(t('pay'))}</label>
@@ -345,6 +355,41 @@ function openCheckout(){
     pay = b.dataset.pay;
   });
   $('#place').onclick = () => place(pay);
+
+  // WHERE ARE YOU? Only asked when the venue has actually drawn a service area,
+  // and only when the customer presses the button. A location prompt that fires
+  // on its own is the kind of thing people dismiss reflexively and then distrust
+  // the site for.
+  //
+  // Coordinates NEVER replace the typed address -- there is no geocoder here and
+  // a courier needs a street and a door number, not a decimal pair. They ride
+  // alongside it so the hub can answer one question: is this inside the area.
+  const geo = $('#f-geo');
+  if (geo) geo.onclick = () => {
+    const out = $('#f-geo-out');
+    out.hidden = false; out.className = 'geo'; out.textContent = t('checking');
+    if (!navigator.geolocation) { out.className = 'geo bad'; out.textContent = t('noGeo'); return; }
+    navigator.geolocation.getCurrentPosition(async pos => {
+      // Micro-degrees, rounded once here and never re-derived: the whole system
+      // holds coordinates as integers, and a float crossing into an order is
+      // the thing MANIFESTO C2 forbids.
+      state.geo = { lat_udeg: Math.round(pos.coords.latitude * 1e6),
+                    lon_udeg: Math.round(pos.coords.longitude * 1e6) };
+      try {
+        const r = await fetch(`${API}/public/reach?lat_udeg=${state.geo.lat_udeg}&lon_udeg=${state.geo.lon_udeg}`);
+        const d = await r.json();
+        if (d.deliverable) { out.className = 'geo ok'; out.textContent = t('inArea'); }
+        else {
+          out.className = 'geo bad';
+          const km = (d.nearestMetres || 0) / 1000;
+          out.textContent = t('outArea') + (km >= 0.1 ? ` · ~${km.toFixed(1)} km` : '');
+        }
+      } catch { out.className = 'geo bad'; out.textContent = t('noGeo'); }
+    }, () => {
+      // A refusal is not a failure: the order still goes through unverified.
+      state.geo = null; out.className = 'geo'; out.textContent = t('noGeo');
+    }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+  };
 }
 
 async function place(pay){
@@ -364,7 +409,9 @@ async function place(pay){
     const r = await fetch(`${API}/public/locations/${encodeURIComponent(SLUG)}/orders`, {
       method:'POST', headers:{ 'content-type':'application/json' },
       body: JSON.stringify({ items, contact:{ name, phone },
-        fulfilment:{ kind:'delivery', address:{ line:addr, note: note || null } },
+        fulfilment:{ kind:'delivery',
+          address:{ line:addr, note: note || null,
+                    ...(state.geo || {}) } },
         payment: pay, locale: lang })
     });
     const d = await r.json();
