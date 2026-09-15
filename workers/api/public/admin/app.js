@@ -1,3 +1,4 @@
+import { shrinkImage } from '/lib/shrink.js';
 // Owner console. Everything here is a view over server state: the queue, the
 // numbers and the menu are re-read, never accumulated locally. No status chain
 // lives in this file -- an action names an intent and the server's FSM answers.
@@ -722,6 +723,10 @@ async function showCourier(id){
   } catch (e) { box.textContent = String(e.message || e); }
 }
 
+// ONE request, two consumers: the assign dropdown on the orders tab and the
+// couriers pane in settings. There were two loaders for a while -- the second
+// silently shadowed the first, which in a module is not a shadow but a fatal
+// redeclaration, and the whole admin pane failed to parse.
 async function loadCouriers(){
   try {
     const d = await api('/owner/couriers');
@@ -927,6 +932,10 @@ function row(o, newIdx){
       ${o.promo?.code ? `<span class="muted"><i class="ti ti-ticket i" aria-hidden="true"></i>${esc(o.promo.code)} −<span class="money">${money(o.discount || 0)}</span></span>` : ''}
     </div>
     ${said}
+    ${o.proof?.url ? `<a class="proof" href="${esc(o.proof.url)}" target="_blank" rel="noopener">
+      <img src="${esc(o.proof.url)}" alt="Фото біля дверей" loading="lazy" decoding="async"
+           width="56" height="56">
+      <span class="hint">фото біля дверей</span></a>` : ''}
     <div class="acts">${actions(o)}</div>
   </article>`;
 }
@@ -1047,7 +1056,8 @@ async function loadStats(){ try { S.stats = await api(`/owner/dashboard?location
 // Who is available to carry an order. Failing quietly is right here: a missing
 // courier list must not blank the order queue, which is the thing the owner
 // actually needs on screen.
-async function loadCouriers(){ try { S.couriers = (await api('/owner/couriers')).couriers || []; } catch {} }
+// (The couriers loader lives with the couriers pane above: it fills both the
+// assign dropdown and that pane, from one request.)
 
 // A new order during a rush must be HEARD, not noticed. iOS will not play audio
 // until a user gesture has unlocked the context, so the context is created lazily
@@ -1409,29 +1419,6 @@ async function renderKeys(){
 // A failure here REJECTS rather than falling back to the original bytes: the
 // fallback would be the unresized, EXIF-carrying file, which is exactly what
 // this exists to prevent.
-function shrinkImage(file, max = 1600, quality = 0.82){
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const scale = Math.min(1, max / Math.max(img.width, img.height));
-        const w = Math.max(1, Math.round(img.width * scale));
-        const h = Math.max(1, Math.round(img.height * scale));
-        const c = document.createElement('canvas');
-        c.width = w; c.height = h;
-        const ctx = c.getContext('2d');
-        ctx.imageSmoothingQuality = 'high';
-        ctx.drawImage(img, 0, 0, w, h);
-        c.toBlob(b => b ? resolve(b) : reject(new Error('Не вдалося обробити зображення')),
-                 'image/jpeg', quality);
-      } catch (e) { reject(e); }
-      finally { URL.revokeObjectURL(url); }
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Це не зображення')); };
-    img.src = url;
-  });
-}
 
 // The drafts, with the two decisions that matter on each one.
 //

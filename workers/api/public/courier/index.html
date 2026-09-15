@@ -363,6 +363,24 @@ a.tel{color:var(--brand-text);font-weight:var(--weight-semibold);text-decoration
       background:var(--brand-surface);font-size:var(--text-base)}
 /* The one figure on this screen that is the courier's own. Coloured so it is
    never read as part of the float they hand over. */
+/* SWIPE TO COMPLETE. "Delivered" is irreversible and lives under a thumb that
+   has been holding a phone in the rain, so a tap is too cheap for it. The knob
+   is a real button underneath -- a keyboard or a screen reader activates it
+   directly -- and the track is the guard, not the interface. */
+.slide{position:relative;width:100%;overflow:hidden;
+      border-radius:var(--radius-lg);background:var(--brand-surface-raised);
+      margin-bottom:var(--space-3)}
+.slide-fill{position:absolute;inset:0 auto 0 0;width:0;
+      background:color-mix(in srgb,var(--color-success) 22%,transparent);
+      pointer-events:none}
+.slide-knob{position:relative;margin:0;touch-action:none;will-change:transform}
+.slide.dragging .slide-knob{transition:none}
+.slide-hint{position:absolute;right:var(--space-4);top:50%;transform:translateY(-50%);
+      color:var(--brand-text-muted);font-size:var(--text-xs);pointer-events:none}
+.shoot{position:relative;margin-bottom:var(--space-3);cursor:pointer}
+.shoot input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.shoot.busy{opacity:.6;pointer-events:none}
+.done-proof{color:var(--color-success)}
 .tips{color:var(--color-success)}
 .hint2{width:100%;margin:0 0 var(--space-3);color:var(--brand-text-muted);
       font-size:var(--text-sm);line-height:1.5}

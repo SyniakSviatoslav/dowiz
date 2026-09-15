@@ -1069,6 +1069,9 @@ pub(crate) fn carry_over(old: &Value, updated: &mut Value) {
         // The customer's note. It is written after the order is over, so
         // nothing should follow it -- but "should" is how fields get lost.
         "feedback",
+        // The photo at the door, taken BEFORE the order is marked delivered --
+        // so a transition certainly does follow it.
+        "proof",
     ] {
         if let Some(v) = old.get(k) {
             updated[k] = v.clone();

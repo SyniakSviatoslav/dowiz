@@ -334,6 +334,7 @@ pub fn routes(state: Shared) -> Router {
         .route("/api/courier/position", post(position))
         .route("/api/courier/shift", post(shift))
         .route("/api/courier/assist", post(courier_assist))
+        .route("/api/courier/orders/{id}/proof", post(proof))
         .route("/api/courier/earnings", get(earnings))
         .route("/api/courier/history", get(history))
         .with_state(state)
@@ -410,6 +411,57 @@ fn day_start(now: i64) -> i64 {
 /// The cash figure is the one that matters day to day: it is what has to be
 /// handed over at the end of a shift, and a courier who cannot see it is
 /// reconciling from memory.
+/// `POST /api/courier/orders/{id}/proof` — a photo at the door.
+///
+/// WHAT THIS IS FOR, and what it is not for. A customer who says the food never
+/// arrived and a courier who says it did are, without this, two accounts and no
+/// facts. One photo of the door settles almost all of them, and the ones it does
+/// not settle it settles quickly.
+///
+/// It is NOT surveillance of the courier. It is taken once, at one moment they
+/// choose, of a doorway -- not a track, not a stream, not a face. There is no
+/// requirement to take one: a courier who does not is not flagged, scored, or
+/// asked why, because a "proof rate" is a ranking and dowiz does not rank the
+/// people who work through it.
+///
+/// Recorded as `Noted`: it adds a fact without moving the status, and a
+/// photograph is not a transition the order machine ever decided.
+pub async fn proof(
+    State(st): State<Shared>,
+    who: CourierCaller,
+    AxPath(id): AxPath<String>,
+    body: axum::body::Bytes,
+) -> Result<Json<Value>, HubHttpError> {
+    let me = who.0.person.id.clone();
+    // THEIRS, and still running. A photo attached to somebody else's delivery
+    // is a stranger's doorway in a stranger's order.
+    let raw = st.read_log()?.order(&id).map_err(|_| HubHttpError::NotFound("order"))?;
+    let env: Value = serde_json::from_str(&raw).map_err(|_| HubHttpError::Corrupt("order"))?;
+    if env.get("courier_id").and_then(Value::as_str) != Some(me.as_str()) {
+        return Err(HubHttpError::Unauthorized("that run is not yours"));
+    }
+    let stored = st.put_media(&body)?;
+    let url = stored.url();
+
+    let (at, url2) = (now_ms(), url.clone());
+    st.with_log(move |hub| {
+        let raw = hub.order(&id).map_err(|_| HubHttpError::NotFound("order"))?;
+        let mut env: Value =
+            serde_json::from_str(&raw).map_err(|_| HubHttpError::Corrupt("order"))?;
+        // ONE photo. A second would replace the first, and a proof that can be
+        // replaced is not proof of anything.
+        if env.get("proof").is_some() {
+            return Err(HubHttpError::Conflict("this run already has a photo".into()));
+        }
+        env["proof"] = json!({ "url": url2, "at": at, "by": me });
+        let stored = serde_json::to_string(&env).unwrap_or(raw);
+        hub.append(dowiz_hub::EventKind::Noted, &id, &stored, at as u64, [0u8; 32])
+            .map_err(|e| HubHttpError::Io(format!("{e:?}")))
+    })
+    .await?;
+    Ok(Json(json!({ "url": url, "bytes": stored.bytes })))
+}
+
 pub async fn earnings(
     State(st): State<Shared>,
     who: CourierCaller,

@@ -3020,3 +3020,52 @@ async fn a_courier_sees_tips_apart_from_the_float() {
     assert!(e["today"]["tips"].is_i64(), "tips are not reported at all: {e}");
     assert_eq!(e["today"]["tips"], 0);
 }
+
+/// A photo at the door. One, on your own run, and it survives the delivery
+/// transition that follows it.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_courier_can_leave_one_photo_on_their_own_run() {
+    let s = boot("proof").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+    let (id, _) = order_ready_for_a_courier(&s.base, &owner);
+
+    let (_, c) = post(&s.base, "/api/courier/auth/login", None,
+        json!({ "phone": "+355691112233", "password": "courier-pw" }));
+    let mine = c["jwt"].as_str().unwrap().to_string();
+    let (_, c2) = post(&s.base, "/api/courier/auth/login", None,
+        json!({ "phone": "+355694445566", "password": "courier-pw-2" }));
+    let theirs = c2["jwt"].as_str().unwrap().to_string();
+
+    let mut jpeg = vec![0xFFu8, 0xD8, 0xFF, 0xE0];
+    jpeg.extend_from_slice(b"\x00\x10JFIF\x00\x01");
+    jpeg.extend(std::iter::repeat_n(0x42u8, 512));
+    let shoot = |tok: &str| request_bytes(&s.base, "POST",
+        &format!("/api/courier/orders/{id}/proof"), Some(tok), "image/jpeg", &jpeg);
+
+    post(&s.base, &format!("/api/courier/orders/{id}/accept"), Some(&mine), json!({}));
+
+    // Somebody else's doorway in somebody else's order.
+    assert_eq!(shoot(&theirs).0, 401);
+
+    let (code, v) = shoot(&mine);
+    assert_eq!(code, 200, "{v}");
+    let url = v["url"].as_str().expect("url").to_string();
+    assert!(url.starts_with("/media/"), "{url}");
+
+    // One. A proof that can be replaced is not proof of anything.
+    assert_eq!(shoot(&mine).0, 409);
+
+    // And it survives being marked delivered, which happens after it is taken.
+    post(&s.base, &format!("/api/courier/orders/{id}/pickup"), Some(&mine), json!({}));
+    post(&s.base, &format!("/api/courier/orders/{id}/deliver"), Some(&mine), json!({}));
+    let (_, list) = get(&s.base, "/api/owner/orders", Some(&owner));
+    let done = list["orders"].as_array().unwrap().iter()
+        .find(|x| x["id"] == id.as_str()).expect("the order");
+    assert_eq!(done["status"], "DELIVERED");
+    assert_eq!(done["proof"]["url"], url.as_str(), "the transition erased the photo: {done}");
+
+    // The photo is not a status change.
+    let (_, d) = get(&s.base, "/api/owner/dashboard", Some(&owner));
+    assert_eq!(d["todayOrders"], 1, "the photo was counted as an order: {d}");
+}

@@ -1,3 +1,4 @@
+import { shrinkImage } from '/lib/shrink.js';
 // Courier app. One job on screen at a time, because the person holding this
 // phone is on a scooter. Every status change is the server's answer -- there is
 // no ordered list of statuses in this file.
@@ -686,8 +687,20 @@ function renderActive(o){
   const cash = o.payment === 'cash' ? o.total : 0;
   $('#app').innerHTML = `${orderHead(o, picked)}
     ${picked
-      ? `<button class="cta go" id="done" type="button">${icon('circle-check')}Доставлено</button>`
+      ? `<div class="slide" id="slide">
+           <div class="slide-fill" id="slideFill"></div>
+           <button class="cta go slide-knob" id="done" type="button"
+                   aria-label="Доставлено — проведіть або натисніть">
+             ${icon('circle-check')}Доставлено</button>
+           <span class="slide-hint" aria-hidden="true">проведіть →</span>
+         </div>`
       : `<button class="cta" id="pick" type="button">${icon('package')}Забрав</button>`}
+    ${picked && !o.proof ? `
+      <label class="ghost shoot">
+        ${icon('camera')}<span>Фото біля дверей</span>
+        <input type="file" accept="image/*" capture="environment" id="proofPic">
+      </label>` : ''}
+    ${o.proof ? `<p class="hint2 done-proof">${icon('camera-check')}Фото збережено</p>` : ''}
     <div class="row2">
       ${addr ? `<a class="ghost" target="_blank" rel="noopener"
           href="https://www.openstreetmap.org/search?query=${encodeURIComponent(addr)}">${icon('external-link')}У картах</a>` : ''}
@@ -719,14 +732,76 @@ function renderActive(o){
       b.disabled = false; b.removeAttribute('aria-busy'); b.innerHTML = had;
     }
   };
-  if ($('#done')) $('#done').onclick = () => {
+  // ── the photo ──
+  //
+  // Optional, and deliberately not measured. A courier who does not take one
+  // is not flagged or asked why: a "proof rate" is a ranking, and dowiz does
+  // not rank the people who work through it.
+  const pic = $('#proofPic');
+  if (pic) pic.onchange = async () => {
+    const file = pic.files?.[0]; if (!file) return;
+    const cell = pic.closest('.shoot');
+    cell.classList.add('busy');
+    try {
+      const blob = await shrinkImage(file);
+      await api(`/courier/orders/${encodeURIComponent(o.id)}/proof`, {
+        method:'POST', headers:{ 'content-type':'image/jpeg' }, body: blob });
+      toast('Фото збережено', 'camera-check');
+      await load();
+    } catch (e) { cell.classList.remove('busy'); toast(String(e.message || e), 'alert-circle'); }
+  };
+
+  // ── swipe to complete ──
+  //
+  // "Delivered" is irreversible and sits under a thumb that has been holding a
+  // phone in the rain. A tap is too cheap for it. The slider is the deliberate
+  // gesture; the element underneath is still a real <button>, so a keyboard or
+  // a screen reader activates it directly and gets a confirm instead -- the
+  // gesture is the guard, not the interface.
+  //
+  // IT RESETS ON RELEASE. A knob left halfway is a courier who thinks the order
+  // is done and a kitchen that thinks it is not.
+  const track = $('#slide'), knob = $('#done'), fill = $('#slideFill');
+  if (track && knob) {
+    let dragging = false, startX = 0, travelled = 0, fired = false;
+    const width = () => track.clientWidth - knob.offsetWidth;
+    const put = px => {
+      travelled = Math.max(0, Math.min(width(), px));
+      knob.style.transform = `translateX(${travelled}px)`;
+      fill.style.width = `${travelled + knob.offsetWidth}px`;
+    };
+    const reset = () => { dragging = false; put(0); track.classList.remove('dragging'); };
+    knob.addEventListener('pointerdown', e => {
+      dragging = true; fired = false; startX = e.clientX;
+      track.classList.add('dragging');
+      knob.setPointerCapture(e.pointerId);
+    });
+    knob.addEventListener('pointermove', e => {
+      if (!dragging) return;
+      put(e.clientX - startX);
+      // Ninety per cent, not the whole track: the last few pixels are where a
+      // thumb runs out of screen.
+      if (!fired && travelled >= width() * 0.9) { fired = true; dragging = false; finish(); }
+    });
+    knob.addEventListener('pointerup', () => { if (!fired) reset(); });
+    knob.addEventListener('pointercancel', reset);
+    knob.onclick = e => {
+      // A real click: keyboard, assistive technology, or a thumb that tapped
+      // instead of dragging. Confirm rather than refuse -- refusing would leave
+      // a keyboard user with no way to finish a delivery at all.
+      if (fired || travelled > 4) { e.preventDefault(); return; }
+      if (confirm('Позначити як доставлене?')) finish();
+    };
+  }
+
+  function finish(){
     // Short handovers happen. Record what was actually taken rather than
     // assume the full amount -- this number settles disputes later. The
     // question is asked in the sheet, at 16px+, in the courier's theme, not
     // in window.prompt.
     if (cash) { S.cashFor = o.id; return renderCash(o); }
     deliver(o, 0);
-  };
+  }
 }
 
 function renderCash(o){
