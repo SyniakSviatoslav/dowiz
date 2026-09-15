@@ -21,6 +21,7 @@ const T = {
         retry:'Provo përsëri', loadFail:'Menuja nuk u ngarkua', loading:'Po ngarkohet…',
         myOrders:'Porositë e mia', noOrders:'Ende asnjë porosi', when:'Kur', asap:'Sa më shpejt',
         onTable:'Shikoni në tryezë', arScan:'Drejtojeni nga tryeza…', arTap:'Prekni për ta vendosur', arFail:'Nuk u hap',
+        opensAt:'Hapet', pausedNow:'Dërgesat janë ndalur',
         search:'Kërkoni në meny', sortBy:'Renditni', sortPop:'Si në meny', sortLow:'Çmimi: nga i ulëti',
         sortHigh:'Çmimi: nga i larti', sortAz:'Sipas emrit', noHits:'Asgjë nuk u gjet', clear:'Pastroni',
         onlyAvail:'Vetëm në dispozicion',
@@ -42,6 +43,7 @@ const T = {
         retry:'Try again', loadFail:'The menu did not load', loading:'Loading…',
         myOrders:'My orders', noOrders:'No orders yet', when:'When', asap:'As soon as possible',
         onTable:'See it on your table', arScan:'Point at your table…', arTap:'Tap to place it', arFail:'Could not open',
+        opensAt:'Opens', pausedNow:'Delivery is paused',
         search:'Search the menu', sortBy:'Sort', sortPop:'As on the menu', sortLow:'Price: low first',
         sortHigh:'Price: high first', sortAz:'By name', noHits:'Nothing matched', clear:'Clear',
         onlyAvail:'Available only',
@@ -63,6 +65,7 @@ const T = {
         retry:'Спробувати ще раз', loadFail:'Меню не завантажилось', loading:'Завантажуємо…',
         myOrders:'Мої замовлення', noOrders:'Замовлень ще немає', when:'Коли', asap:'Якнайшвидше',
         onTable:'Подивитись на столі', arScan:'Наведіть на стіл…', arTap:'Торкніться, щоб поставити', arFail:'Не вдалося відкрити',
+        opensAt:'Відчиняється', pausedNow:'Доставку призупинено',
         search:'Пошук у меню', sortBy:'Сортування', sortLow:'Ціна: від дешевших',
         sortPop:'Як у меню', sortHigh:'Ціна: від дорожчих', sortAz:'За назвою',
         noHits:'Нічого не знайдено', clear:'Очистити', onlyAvail:'Лише в наявності',
@@ -368,6 +371,22 @@ function visibleCats(){
   return out;
 }
 
+// "Opens Monday at 11:00" rather than "closed".
+//
+// A customer told only that a place is shut goes somewhere else; one told when
+// it opens comes back. Weekday 0 is Monday, matching the hub.
+function whenOpens(n){
+  const days = { uk:['пн','вт','ср','чт','пт','сб','нд'],
+                 en:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
+                 sq:['Hën','Mar','Mër','Enj','Pre','Sht','Die'] };
+  const d = (days[lang] || days.en)[n.weekday] ?? '';
+  const hh = String(Math.floor((n.minute || 0) / 60)).padStart(2, '0');
+  const mm = String((n.minute || 0) % 60).padStart(2, '0');
+  // Today needs no day name — "opens at 18:00" reads better than "opens Tue".
+  const todayIdx = (new Date().getDay() + 6) % 7;
+  return n.weekday === todayIdx ? `${hh}:${mm}` : `${d} ${hh}:${mm}`;
+}
+
 function renderMenu(){
   const L = state.loc, open = L.status === 'open';
   const cats = visibleCats();
@@ -382,8 +401,11 @@ function renderMenu(){
         ${L.deliveryFee ? `<span><b class="money">${money(L.deliveryFee)}</b> ${esc(t('delivery').toLowerCase())}</span>`
                         : `<span><b>${esc(t('free'))}</b> ${esc(t('delivery').toLowerCase())}</span>`}
       </div>
-      ${open ? '' : `<div class="notice"><i class="ti ti-clock-hour-9 i" aria-hidden="true"></i><div>${esc(t('closedHint'))}
-        <a href="tel:${esc(L.phone)}">${esc(L.phone)}</a></div></div>`}
+      ${open ? '' : `<div class="notice"><i class="ti ti-clock-hour-9 i" aria-hidden="true"></i><div>
+        ${L.closedReason === 'paused' ? esc(t('pausedNow'))
+          : L.nextOpen ? `${esc(t('opensAt'))} ${esc(whenOpens(L.nextOpen))}`
+          : esc(t('closedHint'))}
+        ${L.phone ? `<br><a href="tel:${esc(L.phone)}">${esc(L.phone)}</a>` : ''}</div></div>`}
     </section>
     <div class="find">
       <label class="srch">

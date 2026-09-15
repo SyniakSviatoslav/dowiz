@@ -24,6 +24,7 @@
 
 pub mod catalog;
 pub mod crypto;
+pub mod hours;
 pub mod import;
 pub mod media;
 pub mod minijson;

@@ -505,6 +505,18 @@ function setupView(){
     </section>
 
     <section class="card">
+      <h2>Робочі години</h2>
+      <p class="hint">Заклад відчинятиметься й зачинятиметься сам. Вручну можна
+         закрити раніше — але не залишитись відчиненим поза графіком.
+         Порожній рядок = вихідний.</p>
+      <div id="hoursBox" class="hours"></div>
+      <div class="row">
+        <button class="btn pri" id="hoursSave"><i class="ti ti-check i" aria-hidden="true"></i>Зберегти</button>
+        <button class="btn" id="hoursOff">Без графіка</button>
+      </div>
+    </section>
+
+    <section class="card">
       <h2>Пости</h2>
       <p class="hint">dowiz помічає справжні зміни у вашому меню й пропонує короткий
          пост. <b>Нічого не публікується, поки ви не погодите.</b> Вигадані знижки
@@ -761,6 +773,30 @@ async function renderPosts(){
   });
 }
 
+const DAY_NAMES = ['Понеділок','Вівторок','Середа','Четвер','П\u2019ятниця','Субота','Неділя'];
+const toHM = m => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+const toMin = v => { const [h,m] = String(v||'').split(':').map(Number);
+                     return Number.isFinite(h) && Number.isFinite(m) ? h*60+m : null; };
+
+// One row per day, with the venue's existing windows filled in. Only the FIRST
+// window per day is editable here: a split day (lunch, then dinner) is real but
+// rare, and a grid that can express it costs every owner the complexity. The
+// API takes any number, so a second window set elsewhere survives a save
+// untouched — which is why the row keeps the rest of the day's windows.
+function renderHours(){
+  const box = $('#hoursBox'); if (!box) return;
+  const hours = Array.isArray(S.venue?.hours) ? S.venue.hours : [];
+  box.innerHTML = DAY_NAMES.map((name, i) => {
+    const w = (hours[i] || [])[0];
+    return `<div class="hrow">
+      <span>${name}</span>
+      <input type="time" data-h-open="${i}" value="${w ? toHM(w.open) : ''}">
+      <span class="hint">—</span>
+      <input type="time" data-h-close="${i}" value="${w ? toHM(w.close) : ''}">
+    </div>`;
+  }).join('');
+}
+
 function bindSetup(){
   let csvText = null;
   renderSettings();
@@ -823,6 +859,36 @@ function bindSetup(){
 
   renderKeys();
   renderPosts();
+  renderHours();
+  const hs = $('#hoursSave');
+  if (hs) hs.onclick = async () => {
+    const existing = Array.isArray(S.venue?.hours) ? S.venue.hours : [];
+    const hours = DAY_NAMES.map((_, i) => {
+      const o = toMin($(`[data-h-open="${i}"]`)?.value);
+      const c = toMin($(`[data-h-close="${i}"]`)?.value);
+      // Windows beyond the first are preserved rather than dropped: this editor
+      // shows one and must not silently delete a split day set elsewhere.
+      const rest = (existing[i] || []).slice(1);
+      // A day with one field filled is a mistake, not a window; sending it
+      // would be refused by the hub anyway, and saying so here is quicker.
+      if (o == null || c == null || o === c) return rest;
+      return [{ open: o, close: c }, ...rest];
+    });
+    try {
+      await busy(hs, () => api('/owner/location', { method:'POST',
+        body: JSON.stringify({ location_id: store.loc, hours }) }));
+      toast('Графік збережено'); await loadVenue(); renderHours();
+    } catch (e) { toast(String(e.message || e)); }
+  };
+  const ho = $('#hoursOff');
+  if (ho) ho.onclick = async () => {
+    if (!confirm('Прибрати графік? Заклад керуватиметься лише кнопкою «відчинено».')) return;
+    try {
+      await busy(ho, () => api('/owner/location', { method:'POST',
+        body: JSON.stringify({ location_id: store.loc, hours: [[],[],[],[],[],[],[]] }) }));
+      toast('Графік прибрано'); await loadVenue(); renderHours();
+    } catch (e) { toast(String(e.message || e)); }
+  };
   const pd = $('#postDraft');
   if (pd) pd.onclick = async () => {
     try {

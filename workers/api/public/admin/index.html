@@ -314,6 +314,18 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
 .prod .size{width:5rem;flex:0 0 auto}
 .prod .size::placeholder{color:var(--brand-text-muted)}
 
+/* One row per day. The three columns line up down the week, so a glance shows
+   the shape of the week rather than seven separate readings. */
+.hours{display:grid;gap:var(--space-1)}
+.hrow{display:grid;grid-template-columns:minmax(6rem,1fr) auto auto auto;
+      align-items:center;gap:var(--space-2);min-height:var(--tap);
+      font-size:var(--text-sm);color:var(--brand-text)}
+.hrow input{min-height:calc(var(--tap) - 8px);padding:0 var(--space-2);
+      border:1px solid var(--brand-border);border-radius:var(--radius-md);
+      background:var(--brand-surface);color:var(--brand-text);
+      font:inherit;font-variant-numeric:tabular-nums}
+@media (max-width:26rem){.hrow{grid-template-columns:1fr auto auto auto;font-size:var(--text-xs)}}
+
 .posts{display:grid;gap:var(--space-3)}
 .post{border:1px solid var(--brand-border);border-radius:var(--radius-md);
        padding:var(--space-3);display:grid;gap:var(--space-2);background:var(--brand-surface)}

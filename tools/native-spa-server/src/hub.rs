@@ -385,11 +385,34 @@ pub async fn menu(State(st): State<Shared>, _slug: Option<AxPath<String>>) -> Re
         }));
     }
 
+    // ── open is DERIVED, and can only be narrowed by hand ──
+    //
+    // A manual flag alone means somebody has to remember at eleven at night.
+    // The one they forget is the closing one, and the cost is orders arriving
+    // at a dark kitchen. So: the schedule decides, a pause or a manual "closed"
+    // can shut it early, and nothing can force it open outside its hours.
+    //
+    // A venue with NO schedule keeps working exactly as before, on the flag --
+    // hours that must be configured before the venue can trade would be a
+    // migration, not a feature.
     let paused = loc.get("delivery_paused").and_then(|x| x.as_i64()).unwrap_or(0) == 1;
-    let status = if paused {
+    let manual = loc.get("status").and_then(|x| x.as_str()).unwrap_or("closed");
+    let sched = loc
+        .get("hours")
+        .map(|h| dowiz_hub::hours::from_json(&h.to_string()))
+        .unwrap_or_default();
+    let tz: i64 = std::env::var("TZ_OFFSET_MINUTES")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(120);
+    let (weekday, minute) = dowiz_hub::hours::local_now(now_ms(), tz);
+    let scheduled_open = sched.is_empty() || sched.is_open_at(weekday, minute);
+    let next_open = sched.next_open(weekday, minute);
+
+    let status = if paused || manual == "closed" || !scheduled_open {
         "closed"
     } else {
-        loc.get("status").and_then(|x| x.as_str()).unwrap_or("closed")
+        manual
     };
 
     Ok(Json(json!({
@@ -401,6 +424,18 @@ pub async fn menu(State(st): State<Shared>, _slug: Option<AxPath<String>>) -> Re
             "address": loc.get("address").cloned().unwrap_or(Value::Null),
             "status": status,
             "closesAt": loc.get("closes_at").cloned().unwrap_or(Value::Null),
+            "hours": loc.get("hours").cloned().unwrap_or(Value::Null),
+            // WHEN, not just "no". A customer told only that a place is shut
+            // goes somewhere else; one told it opens at eleven comes back.
+            "nextOpen": next_open
+                .map(|(d, m)| json!({ "weekday": d, "minute": m }))
+                .unwrap_or(Value::Null),
+            // Distinguishes "the owner shut it" from "it is outside hours", so
+            // the storefront can say which.
+            "closedReason": if paused { json!("paused") }
+                else if manual == "closed" { json!("manual") }
+                else if !scheduled_open { json!("hours") }
+                else { Value::Null },
             "deliveryEta": loc.get("delivery_eta").cloned().unwrap_or(json!("30-45")),
             "deliveryFee": loc.get("delivery_fee").cloned().unwrap_or(json!(0)),
             "freeDeliveryThreshold": loc.get("free_delivery_threshold").cloned().unwrap_or(Value::Null),

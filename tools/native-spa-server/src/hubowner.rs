@@ -394,6 +394,11 @@ async fn edit_product(
 pub struct LocationIn {
     #[serde(default)]
     pub status: Option<String>,
+    /// Seven arrays of `{open, close}`, in minutes since local midnight.
+    /// An EMPTY array of arrays removes the schedule and returns the venue to
+    /// the manual flag.
+    #[serde(default)]
+    pub hours: Option<Value>,
     #[serde(default)]
     pub delivery_paused: Option<bool>,
     #[serde(default, rename = "location_id")]
@@ -411,6 +416,25 @@ pub async fn update_location(
             return Err(HubHttpError::Invalid(format!("unknown status {s:?}")));
         }
     }
+    if let Some(h) = &body.hours {
+        // PARSED BACK before storing, like the zones and the option groups. A
+        // schedule the reader cannot see would leave the venue on its manual
+        // flag while the owner believed it was automatic -- and they would find
+        // out by staying open all night.
+        let declared: usize = h
+            .as_array()
+            .map(|days| days.iter().filter_map(|d| d.as_array()).map(|d| d.len()).sum())
+            .unwrap_or(0);
+        let sched = dowiz_hub::hours::from_json(&h.to_string());
+        let readable: usize = sched.days.iter().map(|d| d.len()).sum();
+        if declared != readable {
+            return Err(HubHttpError::Invalid(format!(
+                "{} of {declared} time windows could not be read; each needs `open` and \
+                 `close` as minutes since midnight, 0-1440, and they must differ",
+                declared - readable
+            )));
+        }
+    }
     st.with_catalog(move |cat| {
         let raw = cat.location().ok_or(HubHttpError::NotFound("venue"))?;
         let mut loc: Value =
@@ -420,6 +444,9 @@ pub async fn update_location(
         }
         if let Some(p) = body.delivery_paused {
             loc["delivery_paused"] = json!(if p { 1 } else { 0 });
+        }
+        if let Some(h) = body.hours {
+            loc["hours"] = h;
         }
         cat.set_location(&serde_json::to_string(&loc).unwrap_or(raw));
         Ok(Json(loc))

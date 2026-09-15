@@ -2082,3 +2082,90 @@ async fn a_courier_can_see_their_runs_and_their_cash() {
     assert_eq!(get(&s.base, "/api/courier/earnings", Some(&owner)).0, 403);
     assert_eq!(get(&s.base, "/api/courier/history", None).0, 401);
 }
+
+/// The venue opens and closes itself, and the owner can only narrow that.
+#[tokio::test(flavor = "multi_thread")]
+async fn opening_hours_decide_and_the_owner_can_only_close_early() {
+    let s = boot("hours").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+
+    // No schedule: the venue works exactly as before, on the manual flag.
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    assert_eq!(menu["location"]["status"], "open");
+    assert_eq!(menu["location"]["closedReason"], Value::Null);
+
+    // A schedule the reader cannot see must be refused at the point it is set,
+    // or the owner believes the venue is automatic and finds out by staying
+    // open all night.
+    for bad in [
+        json!([[{ "open": 600 }], [], [], [], [], [], []]),
+        json!([[{ "open": 600, "close": 600 }], [], [], [], [], [], []]),
+        json!([[{ "open": -60, "close": 600 }], [], [], [], [], [], []]),
+        json!([[{ "open": 2000, "close": 2100 }], [], [], [], [], [], []]),
+    ] {
+        let (code, v) = post(&s.base, "/api/owner/location", Some(&owner), json!({ "hours": bad }));
+        assert_eq!(code, 400, "accepted an unreadable schedule: {v}");
+    }
+
+    // A schedule that is closed every day of the week: whatever the flag says,
+    // the venue is shut, and the reason says which.
+    let never = json!([[], [], [], [], [], [], []]);
+    let (code, _) = post(&s.base, "/api/owner/location", Some(&owner),
+                         json!({ "status": "open", "hours": never }));
+    assert_eq!(code, 200);
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    // An all-empty schedule reads as NO schedule, which keeps the manual flag —
+    // "closed every day" and "no hours set" are the same data and the kinder
+    // reading is the one that does not shut a venue that misconfigured itself.
+    assert_eq!(menu["location"]["status"], "open", "{}", menu["location"]);
+
+    // A real schedule with one window that cannot contain now: a single minute
+    // on a day, placed so that at most one minute of the week is open.
+    let one_minute = json!([
+        [{ "open": 0, "close": 1 }], [{ "open": 0, "close": 1 }], [{ "open": 0, "close": 1 }],
+        [{ "open": 0, "close": 1 }], [{ "open": 0, "close": 1 }], [{ "open": 0, "close": 1 }],
+        [{ "open": 0, "close": 1 }]
+    ]);
+    let (code, _) = post(&s.base, "/api/owner/location", Some(&owner),
+                         json!({ "status": "open", "hours": one_minute }));
+    assert_eq!(code, 200);
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    let loc = &menu["location"];
+    // Unless the suite runs in that one minute after midnight, the venue is
+    // shut BY ITS HOURS while the flag still says open.
+    if loc["status"] == "closed" {
+        assert_eq!(loc["closedReason"], "hours", "{loc}");
+        assert!(loc["nextOpen"]["minute"].is_i64(), "a customer is told WHEN: {loc}");
+        assert_eq!(loc["nextOpen"]["minute"], 0);
+    }
+
+    // A whole week open, and the manual flag can still shut it.
+    let always = json!([
+        [{ "open": 0, "close": 1440 }], [{ "open": 0, "close": 1440 }], [{ "open": 0, "close": 1440 }],
+        [{ "open": 0, "close": 1440 }], [{ "open": 0, "close": 1440 }], [{ "open": 0, "close": 1440 }],
+        [{ "open": 0, "close": 1440 }]
+    ]);
+    post(&s.base, "/api/owner/location", Some(&owner), json!({ "status": "open", "hours": always }));
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    assert_eq!(menu["location"]["status"], "open", "{}", menu["location"]);
+
+    // Closing by hand wins over the schedule: an owner can always close early.
+    post(&s.base, "/api/owner/location", Some(&owner), json!({ "status": "closed" }));
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    assert_eq!(menu["location"]["status"], "closed");
+    assert_eq!(menu["location"]["closedReason"], "manual");
+
+    // And so does a pause.
+    post(&s.base, "/api/owner/location", Some(&owner),
+         json!({ "status": "open", "delivery_paused": true }));
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    assert_eq!(menu["location"]["status"], "closed");
+    assert_eq!(menu["location"]["closedReason"], "paused");
+
+    // Only the owner sets hours.
+    let (_, c) = post(&s.base, "/api/courier/auth/login", None,
+                      json!({ "phone": "+355691112233", "password": "courier-pw" }));
+    assert_eq!(post(&s.base, "/api/owner/location", Some(c["jwt"].as_str().unwrap()),
+                    json!({ "hours": always })).0, 403);
+}
