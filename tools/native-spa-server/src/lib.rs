@@ -34,6 +34,7 @@ pub mod api;
 /// P48-INTAKE Phase 1 — `/webhook/*` route handlers (external signature gate,
 /// NOT capability-cert gated — separate trust boundary per §5.3).
 pub mod hub;
+pub mod notify;
 pub mod webhook;
 
 /// DEFAULT_ROOT mirrors the legacy nginx web root.

@@ -193,6 +193,7 @@ fn default_webhook() -> Arc<WebhookState> {
     Arc::new(WebhookState {
         telegram: Arc::new(TelegramAdapter::new("test-secret".into())),
         intake: Arc::new(IntakeService::new(vec!["sushi".into()])),
+        hub: None,
     })
 }
 

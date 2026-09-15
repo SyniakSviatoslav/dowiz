@@ -60,18 +60,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
     let root = resolve_root(Some(cli.root.clone()));
     let api = ApiState::build_default();
-    // Phase 1: single-hub webhook state. In production this would be loaded from
-    // hub config (the per-hub BotFather token → secret_token mapping).
-    let webhook_state = std::sync::Arc::new(WebhookState {
-        telegram: std::sync::Arc::new(
-            intake_adapters::telegram::TelegramAdapter::new(
-                std::env::var("DOWIZ_TELEGRAM_SECRET").unwrap_or_default(),
-            ),
-        ),
-        intake: std::sync::Arc::new(
-            dowiz_kernel::ports::hub_intake::IntakeService::new(vec![]),
-        ),
-    });
     if let (Some(dir), Some(bundle)) = (&cli.hub_dir, &cli.seed_catalog) {
         let n = native_spa_server::hub::seed_catalog(dir, bundle)?;
         eprintln!("[hub] seeded {} categories and {} products into {}", n.0, n.1, dir.display());
@@ -86,6 +74,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         None => None,
     };
+    // The webhook is built AFTER the hub, because it now hands inbound messages
+    // to it. Phase 1: one hub per process. In production the per-hub BotFather
+    // token → secret_token mapping comes from hub config.
+    let webhook_state = std::sync::Arc::new(WebhookState {
+        telegram: std::sync::Arc::new(
+            intake_adapters::telegram::TelegramAdapter::new(
+                std::env::var("DOWIZ_TELEGRAM_SECRET").unwrap_or_default(),
+            ),
+        ),
+        intake: std::sync::Arc::new(
+            dowiz_kernel::ports::hub_intake::IntakeService::new(vec![]),
+        ),
+        hub: hub_state.clone(),
+    });
     let router = build_router(&root, api, webhook_state, hub_state);
     let addr = format!("{}:{}", cli.bind, cli.port);
 

@@ -23,6 +23,7 @@
 #![forbid(unsafe_code)]
 
 pub mod catalog;
+pub mod subs;
 
 use bebop_store::evlog::{EvLog, Record};
 use bebop_store::{Store, StoreError};

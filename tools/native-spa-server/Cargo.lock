@@ -735,6 +735,7 @@ dependencies = [
  "axum",
  "base64",
  "clap",
+ "dowiz-core",
  "dowiz-hub",
  "dowiz-kernel",
  "flate2",

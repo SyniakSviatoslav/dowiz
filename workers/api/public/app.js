@@ -17,6 +17,7 @@ const T = {
         closedHint:'Telefononi për të porositur', soldOut:'S’ka', min:'Porosia minimale',
         sent:'Porosia u dërgua', track:'Ndiqni porosinë', offline:'Jeni offline — telefononi',
         required:'E detyrueshme', badPhone:'Numër i pavlefshëm', ordering:'Duke dërguar…',
+        notify:'Merrni njoftime në Telegram', notifyHint:'Ju njoftojmë sa herë ndryshon porosia',
         st:{PENDING:'Duke pritur konfirmimin',CONFIRMED:'U konfirmua',PREPARING:'Po gatuhet',
             READY:'Gati',IN_DELIVERY:'Në rrugë',DELIVERED:'U dorëzua',
             REJECTED:'U refuzua',CANCELLED:'U anulua'} },
@@ -28,6 +29,7 @@ const T = {
         closedHint:'Call to order', soldOut:'Sold out', min:'Minimum order',
         sent:'Order placed', track:'Track your order', offline:'You are offline — call instead',
         required:'Required', badPhone:'Invalid number', ordering:'Sending…',
+        notify:'Get updates on Telegram', notifyHint:'We\u2019ll message you each time this order moves',
         st:{PENDING:'Awaiting confirmation',CONFIRMED:'Confirmed',PREPARING:'Being prepared',
             READY:'Ready',IN_DELIVERY:'On the way',DELIVERED:'Delivered',
             REJECTED:'Rejected',CANCELLED:'Cancelled'} },
@@ -39,6 +41,7 @@ const T = {
         closedHint:'Зателефонуйте, щоб замовити', soldOut:'Немає', min:'Мінімальне замовлення',
         sent:'Замовлення прийнято', track:'Стежити за замовленням', offline:'Немає зв’язку — телефонуйте',
         required:'Обов’язкове поле', badPhone:'Некоректний номер', ordering:'Надсилаємо…',
+        notify:'Сповіщення в Telegram', notifyHint:'Напишемо щоразу, коли статус зміниться',
         st:{PENDING:'Очікує підтвердження',CONFIRMED:'Підтверджено',PREPARING:'Готується',
             READY:'Готове',IN_DELIVERY:'У дорозі',DELIVERED:'Доставлено',
             REJECTED:'Відхилено',CANCELLED:'Скасовано'} },
@@ -406,6 +409,19 @@ function openTracking(order){
   const st = order.status, i = FLOW.indexOf(st);
   if (openTracking._last !== st) { openTracking._last = st; seaForOrder(st); }
   const dead = st === 'REJECTED' || st === 'CANCELLED';
+  // The follow link is what makes notifications possible at all: the server has
+  // no way to reach this customer until they start a chat with the bot, and the
+  // `start` payload is how their first message carries the order id with it.
+  // Hidden when the venue has no bot, rather than linking somewhere broken, and
+  // hidden once the order is finished, when there is nothing left to follow.
+  const bot = state.loc?.telegramBot;
+  const follow = (bot && !dead && st !== 'DELIVERED') ? `
+    <a class="btn btn-ghost" style="margin-bottom:8px"
+       href="https://t.me/${encodeURIComponent(bot)}?start=${encodeURIComponent(order.id)}"
+       target="_blank" rel="noopener noreferrer">
+      <i class="ti ti-brand-telegram" aria-hidden="true"></i><span>${esc(t('notify'))}</span></a>
+    <p style="color:var(--brand-text-muted);font-size:var(--text-sm);margin:0 0 12px">
+      ${esc(t('notifyHint'))}</p>` : '';
   sheet(`<h2>${esc(dead ? t('st')[st] : t('sent'))}</h2>
     <p style="color:var(--brand-text-muted);margin:6px 0 2px">#${esc(String(order.id).slice(0,8))}</p>
     ${dead ? '' : `<div class="track">${FLOW.map((s, n) => `
@@ -415,6 +431,7 @@ function openTracking(order){
       </div>`).join('')}</div>`}
     <div class="totals"><div class="row grand"><span>${esc(t('total'))}</span>
       <span>${money(order.total ?? order.subtotal ?? 0)}</span></div></div>
+    ${follow}
     <button class="btn btn-ghost" id="closeTrack" style="margin-bottom:12px">OK</button>`);
   $('#closeTrack').onclick = closeSheet;
   clearTimeout(openTracking._t);

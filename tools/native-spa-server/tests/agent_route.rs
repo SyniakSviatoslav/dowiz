@@ -181,6 +181,7 @@ fn spawn_server(api: &Arc<ApiState>) -> SocketAddr {
             let router: Router = build_router(&root, api, Arc::new(WebhookState {
                 telegram: Arc::new(intake_adapters::telegram::TelegramAdapter::new("test".into())),
                 intake: Arc::new(dowiz_kernel::ports::hub_intake::IntakeService::new(vec![])),
+                hub: None,
             }), None);
             let _ = axum::serve(listener, router).await;
         });

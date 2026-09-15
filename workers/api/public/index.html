@@ -206,6 +206,11 @@ button,input,textarea,select{font:inherit;color:inherit}
      min-height:var(--tap);padding:var(--space-3) var(--space-5);border:0;
      border-radius:var(--radius-btn);background:var(--brand-primary);color:#fff;
      font-weight:var(--weight-bold);font-size:var(--text-base);cursor:pointer;
+     /* An <a> may wear .btn (the Telegram follow link is one). Without this it
+        arrives underlined and inheriting link colour, which is the same control
+        rendered two different ways -- the exact inconsistency the token set
+        exists to prevent. */
+     text-decoration:none;
      transition:background .15s ease-out,transform .12s ease-out}
 @media (hover:hover) and (pointer:fine){ .btn:hover{background:var(--brand-primary-hover)} }
 .btn:active{transform:scale(.97)}

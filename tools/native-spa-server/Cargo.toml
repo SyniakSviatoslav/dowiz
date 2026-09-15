@@ -36,6 +36,13 @@ sha2 = "0.10"
 # The kernel: the order JSON authority (P37 W37-1). We enable ONLY `json-api`
 # (no wasm-bindgen) so the server pulls no browser-shaped deps.
 dowiz-kernel = { path = "../../kernel", features = ["json-api"] }
+# dowiz-core directly, for the two authorities the kernel facade does not
+# re-export: `OrderStatus::from_str` and `StatusMsg::for_status`. Taking them
+# from here rather than restating them keeps ONE list of order statuses in the
+# tree -- a second one in the notifier would drift the day a status is added.
+# It is a path dependency, so it is not an external crate and the zero-dep gate
+# is unaffected.
+dowiz-core = { path = "../../crates/dowiz-core" }
 # tower-http (cached) — ServeDir (SPA static file serving) + CompressionLayer.
 tower-http = { version = "0.6", features = ["fs", "compression-gzip", "compression-br", "compression-deflate"] }
 # tokio (cached) — async runtime + TLS listener.

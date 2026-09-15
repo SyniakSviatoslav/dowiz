@@ -31,6 +31,10 @@ use intake_adapters::{
 pub struct WebhookState {
     pub telegram: Arc<TelegramAdapter>,
     pub intake: Arc<IntakeService>,
+    /// The hub this bot speaks for. `None` in the intake test suite, which
+    /// exercises verification and normalization without a store behind it --
+    /// so the subscription step is skipped rather than faked.
+    pub hub: Option<crate::hub::Shared>,
 }
 
 /// Build the `/webhook/*` route family. This is merged into the main router
@@ -78,6 +82,16 @@ async fn telegram_webhook(
         Ok(messages) => {
             for msg in &messages {
                 let _ = state.intake.handle_inbound(msg);
+                // A message is also how a person subscribes. The intake service
+                // reads it as a possible ORDER; this reads it as a possible
+                // COMMAND. Both look at the same text, and neither consumes it,
+                // because "/start ord_123" is a subscription and not an order
+                // while "two sushi please" is the reverse.
+                if let Some(hub) = &state.hub {
+                    if let Some(reply) = hub.handle_inbound_text(&msg.sender, &msg.text).await {
+                        hub.reply(&msg.sender, reply);
+                    }
+                }
             }
             (StatusCode::OK, Json(serde_json::json!({"ok": true, "messages": messages.len()})))
                 .into_response()
