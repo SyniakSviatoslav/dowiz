@@ -120,6 +120,46 @@ fn gen_events(order_id: [i64], from: [i64], to: [i64], t: [i64], amount: [i64],
 }
 
 // Phase q1: fold through events using CSR,  return sum of final states
+// ---- ROADMAP B4: the tiered tail ----
+// Updates used to rewrite the ENTIRE log -- every array, both CSRs, the root -- for a batch of
+// any size, which is O(m) per append and quadratic over a run. B4's shape (the same one
+// sgraph2.bp's phase_log uses) is a small TAIL that appends absorb, promoted into the main
+// arrays only when it fills.
+//
+// TAIL object: {cap, n, then n records of 5 cells (oid, from, to, t, amount)}.
+// The tail is COPIED ONCE per transaction (copy-on-write) and appended into, so an append
+// costs O(cap) rather than O(m). When cap would be exceeded the tail is PROMOTED: the main
+// arrays and both indexes are rebuilt over main + tail, and the tail is emptied.
+//
+// Every read path folds main FIRST and the tail SECOND, which is the correct order because the
+// tail holds strictly later events.
+fn tl_cap() -> i64 { 4096 }
+fn tl_n(base: [i64], tl: i64) -> i64 { st_get(base, tl, 1) }
+fn tl_oid(base: [i64], tl: i64, i: i64) -> i64 { st_get(base, tl, 2 + 5 * i) }
+fn tl_from(base: [i64], tl: i64, i: i64) -> i64 { st_get(base, tl, 3 + 5 * i) }
+fn tl_to(base: [i64], tl: i64, i: i64) -> i64 { st_get(base, tl, 4 + 5 * i) }
+fn tl_t(base: [i64], tl: i64, i: i64) -> i64 { st_get(base, tl, 5 + 5 * i) }
+fn tl_amt(base: [i64], tl: i64, i: i64) -> i64 { st_get(base, tl, 6 + 5 * i) }
+
+// apply every tail event to a per-order state array, in tail order
+fn tl_apply(base: [i64], tl: i64, adj: [i64], state: [i64], upto_t: i64) -> i64 {
+  let tn = tl_n(base, tl);
+  let i = 0;
+  while i < tn {
+    let oid = tl_oid(base, tl, i);
+    let f = tl_from(base, tl, i);
+    let t = tl_to(base, tl, i);
+    let tv = tl_t(base, tl, i);
+    let ok = decide(adj, f, t);
+    let okz = if ok == 0 then 1 else 0;
+    let inwin = if tv < upto_t then 1 else 0;
+    let _ = if okz * inwin == 1 then (let _ = state[oid] = t in 0) else 0;
+    let i = i + 1;
+    0
+  };
+  tn
+}
+
 fn phase_q1(base: [i64], tmp: [i64], n: i64, adj: [i64]) -> i64 {
   let g = st_root(base, tmp);
   let m = st_get(base, g, 0);
@@ -128,7 +168,7 @@ fn phase_q1(base: [i64], tmp: [i64], n: i64, adj: [i64]) -> i64 {
   let to_st = st_ref(base, g, 3);
   let rp = st_ref(base, g, 6);
   let ci = st_ref(base, g, 7);
-  let state = zeros(n);
+  let state = zeros(n + 1);
   let oid = 0;
   while oid < n {
     let lo = st_get(base, rp, 1 + oid);
@@ -146,6 +186,7 @@ fn phase_q1(base: [i64], tmp: [i64], n: i64, adj: [i64]) -> i64 {
     let oid = oid + 1;
     0
   };
+  let _ = tl_apply(base, st_ref(base, g, 10), adj, state, 999999999);
   let fold_h = 0;
   let i = 0;
   while i < n {
@@ -171,6 +212,16 @@ fn phase_q3(base: [i64], tmp: [i64], adj: [i64], which: i64) -> i64 {
     let idx = if code == 0 then 0 else (if code == 1 then 1 else (if code == 2 then 2 else 3));
     let _ = c[idx] = c[idx] + 1;
     let ev = ev + 1;
+    0
+  };
+  let tl = st_ref(base, g, 10);
+  let tn = tl_n(base, tl);
+  let ti = 0;
+  while ti < tn {
+    let code = decide(adj, tl_from(base, tl, ti), tl_to(base, tl, ti));
+    let idx = if code == 0 then 0 else (if code == 1 then 1 else (if code == 2 then 2 else 3));
+    let _ = c[idx] = c[idx] + 1;
+    let ti = ti + 1;
     0
   };
   if which == 48 then c[0] else (if which == 49 then c[1] else (if which == 50 then c[2] else (if which == 51 then c[3] else 0)))
@@ -217,6 +268,7 @@ fn phase_q2(base: [i64], tmp: [i64], n: i64, adj: [i64], target_s: i64, target_t
     let b = b + 1;
     0
   };
+  let _ = tl_apply(base, st_ref(base, g, 10), adj, state, target_t);
   let cnt = zeros(1);
   let i = 0;
   while i < n {
@@ -237,50 +289,90 @@ fn phase_q4(base: [i64], tmp: [i64], n: i64, adj: [i64], target_s: i64, want_ref
   let ci_o = st_ref(base, g, 7);
   let ms = zeros(5);
   let refusals = zeros(1);
-  let total = zeros(1);
-  let state = zeros(1);
-  let sub = zeros(1);
+  let state = zeros(n + 1);
+  let sub = zeros(n + 1);
   let oid = 0;
   while oid < n {
     let lo = st_get(base, rp_o, 1 + oid);
     let hi = st_get(base, rp_o, 2 + oid);
-    let _ = state[0] = 0;
-    let _ = sub[0] = 0;
     let ev_idx = lo;
     while ev_idx < hi {
       let ev = st_get(base, ci_o, 1 + ev_idx);
       let f = st_get(base, from_st, ev);
       let t = st_get(base, to_st, ev);
       let ok = decide(adj, f, t);
-      let _ = if ok == 0 then (let _ = state[0] = t in 0) else 0;
+      let _ = if ok == 0 then (let _ = state[oid] = t in 0) else 0;
       let av = st_get(base, amt, ev);
-      let _ = op_add(ms, sub[0], 0, av, 0);
+      let _ = op_add(ms, sub[oid], 0, av, 0);
       let _ = if ms[3] == 0 then (let _ = refusals[0] = refusals[0] + 1 in 0) else 0;
-      let _ = if ms[3] == 1 then (let _ = sub[0] = ms[4] in 0) else 0;
+      let _ = if ms[3] == 1 then (let _ = sub[oid] = ms[4] in 0) else 0;
       let ev_idx = ev_idx + 1;
       0
     };
-    let hit = if target_s < 0 then 1 else (if state[0] == target_s then 1 else 0);
+    let oid = oid + 1;
+    0
+  };
+  // B4: the tail carries strictly later events, so it is folded after main
+  let tl = st_ref(base, g, 10);
+  let tn = tl_n(base, tl);
+  let ti = 0;
+  while ti < tn {
+    let o = tl_oid(base, tl, ti);
+    let ok = decide(adj, tl_from(base, tl, ti), tl_to(base, tl, ti));
+    let _ = if ok == 0 then (let _ = state[o] = tl_to(base, tl, ti) in 0) else 0;
+    let _ = op_add(ms, sub[o], 0, tl_amt(base, tl, ti), 0);
+    let _ = if ms[3] == 0 then (let _ = refusals[0] = refusals[0] + 1 in 0) else 0;
+    let _ = if ms[3] == 1 then (let _ = sub[o] = ms[4] in 0) else 0;
+    let ti = ti + 1;
+    0
+  };
+  let total = zeros(1);
+  let j = 0;
+  while j < n {
+    let hit = if target_s < 0 then 1 else (if state[j] == target_s then 1 else 0);
     let _ = if hit == 1 then (
-      let _ = op_add(ms, total[0], 0, sub[0], 0) in
+      let _ = op_add(ms, total[0], 0, sub[j], 0) in
       let _ = if ms[3] == 0 then (let _ = refusals[0] = refusals[0] + 1 in 0) else 0 in
       let _ = if ms[3] == 1 then (let _ = total[0] = ms[4] in 0) else 0 in
       0
     ) else 0;
-    let oid = oid + 1;
+    let j = j + 1;
     0
   };
   if want_ref == 1 then refusals[0] else total[0]
 }
 
-// Phase u: apply E new events. Reads each order's CURRENT state out of the committed log, walks
-// the FSM forward from there, validates every appended event with decide() and counts any that is
-// not code 0 as refused, then rebuilds BOTH indexes (EvByOrder and EvByT) and commits a new
-// generation. EvByT must be rebuilt too: it is a root ref cell, and a root cell that is not
-// re-linked is not copied by compaction.
-// This is the EAGER form -- it rewrites the whole log rather than appending to a tail. The tiered
-// append is what ROADMAP B4 exists to provide, and B5's partition-by-order-range half is out of
-// scope here; both are named rather than silently skipped.
+// u_state_of: fold ONE order's events out of the CSR. The update path needs the current state
+// of only the orders its batch touches, so folding all n of them (which is what this function
+// replaced) made every append O(m) no matter how small the batch -- the tiering saved the write
+// and left an O(m) read in front of it.
+fn u_state_of(base: [i64], o_rp: i64, o_ci: i64, o_from: i64, o_to: i64, adj: [i64], oid: i64) -> i64 {
+  let lo = st_get(base, o_rp, 1 + oid);
+  let hi = st_get(base, o_rp, 2 + oid);
+  let st0 = zeros(1);
+  let e = lo;
+  while e < hi {
+    let ev = st_get(base, o_ci, 1 + e);
+    let f = st_get(base, o_from, ev);
+    let t = st_get(base, o_to, ev);
+    let ok = decide(adj, f, t);
+    let _ = if ok == 0 then (let _ = st0[0] = t in 0) else 0;
+    let e = e + 1;
+    0
+  };
+  st0[0]
+}
+
+// Phase u (ROADMAP B4, tiered): apply num_new new events.
+// Reads each order's CURRENT state (main folded through the CSR, then the tail), walks the FSM
+// forward from there, and validates every appended event with decide().
+// THE APPEND ITSELF takes one of two paths:
+//   fast  -- the batch fits in the tail: copy the tail once, append the records, relink the
+//            root, commit. Cost O(cap), independent of the log length.
+//   slow  -- the batch would overflow the tail: PROMOTE, rebuilding the main arrays and both
+//            indexes over main + tail + batch, and emptying the tail. Cost O(m), amortised
+//            over the cap/batch appends the fast path served.
+// B5's partition-by-order-range half is out of scope here.
 fn phase_u(base: [i64], tmp: [i64], d: [i64], n: i64, k: i64, adj: [i64], num_new: i64, want_ref: i64) -> i64 {
   let g = st_root(base, tmp);
   let m = st_get(base, g, 0);
@@ -291,46 +383,32 @@ fn phase_u(base: [i64], tmp: [i64], d: [i64], n: i64, k: i64, adj: [i64], num_ne
   let o_amt = st_ref(base, g, 5);
   let o_rp = st_ref(base, g, 6);
   let o_ci = st_ref(base, g, 7);
+  let tl = st_ref(base, g, 10);
+  let tn = tl_n(base, tl);
 
-  // current state per order, from the committed log
+  // Current state, for the orders this batch touches ONLY: fold each such order's CSR row,
+  // then apply the tail once. O(num_new*k + tail) instead of O(m).
   let cur = zeros(n + 1);
-  let oid0 = 0;
-  while oid0 < n {
-    let lo = st_get(base, o_rp, 1 + oid0);
-    let hi = st_get(base, o_rp, 2 + oid0);
-    let st0 = zeros(1);
-    let e0 = lo;
-    while e0 < hi {
-      let ev = st_get(base, o_ci, 1 + e0);
-      let f = st_get(base, o_from, ev);
-      let t = st_get(base, o_to, ev);
-      let ok = decide(adj, f, t);
-      let _ = if ok == 0 then (let _ = st0[0] = t in 0) else 0;
-      let e0 = e0 + 1;
+  let seen = zeros(n + 1);
+  let w0 = 0;
+  while w0 < num_new {
+    let oid0 = w0 % n;
+    let _ = if seen[oid0] == 0 then (
+      let _ = cur[oid0] = u_state_of(base, o_rp, o_ci, o_from, o_to, adj, oid0) in
+      let _ = seen[oid0] = 1 in
       0
-    };
-    let _ = cur[oid0] = st0[0];
-    let oid0 = oid0 + 1;
+    ) else 0;
+    let w0 = w0 + 1;
     0
   };
+  let _ = tl_apply(base, tl, adj, cur, 999999999);
 
-  let m2 = m + num_new;
-  let a_oid = zeros(m2 + 1);
-  let a_from = zeros(m2 + 1);
-  let a_to = zeros(m2 + 1);
-  let a_t = zeros(m2 + 1);
-  let a_amt = zeros(m2 + 1);
-  let c = 0;
-  while c < m {
-    let _ = a_oid[c] = st_get(base, o_oid, c);
-    let _ = a_from[c] = st_get(base, o_from, c);
-    let _ = a_to[c] = st_get(base, o_to, c);
-    let _ = a_t[c] = st_get(base, o_t, c);
-    let _ = a_amt[c] = st_get(base, o_amt, c);
-    let c = c + 1;
-    0
-  };
-
+  // generate the batch
+  let b_oid = zeros(num_new + 1);
+  let b_from = zeros(num_new + 1);
+  let b_to = zeros(num_new + 1);
+  let b_t = zeros(num_new + 1);
+  let b_amt = zeros(num_new + 1);
   let refused = zeros(1);
   let lcg_u = zeros(1);
   let _ = lcg_u[0] = 999331;
@@ -347,26 +425,106 @@ fn phase_u(base: [i64], tmp: [i64], d: [i64], n: i64, k: i64, adj: [i64], num_ne
     let f = cur[oid];
     let ok = decide(adj, f, nxt);
     let _ = if ok == 0 then (let _ = cur[oid] = nxt in 0) else (let _ = refused[0] = refused[0] + 1 in 0);
-    let _ = a_oid[m + w] = oid;
-    let _ = a_from[m + w] = f;
-    let _ = a_to[m + w] = nxt;
-    let _ = a_t[m + w] = k * 1000;
-    let _ = a_amt[m + w] = (lv % 100) + 1;
+    let _ = b_oid[w] = oid;
+    let _ = b_from[w] = f;
+    let _ = b_to[w] = nxt;
+    let _ = b_t[w] = k * 1000;
+    let _ = b_amt[w] = (lv % 100) + 1;
     let w = w + 1;
+    0
+  };
+
+  let fits = if tn + num_new <= tl_cap() then 1 else 0;
+  let res = if fits == 1 then (
+    // FAST PATH: copy-on-write the tail, append, relink the root. No arrays rebuilt.
+    let tx = zeros(6) in
+    let _ = st_begin(base, tx, tmp) in
+    let nt = st_alloc(base, tx, 2 + 5 * tl_cap(), d[1]) in
+    let _ = st_put(base, nt, 0, tl_cap()) in
+    let _ = st_put(base, nt, 1, tn + num_new) in
+    let _ = u_copy_tail(base, tl, nt, tn) in
+    let _ = u_add_batch(base, nt, tn, b_oid, b_from, b_to, b_t, b_amt, num_new) in
+    let _ = st_seal(base, nt, tmp) in
+    let r2 = st_alloc(base, tx, 11, d[0]) in
+    let _ = st_put(base, r2, 0, m) in
+    let _ = st_link(base, r2, 1, o_oid) in
+    let _ = st_link(base, r2, 2, o_from) in
+    let _ = st_link(base, r2, 3, o_to) in
+    let _ = st_link(base, r2, 4, o_t) in
+    let _ = st_link(base, r2, 5, o_amt) in
+    let _ = st_link(base, r2, 6, o_rp) in
+    let _ = st_link(base, r2, 7, o_ci) in
+    let _ = st_link(base, r2, 8, st_ref(base, g, 8)) in
+    let _ = st_link(base, r2, 9, st_ref(base, g, 9)) in
+    let _ = st_link(base, r2, 10, nt) in
+    let _ = st_seal(base, r2, tmp) in
+    let _ = st_commit(base, tx, r2, tmp) in
+    m + tn + num_new
+  ) else (
+    u_promote(base, tmp, d, n, k, adj, b_oid, b_from, b_to, b_t, b_amt, num_new)
+  );
+  if want_ref == 1 then refused[0] else res
+}
+
+// u_promote: the slow path -- rebuild the main arrays and BOTH indexes over main + tail +
+// batch, and empty the tail. This is the old eager update, now reached once every cap/batch
+// appends instead of on every one.
+fn u_promote(base: [i64], tmp: [i64], d: [i64], n: i64, k: i64, adj: [i64], bo: [i64], bf: [i64], bt: [i64], bts: [i64], ba: [i64], cnt: i64) -> i64 {
+  let g = st_root(base, tmp);
+  let m = st_get(base, g, 0);
+  let o_oid = st_ref(base, g, 1);
+  let o_from = st_ref(base, g, 2);
+  let o_to = st_ref(base, g, 3);
+  let o_t = st_ref(base, g, 4);
+  let o_amt = st_ref(base, g, 5);
+  let tl = st_ref(base, g, 10);
+  let tn = tl_n(base, tl);
+  let m2 = m + tn + cnt;
+
+  let a_oid = zeros(m2 + 1);
+  let a_from = zeros(m2 + 1);
+  let a_to = zeros(m2 + 1);
+  let a_t = zeros(m2 + 1);
+  let a_amt = zeros(m2 + 1);
+  let c = 0;
+  while c < m {
+    let _ = a_oid[c] = st_get(base, o_oid, c);
+    let _ = a_from[c] = st_get(base, o_from, c);
+    let _ = a_to[c] = st_get(base, o_to, c);
+    let _ = a_t[c] = st_get(base, o_t, c);
+    let _ = a_amt[c] = st_get(base, o_amt, c);
+    let c = c + 1;
+    0
+  };
+  let i = 0;
+  while i < tn {
+    let _ = a_oid[m + i] = tl_oid(base, tl, i);
+    let _ = a_from[m + i] = tl_from(base, tl, i);
+    let _ = a_to[m + i] = tl_to(base, tl, i);
+    let _ = a_t[m + i] = tl_t(base, tl, i);
+    let _ = a_amt[m + i] = tl_amt(base, tl, i);
+    let i = i + 1;
+    0
+  };
+  let j = 0;
+  while j < cnt {
+    let _ = a_oid[m + tn + j] = bo[j];
+    let _ = a_from[m + tn + j] = bf[j];
+    let _ = a_to[m + tn + j] = bt[j];
+    let _ = a_t[m + tn + j] = bts[j];
+    let _ = a_amt[m + tn + j] = ba[j];
+    let j = j + 1;
     0
   };
 
   let prp = zeros(n + 2);
   let pci = zeros(m2 + 1);
   let cs = zeros(n + 1);
-  // the CSR's VALUE array is the EVENT INDEX, not the `to` state -- q1 indexes from/to with it
   let a_idx = zeros(m2 + 1);
   let xi = 0;
   while xi < m2 { let _ = a_idx[xi] = xi; let xi = xi + 1; 0 };
   let _ = csr_passes(a_oid, a_idx, m2, n, cs, prp, pci);
 
-  // EvByT must be rebuilt too: it is a ROOT ref cell, and a root cell that is not re-linked
-  // is not copied by compaction. New events land in bucket k, which is < max_bucket = k + 1.
   let bucket_width = 1000;
   let max_bucket = (k * 1000) / bucket_width + 1;
   let b_src = zeros(m2 + 1);
@@ -412,6 +570,9 @@ fn phase_u(base: [i64], tmp: [i64], d: [i64], n: i64, k: i64, adj: [i64], num_ne
   while c5 < max_bucket + 2 { let _ = st_put(base, n_rpt, c5, prp_t[c5]); let c5 = c5 + 1; 0 };
   let c6 = 0;
   while c6 < m2 + 1 { let _ = st_put(base, n_cit, c6, pci_t[c6]); let c6 = c6 + 1; 0 };
+  let n_tl = st_alloc(base, tx, 2 + 5 * tl_cap(), d[1]);
+  let _ = st_put(base, n_tl, 0, tl_cap());
+  let _ = st_put(base, n_tl, 1, 0);
   let _ = st_seal(base, n_oid, tmp);
   let _ = st_seal(base, n_from, tmp);
   let _ = st_seal(base, n_to, tmp);
@@ -421,7 +582,8 @@ fn phase_u(base: [i64], tmp: [i64], d: [i64], n: i64, k: i64, adj: [i64], num_ne
   let _ = st_seal(base, n_ci, tmp);
   let _ = st_seal(base, n_rpt, tmp);
   let _ = st_seal(base, n_cit, tmp);
-  let root2 = st_alloc(base, tx, 10, d[0]);
+  let _ = st_seal(base, n_tl, tmp);
+  let root2 = st_alloc(base, tx, 11, d[0]);
   let _ = st_put(base, root2, 0, m2);
   let _ = st_link(base, root2, 1, n_oid);
   let _ = st_link(base, root2, 2, n_from);
@@ -432,9 +594,41 @@ fn phase_u(base: [i64], tmp: [i64], d: [i64], n: i64, k: i64, adj: [i64], num_ne
   let _ = st_link(base, root2, 7, n_ci);
   let _ = st_link(base, root2, 8, n_rpt);
   let _ = st_link(base, root2, 9, n_cit);
+  let _ = st_link(base, root2, 10, n_tl);
   let _ = st_seal(base, root2, tmp);
   let _ = st_commit(base, tx, root2, tmp);
-  if want_ref == 1 then refused[0] else m2
+  m2
+}
+
+// copy the live tail's records into a fresh tail object
+fn u_copy_tail(base: [i64], tl: i64, nt: i64, tn: i64) -> i64 {
+  let i = 0;
+  while i < tn {
+    let _ = st_put(base, nt, 2 + 5 * i, tl_oid(base, tl, i));
+    let _ = st_put(base, nt, 3 + 5 * i, tl_from(base, tl, i));
+    let _ = st_put(base, nt, 4 + 5 * i, tl_to(base, tl, i));
+    let _ = st_put(base, nt, 5 + 5 * i, tl_t(base, tl, i));
+    let _ = st_put(base, nt, 6 + 5 * i, tl_amt(base, tl, i));
+    let i = i + 1;
+    0
+  };
+  tn
+}
+
+// append the generated batch after the copied records
+fn u_add_batch(base: [i64], nt: i64, at: i64, bo: [i64], bf: [i64], bt: [i64], bts: [i64], ba: [i64], cnt: i64) -> i64 {
+  let j = 0;
+  while j < cnt {
+    let w = at + j;
+    let _ = st_put(base, nt, 2 + 5 * w, bo[j]);
+    let _ = st_put(base, nt, 3 + 5 * w, bf[j]);
+    let _ = st_put(base, nt, 4 + 5 * w, bt[j]);
+    let _ = st_put(base, nt, 5 + 5 * w, bts[j]);
+    let _ = st_put(base, nt, 6 + 5 * w, ba[j]);
+    let j = j + 1;
+    0
+  };
+  cnt
 }
 
 // ---- B6: q1 folded across P cores ----
@@ -627,6 +821,7 @@ fn phase_ingest(base: [i64], tmp: [i64], d: [i64], n: i64, k: i64, adj: [i64]) -
   let ci_obj = st_alloc(base, tx, m + 1, d[1]);
   let rp_t_obj = st_alloc(base, tx, max_bucket + 2, d[1]);
   let ci_t_obj = st_alloc(base, tx, m + 1, d[1]);
+  let tail_obj = st_alloc(base, tx, 2 + 5 * tl_cap(), d[1]);
 
   let j = 0;
   while j < m {
@@ -674,10 +869,13 @@ fn phase_ingest(base: [i64], tmp: [i64], d: [i64], n: i64, k: i64, adj: [i64]) -
   let _ = st_seal(base, amt_obj, tmp);
   let _ = st_seal(base, rp_obj, tmp);
   let _ = st_seal(base, ci_obj, tmp);
+  let _ = st_put(base, tail_obj, 0, tl_cap());
+  let _ = st_put(base, tail_obj, 1, 0);
   let _ = st_seal(base, rp_t_obj, tmp);
   let _ = st_seal(base, ci_t_obj, tmp);
+  let _ = st_seal(base, tail_obj, tmp);
 
-  let root = st_alloc(base, tx, 10, d[0]);
+  let root = st_alloc(base, tx, 11, d[0]);
   let _ = st_put(base, root, 0, m);
   let _ = st_link(base, root, 1, oid_obj);
   let _ = st_link(base, root, 2, from_obj);
@@ -688,6 +886,7 @@ fn phase_ingest(base: [i64], tmp: [i64], d: [i64], n: i64, k: i64, adj: [i64]) -
   let _ = st_link(base, root, 7, ci_obj);
   let _ = st_link(base, root, 8, rp_t_obj);
   let _ = st_link(base, root, 9, ci_t_obj);
+  let _ = st_link(base, root, 10, tail_obj);
   let _ = st_seal(base, root, tmp);
 
   let _ = st_commit(base, tx, root, tmp);
@@ -716,7 +915,7 @@ fn main(argc: i64, argv: [str]) -> i64 {
   let _ = adj[10] = 2048;
 
   let d = zeros(2);
-  let _ = d[0] = st_digest("ROOT{i64,ref [i64],ref [i64],ref [i64],ref [i64],ref [i64],ref [i64],ref [i64],ref [i64],ref [i64]}");
+  let _ = d[0] = st_digest("ROOT{i64,ref [i64],ref [i64],ref [i64],ref [i64],ref [i64],ref [i64],ref [i64],ref [i64],ref [i64],ref [i64]}");
   let _ = d[1] = st_digest("arr i64");
 
   let base = st_open(path, pl, size, tmp);
