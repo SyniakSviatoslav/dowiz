@@ -73,7 +73,7 @@ impl Catalog {
     /// `Kv::compacted_bytes` for what that gives up (nothing anything here
     /// reads).
     pub fn to_bytes(&mut self) -> Result<Vec<u8>, HubError> {
-        Ok(self.kv.compacted_bytes(DEFAULT_CATALOG_BYTES)?)
+        Ok(self.kv.compacted_bytes_fit(DEFAULT_CATALOG_BYTES)?)
     }
 
     /// A fingerprint of the whole catalogue. Two hubs holding the same menu

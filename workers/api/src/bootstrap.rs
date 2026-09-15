@@ -84,7 +84,11 @@ pub async fn seed(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let loc = bundle.location.clone();
     let cats = bundle.categories.clone();
     let prods = bundle.products.clone();
-    let (n_cat, n_prod) = crate::hubstore::with_catalog(&db, move |cat| {
+    // A 500 WITH NO MESSAGE IS NOT AN ERROR REPORT. This route is behind a
+    // 32-byte secret, so the caller is the operator seeding their own hub, and
+    // telling them what actually failed costs nothing and saves a round trip
+    // through `wrangler tail` that produced nothing twice.
+    let seeded = crate::hubstore::with_catalog(&db, move |cat| {
         cat.set_location(&serde_json::to_string(&loc).unwrap_or_else(|_| "{}".into()));
         let mut nc = 0;
         for c in &cats {
@@ -100,7 +104,45 @@ pub async fn seed(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
         }
         Ok((nc, np))
     })
-    .await?;
+    .await;
+    let (n_cat, n_prod) = match seeded {
+        Ok(v) => v,
+        Err(e) => return Response::error(format!("catalogue seed failed: {e}"), 500),
+    };
+
+    // ── THE VENUE ROW THAT `memberships` POINTS AT ──
+    //
+    // The venue itself lives in the catalogue IMAGE, which is the data model.
+    // But `memberships.location_id` is a foreign key into the `locations`
+    // table, so seeding an owner against a venue that exists only in the image
+    // failed the constraint -- and the failure surfaced as a bare 500. This
+    // route has therefore never been able to seed an owner.
+    //
+    // The row is a POINTER, not a second copy of the truth: only the columns
+    // the constraint and the identity queries need. Everything the storefront
+    // reads still comes from the image.
+    if let Some(id) = bundle.location.get("id").and_then(|x| x.as_str()) {
+        let now = Date::now().as_millis() as i64;
+        let pick = |k: &str, d: &str| {
+            bundle.location.get(k).and_then(|x| x.as_str()).unwrap_or(d).to_string()
+        };
+        let _ = db
+            .prepare(
+                "INSERT INTO locations (id,slug,name,phone,status,created_at_ms,updated_at_ms) \
+                 VALUES (?1,?2,?3,?4,?5,?6,?6) ON CONFLICT(id) DO UPDATE SET \
+                 slug=excluded.slug, name=excluded.name, updated_at_ms=excluded.updated_at_ms",
+            )
+            .bind(&[
+                id.into(),
+                pick("slug", id).into(),
+                pick("name", "Venue").into(),
+                pick("phone", "").into(),
+                pick("status", "closed").into(),
+                worker::wasm_bindgen::JsValue::from_f64(now as f64),
+            ])?
+            .run()
+            .await?;
+    }
 
     // ── first owner, if one was supplied ──
     let mut owner_id: Option<String> = None;

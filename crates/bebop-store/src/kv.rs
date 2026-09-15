@@ -224,6 +224,32 @@ impl Kv {
         Ok(fresh.to_bytes())
     }
 
+    /// Commit into the SMALLEST image that holds the data, up to `max`.
+    ///
+    /// The size of a KV image is otherwise an arbitrary constant chosen once,
+    /// and a constant chosen once is a constant that turns out to be wrong
+    /// somewhere specific. It did: the catalogue's 1 MiB arena is larger than
+    /// D1's one-million-byte row limit, so a fifty-two dish menu -- about sixty
+    /// kilobytes of actual content -- could not be written to the Worker's
+    /// store at all, and the failure was a 500 with no message.
+    ///
+    /// Doubling from 16 KiB finds the fit in a handful of attempts, each of
+    /// which is a commit into a fresh arena and therefore cheap. `max` is still
+    /// honoured, so a genuinely large menu grows to the declared ceiling rather
+    /// than silently truncating.
+    pub fn compacted_bytes_fit(&self, max: usize) -> Result<Vec<u8>, StoreError> {
+        let mut cap = 16 * 1024;
+        loop {
+            match self.compacted_bytes(cap) {
+                Ok(b) => return Ok(b),
+                Err(StoreError::ArenaFull { .. }) if cap < max => {
+                    cap = (cap * 2).min(max);
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
     pub fn commit_into_bytes(&self, st: &mut Store) -> Result<i64, StoreError> {
         let (tx, root) = self.stage_commit_into(st)?;
         Ok(st.commit_bytes(&tx, root))

@@ -42,18 +42,60 @@ pub struct LoadedCatalog {
     pub generation: i64,
 }
 
-/// Read the hub image, creating a fresh one the first time.
-pub async fn load(db: &D1Database) -> Result<Loaded> {
+/// D1 refuses any single value over one million bytes.
+///
+/// THE LIMIT IS NOT NEGOTIABLE AND THE IMAGES ARE BIGGER. A fresh order log is
+/// 4 MiB of arena, so `save` failed on the FIRST order ever placed through this
+/// Worker -- as a bare 500, with the order lost. The catalogue was the same
+/// story at 1 MiB, which is how a 52-dish menu could not be seeded.
+///
+/// So an image is stored in CHUNKS, in the same table, under `<id>#<n>`. 900_000
+/// leaves room for the row's other columns without arithmetic nobody will
+/// re-check. Chunk zero keeps the original id, so an image small enough to fit
+/// in one row is stored exactly as it was before this change.
+const CHUNK: usize = 900_000;
+
+/// Read every chunk of an image back into one buffer.
+async fn load_bytes(db: &D1Database, id: &str) -> Result<Option<(Vec<u8>, i64)>> {
     #[derive(serde::Deserialize)]
     struct Row {
         image: Vec<u8>,
         generation: i64,
     }
-    let row: Option<Row> = db
+    let first: Option<Row> = db
         .prepare("SELECT image, generation FROM hub_image WHERE id = ?1")
-        .bind(&[IMAGE_LOG.into()])?
+        .bind(&[id.into()])?
         .first(None)
         .await?;
+    let Some(first) = first else { return Ok(None) };
+    let generation = first.generation;
+    let mut out = first.image;
+    // Chunks are read until one is missing rather than by a stored count: a
+    // count is a second fact that can disagree with the rows, and the rows are
+    // the ones that decide whether the image loads.
+    for n in 1.. {
+        let key = format!("{id}#{n}");
+        let row: Option<Row> = db
+            .prepare("SELECT image, generation FROM hub_image WHERE id = ?1")
+            .bind(&[key.into()])?
+            .first(None)
+            .await?;
+        match row {
+            Some(r) => out.extend_from_slice(&r.image),
+            None => break,
+        }
+    }
+    Ok(Some((out, generation)))
+}
+
+/// Read the hub image, creating a fresh one the first time.
+pub async fn load(db: &D1Database) -> Result<Loaded> {
+    struct Row {
+        image: Vec<u8>,
+        generation: i64,
+    }
+    let row: Option<Row> =
+        load_bytes(db, IMAGE_LOG).await?.map(|(image, generation)| Row { image, generation });
 
     match row {
         Some(r) => {
@@ -74,6 +116,42 @@ pub async fn load(db: &D1Database) -> Result<Loaded> {
 /// the guard rejected the write, which means "re-read and replay", not "failed".
 async fn save_image(db: &D1Database, id: &str, bytes: Vec<u8>, generation: i64) -> Result<bool> {
     let next = generation + 1;
+
+    // ── the tail chunks ──
+    //
+    // Written BEFORE the head, and the head carries the generation guard. If the
+    // write is interrupted between the two, the head still points at the old
+    // generation, so the image that loads is the old one plus some unreferenced
+    // tail bytes -- wrong-but-stale rather than half-new. The other order would
+    // publish a head whose tail had not arrived yet.
+    //
+    // Chunks the new image does not need are removed after the head lands, not
+    // before: an image that shrank must not lose its tail while the head still
+    // describes the longer one.
+    let head_len = bytes.len().min(CHUNK);
+    let mut n = 1usize;
+    let mut at = head_len;
+    while at < bytes.len() {
+        let end = (at + CHUNK).min(bytes.len());
+        let key = format!("{id}#{n}");
+        db.prepare(
+            "INSERT INTO hub_image (id, image, generation, updated_at_ms) VALUES (?1,?2,?3,?4) \
+             ON CONFLICT(id) DO UPDATE SET image = excluded.image, \
+             generation = excluded.generation, updated_at_ms = excluded.updated_at_ms",
+        )
+        .bind(&[
+            key.into(),
+            bytes_to_js(&bytes[at..end]),
+            JsValue::from_f64(next as f64),
+            JsValue::from_f64(Date::now().as_millis() as f64),
+        ])?
+        .run()
+        .await?;
+        at = end;
+        n += 1;
+    }
+    let chunks_written = n;
+    let bytes = bytes[..head_len].to_vec();
 
     let res = if generation == 0 {
         db.prepare(
@@ -103,7 +181,20 @@ async fn save_image(db: &D1Database, id: &str, bytes: Vec<u8>, generation: i64) 
         .run()
         .await?
     };
-    Ok(res.meta()?.and_then(|m| m.changes).unwrap_or(0) > 0)
+    let landed = res.meta()?.and_then(|m| m.changes).unwrap_or(0) > 0;
+    if landed {
+        // Now that the head describes the shorter image, the chunks past its end
+        // are unreachable and can go.
+        for extra in chunks_written..chunks_written + 8 {
+            let key = format!("{id}#{extra}");
+            let _ = db
+                .prepare("DELETE FROM hub_image WHERE id = ?1")
+                .bind(&[key.into()])?
+                .run()
+                .await;
+        }
+    }
+    Ok(landed)
 }
 
 pub async fn save(db: &D1Database, loaded: &Loaded) -> Result<bool> {
@@ -112,16 +203,12 @@ pub async fn save(db: &D1Database, loaded: &Loaded) -> Result<bool> {
 
 /// Read the catalogue image, creating an empty one the first time.
 pub async fn load_catalog(db: &D1Database) -> Result<LoadedCatalog> {
-    #[derive(serde::Deserialize)]
     struct Row {
         image: Vec<u8>,
         generation: i64,
     }
-    let row: Option<Row> = db
-        .prepare("SELECT image, generation FROM hub_image WHERE id = ?1")
-        .bind(&[IMAGE_CATALOG.into()])?
-        .first(None)
-        .await?;
+    let row: Option<Row> =
+        load_bytes(db, IMAGE_CATALOG).await?.map(|(image, generation)| Row { image, generation });
     match row {
         Some(r) => {
             let catalog = Catalog::load(&r.image)
@@ -166,6 +253,29 @@ fn bytes_to_js(b: &[u8]) -> JsValue {
 ///
 /// Bounded at five attempts: an append-only log makes a replay safe, but an
 /// unbounded retry would turn a hot hub into a livelock rather than an error.
+/// How many times a promo code has been redeemed, folded from the orders.
+///
+/// No counter is stored, for the reason the analytics give: a tally kept beside
+/// the orders is a second number that can disagree with them, and when they
+/// disagree it is always the tally that is wrong. A rejected or cancelled order
+/// gives its use back -- the venue never took the money, so holding a use
+/// against the customer would charge them for a refusal.
+pub fn promo_uses(hub: &Hub, code: &str) -> i64 {
+    hub.orders()
+        .iter()
+        .filter(|ev| {
+            let Ok(o) = serde_json::from_str::<serde_json::Value>(&ev.order_json) else {
+                return false;
+            };
+            let st = o.get("status").and_then(|s| s.as_str());
+            if matches!(st, Some("REJECTED" | "CANCELLED")) {
+                return false;
+            }
+            o.get("promo").and_then(|p| p.get("code")).and_then(|c| c.as_str()) == Some(code)
+        })
+        .count() as i64
+}
+
 pub async fn with_hub<F, T>(db: &D1Database, mut f: F) -> Result<T>
 where
     F: FnMut(&mut Hub) -> Result<T>,

@@ -166,6 +166,7 @@ name = "dowiz-hub"
 version = "0.1.0"
 dependencies = [
  "bebop-store",
+ "sha2",
 ]
 
 [[package]]

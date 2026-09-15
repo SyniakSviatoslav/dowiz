@@ -17,6 +17,7 @@ mod courier;
 mod hubstore;
 mod otel;
 mod owner;
+mod extra;
 mod storefront;
 mod stripe;
 
@@ -100,6 +101,8 @@ async fn route(req: Request, env: Env) -> Result<Response> {
         // ── public storefront ──
         .get_async("/api/public/locations/:slug/menu", storefront::menu)
         .post_async("/api/public/locations/:slug/orders", storefront::place)
+        .post_async("/api/promo/check", extra::promo_check)
+        .post_async("/api/order/:id/feedback", extra::feedback)
         // ── accounts ──
         .post_async("/api/bootstrap", bootstrap::seed)
         .post_async("/api/webhooks/stripe", stripe::webhook)
@@ -113,6 +116,18 @@ async fn route(req: Request, env: Env) -> Result<Response> {
         .get_async("/api/owner/dashboard", owner::dashboard)
         .post_async("/api/owner/products/:id", owner::update_product)
         .post_async("/api/owner/location", owner::update_location)
+        // ── ported from the native adapter, on the SAME dowiz-hub logic ──
+        .get_async("/api/owner/analytics", extra::analytics)
+        .get_async("/api/owner/promotions", extra::promotions)
+        .post_async("/api/owner/promotions", extra::set_promotion)
+        .post_async("/api/owner/promotions/:code/delete", extra::delete_promotion)
+        .get_async("/api/owner/activation", extra::activation)
+        .get_async("/api/owner/branding", extra::branding)
+        .post_async("/api/owner/branding", extra::set_branding)
+        .post_async("/api/owner/branding/preset", extra::set_preset)
+        .get_async("/api/owner/customers", extra::customers)
+        .post_async("/api/owner/customers/:key/reveal", extra::reveal_customer)
+        .get_async("/api/owner/customers/reveals", extra::reveals)
         // ── courier ──
         .get_async("/api/courier/tasks", courier::tasks)
         .post_async("/api/courier/shift", courier::shift)
@@ -121,6 +136,7 @@ async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/courier/orders/:id/deliver", courier::deliver)
         .post_async("/api/courier/position", courier::position)
         .get_async("/api/courier/earnings", courier::earnings)
+        .get_async("/api/courier/history", extra::courier_history)
         .post_async("/api/order", |mut req, ctx| async move {
             let body: PlaceOrderBody = match req.json().await {
                 Ok(b) => b,

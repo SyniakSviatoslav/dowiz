@@ -41,6 +41,10 @@ pub struct FulfilmentIn {
     pub kind: String,
     #[serde(default)]
     pub address: Option<AddressIn>,
+    /// A pickup has no address to carry the customer's note on, so it rides
+    /// here. Without this field the note was accepted and silently discarded.
+    #[serde(default)]
+    pub note: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -52,6 +56,14 @@ pub struct PlaceIn {
     pub payment: Option<String>,
     #[serde(default)]
     pub locale: Option<String>,
+    /// A promo code as the customer typed it. Normalised and re-checked here;
+    /// whatever the storefront showed as a preview is advisory.
+    #[serde(default)]
+    pub promo: Option<String>,
+    /// A tip, in minor units. THE COURIER'S -- carried as its own field the
+    /// whole way so it never lands in the venue's takings.
+    #[serde(default)]
+    pub tip: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -134,9 +146,35 @@ pub async fn menu(_req: Request, ctx: RouteContext<()>) -> Result<Response> {
         return Response::error("not found", 404);
     }
 
-    // A paused venue is CLOSED to the storefront even when its status says open:
-    // the owner needs a way to stop the queue without rewriting opening hours.
-    let status = if loc.delivery_paused == 1 { "closed".to_string() } else { loc.status.clone() };
+    // The same record, untyped, for the fields that arrived after `LocRow` was
+    // written. Growing the struct for each one means a venue saved by an older
+    // hub fails to deserialise entirely; reading them off the Value means a
+    // missing field is a missing field.
+    let raw: Value = serde_json::from_str(&loc_json).unwrap_or(json!({}));
+
+    // ── THE STATUS IS DERIVED, not read ──
+    //
+    // A paused venue is closed however its flag reads: the owner needs a way to
+    // stop the queue without rewriting opening hours. And a SCHEDULE can only
+    // ever close -- never open -- which is what lets the activation gate live on
+    // the manual flag alone.
+    let sched = raw
+        .get("hours")
+        .map(|h| dowiz_hub::hours::from_json(&h.to_string()))
+        .unwrap_or_default();
+    // Durrës is UTC+2. A Worker has no timezone database and needs none: one
+    // venue sits in one place, and its offset is one configured number.
+    let tz: i64 = raw.get("tz_offset_minutes").and_then(Value::as_i64).unwrap_or(120);
+    let now_ms = Date::now().as_millis() as i64;
+    let (weekday, minute) = dowiz_hub::hours::local_now(now_ms, tz);
+    let scheduled_open = sched.is_empty() || sched.is_open_at(weekday, minute);
+    let next_open = sched.next_open(weekday, minute);
+    let paused = loc.delivery_paused == 1;
+    let status = if paused || loc.status == "closed" || !scheduled_open {
+        "closed".to_string()
+    } else {
+        loc.status.clone()
+    };
 
     // Category order comes from the catalogue, and products are grouped into it.
     // Keys are sorted by the KV layout, so the order is stable across reads
@@ -179,6 +217,22 @@ pub async fn menu(_req: Request, ctx: RouteContext<()>) -> Result<Response> {
                         "available": p.get("available").and_then(|x| x.as_bool()).unwrap_or(true),
                         "unavailableNote": p.get("unavailableNote").cloned().unwrap_or(Value::Null),
                         "imageUrl": p.get("imageUrl").cloned().unwrap_or(Value::Null),
+                        // ── the four fields the storefront reads and this
+                        // payload did not send ──
+                        //
+                        // Their absence was not cosmetic. `allergens` missing
+                        // means every dish renders as "not declared" -- the
+                        // loudest state -- even for one the venue declared
+                        // clear. `modifierGroups` missing means a dish with
+                        // choices is sold without them. `sizeCm` missing means
+                        // the AR button never appears.
+                        //
+                        // `allergens` is passed through as STORED, including
+                        // its absence: null and [] are different claims and
+                        // flattening them here would undo the whole design.
+                        "allergens": p.get("allergens").cloned().unwrap_or(Value::Null),
+                        "modifierGroups": p.get("modifierGroups").cloned().unwrap_or(Value::Null),
+                        "sizeCm": p.get("sizeCm").cloned().unwrap_or(Value::Null),
                         "sortOrder": p.get("sortOrder").cloned().unwrap_or(json!(0))
                     }),
                 )
@@ -194,17 +248,58 @@ pub async fn menu(_req: Request, ctx: RouteContext<()>) -> Result<Response> {
         }));
     }
 
+    let mut location = serde_json::to_value(LocationOut {
+        id: loc.id,
+        name: loc.name,
+        slug: loc.slug,
+        phone: loc.phone,
+        address: loc.address,
+        status,
+        closes_at: loc.closes_at,
+        delivery_eta: loc.delivery_eta,
+        delivery_fee: loc.delivery_fee,
+        free_delivery_threshold: loc.free_delivery_threshold,
+        min_order: loc.min_order,
+        currency_code: loc.currency_code,
+        menu_version: loc.menu_version,
+        supported_locales: serde_json::from_str(&loc.supported_locales)
+            .unwrap_or_else(|_| json!(["sq"])),
+        default_locale: loc.default_locale,
+    })
+    .unwrap_or(json!({}));
+
+    // ── the fields the storefront reads and this payload did not send ──
+    //
+    // Each absence had a visible consequence. No `theme` meant the venue's own
+    // colours never reached its own storefront -- the branding editor wrote to a
+    // field nothing read. No `pickup` meant the collection choice could not be
+    // offered even where the hub accepted it. No `nextOpen` meant a closed venue
+    // said "closed" instead of "opens at eleven", and a customer told only that
+    // a place is shut goes somewhere else.
+    location["theme"] = raw.get("theme").cloned().unwrap_or(Value::Null);
+    location["pickup"] = json!(raw.get("pickup").and_then(Value::as_bool).unwrap_or(false));
+    location["hasDeliveryZones"] = json!(raw.get("delivery_zones").is_some());
+    location["nextOpen"] = next_open
+        .map(|(d, m)| json!({ "weekday": d, "minute": m }))
+        .unwrap_or(Value::Null);
+    // Which KIND of closed, so the storefront can say which.
+    location["closedReason"] = if paused {
+        json!("paused")
+    } else if loc.status == "closed" {
+        json!("manual")
+    } else if !scheduled_open {
+        json!("hours")
+    } else {
+        Value::Null
+    };
+    location["telegramBot"] = ctx
+        .env
+        .secret("TELEGRAM_BOT_USERNAME")
+        .map(|v| Value::from(v.to_string()))
+        .unwrap_or(Value::Null);
+
     let out = json!({
-        "location": LocationOut {
-            id: loc.id, name: loc.name, slug: loc.slug, phone: loc.phone, address: loc.address,
-            status, closes_at: loc.closes_at, delivery_eta: loc.delivery_eta,
-            delivery_fee: loc.delivery_fee, free_delivery_threshold: loc.free_delivery_threshold,
-            min_order: loc.min_order, currency_code: loc.currency_code,
-            menu_version: loc.menu_version,
-            supported_locales: serde_json::from_str(&loc.supported_locales)
-                .unwrap_or_else(|_| json!(["sq"])),
-            default_locale: loc.default_locale,
-        },
+        "location": location,
         "categories": cats,
         // The PUBLISHABLE key only. It is designed to be public -- it can create
         // a payment method and nothing else -- and the browser needs it to mount
@@ -313,13 +408,57 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     // carried alongside until the aggregate's new fields reach this boundary.
     let mut envelope: Value = serde_json::from_str(&order_json)
         .map_err(|e| Error::RustError(format!("kernel order json unreadable: {e}")))?;
-    let total = subtotal + fee;
+    // ── the tip ──
+    //
+    // Bounded on both sides. Zero or less is not a tip; the ceiling is the
+    // order or 10000, whichever is more, because somebody meaning 200 and
+    // typing 20000 would otherwise hand over a month's pay and find out at the
+    // card rail.
+    let tip = match body.tip.unwrap_or(0) {
+        0 => 0,
+        t if t < 0 => return Response::error("a tip cannot be negative", 400),
+        t if t > subtotal.max(10_000) => {
+            return Response::error("that tip is larger than the order", 400)
+        }
+        t => t,
+    };
+
+    // ── the promo code ──
+    //
+    // Decided AFTER the basket is priced and against the subtotal the hub
+    // derived, never a number from the browser. The use-count is folded from
+    // the orders themselves, so there is no counter that can disagree with
+    // them; a rejected or cancelled order gives its use back, because the venue
+    // never took the money.
+    // The code is LOOKED UP here, before the order exists, so an unknown one
+    // costs the customer a refusal and nothing else. Whether it still APPLIES is
+    // decided in the append below, where the use-count cannot move underneath
+    // the answer.
+    let promo = match body.promo.as_deref().map(dowiz_hub::promo::normalise) {
+        None => None,
+        Some(code) if code.is_empty() => None,
+        Some(code) => {
+            match loaded.catalog.promo(&code).as_deref().and_then(dowiz_hub::promo::Promo::parse) {
+                Some(p) => Some(p),
+                None => return Response::error(dowiz_hub::promo::Refusal::Unknown.as_str(), 400),
+            }
+        }
+    };
+
+    // The fee was decided BEFORE the discount and on the undiscounted subtotal:
+    // the other order lets a code quietly ADD a delivery charge by pushing the
+    // basket back under the free-delivery threshold, and a customer who applied
+    // a saving and watched the total go up is right to distrust the number.
+    let total = subtotal + fee + tip;
     envelope["delivery_fee"] = json!(fee);
+    envelope["tip"] = json!(tip);
     envelope["total"] = json!(total);
     envelope["location_id"] = json!(loc.id);
     envelope["contact"] = json!({ "name": body.contact.name, "phone": body.contact.phone });
     envelope["fulfilment"] = json!({
         "kind": body.fulfilment.kind,
+        "note": body.fulfilment.note.as_deref().map(str::trim).filter(|n| !n.is_empty())
+            .map(|n| json!(n)).unwrap_or(Value::Null),
         "address": body.fulfilment.address.as_ref().map(|a| json!({ "line": a.line, "note": a.note })),
         "fee": fee
     });
@@ -327,17 +466,31 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     envelope["payment"] = json!(payment_kind);
 
     let phone_hash = auth::sha256_hex(&body.contact.phone);
-    let stored = serde_json::to_string(&envelope).unwrap_or(order_json);
-
-    // The order goes into the HUB's event log, not into a table. An order's state
-    // is a fold over what happened to it, so there is one place it can be read
-    // from and no row that could disagree with the log.
+    // THE DISCOUNT IS DECIDED BESIDE THE APPEND THAT MAKES IT REAL. Counting the
+    // uses first and appending after would let two customers spend the last use
+    // of the same code at once -- rare at one restaurant, and exactly the kind
+    // of rare that only ever shows up as an unexplained loss.
     let seq = created_at_ms as u64;
     let ev_id = id.clone();
-    let ev_json = stored.clone();
-    crate::hubstore::with_hub(&db, move |hub| {
-        hub.append(dowiz_hub::EventKind::Placed, &ev_id, &ev_json, seq, [0u8; 32])
-            .map_err(|e| Error::RustError(format!("hub append failed: {e:?}")))
+    let now_for_promo = Date::now().as_millis() as i64;
+    let stored = crate::hubstore::with_hub(&db, move |hub| {
+        // CLONED per attempt, not moved: `with_hub` retries when it loses the
+        // generation guard, so the closure runs more than once and must not
+        // consume what it patches.
+        let mut envelope = envelope.clone();
+        if let Some(p) = &promo {
+            let used = crate::hubstore::promo_uses(hub, &p.code);
+            let cut = p
+                .redeem(subtotal, now_for_promo, used)
+                .map_err(|r| Error::RustError(format!("promo: {}", r.as_str())))?;
+            envelope["discount"] = json!(cut);
+            envelope["promo"] = json!({ "code": p.code, "discount": cut });
+            envelope["total"] = json!(subtotal - cut + fee + tip);
+        }
+        let stored = serde_json::to_string(&envelope).unwrap_or_else(|_| order_json.clone());
+        hub.append(dowiz_hub::EventKind::Placed, &ev_id, &stored, seq, [0u8; 32])
+            .map_err(|e| Error::RustError(format!("hub append failed: {e:?}")))?;
+        Ok(stored)
     })
     .await?;
 

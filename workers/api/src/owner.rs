@@ -14,14 +14,14 @@ use worker::*;
 use crate::auth::{self, Principal};
 use dowiz_kernel::json_api;
 
-fn now_ms() -> i64 {
+pub(crate) fn now_ms() -> i64 {
     Date::now().as_millis() as i64
 }
 
 /// Authenticate, require the owner role, and confirm the membership covers this
 /// location. The membership is read LIVE — an owner removed a moment ago is
 /// refused here even holding a valid token.
-async fn owner_at(
+pub(crate) async fn owner_at(
     req: &Request,
     ctx: &RouteContext<()>,
     db: &D1Database,
@@ -56,7 +56,24 @@ async fn owner_at(
     }
 }
 
-fn location_of(req: &Request) -> Option<String> {
+/// Which venue, resolved rather than demanded.
+///
+/// A HUB IMAGE HOLDS EXACTLY ONE VENUE. The `location_id` query parameter is a
+/// leftover from the multi-tenant table shape, and every console pane written
+/// against the native adapter omits it -- which meant the owner surface on this
+/// Worker answered 400 to its own admin pane for every route. When the caller
+/// says nothing, the catalogue is asked.
+pub(crate) async fn venue_of(req: &Request, db: &D1Database) -> Option<String> {
+    if let Some(l) = location_of(req) {
+        return Some(l);
+    }
+    let loaded = crate::hubstore::load_catalog(db).await.ok()?;
+    let j = loaded.catalog.location()?;
+    let v: Value = serde_json::from_str(&j).ok()?;
+    v.get("id").and_then(|x| x.as_str()).map(String::from)
+}
+
+pub(crate) fn location_of(req: &Request) -> Option<String> {
     req.url()
         .ok()?
         .query_pairs()
@@ -67,8 +84,8 @@ fn location_of(req: &Request) -> Option<String> {
 /// `GET /api/owner/orders?location_id=&status=`
 pub async fn orders(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let Some(loc) = location_of(&req) else {
-        return Response::error("location_id required", 400);
+    let Some(loc) = venue_of(&req, &db).await else {
+        return Response::error("this hub has no venue yet", 404);
     };
     if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
         return Ok(r);
@@ -204,8 +221,8 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
 /// that can drift.
 pub async fn dashboard(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let Some(loc) = location_of(&req) else {
-        return Response::error("location_id required", 400);
+    let Some(loc) = venue_of(&req, &db).await else {
+        return Response::error("this hub has no venue yet", 404);
     };
     if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
         return Ok(r);
@@ -255,6 +272,16 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<()>) -> Result<R
         unavailable_note: Option<String>,
         #[serde(default)]
         price: Option<i64>,
+        /// The fourteen declarable allergens. AN EMPTY ARRAY IS A CLAIM --
+        /// "none of the fourteen" -- and absent is not, which is why this is
+        /// `Option<Vec<_>>` all the way from the wire.
+        #[serde(default)]
+        allergens: Option<Vec<String>>,
+        /// The dish's real widest dimension, in centimetres. Without it the
+        /// storefront shows no AR button, which is correct: a guessed size
+        /// answers the customer's question wrongly.
+        #[serde(default)]
+        size_cm: Option<i64>,
     }
     let body: In = match req.json().await {
         Ok(b) => b,
@@ -274,11 +301,28 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<()>) -> Result<R
         }
     }
 
+    // Checked before the write, so a refused list never reaches the record. A
+    // dish tagged `shelfish` would match no filter, so the customer who
+    // filtered for shellfish would be shown it as safe.
+    let allergens = match &body.allergens {
+        None => None,
+        Some(raw) => match dowiz_hub::allergens::validate(raw) {
+            Ok(v) => Some(v),
+            Err(e) => return Response::error(e, 400),
+        },
+    };
+    if let Some(cm) = body.size_cm {
+        if !(3..=120).contains(&cm) {
+            return Response::error("a dish is between 3 and 120 cm across", 400);
+        }
+    }
+
     let want_id = id.clone();
     let price = body.price;
     let available = body.available;
     let note = body.unavailable_note.clone();
-    crate::hubstore::with_catalog(&db, move |cat| {
+    let size_cm = body.size_cm;
+    let written = crate::hubstore::with_catalog(&db, move |cat| {
         let Some(pj) = cat.product(&want_id) else {
             return Err(Error::RustError("unknown product".into()));
         };
@@ -286,6 +330,33 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<()>) -> Result<R
             .map_err(|e| Error::RustError(format!("catalogue product unreadable: {e}")))?;
         if let Some(v) = price {
             p["price"] = json!(v);
+        }
+        if let Some(cm) = size_cm {
+            p["sizeCm"] = json!(cm);
+        }
+        if let Some(list) = &allergens {
+            p["allergens"] = json!(list);
+        }
+        // ── THE ALLERGEN PUBLISH GATE ──
+        //
+        // A dish nobody has declared cannot go on sale. Not a badge, a refusal:
+        // a customer with an allergy cannot tell "we checked and it is clear"
+        // from "nobody filled this in", and every surface renders both as no
+        // warning. Declaring costs one action and "none of the fourteen" is a
+        // valid answer; the gate is per DISH, so a venue is never blocked
+        // wholesale.
+        if available == Some(true) {
+            let decided = allergens.as_ref().map(|l| {
+                if l.is_empty() {
+                    dowiz_hub::allergens::Declaration::None
+                } else {
+                    dowiz_hub::allergens::Declaration::Contains(l.clone())
+                }
+            });
+            let state = decided.unwrap_or_else(|| dowiz_hub::allergens::read(&pj));
+            if !state.is_declared() {
+                return Err(Error::RustError("undeclared".into()));
+            }
         }
         if let Some(a) = available {
             p["available"] = json!(a);
@@ -306,7 +377,23 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<()>) -> Result<R
         }
         Ok(())
     })
-    .await?;
+    .await;
+    // The gate's refusal is a 409 with the sentence that tells the owner what
+    // to do, not a 500 with a marker word. The marker only exists because the
+    // closure can only fail with `Error`.
+    if let Err(e) = written {
+        if e.to_string().contains("undeclared") {
+            return Response::error(
+                "declare this dish's allergens before putting it on sale; \
+                 'none of the fourteen' is a valid answer, an empty field is not",
+                409,
+            );
+        }
+        if e.to_string().contains("unknown product") {
+            return Response::error("not found", 404);
+        }
+        return Err(e);
+    }
 
     Response::from_json(&json!({ "ok": true, "id": id }))
 }
@@ -320,6 +407,13 @@ pub async fn update_location(mut req: Request, ctx: RouteContext<()>) -> Result<
         status: Option<String>,
         #[serde(default)]
         delivery_paused: Option<bool>,
+        /// The number a customer rings when the app cannot help them, and one
+        /// of the two ways a venue satisfies the notifications leg.
+        #[serde(default)]
+        phone: Option<String>,
+        /// Can a customer come and collect? The other half of fulfilment.
+        #[serde(default)]
+        pickup: Option<bool>,
     }
     let body: In = match req.json().await {
         Ok(b) => b,
@@ -334,8 +428,17 @@ pub async fn update_location(mut req: Request, ctx: RouteContext<()>) -> Result<
             return Response::error("status must be open, closed or busy", 400);
         }
     }
+    if let Some(ph) = &body.phone {
+        // Empty CLEARS it -- a venue with no phone should be able to say so
+        // rather than keep a number that no longer answers.
+        if !ph.trim().is_empty() && ph.chars().filter(|c| c.is_ascii_digit()).count() < 8 {
+            return Response::error("that does not look like a phone number", 400);
+        }
+    }
     let status = body.status.clone();
     let paused = body.delivery_paused;
+    let phone = body.phone.clone();
+    let pickup = body.pickup;
     crate::hubstore::with_catalog(&db, move |cat| {
         let Some(lj) = cat.location() else {
             return Err(Error::RustError("no venue in the catalogue".into()));
@@ -347,6 +450,12 @@ pub async fn update_location(mut req: Request, ctx: RouteContext<()>) -> Result<
         }
         if let Some(p) = paused {
             l["delivery_paused"] = json!(if p { 1 } else { 0 });
+        }
+        if let Some(ph) = &phone {
+            l["phone"] = if ph.trim().is_empty() { Value::Null } else { json!(ph.trim()) };
+        }
+        if let Some(p) = pickup {
+            l["pickup"] = json!(p);
         }
         cat.set_location(&serde_json::to_string(&l).unwrap_or(lj));
         Ok(())

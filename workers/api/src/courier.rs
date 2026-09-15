@@ -76,7 +76,7 @@ pub async fn tasks(req: Request, ctx: RouteContext<()>) -> Result<Response> {
             .find(|a| a.order_id == e.order_id)
             .map(|a| a.courier_id.as_str());
         let f = v.get("fulfilment").cloned().unwrap_or(Value::Null);
-        let card = json!({
+        let mut card = json!({
             "id": e.order_id, "status": status,
             "total": v.get("total").cloned().unwrap_or(json!(0)),
             "payment": v.get("payment").cloned().unwrap_or(json!("cash")),
@@ -84,8 +84,29 @@ pub async fn tasks(req: Request, ctx: RouteContext<()>) -> Result<Response> {
             "address": f.get("address").cloned().unwrap_or(Value::Null),
             "items": v.get("items").and_then(|i| i.as_array()).map(|a| a.len()).unwrap_or(0)
         });
+        // ── THE FIVE-MINUTE OFFER WINDOW ──
+        //
+        // An assignment nobody answers must not sit on one courier's screen for
+        // the rest of the evening while the food goes cold. After the window it
+        // goes back to the pool -- NOT declined, not held against them, just no
+        // longer exclusively theirs, and they can still take it if nobody else
+        // did. An ACCEPTED order never lapses however long the ride takes.
+        //
+        // The deadline is sent as an INSTANT: a server-computed "seconds left"
+        // is stale the moment it is sent, and a phone polling every few seconds
+        // would show it jumping backwards.
+        let lapsed = crate::extra::offer_lapsed(&v, now_ms());
         match holder {
-            Some(c) if c == courier_id => mine.push(card),
+            Some(c) if c == courier_id => {
+                if v.get("accepted_at_ms").and_then(Value::as_i64).is_none() {
+                    if let Some(at) = v.get("assigned_at_ms").and_then(Value::as_i64) {
+                        card["offerEndsMs"] = json!(at + crate::extra::OFFER_WINDOW_MS);
+                    }
+                }
+                mine.push(card)
+            }
+            // An offer that lapsed is back in the pool for everybody.
+            Some(_) if lapsed && status == "READY" => open.push(card),
             // An order someone else is carrying is not shown at all rather than
             // greyed: a courier's screen during a run holds one job.
             Some(_) => {}
@@ -244,7 +265,7 @@ pub async fn accept(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         .run()
         .await;
     if res.is_err() {
-        return Response::error("already taken", 409);
+        return Response::error("another courier took this order", 409);
     }
     Response::from_json(&json!({ "ok": true, "orderId": id, "cashDue": cash_due }))
 }
@@ -404,33 +425,59 @@ pub async fn position(mut req: Request, ctx: RouteContext<()>) -> Result<Respons
 /// `GET /api/courier/earnings` — folded from the shift log, not a running total.
 pub async fn earnings(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let (courier_id, _) = match courier_at(&req, &ctx, &db).await {
+    let (courier_id, loc) = match courier_at(&req, &ctx, &db).await {
         Ok(v) => v,
         Err(r) => return Ok(r),
     };
-    #[derive(Deserialize)]
-    struct S {
-        started_at_ms: i64,
-        ended_at_ms: Option<i64>,
-        deliveries: i64,
-        cash_collected: i64,
+    // FOLDED FROM THE ORDERS, not from a shifts table. The table was a second
+    // place the same numbers lived, and the response it produced did not even
+    // have the shape the courier app reads -- `d.today.cash` was undefined, so
+    // the wallet showed nothing at all.
+    let loaded = crate::hubstore::load(&db).await?;
+    let now = now_ms();
+    let day = 86_400_000i64;
+    let today = ((now + 2 * 60 * 60 * 1000) / day) * day - 2 * 60 * 60 * 1000;
+    let (week, month) = (today - 6 * day, today - 29 * day);
+
+    let (mut d_t, mut d_w, mut d_m) = (0i64, 0i64, 0i64);
+    let (mut c_t, mut c_w, mut c_m) = (0i64, 0i64, 0i64);
+    // Tips kept APART from the float: at the end of a shift one is handed over
+    // and one is theirs, and a single figure is the wrong number to reach for
+    // whichever way you reach.
+    let (mut t_t, mut t_w, mut t_m) = (0i64, 0i64, 0i64);
+    let mut open_cash = 0i64;
+    let mut in_hand = 0i64;
+
+    for e in loaded.hub.orders() {
+        let Ok(v) = serde_json::from_str::<Value>(&e.order_json) else { continue };
+        if v.get("location_id").and_then(Value::as_str).map(|l| l != loc).unwrap_or(false) {
+            continue;
+        }
+        if v.get("courier_id").and_then(Value::as_str) != Some(courier_id.as_str()) {
+            continue;
+        }
+        let status = v.get("status").and_then(Value::as_str).unwrap_or("");
+        let at = v.get("created_at_ms").and_then(Value::as_i64).unwrap_or(0);
+        let cash = v.get("cash_collected").and_then(Value::as_i64).unwrap_or(0);
+        let tip = v.get("tip").and_then(Value::as_i64).unwrap_or(0);
+        if status == "DELIVERED" {
+            if at >= month { d_m += 1; c_m += cash; t_m += tip; }
+            if at >= week { d_w += 1; c_w += cash; t_w += tip; }
+            if at >= today { d_t += 1; c_t += cash; t_t += tip; in_hand += cash; }
+        } else if !matches!(status, "CANCELLED" | "REJECTED")
+            && v.get("payment").and_then(Value::as_str) == Some("cash")
+        {
+            // Still out and payable in cash: what they are ABOUT to hold, shown
+            // separately so the two are never added together by mistake.
+            open_cash += v.get("total").and_then(Value::as_i64).unwrap_or(0);
+        }
     }
-    let rows = db
-        .prepare(
-            "SELECT started_at_ms, ended_at_ms, deliveries, cash_collected FROM courier_shifts \
-             WHERE courier_id = ?1 ORDER BY started_at_ms DESC LIMIT 30",
-        )
-        .bind(&[courier_id.into()])?
-        .all()
-        .await?
-        .results::<S>()?;
-    let total_deliveries: i64 = rows.iter().map(|s| s.deliveries).sum();
-    let total_cash: i64 = rows.iter().map(|s| s.cash_collected).sum();
+
     Response::from_json(&json!({
-        "deliveries": total_deliveries, "cash": total_cash,
-        "shifts": rows.iter().map(|s| json!({
-            "startedAtMs": s.started_at_ms, "endedAtMs": s.ended_at_ms,
-            "deliveries": s.deliveries, "cash": s.cash_collected
-        })).collect::<Vec<_>>()
+        "today":  { "deliveries": d_t, "cash": c_t, "tips": t_t },
+        "week":   { "deliveries": d_w, "cash": c_w, "tips": t_w },
+        "month":  { "deliveries": d_m, "cash": c_m, "tips": t_m },
+        "cashInHand": in_hand,
+        "expectedCash": open_cash
     }))
 }

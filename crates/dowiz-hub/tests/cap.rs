@@ -106,3 +106,44 @@ fn a_grown_image_still_loads_and_accepts_more() {
         .expect("a loaded hub must keep accepting");
     assert_eq!(back.orders().len(), 2_001);
 }
+
+/// A KV image is as large as its CONTENT, not as large as a constant somebody
+/// chose once. That constant turned out to be wrong somewhere specific: the
+/// catalogue's 1 MiB arena is larger than D1's one-million-byte row limit, so a
+/// fifty-two dish menu could not be written to the Worker's store at all and
+/// the failure was a 500 with no message.
+#[test]
+fn a_real_menu_fits_under_the_d1_row_limit() {
+    const D1_ROW_LIMIT: usize = 1_000_000;
+    let mut c = dowiz_hub::catalog::Catalog::create().unwrap();
+    c.set_location(
+        r#"{"id":"dubin-durres","name":"Dubin & Sushi","slug":"dubin-durres","currency_code":"ALL"}"#,
+    );
+    for i in 0..13 {
+        c.set_category(&format!("cat-{i}"), &format!(r#"{{"name":"Category {i}","sortOrder":{i}}}"#));
+    }
+    for i in 0..52 {
+        c.set_product(
+            &format!("item-{i:02}"),
+            &format!(
+                r#"{{"id":"item-{i:02}","categoryId":"cat-{}","name":"Dish number {i}","description":"A sentence about this dish, of the length a real menu carries.","price":{},"available":true,"allergens":["fish","soy"],"sizeCm":20}}"#,
+                i % 13,
+                900 + i * 25
+            ),
+        );
+    }
+    let bytes = c.to_bytes().expect("commit");
+    assert!(
+        bytes.len() < D1_ROW_LIMIT,
+        "a 52-dish catalogue is {} bytes and D1 refuses anything over {D1_ROW_LIMIT}",
+        bytes.len()
+    );
+    println!("52 DISHES, 13 CATEGORIES: {} bytes", bytes.len());
+
+    // And it is still the same catalogue when it comes back.
+    let back = dowiz_hub::catalog::Catalog::load(&bytes).expect("load");
+    assert_eq!(back.products().len(), 52);
+    assert_eq!(back.categories().len(), 13);
+    assert!(back.location().unwrap().contains("Dubin"));
+    assert!(dowiz_hub::allergens::read(&back.product("item-07").unwrap()).is_declared());
+}
