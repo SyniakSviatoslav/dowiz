@@ -126,6 +126,23 @@ for name, (html_p, js_p) in SURFACES.items():
         if not rm_blocks:
             fail(name, "R9", f"{len(anims)} animations and no reduced-motion block")
 
+    # ── §8.3 every class the markup uses must have a rule ─────────────────
+    # A class with no rule is markup that looks styled and is not. This was
+    # being checked by hand after every change, which is exactly the kind of
+    # thing that stops happening.
+    #
+    # `ti-*` are the icon font's own and are defined in its stylesheet, not
+    # here; a class built by interpolation is skipped because its concrete
+    # values cannot be read statically.
+    used = set()
+    for m in re.finditer(r"""class=["'`]([^"'`$\\]+)""", js):
+        used |= set(m.group(1).split())
+    for cls in sorted(used):
+        if cls.startswith("ti") or not cls:
+            continue
+        if f".{cls}" not in html and f".{cls}" not in js:
+            fail(name, "R5", f'class "{cls}" is used and has no rule')
+
     # ── the browser chrome must be a colour the page contains ─────────────
     # A <meta theme-color> cannot read a CSS variable, so its value is repeated
     # by hand -- which is exactly how it goes stale. The storefront carried

@@ -200,12 +200,17 @@ function render(){
     <div class="tabs" role="tablist" aria-label="Розділи">
       <button class="tab" role="tab" id="tab-orders" aria-controls="pane" data-t="orders" aria-selected="${S.tab==='orders'}" tabindex="${S.tab==='orders' ? 0 : -1}">Замовлення <span class="n" id="liveN">${liveOrders().length}</span></button>
       <button class="tab" role="tab" id="tab-menu"   aria-controls="pane" data-t="menu"   aria-selected="${S.tab==='menu'}"   tabindex="${S.tab==='menu' ? 0 : -1}">Меню</button>
+      <button class="tab" role="tab" id="tab-stats" aria-controls="pane" data-t="stats" aria-selected="${S.tab==='stats'}" tabindex="${S.tab==='stats' ? 0 : -1}">Аналітика</button>
       <button class="tab" role="tab" id="tab-setup" aria-controls="pane" data-t="setup" aria-selected="${S.tab==='setup'}" tabindex="${S.tab==='setup' ? 0 : -1}">Налаштування</button>
     </div>
     <div id="pane" role="tabpanel" aria-labelledby="tab-${S.tab}"></div>`;
   const tabs = [...document.querySelectorAll('.tab')];
   tabs.forEach((b, i) => {
-    b.onclick = () => { S.tab = b.dataset.t; render(); if (S.tab === 'menu' && !S.products.length) loadMenu(); };
+    b.onclick = () => {
+      S.tab = b.dataset.t; render();
+      if (S.tab === 'menu' && !S.products.length) loadMenu();
+      if (S.tab === 'stats') loadAnalytics();
+    };
     // Keyboard: arrows move between tabs, as a tablist is expected to.
     b.onkeydown = e => {
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
@@ -213,8 +218,14 @@ function render(){
       n.focus(); n.click(); e.preventDefault();
     };
   });
-  $('#pane').innerHTML = S.tab === 'orders' ? ordersView() : S.tab === 'menu' ? menuView() : setupView();
-  if (S.tab === 'orders') bindOrders(); else if (S.tab === 'menu') bindMenu(); else bindSetup();
+  $('#pane').innerHTML = S.tab === 'orders' ? ordersView()
+    : S.tab === 'menu' ? menuView()
+    : S.tab === 'stats' ? statsView()
+    : setupView();
+  if (S.tab === 'orders') bindOrders();
+  else if (S.tab === 'menu') bindMenu();
+  else if (S.tab === 'stats') bindStats();
+  else bindSetup();
   const retry = $('#retry');
   if (retry) retry.onclick = async () => {
     retry.disabled = true; S.phase = 'loading'; render(); await reload();
@@ -250,6 +261,115 @@ function ordersView(){
 
 // Placeholders shaped like the rows they stand in for -- same height, same
 // three bands -- so the queue does not jump when the real orders land.
+// ── analytics ───────────────────────────────────────────────────────────────
+// The chart is drawn as an inline SVG from the numbers the hub folded. No
+// charting library: the same reasoning that took maplibre off the courier's
+// first paint applies here, and a bar chart is a loop over rectangles.
+//
+// Money in the chart is LABELLED but never animated, and the axis label names a
+// value the bars actually reach — a chart whose top gridline is a round number
+// nothing touches invites the wrong reading.
+function bars(series, valueOf, labelOf){
+  const vals = series.map(valueOf);
+  const peak = Math.max(1, ...vals);
+  const w = 100 / Math.max(1, series.length);
+  return `<svg class="chart" viewBox="0 0 100 44" preserveAspectRatio="none" role="img"
+            aria-label="${esc(labelOf ? labelOf(peak) : String(peak))}">
+    ${series.map((d, i) => {
+      const h = (valueOf(d) / peak) * 38;
+      return `<rect x="${(i * w + w * 0.15).toFixed(2)}" y="${(40 - h).toFixed(2)}"
+                width="${(w * 0.7).toFixed(2)}" height="${Math.max(0.4, h).toFixed(2)}"
+                rx="0.6"></rect>`;
+    }).join('')}
+    <line x1="0" y1="40" x2="100" y2="40" class="axis"></line>
+  </svg>`;
+}
+
+function statsView(){
+  if (S.statsPhase === 'loading' || S.statsPhase === undefined) return skeletonMenu();
+  if (S.statsPhase === 'error') return `
+    <div class="panel"><div class="empty" role="alert">
+      <i class="ti ti-alert-triangle i" aria-hidden="true"></i>
+      <b>Аналітика не завантажилась</b>
+      <span class="reason">${esc(S.statsError || '')}</span>
+      <button class="btn" id="retryStats" style="margin-top:12px">Спробувати ще раз</button>
+    </div></div>`;
+  const a = S.analytics;
+  if (!a || !a.orders) return `
+    <div class="panel"><div class="empty">
+      <i class="ti ti-chart-bar i" aria-hidden="true"></i>
+      <b>Ще немає даних</b>
+      Числа з'являться після перших замовлень
+    </div></div>`;
+
+  const day = at => new Date(at).toLocaleDateString('uk', { day:'numeric', month:'short' });
+  return `
+    <div class="panel setup">
+      <section class="card">
+        <div class="row">
+          <h2>За ${a.days} днів</h2>
+          <span class="spacer"></span>
+          <div class="seg">
+            <button class="btn ${a.days === 7 ? 'pri' : ''}" data-days="7">7</button>
+            <button class="btn ${a.days === 30 ? 'pri' : ''}" data-days="30">30</button>
+          </div>
+        </div>
+        <div class="stats">
+          <div class="stat"><div class="k">Замовлень</div><div class="v">${a.orders}</div></div>
+          <div class="stat"><div class="k">Виручка</div><div class="v money">${money(a.revenue)}</div></div>
+          <div class="stat"><div class="k">Середній чек</div><div class="v money">${money(a.averageOrder)}</div></div>
+          <div class="stat"><div class="k">Відхилено</div><div class="v">${a.rejected}</div></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Виручка по днях</h2>
+        ${bars(a.byDay, d => d.revenue, p => `максимум ${p}`)}
+        <div class="xaxis"><span>${esc(day(a.byDay[0].at))}</span>
+          <span>${esc(day(a.byDay[a.byDay.length - 1].at))}</span></div>
+      </section>
+
+      <section class="card">
+        <h2>Коли замовляють</h2>
+        ${bars(a.byHour.map((n, h) => ({ n, h })), d => d.n, p => `максимум ${p}`)}
+        <div class="xaxis"><span>00</span><span>12</span><span>23</span></div>
+      </section>
+
+      <section class="card">
+        <h2>Що беруть</h2>
+        <div class="elist">
+          ${a.topProducts.map(p => `
+            <div class="erow"><span>${esc(p.name)}<br>
+              <small class="hint">${p.quantity} порцій</small></span>
+              <span class="money">${money(p.revenue)}</span></div>`).join('')}
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Як забирають</h2>
+        <div class="elist">
+          <div class="erow"><span>Доставка</span><span>${a.delivery}</span></div>
+          <div class="erow"><span>Самовивіз</span><span>${a.pickup}</span></div>
+        </div>
+      </section>
+    </div>`;
+}
+
+async function loadAnalytics(days){
+  S.statsPhase = 'loading'; if (S.tab === 'stats') render();
+  try {
+    S.analytics = await api(`/owner/analytics?days=${days || S.analytics?.days || 7}`);
+    S.statsPhase = 'ready';
+  } catch (e) { S.statsPhase = 'error'; S.statsError = String(e.message || e); }
+  if (S.tab === 'stats') render();
+}
+
+function bindStats(){
+  document.querySelectorAll('[data-days]').forEach(b =>
+    b.onclick = () => loadAnalytics(parseInt(b.dataset.days, 10)));
+  const r = $('#retryStats'); if (r) r.onclick = () => loadAnalytics();
+}
+
 function skeletonMenu(){
   return `<div class="panel" aria-busy="true" aria-label="Завантажуємо меню">
     <div class="panel-h"><span class="skel" style="width:8rem;height:1rem"></span></div>

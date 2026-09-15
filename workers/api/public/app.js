@@ -565,7 +565,7 @@ function groupMarkup(g){
   const single = g.max === 1;
   const need = g.min >= 1
     ? `<span class="req">${esc(t('required'))}</span>`
-    : g.max > 0 ? `<span class="hint">${g.max}</span>` : '';
+    : g.max > 0 ? `<span class="req">${g.max}</span>` : '';
   return `<fieldset class="mgroup" data-g="${esc(g.id)}"
             data-min="${g.min|0}" data-max="${g.max|0}">
     <legend>${esc(g.name)} ${need}</legend>
@@ -891,7 +891,7 @@ async function loadStripe(){
 
 async function collectCard(order){
   sheet(`<h2>${esc(t('pay'))}</h2>
-    <p class="sub" style="color:var(--brand-text-muted)">#${esc(String(order.id).slice(0,8))} · <span class="money">${money(order.total)}</span></p>
+    <p style="color:var(--brand-text-muted)">#${esc(String(order.id).slice(0,8))} · <span class="money">${money(order.total)}</span></p>
     <div id="pe" style="margin:var(--space-4) 0;min-height:180px"></div>
     <div id="pe-err"></div>
     <button class="btn" id="pay">${esc(t('place'))}</button>`);

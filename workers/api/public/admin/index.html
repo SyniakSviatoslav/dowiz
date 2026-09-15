@@ -316,6 +316,24 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
 
 /* One row per day. The three columns line up down the week, so a glance shows
    the shape of the week rather than seven separate readings. */
+/* A bar chart, drawn as rectangles. `preserveAspectRatio: none` lets it fill
+   any width; the bars carry no gradient and no animation, because this is data
+   and not decoration. */
+.chart{width:100%;height:5.5rem;display:block}
+.chart rect{fill:var(--brand-primary)}
+.chart .axis{stroke:var(--brand-border);stroke-width:.4}
+.xaxis{display:flex;justify-content:space-between;
+      color:var(--brand-text-muted);font-size:var(--text-xs);
+      font-variant-numeric:tabular-nums}
+/* A segmented switch: two ranges, one of them current. Not a card — it is one
+   control, so the buttons share an edge instead of each carrying their own. */
+.seg{display:flex;gap:2px}
+.elist{display:grid;gap:var(--space-1)}
+.erow{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);
+      min-height:var(--tap);padding:0 var(--space-3);
+      border:1px solid var(--brand-border);border-radius:var(--radius-md);
+      background:var(--brand-surface);font-size:var(--text-sm)}
+
 .hours{display:grid;gap:var(--space-1)}
 .hrow{display:grid;grid-template-columns:minmax(6rem,1fr) auto auto auto;
       align-items:center;gap:var(--space-2);min-height:var(--tap);

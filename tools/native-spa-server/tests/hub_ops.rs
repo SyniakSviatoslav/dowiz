@@ -2169,3 +2169,86 @@ async fn opening_hours_decide_and_the_owner_can_only_close_early() {
     assert_eq!(post(&s.base, "/api/owner/location", Some(c["jwt"].as_str().unwrap()),
                     json!({ "hours": always })).0, 403);
 }
+
+/// The owner's numbers, folded from the log rather than kept in a second place
+/// that can disagree with it.
+#[tokio::test(flavor = "multi_thread")]
+async fn analytics_are_folded_from_the_orders_themselves() {
+    let s = boot("analytics").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+
+    // Nothing yet: zeros and a full set of empty days, not an error.
+    let (code, v) = get(&s.base, "/api/owner/analytics", Some(&owner));
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["orders"], 0);
+    assert_eq!(v["revenue"], 0);
+    assert_eq!(v["averageOrder"], 0, "no division by zero on an empty venue");
+    assert_eq!(v["byDay"].as_array().unwrap().len(), 7);
+    assert_eq!(v["byHour"].as_array().unwrap().len(), 24);
+    assert!(v["topProducts"].as_array().unwrap().is_empty());
+
+    let place = |qty: i64, pickup: bool| {
+        post(&s.base, "/api/public/locations/dubin/orders", None, json!({
+            "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": qty }],
+            "contact": { "name": "C", "phone": "+355690000000" },
+            "fulfilment": if pickup { json!({ "kind": "pickup" }) }
+                          else { json!({ "kind": "delivery",
+                                         "address": { "line": "Rruga Taulantia 12" } }) }
+        }))
+    };
+
+    // Three orders: two kept, one rejected.
+    let (_, a) = place(2, true);       // 1800
+    let (_, b) = place(1, false);      // 900 + 200 delivery = 1100
+    let (_, c) = place(3, true);       // 2700, rejected
+    let rejected_id = c["id"].as_str().unwrap().to_string();
+    post(&s.base, &format!("/api/owner/orders/{rejected_id}/action"), Some(&owner),
+         json!({ "action": "reject", "reason": "closing" }));
+
+    let (_, v) = get(&s.base, "/api/owner/analytics", Some(&owner));
+    assert_eq!(v["orders"], 3, "every order counts as an order");
+    assert_eq!(v["rejected"], 1);
+    // A REFUSED ORDER IS NOT REVENUE. Counting it would overstate every day the
+    // kitchen turned something down.
+    assert_eq!(v["revenue"], 1800 + 1100, "{v}");
+    // Integer division: a mean of 1450.0 not 1450.0000001, and never a float.
+    assert_eq!(v["averageOrder"], 1450);
+    assert_eq!(v["delivery"], 1);
+    assert_eq!(v["pickup"], 2);
+
+    // The day buckets carry it, and only today's is non-zero.
+    let days = v["byDay"].as_array().unwrap();
+    let today = days.last().unwrap();
+    assert_eq!(today["orders"], 3);
+    assert_eq!(today["revenue"], 2900);
+    assert_eq!(days[0]["orders"], 0, "an earlier day stays empty rather than absent");
+
+    // Exactly one hour bucket is non-zero, and it sums to the order count.
+    let hours: Vec<i64> = v["byHour"].as_array().unwrap().iter()
+        .map(|h| h.as_i64().unwrap()).collect();
+    assert_eq!(hours.iter().sum::<i64>(), 3);
+
+    // Top products count only what was actually sold: 2 + 1 portions, not the
+    // 3 on the rejected order.
+    let top = v["topProducts"].as_array().unwrap();
+    assert_eq!(top.len(), 1);
+    assert_eq!(top[0]["name"], "Sake Futomaki", "named, not an id: {top:?}");
+    assert_eq!(top[0]["quantity"], 3);
+    assert_eq!(top[0]["revenue"], 2700, "3 portions at 900");
+
+    // Thirty days is the other window, and nothing between is accepted.
+    let (_, v30) = get(&s.base, "/api/owner/analytics?days=30", Some(&owner));
+    assert_eq!(v30["days"], 30);
+    assert_eq!(v30["byDay"].as_array().unwrap().len(), 30);
+    assert_eq!(v30["revenue"], 2900, "the same orders, a wider window");
+    let (_, odd) = get(&s.base, "/api/owner/analytics?days=3", Some(&owner));
+    assert_eq!(odd["days"], 7, "an arbitrary window would invite a query nobody can read");
+
+    // The owner's alone.
+    let (_, cr) = post(&s.base, "/api/courier/auth/login", None,
+                       json!({ "phone": "+355691112233", "password": "courier-pw" }));
+    assert_eq!(get(&s.base, "/api/owner/analytics", Some(cr["jwt"].as_str().unwrap())).0, 403);
+    assert_eq!(get(&s.base, "/api/owner/analytics", None).0, 401);
+    let _ = (a, b);
+}

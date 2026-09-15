@@ -806,6 +806,7 @@ pub fn routes(state: Shared) -> Router {
         .route("/api/owner/products/{id}/image/clear", post(clear_product_image))
         .route("/api/public/reach", get(public_reach))
         .route("/api/owner/stock", get(stock))
+        .route("/api/owner/analytics", get(analytics))
         .route("/api/owner/supplies", post(set_supply))
         .route("/api/owner/stock/{kind}", post(stock_move))
         .with_state(state)
@@ -1330,4 +1331,133 @@ pub async fn stock_move(
         "item": body.item, "onHand": lvl.on_hand,
         "reserved": lvl.reserved, "available": lvl.available()
     })))
+}
+
+// ── analytics ────────────────────────────────────────────────────────────────
+
+/// `GET /api/owner/analytics?days=7`
+///
+/// DERIVED ON READ from the order log, like the dashboard. There is no
+/// analytics store and there should not be: the log already holds every fact,
+/// and a second table of pre-aggregated numbers is a second thing that can
+/// disagree with it. A venue's month is a few thousand orders; folding them is
+/// microseconds.
+///
+/// §7.3 asks for revenue over time, top products, and an hour-of-day picture.
+/// It also asks for a delivery geo-map and ingredient consumption; the first
+/// needs coordinates most orders do not carry and the second is answerable from
+/// the stock log rather than here, so neither is faked with a placeholder.
+pub async fn analytics(
+    State(st): State<Shared>,
+    _who: OwnerCaller,
+    Query(q): Query<AnalyticsQuery>,
+) -> Result<Json<Value>, HubHttpError> {
+    // 7 or 30, and nothing else: two windows an owner reasons about, rather
+    // than an arbitrary number that invites a query nobody can interpret.
+    let days = if q.days.unwrap_or(7) >= 30 { 30 } else { 7 };
+    let now = now_ms();
+    let day_ms = 24 * 60 * 60 * 1000;
+    let from = start_of_day_ms(now) - (days as i64 - 1) * day_ms;
+
+    let hub = st.read_log()?;
+    let cat = st.read_catalog()?;
+
+    let mut by_day: Vec<(i64, i64, i64)> = (0..days as i64)
+        .map(|i| (from + i * day_ms, 0i64, 0i64))
+        .collect();
+    let mut by_hour = [0i64; 24];
+    let mut products: Vec<(String, i64, i64)> = Vec::new();
+    let (mut orders, mut revenue, mut rejected) = (0i64, 0i64, 0i64);
+    let (mut delivery, mut pickup) = (0i64, 0i64);
+
+    let tz: i64 = std::env::var("TZ_OFFSET_MINUTES")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(120);
+
+    for ev in hub.orders() {
+        let Ok(o) = serde_json::from_str::<Value>(&ev.order_json) else { continue };
+        let at = o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(0);
+        if at < from {
+            continue;
+        }
+        let status = o.get("status").and_then(Value::as_str).unwrap_or("");
+        let refused = matches!(status, "REJECTED" | "CANCELLED");
+        orders += 1;
+        if refused {
+            rejected += 1;
+        }
+        // Money the venue TOOK. A refused order is not revenue, and counting it
+        // would overstate every day the kitchen turned something down.
+        let total = if refused { 0 } else { o.get("total").and_then(Value::as_i64).unwrap_or(0) };
+        revenue += total;
+
+        match o.get("fulfilment").and_then(|f| f.get("kind")).and_then(Value::as_str) {
+            Some("pickup") => pickup += 1,
+            _ => delivery += 1,
+        }
+
+        let idx = ((at - from) / day_ms).clamp(0, days as i64 - 1) as usize;
+        by_day[idx].1 += 1;
+        by_day[idx].2 += total;
+
+        let (_, minute) = dowiz_hub::hours::local_now(at, tz);
+        by_hour[(minute / 60).clamp(0, 23) as usize] += 1;
+
+        if refused {
+            continue;
+        }
+        for item in o.get("items").and_then(Value::as_array).into_iter().flatten() {
+            let Some(pid) = item.get("product_id").and_then(Value::as_str) else { continue };
+            let qty = item.get("quantity").and_then(Value::as_i64).unwrap_or(1);
+            let line = item.get("unit_price").and_then(Value::as_i64).unwrap_or(0) * qty;
+            match products.iter_mut().find(|(p, _, _)| p == pid) {
+                Some((_, n, m)) => {
+                    *n += qty;
+                    *m += line;
+                }
+                None => products.push((pid.to_string(), qty, line)),
+            }
+        }
+    }
+
+    // By money, then by name, so a tie is stable and two reads agree.
+    products.sort_by(|a, b| b.2.cmp(&a.2).then(a.0.cmp(&b.0)));
+    let top: Vec<Value> = products
+        .iter()
+        .take(10)
+        .map(|(pid, qty, money)| {
+            let name = cat
+                .product(pid)
+                .and_then(|j| serde_json::from_str::<Value>(&j).ok())
+                .and_then(|v| v.get("name").and_then(Value::as_str).map(str::to_string))
+                .unwrap_or_else(|| pid.clone());
+            json!({ "id": pid, "name": name, "quantity": qty, "revenue": money })
+        })
+        .collect();
+
+    Ok(Json(json!({
+        "days": days,
+        "orders": orders,
+        "revenue": revenue,
+        "rejected": rejected,
+        // The average is INTEGER division. A mean order value of 1732.6667
+        // implies a precision the underlying integers do not have, and money
+        // never becomes a float in this system.
+        "averageOrder": if orders > rejected { revenue / (orders - rejected) } else { 0 },
+        "delivery": delivery,
+        "pickup": pickup,
+        "byDay": by_day.iter()
+            .map(|(at, n, m)| json!({ "at": at, "orders": n, "revenue": m }))
+            .collect::<Vec<_>>(),
+        "byHour": by_hour.to_vec(),
+        "topProducts": top,
+        "currency": "ALL",
+    })))
+}
+
+#[derive(Deserialize, Default)]
+pub struct AnalyticsQuery {
+    #[serde(default)]
+    pub days: Option<u32>,
 }
