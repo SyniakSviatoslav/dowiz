@@ -846,3 +846,226 @@ mod log_tests {
         assert_eq!(log.ledger().unwrap().level("uni").reserved, 0);
     }
 }
+
+// ── what a dish is made of ──────────────────────────────────────────────────
+
+/// One line of a dish's bill of materials.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BomLine {
+    pub supply: String,
+    /// How much ONE portion uses, in the supply's base unit.
+    pub qty: Qty,
+}
+
+/// Read a product's recipe out of its catalogue record.
+///
+/// A product with no `bom` is not an error and not a problem: plenty of things
+/// a venue sells -- a bottle of water, a dessert bought in -- have no recipe
+/// worth tracking, and those simply never reserve anything. Stock control that
+/// demands every item be modelled before any item can be sold is stock control
+/// nobody switches on.
+pub fn bom_of(product_json: &str) -> Vec<BomLine> {
+    let mut out = Vec::new();
+    // `"bom":[{"supply":"salmon","qty":40}, ...]`
+    let Some(start) = product_json.find("\"bom\"") else { return out };
+    let rest = &product_json[start..];
+    let Some(open) = rest.find('[') else { return out };
+    let Some(close) = rest[open..].find(']') else { return out };
+    for chunk in rest[open..open + close].split('{').skip(1) {
+        let Some(supply) = crate::minijson::str_field(chunk, "supply") else { continue };
+        let Some(qty) = crate::minijson::int_field(chunk, "qty") else { continue };
+        if qty > 0 && !supply.is_empty() {
+            out.push(BomLine { supply, qty });
+        }
+    }
+    out
+}
+
+/// The stock events one order's lines imply.
+///
+/// `lines` is `(product_json, quantity_ordered)`. Quantities MULTIPLY: two
+/// portions of a roll using forty grams of salmon reserve eighty, and getting
+/// that wrong is how a kitchen runs out mid-service while the ledger says it is
+/// fine.
+///
+/// Lines for the same supply are SUMMED rather than emitted separately, so a
+/// basket with two different rolls that both use salmon is checked against the
+/// total it actually needs.
+pub fn reservations_for(order_id: &str, lines: &[(String, i64)]) -> Vec<StockEvent> {
+    let mut totals: Vec<(String, Qty)> = Vec::new();
+    for (product_json, qty_ordered) in lines {
+        if *qty_ordered <= 0 {
+            continue;
+        }
+        for line in bom_of(product_json) {
+            let need = line.qty.saturating_mul(*qty_ordered);
+            match totals.iter_mut().find(|(s, _)| *s == line.supply) {
+                Some((_, t)) => *t = t.saturating_add(need),
+                None => totals.push((line.supply.clone(), need)),
+            }
+        }
+    }
+    // Sorted, so the same basket always produces the same event sequence and
+    // two hubs replaying it agree byte for byte.
+    totals.sort_by(|a, b| a.0.cmp(&b.0));
+    totals
+        .into_iter()
+        .map(|(supply, qty)| StockEvent::Reserved {
+            item: supply,
+            qty,
+            order_id: order_id.to_string(),
+        })
+        .collect()
+}
+
+/// Turn an order's reservations into consumption or release.
+///
+/// Derived from what the LEDGER is holding for that order rather than
+/// recomputed from the basket: if the menu changed between placing and
+/// cooking, the recipe may have too, and releasing a different quantity from
+/// the one that was reserved is how a reservation gets stranded.
+pub fn settle(ledger: &StockLedger, order_id: &str, consume: bool) -> Vec<StockEvent> {
+    ledger
+        .stranded()
+        .into_iter()
+        .filter(|(o, _, _)| o == order_id)
+        .map(|(_, item, qty)| {
+            if consume {
+                StockEvent::Consumed { item, qty, order_id: order_id.to_string() }
+            } else {
+                StockEvent::Released { item, qty, order_id: order_id.to_string() }
+            }
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod bom_tests {
+    use super::*;
+
+    const ROLL: &str = r#"{"id":"p1","name":"Sake","bom":[{"supply":"salmon","qty":40},{"supply":"rice","qty":90}]}"#;
+    const MAKI: &str = r#"{"id":"p2","name":"Ebi","bom":[{"supply":"rice","qty":60},{"supply":"prawn","qty":30}]}"#;
+    const WATER: &str = r#"{"id":"p3","name":"Water","price":100}"#;
+
+    #[test]
+    fn a_recipe_reads_back() {
+        assert_eq!(
+            bom_of(ROLL),
+            vec![
+                BomLine { supply: "salmon".into(), qty: 40 },
+                BomLine { supply: "rice".into(), qty: 90 },
+            ]
+        );
+    }
+
+    /// A dish with no recipe reserves nothing, and that is a normal venue --
+    /// a bought-in bottle of water has no bill of materials worth keeping.
+    #[test]
+    fn a_dish_with_no_recipe_is_not_an_error() {
+        assert!(bom_of(WATER).is_empty());
+        assert!(reservations_for("o1", &[(WATER.into(), 3)]).is_empty());
+    }
+
+    /// Quantities multiply. Getting this wrong is how a kitchen runs out
+    /// mid-service while the ledger says it is fine.
+    #[test]
+    fn quantities_multiply_by_the_portions_ordered() {
+        let evs = reservations_for("o1", &[(ROLL.into(), 2)]);
+        let salmon = evs.iter().find(|e| e.item() == "salmon").expect("salmon");
+        match salmon {
+            StockEvent::Reserved { qty, .. } => assert_eq!(*qty, 80),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    /// Two different dishes sharing an ingredient are checked against the
+    /// TOTAL they need, not one line at a time.
+    #[test]
+    fn a_shared_ingredient_is_summed_across_the_basket() {
+        let evs = reservations_for("o1", &[(ROLL.into(), 1), (MAKI.into(), 2)]);
+        let rice = evs.iter().find(|e| e.item() == "rice").expect("rice");
+        match rice {
+            // 90 for one roll + 60x2 for two maki
+            StockEvent::Reserved { qty, .. } => assert_eq!(*qty, 210),
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(evs.len(), 3, "salmon, rice, prawn — one event each");
+        // Sorted, so the same basket always produces the same sequence.
+        let names: Vec<&str> = evs.iter().map(|e| e.item()).collect();
+        assert_eq!(names, vec!["prawn", "rice", "salmon"]);
+    }
+
+    /// The whole reason to route a basket through the ledger.
+    #[test]
+    fn a_basket_that_exceeds_the_shelf_reserves_nothing() {
+        let mut log = StockLog::create().expect("create");
+        log.append(&StockEvent::Received { item: "salmon".into(), qty: 100 }).unwrap();
+        log.append(&StockEvent::Received { item: "rice".into(), qty: 1000 }).unwrap();
+
+        // Three portions need 120g of salmon and there are 100.
+        let evs = reservations_for("o1", &[(ROLL.into(), 3)]);
+        assert!(log.append_all(&evs).is_err());
+        assert_eq!(log.ledger().unwrap().level("rice").reserved, 0, "rice was not held either");
+
+        // Two portions fit.
+        let evs = reservations_for("o2", &[(ROLL.into(), 2)]);
+        assert!(log.append_all(&evs).is_ok());
+        assert_eq!(log.ledger().unwrap().available("salmon"), 20);
+    }
+
+    /// Settlement comes from what the LEDGER holds, not from the basket: if the
+    /// recipe changed between placing and cooking, releasing a recomputed
+    /// quantity would strand the difference forever.
+    #[test]
+    fn settlement_releases_exactly_what_was_reserved() {
+        let mut log = StockLog::create().expect("create");
+        log.append(&StockEvent::Received { item: "salmon".into(), qty: 200 }).unwrap();
+        log.append(&StockEvent::Received { item: "rice".into(), qty: 500 }).unwrap();
+        log.append_all(&reservations_for("o1", &[(ROLL.into(), 1)])).unwrap();
+
+        let led = log.ledger().unwrap();
+        let release = settle(&led, "o1", false);
+        assert_eq!(release.len(), 2);
+        log.append_all(&release).unwrap();
+
+        let led = log.ledger().unwrap();
+        assert!(led.stranded().is_empty(), "nothing left held");
+        assert_eq!(led.level("salmon"), StockLevel { on_hand: 200, reserved: 0 });
+
+        // And consuming instead takes it off the shelf.
+        log.append_all(&reservations_for("o2", &[(ROLL.into(), 1)])).unwrap();
+        let led = log.ledger().unwrap();
+        log.append_all(&settle(&led, "o2", true)).unwrap();
+        assert_eq!(log.ledger().unwrap().level("salmon"), StockLevel { on_hand: 160, reserved: 0 });
+    }
+
+    /// Settling one order must not touch another's reservations.
+    #[test]
+    fn settlement_is_scoped_to_its_own_order() {
+        let mut log = StockLog::create().expect("create");
+        log.append(&StockEvent::Received { item: "salmon".into(), qty: 500 }).unwrap();
+        log.append(&StockEvent::Received { item: "rice".into(), qty: 500 }).unwrap();
+        log.append_all(&reservations_for("o1", &[(ROLL.into(), 1)])).unwrap();
+        log.append_all(&reservations_for("o2", &[(ROLL.into(), 1)])).unwrap();
+
+        let led = log.ledger().unwrap();
+        log.append_all(&settle(&led, "o1", false)).unwrap();
+        let led = log.ledger().unwrap();
+        assert_eq!(led.stranded().len(), 2, "o2 still holds its two lines");
+        assert!(led.stranded().iter().all(|(o, _, _)| o == "o2"));
+    }
+
+    #[test]
+    fn a_malformed_recipe_is_ignored_rather_than_fatal() {
+        for junk in [
+            r#"{"id":"p","bom":"not an array"}"#,
+            r#"{"id":"p","bom":[]}"#,
+            r#"{"id":"p","bom":[{"supply":"","qty":5}]}"#,
+            r#"{"id":"p","bom":[{"supply":"x","qty":0}]}"#,
+            r#"{"id":"p","bom":[{"supply":"x","qty":-3}]}"#,
+            r#"{"id":"p"}"#,
+        ] {
+            assert!(bom_of(junk).is_empty(), "accepted {junk}");
+        }
+    }
+}

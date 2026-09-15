@@ -151,6 +151,42 @@ pub async fn apply_owner_action(
         })
         .await?;
 
+    // ── the stock side of the same intent ──
+    //
+    // §4's lifecycle coupling: entry into Preparing emits Consumed; every
+    // cancellation edge emits Released. Derived from what the LEDGER holds for
+    // this order rather than recomputed from the basket -- if the recipe
+    // changed between placing and cooking, releasing a recomputed quantity
+    // would strand the difference forever.
+    //
+    // Settled AFTER the order moved, never before: the kernel owns whether the
+    // transition is legal at all, and taking ingredients off the shelf for a
+    // transition it then refuses would be a loss with no order behind it.
+    let settle = match action {
+        OwnerOrderAction::MarkPreparing => Some(true),
+        OwnerOrderAction::Reject | OwnerOrderAction::Cancel => Some(false),
+        _ => None,
+    };
+    if let Some(consume) = settle {
+        let oid = notify_id.clone();
+        if let Err(e) = st
+            .with_stock(move |log| {
+                let led = log.ledger().map_err(|e| HubHttpError::Io(e.to_string()))?;
+                let evs = dowiz_hub::stock::settle(&led, &oid, consume);
+                if evs.is_empty() {
+                    return Ok(());
+                }
+                log.append_all(&evs).map_err(|e| HubHttpError::Io(e.to_string()))
+            })
+            .await
+        {
+            // LOUD, and it does not fail the transition. The order has already
+            // moved and the customer has been told; refusing now would leave
+            // the order and the ledger disagreeing in the other direction.
+            eprintln!("stock: settling {notify_id} ({}) failed: {e:?}", action.verb());
+        }
+    }
+
     st.notify_advanced(&notify_id, &out);
     Ok(out)
 }
@@ -709,6 +745,9 @@ pub fn routes(state: Shared) -> Router {
         .route("/api/owner/products/{id}/image", post(set_product_image))
         .route("/api/owner/products/{id}/image/clear", post(clear_product_image))
         .route("/api/public/reach", get(public_reach))
+        .route("/api/owner/stock", get(stock))
+        .route("/api/owner/supplies", post(set_supply))
+        .route("/api/owner/stock/{kind}", post(stock_move))
         .with_state(state)
 }
 
@@ -820,10 +859,45 @@ async fn owner_facts(st: &Shared) -> Result<Value, HubHttpError> {
         }));
     }
     live.sort_by_key(|o| -o["waiting_minutes"].as_i64().unwrap_or(0));
+    // WHAT IS RUNNING OUT, computed here and handed over as fact. The model is
+    // never asked to work out whether something is low -- it is told, the same
+    // way it is told the order counts. A model doing arithmetic over a stock
+    // ledger would eventually get one wrong, and the owner would order fish
+    // they already have or not order fish they do not.
+    let low: Vec<Value> = match st.read_stock().and_then(|l| {
+        l.ledger().map_err(|e| HubHttpError::Io(e.to_string()))
+    }) {
+        Ok(led) => st
+            .read_catalog()
+            .map(|cat| {
+                cat.supplies()
+                    .into_iter()
+                    .filter_map(|(id, j)| {
+                        let v: Value = serde_json::from_str(&j).ok()?;
+                        let avail = led.available(&id);
+                        let low_at = v.get("lowAt").and_then(Value::as_i64).unwrap_or(0);
+                        (low_at > 0 && avail <= low_at).then(|| {
+                            json!({
+                                "item": v.get("name").cloned().unwrap_or(json!(id)),
+                                "available": avail,
+                                "unit": v.get("unit").cloned().unwrap_or(json!("g")),
+                                "threshold": low_at,
+                            })
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+        // A stock log that will not read must not take the whole assistant
+        // down: the order questions are still answerable without it.
+        Err(_) => Vec::new(),
+    };
+
     Ok(json!({
         "now_iso_minutes_since_epoch": now / 60_000,
         "live_orders": live,
         "couriers_on_shift": shifts,
+        "running_low": low,
         "currency": "ALL",
     }))
 }
@@ -1020,4 +1094,180 @@ pub async fn clear_product_image(
         Ok(Json(json!({ "imageUrl": Value::Null })))
     })
     .await
+}
+
+// ── supplies and stock ───────────────────────────────────────────────────────
+
+/// `GET /api/owner/stock` — what is on the shelf, and what is running out.
+pub async fn stock(
+    State(st): State<Shared>,
+    _who: OwnerCaller,
+) -> Result<Json<Value>, HubHttpError> {
+    let cat = st.read_catalog()?;
+    let log = st.read_stock()?;
+    let led = log.ledger().map_err(|e| HubHttpError::Io(e.to_string()))?;
+
+    let rows: Vec<Value> = cat
+        .supplies()
+        .into_iter()
+        .filter_map(|(id, j)| {
+            let v: Value = serde_json::from_str(&j).ok()?;
+            let level = led.level(&id);
+            let low_at = v.get("lowAt").and_then(Value::as_i64).unwrap_or(0);
+            Some(json!({
+                "id": id,
+                "name": v.get("name").cloned().unwrap_or(Value::Null),
+                "unit": v.get("unit").cloned().unwrap_or(json!("g")),
+                "onHand": level.on_hand,
+                "reserved": level.reserved,
+                "available": level.available(),
+                "lowAt": low_at,
+                // The only derived flag, and it is derived on read rather than
+                // stored: a "low" boolean in the store would go stale the moment
+                // the threshold moved.
+                "low": low_at > 0 && level.available() <= low_at,
+            }))
+        })
+        .collect();
+
+    // Reservations nobody will ever settle. Surfaced rather than swept: this is
+    // stock the venue believes it owes to an order that ended.
+    let stranded: Vec<Value> = led
+        .stranded()
+        .into_iter()
+        .map(|(order, item, qty)| json!({ "order": order, "item": item, "qty": qty }))
+        .collect();
+
+    Ok(Json(json!({ "supplies": rows, "stranded": stranded })))
+}
+
+#[derive(Deserialize)]
+pub struct SupplyIn {
+    pub id: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    /// Base unit — grams, millilitres, pieces. Free text, because a venue knows
+    /// what it counts in better than a fixed list does.
+    #[serde(default)]
+    pub unit: Option<String>,
+    /// Tell me when available drops to this. Zero means never.
+    #[serde(default)]
+    pub low_at: Option<i64>,
+}
+
+/// `POST /api/owner/supplies` — add or edit an ingredient.
+pub async fn set_supply(
+    State(st): State<Shared>,
+    _who: OwnerCaller,
+    Json(body): Json<SupplyIn>,
+) -> Result<Json<Value>, HubHttpError> {
+    let id = body.id.trim().to_string();
+    if id.is_empty() || id.len() > 64 {
+        return Err(HubHttpError::Invalid("an ingredient needs a short id".into()));
+    }
+    if body.low_at.is_some_and(|v| v < 0) {
+        return Err(HubHttpError::Invalid("a threshold cannot be negative".into()));
+    }
+    st.with_catalog(move |cat| {
+        let existing: Value = cat
+            .supply(&id)
+            .and_then(|j| serde_json::from_str(&j).ok())
+            .unwrap_or(json!({}));
+        let rec = json!({
+            "id": id,
+            "name": body.name.clone()
+                .map(Value::String)
+                .or_else(|| existing.get("name").cloned())
+                .unwrap_or(json!(id)),
+            "unit": body.unit.clone()
+                .map(Value::String)
+                .or_else(|| existing.get("unit").cloned())
+                .unwrap_or(json!("g")),
+            "lowAt": body.low_at
+                .map(|v| json!(v))
+                .or_else(|| existing.get("lowAt").cloned())
+                .unwrap_or(json!(0)),
+        });
+        cat.set_supply(&id, &rec.to_string());
+        Ok(Json(rec))
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub struct StockMoveIn {
+    pub item: String,
+    #[serde(default)]
+    pub qty: Option<i64>,
+    /// For a stocktake: what was actually counted.
+    #[serde(default)]
+    pub observed: Option<i64>,
+    /// For waste: spoiled, dropped or unsold.
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+/// `POST /api/owner/stock/{kind}` — received, wasted or counted.
+///
+/// The three events a HUMAN causes. Reserved, Consumed and Released are
+/// emitted by the order lifecycle and are deliberately NOT reachable here: a
+/// hand-written reservation has no order to settle it and would strand
+/// immediately.
+pub async fn stock_move(
+    State(st): State<Shared>,
+    _who: OwnerCaller,
+    AxPath(kind): AxPath<String>,
+    Json(body): Json<StockMoveIn>,
+) -> Result<Json<Value>, HubHttpError> {
+    use dowiz_hub::stock::{StockEvent, WasteReason};
+
+    let item = body.item.trim().to_string();
+    if item.is_empty() {
+        return Err(HubHttpError::Invalid("which ingredient?".into()));
+    }
+    if st.read_catalog()?.supply(&item).is_none() {
+        return Err(HubHttpError::NotFound("ingredient"));
+    }
+
+    let ev = match kind.as_str() {
+        "received" => StockEvent::Received {
+            item,
+            qty: body.qty.ok_or_else(|| HubHttpError::Invalid("how much?".into()))?,
+        },
+        "wasted" => StockEvent::Wasted {
+            item,
+            qty: body.qty.ok_or_else(|| HubHttpError::Invalid("how much?".into()))?,
+            reason: body
+                .reason
+                .as_deref()
+                .and_then(WasteReason::from_str)
+                .unwrap_or(WasteReason::Spoiled),
+        },
+        "stocktake" => StockEvent::Stocktake {
+            item,
+            observed: body
+                .observed
+                .ok_or_else(|| HubHttpError::Invalid("what was counted?".into()))?,
+            // The id ties a count to the person and moment that made it, so a
+            // basis reset is attributable rather than anonymous.
+            stocktake_id: format!("st_{}", now_ms()),
+        },
+        other => return Err(HubHttpError::Invalid(format!("no such movement: {other}"))),
+    };
+
+    st.with_stock(move |log| {
+        log.append(&ev).map_err(|e| match e {
+            dowiz_hub::stock::StockError::OutOfStock { .. }
+            | dowiz_hub::stock::StockError::Linkage(_) => HubHttpError::Conflict(e.to_string()),
+            other => HubHttpError::Invalid(other.to_string()),
+        })
+    })
+    .await?;
+
+    let led = st.read_stock()?.ledger().map_err(|e| HubHttpError::Io(e.to_string()))?;
+    let lvl = led.level(&body.item);
+    Ok(Json(json!({
+        "item": body.item, "onHand": lvl.on_hand,
+        "reserved": lvl.reserved, "available": lvl.available()
+    })))
 }

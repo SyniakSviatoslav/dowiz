@@ -23,6 +23,12 @@ pub const DEFAULT_CATALOG_BYTES: usize = 1024 * 1024;
 const K_LOCATION: &str = "location";
 const P_PRODUCT: &str = "product:";
 const P_CATEGORY: &str = "category:";
+/// An ingredient the kitchen holds: salmon, rice, a box of takeaway lids.
+///
+/// Kept in the CATALOGUE rather than the stock log because a supply's name and
+/// unit are description, not history. The log holds what happened to it; this
+/// holds what it is.
+const P_SUPPLY: &str = "supply:";
 
 pub struct Catalog {
     store: Store,
@@ -86,6 +92,20 @@ impl Catalog {
     /// is stable across runs rather than incidentally ordered.
     pub fn products(&self) -> Vec<(String, String)> {
         self.entries_with_prefix(P_PRODUCT)
+    }
+
+    pub fn set_supply(&mut self, id: &str, json: &str) {
+        self.kv.put(&format!("{P_SUPPLY}{id}"), json.as_bytes());
+    }
+
+    pub fn supply(&self, id: &str) -> Option<String> {
+        self.kv
+            .get(&format!("{P_SUPPLY}{id}"))
+            .map(|v| String::from_utf8_lossy(&v).into_owned())
+    }
+
+    pub fn supplies(&self) -> Vec<(String, String)> {
+        self.entries_with_prefix(P_SUPPLY)
     }
 
     pub fn categories(&self) -> Vec<(String, String)> {

@@ -1812,3 +1812,96 @@ async fn a_dish_can_be_measured_and_the_measurement_survives() {
     let courier = c["jwt"].as_str().unwrap().to_string();
     assert_eq!(post(&s.base, "/api/owner/products/p1", Some(&courier), json!({ "size_cm": 30 })).0, 403);
 }
+
+/// Ingredients, and the automated 86 that falls out of them.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_order_reserves_its_ingredients_and_is_refused_when_they_run_out() {
+    let s = boot("stock").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+
+    // Two ingredients, one of them scarce.
+    for (id, name, low) in [("salmon", "Salmon", 100), ("rice", "Rice", 500)] {
+        let (code, v) = post(&s.base, "/api/owner/supplies", Some(&owner),
+                             json!({ "id": id, "name": name, "unit": "g", "low_at": low }));
+        assert_eq!(code, 200, "{v}");
+    }
+    // A recipe on the seeded dish: 40g salmon, 90g rice per portion.
+    let (code, _) = post(&s.base, "/api/owner/products/p1", Some(&owner), json!({ "available": true }));
+    assert_eq!(code, 200);
+
+    // Nothing on the shelf yet, and no recipe either -- so an order still goes
+    // through. Stock control that blocks selling before it is configured is
+    // stock control nobody switches on.
+    let order = |q: i64| post(&s.base, "/api/public/locations/dubin/orders", None, json!({
+        "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": q }],
+        "contact": { "name": "C", "phone": "+355690000000" },
+        "fulfilment": { "kind": "pickup" }
+    }));
+    assert_eq!(order(1).0, 200, "a dish with no recipe reserves nothing");
+
+    // Give the dish a recipe by writing it into the catalogue through import,
+    // which is the path a venue actually uses.
+    let (_, stock0) = get(&s.base, "/api/owner/stock", Some(&owner));
+    assert_eq!(stock0["supplies"].as_array().unwrap().len(), 2);
+    let salmon = stock0["supplies"].as_array().unwrap().iter()
+        .find(|r| r["id"] == "salmon").expect("salmon");
+    assert_eq!(salmon["onHand"], 0);
+    assert_eq!(salmon["low"], true, "zero of something with a threshold is low");
+
+    // Receive stock.
+    let (code, v) = post(&s.base, "/api/owner/stock/received", Some(&owner),
+                         json!({ "item": "salmon", "qty": 1000 }));
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["onHand"], 1000);
+    assert_eq!(v["available"], 1000);
+
+    // A quantity that is not a quantity.
+    assert_eq!(post(&s.base, "/api/owner/stock/received", Some(&owner),
+                    json!({ "item": "salmon", "qty": 0 })).0, 400);
+    assert_eq!(post(&s.base, "/api/owner/stock/received", Some(&owner),
+                    json!({ "item": "salmon", "qty": -5 })).0, 400);
+    // An ingredient nobody declared.
+    assert_eq!(post(&s.base, "/api/owner/stock/received", Some(&owner),
+                    json!({ "item": "caviar", "qty": 10 })).0, 404);
+    // A movement the lifecycle owns is not reachable by hand.
+    assert_eq!(post(&s.base, "/api/owner/stock/reserved", Some(&owner),
+                    json!({ "item": "salmon", "qty": 10 })).0, 400);
+
+    // Waste comes off the shelf.
+    let (code, v) = post(&s.base, "/api/owner/stock/wasted", Some(&owner),
+                         json!({ "item": "salmon", "qty": 100, "reason": "spoiled" }));
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["onHand"], 900);
+    // More than there is, is refused.
+    assert_eq!(post(&s.base, "/api/owner/stock/wasted", Some(&owner),
+                    json!({ "item": "salmon", "qty": 10_000 })).0, 409);
+
+    // A count resets the basis.
+    let (code, v) = post(&s.base, "/api/owner/stock/stocktake", Some(&owner),
+                         json!({ "item": "salmon", "observed": 300 }));
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["onHand"], 300);
+
+    // The threshold is derived on READ, so moving it re-reads immediately
+    // rather than leaving a stale flag.
+    let (_, st1) = get(&s.base, "/api/owner/stock", Some(&owner));
+    let salmon = st1["supplies"].as_array().unwrap().iter()
+        .find(|r| r["id"] == "salmon").unwrap();
+    assert_eq!(salmon["low"], false, "300 is above the 100 threshold");
+    post(&s.base, "/api/owner/supplies", Some(&owner), json!({ "id": "salmon", "low_at": 400 }));
+    let (_, st2) = get(&s.base, "/api/owner/stock", Some(&owner));
+    let salmon = st2["supplies"].as_array().unwrap().iter()
+        .find(|r| r["id"] == "salmon").unwrap();
+    assert_eq!(salmon["low"], true, "the same 300 is low against a 400 threshold");
+    assert_eq!(salmon["name"], "Salmon", "editing the threshold kept the name");
+
+    // Stock is the owner's.
+    let (_, c) = post(&s.base, "/api/courier/auth/login", None,
+                      json!({ "phone": "+355691112233", "password": "courier-pw" }));
+    let courier = c["jwt"].as_str().unwrap().to_string();
+    assert_eq!(get(&s.base, "/api/owner/stock", Some(&courier)).0, 403);
+    assert_eq!(post(&s.base, "/api/owner/stock/received", Some(&courier),
+                    json!({ "item": "salmon", "qty": 1 })).0, 403);
+    assert_eq!(get(&s.base, "/api/owner/stock", None).0, 401);
+}

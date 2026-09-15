@@ -348,6 +348,33 @@ input:focus,textarea:focus,select:focus{border-color:var(--brand-primary);outlin
 .icon-btn:hover{background:var(--brand-surface-raised)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
+/* ── find ──
+   Search, sort and an availability filter, above the category rail. Sticky
+   would fight the rail for the top of the screen, so it scrolls: a customer who
+   has started reading the menu is past needing it. */
+.find{display:grid;gap:var(--space-2);padding:0 var(--space-4) var(--space-3)}
+.srch{display:flex;align-items:center;gap:var(--space-2);min-height:var(--tap);
+      padding:0 var(--space-3);border:1px solid var(--brand-border);
+      border-radius:var(--radius-btn);background:var(--brand-surface);
+      color:var(--brand-text-muted)}
+.srch:focus-within{border-color:var(--brand-primary);
+      outline:2px solid var(--brand-primary);outline-offset:1px}
+.srch input{flex:1 1 auto;min-width:0;border:0;background:none;outline:none;
+      color:var(--brand-text);font:inherit;font-size:var(--text-base)}
+/* The browser's own clear button would sit beside ours and do the same thing. */
+.srch input::-webkit-search-cancel-button{display:none}
+.srch button{display:grid;place-items:center;width:2rem;height:2rem;border:0;
+      border-radius:var(--radius-full);background:none;color:var(--brand-text-muted);
+      cursor:pointer}
+.srch button:hover{background:var(--brand-surface-raised);color:var(--brand-text)}
+.finds{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-3)}
+.finds select{min-height:var(--tap);padding:0 var(--space-3);
+      border:1px solid var(--brand-border);border-radius:var(--radius-md);
+      background:var(--brand-surface);color:var(--brand-text);
+      font:inherit;font-size:var(--text-sm);cursor:pointer}
+.chk{display:inline-flex;align-items:center;gap:var(--space-2);
+      font-size:var(--text-sm);color:var(--brand-text);cursor:pointer}
+
 .when{display:flex;gap:var(--space-2);margin-bottom:var(--space-3)}
 .when .chip{flex:1 1 0;min-height:var(--tap);border-radius:var(--radius-btn);
      border:1px solid var(--brand-border);background:var(--brand-surface);

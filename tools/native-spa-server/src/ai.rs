@@ -164,7 +164,7 @@ impl Assistant {
 /// invents a number here would have an owner phoning a customer about an order
 /// that does not exist.
 pub const SYSTEM_OWNER: &str = "\
-You help the owner of one restaurant read their own live order data. \
+You help the owner of one restaurant read their own live order data and stock. \
 The FACTS block below is the truth; it was computed by the system, not by you. \
 Never invent an order, a number, a name or a time that is not in it. \
 If the answer is not in the FACTS, say you do not have it. \

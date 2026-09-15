@@ -21,6 +21,9 @@ const T = {
         retry:'Provo përsëri', loadFail:'Menuja nuk u ngarkua', loading:'Po ngarkohet…',
         myOrders:'Porositë e mia', noOrders:'Ende asnjë porosi', when:'Kur', asap:'Sa më shpejt',
         onTable:'Shikoni në tryezë', arScan:'Drejtojeni nga tryeza…', arTap:'Prekni për ta vendosur', arFail:'Nuk u hap',
+        search:'Kërkoni në meny', sortBy:'Renditni', sortPop:'Si në meny', sortLow:'Çmimi: nga i ulëti',
+        sortHigh:'Çmimi: nga i larti', sortAz:'Sipas emrit', noHits:'Asgjë nuk u gjet', clear:'Pastroni',
+        onlyAvail:'Vetëm në dispozicion',
         later:'Në një orë tjetër', schedFail:'Koha nuk vlen',
         inArea:'Ne dërgojmë këtu', outArea:'Jashtë zonës sonë të dërgesës', noGeo:'Nuk morëm dot vendndodhjen',
         notify:'Merrni njoftime në Telegram', notifyHint:'Ju njoftojmë sa herë ndryshon porosia',
@@ -39,6 +42,9 @@ const T = {
         retry:'Try again', loadFail:'The menu did not load', loading:'Loading…',
         myOrders:'My orders', noOrders:'No orders yet', when:'When', asap:'As soon as possible',
         onTable:'See it on your table', arScan:'Point at your table…', arTap:'Tap to place it', arFail:'Could not open',
+        search:'Search the menu', sortBy:'Sort', sortPop:'As on the menu', sortLow:'Price: low first',
+        sortHigh:'Price: high first', sortAz:'By name', noHits:'Nothing matched', clear:'Clear',
+        onlyAvail:'Available only',
         later:'At a later time', schedFail:'That time will not work',
         inArea:'We deliver here', outArea:'Outside our delivery area', noGeo:'Could not get your location',
         notify:'Get updates on Telegram', notifyHint:'We\u2019ll message you each time this order moves',
@@ -57,6 +63,9 @@ const T = {
         retry:'Спробувати ще раз', loadFail:'Меню не завантажилось', loading:'Завантажуємо…',
         myOrders:'Мої замовлення', noOrders:'Замовлень ще немає', when:'Коли', asap:'Якнайшвидше',
         onTable:'Подивитись на столі', arScan:'Наведіть на стіл…', arTap:'Торкніться, щоб поставити', arFail:'Не вдалося відкрити',
+        search:'Пошук у меню', sortBy:'Сортування', sortLow:'Ціна: від дешевших',
+        sortPop:'Як у меню', sortHigh:'Ціна: від дорожчих', sortAz:'За назвою',
+        noHits:'Нічого не знайдено', clear:'Очистити', onlyAvail:'Лише в наявності',
         later:'На інший час', schedFail:'Такий час не підходить',
         inArea:'Сюди доставляємо', outArea:'Поза зоною доставки', noGeo:'Не вдалося визначити місце',
         notify:'Сповіщення в Telegram', notifyHint:'Напишемо щоразу, коли статус зміниться',
@@ -72,7 +81,12 @@ const t = k => (T[lang] && T[lang][k]) ?? T.en[k] ?? k;
 function safeGet(k){ try { return localStorage.getItem(k); } catch { return null; } }
 function safeSet(k,v){ try { localStorage.setItem(k,v); } catch {} }
 
-let state = { loc:null, cats:[], cart:loadCart(), placing:false };
+// `q`, `sort` and `availOnly` live HERE and not in the DOM: renderMenu replaces
+// the whole node, and a re-render for any other reason -- a theme change, a
+// language switch -- would otherwise silently reset what the customer was
+// looking at.
+let state = { loc:null, cats:[], cart:loadCart(), placing:false,
+              q:'', sort:'pop', availOnly:false };
 function loadCart(){ try { return JSON.parse(safeGet('dw_cart_'+SLUG) || '{}'); } catch { return {}; } }
 function saveCart(){ safeSet('dw_cart_'+SLUG, JSON.stringify(state.cart)); }
 
@@ -288,9 +302,50 @@ const skeleton = () => `<div class="hero"><div class="skel" style="height:44px;w
   <div class="skel" style="height:18px;width:45%;margin-top:10px"></div></div>
   ${'<div class="skel" style="height:132px;margin-bottom:10px"></div>'.repeat(4)}`;
 
+// ── search, sort, filter ────────────────────────────────────────────────────
+// A fifty-dish menu is a scroll; a search box turns it into a menu. All three
+// run ON WHAT IS ALREADY LOADED -- the whole catalogue arrives in one response,
+// so filtering is instant and works with no signal, which matters more here
+// than anywhere: a customer standing outside a restaurant has one bar.
+//
+// The state lives in `state.q/sort/availOnly` rather than in the DOM, so a
+// re-render (a theme change, a language switch) does not silently reset what
+// the customer was looking at.
+function normalise(x){
+  // Accent- and case-insensitive. "Byrek" must find "Byrek me spinaq", and
+  // "cmimi" must find "çmimi" — a search that demands the right diacritic on a
+  // phone keyboard is a search nobody uses twice.
+  return String(x ?? '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
+}
+
+function visibleCats(){
+  const q = normalise(state.q).trim();
+  const terms = q ? q.split(/\s+/) : [];
+  const out = [];
+  for (const c of state.cats) {
+    let items = (c.products || []).filter(p => {
+      if (state.availOnly && !p.available) return false;
+      if (!terms.length) return true;
+      // EVERY term must match somewhere — name, description or category. That
+      // makes "sake roll" narrow rather than widen, which is what a person
+      // typing a second word means by it.
+      const hay = normalise(`${p.name} ${p.description || ''} ${c.name}`);
+      return terms.every(t => hay.includes(t));
+    });
+    if (state.sort === 'low')  items = [...items].sort((a,b) => a.price - b.price);
+    if (state.sort === 'high') items = [...items].sort((a,b) => b.price - a.price);
+    if (state.sort === 'az')   items = [...items].sort((a,b) => a.name.localeCompare(b.name, lang));
+    // 'pop' is the venue's own order, which is the default because a
+    // restaurant arranges its menu deliberately and we should not overrule it.
+    if (items.length) out.push({ ...c, products: items });
+  }
+  return out;
+}
+
 function renderMenu(){
   const L = state.loc, open = L.status === 'open';
-  const cats = state.cats.filter(c => c.products?.length);
+  const cats = visibleCats();
+  const filtering = Boolean(state.q?.trim()) || state.availOnly || state.sort !== 'pop';
   render(`
     <section class="hero">
       <h1>${esc(L.name)}</h1>
@@ -304,10 +359,37 @@ function renderMenu(){
       ${open ? '' : `<div class="notice"><i class="ti ti-clock-hour-9 i" aria-hidden="true"></i><div>${esc(t('closedHint'))}
         <a href="tel:${esc(L.phone)}">${esc(L.phone)}</a></div></div>`}
     </section>
+    <div class="find">
+      <label class="srch">
+        <i class="ti ti-search" aria-hidden="true"></i>
+        <input id="q" type="search" inputmode="search" autocomplete="off"
+               placeholder="${esc(t('search'))}" aria-label="${esc(t('search'))}"
+               value="${esc(state.q || '')}">
+        ${state.q ? `<button id="qx" type="button" aria-label="${esc(t('clear'))}">
+          <i class="ti ti-x" aria-hidden="true"></i></button>` : ''}
+      </label>
+      <div class="finds">
+        <label class="sr" for="sort">${esc(t('sortBy'))}</label>
+        <select id="sort" aria-label="${esc(t('sortBy'))}">
+          <option value="pop"  ${state.sort==='pop' ?'selected':''}>${esc(t('sortPop'))}</option>
+          <option value="low"  ${state.sort==='low' ?'selected':''}>${esc(t('sortLow'))}</option>
+          <option value="high" ${state.sort==='high'?'selected':''}>${esc(t('sortHigh'))}</option>
+          <option value="az"   ${state.sort==='az'  ?'selected':''}>${esc(t('sortAz'))}</option>
+        </select>
+        <label class="chk"><input type="checkbox" id="availOnly" ${state.availOnly?'checked':''}>
+          <span>${esc(t('onlyAvail'))}</span></label>
+      </div>
+    </div>
+    ${cats.length ? `
     <nav class="cats"><div class="cats-in">${cats.map((c,i) =>
       `<button class="cat" data-c="${esc(c.id)}" ${i===0?'aria-current="true"':''}>${esc(c.name)}</button>`).join('')}</div></nav>
     ${cats.map(c => `<h2 class="sec-h" id="c-${esc(c.id)}">${esc(c.name)}</h2>
-      <div class="dishes">${c.products.map(dish).join('')}</div>`).join('')}
+      <div class="dishes">${c.products.map(dish).join('')}</div>`).join('')}`
+    : `<div class="empty">
+        <i class="ti ti-search-off" aria-hidden="true" style="font-size:2rem;display:block;margin-bottom:8px"></i>
+        <b>${esc(t('noHits'))}</b>
+        ${filtering ? `<button class="btn btn-ghost" id="qreset" style="margin-top:14px;max-width:16rem">${esc(t('clear'))}</button>` : ''}
+      </div>`}
     <div style="height:28px"></div>`);
   bindMenu(); updateBar();
 }
@@ -329,6 +411,30 @@ function dish(p){
 }
 
 function bindMenu(){
+  // Search runs on every keystroke because it is local: there is no request to
+  // debounce, and a fifty-item filter is microseconds. Focus and caret are
+  // restored because renderMenu replaces the whole node.
+  const q = $('#q');
+  if (q) {
+    q.oninput = () => {
+      const pos = q.selectionStart;
+      state.q = q.value;
+      renderMenu();
+      const again = $('#q');
+      if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch {} }
+    };
+  }
+  const qx = $('#qx');
+  if (qx) qx.onclick = () => { state.q = ''; renderMenu(); $('#q')?.focus(); };
+  const qreset = $('#qreset');
+  if (qreset) qreset.onclick = () => {
+    state.q = ''; state.availOnly = false; state.sort = 'pop'; renderMenu();
+  };
+  const sort = $('#sort');
+  if (sort) sort.onchange = () => { state.sort = sort.value; renderMenu(); };
+  const av = $('#availOnly');
+  if (av) av.onchange = () => { state.availOnly = av.checked; renderMenu(); };
+
   // The category chip scrolls to its section and the chips follow the scroll.
   const secs = state.cats.filter(c=>c.products?.length).map(c => $('#c-' + CSS.escape(c.id))).filter(Boolean);
   document.querySelectorAll('.cat').forEach(b => b.onclick = () => {

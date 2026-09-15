@@ -49,6 +49,7 @@ pub struct HubPaths {
     /// blobs do not belong in a layout that rewrites itself on every write.
     pub media: PathBuf,
     pub posts: PathBuf,
+    pub stock: PathBuf,
     /// The token signing key. A FILE and not a store, because it must be
     /// readable before any store is opened and must never travel with a backup
     /// of the data.
@@ -65,6 +66,7 @@ impl HubPaths {
             settings: dir.join("settings.store"),
             media: dir.join("media"),
             posts: dir.join("posts.store"),
+            stock: dir.join("stock.store"),
             key: dir.join("signing.key"),
         }
     }
@@ -125,6 +127,10 @@ impl HubState {
         }
         let signing_key = load_or_create_key(&paths.key)?;
         std::fs::create_dir_all(&paths.media)?;
+        if !paths.stock.exists() {
+            let log = dowiz_hub::stock::StockLog::create().map_err(io_err)?;
+            std::fs::write(&paths.stock, log.to_bytes())?;
+        }
         if !paths.posts.exists() {
             let mut ps = dowiz_hub::post::Posts::create().map_err(io_err)?;
             let bytes = ps.to_bytes().map_err(io_err)?;
@@ -578,14 +584,63 @@ pub async fn place(
         envelope["scheduled_for_ms"] = json!(t);
     }
 
+    // ── ingredients are reserved BEFORE the order exists ──
+    //
+    // §4's fail-closed gate: if the kitchen cannot make it, the customer is
+    // told now rather than phoned in twenty minutes. The reservation is all or
+    // nothing across the whole basket, so a third line that is short does not
+    // leave the first two held by an order that was never placed.
+    //
+    // A venue that has not modelled its ingredients reserves nothing and this
+    // is a no-op -- stock control that must be complete before anything can be
+    // sold is stock control nobody switches on.
+    let bom_lines: Vec<(String, i64)> = body
+        .items
+        .iter()
+        .filter_map(|it| Some((cat.product(&it.product_id)?, it.quantity)))
+        .collect();
+    let reservations = dowiz_hub::stock::reservations_for(&id, &bom_lines);
+    if !reservations.is_empty() {
+        let evs = reservations.clone();
+        st.with_stock(move |log| {
+            log.append_all(&evs).map_err(|e| match e {
+                dowiz_hub::stock::StockError::OutOfStock { item, .. } => {
+                    // The customer is told WHICH ingredient, because "something
+                    // is unavailable" sends them hunting through a basket.
+                    HubHttpError::Conflict(format!("not enough {item} to make that right now"))
+                }
+                other => HubHttpError::Io(other.to_string()),
+            })
+        })
+        .await?;
+    }
+
     let stored = serde_json::to_string(&envelope).unwrap_or(order_json);
     let ev_id = id.clone();
     let ev_body = stored.clone();
-    st.with_log(move |hub| {
-        hub.append(EventKind::Placed, &ev_id, &ev_body, created_at_ms as u64, [0u8; 32])
-            .map_err(|e| HubHttpError::Io(format!("{e:?}")))
-    })
-    .await?;
+    let placed = st
+        .with_log(move |hub| {
+            hub.append(EventKind::Placed, &ev_id, &ev_body, created_at_ms as u64, [0u8; 32])
+                .map_err(|e| HubHttpError::Io(format!("{e:?}")))
+        })
+        .await;
+    if placed.is_err() && !reservations.is_empty() {
+        // The order did not survive; its ingredients must not stay held. A
+        // failure here is loud rather than silent, because a stranded
+        // reservation makes a kitchen believe it is out of something it has.
+        let oid = id.clone();
+        if let Err(e) = st
+            .with_stock(move |log| {
+                let led = log.ledger().map_err(|e| HubHttpError::Io(e.to_string()))?;
+                let rel = dowiz_hub::stock::settle(&led, &oid, false);
+                log.append_all(&rel).map_err(|e| HubHttpError::Io(e.to_string()))
+            })
+            .await
+        {
+            eprintln!("stock: could NOT release {id} after a failed placement: {e:?}");
+        }
+    }
+    placed?;
 
     // Only after the order is durable. Notifying first would let a crash between
     // the two produce a kitchen ticket for an order that does not exist.
@@ -1050,6 +1105,22 @@ impl HubState {
         let (digest, kind) = dowiz_hub::media::parse_name(name)?;
         let path = self.paths.media.join(format!("{digest}.{}", kind.extension()));
         std::fs::read(path).ok().map(|b| (b, kind))
+    }
+
+    pub fn read_stock(&self) -> Result<dowiz_hub::stock::StockLog, HubHttpError> {
+        let bytes = std::fs::read(&self.paths.stock).map_err(|e| HubHttpError::Io(e.to_string()))?;
+        dowiz_hub::stock::StockLog::load(&bytes).map_err(|_| HubHttpError::Corrupt("stock log"))
+    }
+
+    pub async fn with_stock<F, T>(&self, f: F) -> Result<T, HubHttpError>
+    where
+        F: FnOnce(&mut dowiz_hub::stock::StockLog) -> Result<T, HubHttpError>,
+    {
+        let _guard = self.write_lock.lock().await;
+        let mut log = self.read_stock()?;
+        let out = f(&mut log)?;
+        atomic_write(&self.paths.stock, &log.to_bytes())?;
+        Ok(out)
     }
 
     pub fn read_posts(&self) -> Result<dowiz_hub::post::Posts, HubHttpError> {
