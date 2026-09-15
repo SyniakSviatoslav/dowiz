@@ -191,6 +191,39 @@ impl Kv {
     }
 
     /// `commit_into` with no filesystem.
+    /// Commit into a FRESH image of `capacity` bytes and hand it back.
+    ///
+    /// WHY THIS EXISTS, measured rather than argued. The store is append-only:
+    /// every commit allocates five new objects and the previous generation is
+    /// never reclaimed. That is exactly right for `EvLog`, whose whole purpose
+    /// is an immutable chain -- and exactly wrong for a KV, which rewrites the
+    /// same small map over and over. The cost is not per ENTRY, it is per
+    /// COMMIT: a roster with one person and no sessions filled its arena after
+    /// 313 empty commits, while five hundred sessions written in a single
+    /// commit fitted with room to spare.
+    ///
+    /// For a hub that means the roster stops accepting writes after a few
+    /// hundred logins -- and the route it fails is the one everybody needs to
+    /// get in. The same held for the catalogue, the settings, the subscriptions
+    /// and the posts.
+    ///
+    /// A `Kv` holds all of its entries in memory, so committing them into a new
+    /// store is not a repair or a migration: it is the same map, written once,
+    /// with no dead generations behind it. The image is therefore as large as
+    /// its CONTENT rather than as large as its history.
+    ///
+    /// WHAT IS GIVEN UP: the old image's generations. Nothing in dowiz reads
+    /// them -- `snapshot_root` folds the entries themselves, not the store --
+    /// and an audit trail belongs in the event log, which is append-only on
+    /// purpose and is not this.
+    pub fn compacted_bytes(&self, capacity: usize) -> Result<Vec<u8>, StoreError> {
+        let mut fresh = Store::create_bytes(capacity);
+        Kv::init_bytes(&mut fresh)?;
+        let (tx, root) = self.stage_commit_into(&mut fresh)?;
+        fresh.commit_bytes(&tx, root);
+        Ok(fresh.to_bytes())
+    }
+
     pub fn commit_into_bytes(&self, st: &mut Store) -> Result<i64, StoreError> {
         let (tx, root) = self.stage_commit_into(st)?;
         Ok(st.commit_bytes(&tx, root))

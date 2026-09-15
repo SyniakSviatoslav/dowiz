@@ -210,9 +210,62 @@ impl Hub {
         let id = content_id(&payload);
         let prev = EvLog::tip(&self.store).unwrap_or([0u8; 32]);
         let rec = Record { id, prev, actor_pubkey, actor_seq: seq, payload };
-        let gen = EvLog::append_bytes(&mut self.store, &rec)?;
-        EvLog::set_tip_bytes(&mut self.store, &id)?;
-        Ok(gen)
+
+        // ── THE IMAGE GROWS RATHER THAN REFUSING ──
+        //
+        // Measured, not assumed: a 4 MiB image holds 1440 order events. A venue
+        // doing fifty orders a day writes three or four events each, so it
+        // fills in about a WEEK -- and then the hub stops accepting orders,
+        // during service, with a message about an arena.
+        //
+        // Unlike the KV stores this growth is not waste: the log is append-only
+        // because it is a log, and every record in it is history somebody may
+        // need. So the answer is not to reclaim, it is to make room. On a full
+        // arena the image doubles and the existing chain is copied across
+        // VERBATIM -- ids and prev links included, since both are content
+        // addresses and rewriting either would break the chain.
+        //
+        // It costs one O(n) copy per doubling, which is a handful of
+        // milliseconds a few times in a hub's life, and it happens under the
+        // same write lock that serialises every other append.
+        match EvLog::append_bytes(&mut self.store, &rec) {
+            Ok(gen) => {
+                EvLog::set_tip_bytes(&mut self.store, &id)?;
+                Ok(gen)
+            }
+            Err(e) if e_is_full(&e) => {
+                self.grow()?;
+                let gen = EvLog::append_bytes(&mut self.store, &rec)?;
+                EvLog::set_tip_bytes(&mut self.store, &id)?;
+                Ok(gen)
+            }
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Double the image and copy the chain into it, oldest first.
+    ///
+    /// `walk` is newest-first, so it is reversed: appending in the wrong order
+    /// would leave every `prev` pointing at a record that does not exist yet,
+    /// and the copy would be a chain of orphans that still LOOKS like a log.
+    fn grow(&mut self) -> Result<(), HubError> {
+        let mut records = EvLog::walk(&self.store);
+        records.reverse();
+        let bigger = self.store.to_bytes().len().saturating_mul(2).max(DEFAULT_IMAGE_BYTES);
+        let mut fresh = Store::create_bytes(bigger);
+        EvLog::init_bytes(&mut fresh)?;
+        let mut last: Option<[u8; 32]> = None;
+        for r in &records {
+            EvLog::append_bytes(&mut fresh, r)?;
+            last = Some(r.id);
+        }
+        if let Some(id) = last {
+            EvLog::set_tip_bytes(&mut fresh, &id)?;
+        }
+        // Swapped in only once the whole copy succeeded. A partial grow that
+        // replaced the store would lose history to save space.
+        self.store = fresh;
+        Ok(())
     }
 
     /// Every event, newest first.
@@ -262,6 +315,12 @@ impl Hub {
     pub fn reveals(&self) -> Vec<Event> {
         self.events().into_iter().filter(|e| e.kind == EventKind::Revealed).collect()
     }
+}
+
+/// Is this "the image has no room left"? Matched through the public shape
+/// rather than a Debug string, for the reason `HubError::arena_full` gives.
+fn e_is_full(e: &StoreError) -> bool {
+    matches!(e, StoreError::ArenaFull { .. })
 }
 
 fn decode(r: &Record) -> Option<Event> {

@@ -59,9 +59,21 @@ impl Catalog {
 
     /// Flush the in-memory entries into the image and hand back the bytes. The
     /// caller persists them; nothing here touches storage.
+    /// THE IMAGE IS REWRITTEN WHOLE, not appended to.
+    ///
+    /// The store is append-only: every commit allocates a new generation and
+    /// the old one is never reclaimed. For a KV that rewrites the same small
+    /// map over and over, the arena is spent by the NUMBER OF WRITES rather
+    /// than by the data -- measured at 313 empty commits before a fresh roster
+    /// refused, while five hundred sessions in ONE commit fitted easily. A hub
+    /// would therefore stop accepting logins after a few hundred of them.
+    ///
+    /// `compacted_bytes` commits the entries into a fresh image, so the file is
+    /// as large as its content rather than as large as its history. See
+    /// `Kv::compacted_bytes` for what that gives up (nothing anything here
+    /// reads).
     pub fn to_bytes(&mut self) -> Result<Vec<u8>, HubError> {
-        self.kv.commit_into_bytes(&mut self.store)?;
-        Ok(self.store.to_bytes())
+        Ok(self.kv.compacted_bytes(DEFAULT_CATALOG_BYTES)?)
     }
 
     /// A fingerprint of the whole catalogue. Two hubs holding the same menu
