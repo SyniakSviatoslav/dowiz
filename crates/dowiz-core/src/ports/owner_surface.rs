@@ -268,11 +268,27 @@ impl From<crate::capability_cert::CertError> for OwnerSurfaceError {
 
 const OWNER_SIG_DOMAIN: &[u8] = b"dowiz.owner.sig\x01";
 
+/// Build the bytes an owner signs.
+///
+/// Fields are SEPARATED, not concatenated. The previous form appended `action`
+/// straight onto `subject`, so ("confirm", "x") and ("confirmx", "") produced
+/// identical bytes — harmless while the verb set was two fixed strings, and a
+/// real forgery surface the moment a caller-supplied field (a rejection reason)
+/// joins them. `\x1f` is ASCII unit-separator and cannot appear in a verb.
 fn owner_sig_msg(action: &str, subject: &str) -> Vec<u8> {
-    let mut out = Vec::with_capacity(OWNER_SIG_DOMAIN.len() + action.len() + subject.len());
+    owner_sig_msg_with_reason(action, subject, None)
+}
+
+fn owner_sig_msg_with_reason(action: &str, subject: &str, reason: Option<&str>) -> Vec<u8> {
+    let r = reason.unwrap_or("");
+    let mut out =
+        Vec::with_capacity(OWNER_SIG_DOMAIN.len() + action.len() + subject.len() + r.len() + 3);
     out.extend_from_slice(OWNER_SIG_DOMAIN);
     out.extend_from_slice(action.as_bytes());
+    out.push(0x1f);
     out.extend_from_slice(subject.as_bytes());
+    out.push(0x1f);
+    out.extend_from_slice(r.as_bytes());
     out
 }
 
@@ -336,6 +352,45 @@ fn is_terminal(s: OrderStatus) -> bool {
 pub enum OwnerOrderAction {
     Confirm,
     Cancel,
+    /// Refuse the order outright. Distinct from Cancel: a rejection happens
+    /// BEFORE the venue commits, carries a reason, and is what the product spec
+    /// follows with "add the dish to the stop-list?".
+    Reject,
+    /// The kitchen has started. Confirmed -> Preparing.
+    MarkPreparing,
+    /// The food is ready for pickup by the courier. Preparing -> Ready.
+    MarkReady,
+}
+
+impl OwnerOrderAction {
+    /// The verb that goes INTO the signed message, and the ONE place it is
+    /// defined. It used to be spelled out separately in the signing helper and
+    /// in the verifier; with two actions that was merely duplication, with five
+    /// it is a standing invitation for the two sides to drift — or worse, for two
+    /// actions to share a verb, which would make a signature for one valid for
+    /// the other.
+    pub const fn verb(self) -> &'static str {
+        match self {
+            OwnerOrderAction::Confirm => "confirm",
+            OwnerOrderAction::Cancel => "cancel",
+            OwnerOrderAction::Reject => "reject",
+            OwnerOrderAction::MarkPreparing => "preparing",
+            OwnerOrderAction::MarkReady => "ready",
+        }
+    }
+
+    /// The status this action drives the order to from `from`, or `None` when the
+    /// action has no legal target at all. Legality of the resulting EDGE is still
+    /// decided by `apply_event` — this only names the destination.
+    fn target(self, from: OrderStatus) -> Option<OrderStatus> {
+        match self {
+            OwnerOrderAction::Confirm => Some(OrderStatus::Confirmed),
+            OwnerOrderAction::Cancel => cancel_target(from),
+            OwnerOrderAction::Reject => Some(OrderStatus::Rejected),
+            OwnerOrderAction::MarkPreparing => Some(OrderStatus::Preparing),
+            OwnerOrderAction::MarkReady => Some(OrderStatus::Ready),
+        }
+    }
 }
 
 /// An owner-cap-cert-signed confirm/cancel intent. A confirm/cancel without a live
@@ -344,6 +399,10 @@ pub enum OwnerOrderAction {
 pub struct OwnerCapIntent {
     pub action: OwnerOrderAction,
     pub order_id: String,
+    /// Why, for `Reject`. Part of the SIGNED bytes, so it cannot be swapped after
+    /// the fact — a rejection reason the customer is shown must be the one the
+    /// owner actually authorised.
+    pub reason: Option<String>,
     pub owner_sig: Vec<u8>,
 }
 
@@ -357,12 +416,10 @@ pub fn apply_owner_order_intent<V: SignatureVerifier>(
     orders: &[Order],
     intent: &OwnerCapIntent,
 ) -> Result<OrderStatus, OwnerSurfaceError> {
-    let msg = owner_sig_msg(
-        match intent.action {
-            OwnerOrderAction::Confirm => "confirm",
-            OwnerOrderAction::Cancel => "cancel",
-        },
+    let msg = owner_sig_msg_with_reason(
+        intent.action.verb(),
         &intent.order_id,
+        intent.reason.as_deref(),
     );
     if !verify_owner(v, owner_pk, &msg, &intent.owner_sig) {
         return Err(OwnerSurfaceError::BadOwnerSig);
@@ -371,10 +428,7 @@ pub fn apply_owner_order_intent<V: SignatureVerifier>(
         .iter()
         .find(|o| o.id == intent.order_id)
         .ok_or(OwnerSurfaceError::UnknownCustomer)?; // unknown order id
-    let target = match intent.action {
-        OwnerOrderAction::Confirm => Some(OrderStatus::Confirmed),
-        OwnerOrderAction::Cancel => cancel_target(order.status),
-    };
+    let target = intent.action.target(order.status);
     let target = target.ok_or(OwnerSurfaceError::IllegalTransition)?;
     let updated = apply_event(&order.clone(), target).map_err(OwnerSurfaceError::Transition)?;
     Ok(updated.status)
@@ -400,16 +454,22 @@ pub fn sign_owner_order_intent<V: SignatureVerifier>(
     action: OwnerOrderAction,
     order_id: &str,
 ) -> OwnerCapIntent {
-    let msg = owner_sig_msg(
-        match action {
-            OwnerOrderAction::Confirm => "confirm",
-            OwnerOrderAction::Cancel => "cancel",
-        },
-        order_id,
-    );
+    sign_owner_order_intent_with_reason(v, owner_secret, action, order_id, None)
+}
+
+/// Sign an owner order intent that carries a reason (the `Reject` path).
+pub fn sign_owner_order_intent_with_reason<V: SignatureVerifier>(
+    v: &V,
+    owner_secret: &[u8; 32],
+    action: OwnerOrderAction,
+    order_id: &str,
+    reason: Option<&str>,
+) -> OwnerCapIntent {
+    let msg = owner_sig_msg_with_reason(action.verb(), order_id, reason);
     OwnerCapIntent {
         action,
         order_id: order_id.to_string(),
+        reason: reason.map(str::to_string),
         owner_sig: sign_owner(v, owner_secret, &msg),
     }
 }
@@ -989,6 +1049,95 @@ mod tests {
         assert_eq!(a[2].id, "o2");
     }
 
+    /// Every verb is distinct. If two actions shared one, a signature authorising
+    /// the harmless action would verify for the destructive one.
+    #[test]
+    fn g1_action_verbs_are_all_distinct() {
+        let all = [
+            OwnerOrderAction::Confirm,
+            OwnerOrderAction::Cancel,
+            OwnerOrderAction::Reject,
+            OwnerOrderAction::MarkPreparing,
+            OwnerOrderAction::MarkReady,
+        ];
+        let mut seen: Vec<&str> = all.iter().map(|a| a.verb()).collect();
+        seen.sort_unstable();
+        let n = seen.len();
+        seen.dedup();
+        assert_eq!(seen.len(), n, "two owner actions share a signing verb");
+    }
+
+    /// A signature is bound to ITS action. Signing "mark ready" must not authorise
+    /// a reject, which the old concatenated message plus a duplicated verb table
+    /// made easy to get wrong.
+    #[test]
+    fn g1_signature_does_not_transfer_between_actions() {
+        let v = verifier();
+        let (pk, sk) = owner_keys();
+        let orders = vec![sample_order("o1", OrderStatus::Pending, 1000)];
+        let ready = sign_owner_order_intent(&v, &sk, OwnerOrderAction::MarkReady, "o1");
+        let forged = OwnerCapIntent {
+            action: OwnerOrderAction::Reject,
+            order_id: ready.order_id.clone(),
+            reason: None,
+            owner_sig: ready.owner_sig.clone(),
+        };
+        assert_eq!(
+            apply_owner_order_intent(&v, &pk, &orders, &forged),
+            Err(OwnerSurfaceError::BadOwnerSig)
+        );
+    }
+
+    /// The reason is inside the signed bytes, so it cannot be swapped afterwards:
+    /// the reason a customer is shown is the one the owner actually authorised.
+    #[test]
+    fn g1_reject_reason_is_bound_to_the_signature() {
+        let v = verifier();
+        let (pk, sk) = owner_keys();
+        let orders = vec![sample_order("o1", OrderStatus::Pending, 1000)];
+        let intent = sign_owner_order_intent_with_reason(
+            &v,
+            &sk,
+            OwnerOrderAction::Reject,
+            "o1",
+            Some("out of salmon"),
+        );
+        assert_eq!(
+            apply_owner_order_intent(&v, &pk, &orders, &intent).unwrap(),
+            OrderStatus::Rejected
+        );
+        let mut swapped = intent.clone();
+        swapped.reason = Some("customer cancelled".into());
+        assert_eq!(
+            apply_owner_order_intent(&v, &pk, &orders, &swapped),
+            Err(OwnerSurfaceError::BadOwnerSig)
+        );
+    }
+
+    /// The kitchen path the owner actually walks during service.
+    #[test]
+    fn g1_preparing_then_ready_walks_the_fsm() {
+        let v = verifier();
+        let (pk, sk) = owner_keys();
+        let confirmed = vec![sample_order("o1", OrderStatus::Confirmed, 1000)];
+        let prep = sign_owner_order_intent(&v, &sk, OwnerOrderAction::MarkPreparing, "o1");
+        assert_eq!(
+            apply_owner_order_intent(&v, &pk, &confirmed, &prep).unwrap(),
+            OrderStatus::Preparing
+        );
+
+        let preparing = vec![sample_order("o1", OrderStatus::Preparing, 1000)];
+        let ready = sign_owner_order_intent(&v, &sk, OwnerOrderAction::MarkReady, "o1");
+        assert_eq!(
+            apply_owner_order_intent(&v, &pk, &preparing, &ready).unwrap(),
+            OrderStatus::Ready
+        );
+
+        // And the FSM still refuses a jump: ready straight from Pending.
+        let pending = vec![sample_order("o1", OrderStatus::Pending, 1000)];
+        assert!(apply_owner_order_intent(&v, &pk, &pending, &ready).is_err());
+    }
+
     #[test]
     fn g1_confirm_is_capcert_human_intent() {
         let v = verifier();
@@ -998,6 +1147,7 @@ mod tests {
         let unsigned = OwnerCapIntent {
             action: OwnerOrderAction::Confirm,
             order_id: "o1".into(),
+            reason: None,
             owner_sig: vec![],
         };
         assert_eq!(
