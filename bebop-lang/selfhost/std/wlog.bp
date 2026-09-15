@@ -422,6 +422,33 @@ fn phase_u(base: [i64], tmp: [i64], d: [i64], n: i64, k: i64, adj: [i64], num_ne
   if want_ref == 1 then refused[0] else m2
 }
 
+// Phase c: the CRASH WRITER (B1 model, scrash.bp's shape). Repeatedly appends a batch and
+// commits, so the harness can SIGKILL it at an arbitrary moment. Every append is deterministic,
+// so generation g has ONE correct fold and a reader can check which generation survived.
+// Commit is an append plus a superblock toggle -- nothing already committed is overwritten --
+// so a kill must leave the store readable at generation k or k-1, never in between.
+fn phase_crash(base: [i64], tmp: [i64], d: [i64], n: i64, k: i64, adj: [i64], rounds: i64, batch: i64) -> i64 {
+  let r = 0;
+  while r < rounds {
+    let _ = phase_u(base, tmp, d, n, k, adj, batch, 0);
+    let r = r + 1;
+    0
+  };
+  rounds
+}
+
+// Phase r: reopen after a crash. argv[3] selects: 'g' the generation the store reopened at,
+// 'v' st_reopen_verify's integrity result, 'm' the event count, anything else the q1 fold.
+fn phase_reopen(base: [i64], tmp: [i64], n: i64, adj: [i64], which: i64) -> i64 {
+  let gen = st_gen(base, tmp);
+  let g = st_root(base, tmp);
+  let m = st_get(base, g, 0);
+  if which == 103 then gen
+  else (if which == 118 then st_reopen_verify(base, tmp)
+  else (if which == 109 then m
+  else phase_q1(base, tmp, n, adj)))
+}
+
 fn phase_ingest(base: [i64], tmp: [i64], d: [i64], n: i64, k: i64, adj: [i64]) -> i64 {
   let m = n * k;
   let order_id = zeros(m + 1);
@@ -588,11 +615,17 @@ fn main(argc: i64, argv: [str]) -> i64 {
     let q4s = if argc >= 7 then parse(argv[6]) else 0 - 1 in
     let q4r = if char(argv[3], 0) == 114 then 1 else 0 in
     phase_q4(base, tmp, n, adj, q4s, q4r)
+  ) else (if ph_first == 99 then (
+    let rounds = if argc >= 7 then parse(argv[6]) else 100 in
+    let batch = if argc >= 8 then parse(argv[7]) else 200 in
+    phase_crash(base, tmp, d, n, k, adj, rounds, batch)
+  ) else (if ph_first == 114 then (
+    phase_reopen(base, tmp, n, adj, char(argv[3], 0))
   ) else (if ph_first == 117 then (
     let num_new = if argc >= 7 then parse(argv[6]) else 1000 in
     let ur = if char(argv[3], 0) == 114 then 1 else 0 in
     phase_u(base, tmp, d, n, k, adj, num_new, ur)
-  ) else 0)))));
+  ) else 0)))))));
 
   let t1 = clock_ms();
   let ms = t1 - t0;
