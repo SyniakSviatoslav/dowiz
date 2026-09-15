@@ -482,7 +482,9 @@ async fn a_dish_keeps_its_name_all_the_way_to_the_door() {
         &s.base,
         "/api/owner/products/p1",
         Some(&owner),
-        json!({ "available": true }),
+        // The allergen publish gate: a dish cannot go back on sale undeclared,
+        // so this flow now carries the declaration it always should have.
+        json!({ "available": true, "allergens": [] }),
     );
     assert_eq!(code, 200);
     let (_, v) = get(&s.base, &format!("/api/order/{id}"), Some(&customer_tok));
@@ -619,7 +621,9 @@ async fn the_owner_can_stop_list_a_dish_and_the_menu_shows_it() {
 
     // Putting it back must clear the note, or the customer reads a stale excuse
     // on a dish that is available.
-    post(&s.base, "/api/owner/products/p1", Some(&owner), json!({ "available": true }));
+    // Declared on the way back: the publish gate refuses an undeclared listing.
+    post(&s.base, "/api/owner/products/p1", Some(&owner),
+         json!({ "available": true, "allergens": [] }));
     let (_, menu) = get(&s.base, "/api/menu", None);
     assert_eq!(menu["categories"][0]["products"][0]["unavailableNote"], Value::Null);
 
@@ -1827,7 +1831,8 @@ async fn an_order_reserves_its_ingredients_and_is_refused_when_they_run_out() {
         assert_eq!(code, 200, "{v}");
     }
     // A recipe on the seeded dish: 40g salmon, 90g rice per portion.
-    let (code, _) = post(&s.base, "/api/owner/products/p1", Some(&owner), json!({ "available": true }));
+    let (code, _) = post(&s.base, "/api/owner/products/p1", Some(&owner),
+                         json!({ "available": true, "allergens": [] }));
     assert_eq!(code, 200);
 
     // Nothing on the shelf yet, and no recipe either -- so an order still goes
@@ -2578,4 +2583,85 @@ async fn a_courier_detail_has_no_score_in_it() {
 
     let (code, _) = get(&s.base, "/api/owner/couriers/+355699999999", Some(&owner));
     assert_eq!(code, 404, "a courier nobody hired");
+}
+
+/// A dish nobody has declared cannot go on sale, and "none of the fourteen" is
+/// an answer somebody has to give rather than one an empty field gives for them.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_undeclared_dish_cannot_be_put_on_sale() {
+    let s = boot("allergen_gate").await;
+    let (_, t) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = t["access_token"].as_str().unwrap().to_string();
+
+    // Off the menu first, so putting it back is a real transition.
+    let (code, _) = post(&s.base, "/api/owner/products/p1", Some(&owner),
+                         json!({ "available": false }));
+    assert_eq!(code, 200);
+
+    let (code, v) = post(&s.base, "/api/owner/products/p1", Some(&owner),
+                         json!({ "available": true }));
+    assert_eq!(code, 409, "{v}");
+    assert!(v["error"].as_str().unwrap().contains("allergens"), "{v}");
+
+    // The storefront still shows it as unavailable: the refusal changed nothing.
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    let p = menu["categories"][0]["products"][0].clone();
+    assert_eq!(p["available"], false, "{p}");
+
+    // Declaring "none" is a deliberate answer and opens the gate.
+    let (code, v) = post(&s.base, "/api/owner/products/p1", Some(&owner),
+                         json!({ "available": true, "allergens": [] }));
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["available"], true);
+    assert_eq!(v["allergens"], json!([]));
+
+    // And it stays declared: a later edit does not have to repeat it.
+    let (code, v) = post(&s.base, "/api/owner/products/p1", Some(&owner),
+                         json!({ "available": false }));
+    assert_eq!(code, 200, "{v}");
+    let (code, _) = post(&s.base, "/api/owner/products/p1", Some(&owner),
+                         json!({ "available": true }));
+    assert_eq!(code, 200, "a dish declared once must not be asked again");
+}
+
+/// A misspelled allergen would match no filter, so the customer who filtered
+/// for it would be shown the dish as safe. Refused, and nothing is stored.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_misspelled_allergen_is_refused_and_stores_nothing() {
+    let s = boot("allergen_typo").await;
+    let (_, t) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = t["access_token"].as_str().unwrap().to_string();
+
+    let (code, v) = post(&s.base, "/api/owner/products/p1", Some(&owner),
+                         json!({ "allergens": ["fish", "shelfish"] }));
+    assert_eq!(code, 400, "{v}");
+    assert!(v["error"].as_str().unwrap().contains("shelfish"), "{v}");
+
+    // Not even the readable half of the list landed.
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    assert_eq!(menu["categories"][0]["products"][0]["allergens"], Value::Null);
+
+    // The real spelling is normalised into regulation order.
+    let (code, v) = post(&s.base, "/api/owner/products/p1", Some(&owner),
+                         json!({ "allergens": ["SOY", "fish", "soy"] }));
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["allergens"], json!(["fish", "soy"]));
+}
+
+/// The gate refuses new listings; it does not sweep a working menu. What it
+/// does instead is count what is still undeclared, loudly, until it is zero.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_dashboard_counts_what_is_on_sale_undeclared() {
+    let s = boot("allergen_readiness").await;
+    let (_, t) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = t["access_token"].as_str().unwrap().to_string();
+
+    let (_, d) = get(&s.base, "/api/owner/dashboard", Some(&owner));
+    assert_eq!(d["undeclared"], 1, "{d}");
+    assert_eq!(d["onSaleUndeclared"], 1, "the seeded dish is selling undeclared: {d}");
+
+    post(&s.base, "/api/owner/products/p1", Some(&owner), json!({ "allergens": ["fish"] }));
+    let (_, d) = get(&s.base, "/api/owner/dashboard", Some(&owner));
+    assert_eq!(d["undeclared"], 0, "{d}");
+    assert_eq!(d["onSaleUndeclared"], 0, "{d}");
 }

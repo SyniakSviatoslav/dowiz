@@ -185,6 +185,33 @@ async function reload(){
 const LIVE = ['PENDING','CONFIRMED','PREPARING','READY','IN_DELIVERY'];
 const liveOrders = () => S.orders.filter(o => LIVE.includes(o.status));
 
+// THE COUNT IS SHOWN UNTIL IT IS ZERO, and then the banner disappears entirely.
+//
+// The publish gate refuses NEW listings and deliberately does not sweep a
+// working menu -- taking fifty-two dishes off sale the moment the field arrived
+// would close a restaurant to fix its paperwork. The cost of that mercy is that
+// undeclared dishes keep selling, so the number says so on every screen the
+// owner opens, and the button goes straight to the work.
+function readinessBanner(s){
+  const n = s?.onSaleUndeclared || 0;
+  if (!n) return '';
+  return `<div class="ready" role="status">
+    <i class="ti ti-alert-triangle i" aria-hidden="true"></i>
+    <span><b>${n} ${plural(n, 'страва', 'страви', 'страв')} у продажу без заяви про алергени.</b>
+      Клієнт з алергією читає порожнє поле як «безпечно».</span>
+    <button class="btn" id="toAllergens">Заявити</button>
+  </div>`;
+}
+
+// Ukrainian needs three forms, and "52 страва" is the tell that somebody wired
+// an English pluraliser into a Slavic language.
+function plural(n, one, few, many){
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+  return many;
+}
+
 function render(){
   if (!S.booted) return;
   const s = S.stats;
@@ -197,6 +224,7 @@ function render(){
             ? (k === 'todayRevenue' ? money(s[k]) : s[k])
             : `<span class="skel" style="display:inline-block;width:3rem;height:1.4rem;vertical-align:-.2em"></span>`}</div></div>`).join('')}
     </div>
+    ${readinessBanner(s)}
     <div class="tabs" role="tablist" aria-label="Розділи">
       <button class="tab" role="tab" id="tab-orders" aria-controls="pane" data-t="orders" aria-selected="${S.tab==='orders'}" tabindex="${S.tab==='orders' ? 0 : -1}">Замовлення <span class="n" id="liveN">${liveOrders().length}</span></button>
       <button class="tab" role="tab" id="tab-menu"   aria-controls="pane" data-t="menu"   aria-selected="${S.tab==='menu'}"   tabindex="${S.tab==='menu' ? 0 : -1}">Меню</button>
@@ -204,6 +232,11 @@ function render(){
       <button class="tab" role="tab" id="tab-setup" aria-controls="pane" data-t="setup" aria-selected="${S.tab==='setup'}" tabindex="${S.tab==='setup' ? 0 : -1}">Налаштування</button>
     </div>
     <div id="pane" role="tabpanel" aria-labelledby="tab-${S.tab}"></div>`;
+  const ta = $('#toAllergens');
+  if (ta) ta.onclick = () => {
+    S.tab = 'menu'; render();
+    if (!S.products.length) loadMenu();
+  };
   const tabs = [...document.querySelectorAll('.tab')];
   tabs.forEach((b, i) => {
     b.onclick = () => {
@@ -1341,6 +1374,72 @@ function bindSetup(){
   };
 }
 
+// ── allergens ───────────────────────────────────────────────────────────────
+//
+// THE THREE STATES ARE NOT TWO. A dish with no list is not a dish with an empty
+// list: the first means nobody has said, the second means somebody said "none
+// of the fourteen". Rendering both as no warning is how a customer with an
+// allergy reads an unfilled field as a safety claim, so the undeclared state
+// gets the loudest treatment on this screen.
+const ALLERGENS = [
+  ['gluten', 'глютен'], ['crustaceans', 'ракоподібні'], ['eggs', 'яйця'],
+  ['fish', 'риба'], ['peanuts', 'арахіс'], ['soy', 'соя'],
+  ['milk', 'молоко'], ['nuts', 'горіхи'], ['celery', 'селера'],
+  ['mustard', 'гірчиця'], ['sesame', 'кунжут'], ['sulphites', 'сульфіти'],
+  ['lupin', 'люпин'], ['molluscs', 'молюски'],
+];
+const allergenName = c => (ALLERGENS.find(a => a[0] === c) || [c, c])[1];
+
+function allergenChip(p){
+  if (!Array.isArray(p.allergens)) return `<span class="chip warn">не заявлено</span>`;
+  if (!p.allergens.length) return `<span class="chip ok">без алергенів</span>`;
+  return `<span class="chip">${p.allergens.map(c => esc(allergenName(c))).join(', ')}</span>`;
+}
+
+function allergenPanel(p){
+  const has = Array.isArray(p.allergens) ? p.allergens : [];
+  return `<div class="algn" data-algn="${esc(p.id)}" hidden>
+    <p class="hint">Позначте те, що є у страві. Якщо немає нічого з переліку —
+       натисніть «Нічого з переліку»: порожнє поле не є відповіддю.</p>
+    <div class="algn-grid">
+      ${ALLERGENS.map(([code, name]) => `
+        <label class="algn-one"><input type="checkbox" value="${code}"
+          ${has.includes(code) ? 'checked' : ''}><span>${esc(name)}</span></label>`).join('')}
+    </div>
+    <div class="row">
+      <button class="btn pri" data-algn-save="${esc(p.id)}">Зберегти</button>
+      <button class="btn" data-algn-none="${esc(p.id)}">Нічого з переліку</button>
+    </div>
+  </div>`;
+}
+
+async function saveAllergens(id, list){
+  try {
+    await api(`/owner/products/${encodeURIComponent(id)}`, { method:'POST',
+      body: JSON.stringify({ location_id: store.loc, allergens: list }) });
+    const p = S.products.find(x => x.id === id); if (p) p.allergens = list;
+    toast('Заявлено');
+    render();
+  } catch (e) { toast(String(e.message || e)); }
+}
+
+function bindAllergens(){
+  document.querySelectorAll('[data-algn-open]').forEach(b => b.onclick = () => {
+    const box = document.querySelector(`[data-algn="${CSS.escape(b.dataset.algnOpen)}"]`);
+    if (box) box.hidden = !box.hidden;
+  });
+  document.querySelectorAll('[data-algn-save]').forEach(b => b.onclick = () => {
+    const id = b.dataset.algnSave;
+    const box = document.querySelector(`[data-algn="${CSS.escape(id)}"]`);
+    saveAllergens(id, [...box.querySelectorAll('input:checked')].map(i => i.value));
+  });
+  document.querySelectorAll('[data-algn-none]').forEach(b => b.onclick = () => {
+    // A deliberate answer, not an empty form. It is the same call with an empty
+    // list, and it is a separate button so nobody submits it by accident.
+    saveAllergens(b.dataset.algnNone, []);
+  });
+}
+
 function menuView(){
   // THREE STATES, and the bug this replaces is worth naming: the old code showed
   // a skeleton whenever the list was empty, so a venue that genuinely has no
@@ -1383,12 +1482,16 @@ function menuView(){
              title="Ширина страви в сантиметрах — вмикає перегляд на столі"
              aria-label="Розмір у см, ${esc(p.name)}">
       <label class="sw" title="У продажу"><input type="checkbox" data-av="${esc(p.id)}" aria-label="У продажу, ${esc(p.name)}" ${p.available ? 'checked' : ''}><span></span></label>
+      <button class="algn-btn" data-algn-open="${esc(p.id)}"
+              aria-label="Алергени: ${esc(p.name)}">${allergenChip(p)}</button>
     </div>`);
+    out.push(allergenPanel(p));
   }
   if (cat !== null) out.push('</div>');
   return out.join('');
 }
 function bindMenu(){
+  bindAllergens();
   document.querySelectorAll('[data-pic]').forEach(el => el.onchange = async () => {
     const file = el.files?.[0]; if (!file) return;
     const id = el.dataset.pic, cell = el.closest('.pic');

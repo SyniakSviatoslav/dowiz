@@ -27,6 +27,9 @@ const T = {
         onlyAvail:'Vetëm në dispozicion',
         later:'Në një orë tjetër', schedFail:'Koha nuk vlen',
         inArea:'Ne dërgojmë këtu', outArea:'Jashtë zonës sonë të dërgesës', noGeo:'Nuk morëm dot vendndodhjen',
+        notDeclared:'Alergjenët nuk janë deklaruar', noneOf14:'Asnjë nga 14 alergjenët',
+        avoid:'Alergjenët', avoidHint:'Fshihni pjatat që i përmbajnë', avoidOn:'Fshehur',
+        avoidUnknown:'pjata pa deklaratë', clearAvoid:'Shfaqni të gjitha',
         promo:'Kodi i zbritjes', promoApply:'Apliko', promoOff:'Hiq', discount:'Zbritja',
         notify:'Merrni njoftime në Telegram', notifyHint:'Ju njoftojmë sa herë ndryshon porosia',
         st:{PENDING:'Duke pritur konfirmimin',CONFIRMED:'U konfirmua',PREPARING:'Po gatuhet',
@@ -50,6 +53,9 @@ const T = {
         onlyAvail:'Available only',
         later:'At a later time', schedFail:'That time will not work',
         inArea:'We deliver here', outArea:'Outside our delivery area', noGeo:'Could not get your location',
+        notDeclared:'Allergens not declared', noneOf14:'None of the 14 allergens',
+        avoid:'Allergens', avoidHint:'Hide dishes that contain them', avoidOn:'hidden',
+        avoidUnknown:'undeclared dishes', clearAvoid:'Show everything',
         promo:'Promo code', promoApply:'Apply', promoOff:'Remove', discount:'Discount',
         notify:'Get updates on Telegram', notifyHint:'We\u2019ll message you each time this order moves',
         st:{PENDING:'Awaiting confirmation',CONFIRMED:'Confirmed',PREPARING:'Being prepared',
@@ -73,6 +79,9 @@ const T = {
         noHits:'Нічого не знайдено', clear:'Очистити', onlyAvail:'Лише в наявності',
         later:'На інший час', schedFail:'Такий час не підходить',
         inArea:'Сюди доставляємо', outArea:'Поза зоною доставки', noGeo:'Не вдалося визначити місце',
+        notDeclared:'Алергени не заявлено', noneOf14:'Жодного з 14 алергенів',
+        avoid:'Алергени', avoidHint:'Сховати страви, що їх містять', avoidOn:'сховано',
+        avoidUnknown:'страв без заяви', clearAvoid:'Показати все',
         promo:'Промокод', promoApply:'Застосувати', promoOff:'Прибрати', discount:'Знижка',
         notify:'Сповіщення в Telegram', notifyHint:'Напишемо щоразу, коли статус зміниться',
         st:{PENDING:'Очікує підтвердження',CONFIRMED:'Підтверджено',PREPARING:'Готується',
@@ -91,8 +100,17 @@ function safeSet(k,v){ try { localStorage.setItem(k,v); } catch {} }
 // the whole node, and a re-render for any other reason -- a theme change, a
 // language switch -- would otherwise silently reset what the customer was
 // looking at.
+function loadAvoid(){
+  // A stored value that is not an array of known codes is discarded rather than
+  // trusted: a corrupted entry must not silently hide half a menu, nor silently
+  // show a dish somebody is avoiding.
+  try {
+    const v = JSON.parse(safeGet('dw_avoid') || '[]');
+    return Array.isArray(v) ? v.filter(c => ALLERGENS.some(a => a[0] === c)) : [];
+  } catch { return []; }
+}
 let state = { loc:null, cats:[], cart:loadCart(), placing:false,
-              q:'', sort:'pop', availOnly:false };
+              q:'', sort:'pop', availOnly:false, avoid:[], avoidOpen:false };
 // A cart line is a dish AND the choices made about it: two rolls of the same
 // dish with different extras are two lines, not one with a quantity of two.
 // The key is the product id plus its sorted option ids, so the same choices
@@ -317,6 +335,10 @@ async function load(){
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const d = await r.json();
     state.loc = d.location; state.cats = d.categories || [];
+    // Read here rather than at module scope: ALLERGENS is defined further down,
+    // and a filter that silently came back empty would be the failure this
+    // whole control exists to prevent.
+    state.avoid = loadAvoid();
     applyTheme(d.location.theme);
     document.title = d.location.name;
     $('#brandName').textContent = d.location.name;
@@ -365,6 +387,59 @@ function normalise(x){
   return String(x ?? '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
 }
 
+// ── allergens ───────────────────────────────────────────────────────────────
+//
+// THE FILTER HIDES THE UNDECLARED TOO, and that is the whole design. A customer
+// avoiding fish is not asking "which dishes are tagged fish"; they are asking
+// "which dishes can I safely eat". A dish nobody has declared cannot answer
+// that, so showing it would present an unanswered question as a clear one --
+// which is precisely how somebody gets hurt. The count of what was hidden for
+// that reason is shown, so the absence is visible rather than silent.
+const ALLERGENS = [
+  ['gluten',      { sq:'Gluten',      en:'Gluten',      uk:'Глютен' }],
+  ['crustaceans', { sq:'Guaskorë',    en:'Crustaceans', uk:'Ракоподібні' }],
+  ['eggs',        { sq:'Vezë',        en:'Eggs',        uk:'Яйця' }],
+  ['fish',        { sq:'Peshk',       en:'Fish',        uk:'Риба' }],
+  ['peanuts',     { sq:'Kikirikë',    en:'Peanuts',     uk:'Арахіс' }],
+  ['soy',         { sq:'Soja',        en:'Soy',         uk:'Соя' }],
+  ['milk',        { sq:'Qumësht',     en:'Milk',        uk:'Молоко' }],
+  ['nuts',        { sq:'Arra',        en:'Nuts',        uk:'Горіхи' }],
+  ['celery',      { sq:'Selino',      en:'Celery',      uk:'Селера' }],
+  ['mustard',     { sq:'Mustardë',    en:'Mustard',     uk:'Гірчиця' }],
+  ['sesame',      { sq:'Susam',       en:'Sesame',      uk:'Кунжут' }],
+  ['sulphites',   { sq:'Sulfite',     en:'Sulphites',   uk:'Сульфіти' }],
+  ['lupin',       { sq:'Lupin',       en:'Lupin',       uk:'Люпин' }],
+  ['molluscs',    { sq:'Molusqe',     en:'Molluscs',    uk:'Молюски' }],
+];
+const allergenName = c => {
+  const row = ALLERGENS.find(a => a[0] === c);
+  return row ? (row[1][lang] || row[1].en) : c;
+};
+
+/// What the dish card says about allergens. THREE outcomes, not two: a dish
+/// with nothing declared says so, in words, rather than showing the blank space
+/// that a declared-clear dish also shows. Silence is the one thing this line
+/// must never be, because silence reads as "nothing to worry about".
+function allergenLine(p){
+  if (!Array.isArray(p.allergens)) {
+    return `<p class="allerg unknown"><i class="ti ti-help-circle i" aria-hidden="true"></i>${esc(t('notDeclared'))}</p>`;
+  }
+  if (!p.allergens.length) {
+    return `<p class="allerg none"><i class="ti ti-check i" aria-hidden="true"></i>${esc(t('noneOf14'))}</p>`;
+  }
+  return `<p class="allerg"><i class="ti ti-alert-circle i" aria-hidden="true"></i>${
+    p.allergens.map(c => esc(allergenName(c))).join(', ')}</p>`;
+}
+
+/// Why this dish is hidden, or null. Separated from the filter so the counts
+/// below can say WHICH reason without running the test twice.
+function hiddenBecause(p){
+  const avoid = state.avoid || [];
+  if (!avoid.length) return null;
+  if (!Array.isArray(p.allergens)) return 'undeclared';
+  return p.allergens.some(c => avoid.includes(c)) ? 'contains' : null;
+}
+
 function visibleCats(){
   const q = normalise(state.q).trim();
   const terms = q ? q.split(/\s+/) : [];
@@ -372,6 +447,7 @@ function visibleCats(){
   for (const c of state.cats) {
     let items = (c.products || []).filter(p => {
       if (state.availOnly && !p.available) return false;
+      if (hiddenBecause(p)) return false;
       if (!terms.length) return true;
       // EVERY term must match somewhere — name, description or category. That
       // makes "sake roll" narrow rather than widen, which is what a person
@@ -408,7 +484,20 @@ function whenOpens(n){
 function renderMenu(){
   const L = state.loc, open = L.status === 'open';
   const cats = visibleCats();
-  const filtering = Boolean(state.q?.trim()) || state.availOnly || state.sort !== 'pop';
+  const filtering = Boolean(state.q?.trim()) || state.availOnly || state.sort !== 'pop'
+    || Boolean(state.avoid?.length);
+  // Counted BEFORE the render, and split by reason. "12 hidden" without saying
+  // that four of them are hidden because nobody declared them would hide the
+  // gap in the venue's own data behind the customer's own filter.
+  const hiddenCount = state.avoid?.length
+    ? state.cats.reduce((acc, c) => {
+        for (const p of (c.products || [])) {
+          const why = hiddenBecause(p);
+          if (why) acc[why] += 1;
+        }
+        return acc;
+      }, { contains: 0, undeclared: 0 })
+    : null;
   render(`
     <section class="hero">
       <h1>${esc(L.name)}</h1>
@@ -444,6 +533,21 @@ function renderMenu(){
         </select>
         <label class="chk"><input type="checkbox" id="availOnly" ${state.availOnly?'checked':''}>
           <span>${esc(t('onlyAvail'))}</span></label>
+        <button type="button" class="chip ${state.avoid?.length ? 'on' : ''}" id="avoidGo"
+                aria-expanded="${state.avoidOpen ? 'true' : 'false'}" aria-controls="avoidBox">
+          <i class="ti ti-alert-circle" aria-hidden="true"></i>
+          ${esc(t('avoid'))}${state.avoid?.length ? ` · ${state.avoid.length}` : ''}</button>
+      </div>
+      <div class="avoid" id="avoidBox" ${state.avoidOpen ? '' : 'hidden'}>
+        <p class="avoid-h">${esc(t('avoidHint'))}</p>
+        <div class="avoid-in">
+          ${ALLERGENS.map(([code]) => `<button type="button" class="chip ${state.avoid?.includes(code) ? 'on' : ''}"
+             data-avoid="${code}" aria-pressed="${state.avoid?.includes(code) ? 'true' : 'false'}"
+             >${esc(allergenName(code))}</button>`).join('')}
+        </div>
+        ${hiddenCount ? `<p class="avoid-h">${hiddenCount.contains} ${esc(t('avoidOn'))}${
+          hiddenCount.undeclared ? `, ${hiddenCount.undeclared} ${esc(t('avoidUnknown'))}` : ''}
+          ${state.avoid?.length ? `· <button type="button" class="linky" id="avoidClear">${esc(t('clearAvoid'))}</button>` : ''}</p>` : ''}
       </div>
     </div>
     ${cats.length ? `
@@ -494,12 +598,32 @@ function bindMenu(){
   if (qx) qx.onclick = () => { state.q = ''; renderMenu(); $('#q')?.focus(); };
   const qreset = $('#qreset');
   if (qreset) qreset.onclick = () => {
+    // The allergen choice is NOT cleared here. "Show everything" on an empty
+    // search means the search; a control that quietly dropped somebody's
+    // allergens while they were looking elsewhere would be the worst bug on
+    // this screen.
     state.q = ''; state.availOnly = false; state.sort = 'pop'; renderMenu();
   };
   const sort = $('#sort');
   if (sort) sort.onchange = () => { state.sort = sort.value; renderMenu(); };
   const av = $('#availOnly');
   if (av) av.onchange = () => { state.availOnly = av.checked; renderMenu(); };
+
+  // The chosen allergens SURVIVE a reload. Somebody who is allergic to fish is
+  // allergic to fish tomorrow too, and asking them to re-tick it every visit is
+  // how a safety control becomes one people stop using.
+  const ago = $('#avoidGo');
+  if (ago) ago.onclick = () => { state.avoidOpen = !state.avoidOpen; renderMenu(); };
+  document.querySelectorAll('[data-avoid]').forEach(b => b.onclick = () => {
+    const c = b.dataset.avoid, cur = state.avoid || [];
+    state.avoid = cur.includes(c) ? cur.filter(x => x !== c) : [...cur, c];
+    safeSet('dw_avoid', JSON.stringify(state.avoid));
+    renderMenu();
+  });
+  const acl = $('#avoidClear');
+  if (acl) acl.onclick = () => {
+    state.avoid = []; safeSet('dw_avoid', '[]'); renderMenu();
+  };
 
   // The category chip scrolls to its section and the chips follow the scroll.
   const secs = state.cats.filter(c=>c.products?.length).map(c => $('#c-' + CSS.escape(c.id))).filter(Boolean);
@@ -603,7 +727,7 @@ function openDish(p){
   const groups = Array.isArray(p.modifierGroups) ? p.modifierGroups : [];
   sheet(`<h2>${esc(p.name)}</h2>
     ${p.description ? `<p style="color:var(--brand-text-muted);margin:8px 0 4px">${esc(p.description)}</p>` : ''}
-    ${p.allergens?.length ? `<p class="allerg"><i class="ti ti-alert-circle i" aria-hidden="true"></i>${p.allergens.map(esc).join(', ')}</p>` : ''}
+    ${allergenLine(p)}
     ${groups.map(groupMarkup).join('')}
     <div class="row"><span class="dish-price money" id="dprice">${money(p.price)}</span>
       <span class="qty"><button id="dm" aria-label="−">−</button><span id="dq">1</span><button id="dp" aria-label="+">+</button></span></div>

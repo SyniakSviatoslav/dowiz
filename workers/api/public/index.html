@@ -290,6 +290,16 @@ input:focus,textarea:focus,select:focus{border-color:var(--brand-primary);outlin
 /* Not a card inside a sheet. A rule and rhythm do the same job without nesting. */
 /* The code field and its button share a line: one action on one input, so a
    stacked layout would read as two unrelated controls. */
+/* The allergen tray opens under the find bar, full width, because fourteen
+   chips wrap and a row that scrolls sideways hides half of them. */
+.avoid{grid-column:1/-1;margin-top:var(--space-2);padding:var(--space-3);
+      border:1px solid var(--brand-border);border-radius:var(--radius-md);
+      background:var(--brand-surface)}
+.avoid-in{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.avoid-h{margin:0 0 var(--space-2);color:var(--brand-text-muted);font-size:var(--text-xs)}
+.avoid-in + .avoid-h{margin:var(--space-2) 0 0}
+.linky{background:none;border:0;padding:0;font:inherit;color:var(--brand-primary);
+      text-decoration:underline;cursor:pointer}
 .promo-row{display:flex;gap:var(--space-2);align-items:stretch;margin-bottom:var(--space-2)}
 .promo-row input{flex:1 1 auto;margin:0;text-transform:uppercase}
 .promo-row .btn{flex:0 0 auto;width:auto;margin:0;padding-inline:var(--space-4)}
@@ -380,6 +390,10 @@ input:focus,textarea:focus,select:focus{border-color:var(--brand-primary);outlin
    for it think the venue never had it. */
 .mopt.off{opacity:.45;cursor:not-allowed}
 .mopt.off input{cursor:not-allowed}
+/* Three states, three treatments. The undeclared one is the loudest because it
+   is the only one that means a question has gone unanswered. */
+.allerg.unknown{color:var(--color-danger);font-weight:var(--weight-medium)}
+.allerg.none{color:var(--brand-text-muted)}
 .allerg{display:flex;align-items:center;gap:var(--space-2);margin:var(--space-2) 0 0;
       color:var(--color-warning);font-size:var(--text-sm)}
 

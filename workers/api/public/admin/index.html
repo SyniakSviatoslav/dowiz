@@ -333,6 +333,30 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
    below the width its own placeholder needs. */
 /* An invite code is read off the screen and typed on a phone. Monospace with a
    wide track, so the eye can hold its place halfway through sixteen characters. */
+/* The allergen editor sits UNDER its dish rather than beside it: fourteen
+   choices do not fit on a product row, and a modal would hide the dish being
+   described. */
+/* Not a card: a standing notice about a gap in the venue's own data, so it
+   carries the warning edge and nothing else does. */
+.ready{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;
+      margin:0 var(--space-4) var(--space-3);padding:var(--space-3);
+      border:1px solid var(--danger-ink);border-radius:var(--radius-md);
+      background:var(--brand-surface);font-size:var(--text-sm)}
+.ready span{flex:1 1 14rem}
+.ready .i{color:var(--danger-ink);flex:0 0 auto}
+.algn-btn{grid-column:1/-1;justify-self:start;background:none;border:0;padding:0;
+      cursor:pointer;font:inherit;color:inherit}
+.algn{grid-column:1/-1;padding:var(--space-3);margin:0 0 var(--space-2);
+      border:1px solid var(--brand-border);border-radius:var(--radius-md);
+      background:var(--brand-surface)}
+.algn-grid{display:grid;gap:var(--space-1) var(--space-3);
+      grid-template-columns:repeat(auto-fit,minmax(8rem,1fr));
+      margin-bottom:var(--space-3)}
+.algn-one{display:flex;align-items:center;gap:var(--space-2);
+      min-height:var(--tap);font-size:var(--text-sm);cursor:pointer}
+/* An undeclared dish is the one state on this screen that is a problem, so it
+   is the one that carries a warning colour. */
+.chip.warn{color:var(--danger-ink);border-color:var(--danger-ink)}
 .code{display:block;font-family:var(--font-mono);font-size:var(--text-lg);
       letter-spacing:.18em;word-break:break-all;margin-bottom:var(--space-2)}
 .erow.courier{align-items:flex-start;padding:var(--space-2) var(--space-3)}

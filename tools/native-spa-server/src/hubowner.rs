@@ -242,12 +242,37 @@ pub async fn dashboard_facts(st: &Shared) -> Result<Value, HubHttpError> {
             }
         }
     }
+    // ── READINESS: dishes on sale that nobody has declared ──
+    //
+    // The publish gate refuses NEW listings, and deliberately does not sweep
+    // the menu: taking fifty dishes off sale the moment the field arrived would
+    // close a working restaurant to fix its paperwork. What it does instead is
+    // count them and say so, every time the owner opens the dashboard, until
+    // the number is zero.
+    let cat = st.read_catalog()?;
+    let (mut undeclared, mut on_sale_undeclared) = (0i64, 0i64);
+    for (_, pj) in cat.products() {
+        if dowiz_hub::allergens::read(&pj).is_declared() {
+            continue;
+        }
+        undeclared += 1;
+        if serde_json::from_str::<Value>(&pj)
+            .ok()
+            .and_then(|p| p.get("available").and_then(Value::as_bool))
+            .unwrap_or(false)
+        {
+            on_sale_undeclared += 1;
+        }
+    }
+
     Ok(json!({
         "todayOrders": today,
         "pending": pending,
         "active": active,
         "todayRevenue": revenue,
-        "scheduled": scheduled
+        "scheduled": scheduled,
+        "undeclared": undeclared,
+        "onSaleUndeclared": on_sale_undeclared
     }))
 }
 
@@ -270,6 +295,14 @@ fn start_of_day_ms(now: i64) -> i64 {
 pub struct ProductIn {
     #[serde(default)]
     pub available: Option<bool>,
+    /// The fourteen declarable allergens this dish contains.
+    ///
+    /// AN EMPTY ARRAY IS A CLAIM -- "none of the fourteen" -- and absent is not.
+    /// `Option<Vec<_>>` keeps the two apart all the way from the wire: `None`
+    /// means this request is not about allergens, `Some([])` means somebody
+    /// has just declared the dish free of them.
+    #[serde(default)]
+    pub allergens: Option<Vec<String>>,
     /// The dish's real widest dimension, in centimetres.
     ///
     /// What makes the AR view answer a question rather than be a novelty: it is
@@ -301,7 +334,7 @@ pub async fn update_product(
     Json(body): Json<ProductIn>,
 ) -> Result<Json<Value>, HubHttpError> {
     edit_product(&st, &id, body.available, body.unavailable_note, body.price, body.size_cm,
-                 body.modifier_groups)
+                 body.modifier_groups, body.allergens)
         .await
         .map(Json)
 }
@@ -313,7 +346,7 @@ pub async fn set_product_availability(
     available: bool,
     note: Option<String>,
 ) -> Result<Value, HubHttpError> {
-    edit_product(st, id, Some(available), note, None, None, None).await
+    edit_product(st, id, Some(available), note, None, None, None, None).await
 }
 
 async fn edit_product(
@@ -324,7 +357,15 @@ async fn edit_product(
     price: Option<i64>,
     size_cm: Option<i64>,
     modifier_groups: Option<Value>,
+    allergens: Option<Vec<String>>,
 ) -> Result<Value, HubHttpError> {
+    // Checked before the write, so a refused list never reaches the record.
+    let allergens = match allergens {
+        None => None,
+        Some(raw) => Some(
+            dowiz_hub::allergens::validate(&raw).map_err(HubHttpError::Invalid)?,
+        ),
+    };
     if let Some(p) = price {
         // Integer minor units, and a negative price is not a discount, it is a
         // typo that would make the kernel's ledger owe the customer money.
@@ -364,6 +405,36 @@ async fn edit_product(
         let raw = cat.product(&id).ok_or(HubHttpError::NotFound("product"))?;
         let mut p: Value =
             serde_json::from_str(&raw).map_err(|_| HubHttpError::Corrupt("catalogue product"))?;
+        if let Some(list) = &allergens {
+            p["allergens"] = json!(list);
+        }
+        // ── THE PUBLISH GATE ──
+        //
+        // A dish nobody has declared cannot go on sale. Not a warning, not a
+        // badge: a refusal, because a customer with an allergy reading a menu
+        // cannot tell "we checked and it is clear" from "nobody filled this
+        // in", and every surface renders both as no warning.
+        //
+        // Declaring costs one action and can say "none of the fourteen". The
+        // gate is per DISH, so a venue is never blocked wholesale -- the dishes
+        // that are declared keep selling while the rest are finished.
+        if available == Some(true) {
+            let decided = allergens.as_ref().map(|l| {
+                if l.is_empty() {
+                    dowiz_hub::allergens::Declaration::None
+                } else {
+                    dowiz_hub::allergens::Declaration::Contains(l.clone())
+                }
+            });
+            let state = decided.unwrap_or_else(|| dowiz_hub::allergens::read(&raw));
+            if !state.is_declared() {
+                return Err(HubHttpError::Conflict(
+                    "declare this dish's allergens before putting it on sale; \
+                     'none of the fourteen' is a valid answer, an empty field is not"
+                        .into(),
+                ));
+            }
+        }
         if let Some(a) = available {
             p["available"] = json!(a);
             // The note only makes sense while the dish is off. Leaving a stale
