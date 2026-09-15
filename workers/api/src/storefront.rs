@@ -304,16 +304,19 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     });
     envelope["payment"] = json!(body.payment.unwrap_or_else(|| "cash".into()));
 
-    let status = envelope["status"].as_str().unwrap_or("PENDING").to_string();
     let phone_hash = auth::sha256_hex(&body.contact.phone);
     let stored = serde_json::to_string(&envelope).unwrap_or(order_json);
 
-    db.prepare(
-        "INSERT INTO orders (id,status,order_json,created_at_ms,updated_at_ms) VALUES (?1,?2,?3,?4,?4)",
-    )
-    .bind(&[id.clone().into(), status.into(), stored.clone().into(),
-            worker::wasm_bindgen::JsValue::from_f64(created_at_ms as f64)])?
-    .run()
+    // The order goes into the HUB's event log, not into a table. An order's state
+    // is a fold over what happened to it, so there is one place it can be read
+    // from and no row that could disagree with the log.
+    let seq = created_at_ms as u64;
+    let ev_id = id.clone();
+    let ev_json = stored.clone();
+    crate::hubstore::with_hub(&db, move |hub| {
+        hub.append(dowiz_hub::EventKind::Placed, &ev_id, &ev_json, seq, [0u8; 32])
+            .map_err(|e| Error::RustError(format!("hub append failed: {e:?}")))
+    })
     .await?;
 
     // The customer row is keyed by a HASH of the phone, never the phone itself,

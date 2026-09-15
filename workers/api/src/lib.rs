@@ -12,6 +12,8 @@
 
 mod accounts;
 mod auth;
+mod courier;
+mod hubstore;
 mod owner;
 mod storefront;
 
@@ -84,6 +86,14 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         .get_async("/api/owner/dashboard", owner::dashboard)
         .post_async("/api/owner/products/:id", owner::update_product)
         .post_async("/api/owner/location", owner::update_location)
+        // ── courier ──
+        .get_async("/api/courier/tasks", courier::tasks)
+        .post_async("/api/courier/shift", courier::shift)
+        .post_async("/api/courier/orders/:id/accept", courier::accept)
+        .post_async("/api/courier/orders/:id/pickup", courier::pickup)
+        .post_async("/api/courier/orders/:id/deliver", courier::deliver)
+        .post_async("/api/courier/position", courier::position)
+        .get_async("/api/courier/earnings", courier::earnings)
         .post_async("/api/order", |mut req, ctx| async move {
             let body: PlaceOrderBody = match req.json().await {
                 Ok(b) => b,
@@ -106,19 +116,16 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             };
             let status = status_of(&order_json)?;
 
-            ctx.d1("DB")?
-                .prepare(
-                    "INSERT INTO orders (id, status, order_json, created_at_ms, updated_at_ms) \
-                     VALUES (?1, ?2, ?3, ?4, ?4)",
-                )
-                .bind(&[
-                    id.into(),
-                    status.into(),
-                    order_json.clone().into(),
-                    JsValue::from_f64(created_at_ms as f64),
-                ])?
-                .run()
-                .await?;
+
+            let seq = created_at_ms as u64;
+            let ev_id = id.clone();
+            let ev_json = order_json.clone();
+            crate::hubstore::with_hub(&ctx.d1("DB")?, move |hub| {
+                hub.append(dowiz_hub::EventKind::Placed, &ev_id, &ev_json, seq, [0u8; 32])
+                    .map_err(|e| Error::RustError(format!("hub append failed: {e:?}")))
+            })
+            .await?;
+
 
             let mut res = Response::ok(order_json)?;
             res.headers_mut()
@@ -129,20 +136,18 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             let Some(id) = ctx.param("id").cloned() else {
                 return Response::error("missing order id", 400);
             };
-            let found: Option<String> = ctx
-                .d1("DB")?
-                .prepare("SELECT order_json FROM orders WHERE id = ?1")
-                .bind(&[id.into()])?
-                .first(Some("order_json"))
-                .await?;
-            match found {
-                Some(order_json) => {
+            // Read from the hub's event log. An order's state is the fold over
+            // its events, so there is no row here that could have drifted from
+            // what actually happened to it.
+            let loaded = hubstore::load(&ctx.d1("DB")?).await?;
+            match loaded.hub.order(&id) {
+                Ok(order_json) => {
                     let mut res = Response::ok(order_json)?;
                     res.headers_mut()
                         .set("content-type", "application/json; charset=utf-8")?;
                     Ok(res)
                 }
-                None => Response::error("order not found", 404),
+                Err(_) => Response::error("order not found", 404),
             }
         })
         .post_async("/api/order/:id/advance", |mut req, ctx| async move {
@@ -153,41 +158,70 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                 Ok(b) => b,
                 Err(e) => return Response::error(format!("bad request body: {e}"), 400),
             };
-
             let db = ctx.d1("DB")?;
-            let current: Option<String> = db
-                .prepare("SELECT order_json FROM orders WHERE id = ?1")
-                .bind(&[id.clone().into()])?
-                .first(Some("order_json"))
-                .await?;
-            let Some(current) = current else {
-                return Response::error("order not found", 404);
-            };
+            let next = body.next_status.clone();
 
-            // The kernel refuses an illegal edge; the Worker never decides this.
-            let updated = match json_api::apply_event_logic(&current, &body.next_status) {
-                Ok(j) => j,
-                Err(e) => return kernel_reject(e),
-            };
-            let status = status_of(&updated)?;
+            // One read-modify-write against the hub image, replayed if another
+            // writer moved it first. The kernel decides whether the edge is
+            // legal; the Worker only records its answer.
+            let out = hubstore::with_hub(&db, move |hub| {
+                let current = hub
+                    .order(&id)
+                    .map_err(|_| Error::RustError("order not found".into()))?;
+                let updated = json_api::apply_event_logic(&current, &next)
+                    .map_err(Error::RustError)?;
+                let merged = carry_envelope(&current, &updated);
+                hub.append(
+                    dowiz_hub::EventKind::Advanced,
+                    &id,
+                    &merged,
+                    Date::now().as_millis() as u64,
+                    [0u8; 32],
+                )
+                .map_err(|e| Error::RustError(format!("hub append failed: {e:?}")))?;
+                Ok(merged)
+            })
+            .await;
 
-            db.prepare(
-                "UPDATE orders SET status = ?1, order_json = ?2, updated_at_ms = ?3 WHERE id = ?4",
-            )
-            .bind(&[
-                status.into(),
-                updated.clone().into(),
-                JsValue::from_f64(Date::now().as_millis() as f64),
-                id.into(),
-            ])?
-            .run()
-            .await?;
-
-            let mut res = Response::ok(updated)?;
-            res.headers_mut()
-                .set("content-type", "application/json; charset=utf-8")?;
-            Ok(res)
+            match out {
+                Ok(merged) => {
+                    let mut res = Response::ok(merged)?;
+                    res.headers_mut()
+                        .set("content-type", "application/json; charset=utf-8")?;
+                    Ok(res)
+                }
+                // An illegal transition is the caller's mistake, so 409 -- never
+                // a 500, which would blame the server for a refusal it was right
+                // to make.
+                Err(e) => {
+                    let msg = e.to_string();
+                    let code = if msg.contains("not found") { 404 } else { 409 };
+                    Response::error(msg, code)
+                }
+            }
         })
         .run(req, env)
         .await
+}
+
+/// Carry the fields the kernel does not model across a transition.
+///
+/// The kernel owns items, status, subtotal and the ledger. Delivery address,
+/// contact and payment ride alongside until the aggregate's new fields reach
+/// this boundary, and they have to survive every advance: losing a delivery
+/// address on a status change is a silent loss that only surfaces at the door.
+fn carry_envelope(old_raw: &str, updated: &str) -> String {
+    let Ok(mut merged) = serde_json::from_str::<serde_json::Value>(updated) else {
+        return updated.to_string();
+    };
+    let old: serde_json::Value = serde_json::from_str(old_raw).unwrap_or(serde_json::Value::Null);
+    for k in [
+        "location_id", "contact", "fulfilment", "payment", "delivery_fee", "total",
+        "courier_id", "rejection_reason",
+    ] {
+        if let Some(v) = old.get(k) {
+            merged[k] = v.clone();
+        }
+    }
+    serde_json::to_string(&merged).unwrap_or_else(|_| updated.to_string())
 }
