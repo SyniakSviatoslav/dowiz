@@ -431,6 +431,16 @@ fn qdsl_explain_query(node: i64, a: [i64], sb: [i64], buf: [i64], bp: [i64]) -> 
           let _ = qdsl_explain_ident(a[jn+5], a, sb, buf, bp) in 0)
        else 0; 0)
     else 0;
+    let _ = if ck == 8 then
+      (let _ = buf[bp[0]] = 32 in let _ = bp[0] = bp[0] + 1 in
+       let _ = buf[bp[0]] = 119 in let _ = bp[0] = bp[0] + 1 in
+       let _ = buf[bp[0]] = 104 in let _ = bp[0] = bp[0] + 1 in
+       let _ = buf[bp[0]] = 101 in let _ = bp[0] = bp[0] + 1 in
+       let _ = buf[bp[0]] = 114 in let _ = bp[0] = bp[0] + 1 in
+       let _ = buf[bp[0]] = 101 in let _ = bp[0] = bp[0] + 1 in
+       let _ = buf[bp[0]] = 32 in let _ = bp[0] = bp[0] + 1 in
+       let _ = qdsl_explain_ident(a[child+3], a, sb, buf, bp) in 0)
+    else 0;
     let _ = if ck == 5 then
       (let _ = buf[bp[0]] = 32 in let _ = bp[0] = bp[0] + 1 in
        let _ = buf[bp[0]] = 103 in let _ = bp[0] = bp[0] + 1 in

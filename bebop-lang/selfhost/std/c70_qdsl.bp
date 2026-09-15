@@ -26,7 +26,7 @@ fn main() -> i64 {
   let ok4 = if fp_bad == 0 then 1 else 0;
   let buf2 = zeros(4096) in
   let len2 = qdsl_explain_into("q { from T where x = 1 }", buf2) in
-  let ok5 = if len2 > 7 then 1 else 0;
+  let ok5 = if len2 == 16 then 1 else 0;
   let h = fold_str(buf1, len1);
   ok1 * 100000 + ok2 * 10000 + ok3 * 1000 + ok4 * 100 + ok5 * 10 + (if h == 0 then 0 else 1)
 }
