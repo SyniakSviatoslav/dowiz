@@ -2952,3 +2952,71 @@ async fn feedback_is_a_sentence_and_not_a_score() {
     assert_eq!(post(&s.base, &format!("/api/order/{id}/feedback"), Some(&owner),
                     json!({ "text": "we were fine actually" })).0, 401);
 }
+
+/// A tip is the courier's money passing through the venue's till. It must not
+/// appear in anything that describes what the venue earned.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_tip_never_lands_in_the_venue_takings() {
+    let s = boot("tips").await;
+    let (_, t) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = t["access_token"].as_str().unwrap().to_string();
+
+    let (code, o) = post(&s.base, "/api/public/locations/dubin/orders", None, json!({
+        "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 2 }],
+        "contact": { "name": "Ana", "phone": "+355691234567" },
+        "fulfilment": { "kind": "pickup" }, "tip": 200
+    }));
+    assert_eq!(code, 200, "{o}");
+    assert_eq!(o["tip"], 200);
+    assert_eq!(o["total"], 2000, "the customer pays 1800 for food plus a 200 tip");
+
+    // Every place the venue's money is counted.
+    let (_, d) = get(&s.base, "/api/owner/dashboard", Some(&owner));
+    assert_eq!(d["todayRevenue"], 1800, "the tip is in the takings: {d}");
+    let (_, a) = get(&s.base, "/api/owner/analytics?days=7", Some(&owner));
+    assert_eq!(a["revenue"], 1800, "the tip is in the analytics: {a}");
+    let (_, c) = get(&s.base, "/api/owner/customers", Some(&owner));
+    assert_eq!(c["customers"][0]["spent"], 1800, "the tip counts as customer value: {c}");
+
+    // But the order still says what the customer actually paid.
+    let (_, list) = get(&s.base, "/api/owner/orders", Some(&owner));
+    assert_eq!(list["orders"][0]["total"], 2000);
+}
+
+/// Both bounds, because a mistyped tip is the one that hurts: somebody meaning
+/// 200 and typing 20000 finds out at the card rail.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_tip_is_bounded_on_both_sides() {
+    let s = boot("tips_bounds").await;
+    let basket = |tip: i64| json!({
+        "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 1 }],
+        "contact": { "name": "C", "phone": "+355690000000" },
+        "fulfilment": { "kind": "pickup" }, "tip": tip
+    });
+    let (code, v) = post(&s.base, "/api/public/locations/dubin/orders", None, basket(-100));
+    assert_eq!(code, 400, "{v}");
+    let (code, v) = post(&s.base, "/api/public/locations/dubin/orders", None, basket(20_000));
+    assert_eq!(code, 400, "{v}");
+    assert!(v["error"].as_str().unwrap().contains("larger"), "{v}");
+    // A generous but plausible tip on a small order is allowed: the floor is
+    // the order or 10000, whichever is more, so a 900 basket can still tip 500.
+    let (code, o) = post(&s.base, "/api/public/locations/dubin/orders", None, basket(500));
+    assert_eq!(code, 200, "{o}");
+    assert_eq!(o["total"], 1400);
+}
+
+/// The courier's tips are kept apart from the cash they are holding for the
+/// venue: the two mean opposite things at the end of a shift.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_courier_sees_tips_apart_from_the_float() {
+    let s = boot("tips_courier").await;
+    let (_, t) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = t["access_token"].as_str().unwrap().to_string();
+    let (_, c) = post(&s.base, "/api/courier/auth/login", None,
+        json!({ "phone": "+355691112233", "password": "courier-pw" }));
+    let jwt = c["jwt"].as_str().unwrap().to_string();
+
+    let (_, e) = get(&s.base, "/api/courier/earnings", Some(&jwt));
+    assert!(e["today"]["tips"].is_i64(), "tips are not reported at all: {e}");
+    assert_eq!(e["today"]["tips"], 0);
+}

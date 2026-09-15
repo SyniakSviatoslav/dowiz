@@ -28,6 +28,7 @@ const T = {
         later:'Në një orë tjetër', schedFail:'Koha nuk vlen',
         inArea:'Ne dërgojmë këtu', outArea:'Jashtë zonës sonë të dërgesës', noGeo:'Nuk morëm dot vendndodhjen',
         notDeclared:'Alergjenët nuk janë deklaruar', noneOf14:'Asnjë nga 14 alergjenët',
+        tip:'Bakshish për korrierin', tipNo:'Pa bakshish', tipOther:'Tjetër',
         sayHow:'Si ishte?', sayHint:'Vetëm restoranti e lexon. Pa yje, pa vlerësime.',
         sayGo:'Dërgo', saidIt:'Faleminderit',
         how:'Si e merrni', toDoor:'Dërgesë', toPickup:'E marr vetë', pickupAt:'Merreni te',
@@ -57,6 +58,7 @@ const T = {
         later:'At a later time', schedFail:'That time will not work',
         inArea:'We deliver here', outArea:'Outside our delivery area', noGeo:'Could not get your location',
         notDeclared:'Allergens not declared', noneOf14:'None of the 14 allergens',
+        tip:'Tip for the courier', tipNo:'No tip', tipOther:'Other',
         sayHow:'How was it?', sayHint:'Only the venue reads this. No stars, no ratings.',
         sayGo:'Send', saidIt:'Thank you',
         how:'How you get it', toDoor:'Delivery', toPickup:'I will collect', pickupAt:'Collect at',
@@ -86,6 +88,7 @@ const T = {
         later:'На інший час', schedFail:'Такий час не підходить',
         inArea:'Сюди доставляємо', outArea:'Поза зоною доставки', noGeo:'Не вдалося визначити місце',
         notDeclared:'Алергени не заявлено', noneOf14:'Жодного з 14 алергенів',
+        tip:'Чайові кур\'єру', tipNo:'Без чайових', tipOther:'Інша сума',
         sayHow:'Як вам?', sayHint:'Читає лише заклад. Без зірок і оцінок.',
         sayGo:'Надіслати', saidIt:'Дякуємо',
         how:'Як заберете', toDoor:'Доставка', toPickup:'Заберу сам', pickupAt:'Забрати за адресою',
@@ -120,7 +123,7 @@ function loadAvoid(){
 }
 let state = { loc:null, cats:[], cart:loadCart(), placing:false,
               q:'', sort:'pop', availOnly:false, avoid:[], avoidOpen:false,
-              how:'delivery' };
+              how:'delivery', tip:0 };
 // A cart line is a dish AND the choices made about it: two rolls of the same
 // dish with different extras are two lines, not one with a quantity of two.
 // The key is the product id plus its sorted option ids, so the same choices
@@ -865,12 +868,18 @@ function totalsBlock(){
   // code took off only because the hub said so; re-deriving it locally would
   // give two answers to the same question and put the wrong one on screen.
   const cut = state.promo ? state.promo.discount : 0;
+  // Never on a collection: the control is hidden there, and a stale amount left
+  // over from a delivery the customer changed their mind about must not ride
+  // along into the total.
+  const tip = state.how === 'pickup' ? 0 : (state.tip || 0);
   return `<div class="totals" id="totalsBox">
     <div class="row"><span>${esc(t('subtotal'))}</span><span class="money">${money(s)}</span></div>
     ${cut ? `<div class="row cut"><span>${esc(t('discount'))} · ${esc(state.promo.code)}</span>
       <span class="money">−${money(cut)}</span></div>` : ''}
     <div class="row"><span>${esc(t('delivery'))}</span><span class="money">${d ? money(d) : esc(t('free'))}</span></div>
-    <div class="row grand"><span>${esc(t('total'))}</span><span class="money">${money(s - cut + d)}</span></div>
+    ${tip ? `<div class="row"><span>${esc(t('tip'))}</span>
+      <span class="money">${money(tip)}</span></div>` : ''}
+    <div class="row grand"><span>${esc(t('total'))}</span><span class="money">${money(s - cut + d + tip)}</span></div>
     ${below ? `<div class="err">${esc(t('min'))}: <span class="money">${money(L.minOrder)}</span></div>` : ''}
   </div>`;
 }
@@ -912,6 +921,13 @@ function openCheckout(){
       <p id="f-geo-out" class="geo" hidden></p>` : ''}
     <label for="f-note">${esc(t('note'))}</label>
     <input id="f-note">
+    ${state.how !== 'pickup' ? `
+    <label>${esc(t('tip'))}</label>
+    <div class="when" role="radiogroup" aria-label="${esc(t('tip'))}">
+      ${TIPS.map(v => `<button type="button" class="chip ${state.tip === v ? 'on' : ''}"
+         data-tip="${v}" aria-pressed="${state.tip === v}">${
+           v ? `<span class="money">${money(v)}</span>` : esc(t('tipNo'))}</button>`).join('')}
+    </div>` : ''}
     <label>${esc(t('pay'))}</label>
     <div class="pays" role="radiogroup">
       <button class="pay" role="radio" aria-checked="true" data-pay="cash">
@@ -968,6 +984,15 @@ function openCheckout(){
       f.min = f.value;
     }
     if (when === 'later') f.focus();
+  });
+
+  $('#sheetIn').querySelectorAll('[data-tip]').forEach(b => b.onclick = () => {
+    state.tip = parseInt(b.dataset.tip, 10) || 0;
+    $('#sheetIn').querySelectorAll('[data-tip]').forEach(x => {
+      x.classList.toggle('on', x === b);
+      x.setAttribute('aria-pressed', String(x === b));
+    });
+    refreshTotals();
   });
 
   // Delivery or collection. The address field goes away rather than becoming
@@ -1088,6 +1113,7 @@ async function place(pay){
               address:{ line:addr, note: note || null, ...(state.geo || {}) } },
         payment: pay, locale: lang,
         ...(state.promo ? { promo: state.promo.code } : {}),
+        ...(state.tip && !collecting ? { tip: state.tip } : {}),
         // Epoch milliseconds. `datetime-local` has no timezone, so it is read
         // in the CUSTOMER'S timezone -- which is the venue's too, for a
         // delivery you can walk to.
@@ -1209,6 +1235,16 @@ function bindSay(order){
     } catch (e) { go.disabled = false; toast(String(e.message || e)); }
   };
 }
+
+// FIXED AMOUNTS, NOT PERCENTAGES. A percentage of a basket is a number the
+// customer has to work out to know what they are agreeing to, and it grows with
+// the food rather than with the journey -- which is what the courier actually
+// did. Three plausible amounts and "none", in the venue's own currency.
+//
+// It is a DELIVERY control: nobody tips a courier for an order they collect
+// themselves, and offering it anyway is asking for money on somebody else's
+// behalf who did no work.
+const TIPS = [0, 100, 200, 500];
 
 const FLOW = ['PENDING','CONFIRMED','PREPARING','READY','IN_DELIVERY','DELIVERED'];
 function openTracking(order){

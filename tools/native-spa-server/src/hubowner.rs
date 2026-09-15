@@ -238,7 +238,11 @@ pub async fn dashboard_facts(st: &Shared) -> Result<Value, HubHttpError> {
             // not money the venue took, and counting it would overstate the day
             // every time the kitchen turned something down.
             if !matches!(status, "REJECTED" | "CANCELLED") {
-                revenue += o.get("total").and_then(Value::as_i64).unwrap_or(0);
+                // The tip is the COURIER'S. Counting it here would put money
+                // in the venue's takings that the venue never earned and will
+                // not keep.
+                revenue += o.get("total").and_then(Value::as_i64).unwrap_or(0)
+                    - o.get("tip").and_then(Value::as_i64).unwrap_or(0);
             }
         }
     }
@@ -1596,7 +1600,9 @@ pub async fn customers(
         // towards what this customer is worth -- the same rule the takings use.
         let spent = match o.get("status").and_then(Value::as_str) {
             Some("REJECTED" | "CANCELLED") => 0,
-            _ => o.get("total").and_then(Value::as_i64).unwrap_or(0),
+            // What they spent WITH THE VENUE. The tip went to the courier.
+            _ => o.get("total").and_then(Value::as_i64).unwrap_or(0)
+                - o.get("tip").and_then(Value::as_i64).unwrap_or(0),
         };
         let key = customer_key(&st, phone);
         match rows.iter_mut().find(|r| r.0 == key) {
@@ -2113,7 +2119,14 @@ pub async fn analytics(
         }
         // Money the venue TOOK. A refused order is not revenue, and counting it
         // would overstate every day the kitchen turned something down.
-        let total = if refused { 0 } else { o.get("total").and_then(Value::as_i64).unwrap_or(0) };
+        // Tips excluded, for the same reason they are excluded from the
+        // dashboard: they are the courier's money passing through.
+        let total = if refused {
+            0
+        } else {
+            o.get("total").and_then(Value::as_i64).unwrap_or(0)
+                - o.get("tip").and_then(Value::as_i64).unwrap_or(0)
+        };
         revenue += total;
 
         match o.get("fulfilment").and_then(|f| f.get("kind")).and_then(Value::as_str) {

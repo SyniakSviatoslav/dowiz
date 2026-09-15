@@ -643,9 +643,14 @@ async function openEarnings(){
   let d;
   try { d = await api('/courier/earnings'); }
   catch (e) { return panel('Мої зміни', `<p class="answer">${esc(String(e.message || e))}</p>`); }
+  // TIPS ARE SHOWN APART FROM THE FLOAT. The cash on the first line is money
+  // the courier is holding FOR the venue and will hand over; the tips are
+  // theirs. One combined figure at the end of a shift is the wrong number to
+  // reach for, whichever way you reach.
   const row = (label, w) => `
     <div class="erow"><span>${esc(label)}</span>
-      <span><b>${w.deliveries}</b> · <span class="money">${money(w.cash)}</span></span></div>`;
+      <span><b>${w.deliveries}</b> · <span class="money">${money(w.cash)}</span>${
+        w.tips ? ` · <span class="money tips">+${money(w.tips)}</span>` : ''}</span></div>`;
   await panel('Мої зміни', `
     <div class="ecash">
       <span class="k">Готівка на руках</span>
@@ -655,7 +660,8 @@ async function openEarnings(){
     <div class="elist">
       ${row('Сьогодні', d.today)}${row('7 днів', d.week)}${row('30 днів', d.month)}
     </div>
-    <p class="hint2">Доставки й зібрана готівка. Розрахунок оплати dowiz не веде.</p>`);
+    <p class="hint2">Доставки, зібрана готівка й <span class="tips">чайові</span>.
+       Готівку віддаєте закладу, чайові — ваші. Розрахунок оплати dowiz не веде.</p>`);
 }
 
 async function openHistory(){

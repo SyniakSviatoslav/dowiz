@@ -326,6 +326,12 @@ pub struct PlaceIn {
     /// whatever the storefront showed as a preview is advisory.
     #[serde(default)]
     pub promo: Option<String>,
+    /// A tip, in minor units. THE COURIER'S, not the venue's -- which is why it
+    /// is carried as its own field all the way through rather than folded into
+    /// the total and forgotten. A tip inside an undifferentiated total is a tip
+    /// that shows up in the venue's takings.
+    #[serde(default)]
+    pub tip: Option<i64>,
 }
 
 pub async fn menu(State(st): State<Shared>, _slug: Option<AxPath<String>>) -> Result<Json<Value>, HubHttpError> {
@@ -739,8 +745,20 @@ pub async fn place(
     // The kernel returns its own lines, without the names. Put them back from
     // the lines we priced a moment ago.
     carry_item_names(&json!({ "items": lines }), &mut envelope);
+    // A tip is bounded on both sides. Zero or less is not a tip; the ceiling
+    // stops a mistyped amount -- a customer meaning 200 and typing 20000 would
+    // otherwise hand a courier a month's pay and find out at the card rail.
+    let tip = match body.tip.unwrap_or(0) {
+        0 => 0,
+        t if t < 0 => return Err(HubHttpError::Invalid("a tip cannot be negative".into())),
+        t if t > subtotal.max(10_000) => {
+            return Err(HubHttpError::Invalid("that tip is larger than the order".into()))
+        }
+        t => t,
+    };
     envelope["delivery_fee"] = json!(fee);
-    envelope["total"] = json!(subtotal + fee);
+    envelope["tip"] = json!(tip);
+    envelope["total"] = json!(subtotal + fee + tip);
     envelope["contact"] = json!({ "name": body.contact.name, "phone": body.contact.phone });
     envelope["fulfilment"] = json!({
         "kind": body.fulfilment.kind,
@@ -811,7 +829,7 @@ pub async fn place(
                     .map_err(|r| HubHttpError::Conflict(r.as_str().into()))?;
                 envelope["discount"] = json!(cut);
                 envelope["promo"] = json!({ "code": p.code, "discount": cut });
-                envelope["total"] = json!(subtotal - cut + fee);
+                envelope["total"] = json!(subtotal - cut + fee + tip);
             }
             let stored = serde_json::to_string(&envelope).unwrap_or(order_json);
             hub.append(EventKind::Placed, &ev_id, &stored, created_at_ms as u64, [0u8; 32])
@@ -1035,6 +1053,7 @@ pub(crate) fn carry_over(old: &Value, updated: &mut Value) {
         "rejection_reason",
         "cash_collected",
         "courier_note",
+        "tip",
         "scheduled_for_ms",
         "last_actor",
         // THE DISCOUNT AND THE CODE THAT GAVE IT. Missing from this list until

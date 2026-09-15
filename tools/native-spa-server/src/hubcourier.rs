@@ -424,6 +424,10 @@ pub async fn earnings(
     let (mut d_today, mut d_week, mut d_month) = (0i64, 0i64, 0i64);
     let (mut c_today, mut c_week, mut c_month) = (0i64, 0i64, 0i64);
     let mut open_cash = 0i64;
+    // Tips, kept apart from the cash a courier is holding FOR the venue. The
+    // two numbers mean opposite things at the end of a shift: one is theirs and
+    // one they hand over, and a single figure invites the wrong one.
+    let (mut t_today, mut t_week, mut t_month) = (0i64, 0i64, 0i64);
 
     for ev in hub.orders() {
         let Ok(o) = serde_json::from_str::<Value>(&ev.order_json) else { continue };
@@ -434,18 +438,22 @@ pub async fn earnings(
         let at = o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(0);
         let cash = o.get("cash_collected").and_then(Value::as_i64).unwrap_or(0);
 
+        let tip = o.get("tip").and_then(Value::as_i64).unwrap_or(0);
         if status == "DELIVERED" {
             if at >= month {
                 d_month += 1;
                 c_month += cash;
+                t_month += tip;
             }
             if at >= week {
                 d_week += 1;
                 c_week += cash;
+                t_week += tip;
             }
             if at >= today {
                 d_today += 1;
                 c_today += cash;
+                t_today += tip;
             }
         } else if !matches!(status, "CANCELLED" | "REJECTED")
             && o.get("payment").and_then(Value::as_str) == Some("cash")
@@ -458,9 +466,9 @@ pub async fn earnings(
     }
 
     Ok(Json(json!({
-        "today":  { "deliveries": d_today, "cash": c_today },
-        "week":   { "deliveries": d_week,  "cash": c_week },
-        "month":  { "deliveries": d_month, "cash": c_month },
+        "today":  { "deliveries": d_today, "cash": c_today, "tips": t_today },
+        "week":   { "deliveries": d_week,  "cash": c_week,  "tips": t_week },
+        "month":  { "deliveries": d_month, "cash": c_month, "tips": t_month },
         // Cash on this shift that has not been handed over. The number a
         // courier is asked for at the end of the night.
         "cashInHand": c_today,
