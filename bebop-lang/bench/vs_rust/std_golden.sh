@@ -1086,5 +1086,37 @@ gate gb_sssp 1281 "$r"
 r=$(./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile bench/vs_rust/std_tests/gb_pr.bp "$GBT/gb_pr_test.bin" >/dev/null 2>&1 && run 30 "$GBT/gb_pr_test.bin" "$GBT" | tail -1)
 gate gb_pr 2510021250460919878 "$r"
 
+# ---- wlog (ROADMAP B8: the dowiz-core order log on the store) ----
+# Every golden below is the number the PRODUCTION oracle prints --
+# bench/oracles/rust/src/bin/wlog.rs, which takes each transition decision from
+# `dowiz_core::order_machine::assert_transition` and derives the adjacency from it rather than
+# copying bebop's table. So a red here means bebop and dowiz-core have diverged on the order
+# lifecycle, which is the one thing this row exists to detect.
+#
+# The ingest is run DIRECTLY rather than through `run`, on purpose: it is the only
+# side-effecting phase (it writes wlog.store), and a memo replay would return its recorded
+# stdout without rebuilding the store, leaving the query gates reading a stale or absent file.
+# The queries are pure reads given that store and memo normally.
+rm -f wlog.store
+./seed/build/seed ${BEBOP_BIN:-bebop.bin} compile selfhost/std/wlog.bp ${BEBOP_TMP:-/tmp/opencode}/wlog_test.bin >/dev/null 2>&1
+r=$(timeout 120 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/wlog_test.bin i f | tail -1)
+gate wlog_i 841 "$r"
+r=$(run 120 ${BEBOP_TMP:-/tmp/opencode}/wlog_test.bin q1 f | tail -1)
+gate wlog_q1 60417 "$r"
+r=$(run 120 ${BEBOP_TMP:-/tmp/opencode}/wlog_test.bin q2 f 10000 8 1 | tail -1)
+gate wlog_q2 1750 "$r"
+r=$(run 120 ${BEBOP_TMP:-/tmp/opencode}/wlog_test.bin q3 3 | tail -1)
+gate wlog_q3 841 "$r"
+r=$(run 120 ${BEBOP_TMP:-/tmp/opencode}/wlog_test.bin q3 0 | tail -1)
+gate wlog_q3ok 79159 "$r"
+r=$(run 120 ${BEBOP_TMP:-/tmp/opencode}/wlog_test.bin q4 f | tail -1)
+gate wlog_q4 4036872 "$r"
+# the update path: append 5000 events through B4's tail, then re-fold. Both runs are
+# side-effecting, so both bypass the memo.
+r=$(timeout 120 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/wlog_test.bin u f 10000 8 5000 | tail -1)
+gate wlog_u 85000 "$r"
+r=$(timeout 120 ./seed/build/seed ${BEBOP_TMP:-/tmp/opencode}/wlog_test.bin q1 f | tail -1)
+gate wlog_u_q1 60734 "$r"
+
 echo "std_golden: $PASS pass, $FAIL fail"
 [ "$FAIL" = 0 ]
