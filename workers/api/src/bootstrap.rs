@@ -31,6 +31,26 @@ pub struct Bundle {
     /// claims it, which is exactly the "shadow org" the old schema allowed for.
     #[serde(default)]
     pub owner: Option<OwnerSeed>,
+    /// The people who will carry the orders.
+    ///
+    /// A hub seeded with a menu and an owner and NO courier cannot complete a
+    /// single delivery, so leaving them out made a "seeded" hub one that still
+    /// could not run a service. The proper path is the owner's invite flow --
+    /// a 16-character code the courier spends once, choosing their own password
+    /// -- and that flow lives on the hub's roster, which this Worker does not
+    /// use yet. Until it does, seeding is how a courier exists here.
+    #[serde(default)]
+    pub couriers: Vec<CourierSeed>,
+}
+
+#[derive(Deserialize)]
+pub struct CourierSeed {
+    pub phone: String,
+    pub password: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub email: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -209,10 +229,79 @@ pub async fn seed(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
         }
     }
 
+    // ── couriers ──
+    let mut n_courier = 0usize;
+    let loc_id = bundle
+        .location
+        .get("id")
+        .and_then(|x| x.as_str())
+        .unwrap_or("hub")
+        .to_string();
+    for c in &bundle.couriers {
+        let Some(cid) = crate::edge_id() else {
+            return Response::error("no platform CSPRNG", 500);
+        };
+        let hash = match hash_password(&c.password) {
+            Ok(h) => h,
+            Err(e) => return e.into_response(),
+        };
+        let phone = c.phone.trim().to_string();
+        // The email column is NOT NULL and unique, and a courier who signs in by
+        // phone has no email. A derived placeholder keeps the constraint honest
+        // without inventing an address that might one day reach somebody.
+        let email = c
+            .email
+            .clone()
+            .unwrap_or_else(|| format!("{}@courier.invalid", phone.replace(['+', ' '], "")));
+        let now = Date::now().as_millis() as i64;
+        db.prepare(
+            "INSERT INTO couriers (id,email_encrypted,email_hash,phone_encrypted,phone_hash,\
+             full_name_encrypted,password_hash,status,created_at_ms) \
+             VALUES (?1,?2,?3,?4,?5,?6,?7,'active',?8) ON CONFLICT(email_hash) DO NOTHING",
+        )
+        .bind(&[
+            cid.clone().into(),
+            email.clone().into(),
+            crate::auth::sha256_hex(&email.to_lowercase()).into(),
+            phone.clone().into(),
+            crate::auth::sha256_hex(&phone).into(),
+            c.name.clone().unwrap_or_default().into(),
+            hash.into(),
+            worker::wasm_bindgen::JsValue::from_f64(now as f64),
+        ])?
+        .run()
+        .await?;
+
+        #[derive(Deserialize)]
+        struct C {
+            id: String,
+        }
+        let row: Option<C> = db
+            .prepare("SELECT id FROM couriers WHERE phone_hash = ?1")
+            .bind(&[crate::auth::sha256_hex(&phone).into()])?
+            .first(None)
+            .await?;
+        if let Some(row) = row {
+            db.prepare(
+                "INSERT INTO courier_locations (courier_id,location_id,role,added_at_ms) \
+                 VALUES (?1,?2,'courier',?3) ON CONFLICT DO NOTHING",
+            )
+            .bind(&[
+                row.id.into(),
+                loc_id.clone().into(),
+                worker::wasm_bindgen::JsValue::from_f64(now as f64),
+            ])?
+            .run()
+            .await?;
+            n_courier += 1;
+        }
+    }
+
     Response::from_json(&json!({
         "ok": true,
         "categories": n_cat,
         "products": n_prod,
+        "couriers": n_courier,
         "ownerId": owner_id,
         // The catalogue's content fingerprint. Two hubs seeded from the same
         // bundle produce the same root, which makes a mirror checkable.

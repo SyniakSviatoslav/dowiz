@@ -106,7 +106,15 @@ pub async fn load(db: &D1Database) -> Result<Loaded> {
             Ok(Loaded { hub, generation: r.generation })
         }
         None => {
-            let hub = Hub::create().map_err(|_| Error::RustError("cannot create hub image".into()))?;
+            // BORN SMALL, GROWN AS NEEDED. `Hub::create` allocates 4 MiB, which
+            // on a Worker means every single order read five D1 chunks and
+            // wrote five back -- and the third order of the day exceeded the
+            // isolate's resource limit with error 1102. The log grows itself
+            // when an append does not fit (doubling, chain copied verbatim), so
+            // starting at 64 KiB costs a handful of doublings over a hub's life
+            // and keeps the common case one row.
+            let hub = Hub::create_sized(64 * 1024)
+                .map_err(|_| Error::RustError("cannot create hub image".into()))?;
             Ok(Loaded { hub, generation: 0 })
         }
     }

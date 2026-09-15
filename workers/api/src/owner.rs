@@ -114,16 +114,23 @@ pub async fn orders(req: Request, ctx: RouteContext<()>) -> Result<Response> {
                     return None;
                 }
             }
-            Some(json!({
-                "id": e.order_id, "status": st, "createdAtMs": e.seq,
-                "total": v.get("total").cloned().unwrap_or(json!(0)),
-                "subtotal": v.get("subtotal").cloned().unwrap_or(json!(0)),
-                "items": v.get("items").cloned().unwrap_or(json!([])),
-                "contact": v.get("contact").cloned().unwrap_or(Value::Null),
-                "fulfilment": v.get("fulfilment").cloned().unwrap_or(Value::Null),
-                "payment": v.get("payment").cloned().unwrap_or(Value::Null),
-                "courierId": v.get("courier_id").cloned().unwrap_or(Value::Null)
-            }))
+            // THE ENVELOPE AS STORED, not a re-spelling of it.
+            //
+            // This projection sent `createdAtMs` and `courierId` while the
+            // console reads `created_at_ms` and `courier_id`, and it dropped
+            // `promo`, `discount`, `tip` and `feedback` entirely -- so every row
+            // rendered without its money detail and with no time on it. That is
+            // the same shape-mismatch that once left the courier app showing
+            // "you are offline" for every courier: a hand-written projection is
+            // a second contract, and the second contract is the one that drifts.
+            //
+            // Handing back the order itself removes the second contract. The
+            // fields are the ones the log holds, which is what every other
+            // reader already agrees on.
+            let mut o = v.clone();
+            o["id"] = json!(e.order_id);
+            o["status"] = json!(st);
+            Some(o)
         })
         .collect();
     Response::from_json(&json!({ "orders": out }))
@@ -179,13 +186,41 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
         let mut merged: Value = serde_json::from_str(&updated)
             .map_err(|e| Error::RustError(format!("kernel order json unreadable: {e}")))?;
         let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
-        for k in ["location_id", "contact", "fulfilment", "payment", "delivery_fee", "courier_id"] {
+        // ── EVERY FIELD THE HUB OWNS, CARRIED ACROSS THE TRANSITION ──
+        //
+        // The kernel returns its own order and knows nothing about delivery,
+        // contact, discounts or tips, so anything not on this list is ERASED by
+        // the first status change. The native adapter lost `discount` and
+        // `promo` that way, and the consequence was not cosmetic: the use-count
+        // folds over orders looking for `promo.code`, so a max-uses code became
+        // infinitely reusable the moment the kitchen accepted the first order
+        // that used it. Measured here as well -- a live order on Cloudflare came
+        // back from confirm/preparing/ready with no promo and no tip, and the
+        // day's takings were 200 lek too high because the tip could no longer
+        // be subtracted.
+        for k in [
+            "location_id",
+            "contact",
+            "fulfilment",
+            "payment",
+            "payment_status",
+            "delivery_fee",
+            "courier_id",
+            "created_at_ms",
+            "rejection_reason",
+            "cash_collected",
+            "scheduled_for_ms",
+            "tip",
+            "discount",
+            "promo",
+            "feedback",
+            "assigned_at_ms",
+            "accepted_at_ms",
+            "total",
+        ] {
             if let Some(v) = old.get(k) {
                 merged[k] = v.clone();
             }
-        }
-        if let Some(total) = old.get("total") {
-            merged["total"] = total.clone();
         }
         // A rejection carries WHY, recorded with the event so the customer can be
         // told something true rather than "rejected".
@@ -246,13 +281,27 @@ pub async fn dashboard(req: Request, ctx: RouteContext<()>) -> Result<Response> 
             continue;
         }
         count += 1;
-        match v.get("status").and_then(|x| x.as_str()).unwrap_or("") {
+        let status = v.get("status").and_then(|x| x.as_str()).unwrap_or("");
+        match status {
             "PENDING" => pending += 1,
             "CONFIRMED" | "PREPARING" | "READY" | "IN_DELIVERY" => active += 1,
-            // Revenue counts DELIVERED only. Counting a pending order as money
-            // is how a dashboard starts lying.
-            "DELIVERED" => revenue += v.get("total").and_then(|t| t.as_i64()).unwrap_or(0),
             _ => {}
+        }
+        // ── ONE DEFINITION OF TODAY'S TAKINGS ──
+        //
+        // This counted DELIVERED only while the native adapter and the
+        // analytics count every order that was not REFUSED -- so the same
+        // product showed an owner two different numbers depending on which
+        // deployment they opened, and the dashboard disagreed with its own
+        // analytics pane on the same screen. The rule is the analytics one,
+        // because that is what the copy on both panes describes: money the
+        // venue took, and a rejected order is not that.
+        //
+        // The tip is subtracted wherever the venue's money is counted: it is
+        // the courier's, passing through.
+        if !matches!(status, "REJECTED" | "CANCELLED") {
+            revenue += v.get("total").and_then(|t| t.as_i64()).unwrap_or(0)
+                - v.get("tip").and_then(|t| t.as_i64()).unwrap_or(0);
         }
     }
     Response::from_json(&json!({
