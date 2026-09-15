@@ -40,7 +40,7 @@ pub const DIGEST_ARR_I64: i64 = 4290599237;
 impl Kv {
     /// Create the empty KV schema in a fresh store -- the same four zero-length arrays and
     /// root that `kv.bp`'s init phase writes.
-    pub fn init(st: &mut Store, path: &str) -> Result<i64, StoreError> {
+    fn stage_init(st: &mut Store) -> Result<(crate::Tx, usize), StoreError> {
         let mut tx = st.begin()?;
         let kidx = st.alloc(&mut tx, 1, DIGEST_ARR_I64)?;
         let kblob = st.alloc(&mut tx, 1, DIGEST_ARR_I64)?;
@@ -54,7 +54,19 @@ impl Kv {
         st.link(root, 3, vidx);
         st.link(root, 4, vblob);
         st.seal(root);
+        Ok((tx, root))
+    }
+
+    /// Create the empty KV schema in a fresh store.
+    pub fn init(st: &mut Store, path: &str) -> Result<i64, StoreError> {
+        let (tx, root) = Self::stage_init(st)?;
         st.commit(&tx, root, path)
+    }
+
+    /// `init` with no filesystem.
+    pub fn init_bytes(st: &mut Store) -> Result<i64, StoreError> {
+        let (tx, root) = Self::stage_init(st)?;
+        Ok(st.commit_bytes(&tx, root))
     }
 
     /// Read all entries out of a store.
@@ -117,7 +129,7 @@ impl Kv {
 
     /// Write every entry back as a new generation. Eager: it rewrites all four arrays and the
     /// root, mirroring what wlog.bp's update phase does. A tiered append is ROADMAP B4.
-    pub fn commit_into(&self, st: &mut Store, path: &str) -> Result<i64, StoreError> {
+    fn stage_commit_into(&self, st: &mut Store) -> Result<(crate::Tx, usize), StoreError> {
         let old_root = st.root().ok_or(StoreError::NoSuperblock)?;
         let arr_dig = st.obj_digest(st.follow(old_root, 1).unwrap());
         let root_dig = st.obj_digest(old_root);
@@ -156,7 +168,19 @@ impl Kv {
         st.link(root, 3, vidx);
         st.link(root, 4, vblob);
         st.seal(root);
+        Ok((tx, root))
+    }
+
+    /// Write every entry back as a new generation.
+    pub fn commit_into(&self, st: &mut Store, path: &str) -> Result<i64, StoreError> {
+        let (tx, root) = self.stage_commit_into(st)?;
         st.commit(&tx, root, path)
+    }
+
+    /// `commit_into` with no filesystem.
+    pub fn commit_into_bytes(&self, st: &mut Store) -> Result<i64, StoreError> {
+        let (tx, root) = self.stage_commit_into(st)?;
+        Ok(st.commit_bytes(&tx, root))
     }
 }
 

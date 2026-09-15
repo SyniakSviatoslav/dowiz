@@ -22,6 +22,8 @@
 
 #![forbid(unsafe_code)]
 
+pub mod catalog;
+
 use bebop_store::evlog::{EvLog, Record};
 use bebop_store::{Store, StoreError};
 
