@@ -13,6 +13,13 @@ compatibility_date = "2026-09-15"
 [build]
 command = "worker-build --release"
 
+# The storefront ships WITH the API, from one Worker. Static files win for paths
+# that exist on disk; /api/* has no file, so it falls through to the fetch
+# handler. One deployment, one origin, no CORS to get wrong.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
 # D1 holds the order log. This replaces the native adapter's Mutex<HashMap>,
 # which died with the process -- the reason no order ever survived a restart.
 [[d1_databases]]

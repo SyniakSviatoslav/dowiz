@@ -20,6 +20,19 @@ worker-macros = "0.8"
 dowiz-kernel = { path = "../../kernel", features = ["json-api"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Auth primitives, all wasm32-clean and pure Rust -- no WebCrypto plumbing and no
+# native C. HMAC-SHA256 signs the tokens; see auth.rs for why the old service's
+# RS256 was deliberately NOT carried over to a Worker.
+hmac = "0.12"
+sha2 = "0.10"
+base64 = "0.22"
+subtle = "2"
+# Password hashing. argon2id is the old service's choice and it is kept: this is
+# the one place slowness is the point.
+argon2 = { version = "0.5", default-features = false, features = ["alloc", "password-hash"] }
+password-hash = { version = "0.5", features = ["alloc", "getrandom"] }
+# getrandom on wasm32 has to be told to use the platform RNG explicitly.
+getrandom = { version = "0.2", features = ["js"] }
 
 # Size-and-startup profile. The kernel's own [profile.release] targets native
 # SPEED (opt-level 3, thin LTO); a Worker is judged on bundle size and the 1s

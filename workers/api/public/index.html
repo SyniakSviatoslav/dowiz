@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="sq">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#C1121F">
+<title>Dubin &amp; Sushi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<style>
+/* ── Brand tokens ────────────────────────────────────────────────────────────
+   EVERY colour in this file is var(--brand-*) or var(--color-*). That is the
+   white-label rule from the old platform, kept verbatim: re-skinning a tenant
+   must be a change of these values and nothing else. Semantic colours never
+   move per theme. */
+:root{
+  --brand-primary:#C1121F; --brand-primary-hover:#9B0D17; --brand-primary-light:#FFF0F1;
+  --brand-accent:#F5F0E8;
+  --brand-bg:#FBF8F5; --brand-surface:#FFFFFF; --brand-surface-2:#F7F2EC;
+  --brand-text:#1A1614; --brand-text-muted:#6B625C; --brand-border:#E8DFD6;
+  --brand-font-heading:'DM Serif Display',Georgia,serif;
+  --brand-font-body:'DM Sans',system-ui,-apple-system,sans-serif;
+  --brand-radius:14px; --brand-radius-sm:8px; --brand-radius-btn:999px;
+
+  --color-success:#0F7B47; --color-warning:#B45309; --color-danger:#C1121F; --color-info:#1D4ED8;
+
+  --shadow-1:0 1px 2px rgba(26,22,20,.06),0 2px 8px rgba(26,22,20,.05);
+  --shadow-2:0 4px 16px rgba(26,22,20,.10);
+  --tap:44px;                      /* one-handed reach: nothing tappable is smaller */
+  --bar-h:calc(68px + env(safe-area-inset-bottom,0px));
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  font-family:var(--brand-font-body); background:var(--brand-bg); color:var(--brand-text);
+  min-height:100dvh; line-height:1.5; -webkit-font-smoothing:antialiased;
+  padding-bottom:var(--bar-h);
+}
+img{max-width:100%;display:block}
+[hidden]{display:none!important}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--brand-primary);outline-offset:2px;border-radius:4px}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+.wrap{max-width:720px;margin:0 auto;padding:0 16px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ── Header ── */
+.top{position:sticky;top:0;z-index:30;background:color-mix(in srgb,var(--brand-bg) 88%,transparent);
+     backdrop-filter:blur(12px);border-bottom:1px solid var(--brand-border)}
+.top-in{display:flex;align-items:center;gap:12px;min-height:56px}
+.brand{font-family:var(--brand-font-heading);font-size:1.3rem;letter-spacing:-.01em;flex:1;
+       white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.langs{display:flex;gap:2px;background:var(--brand-surface-2);border-radius:var(--brand-radius-btn);padding:3px}
+.lang{min-width:36px;height:30px;border:0;background:none;border-radius:var(--brand-radius-btn);
+      font-size:.78rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+      color:var(--brand-text-muted);cursor:pointer}
+.lang[aria-pressed="true"]{background:var(--brand-surface);color:var(--brand-text);box-shadow:var(--shadow-1)}
+
+/* ── Hero ── */
+.hero{padding:22px 0 16px}
+.hero h1{font-family:var(--brand-font-heading);font-size:clamp(1.9rem,7vw,2.6rem);line-height:1.08;
+         letter-spacing:-.02em;margin-bottom:8px}
+.hero .meta{display:flex;flex-wrap:wrap;gap:8px 14px;color:var(--brand-text-muted);font-size:.9rem}
+.hero .meta b{color:var(--brand-text);font-weight:500}
+.status-dot{display:inline-flex;align-items:center;gap:6px;font-weight:500}
+.status-dot::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--color-success)}
+.status-dot.closed::before{background:var(--brand-text-muted)}
+.status-dot.busy::before{background:var(--color-warning)}
+
+/* ── Category nav (Wolt pattern: horizontal, sticky under the header) ── */
+.cats{position:sticky;top:56px;z-index:20;background:var(--brand-bg);
+      border-bottom:1px solid var(--brand-border);margin-bottom:8px}
+.cats-in{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:10px 16px;
+         max-width:720px;margin:0 auto;scroll-snap-type:x proximity}
+.cats-in::-webkit-scrollbar{display:none}
+.cat{flex:0 0 auto;min-height:36px;padding:7px 15px;border:1px solid var(--brand-border);
+     background:var(--brand-surface);border-radius:var(--brand-radius-btn);font-size:.88rem;
+     font-weight:500;white-space:nowrap;cursor:pointer;scroll-snap-align:start;
+     transition:background .15s,border-color .15s,color .15s}
+.cat[aria-current="true"]{background:var(--brand-primary);border-color:var(--brand-primary);color:#fff}
+
+/* ── Dish ── */
+.sec-h{font-family:var(--brand-font-heading);font-size:1.5rem;letter-spacing:-.01em;
+       margin:26px 0 12px;scroll-margin-top:110px}
+.dishes{display:grid;gap:10px}
+.dish{display:grid;grid-template-columns:1fr 104px;gap:14px;align-items:stretch;
+      background:var(--brand-surface);border:1px solid var(--brand-border);
+      border-radius:var(--brand-radius);padding:14px;text-align:left;width:100%;cursor:pointer;
+      box-shadow:var(--shadow-1);transition:transform .16s ease,box-shadow .16s ease}
+.dish:hover{transform:translateY(-1px);box-shadow:var(--shadow-2)}
+.dish:active{transform:translateY(0)}
+.dish-name{font-family:var(--brand-font-heading);font-size:1.1rem;line-height:1.2;margin-bottom:5px}
+.dish-desc{color:var(--brand-text-muted);font-size:.86rem;line-height:1.45;
+           display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.dish-price{margin-top:9px;font-weight:700;font-size:1rem;font-variant-numeric:tabular-nums}
+.dish-media{border-radius:var(--brand-radius-sm);overflow:hidden;position:relative;
+            aspect-ratio:1;background:var(--brand-surface-2)}
+.dish-media img{width:100%;height:100%;object-fit:cover}
+/* A dish with no photo gets a CRAFTED fallback, never a dead grey box -- the
+   product brief names that box as the thing to kill. Hue is derived from the
+   name so a dish looks the same on every visit. */
+.fallback{width:100%;height:100%;display:grid;place-items:center;
+          font-family:var(--brand-font-heading);font-size:2rem;color:#fff;
+          text-shadow:0 1px 6px rgba(0,0,0,.22)}
+.sold-out .dish-media::after{content:"";position:absolute;inset:0;background:rgba(251,248,245,.72)}
+.sold-out .dish-name,.sold-out .dish-desc,.sold-out .dish-price{opacity:.55}
+.badge{display:inline-block;margin-top:6px;padding:3px 9px;border-radius:var(--brand-radius-btn);
+       background:var(--brand-surface-2);color:var(--brand-text-muted);font-size:.72rem;font-weight:700;
+       text-transform:uppercase;letter-spacing:.05em}
+
+/* ── Bottom cart bar (Wolt: a bar, never a floating blob) ── */
+.bar{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--brand-surface);
+     border-top:1px solid var(--brand-border);box-shadow:0 -4px 20px rgba(26,22,20,.08);
+     padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));
+     transform:translateY(110%);transition:transform .22s cubic-bezier(.2,.8,.2,1)}
+.bar.show{transform:none}
+.bar-in{max-width:720px;margin:0 auto}
+.btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:var(--tap);
+     padding:13px 20px;border:0;border-radius:var(--brand-radius-btn);background:var(--brand-primary);
+     color:#fff;font-weight:700;font-size:1rem;cursor:pointer;transition:background .15s}
+.btn:hover{background:var(--brand-primary-hover)}
+.btn[disabled]{background:var(--brand-border);color:var(--brand-text-muted);cursor:not-allowed}
+.btn-ghost{background:var(--brand-surface);color:var(--brand-text);border:1px solid var(--brand-border)}
+.btn-ghost:hover{background:var(--brand-surface-2)}
+.pill{background:rgba(255,255,255,.22);padding:2px 10px;border-radius:var(--brand-radius-btn);
+      font-variant-numeric:tabular-nums}
+
+/* ── Sheet (detail / cart / checkout) ── */
+.scrim{position:fixed;inset:0;z-index:50;background:rgba(26,22,20,.45);opacity:0;pointer-events:none;
+       transition:opacity .2s}
+.scrim.show{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:60;background:var(--brand-surface);
+       border-radius:20px 20px 0 0;max-height:92dvh;overflow-y:auto;
+       transform:translateY(100%);transition:transform .26s cubic-bezier(.2,.8,.2,1);
+       padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+.sheet.show{transform:none}
+.sheet-in{max-width:720px;margin:0 auto;padding:0 16px}
+.grab{width:40px;height:4px;border-radius:2px;background:var(--brand-border);margin:10px auto 6px}
+.sheet h2{font-family:var(--brand-font-heading);font-size:1.5rem;margin:10px 0 4px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;
+     padding:13px 0;border-bottom:1px solid var(--brand-border)}
+.row:last-of-type{border-bottom:0}
+.qty{display:flex;align-items:center;gap:4px;background:var(--brand-surface-2);
+     border-radius:var(--brand-radius-btn);padding:3px}
+.qty button{width:34px;height:34px;border:0;background:var(--brand-surface);border-radius:50%;
+            font-size:1.1rem;font-weight:700;cursor:pointer;box-shadow:var(--shadow-1)}
+.qty span{min-width:26px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
+label{display:block;font-size:.84rem;font-weight:500;margin:14px 0 6px;color:var(--brand-text-muted)}
+input,textarea,select{width:100%;min-height:var(--tap);padding:12px 14px;
+  border:1px solid var(--brand-border);border-radius:var(--brand-radius-sm);
+  background:var(--brand-surface);font-size:1rem}
+textarea{min-height:76px;resize:vertical}
+input:focus,textarea:focus,select:focus{border-color:var(--brand-primary);outline:none;
+  box-shadow:0 0 0 3px var(--brand-primary-light)}
+.err{color:var(--color-danger);font-size:.82rem;margin-top:6px;font-weight:500}
+.totals{margin:16px 0;padding:14px;background:var(--brand-surface-2);border-radius:var(--brand-radius)}
+.totals .row{padding:7px 0;border:0;font-size:.92rem;color:var(--brand-text-muted)}
+.totals .row.grand{font-size:1.12rem;font-weight:700;color:var(--brand-text);
+                   border-top:1px solid var(--brand-border);margin-top:7px;padding-top:11px}
+.pays{display:grid;gap:8px}
+.pay{display:flex;align-items:center;gap:12px;padding:13px 14px;border:1.5px solid var(--brand-border);
+     border-radius:var(--brand-radius);background:var(--brand-surface);cursor:pointer;text-align:left}
+.pay[aria-checked="true"]{border-color:var(--brand-primary);background:var(--brand-primary-light)}
+.pay .t{flex:1}
+.pay .t b{display:block;font-size:.95rem}
+.pay .t small{color:var(--brand-text-muted);font-size:.8rem}
+
+/* ── Status timeline ── */
+.track{display:grid;gap:0;margin:18px 0}
+.step{display:grid;grid-template-columns:24px 1fr;gap:14px;padding-bottom:20px;position:relative}
+.step::before{content:"";position:absolute;left:11px;top:22px;bottom:0;width:2px;background:var(--brand-border)}
+.step:last-child::before{display:none}
+.dot{width:24px;height:24px;border-radius:50%;border:2px solid var(--brand-border);
+     background:var(--brand-surface);display:grid;place-items:center;font-size:.7rem;color:#fff}
+.step.done .dot{background:var(--color-success);border-color:var(--color-success)}
+.step.now .dot{background:var(--brand-primary);border-color:var(--brand-primary)}
+.step.now .dot::after{content:"";width:8px;height:8px;border-radius:50%;background:#fff;
+                      animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.step b{font-size:.98rem}
+.step small{color:var(--brand-text-muted);font-size:.84rem}
+.step:not(.done):not(.now) b{color:var(--brand-text-muted);font-weight:400}
+
+/* ── States ── */
+.skel{background:linear-gradient(90deg,var(--brand-surface-2) 25%,var(--brand-surface) 37%,var(--brand-surface-2) 63%);
+      background-size:400% 100%;animation:sh 1.3s ease infinite;border-radius:var(--brand-radius)}
+@keyframes sh{0%{background-position:100% 0}100%{background-position:0 0}}
+.empty{text-align:center;padding:44px 20px;color:var(--brand-text-muted)}
+.empty b{display:block;font-family:var(--brand-font-heading);font-size:1.2rem;
+         color:var(--brand-text);margin-bottom:6px}
+.notice{display:flex;gap:10px;align-items:flex-start;padding:13px 15px;border-radius:var(--brand-radius);
+        background:var(--brand-primary-light);border:1px solid var(--brand-border);
+        font-size:.9rem;margin:12px 0}
+.notice a{color:var(--brand-primary);font-weight:700}
+.offline{position:fixed;left:0;right:0;top:0;z-index:70;background:var(--color-warning);color:#fff;
+         text-align:center;padding:9px 16px;font-size:.87rem;font-weight:500}
+.toast{position:fixed;left:16px;right:16px;bottom:calc(var(--bar-h) + 12px);z-index:80;
+       background:var(--brand-text);color:var(--brand-bg);padding:13px 16px;border-radius:var(--brand-radius);
+       box-shadow:var(--shadow-2);font-size:.9rem;max-width:688px;margin:0 auto;
+       opacity:0;transform:translateY(10px);pointer-events:none;transition:opacity .2s,transform .2s}
+.toast.show{opacity:1;transform:none}
+</style>
+</head>
+<body>
+<div id="offline" class="offline" hidden></div>
+<header class="top"><div class="wrap top-in">
+  <span class="brand" id="brandName">…</span>
+  <div class="langs" role="group" aria-label="Language">
+    <button class="lang" data-l="sq">sq</button>
+    <button class="lang" data-l="en">en</button>
+    <button class="lang" data-l="uk">uk</button>
+  </div>
+</div></header>
+<main id="app" class="wrap" aria-live="polite"></main>
+<div class="bar" id="bar"><div class="bar-in">
+  <button class="btn" id="barBtn"><span id="barCount" class="pill">0</span><span id="barLabel">Cart</span><span id="barTotal"></span></button>
+</div></div>
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true"><div class="grab"></div><div class="sheet-in" id="sheetIn"></div></div>
+<div class="toast" id="toast"></div>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

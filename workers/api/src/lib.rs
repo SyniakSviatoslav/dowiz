@@ -10,6 +10,9 @@
 //! `place_order_at`. A process-local counter is unsound here by construction:
 //! Workers recycles isolates constantly and runs many at once.
 
+mod auth;
+mod storefront;
+
 use dowiz_kernel::json_api;
 use serde::Deserialize;
 use worker::wasm_bindgen::{JsCast, JsValue};
@@ -35,7 +38,7 @@ struct AdvanceBody {
 /// request rather than fall back to a weaker source. An order id that can repeat
 /// is a primary-key collision between two customers, which is exactly the defect
 /// the kernel's old `AtomicU64` counter produced once it left a single process.
-fn edge_id() -> Option<String> {
+pub fn edge_id() -> Option<String> {
     let global = js_sys::global();
     let crypto = js_sys::Reflect::get(&global, &JsValue::from_str("crypto")).ok()?;
     let f = js_sys::Reflect::get(&crypto, &JsValue::from_str("randomUUID")).ok()?;
@@ -65,6 +68,9 @@ fn kernel_reject(msg: String) -> Result<Response> {
 pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     Router::new()
         .get("/healthz", |_, _| Response::ok("ok"))
+        // ── public storefront ──
+        .get_async("/api/public/locations/:slug/menu", storefront::menu)
+        .post_async("/api/public/locations/:slug/orders", storefront::place)
         .post_async("/api/order", |mut req, ctx| async move {
             let body: PlaceOrderBody = match req.json().await {
                 Ok(b) => b,
