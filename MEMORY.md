@@ -947,9 +947,29 @@ Everything else for it is measured and ready.
   (sub-metre at delivery scale, useless at planetary scale — said so in the tests).
 - **MCP server per venue** at `/mcp`, plus year-long revocable API keys.
 
-**Still open:** voice/STT, social autoposting, AR, P67 provider implementations
-(Hetzner/Cloudflare Tunnel), customer order history/accounts, scheduled orders,
-media storage for product images (43/50 still 404).
+**All of the above now done** (2026-09-15, later): voice (deterministic grammar,
+propose-then-confirm), social autoposting (facts only, owner approves, Telegram
+channel), AR dish-scale (WebXR quad at the measured size — NOT verified, no XR
+device on this box), P67 adapters (real Hetzner + Cloudflare, live-tested),
+customer history without an account, scheduled orders, media storage.
 
-**Branch:** `bebop/main-2026-09-15` @ e55f7bb. No deploy yet (by instruction).
-Counts: 98 tests dowiz-hub, 34 native-spa-server lib, 22 operator-loop integration.
+**Photos were WORSE than recorded**: 58 of 58 missing, and no upload path existed
+at all. Fixed: content-addressed blobs, EXIF stripped in the browser.
+
+**Two defects only live calls found:** `/api/order/{id}` was PUBLIC (an order
+carries a name, phone and address — "unguessable id" is not an access rule); and
+`httpc` could not decode `Transfer-Encoding: chunked`, which is what Cloudflare
+answers with. Both closed.
+
+**The Cloudflare token DOES have `cfd_tunnel` permission** — the earlier note
+saying it "authenticates but holds no account-level permission" was wrong.
+Live: `0 live tunnels (cap 1000)`.
+
+**Client pitch deck** (English, Fable-designed, black-swan-wing mark):
+https://claude.ai/artifact/C6gzULs1KLiU29YqLsnkAu
+
+**Still open:** DEPLOY ONLY. Needs a `HETZNER_API_TOKEN` and the operator's
+explicit go-ahead, because `--provision` creates a billed machine.
+
+**Branch:** `bebop/main-2026-09-15` @ fcde986. No deploy yet.
+Counts: 136 dowiz-hub, 50 native-spa-server lib, 32 operator-loop integration.
