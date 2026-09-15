@@ -279,6 +279,12 @@ pub struct ProductIn {
     /// answering it.
     #[serde(default)]
     pub size_cm: Option<i64>,
+    /// The choices a customer may make about this dish. Replaces the whole set
+    /// rather than merging: a partial merge of nested groups is ambiguous
+    /// (is a missing group deleted or untouched?) and the editor always has the
+    /// full list in hand anyway.
+    #[serde(default)]
+    pub modifier_groups: Option<Value>,
     #[serde(default)]
     pub unavailable_note: Option<String>,
     #[serde(default)]
@@ -294,7 +300,8 @@ pub async fn update_product(
     AxPath(id): AxPath<String>,
     Json(body): Json<ProductIn>,
 ) -> Result<Json<Value>, HubHttpError> {
-    edit_product(&st, &id, body.available, body.unavailable_note, body.price, body.size_cm)
+    edit_product(&st, &id, body.available, body.unavailable_note, body.price, body.size_cm,
+                 body.modifier_groups)
         .await
         .map(Json)
 }
@@ -306,7 +313,7 @@ pub async fn set_product_availability(
     available: bool,
     note: Option<String>,
 ) -> Result<Value, HubHttpError> {
-    edit_product(st, id, Some(available), note, None, None).await
+    edit_product(st, id, Some(available), note, None, None, None).await
 }
 
 async fn edit_product(
@@ -316,12 +323,30 @@ async fn edit_product(
     note: Option<String>,
     price: Option<i64>,
     size_cm: Option<i64>,
+    modifier_groups: Option<Value>,
 ) -> Result<Value, HubHttpError> {
     if let Some(p) = price {
         // Integer minor units, and a negative price is not a discount, it is a
         // typo that would make the kernel's ledger owe the customer money.
         if p < 0 {
             return Err(HubHttpError::Invalid("price cannot be negative".into()));
+        }
+    }
+    if let Some(g) = &modifier_groups {
+        // PARSED BACK before it is stored. A group the reader cannot see is a
+        // rule the owner believes is enforced and is not -- the same failure
+        // the delivery zones had, and the same fix. The commonest cause is a
+        // group with no id, which silently borrowed its first option's until
+        // that was fixed.
+        let declared = g.as_array().map(|a| a.len()).unwrap_or(0);
+        let readable =
+            dowiz_hub::modifiers::groups_of(&json!({ "modifierGroups": g }).to_string()).len();
+        if declared != readable {
+            return Err(HubHttpError::Invalid(format!(
+                "{} of {declared} option groups could not be read; each needs an id \
+                 and at least one option that has an id",
+                declared - readable
+            )));
         }
     }
     if let Some(cm) = size_cm {
@@ -355,6 +380,9 @@ async fn edit_product(
         }
         if let Some(cm) = size_cm {
             p["sizeCm"] = json!(cm);
+        }
+        if let Some(g) = modifier_groups {
+            p["modifierGroups"] = g;
         }
         cat.set_product(&id, &serde_json::to_string(&p).unwrap_or(raw));
         Ok(p)
@@ -575,13 +603,18 @@ pub async fn import_menu(
                 .as_ref()
                 .and_then(|v| v.get("sizeCm").cloned())
                 .unwrap_or(Value::Null);
+            // A spreadsheet has no column for these either.
+            let mods = existing
+                .as_ref()
+                .and_then(|v| v.get("modifierGroups").cloned())
+                .unwrap_or(Value::Null);
             cat.set_product(
                 &p.id,
                 &json!({
                     "id": p.id, "categoryId": p.category_id, "name": p.name,
                     "description": p.description, "price": p.price,
                     "available": p.available, "sortOrder": p.sort_order,
-                    "imageUrl": image, "sizeCm": size
+                    "imageUrl": image, "sizeCm": size, "modifierGroups": mods
                 })
                 .to_string(),
             );

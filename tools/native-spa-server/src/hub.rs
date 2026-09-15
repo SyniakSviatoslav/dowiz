@@ -364,7 +364,13 @@ pub async fn menu(State(st): State<Shared>, _slug: Option<AxPath<String>>) -> Re
                         "imageUrl": p.get("imageUrl").cloned().unwrap_or(Value::Null),
                         // The real size, for the AR view. Absent means no AR
                         // button on that dish -- see the owner surface.
-                        "sizeCm": p.get("sizeCm").cloned().unwrap_or(Value::Null)
+                        "sizeCm": p.get("sizeCm").cloned().unwrap_or(Value::Null),
+                        // The choices a customer may make. Sent as data so the
+                        // storefront renders the venue's own rules rather than
+                        // a hardcoded set.
+                        "modifierGroups": p.get("modifierGroups").cloned().unwrap_or(Value::Null),
+                        "allergens": p.get("allergens").cloned().unwrap_or(Value::Null),
+                        "tags": p.get("tags").cloned().unwrap_or(Value::Null)
                     }),
                 )
             })
@@ -473,9 +479,34 @@ pub async fn place(
         if price < 0 {
             return Err(HubHttpError::Conflict(format!("no price: {}", it.product_id)));
         }
+        // ── what the customer changed about the dish ──
+        //
+        // Validated and priced HERE. The basket arrives carrying option ids and
+        // nothing else; a client that can name its own price will eventually be
+        // asked to. A refusal names the group so the customer knows where to
+        // look -- "choose 1 from Size" rather than "invalid order".
+        let groups = dowiz_hub::modifiers::groups_of(&pj);
+        let chosen = dowiz_hub::modifiers::price(&groups, &it.modifier_ids)
+            .map_err(|e| HubHttpError::Invalid(format!("{}: {e}", p.get("name")
+                .and_then(|n| n.as_str()).unwrap_or(&it.product_id))))?;
+        let price = price.saturating_add(chosen.delta);
+        if price < 0 {
+            // A stack of negative deltas must not make a dish cost less than
+            // nothing. Refusing beats handing the kernel a line that would owe
+            // the customer money.
+            return Err(HubHttpError::Invalid(format!(
+                "those choices price {} below zero", it.product_id
+            )));
+        }
+
         subtotal += price * it.quantity;
         lines.push(json!({
             "product_id": it.product_id, "modifier_ids": it.modifier_ids,
+            // The chosen options BY NAME, so the kitchen ticket reads in words
+            // rather than in ids nobody can act on.
+            "modifiers": chosen.chosen.iter()
+                .map(|(id, name, delta)| json!({ "id": id, "name": name, "priceDelta": delta }))
+                .collect::<Vec<_>>(),
             "quantity": it.quantity, "unit_price": price,
             // The name AS SOLD. Kept on the order rather than looked up later,
             // so renaming a dish -- or taking it off the menu -- does not
@@ -772,37 +803,39 @@ pub(crate) fn carry_over(old: &Value, updated: &mut Value) {
     carry_item_names(old, updated);
 }
 
-/// Put the dish names back on the lines.
+/// Put the hub's own per-line fields back on the kernel's lines.
 ///
 /// The kernel's order lines carry `product_id`, quantity and unit price — it has
-/// no menu and no reason to. Without this the kitchen's ticket and the owner's
-/// queue both read "2x item-01", which is not a thing anyone can cook.
+/// no menu and no reason to. Everything the hub knows about a line and the
+/// kernel does not is restored here: the dish's NAME, without which the kitchen
+/// ticket reads "2x item-01", and the chosen MODIFIERS, without which it reads
+/// "2x Sake Futomaki" for a customer who asked for no wasabi — a remake and an
+/// apology.
 ///
-/// Matched BY product_id rather than by position, because the kernel is free to
-/// reorder or merge lines and a positional match would then put one dish's name
-/// on another's quantity.
+/// ONE list, because this is the second field to go missing this way and there
+/// will be a third. Matched BY product_id rather than by position, since the
+/// kernel is free to reorder or merge lines and a positional match would put
+/// one dish's choices on another's quantity.
 fn carry_item_names(old: &Value, updated: &mut Value) {
+    const LINE_FIELDS: [&str; 2] = ["name", "modifiers"];
+
     let Some(old_items) = old.get("items").and_then(Value::as_array) else { return };
-    let names: Vec<(String, String)> = old_items
-        .iter()
-        .filter_map(|i| {
-            Some((
-                i.get("product_id")?.as_str()?.to_string(),
-                i.get("name")?.as_str()?.to_string(),
-            ))
-        })
-        .collect();
-    if names.is_empty() {
-        return;
-    }
-    if let Some(items) = updated.get_mut("items").and_then(Value::as_array_mut) {
-        for item in items {
-            let Some(pid) = item.get("product_id").and_then(Value::as_str).map(str::to_string)
-            else {
-                continue;
-            };
-            if let Some((_, n)) = names.iter().find(|(p, _)| *p == pid) {
-                item["name"] = json!(n);
+    let Some(items) = updated.get_mut("items").and_then(Value::as_array_mut) else { return };
+    for item in items {
+        let Some(pid) = item.get("product_id").and_then(Value::as_str).map(str::to_string) else {
+            continue;
+        };
+        let Some(src) = old_items
+            .iter()
+            .find(|o| o.get("product_id").and_then(Value::as_str) == Some(pid.as_str()))
+        else {
+            continue;
+        };
+        for f in LINE_FIELDS {
+            if let Some(v) = src.get(f) {
+                if !v.is_null() {
+                    item[f] = v.clone();
+                }
             }
         }
     }
@@ -1298,6 +1331,14 @@ pub fn staff_message(envelope: &Value) -> String {
                 .or_else(|| it.get("product_id").and_then(Value::as_str))
                 .unwrap_or("item");
             out.push_str(&format!("\n  {}× {}", qty, esc(name)));
+            // The changes, under the dish, in words. A ticket that says
+            // "2x Sake Futomaki" when the customer asked for no wasabi is a
+            // remake and an apology.
+            for m in it.get("modifiers").and_then(Value::as_array).into_iter().flatten() {
+                if let Some(n) = m.get("name").and_then(Value::as_str) {
+                    out.push_str(&format!("\n     · {}", esc(n)));
+                }
+            }
         }
     }
     if let Some(total) = envelope.get("total").and_then(Value::as_i64) {

@@ -27,6 +27,7 @@ pub mod crypto;
 pub mod import;
 pub mod media;
 pub mod minijson;
+pub mod modifiers;
 pub mod palette;
 pub mod post;
 pub mod roster;

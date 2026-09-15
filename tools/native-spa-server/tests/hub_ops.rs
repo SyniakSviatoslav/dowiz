@@ -1905,3 +1905,97 @@ async fn an_order_reserves_its_ingredients_and_is_refused_when_they_run_out() {
                     json!({ "item": "salmon", "qty": 1 })).0, 403);
     assert_eq!(get(&s.base, "/api/owner/stock", None).0, 401);
 }
+
+/// What a customer changes about a dish, priced by the hub and never by the
+/// basket that asked for it.
+#[tokio::test(flavor = "multi_thread")]
+async fn modifiers_are_validated_and_priced_by_the_server() {
+    let s = boot("modifiers").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+
+    // A dish with a required size, capped extras, and an uncapped hold group.
+    // Written through the product record, which is where a venue's rules live.
+    let groups = json!([
+        { "id": "size", "name": "Size", "min": 1, "max": 1, "options": [
+            { "id": "s6", "name": "6 pieces", "priceDelta": 0 },
+            { "id": "s8", "name": "8 pieces", "priceDelta": 300 }]},
+        { "id": "extra", "name": "Extras", "min": 0, "max": 2, "options": [
+            { "id": "wasabi", "name": "Extra wasabi", "priceDelta": 50 },
+            { "id": "ginger", "name": "Extra ginger", "priceDelta": 50 },
+            { "id": "tobiko", "name": "Tobiko", "priceDelta": 400, "available": false }]},
+        { "id": "hold", "name": "Leave out", "min": 0, "max": 0, "options": [
+            { "id": "no_avo", "name": "No avocado", "priceDelta": -50 }]}
+    ]);
+    let (code, v) = post(&s.base, "/api/owner/products/p1", Some(&owner),
+                         json!({ "modifier_groups": groups }));
+    assert_eq!(code, 200, "{v}");
+
+    // The storefront is sent the rules as data.
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    let p1 = &menu["categories"][0]["products"][0];
+    assert_eq!(p1["modifierGroups"].as_array().expect("groups").len(), 3, "{p1}");
+
+    let order = |mods: Value| post(&s.base, "/api/public/locations/dubin/orders", None, json!({
+        "items": [{ "product_id": "p1", "modifier_ids": mods, "quantity": 2 }],
+        "contact": { "name": "C", "phone": "+355690000000" },
+        "fulfilment": { "kind": "pickup" }
+    }));
+
+    // No size chosen: the kitchen would have to guess.
+    let (code, v) = order(json!([]));
+    assert_eq!(code, 400, "{v}");
+    assert!(v["error"].as_str().unwrap().contains("Size"), "name the group: {v}");
+
+    // Two sizes: the kitchen would have to phone.
+    let (code, v) = order(json!(["s6", "s8"]));
+    assert_eq!(code, 400, "{v}");
+    assert!(v["error"].as_str().unwrap().contains("at most 1"), "{v}");
+
+    // Three extras against a cap of two.
+    let (code, _) = order(json!(["s6", "wasabi", "ginger", "tobiko"]));
+    assert_eq!(code, 400);
+
+    // An option the kitchen has run out of.
+    let (code, v) = order(json!(["s6", "tobiko"]));
+    assert_eq!(code, 400, "{v}");
+    assert!(v["error"].as_str().unwrap().contains("Tobiko"), "{v}");
+
+    // An id from nowhere.
+    let (code, v) = order(json!(["s6", "gold_leaf"]));
+    assert_eq!(code, 400, "{v}");
+    assert!(v["error"].as_str().unwrap().contains("gold_leaf"), "{v}");
+
+    // THE PRICE IS THE SERVER'S. 900 base + 300 size + 50 wasabi = 1250, twice.
+    let (code, v) = order(json!(["s8", "wasabi"]));
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["subtotal"], 2500);
+    assert_eq!(v["items"][0]["unit_price"], 1250);
+    // And the choices travel by NAME, so the kitchen ticket reads in words.
+    let names: Vec<&str> = v["items"][0]["modifiers"].as_array().unwrap().iter()
+        .map(|m| m["name"].as_str().unwrap()).collect();
+    assert!(names.contains(&"8 pieces") && names.contains(&"Extra wasabi"), "{v}");
+
+    // A negative delta really reduces it: 900 - 50 = 850.
+    let (code, v) = order(json!(["s6", "no_avo"]));
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["items"][0]["unit_price"], 850);
+
+    // A GROUP THE READER CANNOT SEE is a rule the owner believes is enforced
+    // and is not. Refused at the point it is set, like a delivery zone.
+    for bad in [
+        json!([{ "name": "no id", "options": [{ "id": "x", "name": "X" }] }]),
+        json!([{ "id": "g", "name": "G", "options": [] }]),
+        json!([{ "id": "g", "name": "G" }]),
+    ] {
+        let (code, v) = post(&s.base, "/api/owner/products/p1", Some(&owner),
+                             json!({ "modifier_groups": bad }));
+        assert_eq!(code, 400, "accepted an unreadable group: {v}");
+    }
+
+    // A dish with no groups still takes an empty selection.
+    let (code, _) = post(&s.base, "/api/owner/products/p1", Some(&owner),
+                         json!({ "modifier_groups": [] }));
+    assert_eq!(code, 200);
+    assert_eq!(order(json!([])).0, 200, "no rules means nothing to break");
+}

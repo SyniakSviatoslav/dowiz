@@ -87,7 +87,33 @@ function safeSet(k,v){ try { localStorage.setItem(k,v); } catch {} }
 // looking at.
 let state = { loc:null, cats:[], cart:loadCart(), placing:false,
               q:'', sort:'pop', availOnly:false };
-function loadCart(){ try { return JSON.parse(safeGet('dw_cart_'+SLUG) || '{}'); } catch { return {}; } }
+// A cart line is a dish AND the choices made about it: two rolls of the same
+// dish with different extras are two lines, not one with a quantity of two.
+// The key is the product id plus its sorted option ids, so the same choices
+// always collapse onto the same line and a different set never does.
+const lineKey = (pid, mods) => [pid, ...[...(mods || [])].sort()].join('|');
+
+function loadCart(){
+  try {
+    const raw = JSON.parse(safeGet('dw_cart_'+SLUG) || '{}');
+    const out = {};
+    for (const [k, v] of Object.entries(raw)) {
+      // A cart saved before options existed is `{id: quantity}`. Migrated
+      // rather than discarded: a customer who closed the tab mid-order should
+      // find their basket, not an apology.
+      if (typeof v === 'number') out[lineKey(k, [])] = { p: k, m: [], q: v };
+      else if (v && typeof v === 'object' && v.p) out[k] = { p: v.p, m: v.m || [], q: v.q || 1 };
+    }
+    return out;
+  } catch { return {}; }
+}
+
+function addLine(pid, mods, q){
+  const k = lineKey(pid, mods);
+  const cur = state.cart[k];
+  state.cart[k] = { p: pid, m: mods || [], q: (cur?.q || 0) + q };
+  saveCart();
+}
 function saveCart(){ safeSet('dw_cart_'+SLUG, JSON.stringify(state.cart)); }
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -507,26 +533,116 @@ async function bindAr(p){
   };
 }
 
+// The choices a venue offers on a dish.
+//
+// Rendered from the RULES the hub sent: a group with max 1 is radios, anything
+// else is checkboxes, and a required group says so. The hub validates and
+// prices again on arrival -- this is the courtesy of catching it before the
+// customer presses the button, not the authority.
+function groupMarkup(g){
+  const single = g.max === 1;
+  const need = g.min >= 1
+    ? `<span class="req">${esc(t('required'))}</span>`
+    : g.max > 0 ? `<span class="hint">${g.max}</span>` : '';
+  return `<fieldset class="mgroup" data-g="${esc(g.id)}"
+            data-min="${g.min|0}" data-max="${g.max|0}">
+    <legend>${esc(g.name)} ${need}</legend>
+    ${(g.options || []).map(o => `
+      <label class="mopt ${o.available === false ? 'off' : ''}">
+        <input type="${single ? 'radio' : 'checkbox'}"
+               name="mg-${esc(g.id)}" value="${esc(o.id)}"
+               data-delta="${o.priceDelta | 0}"
+               ${o.available === false ? 'disabled' : ''}>
+        <span>${esc(o.name)}</span>
+        ${o.priceDelta ? `<span class="mdelta money">${o.priceDelta > 0 ? '+' : '−'}${money(Math.abs(o.priceDelta))}</span>` : ''}
+      </label>`).join('')}
+  </fieldset>`;
+}
+
 function openDish(p){
+  const groups = Array.isArray(p.modifierGroups) ? p.modifierGroups : [];
   sheet(`<h2>${esc(p.name)}</h2>
     ${p.description ? `<p style="color:var(--brand-text-muted);margin:8px 0 4px">${esc(p.description)}</p>` : ''}
-    <div class="row"><span class="dish-price money">${money(p.price)}</span>
+    ${p.allergens?.length ? `<p class="allerg"><i class="ti ti-alert-circle i" aria-hidden="true"></i>${p.allergens.map(esc).join(', ')}</p>` : ''}
+    ${groups.map(groupMarkup).join('')}
+    <div class="row"><span class="dish-price money" id="dprice">${money(p.price)}</span>
       <span class="qty"><button id="dm" aria-label="−">−</button><span id="dq">1</span><button id="dp" aria-label="+">+</button></span></div>
+    <p id="derr" class="err" hidden></p>
     <button class="btn" id="dadd" style="margin:14px 0">${esc(t('add'))}</button>
     <button class="btn btn-ghost" id="dar" style="margin-bottom:14px" hidden>
       <i class="ti ti-cube-3d-sphere" aria-hidden="true"></i><span>${esc(t('onTable'))}</span></button>
     <p id="darNote" class="geo" hidden></p>`);
   bindAr(p);
   let q = 1;
+
+  // The chosen ids and what they add. Recomputed from the DOM on every change
+  // rather than tracked separately: one source, and a radio group that swaps a
+  // selection cannot leave a stale delta behind.
+  const chosen = () => [...$('#sheetIn').querySelectorAll('.mgroup input:checked')];
+  const repriceAndCheck = () => {
+    const picked = chosen();
+    const delta = picked.reduce((s, el) => s + (parseInt(el.dataset.delta, 10) || 0), 0);
+    $('#dprice').textContent = money(Math.max(0, p.price + delta));
+
+    // The same rules the hub enforces, checked here so the customer is told
+    // before they press the button rather than after.
+    let problem = null;
+    for (const fs of $('#sheetIn').querySelectorAll('.mgroup')) {
+      const min = parseInt(fs.dataset.min, 10) || 0;
+      const max = parseInt(fs.dataset.max, 10) || 0;
+      const n = fs.querySelectorAll('input:checked').length;
+      const name = fs.querySelector('legend')?.firstChild?.textContent?.trim() || '';
+      if (n === 0 && min >= 1) { problem = `${t('required')}: ${name}`; break; }
+      if (n > 0 && n < min)   { problem = `${name}: ${min}`; break; }
+      if (max > 0 && n > max) { problem = `${name}: ${max}`; break; }
+    }
+    const err = $('#derr'), add = $('#dadd');
+    err.hidden = !problem;
+    if (problem) err.textContent = problem;
+    add.disabled = Boolean(problem);
+    return picked.map(el => el.value);
+  };
+  $('#sheetIn').querySelectorAll('.mgroup input').forEach(el => el.onchange = repriceAndCheck);
+  repriceAndCheck();
+
   $('#dm').onclick = () => { q = Math.max(1, q - 1); $('#dq').textContent = q; };
   $('#dp').onclick = () => { q = Math.min(99, q + 1); $('#dq').textContent = q; };
-  $('#dadd').onclick = () => { state.cart[p.id] = (state.cart[p.id] || 0) + q; saveCart(); updateBar(); closeSheet();
-    seaEvent('order_created', 24); toast(`${p.name} · ${q}`); };
+  $('#dadd').onclick = () => {
+    const mods = repriceAndCheck();
+    if ($('#dadd').disabled) return;
+    // A line is keyed by the dish AND its choices: two rolls of the same dish
+    // with different extras are two lines, not one with a quantity of two.
+    addLine(p.id, mods, q);
+    updateBar(); closeSheet();
+    seaEvent('order_created', 24); toast(`${p.name} · ${q}`);
+  };
 }
 
+// A line's unit price is the dish plus its chosen deltas, computed from the
+// CATALOGUE rather than stored in the cart: a price that changed while the
+// basket sat in a tab must re-price, not sell at yesterday's number.
+function lineUnit(p, mods){
+  const groups = Array.isArray(p.modifierGroups) ? p.modifierGroups : [];
+  let d = 0;
+  for (const g of groups) {
+    for (const o of (g.options || [])) {
+      if ((mods || []).includes(o.id)) d += (o.priceDelta | 0);
+    }
+  }
+  return Math.max(0, p.price + d);
+}
+function lineNames(p, mods){
+  const groups = Array.isArray(p.modifierGroups) ? p.modifierGroups : [];
+  const out = [];
+  for (const g of groups) {
+    for (const o of (g.options || [])) if ((mods || []).includes(o.id)) out.push(o.name);
+  }
+  return out;
+}
 const cartLines = () => Object.entries(state.cart)
-  .map(([id, q]) => ({ p: findProduct(id), q })).filter(x => x.p && x.p.available);
-const subtotal = () => cartLines().reduce((s, l) => s + l.p.price * l.q, 0);
+  .map(([k, l]) => ({ k, p: findProduct(l.p), m: l.m || [], q: l.q }))
+  .filter(x => x.p && x.p.available);
+const subtotal = () => cartLines().reduce((s, l) => s + lineUnit(l.p, l.m) * l.q, 0);
 function deliveryFee(){
   const L = state.loc; if (!L) return 0;
   if (L.freeDeliveryThreshold != null && subtotal() >= L.freeDeliveryThreshold) return 0;
@@ -546,15 +662,20 @@ function openCart(){
   const lines = cartLines();
   if (!lines.length) return sheet(`<div class="empty"><b>${esc(t('empty'))}</b>${esc(t('emptyHint'))}</div>`);
   sheet(`<h2>${esc(t('cart'))}</h2>
-    ${lines.map(l => `<div class="row"><span><b>${esc(l.p.name)}</b><br>
-      <small class="money" style="color:var(--brand-text-muted)">${money(l.p.price)}</small></span>
-      <span class="qty"><button data-m="${esc(l.p.id)}" aria-label="−">−</button>
-      <span>${l.q}</span><button data-a="${esc(l.p.id)}" aria-label="+">+</button></span></div>`).join('')}
+    ${lines.map(l => `<div class="row"><span><b>${esc(l.p.name)}</b>
+      ${lineNames(l.p, l.m).length ? `<br><small style="color:var(--brand-text-muted)">${lineNames(l.p, l.m).map(esc).join(' · ')}</small>` : ''}
+      <br><small class="money" style="color:var(--brand-text-muted)">${money(lineUnit(l.p, l.m))}</small></span>
+      <span class="qty"><button data-m="${esc(l.k)}" aria-label="−">−</button>
+      <span>${l.q}</span><button data-a="${esc(l.k)}" aria-label="+">+</button></span></div>`).join('')}
     ${totalsBlock()}
     <button class="btn" id="toCheckout" style="margin-bottom:12px">${esc(t('checkout'))}</button>`);
-  $('#sheetIn').querySelectorAll('[data-a]').forEach(b => b.onclick = () => { state.cart[b.dataset.a]++; saveCart(); updateBar(); openCart(); });
+  $('#sheetIn').querySelectorAll('[data-a]').forEach(b => b.onclick = () => {
+    const l = state.cart[b.dataset.a]; if (!l) return;
+    l.q++; saveCart(); updateBar(); openCart();
+  });
   $('#sheetIn').querySelectorAll('[data-m]').forEach(b => b.onclick = () => {
-    const id = b.dataset.m; state.cart[id]--; if (state.cart[id] <= 0) delete state.cart[id];
+    const k = b.dataset.m, l = state.cart[k]; if (!l) return;
+    l.q--; if (l.q <= 0) delete state.cart[k];
     saveCart(); updateBar(); openCart(); });
   $('#toCheckout').onclick = openCheckout;
 }
@@ -694,7 +815,10 @@ async function place(pay){
   safeSet('dw_name', name); safeSet('dw_phone', phone); safeSet('dw_addr', addr);
   state.placing = true; $('#place').disabled = true; $('#place').textContent = t('ordering');
   try {
-    const items = cartLines().map(l => ({ product_id: l.p.id, modifier_ids: [], quantity: l.q, unit_price: l.p.price }));
+    // The ids only. The hub prices it -- `unit_price` is sent for the
+    // storefront's own arithmetic to be checkable against, never trusted.
+    const items = cartLines().map(l => ({
+      product_id: l.p.id, modifier_ids: l.m, quantity: l.q, unit_price: lineUnit(l.p, l.m) }));
     const r = await fetch(`${API}/public/locations/${encodeURIComponent(SLUG)}/orders`, {
       method:'POST', headers:{ 'content-type':'application/json' },
       body: JSON.stringify({ items, contact:{ name, phone },
