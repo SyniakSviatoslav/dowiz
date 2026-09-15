@@ -422,6 +422,112 @@ fn phase_u(base: [i64], tmp: [i64], d: [i64], n: i64, k: i64, adj: [i64], num_ne
   if want_ref == 1 then refused[0] else m2
 }
 
+// ---- B6: q1 folded across P cores ----
+// The shape is copied verbatim from bench/vs_rust/std_tests/b6core.bp, including the two rules
+// that make sys_clone usable here: at most ~7 symbols may be KEPT across the spawn (a symbol
+// spilled before it reads as 0 on the child's fresh frame, and the failure is SILENT), and the
+// child's work therefore lives in its OWN function. Everything the child needs travels in one
+// `env` array rather than as separate live names.
+fn wl_stk(cur: i64, w: i64) -> i64 { cur + 16384 + w * 8192 }
+
+fn wl_fold_range(env: [i64], lo: i64, hi: i64) -> i64 {
+  let base = env[0];
+  let rp = env[1];
+  let ci = env[3];
+  let fo = env[4];
+  let to_o = env[5];
+  let adj = env[6];
+  let acc = 0;
+  let state = zeros(1);
+  let oid = lo;
+  while oid < hi {
+    let a0 = st_get(base, rp, 1 + oid);
+    let b0 = st_get(base, rp, 2 + oid);
+    let _ = state[0] = 0;
+    let e = a0;
+    while e < b0 {
+      let ev = st_get(base, ci, 1 + e);
+      let f = st_get(base, fo, ev);
+      let t = st_get(base, to_o, ev);
+      let ok = decide(adj, f, t);
+      let _ = if ok == 0 then (let _ = state[0] = t in 0) else 0;
+      let e = e + 1;
+      0
+    };
+    let acc = acc + state[0];
+    let oid = oid + 1;
+    0
+  };
+  acc
+}
+
+fn wl_work(env: [i64], cells: [i64], w: i64, W: i64) -> i64 {
+  let _ = sys_setaffinity(cells, 2 * W + 1 + w);
+  let n = env[2];
+  let lo = w * (n / W);
+  let hi = if w == W - 1 then n else (w + 1) * (n / W);
+  let part = wl_fold_range(env, lo, hi);
+  let _ = sys_atomic_add(cells, w, part);
+  part
+}
+
+fn wl_par(env: [i64], cells: [i64], W: i64) -> i64 {
+  let cur = sys_arena_base();
+  let w = 0;
+  while w < W {
+    let r = sys_clone(68864, wl_stk(cur, w));
+    let is_child = if r == 0 then 1 else 0;
+    let _ = if is_child == 1 then wl_work(env, cells, w, W) else 0;
+    let _ = sys_atomic_add(cells, W + w, is_child);
+    let _ = sys_futex_wake(cells, W + w, 64);
+    let parked = if is_child == 0 then 1 else 0;
+    while parked == 0 {
+      let _ = sys_futex_wait_guard(if is_child == 0 then 1 else 0, cells, W + w, 0);
+      let parked = if cells[W + w] == 1 then 1 else 0;
+      0
+    };
+    let _ = sys_exit_thread_guard(is_child, 0);
+    let w = w + 1;
+    0
+  };
+  let w = 0;
+  while w < W {
+    let d = 0;
+    while d == 0 {
+      let _ = sys_futex_wait_guard(0, cells, W + w, 0);
+      let d = if sys_atomic_add(cells, W + w, 0) == 1 then 1 else 0;
+      0
+    };
+    let w = w + 1;
+    0
+  };
+  0
+}
+
+// Phase p: the q1 fold over P cores. The fold MUST equal the sequential q1 -- a parallel
+// answer that differs from the sequential one is not a speed-up, it is a wrong answer.
+fn phase_par(base: [i64], tmp: [i64], n: i64, adj: [i64], W: i64) -> i64 {
+  let g = st_root(base, tmp);
+  let rp = st_ref(base, g, 6);
+  let ci = st_ref(base, g, 7);
+  let fo = st_ref(base, g, 2);
+  let to_o = st_ref(base, g, 3);
+  let env = [base, rp, n, ci, fo, to_o, adj, 0];
+  let cells = zeros(6 * W + 8);
+  let _ = cells[2 * W + 1] = 16;
+  let _ = cells[2 * W + 2] = 32;
+  let _ = cells[2 * W + 3] = 64;
+  let _ = wl_par(env, cells, W);
+  let acc = 0;
+  let w = 0;
+  while w < W {
+    let acc = acc + cells[w];
+    let w = w + 1;
+    0
+  };
+  acc
+}
+
 // Phase c: the CRASH WRITER (B1 model, scrash.bp's shape). Repeatedly appends a batch and
 // commits, so the harness can SIGKILL it at an arbitrary moment. Every append is deterministic,
 // so generation g has ONE correct fold and a reader can check which generation survived.
@@ -615,6 +721,9 @@ fn main(argc: i64, argv: [str]) -> i64 {
     let q4s = if argc >= 7 then parse(argv[6]) else 0 - 1 in
     let q4r = if char(argv[3], 0) == 114 then 1 else 0 in
     phase_q4(base, tmp, n, adj, q4s, q4r)
+  ) else (if ph_first == 112 then (
+    let W = if argc >= 7 then parse(argv[6]) else 1 in
+    phase_par(base, tmp, n, adj, W)
   ) else (if ph_first == 99 then (
     let rounds = if argc >= 7 then parse(argv[6]) else 100 in
     let batch = if argc >= 8 then parse(argv[7]) else 200 in
@@ -625,7 +734,7 @@ fn main(argc: i64, argv: [str]) -> i64 {
     let num_new = if argc >= 7 then parse(argv[6]) else 1000 in
     let ur = if char(argv[3], 0) == 114 then 1 else 0 in
     phase_u(base, tmp, d, n, k, adj, num_new, ur)
-  ) else 0)))))));
+  ) else 0))))))));
 
   let t1 = clock_ms();
   let ms = t1 - t0;
