@@ -3,93 +3,322 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<meta name="theme-color" content="#12161C">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#061b1a">
 <title>dowiz · кур'єр</title>
 <link href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.9.0/dist/maplibre-gl.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
-/* Uber Eats Driver is the reference the brief names, and its rules are physical:
-   the map dominates, the UI is a sheet on top of it, there is ONE action at a
-   time, and nothing read while moving is below 16px. Everything here is sized
-   for a thumb on a scooter, not a cursor. */
+/* ── The courier surface, in Sea & Sheet terms ──────────────────────────────
+   The design plan is explicit for this role: during a run "the Sea IS the map"
+   (DOWIZ-INTERFACES-PLAN §6, COURIER row). So the map is the ambient layer and
+   it is full-bleed; the Sheet floats over its lower part and carries every
+   decision; the seam between them is the spectral edge. Uber Eats Driver is the
+   named reference and its rules are physical: map dominates, ONE action at a
+   time, nothing read while moving below 16px, primary target 56px+.
+
+   Colour is dowiz's own chrome, not a tenant's: DESIGN.md §11 makes "rebrand
+   admin + courier" an enterprise feature, so by default this surface wears
+   the plan's T3 palette (Warm Cosmo-Noir #d69a3d / #061b1a / #f5efe5, §8.1).
+   Semantic and status colours are DESIGN.md §1's immutable set, untouched.
+
+   Every number below is on the 4px grid (DESIGN.md §3) or on the type scale;
+   no rule sets a raw size, and no hex appears outside the token blocks. ── */
 :root{
-  --bg:#12161C; --sheet:#FFFFFF; --ink:#12161C; --muted:#5B6672; --line:#E3E7EC;
-  --accent:#1D4ED8; --success:#0F7B47; --warning:#B45309; --danger:#C1121F;
-  --cta:60px;            /* the brief says 56+; 60 leaves room for gloves */
-  --r:14px;
+  /* T3 dowiz chrome — light. Ink and ground are the same two colours that swap
+     roles in the dark theme, which is what keeps the two themes one design. */
+  --brand-primary:#d69a3d; --brand-primary-hover:#c98b2c;
+  --brand-bg:#f5efe5; --brand-surface:#ffffff; --brand-surface-2:#f5efe5;
+  --brand-text:#061b1a;
+  /* Measured, not DESIGN.md's #6B7280: this muted carries the ink's own hue and
+     lands at 7.26:1 on the white sheet (the outdoor floor I set is 7:1, not 4.5). */
+  --brand-text-muted:#4a5a58;
+  --brand-border:#d9d2c5;
+  /* White on the gold accent is 2.46:1 and fails; dark ink on it is 7.25:1.
+     The CTA therefore always carries ink, never white. */
+  --on-primary:#061b1a;
+  /* Gold on white is 2.46:1 — invisible as a focus ring in daylight. In the
+     light theme the ring is ink (17.8:1); in the dark theme it is gold (6.5:1). */
+  --focus-ring:#061b1a;
+  --chip-bg:rgba(255,255,255,.92);
+  --elevation-sheet:0 -8px 24px rgba(0,0,0,.18);
+  --scrim-marker:rgba(6,27,26,.25);
+
+  /* Immutable across every preset and theme — DESIGN.md §1. */
+  --color-success:#059669; --color-warning:#D97706; --color-danger:#DC2626; --color-info:#2563EB;
+  --st-PENDING:#D97706; --st-CONFIRMED:#2563EB; --st-PREPARING:#F59E0B;
+  --st-READY:#0D9488; --st-IN_DELIVERY:#3B82F6; --st-DELIVERED:#059669;
+  --st-REJECTED:#DC2626; --st-CANCELLED:#DC2626; --st-PICKED_UP:#0D9488;
+  /* Semantic fills take ink, because white fails on two of them
+     (white/#059669 3.77:1, white/#D97706 3.19:1; ink is 4.73 and 5.59). */
+  --on-success:#061b1a; --on-warning:#061b1a;
+
+  /* Spectral edge — the dowiz seam, terracotta → accent → gold (plan §2.4). */
+  --spectral-a:#b5541c; --spectral-b:#f2c14e;
+  --spectral:linear-gradient(90deg,transparent 0%,var(--spectral-a) 30%,var(--brand-primary) 50%,var(--spectral-b) 70%,transparent 100%);
+
+  --brand-font-body:'Inter',system-ui,-apple-system,sans-serif;
+
+  /* One type scale, shared with the storefront so the surfaces are siblings.
+     Anything read while moving uses --text-base (16px) or larger. */
+  --text-2xs:.6875rem; --text-xs:.75rem; --text-sm:.875rem; --text-base:1rem;
+  --text-lg:1.125rem; --text-xl:1.375rem; --text-2xl:1.75rem; --text-3xl:2.25rem;
+  --weight-medium:500; --weight-semibold:600; --weight-bold:700;
+
+  /* 4px grid. DESIGN.md §3: "Only these values. Never 6px, 10px, 14px, 18px." */
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px;
+  --space-6:24px; --space-8:32px; --space-10:40px; --space-12:48px; --space-16:64px;
+
+  --radius-sm:4px; --radius-md:8px; --radius-lg:12px; --radius-xl:16px; --radius-full:9999px;
+  --radius-card:var(--radius-lg);
+  --radius-btn:var(--radius-full);
+
+  --elevation-1:0 1px 3px rgba(0,0,0,.12);
+  --elevation-2:0 4px 12px rgba(0,0,0,.15);
+  --elevation-3:0 8px 24px rgba(0,0,0,.18);
+  --z-sticky:200; --z-toast:500;
+
+  /* Tap sizes from the plan's --tap 44/48/56: 56 is the courier primary. */
+  --tap:44px; --tap-courier:56px;
+  --sheet-h:288px;               /* live value set by JS from the sheet's box */
+
+  /* ζ vocabulary (plan §8.2): snap for taps, out-curve for entrances. */
+  --ease-snap:cubic-bezier(.32,.72,0,1);
+  --ease-out:cubic-bezier(.2,.8,.2,1);
+  --dur-press:120ms; --dur-toast:160ms; --dur-sheet:260ms;
 }
+/* Dark mode is a red line in deliveryos-ui, and for a courier it is not
+   cosmetic: a white sheet at 23:00 is a floodlight. Tokens only — no component
+   rule lives inside a theme block. The guard lets an explicit light choice win. */
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --brand-bg:#061b1a; --brand-surface:#0b2624; --brand-surface-2:#12302d;
+    --brand-text:#f5efe5; --brand-text-muted:#a9b8b5; --brand-border:#22403c;
+    --focus-ring:#d69a3d;
+    --chip-bg:rgba(11,38,36,.92);
+    --elevation-sheet:0 -8px 24px rgba(0,0,0,.5);
+    --scrim-marker:rgba(214,154,61,.3);
+  }
+}
+:root[data-theme="dark"]{
+  --brand-bg:#061b1a; --brand-surface:#0b2624; --brand-surface-2:#12302d;
+  --brand-text:#f5efe5; --brand-text-muted:#a9b8b5; --brand-border:#22403c;
+  --focus-ring:#d69a3d;
+  --chip-bg:rgba(11,38,36,.92);
+  --elevation-sheet:0 -8px 24px rgba(0,0,0,.5);
+  --scrim-marker:rgba(214,154,61,.3);
+}
+
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden}
-body{font-family:Inter,system-ui,sans-serif;font-size:16px;background:var(--bg);color:var(--ink);
-     -webkit-font-smoothing:antialiased}
-button{font:inherit;color:inherit}
-:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+html{-webkit-text-size-adjust:100%}
+body{font-family:var(--brand-font-body);font-size:var(--text-base);line-height:1.4;
+     background:var(--brand-bg);color:var(--brand-text);-webkit-font-smoothing:antialiased}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;touch-action:manipulation}
 [hidden]{display:none!important}
-@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+:focus-visible{outline:3px solid var(--focus-ring);outline-offset:2px}
+.i{line-height:1;font-size:1.25em;vertical-align:-.15em}
+.money{font-variant-numeric:tabular-nums;font-weight:var(--weight-bold)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
-#map{position:fixed;inset:0;bottom:38dvh}
-.maplibregl-ctrl-attrib{font-size:10px}
+/* ── The Sea: the map, full-bleed. The sheet floats over it; fitBounds pads
+   for the sheet so a marker is never parked underneath. ── */
+#map{position:fixed;inset:0;z-index:0;background:var(--brand-bg)}
+.maplibregl-ctrl-attrib{font-size:var(--text-2xs)}
+/* MapLibre's buttons are 29px; nothing tappable here is under 44. Pushed below
+   the HUD row so the zoom buttons and the GPS chip never overlap. */
+.maplibregl-ctrl-top-right{top:calc(env(safe-area-inset-top,0px) + var(--space-12) + var(--space-3))}
+.maplibregl-ctrl-group{border-radius:var(--radius-lg);box-shadow:var(--elevation-2);background:var(--brand-surface)}
+.maplibregl-ctrl-group button{width:var(--tap);height:var(--tap)}
+.maplibregl-ctrl-group button + button{border-top-color:var(--brand-border)}
 
-.hud{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));left:12px;right:12px;z-index:5;
-     display:flex;gap:8px;align-items:center}
-.hud .tag{background:rgba(18,22,28,.86);color:#fff;padding:8px 13px;border-radius:999px;
-          font-size:14px;font-weight:600;backdrop-filter:blur(8px)}
-.hud .tag.warn{background:var(--warning)}
+/* The "me" marker and the drop pin. The ring gives the dot a halo that reads on
+   both map styles; nothing here animates. */
+.me-marker{width:var(--space-5);height:var(--space-5);border-radius:var(--radius-full);
+           background:var(--color-info);border:3px solid var(--brand-surface);
+           box-shadow:0 0 0 var(--space-1) var(--scrim-marker),var(--elevation-2)}
+
+/* Event burst canvas. A thin band centred on the seam, under the sheet in z:
+   particle-cloud emits from the canvas centre, so a burst is born at the
+   spectral edge, its lower half hidden by the sheet, its upper half fading over
+   the bottom of the map — the one region fitBounds already keeps clear. It has
+   no ambient loop: the library stops its RAF when the burst dies. */
+#sea{position:fixed;left:0;right:0;height:192px;bottom:calc(var(--sheet-h) - 96px);
+     z-index:1;pointer-events:none}
+
+/* ── HUD: two chips over the map and the theme control. Chip text is 16px
+   semibold ink on a 92% surface — measured 11.1:1 (light) / 13.9:1 (dark)
+   over a worst-case tile, so it holds in sun. ── */
+.hud{position:fixed;top:calc(var(--space-3) + env(safe-area-inset-top,0px));left:var(--space-3);right:var(--space-3);
+     z-index:var(--z-sticky);display:flex;gap:var(--space-2);align-items:center;pointer-events:none}
+.hud>*{pointer-events:auto}
 .hud .sp{flex:1}
+.tag{display:inline-flex;align-items:center;gap:var(--space-2);min-height:var(--tap);
+     padding:var(--space-2) var(--space-4);border-radius:var(--radius-full);
+     background:var(--chip-bg);color:var(--brand-text);border:1px solid var(--brand-border);
+     box-shadow:var(--elevation-2);font-size:var(--text-base);font-weight:var(--weight-semibold);
+     white-space:nowrap}
+.tag .dot{width:var(--space-2);height:var(--space-2);border-radius:var(--radius-full);
+          background:var(--brand-text-muted);flex:0 0 auto}
+.tag.on .dot{background:var(--color-success)}
+.tag.warn{background:var(--color-warning);color:var(--on-warning);border-color:transparent}
+.tag.warn .dot{background:var(--on-warning)}
+.icon-btn{width:var(--tap);height:var(--tap);border-radius:var(--radius-full);border:1px solid var(--brand-border);
+          background:var(--chip-bg);color:var(--brand-text);box-shadow:var(--elevation-2);
+          display:inline-flex;align-items:center;justify-content:center;font-size:var(--text-xl);
+          transition:transform var(--dur-press) var(--ease-snap)}
+.icon-btn:active{transform:scale(.94)}
+.icon-btn[disabled]{opacity:.5;cursor:default}
 
-.sheet{position:fixed;left:0;right:0;bottom:0;height:38dvh;min-height:300px;z-index:10;
-       background:var(--sheet);border-radius:20px 20px 0 0;box-shadow:0 -6px 28px rgba(0,0,0,.28);
-       display:flex;flex-direction:column;
-       padding-bottom:env(safe-area-inset-bottom,0px)}
-.grab{width:42px;height:4px;border-radius:2px;background:var(--line);margin:9px auto 4px;flex:0 0 auto}
-.sheet-in{flex:1;overflow-y:auto;padding:6px 16px 12px;-webkit-overflow-scrolling:touch}
+/* ── The Sheet. Content-sized up to 48dvh, so the map always keeps ≥52% of the
+   screen; anything longer scrolls inside. Rises once, on boot, from the
+   starting style; later state changes just swap content — a courier sees this
+   sheet 100+ times a day and that frequency earns no animation. ── */
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:var(--z-sticky);max-height:48dvh;
+       display:flex;flex-direction:column;background:var(--brand-surface);color:var(--brand-text);
+       border-radius:var(--radius-xl) var(--radius-xl) 0 0;box-shadow:var(--elevation-sheet);
+       padding-bottom:env(safe-area-inset-bottom,0px);
+       transition:transform var(--dur-sheet) var(--ease-out),opacity var(--dur-sheet) var(--ease-out)}
+@starting-style{.sheet{transform:translateY(var(--space-6));opacity:0}}
+/* Spectral edge: the dowiz seam. Still at rest; while the sheet is "attending"
+   (a request in flight) it sweeps — transform only, 1.4s, the plan's attend
+   speed. That is state indication, the one reason it is allowed to move. */
+.sheet::before{content:"";position:absolute;top:0;left:var(--space-4);right:var(--space-4);height:2px;
+               background:var(--spectral);border-radius:var(--radius-full);opacity:.9;
+               transform:translateX(0)}
+.sheet.attending::before{animation:sweep 1.4s var(--ease-out) infinite alternate}
+@keyframes sweep{from{transform:translateX(-12%)}to{transform:translateX(12%)}}
+.grab{width:var(--space-10);height:var(--space-1);border-radius:var(--radius-full);background:var(--brand-border);
+      margin:var(--space-3) auto var(--space-2);flex:0 0 auto}
+.sheet-in{flex:1;min-height:0;overflow-y:auto;padding:var(--space-1) var(--space-4) var(--space-4);
+          -webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 
-h2{font-size:19px;font-weight:700;letter-spacing:-.01em;margin-bottom:2px}
-.sub{color:var(--muted);font-size:15px;margin-bottom:12px}
-.addr{font-size:18px;font-weight:600;line-height:1.3;margin:10px 0 4px}
-.note{color:var(--muted);font-size:15px}
-.meta{display:flex;flex-wrap:wrap;gap:8px 16px;margin:12px 0;font-size:15px}
-.meta b{font-variant-numeric:tabular-nums}
-.cash{display:inline-flex;align-items:center;gap:7px;background:#FFF4E5;color:var(--warning);
-      padding:7px 13px;border-radius:999px;font-weight:700}
+h2{font-size:var(--text-xl);font-weight:var(--weight-bold);letter-spacing:-.01em;line-height:1.2;
+   text-wrap:balance;margin-bottom:var(--space-1)}
+.sub{color:var(--brand-text-muted);font-size:var(--text-base);margin-bottom:var(--space-3);
+     display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap}
+/* Status badge per DESIGN.md §5: a coloured dot + an ink label. The dot is
+   the only thing that carries the status hue, because IN_DELIVERY #3B82F6 as
+   text is 3.68:1 on white — fine for a dot, not for a word. */
+.status{display:inline-flex;align-items:center;gap:var(--space-2);color:var(--brand-text);font-weight:var(--weight-semibold)}
+.status::before{content:"";width:var(--space-2);height:var(--space-2);border-radius:var(--radius-full);
+                background:var(--st,var(--brand-text-muted))}
+.status.live::before{animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.4}}
+.addr{display:flex;gap:var(--space-3);align-items:flex-start;font-size:var(--text-xl);
+      font-weight:var(--weight-semibold);line-height:1.25;margin:var(--space-2) 0 var(--space-1);text-wrap:balance}
+.addr .i{color:var(--brand-primary);margin-top:2px;flex:0 0 auto}
+.note{color:var(--brand-text-muted);font-size:var(--text-base)}
+.meta{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2) var(--space-4);margin:var(--space-3) 0}
+.cash{display:inline-flex;align-items:center;gap:var(--space-2);background:var(--brand-surface-2);
+      color:var(--brand-text);padding:var(--space-2) var(--space-4);border-radius:var(--radius-full);
+      font-size:var(--text-lg);border:1px solid var(--brand-border)}
+.cash .i{color:var(--color-warning)}
+a.tel{color:var(--brand-text);font-weight:var(--weight-semibold);text-decoration:none;
+      display:inline-flex;align-items:center;gap:var(--space-2);min-height:var(--tap)}
 
-.cta{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:var(--cta);
-     border:0;border-radius:var(--r);background:var(--accent);color:#fff;font-size:18px;font-weight:700;
-     cursor:pointer;margin-top:8px}
-.cta:active{transform:scale(.99)}
-.cta.go{background:var(--success)}
-.cta.off{background:#EEF1F4;color:var(--ink)}
-.cta[disabled]{opacity:.55}
-.ghost{width:100%;min-height:50px;border:1px solid var(--line);background:#fff;border-radius:var(--r);
-       font-size:16px;font-weight:600;margin-top:8px;cursor:pointer}
-a.ghost{display:flex;align-items:center;justify-content:center;text-decoration:none;color:var(--ink)}
+/* ── ONE CTA. Same geometry everywhere; only the fill changes with meaning.
+   Ink on gold 7.25:1; ink on success 4.73:1. Press feedback on every button:
+   scale, 120ms snap — a button with no :active feels dead. ── */
+.cta{display:flex;align-items:center;justify-content:center;gap:var(--space-3);width:100%;
+     min-height:var(--tap-courier);padding:var(--space-3) var(--space-5);border:0;
+     border-radius:var(--radius-btn);background:var(--brand-primary);color:var(--on-primary);
+     font-size:var(--text-lg);font-weight:var(--weight-bold);margin-top:var(--space-2);
+     box-shadow:var(--elevation-1);
+     transition:transform var(--dur-press) var(--ease-snap),background-color var(--dur-press) var(--ease-snap)}
+.cta:active{transform:scale(.97)}
+.cta.go{background:var(--color-success);color:var(--on-success)}
+.cta[disabled]{opacity:.5;cursor:default;transform:none}
+.ghost{display:flex;align-items:center;justify-content:center;gap:var(--space-2);width:100%;
+       min-height:var(--tap-courier);padding:var(--space-2) var(--space-4);
+       border:1px solid var(--brand-border);background:var(--brand-surface);color:var(--brand-text);
+       border-radius:var(--radius-btn);font-size:var(--text-base);font-weight:var(--weight-semibold);
+       text-decoration:none;margin-top:var(--space-2);
+       transition:transform var(--dur-press) var(--ease-snap),background-color var(--dur-press) var(--ease-snap)}
+.ghost:active{transform:scale(.98)}
+.ghost[disabled]{opacity:.5;cursor:default;transform:none}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)}
+.row2 .ghost{margin-top:var(--space-2)}
+@media (hover:hover) and (pointer:fine){
+  .cta:hover{background:var(--brand-primary-hover)}
+  .cta.go:hover{filter:brightness(.94)}
+  .ghost:hover,.task:hover,.icon-btn:hover{background:var(--brand-surface-2)}
+}
 
-.task{border:1px solid var(--line);border-radius:var(--r);padding:13px;margin-bottom:9px}
-.task .r1{display:flex;align-items:center;gap:9px;margin-bottom:5px}
-.task .r1 b{font-size:17px}
-.task .r1 .amt{margin-left:auto;font-weight:700;font-variant-numeric:tabular-nums}
-.empty{text-align:center;padding:26px 12px;color:var(--muted);font-size:16px}
-.empty b{display:block;color:var(--ink);font-size:18px;margin-bottom:5px}
-.login{padding:26px 18px}
-label{display:block;font-size:14px;font-weight:600;color:var(--muted);margin:14px 0 6px}
-input{width:100%;min-height:52px;padding:13px 15px;border:1px solid var(--line);border-radius:var(--r);
-      font-size:17px}
-.err{color:var(--danger);font-size:15px;font-weight:600;margin-top:10px}
-.toast{position:fixed;left:12px;right:12px;bottom:calc(38dvh + 12px);z-index:20;background:var(--ink);
-       color:#fff;padding:14px 16px;border-radius:var(--r);font-size:16px;opacity:0;
-       transform:translateY(8px);pointer-events:none;transition:opacity .18s,transform .18s}
-.toast.show{opacity:1;transform:none}
+/* ── Available tasks: rows, not N buttons. Tapping a row selects it; the ONE
+   CTA below takes the selected one. That is how the one-action rule survives
+   a list of three orders. ── */
+.task{display:grid;grid-template-columns:auto 1fr auto;gap:var(--space-1) var(--space-3);align-items:center;
+      width:100%;text-align:left;padding:var(--space-3) var(--space-4);margin-bottom:var(--space-2);
+      border:1px solid var(--brand-border);border-radius:var(--radius-card);background:var(--brand-surface);
+      color:var(--brand-text);min-height:var(--tap-courier);
+      transition:transform var(--dur-press) var(--ease-snap),background-color var(--dur-press) var(--ease-snap)}
+.task:active{transform:scale(.99)}
+.task[aria-pressed="true"]{border-color:var(--brand-primary);box-shadow:0 0 0 1px var(--brand-primary)}
+.task .pick{grid-row:span 2;font-size:var(--text-xl);color:var(--brand-border);line-height:1}
+.task[aria-pressed="true"] .pick{color:var(--brand-primary)}
+.task b{font-size:var(--text-base)}
+.task .amt{grid-row:span 2;font-size:var(--text-base)}
+.task .note{grid-column:2}
+
+.empty{text-align:center;padding:var(--space-5) var(--space-3);color:var(--brand-text-muted);font-size:var(--text-base)}
+.empty b{display:block;color:var(--brand-text);font-size:var(--text-lg);margin-bottom:var(--space-1)}
+.empty .i{display:block;font-size:var(--text-3xl);color:var(--brand-border);margin-bottom:var(--space-2)}
+
+/* ── Login and the cash form: inputs are 56px on this surface, labels 16px. ── */
+.login{padding:var(--space-2) 0 var(--space-3)}
+label{display:block;font-size:var(--text-base);font-weight:var(--weight-semibold);
+      color:var(--brand-text-muted);margin:var(--space-3) 0 var(--space-2)}
+input{width:100%;min-height:var(--tap-courier);padding:var(--space-3) var(--space-4);
+      border:1px solid var(--brand-border);border-radius:var(--radius-md);background:var(--brand-surface);
+      font-size:var(--text-lg)}
+input:focus{border-color:var(--brand-primary)}
+input.money{font-size:var(--text-2xl)}
+/* Error: an icon in the danger colour (3.3:1 on the dark sheet — enough for a
+   glyph), the words in ink (13.9:1) — danger as text fails at night. */
+.err{display:flex;gap:var(--space-2);align-items:flex-start;color:var(--brand-text);
+     font-size:var(--text-base);font-weight:var(--weight-semibold);margin-top:var(--space-3)}
+.err .i{color:var(--color-danger);flex:0 0 auto}
+
+/* ── Toast: hidden means display:none, so nothing is parked at opacity 0.
+   Entrance is a 160ms out-curve from the starting style; exit snaps. ── */
+.toast{position:fixed;left:var(--space-3);right:var(--space-3);bottom:calc(var(--sheet-h) + var(--space-3));
+       z-index:var(--z-toast);background:var(--brand-text);color:var(--brand-surface);
+       padding:var(--space-4);border-radius:var(--radius-lg);font-size:var(--text-base);
+       font-weight:var(--weight-semibold);box-shadow:var(--elevation-3);pointer-events:none;
+       display:flex;gap:var(--space-2);align-items:center;
+       transition:transform var(--dur-toast) var(--ease-out),opacity var(--dur-toast) var(--ease-out)}
+@starting-style{.toast{transform:translateY(var(--space-2));opacity:0}}
+
+/* Reduced motion removes travel and keeps meaning: the sheet still fades in,
+   the edge still brightens when attending, the live dot is simply solid. */
+@media (prefers-reduced-motion:reduce){
+  .sheet,.toast{transition-property:opacity}
+  @starting-style{.sheet,.toast{transform:none}}
+  .sheet.attending::before{animation:none;opacity:1}
+  .status.live::before{animation:none}
+  .cta,.ghost,.task,.icon-btn{transition:none}
+  .cta:active,.ghost:active,.task:active,.icon-btn:active{transform:none;filter:brightness(.92)}
+}
 </style>
 </head>
 <body>
 <div id="map"></div>
+<canvas id="sea" aria-hidden="true"></canvas>
 <div class="hud">
-  <span class="tag" id="shiftTag">офлайн</span>
+  <span class="tag" id="shiftTag"><span class="dot" aria-hidden="true"></span><span id="shiftText">офлайн</span></span>
   <span class="sp"></span>
-  <span class="tag" id="gpsTag" hidden>GPS</span>
+  <span class="tag" id="gpsTag" hidden><i class="ti ti-gps i" aria-hidden="true"></i><span id="gpsText">GPS</span></span>
+  <button class="icon-btn" id="themeBtn" type="button" aria-label="Тема: системна" title="Тема"><i class="ti ti-sun-moon" aria-hidden="true"></i></button>
 </div>
-<div class="sheet"><div class="grab"></div><div class="sheet-in" id="app" aria-live="polite"></div></div>
-<div class="toast" id="toast"></div>
+<section class="sheet" id="sheet" aria-label="Панель кур'єра">
+  <div class="grab" aria-hidden="true"></div>
+  <div class="sheet-in" id="app" aria-live="polite"></div>
+</section>
+<div class="toast" id="toast" role="status" hidden></div>
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.9.0/dist/maplibre-gl.js"></script>
 <script type="module" src="/courier/app.js"></script>
 </body>

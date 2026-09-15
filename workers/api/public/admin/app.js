@@ -18,12 +18,52 @@ const store = {
   set loc(v){ try { v ? localStorage.setItem('dw_loc', v) : localStorage.removeItem('dw_loc'); } catch {} },
 };
 
-let S = { tab:'orders', orders:[], stats:null, products:[], venue:null, seen:new Set(), booted:false };
+let S = { tab:'orders', orders:[], stats:null, products:[], venue:null, seen:new Set(), fresh:new Set(), booted:false };
 
 function toast(m){ const el = $('#toast'); el.textContent = m; el.classList.add('show');
   clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove('show'), 2600); }
 
+// Money is an integer the server sent, formatted and SET as text. There is no
+// animated path to an amount anywhere in this file (DESIGN plan §2.5).
 const money = n => new Intl.NumberFormat('uk', { style:'currency', currency:'ALL', maximumFractionDigits:0 }).format(n || 0);
+
+// ── SEA ─────────────────────────────────────────────────────────────────────
+// The dowiz ambient layer, the same shipped module the storefront wires
+// (/lib/particle-cloud.js). The design plan's owner Act 1 is "the field IS the
+// business: each order a ripple, volume = amplitude". So: a new order bursts
+// amber, a queue that is still waiting drifts as ember, a row marked ready
+// streams teal, a rejection is turbulence. Counts are lower than the
+// storefront's -- this is a tool, and the field is weather behind the window.
+// The Sea carries NO text, NO price and NO decision; every status sits on an
+// opaque surface above it, so nothing the owner must read can be obscured.
+let sea = null;
+async function initSea(){
+  if (sea) return;
+  const cv = document.getElementById('sea'); if (!cv) return;
+  // Reduced motion is a calm sea, not no sea: the module quarters its bursts
+  // and the canvas fades to its calm opacity.
+  const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  try {
+    const { createParticleCloud } = await import('/lib/particle-cloud.js');
+    sea = createParticleCloud();
+    sea.init(cv);
+    sea.setReducedMotion(calm);
+    cv.classList.toggle('calm', calm);
+    addEventListener('resize', () => sea.resize(), { passive:true });
+    if (matchMedia('(hover: hover) and (pointer: fine)').matches) {
+      addEventListener('pointermove', e => sea.setPointer(e.clientX / innerWidth, e.clientY / innerHeight), { passive:true });
+    }
+  } catch {
+    // No WebGL2 or the module failed: the console is fully usable without the
+    // Sea. It is atmosphere, never a dependency.
+    sea = null;
+  }
+}
+function seaEvent(kind, n){ try { sea && sea.burst(kind, n); } catch {} }
+// What an owner ACTION does to the field. The server still decides the state;
+// the ripple is fired only after the server said yes.
+const SEA_FOR_ACTION = { confirm:['pending_aging', 24], preparing:['pending_aging', 24],
+                         ready:['courier_assigned', 40], reject:['dispatch_failed', 40], cancel:['dispatch_failed', 40] };
 
 // One fetch wrapper so a 401 has exactly one meaning everywhere: the session is
 // over. It tries a refresh once, then stops -- retrying forever on a dead token
@@ -68,8 +108,8 @@ function renderLogin(err){
     <h1>dowiz</h1><p>Панель власника</p>
     <label for="e">Email</label><input id="e" type="email" autocomplete="username" inputmode="email">
     <label for="p">Пароль</label><input id="p" type="password" autocomplete="current-password">
-    ${err ? `<div class="err">${esc(err)}</div>` : ''}
-    <button class="btn pri" id="go" style="width:100%;margin-top:18px;min-height:46px">Увійти</button>
+    ${err ? `<div class="err" role="alert"><i class="ti ti-alert-circle i" aria-hidden="true"></i><span>${esc(err)}</span></div>` : ''}
+    <button class="btn pri wide" id="go">Увійти</button>
   </div>`;
   const submit = async () => {
     const b = $('#go'); b.disabled = true; b.textContent = 'Входимо…';
@@ -98,68 +138,84 @@ async function boot(){
   poll();
 }
 
+const LIVE = ['PENDING','CONFIRMED','PREPARING','READY','IN_DELIVERY'];
+const liveOrders = () => S.orders.filter(o => LIVE.includes(o.status));
+
 function render(){
   if (!S.booted) return;
   const s = S.stats;
   $('#app').innerHTML = `
     <div class="stats">
-      <div class="stat"><div class="k">Замовлень сьогодні</div><div class="v">${s ? s.todayOrders : '—'}</div></div>
-      <div class="stat"><div class="k">Чекають</div><div class="v">${s ? s.pending : '—'}</div></div>
-      <div class="stat"><div class="k">В роботі</div><div class="v">${s ? s.active : '—'}</div></div>
-      <div class="stat"><div class="k">Виручка</div><div class="v">${s ? money(s.todayRevenue) : '—'}</div></div>
+      <div class="stat"><div class="k">Замовлень сьогодні</div><div class="v" data-k="todayOrders">${s ? s.todayOrders : '—'}</div></div>
+      <div class="stat"><div class="k">Чекають</div><div class="v" data-k="pending">${s ? s.pending : '—'}</div></div>
+      <div class="stat"><div class="k">В роботі</div><div class="v" data-k="active">${s ? s.active : '—'}</div></div>
+      <div class="stat"><div class="k">Виручка</div><div class="v" data-k="todayRevenue">${s ? money(s.todayRevenue) : '—'}</div></div>
     </div>
-    <div class="tabs" role="tablist">
-      <button class="tab" role="tab" data-t="orders" aria-selected="${S.tab==='orders'}">Замовлення</button>
-      <button class="tab" role="tab" data-t="menu"   aria-selected="${S.tab==='menu'}">Меню</button>
+    <div class="tabs" role="tablist" aria-label="Розділи">
+      <button class="tab" role="tab" id="tab-orders" aria-controls="pane" data-t="orders" aria-selected="${S.tab==='orders'}" tabindex="${S.tab==='orders' ? 0 : -1}">Замовлення <span class="n" id="liveN">${liveOrders().length}</span></button>
+      <button class="tab" role="tab" id="tab-menu"   aria-controls="pane" data-t="menu"   aria-selected="${S.tab==='menu'}"   tabindex="${S.tab==='menu' ? 0 : -1}">Меню</button>
     </div>
-    <div id="pane"></div>`;
-  document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
-    S.tab = b.dataset.t; render(); if (S.tab === 'menu' && !S.products.length) loadMenu();
+    <div id="pane" role="tabpanel" aria-labelledby="tab-${S.tab}"></div>`;
+  const tabs = [...document.querySelectorAll('.tab')];
+  tabs.forEach((b, i) => {
+    b.onclick = () => { S.tab = b.dataset.t; render(); if (S.tab === 'menu' && !S.products.length) loadMenu(); };
+    // Keyboard: arrows move between tabs, as a tablist is expected to.
+    b.onkeydown = e => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      const n = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+      n.focus(); n.click(); e.preventDefault();
+    };
   });
   $('#pane').innerHTML = S.tab === 'orders' ? ordersView() : menuView();
   if (S.tab === 'orders') bindOrders(); else bindMenu();
+  S.fresh.clear();                                // the entrance runs once, on the render that introduced the row
   paintVenue();
 }
 
 // ── orders ──
-const LIVE = ['PENDING','CONFIRMED','PREPARING','READY','IN_DELIVERY'];
+const STATUS_LABEL = { PENDING:'Нове', CONFIRMED:'Підтверджено', PREPARING:'Готується', READY:'Готове',
+                       IN_DELIVERY:'В дорозі', DELIVERED:'Доставлено', REJECTED:'Відхилено', CANCELLED:'Скасовано',
+                       SCHEDULED:'Заплановано', PICKED_UP:'Забрано' };
 function ordersView(){
-  const live = S.orders.filter(o => LIVE.includes(o.status));
-  if (!live.length) return `<div class="empty"><b>Поки тихо</b>Нові замовлення з'являться тут автоматично</div>`;
-  return live.map(card).join('');
+  const live = liveOrders();
+  if (!live.length) return `<div class="panel"><div class="empty"><i class="ti ti-inbox i" aria-hidden="true"></i><b>Поки тихо</b>Нові замовлення з'являться тут автоматично</div></div>`;
+  let i = 0;
+  return `<div class="panel">${live.map(o => row(o, S.fresh.has(o.id) ? i++ : -1)).join('')}</div>`;
 }
 
-function card(o){
+function row(o, newIdx){
   const items = (o.items || []).map(i => `<b>${i.quantity}×</b> ${esc(shortId(i.product_id))}`).join(', ');
   const f = o.fulfilment || {}, c = o.contact || {};
-  return `<div class="card ${o.status === 'PENDING' ? 'pending' : ''}">
-    <div class="card-h">
+  const st = esc(o.status);
+  return `<article class="order ${o.status === 'PENDING' ? 'attn' : ''} ${newIdx >= 0 ? 'is-new' : ''}" ${newIdx >= 0 ? `style="--i:${newIdx}"` : ''}>
+    <div class="o-h">
       <span class="oid">#${esc(String(o.id).slice(0,8))}</span>
-      <span class="chip ${esc(o.status)}">${esc(o.status)}</span>
+      <span class="chip ${st}"><i aria-hidden="true"></i>${esc(STATUS_LABEL[o.status] || o.status)}</span>
       <span class="amt">${money(o.total)}</span>
     </div>
-    <div class="lines">${items || '—'}</div>
+    <p class="lines">${items || '—'}</p>
     <div class="who">
-      ${c.phone ? `<a href="tel:${esc(c.phone)}">${esc(c.phone)}</a>` : ''}
-      ${c.name ? `<span>${esc(c.name)}</span>` : ''}
-      ${f.address?.line ? `<span>${esc(f.address.line)}</span>` : ''}
-      ${f.address?.note ? `<span style="color:var(--muted)">${esc(f.address.note)}</span>` : ''}
-      <span style="color:var(--muted)">${o.payment === 'cash' ? 'готівка' : esc(o.payment || '')}</span>
+      ${c.phone ? `<a class="tel" href="tel:${esc(c.phone)}"><i class="ti ti-phone i" aria-hidden="true"></i>${esc(c.phone)}</a>` : ''}
+      ${c.name ? `<span><i class="ti ti-user i" aria-hidden="true"></i>${esc(c.name)}</span>` : ''}
+      ${f.address?.line ? `<span><i class="ti ti-map-pin i" aria-hidden="true"></i>${esc(f.address.line)}</span>` : ''}
+      ${f.address?.note ? `<span class="muted"><i class="ti ti-note i" aria-hidden="true"></i>${esc(f.address.note)}</span>` : ''}
+      <span class="muted"><i class="ti ${o.payment === 'cash' ? 'ti-cash' : 'ti-credit-card'} i" aria-hidden="true"></i>${o.payment === 'cash' ? 'готівка' : esc(o.payment || '')}</span>
     </div>
     <div class="acts">${actions(o)}</div>
-  </div>`;
+  </article>`;
 }
 const shortId = id => String(id || '').slice(0, 8);
 
 // The buttons offered are the ones that make sense next. The SERVER still
-// decides: an action the FSM refuses comes back 409 and the card does not move.
+// decides: an action the FSM refuses comes back 409 and the row does not move.
 function actions(o){
-  const b = (a, label, cls = '') => `<button class="btn ${cls}" data-o="${esc(o.id)}" data-a="${a}">${label}</button>`;
+  const b = (a, label, cls = '', icon = '') =>
+    `<button class="btn ${cls}" data-o="${esc(o.id)}" data-a="${a}">${icon ? `<i class="ti ${icon} i" aria-hidden="true"></i>` : ''}${label}</button>`;
   switch (o.status) {
-    case 'PENDING':   return b('confirm','Підтвердити','pri') + b('reject','Відхилити','dan');
-    case 'CONFIRMED': return b('preparing','Готуємо','pri') + b('cancel','Скасувати','dan');
-    case 'PREPARING': return b('ready','Готове','pri') + b('cancel','Скасувати','dan');
-    case 'READY':     return `<span style="color:var(--muted);font-size:13px">Чекає кур'єра</span>`;
+    case 'PENDING':   return b('confirm','Підтвердити','pri','ti-check') + b('reject','Відхилити','dan','ti-x');
+    case 'CONFIRMED': return b('preparing','Готуємо','pri','ti-flame') + b('cancel','Скасувати','dan');
+    case 'PREPARING': return b('ready','Готове','pri','ti-package') + b('cancel','Скасувати','dan');
+    case 'READY':     return `<span class="wait"><i class="ti ti-bike i" aria-hidden="true"></i>Чекає кур'єра</span>`;
     default:          return '';
   }
 }
@@ -176,6 +232,7 @@ function bindOrders(){
     try {
       await api(`/owner/orders/${encodeURIComponent(id)}/action`, { method:'POST',
         body: JSON.stringify({ location_id: store.loc, action, reason }) });
+      const ev = SEA_FOR_ACTION[action]; if (ev) seaEvent(ev[0], ev[1]);
       await Promise.all([loadOrders(), loadStats()]);
       render();
     } catch (e) {
@@ -188,9 +245,11 @@ function bindOrders(){
 async function loadOrders(){
   try {
     const d = await api(`/owner/orders?location_id=${encodeURIComponent(store.loc)}`);
+    const first = S.seen.size === 0;            // the first load is not "new orders", it is the queue
     const fresh = (d.orders || []).filter(o => o.status === 'PENDING' && !S.seen.has(o.id));
     (d.orders || []).forEach(o => S.seen.add(o.id));
     S.orders = d.orders || [];
+    if (!first) fresh.forEach(o => S.fresh.add(o.id));
     if (fresh.length && S.stats) alert_new(fresh.length);
   } catch (e) { if (String(e.message) !== 'session expired') toast(String(e.message || e)); }
 }
@@ -203,6 +262,7 @@ let actx = null;
 addEventListener('pointerdown', () => { if (!actx) { try { actx = new (AudioContext || webkitAudioContext)(); } catch {} } }, { once:true });
 function alert_new(n){
   toast(n === 1 ? 'Нове замовлення' : `Нових замовлень: ${n}`);
+  seaEvent('order_created', 48 * Math.min(n, 3));
   try {
     if (!actx) return;
     const t = actx.currentTime, o = actx.createOscillator(), g = actx.createGain();
@@ -222,17 +282,24 @@ async function loadMenu(){
     S.venue = d.location; render();
   } catch (e) { toast(String(e.message || e)); }
 }
+// One panel per category, product ROWS inside it. The old view put a card
+// inside a card for every dish; nested cards are always wrong.
 function menuView(){
   if (!S.products.length) return `<div class="skel"></div><div class="skel"></div>`;
   let cat = null; const out = [];
   for (const p of S.products) {
-    if (p.cat !== cat) { cat = p.cat; out.push(`<div class="card" style="padding:10px 14px;font-weight:600">${esc(cat)}</div>`); }
-    out.push(`<div class="card" style="padding:0 14px"><div class="prod">
+    if (p.cat !== cat) {
+      if (cat !== null) out.push('</div>');
+      cat = p.cat;
+      out.push(`<div class="panel"><h2 class="panel-h"><i class="ti ti-category i" aria-hidden="true"></i>${esc(cat)}</h2>`);
+    }
+    out.push(`<div class="prod ${p.available ? '' : 'off'}">
       <span class="n"><b>${esc(p.name)}</b><small>${p.available ? 'у продажу' : esc(p.unavailableNote || 'зупинено')}</small></span>
-      <input type="number" min="0" step="1" value="${p.price}" data-price="${esc(p.id)}" aria-label="Ціна">
-      <label class="sw" title="У продажу"><input type="checkbox" data-av="${esc(p.id)}" ${p.available ? 'checked' : ''}><span></span></label>
-    </div></div>`);
+      <input type="number" min="0" step="1" value="${p.price}" data-price="${esc(p.id)}" aria-label="Ціна, ${esc(p.name)}">
+      <label class="sw" title="У продажу"><input type="checkbox" data-av="${esc(p.id)}" aria-label="У продажу, ${esc(p.name)}" ${p.available ? 'checked' : ''}><span></span></label>
+    </div>`);
   }
+  if (cat !== null) out.push('</div>');
   return out.join('');
 }
 function bindMenu(){
@@ -273,10 +340,12 @@ function paintVenue(){
     // Closing stops new orders reaching the kitchen. That is not a thing to do
     // by mis-tap, so it asks.
     if (next === 'closed' && !confirm('Зачинити заклад? Нові замовлення не надходитимуть.')) return;
+    b.disabled = true;
     try {
       await api('/owner/location', { method:'POST', body: JSON.stringify({ location_id: store.loc, status: next }) });
-      S.venue.status = next; paintVenue(); toast('Статус: ' + next);
+      S.venue.status = next; toast('Статус: ' + next);
     } catch (e) { toast(String(e.message || e)); }
+    b.disabled = false; paintVenue();
   };
 }
 
@@ -287,12 +356,19 @@ function poll(){
   poll._i = setInterval(async () => {
     if (document.hidden || !S.booted) return;
     await Promise.all([loadOrders(), loadStats()]);
-    if (S.tab === 'orders') { $('#pane').innerHTML = ordersView(); bindOrders(); }
+    if (S.tab === 'orders') { $('#pane').innerHTML = ordersView(); bindOrders(); S.fresh.clear(); }
     const s = S.stats;
-    if (s) document.querySelectorAll('.stat .v').forEach((el, i) =>
-      el.textContent = [s.todayOrders, s.pending, s.active, money(s.todayRevenue)][i]);
+    if (s) {
+      // Text SET, never tweened -- the revenue is a kernel integer presented, not interpolated.
+      const v = { todayOrders:s.todayOrders, pending:s.pending, active:s.active, todayRevenue:money(s.todayRevenue) };
+      document.querySelectorAll('.stat .v[data-k]').forEach(el => { el.textContent = v[el.dataset.k]; });
+      const n = $('#liveN'); if (n) n.textContent = liveOrders().length;
+      // A queue still waiting is ember drift in the field: volume = amplitude.
+      if (s.pending > 0) seaEvent('pending_aging', 8 * Math.min(s.pending, 3));
+    }
   }, 10000);
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden && S.booted) loadOrders().then(() => render()); });
 
+initSea();
 store.t ? boot() : renderLogin();

@@ -105,7 +105,12 @@ button,input,textarea,select{font:inherit;color:inherit}
 #sea{position:fixed;inset:0;z-index:0;pointer-events:none;
      opacity:.55;transition:opacity .6s ease-out}
 #sea.calm{opacity:.3}
-body>*:not(#sea){position:relative;z-index:1}
+/* NOT `body>*:not(#sea)`: the :not(#sea) gives that selector id-level
+   specificity (1,0,1), which beats .top/.bar/.sheet/.scrim/.toast/.offline and
+   silently replaces their sticky/fixed with relative -- the header stops
+   sticking and the cart bar stops being pinned. Only #app needs a stacking
+   context; everything else already carries a z-index above the Sea. */
+#app{position:relative;z-index:1}
 .hero{position:relative}
 .hero::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;
   background:linear-gradient(90deg,transparent,var(--brand-primary),transparent);
