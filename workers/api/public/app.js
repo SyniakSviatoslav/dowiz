@@ -12,7 +12,7 @@ const T = {
   sq: { cart:'Shporta', add:'Shto', total:'Totali', checkout:'Vazhdo', empty:'Shporta është bosh',
         emptyHint:'Zgjidhni një pjatë nga menuja', name:'Emri', phone:'Telefoni', address:'Adresa',
         note:'Shënim për korrierin', pay:'Mënyra e pagesës', cash:'Para në dorë', card:'Kartë',
-        cashNote:'Paguani korrierit në dorëzim', cardNote:'Së shpejti', place:'Porosit',
+        cashNote:'Paguani korrierit në dorëzim', cardNote:'Kartë ose Apple/Google Pay', place:'Porosit',
         subtotal:'Nëntotali', delivery:'Dërgesa', free:'Falas', closed:'Mbyllur tani',
         closedHint:'Telefononi për të porositur', soldOut:'S’ka', min:'Porosia minimale',
         sent:'Porosia u dërgua', track:'Ndiqni porosinë', offline:'Jeni offline — telefononi',
@@ -23,7 +23,7 @@ const T = {
   en: { cart:'Cart', add:'Add', total:'Total', checkout:'Checkout', empty:'Your cart is empty',
         emptyHint:'Pick a dish from the menu', name:'Name', phone:'Phone', address:'Address',
         note:'Note for the courier', pay:'Payment', cash:'Cash', card:'Card',
-        cashNote:'Pay the courier on delivery', cardNote:'Coming soon', place:'Place order',
+        cashNote:'Pay the courier on delivery', cardNote:'Card or Apple/Google Pay', place:'Place order',
         subtotal:'Subtotal', delivery:'Delivery', free:'Free', closed:'Closed right now',
         closedHint:'Call to order', soldOut:'Sold out', min:'Minimum order',
         sent:'Order placed', track:'Track your order', offline:'You are offline — call instead',
@@ -34,7 +34,7 @@ const T = {
   uk: { cart:'Кошик', add:'Додати', total:'Разом', checkout:'Оформити', empty:'Кошик порожній',
         emptyHint:'Оберіть страву з меню', name:'Ім’я', phone:'Телефон', address:'Адреса',
         note:'Коментар кур’єру', pay:'Оплата', cash:'Готівка', card:'Картка',
-        cashNote:'Оплата кур’єру при отриманні', cardNote:'Незабаром', place:'Замовити',
+        cashNote:'Оплата кур’єру при отриманні', cardNote:'Картка або Apple/Google Pay', place:'Замовити',
         subtotal:'Сума', delivery:'Доставка', free:'Безкоштовно', closed:'Зараз зачинено',
         closedHint:'Зателефонуйте, щоб замовити', soldOut:'Немає', min:'Мінімальне замовлення',
         sent:'Замовлення прийнято', track:'Стежити за замовленням', offline:'Немає зв’язку — телефонуйте',
@@ -293,8 +293,8 @@ function openCheckout(){
     <div class="pays" role="radiogroup">
       <button class="pay" role="radio" aria-checked="true" data-pay="cash">
         <i class="ti ti-cash i" aria-hidden="true"></i><span class="t"><b>${esc(t('cash'))}</b><small>${esc(t('cashNote'))}</small></span></button>
-      <button class="pay" role="radio" aria-checked="false" data-pay="card" disabled style="opacity:.5">
-        <i class="ti ti-credit-card i" aria-hidden="true"></i><span class="t"><b>${esc(t('card'))}</b><small>${esc(t('cardNote'))}</small></span></button>
+      ${state.loc?.stripePublishableKey ? `<button class="pay" role="radio" aria-checked="false" data-pay="card">
+        <i class="ti ti-credit-card i" aria-hidden="true"></i><span class="t"><b>${esc(t('card'))}</b><small>${esc(t('cardNote'))}</small></span></button>` : ''}
     </div>
     <div id="f-err"></div>
     ${totalsBlock()}
@@ -332,6 +332,10 @@ async function place(pay){
     if (!r.ok) throw new Error(d.error || d.message || ('HTTP ' + r.status));
     state.cart = {}; saveCart(); updateBar();
     safeSet('dw_last_order', d.id);
+    // The order IS placed -- it is in the log. Only the card rail failed, so say
+    // that instead of letting a silent absence look like success.
+    if (d.payment_error) toast(String(d.payment_error));
+    if (d.client_secret) return collectCard(d);
     seaEvent('order_created', 160);
     openTracking(d);
   } catch (e) {
@@ -340,6 +344,61 @@ async function place(pay){
     state.placing = false;
     const b = $('#place'); if (b) { b.disabled = false; b.textContent = t('place'); }
   }
+}
+
+// ── card ──
+// Stripe.js is fetched on demand, so a venue taking only cash never loads it.
+// The card itself goes from the browser straight to Stripe: no card field, and
+// no value that could hold one, ever reaches dowiz.
+let stripeLib = null;
+async function loadStripe(){
+  if (stripeLib) return stripeLib;
+  await new Promise((ok, no) => {
+    const el = document.createElement('script');
+    el.src = 'https://js.stripe.com/v3/'; el.onload = ok; el.onerror = no;
+    document.head.appendChild(el);
+  });
+  stripeLib = window.Stripe(state.loc.stripePublishableKey);
+  return stripeLib;
+}
+
+async function collectCard(order){
+  sheet(`<h2>${esc(t('pay'))}</h2>
+    <p class="sub" style="color:var(--brand-text-muted)">#${esc(String(order.id).slice(0,8))} · ${money(order.total)}</p>
+    <div id="pe" style="margin:var(--space-4) 0;min-height:180px"></div>
+    <div id="pe-err"></div>
+    <button class="btn" id="pay">${esc(t('place'))}</button>`);
+  let stripe, elements;
+  try {
+    stripe = await loadStripe();
+    elements = stripe.elements({ clientSecret: order.client_secret });
+    // Apple Pay and Google Pay are not separate integrations: the Payment
+    // Element offers whichever wallet the device supports, which is why the
+    // intent asked for automatic_payment_methods.
+    elements.create('payment', { layout: 'tabs' }).mount('#pe');
+  } catch {
+    $('#pe').innerHTML = `<div class="err">${esc(t('offline'))}</div>`;
+    return;
+  }
+  $('#pay').onclick = async () => {
+    const b = $('#pay'); b.disabled = true; b.textContent = t('ordering');
+    const { error } = await stripe.confirmPayment({
+      elements,
+      confirmParams: { return_url: location.origin + '/?order=' + encodeURIComponent(order.id) },
+      redirect: 'if_required',
+    });
+    if (error) {
+      // Stripe's message is written for the customer; passing it through beats
+      // replacing it with a generic one.
+      $('#pe-err').innerHTML = `<div class="err">${esc(error.message || '')}</div>`;
+      b.disabled = false; b.textContent = t('place');
+      return;
+    }
+    // The order is not marked paid here. The WEBHOOK does that, because a
+    // browser saying "it worked" is not evidence that money moved.
+    seaEvent('order_created', 160);
+    openTracking(order);
+  };
 }
 
 const FLOW = ['PENDING','CONFIRMED','PREPARING','READY','IN_DELIVERY','DELIVERED'];

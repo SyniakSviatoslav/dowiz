@@ -337,6 +337,8 @@ input:focus,textarea:focus,select:focus{border-color:var(--brand-primary);outlin
 <div class="scrim" id="scrim"></div>
 <div class="sheet" id="sheet" role="dialog" aria-modal="true"><div class="grab"></div><div class="sheet-in" id="sheetIn"></div></div>
 <div class="toast" id="toast"></div>
+<!-- Stripe.js is loaded ONLY when the card rail is configured (app.js injects it
+     after the menu says so), so a cash-only venue ships no payment SDK at all. -->
 <script type="module" src="/app.js"></script>
 </body>
 </html>

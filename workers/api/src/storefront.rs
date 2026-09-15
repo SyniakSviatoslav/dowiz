@@ -205,7 +205,13 @@ pub async fn menu(_req: Request, ctx: RouteContext<()>) -> Result<Response> {
                 .unwrap_or_else(|_| json!(["sq"])),
             default_locale: loc.default_locale,
         },
-        "categories": cats
+        "categories": cats,
+        // The PUBLISHABLE key only. It is designed to be public -- it can create
+        // a payment method and nothing else -- and the browser needs it to mount
+        // the Payment Element. Absent when the card rail is off, so the storefront
+        // can hide the option rather than offer one that cannot complete.
+        "stripePublishableKey": ctx.env.secret("STRIPE_PUBLISHABLE_KEY")
+            .map(|v| Value::from(v.to_string())).unwrap_or(Value::Null)
     });
     let mut res = Response::from_json(&out)?;
     // The menu is public and changes rarely; the version field is what a client
@@ -317,7 +323,8 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
         "address": body.fulfilment.address.as_ref().map(|a| json!({ "line": a.line, "note": a.note })),
         "fee": fee
     });
-    envelope["payment"] = json!(body.payment.unwrap_or_else(|| "cash".into()));
+    let payment_kind = body.payment.clone().unwrap_or_else(|| "cash".into());
+    envelope["payment"] = json!(payment_kind);
 
     let phone_hash = auth::sha256_hex(&body.contact.phone);
     let stored = serde_json::to_string(&envelope).unwrap_or(order_json);
@@ -348,7 +355,30 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
         .run()
         .await;
 
-    let mut res = Response::ok(stored)?;
+    // A card order needs an intent before the browser can collect anything. The
+    // ORDER ID is the idempotency key, so a retry -- a flaky connection, a double
+    // tap, a replay after a lost generation guard -- returns the SAME intent
+    // rather than charging twice.
+    let mut out: Value = serde_json::from_str(&stored).unwrap_or(json!({}));
+    if payment_kind == "card" {
+        match crate::stripe::create_intent(&ctx.env, &id, total, &loc.currency_code).await {
+            Ok((intent_id, client_secret)) => {
+                out["payment_intent"] = json!(intent_id);
+                out["client_secret"] = json!(client_secret);
+            }
+            // The order is already in the log and must not be lost because the
+            // card rail is down. It comes back marked so the surface can offer
+            // cash instead of pretending the order failed.
+            Err(e) => {
+                out["payment_error"] = json!(match e {
+                    crate::stripe::PayError::NotConfigured => "card payments are not configured",
+                    _ => "the card provider could not be reached",
+                });
+            }
+        }
+    }
+
+    let mut res = Response::from_json(&out)?;
     res.headers_mut().set("content-type", "application/json; charset=utf-8")?;
     Ok(res)
 }

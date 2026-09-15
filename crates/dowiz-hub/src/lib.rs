@@ -39,6 +39,11 @@ pub enum EventKind {
     Placed = 1,
     /// A status transition the KERNEL allowed, payload = the updated order.
     Advanced = 2,
+    /// Money arrived. NOT a status transition: an order can be paid while still
+    /// PENDING, and paying is not something the order FSM has an edge for. It is
+    /// its own fact, recorded as its own event rather than smuggled through a
+    /// transition the kernel would rightly refuse.
+    Paid = 3,
 }
 
 impl EventKind {
@@ -46,6 +51,7 @@ impl EventKind {
         match b {
             1 => Some(EventKind::Placed),
             2 => Some(EventKind::Advanced),
+            3 => Some(EventKind::Paid),
             _ => None,
         }
     }
