@@ -421,6 +421,11 @@ pub use dowiz_core::online;
 #[cfg(feature = "optical")]
 pub mod optical;
 pub use dowiz_core::order_machine;
+
+/// Bebop-backed durable [`EventStore`](dowiz_core::event_log::EventStore) — the `bebopdb`
+/// adapter. OFF by default; see the module docs for why this seam exists.
+#[cfg(feature = "bebopdb")]
+pub mod bebop_event_store;
 /// Kernel-native structured data extraction (pure `std`). Replaces `awk`,
 /// `split('=')`, and `node -e JSON.parse` with deterministic, zero-dep parsers.
 pub use dowiz_core::parse;

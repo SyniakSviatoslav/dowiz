@@ -44,18 +44,35 @@ pub struct BootConfig {
 
 /// The production composition result. Holds the live durable `EventLog` — the
 /// exact value item 2's proof condition required a production binary to construct.
+/// The durable store the composition root boots on.
+///
+/// Default: [`FileEventStore`], the hand-rolled JSONL append log. Under the `bebopdb` feature
+/// it is [`BebopEventStore`](crate::bebop_event_store::BebopEventStore) instead -- bebop's own
+/// object store, which is the seam `docs/adr/0008-local-sqlite-pq-at-rest.md` describes
+/// (`Status: PROPOSED`, per-node local SQLite) and that no SQLite dependency was ever added to
+/// fill. Selecting it here is what makes it a PRODUCTION construction rather than a test one.
+#[cfg(not(feature = "bebopdb"))]
+pub type BootStore = FileEventStore;
+/// See [`BootStore`].
+#[cfg(feature = "bebopdb")]
+pub type BootStore = crate::bebop_event_store::BebopEventStore;
+
+/// Arena size for a freshly created bebop-backed store, in bytes.
+#[cfg(feature = "bebopdb")]
+pub const BEBOP_STORE_BYTES: usize = 64 << 20;
+
 pub struct ProductionRoot {
-    log: EventLog<FileEventStore>,
+    log: EventLog<BootStore>,
 }
 
 impl ProductionRoot {
     /// Borrow the wired durable audit log.
-    pub fn log(&self) -> &EventLog<FileEventStore> {
+    pub fn log(&self) -> &EventLog<BootStore> {
         &self.log
     }
 
     /// Borrow the wired durable audit log mutably (for appending).
-    pub fn log_mut(&mut self) -> &mut EventLog<FileEventStore> {
+    pub fn log_mut(&mut self) -> &mut EventLog<BootStore> {
         &mut self.log
     }
 }
@@ -86,22 +103,44 @@ impl ProductionRoot {
 /// Build the production composition root: derive the init order, fail-closed
 /// capability check, open the durable `FileEventStore`, wrap it in `EventLog`,
 /// verify the chain, and surface `StoreIo`/chain defects instead of swallowing.
+/// Open the durable store the composition root boots on.
+///
+/// ONE construction site, deliberately. It was briefly two -- `boot` and the cycle
+/// test's helper each opened their own -- and under the `bebopdb` feature the two
+/// disagreed about which store type they produced, which is how the feature came to
+/// be committed in a state that did not compile. A feature that changes a type must
+/// change it in one place or it changes it in none.
+fn open_boot_store(cfg: &BootConfig) -> Result<BootStore, InitError> {
+    #[cfg(not(feature = "bebopdb"))]
+    {
+        FileEventStore::open(&cfg.store_path).map_err(|e| InitError::StoreIo(e.to_string()))
+    }
+    #[cfg(feature = "bebopdb")]
+    {
+        crate::bebop_event_store::BebopEventStore::open_or_create(
+            cfg.store_path
+                .to_str()
+                .ok_or_else(|| InitError::StoreIo("store_path is not valid UTF-8".to_string()))?,
+            BEBOP_STORE_BYTES,
+        )
+        .map_err(|e| InitError::StoreIo(alloc::format!("{e:?}")))
+    }
+}
+
 pub fn boot(cfg: &BootConfig) -> Result<ProductionRoot, InitError> {
     let order = init_order(DAG)?;
     check_capabilities(DAG, &order)?;
 
     // Walk the derived order, running each node's constructor. Only `DurableStore`
     // produces a value; the others operate on / verify it (fail-closed).
-    let mut log: Option<EventLog<FileEventStore>> = None;
+    let mut log: Option<EventLog<BootStore>> = None;
     let mut minted = false;
     for &id in &order {
         match id {
             NodeId::DurableStore => {
                 // The exact line the wiring-gap blueprint says is missing everywhere:
                 // a PRODUCTION (non-#[cfg(test)]) construction of the durable store.
-                let store = FileEventStore::open(&cfg.store_path)
-                    .map_err(|e| InitError::StoreIo(e.to_string()))?;
-                log = Some(EventLog::new(store));
+                log = Some(EventLog::new(open_boot_store(cfg)?));
             }
             NodeId::AuditChain => {
                 // Re-verify the durable chain before it is trusted (item 48 home).
@@ -212,8 +251,10 @@ mod tests {
             store_path: path.clone(),
         })
         .expect("boot");
-        // Compile-time + run-time proof the value IS `EventLog<FileEventStore>`.
-        fn assert_type(_: &EventLog<FileEventStore>) {}
+        // Compile-time proof the value IS the concrete boot store -- `BootStore`
+        // is a type alias resolved at compile time, not a trait object, so this
+        // still fails to compile if `boot` ever hands back something erased.
+        fn assert_type(_: &EventLog<BootStore>) {}
         assert_type(root.log());
         let _ = crate::vfs::remove_file(&path);
     }
@@ -250,10 +291,8 @@ mod tests {
         let cfg = BootConfig {
             store_path: temp_store_path("cycle"),
         };
-        let store =
-            FileEventStore::open(&cfg.store_path).map_err(|e| InitError::StoreIo(e.to_string()))?;
         Ok(ProductionRoot {
-            log: EventLog::new(store),
+            log: EventLog::new(open_boot_store(&cfg)?),
         })
     }
 }
