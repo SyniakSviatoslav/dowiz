@@ -171,3 +171,81 @@ mod pg_tests {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// `bebopdb` — the bebop-backed living-memory store.
+// ---------------------------------------------------------------------------
+
+/// Optional bebop adapter — a REAL persistent living-memory store backed by
+/// bebop's own object store, with no SQL and no server.
+///
+/// This is the same contract [`PgStore`] implements against a Postgres `kv`
+/// table, and the same one [`InMemoryStore`] implements in RAM. The difference
+/// is where the bytes live: a single bebop store file, written through the
+/// pointer-free format documented in `bebop-lang/selfhost/prelude/store.bp` —
+/// two superblocks, an append-only arena of self-describing objects, every
+/// `ref` an object-relative cell offset, commit = a superblock toggle.
+///
+/// Compiled ONLY under the `bebopdb` feature, so the default kernel build stays
+/// pure-`std` and the wasm chain is untouched. It pulls exactly one path
+/// dependency (`bebop-store`), which itself has ZERO dependencies.
+///
+/// The store file's SCHEMA is created by `bebop-lang/selfhost/std/kv.bp`
+/// (`kv.bin i`), because layout digests are sha256 and that stays on the bebop
+/// side; this adapter reads and writes the data. `snapshot_root` is the same
+/// FNV-1a fold as [`InMemoryStore`] — verified equal across bebop, this crate,
+/// and dowiz-core on the same entry set.
+///
+/// Writes are eager: each `put` rewrites the entry arrays and commits a new
+/// generation. That is correct and crash-safe but O(n) per write; the tiered
+/// append is bebop ROADMAP B4.
+#[cfg(feature = "bebopdb")]
+pub struct BebopStore {
+    path: String,
+    cache: core::cell::RefCell<bebop_store::kv::Kv>,
+}
+
+#[cfg(feature = "bebopdb")]
+impl BebopStore {
+    /// Open an existing bebop store file whose KV root has already been created
+    /// by `kv.bp`'s init phase. Returns Err if the file has no valid superblock
+    /// or no KV root.
+    pub fn open(path: &str) -> Result<Self, String> {
+        use alloc::string::ToString;
+        let st = bebop_store::Store::open(path).map_err(|e| e.to_string())?;
+        let kv = bebop_store::kv::Kv::load(&st)
+            .ok_or_else(|| "no KV root -- run `kv.bin i` to create the schema".to_string())?;
+        Ok(BebopStore { path: path.to_string(), cache: core::cell::RefCell::new(kv) })
+    }
+
+    /// The generation the store is currently at.
+    pub fn generation(&self) -> Result<i64, String> {
+        use alloc::string::ToString;
+        let st = bebop_store::Store::open(&self.path).map_err(|e| e.to_string())?;
+        st.pick().map(|sb| sb.generation).ok_or_else(|| "no valid superblock".to_string())
+    }
+}
+
+#[cfg(feature = "bebopdb")]
+impl MemoryStore for BebopStore {
+    fn put(&self, key: &str, value: &[u8]) -> Result<(), String> {
+        use alloc::format;
+        let mut kv = self.cache.borrow_mut();
+        kv.put(key, value);
+        let mut st = bebop_store::Store::open(&self.path).map_err(|e| format!("{e:?}"))?;
+        kv.commit_into(&mut st, &self.path).map_err(|e| format!("{e:?}"))?;
+        Ok(())
+    }
+
+    fn get(&self, key: &str) -> Option<Vec<u8>> {
+        self.cache.borrow().get(key)
+    }
+
+    fn keys(&self) -> Vec<String> {
+        self.cache.borrow().keys()
+    }
+
+    fn snapshot_root(&self) -> String {
+        self.cache.borrow().snapshot_root()
+    }
+}

@@ -29,7 +29,34 @@ pub struct Kv {
     pub entries: Vec<(String, Vec<u8>)>,
 }
 
+/// `st_digest("KV{i64,ref [i64],ref [i64],ref [i64],ref [i64]}")`, the KV root layout.
+/// Read out of a store that `kv.bp` created; re-derivable by running `kv.bin i` and
+/// inspecting the root object's header. Pinned here so Rust can create a store from
+/// scratch without reimplementing sha256.
+pub const DIGEST_KV_ROOT: i64 = 610082063;
+/// `st_digest("arr i64")`, the layout of the four entry arrays. Same provenance.
+pub const DIGEST_ARR_I64: i64 = 4290599237;
+
 impl Kv {
+    /// Create the empty KV schema in a fresh store -- the same four zero-length arrays and
+    /// root that `kv.bp`'s init phase writes.
+    pub fn init(st: &mut Store, path: &str) -> Result<i64, StoreError> {
+        let mut tx = st.begin()?;
+        let kidx = st.alloc(&mut tx, 1, DIGEST_ARR_I64)?;
+        let kblob = st.alloc(&mut tx, 1, DIGEST_ARR_I64)?;
+        let vidx = st.alloc(&mut tx, 1, DIGEST_ARR_I64)?;
+        let vblob = st.alloc(&mut tx, 1, DIGEST_ARR_I64)?;
+        st.seal(kidx); st.seal(kblob); st.seal(vidx); st.seal(vblob);
+        let root = st.alloc(&mut tx, 5, DIGEST_KV_ROOT)?;
+        st.put_cell(root, 0, 0);
+        st.link(root, 1, kidx);
+        st.link(root, 2, kblob);
+        st.link(root, 3, vidx);
+        st.link(root, 4, vblob);
+        st.seal(root);
+        st.commit(&tx, root, path)
+    }
+
     /// Read all entries out of a store.
     pub fn load(st: &Store) -> Option<Kv> {
         let root = st.root()?;
@@ -130,5 +157,69 @@ impl Kv {
         st.link(root, 4, vblob);
         st.seal(root);
         st.commit(&tx, root, path)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A store created, written and read back entirely by Rust: the schema, five entries, a
+    /// reopen, and the FNV-1a root. The root value is dowiz-core's own — the same constant
+    /// `InMemoryStore` folds over these entries — so this test fails if either the store
+    /// format handling or the fold drifts.
+    #[test]
+    fn rust_roundtrip_matches_dowiz_root() {
+        let path = std::env::temp_dir().join("bebop_store_kv_roundtrip.store");
+        let path = path.to_str().unwrap();
+        let mut st = Store::create(path, 1 << 20).expect("create");
+        Kv::init(&mut st, path).expect("init");
+
+        let st = Store::open(path).expect("open");
+        let mut kv = Kv::load(&st).expect("load");
+        assert_eq!(kv.entries.len(), 0, "a fresh KV must be empty");
+        assert_eq!(kv.snapshot_root_u64(), FNV_OFFSET, "empty root is the FNV offset basis");
+
+        for (k, v) in [
+            ("order/0001", "pending"),
+            ("order/0002", "confirmed"),
+            ("courier/alpha", "idle"),
+            ("zone/north", "{\"cap\":12}"),
+            ("order/0003", "delivered"),
+        ] {
+            kv.put(k, v.as_bytes());
+        }
+        let mut st = Store::open(path).expect("reopen for write");
+        kv.commit_into(&mut st, path).expect("commit");
+
+        let st = Store::open(path).expect("reopen");
+        let kv = Kv::load(&st).expect("reload");
+        assert_eq!(kv.entries.len(), 5);
+        assert_eq!(
+            kv.keys(),
+            vec!["courier/alpha", "order/0001", "order/0002", "order/0003", "zone/north"],
+            "keys must come back sorted"
+        );
+        assert_eq!(kv.get("order/0002").unwrap(), b"confirmed");
+        assert_eq!(kv.snapshot_root(), "fd11fc93f180ca47", "dowiz-core's snapshot_root");
+        let _ = std::fs::remove_file(path);
+    }
+
+    /// Overwriting a key must change the root, and restoring the old value must restore it.
+    #[test]
+    fn root_is_sensitive_to_every_byte() {
+        let path = std::env::temp_dir().join("bebop_store_kv_sensitive.store");
+        let path = path.to_str().unwrap();
+        let mut st = Store::create(path, 1 << 20).expect("create");
+        Kv::init(&mut st, path).expect("init");
+        let st = Store::open(path).expect("open");
+        let mut kv = Kv::load(&st).expect("load");
+        kv.put("a", b"one");
+        let before = kv.snapshot_root_u64();
+        kv.put("a", b"onf");
+        assert_ne!(kv.snapshot_root_u64(), before, "a one-bit value change must move the root");
+        kv.put("a", b"one");
+        assert_eq!(kv.snapshot_root_u64(), before, "restoring the value restores the root");
+        let _ = std::fs::remove_file(path);
     }
 }

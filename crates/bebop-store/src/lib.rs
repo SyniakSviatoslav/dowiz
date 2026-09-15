@@ -70,6 +70,26 @@ pub struct Superblock {
 }
 
 impl Store {
+    /// Create a FRESH store file of `size_bytes`, initialised exactly as `st_open` does on a
+    /// file with no valid superblock: superblock A only, generation 0, root 0, cursor at the
+    /// first arena cell, capacity = size/8 - 1024.
+    pub fn create(path: &str, size_bytes: usize) -> io::Result<Self> {
+        let n = size_bytes / 8;
+        let mut st = Store { cells: vec![0i64; n] };
+        let capacity = (n - ARENA) as i64;
+        st.cells[SB_A] = MAGIC;
+        st.cells[SB_A + 1] = 2;
+        st.cells[SB_A + 2] = 0;
+        st.cells[SB_A + 3] = 0;
+        st.cells[SB_A + 4] = ARENA as i64;
+        st.cells[SB_A + 12] = capacity;
+        st.cells[SB_A + 15] = crc32_cells(&st.cells, SB_A, 15) as i64;
+        let mut buf = Vec::with_capacity(size_bytes);
+        for c in &st.cells { buf.extend_from_slice(&c.to_le_bytes()); }
+        std::fs::write(path, &buf)?;
+        Ok(st)
+    }
+
     /// Read a store file from disk.
     pub fn open(path: &str) -> io::Result<Self> {
         let bytes = std::fs::read(path)?;
