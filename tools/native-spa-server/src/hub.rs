@@ -316,6 +316,10 @@ pub struct PlaceIn {
     pub fulfilment: FulfilmentIn,
     #[serde(default)]
     pub payment: Option<String>,
+    /// A promo code as the customer typed it. Normalised and re-checked here;
+    /// whatever the storefront showed as a preview is advisory.
+    #[serde(default)]
+    pub promo: Option<String>,
 }
 
 pub async fn menu(State(st): State<Shared>, _slug: Option<AxPath<String>>) -> Result<Json<Value>, HubHttpError> {
@@ -465,40 +469,42 @@ pub async fn menu(State(st): State<Shared>, _slug: Option<AxPath<String>>) -> Re
     })))
 }
 
-pub async fn place(
-    State(st): State<Shared>,
-    _slug: Option<AxPath<String>>,
-    Json(body): Json<PlaceIn>,
-) -> Result<Json<Value>, HubHttpError> {
-    if body.items.is_empty() {
-        return Err(HubHttpError::Invalid("empty order".into()));
-    }
-    if body.contact.phone.chars().filter(char::is_ascii_digit).count() < 8 {
-        return Err(HubHttpError::Invalid("invalid phone".into()));
-    }
-    if body.fulfilment.kind == "delivery"
-        && body.fulfilment.address.as_ref().map_or(true, |a| a.line.trim().is_empty())
-    {
-        return Err(HubHttpError::Invalid("delivery address required".into()));
-    }
+/// How many times a code has been redeemed, folded from the orders themselves.
+///
+/// No counter is stored. The reason is the one the analytics gave: a tally kept
+/// beside the orders is a second number that can disagree with them, and when
+/// they disagree it is always the tally that is wrong.
+///
+/// A rejected or cancelled order gives its use BACK. The venue never took the
+/// money, so holding a use against the customer would charge them for an order
+/// the kitchen refused.
+pub(crate) fn promo_uses(hub: &Hub, code: &str) -> i64 {
+    hub.orders()
+        .iter()
+        .filter(|ev| {
+            let Ok(o) = serde_json::from_str::<Value>(&ev.order_json) else { return false };
+            if matches!(o.get("status").and_then(Value::as_str), Some("REJECTED" | "CANCELLED")) {
+                return false;
+            }
+            o.get("promo").and_then(|p| p.get("code")).and_then(Value::as_str) == Some(code)
+        })
+        .count() as i64
+}
 
-    let cat = st.read_catalog()?;
-    let Some(loc_json) = cat.location() else {
-        return Err(HubHttpError::NotFound("this hub has no venue yet"));
-    };
-    let loc: Value =
-        serde_json::from_str(&loc_json).map_err(|_| HubHttpError::Corrupt("catalogue venue"))?;
-    if loc.get("delivery_paused").and_then(|x| x.as_i64()).unwrap_or(0) == 1
-        || loc.get("status").and_then(|x| x.as_str()) == Some("closed")
-    {
-        return Err(HubHttpError::Conflict("venue is closed".into()));
-    }
-
-    // THE MONEY RULE, unchanged by the move: every price is re-derived from the
-    // catalogue and the browser's unit_price is discarded.
-    let mut lines = Vec::with_capacity(body.items.len());
+/// THE MONEY RULE, in one place: every price is re-derived from the catalogue
+/// and the browser's `unit_price` is discarded.
+///
+/// Lifted out of `place` so the promo preview prices a basket the SAME way the
+/// order does. A preview that ran its own arithmetic would eventually quote a
+/// discount the order then refuses, and the customer would be right to call
+/// that a bait.
+fn price_lines(
+    cat: &dowiz_hub::catalog::Catalog,
+    items: &[LineIn],
+) -> Result<(Vec<Value>, i64), HubHttpError> {
+    let mut lines = Vec::with_capacity(items.len());
     let mut subtotal: i64 = 0;
-    for it in &body.items {
+    for it in items {
         if !(1..=99).contains(&it.quantity) {
             return Err(HubHttpError::Invalid("invalid quantity".into()));
         }
@@ -549,11 +555,106 @@ pub async fn place(
             "name": p.get("name").cloned().unwrap_or(Value::Null)
         }));
     }
+    Ok((lines, subtotal))
+}
+
+#[derive(Deserialize)]
+pub struct PromoCheckIn {
+    pub code: String,
+    pub items: Vec<LineIn>,
+}
+
+/// `POST /api/promo/check` — what would this code take off THIS basket?
+///
+/// The basket arrives as product ids and quantities, never as a subtotal: the
+/// hub prices it with `price_lines`, the same function the order uses. A
+/// preview that trusted a number from the browser would quote whatever the
+/// browser asked for.
+///
+/// This is a PREVIEW and says so. It reads the use-count without the write
+/// lock, so a code on its last use can be quoted here and refused at checkout.
+/// The order is the authority; showing a stale preview costs a moment of
+/// confusion, while taking this answer as binding would give the discount away
+/// twice.
+pub async fn promo_check(
+    State(st): State<Shared>,
+    Json(body): Json<PromoCheckIn>,
+) -> Result<Json<Value>, HubHttpError> {
+    use dowiz_hub::promo::{normalise, Promo, Refusal};
+
+    let code = normalise(&body.code);
+    let cat = st.read_catalog()?;
+    let Some(p) = cat.promo(&code).as_deref().and_then(Promo::parse) else {
+        return Err(HubHttpError::Invalid(Refusal::Unknown.as_str().into()));
+    };
+    let (_, subtotal) = price_lines(&cat, &body.items)?;
+    let used = promo_uses(&st.read_log()?, &code);
+    match p.redeem(subtotal, now_ms(), used) {
+        Ok(cut) => Ok(Json(json!({
+            "code": p.code, "discount": cut, "subtotal": subtotal, "total": subtotal - cut
+        }))),
+        Err(r) => Err(HubHttpError::Conflict(r.as_str().into())),
+    }
+}
+
+pub async fn place(
+    State(st): State<Shared>,
+    _slug: Option<AxPath<String>>,
+    Json(body): Json<PlaceIn>,
+) -> Result<Json<Value>, HubHttpError> {
+    if body.items.is_empty() {
+        return Err(HubHttpError::Invalid("empty order".into()));
+    }
+    if body.contact.phone.chars().filter(char::is_ascii_digit).count() < 8 {
+        return Err(HubHttpError::Invalid("invalid phone".into()));
+    }
+    if body.fulfilment.kind == "delivery"
+        && body.fulfilment.address.as_ref().map_or(true, |a| a.line.trim().is_empty())
+    {
+        return Err(HubHttpError::Invalid("delivery address required".into()));
+    }
+
+    let cat = st.read_catalog()?;
+    let Some(loc_json) = cat.location() else {
+        return Err(HubHttpError::NotFound("this hub has no venue yet"));
+    };
+    let loc: Value =
+        serde_json::from_str(&loc_json).map_err(|_| HubHttpError::Corrupt("catalogue venue"))?;
+    if loc.get("delivery_paused").and_then(|x| x.as_i64()).unwrap_or(0) == 1
+        || loc.get("status").and_then(|x| x.as_str()) == Some("closed")
+    {
+        return Err(HubHttpError::Conflict("venue is closed".into()));
+    }
+
+    let (lines, subtotal) = price_lines(&cat, &body.items)?;
+    // The code is looked up BEFORE the order is built, so an unknown code costs
+    // the customer one refusal rather than a reserved basket. Whether it still
+    // APPLIES is decided later, under the write lock, where the use-count
+    // cannot move underneath the answer.
+    let asked = body.promo.as_deref().map(dowiz_hub::promo::normalise).filter(|c| !c.is_empty());
+    let promo = match &asked {
+        None => None,
+        Some(code) => match cat.promo(code).as_deref().and_then(dowiz_hub::promo::Promo::parse) {
+            Some(p) => Some(p),
+            None => {
+                return Err(HubHttpError::Invalid(
+                    dowiz_hub::promo::Refusal::Unknown.as_str().into(),
+                ))
+            }
+        },
+    };
+
     let min_order = loc.get("min_order").and_then(|x| x.as_i64()).unwrap_or(0);
     if subtotal < min_order {
         return Err(HubHttpError::Conflict("below minimum order".into()));
     }
 
+    // THE FEE IS DECIDED BEFORE THE DISCOUNT, and on the undiscounted subtotal.
+    // The other order would let a promo code quietly ADD a delivery fee by
+    // pushing the basket back under the free-delivery threshold -- a customer
+    // who applied a discount and watched the total go up would be right to
+    // distrust the number. The venue gives away one delivery; it does not
+    // spring a charge.
     let fee = match loc.get("free_delivery_threshold").and_then(|x| x.as_i64()) {
         Some(th) if subtotal >= th => 0,
         _ if body.fulfilment.kind == "pickup" => 0,
@@ -681,13 +782,28 @@ pub async fn place(
         .await?;
     }
 
-    let stored = serde_json::to_string(&envelope).unwrap_or(order_json);
     let ev_id = id.clone();
-    let ev_body = stored.clone();
+    // THE DISCOUNT IS DECIDED UNDER THE WRITE LOCK, beside the append that makes
+    // it real. Counting the uses first and appending after would let two
+    // customers redeem the last use of the same code in the same instant --
+    // rare at one restaurant, and exactly the kind of rare that only shows up
+    // as an unexplained loss.
     let placed = st
         .with_log(move |hub| {
-            hub.append(EventKind::Placed, &ev_id, &ev_body, created_at_ms as u64, [0u8; 32])
-                .map_err(|e| HubHttpError::Io(format!("{e:?}")))
+            let mut envelope = envelope;
+            if let Some(p) = promo {
+                let used = promo_uses(hub, &p.code);
+                let cut = p
+                    .redeem(subtotal, created_at_ms, used)
+                    .map_err(|r| HubHttpError::Conflict(r.as_str().into()))?;
+                envelope["discount"] = json!(cut);
+                envelope["promo"] = json!({ "code": p.code, "discount": cut });
+                envelope["total"] = json!(subtotal - cut + fee);
+            }
+            let stored = serde_json::to_string(&envelope).unwrap_or(order_json);
+            hub.append(EventKind::Placed, &ev_id, &stored, created_at_ms as u64, [0u8; 32])
+                .map_err(|e| HubHttpError::Io(format!("{e:?}")))?;
+            Ok(envelope)
         })
         .await;
     if placed.is_err() && !reservations.is_empty() {
@@ -706,7 +822,7 @@ pub async fn place(
             eprintln!("stock: could NOT release {id} after a failed placement: {e:?}");
         }
     }
-    placed?;
+    let mut envelope = placed?;
 
     // Only after the order is durable. Notifying first would let a crash between
     // the two produce a kitchen ticket for an order that does not exist.
@@ -1577,6 +1693,7 @@ pub fn routes(state: Shared) -> Router {
         .route("/api/public/locations/{slug}/menu", get(menu))
         .route("/api/public/locations/{slug}/orders", post(place))
         .route("/api/menu", get(menu))
+        .route("/api/promo/check", post(promo_check))
         .route("/api/order/{id}", get(order))
         .route("/api/order/{id}/advance", post(advance))
         .route("/api/order/{id}/subscribe", post(subscribe_order))

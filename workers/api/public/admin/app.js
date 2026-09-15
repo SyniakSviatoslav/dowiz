@@ -370,6 +370,124 @@ function bindStats(){
   const r = $('#retryStats'); if (r) r.onclick = () => loadAnalytics();
 }
 
+// ── promo codes ─────────────────────────────────────────────────────────────
+//
+// The DATE inputs speak in whole local days, which is what the owner means, and
+// the API speaks in half-open millisecond windows, which is what a comparison
+// needs. "діє по 31 березня" therefore becomes midnight on 1 April: the code
+// works all through the 31st and stops the instant the day does. Translating in
+// the other direction -- midnight on the 31st -- is the off-by-one that shows
+// up as a customer complaint at nine in the evening.
+const DAY_MS = 86400000;
+
+function dayToMs(v, endOfDay){
+  if (!v) return null;
+  const t = new Date(v + 'T00:00').getTime();
+  return Number.isFinite(t) ? t + (endOfDay ? DAY_MS : 0) : null;
+}
+
+function msToDay(ms, endOfDay){
+  if (ms === null || ms === undefined) return '';
+  const d = new Date(ms - (endOfDay ? DAY_MS : 0));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+const PM_STATUS = {
+  active:    { label: 'діє',         tone: 'ok' },
+  inactive:  { label: 'вимкнено',    tone: '' },
+  scheduled: { label: 'ще не почав', tone: 'wait' },
+  expired:   { label: 'скінчився',   tone: '' },
+  exhausted: { label: 'вичерпано',   tone: '' },
+};
+
+function promoRow(p){
+  const st = PM_STATUS[p.status] || { label: p.status, tone: '' };
+  const cut = p.kind === 'percent'
+    ? `−${p.value}%`
+    : `−<span class="money">${money(p.value)}</span>`;
+  const uses = p.maxUses ? `${p.used}/${p.maxUses}` : `${p.used}`;
+  const when = [
+    p.fromMs ? `з ${msToDay(p.fromMs, false)}` : '',
+    p.untilMs ? `по ${msToDay(p.untilMs, true)}` : '',
+    p.minOrder ? `від <span class="money">${money(p.minOrder)}</span>` : '',
+  ].filter(Boolean).join(' · ');
+  return `<div class="erow promo" data-code="${esc(p.code)}">
+    <span><b>${esc(p.code)}</b> ${cut}
+      <span class="chip ${st.tone}">${st.label}</span>
+      ${when ? `<br><small class="hint">${when}</small>` : ''}</span>
+    <span class="row">
+      <small class="hint" title="використань">${uses}</small>
+      <button class="icon-btn" data-pm-toggle aria-label="${p.active ? 'Вимкнути' : 'Увімкнути'}">
+        <i class="ti ti-${p.active ? 'player-pause' : 'player-play'} i" aria-hidden="true"></i></button>
+      <button class="icon-btn" data-pm-del aria-label="Видалити ${esc(p.code)}">
+        <i class="ti ti-trash i" aria-hidden="true"></i></button>
+    </span>
+  </div>`;
+}
+
+function renderPromos(){
+  const box = $('#pmList'); if (!box) return;
+  const rows = S.promos || [];
+  box.innerHTML = rows.length
+    ? rows.map(promoRow).join('')
+    : `<p class="hint">Жодного коду. Перший рядок вище створює його.</p>`;
+  box.querySelectorAll('.promo').forEach(row => {
+    const code = row.dataset.code;
+    const p = rows.find(x => x.code === code);
+    row.querySelector('[data-pm-toggle]').onclick = () => savePromo({ ...p, active: !p.active });
+    // A delete is not undoable and the word becomes free again, so it asks.
+    row.querySelector('[data-pm-del]').onclick = async () => {
+      if (!confirm(`Видалити ${code}? Код перестане діяти.`)) return;
+      await api(`/owner/promotions/${encodeURIComponent(code)}/delete`, {});
+      loadPromos();
+    };
+  });
+}
+
+async function loadPromos(){
+  try { S.promos = (await api('/owner/promotions')).promotions || []; }
+  catch { S.promos = []; }
+  renderPromos();
+}
+
+function pmFail(msg){
+  const box = $('#pmErr'); if (!box) return;
+  box.textContent = msg || '';
+  box.hidden = !msg;
+}
+
+async function savePromo(p){
+  pmFail('');
+  try {
+    await api('/owner/promotions', {
+      code: p.code, kind: p.kind, value: p.value,
+      minOrder: p.minOrder || 0, fromMs: p.fromMs ?? null,
+      untilMs: p.untilMs ?? null, maxUses: p.maxUses ?? null, active: p.active !== false,
+    });
+    loadPromos();
+    return true;
+  } catch (e) { pmFail(String(e.message || e)); return false; }
+}
+
+function bindPromos(){
+  if (!$('#pmSave')) return;
+  loadPromos();
+  $('#pmSave').onclick = async () => {
+    const ok = await savePromo({
+      code: $('#pmCode').value,
+      kind: $('#pmKind').value,
+      value: parseInt($('#pmValue').value, 10) || 0,
+      minOrder: parseInt($('#pmMin').value, 10) || 0,
+      fromMs: dayToMs($('#pmFrom').value, false),
+      untilMs: dayToMs($('#pmUntil').value, true),
+      maxUses: parseInt($('#pmMax').value, 10) || null,
+      active: true,
+    });
+    if (ok) ['#pmCode', '#pmValue', '#pmMin', '#pmFrom', '#pmUntil', '#pmMax']
+      .forEach(id => { $(id).value = ''; });
+  };
+}
+
 function skeletonMenu(){
   return `<div class="panel" aria-busy="true" aria-label="Завантажуємо меню">
     <div class="panel-h"><span class="skel" style="width:8rem;height:1rem"></span></div>
@@ -634,6 +752,33 @@ function setupView(){
         <button class="btn pri" id="hoursSave"><i class="ti ti-check i" aria-hidden="true"></i>Зберегти</button>
         <button class="btn" id="hoursOff">Без графіка</button>
       </div>
+    </section>
+
+    <section class="card">
+      <h2>Промокоди</h2>
+      <p class="hint">Знижка йде з їжі, не з доставки — кур'єру платять однаково.
+         Відсоток округлюємо вниз. Статус рахується сам: код не треба
+         вимикати вручну, коли скінчився термін.</p>
+      <div class="promo-form">
+        <input id="pmCode" class="ask" type="text" placeholder="КОД" autocomplete="off"
+               maxlength="16" aria-label="Код">
+        <select id="pmKind" class="ask" aria-label="Тип знижки">
+          <option value="percent">відсоток</option>
+          <option value="fixed">сума</option>
+        </select>
+        <input id="pmValue" class="ask" type="number" min="1" placeholder="10"
+               inputmode="numeric" aria-label="Розмір знижки">
+        <input id="pmMin" class="ask" type="number" min="0" placeholder="від суми"
+               inputmode="numeric" aria-label="Мінімальне замовлення">
+        <input id="pmFrom" class="ask" type="date" aria-label="Діє з">
+        <input id="pmUntil" class="ask" type="date" aria-label="Діє по">
+        <input id="pmMax" class="ask" type="number" min="1" placeholder="разів"
+               inputmode="numeric" aria-label="Скільки разів можна використати">
+        <button class="btn pri" id="pmSave">
+          <i class="ti ti-plus i" aria-hidden="true"></i>Додати</button>
+      </div>
+      <div id="pmErr" class="report" role="alert" hidden></div>
+      <div id="pmList" class="elist"></div>
     </section>
 
     <section class="card">
@@ -918,6 +1063,7 @@ function renderHours(){
 }
 
 function bindSetup(){
+  bindPromos();
   let csvText = null;
   renderSettings();
 

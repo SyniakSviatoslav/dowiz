@@ -29,6 +29,11 @@ const P_CATEGORY: &str = "category:";
 /// unit are description, not history. The log holds what happened to it; this
 /// holds what it is.
 const P_SUPPLY: &str = "supply:";
+/// A promo code. Stored under the NORMALISED code itself rather than a
+/// generated id, so two promos sharing a code cannot exist: the second write
+/// replaces the first instead of creating a pair the lookup would have to
+/// choose between.
+const P_PROMO: &str = "promo:";
 
 pub struct Catalog {
     store: Store,
@@ -108,6 +113,26 @@ impl Catalog {
         self.entries_with_prefix(P_SUPPLY)
     }
 
+    pub fn set_promo(&mut self, code: &str, json: &str) {
+        self.kv.put(&format!("{P_PROMO}{code}"), json.as_bytes());
+    }
+
+    pub fn promo(&self, code: &str) -> Option<String> {
+        self.kv
+            .get(&format!("{P_PROMO}{code}"))
+            .map(|v| String::from_utf8_lossy(&v).into_owned())
+    }
+
+    pub fn promos(&self) -> Vec<(String, String)> {
+        self.entries_with_prefix(P_PROMO)
+    }
+
+    /// Removing a promo is a real delete, not a flag. A code the owner deleted
+    /// must stop working; `active: false` is the separate, reversible thing.
+    pub fn remove_promo(&mut self, code: &str) -> bool {
+        self.kv.remove(&format!("{P_PROMO}{code}"))
+    }
+
     pub fn categories(&self) -> Vec<(String, String)> {
         self.entries_with_prefix(P_CATEGORY)
     }
@@ -177,6 +202,26 @@ mod tests {
         b.set_product("p1", r#"{"price":950}"#);
         let _ = b.to_bytes().unwrap();
         assert_ne!(a.root(), b.root(), "one changed price must change the root");
+    }
+
+    /// A deleted promo must be gone from the IMAGE, not just from the in-memory
+    /// entries. The commit rewrites all four arrays, so a delete that only
+    /// dropped the entry would still be readable after a reload.
+    #[test]
+    fn a_deleted_promo_does_not_come_back_after_a_reload() {
+        let mut c = Catalog::create().unwrap();
+        c.set_promo("SAVE10", r#"{"code":"SAVE10","kind":"percent","value":10}"#);
+        c.set_promo("WELCOME", r#"{"code":"WELCOME","kind":"fixed","value":300}"#);
+        let _ = c.to_bytes().unwrap();
+
+        assert!(c.remove_promo("SAVE10"));
+        assert!(!c.remove_promo("SAVE10"), "removing it twice is not a second delete");
+        let bytes = c.to_bytes().unwrap();
+
+        let back = Catalog::load(&bytes).unwrap();
+        assert_eq!(back.promos().len(), 1);
+        assert!(back.promo("SAVE10").is_none(), "the deleted code is readable after reload");
+        assert!(back.promo("WELCOME").is_some());
     }
 
     #[test]

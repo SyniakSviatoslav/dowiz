@@ -18,7 +18,7 @@
 //! VPS. There is no shared secret store to breach, and a compromise reaches one
 //! restaurant's tokens rather than every restaurant's.
 
-use crate::minijson::{esc, str_field};
+use crate::minijson::esc;
 use crate::HubError;
 use bebop_store::kv::Kv;
 use bebop_store::Store;

@@ -108,6 +108,19 @@ impl Kv {
         }
     }
 
+    /// Remove a key, reporting whether it was there. The commit rewrites all
+    /// four arrays anyway, so a delete costs exactly what a put costs and there
+    /// is no tombstone to compact later.
+    pub fn remove(&mut self, key: &str) -> bool {
+        match self.entries.binary_search_by(|(k, _)| k.as_str().cmp(key)) {
+            Ok(i) => {
+                self.entries.remove(i);
+                true
+            }
+            Err(_) => false,
+        }
+    }
+
     /// FNV-1a 64 over frame-delimited (key, value) pairs -- `len || bytes` for each -- which is
     /// byte-for-byte what `InMemoryStore::snapshot_root` folds in dowiz-core, and what
     /// `kv_snapshot` folds in kv.bp.

@@ -108,6 +108,25 @@ pub fn int_field(json: &str, key: &str) -> Option<i64> {
     }
 }
 
+/// The value of a boolean field. `None` when the key is absent OR holds
+/// something that is not a bare `true`/`false`, so a caller decides what a
+/// missing switch means rather than inheriting `false` by accident.
+pub fn bool_field(json: &str, key: &str) -> Option<bool> {
+    let pat = format!("\"{key}\":");
+    let mut from = 0usize;
+    loop {
+        let at = json[from..].find(&pat)? + from;
+        let rest = &json[at + pat.len()..];
+        if rest.starts_with("true") {
+            return Some(true);
+        }
+        if rest.starts_with("false") {
+            return Some(false);
+        }
+        from = at + pat.len();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -328,6 +328,15 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
 /* A segmented switch: two ranges, one of them current. Not a card — it is one
    control, so the buttons share an edge instead of each carrying their own. */
 .seg{display:flex;gap:2px}
+/* The promo form is one control per field on a phone and a single row on a
+   desktop: auto-fit rather than a fixed column count, so nothing is squeezed
+   below the width its own placeholder needs. */
+.promo-form{display:grid;gap:var(--space-2);
+      grid-template-columns:repeat(auto-fit,minmax(7.5rem,1fr));
+      margin-bottom:var(--space-3)}
+.promo-form .btn{justify-content:center}
+.erow.promo{align-items:flex-start;padding:var(--space-2) var(--space-3)}
+.erow.promo .row{gap:var(--space-1)}
 .elist{display:grid;gap:var(--space-1)}
 .erow{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);
       min-height:var(--tap);padding:0 var(--space-3);

@@ -288,6 +288,14 @@ input:focus,textarea:focus,select:focus{border-color:var(--brand-primary);outlin
 .err{color:var(--color-danger);font-size:var(--text-sm);margin-top:var(--space-2);
      font-weight:var(--weight-medium)}
 /* Not a card inside a sheet. A rule and rhythm do the same job without nesting. */
+/* The code field and its button share a line: one action on one input, so a
+   stacked layout would read as two unrelated controls. */
+.promo-row{display:flex;gap:var(--space-2);align-items:stretch;margin-bottom:var(--space-2)}
+.promo-row input{flex:1 1 auto;margin:0;text-transform:uppercase}
+.promo-row .btn{flex:0 0 auto;width:auto;margin:0;padding-inline:var(--space-4)}
+/* A discount is the one row in the totals that moves the number DOWN, so it is
+   the one row that carries a colour. */
+.totals .row.cut{color:var(--brand-primary)}
 .totals{margin-block:var(--space-4);padding-top:var(--space-4);border-top:1px solid var(--brand-border)}
 .totals .row{padding-block:var(--space-2);border:0;font-size:var(--text-sm);color:var(--brand-text-muted)}
 .totals .row.grand{font-size:var(--text-lg);font-weight:var(--weight-bold);color:var(--brand-text);

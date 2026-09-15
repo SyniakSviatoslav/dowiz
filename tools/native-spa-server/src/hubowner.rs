@@ -807,6 +807,9 @@ pub fn routes(state: Shared) -> Router {
         .route("/api/public/reach", get(public_reach))
         .route("/api/owner/stock", get(stock))
         .route("/api/owner/analytics", get(analytics))
+        .route("/api/owner/promotions", get(promotions))
+        .route("/api/owner/promotions", post(set_promotion))
+        .route("/api/owner/promotions/{code}/delete", post(delete_promotion))
         .route("/api/owner/supplies", post(set_supply))
         .route("/api/owner/stock/{kind}", post(stock_move))
         .with_state(state)
@@ -1155,6 +1158,153 @@ pub async fn clear_product_image(
         Ok(Json(json!({ "imageUrl": Value::Null })))
     })
     .await
+}
+
+
+// ── promo codes ─────────────────────────────────────────────────────────────
+
+/// AN UNKNOWN FIELD IS A REFUSAL, not a shrug.
+///
+/// The default is to ignore what serde does not recognise, and for a promo that
+/// default gives money away: a client that sends `until` instead of `untilMs`
+/// gets a code with NO expiry, silently, forever. The cost of being strict is a
+/// 400 with the field named; the cost of being lenient is an unbounded
+/// discount nobody created on purpose. This was not a hypothesis -- the first
+/// run of the tests below saved an "expired" code that was still live.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PromoIn {
+    pub code: String,
+    pub kind: String,
+    pub value: i64,
+    #[serde(default)]
+    pub min_order: Option<i64>,
+    #[serde(default)]
+    pub from_ms: Option<i64>,
+    #[serde(default)]
+    pub until_ms: Option<i64>,
+    #[serde(default)]
+    pub max_uses: Option<i64>,
+    #[serde(default)]
+    pub active: Option<bool>,
+}
+
+/// `GET /api/owner/promotions` — every code, with its DERIVED status.
+///
+/// Status is computed, never stored: a stored one goes stale the moment the
+/// clock passes the window, and the owner would be reading a label that no
+/// longer describes what the code does.
+pub async fn promotions(
+    State(st): State<Shared>,
+    _who: OwnerCaller,
+) -> Result<Json<Value>, HubHttpError> {
+    use dowiz_hub::promo::Promo;
+
+    let cat = st.read_catalog()?;
+    let hub = st.read_log()?;
+    let now = now_ms();
+    let mut rows: Vec<Value> = cat
+        .promos()
+        .into_iter()
+        .filter_map(|(_, j)| Promo::parse(&j))
+        .map(|p| {
+            let used = crate::hub::promo_uses(&hub, &p.code);
+            json!({
+                "code": p.code, "kind": p.kind.as_str(), "value": p.value,
+                "minOrder": p.min_order, "fromMs": p.from_ms, "untilMs": p.until_ms,
+                "maxUses": p.max_uses, "active": p.active,
+                "used": used, "status": p.status(now, used).as_str(),
+            })
+        })
+        .collect();
+    // Alphabetical, because a code is looked up by its name. Sorting by status
+    // would move a row the moment a window closed, under the owner's cursor.
+    rows.sort_by(|a, b| a["code"].as_str().cmp(&b["code"].as_str()));
+    let currency = cat
+        .location()
+        .and_then(|j| serde_json::from_str::<Value>(&j).ok())
+        .and_then(|l| l.get("currency").and_then(Value::as_str).map(String::from))
+        .unwrap_or_else(|| "ALL".into());
+    Ok(Json(json!({ "promotions": rows, "currency": currency })))
+}
+
+/// `POST /api/owner/promotions` — create or replace one.
+///
+/// Replace, not merge: a promo is six numbers read together, and a partial
+/// update would let an owner change the percentage while a forgotten window
+/// from last month silently keeps it expired.
+pub async fn set_promotion(
+    State(st): State<Shared>,
+    _who: OwnerCaller,
+    Json(raw): Json<Value>,
+) -> Result<Json<Value>, HubHttpError> {
+    use dowiz_hub::promo::{normalise, valid_code, valid_value, Kind, Promo};
+
+    // Deserialised BY HAND rather than through the extractor, so a rejected
+    // field comes back as a sentence naming it -- serde says "unknown field
+    // `until`, expected one of ..." -- instead of the extractor's bare 422 with
+    // an empty body, which tells the owner only that something was wrong.
+    let body: PromoIn =
+        serde_json::from_value(raw).map_err(|e| HubHttpError::Invalid(e.to_string()))?;
+
+    let code = normalise(&body.code);
+    if !valid_code(&code) {
+        return Err(HubHttpError::Invalid(
+            "a code is 3 to 16 letters or digits".into(),
+        ));
+    }
+    let Some(kind) = Kind::parse(&body.kind) else {
+        return Err(HubHttpError::Invalid("a code takes off a percent or a fixed amount".into()));
+    };
+    if !valid_value(kind, body.value) {
+        return Err(HubHttpError::Invalid(match kind {
+            Kind::Percent => "a percentage is between 1 and 100".into(),
+            Kind::Fixed => "a fixed discount must be more than nothing".into(),
+        }));
+    }
+    // A window that ends before it starts is a code that can never apply. It is
+    // refused rather than saved, because the list would show it as Scheduled
+    // forever and nobody would know why.
+    if let (Some(f), Some(u)) = (body.from_ms, body.until_ms) {
+        if u <= f {
+            return Err(HubHttpError::Invalid("that window ends before it starts".into()));
+        }
+    }
+    let p = Promo {
+        code: code.clone(),
+        kind,
+        value: body.value,
+        min_order: body.min_order.unwrap_or(0).max(0),
+        from_ms: body.from_ms,
+        until_ms: body.until_ms,
+        max_uses: body.max_uses.filter(|n| *n > 0),
+        active: body.active.unwrap_or(true),
+    };
+    let stored = p.to_json();
+    st.with_catalog(move |cat| {
+        cat.set_promo(&code, &stored);
+        Ok(())
+    })
+    .await?;
+    Ok(Json(json!({ "ok": true, "code": p.code })))
+}
+
+/// `POST /api/owner/promotions/{code}/delete` — a real delete.
+///
+/// Distinct from the active switch on purpose. Switching off is reversible and
+/// keeps the dates; deleting means the code stops working and the owner is
+/// free to reuse the word.
+pub async fn delete_promotion(
+    State(st): State<Shared>,
+    _who: OwnerCaller,
+    AxPath(code): AxPath<String>,
+) -> Result<Json<Value>, HubHttpError> {
+    let code = dowiz_hub::promo::normalise(&code);
+    let gone = st.with_catalog(move |cat| Ok(cat.remove_promo(&code))).await?;
+    if !gone {
+        return Err(HubHttpError::NotFound("promo code"));
+    }
+    Ok(Json(json!({ "ok": true })))
 }
 
 // ── supplies and stock ───────────────────────────────────────────────────────

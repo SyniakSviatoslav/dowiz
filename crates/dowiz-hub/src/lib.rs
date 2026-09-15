@@ -31,6 +31,7 @@ pub mod minijson;
 pub mod modifiers;
 pub mod palette;
 pub mod post;
+pub mod promo;
 pub mod roster;
 pub mod settings;
 pub mod stock;

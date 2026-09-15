@@ -27,6 +27,7 @@ const T = {
         onlyAvail:'Vetëm në dispozicion',
         later:'Në një orë tjetër', schedFail:'Koha nuk vlen',
         inArea:'Ne dërgojmë këtu', outArea:'Jashtë zonës sonë të dërgesës', noGeo:'Nuk morëm dot vendndodhjen',
+        promo:'Kodi i zbritjes', promoApply:'Apliko', promoOff:'Hiq', discount:'Zbritja',
         notify:'Merrni njoftime në Telegram', notifyHint:'Ju njoftojmë sa herë ndryshon porosia',
         st:{PENDING:'Duke pritur konfirmimin',CONFIRMED:'U konfirmua',PREPARING:'Po gatuhet',
             READY:'Gati',IN_DELIVERY:'Në rrugë',DELIVERED:'U dorëzua',
@@ -49,6 +50,7 @@ const T = {
         onlyAvail:'Available only',
         later:'At a later time', schedFail:'That time will not work',
         inArea:'We deliver here', outArea:'Outside our delivery area', noGeo:'Could not get your location',
+        promo:'Promo code', promoApply:'Apply', promoOff:'Remove', discount:'Discount',
         notify:'Get updates on Telegram', notifyHint:'We\u2019ll message you each time this order moves',
         st:{PENDING:'Awaiting confirmation',CONFIRMED:'Confirmed',PREPARING:'Being prepared',
             READY:'Ready',IN_DELIVERY:'On the way',DELIVERED:'Delivered',
@@ -71,6 +73,7 @@ const T = {
         noHits:'Нічого не знайдено', clear:'Очистити', onlyAvail:'Лише в наявності',
         later:'На інший час', schedFail:'Такий час не підходить',
         inArea:'Сюди доставляємо', outArea:'Поза зоною доставки', noGeo:'Не вдалося визначити місце',
+        promo:'Промокод', promoApply:'Застосувати', promoOff:'Прибрати', discount:'Знижка',
         notify:'Сповіщення в Telegram', notifyHint:'Напишемо щоразу, коли статус зміниться',
         st:{PENDING:'Очікує підтвердження',CONFIRMED:'Підтверджено',PREPARING:'Готується',
             READY:'Готове',IN_DELIVERY:'У дорозі',DELIVERED:'Доставлено',
@@ -117,7 +120,22 @@ function addLine(pid, mods, q){
   state.cart[k] = { p: pid, m: mods || [], q: (cur?.q || 0) + q };
   saveCart();
 }
-function saveCart(){ safeSet('dw_cart_'+SLUG, JSON.stringify(state.cart)); }
+// A DISCOUNT BELONGS TO THE BASKET IT WAS QUOTED FOR. Change the basket and the
+// number the hub gave back stops describing it -- a 50% code checked against
+// 2700 would sit on screen claiming 1350 off a basket now worth 900. The order
+// would still be priced correctly by the hub; the customer would have been
+// shown a lie on the way there. So the quote is dropped with the change and
+// re-asked.
+function saveCart(){
+  safeSet('dw_cart_'+SLUG, JSON.stringify(state.cart));
+  state.promo = null;
+}
+
+/// Re-render the totals in place after the discount moved.
+function refreshTotals(){
+  const box = document.getElementById('totalsBox');
+  if (box) box.outerHTML = totalsBlock();
+}
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 // Money arrives as integer minor units and is formatted only here. It is never
@@ -705,10 +723,16 @@ function openCart(){
 function totalsBlock(){
   const s = subtotal(), d = deliveryFee(), L = state.loc;
   const below = L?.minOrder && s < L.minOrder;
-  return `<div class="totals">
+  // The hub's number, never one worked out here. The storefront knows what a
+  // code took off only because the hub said so; re-deriving it locally would
+  // give two answers to the same question and put the wrong one on screen.
+  const cut = state.promo ? state.promo.discount : 0;
+  return `<div class="totals" id="totalsBox">
     <div class="row"><span>${esc(t('subtotal'))}</span><span class="money">${money(s)}</span></div>
+    ${cut ? `<div class="row cut"><span>${esc(t('discount'))} · ${esc(state.promo.code)}</span>
+      <span class="money">−${money(cut)}</span></div>` : ''}
     <div class="row"><span>${esc(t('delivery'))}</span><span class="money">${d ? money(d) : esc(t('free'))}</span></div>
-    <div class="row grand"><span>${esc(t('total'))}</span><span class="money">${money(s + d)}</span></div>
+    <div class="row grand"><span>${esc(t('total'))}</span><span class="money">${money(s - cut + d)}</span></div>
     ${below ? `<div class="err">${esc(t('min'))}: <span class="money">${money(L.minOrder)}</span></div>` : ''}
   </div>`;
 }
@@ -745,6 +769,14 @@ function openCheckout(){
       ${state.loc?.stripePublishableKey ? `<button class="pay" role="radio" aria-checked="false" data-pay="card">
         <i class="ti ti-credit-card i" aria-hidden="true"></i><span class="t"><b>${esc(t('card'))}</b><small>${esc(t('cardNote'))}</small></span></button>` : ''}
     </div>
+    <label for="f-promo">${esc(t('promo'))}</label>
+    <div class="promo-row">
+      <input id="f-promo" autocomplete="off" autocapitalize="characters" spellcheck="false"
+             value="${esc(state.promo ? state.promo.code : '')}">
+      <button type="button" class="btn btn-ghost" id="f-promo-go">
+        ${esc(state.promo ? t('promoOff') : t('promoApply'))}</button>
+    </div>
+    <p id="f-promo-out" class="geo" hidden></p>
     <div id="f-err"></div>
     ${totalsBlock()}
     <button class="btn" id="place" style="margin-bottom:12px">${esc(t('place'))}</button>`);
@@ -787,6 +819,44 @@ function openCheckout(){
     }
     if (when === 'later') f.focus();
   });
+
+  // THE CODE IS CHECKED BY THE HUB, against a basket the hub prices itself. The
+  // storefront sends product ids and quantities and gets back one number. It is
+  // a PREVIEW: the order re-checks it under the write lock, so a code on its
+  // last use can pass here and still be refused at the end. That is the right
+  // way round -- the alternative is giving the same last use away twice.
+  const promoBtn = $('#f-promo-go');
+  promoBtn.onclick = async () => {
+    const out = $('#f-promo-out');
+    if (state.promo) {
+      state.promo = null; $('#f-promo').value = ''; out.hidden = true;
+      promoBtn.textContent = t('promoApply');
+      return refreshTotals();
+    }
+    const code = $('#f-promo').value.trim();
+    if (!code) return;
+    out.hidden = false; out.className = 'geo'; out.textContent = t('checking');
+    promoBtn.disabled = true;
+    try {
+      const items = cartLines().map(l => ({
+        product_id: l.p.id, modifier_ids: l.m, quantity: l.q }));
+      const r = await fetch(`${API}/promo/check`, {
+        method:'POST', headers:{ 'content-type':'application/json' },
+        body: JSON.stringify({ code, items }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+      state.promo = { code: d.code, discount: d.discount };
+      out.className = 'geo ok';
+      // A toast is plain text and so is this line: one number, read once.
+      out.textContent = `−${money(d.discount)}`; // money:toast
+      promoBtn.textContent = t('promoOff');
+      refreshTotals();
+    } catch (e) {
+      state.promo = null;
+      out.className = 'geo bad'; out.textContent = String(e.message || e);
+      refreshTotals();
+    } finally { promoBtn.disabled = false; }
+  };
 
   const geo = $('#f-geo');
   if (geo) geo.onclick = () => {
@@ -848,6 +918,7 @@ async function place(pay){
           address:{ line:addr, note: note || null,
                     ...(state.geo || {}) } },
         payment: pay, locale: lang,
+        ...(state.promo ? { promo: state.promo.code } : {}),
         // Epoch milliseconds. `datetime-local` has no timezone, so it is read
         // in the CUSTOMER'S timezone -- which is the venue's too, for a
         // delivery you can walk to.

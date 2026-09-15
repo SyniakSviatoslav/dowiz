@@ -2252,3 +2252,197 @@ async fn analytics_are_folded_from_the_orders_themselves() {
     assert_eq!(get(&s.base, "/api/owner/analytics", None).0, 401);
     let _ = (a, b);
 }
+
+/// A promo code, end to end: created by the owner, previewed by the storefront,
+/// applied by the order, counted from the orders themselves.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_promo_code_comes_off_the_food_and_not_off_the_courier() {
+    let s = boot("promo_applies").await;
+    let (_, t) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = t["access_token"].as_str().unwrap().to_string();
+
+    let (code, _) = post(&s.base, "/api/owner/promotions", Some(&owner),
+        json!({ "code": "save 10", "kind": "percent", "value": 10 }));
+    assert_eq!(code, 200);
+
+    // Two rolls at 900 = 1800 food, plus a 200 delivery fee. Ten per cent is
+    // 180, and the fee is untouched: the courier is paid either way.
+    let (code, order) = post(&s.base, "/api/public/locations/dubin/orders", None, json!({
+        "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 2 }],
+        "contact": { "name": "C", "phone": "+355690000000" },
+        "fulfilment": { "kind": "delivery", "address": { "line": "Rruga Taulantia 1" } },
+        "promo": "SAVE10"
+    }));
+    assert_eq!(code, 200, "{order}");
+    assert_eq!(order["discount"], 180);
+    assert_eq!(order["delivery_fee"], 200);
+    assert_eq!(order["total"], 1800 - 180 + 200);
+    assert_eq!(order["promo"]["code"], "SAVE10");
+
+    // The use is counted from that order, with no counter anywhere.
+    let (_, list) = get(&s.base, "/api/owner/promotions", Some(&owner));
+    let row = &list["promotions"][0];
+    assert_eq!(row["code"], "SAVE10");
+    assert_eq!(row["used"], 1);
+    assert_eq!(row["status"], "active");
+}
+
+/// The preview prices the basket with the SAME function the order uses, so a
+/// browser cannot ask for a discount on a subtotal it invented.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_preview_prices_the_basket_itself() {
+    let s = boot("promo_preview").await;
+    let (_, t) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = t["access_token"].as_str().unwrap().to_string();
+    post(&s.base, "/api/owner/promotions", Some(&owner),
+         json!({ "code": "HALF", "kind": "percent", "value": 50, "minOrder": 1000 }));
+
+    let (code, v) = post(&s.base, "/api/promo/check", None,
+        json!({ "code": "half", "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 3 }] }));
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["subtotal"], 2700, "priced from the catalogue, not from the request");
+    assert_eq!(v["discount"], 1350);
+
+    // One roll is 900, under the code's 1000 minimum, and the refusal says so.
+    let (code, v) = post(&s.base, "/api/promo/check", None,
+        json!({ "code": "HALF", "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 1 }] }));
+    assert_eq!(code, 409, "{v}");
+    assert!(v["error"].as_str().unwrap().contains("minimum"), "{v}");
+}
+
+/// Every way a code can fail to apply, at the checkout rather than in the unit
+/// test: the customer must be told which one.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_code_that_does_not_apply_says_which_way() {
+    let s = boot("promo_refusals").await;
+    let (_, t) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = t["access_token"].as_str().unwrap().to_string();
+
+    let basket = |promo: &str| json!({
+        "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 2 }],
+        "contact": { "name": "C", "phone": "+355690000000" },
+        "fulfilment": { "kind": "pickup" },
+        "promo": promo
+    });
+
+    // A code nobody created.
+    let (code, v) = post(&s.base, "/api/public/locations/dubin/orders", None, basket("NOSUCH"));
+    assert_eq!(code, 400, "{v}");
+    assert!(v["error"].as_str().unwrap().contains("unknown"), "{v}");
+
+    // Switched off.
+    post(&s.base, "/api/owner/promotions", Some(&owner),
+         json!({ "code": "PAUSED", "kind": "fixed", "value": 100, "active": false }));
+    let (code, v) = post(&s.base, "/api/public/locations/dubin/orders", None, basket("PAUSED"));
+    assert_eq!(code, 409, "{v}");
+    assert!(v["error"].as_str().unwrap().contains("not active"), "{v}");
+
+    // Expired: a window that closed in 2001.
+    post(&s.base, "/api/owner/promotions", Some(&owner),
+         json!({ "code": "OLD", "kind": "fixed", "value": 100,
+                 "fromMs": 1_000_000_000_000i64, "untilMs": 1_000_000_001_000i64 }));
+    let (code, v) = post(&s.base, "/api/public/locations/dubin/orders", None, basket("OLD"));
+    assert_eq!(code, 409, "{v}");
+    assert!(v["error"].as_str().unwrap().contains("expired"), "{v}");
+
+    // Used up: a one-use code, spent, then offered again.
+    post(&s.base, "/api/owner/promotions", Some(&owner),
+         json!({ "code": "ONCE", "kind": "fixed", "value": 100, "maxUses": 1 }));
+    let (code, v) = post(&s.base, "/api/public/locations/dubin/orders", None, basket("ONCE"));
+    assert_eq!(code, 200, "{v}");
+    let (code, v) = post(&s.base, "/api/public/locations/dubin/orders", None, basket("ONCE"));
+    assert_eq!(code, 409, "{v}");
+    assert!(v["error"].as_str().unwrap().contains("fully used"), "{v}");
+}
+
+/// The strictness that the first run of these tests bought: a field the hub
+/// does not recognise is a refusal. Ignoring `until` because the field is
+/// spelled `untilMs` saves a code with no expiry, which is an unbounded
+/// discount created by a typo.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_misspelled_field_is_refused_rather_than_ignored() {
+    let s = boot("promo_strict").await;
+    let (_, t) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = t["access_token"].as_str().unwrap().to_string();
+
+    let (code, v) = post(&s.base, "/api/owner/promotions", Some(&owner),
+        json!({ "code": "TYPO", "kind": "fixed", "value": 100, "until": 1_000_000_000_000i64 }));
+    assert_eq!(code, 400, "a code with an ignored expiry was saved: {v}");
+    assert!(v["error"].as_str().unwrap_or("").contains("until"),
+            "the refusal must name the field: {v}");
+
+    let (_, list) = get(&s.base, "/api/owner/promotions", Some(&owner));
+    assert_eq!(list["promotions"].as_array().unwrap().len(), 0, "nothing was stored");
+}
+
+/// A rejected order gives its use back. The venue never took the money, so
+/// holding a use against the customer would charge them for a refusal.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_rejected_order_returns_the_use_it_took() {
+    let s = boot("promo_rejected").await;
+    let (_, t) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = t["access_token"].as_str().unwrap().to_string();
+    post(&s.base, "/api/owner/promotions", Some(&owner),
+         json!({ "code": "ONCE", "kind": "fixed", "value": 100, "maxUses": 1 }));
+
+    let (_, order) = post(&s.base, "/api/public/locations/dubin/orders", None, json!({
+        "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 2 }],
+        "contact": { "name": "C", "phone": "+355690000000" },
+        "fulfilment": { "kind": "pickup" }, "promo": "ONCE"
+    }));
+    let id = order["id"].as_str().unwrap().to_string();
+
+    let (_, list) = get(&s.base, "/api/owner/promotions", Some(&owner));
+    assert_eq!(list["promotions"][0]["used"], 1);
+
+    let (code, v) = post(&s.base, &format!("/api/owner/orders/{id}/action"), Some(&owner),
+                         json!({ "action": "reject", "reason": "out of fish" }));
+    assert_eq!(code, 200, "{v}");
+
+    let (_, list) = get(&s.base, "/api/owner/promotions", Some(&owner));
+    assert_eq!(list["promotions"][0]["used"], 0, "the refused order still holds the use");
+    assert_eq!(list["promotions"][0]["status"], "active");
+}
+
+/// Deleting is not the same as switching off: the deleted code stops working
+/// and the word is free again.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_deleted_code_stops_working() {
+    let s = boot("promo_delete").await;
+    let (_, t) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = t["access_token"].as_str().unwrap().to_string();
+    post(&s.base, "/api/owner/promotions", Some(&owner),
+         json!({ "code": "GONE", "kind": "fixed", "value": 100 }));
+
+    let (code, v) = post(&s.base, "/api/owner/promotions/GONE/delete", Some(&owner), json!({}));
+    assert_eq!(code, 200, "{v}");
+    let (code, _) = post(&s.base, "/api/owner/promotions/GONE/delete", Some(&owner), json!({}));
+    assert_eq!(code, 404, "deleting it twice is not a second delete");
+
+    let (code, v) = post(&s.base, "/api/promo/check", None,
+        json!({ "code": "GONE", "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 1 }] }));
+    assert_eq!(code, 400, "{v}");
+
+    let (_, list) = get(&s.base, "/api/owner/promotions", Some(&owner));
+    assert_eq!(list["promotions"].as_array().unwrap().len(), 0);
+}
+
+/// Promo codes are the owner's. A customer who found the route must not be able
+/// to mint one.
+#[tokio::test(flavor = "multi_thread")]
+async fn only_the_owner_can_make_a_code() {
+    let s = boot("promo_auth").await;
+    // The owner login deliberately refuses courier credentials, so the courier
+    // comes in through their own door and still must not reach this route.
+    let (_, t) = post(&s.base, "/api/courier/auth/login", None,
+                      json!({ "phone": "+355691112233", "password": "courier-pw" }));
+    let courier = t["jwt"].as_str().expect("jwt").to_string();
+    let body = json!({ "code": "FREE", "kind": "percent", "value": 100 });
+
+    let (code, _) = post(&s.base, "/api/owner/promotions", None, body.clone());
+    assert_eq!(code, 401, "no token");
+    let (code, _) = post(&s.base, "/api/owner/promotions", Some(&courier), body);
+    assert_eq!(code, 403, "a courier is not an owner");
+    let (code, _) = get(&s.base, "/api/owner/promotions", Some(&courier));
+    assert_eq!(code, 403);
+}
