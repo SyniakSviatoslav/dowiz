@@ -1,0 +1,14 @@
+[package]
+name = "dowiz-hub"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "One tenant's sovereign hub: the order log over a bebop store, as pure bytes-in/bytes-out logic."
+
+[lib]
+name = "dowiz_hub"
+path = "src/lib.rs"
+
+[dependencies]
+# The store. Zero dependencies of its own, and it builds for wasm32.
+bebop-store = { path = "../bebop-store" }
