@@ -16,5 +16,9 @@ path = "src/bin/money.rs"
 name = "ordfsm"
 path = "src/bin/ordfsm.rs"
 
+[[bin]]
+name = "wlog"
+path = "src/bin/wlog.rs"
+
 [profile.release]
 opt-level = 3
