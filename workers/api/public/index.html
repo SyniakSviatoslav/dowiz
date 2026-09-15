@@ -320,6 +320,36 @@ input:focus,textarea:focus,select:focus{border-color:var(--brand-primary);outlin
 /* The delivery-area answer. Colour is NOT the only signal -- the text says
    which it is -- because a red/green pair is invisible to about one man in
    twelve, and this one decides whether someone can order at all. */
+/* ASAP / later, and the order history list.
+   The two chips are one choice, so they read as a pair rather than as two
+   buttons: same height as every other control, the selected one filled. */
+.icon-btn{display:grid;place-items:center;width:var(--tap);height:var(--tap);
+     border:0;border-radius:var(--radius-full);background:transparent;
+     color:var(--brand-text);font-size:1.15rem;cursor:pointer}
+.icon-btn:hover{background:var(--brand-surface-raised)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+.when{display:flex;gap:var(--space-2);margin-bottom:var(--space-3)}
+.when .chip{flex:1 1 0;min-height:var(--tap);border-radius:var(--radius-btn);
+     border:1px solid var(--brand-border);background:var(--brand-surface);
+     color:var(--brand-text);font-size:var(--text-base);cursor:pointer}
+.when .chip.on{background:var(--brand-primary);border-color:var(--brand-primary);
+     color:var(--brand-on-primary);font-weight:var(--weight-bold)}
+#f-when{width:100%;min-height:var(--tap);padding:0 var(--space-3);
+     border:1px solid var(--brand-border);border-radius:var(--radius-md);
+     background:var(--brand-surface);color:var(--brand-text);
+     font-size:var(--text-base);margin-bottom:var(--space-3)}
+.hist{display:flex;width:100%;align-items:center;justify-content:space-between;
+     gap:var(--space-3);min-height:var(--tap);margin-bottom:var(--space-2);
+     padding:0 var(--space-4);border:1px solid var(--brand-border);
+     border-radius:var(--radius-md);background:var(--brand-surface);
+     color:var(--brand-text);font-size:var(--text-base);cursor:pointer;text-align:left}
+.hist:hover{border-color:var(--brand-primary)}
+/* An order whose token has expired is SHOWN, greyed, rather than dropped: a
+   customer who remembers ordering and sees nothing assumes the site lost it. */
+.hist.gone{opacity:.55;cursor:default}
+.hist .muted{color:var(--brand-text-muted);font-size:var(--text-sm)}
+
 .geo{margin:0 0 var(--space-3);font-size:var(--text-sm);color:var(--brand-text-muted)}
 .geo.ok{color:var(--color-success)}
 .geo.bad{color:var(--color-danger)}
@@ -346,6 +376,10 @@ input:focus,textarea:focus,select:focus{border-color:var(--brand-primary);outlin
 <div id="offline" class="offline" hidden></div>
 <header class="top"><div class="wrap top-in">
   <span class="brand" id="brandName">…</span>
+  <!-- Hidden until there is something to show: a "my orders" button that opens
+       an empty list on a first visit is a promise the site has not kept yet. -->
+  <button class="icon-btn" id="histBtn" type="button" title="Мої замовлення" hidden>
+    <i class="ti ti-receipt" aria-hidden="true"></i><span class="sr">Мої замовлення</span></button>
   <div class="langs" role="group" aria-label="Language">
     <button class="lang" data-l="sq">sq</button>
     <button class="lang" data-l="en">en</button>

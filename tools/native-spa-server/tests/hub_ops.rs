@@ -206,7 +206,7 @@ fn login(base: &str, id: &str, pw: &str) -> (u16, Value) {
 }
 
 /// Place an order and drive it to READY, which is the state a courier can act on.
-fn order_ready_for_a_courier(base: &str, owner: &str) -> String {
+fn order_ready_for_a_courier(base: &str, owner: &str) -> (String, String) {
     let (code, order) = post(
         base,
         "/api/public/locations/dubin/orders",
@@ -220,6 +220,7 @@ fn order_ready_for_a_courier(base: &str, owner: &str) -> String {
     );
     assert_eq!(code, 200, "place: {order}");
     let id = order["id"].as_str().expect("order id").to_string();
+    let tok = order["access_token"].as_str().expect("the order carries its own key").to_string();
     for action in ["confirm", "preparing", "ready"] {
         let (c, v) = post(
             base,
@@ -229,7 +230,7 @@ fn order_ready_for_a_courier(base: &str, owner: &str) -> String {
         );
         assert_eq!(c, 200, "{action}: {v}");
     }
-    id
+    (id, tok)
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -308,7 +309,7 @@ async fn an_order_travels_from_the_customer_to_the_door() {
     );
     let courier = c["jwt"].as_str().expect("jwt").to_string();
 
-    let id = order_ready_for_a_courier(&s.base, &owner);
+    let (id, customer_tok) = order_ready_for_a_courier(&s.base, &owner);
 
     // The order is the venue's money: 2 x 900 = 1800, under the 2000 free
     // threshold, so the 200 fee applies. Computed by the server, never sent.
@@ -377,7 +378,7 @@ async fn a_courier_cannot_move_another_couriers_order() {
     let eni = tok("+355691112233", "courier-pw");
     let blerim = tok("+355694445566", "courier-pw-2");
 
-    let id = order_ready_for_a_courier(&s.base, &owner);
+    let (id, customer_tok) = order_ready_for_a_courier(&s.base, &owner);
 
     // An unknown courier is not assignable: an order handed to nobody would
     // vanish from every app while the customer waits for it.
@@ -408,7 +409,7 @@ async fn a_courier_cannot_move_another_couriers_order() {
     assert!(tasks["available"].as_array().unwrap().is_empty(), "and not on offer: {tasks}");
 
     // The order is untouched by any of that.
-    let (_, v) = get(&s.base, &format!("/api/order/{id}"), None);
+    let (_, v) = get(&s.base, &format!("/api/order/{id}"), Some(&customer_tok));
     assert_eq!(v["status"], "READY");
     assert_eq!(v["courier_id"], "+355691112233");
 
@@ -449,6 +450,7 @@ async fn a_dish_keeps_its_name_all_the_way_to_the_door() {
         }),
     );
     let id = order["id"].as_str().unwrap().to_string();
+    let customer_tok = order["access_token"].as_str().expect("the order carries its own key").to_string();
     assert_eq!(order["items"][0]["name"], "Sake Futomaki", "at placement: {order}");
 
     let named = |v: &Value| v["items"][0]["name"].as_str().unwrap_or("").to_string();
@@ -471,7 +473,7 @@ async fn a_dish_keeps_its_name_all_the_way_to_the_door() {
     assert_eq!(named(&v), "Sake Futomaki", "lost the name at delivery: {v}");
 
     // And it is still there when the order is read back from the log.
-    let (_, v) = get(&s.base, &format!("/api/order/{id}"), None);
+    let (_, v) = get(&s.base, &format!("/api/order/{id}"), Some(&customer_tok));
     assert_eq!(named(&v), "Sake Futomaki");
 
     // Renaming the dish afterwards must NOT rewrite what this order says was
@@ -483,7 +485,7 @@ async fn a_dish_keeps_its_name_all_the_way_to_the_door() {
         json!({ "available": true }),
     );
     assert_eq!(code, 200);
-    let (_, v) = get(&s.base, &format!("/api/order/{id}"), None);
+    let (_, v) = get(&s.base, &format!("/api/order/{id}"), Some(&customer_tok));
     assert_eq!(named(&v), "Sake Futomaki", "history must not be rewritten by the menu");
 }
 
@@ -505,6 +507,7 @@ async fn the_kernel_still_decides_what_the_owner_may_do() {
         }),
     );
     let id = order["id"].as_str().unwrap().to_string();
+    let customer_tok = order["access_token"].as_str().expect("the order carries its own key").to_string();
 
     // An action that does not exist.
     let (code, _) = post(
@@ -534,7 +537,7 @@ async fn the_kernel_still_decides_what_the_owner_may_do() {
     assert_eq!(code, 409, "PENDING -> READY must be refused: {v}");
 
     // And the refusal did not damage the order.
-    let (code, v) = get(&s.base, &format!("/api/order/{id}"), None);
+    let (code, v) = get(&s.base, &format!("/api/order/{id}"), Some(&customer_tok));
     assert_eq!(code, 200);
     assert_eq!(v["status"], "PENDING");
 
@@ -562,7 +565,7 @@ async fn the_dashboard_counts_what_happened() {
     assert_eq!(d["todayOrders"], 0);
     assert_eq!(d["todayRevenue"], 0);
 
-    let id = order_ready_for_a_courier(&s.base, &owner);
+    let (id, customer_tok) = order_ready_for_a_courier(&s.base, &owner);
     let (_, d) = get(&s.base, "/api/owner/dashboard", Some(&owner));
     assert_eq!(d["todayOrders"], 1);
     assert_eq!(d["pending"], 0, "it was confirmed");
@@ -1111,6 +1114,7 @@ async fn the_hub_speaks_mcp_over_its_own_data() {
         "fulfilment": { "kind": "pickup" }
     }));
     let id = order["id"].as_str().unwrap().to_string();
+    let customer_tok = order["access_token"].as_str().expect("the order carries its own key").to_string();
 
     let call = |name: &str, args: Value| {
         rpc(json!({ "jsonrpc": "2.0", "id": 9, "method": "tools/call",
@@ -1139,7 +1143,7 @@ async fn the_hub_speaks_mcp_over_its_own_data() {
     // A legal one works, and records the owner as the actor.
     let (_, v) = call("order_action", json!({ "id": &id, "action": "confirm" }));
     assert_eq!(v["result"]["isError"], false, "{v}");
-    let (_, after) = get(&s.base, &format!("/api/order/{id}"), None);
+    let (_, after) = get(&s.base, &format!("/api/order/{id}"), Some(&customer_tok));
     assert_eq!(after["status"], "CONFIRMED");
     assert_eq!(after["last_actor"], "ana@dubin.al", "an MCP action is still the owner's act");
 
@@ -1267,6 +1271,7 @@ async fn the_courier_payload_matches_what_the_courier_app_reads() {
             "lat_udeg": 41_323_000, "lon_udeg": 19_441_000 } }
     }));
     let id = order["id"].as_str().unwrap().to_string();
+    let customer_tok = order["access_token"].as_str().expect("the order carries its own key").to_string();
     for a in ["confirm", "preparing", "ready"] {
         post(&s.base, &format!("/api/owner/orders/{id}/action"), Some(&owner), json!({ "action": a }));
     }
@@ -1348,6 +1353,7 @@ async fn a_spoken_command_is_proposed_before_it_is_obeyed() {
         "fulfilment": { "kind": "pickup" }
     }));
     let id = order["id"].as_str().unwrap().to_string();
+    let customer_tok = order["access_token"].as_str().expect("the order carries its own key").to_string();
 
     let say = |t: &str, tok: Option<&str>| {
         let mut b = json!({ "transcript": t, "confidence": 0.95, "is_final": true, "lang": "uk" });
@@ -1373,14 +1379,14 @@ async fn a_spoken_command_is_proposed_before_it_is_obeyed() {
     assert!(readback.contains(&id[id.len() - 4..]), "naming the RESOLVED order: {readback}");
     let tok = v["token"].as_str().expect("token").to_string();
 
-    let (_, still) = get(&s.base, &format!("/api/order/{id}"), None);
+    let (_, still) = get(&s.base, &format!("/api/order/{id}"), Some(&customer_tok));
     assert_eq!(still["status"], "PENDING", "a proposal must not have moved anything");
 
     // Confirming does move it, through the same handler the pane uses.
     let (code, v) = say("", Some(&tok));
     assert_eq!(code, 200, "{v}");
     assert_eq!(v["done"], true);
-    let (_, after) = get(&s.base, &format!("/api/order/{id}"), None);
+    let (_, after) = get(&s.base, &format!("/api/order/{id}"), Some(&customer_tok));
     assert_eq!(after["status"], "CONFIRMED");
     assert_eq!(after["last_actor"], "ana@dubin.al", "a spoken action is still the owner's");
 
@@ -1476,6 +1482,7 @@ async fn a_couriers_voice_is_scoped_to_their_own_run() {
         "fulfilment": { "kind": "delivery", "address": { "line": "Rruga Taulantia 12" } }
     }));
     let id = order["id"].as_str().unwrap().to_string();
+    let customer_tok = order["access_token"].as_str().expect("the order carries its own key").to_string();
     for a in ["confirm", "preparing", "ready"] {
         post(&s.base, &format!("/api/owner/orders/{id}/action"), Some(&owner), json!({ "action": a }));
     }
@@ -1491,14 +1498,14 @@ async fn a_couriers_voice_is_scoped_to_their_own_run() {
     assert_eq!(v["action"], "pickup", "{v}");
     let t = v["token"].as_str().unwrap().to_string();
     assert_eq!(say(&eni, "", Some(&t)).0, 200);
-    let (_, after) = get(&s.base, &format!("/api/order/{id}"), None);
+    let (_, after) = get(&s.base, &format!("/api/order/{id}"), Some(&customer_tok));
     assert_eq!(after["status"], "IN_DELIVERY");
 
     let (_, v) = say(&eni, "доставив", None);
     assert_eq!(v["action"], "deliver", "{v}");
     let t = v["token"].as_str().unwrap().to_string();
     assert_eq!(say(&eni, "", Some(&t)).0, 200);
-    let (_, after) = get(&s.base, &format!("/api/order/{id}"), None);
+    let (_, after) = get(&s.base, &format!("/api/order/{id}"), Some(&customer_tok));
     assert_eq!(after["status"], "DELIVERED");
 
     // Blerim cannot confirm a proposal that was made to Eni, even holding it.
@@ -1583,4 +1590,127 @@ async fn a_dish_photograph_is_stored_by_its_content() {
     let (_, menu) = get(&s.base, "/api/menu", None);
     assert_eq!(menu["categories"][0]["products"][0]["imageUrl"], Value::Null);
     assert_eq!(raw_get(&s.base, &url).0, 200, "the file itself must survive a reference being cleared");
+}
+
+/// An order carries a name, a phone and a home address. Reading one is now a
+/// privilege, not a matter of knowing an unguessable string.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_order_can_only_be_read_by_someone_entitled_to_it() {
+    let s = boot("order_access").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+    let tok_of = |phone: &str, pw: &str| {
+        let (_, c) = post(&s.base, "/api/courier/auth/login", None,
+                          json!({ "phone": phone, "password": pw }));
+        c["jwt"].as_str().expect("jwt").to_string()
+    };
+    let eni = tok_of("+355691112233", "courier-pw");
+    let blerim = tok_of("+355694445566", "courier-pw-2");
+
+    let (_, order) = post(&s.base, "/api/public/locations/dubin/orders", None, json!({
+        "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 1 }],
+        "contact": { "name": "Ana Hoxha", "phone": "+355691234567" },
+        "fulfilment": { "kind": "delivery", "address": { "line": "Rruga Taulantia 12" } }
+    }));
+    let id = order["id"].as_str().unwrap().to_string();
+    let mine = order["access_token"].as_str().expect("the customer gets a key").to_string();
+
+    // A SECOND order, so there is a neighbour's token to try.
+    let (_, other) = post(&s.base, "/api/public/locations/dubin/orders", None, json!({
+        "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 1 }],
+        "contact": { "name": "Someone Else", "phone": "+355690000001" },
+        "fulfilment": { "kind": "pickup" }
+    }));
+    let theirs = other["access_token"].as_str().unwrap().to_string();
+
+    // Knowing the id is no longer enough.
+    let (code, v) = get(&s.base, &format!("/api/order/{id}"), None);
+    assert_eq!(code, 401, "an unauthenticated read must be refused: {v}");
+    assert_eq!(get(&s.base, &format!("/api/order/{id}"), Some("nonsense")).0, 401);
+
+    // Another customer's token does not walk to this order.
+    let (code, v) = get(&s.base, &format!("/api/order/{id}"), Some(&theirs));
+    assert_eq!(code, 401, "a token is scoped to ONE order: {v}");
+
+    // The customer's own token works, and carries what they need.
+    let (code, v) = get(&s.base, &format!("/api/order/{id}"), Some(&mine));
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["contact"]["phone"], "+355691234567");
+
+    // The owner may read it.
+    assert_eq!(get(&s.base, &format!("/api/order/{id}"), Some(&owner)).0, 200);
+
+    // A courier may NOT, until it is theirs -- a courier is not entitled to
+    // every customer's address in the venue.
+    assert_eq!(get(&s.base, &format!("/api/order/{id}"), Some(&eni)).0, 401);
+    for a in ["confirm", "preparing", "ready"] {
+        post(&s.base, &format!("/api/owner/orders/{id}/action"), Some(&owner), json!({ "action": a }));
+    }
+    post(&s.base, &format!("/api/courier/orders/{id}/accept"), Some(&eni), json!({}));
+    assert_eq!(get(&s.base, &format!("/api/order/{id}"), Some(&eni)).0, 200, "now it is their run");
+    assert_eq!(get(&s.base, &format!("/api/order/{id}"), Some(&blerim)).0, 401, "and only theirs");
+
+    // A logged-out owner stops reading orders NOW, not at token expiry.
+    post(&s.base, "/api/auth/logout", Some(&owner), json!({}));
+    assert_eq!(get(&s.base, &format!("/api/order/{id}"), Some(&owner)).0, 401);
+    // The customer is unaffected: their key is not a session.
+    assert_eq!(get(&s.base, &format!("/api/order/{id}"), Some(&mine)).0, 200);
+}
+
+/// An order for later is a different thing from an order for now.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_order_can_be_placed_for_later() {
+    let s = boot("scheduled").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64;
+    let place_at = |t: Option<i64>| {
+        let mut b = json!({
+            "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 1 }],
+            "contact": { "name": "C", "phone": "+355690000000" },
+            "fulfilment": { "kind": "pickup" }
+        });
+        if let Some(t) = t { b["scheduled_for_ms"] = json!(t); }
+        post(&s.base, "/api/public/locations/dubin/orders", None, b)
+    };
+
+    // The three ways a time is wrong, each refused with its own reason.
+    let (code, v) = place_at(Some(now - 60_000));
+    assert_eq!(code, 400, "the past: {v}");
+    assert!(v["error"].as_str().unwrap().contains("ten minutes"), "{v}");
+    let (code, _) = place_at(Some(now + 60_000));
+    assert_eq!(code, 400, "a minute away is indistinguishable from now");
+    let (code, v) = place_at(Some(now + 30 * 24 * 60 * 60 * 1000));
+    assert_eq!(code, 400, "a month away is a typo: {v}");
+    assert!(v["error"].as_str().unwrap().contains("week"), "{v}");
+
+    // Two hours out is accepted and recorded.
+    let due = now + 2 * 60 * 60 * 1000;
+    let (code, v) = place_at(Some(due));
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["scheduled_for_ms"], due);
+
+    // It does NOT count as waiting on the kitchen: chasing an order that is not
+    // due for two hours is how the queue number stops meaning anything.
+    let (_, d) = get(&s.base, "/api/owner/dashboard", Some(&owner));
+    assert_eq!(d["pending"], 0, "not waiting yet: {d}");
+    assert_eq!(d["scheduled"], 1, "but counted, so it is not invisible: {d}");
+    assert_eq!(d["active"], 1, "and still live work");
+    assert_eq!(d["todayOrders"], 1);
+
+    // An ordinary order alongside it is waiting, and the two do not blur.
+    let (code, _) = place_at(None);
+    assert_eq!(code, 200);
+    let (_, d) = get(&s.base, "/api/owner/dashboard", Some(&owner));
+    assert_eq!(d["pending"], 1, "{d}");
+    assert_eq!(d["scheduled"], 1, "{d}");
+
+    // The owner sees the time on the order itself.
+    let (_, list) = get(&s.base, "/api/owner/orders", Some(&owner));
+    let sched = list["orders"].as_array().unwrap().iter()
+        .find(|o| o["scheduled_for_ms"].as_i64() == Some(due))
+        .expect("the scheduled order must be in the queue");
+    assert_eq!(sched["status"], "PENDING");
 }

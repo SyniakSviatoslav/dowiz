@@ -273,6 +273,15 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
    between a dish that has a photo and one that does not -- a menu that jumps as
    images load is a menu the owner loses their place in. The whole cell is the
    file input's label, so the tap target is the picture itself. */
+/* A scheduled order's time, on the row. Warning-toned rather than neutral,
+   because its whole purpose is to stop someone cooking it now -- but not
+   danger-toned, because nothing is wrong. */
+.due{display:inline-flex;align-items:center;gap:var(--space-1);
+     padding:0 var(--space-2);min-height:1.5rem;border-radius:var(--radius-full);
+     background:color-mix(in srgb,var(--color-warning) 14%,transparent);
+     color:var(--brand-text);font-size:var(--text-sm);font-weight:var(--weight-semibold);
+     white-space:nowrap}
+
 .prod .pic{position:relative;flex:0 0 auto;width:44px;height:44px;
        display:grid;place-items:center;overflow:hidden;cursor:pointer;
        border:1px solid var(--brand-border);border-radius:var(--radius-md);

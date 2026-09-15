@@ -19,6 +19,8 @@ const T = {
         required:'E detyrueshme', badPhone:'Numër i pavlefshëm', ordering:'Duke dërguar…',
         checkArea:'Kontrolloni adresën', checking:'Po kontrollojmë…',
         retry:'Provo përsëri', loadFail:'Menuja nuk u ngarkua', loading:'Po ngarkohet…',
+        myOrders:'Porositë e mia', noOrders:'Ende asnjë porosi', when:'Kur', asap:'Sa më shpejt',
+        later:'Në një orë tjetër', schedFail:'Koha nuk vlen',
         inArea:'Ne dërgojmë këtu', outArea:'Jashtë zonës sonë të dërgesës', noGeo:'Nuk morëm dot vendndodhjen',
         notify:'Merrni njoftime në Telegram', notifyHint:'Ju njoftojmë sa herë ndryshon porosia',
         st:{PENDING:'Duke pritur konfirmimin',CONFIRMED:'U konfirmua',PREPARING:'Po gatuhet',
@@ -34,6 +36,8 @@ const T = {
         required:'Required', badPhone:'Invalid number', ordering:'Sending…',
         checkArea:'Check this address', checking:'Checking…',
         retry:'Try again', loadFail:'The menu did not load', loading:'Loading…',
+        myOrders:'My orders', noOrders:'No orders yet', when:'When', asap:'As soon as possible',
+        later:'At a later time', schedFail:'That time will not work',
         inArea:'We deliver here', outArea:'Outside our delivery area', noGeo:'Could not get your location',
         notify:'Get updates on Telegram', notifyHint:'We\u2019ll message you each time this order moves',
         st:{PENDING:'Awaiting confirmation',CONFIRMED:'Confirmed',PREPARING:'Being prepared',
@@ -49,6 +53,8 @@ const T = {
         required:'Обов’язкове поле', badPhone:'Некоректний номер', ordering:'Надсилаємо…',
         checkArea:'Перевірити адресу', checking:'Перевіряємо…',
         retry:'Спробувати ще раз', loadFail:'Меню не завантажилось', loading:'Завантажуємо…',
+        myOrders:'Мої замовлення', noOrders:'Замовлень ще немає', when:'Коли', asap:'Якнайшвидше',
+        later:'На інший час', schedFail:'Такий час не підходить',
         inArea:'Сюди доставляємо', outArea:'Поза зоною доставки', noGeo:'Не вдалося визначити місце',
         notify:'Сповіщення в Telegram', notifyHint:'Напишемо щоразу, коли статус зміниться',
         st:{PENDING:'Очікує підтвердження',CONFIRMED:'Підтверджено',PREPARING:'Готується',
@@ -172,6 +178,72 @@ function applyTheme(theme){
     `:root{${light}}` +
     (dark ? `@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){${dark}}}` +
             `:root[data-theme="dark"]{${dark}}` : '');
+}
+
+// ── my orders ───────────────────────────────────────────────────────────────
+// NO ACCOUNT, and that is the design rather than a shortcut. The hub keeps no
+// customer registry: one would be a list of names, phones and addresses the
+// venue does not need, cannot protect better than a browser can, and could be
+// compelled to hand over if it existed.
+//
+// Instead each order comes back with a token scoped to that ONE order, and the
+// browser keeps the list. The consequence is stated plainly rather than hidden:
+// clear your browser data and the history goes with it. That is the same deal
+// as every guest checkout, and it is the honest one -- linking history by phone
+// number would mean anyone who knows your number can read your address.
+const HIST_KEY = 'dw_orders';
+const history = () => { try { return JSON.parse(safeGet(HIST_KEY) || '[]'); } catch { return []; } };
+function remember(order){
+  if (!order?.id || !order?.access_token) return;
+  const list = history().filter(o => o.id !== order.id);
+  list.unshift({ id: order.id, t: order.access_token, at: Date.now(), total: order.total ?? 0 });
+  // Twenty is a year of ordering for a regular customer and keeps localStorage
+  // small. The oldest fall off; the tokens expire at thirty days anyway.
+  safeSet(HIST_KEY, JSON.stringify(list.slice(0, 20)));
+}
+/// Fetch one remembered order, sending ITS OWN token.
+async function fetchRemembered(entry){
+  const r = await fetch(`${API}/order/${encodeURIComponent(entry.id)}`,
+                        { headers:{ authorization:'Bearer ' + entry.t } });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+async function openHistory(){
+  const list = history();
+  if (!list.length) {
+    sheet(`<h2>${esc(t('myOrders'))}</h2>
+      <div class="empty"><i class="ti ti-receipt" aria-hidden="true"
+        style="font-size:2rem;display:block;margin-bottom:8px"></i>
+        <b>${esc(t('noOrders'))}</b><span>${esc(t('emptyHint'))}</span></div>
+      <button class="btn btn-ghost" id="closeHist">OK</button>`);
+    $('#closeHist').onclick = closeSheet;
+    return;
+  }
+  sheet(`<h2>${esc(t('myOrders'))}</h2>
+    <div id="histList">${list.map(() =>
+      `<div class="skel" style="height:56px;margin-bottom:8px"></div>`).join('')}</div>
+    <button class="btn btn-ghost" id="closeHist">OK</button>`);
+  $('#closeHist').onclick = closeSheet;
+
+  // Settled, not all-or-nothing: one expired token must not blank the list.
+  const got = await Promise.allSettled(list.map(fetchRemembered));
+  const rows = got.map((r, i) => {
+    const e = list[i];
+    if (r.status !== 'fulfilled') {
+      return `<button class="hist gone" disabled>
+        <span>#${esc(String(e.id).slice(-4))}</span>
+        <span class="muted">${esc(t('loadFail'))}</span></button>`;
+    }
+    const o = r.value;
+    return `<button class="hist" data-open="${esc(o.id)}">
+      <span>#${esc(String(o.id).slice(-4))} · ${esc(t('st')[o.status] || o.status)}</span>
+      <span>${money(o.total ?? 0)}</span></button>`;
+  }).join('');
+  const el = $('#histList'); if (el) el.innerHTML = rows;
+  document.querySelectorAll('[data-open]').forEach(b => b.onclick = async () => {
+    const e = history().find(x => x.id === b.dataset.open); if (!e) return;
+    try { openTracking(await fetchRemembered(e)); } catch { toast(t('loadFail')); }
+  });
 }
 
 async function load(){
@@ -350,6 +422,12 @@ function openCheckout(){
     <input id="f-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+355…" value="${esc(safeGet('dw_phone') || '')}">
     <label for="f-addr">${esc(t('address'))}</label>
     <textarea id="f-addr" autocomplete="street-address">${esc(safeGet('dw_addr') || '')}</textarea>
+    <label for="f-when">${esc(t('when'))}</label>
+    <div class="when">
+      <button type="button" class="chip on" data-when="asap" aria-pressed="true">${esc(t('asap'))}</button>
+      <button type="button" class="chip" data-when="later" aria-pressed="false">${esc(t('later'))}</button>
+    </div>
+    <input type="datetime-local" id="f-when" hidden>
     ${state.loc?.hasDeliveryZones ? `
       <button type="button" class="btn btn-ghost" id="f-geo" style="margin-bottom:8px">
         <i class="ti ti-map-pin-check" aria-hidden="true"></i><span>${esc(t('checkArea'))}</span></button>
@@ -382,6 +460,30 @@ function openCheckout(){
   // Coordinates NEVER replace the typed address -- there is no geocoder here and
   // a courier needs a street and a door number, not a decimal pair. They ride
   // alongside it so the hub can answer one question: is this inside the area.
+  // ASAP or later. The picker only appears once "later" is chosen, because a
+  // datetime field on every checkout is a decision most customers do not want
+  // to make and will mistrust if it is prefilled.
+  let when = 'asap';
+  $('#sheetIn').querySelectorAll('[data-when]').forEach(b => b.onclick = () => {
+    when = b.dataset.when;
+    $('#sheetIn').querySelectorAll('[data-when]').forEach(x => {
+      x.classList.toggle('on', x === b);
+      x.setAttribute('aria-pressed', String(x === b));
+    });
+    const f = $('#f-when');
+    f.hidden = when !== 'later';
+    if (when === 'later' && !f.value) {
+      // Default an hour out, rounded to the next half hour: a sensible offer
+      // rather than an empty field, and past the hub's ten-minute floor.
+      const d = new Date(Date.now() + 60 * 60 * 1000);
+      d.setMinutes(d.getMinutes() > 30 ? 60 : 30, 0, 0);
+      const pad = n => String(n).padStart(2, '0');
+      f.value = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      f.min = f.value;
+    }
+    if (when === 'later') f.focus();
+  });
+
   const geo = $('#f-geo');
   if (geo) geo.onclick = () => {
     const out = $('#f-geo-out');
@@ -410,6 +512,14 @@ function openCheckout(){
   };
 }
 
+/// The chosen time, or null for "as soon as possible".
+function scheduledAt(){
+  const f = document.getElementById('f-when');
+  if (!f || f.hidden || !f.value) return null;
+  const ms = new Date(f.value).getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
 async function place(pay){
   if (state.placing) return;
   const name = $('#f-name').value.trim(), phone = $('#f-phone').value.trim(),
@@ -430,12 +540,18 @@ async function place(pay){
         fulfilment:{ kind:'delivery',
           address:{ line:addr, note: note || null,
                     ...(state.geo || {}) } },
-        payment: pay, locale: lang })
+        payment: pay, locale: lang,
+        // Epoch milliseconds. `datetime-local` has no timezone, so it is read
+        // in the CUSTOMER'S timezone -- which is the venue's too, for a
+        // delivery you can walk to.
+        ...(scheduledAt() ? { scheduled_for_ms: scheduledAt() } : {}) })
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || d.message || ('HTTP ' + r.status));
     state.cart = {}; saveCart(); updateBar();
     safeSet('dw_last_order', d.id);
+    remember(d);
+    dispatchEvent(new Event('dw:ordered'));
     // The order IS placed -- it is in the log. Only the card rail failed, so say
     // that instead of letting a silent absence look like success.
     if (d.payment_error) toast(String(d.payment_error));
@@ -541,7 +657,11 @@ function openTracking(order){
     // guessing locally. A socket comes later; this is honest in the meantime.
     openTracking._t = setTimeout(async () => {
       try {
-        const r = await fetch(`${API}/order/${encodeURIComponent(order.id)}`);
+        // The order's OWN token. Polling used to be unauthenticated, which
+        // meant anyone holding the id could read the address and phone.
+        const tok = history().find(x => x.id === order.id)?.t;
+        const r = await fetch(`${API}/order/${encodeURIComponent(order.id)}`,
+                              tok ? { headers:{ authorization:'Bearer ' + tok } } : undefined);
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const d = await r.json();
         openTracking._fails = 0;
@@ -571,5 +691,16 @@ function netState(){
   el.hidden = navigator.onLine;
   el.textContent = t('offline') + (state.loc?.phone ? ` · ${state.loc.phone}` : '');
 }
+// The history button appears only once there IS history.
+(function historyChrome(){
+  const b = document.getElementById('histBtn');
+  if (!b) return;
+  const sync = () => { b.hidden = history().length === 0; };
+  b.onclick = openHistory;
+  sync();
+  // Re-checked after a placement, which is the only moment the answer changes.
+  addEventListener('dw:ordered', sync);
+})();
+
 addEventListener('online', netState); addEventListener('offline', netState);
 netState(); load();

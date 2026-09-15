@@ -191,7 +191,7 @@ function render(){
   $('#app').innerHTML = `
     <div class="stats">
       ${[['todayOrders','Замовлень сьогодні'],['pending','Чекають'],
-         ['active','В роботі'],['todayRevenue','Виручка']].map(([k, label]) => `
+         ['scheduled','На час'],['active','В роботі'],['todayRevenue','Виручка']].map(([k, label]) => `
         <div class="stat"><div class="k">${label}</div>
           <div class="v" data-k="${k}">${s
             ? (k === 'todayRevenue' ? money(s[k]) : s[k])
@@ -277,10 +277,19 @@ function row(o, newIdx){
   const items = (o.items || []).map(i => `<b>${i.quantity}×</b> ${esc(i.name || shortId(i.product_id))}`).join(', ');
   const f = o.fulfilment || {}, c = o.contact || {};
   const st = esc(o.status);
+  // A scheduled order looks exactly like a live one in a queue, which is how a
+  // kitchen starts cooking something due in three hours. The time is the whole
+  // difference, so it is on the row rather than behind a tap.
+  const due = o.scheduled_for_ms
+    ? new Date(o.scheduled_for_ms).toLocaleString('uk', { day:'numeric', month:'short',
+        hour:'2-digit', minute:'2-digit' })
+    : null;
   return `<article class="order ${o.status === 'PENDING' ? 'attn' : ''} ${newIdx >= 0 ? 'is-new' : ''}" ${newIdx >= 0 ? `style="--i:${newIdx}"` : ''}>
     <div class="o-h">
       <span class="oid">#${esc(String(o.id).slice(0,8))}</span>
       <span class="chip ${st}"><i aria-hidden="true"></i>${esc(STATUS_LABEL[o.status] || o.status)}</span>
+      ${due ? `<span class="due" title="Замовлення на визначений час">
+        <i class="ti ti-clock-hour-4 i" aria-hidden="true"></i>${esc(due)}</span>` : ''}
       <span class="amt">${money(o.total)}</span>
     </div>
     <p class="lines">${items || '—'}</p>
@@ -927,7 +936,8 @@ function poll(){
     const s = S.stats;
     if (s) {
       // Text SET, never tweened -- the revenue is a kernel integer presented, not interpolated.
-      const v = { todayOrders:s.todayOrders, pending:s.pending, active:s.active, todayRevenue:money(s.todayRevenue) };
+      const v = { todayOrders:s.todayOrders, pending:s.pending, scheduled:s.scheduled,
+                  active:s.active, todayRevenue:money(s.todayRevenue) };
       document.querySelectorAll('.stat .v[data-k]').forEach(el => { el.textContent = v[el.dataset.k]; });
       const n = $('#liveN'); if (n) n.textContent = liveOrders().length;
       // A queue still waiting is ember drift in the field: volume = amplitude.

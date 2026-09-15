@@ -217,6 +217,8 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), HubHttpError> {
 #[derive(Debug)]
 pub enum HubHttpError {
     NotFound(&'static str),
+    /// No credential, or one that does not cover this thing.
+    Unauthorized(&'static str),
     /// The kernel refused a transition. The caller's mistake, not the server's.
     Refused(String),
     Invalid(String),
@@ -231,6 +233,7 @@ impl IntoResponse for HubHttpError {
     fn into_response(self) -> Response {
         let (code, msg) = match self {
             HubHttpError::NotFound(w) => (StatusCode::NOT_FOUND, w.to_string()),
+            HubHttpError::Unauthorized(w) => (StatusCode::UNAUTHORIZED, w.to_string()),
             HubHttpError::Refused(m) => (StatusCode::CONFLICT, m),
             HubHttpError::Invalid(m) => (StatusCode::BAD_REQUEST, m),
             HubHttpError::Conflict(m) => (StatusCode::CONFLICT, m),
@@ -288,6 +291,9 @@ pub struct FulfilmentIn {
 #[derive(Deserialize)]
 pub struct PlaceIn {
     pub items: Vec<LineIn>,
+    /// When the customer wants it, in epoch milliseconds. Absent means now.
+    #[serde(default)]
+    pub scheduled_for_ms: Option<i64>,
     pub contact: ContactIn,
     pub fulfilment: FulfilmentIn,
     #[serde(default)]
@@ -494,8 +500,33 @@ pub async fn place(
         )));
     }
 
-    let id = new_order_id();
+    // A TIME THE VENUE CAN ACTUALLY HONOUR. Three bounds, each for a different
+    // way this goes wrong:
+    //   * in the past -- a clock skew or a stale form, and the kitchen would see
+    //     an order that is already late the moment it arrives
+    //   * inside the next few minutes -- indistinguishable from "now", and a
+    //     scheduled order that is due immediately just confuses the queue
+    //   * further out than a week -- a typo in a date field, and the order sits
+    //     in the log for months looking live
     let created_at_ms = now_ms();
+    let scheduled = match body.scheduled_for_ms {
+        None => None,
+        Some(t) => {
+            const MIN_AHEAD_MS: i64 = 10 * 60 * 1000;
+            const MAX_AHEAD_MS: i64 = 7 * 24 * 60 * 60 * 1000;
+            if t < created_at_ms + MIN_AHEAD_MS {
+                return Err(HubHttpError::Invalid(
+                    "a scheduled order must be at least ten minutes ahead".into(),
+                ));
+            }
+            if t > created_at_ms + MAX_AHEAD_MS {
+                return Err(HubHttpError::Invalid("that is more than a week away".into()));
+            }
+            Some(t)
+        }
+    };
+
+    let id = new_order_id();
     let order_json = json_api::place_order_at(
         id.clone(),
         None,
@@ -528,6 +559,9 @@ pub async fn place(
         envelope["delivery_area_unverified"] = json!(true);
     }
     envelope["payment"] = json!(body.payment.unwrap_or_else(|| "cash".into()));
+    if let Some(t) = scheduled {
+        envelope["scheduled_for_ms"] = json!(t);
+    }
 
     let stored = serde_json::to_string(&envelope).unwrap_or(order_json);
     let ev_id = id.clone();
@@ -542,16 +576,95 @@ pub async fn place(
     // the two produce a kitchen ticket for an order that does not exist.
     st.notify_placed(&envelope);
 
+    // THE CUSTOMER'S KEY TO THEIR OWN ORDER, minted once, here, and returned
+    // exactly once. It is scoped to this order and nothing else, so it cannot
+    // be walked to a neighbour's; it is what the tracking page polls with and
+    // what the browser keeps so "my orders" can exist without an account.
+    //
+    // Thirty days, because that is how long a person might reasonably come back
+    // and ask what they ordered -- and because an order older than that is
+    // history, not a live thing to watch.
+    let now = now_ms();
+    let customer_token = dowiz_hub::token::mint(
+        st.signing_key(),
+        &dowiz_hub::token::Claims {
+            role: dowiz_hub::token::Role::Customer,
+            // No account exists, so the subject is the order. There is
+            // deliberately no customer registry: one would be a list of names,
+            // phones and addresses that the venue does not need and cannot be
+            // compelled to hand over if it is not there.
+            subject: id.clone(),
+            session: String::new(),
+            scope: id.clone(),
+            issued_ms: now,
+            expires_ms: now + 30 * 24 * 60 * 60 * 1000,
+        },
+    );
+    envelope["access_token"] = json!(customer_token);
+
     Ok(Json(envelope))
 }
 
+/// `GET /api/order/{id}` — one order, to whoever is entitled to it.
+///
+/// THIS USED TO BE PUBLIC, and that was capability-by-obscurity: an order id is
+/// unguessable, so nobody could read a stranger's order in practice -- but the
+/// order carries a name, a phone number and a home address, and "the URL is
+/// hard to guess" is not an access rule. A link pasted into a chat, an id in a
+/// server log, a screenshot of the tracking page: any of those handed the lot
+/// over permanently.
+///
+/// Four parties may read an order, and no one else:
+///   * the customer, holding the token minted when they placed it
+///   * the venue owner
+///   * the courier carrying it -- and only that courier
+///   * anyone with the venue's staff Telegram binding, via the bot, which reads
+///     the log directly and never comes through here
 pub async fn order(
     State(st): State<Shared>,
+    headers: axum::http::HeaderMap,
     AxPath(id): AxPath<String>,
 ) -> Result<Json<Value>, HubHttpError> {
     let hub = st.read_log()?;
     let raw = hub.order(&id).map_err(|_| HubHttpError::NotFound("order"))?;
-    Ok(Json(serde_json::from_str(&raw).unwrap_or(json!({}))))
+    let envelope: Value = serde_json::from_str(&raw).unwrap_or(json!({}));
+
+    let bearer = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|h| h.strip_prefix("Bearer "))
+        .map(str::trim)
+        .filter(|t| !t.is_empty());
+    let Some(tok) = bearer else {
+        return Err(HubHttpError::Unauthorized("this order needs the link you were given"));
+    };
+    let claims = dowiz_hub::token::verify(st.signing_key(), tok, now_ms())
+        .map_err(|_| HubHttpError::Unauthorized("that link is no longer valid"))?;
+
+    let allowed = match claims.role {
+        // A customer token names exactly one order. It cannot be walked.
+        dowiz_hub::token::Role::Customer => claims.scope == id,
+        // Staff tokens must still be backed by a live session, or a logged-out
+        // owner would keep reading orders until their token expired.
+        dowiz_hub::token::Role::Owner => st
+            .read_roster()?
+            .session_owner(&claims.session)
+            .as_deref()
+            == Some(claims.subject.as_str()),
+        dowiz_hub::token::Role::Courier => {
+            let live = st.read_roster()?.session_owner(&claims.session).as_deref()
+                == Some(claims.subject.as_str());
+            // AND it has to be their run. A courier is not entitled to every
+            // customer's address in the venue.
+            live && envelope.get("courier_id").and_then(Value::as_str)
+                == Some(claims.subject.as_str())
+        }
+        dowiz_hub::token::Role::Refresh => false,
+    };
+    if !allowed {
+        return Err(HubHttpError::Unauthorized("that link is not for this order"));
+    }
+    Ok(Json(envelope))
 }
 
 /// Carry the hub's own fields across a kernel transition.

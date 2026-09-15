@@ -174,12 +174,24 @@ pub async fn dashboard_facts(st: &Shared) -> Result<Value, HubHttpError> {
 
     let day_start = start_of_day_ms(now_ms());
     let (mut today, mut pending, mut active, mut revenue) = (0i64, 0i64, 0i64, 0i64);
+    let mut scheduled = 0i64;
     for ev in &orders {
         let Ok(o) = serde_json::from_str::<Value>(&ev.order_json) else { continue };
         let status = o.get("status").and_then(Value::as_str).unwrap_or("");
         let created = o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(0);
-        if status == OrderStatus::Pending.as_str() {
+        // A SCHEDULED order is pending, but it is not waiting on the kitchen
+        // yet. Counting it in "waiting" would have the owner chasing an order
+        // that is not due for three hours, and would make the number that
+        // drives the alert sound permanently wrong.
+        let due_later = o
+            .get("scheduled_for_ms")
+            .and_then(Value::as_i64)
+            .is_some_and(|t| t > now_ms());
+        if status == OrderStatus::Pending.as_str() && !due_later {
             pending += 1;
+        }
+        if due_later {
+            scheduled += 1;
         }
         if is_live(status) {
             active += 1;
@@ -198,7 +210,8 @@ pub async fn dashboard_facts(st: &Shared) -> Result<Value, HubHttpError> {
         "todayOrders": today,
         "pending": pending,
         "active": active,
-        "todayRevenue": revenue
+        "todayRevenue": revenue,
+        "scheduled": scheduled
     }))
 }
 
