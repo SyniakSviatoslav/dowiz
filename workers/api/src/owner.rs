@@ -79,46 +79,26 @@ pub async fn orders(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         .ok()
         .and_then(|u| u.query_pairs().find(|(k, _)| k == "status").map(|(_, v)| v.to_string()));
 
-    #[derive(Deserialize)]
-    struct Row {
-        id: String,
-        status: String,
-        order_json: String,
-        created_at_ms: i64,
-    }
-    let rows = match &status {
-        Some(s) => {
-            db.prepare(
-                "SELECT id,status,order_json,created_at_ms FROM orders \
-                 WHERE status = ?1 ORDER BY created_at_ms DESC LIMIT 200",
-            )
-            .bind(&[s.clone().into()])?
-            .all()
-            .await?
-        }
-        None => {
-            db.prepare(
-                "SELECT id,status,order_json,created_at_ms FROM orders \
-                 ORDER BY created_at_ms DESC LIMIT 200",
-            )
-            .all()
-            .await?
-        }
-    }
-    .results::<Row>()?;
-
-    // Only orders belonging to this location. The column does not exist on the
-    // orders table yet, so the filter reads the envelope — explicit and slow
-    // rather than absent and fast.
-    let out: Vec<Value> = rows
+    // The hub log is the source. Reading it folds every order to its newest
+    // state, so the queue cannot show a status the events do not support.
+    let loaded = crate::hubstore::load(&db).await?;
+    let out: Vec<Value> = loaded
+        .hub
+        .orders()
         .into_iter()
-        .filter_map(|r| {
-            let v: Value = serde_json::from_str(&r.order_json).ok()?;
+        .filter_map(|e| {
+            let v: Value = serde_json::from_str(&e.order_json).ok()?;
             if v.get("location_id").and_then(|x| x.as_str()) != Some(loc.as_str()) {
                 return None;
             }
+            let st = v.get("status").and_then(|x| x.as_str()).unwrap_or("").to_string();
+            if let Some(want) = &status {
+                if &st != want {
+                    return None;
+                }
+            }
             Some(json!({
-                "id": r.id, "status": r.status, "createdAtMs": r.created_at_ms,
+                "id": e.order_id, "status": st, "createdAtMs": e.seq,
                 "total": v.get("total").cloned().unwrap_or(json!(0)),
                 "subtotal": v.get("subtotal").cloned().unwrap_or(json!(0)),
                 "items": v.get("items").cloned().unwrap_or(json!([])),
@@ -165,55 +145,57 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
         other => return Response::error(format!("unknown action: {other}"), 400),
     };
 
-    let current: Option<String> = db
-        .prepare("SELECT order_json FROM orders WHERE id = ?1")
-        .bind(&[id.clone().into()])?
-        .first(Some("order_json"))
-        .await?;
-    let Some(current) = current else {
-        return Response::error("order not found", 404);
-    };
-    {
-        let v: Value = serde_json::from_str(&current)
-            .map_err(|e| Error::RustError(format!("stored order unreadable: {e}")))?;
-        if v.get("location_id").and_then(|x| x.as_str()) != Some(body.location_id.as_str()) {
-            return Response::error("not found", 404);
+    let want_loc = body.location_id.clone();
+    let reason = body.reason.clone();
+    let out = crate::hubstore::with_hub(&db, move |hub| {
+        let current = hub
+            .order(&id)
+            .map_err(|_| Error::RustError("order not found".into()))?;
+        {
+            let v: Value = serde_json::from_str(&current).unwrap_or(json!({}));
+            if v.get("location_id").and_then(|x| x.as_str()) != Some(want_loc.as_str()) {
+                return Err(Error::RustError("order not found".into()));
+            }
         }
-    }
-
-    // The kernel decides. An illegal edge comes back as a refusal, not a 500.
-    let updated = match json_api::apply_event_logic(&current, next) {
-        Ok(j) => j,
-        Err(e) => return Response::error(e, 409),
-    };
-
-    // Carry the envelope fields the kernel does not model yet, and record why a
-    // rejection happened so the customer can be told something true.
-    let mut merged: Value = serde_json::from_str(&updated)
-        .map_err(|e| Error::RustError(format!("kernel order json unreadable: {e}")))?;
-    let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
-    for k in ["location_id", "contact", "fulfilment", "payment", "delivery_fee", "courier_id"] {
-        if let Some(v) = old.get(k) {
-            merged[k] = v.clone();
+        // The kernel decides. An illegal edge is its refusal, not ours.
+        let updated = json_api::apply_event_logic(&current, next).map_err(Error::RustError)?;
+        let mut merged: Value = serde_json::from_str(&updated)
+            .map_err(|e| Error::RustError(format!("kernel order json unreadable: {e}")))?;
+        let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
+        for k in ["location_id", "contact", "fulfilment", "payment", "delivery_fee", "courier_id"] {
+            if let Some(v) = old.get(k) {
+                merged[k] = v.clone();
+            }
         }
-    }
-    if let Some(total) = old.get("total") {
-        merged["total"] = total.clone();
-    }
-    if next == "REJECTED" {
-        merged["rejection_reason"] = json!(body.reason);
-    }
+        if let Some(total) = old.get("total") {
+            merged["total"] = total.clone();
+        }
+        // A rejection carries WHY, recorded with the event so the customer can be
+        // told something true rather than "rejected".
+        if next == "REJECTED" {
+            merged["rejection_reason"] = json!(reason);
+        }
+        let body_s = serde_json::to_string(&merged).unwrap_or(updated);
+        hub.append(
+            dowiz_hub::EventKind::Advanced,
+            &id,
+            &body_s,
+            now_ms() as u64,
+            [0u8; 32],
+        )
+        .map_err(|e| Error::RustError(format!("hub append failed: {e:?}")))?;
+        Ok(merged)
+    })
+    .await;
 
-    let now = now_ms();
-    db.prepare("UPDATE orders SET status = ?1, order_json = ?2, updated_at_ms = ?3 WHERE id = ?4")
-        .bind(&[
-            next.into(),
-            serde_json::to_string(&merged).unwrap_or(updated).into(),
-            JsValue::from_f64(now as f64),
-            id.into(),
-        ])?
-        .run()
-        .await?;
+    let merged = match out {
+        Ok(m) => m,
+        Err(e) => {
+            let msg = e.to_string();
+            let code = if msg.contains("not found") { 404 } else { 409 };
+            return Response::error(msg, code);
+        }
+    };
     Response::from_json(&merged)
 }
 
@@ -236,26 +218,18 @@ pub async fn dashboard(req: Request, ctx: RouteContext<()>) -> Result<Response> 
     let now = now_ms();
     let day_start = ((now + tz_offset_ms) / 86_400_000) * 86_400_000 - tz_offset_ms;
 
-    #[derive(Deserialize)]
-    struct Row {
-        status: String,
-        order_json: String,
-    }
-    let rows = db
-        .prepare("SELECT status, order_json FROM orders WHERE created_at_ms >= ?1")
-        .bind(&[JsValue::from_f64(day_start as f64)])?
-        .all()
-        .await?
-        .results::<Row>()?;
-
+    let loaded = crate::hubstore::load(&db).await?;
     let (mut count, mut revenue, mut pending, mut active) = (0i64, 0i64, 0i64, 0i64);
-    for r in rows {
-        let Ok(v) = serde_json::from_str::<Value>(&r.order_json) else { continue };
+    for e in loaded.hub.orders() {
+        let Ok(v) = serde_json::from_str::<Value>(&e.order_json) else { continue };
         if v.get("location_id").and_then(|x| x.as_str()) != Some(loc.as_str()) {
             continue;
         }
+        if (e.seq as i64) < day_start {
+            continue;
+        }
         count += 1;
-        match r.status.as_str() {
+        match v.get("status").and_then(|x| x.as_str()).unwrap_or("") {
             "PENDING" => pending += 1,
             "CONFIRMED" | "PREPARING" | "READY" | "IN_DELIVERY" => active += 1,
             // Revenue counts DELIVERED only. Counting a pending order as money

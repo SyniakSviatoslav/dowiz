@@ -47,20 +47,7 @@ pub async fn tasks(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         Err(r) => return Ok(r),
     };
 
-    #[derive(Deserialize)]
-    struct Row {
-        id: String,
-        status: String,
-        order_json: String,
-    }
-    let rows = db
-        .prepare(
-            "SELECT o.id AS id, o.status AS status, o.order_json AS order_json FROM orders o \
-             WHERE o.status IN ('READY','IN_DELIVERY') ORDER BY o.created_at_ms ASC LIMIT 100",
-        )
-        .all()
-        .await?
-        .results::<Row>()?;
+    let loaded = crate::hubstore::load(&db).await?;
 
     #[derive(Deserialize)]
     struct A {
@@ -75,15 +62,22 @@ pub async fn tasks(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 
     let mut mine = Vec::new();
     let mut open = Vec::new();
-    for r in rows {
-        let Ok(v) = serde_json::from_str::<Value>(&r.order_json) else { continue };
+    for e in loaded.hub.orders() {
+        let Ok(v) = serde_json::from_str::<Value>(&e.order_json) else { continue };
         if v.get("location_id").and_then(|x| x.as_str()) != Some(loc.as_str()) {
             continue;
         }
-        let holder = assigned.iter().find(|a| a.order_id == r.id).map(|a| a.courier_id.as_str());
+        let status = v.get("status").and_then(|x| x.as_str()).unwrap_or("");
+        if !matches!(status, "READY" | "IN_DELIVERY") {
+            continue;
+        }
+        let holder = assigned
+            .iter()
+            .find(|a| a.order_id == e.order_id)
+            .map(|a| a.courier_id.as_str());
         let f = v.get("fulfilment").cloned().unwrap_or(Value::Null);
         let card = json!({
-            "id": r.id, "status": r.status,
+            "id": e.order_id, "status": status,
             "total": v.get("total").cloned().unwrap_or(json!(0)),
             "payment": v.get("payment").cloned().unwrap_or(json!("cash")),
             "contact": v.get("contact").cloned().unwrap_or(Value::Null),
@@ -92,10 +86,10 @@ pub async fn tasks(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         });
         match holder {
             Some(c) if c == courier_id => mine.push(card),
-            // An order someone else is carrying is not shown at all, rather than
-            // shown greyed: a courier's screen during a run must have one job on it.
+            // An order someone else is carrying is not shown at all rather than
+            // greyed: a courier's screen during a run holds one job.
             Some(_) => {}
-            None if r.status == "READY" => open.push(card),
+            None if status == "READY" => open.push(card),
             None => {}
         }
     }
@@ -179,13 +173,10 @@ pub async fn shift(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     Response::from_json(&json!({ "onShift": body.open }))
 }
 
+/// Read one order out of the hub log, scoped to this hub's location.
 async fn load_order(db: &D1Database, id: &str, loc: &str) -> Result<Option<(String, Value)>> {
-    let raw: Option<String> = db
-        .prepare("SELECT order_json FROM orders WHERE id = ?1")
-        .bind(&[id.into()])?
-        .first(Some("order_json"))
-        .await?;
-    let Some(raw) = raw else { return Ok(None) };
+    let loaded = crate::hubstore::load(db).await?;
+    let Ok(raw) = loaded.hub.order(id) else { return Ok(None) };
     let v: Value = serde_json::from_str(&raw).unwrap_or(json!({}));
     if v.get("location_id").and_then(|x| x.as_str()) != Some(loc) {
         return Ok(None);
@@ -193,27 +184,28 @@ async fn load_order(db: &D1Database, id: &str, loc: &str) -> Result<Option<(Stri
     Ok(Some((raw, v)))
 }
 
-async fn write_status(db: &D1Database, id: &str, next: &str, old_raw: &str) -> Result<Value> {
-    let updated = json_api::apply_event_logic(old_raw, next)
-        .map_err(|e| Error::RustError(e))?;
-    let mut merged: Value = serde_json::from_str(&updated)
-        .map_err(|e| Error::RustError(format!("kernel order json unreadable: {e}")))?;
-    let old: Value = serde_json::from_str(old_raw).unwrap_or(json!({}));
-    for k in ["location_id","contact","fulfilment","payment","delivery_fee","total","courier_id","rejection_reason"] {
-        if let Some(v) = old.get(k) {
-            merged[k] = v.clone();
+/// Advance one order through the kernel and record the result as an event.
+async fn write_status(db: &D1Database, id: &str, next: &'static str) -> Result<Value> {
+    let id_s = id.to_string();
+    crate::hubstore::with_hub(db, move |hub| {
+        let current = hub
+            .order(&id_s)
+            .map_err(|_| Error::RustError("order not found".into()))?;
+        let updated = json_api::apply_event_logic(&current, next).map_err(Error::RustError)?;
+        let mut merged: Value = serde_json::from_str(&updated)
+            .map_err(|e| Error::RustError(format!("kernel order json unreadable: {e}")))?;
+        let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
+        for k in ["location_id","contact","fulfilment","payment","delivery_fee","total","courier_id","rejection_reason"] {
+            if let Some(v) = old.get(k) {
+                merged[k] = v.clone();
+            }
         }
-    }
-    db.prepare("UPDATE orders SET status = ?1, order_json = ?2, updated_at_ms = ?3 WHERE id = ?4")
-        .bind(&[
-            next.into(),
-            serde_json::to_string(&merged).unwrap_or(updated).into(),
-            JsValue::from_f64(now_ms() as f64),
-            id.into(),
-        ])?
-        .run()
-        .await?;
-    Ok(merged)
+        let body = serde_json::to_string(&merged).unwrap_or(updated);
+        hub.append(dowiz_hub::EventKind::Advanced, &id_s, &body, now_ms() as u64, [0u8; 32])
+            .map_err(|e| Error::RustError(format!("hub append failed: {e:?}")))?;
+        Ok(merged)
+    })
+    .await
 }
 
 /// `POST /api/courier/orders/:id/accept`
@@ -275,10 +267,10 @@ pub async fn pickup(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     if held.is_none() {
         return Response::error("not your delivery", 403);
     }
-    let Some((raw, _)) = load_order(&db, &id, &loc).await? else {
+    if load_order(&db, &id, &loc).await?.is_none() {
         return Response::error("not found", 404);
-    };
-    let merged = match write_status(&db, &id, "IN_DELIVERY", &raw).await {
+    }
+    let merged = match write_status(&db, &id, "IN_DELIVERY").await {
         Ok(v) => v,
         Err(e) => return Response::error(e.to_string(), 409),
     };
@@ -326,10 +318,10 @@ pub async fn deliver(mut req: Request, ctx: RouteContext<()>) -> Result<Response
     // what a settlement dispute is later resolved from.
     let short = a.cash_due - collected;
 
-    let Some((raw, _)) = load_order(&db, &id, &loc).await? else {
+    if load_order(&db, &id, &loc).await?.is_none() {
         return Response::error("not found", 404);
-    };
-    let merged = match write_status(&db, &id, "DELIVERED", &raw).await {
+    }
+    let merged = match write_status(&db, &id, "DELIVERED").await {
         Ok(v) => v,
         Err(e) => return Response::error(e.to_string(), 409),
     };
