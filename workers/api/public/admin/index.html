@@ -342,6 +342,35 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
    searching while orders arrive must not lose the box under a new row. */
 /* The customer's own words. Quoted rather than styled as a field: it is the
    only thing on the row that somebody wrote rather than the system recorded. */
+/* ── the brand editor ── */
+.sub{margin:var(--space-5) 0 var(--space-1);font-size:var(--text-base);
+      font-weight:var(--weight-medium)}
+.presets{display:grid;gap:var(--space-2);
+      grid-template-columns:repeat(auto-fit,minmax(7rem,1fr));margin-bottom:var(--space-2)}
+.preset{display:flex;align-items:center;gap:var(--space-2);min-height:var(--tap);
+      padding:var(--space-2);cursor:pointer;font:inherit;color:inherit;
+      border:1px solid var(--brand-border);border-radius:var(--radius-md);
+      background:var(--brand-surface);text-align:left}
+.preset.on{border-color:var(--brand-primary);box-shadow:inset 0 0 0 1px var(--brand-primary)}
+/* A swatch that shows the three colours in the relationship they will actually
+   have: ink and accent ON the paper, not three squares in a row. */
+.pchip{position:relative;flex:0 0 auto;width:2.25rem;height:2.25rem;
+      border-radius:var(--radius-sm);border:1px solid var(--brand-border);overflow:hidden}
+.pdot{position:absolute;left:.3rem;top:.3rem;width:.85rem;height:.85rem;border-radius:50%}
+.pbar{position:absolute;left:.3rem;bottom:.45rem;width:1.5rem;height:.28rem;border-radius:1px}
+.t1{display:grid;gap:var(--space-3);
+      grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));margin-bottom:var(--space-3)}
+.t1one{display:flex;flex-direction:column;gap:var(--space-1);font-size:var(--text-sm)}
+.t1one input[type=color]{width:100%;height:var(--tap);padding:0;cursor:pointer;
+      border:1px solid var(--brand-border);border-radius:var(--radius-md);background:none}
+.t1one input[type=range]{width:100%;min-height:var(--tap);accent-color:var(--brand-primary)}
+/* The real storefront in a frame, at phone width. Not a mock: a mock is a
+   second implementation of the design system, and the two disagree on exactly
+   the details somebody is trying to judge. */
+.phone{width:100%;max-width:23rem;aspect-ratio:9/16;margin-bottom:var(--space-3);
+      border:1px solid var(--brand-border);border-radius:var(--radius-lg);
+      overflow:hidden;background:var(--brand-surface)}
+.phone iframe{width:100%;height:100%;border:0;display:block}
 .said{display:flex;gap:var(--space-2);margin:var(--space-2) var(--space-4) 0;
       padding-left:var(--space-3);border-left:2px solid var(--brand-primary);
       color:var(--brand-text-muted);font-size:var(--text-sm)}

@@ -52,6 +52,38 @@ pub struct Live {
 }
 
 /// `GET /api/courier/tasks` — this courier's work, and what is waiting for one.
+/// How long a courier has to answer an assignment before it goes back to the
+/// pool.
+///
+/// FIVE MINUTES, and the number is a judgement rather than a constant somebody
+/// liked. A minute is not enough: a courier is holding a bike, or a door, or
+/// the previous order's change. An evening is far too long -- the food is cold
+/// and the customer has phoned twice. Five minutes is about how long a venue
+/// will wait before saying "give it to somebody else" out loud.
+///
+/// NOTHING IS AUTO-DECLINED. The offer lapsing does not refuse anything on the
+/// courier's behalf and does not count against them; it only stops the order
+/// being exclusively theirs. They can still take it after five minutes if
+/// nobody else has -- the order is back in the same pool they are looking at.
+pub const OFFER_WINDOW_MS: i64 = 5 * 60 * 1000;
+
+/// Has this order been offered to somebody who has not answered?
+///
+/// An ACCEPTED order never lapses however long it takes: a courier riding
+/// across Durrës has answered, and taking the order off them mid-run would be
+/// the worst possible moment.
+pub fn offer_lapsed(o: &Value, now: i64) -> bool {
+    if o.get("accepted_at_ms").and_then(Value::as_i64).is_some() {
+        return false;
+    }
+    match o.get("assigned_at_ms").and_then(Value::as_i64) {
+        // An order assigned before this field existed is not lapsed: it would
+        // be unfair to reopen every historical assignment on one deploy.
+        None => false,
+        Some(at) => now.saturating_sub(at) >= OFFER_WINDOW_MS,
+    }
+}
+
 pub async fn tasks(
     State(st): State<Shared>,
     who: CourierCaller,
@@ -71,11 +103,27 @@ pub async fn tasks(
         {
             continue;
         }
+        let live = !matches!(status, "DELIVERED" | "CANCELLED" | "REJECTED");
         match o.get("courier_id").and_then(Value::as_str) {
             Some(c) if c == me => {
-                if !matches!(status, "DELIVERED" | "CANCELLED" | "REJECTED") {
-                    mine.push(task_shape(&o));
+                if live {
+                    let mut t = task_shape(&o);
+                    // The countdown, as an INSTANT rather than a duration: a
+                    // remaining-seconds number computed here is stale the moment
+                    // it is sent, and a phone that polls every few seconds would
+                    // show it jumping. The app subtracts from its own clock.
+                    if o.get("accepted_at_ms").and_then(Value::as_i64).is_none() {
+                        if let Some(at) = o.get("assigned_at_ms").and_then(Value::as_i64) {
+                            t["offerEndsMs"] = json!(at + OFFER_WINDOW_MS);
+                        }
+                    }
+                    mine.push(t);
                 }
+            }
+            // An assignment nobody answered within the window is back in the
+            // pool -- for everybody, including the courier it was offered to.
+            Some(_) if live && status == OrderStatus::Ready.as_str() && offer_lapsed(&o, now_ms()) => {
+                offered.push(task_shape(&o))
             }
             // Unassigned and ready to leave the kitchen: anyone on shift may
             // take it. This is what makes the venue workable without the owner
@@ -167,7 +215,10 @@ pub async fn accept(
         // them is inside the lock when it is written, and the second sees the
         // assignment and is refused rather than silently overwriting it.
         if let Some(existing) = o.get("courier_id").and_then(Value::as_str) {
-            if existing != me {
+            // ...unless the offer to them has LAPSED. An assignment nobody
+            // answered is not a claim, and treating it as one is how an order
+            // sits on the screen of somebody who has gone home.
+            if existing != me && !offer_lapsed(&o, now_ms()) {
                 return Err(HubHttpError::Conflict("another courier took this order".into()));
             }
         }
@@ -178,6 +229,9 @@ pub async fn accept(
             )));
         }
         o["courier_id"] = json!(me);
+        // Taking it ends the offer window: from here it is theirs until it is
+        // delivered or the owner moves it.
+        o["accepted_at_ms"] = json!(now_ms());
         let body = serde_json::to_string(&o).unwrap_or(current);
         hub.append(EventKind::Advanced, &id, &body, now_ms() as u64, [0u8; 32])
             .map_err(|e| HubHttpError::Io(format!("{e:?}")))?;

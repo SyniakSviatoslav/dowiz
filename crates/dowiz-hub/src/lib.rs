@@ -32,6 +32,7 @@ pub mod modifiers;
 pub mod palette;
 pub mod activation;
 pub mod allergens;
+pub mod brand;
 pub mod post;
 pub mod promo;
 pub mod roster;

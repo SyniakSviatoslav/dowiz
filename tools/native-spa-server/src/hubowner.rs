@@ -859,6 +859,12 @@ pub async fn assign(
             )));
         }
         o["courier_id"] = json!(courier);
+        // WHEN IT WAS OFFERED. An assignment nobody answers must not sit on one
+        // courier's screen for the rest of the evening while the food goes
+        // cold: after the offer window it returns to the pool. The moment is
+        // recorded here because this is the only place that knows it.
+        o["assigned_at_ms"] = json!(now_ms());
+        o["accepted_at_ms"] = Value::Null;
         let body = serde_json::to_string(&o).unwrap_or(current);
         hub.append(EventKind::Advanced, &id, &body, now_ms() as u64, [0u8; 32])
             .map_err(|e| HubHttpError::Io(format!("{e:?}")))?;
@@ -1088,9 +1094,74 @@ pub async fn extract_branding(
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BrandingIn {
-    /// The seed colour, as the owner chose it.
+    /// The seed colour, as the owner chose it. Still the only REQUIRED field:
+    /// a colour picked out of a photograph is one colour and must not have to
+    /// invent four more.
     pub primary: String,
+    #[serde(default)]
+    pub ink: Option<String>,
+    #[serde(default)]
+    pub paper: Option<String>,
+    #[serde(default)]
+    pub type_pair: Option<String>,
+    #[serde(default)]
+    pub radius: Option<i64>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PresetIn {
+    pub preset: String,
+}
+
+/// `GET /api/owner/branding` — what the venue has, and what it could have.
+///
+/// The presets and the type pairs come from the HUB rather than being written
+/// into the pane, so the owner's console and the storefront can never disagree
+/// about which pairs exist -- and a pair that is not on this list is not a pair
+/// the storefront will render.
+pub async fn branding(
+    State(st): State<Shared>,
+    _who: OwnerCaller,
+) -> Result<Json<Value>, HubHttpError> {
+    use dowiz_hub::brand::{Brand, PRESETS, RADIUS_MAX, TYPE_PAIRS};
+    let stored = st
+        .read_catalog()?
+        .location()
+        .and_then(|j| serde_json::from_str::<Value>(&j).ok())
+        .and_then(|l| l.get("theme").cloned())
+        .unwrap_or(Value::Null);
+    let b = match &stored {
+        Value::Null => Brand::shipped(),
+        v => Brand::parse(&v.to_string()),
+    };
+    Ok(Json(json!({
+        "brand": {
+            "primary": b.accent.hex(), "ink": b.ink.hex(), "paper": b.paper.hex(),
+            "typePair": b.type_pair, "radius": b.radius,
+        },
+        "presets": PRESETS.iter().map(|p| json!({
+            "id": p.id, "label": p.label, "primary": p.accent,
+            "ink": p.ink, "paper": p.paper, "typePair": p.type_pair, "radius": p.radius,
+        })).collect::<Vec<_>>(),
+        "typePairs": TYPE_PAIRS.iter().map(|t| json!({ "id": t.id, "label": t.label }))
+            .collect::<Vec<_>>(),
+        "radiusMax": RADIUS_MAX,
+    })))
+}
+
+/// `POST /api/owner/branding/preset` — take a whole look at once.
+pub async fn set_preset(
+    State(st): State<Shared>,
+    who: OwnerCaller,
+    Json(body): Json<PresetIn>,
+) -> Result<Json<Value>, HubHttpError> {
+    let Some(b) = dowiz_hub::brand::preset(&body.preset) else {
+        return Err(HubHttpError::Invalid(format!("{:?} is not a preset", body.preset)));
+    };
+    apply_brand(&st, who, b).await
 }
 
 /// `POST /api/owner/branding` — adopt a theme derived from one colour.
@@ -1100,13 +1171,55 @@ pub struct BrandingIn {
 /// to pick their colour again.
 pub async fn set_branding(
     State(st): State<Shared>,
-    _who: OwnerCaller,
+    who: OwnerCaller,
     Json(body): Json<BrandingIn>,
 ) -> Result<Json<Value>, HubHttpError> {
-    let seed = Rgb::from_hex(&body.primary)
-        .ok_or_else(|| HubHttpError::Invalid(format!("{:?} is not a colour", body.primary)))?;
-    let theme = Theme::from_seed(seed);
-    let payload = theme_json(&theme);
+    use dowiz_hub::brand::{type_pair, Brand, RADIUS_MAX};
+
+    let colour = |what: &str, v: &str| {
+        Rgb::from_hex(v).ok_or_else(|| HubHttpError::Invalid(format!("{what}: {v:?} is not a colour")))
+    };
+    let d = Brand::shipped();
+    let b = Brand {
+        accent: colour("accent", &body.primary)?,
+        ink: match &body.ink {
+            Some(v) => colour("ink", v)?,
+            None => d.ink,
+        },
+        paper: match &body.paper {
+            Some(v) => colour("paper", v)?,
+            None => d.paper,
+        },
+        // AN UNKNOWN PAIR IS REFUSED, not defaulted. Silently substituting one
+        // would leave the owner looking at a font they did not pick and no
+        // reason why.
+        type_pair: match &body.type_pair {
+            Some(v) => {
+                type_pair(v).ok_or_else(|| HubHttpError::Invalid(format!("{v:?} is not a type pair")))?.id
+            }
+            None => d.type_pair,
+        },
+        radius: match body.radius {
+            Some(r) if !(0..=RADIUS_MAX).contains(&r) => {
+                return Err(HubHttpError::Invalid(format!("a radius is 0 to {RADIUS_MAX} px")))
+            }
+            Some(r) => r,
+            None => d.radius,
+        },
+    };
+    apply_brand(&st, who, b).await
+}
+
+async fn apply_brand(
+    st: &Shared,
+    _who: OwnerCaller,
+    b: dowiz_hub::brand::Brand,
+) -> Result<Json<Value>, HubHttpError> {
+    let seed = b.accent;
+    let theme = b.theme();
+    let mut payload = theme_json(&theme);
+    payload["typePair"] = json!(b.type_pair);
+    payload["radius"] = json!(b.radius);
 
     // The derivation already walks the colour until every pair passes; this is
     // the belt to that braces. A theme that fails here is a bug in the
@@ -1119,7 +1232,12 @@ pub async fn set_branding(
         )));
     }
 
-    let stored = json!({ "seed": seed.hex(), "light": payload["light"], "dark": payload["dark"] });
+    let stored = json!({
+        "seed": seed.hex(),
+        "ink": b.ink.hex(), "paper": b.paper.hex(),
+        "typePair": b.type_pair, "radius": b.radius,
+        "light": payload["light"], "dark": payload["dark"]
+    });
     st.with_catalog(move |cat| {
         let raw = cat.location().ok_or(HubHttpError::NotFound("venue"))?;
         let mut loc: Value =
@@ -1148,7 +1266,9 @@ pub fn routes(state: Shared) -> Router {
         .route("/api/owner/couriers/{id}/active", post(set_courier_active))
         .route("/api/owner/menu/import", post(import_menu))
         .route("/api/owner/branding/extract", post(extract_branding))
+        .route("/api/owner/branding", get(branding))
         .route("/api/owner/branding", post(set_branding))
+        .route("/api/owner/branding/preset", post(set_preset))
         .route("/api/owner/settings", get(settings))
         .route("/api/owner/settings", post(set_setting))
         .route("/api/owner/assist", post(owner_assist))

@@ -3021,3 +3021,126 @@ async fn a_courier_sees_tips_apart_from_the_float() {
     assert_eq!(e["today"]["tips"], 0);
 }
 
+
+/// The five tokens a venue owns, and the refusals that keep them from producing
+/// a storefront nobody can read.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_owner_touches_five_tokens_and_nothing_else() {
+    let s = boot("brand_t1").await;
+    let (_, t) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = t["access_token"].as_str().unwrap().to_string();
+
+    let (code, b) = get(&s.base, "/api/owner/branding", Some(&owner));
+    assert_eq!(code, 200, "{b}");
+    assert_eq!(b["presets"].as_array().unwrap().len(), 6);
+    assert_eq!(b["typePairs"].as_array().unwrap().len(), 4);
+    assert_eq!(b["radiusMax"], 20);
+
+    let (code, v) = post(&s.base, "/api/owner/branding", Some(&owner), json!({
+        "primary": "#1c6e8c", "ink": "#10242b", "paper": "#f4f8f9",
+        "typePair": "modern", "radius": 12 }));
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["typePair"], "modern");
+    assert_eq!(v["radius"], 12);
+    // Every contrast pair holds, in both modes, or the owner has a storefront
+    // their customers cannot read.
+    for c in v["contrast"].as_array().unwrap() {
+        assert_eq!(c["passes"], true, "{c}");
+    }
+
+    // The storefront receives an ID and a number, never a CSS fragment.
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    let theme = &menu["location"]["theme"];
+    assert_eq!(theme["typePair"], "modern");
+    assert_eq!(theme["radius"], 12);
+    assert_eq!(theme["ink"], "#10242b");
+
+    // A pair nobody shipped is refused rather than quietly substituted: an
+    // owner looking at a font they did not pick deserves a reason.
+    let (code, v) = post(&s.base, "/api/owner/branding", Some(&owner), json!({
+        "primary": "#1c6e8c", "typePair": "comic; }body{display:none" }));
+    assert_eq!(code, 400, "{v}");
+    assert!(v["error"].as_str().unwrap().contains("type pair"), "{v}");
+
+    // And the refusal changed nothing.
+    let (_, b2) = get(&s.base, "/api/owner/branding", Some(&owner));
+    assert_eq!(b2["brand"]["typePair"], "modern");
+
+    for bad in [json!({ "primary": "not a colour" }),
+                json!({ "primary": "#1c6e8c", "radius": 999 }),
+                json!({ "primary": "#1c6e8c", "ink": "rgb(0,0,0)" })] {
+        let (code, v) = post(&s.base, "/api/owner/branding", Some(&owner), bad.clone());
+        assert_eq!(code, 400, "{bad} was accepted: {v}");
+    }
+
+    // A preset is a whole look at once, and it lands in the same place.
+    let (code, v) = post(&s.base, "/api/owner/branding/preset", Some(&owner),
+                         json!({ "preset": "terracotta" }));
+    assert_eq!(code, 200, "{v}");
+    let (_, b3) = get(&s.base, "/api/owner/branding", Some(&owner));
+    assert_eq!(b3["brand"]["typePair"], "warm");
+    assert_eq!(b3["brand"]["radius"], 16);
+    assert_eq!(post(&s.base, "/api/owner/branding/preset", Some(&owner),
+                    json!({ "preset": "nope" })).0, 400);
+}
+
+/// An assignment nobody answers goes back to the pool after five minutes. It is
+/// not a refusal, it does not count against anybody, and an order already
+/// ACCEPTED never lapses however long the ride takes.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_unanswered_offer_returns_to_the_pool() {
+    use native_spa_server::hubcourier::{offer_lapsed, OFFER_WINDOW_MS};
+    assert_eq!(OFFER_WINDOW_MS, 5 * 60 * 1000);
+
+    let now = 1_789_000_000_000i64;
+    let offered = |assigned: i64| json!({ "assigned_at_ms": assigned });
+    assert!(!offer_lapsed(&offered(now), now), "an offer just made has not lapsed");
+    assert!(!offer_lapsed(&offered(now), now + OFFER_WINDOW_MS - 1));
+    assert!(offer_lapsed(&offered(now), now + OFFER_WINDOW_MS));
+
+    // Accepted: never lapses, however long the ride.
+    let taken = json!({ "assigned_at_ms": now, "accepted_at_ms": now + 1 });
+    assert!(!offer_lapsed(&taken, now + 10 * OFFER_WINDOW_MS),
+            "an order was taken off a courier who was already riding it");
+
+    // An order assigned before the field existed is not retroactively lapsed:
+    // one deploy must not reopen every historical assignment.
+    assert!(!offer_lapsed(&json!({ "courier_id": "x" }), now));
+}
+
+/// The live half: an order assigned to one courier is theirs, and the other one
+/// is refused -- until the window passes.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_second_courier_is_refused_while_the_offer_stands() {
+    let s = boot("offer_window").await;
+    let (_, t) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = t["access_token"].as_str().unwrap().to_string();
+    let (id, _) = order_ready_for_a_courier(&s.base, &owner);
+
+    let (code, v) = post(&s.base, &format!("/api/owner/orders/{id}/assign"), Some(&owner),
+                         json!({ "courier_id": "+355691112233" }));
+    assert_eq!(code, 200, "{v}");
+    assert!(v["assigned_at_ms"].is_i64(), "the offer has no timestamp: {v}");
+    assert_eq!(v["accepted_at_ms"], Value::Null);
+
+    let (_, c2) = post(&s.base, "/api/courier/auth/login", None,
+        json!({ "phone": "+355694445566", "password": "courier-pw-2" }));
+    let other = c2["jwt"].as_str().unwrap().to_string();
+    let (code, v) = post(&s.base, &format!("/api/courier/orders/{id}/accept"), Some(&other), json!({}));
+    assert_eq!(code, 409, "the offer was not exclusive: {v}");
+
+    // The assignee sees the deadline, as an instant rather than a countdown.
+    let (_, c1) = post(&s.base, "/api/courier/auth/login", None,
+        json!({ "phone": "+355691112233", "password": "courier-pw" }));
+    let mine = c1["jwt"].as_str().unwrap().to_string();
+    post(&s.base, "/api/courier/shift", Some(&mine), json!({ "open": true }));
+    let (_, d) = get(&s.base, "/api/courier/tasks", Some(&mine));
+    let task = &d["mine"][0];
+    assert!(task["offerEndsMs"].is_i64(), "no deadline on the offer: {task}");
+
+    // Taking it ends the window.
+    let (code, _) = post(&s.base, &format!("/api/courier/orders/{id}/accept"), Some(&mine), json!({}));
+    assert_eq!(code, 200);
+    let (_, d) = get(&s.base, "/api/courier/tasks", Some(&mine));
+    assert_eq!(d["mine"][0]["offerEndsMs"], Value::Null, "{d}");
+}

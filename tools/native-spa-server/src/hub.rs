@@ -479,6 +479,9 @@ pub async fn menu(State(st): State<Shared>, _slug: Option<AxPath<String>>) -> Re
             // The venue's own colours, when they have set any. Absent means the
             // surfaces keep their shipped palette -- which is a complete,
             // contrast-checked theme in its own right, not a placeholder.
+            // The theme as STORED, which now carries the type-pair id and the
+            // radius alongside the colours. Both are looked up client-side in a
+            // table the client owns: see `applyTheme`.
             "theme": loc.get("theme").cloned().unwrap_or(Value::Null)
         },
         "categories": cats
@@ -1056,6 +1059,8 @@ pub(crate) fn carry_over(old: &Value, updated: &mut Value) {
         "tip",
         "scheduled_for_ms",
         "last_actor",
+        "assigned_at_ms",
+        "accepted_at_ms",
         // THE DISCOUNT AND THE CODE THAT GAVE IT. Missing from this list until
         // now, and the consequence was not cosmetic: the use-count folds over
         // orders looking for `promo.code`, so the first status change erased

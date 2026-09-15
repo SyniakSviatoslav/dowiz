@@ -360,6 +360,49 @@ function findBar(n){
   </div>`;
 }
 
+// WHAT GETS COPIED IS THE ORDER, not a link.
+//
+// A link would need a capability to open it, and handing one out casually is
+// how a tracking URL ends up in a group chat. What an owner actually does at
+// half past eight is paste the order into a message -- to the kitchen, to a
+// courier they are dispatching by phone -- so that is what the button produces:
+// plain text somebody can read out.
+function orderAsText(o){
+  const lines = (o.items || [])
+    .map(i => `  ${i.quantity}× ${i.name || i.product_id}${
+      (i.modifiers || []).length ? ' (' + i.modifiers.map(m => m.name).join(', ') + ')' : ''}`);
+  const f = o.fulfilment || {}, c = o.contact || {};
+  return [
+    `#${shortId(o.id)} · ${o.status}`,
+    ...lines,
+    f.kind === 'pickup' ? 'Самовивіз' : `Доставка: ${f.address?.line || '—'}`,
+    f.address?.note || f.note ? `Примітка: ${f.address?.note || f.note}` : '',
+    c.name || c.phone ? `${c.name || ''} ${c.phone || ''}`.trim() : '',
+    o.promo?.code ? `Промокод ${o.promo.code}: −${money(o.discount || 0)}` : '',
+    `Разом: ${money(o.total ?? 0)}${o.payment === 'cash' ? ' (готівка)' : ''}`,
+  ].filter(Boolean).join('\n');
+}
+
+async function copyOrder(id){
+  const o = S.orders.find(x => x.id === id);
+  if (!o) return;
+  const text = orderAsText(o);
+  try {
+    // The clipboard API needs a secure context, and a hub reached over plain
+    // http on a phone is not one. The fallback is not a nicety -- it is the
+    // case that actually happens in a kitchen on a local network.
+    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
+    else {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); ta.remove();
+    }
+    toast('Скопійовано');
+  } catch { toast('Не вдалося скопіювати'); }
+}
+
 function bindFind(){
   const q = $('#oq');
   if (q) q.oninput = () => {
@@ -932,7 +975,9 @@ function row(o, newIdx){
       ${o.promo?.code ? `<span class="muted"><i class="ti ti-ticket i" aria-hidden="true"></i>${esc(o.promo.code)} −<span class="money">${money(o.discount || 0)}</span></span>` : ''}
     </div>
     ${said}
-    <div class="acts">${actions(o)}</div>
+    <div class="acts">${actions(o)}
+      <button class="icon-btn" data-copy="${esc(o.id)}" aria-label="Скопіювати замовлення">
+        <i class="ti ti-copy i" aria-hidden="true"></i></button></div>
   </article>`;
 }
 const shortId = id => String(id || '').slice(0, 8);
@@ -983,6 +1028,8 @@ function courierPicker(o){
 }
 
 function bindOrders(){
+  document.querySelectorAll('[data-copy]').forEach(b =>
+    b.onclick = () => copyOrder(b.dataset.copy));
   document.querySelectorAll('[data-a]').forEach(btn => btn.onclick = async () => {
     const { o: id, a: action } = btn.dataset;
     let reason = null;
@@ -1274,8 +1321,119 @@ function setupView(){
       </div>
       <div id="swatches" class="swatches" hidden></div>
       <div id="contrast" class="report" hidden></div>
+
+      <h3 class="sub">Готові набори</h3>
+      <p class="hint">Один дотик замість п'яти рішень. Кожен перевірено на
+         контраст у світлій і темній темі.</p>
+      <div id="presets" class="presets"></div>
+
+      <h3 class="sub">П'ять власних налаштувань</h3>
+      <p class="hint">Це все, що ви змінюєте. Решта — відступи, тіні, рухи —
+         виводиться сама, щоб поверхні не розійшлися між собою.</p>
+      <div class="t1">
+        <label class="t1one"><span>Акцент</span>
+          <input type="color" id="bAccent"></label>
+        <label class="t1one"><span>Текст</span>
+          <input type="color" id="bInk"></label>
+        <label class="t1one"><span>Тло</span>
+          <input type="color" id="bPaper"></label>
+        <label class="t1one"><span>Шрифти</span>
+          <select id="bPair" class="ask"></select></label>
+        <label class="t1one"><span>Заокруглення <b id="bRadiusV" class="money"></b></span>
+          <input type="range" id="bRadius" min="0" max="20" step="1"></label>
+      </div>
+      <div class="row">
+        <button class="btn pri" id="bSave">
+          <i class="ti ti-check i" aria-hidden="true"></i>Застосувати</button>
+        <span class="hint" id="bMsg"></span>
+      </div>
+      <p class="hint">Так це побачить клієнт:</p>
+      <div class="phone"><iframe id="bPreview" title="Передперегляд вітрини"
+           src="/?s=${esc(store.loc || '')}" loading="lazy"></iframe></div>
     </section>
   </div>`;
+}
+
+// ── the five tokens ─────────────────────────────────────────────────────────
+//
+// §8.1: T1 is brand-owned and has exactly five members. A colour picker per
+// token is a way to produce an unreadable storefront slowly, with every step
+// feeling reasonable, so the count is the design and not a limitation.
+//
+// The presets and the type pairs are read from the HUB rather than written
+// here. Two lists of what a pair is called would eventually disagree, and the
+// one on this screen is always the one that goes stale.
+async function loadBrand(){
+  if (!$('#bAccent')) return;
+  try { S.brand = await api('/owner/branding'); }
+  catch (e) { $('#bMsg').textContent = String(e.message || e); return; }
+  const { brand, presets, typePairs, radiusMax } = S.brand;
+
+  $('#presets').innerHTML = presets.map(p => `
+    <button class="preset ${p.id === S.presetOn ? 'on' : ''}" data-preset="${esc(p.id)}"
+            title="${esc(p.label)}">
+      <span class="pchip" style="background:${esc(p.paper)}">
+        <span class="pdot" style="background:${esc(p.primary)}"></span>
+        <span class="pbar" style="background:${esc(p.ink)}"></span>
+      </span>
+      <span>${esc(p.label)}</span>
+    </button>`).join('');
+
+  $('#bPair').innerHTML = typePairs.map(t =>
+    `<option value="${esc(t.id)}" ${t.id === brand.typePair ? 'selected' : ''}>${esc(t.label)}</option>`).join('');
+  $('#bAccent').value = brand.primary;
+  $('#bInk').value = brand.ink;
+  $('#bPaper').value = brand.paper;
+  const r = $('#bRadius');
+  r.max = radiusMax; r.value = brand.radius;
+  $('#bRadiusV').textContent = `${brand.radius}px`;
+}
+
+function bindBrand(){
+  if (!$('#bSave')) return;
+  loadBrand();
+  const r = $('#bRadius');
+  // The number moves with the slider, because a slider whose value you cannot
+  // read is a slider you set by guessing.
+  if (r) r.oninput = () => { $('#bRadiusV').textContent = `${r.value}px`; };
+
+  document.querySelectorAll('[data-preset]').forEach(b => b.onclick = async () => {
+    const msg = $('#bMsg'); msg.textContent = 'Застосовуємо…';
+    try {
+      await api('/owner/branding/preset', { preset: b.dataset.preset });
+      S.presetOn = b.dataset.preset;
+      msg.textContent = 'Готово';
+      await loadBrand();
+      refreshPreview();
+    } catch (e) { msg.textContent = String(e.message || e); }
+  });
+
+  $('#bSave').onclick = async () => {
+    const msg = $('#bMsg'); msg.textContent = 'Перевіряємо контраст…';
+    try {
+      const d = await api('/owner/branding', {
+        primary: $('#bAccent').value, ink: $('#bInk').value, paper: $('#bPaper').value,
+        typePair: $('#bPair').value, radius: parseInt($('#bRadius').value, 10),
+      });
+      // The ADJUSTMENT is reported, not hidden. An owner whose colour was moved
+      // to make it legible should be told by how much rather than wondering why
+      // the storefront is not quite the shade they picked.
+      const moved = d.primaryAdjustedPct || 0;
+      msg.textContent = moved
+        ? `Застосовано. Акцент посунуто на ${moved}% для читабельності.`
+        : 'Застосовано.';
+      S.presetOn = null;
+      refreshPreview();
+    } catch (e) { msg.textContent = String(e.message || e); }
+  };
+}
+
+// The preview is the REAL storefront in a frame, reloaded after a change --
+// not a mock. A mock is a second implementation of the design system, and the
+// two would disagree on exactly the details somebody is trying to judge.
+function refreshPreview(){
+  const f = $('#bPreview');
+  if (f) f.contentWindow?.location.reload();
 }
 
 /// Downsample an image file to a flat hex string of pixels.
@@ -1493,6 +1651,7 @@ function renderHours(){
 }
 
 function bindSetup(){
+  bindBrand();
   bindActivation();
   bindCustomers();
   bindCouriers();

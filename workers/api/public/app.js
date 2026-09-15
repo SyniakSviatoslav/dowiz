@@ -251,6 +251,28 @@ function toast(msg){ const el = $('#toast'); el.textContent = msg; el.classList.
 //
 // Absent theme means the shipped palette stays, which is a complete
 // contrast-checked design in its own right and not a placeholder.
+// THE TYPE PAIRS LIVE HERE, in the client, and the hub only ever names one.
+//
+// A font-family arriving from the network and going into a stylesheet is
+// arbitrary text reaching CSS: `font-family: x; } body { display:none` is a
+// defacement that escaping in the wrong place will not reliably stop. An id is
+// looked up in this table, so the worst a compromised or mistaken hub can do is
+// pick one of four pairings that already shipped.
+//
+// Every stack is system-resident. A storefront that waits on a web font is a
+// storefront showing nothing on a Durrës 3G connection, and the wait lands on
+// exactly the customers least able to absorb it.
+const TYPE_PAIRS = {
+  classic: { heading: "'DM Serif Display',Georgia,'Times New Roman',serif",
+             body: "'DM Sans',system-ui,-apple-system,sans-serif" },
+  modern:  { heading: "system-ui,-apple-system,'Segoe UI',sans-serif",
+             body: "system-ui,-apple-system,'Segoe UI',sans-serif" },
+  warm:    { heading: "Georgia,'Iowan Old Style','Palatino Linotype',serif",
+             body: "Georgia,'Iowan Old Style','Palatino Linotype',serif" },
+  plain:   { heading: "ui-sans-serif,system-ui,sans-serif",
+             body: "ui-sans-serif,system-ui,sans-serif" },
+};
+
 function applyTheme(theme){
   const el = document.getElementById('venue-theme') || (() => {
     const s = document.createElement('style'); s.id = 'venue-theme';
@@ -266,11 +288,24 @@ function applyTheme(theme){
     .join(';');
   const light = safe(theme.light), dark = safe(theme.dark);
   if (!light) { el.textContent = ''; return; }
+
+  // The two non-colour tokens. Neither value from the hub reaches CSS: the
+  // pair is an index into the table above, and the radius is put through
+  // parseInt and clamped, so the only thing that can land in the stylesheet is
+  // a number this function produced.
+  const pair = TYPE_PAIRS[theme.typePair] || TYPE_PAIRS.classic;
+  const r = Math.max(0, Math.min(20, parseInt(theme.radius, 10) || 0));
+  const shape =
+    `--brand-font-heading:${pair.heading};--brand-font-body:${pair.body};` +
+    // One number, four steps. A venue picking "round" should get round
+    // consistently rather than having to set four values that drift apart.
+    `--radius-sm:${Math.round(r / 2)}px;--radius-md:${r}px;` +
+    `--radius-lg:${Math.round(r * 1.5)}px;--radius-xl:${r * 2}px;`;
   // Same three-state structure the shipped palette uses: bare :root, then the
   // system preference guarded so an explicit light choice still wins, then the
   // explicit dark choice.
   el.textContent =
-    `:root{${light}}` +
+    `:root{${shape}${light}}` +
     (dark ? `@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){${dark}}}` +
             `:root[data-theme="dark"]{${dark}}` : '');
 }

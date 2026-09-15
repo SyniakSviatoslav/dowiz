@@ -417,6 +417,11 @@ function render(){
 
   // ONE job on screen. A run in hand hides everything else.
   const active = S.mine[0];
+  // AN OFFER IS NOT A RUN. An order assigned to this courier that they have not
+  // taken yet gets its own screen: the active screen's first control is
+  // "picked up", and a courier who has not agreed to the job should not be one
+  // mis-tap from telling the kitchen they have it.
+  if (active && active.offerEndsMs) { keepAwake(true); return renderOffer(active); }
   if (active) { keepAwake(true); return S.cashFor && S.cashFor === active.id ? renderCash(active) : renderActive(active); }
   keepAwake(false); S.cashFor = null;
 
@@ -678,6 +683,58 @@ async function openHistory(){
         <span class="money">${money(r.cashCollected ?? r.total ?? 0)}</span>
       </div>`).join('')}</div>`
     : `<div class="empty">${icon('history')}<b>Поки порожньо</b>Завершені доставки з'являться тут</div>`);
+}
+
+// ── an offer, with the time left on it ──────────────────────────────────────
+//
+// The venue gave this order to this courier. Five minutes later it goes back to
+// the pool -- NOT declined, not held against them, just no longer exclusively
+// theirs. So the screen says what is left rather than counting down to a
+// punishment, and the order stays takeable after it lapses if nobody else got
+// there first.
+//
+// The deadline arrives as an INSTANT and the remaining time is worked out here.
+// A server-computed "seconds left" is stale the moment it is sent, and a phone
+// polling every few seconds would show it jumping backwards.
+function renderOffer(o){
+  const left = () => Math.max(0, Math.round((o.offerEndsMs - Date.now()) / 1000));
+  const mmss = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  const lapsed = left() === 0;
+  $('#app').innerHTML = `
+    <div class="offer">
+      <span class="tag on"><span class="dot"></span>Вам пропонують</span>
+      <b class="oid">#${short(o.id)}</b>
+      <span class="amt money">${esc(money(o.total))}</span>
+      <p class="note">${esc(o.address?.line || '—')}</p>
+      <p class="hint2" id="offerLeft">${lapsed
+        ? 'Час вийшов — замовлення знову вільне, але ви ще можете його взяти'
+        : `Залишилось <b id="offerClock">${mmss(left())}</b>`}</p>
+    </div>
+    <button class="cta" id="takeOffer" type="button">${icon('package')}Взяти</button>
+    <button class="ghost" id="endShift" type="button">${icon('power')}Завершити зміну</button>`;
+  $('#endShift').onclick = () => setShift(false);
+  $('#takeOffer').onclick = async () => {
+    const b = $('#takeOffer'); b.disabled = true;
+    try {
+      await api(`/courier/orders/${encodeURIComponent(o.id)}/accept`, { method:'POST', attend:true });
+      seaEvent('courier_assigned', 60);
+      await load();
+    } catch (e) {
+      toast(String(e.message || e), 'alert-circle');
+      seaEvent('dispatch_failed', 40);
+      b.disabled = false;
+    }
+  };
+  // One interval, cleared by the next render. A timer left running behind a
+  // screen that no longer exists is a battery drain nobody can see.
+  clearInterval(renderOffer._t);
+  renderOffer._t = setInterval(() => {
+    const el = document.getElementById('offerClock');
+    if (!el) { clearInterval(renderOffer._t); return; }
+    const n = left();
+    if (n === 0) { clearInterval(renderOffer._t); return load(); }
+    el.textContent = mmss(n);
+  }, 1000);
 }
 
 function renderActive(o){

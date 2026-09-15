@@ -311,6 +311,56 @@ impl Theme {
         }
     }
 
+    /// Derive a theme from the three COLOUR tokens a venue owns.
+    ///
+    /// `from_seed` is this with the ink and the paper left at their derived
+    /// defaults, and it stays because a colour picked out of a photograph is
+    /// one colour and should not have to invent two more.
+    ///
+    /// EVERY ONE IS CORRECTED, NOT OBEYED. The accent moves until white text on
+    /// it clears AA; the ink moves until it clears AA on the paper the venue
+    /// actually chose, which is the pair that fails in hand-made themes because
+    /// "dark enough" is judged against whatever ground the designer happened to
+    /// be looking at. The owner's colour is used exactly when it works, and the
+    /// nearest one that does when it does not.
+    ///
+    /// The paper decides the surfaces: a venue that picks a warm cream gets
+    /// cards slightly lighter than it and a raised layer slightly darker, in
+    /// its own hue, rather than white cards floating on cream.
+    pub fn from_brand(accent: Rgb, ink: Rgb, paper: Rgb) -> Theme {
+        let mut t = Theme::from_seed(accent);
+        let (ph, ps, pl) = paper.hsl();
+
+        // A dark paper is a deliberate choice and the surfaces have to go the
+        // other way: lighter than the ground rather than darker, or every card
+        // disappears into it.
+        let dark_paper = pl < 0.5;
+        t.bg = paper;
+        t.surface = Rgb::from_hsl(ph, ps, if dark_paper { (pl + 0.05).min(1.0) } else { (pl + 0.015).min(1.0) });
+        t.surface_raised =
+            Rgb::from_hsl(ph, ps, if dark_paper { (pl + 0.10).min(1.0) } else { (pl - 0.02).max(0.0) });
+        t.border = Rgb::from_hsl(ph, ps, if dark_paper { (pl + 0.16).min(1.0) } else { (pl - 0.10).max(0.0) });
+
+        let (corrected_ink, _) = ensure_contrast(ink, t.surface, AA_TEXT);
+        t.text = corrected_ink;
+        // Muted is derived FROM the corrected ink rather than from the hue, so
+        // it stays a quieter version of the text the venue chose instead of a
+        // grey that happens to pass.
+        let (ih, is_, il) = corrected_ink.hsl();
+        let muted_l = if dark_paper { (il - 0.30).max(0.0) } else { (il + 0.32).min(1.0) };
+        let (muted, _) = ensure_contrast(Rgb::from_hsl(ih, is_, muted_l), t.surface, AA_TEXT);
+        t.text_muted = muted;
+
+        // The accent has to clear AA-large on the venue's own surface too, not
+        // only on white: a pale gold on a cream page is invisible even though
+        // it passed against a ground this venue does not have.
+        let (on_surface, _) = ensure_contrast(t.primary, t.surface, AA_LARGE);
+        t.primary = on_surface;
+        let (ah, as_, al) = t.primary.hsl();
+        t.primary_hover = Rgb::from_hsl(ah, as_, (al - 0.06).max(0.0));
+        t
+    }
+
     /// Every contrast pair that must hold, with its measured ratio.
     ///
     /// Returned rather than merely checked, so the owner sees the numbers and so

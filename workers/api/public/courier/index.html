@@ -377,6 +377,14 @@ a.tel{color:var(--brand-text);font-weight:var(--weight-semibold);text-decoration
 .slide.dragging .slide-knob{transition:none}
 .slide-hint{position:absolute;right:var(--space-4);top:50%;transform:translateY(-50%);
       color:var(--brand-text-muted);font-size:var(--text-xs);pointer-events:none}
+/* An offer: a card, because it is a thing being handed to you and not a job in
+   progress. The active-run screen deliberately looks different. */
+.offer{display:flex;flex-direction:column;gap:var(--space-2);width:100%;
+      padding:var(--space-4);margin-bottom:var(--space-3);
+      border:1px solid var(--brand-border);border-radius:var(--radius-lg);
+      background:var(--brand-surface)}
+.offer .oid{font-size:var(--text-lg)}
+.offer .amt{font-size:var(--text-xl);font-weight:var(--weight-bold)}
 .tips{color:var(--color-success)}
 .hint2{width:100%;margin:0 0 var(--space-3);color:var(--brand-text-muted);
       font-size:var(--text-sm);line-height:1.5}
