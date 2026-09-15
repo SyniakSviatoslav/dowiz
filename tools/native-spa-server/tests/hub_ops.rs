@@ -1293,3 +1293,175 @@ async fn the_owner_payloads_match_what_the_admin_pane_reads() {
         assert!(!p[k].is_null(), "the menu tab reads {k}: {p}");
     }
 }
+
+/// Voice proposes; a person disposes. Nothing moves on one utterance.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_spoken_command_is_proposed_before_it_is_obeyed() {
+    let s = boot("voice").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+
+    let (_, order) = post(&s.base, "/api/public/locations/dubin/orders", None, json!({
+        "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 1 }],
+        "contact": { "name": "C", "phone": "+355690000000" },
+        "fulfilment": { "kind": "pickup" }
+    }));
+    let id = order["id"].as_str().unwrap().to_string();
+
+    let say = |t: &str, tok: Option<&str>| {
+        let mut b = json!({ "transcript": t, "confidence": 0.95, "is_final": true, "lang": "uk" });
+        if let Some(x) = tok { b["confirm"] = json!(x); }
+        post(&s.base, "/api/voice", Some(&owner), b)
+    };
+
+    // A read-only question runs at once -- making someone confirm a question is
+    // the ceremony that stops people using voice at all.
+    let (code, v) = say("скільки замовлень чекає", None);
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["needsConfirmation"], false);
+    assert_eq!(v["waiting"], 1, "{v}");
+
+    // A consequential one is a PROPOSAL, and the order has not moved.
+    let (code, v) = say("підтверди останнє", None);
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["needsConfirmation"], true, "{v}");
+    assert_eq!(v["action"], "confirm");
+    assert_eq!(v["orderId"], id.as_str());
+    let readback = v["readback"].as_str().expect("readback");
+    assert!(readback.starts_with("підтвердити останнє"), "in the speaker's language: {readback}");
+    assert!(readback.contains(&id[id.len() - 4..]), "naming the RESOLVED order: {readback}");
+    let tok = v["token"].as_str().expect("token").to_string();
+
+    let (_, still) = get(&s.base, &format!("/api/order/{id}"), None);
+    assert_eq!(still["status"], "PENDING", "a proposal must not have moved anything");
+
+    // Confirming does move it, through the same handler the pane uses.
+    let (code, v) = say("", Some(&tok));
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["done"], true);
+    let (_, after) = get(&s.base, &format!("/api/order/{id}"), None);
+    assert_eq!(after["status"], "CONFIRMED");
+    assert_eq!(after["last_actor"], "ana@dubin.al", "a spoken action is still the owner's");
+
+    // A token is single-situation, not single-use, but a TAMPERED one is
+    // refused outright.
+    let bad = format!("{}x", tok);
+    assert_eq!(say("", Some(&bad)).0, 409);
+    assert_eq!(say("", Some("nonsense")).0, 409);
+}
+
+/// Everything the grammar refuses, refused over HTTP too.
+#[tokio::test(flavor = "multi_thread")]
+async fn voice_refuses_what_it_cannot_resolve() {
+    let s = boot("voice_guard").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+    let say = |t: &str, conf: f64| post(&s.base, "/api/voice", Some(&owner),
+        json!({ "transcript": t, "confidence": conf, "is_final": true, "lang": "uk" }));
+
+    // Two orders, so an unqualified reference is genuinely ambiguous.
+    for _ in 0..2 {
+        post(&s.base, "/api/public/locations/dubin/orders", None, json!({
+            "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 1 }],
+            "contact": { "name": "C", "phone": "+355690000000" },
+            "fulfilment": { "kind": "pickup" }
+        }));
+    }
+
+    let (_, v) = say("підтверди", 0.95);
+    assert_eq!(v["understood"], false, "two candidates is a question, not a coin toss: {v}");
+    assert_eq!(v["say"], "which order?");
+
+    let (_, v) = say("підтверди останнє", 0.4);
+    assert_eq!(v["understood"], false, "an unsure recogniser is not obeyed: {v}");
+
+    let (_, v) = say("скасуй ні підтверди", 0.95);
+    assert_eq!(v["understood"], false, "self-correction mid-sentence: {v}");
+    assert_eq!(v["say"], "heard more than one command");
+
+    let (_, v) = say("забрав", 0.95);
+    assert_eq!(v["understood"], false, "an owner does not pick up: {v}");
+
+    // A rejection needs a reason and voice has none, so it is sent to the screen
+    // rather than inventing one the customer would read.
+    let (_, v) = say("відхили останнє", 0.95);
+    assert_eq!(v["needsConfirmation"], true);
+    let tok = v["token"].as_str().unwrap().to_string();
+    let (code, v) = post(&s.base, "/api/voice", Some(&owner), json!({ "confirm": tok }));
+    assert_eq!(code, 400, "{v}");
+    assert!(v["error"].as_str().unwrap().contains("reason"), "{v}");
+
+    // An unrecognised phrase becomes a question and is NOT answered here --
+    // voice must work with the assistant switched off.
+    let (_, v) = say("яка виручка за минулий вівторок", 0.95);
+    assert_eq!(v["action"], "ask");
+    assert_eq!(v["needsConfirmation"], false);
+    assert!(v["question"].as_str().unwrap().contains("виручка"));
+}
+
+/// A courier's voice reaches their own run and nothing else.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_couriers_voice_is_scoped_to_their_own_run() {
+    let s = boot("voice_courier").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+    let tok_of = |phone: &str, pw: &str| {
+        let (_, c) = post(&s.base, "/api/courier/auth/login", None,
+                          json!({ "phone": phone, "password": pw }));
+        c["jwt"].as_str().expect("jwt").to_string()
+    };
+    let eni = tok_of("+355691112233", "courier-pw");
+    let blerim = tok_of("+355694445566", "courier-pw-2");
+
+    let say = |who: &str, t: &str, tok: Option<&str>| {
+        let mut b = json!({ "transcript": t, "confidence": 0.95, "is_final": true, "lang": "uk" });
+        if let Some(x) = tok { b["confirm"] = json!(x); }
+        post(&s.base, "/api/voice", Some(who), b)
+    };
+
+    // A shift, by voice.
+    let (_, v) = say(&eni, "почати зміну", None);
+    assert_eq!(v["needsConfirmation"], true, "{v}");
+    assert_eq!(v["readback"], "почати зміну");
+    let t = v["token"].as_str().unwrap().to_string();
+    assert_eq!(say(&eni, "", Some(&t)).0, 200);
+    let (_, tasks) = get(&s.base, "/api/courier/tasks", Some(&eni));
+    assert_eq!(tasks["onShift"], true, "the shift must actually have opened");
+
+    // An order, taken by Eni.
+    let (_, order) = post(&s.base, "/api/public/locations/dubin/orders", None, json!({
+        "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 1 }],
+        "contact": { "name": "C", "phone": "+355690000000" },
+        "fulfilment": { "kind": "delivery", "address": { "line": "Rruga Taulantia 12" } }
+    }));
+    let id = order["id"].as_str().unwrap().to_string();
+    for a in ["confirm", "preparing", "ready"] {
+        post(&s.base, &format!("/api/owner/orders/{id}/action"), Some(&owner), json!({ "action": a }));
+    }
+    post(&s.base, &format!("/api/courier/orders/{id}/accept"), Some(&eni), json!({}));
+
+    // Blerim cannot even REFER to it: it is not in his candidate pool.
+    let (_, v) = say(&blerim, "забрав", None);
+    assert_eq!(v["understood"], false, "another courier's run is not visible: {v}");
+    assert_eq!(v["say"], "no open orders");
+
+    // Eni can, and "готово" from a courier means delivered, not ready.
+    let (_, v) = say(&eni, "забрав", None);
+    assert_eq!(v["action"], "pickup", "{v}");
+    let t = v["token"].as_str().unwrap().to_string();
+    assert_eq!(say(&eni, "", Some(&t)).0, 200);
+    let (_, after) = get(&s.base, &format!("/api/order/{id}"), None);
+    assert_eq!(after["status"], "IN_DELIVERY");
+
+    let (_, v) = say(&eni, "доставив", None);
+    assert_eq!(v["action"], "deliver", "{v}");
+    let t = v["token"].as_str().unwrap().to_string();
+    assert_eq!(say(&eni, "", Some(&t)).0, 200);
+    let (_, after) = get(&s.base, &format!("/api/order/{id}"), None);
+    assert_eq!(after["status"], "DELIVERED");
+
+    // Blerim cannot confirm a proposal that was made to Eni, even holding it.
+    let (_, v) = say(&eni, "почати зміну", None);
+    let enis_token = v["token"].as_str().unwrap().to_string();
+    assert_eq!(say(&blerim, "", Some(&enis_token)).0, 409, "a proposal is bound to its speaker");
+}

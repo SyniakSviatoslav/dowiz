@@ -7,6 +7,8 @@
 // dark theme that follows the phone, Tabler icons, a one-CTA task list, the
 // cash handover as an in-sheet form instead of window.prompt, and the plan's
 // "one incoming ripple + ping" on a new task.
+import { create as vcreate, speak, supported as vsupported } from '/lib/voice.js';
+
 const API = '/api';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -436,6 +438,116 @@ function orderHead(o, picked){
     </div>`;
 }
 
+// ── voice ───────────────────────────────────────────────────────────────────
+// The surface voice matters most on: a courier is outdoors, moving, often with
+// one hand on a handlebar and gloves on. Typing here is close to useless, which
+// is why the typed ask box exists only in the one state where they are standing
+// still -- and why this does not.
+//
+// The MICROPHONE IS ALWAYS AVAILABLE while on shift, including mid-delivery,
+// because that is exactly when hands are busy.
+
+let vrec = null, vlistening = false;
+
+function voiceLang(){ return 'uk-UA'; }          // this surface ships Ukrainian only
+
+async function sendVoice(payload){
+  return api('/voice', { method:'POST', body: JSON.stringify(payload) });
+}
+
+// The pending proposal. A consequential command is never acted on from one
+// utterance -- the hub returns a token and a read-back, and this holds it until
+// the courier agrees.
+let vpending = null;
+
+function voiceSay(line, kind){
+  const el = $('#vsay');
+  if (!el) return;
+  el.hidden = false;
+  el.className = 'vsay ' + (kind || '');
+  el.textContent = line;
+}
+
+function clearVoice(){
+  vpending = null;
+  const el = $('#vsay'); if (el) el.hidden = true;
+  const bar = $('#vconfirm'); if (bar) bar.hidden = true;
+}
+
+async function handleVoice(r){
+  if (!r.understood) {
+    // Echo what was heard: it is how a person learns to speak to the thing,
+    // instead of repeating the same misheard phrase louder.
+    voiceSay(`${r.say}${r.heard ? ' · «' + r.heard + '»' : ''}`, 'bad');
+    speak(r.say, voiceLang());
+    return;
+  }
+  if (!r.needsConfirmation) {
+    if (r.action === 'status') {
+      const line = `Відкритих ${r.open}, чекає ${r.waiting}`;
+      voiceSay(line); speak(line, voiceLang());
+    } else if (r.action === 'ask') {
+      // NOT answered here. Voice works with the assistant off; if it is on, the
+      // question goes to it, and if it is off the courier is told plainly.
+      voiceSay('Питаю…');
+      try {
+        const d = await api('/courier/assist', { method:'POST', body: JSON.stringify({ question: r.question }) });
+        voiceSay(d.answer); speak(d.answer, voiceLang());
+      } catch (e) { voiceSay(String(e.message || e), 'bad'); }
+    }
+    return;
+  }
+  // A proposal: read it back, out loud, and wait.
+  vpending = r.token;
+  voiceSay(r.readback);
+  speak(r.readback + '?', voiceLang());
+  const bar = $('#vconfirm'); if (bar) bar.hidden = false;
+}
+
+async function confirmVoice(){
+  if (!vpending) return;
+  const t = vpending; vpending = null;
+  try {
+    await sendVoice({ confirm: t });
+    clearVoice();
+    await load();
+  } catch (e) { voiceSay(String(e.message || e), 'bad'); }
+}
+
+function startVoice(){
+  if (vlistening) { vrec?.stop(); return; }
+  if (!vsupported()) { toast('Браузер не розпізнає голос', 'microphone-off'); return; }
+  clearVoice();
+  vrec = vcreate({
+    lang: voiceLang(),
+    onResult: async res => {
+      voiceSay(res.transcript, res.isFinal ? '' : 'dim');
+      if (!res.isFinal) return;
+      try { await handleVoice(await sendVoice({
+        transcript: res.transcript, confidence: res.confidence,
+        is_final: true, lang: 'uk' })); }
+      catch (e) { voiceSay(String(e.message || e), 'bad'); }
+    },
+    onError: err => {
+      vlistening = false; setMicState();
+      voiceSay(err === 'microphone-denied'
+        ? 'Немає дозволу на мікрофон'
+        : err === 'network' ? 'Розпізнавання недоступне офлайн' : String(err), 'bad');
+    },
+    onEnd: () => { vlistening = false; setMicState(); },
+  });
+  if (!vrec) return;
+  vlistening = true; setMicState();
+  try { vrec.start(); } catch { vlistening = false; setMicState(); }
+}
+
+function setMicState(){
+  const b = $('#mic'); if (!b) return;
+  b.classList.toggle('on', vlistening);
+  b.setAttribute('aria-pressed', String(vlistening));
+  b.setAttribute('aria-label', vlistening ? 'Зупинити запис' : 'Сказати команду');
+}
+
 // The courier's own assistant. Its facts are only this courier's open
 // deliveries -- the hub builds them that way, so a question cannot reach work
 // that is not theirs.
@@ -550,7 +662,16 @@ async function setShift(open){
   catch (e) { toast(String(e.message || e), 'alert-circle'); }
 }
 
+function bindVoiceChrome(){
+  // The microphone appears only where there is a recogniser behind it.
+  const mic = $('#mic');
+  if (mic && vsupported()) { mic.hidden = false; mic.onclick = startVoice; }
+  const yes = $('#vyes'); if (yes) yes.onclick = confirmVoice;
+  const no = $('#vno'); if (no) no.onclick = () => { clearVoice(); };
+}
+
 async function boot(){ S.booted = true;
+  bindVoiceChrome();
   // NOT awaited. The task list is what this screen is for; the map is how the
   // task is easier. Blocking the first paint on a 245 KB download would make
   // the important thing wait for the helpful one.

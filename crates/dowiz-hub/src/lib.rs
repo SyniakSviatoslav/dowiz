@@ -30,6 +30,7 @@ pub mod palette;
 pub mod roster;
 pub mod settings;
 pub mod subs;
+pub mod voice;
 pub mod zone;
 pub mod token;
 

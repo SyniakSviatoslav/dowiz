@@ -188,6 +188,17 @@ pub async fn accept(
 
 /// Move an order the courier holds to `target`, with the kernel deciding
 /// whether the edge is legal.
+/// The courier transition, reachable from the voice surface as well as the
+/// buttons. Same rules, same claim check, same log.
+pub(crate) async fn advance_confirmed(
+    st: &Shared,
+    me: String,
+    id: String,
+    target: OrderStatus,
+) -> Result<Value, HubHttpError> {
+    advance_as_courier(st, me, id, target).await.map(|j| j.0)
+}
+
 async fn advance_as_courier(
     st: &Shared,
     me: String,

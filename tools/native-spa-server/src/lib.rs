@@ -39,6 +39,7 @@ pub mod httpc;
 pub mod hubauth;
 pub mod hubcourier;
 pub mod hubowner;
+pub mod hubvoice;
 pub mod mcp;
 pub mod notify;
 pub mod webhook;
@@ -153,7 +154,8 @@ pub fn build_router(
                         .merge(hubauth::routes(h.clone()))
                         .merge(hubowner::routes(h.clone()))
                         .merge(hubcourier::routes(h.clone()))
-                        .merge(mcp::routes(h))
+                        .merge(mcp::routes(h.clone()))
+                        .merge(hubvoice::routes(h))
                 })
                 .unwrap_or_default(),
         )
