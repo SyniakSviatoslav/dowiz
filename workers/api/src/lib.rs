@@ -12,6 +12,7 @@
 
 mod accounts;
 mod auth;
+mod bootstrap;
 mod courier;
 mod hubstore;
 mod owner;
@@ -76,6 +77,7 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         .get_async("/api/public/locations/:slug/menu", storefront::menu)
         .post_async("/api/public/locations/:slug/orders", storefront::place)
         // ── accounts ──
+        .post_async("/api/bootstrap", bootstrap::seed)
         .post_async("/api/auth/login", accounts::owner_login)
         .post_async("/api/auth/refresh", accounts::owner_refresh)
         .post_async("/api/auth/logout", accounts::owner_logout)
