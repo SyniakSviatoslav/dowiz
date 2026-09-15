@@ -154,6 +154,7 @@ function render(){
     <div class="tabs" role="tablist" aria-label="Розділи">
       <button class="tab" role="tab" id="tab-orders" aria-controls="pane" data-t="orders" aria-selected="${S.tab==='orders'}" tabindex="${S.tab==='orders' ? 0 : -1}">Замовлення <span class="n" id="liveN">${liveOrders().length}</span></button>
       <button class="tab" role="tab" id="tab-menu"   aria-controls="pane" data-t="menu"   aria-selected="${S.tab==='menu'}"   tabindex="${S.tab==='menu' ? 0 : -1}">Меню</button>
+      <button class="tab" role="tab" id="tab-setup" aria-controls="pane" data-t="setup" aria-selected="${S.tab==='setup'}" tabindex="${S.tab==='setup' ? 0 : -1}">Налаштування</button>
     </div>
     <div id="pane" role="tabpanel" aria-labelledby="tab-${S.tab}"></div>`;
   const tabs = [...document.querySelectorAll('.tab')];
@@ -166,8 +167,8 @@ function render(){
       n.focus(); n.click(); e.preventDefault();
     };
   });
-  $('#pane').innerHTML = S.tab === 'orders' ? ordersView() : menuView();
-  if (S.tab === 'orders') bindOrders(); else bindMenu();
+  $('#pane').innerHTML = S.tab === 'orders' ? ordersView() : S.tab === 'menu' ? menuView() : setupView();
+  if (S.tab === 'orders') bindOrders(); else if (S.tab === 'menu') bindMenu(); else bindSetup();
   S.fresh.clear();                                // the entrance runs once, on the render that introduced the row
   paintVenue();
 }
@@ -339,6 +340,176 @@ async function loadMenu(){
 }
 // One panel per category, product ROWS inside it. The old view put a card
 // inside a card for every dish; nested cards are always wrong.
+// ── setup ───────────────────────────────────────────────────────────────────
+// Two jobs a venue does ONCE and then forgets: get the menu in, and make the
+// storefront look like them. Both were previously a shell command on the VPS,
+// which meant neither was something the owner could do.
+
+function setupView(){
+  const t = S.venue?.theme;
+  return `
+  <div class="panel setup">
+    <section class="card">
+      <h2>Меню з файлу</h2>
+      <p class="hint">CSV із таблиці. Потрібні стовпці <b>Назва</b> та <b>Ціна</b>;
+         <b>Розділ</b>, <b>Опис</b> і <b>Наявність</b> — за бажанням.
+         Ціни — цілими числами, без копійок.</p>
+      <div class="row">
+        <label class="btn btn-ghost file">
+          <i class="ti ti-file-spreadsheet i" aria-hidden="true"></i>
+          <span>Обрати файл</span>
+          <input type="file" id="csvFile" accept=".csv,text/csv,text/plain">
+        </label>
+        <span class="hint" id="csvName">Файл не обрано</span>
+      </div>
+      <div id="csvReport" class="report" hidden></div>
+      <div class="row" id="csvApplyRow" hidden>
+        <label class="check"><input type="checkbox" id="csvRetire">
+          <span>Зняти з продажу те, чого немає у файлі</span></label>
+        <button class="btn pri" id="csvApply">
+          <i class="ti ti-upload i" aria-hidden="true"></i>Застосувати</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Кольори закладу</h2>
+      <p class="hint">Завантажте логотип або фото меню — кольори візьмемо звідти.
+         Контраст перевіряємо автоматично: нечитабельну пару не приймемо.</p>
+      <div class="row">
+        <label class="btn btn-ghost file">
+          <i class="ti ti-photo i" aria-hidden="true"></i>
+          <span>Обрати зображення</span>
+          <input type="file" id="imgFile" accept="image/*">
+        </label>
+        <span class="hint" id="imgName">${t ? 'Поточний: ' + esc(t.seed) : 'Файл не обрано'}</span>
+      </div>
+      <div id="swatches" class="swatches" hidden></div>
+      <div id="contrast" class="report" hidden></div>
+    </section>
+  </div>`;
+}
+
+/// Downsample an image file to a flat hex string of pixels.
+///
+/// The BROWSER decodes the image -- it already has a PNG and JPEG decoder, and
+/// the server deliberately has neither. 64x64 is plenty to find dominant
+/// colours and keeps the upload small; `drawImage` does the averaging.
+function pixelsFromFile(file){
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const N = 64, c = document.createElement('canvas');
+        c.width = N; c.height = N;
+        const ctx = c.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(img, 0, 0, N, N);
+        const d = ctx.getImageData(0, 0, N, N).data;
+        let hex = '';
+        for (let i = 0; i < d.length; i += 4) {
+          // A transparent pixel has no colour; including it would drag every
+          // palette toward whatever the canvas was cleared to.
+          if (d[i + 3] < 128) continue;
+          hex += d[i].toString(16).padStart(2,'0') + d[i+1].toString(16).padStart(2,'0')
+               + d[i+2].toString(16).padStart(2,'0');
+        }
+        resolve(hex);
+      } catch (e) { reject(e); }
+      finally { URL.revokeObjectURL(url); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Не вдалося прочитати зображення')); };
+    img.src = url;
+  });
+}
+
+function contrastReport(pairs){
+  return `<ul class="pairs">${pairs.map(p => `
+    <li class="${p.passes ? 'ok' : 'bad'}">
+      <i class="ti ti-${p.passes ? 'check' : 'alert-triangle'} i" aria-hidden="true"></i>
+      <span>${esc(p.pair)}</span>
+      <b>${p.ratio}:1</b><span class="hint">потрібно ${p.required}:1</span>
+    </li>`).join('')}</ul>`;
+}
+
+function bindSetup(){
+  let csvText = null;
+
+  const csv = $('#csvFile');
+  if (csv) csv.onchange = async () => {
+    const f = csv.files?.[0]; if (!f) return;
+    $('#csvName').textContent = f.name;
+    try {
+      csvText = await f.text();
+      // A DRY RUN first, always. The owner sees the counts and every rejected
+      // row before anything touches the live menu.
+      const d = await api('/owner/menu/import', { method:'POST',
+        headers:{ 'content-type':'text/csv' }, body: csvText });
+      $('#csvReport').hidden = false;
+      $('#csvReport').innerHTML = `
+        <p><b>${d.products}</b> страв у <b>${d.categories}</b> розділах</p>
+        ${d.warnings.length ? `<details open><summary>Не імпортовано: ${d.warnings.length}</summary>
+          <ul class="warn">${d.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul></details>` : ''}
+        ${d.notInFile.length ? `<details><summary>Є в меню, немає у файлі: ${d.notInFile.length}</summary>
+          <ul class="warn">${d.notInFile.map(p => `<li>${esc(p.name)}</li>`).join('')}</ul></details>` : ''}`;
+      $('#csvApplyRow').hidden = d.products === 0;
+    } catch (e) { toast(String(e.message || e)); }
+  };
+
+  const apply = $('#csvApply');
+  if (apply) apply.onclick = async () => {
+    if (!csvText) return;
+    apply.disabled = true;
+    try {
+      const q = $('#csvRetire').checked ? '?apply=true&retire_missing=true' : '?apply=true';
+      const d = await api('/owner/menu/import' + q, { method:'POST',
+        headers:{ 'content-type':'text/csv' }, body: csvText });
+      toast(`Меню оновлено: ${d.products} страв`);
+      S.products = []; await loadMenu(); await loadVenue();
+    } catch (e) { toast(String(e.message || e)); }
+    apply.disabled = false;
+  };
+
+  const img = $('#imgFile');
+  if (img) img.onchange = async () => {
+    const f = img.files?.[0]; if (!f) return;
+    $('#imgName').textContent = f.name;
+    try {
+      const pixels = await pixelsFromFile(f);
+      const d = await api('/owner/branding/extract', { method:'POST',
+        body: JSON.stringify({ pixels }) });
+      const sw = $('#swatches');
+      sw.hidden = false;
+      if (!d.swatches.length) {
+        sw.innerHTML = `<p class="hint">${esc(d.note || 'Кольорів не знайдено')}</p>`;
+        return;
+      }
+      // Each candidate shows the colour AS IT WILL BE USED -- adjusted for
+      // contrast if it had to be. Showing the raw colour and applying a
+      // different one would be a bait and switch the owner only notices later.
+      sw.innerHTML = d.swatches.map(s => `
+        <button class="swatch" data-hex="${esc(s.hex)}" title="${esc(s.hex)}">
+          <span class="chipc" style="background:${esc(s.theme.primary)}"></span>
+          <span>${esc(s.theme.primary)}</span>
+          <span class="hint">${s.sharePct}%${s.theme.primaryAdjustedPct ? ' · підсилено' : ''}</span>
+        </button>`).join('');
+      sw.querySelectorAll('.swatch').forEach(b => {
+        b.onclick = async () => {
+          sw.querySelectorAll('.swatch').forEach(x => x.disabled = true);
+          try {
+            const t = await api('/owner/branding', { method:'POST',
+              body: JSON.stringify({ primary: b.dataset.hex }) });
+            $('#contrast').hidden = false;
+            $('#contrast').innerHTML = contrastReport(t.contrast);
+            toast('Кольори оновлено');
+            await loadVenue();
+          } catch (e) { toast(String(e.message || e)); }
+          sw.querySelectorAll('.swatch').forEach(x => x.disabled = false);
+        };
+      });
+    } catch (e) { toast(String(e.message || e)); }
+  };
+}
+
 function menuView(){
   if (!S.products.length) return `<div class="skel"></div><div class="skel"></div>`;
   let cat = null; const out = [];

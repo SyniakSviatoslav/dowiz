@@ -27,8 +27,12 @@
      storefront to carry the restaurant's identity, not dowiz's, so the tenant's
      committed colours win over any preset I would otherwise pick. */
   --brand-primary:#e11d48; --brand-primary-hover:#cd3409; --brand-secondary:#457b9d;
+  /* Text ON the primary. A token rather than a literal #fff, because a venue
+     that adopts its own colours has that pair contrast-checked on the server —
+     and a hardcoded white cannot be checked or changed. */
+  --brand-on-primary:#ffffff;
   --brand-primary-light:#ffe9ef;
-  --brand-bg:#fdf2f8; --brand-surface:#ffffff; --brand-surface-2:#fbe9f1;
+  --brand-bg:#fdf2f8; --brand-surface:#ffffff; --brand-surface-raised:#fbe9f1;
   --brand-text:#212529;
   /* NOT DESIGN.md's #6B7280: measured on this blush ground it is 4.43:1 and
      fails AA for body text. This carries the ground's own hue at 5.57:1. */
@@ -73,13 +77,13 @@
    colour existing in one theme and not the other. */
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --brand-bg:#0F172A; --brand-surface:#1E293B; --brand-surface-2:#263548;
+    --brand-bg:#0F172A; --brand-surface:#1E293B; --brand-surface-raised:#263548;
     --brand-text:#F1F5F9; --brand-text-muted:#94A3B8; --brand-border:#334155;
     --brand-primary-light:#3a1220;
   }
 }
 :root[data-theme="dark"]{
-  --brand-bg:#0F172A; --brand-surface:#1E293B; --brand-surface-2:#263548;
+  --brand-bg:#0F172A; --brand-surface:#1E293B; --brand-surface-raised:#263548;
   --brand-text:#F1F5F9; --brand-text-muted:#94A3B8; --brand-border:#334155;
   --brand-primary-light:#3a1220;
 }
@@ -135,7 +139,7 @@ button,input,textarea,select{font:inherit;color:inherit}
 .top-in{display:flex;align-items:center;gap:var(--space-3);min-height:56px}
 .brand{font-family:var(--brand-font-heading);font-size:var(--text-xl);flex:1;
        white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.langs{display:flex;gap:2px;background:var(--brand-surface-2);border-radius:var(--radius-full);padding:var(--space-1)}
+.langs{display:flex;gap:2px;background:var(--brand-surface-raised);border-radius:var(--radius-full);padding:var(--space-1)}
 .lang{min-width:36px;min-height:32px;border:0;background:none;border-radius:var(--radius-full);
       font-size:var(--text-xs);font-weight:var(--weight-bold);letter-spacing:.04em;
       text-transform:uppercase;color:var(--brand-text-muted);cursor:pointer}
@@ -164,7 +168,7 @@ button,input,textarea,select{font:inherit;color:inherit}
      border-radius:var(--radius-full);font-size:var(--text-sm);font-weight:var(--weight-medium);
      white-space:nowrap;cursor:pointer;scroll-snap-align:start;
      transition:background .15s ease-out,border-color .15s ease-out,color .15s ease-out}
-.cat[aria-current="true"]{background:var(--brand-primary);border-color:var(--brand-primary);color:#fff}
+.cat[aria-current="true"]{background:var(--brand-primary);border-color:var(--brand-primary);color:var(--brand-on-primary)}
 
 /* ── dishes ── */
 .sec-h{font-size:var(--text-xl);margin:var(--space-6) 0 var(--space-3);scroll-margin-top:112px}
@@ -185,7 +189,7 @@ button,input,textarea,select{font:inherit;color:inherit}
 .dish-price{margin-top:var(--space-2);font-weight:var(--weight-bold);
             font-size:var(--text-base);font-variant-numeric:tabular-nums;display:block}
 .dish-media{border-radius:var(--radius-md);overflow:hidden;position:relative;
-            aspect-ratio:1;background:var(--brand-surface-2)}
+            aspect-ratio:1;background:var(--brand-surface-raised)}
 .dish-media img{width:100%;height:100%;object-fit:cover}
 /* The brief names "160px empty grey image placeholders" as the thing to kill, so
    a dish with no photo gets a deliberate mark whose hue is a stable hash of its
@@ -197,14 +201,14 @@ button,input,textarea,select{font:inherit;color:inherit}
                              background:color-mix(in srgb,var(--brand-bg) 72%,transparent)}
 .sold-out .dish-name,.sold-out .dish-desc,.sold-out .dish-price{opacity:.55}
 .badge{display:inline-block;margin-top:var(--space-2);padding:var(--space-1) var(--space-3);
-       border-radius:var(--radius-full);background:var(--brand-surface-2);
+       border-radius:var(--radius-full);background:var(--brand-surface-raised);
        color:var(--brand-text-muted);font-size:var(--text-2xs);font-weight:var(--weight-bold);
        text-transform:uppercase;letter-spacing:.05em}
 
 /* ── ONE primary CTA. The audit found five signatures of this button. ── */
 .btn{display:flex;align-items:center;justify-content:center;gap:var(--space-2);width:100%;
      min-height:var(--tap);padding:var(--space-3) var(--space-5);border:0;
-     border-radius:var(--radius-btn);background:var(--brand-primary);color:#fff;
+     border-radius:var(--radius-btn);background:var(--brand-primary);color:var(--brand-on-primary);
      font-weight:var(--weight-bold);font-size:var(--text-base);cursor:pointer;
      /* An <a> may wear .btn (the Telegram follow link is one). Without this it
         arrives underlined and inheriting link colour, which is the same control
@@ -216,7 +220,7 @@ button,input,textarea,select{font:inherit;color:inherit}
 .btn:active{transform:scale(.97)}
 .btn[disabled]{background:var(--brand-border);color:var(--brand-text-muted);cursor:not-allowed}
 .btn-ghost{background:var(--brand-surface);color:var(--brand-text);border:1px solid var(--brand-border)}
-@media (hover:hover) and (pointer:fine){ .btn-ghost:hover{background:var(--brand-surface-2)} }
+@media (hover:hover) and (pointer:fine){ .btn-ghost:hover{background:var(--brand-surface-raised)} }
 .pill{background:rgba(255,255,255,.22);padding:2px var(--space-3);
       border-radius:var(--radius-full);font-variant-numeric:tabular-nums}
 
@@ -245,7 +249,7 @@ button,input,textarea,select{font:inherit;color:inherit}
 .row{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);
      padding-block:var(--space-3);border-bottom:1px solid var(--brand-border)}
 .row:last-of-type{border-bottom:0}
-.qty{display:flex;align-items:center;gap:var(--space-1);background:var(--brand-surface-2);
+.qty{display:flex;align-items:center;gap:var(--space-1);background:var(--brand-surface-raised);
      border-radius:var(--radius-full);padding:var(--space-1)}
 .qty button{width:36px;height:36px;border:0;background:var(--brand-surface);
             border-radius:var(--radius-full);font-size:var(--text-lg);
@@ -296,7 +300,7 @@ input:focus,textarea:focus,select:focus{border-color:var(--brand-primary);outlin
 .step:not(.done):not(.now) b{color:var(--brand-text-muted);font-weight:var(--weight-normal)}
 
 /* ── states ── */
-.skel{position:relative;overflow:hidden;background:var(--brand-surface-2);border-radius:var(--radius-card)}
+.skel{position:relative;overflow:hidden;background:var(--brand-surface-raised);border-radius:var(--radius-card)}
 .skel::after{content:"";position:absolute;inset:0;transform:translateX(-100%);
   background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--brand-surface) 70%,transparent),transparent);
   animation:sweep 1.3s ease-in-out infinite}

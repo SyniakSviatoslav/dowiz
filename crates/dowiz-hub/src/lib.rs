@@ -24,7 +24,9 @@
 
 pub mod catalog;
 pub mod crypto;
+pub mod import;
 pub mod minijson;
+pub mod palette;
 pub mod roster;
 pub mod subs;
 pub mod token;

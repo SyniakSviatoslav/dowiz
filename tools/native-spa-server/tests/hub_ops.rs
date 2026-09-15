@@ -134,6 +134,32 @@ fn post(b: &str, p: &str, t: Option<&str>, body: Value) -> (u16, Value) {
     request(b, "POST", p, t, Some(body))
 }
 
+/// POST a raw body (not JSON) -- the menu import takes the file itself.
+fn post_text(base: &str, path: &str, token: &str, text: &str) -> (u16, Value) {
+    use std::io::{Read, Write};
+    let addr = base.trim_start_matches("http://");
+    let mut s = std::net::TcpStream::connect(addr).expect("connect");
+    s.set_read_timeout(Some(Duration::from_secs(30))).ok();
+    let req = format!(
+        "POST {path} HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\
+         Authorization: Bearer {token}\r\nContent-Type: text/csv\r\n\
+         Content-Length: {}\r\n\r\n{text}",
+        text.len()
+    );
+    s.write_all(req.as_bytes()).expect("write");
+    let mut raw = Vec::new();
+    s.read_to_end(&mut raw).expect("read");
+    let t = String::from_utf8_lossy(&raw);
+    let (head, body) = t.split_once("\r\n\r\n").unwrap_or((&t, ""));
+    let code = head
+        .lines()
+        .next()
+        .and_then(|l| l.split_whitespace().nth(1))
+        .and_then(|c| c.parse().ok())
+        .unwrap_or(0);
+    (code, serde_json::from_str(body.trim()).unwrap_or(Value::Null))
+}
+
 fn login(base: &str, id: &str, pw: &str) -> (u16, Value) {
     post(base, "/api/auth/login", None, json!({ "email": id, "password": pw }))
 }
@@ -562,4 +588,230 @@ async fn the_owner_can_stop_list_a_dish_and_the_menu_shows_it() {
     assert_eq!(code, 200);
     let (_, menu) = get(&s.base, "/api/menu", None);
     assert_eq!(menu["location"]["status"], "closed");
+}
+
+/// A spreadsheet becomes a menu, and does not become one by accident.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_spreadsheet_becomes_a_menu() {
+    let s = boot("import").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+
+    let csv = "Category,Name,Description,Price,Available\n\
+               Rolls,Sake Futomaki,salmon,900,yes\n\
+               Rolls,Ebi Maki,prawn,750,yes\n\
+               Rolls,Broken,prawn,9.50,yes\n\
+               Drinks,Water,,100,yes\n";
+
+    // A DRY RUN by default: nothing may change until the owner says so.
+    let (code, v) = post_text(&s.base, "/api/owner/menu/import", &owner, csv);
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["applied"], false);
+    assert_eq!(v["products"], 3, "the fractional-price row is refused: {v}");
+    assert_eq!(v["warnings"].as_array().unwrap().len(), 1);
+    assert!(
+        v["warnings"][0].as_str().unwrap().contains("row 4 (Broken)"),
+        "the warning must name the row: {v}"
+    );
+    // The seeded dish is not in the file, so it is reported as such.
+    assert!(
+        v["notInFile"].as_array().unwrap().iter().any(|p| p["id"] == "p1"),
+        "{v}"
+    );
+    // And the live menu is untouched.
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    assert_eq!(menu["categories"][0]["products"][0]["id"], "p1");
+
+    // Now apply.
+    let (code, v) = post_text(&s.base, "/api/owner/menu/import?apply=true", &owner, csv);
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["applied"], true);
+
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    let all: Vec<&Value> = menu["categories"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|c| c["products"].as_array().unwrap())
+        .collect();
+    let find = |id: &str| all.iter().find(|p| p["id"] == id).copied();
+    assert!(find("rolls-sake-futomaki").is_some(), "{menu}");
+    assert_eq!(find("rolls-sake-futomaki").unwrap()["price"], 900);
+    assert_eq!(find("drinks-water").unwrap()["price"], 100);
+    assert!(find("rolls-broken").is_none(), "a refused row must not appear");
+    // The seeded dish survives: an import ADDS, and retiring is opt-in.
+    assert!(find("p1").is_some(), "an import must not silently remove a dish");
+
+    // Importing the SAME file again updates rather than duplicating.
+    let before = all.len();
+    let (_, _) = post_text(&s.base, "/api/owner/menu/import?apply=true", &owner, csv);
+    let (_, menu2) = get(&s.base, "/api/menu", None);
+    let after: usize = menu2["categories"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["products"].as_array().unwrap().len())
+        .sum();
+    assert_eq!(after, before, "a second import must not duplicate the menu");
+
+    // Retiring takes the absent dish off the storefront WITHOUT deleting it.
+    let (code, v) =
+        post_text(&s.base, "/api/owner/menu/import?apply=true&retire_missing=true", &owner, csv);
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["retired"], 1);
+    let (_, menu3) = get(&s.base, "/api/menu", None);
+    let still: Vec<&Value> = menu3["categories"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|c| c["products"].as_array().unwrap())
+        .collect();
+    let p1 = still.iter().find(|p| p["id"] == "p1").expect("still present, not deleted");
+    assert_eq!(p1["available"], false);
+}
+
+/// A file that parses to nothing must NOT be allowed to wipe a working menu.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_unreadable_file_cannot_erase_the_menu() {
+    let s = boot("import_guard").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+
+    // No price column: the parser understands the file, and it means nothing.
+    let (code, v) = post_text(
+        &s.base,
+        "/api/owner/menu/import?apply=true&retire_missing=true",
+        &owner,
+        "Category,Name\nRolls,Sake\n",
+    );
+    assert_eq!(code, 400, "{v}");
+
+    // An empty body.
+    let (code, _) = post_text(&s.base, "/api/owner/menu/import?apply=true", &owner, "");
+    assert_eq!(code, 400);
+
+    // The menu is exactly as it was.
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    assert_eq!(menu["categories"][0]["products"][0]["id"], "p1");
+    assert_eq!(menu["categories"][0]["products"][0]["available"], true);
+}
+
+/// Importing is the owner's act, not the public's.
+#[tokio::test(flavor = "multi_thread")]
+async fn only_an_owner_may_import_a_menu() {
+    let s = boot("import_auth").await;
+    let (_, c) = post(
+        &s.base,
+        "/api/courier/auth/login",
+        None,
+        json!({ "phone": "+355691112233", "password": "courier-pw" }),
+    );
+    let courier = c["jwt"].as_str().unwrap().to_string();
+    let csv = "Category,Name,Price\nRolls,Sake,900\n";
+
+    assert_eq!(post_text(&s.base, "/api/owner/menu/import?apply=true", "", csv).0, 401);
+    assert_eq!(
+        post_text(&s.base, "/api/owner/menu/import?apply=true", &courier, csv).0,
+        403,
+        "a courier is authenticated but not permitted"
+    );
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    assert_eq!(menu["categories"][0]["products"][0]["id"], "p1");
+}
+
+/// An image becomes a palette, and a palette becomes a checked theme.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_photo_becomes_a_venue_theme() {
+    let s = boot("brand").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+
+    // A "photograph": mostly paper, some ink, a little logo red. The same
+    // proportions a menu photo actually has.
+    let mut hex = String::new();
+    for _ in 0..900 {
+        hex.push_str("fcfbf8");
+    }
+    for _ in 0..80 {
+        hex.push_str("121214");
+    }
+    for _ in 0..20 {
+        hex.push_str("e11d48");
+    }
+
+    let (code, v) = post(&s.base, "/api/owner/branding/extract", Some(&owner), json!({ "pixels": hex }));
+    assert_eq!(code, 200, "{v}");
+    let sw = v["swatches"].as_array().expect("swatches");
+    assert!(!sw.is_empty(), "the logo colour must be found under the paper: {v}");
+    // Paper and ink must not win.
+    let top = sw[0]["hex"].as_str().unwrap();
+    assert!(top.starts_with("#e") || top.starts_with("#d"), "expected the red, got {top}");
+    // Every suggestion arrives with its contrast already measured.
+    for pair in sw[0]["theme"]["contrast"].as_array().unwrap() {
+        assert_eq!(pair["passes"], true, "a suggested theme must pass: {pair}");
+    }
+
+    // Nothing was applied by extracting.
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    assert_eq!(menu["location"]["theme"], Value::Null, "extraction must not repaint anything");
+
+    // The owner adopts one.
+    let (code, v) = post(&s.base, "/api/owner/branding", Some(&owner), json!({ "primary": "#e11d48" }));
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["primary"], "#e11d48");
+    assert_eq!(v["primaryAdjustedPct"], 0, "a usable colour must be used as given");
+
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    let theme = &menu["location"]["theme"];
+    assert_eq!(theme["seed"], "#e11d48");
+    let light = theme["light"].as_str().expect("light tokens");
+    assert!(light.contains("--brand-primary:#e11d48"), "{light}");
+    assert!(light.contains("--brand-text:"), "{light}");
+    assert!(theme["dark"].as_str().unwrap().contains("--brand-bg:"), "dark mode is not optional");
+}
+
+/// A pastel logo must not produce an unreadable storefront.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_pastel_brand_is_made_legible_and_says_so() {
+    let s = boot("pastel").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+
+    let (code, v) = post(&s.base, "/api/owner/branding", Some(&owner), json!({ "primary": "#ffd9e3" }));
+    assert_eq!(code, 200, "{v}");
+    // It was adjusted, and the owner is told by how much rather than being
+    // handed a different colour silently.
+    assert!(v["primaryAdjustedPct"].as_u64().unwrap() > 0, "{v}");
+    assert_ne!(v["primary"], "#ffd9e3");
+    for pair in v["contrast"].as_array().unwrap() {
+        assert_eq!(pair["passes"], true, "{pair}");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn branding_refuses_junk_and_strangers() {
+    let s = boot("brandguard").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+
+    assert_eq!(post(&s.base, "/api/owner/branding", Some(&owner), json!({ "primary": "red" })).0, 400);
+    assert_eq!(post(&s.base, "/api/owner/branding", Some(&owner), json!({ "primary": "" })).0, 400);
+    assert_eq!(post(&s.base, "/api/owner/branding", None, json!({ "primary": "#e11d48" })).0, 401);
+
+    // Pixels that are not whole triples, and a payload nobody meant to send.
+    assert_eq!(
+        post(&s.base, "/api/owner/branding/extract", Some(&owner), json!({ "pixels": "abcd" })).0,
+        400
+    );
+    assert_eq!(
+        post(&s.base, "/api/owner/branding/extract", Some(&owner), json!({ "pixels": "zzzzzz" })).0,
+        400
+    );
+
+    // A black-and-white image yields NOTHING rather than an invented colour.
+    let bw: String = std::iter::repeat_n("ffffff", 50).chain(std::iter::repeat_n("000000", 50)).collect();
+    let (code, v) = post(&s.base, "/api/owner/branding/extract", Some(&owner), json!({ "pixels": bw }));
+    assert_eq!(code, 200, "{v}");
+    assert!(v["swatches"].as_array().unwrap().is_empty(), "{v}");
+    assert!(v["note"].as_str().unwrap().contains("no strong colours"), "{v}");
 }

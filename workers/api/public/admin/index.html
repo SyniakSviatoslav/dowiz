@@ -41,7 +41,7 @@
   /* Gold is a GROUND, never a carrier of white: white on #d69a3d is 2.46:1,
      ink on it is 7.25:1 (hover ground #c98b2c: 6.12:1). The CTA always carries
      ink. Gold is also never text on a light ground (2.15:1 on paper). */
-  --brand-primary:#d69a3d; --brand-primary-hover:#c98b2c; --on-primary:#061b1a;
+  --brand-primary:#d69a3d; --brand-primary-hover:#c98b2c; --brand-on-primary:#061b1a;
   /* The gold CTA's EDGE, not its fill. Gold on a light ground is 2.46:1 against
      white and 2.15:1 against paper -- under the 3:1 non-text floor, so the button
      is legible by its 7.25:1 ink label while its boundary is not delimited. Gold
@@ -226,6 +226,49 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
 /* ── panel ── the Sheet. Orders are ROWS inside one surface with hairline
    dividers, not a stack of cards: cards are the lazy answer, and nested cards
    (the old menu view) are always wrong. */
+/* ── setup pane ──
+   Two one-off jobs: import the menu, take the colours off a photo. Composed as
+   REPEATED CARDS with identical edges, padding and heading treatment, so the
+   two read as one thing done twice rather than two features bolted on. Nothing
+   here introduces a colour, a radius or a spacing step of its own -- every value
+   is a token this file already defines. */
+.setup{display:grid;gap:var(--space-4);padding:var(--space-4);background:none;border:0;box-shadow:none}
+.setup .card{background:var(--brand-surface-raised);border:1px solid var(--brand-border);
+       border-radius:var(--radius-md);padding:var(--space-4);display:grid;gap:var(--space-3)}
+.setup h2{margin:0;font-size:var(--text-lg);font-weight:var(--weight-semibold);color:var(--brand-text)}
+.setup .hint{margin:0;color:var(--brand-text-muted);font-size:var(--text-sm);line-height:1.5}
+.setup .row{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-3)}
+/* The file input itself is unreachable by design: a <label class="btn"> gives
+   the platform picker a control that matches every other button on the page,
+   which the native widget never will. It stays focusable via the input. */
+.setup .file{position:relative;overflow:hidden;width:auto;cursor:pointer}
+.setup .file input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.setup .file:focus-within{outline:2px solid var(--focus-ring);outline-offset:2px}
+.setup .check{display:inline-flex;align-items:center;gap:var(--space-2);
+       font-size:var(--text-sm);color:var(--brand-text);cursor:pointer}
+.setup .report{font-size:var(--text-sm);color:var(--brand-text);display:grid;gap:var(--space-2)}
+.setup .report p{margin:0}
+.setup summary{cursor:pointer;color:var(--brand-text-muted)}
+/* A rejected row is information, not an alarm: it is listed in the muted voice
+   with a danger rule at the edge, so ten of them do not read as ten errors. */
+.setup .warn{margin:var(--space-2) 0 0;padding:0 0 0 var(--space-4);list-style:none;
+       border-left:2px solid var(--danger-ink);display:grid;gap:var(--space-1);
+       color:var(--brand-text-muted)}
+.setup .pairs{margin:0;padding:0;list-style:none;display:grid;gap:var(--space-1)}
+.setup .pairs li{display:flex;align-items:center;gap:var(--space-2)}
+.setup .pairs .ok{color:var(--brand-text-muted)}
+.setup .pairs .bad{color:var(--danger-ink);font-weight:var(--weight-semibold)}
+.setup .swatches{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.setup .swatch{display:inline-flex;align-items:center;gap:var(--space-2);min-height:var(--tap);
+       padding:0 var(--space-3);border:1px solid var(--brand-border);border-radius:var(--radius-md);
+       background:var(--brand-surface);color:var(--brand-text);font-size:var(--text-sm);cursor:pointer}
+.setup .swatch:hover{border-color:var(--brand-primary)}
+.setup .swatch:disabled{opacity:.55;cursor:progress}
+/* A ring on the chip, so a near-white swatch is still visible as a swatch
+   against a near-white card rather than disappearing into it. */
+.setup .chipc{width:20px;height:20px;border-radius:var(--radius-full);
+       box-shadow:inset 0 0 0 1px rgb(0 0 0/.18)}
+
 .panel{background:var(--brand-surface);border:1px solid var(--brand-border);
        border-radius:var(--radius-md);box-shadow:var(--elevation-1);margin-bottom:var(--space-4);overflow:hidden}
 .panel-h{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-3) var(--space-4);
@@ -318,7 +361,7 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
      font-weight:var(--weight-semibold);font-size:var(--text-base);cursor:pointer;
      transition:background .15s ease-out,border-color .15s ease-out,transform .12s ease-out}
 .btn:active{transform:scale(.97)}
-.btn.pri{background:var(--brand-primary);border-color:var(--primary-edge);color:var(--on-primary)}
+.btn.pri{background:var(--brand-primary);border-color:var(--primary-edge);color:var(--brand-on-primary)}
 .btn.dan{background:var(--brand-surface);border-color:var(--danger-ink);color:var(--danger-ink)}
 .btn.wide{width:100%;margin-top:var(--space-5)}
 .btn[disabled]{opacity:.5;cursor:not-allowed;transform:none}

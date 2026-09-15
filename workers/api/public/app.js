@@ -130,6 +130,41 @@ function toast(msg){ const el = $('#toast'); el.textContent = msg; el.classList.
   clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove('show'), 2600); }
 
 // ── data ──
+// The venue's own colours.
+//
+// APPLIED AS TOKENS on the root element, never as per-element styles: every
+// rule in this page already reads these tokens, so one assignment repaints the
+// whole storefront and nothing can be left behind wearing the old palette.
+//
+// The server derives and CONTRAST-CHECKS the token set; the client only wears
+// it. Deriving here would put the check somewhere a page can skip.
+//
+// Absent theme means the shipped palette stays, which is a complete
+// contrast-checked design in its own right and not a placeholder.
+function applyTheme(theme){
+  const el = document.getElementById('venue-theme') || (() => {
+    const s = document.createElement('style'); s.id = 'venue-theme';
+    document.head.appendChild(s); return s;
+  })();
+  if (!theme || !theme.light) { el.textContent = ''; return; }
+  // Only tokens, and only ones that look like tokens. The string arrives from
+  // this venue's own hub, but a stylesheet is the wrong place to relax about
+  // what goes into it.
+  const safe = s => String(s || '').split(';')
+    .map(d => d.trim())
+    .filter(d => /^--brand-[a-z-]+:\s*#[0-9a-fA-F]{3,8}$/.test(d))
+    .join(';');
+  const light = safe(theme.light), dark = safe(theme.dark);
+  if (!light) { el.textContent = ''; return; }
+  // Same three-state structure the shipped palette uses: bare :root, then the
+  // system preference guarded so an explicit light choice still wins, then the
+  // explicit dark choice.
+  el.textContent =
+    `:root{${light}}` +
+    (dark ? `@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){${dark}}}` +
+            `:root[data-theme="dark"]{${dark}}` : '');
+}
+
 async function load(){
   render(skeleton());
   try {
@@ -137,6 +172,7 @@ async function load(){
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const d = await r.json();
     state.loc = d.location; state.cats = d.categories || [];
+    applyTheme(d.location.theme);
     document.title = d.location.name;
     $('#brandName').textContent = d.location.name;
     document.documentElement.lang = lang;

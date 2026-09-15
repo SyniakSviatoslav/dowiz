@@ -346,7 +346,11 @@ pub async fn menu(State(st): State<Shared>, _slug: Option<AxPath<String>>) -> Re
             // The bot handle, so the storefront can offer a follow link. Absent
             // when no bot is configured, and the storefront then shows no
             // button -- rather than a link to a bot that does not exist.
-            "telegramBot": st.bot_username.clone().map(Value::String).unwrap_or(Value::Null)
+            "telegramBot": st.bot_username.clone().map(Value::String).unwrap_or(Value::Null),
+            // The venue's own colours, when they have set any. Absent means the
+            // surfaces keep their shipped palette -- which is a complete,
+            // contrast-checked theme in its own right, not a placeholder.
+            "theme": loc.get("theme").cloned().unwrap_or(Value::Null)
         },
         "categories": cats
     })))

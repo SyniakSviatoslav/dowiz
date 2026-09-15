@@ -30,7 +30,7 @@
   /* T3 dowiz chrome — light. Ink and ground are the same two colours that swap
      roles in the dark theme, which is what keeps the two themes one design. */
   --brand-primary:#d69a3d; --brand-primary-hover:#c98b2c;
-  --brand-bg:#f5efe5; --brand-surface:#ffffff; --brand-surface-2:#f5efe5;
+  --brand-bg:#f5efe5; --brand-surface:#ffffff; --brand-surface-raised:#f5efe5;
   --brand-text:#061b1a;
   /* Measured, not DESIGN.md's #6B7280: this muted carries the ink's own hue and
      lands at 7.26:1 on the white sheet (the outdoor floor I set is 7:1, not 4.5). */
@@ -38,7 +38,7 @@
   --brand-border:#d9d2c5;
   /* White on the gold accent is 2.46:1 and fails; dark ink on it is 7.25:1.
      The CTA therefore always carries ink, never white. */
-  --on-primary:#061b1a;
+  --brand-on-primary:#061b1a;
   /* The gold CTA's EDGE, not its fill. Gold on a light ground is 2.46:1 against
      white and 2.15:1 against paper -- under the 3:1 non-text floor, so the button
      is legible by its 7.25:1 ink label but its boundary is not delimited. Gold
@@ -101,7 +101,7 @@
    rule lives inside a theme block. The guard lets an explicit light choice win. */
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --brand-bg:#061b1a; --brand-surface:#0b2624; --brand-surface-2:#12302d;
+    --brand-bg:#061b1a; --brand-surface:#0b2624; --brand-surface-raised:#12302d;
     --brand-text:#f5efe5; --brand-text-muted:#a9b8b5; --brand-border:#22403c;
     --focus-ring:#d69a3d; --primary-edge:#d69a3d;
     --chip-bg:rgba(11,38,36,.92);
@@ -110,7 +110,7 @@
   }
 }
 :root[data-theme="dark"]{
-  --brand-bg:#061b1a; --brand-surface:#0b2624; --brand-surface-2:#12302d;
+  --brand-bg:#061b1a; --brand-surface:#0b2624; --brand-surface-raised:#12302d;
   --brand-text:#f5efe5; --brand-text-muted:#a9b8b5; --brand-border:#22403c;
   --focus-ring:#d69a3d;
   --chip-bg:rgba(11,38,36,.92);
@@ -220,7 +220,7 @@ h2{font-size:var(--text-xl);font-weight:var(--weight-bold);letter-spacing:-.01em
 .addr .i{color:var(--brand-primary);margin-top:2px;flex:0 0 auto}
 .note{color:var(--brand-text-muted);font-size:var(--text-base)}
 .meta{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2) var(--space-4);margin:var(--space-3) 0}
-.cash{display:inline-flex;align-items:center;gap:var(--space-2);background:var(--brand-surface-2);
+.cash{display:inline-flex;align-items:center;gap:var(--space-2);background:var(--brand-surface-raised);
       color:var(--brand-text);padding:var(--space-2) var(--space-4);border-radius:var(--radius-full);
       font-size:var(--text-lg);border:1px solid var(--brand-border)}
 .cash .i{color:var(--color-warning)}
@@ -233,7 +233,7 @@ a.tel{color:var(--brand-text);font-weight:var(--weight-semibold);text-decoration
 .cta{display:flex;align-items:center;justify-content:center;gap:var(--space-3);width:100%;
      min-height:var(--tap-courier);padding:var(--space-3) var(--space-5);
      border:1px solid var(--primary-edge);
-     border-radius:var(--radius-btn);background:var(--brand-primary);color:var(--on-primary);
+     border-radius:var(--radius-btn);background:var(--brand-primary);color:var(--brand-on-primary);
      font-size:var(--text-lg);font-weight:var(--weight-bold);margin-top:var(--space-2);
      box-shadow:var(--elevation-1);
      transition:transform var(--dur-press) var(--ease-snap),background-color var(--dur-press) var(--ease-snap)}
@@ -253,7 +253,7 @@ a.tel{color:var(--brand-text);font-weight:var(--weight-semibold);text-decoration
 @media (hover:hover) and (pointer:fine){
   .cta:hover{background:var(--brand-primary-hover)}
   .cta.go:hover{filter:brightness(.94)}
-  .ghost:hover,.task:hover,.icon-btn:hover{background:var(--brand-surface-2)}
+  .ghost:hover,.task:hover,.icon-btn:hover{background:var(--brand-surface-raised)}
 }
 
 /* ── Available tasks: rows, not N buttons. Tapping a row selects it; the ONE
