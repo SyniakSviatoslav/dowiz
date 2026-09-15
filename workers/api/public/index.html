@@ -99,6 +99,18 @@ img{max-width:100%;display:block}
 button,input,textarea,select{font:inherit;color:inherit}
 :focus-visible{outline:3px solid var(--brand-primary);outline-offset:2px;border-radius:var(--radius-sm)}
 .i{font-size:1.15em;line-height:1;vertical-align:-.12em}
+/* ── Sea ── the field layer. Fixed, behind everything, pointer-transparent.
+   The spectral edge is the seam the design language calls the dowiz signature:
+   a thin gradient where the Sheet meets the Sea rather than a hard cut. */
+#sea{position:fixed;inset:0;z-index:0;pointer-events:none;
+     opacity:.55;transition:opacity .6s ease-out}
+#sea.calm{opacity:.3}
+body>*:not(#sea){position:relative;z-index:1}
+.hero{position:relative}
+.hero::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;
+  background:linear-gradient(90deg,transparent,var(--brand-primary),transparent);
+  opacity:.35}
+@media (prefers-reduced-motion:reduce){ #sea{opacity:.18} }
 .wrap{max-width:720px;margin:0 auto;padding-inline:var(--space-4)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
@@ -299,6 +311,11 @@ input:focus,textarea:focus,select:focus{border-color:var(--brand-primary);outlin
 </style>
 </head>
 <body>
+<!-- SEA — the dowiz ambient layer. It lives BEHIND the Sheet and never carries
+     text, a price or a decision: those are Sheet-owned by contract. Because every
+     card sits on an opaque --brand-surface, the measured text contrast is
+     unaffected by whatever the field is doing. -->
+<canvas id="sea" aria-hidden="true"></canvas>
 <div id="offline" class="offline" hidden></div>
 <header class="top"><div class="wrap top-in">
   <span class="brand" id="brandName">…</span>

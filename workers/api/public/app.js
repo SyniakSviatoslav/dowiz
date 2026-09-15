@@ -70,6 +70,59 @@ function fallbackArt(name){
     hsl(${hue} 46% 58%),hsl(${(hue + 38) % 360} 52% 42%))" aria-hidden="true">${esc(name.trim()[0] || '·')}</div>`;
 }
 
+// ── SEA ─────────────────────────────────────────────────────────────────────
+// The dowiz ambient layer, wired rather than rewritten: webgl/particle-cloud is
+// an existing 319-line WebGL2 field whose event vocabulary already maps order
+// events to physics (order_created -> amber burst, courier_assigned -> teal
+// stream, delivered -> gold bloom, dispatch_failed -> blood turbulence,
+// pending_aging -> slow ember drift). The design language's first truth is that
+// the engine already exists and the work is wiring it to every screen.
+//
+// The Sea carries NO text, NO price and NO decision. Those are Sheet-owned by
+// contract, which is also why money never tweens: `money()` formats an integer
+// the server sent and there is no animated path to it anywhere in this file.
+let sea = null;
+const SEA_FOR_STATUS = {
+  PENDING:'pending_aging', CONFIRMED:'order_created', PREPARING:'order_created',
+  READY:'courier_assigned', IN_DELIVERY:'courier_assigned',
+  DELIVERED:'delivered', REJECTED:'dispatch_failed', CANCELLED:'dispatch_failed',
+};
+async function initSea(){
+  if (sea) return;
+  // Reduced motion does not mean "no sea" -- it means a calm one. The canvas
+  // still renders; it simply stops moving at you.
+  const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  try {
+    const { createParticleCloud } = await import('/lib/particle-cloud.js');
+    sea = createParticleCloud();
+    sea.init(document.getElementById('sea'));
+    sea.setReducedMotion(calm);
+    document.getElementById('sea').classList.toggle('calm', calm);
+    addEventListener('resize', () => sea.resize(), { passive:true });
+    // Touch makes ripples. Gated to real pointers so it is not driven by a
+    // synthetic move on a tap.
+    if (matchMedia('(hover: hover) and (pointer: fine)').matches) {
+      addEventListener('pointermove', e => sea.setPointer(e.clientX / innerWidth, e.clientY / innerHeight), { passive:true });
+    } else {
+      addEventListener('touchstart', e => {
+        const t = e.touches[0]; if (t) sea.setPointer(t.clientX / innerWidth, t.clientY / innerHeight);
+      }, { passive:true });
+    }
+  } catch {
+    // No WebGL2, or the module failed: the storefront is fully usable without
+    // the Sea. It is atmosphere, never a dependency.
+    sea = null;
+  }
+}
+function seaEvent(kind, n){ try { sea && sea.burst(kind, n); } catch {} }
+/// The sea matures WITH the order: amber at creation, teal once a courier has
+/// it, gold on arrival. That progression is the design language's "море дозріває
+/// зі станом", driven by the status the SERVER reports -- never guessed locally.
+function seaForOrder(status){
+  const kind = SEA_FOR_STATUS[status];
+  if (kind) seaEvent(kind, status === 'DELIVERED' ? 220 : 90);
+}
+
 function toast(msg){ const el = $('#toast'); el.textContent = msg; el.classList.add('show');
   clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove('show'), 2600); }
 
@@ -85,6 +138,7 @@ async function load(){
     $('#brandName').textContent = d.location.name;
     document.documentElement.lang = lang;
     renderMenu();
+    initSea().then(() => seaEvent('pending_aging', 40));
   } catch (e) {
     // An honest error naming the real fallback -- the venue's own phone.
     render(`<div class="empty"><b>${esc(t('offline'))}</b>
@@ -173,7 +227,8 @@ function openDish(p){
   let q = 1;
   $('#dm').onclick = () => { q = Math.max(1, q - 1); $('#dq').textContent = q; };
   $('#dp').onclick = () => { q = Math.min(99, q + 1); $('#dq').textContent = q; };
-  $('#dadd').onclick = () => { state.cart[p.id] = (state.cart[p.id] || 0) + q; saveCart(); updateBar(); closeSheet(); toast(`${p.name} · ${q}`); };
+  $('#dadd').onclick = () => { state.cart[p.id] = (state.cart[p.id] || 0) + q; saveCart(); updateBar(); closeSheet();
+    seaEvent('order_created', 24); toast(`${p.name} · ${q}`); };
 }
 
 const cartLines = () => Object.entries(state.cart)
@@ -277,6 +332,7 @@ async function place(pay){
     if (!r.ok) throw new Error(d.error || d.message || ('HTTP ' + r.status));
     state.cart = {}; saveCart(); updateBar();
     safeSet('dw_last_order', d.id);
+    seaEvent('order_created', 160);
     openTracking(d);
   } catch (e) {
     $('#f-err').innerHTML = `<div class="err">${esc(String(e.message || e))}</div>`;
@@ -289,6 +345,7 @@ async function place(pay){
 const FLOW = ['PENDING','CONFIRMED','PREPARING','READY','IN_DELIVERY','DELIVERED'];
 function openTracking(order){
   const st = order.status, i = FLOW.indexOf(st);
+  if (openTracking._last !== st) { openTracking._last = st; seaForOrder(st); }
   const dead = st === 'REJECTED' || st === 'CANCELLED';
   sheet(`<h2>${esc(dead ? t('st')[st] : t('sent'))}</h2>
     <p style="color:var(--brand-text-muted);margin:6px 0 2px">#${esc(String(order.id).slice(0,8))}</p>
