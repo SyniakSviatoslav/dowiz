@@ -178,35 +178,50 @@ fn phase_q3(base: [i64], tmp: [i64], adj: [i64], which: i64) -> i64 {
 
 // Phase q2: orders in state s at time t (EvByT bucket + prefix fold)
 // BUCKET width = 1000; t[i] / BUCKET gives bucket index
+// Phase q2: orders in state s as of time t, answered through the EvByT index.
+// Bucket == ek here (t = ek*1000 + r), so walking buckets in order replays every order's
+// events in sequence -- the prefix fold the blueprint asks for. Buckets entirely beyond the
+// cutoff are never touched, which is the point of carrying a second index: the cost is the
+// events BEFORE t, not the whole log. The per-event `tv < target_t` test stays so a cutoff
+// that falls inside a bucket is still exact.
 fn phase_q2(base: [i64], tmp: [i64], n: i64, adj: [i64], target_s: i64, target_t: i64) -> i64 {
   let g = st_root(base, tmp);
+  let oid_a = st_ref(base, g, 1);
   let from_st = st_ref(base, g, 2);
   let to_st = st_ref(base, g, 3);
   let t_arr = st_ref(base, g, 4);
-  let rp_o = st_ref(base, g, 6);
-  let ci_o = st_ref(base, g, 7);
-  let cnt = zeros(1);
-  let state = zeros(1);
-  let oid = 0;
-  while oid < n {
-    let lo = st_get(base, rp_o, 1 + oid);
-    let hi = st_get(base, rp_o, 2 + oid);
-    let _ = state[0] = 0;
-    let ev_idx = lo;
-    while ev_idx < hi {
-      let ev = st_get(base, ci_o, 1 + ev_idx);
+  let rp_t = st_ref(base, g, 8);
+  let ci_t = st_ref(base, g, 9);
+  let nbuckets = st_get(base, rp_t, 0) - 1;
+  let bmax0 = (target_t + 999) / 1000;
+  let bmax = if bmax0 > nbuckets then nbuckets else bmax0;
+  let state = zeros(n + 1);
+  let b = 0;
+  while b < bmax {
+    let lo = st_get(base, rp_t, 1 + b);
+    let hi = st_get(base, rp_t, 2 + b);
+    let e = lo;
+    while e < hi {
+      let ev = st_get(base, ci_t, 1 + e);
       let tv = st_get(base, t_arr, ev);
+      let oid = st_get(base, oid_a, ev);
       let f = st_get(base, from_st, ev);
       let t = st_get(base, to_st, ev);
       let ok = decide(adj, f, t);
       let okz = if ok == 0 then 1 else 0;
       let inwin = if tv < target_t then 1 else 0;
-      let _ = if okz * inwin == 1 then (let _ = state[0] = t in 0) else 0;
-      let ev_idx = ev_idx + 1;
+      let _ = if okz * inwin == 1 then (let _ = state[oid] = t in 0) else 0;
+      let e = e + 1;
       0
     };
-    let _ = if state[0] == target_s then (let _ = cnt[0] = cnt[0] + 1 in 0) else 0;
-    let oid = oid + 1;
+    let b = b + 1;
+    0
+  };
+  let cnt = zeros(1);
+  let i = 0;
+  while i < n {
+    let _ = if state[i] == target_s then (let _ = cnt[0] = cnt[0] + 1 in 0) else 0;
+    let i = i + 1;
     0
   };
   cnt[0]
