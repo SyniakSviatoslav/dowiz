@@ -18,7 +18,7 @@ const store = {
   set loc(v){ try { v ? localStorage.setItem('dw_loc', v) : localStorage.removeItem('dw_loc'); } catch {} },
 };
 
-let S = { tab:'orders', orders:[], stats:null, products:[], venue:null, seen:new Set(), fresh:new Set(), booted:false };
+let S = { tab:'orders', orders:[], stats:null, products:[], venue:null, couriers:[], seen:new Set(), fresh:new Set(), booted:false };
 
 function toast(m){ const el = $('#toast'); el.textContent = m; el.classList.add('show');
   clearTimeout(toast._t); toast._t = setTimeout(() => el.classList.remove('show'), 2600); }
@@ -133,7 +133,7 @@ async function boot(){
   $('#top').hidden = false;
   S.booted = true;
   render();
-  await Promise.all([loadStats(), loadOrders(), loadVenue()]);
+  await Promise.all([loadStats(), loadOrders(), loadVenue(), loadCouriers()]);
   render();
   poll();
 }
@@ -184,7 +184,7 @@ function ordersView(){
 }
 
 function row(o, newIdx){
-  const items = (o.items || []).map(i => `<b>${i.quantity}×</b> ${esc(shortId(i.product_id))}`).join(', ');
+  const items = (o.items || []).map(i => `<b>${i.quantity}×</b> ${esc(i.name || shortId(i.product_id))}`).join(', ');
   const f = o.fulfilment || {}, c = o.contact || {};
   const st = esc(o.status);
   return `<article class="order ${o.status === 'PENDING' ? 'attn' : ''} ${newIdx >= 0 ? 'is-new' : ''}" ${newIdx >= 0 ? `style="--i:${newIdx}"` : ''}>
@@ -215,9 +215,40 @@ function actions(o){
     case 'PENDING':   return b('confirm','Підтвердити','pri','ti-check') + b('reject','Відхилити','dan','ti-x');
     case 'CONFIRMED': return b('preparing','Готуємо','pri','ti-flame') + b('cancel','Скасувати','dan');
     case 'PREPARING': return b('ready','Готове','pri','ti-package') + b('cancel','Скасувати','dan');
-    case 'READY':     return `<span class="wait"><i class="ti ti-bike i" aria-hidden="true"></i>Чекає кур'єра</span>`;
+    // A READY order is the kitchen's work finished and the courier's not yet
+    // started. Until now this said "waiting for a courier" and offered no way to
+    // get one, which is a status message standing in for a missing control.
+    case 'READY':     return courierPicker(o);
+    case 'IN_DELIVERY': return courierName(o);
     default:          return '';
   }
+}
+
+/// Who is carrying this order, if anyone.
+function courierName(o){
+  const c = S.couriers.find(x => x.id === o.courier_id);
+  return o.courier_id
+    ? `<span class="wait"><i class="ti ti-bike i" aria-hidden="true"></i>${esc(c ? c.name : o.courier_id)}</span>`
+    : `<span class="wait"><i class="ti ti-bike i" aria-hidden="true"></i>Без кур'єра</span>`;
+}
+
+/// Hand the order to a courier.
+///
+/// Couriers who are ON SHIFT come first and are the only ones enabled: assigning
+/// an order to a phone that is switched off looks exactly like a lost order to
+/// the person waiting for it. When nobody is on shift the control says so rather
+/// than presenting an empty menu.
+function courierPicker(o){
+  if (o.courier_id) return courierName(o);
+  const on = S.couriers.filter(c => c.active && c.onShift);
+  if (!on.length) return `<span class="wait"><i class="ti ti-bike i" aria-hidden="true"></i>Немає кур'єрів на зміні</span>`;
+  return `<label class="assign">
+      <span class="sr">Призначити кур&#39;єра</span>
+      <select data-assign="${esc(o.id)}">
+        <option value="">Призначити кур'єра…</option>
+        ${on.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}
+      </select>
+    </label>`;
 }
 
 function bindOrders(){
@@ -233,12 +264,32 @@ function bindOrders(){
       await api(`/owner/orders/${encodeURIComponent(id)}/action`, { method:'POST',
         body: JSON.stringify({ location_id: store.loc, action, reason }) });
       const ev = SEA_FOR_ACTION[action]; if (ev) seaEvent(ev[0], ev[1]);
-      await Promise.all([loadOrders(), loadStats()]);
+      await Promise.all([loadOrders(), loadStats(), loadCouriers()]);
       render();
     } catch (e) {
       toast(String(e.message || e));
       document.querySelectorAll('[data-o="' + CSS.escape(id) + '"]').forEach(x => x.disabled = false);
     }
+  });
+
+  document.querySelectorAll('[data-assign]').forEach(sel => {
+    sel.onchange = async () => {
+      const id = sel.dataset.assign, courier_id = sel.value;
+      if (!courier_id) return;
+      sel.disabled = true;
+      try {
+        await api(`/owner/orders/${encodeURIComponent(id)}/assign`, { method:'POST',
+          body: JSON.stringify({ courier_id }) });
+        seaEvent('courier_assigned', 40);
+        toast('Кур\u2019єра призначено');
+        await loadOrders(); render();
+      } catch (e) {
+        // Put the control back where it was: a select left showing a courier
+        // who was never assigned is a lie the owner will act on.
+        sel.value = ''; sel.disabled = false;
+        toast(String(e.message || e));
+      }
+    };
   });
 }
 
@@ -254,6 +305,10 @@ async function loadOrders(){
   } catch (e) { if (String(e.message) !== 'session expired') toast(String(e.message || e)); }
 }
 async function loadStats(){ try { S.stats = await api(`/owner/dashboard?location_id=${encodeURIComponent(store.loc)}`); } catch {} }
+// Who is available to carry an order. Failing quietly is right here: a missing
+// courier list must not blank the order queue, which is the thing the owner
+// actually needs on screen.
+async function loadCouriers(){ try { S.couriers = (await api('/owner/couriers')).couriers || []; } catch {} }
 
 // A new order during a rush must be HEARD, not noticed. iOS will not play audio
 // until a user gesture has unlocked the context, so the context is created lazily
@@ -355,7 +410,7 @@ function poll(){
   clearInterval(poll._i);
   poll._i = setInterval(async () => {
     if (document.hidden || !S.booted) return;
-    await Promise.all([loadOrders(), loadStats()]);
+    await Promise.all([loadOrders(), loadStats(), loadCouriers()]);
     if (S.tab === 'orders') { $('#pane').innerHTML = ordersView(); bindOrders(); S.fresh.clear(); }
     const s = S.stats;
     if (s) {

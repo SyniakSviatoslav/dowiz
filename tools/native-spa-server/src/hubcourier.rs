@@ -151,14 +151,7 @@ async fn advance_as_courier(
                 .map_err(HubHttpError::Refused)?;
             let mut merged: Value = serde_json::from_str(&updated)
                 .map_err(|_| HubHttpError::Corrupt("kernel order"))?;
-            for k in [
-                "contact", "fulfilment", "payment", "delivery_fee", "total", "courier_id",
-                "payment_status", "created_at_ms", "rejection_reason",
-            ] {
-                if let Some(v) = cur.get(k) {
-                    merged[k] = v.clone();
-                }
-            }
+            crate::hub::carry_over(&cur, &mut merged);
             merged["last_actor"] = json!(me);
             let body = serde_json::to_string(&merged).unwrap_or(updated);
             hub.append(EventKind::Advanced, &id, &body, now_ms() as u64, [0u8; 32])

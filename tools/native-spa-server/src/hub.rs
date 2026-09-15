@@ -404,7 +404,11 @@ pub async fn place(
         subtotal += price * it.quantity;
         lines.push(json!({
             "product_id": it.product_id, "modifier_ids": it.modifier_ids,
-            "quantity": it.quantity, "unit_price": price
+            "quantity": it.quantity, "unit_price": price,
+            // The name AS SOLD. Kept on the order rather than looked up later,
+            // so renaming a dish -- or taking it off the menu -- does not
+            // rewrite what a past order says was bought.
+            "name": p.get("name").cloned().unwrap_or(Value::Null)
         }));
     }
     let min_order = loc.get("min_order").and_then(|x| x.as_i64()).unwrap_or(0);
@@ -431,6 +435,9 @@ pub async fn place(
 
     let mut envelope: Value =
         serde_json::from_str(&order_json).map_err(|_| HubHttpError::Corrupt("kernel order"))?;
+    // The kernel returns its own lines, without the names. Put them back from
+    // the lines we priced a moment ago.
+    carry_item_names(&json!({ "items": lines }), &mut envelope);
     envelope["delivery_fee"] = json!(fee);
     envelope["total"] = json!(subtotal + fee);
     envelope["contact"] = json!({ "name": body.contact.name, "phone": body.contact.phone });
@@ -464,6 +471,77 @@ pub async fn order(
     let hub = st.read_log()?;
     let raw = hub.order(&id).map_err(|_| HubHttpError::NotFound("order"))?;
     Ok(Json(serde_json::from_str(&raw).unwrap_or(json!({}))))
+}
+
+/// Carry the hub's own fields across a kernel transition.
+///
+/// THE KERNEL OWNS items, status, subtotal and the ledger; it does not know
+/// about addresses, phone numbers, couriers or what a dish is called, and it
+/// returns an envelope without them. Everything the hub added has to be put
+/// back, or it is lost the first time the order moves — an address that
+/// disappears on "confirmed" only shows up at somebody's door.
+///
+/// ONE list, in one place. It was briefly three -- the public advance handler,
+/// the owner's action and the courier's -- and three copies of a list of field
+/// names is three chances to forget one. The one that gets forgotten is the one
+/// nobody tests, which is why this is a function and not a convention.
+pub(crate) fn carry_over(old: &Value, updated: &mut Value) {
+    for k in [
+        "contact",
+        "fulfilment",
+        "payment",
+        "payment_status",
+        "delivery_fee",
+        "total",
+        "courier_id",
+        "created_at_ms",
+        "rejection_reason",
+        "cash_collected",
+        "courier_note",
+        "scheduled_for_ms",
+        "last_actor",
+    ] {
+        if let Some(v) = old.get(k) {
+            updated[k] = v.clone();
+        }
+    }
+    carry_item_names(old, updated);
+}
+
+/// Put the dish names back on the lines.
+///
+/// The kernel's order lines carry `product_id`, quantity and unit price — it has
+/// no menu and no reason to. Without this the kitchen's ticket and the owner's
+/// queue both read "2x item-01", which is not a thing anyone can cook.
+///
+/// Matched BY product_id rather than by position, because the kernel is free to
+/// reorder or merge lines and a positional match would then put one dish's name
+/// on another's quantity.
+fn carry_item_names(old: &Value, updated: &mut Value) {
+    let Some(old_items) = old.get("items").and_then(Value::as_array) else { return };
+    let names: Vec<(String, String)> = old_items
+        .iter()
+        .filter_map(|i| {
+            Some((
+                i.get("product_id")?.as_str()?.to_string(),
+                i.get("name")?.as_str()?.to_string(),
+            ))
+        })
+        .collect();
+    if names.is_empty() {
+        return;
+    }
+    if let Some(items) = updated.get_mut("items").and_then(Value::as_array_mut) {
+        for item in items {
+            let Some(pid) = item.get("product_id").and_then(Value::as_str).map(str::to_string)
+            else {
+                continue;
+            };
+            if let Some((_, n)) = names.iter().find(|(p, _)| *p == pid) {
+                item["name"] = json!(n);
+            }
+        }
+    }
 }
 
 // ── notification ─────────────────────────────────────────────────────────────
@@ -1011,14 +1089,7 @@ pub async fn advance(
             let mut merged: Value = serde_json::from_str(&updated)
                 .map_err(|_| HubHttpError::Corrupt("kernel order"))?;
             let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
-            for k in [
-                "contact", "fulfilment", "payment", "delivery_fee", "total", "courier_id",
-                "rejection_reason", "payment_status",
-            ] {
-                if let Some(v) = old.get(k) {
-                    merged[k] = v.clone();
-                }
-            }
+            carry_over(&old, &mut merged);
             let body = serde_json::to_string(&merged).unwrap_or(updated);
             hub.append(EventKind::Advanced, &id, &body, now_ms() as u64, [0u8; 32])
                 .map_err(|e| HubHttpError::Io(format!("{e:?}")))?;

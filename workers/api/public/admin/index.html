@@ -265,6 +265,21 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
 .wait{display:inline-flex;align-items:center;gap:var(--space-2);min-height:var(--tap);
       color:var(--brand-text-muted);font-size:var(--text-base)}
 
+/* ── assign a courier ──
+   Sized from the SAME tokens as .wait and .btn, because it stands where both of
+   them stand: a READY order shows this control, an IN_DELIVERY one shows .wait,
+   and a row must not change height as an order moves between them. The native
+   <select> is kept rather than replaced with a custom menu -- on a phone it
+   opens the platform picker, which is larger, scrollable and reachable with one
+   thumb during a rush, and no hand-rolled dropdown here would beat that. */
+.assign{display:inline-flex;align-items:center;min-height:var(--tap)}
+.assign select{min-height:var(--tap);padding:0 var(--space-3);
+      border:1px solid var(--brand-border);border-radius:var(--radius-md);
+      background:var(--brand-surface-raised);color:var(--brand-text);
+      font-size:var(--text-base);cursor:pointer}
+.assign select:hover{border-color:var(--brand-primary)}
+.assign select:disabled{opacity:.55;cursor:progress}
+
 /* ── status chip ── DESIGN.md §5: coloured dot + text label; PENDING and
    IN_DELIVERY pulse. The LABEL carries the status (ink on a tint, 9.6:1 at
    worst); the dot is reinforcement in the immutable status colour, and two of

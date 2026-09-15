@@ -118,14 +118,7 @@ pub async fn order_action(
                 .map_err(HubHttpError::Refused)?;
             let mut merged: Value = serde_json::from_str(&updated)
                 .map_err(|_| HubHttpError::Corrupt("kernel order"))?;
-            for k in [
-                "contact", "fulfilment", "payment", "delivery_fee", "total", "courier_id",
-                "payment_status", "created_at_ms",
-            ] {
-                if let Some(v) = cur.get(k) {
-                    merged[k] = v.clone();
-                }
-            }
+            crate::hub::carry_over(&cur, &mut merged);
             if let Some(r) = reason {
                 merged["rejection_reason"] = json!(r);
             }

@@ -351,6 +351,75 @@ async fn a_courier_cannot_move_another_couriers_order() {
     assert_eq!(code, 409, "a delivery without a pickup must be refused: {v}");
 }
 
+/// The dish NAME must survive every hand-off.
+///
+/// The kernel has no menu, so it returns lines carrying a product id and a
+/// price and nothing else. Without the hub putting the name back at every
+/// transition, the kitchen's ticket and the owner's queue read "2x item-01",
+/// which is not something anyone can cook -- and it degrades silently, only at
+/// the FIRST status change, which is exactly when nobody is looking at a test.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_dish_keeps_its_name_all_the_way_to_the_door() {
+    let s = boot("names").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+    let (_, c) = post(
+        &s.base,
+        "/api/courier/auth/login",
+        None,
+        json!({ "phone": "+355691112233", "password": "courier-pw" }),
+    );
+    let courier = c["jwt"].as_str().unwrap().to_string();
+
+    let (_, order) = post(
+        &s.base,
+        "/api/public/locations/dubin/orders",
+        None,
+        json!({
+            "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 2 }],
+            "contact": { "name": "C", "phone": "+355690000000" },
+            "fulfilment": { "kind": "delivery", "address": { "line": "Rruga Taulantia 12" } }
+        }),
+    );
+    let id = order["id"].as_str().unwrap().to_string();
+    assert_eq!(order["items"][0]["name"], "Sake Futomaki", "at placement: {order}");
+
+    let named = |v: &Value| v["items"][0]["name"].as_str().unwrap_or("").to_string();
+
+    for action in ["confirm", "preparing", "ready"] {
+        let (code, v) = post(
+            &s.base,
+            &format!("/api/owner/orders/{id}/action"),
+            Some(&owner),
+            json!({ "action": action }),
+        );
+        assert_eq!(code, 200, "{action}");
+        assert_eq!(named(&v), "Sake Futomaki", "lost the name at {action}: {v}");
+    }
+
+    post(&s.base, &format!("/api/courier/orders/{id}/accept"), Some(&courier), json!({}));
+    let (_, v) = post(&s.base, &format!("/api/courier/orders/{id}/pickup"), Some(&courier), json!({}));
+    assert_eq!(named(&v), "Sake Futomaki", "lost the name at pickup: {v}");
+    let (_, v) = post(&s.base, &format!("/api/courier/orders/{id}/deliver"), Some(&courier), json!({}));
+    assert_eq!(named(&v), "Sake Futomaki", "lost the name at delivery: {v}");
+
+    // And it is still there when the order is read back from the log.
+    let (_, v) = get(&s.base, &format!("/api/order/{id}"), None);
+    assert_eq!(named(&v), "Sake Futomaki");
+
+    // Renaming the dish afterwards must NOT rewrite what this order says was
+    // bought. The name was recorded as sold.
+    let (code, _) = post(
+        &s.base,
+        "/api/owner/products/p1",
+        Some(&owner),
+        json!({ "available": true }),
+    );
+    assert_eq!(code, 200);
+    let (_, v) = get(&s.base, &format!("/api/order/{id}"), None);
+    assert_eq!(named(&v), "Sake Futomaki", "history must not be rewritten by the menu");
+}
+
 /// The owner's actions are the kernel's, including the ones it refuses.
 #[tokio::test(flavor = "multi_thread")]
 async fn the_kernel_still_decides_what_the_owner_may_do() {
