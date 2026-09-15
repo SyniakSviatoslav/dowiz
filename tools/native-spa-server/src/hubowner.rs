@@ -473,7 +473,173 @@ pub async fn couriers(
             })
         })
         .collect();
-    Ok(Json(json!({ "couriers": list })))
+    let now = now_ms();
+    // Pending invites sit in the SAME list as the people. An owner asking "who
+    // delivers for me" counts the person they invited yesterday among the
+    // answer, and a separate panel for them is a panel nobody opens.
+    let pending: Vec<Value> = roster
+        .invites()
+        .into_iter()
+        .map(|i| {
+            json!({
+                "id": i.id, "name": i.name, "madeMs": i.made_ms, "untilMs": i.until_ms,
+                "expired": now >= i.until_ms,
+            })
+        })
+        .collect();
+    Ok(Json(json!({ "couriers": list, "invites": pending })))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct InviteIn {
+    /// The phone the courier will log in with. It IS the account id, so it is
+    /// fixed at invite time rather than chosen later.
+    pub phone: String,
+    pub name: String,
+}
+
+/// `POST /api/owner/couriers/invite` — mint a code, shown ONCE.
+///
+/// The hub cannot show it again: it is stored hashed, exactly like a password,
+/// because until it is claimed it opens an account. The owner reads it out or
+/// sends it; if it is lost, they issue another, which replaces the first.
+pub async fn invite_courier(
+    State(st): State<Shared>,
+    _who: OwnerCaller,
+    Json(raw): Json<Value>,
+) -> Result<Json<Value>, HubHttpError> {
+    /// A week. Long enough for a courier who starts next Monday, short enough
+    /// that a code found in an old message no longer opens anything.
+    const TTL_MS: i64 = 7 * 24 * 60 * 60 * 1000;
+
+    let body: InviteIn =
+        serde_json::from_value(raw).map_err(|e| HubHttpError::Invalid(e.to_string()))?;
+    let phone = body.phone.trim().to_string();
+    if phone.chars().filter(char::is_ascii_digit).count() < 8 {
+        return Err(HubHttpError::Invalid("that does not look like a phone number".into()));
+    }
+    let name = body.name.trim().to_string();
+    if name.is_empty() {
+        return Err(HubHttpError::Invalid("who is this code for?".into()));
+    }
+    if st.read_roster()?.person(&phone).is_some() {
+        return Err(HubHttpError::Conflict("that phone already has an account".into()));
+    }
+    let code = dowiz_hub::roster::new_invite_code()
+        .map_err(|_| HubHttpError::Io("no randomness available".into()))?;
+    let (c, now) = (code.clone(), now_ms());
+    st.with_roster(move |r| {
+        r.create_invite(&phone, dowiz_hub::token::Role::Courier, &name, &c, now, TTL_MS)
+            .map_err(|_| HubHttpError::Io("could not write the invite".into()))
+    })
+    .await?;
+    Ok(Json(json!({ "code": code, "expiresMs": now + TTL_MS })))
+}
+
+/// `POST /api/owner/couriers/{id}/uninvite` — withdraw a pending code.
+pub async fn uninvite_courier(
+    State(st): State<Shared>,
+    _who: OwnerCaller,
+    AxPath(id): AxPath<String>,
+) -> Result<Json<Value>, HubHttpError> {
+    let gone = st.with_roster(move |r| Ok(r.revoke_invite(&id))).await?;
+    if !gone {
+        return Err(HubHttpError::NotFound("invite"));
+    }
+    Ok(Json(json!({ "ok": true })))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CourierActiveIn {
+    pub active: bool,
+}
+
+/// `POST /api/owner/couriers/{id}/active` — a courier who has left.
+///
+/// Their record STAYS. An order they delivered still names them, and deleting
+/// the person would leave that order pointing at nobody. What changes is that
+/// they can no longer log in; every session they hold dies with it, because a
+/// courier who has left must not keep a live app in their pocket.
+pub async fn set_courier_active(
+    State(st): State<Shared>,
+    _who: OwnerCaller,
+    AxPath(id): AxPath<String>,
+    Json(body): Json<CourierActiveIn>,
+) -> Result<Json<Value>, HubHttpError> {
+    let active = body.active;
+    let revoked = st
+        .with_roster(move |r| {
+            if !r.set_active(&id, active) {
+                return Err(HubHttpError::NotFound("courier"));
+            }
+            Ok(if active { 0 } else { r.revoke_all_for(&id) })
+        })
+        .await?;
+    Ok(Json(json!({ "ok": true, "active": active, "sessionsRevoked": revoked })))
+}
+
+/// `GET /api/owner/couriers/{id}` — one courier, folded from the orders.
+///
+/// Deliveries, cash held and shifts, and nothing that could be read as a score.
+/// There is no rating here and there will not be one: NO-COURIER-SCORING is a
+/// red line, and an average-minutes-per-delivery figure is a ranking with the
+/// serial numbers filed off.
+pub async fn courier_detail(
+    State(st): State<Shared>,
+    _who: OwnerCaller,
+    AxPath(id): AxPath<String>,
+) -> Result<Json<Value>, HubHttpError> {
+    let roster = st.read_roster()?;
+    let Some(p) = roster.person(&id) else {
+        return Err(HubHttpError::NotFound("courier"));
+    };
+    let hub = st.read_log()?;
+    let now = now_ms();
+    let day = 24 * 60 * 60 * 1000;
+    let month = start_of_day_ms(now) - 29 * day;
+
+    let (mut delivered, mut in_flight, mut cash_held) = (0i64, 0i64, 0i64);
+    let mut recent: Vec<Value> = Vec::new();
+    for ev in hub.orders() {
+        let Ok(o) = serde_json::from_str::<Value>(&ev.order_json) else { continue };
+        if o.get("courier_id").and_then(Value::as_str) != Some(id.as_str()) {
+            continue;
+        }
+        let status = o.get("status").and_then(Value::as_str).unwrap_or("");
+        let at = o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(0);
+        match status {
+            "DELIVERED" if at >= month => delivered += 1,
+            "IN_DELIVERY" | "READY" => {
+                in_flight += 1;
+                if o.get("payment").and_then(Value::as_str) == Some("cash") {
+                    cash_held += o.get("total").and_then(Value::as_i64).unwrap_or(0);
+                }
+            }
+            _ => {}
+        }
+        if recent.len() < 20 {
+            recent.push(json!({
+                "id": o.get("id").cloned().unwrap_or(Value::Null),
+                "status": status, "at": at,
+                "total": o.get("total").cloned().unwrap_or(json!(0)),
+            }));
+        }
+    }
+    let currency = st
+        .read_catalog()?
+        .location()
+        .and_then(|j| serde_json::from_str::<Value>(&j).ok())
+        .and_then(|l| l.get("currency").and_then(Value::as_str).map(String::from))
+        .unwrap_or_else(|| "ALL".into());
+
+    Ok(Json(json!({
+        "id": p.id, "name": p.name, "active": p.active,
+        "onShift": st.shifts().await.contains(&p.id),
+        "delivered30d": delivered, "inFlight": in_flight, "cashHeld": cash_held,
+        "orders": recent, "currency": currency,
+    })))
 }
 
 #[derive(Deserialize)]
@@ -795,6 +961,10 @@ pub fn routes(state: Shared) -> Router {
         .route("/api/owner/products/{id}", post(update_product))
         .route("/api/owner/location", post(update_location))
         .route("/api/owner/couriers", get(couriers))
+        .route("/api/owner/couriers/invite", post(invite_courier))
+        .route("/api/owner/couriers/{id}", get(courier_detail))
+        .route("/api/owner/couriers/{id}/uninvite", post(uninvite_courier))
+        .route("/api/owner/couriers/{id}/active", post(set_courier_active))
         .route("/api/owner/menu/import", post(import_menu))
         .route("/api/owner/branding/extract", post(extract_branding))
         .route("/api/owner/branding", post(set_branding))

@@ -331,6 +331,12 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
 /* The promo form is one control per field on a phone and a single row on a
    desktop: auto-fit rather than a fixed column count, so nothing is squeezed
    below the width its own placeholder needs. */
+/* An invite code is read off the screen and typed on a phone. Monospace with a
+   wide track, so the eye can hold its place halfway through sixteen characters. */
+.code{display:block;font-family:var(--font-mono);font-size:var(--text-lg);
+      letter-spacing:.18em;word-break:break-all;margin-bottom:var(--space-2)}
+.erow.courier{align-items:flex-start;padding:var(--space-2) var(--space-3)}
+.erow.courier .row{gap:var(--space-1)}
 .promo-form{display:grid;gap:var(--space-2);
       grid-template-columns:repeat(auto-fit,minmax(7.5rem,1fr));
       margin-bottom:var(--space-3)}

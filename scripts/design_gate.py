@@ -137,10 +137,16 @@ for name, (html_p, js_p) in SURFACES.items():
     used = set()
     for m in re.finditer(r"""class=["'`]([^"'`$\\]+)""", js):
         used |= set(m.group(1).split())
+    # A SUBSTRING TEST IS NOT A SELECTOR TEST. `".hint" in html` is true when the
+    # sheet only defines `.hint2`, so a class with no rule of its own passed for
+    # as long as some longer class shared its prefix -- which is how `hint`
+    # reached the courier surface unstyled while the gate reported GREEN. The
+    # match now has to end where a CSS identifier ends.
     for cls in sorted(used):
         if cls.startswith("ti") or not cls:
             continue
-        if f".{cls}" not in html and f".{cls}" not in js:
+        sel = re.compile(r"\." + re.escape(cls) + r"(?![A-Za-z0-9_-])")
+        if not sel.search(html) and not sel.search(js):
             fail(name, "R5", f'class "{cls}" is used and has no rule')
 
     # ── the browser chrome must be a colour the page contains ─────────────

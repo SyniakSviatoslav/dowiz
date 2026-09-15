@@ -287,7 +287,9 @@ function renderLogin(err){
     <input id="pw" type="password" autocomplete="current-password" enterkeyhint="go">
     ${err ? `<div class="err" role="alert">${icon('alert-circle')}<span>${esc(err)}</span></div>` : ''}
     <button class="cta" id="go" type="submit">${icon('login')}Увійти</button>
+    <button class="ghost" id="toClaim" type="button">${icon('ticket')}У мене код запрошення</button>
   </form>`;
+  $('#toClaim').onclick = () => renderClaim();
   $('#loginForm').onsubmit = async ev => {
     ev.preventDefault();
     const b = $('#go'); b.disabled = true; b.innerHTML = `${icon('loader-2')}Входимо…`;
@@ -300,6 +302,46 @@ function renderLogin(err){
       if (!r.ok) throw new Error(d.error || d.message || 'HTTP ' + r.status);
       store.t = d.jwt; boot();
     } catch (e) { renderLogin(String(e.message || e)); }
+  };
+}
+
+// ── claiming an invite ──
+//
+// The courier has no account yet: the code stands in for one, once. They choose
+// their own password here, which is the point -- an owner who typed it for them
+// would know it, and a shared password is not a password.
+function renderClaim(err){
+  $('#app').innerHTML = `<form class="login" id="claimForm" novalidate>
+    <h2>Код запрошення</h2>
+    <p class="hint2">Код дав вам заклад. Він діє тиждень і спрацьовує один раз.</p>
+    <label for="cph">Ваш телефон</label>
+    <input id="cph" type="tel" inputmode="tel" autocomplete="tel" enterkeyhint="next">
+    <label for="cod">Код</label>
+    <input id="cod" autocomplete="one-time-code" autocapitalize="characters"
+           spellcheck="false" maxlength="16" enterkeyhint="next">
+    <label for="cpw">Придумайте пароль</label>
+    <input id="cpw" type="password" autocomplete="new-password" minlength="8" enterkeyhint="go">
+    <p class="hint2">Щонайменше 8 символів. Заклад його не побачить.</p>
+    ${err ? `<div class="err" role="alert">${icon('alert-circle')}<span>${esc(err)}</span></div>` : ''}
+    <button class="cta" id="cgo" type="submit">${icon('check')}Почати</button>
+    <button class="ghost" id="toLogin" type="button">${icon('arrow-left')}У мене вже є пароль</button>
+  </form>`;
+  $('#toLogin').onclick = () => renderLogin();
+  $('#claimForm').onsubmit = async ev => {
+    ev.preventDefault();
+    const b = $('#cgo'); b.disabled = true; b.innerHTML = `${icon('loader-2')}Перевіряємо…`;
+    try {
+      const r = await fetch(API + '/courier/auth/claim', { method:'POST',
+        headers:{ 'content-type':'application/json' },
+        body: JSON.stringify({ phone: $('#cph').value.trim(),
+                               code: $('#cod').value.trim().toUpperCase(),
+                               password: $('#cpw').value }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || d.message || 'HTTP ' + r.status);
+      // Signed in on the spot: they set the password ten seconds ago and
+      // re-typing it proves nothing.
+      store.t = d.jwt; boot();
+    } catch (e) { renderClaim(String(e.message || e)); }
   };
 }
 

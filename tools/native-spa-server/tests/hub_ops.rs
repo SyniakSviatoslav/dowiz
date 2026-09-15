@@ -2446,3 +2446,136 @@ async fn only_the_owner_can_make_a_code() {
     let (code, _) = get(&s.base, "/api/owner/promotions", Some(&courier));
     assert_eq!(code, 403);
 }
+
+/// The invite loop: the owner mints a code, the courier turns it into an
+/// account with a password the owner never sees, and the code dies with the use.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_invite_becomes_a_working_courier_account() {
+    let s = boot("invite_flow").await;
+    let (_, t) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = t["access_token"].as_str().unwrap().to_string();
+
+    let (code, v) = post(&s.base, "/api/owner/couriers/invite", Some(&owner),
+        json!({ "phone": "+355697778899", "name": "Arben" }));
+    assert_eq!(code, 200, "{v}");
+    let invite = v["code"].as_str().expect("a code").to_string();
+    assert_eq!(invite.chars().count(), 16);
+
+    // It shows in the list as pending, and it is NOT yet an account.
+    let (_, list) = get(&s.base, "/api/owner/couriers", Some(&owner));
+    assert!(list["invites"].as_array().unwrap().iter().any(|i| i["id"] == "+355697778899"));
+    assert!(!list["couriers"].as_array().unwrap().iter().any(|c| c["id"] == "+355697778899"));
+    let (code, _) = post(&s.base, "/api/courier/auth/login", None,
+        json!({ "phone": "+355697778899", "password": "anything" }));
+    assert_eq!(code, 401, "an invite is not a login");
+
+    // The courier claims it and is signed in on the spot.
+    let (code, v) = post(&s.base, "/api/courier/auth/claim", None,
+        json!({ "phone": "+355697778899", "code": invite, "password": "my-own-password" }));
+    assert_eq!(code, 200, "{v}");
+    assert!(v["jwt"].as_str().is_some(), "{v}");
+    assert_eq!(v["courier"]["name"], "Arben");
+
+    // The chosen password works, and the code is spent.
+    let (code, _) = post(&s.base, "/api/courier/auth/login", None,
+        json!({ "phone": "+355697778899", "password": "my-own-password" }));
+    assert_eq!(code, 200);
+    let (code, v) = post(&s.base, "/api/courier/auth/claim", None,
+        json!({ "phone": "+355697778899", "code": invite, "password": "second-password" }));
+    assert_eq!(code, 400, "{v}");
+    let (code, _) = post(&s.base, "/api/courier/auth/login", None,
+        json!({ "phone": "+355697778899", "password": "second-password" }));
+    assert_eq!(code, 401, "a spent code must not re-set the password");
+
+    let (_, list) = get(&s.base, "/api/owner/couriers", Some(&owner));
+    assert_eq!(list["invites"].as_array().unwrap().len(), 0, "the invite outlived its use");
+}
+
+/// A wrong code must not open an account, and must not say whether the phone
+/// was ever invited.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_wrong_code_opens_nothing() {
+    let s = boot("invite_wrong").await;
+    let (_, t) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = t["access_token"].as_str().unwrap().to_string();
+    post(&s.base, "/api/owner/couriers/invite", Some(&owner),
+         json!({ "phone": "+355690001111", "name": "Real" }));
+
+    let (c1, v1) = post(&s.base, "/api/courier/auth/claim", None,
+        json!({ "phone": "+355690001111", "code": "WRONGWRONGWRONG2", "password": "password1" }));
+    let (c2, v2) = post(&s.base, "/api/courier/auth/claim", None,
+        json!({ "phone": "+355699998888", "code": "WRONGWRONGWRONG2", "password": "password1" }));
+    assert_eq!(c1, 400);
+    assert_eq!((c1, &v1["error"]), (c2, &v2["error"]),
+               "an invited phone must not answer differently from one nobody invited");
+
+    // A short password is refused before any of that.
+    let (code, v) = post(&s.base, "/api/courier/auth/claim", None,
+        json!({ "phone": "+355690001111", "code": "WRONGWRONGWRONG2", "password": "short" }));
+    assert_eq!(code, 400);
+    assert!(v["error"].as_str().unwrap().contains("8"), "{v}");
+}
+
+/// An invite must not be a way to take over an account that already exists.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_invite_cannot_be_issued_for_an_existing_account() {
+    let s = boot("invite_takeover").await;
+    let (_, t) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = t["access_token"].as_str().unwrap().to_string();
+
+    let (code, v) = post(&s.base, "/api/owner/couriers/invite", Some(&owner),
+        json!({ "phone": "+355691112233", "name": "Not Eni" }));
+    assert_eq!(code, 409, "{v}");
+    // Eni's own password still works.
+    let (code, _) = post(&s.base, "/api/courier/auth/login", None,
+        json!({ "phone": "+355691112233", "password": "courier-pw" }));
+    assert_eq!(code, 200);
+}
+
+/// A courier who has left keeps their record -- an order names them -- but
+/// loses every live session in their pocket.
+#[tokio::test(flavor = "multi_thread")]
+async fn deactivating_a_courier_kills_their_sessions() {
+    let s = boot("courier_off").await;
+    let (_, t) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = t["access_token"].as_str().unwrap().to_string();
+    let (_, c) = post(&s.base, "/api/courier/auth/login", None,
+        json!({ "phone": "+355691112233", "password": "courier-pw" }));
+    let jwt = c["jwt"].as_str().unwrap().to_string();
+    assert_eq!(get(&s.base, "/api/courier/tasks", Some(&jwt)).0, 200);
+
+    let (code, v) = post(&s.base, "/api/owner/couriers/+355691112233/active", Some(&owner),
+                         json!({ "active": false }));
+    assert_eq!(code, 200, "{v}");
+    assert!(v["sessionsRevoked"].as_i64().unwrap() >= 1, "{v}");
+
+    assert_eq!(get(&s.base, "/api/courier/tasks", Some(&jwt)).0, 401,
+               "the app in their pocket kept working");
+    assert_eq!(post(&s.base, "/api/courier/auth/login", None,
+        json!({ "phone": "+355691112233", "password": "courier-pw" })).0, 401);
+
+    // The record is still there, because orders point at it.
+    let (_, d) = get(&s.base, "/api/owner/couriers/+355691112233", Some(&owner));
+    assert_eq!(d["name"], "Eni");
+    assert_eq!(d["active"], false);
+}
+
+/// The courier detail carries work, cash and shifts -- and nothing that reads
+/// as a score. NO-COURIER-SCORING is a red line, not a preference.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_courier_detail_has_no_score_in_it() {
+    let s = boot("courier_detail").await;
+    let (_, t) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = t["access_token"].as_str().unwrap().to_string();
+
+    let (code, d) = get(&s.base, "/api/owner/couriers/+355691112233", Some(&owner));
+    assert_eq!(code, 200, "{d}");
+    for banned in ["rating", "score", "reputation", "rank", "stars", "average"] {
+        assert!(!d.to_string().to_lowercase().contains(banned),
+                "the courier detail carries a {banned}: {d}");
+    }
+    assert!(d["delivered30d"].is_i64() && d["cashHeld"].is_i64(), "{d}");
+
+    let (code, _) = get(&s.base, "/api/owner/couriers/+355699999999", Some(&owner));
+    assert_eq!(code, 404, "a courier nobody hired");
+}

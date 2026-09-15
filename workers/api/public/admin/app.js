@@ -370,6 +370,105 @@ function bindStats(){
   const r = $('#retryStats'); if (r) r.onclick = () => loadAnalytics();
 }
 
+// ── couriers ────────────────────────────────────────────────────────────────
+//
+// People and pending invites in ONE list. An owner asking who delivers for them
+// counts the person they invited yesterday among the answer, and a separate
+// panel for invites is a panel nobody opens.
+function courierRow(c){
+  const state = c.pending
+    ? (c.expired ? { label: 'код прострочено', tone: '' } : { label: 'чекає на код', tone: 'wait' })
+    : c.active
+      ? (c.onShift ? { label: 'на зміні', tone: 'ok' } : { label: 'не на зміні', tone: '' })
+      : { label: 'пішов', tone: '' };
+  return `<div class="erow courier" data-id="${esc(c.id)}" data-pending="${c.pending ? 1 : 0}">
+    <span><b>${esc(c.name || c.id)}</b>
+      <span class="chip ${state.tone}">${state.label}</span>
+      <br><small class="hint">${esc(c.id)}</small></span>
+    <span class="row">
+      ${c.pending
+        ? `<button class="icon-btn" data-cv-drop aria-label="Скасувати запрошення">
+             <i class="ti ti-x i" aria-hidden="true"></i></button>`
+        : `<button class="icon-btn" data-cv-open aria-label="Показати ${esc(c.name || c.id)}">
+             <i class="ti ti-chevron-right i" aria-hidden="true"></i></button>
+           <button class="icon-btn" data-cv-active aria-label="${c.active ? 'Звільнити' : 'Повернути'}">
+             <i class="ti ti-${c.active ? 'user-off' : 'user-check'} i" aria-hidden="true"></i></button>`}
+    </span>
+  </div>`;
+}
+
+function renderCouriers(){
+  const box = $('#cvList'); if (!box) return;
+  const people = (S.couriers || []).map(c => ({ ...c, pending: false }));
+  const waiting = (S.invites || []).map(i => ({ ...i, pending: true }));
+  const rows = [...people, ...waiting];
+  box.innerHTML = rows.length
+    ? rows.map(courierRow).join('')
+    : `<p class="hint">Ще нікого. Перший рядок вище створює запрошення.</p>`;
+  box.querySelectorAll('.courier').forEach(row => {
+    const id = row.dataset.id;
+    const c = rows.find(x => x.id === id);
+    const drop = row.querySelector('[data-cv-drop]');
+    if (drop) drop.onclick = async () => {
+      await api(`/owner/couriers/${encodeURIComponent(id)}/uninvite`, {});
+      loadCouriers();
+    };
+    const act = row.querySelector('[data-cv-active]');
+    if (act) act.onclick = async () => {
+      // Turning a courier off kills every session they hold, so it asks.
+      if (c.active && !confirm(`${c.name || id} більше не зможе увійти. Продовжити?`)) return;
+      await api(`/owner/couriers/${encodeURIComponent(id)}/active`, { active: !c.active });
+      loadCouriers();
+    };
+    const open = row.querySelector('[data-cv-open]');
+    if (open) open.onclick = () => showCourier(id);
+  });
+}
+
+async function showCourier(id){
+  const box = $('#cvShown');
+  box.hidden = false; box.textContent = 'Завантажуємо…';
+  try {
+    const d = await api(`/owner/couriers/${encodeURIComponent(id)}`);
+    // Work, cash and shifts. NO SCORE: dowiz does not rank the people who
+    // deliver for it, and an average-minutes figure is a ranking in disguise.
+    box.innerHTML = `<b>${esc(d.name)}</b>
+      <div class="stats">
+        <div class="stat"><div class="k">Доставок за 30 днів</div><div class="v">${d.delivered30d}</div></div>
+        <div class="stat"><div class="k">Зараз у роботі</div><div class="v">${d.inFlight}</div></div>
+        <div class="stat"><div class="k">Готівка на руках</div><div class="v money">${money(d.cashHeld)}</div></div>
+      </div>`;
+  } catch (e) { box.textContent = String(e.message || e); }
+}
+
+async function loadCouriers(){
+  try {
+    const d = await api('/owner/couriers');
+    S.couriers = d.couriers || []; S.invites = d.invites || [];
+  } catch { S.couriers = []; S.invites = []; }
+  renderCouriers();
+}
+
+function bindCouriers(){
+  if (!$('#cvGo')) return;
+  loadCouriers();
+  $('#cvGo').onclick = async () => {
+    const err = $('#cvErr'), shown = $('#cvShown');
+    err.hidden = true; shown.hidden = true;
+    try {
+      const d = await api('/owner/couriers/invite',
+        { phone: $('#cvPhone').value.trim(), name: $('#cvName').value.trim() });
+      // ONCE. The hub stores it hashed and cannot show it again, so the screen
+      // says so rather than letting the owner assume they can come back for it.
+      shown.hidden = false;
+      shown.innerHTML = `<b class="code">${esc(d.code)}</b>
+        <p class="hint">Передайте цей код кур'єру. Більше ми його не покажемо.</p>`;
+      $('#cvPhone').value = ''; $('#cvName').value = '';
+      loadCouriers();
+    } catch (e) { err.hidden = false; err.textContent = String(e.message || e); }
+  };
+}
+
 // ── promo codes ─────────────────────────────────────────────────────────────
 //
 // The DATE inputs speak in whole local days, which is what the owner means, and
@@ -755,6 +854,24 @@ function setupView(){
     </section>
 
     <section class="card">
+      <h2>Кур'єри</h2>
+      <p class="hint">Запрошення — це код на 16 знаків, який діє тиждень і
+         спрацьовує <b>один раз</b>. Кур'єр сам придумає пароль: ви його не
+         побачите. Код показуємо теж один раз.</p>
+      <div class="row">
+        <input id="cvPhone" class="ask" type="tel" inputmode="tel"
+               placeholder="+355…" autocomplete="off" aria-label="Телефон кур'єра">
+        <input id="cvName" class="ask" type="text" placeholder="Ім'я"
+               autocomplete="off" aria-label="Ім'я кур'єра">
+        <button class="btn" id="cvGo">
+          <i class="ti ti-user-plus i" aria-hidden="true"></i>Запросити</button>
+      </div>
+      <div id="cvShown" class="report" hidden></div>
+      <div id="cvErr" class="report" role="alert" hidden></div>
+      <div id="cvList" class="elist"></div>
+    </section>
+
+    <section class="card">
       <h2>Промокоди</h2>
       <p class="hint">Знижка йде з їжі, не з доставки — кур'єру платять однаково.
          Відсоток округлюємо вниз. Статус рахується сам: код не треба
@@ -1063,6 +1180,7 @@ function renderHours(){
 }
 
 function bindSetup(){
+  bindCouriers();
   bindPromos();
   let csvText = null;
   renderSettings();

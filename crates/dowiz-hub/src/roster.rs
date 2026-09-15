@@ -29,6 +29,9 @@ use bebop_store::Store;
 pub const DEFAULT_ROSTER_BYTES: usize = 512 * 1024;
 
 const P_PERSON: &str = "person:";
+/// A pending invite. A separate namespace from `person:` so an invite can never
+/// be mistaken for an account -- the difference is exactly "can this id log in".
+const P_INVITE: &str = "invite:";
 const P_SESSION: &str = "session:";
 const SALT_LEN: usize = 16;
 const HASH_LEN: usize = 32;
@@ -41,6 +44,57 @@ pub struct Person {
     /// A person who has left. Their record is kept — an order they touched
     /// still names them — but they can no longer log in.
     pub active: bool,
+}
+
+/// The alphabet an invite code is drawn from: exactly 32 characters, being the
+/// uppercase letters without `I` and `O`, and the digits without `0` and `1`.
+///
+/// The code is READ OFF A SCREEN AND TYPED ON A PHONE, usually by somebody
+/// standing in a kitchen doorway. Each confusable pair it loses -- zero for
+/// oh, one for eye -- is a courier who cannot start their shift and an owner
+/// who has to issue a second code. Dropping the DIGITS is what lets `L` stay:
+/// `L` is only ambiguous against a `1` that is no longer in the set.
+///
+/// Thirty-two is not cosmetic. It divides 256 evenly, so `b & 31` draws each
+/// character with equal probability; an alphabet of 31 or 33 would make the
+/// low characters likelier and quietly cost the code some of its entropy.
+const CODE_ALPHABET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+/// A 16-character invite code. 32^16 is 2^80, which is not a number anybody
+/// guesses against a hub that answers one request at a time.
+pub fn new_invite_code() -> Result<String, HubError> {
+    let bytes = random_bytes(16).map_err(|_| HubError::NotAHub)?;
+    Ok(bytes.iter().map(|b| CODE_ALPHABET[(b & 31) as usize] as char).collect())
+}
+
+/// A pending invite, as the owner sees it. No hash, no code -- there is nothing
+/// here that could be replayed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Invite {
+    pub id: String,
+    pub role: Role,
+    pub name: String,
+    pub made_ms: i64,
+    pub until_ms: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClaimError {
+    /// No invite, or the wrong code. ONE variant on purpose: telling the two
+    /// apart would say which phone numbers have been invited.
+    NoSuchInvite,
+    Expired,
+    AlreadyClaimed,
+}
+
+impl ClaimError {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ClaimError::NoSuchInvite => "that code does not match",
+            ClaimError::Expired => "that code has expired -- ask for a new one",
+            ClaimError::AlreadyClaimed => "this person already has an account",
+        }
+    }
 }
 
 pub struct Roster {
@@ -198,6 +252,130 @@ impl Roster {
         } else {
             None
         }
+    }
+
+    // ── invites ─────────────────────────────────────────────────────────────
+
+    /// Invite somebody who has no password yet.
+    ///
+    /// THE CODE IS STORED HASHED, exactly like a password, because that is what
+    /// it is: for as long as it stands, whoever holds it can become this
+    /// courier. Keeping it in the clear would mean anyone who could read the
+    /// roster image -- a backup, a copied hub directory -- could claim the
+    /// account. The owner sees it once, at the moment they create it, and the
+    /// hub cannot show it again.
+    ///
+    /// The invite is keyed by the id the courier will log in with, so inviting
+    /// the same phone twice REPLACES the pending invite rather than leaving two
+    /// codes alive for one person.
+    pub fn create_invite(
+        &mut self,
+        id: &str,
+        role: Role,
+        name: &str,
+        code: &str,
+        now_ms: i64,
+        ttl_ms: i64,
+    ) -> Result<(), HubError> {
+        let salt = random_bytes(SALT_LEN).map_err(|_| HubError::NotAHub)?;
+        let mut hash = [0u8; HASH_LEN];
+        pbkdf2_sha256(code.as_bytes(), &salt, self.iterations, &mut hash);
+        let rec = format!(
+            r#"{{"id":"{}","role":"{}","name":"{}","salt":"{}","hash":"{}","it":{},"made":{},"until":{}}}"#,
+            esc(id),
+            role.as_str(),
+            esc(name),
+            hex(&salt),
+            hex(&hash),
+            self.iterations,
+            now_ms,
+            now_ms + ttl_ms
+        );
+        self.kv.put(&format!("{P_INVITE}{id}"), rec.as_bytes());
+        Ok(())
+    }
+
+    /// Pending invites, WITHOUT their hashes. An expired one is still listed:
+    /// the owner needs to see that the code they sent has run out, which is the
+    /// answer to "they say it does not work".
+    pub fn invites(&self) -> Vec<Invite> {
+        self.kv
+            .keys()
+            .into_iter()
+            .filter(|k| k.starts_with(P_INVITE))
+            .filter_map(|k| {
+                let rec = String::from_utf8(self.kv.get(&k)?).ok()?;
+                Some(Invite {
+                    id: str_field(&rec, "id")?,
+                    role: Role::from_str(&str_field(&rec, "role")?)?,
+                    name: str_field(&rec, "name").unwrap_or_default(),
+                    made_ms: int_field(&rec, "made").unwrap_or(0),
+                    until_ms: int_field(&rec, "until").unwrap_or(0),
+                })
+            })
+            .collect()
+    }
+
+    pub fn revoke_invite(&mut self, id: &str) -> bool {
+        self.kv.remove(&format!("{P_INVITE}{id}"))
+    }
+
+    /// Turn an invite into a person, with the password THEY choose.
+    ///
+    /// One shot: the invite is removed whether or not the hub crashes a
+    /// millisecond later, because the person is written first and the invite
+    /// deleted in the same commit. A code that survived its own use would be a
+    /// second key to somebody else's account.
+    ///
+    /// Spends the same work on a miss as `authenticate`, and for the same
+    /// reason: otherwise "no invite for this phone" answers instantly and
+    /// "wrong code" answers slowly, and an attacker learns which phones have
+    /// been invited without guessing a single code.
+    pub fn claim_invite(
+        &mut self,
+        id: &str,
+        code: &str,
+        password: &str,
+        now_ms: i64,
+    ) -> Result<Person, ClaimError> {
+        const DUMMY_SALT: &[u8] = b"a fixed dummy salt";
+        let rec = self
+            .kv
+            .get(&format!("{P_INVITE}{id}"))
+            .and_then(|v| String::from_utf8(v).ok());
+
+        let Some((salt, expected, iterations, role, name, until)) = rec.as_deref().and_then(|r| {
+            Some((
+                unhex(&str_field(r, "salt")?)?,
+                unhex(&str_field(r, "hash")?)?,
+                int_field(r, "it")? as u32,
+                Role::from_str(&str_field(r, "role")?)?,
+                str_field(r, "name").unwrap_or_default(),
+                int_field(r, "until").unwrap_or(0),
+            ))
+        }) else {
+            let mut sink = [0u8; HASH_LEN];
+            pbkdf2_sha256(code.as_bytes(), DUMMY_SALT, self.iterations, &mut sink);
+            return Err(ClaimError::NoSuchInvite);
+        };
+
+        let mut got = [0u8; HASH_LEN];
+        pbkdf2_sha256(code.as_bytes(), &salt, iterations.max(1), &mut got);
+        if !constant_time_eq(&got, &expected) {
+            return Err(ClaimError::NoSuchInvite);
+        }
+        // Checked AFTER the hash, so an expired invite and a wrong code take
+        // the same time. Told apart in the ANSWER, because a courier whose code
+        // expired needs a new one rather than another attempt.
+        if now_ms >= until {
+            return Err(ClaimError::Expired);
+        }
+        if self.person(id).is_some() {
+            return Err(ClaimError::AlreadyClaimed);
+        }
+        self.upsert_person(id, role, &name, password).map_err(|_| ClaimError::NoSuchInvite)?;
+        self.revoke_invite(id);
+        self.person(id).ok_or(ClaimError::NoSuchInvite)
     }
 
     // ── sessions ────────────────────────────────────────────────────────────
@@ -496,5 +674,162 @@ mod tests {
         r.set_iterations(FAST);
         r.upsert_person("x", Role::Courier, r#"Eni","role":"owner"#, "pw").unwrap();
         assert_eq!(r.person("x").map(|p| p.role), Some(Role::Courier), "role must not move");
+    }
+}
+
+#[cfg(test)]
+mod invite_tests {
+    use super::*;
+
+    /// The uniformity argument above is only true if the alphabet is exactly
+    /// 32 long. A thirty-third character added later would silently bias every
+    /// code the hub ever issues.
+    #[test]
+    fn the_alphabet_is_exactly_thirty_two_and_has_no_confusable_pairs() {
+        assert_eq!(CODE_ALPHABET.len(), 32);
+        for c in [b'0', b'1', b'I', b'O'] {
+            assert!(!CODE_ALPHABET.contains(&c), "{} is confusable", c as char);
+        }
+        let mut seen = CODE_ALPHABET.to_vec();
+        seen.sort_unstable();
+        seen.dedup();
+        assert_eq!(seen.len(), 32, "a repeated character is a biased draw");
+    }
+
+    #[test]
+    fn a_code_is_sixteen_characters_from_that_alphabet() {
+        let code = new_invite_code().unwrap();
+        assert_eq!(code.chars().count(), 16);
+        assert!(code.bytes().all(|b| CODE_ALPHABET.contains(&b)), "{code}");
+        assert_ne!(code, new_invite_code().unwrap(), "two codes must not match");
+    }
+
+    const NOW: i64 = 1_789_000_000_000;
+    const WEEK: i64 = 7 * 24 * 60 * 60 * 1000;
+
+    fn roster() -> Roster {
+        let mut r = Roster::create().unwrap();
+        r.set_iterations(64);
+        r
+    }
+
+    #[test]
+    fn an_invite_becomes_a_person_with_the_password_they_choose() {
+        let mut r = roster();
+        r.create_invite("+355690000001", Role::Courier, "Eni", "CODE1234CODE5678", NOW, WEEK)
+            .unwrap();
+        assert!(r.person("+355690000001").is_none(), "an invite is not yet an account");
+
+        let p = r
+            .claim_invite("+355690000001", "CODE1234CODE5678", "their-own-pw", NOW + 1000)
+            .expect("claim");
+        assert_eq!(p.role, Role::Courier);
+        assert_eq!(p.name, "Eni");
+        assert!(r.authenticate("+355690000001", "their-own-pw").is_some());
+    }
+
+    /// A code that survived its own use would be a second key to somebody
+    /// else's account.
+    #[test]
+    fn a_code_works_once() {
+        let mut r = roster();
+        r.create_invite("+355690000002", Role::Courier, "Blerim", "ONCEONCEONCEONCE", NOW, WEEK)
+            .unwrap();
+        r.claim_invite("+355690000002", "ONCEONCEONCEONCE", "pw", NOW).unwrap();
+        assert_eq!(
+            r.claim_invite("+355690000002", "ONCEONCEONCEONCE", "other-pw", NOW),
+            Err(ClaimError::NoSuchInvite)
+        );
+        // And the first password still works: the second attempt changed nothing.
+        assert!(r.authenticate("+355690000002", "pw").is_some());
+        assert!(r.authenticate("+355690000002", "other-pw").is_none());
+    }
+
+    #[test]
+    fn the_wrong_code_and_no_invite_are_the_same_answer() {
+        let mut r = roster();
+        r.create_invite("+355690000003", Role::Courier, "C", "RIGHTRIGHTRIGHT1", NOW, WEEK)
+            .unwrap();
+        assert_eq!(
+            r.claim_invite("+355690000003", "WRONGWRONGWRONG1", "pw", NOW),
+            Err(ClaimError::NoSuchInvite)
+        );
+        assert_eq!(
+            r.claim_invite("+355699999999", "RIGHTRIGHTRIGHT1", "pw", NOW),
+            Err(ClaimError::NoSuchInvite),
+            "a phone nobody invited must not answer differently"
+        );
+    }
+
+    #[test]
+    fn an_expired_code_says_so_rather_than_failing_silently() {
+        let mut r = roster();
+        r.create_invite("+355690000004", Role::Courier, "C", "EXPIREDEXPIRED12", NOW, WEEK)
+            .unwrap();
+        assert_eq!(
+            r.claim_invite("+355690000004", "EXPIREDEXPIRED12", "pw", NOW + WEEK),
+            Err(ClaimError::Expired)
+        );
+        assert!(r.person("+355690000004").is_none());
+        // Still listed, so the owner can see WHY the courier is stuck.
+        assert_eq!(r.invites().len(), 1);
+    }
+
+    /// Inviting the same phone twice must not leave two live codes for one
+    /// person -- the first one would keep working after the owner believed they
+    /// had replaced it.
+    #[test]
+    fn a_second_invite_replaces_the_first() {
+        let mut r = roster();
+        r.create_invite("+355690000005", Role::Courier, "C", "FIRSTFIRSTFIRST1", NOW, WEEK)
+            .unwrap();
+        r.create_invite("+355690000005", Role::Courier, "C", "SECONDSECONDSEC1", NOW, WEEK)
+            .unwrap();
+        assert_eq!(r.invites().len(), 1);
+        assert_eq!(
+            r.claim_invite("+355690000005", "FIRSTFIRSTFIRST1", "pw", NOW),
+            Err(ClaimError::NoSuchInvite),
+            "the replaced code still worked"
+        );
+        assert!(r.claim_invite("+355690000005", "SECONDSECONDSEC1", "pw", NOW).is_ok());
+    }
+
+    #[test]
+    fn an_invite_cannot_overwrite_an_existing_account() {
+        let mut r = roster();
+        r.upsert_person("+355690000006", Role::Courier, "C", "real-password").unwrap();
+        r.create_invite("+355690000006", Role::Courier, "C", "TAKEOVERTAKEOVER", NOW, WEEK)
+            .unwrap();
+        assert_eq!(
+            r.claim_invite("+355690000006", "TAKEOVERTAKEOVER", "stolen", NOW),
+            Err(ClaimError::AlreadyClaimed)
+        );
+        assert!(r.authenticate("+355690000006", "real-password").is_some());
+    }
+
+    /// The code is a credential and is stored the way credentials are stored.
+    /// A roster image that leaked would otherwise hand over every pending
+    /// account.
+    #[test]
+    fn the_code_is_not_in_the_image() {
+        let mut r = roster();
+        r.create_invite("+355690000007", Role::Courier, "C", "PLAINTEXTSECRET1", NOW, WEEK)
+            .unwrap();
+        let bytes = r.to_bytes().unwrap();
+        let hay = String::from_utf8_lossy(&bytes);
+        assert!(!hay.contains("PLAINTEXTSECRET1"), "the code is readable in the roster image");
+    }
+
+    #[test]
+    fn invites_survive_a_round_trip() {
+        let mut r = roster();
+        r.create_invite("+355690000008", Role::Courier, "Ana", "ROUNDTRIPROUND12", NOW, WEEK)
+            .unwrap();
+        let bytes = r.to_bytes().unwrap();
+        let mut back = Roster::load(&bytes).unwrap();
+        back.set_iterations(64);
+        assert_eq!(back.invites().len(), 1);
+        assert_eq!(back.invites()[0].name, "Ana");
+        assert!(back.claim_invite("+355690000008", "ROUNDTRIPROUND12", "pw", NOW).is_ok());
     }
 }

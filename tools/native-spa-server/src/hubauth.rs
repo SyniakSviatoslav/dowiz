@@ -215,6 +215,98 @@ pub async fn courier_login(State(st): State<Shared>, Json(body): Json<LoginIn>) 
     login_as(&st, &id, &body.password, Role::Courier, true).await
 }
 
+#[derive(Deserialize)]
+pub struct ClaimIn {
+    pub phone: String,
+    pub code: String,
+    pub password: String,
+}
+
+/// `POST /api/courier/auth/claim` — turn an invite into an account.
+///
+/// PUBLIC BY NECESSITY: the courier has no credentials yet, which is the whole
+/// point. What stands in for authentication is the code, and the code is
+/// checked the way a password is -- hashed, constant-time, and costing the same
+/// on a miss as on a hit, so this route cannot be used to discover which phone
+/// numbers have been invited.
+///
+/// The courier chooses their own password here and the hub never sees the
+/// owner's. An owner who set it for them would know it.
+pub async fn courier_claim(State(st): State<Shared>, Json(body): Json<ClaimIn>) -> Response {
+    // Eight characters. Short enough that a courier types it at the door,
+    // long enough that it is not the four-digit PIN everyone would otherwise
+    // pick. The cost of a weak one here is somebody else's shift.
+    if body.password.chars().count() < 8 {
+        return HubHttpError::Invalid("choose a password of at least 8 characters".into())
+            .into_response();
+    }
+    let phone = body.phone.trim().to_string();
+
+    // ── verified OUTSIDE the lock, written inside it ──
+    //
+    // This route is public by necessity, and verifying a code is PBKDF2 at the
+    // production cost. Doing that under the hub's single write lock would let
+    // anyone who can reach the port serialise every write in the hub by posting
+    // wrong codes at it -- a denial of service with no credentials at all.
+    //
+    // So the expensive check runs first on the blocking pool against a READ of
+    // the roster, and only a code that already verified gets to take the lock.
+    // The write then re-runs the same check, because between the two a
+    // concurrent claim could have used the invite; that costs the happy path a
+    // second hash, once in a courier's life, and costs an attacker the lock
+    // never.
+    let (probe_st, probe_phone, probe_code) =
+        (st.clone(), phone.clone(), body.code.clone());
+    let probe = tokio::task::spawn_blocking(move || {
+        let mut roster = probe_st.read_roster()?;
+        // A throwaway password: this call is only asked whether the CODE is
+        // right. The roster it mutates is this local copy and is dropped here.
+        Ok::<_, HubHttpError>(
+            roster
+                .claim_invite(&probe_phone, &probe_code, "probe-only-never-stored", crate::hub::now_ms())
+                .map(|_| ())
+                .map_err(|e| e.as_str().to_string()),
+        )
+    })
+    .await;
+    match probe {
+        Ok(Ok(Ok(()))) => {}
+        Ok(Ok(Err(why))) => return HubHttpError::Invalid(why).into_response(),
+        Ok(Err(e)) => return e.into_response(),
+        Err(e) => return HubHttpError::Io(format!("join: {e}")).into_response(),
+    }
+
+    let person = st
+        .with_roster(move |r| {
+            r.claim_invite(&phone, &body.code, &body.password, crate::hub::now_ms())
+                .map_err(|e| HubHttpError::Invalid(e.as_str().into()))
+        })
+        .await;
+    let person = match person {
+        Ok(p) => p,
+        Err(e) => return e.into_response(),
+    };
+
+    let pid = person.id.clone();
+    let session = match st
+        .with_roster(move |r| {
+            r.open_session(&pid, crate::hub::now_ms())
+                .map_err(|e| HubHttpError::Io(format!("{e:?}")))
+        })
+        .await
+    {
+        Ok(s) => s,
+        Err(e) => return e.into_response(),
+    };
+    let (access, refresh) = issue(&st, &person, &session);
+    // Signed in immediately. Making them claim the code and then type the
+    // password they set ten seconds ago is a step that exists only because the
+    // two things were written separately.
+    Json(json!({ "jwt": access, "refresh_token": refresh,
+                 "courier": { "id": person.id, "name": person.name } }))
+        .into_response()
+}
+
 async fn login_as(st: &Shared, id: &str, password: &str, want: Role, jwt_shape: bool) -> Response {
     // ON THE BLOCKING POOL, not the async runtime. Password verification is
     // 600k iterations of PBKDF2 -- that is the point of it -- and CPU work of
@@ -319,6 +411,7 @@ pub fn routes(state: Shared) -> Router {
         .route("/api/auth/logout", post(logout))
         .route("/api/auth/me", axum::routing::get(me))
         .route("/api/courier/auth/login", post(courier_login))
+        .route("/api/courier/auth/claim", post(courier_claim))
         .route("/api/owner/apikeys", post(create_api_key))
         .route("/api/owner/apikeys", axum::routing::get(list_api_keys))
         .route("/api/owner/apikeys/revoke", post(revoke_api_key))
