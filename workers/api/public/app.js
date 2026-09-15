@@ -20,6 +20,7 @@ const T = {
         checkArea:'Kontrolloni adresën', checking:'Po kontrollojmë…',
         retry:'Provo përsëri', loadFail:'Menuja nuk u ngarkua', loading:'Po ngarkohet…',
         myOrders:'Porositë e mia', noOrders:'Ende asnjë porosi', when:'Kur', asap:'Sa më shpejt',
+        onTable:'Shikoni në tryezë', arScan:'Drejtojeni nga tryeza…', arTap:'Prekni për ta vendosur', arFail:'Nuk u hap',
         later:'Në një orë tjetër', schedFail:'Koha nuk vlen',
         inArea:'Ne dërgojmë këtu', outArea:'Jashtë zonës sonë të dërgesës', noGeo:'Nuk morëm dot vendndodhjen',
         notify:'Merrni njoftime në Telegram', notifyHint:'Ju njoftojmë sa herë ndryshon porosia',
@@ -37,6 +38,7 @@ const T = {
         checkArea:'Check this address', checking:'Checking…',
         retry:'Try again', loadFail:'The menu did not load', loading:'Loading…',
         myOrders:'My orders', noOrders:'No orders yet', when:'When', asap:'As soon as possible',
+        onTable:'See it on your table', arScan:'Point at your table…', arTap:'Tap to place it', arFail:'Could not open',
         later:'At a later time', schedFail:'That time will not work',
         inArea:'We deliver here', outArea:'Outside our delivery area', noGeo:'Could not get your location',
         notify:'Get updates on Telegram', notifyHint:'We\u2019ll message you each time this order moves',
@@ -54,6 +56,7 @@ const T = {
         checkArea:'Перевірити адресу', checking:'Перевіряємо…',
         retry:'Спробувати ще раз', loadFail:'Меню не завантажилось', loading:'Завантажуємо…',
         myOrders:'Мої замовлення', noOrders:'Замовлень ще немає', when:'Коли', asap:'Якнайшвидше',
+        onTable:'Подивитись на столі', arScan:'Наведіть на стіл…', arTap:'Торкніться, щоб поставити', arFail:'Не вдалося відкрити',
         later:'На інший час', schedFail:'Такий час не підходить',
         inArea:'Сюди доставляємо', outArea:'Поза зоною доставки', noGeo:'Не вдалося визначити місце',
         notify:'Сповіщення в Telegram', notifyHint:'Напишемо щоразу, коли статус зміниться',
@@ -353,12 +356,61 @@ function closeSheet(){ $('#sheet').classList.remove('show'); $('#scrim').classLi
 $('#scrim').onclick = closeSheet;
 addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
 
+// "How big is it, actually?"
+//
+// The one question a photograph of food cannot answer. It appears only when the
+// venue has BOTH uploaded a photo and measured the dish, and only on a device
+// that can actually do it — WebXR's immersive-ar is Android Chrome and some
+// headsets, and iOS Safari has none. A button that fails on tap is worse than
+// no button.
+//
+// The module is imported ON DEMAND. A customer scrolling a menu should not pay
+// for a WebGL renderer they will not open.
+async function bindAr(p){
+  const b = document.getElementById('dar');
+  if (!b || !p.imageUrl || !(p.sizeCm > 0)) return;
+  let ar;
+  try { ar = await import('/lib/ar.js'); } catch { return; }
+  if (!await ar.supported()) return;
+
+  b.hidden = false;
+  b.onclick = async () => {
+    const note = document.getElementById('darNote');
+    b.disabled = true;
+    try {
+      await ar.show({
+        imageUrl: p.imageUrl,
+        sizeCm: p.sizeCm,
+        // The sheet stays on screen during the session, so the customer can add
+        // the dish to the basket while looking at it on their table.
+        overlay: document.getElementById('sheet'),
+        onStatus: st => {
+          if (!note) return;
+          note.hidden = false;
+          note.className = 'geo';
+          note.textContent = st === 'ready' ? t('arTap')
+            : st === 'placed' ? `${p.name} · ${p.sizeCm} cm`
+            : t('arScan');
+        },
+        onEnd: () => { b.disabled = false; if (note) note.hidden = true; },
+      });
+    } catch {
+      b.disabled = false;
+      if (note) { note.hidden = false; note.className = 'geo bad'; note.textContent = t('arFail'); }
+    }
+  };
+}
+
 function openDish(p){
   sheet(`<h2>${esc(p.name)}</h2>
     ${p.description ? `<p style="color:var(--brand-text-muted);margin:8px 0 4px">${esc(p.description)}</p>` : ''}
     <div class="row"><span class="dish-price">${money(p.price)}</span>
       <span class="qty"><button id="dm" aria-label="−">−</button><span id="dq">1</span><button id="dp" aria-label="+">+</button></span></div>
-    <button class="btn" id="dadd" style="margin:14px 0">${esc(t('add'))}</button>`);
+    <button class="btn" id="dadd" style="margin:14px 0">${esc(t('add'))}</button>
+    <button class="btn btn-ghost" id="dar" style="margin-bottom:14px" hidden>
+      <i class="ti ti-cube-3d-sphere" aria-hidden="true"></i><span>${esc(t('onTable'))}</span></button>
+    <p id="darNote" class="geo" hidden></p>`);
+  bindAr(p);
   let q = 1;
   $('#dm').onclick = () => { q = Math.max(1, q - 1); $('#dq').textContent = q; };
   $('#dp').onclick = () => { q = Math.min(99, q + 1); $('#dq').textContent = q; };

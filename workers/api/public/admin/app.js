@@ -928,6 +928,10 @@ function menuView(){
       </label>
       <span class="n"><b>${esc(p.name)}</b><small>${p.available ? 'у продажу' : esc(p.unavailableNote || 'зупинено')}</small></span>
       <input type="number" min="0" step="1" value="${p.price}" data-price="${esc(p.id)}" aria-label="Ціна, ${esc(p.name)}">
+      <input type="number" min="3" max="120" step="1" class="size" placeholder="см"
+             value="${p.sizeCm ?? ''}" data-size="${esc(p.id)}"
+             title="Ширина страви в сантиметрах — вмикає перегляд на столі"
+             aria-label="Розмір у см, ${esc(p.name)}">
       <label class="sw" title="У продажу"><input type="checkbox" data-av="${esc(p.id)}" aria-label="У продажу, ${esc(p.name)}" ${p.available ? 'checked' : ''}><span></span></label>
     </div>`);
   }
@@ -951,6 +955,25 @@ function bindMenu(){
       render();
     } catch (e) {
       cell.classList.remove('busy');
+      toast(String(e.message || e));
+    }
+  });
+
+  document.querySelectorAll('[data-size]').forEach(el => el.onchange = async () => {
+    const id = el.dataset.size, raw = el.value.trim();
+    if (!raw) return;                       // clearing is not "set it to zero"
+    const size_cm = parseInt(raw, 10);
+    if (!Number.isFinite(size_cm)) { toast('Некоректний розмір'); return; }
+    try {
+      await api(`/owner/products/${encodeURIComponent(id)}`, { method:'POST',
+        body: JSON.stringify({ location_id: store.loc, size_cm }) });
+      const p = S.products.find(x => x.id === id); if (p) p.sizeCm = size_cm;
+      toast('Розмір збережено');
+    } catch (e) {
+      // Put the old value back: a field showing a size the server refused is a
+      // dish the owner believes is measured and is not.
+      const p = S.products.find(x => x.id === id);
+      el.value = p?.sizeCm ?? '';
       toast(String(e.message || e));
     }
   });

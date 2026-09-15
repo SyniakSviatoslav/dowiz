@@ -234,6 +234,15 @@ fn start_of_day_ms(now: i64) -> i64 {
 pub struct ProductIn {
     #[serde(default)]
     pub available: Option<bool>,
+    /// The dish's real widest dimension, in centimetres.
+    ///
+    /// What makes the AR view answer a question rather than be a novelty: it is
+    /// the number that tells a customer whether the "large" set is actually
+    /// large. Optional, and a dish without one simply has no AR button -- a
+    /// guessed size would answer the question WRONGLY, which is worse than not
+    /// answering it.
+    #[serde(default)]
+    pub size_cm: Option<i64>,
     #[serde(default)]
     pub unavailable_note: Option<String>,
     #[serde(default)]
@@ -249,7 +258,9 @@ pub async fn update_product(
     AxPath(id): AxPath<String>,
     Json(body): Json<ProductIn>,
 ) -> Result<Json<Value>, HubHttpError> {
-    edit_product(&st, &id, body.available, body.unavailable_note, body.price).await.map(Json)
+    edit_product(&st, &id, body.available, body.unavailable_note, body.price, body.size_cm)
+        .await
+        .map(Json)
 }
 
 /// Take a dish off the menu or put it back, shared with the MCP tool.
@@ -259,7 +270,7 @@ pub async fn set_product_availability(
     available: bool,
     note: Option<String>,
 ) -> Result<Value, HubHttpError> {
-    edit_product(st, id, Some(available), note, None).await
+    edit_product(st, id, Some(available), note, None, None).await
 }
 
 async fn edit_product(
@@ -268,12 +279,23 @@ async fn edit_product(
     available: Option<bool>,
     note: Option<String>,
     price: Option<i64>,
+    size_cm: Option<i64>,
 ) -> Result<Value, HubHttpError> {
     if let Some(p) = price {
         // Integer minor units, and a negative price is not a discount, it is a
         // typo that would make the kernel's ledger owe the customer money.
         if p < 0 {
             return Err(HubHttpError::Invalid("price cannot be negative".into()));
+        }
+    }
+    if let Some(cm) = size_cm {
+        // A plate is not two millimetres across and not two metres. Both bounds
+        // are generous; both refuse a typo that would put a dish the size of a
+        // table on someone's table.
+        if !(3..=120).contains(&cm) {
+            return Err(HubHttpError::Invalid(
+                "a dish is between 3 and 120 cm across".into(),
+            ));
         }
     }
     let id = id.to_string();
@@ -294,6 +316,9 @@ async fn edit_product(
         }
         if let Some(price) = price {
             p["price"] = json!(price);
+        }
+        if let Some(cm) = size_cm {
+            p["sizeCm"] = json!(cm);
         }
         cat.set_product(&id, &serde_json::to_string(&p).unwrap_or(raw));
         Ok(p)
@@ -500,10 +525,19 @@ pub async fn import_menu(
             // An EXISTING dish keeps its image. The file has no image column,
             // and re-importing a price list must not blank every photo the
             // owner uploaded.
-            let image = cat
+            // An EXISTING dish keeps its image AND its measured size. The file
+            // has neither column, and re-importing a price list must not blank
+            // every photo the owner uploaded or every size they measured.
+            let existing = cat
                 .product(&p.id)
-                .and_then(|j| serde_json::from_str::<Value>(&j).ok())
+                .and_then(|j| serde_json::from_str::<Value>(&j).ok());
+            let image = existing
+                .as_ref()
                 .and_then(|v| v.get("imageUrl").cloned())
+                .unwrap_or(Value::Null);
+            let size = existing
+                .as_ref()
+                .and_then(|v| v.get("sizeCm").cloned())
                 .unwrap_or(Value::Null);
             cat.set_product(
                 &p.id,
@@ -511,7 +545,7 @@ pub async fn import_menu(
                     "id": p.id, "categoryId": p.category_id, "name": p.name,
                     "description": p.description, "price": p.price,
                     "available": p.available, "sortOrder": p.sort_order,
-                    "imageUrl": image
+                    "imageUrl": image, "sizeCm": size
                 })
                 .to_string(),
             );

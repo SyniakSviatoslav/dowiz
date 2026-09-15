@@ -1759,3 +1759,56 @@ async fn social_posting_is_off_until_switched_on_and_never_publishes_itself() {
     assert_eq!(post(&s.base, "/api/owner/posts/nope/approve", Some(&owner), json!({})).0, 404);
     assert_eq!(post(&s.base, "/api/owner/posts/nope/reject", Some(&owner), json!({})).0, 404);
 }
+
+/// The measurement that makes the AR view answer a question instead of being a
+/// novelty — and the bounds that stop a typo putting a table-sized dish on a
+/// table.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_dish_can_be_measured_and_the_measurement_survives() {
+    let s = boot("size").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+
+    // Absent by default: a dish with no measurement gets no AR button, and a
+    // guessed size would answer the customer's question wrongly.
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    assert_eq!(menu["categories"][0]["products"][0]["sizeCm"], Value::Null);
+
+    let set = |cm: i64| post(&s.base, "/api/owner/products/p1", Some(&owner),
+                             json!({ "size_cm": cm }));
+
+    // A plate is not two millimetres across and not two metres.
+    assert_eq!(set(0).0, 400);
+    assert_eq!(set(2).0, 400);
+    assert_eq!(set(121).0, 400);
+    assert_eq!(set(-5).0, 400);
+    let (code, v) = set(24);
+    assert_eq!(code, 200, "{v}");
+
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    assert_eq!(menu["categories"][0]["products"][0]["sizeCm"], 24);
+
+    // A price change must not blank it.
+    post(&s.base, "/api/owner/products/p1", Some(&owner), json!({ "price": 950 }));
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    assert_eq!(menu["categories"][0]["products"][0]["sizeCm"], 24, "still measured");
+    assert_eq!(menu["categories"][0]["products"][0]["price"], 950);
+
+    // Neither must a re-import from a spreadsheet, which has no size column --
+    // the same rule that protects the photograph.
+    let csv = "Category,Name,Price\nRolls,Sake Futomaki,900\n";
+    let (code, _) = post_text(&s.base, "/api/owner/menu/import?apply=true", &owner, csv);
+    assert_eq!(code, 200);
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    let p1 = menu["categories"].as_array().unwrap().iter()
+        .flat_map(|c| c["products"].as_array().unwrap())
+        .find(|p| p["id"] == "p1")
+        .expect("the seeded dish survives an import");
+    assert_eq!(p1["sizeCm"], 24, "an import must not blank a measurement");
+
+    // Only the owner measures dishes.
+    let (_, c) = post(&s.base, "/api/courier/auth/login", None,
+                      json!({ "phone": "+355691112233", "password": "courier-pw" }));
+    let courier = c["jwt"].as_str().unwrap().to_string();
+    assert_eq!(post(&s.base, "/api/owner/products/p1", Some(&courier), json!({ "size_cm": 30 })).0, 403);
+}

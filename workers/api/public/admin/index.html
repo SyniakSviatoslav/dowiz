@@ -299,6 +299,11 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
 /* Drafts. Each is one card with the FACT above the words, so the owner can see
    what it is about before reading what it says -- and can tell at a glance that
    dowiz did not invent the subject. */
+/* The size field sits beside the price and is visibly optional: narrower, and
+   empty by default rather than pre-filled with a guess. */
+.prod .size{width:5rem;flex:0 0 auto}
+.prod .size::placeholder{color:var(--brand-text-muted)}
+
 .posts{display:grid;gap:var(--space-3)}
 .post{border:1px solid var(--brand-border);border-radius:var(--radius-md);
        padding:var(--space-3);display:grid;gap:var(--space-2);background:var(--brand-surface)}

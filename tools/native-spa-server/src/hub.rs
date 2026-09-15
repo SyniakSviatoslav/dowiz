@@ -355,7 +355,10 @@ pub async fn menu(State(st): State<Shared>, _slug: Option<AxPath<String>>) -> Re
                         "price": p.get("price").cloned().unwrap_or(json!(0)),
                         "available": p.get("available").and_then(|x| x.as_bool()).unwrap_or(true),
                         "unavailableNote": p.get("unavailableNote").cloned().unwrap_or(Value::Null),
-                        "imageUrl": p.get("imageUrl").cloned().unwrap_or(Value::Null)
+                        "imageUrl": p.get("imageUrl").cloned().unwrap_or(Value::Null),
+                        // The real size, for the AR view. Absent means no AR
+                        // button on that dish -- see the owner surface.
+                        "sizeCm": p.get("sizeCm").cloned().unwrap_or(Value::Null)
                     }),
                 )
             })
