@@ -29,4 +29,15 @@ serde_json = "1"
 opt-level = "z"
 lto = true
 codegen-units = 1
-strip = true
+# strip MUST stay false. With `strip = true` wasm-bindgen dies with
+#   error: failed to generate catch wrappers
+#   Caused by: externref table required for catch wrappers
+# because stripping removes the sections it needs to place the externref table
+# that the panic-recovery catch wrappers stand on. Measured, not guessed: a build
+# with strip=true plus `--growable-table`/`--export-table` link args still failed,
+# and a build with strip=false and NO extra link args succeeded -- so strip is the
+# whole cause and those link args are not needed. The alternative is
+# `worker-build --no-panic-recovery`, which drops automatic reinitialisation after
+# a WebAssembly.RuntimeError; keeping the symbols is cheaper than losing that.
+# Bundle after wasm-opt: ~447 KB wasm + 22 KB JS against a 64 MiB limit.
+strip = false

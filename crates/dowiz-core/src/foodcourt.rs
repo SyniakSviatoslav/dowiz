@@ -316,6 +316,10 @@ mod tests {
             cash_pay_with: None,
             price_trusted: true,
             ledger: vec![],
+            fulfilment: Default::default(),
+            contact: Default::default(),
+            scheduled_for_ms: None,
+            courier_id: None,
         }
     }
 

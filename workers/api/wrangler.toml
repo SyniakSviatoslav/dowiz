@@ -4,6 +4,12 @@ name = "dowiz-api"
 main = "build/worker/shim.mjs"
 compatibility_date = "2026-09-15"
 
+# account_id is deliberately NOT committed here. wrangler needs it in a
+# non-interactive shell, but this repo carries a licence and may be public, so it
+# is supplied as CLOUDFLARE_ACCOUNT_ID alongside the API token (both live outside
+# the tree, mode 0600). Deploy with:
+#   . /root/.cf_token && PATH="$HOME/.cargo/bin:$PATH" npx wrangler deploy
+
 [build]
 command = "worker-build --release"
 

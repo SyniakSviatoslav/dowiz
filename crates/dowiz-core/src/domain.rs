@@ -48,6 +48,54 @@ pub struct OrderItem {
     pub currency: Currency,
 }
 
+/// A delivery destination. `line` is the free text a courier reads at the door.
+///
+/// The optional geocode is INTEGER micro-degrees (1e-6 deg), not `f64`: a folded
+/// order must replay byte-identically on every node (MANIFESTO C2), and floats in
+/// the aggregate would make that depend on rounding. The `f64` conversion belongs
+/// at the `geo::` boundary, which is where the kinematics already live.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DeliveryAddress {
+    pub line: String,
+    /// Entrance, floor, door code — whatever the courier needs to finish the leg.
+    pub note: Option<String>,
+    pub lat_udeg: Option<i32>,
+    pub lon_udeg: Option<i32>,
+}
+
+/// How the order reaches the customer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Fulfilment {
+    /// Courier delivery. `fee` is integer minor units in the order's currency —
+    /// the same money law as every other amount here, and exactly the value
+    /// `Order::recompute_total`'s `fee` slot has been waiting for: that parameter
+    /// existed while nothing on the aggregate could supply it.
+    Delivery { address: DeliveryAddress, fee: i64 },
+    /// Customer collects at the venue; `code` is what they show at the counter.
+    Pickup { code: String },
+}
+
+impl Default for Fulfilment {
+    /// Pickup with an empty code — the shape that claims nothing. An order that
+    /// never had fulfilment attached must not silently present as a delivery to
+    /// an address it does not have.
+    fn default() -> Self {
+        Fulfilment::Pickup {
+            code: String::new(),
+        }
+    }
+}
+
+/// How the venue and the courier reach the customer. `phone` is plain text the
+/// domain never parses — number formatting is a presentation concern — but it is
+/// not optional in shape, because it is the fallback channel when the platform
+/// is unreachable and the settlement channel for cash on delivery.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Contact {
+    pub phone: String,
+    pub name: Option<String>,
+}
+
 /// The Order aggregate. Status enum is `crate::order_machine::OrderStatus` — kept
 /// byte-for-byte identical to the oracle `OrderStatusEnum` (legacy.ts).
 ///
@@ -75,6 +123,21 @@ pub struct Order {
     /// (Earn legs + their Reversals). A compensated order's entries sum to EXACTLY zero.
     /// Empty until the first earn leg is posted (typically at `Confirmed`).
     pub ledger: Vec<LedgerEntry>,
+    /// Where the order is going, and what the delivery leg costs. Defaults to
+    /// `Pickup` so an order that never went through checkout cannot pretend to
+    /// have an address.
+    pub fulfilment: Fulfilment,
+    /// How to reach the customer. Empty until a checkout supplies it.
+    pub contact: Contact,
+    /// Unix ms the customer asked for, when the order is scheduled rather than ASAP.
+    pub scheduled_for_ms: Option<i64>,
+    /// The courier carrying this order. `None` until the owner assigns one.
+    ///
+    /// Deliberately an IDENTITY and nothing else: the `no-courier-scoring` CI job
+    /// fails the build if a `courier_score`/`rating`/`reputation` identifier appears
+    /// in this crate, and the routing enums omit `Ord` so a ranking router is not
+    /// representable. Assignment is a capability, never a score.
+    pub courier_id: Option<String>,
 }
 
 impl Order {
@@ -191,6 +254,11 @@ pub fn place_order(
         // `vendor_id` is the default single-vendor key (no reserved sentinel).
         price_trusted: false,
         ledger: Vec::new(),
+        // Checkout attaches these; construction commits to nothing.
+        fulfilment: Fulfilment::default(),
+        contact: Contact::default(),
+        scheduled_for_ms: None,
+        courier_id: None,
     })
 }
 
@@ -239,6 +307,11 @@ pub fn place_order_priced(
         // Every unit_price came from the trusted catalog → TRUSTED.
         price_trusted: true,
         ledger: Vec::new(),
+        // Checkout attaches these; construction commits to nothing.
+        fulfilment: Fulfilment::default(),
+        contact: Contact::default(),
+        scheduled_for_ms: None,
+        courier_id: None,
     })
 }
 

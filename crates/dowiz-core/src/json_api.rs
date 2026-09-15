@@ -130,6 +130,14 @@ fn order_from_json(json: &str) -> Result<Order, String> {
         // did not carry the trust flag → conservatively UNTRUSTED (fail-closed).
         price_trusted: false,
         ledger: Vec::new(),
+        // This path reconstructs an order from an untrusted JS-boundary payload
+        // that does not carry fulfilment/contact. Reconstructing them as absent
+        // is the fail-closed choice: a rehydrated order must not invent an
+        // address, a phone, or an assigned courier it was never given.
+        fulfilment: crate::domain::Fulfilment::default(),
+        contact: crate::domain::Contact::default(),
+        scheduled_for_ms: None,
+        courier_id: None,
     })
 }
 
