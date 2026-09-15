@@ -659,6 +659,8 @@ pub fn routes(state: Shared) -> Router {
         .route("/api/owner/settings", post(set_setting))
         .route("/api/owner/assist", post(owner_assist))
         .route("/api/owner/zones", post(set_zones))
+        .route("/api/owner/products/{id}/image", post(set_product_image))
+        .route("/api/owner/products/{id}/image/clear", post(clear_product_image))
         .route("/api/public/reach", get(public_reach))
         .with_state(state)
 }
@@ -913,4 +915,62 @@ pub async fn public_reach(
         }),
     };
     Ok(Json(out))
+}
+
+// ── photographs ──────────────────────────────────────────────────────────────
+
+/// `POST /api/owner/products/{id}/image` — the body is the image itself.
+///
+/// RAW BODY rather than multipart, for the same reason the menu import takes
+/// raw CSV: the admin pane already has the bytes in hand after re-encoding them
+/// on a canvas, and a multipart parser would be a dependency and an attack
+/// surface added for nothing.
+pub async fn set_product_image(
+    State(st): State<Shared>,
+    _who: OwnerCaller,
+    AxPath(id): AxPath<String>,
+    body: axum::body::Bytes,
+) -> Result<Json<Value>, HubHttpError> {
+    // The product must exist BEFORE a file is written, or a typo in an id
+    // leaves an orphan blob nothing will ever reference or clean up.
+    if st.read_catalog()?.product(&id).is_none() {
+        return Err(HubHttpError::NotFound("product"));
+    }
+    let stored = st.put_media(&body)?;
+    let url = stored.url();
+
+    let (id2, url2) = (id.clone(), url.clone());
+    st.with_catalog(move |cat| {
+        let raw = cat.product(&id2).ok_or(HubHttpError::NotFound("product"))?;
+        let mut p: Value =
+            serde_json::from_str(&raw).map_err(|_| HubHttpError::Corrupt("catalogue product"))?;
+        // The PREVIOUS image is not deleted. Another product may reference the
+        // same bytes -- content addressing makes that likely, not rare -- and
+        // an order placed an hour ago still names the dish it was sold as.
+        // Reclaiming unreferenced blobs is a sweep, not a side effect of an
+        // edit.
+        p["imageUrl"] = json!(url2);
+        cat.set_product(&id2, &serde_json::to_string(&p).unwrap_or(raw));
+        Ok(())
+    })
+    .await?;
+
+    Ok(Json(json!({ "imageUrl": url, "bytes": stored.bytes, "type": stored.kind.mime() })))
+}
+
+/// `DELETE`-shaped: `POST /api/owner/products/{id}/image/clear`.
+pub async fn clear_product_image(
+    State(st): State<Shared>,
+    _who: OwnerCaller,
+    AxPath(id): AxPath<String>,
+) -> Result<Json<Value>, HubHttpError> {
+    st.with_catalog(move |cat| {
+        let raw = cat.product(&id).ok_or(HubHttpError::NotFound("product"))?;
+        let mut p: Value =
+            serde_json::from_str(&raw).map_err(|_| HubHttpError::Corrupt("catalogue product"))?;
+        p["imageUrl"] = Value::Null;
+        cat.set_product(&id, &serde_json::to_string(&p).unwrap_or(raw));
+        Ok(Json(json!({ "imageUrl": Value::Null })))
+    })
+    .await
 }

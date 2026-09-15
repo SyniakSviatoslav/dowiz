@@ -160,6 +160,47 @@ fn post_text(base: &str, path: &str, token: &str, text: &str) -> (u16, Value) {
     (code, serde_json::from_str(body.trim()).unwrap_or(Value::Null))
 }
 
+/// POST raw bytes with a chosen content type -- image uploads.
+fn request_bytes(base: &str, method: &str, path: &str, token: Option<&str>, ctype: &str, body: &[u8]) -> (u16, Value) {
+    use std::io::{Read, Write};
+    let mut s = std::net::TcpStream::connect(base.trim_start_matches("http://")).expect("connect");
+    s.set_read_timeout(Some(Duration::from_secs(30))).ok();
+    let mut head = format!(
+        "{method} {path} HTTP/1.1\r\nHost: h\r\nConnection: close\r\nContent-Type: {ctype}\r\nContent-Length: {}\r\n",
+        body.len()
+    );
+    if let Some(t) = token {
+        head.push_str(&format!("Authorization: Bearer {t}\r\n"));
+    }
+    head.push_str("\r\n");
+    s.write_all(head.as_bytes()).expect("head");
+    s.write_all(body).expect("body");
+    let mut raw = Vec::new();
+    s.read_to_end(&mut raw).expect("read");
+    let t = String::from_utf8_lossy(&raw);
+    let (h, b) = t.split_once("\r\n\r\n").unwrap_or((&t, ""));
+    let code = h.lines().next().and_then(|l| l.split_whitespace().nth(1))
+        .and_then(|c| c.parse().ok()).unwrap_or(0);
+    (code, serde_json::from_str(b.trim()).unwrap_or(Value::Null))
+}
+
+/// GET returning the raw headers and body -- the served image is bytes, not JSON.
+fn raw_get(base: &str, path: &str) -> (u16, String, Vec<u8>) {
+    use std::io::{Read, Write};
+    let mut s = std::net::TcpStream::connect(base.trim_start_matches("http://")).expect("connect");
+    s.set_read_timeout(Some(Duration::from_secs(30))).ok();
+    s.write_all(format!("GET {path} HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n").as_bytes())
+        .expect("write");
+    let mut raw = Vec::new();
+    s.read_to_end(&mut raw).expect("read");
+    let split = raw.windows(4).position(|w| w == b"\r\n\r\n").unwrap_or(raw.len());
+    let headers = String::from_utf8_lossy(&raw[..split]).to_string();
+    let code = headers.lines().next().and_then(|l| l.split_whitespace().nth(1))
+        .and_then(|c| c.parse().ok()).unwrap_or(0);
+    let body = raw.get(split + 4..).unwrap_or(&[]).to_vec();
+    (code, headers, body)
+}
+
 fn login(base: &str, id: &str, pw: &str) -> (u16, Value) {
     post(base, "/api/auth/login", None, json!({ "email": id, "password": pw }))
 }
@@ -1464,4 +1505,82 @@ async fn a_couriers_voice_is_scoped_to_their_own_run() {
     let (_, v) = say(&eni, "почати зміну", None);
     let enis_token = v["token"].as_str().unwrap().to_string();
     assert_eq!(say(&blerim, "", Some(&enis_token)).0, 409, "a proposal is bound to its speaker");
+}
+
+/// Photographs: stored by content, served immutably, and impossible to use as
+/// a way to read anything else on the box.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_dish_photograph_is_stored_by_its_content() {
+    let s = boot("media").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+
+    // A minimal but real JPEG header, which is what the sniffer decides on.
+    let mut jpeg = vec![0xFFu8, 0xD8, 0xFF, 0xE0];
+    jpeg.extend_from_slice(b"\x00\x10JFIF\x00\x01");
+    jpeg.extend(std::iter::repeat_n(0x42u8, 512));
+
+    let up = |id: &str, body: &[u8], tok: Option<&str>| {
+        request_bytes(&s.base, "POST", &format!("/api/owner/products/{id}/image"), tok, "image/jpeg", body)
+    };
+
+    // A product that does not exist must not leave an orphan blob behind.
+    assert_eq!(up("nope", &jpeg, Some(&owner)).0, 404);
+
+    let (code, v) = up("p1", &jpeg, Some(&owner));
+    assert_eq!(code, 200, "{v}");
+    let url = v["imageUrl"].as_str().expect("imageUrl").to_string();
+    assert!(url.starts_with("/media/") && url.ends_with(".jpg"), "{url}");
+    assert_eq!(v["type"], "image/jpeg");
+
+    // The same bytes again give the SAME name -- content addressing.
+    let (_, again) = up("p1", &jpeg, Some(&owner));
+    assert_eq!(again["imageUrl"], url.as_str());
+
+    // It reaches the storefront menu.
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    assert_eq!(menu["categories"][0]["products"][0]["imageUrl"], url.as_str());
+
+    // And it is served, publicly, with the headers content addressing earns.
+    let (code, headers, body) = raw_get(&s.base, &url);
+    assert_eq!(code, 200);
+    assert_eq!(body, jpeg, "the bytes must come back unchanged");
+    let h = headers.to_lowercase();
+    assert!(h.contains("content-type: image/jpeg"), "{headers}");
+    assert!(h.contains("immutable"), "content-addressed bytes can be cached forever: {headers}");
+    assert!(h.contains("nosniff"), "the type came from the bytes; the browser must not re-guess");
+
+    // An SVG is a document that can carry script. It is not an image.
+    let svg = b"<svg xmlns=\"http://www.w3.org/2000/svg\"><script>alert(1)</script></svg>";
+    assert_eq!(up("p1", svg, Some(&owner)).0, 400);
+    let html = b"<!DOCTYPE html><html><body>not an image at all</body></html>";
+    assert_eq!(up("p1", html, Some(&owner)).0, 400);
+
+    // Nothing but a digest can be named on the serving path.
+    for bad in [
+        "/media/../../signing.key",
+        "/media/orders.store",
+        "/media/signing.key",
+        "/media/aaaa.jpg",
+        &format!("/media/{}.svg", "a".repeat(64)),
+        &format!("/media/{}.jpg", "a".repeat(64)),
+    ] {
+        let (code, _, _) = raw_get(&s.base, bad);
+        assert!(code == 404 || code == 400, "{bad} answered {code}");
+    }
+
+    // Only the owner may upload.
+    assert_eq!(up("p1", &jpeg, None).0, 401);
+    let (_, c) = post(&s.base, "/api/courier/auth/login", None,
+                      json!({ "phone": "+355691112233", "password": "courier-pw" }));
+    let courier = c["jwt"].as_str().unwrap().to_string();
+    assert_eq!(up("p1", &jpeg, Some(&courier)).0, 403);
+
+    // Clearing removes the reference; the bytes stay, because another product
+    // may share them and a past order still names what it was sold.
+    let (code, v) = post(&s.base, "/api/owner/products/p1/image/clear", Some(&owner), json!({}));
+    assert_eq!(code, 200, "{v}");
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    assert_eq!(menu["categories"][0]["products"][0]["imageUrl"], Value::Null);
+    assert_eq!(raw_get(&s.base, &url).0, 200, "the file itself must survive a reference being cleared");
 }

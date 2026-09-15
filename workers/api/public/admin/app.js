@@ -644,6 +644,49 @@ async function renderKeys(){
   });
 }
 
+// Re-encode a photograph in the browser before it is uploaded.
+//
+// THREE THINGS HAPPEN HERE, and the second is the one worth stating plainly:
+//
+//   1. The image is capped at 1600px on its long edge, which turns a 6 MB
+//      camera original into something around 300 KB. The venue's own phone does
+//      the work rather than their VPS.
+//   2. EXIF IS STRIPPED, because a canvas re-encode carries no metadata. A
+//      photo taken in the kitchen with a phone carries GPS coordinates, the
+//      device model and a timestamp; publishing that on a public menu page
+//      would hand anyone the restaurant's exact position and their staff's
+//      phone. Nobody asks for this and it happens by default everywhere else.
+//   3. It becomes a JPEG regardless of what it started as, so one format
+//      reaches the hub and the hub's sniffer has one less thing to be right
+//      about.
+//
+// A failure here REJECTS rather than falling back to the original bytes: the
+// fallback would be the unresized, EXIF-carrying file, which is exactly what
+// this exists to prevent.
+function shrinkImage(file, max = 1600, quality = 0.82){
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        const ctx = c.getContext('2d');
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, w, h);
+        c.toBlob(b => b ? resolve(b) : reject(new Error('Не вдалося обробити зображення')),
+                 'image/jpeg', quality);
+      } catch (e) { reject(e); }
+      finally { URL.revokeObjectURL(url); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Це не зображення')); };
+    img.src = url;
+  });
+}
+
 function bindSetup(){
   let csvText = null;
   renderSettings();
@@ -791,6 +834,13 @@ function menuView(){
       out.push(`<div class="panel"><h2 class="panel-h"><i class="ti ti-category i" aria-hidden="true"></i>${esc(cat)}</h2>`);
     }
     out.push(`<div class="prod ${p.available ? '' : 'off'}">
+      <label class="pic" title="Фото страви">
+        ${p.imageUrl
+          ? `<img src="${esc(p.imageUrl)}" alt="" loading="lazy" decoding="async" width="44" height="44">`
+          : `<i class="ti ti-camera-plus i" aria-hidden="true"></i>`}
+        <input type="file" accept="image/*" data-pic="${esc(p.id)}">
+        <span class="sr">Фото: ${esc(p.name)}</span>
+      </label>
       <span class="n"><b>${esc(p.name)}</b><small>${p.available ? 'у продажу' : esc(p.unavailableNote || 'зупинено')}</small></span>
       <input type="number" min="0" step="1" value="${p.price}" data-price="${esc(p.id)}" aria-label="Ціна, ${esc(p.name)}">
       <label class="sw" title="У продажу"><input type="checkbox" data-av="${esc(p.id)}" aria-label="У продажу, ${esc(p.name)}" ${p.available ? 'checked' : ''}><span></span></label>
@@ -800,6 +850,26 @@ function menuView(){
   return out.join('');
 }
 function bindMenu(){
+  document.querySelectorAll('[data-pic]').forEach(el => el.onchange = async () => {
+    const file = el.files?.[0]; if (!file) return;
+    const id = el.dataset.pic, cell = el.closest('.pic');
+    cell.classList.add('busy');
+    try {
+      const blob = await shrinkImage(file);
+      // The re-encoded BLOB, not the original file. Sending the original would
+      // undo both the resize and the EXIF strip.
+      const d = await api(`/owner/products/${encodeURIComponent(id)}/image`, {
+        method:'POST', headers:{ 'content-type':'image/jpeg' }, body: blob });
+      const p = S.products.find(x => x.id === id);
+      if (p) p.imageUrl = d.imageUrl;
+      toast('Фото збережено');
+      render();
+    } catch (e) {
+      cell.classList.remove('busy');
+      toast(String(e.message || e));
+    }
+  });
+
   document.querySelectorAll('[data-av]').forEach(el => el.onchange = async () => {
     const id = el.dataset.av, available = el.checked;
     let note = null;

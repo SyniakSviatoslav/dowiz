@@ -45,6 +45,9 @@ pub struct HubPaths {
     pub subs: PathBuf,
     pub roster: PathBuf,
     pub settings: PathBuf,
+    /// Photographs. A DIRECTORY, not a store: see `dowiz_hub::media` for why
+    /// blobs do not belong in a layout that rewrites itself on every write.
+    pub media: PathBuf,
     /// The token signing key. A FILE and not a store, because it must be
     /// readable before any store is opened and must never travel with a backup
     /// of the data.
@@ -59,6 +62,7 @@ impl HubPaths {
             subs: dir.join("subs.store"),
             roster: dir.join("roster.store"),
             settings: dir.join("settings.store"),
+            media: dir.join("media"),
             key: dir.join("signing.key"),
         }
     }
@@ -117,6 +121,7 @@ impl HubState {
             std::fs::write(&paths.roster, bytes)?;
         }
         let signing_key = load_or_create_key(&paths.key)?;
+        std::fs::create_dir_all(&paths.media)?;
         if !paths.settings.exists() {
             let mut st = Settings::create().map_err(io_err)?;
             let bytes = st.to_bytes().map_err(io_err)?;
@@ -894,6 +899,31 @@ impl HubState {
             .unwrap_or_default()
     }
 
+    /// Store an image and return the reference the catalogue keeps.
+    ///
+    /// Content-addressed, so storing the same photo twice writes nothing the
+    /// second time -- the file is already there under the same name, with the
+    /// same bytes, and rewriting it would only risk truncating a file a request
+    /// is currently reading.
+    pub fn put_media(&self, bytes: &[u8]) -> Result<dowiz_hub::media::Stored, HubHttpError> {
+        let stored = dowiz_hub::media::prepare(bytes)
+            .map_err(|e| HubHttpError::Invalid(e.to_string()))?;
+        let path = self.paths.media.join(stored.filename());
+        if !path.exists() {
+            atomic_write(&path, bytes)?;
+        }
+        Ok(stored)
+    }
+
+    /// Read an image back by the name in its URL.
+    pub fn get_media(&self, name: &str) -> Option<(Vec<u8>, dowiz_hub::media::Kind)> {
+        // The name is validated by SHAPE before it touches the filesystem, so
+        // no traversal can be expressed -- see `media::parse_name`.
+        let (digest, kind) = dowiz_hub::media::parse_name(name)?;
+        let path = self.paths.media.join(format!("{digest}.{}", kind.extension()));
+        std::fs::read(path).ok().map(|b| (b, kind))
+    }
+
     pub fn read_settings(&self) -> Result<Settings, HubHttpError> {
         let bytes =
             std::fs::read(&self.paths.settings).map_err(|e| HubHttpError::Io(e.to_string()))?;
@@ -1247,6 +1277,7 @@ pub fn routes(state: Shared) -> Router {
         .route("/api/order/{id}/subscribe", post(subscribe_order))
         .route("/api/hub/staff/subscribe", post(subscribe_staff))
         .route("/api/hub/staff/unsubscribe", post(unsubscribe_staff))
+        .route("/media/{name}", get(media))
         .with_state(state)
 }
 
@@ -1492,5 +1523,33 @@ mod notify_tests {
         assert!(st.handle_inbound_text("55501", "two sushi please").await.is_none());
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+/// `GET /media/{name}` — serve a stored photograph.
+///
+/// PUBLIC, and it has to be: these are the pictures on a restaurant's menu.
+/// What makes that safe is that the only thing addressable here is a sha256 of
+/// bytes this hub itself stored, under a type its own sniffer decided.
+///
+/// `immutable` with a year's max-age, which content addressing earns honestly:
+/// the bytes behind a digest cannot change, so a browser that has one never
+/// needs to ask again. `nosniff` because the type came from the bytes and the
+/// browser must not second-guess it.
+pub async fn media(
+    State(st): State<Shared>,
+    AxPath(name): AxPath<String>,
+) -> Response {
+    match st.get_media(&name) {
+        Some((bytes, kind)) => (
+            [
+                (axum::http::header::CONTENT_TYPE, kind.mime()),
+                (axum::http::header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+                (axum::http::header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+            ],
+            bytes,
+        )
+            .into_response(),
+        None => (StatusCode::NOT_FOUND, "no such image").into_response(),
     }
 }

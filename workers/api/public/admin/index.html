@@ -268,6 +268,25 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
 .order.sk{pointer-events:none}
 .order.sk .o-h{display:flex;align-items:center;gap:var(--space-2)}
 
+/* The dish photograph, in the menu row.
+   A fixed 44px square with an aspect-ratio so the row never changes height
+   between a dish that has a photo and one that does not -- a menu that jumps as
+   images load is a menu the owner loses their place in. The whole cell is the
+   file input's label, so the tap target is the picture itself. */
+.prod .pic{position:relative;flex:0 0 auto;width:44px;height:44px;
+       display:grid;place-items:center;overflow:hidden;cursor:pointer;
+       border:1px solid var(--brand-border);border-radius:var(--radius-md);
+       background:var(--brand-surface-raised);color:var(--brand-text-muted)}
+.prod .pic img{width:100%;height:100%;object-fit:cover;aspect-ratio:1}
+.prod .pic input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.prod .pic:hover{border-color:var(--brand-primary)}
+.prod .pic:focus-within{outline:2px solid var(--focus-ring);outline-offset:2px}
+.prod .pic.busy{opacity:.5;cursor:progress}
+.prod .pic.busy::after{content:"";position:absolute;width:18px;height:18px;
+       border:2px solid var(--brand-primary);border-right-color:transparent;
+       border-radius:var(--radius-full);animation:spin .8s linear infinite}
+@media (prefers-reduced-motion:reduce){.prod .pic.busy::after{animation:none}}
+
 .setup .keys{margin:0;padding:0;list-style:none;display:grid;gap:var(--space-1)}
 .setup .keys li{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);
        min-height:var(--tap);padding:0 var(--space-3);border:1px solid var(--brand-border);
