@@ -30,6 +30,7 @@ pub mod media;
 pub mod minijson;
 pub mod modifiers;
 pub mod palette;
+pub mod activation;
 pub mod allergens;
 pub mod post;
 pub mod promo;

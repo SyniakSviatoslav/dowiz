@@ -304,6 +304,12 @@ pub struct FulfilmentIn {
     pub kind: String,
     #[serde(default)]
     pub address: Option<AddressIn>,
+    /// What the customer wants the venue to know. For a DELIVERY this rides on
+    /// the address, where the courier reads it; a pickup has no address, so
+    /// without this field the note was silently dropped -- the customer typed
+    /// "I will be there at eight, under Ana" and nobody ever saw it.
+    #[serde(default)]
+    pub note: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -441,6 +447,10 @@ pub async fn menu(State(st): State<Shared>, _slug: Option<AxPath<String>>) -> Re
                 else if !scheduled_open { json!("hours") }
                 else { Value::Null },
             "deliveryEta": loc.get("delivery_eta").cloned().unwrap_or(json!("30-45")),
+            // Whether the customer may come and collect. The hub has accepted
+            // pickup orders since the beginning; until now the storefront had
+            // no way to offer one, so the capability was unreachable.
+            "pickup": loc.get("pickup").and_then(Value::as_bool).unwrap_or(false),
             "deliveryFee": loc.get("delivery_fee").cloned().unwrap_or(json!(0)),
             "freeDeliveryThreshold": loc.get("free_delivery_threshold").cloned().unwrap_or(Value::Null),
             "minOrder": loc.get("min_order").cloned().unwrap_or(json!(0)),
@@ -734,6 +744,9 @@ pub async fn place(
     envelope["contact"] = json!({ "name": body.contact.name, "phone": body.contact.phone });
     envelope["fulfilment"] = json!({
         "kind": body.fulfilment.kind,
+        "note": body.fulfilment.note.as_deref()
+            .map(str::trim).filter(|n| !n.is_empty())
+            .map(|n| json!(n)).unwrap_or(Value::Null),
         "address": body.fulfilment.address.as_ref().map(|a| json!({
             "line": a.line, "note": a.note,
             "lat_udeg": a.lat_udeg, "lon_udeg": a.lon_udeg
@@ -1518,7 +1531,19 @@ pub fn staff_message(envelope: &Value) -> String {
                 out.push_str(&format!("\n  ↳ {}", esc(note)));
             }
         }
-        _ => out.push_str("\n🏠 Pickup"),
+        _ => {
+            out.push_str("\n🏠 Pickup");
+            // The pickup note reaches the kitchen ticket, which is the only
+            // place anybody would read it. It had nowhere to live until now.
+            if let Some(note) = envelope
+                .get("fulfilment")
+                .and_then(|f| f.get("note"))
+                .and_then(Value::as_str)
+                .filter(|n| !n.trim().is_empty())
+            {
+                out.push_str(&format!("\n  ↳ {}", esc(note)));
+            }
+        }
     }
     if let Some(c) = envelope.get("contact") {
         let name = c.get("name").and_then(Value::as_str).unwrap_or("");

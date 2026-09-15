@@ -403,6 +403,56 @@ function bindStats(){
   const r = $('#retryStats'); if (r) r.onclick = () => loadAnalytics();
 }
 
+// ── activation ──────────────────────────────────────────────────────────────
+//
+// The same three facts the hub gates on, shown before the owner presses open
+// rather than as a refusal after. The list is read from the hub, never worked
+// out here: two copies of a rule are two rules, and the one on the screen is
+// always the one that goes stale.
+async function loadActivation(){
+  const box = $('#actList'); if (!box) return;
+  try {
+    const a = await api('/owner/activation');
+    S.activation = a;
+    const done = k => !a.missing.some(m => m.key === k);
+    const rows = [
+      ['menu', 'Є що продати', `${a.facts.sellableDishes} страв у продажу`],
+      ['notifications', 'Є кому почути', a.facts.telegramChats
+        ? `Telegram: ${a.facts.telegramChats}` : a.facts.hasVenuePhone ? 'телефон закладу' : ''],
+      ['fulfilment', 'Є як віддати', [a.facts.deliveryConfigured && 'доставка',
+        a.facts.pickupEnabled && 'самовивіз'].filter(Boolean).join(' · ')],
+    ];
+    box.innerHTML = rows.map(([key, label, detail]) => {
+      const ok = done(key);
+      const why = a.missing.find(m => m.key === key)?.why || '';
+      return `<div class="erow">
+        <span><i class="ti ti-${ok ? 'circle-check' : 'circle-dashed'} i"
+                 aria-hidden="true"></i> ${label}
+          ${detail ? `<br><small class="hint">${esc(detail)}</small>` : ''}
+          ${ok ? '' : `<br><small class="hint">${esc(why)}</small>`}</span>
+        <span class="chip ${ok ? 'ok' : 'warn'}">${ok ? 'готово' : 'бракує'}</span>
+      </div>`;
+    }).join('');
+    const ph = $('#vnPhone'), pk = $('#vnPickup');
+    if (ph && !ph.value) ph.value = S.venue?.phone || '';
+    if (pk) pk.checked = Boolean(a.facts.pickupEnabled);
+  } catch (e) { box.innerHTML = `<p class="hint">${esc(String(e.message || e))}</p>`; }
+}
+
+function bindActivation(){
+  if (!$('#vnSave')) return;
+  loadActivation();
+  $('#vnSave').onclick = async () => {
+    const err = $('#vnErr'); err.hidden = true;
+    try {
+      await api('/owner/location',
+        { phone: $('#vnPhone').value.trim(), pickup: $('#vnPickup').checked });
+      toast('Збережено');
+      loadActivation();
+    } catch (e) { err.hidden = false; err.textContent = String(e.message || e); }
+  };
+}
+
 // ── couriers ────────────────────────────────────────────────────────────────
 //
 // People and pending invites in ONE list. An owner asking who delivers for them
@@ -839,6 +889,23 @@ function setupView(){
   return `
   <div class="panel setup">
     <section class="card">
+      <h2>Заклад</h2>
+      <p class="hint">Три речі, без яких замовлення не має сенсу: є що продати,
+         є кому почути замовлення, є як його віддати. Поки бракує хоч однієї —
+         заклад не відчиняється.</p>
+      <div id="actList" class="elist"></div>
+      <div class="row">
+        <input id="vnPhone" class="ask" type="tel" inputmode="tel" placeholder="Телефон закладу"
+               autocomplete="off" aria-label="Телефон закладу">
+        <label class="check"><input type="checkbox" id="vnPickup">
+          <span>Можна забрати самому</span></label>
+        <button class="btn" id="vnSave">
+          <i class="ti ti-check i" aria-hidden="true"></i>Зберегти</button>
+      </div>
+      <div id="vnErr" class="report" role="alert" hidden></div>
+    </section>
+
+    <section class="card">
       <h2>Меню з файлу</h2>
       <p class="hint">CSV із таблиці. Потрібні стовпці <b>Назва</b> та <b>Ціна</b>;
          <b>Розділ</b>, <b>Опис</b> і <b>Наявність</b> — за бажанням.
@@ -1213,6 +1280,7 @@ function renderHours(){
 }
 
 function bindSetup(){
+  bindActivation();
   bindCouriers();
   bindPromos();
   let csvText = null;

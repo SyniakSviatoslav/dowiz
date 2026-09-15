@@ -2094,6 +2094,9 @@ async fn opening_hours_decide_and_the_owner_can_only_close_early() {
     let s = boot("hours").await;
     let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
     let owner = o["access_token"].as_str().unwrap().to_string();
+    // The activation gate: opening needs something that would HEAR an order.
+    // The seeded venue has no Telegram bound, so it gets a phone first.
+    post(&s.base, "/api/owner/location", Some(&owner), json!({ "phone": "+355691234567" }));
 
     // No schedule: the venue works exactly as before, on the manual flag.
     let (_, menu) = get(&s.base, "/api/menu", None);
@@ -2664,4 +2667,119 @@ async fn the_dashboard_counts_what_is_on_sale_undeclared() {
     let (_, d) = get(&s.base, "/api/owner/dashboard", Some(&owner));
     assert_eq!(d["undeclared"], 0, "{d}");
     assert_eq!(d["onSaleUndeclared"], 0, "{d}");
+}
+
+/// Opening is the moment a stranger can order, so it is the moment all three
+/// legs have to hold. Closing is never gated.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_venue_nobody_would_hear_cannot_be_opened() {
+    let s = boot("activation").await;
+    let (_, t) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = t["access_token"].as_str().unwrap().to_string();
+
+    // The seeded venue has a menu and a delivery fee, and nothing bound to hear
+    // an order. That is the commonest real failure and it must be the one that
+    // blocks.
+    let (code, a) = get(&s.base, "/api/owner/activation", Some(&owner));
+    assert_eq!(code, 200, "{a}");
+    assert_eq!(a["canOpen"], false, "{a}");
+    assert_eq!(a["missing"].as_array().unwrap().len(), 1, "{a}");
+    assert_eq!(a["missing"][0]["key"], "notifications");
+
+    let (code, v) = post(&s.base, "/api/owner/location", Some(&owner), json!({ "status": "open" }));
+    assert_eq!(code, 409, "{v}");
+    assert!(v["error"].as_str().unwrap().contains("hear"), "{v}");
+
+    // Closing is always allowed, whatever the state.
+    let (code, _) = post(&s.base, "/api/owner/location", Some(&owner), json!({ "status": "closed" }));
+    assert_eq!(code, 200, "a venue must always be able to stop taking orders");
+
+    // A phone somebody can call satisfies the leg.
+    let (code, v) = post(&s.base, "/api/owner/location", Some(&owner),
+                         json!({ "phone": "+355691234567" }));
+    assert_eq!(code, 200, "{v}");
+    let (_, a) = get(&s.base, "/api/owner/activation", Some(&owner));
+    assert_eq!(a["canOpen"], true, "{a}");
+    let (code, v) = post(&s.base, "/api/owner/location", Some(&owner), json!({ "status": "open" }));
+    assert_eq!(code, 200, "{v}");
+}
+
+/// A menu with nothing on sale is not a menu. The gate reads the same facts the
+/// activation view shows, so the two can never disagree.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_empty_menu_blocks_opening_and_the_view_says_so() {
+    let s = boot("activation_menu").await;
+    let (_, t) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = t["access_token"].as_str().unwrap().to_string();
+
+    post(&s.base, "/api/owner/products/p1", Some(&owner), json!({ "available": false }));
+    let (_, a) = get(&s.base, "/api/owner/activation", Some(&owner));
+    assert_eq!(a["facts"]["sellableDishes"], 0, "{a}");
+    let keys: Vec<String> = a["missing"].as_array().unwrap().iter()
+        .map(|m| m["key"].as_str().unwrap().to_string()).collect();
+    assert!(keys.contains(&"menu".to_string()), "{a}");
+
+    let (code, v) = post(&s.base, "/api/owner/location", Some(&owner), json!({ "status": "open" }));
+    assert_eq!(code, 409, "{v}");
+    assert!(v["error"].as_str().unwrap().contains("dish"), "{v}");
+}
+
+/// Pickup is a thing the hub has always accepted and the storefront could not
+/// offer. The note is the part that silently vanished: a pickup has no address
+/// to carry it.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_pickup_order_keeps_its_note() {
+    let s = boot("pickup_note").await;
+    let (_, t) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = t["access_token"].as_str().unwrap().to_string();
+
+    // Pickup is off until the venue turns it on, and that switch had no route.
+    let (_, a) = get(&s.base, "/api/owner/activation", Some(&owner));
+    assert_eq!(a["facts"]["pickupEnabled"], false, "{a}");
+    let (code, v) = post(&s.base, "/api/owner/location", Some(&owner), json!({ "pickup": true }));
+    assert_eq!(code, 200, "{v}");
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    assert_eq!(menu["location"]["pickup"], true, "the storefront cannot offer what it cannot see");
+
+    let (code, o) = post(&s.base, "/api/public/locations/dubin/orders", None, json!({
+        "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 1 }],
+        "contact": { "name": "Ana", "phone": "+355690000000" },
+        "fulfilment": { "kind": "pickup", "note": "I will be there at eight" }
+    }));
+    assert_eq!(code, 200, "{o}");
+    assert_eq!(o["fulfilment"]["kind"], "pickup");
+    assert_eq!(o["fulfilment"]["note"], "I will be there at eight");
+    assert_eq!(o["fulfilment"]["address"], Value::Null, "a pickup carries no address");
+    assert_eq!(o["delivery_fee"], 0);
+
+    // An empty note is absent, not an empty string on the ticket.
+    let (_, o) = post(&s.base, "/api/public/locations/dubin/orders", None, json!({
+        "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 1 }],
+        "contact": { "name": "Ana", "phone": "+355690000000" },
+        "fulfilment": { "kind": "pickup", "note": "   " }
+    }));
+    assert_eq!(o["fulfilment"]["note"], Value::Null);
+}
+
+/// A phone that is not a phone must not satisfy the notifications leg, and
+/// clearing it has to be possible.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_venue_phone_is_checked_and_can_be_cleared() {
+    let s = boot("venue_phone").await;
+    let (_, t) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = t["access_token"].as_str().unwrap().to_string();
+
+    let (code, v) = post(&s.base, "/api/owner/location", Some(&owner), json!({ "phone": "call us" }));
+    assert_eq!(code, 400, "{v}");
+
+    let (code, _) = post(&s.base, "/api/owner/location", Some(&owner),
+                         json!({ "phone": "+355 69 123 4567" }));
+    assert_eq!(code, 200);
+    let (_, a) = get(&s.base, "/api/owner/activation", Some(&owner));
+    assert_eq!(a["facts"]["hasVenuePhone"], true, "{a}");
+
+    let (code, _) = post(&s.base, "/api/owner/location", Some(&owner), json!({ "phone": "" }));
+    assert_eq!(code, 200, "a venue with no phone must be able to say so");
+    let (_, a) = get(&s.base, "/api/owner/activation", Some(&owner));
+    assert_eq!(a["facts"]["hasVenuePhone"], false, "{a}");
 }

@@ -28,6 +28,7 @@ const T = {
         later:'Në një orë tjetër', schedFail:'Koha nuk vlen',
         inArea:'Ne dërgojmë këtu', outArea:'Jashtë zonës sonë të dërgesës', noGeo:'Nuk morëm dot vendndodhjen',
         notDeclared:'Alergjenët nuk janë deklaruar', noneOf14:'Asnjë nga 14 alergjenët',
+        how:'Si e merrni', toDoor:'Dërgesë', toPickup:'E marr vetë', pickupAt:'Merreni te',
         avoid:'Alergjenët', avoidHint:'Fshihni pjatat që i përmbajnë', avoidOn:'Fshehur',
         avoidUnknown:'pjata pa deklaratë', clearAvoid:'Shfaqni të gjitha',
         promo:'Kodi i zbritjes', promoApply:'Apliko', promoOff:'Hiq', discount:'Zbritja',
@@ -54,6 +55,7 @@ const T = {
         later:'At a later time', schedFail:'That time will not work',
         inArea:'We deliver here', outArea:'Outside our delivery area', noGeo:'Could not get your location',
         notDeclared:'Allergens not declared', noneOf14:'None of the 14 allergens',
+        how:'How you get it', toDoor:'Delivery', toPickup:'I will collect', pickupAt:'Collect at',
         avoid:'Allergens', avoidHint:'Hide dishes that contain them', avoidOn:'hidden',
         avoidUnknown:'undeclared dishes', clearAvoid:'Show everything',
         promo:'Promo code', promoApply:'Apply', promoOff:'Remove', discount:'Discount',
@@ -80,6 +82,7 @@ const T = {
         later:'На інший час', schedFail:'Такий час не підходить',
         inArea:'Сюди доставляємо', outArea:'Поза зоною доставки', noGeo:'Не вдалося визначити місце',
         notDeclared:'Алергени не заявлено', noneOf14:'Жодного з 14 алергенів',
+        how:'Як заберете', toDoor:'Доставка', toPickup:'Заберу сам', pickupAt:'Забрати за адресою',
         avoid:'Алергени', avoidHint:'Сховати страви, що їх містять', avoidOn:'сховано',
         avoidUnknown:'страв без заяви', clearAvoid:'Показати все',
         promo:'Промокод', promoApply:'Застосувати', promoOff:'Прибрати', discount:'Знижка',
@@ -110,7 +113,8 @@ function loadAvoid(){
   } catch { return []; }
 }
 let state = { loc:null, cats:[], cart:loadCart(), placing:false,
-              q:'', sort:'pop', availOnly:false, avoid:[], avoidOpen:false };
+              q:'', sort:'pop', availOnly:false, avoid:[], avoidOpen:false,
+              how:'delivery' };
 // A cart line is a dish AND the choices made about it: two rolls of the same
 // dish with different extras are two lines, not one with a quantity of two.
 // The key is the product id plus its sorted option ids, so the same choices
@@ -809,6 +813,10 @@ const cartLines = () => Object.entries(state.cart)
 const subtotal = () => cartLines().reduce((s, l) => s + lineUnit(l.p, l.m) * l.q, 0);
 function deliveryFee(){
   const L = state.loc; if (!L) return 0;
+  // Collection costs nothing to deliver. The hub decides this again for the
+  // real order; showing anything else here would be a number the customer
+  // watches change at the last step.
+  if (state.how === 'pickup') return 0;
   if (L.freeDeliveryThreshold != null && subtotal() >= L.freeDeliveryThreshold) return 0;
   return L.deliveryFee || 0;
 }
@@ -872,8 +880,20 @@ function openCheckout(){
     <input id="f-name" autocomplete="name" value="${esc(safeGet('dw_name') || '')}">
     <label for="f-phone">${esc(t('phone'))}</label>
     <input id="f-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+355…" value="${esc(safeGet('dw_phone') || '')}">
-    <label for="f-addr">${esc(t('address'))}</label>
-    <textarea id="f-addr" autocomplete="street-address">${esc(safeGet('dw_addr') || '')}</textarea>
+    ${state.loc?.pickup ? `
+    <label>${esc(t('how'))}</label>
+    <div class="when" role="radiogroup" aria-label="${esc(t('how'))}">
+      <button type="button" class="chip ${state.how !== 'pickup' ? 'on' : ''}" data-how="delivery"
+              aria-pressed="${state.how !== 'pickup'}">${esc(t('toDoor'))}</button>
+      <button type="button" class="chip ${state.how === 'pickup' ? 'on' : ''}" data-how="pickup"
+              aria-pressed="${state.how === 'pickup'}">${esc(t('toPickup'))}</button>
+    </div>` : ''}
+    <div id="addrBox" ${state.how === 'pickup' && state.loc?.pickup ? 'hidden' : ''}>
+      <label for="f-addr">${esc(t('address'))}</label>
+      <textarea id="f-addr" autocomplete="street-address">${esc(safeGet('dw_addr') || '')}</textarea>
+    </div>
+    ${state.how === 'pickup' && state.loc?.address ? `
+      <p class="geo ok">${esc(t('pickupAt'))}: ${esc(state.loc.address)}</p>` : ''}
     <label for="f-when">${esc(t('when'))}</label>
     <div class="when">
       <button type="button" class="chip on" data-when="asap" aria-pressed="true">${esc(t('asap'))}</button>
@@ -942,6 +962,20 @@ function openCheckout(){
       f.min = f.value;
     }
     if (when === 'later') f.focus();
+  });
+
+  // Delivery or collection. The address field goes away rather than becoming
+  // optional: a field that is sometimes required and sometimes ignored is one
+  // people fill in wrongly and one the validator has to guess about.
+  $('#sheetIn').querySelectorAll('[data-how]').forEach(b => b.onclick = () => {
+    state.how = b.dataset.how;
+    $('#sheetIn').querySelectorAll('[data-how]').forEach(x => {
+      x.classList.toggle('on', x === b);
+      x.setAttribute('aria-pressed', String(x === b));
+    });
+    const box = $('#addrBox');
+    if (box) box.hidden = state.how === 'pickup';
+    refreshTotals();
   });
 
   // THE CODE IS CHECKED BY THE HUB, against a basket the hub prices itself. The
@@ -1024,7 +1058,8 @@ async function place(pay){
         addr = $('#f-addr').value.trim(), note = $('#f-note').value.trim();
   const errs = [];
   if (!phone || phone.replace(/\D/g,'').length < 8) errs.push(t('badPhone'));
-  if (!addr) errs.push(t('address') + ': ' + t('required'));
+  const collecting = state.how === 'pickup' && state.loc?.pickup;
+  if (!collecting && !addr) errs.push(t('address') + ': ' + t('required'));
   $('#f-err').innerHTML = errs.map(e => `<div class="err">${esc(e)}</div>`).join('');
   if (errs.length) return;
 
@@ -1038,9 +1073,13 @@ async function place(pay){
     const r = await fetch(`${API}/public/locations/${encodeURIComponent(SLUG)}/orders`, {
       method:'POST', headers:{ 'content-type':'application/json' },
       body: JSON.stringify({ items, contact:{ name, phone },
-        fulfilment:{ kind:'delivery',
-          address:{ line:addr, note: note || null,
-                    ...(state.geo || {}) } },
+        // A PICKUP ORDER CARRIES NO ADDRESS. Sending one anyway would put a
+        // street on a ticket the courier never sees and the kitchen would read
+        // as a delivery.
+        fulfilment: collecting
+          ? { kind:'pickup', note: note || null }
+          : { kind:'delivery',
+              address:{ line:addr, note: note || null, ...(state.geo || {}) } },
         payment: pay, locale: lang,
         ...(state.promo ? { promo: state.promo.code } : {}),
         // Epoch milliseconds. `datetime-local` has no timezone, so it is read

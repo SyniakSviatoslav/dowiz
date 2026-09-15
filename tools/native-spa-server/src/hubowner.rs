@@ -465,6 +465,17 @@ async fn edit_product(
 pub struct LocationIn {
     #[serde(default)]
     pub status: Option<String>,
+    /// The number a customer rings when the app cannot help them, and one of
+    /// the two ways a venue satisfies the notifications leg of the activation
+    /// gate. There was NO way to set this before: the storefront read the field
+    /// and nothing wrote it, so every venue showed an empty phone unless it had
+    /// been seeded with one.
+    #[serde(default)]
+    pub phone: Option<String>,
+    /// Can a customer come and collect? The other half of the fulfilment leg,
+    /// and likewise unreachable until now.
+    #[serde(default)]
+    pub pickup: Option<bool>,
     /// Seven arrays of `{open, close}`, in minutes since local midnight.
     /// An EMPTY array of arrays removes the schedule and returns the venue to
     /// the manual flag.
@@ -486,6 +497,20 @@ pub async fn update_location(
         if !matches!(s.as_str(), "open" | "closed") {
             return Err(HubHttpError::Invalid(format!("unknown status {s:?}")));
         }
+        // ── THE ACTIVATION GATE ──
+        //
+        // Opening is the moment a stranger can place an order, so it is the
+        // moment all three legs have to hold. CLOSING is never gated: a venue
+        // must always be able to stop taking orders, whatever state it is in.
+        if s == "open" {
+            let f = activation_facts(&st).await?;
+            let missing = dowiz_hub::activation::missing(&f);
+            if !missing.is_empty() {
+                return Err(HubHttpError::Conflict(
+                    missing.iter().map(|r| r.as_str()).collect::<Vec<_>>().join("; "),
+                ));
+            }
+        }
     }
     if let Some(h) = &body.hours {
         // PARSED BACK before storing, like the zones and the option groups. A
@@ -506,12 +531,27 @@ pub async fn update_location(
             )));
         }
     }
+    if let Some(ph) = &body.phone {
+        // Empty CLEARS it -- a venue with no phone should be able to say so
+        // rather than keep a number that no longer answers. Anything else has
+        // to look like a number, or the activation gate would pass a venue
+        // nobody can call.
+        if !ph.trim().is_empty() && ph.chars().filter(char::is_ascii_digit).count() < 8 {
+            return Err(HubHttpError::Invalid("that does not look like a phone number".into()));
+        }
+    }
     st.with_catalog(move |cat| {
         let raw = cat.location().ok_or(HubHttpError::NotFound("venue"))?;
         let mut loc: Value =
             serde_json::from_str(&raw).map_err(|_| HubHttpError::Corrupt("catalogue venue"))?;
         if let Some(s) = body.status {
             loc["status"] = json!(s);
+        }
+        if let Some(ph) = body.phone {
+            loc["phone"] = if ph.trim().is_empty() { Value::Null } else { json!(ph.trim()) };
+        }
+        if let Some(p) = body.pickup {
+            loc["pickup"] = json!(p);
         }
         if let Some(p) = body.delivery_paused {
             loc["delivery_paused"] = json!(if p { 1 } else { 0 });
@@ -559,6 +599,71 @@ pub async fn couriers(
         })
         .collect();
     Ok(Json(json!({ "couriers": list, "invites": pending })))
+}
+
+/// Gather what the activation gate needs to decide. Every lookup happens here;
+/// `dowiz_hub::activation` gets plain facts and no I/O.
+async fn activation_facts(st: &Shared) -> Result<dowiz_hub::activation::Facts, HubHttpError> {
+    let cat = st.read_catalog()?;
+    let loc: Value = cat
+        .location()
+        .and_then(|j| serde_json::from_str(&j).ok())
+        .unwrap_or_else(|| json!({}));
+
+    let sellable = cat
+        .products()
+        .into_iter()
+        .filter(|(_, pj)| {
+            serde_json::from_str::<Value>(pj)
+                .ok()
+                .map(|p| {
+                    p.get("available").and_then(Value::as_bool).unwrap_or(false)
+                        && p.get("price").and_then(Value::as_i64).unwrap_or(0) > 0
+                })
+                .unwrap_or(false)
+        })
+        .count();
+
+    let phone = loc.get("phone").and_then(Value::as_str).unwrap_or("");
+    Ok(dowiz_hub::activation::Facts {
+        sellable_dishes: sellable,
+        telegram_chats: st.read_subs().map(|s| s.staff().len()).unwrap_or(0),
+        // Eight digits, the same floor the storefront applies to a customer's
+        // number. An empty string and a placeholder both have to fail here, or
+        // the gate passes a venue nobody can call.
+        has_venue_phone: phone.chars().filter(char::is_ascii_digit).count() >= 8,
+        // A fee of zero is configured -- free delivery is a decision. What is
+        // NOT configured is the absence of the key.
+        delivery_configured: loc.get("delivery_fee").is_some()
+            || loc.get("delivery_zones").is_some(),
+        pickup_enabled: loc.get("pickup").and_then(Value::as_bool).unwrap_or(false),
+    })
+}
+
+/// `GET /api/owner/activation` — what is still missing, and can we open.
+///
+/// Read freely and often: this is what the owner pane shows while they are
+/// setting the venue up, so it has to be cheap and has to be the SAME answer
+/// the gate will give when they press open.
+pub async fn activation(
+    State(st): State<Shared>,
+    _who: OwnerCaller,
+) -> Result<Json<Value>, HubHttpError> {
+    let f = activation_facts(&st).await?;
+    let missing = dowiz_hub::activation::missing(&f);
+    Ok(Json(json!({
+        "canOpen": missing.is_empty(),
+        "missing": missing.iter()
+            .map(|r| json!({ "key": r.key(), "why": r.as_str() }))
+            .collect::<Vec<_>>(),
+        "facts": {
+            "sellableDishes": f.sellable_dishes,
+            "telegramChats": f.telegram_chats,
+            "hasVenuePhone": f.has_venue_phone,
+            "deliveryConfigured": f.delivery_configured,
+            "pickupEnabled": f.pickup_enabled,
+        }
+    })))
 }
 
 #[derive(Deserialize)]
@@ -1029,6 +1134,7 @@ pub fn routes(state: Shared) -> Router {
         .route("/api/owner/orders/{id}/action", post(order_action))
         .route("/api/owner/orders/{id}/assign", post(assign))
         .route("/api/owner/dashboard", get(dashboard))
+        .route("/api/owner/activation", get(activation))
         .route("/api/owner/products/{id}", post(update_product))
         .route("/api/owner/location", post(update_location))
         .route("/api/owner/couriers", get(couriers))
