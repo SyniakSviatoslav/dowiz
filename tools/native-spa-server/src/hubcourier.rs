@@ -267,5 +267,53 @@ pub fn routes(state: Shared) -> Router {
         .route("/api/courier/orders/{id}/deliver", post(deliver))
         .route("/api/courier/position", post(position))
         .route("/api/courier/shift", post(shift))
+        .route("/api/courier/assist", post(courier_assist))
         .with_state(state)
+}
+
+/// `POST /api/courier/assist` — the same assistant, scoped to this courier's run.
+///
+/// The facts are ONLY their own orders. A courier asking a question must not be
+/// able to learn about work that is not theirs, and the cheapest way to
+/// guarantee that is to never put it in the prompt.
+pub async fn courier_assist(
+    State(st): State<Shared>,
+    who: CourierCaller,
+    Json(body): Json<crate::hubowner::AskIn>,
+) -> Result<Json<Value>, HubHttpError> {
+    let me = who.0.person.id.clone();
+    let now = now_ms();
+    let hub = st.read_log()?;
+    let mine: Vec<Value> = hub
+        .orders()
+        .iter()
+        .filter_map(|ev| serde_json::from_str::<Value>(&ev.order_json).ok())
+        .filter(|o| o.get("courier_id").and_then(Value::as_str) == Some(me.as_str()))
+        .filter(|o| {
+            !matches!(
+                o.get("status").and_then(Value::as_str).unwrap_or(""),
+                "DELIVERED" | "CANCELLED" | "REJECTED"
+            )
+        })
+        .map(|o| {
+            let created = o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(now);
+            json!({
+                "id": o.get("id").cloned().unwrap_or(Value::Null),
+                "status": o.get("status").cloned().unwrap_or(Value::Null),
+                "total": o.get("total").cloned().unwrap_or(Value::Null),
+                "payment": o.get("payment").cloned().unwrap_or(Value::Null),
+                "waiting_minutes": (now - created) / 60_000,
+                "address": o.get("fulfilment").and_then(|f| f.get("address")).cloned().unwrap_or(Value::Null),
+                "contact": o.get("contact").cloned().unwrap_or(Value::Null),
+            })
+        })
+        .collect();
+
+    crate::hubowner::assist_public(
+        &st,
+        crate::ai::SYSTEM_COURIER,
+        json!({ "my_open_deliveries": mine, "currency": "ALL" }),
+        &body.question,
+    )
+    .await
 }

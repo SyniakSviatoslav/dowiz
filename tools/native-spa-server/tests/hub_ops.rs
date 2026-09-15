@@ -815,3 +815,98 @@ async fn branding_refuses_junk_and_strangers() {
     assert!(v["swatches"].as_array().unwrap().is_empty(), "{v}");
     assert!(v["note"].as_str().unwrap().contains("no strong colours"), "{v}");
 }
+
+/// Settings are the owner's, secrets never come back, and the assistant is off
+/// until it is switched on.
+#[tokio::test(flavor = "multi_thread")]
+async fn settings_guard_their_secrets_and_the_assistant_starts_off() {
+    let s = boot("settings").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+
+    // The pane is built from the hub's own declarations.
+    let (code, v) = get(&s.base, "/api/owner/settings", Some(&owner));
+    assert_eq!(code, 200, "{v}");
+    let known = v["known"].as_array().expect("known");
+    assert!(known.iter().any(|k| k["key"] == "ai.endpoint"), "{v}");
+    assert!(
+        known.iter().find(|k| k["key"] == "ai.token").unwrap()["secret"] == true,
+        "a token must be declared secret"
+    );
+
+    // Off by default: asking now is refused rather than silently doing nothing.
+    let (code, v) = post(&s.base, "/api/owner/assist", Some(&owner), json!({ "question": "how many orders?" }));
+    assert_eq!(code, 409, "{v}");
+    assert!(v["error"].as_str().unwrap().contains("switched off"), "{v}");
+
+    // An endpoint is validated when it is SET, not at the first question.
+    let bad = post(&s.base, "/api/owner/settings", Some(&owner),
+                   json!({ "key": "ai.endpoint", "value": "http://api.example.com/v1" }));
+    assert_eq!(bad.0, 400, "plain http to a remote host must be refused: {}", bad.1);
+    let bad = post(&s.base, "/api/owner/settings", Some(&owner),
+                   json!({ "key": "ai.endpoint", "value": "nonsense" }));
+    assert_eq!(bad.0, 400);
+    // An undeclared key has nowhere to go.
+    assert_eq!(
+        post(&s.base, "/api/owner/settings", Some(&owner), json!({ "key": "x.y", "value": "1" })).0,
+        400
+    );
+
+    // A token goes in and never comes back.
+    let (code, _) = post(&s.base, "/api/owner/settings", Some(&owner),
+                         json!({ "key": "ai.token", "value": "sk-do-not-leak-me" }));
+    assert_eq!(code, 200);
+    let (_, v) = get(&s.base, "/api/owner/settings", Some(&owner));
+    let shown = v.to_string();
+    assert!(!shown.contains("sk-do-not-leak-me"), "the token leaked to the owner pane: {shown}");
+    assert!(v["values"]["ai.token"].as_str().unwrap().contains("set"), "{v}");
+
+    // Clearing it works even though it can no longer be read.
+    post(&s.base, "/api/owner/settings", Some(&owner), json!({ "key": "ai.token", "value": "" }));
+    let (_, v) = get(&s.base, "/api/owner/settings", Some(&owner));
+    assert!(v["values"].get("ai.token").is_none(), "{v}");
+}
+
+/// Settings and the assistant belong to the owner alone.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_courier_cannot_read_or_change_settings() {
+    let s = boot("settings_auth").await;
+    let (_, c) = post(&s.base, "/api/courier/auth/login", None,
+                      json!({ "phone": "+355691112233", "password": "courier-pw" }));
+    let courier = c["jwt"].as_str().unwrap().to_string();
+
+    assert_eq!(get(&s.base, "/api/owner/settings", Some(&courier)).0, 403);
+    assert_eq!(
+        post(&s.base, "/api/owner/settings", Some(&courier),
+             json!({ "key": "ai.enabled", "value": "1" })).0,
+        403
+    );
+    assert_eq!(get(&s.base, "/api/owner/settings", None).0, 401);
+
+    // The courier's OWN assistant is reachable, and is off like everyone's.
+    let (code, v) = post(&s.base, "/api/courier/assist", Some(&courier), json!({ "question": "what is left?" }));
+    assert_eq!(code, 409, "{v}");
+}
+
+/// With the assistant on and pointed at a model that is not there, the failure
+/// must be LOUD and must name what went wrong -- not a blank answer bubble.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_unreachable_model_fails_loudly() {
+    let s = boot("ai_down").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+
+    // Port 1 on loopback: a local address, so the TLS rule permits it, and
+    // nothing is listening there.
+    post(&s.base, "/api/owner/settings", Some(&owner),
+         json!({ "key": "ai.endpoint", "value": "http://127.0.0.1:1/v1" }));
+    post(&s.base, "/api/owner/settings", Some(&owner), json!({ "key": "ai.enabled", "value": "1" }));
+
+    let (code, v) = post(&s.base, "/api/owner/assist", Some(&owner), json!({ "question": "how many?" }));
+    assert_eq!(code, 503, "{v}");
+    let err = v["error"].as_str().unwrap();
+    assert!(err.contains("could not reach the model"), "must say what failed: {err}");
+
+    // An empty question never reaches a model at all.
+    assert_eq!(post(&s.base, "/api/owner/assist", Some(&owner), json!({ "question": "  " })).0, 400);
+}

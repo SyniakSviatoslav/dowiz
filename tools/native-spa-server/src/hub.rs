@@ -29,6 +29,7 @@ use dowiz_core::order_machine::OrderStatus;
 use dowiz_core::ports::notification::StatusMsg;
 use dowiz_hub::catalog::Catalog;
 use dowiz_hub::roster::Roster;
+use dowiz_hub::settings::Settings;
 use dowiz_hub::subs::Subs;
 use dowiz_hub::{EventKind, Hub};
 use dowiz_kernel::json_api;
@@ -42,6 +43,7 @@ pub struct HubPaths {
     pub catalog: PathBuf,
     pub subs: PathBuf,
     pub roster: PathBuf,
+    pub settings: PathBuf,
     /// The token signing key. A FILE and not a store, because it must be
     /// readable before any store is opened and must never travel with a backup
     /// of the data.
@@ -55,6 +57,7 @@ impl HubPaths {
             catalog: dir.join("catalog.store"),
             subs: dir.join("subs.store"),
             roster: dir.join("roster.store"),
+            settings: dir.join("settings.store"),
             key: dir.join("signing.key"),
         }
     }
@@ -113,6 +116,20 @@ impl HubState {
             std::fs::write(&paths.roster, bytes)?;
         }
         let signing_key = load_or_create_key(&paths.key)?;
+        if !paths.settings.exists() {
+            let mut st = Settings::create().map_err(io_err)?;
+            let bytes = st.to_bytes().map_err(io_err)?;
+            std::fs::write(&paths.settings, bytes)?;
+            // Settings hold provider tokens. Same mode as the signing key, and
+            // for the same reason: on a VPS the file permission IS the
+            // protection, since nothing here can be encrypted with a key that
+            // does not live beside it.
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(&paths.settings, std::fs::Permissions::from_mode(0o600))?;
+            }
+        }
         if !paths.subs.exists() {
             let mut subs = Subs::create().map_err(io_err)?;
             let bytes = subs.to_bytes().map_err(io_err)?;
@@ -820,6 +837,24 @@ impl HubState {
                     .map(str::to_string)
             })
             .unwrap_or_default()
+    }
+
+    pub fn read_settings(&self) -> Result<Settings, HubHttpError> {
+        let bytes =
+            std::fs::read(&self.paths.settings).map_err(|e| HubHttpError::Io(e.to_string()))?;
+        Settings::load(&bytes).map_err(|_| HubHttpError::Corrupt("settings"))
+    }
+
+    pub async fn with_settings<F, T>(&self, f: F) -> Result<T, HubHttpError>
+    where
+        F: FnOnce(&mut Settings) -> Result<T, HubHttpError>,
+    {
+        let _guard = self.write_lock.lock().await;
+        let mut st = self.read_settings()?;
+        let out = f(&mut st)?;
+        let bytes = st.to_bytes().map_err(|e| HubHttpError::Io(format!("{e:?}")))?;
+        atomic_write(&self.paths.settings, &bytes)?;
+        Ok(out)
     }
 
     pub fn read_roster(&self) -> Result<Roster, HubHttpError> {

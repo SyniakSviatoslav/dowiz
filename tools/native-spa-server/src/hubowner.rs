@@ -612,5 +612,180 @@ pub fn routes(state: Shared) -> Router {
         .route("/api/owner/menu/import", post(import_menu))
         .route("/api/owner/branding/extract", post(extract_branding))
         .route("/api/owner/branding", post(set_branding))
+        .route("/api/owner/settings", get(settings))
+        .route("/api/owner/settings", post(set_setting))
+        .route("/api/owner/assist", post(owner_assist))
         .with_state(state)
+}
+
+// ── settings and the assistant ───────────────────────────────────────────────
+
+/// `GET /api/owner/settings` — what is configured, with secrets redacted.
+///
+/// Returns the DECLARATIONS alongside the values, so the settings pane is built
+/// from the same list the hub consults. Two lists of settings drift, and the one
+/// that drifts is the one the owner reads.
+pub async fn settings(
+    State(st): State<Shared>,
+    _who: OwnerCaller,
+) -> Result<Json<Value>, HubHttpError> {
+    let s = st.read_settings()?;
+    let values: Value = serde_json::from_str(&s.as_json()).unwrap_or(json!({}));
+    let known: Vec<Value> = dowiz_hub::settings::KNOWN
+        .iter()
+        .map(|k| {
+            json!({
+                "key": k.key, "label": k.label, "hint": k.hint,
+                "default": k.default,
+                "secret": dowiz_hub::settings::is_secret(k.key)
+            })
+        })
+        .collect();
+    Ok(Json(json!({ "values": values, "known": known })))
+}
+
+#[derive(Deserialize)]
+pub struct SettingIn {
+    pub key: String,
+    /// An empty value CLEARS the setting, which is how an owner removes a token
+    /// they can no longer see.
+    pub value: String,
+}
+
+/// `POST /api/owner/settings`.
+pub async fn set_setting(
+    State(st): State<Shared>,
+    _who: OwnerCaller,
+    Json(body): Json<SettingIn>,
+) -> Result<Json<Value>, HubHttpError> {
+    // Only declared keys. An open key space would let this become a place to
+    // stash arbitrary data, and nothing would ever read it back.
+    if !dowiz_hub::settings::KNOWN.iter().any(|k| k.key == body.key) {
+        return Err(HubHttpError::Invalid(format!("unknown setting {:?}", body.key)));
+    }
+    if body.value.len() > 4096 {
+        return Err(HubHttpError::Invalid("value too long".into()));
+    }
+    // An endpoint is checked HERE, when the owner can still fix it, rather than
+    // at the first question when they are mid-rush.
+    if body.key == "ai.endpoint" && !body.value.trim().is_empty() {
+        let u = crate::httpc::parse_url(body.value.trim())
+            .map_err(|e| HubHttpError::Invalid(format!("{e}")))?;
+        if !u.tls && !crate::httpc::is_local(&u.host) {
+            return Err(HubHttpError::Invalid(
+                "plain http is only allowed to an address on this machine".into(),
+            ));
+        }
+    }
+    let (k, v) = (body.key.clone(), body.value.trim().to_string());
+    st.with_settings(move |s| {
+        if v.is_empty() {
+            s.clear(&k);
+        } else {
+            s.set(&k, &v);
+        }
+        Ok(())
+    })
+    .await?;
+    Ok(Json(json!({ "ok": true, "key": body.key })))
+}
+
+#[derive(Deserialize)]
+pub struct AskIn {
+    pub question: String,
+}
+
+/// Everything the assistant is allowed to know about the venue right now.
+///
+/// COMPUTED HERE, by the same code paths the dashboard uses, and handed to the
+/// model as fact. The model phrases; it does not count. A model asked to total
+/// a day's orders would eventually get one wrong, and the owner would have no
+/// way to tell which.
+async fn owner_facts(st: &Shared) -> Result<Value, HubHttpError> {
+    let hub = st.read_log()?;
+    let now = now_ms();
+    let shifts = st.shifts().await;
+    let mut live: Vec<Value> = Vec::new();
+    for ev in hub.orders() {
+        let Ok(o) = serde_json::from_str::<Value>(&ev.order_json) else { continue };
+        let status = o.get("status").and_then(Value::as_str).unwrap_or("");
+        if !is_live(status) {
+            continue;
+        }
+        let created = o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(now);
+        live.push(json!({
+            "id": o.get("id").cloned().unwrap_or(Value::Null),
+            "status": status,
+            "total": o.get("total").cloned().unwrap_or(Value::Null),
+            "waiting_minutes": (now - created) / 60_000,
+            "fulfilment": o.get("fulfilment").and_then(|f| f.get("kind")).cloned().unwrap_or(Value::Null),
+            "courier_id": o.get("courier_id").cloned().unwrap_or(Value::Null),
+            "contact": o.get("contact").cloned().unwrap_or(Value::Null),
+            "address": o.get("fulfilment").and_then(|f| f.get("address")).cloned().unwrap_or(Value::Null),
+            "items": o.get("items").cloned().unwrap_or(Value::Null),
+        }));
+    }
+    live.sort_by_key(|o| -o["waiting_minutes"].as_i64().unwrap_or(0));
+    Ok(json!({
+        "now_iso_minutes_since_epoch": now / 60_000,
+        "live_orders": live,
+        "couriers_on_shift": shifts,
+        "currency": "ALL",
+    }))
+}
+
+/// Ask, and answer.
+///
+/// Shared by both surfaces so the redaction rule -- full facts to a model on
+/// this machine, PII withheld from anything else -- has ONE implementation. Two
+/// would be two chances to leave it out of the second one.
+pub(crate) async fn assist_public(
+    st: &Shared,
+    system: &'static str,
+    facts: Value,
+    question: &str,
+) -> Result<Json<Value>, HubHttpError> {
+    let question = question.trim();
+    if question.is_empty() {
+        return Err(HubHttpError::Invalid("no question".into()));
+    }
+    if question.chars().count() > 2000 {
+        return Err(HubHttpError::Invalid("question too long".into()));
+    }
+
+    let settings = st.read_settings()?;
+    let assistant = crate::ai::Assistant::from_settings(&settings).map_err(|e| match e {
+        crate::ai::AiError::Disabled => HubHttpError::Refused(e.to_string()),
+        other => HubHttpError::Invalid(other.to_string()),
+    })?;
+
+    let sent = if assistant.local { facts.clone() } else { crate::ai::redact(&facts) };
+    let prompt = format!("FACTS:\n{sent}\n\nQUESTION:\n{question}");
+
+    // A local model on modest hardware is slow; a minute is a long wait but a
+    // shorter cap would make the local-first default unusable and push venues
+    // to a hosted provider, which is the opposite of the intent.
+    let answer = assistant
+        .ask(system, &prompt, 60_000)
+        .await
+        .map_err(|e| HubHttpError::Io(e.to_string()))?;
+
+    Ok(Json(json!({
+        "answer": answer,
+        // The owner is told, every time, whether their customers' details left
+        // the machine. Burying this in a settings page would make it a thing
+        // they configured once and forgot.
+        "local": assistant.local,
+        "contextRedacted": !assistant.local,
+    })))
+}
+
+/// `POST /api/owner/assist`.
+pub async fn owner_assist(
+    State(st): State<Shared>,
+    _who: OwnerCaller,
+    Json(body): Json<AskIn>,
+) -> Result<Json<Value>, HubHttpError> {
+    let facts = owner_facts(&st).await?;
+    assist_public(&st, crate::ai::SYSTEM_OWNER, facts, &body.question).await
 }

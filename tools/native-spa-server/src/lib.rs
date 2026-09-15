@@ -29,11 +29,13 @@ use axum::{
 use tower_http::services::{ServeDir, ServeFile};
 
 /// The minimal HTTP order surface (P37 W37-2/3): cap-gated `/api/order*`.
+pub mod ai;
 pub mod api;
 
 /// P48-INTAKE Phase 1 — `/webhook/*` route handlers (external signature gate,
 /// NOT capability-cert gated — separate trust boundary per §5.3).
 pub mod hub;
+pub mod httpc;
 pub mod hubauth;
 pub mod hubcourier;
 pub mod hubowner;
