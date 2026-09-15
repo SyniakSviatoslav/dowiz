@@ -10,6 +10,7 @@
 //! `place_order_at`. A process-local counter is unsound here by construction:
 //! Workers recycles isolates constantly and runs many at once.
 
+mod accounts;
 mod auth;
 mod storefront;
 
@@ -71,6 +72,11 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         // ── public storefront ──
         .get_async("/api/public/locations/:slug/menu", storefront::menu)
         .post_async("/api/public/locations/:slug/orders", storefront::place)
+        // ── accounts ──
+        .post_async("/api/auth/login", accounts::owner_login)
+        .post_async("/api/auth/refresh", accounts::owner_refresh)
+        .post_async("/api/auth/logout", accounts::owner_logout)
+        .post_async("/api/courier/auth/login", accounts::courier_login)
         .post_async("/api/order", |mut req, ctx| async move {
             let body: PlaceOrderBody = match req.json().await {
                 Ok(b) => b,
