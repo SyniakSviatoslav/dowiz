@@ -1,0 +1,9 @@
+{
+  "name": "dowiz-workers",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Cloudflare Workers surface for dowiz. The Rust Worker (workers-rs) links the kernel directly; this package exists only to pin wrangler.",
+  "devDependencies": {
+    "wrangler": "4.131.2"
+  }
+}

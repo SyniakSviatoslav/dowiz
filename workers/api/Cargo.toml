@@ -1,0 +1,32 @@
+[package]
+name = "dowiz-api-worker"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "Cloudflare Worker surface for dowiz. Transport + storage ONLY: every order decision is made by dowiz-kernel's json_api, never re-implemented here."
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# workers-rs — the Cloudflare Workers runtime binding. This replaces the axum
+# native-spa-server for PRODUCTION: axum/tokio/rustls cannot run on Workers.
+worker = { version = "0.8", features = ["d1"] }
+worker-macros = "0.8"
+# The kernel: the SOLE order/FSM/money authority. `json-api` is the string
+# boundary WITHOUT wasm-bindgen, so the Worker links the same JSON authority the
+# native adapter uses. Measured cost of this link, size-optimised: ~98 KB raw /
+# ~48 KB gzip against the Worker's 64 MiB uncompressed budget.
+dowiz-kernel = { path = "../../kernel", features = ["json-api"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Size-and-startup profile. The kernel's own [profile.release] targets native
+# SPEED (opt-level 3, thin LTO); a Worker is judged on bundle size and the 1s
+# startup budget instead. Profile comes from the crate being built, so this
+# governs the kernel too WITHOUT touching kernel/Cargo.toml.
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true

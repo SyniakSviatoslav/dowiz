@@ -1,0 +1,20 @@
+# dowiz API Worker. Build: `worker-build --release` compiles the Rust crate to
+# wasm32 and emits the JS shim wrangler uploads.
+name = "dowiz-api"
+main = "build/worker/shim.mjs"
+compatibility_date = "2026-09-15"
+
+[build]
+command = "worker-build --release"
+
+# D1 holds the order log. This replaces the native adapter's Mutex<HashMap>,
+# which died with the process -- the reason no order ever survived a restart.
+[[d1_databases]]
+binding = "DB"
+database_name = "dowiz"
+database_id = "5467a3b0-5fb8-47d0-9680-4101666598d0"
+
+# Workers Logs. The OpenTelemetry export rides on top of this later, through the
+# kernel's own fdr::SpanObserver seam rather than a `tracing` dependency.
+[observability]
+enabled = true

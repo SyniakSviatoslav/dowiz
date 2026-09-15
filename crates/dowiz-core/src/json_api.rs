@@ -175,16 +175,11 @@ fn status_err(e: TransitionError) -> String {
 /// BOTH the wasm surface and the HTTP adapter (P37 W37-1). Returns the created
 /// [`Order`] serialized to JSON, or an error string (fail-closed on malformed
 /// input / illegal quantity / price).
-pub fn place_order_logic(
-    customer_id: Option<String>,
-    items_json: &str,
-    channel: Option<String>,
-) -> Result<String, String> {
+/// Parse the untrusted item list and refuse malformed money/quantity before any
+/// domain mutation (V3 1.3, ROUND-2 GAP-AUDIT): a negative quantity or unit price
+/// would produce a negative/garbage order total. Fail-closed at the JSON boundary.
+fn validated_items(items_json: &str) -> Result<Vec<OrderItem>, String> {
     let items = parse_items(items_json)?;
-
-    // V3 1.3 (ROUND-2 GAP-AUDIT): a negative quantity or unit price is malformed
-    // input that would produce a negative/garbage order total. Refuse before any
-    // domain mutation (fail-closed on the untrusted-JSON boundary).
     for it in &items {
         if it.quantity <= 0 {
             return Err(format!(
@@ -199,11 +194,61 @@ pub fn place_order_logic(
             ));
         }
     }
+    Ok(items)
+}
+
+pub fn place_order_logic(
+    customer_id: Option<String>,
+    items_json: &str,
+    channel: Option<String>,
+) -> Result<String, String> {
+    let items = validated_items(items_json)?;
 
     let seq = ORDER_SEQ.fetch_add(1, Ordering::SeqCst);
     let id = format!("ord_{}", seq);
     let created_at_ms = seq as i64;
 
+    finish_place_order(id, customer_id, items, created_at_ms, channel)
+}
+
+/// Place an order with a CALLER-SUPPLIED id and creation timestamp.
+///
+/// `place_order_logic` derives both from [`ORDER_SEQ`], a process-local
+/// `AtomicU64` that starts at 0. That is sound for exactly one deployment shape:
+/// a single long-lived process keying a volatile map. It is UNSOUND anywhere
+/// that runs more than one instance — a Cloudflare Worker recycles isolates
+/// constantly and runs many concurrently, so every cold isolate re-issues
+/// `ord_0`, `ord_1`, … and two unrelated customers collide on one primary key.
+/// The timestamp is worse: `created_at_ms = seq` dates the first order of every
+/// isolate to the epoch, and confirmation timeouts and daily revenue are built
+/// on that number.
+///
+/// So the clock and the identity come from the EDGE, which is exactly the
+/// kernel's own rule — `domain::place_order` has always taken both as
+/// parameters. This entry point restores that at the JSON boundary; the
+/// validation and money law below it are shared, not duplicated.
+pub fn place_order_at(
+    id: String,
+    customer_id: Option<String>,
+    items_json: &str,
+    created_at_ms: i64,
+    channel: Option<String>,
+) -> Result<String, String> {
+    if id.is_empty() {
+        return Err("place_order: id must be non-empty".to_string());
+    }
+    let items = validated_items(items_json)?;
+    finish_place_order(id, customer_id, items, created_at_ms, channel)
+}
+
+/// Shared tail of both placement entry points.
+fn finish_place_order(
+    id: String,
+    customer_id: Option<String>,
+    items: Vec<OrderItem>,
+    created_at_ms: i64,
+    channel: Option<String>,
+) -> Result<String, String> {
     let order = place_order(
         id,
         customer_id,
@@ -252,6 +297,57 @@ mod tests {
             }
         }
         v.to_string()
+    }
+
+    /// The edge owns identity and the clock. `place_order_logic` derives both
+    /// from a process-local `AtomicU64`, which re-issues `ord_0` in every fresh
+    /// process -- on Cloudflare Workers that means two customers colliding on one
+    /// D1 primary key, and every isolate's first order dated to the epoch.
+    /// `place_order_at` must carry the caller's values through untouched.
+    #[test]
+    fn place_order_at_keeps_caller_id_and_clock() {
+        let json = place_order_at(
+            "01JCZ8Q0RW9V".into(),
+            Some("c1".into()),
+            SAMPLE_ITEMS,
+            1_789_000_000_123,
+            Some("web".into()),
+        )
+        .expect("place_order_at ok");
+        let v = parse(&json).unwrap();
+        assert_eq!(field_str(&v, "id").unwrap(), "01JCZ8Q0RW9V");
+        assert_eq!(field_i64(&v, "created_at_ms").unwrap(), 1_789_000_000_123);
+
+        // And it must NOT be the counter: two calls keep their own identities,
+        // where the counter path would hand out two different generated ones.
+        let second = place_order_at(
+            "01JCZ8Q0RW9V".into(),
+            None,
+            SAMPLE_ITEMS,
+            1_789_000_000_123,
+            None,
+        )
+        .expect("place_order_at ok");
+        assert_eq!(
+            field_str(&parse(&second).unwrap(), "id").unwrap(),
+            "01JCZ8Q0RW9V"
+        );
+
+        // The money law still applies at this boundary.
+        assert_eq!(field_i64(&v, "subtotal").unwrap(), 2 * 500 + 300);
+    }
+
+    #[test]
+    fn place_order_at_refuses_empty_id() {
+        assert!(place_order_at(String::new(), None, SAMPLE_ITEMS, 1, None).is_err());
+    }
+
+    #[test]
+    fn place_order_at_enforces_the_same_money_validation() {
+        let bad = r#"[{"product_id":"p1","modifier_ids":[],"quantity":0,"unit_price":500}]"#;
+        assert!(place_order_at("id1".into(), None, bad, 1, None).is_err());
+        let neg = r#"[{"product_id":"p1","modifier_ids":[],"quantity":1,"unit_price":-5}]"#;
+        assert!(place_order_at("id2".into(), None, neg, 1, None).is_err());
     }
 
     #[test]
