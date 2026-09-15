@@ -71,4 +71,7 @@ tokio = { version = "1", features = ["full"] }
 dowiz-kernel = { path = "../../kernel", features = ["json-api"] }
 # intake-adapters — needed for webhook integration tests (R16+).
 intake-adapters = { path = "../../intake-adapters" }
+# dowiz-hub — the operator-loop test names Role when it creates the owner and
+# the courier it then logs in as.
+dowiz-hub = { path = "../../crates/dowiz-hub" }
 serde_json = "1"

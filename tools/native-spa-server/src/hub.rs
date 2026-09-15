@@ -28,6 +28,7 @@ use tokio::sync::Mutex;
 use dowiz_core::order_machine::OrderStatus;
 use dowiz_core::ports::notification::StatusMsg;
 use dowiz_hub::catalog::Catalog;
+use dowiz_hub::roster::Roster;
 use dowiz_hub::subs::Subs;
 use dowiz_hub::{EventKind, Hub};
 use dowiz_kernel::json_api;
@@ -40,6 +41,11 @@ pub struct HubPaths {
     pub log: PathBuf,
     pub catalog: PathBuf,
     pub subs: PathBuf,
+    pub roster: PathBuf,
+    /// The token signing key. A FILE and not a store, because it must be
+    /// readable before any store is opened and must never travel with a backup
+    /// of the data.
+    pub key: PathBuf,
 }
 
 impl HubPaths {
@@ -48,6 +54,8 @@ impl HubPaths {
             log: dir.join("orders.store"),
             catalog: dir.join("catalog.store"),
             subs: dir.join("subs.store"),
+            roster: dir.join("roster.store"),
+            key: dir.join("signing.key"),
         }
     }
 }
@@ -72,6 +80,14 @@ pub struct HubState {
     /// The bot's @handle, for building `t.me` links. Separate from the token:
     /// the token must never leave this process, and the handle is public.
     bot_username: Option<String>,
+    /// The HMAC key every bearer token is signed with. Held in memory for the
+    /// process's life; rotating it invalidates every live token, which is the
+    /// intended emergency behaviour.
+    signing_key: Vec<u8>,
+    /// Courier positions and shifts. In memory and gone on restart -- see
+    /// `hubcourier`'s header for why that is the right shape for one and a
+    /// stated compromise for the other.
+    live: Mutex<crate::hubcourier::Live>,
 }
 
 pub type Shared = Arc<HubState>;
@@ -91,6 +107,12 @@ impl HubState {
             let bytes = cat.to_bytes().map_err(io_err)?;
             std::fs::write(&paths.catalog, bytes)?;
         }
+        if !paths.roster.exists() {
+            let mut roster = Roster::create().map_err(io_err)?;
+            let bytes = roster.to_bytes().map_err(io_err)?;
+            std::fs::write(&paths.roster, bytes)?;
+        }
+        let signing_key = load_or_create_key(&paths.key)?;
         if !paths.subs.exists() {
             let mut subs = Subs::create().map_err(io_err)?;
             let bytes = subs.to_bytes().map_err(io_err)?;
@@ -106,15 +128,17 @@ impl HubState {
                 .ok()
                 .map(|v| v.trim_start_matches('@').to_string())
                 .filter(|v| !v.is_empty()),
+            signing_key,
+            live: Mutex::new(Default::default()),
         }))
     }
 
-    fn read_log(&self) -> Result<Hub, HubHttpError> {
+    pub(crate) fn read_log(&self) -> Result<Hub, HubHttpError> {
         let bytes = std::fs::read(&self.paths.log).map_err(|e| HubHttpError::Io(e.to_string()))?;
         Hub::load(&bytes).map_err(|_| HubHttpError::Corrupt("order log"))
     }
 
-    fn read_catalog(&self) -> Result<Catalog, HubHttpError> {
+    pub(crate) fn read_catalog(&self) -> Result<Catalog, HubHttpError> {
         let bytes =
             std::fs::read(&self.paths.catalog).map_err(|e| HubHttpError::Io(e.to_string()))?;
         Catalog::load(&bytes).map_err(|_| HubHttpError::Corrupt("catalogue"))
@@ -127,7 +151,7 @@ impl HubState {
     /// rather than a half-written one. bebop's own commit orders three fsyncs for
     /// the same reason; rename gives it in one step when the whole image is
     /// rewritten anyway.
-    async fn with_log<F, T>(&self, f: F) -> Result<T, HubHttpError>
+    pub(crate) async fn with_log<F, T>(&self, f: F) -> Result<T, HubHttpError>
     where
         F: FnOnce(&mut Hub) -> Result<T, HubHttpError>,
     {
@@ -138,7 +162,7 @@ impl HubState {
         Ok(out)
     }
 
-    async fn with_catalog<F, T>(&self, f: F) -> Result<T, HubHttpError>
+    pub(crate) async fn with_catalog<F, T>(&self, f: F) -> Result<T, HubHttpError>
     where
         F: FnOnce(&mut Catalog) -> Result<T, HubHttpError>,
     {
@@ -448,7 +472,7 @@ impl HubState {
     /// Read the subscription roster. Not under the write lock: readers do not
     /// need it, and holding it here would serialise every notification behind
     /// every order write.
-    fn read_subs(&self) -> Result<Subs, HubHttpError> {
+    pub(crate) fn read_subs(&self) -> Result<Subs, HubHttpError> {
         let bytes = std::fs::read(&self.paths.subs).map_err(|e| HubHttpError::Io(e.to_string()))?;
         Subs::load(&bytes).map_err(|_| HubHttpError::Corrupt("subscriptions"))
     }
@@ -532,7 +556,7 @@ impl HubState {
     }
 
     /// Tell the venue a new order arrived.
-    fn notify_placed(&self, envelope: &Value) {
+    pub(crate) fn notify_placed(&self, envelope: &Value) {
         if self.notify.is_none() {
             return;
         }
@@ -547,7 +571,7 @@ impl HubState {
     }
 
     /// Tell the customer their order moved.
-    fn notify_advanced(&self, id: &str, envelope: &Value) {
+    pub(crate) fn notify_advanced(&self, id: &str, envelope: &Value) {
         if self.notify.is_none() {
             return;
         }
@@ -645,6 +669,166 @@ impl HubState {
     pub fn reply(&self, chat_id: &str, text: String) {
         self.dispatch(vec![chat_id.to_string()], text);
     }
+}
+
+impl HubState {
+    pub async fn set_position(&self, courier: &str, p: crate::hubcourier::Position) {
+        self.live.lock().await.positions.insert(courier.to_string(), p);
+    }
+
+    pub async fn position(&self, courier: &str) -> Option<crate::hubcourier::Position> {
+        self.live.lock().await.positions.get(courier).copied()
+    }
+
+    pub async fn set_shift(&self, courier: &str, open: bool) {
+        let mut live = self.live.lock().await;
+        if open {
+            live.shifts.insert(courier.to_string(), true);
+        } else {
+            live.shifts.remove(courier);
+            // Going off shift drops the last position too. Keeping it would
+            // leave the owner looking at where someone was when they finished,
+            // presented as where they are.
+            live.positions.remove(courier);
+        }
+    }
+
+    /// Who is on shift right now.
+    pub async fn shifts(&self) -> Vec<String> {
+        self.live.lock().await.shifts.keys().cloned().collect()
+    }
+
+    /// Add or replace a person on the roster.
+    ///
+    /// Adding an OWNER revokes every existing session for that id, so resetting
+    /// a forgotten password actually locks out whoever was using the old one --
+    /// which is the entire point of resetting it.
+    pub async fn add_person(
+        &self,
+        id: &str,
+        role: dowiz_hub::token::Role,
+        name: &str,
+        password: &str,
+    ) -> std::io::Result<()> {
+        let (id, name, password) = (id.to_string(), name.to_string(), password.to_string());
+        self.with_roster(move |r| {
+            r.revoke_all_for(&id);
+            r.upsert_person(&id, role, &name, &password)
+                .map_err(|e| HubHttpError::Io(format!("{e:?}")))
+        })
+        .await
+        .map_err(|e| std::io::Error::other(format!("{e:?}")))
+    }
+
+    pub fn signing_key(&self) -> &[u8] {
+        &self.signing_key
+    }
+
+    /// The venue's id, for the `user.locationId` the admin pane expects. Read
+    /// from the catalogue rather than configured twice.
+    pub fn location_id(&self) -> String {
+        self.read_catalog()
+            .ok()
+            .and_then(|c| c.location())
+            .and_then(|j| {
+                serde_json::from_str::<Value>(&j)
+                    .ok()?
+                    .get("id")?
+                    .as_str()
+                    .map(str::to_string)
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn read_roster(&self) -> Result<Roster, HubHttpError> {
+        let bytes = std::fs::read(&self.paths.roster).map_err(|e| HubHttpError::Io(e.to_string()))?;
+        let mut roster = Roster::load(&bytes).map_err(|_| HubHttpError::Corrupt("roster"))?;
+        if let Some(n) = pbkdf2_override() {
+            roster.set_iterations(n);
+        }
+        Ok(roster)
+    }
+
+    pub async fn with_roster<F, T>(&self, f: F) -> Result<T, HubHttpError>
+    where
+        F: FnOnce(&mut Roster) -> Result<T, HubHttpError>,
+    {
+        let _guard = self.write_lock.lock().await;
+        let mut roster = self.read_roster()?;
+        let out = f(&mut roster)?;
+        let bytes = roster.to_bytes().map_err(|e| HubHttpError::Io(format!("{e:?}")))?;
+        atomic_write(&self.paths.roster, &bytes)?;
+        Ok(out)
+    }
+}
+
+/// A lowered password-hashing cost, when one is configured.
+///
+/// EXISTS FOR TESTS, and says so out loud on every call rather than hiding in a
+/// config file. An integration test cannot spend 600k iterations per login and
+/// still be a test anyone runs; a PRODUCTION hub that sets this has weakened
+/// every password on it, so it warns each time it is read instead of once at
+/// startup, where the line would scroll away.
+///
+/// It cannot go below 1: a "KDF" with zero iterations is not a slow hash, it is
+/// no hash.
+fn pbkdf2_override() -> Option<u32> {
+    let raw = std::env::var("HUB_PBKDF2_ITERATIONS").ok()?;
+    let n: u32 = raw.trim().parse().ok()?;
+    if n >= dowiz_hub::crypto::PBKDF2_ITERATIONS {
+        return Some(n);
+    }
+    eprintln!(
+        "[hub] WARNING: HUB_PBKDF2_ITERATIONS={n} is below the recommended {} -- \
+         passwords on this hub are hashed more cheaply than they should be. \
+         Unset it outside of tests.",
+        dowiz_hub::crypto::PBKDF2_ITERATIONS
+    );
+    Some(n.max(1))
+}
+
+/// Read the hub's token signing key, creating one on first run.
+///
+/// GENERATED, not configured, so a hub that nobody set up is still safe rather
+/// than signing with a default. `HUB_SIGNING_KEY` overrides it, for an operator
+/// who wants the key in their own secret manager instead of on the disk.
+///
+/// Written 0600. It is the one file in the hub directory that must not travel
+/// with a backup: holding it is enough to mint an owner token.
+fn load_or_create_key(path: &Path) -> std::io::Result<Vec<u8>> {
+    if let Ok(hexkey) = std::env::var("HUB_SIGNING_KEY") {
+        let hexkey = hexkey.trim();
+        if !hexkey.is_empty() {
+            let key = dowiz_hub::crypto::unhex(hexkey).ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "HUB_SIGNING_KEY must be hex",
+                )
+            })?;
+            if key.len() < 32 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "HUB_SIGNING_KEY must be at least 32 bytes",
+                ));
+            }
+            return Ok(key);
+        }
+    }
+    if path.exists() {
+        let text = std::fs::read_to_string(path)?;
+        return dowiz_hub::crypto::unhex(text.trim()).ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "signing key file is not hex")
+        });
+    }
+    let key = dowiz_hub::crypto::random_bytes(32)?;
+    std::fs::write(path, dowiz_hub::crypto::hex(&key))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+    }
+    eprintln!("[hub] minted a new token signing key at {}", path.display());
+    Ok(key)
 }
 
 /// Compare two secrets without leaking their common prefix through timing.
@@ -775,7 +959,7 @@ fn money(minor: i64, currency: &str) -> String {
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
-fn now_ms() -> i64 {
+pub fn now_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)

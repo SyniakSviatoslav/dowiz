@@ -34,6 +34,9 @@ pub mod api;
 /// P48-INTAKE Phase 1 — `/webhook/*` route handlers (external signature gate,
 /// NOT capability-cert gated — separate trust boundary per §5.3).
 pub mod hub;
+pub mod hubauth;
+pub mod hubcourier;
+pub mod hubowner;
 pub mod notify;
 pub mod webhook;
 
@@ -134,7 +137,22 @@ pub fn build_router(
         .merge(webhook::build_webhook_router(webhook_state))
         // The hub's own routes. Absent when no hub directory is configured, so
         // this binary is still just a static server when that is all it is.
-        .merge(hub_state.map(hub::routes).unwrap_or_default())
+        // Four routers rather than one: the public storefront, the sign-in
+        // surface, and the two operator surfaces, each gated differently. They
+        // are separate files because their AUTHORISATION differs, not merely
+        // their paths -- putting an owner route next to a public one is how a
+        // missing extractor stops being obvious.
+        .merge(
+            hub_state
+                .clone()
+                .map(|h| {
+                    hub::routes(h.clone())
+                        .merge(hubauth::routes(h.clone()))
+                        .merge(hubowner::routes(h.clone()))
+                        .merge(hubcourier::routes(h))
+                })
+                .unwrap_or_default(),
+        )
         .layer(axum::middleware::from_fn(asset_cache_control))
         .layer(axum::middleware::from_fn(security_headers))
 }

@@ -1,0 +1,278 @@
+//! The courier's surface.
+//!
+//! WHAT WAS MISSING AND WHY IT MATTERED. The courier app has always polled
+//! `/api/courier/tasks`. Nothing could put a `courier_id` on an order, so that
+//! list was empty by construction — the app worked, logged in, drew its map, and
+//! had nothing to show, forever. The delivery leg of a delivery service was open.
+//!
+//! POSITIONS ARE VOLATILE, ON PURPOSE. A courier's location is worth something
+//! for the next few seconds and nothing after that, so it lives in memory and
+//! dies with the process. Writing it to the store would rewrite the whole KV
+//! several times a minute per courier to persist a number that is stale by the
+//! time anyone reads it — and would leave a movement history on disk that
+//! nobody asked for and D0 gives no reason to keep.
+//!
+//! SHIFTS ARE ALSO IN MEMORY, and that is a weaker claim: a hub restart clears
+//! every shift and couriers must reopen. That is the honest trade for now — a
+//! shift is a statement about right now, and a stale "on shift" surviving a
+//! crash would route orders to a phone that is off.
+
+use std::collections::HashMap;
+
+use axum::extract::{Path as AxPath, State};
+use axum::routing::{get, post};
+use axum::{Json, Router};
+use serde::Deserialize;
+use serde_json::{json, Value};
+
+use dowiz_core::order_machine::OrderStatus;
+use dowiz_hub::EventKind;
+use dowiz_kernel::json_api;
+
+use crate::hub::{now_ms, HubHttpError, Shared};
+use crate::hubauth::CourierCaller;
+
+/// Where a courier was, and when.
+///
+/// Coordinates are integer MICRO-DEGREES, per MANIFESTO C2: no float ever
+/// touches a coordinate that the kernel might later compare or store. A
+/// micro-degree is about 11 cm, which is finer than any phone's GPS.
+#[derive(Debug, Clone, Copy)]
+pub struct Position {
+    pub lat_udeg: i64,
+    pub lon_udeg: i64,
+    pub at_ms: i64,
+}
+
+/// The volatile half of the courier surface.
+#[derive(Default)]
+pub struct Live {
+    pub positions: HashMap<String, Position>,
+    pub shifts: HashMap<String, bool>,
+}
+
+/// `GET /api/courier/tasks` — this courier's work, and what is waiting for one.
+pub async fn tasks(
+    State(st): State<Shared>,
+    who: CourierCaller,
+) -> Result<Json<Value>, HubHttpError> {
+    let me = who.0.person.id.clone();
+    let hub = st.read_log()?;
+    let all = hub.orders();
+
+    let (mut mine, mut offered) = (Vec::new(), Vec::new());
+    for ev in &all {
+        let Ok(o) = serde_json::from_str::<Value>(&ev.order_json) else { continue };
+        let status = o.get("status").and_then(Value::as_str).unwrap_or("");
+        // Only delivery orders concern a courier. A pickup order is the
+        // customer's own journey.
+        if o.get("fulfilment").and_then(|f| f.get("kind")).and_then(Value::as_str)
+            != Some("delivery")
+        {
+            continue;
+        }
+        match o.get("courier_id").and_then(Value::as_str) {
+            Some(c) if c == me => {
+                if !matches!(status, "DELIVERED" | "CANCELLED" | "REJECTED") {
+                    mine.push(o);
+                }
+            }
+            // Unassigned and ready to leave the kitchen: anyone on shift may
+            // take it. This is what makes the venue workable without the owner
+            // hand-assigning every order during a rush.
+            None if status == OrderStatus::Ready.as_str() => offered.push(o),
+            _ => {}
+        }
+    }
+    Ok(Json(json!({ "tasks": mine, "available": offered, "courier": { "id": me } })))
+}
+
+/// One place where "this order is mine and still open" is decided.
+fn claim_check(o: &Value, me: &str) -> Result<(), HubHttpError> {
+    match o.get("courier_id").and_then(Value::as_str) {
+        Some(c) if c == me => Ok(()),
+        Some(_) => Err(HubHttpError::Refused("this order is assigned to another courier".into())),
+        None => Err(HubHttpError::Refused("this order is not assigned to you".into())),
+    }
+}
+
+/// `POST /api/courier/orders/{id}/accept` — take an unassigned order.
+pub async fn accept(
+    State(st): State<Shared>,
+    who: CourierCaller,
+    AxPath(id): AxPath<String>,
+) -> Result<Json<Value>, HubHttpError> {
+    let me = who.0.person.id.clone();
+    st.with_log(move |hub| {
+        let current = hub.order(&id).map_err(|_| HubHttpError::NotFound("order"))?;
+        let mut o: Value =
+            serde_json::from_str(&current).map_err(|_| HubHttpError::Corrupt("order"))?;
+        // FIRST WRITER WINS, and the write lock is what makes that true. Two
+        // couriers tapping at once both read an unassigned order; only one of
+        // them is inside the lock when it is written, and the second sees the
+        // assignment and is refused rather than silently overwriting it.
+        if let Some(existing) = o.get("courier_id").and_then(Value::as_str) {
+            if existing != me {
+                return Err(HubHttpError::Conflict("another courier took this order".into()));
+            }
+        }
+        let status = o.get("status").and_then(Value::as_str).unwrap_or("");
+        if status != OrderStatus::Ready.as_str() {
+            return Err(HubHttpError::Refused(format!(
+                "an order can be taken when it is READY, not {status}"
+            )));
+        }
+        o["courier_id"] = json!(me);
+        let body = serde_json::to_string(&o).unwrap_or(current);
+        hub.append(EventKind::Advanced, &id, &body, now_ms() as u64, [0u8; 32])
+            .map_err(|e| HubHttpError::Io(format!("{e:?}")))?;
+        Ok(Json(o))
+    })
+    .await
+}
+
+/// Move an order the courier holds to `target`, with the kernel deciding
+/// whether the edge is legal.
+async fn advance_as_courier(
+    st: &Shared,
+    me: String,
+    id: String,
+    target: OrderStatus,
+) -> Result<Json<Value>, HubHttpError> {
+    let notify_id = id.clone();
+    let out = st
+        .with_log(move |hub| {
+            let current = hub.order(&id).map_err(|_| HubHttpError::NotFound("order"))?;
+            let cur: Value =
+                serde_json::from_str(&current).map_err(|_| HubHttpError::Corrupt("order"))?;
+            claim_check(&cur, &me)?;
+
+            let updated = json_api::apply_event_logic(&current, target.as_str())
+                .map_err(HubHttpError::Refused)?;
+            let mut merged: Value = serde_json::from_str(&updated)
+                .map_err(|_| HubHttpError::Corrupt("kernel order"))?;
+            for k in [
+                "contact", "fulfilment", "payment", "delivery_fee", "total", "courier_id",
+                "payment_status", "created_at_ms", "rejection_reason",
+            ] {
+                if let Some(v) = cur.get(k) {
+                    merged[k] = v.clone();
+                }
+            }
+            merged["last_actor"] = json!(me);
+            let body = serde_json::to_string(&merged).unwrap_or(updated);
+            hub.append(EventKind::Advanced, &id, &body, now_ms() as u64, [0u8; 32])
+                .map_err(|e| HubHttpError::Io(format!("{e:?}")))?;
+            Ok(merged)
+        })
+        .await?;
+    st.notify_advanced(&notify_id, &out);
+    Ok(Json(out))
+}
+
+/// `POST /api/courier/orders/{id}/pickup` — the food is with the courier.
+pub async fn pickup(
+    State(st): State<Shared>,
+    who: CourierCaller,
+    AxPath(id): AxPath<String>,
+) -> Result<Json<Value>, HubHttpError> {
+    advance_as_courier(&st, who.0.person.id, id, OrderStatus::InDelivery).await
+}
+
+#[derive(Deserialize)]
+pub struct DeliverIn {
+    /// Cash collected at the door, in minor units. Recorded, not trusted as
+    /// authority: the kernel already knows the total, and this is what the
+    /// courier says they took.
+    #[serde(default)]
+    pub cash_collected: Option<i64>,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+/// `POST /api/courier/orders/{id}/deliver`.
+pub async fn deliver(
+    State(st): State<Shared>,
+    who: CourierCaller,
+    AxPath(id): AxPath<String>,
+    Json(body): Json<DeliverIn>,
+) -> Result<Json<Value>, HubHttpError> {
+    let me = who.0.person.id.clone();
+    let out = advance_as_courier(&st, me.clone(), id.clone(), OrderStatus::Delivered).await?;
+
+    // The cash note rides as a separate append so the delivery itself is
+    // recorded even if this second write is the one that fails.
+    if body.cash_collected.is_some() || body.note.is_some() {
+        let mut o = out.0.clone();
+        if let Some(c) = body.cash_collected {
+            o["cash_collected"] = json!(c);
+        }
+        if let Some(n) = body.note {
+            o["courier_note"] = json!(n);
+        }
+        let payload = serde_json::to_string(&o).unwrap_or_default();
+        let _ = st
+            .with_log(move |hub| {
+                hub.append(EventKind::Advanced, &id, &payload, now_ms() as u64, [0u8; 32])
+                    .map_err(|e| HubHttpError::Io(format!("{e:?}")))
+            })
+            .await;
+        return Ok(Json(o));
+    }
+    Ok(out)
+}
+
+#[derive(Deserialize)]
+pub struct PositionIn {
+    /// Degrees, as the browser's Geolocation API gives them. Converted to
+    /// integer micro-degrees on arrival so no float crosses into storage.
+    pub lat: f64,
+    pub lon: f64,
+}
+
+/// `POST /api/courier/position`.
+pub async fn position(
+    State(st): State<Shared>,
+    who: CourierCaller,
+    Json(body): Json<PositionIn>,
+) -> Result<Json<Value>, HubHttpError> {
+    if !body.lat.is_finite() || !body.lon.is_finite() {
+        return Err(HubHttpError::Invalid("position is not a number".into()));
+    }
+    if !(-90.0..=90.0).contains(&body.lat) || !(-180.0..=180.0).contains(&body.lon) {
+        return Err(HubHttpError::Invalid("position is off the planet".into()));
+    }
+    let p = Position {
+        lat_udeg: (body.lat * 1_000_000.0).round() as i64,
+        lon_udeg: (body.lon * 1_000_000.0).round() as i64,
+        at_ms: now_ms(),
+    };
+    st.set_position(&who.0.person.id, p).await;
+    Ok(Json(json!({ "ok": true })))
+}
+
+#[derive(Deserialize)]
+pub struct ShiftIn {
+    pub open: bool,
+}
+
+/// `POST /api/courier/shift`.
+pub async fn shift(
+    State(st): State<Shared>,
+    who: CourierCaller,
+    Json(body): Json<ShiftIn>,
+) -> Result<Json<Value>, HubHttpError> {
+    st.set_shift(&who.0.person.id, body.open).await;
+    Ok(Json(json!({ "open": body.open })))
+}
+
+pub fn routes(state: Shared) -> Router {
+    Router::new()
+        .route("/api/courier/tasks", get(tasks))
+        .route("/api/courier/orders/{id}/accept", post(accept))
+        .route("/api/courier/orders/{id}/pickup", post(pickup))
+        .route("/api/courier/orders/{id}/deliver", post(deliver))
+        .route("/api/courier/position", post(position))
+        .route("/api/courier/shift", post(shift))
+        .with_state(state)
+}

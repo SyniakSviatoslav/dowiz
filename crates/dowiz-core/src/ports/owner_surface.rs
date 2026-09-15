@@ -379,10 +379,31 @@ impl OwnerOrderAction {
         }
     }
 
+    /// The inverse of [`verb`](Self::verb). Public because the HTTP surfaces
+    /// receive the verb as a string and must map it back HERE rather than
+    /// keeping their own table — a second table is how an action ends up
+    /// meaning one thing to the API and another to the signature check.
+    pub fn from_verb(s: &str) -> Option<Self> {
+        // Written as a scan over the same list `verb` defines, so a new action
+        // cannot be added to one direction and forgotten in the other.
+        [
+            OwnerOrderAction::Confirm,
+            OwnerOrderAction::Cancel,
+            OwnerOrderAction::Reject,
+            OwnerOrderAction::MarkPreparing,
+            OwnerOrderAction::MarkReady,
+        ]
+        .into_iter()
+        .find(|a| a.verb() == s)
+    }
+
     /// The status this action drives the order to from `from`, or `None` when the
     /// action has no legal target at all. Legality of the resulting EDGE is still
     /// decided by `apply_event` — this only names the destination.
-    fn target(self, from: OrderStatus) -> Option<OrderStatus> {
+    ///
+    /// Public for the same reason as `from_verb`: the hub's owner routes must
+    /// ask the kernel where an action leads instead of holding their own map.
+    pub fn target(self, from: OrderStatus) -> Option<OrderStatus> {
         match self {
             OwnerOrderAction::Confirm => Some(OrderStatus::Confirmed),
             OwnerOrderAction::Cancel => cancel_target(from),
@@ -985,6 +1006,33 @@ pub fn revoke_hub(ledger: &mut CourierRevocationLedger, hub_pk: [u8; 32], seq: u
 pub fn drop_revoked_hub(view: &mut MultiHubView, ledger: &CourierRevocationLedger) {
     view.hubs
         .retain(|c| !ledger.is_revoked(&c.child_cert.subject));
+}
+
+#[cfg(test)]
+mod verb_roundtrip_tests {
+    // Distinctness of the verbs is already covered by
+    // `tests::g1_action_verbs_are_all_distinct` above; a second copy here would
+    // be one more thing to keep in step for no extra coverage.
+    use super::*;
+
+    /// Every action's verb must map back to that action. A one-way table is how
+    /// the API and the signature check come to disagree about what "ready"
+    /// means.
+    #[test]
+    fn every_verb_round_trips() {
+        for a in [
+            OwnerOrderAction::Confirm,
+            OwnerOrderAction::Cancel,
+            OwnerOrderAction::Reject,
+            OwnerOrderAction::MarkPreparing,
+            OwnerOrderAction::MarkReady,
+        ] {
+            assert_eq!(OwnerOrderAction::from_verb(a.verb()), Some(a), "{}", a.verb());
+        }
+        assert_eq!(OwnerOrderAction::from_verb("deliver"), None);
+        assert_eq!(OwnerOrderAction::from_verb(""), None);
+    }
+
 }
 
 #[cfg(test)]

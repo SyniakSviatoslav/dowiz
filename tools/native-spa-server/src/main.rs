@@ -51,8 +51,44 @@ struct Cli {
     #[arg(long)]
     seed_catalog: Option<PathBuf>,
 
+    /// Add a person to the hub's roster and exit:
+    /// `--hub-dir <dir> --add-person owner:ana@dubin.al:Ana`.
+    ///
+    /// The password comes from `PERSON_PASSWORD`, or is generated and printed
+    /// once. Deliberately NOT an HTTP route -- see where it is handled.
+    #[arg(long)]
+    add_person: Option<String>,
+
     #[arg(long, env = "SPA_TLS_KEY")]
     tls_key: Option<PathBuf>,
+}
+
+/// `role:identifier:name`, e.g. `owner:ana@dubin.al:Ana` or
+/// `courier:+355691234567:Eni`.
+///
+/// The identifier is what the person types to log in, so it is lowercased here
+/// once rather than at every comparison later.
+fn parse_person_spec(spec: &str) -> std::io::Result<(String, dowiz_hub::token::Role, String)> {
+    let mut parts = spec.splitn(3, ':');
+    let role = parts.next().unwrap_or_default();
+    let id = parts.next().unwrap_or_default().trim().to_ascii_lowercase();
+    let name = parts.next().unwrap_or("").trim().to_string();
+    let role = dowiz_hub::token::Role::from_str(role)
+        .filter(|r| matches!(r, dowiz_hub::token::Role::Owner | dowiz_hub::token::Role::Courier))
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "role must be `owner` or `courier`",
+            )
+        })?;
+    if id.is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "--add-person needs role:identifier[:name]",
+        ));
+    }
+    let name = if name.is_empty() { id.clone() } else { name };
+    Ok((id, role, name))
 }
 
 #[tokio::main]
@@ -60,6 +96,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
     let root = resolve_root(Some(cli.root.clone()));
     let api = ApiState::build_default();
+    // Creating a person is a SEPARATE INVOCATION, not a route. A hub with no
+    // people must not expose a "create the first owner" endpoint: that endpoint
+    // is unauthenticated by definition, and whoever reaches the box first owns
+    // the restaurant. Requiring shell access to the VPS is the authorisation.
+    if let (Some(dir), Some(spec)) = (&cli.hub_dir, &cli.add_person) {
+        let (id, role, name) = parse_person_spec(spec)?;
+        let password = match std::env::var("PERSON_PASSWORD") {
+            Ok(p) if !p.is_empty() => p,
+            _ => {
+                // Generated rather than prompted: a password typed on a command
+                // line ends up in the shell history and in `ps`.
+                let bytes = dowiz_hub::crypto::random_bytes(12)?;
+                let generated = dowiz_hub::crypto::b64url_encode(&bytes);
+                eprintln!("[hub] generated password for {id}: {generated}");
+                eprintln!("[hub] it is shown ONCE and is not recoverable from the roster.");
+                generated
+            }
+        };
+        let st = native_spa_server::hub::HubState::open(dir)?;
+        st.add_person(&id, role, &name, &password).await?;
+        eprintln!("[hub] {} {} added as {}", role.as_str(), id, name);
+        return Ok(());
+    }
     if let (Some(dir), Some(bundle)) = (&cli.hub_dir, &cli.seed_catalog) {
         let n = native_spa_server::hub::seed_catalog(dir, bundle)?;
         eprintln!("[hub] seeded {} categories and {} products into {}", n.0, n.1, dir.display());
