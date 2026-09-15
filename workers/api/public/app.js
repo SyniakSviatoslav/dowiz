@@ -28,6 +28,8 @@ const T = {
         later:'Në një orë tjetër', schedFail:'Koha nuk vlen',
         inArea:'Ne dërgojmë këtu', outArea:'Jashtë zonës sonë të dërgesës', noGeo:'Nuk morëm dot vendndodhjen',
         notDeclared:'Alergjenët nuk janë deklaruar', noneOf14:'Asnjë nga 14 alergjenët',
+        sayHow:'Si ishte?', sayHint:'Vetëm restoranti e lexon. Pa yje, pa vlerësime.',
+        sayGo:'Dërgo', saidIt:'Faleminderit',
         how:'Si e merrni', toDoor:'Dërgesë', toPickup:'E marr vetë', pickupAt:'Merreni te',
         avoid:'Alergjenët', avoidHint:'Fshihni pjatat që i përmbajnë', avoidOn:'Fshehur',
         avoidUnknown:'pjata pa deklaratë', clearAvoid:'Shfaqni të gjitha',
@@ -55,6 +57,8 @@ const T = {
         later:'At a later time', schedFail:'That time will not work',
         inArea:'We deliver here', outArea:'Outside our delivery area', noGeo:'Could not get your location',
         notDeclared:'Allergens not declared', noneOf14:'None of the 14 allergens',
+        sayHow:'How was it?', sayHint:'Only the venue reads this. No stars, no ratings.',
+        sayGo:'Send', saidIt:'Thank you',
         how:'How you get it', toDoor:'Delivery', toPickup:'I will collect', pickupAt:'Collect at',
         avoid:'Allergens', avoidHint:'Hide dishes that contain them', avoidOn:'hidden',
         avoidUnknown:'undeclared dishes', clearAvoid:'Show everything',
@@ -82,6 +86,8 @@ const T = {
         later:'На інший час', schedFail:'Такий час не підходить',
         inArea:'Сюди доставляємо', outArea:'Поза зоною доставки', noGeo:'Не вдалося визначити місце',
         notDeclared:'Алергени не заявлено', noneOf14:'Жодного з 14 алергенів',
+        sayHow:'Як вам?', sayHint:'Читає лише заклад. Без зірок і оцінок.',
+        sayGo:'Надіслати', saidIt:'Дякуємо',
         how:'Як заберете', toDoor:'Доставка', toPickup:'Заберу сам', pickupAt:'Забрати за адресою',
         avoid:'Алергени', avoidHint:'Сховати страви, що їх містять', avoidOn:'сховано',
         avoidUnknown:'страв без заяви', clearAvoid:'Показати все',
@@ -1162,6 +1168,48 @@ async function collectCard(order){
   };
 }
 
+// ── what the customer thought ───────────────────────────────────────────────
+//
+// A SENTENCE, NOT A SCORE, and not about a person. dowiz does not rank the
+// people who work through it; a number on an order becomes a number on whoever
+// carried it the moment anybody joins the two. A kitchen can act on "the rice
+// was cold" and can do nothing at all with a three.
+//
+// Only once the order is over, and only once: the box goes away after it is
+// sent, because a note the customer can rewrite is one the venue cannot trust
+// it read.
+function sayBlock(order){
+  const over = ['DELIVERED', 'REJECTED', 'CANCELLED'].includes(order.status);
+  if (!over) return '';
+  if (order.feedback) {
+    return `<p class="geo ok" style="margin-bottom:12px">${esc(t('saidIt'))}</p>`;
+  }
+  return `<label for="f-say">${esc(t('sayHow'))}</label>
+    <textarea id="f-say" maxlength="600" rows="2"></textarea>
+    <p class="avoid-h">${esc(t('sayHint'))}</p>
+    <button class="btn btn-ghost" id="sayGo" style="margin-bottom:12px">${esc(t('sayGo'))}</button>`;
+}
+
+function bindSay(order){
+  const go = $('#sayGo'); if (!go) return;
+  go.onclick = async () => {
+    const text = $('#f-say').value.trim();
+    if (!text) return;
+    go.disabled = true;
+    try {
+      const tok = history().find(x => x.id === order.id)?.t;
+      const r = await fetch(`${API}/order/${encodeURIComponent(order.id)}/feedback`, {
+        method:'POST',
+        headers:{ 'content-type':'application/json',
+                  ...(tok ? { authorization:'Bearer ' + tok } : {}) },
+        body: JSON.stringify({ text }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+      openTracking({ ...order, feedback: { text } });
+    } catch (e) { go.disabled = false; toast(String(e.message || e)); }
+  };
+}
+
 const FLOW = ['PENDING','CONFIRMED','PREPARING','READY','IN_DELIVERY','DELIVERED'];
 function openTracking(order){
   const st = order.status, i = FLOW.indexOf(st);
@@ -1190,7 +1238,9 @@ function openTracking(order){
     <div class="totals"><div class="row grand"><span>${esc(t('total'))}</span>
       <span class="money">${money(order.total ?? order.subtotal ?? 0)}</span></div></div>
     ${follow}
+    ${sayBlock(order)}
     <button class="btn btn-ghost" id="closeTrack" style="margin-bottom:12px">OK</button>`);
+  bindSay(order);
   $('#closeTrack').onclick = closeSheet;
   clearTimeout(openTracking._t);
   if (!dead && st !== 'DELIVERED') {

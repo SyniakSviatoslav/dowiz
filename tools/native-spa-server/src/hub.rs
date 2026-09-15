@@ -932,6 +932,84 @@ pub async fn order(
     Ok(Json(envelope))
 }
 
+#[derive(Deserialize)]
+pub struct FeedbackIn {
+    pub text: String,
+}
+
+/// `POST /api/order/{id}/feedback` — what the customer thought.
+///
+/// NO STARS. NO SCORE. NOT ON ANYONE.
+///
+/// The plan asked for a five-star rating here and flagged it against
+/// NO-COURIER-SCORING, so this is the reconciliation rather than a shrug: a
+/// number attached to an order is a number attached to whoever carried it the
+/// moment anybody joins the two, and the join is one line of SQL nobody would
+/// even notice writing. dowiz does not rank the people who work through it --
+/// that is a D0 invariant, enforced in the kernel by omitting `Ord` from the
+/// routing enums so a quality router is unrepresentable.
+///
+/// What survives is the part that was actually useful: a sentence, to the
+/// venue, about one order. A kitchen can act on "the rice was cold"; it can do
+/// nothing with a three.
+///
+/// Written ONCE. A comment the customer can rewrite is a comment the venue
+/// cannot trust it read, and an endpoint that rewrites an order's fields on
+/// demand is one a stranger with the link can use as an eraser.
+pub async fn feedback(
+    State(st): State<Shared>,
+    headers: axum::http::HeaderMap,
+    AxPath(id): AxPath<String>,
+    Json(body): Json<FeedbackIn>,
+) -> Result<Json<Value>, HubHttpError> {
+    let text = body.text.trim().to_string();
+    if text.is_empty() {
+        return Err(HubHttpError::Invalid("say something, or say nothing".into()));
+    }
+    if text.chars().count() > 600 {
+        return Err(HubHttpError::Invalid("that is longer than a note about an order".into()));
+    }
+    // The customer's own token for THIS order, and nothing else. An owner
+    // leaving feedback on their own venue is not a thing worth supporting.
+    let tok = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|h| h.strip_prefix("Bearer "))
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .ok_or(HubHttpError::Unauthorized("this order needs the link you were given"))?;
+    let claims = dowiz_hub::token::verify(st.signing_key(), tok, now_ms())
+        .map_err(|_| HubHttpError::Unauthorized("that link is no longer valid"))?;
+    if claims.role != dowiz_hub::token::Role::Customer || claims.scope != id {
+        return Err(HubHttpError::Unauthorized("that link is not for this order"));
+    }
+
+    let at = now_ms();
+    st.with_log(move |hub| {
+        let raw = hub.order(&id).map_err(|_| HubHttpError::NotFound("order"))?;
+        let mut env: Value =
+            serde_json::from_str(&raw).map_err(|_| HubHttpError::Corrupt("order"))?;
+        if env.get("feedback").is_some() {
+            return Err(HubHttpError::Conflict("you have already left a note".into()));
+        }
+        // Only once the order is over. Feedback on a pending order is a message
+        // the kitchen needs NOW, and this is not a messaging channel -- saying
+        // so beats letting it arrive somewhere nobody is watching.
+        let status = env.get("status").and_then(Value::as_str).unwrap_or("");
+        if !matches!(status, "DELIVERED" | "REJECTED" | "CANCELLED") {
+            return Err(HubHttpError::Conflict(
+                "this order is still running -- call the venue if something is wrong".into(),
+            ));
+        }
+        env["feedback"] = json!({ "text": text, "at": at });
+        let stored = serde_json::to_string(&env).unwrap_or(raw);
+        hub.append(EventKind::Noted, &id, &stored, at as u64, [0u8; 32])
+            .map_err(|e| HubHttpError::Io(format!("{e:?}")))?;
+        Ok(Json(json!({ "ok": true })))
+    })
+    .await
+}
+
 /// Carry the hub's own fields across a kernel transition.
 ///
 /// THE KERNEL OWNS items, status, subtotal and the ledger; it does not know
@@ -959,6 +1037,19 @@ pub(crate) fn carry_over(old: &Value, updated: &mut Value) {
         "courier_note",
         "scheduled_for_ms",
         "last_actor",
+        // THE DISCOUNT AND THE CODE THAT GAVE IT. Missing from this list until
+        // now, and the consequence was not cosmetic: the use-count folds over
+        // orders looking for `promo.code`, so the first status change erased
+        // the evidence and a max-uses code became infinitely reusable. The
+        // test that was supposed to catch it passed for the wrong reason --
+        // it asserted the count went back to zero after a rejection, which it
+        // did, because the field had been dropped rather than because the
+        // rejection returned the use.
+        "discount",
+        "promo",
+        // The customer's note. It is written after the order is over, so
+        // nothing should follow it -- but "should" is how fields get lost.
+        "feedback",
     ] {
         if let Some(v) = old.get(k) {
             updated[k] = v.clone();
@@ -1722,6 +1813,7 @@ pub fn routes(state: Shared) -> Router {
         .route("/api/order/{id}", get(order))
         .route("/api/order/{id}/advance", post(advance))
         .route("/api/order/{id}/subscribe", post(subscribe_order))
+        .route("/api/order/{id}/feedback", post(feedback))
         .route("/api/hub/staff/subscribe", post(subscribe_staff))
         .route("/api/hub/staff/unsubscribe", post(unsubscribe_staff))
         .route("/media/{name}", get(media))

@@ -71,13 +71,24 @@ pub enum EventKind {
     /// details itself, because a log of who read a phone number that also
     /// contains the phone number has doubled the exposure it exists to record.
     Revealed = 4,
+    /// A fact was ADDED to an order without its status moving: the customer's
+    /// note, a courier's proof of delivery.
+    ///
+    /// Not `Advanced`, which means specifically a transition the KERNEL
+    /// allowed. Writing an annotation as a transition would put events in the
+    /// log that the order machine never decided, and the first person to audit
+    /// the lifecycle would find a status change with no edge behind it.
+    Noted = 5,
 }
 
 impl EventKind {
     /// Does this event describe an ORDER? Everything that folds the log into
     /// orders asks this first.
     pub fn is_order(self) -> bool {
-        matches!(self, EventKind::Placed | EventKind::Advanced | EventKind::Paid)
+        matches!(
+            self,
+            EventKind::Placed | EventKind::Advanced | EventKind::Paid | EventKind::Noted
+        )
     }
 
     fn from_byte(b: u8) -> Option<Self> {
@@ -86,6 +97,7 @@ impl EventKind {
             2 => Some(EventKind::Advanced),
             3 => Some(EventKind::Paid),
             4 => Some(EventKind::Revealed),
+            5 => Some(EventKind::Noted),
             _ => None,
         }
     }

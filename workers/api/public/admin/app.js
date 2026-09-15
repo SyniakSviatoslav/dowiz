@@ -893,6 +893,12 @@ function skeletonOrders(){
 
 function row(o, newIdx){
   const items = (o.items || []).map(i => `<b>${i.quantity}×</b> ${esc(i.name || shortId(i.product_id))}`).join(', ');
+  // The customer's own words, on the row rather than behind a tap: a note that
+  // takes a click to find is a note nobody reads, and this is the only channel
+  // they have after the order is over.
+  const said = o.feedback?.text
+    ? `<div class="said"><i class="ti ti-message-2 i" aria-hidden="true"></i>${esc(o.feedback.text)}</div>`
+    : '';
   const f = o.fulfilment || {}, c = o.contact || {};
   const st = esc(o.status);
   // A scheduled order looks exactly like a live one in a queue, which is how a
@@ -917,7 +923,10 @@ function row(o, newIdx){
       ${f.address?.line ? `<span><i class="ti ti-map-pin i" aria-hidden="true"></i>${esc(f.address.line)}</span>` : ''}
       ${f.address?.note ? `<span class="muted"><i class="ti ti-note i" aria-hidden="true"></i>${esc(f.address.note)}</span>` : ''}
       <span class="muted"><i class="ti ${o.payment === 'cash' ? 'ti-cash' : 'ti-credit-card'} i" aria-hidden="true"></i>${o.payment === 'cash' ? 'готівка' : esc(o.payment || '')}</span>
+      ${f.note ? `<span class="muted"><i class="ti ti-note i" aria-hidden="true"></i>${esc(f.note)}</span>` : ''}
+      ${o.promo?.code ? `<span class="muted"><i class="ti ti-ticket i" aria-hidden="true"></i>${esc(o.promo.code)} −<span class="money">${money(o.discount || 0)}</span></span>` : ''}
     </div>
+    ${said}
     <div class="acts">${actions(o)}</div>
   </article>`;
 }

@@ -2407,9 +2407,38 @@ async fn a_rejected_order_returns_the_use_it_took() {
                          json!({ "action": "reject", "reason": "out of fish" }));
     assert_eq!(code, 200, "{v}");
 
+    // The order must still CARRY its promo after the transition, or this
+    // assertion passes because the field was dropped rather than because the
+    // rejection returned the use -- which is exactly what it did at first.
+    let (_, o) = get(&s.base, &format!("/api/owner/orders"), Some(&owner));
+    let rejected = o["orders"].as_array().unwrap().iter()
+        .find(|x| x["id"] == id.as_str()).expect("the order");
+    assert_eq!(rejected["promo"]["code"], "ONCE", "the transition erased the promo: {rejected}");
+    assert_eq!(rejected["discount"], 100);
+
     let (_, list) = get(&s.base, "/api/owner/promotions", Some(&owner));
     assert_eq!(list["promotions"][0]["used"], 0, "the refused order still holds the use");
     assert_eq!(list["promotions"][0]["status"], "active");
+
+    // And a code with a cap must survive an ACCEPTED order, which is where the
+    // erasure actually cost money: the code would be reusable for ever.
+    post(&s.base, "/api/owner/promotions", Some(&owner),
+         json!({ "code": "CAPPED", "kind": "fixed", "value": 100, "maxUses": 1 }));
+    let (_, o2) = post(&s.base, "/api/public/locations/dubin/orders", None, json!({
+        "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 2 }],
+        "contact": { "name": "C", "phone": "+355690000000" },
+        "fulfilment": { "kind": "pickup" }, "promo": "CAPPED"
+    }));
+    let id2 = o2["id"].as_str().unwrap().to_string();
+    let (code, v) = post(&s.base, &format!("/api/owner/orders/{id2}/action"), Some(&owner),
+                         json!({ "action": "confirm" }));
+    assert_eq!(code, 200, "{v}");
+    let (code, v) = post(&s.base, "/api/public/locations/dubin/orders", None, json!({
+        "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 2 }],
+        "contact": { "name": "C", "phone": "+355690000000" },
+        "fulfilment": { "kind": "pickup" }, "promo": "CAPPED"
+    }));
+    assert_eq!(code, 409, "an accepted order lost its promo, so the cap never binds: {v}");
 }
 
 /// Deleting is not the same as switching off: the deleted code stops working
@@ -2868,4 +2897,58 @@ async fn the_customer_key_is_not_a_phone_number() {
     assert_eq!(get(&s.base, "/api/owner/customers", Some(&jwt)).0, 403);
     assert_eq!(post(&s.base, &format!("/api/owner/customers/{key}/reveal"), Some(&jwt),
                     json!({ "reason": "curious" })).0, 403);
+}
+
+/// Feedback is a sentence to the venue about one order. There is no score on
+/// anyone, and the note cannot be rewritten.
+#[tokio::test(flavor = "multi_thread")]
+async fn feedback_is_a_sentence_and_not_a_score() {
+    let s = boot("feedback").await;
+    let (_, t) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = t["access_token"].as_str().unwrap().to_string();
+    let (_, o) = post(&s.base, "/api/public/locations/dubin/orders", None, json!({
+        "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 1 }],
+        "contact": { "name": "C", "phone": "+355690000000" },
+        "fulfilment": { "kind": "pickup" }
+    }));
+    let id = o["id"].as_str().unwrap().to_string();
+    let cust = o["access_token"].as_str().unwrap().to_string();
+
+    // Not while it is running: that is a message the kitchen needs now, and
+    // this is not a messaging channel.
+    let (code, v) = post(&s.base, &format!("/api/order/{id}/feedback"), Some(&cust),
+                         json!({ "text": "the rice was cold" }));
+    assert_eq!(code, 409, "{v}");
+
+    post(&s.base, &format!("/api/owner/orders/{id}/action"), Some(&owner),
+         json!({ "action": "reject", "reason": "closed early" }));
+
+    let (code, v) = post(&s.base, &format!("/api/order/{id}/feedback"), Some(&cust),
+                         json!({ "text": "the rice was cold" }));
+    assert_eq!(code, 200, "{v}");
+
+    // Written once. A note the customer can rewrite is one the venue cannot
+    // trust it read.
+    let (code, _) = post(&s.base, &format!("/api/order/{id}/feedback"), Some(&cust),
+                         json!({ "text": "actually it was fine" }));
+    assert_eq!(code, 409);
+
+    let (_, order) = get(&s.base, &format!("/api/order/{id}"), Some(&cust));
+    assert_eq!(order["feedback"]["text"], "the rice was cold");
+    assert_eq!(order["status"], "REJECTED", "an annotation must not move the status");
+
+    // Somebody else's link opens nothing.
+    let (_, other) = post(&s.base, "/api/public/locations/dubin/orders", None, json!({
+        "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 1 }],
+        "contact": { "name": "D", "phone": "+355690000009" },
+        "fulfilment": { "kind": "pickup" }
+    }));
+    let stranger = other["access_token"].as_str().unwrap().to_string();
+    assert_eq!(post(&s.base, &format!("/api/order/{id}/feedback"), Some(&stranger),
+                    json!({ "text": "not mine" })).0, 401);
+    assert_eq!(post(&s.base, &format!("/api/order/{id}/feedback"), None,
+                    json!({ "text": "nobody" })).0, 401);
+    // And so does the owner's: this is the customer's voice, not the venue's.
+    assert_eq!(post(&s.base, &format!("/api/order/{id}/feedback"), Some(&owner),
+                    json!({ "text": "we were fine actually" })).0, 401);
 }

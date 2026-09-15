@@ -340,6 +340,11 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
    carries the warning edge and nothing else does. */
 /* The find bar sits above the queue and never scrolls away with it: an owner
    searching while orders arrive must not lose the box under a new row. */
+/* The customer's own words. Quoted rather than styled as a field: it is the
+   only thing on the row that somebody wrote rather than the system recorded. */
+.said{display:flex;gap:var(--space-2);margin:var(--space-2) var(--space-4) 0;
+      padding-left:var(--space-3);border-left:2px solid var(--brand-primary);
+      color:var(--brand-text-muted);font-size:var(--text-sm)}
 .ofind{display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap;
       margin:0 var(--space-4) var(--space-3)}
 .ofind .srch{flex:1 1 12rem;display:flex;align-items:center;gap:var(--space-2);
