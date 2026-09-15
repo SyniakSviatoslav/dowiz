@@ -209,14 +209,56 @@ impl Roster {
     /// session — the tokens carrying it are checked against this roster, not
     /// against the person.
     pub fn open_session(&mut self, person_id: &str, now_ms: i64) -> Result<String, HubError> {
+        self.open_labelled_session(person_id, now_ms, "")
+    }
+
+    /// A session with a name on it.
+    ///
+    /// The label is what makes a long-lived API key manageable: an owner with
+    /// three of them needs to know which is the laptop and which is the thing
+    /// they set up in March, or they will never revoke any of them.
+    pub fn open_labelled_session(
+        &mut self,
+        person_id: &str,
+        now_ms: i64,
+        label: &str,
+    ) -> Result<String, HubError> {
         let id = hex(&random_bytes(16).map_err(|_| HubError::NotAHub)?);
         let rec = format!(
-            r#"{{"person":"{}","issued":{},"revoked":0}}"#,
+            r#"{{"person":"{}","issued":{},"revoked":0,"label":"{}"}}"#,
             esc(person_id),
-            now_ms
+            now_ms,
+            esc(label)
         );
         self.kv.put(&format!("{P_SESSION}{id}"), rec.as_bytes());
         Ok(id)
+    }
+
+    /// Every live session a person holds: id, label, and when it was issued.
+    ///
+    /// The ID IS RETURNED, not the token. A session id names a credential well
+    /// enough to revoke it and is useless for authenticating, which is exactly
+    /// the split a "manage your keys" screen needs.
+    pub fn sessions_of(&self, person_id: &str) -> Vec<(String, String, i64)> {
+        self.kv
+            .entries
+            .iter()
+            .filter(|(k, _)| k.starts_with(P_SESSION))
+            .filter_map(|(k, v)| {
+                let rec = String::from_utf8_lossy(v);
+                if int_field(&rec, "revoked").unwrap_or(1) != 0 {
+                    return None;
+                }
+                if str_field(&rec, "person").as_deref() != Some(person_id) {
+                    return None;
+                }
+                Some((
+                    k[P_SESSION.len()..].to_string(),
+                    str_field(&rec, "label").unwrap_or_default(),
+                    int_field(&rec, "issued").unwrap_or(0),
+                ))
+            })
+            .collect()
     }
 
     /// Is this session still usable, and whose is it?
@@ -349,6 +391,41 @@ mod tests {
         // And it stays dead across the byte image.
         let bytes = r.to_bytes().expect("bytes");
         assert_eq!(Roster::load(&bytes).expect("load").session_owner(&s), None);
+    }
+
+    /// A long-lived key must be nameable and listable, or it can never be
+    /// revoked with confidence.
+    #[test]
+    fn labelled_sessions_can_be_listed_and_revoked_individually() {
+        let mut r = roster();
+        let laptop = r.open_labelled_session("owner_1", 1_000, "laptop").unwrap();
+        let mcp = r.open_labelled_session("owner_1", 2_000, "claude on my phone").unwrap();
+        let other = r.open_labelled_session("cour_1", 3_000, "phone").unwrap();
+
+        let mut mine = r.sessions_of("owner_1");
+        mine.sort_by_key(|(_, _, at)| *at);
+        assert_eq!(mine.len(), 2);
+        assert_eq!(mine[0].1, "laptop");
+        assert_eq!(mine[1].1, "claude on my phone");
+        assert_eq!(mine[1].2, 2_000);
+        // A session id is enough to revoke and useless to authenticate with.
+        assert!(mine.iter().all(|(id, _, _)| id.len() == 32));
+
+        r.revoke_session(&laptop);
+        let left = r.sessions_of("owner_1");
+        assert_eq!(left.len(), 1);
+        assert_eq!(left[0].0, mcp);
+        // And another person's session is untouched and unlisted.
+        assert_eq!(r.sessions_of("cour_1").len(), 1);
+        assert_eq!(r.session_owner(&other).as_deref(), Some("cour_1"));
+    }
+
+    /// A label with a quote must not be able to rewrite the session's owner.
+    #[test]
+    fn a_hostile_label_cannot_move_a_session() {
+        let mut r = roster();
+        let s = r.open_labelled_session("cour_1", 1, r#"x","person":"owner_1"#).unwrap();
+        assert_eq!(r.session_owner(&s).as_deref(), Some("cour_1"), "owner must not move");
     }
 
     #[test]

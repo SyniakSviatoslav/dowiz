@@ -386,6 +386,19 @@ function setupView(){
     </section>
 
     <section class="card">
+      <h2>Ключі доступу</h2>
+      <p class="hint">Для ваших власних застосунків і MCP-клієнтів. Ключ показуємо
+         <b>один раз</b>. Кожен ключ можна відкликати окремо — решта працюватимуть.
+         Адреса MCP: <code>${esc(location.origin)}/mcp</code></p>
+      <div class="row">
+        <input id="keyLabel" class="ask" type="text" placeholder="Для чого цей ключ…" autocomplete="off">
+        <button class="btn btn-ghost" id="keyNew"><i class="ti ti-key i" aria-hidden="true"></i>Створити</button>
+      </div>
+      <div id="keyShown" class="report" hidden></div>
+      <ul id="keyList" class="keys"></ul>
+    </section>
+
+    <section class="card">
       <h2>Кольори закладу</h2>
       <p class="hint">Завантажте логотип або фото меню — кольори візьмемо звідти.
          Контраст перевіряємо автоматично: нечитабельну пару не приймемо.</p>
@@ -495,6 +508,32 @@ async function renderSettings(){
   });
 }
 
+// The keys that exist, by name. The VALUE is never listed -- only the session
+// id, which is enough to revoke a key and useless for authenticating with it.
+async function renderKeys(){
+  const el = $('#keyList'); if (!el) return;
+  let d;
+  try { d = await api('/owner/apikeys'); } catch { return; }
+  el.innerHTML = d.keys.map(k => `
+    <li>
+      <span>${esc(k.label || 'ключ')}</span>
+      ${k.current ? '<span class="hint">поточна сесія</span>'
+                  : `<button class="btn btn-ghost narrow" data-revoke="${esc(k.session)}">Відкликати</button>`}
+    </li>`).join('') || '<li class="hint">Ключів ще немає</li>';
+  el.querySelectorAll('[data-revoke]').forEach(b => {
+    b.onclick = async () => {
+      // Irreversible and immediate, so it is confirmed. Anything already using
+      // this key stops working the moment this returns.
+      if (!confirm('Відкликати ключ? Застосунки, що ним користуються, втратять доступ.')) return;
+      b.disabled = true;
+      try { await api('/owner/apikeys/revoke', { method:'POST',
+              body: JSON.stringify({ session: b.dataset.revoke }) });
+            toast('Ключ відкликано'); await renderKeys(); }
+      catch (e) { b.disabled = false; toast(String(e.message || e)); }
+    };
+  });
+}
+
 function bindSetup(){
   let csvText = null;
   renderSettings();
@@ -555,6 +594,26 @@ function bindSetup(){
       S.products = []; await loadMenu(); await loadVenue();
     } catch (e) { toast(String(e.message || e)); }
     apply.disabled = false;
+  };
+
+  renderKeys();
+  const keyNew = $('#keyNew');
+  if (keyNew) keyNew.onclick = async () => {
+    keyNew.disabled = true;
+    try {
+      const d = await api('/owner/apikeys', { method:'POST',
+        body: JSON.stringify({ label: $('#keyLabel').value.trim() }) });
+      // Shown ONCE, in a field the owner can select and copy. Not a toast:
+      // a toast disappears, and this is the only time this value exists.
+      const box = $('#keyShown');
+      box.hidden = false;
+      box.innerHTML = `<p><b>${esc(d.label)}</b> — скопіюйте зараз, більше не покажемо:</p>
+        <input class="ask" readonly value="${esc(d.key)}" id="keyValue">`;
+      $('#keyValue').select();
+      $('#keyLabel').value = '';
+      await renderKeys();
+    } catch (e) { toast(String(e.message || e)); }
+    keyNew.disabled = false;
   };
 
   const img = $('#imgFile');

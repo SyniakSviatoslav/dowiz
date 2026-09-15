@@ -258,6 +258,17 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
 .setup .pairs li{display:flex;align-items:center;gap:var(--space-2)}
 .setup .pairs .ok{color:var(--brand-text-muted)}
 .setup .pairs .bad{color:var(--danger-ink);font-weight:var(--weight-semibold)}
+.setup .keys{margin:0;padding:0;list-style:none;display:grid;gap:var(--space-1)}
+.setup .keys li{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);
+       min-height:var(--tap);padding:0 var(--space-3);border:1px solid var(--brand-border);
+       border-radius:var(--radius-md);background:var(--brand-surface);font-size:var(--text-sm)}
+.setup .btn.narrow{width:auto;flex:0 0 auto;min-height:calc(var(--tap) - 8px);padding:0 var(--space-3)}
+/* The key value is read-only and monospaced: it is copied, not read, and a
+   proportional font makes an O and a 0 indistinguishable in a credential. */
+.setup #keyValue{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:var(--text-sm)}
+.setup code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:var(--text-sm);
+       padding:0 var(--space-1);border-radius:var(--radius-sm);background:var(--brand-surface)}
+
 .setup .swatches{display:flex;flex-wrap:wrap;gap:var(--space-2)}
 .setup .swatch{display:inline-flex;align-items:center;gap:var(--space-2);min-height:var(--tap);
        padding:0 var(--space-3);border:1px solid var(--brand-border);border-radius:var(--radius-md);

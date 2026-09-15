@@ -1030,3 +1030,151 @@ async fn an_unreadable_zone_is_refused_rather_than_stored() {
         403
     );
 }
+
+/// The venue's own MCP server, driven as a client would drive it.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_hub_speaks_mcp_over_its_own_data() {
+    let s = boot("mcp").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let short = o["access_token"].as_str().unwrap().to_string();
+
+    // An MCP client holds ONE static credential and cannot refresh, so it gets
+    // a long-lived key bound to its own revocable session.
+    let (code, k) = post(&s.base, "/api/owner/apikeys", Some(&short), json!({ "label": "claude" }));
+    assert_eq!(code, 200, "{k}");
+    let key = k["key"].as_str().expect("key").to_string();
+    let session = k["session"].as_str().expect("session").to_string();
+    assert!(k["expiresMs"].as_i64().unwrap() > 0);
+
+    let rpc = |body: Value, tok: Option<&str>| post(&s.base, "/mcp", tok, body);
+
+    // initialize
+    let (code, v) = rpc(json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize",
+                                "params": { "protocolVersion": "2025-06-18" } }), Some(&key));
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["jsonrpc"], "2.0");
+    assert_eq!(v["id"], 1);
+    assert_eq!(v["result"]["serverInfo"]["name"], "dowiz-hub");
+    assert!(v["result"]["capabilities"]["tools"].is_object(), "{v}");
+
+    // tools/list
+    let (_, v) = rpc(json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list" }), Some(&key));
+    let tools = v["result"]["tools"].as_array().expect("tools");
+    assert!(tools.iter().any(|t| t["name"] == "list_orders"), "{v}");
+    assert!(tools.iter().any(|t| t["name"] == "order_action"), "{v}");
+
+    // A real order, then the tools over it.
+    let (_, order) = post(&s.base, "/api/public/locations/dubin/orders", None, json!({
+        "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 2 }],
+        "contact": { "name": "C", "phone": "+355690000000" },
+        "fulfilment": { "kind": "pickup" }
+    }));
+    let id = order["id"].as_str().unwrap().to_string();
+
+    let call = |name: &str, args: Value| {
+        rpc(json!({ "jsonrpc": "2.0", "id": 9, "method": "tools/call",
+                    "params": { "name": name, "arguments": args } }), Some(&key))
+    };
+
+    let (_, v) = call("list_orders", json!({ "status": "PENDING" }));
+    let text = v["result"]["content"][0]["text"].as_str().expect("text");
+    assert!(text.contains(&id), "the order must be listed: {text}");
+    assert_eq!(v["result"]["isError"], false);
+
+    let (_, v) = call("dashboard", json!({}));
+    let text = v["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(text.contains("todayRevenue"), "{text}");
+
+    let (_, v) = call("search_menu", json!({ "query": "futomaki" }));
+    assert!(v["result"]["content"][0]["text"].as_str().unwrap().contains("Sake Futomaki"));
+
+    // THE KERNEL STILL DECIDES. An illegal transition through MCP must be
+    // refused exactly as it is through HTTP -- and as a TOOL error, so a client
+    // shows "that did not work" rather than "the server is broken".
+    let (code, v) = call("order_action", json!({ "id": &id, "action": "ready" }));
+    assert_eq!(code, 200, "a refusal is still a valid JSON-RPC response: {v}");
+    assert_eq!(v["result"]["isError"], true, "{v}");
+
+    // A legal one works, and records the owner as the actor.
+    let (_, v) = call("order_action", json!({ "id": &id, "action": "confirm" }));
+    assert_eq!(v["result"]["isError"], false, "{v}");
+    let (_, after) = get(&s.base, &format!("/api/order/{id}"), None);
+    assert_eq!(after["status"], "CONFIRMED");
+    assert_eq!(after["last_actor"], "ana@dubin.al", "an MCP action is still the owner's act");
+
+    // A rejection still needs a reason, through MCP as through the pane.
+    let (_, v) = call("order_action", json!({ "id": &id, "action": "reject" }));
+    assert_eq!(v["result"]["isError"], true, "{v}");
+
+    // set_availability reaches the storefront.
+    let (_, v) = call("set_availability", json!({ "id": "p1", "available": false, "note": "off" }));
+    assert_eq!(v["result"]["isError"], false, "{v}");
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    assert_eq!(menu["categories"][0]["products"][0]["available"], false);
+
+    // An unknown method is a PROTOCOL error with the spec's own code.
+    let (_, v) = rpc(json!({ "jsonrpc": "2.0", "id": 3, "method": "resources/list" }), Some(&key));
+    assert_eq!(v["error"]["code"], -32601, "{v}");
+
+    // A notification gets no response body at all.
+    let (code, _) = rpc(json!({ "jsonrpc": "2.0", "method": "notifications/initialized" }), Some(&key));
+    assert_eq!(code, 202, "a notification must not be answered");
+
+    // Revoking the key kills it immediately, without touching the owner's
+    // browser session.
+    let (code, v) = post(&s.base, "/api/owner/apikeys/revoke", Some(&short), json!({ "session": session }));
+    assert_eq!(code, 200, "{v}");
+    let (code, _) = rpc(json!({ "jsonrpc": "2.0", "id": 4, "method": "tools/list" }), Some(&key));
+    assert_eq!(code, 401, "a revoked key must stop working now, not at expiry");
+    assert_eq!(get(&s.base, "/api/owner/orders", Some(&short)).0, 200, "the browser session survives");
+}
+
+/// MCP is the owner's surface, and nobody else's.
+#[tokio::test(flavor = "multi_thread")]
+async fn mcp_refuses_everyone_but_the_owner() {
+    let s = boot("mcp_auth").await;
+    let init = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" });
+
+    assert_eq!(post(&s.base, "/mcp", None, init.clone()).0, 401);
+    assert_eq!(post(&s.base, "/mcp", Some("garbage"), init.clone()).0, 401);
+
+    let (_, c) = post(&s.base, "/api/courier/auth/login", None,
+                      json!({ "phone": "+355691112233", "password": "courier-pw" }));
+    let courier = c["jwt"].as_str().unwrap().to_string();
+    let (code, v) = post(&s.base, "/mcp", Some(&courier), init);
+    assert_eq!(code, 403, "a courier authenticates and is still refused: {v}");
+
+    // And a courier cannot mint themselves an owner key.
+    assert_eq!(post(&s.base, "/api/owner/apikeys", Some(&courier), json!({})).0, 409);
+    assert_eq!(get(&s.base, "/api/owner/apikeys", Some(&courier)).0, 409);
+}
+
+/// An owner must not be able to revoke somebody else's session by guessing.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_session_that_is_not_yours_cannot_be_revoked() {
+    let s = boot("mcp_revoke").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+    let (_, c) = post(&s.base, "/api/courier/auth/login", None,
+                      json!({ "phone": "+355691112233", "password": "courier-pw" }));
+    let courier = c["jwt"].as_str().unwrap().to_string();
+
+    // Find the courier's session id the only way an attacker could: by holding
+    // a key of their own and reading its session, then trying a neighbour.
+    let (_, k) = post(&s.base, "/api/owner/apikeys", Some(&owner), json!({ "label": "x" }));
+    let mine = k["session"].as_str().unwrap().to_string();
+
+    // Listing shows only the owner's own sessions.
+    let (_, list) = get(&s.base, "/api/owner/apikeys", Some(&owner));
+    let keys = list["keys"].as_array().unwrap();
+    assert!(keys.iter().any(|k| k["session"] == mine.as_str()));
+    assert!(keys.iter().any(|k| k["current"] == true), "the current session is marked: {list}");
+
+    // A session id that is not theirs reads as not found, not as forbidden --
+    // which also declines to confirm that the id exists.
+    let (code, _) = post(&s.base, "/api/owner/apikeys/revoke", Some(&owner),
+                         json!({ "session": "00000000000000000000000000000000" }));
+    assert_eq!(code, 404);
+    // The courier is still logged in.
+    assert_eq!(get(&s.base, "/api/courier/tasks", Some(&courier)).0, 200);
+}

@@ -83,19 +83,35 @@ pub async fn order_action(
     AxPath(id): AxPath<String>,
     Json(body): Json<ActionIn>,
 ) -> Result<Json<Value>, HubHttpError> {
-    let action = OwnerOrderAction::from_verb(&body.action)
-        .ok_or_else(|| HubHttpError::Invalid(format!("unknown action {:?}", body.action)))?;
+    apply_owner_action(&st, &who.0.person.id, &id, &body.action, body.reason).await.map(Json)
+}
+
+/// Move an order, as the owner.
+///
+/// THE ONE IMPLEMENTATION. The HTTP route above and the MCP tool both call this,
+/// so an action taken from a chat client obeys exactly the rules an action taken
+/// from the admin pane obeys, lands in the same log, and records the same actor.
+/// A parallel path for the machine-facing surface would be a second set of
+/// rules, and the less-tested one would be the one a model could reach.
+pub async fn apply_owner_action(
+    st: &Shared,
+    actor: &str,
+    id: &str,
+    verb: &str,
+    reason: Option<String>,
+) -> Result<Value, HubHttpError> {
+    let action = OwnerOrderAction::from_verb(verb)
+        .ok_or_else(|| HubHttpError::Invalid(format!("unknown action {verb:?}")))?;
     // A rejection the customer is shown must say why. The kernel makes `reason`
     // part of the signed bytes for exactly this reason; here it is at least
     // required rather than optional.
     if action == OwnerOrderAction::Reject
-        && body.reason.as_deref().map_or(true, |r| r.trim().is_empty())
+        && reason.as_deref().map_or(true, |r| r.trim().is_empty())
     {
         return Err(HubHttpError::Invalid("a rejection must carry a reason".into()));
     }
 
-    let reason = body.reason.clone();
-    let actor = who.0.person.id.clone();
+    let (actor, id) = (actor.to_string(), id.to_string());
     let notify_id = id.clone();
     let out = st
         .with_log(move |hub| {
@@ -108,13 +124,13 @@ pub async fn order_action(
                 .ok_or(HubHttpError::Corrupt("order status"))?;
             // The KERNEL names the destination. This handler does not know the
             // order of statuses and must not learn it.
-            let target = action
-                .target(from)
-                .ok_or_else(|| HubHttpError::Refused(format!(
+            let target = action.target(from).ok_or_else(|| {
+                HubHttpError::Refused(format!(
                     "{} cannot apply to an order that is {}",
                     action.verb(),
                     from.as_str()
-                )))?;
+                ))
+            })?;
 
             let updated = json_api::apply_event_logic(&current, target.as_str())
                 .map_err(HubHttpError::Refused)?;
@@ -125,7 +141,8 @@ pub async fn order_action(
                 merged["rejection_reason"] = json!(r);
             }
             // Who did it. An order that changed state with nobody's name on it
-            // is unanswerable the next morning.
+            // is unanswerable the next morning -- and "the owner's MCP client"
+            // is still the owner.
             merged["last_actor"] = json!(actor);
             let body = serde_json::to_string(&merged).unwrap_or(updated);
             hub.append(EventKind::Advanced, &id, &body, now_ms() as u64, [0u8; 32])
@@ -135,7 +152,7 @@ pub async fn order_action(
         .await?;
 
     st.notify_advanced(&notify_id, &out);
-    Ok(Json(out))
+    Ok(out)
 }
 
 /// `GET /api/owner/dashboard` — the four numbers on the top of the pane.
@@ -147,6 +164,11 @@ pub async fn dashboard(
     State(st): State<Shared>,
     _who: OwnerCaller,
 ) -> Result<Json<Value>, HubHttpError> {
+    dashboard_facts(&st).await.map(Json)
+}
+
+/// The four numbers, shared by the HTTP route and the MCP tool.
+pub async fn dashboard_facts(st: &Shared) -> Result<Value, HubHttpError> {
     let hub = st.read_log()?;
     let orders = hub.orders();
 
@@ -172,12 +194,12 @@ pub async fn dashboard(
             }
         }
     }
-    Ok(Json(json!({
+    Ok(json!({
         "todayOrders": today,
         "pending": pending,
         "active": active,
         "todayRevenue": revenue
-    })))
+    }))
 }
 
 /// Midnight, local to the venue.
@@ -214,18 +236,39 @@ pub async fn update_product(
     AxPath(id): AxPath<String>,
     Json(body): Json<ProductIn>,
 ) -> Result<Json<Value>, HubHttpError> {
-    if let Some(p) = body.price {
+    edit_product(&st, &id, body.available, body.unavailable_note, body.price).await.map(Json)
+}
+
+/// Take a dish off the menu or put it back, shared with the MCP tool.
+pub async fn set_product_availability(
+    st: &Shared,
+    id: &str,
+    available: bool,
+    note: Option<String>,
+) -> Result<Value, HubHttpError> {
+    edit_product(st, id, Some(available), note, None).await
+}
+
+async fn edit_product(
+    st: &Shared,
+    id: &str,
+    available: Option<bool>,
+    note: Option<String>,
+    price: Option<i64>,
+) -> Result<Value, HubHttpError> {
+    if let Some(p) = price {
         // Integer minor units, and a negative price is not a discount, it is a
         // typo that would make the kernel's ledger owe the customer money.
         if p < 0 {
             return Err(HubHttpError::Invalid("price cannot be negative".into()));
         }
     }
+    let id = id.to_string();
     st.with_catalog(move |cat| {
         let raw = cat.product(&id).ok_or(HubHttpError::NotFound("product"))?;
         let mut p: Value =
             serde_json::from_str(&raw).map_err(|_| HubHttpError::Corrupt("catalogue product"))?;
-        if let Some(a) = body.available {
+        if let Some(a) = available {
             p["available"] = json!(a);
             // The note only makes sense while the dish is off. Leaving a stale
             // "none today" on a dish that is back is a lie the customer reads.
@@ -233,14 +276,14 @@ pub async fn update_product(
                 p["unavailableNote"] = Value::Null;
             }
         }
-        if let Some(n) = body.unavailable_note {
+        if let Some(n) = note {
             p["unavailableNote"] = if n.trim().is_empty() { Value::Null } else { json!(n) };
         }
-        if let Some(price) = body.price {
+        if let Some(price) = price {
             p["price"] = json!(price);
         }
         cat.set_product(&id, &serde_json::to_string(&p).unwrap_or(raw));
-        Ok(Json(p))
+        Ok(p)
     })
     .await
 }

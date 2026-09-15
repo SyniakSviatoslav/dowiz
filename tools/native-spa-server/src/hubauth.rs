@@ -319,8 +319,140 @@ pub fn routes(state: Shared) -> Router {
         .route("/api/auth/logout", post(logout))
         .route("/api/auth/me", axum::routing::get(me))
         .route("/api/courier/auth/login", post(courier_login))
+        .route("/api/owner/apikeys", post(create_api_key))
+        .route("/api/owner/apikeys", axum::routing::get(list_api_keys))
+        .route("/api/owner/apikeys/revoke", post(revoke_api_key))
         .with_state(state)
 }
 
 /// Re-exported so the route modules do not each import the hub's Arc shape.
 pub type SharedState = Arc<crate::hub::HubState>;
+
+// ── long-lived keys ──────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct KeyIn {
+    /// What this key is for, in the owner's words.
+    #[serde(default)]
+    pub label: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct RevokeIn {
+    pub session: String,
+}
+
+/// How long an API key lives.
+///
+/// A YEAR, not fifteen minutes. An MCP client cannot run the refresh dance --
+/// it holds one static credential in its configuration -- so the access-token
+/// lifetime that protects a browser session would make this unusable. What
+/// replaces short expiry as the safety mechanism is REVOCATION: every key is
+/// bound to its own named session, listed, and killable on its own without
+/// disturbing the others.
+pub const API_KEY_TTL_MS: i64 = 365 * 24 * 60 * 60 * 1000;
+
+/// `POST /api/owner/apikeys` — mint a key for a machine.
+///
+/// The key is returned ONCE and never stored in a form that can be read back;
+/// only its session is recorded. An owner who loses it mints another and
+/// revokes the old one, which is the same shape every credential in this hub
+/// has.
+pub async fn create_api_key(
+    State(st): State<Shared>,
+    caller: Caller,
+    Json(body): Json<KeyIn>,
+) -> Result<Json<Value>, HubHttpError> {
+    if caller.person.role != Role::Owner {
+        return Err(HubHttpError::Refused("only the venue owner may mint API keys".into()));
+    }
+    let label = body
+        .label
+        .unwrap_or_default()
+        .trim()
+        .chars()
+        .take(60)
+        .collect::<String>();
+    let label = if label.is_empty() { "api key".to_string() } else { label };
+
+    let pid = caller.person.id.clone();
+    let (l, p) = (label.clone(), pid.clone());
+    let session = st
+        .with_roster(move |r| {
+            r.open_labelled_session(&p, crate::hub::now_ms(), &l)
+                .map_err(|e| HubHttpError::Io(format!("{e:?}")))
+        })
+        .await?;
+
+    let now = crate::hub::now_ms();
+    let key = token::mint(
+        st.signing_key(),
+        &Claims {
+            role: Role::Owner,
+            subject: pid,
+            session: session.clone(),
+            scope: String::new(),
+            issued_ms: now,
+            expires_ms: now + API_KEY_TTL_MS,
+        },
+    );
+    Ok(Json(json!({
+        "key": key,
+        "session": session,
+        "label": label,
+        "expiresMs": now + API_KEY_TTL_MS,
+        "note": "This key is shown once. Store it in your client's configuration; \
+                 if you lose it, revoke this session and mint another."
+    })))
+}
+
+/// `GET /api/owner/apikeys` — what is out there.
+pub async fn list_api_keys(
+    State(st): State<Shared>,
+    caller: Caller,
+) -> Result<Json<Value>, HubHttpError> {
+    if caller.person.role != Role::Owner {
+        return Err(HubHttpError::Refused("only the venue owner may list API keys".into()));
+    }
+    let roster = st.read_roster()?;
+    let keys: Vec<Value> = roster
+        .sessions_of(&caller.person.id)
+        .into_iter()
+        .map(|(id, label, issued)| {
+            json!({
+                "session": id,
+                "label": label,
+                "issuedMs": issued,
+                // The session the owner is looking at this page THROUGH. Marked
+                // so they do not revoke it and lock themselves out of the pane
+                // they are standing in.
+                "current": id == caller.session
+            })
+        })
+        .collect();
+    Ok(Json(json!({ "keys": keys })))
+}
+
+/// `POST /api/owner/apikeys/revoke`.
+pub async fn revoke_api_key(
+    State(st): State<Shared>,
+    caller: Caller,
+    Json(body): Json<RevokeIn>,
+) -> Result<Json<Value>, HubHttpError> {
+    if caller.person.role != Role::Owner {
+        return Err(HubHttpError::Refused("only the venue owner may revoke API keys".into()));
+    }
+    // ONLY THEIR OWN. Without this an owner could revoke a courier's session by
+    // guessing an id -- and on a hub with staff, one owner could evict another.
+    let roster = st.read_roster()?;
+    if roster.session_owner(&body.session).as_deref() != Some(caller.person.id.as_str()) {
+        return Err(HubHttpError::NotFound("session"));
+    }
+    let s = body.session.clone();
+    st.with_roster(move |r| {
+        r.revoke_session(&s);
+        Ok(())
+    })
+    .await?;
+    Ok(Json(json!({ "revoked": body.session })))
+}
