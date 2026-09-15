@@ -101,6 +101,16 @@
 
   --tap:44px;
   --ease:cubic-bezier(.2,.8,.2,1);
+
+  /* ── §8.1 T2 DOWIZ-FIXED ──
+     the plan calls its absence a "real gap", and it is — proportional digits
+     make a column of totals jitter as it updates, and a 0 indistinguishable
+     from an O in an order number read down a phone. */
+  /* The ζ vocabulary. Motion is never a raw cubic-bezier at a call site:
+     SNAP ζ=1 for taps and toggles, TIDE ζ>1 for the Sea, which drifts and
+     never settles. */
+  --ease-snap:cubic-bezier(.32,.72,0,1);
+  --ease-tide:cubic-bezier(.37,0,.63,1);
 }
 /* Dark mode: a red line in deliveryos-ui. Three states -- bare :root light,
    system dark unless the page was explicitly set light, explicit dark. Tokens
@@ -534,6 +544,15 @@ input:focus{border-color:var(--focus-ring);outline:none;
        opacity:0;transform:translateY(8px);pointer-events:none;
        transition:opacity .2s var(--ease),transform .2s var(--ease)}
 .toast.show{opacity:1;transform:none}
+
+/* ── §8.4(3) MONEY IS SACRED ──
+   One rule, one place, three surfaces. Mono and tabular so digits sit in a
+   column and a total does not shuffle sideways as it changes; never animated,
+   because a number that counts up is a number that is briefly wrong, and this
+   one is what somebody pays. The kernel hands over an integer and it is
+   rendered, not interpolated and not rounded. */
+.money{font-family:var(--font-mono);font-variant-numeric:tabular-nums;
+       font-feature-settings:"tnum" 1;letter-spacing:-.01em}
 </style>
 </head>
 <body>

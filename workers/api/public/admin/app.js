@@ -193,7 +193,7 @@ function render(){
       ${[['todayOrders','Замовлень сьогодні'],['pending','Чекають'],
          ['scheduled','На час'],['active','В роботі'],['todayRevenue','Виручка']].map(([k, label]) => `
         <div class="stat"><div class="k">${label}</div>
-          <div class="v" data-k="${k}">${s
+          <div class="v money" data-k="${k}">${s
             ? (k === 'todayRevenue' ? money(s[k]) : s[k])
             : `<span class="skel" style="display:inline-block;width:3rem;height:1.4rem;vertical-align:-.2em"></span>`}</div></div>`).join('')}
     </div>
@@ -290,7 +290,7 @@ function row(o, newIdx){
       <span class="chip ${st}"><i aria-hidden="true"></i>${esc(STATUS_LABEL[o.status] || o.status)}</span>
       ${due ? `<span class="due" title="Замовлення на визначений час">
         <i class="ti ti-clock-hour-4 i" aria-hidden="true"></i>${esc(due)}</span>` : ''}
-      <span class="amt">${money(o.total)}</span>
+      <span class="amt money">${money(o.total)}</span>
     </div>
     <p class="lines">${items || '—'}</p>
     <div class="who">

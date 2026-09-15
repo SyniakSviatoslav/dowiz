@@ -647,7 +647,9 @@ async function deliver(o, collected){
     const d = await api(`/courier/orders/${encodeURIComponent(o.id)}/deliver`, {
       method:'POST', attend:true, body: JSON.stringify({ cash_collected: collected }) });
     S.cashFor = null;
-    if (d.short > 0) toast(`Недостача ${money(d.short)} — записано`, 'alert-triangle');
+    // A toast is plain text and cannot carry a class; the value is still the
+    // kernel's integer. // money:toast
+    if (d.short > 0) toast(`Недостача ${money(d.short)} — записано`, 'alert-triangle'); // money:toast
     else toast('Доставлено', 'circle-check');
     seaEvent('delivered', 160);
     await load();

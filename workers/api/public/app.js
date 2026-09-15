@@ -240,7 +240,7 @@ async function openHistory(){
     const o = r.value;
     return `<button class="hist" data-open="${esc(o.id)}">
       <span>#${esc(String(o.id).slice(-4))} · ${esc(t('st')[o.status] || o.status)}</span>
-      <span>${money(o.total ?? 0)}</span></button>`;
+      <span class="money">${money(o.total ?? 0)}</span></button>`;
   }).join('');
   const el = $('#histList'); if (el) el.innerHTML = rows;
   document.querySelectorAll('[data-open]').forEach(b => b.onclick = async () => {
@@ -298,7 +298,7 @@ function renderMenu(){
         <span class="status-dot ${open ? '' : L.status === 'busy' ? 'busy' : 'closed'}">
           ${open ? `${esc(L.deliveryEta)} min` : esc(t('closed'))}</span>
         ${L.address ? `<span>${esc(L.address)}</span>` : ''}
-        ${L.deliveryFee ? `<span><b>${money(L.deliveryFee)}</b> ${esc(t('delivery').toLowerCase())}</span>`
+        ${L.deliveryFee ? `<span><b class="money">${money(L.deliveryFee)}</b> ${esc(t('delivery').toLowerCase())}</span>`
                         : `<span><b>${esc(t('free'))}</b> ${esc(t('delivery').toLowerCase())}</span>`}
       </div>
       ${open ? '' : `<div class="notice"><i class="ti ti-clock-hour-9 i" aria-hidden="true"></i><div>${esc(t('closedHint'))}
@@ -318,7 +318,7 @@ function dish(p){
     <span>
       <span class="dish-name">${esc(p.name)}</span>
       ${p.description ? `<span class="dish-desc">${esc(p.description)}</span>` : ''}
-      <span class="dish-price">${money(p.price)}</span>
+      <span class="dish-price money">${money(p.price)}</span>
       ${out ? `<span class="badge">${esc(p.unavailableNote || t('soldOut'))}</span>` : ''}
     </span>
     <span class="dish-media">${p.imageUrl
@@ -404,7 +404,7 @@ async function bindAr(p){
 function openDish(p){
   sheet(`<h2>${esc(p.name)}</h2>
     ${p.description ? `<p style="color:var(--brand-text-muted);margin:8px 0 4px">${esc(p.description)}</p>` : ''}
-    <div class="row"><span class="dish-price">${money(p.price)}</span>
+    <div class="row"><span class="dish-price money">${money(p.price)}</span>
       <span class="qty"><button id="dm" aria-label="−">−</button><span id="dq">1</span><button id="dp" aria-label="+">+</button></span></div>
     <button class="btn" id="dadd" style="margin:14px 0">${esc(t('add'))}</button>
     <button class="btn btn-ghost" id="dar" style="margin-bottom:14px" hidden>
@@ -441,7 +441,7 @@ function openCart(){
   if (!lines.length) return sheet(`<div class="empty"><b>${esc(t('empty'))}</b>${esc(t('emptyHint'))}</div>`);
   sheet(`<h2>${esc(t('cart'))}</h2>
     ${lines.map(l => `<div class="row"><span><b>${esc(l.p.name)}</b><br>
-      <small style="color:var(--brand-text-muted)">${money(l.p.price)}</small></span>
+      <small class="money" style="color:var(--brand-text-muted)">${money(l.p.price)}</small></span>
       <span class="qty"><button data-m="${esc(l.p.id)}" aria-label="−">−</button>
       <span>${l.q}</span><button data-a="${esc(l.p.id)}" aria-label="+">+</button></span></div>`).join('')}
     ${totalsBlock()}
@@ -457,16 +457,19 @@ function totalsBlock(){
   const s = subtotal(), d = deliveryFee(), L = state.loc;
   const below = L?.minOrder && s < L.minOrder;
   return `<div class="totals">
-    <div class="row"><span>${esc(t('subtotal'))}</span><span>${money(s)}</span></div>
-    <div class="row"><span>${esc(t('delivery'))}</span><span>${d ? money(d) : esc(t('free'))}</span></div>
-    <div class="row grand"><span>${esc(t('total'))}</span><span>${money(s + d)}</span></div>
-    ${below ? `<div class="err">${esc(t('min'))}: ${money(L.minOrder)}</div>` : ''}
+    <div class="row"><span>${esc(t('subtotal'))}</span><span class="money">${money(s)}</span></div>
+    <div class="row"><span>${esc(t('delivery'))}</span><span class="money">${d ? money(d) : esc(t('free'))}</span></div>
+    <div class="row grand"><span>${esc(t('total'))}</span><span class="money">${money(s + d)}</span></div>
+    ${below ? `<div class="err">${esc(t('min'))}: <span class="money">${money(L.minOrder)}</span></div>` : ''}
   </div>`;
 }
 
 function openCheckout(){
   const s = subtotal(), L = state.loc;
-  if (L?.minOrder && s < L.minOrder) return toast(`${t('min')}: ${money(L.minOrder)}`);
+  // A toast is plain text: .money cannot ride on a string. The value is still
+  // the kernel's integer, and a toast shows one number for two seconds rather
+  // than a column to line up, so tabular figures buy nothing here.
+  if (L?.minOrder && s < L.minOrder) return toast(`${t('min')}: ${money(L.minOrder)}`); // money:toast
   sheet(`<h2>${esc(t('checkout'))}</h2>
     <label for="f-name">${esc(t('name'))}</label>
     <input id="f-name" autocomplete="name" value="${esc(safeGet('dw_name') || '')}">
@@ -636,7 +639,7 @@ async function loadStripe(){
 
 async function collectCard(order){
   sheet(`<h2>${esc(t('pay'))}</h2>
-    <p class="sub" style="color:var(--brand-text-muted)">#${esc(String(order.id).slice(0,8))} · ${money(order.total)}</p>
+    <p class="sub" style="color:var(--brand-text-muted)">#${esc(String(order.id).slice(0,8))} · <span class="money">${money(order.total)}</span></p>
     <div id="pe" style="margin:var(--space-4) 0;min-height:180px"></div>
     <div id="pe-err"></div>
     <button class="btn" id="pay">${esc(t('place'))}</button>`);
@@ -699,7 +702,7 @@ function openTracking(order){
         <span><b>${esc(t('st')[s])}</b></span>
       </div>`).join('')}</div>`}
     <div class="totals"><div class="row grand"><span>${esc(t('total'))}</span>
-      <span>${money(order.total ?? order.subtotal ?? 0)}</span></div></div>
+      <span class="money">${money(order.total ?? order.subtotal ?? 0)}</span></div></div>
     ${follow}
     <button class="btn btn-ghost" id="closeTrack" style="margin-bottom:12px">OK</button>`);
   $('#closeTrack').onclick = closeSheet;
