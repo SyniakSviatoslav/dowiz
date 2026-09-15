@@ -90,6 +90,66 @@ impl Store {
         Ok(st)
     }
 
+    /// Create a fresh store IN MEMORY, with no filesystem at all.
+    ///
+    /// The whole point of the pointer-free format is that nothing in it is an
+    /// address, so the byte image and the in-memory image are the same thing.
+    /// That is what lets the store live somewhere with no `open()` -- an R2
+    /// object, a Durable Object's storage, a Worker's heap -- rather than only
+    /// on a disk.
+    pub fn create_bytes(size_bytes: usize) -> Self {
+        let n = size_bytes / 8;
+        let mut st = Store { cells: vec![0i64; n] };
+        let capacity = (n - ARENA) as i64;
+        st.cells[SB_A] = MAGIC;
+        st.cells[SB_A + 1] = 2;
+        st.cells[SB_A + 2] = 0;
+        st.cells[SB_A + 3] = 0;
+        st.cells[SB_A + 4] = ARENA as i64;
+        st.cells[SB_A + 12] = capacity;
+        st.cells[SB_A + 15] = crc32_cells(&st.cells, SB_A, 15) as i64;
+        st
+    }
+
+    /// Load a store from a byte image. Trailing bytes that do not fill a whole
+    /// cell are ignored rather than padded: a truncated image must not silently
+    /// become a valid one.
+    pub fn from_bytes(bytes: &[u8]) -> Self {
+        let n = bytes.len() / 8;
+        let mut cells = Vec::with_capacity(n);
+        for i in 0..n {
+            let mut w = [0u8; 8];
+            w.copy_from_slice(&bytes[i * 8..i * 8 + 8]);
+            cells.push(i64::from_le_bytes(w));
+        }
+        Store { cells }
+    }
+
+    /// The byte image. Little-endian cells, identical to what `create`/`commit`
+    /// write to a file -- a store written here opens with `Store::open`, and one
+    /// written by `commit` loads with `from_bytes`.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(self.cells.len() * 8);
+        for c in &self.cells {
+            buf.extend_from_slice(&c.to_le_bytes());
+        }
+        buf
+    }
+
+    /// Commit with no filesystem: stage the new PartTab and superblock, and hand
+    /// the caller the new generation. The caller persists `to_bytes()`.
+    ///
+    /// The on-disk `commit` orders three fsync'd writes -- objects, PartTab,
+    /// superblock LAST -- so a crash between any two leaves generation k-1
+    /// intact. A whole-image PUT to object storage gives the same property by a
+    /// shorter route: the old image stays readable until the new one lands, and
+    /// there is no partial state in between. Stated rather than assumed, because
+    /// the guarantee is the reason the ordering exists.
+    pub fn commit_bytes(&mut self, tx: &Tx, root: usize) -> i64 {
+        let _ = self.stage_commit(tx, root);
+        tx.next_gen
+    }
+
     /// Read a store file from disk.
     pub fn open(path: &str) -> io::Result<Self> {
         let bytes = std::fs::read(path)?;
@@ -354,3 +414,62 @@ impl Store {
     }
 }
 pub mod kv;
+pub mod evlog;
+
+#[cfg(test)]
+mod bytes_tests {
+    use super::*;
+
+    /// A fresh store built with no filesystem must be byte-identical to one
+    /// `create()` writes. If these ever diverge, the format has two definitions.
+    #[test]
+    fn create_bytes_matches_create_on_disk() {
+        let p = std::env::temp_dir().join("bebop_bytes_create.store");
+        let p = p.to_str().unwrap();
+        let on_disk = Store::create(p, 1 << 20).unwrap();
+        let in_mem = Store::create_bytes(1 << 20);
+        assert_eq!(on_disk.cells, in_mem.cells, "same format, two constructors");
+        assert_eq!(std::fs::read(p).unwrap(), in_mem.to_bytes(), "byte image matches the file");
+        let _ = std::fs::remove_file(p);
+    }
+
+    /// A store committed WITHOUT a filesystem, written out as bytes, must open
+    /// with the ordinary reader — that is what lets the same store live in an R2
+    /// object on a Worker and in a file on a hub.
+    #[test]
+    fn commit_bytes_is_readable_by_the_file_reader() {
+        let mut st = Store::create_bytes(1 << 20);
+        let mut tx = st.begin().unwrap();
+        let obj = st.alloc(&mut tx, 4, 0x1234).unwrap();
+        for i in 0..4 {
+            st.put_cell(obj, i, (i as i64 + 1) * 11);
+        }
+        st.seal(obj);
+        let gen = st.commit_bytes(&tx, obj);
+        assert_eq!(gen, 1, "first commit is generation 1");
+
+        let p = std::env::temp_dir().join("bebop_bytes_commit.store");
+        let p = p.to_str().unwrap();
+        std::fs::write(p, st.to_bytes()).unwrap();
+
+        let reopened = Store::open(p).unwrap();
+        let root = reopened.root().expect("the committed root must resolve");
+        assert_eq!(reopened.obj_len(root), 4);
+        assert!(reopened.obj_crc_ok(root), "payload CRC survives the byte trip");
+        for i in 0..4 {
+            assert_eq!(reopened.get(root, i), (i as i64 + 1) * 11);
+        }
+        let _ = std::fs::remove_file(p);
+    }
+
+    /// from_bytes must not invent cells out of a truncated image.
+    #[test]
+    fn from_bytes_ignores_a_partial_trailing_cell() {
+        let st = Store::create_bytes(1 << 16);
+        let mut b = st.to_bytes();
+        b.extend_from_slice(&[0xAB, 0xCD, 0xEF]); // three stray bytes, not a cell
+        let back = Store::from_bytes(&b);
+        assert_eq!(back.cells.len(), st.cells.len(), "a partial cell is dropped, not padded");
+        assert_eq!(back.cells, st.cells);
+    }
+}
