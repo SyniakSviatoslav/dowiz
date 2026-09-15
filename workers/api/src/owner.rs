@@ -274,39 +274,40 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<()>) -> Result<R
         }
     }
 
-    let now = now_ms();
-    if let Some(p) = body.price {
-        db.prepare("UPDATE products SET price = ?1, updated_at_ms = ?2 WHERE id = ?3 AND location_id = ?4")
-            .bind(&[JsValue::from_f64(p as f64), JsValue::from_f64(now as f64),
-                    id.clone().into(), body.location_id.clone().into()])?
-            .run()
-            .await?;
-    }
-    if let Some(a) = body.available {
-        db.prepare(
-            "UPDATE products SET available = ?1, unavailable_note = ?2, updated_at_ms = ?3 \
-             WHERE id = ?4 AND location_id = ?5",
-        )
-        .bind(&[
-            JsValue::from_f64(if a { 1.0 } else { 0.0 }),
-            match (&body.unavailable_note, a) {
-                (_, true) => JsValue::NULL,
-                (Some(n), false) => n.clone().into(),
-                (None, false) => JsValue::NULL,
-            },
-            JsValue::from_f64(now as f64),
-            id.clone().into(),
-            body.location_id.clone().into(),
-        ])?
-        .run()
-        .await?;
-    }
-    // Any catalogue write moves the menu version, which is how a client notices
-    // its cart is stale.
-    db.prepare("UPDATE locations SET menu_version = menu_version + 1, updated_at_ms = ?2 WHERE id = ?1")
-        .bind(&[body.location_id.into(), JsValue::from_f64(now as f64)])?
-        .run()
-        .await?;
+    let want_id = id.clone();
+    let price = body.price;
+    let available = body.available;
+    let note = body.unavailable_note.clone();
+    crate::hubstore::with_catalog(&db, move |cat| {
+        let Some(pj) = cat.product(&want_id) else {
+            return Err(Error::RustError("unknown product".into()));
+        };
+        let mut p: Value = serde_json::from_str(&pj)
+            .map_err(|e| Error::RustError(format!("catalogue product unreadable: {e}")))?;
+        if let Some(v) = price {
+            p["price"] = json!(v);
+        }
+        if let Some(a) = available {
+            p["available"] = json!(a);
+            // Clearing the note when a dish comes back is the point: a stale
+            // reason on an available dish reads as a contradiction.
+            p["unavailableNote"] = if a { Value::Null } else { json!(note) };
+        }
+        cat.set_product(&want_id, &serde_json::to_string(&p).unwrap_or(pj));
+
+        // Any catalogue write moves the menu version, which is how a client
+        // notices its cart went stale.
+        if let Some(lj) = cat.location() {
+            if let Ok(mut l) = serde_json::from_str::<Value>(&lj) {
+                let v = l.get("menu_version").and_then(|x| x.as_i64()).unwrap_or(1);
+                l["menu_version"] = json!(v + 1);
+                cat.set_location(&serde_json::to_string(&l).unwrap_or(lj));
+            }
+        }
+        Ok(())
+    })
+    .await?;
+
     Response::from_json(&json!({ "ok": true, "id": id }))
 }
 
@@ -328,24 +329,29 @@ pub async fn update_location(mut req: Request, ctx: RouteContext<()>) -> Result<
     if let Err(r) = owner_at(&req, &ctx, &db, &body.location_id).await {
         return Ok(r);
     }
-    if let Some(s) = &body.status {
-        if !matches!(s.as_str(), "open" | "closed" | "busy") {
+    if let Some(st) = &body.status {
+        if !matches!(st.as_str(), "open" | "closed" | "busy") {
             return Response::error("status must be open, closed or busy", 400);
         }
-        db.prepare("UPDATE locations SET status = ?1, updated_at_ms = ?2 WHERE id = ?3")
-            .bind(&[s.clone().into(), JsValue::from_f64(now_ms() as f64), body.location_id.clone().into()])?
-            .run()
-            .await?;
     }
-    if let Some(p) = body.delivery_paused {
-        db.prepare("UPDATE locations SET delivery_paused = ?1, updated_at_ms = ?2 WHERE id = ?3")
-            .bind(&[
-                JsValue::from_f64(if p { 1.0 } else { 0.0 }),
-                JsValue::from_f64(now_ms() as f64),
-                body.location_id.clone().into(),
-            ])?
-            .run()
-            .await?;
-    }
+    let status = body.status.clone();
+    let paused = body.delivery_paused;
+    crate::hubstore::with_catalog(&db, move |cat| {
+        let Some(lj) = cat.location() else {
+            return Err(Error::RustError("no venue in the catalogue".into()));
+        };
+        let mut l: Value = serde_json::from_str(&lj)
+            .map_err(|e| Error::RustError(format!("catalogue location unreadable: {e}")))?;
+        if let Some(st) = &status {
+            l["status"] = json!(st);
+        }
+        if let Some(p) = paused {
+            l["delivery_paused"] = json!(if p { 1 } else { 0 });
+        }
+        cat.set_location(&serde_json::to_string(&l).unwrap_or(lj));
+        Ok(())
+    })
+    .await?;
+
     Response::from_json(&json!({ "ok": true }))
 }

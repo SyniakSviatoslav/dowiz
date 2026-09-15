@@ -123,60 +123,75 @@ pub async fn menu(_req: Request, ctx: RouteContext<()>) -> Result<Response> {
         return Response::error("missing slug", 400);
     };
     let db = ctx.d1("DB")?;
+    let loaded = crate::hubstore::load_catalog(&db).await?;
 
-    let loc: Option<LocRow> = db
-        .prepare(
-            "SELECT id,name,slug,phone,address,status,closes_at,delivery_eta,delivery_fee, \
-             free_delivery_threshold,min_order,currency_code,menu_version,supported_locales, \
-             default_locale,delivery_paused FROM locations WHERE slug = ?1",
-        )
-        .bind(&[slug.into()])?
-        .first(None)
-        .await?;
-    let Some(loc) = loc else {
+    let Some(loc_json) = loaded.catalog.location() else {
         return Response::error("not found", 404);
     };
+    let loc: LocRow = serde_json::from_str(&loc_json)
+        .map_err(|e| Error::RustError(format!("catalogue location unreadable: {e}")))?;
+    if loc.slug != slug {
+        return Response::error("not found", 404);
+    }
 
-    // A paused venue is CLOSED to the storefront even if its status says open --
-    // the old platform had `delivery_paused` as a separate kill switch so an
-    // owner could stop the queue without changing opening hours.
+    // A paused venue is CLOSED to the storefront even when its status says open:
+    // the owner needs a way to stop the queue without rewriting opening hours.
     let status = if loc.delivery_paused == 1 { "closed".to_string() } else { loc.status.clone() };
 
-    let rows = db
-        .prepare(
-            "SELECT p.id AS id, p.category_id AS category_id, c.name AS category_name, \
-             c.sort_order AS category_sort, p.name AS name, p.description AS description, \
-             p.price AS price, p.available AS available, p.unavailable_note AS unavailable_note, \
-             p.image_url AS image_url, p.sort_order AS sort_order \
-             FROM products p LEFT JOIN categories c ON c.id = p.category_id \
-             WHERE p.location_id = ?1 ORDER BY c.sort_order, p.sort_order, p.name",
-        )
-        .bind(&[loc.id.clone().into()])?
-        .all()
-        .await?
-        .results::<ProdRow>()?;
+    // Category order comes from the catalogue, and products are grouped into it.
+    // Keys are sorted by the KV layout, so the order is stable across reads
+    // rather than incidentally whatever the store returned.
+    let mut cat_meta: Vec<(String, String, i64)> = loaded
+        .catalog
+        .categories()
+        .into_iter()
+        .filter_map(|(id, j)| {
+            let v: Value = serde_json::from_str(&j).ok()?;
+            Some((
+                id,
+                v.get("name").and_then(|x| x.as_str()).unwrap_or("—").to_string(),
+                v.get("sortOrder").and_then(|x| x.as_i64()).unwrap_or(0),
+            ))
+        })
+        .collect();
+    cat_meta.sort_by_key(|(_, _, sort)| *sort);
 
-    // Group in one pass, preserving the SQL order rather than re-sorting.
+    let products: Vec<(String, Value)> = loaded
+        .catalog
+        .products()
+        .into_iter()
+        .filter_map(|(id, j)| serde_json::from_str::<Value>(&j).ok().map(|v| (id, v)))
+        .collect();
+
     let mut cats: Vec<Value> = Vec::new();
-    let mut last: Option<String> = None;
-    for p in rows {
-        let cid = p.category_id.clone().unwrap_or_else(|| "uncategorised".into());
-        if last.as_deref() != Some(cid.as_str()) {
-            cats.push(json!({
-                "id": cid, "name": p.category_name.clone().unwrap_or_else(|| "—".into()),
-                "sortOrder": p.category_sort.unwrap_or(0), "products": []
-            }));
-            last = Some(cid);
+    for (cid, cname, csort) in &cat_meta {
+        let mut items: Vec<(i64, Value)> = products
+            .iter()
+            .filter(|(_, p)| p.get("categoryId").and_then(|x| x.as_str()) == Some(cid.as_str()))
+            .map(|(id, p)| {
+                (
+                    p.get("sortOrder").and_then(|x| x.as_i64()).unwrap_or(0),
+                    json!({
+                        "id": id,
+                        "name": p.get("name").cloned().unwrap_or(json!("")),
+                        "description": p.get("description").cloned().unwrap_or(Value::Null),
+                        "price": p.get("price").cloned().unwrap_or(json!(0)),
+                        "available": p.get("available").and_then(|x| x.as_bool()).unwrap_or(true),
+                        "unavailableNote": p.get("unavailableNote").cloned().unwrap_or(Value::Null),
+                        "imageUrl": p.get("imageUrl").cloned().unwrap_or(Value::Null),
+                        "sortOrder": p.get("sortOrder").cloned().unwrap_or(json!(0))
+                    }),
+                )
+            })
+            .collect();
+        items.sort_by_key(|(sort, _)| *sort);
+        if items.is_empty() {
+            continue;
         }
-        let entry = json!({
-            "id": p.id, "name": p.name, "description": p.description,
-            "price": p.price, "available": p.available == 1,
-            "unavailableNote": p.unavailable_note, "imageUrl": p.image_url,
-            "sortOrder": p.sort_order
-        });
-        if let Some(Value::Array(a)) = cats.last_mut().and_then(|c| c.get_mut("products")) {
-            a.push(entry);
-        }
+        cats.push(json!({
+            "id": cid, "name": cname, "sortOrder": csort,
+            "products": items.into_iter().map(|(_, p)| p).collect::<Vec<_>>()
+        }));
     }
 
     let out = json!({
@@ -221,45 +236,45 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     }
 
     let db = ctx.d1("DB")?;
-    let loc: Option<LocRow> = db
-        .prepare(
-            "SELECT id,name,slug,phone,address,status,closes_at,delivery_eta,delivery_fee, \
-             free_delivery_threshold,min_order,currency_code,menu_version,supported_locales, \
-             default_locale,delivery_paused FROM locations WHERE slug = ?1",
-        )
-        .bind(&[slug.into()])?
-        .first(None)
-        .await?;
-    let Some(loc) = loc else { return Response::error("not found", 404) };
+    let loaded = crate::hubstore::load_catalog(&db).await?;
+    let Some(loc_json) = loaded.catalog.location() else {
+        return Response::error("not found", 404);
+    };
+    let loc: LocRow = serde_json::from_str(&loc_json)
+        .map_err(|e| Error::RustError(format!("catalogue location unreadable: {e}")))?;
+    if loc.slug != slug {
+        return Response::error("not found", 404);
+    }
     if loc.delivery_paused == 1 || loc.status == "closed" {
         return Response::error("venue is closed", 409);
     }
 
     // ── re-derive every price from the catalogue ──
-    #[derive(Deserialize)]
-    struct PriceRow { id: String, price: i64, available: i64 }
+    // The rule does not change with the store: whatever unit_price the browser
+    // sent is discarded, and an unknown product fails CLOSED rather than being
+    // priced at zero.
     let mut lines = Vec::with_capacity(body.items.len());
     let mut subtotal: i64 = 0;
     for it in &body.items {
         if it.quantity < 1 || it.quantity > 99 {
             return Response::error("invalid quantity", 400);
         }
-        let row: Option<PriceRow> = db
-            .prepare("SELECT id, price, available FROM products WHERE id = ?1 AND location_id = ?2")
-            .bind(&[it.product_id.clone().into(), loc.id.clone().into()])?
-            .first(None)
-            .await?;
-        let Some(row) = row else {
-            // Fail CLOSED on an unknown product rather than pricing it at zero.
+        let Some(pj) = loaded.catalog.product(&it.product_id) else {
             return Response::error(format!("unknown product: {}", it.product_id), 400);
         };
-        if row.available != 1 {
+        let p: Value = serde_json::from_str(&pj)
+            .map_err(|e| Error::RustError(format!("catalogue product unreadable: {e}")))?;
+        if !p.get("available").and_then(|x| x.as_bool()).unwrap_or(false) {
             return Response::error(format!("unavailable: {}", it.product_id), 409);
         }
-        subtotal += row.price * it.quantity;
+        let price = p.get("price").and_then(|x| x.as_i64()).unwrap_or(-1);
+        if price < 0 {
+            return Response::error(format!("product has no price: {}", it.product_id), 409);
+        }
+        subtotal += price * it.quantity;
         lines.push(json!({
-            "product_id": row.id, "modifier_ids": it.modifier_ids,
-            "quantity": it.quantity, "unit_price": row.price   // trusted, from D1
+            "product_id": it.product_id, "modifier_ids": it.modifier_ids,
+            "quantity": it.quantity, "unit_price": price   // trusted, from the catalogue
         }));
     }
     if subtotal < loc.min_order {
