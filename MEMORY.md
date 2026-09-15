@@ -935,9 +935,21 @@ Everything else for it is measured and ready.
   `hmac`/`argon2`/RNG crates are outside the allowlist. RFC 4231 + PBKDF2 vectors pass.
   Login 0.67 s release; miss 0.659 s (indistinguishable, measured).
 
-**Still open:** local AI, voice/STT, menu import from a file, social autoposting,
-per-owner API & MCP, AR, P67 provider implementations (Hetzner/Cloudflare Tunnel),
-customer order history, delivery-zone check, scheduled orders, 43/50 product images 404,
-and the admin UI has no button for the assign endpoint that now exists.
+**Also working (same session, later):**
+- **Menu import** — CSV (comma or semicolon, BOM, quoted cells, sq/uk/en headers).
+  Fractional prices REFUSED by row number, never guessed. Dry run by default.
+- **Branding from a photo** — browser decodes and downsamples, server does the colour
+  maths and ENFORCES WCAG AA by walking lightness (hue preserved). 12-seed sweep.
+- **Local AI assistant** — OpenAI-compatible; default `http://127.0.0.1:11434/v1`.
+  Hosted endpoints get PII-redacted facts; loopback gets everything. Decided by parsing
+  the host, not by a setting.
+- **Delivery zones** — circles and polygons, integer micro-degrees, flat-earth
+  (sub-metre at delivery scale, useless at planetary scale — said so in the tests).
+- **MCP server per venue** at `/mcp`, plus year-long revocable API keys.
 
-**Branch:** `bebop/main-2026-09-15` @ 4f6620c. No deploy yet (by instruction).
+**Still open:** voice/STT, social autoposting, AR, P67 provider implementations
+(Hetzner/Cloudflare Tunnel), customer order history/accounts, scheduled orders,
+media storage for product images (43/50 still 404).
+
+**Branch:** `bebop/main-2026-09-15` @ e55f7bb. No deploy yet (by instruction).
+Counts: 98 tests dowiz-hub, 34 native-spa-server lib, 22 operator-loop integration.
