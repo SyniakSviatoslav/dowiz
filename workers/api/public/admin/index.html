@@ -269,6 +269,29 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
 .setup .chipc{width:20px;height:20px;border-radius:var(--radius-full);
        box-shadow:inset 0 0 0 1px rgb(0 0 0/.18)}
 
+/* settings fields and the assistant. Same card, same gaps, same control
+   heights as the import block above -- the two sit in one column and must read
+   as one pane, not as two features that arrived separately. */
+.setup .fields{display:grid;gap:var(--space-2)}
+.setup .field{display:grid;gap:var(--space-1);font-size:var(--text-sm);color:var(--brand-text)}
+.setup .field input,.setup .ask{min-height:var(--tap);padding:0 var(--space-3);
+       border:1px solid var(--brand-border);border-radius:var(--radius-md);
+       background:var(--brand-surface);color:var(--brand-text);font-size:var(--text-base)}
+.setup .field input:disabled,.setup .ask:disabled{opacity:.55;cursor:progress}
+/* The question takes the row; the button keeps its own width. On a phone the
+   row wraps and the input goes full width rather than shrinking to nothing. */
+.setup .ask{flex:1 1 14rem;min-width:0}
+.setup .row .btn{width:auto}
+.setup .answer{display:grid;gap:var(--space-1)}
+.setup .said{margin:0;padding:var(--space-3);border-radius:var(--radius-md);
+       background:var(--brand-surface);border:1px solid var(--brand-border);
+       font-size:var(--text-base);line-height:1.55;white-space:pre-wrap}
+.setup .said.bad{border-color:var(--danger-ink);color:var(--danger-ink)}
+/* A spinner must not spin for someone who asked the system to stop moving. */
+.spin{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+
 .panel{background:var(--brand-surface);border:1px solid var(--brand-border);
        border-radius:var(--radius-md);box-shadow:var(--elevation-1);margin-bottom:var(--space-4);overflow:hidden}
 .panel-h{display:flex;align-items:center;gap:var(--space-2);padding:var(--space-3) var(--space-4);

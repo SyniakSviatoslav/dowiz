@@ -273,6 +273,18 @@ a.tel{color:var(--brand-text);font-weight:var(--weight-semibold);text-decoration
 .task .note{grid-column:2}
 
 .empty{text-align:center;padding:var(--space-5) var(--space-3);color:var(--brand-text-muted);font-size:var(--text-base)}
+
+/* The courier's ask box. Sized from --tap like every other control here: this
+   is used outdoors, one-handed, sometimes with gloves, and a control smaller
+   than the others is the one that gets missed. */
+.askrow{display:flex;gap:var(--space-2);width:100%;margin-bottom:var(--space-3)}
+.ask{flex:1 1 auto;min-width:0;min-height:var(--tap);padding:0 var(--space-3);
+     border:1px solid var(--brand-border);border-radius:var(--radius-md);
+     background:var(--brand-surface);color:var(--brand-text);font-size:var(--text-base)}
+.ghost.narrow{width:auto;flex:0 0 auto;padding:0 var(--space-4)}
+.answer{margin:0 0 var(--space-3);padding:var(--space-3);border-radius:var(--radius-md);
+     background:var(--brand-surface);border:1px solid var(--brand-border);
+     color:var(--brand-text);font-size:var(--text-base);line-height:1.55;white-space:pre-wrap}
 .empty b{display:block;color:var(--brand-text);font-size:var(--text-lg);margin-bottom:var(--space-1)}
 .empty .i{display:block;font-size:var(--text-3xl);color:var(--brand-border);margin-bottom:var(--space-2)}
 

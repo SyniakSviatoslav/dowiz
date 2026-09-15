@@ -306,9 +306,20 @@ function render(){
   keepAwake(false); S.cashFor = null;
 
   if (!S.available.length) {
+    // The ask box lives HERE and nowhere else. This app shows one job at a time
+    // on purpose, and a text field on a live delivery screen would compete with
+    // the address and the call button for a thumb that is on a handlebar. This
+    // is the one state where the courier is standing still.
     $('#app').innerHTML = `<div class="empty">${icon('radar-2')}<b>Вільних замовлень немає</b>Щойно щось буде готове — з'явиться тут</div>
+      <div class="askrow">
+        <input id="askBox" class="ask" type="text" placeholder="Спитати про мої доставки…"
+               autocomplete="off" enterkeyhint="send">
+        <button class="ghost narrow" id="askGo" type="button">${icon('send')}</button>
+      </div>
+      <p id="answer" class="answer" hidden></p>
       <button class="ghost" id="endShift" type="button">${icon('power')}Завершити зміну</button>`;
     $('#endShift').onclick = () => setShift(false);
+    bindAsk();
     return;
   }
 
@@ -352,6 +363,29 @@ function orderHead(o, picked){
              : `<span class="note">${icon('credit-card')} Оплачено онлайн</span>`}
       ${o.contact?.phone ? `<a class="tel" href="tel:${esc(o.contact.phone)}">${icon('phone')}${esc(o.contact.phone)}</a>` : ''}
     </div>`;
+}
+
+// The courier's own assistant. Its facts are only this courier's open
+// deliveries -- the hub builds them that way, so a question cannot reach work
+// that is not theirs.
+function bindAsk(){
+  const box = $('#askBox'), go = $('#askGo'), out = $('#answer');
+  if (!box || !go) return;
+  const ask = async () => {
+    const q = box.value.trim(); if (!q) return;
+    go.disabled = true; out.hidden = false; out.textContent = 'Думає…';
+    try {
+      const d = await api('/courier/assist', { method:'POST', body: JSON.stringify({ question: q }) });
+      out.textContent = d.answer;
+    } catch (e) {
+      // The reason, not a shrug: "assistant is off" and "model unreachable"
+      // need different people to do different things.
+      out.textContent = String(e.message || e);
+    }
+    go.disabled = false;
+  };
+  go.onclick = ask;
+  box.onkeydown = e => { if (e.key === 'Enter') ask(); };
 }
 
 function renderActive(o){

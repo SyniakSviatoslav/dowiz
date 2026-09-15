@@ -372,6 +372,20 @@ function setupView(){
     </section>
 
     <section class="card">
+      <h2>Помічник</h2>
+      <p class="hint">Працює на моделі, яку ви оберете. За замовчуванням — на цьому ж
+         сервері: питання й дані не залишають вашу машину. Якщо вкажете хмарну
+         модель, дані клієнтів (ім'я, телефон, адреса) до неї <b>не надсилаються</b>.</p>
+      <div id="aiSettings" class="fields"></div>
+      <div class="row">
+        <input id="askBox" class="ask" type="text" placeholder="Запитайте про замовлення…"
+               autocomplete="off" enterkeyhint="send">
+        <button class="btn pri" id="askGo"><i class="ti ti-send i" aria-hidden="true"></i>Спитати</button>
+      </div>
+      <div id="answer" class="answer" hidden></div>
+    </section>
+
+    <section class="card">
       <h2>Кольори закладу</h2>
       <p class="hint">Завантажте логотип або фото меню — кольори візьмемо звідти.
          Контраст перевіряємо автоматично: нечитабельну пару не приймемо.</p>
@@ -431,8 +445,82 @@ function contrastReport(pairs){
     </li>`).join('')}</ul>`;
 }
 
+// Settings are RENDERED FROM THE HUB'S OWN DECLARATIONS -- label, hint, default
+// and secrecy all come from `/owner/settings`. Listing them again here would be
+// a second list of settings, and the one that drifts is always the one the owner
+// reads.
+async function renderSettings(){
+  const box = $('#aiSettings'); if (!box) return;
+  let d;
+  try { d = await api('/owner/settings'); } catch { return; }
+  S.settings = d;
+  box.innerHTML = d.known.map(k => {
+    const v = d.values[k.key] || '';
+    const isFlag = k.default === '0' || k.default === '1';
+    if (isFlag) return `
+      <label class="check"><input type="checkbox" data-set="${esc(k.key)}"
+        ${(v === '1' || v === 'true' || v === 'on') ? 'checked' : ''}>
+        <span>${esc(k.label)}</span></label>
+      <p class="hint">${esc(k.hint)}</p>`;
+    return `
+      <label class="field">
+        <span>${esc(k.label)}</span>
+        <input type="${k.secret ? 'password' : 'text'}" data-set="${esc(k.key)}"
+          placeholder="${esc(k.secret && v ? v : k.default)}"
+          value="${esc(k.secret ? '' : v)}"
+          autocomplete="${k.secret ? 'new-password' : 'off'}">
+      </label>
+      <p class="hint">${esc(k.hint)}</p>`;
+  }).join('');
+
+  box.querySelectorAll('[data-set]').forEach(el => {
+    const save = async value => {
+      el.disabled = true;
+      try {
+        await api('/owner/settings', { method:'POST',
+          body: JSON.stringify({ key: el.dataset.set, value }) });
+        toast('Збережено');
+      } catch (e) {
+        toast(String(e.message || e));
+        // Put the control back: a field showing a value the hub refused is a
+        // setting the owner believes is active and is not.
+        await renderSettings(); return;
+      }
+      el.disabled = false;
+    };
+    if (el.type === 'checkbox') el.onchange = () => save(el.checked ? '1' : '0');
+    // `change` and not `input`: saving on every keystroke would post a dozen
+    // half-typed endpoints, each of which the hub correctly refuses.
+    else el.onchange = () => save(el.value.trim());
+  });
+}
+
 function bindSetup(){
   let csvText = null;
+  renderSettings();
+
+  const ask = async () => {
+    const q = $('#askBox').value.trim(); if (!q) return;
+    const go = $('#askGo'), out = $('#answer');
+    go.disabled = true; out.hidden = false;
+    out.innerHTML = `<p class="hint"><i class="ti ti-loader-2 i spin" aria-hidden="true"></i>Думає…</p>`;
+    try {
+      const d = await api('/owner/assist', { method:'POST', body: JSON.stringify({ question: q }) });
+      // Where the data went is shown WITH EVERY ANSWER, not once in a settings
+      // page. It is the owner's customers' information and the answer is the
+      // moment they are thinking about it.
+      out.innerHTML = `<p class="said">${esc(d.answer)}</p>
+        <p class="hint"><i class="ti ti-${d.local ? 'home' : 'cloud'} i" aria-hidden="true"></i>${
+          d.local ? 'Відповіла модель на цьому сервері' :
+                    'Хмарна модель · дані клієнтів не надсилались'}</p>`;
+    } catch (e) {
+      out.innerHTML = `<p class="said bad">${esc(String(e.message || e))}</p>`;
+    }
+    go.disabled = false;
+  };
+  const go = $('#askGo'); if (go) go.onclick = ask;
+  const box = $('#askBox'); if (box) box.onkeydown = e => { if (e.key === 'Enter') ask(); };
+
 
   const csv = $('#csvFile');
   if (csv) csv.onchange = async () => {
