@@ -696,3 +696,79 @@ Auto-deprioritization after ≥3 consecutive failures; recovery on success.
 - Verified: rtk hook rewrites Bash (63.8% savings); graphify hook-guard exits 0 (non-blocking);
   headroom OAuth passthrough returned 200 and saved 6,691 tokens on the 14:42 canary.
 
+
+## Session note 2026-09-15 (product audit → Cloudflare/workers-rs decision)
+
+**AUDIT — the working product is NOT in this tree.**
+- `dowiz-staging.fly.dev` is **LIVE** (probed 2026-09-15 08:56 UTC): postgres/workers/messageBus/
+  telegram/r2/settlement/anonymizer/backup all `ok`, `fallback` **degraded**. `/s/demo` →
+  "Dubin & Sushi"; `/public/locations/demo/menu` → 50 products / 16 categories / currency ALL /
+  locales sq,en,uk / menu_version 835. `/admin` + `/courier` → 200. `/api/owner/dashboard` → 401
+  (auth real). Demo-data clutter in the live menu: categories `Pizzas`, `Pastas`, `Salads`,
+  `UI-FCat-1783260801575`.
+- `dowiz.fly.dev` + `dowiz.org` do NOT resolve. **`dowiz.org` IS registered and its NS are already
+  Cloudflare** (`dimitris.ns.cloudflare.com`, `ursula.ns.cloudflare.com`) — only an A/CNAME is missing.
+- **Every product image 404s on staging** (5/5 sampled) although health reports `r2: ok`.
+  R2 buckets `dowiz-images` (2026-06-18) and `dowiz-offsite` (2026-07-13) exist. D1: 0 bases. KV: 0.
+  Workers: 2, neither is dowiz.
+- **This repo is a SHALLOW clone (from 2026-09-06)** — the Node/TS platform is on `origin`, not here:
+  `backup-wip-2026-07-08` (3428 files, 162 migrations, 60 web pages, 66 api route files) >
+  `integrate/merge-to-main` (07-02) > `feat/v1-hardening` (06-20) > `feat/golive-remediation` (06-22).
+- Local surfaces: customer = `web/index.html`+`app.js` (real 59-item vendor menu, in-memory server);
+  `web/sushi-durres/index.html` (i18n uk/sq/**ar**, payments are mockups); owner = an unauthenticated
+  role toggle; courier = `apps/courier` is a lib with **no `[[bin]]`** — not runnable.
+- `native-spa-server`: 5 routes, `Mutex<HashMap>`; `build_default()` uses an EMPTY `AnchorRoster`
+  (api.rs:363) so **every `/api/*` is 401**, and `RefSigner` is documented (cap.rs:105) as NOT the
+  production verifier. Telegram webhook discards its order (`webhook.rs:80`).
+
+**DECISIONS (operator, this session):** finish the Rust/WASM rewrite (not reviving the Node stack);
+host on Cloudflare; API runtime = **workers-rs** (Rust Worker, kernel linked directly); payments must
+cover cash + crypto + Stripe + Google/Apple Pay; OpenTelemetry everywhere.
+
+**DECART (no silent adoption) — what the Cloudflare choice costs and what it does not:**
+- axum+tokio+rustls **cannot** run on Workers → `native-spa-server` is demoted to dev/self-host.
+  The kernel survives unchanged: it is the thing that compiles to wasm32.
+- `FileEventStore` and `bebop-store` are `std::fs` → unusable on Workers. Storage becomes
+  D1 / Durable Objects / KV. The B-series bebop-as-database work does NOT carry over to this runtime.
+- Payments are ALREADY modelled: `PaymentRail` = `{Fiat, Crypto, Stripe, GoogleApplePay, OtherLater}`
+  (`ports/payment_capability.rs:42-57`); the `PaymentProvider` port is complete;
+  `payment-adapters/src/stripe.rs` is an honest 85-line degrade-closed stub — 6 method bodies to write.
+  Google/Apple Pay are wallet presentment **via Stripe**, one rail, not two integrations.
+- OTel has a deliberate seam: `fdr::SpanObserver` + `set_global_observer` (`fdr/mod.rs:128`), the
+  chosen replacement for `tracing_subscriber::Layer`. BUT `on_span_close(name, dur_us)` carries no
+  trace_id/parent/attributes — it must be widened before it can feed real distributed tracing.
+  Adding OTel crates to `native-spa-server` would violate its `ZERO-DEP-ALLOWLIST.txt` ("may only SHRINK").
+
+**VERIFIED this session (fresh evidence):**
+- `native-spa-server`: `cargo check --locked --offline --all-targets` → **rc=0, 5m10s**
+  (`aws-lc-sys` + cmake do build on this box).
+- BASELINE: `kernel cargo test --lib` → **204 passed, 0 failed, 1 ignored (rc=0)**.
+  `native-spa-server cargo test` → **rc=101, ONE pre-existing failure**.
+- **FIXED a dead red-line gate.** `tests/money_law_firewall_grep.rs::red_money_tool_absent` read
+  `kernel/src/ports/tool.rs`, which moved to `crates/dowiz-core/src/ports/tool.rs` at the core split —
+  so the money-tool firewall was PANICKING `NotFound`, not checking anything. Repointed, and corrected
+  a stale comment claiming the enum holds exactly one variant (it holds `OrderStatus` + `WebFetch`;
+  the assertions never counted variants — only the comment did). Now 2 passed.
+  **MUTATION-PROVEN:** injecting a `Price` variant drives it to rc=101; revert verified clean by `git diff`.
+
+**BLOCKER hit and how it was resolved:**
+- `wasm32-unknown-unknown` was absent and there is no rustup. The upstream
+  `rust-std-1.93.1-wasm32-unknown-unknown` (sha256 matched dist; `git-commit-hash` identical to the
+  local rustc's `01f6ddf7588f42ae2d7eb0a2f21d44e8e96674cf`) is still REJECTED:
+  *"found crate `std` compiled by an incompatible version of rustc"*. The local rustc is **built from a
+  source tarball** — a different BUILD of the same commit — so upstream rlibs can never link against it.
+  The copied target dir was removed. Termux's rust 1.98.1 carries Android targets only.
+- Resolution (operator-approved): `rustup --no-modify-path --profile minimal --default-toolchain 1.93.1`
+  + `target add wasm32-unknown-unknown`. **`~/.cargo/bin` is NOT on PATH** (`/usr/bin/cargo` is), so the
+  verified aarch64 baseline stays on the system toolchain; wasm builds are invoked by explicit path.
+
+**OPEN:**
+- **kernel → wasm32 is UNVERIFIED** — the run was invalidated when the target dir was removed mid-build.
+  This is the real gate for workers-rs: `kernel/src/` carries `vfs.rs`, `living_memory_store.rs`,
+  `kthread.rs`, `brain/hydra.rs` with `std::fs`/`std::thread`.
+- 6 uncommitted files from the previous session (`crates/bebop-store/src/evlog.rs`,
+  `kernel/src/bebop_event_store.rs` + 4 modified) are NOT in the pushed backup branch.
+- Root `Dockerfile` is broken three ways: dead pnpm stage; stage 2 copies only
+  `tools/native-spa-server` while it path-depends on kernel→dowiz-core→(dev)eqc-rs + intake-adapters;
+  and `FROM scratch` requires a static binary that `rust:1` + `aws-lc-sys` does not produce.
+- Backup pushed: `origin/bebop/main-2026-09-15` = `4b7f67a` (137 previously-unpushed commits).

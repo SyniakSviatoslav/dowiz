@@ -102,11 +102,22 @@ fn red_money_law_firewall_present() {
 #[test]
 fn red_money_tool_absent() {
     let root = repo_root();
-    let tool_rs = root.join("kernel").join("src").join("ports").join("tool.rs");
-    let src = std::fs::read_to_string(&tool_rs).expect("read kernel ports/tool.rs");
+    // `ports::tool` moved out of `kernel/src/` when the core was split into
+    // `crates/dowiz-core/`; `kernel::ports` only re-exports it. This gate read the
+    // OLD path and panicked `NotFound` instead of checking anything — a red-line
+    // firewall that measured nothing. Read the file where the enum actually lives.
+    let tool_rs = root
+        .join("crates")
+        .join("dowiz-core")
+        .join("src")
+        .join("ports")
+        .join("tool.rs");
+    let src = std::fs::read_to_string(&tool_rs)
+        .unwrap_or_else(|e| panic!("cannot check the money-tool red line: {} unreadable: {e}", tool_rs.display()));
 
-    // The closed ToolResource enum must have exactly ONE variant: OrderStatus.
-    // A money/price variant is UNREPRESENTABLE (P54 prong 1).
+    // The red line: a money/price resource is UNREPRESENTABLE on the tool surface
+    // (P54 prong 1). The enum is NOT pinned to one variant — `WebFetch` was added
+    // deliberately — so this asserts the money ban, not the variant count.
     let enum_start = src
         .find("pub enum ToolResource")
         .expect("ToolResource enum must exist");
