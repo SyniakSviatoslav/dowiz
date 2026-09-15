@@ -51,6 +51,28 @@ struct Cli {
     #[arg(long)]
     seed_catalog: Option<PathBuf>,
 
+    /// Provision a hub on a VPS and expose it through a tunnel, then exit:
+    /// `--provision dubin-sushi --hostname dubin.example.com`.
+    ///
+    /// Needs `HETZNER_API_TOKEN`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`
+    /// and, to point a name at it, `CLOUDFLARE_ZONE_ID`. Refuses by name
+    /// otherwise -- see `p67`.
+    #[arg(long)]
+    provision: Option<String>,
+
+    /// The hostname the venue will be reached on. Without it the tunnel is
+    /// created and configured but nothing is pointed at it.
+    #[arg(long)]
+    hostname: Option<String>,
+
+    /// Where the hub binary is fetched from on first boot.
+    #[arg(long, env = "HUB_BINARY_URL")]
+    hub_binary_url: Option<String>,
+
+    /// Report what exists without changing anything.
+    #[arg(long)]
+    provision_status: bool,
+
     /// Add a person to the hub's roster and exit:
     /// `--hub-dir <dir> --add-person owner:ana@dubin.al:Ana`.
     ///
@@ -91,11 +113,126 @@ fn parse_person_spec(spec: &str) -> std::io::Result<(String, dowiz_hub::token::R
     Ok((id, role, name))
 }
 
+/// What already exists, changing nothing.
+///
+/// A read-only command first, because the first thing an operator wants from a
+/// provisioning tool is to be told what is already there -- and because a tool
+/// whose only mode is "create" gets run twice.
+async fn provision_status() -> Result<(), Box<dyn std::error::Error>> {
+    use native_spa_server::p67::{CloudflareTunnel, Hetzner};
+    let mut any = false;
+    match Hetzner::from_env() {
+        Ok(h) => match h.list_hubs().await {
+            Ok(list) if list.is_empty() => eprintln!("[p67] hetzner: no dowiz-labelled servers"),
+            Ok(list) => {
+                any = true;
+                for (id, name, status) in list {
+                    eprintln!("[p67] hetzner: {id}  {name}  {status}");
+                }
+            }
+            Err(e) => eprintln!("[p67] hetzner: {e}"),
+        },
+        Err(e) => eprintln!("[p67] hetzner: {e}"),
+    }
+    match CloudflareTunnel::from_env() {
+        Ok(cf) => match cf.count_tunnels().await {
+            // The 1,000-tunnel cap is an account limit, so the gauge is
+            // reported against it rather than as a bare number.
+            Ok(n) => {
+                any = true;
+                eprintln!("[p67] cloudflare: {n} live tunnels (cap 1000)");
+            }
+            Err(e) => eprintln!("[p67] cloudflare: {e}"),
+        },
+        Err(e) => eprintln!("[p67] cloudflare: {e}"),
+    }
+    if !any {
+        eprintln!("[p67] nothing reachable; set the credentials named above");
+    }
+    Ok(())
+}
+
+/// Create a machine, a tunnel, and the route between them.
+///
+/// ORDER MATTERS AND IS NOT ARBITRARY. The tunnel is created FIRST, because its
+/// connector token has to be inside the cloud-init the server boots with. A
+/// server created first would come up with nowhere to connect and would need a
+/// second pass over SSH -- which is the manual step this exists to remove.
+///
+/// It is also the order that fails cheapest: a tunnel with no server costs
+/// nothing and is deleted in one call, while a server with no tunnel is a
+/// machine being billed for that nobody can reach.
+async fn provision(
+    name: &str,
+    hostname: Option<&str>,
+    binary_url: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use native_spa_server::p67::{cloud_init, CloudflareTunnel, Hetzner, ServerSpec};
+
+    let fail = |e: String| -> Box<dyn std::error::Error> { Box::new(std::io::Error::other(e)) };
+    let binary_url = binary_url.ok_or_else(|| {
+        fail("--hub-binary-url (or HUB_BINARY_URL) must say where the hub binary is fetched from".into())
+    })?;
+
+    let hetzner = Hetzner::from_env().map_err(|e| fail(e.to_string()))?;
+    let cf = CloudflareTunnel::from_env().map_err(|e| fail(e.to_string()))?;
+
+    eprintln!("[p67] creating tunnel {name}");
+    let (tunnel_id, connector) = cf.create_tunnel(name).await.map_err(|e| fail(e.to_string()))?;
+    eprintln!("[p67] tunnel {tunnel_id}");
+
+    // From here on a failure must CLEAN UP the tunnel, or the account collects
+    // orphans that count against the 1,000 cap and that nobody remembers
+    // creating.
+    let result = async {
+        if let Some(host) = hostname {
+            cf.configure_ingress(&tunnel_id, host, "http://127.0.0.1:8080")
+                .await
+                .map_err(|e| e.to_string())?;
+            let rec = cf.route_dns(host, &tunnel_id).await.map_err(|e| e.to_string())?;
+            eprintln!("[p67] {host} -> {tunnel_id}.cfargotunnel.com (dns {rec})");
+        }
+        let spec = ServerSpec {
+            name: format!("dowiz-{name}"),
+            user_data: Some(cloud_init(binary_url, &connector, 8080)),
+            ..Default::default()
+        };
+        let id = hetzner.create_server(&spec).await.map_err(|e| e.to_string())?;
+        Ok::<i64, String>(id)
+    }
+    .await;
+
+    match result {
+        Ok(id) => {
+            eprintln!("[p67] server {id} created; it boots, installs the hub and dials the tunnel");
+            eprintln!("[p67] next: --hub-dir on that box, --seed-catalog, --add-person owner:…");
+            Ok(())
+        }
+        Err(e) => {
+            eprintln!("[p67] FAILED: {e}");
+            eprintln!("[p67] removing the tunnel so it does not count against the cap");
+            if let Err(e2) = cf.destroy_tunnel(&tunnel_id).await {
+                // Said loudly rather than swallowed: an orphan the operator does
+                // not know about is worse than one they do.
+                eprintln!("[p67] could NOT remove tunnel {tunnel_id}: {e2} -- remove it by hand");
+            }
+            Err(fail(e))
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
     let root = resolve_root(Some(cli.root.clone()));
     let api = ApiState::build_default();
+    if cli.provision_status {
+        return provision_status().await;
+    }
+    if let Some(name) = &cli.provision {
+        return provision(name, cli.hostname.as_deref(), cli.hub_binary_url.as_deref()).await;
+    }
+
     // Creating a person is a SEPARATE INVOCATION, not a route. A hub with no
     // people must not expose a "create the first owner" endpoint: that endpoint
     // is unauthenticated by definition, and whoever reaches the box first owns

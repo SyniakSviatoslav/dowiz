@@ -277,19 +277,78 @@ fn complete_at(raw: &[u8]) -> Option<usize> {
 }
 
 /// Split a response into its status and body.
+///
+/// CHUNKED IS DECODED HERE, and it has to be. The first version handled only
+/// `Content-Length` and handed the caller the body with its chunk framing still
+/// attached -- which a JSON parser rejects with "trailing characters", a message
+/// that points at the payload rather than at the framing. Cloudflare's API
+/// answers chunked, so this was not a theoretical branch: it was the reason the
+/// first live call against a real provider failed.
 pub fn parse_response(raw: &[u8]) -> Result<(u16, Vec<u8>), HttpError> {
     let head_end = raw
         .windows(4)
         .position(|w| w == b"\r\n\r\n")
         .ok_or_else(|| HttpError::Transport("truncated response: no header terminator".into()))?;
-    let status_line = raw[..head_end].split(|&b| b == b'\n').next().unwrap_or(&[]);
-    let status_line = String::from_utf8_lossy(status_line);
+    let head = String::from_utf8_lossy(&raw[..head_end]);
+    let status_line = head.lines().next().unwrap_or("");
     let code: u16 = status_line
         .split_whitespace()
         .nth(1)
         .and_then(|c| c.parse().ok())
         .ok_or_else(|| HttpError::Transport(format!("unparsable status line: {status_line:?}")))?;
-    Ok((code, raw[head_end + 4..].to_vec()))
+
+    let body = &raw[head_end + 4..];
+    let chunked = head
+        .to_ascii_lowercase()
+        .lines()
+        .any(|l| l.starts_with("transfer-encoding:") && l.contains("chunked"));
+    if chunked {
+        return Ok((code, dechunk(body)?));
+    }
+    Ok((code, body.to_vec()))
+}
+
+/// Undo `Transfer-Encoding: chunked` (RFC 9112 §7.1).
+///
+/// Each chunk is a hex length, optional `;ext`, CRLF, that many bytes, CRLF. A
+/// zero-length chunk ends the body; trailers may follow and are discarded,
+/// because nothing here reads them.
+///
+/// A TRUNCATED body is an ERROR, not a short answer. This runs over a
+/// connection the peer may have dropped, and returning the bytes that did
+/// arrive would hand a caller half a JSON document to misparse.
+fn dechunk(mut body: &[u8]) -> Result<Vec<u8>, HttpError> {
+    let mut out = Vec::with_capacity(body.len());
+    loop {
+        let line_end = body
+            .windows(2)
+            .position(|w| w == b"\r\n")
+            .ok_or_else(|| HttpError::Transport("chunked body ended mid-header".into()))?;
+        let header = &body[..line_end];
+        // `1a2b;name=value` -- the extension is legal and ignored.
+        let hex_part = header.split(|&b| b == b';').next().unwrap_or(header);
+        let hex = String::from_utf8_lossy(hex_part);
+        let n = usize::from_str_radix(hex.trim(), 16)
+            .map_err(|_| HttpError::Transport(format!("bad chunk size {:?}", hex.trim())))?;
+        body = &body[line_end + 2..];
+        if n == 0 {
+            return Ok(out);
+        }
+        if body.len() < n {
+            return Err(HttpError::Transport(format!(
+                "chunked body claimed {n} bytes and {} arrived",
+                body.len()
+            )));
+        }
+        out.extend_from_slice(&body[..n]);
+        body = &body[n..];
+        // The CRLF after the data. A peer that omits it is malformed, but the
+        // bytes already read are correct, so skip whatever is there rather than
+        // failing on a trailing-newline disagreement.
+        if body.starts_with(b"\r\n") {
+            body = &body[2..];
+        }
+    }
 }
 
 /// Percent-encode a value for a form body or a query string.
@@ -410,6 +469,81 @@ mod tests {
             None
         );
         assert_eq!(complete_at(b"HTTP/1.1 204 No Content\r\n\r\n"), None);
+    }
+
+    /// The framing that broke the first live call against a real provider.
+    ///
+    /// The chunk sizes are COMPUTED from the payload rather than written by
+    /// hand: the first draft of this test hard-coded `e` for a sixteen-byte
+    /// body, failed, and for a moment looked like a bug in the decoder.
+    fn chunked(parts: &[&str]) -> Vec<u8> {
+        let mut v = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n".to_vec();
+        for p in parts {
+            v.extend_from_slice(format!("{:x}\r\n{p}\r\n", p.len()).as_bytes());
+        }
+        v.extend_from_slice(b"0\r\n\r\n");
+        v
+    }
+
+    #[test]
+    fn a_chunked_body_is_decoded_not_handed_over_raw() {
+        let raw = chunked(&[r#"{"success":true}"#]);
+        let (code, body) = parse_response(&raw).expect("parse");
+        assert_eq!(code, 200);
+        assert_eq!(String::from_utf8_lossy(&body), r#"{"success":true}"#);
+        // Valid JSON is the property that actually failed live: the raw body
+        // still carried its chunk framing and serde said "trailing characters".
+        assert!(serde_json::from_slice::<serde_json::Value>(&body).is_ok());
+    }
+
+    #[test]
+    fn several_chunks_are_joined_in_order() {
+        let raw = chunked(&["hello", " ", "world"]);
+        let (_, body) = parse_response(&raw).expect("parse");
+        assert_eq!(String::from_utf8_lossy(&body), "hello world");
+    }
+
+    /// A chunk longer than 15 bytes exercises the multi-digit hex length, which
+    /// is where a decoder that reads one character silently truncates.
+    #[test]
+    fn a_long_chunk_reads_its_whole_length() {
+        let long = "x".repeat(300);
+        let raw = chunked(&[&long]);
+        let (_, body) = parse_response(&raw).expect("parse");
+        assert_eq!(body.len(), 300);
+    }
+
+    #[test]
+    fn a_chunk_extension_is_ignored_not_fatal() {
+        let mut raw = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n".to_vec();
+        raw.extend_from_slice(b"5;name=value\r\nhello\r\n0\r\n\r\n");
+        let (_, body) = parse_response(&raw).expect("parse");
+        assert_eq!(String::from_utf8_lossy(&body), "hello");
+    }
+
+    /// A dropped connection must not hand back half a document.
+    #[test]
+    fn a_truncated_chunked_body_is_an_error() {
+        let head = b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n";
+        let mut raw = head.to_vec();
+        raw.extend_from_slice(b"ff\r\nonly a few bytes");
+        assert!(parse_response(&raw).is_err(), "claimed 255 bytes, sent 16");
+
+        let mut raw = head.to_vec();
+        raw.extend_from_slice(b"5\r\nhel");
+        assert!(parse_response(&raw).is_err());
+
+        let mut raw = head.to_vec();
+        raw.extend_from_slice(b"zz\r\n");
+        assert!(parse_response(&raw).is_err(), "a non-hex chunk size is not a body");
+    }
+
+    /// A body that is NOT chunked must pass through untouched.
+    #[test]
+    fn a_plain_body_is_not_dechunked() {
+        let raw = b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello";
+        let (_, body) = parse_response(raw).expect("parse");
+        assert_eq!(String::from_utf8_lossy(&body), "hello");
     }
 
     #[test]

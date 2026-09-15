@@ -42,6 +42,7 @@ pub mod hubowner;
 pub mod hubvoice;
 pub mod mcp;
 pub mod notify;
+pub mod p67;
 pub mod webhook;
 
 /// DEFAULT_ROOT mirrors the legacy nginx web root.
