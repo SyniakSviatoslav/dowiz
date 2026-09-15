@@ -1,0 +1,16 @@
+[package]
+name = "bebop-store"
+version = "0.1.0"
+edition = "2021"
+
+# A Rust reader/writer for the bebop store file format (bebop-lang
+# selfhost/prelude/store.bp, docs/LANG-DB-DESIGN.md §4).
+#
+# This crate exists because the format is POINTER-FREE by design -- "nothing in the file is an
+# address", every ref is an object-relative cell offset -- which is exactly what lets a second
+# language read and write the same file. ZERO dependencies: std only, plain file I/O, and a
+# table-free CRC-32. It is the seam by which dowiz uses bebop as its database.
+[dependencies]
+
+[profile.release]
+opt-level = 3
