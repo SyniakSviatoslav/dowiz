@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1A1614">
+<title>dowiz · admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* The owner layer is a TOOL, not a brand surface. product-context.md puts it in
+   the product register with Shopify Admin and Stripe as references: dense,
+   utilitarian, legible at a glance during a rush. It deliberately shares no
+   visual language with the storefront -- the person using this is working, not
+   being sold to. Semantic colours are the SAME tokens as the storefront, because
+   those must never move per theme. */
+:root{
+  --bg:#F6F7F9; --panel:#FFFFFF; --ink:#12161C; --muted:#5B6672; --line:#E3E7EC;
+  --accent:#1D4ED8; --accent-soft:#EFF4FF;
+  --success:#0F7B47; --warning:#B45309; --danger:#C1121F;
+  --r:10px; --r-sm:6px; --tap:44px;
+  --shadow:0 1px 2px rgba(18,22,28,.06),0 1px 3px rgba(18,22,28,.04);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--ink);
+     font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased;
+     padding-bottom:calc(64px + env(safe-area-inset-bottom,0px))}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+.wrap{max-width:900px;margin:0 auto;padding:0 14px}
+
+.top{position:sticky;top:0;z-index:30;background:var(--panel);border-bottom:1px solid var(--line)}
+.top-in{display:flex;align-items:center;gap:12px;min-height:54px}
+.logo{font-weight:700;letter-spacing:-.01em;font-size:15px}
+.spacer{flex:1}
+.vstatus{display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;
+         border:1px solid var(--line);background:var(--panel);cursor:pointer;font-weight:600;font-size:13px}
+.vstatus .d{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.vstatus.open .d{background:var(--success)}
+.vstatus.busy .d{background:var(--warning)}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:13px 15px;
+      box-shadow:var(--shadow)}
+.stat .k{color:var(--muted);font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.05em}
+.stat .v{font-size:26px;font-weight:700;margin-top:3px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+
+.tabs{display:flex;gap:4px;background:var(--panel);border:1px solid var(--line);
+      border-radius:var(--r);padding:4px;margin-bottom:12px;overflow-x:auto}
+.tab{flex:1 0 auto;min-height:36px;padding:8px 14px;border:0;background:none;border-radius:var(--r-sm);
+     font-weight:600;font-size:13px;color:var(--muted);cursor:pointer;white-space:nowrap}
+.tab[aria-selected="true"]{background:var(--accent-soft);color:var(--accent)}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+      padding:14px;margin-bottom:10px;box-shadow:var(--shadow)}
+/* A pending order pulses. During a rush the owner is not reading, they are
+   scanning -- the thing that needs them has to move. */
+.card.pending{border-left:3px solid var(--danger);animation:att 2.2s ease-in-out infinite}
+@keyframes att{0%,100%{box-shadow:var(--shadow)}50%{box-shadow:0 0 0 4px rgba(193,18,31,.10)}}
+.card-h{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.oid{font-family:ui-monospace,SFMono-Regular,monospace;font-size:12px;color:var(--muted)}
+.chip{padding:3px 9px;border-radius:999px;font-size:11px;font-weight:700;
+      text-transform:uppercase;letter-spacing:.04em;background:#EEF1F4;color:var(--muted)}
+.chip.PENDING{background:#FDECEE;color:var(--danger)}
+.chip.CONFIRMED,.chip.PREPARING{background:#FFF4E5;color:var(--warning)}
+.chip.READY,.chip.IN_DELIVERY{background:var(--accent-soft);color:var(--accent)}
+.chip.DELIVERED{background:#E7F5EE;color:var(--success)}
+.amt{margin-left:auto;font-weight:700;font-variant-numeric:tabular-nums}
+.lines{font-size:13px;color:var(--muted);margin-bottom:9px}
+.lines b{color:var(--ink);font-weight:600}
+.who{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;margin-bottom:10px}
+.who a{color:var(--accent);font-weight:600;text-decoration:none}
+.acts{display:flex;flex-wrap:wrap;gap:7px}
+.btn{min-height:38px;padding:8px 15px;border:1px solid var(--line);background:var(--panel);
+     border-radius:var(--r-sm);font-weight:600;font-size:13px;cursor:pointer}
+.btn:hover{background:#F2F4F7}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.pri:hover{background:#1A43BE}
+.btn.dan{background:var(--panel);border-color:#F3C9CD;color:var(--danger)}
+.btn.dan:hover{background:#FDECEE}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+
+.prod{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)}
+.prod:last-child{border-bottom:0}
+.prod .n{flex:1;min-width:0}
+.prod .n b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prod .n small{color:var(--muted)}
+.prod input[type=number]{width:96px;min-height:var(--tap);padding:8px 10px;border:1px solid var(--line);
+                         border-radius:var(--r-sm);text-align:right;font-variant-numeric:tabular-nums}
+.sw{position:relative;width:46px;height:27px;flex:0 0 auto}
+.sw input{position:absolute;inset:0;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}
+.sw span{position:absolute;inset:0;background:#CBD2DA;border-radius:999px;transition:background .15s}
+.sw span::after{content:"";position:absolute;top:3px;left:3px;width:21px;height:21px;background:#fff;
+                border-radius:50%;transition:transform .15s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.sw input:checked + span{background:var(--success)}
+.sw input:checked + span::after{transform:translateX(19px)}
+.sw input:focus-visible + span{outline:2px solid var(--accent);outline-offset:2px}
+
+.login{max-width:360px;margin:12vh auto;padding:0 16px}
+.login h1{font-size:22px;font-weight:700;margin-bottom:4px;letter-spacing:-.02em}
+.login p{color:var(--muted);margin-bottom:20px}
+label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin:12px 0 5px}
+input[type=email],input[type=password],input[type=text]{width:100%;min-height:var(--tap);
+  padding:11px 13px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--panel)}
+input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
+.err{color:var(--danger);font-size:13px;font-weight:500;margin-top:10px}
+.empty{text-align:center;padding:40px 16px;color:var(--muted)}
+.empty b{display:block;color:var(--ink);font-size:15px;margin-bottom:4px}
+.skel{background:linear-gradient(90deg,#EEF1F4 25%,#F7F9FB 37%,#EEF1F4 63%);background-size:400% 100%;
+      animation:sh 1.3s ease infinite;border-radius:var(--r);height:96px;margin-bottom:10px}
+@keyframes sh{0%{background-position:100% 0}100%{background-position:0 0}}
+.toast{position:fixed;left:14px;right:14px;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:80;
+       background:var(--ink);color:#fff;padding:12px 15px;border-radius:var(--r);max-width:872px;
+       margin:0 auto;font-size:13px;opacity:0;transform:translateY(8px);pointer-events:none;
+       transition:opacity .18s,transform .18s}
+.toast.show{opacity:1;transform:none}
+</style>
+</head>
+<body>
+<header class="top" id="top" hidden><div class="wrap top-in">
+  <span class="logo">dowiz</span>
+  <span class="spacer"></span>
+  <button class="vstatus" id="vstatus"><span class="d"></span><span id="vstatusT">—</span></button>
+  <button class="btn" id="logout">Вийти</button>
+</div></header>
+<main id="app" class="wrap" aria-live="polite"></main>
+<div class="toast" id="toast"></div>
+<script type="module" src="/admin/app.js"></script>
+</body>
+</html>

@@ -12,6 +12,7 @@
 
 mod accounts;
 mod auth;
+mod owner;
 mod storefront;
 
 use dowiz_kernel::json_api;
@@ -77,6 +78,12 @@ pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         .post_async("/api/auth/refresh", accounts::owner_refresh)
         .post_async("/api/auth/logout", accounts::owner_logout)
         .post_async("/api/courier/auth/login", accounts::courier_login)
+        // ── owner ──
+        .get_async("/api/owner/orders", owner::orders)
+        .post_async("/api/owner/orders/:id/action", owner::order_action)
+        .get_async("/api/owner/dashboard", owner::dashboard)
+        .post_async("/api/owner/products/:id", owner::update_product)
+        .post_async("/api/owner/location", owner::update_location)
         .post_async("/api/order", |mut req, ctx| async move {
             let body: PlaceOrderBody = match req.json().await {
                 Ok(b) => b,

@@ -1,0 +1,377 @@
+//! The owner's day of service: see the queue, move an order, stop a dish,
+//! open or close the venue.
+//!
+//! Every status change goes through the kernel FSM. This module never contains a
+//! list of statuses in order — the one in `web/src/app.js` is exactly the
+//! duplicate authority the architecture forbids, and it is why an order there
+//! could be walked anywhere. Here an illegal edge is the kernel's refusal.
+
+use serde::Deserialize;
+use serde_json::{json, Value};
+use worker::wasm_bindgen::JsValue;
+use worker::*;
+
+use crate::auth::{self, Principal};
+use dowiz_kernel::json_api;
+
+fn now_ms() -> i64 {
+    Date::now().as_millis() as i64
+}
+
+/// Authenticate, require the owner role, and confirm the membership covers this
+/// location. The membership is read LIVE — an owner removed a moment ago is
+/// refused here even holding a valid token.
+async fn owner_at(
+    req: &Request,
+    ctx: &RouteContext<()>,
+    db: &D1Database,
+    location_id: &str,
+) -> std::result::Result<String, Response> {
+    let p = match auth::authenticate(req, &ctx.env, db, now_ms()).await {
+        Ok(p) => p,
+        Err(e) => return Err(e.into_response().unwrap()),
+    };
+    let Principal::Owner { user_id, .. } = p else {
+        return Err(Response::error("forbidden role", 403).unwrap());
+    };
+    #[derive(Deserialize)]
+    struct M {
+        id: String,
+    }
+    let m: std::result::Result<Option<M>, _> = async {
+        db.prepare(
+            "SELECT id FROM memberships WHERE user_id = ?1 AND location_id = ?2 \
+             AND role = 'owner' AND status = 'active' LIMIT 1",
+        )
+        .bind(&[user_id.clone().into(), location_id.into()])?
+        .first(None)
+        .await
+    }
+    .await;
+    match m {
+        Ok(Some(_)) => Ok(user_id),
+        // Cross-tenant is 404, never 403: a 403 confirms the location exists.
+        Ok(None) => Err(Response::error("not found", 404).unwrap()),
+        Err(e) => Err(Response::error(format!("auth backend unavailable: {e}"), 503).unwrap()),
+    }
+}
+
+fn location_of(req: &Request) -> Option<String> {
+    req.url()
+        .ok()?
+        .query_pairs()
+        .find(|(k, _)| k == "location_id")
+        .map(|(_, v)| v.to_string())
+}
+
+/// `GET /api/owner/orders?location_id=&status=`
+pub async fn orders(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let db = ctx.d1("DB")?;
+    let Some(loc) = location_of(&req) else {
+        return Response::error("location_id required", 400);
+    };
+    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
+        return Ok(r);
+    }
+
+    let status = req
+        .url()
+        .ok()
+        .and_then(|u| u.query_pairs().find(|(k, _)| k == "status").map(|(_, v)| v.to_string()));
+
+    #[derive(Deserialize)]
+    struct Row {
+        id: String,
+        status: String,
+        order_json: String,
+        created_at_ms: i64,
+    }
+    let rows = match &status {
+        Some(s) => {
+            db.prepare(
+                "SELECT id,status,order_json,created_at_ms FROM orders \
+                 WHERE status = ?1 ORDER BY created_at_ms DESC LIMIT 200",
+            )
+            .bind(&[s.clone().into()])?
+            .all()
+            .await?
+        }
+        None => {
+            db.prepare(
+                "SELECT id,status,order_json,created_at_ms FROM orders \
+                 ORDER BY created_at_ms DESC LIMIT 200",
+            )
+            .all()
+            .await?
+        }
+    }
+    .results::<Row>()?;
+
+    // Only orders belonging to this location. The column does not exist on the
+    // orders table yet, so the filter reads the envelope — explicit and slow
+    // rather than absent and fast.
+    let out: Vec<Value> = rows
+        .into_iter()
+        .filter_map(|r| {
+            let v: Value = serde_json::from_str(&r.order_json).ok()?;
+            if v.get("location_id").and_then(|x| x.as_str()) != Some(loc.as_str()) {
+                return None;
+            }
+            Some(json!({
+                "id": r.id, "status": r.status, "createdAtMs": r.created_at_ms,
+                "total": v.get("total").cloned().unwrap_or(json!(0)),
+                "subtotal": v.get("subtotal").cloned().unwrap_or(json!(0)),
+                "items": v.get("items").cloned().unwrap_or(json!([])),
+                "contact": v.get("contact").cloned().unwrap_or(Value::Null),
+                "fulfilment": v.get("fulfilment").cloned().unwrap_or(Value::Null),
+                "payment": v.get("payment").cloned().unwrap_or(Value::Null),
+                "courierId": v.get("courier_id").cloned().unwrap_or(Value::Null)
+            }))
+        })
+        .collect();
+    Response::from_json(&json!({ "orders": out }))
+}
+
+/// `POST /api/owner/orders/:id/action` — `{location_id, action, reason?}`
+///
+/// `action` names an intent, never a target status. The mapping from intent to
+/// status lives in one place and the FSM decides whether the edge is legal.
+pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    #[derive(Deserialize)]
+    struct In {
+        location_id: String,
+        action: String,
+        #[serde(default)]
+        reason: Option<String>,
+    }
+    let body: In = match req.json().await {
+        Ok(b) => b,
+        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
+    };
+    let Some(id) = ctx.param("id").cloned() else {
+        return Response::error("missing order id", 400);
+    };
+    let db = ctx.d1("DB")?;
+    if let Err(r) = owner_at(&req, &ctx, &db, &body.location_id).await {
+        return Ok(r);
+    }
+
+    let next = match body.action.as_str() {
+        "confirm" => "CONFIRMED",
+        "reject" => "REJECTED",
+        "preparing" => "PREPARING",
+        "ready" => "READY",
+        "cancel" => "CANCELLED",
+        other => return Response::error(format!("unknown action: {other}"), 400),
+    };
+
+    let current: Option<String> = db
+        .prepare("SELECT order_json FROM orders WHERE id = ?1")
+        .bind(&[id.clone().into()])?
+        .first(Some("order_json"))
+        .await?;
+    let Some(current) = current else {
+        return Response::error("order not found", 404);
+    };
+    {
+        let v: Value = serde_json::from_str(&current)
+            .map_err(|e| Error::RustError(format!("stored order unreadable: {e}")))?;
+        if v.get("location_id").and_then(|x| x.as_str()) != Some(body.location_id.as_str()) {
+            return Response::error("not found", 404);
+        }
+    }
+
+    // The kernel decides. An illegal edge comes back as a refusal, not a 500.
+    let updated = match json_api::apply_event_logic(&current, next) {
+        Ok(j) => j,
+        Err(e) => return Response::error(e, 409),
+    };
+
+    // Carry the envelope fields the kernel does not model yet, and record why a
+    // rejection happened so the customer can be told something true.
+    let mut merged: Value = serde_json::from_str(&updated)
+        .map_err(|e| Error::RustError(format!("kernel order json unreadable: {e}")))?;
+    let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
+    for k in ["location_id", "contact", "fulfilment", "payment", "delivery_fee", "courier_id"] {
+        if let Some(v) = old.get(k) {
+            merged[k] = v.clone();
+        }
+    }
+    if let Some(total) = old.get("total") {
+        merged["total"] = total.clone();
+    }
+    if next == "REJECTED" {
+        merged["rejection_reason"] = json!(body.reason);
+    }
+
+    let now = now_ms();
+    db.prepare("UPDATE orders SET status = ?1, order_json = ?2, updated_at_ms = ?3 WHERE id = ?4")
+        .bind(&[
+            next.into(),
+            serde_json::to_string(&merged).unwrap_or(updated).into(),
+            JsValue::from_f64(now as f64),
+            id.into(),
+        ])?
+        .run()
+        .await?;
+    Response::from_json(&merged)
+}
+
+/// `GET /api/owner/dashboard?location_id=` — the numbers an owner looks at
+/// between orders, computed from the log rather than kept as a running total
+/// that can drift.
+pub async fn dashboard(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let db = ctx.d1("DB")?;
+    let Some(loc) = location_of(&req) else {
+        return Response::error("location_id required", 400);
+    };
+    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
+        return Ok(r);
+    }
+
+    // "Today" starts at local midnight for the venue. Without the timezone this
+    // would silently mean UTC, and an owner in Durrës would see the day roll over
+    // two hours early.
+    let tz_offset_ms: i64 = 2 * 60 * 60 * 1000; // Europe/Tirane, standard time
+    let now = now_ms();
+    let day_start = ((now + tz_offset_ms) / 86_400_000) * 86_400_000 - tz_offset_ms;
+
+    #[derive(Deserialize)]
+    struct Row {
+        status: String,
+        order_json: String,
+    }
+    let rows = db
+        .prepare("SELECT status, order_json FROM orders WHERE created_at_ms >= ?1")
+        .bind(&[JsValue::from_f64(day_start as f64)])?
+        .all()
+        .await?
+        .results::<Row>()?;
+
+    let (mut count, mut revenue, mut pending, mut active) = (0i64, 0i64, 0i64, 0i64);
+    for r in rows {
+        let Ok(v) = serde_json::from_str::<Value>(&r.order_json) else { continue };
+        if v.get("location_id").and_then(|x| x.as_str()) != Some(loc.as_str()) {
+            continue;
+        }
+        count += 1;
+        match r.status.as_str() {
+            "PENDING" => pending += 1,
+            "CONFIRMED" | "PREPARING" | "READY" | "IN_DELIVERY" => active += 1,
+            // Revenue counts DELIVERED only. Counting a pending order as money
+            // is how a dashboard starts lying.
+            "DELIVERED" => revenue += v.get("total").and_then(|t| t.as_i64()).unwrap_or(0),
+            _ => {}
+        }
+    }
+    Response::from_json(&json!({
+        "todayOrders": count, "todayRevenue": revenue,
+        "pending": pending, "active": active, "dayStartMs": day_start
+    }))
+}
+
+/// `PATCH /api/owner/products/:id` — the stop-list and the price.
+pub async fn update_product(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    #[derive(Deserialize)]
+    struct In {
+        location_id: String,
+        #[serde(default)]
+        available: Option<bool>,
+        #[serde(default)]
+        unavailable_note: Option<String>,
+        #[serde(default)]
+        price: Option<i64>,
+    }
+    let body: In = match req.json().await {
+        Ok(b) => b,
+        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
+    };
+    let Some(id) = ctx.param("id").cloned() else {
+        return Response::error("missing product id", 400);
+    };
+    let db = ctx.d1("DB")?;
+    if let Err(r) = owner_at(&req, &ctx, &db, &body.location_id).await {
+        return Ok(r);
+    }
+    if let Some(p) = body.price {
+        // Money is integer minor units and never negative. Refuse rather than clamp.
+        if p < 0 {
+            return Response::error("price must be >= 0", 400);
+        }
+    }
+
+    let now = now_ms();
+    if let Some(p) = body.price {
+        db.prepare("UPDATE products SET price = ?1, updated_at_ms = ?2 WHERE id = ?3 AND location_id = ?4")
+            .bind(&[JsValue::from_f64(p as f64), JsValue::from_f64(now as f64),
+                    id.clone().into(), body.location_id.clone().into()])?
+            .run()
+            .await?;
+    }
+    if let Some(a) = body.available {
+        db.prepare(
+            "UPDATE products SET available = ?1, unavailable_note = ?2, updated_at_ms = ?3 \
+             WHERE id = ?4 AND location_id = ?5",
+        )
+        .bind(&[
+            JsValue::from_f64(if a { 1.0 } else { 0.0 }),
+            match (&body.unavailable_note, a) {
+                (_, true) => JsValue::NULL,
+                (Some(n), false) => n.clone().into(),
+                (None, false) => JsValue::NULL,
+            },
+            JsValue::from_f64(now as f64),
+            id.clone().into(),
+            body.location_id.clone().into(),
+        ])?
+        .run()
+        .await?;
+    }
+    // Any catalogue write moves the menu version, which is how a client notices
+    // its cart is stale.
+    db.prepare("UPDATE locations SET menu_version = menu_version + 1, updated_at_ms = ?2 WHERE id = ?1")
+        .bind(&[body.location_id.into(), JsValue::from_f64(now as f64)])?
+        .run()
+        .await?;
+    Response::from_json(&json!({ "ok": true, "id": id }))
+}
+
+/// `PATCH /api/owner/location` — open, close, go busy, pause delivery.
+pub async fn update_location(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    #[derive(Deserialize)]
+    struct In {
+        location_id: String,
+        #[serde(default)]
+        status: Option<String>,
+        #[serde(default)]
+        delivery_paused: Option<bool>,
+    }
+    let body: In = match req.json().await {
+        Ok(b) => b,
+        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
+    };
+    let db = ctx.d1("DB")?;
+    if let Err(r) = owner_at(&req, &ctx, &db, &body.location_id).await {
+        return Ok(r);
+    }
+    if let Some(s) = &body.status {
+        if !matches!(s.as_str(), "open" | "closed" | "busy") {
+            return Response::error("status must be open, closed or busy", 400);
+        }
+        db.prepare("UPDATE locations SET status = ?1, updated_at_ms = ?2 WHERE id = ?3")
+            .bind(&[s.clone().into(), JsValue::from_f64(now_ms() as f64), body.location_id.clone().into()])?
+            .run()
+            .await?;
+    }
+    if let Some(p) = body.delivery_paused {
+        db.prepare("UPDATE locations SET delivery_paused = ?1, updated_at_ms = ?2 WHERE id = ?3")
+            .bind(&[
+                JsValue::from_f64(if p { 1.0 } else { 0.0 }),
+                JsValue::from_f64(now_ms() as f64),
+                body.location_id.clone().into(),
+            ])?
+            .run()
+            .await?;
+    }
+    Response::from_json(&json!({ "ok": true }))
+}
