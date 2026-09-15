@@ -23,7 +23,11 @@
 #![forbid(unsafe_code)]
 
 pub mod catalog;
+pub mod crypto;
+pub mod minijson;
+pub mod roster;
 pub mod subs;
+pub mod token;
 
 use bebop_store::evlog::{EvLog, Record};
 use bebop_store::{Store, StoreError};

@@ -12,3 +12,8 @@ path = "src/lib.rs"
 [dependencies]
 # The store. Zero dependencies of its own, and it builds for wasm32.
 bebop-store = { path = "../bebop-store" }
+# SHA-256 only. HMAC and PBKDF2 are built on it in `crypto.rs` rather than
+# pulled in, because `hmac` and `argon2` are outside native-spa-server's
+# zero-dep allowlist and that gate may only shrink. See that module's header
+# for what the choice costs.
+sha2 = "0.10"
