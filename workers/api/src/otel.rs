@@ -1,0 +1,230 @@
+//! OpenTelemetry over OTLP/HTTP.
+//!
+//! WHAT THIS COVERS, and what it does not. This traces what the WORKER does: the
+//! request, the kernel call inside it, each store read and write. It does not
+//! yet carry the kernel's own internal spans, because `fdr::SpanObserver` hands
+//! out `(name, dur_us)` and nothing else — no trace id, no parent, no attributes
+//! — so kernel spans cannot be stitched into a trace without widening that trait.
+//! That is a change to the kernel's own instrumentation and it is named here
+//! rather than half-done: a span with a fabricated parent is worse than no span.
+//!
+//! TELEMETRY NEVER FAILS A REQUEST. Every export path swallows its own errors.
+//! An order must not be lost because a collector was unreachable, and a tracing
+//! layer that can take the service down has inverted its purpose.
+//!
+//! W3C context is propagated: an incoming `traceparent` is continued rather than
+//! replaced, so a trace that started at a gateway or in the browser stays one
+//! trace instead of becoming two unrelated halves.
+
+use serde_json::{json, Value};
+use worker::*;
+
+/// One span, held until the request ends.
+pub struct Span {
+    name: String,
+    span_id: String,
+    parent_id: Option<String>,
+    start_ns: u64,
+    end_ns: u64,
+    attrs: Vec<(String, Value)>,
+    error: Option<String>,
+}
+
+pub struct Trace {
+    trace_id: String,
+    root_id: String,
+    spans: Vec<Span>,
+    start_ms: f64,
+}
+
+fn hex(bytes: usize) -> String {
+    // Ids come from the platform CSPRNG, the same source order ids use. A
+    // predictable trace id lets an outsider guess and poison a trace.
+    let mut out = String::with_capacity(bytes * 2);
+    while out.len() < bytes * 2 {
+        match crate::edge_id() {
+            Some(u) => out.push_str(&u.replace('-', "")),
+            None => break,
+        }
+    }
+    out.truncate(bytes * 2);
+    if out.len() < bytes * 2 {
+        // No CSPRNG: a zero id is WRONG but visible, which beats a plausible
+        // fake that quietly corrupts someone's trace search.
+        out = "0".repeat(bytes * 2);
+    }
+    out
+}
+
+impl Trace {
+    /// Continue an incoming trace, or start one.
+    pub fn begin(req: &Request, name: &str) -> Self {
+        let tp = req.headers().get("traceparent").ok().flatten();
+        let (trace_id, parent) = match tp.as_deref().and_then(parse_traceparent) {
+            Some((t, p)) => (t, Some(p)),
+            None => (hex(16), None),
+        };
+        let root_id = hex(8);
+        let start_ms = Date::now().as_millis() as f64;
+        let mut t = Trace { trace_id, root_id: root_id.clone(), spans: Vec::new(), start_ms };
+        t.spans.push(Span {
+            name: name.to_string(),
+            span_id: root_id,
+            parent_id: parent,
+            start_ns: (start_ms * 1.0e6) as u64,
+            end_ns: 0,
+            attrs: Vec::new(),
+            error: None,
+        });
+        t
+    }
+
+    /// Open a child of the root. Returns its index; close it with `end`.
+    pub fn child(&mut self, name: &str) -> usize {
+        let now_ns = (Date::now().as_millis() as f64 * 1.0e6) as u64;
+        self.spans.push(Span {
+            name: name.to_string(),
+            span_id: hex(8),
+            parent_id: Some(self.root_id.clone()),
+            start_ns: now_ns,
+            end_ns: 0,
+            attrs: Vec::new(),
+            error: None,
+        });
+        self.spans.len() - 1
+    }
+
+    pub fn end(&mut self, idx: usize) {
+        if let Some(s) = self.spans.get_mut(idx) {
+            s.end_ns = (Date::now().as_millis() as f64 * 1.0e6) as u64;
+        }
+    }
+
+    pub fn attr(&mut self, idx: usize, k: &str, v: Value) {
+        if let Some(s) = self.spans.get_mut(idx) {
+            s.attrs.push((k.to_string(), v));
+        }
+    }
+
+    pub fn fail(&mut self, idx: usize, msg: &str) {
+        if let Some(s) = self.spans.get_mut(idx) {
+            s.error = Some(msg.to_string());
+        }
+    }
+
+    /// The header to hand downstream, so a call this Worker makes joins the trace.
+    pub fn traceparent(&self) -> String {
+        format!("00-{}-{}-01", self.trace_id, self.root_id)
+    }
+
+    /// Close the root and build the OTLP payload.
+    fn finish(&mut self, status: u16) -> Value {
+        let now_ns = (Date::now().as_millis() as f64 * 1.0e6) as u64;
+        if let Some(root) = self.spans.first_mut() {
+            root.end_ns = now_ns;
+            root.attrs.push(("http.response.status_code".into(), json!(status)));
+        }
+        let spans: Vec<Value> = self
+            .spans
+            .iter()
+            .map(|s| {
+                let mut attrs: Vec<Value> = s
+                    .attrs
+                    .iter()
+                    .map(|(k, v)| json!({ "key": k, "value": to_any(v) }))
+                    .collect();
+                if let Some(e) = &s.error {
+                    attrs.push(json!({ "key": "exception.message", "value": { "stringValue": e } }));
+                }
+                json!({
+                    "traceId": self.trace_id,
+                    "spanId": s.span_id,
+                    "parentSpanId": s.parent_id.clone().unwrap_or_default(),
+                    "name": s.name,
+                    "kind": 2,                         // SERVER
+                    "startTimeUnixNano": s.start_ns.to_string(),
+                    "endTimeUnixNano": (if s.end_ns == 0 { now_ns } else { s.end_ns }).to_string(),
+                    // 2 = ERROR, 1 = OK. An unset status is not the same as OK and
+                    // is not reported as one.
+                    "status": { "code": if s.error.is_some() { 2 } else { 1 } },
+                    "attributes": attrs
+                })
+            })
+            .collect();
+
+        json!({
+            "resourceSpans": [{
+                "resource": { "attributes": [
+                    { "key": "service.name", "value": { "stringValue": "dowiz-hub" } },
+                    { "key": "service.version", "value": { "stringValue": env!("CARGO_PKG_VERSION") } },
+                    // One hub per tenant, so the tenant IS the deployment. Naming
+                    // it here is what makes a trace searchable per restaurant.
+                    { "key": "deployment.environment", "value": { "stringValue": "hub" } }
+                ]},
+                "scopeSpans": [{ "scope": { "name": "dowiz-api-worker" }, "spans": spans }]
+            }]
+        })
+    }
+
+    /// Export, never blocking the response and never failing it.
+    pub async fn export(mut self, env: &Env, status: u16) {
+        let payload = self.finish(status);
+        let Ok(endpoint) = env.secret("OTEL_EXPORTER_OTLP_ENDPOINT") else {
+            return; // no collector configured: tracing is simply off
+        };
+        let url = format!("{}/v1/traces", endpoint.to_string().trim_end_matches('/'));
+
+        let mut headers = Headers::new();
+        let _ = headers.set("content-type", "application/json");
+        if let Ok(h) = env.secret("OTEL_EXPORTER_OTLP_HEADERS") {
+            // `key=value,key=value`, the OTLP convention.
+            for pair in h.to_string().split(',') {
+                if let Some((k, v)) = pair.split_once('=') {
+                    let _ = headers.set(k.trim(), v.trim());
+                }
+            }
+        }
+        let mut init = RequestInit::new();
+        init.with_method(Method::Post)
+            .with_headers(headers)
+            .with_body(Some(payload.to_string().into()));
+        if let Ok(req) = Request::new_with_init(&url, &init) {
+            // Errors are deliberately dropped. A collector being down must not
+            // turn into a failed order.
+            let _ = Fetch::Request(req).send().await;
+        }
+    }
+
+    pub fn duration_ms(&self) -> f64 {
+        Date::now().as_millis() as f64 - self.start_ms
+    }
+}
+
+/// `00-<32 hex trace>-<16 hex span>-<flags>`
+fn parse_traceparent(h: &str) -> Option<(String, String)> {
+    let mut p = h.split('-');
+    let ver = p.next()?;
+    let trace = p.next()?;
+    let span = p.next()?;
+    if ver != "00" || trace.len() != 32 || span.len() != 16 {
+        return None;
+    }
+    // An all-zero id is invalid per the spec and must not be continued.
+    if trace.bytes().all(|b| b == b'0') || span.bytes().all(|b| b == b'0') {
+        return None;
+    }
+    if !trace.bytes().chain(span.bytes()).all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    Some((trace.to_string(), span.to_string()))
+}
+
+fn to_any(v: &Value) -> Value {
+    match v {
+        Value::String(s) => json!({ "stringValue": s }),
+        Value::Bool(b) => json!({ "boolValue": b }),
+        Value::Number(n) if n.is_i64() => json!({ "intValue": n.as_i64().unwrap().to_string() }),
+        Value::Number(n) => json!({ "doubleValue": n.as_f64().unwrap_or(0.0) }),
+        other => json!({ "stringValue": other.to_string() }),
+    }
+}

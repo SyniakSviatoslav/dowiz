@@ -15,6 +15,7 @@ mod auth;
 mod bootstrap;
 mod courier;
 mod hubstore;
+mod otel;
 mod owner;
 mod storefront;
 mod stripe;
@@ -71,7 +72,29 @@ fn kernel_reject(msg: String) -> Result<Response> {
 }
 
 #[event(fetch)]
-pub async fn main(req: Request, env: Env, _ctx: Context) -> Result<Response> {
+pub async fn main(req: Request, env: Env, ctx: Context) -> Result<Response> {
+    // One span per request, continuing an incoming W3C traceparent if there is
+    // one. The export happens in waitUntil AFTER the response is returned, so
+    // tracing costs the customer nothing in latency.
+    let method = req.method().to_string();
+    let path = req.path();
+    let mut trace = otel::Trace::begin(&req, &format!("{method} {path}"));
+    trace.attr(0, "http.request.method", serde_json::json!(method));
+    trace.attr(0, "url.path", serde_json::json!(path));
+
+    let out = route(req, env.clone()).await;
+    let status = match &out {
+        Ok(r) => r.status_code(),
+        Err(_) => 500,
+    };
+    if let Err(e) = &out {
+        trace.fail(0, &e.to_string());
+    }
+    ctx.wait_until(async move { trace.export(&env, status).await });
+    out
+}
+
+async fn route(req: Request, env: Env) -> Result<Response> {
     Router::new()
         .get("/healthz", |_, _| Response::ok("ok"))
         // ── public storefront ──
