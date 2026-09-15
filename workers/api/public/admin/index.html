@@ -296,6 +296,24 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
        border-radius:var(--radius-full);animation:spin .8s linear infinite}
 @media (prefers-reduced-motion:reduce){.prod .pic.busy::after{animation:none}}
 
+/* Drafts. Each is one card with the FACT above the words, so the owner can see
+   what it is about before reading what it says -- and can tell at a glance that
+   dowiz did not invent the subject. */
+.posts{display:grid;gap:var(--space-3)}
+.post{border:1px solid var(--brand-border);border-radius:var(--radius-md);
+       padding:var(--space-3);display:grid;gap:var(--space-2);background:var(--brand-surface)}
+.post .about{margin:0;font-size:var(--text-sm);color:var(--brand-text-muted)}
+.post .ptext{width:100%;padding:var(--space-2) var(--space-3);resize:vertical;
+       border:1px solid var(--brand-border);border-radius:var(--radius-md);
+       background:var(--brand-surface-raised);color:var(--brand-text);
+       font:inherit;font-size:var(--text-base);line-height:1.5}
+.post .said{margin:0;font-size:var(--text-base);line-height:1.5}
+/* A published post is settled; a failed one needs a decision. The edge says
+   which without the owner having to read the label. */
+.post.published{border-left:3px solid var(--color-success)}
+.post.rejected{opacity:.6}
+.post.failed{border-left:3px solid var(--danger-ink)}
+
 .setup .keys{margin:0;padding:0;list-style:none;display:grid;gap:var(--space-1)}
 .setup .keys li{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);
        min-height:var(--tap);padding:0 var(--space-3);border:1px solid var(--brand-border);

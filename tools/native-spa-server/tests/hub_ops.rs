@@ -1714,3 +1714,48 @@ async fn an_order_can_be_placed_for_later() {
         .expect("the scheduled order must be in the queue");
     assert_eq!(sched["status"], "PENDING");
 }
+
+/// Social posting is off, gated, and the owner's alone.
+#[tokio::test(flavor = "multi_thread")]
+async fn social_posting_is_off_until_switched_on_and_never_publishes_itself() {
+    let s = boot("social").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+
+    // Off by default: nothing drafts, nothing posts.
+    let (code, v) = post(&s.base, "/api/owner/posts/draft", Some(&owner), json!({}));
+    assert_eq!(code, 409, "{v}");
+    assert!(v["error"].as_str().unwrap().contains("switched off"), "{v}");
+
+    let (code, v) = get(&s.base, "/api/owner/posts", Some(&owner));
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["enabled"], false);
+    assert!(v["posts"].as_array().unwrap().is_empty());
+
+    // On, but with no assistant configured: refused with the reason, rather
+    // than drafting nothing and saying it worked.
+    post(&s.base, "/api/owner/settings", Some(&owner), json!({ "key": "social.enabled", "value": "1" }));
+    let (code, v) = post(&s.base, "/api/owner/posts/draft", Some(&owner), json!({}));
+    assert_eq!(code, 409, "{v}");
+    assert!(v["error"].as_str().unwrap().contains("assistant"), "{v}");
+
+    // The channel is reported before anything is attempted.
+    let (_, v) = get(&s.base, "/api/owner/posts", Some(&owner));
+    assert_eq!(v["channel"], "");
+    post(&s.base, "/api/owner/settings", Some(&owner),
+         json!({ "key": "social.telegram.channel", "value": "@dubinsushi" }));
+    let (_, v) = get(&s.base, "/api/owner/posts", Some(&owner));
+    assert_eq!(v["channel"], "@dubinsushi");
+
+    // Nobody but the owner sees or touches any of it.
+    let (_, c) = post(&s.base, "/api/courier/auth/login", None,
+                      json!({ "phone": "+355691112233", "password": "courier-pw" }));
+    let courier = c["jwt"].as_str().unwrap().to_string();
+    assert_eq!(get(&s.base, "/api/owner/posts", Some(&courier)).0, 403);
+    assert_eq!(post(&s.base, "/api/owner/posts/draft", Some(&courier), json!({})).0, 403);
+    assert_eq!(get(&s.base, "/api/owner/posts", None).0, 401);
+
+    // A post that does not exist cannot be approved into existence.
+    assert_eq!(post(&s.base, "/api/owner/posts/nope/approve", Some(&owner), json!({})).0, 404);
+    assert_eq!(post(&s.base, "/api/owner/posts/nope/reject", Some(&owner), json!({})).0, 404);
+}

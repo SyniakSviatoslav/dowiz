@@ -505,6 +505,19 @@ function setupView(){
     </section>
 
     <section class="card">
+      <h2>Пости</h2>
+      <p class="hint">dowiz помічає справжні зміни у вашому меню й пропонує короткий
+         пост. <b>Нічого не публікується, поки ви не погодите.</b> Вигадані знижки
+         й «встигніть сьогодні» не проходять — ні від моделі, ні від вас.</p>
+      <div class="row">
+        <button class="btn" id="postDraft">
+          <i class="ti ti-sparkles i" aria-hidden="true"></i>Що можна написати?</button>
+        <span class="hint" id="postChannel"></span>
+      </div>
+      <div id="postList" class="posts"></div>
+    </section>
+
+    <section class="card">
       <h2>Ключі доступу</h2>
       <p class="hint">Для ваших власних застосунків і MCP-клієнтів. Ключ показуємо
          <b>один раз</b>. Кожен ключ можна відкликати окремо — решта працюватимуть.
@@ -696,6 +709,58 @@ function shrinkImage(file, max = 1600, quality = 0.82){
   });
 }
 
+// The drafts, with the two decisions that matter on each one.
+//
+// The TEXT IS EDITABLE before approval. An assistant that cannot be overruled is
+// one that gets switched off, and the owner knows how their own restaurant
+// speaks better than a model does.
+async function renderPosts(){
+  const box = $('#postList'); if (!box) return;
+  let d;
+  try { d = await api('/owner/posts'); } catch { return; }
+  const ch = $('#postChannel');
+  if (ch) ch.textContent = d.enabled
+    ? (d.channel ? 'Канал: ' + d.channel : 'Канал не вказано — додайте його вище')
+    : 'Вимкнено — увімкніть «Пости» у налаштуваннях вище';
+
+  if (!d.posts.length) {
+    box.innerHTML = `<p class="hint">Чернеток ще немає.</p>`;
+    return;
+  }
+  box.innerHTML = d.posts.map(p => `
+    <article class="post ${esc(p.state)}">
+      <p class="about">${esc(p.about)}</p>
+      ${p.state === 'draft'
+        ? `<textarea class="ptext" data-text="${esc(p.id)}" rows="3">${esc(p.text)}</textarea>
+           <div class="row">
+             <button class="btn pri" data-approve="${esc(p.id)}">
+               <i class="ti ti-send i" aria-hidden="true"></i>Опублікувати</button>
+             <button class="btn" data-reject="${esc(p.id)}">Не треба</button>
+           </div>`
+        : `<p class="said">${esc(p.text)}</p>
+           <p class="hint">${p.state === 'published' ? 'Опубліковано'
+              : p.state === 'rejected' ? 'Відхилено'
+              : 'Не вдалося: ' + esc(p.error)}</p>`}
+    </article>`).join('');
+
+  box.querySelectorAll('[data-approve]').forEach(b => b.onclick = async () => {
+    const id = b.dataset.approve;
+    const text = box.querySelector(`[data-text="${CSS.escape(id)}"]`)?.value?.trim();
+    try {
+      await busy(b, () => api(`/owner/posts/${encodeURIComponent(id)}/approve`,
+        { method:'POST', body: JSON.stringify({ text }) }));
+      toast('Опубліковано');
+    } catch (e) { toast(String(e.message || e)); }
+    await renderPosts();
+  });
+  box.querySelectorAll('[data-reject]').forEach(b => b.onclick = async () => {
+    try { await busy(b, () => api(`/owner/posts/${encodeURIComponent(b.dataset.reject)}/reject`,
+            { method:'POST' })); }
+    catch (e) { toast(String(e.message || e)); }
+    await renderPosts();
+  });
+}
+
 function bindSetup(){
   let csvText = null;
   renderSettings();
@@ -757,6 +822,17 @@ function bindSetup(){
   };
 
   renderKeys();
+  renderPosts();
+  const pd = $('#postDraft');
+  if (pd) pd.onclick = async () => {
+    try {
+      const d = await busy(pd, () => api('/owner/posts/draft', { method:'POST' }));
+      // "Nothing new to say" is an ANSWER, not a failure. Saying so beats an
+      // empty list that looks like something broke.
+      toast(d.drafted ? `Чернеток: ${d.drafted}` : 'Поки нема про що писати');
+    } catch (e) { toast(String(e.message || e)); }
+    await renderPosts();
+  };
   const keyNew = $('#keyNew');
   if (keyNew) keyNew.onclick = async () => {
     try {

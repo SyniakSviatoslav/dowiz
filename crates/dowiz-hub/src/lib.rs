@@ -28,6 +28,7 @@ pub mod import;
 pub mod media;
 pub mod minijson;
 pub mod palette;
+pub mod post;
 pub mod roster;
 pub mod settings;
 pub mod subs;

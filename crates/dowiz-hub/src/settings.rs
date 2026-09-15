@@ -163,6 +163,20 @@ pub const KNOWN: &[Known] = &[
         default: "",
     },
     Known {
+        key: "social.telegram.channel",
+        label: "Telegram channel",
+        hint: "Your public channel, e.g. @dubinsushi. Add your bot as an \
+               administrator of it first, or posting will be refused.",
+        default: "",
+    },
+    Known {
+        key: "social.enabled",
+        label: "Draft social posts",
+        hint: "Off by default. When on, dowiz drafts posts about real changes to \
+               your menu. Nothing is ever published until you approve it.",
+        default: "0",
+    },
+    Known {
         key: "ai.enabled",
         label: "AI assistant",
         hint: "Off by default. Nothing is sent anywhere until this is on.",

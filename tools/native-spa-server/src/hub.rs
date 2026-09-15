@@ -48,6 +48,7 @@ pub struct HubPaths {
     /// Photographs. A DIRECTORY, not a store: see `dowiz_hub::media` for why
     /// blobs do not belong in a layout that rewrites itself on every write.
     pub media: PathBuf,
+    pub posts: PathBuf,
     /// The token signing key. A FILE and not a store, because it must be
     /// readable before any store is opened and must never travel with a backup
     /// of the data.
@@ -63,6 +64,7 @@ impl HubPaths {
             roster: dir.join("roster.store"),
             settings: dir.join("settings.store"),
             media: dir.join("media"),
+            posts: dir.join("posts.store"),
             key: dir.join("signing.key"),
         }
     }
@@ -96,6 +98,7 @@ pub struct HubState {
     /// `hubcourier`'s header for why that is the right shape for one and a
     /// stated compromise for the other.
     live: Mutex<crate::hubcourier::Live>,
+    was_open: Mutex<Option<bool>>,
 }
 
 pub type Shared = Arc<HubState>;
@@ -122,6 +125,11 @@ impl HubState {
         }
         let signing_key = load_or_create_key(&paths.key)?;
         std::fs::create_dir_all(&paths.media)?;
+        if !paths.posts.exists() {
+            let mut ps = dowiz_hub::post::Posts::create().map_err(io_err)?;
+            let bytes = ps.to_bytes().map_err(io_err)?;
+            std::fs::write(&paths.posts, bytes)?;
+        }
         if !paths.settings.exists() {
             let mut st = Settings::create().map_err(io_err)?;
             let bytes = st.to_bytes().map_err(io_err)?;
@@ -153,6 +161,10 @@ impl HubState {
                 .filter(|v| !v.is_empty()),
             signing_key,
             live: Mutex::new(Default::default()),
+            // Whether the venue was open at the last check. In memory because
+            // it exists only to spot the moment it flips, and a hub that just
+            // restarted has no opinion about a transition it did not witness.
+            was_open: Mutex::new(None),
         }))
     }
 
@@ -1035,6 +1047,36 @@ impl HubState {
         let (digest, kind) = dowiz_hub::media::parse_name(name)?;
         let path = self.paths.media.join(format!("{digest}.{}", kind.extension()));
         std::fs::read(path).ok().map(|b| (b, kind))
+    }
+
+    pub fn read_posts(&self) -> Result<dowiz_hub::post::Posts, HubHttpError> {
+        let bytes = std::fs::read(&self.paths.posts).map_err(|e| HubHttpError::Io(e.to_string()))?;
+        dowiz_hub::post::Posts::load(&bytes).map_err(|_| HubHttpError::Corrupt("posts"))
+    }
+
+    pub async fn with_posts<F, T>(&self, f: F) -> Result<T, HubHttpError>
+    where
+        F: FnOnce(&mut dowiz_hub::post::Posts) -> Result<T, HubHttpError>,
+    {
+        let _guard = self.write_lock.lock().await;
+        let mut ps = self.read_posts()?;
+        let out = f(&mut ps)?;
+        let bytes = ps.to_bytes().map_err(|e| HubHttpError::Io(format!("{e:?}")))?;
+        atomic_write(&self.paths.posts, &bytes)?;
+        Ok(out)
+    }
+
+    /// Was the venue closed when this was last looked at?
+    ///
+    /// `false` on the first call after a restart, so a hub coming up to an open
+    /// venue does not announce a reopening that happened while it was down --
+    /// or that never happened at all.
+    pub fn was_closed(&self) -> bool {
+        self.was_open.try_lock().map(|g| *g == Some(false)).unwrap_or(false)
+    }
+
+    pub async fn note_open_state(&self, open: bool) {
+        *self.was_open.lock().await = Some(open);
     }
 
     pub fn read_settings(&self) -> Result<Settings, HubHttpError> {
