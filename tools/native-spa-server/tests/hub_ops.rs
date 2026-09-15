@@ -2783,3 +2783,89 @@ async fn the_venue_phone_is_checked_and_can_be_cleared() {
     let (_, a) = get(&s.base, "/api/owner/activation", Some(&owner));
     assert_eq!(a["facts"]["hasVenuePhone"], false, "{a}");
 }
+
+/// The customer list is a FOLD, redacted by default. Un-redacting one person is
+/// a deliberate act and it is written into the append-only log.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_customer_list_shows_nobody_until_somebody_asks() {
+    let s = boot("crm").await;
+    let (_, t) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = t["access_token"].as_str().unwrap().to_string();
+
+    for n in 0..2 {
+        post(&s.base, "/api/public/locations/dubin/orders", None, json!({
+            "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 1 + n }],
+            "contact": { "name": "Ana Hoxha", "phone": "+355691234567" },
+            "fulfilment": { "kind": "pickup" }
+        }));
+    }
+    post(&s.base, "/api/public/locations/dubin/orders", None, json!({
+        "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 1 }],
+        "contact": { "name": "Blerim", "phone": "+355697654321" },
+        "fulfilment": { "kind": "pickup" }
+    }));
+
+    let (code, list) = get(&s.base, "/api/owner/customers?sort=spent", Some(&owner));
+    assert_eq!(code, 200, "{list}");
+    let rows = list["customers"].as_array().unwrap();
+    assert_eq!(rows.len(), 2, "two phones, two customers: {list}");
+    assert_eq!(rows[0]["orders"], 2, "the repeat customer sorts first by spend");
+    assert_eq!(rows[0]["spent"], 900 + 1800);
+
+    // Nothing dialable, nothing nameable.
+    let blob = list.to_string();
+    assert!(!blob.contains("691234567"), "the list carries a phone number: {blob}");
+    assert!(!blob.contains("Hoxha"), "the list carries a surname: {blob}");
+    assert_eq!(rows[0]["name"], "A. H.");
+    assert!(rows[0]["phone"].as_str().unwrap().contains('•'), "{rows:?}");
+
+    // Revealing needs a reason.
+    let key = rows[0]["key"].as_str().unwrap().to_string();
+    let (code, v) = post(&s.base, &format!("/api/owner/customers/{key}/reveal"),
+                         Some(&owner), json!({ "reason": "" }));
+    assert_eq!(code, 400, "{v}");
+
+    let (code, v) = post(&s.base, &format!("/api/owner/customers/{key}/reveal"),
+                         Some(&owner), json!({ "reason": "customer rang about a missing order" }));
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["phone"], "+355691234567");
+    assert_eq!(v["name"], "Ana Hoxha");
+    assert_eq!(v["orders"].as_array().unwrap().len(), 2);
+
+    // And the looking is on the record, without the number it was about.
+    let (_, log) = get(&s.base, "/api/owner/customers/reveals", Some(&owner));
+    let r = &log["reveals"][0];
+    assert_eq!(r["by"], "ana@dubin.al");
+    assert_eq!(r["customer"], key);
+    assert!(r["reason"].as_str().unwrap().contains("rang"), "{r}");
+    assert!(!log.to_string().contains("691234567"), "the audit log carries the number: {log}");
+
+    // The audit entry must not have become an order.
+    let (_, d) = get(&s.base, "/api/owner/dashboard", Some(&owner));
+    assert_eq!(d["todayOrders"], 3, "an audit entry was counted as a sale: {d}");
+}
+
+/// A courier must not be able to read the customer list, and the key in the URL
+/// must not be a phone number.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_customer_key_is_not_a_phone_number() {
+    let s = boot("crm_key").await;
+    let (_, t) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = t["access_token"].as_str().unwrap().to_string();
+    post(&s.base, "/api/public/locations/dubin/orders", None, json!({
+        "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 1 }],
+        "contact": { "name": "Ana", "phone": "+355691234567" },
+        "fulfilment": { "kind": "pickup" }
+    }));
+    let (_, list) = get(&s.base, "/api/owner/customers", Some(&owner));
+    let key = list["customers"][0]["key"].as_str().unwrap();
+    assert!(!key.contains("355"), "the key leaks the number into every proxy log: {key}");
+    assert_eq!(key.len(), 16, "{key}");
+
+    let (_, c) = post(&s.base, "/api/courier/auth/login", None,
+        json!({ "phone": "+355691112233", "password": "courier-pw" }));
+    let jwt = c["jwt"].as_str().unwrap().to_string();
+    assert_eq!(get(&s.base, "/api/owner/customers", Some(&jwt)).0, 403);
+    assert_eq!(post(&s.base, &format!("/api/owner/customers/{key}/reveal"), Some(&jwt),
+                    json!({ "reason": "curious" })).0, 403);
+}

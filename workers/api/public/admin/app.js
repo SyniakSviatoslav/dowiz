@@ -255,7 +255,7 @@ function render(){
     : S.tab === 'menu' ? menuView()
     : S.tab === 'stats' ? statsView()
     : setupView();
-  if (S.tab === 'orders') bindOrders();
+  if (S.tab === 'orders') { bindFind(); bindOrders(); }
   else if (S.tab === 'menu') bindMenu();
   else if (S.tab === 'stats') bindStats();
   else bindSetup();
@@ -275,6 +275,109 @@ function render(){
 const STATUS_LABEL = { PENDING:'Нове', CONFIRMED:'Підтверджено', PREPARING:'Готується', READY:'Готове',
                        IN_DELIVERY:'В дорозі', DELIVERED:'Доставлено', REJECTED:'Відхилено', CANCELLED:'Скасовано',
                        SCHEDULED:'Заплановано', PICKED_UP:'Забрано' };
+// ── finding an order ────────────────────────────────────────────────────────
+//
+// Fifty orders in an evening is a scroll. The search runs on WHAT IS ALREADY
+// LOADED -- the pane already holds the day's orders -- so it answers instantly
+// and keeps answering when the kitchen's connection does not.
+//
+// It matches the things somebody actually says on the phone: the short id read
+// off a receipt, a name, the last digits of a number, a dish. Not the internal
+// id, which nobody has.
+function ordersMatching(){
+  const all = S.view === 'history'
+    ? S.orders.filter(o => !LIVE.includes(o.status))
+    : liveOrders();
+  const q = String(S.oq || '').trim().toLowerCase();
+  if (!q) return all;
+  const terms = q.split(/\s+/);
+  return all.filter(o => {
+    const hay = [
+      shortId(o.id), o.contact?.name, o.contact?.phone,
+      o.fulfilment?.address?.line, o.status,
+      ...(o.items || []).map(i => i.name),
+    ].filter(Boolean).join(' ').toLowerCase();
+    return terms.every(t => hay.includes(t));
+  });
+}
+
+// ONE ROW PER ORDER, and the money stays an integer all the way into the file.
+// A spreadsheet that opens 2650 as 26.50 because somebody wrote a decimal point
+// is how a day's takings get misread; the currency is its own column instead.
+function ordersCsv(rows){
+  const cur = S.venue?.currency || S.analytics?.currency || '';
+  const cell = v => {
+    const s = String(v ?? '');
+    return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const head = ['id', 'коли', 'статус', 'спосіб', 'клієнт', 'телефон', 'адреса',
+                'страви', 'сума', 'валюта', 'знижка', 'промокод', 'кур\'єр'];
+  const body = rows.map(o => [
+    shortId(o.id),
+    new Date(o.created_at_ms || 0).toISOString(),
+    o.status,
+    o.fulfilment?.kind || '',
+    o.contact?.name || '',
+    o.contact?.phone || '',
+    o.fulfilment?.address?.line || '',
+    (o.items || []).map(i => `${i.quantity}x ${i.name || i.product_id}`).join('; '),
+    o.total ?? 0,
+    cur,
+    o.discount ?? 0,
+    o.promo?.code || '',
+    o.courier_id || '',
+  ].map(cell).join(','));
+  // A BOM, because the spreadsheet everyone actually opens this in reads a
+  // bare UTF-8 file as Latin-1 and turns every Ukrainian name into mojibake.
+  return '\ufeff' + [head.map(cell).join(','), ...body].join('\n');
+}
+
+function downloadCsv(name, text){
+  const url = URL.createObjectURL(new Blob([text], { type:'text/csv;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  // Revoked on the next frame: revoking immediately races the download in
+  // some browsers and produces an empty file.
+  requestAnimationFrame(() => URL.revokeObjectURL(url));
+}
+
+function findBar(n){
+  return `<div class="ofind">
+    <label class="srch">
+      <i class="ti ti-search" aria-hidden="true"></i>
+      <input id="oq" type="search" inputmode="search" autocomplete="off"
+             placeholder="Номер, ім'я, телефон, страва…" aria-label="Пошук замовлень"
+             value="${esc(S.oq || '')}">
+    </label>
+    <div class="seg">
+      <button class="btn ${S.view !== 'history' ? 'pri' : ''}" data-view="live">Живі</button>
+      <button class="btn ${S.view === 'history' ? 'pri' : ''}" data-view="history">Історія</button>
+    </div>
+    <button class="btn" id="ocsv" ${n ? '' : 'disabled'}>
+      <i class="ti ti-download i" aria-hidden="true"></i>CSV</button>
+  </div>`;
+}
+
+function bindFind(){
+  const q = $('#oq');
+  if (q) q.oninput = () => {
+    const pos = q.selectionStart;
+    S.oq = q.value; render();
+    const again = $('#oq');
+    if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch {} }
+  };
+  document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => {
+    S.view = b.dataset.view; render();
+  });
+  const c = $('#ocsv');
+  if (c) c.onclick = () => {
+    const rows = ordersMatching();
+    const day = new Date().toISOString().slice(0, 10);
+    downloadCsv(`dowiz-${S.view === 'history' ? 'history' : 'live'}-${day}.csv`, ordersCsv(rows));
+  };
+}
+
 function ordersView(){
   // ORDER MATTERS. Loading and error are checked BEFORE emptiness, because an
   // empty list is only meaningful once we know the list arrived.
@@ -286,10 +389,17 @@ function ordersView(){
       <span class="reason">${esc(S.error || '')}</span>
       <button class="btn" id="retry" style="margin-top:12px">Спробувати ще раз</button>
     </div></div>`;
-  const live = liveOrders();
-  if (!live.length) return `<div class="panel"><div class="empty"><i class="ti ti-inbox i" aria-hidden="true"></i><b>Поки тихо</b>Нові замовлення з'являться тут автоматично</div></div>`;
+  const live = ordersMatching();
+  const searching = Boolean(String(S.oq || '').trim());
+  if (!live.length) return findBar(0) + `<div class="panel"><div class="empty">
+      <i class="ti ti-${searching ? 'search-off' : 'inbox'} i" aria-hidden="true"></i>
+      <b>${searching ? 'Нічого не знайшли' : S.view === 'history' ? 'Історія порожня' : 'Поки тихо'}</b>
+      ${searching ? 'Спробуйте номер, ім\'я або страву'
+        : S.view === 'history' ? 'Завершені замовлення з\'являться тут'
+        : 'Нові замовлення з\'являться тут автоматично'}</div></div>`;
   let i = 0;
-  return `<div class="panel">${live.map(o => row(o, S.fresh.has(o.id) ? i++ : -1)).join('')}</div>`;
+  return findBar(live.length)
+    + `<div class="panel">${live.map(o => row(o, S.fresh.has(o.id) ? i++ : -1)).join('')}</div>`;
 }
 
 // Placeholders shaped like the rows they stand in for -- same height, same
@@ -401,6 +511,94 @@ function bindStats(){
   document.querySelectorAll('[data-days]').forEach(b =>
     b.onclick = () => loadAnalytics(parseInt(b.dataset.days, 10)));
   const r = $('#retryStats'); if (r) r.onclick = () => loadAnalytics();
+}
+
+// ── customers ───────────────────────────────────────────────────────────────
+//
+// The list never holds a phone number: the hub sends it masked and the reveal
+// is a separate, reasoned request. Nothing here un-masks locally, because a
+// client that could would make the audit log a formality.
+function customerRow(c){
+  return `<div class="erow" data-cu="${esc(c.key)}">
+    <span><b>${esc(c.name)}</b> <small class="hint">${esc(c.phone)}</small>
+      <br><small class="hint">${c.orders} ${plural(c.orders, 'замовлення', 'замовлення', 'замовлень')}
+        · ${new Date(c.lastAt).toLocaleDateString('uk', { day:'numeric', month:'short' })}</small></span>
+    <span class="row"><span class="money">${money(c.spent)}</span>
+      <button class="icon-btn" data-cu-show aria-label="Показати контакти">
+        <i class="ti ti-eye i" aria-hidden="true"></i></button></span>
+  </div>`;
+}
+
+function renderCustomers(){
+  const box = $('#cuList'); if (!box) return;
+  const rows = S.customers || [];
+  box.innerHTML = rows.length
+    ? rows.map(customerRow).join('')
+    : `<p class="hint">Ще нікого. Список складається з ваших замовлень.</p>`;
+  box.querySelectorAll('[data-cu-show]').forEach(b => b.onclick = () => {
+    const key = b.closest('[data-cu]').dataset.cu;
+    // The reason is REQUIRED and goes into the log. A prompt is blunt, and
+    // blunt is right: the point is that looking is a deliberate act.
+    const reason = prompt('Навіщо потрібні контакти? (запишемо в журнал)');
+    if (!reason || reason.trim().length < 3) return;
+    revealCustomer(key, reason.trim());
+  });
+}
+
+async function revealCustomer(key, reason){
+  const box = $('#cuShown');
+  box.hidden = false; box.textContent = 'Показуємо…';
+  try {
+    const d = await api(`/owner/customers/${encodeURIComponent(key)}/reveal`, { reason });
+    box.innerHTML = `<b>${esc(d.name)}</b> · <a href="tel:${esc(d.phone)}">${esc(d.phone)}</a>
+      <div class="elist" style="margin-top:8px">
+        ${d.orders.slice(0, 8).map(o => `<div class="erow">
+          <span>${new Date(o.at).toLocaleDateString('uk', { day:'numeric', month:'short' })}
+            ${o.address ? `<br><small class="hint">${esc(o.address)}</small>` : ''}</span>
+          <span class="money">${money(o.total)}</span></div>`).join('')}
+      </div>`;
+  } catch (e) { box.textContent = String(e.message || e); }
+}
+
+async function loadCustomers(){
+  try {
+    const d = await api(`/owner/customers${S.cSort ? '?sort=' + S.cSort : ''}`);
+    S.customers = d.customers || [];
+  } catch { S.customers = []; }
+  renderCustomers();
+}
+
+function bindCustomers(){
+  if (!$('#cuList')) return;
+  loadCustomers();
+  document.querySelectorAll('[data-csort]').forEach(b => b.onclick = () => {
+    S.cSort = b.dataset.csort; render();
+  });
+  $('#cuCsv').onclick = () => {
+    // THE EXPORT IS THE MASKED LIST. A file is the easiest thing in the world
+    // to forward, and an export that un-masked would undo every other decision
+    // on this screen in one click.
+    const cell = v => { const x = String(v ?? ''); return /[",\n;]/.test(x) ? '"' + x.replace(/"/g,'""') + '"' : x; };
+    const head = ['клієнт', 'телефон', 'замовлень', 'сума', 'останнє'];
+    const body = (S.customers || []).map(c => [c.name, c.phone, c.orders, c.spent,
+      new Date(c.lastAt).toISOString()].map(cell).join(','));
+    downloadCsv(`dowiz-customers-${new Date().toISOString().slice(0,10)}.csv`,
+                '\ufeff' + [head.join(','), ...body].join('\n'));
+  };
+  $('#cuLog').onclick = async () => {
+    const box = $('#cuShown');
+    box.hidden = false; box.textContent = 'Завантажуємо…';
+    try {
+      const d = await api('/owner/customers/reveals');
+      box.innerHTML = d.reveals.length
+        ? `<div class="elist">${d.reveals.slice(0, 20).map(r => `<div class="erow">
+            <span>${esc(r.by)}<br><small class="hint">${esc(r.reason || '')}</small></span>
+            <span class="hint">${new Date(r.at).toLocaleString('uk', {
+              day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}</span>
+          </div>`).join('')}</div>`
+        : '<p class="hint">Контактів ще ніхто не дивився.</p>';
+    } catch (e) { box.textContent = String(e.message || e); }
+  };
 }
 
 // ── activation ──────────────────────────────────────────────────────────────
@@ -954,6 +1152,29 @@ function setupView(){
     </section>
 
     <section class="card">
+      <h2>Клієнти</h2>
+      <p class="hint">Це не база клієнтів — це те, що видно з ваших замовлень.
+         Імена й номери приховані, поки ви не попросите конкретний. Кожне
+         розкриття записується в журнал, який неможливо стерти.</p>
+      <div class="row">
+        <span class="hint">Сортувати:</span>
+        <div class="seg">
+          <button class="btn ${S.cSort === 'spent' ? 'pri' : ''}" data-csort="spent">За сумою</button>
+          <button class="btn ${S.cSort === 'orders' ? 'pri' : ''}" data-csort="orders">За кількістю</button>
+          <button class="btn ${!S.cSort ? 'pri' : ''}" data-csort="">Нещодавні</button>
+        </div>
+      </div>
+      <div id="cuShown" class="report" hidden></div>
+      <div id="cuList" class="elist"></div>
+      <div class="row">
+        <button class="btn" id="cuCsv">
+          <i class="ti ti-download i" aria-hidden="true"></i>CSV (приховано)</button>
+        <button class="btn" id="cuLog">
+          <i class="ti ti-history i" aria-hidden="true"></i>Журнал переглядів</button>
+      </div>
+    </section>
+
+    <section class="card">
       <h2>Кур'єри</h2>
       <p class="hint">Запрошення — це код на 16 знаків, який діє тиждень і
          спрацьовує <b>один раз</b>. Кур'єр сам придумає пароль: ви його не
@@ -1281,6 +1502,7 @@ function renderHours(){
 
 function bindSetup(){
   bindActivation();
+  bindCustomers();
   bindCouriers();
   bindPromos();
   let csvText = null;

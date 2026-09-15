@@ -62,14 +62,30 @@ pub enum EventKind {
     /// its own fact, recorded as its own event rather than smuggled through a
     /// transition the kernel would rightly refuse.
     Paid = 3,
+    /// Somebody LOOKED at a customer's contact details.
+    ///
+    /// A read, in a log of writes, and deliberately so. The order log is the
+    /// only append-only, tamper-evident thing this hub has, and an audit trail
+    /// kept anywhere softer is an audit trail that can be tidied up. The
+    /// payload names who looked, at whom, and when; it carries no contact
+    /// details itself, because a log of who read a phone number that also
+    /// contains the phone number has doubled the exposure it exists to record.
+    Revealed = 4,
 }
 
 impl EventKind {
+    /// Does this event describe an ORDER? Everything that folds the log into
+    /// orders asks this first.
+    pub fn is_order(self) -> bool {
+        matches!(self, EventKind::Placed | EventKind::Advanced | EventKind::Paid)
+    }
+
     fn from_byte(b: u8) -> Option<Self> {
         match b {
             1 => Some(EventKind::Placed),
             2 => Some(EventKind::Advanced),
             3 => Some(EventKind::Paid),
+            4 => Some(EventKind::Revealed),
             _ => None,
         }
     }
@@ -193,10 +209,19 @@ impl Hub {
 
     /// The newest state of every order, newest order first. One pass, keeping
     /// the first sighting of each id because `events()` is already newest-first.
+    ///
+    /// NON-ORDER EVENTS ARE SKIPPED, and that is load-bearing rather than
+    /// tidy. `Revealed` records an audit fact under a subject that is not an
+    /// order id; without this filter it would take a slot in this list and
+    /// every fold built on it -- the analytics, the promo use-count, the
+    /// dashboard -- would count an audit entry as a sale.
     pub fn orders(&self) -> Vec<Event> {
         let mut seen: Vec<String> = Vec::new();
         let mut out = Vec::new();
         for e in self.events() {
+            if !e.kind.is_order() {
+                continue;
+            }
             if seen.iter().any(|s| s == &e.order_id) {
                 continue;
             }
@@ -204,6 +229,11 @@ impl Hub {
             out.push(e);
         }
         out
+    }
+
+    /// Every audit event, newest first.
+    pub fn reveals(&self) -> Vec<Event> {
+        self.events().into_iter().filter(|e| e.kind == EventKind::Revealed).collect()
     }
 }
 
@@ -324,5 +354,60 @@ mod tests {
         assert!(matches!(h.append(EventKind::Placed, &long, "{}", 1, ACTOR),
                          Err(HubError::OrderIdTooLong)),
                 "truncating an id would silently merge two different orders");
+    }
+}
+
+#[cfg(test)]
+mod audit_tests {
+    use super::*;
+
+    /// An audit entry must not be able to masquerade as an order. Every fold in
+    /// the system -- the takings, the promo use-count, the dashboard -- is built
+    /// on `orders()`, and one bogus row in it is a number that is quietly wrong
+    /// everywhere at once.
+    #[test]
+    fn a_reveal_is_not_an_order() {
+        let mut h = Hub::create().unwrap();
+        h.append(EventKind::Placed, "ord_1", r#"{"total":900}"#, 1, [0u8; 32]).unwrap();
+        h.append(
+            EventKind::Revealed,
+            "cust:+355690000000",
+            r#"{"by":"ana@dubin.al","at":1789000000000}"#,
+            2,
+            [0u8; 32],
+        )
+        .unwrap();
+        h.append(EventKind::Placed, "ord_2", r#"{"total":850}"#, 3, [0u8; 32]).unwrap();
+
+        let orders = h.orders();
+        assert_eq!(orders.len(), 2, "the audit entry took an order's place");
+        assert!(orders.iter().all(|e| e.kind.is_order()));
+        assert!(orders.iter().all(|e| e.order_id.starts_with("ord_")));
+
+        assert_eq!(h.reveals().len(), 1);
+        assert_eq!(h.reveals()[0].order_id, "cust:+355690000000");
+        // It survives a round trip through the image, like everything else.
+        let back = Hub::load(&h.to_bytes()).unwrap();
+        assert_eq!(back.reveals().len(), 1);
+        assert_eq!(back.orders().len(), 2);
+    }
+
+    /// The audit payload must not contain what it audits: a log of who read a
+    /// phone number that also holds the phone number has doubled the exposure.
+    #[test]
+    fn the_audit_entry_carries_no_contact_details() {
+        let mut h = Hub::create().unwrap();
+        h.append(
+            EventKind::Revealed,
+            "cust:8f2a9c",
+            r#"{"by":"ana@dubin.al","at":1789000000000}"#,
+            1,
+            [0u8; 32],
+        )
+        .unwrap();
+        let e = &h.reveals()[0];
+        for leak in ["+355", "@gmail", "Rruga"] {
+            assert!(!e.order_json.contains(leak), "the audit entry carries {leak}");
+        }
     }
 }

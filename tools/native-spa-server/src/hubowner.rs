@@ -1154,6 +1154,9 @@ pub fn routes(state: Shared) -> Router {
         .route("/api/public/reach", get(public_reach))
         .route("/api/owner/stock", get(stock))
         .route("/api/owner/analytics", get(analytics))
+        .route("/api/owner/customers", get(customers))
+        .route("/api/owner/customers/reveals", get(reveals))
+        .route("/api/owner/customers/{key}/reveal", post(reveal_customer))
         .route("/api/owner/promotions", get(promotions))
         .route("/api/owner/promotions", post(set_promotion))
         .route("/api/owner/promotions/{code}/delete", post(delete_promotion))
@@ -1507,6 +1510,230 @@ pub async fn clear_product_image(
     .await
 }
 
+
+
+// ── customers ───────────────────────────────────────────────────────────────
+//
+// THERE IS STILL NO CUSTOMER REGISTRY. This is a FOLD over the orders, computed
+// per request and stored nowhere, so the venue holds exactly what it held
+// before: the orders people placed.
+//
+// The comment this replaces claimed the absence of a registry meant the data
+// "cannot be compelled to be handed over if it is not there". That was
+// overstated and worth correcting: the orders carry the name, the phone and the
+// address already. What a registry would have added is not the data but the
+// CONVENIENCE of it -- a ready-made list, sorted by value, one click from
+// export. So the protection moves to where it can still do work: the list is
+// redacted by default, un-redacting one customer is a deliberate act, and that
+// act is written into the append-only log where it cannot be quietly removed.
+//
+// The key is the PHONE, because it is the one field a person reliably repeats.
+// Names are typed differently every time and addresses change.
+
+/// Show enough to recognise a number you already know, and not enough to dial
+/// one you do not. The last two digits plus the country prefix is what a venue
+/// needs to match a caller against the list.
+fn mask_phone(p: &str) -> String {
+    let digits: Vec<char> = p.chars().filter(|c| c.is_ascii_digit()).collect();
+    if digits.len() < 4 {
+        return "•".repeat(digits.len().max(1));
+    }
+    let head: String = digits[..3].iter().collect();
+    let tail: String = digits[digits.len() - 2..].iter().collect();
+    format!("+{head}•••••{tail}")
+}
+
+/// A name as an initial. "A. H." recognises somebody you know and identifies
+/// nobody you do not.
+fn mask_name(n: &str) -> String {
+    let parts: Vec<String> = n
+        .split_whitespace()
+        .filter_map(|w| w.chars().next())
+        .map(|c| format!("{}.", c.to_uppercase()))
+        .collect();
+    if parts.is_empty() { "—".into() } else { parts.join(" ") }
+}
+
+/// A stable, non-reversible handle for a phone, used as the id in URLs and in
+/// the audit log. The audit entry must not carry the number it is about, and a
+/// URL that contains a customer's phone is a phone number in every proxy log
+/// between here and the browser.
+fn customer_key(st: &Shared, phone: &str) -> String {
+    let digits: String = phone.chars().filter(|c| c.is_ascii_digit()).collect();
+    let mac = dowiz_hub::crypto::hmac_sha256(st.signing_key(), digits.as_bytes());
+    dowiz_hub::crypto::hex(&mac[..8])
+}
+
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CustomersQuery {
+    #[serde(default)]
+    pub sort: Option<String>,
+}
+
+/// `GET /api/owner/customers` — who orders here, without saying who they are.
+pub async fn customers(
+    State(st): State<Shared>,
+    _who: OwnerCaller,
+    Query(q): Query<CustomersQuery>,
+) -> Result<Json<Value>, HubHttpError> {
+    let hub = st.read_log()?;
+    // (key, masked name, masked phone, orders, spent, last_at)
+    let mut rows: Vec<(String, String, String, i64, i64, i64)> = Vec::new();
+    for ev in hub.orders() {
+        let Ok(o) = serde_json::from_str::<Value>(&ev.order_json) else { continue };
+        let Some(phone) = o.get("contact").and_then(|c| c.get("phone")).and_then(Value::as_str)
+        else {
+            continue;
+        };
+        let name = o
+            .get("contact")
+            .and_then(|c| c.get("name"))
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        let at = o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(0);
+        // A refused order is not money the venue took, so it does not count
+        // towards what this customer is worth -- the same rule the takings use.
+        let spent = match o.get("status").and_then(Value::as_str) {
+            Some("REJECTED" | "CANCELLED") => 0,
+            _ => o.get("total").and_then(Value::as_i64).unwrap_or(0),
+        };
+        let key = customer_key(&st, phone);
+        match rows.iter_mut().find(|r| r.0 == key) {
+            Some(r) => {
+                r.3 += 1;
+                r.4 += spent;
+                r.5 = r.5.max(at);
+            }
+            None => rows.push((
+                key,
+                mask_name(name),
+                mask_phone(phone),
+                1,
+                spent,
+                at,
+            )),
+        }
+    }
+    match q.sort.as_deref() {
+        Some("spent") => rows.sort_by(|a, b| b.4.cmp(&a.4).then(b.5.cmp(&a.5))),
+        Some("orders") => rows.sort_by(|a, b| b.3.cmp(&a.3).then(b.5.cmp(&a.5))),
+        // Newest first by default: the question an owner asks at the end of a
+        // shift is who has just been in, not who is worth the most.
+        _ => rows.sort_by(|a, b| b.5.cmp(&a.5)),
+    }
+    let currency = st
+        .read_catalog()?
+        .location()
+        .and_then(|j| serde_json::from_str::<Value>(&j).ok())
+        .and_then(|l| l.get("currency").and_then(Value::as_str).map(String::from))
+        .unwrap_or_else(|| "ALL".into());
+    Ok(Json(json!({
+        "customers": rows.iter().map(|r| json!({
+            "key": r.0, "name": r.1, "phone": r.2,
+            "orders": r.3, "spent": r.4, "lastAt": r.5,
+        })).collect::<Vec<_>>(),
+        "currency": currency,
+    })))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RevealIn {
+    /// Why. Not validated against a list, because the reasons are whatever a
+    /// restaurant's evening throws up -- but it is REQUIRED, so the log says
+    /// more than "somebody looked".
+    pub reason: String,
+}
+
+/// `POST /api/owner/customers/{key}/reveal` — un-redact one person, on the record.
+///
+/// The audit entry is appended BEFORE the answer is returned. If the append
+/// fails, nothing is revealed: an un-auditable reveal is the one thing this
+/// route must not do, and returning the number first and logging afterwards
+/// would make the log best-effort.
+pub async fn reveal_customer(
+    State(st): State<Shared>,
+    who: OwnerCaller,
+    AxPath(key): AxPath<String>,
+    Json(body): Json<RevealIn>,
+) -> Result<Json<Value>, HubHttpError> {
+    let reason = body.reason.trim().to_string();
+    if reason.len() < 3 {
+        return Err(HubHttpError::Invalid("say why you are looking".into()));
+    }
+    let hub = st.read_log()?;
+    let mut found: Option<(String, String, Vec<Value>)> = None;
+    for ev in hub.orders() {
+        let Ok(o) = serde_json::from_str::<Value>(&ev.order_json) else { continue };
+        let Some(phone) = o.get("contact").and_then(|c| c.get("phone")).and_then(Value::as_str)
+        else {
+            continue;
+        };
+        if customer_key(&st, phone) != key {
+            continue;
+        }
+        let name = o
+            .get("contact")
+            .and_then(|c| c.get("name"))
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        let row = json!({
+            "id": o.get("id").cloned().unwrap_or(Value::Null),
+            "at": o.get("created_at_ms").cloned().unwrap_or(json!(0)),
+            "status": o.get("status").cloned().unwrap_or(Value::Null),
+            "total": o.get("total").cloned().unwrap_or(json!(0)),
+            "address": o.get("fulfilment").and_then(|f| f.get("address"))
+                .and_then(|a| a.get("line")).cloned().unwrap_or(Value::Null),
+        });
+        match &mut found {
+            Some((_, _, rows)) => rows.push(row),
+            None => found = Some((name, phone.to_string(), vec![row])),
+        }
+    }
+    let Some((name, phone, orders)) = found else {
+        return Err(HubHttpError::NotFound("customer"));
+    };
+
+    let entry = json!({ "by": who.0.person.id, "at": now_ms(), "reason": reason }).to_string();
+    let subject = format!("cust:{key}");
+    let at = now_ms() as u64;
+    st.with_log(move |log| {
+        log.append(dowiz_hub::EventKind::Revealed, &subject, &entry, at, [0u8; 32])
+            .map_err(|e| HubHttpError::Io(format!("{e:?}")))
+    })
+    .await?;
+
+    Ok(Json(json!({ "name": name, "phone": phone, "orders": orders })))
+}
+
+/// `GET /api/owner/customers/reveals` — who has been looking.
+///
+/// Readable by the owner, which is the only role that can reveal. The point of
+/// a log nobody reads is small; the point of one anybody with the pane can read
+/// is that a staff member knows their lookups are visible.
+pub async fn reveals(
+    State(st): State<Shared>,
+    _who: OwnerCaller,
+) -> Result<Json<Value>, HubHttpError> {
+    let hub = st.read_log()?;
+    let out: Vec<Value> = hub
+        .reveals()
+        .into_iter()
+        .take(200)
+        .filter_map(|e| {
+            let v: Value = serde_json::from_str(&e.order_json).ok()?;
+            Some(json!({
+                "customer": e.order_id.strip_prefix("cust:").unwrap_or(&e.order_id),
+                "by": v.get("by").cloned().unwrap_or(Value::Null),
+                "at": v.get("at").cloned().unwrap_or(json!(0)),
+                "reason": v.get("reason").cloned().unwrap_or(Value::Null),
+            }))
+        })
+        .collect();
+    Ok(Json(json!({ "reveals": out })))
+}
 
 // ── promo codes ─────────────────────────────────────────────────────────────
 
