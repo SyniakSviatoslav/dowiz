@@ -835,3 +835,83 @@ block is the usual cause. Everything else for deploy is ready and measured: bund
 22 KB JS against a 64 MiB limit, the `strip = true` → wasm-bindgen externref failure diagnosed
 against a control, and `worker-build` installed after finding that Termux's pkg-config poisons every
 glibc build on this box (`PKG_CONFIG_LIBDIR` is the one-variable fix).
+
+## Session note 2026-09-15 part 3 (the service, built against the architecture)
+
+**STORAGE IS BEBOP, END TO END.** Orders are an append-only event log; the menu is
+a KV image. `orders`, `locations` and `products` are not referenced anywhere in
+the Worker. An order's state is the FOLD over its events, so a status a surface
+shows is one the events support. Two images per hub, because a bebop store has ONE
+root and the log's layout and the KV layout cannot share it — and their lifecycles
+differ anyway (log grows forever, catalogue is rewritten whole).
+The file API was never the blocker it looked like: the format is pointer-free, so
+the byte image IS the in-memory image. `create_bytes`/`from_bytes`/`to_bytes`/
+`commit_bytes` sit beside the file ones and are **proven format-identical** — a
+store written byte-side opens with the ordinary file reader. Append is O(1),
+measured by arena growth.
+
+**THE WRITE RACE IS GUARDED, NOT IGNORED.** Two Workers reading one image and
+writing back would lose an append, so `save` writes behind a generation guard and
+the loser re-reads and REPLAYS. Replay is safe precisely because the log is
+append-only. Bounded at five attempts: unbounded retry turns a busy hub into a
+livelock rather than an error.
+
+**PAYMENTS.** Card implemented where the transport is `fetch` — `payment-adapters`
+is an honest stub AND speaks `ureq`, which a Worker has no sockets for. No card
+data crosses the boundary by construction; Apple/Google Pay are the Payment
+Element's wallets, not separate integrations. The ORDER ID is the idempotency key,
+so a retry returns the same intent instead of a second charge. `Paid` is its own
+event kind: an order can be paid while PENDING and the FSM has no edge for paying.
+Only the WEBHOOK marks an order paid — a browser saying "it worked" is not
+evidence money moved. Webhook: signature over the RAW body, timestamp tolerance
+checked first, constant-time compare, and an already-applied event answers 200
+because 200 is what stops Stripe's retries.
+
+**TELEMETRY.** Real OTLP/HTTP spans, W3C context continued rather than replaced,
+exported in `waitUntil` so it costs no latency, and every export error swallowed
+because telemetry must never fail an order. **Named gap:** kernel spans are NOT in
+these traces — `fdr::SpanObserver` gives `(name, dur_us)` with no trace id or
+parent, and a span with a fabricated parent is worse than no span. Widening that
+trait is the next piece.
+
+**UI.** Three surfaces on the project's own scales, dark mode everywhere (a
+deliveryos-ui red line I had violated), Tabler icons not emoji (the other one).
+Contrast was COMPUTED and the numbers rejected things: white on gold 2.46 → CTAs
+carry ink; DESIGN.md's own `#6B7280` fails on several grounds; immutable info and
+danger cannot be text on a dark sheet, so derived inks exist while the tokens stay
+untouched. The owner console and courier now share ONE palette — Warm Cosmo-Noir,
+which DOWIZ-INTERFACES-PLAN §8.1 T3 names for "owner-tool-frame" — with eight
+tokens byte-identical across the two files.
+**Still open, flagged not solved:** gold (hue 36) is the same family as immutable
+PREPARING (38) and PENDING/warning (32), 1.14:1 and 1.30:1 apart. What separates
+the confirm button from a status is ROLE — status is only ever a dot or a tint,
+never a solid fill — which is weaker than a hue distinction.
+
+**A BUG A REVIEWER FOUND IN MY CODE.** I wrote `body>*:not(#sea){position:relative}`
+when wiring the Sea. `:not(#sea)` gives it id-level specificity, so it beat
+`.top`/`.bar`/`.sheet`/`.scrim`/`.toast`/`.offline` and would have un-stuck the
+header and un-pinned the cart bar. Found by a pass over a file its author had not
+written.
+
+**BOOTSTRAP.** A hub can be seeded before it has an owner, guarded by a secret and
+failing CLOSED — no `BOOTSTRAP_SECRET` means the route answers 404, not 401,
+because 401 confirms there is something to guess at. This is NOT P67's claim and
+is named `bootstrap` rather than dressed up as one. The importer emits the bundle
+from the only authoritative copy of the client's menu: what the old deployment
+answers with TODAY (1 venue, 16 categories, 50 products), not either stale copy in
+the repo.
+
+**VERIFIED THIS PASS:** bebop-store 10, dowiz-hub 11, dowiz-core 3541, all 0
+failed; Worker builds for wasm32.
+
+**STILL SQL, and it should not be:** identity (`users`, `memberships`, `couriers`,
+`courier_sessions`, `courier_locations`, `auth_refresh_tokens`) must collapse into
+the anchor roster plus signed delegations under the hub model — P67's claim is the
+path, and it ALSO fills the empty `AnchorRoster` that makes every `/api/*` a 401
+in `native-spa-server`. Courier assignments/shifts/positions are events wearing
+table clothes. `hub_image` is a byte container, not a model, and moves to a
+Durable Object at deploy.
+
+**DEPLOY REMAINS BLOCKED** on the Cloudflare token: it authenticates but holds no
+account-level permission (workers/scripts 403, d1/database 401) even after edits.
+Everything else for it is measured and ready.
