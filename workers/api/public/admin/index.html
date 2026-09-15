@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#F8F9FA" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0F172A" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f5efe5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#061b1a" media="(prefers-color-scheme: dark)">
 <title>dowiz · admin</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -17,8 +17,10 @@
    controls. It is the storefront's SIBLING, not its twin: the same token names
    (docs/design/DESIGN.md §1-§4, web/src/styles/tokens.css), the same 4px grid,
    the same IMMUTABLE semantic + status colours, the same motion standards --
-   but ink where the storefront is tenant colour, rows where it has cards, and
-   a calmer Sea.
+   but dowiz's own chrome where the storefront wears the tenant's, rows where
+   it has cards, and a calmer Sea. The chrome is the plan's T3 palette (§8.1:
+   "owner-tool-frame = Warm Cosmo-Noir #d69a3d / #061b1a / #f5efe5"), the same
+   values the courier surface wears, so the two dowiz-owned surfaces agree.
 
    Sea & Sheet (docs/design/dowiz-interfaces/DOWIZ-INTERFACES-PLAN.md §0, §2):
    every dowiz screen is a Sheet (content, money, DECISIONS -- opaque, crisp)
@@ -26,17 +28,30 @@
    status, amount and button sits on an opaque --brand-surface, so nothing the
    owner must read during a rush can be touched by whatever the field does. ── */
 :root{
-  /* Neutrals: DESIGN.md §1 light column values. The darker of the two greys is
-     the page GROUND and white is the panel, so panels read as raised -- the
-     same ordering DESIGN.md's dark override uses (#0F172A ground, #1E293B panel). */
-  --brand-bg:#F8F9FA; --brand-surface:#FFFFFF; --brand-surface-raised:#F3F4F6;
-  --brand-text:#1A1A1A; --brand-text-muted:#6B7280; --brand-border:#E5E7EB;
-  /* Primary action is INK (Shopify's black button). Every hue in DESIGN.md's
-     preset table is either a status colour already (teal=READY, blue=CONFIRMED,
-     amber=warning) or fails 4.5:1 with white text (#ea4f16, #F97316). An owner
-     confirming forty orders an hour must never read the confirm button as a
-     status. Measured: white on #1A1A1A 17.40:1. */
-  --brand-primary:#1A1A1A; --brand-primary-hover:#2F2F2F; --brand-primary-ink:#FFFFFF;
+  /* T3 dowiz chrome -- light. Paper is the page GROUND, white the panel, ink
+     the text; ink and paper swap roles in the dark theme (as on the courier),
+     which is what keeps the two themes one design. */
+  --brand-bg:#f5efe5; --brand-surface:#ffffff; --brand-surface-raised:#f5efe5;
+  --brand-text:#061b1a;
+  /* The courier's muted, not DESIGN.md's #6B7280: that one measures 4.23:1 on
+     paper and fails. This carries the ink's own hue: 7.26:1 on white, 6.34:1
+     on paper, 6.82:1 on the pending-row tint. */
+  --brand-text-muted:#4a5a58;
+  --brand-border:#d9d2c5;
+  /* Gold is a GROUND, never a carrier of white: white on #d69a3d is 2.46:1,
+     ink on it is 7.25:1 (hover ground #c98b2c: 6.12:1). The CTA always carries
+     ink. Gold is also never text on a light ground (2.15:1 on paper). */
+  --brand-primary:#d69a3d; --brand-primary-hover:#c98b2c; --on-primary:#061b1a;
+  /* The gold CTA's EDGE, not its fill. Gold on a light ground is 2.46:1 against
+     white and 2.15:1 against paper -- under the 3:1 non-text floor, so the button
+     is legible by its 7.25:1 ink label while its boundary is not delimited. Gold
+     darkened 25% toward ink measures 3.91:1 on white and 3.42:1 on paper, which
+     clears the floor without touching the palette the plan mandates. In dark the
+     fill is already 6.49:1 against the sheet, so the edge collapses into it. */
+  --primary-edge:#a27a34;
+  /* Focus ring: ink in light (gold on white is 2.46:1, invisible), gold in
+     dark (6.49:1 on the dark surface) -- the courier's rule. */
+  --focus-ring:#061b1a;
 
   /* IMMUTABLE across every preset and theme -- DESIGN.md §1. Never redefined below. */
   --color-success:#059669; --color-warning:#D97706; --color-danger:#DC2626; --color-info:#2563EB;
@@ -46,22 +61,22 @@
 
   /* Derived inks. The immutable tokens above are the SOURCE; these are what is
      allowed to touch text, because a colour that is immutable in value cannot
-     also be legible on every ground: #2563EB is 5.17:1 on white and 2.83:1 on
-     #1E293B; #DC2626 is 4.83:1 on white and 3.03:1 on #1E293B. In light mode
+     also be legible on every ground: #2563EB is 5.17:1 on white and 3.09:1 on
+     #0b2624; #DC2626 is 4.83:1 on white and 3.30:1 on #0b2624. In light mode
      they ARE the tokens; dark mode redefines only these derived names. */
-  --accent-ink:var(--color-info);      /* links, focus ring   */
+  --accent-ink:var(--color-info);      /* links               */
   --danger-ink:var(--color-danger);    /* danger outline text */
-  /* A pending row's ground. 6% not 8%: #6B7280 measures 4.54:1 on the 6% tint
-     and 4.44:1 on the 8% -- the impeccable "muted grey on tinted near-white"
-     failure, avoided by two percent. */
+  /* A pending row's ground: the immutable PENDING amber at 6% over the white
+     panel. Muted 6.82:1, link 4.86:1, danger 4.54:1 on it. */
   --row-attn:color-mix(in srgb,var(--st-PENDING) 6%,var(--brand-surface));
   --chip-mix:14%;
-  --toggle-off:#D1D5DB; --toggle-thumb:#FFFFFF;
-  --on-danger:#FFFFFF;                 /* 4.83:1 on --color-danger, both themes */
+  --toggle-off:#d9d2c5; --toggle-thumb:#ffffff;
+  --on-danger:#ffffff;                 /* 4.83:1 on --color-danger, both themes */
   --sea-opacity:.28; --sea-opacity-calm:.14;
-  /* The spectral edge: the order lifecycle as a thread, amber -> blue -> green,
-     spelled only in immutable status tokens so it needs no new hue. */
-  --spectral:linear-gradient(90deg,transparent,var(--st-PENDING) 25%,var(--st-IN_DELIVERY) 55%,var(--st-DELIVERED) 80%,transparent);
+  /* Spectral edge -- the dowiz seam, terracotta -> accent -> gold (plan §2.4),
+     the courier's exact stops: one seam across the dowiz-owned surfaces. */
+  --spectral-a:#b5541c; --spectral-b:#f2c14e;
+  --spectral:linear-gradient(90deg,transparent 0%,var(--spectral-a) 30%,var(--brand-primary) 50%,var(--spectral-b) 70%,transparent 100%);
 
   --brand-font-body:'Inter',system-ui,-apple-system,sans-serif;
   --font-mono:ui-monospace,'JetBrains Mono',SFMono-Regular,Menlo,monospace;
@@ -90,30 +105,31 @@
 /* Dark mode: a red line in deliveryos-ui. Three states -- bare :root light,
    system dark unless the page was explicitly set light, explicit dark. Tokens
    ONLY. Not one component rule lives inside a theme block, which is what stops
-   a colour existing in one theme and not the other. Values are DESIGN.md §1's
-   own dark override. */
+   a colour existing in one theme and not the other. Values are the courier
+   surface's dark theme, verbatim: ink becomes the ground, paper the text, and
+   gold stays gold with ink on it (7.25:1 does not depend on the theme). */
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --brand-bg:#0F172A; --brand-surface:#1E293B; --brand-surface-raised:#263548;
-    --brand-text:#F1F5F9; --brand-text-muted:#94A3B8; --brand-border:#334155;
-    --brand-primary:#F1F5F9; --brand-primary-hover:#FFFFFF; --brand-primary-ink:#0F172A;
-    --accent-ink:color-mix(in srgb,var(--color-info) 65%,#FFFFFF);   /* 5.30:1 on #1E293B */
-    --danger-ink:color-mix(in srgb,var(--color-danger) 60%,#FFFFFF); /* 5.38:1 on #1E293B */
-    --row-attn:color-mix(in srgb,var(--st-PENDING) 12%,var(--brand-surface)); /* muted 4.95:1 */
+    --brand-bg:#061b1a; --brand-surface:#0b2624; --brand-surface-raised:#12302d;
+    --brand-text:#f5efe5; --brand-text-muted:#a9b8b5; --brand-border:#22403c;
+    --focus-ring:#d69a3d; --primary-edge:#d69a3d;                                             /* 6.49:1 on #0b2624 */
+    --accent-ink:color-mix(in srgb,var(--color-info) 65%,#ffffff);   /* 5.78:1 on #0b2624 */
+    --danger-ink:color-mix(in srgb,var(--color-danger) 60%,#ffffff); /* 5.87:1 on #0b2624 */
+    --row-attn:color-mix(in srgb,var(--st-PENDING) 12%,var(--brand-surface)); /* muted 6.72:1 */
     --chip-mix:18%;
-    --toggle-off:#475569; --toggle-thumb:#F1F5F9;
+    --toggle-off:#22403c; --toggle-thumb:#f5efe5;
     --sea-opacity:.4; --sea-opacity-calm:.2;
   }
 }
 :root[data-theme="dark"]{
-  --brand-bg:#0F172A; --brand-surface:#1E293B; --brand-surface-raised:#263548;
-  --brand-text:#F1F5F9; --brand-text-muted:#94A3B8; --brand-border:#334155;
-  --brand-primary:#F1F5F9; --brand-primary-hover:#FFFFFF; --brand-primary-ink:#0F172A;
-  --accent-ink:color-mix(in srgb,var(--color-info) 65%,#FFFFFF);
-  --danger-ink:color-mix(in srgb,var(--color-danger) 60%,#FFFFFF);
+  --brand-bg:#061b1a; --brand-surface:#0b2624; --brand-surface-raised:#12302d;
+  --brand-text:#f5efe5; --brand-text-muted:#a9b8b5; --brand-border:#22403c;
+  --focus-ring:#d69a3d;
+  --accent-ink:color-mix(in srgb,var(--color-info) 65%,#ffffff);
+  --danger-ink:color-mix(in srgb,var(--color-danger) 60%,#ffffff);
   --row-attn:color-mix(in srgb,var(--st-PENDING) 12%,var(--brand-surface));
   --chip-mix:18%;
-  --toggle-off:#475569; --toggle-thumb:#F1F5F9;
+  --toggle-off:#22403c; --toggle-thumb:#f5efe5;
   --sea-opacity:.4; --sea-opacity-calm:.2;
 }
 
@@ -124,7 +140,7 @@ body{font-family:var(--brand-font-body);background:var(--brand-bg);color:var(--b
      -webkit-font-smoothing:antialiased;
      padding-bottom:calc(var(--space-16) + env(safe-area-inset-bottom,0px))}
 button,input,select{font:inherit;color:inherit}
-:focus-visible{outline:2px solid var(--accent-ink);outline-offset:2px;border-radius:var(--radius-sm)}
+:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;border-radius:var(--radius-sm)}
 [hidden]{display:none!important}
 .i{font-size:1.15em;line-height:1;vertical-align:-.12em}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
@@ -275,14 +291,19 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
 .chip.PENDING i,.chip.IN_DELIVERY i{animation:pulse 1.2s ease-in-out infinite}
 
 /* ── buttons ── one geometry, three surfaces. 44px targets, 8px radius (not
-   the storefront's pill: sibling, not twin). Press = scale(.97), 120ms. */
+   the storefront's pill: sibling, not twin). Press = scale(.97), 120ms.
+   The primary is gold with INK on it (7.25:1) -- the courier's CTA rule. Gold
+   sits at hue 36; the immutable PREPARING (#F59E0B, hue 38) and PENDING
+   (#D97706, hue 32) are the same family, 1.14:1 and 1.30:1 apart. On this
+   surface a status hue is only ever an 8px dot or a 6-18% tint, never a fill;
+   the only solid gold block is the action, and it carries a verb. */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-2);
      min-height:var(--tap);padding:0 var(--space-4);border:1px solid var(--brand-border);
      background:var(--brand-surface);color:var(--brand-text);border-radius:var(--radius-md);
      font-weight:var(--weight-semibold);font-size:var(--text-base);cursor:pointer;
      transition:background .15s ease-out,border-color .15s ease-out,transform .12s ease-out}
 .btn:active{transform:scale(.97)}
-.btn.pri{background:var(--brand-primary);border-color:var(--brand-primary);color:var(--brand-primary-ink)}
+.btn.pri{background:var(--brand-primary);border-color:var(--primary-edge);color:var(--on-primary)}
 .btn.dan{background:var(--brand-surface);border-color:var(--danger-ink);color:var(--danger-ink)}
 .btn.wide{width:100%;margin-top:var(--space-5)}
 .btn[disabled]{opacity:.5;cursor:not-allowed;transform:none}
@@ -323,7 +344,7 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
 .sw input:checked + span::after{transform:translateX(20px)}
 .sw input:active + span::after{transform:scale(.92)}
 .sw input:checked:active + span::after{transform:translateX(20px) scale(.92)}
-.sw input:focus-visible + span{outline:2px solid var(--accent-ink);outline-offset:2px}
+.sw input:focus-visible + span{outline:2px solid var(--focus-ring);outline-offset:2px}
 
 /* ── login ── a Sheet over the Sea. */
 .login{max-width:360px;margin:var(--space-16) auto;padding:var(--space-6);
@@ -337,8 +358,8 @@ input[type=email],input[type=password],input[type=text]{width:100%;min-height:va
   padding:0 var(--space-3);border:1px solid var(--brand-border);border-radius:var(--radius-md);
   background:var(--brand-surface)}
 input::placeholder{color:var(--brand-text-muted)}
-input:focus{border-color:var(--accent-ink);outline:none;
-            box-shadow:0 0 0 3px color-mix(in srgb,var(--accent-ink) 25%,transparent)}
+input:focus{border-color:var(--focus-ring);outline:none;
+            box-shadow:0 0 0 3px color-mix(in srgb,var(--focus-ring) 25%,transparent)}
 .err{display:flex;gap:var(--space-2);align-items:flex-start;color:var(--danger-ink);
      font-size:var(--text-sm);font-weight:var(--weight-medium);margin-top:var(--space-3)}
 

@@ -39,6 +39,13 @@
   /* White on the gold accent is 2.46:1 and fails; dark ink on it is 7.25:1.
      The CTA therefore always carries ink, never white. */
   --on-primary:#061b1a;
+  /* The gold CTA's EDGE, not its fill. Gold on a light ground is 2.46:1 against
+     white and 2.15:1 against paper -- under the 3:1 non-text floor, so the button
+     is legible by its 7.25:1 ink label but its boundary is not delimited. Gold
+     darkened 25% toward ink measures 3.91:1 on white and 3.42:1 on paper, which
+     clears the floor without touching the palette the plan mandates. In dark the
+     fill is already 6.49:1 against the sheet, so the edge collapses into it. */
+  --primary-edge:#a27a34;
   /* Gold on white is 2.46:1 — invisible as a focus ring in daylight. In the
      light theme the ring is ink (17.8:1); in the dark theme it is gold (6.5:1). */
   --focus-ring:#061b1a;
@@ -96,7 +103,7 @@
   :root:not([data-theme="light"]){
     --brand-bg:#061b1a; --brand-surface:#0b2624; --brand-surface-2:#12302d;
     --brand-text:#f5efe5; --brand-text-muted:#a9b8b5; --brand-border:#22403c;
-    --focus-ring:#d69a3d;
+    --focus-ring:#d69a3d; --primary-edge:#d69a3d;
     --chip-bg:rgba(11,38,36,.92);
     --elevation-sheet:0 -8px 24px rgba(0,0,0,.5);
     --scrim-marker:rgba(214,154,61,.3);
@@ -224,7 +231,8 @@ a.tel{color:var(--brand-text);font-weight:var(--weight-semibold);text-decoration
    Ink on gold 7.25:1; ink on success 4.73:1. Press feedback on every button:
    scale, 120ms snap — a button with no :active feels dead. ── */
 .cta{display:flex;align-items:center;justify-content:center;gap:var(--space-3);width:100%;
-     min-height:var(--tap-courier);padding:var(--space-3) var(--space-5);border:0;
+     min-height:var(--tap-courier);padding:var(--space-3) var(--space-5);
+     border:1px solid var(--primary-edge);
      border-radius:var(--radius-btn);background:var(--brand-primary);color:var(--on-primary);
      font-size:var(--text-lg);font-weight:var(--weight-bold);margin-top:var(--space-2);
      box-shadow:var(--elevation-1);
