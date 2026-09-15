@@ -109,7 +109,7 @@ function renderMenu(){
         ${L.deliveryFee ? `<span><b>${money(L.deliveryFee)}</b> ${esc(t('delivery').toLowerCase())}</span>`
                         : `<span><b>${esc(t('free'))}</b> ${esc(t('delivery').toLowerCase())}</span>`}
       </div>
-      ${open ? '' : `<div class="notice"><span>🕒</span><div>${esc(t('closedHint'))}
+      ${open ? '' : `<div class="notice"><i class="ti ti-clock-hour-9 i" aria-hidden="true"></i><div>${esc(t('closedHint'))}
         <a href="tel:${esc(L.phone)}">${esc(L.phone)}</a></div></div>`}
     </section>
     <nav class="cats"><div class="cats-in">${cats.map((c,i) =>
@@ -237,9 +237,9 @@ function openCheckout(){
     <label>${esc(t('pay'))}</label>
     <div class="pays" role="radiogroup">
       <button class="pay" role="radio" aria-checked="true" data-pay="cash">
-        <span>💵</span><span class="t"><b>${esc(t('cash'))}</b><small>${esc(t('cashNote'))}</small></span></button>
+        <i class="ti ti-cash i" aria-hidden="true"></i><span class="t"><b>${esc(t('cash'))}</b><small>${esc(t('cashNote'))}</small></span></button>
       <button class="pay" role="radio" aria-checked="false" data-pay="card" disabled style="opacity:.5">
-        <span>💳</span><span class="t"><b>${esc(t('card'))}</b><small>${esc(t('cardNote'))}</small></span></button>
+        <i class="ti ti-credit-card i" aria-hidden="true"></i><span class="t"><b>${esc(t('card'))}</b><small>${esc(t('cardNote'))}</small></span></button>
     </div>
     <div id="f-err"></div>
     ${totalsBlock()}
@@ -294,7 +294,7 @@ function openTracking(order){
     <p style="color:var(--brand-text-muted);margin:6px 0 2px">#${esc(String(order.id).slice(0,8))}</p>
     ${dead ? '' : `<div class="track">${FLOW.map((s, n) => `
       <div class="step ${n < i ? 'done' : n === i ? 'now' : ''}">
-        <span class="dot">${n < i ? '✓' : ''}</span>
+        <span class="dot">${n < i ? `<i class="ti ti-check" aria-hidden="true"></i>` : ""}</span>
         <span><b>${esc(t('st')[s])}</b></span>
       </div>`).join('')}</div>`}
     <div class="totals"><div class="row grand"><span>${esc(t('total'))}</span>

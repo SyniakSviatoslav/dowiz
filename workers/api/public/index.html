@@ -8,198 +8,293 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css" rel="stylesheet">
 <style>
-/* ── Brand tokens ────────────────────────────────────────────────────────────
-   EVERY colour in this file is var(--brand-*) or var(--color-*). That is the
-   white-label rule from the old platform, kept verbatim: re-skinning a tenant
-   must be a change of these values and nothing else. Semantic colours never
-   move per theme. */
+/* ── dowiz storefront ──────────────────────────────────────────────────────────
+   Built on the project's OWN scales (docs/design/DESIGN.md §1-§4 and
+   packages/ui/src/theme/tokens.css), not on values invented here.
+
+   The storefront-polish CONSISTENCY-AUDIT found the real failure mode on the old
+   codebase: "the design system is good; adoption is partial" -- 103 stock type
+   classes fighting 113 modular ones, five different primary-CTA signatures, two
+   radius families holding the same pixels under different names, and no global
+   heading rule, so the SAME dish name rendered in two fonts on two screens.
+   This file answers each of those by construction: one type scale, one spacing
+   grid, ONE card radius, one CTA, and a global heading rule. ── */
 :root{
-  --brand-primary:#C1121F; --brand-primary-hover:#9B0D17; --brand-primary-light:#FFF0F1;
-  --brand-accent:#F5F0E8;
-  --brand-bg:#FBF8F5; --brand-surface:#FFFFFF; --brand-surface-2:#F7F2EC;
-  --brand-text:#1A1614; --brand-text-muted:#6B625C; --brand-border:#E8DFD6;
+  /* Tenant identity. These are the values the live deployment serves for this
+     restaurant at /public/locations/:id/theme.css. PRODUCT.md requires the
+     storefront to carry the restaurant's identity, not dowiz's, so the tenant's
+     committed colours win over any preset I would otherwise pick. */
+  --brand-primary:#e11d48; --brand-primary-hover:#cd3409; --brand-secondary:#457b9d;
+  --brand-primary-light:#ffe9ef;
+  --brand-bg:#fdf2f8; --brand-surface:#ffffff; --brand-surface-2:#fbe9f1;
+  --brand-text:#212529;
+  /* NOT DESIGN.md's #6B7280: measured on this blush ground it is 4.43:1 and
+     fails AA for body text. This carries the ground's own hue at 5.57:1. */
+  --brand-text-muted:#6b5f66;
+  --brand-border:#f0dae4;
+
+  /* Immutable across every preset and theme — DESIGN.md §1. */
+  --color-success:#059669; --color-warning:#D97706; --color-danger:#DC2626; --color-info:#2563EB;
+  --st-PENDING:#D97706; --st-CONFIRMED:#2563EB; --st-PREPARING:#F59E0B;
+  --st-READY:#0D9488; --st-IN_DELIVERY:#3B82F6; --st-DELIVERED:#059669;
+  --st-REJECTED:#DC2626; --st-CANCELLED:#DC2626;
+
   --brand-font-heading:'DM Serif Display',Georgia,serif;
   --brand-font-body:'DM Sans',system-ui,-apple-system,sans-serif;
-  --brand-radius:14px; --brand-radius-sm:8px; --brand-radius-btn:999px;
 
-  --color-success:#0F7B47; --color-warning:#B45309; --color-danger:#C1121F; --color-info:#1D4ED8;
+  /* One type scale. The audit's drift came from two scales disagreeing at
+     xl/2xl/3xl, so there is exactly one here and nothing sets a raw size. */
+  --text-2xs:.6875rem; --text-xs:.75rem; --text-sm:.875rem; --text-base:1rem;
+  --text-lg:1.125rem; --text-xl:1.375rem; --text-2xl:1.75rem; --text-3xl:2.25rem;
+  --weight-normal:400; --weight-medium:500; --weight-semibold:600; --weight-bold:700;
 
-  --shadow-1:0 1px 2px rgba(26,22,20,.06),0 2px 8px rgba(26,22,20,.05);
-  --shadow-2:0 4px 16px rgba(26,22,20,.10);
-  --tap:44px;                      /* one-handed reach: nothing tappable is smaller */
+  /* 4px grid. DESIGN.md §3: "Only these values. Never 6px, 10px, 14px, 18px." */
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px;
+  --space-6:24px; --space-8:32px; --space-10:40px; --space-12:48px; --space-16:64px;
+
+  /* ONE card radius, the audit's fix #3. The tenant's own token is 8px and it wins. */
+  --radius-sm:4px; --radius-md:8px; --radius-lg:12px; --radius-xl:16px; --radius-full:9999px;
+  --radius-card:var(--radius-md);
+  --radius-btn:var(--radius-full);
+
+  --elevation-1:0 1px 3px rgba(0,0,0,.12);
+  --elevation-2:0 4px 12px rgba(0,0,0,.15);
+  --elevation-3:0 8px 24px rgba(0,0,0,.18);
+  --z-sticky:200; --z-backdrop:300; --z-modal:400; --z-toast:500;
+
+  --tap:44px;
   --bar-h:calc(68px + env(safe-area-inset-bottom,0px));
+  --ease:cubic-bezier(.2,.8,.2,1);
 }
+/* Dark mode is a red line in deliveryos-ui: no screen ships without it. Tokens
+   only — not one component rule lives inside this block, which is what stops a
+   colour existing in one theme and not the other. */
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --brand-bg:#0F172A; --brand-surface:#1E293B; --brand-surface-2:#263548;
+    --brand-text:#F1F5F9; --brand-text-muted:#94A3B8; --brand-border:#334155;
+    --brand-primary-light:#3a1220;
+  }
+}
+:root[data-theme="dark"]{
+  --brand-bg:#0F172A; --brand-surface:#1E293B; --brand-surface-2:#263548;
+  --brand-text:#F1F5F9; --brand-text-muted:#94A3B8; --brand-border:#334155;
+  --brand-primary-light:#3a1220;
+}
+
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-text-size-adjust:100%}
-body{
-  font-family:var(--brand-font-body); background:var(--brand-bg); color:var(--brand-text);
-  min-height:100dvh; line-height:1.5; -webkit-font-smoothing:antialiased;
-  padding-bottom:var(--bar-h);
-}
+body{font-family:var(--brand-font-body);background:var(--brand-bg);color:var(--brand-text);
+     min-height:100dvh;line-height:1.5;font-size:var(--text-base);
+     -webkit-font-smoothing:antialiased;padding-bottom:var(--bar-h)}
+/* THE GLOBAL HEADING RULE. Its absence is finding T1 in the audit and the reason
+   the same dish name rendered in two different fonts on two screens. */
+h1,h2,h3{font-family:var(--brand-font-heading);font-weight:var(--weight-normal);
+         letter-spacing:-.02em;line-height:1.12;text-wrap:balance}
+p{text-wrap:pretty}
 img{max-width:100%;display:block}
 [hidden]{display:none!important}
-button,input,select,textarea{font:inherit;color:inherit}
-:focus-visible{outline:3px solid var(--brand-primary);outline-offset:2px;border-radius:4px}
-@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
-
-.wrap{max-width:720px;margin:0 auto;padding:0 16px}
+button,input,textarea,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--brand-primary);outline-offset:2px;border-radius:var(--radius-sm)}
+.i{font-size:1.15em;line-height:1;vertical-align:-.12em}
+.wrap{max-width:720px;margin:0 auto;padding-inline:var(--space-4)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
-/* ── Header ── */
-.top{position:sticky;top:0;z-index:30;background:color-mix(in srgb,var(--brand-bg) 88%,transparent);
-     backdrop-filter:blur(12px);border-bottom:1px solid var(--brand-border)}
-.top-in{display:flex;align-items:center;gap:12px;min-height:56px}
-.brand{font-family:var(--brand-font-heading);font-size:1.3rem;letter-spacing:-.01em;flex:1;
-       white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.langs{display:flex;gap:2px;background:var(--brand-surface-2);border-radius:var(--brand-radius-btn);padding:3px}
-.lang{min-width:36px;height:30px;border:0;background:none;border-radius:var(--brand-radius-btn);
-      font-size:.78rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
-      color:var(--brand-text-muted);cursor:pointer}
-.lang[aria-pressed="true"]{background:var(--brand-surface);color:var(--brand-text);box-shadow:var(--shadow-1)}
+/* Movement removed, meaning kept. Zeroing every duration also removes the fade
+   that tells you the sheet opened. */
+@media (prefers-reduced-motion:reduce){
+  *{animation-iteration-count:1!important}
+  .dish:hover,.dish:active,.btn:active{transform:none!important}
+  .bar,.sheet,.toast{transition-property:opacity!important;transform:none!important}
+  .skel::after,.step.now .dot::after{animation:none!important}
+}
 
-/* ── Hero ── */
-.hero{padding:22px 0 16px}
-.hero h1{font-family:var(--brand-font-heading);font-size:clamp(1.9rem,7vw,2.6rem);line-height:1.08;
-         letter-spacing:-.02em;margin-bottom:8px}
-.hero .meta{display:flex;flex-wrap:wrap;gap:8px 14px;color:var(--brand-text-muted);font-size:.9rem}
-.hero .meta b{color:var(--brand-text);font-weight:500}
-.status-dot{display:inline-flex;align-items:center;gap:6px;font-weight:500}
-.status-dot::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--color-success)}
+/* ── header ── */
+.top{position:sticky;top:0;z-index:var(--z-sticky);
+     background:color-mix(in srgb,var(--brand-bg) 90%,transparent);
+     backdrop-filter:blur(12px);border-bottom:1px solid var(--brand-border)}
+.top-in{display:flex;align-items:center;gap:var(--space-3);min-height:56px}
+.brand{font-family:var(--brand-font-heading);font-size:var(--text-xl);flex:1;
+       white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.langs{display:flex;gap:2px;background:var(--brand-surface-2);border-radius:var(--radius-full);padding:var(--space-1)}
+.lang{min-width:36px;min-height:32px;border:0;background:none;border-radius:var(--radius-full);
+      font-size:var(--text-xs);font-weight:var(--weight-bold);letter-spacing:.04em;
+      text-transform:uppercase;color:var(--brand-text-muted);cursor:pointer}
+.lang[aria-pressed="true"]{background:var(--brand-surface);color:var(--brand-text);box-shadow:var(--elevation-1)}
+
+/* ── hero ── */
+.hero{padding-block:var(--space-6) var(--space-4)}
+.hero h1{font-size:clamp(var(--text-2xl),7vw,var(--text-3xl));margin-bottom:var(--space-2)}
+.hero .meta{display:flex;flex-wrap:wrap;gap:var(--space-2) var(--space-4);
+            color:var(--brand-text-muted);font-size:var(--text-sm)}
+.hero .meta b{color:var(--brand-text);font-weight:var(--weight-medium)}
+.status-dot{display:inline-flex;align-items:center;gap:var(--space-2);font-weight:var(--weight-medium)}
+.status-dot::before{content:"";width:8px;height:8px;border-radius:var(--radius-full);background:var(--color-success)}
 .status-dot.closed::before{background:var(--brand-text-muted)}
 .status-dot.busy::before{background:var(--color-warning)}
 
-/* ── Category nav (Wolt pattern: horizontal, sticky under the header) ── */
-.cats{position:sticky;top:56px;z-index:20;background:var(--brand-bg);
-      border-bottom:1px solid var(--brand-border);margin-bottom:8px}
-.cats-in{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:10px 16px;
-         max-width:720px;margin:0 auto;scroll-snap-type:x proximity}
+/* ── category nav ── */
+.cats{position:sticky;top:56px;z-index:calc(var(--z-sticky) - 10);background:var(--brand-bg);
+      border-bottom:1px solid var(--brand-border);margin-bottom:var(--space-2)}
+.cats-in{display:flex;gap:var(--space-2);overflow-x:auto;scrollbar-width:none;
+         padding:var(--space-3) var(--space-4);max-width:720px;margin:0 auto;
+         scroll-snap-type:x proximity}
 .cats-in::-webkit-scrollbar{display:none}
-.cat{flex:0 0 auto;min-height:36px;padding:7px 15px;border:1px solid var(--brand-border);
-     background:var(--brand-surface);border-radius:var(--brand-radius-btn);font-size:.88rem;
-     font-weight:500;white-space:nowrap;cursor:pointer;scroll-snap-align:start;
-     transition:background .15s,border-color .15s,color .15s}
+.cat{flex:0 0 auto;min-height:36px;padding:var(--space-2) var(--space-4);
+     border:1px solid var(--brand-border);background:var(--brand-surface);
+     border-radius:var(--radius-full);font-size:var(--text-sm);font-weight:var(--weight-medium);
+     white-space:nowrap;cursor:pointer;scroll-snap-align:start;
+     transition:background .15s ease-out,border-color .15s ease-out,color .15s ease-out}
 .cat[aria-current="true"]{background:var(--brand-primary);border-color:var(--brand-primary);color:#fff}
 
-/* ── Dish ── */
-.sec-h{font-family:var(--brand-font-heading);font-size:1.5rem;letter-spacing:-.01em;
-       margin:26px 0 12px;scroll-margin-top:110px}
-.dishes{display:grid;gap:10px}
-.dish{display:grid;grid-template-columns:1fr 104px;gap:14px;align-items:stretch;
+/* ── dishes ── */
+.sec-h{font-size:var(--text-xl);margin:var(--space-6) 0 var(--space-3);scroll-margin-top:112px}
+.dishes{display:grid;gap:var(--space-3)}
+.dish{display:grid;grid-template-columns:1fr 104px;gap:var(--space-4);
       background:var(--brand-surface);border:1px solid var(--brand-border);
-      border-radius:var(--brand-radius);padding:14px;text-align:left;width:100%;cursor:pointer;
-      box-shadow:var(--shadow-1);transition:transform .16s ease,box-shadow .16s ease}
-.dish:hover{transform:translateY(-1px);box-shadow:var(--shadow-2)}
-.dish:active{transform:translateY(0)}
-.dish-name{font-family:var(--brand-font-heading);font-size:1.1rem;line-height:1.2;margin-bottom:5px}
-.dish-desc{color:var(--brand-text-muted);font-size:.86rem;line-height:1.45;
-           display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.dish-price{margin-top:9px;font-weight:700;font-size:1rem;font-variant-numeric:tabular-nums}
-.dish-media{border-radius:var(--brand-radius-sm);overflow:hidden;position:relative;
+      border-radius:var(--radius-card);padding:var(--space-4);text-align:left;width:100%;
+      cursor:pointer;box-shadow:var(--elevation-1);
+      transition:transform .16s var(--ease),box-shadow .16s var(--ease)}
+@media (hover:hover) and (pointer:fine){
+  .dish:hover{transform:translateY(-1px);box-shadow:var(--elevation-2)}
+}
+.dish:active{transform:scale(.995)}
+.dish-name{font-family:var(--brand-font-heading);font-size:var(--text-lg);
+           line-height:1.2;margin-bottom:var(--space-1);display:block}
+.dish-desc{color:var(--brand-text-muted);font-size:var(--text-sm);line-height:1.45;display:-webkit-box;
+           -webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.dish-price{margin-top:var(--space-2);font-weight:var(--weight-bold);
+            font-size:var(--text-base);font-variant-numeric:tabular-nums;display:block}
+.dish-media{border-radius:var(--radius-md);overflow:hidden;position:relative;
             aspect-ratio:1;background:var(--brand-surface-2)}
 .dish-media img{width:100%;height:100%;object-fit:cover}
-/* A dish with no photo gets a CRAFTED fallback, never a dead grey box -- the
-   product brief names that box as the thing to kill. Hue is derived from the
-   name so a dish looks the same on every visit. */
+/* The brief names "160px empty grey image placeholders" as the thing to kill, so
+   a dish with no photo gets a deliberate mark whose hue is a stable hash of its
+   name: the same dish looks the same on every visit. */
 .fallback{width:100%;height:100%;display:grid;place-items:center;
-          font-family:var(--brand-font-heading);font-size:2rem;color:#fff;
-          text-shadow:0 1px 6px rgba(0,0,0,.22)}
-.sold-out .dish-media::after{content:"";position:absolute;inset:0;background:rgba(251,248,245,.72)}
+          font-family:var(--brand-font-heading);font-size:var(--text-2xl);color:#fff;
+          text-shadow:0 1px 6px rgba(0,0,0,.25)}
+.sold-out .dish-media::after{content:"";position:absolute;inset:0;
+                             background:color-mix(in srgb,var(--brand-bg) 72%,transparent)}
 .sold-out .dish-name,.sold-out .dish-desc,.sold-out .dish-price{opacity:.55}
-.badge{display:inline-block;margin-top:6px;padding:3px 9px;border-radius:var(--brand-radius-btn);
-       background:var(--brand-surface-2);color:var(--brand-text-muted);font-size:.72rem;font-weight:700;
+.badge{display:inline-block;margin-top:var(--space-2);padding:var(--space-1) var(--space-3);
+       border-radius:var(--radius-full);background:var(--brand-surface-2);
+       color:var(--brand-text-muted);font-size:var(--text-2xs);font-weight:var(--weight-bold);
        text-transform:uppercase;letter-spacing:.05em}
 
-/* ── Bottom cart bar (Wolt: a bar, never a floating blob) ── */
-.bar{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--brand-surface);
-     border-top:1px solid var(--brand-border);box-shadow:0 -4px 20px rgba(26,22,20,.08);
-     padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));
-     transform:translateY(110%);transition:transform .22s cubic-bezier(.2,.8,.2,1)}
-.bar.show{transform:none}
-.bar-in{max-width:720px;margin:0 auto}
-.btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:var(--tap);
-     padding:13px 20px;border:0;border-radius:var(--brand-radius-btn);background:var(--brand-primary);
-     color:#fff;font-weight:700;font-size:1rem;cursor:pointer;transition:background .15s}
-.btn:hover{background:var(--brand-primary-hover)}
+/* ── ONE primary CTA. The audit found five signatures of this button. ── */
+.btn{display:flex;align-items:center;justify-content:center;gap:var(--space-2);width:100%;
+     min-height:var(--tap);padding:var(--space-3) var(--space-5);border:0;
+     border-radius:var(--radius-btn);background:var(--brand-primary);color:#fff;
+     font-weight:var(--weight-bold);font-size:var(--text-base);cursor:pointer;
+     transition:background .15s ease-out,transform .12s ease-out}
+@media (hover:hover) and (pointer:fine){ .btn:hover{background:var(--brand-primary-hover)} }
+.btn:active{transform:scale(.97)}
 .btn[disabled]{background:var(--brand-border);color:var(--brand-text-muted);cursor:not-allowed}
 .btn-ghost{background:var(--brand-surface);color:var(--brand-text);border:1px solid var(--brand-border)}
-.btn-ghost:hover{background:var(--brand-surface-2)}
-.pill{background:rgba(255,255,255,.22);padding:2px 10px;border-radius:var(--brand-radius-btn);
-      font-variant-numeric:tabular-nums}
+@media (hover:hover) and (pointer:fine){ .btn-ghost:hover{background:var(--brand-surface-2)} }
+.pill{background:rgba(255,255,255,.22);padding:2px var(--space-3);
+      border-radius:var(--radius-full);font-variant-numeric:tabular-nums}
 
-/* ── Sheet (detail / cart / checkout) ── */
-.scrim{position:fixed;inset:0;z-index:50;background:rgba(26,22,20,.45);opacity:0;pointer-events:none;
-       transition:opacity .2s}
+/* ── cart bar ── */
+.bar{position:fixed;left:0;right:0;bottom:0;z-index:var(--z-modal);background:var(--brand-surface);
+     border-top:1px solid var(--brand-border);box-shadow:0 -4px 20px rgba(0,0,0,.08);
+     padding:var(--space-3) var(--space-4) calc(var(--space-3) + env(safe-area-inset-bottom,0px));
+     transform:translateY(110%);transition:transform .22s var(--ease)}
+.bar.show{transform:none}
+.bar-in{max-width:720px;margin:0 auto}
+
+/* ── sheet ── */
+.scrim{position:fixed;inset:0;z-index:var(--z-backdrop);background:rgba(33,37,41,.5);
+       opacity:0;pointer-events:none;transition:opacity .18s var(--ease)}
 .scrim.show{opacity:1;pointer-events:auto}
-.sheet{position:fixed;left:0;right:0;bottom:0;z-index:60;background:var(--brand-surface);
-       border-radius:20px 20px 0 0;max-height:92dvh;overflow-y:auto;
-       transform:translateY(100%);transition:transform .26s cubic-bezier(.2,.8,.2,1);
-       padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:var(--z-modal);background:var(--brand-surface);
+       border-radius:var(--radius-xl) var(--radius-xl) 0 0;max-height:92dvh;overflow-y:auto;
+       transform:translateY(100%);transition:transform .26s var(--ease);
+       padding-bottom:calc(var(--space-4) + env(safe-area-inset-bottom,0px))}
 .sheet.show{transform:none}
-.sheet-in{max-width:720px;margin:0 auto;padding:0 16px}
-.grab{width:40px;height:4px;border-radius:2px;background:var(--brand-border);margin:10px auto 6px}
-.sheet h2{font-family:var(--brand-font-heading);font-size:1.5rem;margin:10px 0 4px}
-.row{display:flex;align-items:center;justify-content:space-between;gap:12px;
-     padding:13px 0;border-bottom:1px solid var(--brand-border)}
+.sheet-in{max-width:720px;margin:0 auto;padding-inline:var(--space-4)}
+.grab{width:40px;height:4px;border-radius:var(--radius-full);background:var(--brand-border);
+      margin:var(--space-3) auto var(--space-2)}
+.sheet h2{font-size:var(--text-xl);margin:var(--space-3) 0 var(--space-1)}
+.sheet p{max-width:65ch}
+.row{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);
+     padding-block:var(--space-3);border-bottom:1px solid var(--brand-border)}
 .row:last-of-type{border-bottom:0}
-.qty{display:flex;align-items:center;gap:4px;background:var(--brand-surface-2);
-     border-radius:var(--brand-radius-btn);padding:3px}
-.qty button{width:34px;height:34px;border:0;background:var(--brand-surface);border-radius:50%;
-            font-size:1.1rem;font-weight:700;cursor:pointer;box-shadow:var(--shadow-1)}
-.qty span{min-width:26px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
-label{display:block;font-size:.84rem;font-weight:500;margin:14px 0 6px;color:var(--brand-text-muted)}
-input,textarea,select{width:100%;min-height:var(--tap);padding:12px 14px;
-  border:1px solid var(--brand-border);border-radius:var(--brand-radius-sm);
-  background:var(--brand-surface);font-size:1rem}
+.qty{display:flex;align-items:center;gap:var(--space-1);background:var(--brand-surface-2);
+     border-radius:var(--radius-full);padding:var(--space-1)}
+.qty button{width:36px;height:36px;border:0;background:var(--brand-surface);
+            border-radius:var(--radius-full);font-size:var(--text-lg);
+            font-weight:var(--weight-bold);cursor:pointer;box-shadow:var(--elevation-1);
+            transition:transform .12s ease-out}
+.qty button:active{transform:scale(.92)}
+.qty span{min-width:28px;text-align:center;font-weight:var(--weight-bold);font-variant-numeric:tabular-nums}
+label{display:block;font-size:var(--text-sm);font-weight:var(--weight-medium);
+      margin:var(--space-4) 0 var(--space-2);color:var(--brand-text-muted)}
+input,textarea,select{width:100%;min-height:var(--tap);padding:var(--space-3) var(--space-4);
+  border:1px solid var(--brand-border);border-radius:var(--radius-md);
+  background:var(--brand-surface);font-size:var(--text-base)}
 textarea{min-height:76px;resize:vertical}
+input::placeholder,textarea::placeholder{color:var(--brand-text-muted)}
 input:focus,textarea:focus,select:focus{border-color:var(--brand-primary);outline:none;
   box-shadow:0 0 0 3px var(--brand-primary-light)}
-.err{color:var(--color-danger);font-size:.82rem;margin-top:6px;font-weight:500}
-.totals{margin:16px 0;padding:14px;background:var(--brand-surface-2);border-radius:var(--brand-radius)}
-.totals .row{padding:7px 0;border:0;font-size:.92rem;color:var(--brand-text-muted)}
-.totals .row.grand{font-size:1.12rem;font-weight:700;color:var(--brand-text);
-                   border-top:1px solid var(--brand-border);margin-top:7px;padding-top:11px}
-.pays{display:grid;gap:8px}
-.pay{display:flex;align-items:center;gap:12px;padding:13px 14px;border:1.5px solid var(--brand-border);
-     border-radius:var(--brand-radius);background:var(--brand-surface);cursor:pointer;text-align:left}
+.err{color:var(--color-danger);font-size:var(--text-sm);margin-top:var(--space-2);
+     font-weight:var(--weight-medium)}
+/* Not a card inside a sheet. A rule and rhythm do the same job without nesting. */
+.totals{margin-block:var(--space-4);padding-top:var(--space-4);border-top:1px solid var(--brand-border)}
+.totals .row{padding-block:var(--space-2);border:0;font-size:var(--text-sm);color:var(--brand-text-muted)}
+.totals .row.grand{font-size:var(--text-lg);font-weight:var(--weight-bold);color:var(--brand-text);
+                   border-top:1px solid var(--brand-border);margin-top:var(--space-2);
+                   padding-top:var(--space-3)}
+.pays{display:grid;gap:var(--space-2)}
+.pay{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-4);
+     border:1.5px solid var(--brand-border);border-radius:var(--radius-card);
+     background:var(--brand-surface);cursor:pointer;text-align:left;min-height:var(--tap)}
 .pay[aria-checked="true"]{border-color:var(--brand-primary);background:var(--brand-primary-light)}
 .pay .t{flex:1}
-.pay .t b{display:block;font-size:.95rem}
-.pay .t small{color:var(--brand-text-muted);font-size:.8rem}
+.pay .t b{display:block;font-size:var(--text-base);font-weight:var(--weight-semibold)}
+.pay .t small{color:var(--brand-text-muted);font-size:var(--text-sm)}
 
-/* ── Status timeline ── */
-.track{display:grid;gap:0;margin:18px 0}
-.step{display:grid;grid-template-columns:24px 1fr;gap:14px;padding-bottom:20px;position:relative}
-.step::before{content:"";position:absolute;left:11px;top:22px;bottom:0;width:2px;background:var(--brand-border)}
+/* ── tracking ── */
+.track{display:grid;margin-block:var(--space-5)}
+.step{display:grid;grid-template-columns:24px 1fr;gap:var(--space-4);
+      padding-bottom:var(--space-5);position:relative}
+.step::before{content:"";position:absolute;left:11px;top:24px;bottom:0;width:2px;background:var(--brand-border)}
 .step:last-child::before{display:none}
-.dot{width:24px;height:24px;border-radius:50%;border:2px solid var(--brand-border);
-     background:var(--brand-surface);display:grid;place-items:center;font-size:.7rem;color:#fff}
-.step.done .dot{background:var(--color-success);border-color:var(--color-success)}
+.dot{width:24px;height:24px;border-radius:var(--radius-full);border:2px solid var(--brand-border);
+     background:var(--brand-surface);display:grid;place-items:center;font-size:var(--text-xs);color:#fff}
+.step.done .dot{background:var(--st-DELIVERED);border-color:var(--st-DELIVERED)}
 .step.now .dot{background:var(--brand-primary);border-color:var(--brand-primary)}
-.step.now .dot::after{content:"";width:8px;height:8px;border-radius:50%;background:#fff;
-                      animation:pulse 1.6s ease-in-out infinite}
+.step.now .dot::after{content:"";width:8px;height:8px;border-radius:var(--radius-full);
+                      background:#fff;animation:pulse 1.6s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
-.step b{font-size:.98rem}
-.step small{color:var(--brand-text-muted);font-size:.84rem}
-.step:not(.done):not(.now) b{color:var(--brand-text-muted);font-weight:400}
+.step b{font-size:var(--text-base);font-weight:var(--weight-semibold)}
+.step:not(.done):not(.now) b{color:var(--brand-text-muted);font-weight:var(--weight-normal)}
 
-/* ── States ── */
-.skel{background:linear-gradient(90deg,var(--brand-surface-2) 25%,var(--brand-surface) 37%,var(--brand-surface-2) 63%);
-      background-size:400% 100%;animation:sh 1.3s ease infinite;border-radius:var(--brand-radius)}
-@keyframes sh{0%{background-position:100% 0}100%{background-position:0 0}}
-.empty{text-align:center;padding:44px 20px;color:var(--brand-text-muted)}
-.empty b{display:block;font-family:var(--brand-font-heading);font-size:1.2rem;
-         color:var(--brand-text);margin-bottom:6px}
-.notice{display:flex;gap:10px;align-items:flex-start;padding:13px 15px;border-radius:var(--brand-radius);
-        background:var(--brand-primary-light);border:1px solid var(--brand-border);
-        font-size:.9rem;margin:12px 0}
-.notice a{color:var(--brand-primary);font-weight:700}
-.offline{position:fixed;left:0;right:0;top:0;z-index:70;background:var(--color-warning);color:#fff;
-         text-align:center;padding:9px 16px;font-size:.87rem;font-weight:500}
-.toast{position:fixed;left:16px;right:16px;bottom:calc(var(--bar-h) + 12px);z-index:80;
-       background:var(--brand-text);color:var(--brand-bg);padding:13px 16px;border-radius:var(--brand-radius);
-       box-shadow:var(--shadow-2);font-size:.9rem;max-width:688px;margin:0 auto;
-       opacity:0;transform:translateY(10px);pointer-events:none;transition:opacity .2s,transform .2s}
+/* ── states ── */
+.skel{position:relative;overflow:hidden;background:var(--brand-surface-2);border-radius:var(--radius-card)}
+.skel::after{content:"";position:absolute;inset:0;transform:translateX(-100%);
+  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--brand-surface) 70%,transparent),transparent);
+  animation:sweep 1.3s ease-in-out infinite}
+@keyframes sweep{to{transform:translateX(100%)}}
+.empty{text-align:center;padding:var(--space-12) var(--space-5);color:var(--brand-text-muted)}
+.empty b{display:block;font-family:var(--brand-font-heading);font-size:var(--text-lg);
+         font-weight:var(--weight-normal);color:var(--brand-text);margin-bottom:var(--space-2)}
+.notice{display:flex;gap:var(--space-3);align-items:flex-start;padding:var(--space-3) var(--space-4);
+        border-radius:var(--radius-card);background:var(--brand-primary-light);
+        border:1px solid var(--brand-border);font-size:var(--text-sm);margin-block:var(--space-3)}
+.notice a{color:var(--brand-primary);font-weight:var(--weight-bold)}
+.offline{position:fixed;left:0;right:0;top:0;z-index:var(--z-toast);background:var(--color-warning);
+         color:#fff;text-align:center;padding:var(--space-2) var(--space-4);
+         font-size:var(--text-sm);font-weight:var(--weight-medium)}
+.toast{position:fixed;left:var(--space-4);right:var(--space-4);bottom:calc(var(--bar-h) + var(--space-3));
+       z-index:var(--z-toast);background:var(--brand-text);color:var(--brand-bg);
+       padding:var(--space-3) var(--space-4);border-radius:var(--radius-card);
+       box-shadow:var(--elevation-3);font-size:var(--text-sm);max-width:688px;margin:0 auto;
+       opacity:0;transform:translateY(10px);pointer-events:none;
+       transition:opacity .2s var(--ease),transform .2s var(--ease)}
 .toast.show{opacity:1;transform:none}
 </style>
 </head>
