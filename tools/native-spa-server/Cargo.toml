@@ -49,6 +49,10 @@ hyper-util = { version = "0.1", features = ["server", "tokio", "service", "http1
 flate2 = "1"
 # clap (cached) — CLI flag / env-var configuration (no secret reads).
 clap = { version = "4", features = ["derive", "env"] }
+# The hub: one tenant's order log + catalogue over a bebop store. Pure logic --
+# this crate owns the file I/O around it, which on a VPS is a real filesystem
+# rather than a byte container borrowed from somewhere else.
+dowiz-hub = { path = "../../crates/dowiz-hub" }
 # intake-adapters (P48-INTAKE) — Telegram webhook verification + normalization.
 # Compile firewall: produces InboundMessage, never calls place_order.
 intake-adapters = { path = "../../intake-adapters" }

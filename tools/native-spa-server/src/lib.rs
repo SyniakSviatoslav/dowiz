@@ -33,6 +33,7 @@ pub mod api;
 
 /// P48-INTAKE Phase 1 — `/webhook/*` route handlers (external signature gate,
 /// NOT capability-cert gated — separate trust boundary per §5.3).
+pub mod hub;
 pub mod webhook;
 
 /// DEFAULT_ROOT mirrors the legacy nginx web root.
@@ -112,7 +113,12 @@ fn insert_header(headers: &mut header::HeaderMap, name: &str, value: &str) {
 ///   (mirrors nginx `try_files $uri $uri/ /index.html`).
 /// * The cap-gated order API (P37) is merged on top — its middleware runs only
 ///   on the `/api/*` + `/healthz` routes, so static serving is byte-unchanged.
-pub fn build_router(root: impl AsRef<Path>, api: Arc<api::ApiState>, webhook_state: Arc<webhook::WebhookState>) -> Router {
+pub fn build_router(
+    root: impl AsRef<Path>,
+    api: Arc<api::ApiState>,
+    webhook_state: Arc<webhook::WebhookState>,
+    hub_state: Option<hub::Shared>,
+) -> Router {
     let root = root.as_ref().to_path_buf();
     let index = root.join("index.html");
     let serve_dir = ServeDir::new(&root)
@@ -123,8 +129,11 @@ pub fn build_router(root: impl AsRef<Path>, api: Arc<api::ApiState>, webhook_sta
 
     Router::new()
         .fallback_service(serve_dir)
-        .merge(api::build_api_router(api))
+        .merge(api::build_api_router(api, hub_state.is_none()))
         .merge(webhook::build_webhook_router(webhook_state))
+        // The hub's own routes. Absent when no hub directory is configured, so
+        // this binary is still just a static server when that is all it is.
+        .merge(hub_state.map(hub::routes).unwrap_or_default())
         .layer(axum::middleware::from_fn(asset_cache_control))
         .layer(axum::middleware::from_fn(security_headers))
 }

@@ -173,6 +173,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
+name = "bebop-store"
+version = "0.1.0"
+
+[[package]]
 name = "bitflags"
 version = "2.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -348,6 +352,13 @@ name = "dowiz-core"
 version = "0.1.0"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "dowiz-hub"
+version = "0.1.0"
+dependencies = [
+ "bebop-store",
 ]
 
 [[package]]
@@ -724,6 +735,7 @@ dependencies = [
  "axum",
  "base64",
  "clap",
+ "dowiz-hub",
  "dowiz-kernel",
  "flate2",
  "hyper-util",

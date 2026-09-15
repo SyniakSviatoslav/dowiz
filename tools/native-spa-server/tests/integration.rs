@@ -162,7 +162,7 @@ fn spawn_server(api: &Arc<ApiState>) -> (SocketAddr, std::thread::JoinHandle<()>
                 .expect("bind ephemeral");
             let addr = listener.local_addr().unwrap();
             let _ = tx.send(addr);
-            let router: Router = build_router(&root, api, default_webhook());
+            let router: Router = build_router(&root, api, default_webhook(), None);
             let _ = native_spa_server::serve_with_timeout(
                 listener,
                 router,
@@ -603,7 +603,7 @@ fn r15_header_read_timeout_closes_stalled_connection() {
                 .expect("bind ephemeral");
             let addr = listener.local_addr().unwrap();
             let _ = tx.send(addr);
-            let router: Router = build_router(&root, api, default_webhook());
+            let router: Router = build_router(&root, api, default_webhook(), None);
             let _ = native_spa_server::serve_with_timeout(
                 listener,
                 router,
@@ -673,7 +673,7 @@ fn r19_telegram_webhook_end_to_end() {
                 .expect("bind ephemeral");
             let addr = listener.local_addr().unwrap();
             let _ = tx.send(addr);
-            let router: Router = build_router(&root, api, webhook);
+            let router: Router = build_router(&root, api, webhook, None);
             let _ = native_spa_server::serve_with_timeout(
                 listener,
                 router,
@@ -835,7 +835,7 @@ fn r16_global_connection_cap_enforced() {
                 .expect("bind ephemeral");
             let addr = listener.local_addr().unwrap();
             let _ = tx.send(addr);
-            let router: Router = build_router(&root, api, default_webhook());
+            let router: Router = build_router(&root, api, default_webhook(), None);
             let _ = native_spa_server::serve_with_timeout(
                 listener,
                 router,
@@ -916,7 +916,7 @@ fn r17_per_ip_throttling_enforced() {
                 .expect("bind ephemeral");
             let addr = listener.local_addr().unwrap();
             let _ = tx.send(addr);
-            let router: Router = build_router(&root, api, default_webhook());
+            let router: Router = build_router(&root, api, default_webhook(), None);
             let _ = native_spa_server::serve_with_timeout(
                 listener,
                 router,

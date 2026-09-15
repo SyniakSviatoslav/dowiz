@@ -41,6 +41,16 @@ struct Cli {
     tls_cert: Option<PathBuf>,
 
     /// Optional TLS private key (PEM). Required when `--tls-cert` is set.
+    /// Where this hub keeps its store. Absent => this binary is a static server
+    /// and nothing else, which is what it was before the hub moved onto it.
+    #[arg(long, env = "HUB_DIR")]
+    hub_dir: Option<PathBuf>,
+
+    /// Seed the hub's catalogue from a bundle and exit. This is how a hub gets
+    /// its menu: `--hub-dir <dir> --seed-catalog bundle.json`.
+    #[arg(long)]
+    seed_catalog: Option<PathBuf>,
+
     #[arg(long, env = "SPA_TLS_KEY")]
     tls_key: Option<PathBuf>,
 }
@@ -62,7 +72,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             dowiz_kernel::ports::hub_intake::IntakeService::new(vec![]),
         ),
     });
-    let router = build_router(&root, api, webhook_state);
+    if let (Some(dir), Some(bundle)) = (&cli.hub_dir, &cli.seed_catalog) {
+        let n = native_spa_server::hub::seed_catalog(dir, bundle)?;
+        eprintln!("[hub] seeded {} categories and {} products into {}", n.0, n.1, dir.display());
+        return Ok(());
+    }
+
+    let hub_state = match &cli.hub_dir {
+        Some(dir) => {
+            let st = native_spa_server::hub::HubState::open(dir)?;
+            eprintln!("[hub] store at {}", dir.display());
+            Some(st)
+        }
+        None => None,
+    };
+    let router = build_router(&root, api, webhook_state, hub_state);
     let addr = format!("{}:{}", cli.bind, cli.port);
 
     match (cli.tls_cert, cli.tls_key) {

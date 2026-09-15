@@ -664,12 +664,22 @@ fn now_epoch() -> u64 {
 /// Build the API sub-router (auth + handlers). Merged into the static router by
 /// `build_router` (W37-2). The body-limit + concurrency layers are scoped to this
 /// sub-router ONLY so static serving is byte-unchanged.
-pub fn build_api_router(state: Arc<ApiState>) -> Router {
-    Router::new()
-        .route(ROUTE_ORDER_PLACE, post(place_order_handler))
-        .route(ROUTE_ORDER_READ, get(read_order_handler))
-        .route(ROUTE_ORDER_ADVANCE, post(advance_order_handler))
-        .route(ROUTE_AGENT, post(agent_handler))
+/// `include_orders` is false when a HUB is mounted.
+///
+/// These handlers keep order state in an in-process `Mutex<HashMap>` that dies
+/// with the process, and the hub keeps it in a durable bebop log. Serving both
+/// would be two authorities over the same data, with the worse one reachable --
+/// so when the hub is present these do not exist. When it is absent they remain,
+/// which is what the existing integration tests exercise.
+pub fn build_api_router(state: Arc<ApiState>, include_orders: bool) -> Router {
+    let mut r = Router::new();
+    if include_orders {
+        r = r
+            .route(ROUTE_ORDER_PLACE, post(place_order_handler))
+            .route(ROUTE_ORDER_READ, get(read_order_handler))
+            .route(ROUTE_ORDER_ADVANCE, post(advance_order_handler));
+    }
+    r.route(ROUTE_AGENT, post(agent_handler))
         .route(ROUTE_HEALTH, get(healthz_handler))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
