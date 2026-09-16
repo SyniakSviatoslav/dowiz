@@ -1888,6 +1888,54 @@ fn graph_facts(
 }
 
 
+
+/// `GET /api/owner/backup` — the venue's own copy of everything.
+///
+/// A DOWNLOAD, NOT A DASHBOARD. The point is that the file leaves this platform
+/// and lands where the venue keeps things. Cloudflare's thirty-day time travel
+/// is a fine safety net and is not theirs.
+pub async fn backup(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
+    let (_, _loc, bundle) =
+        match crate::owner::owner_beside(&req, &ctx, &db, crate::hubstore::export(&place)).await {
+            Ok(v) => v,
+            Err(r) => return Ok(r),
+        };
+    let mut res = Response::from_json(&bundle)?;
+    let stamp = Date::now().as_millis();
+    let h = res.headers_mut();
+    h.set("content-disposition", &format!("attachment; filename=\"dowiz-backup-{stamp}.json\""))?;
+    // A backup holds every order this venue has ever taken. Nothing between
+    // here and the owner's disk may keep a copy.
+    h.set("cache-control", "private, no-store")?;
+    Ok(res)
+}
+
+/// `POST /api/owner/restore` — put one back, into an EMPTY venue only.
+///
+/// See `hubstore::import` for why the refusal is the feature: a restore that
+/// overwrites a live hub is a one-click way to erase a venue's history, and it
+/// would be reachable by anything that could reach an owner's token.
+pub async fn restore(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let bundle: Value = match req.json().await {
+        Ok(v) => v,
+        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
+    };
+    let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
+    // Authority first and alone: this one writes, so nothing starts beside it.
+    if let Err(r) = crate::owner::owner_and_venue(&req, &ctx, &db).await {
+        return Ok(r);
+    }
+    match crate::hubstore::import(&place, &bundle).await {
+        Ok(written) => Response::from_json(&json!({ "restored": written })),
+        // The refusals here are all the caller's to fix -- a damaged file, a
+        // venue that is not empty -- so they are 409, with the reason said.
+        Err(e) => Response::error(format!("{e}"), 409),
+    }
+}
+
 /// `GET /api/owner/graph?q=` — what the hub knows, directly.
 ///
 /// THE SAME RETRIEVAL THE ASSISTANT USES, exposed on its own. An answer a model

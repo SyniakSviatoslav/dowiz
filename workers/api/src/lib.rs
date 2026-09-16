@@ -185,6 +185,8 @@ async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/owner/posts/:id/approve", extra::approve_post)
         .post_async("/api/owner/posts/:id/reject", extra::reject_post)
         .get_async("/api/owner/graph", extra::graph)
+        .get_async("/api/owner/backup", extra::backup)
+        .post_async("/api/owner/restore", extra::restore)
         .post_async("/api/owner/assist", extra::owner_assist)
         .post_async("/api/courier/assist", extra::courier_assist)
         .get_async("/api/owner/apikeys", extra::list_api_keys)

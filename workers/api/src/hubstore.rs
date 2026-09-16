@@ -969,3 +969,106 @@ mod tests {
         assert!(SLICE * SLICES >= CHUNK, "{SLICE} x {SLICES} must cover {CHUNK}");
     }
 }
+
+/// Every image this venue has, for the venue to keep.
+///
+/// P68'S SOVEREIGN BACKUP, STARTED. `settings.rs` says the honest thing about
+/// secrets at rest: what protects them is file mode on hardware the venue owns,
+/// and real protection needs a key that lives somewhere else. The same is true
+/// of the data itself. Today the only thing standing between Dubin & Sushi and
+/// losing their entire history is Cloudflare's own thirty-day time travel —
+/// which is a fine safety net and is not THEIRS. This is the copy they hold.
+///
+/// SELF-DESCRIBING AND SELF-CHECKING, because a backup nobody can verify is a
+/// backup nobody can trust. The manifest names each image, its length and its
+/// SHA-256, so a restore can refuse a corrupted file instead of feeding a
+/// truncated arena to the kernel.
+pub const IMAGES: &[&str] =
+    &[IMAGE_LOG, IMAGE_CATALOG, IMAGE_SETTINGS, IMAGE_POSTS, IMAGE_STOCK];
+
+pub async fn export(place: &Place) -> Result<serde_json::Value> {
+    use sha2::{Digest, Sha256};
+    let got = load_images(place, IMAGES).await?;
+    let mut images = serde_json::Map::new();
+    for id in IMAGES {
+        let Some((bytes, generation)) = got.get(*id) else { continue };
+        let digest: String =
+            Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect();
+        images.insert(
+            (*id).to_string(),
+            serde_json::json!({
+                "generation": generation,
+                "bytes": bytes.len(),
+                "sha256": digest,
+                // Base64 rather than hex: a backup is downloaded whole, so the
+                // wire cost is paid once and a third smaller matters, unlike on
+                // the read path where the crossing was the cost.
+                "image": base64::Engine::encode(
+                    &base64::engine::general_purpose::STANDARD, bytes),
+            }),
+        );
+    }
+    Ok(serde_json::json!({
+        "format": "dowiz-hub-backup/1",
+        "venue": place.venue,
+        "taken_at_ms": Date::now().as_millis() as i64,
+        "images": images,
+    }))
+}
+
+/// Put a backup back — ONLY INTO A VENUE THAT HAS NONE.
+///
+/// THE REFUSAL IS THE FEATURE. A restore that overwrites a live hub is a
+/// one-click way to erase a venue's entire history, and it would be reachable
+/// by anything that could reach an owner's token. So this writes only where
+/// generation is zero: disaster recovery into a fresh object, never a rollback
+/// over something that exists. An operator who genuinely wants to roll back
+/// deletes the object first, deliberately, which is a different act.
+///
+/// EVERY IMAGE IS CHECKED BEFORE ANY IMAGE IS WRITTEN. A bundle whose third
+/// image is corrupt must not leave the first two in place and the rest missing.
+pub async fn import(place: &Place, bundle: &serde_json::Value) -> Result<Vec<String>> {
+    use sha2::{Digest, Sha256};
+    if bundle.get("format").and_then(|v| v.as_str()) != Some("dowiz-hub-backup/1") {
+        return Err(Error::RustError("not a dowiz hub backup".into()));
+    }
+    let Some(images) = bundle.get("images").and_then(|v| v.as_object()) else {
+        return Err(Error::RustError("backup has no images".into()));
+    };
+
+    let mut staged: Vec<(String, Vec<u8>)> = Vec::new();
+    for (id, entry) in images {
+        if !IMAGES.contains(&id.as_str()) {
+            return Err(Error::RustError(format!("backup names an unknown image: {id}")));
+        }
+        let Some(b64) = entry.get("image").and_then(|v| v.as_str()) else {
+            return Err(Error::RustError(format!("image {id} has no bytes")));
+        };
+        let bytes = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, b64)
+            .map_err(|e| Error::RustError(format!("image {id} is not base64: {e}")))?;
+        let want = entry.get("sha256").and_then(|v| v.as_str()).unwrap_or("");
+        let got: String = Sha256::digest(&bytes).iter().map(|b| format!("{b:02x}")).collect();
+        if got != want {
+            return Err(Error::RustError(format!(
+                "image {id} does not match its digest; the backup is damaged"
+            )));
+        }
+        staged.push((id.clone(), bytes));
+    }
+
+    // Now, and only now, that every image has been read and checked.
+    let mut written = Vec::new();
+    for (id, bytes) in staged {
+        let existing = load_images(place, &[id.as_str()]).await?;
+        if existing.get(&id).map(|(_, g)| *g).unwrap_or(0) != 0 {
+            return Err(Error::RustError(format!(
+                "{id} already exists in this venue; a restore never overwrites"
+            )));
+        }
+        if !save_image(place, &id, bytes, 0).await? {
+            return Err(Error::RustError(format!("{id} was written by someone else mid-restore")));
+        }
+        written.push(id);
+    }
+    Ok(written)
+}
