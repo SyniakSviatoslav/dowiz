@@ -143,6 +143,7 @@ dependencies = [
  "base64",
  "dowiz-hub",
  "dowiz-kernel",
+ "futures-util",
  "getrandom",
  "hmac",
  "password-hash",

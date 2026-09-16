@@ -12,6 +12,12 @@ crate-type = ["cdylib"]
 # workers-rs — the Cloudflare Workers runtime binding. This replaces the axum
 # native-spa-server for PRODUCTION: axum/tokio/rustls cannot run on Workers.
 worker = { version = "0.8", features = ["d1"] }
+# Two D1 round trips that do not depend on each other, overlapped. NO NEW SUPPLY
+# CHAIN: futures-util is already in the lock file as a transitive dependency of
+# `worker` at this exact version, so declaring it direct adds no code to the
+# build -- it only makes `join` nameable from here.
+futures-util = { version = "0.3", default-features = false }
+
 worker-macros = "0.8"
 # The kernel: the SOLE order/FSM/money authority. `json-api` is the string
 # boundary WITHOUT wasm-bindgen, so the Worker links the same JSON authority the

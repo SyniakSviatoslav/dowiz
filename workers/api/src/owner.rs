@@ -126,6 +126,56 @@ pub(crate) async fn owner_and_venue(
     }
 }
 
+/// The owner, the venue AND the hub — with the two round trips OVERLAPPED.
+///
+/// `owner_and_venue` asks D1 who the caller is; `load_both` asks D1 for the
+/// images. NEITHER NEEDS THE OTHER'S ANSWER — the hub image holds exactly one
+/// venue and is fetched by a fixed id, not by anything the membership row says.
+/// Run one after the other, as every handler did, and an owner request pays two
+/// full round trips to a database that is roughly 150 ms away from this Worker.
+/// Run them together and it pays the slower of the two.
+///
+/// THE TOKEN IS STILL CHECKED FIRST, and deliberately. `auth::verify` is pure
+/// HMAC with no I/O, so it costs nothing to run before the join — and running
+/// it first means a request with a forged or expired token never reaches D1 at
+/// all. Starting the image load beside an unverified caller would hand anyone
+/// on the internet a way to make this Worker do a megabyte of work per request.
+///
+/// Authority is unchanged: the membership is still re-derived from the database
+/// on every request, so an owner removed a moment ago is refused even holding a
+/// valid token. Nothing loaded here is disclosed before that check returns.
+/// Takes the WORK rather than doing a fixed piece of it, because the handlers
+/// do not agree on what they need: some want both images, some the catalogue
+/// alone, some the order log, and the stock pane wants the catalogue and the
+/// ledger. A helper per combination would be four helpers that each have to be
+/// kept in step with this reasoning; a helper that takes a future is one.
+pub(crate) async fn owner_beside<F, T>(
+    req: &Request,
+    ctx: &RouteContext<()>,
+    db: &D1Database,
+    work: F,
+) -> std::result::Result<(String, String, T), Response>
+where
+    F: std::future::Future<Output = Result<T>>,
+{
+    // Pure, no I/O. A bad token stops here, before either query is issued.
+    let bearer = auth::bearer(req).map_err(|e| e.into_response().unwrap())?;
+    match auth::verify(&ctx.env, &bearer, now_ms()) {
+        Ok(auth::Claims::Owner { .. }) => {}
+        Ok(_) => return Err(Response::error("forbidden role", 403).unwrap()),
+        Err(e) => return Err(e.into_response().unwrap()),
+    }
+
+    let (who, done) = futures_util::future::join(owner_and_venue(req, ctx, db), work).await;
+
+    // AUTHORISATION IS RESOLVED BEFORE THE WORK IS HANDED BACK, so a caller who
+    // fails it gets their 401 or 404 and nothing else -- that the bytes were
+    // already in memory is invisible to them.
+    let (user_id, location_id) = who?;
+    let out = done.map_err(|e| Response::error(format!("hub unavailable: {e}"), 503).unwrap())?;
+    Ok((user_id, location_id, out))
+}
+
 pub(crate) async fn venue_of(req: &Request, db: &D1Database) -> Option<String> {
     if let Some(l) = location_of(req) {
         return Some(l);
@@ -161,19 +211,21 @@ pub(crate) fn location_of(req: &Request) -> Option<String> {
 /// `GET /api/owner/orders?location_id=&status=`
 pub async fn orders(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
-        Ok((_, l)) => l,
-        Err(r) => return Ok(r),
-    };
+    // The membership query and the image read do not depend on each other, so
+    // `owner_beside` runs them together. The token is still verified before
+    // either is issued -- see it for why that order matters.
+    let (_, loc, loaded) =
+        match owner_beside(&req, &ctx, &db, crate::hubstore::load(&db)).await {
+            Ok(v) => v,
+            Err(r) => return Ok(r),
+        };
 
     let status = req
         .url()
         .ok()
         .and_then(|u| u.query_pairs().find(|(k, _)| k == "status").map(|(_, v)| v.to_string()));
-
     // The hub log is the source. Reading it folds every order to its newest
     // state, so the queue cannot show a status the events do not support.
-    let loaded = crate::hubstore::load(&db).await?;
     let out: Vec<Value> = loaded
         .hub
         .orders()
@@ -333,10 +385,14 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
 /// that can drift.
 pub async fn dashboard(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
-        Ok((_, l)) => l,
-        Err(r) => return Ok(r),
-    };
+    // The membership query and the image read do not depend on each other, so
+    // `owner_beside` runs them together. The token is still verified before
+    // either is issued -- see it for why that order matters.
+    let (_, loc, (loaded, loaded_cat)) =
+        match owner_beside(&req, &ctx, &db, crate::hubstore::load_both(&db)).await {
+            Ok(v) => v,
+            Err(r) => return Ok(r),
+        };
 
     // "Today" starts at local midnight for the venue. Without the timezone this
     // would silently mean UTC, and an owner in Durrës would see the day roll over
@@ -348,7 +404,6 @@ pub async fn dashboard(req: Request, ctx: RouteContext<()>) -> Result<Response> 
     // Both images in one round trip: the fold needs the orders, the readiness
     // count needs the catalogue, and asking twice is the cost this route used
     // to be made of.
-    let (loaded, loaded_cat) = crate::hubstore::load_both(&db).await?;
     let (mut count, mut revenue, mut pending, mut active) = (0i64, 0i64, 0i64, 0i64);
     for e in loaded.hub.orders() {
         let Ok(v) = serde_json::from_str::<Value>(&e.order_json) else { continue };

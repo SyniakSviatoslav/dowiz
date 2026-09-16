@@ -325,12 +325,14 @@ struct PromoIn {
 /// `GET /api/owner/promotions?location_id=`
 pub async fn promotions(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
-        Ok((_, l)) => l,
-        Err(r) => return Ok(r),
-    };
-    // ONE ROUND TRIP for both images: see `load_both`.
-    let (loaded, cat) = crate::hubstore::load_both(&db).await?;
+    // The membership query and the image read do not depend on each other;
+    // `owner_with_hub` runs them together. See it for why the token is still
+    // verified before either is issued.
+    let (_, loc, (loaded, cat)) =
+        match crate::owner::owner_beside(&req, &ctx, &db, crate::hubstore::load_both(&db)).await {
+            Ok(v) => v,
+            Err(r) => return Ok(r),
+        };
     let cat = cat.catalog;
     let now = now_ms();
     let mut rows: Vec<Value> = cat
@@ -449,11 +451,14 @@ pub async fn delete_promotion(req: Request, ctx: RouteContext<()>) -> Result<Res
 /// the bot until an order has sat unanswered for forty minutes.
 pub async fn activation(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
-        Ok((_, l)) => l,
-        Err(r) => return Ok(r),
-    };
-    let loaded = crate::hubstore::load_catalog(&db).await?;
+    // The membership query and this read do not depend on each other, so
+    // `owner_beside` runs them together. The token is still verified before
+    // either is issued -- see it for why that order matters.
+    let (_, loc, loaded) =
+        match crate::owner::owner_beside(&req, &ctx, &db, crate::hubstore::load_catalog(&db)).await {
+            Ok(v) => v,
+            Err(r) => return Ok(r),
+        };
     let raw: Value = loaded
         .catalog
         .location()
@@ -527,12 +532,15 @@ struct PresetIn {
 /// pairs exist -- and a pair not on this list is not one the storefront renders.
 pub async fn branding(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
-        Ok((_, l)) => l,
-        Err(r) => return Ok(r),
-    };
     use dowiz_hub::brand::{Brand, PRESETS, RADIUS_MAX, TYPE_PAIRS};
-    let loaded = crate::hubstore::load_catalog(&db).await?;
+    // The membership query and this read do not depend on each other, so
+    // `owner_beside` runs them together. The token is still verified before
+    // either is issued -- see it for why that order matters.
+    let (_, loc, loaded) =
+        match crate::owner::owner_beside(&req, &ctx, &db, crate::hubstore::load_catalog(&db)).await {
+            Ok(v) => v,
+            Err(r) => return Ok(r),
+        };
     let stored = loaded
         .catalog
         .location()
@@ -719,16 +727,20 @@ fn signing_secret(env: &Env) -> Vec<u8> {
 /// `GET /api/owner/customers?location_id=&sort=spent|orders`
 pub async fn customers(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
-        Ok((_, l)) => l,
-        Err(r) => return Ok(r),
-    };
+    // The membership query and the image read do not depend on each other, so
+    // `owner_beside` runs them together. Measured against this very handler
+    // before it was converted: 293 ms of server time against the dashboard's
+    // 235 for the same 655 KB, on the same deployment at the same minute.
+    let (_, loc, (loaded, loaded_cat)) =
+        match crate::owner::owner_beside(&req, &ctx, &db, crate::hubstore::load_both(&db)).await {
+            Ok(v) => v,
+            Err(r) => return Ok(r),
+        };
     let sort = req
         .url()
         .ok()
         .and_then(|u| u.query_pairs().find(|(k, _)| k == "sort").map(|(_, v)| v.to_string()));
     let secret = signing_secret(&ctx.env);
-    let (loaded, loaded_cat) = crate::hubstore::load_both(&db).await?;
 
     let mut rows: Vec<(String, String, String, i64, i64, i64)> = Vec::new();
     for o in orders_of(&loaded, &loc) {
@@ -851,11 +863,14 @@ pub async fn reveal_customer(mut req: Request, ctx: RouteContext<()>) -> Result<
 /// `GET /api/owner/customers/reveals?location_id=` — who has been looking.
 pub async fn reveals(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
-        Ok((_, l)) => l,
-        Err(r) => return Ok(r),
-    };
-    let loaded = crate::hubstore::load(&db).await?;
+    // The membership query and this read do not depend on each other, so
+    // `owner_beside` runs them together. The token is still verified before
+    // either is issued -- see it for why that order matters.
+    let (_, loc, loaded) =
+        match crate::owner::owner_beside(&req, &ctx, &db, crate::hubstore::load(&db)).await {
+            Ok(v) => v,
+            Err(r) => return Ok(r),
+        };
     let out: Vec<Value> = loaded
         .hub
         .reveals()
@@ -1758,11 +1773,14 @@ pub async fn owner_assist(mut req: Request, ctx: RouteContext<()>) -> Result<Res
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
-        Ok((_, l)) => l,
-        Err(r) => return Ok(r),
-    };
-    let loaded = crate::hubstore::load(&db).await?;
+    // The membership query and this read do not depend on each other, so
+    // `owner_beside` runs them together. The token is still verified before
+    // either is issued -- see it for why that order matters.
+    let (_, loc, loaded) =
+        match crate::owner::owner_beside(&req, &ctx, &db, crate::hubstore::load(&db)).await {
+            Ok(v) => v,
+            Err(r) => return Ok(r),
+        };
     let now = now_ms();
     // THE FACTS ARE COMPUTED HERE and handed over. The model is told plainly
     // that they are the truth and it is not; a model that invented a number
@@ -2123,12 +2141,28 @@ pub async fn media(_req: Request, ctx: RouteContext<()>) -> Result<Response> {
 /// `GET /api/owner/stock` — what is on the shelf, and what is running out.
 pub async fn stock(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
-        Ok((_, l)) => l,
+    // The membership query and this read do not depend on each other, so
+    // `owner_beside` runs them together. The token is still verified before
+    // either is issued -- see it for why that order matters.
+    // Two images, and they do not depend on each other either.
+    let (_, loc, (cat, log)) = match crate::owner::owner_beside(
+        &req,
+        &ctx,
+        &db,
+        async {
+            let (c, s) = futures_util::future::join(
+                crate::hubstore::load_catalog(&db),
+                crate::hubstore::load_stock(&db),
+            )
+            .await;
+            Ok((c?.catalog, s?.stock))
+        },
+    )
+    .await
+    {
+        Ok(v) => v,
         Err(r) => return Ok(r),
     };
-    let cat = crate::hubstore::load_catalog(&db).await?.catalog;
-    let log = crate::hubstore::load_stock(&db).await?.stock;
     let led = match log.ledger() {
         Ok(l) => l,
         Err(e) => return Response::error(e.to_string(), 500),

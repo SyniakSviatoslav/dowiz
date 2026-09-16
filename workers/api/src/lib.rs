@@ -84,7 +84,7 @@ pub async fn main(req: Request, env: Env, ctx: Context) -> Result<Response> {
     trace.attr(0, "http.request.method", serde_json::json!(method));
     trace.attr(0, "url.path", serde_json::json!(path));
 
-    let out = route(req, env.clone()).await;
+    let out = route(req, env.clone()).await.map(harden);
     let status = match &out {
         Ok(r) => r.status_code(),
         Err(_) => 500,
@@ -94,6 +94,39 @@ pub async fn main(req: Request, env: Env, ctx: Context) -> Result<Response> {
     }
     ctx.wait_until(async move { trace.export(&env, status).await });
     out
+}
+
+/// The headers every API response carries, set in ONE place.
+///
+/// Per-handler headers were never going to hold: there are 223 places in this
+/// crate that build an error response, and a policy that has to be remembered
+/// 223 times is a policy with holes in it. The static surfaces get theirs from
+/// `public/_headers`, because `[assets]` answers those without ever calling
+/// this function.
+///
+/// A header already set by the handler WINS. `/media` sets a year of immutable
+/// caching and `/api/order/:id` sets `no-store`; overwriting either from here
+/// would be this function quietly undoing a decision made where the content was
+/// actually known.
+fn harden(mut res: Response) -> Response {
+    let h = res.headers_mut();
+    for (k, v) in [
+        ("strict-transport-security", "max-age=31536000; includeSubDomains"),
+        ("x-content-type-options", "nosniff"),
+        ("referrer-policy", "strict-origin-when-cross-origin"),
+        // An API response is JSON, never a document. No script can run from it,
+        // so the policy only has to say that nothing may be loaded at all.
+        ("content-security-policy", "default-src 'none'; frame-ancestors 'none'"),
+        // Every API answer is specific to who asked. A shared cache holding one
+        // would hand an owner's dashboard to the next person through the same
+        // proxy; handlers that know better set their own and keep it.
+        ("cache-control", "private, no-store"),
+    ] {
+        if h.get(k).ok().flatten().is_none() {
+            let _ = h.set(k, v);
+        }
+    }
+    res
 }
 
 async fn route(req: Request, env: Env) -> Result<Response> {

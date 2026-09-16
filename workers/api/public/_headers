@@ -1,0 +1,52 @@
+# Response headers for the STATIC surfaces, applied by the edge.
+#
+# WHY A FILE AND NOT THE WORKER. `[assets]` serves any path that exists on disk
+# WITHOUT invoking the fetch handler, so a header set in `main()` never reaches
+# the storefront's HTML — the one document where a content policy actually
+# matters. The Worker sets its own on API responses; this covers everything the
+# edge answers by itself.
+#
+# THE POLICY IS STRICT BECAUSE THE APP EARNED IT. There is not one inline
+# `<script>` and not one `style=` attribute in the tree, so neither
+# 'unsafe-inline' nor 'unsafe-eval' is needed. The 191 `element.style.x = y`
+# writes in the JavaScript are CSSOM, which a content policy does not govern —
+# only inline stylesheets and style attributes do, and there are none.
+
+/*
+  # Confidentiality of the transport is already post-quantum: the live endpoint
+  # negotiates X25519MLKEM768. This is what stops the FIRST request from going
+  # over plaintext and being downgraded before that handshake can happen.
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  # No `preload`. Preload is a submission to a browser-shipped list and is
+  # effectively irreversible; it is a decision for the venue's own domain, not
+  # something to switch on for them from here.
+
+  # An order confirmation carries a name, a phone and an address. Sending the
+  # full URL of the page to a map tile server would put the order id in someone
+  # else's logs.
+  Referrer-Policy: strict-origin-when-cross-origin
+
+  # Stops a browser from deciding that an uploaded dish photograph is really a
+  # script because its first bytes look like one.
+  X-Content-Type-Options: nosniff
+
+  # The storefront is never a frame. `frame-ancestors` below is the real
+  # control; this is for the browsers that still only understand the old one.
+  X-Frame-Options: DENY
+
+  # Nothing here needs a camera, a microphone or a payment handler. The AR view
+  # is WebXR over the device's own session, and geolocation is asked for by the
+  # courier surface only — which is why it is the one permission left on.
+  Permissions-Policy: camera=(self), microphone=(), payment=(), geolocation=(self), usb=(), magnetometer=(), interest-cohort=()
+
+  # script-src: self, plus Stripe, which cannot be self-hosted — its script is
+  #   versioned by Stripe and pinning a copy is how a payment integration ends
+  #   up running last year's fraud checks.
+  # img-src: `data:` for the inline SVG masks in icons.css, `blob:` for a photo
+  #   the owner has chosen but not yet uploaded.
+  # worker-src `blob:`: MapLibre builds its tile workers from blob URLs. Without
+  #   it the map renders nothing and says nothing about why.
+  # connect-src: the API is same-origin; the tile server is not.
+  # base-uri 'none': a `<base>` injected into the page would silently re-point
+  #   every relative fetch, including the API ones.
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self'; img-src 'self' data: blob: https://tiles.openfreemap.org; font-src 'self'; connect-src 'self' https://tiles.openfreemap.org https://api.stripe.com; worker-src 'self' blob:; frame-src https://js.stripe.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; upgrade-insecure-requests
