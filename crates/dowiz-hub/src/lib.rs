@@ -163,6 +163,19 @@ pub struct Usage {
     /// The largest this image may ever grow to — the point at which a write is
     /// refused. This is the denominator.
     pub ceiling_cells: i64,
+    /// Does this image DOUBLE itself rather than refuse a write?
+    ///
+    /// THE TWO KINDS REFUSE DIFFERENTLY AND ONLY ONE OF THEM REFUSES AT ALL.
+    /// The append logs (`Hub`, `StockLog`) copy their chain into an image twice
+    /// the size when one fills, so "how full" is a sawtooth that predicts a
+    /// doubling, not a failure — measured: a stock log went from 7168 cells to
+    /// 523264 over four thousand events without once refusing. The compacted KV
+    /// images do NOT grow past `DEFAULT_*_BYTES`; when they fill, the write is
+    /// refused for real.
+    ///
+    /// A verdict built from all five treats an imminent doubling as an
+    /// emergency and says "compact" about an image that cannot be compacted.
+    pub grows: bool,
     pub generation: i64,
 }
 
@@ -183,6 +196,10 @@ pub(crate) fn ceiling_cells(bytes: usize) -> i64 {
 }
 
 pub(crate) fn usage_of(store: &Store, ceiling_cells: i64) -> Usage {
+    usage_of_kind(store, ceiling_cells, false)
+}
+
+pub(crate) fn usage_of_kind(store: &Store, ceiling_cells: i64, grows: bool) -> Usage {
     match store.pick() {
         Some(sb) => Usage {
             // `arena_used` is an absolute cell index; the arena starts at 1024,
@@ -190,12 +207,14 @@ pub(crate) fn usage_of(store: &Store, ceiling_cells: i64) -> Usage {
             used_cells: (sb.arena_used - bebop_store::ARENA as i64).max(0),
             capacity_cells: store.capacity_cells(),
             ceiling_cells,
+            grows,
             generation: sb.generation,
         },
         None => Usage {
             used_cells: 0,
             capacity_cells: 0,
             ceiling_cells,
+            grows,
             generation: 0,
         },
     }
@@ -264,11 +283,16 @@ impl Hub {
         self.store.to_bytes()
     }
 
-    /// What this image has spent. See `Usage`. The log is created at a fixed
-    /// size and `to_bytes` preserves it, so its ceiling IS its capacity.
+    /// What this image has spent. See `Usage`.
+    ///
+    /// THE LOG GROWS RATHER THAN REFUSING, so its reading is a sawtooth that
+    /// predicts a doubling and not a failure. An earlier version of this called
+    /// the log fixed-size because `to_bytes` preserves its capacity — which is
+    /// true of a SAVE and says nothing about an APPEND, and `append` doubles
+    /// the image when the arena is full.
     pub fn usage(&self) -> Usage {
         let cap = self.store.capacity_cells();
-        usage_of(&self.store, cap)
+        usage_of_kind(&self.store, cap, true)
     }
 
     pub fn len(&self) -> usize {
@@ -322,15 +346,36 @@ impl Hub {
         // It costs one O(n) copy per doubling, which is a handful of
         // milliseconds a few times in a hub's life, and it happens under the
         // same write lock that serialises every other append.
+        // ── THE RECORD AND THE TIP FILL THE ARENA SEPARATELY ──
+        //
+        // MEASURED: the order log refused order 2450 with FIFTY-SIX CELLS still
+        // free. The record fitted; the tip update that follows it did not, and
+        // only the record's failure was handled -- so a hub with room to grow
+        // answered `arena_full` and a venue stopped taking orders mid-service.
+        // `stock.rs` had already found this exact shape and says so in its own
+        // header ("on a nearly full arena the RECORD still fits while the tip
+        // update does not"); the fix was made there and never brought here.
+        //
+        // GROWING AFTER THE RECORD IS IN IS SAFE AND RE-APPENDING IS NOT.
+        // `grow` copies the object chain verbatim and re-points the tip at its
+        // last record -- which IS this one -- so a tip that failed needs only
+        // the copy. Re-appending the record instead would count it twice, which
+        // is how the stock ledger once recorded 3002 deliveries for 3000 made.
         match EvLog::append_bytes(&mut self.store, &rec) {
             Ok(gen) => {
-                EvLog::set_tip_bytes(&mut self.store, &id)?;
+                if EvLog::set_tip_bytes(&mut self.store, &id).is_err() {
+                    self.grow()?;
+                    EvLog::set_tip_bytes(&mut self.store, &id)?;
+                }
                 Ok(gen)
             }
             Err(e) if e_is_full(&e) => {
                 self.grow()?;
                 let gen = EvLog::append_bytes(&mut self.store, &rec)?;
-                EvLog::set_tip_bytes(&mut self.store, &id)?;
+                if EvLog::set_tip_bytes(&mut self.store, &id).is_err() {
+                    self.grow()?;
+                    EvLog::set_tip_bytes(&mut self.store, &id)?;
+                }
                 Ok(gen)
             }
             Err(e) => Err(e.into()),
@@ -689,23 +734,51 @@ mod usage_tests {
         );
     }
 
-    /// A store too small to take another event must READ as nearly full before
-    /// it refuses, or the gauge is useless for the one thing it is for.
+    /// AN APPEND LOG DOES NOT REFUSE, SO THE GAUGE CANNOT WARN OF A REFUSAL.
+    ///
+    /// This test used to assert that a 16 KiB hub filled and that the reading
+    /// just before the refusal was above 800 per mille. It passed for the wrong
+    /// reason: the hub DID refuse, but only because `append` grew the image for
+    /// a full record and not for the tip update that follows it -- fifty-six
+    /// cells free and an order turned away. With that fixed the log grows
+    /// instead, so what this must assert is the opposite: the reading moves,
+    /// and filling is not a failure.
     #[test]
-    fn the_gauge_warns_before_the_arena_refuses() {
+    fn an_append_log_doubles_instead_of_refusing() {
         let mut hub = Hub::create_sized(16 * 1024).expect("hub");
-        let mut refused_at = None;
+        let first = hub.usage();
+        assert!(first.grows, "the order log grows; the gauge must say so");
+        let mut doubled = false;
         for i in 0..2000 {
-            let before = hub.usage().used_per_mille();
-            if hub
-                .append(EventKind::Placed, &format!("o{i}"), "{}", i as u64, [0u8; 32])
-                .is_err()
-            {
-                refused_at = Some(before);
-                break;
+            hub.append(EventKind::Placed, &format!("o{i}"), "{}", i as u64, [0u8; 32])
+                .unwrap_or_else(|e| panic!("the log refused order {i} rather than growing: {e:?}"));
+            if hub.usage().capacity_cells > first.capacity_cells {
+                doubled = true;
             }
         }
-        let at = refused_at.expect("a 16 KiB arena must fill");
-        assert!(at > 800, "the reading just before the refusal was only {at} per mille");
+        assert!(doubled, "2000 orders did not outgrow a 16 KiB image: {:?}", hub.usage());
+        assert_eq!(hub.len(), 2000, "growing lost records");
+    }
+
+    /// A COMPACTED IMAGE DOES refuse, and there the warning is the whole point.
+    #[test]
+    fn a_compacted_image_still_warns_before_it_refuses() {
+        let mut last = 0;
+        for n in 1.. {
+            let mut s = settings::Settings::create().expect("settings");
+            for i in 0..n * 100 {
+                s.set(&format!("k{i}"), &"x".repeat(60));
+            }
+            match s.to_bytes() {
+                Ok(b) => {
+                    let u = settings::Settings::load(&b).expect("reload").usage();
+                    assert!(!u.grows, "a compacted image must not claim to grow");
+                    last = u.used_per_mille();
+                }
+                Err(_) => break,
+            }
+            assert!(n < 100, "settings must refuse eventually");
+        }
+        assert!(last > 700, "the last reading before the refusal was only {last}");
     }
 }

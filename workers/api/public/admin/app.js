@@ -601,7 +601,15 @@ const IMAGE_NAMES = {
 };
 const VERDICTS = { ok:'Все добре', watch:'Під наглядом', compact:'Потрібне втручання' };
 
-function gaugeClass(perMille){ return perMille >= 900 ? 'bad' : perMille >= 700 ? 'warn' : ''; }
+/// A GROWING IMAGE IS NEVER AMBER. `log` and `stock` double themselves when
+/// full, so a reading of 900 there means "a few milliseconds of copying soon",
+/// not "this venue is in trouble" -- and colouring it like the second sent an
+/// owner looking for a problem that did not exist. Only the images that can
+/// actually refuse a write get a warning colour.
+function gaugeClass(perMille, grows){
+  if (grows) return '';
+  return perMille >= 900 ? 'bad' : perMille >= 700 ? 'warn' : '';
+}
 
 function healthView(){
   if (S.healthPhase === 'loading' || S.healthPhase === undefined) return skeletonMenu();
@@ -618,19 +626,25 @@ function healthView(){
   // The order is worst first: the image about to refuse a write is the one
   // this screen exists for, and it must not be below the fold.
   const rows = Object.keys(imgs)
-    .sort((a, b) => (imgs[b].usedPerMille || 0) - (imgs[a].usedPerMille || 0))
+    .sort((a, b) => {
+      // The ones that can refuse a write first, then by how full. A growing
+      // image at 900 is not the thing to look at before a fixed one at 700.
+      const ga = imgs[a].grows ? 1 : 0, gb = imgs[b].grows ? 1 : 0;
+      return ga - gb || (imgs[b].usedPerMille || 0) - (imgs[a].usedPerMille || 0);
+    })
     .map(k => {
       const g = imgs[k];
       const [name, sub] = IMAGE_NAMES[k] || [k, ''];
       const pm = g.usedPerMille || 0;
-      const cls = gaugeClass(pm);
+      const cls = gaugeClass(pm, g.grows);
       return `
         <div class="erow img">
           <span class="grow">
             <div class="row"><b>${esc(name)}</b><span class="spacer"></span>
               <span class="chip ${cls === 'bad' ? 'warn' : ''}">${(pm / 10).toFixed(1)}%</span></div>
             <div class="gauge ${cls}"><span style="width:${Math.max(1, Math.min(100, pm / 10))}%"></span></div>
-            <small class="hint">${esc(sub)} · ${g.usedCells} з ${g.ceilingCells} комірок · покоління ${g.generation}</small>
+            <small class="hint">${esc(sub)} · ${g.usedCells} з ${g.ceilingCells} комірок · покоління ${g.generation}${
+              g.grows ? ' · росте сам' : ''}</small>
           </span>
         </div>`;
     }).join('');

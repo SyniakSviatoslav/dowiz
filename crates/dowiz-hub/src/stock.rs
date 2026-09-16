@@ -660,12 +660,15 @@ pub struct StockLog {
 pub const DEFAULT_STOCK_BYTES: usize = 8 * 1024 * 1024;
 
 impl StockLog {
-    /// What this image has spent. See [`crate::Usage`]. The stock log is an
-    /// append log created at a fixed size and `to_bytes` preserves it, so its
-    /// ceiling IS its capacity.
+    /// What this image has spent. See [`crate::Usage`].
+    ///
+    /// GROWS RATHER THAN REFUSING: `write` doubles the image and copies the
+    /// chain when the arena fills, retrying up to six times. Measured at 7168
+    /// cells growing to 523264 over four thousand events with no refusal, so
+    /// this reading predicts a doubling rather than a failure.
     pub fn usage(&self) -> crate::Usage {
         let cap = self.store.capacity_cells();
-        crate::usage_of(&self.store, cap)
+        crate::usage_of_kind(&self.store, cap, true)
     }
 
     pub fn create() -> Result<Self, crate::HubError> {

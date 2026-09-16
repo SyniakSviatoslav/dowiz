@@ -1936,6 +1936,9 @@ pub async fn health(req: Request, ctx: RouteContext<()>) -> Result<Response> {
             // Per mille rather than a fraction: the kernel keeps no floats and
             // a percentage with one decimal is what a gauge shows anyway.
             "usedPerMille": u.used_per_mille(),
+            // Does this image double itself instead of refusing? See
+            // `dowiz_hub::Usage`. A reading of 900 means opposite things.
+            "grows": u.grows,
         })
     }
 
@@ -1952,10 +1955,27 @@ pub async fn health(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         images.insert("stock".into(), gauge(st.stock.usage()));
     }
 
-    // The worst reading decides the verdict, because one full image refuses
-    // writes whatever the others say.
+    // THE VERDICT COMES ONLY FROM THE IMAGES THAT CAN ACTUALLY REFUSE.
+    //
+    // Measured: a stock log grew from 7168 cells to 523264 over four thousand
+    // events and never refused once, and the order log doubles the same way.
+    // For those, a reading near full predicts a DOUBLING -- a few milliseconds
+    // of copying -- and counting it as the venue's worst problem put
+    // `dubin-durres` on "watch" for a stock image in no danger at all, while
+    // the advice attached to it, "compact", is something an append log cannot
+    // do. The compacted KV images are the ones with a real ceiling, so they are
+    // the ones the verdict is about.
     let worst = images
         .values()
+        .filter(|v| v.get("grows").and_then(Value::as_bool) != Some(true))
+        .filter_map(|v| v.get("usedPerMille").and_then(Value::as_i64))
+        .max()
+        .unwrap_or(0);
+    // Still reported, because an image doubling every week is worth seeing even
+    // though it is not an emergency.
+    let worst_growing = images
+        .values()
+        .filter(|v| v.get("grows").and_then(Value::as_bool) == Some(true))
         .filter_map(|v| v.get("usedPerMille").and_then(Value::as_i64))
         .max()
         .unwrap_or(0);
@@ -1969,6 +1989,7 @@ pub async fn health(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         "venue": loc,
         "images": images,
         "worstUsedPerMille": worst,
+        "worstGrowingPerMille": worst_growing,
         "verdict": verdict,
         "orders": hub.hub.len(),
     }))
