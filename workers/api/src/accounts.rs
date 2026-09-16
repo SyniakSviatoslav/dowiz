@@ -347,10 +347,7 @@ pub async fn courier_login(mut req: Request, ctx: RouteContext<()>) -> Result<Re
     };
     // The session secret is argon2-hashed, which is why the refresh token has to
     // carry the row id as a prefix: a hash lookup is impossible by design.
-    let token_hash = match hash_password(&secret) {
-        Ok(h) => h,
-        Err(e) => return e.into_response(),
-    };
+    let token_hash = auth::hash_opaque(&secret);
     db.prepare(
         "INSERT INTO courier_sessions (id,courier_id,family_id,token_hash,active_location_id,\
          issued_at_ms,expires_at_ms) VALUES (?1,?2,?3,?4,?5,?6,?7)",
@@ -532,10 +529,7 @@ pub async fn courier_claim(mut req: Request, ctx: RouteContext<()>) -> Result<Re
         .run()
         .await?;
 
-    let token_hash = match hash_password(&secret) {
-        Ok(h) => h,
-        Err(e) => return e.into_response(),
-    };
+    let token_hash = auth::hash_opaque(&secret);
     db.prepare(
         "INSERT INTO courier_sessions (id,courier_id,family_id,token_hash,active_location_id,\
          issued_at_ms,expires_at_ms) VALUES (?1,?2,?3,?4,?5,?6,?7)",

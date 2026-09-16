@@ -236,6 +236,44 @@ pub fn verify_password(password: &str, stored: &str) -> bool {
 /// Spend the same work on a miss as on a hit, so "no such account" and "wrong
 /// password" are indistinguishable by timing. The old service did this with a
 /// dummy argon2 verify; the reason is the same.
+/// Hash a SECRET THIS SERVICE GENERATED, not a password a person chose.
+///
+/// ARGON2 IS FOR PASSWORDS, and the difference is not stylistic. Argon2 is
+/// deliberately expensive -- 19 MiB and two passes at the default -- because a
+/// human password has maybe thirty bits of entropy and the only defence is
+/// making each guess cost something. A session secret is 128 bits from the
+/// platform CSPRNG: there is no dictionary, no list, and no number of guesses
+/// that gets anywhere, so the expense buys nothing.
+///
+/// It cost something, though. A courier login ran TWO Argon2 operations -- one
+/// verifying their password, one hashing the new session secret -- and the pair
+/// exceeded the isolate's memory. Cloudflare answered 503 error 1102, "Worker
+/// exceeded resource limits", and no courier on that deployment could sign in.
+///
+/// SHA-256 over a 128-bit random value is not a weakening; it is the right
+/// primitive for the thing being hashed. The same reasoning already governs the
+/// invite codes.
+pub fn hash_opaque(secret: &str) -> String {
+    format!("sha256:{}", sha256_hex(secret))
+}
+
+/// Check one, accepting the argon2 hashes written before this existed.
+///
+/// A deployment mid-upgrade holds both kinds, and refusing the old ones would
+/// log out every live session to save a few milliseconds.
+pub fn verify_opaque(secret: &str, stored: &str) -> bool {
+    match stored.strip_prefix("sha256:") {
+        Some(want) => {
+            // Constant-time: a timing difference here would leak the prefix of
+            // a valid session id, one byte at a time.
+            let got = sha256_hex(secret);
+            got.len() == want.len()
+                && got.bytes().zip(want.bytes()).fold(0u8, |a, (x, y)| a | (x ^ y)) == 0
+        }
+        None => verify_password(secret, stored),
+    }
+}
+
 pub fn verify_password_constant_work(password: &str, stored: Option<&str>) -> bool {
     const DUMMY: &str = "$argon2id$v=19$m=19456,t=2,p=1$c29tZXNhbHR2YWx1ZQ$\
                          Yx3vJ8xQmN0oKZ7Xp1qLdT4hVn2sRwEbGcFuHiJkLmN";
@@ -384,7 +422,7 @@ async fn api_key_principal(
     if now_ms >= row.expires_at_ms {
         return Err(AuthError::Revoked("that key has expired"));
     }
-    if !verify_password(secret, &row.key_hash) {
+    if !verify_opaque(secret, &row.key_hash) {
         return Err(AuthError::Revoked("no such key"));
     }
     // Recorded, not enforced: an owner looking at a key they no longer recognise

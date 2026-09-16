@@ -1940,10 +1940,10 @@ pub async fn create_api_key(mut req: Request, ctx: RouteContext<()>) -> Result<R
         return Response::error("no platform CSPRNG", 500);
     };
     let secret = secret.replace('-', "");
-    let hash = match crate::auth::hash_password(&secret) {
-        Ok(h) => h,
-        Err(e) => return e.into_response(),
-    };
+    // Ours, not a person's: 122 bits from the platform CSPRNG. See
+    // `auth::hash_opaque` for why argon2 would be the wrong primitive here and
+    // what it cost when it was used for the session secrets.
+    let hash = crate::auth::hash_opaque(&secret);
     let now = now_ms();
     db.prepare(
         "INSERT INTO owner_api_keys (id,location_id,owner_id,label,key_hash,\
