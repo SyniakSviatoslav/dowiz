@@ -6,10 +6,24 @@
 <meta name="theme-color" content="#f5efe5" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#061b1a" media="(prefers-color-scheme: dark)">
 <title>dowiz · admin</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css" rel="stylesheet">
+<!-- NO WEB FONTS, AND THAT IS A DESIGN DECISION RATHER THAN A SAVING.
+     
+     These surfaces loaded two hundred kilobytes of render-blocking typeface
+     from Google before anything could paint, and every customer's IP reached
+     Google to do it -- on a service whose first invariant is local-first. The
+     Cyrillic the console is written in needed a further subset again.
+     
+     What is lost is small: at fourteen to thirty-three pixels, on a phone, the
+     difference between DM Sans and the system face is not what anyone notices.
+     What Swiss typography actually asks for is the grid, the measure, the one
+     ratio and the restraint -- Müller-Brockmann worked in Akzidenz-Grotesk
+     because it was the face that was already there. The system stack is ours.
+     
+     It also renders instantly with no swap: no flash of fallback text, no
+     layout shift when the real face arrives, nothing to wait for. -->
+
+<link rel="stylesheet" href="/lib/icons.css">
+<link rel="stylesheet" href="/lib/tokens.css">
 <style>
 /* ── dowiz owner console ───────────────────────────────────────────────────────
    Register: PRODUCT (PRODUCT.md). A tool scanned during a rush, not a brand
@@ -31,7 +45,7 @@
   /* T3 dowiz chrome -- light. Paper is the page GROUND, white the panel, ink
      the text; ink and paper swap roles in the dark theme (as on the courier),
      which is what keeps the two themes one design. */
-  --brand-bg:#f5efe5; --brand-surface:#ffffff; --brand-surface-raised:#f5efe5;
+  --brand-bg:#f5efe5; --brand-surface-raised:#f5efe5;
   --brand-text:#061b1a;
   /* The courier's muted, not DESIGN.md's #6B7280: that one measures 4.23:1 on
      paper and fails. This carries the ink's own hue: 7.26:1 on white, 6.34:1
@@ -54,7 +68,6 @@
   --focus-ring:#061b1a;
 
   /* IMMUTABLE across every preset and theme -- DESIGN.md §1. Never redefined below. */
-  --color-success:#059669; --color-warning:#D97706; --color-danger:#DC2626; --color-info:#2563EB;
   --st-PENDING:#D97706; --st-CONFIRMED:#2563EB; --st-PREPARING:#F59E0B;
   --st-READY:#0D9488; --st-IN_DELIVERY:#3B82F6; --st-DELIVERED:#059669;
   --st-REJECTED:#DC2626; --st-CANCELLED:#DC2626; --st-SCHEDULED:#7C3AED; --st-PICKED_UP:#0D9488;
@@ -68,6 +81,7 @@
   --danger-ink:var(--color-danger);    /* danger outline text */
   /* A pending row's ground: the immutable PENDING amber at 6% over the white
      panel. Muted 6.82:1, link 4.86:1, danger 4.54:1 on it. */
+  --row-attn:var(--brand-surface);
   --row-attn:color-mix(in srgb,var(--st-PENDING) 6%,var(--brand-surface));
   --chip-mix:14%;
   --toggle-off:#d9d2c5; --toggle-thumb:#ffffff;
@@ -78,28 +92,13 @@
   --spectral-a:#b5541c; --spectral-b:#f2c14e;
   --spectral:linear-gradient(90deg,transparent 0%,var(--spectral-a) 30%,var(--brand-primary) 50%,var(--spectral-b) 70%,transparent 100%);
 
-  --brand-font-body:'Inter',system-ui,-apple-system,sans-serif;
-  --font-mono:ui-monospace,'JetBrains Mono',SFMono-Regular,Menlo,monospace;
+  --brand-font-body:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
 
   /* Type scale = web/src/styles/tokens.css (11/12/14/16/20/24/36), in rem.
      14px base is the product register's density; nothing sets a raw size. */
-  --text-xs:.6875rem; --text-sm:.75rem; --text-base:.875rem; --text-lg:1rem;
-  --text-xl:1.25rem; --text-2xl:1.5rem; --text-3xl:2.25rem;
-  --weight-normal:400; --weight-medium:500; --weight-semibold:600; --weight-bold:700;
-  --leading-tight:1.25; --leading-normal:1.5;
-
+  --text-base:.875rem; --weight-normal:400;
   /* 4px grid. DESIGN.md §3: "Only these values. Never 6px, 10px, 14px, 18px." */
-  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px;
-  --space-6:24px; --space-8:32px; --space-12:48px; --space-16:64px;
-
-  --radius-sm:4px; --radius-md:8px; --radius-lg:12px; --radius-full:9999px;
-
-  --elevation-1:0 1px 3px rgba(0,0,0,.12);
-  --elevation-2:0 4px 12px rgba(0,0,0,.15);
-  --elevation-3:0 8px 24px rgba(0,0,0,.18);
-  --z-sticky:200; --z-backdrop:300; --z-modal:400; --z-toast:500;
-
-  --tap:44px;
+  --z-backdrop:300; --z-modal:400;
   --ease:cubic-bezier(.2,.8,.2,1);
 
   /* ── §8.1 T2 DOWIZ-FIXED ──
@@ -109,9 +108,7 @@
   /* The ζ vocabulary. Motion is never a raw cubic-bezier at a call site:
      SNAP ζ=1 for taps and toggles, TIDE ζ>1 for the Sea, which drifts and
      never settles. */
-  --ease-snap:cubic-bezier(.32,.72,0,1);
-  --ease-tide:cubic-bezier(.37,0,.63,1);
-}
+  }
 /* Dark mode: a red line in deliveryos-ui. Three states -- bare :root light,
    system dark unless the page was explicitly set light, explicit dark. Tokens
    ONLY. Not one component rule lives inside a theme block, which is what stops
@@ -123,8 +120,11 @@
     --brand-bg:#061b1a; --brand-surface:#0b2624; --brand-surface-raised:#12302d;
     --brand-text:#f5efe5; --brand-text-muted:#a9b8b5; --brand-border:#22403c;
     --focus-ring:#d69a3d; --primary-edge:#d69a3d;                                             /* 6.49:1 on #0b2624 */
+    --accent-ink:var(--color-info);
     --accent-ink:color-mix(in srgb,var(--color-info) 65%,#ffffff);   /* 5.78:1 on #0b2624 */
+    --danger-ink:var(--color-danger);
     --danger-ink:color-mix(in srgb,var(--color-danger) 60%,#ffffff); /* 5.87:1 on #0b2624 */
+    --row-attn:var(--brand-surface);
     --row-attn:color-mix(in srgb,var(--st-PENDING) 12%,var(--brand-surface)); /* muted 6.72:1 */
     --chip-mix:18%;
     --toggle-off:#22403c; --toggle-thumb:#f5efe5;
@@ -135,8 +135,11 @@
   --brand-bg:#061b1a; --brand-surface:#0b2624; --brand-surface-raised:#12302d;
   --brand-text:#f5efe5; --brand-text-muted:#a9b8b5; --brand-border:#22403c;
   --focus-ring:#d69a3d;
+  --accent-ink:var(--color-info);
   --accent-ink:color-mix(in srgb,var(--color-info) 65%,#ffffff);
+  --danger-ink:var(--color-danger);
   --danger-ink:color-mix(in srgb,var(--color-danger) 60%,#ffffff);
+  --row-attn:var(--brand-surface);
   --row-attn:color-mix(in srgb,var(--st-PENDING) 12%,var(--brand-surface));
   --chip-mix:18%;
   --toggle-off:#22403c; --toggle-thumb:#f5efe5;
@@ -146,7 +149,7 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-text-size-adjust:100%}
 body{font-family:var(--brand-font-body);background:var(--brand-bg);color:var(--brand-text);
-     font-size:var(--text-base);line-height:var(--leading-normal);min-height:100dvh;
+     font-size:var(--text-base);line-height:var(--leading-normal);min-height:100vh;min-height:100dvh;
      -webkit-font-smoothing:antialiased;
      padding-bottom:calc(var(--space-16) + env(safe-area-inset-bottom,0px))}
 button,input,select{font:inherit;color:inherit}
@@ -246,7 +249,8 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
 .setup .card{background:var(--brand-surface-raised);border:1px solid var(--brand-border);
        border-radius:var(--radius-md);padding:var(--space-4);display:grid;gap:var(--space-3)}
 .setup h2{margin:0;font-size:var(--text-lg);font-weight:var(--weight-semibold);color:var(--brand-text)}
-.setup .hint{margin:0;color:var(--brand-text-muted);font-size:var(--text-sm);line-height:1.5}
+.setup .hint,.hint{margin:0;color:var(--brand-text-muted);font-size:var(--text-sm);
+      line-height:1.5;max-width:var(--measure)}
 .setup .row{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-3)}
 /* The file input itself is unreachable by design: a <label class="btn"> gives
    the platform picker a control that matches every other button on the page,
@@ -288,6 +292,7 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
    danger-toned, because nothing is wrong. */
 .due{display:inline-flex;align-items:center;gap:var(--space-1);
      padding:0 var(--space-2);min-height:1.5rem;border-radius:var(--radius-full);
+     background:var(--brand-surface-raised);
      background:color-mix(in srgb,var(--color-warning) 14%,transparent);
      color:var(--brand-text);font-size:var(--text-sm);font-weight:var(--weight-semibold);
      white-space:nowrap}
@@ -403,6 +408,8 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
 .chip.warn{color:var(--danger-ink);border-color:var(--danger-ink)}
 .code{display:block;font-family:var(--font-mono);font-size:var(--text-lg);
       letter-spacing:.18em;word-break:break-all;margin-bottom:var(--space-2)}
+.erow.feat{align-items:flex-start;padding:var(--space-3);gap:var(--space-4)}
+.erow.feat .hint{max-width:var(--measure-tight)}
 .erow.courier{align-items:flex-start;padding:var(--space-2) var(--space-3)}
 .erow.courier .row{gap:var(--space-1)}
 .promo-form{display:grid;gap:var(--space-2);
@@ -550,6 +557,7 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
       padding:0 var(--space-2);border-radius:var(--radius-full);
       font-size:var(--text-xs);font-weight:var(--weight-semibold);
       text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;
+      background:var(--brand-surface);
       background:color-mix(in srgb,var(--st,var(--brand-text-muted)) var(--chip-mix),var(--brand-surface));
       color:var(--brand-text)}
 .chip i{width:8px;height:8px;border-radius:var(--radius-full);background:var(--st,var(--brand-text-muted));flex:0 0 auto}

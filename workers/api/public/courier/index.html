@@ -2,7 +2,13 @@
 <html lang="uk">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<!-- PINCH ZOOM STAYS. `maximum-scale=1,user-scalable=no` was here to stop iOS
+     zooming when a field is focused, and the cost was that a courier could not
+     enlarge an address they were squinting at on a wet phone in the dark. That
+     is the one screen where zoom matters most, and WCAG 1.4.4 is not optional
+     because a gesture is inconvenient. The focus-zoom problem has a real fix
+     and it is below: inputs are 16px, which is the size iOS stops zooming at. -->
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#061b1a">
@@ -13,8 +19,24 @@
      off-shift screens, neither of which has a map. preconnect keeps that later
      fetch fast without paying for the payload up front. -->
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/lib/icons.css">
+<!-- NO WEB FONTS, AND THAT IS A DESIGN DECISION RATHER THAN A SAVING.
+     
+     These surfaces loaded two hundred kilobytes of render-blocking typeface
+     from Google before anything could paint, and every customer's IP reached
+     Google to do it -- on a service whose first invariant is local-first. The
+     Cyrillic the console is written in needed a further subset again.
+     
+     What is lost is small: at fourteen to thirty-three pixels, on a phone, the
+     difference between DM Sans and the system face is not what anyone notices.
+     What Swiss typography actually asks for is the grid, the measure, the one
+     ratio and the restraint -- Müller-Brockmann worked in Akzidenz-Grotesk
+     because it was the face that was already there. The system stack is ours.
+     
+     It also renders instantly with no swap: no flash of fallback text, no
+     layout shift when the real face arrives, nothing to wait for. -->
+
+<link rel="stylesheet" href="/lib/tokens.css">
 <style>
 /* ── The courier surface, in Sea & Sheet terms ──────────────────────────────
    The design plan is explicit for this role: during a run "the Sea IS the map"
@@ -35,7 +57,7 @@
   /* T3 dowiz chrome — light. Ink and ground are the same two colours that swap
      roles in the dark theme, which is what keeps the two themes one design. */
   --brand-primary:#d69a3d; --brand-primary-hover:#c98b2c;
-  --brand-bg:#f5efe5; --brand-surface:#ffffff; --brand-surface-raised:#f5efe5;
+  --brand-bg:#f5efe5; --brand-surface-raised:#f5efe5;
   --brand-text:#061b1a;
   /* Measured, not DESIGN.md's #6B7280: this muted carries the ink's own hue and
      lands at 7.26:1 on the white sheet (the outdoor floor I set is 7:1, not 4.5). */
@@ -59,7 +81,6 @@
   --scrim-marker:rgba(6,27,26,.25);
 
   /* Immutable across every preset and theme — DESIGN.md §1. */
-  --color-success:#059669; --color-warning:#D97706; --color-danger:#DC2626; --color-info:#2563EB;
   /* Danger as TEXT, which needs a different value from danger as a fill or an
      icon. #DC2626 is 4.83:1 on white -- fine -- but only 3.30:1 on the dark
      surface, and the voice read-back is 16px body text, not a glyph. Same token
@@ -76,33 +97,21 @@
   --spectral-a:#b5541c; --spectral-b:#f2c14e;
   --spectral:linear-gradient(90deg,transparent 0%,var(--spectral-a) 30%,var(--brand-primary) 50%,var(--spectral-b) 70%,transparent 100%);
 
-  --brand-font-body:'Inter',system-ui,-apple-system,sans-serif;
+  --brand-font-body:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
 
   /* One type scale, shared with the storefront so the surfaces are siblings.
      Anything read while moving uses --text-base (16px) or larger. */
-  --text-2xs:.6875rem; --text-xs:.75rem; --text-sm:.875rem; --text-base:1rem;
-  --text-lg:1.125rem; --text-xl:1.375rem; --text-2xl:1.75rem; --text-3xl:2.25rem;
-  --weight-medium:500; --weight-semibold:600; --weight-bold:700;
-
+  --text-base:1rem;
   /* 4px grid. DESIGN.md §3: "Only these values. Never 6px, 10px, 14px, 18px." */
-  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px;
-  --space-6:24px; --space-8:32px; --space-10:40px; --space-12:48px; --space-16:64px;
-
-  --radius-sm:4px; --radius-md:8px; --radius-lg:12px; --radius-xl:16px; --radius-full:9999px;
+  --space-10:40px; --radius-xl:16px;
   --radius-card:var(--radius-lg);
   --radius-btn:var(--radius-full);
 
-  --elevation-1:0 1px 3px rgba(0,0,0,.12);
-  --elevation-2:0 4px 12px rgba(0,0,0,.15);
-  --elevation-3:0 8px 24px rgba(0,0,0,.18);
-  --z-sticky:200; --z-toast:500;
-
   /* Tap sizes from the plan's --tap 44/48/56: 56 is the courier primary. */
-  --tap:44px; --tap-courier:56px;
+  --tap-courier:56px;
   --sheet-h:288px;               /* live value set by JS from the sheet's box */
 
   /* ζ vocabulary (plan §8.2): snap for taps, out-curve for entrances. */
-  --ease-snap:cubic-bezier(.32,.72,0,1);
   --ease-out:cubic-bezier(.2,.8,.2,1);
   --dur-press:120ms; --dur-toast:160ms; --dur-sheet:260ms;
 
@@ -111,12 +120,10 @@
      the plan calls its absence a "real gap", and it is — proportional digits
      make a column of totals jitter as it updates, and a 0 indistinguishable
      from an O in an order number read down a phone. */
-  --font-mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
   /* The ζ vocabulary. Motion is never a raw cubic-bezier at a call site:
      SNAP ζ=1 for taps and toggles, TIDE ζ>1 for the Sea, which drifts and
      never settles. */
-  --ease-tide:cubic-bezier(.37,0,.63,1);
-}
+  }
 /* Dark mode is a red line in deliveryos-ui, and for a courier it is not
    cosmetic: a white sheet at 23:00 is a floodlight. Tokens only — no component
    rule lives inside a theme block. The guard lets an explicit light choice win. */
@@ -128,6 +135,7 @@
     --chip-bg:rgba(11,38,36,.92);
     --elevation-sheet:0 -8px 24px rgba(0,0,0,.5);
     --scrim-marker:rgba(214,154,61,.3);
+    --danger-ink:var(--color-danger);
     --danger-ink:color-mix(in srgb,var(--color-danger) 58%,#ffffff);
   }
 }
@@ -138,6 +146,7 @@
   --chip-bg:rgba(11,38,36,.92);
   --elevation-sheet:0 -8px 24px rgba(0,0,0,.5);
   --scrim-marker:rgba(214,154,61,.3);
+  --danger-ink:var(--color-danger);
   --danger-ink:color-mix(in srgb,var(--color-danger) 58%,#ffffff);
 }
 
@@ -147,6 +156,13 @@ html{-webkit-text-size-adjust:100%}
 body{font-family:var(--brand-font-body);font-size:var(--text-base);line-height:1.4;
      background:var(--brand-bg);color:var(--brand-text);-webkit-font-smoothing:antialiased}
 button,input{font:inherit;color:inherit}
+/* SIXTEEN PIXELS, AND THAT IS THE WHOLE REASON. iOS zooms the page when a field
+   smaller than 16px takes focus, and the old fix for that was to forbid zooming
+   altogether -- which took pinch-zoom away from the one screen where somebody
+   is reading an address outdoors in the rain. Sizing the field correctly solves
+   the same problem without taking anything away. `--text-base` is 1rem here, so
+   this is a floor rather than an override. */
+input,select,textarea{font-size:max(16px,var(--text-base))}
 button{cursor:pointer;touch-action:manipulation}
 [hidden]{display:none!important}
 :focus-visible{outline:3px solid var(--focus-ring);outline-offset:2px}
@@ -158,7 +174,7 @@ button{cursor:pointer;touch-action:manipulation}
 /* ── The Sea: the map, full-bleed. The sheet floats over it; fitBounds pads
    for the sheet so a marker is never parked underneath. ── */
 #map{position:fixed;inset:0;z-index:0;background:var(--brand-bg)}
-.maplibregl-ctrl-attrib{font-size:var(--text-2xs)}
+.maplibregl-ctrl-attrib{font-size:var(--text-xs)}
 /* MapLibre's buttons are 29px; nothing tappable here is under 44. Pushed below
    the HUD row so the zoom buttons and the GPS chip never overlap. */
 .maplibregl-ctrl-top-right{top:calc(env(safe-area-inset-top,0px) + var(--space-12) + var(--space-3))}
@@ -208,7 +224,7 @@ button{cursor:pointer;touch-action:manipulation}
    screen; anything longer scrolls inside. Rises once, on boot, from the
    starting style; later state changes just swap content — a courier sees this
    sheet 100+ times a day and that frequency earns no animation. ── */
-.sheet{position:fixed;left:0;right:0;bottom:0;z-index:var(--z-sticky);max-height:48dvh;
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:var(--z-sticky);max-height:48vh;max-height:48dvh;
        display:flex;flex-direction:column;background:var(--brand-surface);color:var(--brand-text);
        border-radius:var(--radius-xl) var(--radius-xl) 0 0;box-shadow:var(--elevation-sheet);
        padding-bottom:env(safe-area-inset-bottom,0px);
@@ -371,6 +387,7 @@ a.tel{color:var(--brand-text);font-weight:var(--weight-semibold);text-decoration
       border-radius:var(--radius-lg);background:var(--brand-surface-raised);
       margin-bottom:var(--space-3)}
 .slide-fill{position:absolute;inset:0 auto 0 0;width:0;
+      background:var(--brand-surface-raised);
       background:color-mix(in srgb,var(--color-success) 22%,transparent);
       pointer-events:none}
 .slide-knob{position:relative;margin:0;touch-action:none;will-change:transform}

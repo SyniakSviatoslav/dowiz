@@ -8,10 +8,18 @@ SURFACES = {
     "courier": ("courier/index.html", "courier/app.js"),
 }
 
-# §8.1 T2 — DOWIZ-FIXED tokens every surface must define. The plan flags
+# §8.1 T2 — DOWIZ-FIXED tokens every surface must resolve. The plan flags
 # --font-mono as "NEW — real gap!"; it is on this list so it cannot be a gap
 # again.
 REQUIRED_TOKENS = ["--font-mono", "--ease-snap", "--ease-tide", "--tap"]
+
+# The shared layer. T2 lives here ONCE and a surface may not redefine it: the
+# three surfaces each held their own copy until seventeen tokens had drifted
+# apart, including --font-mono, which meant the same price was set in a
+# different typeface on the console than on the storefront.
+SHARED_CSS = BASE / "lib" / "tokens.css"
+shared_text = SHARED_CSS.read_text(encoding="utf-8")
+SHARED_TOKENS = set(re.findall(r"(--[A-Za-z0-9_-]+)\s*:", shared_text))
 
 failures = []
 notes = []
@@ -27,7 +35,21 @@ for name, (html_p, js_p) in SURFACES.items():
     both = html + js
 
     # ── §8.1 the fixed tokens exist ───────────────────────────────────────
-    defined = set(re.findall(r"(--[A-Za-z0-9_-]+)\s*:", html))
+    # A surface resolves a token if it declares it OR the shared layer does.
+    own = set(re.findall(r"(--[A-Za-z0-9_-]+)\s*:", html))
+    defined = own | SHARED_TOKENS
+
+    # ── T2 IS NOT A SURFACE'S TO REDEFINE ─────────────────────────────────
+    # This is the rule that would have caught the drift. A surface that wants a
+    # different spacing scale or a different monospace stack is a surface that
+    # has stopped sharing a design system with the other two.
+    for tok in sorted(own & SHARED_TOKENS):
+        fail(name, "T2", f"{tok} is fixed by lib/tokens.css and redefined here")
+
+    # And the shared layer has to actually be loaded, or the tokens resolve to
+    # nothing and every measurement on the page silently becomes zero.
+    if 'href="/lib/tokens.css"' not in html:
+        fail(name, "T2", "lib/tokens.css is not linked")
     for tok in REQUIRED_TOKENS:
         if tok not in defined:
             fail(name, "T2", f"{tok} is not defined")
@@ -148,6 +170,28 @@ for name, (html_p, js_p) in SURFACES.items():
         sel = re.compile(r"\." + re.escape(cls) + r"(?![A-Za-z0-9_-])")
         if not sel.search(html) and not sel.search(js):
             fail(name, "R5", f'class "{cls}" is used and has no rule')
+
+    # ── NOTHING THIRD-PARTY MAY BLOCK THE FIRST PAINT ─────────────────────
+    #
+    # Measured before this rule existed: 982 KB of icon font from jsdelivr and
+    # 200 KB of typeface from Google, all render-blocking, on a storefront
+    # whose own critical path is 40 KB. Two CDNs a venue does not control, and
+    # every customer's IP reaching both -- on a product whose first invariant
+    # is local-first.
+    #
+    # `preconnect` to a host nothing then loads is also caught: it is a DNS and
+    # TLS handshake bought for nothing.
+    for m in re.finditer(r'<link[^>]*href="(https?://[^"]+)"[^>]*>', html):
+        tag, url = m.group(0), m.group(1)
+        host = url.split("/")[2]
+        if 'rel="preconnect"' in tag:
+            # A preconnect is a handshake, not a payload. It is legitimate when
+            # the page really does fetch from that host later -- and waste when
+            # it does not, which is the case this catches.
+            if host not in js:
+                fail(name, "origin", f"preconnects to {host}, which nothing loads")
+        else:
+            fail(name, "origin", f"loads {host} before the page can paint")
 
     # ── the browser chrome must be a colour the page contains ─────────────
     # A <meta theme-color> cannot read a CSS variable, so its value is repeated

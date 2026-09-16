@@ -201,6 +201,11 @@ const SEA_FOR_STATUS = {
   DELIVERED:'delivered', REJECTED:'dispatch_failed', CANCELLED:'dispatch_failed',
 };
 async function initSea(){
+  // THE ONE THING ON THE PAGE THAT NEVER STOPS DRAWING. A venue whose customers
+  // are on older phones should be able to turn it off, and turning it off must
+  // mean the module is never fetched -- a flag that still downloads 12 KB and
+  // starts a WebGL context has saved nothing.
+  if (!on('sea')) return;
   if (sea) return;
   // Reduced motion does not mean "no sea" -- it means a calm one. The canvas
   // still renders; it simply stops moving at you.
@@ -263,8 +268,8 @@ function toast(msg){ const el = $('#toast'); el.textContent = msg; el.classList.
 // storefront showing nothing on a Durrës 3G connection, and the wait lands on
 // exactly the customers least able to absorb it.
 const TYPE_PAIRS = {
-  classic: { heading: "'DM Serif Display',Georgia,'Times New Roman',serif",
-             body: "'DM Sans',system-ui,-apple-system,sans-serif" },
+  classic: { heading: "Georgia,'Iowan Old Style','Times New Roman',serif",
+             body: "system-ui,-apple-system,'Segoe UI',Roboto,sans-serif" },
   modern:  { heading: "system-ui,-apple-system,'Segoe UI',sans-serif",
              body: "system-ui,-apple-system,'Segoe UI',sans-serif" },
   warm:    { heading: "Georgia,'Iowan Old Style','Palatino Linotype',serif",
@@ -272,6 +277,17 @@ const TYPE_PAIRS = {
   plain:   { heading: "ui-sans-serif,system-ui,sans-serif",
              body: "ui-sans-serif,system-ui,sans-serif" },
 };
+
+// A FLAG IS OFF UNLESS THE HUB SAYS ON, and an absent `features` block means
+// every flag is on. Those two rules are not the same and both are deliberate:
+// an old hub that does not send the block gets the product it already had,
+// while a hub that sends the block and omits a key has not heard of it, and
+// something the hub has not heard of must not render.
+function on(name){
+  const f = state.loc?.features;
+  if (!f) return true;
+  return f[name] !== false;
+}
 
 function applyTheme(theme){
   const el = document.getElementById('venue-theme') || (() => {
@@ -581,10 +597,10 @@ function renderMenu(){
         </select>
         <label class="chk"><input type="checkbox" id="availOnly" ${state.availOnly?'checked':''}>
           <span>${esc(t('onlyAvail'))}</span></label>
-        <button type="button" class="chip ${state.avoid?.length ? 'on' : ''}" id="avoidGo"
+        ${on('allergen_filter') ? `<button type="button" class="chip ${state.avoid?.length ? 'on' : ''}" id="avoidGo"
                 aria-expanded="${state.avoidOpen ? 'true' : 'false'}" aria-controls="avoidBox">
           <i class="ti ti-alert-circle" aria-hidden="true"></i>
-          ${esc(t('avoid'))}${state.avoid?.length ? ` · ${state.avoid.length}` : ''}</button>
+          ${esc(t('avoid'))}${state.avoid?.length ? ` · ${state.avoid.length}` : ''}</button>` : ''}
       </div>
       <div class="avoid" id="avoidBox" ${state.avoidOpen ? '' : 'hidden'}>
         <p class="avoid-h">${esc(t('avoidHint'))}</p>
@@ -712,7 +728,7 @@ addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
 // for a WebGL renderer they will not open.
 async function bindAr(p){
   const b = document.getElementById('dar');
-  if (!b || !p.imageUrl || !(p.sizeCm > 0)) return;
+  if (!b || !on('ar') || !p.imageUrl || !(p.sizeCm > 0)) return;
   let ar;
   try { ar = await import('/lib/ar.js'); } catch { return; }
   if (!await ar.supported()) return;
@@ -956,7 +972,7 @@ function openCheckout(){
       <p id="f-geo-out" class="geo" hidden></p>` : ''}
     <label for="f-note">${esc(t('note'))}</label>
     <input id="f-note">
-    ${state.how !== 'pickup' ? `
+    ${state.how !== 'pickup' && on('tips') ? `
     <label>${esc(t('tip'))}</label>
     <div class="when" role="radiogroup" aria-label="${esc(t('tip'))}">
       ${TIPS.map(v => `<button type="button" class="chip ${state.tip === v ? 'on' : ''}"
@@ -970,14 +986,14 @@ function openCheckout(){
       ${state.loc?.stripePublishableKey ? `<button class="pay" role="radio" aria-checked="false" data-pay="card">
         <i class="ti ti-credit-card i" aria-hidden="true"></i><span class="t"><b>${esc(t('card'))}</b><small>${esc(t('cardNote'))}</small></span></button>` : ''}
     </div>
-    <label for="f-promo">${esc(t('promo'))}</label>
+    ${on('promo') ? `<label for="f-promo">${esc(t('promo'))}</label>
     <div class="promo-row">
       <input id="f-promo" autocomplete="off" autocapitalize="characters" spellcheck="false"
              value="${esc(state.promo ? state.promo.code : '')}">
       <button type="button" class="btn btn-ghost" id="f-promo-go">
         ${esc(state.promo ? t('promoOff') : t('promoApply'))}</button>
     </div>
-    <p id="f-promo-out" class="geo" hidden></p>
+    <p id="f-promo-out" class="geo" hidden></p>` : ''}
     <div id="f-err"></div>
     ${totalsBlock()}
     <button class="btn" id="place" style="margin-bottom:12px">${esc(t('place'))}</button>`);
@@ -1241,7 +1257,7 @@ async function collectCard(order){
 // it read.
 function sayBlock(order){
   const over = ['DELIVERED', 'REJECTED', 'CANCELLED'].includes(order.status);
-  if (!over) return '';
+  if (!over || !on('feedback')) return '';
   if (order.feedback) {
     return `<p class="geo ok" style="margin-bottom:12px">${esc(t('saidIt'))}</p>`;
   }

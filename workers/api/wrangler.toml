@@ -29,5 +29,18 @@ database_id = "5467a3b0-5fb8-47d0-9680-4101666598d0"
 
 # Workers Logs. The OpenTelemetry export rides on top of this later, through the
 # kernel's own fdr::SpanObserver seam rather than a `tracing` dependency.
+# Dish photographs. KV RATHER THAN THE DATABASE: a photo is an opaque blob read
+# by URL and never queried, and D1 refuses anything over a million bytes, so an
+# image would have to be split across rows and reassembled on every menu paint.
+# KV is a key-value store reached by exactly the key the URL carries, and it is
+# read from the edge cache rather than from the database.
+#
+# CONTENT-ADDRESSED: the key is the SHA-256 of the bytes, so uploading the same
+# photograph twice stores it once and an image URL can be cached forever without
+# an invalidation story.
+[[kv_namespaces]]
+binding = "MEDIA"
+id = "0af8bfcd828e4802a4ec7f5bb399666f"
+
 [observability]
 enabled = true

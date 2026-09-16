@@ -1,0 +1,139 @@
+/* dowiz design tokens — the layer that must be identical on every surface.
+ *
+ * WHY THIS FILE EXISTS. There was no design system: there were three copies of
+ * one, and they had drifted. Seventeen tokens differed between the storefront,
+ * the console and the courier app, and two of the seventeen were tokens §8.1
+ * calls DOWIZ-FIXED and not a surface's to change -- `--font-mono`, which is
+ * what makes a price look like a price, and a step of the type scale. A price
+ * rendered in a different typeface on the console than on the storefront is the
+ * exact failure the money rules exist to prevent, and no gate caught it because
+ * each surface was internally consistent.
+ *
+ * WHAT IS HERE: T2. Spacing, radii, elevation, motion, stacking, the semantic
+ * colours, the tap floor, the weights, and the one monospace stack. These are
+ * dowiz's, not the venue's, and nothing below may redefine them.
+ *
+ * WHAT IS NOT HERE: T1, the five tokens a venue owns (accent, ink, paper, type
+ * pair, radius) -- those are per-surface defaults that the tenant's theme
+ * overrides at runtime. And the type SCALE, because density is a legitimate
+ * surface decision: a console read at arm's length across a busy kitchen is not
+ * a storefront read on a phone, and forcing one base size on both would make
+ * one of them wrong.
+ *
+ * Loaded with <link>, so the three surfaces share one cached file rather than
+ * three copies of the same bytes. */
+:root {
+  /* ── spacing: one 4px-derived scale ── */
+  --space-1: 4px;  --space-2: 8px;   --space-3: 12px;  --space-4: 16px;
+  --space-5: 20px; --space-6: 24px;  --space-8: 32px;  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ── radii ── */
+  --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px; --radius-full: 9999px;
+
+  /* ── elevation: three steps, and only three. A fourth shadow is a fourth
+     opinion about how far off the page something is. ── */
+  --elevation-1: 0 1px 2px rgba(0,0,0,.06), 0 1px 3px rgba(0,0,0,.10);
+  --elevation-2: 0 4px 6px -1px rgba(0,0,0,.10), 0 2px 4px -2px rgba(0,0,0,.10);
+  --elevation-3: 0 10px 15px -3px rgba(0,0,0,.12), 0 4px 6px -4px rgba(0,0,0,.10);
+
+  /* ── MEASURE ──
+     The one rule both the Swiss school and the Renaissance canons put first,
+     and the one this system did not have: a line of prose is 45-75 characters.
+     Past that the eye loses its place on the return sweep, which is why a
+     manuscript page has margins of a ninth and a third of its width rather
+     than text edge to edge.
+     
+     The console had no measure at all -- its hint paragraphs ran the full
+     960px of the content column, about 110 characters, comfortably into the
+     range where reading speed drops. `ch` is the right unit because it scales
+     with the type: the constraint is characters, not millimetres. */
+  --measure: 65ch;
+  --measure-tight: 52ch;
+
+  /* ── motion: the ζ vocabulary of §8.2. SNAP (ζ=1) for taps and toggles,
+     TIDE (ζ>1) for the Sea, which drifts rather than arrives. Written as
+     curves rather than named guesses so a reviewer can check them. ── */
+  --ease-snap: cubic-bezier(.32,.72,0,1);
+  --ease-tide: cubic-bezier(.37,0,.63,1);
+
+  /* A REAL SPRING, where the browser has one.
+     
+     A cubic-bezier cannot overshoot, so a curve is only ever an impression of
+     physics; `linear()` samples an actual damped oscillator, which is what
+     makes a control feel like it has mass. The bezier above is declared first
+     and stays the answer for browsers without `linear()` -- an unparsed value
+     is a dropped declaration, so the order is the fallback.
+     
+     ζ≈0.7, settling once: a single small overshoot reads as responsiveness,
+     two reads as a bug. Used only for things that MOVE. Nothing carrying money
+     is animated at all. */
+  --ease-spring: cubic-bezier(.32,.72,0,1);
+  --ease-spring: linear(
+    0, 0.0032 1.2%, 0.0129 2.4%, 0.0509 4.9%, 0.1113 7.4%, 0.1926 9.9%,
+    0.2933 12.5%, 0.4118 15.2%, 0.5457 18%, 0.6924 20.9%, 0.8488 23.9%,
+    1.0114 27%, 1.0968 28.7%, 1.1767 30.4%, 1.2501 32.2%, 1.3159 34.1%,
+    1.3731 36%, 1.4207 38%, 1.4578 40.1%, 1.4835 42.3%, 1.4973 44.6%,
+    1.4987 46.9%, 1.4875 49.4%, 1.4637 52%, 1.4274 54.7%, 1.379 57.6%,
+    1.3191 60.6%, 1.2487 63.8%, 1.169 67.2%, 1.0816 70.9%, 1.0288 73.3%,
+    0.9885 75.4%, 0.9661 76.9%, 0.9482 78.4%, 0.9349 80%, 0.9264 81.7%,
+    0.9228 83.6%, 0.9243 85.6%, 0.9309 87.9%, 0.9428 90.4%, 0.96 93.2%,
+    0.9827 96.4%, 1
+  );
+
+  /* ── semantic colour. SEPARATE FROM THE ACCENT on purpose: a venue whose
+     brand is red must not have every error disappear into it. ── */
+  --color-success: #059669; --color-warning: #D97706;
+  --color-danger: #DC2626;  --color-info: #2563EB;
+
+  /* ── the one monospace stack ──
+     What makes a price a price. It is the same on all three surfaces or the
+     same number looks like two different things to the same person. ── */
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  /* ── the tap floor. 44px is the smallest target a thumb hits reliably; the
+     courier app raises its own above this, never below. ── */
+  --tap: 44px;
+
+  /* ── THE TYPE SCALE: ONE RATIO, EACH SURFACE ITS OWN BASE ──
+     
+     The old scale had no ratio. Its steps grew by 1.091, then 1.167, 1.143,
+     1.125, 1.222, 1.273, 1.286 -- eight sizes picked one at a time, which is
+     why the relationships between them were not legible as a system. Swiss
+     practice, and the Renaissance canons before it, build a page from ONE
+     proportion repeated; the repetition is what the eye reads as order.
+     
+     1.200, the minor third. Small enough that adjacent steps stay usable for
+     interface text, large enough that a heading is unmistakably a heading.
+     
+     DERIVED, NOT LISTED. Each surface sets `--text-base` and gets the same
+     proportions from it: the console reads denser than the storefront because
+     an operator scans it across a kitchen, and that is a decision about BASE
+     SIZE, not a licence to invent a different set of relationships. Before
+     this, the console's scale had different ratios as well as a different
+     base, so the two surfaces were not the same system rendered at two sizes.
+     
+     `--text-xs` is a FLOOR, not a continuation: 1/1.2^2 of a 14px base is
+     9.7px, and nothing anybody has to read should be 9.7px. Stopping the ratio
+     deliberately is a decision; wandering off it is the absence of one. */
+  --text-ratio: 1.2;
+  --text-sm: calc(var(--text-base) / var(--text-ratio));
+  --text-xs: max(0.6875rem, calc(var(--text-sm) / var(--text-ratio)));
+  --text-lg: calc(var(--text-base) * var(--text-ratio));
+  --text-xl: calc(var(--text-lg) * var(--text-ratio));
+  --text-2xl: calc(var(--text-xl) * var(--text-ratio));
+  --text-3xl: calc(var(--text-2xl) * var(--text-ratio));
+
+  /* ── LEADING, AS A RATIO TOO ──
+     Tight for display, open for prose: a 33px heading set at 1.5 drifts apart,
+     and a 13px paragraph set at 1.2 closes up. Both numbers are the same
+     decision the scale makes, applied vertically. */
+  --leading-tight: 1.15;
+  --leading-normal: 1.5;
+
+  --weight-medium: 500; --weight-semibold: 600; --weight-bold: 700;
+
+  /* ── stacking, named so nothing invents a z-index ── */
+  --z-sticky: 50; --z-toast: 90;
+
+}

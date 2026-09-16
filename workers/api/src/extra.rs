@@ -1038,6 +1038,61 @@ pub async fn set_setting(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
     Response::from_json(&json!({ "ok": true, "key": body.key }))
 }
 
+/// `GET /api/owner/features` — what can be switched, and what it costs.
+///
+/// The list comes from the HUB. A console that held its own copy would show a
+/// switch for something that no longer exists, or miss one that does.
+pub async fn features(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let db = ctx.d1("DB")?;
+    let Some(loc) = venue_of(&req, &db).await else {
+        return Response::error("this hub has no venue yet", 404);
+    };
+    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
+        return Ok(r);
+    }
+    let s = crate::hubstore::load_settings(&db).await?.settings;
+    Response::from_json(&json!({
+        "features": dowiz_hub::features::all(&s).into_iter().map(|(f, on)| json!({
+            "key": f.key, "label": f.label, "hint": f.hint,
+            "surface": f.surface, "on": on, "defaultOn": f.default_on,
+        })).collect::<Vec<_>>(),
+    }))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FeatureIn {
+    key: String,
+    on: bool,
+}
+
+/// `POST /api/owner/features`
+pub async fn set_feature(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let body: FeatureIn = match req.json().await {
+        Ok(b) => b,
+        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
+    };
+    let db = ctx.d1("DB")?;
+    let Some(loc) = venue_of(&req, &db).await else {
+        return Response::error("this hub has no venue yet", 404);
+    };
+    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
+        return Ok(r);
+    }
+    // Only a DECLARED flag. An open key space would make this a way to write
+    // arbitrary settings, and nothing would ever read them back.
+    if dowiz_hub::features::get(&body.key).is_none() {
+        return Response::error(format!("{:?} is not a feature", body.key), 400);
+    }
+    let (key, value) = (body.key.clone(), if body.on { "1" } else { "0" });
+    crate::hubstore::with_settings(&db, move |s| {
+        s.set(&key, value);
+        Ok(())
+    })
+    .await?;
+    Response::from_json(&json!({ "ok": true, "key": body.key, "on": body.on }))
+}
+
 // ── owner: a spreadsheet becomes a menu ─────────────────────────────────────
 
 /// `POST /api/owner/menu/import?apply=true&retire=true` — body is the CSV.
@@ -1980,4 +2035,130 @@ pub async fn revoke_api_key(mut req: Request, ctx: RouteContext<()>) -> Result<R
         return Response::error("not found", 404);
     }
     Response::from_json(&json!({ "ok": true }))
+}
+
+// ── photographs ─────────────────────────────────────────────────────────────
+//
+// THE BYTES ARE SNIFFED, NEVER TRUSTED. A `content-type` header is what the
+// uploader says; the magic bytes are what the file is. Anything that is not one
+// of the four image formats the hub recognises is refused, so a page that later
+// renders these URLs cannot be handed a script with a .jpg name.
+//
+// The key is the SHA-256 of the bytes. The same photo uploaded twice is stored
+// once, and a URL that names its own content can be cached forever -- there is
+// no version of it that could later be different.
+
+/// `POST /api/owner/products/:id/image` — body is the image.
+pub async fn set_product_image(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let db = ctx.d1("DB")?;
+    let Some(loc) = venue_of(&req, &db).await else {
+        return Response::error("this hub has no venue yet", 404);
+    };
+    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
+        return Ok(r);
+    }
+    let Some(id) = ctx.param("id").cloned() else {
+        return Response::error("missing product", 400);
+    };
+    // The product must exist BEFORE a blob is written, or a typo in an id
+    // leaves an orphan nothing will ever reference or clean up.
+    let cat = crate::hubstore::load_catalog(&db).await?.catalog;
+    if cat.product(&id).is_none() {
+        return Response::error("not found", 404);
+    }
+
+    let bytes = req.bytes().await?;
+    let stored = match dowiz_hub::media::prepare(&bytes) {
+        Ok(s) => s,
+        Err(e) => return Response::error(e.to_string(), 400),
+    };
+    let url = stored.url();
+    let key = url.trim_start_matches("/media/").to_string();
+
+    let kv = ctx.kv("MEDIA")?;
+    kv.put_bytes(&key, &bytes)?
+        // No expiry. A dish photo is referenced by orders that are already
+        // placed; letting it lapse would blank the picture on a receipt.
+        .execute()
+        .await?;
+    // The media type is stored beside the blob rather than guessed at read
+    // time: sniffing twice is two chances to disagree.
+    kv.put(&format!("{key}#type"), stored.kind.mime())?.execute().await?;
+
+    let (pid, u) = (id.clone(), url.clone());
+    crate::hubstore::with_catalog(&db, move |cat| {
+        let Some(raw) = cat.product(&pid) else {
+            return Err(Error::RustError("unknown product".into()));
+        };
+        let mut p: Value = serde_json::from_str(&raw).unwrap_or(json!({}));
+        // The PREVIOUS image is not deleted. Another product may reference the
+        // same bytes -- content addressing makes that likely, not rare -- and an
+        // order placed an hour ago still names the dish it was sold as.
+        p["imageUrl"] = json!(u);
+        cat.set_product(&pid, &serde_json::to_string(&p).unwrap_or(raw));
+        Ok(())
+    })
+    .await?;
+    Response::from_json(&json!({
+        "imageUrl": url, "bytes": stored.bytes, "type": stored.kind.mime()
+    }))
+}
+
+/// `POST /api/owner/products/:id/image/clear`
+pub async fn clear_product_image(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let db = ctx.d1("DB")?;
+    let Some(loc) = venue_of(&req, &db).await else {
+        return Response::error("this hub has no venue yet", 404);
+    };
+    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
+        return Ok(r);
+    }
+    let Some(id) = ctx.param("id").cloned() else {
+        return Response::error("missing product", 400);
+    };
+    // The blob STAYS. Clearing a dish's photo is not a statement about every
+    // other dish that might share those bytes, nor about the orders that
+    // already carry the URL.
+    crate::hubstore::with_catalog(&db, move |cat| {
+        let Some(raw) = cat.product(&id) else {
+            return Err(Error::RustError("unknown product".into()));
+        };
+        let mut p: Value = serde_json::from_str(&raw).unwrap_or(json!({}));
+        p["imageUrl"] = Value::Null;
+        cat.set_product(&id, &serde_json::to_string(&p).unwrap_or(raw));
+        Ok(())
+    })
+    .await?;
+    Response::from_json(&json!({ "ok": true }))
+}
+
+/// `GET /media/:name` — serve one.
+///
+/// PUBLIC AND IMMUTABLE. The name is a content hash, so the bytes behind it can
+/// never change and the cache can hold them for a year. That is the whole
+/// benefit of content addressing and it is why the header is written here
+/// rather than left to a default.
+pub async fn media(_req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let Some(name) = ctx.param("name").cloned() else {
+        return Response::error("not found", 404);
+    };
+    // A path that is not a hash and an extension cannot be one of ours, and
+    // refusing early keeps anything with a slash or a dot-dot out of the key.
+    if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '.') || name.len() > 80 {
+        return Response::error("not found", 404);
+    }
+    let kv = ctx.kv("MEDIA")?;
+    let Some(bytes) = kv.get(&name).bytes().await? else {
+        return Response::error("not found", 404);
+    };
+    let kind = kv.get(&format!("{name}#type")).text().await?;
+    let mut res = Response::from_bytes(bytes)?;
+    let h = res.headers_mut();
+    h.set("content-type", kind.as_deref().unwrap_or("application/octet-stream"))?;
+    h.set("cache-control", "public, max-age=31536000, immutable")?;
+    // A stored blob is data, not a document: a browser must never be talked
+    // into running one.
+    h.set("x-content-type-options", "nosniff")?;
+    h.set("content-security-policy", "default-src 'none'; sandbox")?;
+    Ok(res)
 }

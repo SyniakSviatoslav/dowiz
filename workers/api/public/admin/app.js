@@ -557,6 +557,41 @@ function bindStats(){
   const r = $('#retryStats'); if (r) r.onclick = () => loadAnalytics();
 }
 
+// ── feature flags ───────────────────────────────────────────────────────────
+//
+// The list comes from the HUB, not from here. A console with its own copy shows
+// a switch for something that no longer exists, or misses one that does.
+async function loadFeatures(){
+  const box = $('#featList'); if (!box) return;
+  let d;
+  try { d = await api('/owner/features'); }
+  catch (e) { box.innerHTML = `<p class="hint">${esc(String(e.message || e))}</p>`; return; }
+  const group = (name, which) => {
+    const rows = d.features.filter(f => f.surface === which);
+    if (!rows.length) return '';
+    return `<h3 class="sub">${name}</h3>` + rows.map(f => `
+      <div class="erow feat">
+        <span><b>${esc(f.label)}</b>${f.on === f.defaultOn ? '' : ' <span class="chip">змінено</span>'}
+          <br><small class="hint">${esc(f.hint)}</small></span>
+        <label class="sw"><input type="checkbox" data-feat="${esc(f.key)}" ${f.on ? 'checked' : ''}
+               aria-label="${esc(f.label)}"><span></span></label>
+      </div>`).join('');
+  };
+  box.innerHTML = group('Вітрина', 'storefront') + group('Панелі', 'staff');
+  box.querySelectorAll('[data-feat]').forEach(el => el.onchange = async () => {
+    try {
+      await api('/owner/features', { key: el.dataset.feat, on: el.checked });
+      toast(el.checked ? 'Увімкнено' : 'Вимкнено');
+      loadFeatures();
+    } catch (e) {
+      // Put the switch back: a control showing a state the server refused is a
+      // control the owner believes they have set.
+      el.checked = !el.checked;
+      toast(String(e.message || e));
+    }
+  });
+}
+
 // ── customers ───────────────────────────────────────────────────────────────
 //
 // The list never holds a phone number: the hub sends it masked and the reveal
@@ -1214,6 +1249,13 @@ function setupView(){
     </section>
 
     <section class="card">
+      <h2>Що увімкнено</h2>
+      <p class="hint">Кожен перемикач каже, чого коштує його вимкнути. Нічого з
+         цього не стосується грошей, замовлень чи алергенів — те не вимикається.</p>
+      <div id="featList" class="elist"></div>
+    </section>
+
+    <section class="card">
       <h2>Клієнти</h2>
       <p class="hint">Це не база клієнтів — це те, що видно з ваших замовлень.
          Імена й номери приховані, поки ви не попросите конкретний. Кожне
@@ -1651,6 +1693,7 @@ function renderHours(){
 }
 
 function bindSetup(){
+  loadFeatures();
   bindBrand();
   bindActivation();
   bindCustomers();

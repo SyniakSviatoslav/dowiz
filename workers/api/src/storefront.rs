@@ -292,6 +292,22 @@ pub async fn menu(_req: Request, ctx: RouteContext<()>) -> Result<Response> {
     } else {
         Value::Null
     };
+    // WHICH FEATURES THIS VENUE HAS ON. Sent with the menu rather than fetched
+    // separately: a control that appears a moment after the page does is worse
+    // than one that was never there, and a second request to decide what to
+    // render is a second chance to render the wrong thing.
+    let settings = crate::hubstore::load_settings(&db).await?.settings;
+    let mut features = serde_json::Map::new();
+    for (f, on) in dowiz_hub::features::all(&settings) {
+        if f.surface != "storefront" {
+            continue;
+        }
+        // The prefix is an internal namespace; the client asks for `tips`, not
+        // `feature.tips`.
+        features.insert(f.key.trim_start_matches("feature.").to_string(), json!(on));
+    }
+    location["features"] = Value::Object(features);
+
     location["telegramBot"] = ctx
         .env
         .secret("TELEGRAM_BOT_USERNAME")

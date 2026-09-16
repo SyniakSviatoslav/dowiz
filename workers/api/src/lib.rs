@@ -130,6 +130,8 @@ async fn route(req: Request, env: Env) -> Result<Response> {
         .get_async("/api/owner/customers", extra::customers)
         .post_async("/api/owner/customers/:key/reveal", extra::reveal_customer)
         .get_async("/api/owner/customers/reveals", extra::reveals)
+        .get_async("/api/owner/features", extra::features)
+        .post_async("/api/owner/features", extra::set_feature)
         .get_async("/api/owner/settings", extra::settings)
         .post_async("/api/owner/settings", extra::set_setting)
         .post_async("/api/owner/menu/import", extra::import_menu)
@@ -146,6 +148,9 @@ async fn route(req: Request, env: Env) -> Result<Response> {
         .get_async("/api/owner/apikeys", extra::list_api_keys)
         .post_async("/api/owner/apikeys", extra::create_api_key)
         .post_async("/api/owner/apikeys/revoke", extra::revoke_api_key)
+        .post_async("/api/owner/products/:id/image", extra::set_product_image)
+        .post_async("/api/owner/products/:id/image/clear", extra::clear_product_image)
+        .get_async("/media/:name", extra::media)
         // ── courier ──
         .get_async("/api/courier/tasks", courier::tasks)
         .post_async("/api/courier/shift", courier::shift)
