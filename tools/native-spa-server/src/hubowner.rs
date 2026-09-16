@@ -1536,7 +1536,7 @@ pub async fn owner_agent(
 
     let hub = st.read_log()?;
     let catalog = st.read_catalog()?;
-    let knowledge = crate::agent::HubKnowledge { hub: &hub, catalog: &catalog };
+    let knowledge = crate::agent::HubKnowledge::new(&hub, &catalog);
     let run = crate::agent::run(&assistant, &knowledge, &question, &sent)
         .await
         .map_err(|e| HubHttpError::Io(e.to_string()))?;

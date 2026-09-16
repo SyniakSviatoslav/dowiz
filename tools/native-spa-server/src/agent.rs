@@ -107,15 +107,34 @@ pub trait Knowledge {
 }
 
 /// The hub's graph, as the agent's knowledge.
+///
+/// THE FOLD IS ONCE PER RUN, NOT ONCE PER LOOKUP. `Graph::of` walks the whole
+/// order log and the whole catalogue -- measured at ~20 ms on the live hub --
+/// and the agent may look something up on every one of its four turns. Folding
+/// per call paid that four times for a graph that cannot have changed: the hub
+/// and catalogue behind these two references are immutable for the life of the
+/// run. The cost also grows with the log, so this is the difference between an
+/// agent that stays fast as a venue trades and one that gets slower every week.
 pub struct HubKnowledge<'a> {
     pub hub: &'a dowiz_hub::Hub,
     pub catalog: &'a dowiz_hub::catalog::Catalog,
+    graph: std::sync::OnceLock<dowiz_hub::graph::Graph>,
+}
+
+impl<'a> HubKnowledge<'a> {
+    pub fn new(hub: &'a dowiz_hub::Hub, catalog: &'a dowiz_hub::catalog::Catalog) -> Self {
+        Self { hub, catalog, graph: std::sync::OnceLock::new() }
+    }
+
+    /// The fold, done at most once.
+    fn graph(&self) -> &dowiz_hub::graph::Graph {
+        self.graph.get_or_init(|| dowiz_hub::graph::Graph::of(self.hub, self.catalog))
+    }
 }
 
 impl Knowledge for HubKnowledge<'_> {
     fn search(&self, query: &str, limit: usize) -> String {
-        use dowiz_hub::graph::Graph;
-        let g = Graph::of(self.hub, self.catalog);
+        let g = self.graph();
         let hits = g.hybrid(query, limit);
         if hits.is_empty() {
             return format!("граф має {} вузлів; за цим запитом — нічого", g.len());

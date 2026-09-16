@@ -153,6 +153,13 @@ impl Graph {
         out
     }
 
+    /// How many steps lead away from this node, both directions, WITHOUT
+    /// building the list. `ppr` asks this of every node on every iteration, and
+    /// `neighbours` allocates a `Vec` to answer it.
+    pub fn degree(&self, i: usize) -> usize {
+        self.out.get(i).map_or(0, |v| v.len()) + self.inc.get(i).map_or(0, |v| v.len())
+    }
+
     fn build(nodes: Vec<Node>, edges: Vec<(usize, Rel, usize)>) -> Self {
         let by_id = nodes.iter().enumerate().map(|(i, n)| (n.id.clone(), i)).collect();
         let mut out = vec![Vec::new(); nodes.len()];
@@ -513,23 +520,35 @@ impl Graph {
                 restart[s] += share;
             }
         }
+        // Degrees once, not once per node per iteration. `neighbours` builds a
+        // Vec to answer this and `ppr` asked it n * iterations times.
+        let deg: Vec<usize> = (0..n).map(|i| self.degree(i)).collect();
+
         let mut rank = restart.clone();
+        let mut each = vec![0i64; n];
         for _ in 0..iterations {
             let mut next = vec![0i64; n];
+            // What each neighbour of `i` receives. Computed for every node
+            // first, so the push below can walk the edge list once instead of
+            // rebuilding an adjacency list per node. Each edge appears in
+            // exactly one node's `out` and one node's `inc`, so pushing both
+            // ways here is the same arithmetic in the same order as asking
+            // every node for its neighbours -- including duplicate edges.
             for i in 0..n {
-                let nbrs = self.neighbours(i);
-                if nbrs.is_empty() {
+                each[i] = if deg[i] == 0 { 0 } else { rank[i] * DAMP_NUM / DAMP_DEN / deg[i] as i64 };
+            }
+            for &(a, _, b) in &self.edges {
+                next[b] += each[a];
+                next[a] += each[b];
+            }
+            for i in 0..n {
+                if deg[i] == 0 {
                     // A dangling node returns its mass to the seeds rather than
                     // losing it, or the totals shrink every iteration and the
                     // ranking drifts toward whatever is best connected.
                     for (j, r) in restart.iter().enumerate() {
                         next[j] += rank[i] * DAMP_NUM / DAMP_DEN * r / SCALE;
                     }
-                    continue;
-                }
-                let each = rank[i] * DAMP_NUM / DAMP_DEN / nbrs.len() as i64;
-                for (_, j, _) in nbrs {
-                    next[j] += each;
                 }
             }
             for (j, r) in restart.iter().enumerate() {
@@ -539,6 +558,46 @@ impl Graph {
         }
         let mut out: Vec<(usize, i64)> =
             rank.into_iter().enumerate().filter(|(_, s)| *s > 0).collect();
+        out.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        out
+    }
+
+    /// PPR mass DIVIDED BY DEGREE — what the walk found that the node's own
+    /// popularity does not already explain.
+    ///
+    /// THE RAW MASS RANKS THE GRAPH'S SHAPE, NOT THE ANSWER. A random walk on an
+    /// undirected graph converges toward the degree distribution, so the
+    /// best-connected node wins whatever you seeded it with. Every dish here
+    /// carries a `ServedBy` edge to the one venue, which makes the venue a
+    /// node of degree `n_dishes` and puts it two steps from everything. Measured
+    /// on a 60-dish venue, asking for `shrimp` returned: the shrimp ingredient,
+    /// then THE VENUE, then two categories, then the SALMON and TUNA
+    /// ingredients — five hub nodes — and only then the dishes that actually
+    /// contain shrimp. The one question the graph exists to answer was ranked
+    /// sixth by the half of the ranker that exists to answer it.
+    ///
+    /// Dividing by degree asks the useful question instead: not "how much mass
+    /// landed here" but "how much more than this node collects from anywhere".
+    /// A venue every dish points at collects mass from every seed and earns no
+    /// lift from any of them; a dish on three edges that the walk keeps
+    /// reaching has found something. It needs no tuning constant and no list of
+    /// node kinds to suppress -- the correction is the same arithmetic for the
+    /// venue, a category and a popular ingredient alike.
+    ///
+    /// Applied to the STRUCTURAL half only. BM25 already divides by length,
+    /// which is its own version of this, and the fusion downstream reads ranks
+    /// rather than scores -- so this changes the ORDER the walk reports, which
+    /// is the only thing RRF consumes.
+    pub fn lift(&self, mass: &[(usize, i64)]) -> Vec<(usize, i64)> {
+        let mut out: Vec<(usize, i64)> = mass
+            .iter()
+            .map(|&(i, m)| {
+                // Degree 0 cannot be a divisor, and an isolated node was not
+                // reached by the walk anyway -- it holds only its own restart.
+                let d = self.degree(i).max(1) as i64;
+                (i, m / d)
+            })
+            .collect();
         out.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
         out
     }
@@ -561,7 +620,7 @@ impl Graph {
         // hit there is nothing to walk from, and a PPR over every node would
         // return the graph's centre rather than an answer.
         let seeds: Vec<usize> = lexical.iter().take(5).map(|(i, _)| *i).collect();
-        let structural = if seeds.is_empty() { Vec::new() } else { self.ppr(&seeds, 12) };
+        let structural = if seeds.is_empty() { Vec::new() } else { self.lift(&self.ppr(&seeds, 12)) };
 
         let mut fused: HashMap<usize, i64> = HashMap::new();
         for (rank, (i, _)) in lexical.iter().enumerate() {
@@ -595,6 +654,73 @@ mod tests {
     use super::*;
     use crate::catalog::Catalog;
     use crate::{EventKind, Hub};
+
+    /// A venue the size of the real one, whose dish NAMES never say the
+    /// ingredient — the only shape in which the graph earns its keep, because
+    /// BM25 can answer the other one on its own.
+    fn sixty_dishes() -> (Hub, Catalog) {
+        let mut c = Catalog::create().expect("catalog");
+        c.set_location(r#"{"id":"dubin-durres","name":"Dubin & Sushi","address":"Rruga Taulantia"}"#);
+        let cats = ["maki", "nigiri", "bowls", "snacks", "chef", "drinks"];
+        for i in 0..60 {
+            let cat = cats[i % cats.len()];
+            let (name, desc, supply) = match i % 3 {
+                0 => (format!("Philadelphia {i}"), "oriz sushi, nori, krem", "salmon"),
+                1 => (format!("Panko Special {i}"), "karkalec panko, chili", "shrimp"),
+                _ => (format!("Spicy Roll {i}"), "oriz sushi, nori, majoneze", "tuna"),
+            };
+            c.set_product(
+                &format!("item-{i:02}"),
+                &format!(
+                    r#"{{"name":"{name}","description":"{desc}","price":900,"categoryId":"{cat}","recipe":[{{"supplyId":"{supply}"}}]}}"#
+                ),
+            );
+        }
+        for sup in ["salmon", "shrimp", "tuna"] {
+            c.set_supply(sup, &format!(r#"{{"name":"{sup}","unit":"kg"}}"#));
+        }
+        (Hub::create_sized(512 * 1024).expect("hub"), c)
+    }
+
+    /// THE HUB NODES MUST NOT OUTRANK THE ANSWER. Every dish points at the one
+    /// venue, so the venue is a node of degree 60 and a raw PPR ranks it — and
+    /// the other ingredients, and the categories — above every dish that
+    /// actually contains what was asked for. Measured before `lift`: asking
+    /// `shrimp` put the venue second, two categories third and fourth, and the
+    /// SALMON and TUNA ingredients fifth and sixth, pushing the shrimp dishes
+    /// to rank six and below. This asserts the walk answers the question.
+    #[test]
+    fn a_super_node_does_not_outrank_the_dishes_that_use_the_ingredient() {
+        let (hub, cat) = sixty_dishes();
+        let g = Graph::of(&hub, &cat);
+        assert!(g.degree(g.index_of("venue:dubin-durres").expect("venue")) >= 60);
+
+        for (q, other) in [("shrimp", "salmon"), ("salmon", "shrimp")] {
+            let hits = g.hybrid(q, 12);
+            let kinds: Vec<&str> = hits
+                .iter()
+                .filter_map(|(i, _)| g.node(*i))
+                .map(|n| n.kind.tag())
+                .collect();
+            let names: Vec<String> = hits
+                .iter()
+                .filter_map(|(i, _)| g.node(*i))
+                .map(|n| format!("{} {}", n.kind.tag(), n.label))
+                .collect();
+
+            assert!(
+                !kinds.contains(&"venue"),
+                "the venue is in the top 12 for '{q}': {names:?}"
+            );
+            assert!(
+                !names.iter().any(|n| n == &format!("ingredient {other}")),
+                "the '{other}' ingredient is in the top 12 for '{q}': {names:?}"
+            );
+            // And the dishes that DO use it are the bulk of the answer.
+            let dishes = kinds.iter().filter(|k| **k == "dish").count();
+            assert!(dishes >= 8, "only {dishes} of 12 hits are dishes for '{q}': {names:?}");
+        }
+    }
 
     fn venue() -> Catalog {
         let mut c = Catalog::create().expect("catalog");
