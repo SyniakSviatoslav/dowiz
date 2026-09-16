@@ -83,7 +83,22 @@ impl Kv {
             let kl = st.get(kidx, 2 * i + 1) as usize;
             let vo = st.get(vidx, 2 * i) as usize;
             let vl = st.get(vidx, 2 * i + 1) as usize;
-            let k: String = (0..kl).map(|j| (st.get(kblob, ko + j) as u8) as char).collect();
+            // KEYS ARE UTF-8 BYTES AND MUST BE DECODED AS UTF-8. This read
+            // `(byte as char)`, which is not a decode at all -- in Rust that
+            // maps a `u8` to the code point of the same value, which is exactly
+            // Latin-1. The write side has always been `k.as_bytes()`, so every
+            // non-ASCII key was stored correctly and read back wrong, and the
+            // wrong string was then written back as ITS OWN UTF-8 -- so the
+            // damage COMPOUNDED on every round trip: `ujë` became `ujÃ«`, then
+            // `ujÃÂ«`, then `ujÃÂÃÂ«`, and the dish it identified became a
+            // new dish each time. It reached production as duplicate products on
+            // an Albanian menu, which is the whole product's alphabet.
+            //
+            // Lossy rather than strict: a key that is already damaged must still
+            // be readable, or this fix would make an affected image unopenable
+            // instead of repairable.
+            let kb: Vec<u8> = (0..kl).map(|j| st.get(kblob, ko + j) as u8).collect();
+            let k: String = String::from_utf8_lossy(&kb).into_owned();
             let v: Vec<u8> = (0..vl).map(|j| st.get(vblob, vo + j) as u8).collect();
             entries.push((k, v));
         }
@@ -264,6 +279,36 @@ mod tests {
     /// reopen, and the FNV-1a root. The root value is dowiz-core's own — the same constant
     /// `InMemoryStore` folds over these entries — so this test fails if either the store
     /// format handling or the fold drifts.
+    /// A NON-ASCII KEY MUST SURVIVE A ROUND TRIP. It did not: keys were written
+    /// as UTF-8 and read back as Latin-1, so an Albanian or Ukrainian id came
+    /// back as a different string -- and writing that back damaged it further,
+    /// so the same dish became a new product on every menu import.
+    #[test]
+    fn a_non_ascii_key_survives_the_image() {
+        let keys = ["pije-ujë-0-5l", "sushi-sets-durrës-set-24", "страва-суші", "ascii-plain"];
+        let mut st = Store::create_bytes(64 * 1024);
+        Kv::init_bytes(&mut st).expect("init");
+        let mut kv = Kv::load(&st).expect("load");
+        for k in keys {
+            kv.put(k, b"v");
+        }
+        let bytes = kv.compacted_bytes_fit(256 * 1024).expect("write");
+
+        let back = Kv::load(&Store::from_bytes(&bytes)).expect("reload");
+        for k in keys {
+            assert!(
+                back.get(k).is_some(),
+                "key {k:?} did not survive; the image holds {:?}",
+                back.keys()
+            );
+        }
+        // And the damage must not compound: a second round trip is identical.
+        let mut again = back;
+        let twice = again.compacted_bytes_fit(256 * 1024).expect("rewrite");
+        let back2 = Kv::load(&Store::from_bytes(&twice)).expect("reload twice");
+        assert_eq!(back2.keys(), again.keys(), "a second round trip changed the keys");
+    }
+
     #[test]
     fn rust_roundtrip_matches_dowiz_root() {
         let path = std::env::temp_dir().join("bebop_store_kv_roundtrip.store");
