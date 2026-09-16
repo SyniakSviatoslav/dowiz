@@ -74,6 +74,39 @@ async fn issue_owner_refresh(
     Ok(Some(tok))
 }
 
+/// Rewrite a password hash that was stored at a cost this Worker can no longer
+/// afford — see `auth::needs_rehash`.
+///
+/// ON LOGIN, because that is the only moment the plaintext exists. A migration
+/// cannot do this: the whole point of the stored value is that the password is
+/// not recoverable from it, so the rehash has to ride along with someone
+/// actually signing in.
+///
+/// IT NEVER FAILS THE LOGIN. The caller has already been authenticated; if the
+/// write does not land they simply pay the old cost again on their next visit
+/// and we try again then. Turning a successful authentication into a 500
+/// because of an optimisation would be the worse trade by a wide margin.
+///
+/// The table name is a `&'static str` chosen at the two call sites rather than
+/// anything derived from a request, because it is interpolated into SQL.
+async fn upgrade_hash(
+    db: &D1Database,
+    table: &'static str,
+    id: &str,
+    password: &str,
+    stored: Option<&str>,
+) {
+    let Some(stored) = stored else { return };
+    if !auth::needs_rehash(stored) {
+        return;
+    }
+    let Ok(fresh) = hash_password(password) else { return };
+    let sql = format!("UPDATE {table} SET password_hash = ?2 WHERE id = ?1");
+    if let Ok(stmt) = db.prepare(&sql).bind(&[id.into(), fresh.into()]) {
+        let _ = stmt.run().await;
+    }
+}
+
 /// `POST /api/auth/login` — owner, email + password.
 pub async fn owner_login(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let body: LoginIn = match req.json().await {
@@ -102,6 +135,7 @@ pub async fn owner_login(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
         return Response::error("invalid credentials", 401);
     }
     let user = user.expect("verified above");
+    upgrade_hash(&db, "users", &user.id, &body.password, user.password_hash.as_deref()).await;
 
     // Authority comes from memberships, not from the request.
     #[derive(Deserialize)]
@@ -313,6 +347,7 @@ pub async fn courier_login(mut req: Request, ctx: RouteContext<()>) -> Result<Re
         return Response::error("invalid credentials", 401);
     }
     let c = c.expect("verified above");
+    upgrade_hash(&db, "couriers", &c.id, &body.password, Some(c.password_hash.as_str())).await;
     if c.status != "active" {
         return Response::error("courier account is not active", 403);
     }

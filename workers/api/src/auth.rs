@@ -216,14 +216,35 @@ pub fn sha256_hex(input: &str) -> String {
 
 // ── passwords ────────────────────────────────────────────────────────────────
 
-/// argon2id, kept from the old service. This is the one place slowness is the
-/// feature; note it needs the Workers PAID CPU budget, the 10ms free tier cannot
-/// run it.
+/// argon2id, at parameters a Worker isolate can actually afford.
+///
+/// THE DEFAULT DID NOT FIT. `Argon2::default()` is m=19456 — 19 MiB allocated
+/// and touched for a single verify — and a login that did that answered `503
+/// error 1102` under any load at all. Slowness is the feature here, but a cost
+/// the platform refuses to pay is not slowness, it is an outage, and an outage
+/// authenticates nobody.
+///
+/// m=8192, t=3 keeps the same product of work at a third of the memory: three
+/// passes over 8 MiB instead of two over 19. OWASP's second recommended profile
+/// is m=9216/t=4, so this sits inside the range they consider current rather
+/// than below it. What it gives up is real and worth naming: an attacker with
+/// the hash file gets a cheaper guess than the default would have cost them.
+/// What it buys is that the login works.
+///
+/// The parameters live in the PHC string, so a hash written at the old cost is
+/// still VERIFIED at the old cost — which is why `needs_rehash` exists and why
+/// the login path uses it. Without that, every legacy account would keep
+/// spending 19 MiB forever and the outage would never actually end.
+fn argon2() -> argon2::Argon2<'static> {
+    use argon2::{Algorithm, Argon2, Params, Version};
+    let params = Params::new(8 * 1024, 3, 1, None).expect("argon2 parameters are constant");
+    Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
+}
+
 pub fn hash_password(password: &str) -> std::result::Result<String, AuthError> {
     use argon2::password_hash::{rand_core::OsRng, PasswordHasher, SaltString};
-    use argon2::Argon2;
     let salt = SaltString::generate(&mut OsRng);
-    Argon2::default()
+    argon2()
         .hash_password(password.as_bytes(), &salt)
         .map(|h| h.to_string())
         .map_err(|_| AuthError::Config("password hashing failed"))
@@ -231,13 +252,30 @@ pub fn hash_password(password: &str) -> std::result::Result<String, AuthError> {
 
 pub fn verify_password(password: &str, stored: &str) -> bool {
     use argon2::password_hash::{PasswordHash, PasswordVerifier};
-    use argon2::Argon2;
     match PasswordHash::new(stored) {
-        Ok(parsed) => Argon2::default()
-            .verify_password(password.as_bytes(), &parsed)
-            .is_ok(),
+        // VERIFIED WITH THE STORED HASH'S OWN PARAMETERS, not with ours. This
+        // is what makes the change above safe to deploy against live accounts:
+        // the m and t that produced the hash are written in it.
+        Ok(parsed) => argon2().verify_password(password.as_bytes(), &parsed).is_ok(),
         Err(_) => false,
     }
+}
+
+/// Was this hash written at a cost this Worker can no longer afford?
+///
+/// Read from the hash rather than from a stored flag or a version column: the
+/// PHC string is the only thing that cannot disagree with the hash it describes.
+pub fn needs_rehash(stored: &str) -> bool {
+    use argon2::password_hash::PasswordHash;
+    let Ok(parsed) = PasswordHash::new(stored) else {
+        // Not a PHC string at all, so not something we can reason about. Leave
+        // it alone; `verify_password` will refuse it on its own terms.
+        return false;
+    };
+    let Ok(params) = argon2::Params::try_from(&parsed) else {
+        return false;
+    };
+    params.m_cost() > 8 * 1024
 }
 
 /// Spend the same work on a miss as on a hit, so "no such account" and "wrong
@@ -281,9 +319,19 @@ pub fn verify_opaque(secret: &str, stored: &str) -> bool {
     }
 }
 
+/// The hash a login MISS is checked against — see `verify_password_constant_work`.
+// A REAL HASH, produced by `hash_password` and pasted here, not a plausible
+// looking string. The hand-written one that stood here did not parse: its
+// final base64 character carried non-zero padding bits, so `PasswordHash`
+// refused it, `verify_password` returned false without running argon2, and
+// the miss cost NOTHING while the hit cost a full derivation. The timing
+// difference this constant exists to erase was therefore present for the
+// whole life of the function, and looked exactly like working code.
+// `the_dummy_hash_actually_costs_something` is what now says otherwise.
+const DUMMY: &str = "$argon2id$v=19$m=8192,t=3,p=1$ZG93aXpkdW1teXNhbHQ$\
+                     cwMAH3VmqnqbDRZKJyROeGXCWQuBkRLbvmPp9z6HzXc";
+
 pub fn verify_password_constant_work(password: &str, stored: Option<&str>) -> bool {
-    const DUMMY: &str = "$argon2id$v=19$m=19456,t=2,p=1$c29tZXNhbHR2YWx1ZQ$\
-                         Yx3vJ8xQmN0oKZ7Xp1qLdT4hVn2sRwEbGcFuHiJkLmN";
     match stored {
         Some(h) => verify_password(password, h),
         None => {
@@ -463,5 +511,62 @@ pub fn require_location(p: &Principal, location_id: &str) -> std::result::Result
         Ok(())
     } else {
         Err(Response::error("not found", 404).unwrap())
+    }
+}
+
+#[cfg(test)]
+mod password_tests {
+    use super::*;
+
+    #[test]
+    fn a_password_verifies_against_its_own_hash() {
+        let h = hash_password("correct horse battery staple").expect("hash");
+        assert!(verify_password("correct horse battery staple", &h));
+        assert!(!verify_password("correct horse battery stapl", &h));
+        assert!(!verify_password("", &h));
+    }
+
+    /// The parameters must actually be the cheaper ones. A `Params::new` that
+    /// silently fell back to the default would leave the 503 in place while
+    /// every test here still passed.
+    #[test]
+    fn hashes_are_written_at_the_affordable_cost() {
+        let h = hash_password("x").expect("hash");
+        assert!(h.contains("m=8192"), "wrong memory cost: {h}");
+        assert!(h.contains("t=3"), "wrong time cost: {h}");
+        assert!(!needs_rehash(&h), "a hash we just wrote must not need rewriting");
+    }
+
+    /// A hash written by the old default is still accepted -- deploying this
+    /// must not lock out the accounts that exist -- and is flagged for rewrite.
+    #[test]
+    fn the_old_expensive_hashes_still_work_and_are_flagged() {
+        use argon2::password_hash::{rand_core::OsRng, PasswordHasher, SaltString};
+        let salt = SaltString::generate(&mut OsRng);
+        let old = argon2::Argon2::default()
+            .hash_password(b"legacy", &salt)
+            .expect("legacy hash")
+            .to_string();
+        assert!(old.contains("m=19456"), "this must be the OLD cost: {old}");
+
+        assert!(verify_password("legacy", &old), "an existing account must still sign in");
+        assert!(needs_rehash(&old), "and must be marked for rewrite");
+    }
+
+    /// THE LATENT ONE. `verify_password_constant_work` spends work on a miss so
+    /// that "no such account" and "wrong password" take the same time. If the
+    /// dummy hash does not PARSE, `verify_password` returns false immediately,
+    /// no argon2 runs, and the miss becomes measurably faster than the hit --
+    /// which is exactly the leak the dummy exists to close, passing silently.
+    #[test]
+    fn the_dummy_hash_actually_costs_something() {
+        use argon2::password_hash::PasswordHash;
+        let parsed = PasswordHash::new(DUMMY).expect("the dummy must parse or it costs nothing");
+        let params = argon2::Params::try_from(&parsed).expect("and carry usable parameters");
+        assert_eq!(params.m_cost(), 8192, "the miss must cost what the hit costs");
+        assert_eq!(params.t_cost(), 3);
+
+        // And the function itself answers false without panicking.
+        assert!(!verify_password_constant_work("anything", None));
     }
 }

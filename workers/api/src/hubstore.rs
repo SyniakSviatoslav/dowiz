@@ -70,6 +70,58 @@ pub struct LoadedCatalog {
 /// in one row is stored exactly as it was before this change.
 const CHUNK: usize = 900_000;
 
+/// D1 HANDS A BLOB TO JAVASCRIPT AS AN ARRAY OF NUMBERS — one JS value per byte.
+///
+/// THIS WAS THE 503. The hub log had grown to 524,288 bytes, so every request
+/// that read it asked wasm-bindgen to walk half a million JsValues across the
+/// JS/WASM boundary and allocate a handle for each. Cloudflare answered `503
+/// error 1102`, "Worker exceeded resource limits", for every route that touches
+/// an image, while `/healthz`, which touches none, kept answering 200 in 200 ms
+/// — which is what made it look like an outage rather than a cost.
+///
+/// `hex()` makes it ONE string per column. SQLite has no base64 and hex doubles
+/// the wire bytes; that trade is not close, because the expensive thing here is
+/// the crossing, not the byte.
+///
+/// READ IN SLICES because a single D1 value may not exceed one million bytes —
+/// the same limit `CHUNK` exists for — and `hex()` of a whole chunk would be
+/// 1.8 MB of it. `substr` on a BLOB counts BYTES, and the slicing happens
+/// inside SQLite, so the oversized value is never built in the first place.
+const SLICE: usize = 250_000;
+const SLICES: usize = 4;
+/// If `CHUNK` is ever raised past what the slices cover, the tail of every
+/// chunk would be silently dropped — a corrupt store that reads as a bebop
+/// parse failure a long way from here. The build stops instead.
+const _: () = assert!(SLICE * SLICES >= CHUNK);
+
+/// Hex back to bytes, appended to `out`.
+///
+/// Returns false rather than guessing on anything that is not hex: a store that
+/// half-decodes is worse than one that refuses, because the refusal names the
+/// image while a bad byte surfaces as an unreadable arena.
+fn from_hex(s: &str, out: &mut Vec<u8>) -> bool {
+    fn nibble(c: u8) -> Option<u8> {
+        match c {
+            b'0'..=b'9' => Some(c - b'0'),
+            b'a'..=b'f' => Some(c - b'a' + 10),
+            b'A'..=b'F' => Some(c - b'A' + 10),
+            _ => None,
+        }
+    }
+    let b = s.as_bytes();
+    if b.len() % 2 != 0 {
+        return false;
+    }
+    out.reserve(b.len() / 2);
+    for pair in b.chunks_exact(2) {
+        match (nibble(pair[0]), nibble(pair[1])) {
+            (Some(hi), Some(lo)) => out.push((hi << 4) | lo),
+            _ => return false,
+        }
+    }
+    true
+}
+
 /// Read one or more images, WHOLE, IN ONE QUERY.
 ///
 /// MEASURED, AND IT WAS THE WHOLE COST. The previous version fetched chunk
@@ -87,12 +139,22 @@ async fn load_images(
     db: &D1Database,
     ids: &[&str],
 ) -> Result<std::collections::HashMap<String, (Vec<u8>, i64)>> {
+    /// The slices are SPELLED OUT rather than collected with `#[serde(flatten)]`
+    /// into a map. Flatten needs `deserialize_any`, which serde-wasm-bindgen
+    /// supports only partially, and a deserialiser that fails here fails for
+    /// every image at once on a surface that cannot be tested from this box.
+    /// Four named fields cannot do that, and the assert below is what keeps them
+    /// honest with `SLICES`.
     #[derive(serde::Deserialize)]
     struct Row {
         id: String,
-        image: Vec<u8>,
         generation: i64,
+        h0: String,
+        h1: String,
+        h2: String,
+        h3: String,
     }
+    const _: () = assert!(SLICES == 4, "Row has exactly this many hN fields");
     // `id = ?n OR id LIKE ?n || '#%'` per image. Built rather than fixed
     // because the caller decides how many it needs, and a query per image is
     // the thing being removed.
@@ -102,8 +164,20 @@ async fn load_images(
         wheres.push(format!("id = ?{n} OR id LIKE ?{n} || '#%'", n = i + 1));
         binds.push((*id).into());
     }
+    // `substr` on a BLOB counts BYTES and is 1-based, so slice k starts at
+    // k*SLICE+1. Past the end it yields an empty blob, and `hex` of that is the
+    // empty string -- so a short image simply has empty trailing slices and
+    // needs no length column that could disagree with the bytes.
+    let cols: String = (0..SLICES)
+        .map(|k| {
+            format!(
+                ", ifnull(hex(substr(image, {start}, {SLICE})), '') AS h{k}",
+                start = k * SLICE + 1
+            )
+        })
+        .collect();
     let sql = format!(
-        "SELECT id, image, generation FROM hub_image WHERE {}",
+        "SELECT id, generation{cols} FROM hub_image WHERE {}",
         wheres.join(" OR ")
     );
     let rows: Vec<Row> = db.prepare(&sql).bind(&binds)?.all().await?.results()?;
@@ -141,7 +215,17 @@ async fn load_images(
         let generation = parts[0].1.generation;
         let mut buf = Vec::new();
         for (_, r) in &parts {
-            buf.extend_from_slice(&r.image);
+            // IN SLICE ORDER. Out of order the image reassembles with its bytes
+            // transposed, which reads as a corrupt arena rather than as a bug
+            // here.
+            for (k, hex) in [&r.h0, &r.h1, &r.h2, &r.h3].into_iter().enumerate() {
+                if !from_hex(hex, &mut buf) {
+                    return Err(Error::RustError(format!(
+                        "image {base} chunk {} slice {k} is not hex",
+                        r.id
+                    )));
+                }
+            }
         }
         out.insert((*base).to_string(), (buf, generation));
     }
@@ -555,4 +639,86 @@ where
     Err(Error::RustError(
         "hub image is contended; five attempts lost the generation guard".into(),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// SQLite's `hex()` emits UPPERCASE. Getting that wrong would decode every
+    /// image to garbage while still returning `true`, which is the shape of
+    /// failure this whole change exists to avoid.
+    #[test]
+    fn every_byte_survives_the_hex_round_trip() {
+        let original: Vec<u8> = (0..=255u8).collect();
+        let upper: String = original.iter().map(|b| format!("{b:02X}")).collect();
+        let lower: String = original.iter().map(|b| format!("{b:02x}")).collect();
+
+        for encoded in [&upper, &lower] {
+            let mut out = Vec::new();
+            assert!(from_hex(encoded, &mut out), "well-formed hex must decode");
+            assert_eq!(out, original, "bytes must come back exactly");
+        }
+    }
+
+    /// The reason `from_hex` returns a bool rather than skipping what it cannot
+    /// read: a half-decoded image is a corrupt arena reported far from here.
+    #[test]
+    fn nothing_that_is_not_hex_is_guessed_at() {
+        for bad in ["abc", "zz", "00ff0g", " 00", "00 ff"] {
+            let mut out = Vec::new();
+            assert!(!from_hex(bad, &mut out), "{bad:?} must be refused, not decoded");
+        }
+    }
+
+    /// An image shorter than the slices has empty trailing ones, and an empty
+    /// slice must contribute nothing -- not a zero byte, which would append
+    /// padding to every image in the store.
+    #[test]
+    fn an_empty_slice_appends_nothing() {
+        let mut out = vec![7u8, 8, 9];
+        assert!(from_hex("", &mut out));
+        assert_eq!(out, vec![7, 8, 9]);
+    }
+
+    /// THE ONE THAT MATTERS. Reassembles an image the way `load_images` does --
+    /// slice by slice, in slice order -- from what SQLite's `substr`/`hex` pair
+    /// would return for each, and checks the result against the original bytes.
+    ///
+    /// Sized to straddle a slice boundary AND end part-way through the next, so
+    /// an off-by-one in the 1-based `substr` start or in the final short slice
+    /// shows up as a difference rather than as a still-plausible image.
+    #[test]
+    fn a_multi_slice_image_reassembles_byte_for_byte() {
+        let original: Vec<u8> = (0..SLICE + SLICE / 2).map(|i| (i % 251) as u8).collect();
+
+        // What the query asks SQLite for, computed the same way the SQL is built.
+        let slices: Vec<String> = (0..SLICES)
+            .map(|k| {
+                let start = k * SLICE;
+                let end = (start + SLICE).min(original.len()).max(start.min(original.len()));
+                original[start.min(original.len())..end]
+                    .iter()
+                    .map(|b| format!("{b:02X}"))
+                    .collect()
+            })
+            .collect();
+        assert_eq!(slices[0].len(), SLICE * 2, "slice 0 is full");
+        assert_eq!(slices[1].len(), SLICE, "slice 1 is the remaining half");
+        assert_eq!(slices[2], "", "nothing past the end");
+
+        let mut rebuilt = Vec::new();
+        for s in &slices {
+            assert!(from_hex(s, &mut rebuilt));
+        }
+        assert_eq!(rebuilt, original, "the image must survive slicing");
+    }
+
+    /// The slices must cover a whole chunk. If `CHUNK` outgrows them the tail of
+    /// every chunked image is silently dropped -- a `const` assert already stops
+    /// the build, and this says out loud what it is protecting.
+    #[test]
+    fn the_slices_cover_a_whole_chunk() {
+        assert!(SLICE * SLICES >= CHUNK, "{SLICE} x {SLICES} must cover {CHUNK}");
+    }
 }
