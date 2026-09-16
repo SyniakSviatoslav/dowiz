@@ -35,6 +35,7 @@
      layout shift when the real face arrives, nothing to wait for. -->
 
 <link rel="stylesheet" href="/lib/tokens.css">
+<link rel="stylesheet" href="/lib/components.css">
 <style>
 /* ── The courier surface, in Sea & Sheet terms ──────────────────────────────
    The design plan is explicit for this role: during a run "the Sea IS the map"
@@ -165,9 +166,6 @@ button{cursor:pointer;touch-action:manipulation}
 [hidden]{display:none!important}
 :focus-visible{outline:3px solid var(--focus-ring);outline-offset:2px}
 .i{line-height:1;font-size:1.25em;vertical-align:-.15em}
-.money{font-family:var(--font-mono);font-variant-numeric:tabular-nums;
-       font-feature-settings:"tnum" 1;letter-spacing:-.01em}
-.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
 /* ── The Sea: the map, full-bleed. The sheet floats over it; fitBounds pads
    for the sheet so a marker is never parked underneath. ── */
@@ -215,7 +213,6 @@ button{cursor:pointer;touch-action:manipulation}
           background:var(--chip-bg);color:var(--brand-text);box-shadow:var(--elevation-2);
           display:inline-flex;align-items:center;justify-content:center;font-size:var(--text-xl);
           transition:transform var(--dur-press) var(--ease-snap)}
-.icon-btn:active{transform:scale(.94)}
 .icon-btn[disabled]{opacity:.5;cursor:default}
 
 /* ── The Sheet. Content-sized up to 48dvh, so the map always keeps ≥52% of the

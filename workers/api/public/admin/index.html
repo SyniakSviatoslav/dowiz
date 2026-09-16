@@ -24,6 +24,7 @@
 
 <link rel="stylesheet" href="/lib/icons.css">
 <link rel="stylesheet" href="/lib/tokens.css">
+<link rel="stylesheet" href="/lib/components.css">
 <style>
 /* ── dowiz owner console ───────────────────────────────────────────────────────
    Register: PRODUCT (PRODUCT.md). A tool scanned during a rush, not a brand
@@ -156,7 +157,6 @@ button,input,select{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;border-radius:var(--radius-sm)}
 [hidden]{display:none!important}
 .i{font-size:1.15em;line-height:1;vertical-align:-.12em}
-.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .wrap{max-width:960px;margin:0 auto;padding-inline:var(--space-4)}
 h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balance}
 
@@ -190,7 +190,6 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
      border-bottom:1px solid var(--brand-border)}
 .top::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;
             background:var(--spectral);opacity:.6;pointer-events:none}
-.top-in{display:flex;align-items:center;gap:var(--space-3);min-height:56px}
 .logo{font-weight:var(--weight-bold);font-size:var(--text-lg);letter-spacing:-.01em}
 .spacer{flex:1}
 .vstatus{display:inline-flex;align-items:center;gap:var(--space-2);min-height:var(--tap);
@@ -207,7 +206,6 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
           border:1px solid var(--brand-border);background:var(--brand-surface);
           border-radius:var(--radius-md);cursor:pointer;font-size:var(--text-xl);
           transition:background .15s ease-out,transform .12s ease-out}
-.icon-btn:active{transform:scale(.94)}
 
 /* ── stats ── one strip, hairlines between cells (1px grid gap over the border
    colour), label before value, 20px tabular figures. Not the hero-metric
@@ -617,7 +615,6 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
      background:var(--brand-surface);color:var(--brand-text);border-radius:var(--radius-md);
      font-weight:var(--weight-semibold);font-size:var(--text-base);cursor:pointer;
      transition:background .15s ease-out,border-color .15s ease-out,transform .12s ease-out}
-.btn:active{transform:scale(.97)}
 .btn.pri{background:var(--brand-primary);border-color:var(--primary-edge);color:var(--brand-on-primary)}
 .btn.dan{background:var(--brand-surface);border-color:var(--danger-ink);color:var(--danger-ink)}
 .btn.wide{width:100%;margin-top:var(--space-5)}
@@ -695,7 +692,6 @@ input:focus{border-color:var(--focus-ring);outline:none;
        font-size:var(--text-base);font-weight:var(--weight-medium);
        opacity:0;transform:translateY(8px);pointer-events:none;
        transition:opacity .2s var(--ease),transform .2s var(--ease)}
-.toast.show{opacity:1;transform:none}
 
 /* ── §8.4(3) MONEY IS SACRED ──
    One rule, one place, three surfaces. Mono and tabular so digits sit in a
@@ -703,8 +699,6 @@ input:focus{border-color:var(--focus-ring);outline:none;
    because a number that counts up is a number that is briefly wrong, and this
    one is what somebody pays. The kernel hands over an integer and it is
    rendered, not interpolated and not rounded. */
-.money{font-family:var(--font-mono);font-variant-numeric:tabular-nums;
-       font-feature-settings:"tnum" 1;letter-spacing:-.01em}
 
 /* ── СТАН: the arena gauges and the graph ─────────────────────────────────
    A gauge is a track and a fill and nothing else. The three grounds are the

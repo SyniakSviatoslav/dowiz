@@ -38,6 +38,15 @@ else
   echo "  note  node is not on PATH: the module parse check did not run"
 fi
 
+# The money module's own tests. It is JavaScript a browser runs, so a Rust
+# crate passing says nothing about what a customer sees; this is the only place
+# that check can live.
+node workers/api/public/lib/money.test.mjs >/dev/null || {
+  echo "money-gate: workers/api/public/lib/money.test.mjs FAILED" >&2
+  node workers/api/public/lib/money.test.mjs >&2
+  exit 1
+}
+
 python3 scripts/design_gate.py "$@"
 gate=$?
 [ "$mod_fail" = 0 ] || exit 1

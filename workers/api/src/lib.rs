@@ -190,6 +190,7 @@ async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/public/locations/:slug/orders", storefront::place)
         .post_async("/api/promo/check", extra::promo_check)
         .get_async("/api/public/reach", extra::reach)
+        .get_async("/api/public/rates", extra::rates)
         .post_async("/api/voice", extra::voice)
         .post_async("/api/owner/zones", extra::set_zones)
         .post_async("/api/owner/branding/extract", extra::extract_branding)

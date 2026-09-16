@@ -25,6 +25,20 @@ SHARED_CSS = BASE / "lib" / "tokens.css"
 shared_text = SHARED_CSS.read_text(encoding="utf-8")
 SHARED_TOKENS = set(re.findall(r"(--[A-Za-z0-9_-]+)\s*:", shared_text))
 
+# The shared COMPONENT layer. Same argument as the tokens one directory up: a
+# rule written out once per surface is a rule fixed in three places and
+# forgotten in the fourth. Only rules that were byte-identical in every copy
+# live here; see the file's own header for what is deliberately left out.
+SHARED_COMPONENTS = BASE / "lib" / "components.css"
+components_text = SHARED_COMPONENTS.read_text(encoding="utf-8")
+# Strip comments before reading selectors, or a class named in prose counts.
+_components_css = re.sub(r"/\*.*?\*/", "", components_text, flags=re.S)
+SHARED_RULES = {
+    " ".join(sel.split())
+    for sel in re.findall(r"([^{}@]+)\{", _components_css)
+}
+SHARED_CLASSES = set(re.findall(r"\.([a-zA-Z][\w-]*)", " ".join(SHARED_RULES)))
+
 failures = []
 notes = []
 
@@ -54,6 +68,33 @@ for name, (html_p, js_p) in SURFACES.items():
     # nothing and every measurement on the page silently becomes zero.
     if 'href="/lib/tokens.css"' not in html:
         fail(name, "T2", "lib/tokens.css is not linked")
+    if 'href="/lib/components.css"' not in html:
+        fail(name, "T5", "lib/components.css is not linked")
+
+    # ── A SHARED RULE IS NOT A SURFACE'S TO REDEFINE ──────────────────────
+    # The token rule (T2) one block up, applied to components. A surface that
+    # re-declares `.money` or `.sr` has stopped sharing a component layer with
+    # the other three, and the drift is invisible until two screens disagree.
+    own_rules = set()
+    for sty in re.findall(r"<style>(.*?)</style>", html, re.S):
+        sty_nc = re.sub(r"/\*.*?\*/", "", sty, flags=re.S)
+        depth = 0
+        buf = ""
+        for ch in sty_nc:
+            if ch == "{":
+                if depth == 0:
+                    own_rules.add(" ".join(buf.split()))
+                    buf = ""
+                depth += 1
+            elif ch == "}":
+                depth = max(0, depth - 1)
+                if depth == 0:
+                    buf = ""
+            elif depth == 0:
+                buf += ch
+    for sel in sorted(own_rules & SHARED_RULES):
+        if sel:
+            fail(name, "T5", f"'{sel}' is fixed by lib/components.css and redefined here")
     for tok in REQUIRED_TOKENS:
         if tok not in defined:
             fail(name, "T2", f"{tok} is not defined")
@@ -71,7 +112,12 @@ for name, (html_p, js_p) in SURFACES.items():
     # ── §8.4(3) MONEY IS SACRED ───────────────────────────────────────────
     # mono + tabular, and it never tweens. Checked on the `.money` class,
     # which is the single place money may be styled.
-    m = re.search(r"\.money\{([^}]*)\}", html)
+    # THE SHARED SHEET IS CONSULTED FIRST. A surface may legitimately carry
+    # something like `input.money{font-size:...}`, and a substring search over
+    # the surface would match THAT and then report the canonical rule missing
+    # font-mono. The rule that governs money lives in one place; look there.
+    m = re.search(r"(?:^|[\s,}])\.money\{([^}]*)\}", components_text) \
+        or re.search(r"(?:^|[\s,}])\.money\{([^}]*)\}", html)
     if not m:
         fail(name, "R3", "no .money rule — money must have one styling in one place")
     else:
@@ -133,6 +179,25 @@ for name, (html_p, js_p) in SURFACES.items():
             continue
         fail(name, "R3", f"{js_p}:{line_no} renders money without the .money class")
 
+    # ── MONEY IS FORMATTED IN ONE PLACE, FOR EVERY SURFACE ────────────────
+    #
+    # R3 above says money has ONE STYLING in one place. This says it has one
+    # IMPLEMENTATION. It did not: the storefront formatted with the customer's
+    # locale while the console and the courier app each carried their own
+    # `Intl.NumberFormat` with `currency:'ALL'` hardcoded, so a venue trading in
+    # anything else showed lek to its owner and to its couriers and the right
+    # currency to its customers. Three copies of a rule is three chances to
+    # disagree, and money is where a disagreement is a support call.
+    if "money(" in js or "class=\"money\"" in html:
+        if "/lib/money.js" not in js:
+            fail(name, "R3b", "renders money without importing /lib/money.js")
+        # A surface may still build a currency string for something that is not
+        # money (a rate, a label). What it may not do is re-implement the
+        # formatter, which is what `style:'currency'` outside the module means.
+        for m in re.finditer(r"style\s*:\s*['\"]currency['\"]", js):
+            line_no = js[: m.start()].count("\n") + 1
+            fail(name, "R3b", f"{js_p}:{line_no} formats currency itself; use /lib/money.js")
+
     # ── §8.4(6) ζ GOVERNS MOTION ──────────────────────────────────────────
     # No raw cubic-bezier at a call site; the easing comes from a token.
     for m in re.finditer(r"(transition|animation)\s*:[^;}]*", html):
@@ -172,7 +237,9 @@ for name, (html_p, js_p) in SURFACES.items():
         if cls.startswith("ti") or not cls:
             continue
         sel = re.compile(r"\." + re.escape(cls) + r"(?![A-Za-z0-9_-])")
-        if not sel.search(html) and not sel.search(js):
+        # The shared component layer counts as a rule the surface has: it is
+        # linked by every surface, so a class defined there IS styled here.
+        if not sel.search(html) and not sel.search(js) and cls not in SHARED_CLASSES:
             fail(name, "R5", f'class "{cls}" is used and has no rule')
 
     # ── NOTHING THIRD-PARTY MAY BLOCK THE FIRST PAINT ─────────────────────

@@ -13,7 +13,26 @@ import { createGuide } from '/lib/guide.js';
 const API = '/api';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const money = n => new Intl.NumberFormat('uk', { style:'currency', currency:'ALL', maximumFractionDigits:0 }).format(n || 0);
+// MONEY COMES FROM ONE PLACE NOW. This line was a second copy of a rule that
+// also lived on the storefront, with `currency:'ALL'` hardcoded -- so a venue
+// trading in anything else showed lek here and the right currency to its
+// customers. `MoneyFmt` is reassigned once the venue's currency and the
+// viewer's chosen display currency are known; until then it renders the
+// venue-neutral default rather than a wrong symbol.
+import * as Money from '/lib/money.js';
+let MoneyBase = 'ALL', MoneyDisplay = 'ALL', MoneyRates = null;
+let MoneyFmt = Money.formatter({ base: MoneyBase, display: MoneyDisplay, rates: null, locale: 'sq' });
+const money = n => MoneyFmt(n);
+/// Called once the venue is known, and again when the viewer switches currency.
+async function setCurrency(base, display) {
+  MoneyBase = base || MoneyBase;
+  MoneyDisplay = display || MoneyBase;
+  if (MoneyDisplay !== MoneyBase && (!MoneyRates || MoneyRates.base !== MoneyBase)) {
+    MoneyRates = await Money.loadRates(MoneyBase);
+  }
+  MoneyFmt = Money.formatter({ base: MoneyBase, display: MoneyDisplay, rates: MoneyRates, locale: 'sq' });
+  Money.remember(MoneyDisplay);
+}
 const short = id => esc(String(id).slice(0, 8));
 const icon = (name, cls = '') => `<i class="ti ti-${name} i ${cls}" aria-hidden="true"></i>`;
 

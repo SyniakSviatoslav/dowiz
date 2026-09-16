@@ -32,7 +32,26 @@ function toast(m){ const el = $('#toast'); el.textContent = m; el.classList.add(
 
 // Money is an integer the server sent, formatted and SET as text. There is no
 // animated path to an amount anywhere in this file (DESIGN plan §2.5).
-const money = n => new Intl.NumberFormat('uk', { style:'currency', currency:'ALL', maximumFractionDigits:0 }).format(n || 0);
+// MONEY COMES FROM ONE PLACE NOW. This line was a second copy of a rule that
+// also lived on the storefront, with `currency:'ALL'` hardcoded -- so a venue
+// trading in anything else showed lek here and the right currency to its
+// customers. `MoneyFmt` is reassigned once the venue's currency and the
+// viewer's chosen display currency are known; until then it renders the
+// venue-neutral default rather than a wrong symbol.
+import * as Money from '/lib/money.js';
+let MoneyBase = 'ALL', MoneyDisplay = 'ALL', MoneyRates = null;
+let MoneyFmt = Money.formatter({ base: MoneyBase, display: MoneyDisplay, rates: null, locale: 'sq' });
+const money = n => MoneyFmt(n);
+/// Called once the venue is known, and again when the viewer switches currency.
+async function setCurrency(base, display) {
+  MoneyBase = base || MoneyBase;
+  MoneyDisplay = display || MoneyBase;
+  if (MoneyDisplay !== MoneyBase && (!MoneyRates || MoneyRates.base !== MoneyBase)) {
+    MoneyRates = await Money.loadRates(MoneyBase);
+  }
+  MoneyFmt = Money.formatter({ base: MoneyBase, display: MoneyDisplay, rates: MoneyRates, locale: 'sq' });
+  Money.remember(MoneyDisplay);
+}
 
 // EVERY button that waits on the network shows that it is waiting.
 //

@@ -28,7 +28,7 @@ const $ = (s, r = document) => r.querySelector(s);
 
 // ── i18n. sq is the default: the diners are in Durrës. ──
 const T = {
-  sq: { cart:'Shporta', add:'Shto', total:'Totali', checkout:'Vazhdo', empty:'Shporta është bosh',
+  sq: { cart:'Shporta', add:'Shto', total:'Totali', chargedIn:'Do të paguhet', checkout:'Vazhdo', empty:'Shporta është bosh',
         emptyHint:'Zgjidhni një pjatë nga menuja', name:'Emri', phone:'Telefoni', address:'Adresa',
         note:'Shënim për korrierin', pay:'Mënyra e pagesës', cash:'Para në dorë', card:'Kartë',
         cashNote:'Paguani korrierit në dorëzim', cardNote:'Kartë ose Apple/Google Pay', place:'Porosit',
@@ -58,7 +58,7 @@ const T = {
         st:{PENDING:'Duke pritur konfirmimin',CONFIRMED:'U konfirmua',PREPARING:'Po gatuhet',
             READY:'Gati',IN_DELIVERY:'Në rrugë',DELIVERED:'U dorëzua',
             REJECTED:'U refuzua',CANCELLED:'U anulua'} },
-  en: { cart:'Cart', add:'Add', total:'Total', checkout:'Checkout', empty:'Your cart is empty',
+  en: { cart:'Cart', add:'Add', total:'Total', chargedIn:'You will be charged', checkout:'Checkout', empty:'Your cart is empty',
         emptyHint:'Pick a dish from the menu', name:'Name', phone:'Phone', address:'Address',
         note:'Note for the courier', pay:'Payment', cash:'Cash', card:'Card',
         cashNote:'Pay the courier on delivery', cardNote:'Card or Apple/Google Pay', place:'Place order',
@@ -88,7 +88,7 @@ const T = {
         st:{PENDING:'Awaiting confirmation',CONFIRMED:'Confirmed',PREPARING:'Being prepared',
             READY:'Ready',IN_DELIVERY:'On the way',DELIVERED:'Delivered',
             REJECTED:'Rejected',CANCELLED:'Cancelled'} },
-  uk: { cart:'Кошик', add:'Додати', total:'Разом', checkout:'Оформити', empty:'Кошик порожній',
+  uk: { cart:'Кошик', add:'Додати', total:'Разом', chargedIn:'Буде списано', checkout:'Оформити', empty:'Кошик порожній',
         emptyHint:'Оберіть страву з меню', name:'Ім’я', phone:'Телефон', address:'Адреса',
         note:'Коментар кур’єру', pay:'Оплата', cash:'Готівка', card:'Картка',
         cashNote:'Оплата кур’єру при отриманні', cardNote:'Картка або Apple/Google Pay', place:'Замовити',
@@ -190,8 +190,31 @@ function refreshTotals(){
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 // Money arrives as integer minor units and is formatted only here. It is never
 // parsed back out of the DOM.
-const money = n => new Intl.NumberFormat(lang === 'uk' ? 'uk' : lang === 'en' ? 'en' : 'sq',
-  { style:'currency', currency: state.loc?.currencyCode || 'ALL', maximumFractionDigits:0 }).format(n);
+//
+// ONE MODULE FOR EVERY SURFACE. This was one of three copies; see /lib/money.js
+// for what the other two got wrong. The customer may read prices in EUR or USD,
+// and that is a READING -- the charge is in the venue's currency and the cart
+// says so, because a converted total that looked like the amount taken would be
+// a number nobody could reconcile against their bank.
+import * as Money from '/lib/money.js';
+let MoneyRates = null;
+const baseCurrency = () => state.loc?.currencyCode || 'ALL';
+const displayCurrency = () => state.currency || baseCurrency();
+const money = n => Money.formatter({
+  base: baseCurrency(),
+  display: displayCurrency(),
+  rates: MoneyRates,
+  locale: lang === 'uk' ? 'uk' : lang === 'en' ? 'en' : 'sq',
+})(n);
+/// Switch the reading currency. Rates are fetched once and reused.
+async function setDisplayCurrency(code){
+  state.currency = code;
+  Money.remember(code);
+  if (code !== baseCurrency() && (!MoneyRates || MoneyRates.base !== baseCurrency())) {
+    MoneyRates = await Money.loadRates(baseCurrency());
+  }
+  render();
+}
 
 // A dish without a photo gets a deliberate mark, not a grey rectangle. Hue is a
 // stable hash of the name so the same dish always looks the same.
@@ -426,6 +449,15 @@ async function load(){
     document.title = d.location.name;
     $('#brandName').textContent = d.location.name;
     document.documentElement.lang = lang;
+    // THE VENUE'S CURRENCY IS KNOWN ONLY NOW, so the reading currency is
+    // resolved here: whatever this browser last chose, if the product still
+    // offers it, otherwise the venue's own. Rates are fetched only when the two
+    // differ, so a customer reading lek costs no third-party round trip.
+    state.currency = Money.preferred(baseCurrency());
+    if (state.currency !== baseCurrency()) {
+      MoneyRates = await Money.loadRates(baseCurrency());
+    }
+    paintCurrencies();
     renderMenu();
     initSea().then(() => seaEvent('pending_aging', 40));
   } catch (e) {
@@ -950,6 +982,7 @@ function totalsBlock(){
     ${tip ? `<div class="row"><span>${esc(t('tip'))}</span>
       <span class="money">${money(tip)}</span></div>` : ''}
     <div class="row grand"><span>${esc(t('total'))}</span><span class="money">${money(s - cut + d + tip)}</span></div>
+    ${chargeNote(s - cut + d + tip)}
     ${below ? `<div class="err">${esc(t('min'))}: <span class="money">${money(L.minOrder)}</span></div>` : ''}
   </div>`;
 }
@@ -1377,6 +1410,44 @@ function openTracking(order){
 }
 
 // ── chrome ──
+/// What will actually leave the customer's account.
+///
+/// A CONVERTED TOTAL MUST NEVER LOOK LIKE THE AMOUNT TAKEN. The venue prices,
+/// charges and refunds in its own currency; a euro figure is this page's
+/// arithmetic on a reference rate that moved this morning. Showing it without
+/// saying so would hand someone a number they cannot reconcile against their
+/// bank statement, and the difference would look like the restaurant taking
+/// more than it quoted. Empty when the two currencies are the same, so the
+/// common case gains no clutter.
+function chargeNote(amount){
+  const base = baseCurrency();
+  if (displayCurrency() === base) return '';
+  const exact = Money.format(amount, base, lang === 'uk' ? 'uk' : lang === 'en' ? 'en' : 'sq');
+  const stale = MoneyRates && MoneyRates.stale ? ' ⚠' : '';
+  return `<div class="row note"><span>${esc(t('chargedIn'))}</span><span class="money">${esc(exact)}${stale}</span></div>`;
+}
+
+// ── the currency switcher ───────────────────────────────────────────────────
+//
+// BUILT FROM THE VENUE'S OWN CURRENCY, not from a fixed list, so a venue
+// trading in euros shows EUR first and does not offer to "convert" to itself.
+// Rendered only once the venue is known, because before that there is nothing
+// to convert from.
+function paintCurrencies(){
+  const host = document.getElementById('curs');
+  if (!host) return;
+  const base = baseCurrency();
+  const codes = [base, ...Money.CURRENCIES.filter(c => c !== base)];
+  host.innerHTML = codes.map(c =>
+    `<button class="lang" data-c="${c}" aria-pressed="${c === displayCurrency()}">${c}</button>`).join('');
+  host.querySelectorAll('[data-c]').forEach(b => {
+    b.onclick = async () => {
+      await setDisplayCurrency(b.dataset.c);
+      paintCurrencies();
+    };
+  });
+}
+
 document.querySelectorAll('.lang').forEach(b => {
   b.setAttribute('aria-pressed', String(b.dataset.l === lang));
   b.onclick = () => { lang = b.dataset.l; safeSet('dw_lang', lang);

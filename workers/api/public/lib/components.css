@@ -1,0 +1,31 @@
+/* dowiz — the component rules every surface shares.
+ *
+ * WHAT IS HERE IS WHAT WAS PROVABLY THE SAME. Each of these was written out
+ * separately on the storefront, the owner console, the courier app and the
+ * platform console and was BYTE-IDENTICAL in every copy — `.sr` appeared four
+ * times, twice in one file. A rule duplicated four times is a rule that gets
+ * fixed in three places and forgotten in the fourth, which is exactly how the
+ * design tokens drifted before `lib/tokens.css` existed.
+ *
+ * WHAT IS DELIBERATELY NOT HERE. Twenty-five further selectors are shared by
+ * NAME and differ in BODY: `.btn` scales on press on the storefront, carries
+ * hover states on the console and has neither on the platform; `.empty`,
+ * `.erow`, `.i`, `.icon-btn` and `.err` each differ too. Moving those here
+ * would not be a refactor — it would silently change how three shipped surfaces
+ * look, which is a design decision and not a tidy-up. `.spin` is also left
+ * alone: it is an animation with a prefers-reduced-motion override, and the
+ * first attempt at this extracted the OVERRIDE as canonical and would have
+ * stopped every spinner in the product.
+ *
+ * Loaded after lib/tokens.css and before the surface's own <style>, so a
+ * surface can still override deliberately — and the design gate reports it when
+ * one does, so a divergence is a decision rather than a drift.
+ */
+
+.money{font-family:var(--font-mono);font-variant-numeric:tabular-nums;
+       font-feature-settings:"tnum" 1;letter-spacing:-.01em}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.top-in{display:flex;align-items:center;gap:var(--space-3);min-height:56px}
+.toast.show{opacity:1;transform:none}
+.btn:active{transform:scale(.97)}
+.icon-btn:active{transform:scale(.94)}
