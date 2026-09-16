@@ -404,3 +404,171 @@ pub async fn courier_login(mut req: Request, ctx: RouteContext<()>) -> Result<Re
 }
 
 use worker::wasm_bindgen;
+
+#[derive(Deserialize)]
+pub struct ClaimIn {
+    pub phone: String,
+    pub code: String,
+    pub password: String,
+}
+
+/// `POST /api/courier/auth/claim` — turn an invite into an account.
+///
+/// PUBLIC BY NECESSITY: the courier has no credentials yet, which is the whole
+/// point. What stands in for authentication is the code, and the code is stored
+/// hashed and compared in constant time, so this route cannot be used to
+/// discover which phone numbers a venue has invited.
+///
+/// "No invite for this phone" and "wrong code" are ONE answer, reached after the
+/// same lookup. Expiry is told apart in the answer, because a courier whose code
+/// ran out needs a new one rather than another attempt.
+///
+/// The courier chooses their own password. An owner who set it for them would
+/// know it.
+pub async fn courier_claim(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let body: ClaimIn = match req.json().await {
+        Ok(b) => b,
+        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
+    };
+    // Eight characters. Short enough to type at a door, long enough not to be
+    // the four-digit PIN everyone would otherwise pick. The cost of a weak one
+    // here is somebody else's shift.
+    if body.password.chars().count() < 8 {
+        return Response::error("choose a password of at least 8 characters", 400);
+    }
+    let db = ctx.d1("DB")?;
+    let phone = body.phone.trim().to_string();
+    let phone_hash = auth::sha256_hex(&phone);
+    let code_hash = auth::sha256_hex(body.code.trim());
+    let now = now_ms();
+
+    #[derive(Deserialize)]
+    struct Inv {
+        id: String,
+        location_id: String,
+        invited_name: Option<String>,
+        expires_at_ms: i64,
+    }
+    let inv: Option<Inv> = db
+        .prepare(
+            "SELECT id, location_id, invited_name, expires_at_ms FROM courier_invites \
+             WHERE invited_phone_hash = ?1 AND code_hash = ?2 \
+             AND used_at_ms IS NULL AND revoked_at_ms IS NULL",
+        )
+        .bind(&[phone_hash.clone().into(), code_hash.into()])?
+        .first(None)
+        .await?;
+    let Some(inv) = inv else {
+        return Response::error("that code does not match", 400);
+    };
+    if now >= inv.expires_at_ms {
+        return Response::error("that code has expired -- ask for a new one", 400);
+    }
+
+    #[derive(Deserialize)]
+    struct Row {
+        id: String,
+    }
+    let taken: Option<Row> = db
+        .prepare("SELECT id FROM couriers WHERE phone_hash = ?1")
+        .bind(&[phone_hash.clone().into()])?
+        .first(None)
+        .await?;
+    if taken.is_some() {
+        return Response::error("this person already has an account", 409);
+    }
+
+    let (Some(cid), Some(session_id), Some(family_id), Some(secret)) =
+        (crate::edge_id(), crate::edge_id(), crate::edge_id(), opaque_token())
+    else {
+        return Response::error("no platform CSPRNG", 500);
+    };
+    let pw_hash = match hash_password(&body.password) {
+        Ok(h) => h,
+        Err(e) => return e.into_response(),
+    };
+    let name = inv.invited_name.clone().unwrap_or_default();
+    // The email column is NOT NULL and unique, and a courier who signs in by
+    // phone has no address. A derived placeholder keeps the constraint honest
+    // without inventing one that might reach somebody.
+    let email = format!("{}@courier.invalid", phone.replace(['+', ' '], ""));
+    db.prepare(
+        "INSERT INTO couriers (id,email_encrypted,email_hash,phone_encrypted,phone_hash,\
+         full_name_encrypted,password_hash,status,created_at_ms) \
+         VALUES (?1,?2,?3,?4,?5,?6,?7,'active',?8)",
+    )
+    .bind(&[
+        cid.clone().into(),
+        email.clone().into(),
+        auth::sha256_hex(&email).into(),
+        phone.clone().into(),
+        phone_hash.into(),
+        name.into(),
+        pw_hash.into(),
+        wasm_bindgen::JsValue::from_f64(now as f64),
+    ])?
+    .run()
+    .await?;
+    db.prepare(
+        "INSERT INTO courier_locations (courier_id,location_id,role,added_at_ms) \
+         VALUES (?1,?2,'courier',?3)",
+    )
+    .bind(&[
+        cid.clone().into(),
+        inv.location_id.clone().into(),
+        wasm_bindgen::JsValue::from_f64(now as f64),
+    ])?
+    .run()
+    .await?;
+    // ONE SHOT. A code that survived its own use would be a second key to
+    // somebody else's account. Marked used only after the account exists, so a
+    // failure above leaves the invite still claimable.
+    db.prepare("UPDATE courier_invites SET used_at_ms = ?2, used_by_courier_id = ?3 WHERE id = ?1")
+        .bind(&[
+            inv.id.into(),
+            wasm_bindgen::JsValue::from_f64(now as f64),
+            cid.clone().into(),
+        ])?
+        .run()
+        .await?;
+
+    let token_hash = match hash_password(&secret) {
+        Ok(h) => h,
+        Err(e) => return e.into_response(),
+    };
+    db.prepare(
+        "INSERT INTO courier_sessions (id,courier_id,family_id,token_hash,active_location_id,\
+         issued_at_ms,expires_at_ms) VALUES (?1,?2,?3,?4,?5,?6,?7)",
+    )
+    .bind(&[
+        session_id.clone().into(),
+        cid.clone().into(),
+        family_id.into(),
+        token_hash.into(),
+        inv.location_id.clone().into(),
+        wasm_bindgen::JsValue::from_f64(now as f64),
+        wasm_bindgen::JsValue::from_f64((now + COURIER_REFRESH_TTL_MS) as f64),
+    ])?
+    .run()
+    .await?;
+
+    let claims = Claims::Courier {
+        sub: cid.clone(),
+        active_location_id: inv.location_id.clone(),
+        jti: session_id.clone(),
+        iat: now,
+        exp: now + COURIER_TTL_MS,
+    };
+    let jwt = match auth::sign(&ctx.env, &claims) {
+        Ok(t) => t,
+        Err(e) => return e.into_response(),
+    };
+    // Signed in on the spot: making them claim the code and then type the
+    // password they set ten seconds ago is a step that exists only because the
+    // two things were written separately.
+    Response::from_json(&json!({
+        "jwt": jwt,
+        "refreshToken": format!("{session_id}.{secret}"),
+        "courier": { "id": cid, "locationId": inv.location_id }
+    }))
+}

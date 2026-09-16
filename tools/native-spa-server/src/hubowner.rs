@@ -987,13 +987,23 @@ pub async fn import_menu(
                 .as_ref()
                 .and_then(|v| v.get("modifierGroups").cloned())
                 .unwrap_or(Value::Null);
+            // AND ITS ALLERGENS. Blanking these would be the worst of the four:
+            // a re-imported price list would make every declared dish
+            // undeclared, the publish gate would then refuse to keep them on
+            // sale, and a venue would find its whole menu stopped by an import
+            // that looked like it only touched prices.
+            let allergens = existing
+                .as_ref()
+                .and_then(|v| v.get("allergens").cloned())
+                .unwrap_or(Value::Null);
             cat.set_product(
                 &p.id,
                 &json!({
                     "id": p.id, "categoryId": p.category_id, "name": p.name,
                     "description": p.description, "price": p.price,
                     "available": p.available, "sortOrder": p.sort_order,
-                    "imageUrl": image, "sizeCm": size, "modifierGroups": mods
+                    "imageUrl": image, "sizeCm": size, "modifierGroups": mods,
+                    "allergens": allergens
                 })
                 .to_string(),
             );

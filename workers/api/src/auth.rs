@@ -274,7 +274,20 @@ pub async fn authenticate(
     db: &D1Database,
     now_ms: i64,
 ) -> std::result::Result<Principal, AuthError> {
-    let claims = verify(env, &bearer(req)?, now_ms)?;
+    let raw = bearer(req)?;
+
+    // ── AN API KEY IS NOT A JWT AND IS NOT VERIFIED LIKE ONE ──
+    //
+    // The prefix is what tells them apart, and it is deliberate rather than
+    // decorative: a key that looked like a token would be handed to `verify`,
+    // fail as malformed, and the owner would be told their session expired
+    // instead of that their key is wrong. `dowiz_` is also what lets a secret
+    // scanner recognise one in a repository.
+    if let Some(rest) = raw.strip_prefix("dowiz_") {
+        return api_key_principal(db, rest, now_ms).await;
+    }
+
+    let claims = verify(env, &raw, now_ms)?;
     match claims {
         Claims::Owner { user_id, active_location_id, .. } => {
             // Authority is re-derived, never trusted from the token.
@@ -329,6 +342,63 @@ pub async fn authenticate(
             Ok(Principal::Customer { customer_id: sub, order_id, location_id })
         }
     }
+}
+
+/// Resolve `dowiz_<id>.<secret>` to the owner who minted it.
+///
+/// The id travels in the token because the secret is HASHED in the row and a
+/// hash lookup is impossible by design -- the same reason the refresh tokens
+/// carry their row id. Everything that can refuse does: an unknown id, a
+/// mismatched secret, a revoked key and an expired one all answer the same way.
+async fn api_key_principal(
+    db: &D1Database,
+    rest: &str,
+    now_ms: i64,
+) -> std::result::Result<Principal, AuthError> {
+    let Some((id, secret)) = rest.split_once('.') else {
+        return Err(AuthError::Revoked("that key is malformed"));
+    };
+    #[derive(Deserialize)]
+    struct Row {
+        owner_id: String,
+        location_id: String,
+        key_hash: String,
+        expires_at_ms: i64,
+        revoked_at_ms: Option<i64>,
+    }
+    let row: Option<Row> = db
+        .prepare(
+            "SELECT owner_id, location_id, key_hash, expires_at_ms, revoked_at_ms              FROM owner_api_keys WHERE id = ?1",
+        )
+        .bind(&[id.into()])
+        .map_err(|e| AuthError::Db(e.to_string()))?
+        .first(None)
+        .await
+        .map_err(|e| AuthError::Db(e.to_string()))?;
+    let Some(row) = row else {
+        return Err(AuthError::Revoked("no such key"));
+    };
+    if row.revoked_at_ms.is_some() {
+        return Err(AuthError::Revoked("that key was revoked"));
+    }
+    if now_ms >= row.expires_at_ms {
+        return Err(AuthError::Revoked("that key has expired"));
+    }
+    if !verify_password(secret, &row.key_hash) {
+        return Err(AuthError::Revoked("no such key"));
+    }
+    // Recorded, not enforced: an owner looking at a key they no longer recognise
+    // needs to know whether anything is still using it before they revoke it.
+    let _ = db
+        .prepare("UPDATE owner_api_keys SET last_used_ms = ?2 WHERE id = ?1")
+        .bind(&[id.into(), wasm_bindgen::JsValue::from_f64(now_ms as f64)])
+        .map_err(|e| AuthError::Db(e.to_string()))?
+        .run()
+        .await;
+    Ok(Principal::Owner {
+        user_id: row.owner_id,
+        active_location_id: Some(row.location_id),
+    })
 }
 
 /// Cross-tenant access answers 404, not 403 — the old guard's choice, and the

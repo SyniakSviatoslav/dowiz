@@ -3144,3 +3144,52 @@ async fn a_second_courier_is_refused_while_the_offer_stands() {
     let (_, d) = get(&s.base, "/api/courier/tasks", Some(&mine));
     assert_eq!(d["mine"][0]["offerEndsMs"], Value::Null, "{d}");
 }
+
+/// A re-imported price list must not blank what the spreadsheet has no column
+/// for. The allergens are the dangerous one: blanking them makes every declared
+/// dish undeclared, and the publish gate then refuses to keep them on sale -- a
+/// venue would find its whole menu stopped by an import that looked like it
+/// only touched prices.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_import_keeps_what_the_file_does_not_carry() {
+    let s = boot("import_keeps").await;
+    let (_, t) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = t["access_token"].as_str().unwrap().to_string();
+
+    // The importer derives a product id from the name, so the dish has to come
+    // from a file before a re-import can be a RE-import.
+    let (code, v) = post_text(&s.base, "/api/owner/menu/import?apply=true", &owner,
+                              "Розділ,Назва,Ціна\nRolls,Sake Futomaki,900\n");
+    assert_eq!(code, 200, "{v}");
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    let id = menu["categories"].as_array().unwrap().iter()
+        .flat_map(|c| c["products"].as_array().unwrap())
+        .find(|p| p["name"] == "Sake Futomaki" && p["id"] != "p1")
+        .map(|p| p["id"].as_str().unwrap().to_string())
+        .expect("the imported dish");
+
+    // Declare allergens and a size, and give the dish an image.
+    let (code, _) = post(&s.base, &format!("/api/owner/products/{id}"), Some(&owner),
+                         json!({ "allergens": ["fish"], "size_cm": 20 }));
+    assert_eq!(code, 200);
+    let mut jpeg = vec![0xFFu8, 0xD8, 0xFF, 0xE0];
+    jpeg.extend_from_slice(b"\x00\x10JFIF\x00\x01");
+    jpeg.extend(std::iter::repeat_n(0x42u8, 512));
+    request_bytes(&s.base, "POST", &format!("/api/owner/products/{id}/image"),
+                  Some(&owner), "image/jpeg", &jpeg);
+
+    // Re-import the same dish as a price change.
+    let (code, v) = post_text(&s.base, "/api/owner/menu/import?apply=true", &owner,
+                              "Розділ,Назва,Ціна\nRolls,Sake Futomaki,950\n");
+    assert_eq!(code, 200, "{v}");
+
+    let (_, menu) = get(&s.base, "/api/menu", None);
+    let p = menu["categories"].as_array().unwrap().iter()
+        .flat_map(|c| c["products"].as_array().unwrap())
+        .find(|p| p["id"] == id.as_str()).expect("the dish");
+    assert_eq!(p["price"], 950, "the price should have changed");
+    assert_eq!(p["allergens"], json!(["fish"]), "the import erased the allergens: {p}");
+    assert_eq!(p["sizeCm"], 20, "the import erased the measured size: {p}");
+    assert!(p["imageUrl"].as_str().unwrap_or("").starts_with("/media/"),
+            "the import erased the photo: {p}");
+}

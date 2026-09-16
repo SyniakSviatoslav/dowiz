@@ -60,11 +60,31 @@ pub struct Person {
 /// low characters likelier and quietly cost the code some of its entropy.
 const CODE_ALPHABET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
-/// A 16-character invite code. 32^16 is 2^80, which is not a number anybody
-/// guesses against a hub that answers one request at a time.
+/// Render 16 random bytes as an invite code.
+///
+/// THE RANDOMNESS IS THE CALLER'S, and that is the seam. `random_bytes` reads
+/// `/dev/urandom`, which exists on the hub's own machine and does not exist in
+/// a Worker -- where the same call fails and an owner is told "no randomness
+/// available" while trying to hire somebody. The alphabet and the length are
+/// the part that must not differ between platforms, so they live here and each
+/// platform supplies its own bytes.
+///
+/// Fewer than 16 bytes is refused rather than padded: a shorter code is a
+/// weaker code, and silently producing one would be the kind of downgrade
+/// nobody notices.
+pub fn invite_code_from(bytes: &[u8]) -> Option<String> {
+    if bytes.len() < 16 {
+        return None;
+    }
+    Some(bytes[..16].iter().map(|b| CODE_ALPHABET[(b & 31) as usize] as char).collect())
+}
+
+/// A 16-character invite code, from this machine's CSPRNG. 32^16 is 2^80, which
+/// is not a number anybody guesses against a hub that answers one request at a
+/// time.
 pub fn new_invite_code() -> Result<String, HubError> {
     let bytes = random_bytes(16).map_err(|_| HubError::NotAHub)?;
-    Ok(bytes.iter().map(|b| CODE_ALPHABET[(b & 31) as usize] as char).collect())
+    invite_code_from(&bytes).ok_or(HubError::NotAHub)
 }
 
 /// A pending invite, as the owner sees it. No hash, no code -- there is nothing
@@ -758,6 +778,26 @@ mod invite_tests {
         seen.sort_unstable();
         seen.dedup();
         assert_eq!(seen.len(), 32, "a repeated character is a biased draw");
+    }
+
+    /// The platform supplies the bytes; this supplies the alphabet. A short
+    /// buffer is refused rather than padded, because a silently shorter code is
+    /// a silently weaker one.
+    #[test]
+    fn a_code_renders_from_bytes_the_caller_supplies() {
+        let bytes: Vec<u8> = (0u8..16).collect();
+        let a = new_invite_code_for_test(&bytes);
+        assert_eq!(a.chars().count(), 16);
+        assert!(a.bytes().all(|b| CODE_ALPHABET.contains(&b)), "{a}");
+        // Deterministic in the bytes: the same buffer is the same code, which is
+        // what lets a second implementation be checked against this one.
+        assert_eq!(a, new_invite_code_for_test(&bytes));
+        assert_eq!(invite_code_from(&[1, 2, 3]), None, "a short buffer must not pad");
+        assert_eq!(invite_code_from(&bytes[..15]), None);
+    }
+
+    fn new_invite_code_for_test(b: &[u8]) -> String {
+        invite_code_from(b).expect("16 bytes")
     }
 
     #[test]

@@ -17,6 +17,7 @@ mod courier;
 mod hubstore;
 mod otel;
 mod owner;
+mod assist;
 mod extra;
 mod storefront;
 mod stripe;
@@ -110,6 +111,7 @@ async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/auth/refresh", accounts::owner_refresh)
         .post_async("/api/auth/logout", accounts::owner_logout)
         .post_async("/api/courier/auth/login", accounts::courier_login)
+        .post_async("/api/courier/auth/claim", accounts::courier_claim)
         // ── owner ──
         .get_async("/api/owner/orders", owner::orders)
         .post_async("/api/owner/orders/:id/action", owner::order_action)
@@ -128,6 +130,22 @@ async fn route(req: Request, env: Env) -> Result<Response> {
         .get_async("/api/owner/customers", extra::customers)
         .post_async("/api/owner/customers/:key/reveal", extra::reveal_customer)
         .get_async("/api/owner/customers/reveals", extra::reveals)
+        .get_async("/api/owner/settings", extra::settings)
+        .post_async("/api/owner/settings", extra::set_setting)
+        .post_async("/api/owner/menu/import", extra::import_menu)
+        .get_async("/api/owner/couriers", extra::couriers)
+        .post_async("/api/owner/couriers/invite", extra::invite_courier)
+        .post_async("/api/owner/couriers/:id/uninvite", extra::uninvite_courier)
+        .post_async("/api/owner/couriers/:id/active", extra::set_courier_active)
+        .get_async("/api/owner/posts", extra::posts)
+        .post_async("/api/owner/posts/draft", extra::draft_post)
+        .post_async("/api/owner/posts/:id/approve", extra::approve_post)
+        .post_async("/api/owner/posts/:id/reject", extra::reject_post)
+        .post_async("/api/owner/assist", extra::owner_assist)
+        .post_async("/api/courier/assist", extra::courier_assist)
+        .get_async("/api/owner/apikeys", extra::list_api_keys)
+        .post_async("/api/owner/apikeys", extra::create_api_key)
+        .post_async("/api/owner/apikeys/revoke", extra::revoke_api_key)
         // ── courier ──
         .get_async("/api/courier/tasks", courier::tasks)
         .post_async("/api/courier/shift", courier::shift)

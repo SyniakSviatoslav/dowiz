@@ -16,6 +16,7 @@
 
 use serde::Deserialize;
 use serde_json::{json, Value};
+use worker::wasm_bindgen::JsValue;
 use worker::*;
 
 use crate::owner::{now_ms, owner_at, venue_of};
@@ -961,4 +962,1022 @@ pub async fn courier_history(req: Request, ctx: RouteContext<()>) -> Result<Resp
     rows.sort_by(|a, b| b["at"].as_i64().cmp(&a["at"].as_i64()));
     rows.truncate(50);
     Response::from_json(&json!({ "history": rows }))
+}
+
+// ── owner: the venue's own configuration ────────────────────────────────────
+
+/// `GET /api/owner/settings` — the declared keys, their values and their hints.
+///
+/// The KEY SPACE IS CLOSED. An open one would make this a place to stash
+/// arbitrary data that nothing ever reads back, and the console renders the
+/// list the hub declares rather than a list of its own.
+pub async fn settings(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let db = ctx.d1("DB")?;
+    let Some(loc) = venue_of(&req, &db).await else {
+        return Response::error("this hub has no venue yet", 404);
+    };
+    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
+        return Ok(r);
+    }
+    let loaded = crate::hubstore::load_settings(&db).await?;
+    let values: Value = serde_json::from_str(&loaded.settings.as_json()).unwrap_or(json!({}));
+    Response::from_json(&json!({
+        "values": values,
+        "known": dowiz_hub::settings::KNOWN.iter().map(|k| json!({
+            "key": k.key, "label": k.label, "hint": k.hint, "default": k.default,
+            "secret": dowiz_hub::settings::is_secret(k.key),
+        })).collect::<Vec<_>>(),
+    }))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SettingIn {
+    key: String,
+    /// An empty value CLEARS the setting, which is how an owner removes a token
+    /// they can no longer see.
+    value: String,
+}
+
+/// `POST /api/owner/settings`
+pub async fn set_setting(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let body: SettingIn = match req.json().await {
+        Ok(b) => b,
+        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
+    };
+    let db = ctx.d1("DB")?;
+    let Some(loc) = venue_of(&req, &db).await else {
+        return Response::error("this hub has no venue yet", 404);
+    };
+    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
+        return Ok(r);
+    }
+    if !dowiz_hub::settings::KNOWN.iter().any(|k| k.key == body.key) {
+        return Response::error(format!("unknown setting {:?}", body.key), 400);
+    }
+    if body.value.len() > 4096 {
+        return Response::error("value too long", 400);
+    }
+    // An endpoint is checked HERE, while the owner can still fix it, rather
+    // than at the first question when they are mid-rush. Plain http is refused
+    // outright: a Worker has no loopback, so the native adapter's "only to an
+    // address on this machine" exemption cannot apply and would only be a way
+    // to send a venue's token in the clear.
+    if body.key == "ai.endpoint" && !body.value.trim().is_empty() {
+        let v = body.value.trim();
+        if !v.starts_with("https://") {
+            return Response::error("the endpoint must be https from a Worker", 400);
+        }
+    }
+    let (key, value) = (body.key.clone(), body.value.clone());
+    crate::hubstore::with_settings(&db, move |s| {
+        s.set(&key, &value);
+        Ok(())
+    })
+    .await?;
+    Response::from_json(&json!({ "ok": true, "key": body.key }))
+}
+
+// ── owner: a spreadsheet becomes a menu ─────────────────────────────────────
+
+/// `POST /api/owner/menu/import?apply=true&retire=true` — body is the CSV.
+///
+/// PREVIEW BY DEFAULT. An import that applies on the first click is one the
+/// owner cannot inspect first, and a menu is the thing customers buy from.
+pub async fn import_menu(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let db = ctx.d1("DB")?;
+    let Some(loc) = venue_of(&req, &db).await else {
+        return Response::error("this hub has no venue yet", 404);
+    };
+    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
+        return Ok(r);
+    }
+    let flag = |name: &str| {
+        req.url()
+            .ok()
+            .and_then(|u| {
+                u.query_pairs().find(|(k, _)| k == name).map(|(_, v)| v.to_string())
+            })
+            .map(|v| v == "true" || v == "1")
+            .unwrap_or(false)
+    };
+    let (apply, retire) = (flag("apply"), flag("retire"));
+    let text = req.text().await?;
+    let draft = dowiz_hub::import::from_csv(&text);
+
+    let cat = crate::hubstore::load_catalog(&db).await?.catalog;
+    let existing: Vec<(String, String)> = cat
+        .products()
+        .into_iter()
+        .filter_map(|(id, j)| {
+            let v: Value = serde_json::from_str(&j).ok()?;
+            Some((id, v.get("name")?.as_str()?.to_string()))
+        })
+        .collect();
+    // What is on the menu now but not in the file. Reported either way, so the
+    // owner sees the consequence before choosing to act on it.
+    let missing: Vec<Value> = existing
+        .iter()
+        .filter(|(id, _)| !draft.products.iter().any(|p| &p.id == id))
+        .map(|(id, name)| json!({ "id": id, "name": name }))
+        .collect();
+
+    let mut summary = json!({
+        "applied": apply,
+        "categories": draft.categories.len(),
+        "products": draft.products.len(),
+        "warnings": draft.warnings,
+        "notInFile": missing,
+        "retired": if apply && retire { missing.len() } else { 0 },
+    });
+    if !apply {
+        summary["draft"] = serde_json::from_str(&draft.as_json()).unwrap_or(Value::Null);
+        return Response::from_json(&summary);
+    }
+    // REFUSE to apply a file that produced nothing: applying an empty draft
+    // would wipe a working menu because of a wrong separator or a missing
+    // header, which is the exact failure the parser warns about.
+    if draft.products.is_empty() {
+        return Response::error(
+            format!("nothing to import: {}", draft.warnings.join("; ")),
+            400,
+        );
+    }
+
+    let missing_ids: Vec<String> = missing
+        .iter()
+        .filter_map(|m| m.get("id").and_then(Value::as_str).map(String::from))
+        .collect();
+    crate::hubstore::with_catalog(&db, move |cat| {
+        for c in &draft.categories {
+            cat.set_category(
+                &c.id,
+                &json!({ "id": c.id, "name": c.name, "sortOrder": c.sort_order }).to_string(),
+            );
+        }
+        for p in &draft.products {
+            // AN EXISTING DISH KEEPS WHAT THE FILE HAS NO COLUMN FOR: its
+            // photo, its measured size, its option groups and its ALLERGENS.
+            // Blanking the last of those is the worst: a re-imported price list
+            // would make every declared dish undeclared, the publish gate would
+            // then refuse to keep them on sale, and a venue would find its whole
+            // menu stopped by an import that looked like it only touched prices.
+            let old = cat.product(&p.id).and_then(|j| serde_json::from_str::<Value>(&j).ok());
+            let keep = |k: &str| {
+                old.as_ref().and_then(|v| v.get(k).cloned()).unwrap_or(Value::Null)
+            };
+            cat.set_product(
+                &p.id,
+                &json!({
+                    "id": p.id, "categoryId": p.category_id, "name": p.name,
+                    "description": p.description, "price": p.price,
+                    "available": p.available, "sortOrder": p.sort_order,
+                    "imageUrl": keep("imageUrl"), "sizeCm": keep("sizeCm"),
+                    "modifierGroups": keep("modifierGroups"), "allergens": keep("allergens")
+                })
+                .to_string(),
+            );
+        }
+        if retire {
+            for id in &missing_ids {
+                let Some(raw) = cat.product(id) else { continue };
+                let Ok(mut v) = serde_json::from_str::<Value>(&raw) else { continue };
+                v["available"] = json!(false);
+                v["unavailableNote"] = json!("not on the current menu");
+                cat.set_product(id, &v.to_string());
+            }
+        }
+        // Any catalogue write moves the menu version, which is how a client
+        // notices its cart went stale.
+        if let Some(lj) = cat.location() {
+            if let Ok(mut l) = serde_json::from_str::<Value>(&lj) {
+                let v = l.get("menu_version").and_then(|x| x.as_i64()).unwrap_or(1);
+                l["menu_version"] = json!(v + 1);
+                cat.set_location(&serde_json::to_string(&l).unwrap_or(lj));
+            }
+        }
+        Ok(())
+    })
+    .await?;
+    Response::from_json(&summary)
+}
+
+// ── owner: the people who carry the orders ─────────────────────────────────
+
+/// `GET /api/owner/couriers` — the roster, and the invites still outstanding.
+///
+/// PENDING INVITES SIT IN THE SAME LIST as the people. An owner asking who
+/// delivers for them counts the person they invited yesterday among the answer,
+/// and a separate panel for invites is a panel nobody opens.
+pub async fn couriers(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let db = ctx.d1("DB")?;
+    let Some(loc) = venue_of(&req, &db).await else {
+        return Response::error("this hub has no venue yet", 404);
+    };
+    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
+        return Ok(r);
+    }
+    #[derive(Deserialize)]
+    struct C {
+        id: String,
+        name: Option<String>,
+        phone: Option<String>,
+        status: String,
+        on_shift: i64,
+    }
+    let rows: Vec<C> = db
+        .prepare(
+            "SELECT c.id, c.full_name_encrypted AS name, c.phone_encrypted AS phone, c.status, \
+             (SELECT COUNT(*) FROM courier_shifts s WHERE s.courier_id = c.id \
+              AND s.ended_at_ms IS NULL) AS on_shift \
+             FROM couriers c JOIN courier_locations cl ON cl.courier_id = c.id \
+             WHERE cl.location_id = ?1 ORDER BY c.created_at_ms",
+        )
+        .bind(&[loc.clone().into()])?
+        .all()
+        .await?
+        .results()?;
+
+    #[derive(Deserialize)]
+    struct I {
+        id: String,
+        invited_name: Option<String>,
+        expires_at_ms: i64,
+        created_at_ms: i64,
+    }
+    // Used and revoked invites are gone from this list: an invite that has been
+    // spent is a courier, and it appears as one two lines above.
+    let invites: Vec<I> = db
+        .prepare(
+            "SELECT id, invited_name, expires_at_ms, created_at_ms FROM courier_invites \
+             WHERE location_id = ?1 AND used_at_ms IS NULL AND revoked_at_ms IS NULL \
+             ORDER BY created_at_ms",
+        )
+        .bind(&[loc.into()])?
+        .all()
+        .await?
+        .results()?;
+
+    let now = now_ms();
+    Response::from_json(&json!({
+        "couriers": rows.iter().map(|c| json!({
+            "id": c.phone.clone().unwrap_or_else(|| c.id.clone()),
+            "name": c.name.clone().unwrap_or_default(),
+            "active": c.status == "active",
+            "onShift": c.on_shift > 0,
+        })).collect::<Vec<_>>(),
+        "invites": invites.iter().map(|i| json!({
+            "id": i.id, "name": i.invited_name.clone().unwrap_or_default(),
+            "madeMs": i.created_at_ms, "untilMs": i.expires_at_ms,
+            // An expired invite is still LISTED: the owner needs to see that the
+            // code they sent has run out, which is the answer to "they say it
+            // does not work".
+            "expired": now >= i.expires_at_ms,
+        })).collect::<Vec<_>>(),
+    }))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct InviteIn {
+    phone: String,
+    name: String,
+}
+
+/// `POST /api/owner/couriers/invite` — mint a code, shown ONCE.
+///
+/// The code is stored HASHED, exactly like a password, because that is what it
+/// is: until it is claimed, whoever holds it can become this courier. A copied
+/// database would otherwise hand over every pending account.
+pub async fn invite_courier(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    /// A week. Long enough for a courier who starts next Monday, short enough
+    /// that a code found in an old message no longer opens anything.
+    const TTL_MS: i64 = 7 * 24 * 60 * 60 * 1000;
+
+    let body: InviteIn = match req.json().await {
+        Ok(b) => b,
+        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
+    };
+    let db = ctx.d1("DB")?;
+    let Some(loc) = venue_of(&req, &db).await else {
+        return Response::error("this hub has no venue yet", 404);
+    };
+    let owner = match owner_at(&req, &ctx, &db, &loc).await {
+        Ok(id) => id,
+        Err(r) => return Ok(r),
+    };
+    let phone = body.phone.trim().to_string();
+    if phone.chars().filter(char::is_ascii_digit).count() < 8 {
+        return Response::error("that does not look like a phone number", 400);
+    }
+    let name = body.name.trim().to_string();
+    if name.is_empty() {
+        return Response::error("who is this code for?", 400);
+    }
+    let phone_hash = crate::auth::sha256_hex(&phone);
+
+    #[derive(Deserialize)]
+    struct Row {
+        id: String,
+    }
+    let existing: Option<Row> = db
+        .prepare("SELECT id FROM couriers WHERE phone_hash = ?1")
+        .bind(&[phone_hash.clone().into()])?
+        .first(None)
+        .await?;
+    if existing.is_some() {
+        return Response::error("that phone already has an account", 409);
+    }
+
+    // THE BYTES ARE THE PLATFORM'S, the alphabet is the hub's.
+    //
+    // `new_invite_code` reads /dev/urandom, which a Worker does not have -- so
+    // it failed here with "no randomness available" while an owner was trying
+    // to hire somebody. Two UUIDs from the platform CSPRNG give 32 bytes; the
+    // hub renders 16 of them through the one alphabet both implementations
+    // share, so a code minted here is indistinguishable from one minted
+    // natively.
+    let Some(entropy) = crate::edge_id()
+        .zip(crate::edge_id())
+        .map(|(a, b)| format!("{a}{b}").replace('-', ""))
+    else {
+        return Response::error("no platform CSPRNG", 500);
+    };
+    let raw: Vec<u8> = entropy
+        .as_bytes()
+        .chunks(2)
+        .filter_map(|c| u8::from_str_radix(std::str::from_utf8(c).ok()?, 16).ok())
+        .collect();
+    let Some(code) = dowiz_hub::roster::invite_code_from(&raw) else {
+        return Response::error("no platform CSPRNG", 500);
+    };
+    let Some(id) = crate::edge_id() else {
+        return Response::error("no platform CSPRNG", 500);
+    };
+    let now = now_ms();
+    // Inviting the same phone twice REPLACES the pending invite rather than
+    // leaving two codes alive for one person -- the first would keep working
+    // after the owner believed they had replaced it.
+    db.prepare(
+        "UPDATE courier_invites SET revoked_at_ms = ?3 WHERE location_id = ?1 \
+         AND invited_phone_hash = ?2 AND used_at_ms IS NULL AND revoked_at_ms IS NULL",
+    )
+    .bind(&[
+        loc.clone().into(),
+        phone_hash.clone().into(),
+        JsValue::from_f64(now as f64),
+    ])?
+    .run()
+    .await?;
+    db.prepare(
+        "INSERT INTO courier_invites (id,location_id,created_by_owner_id,role,\
+         invited_email_hash,invited_phone_hash,invited_name,code_hash,expires_at_ms,created_at_ms) \
+         VALUES (?1,?2,?3,'courier',?4,?4,?5,?6,?7,?8)",
+    )
+    .bind(&[
+        id.into(),
+        loc.into(),
+        owner.into(),
+        phone_hash.into(),
+        name.into(),
+        // Hashed with the same one-way function the phone uses. A 16-character
+        // code from a 32-symbol alphabet is 80 bits, so a plain digest is not
+        // brute-forceable the way a human password would be.
+        crate::auth::sha256_hex(&code).into(),
+        JsValue::from_f64((now + TTL_MS) as f64),
+        JsValue::from_f64(now as f64),
+    ])?
+    .run()
+    .await?;
+
+    Response::from_json(&json!({ "code": code, "expiresMs": now + TTL_MS }))
+}
+
+/// `POST /api/owner/couriers/:id/uninvite` — withdraw a pending code.
+pub async fn uninvite_courier(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let db = ctx.d1("DB")?;
+    let Some(loc) = venue_of(&req, &db).await else {
+        return Response::error("this hub has no venue yet", 404);
+    };
+    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
+        return Ok(r);
+    }
+    let Some(id) = ctx.param("id").cloned() else {
+        return Response::error("missing invite", 400);
+    };
+    let res = db
+        .prepare(
+            "UPDATE courier_invites SET revoked_at_ms = ?3 WHERE id = ?1 AND location_id = ?2 \
+             AND used_at_ms IS NULL AND revoked_at_ms IS NULL",
+        )
+        .bind(&[id.into(), loc.into(), JsValue::from_f64(now_ms() as f64)])?
+        .run()
+        .await?;
+    if res.meta()?.and_then(|m| m.changes).unwrap_or(0) == 0 {
+        return Response::error("not found", 404);
+    }
+    Response::from_json(&json!({ "ok": true }))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ActiveIn {
+    active: bool,
+}
+
+/// `POST /api/owner/couriers/:id/active` — a courier who has left.
+///
+/// Their record STAYS -- an order they delivered still names them -- and every
+/// session they hold dies, because somebody who has left must not keep a working
+/// app in their pocket.
+pub async fn set_courier_active(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let body: ActiveIn = match req.json().await {
+        Ok(b) => b,
+        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
+    };
+    let db = ctx.d1("DB")?;
+    let Some(loc) = venue_of(&req, &db).await else {
+        return Response::error("this hub has no venue yet", 404);
+    };
+    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
+        return Ok(r);
+    }
+    let Some(ident) = ctx.param("id").cloned() else {
+        return Response::error("missing courier", 400);
+    };
+    // The console addresses a courier by the phone it displays, which is the
+    // only handle it has; the id is internal.
+    let hash = crate::auth::sha256_hex(&ident);
+    #[derive(Deserialize)]
+    struct C {
+        id: String,
+    }
+    let row: Option<C> = db
+        .prepare(
+            "SELECT c.id FROM couriers c JOIN courier_locations cl ON cl.courier_id = c.id \
+             WHERE cl.location_id = ?1 AND (c.id = ?2 OR c.phone_hash = ?3)",
+        )
+        .bind(&[loc.into(), ident.clone().into(), hash.into()])?
+        .first(None)
+        .await?;
+    let Some(row) = row else {
+        return Response::error("not found", 404);
+    };
+    let status = if body.active { "active" } else { "deactivated" };
+    db.prepare("UPDATE couriers SET status = ?2 WHERE id = ?1")
+        .bind(&[row.id.clone().into(), status.into()])?
+        .run()
+        .await?;
+    let mut revoked = 0usize;
+    if !body.active {
+        let res = db
+            .prepare(
+                "UPDATE courier_sessions SET revoked_at_ms = ?2 WHERE courier_id = ?1 \
+                 AND revoked_at_ms IS NULL",
+            )
+            .bind(&[row.id.into(), JsValue::from_f64(now_ms() as f64)])?
+            .run()
+            .await?;
+        revoked = res.meta()?.and_then(|m| m.changes).unwrap_or(0);
+    }
+    Response::from_json(&json!({ "ok": true, "active": body.active, "sessionsRevoked": revoked }))
+}
+
+// ── owner: the venue's public voice ─────────────────────────────────────────
+//
+// NOTHING IS PUBLISHED WITHOUT A PERSON. The assistant drafts; the owner reads,
+// edits and approves. That is the whole shape, and it is the reason the drafts
+// are stored at all rather than posted as they are written.
+
+/// `GET /api/owner/posts`
+pub async fn posts(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let db = ctx.d1("DB")?;
+    let Some(loc) = venue_of(&req, &db).await else {
+        return Response::error("this hub has no venue yet", 404);
+    };
+    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
+        return Ok(r);
+    }
+    let posts = crate::hubstore::load_posts(&db).await?.posts;
+    let s = crate::hubstore::load_settings(&db).await?.settings;
+    Response::from_json(&json!({
+        "posts": posts.all().into_iter().map(|p| json!({
+            "id": p.id, "text": p.text, "state": p.state.as_str(),
+            "channel": p.channel.as_str(), "about": p.subject_tag,
+            "createdMs": p.created_ms, "error": p.error,
+        })).collect::<Vec<_>>(),
+        "enabled": s.flag("social.enabled"),
+        // Told plainly rather than discovered at publish time.
+        "channel": s.known("social.telegram.channel"),
+    }))
+}
+
+/// `POST /api/owner/posts/draft` — look for something worth saying, and say it.
+///
+/// THE SUBJECTS ARE DERIVED FROM FACTS, never invented: a dish that came back,
+/// a dish that went off, the week's most-ordered plate counted from the log, a
+/// venue that reopened. The model writes the sentence; it never decides what is
+/// true. A draft the checker finds unusable -- an invented discount, a
+/// manufactured urgency -- is dropped and its subject is NOT marked seen, so it
+/// can be tried again.
+pub async fn draft_post(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    use dowiz_hub::post::{self, Post, State as PostState};
+
+    let db = ctx.d1("DB")?;
+    let Some(loc) = venue_of(&req, &db).await else {
+        return Response::error("this hub has no venue yet", 404);
+    };
+    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
+        return Ok(r);
+    }
+    let s = crate::hubstore::load_settings(&db).await?.settings;
+    if !s.flag("social.enabled") {
+        return Response::error("social drafting is switched off", 409);
+    }
+
+    let cat = crate::hubstore::load_catalog(&db).await?.catalog;
+    let current: Vec<(String, String, bool)> = cat
+        .products()
+        .into_iter()
+        .filter_map(|(id, j)| {
+            let v: Value = serde_json::from_str(&j).ok()?;
+            Some((
+                id,
+                v.get("name")?.as_str()?.to_string(),
+                v.get("available").and_then(Value::as_bool).unwrap_or(false),
+            ))
+        })
+        .collect();
+    let venue: Value =
+        cat.location().and_then(|j| serde_json::from_str(&j).ok()).unwrap_or(json!({}));
+    let venue_name = venue.get("name").and_then(Value::as_str).unwrap_or("the restaurant");
+    let is_open = venue.get("status").and_then(Value::as_str) == Some("open");
+    let lang = venue.get("default_locale").and_then(Value::as_str).unwrap_or("sq").to_string();
+
+    // The week's most-ordered dish, COUNTED HERE. The model never counts; it is
+    // handed the number.
+    let loaded = crate::hubstore::load(&db).await?;
+    let week_ago = now_ms() - 7 * 24 * 60 * 60 * 1000;
+    let mut tally: Vec<(String, i64)> = Vec::new();
+    for o in orders_of(&loaded, &loc) {
+        if o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(0) < week_ago {
+            continue;
+        }
+        // A rejected order is not a dish people wanted served.
+        if matches!(o.get("status").and_then(Value::as_str), Some("REJECTED" | "CANCELLED")) {
+            continue;
+        }
+        for it in o.get("items").and_then(Value::as_array).into_iter().flatten() {
+            let Some(pid) = it.get("product_id").and_then(Value::as_str) else { continue };
+            let q = it.get("quantity").and_then(Value::as_i64).unwrap_or(1);
+            match tally.iter_mut().find(|t| t.0 == pid) {
+                Some(t) => t.1 += q,
+                None => tally.push((pid.to_string(), q)),
+            }
+        }
+    }
+    tally.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    let top = tally.first().cloned();
+
+    let posts_img = crate::hubstore::load_posts(&db).await?.posts;
+    let previous = posts_img.catalogue_snapshot();
+    // A Worker holds no memory between requests, so "was the venue closed last
+    // time we looked" cannot be an in-process flag as it is natively. The
+    // snapshot in the posts image is the only thing that persists, and a
+    // reopening is announced from the venue's current status alone -- which
+    // means it can be drafted once per snapshot rather than once per reopening.
+    let was_closed = previous.is_empty();
+    let subjects = post::derive_subjects(&previous, &current, top, was_closed, is_open, &|k| {
+        posts_img.already_seen(k)
+    });
+
+    let snapshot: Vec<(String, bool)> =
+        current.iter().map(|(id, _, a)| (id.clone(), *a)).collect();
+    if subjects.is_empty() {
+        let snap = snapshot.clone();
+        crate::hubstore::with_posts(&db, move |p| {
+            p.set_catalogue_snapshot(&snap);
+            Ok(())
+        })
+        .await?;
+        return Response::from_json(&json!({ "drafted": 0, "note": "nothing new to say" }));
+    }
+
+    let mut written = Vec::new();
+    for subject in &subjects {
+        let prompt = post::prompt_for(subject, venue_name, &lang);
+        let mut res = crate::assist::ask(&db, post::SYSTEM_POST, json!({}), &prompt).await?;
+        if res.status_code() >= 400 {
+            let why = res.text().await.unwrap_or_default();
+            return Response::error(
+                format!("the assistant is needed to write a post: {why}"),
+                409,
+            );
+        }
+        let v: Value = res.json().await?;
+        let text = v.get("answer").and_then(Value::as_str).unwrap_or("").to_string();
+        // A draft that fails the checker is DROPPED and its subject is not
+        // marked seen, so nothing invented reaches the owner and the subject can
+        // be tried again.
+        if post::unusable(&text).is_some() {
+            continue;
+        }
+        let Some(id) = crate::edge_id() else {
+            return Response::error("no platform CSPRNG", 500);
+        };
+        let p = Post {
+            id,
+            text,
+            subject_tag: subject.fact(),
+            subject_key: subject.key(),
+            state: PostState::Draft,
+            channel: dowiz_hub::post::Channel::Telegram,
+            created_ms: now_ms(),
+            decided_ms: 0,
+            error: String::new(),
+        };
+        let stored = p.clone();
+        // Storing the draft IS marking the subject seen: `already_seen` reads
+        // the posts themselves, so a second list of keys would be a second fact
+        // that could disagree with them.
+        crate::hubstore::with_posts(&db, move |posts| {
+            posts.put(&stored);
+            Ok(())
+        })
+        .await?;
+        written.push(json!({ "id": p.id, "text": p.text, "about": p.subject_tag }));
+    }
+    let snap = snapshot.clone();
+    crate::hubstore::with_posts(&db, move |p| {
+        p.set_catalogue_snapshot(&snap);
+        Ok(())
+    })
+    .await?;
+    Response::from_json(&json!({ "drafted": written.len(), "posts": written }))
+}
+
+#[derive(Deserialize)]
+#[serde(default)]
+struct ApproveIn {
+    /// The owner's own words, if they edited the draft. An assistant that
+    /// cannot be overruled is one that gets switched off.
+    text: Option<String>,
+}
+
+impl Default for ApproveIn {
+    fn default() -> Self {
+        ApproveIn { text: None }
+    }
+}
+
+/// `POST /api/owner/posts/:id/approve` — publish it, in the owner's words.
+pub async fn approve_post(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    use dowiz_hub::post::State as PostState;
+
+    let body: ApproveIn = req.json().await.unwrap_or_default();
+    let db = ctx.d1("DB")?;
+    let Some(loc) = venue_of(&req, &db).await else {
+        return Response::error("this hub has no venue yet", 404);
+    };
+    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
+        return Ok(r);
+    }
+    let Some(id) = ctx.param("id").cloned() else {
+        return Response::error("missing post", 400);
+    };
+    let posts = crate::hubstore::load_posts(&db).await?.posts;
+    let Some(mut p) = posts.get(&id) else {
+        return Response::error("not found", 404);
+    };
+    if p.state == PostState::Published {
+        return Response::error("that post is already out", 409);
+    }
+    if let Some(t) = body.text.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
+        p.text = t.to_string();
+    }
+
+    let s = crate::hubstore::load_settings(&db).await?.settings;
+    let channel = s.known("social.telegram.channel");
+    let token = ctx.env.secret("TELEGRAM_BOT_TOKEN").map(|v| v.to_string()).ok();
+    let (state, error) = match (token, channel.trim().is_empty()) {
+        (None, _) => (PostState::Failed, Some("no Telegram bot is configured".to_string())),
+        (_, true) => (PostState::Failed, Some("no channel is set".to_string())),
+        (Some(token), false) => {
+            let url = format!("https://api.telegram.org/bot{token}/sendMessage");
+            let mut headers = Headers::new();
+            headers.set("content-type", "application/json")?;
+            let payload =
+                json!({ "chat_id": channel, "text": p.text, "disable_web_page_preview": true });
+            let r = Request::new_with_init(
+                &url,
+                RequestInit::new()
+                    .with_method(Method::Post)
+                    .with_headers(headers)
+                    .with_body(Some(payload.to_string().into())),
+            )?;
+            let mut res = Fetch::Request(r).send().await?;
+            if res.status_code() < 400 {
+                (PostState::Published, None)
+            } else {
+                // Telegram's own words. "Publishing failed" sends an owner to a
+                // forum; "bot is not a member of the channel chat" sends them to
+                // the channel's admin list, which is where the fix is.
+                let body = res.text().await.unwrap_or_default();
+                (PostState::Failed, Some(body[..body.len().min(200)].to_string()))
+            }
+        }
+    };
+    p.state = state;
+    p.error = error.clone().unwrap_or_default();
+    p.decided_ms = now_ms();
+    let stored = p.clone();
+    crate::hubstore::with_posts(&db, move |ps| {
+        ps.put(&stored);
+        Ok(())
+    })
+    .await?;
+    if p.state == PostState::Failed {
+        return Response::error(error.unwrap_or_else(|| "publishing failed".into()), 502);
+    }
+    Response::from_json(&json!({ "ok": true, "state": p.state.as_str() }))
+}
+
+/// `POST /api/owner/posts/:id/reject` — not this one.
+pub async fn reject_post(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    use dowiz_hub::post::State as PostState;
+
+    let db = ctx.d1("DB")?;
+    let Some(loc) = venue_of(&req, &db).await else {
+        return Response::error("this hub has no venue yet", 404);
+    };
+    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
+        return Ok(r);
+    }
+    let Some(id) = ctx.param("id").cloned() else {
+        return Response::error("missing post", 400);
+    };
+    let posts = crate::hubstore::load_posts(&db).await?.posts;
+    let Some(mut p) = posts.get(&id) else {
+        return Response::error("not found", 404);
+    };
+    if p.state == PostState::Published {
+        return Response::error("that post is already out", 409);
+    }
+    p.state = PostState::Rejected;
+    crate::hubstore::with_posts(&db, move |ps| {
+        ps.put(&p);
+        Ok(())
+    })
+    .await?;
+    Response::from_json(&json!({ "ok": true }))
+}
+
+// ── the assistant's two doors ───────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct AskIn {
+    question: String,
+}
+
+/// `POST /api/owner/assist` — a question about this venue's own live data.
+pub async fn owner_assist(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let body: AskIn = match req.json().await {
+        Ok(b) => b,
+        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
+    };
+    let db = ctx.d1("DB")?;
+    let Some(loc) = venue_of(&req, &db).await else {
+        return Response::error("this hub has no venue yet", 404);
+    };
+    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
+        return Ok(r);
+    }
+    let loaded = crate::hubstore::load(&db).await?;
+    let now = now_ms();
+    // THE FACTS ARE COMPUTED HERE and handed over. The model is told plainly
+    // that they are the truth and it is not; a model that invented a number
+    // would have an owner phoning a customer about an order that does not exist.
+    let mut live: Vec<Value> = orders_of(&loaded, &loc)
+        .into_iter()
+        .filter(|o| {
+            matches!(
+                o.get("status").and_then(Value::as_str),
+                Some("PENDING" | "CONFIRMED" | "PREPARING" | "READY" | "IN_DELIVERY")
+            )
+        })
+        .map(|o| {
+            let created = o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(now);
+            json!({
+                "id": o.get("id").cloned().unwrap_or(Value::Null),
+                "status": o.get("status").cloned().unwrap_or(Value::Null),
+                "total": o.get("total").cloned().unwrap_or(Value::Null),
+                "waiting_minutes": (now - created) / 60_000,
+                "fulfilment": o.get("fulfilment").and_then(|f| f.get("kind")).cloned()
+                    .unwrap_or(Value::Null),
+                "courier_id": o.get("courier_id").cloned().unwrap_or(Value::Null),
+                "contact": o.get("contact").cloned().unwrap_or(Value::Null),
+                "address": o.get("fulfilment").and_then(|f| f.get("address")).cloned()
+                    .unwrap_or(Value::Null),
+                "items": o.get("items").cloned().unwrap_or(Value::Null),
+            })
+        })
+        .collect();
+    live.sort_by_key(|o| -o["waiting_minutes"].as_i64().unwrap_or(0));
+    let cat = crate::hubstore::load_catalog(&db).await?.catalog;
+    let off: Vec<Value> = cat
+        .products()
+        .into_iter()
+        .filter_map(|(_, j)| {
+            let v: Value = serde_json::from_str(&j).ok()?;
+            if v.get("available").and_then(Value::as_bool).unwrap_or(true) {
+                return None;
+            }
+            Some(json!({ "name": v.get("name").cloned().unwrap_or(Value::Null),
+                         "why": v.get("unavailableNote").cloned().unwrap_or(Value::Null) }))
+        })
+        .collect();
+    let facts = json!({ "now_ms": now, "live_orders": live, "off_the_menu": off });
+    crate::assist::ask(&db, crate::assist::SYSTEM_OWNER, facts, &body.question).await
+}
+
+/// `POST /api/courier/assist` — a question about this courier's own run.
+pub async fn courier_assist(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let body: AskIn = match req.json().await {
+        Ok(b) => b,
+        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
+    };
+    let db = ctx.d1("DB")?;
+    let me = match crate::auth::authenticate(&req, &ctx.env, &db, now_ms()).await {
+        Ok(crate::auth::Principal::Courier { courier_id, .. }) => courier_id,
+        Ok(_) => return Response::error("forbidden role", 403),
+        Err(e) => return e.into_response(),
+    };
+    let loaded = crate::hubstore::load(&db).await?;
+    let now = now_ms();
+    // THEIR OWN RUN AND NOTHING ELSE. A courier asking the assistant must not
+    // be able to reach a neighbour's address through it.
+    let mine: Vec<Value> = loaded
+        .hub
+        .orders()
+        .into_iter()
+        .filter_map(|e| serde_json::from_str::<Value>(&e.order_json).ok())
+        .filter(|o| o.get("courier_id").and_then(Value::as_str) == Some(me.as_str()))
+        .filter(|o| {
+            !matches!(
+                o.get("status").and_then(Value::as_str),
+                Some("DELIVERED" | "CANCELLED" | "REJECTED")
+            )
+        })
+        .map(|o| {
+            let created = o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(now);
+            json!({
+                "id": o.get("id").cloned().unwrap_or(Value::Null),
+                "status": o.get("status").cloned().unwrap_or(Value::Null),
+                "total": o.get("total").cloned().unwrap_or(Value::Null),
+                "payment": o.get("payment").cloned().unwrap_or(Value::Null),
+                "waiting_minutes": (now - created) / 60_000,
+                "address": o.get("fulfilment").and_then(|f| f.get("address")).cloned()
+                    .unwrap_or(Value::Null),
+                "contact": o.get("contact").cloned().unwrap_or(Value::Null),
+            })
+        })
+        .collect();
+    let facts = json!({ "now_ms": now, "my_runs": mine });
+    crate::assist::ask(&db, crate::assist::SYSTEM_COURIER, facts, &body.question).await
+}
+
+// ── owner: keys for their own tools ─────────────────────────────────────────
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct KeyIn {
+    label: String,
+}
+
+/// `POST /api/owner/apikeys` — mint one, shown ONCE.
+///
+/// A YEAR, because the thing holding it is a script on somebody's machine and a
+/// credential that expires in an hour is one that gets replaced by a password
+/// in a config file. Revocable individually: an owner who suspects one key
+/// should not have to invalidate the rest.
+pub async fn create_api_key(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    const YEAR_MS: i64 = 365 * 24 * 60 * 60 * 1000;
+
+    let body: KeyIn = match req.json().await {
+        Ok(b) => b,
+        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
+    };
+    let db = ctx.d1("DB")?;
+    let Some(loc) = venue_of(&req, &db).await else {
+        return Response::error("this hub has no venue yet", 404);
+    };
+    let owner = match owner_at(&req, &ctx, &db, &loc).await {
+        Ok(id) => id,
+        Err(r) => return Ok(r),
+    };
+    let label = body.label.trim().to_string();
+    if label.is_empty() || label.chars().count() > 80 {
+        // A key with no label is a key nobody can decide about later. The list
+        // is read months after the keys were made.
+        return Response::error("say what this key is for", 400);
+    }
+    let (Some(id), Some(secret)) = (crate::edge_id(), crate::edge_id()) else {
+        return Response::error("no platform CSPRNG", 500);
+    };
+    let secret = secret.replace('-', "");
+    let hash = match crate::auth::hash_password(&secret) {
+        Ok(h) => h,
+        Err(e) => return e.into_response(),
+    };
+    let now = now_ms();
+    db.prepare(
+        "INSERT INTO owner_api_keys (id,location_id,owner_id,label,key_hash,\
+         created_at_ms,expires_at_ms) VALUES (?1,?2,?3,?4,?5,?6,?7)",
+    )
+    .bind(&[
+        id.clone().into(),
+        loc.into(),
+        owner.into(),
+        label.clone().into(),
+        hash.into(),
+        JsValue::from_f64(now as f64),
+        JsValue::from_f64((now + YEAR_MS) as f64),
+    ])?
+    .run()
+    .await?;
+    // Shown once. The hub stores a hash and genuinely cannot show it again,
+    // which the console says rather than letting the owner assume otherwise.
+    Response::from_json(&json!({
+        "key": format!("dowiz_{id}.{secret}"),
+        "id": id, "label": label, "expiresMs": now + YEAR_MS,
+    }))
+}
+
+/// `GET /api/owner/apikeys` — which keys exist, and whether anything uses them.
+pub async fn list_api_keys(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let db = ctx.d1("DB")?;
+    let Some(loc) = venue_of(&req, &db).await else {
+        return Response::error("this hub has no venue yet", 404);
+    };
+    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
+        return Ok(r);
+    }
+    #[derive(Deserialize)]
+    struct K {
+        id: String,
+        label: String,
+        created_at_ms: i64,
+        expires_at_ms: i64,
+        last_used_ms: Option<i64>,
+    }
+    let rows: Vec<K> = db
+        .prepare(
+            "SELECT id,label,created_at_ms,expires_at_ms,last_used_ms FROM owner_api_keys \
+             WHERE location_id = ?1 AND revoked_at_ms IS NULL ORDER BY created_at_ms DESC",
+        )
+        .bind(&[loc.into()])?
+        .all()
+        .await?
+        .results()?;
+    Response::from_json(&json!({
+        "keys": rows.iter().map(|k| json!({
+            "id": k.id, "label": k.label, "createdMs": k.created_at_ms,
+            "expiresMs": k.expires_at_ms, "lastUsedMs": k.last_used_ms,
+        })).collect::<Vec<_>>(),
+    }))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RevokeIn {
+    id: String,
+}
+
+/// `POST /api/owner/apikeys/revoke`
+pub async fn revoke_api_key(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let body: RevokeIn = match req.json().await {
+        Ok(b) => b,
+        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
+    };
+    let db = ctx.d1("DB")?;
+    let Some(loc) = venue_of(&req, &db).await else {
+        return Response::error("this hub has no venue yet", 404);
+    };
+    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
+        return Ok(r);
+    }
+    // Revoked, not deleted: the row is the record that this key existed and
+    // when it stopped, which is the question asked after an incident.
+    let res = db
+        .prepare(
+            "UPDATE owner_api_keys SET revoked_at_ms = ?3 WHERE id = ?1 AND location_id = ?2 \
+             AND revoked_at_ms IS NULL",
+        )
+        .bind(&[body.id.into(), loc.into(), JsValue::from_f64(now_ms() as f64)])?
+        .run()
+        .await?;
+    if res.meta()?.and_then(|m| m.changes).unwrap_or(0) == 0 {
+        return Response::error("not found", 404);
+    }
+    Response::from_json(&json!({ "ok": true }))
 }

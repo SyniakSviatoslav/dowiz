@@ -30,6 +30,15 @@ use worker::*;
 /// catalogue is small and rewritten whole.
 const IMAGE_LOG: &str = "log";
 const IMAGE_CATALOG: &str = "catalog";
+/// The venue's own configuration, and the drafts the assistant writes.
+///
+/// A FOURTH AND FIFTH IMAGE rather than more keys in the catalogue, because
+/// their lifecycles differ: the catalogue is read on every storefront request
+/// and must stay small, while settings are read only by the owner and posts
+/// grow with every draft. Sharing one image would make every menu read carry
+/// both.
+const IMAGE_SETTINGS: &str = "settings";
+const IMAGE_POSTS: &str = "posts";
 
 pub struct Loaded {
     pub hub: Hub,
@@ -229,6 +238,82 @@ pub async fn load_catalog(db: &D1Database) -> Result<LoadedCatalog> {
             Ok(LoadedCatalog { catalog, generation: 0 })
         }
     }
+}
+
+pub struct LoadedSettings {
+    pub settings: dowiz_hub::settings::Settings,
+    pub generation: i64,
+}
+
+pub async fn load_settings(db: &D1Database) -> Result<LoadedSettings> {
+    match load_bytes(db, IMAGE_SETTINGS).await? {
+        Some((image, generation)) => {
+            let settings = dowiz_hub::settings::Settings::load(&image)
+                .map_err(|_| Error::RustError("settings image is unreadable".into()))?;
+            Ok(LoadedSettings { settings, generation })
+        }
+        None => Ok(LoadedSettings {
+            settings: dowiz_hub::settings::Settings::create()
+                .map_err(|_| Error::RustError("cannot create settings".into()))?,
+            generation: 0,
+        }),
+    }
+}
+
+pub async fn with_settings<F, T>(db: &D1Database, mut f: F) -> Result<T>
+where
+    F: FnMut(&mut dowiz_hub::settings::Settings) -> Result<T>,
+{
+    for _ in 0..5 {
+        let mut loaded = load_settings(db).await?;
+        let out = f(&mut loaded.settings)?;
+        let bytes = loaded
+            .settings
+            .to_bytes()
+            .map_err(|e| Error::RustError(format!("settings serialise failed: {e:?}")))?;
+        if save_image(db, IMAGE_SETTINGS, bytes, loaded.generation).await? {
+            return Ok(out);
+        }
+    }
+    Err(Error::RustError("settings image is contended".into()))
+}
+
+pub struct LoadedPosts {
+    pub posts: dowiz_hub::post::Posts,
+    pub generation: i64,
+}
+
+pub async fn load_posts(db: &D1Database) -> Result<LoadedPosts> {
+    match load_bytes(db, IMAGE_POSTS).await? {
+        Some((image, generation)) => {
+            let posts = dowiz_hub::post::Posts::load(&image)
+                .map_err(|_| Error::RustError("posts image is unreadable".into()))?;
+            Ok(LoadedPosts { posts, generation })
+        }
+        None => Ok(LoadedPosts {
+            posts: dowiz_hub::post::Posts::create()
+                .map_err(|_| Error::RustError("cannot create posts".into()))?,
+            generation: 0,
+        }),
+    }
+}
+
+pub async fn with_posts<F, T>(db: &D1Database, mut f: F) -> Result<T>
+where
+    F: FnMut(&mut dowiz_hub::post::Posts) -> Result<T>,
+{
+    for _ in 0..5 {
+        let mut loaded = load_posts(db).await?;
+        let out = f(&mut loaded.posts)?;
+        let bytes = loaded
+            .posts
+            .to_bytes()
+            .map_err(|e| Error::RustError(format!("posts serialise failed: {e:?}")))?;
+        if save_image(db, IMAGE_POSTS, bytes, loaded.generation).await? {
+            return Ok(out);
+        }
+    }
+    Err(Error::RustError("posts image is contended".into()))
 }
 
 /// Read, mutate, write the catalogue under the same generation guard.
