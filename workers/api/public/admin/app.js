@@ -234,6 +234,7 @@ function render(){
       <button class="tab" role="tab" id="tab-menu"   aria-controls="pane" data-t="menu"   aria-selected="${S.tab==='menu'}"   tabindex="${S.tab==='menu' ? 0 : -1}">Меню</button>
       <button class="tab" role="tab" id="tab-stats" aria-controls="pane" data-t="stats" aria-selected="${S.tab==='stats'}" tabindex="${S.tab==='stats' ? 0 : -1}">Аналітика</button>
       <button class="tab" role="tab" id="tab-setup" aria-controls="pane" data-t="setup" aria-selected="${S.tab==='setup'}" tabindex="${S.tab==='setup' ? 0 : -1}">Налаштування</button>
+      <button class="tab" role="tab" id="tab-health" aria-controls="pane" data-t="health" aria-selected="${S.tab==='health'}" tabindex="${S.tab==='health' ? 0 : -1}">Стан</button>
     </div>
     <div id="pane" role="tabpanel" aria-labelledby="tab-${S.tab}"></div>`;
   const ta = $('#toAllergens');
@@ -247,6 +248,7 @@ function render(){
       S.tab = b.dataset.t; render();
       if (S.tab === 'menu' && !S.products.length) loadMenu();
       if (S.tab === 'stats') loadAnalytics();
+      if (S.tab === 'health' && !S.health) loadHealth();
     };
     // Keyboard: arrows move between tabs, as a tablist is expected to.
     b.onkeydown = e => {
@@ -258,10 +260,12 @@ function render(){
   $('#pane').innerHTML = S.tab === 'orders' ? ordersView()
     : S.tab === 'menu' ? menuView()
     : S.tab === 'stats' ? statsView()
+    : S.tab === 'health' ? healthView()
     : setupView();
   if (S.tab === 'orders') { bindFind(); bindOrders(); }
   else if (S.tab === 'menu') bindMenu();
   else if (S.tab === 'stats') bindStats();
+  else if (S.tab === 'health') bindHealth();
   else bindSetup();
   const retry = $('#retry');
   if (retry) retry.onclick = async () => {
@@ -558,6 +562,146 @@ function bindStats(){
   document.querySelectorAll('[data-days]').forEach(b =>
     b.onclick = () => loadAnalytics(parseInt(b.dataset.days, 10)));
   const r = $('#retryStats'); if (r) r.onclick = () => loadAnalytics();
+}
+
+// ── стан: what the hub is spending, and what it knows ───────────────────────
+//
+// TWO THINGS AN OWNER COULD NOT SEE. The arena gauge and the graph were both
+// reachable only with a bearer token and a terminal, which means in practice
+// nobody looked at them. The gauge is the one number that says an image is
+// about to refuse a write MID-SERVICE, and the graph is what the assistant is
+// shown before it answers -- an owner who cannot see what it read cannot tell
+// a wrong answer from a wrong lookup. Both belong on a screen.
+
+const IMAGE_NAMES = {
+  log:      ['Журнал замовлень', 'Кожне замовлення, назавжди'],
+  catalog:  ['Меню',             'Страви, категорії, рецепти'],
+  settings: ['Налаштування',     'Ключі та вподобання'],
+  posts:    ['Дописи',           'Чернетки та опубліковане'],
+  stock:    ['Склад',            'Рухи залишків'],
+};
+const VERDICTS = { ok:'Все добре', watch:'Під наглядом', compact:'Потрібне втручання' };
+
+function gaugeClass(perMille){ return perMille >= 900 ? 'bad' : perMille >= 700 ? 'warn' : ''; }
+
+function healthView(){
+  if (S.healthPhase === 'loading' || S.healthPhase === undefined) return skeletonMenu();
+  if (S.healthPhase === 'error') return `
+    <div class="panel"><div class="empty" role="alert">
+      <i class="ti ti-alert-triangle i" aria-hidden="true"></i>
+      <b>Стан не завантажився</b>
+      <span class="reason">${esc(S.healthError || '')}</span>
+      <button class="btn" id="retryHealth" style="margin-top:12px">Спробувати ще раз</button>
+    </div></div>`;
+  const h = S.health || {};
+  const imgs = h.images || {};
+  const worst = h.worstUsedPerMille || 0;
+  // The order is worst first: the image about to refuse a write is the one
+  // this screen exists for, and it must not be below the fold.
+  const rows = Object.keys(imgs)
+    .sort((a, b) => (imgs[b].usedPerMille || 0) - (imgs[a].usedPerMille || 0))
+    .map(k => {
+      const g = imgs[k];
+      const [name, sub] = IMAGE_NAMES[k] || [k, ''];
+      const pm = g.usedPerMille || 0;
+      const cls = gaugeClass(pm);
+      return `
+        <div class="erow img">
+          <span class="grow">
+            <div class="row"><b>${esc(name)}</b><span class="spacer"></span>
+              <span class="chip ${cls === 'bad' ? 'warn' : ''}">${(pm / 10).toFixed(1)}%</span></div>
+            <div class="gauge ${cls}"><span style="width:${Math.max(1, Math.min(100, pm / 10))}%"></span></div>
+            <small class="hint">${esc(sub)} · ${g.usedCells} з ${g.ceilingCells} комірок · покоління ${g.generation}</small>
+          </span>
+        </div>`;
+    }).join('');
+
+  return `
+    <div class="panel setup">
+      <section class="card">
+        <div class="row">
+          <h2>Місце у сховищі</h2>
+          <span class="spacer"></span>
+          <span class="chip ${worst >= 700 ? 'warn' : ''}">${esc(VERDICTS[h.verdict] || h.verdict || '')}</span>
+        </div>
+        <p class="hint">Кожен запис у хаб займає місце назавжди — старі покоління
+          не звільняються. Коли образ заповнюється, він ПЕРЕСТАЄ приймати записи,
+          і це трапляється посеред робочого дня. Тут видно це заздалегідь.</p>
+        <div class="elist">${rows}</div>
+        <div class="row" style="margin-top:var(--space-3)">
+          <small class="hint">${h.orders || 0} замовлень · ${esc(h.venue || '')}</small>
+          <span class="spacer"></span>
+          <button class="btn narrow" id="refreshHealth">Оновити</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Пошук по графу</h2>
+        <p class="hint">Те саме, що бачить помічник, перш ніж відповісти. Шукає не
+          лише за словами: «salmon» знаходить і ті страви, у назві яких лосося
+          немає, а в рецепті — є.</p>
+        <div class="gq">
+          <input id="gq" type="search" placeholder="salmon, maki, авокадо…"
+                 aria-label="Запит до графу" value="${esc(S.graphQ || '')}">
+          <button class="btn pri narrow" id="gqGo">Шукати</button>
+        </div>
+        ${graphResults()}
+      </section>
+    </div>`;
+}
+
+function graphResults(){
+  if (S.graphPhase === 'loading') return `<p class="hint">Шукаю…</p>`;
+  if (S.graphPhase === 'error') return `<p class="hint">${esc(S.graphError || '')}</p>`;
+  const g = S.graph;
+  if (!g) return `<p class="hint">Граф: ${S.graphNodes || 0} вузлів.</p>`;
+  if (!g.found || !g.found.length) return `
+    <p class="hint">Нічого не знайшлося. Граф має ${g.nodes} вузлів і ${g.relations} зв'язків.</p>`;
+  return `
+    <div class="elist">
+      ${g.found.map(h => `
+        <div class="erow"><span class="ghit">
+          <span class="gkind">${esc(h.kind || '')}</span>
+          <span>${esc(h.label || h.id || '')}</span>
+        </span></div>`).join('')}
+    </div>
+    <small class="hint">${g.found.length} з ${g.nodes} вузлів · ${g.relations} зв'язків</small>`;
+}
+
+async function loadHealth(){
+  S.healthPhase = 'loading'; if (S.tab === 'health') render();
+  try {
+    S.health = await api('/owner/health');
+    S.healthPhase = 'ready';
+  } catch (e) { S.healthPhase = 'error'; S.healthError = String(e.message || e); }
+  if (S.tab === 'health') render();
+}
+
+async function loadGraph(q){
+  S.graphQ = q;
+  S.graphPhase = 'loading'; render();
+  try {
+    S.graph = await api('/owner/graph?limit=12&q=' + encodeURIComponent(q || ''));
+    S.graphPhase = 'ready';
+  } catch (e) { S.graphPhase = 'error'; S.graphError = String(e.message || e); }
+  render();
+}
+
+function bindHealth(){
+  const r = $('#retryHealth'); if (r) r.onclick = () => loadHealth();
+  const rf = $('#refreshHealth'); if (rf) rf.onclick = () => loadHealth();
+  const go = $('#gqGo'), q = $('#gq');
+  if (go && q) {
+    go.onclick = () => loadGraph(q.value.trim());
+    // Enter searches, because a search box that needs the mouse is not one.
+    q.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); loadGraph(q.value.trim()); } };
+    // The caret goes back where it was: `render()` rebuilds the pane on every
+    // keystroke-driven state change and an input that loses focus mid-query
+    // is an input nobody can type in.
+    if (S.graphQ !== undefined && document.activeElement !== q) {
+      const at = q.value.length; q.focus(); q.setSelectionRange(at, at);
+    }
+  }
 }
 
 // ── the shelf ───────────────────────────────────────────────────────────────
@@ -2182,8 +2326,8 @@ const HELP = {
     body:'Один дотик перемикає по колу: Відкрито → Завантажені → Зачинено. Зачинений заклад не приймає нових замовлень. Якщо задано робочі години, заклад відчиняється й зачиняється сам.' },
   stats: { at:'.stats', hint:false, title:'Сьогодні в цифрах',
     body:'Оновлюються самі кожні десять секунд. «Чекають» — замовлення, які ще ніхто не підтвердив. «На час» — заплановані на пізніше. Виручка — за сьогодні.' },
-  tabs: { at:'.tabs', hint:false, title:'Чотири розділи',
-    body:'Замовлення — жива черга. Меню — ціни, фото, наявність і алергени. Аналітика — за 7 або 30 днів. Налаштування — все інше. Стрілки ← → перемикають розділи з клавіатури.' },
+  tabs: { at:'.tabs', hint:false, title:'П’ять розділів',
+    body:'Замовлення — жива черга. Меню — ціни, фото, наявність і алергени. Аналітика — за 7 або 30 днів. Налаштування — все інше. Стан — скільки місця лишилось у сховищі та що знає граф. Стрілки ← → перемикають розділи з клавіатури.' },
   find: { at:'#oq', title:'Пошук, історія, CSV',
     body:'Пошук шукає за номером, ім’ям, телефоном або стравою. «Живі» — те, що в роботі зараз; «Історія» — завершені. CSV вивантажує те, що зараз на екрані.' },
   activation: { at:'#actList', hint:false, title:'Три умови відкриття',

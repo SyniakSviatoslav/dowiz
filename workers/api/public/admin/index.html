@@ -705,6 +705,23 @@ input:focus{border-color:var(--focus-ring);outline:none;
    rendered, not interpolated and not rounded. */
 .money{font-family:var(--font-mono);font-variant-numeric:tabular-nums;
        font-feature-settings:"tnum" 1;letter-spacing:-.01em}
+
+/* ── СТАН: the arena gauges and the graph ─────────────────────────────────
+   A gauge is a track and a fill and nothing else. The three grounds are the
+   same three the verdict has, so the colour and the word never disagree. */
+.gauge{height:var(--space-2);border-radius:var(--radius-full);
+       background:var(--toggle-off);overflow:hidden;margin-top:var(--space-1)}
+.gauge>span{display:block;height:100%;border-radius:var(--radius-full);
+            background:var(--color-success)}
+.gauge.warn>span{background:var(--color-warning)}
+.gauge.bad>span{background:var(--color-danger)}
+.erow.img{align-items:flex-start;padding:var(--space-2) var(--space-3)}
+.erow.img .grow{flex:1 1 auto;min-width:0}
+.ghit{display:flex;gap:var(--space-2);align-items:baseline;min-width:0}
+.gkind{flex:0 0 auto;font-size:var(--text-xs);font-weight:var(--weight-semibold);
+       text-transform:uppercase;letter-spacing:.04em;opacity:.7}
+.gq{display:flex;gap:var(--space-2);margin-bottom:var(--space-3)}
+.gq input{flex:1 1 auto;min-width:0}
 </style>
 </head>
 <body>
