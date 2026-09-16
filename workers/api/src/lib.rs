@@ -99,6 +99,31 @@ pub async fn main(req: Request, env: Env, ctx: Context) -> Result<Response> {
 async fn route(req: Request, env: Env) -> Result<Response> {
     Router::new()
         .get("/healthz", |_, _| Response::ok("ok"))
+        // ── TEMPORARY. One suspect each, so a failure RATE names a component ──
+        //
+        // Every route that does real work answers 503 error 1102 about a third
+        // of the time while /healthz, which does none, answers 200 every time.
+        // That is not enough to act on: "resource limits" covers CPU, memory and
+        // startup, and this token can read neither tail nor observability logs.
+        // These three isolate the suspects -- one D1 round trip, one image read,
+        // one argon2 verify -- and none of them returns anything about anyone.
+        // Delete once the rates have been read.
+        .get_async("/healthz/d1", |_, ctx| async move {
+            let db = ctx.d1("DB")?;
+            let r = db.prepare("SELECT 1 AS n").first::<serde_json::Value>(None).await?;
+            Response::ok(format!("d1 {}", r.is_some()))
+        })
+        .get_async("/healthz/img", |_, ctx| async move {
+            let db = ctx.d1("DB")?;
+            let c = hubstore::load_catalog(&db).await?;
+            Response::ok(format!("catalog gen {}", c.generation))
+        })
+        .get_async("/healthz/argon", |_, _| async move {
+            // Against a hash with the parameters we now write, so this measures
+            // the cost we intend to pay rather than the legacy one.
+            let ok = auth::verify_password_constant_work("no such password", None);
+            Response::ok(format!("argon {ok}"))
+        })
         // ── public storefront ──
         .get_async("/api/public/locations/:slug/menu", storefront::menu)
         .post_async("/api/public/locations/:slug/orders", storefront::place)
