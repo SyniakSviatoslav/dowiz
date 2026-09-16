@@ -19,7 +19,7 @@ use serde_json::{json, Value};
 use worker::wasm_bindgen::JsValue;
 use worker::*;
 
-use crate::owner::{now_ms, owner_at, venue_of};
+use crate::owner::{now_ms, owner_and_venue, owner_at, venue_of};
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
@@ -82,8 +82,9 @@ pub async fn promo_check(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
     let db = ctx.d1("DB")?;
     // TWO IMAGES, one hub: the log and the catalogue have different roots and
     // cannot share one, so a route that reads both loads both.
-    let loaded = crate::hubstore::load(&db).await?;
-    let cat = crate::hubstore::load_catalog(&db).await?.catalog;
+    // ONE ROUND TRIP for both images: see `load_both`.
+    let (loaded, cat) = crate::hubstore::load_both(&db).await?;
+    let cat = cat.catalog;
     let code = dowiz_hub::promo::normalise(&body.code);
     let Some(p) = cat.promo(&code).as_deref().and_then(dowiz_hub::promo::Promo::parse)
     else {
@@ -197,12 +198,10 @@ pub async fn feedback(mut req: Request, ctx: RouteContext<()>) -> Result<Respons
 /// loop over a few hundred envelopes.
 pub async fn analytics(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     let days: i64 = req
         .url()
         .ok()
@@ -215,8 +214,9 @@ pub async fn analytics(req: Request, ctx: RouteContext<()>) -> Result<Response> 
     let now = now_ms();
     let day_ms = 86_400_000;
     let from = start_of_day_ms(now) - (days - 1) * day_ms;
-    let loaded = crate::hubstore::load(&db).await?;
-    let cat = crate::hubstore::load_catalog(&db).await?.catalog;
+    // ONE ROUND TRIP for both images: see `load_both`.
+    let (loaded, cat) = crate::hubstore::load_both(&db).await?;
+    let cat = cat.catalog;
 
     let mut by_day: Vec<(i64, i64, i64)> = (0..days).map(|i| (from + i * day_ms, 0, 0)).collect();
     let mut by_hour = [0i64; 24];
@@ -325,14 +325,13 @@ struct PromoIn {
 /// `GET /api/owner/promotions?location_id=`
 pub async fn promotions(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
-    let loaded = crate::hubstore::load(&db).await?;
-    let cat = crate::hubstore::load_catalog(&db).await?.catalog;
+    // ONE ROUND TRIP for both images: see `load_both`.
+    let (loaded, cat) = crate::hubstore::load_both(&db).await?;
+    let cat = cat.catalog;
     let now = now_ms();
     let mut rows: Vec<Value> = cat
         .promos()
@@ -370,12 +369,10 @@ pub async fn set_promotion(mut req: Request, ctx: RouteContext<()>) -> Result<Re
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     let body: PromoIn = match serde_json::from_value(raw) {
         Ok(b) => b,
         Err(e) => return Response::error(e.to_string(), 400),
@@ -427,12 +424,10 @@ pub async fn set_promotion(mut req: Request, ctx: RouteContext<()>) -> Result<Re
 /// dates, deleting frees the word.
 pub async fn delete_promotion(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     let Some(code) = ctx.param("code").cloned() else {
         return Response::error("missing code", 400);
     };
@@ -454,12 +449,10 @@ pub async fn delete_promotion(req: Request, ctx: RouteContext<()>) -> Result<Res
 /// the bot until an order has sat unanswered for forty minutes.
 pub async fn activation(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     let loaded = crate::hubstore::load_catalog(&db).await?;
     let raw: Value = loaded
         .catalog
@@ -534,12 +527,10 @@ struct PresetIn {
 /// pairs exist -- and a pair not on this list is not one the storefront renders.
 pub async fn branding(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     use dowiz_hub::brand::{Brand, PRESETS, RADIUS_MAX, TYPE_PAIRS};
     let loaded = crate::hubstore::load_catalog(&db).await?;
     let stored = loaded
@@ -607,12 +598,10 @@ pub async fn set_branding(mut req: Request, ctx: RouteContext<()>) -> Result<Res
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     use dowiz_hub::brand::{type_pair, Brand, RADIUS_MAX};
     use dowiz_hub::palette::Rgb;
     let d = Brand::shipped();
@@ -663,12 +652,10 @@ pub async fn set_preset(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     let Some(b) = dowiz_hub::brand::preset(&body.preset) else {
         return Response::error(format!("{:?} is not a preset", body.preset), 400);
     };
@@ -732,18 +719,16 @@ fn signing_secret(env: &Env) -> Vec<u8> {
 /// `GET /api/owner/customers?location_id=&sort=spent|orders`
 pub async fn customers(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     let sort = req
         .url()
         .ok()
         .and_then(|u| u.query_pairs().find(|(k, _)| k == "sort").map(|(_, v)| v.to_string()));
     let secret = signing_secret(&ctx.env);
-    let loaded = crate::hubstore::load(&db).await?;
+    let (loaded, loaded_cat) = crate::hubstore::load_both(&db).await?;
 
     let mut rows: Vec<(String, String, String, i64, i64, i64)> = Vec::new();
     for o in orders_of(&loaded, &loc) {
@@ -779,7 +764,7 @@ pub async fn customers(req: Request, ctx: RouteContext<()>) -> Result<Response> 
         // in, not who is worth the most.
         _ => rows.sort_by(|a, b| b.5.cmp(&a.5)),
     }
-    let cat = crate::hubstore::load_catalog(&db).await?.catalog;
+    let cat = loaded_cat.catalog;
     Response::from_json(&json!({
         "customers": rows.iter().map(|r| json!({
             "key": r.0, "name": r.1, "phone": r.2,
@@ -805,11 +790,8 @@ pub async fn reveal_customer(mut req: Request, ctx: RouteContext<()>) -> Result<
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
-    };
-    let who = match owner_at(&req, &ctx, &db, &loc).await {
-        Ok(id) => id,
+    let (who, loc) = match owner_and_venue(&req, &ctx, &db).await {
+        Ok(v) => v,
         Err(r) => return Ok(r),
     };
     let reason = body.reason.trim().to_string();
@@ -869,12 +851,10 @@ pub async fn reveal_customer(mut req: Request, ctx: RouteContext<()>) -> Result<
 /// `GET /api/owner/customers/reveals?location_id=` — who has been looking.
 pub async fn reveals(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     let loaded = crate::hubstore::load(&db).await?;
     let out: Vec<Value> = loaded
         .hub
@@ -973,12 +953,10 @@ pub async fn courier_history(req: Request, ctx: RouteContext<()>) -> Result<Resp
 /// list the hub declares rather than a list of its own.
 pub async fn settings(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     let loaded = crate::hubstore::load_settings(&db).await?;
     let values: Value = serde_json::from_str(&loaded.settings.as_json()).unwrap_or(json!({}));
     Response::from_json(&json!({
@@ -1006,12 +984,10 @@ pub async fn set_setting(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     if !dowiz_hub::settings::KNOWN.iter().any(|k| k.key == body.key) {
         return Response::error(format!("unknown setting {:?}", body.key), 400);
     }
@@ -1044,12 +1020,10 @@ pub async fn set_setting(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
 /// switch for something that no longer exists, or miss one that does.
 pub async fn features(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     let s = crate::hubstore::load_settings(&db).await?.settings;
     Response::from_json(&json!({
         "features": dowiz_hub::features::all(&s).into_iter().map(|(f, on)| json!({
@@ -1073,12 +1047,10 @@ pub async fn set_feature(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     // Only a DECLARED flag. An open key space would make this a way to write
     // arbitrary settings, and nothing would ever read them back.
     if dowiz_hub::features::get(&body.key).is_none() {
@@ -1101,12 +1073,10 @@ pub async fn set_feature(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
 /// owner cannot inspect first, and a menu is the thing customers buy from.
 pub async fn import_menu(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     let flag = |name: &str| {
         req.url()
             .ok()
@@ -1226,12 +1196,10 @@ pub async fn import_menu(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
 /// and a separate panel for invites is a panel nobody opens.
 pub async fn couriers(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     #[derive(Deserialize)]
     struct C {
         id: String,
@@ -1314,11 +1282,8 @@ pub async fn invite_courier(mut req: Request, ctx: RouteContext<()>) -> Result<R
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
-    };
-    let owner = match owner_at(&req, &ctx, &db, &loc).await {
-        Ok(id) => id,
+    let (owner, loc) = match owner_and_venue(&req, &ctx, &db).await {
+        Ok(v) => v,
         Err(r) => return Ok(r),
     };
     let phone = body.phone.trim().to_string();
@@ -1411,12 +1376,10 @@ pub async fn invite_courier(mut req: Request, ctx: RouteContext<()>) -> Result<R
 /// `POST /api/owner/couriers/:id/uninvite` — withdraw a pending code.
 pub async fn uninvite_courier(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     let Some(id) = ctx.param("id").cloned() else {
         return Response::error("missing invite", 400);
     };
@@ -1451,12 +1414,10 @@ pub async fn set_courier_active(mut req: Request, ctx: RouteContext<()>) -> Resu
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     let Some(ident) = ctx.param("id").cloned() else {
         return Response::error("missing courier", 400);
     };
@@ -1507,12 +1468,14 @@ pub async fn set_courier_active(mut req: Request, ctx: RouteContext<()>) -> Resu
 /// `GET /api/owner/posts`
 pub async fn posts(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
+    // Two small images, still two queries. They are 16 KB and 64 KB, so the
+    // round trip is the cost rather than the bytes -- and this pane is opened
+    // rarely enough that a third query for a pane nobody has open would be the
+    // worse trade.
     let posts = crate::hubstore::load_posts(&db).await?.posts;
     let s = crate::hubstore::load_settings(&db).await?.settings;
     Response::from_json(&json!({
@@ -1539,12 +1502,10 @@ pub async fn draft_post(req: Request, ctx: RouteContext<()>) -> Result<Response>
     use dowiz_hub::post::{self, Post, State as PostState};
 
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     let s = crate::hubstore::load_settings(&db).await?.settings;
     if !s.flag("social.enabled") {
         return Response::error("social drafting is switched off", 409);
@@ -1571,7 +1532,7 @@ pub async fn draft_post(req: Request, ctx: RouteContext<()>) -> Result<Response>
 
     // The week's most-ordered dish, COUNTED HERE. The model never counts; it is
     // handed the number.
-    let loaded = crate::hubstore::load(&db).await?;
+    let (loaded, _) = crate::hubstore::load_both(&db).await?;
     let week_ago = now_ms() - 7 * 24 * 60 * 60 * 1000;
     let mut tally: Vec<(String, i64)> = Vec::new();
     for o in orders_of(&loaded, &loc) {
@@ -1691,12 +1652,10 @@ pub async fn approve_post(mut req: Request, ctx: RouteContext<()>) -> Result<Res
 
     let body: ApproveIn = req.json().await.unwrap_or_default();
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     let Some(id) = ctx.param("id").cloned() else {
         return Response::error("missing post", 400);
     };
@@ -1762,12 +1721,10 @@ pub async fn reject_post(req: Request, ctx: RouteContext<()>) -> Result<Response
     use dowiz_hub::post::State as PostState;
 
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     let Some(id) = ctx.param("id").cloned() else {
         return Response::error("missing post", 400);
     };
@@ -1801,12 +1758,10 @@ pub async fn owner_assist(mut req: Request, ctx: RouteContext<()>) -> Result<Res
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     let loaded = crate::hubstore::load(&db).await?;
     let now = now_ms();
     // THE FACTS ARE COMPUTED HERE and handed over. The model is told plainly
@@ -1923,11 +1878,8 @@ pub async fn create_api_key(mut req: Request, ctx: RouteContext<()>) -> Result<R
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
-    };
-    let owner = match owner_at(&req, &ctx, &db, &loc).await {
-        Ok(id) => id,
+    let (owner, loc) = match owner_and_venue(&req, &ctx, &db).await {
+        Ok(v) => v,
         Err(r) => return Ok(r),
     };
     let label = body.label.trim().to_string();
@@ -1971,12 +1923,10 @@ pub async fn create_api_key(mut req: Request, ctx: RouteContext<()>) -> Result<R
 /// `GET /api/owner/apikeys` — which keys exist, and whether anything uses them.
 pub async fn list_api_keys(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     #[derive(Deserialize)]
     struct K {
         id: String,
@@ -2015,12 +1965,10 @@ pub async fn revoke_api_key(mut req: Request, ctx: RouteContext<()>) -> Result<R
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     // Revoked, not deleted: the row is the record that this key existed and
     // when it stopped, which is the question asked after an incident.
     let res = db
@@ -2051,12 +1999,10 @@ pub async fn revoke_api_key(mut req: Request, ctx: RouteContext<()>) -> Result<R
 /// `POST /api/owner/products/:id/image` — body is the image.
 pub async fn set_product_image(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     let Some(id) = ctx.param("id").cloned() else {
         return Response::error("missing product", 400);
     };
@@ -2107,12 +2053,10 @@ pub async fn set_product_image(mut req: Request, ctx: RouteContext<()>) -> Resul
 /// `POST /api/owner/products/:id/image/clear`
 pub async fn clear_product_image(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     let Some(id) = ctx.param("id").cloned() else {
         return Response::error("missing product", 400);
     };
@@ -2179,12 +2123,10 @@ pub async fn media(_req: Request, ctx: RouteContext<()>) -> Result<Response> {
 /// `GET /api/owner/stock` — what is on the shelf, and what is running out.
 pub async fn stock(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     let cat = crate::hubstore::load_catalog(&db).await?.catalog;
     let log = crate::hubstore::load_stock(&db).await?.stock;
     let led = match log.ledger() {
@@ -2239,12 +2181,10 @@ pub async fn set_supply(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     let id = body.id.trim().to_string();
     if id.is_empty() || id.len() > 64 {
         return Response::error("an ingredient needs a short id", 400);
@@ -2298,12 +2238,10 @@ pub async fn stock_move(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     let Some(kind) = ctx.param("kind").cloned() else {
         return Response::error("which movement?", 400);
     };
@@ -2374,12 +2312,10 @@ pub async fn set_zones(mut req: Request, ctx: RouteContext<()>) -> Result<Respon
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     let raw = serde_json::to_string(&body.zones).unwrap_or_else(|_| "[]".into());
     let parsed = dowiz_hub::zone::from_json(&raw);
     if parsed.len() != body.zones.len() {
@@ -2466,12 +2402,10 @@ pub async fn extract_branding(mut req: Request, ctx: RouteContext<()>) -> Result
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
     let hex = body.pixels.trim();
     if hex.is_empty() || hex.len() % 6 != 0 {
         return Response::error("pixels must be whole rgb triples in hex", 400);

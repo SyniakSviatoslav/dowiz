@@ -130,10 +130,29 @@ struct ProdRow {
 }
 
 /// `GET /api/public/locations/:slug/menu`
-pub async fn menu(_req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let Some(slug) = ctx.param("slug").cloned() else {
         return Response::error("missing slug", 400);
     };
+
+    // ── SERVED FROM THE EDGE WHERE IT CAN BE ──
+    //
+    // This is the single most-requested thing in the product: every customer,
+    // every page load, every language switch. It already declared
+    // `max-age=30`, but a Worker's response is NOT edge-cached unless the
+    // Worker puts it there -- so the header was a promise nothing kept, and
+    // every visitor paid two D1 reads and a full catalogue fold.
+    //
+    // Thirty seconds is the window the header already claimed, and it is the
+    // right one: a menu changes when an owner edits it, and a dish going off
+    // sale reaching a customer half a minute late is a cost the venue can
+    // absorb. Anything derived from the CLOCK -- whether the venue is open --
+    // moves in minutes, not seconds, so thirty is inside its resolution too.
+    let cache = Cache::default();
+    let key = req.url()?.to_string();
+    if let Some(hit) = cache.get(&key, false).await? {
+        return Ok(hit);
+    }
     let db = ctx.d1("DB")?;
     let loaded = crate::hubstore::load_catalog(&db).await?;
 
@@ -326,8 +345,13 @@ pub async fn menu(_req: Request, ctx: RouteContext<()>) -> Result<Response> {
     });
     let mut res = Response::from_json(&out)?;
     // The menu is public and changes rarely; the version field is what a client
-    // uses to notice it moved. Short edge cache, revalidated.
+    // uses to notice it moved.
     res.headers_mut().set("cache-control", "public, max-age=30, stale-while-revalidate=300")?;
+    // Stored AFTER the response is built and cloned, so the store cannot fail
+    // the request: a cache that breaks a page is worse than no cache.
+    if let Ok(copy) = res.cloned() {
+        let _ = cache.put(&key, copy).await;
+    }
     Ok(res)
 }
 

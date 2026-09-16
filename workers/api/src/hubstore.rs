@@ -70,37 +70,121 @@ pub struct LoadedCatalog {
 /// in one row is stored exactly as it was before this change.
 const CHUNK: usize = 900_000;
 
-/// Read every chunk of an image back into one buffer.
-async fn load_bytes(db: &D1Database, id: &str) -> Result<Option<(Vec<u8>, i64)>> {
+/// Read one or more images, WHOLE, IN ONE QUERY.
+///
+/// MEASURED, AND IT WAS THE WHOLE COST. The previous version fetched chunk
+/// zero, then probed for chunk one, then chunk two, until a query came back
+/// empty -- so a single-chunk image took TWO round trips and the second was
+/// always a miss. A handler needing both the log and the catalogue therefore
+/// paid four. At D1's ~150 ms from this Worker that is 600 ms of waiting, which
+/// matched the measurements almost exactly: dashboard 580 ms of server time,
+/// analytics 680, against a 180 ms network baseline.
+///
+/// One query now, whatever the chunk count. The rows still decide the truth --
+/// there is no stored count that could disagree with them -- but they are all
+/// asked for at once.
+async fn load_images(
+    db: &D1Database,
+    ids: &[&str],
+) -> Result<std::collections::HashMap<String, (Vec<u8>, i64)>> {
     #[derive(serde::Deserialize)]
     struct Row {
+        id: String,
         image: Vec<u8>,
         generation: i64,
     }
-    let first: Option<Row> = db
-        .prepare("SELECT image, generation FROM hub_image WHERE id = ?1")
-        .bind(&[id.into()])?
-        .first(None)
-        .await?;
-    let Some(first) = first else { return Ok(None) };
-    let generation = first.generation;
-    let mut out = first.image;
-    // Chunks are read until one is missing rather than by a stored count: a
-    // count is a second fact that can disagree with the rows, and the rows are
-    // the ones that decide whether the image loads.
-    for n in 1.. {
-        let key = format!("{id}#{n}");
-        let row: Option<Row> = db
-            .prepare("SELECT image, generation FROM hub_image WHERE id = ?1")
-            .bind(&[key.into()])?
-            .first(None)
-            .await?;
-        match row {
-            Some(r) => out.extend_from_slice(&r.image),
-            None => break,
-        }
+    // `id = ?n OR id LIKE ?n || '#%'` per image. Built rather than fixed
+    // because the caller decides how many it needs, and a query per image is
+    // the thing being removed.
+    let mut wheres = Vec::new();
+    let mut binds: Vec<JsValue> = Vec::new();
+    for (i, id) in ids.iter().enumerate() {
+        wheres.push(format!("id = ?{n} OR id LIKE ?{n} || '#%'", n = i + 1));
+        binds.push((*id).into());
     }
-    Ok(Some((out, generation)))
+    let sql = format!(
+        "SELECT id, image, generation FROM hub_image WHERE {}",
+        wheres.join(" OR ")
+    );
+    let rows: Vec<Row> = db.prepare(&sql).bind(&binds)?.all().await?.results()?;
+
+    // SORTED IN RUST, NOT IN SQL. `ORDER BY id` is a string sort, and a string
+    // sort puts "log#10" before "log#2" -- so an image that ever reached ten
+    // chunks would be reassembled with its bytes in the wrong order, which
+    // reads as a corrupt store rather than as a sorting bug.
+    let mut out: std::collections::HashMap<String, (Vec<u8>, i64)> =
+        std::collections::HashMap::new();
+    for base in ids {
+        let mut parts: Vec<(usize, &Row)> = rows
+            .iter()
+            .filter_map(|r| {
+                if r.id == *base {
+                    Some((0usize, r))
+                } else {
+                    r.id.strip_prefix(*base)
+                        .and_then(|rest| rest.strip_prefix('#'))
+                        .and_then(|n| n.parse::<usize>().ok())
+                        .map(|n| (n, r))
+                }
+            })
+            .collect();
+        if parts.is_empty() {
+            continue;
+        }
+        parts.sort_by_key(|(n, _)| *n);
+        // A tail with no head is not an image: chunk zero carries the
+        // generation the guard is checked against, and assembling from chunk
+        // one would silently drop the first 900 KB.
+        if parts[0].0 != 0 {
+            continue;
+        }
+        let generation = parts[0].1.generation;
+        let mut buf = Vec::new();
+        for (_, r) in &parts {
+            buf.extend_from_slice(&r.image);
+        }
+        out.insert((*base).to_string(), (buf, generation));
+    }
+    Ok(out)
+}
+
+/// The log AND the catalogue, in one round trip.
+///
+/// Eleven handlers need both -- the analytics, the customer list, the promo
+/// list, the storefront's order path -- and each was loading them separately,
+/// which after the fix above is still two queries where one will do.
+pub async fn load_both(db: &D1Database) -> Result<(Loaded, LoadedCatalog)> {
+    let mut images = load_images(db, &[IMAGE_LOG, IMAGE_CATALOG]).await?;
+    let hub = match images.remove(IMAGE_LOG) {
+        Some((bytes, generation)) => Loaded {
+            hub: Hub::load(&bytes)
+                .map_err(|_| Error::RustError("hub image is unreadable".into()))?,
+            generation,
+        },
+        None => Loaded {
+            hub: Hub::create_sized(64 * 1024)
+                .map_err(|_| Error::RustError("cannot create hub image".into()))?,
+            generation: 0,
+        },
+    };
+    let catalog = match images.remove(IMAGE_CATALOG) {
+        Some((bytes, generation)) => LoadedCatalog {
+            catalog: Catalog::load(&bytes)
+                .map_err(|_| Error::RustError("catalogue image is unreadable".into()))?,
+            generation,
+        },
+        None => LoadedCatalog {
+            catalog: Catalog::create()
+                .map_err(|_| Error::RustError("cannot create catalogue".into()))?,
+            generation: 0,
+        },
+    };
+    Ok((hub, catalog))
+}
+
+/// One image, by name.
+async fn load_bytes(db: &D1Database, id: &str) -> Result<Option<(Vec<u8>, i64)>> {
+    Ok(load_images(db, &[id]).await?.remove(id))
 }
 
 /// Read the hub image, creating a fresh one the first time.

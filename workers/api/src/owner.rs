@@ -63,14 +63,91 @@ pub(crate) async fn owner_at(
 /// against the native adapter omits it -- which meant the owner surface on this
 /// Worker answered 400 to its own admin pane for every route. When the caller
 /// says nothing, the catalogue is asked.
+/// Authenticate the owner AND resolve the venue, in one query.
+///
+/// Thirty-five handlers call `venue_of` and then `owner_at`, which were two D1
+/// round trips -- one for the venue row, one for the membership -- before the
+/// handler did anything at all. At roughly sixty milliseconds each that is an
+/// eighth of a second every owner request spent asking two questions that one
+/// query answers.
+///
+/// The membership is still re-derived from the database rather than trusted
+/// from the token, which is the property that matters: an owner removed a
+/// moment ago is refused here even holding a valid one.
+pub(crate) async fn owner_and_venue(
+    req: &Request,
+    ctx: &RouteContext<()>,
+    db: &D1Database,
+) -> std::result::Result<(String, String), Response> {
+    // THE TOKEN IS VERIFIED WITHOUT TOUCHING THE DATABASE, and the membership
+    // is checked by the JOIN below. `authenticate` would have run its own
+    // membership SELECT first, so this path was asking the same question twice
+    // -- once to decide the caller is an owner, once to decide which venue --
+    // and paying two round trips for one answer.
+    //
+    // The property that matters is unchanged: authority is RE-DERIVED from the
+    // database on every request, so an owner removed a moment ago is refused
+    // here even holding a valid token. It is derived once instead of twice.
+    let claims = match auth::verify(&ctx.env, &auth::bearer(req).map_err(|e| {
+        e.into_response().unwrap()
+    })?, now_ms()) {
+        Ok(c) => c,
+        Err(e) => return Err(e.into_response().unwrap()),
+    };
+    let auth::Claims::Owner { user_id, .. } = claims else {
+        return Err(Response::error("forbidden role", 403).unwrap());
+    };
+    #[derive(Deserialize)]
+    struct Row {
+        location_id: String,
+    }
+    // The venue the caller named, or the only one this hub has. Joined against
+    // the membership so one query answers both "which venue" and "may they".
+    let wanted = location_of(req);
+    let sql = match wanted {
+        Some(_) => "SELECT l.id AS location_id FROM locations l                     JOIN memberships m ON m.location_id = l.id                     WHERE m.user_id = ?1 AND l.id = ?2 AND m.role = 'owner'                     AND m.status = 'active' LIMIT 1",
+        None => "SELECT l.id AS location_id FROM locations l                  JOIN memberships m ON m.location_id = l.id                  WHERE m.user_id = ?1 AND m.role = 'owner' AND m.status = 'active' LIMIT 1",
+    };
+    let stmt = match &wanted {
+        Some(l) => db
+            .prepare(sql)
+            .bind(&[user_id.clone().into(), l.clone().into()]),
+        None => db.prepare(sql).bind(&[user_id.clone().into()]),
+    };
+    let row: std::result::Result<Option<Row>, _> = match stmt {
+        Ok(s) => s.first(None).await,
+        Err(e) => return Err(Response::error(format!("auth backend: {e}"), 503).unwrap()),
+    };
+    match row {
+        // Cross-tenant is 404, never 403: a 403 confirms the location exists.
+        Ok(Some(r)) => Ok((user_id, r.location_id)),
+        Ok(None) => Err(Response::error("not found", 404).unwrap()),
+        Err(e) => Err(Response::error(format!("auth backend unavailable: {e}"), 503).unwrap()),
+    }
+}
+
 pub(crate) async fn venue_of(req: &Request, db: &D1Database) -> Option<String> {
     if let Some(l) = location_of(req) {
         return Some(l);
     }
-    let loaded = crate::hubstore::load_catalog(db).await.ok()?;
-    let j = loaded.catalog.location()?;
-    let v: Value = serde_json::from_str(&j).ok()?;
-    v.get("id").and_then(|x| x.as_str()).map(String::from)
+    // ONE ROW, NOT THE WHOLE CATALOGUE. This read a 131 KB image and
+    // deserialised every eight bytes of it into an i64 -- sixteen thousand
+    // iterations -- to recover a single string, on EVERY owner request, before
+    // the handler had done anything. The `locations` row exists precisely as
+    // the pointer the foreign keys need, and it carries the id.
+    //
+    // A hub image holds exactly one venue, so `LIMIT 1` is not a guess about
+    // which; it is the only one there is.
+    #[derive(Deserialize)]
+    struct L {
+        id: String,
+    }
+    let row: Option<L> = db
+        .prepare("SELECT id FROM locations LIMIT 1")
+        .first(None)
+        .await
+        .ok()?;
+    row.map(|r| r.id)
 }
 
 pub(crate) fn location_of(req: &Request) -> Option<String> {
@@ -84,12 +161,10 @@ pub(crate) fn location_of(req: &Request) -> Option<String> {
 /// `GET /api/owner/orders?location_id=&status=`
 pub async fn orders(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
 
     let status = req
         .url()
@@ -258,12 +333,10 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
 /// that can drift.
 pub async fn dashboard(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let Some(loc) = venue_of(&req, &db).await else {
-        return Response::error("this hub has no venue yet", 404);
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
     };
-    if let Err(r) = owner_at(&req, &ctx, &db, &loc).await {
-        return Ok(r);
-    }
 
     // "Today" starts at local midnight for the venue. Without the timezone this
     // would silently mean UTC, and an owner in Durrës would see the day roll over
@@ -272,7 +345,10 @@ pub async fn dashboard(req: Request, ctx: RouteContext<()>) -> Result<Response> 
     let now = now_ms();
     let day_start = ((now + tz_offset_ms) / 86_400_000) * 86_400_000 - tz_offset_ms;
 
-    let loaded = crate::hubstore::load(&db).await?;
+    // Both images in one round trip: the fold needs the orders, the readiness
+    // count needs the catalogue, and asking twice is the cost this route used
+    // to be made of.
+    let (loaded, loaded_cat) = crate::hubstore::load_both(&db).await?;
     let (mut count, mut revenue, mut pending, mut active) = (0i64, 0i64, 0i64, 0i64);
     for e in loaded.hub.orders() {
         let Ok(v) = serde_json::from_str::<Value>(&e.order_json) else { continue };
