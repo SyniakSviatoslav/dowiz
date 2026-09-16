@@ -172,3 +172,93 @@ mod tests {
         assert_eq!(int_field(r#"{"n":-1700}"#, "n"), Some(-1700));
     }
 }
+
+/// The raw text of each object in a JSON array field, in order.
+///
+/// WRITTEN HERE RATHER THAN PULLING IN A PARSER because this crate has two
+/// dependencies and the gate that keeps it that way may only shrink. It does
+/// one job: hand back the `{...}` slices of `"key":[{...},{...}]` so a caller
+/// can read fields out of each with the functions above.
+///
+/// STRING-AWARE, which is the whole difficulty. A brace inside a dish name —
+/// and a restaurant menu is exactly where one turns up — would end an object
+/// early, and a `\"` inside that name would end the string early. Both are
+/// tracked; a malformed array yields what it could read rather than panicking,
+/// because a menu that half-parses must not take the hub down with it.
+pub fn objects_in(json: &str, key: &str) -> Vec<String> {
+    let pat = format!("\"{key}\":[");
+    let Some(start) = json.find(&pat) else { return Vec::new() };
+    let b = json.as_bytes();
+    let mut i = start + pat.len();
+    let (mut out, mut depth, mut begin, mut in_str) = (Vec::new(), 0usize, 0usize, false);
+    while i < b.len() {
+        let c = b[i];
+        if in_str {
+            match c {
+                b'\\' => i += 1,
+                b'"' => in_str = false,
+                _ => {}
+            }
+        } else {
+            match c {
+                b'"' => in_str = true,
+                b'{' => {
+                    if depth == 0 {
+                        begin = i;
+                    }
+                    depth += 1;
+                }
+                b'}' => {
+                    depth = depth.saturating_sub(1);
+                    if depth == 0 {
+                        out.push(json[begin..=i].to_string());
+                    }
+                }
+                // The array's own close, at depth zero, ends the field.
+                b']' if depth == 0 => break,
+                _ => {}
+            }
+        }
+        i += 1;
+    }
+    out
+}
+
+#[cfg(test)]
+mod array_tests {
+    use super::*;
+
+    #[test]
+    fn objects_come_back_whole_and_in_order() {
+        let j = r#"{"items":[{"id":"a","qty":1},{"id":"b","qty":2}],"total":300}"#;
+        let got = objects_in(j, "items");
+        assert_eq!(got.len(), 2);
+        assert_eq!(str_field(&got[0], "id").as_deref(), Some("a"));
+        assert_eq!(int_field(&got[1], "qty"), Some(2));
+    }
+
+    /// The one that matters on a restaurant menu: punctuation inside a name.
+    #[test]
+    fn a_brace_inside_a_name_does_not_end_the_object() {
+        let j = r#"{"items":[{"name":"Set {50/50}","id":"x"},{"id":"y"}]}"#;
+        let got = objects_in(j, "items");
+        assert_eq!(got.len(), 2, "got {got:?}");
+        assert_eq!(str_field(&got[0], "id").as_deref(), Some("x"));
+        assert_eq!(str_field(&got[1], "id").as_deref(), Some("y"));
+    }
+
+    #[test]
+    fn an_escaped_quote_does_not_end_the_string() {
+        let j = r#"{"items":[{"name":"Chef\"s pick","id":"x"}]}"#;
+        let got = objects_in(j, "items");
+        assert_eq!(got.len(), 1);
+        assert_eq!(str_field(&got[0], "id").as_deref(), Some("x"));
+    }
+
+    #[test]
+    fn an_absent_or_empty_array_is_no_objects_not_a_panic() {
+        assert!(objects_in(r#"{"a":1}"#, "items").is_empty());
+        assert!(objects_in(r#"{"items":[]}"#, "items").is_empty());
+        assert!(objects_in(r#"{"items":[{"id":"a""#, "items").is_empty(), "unterminated yields nothing");
+    }
+}

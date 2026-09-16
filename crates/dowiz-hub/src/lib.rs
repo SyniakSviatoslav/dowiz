@@ -34,6 +34,7 @@ pub mod activation;
 pub mod allergens;
 pub mod brand;
 pub mod features;
+pub mod graph;
 pub mod post;
 pub mod promo;
 pub mod roster;

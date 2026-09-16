@@ -1790,6 +1790,138 @@ struct AskIn {
 }
 
 /// `POST /api/owner/assist` — a question about this venue's own live data.
+
+/// What the hub knows that bears on a question, as facts.
+///
+/// THE ASSISTANT USED TO SEE ONLY LIVE ORDERS, which answers "what is late"
+/// and nothing else. An owner asking "which dishes need salmon" or "what has
+/// Eni been carrying" was asking about relations that exist in the data and
+/// nowhere in any single record — the ids are in the JSON, the meaning is in
+/// how they connect. `Graph::of` folds those relations out of the log and the
+/// catalogue, and `hybrid` finds the part of that graph the question is about.
+///
+/// HYBRID, not a keyword search, for the reason the graph module gives at
+/// length: an ingredient's name appears in no order's text, so words alone
+/// cannot reach the orders it touched. The walk can. The two are fused by rank
+/// rather than by score, so neither needs a weight anyone has to tune.
+///
+/// NEIGHBOURS ARE INCLUDED because a node alone is a name. "dish:item-41" says
+/// nothing; "Panko Shrimps, in snacks, uses shrimp, was in order ord-2" is an
+/// answer. The model is given the relations and told, as everywhere on this
+/// path, that these are the truth and it is not.
+
+/// What the shelf currently holds, for the graph's ingredient nodes.
+///
+/// COURIER AND CUSTOMER NAMES ARE DELIBERATELY ABSENT, and the reason is in the
+/// schema: the column is `full_name_encrypted`. A courier's name is encrypted at
+/// rest on purpose, and the one place it must never be decrypted into is a
+/// retrieval index that is then pasted into a model's prompt — which may be a
+/// hosted provider's. The graph therefore knows WHICH courier carried an order
+/// and not who they are; the console maps the id to a name at display time,
+/// where the decrypt already lives and stays on the owner's screen.
+///
+/// A SEARCH FOR A COURIER BY NAME THEREFORE FINDS NOTHING, and that is the
+/// correct behaviour rather than a gap. It cost one round of building the
+/// wrong thing to see it.
+///
+/// A stock level is not a person. "salmon: 4 on hand, 1 reserved" is exactly
+/// what turns "which dishes use salmon" into "and here is what running out
+/// costs you", which is the question an owner actually asks.
+async fn shelf_labels(place: &crate::hubstore::Place) -> std::collections::HashMap<String, String> {
+    let Ok(loaded) = crate::hubstore::load_stock(place).await else {
+        return std::collections::HashMap::new();
+    };
+    let Ok(ledger) = loaded.stock.ledger() else {
+        return std::collections::HashMap::new();
+    };
+    ledger
+        .items()
+        .into_iter()
+        .map(|(item, lvl)| {
+            (
+                format!("ingredient:{item}"),
+                format!("на складі {} зарезервовано {}", lvl.on_hand, lvl.reserved),
+            )
+        })
+        .collect()
+}
+
+fn graph_facts(
+    hub: &dowiz_hub::Hub,
+    cat: &dowiz_hub::catalog::Catalog,
+    labels: &std::collections::HashMap<String, String>,
+    question: &str,
+    limit: usize,
+) -> Value {
+    use dowiz_hub::graph::Graph;
+    let g = Graph::of_with(hub, cat, labels);
+    let hits = g.hybrid(question, limit);
+    let found: Vec<Value> = hits
+        .iter()
+        .filter_map(|(i, score)| {
+            let n = g.node(*i)?;
+            let related: Vec<Value> = g
+                .neighbours(*i)
+                .into_iter()
+                .take(12)
+                .filter_map(|(rel, j, forward)| {
+                    let m = g.node(j)?;
+                    Some(json!({
+                        "how": rel.tag(),
+                        "direction": if forward { "to" } else { "from" },
+                        "kind": m.kind.tag(),
+                        "id": m.id,
+                        "label": m.label,
+                    }))
+                })
+                .collect();
+            Some(json!({
+                "kind": n.kind.tag(),
+                "id": n.id,
+                "label": n.label,
+                "relevance": score,
+                "related": related,
+            }))
+        })
+        .collect();
+    json!({ "nodes": g.len(), "relations": g.edge_count(), "found": found })
+}
+
+
+/// `GET /api/owner/graph?q=` — what the hub knows, directly.
+///
+/// THE SAME RETRIEVAL THE ASSISTANT USES, exposed on its own. An answer a model
+/// gives is only as good as what it was shown, and an owner who cannot see what
+/// it was shown cannot tell a wrong answer from a wrong retrieval. This is also
+/// how the retrieval is tested without a model in the loop.
+///
+/// With no `q` it reports the shape — how many nodes and relations — which is
+/// the cheapest way to see that the fold is working at all.
+pub async fn graph(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
+    let (_, _loc, (loaded, loaded_cat)) =
+        match crate::owner::owner_beside(&req, &ctx, &db, crate::hubstore::load_both(&place)).await
+        {
+            Ok(v) => v,
+            Err(r) => return Ok(r),
+        };
+    let q = req
+        .url()
+        .ok()
+        .and_then(|u| u.query_pairs().find(|(k, _)| k == "q").map(|(_, v)| v.to_string()))
+        .unwrap_or_default();
+    let limit = req
+        .url()
+        .ok()
+        .and_then(|u| u.query_pairs().find(|(k, _)| k == "limit").map(|(_, v)| v.to_string()))
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(12)
+        .clamp(1, 50);
+    let labels = shelf_labels(&place).await;
+    Response::from_json(&graph_facts(&loaded.hub, &loaded_cat.catalog, &labels, &q, limit))
+}
+
 pub async fn owner_assist(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let body: AskIn = match req.json().await {
         Ok(b) => b,
@@ -1848,7 +1980,11 @@ pub async fn owner_assist(mut req: Request, ctx: RouteContext<()>) -> Result<Res
                          "why": v.get("unavailableNote").cloned().unwrap_or(Value::Null) }))
         })
         .collect();
-    let facts = json!({ "now_ms": now, "live_orders": live, "off_the_menu": off });
+    // Everything else the hub knows that bears on what was asked.
+    let labels = shelf_labels(&place).await;
+    let knows = graph_facts(&loaded.hub, &cat, &labels, &body.question, 12);
+    let facts =
+        json!({ "now_ms": now, "live_orders": live, "off_the_menu": off, "hub_knows": knows });
     crate::assist::ask(&place, crate::assist::SYSTEM_OWNER, facts, &body.question).await
 }
 
