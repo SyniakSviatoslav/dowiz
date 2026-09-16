@@ -29,6 +29,7 @@ use axum::{
 use tower_http::services::{ServeDir, ServeFile};
 
 /// The minimal HTTP order surface (P37 W37-2/3): cap-gated `/api/order*`.
+pub mod agent;
 pub mod ai;
 pub mod api;
 

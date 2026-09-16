@@ -3193,3 +3193,34 @@ async fn an_import_keeps_what_the_file_does_not_carry() {
     assert!(p["imageUrl"].as_str().unwrap_or("").starts_with("/media/"),
             "the import erased the photo: {p}");
 }
+
+/// The agent route, without a model in the loop.
+///
+/// WHAT IS TESTABLE HERE IS THE GUARD, and it is the part that matters: the
+/// agent has more reach than the assistant — it browses — so "off by default"
+/// and "owners only" have to hold before anything else is worth checking. The
+/// LOOP's behaviour (that it stops, that it refuses an undeclared tool, that a
+/// page is data) is proved against a scripted model in `agent.rs`, where it can
+/// be proved without a GPU.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_agent_is_off_by_default_and_owners_only() {
+    let s = boot("agent").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+
+    // Off until the venue turns it on, exactly like the assistant. An agent
+    // that browsed on a venue's behalf without them switching it on would be a
+    // surprise, not a feature.
+    let (code, v) = post(&s.base, "/api/owner/agent", Some(&owner), json!({ "question": "що зі складом?" }));
+    assert_eq!(code, 409, "{v}");
+    assert!(v["error"].as_str().unwrap_or_default().contains("switched off"), "{v}");
+
+    // No token, no agent.
+    assert_eq!(post(&s.base, "/api/owner/agent", None, json!({ "question": "?" })).0, 401);
+
+    // An empty question is refused before any model is reached.
+    assert_eq!(
+        post(&s.base, "/api/owner/agent", Some(&owner), json!({ "question": "   " })).0,
+        400
+    );
+}

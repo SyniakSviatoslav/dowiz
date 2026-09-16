@@ -1282,6 +1282,7 @@ pub fn routes(state: Shared) -> Router {
         .route("/api/owner/settings", get(settings))
         .route("/api/owner/settings", post(set_setting))
         .route("/api/owner/assist", post(owner_assist))
+        .route("/api/owner/agent", post(owner_agent))
         .route("/api/owner/zones", post(set_zones))
         .route("/api/owner/products/{id}/image", post(set_product_image))
         .route("/api/owner/products/{id}/image/clear", post(clear_product_image))
@@ -1491,6 +1492,74 @@ pub(crate) async fn assist_public(
         // The owner is told, every time, whether their customers' details left
         // the machine. Burying this in a settings page would make it a thing
         // they configured once and forgot.
+        "local": assistant.local,
+        "contextRedacted": !assistant.local,
+    })))
+}
+
+
+/// `POST /api/owner/agent` — the venue's own agent, not just an answer.
+///
+/// THE DIFFERENCE FROM `/assist` IS THAT IT CHOOSES. `assist` is handed a fixed
+/// set of facts and phrases them; this one decides each turn whether it knows
+/// enough or needs to look something up — in the hub's graph, or on the web —
+/// and says which. That is why the steps come back with the answer: an owner
+/// who cannot see what it read cannot tell a wrong answer from a wrong lookup.
+///
+/// LOCAL IS THE POINT AND IS REPORTED EVERY TIME. `ai.endpoint` defaults to an
+/// Ollama on this machine, and `local` in the response says whether it stayed
+/// there. An agent that browses on the venue's behalf while quietly sending the
+/// venue's orders to a hosted provider would be the worst of both.
+pub async fn owner_agent(
+    State(st): State<Shared>,
+    _who: OwnerCaller,
+    Json(body): Json<AskIn>,
+) -> Result<Json<Value>, HubHttpError> {
+    let question = body.question.trim().to_string();
+    if question.is_empty() {
+        return Err(HubHttpError::Invalid("no question".into()));
+    }
+    if question.chars().count() > 2000 {
+        return Err(HubHttpError::Invalid("question too long".into()));
+    }
+    let settings = st.read_settings()?;
+    let assistant = crate::ai::Assistant::from_settings(&settings).map_err(|e| match e {
+        crate::ai::AiError::Disabled => HubHttpError::Refused(e.to_string()),
+        other => HubHttpError::Invalid(other.to_string()),
+    })?;
+
+    let facts = owner_facts(&st).await?;
+    // REDACTED WHEN THE MODEL IS NOT ON THIS MACHINE, by the same rule the
+    // assistant follows. The agent's extra reach makes the rule matter more,
+    // not less.
+    let sent = if assistant.local { facts } else { crate::ai::redact(&facts) };
+
+    let hub = st.read_log()?;
+    let catalog = st.read_catalog()?;
+    let knowledge = crate::agent::HubKnowledge { hub: &hub, catalog: &catalog };
+    let run = crate::agent::run(&assistant, &knowledge, &question, &sent)
+        .await
+        .map_err(|e| HubHttpError::Io(e.to_string()))?;
+
+    let steps: Vec<Value> = run
+        .steps
+        .iter()
+        .map(|s| {
+            let (tool, arg) = match &s.action {
+                crate::agent::Action::Graph(q) => ("graph", q.clone()),
+                crate::agent::Action::Web(u) => ("web", u.clone()),
+                crate::agent::Action::Answer(_) => ("answer", String::new()),
+            };
+            json!({ "tool": tool, "arg": arg, "sawChars": s.observation.chars().count() })
+        })
+        .collect();
+
+    Ok(Json(json!({
+        "answer": run.answer,
+        "steps": steps,
+        // Said plainly rather than inferred from the step count: an answer
+        // assembled because the turns ran out is a weaker answer.
+        "exhausted": run.exhausted,
         "local": assistant.local,
         "contextRedacted": !assistant.local,
     })))
