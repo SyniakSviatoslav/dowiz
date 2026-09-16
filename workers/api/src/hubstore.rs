@@ -182,6 +182,43 @@ async fn load_images(
     );
     let rows: Vec<Row> = db.prepare(&sql).bind(&binds)?.all().await?.results()?;
 
+    // DECODED AS EACH ROW IS CONSUMED, so a row's hex is freed before the next
+    // row's is touched. Holding all of them and decoding afterwards would put
+    // every image's hex -- twice the bytes of every image, by definition -- in
+    // the isolate at once, which is the cost this whole change exists to avoid
+    // paying. `into_iter` on the array moves each slice out and drops it at the
+    // end of its own iteration.
+    let mut by_base: std::collections::HashMap<String, Vec<(usize, Vec<u8>, i64)>> =
+        std::collections::HashMap::new();
+    for r in rows {
+        let Some((base, n)) = ids.iter().find_map(|base| {
+            if r.id == **base {
+                Some(((*base).to_string(), 0usize))
+            } else {
+                r.id.strip_prefix(*base)
+                    .and_then(|rest| rest.strip_prefix('#'))
+                    .and_then(|n| n.parse::<usize>().ok())
+                    .map(|n| ((*base).to_string(), n))
+            }
+        }) else {
+            continue;
+        };
+
+        let hex_len = r.h0.len() + r.h1.len() + r.h2.len() + r.h3.len();
+        let mut bytes = Vec::with_capacity(hex_len / 2);
+        // IN SLICE ORDER. Out of order the image reassembles with its bytes
+        // transposed, which reads as a corrupt arena rather than as a bug here.
+        for (k, hex) in [r.h0, r.h1, r.h2, r.h3].into_iter().enumerate() {
+            if !from_hex(&hex, &mut bytes) {
+                return Err(Error::RustError(format!(
+                    "image {base} chunk {} slice {k} is not hex",
+                    r.id
+                )));
+            }
+        }
+        by_base.entry(base).or_default().push((n, bytes, r.generation));
+    }
+
     // SORTED IN RUST, NOT IN SQL. `ORDER BY id` is a string sort, and a string
     // sort puts "log#10" before "log#2" -- so an image that ever reached ten
     // chunks would be reassembled with its bytes in the wrong order, which
@@ -189,43 +226,23 @@ async fn load_images(
     let mut out: std::collections::HashMap<String, (Vec<u8>, i64)> =
         std::collections::HashMap::new();
     for base in ids {
-        let mut parts: Vec<(usize, &Row)> = rows
-            .iter()
-            .filter_map(|r| {
-                if r.id == *base {
-                    Some((0usize, r))
-                } else {
-                    r.id.strip_prefix(*base)
-                        .and_then(|rest| rest.strip_prefix('#'))
-                        .and_then(|n| n.parse::<usize>().ok())
-                        .map(|n| (n, r))
-                }
-            })
-            .collect();
-        if parts.is_empty() {
-            continue;
-        }
-        parts.sort_by_key(|(n, _)| *n);
+        let Some(mut parts) = by_base.remove(*base) else { continue };
+        parts.sort_by_key(|(n, _, _)| *n);
         // A tail with no head is not an image: chunk zero carries the
         // generation the guard is checked against, and assembling from chunk
         // one would silently drop the first 900 KB.
         if parts[0].0 != 0 {
             continue;
         }
-        let generation = parts[0].1.generation;
-        let mut buf = Vec::new();
-        for (_, r) in &parts {
-            // IN SLICE ORDER. Out of order the image reassembles with its bytes
-            // transposed, which reads as a corrupt arena rather than as a bug
-            // here.
-            for (k, hex) in [&r.h0, &r.h1, &r.h2, &r.h3].into_iter().enumerate() {
-                if !from_hex(hex, &mut buf) {
-                    return Err(Error::RustError(format!(
-                        "image {base} chunk {} slice {k} is not hex",
-                        r.id
-                    )));
-                }
-            }
+        let total: usize = parts.iter().map(|(_, b, _)| b.len()).sum();
+        // The FIRST chunk's buffer becomes the image, rather than a fresh one
+        // it is copied into. Every image in this store is a single chunk today,
+        // and the copy would be the largest allocation in the request.
+        let mut it = parts.into_iter();
+        let (_, mut buf, generation) = it.next().expect("checked non-empty above");
+        buf.reserve_exact(total - buf.len());
+        for (_, bytes, _) in it {
+            buf.extend_from_slice(&bytes);
         }
         out.insert((*base).to_string(), (buf, generation));
     }

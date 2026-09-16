@@ -8,7 +8,15 @@ compatibility_date = "2026-09-15"
 # non-interactive shell, but this repo carries a licence and may be public, so it
 # is supplied as CLOUDFLARE_ACCOUNT_ID alongside the API token (both live outside
 # the tree, mode 0600). Deploy with:
-#   . /root/.cf_token && PATH="$HOME/.cargo/bin:$PATH" npx wrangler deploy
+#   . /root/.cf_deploy_token && PATH="$HOME/.cargo/bin:$PATH" npx wrangler deploy
+#
+# THE FILE NAME MATTERS AND THIS LINE HAD THE WRONG ONE. /root/.cf_token holds a
+# DIFFERENT token ('Bebop') which has API Tokens Write but NOT Workers Scripts
+# Write, so a deploy with it builds the whole crate and then fails at upload with
+# "Authentication error [code: 10000]" -- which reads as a broken token rather
+# than as the wrong file. A deploy that looked like it ran, did not, and was
+# believed, cost an afternoon of measuring the OLD code and concluding the fix
+# had not worked. Verify a deploy by reading the script back, not by its exit.
 
 [build]
 command = "worker-build --release"
