@@ -15,6 +15,7 @@ SEES, which is the only question that matters.
 ```sh
 python3 tools/live-checks/life.py    # the order, watched from all three surfaces
 python3 tools/live-checks/life2.py   # the shelf, a refusal, a closed venue
+python3 tools/live-checks/life3.py   # delivery zones, colour extraction, voice
 python3 tools/live-checks/we2e.py    # promo codes and the money folds
 bash    tools/live-checks/port.sh    # every route the consoles call
 ```

@@ -71,6 +71,15 @@ const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(
 // this on a phone at the edge of coverage paid for it every time before seeing
 // anything at all.
 //
+// SELF-HOSTED, and that is not about the bytes -- it is the same 932 KB either
+// way. It is about who has to be reachable for a courier to see where they are
+// going. From a CDN, a blocked or slow jsdelivr means no map on a delivery
+// screen, and the venue can do nothing about it. From here it is one origin,
+// the same one that just served the app, with no extra DNS or TLS handshake.
+//
+// It also removes the last third party any surface touched: every customer and
+// every courier now talks to exactly one host.
+//
 // Loaded once, cached by the promise so two callers race safely, and its
 // stylesheet comes with it rather than sitting in the document head.
 let mapLibPromise = null;
@@ -80,10 +89,10 @@ function loadMapLibrary(){
   mapLibPromise = new Promise((resolve, reject) => {
     const css = document.createElement('link');
     css.rel = 'stylesheet';
-    css.href = 'https://cdn.jsdelivr.net/npm/maplibre-gl@5.9.0/dist/maplibre-gl.css';
+    css.href = '/lib/map/maplibre-gl.css';
     document.head.appendChild(css);
     const js = document.createElement('script');
-    js.src = 'https://cdn.jsdelivr.net/npm/maplibre-gl@5.9.0/dist/maplibre-gl.js';
+    js.src = '/lib/map/maplibre-gl.js';
     js.async = true;
     js.onload = () => resolve();
     // A failed load must REJECT rather than hang: the delivery screen has to

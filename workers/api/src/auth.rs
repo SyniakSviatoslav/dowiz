@@ -124,6 +124,13 @@ impl AuthError {
     }
 }
 
+/// The raw signing key, for the few places that mint something this module's
+/// `Claims` enum does not describe -- a voice proposal, for instance, which is
+/// scoped to an action rather than to a role.
+pub fn signing_key(env: &Env) -> Vec<u8> {
+    secret(env).map(|(_, k)| k).unwrap_or_default()
+}
+
 fn secret(env: &Env) -> std::result::Result<(String, Vec<u8>), AuthError> {
     let kid = env
         .secret("JWT_KID")

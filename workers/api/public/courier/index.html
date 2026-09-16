@@ -14,11 +14,9 @@
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#061b1a">
 <title>dowiz · кур'єр</title>
 <!-- The map library (932 KB raw, 245 KB gzipped, measured) is fetched only when
-     a delivery is actually on screen -- see loadMapLibrary in app.js. It used to
-     be a <script> tag here, paid for on every page load including the login and
-     off-shift screens, neither of which has a map. preconnect keeps that later
-     fetch fast without paying for the payload up front. -->
-<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+     a delivery is actually on screen -- see loadMapLibrary in app.js -- and it
+     is served from this origin, so there is no third party left to preconnect
+     to and nothing outside the venue's control between a courier and their map. -->
 <link rel="stylesheet" href="/lib/icons.css">
 <!-- NO WEB FONTS, AND THAT IS A DESIGN DECISION RATHER THAN A SAVING.
      

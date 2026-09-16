@@ -103,6 +103,10 @@ async fn route(req: Request, env: Env) -> Result<Response> {
         .get_async("/api/public/locations/:slug/menu", storefront::menu)
         .post_async("/api/public/locations/:slug/orders", storefront::place)
         .post_async("/api/promo/check", extra::promo_check)
+        .get_async("/api/public/reach", extra::reach)
+        .post_async("/api/voice", extra::voice)
+        .post_async("/api/owner/zones", extra::set_zones)
+        .post_async("/api/owner/branding/extract", extra::extract_branding)
         .post_async("/api/order/:id/feedback", extra::feedback)
         // ── accounts ──
         .post_async("/api/bootstrap", bootstrap::seed)
