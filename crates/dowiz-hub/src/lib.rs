@@ -253,7 +253,13 @@ impl Hub {
     fn grow(&mut self) -> Result<(), HubError> {
         let mut records = EvLog::walk(&self.store);
         records.reverse();
-        let bigger = self.store.to_bytes().len().saturating_mul(2).max(DEFAULT_IMAGE_BYTES);
+        // DOUBLE, DO NOT JUMP TO THE DEFAULT. `.max(DEFAULT_IMAGE_BYTES)` was
+        // here and it meant a hub born at 64 KiB went straight to 4 MiB on its
+        // first overflow -- which on a Worker is five D1 rows read and written
+        // on every request, and the resource limit a few orders later. The
+        // floor exists so a corrupt zero-length image cannot produce a
+        // zero-length one; it is not a target.
+        let bigger = self.store.to_bytes().len().saturating_mul(2).max(64 * 1024);
         let mut fresh = Store::create_bytes(bigger);
         EvLog::init_bytes(&mut fresh)?;
         let mut last: Option<[u8; 32]> = None;

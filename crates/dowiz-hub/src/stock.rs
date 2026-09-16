@@ -661,7 +661,17 @@ pub const DEFAULT_STOCK_BYTES: usize = 8 * 1024 * 1024;
 
 impl StockLog {
     pub fn create() -> Result<Self, crate::HubError> {
-        let mut store = Store::create_bytes(DEFAULT_STOCK_BYTES);
+        Self::create_sized(DEFAULT_STOCK_BYTES)
+    }
+
+    /// A log that starts at a chosen size.
+    ///
+    /// The default is a year of a venue's movements, which is right on a disk
+    /// and wrong on a Worker: 8 MiB is nine D1 chunks read and written on every
+    /// order that reserves an ingredient. The log grows itself when an append
+    /// does not fit, so a small start costs a few doublings and nothing else.
+    pub fn create_sized(bytes: usize) -> Result<Self, crate::HubError> {
+        let mut store = Store::create_bytes(bytes);
         EvLog::init_bytes(&mut store)?;
         Ok(StockLog { store })
     }
@@ -715,8 +725,62 @@ impl StockLog {
             actor_seq: self.events().len() as u64,
             payload,
         };
-        EvLog::append_bytes(&mut self.store, &rec).map_err(|_| StockError::Malformed)?;
-        EvLog::set_tip_bytes(&mut self.store, &id).map_err(|_| StockError::Malformed)?;
+        // THE IMAGE GROWS RATHER THAN REFUSING, like the order log. A shelf
+        // that cannot record a delivery because its arena is full is a kitchen
+        // that stops being able to sell -- the refusal path reads this ledger.
+        // ── APPEND AND TIP FAIL DIFFERENTLY, SO THEY ARE HANDLED DIFFERENTLY ──
+        //
+        // Measured: on a nearly full arena the RECORD still fits while the tip
+        // update does not. And `walk` follows the store's object chain rather
+        // than the tip hash, so a record written without its tip is already IN
+        // the chain -- re-appending it after growing counts it twice, which is
+        // exactly what the first version of this did (3002 deliveries recorded
+        // for 3000 made).
+        //
+        // So: grow-and-retry only the APPEND. Once the record is in, the tip is
+        // set; if that is what ran out of room, growing is enough on its own,
+        // because `grow` copies the chain and points the tip at its last
+        // record -- which is this one.
+        let mut placed = EvLog::append_bytes(&mut self.store, &rec).is_ok();
+        for _ in 0..6 {
+            if placed {
+                break;
+            }
+            self.grow().map_err(|_| StockError::Malformed)?;
+            placed = EvLog::append_bytes(&mut self.store, &rec).is_ok();
+        }
+        if !placed {
+            return Err(StockError::Malformed);
+        }
+        if EvLog::set_tip_bytes(&mut self.store, &id).is_err() {
+            self.grow().map_err(|_| StockError::Malformed)?;
+            EvLog::set_tip_bytes(&mut self.store, &id).map_err(|_| StockError::Malformed)?;
+        }
+        Ok(())
+    }
+
+    /// Double the image and copy the chain across, oldest first.
+    ///
+    /// `walk` is newest-first, so the copy is reversed: appending in the wrong
+    /// order leaves every `prev` pointing at a record that does not exist yet,
+    /// which is a heap of orphans that still looks like a log.
+    fn grow(&mut self) -> Result<(), crate::HubError> {
+        let mut records = EvLog::walk(&self.store);
+        records.reverse();
+        let bigger = self.store.to_bytes().len().saturating_mul(2).max(64 * 1024);
+        let mut fresh = Store::create_bytes(bigger);
+        EvLog::init_bytes(&mut fresh)?;
+        let mut last = None;
+        for r in &records {
+            EvLog::append_bytes(&mut fresh, r)?;
+            last = Some(r.id);
+        }
+        if let Some(id) = last {
+            EvLog::set_tip_bytes(&mut fresh, &id)?;
+        }
+        // Swapped in only once the whole copy succeeded: a partial grow that
+        // replaced the store would lose the ledger to save space.
+        self.store = fresh;
         Ok(())
     }
 

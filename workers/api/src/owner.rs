@@ -171,6 +171,9 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
 
     let want_loc = body.location_id.clone();
     let reason = body.reason.clone();
+    // Kept for the stock settlement below, which runs after the closure has
+    // taken ownership of its own copy.
+    let order_id = id.clone();
     let out = crate::hubstore::with_hub(&db, move |hub| {
         let current = hub
             .order(&id)
@@ -186,42 +189,7 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
         let mut merged: Value = serde_json::from_str(&updated)
             .map_err(|e| Error::RustError(format!("kernel order json unreadable: {e}")))?;
         let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
-        // ── EVERY FIELD THE HUB OWNS, CARRIED ACROSS THE TRANSITION ──
-        //
-        // The kernel returns its own order and knows nothing about delivery,
-        // contact, discounts or tips, so anything not on this list is ERASED by
-        // the first status change. The native adapter lost `discount` and
-        // `promo` that way, and the consequence was not cosmetic: the use-count
-        // folds over orders looking for `promo.code`, so a max-uses code became
-        // infinitely reusable the moment the kitchen accepted the first order
-        // that used it. Measured here as well -- a live order on Cloudflare came
-        // back from confirm/preparing/ready with no promo and no tip, and the
-        // day's takings were 200 lek too high because the tip could no longer
-        // be subtracted.
-        for k in [
-            "location_id",
-            "contact",
-            "fulfilment",
-            "payment",
-            "payment_status",
-            "delivery_fee",
-            "courier_id",
-            "created_at_ms",
-            "rejection_reason",
-            "cash_collected",
-            "scheduled_for_ms",
-            "tip",
-            "discount",
-            "promo",
-            "feedback",
-            "assigned_at_ms",
-            "accepted_at_ms",
-            "total",
-        ] {
-            if let Some(v) = old.get(k) {
-                merged[k] = v.clone();
-            }
-        }
+        crate::hubstore::carry_over(&old, &mut merged);
         // A rejection carries WHY, recorded with the event so the customer can be
         // told something true rather than "rejected".
         if next == "REJECTED" {
@@ -248,6 +216,40 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
             return Response::error(msg, code);
         }
     };
+
+    // ── THE SHELF FOLLOWS THE ORDER ──
+    //
+    // Preparing CONSUMES what was held: the food is being made and those
+    // ingredients are gone. Rejecting or cancelling RELEASES them: nothing was
+    // cooked, and holding them would strand the difference for ever.
+    //
+    // Settled AFTER the order moved, never before -- the kernel owns whether
+    // the transition is legal at all, and taking ingredients off the shelf for
+    // a transition it then refuses is a loss with no order behind it.
+    let settle = match next {
+        "PREPARING" => Some(true),
+        "REJECTED" | "CANCELLED" => Some(false),
+        _ => None,
+    };
+    if let Some(consume) = settle {
+        let oid = order_id.clone();
+        let done = crate::hubstore::with_stock(&db, move |log| {
+            let led = log.ledger().map_err(|e| Error::RustError(e.to_string()))?;
+            let evs = dowiz_hub::stock::settle(&led, &oid, consume);
+            if evs.is_empty() {
+                return Ok(());
+            }
+            log.append_all(&evs).map_err(|e| Error::RustError(e.to_string()))
+        })
+        .await;
+        // LOUD, and it does NOT fail the transition. The order has already
+        // moved and the customer has been told; refusing now would leave the
+        // order and the ledger disagreeing in the other direction.
+        if let Err(e) = done {
+            console_error!("stock: could not settle {order_id}: {e}");
+        }
+    }
+
     Response::from_json(&merged)
 }
 

@@ -147,3 +147,23 @@ fn a_real_menu_fits_under_the_d1_row_limit() {
     assert!(back.location().unwrap().contains("Dubin"));
     assert!(dowiz_hub::allergens::read(&back.product("item-07").unwrap()).is_declared());
 }
+
+/// The stock ledger grows too. A shelf that cannot record a delivery because
+/// its arena filled is a kitchen that stops being able to sell: the refusal
+/// path that decides whether a basket can be made reads this log.
+#[test]
+fn the_stock_log_grows_instead_of_refusing() {
+    use dowiz_hub::stock::{StockEvent, StockLog};
+    let mut log = StockLog::create_sized(16 * 1024).unwrap();
+    for i in 0..3_000 {
+        log.append(&StockEvent::Received { item: "salmon".into(), qty: 1 })
+            .unwrap_or_else(|e| panic!("the shelf stopped recording after {i} deliveries: {e}"));
+    }
+    let led = log.ledger().expect("ledger");
+    assert_eq!(led.level("salmon").on_hand, 3_000, "growth lost history");
+
+    // And a grown image still loads and still accepts more.
+    let mut back = StockLog::load(&log.to_bytes()).expect("load");
+    back.append(&StockEvent::Received { item: "salmon".into(), qty: 1 }).expect("append");
+    assert_eq!(back.ledger().unwrap().level("salmon").on_hand, 3_001);
+}

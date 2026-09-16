@@ -482,6 +482,35 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     envelope["payment"] = json!(payment_kind);
 
     let phone_hash = auth::sha256_hex(&body.contact.phone);
+    // ── INGREDIENTS ARE RESERVED BEFORE THE ORDER EXISTS ──
+    //
+    // §4's fail-closed gate: if the kitchen cannot make it, the customer is
+    // told now rather than phoned in twenty minutes. The reservation is all or
+    // nothing across the whole basket, so a third line that is short does not
+    // leave the first two held by an order that was never placed.
+    //
+    // A venue that has not modelled its ingredients reserves nothing and this
+    // is a no-op -- stock control that must be complete before anything can be
+    // sold is stock control nobody switches on.
+    let bom_lines: Vec<(String, i64)> = body
+        .items
+        .iter()
+        .filter_map(|it| Some((loaded.catalog.product(&it.product_id)?, it.quantity)))
+        .collect();
+    let reservations = dowiz_hub::stock::reservations_for(&id, &bom_lines);
+    if !reservations.is_empty() {
+        let evs = reservations.clone();
+        let held = crate::hubstore::with_stock(&db, move |log| {
+            log.append_all(&evs).map_err(|e| Error::RustError(e.to_string()))
+        })
+        .await;
+        if let Err(e) = held {
+            // The customer is told WHICH ingredient: "something is unavailable"
+            // sends them hunting through a basket.
+            return Response::error(format!("{e}"), 409);
+        }
+    }
+
     // THE DISCOUNT IS DECIDED BESIDE THE APPEND THAT MAKES IT REAL. Counting the
     // uses first and appending after would let two customers spend the last use
     // of the same code at once -- rare at one restaurant, and exactly the kind
@@ -508,7 +537,32 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
             .map_err(|e| Error::RustError(format!("hub append failed: {e:?}")))?;
         Ok(stored)
     })
-    .await?;
+    .await;
+
+    // THE ORDER DID NOT SURVIVE; ITS INGREDIENTS MUST NOT STAY HELD. A stranded
+    // reservation makes a kitchen believe it is out of something it has, and
+    // the failure is loud rather than silent because nothing else will notice.
+    let stored = match stored {
+        Ok(v) => v,
+        Err(e) => {
+            if !reservations.is_empty() {
+                let oid = id.clone();
+                let released = crate::hubstore::with_stock(&db, move |log| {
+                    let led = log.ledger().map_err(|e| Error::RustError(e.to_string()))?;
+                    let rel = dowiz_hub::stock::settle(&led, &oid, false);
+                    if rel.is_empty() {
+                        return Ok(());
+                    }
+                    log.append_all(&rel).map_err(|e| Error::RustError(e.to_string()))
+                })
+                .await;
+                if let Err(re) = released {
+                    console_error!("stock: could NOT release {id} after a failed placement: {re}");
+                }
+            }
+            return Err(e);
+        }
+    };
 
     // The customer row is keyed by a HASH of the phone, never the phone itself,
     // so the table can be joined without holding the number in the clear.
@@ -518,17 +572,50 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
             "INSERT INTO customers (id,location_id,phone_hash,name,created_at_ms) VALUES (?1,?2,?3,?4,?5) \
              ON CONFLICT(location_id,phone_hash) DO UPDATE SET name = COALESCE(excluded.name, customers.name)",
         )
-        .bind(&[cust_id.into(), loc.id.into(), phone_hash.into(),
+        .bind(&[cust_id.into(), loc.id.clone().into(), phone_hash.into(),
                 body.contact.name.clone().unwrap_or_default().into(),
                 worker::wasm_bindgen::JsValue::from_f64(created_at_ms as f64)])?
         .run()
         .await;
+
+    // ── THE CUSTOMER'S KEY TO THEIR OWN ORDER ──
+    //
+    // Minted once, here, and returned exactly once. It is scoped to THIS order
+    // and nothing else, so it cannot be walked to a neighbour's, and it carries
+    // no phone and no name -- the claim shape refuses to hold them.
+    //
+    // Without it `/api/order/:id` had nothing to check and was public: anyone
+    // who knew an id could read the name, the phone and the address off it.
+    // Capability-by-obscurity, on a live deployment.
+    //
+    // Seven days, because that is how long somebody might reasonably come back
+    // and ask what they ordered.
+    let now = Date::now().as_millis() as i64;
+    let customer_token = auth::sign(
+        &ctx.env,
+        &auth::Claims::Customer {
+            // No account exists, so the subject is the order. There is
+            // deliberately no customer registry.
+            sub: id.clone(),
+            order_id: id.clone(),
+            location_id: loc.id.clone(),
+            iat: now,
+            exp: now + auth::CUSTOMER_TTL_MS,
+        },
+    )
+    .ok();
 
     // A card order needs an intent before the browser can collect anything. The
     // ORDER ID is the idempotency key, so a retry -- a flaky connection, a double
     // tap, a replay after a lost generation guard -- returns the SAME intent
     // rather than charging twice.
     let mut out: Value = serde_json::from_str(&stored).unwrap_or(json!({}));
+    // Returned once and never again: the hub keeps no copy, so a customer who
+    // loses the link has lost it, which is the same guarantee the native
+    // adapter gives.
+    if let Some(tok) = customer_token {
+        out["access_token"] = json!(tok);
+    }
     if payment_kind == "card" {
         match crate::stripe::create_intent(&ctx.env, &id, total, &loc.currency_code).await {
             Ok((intent_id, client_secret)) => {

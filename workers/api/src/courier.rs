@@ -207,6 +207,17 @@ async fn load_order(db: &D1Database, id: &str, loc: &str) -> Result<Option<(Stri
 
 /// Advance one order through the kernel and record the result as an event.
 async fn write_status(db: &D1Database, id: &str, next: &'static str) -> Result<Value> {
+    write_status_with(db, id, next, -1).await
+}
+
+/// `cash` of -1 means "not a cash-collecting transition"; anything else is
+/// recorded on the order.
+async fn write_status_with(
+    db: &D1Database,
+    id: &str,
+    next: &'static str,
+    cash: i64,
+) -> Result<Value> {
     let id_s = id.to_string();
     crate::hubstore::with_hub(db, move |hub| {
         let current = hub
@@ -216,10 +227,9 @@ async fn write_status(db: &D1Database, id: &str, next: &'static str) -> Result<V
         let mut merged: Value = serde_json::from_str(&updated)
             .map_err(|e| Error::RustError(format!("kernel order json unreadable: {e}")))?;
         let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
-        for k in ["location_id","contact","fulfilment","payment","delivery_fee","total","courier_id","rejection_reason"] {
-            if let Some(v) = old.get(k) {
-                merged[k] = v.clone();
-            }
+        crate::hubstore::carry_over(&old, &mut merged);
+        if cash >= 0 {
+            merged["cash_collected"] = json!(cash);
         }
         let body = serde_json::to_string(&merged).unwrap_or(updated);
         hub.append(dowiz_hub::EventKind::Advanced, &id_s, &body, now_ms() as u64, [0u8; 32])
@@ -267,6 +277,44 @@ pub async fn accept(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     if res.is_err() {
         return Response::error("another courier took this order", 409);
     }
+
+    // ── THE ORDER CARRIES ITS COURIER ──
+    //
+    // The row above settles the race; this is what every screen actually reads.
+    // The courier's tasks, wallet and history all fold from the ORDER LOG, and
+    // so does the owner's queue -- so a courier recorded only in a side table
+    // is a courier none of them can see. Measured: a delivered order came back
+    // with `courier_id: null`, its courier's wallet showed zero deliveries and
+    // their history was empty, while the assignment row said otherwise.
+    //
+    // The INSERT is the authority on who won; this write only repeats its
+    // answer where the rest of the system looks.
+    let now = now_ms();
+    let oid = id.clone();
+    let who = courier_id.clone();
+    let claimed = crate::hubstore::with_hub(&db, move |hub| {
+        let current = hub
+            .order(&oid)
+            .map_err(|_| Error::RustError("order not found".into()))?;
+        let mut o: Value = serde_json::from_str(&current).unwrap_or(json!({}));
+        o["courier_id"] = json!(who);
+        // Taking it ends any offer window: from here it is theirs until it is
+        // delivered or the owner moves it.
+        o["accepted_at_ms"] = json!(now);
+        let body = serde_json::to_string(&o).unwrap_or(current);
+        // `Noted`, not `Advanced`: taking an order is not a transition the
+        // order machine decided, and writing it as one would put an edge in
+        // the log that does not exist.
+        hub.append(dowiz_hub::EventKind::Noted, &oid, &body, now as u64, [0u8; 32])
+            .map_err(|e| Error::RustError(format!("{e:?}")))
+    })
+    .await;
+    if let Err(e) = claimed {
+        // LOUD. The assignment row stands, so the order is not lost -- but the
+        // courier's screens will not show it, and that is worth knowing.
+        console_error!("courier: {courier_id} took {id} and the log did not record it: {e}");
+    }
+
     Response::from_json(&json!({ "ok": true, "orderId": id, "cashDue": cash_due }))
 }
 
@@ -342,7 +390,12 @@ pub async fn deliver(mut req: Request, ctx: RouteContext<()>) -> Result<Response
     if load_order(&db, &id, &loc).await?.is_none() {
         return Response::error("not found", 404);
     }
-    let merged = match write_status(&db, &id, "DELIVERED").await {
+    // THE CASH GOES ON THE ORDER, not only into a shifts table. The courier's
+    // wallet folds `cash_collected` from the orders themselves -- the same
+    // reason the takings and the promo count do -- so a number kept only in a
+    // side table is a number that screen will never show. It read zero for
+    // every delivery until now.
+    let merged = match write_status_with(&db, &id, "DELIVERED", collected).await {
         Ok(v) => v,
         Err(e) => return Response::error(e.to_string(), 409),
     };

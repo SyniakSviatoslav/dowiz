@@ -557,6 +557,80 @@ function bindStats(){
   const r = $('#retryStats'); if (r) r.onclick = () => loadAnalytics();
 }
 
+// ── the shelf ───────────────────────────────────────────────────────────────
+//
+// THE THREE MOVEMENTS A HUMAN CAUSES: a delivery arrived, something was thrown
+// away, somebody counted. Reserved, consumed and released belong to the order
+// lifecycle and have no control here -- a hand-written reservation has no order
+// to settle it and would strand immediately.
+function stockRow(s){
+  const low = s.low ? ' warn' : '';
+  return `<div class="erow stock" data-item="${esc(s.id)}">
+    <span><b>${esc(s.name || s.id)}</b>
+      <span class="chip${low}">${s.available} ${esc(s.unit || '')}</span>
+      ${s.reserved ? `<span class="chip">у резерві ${s.reserved}</span>` : ''}
+      <br><small class="hint">на полиці ${s.onHand}${s.lowAt ? ` · поріг ${s.lowAt}` : ''}</small></span>
+    <span class="row">
+      <button class="btn" data-mv="received" title="Прийом">+</button>
+      <button class="btn" data-mv="wasted" title="Списання">−</button>
+      <button class="btn" data-mv="stocktake" title="Перелік">=</button>
+    </span>
+  </div>`;
+}
+
+async function loadStock(){
+  const box = $('#stList'); if (!box) return;
+  let d;
+  try { d = await api('/owner/stock'); }
+  catch (e) { box.innerHTML = `<p class="hint">${esc(String(e.message || e))}</p>`; return; }
+  box.innerHTML = d.supplies.length
+    ? d.supplies.map(stockRow).join('')
+    : `<p class="hint">Жодного інгредієнта. Поки їх немає, нічого не резервується
+       й нічого не відхиляється — облік, який має бути повним, щоб узагалі
+       працювати, це облік, який ніхто не вмикає.</p>`;
+
+  // A hold whose order never settled. Surfaced rather than swept: it makes a
+  // kitchen believe it is out of something it has.
+  const st = $('#stStranded');
+  st.hidden = !d.stranded.length;
+  if (d.stranded.length) st.innerHTML = `<b>Зависли резерви</b><div class="elist">${
+    d.stranded.map(x => `<div class="erow"><span>${esc(x.item)}<br>
+      <small class="hint">замовлення ${esc(String(x.order).slice(0,8))}</small></span>
+      <span>${x.qty}</span></div>`).join('')}</div>`;
+
+  box.querySelectorAll('[data-mv]').forEach(b => b.onclick = async () => {
+    const item = b.closest('[data-item]').dataset.item, kind = b.dataset.mv;
+    const ask = { received: 'Скільки прийшло?', wasted: 'Скільки списати?',
+                  stocktake: 'Скільки нарахували?' }[kind];
+    const raw = prompt(ask);
+    if (raw === null) return;
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n) || n < 0) return toast('Некоректна кількість');
+    const body = kind === 'stocktake' ? { item, observed: n } : { item, qty: n };
+    if (kind === 'wasted') body.reason = prompt('Причина (spoiled/dropped/unsold):', 'spoiled') || 'spoiled';
+    try { await api(`/owner/stock/${kind}`, body); toast('Записано'); loadStock(); }
+    catch (e) { toast(String(e.message || e)); }
+  });
+}
+
+function bindStock(){
+  if (!$('#spAdd')) return;
+  loadStock();
+  $('#spAdd').onclick = async () => {
+    const err = $('#stErr'); err.hidden = true;
+    try {
+      await api('/owner/supplies', {
+        id: $('#spId').value.trim(),
+        name: $('#spName').value.trim() || undefined,
+        unit: $('#spUnit').value.trim() || undefined,
+        lowAt: parseInt($('#spLow').value, 10) || 0,
+      });
+      ['#spId','#spName','#spUnit','#spLow'].forEach(i => { $(i).value = ''; });
+      loadStock();
+    } catch (e) { err.hidden = false; err.textContent = String(e.message || e); }
+  };
+}
+
 // ── feature flags ───────────────────────────────────────────────────────────
 //
 // The list comes from the HUB, not from here. A console with its own copy shows
@@ -1249,6 +1323,29 @@ function setupView(){
     </section>
 
     <section class="card">
+      <h2>Склад</h2>
+      <p class="hint">Рівень — це згортка того, що сталося з полицею, а не число,
+         яке хтось редагує. Коли інгредієнта бракує, кошик відхиляється <b>до</b>
+         того, як замовлення виникне — і клієнт дізнається одразу, а не за
+         двадцять хвилин по телефону.</p>
+      <div class="row">
+        <input id="spId" class="ask" type="text" placeholder="код (salmon)" autocomplete="off"
+               aria-label="Код інгредієнта">
+        <input id="spName" class="ask" type="text" placeholder="назва" autocomplete="off"
+               aria-label="Назва">
+        <input id="spUnit" class="ask" type="text" placeholder="од." maxlength="8"
+               autocomplete="off" aria-label="Одиниця">
+        <input id="spLow" class="ask" type="number" min="0" placeholder="поріг"
+               inputmode="numeric" aria-label="Поріг «мало»">
+        <button class="btn" id="spAdd">
+          <i class="ti ti-plus i" aria-hidden="true"></i>Додати</button>
+      </div>
+      <div id="stErr" class="report" role="alert" hidden></div>
+      <div id="stList" class="elist"></div>
+      <div id="stStranded" class="report" hidden></div>
+    </section>
+
+    <section class="card">
       <h2>Що увімкнено</h2>
       <p class="hint">Кожен перемикач каже, чого коштує його вимкнути. Нічого з
          цього не стосується грошей, замовлень чи алергенів — те не вимикається.</p>
@@ -1693,6 +1790,7 @@ function renderHours(){
 }
 
 function bindSetup(){
+  bindStock();
   loadFeatures();
   bindBrand();
   bindActivation();

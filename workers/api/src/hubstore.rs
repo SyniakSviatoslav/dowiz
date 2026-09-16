@@ -39,6 +39,12 @@ const IMAGE_CATALOG: &str = "catalog";
 /// both.
 const IMAGE_SETTINGS: &str = "settings";
 const IMAGE_POSTS: &str = "posts";
+/// The ingredient ledger. Append-only like the order log and for the same
+/// reason: a stock level is a FOLD over what happened to the shelf, not a
+/// number somebody edits. The refusal when a basket cannot be made is computed
+/// from this, so a second mutable count would be a second answer to "can the
+/// kitchen make it".
+const IMAGE_STOCK: &str = "stock";
 
 pub struct Loaded {
     pub hub: Hub,
@@ -316,6 +322,43 @@ where
     Err(Error::RustError("posts image is contended".into()))
 }
 
+pub struct LoadedStock {
+    pub stock: dowiz_hub::stock::StockLog,
+    pub generation: i64,
+}
+
+pub async fn load_stock(db: &D1Database) -> Result<LoadedStock> {
+    match load_bytes(db, IMAGE_STOCK).await? {
+        Some((image, generation)) => {
+            let stock = dowiz_hub::stock::StockLog::load(&image)
+                .map_err(|_| Error::RustError("stock image is unreadable".into()))?;
+            Ok(LoadedStock { stock, generation })
+        }
+        None => Ok(LoadedStock {
+            // Born small and grown by the log itself, for the reason the order
+            // log is: 8 MiB of arena would be nine D1 chunks read and written
+            // on every single order.
+            stock: dowiz_hub::stock::StockLog::create_sized(64 * 1024)
+                .map_err(|_| Error::RustError("cannot create stock image".into()))?,
+            generation: 0,
+        }),
+    }
+}
+
+pub async fn with_stock<F, T>(db: &D1Database, mut f: F) -> Result<T>
+where
+    F: FnMut(&mut dowiz_hub::stock::StockLog) -> Result<T>,
+{
+    for _ in 0..5 {
+        let mut loaded = load_stock(db).await?;
+        let out = f(&mut loaded.stock)?;
+        if save_image(db, IMAGE_STOCK, loaded.stock.to_bytes(), loaded.generation).await? {
+            return Ok(out);
+        }
+    }
+    Err(Error::RustError("stock image is contended".into()))
+}
+
 /// Read, mutate, write the catalogue under the same generation guard.
 pub async fn with_catalog<F, T>(db: &D1Database, mut f: F) -> Result<T>
 where
@@ -367,6 +410,51 @@ pub fn promo_uses(hub: &Hub, code: &str) -> i64 {
             o.get("promo").and_then(|p| p.get("code")).and_then(|c| c.as_str()) == Some(code)
         })
         .count() as i64
+}
+
+/// Every field the HUB owns, carried across a kernel transition.
+///
+/// THE KERNEL RETURNS ITS OWN ORDER and knows nothing about delivery, contact,
+/// discounts, tips or timestamps, so anything not on this list is ERASED by the
+/// next status change.
+///
+/// It lives here because there were THREE copies of it -- one in the owner's
+/// action, one in the courier's, one implied by the storefront -- and they had
+/// drifted. The courier's copy had eight fields and was missing
+/// `created_at_ms`, which made every delivery invisible to the earnings fold
+/// (its "today" filter compares against a timestamp that had become zero), and
+/// missing `tip`, which quietly deleted the courier's own money on pickup.
+///
+/// A rule with three copies is three rules. This is the one.
+pub const HUB_OWNED: &[&str] = &[
+    "location_id",
+    "contact",
+    "fulfilment",
+    "payment",
+    "payment_status",
+    "delivery_fee",
+    "courier_id",
+    "created_at_ms",
+    "rejection_reason",
+    "cash_collected",
+    "courier_note",
+    "scheduled_for_ms",
+    "tip",
+    "discount",
+    "promo",
+    "feedback",
+    "assigned_at_ms",
+    "accepted_at_ms",
+    "total",
+];
+
+/// Copy `HUB_OWNED` from the order as it was onto the order the kernel returned.
+pub fn carry_over(old: &serde_json::Value, updated: &mut serde_json::Value) {
+    for k in HUB_OWNED {
+        if let Some(v) = old.get(*k) {
+            updated[*k] = v.clone();
+        }
+    }
 }
 
 pub async fn with_hub<F, T>(db: &D1Database, mut f: F) -> Result<T>

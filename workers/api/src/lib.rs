@@ -130,6 +130,9 @@ async fn route(req: Request, env: Env) -> Result<Response> {
         .get_async("/api/owner/customers", extra::customers)
         .post_async("/api/owner/customers/:key/reveal", extra::reveal_customer)
         .get_async("/api/owner/customers/reveals", extra::reveals)
+        .get_async("/api/owner/stock", extra::stock)
+        .post_async("/api/owner/stock/:kind", extra::stock_move)
+        .post_async("/api/owner/supplies", extra::set_supply)
         .get_async("/api/owner/features", extra::features)
         .post_async("/api/owner/features", extra::set_feature)
         .get_async("/api/owner/settings", extra::settings)
@@ -198,23 +201,47 @@ async fn route(req: Request, env: Env) -> Result<Response> {
                 .set("content-type", "application/json; charset=utf-8")?;
             Ok(res)
         })
-        .get_async("/api/order/:id", |_req, ctx| async move {
+        .get_async("/api/order/:id", |req, ctx| async move {
             let Some(id) = ctx.param("id").cloned() else {
                 return Response::error("missing order id", 400);
             };
-            // Read from the hub's event log. An order's state is the fold over
-            // its events, so there is no row here that could have drifted from
-            // what actually happened to it.
-            let loaded = hubstore::load(&ctx.d1("DB")?).await?;
-            match loaded.hub.order(&id) {
-                Ok(order_json) => {
-                    let mut res = Response::ok(order_json)?;
-                    res.headers_mut()
-                        .set("content-type", "application/json; charset=utf-8")?;
-                    Ok(res)
+            // ── AN ORDER IS NOT READABLE BY WHOEVER KNOWS ITS ID ──
+            //
+            // This route was public. An id is not a secret -- it appears in a
+            // URL, a browser history, a shared screenshot -- and behind it sat
+            // the customer's name, phone and street address. That is
+            // capability-by-obscurity, and it was live.
+            //
+            // Three principals may read one order, and each is checked against
+            // THIS order rather than against a role: the customer holding the
+            // key minted with it, the venue's owner, and the courier whose run
+            // it actually is. A courier is not entitled to every customer's
+            // address in the venue.
+            let db = ctx.d1("DB")?;
+            let loaded = hubstore::load(&db).await?;
+            let Ok(order_json) = loaded.hub.order(&id) else {
+                return Response::error("order not found", 404);
+            };
+            let envelope: serde_json::Value =
+                serde_json::from_str(&order_json).unwrap_or(serde_json::json!({}));
+
+            let allowed = match auth::authenticate(&req, &ctx.env, &db, Date::now().as_millis() as i64).await {
+                Ok(auth::Principal::Customer { order_id, .. }) => order_id == id,
+                Ok(auth::Principal::Owner { .. }) => true,
+                Ok(auth::Principal::Courier { courier_id, .. }) => {
+                    envelope.get("courier_id").and_then(|c| c.as_str()) == Some(courier_id.as_str())
                 }
-                Err(_) => Response::error("order not found", 404),
+                Err(_) => false,
+            };
+            if !allowed {
+                return Response::error("this order needs the link you were given", 401);
             }
+            let mut res = Response::ok(order_json)?;
+            res.headers_mut().set("content-type", "application/json; charset=utf-8")?;
+            // Never cached by anything between here and the browser: it holds
+            // an address.
+            res.headers_mut().set("cache-control", "private, no-store")?;
+            Ok(res)
         })
         .post_async("/api/order/:id/advance", |mut req, ctx| async move {
             let Some(id) = ctx.param("id").cloned() else {
