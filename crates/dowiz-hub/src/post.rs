@@ -154,6 +154,16 @@ pub struct Posts {
 }
 
 impl Posts {
+    /// What this image has spent. See [`crate::Usage`].
+    ///
+    /// The post book is rewritten COMPACTED on every save, so the capacity in the
+    /// image is whatever the doubling loop last picked and is not the limit.
+    /// What refuses a write is `compacted_bytes_fit` running out of doublings
+    /// at `DEFAULT_POSTS_BYTES`, so that is the ceiling measured against.
+    pub fn usage(&self) -> crate::Usage {
+        crate::usage_of(&self.store, crate::ceiling_cells(DEFAULT_POSTS_BYTES))
+    }
+
     pub fn create() -> Result<Self, HubError> {
         let mut store = Store::create_bytes(DEFAULT_POSTS_BYTES);
         Kv::init_bytes(&mut store)?;

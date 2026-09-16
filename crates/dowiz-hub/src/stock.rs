@@ -660,6 +660,14 @@ pub struct StockLog {
 pub const DEFAULT_STOCK_BYTES: usize = 8 * 1024 * 1024;
 
 impl StockLog {
+    /// What this image has spent. See [`crate::Usage`]. The stock log is an
+    /// append log created at a fixed size and `to_bytes` preserves it, so its
+    /// ceiling IS its capacity.
+    pub fn usage(&self) -> crate::Usage {
+        let cap = self.store.capacity_cells();
+        crate::usage_of(&self.store, cap)
+    }
+
     pub fn create() -> Result<Self, crate::HubError> {
         Self::create_sized(DEFAULT_STOCK_BYTES)
     }

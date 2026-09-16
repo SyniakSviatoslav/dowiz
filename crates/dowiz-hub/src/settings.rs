@@ -47,6 +47,16 @@ pub fn is_secret(key: &str) -> bool {
 }
 
 impl Settings {
+    /// What this image has spent. See [`crate::Usage`].
+    ///
+    /// The settings map is rewritten COMPACTED on every save, so the capacity in the
+    /// image is whatever the doubling loop last picked and is not the limit.
+    /// What refuses a write is `compacted_bytes_fit` running out of doublings
+    /// at `DEFAULT_SETTINGS_BYTES`, so that is the ceiling measured against.
+    pub fn usage(&self) -> crate::Usage {
+        crate::usage_of(&self.store, crate::ceiling_cells(DEFAULT_SETTINGS_BYTES))
+    }
+
     pub fn create() -> Result<Self, HubError> {
         let mut store = Store::create_bytes(DEFAULT_SETTINGS_BYTES);
         Kv::init_bytes(&mut store)?;

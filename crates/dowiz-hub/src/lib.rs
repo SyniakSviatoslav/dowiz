@@ -117,6 +117,90 @@ pub enum HubError {
     OrderIdTooLong,
 }
 
+
+/// How much of an image is spent, and on what.
+///
+/// THE ARENA IS THE LIMIT NOBODY SEES UNTIL IT BITES. A bebop store is
+/// append-only: every commit allocates a new generation and the old one is
+/// never reclaimed, so an image is spent by the NUMBER OF WRITES as much as by
+/// the data. `settings.rs` measured it — 313 empty commits before a fresh
+/// roster refused — and the hub answers `arena_full` when it happens. By then
+/// the venue is mid-service and an order is being refused.
+///
+/// MEASURED AGAINST THE CEILING, NOT THE CAPACITY, and the difference is the
+/// whole reason this type is not two fields. The images fall into two kinds:
+///
+///   - The append logs (`Hub`, `StockLog`) persist with `store.to_bytes()`, so
+///     the capacity they were created with is the capacity they keep. It fills,
+///     and when it is full the write is refused. Ceiling == capacity.
+///   - The KV images (`Catalog`, `Settings`, `Posts`) persist with
+///     `compacted_bytes_fit`, which commits the live entries into a FRESH image
+///     sized by doubling from 16 KiB. Their capacity is re-chosen on every save,
+///     so `used/capacity` is a sawtooth: it climbs toward full, the next save
+///     doubles the capacity, and it drops by half. Measured that way a healthy
+///     image reads 942 per mille and the reading falls to 517 the moment it
+///     grows — a gauge that cries full at something with nothing to reclaim.
+///     What actually refuses them is `compacted_bytes_fit` running out of
+///     doublings at `DEFAULT_*_BYTES`. That is the ceiling.
+///
+/// So `used_per_mille` answers one question for both kinds — how close is this
+/// image to the write it will refuse — and `capacity_cells` is kept beside it
+/// as the raw fact, not as the denominator.
+///
+/// THERE IS NO `dead` FIGURE HERE ON PURPOSE. The superblock carries a
+/// `superseded_cells` column and this write path never writes it: `Tx::sup_delta`
+/// is initialised to zero in `Store::begin` and nothing increments it, so
+/// `live_cells` is really "every cell ever allocated" and superseded is flatly 0
+/// in every image this crate produces. A `dead_per_mille` built on it would
+/// return 0 forever while reading like a measurement. It is left out rather
+/// than shipped as a column that cannot move.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Usage {
+    pub used_cells: i64,
+    /// What the image was built with. For a KV image this is re-chosen on every
+    /// save; see the type docs before using it as a denominator.
+    pub capacity_cells: i64,
+    /// The largest this image may ever grow to — the point at which a write is
+    /// refused. This is the denominator.
+    pub ceiling_cells: i64,
+    pub generation: i64,
+}
+
+impl Usage {
+    /// Tenths of a percent of the CEILING, so a caller needs no float to render it.
+    pub fn used_per_mille(&self) -> i64 {
+        if self.ceiling_cells <= 0 {
+            return 0;
+        }
+        (self.used_cells * 1000) / self.ceiling_cells
+    }
+}
+
+/// The usable cells in an image of `bytes` bytes: the arena is what lies past
+/// the two superblocks, exactly as `Store::create_bytes` computes it.
+pub(crate) fn ceiling_cells(bytes: usize) -> i64 {
+    (bytes / 8) as i64 - bebop_store::ARENA as i64
+}
+
+pub(crate) fn usage_of(store: &Store, ceiling_cells: i64) -> Usage {
+    match store.pick() {
+        Some(sb) => Usage {
+            // `arena_used` is an absolute cell index; the arena starts at 1024,
+            // so the cells actually spent are what lies past that.
+            used_cells: (sb.arena_used - bebop_store::ARENA as i64).max(0),
+            capacity_cells: store.capacity_cells(),
+            ceiling_cells,
+            generation: sb.generation,
+        },
+        None => Usage {
+            used_cells: 0,
+            capacity_cells: 0,
+            ceiling_cells,
+            generation: 0,
+        },
+    }
+}
+
 impl HubError {
     /// Is this "the image has no room left", and how much was wanted?
     ///
@@ -178,6 +262,13 @@ impl Hub {
     /// The image to persist. The caller writes this wherever the hub lives.
     pub fn to_bytes(&self) -> Vec<u8> {
         self.store.to_bytes()
+    }
+
+    /// What this image has spent. See `Usage`. The log is created at a fixed
+    /// size and `to_bytes` preserves it, so its ceiling IS its capacity.
+    pub fn usage(&self) -> Usage {
+        let cap = self.store.capacity_cells();
+        usage_of(&self.store, cap)
     }
 
     pub fn len(&self) -> usize {
@@ -504,5 +595,117 @@ mod audit_tests {
         for leak in ["+355", "@gmail", "Rruga"] {
             assert!(!e.order_json.contains(leak), "the audit entry carries {leak}");
         }
+    }
+}
+
+#[cfg(test)]
+mod usage_tests {
+    use super::*;
+
+    /// The number that matters is how close the arena is to refusing a write,
+    /// and a reading that does not move as the log grows is a gauge that is not
+    /// connected to anything.
+    #[test]
+    fn usage_climbs_as_the_log_is_written() {
+        let mut hub = Hub::create_sized(256 * 1024).expect("hub");
+        let empty = hub.usage();
+        assert!(empty.capacity_cells > 0, "capacity must be readable: {empty:?}");
+        assert_eq!(empty.used_per_mille(), 0, "a fresh image has spent nothing");
+
+        for i in 0..20 {
+            hub.append(
+                EventKind::Placed,
+                &format!("ord-{i}"),
+                r#"{"status":"new","items":[]}"#,
+                i as u64,
+                [0u8; 32],
+            )
+            .expect("append");
+        }
+        let after = hub.usage();
+        assert!(after.used_cells > empty.used_cells, "{empty:?} -> {after:?}");
+        assert!(after.generation > empty.generation);
+        assert!(after.used_per_mille() > 0, "the gauge must move: {after:?}");
+        assert!(
+            after.used_per_mille() < 1000,
+            "and must not read full when it is not: {after:?}"
+        );
+    }
+
+    /// THE KV IMAGES ARE THE ONES THIS GETS WRONG IF IT USES CAPACITY. A
+    /// compacted image is re-sized on every save, so measured against its own
+    /// capacity the reading sawtooths — it climbed to 942 per mille and fell
+    /// back to 517 on the next save, which would send an owner compacting
+    /// something with nothing to reclaim. Against the ceiling it only climbs.
+    #[test]
+    fn a_compacted_image_gauge_never_falls_as_it_grows() {
+        let mut worst_drop = 0;
+        let mut prev = 0;
+        let mut last = 0;
+        for n in [1usize, 20, 60, 100, 140, 180, 220, 400] {
+            let mut s = settings::Settings::create().expect("settings");
+            for i in 0..n {
+                s.set(&format!("ai.k{i}"), &"x".repeat(60));
+            }
+            let bytes = s.to_bytes().expect("to_bytes");
+            let u = settings::Settings::load(&bytes).expect("reload").usage();
+            let now = u.used_per_mille();
+            worst_drop = worst_drop.max(prev - now);
+            prev = now;
+            last = now;
+        }
+        assert_eq!(
+            worst_drop, 0,
+            "the reading fell by {worst_drop} per mille as the image GREW; \
+             it is being measured against a capacity that is re-chosen on save"
+        );
+        assert!(last > 0, "and it has to move at all: {last}");
+    }
+
+    /// The ceiling is the point a write is actually refused, so a reading near
+    /// full must mean the next save is near failing — not that a doubling is due.
+    #[test]
+    fn the_compacted_gauge_predicts_the_real_refusal() {
+        let mut last_ok = 0;
+        for n in 1.. {
+            let mut s = settings::Settings::create().expect("settings");
+            for i in 0..n * 100 {
+                s.set(&format!("ai.k{i}"), &"x".repeat(60));
+            }
+            match s.to_bytes() {
+                Ok(b) => {
+                    last_ok = settings::Settings::load(&b)
+                        .expect("reload")
+                        .usage()
+                        .used_per_mille()
+                }
+                Err(_) => break,
+            }
+            assert!(n < 100, "settings must refuse eventually");
+        }
+        assert!(
+            last_ok > 700,
+            "the last reading before settings refused a save was only {last_ok} per mille"
+        );
+    }
+
+    /// A store too small to take another event must READ as nearly full before
+    /// it refuses, or the gauge is useless for the one thing it is for.
+    #[test]
+    fn the_gauge_warns_before_the_arena_refuses() {
+        let mut hub = Hub::create_sized(16 * 1024).expect("hub");
+        let mut refused_at = None;
+        for i in 0..2000 {
+            let before = hub.usage().used_per_mille();
+            if hub
+                .append(EventKind::Placed, &format!("o{i}"), "{}", i as u64, [0u8; 32])
+                .is_err()
+            {
+                refused_at = Some(before);
+                break;
+            }
+        }
+        let at = refused_at.expect("a 16 KiB arena must fill");
+        assert!(at > 800, "the reading just before the refusal was only {at} per mille");
     }
 }

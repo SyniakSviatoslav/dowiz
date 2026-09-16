@@ -7,7 +7,8 @@
 //!
 //! Superblock (16 cells): 0 magic "BEBOPST1", 1 version, 2 generation, 3 root,
 //! 4 arena_used, 5 layout_table, 6 migration_table, 7 live_cells, 8 superseded_cells,
-//! 9 reserved, 10 commit-object, 11 heads-table, 12..14 zero, 15 crc32 of cells 0..14.
+//! 9 reserved, 10 commit-object, 11 heads-table, 12 arena capacity in cells,
+//! 13..14 zero, 15 crc32 of cells 0..14.
 //! A reader picks the VALID superblock with the higher generation.
 //!
 //! Object: h0 = (layout_digest_lo32 << 32) | length_in_cells,
@@ -174,6 +175,17 @@ impl Store {
     }
 
     /// Pick the valid superblock with the higher generation, exactly as a bebop reader does.
+    /// How many arena cells this image was created with.
+    ///
+    /// READ FROM THE SUPERBLOCK, not derived from the image's length, because
+    /// the two can legitimately differ: a reader given a longer buffer than the
+    /// store was built for must not conclude it has room the allocator does not
+    /// know about.
+    pub fn capacity_cells(&self) -> i64 {
+        let Some(sb) = self.pick() else { return 0 };
+        self.cells.get(sb.at + 12).copied().unwrap_or(0)
+    }
+
     pub fn pick(&self) -> Option<Superblock> {
         let mut best: Option<Superblock> = None;
         for at in [SB_A, SB_B] {

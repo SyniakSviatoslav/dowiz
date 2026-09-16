@@ -1889,6 +1889,91 @@ fn graph_facts(
 
 
 
+
+/// `GET /api/owner/health` — what this venue is spending, and how close to a limit.
+///
+/// THE ARENA IS THE LIMIT NOBODY SEES UNTIL IT BITES. A bebop store never
+/// reclaims a generation, so an image is spent by the NUMBER OF WRITES as much
+/// as by the data — measured at 313 empty commits before a fresh roster
+/// refused. When it fills, the hub answers `arena_full` and an order is refused
+/// mid-service. This is the gauge that makes that a thing the owner sees coming
+/// rather than a thing that happens to them.
+///
+/// EVERY IMAGE, not just the log, because they fill for different reasons: the
+/// log grows with orders, settings with writes, posts with drafts.
+///
+/// THERE IS NO `dead` FIGURE. The superblock has a `superseded_cells` column
+/// and nothing on this write path ever writes it, so a ratio built on it would
+/// read 0 forever while looking like a measurement. See `dowiz_hub::Usage`.
+pub async fn health(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
+    let (_, loc, (hub, cat)) =
+        match crate::owner::owner_beside(&req, &ctx, &db, crate::hubstore::load_both(&place)).await
+        {
+            Ok(v) => v,
+            Err(r) => return Ok(r),
+        };
+    // The smaller images, beside the two the dashboard already needs.
+    let (settings, posts, stock) = futures_util::future::join3(
+        crate::hubstore::load_settings(&place),
+        crate::hubstore::load_posts(&place),
+        crate::hubstore::load_stock(&place),
+    )
+    .await;
+
+    fn gauge(u: dowiz_hub::Usage) -> Value {
+        json!({
+            "generation": u.generation,
+            "usedCells": u.used_cells,
+            // What the image holds now, and the most it may ever hold. These
+            // differ for the compacted images: see `dowiz_hub::Usage`. The
+            // ceiling is what `usedPerMille` measures against, because the
+            // capacity of a compacted image is re-chosen on every save and a
+            // ratio against it falls by half exactly when the image grows.
+            "capacityCells": u.capacity_cells,
+            "ceilingCells": u.ceiling_cells,
+            // Per mille rather than a fraction: the kernel keeps no floats and
+            // a percentage with one decimal is what a gauge shows anyway.
+            "usedPerMille": u.used_per_mille(),
+        })
+    }
+
+    let mut images = serde_json::Map::new();
+    images.insert("log".into(), gauge(hub.hub.usage()));
+    images.insert("catalog".into(), gauge(cat.catalog.usage()));
+    if let Ok(s) = &settings {
+        images.insert("settings".into(), gauge(s.settings.usage()));
+    }
+    if let Ok(p) = &posts {
+        images.insert("posts".into(), gauge(p.posts.usage()));
+    }
+    if let Ok(st) = &stock {
+        images.insert("stock".into(), gauge(st.stock.usage()));
+    }
+
+    // The worst reading decides the verdict, because one full image refuses
+    // writes whatever the others say.
+    let worst = images
+        .values()
+        .filter_map(|v| v.get("usedPerMille").and_then(Value::as_i64))
+        .max()
+        .unwrap_or(0);
+    let verdict = match worst {
+        0..=699 => "ok",
+        700..=899 => "watch",
+        _ => "compact",
+    };
+
+    Response::from_json(&json!({
+        "venue": loc,
+        "images": images,
+        "worstUsedPerMille": worst,
+        "verdict": verdict,
+        "orders": hub.hub.len(),
+    }))
+}
+
 /// `GET /api/owner/backup` — the venue's own copy of everything.
 ///
 /// A DOWNLOAD, NOT A DASHBOARD. The point is that the file leaves this platform

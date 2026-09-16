@@ -41,6 +41,16 @@ pub struct Catalog {
 }
 
 impl Catalog {
+    /// What this image has spent. See [`crate::Usage`].
+    ///
+    /// The catalogue is rewritten COMPACTED on every save, so the capacity in the
+    /// image is whatever the doubling loop last picked and is not the limit.
+    /// What refuses a write is `compacted_bytes_fit` running out of doublings
+    /// at `DEFAULT_CATALOG_BYTES`, so that is the ceiling measured against.
+    pub fn usage(&self) -> crate::Usage {
+        crate::usage_of(&self.store, crate::ceiling_cells(DEFAULT_CATALOG_BYTES))
+    }
+
     pub fn create() -> Result<Self, HubError> {
         let mut store = Store::create_bytes(DEFAULT_CATALOG_BYTES);
         Kv::init_bytes(&mut store)?;
