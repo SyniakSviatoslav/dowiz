@@ -4,6 +4,28 @@ name = "dowiz-api"
 main = "build/worker/shim.mjs"
 compatibility_date = "2026-09-15"
 
+# dowiz.org is the main hub; every client is a subdomain of it. The apex is a
+# CUSTOM DOMAIN (wrangler creates and owns its DNS record); the clients are a
+# WILDCARD ROUTE, because a route is the only form that can answer for a
+# hostname created at the moment an administrator presses a button -- a custom
+# domain per venue would mean a DNS write on every hub creation and a Cloudflare
+# API token in the request path.
+#
+# THIS MUST STAY ABOVE EVERY `[table]` HEADER. It sat under `[vars]` for one
+# deploy and TOML did exactly what TOML does: `routes` became an environment
+# VARIABLE called `routes`, the Worker went up with no custom domain at all, and
+# the deploy reported success. `env.routes` in the binding list was the tell.
+# ROUTES ARE NOT MANAGED FROM THIS FILE, and that is forced rather than chosen.
+# wrangler reconciles `routes` by first LISTING the zone's existing routes, and
+# this deploy token cannot read `/zones/.../workers/routes` -- so any `routes`
+# key at all, even one holding nothing but custom domains, fails the call and
+# ABORTS THE WHOLE DEPLOY before the Worker is uploaded. The code then does not
+# ship while the config looks correct, which is the worst of both.
+#
+# So the hostnames are attached out of band, through
+# `/accounts/{id}/workers/domains`, which this token CAN write -- see
+# `tools/platform/attach-host.sh`. The right end state is one wildcard route,
+# `*.dowiz.org/*`, and it needs `Workers Routes:Edit` on the dowiz.org zone.
 # account_id is deliberately NOT committed here. wrangler needs it in a
 # non-interactive shell, but this repo carries a licence and may be public, so it
 # is supplied as CLOUDFLARE_ACCOUNT_ID alongside the API token (both live outside
@@ -18,6 +40,21 @@ compatibility_date = "2026-09-15"
 # believed, cost an afternoon of measuring the OLD code and concluding the fix
 # had not worked. Verify a deploy by reading the script back, not by its exit.
 
+# THE PLATFORM'S OWN HOST. Read by `serve_root` to decide whether `/` is a
+# storefront or the main hub, and by `Place::slug_of_host` to decide whether a
+# subdomain names a venue. It is a var rather than a constant so the workers.dev
+# deployment keeps behaving like a single-venue hub: there, no host matches, the
+# apex serves the storefront, and nothing below changes.
+[vars]
+PLATFORM_HOST = "dowiz.org"
+# THE ONE VENUE THAT PREDATES THE DURABLE OBJECTS. `hub_image` in D1 is keyed by
+# image id with no venue column, because it was written when there was one venue.
+# `do_image` will seed an empty object from it for THIS venue and no other --
+# unset the var and no venue may. Without the scoping the second venue created
+# on this platform came up serving the first's catalogue. Remove both when the
+# legacy rows are gone.
+LEGACY_VENUE = "dubin-durres"
+
 [build]
 command = "worker-build --release"
 
@@ -27,6 +64,13 @@ command = "worker-build --release"
 [assets]
 directory = "./public"
 binding = "ASSETS"
+# ONLY THE ROOT, and only because the decision needs the Host header. One Worker
+# serves two front doors that share a path: `sushi-durres.dowiz.org/` is that
+# venue's storefront and `dowiz.org/` is the main hub. Assets answer before the
+# Worker is reached, so without this the apex serves a storefront with no venue
+# behind it. Every other path is still served straight from assets -- the
+# storefront's own JS and CSS never touch the Worker.
+run_worker_first = ["/"]
 
 # D1 holds the order log. This replaces the native adapter's Mutex<HashMap>,
 # which died with the process -- the reason no order ever survived a restart.

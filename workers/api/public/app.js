@@ -4,7 +4,26 @@
 // computed here are for display, and they are recomputed server-side before the
 // order is accepted -- a client total is never trusted.
 const API = '/api';
-const SLUG = new URLSearchParams(location.search).get('s') || 'demo';
+// WHICH VENUE THIS IS, and the host is the answer before the query string.
+//
+// A client hub is `sushi-durres.dowiz.org`, so the venue is the label in front
+// of the platform domain -- a name a restaurant can print on a receipt, rather
+// than `?s=sushi-durres`, which is a debug handle a customer can edit.
+//
+// `?s=` STILL WINS WHEN IT IS GIVEN, because the workers.dev deployment has no
+// per-venue hostname and is how this is tested. And a workers.dev host is
+// explicitly NOT read as naming a venue: `dowiz-api.sviatoslavsyniak.workers.dev`
+// would otherwise be read as a venue called `dowiz-api` and every request would
+// go to a hub that does not exist.
+const SLUG = (() => {
+  const explicit = new URLSearchParams(location.search).get('s');
+  if (explicit) return explicit;
+  const host = location.hostname.toLowerCase();
+  if (host.endsWith('.workers.dev') || host === 'localhost') return 'demo';
+  const labels = host.split('.');
+  if (labels.length > 2 && labels[0] !== 'www') return labels[0];
+  return 'demo';
+})();
 const $ = (s, r = document) => r.querySelector(s);
 
 // ── i18n. sq is the default: the diners are in Durrës. ──

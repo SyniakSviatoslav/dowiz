@@ -64,6 +64,9 @@ const IMAGE_STOCK: &str = "stock";
 /// and since `owner_beside` verifies the token's signature before it starts,
 /// even that needs this Worker's signing key.
 pub struct Place {
+    /// The one venue whose images may still be seeded from the legacy
+    /// `hub_image` table. `None` means no venue may. See `do_image`.
+    pub legacy_venue: Option<String>,
     pub db: D1Database,
     pub ns: ObjectNamespace,
     pub venue: String,
@@ -88,7 +91,7 @@ impl Place {
             .map(|v| v.to_string())
             .or_else(|| claimed_venue(req, ctx))
             .unwrap_or_else(|| UNNAMED_VENUE.to_string());
-        Ok(Place { db: ctx.d1("DB")?, ns: ctx.durable_object("HUB")?, venue })
+        Ok(Place { db: ctx.d1("DB")?, ns: ctx.durable_object("HUB")?, venue, legacy_venue: legacy_venue(ctx) })
     }
 
     /// For a caller who can name no venue at all.
@@ -106,9 +109,20 @@ impl Place {
     /// honest only while there is one, which is why it reads the table rather
     /// than assuming, and why it is written here where the assumption is
     /// visible.
+    ///
+    /// THAT DAY HAS ARRIVED AND THE HOST IS THE ANSWER. A second venue makes
+    /// `LIMIT 1` pick one of them by rowid, which is not a fallback but a
+    /// coin toss that reads an unrelated restaurant's orders. Now that a client
+    /// hub is `sushi-durres.dowiz.org`, an anonymous request DOES name its
+    /// venue -- in the Host header -- so it is asked before the guess, and the
+    /// guess survives only for the single-venue workers.dev deployment where it
+    /// was true to begin with.
     pub async fn of_any(req: &Request, ctx: &RouteContext<()>) -> Result<Self> {
         if let Some(venue) = claimed_venue(req, ctx) {
-            return Ok(Place { db: ctx.d1("DB")?, ns: ctx.durable_object("HUB")?, venue });
+            return Ok(Place { db: ctx.d1("DB")?, ns: ctx.durable_object("HUB")?, venue, legacy_venue: legacy_venue(ctx) });
+        }
+        if let Some(slug) = Self::slug_of_host(req, ctx) {
+            return Self::of_slug(ctx, &slug).await;
         }
         #[derive(serde::Deserialize)]
         struct Row {
@@ -118,7 +132,7 @@ impl Place {
         let row: Option<Row> =
             db.prepare("SELECT id FROM locations LIMIT 1").first(None).await?;
         let venue = row.map(|r| r.id).unwrap_or_else(|| UNNAMED_VENUE.to_string());
-        Ok(Place { db, ns: ctx.durable_object("HUB")?, venue })
+        Ok(Place { db, ns: ctx.durable_object("HUB")?, venue, legacy_venue: legacy_venue(ctx) })
     }
 
     /// The venue a public URL names, by its slug.
@@ -139,12 +153,69 @@ impl Place {
             .first(None)
             .await?;
         let venue = row.map(|r| r.id).unwrap_or_else(|| UNNAMED_VENUE.to_string());
-        Ok(Place { db, ns: ctx.durable_object("HUB")?, venue })
+        Ok(Place { db, ns: ctx.durable_object("HUB")?, venue, legacy_venue: legacy_venue(ctx) })
+    }
+
+    /// The venue a request's Host header names, by slug.
+    ///
+    /// ONE CLIENT, ONE SUBDOMAIN: `sushi-durres.dowiz.org` is that venue's hub,
+    /// and the apex is the platform. Before this, a storefront named its venue
+    /// with `?s=<slug>` -- a query parameter a customer can edit, that makes
+    /// every venue share one origin, and that reads like a debug handle on a
+    /// link a restaurant prints on a receipt.
+    ///
+    /// ONLY A SUBDOMAIN OF THE PLATFORM DOMAIN COUNTS, and that restriction is
+    /// load-bearing rather than tidy. Taking "the first label" of any host would
+    /// read `dowiz-api.sviatoslavsyniak.workers.dev` as a venue called
+    /// `dowiz-api` and send every request on the workers.dev URL to a hub that
+    /// does not exist. So the host must END with the platform domain, and the
+    /// part in front of it must be a single label.
+    ///
+    /// `www` and the apex are the platform itself, never a venue.
+    pub fn slug_of_host(req: &Request, ctx: &RouteContext<()>) -> Option<String> {
+        let platform = ctx
+            .var("PLATFORM_HOST")
+            .map(|v| v.to_string())
+            .unwrap_or_else(|_| "dowiz.org".to_string());
+        let host = req.headers().get("host").ok().flatten()?;
+        // A Host may carry a port, and it is not part of the name.
+        let host = host.split(':').next()?.to_ascii_lowercase();
+        if host == platform || host == format!("www.{platform}") {
+            return None;
+        }
+        let sub = host.strip_suffix(&format!(".{platform}"))?;
+        if sub.is_empty() || sub.contains('.') || sub == "www" {
+            return None;
+        }
+        Some(sub.to_string())
+    }
+
+    /// Is this request addressed to the platform itself rather than to a venue?
+    pub fn is_platform_host(req: &Request, ctx: &RouteContext<()>) -> bool {
+        let platform = ctx
+            .var("PLATFORM_HOST")
+            .map(|v| v.to_string())
+            .unwrap_or_else(|_| "dowiz.org".to_string());
+        match req.headers().get("host").ok().flatten() {
+            Some(h) => {
+                let h = h.split(':').next().unwrap_or("").to_ascii_lowercase();
+                h == platform || h == format!("www.{platform}")
+            }
+            None => false,
+        }
     }
 
     fn stub(&self) -> Result<Stub> {
         self.ns.id_from_name(&self.venue)?.get_stub()
     }
+}
+
+/// The one venue allowed to adopt an image from the legacy `hub_image` table.
+///
+/// Absent by default, and absent means nobody. See `do_image` for why the safe
+/// direction is "no venue" rather than "the first row".
+fn legacy_venue(ctx: &RouteContext<()>) -> Option<String> {
+    ctx.var("LEGACY_VENUE").ok().map(|v| v.to_string()).filter(|v| !v.is_empty())
 }
 
 /// The venue named by the caller's own token, if the token is genuine.
@@ -280,7 +351,26 @@ async fn do_image(place: &Place, id: &str) -> Result<Option<(Vec<u8>, i64)>> {
         // byte -- see `SLICE` for what that cost.
         return Ok(Some((res.bytes().await?, generation)));
     }
-    // 204: the object has never seen this image. Look in D1 once.
+    // 204: the object has never seen this image.
+    //
+    // ONLY THE LEGACY VENUE MAY ADOPT THE D1 IMAGE, and this scoping is the
+    // difference between a migration and a data leak. `hub_image` is keyed by
+    // IMAGE ID ALONE -- `catalog`, `log`, `settings`, `stock` -- because it was
+    // written when there was one venue and the venue therefore needed no name.
+    // Unscoped, the rule "an object that has never held this image seeds itself
+    // from D1" means EVERY VENUE CREATED FROM NOW ON adopts the first venue's
+    // catalogue, order log and settings on its first read. It is not a
+    // hypothetical: the second venue on this platform came up serving the
+    // first's 52 dishes, and its storefront showed them to the public.
+    //
+    // So the fallback applies to exactly one venue, named in `LEGACY_VENUE`, and
+    // when that is unset there is NO fallback at all. Fail-closed: a venue that
+    // wrongly starts empty is a menu an owner re-enters, and a venue that
+    // wrongly starts full is one tenant's data served from another's hostname.
+    let legacy = place.legacy_venue.as_deref();
+    if legacy != Some(place.venue.as_str()) {
+        return Ok(None);
+    }
     let Some((bytes, _)) = load_images_d1(&place.db, &[id]).await?.remove(id) else {
         return Ok(None);
     };
@@ -788,6 +878,86 @@ where
             .map_err(|e| Error::RustError(format!("catalogue serialise failed: {e:?}")))?;
         if save_image(place, IMAGE_CATALOG, bytes, loaded.generation).await? {
             return Ok(out);
+        }
+    }
+    Err(Error::RustError(
+        "catalogue image is contended; five attempts lost the generation guard".into(),
+    ))
+}
+
+/// Write a BRAND-NEW catalogue for a venue, replacing whatever the object holds.
+///
+/// FRESH, NOT READ-MODIFY-WRITE, and for a new venue those are different in a
+/// way that matters. `with_catalog` loads what is there and edits it -- correct
+/// for an owner changing a price, wrong for a venue being born, because
+/// "what is there" for a never-used object was once ANOTHER TENANT'S CATALOGUE
+/// (see `do_image`). Building the image from nothing means a new hub cannot
+/// inherit a menu under any bug in the read path, and it is also the repair for
+/// a venue that already did.
+/// Give a venue being BORN a complete set of empty images.
+///
+/// EVERY IMAGE, NOT JUST THE CATALOGUE, and that is what the second venue on
+/// this platform taught. A Durable Object is addressed by the venue id, so a
+/// slug that was ever used before reaches the SAME object -- and before
+/// `do_image` was scoped, that object had already adopted the first venue's
+/// images on its first read. Seeding only the catalogue left the new hub with
+/// its own menu and somebody else's SETTINGS: the other venue's AI endpoint and
+/// feature flags, read back through the new owner's console.
+///
+/// ONLY FOR A VENUE BEING CREATED. `create_hub` refuses a slug that is already
+/// a hub, so this runs exactly once per venue and never against a hub that has
+/// traded. It is deliberately not public beyond that caller's need.
+pub async fn seed_fresh_hub(place: &Place, location_json: &str) -> Result<()> {
+    seed_catalog(place, location_json).await?;
+
+    // The four that hold no venue identity: empty is the whole content.
+    let settings = dowiz_hub::settings::Settings::create()
+        .and_then(|mut s| s.to_bytes())
+        .map_err(|e| Error::RustError(format!("cannot create settings: {e:?}")))?;
+    let posts = dowiz_hub::post::Posts::create()
+        .and_then(|mut p| p.to_bytes())
+        .map_err(|e| Error::RustError(format!("cannot create posts: {e:?}")))?;
+    let stock = dowiz_hub::stock::StockLog::create_sized(64 * 1024)
+        .map(|s| s.to_bytes())
+        .map_err(|e| Error::RustError(format!("cannot create stock: {e:?}")))?;
+    let log = Hub::create_sized(64 * 1024)
+        .map(|mut h| h.to_bytes())
+        .map_err(|e| Error::RustError(format!("cannot create hub log: {e:?}")))?;
+
+    for (id, bytes) in [
+        (IMAGE_SETTINGS, settings),
+        (IMAGE_POSTS, posts),
+        (IMAGE_STOCK, stock),
+        (IMAGE_LOG, log),
+    ] {
+        // Read the generation the object is at, then overwrite. A fresh object
+        // is at 0 and a polluted one is not, so this repairs as well as seeds.
+        let generation = match load_bytes(place, id).await? {
+            Some((_, g)) => g,
+            None => 0,
+        };
+        if !save_image(place, id, bytes, generation).await? {
+            return Err(Error::RustError(format!(
+                "could not seed the '{id}' image: the generation moved while a venue was being created"
+            )));
+        }
+    }
+    Ok(())
+}
+
+pub async fn seed_catalog(place: &Place, location_json: &str) -> Result<()> {
+    for _ in 0..5 {
+        // The generation only, so the write is guarded; the CONTENTS are
+        // discarded on purpose.
+        let generation = load_catalog(place).await?.generation;
+        let mut catalog =
+            Catalog::create().map_err(|_| Error::RustError("cannot create catalogue".into()))?;
+        catalog.set_location(location_json);
+        let bytes = catalog
+            .to_bytes()
+            .map_err(|e| Error::RustError(format!("catalogue serialise failed: {e:?}")))?;
+        if save_image(place, IMAGE_CATALOG, bytes, generation).await? {
+            return Ok(());
         }
     }
     Err(Error::RustError(

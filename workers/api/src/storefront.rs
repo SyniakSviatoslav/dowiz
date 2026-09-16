@@ -95,13 +95,13 @@ struct LocationOut {
 }
 
 #[derive(Deserialize)]
-struct LocRow {
-    id: String,
-    name: String,
-    slug: String,
-    phone: String,
+pub(crate) struct LocRow {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) slug: String,
+    pub(crate) phone: String,
     address: Option<String>,
-    status: String,
+    pub(crate) status: String,
     closes_at: Option<String>,
     delivery_eta: String,
     delivery_fee: i64,

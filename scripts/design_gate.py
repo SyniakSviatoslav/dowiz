@@ -3,9 +3,13 @@ import re, sys, pathlib
 
 BASE = pathlib.Path("workers/api/public")
 SURFACES = {
-    "storefront": ("index.html", "app.js"),
+    "storefront": ("store/index.html", "app.js"),
     "admin": ("admin/index.html", "admin/app.js"),
     "courier": ("courier/index.html", "courier/app.js"),
+    # The main hub. A fourth dowiz-owned surface, on the gate from its first
+    # commit rather than added after it had already drifted -- which is the
+    # order the other three learned this in.
+    "platform": ("platform/index.html", "platform/app.js"),
 }
 
 # §8.1 T2 — DOWIZ-FIXED tokens every surface must resolve. The plan flags

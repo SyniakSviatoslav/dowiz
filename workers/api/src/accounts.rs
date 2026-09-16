@@ -151,15 +151,40 @@ pub async fn owner_login(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
         .bind(&[user.id.clone().into()])?
         .first(None)
         .await?;
-    let Some(m) = m else {
-        return Response::error("no active owner membership", 403);
+    // A PLATFORM ADMINISTRATOR OWNS NO RESTAURANT, and that is the point of
+    // them. Authority still comes from a table and not from the request -- it
+    // just comes from a different one. Without this, the only way to sign in to
+    // the main hub was to first make its administrator the owner of somebody's
+    // venue, which would put a platform account inside a tenant's data.
+    //
+    // THE TOKEN NAMES NO VENUE. `active_location_id` stays `None`, so
+    // `claimed_venue` finds nothing and this token cannot be used to read a
+    // hub: every venue route resolves its venue from the claim first. A
+    // platform admin can create hubs and cannot read one.
+    let admin: Option<M> = if m.is_none() {
+        #[derive(Deserialize)]
+        struct P {
+            user_id: String,
+        }
+        let p: Option<P> = db
+            .prepare("SELECT user_id FROM platform_admins WHERE user_id = ?1 LIMIT 1")
+            .bind(&[user.id.clone().into()])?
+            .first(None)
+            .await?;
+        p.map(|_| M { location_id: String::new() })
+    } else {
+        None
     };
+    if m.is_none() && admin.is_none() {
+        return Response::error("no active owner membership", 403);
+    }
+    let venue = m.as_ref().map(|m| m.location_id.clone());
 
     let now = now_ms();
     let claims = Claims::Owner {
         sub: user.id.clone(),
         user_id: user.id.clone(),
-        active_location_id: Some(m.location_id.clone()),
+        active_location_id: venue.clone(),
         iat: now,
         exp: now + OWNER_TTL_MS,
     };
@@ -175,7 +200,8 @@ pub async fn owner_login(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
     Response::from_json(&json!({
         "access_token": access,
         "refresh_token": refresh,
-        "user": { "id": user.id, "name": user.display_name, "locationId": m.location_id }
+        "user": { "id": user.id, "name": user.display_name, "locationId": venue,
+                  "platformAdmin": m.is_none() }
     }))
 }
 

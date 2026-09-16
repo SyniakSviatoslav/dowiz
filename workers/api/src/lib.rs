@@ -13,6 +13,7 @@
 mod accounts;
 mod auth;
 mod bootstrap;
+mod platform;
 mod courier;
 mod hubdo;
 mod hubstore;
@@ -130,7 +131,58 @@ fn harden(mut res: Response) -> Response {
     res
 }
 
+/// Which page the ROOT of a host is.
+///
+/// One Worker serves two different front doors and they share a path. On a
+/// client host, `sushi-durres.dowiz.org/` is that venue's storefront. On the
+/// platform's own host, `dowiz.org/` is the main hub -- the console where a
+/// client's hub is created -- and a storefront there would be a shop with no
+/// venue behind it, which is why the apex used to resolve to the `demo` slug
+/// and show nothing.
+///
+/// `run_worker_first = ["/"]` in `wrangler.toml` is what lets this run at all:
+/// assets otherwise answer `/` before the Worker is reached, and the decision
+/// needs the Host header. Only `/` is taken back -- every other asset is still
+/// served directly, so the storefront's own JS, CSS and images cost nothing.
+async fn serve_root(req: &Request, env: &Env) -> Result<Response> {
+    let host = req
+        .headers()
+        .get("host")
+        .ok()
+        .flatten()
+        .unwrap_or_default()
+        .split(':')
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let platform = env
+        .var("PLATFORM_HOST")
+        .map(|v| v.to_string())
+        .unwrap_or_else(|_| "dowiz.org".to_string());
+    // NEITHER OF THESE MAY BE `/index.html`, AND THAT IS NOT A STYLE CHOICE.
+    // Cloudflare's asset layer normalises `/index.html` to `/`, `/` is
+    // `run_worker_first`, and so asking assets for the storefront re-entered
+    // this function: the Worker fetched itself until the edge cut it off with
+    // error 1042 and the storefront root served nothing at all. Both documents
+    // therefore live one directory down, where the normalised form (`/store/`,
+    // `/platform/`) is a path the Worker does not take back.
+    let page = if host == platform || host == format!("www.{platform}") {
+        "/platform/index.html"
+    } else {
+        "/store/index.html"
+    };
+    let mut url = req.url()?;
+    url.set_path(page);
+    env.assets("ASSETS")?.fetch(url.to_string(), None).await
+}
+
 async fn route(req: Request, env: Env) -> Result<Response> {
+    // Before the router, because this is about the HOST and not the path.
+    if let Ok(u) = req.url() {
+        if u.path() == "/" || u.path() == "/index.html" {
+            return serve_root(&req, &env).await;
+        }
+    }
     Router::new()
         .get("/healthz", |_, _| Response::ok("ok"))
         // ── public storefront ──
@@ -144,6 +196,9 @@ async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/order/:id/feedback", extra::feedback)
         // ── accounts ──
         .post_async("/api/bootstrap", bootstrap::seed)
+        // The main hub. Platform administrators only -- see `platform`.
+        .get_async("/api/platform/hubs", platform::hubs)
+        .post_async("/api/platform/hubs", platform::create_hub)
         .post_async("/api/webhooks/stripe", stripe::webhook)
         .post_async("/api/auth/login", accounts::owner_login)
         .post_async("/api/auth/refresh", accounts::owner_refresh)
