@@ -8,6 +8,7 @@
 // cash handover as an in-sheet form instead of window.prompt, and the plan's
 // "one incoming ripple + ping" on a new task.
 import { create as vcreate, speak, supported as vsupported } from '/lib/voice.js';
+import { createGuide } from '/lib/guide.js';
 
 const API = '/api';
 const $ = (s, r = document) => r.querySelector(s);
@@ -888,6 +889,37 @@ async function setShift(open){
   catch (e) { toast(String(e.message || e), 'alert-circle'); }
 }
 
+// ── guide ───────────────────────────────────────────────────────────────────
+// The courier's version is short because the surface is: one screen, one job,
+// four controls. Same module, same rule -- one table, the tour is an order
+// over it. The help entry lives in the sheet and only while the courier is
+// standing still (offline, or on shift with nothing in hand): a "Довідка"
+// button beside a live delivery is one more thing to mis-tap on a handlebar.
+const HELP = {
+  welcome: { hint:false, title:'Це ваш застосунок кур’єра',
+    body:'Один екран — одна справа. Три короткі кроки покажуть, що тут до чого. Можна пропустити або завершити пізніше.' },
+  shift: { at:'#shiftTag', hint:false, title:'Зміна',
+    body:'Поки зміну не відкрито, замовлення не надходять. На зміні тут видно кількість доставок і зібрану готівку.' },
+  sheet: { at:'#sheet', hint:false, title:'Одна справа на екрані',
+    body:'Готові замовлення з’являються тут. Оберіть одне, натисніть «Взяти» — і далі екран веде крок за кроком до «Доставлено».' },
+  mic: { at:'#mic', hint:false, title:'Голосом',
+    body:'Скажіть «взяв», «доставив» або «де наступне». Застосунок повторить, що почув, і попросить підтвердити.' },
+  ask: { at:'#askBox', title:'Питання про доставки',
+    body:'Відповідає лише про ваші зміни й замовлення: скільки заробили, куди їхати далі, що було вчора.' },
+  help: { at:'.gd-help', hint:false, title:'Довідка',
+    body:'Ця кнопка повторить тур. Вона є лише тоді, коли ви стоїте, не на маршруті.' },
+};
+const TOUR = ['welcome', 'shift', 'sheet', 'mic', 'help'];
+let guide = null;
+function initGuide(){
+  guide ??= createGuide({
+    key:'courier', help: HELP, tour: TOUR, toast,
+    mount: { into:'#app', className:'ghost', text:'Довідка',
+             when: () => S.loadedOnce && !S.mine.length && !$('#pback') },
+  });
+  guide.init();
+}
+
 function bindVoiceChrome(){
   // The microphone appears only where there is a recogniser behind it.
   const mic = $('#mic');
@@ -898,11 +930,13 @@ function bindVoiceChrome(){
 
 async function boot(){ S.booted = true;
   bindVoiceChrome();
+  initGuide();
   // NOT awaited. The task list is what this screen is for; the map is how the
   // task is easier. Blocking the first paint on a 245 KB download would make
   // the important thing wait for the helpful one.
   initMap();
   await load();
+  guide.autoStart();
   clearInterval(boot._i);
   boot._i = setInterval(() => { if (!document.hidden && S.booted) load(); }, 12000); }
 

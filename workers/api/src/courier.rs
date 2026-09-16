@@ -42,12 +42,13 @@ async fn courier_at(
 /// `GET /api/courier/tasks` — what is mine, and what is up for grabs.
 pub async fn tasks(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (courier_id, loc) = match courier_at(&req, &ctx, &db).await {
         Ok(v) => v,
         Err(r) => return Ok(r),
     };
 
-    let loaded = crate::hubstore::load(&db).await?;
+    let loaded = crate::hubstore::load(&place).await?;
 
     #[derive(Deserialize)]
     struct A {
@@ -148,6 +149,7 @@ pub async fn shift(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (courier_id, loc) = match courier_at(&req, &ctx, &db).await {
         Ok(v) => v,
         Err(r) => return Ok(r),
@@ -195,8 +197,8 @@ pub async fn shift(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
 }
 
 /// Read one order out of the hub log, scoped to this hub's location.
-async fn load_order(db: &D1Database, id: &str, loc: &str) -> Result<Option<(String, Value)>> {
-    let loaded = crate::hubstore::load(db).await?;
+async fn load_order(place: &crate::hubstore::Place, id: &str, loc: &str) -> Result<Option<(String, Value)>> {
+    let loaded = crate::hubstore::load(&place).await?;
     let Ok(raw) = loaded.hub.order(id) else { return Ok(None) };
     let v: Value = serde_json::from_str(&raw).unwrap_or(json!({}));
     if v.get("location_id").and_then(|x| x.as_str()) != Some(loc) {
@@ -206,20 +208,24 @@ async fn load_order(db: &D1Database, id: &str, loc: &str) -> Result<Option<(Stri
 }
 
 /// Advance one order through the kernel and record the result as an event.
-async fn write_status(db: &D1Database, id: &str, next: &'static str) -> Result<Value> {
-    write_status_with(db, id, next, -1).await
+async fn write_status(
+    place: &crate::hubstore::Place,
+    id: &str,
+    next: &'static str,
+) -> Result<Value> {
+    write_status_with(place, id, next, -1).await
 }
 
 /// `cash` of -1 means "not a cash-collecting transition"; anything else is
 /// recorded on the order.
 async fn write_status_with(
-    db: &D1Database,
+    place: &crate::hubstore::Place,
     id: &str,
     next: &'static str,
     cash: i64,
 ) -> Result<Value> {
     let id_s = id.to_string();
-    crate::hubstore::with_hub(db, move |hub| {
+    crate::hubstore::with_hub(&place, move |hub| {
         let current = hub
             .order(&id_s)
             .map_err(|_| Error::RustError("order not found".into()))?;
@@ -242,6 +248,7 @@ async fn write_status_with(
 /// `POST /api/courier/orders/:id/accept`
 pub async fn accept(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (courier_id, loc) = match courier_at(&req, &ctx, &db).await {
         Ok(v) => v,
         Err(r) => return Ok(r),
@@ -249,7 +256,7 @@ pub async fn accept(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let Some(id) = ctx.param("id").cloned() else {
         return Response::error("missing order id", 400);
     };
-    let Some((_, v)) = load_order(&db, &id, &loc).await? else {
+    let Some((_, v)) = load_order(&place, &id, &loc).await? else {
         return Response::error("not found", 404);
     };
     let cash_due = if v.get("payment").and_then(|p| p.as_str()) == Some("cash") {
@@ -292,7 +299,7 @@ pub async fn accept(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let now = now_ms();
     let oid = id.clone();
     let who = courier_id.clone();
-    let claimed = crate::hubstore::with_hub(&db, move |hub| {
+    let claimed = crate::hubstore::with_hub(&place, move |hub| {
         let current = hub
             .order(&oid)
             .map_err(|_| Error::RustError("order not found".into()))?;
@@ -321,6 +328,7 @@ pub async fn accept(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 /// `POST /api/courier/orders/:id/pickup` — READY → IN_DELIVERY
 pub async fn pickup(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (courier_id, loc) = match courier_at(&req, &ctx, &db).await {
         Ok(v) => v,
         Err(r) => return Ok(r),
@@ -336,10 +344,10 @@ pub async fn pickup(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     if held.is_none() {
         return Response::error("not your delivery", 403);
     }
-    if load_order(&db, &id, &loc).await?.is_none() {
+    if load_order(&place, &id, &loc).await?.is_none() {
         return Response::error("not found", 404);
     }
-    let merged = match write_status(&db, &id, "IN_DELIVERY").await {
+    let merged = match write_status(&place, &id, "IN_DELIVERY").await {
         Ok(v) => v,
         Err(e) => return Response::error(e.to_string(), 409),
     };
@@ -359,6 +367,7 @@ pub async fn deliver(mut req: Request, ctx: RouteContext<()>) -> Result<Response
     }
     let body: In = req.json().await.unwrap_or(In { cash_collected: None });
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (courier_id, loc) = match courier_at(&req, &ctx, &db).await {
         Ok(v) => v,
         Err(r) => return Ok(r),
@@ -387,7 +396,7 @@ pub async fn deliver(mut req: Request, ctx: RouteContext<()>) -> Result<Response
     // what a settlement dispute is later resolved from.
     let short = a.cash_due - collected;
 
-    if load_order(&db, &id, &loc).await?.is_none() {
+    if load_order(&place, &id, &loc).await?.is_none() {
         return Response::error("not found", 404);
     }
     // THE CASH GOES ON THE ORDER, not only into a shifts table. The courier's
@@ -395,7 +404,8 @@ pub async fn deliver(mut req: Request, ctx: RouteContext<()>) -> Result<Response
     // reason the takings and the promo count do -- so a number kept only in a
     // side table is a number that screen will never show. It read zero for
     // every delivery until now.
-    let merged = match write_status_with(&db, &id, "DELIVERED", collected).await {
+    let merged = match write_status_with(
+        &place, &id, "DELIVERED", collected).await {
         Ok(v) => v,
         Err(e) => return Response::error(e.to_string(), 409),
     };
@@ -478,6 +488,7 @@ pub async fn position(mut req: Request, ctx: RouteContext<()>) -> Result<Respons
 /// `GET /api/courier/earnings` — folded from the shift log, not a running total.
 pub async fn earnings(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (courier_id, loc) = match courier_at(&req, &ctx, &db).await {
         Ok(v) => v,
         Err(r) => return Ok(r),
@@ -486,7 +497,7 @@ pub async fn earnings(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // place the same numbers lived, and the response it produced did not even
     // have the shape the courier app reads -- `d.today.cash` was undefined, so
     // the wallet showed nothing at all.
-    let loaded = crate::hubstore::load(&db).await?;
+    let loaded = crate::hubstore::load(&place).await?;
     let now = now_ms();
     let day = 86_400_000i64;
     let today = ((now + 2 * 60 * 60 * 1000) / day) * day - 2 * 60 * 60 * 1000;

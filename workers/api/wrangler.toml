@@ -52,3 +52,23 @@ id = "0af8bfcd828e4802a4ec7f5bb399666f"
 
 [observability]
 enabled = true
+
+# THE HUB'S IMAGES, one Durable Object per venue.
+#
+# `id_from_name(location_id)` means each venue gets its own object and its own
+# storage, which is P67's hub-per-tenant arriving as a property of where the
+# bytes live rather than as a column every query has to remember to filter on.
+# The object outlives a request, so the image it serves is already in memory —
+# the cost that used to grow with the venue's history.
+[[durable_objects.bindings]]
+name = "HUB"
+class_name = "HubImages"
+
+# `new_sqlite_classes`, NOT `new_classes`. Cloudflare refuses the latter on a
+# free plan outright — "you must create a namespace using a new_sqlite_classes
+# migration [code: 10097]" — which is also how this deployment learned it is on
+# the free plan. The storage API used here is the same key/value one either way;
+# the backend underneath it differs and nothing in `hubdo` can tell.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["HubImages"]

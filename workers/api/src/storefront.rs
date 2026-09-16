@@ -154,7 +154,9 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         return Ok(hit);
     }
     let db = ctx.d1("DB")?;
-    let loaded = crate::hubstore::load_catalog(&db).await?;
+    // The slug is not the id — see `Place::of_slug`.
+    let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
+    let loaded = crate::hubstore::load_catalog(&place).await?;
 
     let Some(loc_json) = loaded.catalog.location() else {
         return Response::error("not found", 404);
@@ -315,7 +317,7 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // separately: a control that appears a moment after the page does is worse
     // than one that was never there, and a second request to decide what to
     // render is a second chance to render the wrong thing.
-    let settings = crate::hubstore::load_settings(&db).await?.settings;
+    let settings = crate::hubstore::load_settings(&place).await?.settings;
     let mut features = serde_json::Map::new();
     for (f, on) in dowiz_hub::features::all(&settings) {
         if f.surface != "storefront" {
@@ -377,7 +379,9 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     }
 
     let db = ctx.d1("DB")?;
-    let loaded = crate::hubstore::load_catalog(&db).await?;
+    // The slug is not the id — see `Place::of_slug`.
+    let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
+    let loaded = crate::hubstore::load_catalog(&place).await?;
     let Some(loc_json) = loaded.catalog.location() else {
         return Response::error("not found", 404);
     };
@@ -524,7 +528,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     let reservations = dowiz_hub::stock::reservations_for(&id, &bom_lines);
     if !reservations.is_empty() {
         let evs = reservations.clone();
-        let held = crate::hubstore::with_stock(&db, move |log| {
+        let held = crate::hubstore::with_stock(&place, move |log| {
             log.append_all(&evs).map_err(|e| Error::RustError(e.to_string()))
         })
         .await;
@@ -542,7 +546,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     let seq = created_at_ms as u64;
     let ev_id = id.clone();
     let now_for_promo = Date::now().as_millis() as i64;
-    let stored = crate::hubstore::with_hub(&db, move |hub| {
+    let stored = crate::hubstore::with_hub(&place, move |hub| {
         // CLONED per attempt, not moved: `with_hub` retries when it loses the
         // generation guard, so the closure runs more than once and must not
         // consume what it patches.
@@ -571,7 +575,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
         Err(e) => {
             if !reservations.is_empty() {
                 let oid = id.clone();
-                let released = crate::hubstore::with_stock(&db, move |log| {
+                let released = crate::hubstore::with_stock(&place, move |log| {
                     let led = log.ledger().map_err(|e| Error::RustError(e.to_string()))?;
                     let rel = dowiz_hub::stock::settle(&led, &oid, false);
                     if rel.is_empty() {

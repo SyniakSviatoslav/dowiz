@@ -99,6 +99,7 @@ pub async fn seed(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
         Err(e) => return Response::error(format!("bad bundle: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
 
     // ── catalogue ──
     let loc = bundle.location.clone();
@@ -108,7 +109,7 @@ pub async fn seed(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // 32-byte secret, so the caller is the operator seeding their own hub, and
     // telling them what actually failed costs nothing and saves a round trip
     // through `wrangler tail` that produced nothing twice.
-    let seeded = crate::hubstore::with_catalog(&db, move |cat| {
+    let seeded = crate::hubstore::with_catalog(&place, move |cat| {
         cat.set_location(&serde_json::to_string(&loc).unwrap_or_else(|_| "{}".into()));
         let mut nc = 0;
         for c in &cats {
@@ -305,7 +306,7 @@ pub async fn seed(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
         "ownerId": owner_id,
         // The catalogue's content fingerprint. Two hubs seeded from the same
         // bundle produce the same root, which makes a mirror checkable.
-        "catalogRoot": crate::hubstore::load_catalog(&db).await?.catalog.root(),
+        "catalogRoot": crate::hubstore::load_catalog(&place).await?.catalog.root(),
         "secretHash": sha256_hex(&want)[..8].to_string()
     }))
 }

@@ -1,0 +1,129 @@
+/* dowiz guide -- the first-run tour and the per-control hints, one sheet for
+ * every surface.
+ *
+ * WHY A FILE. The CSP is `style-src 'self'`: an inline <style> injected by a
+ * module would be dropped without a word, so /lib/guide.js adds a same-origin
+ * <link> to this file, once, and the three index.html files stay untouched.
+ *
+ * WHAT IT MAY USE. T2 from /lib/tokens.css (spacing, radii, elevation, eases,
+ * the tap floor, the measure, the semantic colours) and the --brand-* names the
+ * console and the courier app both define. Nothing else: a colour that is not
+ * a token here is a colour the theme switch does not know about, and the
+ * courier goes dark at sunset.
+ *
+ * gd- is the prefix. It is short because every class below is written in one
+ * module and read nowhere else; it is a prefix at all so `.hint`, which two
+ * surfaces already own, is not shadowed. */
+:root {
+  /* The scrim is the page's own ground at 78% -- dark on the dark theme, warm
+     paper in the light one -- so the highlighted control keeps its real
+     colours and nothing behind it turns into a different palette. */
+  --gd-scrim: color-mix(in srgb, var(--brand-bg) 78%, transparent);
+  /* One card width. 22rem is under the tight measure at every base size the
+     surfaces use; the min() keeps a side gutter of --space-4 at 400px. */
+  --gd-w: min(22rem, calc(100vw - 2 * var(--space-4)));
+  /* Below the toast, above the sticky chrome: a toast fired mid-tour must
+     still be read, and the tour must still cover the header it points at. */
+  --gd-z: calc(var(--z-toast) - 1);
+  --gd-dot: 28px;   /* the visible "?"; its hit area is --tap, see ::before */
+}
+
+/* ── the help entry ──
+   The surface passes its own button class (`icon-btn` on the console, `ghost`
+   on the courier) and this adds only the resume dot, which says "a tour is
+   waiting" without a word. */
+.gd-help{position:relative}
+.gd-help.gd-resume::after{content:"";position:absolute;top:var(--space-1);right:var(--space-1);
+  width:var(--space-2);height:var(--space-2);border-radius:var(--radius-full);
+  background:var(--color-warning);border:1px solid var(--brand-surface)}
+
+/* ── the "?" beside a control ──
+   28px on the page so it does not out-weigh the control it explains; the
+   ::before pseudo-element widens the hit area to the tap floor without
+   widening the layout. */
+.gd-hint{position:relative;display:inline-grid;place-items:center;flex:0 0 auto;
+  width:var(--gd-dot);height:var(--gd-dot);margin-left:var(--space-1);padding:0;
+  border:1px solid var(--brand-border);border-radius:var(--radius-full);
+  background:var(--brand-surface);color:var(--brand-text-muted);
+  font:inherit;line-height:1;vertical-align:middle;cursor:pointer;
+  transition:color .15s var(--ease-snap),border-color .15s var(--ease-snap)}
+.gd-hint::before{content:"";position:absolute;inset:calc((var(--gd-dot) - var(--tap)) / 2)}
+.gd-hint .ti{width:1rem;height:1rem}
+.gd-hint:hover,.gd-hint[aria-expanded="true"]{color:var(--brand-text);border-color:var(--brand-text)}
+
+/* ── the hint's popover ── */
+.gd-pop{position:fixed;left:0;top:0;z-index:var(--gd-z);width:var(--gd-w);
+  padding:var(--space-3) var(--space-4);
+  background:var(--brand-surface-raised);color:var(--brand-text);
+  border:1px solid var(--brand-border);border-radius:var(--radius-md);box-shadow:var(--elevation-2);
+  font-size:var(--text-sm);line-height:var(--leading-normal);
+  animation:gd-in .2s var(--ease-snap)}
+.gd-pop b{display:block;margin:0 0 var(--space-1);padding-right:var(--space-8);
+  font-weight:var(--weight-semibold);color:var(--brand-text)}
+.gd-pop p{margin:0;color:var(--brand-text-muted);max-width:var(--measure-tight);text-wrap:pretty}
+
+/* ── the tour ──
+   The ring sits on the target; its shadow is the scrim. pointer-events:none
+   because the owner may well tap the thing being pointed at, and a tour that
+   blocks the control it is explaining is a tour people close. */
+.gd-ring{position:fixed;left:0;top:0;z-index:var(--gd-z);pointer-events:none;
+  border:2px solid var(--brand-primary);border-radius:var(--radius-md);
+  box-shadow:0 0 0 200vmax var(--gd-scrim);
+  transition:top .3s var(--ease-spring),left .3s var(--ease-spring),
+             width .3s var(--ease-spring),height .3s var(--ease-spring)}
+.gd-ring.gd-none{border-width:0}
+
+.gd-card{position:fixed;left:0;top:0;z-index:var(--gd-z);width:var(--gd-w);
+  padding:var(--space-4);
+  background:var(--brand-surface-raised);color:var(--brand-text);
+  border:1px solid var(--brand-border);border-radius:var(--radius-lg);box-shadow:var(--elevation-3);
+  font-size:var(--text-base);line-height:var(--leading-normal);
+  animation:gd-in .25s var(--ease-snap)}
+.gd-card .gd-n{font-size:var(--text-xs);font-weight:var(--weight-semibold);
+  color:var(--brand-text-muted);letter-spacing:.04em;text-transform:uppercase}
+.gd-card h2{margin:var(--space-1) 0 var(--space-2);padding-right:var(--space-8);
+  font-size:var(--text-lg);font-weight:var(--weight-semibold);line-height:var(--leading-tight)}
+.gd-card p{margin:0 0 var(--space-4);color:var(--brand-text-muted);max-width:var(--measure-tight);text-wrap:pretty}
+.gd-acts{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2)}
+.gd-acts .gd-sp{flex:1 1 var(--space-4)}
+.gd-btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-1);
+  min-height:var(--tap);padding:0 var(--space-3);
+  border:1px solid var(--brand-border);border-radius:var(--radius-md);
+  background:var(--brand-surface);color:var(--brand-text);
+  font:inherit;font-weight:var(--weight-semibold);cursor:pointer;
+  transition:transform .12s var(--ease-snap)}
+.gd-btn:active{transform:scale(.97)}
+.gd-btn.gd-pri{background:var(--brand-primary);border-color:var(--primary-edge);color:var(--brand-on-primary)}
+.gd-btn.gd-quiet{border-color:transparent;background:transparent;color:var(--brand-text-muted);
+  font-weight:var(--weight-medium);padding:0 var(--space-2)}
+@media (hover:hover){
+  .gd-btn:hover{background:var(--brand-surface-raised)}
+  .gd-btn.gd-pri:hover{background:var(--brand-primary)}
+  .gd-btn.gd-quiet:hover{color:var(--brand-text);background:transparent}
+}
+
+/* The close in the corner of a card or a popover. Same meaning as Esc. */
+.gd-x{position:absolute;top:var(--space-2);right:var(--space-2);display:inline-grid;place-items:center;
+  width:calc(var(--tap) - var(--space-2));height:calc(var(--tap) - var(--space-2));padding:0;
+  border:0;border-radius:var(--radius-full);background:transparent;color:var(--brand-text-muted);
+  font:inherit;cursor:pointer}
+.gd-x .ti{width:1.1rem;height:1.1rem}
+.gd-x:hover{color:var(--brand-text);background:var(--brand-surface)}
+
+.gd-hint:focus-visible,.gd-help:focus-visible,.gd-btn:focus-visible,.gd-x:focus-visible{
+  outline:2px solid var(--focus-ring);outline-offset:2px}
+
+/* [hidden] is display:none on both surfaces already; this keeps it so even if
+   a surface drops that rule, because a tour card that cannot hide is a modal
+   with no exit. */
+.gd-ring[hidden],.gd-card[hidden],.gd-pop[hidden]{display:none!important}
+
+@keyframes gd-in{from{opacity:0;transform:translateY(var(--space-2))}}
+
+/* Reduced motion keeps the meaning: the ring still lands on the target and the
+   card still appears; nothing travels to get there. */
+@media (prefers-reduced-motion:reduce){
+  .gd-card,.gd-pop{animation:none}
+  .gd-ring,.gd-hint,.gd-btn{transition:none}
+  .gd-btn:active{transform:none}
+}

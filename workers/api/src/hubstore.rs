@@ -46,6 +46,120 @@ const IMAGE_POSTS: &str = "posts";
 /// kitchen make it".
 const IMAGE_STOCK: &str = "stock";
 
+/// WHERE a hub's images live, decided WITHOUT TOUCHING ANYTHING.
+///
+/// The Durable Object is addressed by venue, so the venue has to be known
+/// before the image can be asked for — and the venue used to come from a
+/// database query, which would have put the read behind the very round trip
+/// `owner_beside` just took it out from behind.
+///
+/// It does not have to. An owner's token already carries `active_location_id`,
+/// and a storefront request names its venue in the URL. Both are readable with
+/// no I/O at all.
+///
+/// A TOKEN CLAIM IS A HINT, NEVER AN AUTHORITY. It only picks which object to
+/// ask; whether the caller may see what comes back is still re-derived from the
+/// membership table on every request, exactly as before. A forged claim
+/// therefore buys an attacker a read of an object they will then be refused —
+/// and since `owner_beside` verifies the token's signature before it starts,
+/// even that needs this Worker's signing key.
+pub struct Place {
+    pub db: D1Database,
+    pub ns: ObjectNamespace,
+    pub venue: String,
+}
+
+/// The fallback name, for the paths that legitimately have neither a token nor
+/// a slug — `bootstrap`, which is what CREATES the first venue. Named rather
+/// than defaulted silently, so a route that lands here by accident is greppable.
+pub const UNNAMED_VENUE: &str = "hub";
+
+impl Place {
+    /// Pure. No query, no fetch — see the type's header for why that matters.
+    ///
+    /// THE NAME IS ALWAYS THE LOCATION ID, never the slug, and the difference is
+    /// not cosmetic: this venue's id is `dubin-durres` and its slug is
+    /// `dubin-sushi`. Taking whichever was to hand would have given the
+    /// storefront one object and the owner console another, and the two would
+    /// have drifted apart one order at a time with nothing reporting it. The
+    /// slug routes resolve theirs with `of_slug` instead.
+    pub fn of(req: &Request, ctx: &RouteContext<()>, venue: Option<&str>) -> Result<Self> {
+        let venue = venue
+            .map(|v| v.to_string())
+            .or_else(|| claimed_venue(req, ctx))
+            .unwrap_or_else(|| UNNAMED_VENUE.to_string());
+        Ok(Place { db: ctx.d1("DB")?, ns: ctx.durable_object("HUB")?, venue })
+    }
+
+    /// For a caller who can name no venue at all.
+    ///
+    /// AN ORDER'S OWN LINK CARRIES NO TOKEN until the customer one is minted,
+    /// and `/api/order/:id` is reached with neither a slug nor a claim. Falling
+    /// back to the placeholder name sent it to an empty object, and the answer
+    /// came back 404 — the order was not missing, we were asking the wrong hub.
+    /// The live check caught it in the first minute; the caution is that a
+    /// wrong-hub read looks exactly like an absent record.
+    ///
+    /// WHEN THERE IS MORE THAN ONE VENUE THIS IS GENUINELY UNANSWERABLE, and
+    /// 404 becomes the right answer rather than a bug: an anonymous request that
+    /// names no venue has not said enough to be given an order. `LIMIT 1` is
+    /// honest only while there is one, which is why it reads the table rather
+    /// than assuming, and why it is written here where the assumption is
+    /// visible.
+    pub async fn of_any(req: &Request, ctx: &RouteContext<()>) -> Result<Self> {
+        if let Some(venue) = claimed_venue(req, ctx) {
+            return Ok(Place { db: ctx.d1("DB")?, ns: ctx.durable_object("HUB")?, venue });
+        }
+        #[derive(serde::Deserialize)]
+        struct Row {
+            id: String,
+        }
+        let db = ctx.d1("DB")?;
+        let row: Option<Row> =
+            db.prepare("SELECT id FROM locations LIMIT 1").first(None).await?;
+        let venue = row.map(|r| r.id).unwrap_or_else(|| UNNAMED_VENUE.to_string());
+        Ok(Place { db, ns: ctx.durable_object("HUB")?, venue })
+    }
+
+    /// The venue a public URL names, by its slug.
+    ///
+    /// ONE QUERY, and a bridge rather than a fixture: it reads the `locations`
+    /// table, which is the next thing to move out of SQL. It is here because a
+    /// customer's request carries no token and therefore no id, and guessing
+    /// that the slug IS the id is exactly the drift described above.
+    pub async fn of_slug(ctx: &RouteContext<()>, slug: &str) -> Result<Self> {
+        #[derive(serde::Deserialize)]
+        struct Row {
+            id: String,
+        }
+        let db = ctx.d1("DB")?;
+        let row: Option<Row> = db
+            .prepare("SELECT id FROM locations WHERE slug = ?1 LIMIT 1")
+            .bind(&[slug.into()])?
+            .first(None)
+            .await?;
+        let venue = row.map(|r| r.id).unwrap_or_else(|| UNNAMED_VENUE.to_string());
+        Ok(Place { db, ns: ctx.durable_object("HUB")?, venue })
+    }
+
+    fn stub(&self) -> Result<Stub> {
+        self.ns.id_from_name(&self.venue)?.get_stub()
+    }
+}
+
+/// The venue named by the caller's own token, if the token is genuine.
+///
+/// The signature IS checked here, because an unverified claim would let anyone
+/// choose which venue's object this Worker wakes up and reads.
+fn claimed_venue(req: &Request, ctx: &RouteContext<()>) -> Option<String> {
+    let token = crate::auth::bearer(req).ok()?;
+    match crate::auth::verify(&ctx.env, &token, Date::now().as_millis() as i64).ok()? {
+        crate::auth::Claims::Owner { active_location_id, .. } => active_location_id,
+        crate::auth::Claims::Courier { active_location_id, .. } => Some(active_location_id),
+        crate::auth::Claims::Customer { location_id, .. } => Some(location_id),
+    }
+}
+
 pub struct Loaded {
     pub hub: Hub,
     /// The generation this image was read at. Passed back to `save`.
@@ -135,7 +249,94 @@ fn from_hex(s: &str, out: &mut Vec<u8>) -> bool {
 /// One query now, whatever the chunk count. The rows still decide the truth --
 /// there is no stored count that could disagree with them -- but they are all
 /// asked for at once.
+/// One image, from the venue's Durable Object — SEEDING IT FROM D1 the first
+/// time and only the first time.
+///
+/// THE MIGRATION IS A READ, NOT A SCRIPT. A one-shot job that moved every image
+/// would have a window in which the old store had been read and the new one not
+/// yet written, and would need to be run exactly once against exactly the right
+/// rows. Doing it on the first miss instead means the copy happens under the
+/// object's own serialisation, for the venue being asked about, and a venue
+/// nobody has opened yet is simply not migrated until somebody does.
+///
+/// D1 STAYS AUTHORITATIVE UNTIL IT IS EMPTY OF MEANING, which is what makes
+/// this safe to deploy against a pilot's live order log: if this path is
+/// reverted, every byte is still in `hub_image` where it was. The seed writes
+/// at generation zero, so the object's first write lands at one and the guard
+/// behaves from there exactly as the D1 guard did.
+async fn do_image(place: &Place, id: &str) -> Result<Option<(Vec<u8>, i64)>> {
+    let stub = place.stub()?;
+    let mut res = stub.fetch_with_str(&format!("https://hub/img/{id}")).await?;
+    if res.status_code() == 200 {
+        let generation = res
+            .headers()
+            .get("x-generation")
+            .ok()
+            .flatten()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
+        // ONE BULK COPY. A response body crosses the boundary as bytes, which is
+        // the whole difference from D1 handing a BLOB over as one JS value per
+        // byte -- see `SLICE` for what that cost.
+        return Ok(Some((res.bytes().await?, generation)));
+    }
+    // 204: the object has never seen this image. Look in D1 once.
+    let Some((bytes, _)) = load_images_d1(&place.db, &[id]).await?.remove(id) else {
+        return Ok(None);
+    };
+    let mut req = Request::new_with_init(
+        &format!("https://hub/img/{id}"),
+        RequestInit::new().with_method(Method::Put).with_body(Some(bytes.clone().into())),
+    )?;
+    req.headers_mut()?.set("x-generation", "0")?;
+    let seeded = stub.fetch_with_request(req).await?;
+    if seeded.status_code() == 409 {
+        // Another request seeded it between our read and our write. Theirs is
+        // the same bytes; take what the object now holds rather than fight.
+        // A LOOP AND NOT A RECURSIVE CALL: an async fn that awaits itself needs
+        // boxing, and a boxed future here would allocate on the path this whole
+        // change exists to make cheap.
+        let mut again = stub.fetch_with_str(&format!("https://hub/img/{id}")).await?;
+        if again.status_code() == 200 {
+            let generation = again
+                .headers()
+                .get("x-generation")
+                .ok()
+                .flatten()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(0);
+            return Ok(Some((again.bytes().await?, generation)));
+        }
+        return Err(Error::RustError(format!(
+            "image {id} was seeded by another request and is now unreadable"
+        )));
+    }
+    Ok(Some((bytes, 1)))
+}
+
+/// Several images, each from the object. Kept as a map so the callers above are
+/// unchanged from when this was one query.
 async fn load_images(
+    place: &Place,
+    ids: &[&str],
+) -> Result<std::collections::HashMap<String, (Vec<u8>, i64)>> {
+    // CONCURRENTLY. They are separate keys in the same object and nothing here
+    // depends on anything there; `load_both` exists precisely because paying
+    // for them one after the other was the cost.
+    let mut out = std::collections::HashMap::new();
+    let fetched = futures_util::future::join_all(ids.iter().map(|id| do_image(place, id))).await;
+    for (id, got) in ids.iter().zip(fetched) {
+        if let Some(v) = got? {
+            out.insert((*id).to_string(), v);
+        }
+    }
+    Ok(out)
+}
+
+/// The D1 reader, kept for exactly one job: seeding an object that has never
+/// held this image. Nothing else calls it, and when every venue has been opened
+/// once it and the `hub_image` table can go.
+async fn load_images_d1(
     db: &D1Database,
     ids: &[&str],
 ) -> Result<std::collections::HashMap<String, (Vec<u8>, i64)>> {
@@ -254,8 +455,8 @@ async fn load_images(
 /// Eleven handlers need both -- the analytics, the customer list, the promo
 /// list, the storefront's order path -- and each was loading them separately,
 /// which after the fix above is still two queries where one will do.
-pub async fn load_both(db: &D1Database) -> Result<(Loaded, LoadedCatalog)> {
-    let mut images = load_images(db, &[IMAGE_LOG, IMAGE_CATALOG]).await?;
+pub async fn load_both(place: &Place) -> Result<(Loaded, LoadedCatalog)> {
+    let mut images = load_images(place, &[IMAGE_LOG, IMAGE_CATALOG]).await?;
     let hub = match images.remove(IMAGE_LOG) {
         Some((bytes, generation)) => Loaded {
             hub: Hub::load(&bytes)
@@ -284,18 +485,18 @@ pub async fn load_both(db: &D1Database) -> Result<(Loaded, LoadedCatalog)> {
 }
 
 /// One image, by name.
-async fn load_bytes(db: &D1Database, id: &str) -> Result<Option<(Vec<u8>, i64)>> {
-    Ok(load_images(db, &[id]).await?.remove(id))
+async fn load_bytes(place: &Place, id: &str) -> Result<Option<(Vec<u8>, i64)>> {
+    Ok(load_images(place, &[id]).await?.remove(id))
 }
 
 /// Read the hub image, creating a fresh one the first time.
-pub async fn load(db: &D1Database) -> Result<Loaded> {
+pub async fn load(place: &Place) -> Result<Loaded> {
     struct Row {
         image: Vec<u8>,
         generation: i64,
     }
     let row: Option<Row> =
-        load_bytes(db, IMAGE_LOG).await?.map(|(image, generation)| Row { image, generation });
+        load_bytes(place, IMAGE_LOG).await?.map(|(image, generation)| Row { image, generation });
 
     match row {
         Some(r) => {
@@ -322,7 +523,36 @@ pub async fn load(db: &D1Database) -> Result<Loaded> {
 
 /// Write one image back, but only if nobody else has since. Returns `false` when
 /// the guard rejected the write, which means "re-read and replay", not "failed".
-async fn save_image(db: &D1Database, id: &str, bytes: Vec<u8>, generation: i64) -> Result<bool> {
+/// Write an image to the venue's Durable Object.
+///
+/// The generation guard is unchanged in MEANING and now nearly unneeded in
+/// fact: a Durable Object serialises its own requests, so the interleaving the
+/// guard was written for cannot happen inside one. It is still sent, still
+/// checked, and still answers 409, because the caller's retry loop speaks that
+/// contract and because a guard costs one comparison.
+///
+/// THE D1 WRITER IS GONE FROM THIS PATH. `save_image_d1` remains only so a
+/// venue whose object has never been woken can be seeded from the old store on
+/// first read; nothing writes to `hub_image` any more.
+async fn save_image(place: &Place, id: &str, bytes: Vec<u8>, generation: i64) -> Result<bool> {
+    let stub = place.stub()?;
+    let mut req = Request::new_with_init(
+        &format!("https://hub/img/{id}"),
+        RequestInit::new().with_method(Method::Put).with_body(Some(bytes.into())),
+    )?;
+    req.headers_mut()?.set("x-generation", &generation.to_string())?;
+    let res = stub.fetch_with_request(req).await?;
+    match res.status_code() {
+        200 => Ok(true),
+        // Someone else moved it. The caller re-reads and replays, which is
+        // correct for an append-only log: the retry lands on the newer image
+        // rather than over it.
+        409 => Ok(false),
+        other => Err(Error::RustError(format!("hub object refused image {id}: {other}"))),
+    }
+}
+
+async fn save_image_d1(db: &D1Database, id: &str, bytes: Vec<u8>, generation: i64) -> Result<bool> {
     let next = generation + 1;
 
     // ── the tail chunks ──
@@ -405,18 +635,18 @@ async fn save_image(db: &D1Database, id: &str, bytes: Vec<u8>, generation: i64) 
     Ok(landed)
 }
 
-pub async fn save(db: &D1Database, loaded: &Loaded) -> Result<bool> {
-    save_image(db, IMAGE_LOG, loaded.hub.to_bytes(), loaded.generation).await
+pub async fn save(place: &Place, loaded: &Loaded) -> Result<bool> {
+    save_image(place, IMAGE_LOG, loaded.hub.to_bytes(), loaded.generation).await
 }
 
 /// Read the catalogue image, creating an empty one the first time.
-pub async fn load_catalog(db: &D1Database) -> Result<LoadedCatalog> {
+pub async fn load_catalog(place: &Place) -> Result<LoadedCatalog> {
     struct Row {
         image: Vec<u8>,
         generation: i64,
     }
     let row: Option<Row> =
-        load_bytes(db, IMAGE_CATALOG).await?.map(|(image, generation)| Row { image, generation });
+        load_bytes(place, IMAGE_CATALOG).await?.map(|(image, generation)| Row { image, generation });
     match row {
         Some(r) => {
             let catalog = Catalog::load(&r.image)
@@ -436,8 +666,8 @@ pub struct LoadedSettings {
     pub generation: i64,
 }
 
-pub async fn load_settings(db: &D1Database) -> Result<LoadedSettings> {
-    match load_bytes(db, IMAGE_SETTINGS).await? {
+pub async fn load_settings(place: &Place) -> Result<LoadedSettings> {
+    match load_bytes(place, IMAGE_SETTINGS).await? {
         Some((image, generation)) => {
             let settings = dowiz_hub::settings::Settings::load(&image)
                 .map_err(|_| Error::RustError("settings image is unreadable".into()))?;
@@ -451,18 +681,18 @@ pub async fn load_settings(db: &D1Database) -> Result<LoadedSettings> {
     }
 }
 
-pub async fn with_settings<F, T>(db: &D1Database, mut f: F) -> Result<T>
+pub async fn with_settings<F, T>(place: &Place, mut f: F) -> Result<T>
 where
     F: FnMut(&mut dowiz_hub::settings::Settings) -> Result<T>,
 {
     for _ in 0..5 {
-        let mut loaded = load_settings(db).await?;
+        let mut loaded = load_settings(place).await?;
         let out = f(&mut loaded.settings)?;
         let bytes = loaded
             .settings
             .to_bytes()
             .map_err(|e| Error::RustError(format!("settings serialise failed: {e:?}")))?;
-        if save_image(db, IMAGE_SETTINGS, bytes, loaded.generation).await? {
+        if save_image(place, IMAGE_SETTINGS, bytes, loaded.generation).await? {
             return Ok(out);
         }
     }
@@ -474,8 +704,8 @@ pub struct LoadedPosts {
     pub generation: i64,
 }
 
-pub async fn load_posts(db: &D1Database) -> Result<LoadedPosts> {
-    match load_bytes(db, IMAGE_POSTS).await? {
+pub async fn load_posts(place: &Place) -> Result<LoadedPosts> {
+    match load_bytes(place, IMAGE_POSTS).await? {
         Some((image, generation)) => {
             let posts = dowiz_hub::post::Posts::load(&image)
                 .map_err(|_| Error::RustError("posts image is unreadable".into()))?;
@@ -489,18 +719,18 @@ pub async fn load_posts(db: &D1Database) -> Result<LoadedPosts> {
     }
 }
 
-pub async fn with_posts<F, T>(db: &D1Database, mut f: F) -> Result<T>
+pub async fn with_posts<F, T>(place: &Place, mut f: F) -> Result<T>
 where
     F: FnMut(&mut dowiz_hub::post::Posts) -> Result<T>,
 {
     for _ in 0..5 {
-        let mut loaded = load_posts(db).await?;
+        let mut loaded = load_posts(place).await?;
         let out = f(&mut loaded.posts)?;
         let bytes = loaded
             .posts
             .to_bytes()
             .map_err(|e| Error::RustError(format!("posts serialise failed: {e:?}")))?;
-        if save_image(db, IMAGE_POSTS, bytes, loaded.generation).await? {
+        if save_image(place, IMAGE_POSTS, bytes, loaded.generation).await? {
             return Ok(out);
         }
     }
@@ -512,8 +742,8 @@ pub struct LoadedStock {
     pub generation: i64,
 }
 
-pub async fn load_stock(db: &D1Database) -> Result<LoadedStock> {
-    match load_bytes(db, IMAGE_STOCK).await? {
+pub async fn load_stock(place: &Place) -> Result<LoadedStock> {
+    match load_bytes(place, IMAGE_STOCK).await? {
         Some((image, generation)) => {
             let stock = dowiz_hub::stock::StockLog::load(&image)
                 .map_err(|_| Error::RustError("stock image is unreadable".into()))?;
@@ -530,14 +760,14 @@ pub async fn load_stock(db: &D1Database) -> Result<LoadedStock> {
     }
 }
 
-pub async fn with_stock<F, T>(db: &D1Database, mut f: F) -> Result<T>
+pub async fn with_stock<F, T>(place: &Place, mut f: F) -> Result<T>
 where
     F: FnMut(&mut dowiz_hub::stock::StockLog) -> Result<T>,
 {
     for _ in 0..5 {
-        let mut loaded = load_stock(db).await?;
+        let mut loaded = load_stock(place).await?;
         let out = f(&mut loaded.stock)?;
-        if save_image(db, IMAGE_STOCK, loaded.stock.to_bytes(), loaded.generation).await? {
+        if save_image(place, IMAGE_STOCK, loaded.stock.to_bytes(), loaded.generation).await? {
             return Ok(out);
         }
     }
@@ -545,18 +775,18 @@ where
 }
 
 /// Read, mutate, write the catalogue under the same generation guard.
-pub async fn with_catalog<F, T>(db: &D1Database, mut f: F) -> Result<T>
+pub async fn with_catalog<F, T>(place: &Place, mut f: F) -> Result<T>
 where
     F: FnMut(&mut Catalog) -> Result<T>,
 {
     for _ in 0..5 {
-        let mut loaded = load_catalog(db).await?;
+        let mut loaded = load_catalog(place).await?;
         let out = f(&mut loaded.catalog)?;
         let bytes = loaded
             .catalog
             .to_bytes()
             .map_err(|e| Error::RustError(format!("catalogue serialise failed: {e:?}")))?;
-        if save_image(db, IMAGE_CATALOG, bytes, loaded.generation).await? {
+        if save_image(place, IMAGE_CATALOG, bytes, loaded.generation).await? {
             return Ok(out);
         }
     }
@@ -642,14 +872,14 @@ pub fn carry_over(old: &serde_json::Value, updated: &mut serde_json::Value) {
     }
 }
 
-pub async fn with_hub<F, T>(db: &D1Database, mut f: F) -> Result<T>
+pub async fn with_hub<F, T>(place: &Place, mut f: F) -> Result<T>
 where
     F: FnMut(&mut Hub) -> Result<T>,
 {
     for _ in 0..5 {
-        let mut loaded = load(db).await?;
+        let mut loaded = load(place).await?;
         let out = f(&mut loaded.hub)?;
-        if save(db, &loaded).await? {
+        if save(place, &loaded).await? {
             return Ok(out);
         }
     }

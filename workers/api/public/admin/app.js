@@ -1,4 +1,5 @@
 import { shrinkImage } from '/lib/shrink.js';
+import { createGuide } from '/lib/guide.js';
 // Owner console. Everything here is a view over server state: the queue, the
 // numbers and the menu are re-read, never accumulated locally. No status chain
 // lives in this file -- an action names an intent and the server's FSM answers.
@@ -161,7 +162,9 @@ async function boot(){
   S.booted = true;
   S.phase = 'loading';
   render();                                   // skeletons, not an empty queue
+  initGuide();
   await reload();
+  guide.autoStart();                          // first visit: the tour; later: nothing, unless it was paused
   poll();
 }
 
@@ -760,6 +763,7 @@ function bindCustomers(){
 // rather than as a refusal after. The list is read from the hub, never worked
 // out here: two copies of a rule are two rules, and the one on the screen is
 // always the one that goes stale.
+const ACT_LABEL = { menu:'Є що продати', notifications:'Є кому почути', fulfilment:'Є як віддати' };
 async function loadActivation(){
   const box = $('#actList'); if (!box) return;
   try {
@@ -767,10 +771,10 @@ async function loadActivation(){
     S.activation = a;
     const done = k => !a.missing.some(m => m.key === k);
     const rows = [
-      ['menu', 'Є що продати', `${a.facts.sellableDishes} страв у продажу`],
-      ['notifications', 'Є кому почути', a.facts.telegramChats
+      ['menu', ACT_LABEL.menu, `${a.facts.sellableDishes} страв у продажу`],
+      ['notifications', ACT_LABEL.notifications, a.facts.telegramChats
         ? `Telegram: ${a.facts.telegramChats}` : a.facts.hasVenuePhone ? 'телефон закладу' : ''],
-      ['fulfilment', 'Є як віддати', [a.facts.deliveryConfigured && 'доставка',
+      ['fulfilment', ACT_LABEL.fulfilment, [a.facts.deliveryConfigured && 'доставка',
         a.facts.pickupEnabled && 'самовивіз'].filter(Boolean).join(' · ')],
     ];
     box.innerHTML = rows.map(([key, label, detail]) => {
@@ -2157,6 +2161,78 @@ function paintVenue(){
     } catch (e) { toast(String(e.message || e)); }
     b.disabled = false; paintVenue();
   };
+}
+
+// ── guide ───────────────────────────────────────────────────────────────────
+//
+// ONE TABLE. Every explanation the console gives of itself lives in HELP: the
+// tour reads its steps out of it by key, and the "?" beside a control opens
+// the same row. There is no second list of what a control does.
+//
+// `at` is the element a row points at. A row with no `at` is tour-only (the
+// welcome); `hint:false` keeps a row out of the "?" affordances where the
+// element already explains itself or is too wide to carry one (the stat strip,
+// the tab bar). A body may be a function, read when the step is shown, which
+// is how the activation step names what is missing RIGHT NOW from the same
+// /owner/activation answer the setup card renders.
+const HELP = {
+  welcome: { hint:false, title:'Вітаємо в консолі dowiz',
+    body:'Кілька коротких кроків покажуть, де що лежить. Тур можна пропустити або завершити пізніше — він чекатиме під кнопкою «Довідка» вгорі.' },
+  vstatus: { at:'#vstatus', title:'Статус закладу',
+    body:'Один дотик перемикає по колу: Відкрито → Завантажені → Зачинено. Зачинений заклад не приймає нових замовлень. Якщо задано робочі години, заклад відчиняється й зачиняється сам.' },
+  stats: { at:'.stats', hint:false, title:'Сьогодні в цифрах',
+    body:'Оновлюються самі кожні десять секунд. «Чекають» — замовлення, які ще ніхто не підтвердив. «На час» — заплановані на пізніше. Виручка — за сьогодні.' },
+  tabs: { at:'.tabs', hint:false, title:'Чотири розділи',
+    body:'Замовлення — жива черга. Меню — ціни, фото, наявність і алергени. Аналітика — за 7 або 30 днів. Налаштування — все інше. Стрілки ← → перемикають розділи з клавіатури.' },
+  find: { at:'#oq', title:'Пошук, історія, CSV',
+    body:'Пошук шукає за номером, ім’ям, телефоном або стравою. «Живі» — те, що в роботі зараз; «Історія» — завершені. CSV вивантажує те, що зараз на екрані.' },
+  activation: { at:'#actList', hint:false, title:'Три умови відкриття',
+    body(){
+      const base = 'Є що продати — страви у продажу. Є кому почути — Telegram або телефон закладу. Є як віддати — доставка або самовивіз. Поки бракує хоч одного, заклад не відчиняється.';
+      const a = S.activation; if (!a) return base;
+      const miss = a.missing.map(m => (ACT_LABEL[m.key] || m.key).toLowerCase());
+      return miss.length ? `${base} Зараз бракує: ${miss.join(', ')}.` : `${base} Зараз усі три виконано.`;
+    } },
+  pickup: { at:'#vnPickup', title:'Самовивіз',
+    body:'Клієнт зможе забрати замовлення сам. Це один із двох способів «є як віддати»; другий — налаштована доставка.' },
+  csv: { at:'#csvFile', title:'Меню з таблиці',
+    body:'Файл CSV з Google Таблиць або Excel. Спершу побачите, що зміниться, і лише після «Застосувати» меню оновиться. Ціни — цілими числами.' },
+  retire: { at:'#csvRetire', title:'Зняти те, чого немає у файлі',
+    body:'Страви, яких у файлі нема, підуть з продажу — але не зникнуть. Без галочки файл лише додає й оновлює.' },
+  hoursOff: { at:'#hoursOff', title:'Без графіка',
+    body:'Прибирає розклад: заклад більше не відчинятиметься й не зачинятиметься сам. Статус тоді змінюєте лише вручну, кнопкою вгорі.' },
+  stockLow: { at:'#spLow', title:'Поріг «мало»',
+    body:'Коли залишок опускається до цього числа, інгредієнт підсвічується. Коли доходить до нуля, страви з ним перестають замовлятися ще до оформлення.' },
+  cuCsv: { at:'#cuCsv', title:'CSV без імен',
+    body:'Вивантаження зі схованими іменами й номерами. Конкретного клієнта розкривають на екрані, і кожне розкриття записується в журнал.' },
+  invite: { at:'#cvGo', title:'Запросити кур’єра',
+    body:'Створює код на 16 знаків. Кур’єр вводить його у своєму застосунку й сам придумує пароль. Код діє тиждень і показується один раз.' },
+  keyNew: { at:'#keyNew', title:'Ключ доступу',
+    body:'Для власних скриптів і MCP-клієнтів. Ключ показуємо один раз; відкликати можна кожен окремо, решта працюватимуть.' },
+  help: { at:'.gd-help', hint:false, title:'Довідка завжди поруч',
+    body:'Ця кнопка відкриває тур знову. Маленькі «?» біля незвичних елементів пояснюють кожен окремо — торкніться, щоб прочитати.' },
+};
+// The tour is an ORDER over HELP, not a second copy of it. A step may widen the
+// anchor (the find step rings the whole bar, not the field) and name what has
+// to happen first (the setup steps switch to that tab).
+let tourFrom = null;
+const toTab = t => () => { tourFrom ??= S.tab; if (S.tab !== t) { S.tab = t; render(); } };
+const TOUR = [
+  'welcome', 'vstatus', 'stats', 'tabs',
+  { key:'find', at:'.ofind', before: toTab('orders') },
+  { key:'activation', before: toTab('setup') },
+  { key:'csv', at:'#csvFile', before: toTab('setup') },
+  'help',
+];
+let guide = null;
+function initGuide(){
+  guide ??= createGuide({
+    key:'owner', help: HELP, tour: TOUR, toast,
+    mount: { into:'.top-in', before:'#logout', className:'icon-btn' },
+    // The tour may have walked the owner to another tab; it walks them back.
+    onEnd(){ if (tourFrom && S.tab !== tourFrom) { S.tab = tourFrom; render(); } tourFrom = null; },
+  });
+  guide.init();
 }
 
 // Poll while the tab is visible. A background tab does not need to hammer the

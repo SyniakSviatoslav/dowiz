@@ -14,6 +14,7 @@ mod accounts;
 mod auth;
 mod bootstrap;
 mod courier;
+mod hubdo;
 mod hubstore;
 mod otel;
 mod owner;
@@ -201,6 +202,7 @@ async fn route(req: Request, env: Env) -> Result<Response> {
         .get_async("/api/courier/earnings", courier::earnings)
         .get_async("/api/courier/history", extra::courier_history)
         .post_async("/api/order", |mut req, ctx| async move {
+        let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
             let body: PlaceOrderBody = match req.json().await {
                 Ok(b) => b,
                 Err(e) => return Response::error(format!("bad request body: {e}"), 400),
@@ -226,7 +228,7 @@ async fn route(req: Request, env: Env) -> Result<Response> {
             let seq = created_at_ms as u64;
             let ev_id = id.clone();
             let ev_json = order_json.clone();
-            crate::hubstore::with_hub(&ctx.d1("DB")?, move |hub| {
+            crate::hubstore::with_hub(&crate::hubstore::Place::of_any(&req, &ctx).await?, move |hub| {
                 hub.append(dowiz_hub::EventKind::Placed, &ev_id, &ev_json, seq, [0u8; 32])
                     .map_err(|e| Error::RustError(format!("hub append failed: {e:?}")))
             })
@@ -255,7 +257,8 @@ async fn route(req: Request, env: Env) -> Result<Response> {
             // it actually is. A courier is not entitled to every customer's
             // address in the venue.
             let db = ctx.d1("DB")?;
-            let loaded = hubstore::load(&db).await?;
+            let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
+            let loaded = hubstore::load(&place).await?;
             let Ok(order_json) = loaded.hub.order(&id) else {
                 return Response::error("order not found", 404);
             };
@@ -289,12 +292,13 @@ async fn route(req: Request, env: Env) -> Result<Response> {
                 Err(e) => return Response::error(format!("bad request body: {e}"), 400),
             };
             let db = ctx.d1("DB")?;
+            let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
             let next = body.next_status.clone();
 
             // One read-modify-write against the hub image, replayed if another
             // writer moved it first. The kernel decides whether the edge is
             // legal; the Worker only records its answer.
-            let out = hubstore::with_hub(&db, move |hub| {
+            let out = hubstore::with_hub(&place, move |hub| {
                 let current = hub
                     .order(&id)
                     .map_err(|_| Error::RustError("order not found".into()))?;

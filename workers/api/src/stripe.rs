@@ -258,8 +258,9 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Response
     let fingerprint = event_fingerprint(&ev.id);
 
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let oid = order_id.clone();
-    let applied = crate::hubstore::with_hub(&db, move |hub| {
+    let applied = crate::hubstore::with_hub(&place, move |hub| {
         // Already paid? Then this is a retry of a delivery we handled.
         let already = hub
             .events()

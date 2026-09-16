@@ -68,7 +68,7 @@ pub fn redact(facts: &Value) -> Value {
 /// and the managed APIs all speak it -- so a venue can move between them
 /// without anything here changing.
 pub async fn ask(
-    db: &D1Database,
+    place: &crate::hubstore::Place,
     system: &str,
     facts: Value,
     question: &str,
@@ -81,7 +81,7 @@ pub async fn ask(
         return Response::error("question too long", 400);
     }
 
-    let s = crate::hubstore::load_settings(db).await?.settings;
+    let s = crate::hubstore::load_settings(&place).await?.settings;
     if !s.flag("ai.enabled") {
         // REFUSED, not broken. The console reads this to tell the owner the
         // assistant is off rather than that something failed.

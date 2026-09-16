@@ -80,10 +80,11 @@ pub async fn promo_check(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // TWO IMAGES, one hub: the log and the catalogue have different roots and
     // cannot share one, so a route that reads both loads both.
     // ONE ROUND TRIP for both images: see `load_both`.
-    let (loaded, cat) = crate::hubstore::load_both(&db).await?;
+    let (loaded, cat) = crate::hubstore::load_both(&place).await?;
     let cat = cat.catalog;
     let code = dowiz_hub::promo::normalise(&body.code);
     let Some(p) = cat.promo(&code).as_deref().and_then(dowiz_hub::promo::Promo::parse)
@@ -143,6 +144,7 @@ pub async fn feedback(mut req: Request, ctx: RouteContext<()>) -> Result<Respons
         return Response::error("that is longer than a note about an order", 400);
     }
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // The customer's own token for THIS order and nothing else. The owner's is
     // refused too: this is the customer's voice and not the venue's.
     match crate::auth::authenticate(&req, &ctx.env, &db, now_ms()).await {
@@ -153,7 +155,7 @@ pub async fn feedback(mut req: Request, ctx: RouteContext<()>) -> Result<Respons
 
     let at = now_ms();
     let oid = id.clone();
-    let outcome = crate::hubstore::with_hub(&db, move |hub| {
+    let outcome = crate::hubstore::with_hub(&place, move |hub| {
         let current = hub
             .order(&oid)
             .map_err(|_| Error::RustError("no such order".into()))?;
@@ -198,6 +200,7 @@ pub async fn feedback(mut req: Request, ctx: RouteContext<()>) -> Result<Respons
 /// loop over a few hundred envelopes.
 pub async fn analytics(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let loc = match owner_and_venue(&req, &ctx, &db).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -215,7 +218,7 @@ pub async fn analytics(req: Request, ctx: RouteContext<()>) -> Result<Response> 
     let day_ms = 86_400_000;
     let from = start_of_day_ms(now) - (days - 1) * day_ms;
     // ONE ROUND TRIP for both images: see `load_both`.
-    let (loaded, cat) = crate::hubstore::load_both(&db).await?;
+    let (loaded, cat) = crate::hubstore::load_both(&place).await?;
     let cat = cat.catalog;
 
     let mut by_day: Vec<(i64, i64, i64)> = (0..days).map(|i| (from + i * day_ms, 0, 0)).collect();
@@ -325,11 +328,12 @@ struct PromoIn {
 /// `GET /api/owner/promotions?location_id=`
 pub async fn promotions(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // The membership query and the image read do not depend on each other;
     // `owner_with_hub` runs them together. See it for why the token is still
     // verified before either is issued.
     let (_, loc, (loaded, cat)) =
-        match crate::owner::owner_beside(&req, &ctx, &db, crate::hubstore::load_both(&db)).await {
+        match crate::owner::owner_beside(&req, &ctx, &db, crate::hubstore::load_both(&place)).await {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };
@@ -371,6 +375,7 @@ pub async fn set_promotion(mut req: Request, ctx: RouteContext<()>) -> Result<Re
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let loc = match owner_and_venue(&req, &ctx, &db).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -412,7 +417,7 @@ pub async fn set_promotion(mut req: Request, ctx: RouteContext<()>) -> Result<Re
         active: body.active.unwrap_or(true),
     };
     let stored = p.to_json();
-    crate::hubstore::with_catalog(&db, move |cat| {
+    crate::hubstore::with_catalog(&place, move |cat| {
         cat.set_promo(&code, &stored);
         Ok(())
     })
@@ -426,6 +431,7 @@ pub async fn set_promotion(mut req: Request, ctx: RouteContext<()>) -> Result<Re
 /// dates, deleting frees the word.
 pub async fn delete_promotion(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let loc = match owner_and_venue(&req, &ctx, &db).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -434,7 +440,7 @@ pub async fn delete_promotion(req: Request, ctx: RouteContext<()>) -> Result<Res
         return Response::error("missing code", 400);
     };
     let code = dowiz_hub::promo::normalise(&code);
-    let gone = crate::hubstore::with_catalog(&db, move |cat| Ok(cat.remove_promo(&code))).await?;
+    let gone = crate::hubstore::with_catalog(&place, move |cat| Ok(cat.remove_promo(&code))).await?;
     if !gone {
         return Response::error("not found", 404);
     }
@@ -451,11 +457,12 @@ pub async fn delete_promotion(req: Request, ctx: RouteContext<()>) -> Result<Res
 /// the bot until an order has sat unanswered for forty minutes.
 pub async fn activation(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // The membership query and this read do not depend on each other, so
     // `owner_beside` runs them together. The token is still verified before
     // either is issued -- see it for why that order matters.
     let (_, loc, loaded) =
-        match crate::owner::owner_beside(&req, &ctx, &db, crate::hubstore::load_catalog(&db)).await {
+        match crate::owner::owner_beside(&req, &ctx, &db, crate::hubstore::load_catalog(&place)).await {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };
@@ -532,12 +539,13 @@ struct PresetIn {
 /// pairs exist -- and a pair not on this list is not one the storefront renders.
 pub async fn branding(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     use dowiz_hub::brand::{Brand, PRESETS, RADIUS_MAX, TYPE_PAIRS};
     // The membership query and this read do not depend on each other, so
     // `owner_beside` runs them together. The token is still verified before
     // either is issued -- see it for why that order matters.
     let (_, loc, loaded) =
-        match crate::owner::owner_beside(&req, &ctx, &db, crate::hubstore::load_catalog(&db)).await {
+        match crate::owner::owner_beside(&req, &ctx, &db, crate::hubstore::load_catalog(&place)).await {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };
@@ -563,7 +571,7 @@ pub async fn branding(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     }))
 }
 
-async fn store_brand(db: &D1Database, b: dowiz_hub::brand::Brand) -> Result<Response> {
+async fn store_brand(place: &crate::hubstore::Place, b: dowiz_hub::brand::Brand) -> Result<Response> {
     let theme = b.theme();
     // The derivation already walks each colour until every pair passes; this is
     // the belt to that braces. Shipping a failing theme would make text
@@ -580,7 +588,7 @@ async fn store_brand(db: &D1Database, b: dowiz_hub::brand::Brand) -> Result<Resp
         "light": theme.as_css_tokens(), "dark": theme.as_dark_css_tokens(),
     });
     let payload = stored.clone();
-    crate::hubstore::with_catalog(db, move |cat| {
+    crate::hubstore::with_catalog(&place, move |cat| {
         let raw = cat.location().ok_or_else(|| Error::RustError("no venue".into()))?;
         let mut loc: Value = serde_json::from_str(&raw).unwrap_or(json!({}));
         loc["theme"] = payload.clone();
@@ -606,6 +614,7 @@ pub async fn set_branding(mut req: Request, ctx: RouteContext<()>) -> Result<Res
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let loc = match owner_and_venue(&req, &ctx, &db).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -650,7 +659,7 @@ pub async fn set_branding(mut req: Request, ctx: RouteContext<()>) -> Result<Res
         Some(r) => r,
         None => d.radius,
     };
-    store_brand(&db, Brand { accent, ink, paper, type_pair: pair, radius }).await
+    store_brand(&place, Brand { accent, ink, paper, type_pair: pair, radius }).await
 }
 
 /// `POST /api/owner/branding/preset?location_id=` — a whole look at once.
@@ -660,6 +669,7 @@ pub async fn set_preset(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let loc = match owner_and_venue(&req, &ctx, &db).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -667,7 +677,7 @@ pub async fn set_preset(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
     let Some(b) = dowiz_hub::brand::preset(&body.preset) else {
         return Response::error(format!("{:?} is not a preset", body.preset), 400);
     };
-    store_brand(&db, b).await
+    store_brand(&place, b).await
 }
 
 // ── owner: who orders here, without saying who they are ────────────────────
@@ -727,12 +737,13 @@ fn signing_secret(env: &Env) -> Vec<u8> {
 /// `GET /api/owner/customers?location_id=&sort=spent|orders`
 pub async fn customers(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // The membership query and the image read do not depend on each other, so
     // `owner_beside` runs them together. Measured against this very handler
     // before it was converted: 293 ms of server time against the dashboard's
     // 235 for the same 655 KB, on the same deployment at the same minute.
     let (_, loc, (loaded, loaded_cat)) =
-        match crate::owner::owner_beside(&req, &ctx, &db, crate::hubstore::load_both(&db)).await {
+        match crate::owner::owner_beside(&req, &ctx, &db, crate::hubstore::load_both(&place)).await {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };
@@ -802,6 +813,7 @@ pub async fn reveal_customer(mut req: Request, ctx: RouteContext<()>) -> Result<
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (who, loc) = match owner_and_venue(&req, &ctx, &db).await {
         Ok(v) => v,
         Err(r) => return Ok(r),
@@ -815,7 +827,7 @@ pub async fn reveal_customer(mut req: Request, ctx: RouteContext<()>) -> Result<
     };
 
     let secret = signing_secret(&ctx.env);
-    let loaded = crate::hubstore::load(&db).await?;
+    let loaded = crate::hubstore::load(&place).await?;
     let mut found: Option<(String, String, Vec<Value>)> = None;
     for o in orders_of(&loaded, &loc) {
         let Some(phone) = o.get("contact").and_then(|c| c.get("phone")).and_then(Value::as_str)
@@ -851,7 +863,7 @@ pub async fn reveal_customer(mut req: Request, ctx: RouteContext<()>) -> Result<
     let at = now_ms();
     let entry = json!({ "by": who, "at": at, "reason": reason }).to_string();
     let subject = format!("cust:{key}");
-    crate::hubstore::with_hub(&db, move |hub| {
+    crate::hubstore::with_hub(&place, move |hub| {
         hub.append(dowiz_hub::EventKind::Revealed, &subject, &entry, at as u64, [0u8; 32])
             .map_err(|e| Error::RustError(format!("{e:?}")))
     })
@@ -863,11 +875,12 @@ pub async fn reveal_customer(mut req: Request, ctx: RouteContext<()>) -> Result<
 /// `GET /api/owner/customers/reveals?location_id=` — who has been looking.
 pub async fn reveals(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // The membership query and this read do not depend on each other, so
     // `owner_beside` runs them together. The token is still verified before
     // either is issued -- see it for why that order matters.
     let (_, loc, loaded) =
-        match crate::owner::owner_beside(&req, &ctx, &db, crate::hubstore::load(&db)).await {
+        match crate::owner::owner_beside(&req, &ctx, &db, crate::hubstore::load(&place)).await {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };
@@ -924,12 +937,13 @@ pub fn offer_lapsed(o: &Value, now: i64) -> bool {
 /// a second list of the same deliveries is a second thing that can disagree.
 pub async fn courier_history(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let me = match crate::auth::authenticate(&req, &ctx.env, &db, now_ms()).await {
         Ok(crate::auth::Principal::Courier { courier_id, .. }) => courier_id,
         Ok(_) => return Response::error("forbidden role", 403),
         Err(e) => return e.into_response(),
     };
-    let loaded = crate::hubstore::load(&db).await?;
+    let loaded = crate::hubstore::load(&place).await?;
     let mut rows: Vec<Value> = loaded
         .hub
         .orders()
@@ -968,11 +982,12 @@ pub async fn courier_history(req: Request, ctx: RouteContext<()>) -> Result<Resp
 /// list the hub declares rather than a list of its own.
 pub async fn settings(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let loc = match owner_and_venue(&req, &ctx, &db).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
-    let loaded = crate::hubstore::load_settings(&db).await?;
+    let loaded = crate::hubstore::load_settings(&place).await?;
     let values: Value = serde_json::from_str(&loaded.settings.as_json()).unwrap_or(json!({}));
     Response::from_json(&json!({
         "values": values,
@@ -999,6 +1014,7 @@ pub async fn set_setting(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let loc = match owner_and_venue(&req, &ctx, &db).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -1021,7 +1037,7 @@ pub async fn set_setting(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
         }
     }
     let (key, value) = (body.key.clone(), body.value.clone());
-    crate::hubstore::with_settings(&db, move |s| {
+    crate::hubstore::with_settings(&place, move |s| {
         s.set(&key, &value);
         Ok(())
     })
@@ -1035,11 +1051,12 @@ pub async fn set_setting(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
 /// switch for something that no longer exists, or miss one that does.
 pub async fn features(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let loc = match owner_and_venue(&req, &ctx, &db).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
-    let s = crate::hubstore::load_settings(&db).await?.settings;
+    let s = crate::hubstore::load_settings(&place).await?.settings;
     Response::from_json(&json!({
         "features": dowiz_hub::features::all(&s).into_iter().map(|(f, on)| json!({
             "key": f.key, "label": f.label, "hint": f.hint,
@@ -1062,6 +1079,7 @@ pub async fn set_feature(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let loc = match owner_and_venue(&req, &ctx, &db).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -1072,7 +1090,7 @@ pub async fn set_feature(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
         return Response::error(format!("{:?} is not a feature", body.key), 400);
     }
     let (key, value) = (body.key.clone(), if body.on { "1" } else { "0" });
-    crate::hubstore::with_settings(&db, move |s| {
+    crate::hubstore::with_settings(&place, move |s| {
         s.set(&key, value);
         Ok(())
     })
@@ -1088,6 +1106,7 @@ pub async fn set_feature(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
 /// owner cannot inspect first, and a menu is the thing customers buy from.
 pub async fn import_menu(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let loc = match owner_and_venue(&req, &ctx, &db).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -1105,7 +1124,7 @@ pub async fn import_menu(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
     let text = req.text().await?;
     let draft = dowiz_hub::import::from_csv(&text);
 
-    let cat = crate::hubstore::load_catalog(&db).await?.catalog;
+    let cat = crate::hubstore::load_catalog(&place).await?.catalog;
     let existing: Vec<(String, String)> = cat
         .products()
         .into_iter()
@@ -1148,7 +1167,7 @@ pub async fn import_menu(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
         .iter()
         .filter_map(|m| m.get("id").and_then(Value::as_str).map(String::from))
         .collect();
-    crate::hubstore::with_catalog(&db, move |cat| {
+    crate::hubstore::with_catalog(&place, move |cat| {
         for c in &draft.categories {
             cat.set_category(
                 &c.id,
@@ -1483,6 +1502,7 @@ pub async fn set_courier_active(mut req: Request, ctx: RouteContext<()>) -> Resu
 /// `GET /api/owner/posts`
 pub async fn posts(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let loc = match owner_and_venue(&req, &ctx, &db).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -1491,8 +1511,8 @@ pub async fn posts(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // round trip is the cost rather than the bytes -- and this pane is opened
     // rarely enough that a third query for a pane nobody has open would be the
     // worse trade.
-    let posts = crate::hubstore::load_posts(&db).await?.posts;
-    let s = crate::hubstore::load_settings(&db).await?.settings;
+    let posts = crate::hubstore::load_posts(&place).await?.posts;
+    let s = crate::hubstore::load_settings(&place).await?.settings;
     Response::from_json(&json!({
         "posts": posts.all().into_iter().map(|p| json!({
             "id": p.id, "text": p.text, "state": p.state.as_str(),
@@ -1517,16 +1537,17 @@ pub async fn draft_post(req: Request, ctx: RouteContext<()>) -> Result<Response>
     use dowiz_hub::post::{self, Post, State as PostState};
 
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let loc = match owner_and_venue(&req, &ctx, &db).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
-    let s = crate::hubstore::load_settings(&db).await?.settings;
+    let s = crate::hubstore::load_settings(&place).await?.settings;
     if !s.flag("social.enabled") {
         return Response::error("social drafting is switched off", 409);
     }
 
-    let cat = crate::hubstore::load_catalog(&db).await?.catalog;
+    let cat = crate::hubstore::load_catalog(&place).await?.catalog;
     let current: Vec<(String, String, bool)> = cat
         .products()
         .into_iter()
@@ -1547,7 +1568,7 @@ pub async fn draft_post(req: Request, ctx: RouteContext<()>) -> Result<Response>
 
     // The week's most-ordered dish, COUNTED HERE. The model never counts; it is
     // handed the number.
-    let (loaded, _) = crate::hubstore::load_both(&db).await?;
+    let (loaded, _) = crate::hubstore::load_both(&place).await?;
     let week_ago = now_ms() - 7 * 24 * 60 * 60 * 1000;
     let mut tally: Vec<(String, i64)> = Vec::new();
     for o in orders_of(&loaded, &loc) {
@@ -1570,7 +1591,7 @@ pub async fn draft_post(req: Request, ctx: RouteContext<()>) -> Result<Response>
     tally.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
     let top = tally.first().cloned();
 
-    let posts_img = crate::hubstore::load_posts(&db).await?.posts;
+    let posts_img = crate::hubstore::load_posts(&place).await?.posts;
     let previous = posts_img.catalogue_snapshot();
     // A Worker holds no memory between requests, so "was the venue closed last
     // time we looked" cannot be an in-process flag as it is natively. The
@@ -1586,7 +1607,7 @@ pub async fn draft_post(req: Request, ctx: RouteContext<()>) -> Result<Response>
         current.iter().map(|(id, _, a)| (id.clone(), *a)).collect();
     if subjects.is_empty() {
         let snap = snapshot.clone();
-        crate::hubstore::with_posts(&db, move |p| {
+        crate::hubstore::with_posts(&place, move |p| {
             p.set_catalogue_snapshot(&snap);
             Ok(())
         })
@@ -1597,7 +1618,7 @@ pub async fn draft_post(req: Request, ctx: RouteContext<()>) -> Result<Response>
     let mut written = Vec::new();
     for subject in &subjects {
         let prompt = post::prompt_for(subject, venue_name, &lang);
-        let mut res = crate::assist::ask(&db, post::SYSTEM_POST, json!({}), &prompt).await?;
+        let mut res = crate::assist::ask(&place, post::SYSTEM_POST, json!({}), &prompt).await?;
         if res.status_code() >= 400 {
             let why = res.text().await.unwrap_or_default();
             return Response::error(
@@ -1631,7 +1652,7 @@ pub async fn draft_post(req: Request, ctx: RouteContext<()>) -> Result<Response>
         // Storing the draft IS marking the subject seen: `already_seen` reads
         // the posts themselves, so a second list of keys would be a second fact
         // that could disagree with them.
-        crate::hubstore::with_posts(&db, move |posts| {
+        crate::hubstore::with_posts(&place, move |posts| {
             posts.put(&stored);
             Ok(())
         })
@@ -1639,7 +1660,7 @@ pub async fn draft_post(req: Request, ctx: RouteContext<()>) -> Result<Response>
         written.push(json!({ "id": p.id, "text": p.text, "about": p.subject_tag }));
     }
     let snap = snapshot.clone();
-    crate::hubstore::with_posts(&db, move |p| {
+    crate::hubstore::with_posts(&place, move |p| {
         p.set_catalogue_snapshot(&snap);
         Ok(())
     })
@@ -1667,6 +1688,7 @@ pub async fn approve_post(mut req: Request, ctx: RouteContext<()>) -> Result<Res
 
     let body: ApproveIn = req.json().await.unwrap_or_default();
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let loc = match owner_and_venue(&req, &ctx, &db).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -1674,7 +1696,7 @@ pub async fn approve_post(mut req: Request, ctx: RouteContext<()>) -> Result<Res
     let Some(id) = ctx.param("id").cloned() else {
         return Response::error("missing post", 400);
     };
-    let posts = crate::hubstore::load_posts(&db).await?.posts;
+    let posts = crate::hubstore::load_posts(&place).await?.posts;
     let Some(mut p) = posts.get(&id) else {
         return Response::error("not found", 404);
     };
@@ -1685,7 +1707,7 @@ pub async fn approve_post(mut req: Request, ctx: RouteContext<()>) -> Result<Res
         p.text = t.to_string();
     }
 
-    let s = crate::hubstore::load_settings(&db).await?.settings;
+    let s = crate::hubstore::load_settings(&place).await?.settings;
     let channel = s.known("social.telegram.channel");
     let token = ctx.env.secret("TELEGRAM_BOT_TOKEN").map(|v| v.to_string()).ok();
     let (state, error) = match (token, channel.trim().is_empty()) {
@@ -1720,7 +1742,7 @@ pub async fn approve_post(mut req: Request, ctx: RouteContext<()>) -> Result<Res
     p.error = error.clone().unwrap_or_default();
     p.decided_ms = now_ms();
     let stored = p.clone();
-    crate::hubstore::with_posts(&db, move |ps| {
+    crate::hubstore::with_posts(&place, move |ps| {
         ps.put(&stored);
         Ok(())
     })
@@ -1736,6 +1758,7 @@ pub async fn reject_post(req: Request, ctx: RouteContext<()>) -> Result<Response
     use dowiz_hub::post::State as PostState;
 
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let loc = match owner_and_venue(&req, &ctx, &db).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -1743,7 +1766,7 @@ pub async fn reject_post(req: Request, ctx: RouteContext<()>) -> Result<Response
     let Some(id) = ctx.param("id").cloned() else {
         return Response::error("missing post", 400);
     };
-    let posts = crate::hubstore::load_posts(&db).await?.posts;
+    let posts = crate::hubstore::load_posts(&place).await?.posts;
     let Some(mut p) = posts.get(&id) else {
         return Response::error("not found", 404);
     };
@@ -1751,7 +1774,7 @@ pub async fn reject_post(req: Request, ctx: RouteContext<()>) -> Result<Response
         return Response::error("that post is already out", 409);
     }
     p.state = PostState::Rejected;
-    crate::hubstore::with_posts(&db, move |ps| {
+    crate::hubstore::with_posts(&place, move |ps| {
         ps.put(&p);
         Ok(())
     })
@@ -1773,11 +1796,12 @@ pub async fn owner_assist(mut req: Request, ctx: RouteContext<()>) -> Result<Res
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // The membership query and this read do not depend on each other, so
     // `owner_beside` runs them together. The token is still verified before
     // either is issued -- see it for why that order matters.
     let (_, loc, loaded) =
-        match crate::owner::owner_beside(&req, &ctx, &db, crate::hubstore::load(&db)).await {
+        match crate::owner::owner_beside(&req, &ctx, &db, crate::hubstore::load(&place)).await {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };
@@ -1811,7 +1835,7 @@ pub async fn owner_assist(mut req: Request, ctx: RouteContext<()>) -> Result<Res
         })
         .collect();
     live.sort_by_key(|o| -o["waiting_minutes"].as_i64().unwrap_or(0));
-    let cat = crate::hubstore::load_catalog(&db).await?.catalog;
+    let cat = crate::hubstore::load_catalog(&place).await?.catalog;
     let off: Vec<Value> = cat
         .products()
         .into_iter()
@@ -1825,7 +1849,7 @@ pub async fn owner_assist(mut req: Request, ctx: RouteContext<()>) -> Result<Res
         })
         .collect();
     let facts = json!({ "now_ms": now, "live_orders": live, "off_the_menu": off });
-    crate::assist::ask(&db, crate::assist::SYSTEM_OWNER, facts, &body.question).await
+    crate::assist::ask(&place, crate::assist::SYSTEM_OWNER, facts, &body.question).await
 }
 
 /// `POST /api/courier/assist` — a question about this courier's own run.
@@ -1835,12 +1859,13 @@ pub async fn courier_assist(mut req: Request, ctx: RouteContext<()>) -> Result<R
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let me = match crate::auth::authenticate(&req, &ctx.env, &db, now_ms()).await {
         Ok(crate::auth::Principal::Courier { courier_id, .. }) => courier_id,
         Ok(_) => return Response::error("forbidden role", 403),
         Err(e) => return e.into_response(),
     };
-    let loaded = crate::hubstore::load(&db).await?;
+    let loaded = crate::hubstore::load(&place).await?;
     let now = now_ms();
     // THEIR OWN RUN AND NOTHING ELSE. A courier asking the assistant must not
     // be able to reach a neighbour's address through it.
@@ -1871,7 +1896,7 @@ pub async fn courier_assist(mut req: Request, ctx: RouteContext<()>) -> Result<R
         })
         .collect();
     let facts = json!({ "now_ms": now, "my_runs": mine });
-    crate::assist::ask(&db, crate::assist::SYSTEM_COURIER, facts, &body.question).await
+    crate::assist::ask(&place, crate::assist::SYSTEM_COURIER, facts, &body.question).await
 }
 
 // ── owner: keys for their own tools ─────────────────────────────────────────
@@ -2017,6 +2042,7 @@ pub async fn revoke_api_key(mut req: Request, ctx: RouteContext<()>) -> Result<R
 /// `POST /api/owner/products/:id/image` — body is the image.
 pub async fn set_product_image(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let loc = match owner_and_venue(&req, &ctx, &db).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -2026,7 +2052,7 @@ pub async fn set_product_image(mut req: Request, ctx: RouteContext<()>) -> Resul
     };
     // The product must exist BEFORE a blob is written, or a typo in an id
     // leaves an orphan nothing will ever reference or clean up.
-    let cat = crate::hubstore::load_catalog(&db).await?.catalog;
+    let cat = crate::hubstore::load_catalog(&place).await?.catalog;
     if cat.product(&id).is_none() {
         return Response::error("not found", 404);
     }
@@ -2050,7 +2076,7 @@ pub async fn set_product_image(mut req: Request, ctx: RouteContext<()>) -> Resul
     kv.put(&format!("{key}#type"), stored.kind.mime())?.execute().await?;
 
     let (pid, u) = (id.clone(), url.clone());
-    crate::hubstore::with_catalog(&db, move |cat| {
+    crate::hubstore::with_catalog(&place, move |cat| {
         let Some(raw) = cat.product(&pid) else {
             return Err(Error::RustError("unknown product".into()));
         };
@@ -2071,6 +2097,7 @@ pub async fn set_product_image(mut req: Request, ctx: RouteContext<()>) -> Resul
 /// `POST /api/owner/products/:id/image/clear`
 pub async fn clear_product_image(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let loc = match owner_and_venue(&req, &ctx, &db).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -2081,7 +2108,7 @@ pub async fn clear_product_image(req: Request, ctx: RouteContext<()>) -> Result<
     // The blob STAYS. Clearing a dish's photo is not a statement about every
     // other dish that might share those bytes, nor about the orders that
     // already carry the URL.
-    crate::hubstore::with_catalog(&db, move |cat| {
+    crate::hubstore::with_catalog(&place, move |cat| {
         let Some(raw) = cat.product(&id) else {
             return Err(Error::RustError("unknown product".into()));
         };
@@ -2141,6 +2168,7 @@ pub async fn media(_req: Request, ctx: RouteContext<()>) -> Result<Response> {
 /// `GET /api/owner/stock` — what is on the shelf, and what is running out.
 pub async fn stock(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // The membership query and this read do not depend on each other, so
     // `owner_beside` runs them together. The token is still verified before
     // either is issued -- see it for why that order matters.
@@ -2151,8 +2179,8 @@ pub async fn stock(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         &db,
         async {
             let (c, s) = futures_util::future::join(
-                crate::hubstore::load_catalog(&db),
-                crate::hubstore::load_stock(&db),
+                crate::hubstore::load_catalog(&place),
+                crate::hubstore::load_stock(&place),
             )
             .await;
             Ok((c?.catalog, s?.stock))
@@ -2215,6 +2243,7 @@ pub async fn set_supply(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let loc = match owner_and_venue(&req, &ctx, &db).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -2226,7 +2255,7 @@ pub async fn set_supply(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
     if body.low_at.is_some_and(|v| v < 0) {
         return Response::error("a threshold cannot be negative", 400);
     }
-    let rec = crate::hubstore::with_catalog(&db, move |cat| {
+    let rec = crate::hubstore::with_catalog(&place, move |cat| {
         let existing: Value =
             cat.supply(&id).and_then(|j| serde_json::from_str(&j).ok()).unwrap_or(json!({}));
         let rec = json!({
@@ -2272,6 +2301,7 @@ pub async fn stock_move(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let loc = match owner_and_venue(&req, &ctx, &db).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -2283,7 +2313,7 @@ pub async fn stock_move(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
     if item.is_empty() {
         return Response::error("which ingredient?", 400);
     }
-    if crate::hubstore::load_catalog(&db).await?.catalog.supply(&item).is_none() {
+    if crate::hubstore::load_catalog(&place).await?.catalog.supply(&item).is_none() {
         return Response::error("not found", 404);
     }
     let ev = match kind.as_str() {
@@ -2313,7 +2343,7 @@ pub async fn stock_move(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
         },
         other => return Response::error(format!("no such movement: {other}"), 400),
     };
-    let outcome = crate::hubstore::with_stock(&db, move |log| {
+    let outcome = crate::hubstore::with_stock(&place, move |log| {
         log.append(&ev).map_err(|e| Error::RustError(e.to_string()))
     })
     .await;
@@ -2346,6 +2376,7 @@ pub async fn set_zones(mut req: Request, ctx: RouteContext<()>) -> Result<Respon
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let loc = match owner_and_venue(&req, &ctx, &db).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -2366,7 +2397,7 @@ pub async fn set_zones(mut req: Request, ctx: RouteContext<()>) -> Result<Respon
         );
     }
     let zones = body.zones.clone();
-    crate::hubstore::with_catalog(&db, move |cat| {
+    crate::hubstore::with_catalog(&place, move |cat| {
         let raw = cat.location().ok_or_else(|| Error::RustError("no venue".into()))?;
         let mut l: Value = serde_json::from_str(&raw).unwrap_or(json!({}));
         l["delivery_zones"] = json!(zones);
@@ -2393,7 +2424,8 @@ pub async fn reach(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     };
     let point = q("lat_udeg").zip(q("lon_udeg"));
     let db = ctx.d1("DB")?;
-    let cat = crate::hubstore::load_catalog(&db).await?.catalog;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
+    let cat = crate::hubstore::load_catalog(&place).await?.catalog;
     let zones = cat
         .location()
         .and_then(|j| serde_json::from_str::<Value>(&j).ok())
@@ -2526,6 +2558,7 @@ pub async fn voice(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
 
     let body: VoiceIn = req.json().await.unwrap_or_default();
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
 
     // WHICH VOCABULARY APPLIES IS DECIDED BY THE TOKEN, never by what the
     // caller says they are: a courier claiming to be an owner would otherwise
@@ -2584,7 +2617,7 @@ pub async fn voice(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     // The orders this speaker may act on. An owner sees the venue's live queue;
     // a courier sees only their own run -- so a misheard number can never reach
     // somebody else's delivery.
-    let loaded = crate::hubstore::load(&db).await?;
+    let loaded = crate::hubstore::load(&place).await?;
     let pool: Vec<Value> = loaded
         .hub
         .orders()

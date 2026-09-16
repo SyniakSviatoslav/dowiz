@@ -211,11 +211,12 @@ pub(crate) fn location_of(req: &Request) -> Option<String> {
 /// `GET /api/owner/orders?location_id=&status=`
 pub async fn orders(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // The membership query and the image read do not depend on each other, so
     // `owner_beside` runs them together. The token is still verified before
     // either is issued -- see it for why that order matters.
     let (_, loc, loaded) =
-        match owner_beside(&req, &ctx, &db, crate::hubstore::load(&db)).await {
+        match owner_beside(&req, &ctx, &db, crate::hubstore::load(&place)).await {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };
@@ -283,6 +284,7 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
         return Response::error("missing order id", 400);
     };
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     if let Err(r) = owner_at(&req, &ctx, &db, &body.location_id).await {
         return Ok(r);
     }
@@ -301,7 +303,7 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
     // Kept for the stock settlement below, which runs after the closure has
     // taken ownership of its own copy.
     let order_id = id.clone();
-    let out = crate::hubstore::with_hub(&db, move |hub| {
+    let out = crate::hubstore::with_hub(&place, move |hub| {
         let current = hub
             .order(&id)
             .map_err(|_| Error::RustError("order not found".into()))?;
@@ -360,7 +362,7 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
     };
     if let Some(consume) = settle {
         let oid = order_id.clone();
-        let done = crate::hubstore::with_stock(&db, move |log| {
+        let done = crate::hubstore::with_stock(&place, move |log| {
             let led = log.ledger().map_err(|e| Error::RustError(e.to_string()))?;
             let evs = dowiz_hub::stock::settle(&led, &oid, consume);
             if evs.is_empty() {
@@ -385,11 +387,12 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
 /// that can drift.
 pub async fn dashboard(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // The membership query and the image read do not depend on each other, so
     // `owner_beside` runs them together. The token is still verified before
     // either is issued -- see it for why that order matters.
     let (_, loc, (loaded, loaded_cat)) =
-        match owner_beside(&req, &ctx, &db, crate::hubstore::load_both(&db)).await {
+        match owner_beside(&req, &ctx, &db, crate::hubstore::load_both(&place)).await {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };
@@ -473,6 +476,7 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<()>) -> Result<R
         return Response::error("missing product id", 400);
     };
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     if let Err(r) = owner_at(&req, &ctx, &db, &body.location_id).await {
         return Ok(r);
     }
@@ -504,7 +508,7 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<()>) -> Result<R
     let available = body.available;
     let note = body.unavailable_note.clone();
     let size_cm = body.size_cm;
-    let written = crate::hubstore::with_catalog(&db, move |cat| {
+    let written = crate::hubstore::with_catalog(&place, move |cat| {
         let Some(pj) = cat.product(&want_id) else {
             return Err(Error::RustError("unknown product".into()));
         };
@@ -602,6 +606,7 @@ pub async fn update_location(mut req: Request, ctx: RouteContext<()>) -> Result<
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     if let Err(r) = owner_at(&req, &ctx, &db, &body.location_id).await {
         return Ok(r);
     }
@@ -621,7 +626,7 @@ pub async fn update_location(mut req: Request, ctx: RouteContext<()>) -> Result<
     let paused = body.delivery_paused;
     let phone = body.phone.clone();
     let pickup = body.pickup;
-    crate::hubstore::with_catalog(&db, move |cat| {
+    crate::hubstore::with_catalog(&place, move |cat| {
         let Some(lj) = cat.location() else {
             return Err(Error::RustError("no venue in the catalogue".into()));
         };
