@@ -467,6 +467,45 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<()>) -> Result<R
         /// answers the customer's question wrongly.
         #[serde(default)]
         size_cm: Option<i64>,
+        /// How long THIS dish takes in the kitchen, in minutes.
+        ///
+        /// The venue's own figure, not a guess and not a platform average. It
+        /// is what `dowiz_kernel::eta` uses to quote a delivery time, so a
+        /// coffee and a slow roast stop sharing one published estimate. Absent
+        /// means the venue has not said, and the estimate falls back to the
+        /// venue's default rather than treating the dish as instant.
+        #[serde(default)]
+        cooking_min: Option<i64>,
+        /// WHAT IS IN THE DISH, as the venue declares it.
+        ///
+        /// A customer choosing food asks three things a price cannot answer:
+        /// what is in it, how much of it there is, and what it does to their
+        /// day. `ingredients` is the venue's own list, `weight_g` the served
+        /// weight, `nutrition` the per-portion figures it publishes
+        /// (`{"kcal":..,"protein":..,"fat":..,"carbs":..}`, each optional).
+        ///
+        /// ALL THREE ARE OPTIONAL AND ABSENT IS NOT ZERO. A dish with no
+        /// declared protein must render as "not declared", never as "0 g" --
+        /// the same rule the allergen list already follows, for the same
+        /// reason: a made-up number about food is worse than no number.
+        #[serde(default)]
+        ingredients: Option<Vec<String>>,
+        #[serde(default)]
+        weight_g: Option<i64>,
+        #[serde(default)]
+        nutrition: Option<serde_json::Map<String, Value>>,
+        /// The dish's name and description in the venue's OTHER languages:
+        /// `{"uk": {"name": "...", "description": "..."}, "en": {...}}`.
+        ///
+        /// The read side of this has existed since the first catalogue
+        /// migration (`content_i18n`) and had no write side at all, which is
+        /// why every menu was served in the venue's own language whatever the
+        /// customer chose. A locale that is not supplied is left alone; an
+        /// EMPTY STRING deletes that translation rather than storing a blank
+        /// one, because a dish whose Ukrainian name is "" must fall back to the
+        /// venue's own name, not render nameless.
+        #[serde(default)]
+        translations: Option<std::collections::HashMap<String, std::collections::HashMap<String, String>>>,
     }
     let body: In = match req.json().await {
         Ok(b) => b,
@@ -502,12 +541,25 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<()>) -> Result<R
             return Response::error("a dish is between 3 and 120 cm across", 400);
         }
     }
+    if let Some(m) = body.cooking_min {
+        // A bound, not a clamp. Zero would read as "instant" and four hours is
+        // not a dish a delivery app can quote; both are refused so the venue
+        // corrects the number rather than the number silently correcting itself.
+        if !(1..=240).contains(&m) {
+            return Response::error("cooking time is between 1 and 240 minutes", 400);
+        }
+    }
 
     let want_id = id.clone();
     let price = body.price;
     let available = body.available;
     let note = body.unavailable_note.clone();
     let size_cm = body.size_cm;
+    let cooking_min = body.cooking_min;
+    let translations = body.translations.clone();
+    let ingredients = body.ingredients.clone();
+    let weight_g = body.weight_g;
+    let nutrition = body.nutrition.clone();
     let written = crate::hubstore::with_catalog(&place, move |cat| {
         let Some(pj) = cat.product(&want_id) else {
             return Err(Error::RustError("unknown product".into()));
@@ -519,6 +571,18 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<()>) -> Result<R
         }
         if let Some(cm) = size_cm {
             p["sizeCm"] = json!(cm);
+        }
+        if let Some(m) = cooking_min {
+            p["cookingMin"] = json!(m);
+        }
+        if let Some(list) = &ingredients {
+            p["ingredients"] = json!(list);
+        }
+        if let Some(g) = weight_g {
+            p["weightG"] = json!(g);
+        }
+        if let Some(n) = &nutrition {
+            p["nutrition"] = Value::Object(n.clone());
         }
         if let Some(list) = &allergens {
             p["allergens"] = json!(list);
@@ -579,6 +643,42 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<()>) -> Result<R
             return Response::error("not found", 404);
         }
         return Err(e);
+    }
+
+    // ── The other languages ──
+    //
+    // Written AFTER the catalogue, and never inside it: a translation is not
+    // part of the priced record, and a locale table that failed must not take
+    // a price change down with it. Each row is upserted on its own primary key
+    // so re-saving a dish is idempotent, and an empty string DELETES rather
+    // than storing a blank the menu would then serve as the dish's name.
+    if let Some(by_locale) = &translations {
+        for (locale, fields) in by_locale {
+            for (field, value) in fields {
+                if field != "name" && field != "description" {
+                    continue;
+                }
+                let q = if value.trim().is_empty() {
+                    db.prepare(
+                        "DELETE FROM content_i18n WHERE entity_type='product' \
+                         AND entity_id=?1 AND locale=?2 AND field=?3",
+                    )
+                    .bind(&[id.clone().into(), locale.clone().into(), field.clone().into()])
+                } else {
+                    db.prepare(
+                        "INSERT INTO content_i18n (entity_type,entity_id,locale,field,value) \
+                         VALUES ('product',?1,?2,?3,?4) \
+                         ON CONFLICT(entity_type,entity_id,locale,field) \
+                         DO UPDATE SET value = excluded.value",
+                    )
+                    .bind(&[id.clone().into(), locale.clone().into(), field.clone().into(),
+                            value.clone().into()])
+                };
+                if let Ok(stmt) = q {
+                    let _ = stmt.run().await;
+                }
+            }
+        }
     }
 
     Response::from_json(&json!({ "ok": true, "id": id }))

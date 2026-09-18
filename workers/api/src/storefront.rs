@@ -26,6 +26,15 @@ pub struct LineIn {
 pub struct ContactIn {
     #[serde(default)]
     pub name: Option<String>,
+    /// THE TELEPHONE NUMBER IS OPTIONAL, by operator decision (2026-09-17).
+    ///
+    /// It used to be mandatory and eight digits, so a customer who would not
+    /// give a number could not order at all. The number is a courtesy to the
+    /// courier, not a fact the order depends on: the order is identified by its
+    /// own id, priced by the kernel and tracked by a link the customer already
+    /// holds. `#[serde(default)]` also keeps an older client that omits the
+    /// field entirely from failing to place an order.
+    #[serde(default)]
     pub phone: String,
 }
 
@@ -129,6 +138,13 @@ struct ProdRow {
     sort_order: i64,
 }
 
+#[derive(Deserialize)]
+struct I18nRow {
+    entity_id: String,
+    field: String,
+    value: String,
+}
+
 /// `GET /api/public/locations/:slug/menu`
 pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let Some(slug) = ctx.param("slug").cloned() else {
@@ -222,6 +238,62 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         .filter_map(|(id, j)| serde_json::from_str::<Value>(&j).ok().map(|v| (id, v)))
         .collect();
 
+    // ── THE MENU IS SERVED IN THE LANGUAGE THAT WAS ASKED FOR ──
+    //
+    // `?locale=` was accepted by the route and then IGNORED: the chrome around
+    // the menu translated on every surface while the dishes stayed in the
+    // venue's own language, which is what a customer reads as "the translation
+    // does not work". `content_i18n` has held the translated strings since the
+    // first catalogue migration and NOTHING HAS EVER READ IT -- the table was
+    // created, documented, and never joined.
+    //
+    // Only a locale that DIFFERS from the venue's own costs a query, and a
+    // missing translation falls back to the venue's string rather than to an
+    // empty one: a dish with no Ukrainian name must still have a name.
+    let want_locale = req
+        .url()?
+        .query_pairs()
+        .find(|(k, _)| k == "locale")
+        .map(|(_, v)| v.to_string())
+        .unwrap_or_else(|| loc.default_locale.clone());
+
+    let mut i18n: std::collections::HashMap<(String, String), String> =
+        std::collections::HashMap::new();
+    if want_locale != loc.default_locale && !want_locale.is_empty() {
+        let mut ids: Vec<String> = products.iter().map(|(id, _)| id.clone()).collect();
+        ids.extend(cat_meta.iter().map(|(id, _, _)| id.clone()));
+        if !ids.is_empty() {
+            // One statement, one round trip. The placeholder list is built from
+            // the catalogue's own ids, never from anything a caller sent.
+            let marks = (2..ids.len() + 2)
+                .map(|i| format!("?{i}"))
+                .collect::<Vec<_>>()
+                .join(",");
+            let sql = format!(
+                "SELECT entity_id, field, value FROM content_i18n \
+                 WHERE locale = ?1 AND field IN ('name','description') AND entity_id IN ({marks})"
+            );
+            let mut binds: Vec<worker::wasm_bindgen::JsValue> =
+                vec![want_locale.clone().into()];
+            binds.extend(ids.into_iter().map(|i| i.into()));
+            if let Ok(stmt) = db.prepare(&sql).bind(&binds) {
+                if let Ok(rows) = stmt.all().await {
+                    if let Ok(list) = rows.results::<I18nRow>() {
+                        for r in list {
+                            i18n.insert((r.entity_id, r.field), r.value);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let translated = |id: &str, field: &str, fallback: Value| -> Value {
+        match i18n.get(&(id.to_string(), field.to_string())) {
+            Some(v) => json!(v),
+            None => fallback,
+        }
+    };
+
     let mut cats: Vec<Value> = Vec::new();
     for (cid, cname, csort) in &cat_meta {
         let mut items: Vec<(i64, Value)> = products
@@ -232,8 +304,10 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
                     p.get("sortOrder").and_then(|x| x.as_i64()).unwrap_or(0),
                     json!({
                         "id": id,
-                        "name": p.get("name").cloned().unwrap_or(json!("")),
-                        "description": p.get("description").cloned().unwrap_or(Value::Null),
+                        "name": translated(id, "name",
+                            p.get("name").cloned().unwrap_or(json!(""))),
+                        "description": translated(id, "description",
+                            p.get("description").cloned().unwrap_or(Value::Null)),
                         "price": p.get("price").cloned().unwrap_or(json!(0)),
                         "available": p.get("available").and_then(|x| x.as_bool()).unwrap_or(true),
                         "unavailableNote": p.get("unavailableNote").cloned().unwrap_or(Value::Null),
@@ -254,6 +328,24 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
                         "allergens": p.get("allergens").cloned().unwrap_or(Value::Null),
                         "modifierGroups": p.get("modifierGroups").cloned().unwrap_or(Value::Null),
                         "sizeCm": p.get("sizeCm").cloned().unwrap_or(Value::Null),
+                        // What the VENUE says this dish takes. Null means it
+                        // has not said — which the estimate treats as the
+                        // venue's default, never as instant.
+                        "cookingMin": p.get("cookingMin").cloned().unwrap_or(Value::Null),
+                        // ── What is in the dish ──
+                        //
+                        // The three questions a price cannot answer: what is in
+                        // it, how much of it there is, what it does to the day.
+                        // Every one of them is passed through AS STORED, null
+                        // included: a dish whose protein the venue never
+                        // declared must reach the screen as "not declared", and
+                        // a zero here would reach it as "0 g" instead — the
+                        // same distinction `allergens` is careful about, for
+                        // the same reason.
+                        "ingredients": p.get("ingredients").cloned().unwrap_or(Value::Null),
+                        "weightG": p.get("weightG").cloned().unwrap_or(Value::Null),
+                        "nutrition": p.get("nutrition").cloned().unwrap_or(Value::Null),
+                        "calories": p.get("calories").cloned().unwrap_or(Value::Null),
                         "sortOrder": p.get("sortOrder").cloned().unwrap_or(json!(0))
                     }),
                 )
@@ -264,7 +356,9 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
             continue;
         }
         cats.push(json!({
-            "id": cid, "name": cname, "sortOrder": csort,
+            // A category is a heading the customer reads, so it is translated
+            // on exactly the same terms as the dishes under it.
+            "id": cid, "name": translated(cid, "name", json!(cname)), "sortOrder": csort,
             "products": items.into_iter().map(|(_, p)| p).collect::<Vec<_>>()
         }));
     }
@@ -369,7 +463,11 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     if body.items.is_empty() {
         return Response::error("empty order", 400);
     }
-    if body.contact.phone.chars().filter(|c| c.is_ascii_digit()).count() < 8 {
+    // A number that IS given must still look like one -- a half-typed number is
+    // worse than none, because the courier will try it. An EMPTY one is now
+    // accepted: see `ContactIn::phone`.
+    let phone = body.contact.phone.trim();
+    if !phone.is_empty() && phone.chars().filter(|c| c.is_ascii_digit()).count() < 8 {
         return Response::error("invalid phone", 400);
     }
     if body.fulfilment.kind == "delivery"
@@ -594,6 +692,14 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
 
     // The customer row is keyed by a HASH of the phone, never the phone itself,
     // so the table can be joined without holding the number in the clear.
+    //
+    // NO PHONE MEANS NO CUSTOMER ROW, and that is not a shortcut. The key is
+    // `(location_id, phone_hash)`, and the hash of the empty string is a
+    // CONSTANT: writing it would file every customer who declined to give a
+    // number into ONE row per venue, each order overwriting the last one's
+    // name. The order itself is complete without it — it carries its own
+    // contact envelope — so the registry simply does not gain a row.
+    if !phone.is_empty() {
     let cust_id = crate::edge_id().unwrap_or_else(|| format!("cust_{created_at_ms}"));
     let _ = db
         .prepare(
@@ -605,6 +711,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
                 worker::wasm_bindgen::JsValue::from_f64(created_at_ms as f64)])?
         .run()
         .await;
+    }
 
     // ── THE CUSTOMER'S KEY TO THEIR OWN ORDER ──
     //
