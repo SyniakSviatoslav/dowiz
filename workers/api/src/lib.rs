@@ -232,6 +232,7 @@ async fn route(req: Request, env: Env) -> Result<Response> {
         .get_async("/api/owner/dashboard", owner::dashboard)
         .post_async("/api/owner/products/:id", owner::update_product)
         .post_async("/api/owner/location", owner::update_location)
+        .post_async("/api/owner/i18n", owner::write_translations)
         // ── ported from the native adapter, on the SAME dowiz-hub logic ──
         .get_async("/api/owner/analytics", extra::analytics)
         .get_async("/api/owner/promotions", extra::promotions)

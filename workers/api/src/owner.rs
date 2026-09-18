@@ -506,6 +506,11 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<()>) -> Result<R
         /// venue's own name, not render nameless.
         #[serde(default)]
         translations: Option<std::collections::HashMap<String, std::collections::HashMap<String, String>>>,
+        /// What the dish IS, as the venue files it: `salmon`, `hot`,
+        /// `vegetarian`, `popular`. The storefront's filter rail is built from
+        /// these. Lower-case slugs; an empty list clears them.
+        #[serde(default)]
+        tags: Option<Vec<String>>,
     }
     let body: In = match req.json().await {
         Ok(b) => b,
@@ -560,6 +565,20 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<()>) -> Result<R
     let ingredients = body.ingredients.clone();
     let weight_g = body.weight_g;
     let nutrition = body.nutrition.clone();
+    let tags = match &body.tags {
+        None => None,
+        Some(list) => {
+            let clean: Vec<String> = list
+                .iter()
+                .map(|t| t.trim().to_lowercase())
+                .filter(|t| !t.is_empty())
+                .collect();
+            if clean.iter().any(|t| t.len() > 32 || !t.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')) {
+                return Response::error("a tag is a short lower-case slug", 400);
+            }
+            Some(clean)
+        }
+    };
     let written = crate::hubstore::with_catalog(&place, move |cat| {
         let Some(pj) = cat.product(&want_id) else {
             return Err(Error::RustError("unknown product".into()));
@@ -583,6 +602,9 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<()>) -> Result<R
         }
         if let Some(n) = &nutrition {
             p["nutrition"] = Value::Object(n.clone());
+        }
+        if let Some(list) = &tags {
+            p["tags"] = if list.is_empty() { Value::Null } else { json!(list) };
         }
         if let Some(list) = &allergens {
             p["allergens"] = json!(list);
@@ -655,33 +677,131 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<()>) -> Result<R
     if let Some(by_locale) = &translations {
         for (locale, fields) in by_locale {
             for (field, value) in fields {
-                if field != "name" && field != "description" {
-                    continue;
-                }
-                let q = if value.trim().is_empty() {
-                    db.prepare(
-                        "DELETE FROM content_i18n WHERE entity_type='product' \
-                         AND entity_id=?1 AND locale=?2 AND field=?3",
-                    )
-                    .bind(&[id.clone().into(), locale.clone().into(), field.clone().into()])
-                } else {
-                    db.prepare(
-                        "INSERT INTO content_i18n (entity_type,entity_id,locale,field,value) \
-                         VALUES ('product',?1,?2,?3,?4) \
-                         ON CONFLICT(entity_type,entity_id,locale,field) \
-                         DO UPDATE SET value = excluded.value",
-                    )
-                    .bind(&[id.clone().into(), locale.clone().into(), field.clone().into(),
-                            value.clone().into()])
-                };
-                if let Ok(stmt) = q {
-                    let _ = stmt.run().await;
+                if let Err(e) = write_i18n(&db, "product", &id, locale, field, value).await {
+                    return Response::error(e, 400);
                 }
             }
         }
     }
 
     Response::from_json(&json!({ "ok": true, "id": id }))
+}
+
+/// The fields a translation may carry, and the shape each must have.
+/// `ingredients` is a JSON array of strings, checked before it is stored so
+/// the menu route never has to guess what it is reading back.
+fn i18n_value_ok(field: &str, value: &str) -> std::result::Result<(), String> {
+    match field {
+        "name" | "description" => Ok(()),
+        "ingredients" => match serde_json::from_str::<Value>(value) {
+            Ok(Value::Array(a)) if a.iter().all(|x| x.is_string()) => Ok(()),
+            _ => Err("ingredients must be a JSON array of strings".into()),
+        },
+        other => Err(format!("{other:?} is not a translatable field")),
+    }
+}
+
+/// One translation row: upserted on its own key, DELETED when the value is
+/// empty rather than stored as a blank the menu would serve as the dish's
+/// name. Products and categories are the two things a customer reads.
+async fn write_i18n(
+    db: &D1Database,
+    entity_type: &str,
+    entity_id: &str,
+    locale: &str,
+    field: &str,
+    value: &str,
+) -> std::result::Result<(), String> {
+    if !matches!(entity_type, "product" | "category") {
+        return Err(format!("{entity_type:?} is not translatable"));
+    }
+    let locale = locale.trim().to_lowercase();
+    if locale.len() != 2 || !locale.chars().all(|c| c.is_ascii_lowercase()) {
+        return Err(format!("{locale:?} is not a locale"));
+    }
+    let q = if value.trim().is_empty() {
+        db.prepare(
+            "DELETE FROM content_i18n WHERE entity_type=?1 \
+             AND entity_id=?2 AND locale=?3 AND field=?4",
+        )
+        .bind(&[entity_type.into(), entity_id.into(), locale.clone().into(), field.into()])
+    } else {
+        i18n_value_ok(field, value)?;
+        db.prepare(
+            "INSERT INTO content_i18n (entity_type,entity_id,locale,field,value) \
+             VALUES (?1,?2,?3,?4,?5) \
+             ON CONFLICT(entity_type,entity_id,locale,field) \
+             DO UPDATE SET value = excluded.value",
+        )
+        .bind(&[entity_type.into(), entity_id.into(), locale.clone().into(), field.into(),
+                value.into()])
+    };
+    let stmt = q.map_err(|e| format!("bind: {e}"))?;
+    stmt.run().await.map(|_| ()).map_err(|e| format!("write: {e}"))
+}
+
+/// `POST /api/owner/i18n` -- the venue's other languages, in bulk.
+///
+/// `{ "location_id": "...", "entries": [ { "entity": "category"|"product",
+///   "id": "...", "locale": "uk", "field": "name", "value": "..." }, ... ] }`
+///
+/// The per-product route can carry a dish's own translations; a category
+/// heading had no write side at all, so every heading stayed in the venue's
+/// language whatever the customer chose. This is the one place both are
+/// written, up to five hundred rows a call, each checked on its own so a bad
+/// row is named rather than the whole batch silently half-applied.
+pub async fn write_translations(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    #[derive(Deserialize)]
+    struct Entry {
+        entity: String,
+        id: String,
+        locale: String,
+        field: String,
+        #[serde(default)]
+        value: String,
+    }
+    #[derive(Deserialize)]
+    struct In {
+        location_id: String,
+        entries: Vec<Entry>,
+    }
+    let body: In = match req.json().await {
+        Ok(b) => b,
+        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
+    };
+    if body.entries.len() > 500 {
+        return Response::error("at most 500 entries per call", 400);
+    }
+    let db = ctx.d1("DB")?;
+    if let Err(r) = owner_at(&req, &ctx, &db, &body.location_id).await {
+        return Ok(r);
+    }
+    // Only ids the catalogue actually has: a translation of a dish that does
+    // not exist is a row nothing will ever read.
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
+    let loaded = crate::hubstore::load_catalog(&place).await?;
+    let products: std::collections::BTreeSet<String> =
+        loaded.catalog.products().into_iter().map(|(id, _)| id).collect();
+    let categories: std::collections::BTreeSet<String> =
+        loaded.catalog.categories().into_iter().map(|(id, _)| id).collect();
+    let mut written = 0;
+    let mut refused: Vec<Value> = Vec::new();
+    for e in &body.entries {
+        let known = match e.entity.as_str() {
+            "product" => products.contains(&e.id),
+            "category" => categories.contains(&e.id),
+            _ => false,
+        };
+        if !known {
+            refused.push(json!({ "id": e.id, "why": format!("unknown {}", e.entity) }));
+            continue;
+        }
+        match write_i18n(&db, &e.entity, &e.id, &e.locale, &e.field, &e.value).await {
+            Ok(()) => written += 1,
+            Err(why) => refused.push(json!({ "id": e.id, "field": e.field, "why": why })),
+        }
+    }
+    Response::from_json(&json!({ "ok": refused.is_empty(), "written": written, "refused": refused }))
 }
 
 /// `PATCH /api/owner/location` — open, close, go busy, pause delivery.
@@ -700,6 +820,23 @@ pub async fn update_location(mut req: Request, ctx: RouteContext<()>) -> Result<
         /// Can a customer come and collect? The other half of fulfilment.
         #[serde(default)]
         pickup: Option<bool>,
+        /// The venue's name as the customer should read it -- the one on its
+        /// sign and its Google listing, not the slug the hub was created under.
+        #[serde(default)]
+        name: Option<String>,
+        /// Delivery terms, in minor units. Each one optional; `null` for the
+        /// threshold means "no free delivery".
+        #[serde(default)]
+        delivery_fee: Option<i64>,
+        #[serde(default, deserialize_with = "deserialize_some")]
+        free_delivery_threshold: Option<Option<i64>>,
+        #[serde(default)]
+        min_order: Option<i64>,
+        /// The venue's crypto wallets: `[{network, symbol, address, note?}]`.
+        /// An empty list switches the rail off. Checked here so a wallet with
+        /// no address never reaches a customer as a way to pay.
+        #[serde(default)]
+        crypto_wallets: Option<Vec<Value>>,
     }
     let body: In = match req.json().await {
         Ok(b) => b,
@@ -709,6 +846,34 @@ pub async fn update_location(mut req: Request, ctx: RouteContext<()>) -> Result<
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     if let Err(r) = owner_at(&req, &ctx, &db, &body.location_id).await {
         return Ok(r);
+    }
+    if let Some(n) = &body.name {
+        let n = n.trim();
+        if n.is_empty() || n.chars().count() > 80 {
+            return Response::error("a venue name is 1 to 80 characters", 400);
+        }
+    }
+    for (what, v) in [("delivery_fee", body.delivery_fee), ("min_order", body.min_order),
+                      ("free_delivery_threshold", body.free_delivery_threshold.flatten())] {
+        if let Some(v) = v {
+            if v < 0 {
+                return Response::error(format!("{what} must be >= 0"), 400);
+            }
+        }
+    }
+    if let Some(list) = &body.crypto_wallets {
+        if list.len() > 12 {
+            return Response::error("at most 12 wallets", 400);
+        }
+        for w in list {
+            let s = |k: &str| w.get(k).and_then(Value::as_str).map(str::trim).unwrap_or("");
+            if s("network").is_empty() || s("symbol").is_empty() || s("address").is_empty() {
+                return Response::error("a wallet needs a network, a symbol and an address", 400);
+            }
+            if s("address").len() > 128 || s("symbol").len() > 12 || s("network").len() > 40 {
+                return Response::error("a wallet field is too long", 400);
+            }
+        }
     }
     if let Some(st) = &body.status {
         if !matches!(st.as_str(), "open" | "closed" | "busy") {
@@ -726,6 +891,31 @@ pub async fn update_location(mut req: Request, ctx: RouteContext<()>) -> Result<
     let paused = body.delivery_paused;
     let phone = body.phone.clone();
     let pickup = body.pickup;
+    let name = body.name.as_deref().map(str::trim).map(String::from);
+    let delivery_fee = body.delivery_fee;
+    let free_th = body.free_delivery_threshold;
+    let min_order = body.min_order;
+    let wallets: Option<Vec<Value>> = body.crypto_wallets.as_ref().map(|list| {
+        list.iter()
+            .map(|w| {
+                let s = |k: &str| w.get(k).and_then(Value::as_str).map(str::trim).unwrap_or("").to_string();
+                json!({ "network": s("network"), "symbol": s("symbol").to_uppercase(),
+                        "address": s("address"),
+                        "note": w.get("note").and_then(Value::as_str).map(str::trim)
+                            .filter(|n| !n.is_empty()).map(|n| json!(n)).unwrap_or(Value::Null) })
+            })
+            .collect()
+    });
+    // The `locations` row is a pointer with a name on it, and the platform
+    // console lists venues from it: renamed in the same request so the two
+    // never disagree about what the venue is called.
+    if let Some(n) = &name {
+        let _ = db
+            .prepare("UPDATE locations SET name=?1, updated_at_ms=?2 WHERE id=?3")
+            .bind(&[n.clone().into(), (Date::now().as_millis() as f64).into(), body.location_id.clone().into()])?
+            .run()
+            .await;
+    }
     crate::hubstore::with_catalog(&place, move |cat| {
         let Some(lj) = cat.location() else {
             return Err(Error::RustError("no venue in the catalogue".into()));
@@ -744,10 +934,43 @@ pub async fn update_location(mut req: Request, ctx: RouteContext<()>) -> Result<
         if let Some(p) = pickup {
             l["pickup"] = json!(p);
         }
+        if let Some(n) = &name {
+            l["name"] = json!(n);
+        }
+        if let Some(f) = delivery_fee {
+            l["delivery_fee"] = json!(f);
+        }
+        if let Some(th) = free_th {
+            l["free_delivery_threshold"] = th.map(|v| json!(v)).unwrap_or(Value::Null);
+        }
+        if let Some(m) = min_order {
+            l["min_order"] = json!(m);
+        }
+        if let Some(w) = &wallets {
+            if !l.get("payments").map_or(false, Value::is_object) {
+                l["payments"] = json!({});
+            }
+            l["payments"]["crypto"] = json!(w);
+        }
+        // Delivery terms are read by every basket, so they move the menu
+        // version the way a price does.
+        if name.is_some() || delivery_fee.is_some() || free_th.is_some() || min_order.is_some() {
+            let v = l.get("menu_version").and_then(|x| x.as_i64()).unwrap_or(1);
+            l["menu_version"] = json!(v + 1);
+        }
         cat.set_location(&serde_json::to_string(&l).unwrap_or(lj));
         Ok(())
     })
     .await?;
 
     Response::from_json(&json!({ "ok": true }))
+}
+
+/// `Option<Option<T>>`: absent means "leave it", `null` means "clear it".
+fn deserialize_some<'de, T, D>(d: D) -> std::result::Result<Option<Option<T>>, D::Error>
+where
+    T: Deserialize<'de>,
+    D: serde::Deserializer<'de>,
+{
+    Option::<T>::deserialize(d).map(Some)
 }

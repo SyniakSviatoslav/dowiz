@@ -1,9 +1,13 @@
 // Act 1 -- ARRIVE. The venue as a place, over the Sea.
 //
-// The hero is the establishing shot: the mark, the name, what people think of
-// it, whether it is open, how long a delivery takes, and where it is. Every
-// row appears only if its fact exists; a row that says "—" is a row that
-// teaches the customer the page is broken.
+// The hero is the establishing shot, and it is composed the way the venue's
+// own mark is composed: the mark itself, large, on the venue's own paper,
+// inside a slowly drawn ring in the venue's accent; the name beneath it in
+// the display face, set in capitals and tracked out the way a sign is; a
+// hairline rule in the accent with one dot at its centre; then what people
+// think of it, whether it is open, how long a delivery takes, what it costs
+// to send, and where it is. Every row appears only if its fact exists; a row
+// that says "—" is a row that teaches the customer the page is broken.
 //
 // The full venue page (hours for the week, the map, the reviews, the address
 // with directions) is a sheet, reached from the hero and from the Info tab, so
@@ -11,8 +15,18 @@
 
 import { state, hhmm, todayAt, whenOpens, DAY_NAMES } from '/store/state.js';
 import { t, lang } from '/store/i18n.js';
-import { $, esc, icon, sheet, stars } from '/store/ui.js';
+import { $, esc, icon, sheet, stars, loadMapLib } from '/store/ui.js';
 import { publishedEta } from '/store/eta.js';
+
+/// How many reviews the venue sheet shows.
+const REVIEWS_SHOWN = 8;
+/// The venue's own map: a street-level zoom.
+const ZOOM_STREET = 16;
+const TILES = 'https://tiles.openfreemap.org/styles/liberty';
+/// The ring behind the mark: a circle of this radius in a 100-unit box, and a
+/// circumference to draw it with. 2π·46 ≈ 289.
+const RING_R = 46;
+const RING_LEN = Math.round(2 * Math.PI * RING_R);
 
 function openWindowNow(){
   const week = Array.isArray(state.loc?.hours) && state.loc.hours.length === 7 ? state.loc.hours : null;
@@ -41,16 +55,34 @@ const mapsHref = () => {
   return L?.google?.url || null;
 };
 
+/// The town, from the address: the last part that is not the country. It is
+/// the eyebrow over the name, the way a sign says where it stands.
+function town(){
+  const parts = String(state.loc?.address || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (parts.length < 2) return '';
+  return parts[parts.length - 2];
+}
+
+/// The rule in the accent with a dot at its centre: the venue mark's own
+/// ornament, drawn once here and reused under every section heading.
+export const ruleMarkup = () => `<div class="rule" aria-hidden="true"><i></i><b></b><i></i></div>`;
+
 /// The hero markup. Text nodes that depend on the language carry an id so
 /// `refreshHero` can rewrite them without rebuilding the block.
 export function heroMarkup(){
   const L = state.loc, g = L.google || null;
   const open = L.status === 'open';
   const eta = publishedEta();
+  const where = town();
   return `
   <section class="hero" id="hero">
-    <p class="eyebrow" data-t="menu"></p>
+    ${L.logoUrl ? `<div class="hero-art" aria-hidden="true">
+      <svg class="ring" viewBox="0 0 100 100"><circle cx="50" cy="50" r="${RING_R}" pathLength="${RING_LEN}"/></svg>
+      <img class="hero-mark" src="${esc(L.logoUrl)}" alt="">
+    </div>` : ''}
+    ${where ? `<p class="eyebrow hero-eyebrow">${esc(where)}</p>` : ''}
     <h1 class="hero-name">${esc(L.name)}</h1>
+    ${ruleMarkup()}
     <div class="hero-chips">
       <button type="button" class="chip-state ${open ? 'open' : 'shut'}" id="stateChip" data-open-venue>
         <span class="dot"></span><span id="openLine">${esc(openLine())}</span></button>
@@ -79,7 +111,7 @@ export function openVenue(focus){
   const names = DAY_NAMES[lang] || DAY_NAMES.en;
   const now = todayAt();
   const href = mapsHref();
-  const reviews = (g && Array.isArray(g.reviews) ? g.reviews : []).slice(0, 8);
+  const reviews = (g && Array.isArray(g.reviews) ? g.reviews : []).slice(0, REVIEWS_SHOWN);
   sheet(`
     <div class="vsheet">
       <p class="eyebrow" data-t="about"></p>
@@ -122,7 +154,7 @@ export function openVenue(focus){
   if (focus) $(`#v-${focus}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
 }
 
-/// MapLibre, imported the first time somebody asks to see the map. A third of a
+/// MapLibre, loaded the first time somebody asks to see the map. A third of a
 /// megabyte and a tile session are not something a customer reading a menu
 /// should pay for.
 async function showMap(){
@@ -134,14 +166,14 @@ async function showMap(){
   if (!opening || box.dataset.drawn) return;
   box.dataset.drawn = '1';
   try {
-    const { default: maplibregl } = await import('/lib/map/maplibre-gl.js');
+    const maplibregl = await loadMapLib();
     const map = new maplibregl.Map({
-      container: box, style: 'https://tiles.openfreemap.org/styles/liberty',
-      center: [state.loc.lng, state.loc.lat], zoom: 16, attributionControl: true,
+      container: box, style: TILES,
+      center: [state.loc.lng, state.loc.lat], zoom: ZOOM_STREET, attributionControl: true,
     });
     new maplibregl.Marker().setLngLat([state.loc.lng, state.loc.lat]).addTo(map);
-  } catch {
-    box.textContent = t('loadFail');
+  } catch (e) {
+    box.textContent = `${t('loadFail')} · ${e.message}`;
     box.dataset.drawn = '';
   }
 }

@@ -1,21 +1,24 @@
-// The bottom bar -- five tabs, the way a phone app is held.
+// The bottom bar -- five tabs, the way a phone app is held -- and the two
+// header controls.
 //
 // Menu, Search, Cart, Orders, Info. The bar is glass over the Sea, sits above
 // the safe area, and steps out of the way when a sheet is open: a sheet IS the
 // screen while it is up. The cart tab carries the count; the floating pill
 // above the bar carries the total, which is a <Money> and snaps.
 //
-// The header keeps the mark and the name and ONE button, which opens the
-// preferences sheet: language and reading currency together, because they are
-// the same kind of choice -- how this page is rendered for me, changing nothing
-// about the order.
+// THE HEADER HAS TWO BUTTONS, NOT ONE. Language and reading currency were one
+// sheet behind one icon, and a customer who wanted euros opened a sheet titled
+// "language". They are different decisions -- what I read in, what I count in
+// -- so each has its own control and its own sheet. The allergen filter lives
+// in the language sheet rather than in the search bar, where it crowded the
+// one field a hungry customer is looking for.
 
-import { state, history, fetchRemembered, CURRENCIES, baseCurrency, displayCurrency, setDisplayCurrency, moneyEl, repaintMoney } from '/store/state.js';
+import { state, history, fetchRemembered, CURRENCIES, baseCurrency, displayCurrency, setDisplayCurrency, moneyEl, repaintMoney, ALLERGENS, allergenName, saveAvoid } from '/store/state.js';
 import { t, lang, LANGS, retranslate } from '/store/i18n.js';
 import { $, $$, esc, icon, sheet, closeSheet, isSheetOpen, sheetName } from '/store/ui.js';
 import { openCart } from '/store/cart.js';
 import { openVenue } from '/store/venue.js';
-import { focusSearch, scrollTop } from '/store/menu.js';
+import { focusSearch, scrollTop, applyFilters } from '/store/menu.js';
 
 let changeLang = null;
 export function onChangeLang(fn){ changeLang = fn; }
@@ -30,6 +33,11 @@ const TABS = [
   ['orders', 'receipt',      'orders'],
   ['info',   'info-circle',  'info'],
 ];
+/// Which tab a sheet belongs to, so the bar follows what is open.
+const TAB_OF_SHEET = { cart: 'cart', checkout: 'cart', pay: 'cart', orders: 'orders', track: 'orders', info: 'info' };
+/// The order id is shown short: eight characters is enough to tell two orders
+/// apart on a phone and short enough to read aloud to the venue.
+const ORDER_ID_SHOWN = 8;
 
 export function mountNav(){
   const nav = $('#nav');
@@ -50,38 +58,70 @@ export function mountNav(){
   });
   // The tab follows the sheet, so a cart opened from a card lights "Cart".
   addEventListener('dw:sheet', e => {
-    const name = e.detail?.name;
     if (!e.detail?.open) return light('menu');
-    if (name === 'cart' || name === 'checkout' || name === 'pay') light('cart');
-    else if (name === 'orders' || name === 'track') light('orders');
-    else if (name === 'info') light('info');
+    light(TAB_OF_SHEET[e.detail.name] || 'menu');
   });
-  $('#prefsBtn').onclick = openPrefs;
+  $('#langBtn').onclick = openLanguage;
+  $('#curBtn').onclick = openCurrency;
+  paintCurrencyButton();
+  addEventListener('dw:money', paintCurrencyButton);
   retranslate(nav);
 }
 function light(id){
   for (const b of $$('#nav [data-tab]')) b.setAttribute('aria-current', b.dataset.tab === id ? 'page' : 'false');
 }
+/// The currency button shows the code it is reading in, so the state is
+/// visible without opening anything.
+function paintCurrencyButton(){
+  const el = $('#curCode'); if (el) el.textContent = displayCurrency();
+}
 
-/// Language and currency, one sheet. Choosing either rewrites text in place.
-export function openPrefs(){
-  const base = baseCurrency();
-  const codes = [base, ...CURRENCIES.filter(c => c !== base)];
+/// Language, and the allergens to keep off the menu. Choosing a language
+/// rewrites text in place; nothing else moves.
+export function openLanguage(){
+  const avoid = state.avoid || [];
   sheet(`
-    <p class="eyebrow" data-t="prefs"></p>
-    <h2 data-t="language"></h2>
-    <div class="seg" role="radiogroup">
-      ${LANGS.map(l => `<button type="button" class="seg-b ${l === lang ? 'on' : ''}" data-l="${l}" aria-pressed="${l === lang}">${l.toUpperCase()}</button>`).join('')}
+    <p class="eyebrow" data-t="language"></p>
+    <h2 data-t="chooseLang"></h2>
+    <div class="choices" role="radiogroup">
+      ${LANGS.map(l => `<button type="button" class="choice ${l === lang ? 'on' : ''}" data-l="${l}" aria-pressed="${l === lang}">
+        <span class="choice-code">${l.toUpperCase()}</span><span class="choice-name">${esc(t('langs')[l] || l)}</span>${icon('check', 'choice-ck')}</button>`).join('')}
     </div>
-    <h2 data-t="currency"></h2>
-    <div class="seg" role="radiogroup">
-      ${codes.map(c => `<button type="button" class="seg-b ${c === displayCurrency() ? 'on' : ''}" data-c="${c}" aria-pressed="${c === displayCurrency()}">${c}</button>`).join('')}
-    </div>
-    <p class="muted small" data-t="chargedIn"></p>`, { name: 'prefs' });
+    ${ALLERGENS.length ? `
+    <h3 class="dsec" data-t="avoid"></h3>
+    <p class="muted small" data-t="avoidHint"></p>
+    <div class="avoid-in" id="avoidBox">${ALLERGENS.map(([code]) => `<button type="button" class="chip ${avoid.includes(code) ? 'on' : ''}"
+       data-avoid="${code}" aria-pressed="${avoid.includes(code)}">${esc(allergenName(code))}</button>`).join('')}</div>
+    <p class="muted small mt-2" id="avoidCount"></p>` : ''}`, { name: 'lang' });
   for (const b of $$('[data-l]', $('#sheetIn'))) b.onclick = async () => {
     for (const x of $$('[data-l]', $('#sheetIn'))) { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); }
     await changeLang?.(b.dataset.l);
+    // The allergen names are the venue's own vocabulary in the new language.
+    for (const c of $$('[data-avoid]', $('#sheetIn'))) c.textContent = allergenName(c.dataset.avoid);
   };
+  for (const b of $$('[data-avoid]', $('#sheetIn'))) b.onclick = () => {
+    const code = b.dataset.avoid;
+    state.avoid = state.avoid.includes(code) ? state.avoid.filter(c => c !== code) : [...state.avoid, code];
+    saveAvoid();
+    const onn = state.avoid.includes(code);
+    b.classList.toggle('on', onn); b.setAttribute('aria-pressed', String(onn));
+    applyFilters();
+  };
+}
+
+/// The reading currency. The charge stays in the venue's currency and the
+/// cart says so; this only changes what the customer counts in.
+export function openCurrency(){
+  const base = baseCurrency();
+  const codes = [base, ...CURRENCIES.filter(c => c !== base)];
+  sheet(`
+    <p class="eyebrow" data-t="currency"></p>
+    <h2 data-t="readIn"></h2>
+    <div class="choices" role="radiogroup">
+      ${codes.map(c => `<button type="button" class="choice ${c === displayCurrency() ? 'on' : ''}" data-c="${c}" aria-pressed="${c === displayCurrency()}">
+        <span class="choice-code money">${c}</span><span class="choice-name">${esc(t('curs')[c] || c)}</span>${icon('check', 'choice-ck')}</button>`).join('')}
+    </div>
+    <p class="muted small"><span data-t="chargedIn"></span>: <b class="money">${esc(base)}</b></p>`, { name: 'currency' });
   for (const b of $$('[data-c]', $('#sheetIn'))) b.onclick = async () => {
     for (const x of $$('[data-c]', $('#sheetIn'))) { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); }
     await setDisplayCurrency(b.dataset.c);
@@ -101,9 +141,10 @@ export async function openHistory(){
   host.innerHTML = got.map((r, i) => {
     const e = list[i];
     const when = new Date(e.at).toLocaleDateString(lang === 'uk' ? 'uk' : lang === 'en' ? 'en' : 'sq', { day: 'numeric', month: 'short' });
-    if (r.status !== 'fulfilled') return `<div class="hist gone"><span><b>#${esc(String(e.id).slice(0, 8))}</b><span class="muted">${esc(when)}</span></span>${moneyEl(e.total)}</div>`;
+    const short = esc(String(e.id).slice(0, ORDER_ID_SHOWN));
+    if (r.status !== 'fulfilled') return `<div class="hist gone"><span><b>#${short}</b><span class="muted">${esc(when)}</span></span>${moneyEl(e.total)}</div>`;
     const o = r.value;
-    return `<button type="button" class="hist" data-o="${i}"><span><b>#${esc(String(o.id).slice(0, 8))}</b>
+    return `<button type="button" class="hist" data-o="${i}"><span><b>#${short}</b>
       <span class="muted"><span data-t-st="${esc(o.status)}"></span> · ${esc(when)}</span></span>${moneyEl(o.total ?? e.total)}</button>`;
   }).join('');
   retranslate(host); repaintMoney(host);

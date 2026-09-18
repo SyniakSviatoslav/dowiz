@@ -2,10 +2,13 @@
 //
 // The three questions a price cannot answer -- what is in it, how much of it
 // there is, what it does to the day -- each get a line ONLY when the venue has
-// answered. Ingredients come from the venue's own list; weight, calories,
-// protein, fat and carbohydrates print when declared and are absent when not,
-// because "0 g" is a claim and "not declared" is the truth. Allergens are the
-// one line that must never be silent: three states, three treatments.
+// answered. Ingredients come from the venue's own list, in the customer's
+// language when the venue has one; calories, protein, fat and carbohydrates
+// print when declared and are absent when not, because "0 g" is a claim and
+// "not declared" is the truth. A figure the venue has not measured but the
+// menu carries as an estimate is printed with "≈" in front of it and a line
+// under the block saying so. Allergens are the one line that must never be
+// silent: three states, three treatments.
 //
 // The add control is a snap. The price is an integer written as text and the
 // quantity is a number; neither ever tweens.
@@ -14,6 +17,16 @@ import { state, addLine, lineUnit, moneyEl, money, on, allergenName } from '/sto
 import { t, tagName } from '/store/i18n.js';
 import { $, $$, esc, icon, sheet, closeSheet, fallbackArt, toast } from '/store/ui.js';
 import { seaEvent } from '/store/sea.js';
+
+/// The Sea's answer to a dish being added: a small pulse from the sheet, a
+/// smaller one from a card. Numbers are particle counts, not milliseconds.
+const SEA_PULSE_SHEET = 24;
+const SEA_PULSE_CARD = 18;
+/// The quantity control's bounds. Ninety-nine is what the order route accepts.
+const QTY_MIN = 1;
+const QTY_MAX = 99;
+/// The prefix on every figure the venue has not measured.
+const APPROX = '≈';
 
 let onAdded = null;
 export function onDishAdded(fn){ onAdded = fn; }
@@ -41,19 +54,25 @@ function groupMarkup(g){
   </fieldset>`;
 }
 
+/// The nutrition block: calories first, because that is the question, then
+/// the three macros, then the served weight, then the kitchen time.
 function factsMarkup(p){
   const n = p.nutrition || {};
+  const approx = !!n.approx;
+  const mark = approx ? APPROX + ' ' : '';
   const kcal = p.calories ?? n.kcal;
   const facts = [];
+  if (Number.isFinite(kcal)) facts.push([icon('flame'), 'kcal', `${mark}${kcal}`]);
+  if (Number.isFinite(n.protein)) facts.push(['', 'protein', `${mark}${n.protein} g`]);
+  if (Number.isFinite(n.fat)) facts.push(['', 'fat', `${mark}${n.fat} g`]);
+  if (Number.isFinite(n.carbs)) facts.push(['', 'carbs', `${mark}${n.carbs} g`]);
+  if (Number.isFinite(p.weightG)) facts.push([icon('bowl'), 'weight', `${mark}${p.weightG} g`]);
   if (Number.isFinite(p.cookingMin)) facts.push([icon('clock'), 'prep', `${p.cookingMin} ${t('etaMin')}`]);
-  if (Number.isFinite(p.weightG)) facts.push([icon('bowl'), 'weight', `${p.weightG} g`]);
-  if (Number.isFinite(kcal)) facts.push([icon('flame'), 'kcal', `${kcal}`]);
-  if (Number.isFinite(n.protein)) facts.push(['', 'protein', `${n.protein} g`]);
-  if (Number.isFinite(n.fat)) facts.push(['', 'fat', `${n.fat} g`]);
-  if (Number.isFinite(n.carbs)) facts.push(['', 'carbs', `${n.carbs} g`]);
   if (!facts.length) return '';
-  return `<div class="facts">${facts.map(([ic, key, val]) => `<div class="fact">
-    <span class="fact-v">${val}</span><span class="fact-k">${ic}<span data-t="${key}"></span></span></div>`).join('')}</div>`;
+  return `<h3 class="dsec" data-t="nutrition"></h3>
+    <div class="facts">${facts.map(([ic, key, val]) => `<div class="fact">
+      <span class="fact-v">${val}</span><span class="fact-k">${ic}<span data-t="${key}"></span></span></div>`).join('')}</div>
+    ${approx ? `<p class="fact-note muted" data-t="approx"></p>` : ''}`;
 }
 
 export function openDish(p){
@@ -72,23 +91,23 @@ export function openDish(p){
         ${tags.length ? `<div class="dtags">${tags.map(tg => `<span class="dtag" data-t-tag="${esc(tg)}">${esc(tagName(tg))}</span>`).join('')}</div>` : ''}
         <h2 class="dname">${esc(p.name)}</h2>
         ${p.description && !ingredients.length ? `<p class="muted ddesc">${esc(p.description)}</p>` : ''}
-        ${factsMarkup(p)}
         ${ingredients.length ? `<h3 class="dsec" data-t="ingredients"></h3>
           <ul class="ings">${ingredients.map(i => `<li>${esc(i)}</li>`).join('')}</ul>` : ''}
         ${allergenLine(p)}
+        ${factsMarkup(p)}
         ${groups.map(groupMarkup).join('')}
         <p id="derr" class="err" hidden></p>
         <button class="btn btn-ghost mb-2" id="dar" hidden>${icon('cube-3d-sphere')}<span data-t="onTable"></span></button>
         <p id="darNote" class="geo" hidden></p>
       </div>
       <div class="dfoot">
-        <span class="qty"><button type="button" id="dm" aria-label="−">−</button><span id="dq">1</span><button type="button" id="dp" aria-label="+">+</button></span>
+        <span class="qty"><button type="button" id="dm" aria-label="−">${icon('minus')}</button><span id="dq">1</span><button type="button" id="dp" aria-label="+">${icon('plus')}</button></span>
         <button class="btn dadd" id="dadd"><span data-t="add"></span><span class="money" id="dprice" data-money="${p.price | 0}">${money(p.price)}</span></button>
       </div>
     </div>`, { name: 'dish' });
   $('#dback').onclick = closeSheet;
   bindAr(p);
-  let q = 1;
+  let q = QTY_MIN;
 
   const chosen = () => $$('.mgroup input:checked', $('#sheetIn'));
   const repriceAndCheck = () => {
@@ -110,12 +129,12 @@ export function openDish(p){
     add.disabled = Boolean(problem);
   };
   $('#sheetIn').addEventListener('change', e => { if (e.target.closest('.mgroup')) repriceAndCheck(); });
-  $('#dm').onclick = () => { q = Math.max(1, q - 1); $('#dq').textContent = q; repriceAndCheck(); };
-  $('#dp').onclick = () => { q = Math.min(99, q + 1); $('#dq').textContent = q; repriceAndCheck(); };
+  $('#dm').onclick = () => { q = Math.max(QTY_MIN, q - 1); $('#dq').textContent = q; repriceAndCheck(); };
+  $('#dp').onclick = () => { q = Math.min(QTY_MAX, q + 1); $('#dq').textContent = q; repriceAndCheck(); };
   $('#dadd').onclick = () => {
     const mods = chosen().map(el => el.value);
     addLine(p.id, mods, q);
-    seaEvent('order_created', 24);
+    seaEvent('order_created', SEA_PULSE_SHEET);
     toast(`${p.name} · ${q}`);
     onAdded?.(p, q);
     closeSheet();
@@ -130,7 +149,7 @@ export function quickAdd(p){
   const groups = Array.isArray(p.modifierGroups) ? p.modifierGroups : [];
   if (groups.some(g => (g.min | 0) >= 1)) return openDish(p);
   addLine(p.id, [], 1);
-  seaEvent('order_created', 18);
+  seaEvent('order_created', SEA_PULSE_CARD);
   onAdded?.(p, 1);
 }
 

@@ -8,11 +8,18 @@
 // language switch rewrites text by product id. Nothing is rebuilt until the
 // venue is reloaded.
 //
-// The card is the Wolt shape: a full-width photograph, four by three, corners
-// rounded, the price on the photo in the money face, the name and one line of
-// what is in it beneath, the add control in reach of a thumb.
+// The card: a full-width photograph, four by three, the price on the photo in
+// the money face, the name in the venue's display face beneath, one line of
+// what is in it, the approximate calories, and the add control in reach of a
+// thumb. A dish with no photograph wears the venue's own mark.
+//
+// THE SEARCH BAR IS A SEARCH BAR. The allergen filter and the "available
+// only" checkbox sat in it and pushed the tags off the screen; a customer
+// looking for salmon saw a warning triangle and a checkbox. Allergens moved
+// to the language sheet, where diet belongs beside language; sold-out dishes
+// are already marked on the card and do not need a second control.
 
-import { state, findProduct, normalise, hiddenBecause, ALLERGENS, allergenName, saveAvoid, moneyEl } from '/store/state.js';
+import { state, findProduct, normalise, hiddenBecause, saveAvoid, moneyEl } from '/store/state.js';
 import { t, tagName, lang } from '/store/i18n.js';
 import { $, $$, esc, icon, fallbackArt, paintFallbacks, spread, debounce } from '/store/ui.js';
 import { heroMarkup } from '/store/venue.js';
@@ -27,20 +34,47 @@ const TAG_ICON = {
 // Tags that mirror a category heading are noise in the rail: the customer has
 // the category rail for those.
 const TAG_SKIP = new Set(['sets', 'bowls', 'soups', 'drinks', 'freskuese', 'kafeteria', 'lengje-frutash', 'alkool', 'birra']);
+/// The sort orders the customer can choose; `pop` is the venue's own order.
+const SORTS = ['pop', 'low', 'high', 'az'];
+/// How many cards spread in on a filter change or a category tap: the first
+/// screenful and a little more. The rest simply appear.
+const SPREAD_ON_FILTER = 24;
+const SPREAD_ON_TAP = 16;
+/// The rail stops following the scroll for this long after a tap, so the chip
+/// the customer chose stays lit while the page glides to it.
+const SPY_PAUSE_MS = 700;
+/// Typing is local, so the search runs on every keystroke; this only coalesces
+/// a fast typist's frames, never waits for a server.
+const SEARCH_DEBOUNCE_MS = 60;
+/// A focused search field a moment after the scroll to it has started, so the
+/// keyboard rises where the field will be.
+const FOCUS_AFTER_SCROLL_MS = 350;
+/// The prefix on every figure the venue has not measured. A customer asked for
+/// "approximately how many calories" and gets the word "approximately" in the
+/// number itself, not a footnote.
+const APPROX = '≈';
 
 let openDishFn = null;
 export function onOpenDish(fn){ openDishFn = fn; }
 let onAdd = null;
 export function onQuickAdd(fn){ onAdd = fn; }
 
+/// The calorie figure for a card, or null. Approximate figures carry the mark.
+export function kcalText(p){
+  const n = p.nutrition || {};
+  const kcal = p.calories ?? n.kcal;
+  if (!Number.isFinite(kcal)) return null;
+  return `${n.approx ? APPROX + ' ' : ''}${kcal}`;
+}
+
 function card(p, catId){
   const out = !p.available;
   const tags = Array.isArray(p.tags) ? p.tags : [];
   const facts = [];
+  const kcal = kcalText(p);
+  if (kcal) facts.push(`${icon('flame')}${kcal} <span data-t="kcal"></span>`);
+  if (Number.isFinite(p.weightG)) facts.push(`${p.nutrition?.approx ? APPROX + ' ' : ''}${p.weightG} g`);
   if (Number.isFinite(p.cookingMin)) facts.push(`${icon('clock')}${p.cookingMin} <span data-t="etaMin"></span>`);
-  if (Number.isFinite(p.weightG)) facts.push(`${p.weightG} g`);
-  const kcal = p.calories ?? p.nutrition?.kcal;
-  if (Number.isFinite(kcal)) facts.push(`${kcal} <span data-t="kcal"></span>`);
   return `<article class="card ${out ? 'sold-out' : ''}" data-p="${esc(p.id)}" data-cat="${esc(catId)}"
       data-price="${p.price | 0}" data-avail="${out ? 0 : 1}" data-tags="${esc(tags.join(' '))}"
       data-search="${esc(normalise(`${p.name} ${p.description || ''}`))}" data-sort="${p.sortOrder | 0}">
@@ -88,22 +122,9 @@ function filtersMarkup(cats){
         ${icon('category')}<span data-t="all"></span></button>
       ${tags.map(tg => `<button type="button" class="tag ${state.tag === tg ? 'on' : ''}" data-tag="${esc(tg)}" aria-pressed="${state.tag === tg}">
         ${TAG_ICON[tg] ? icon(TAG_ICON[tg]) : '<span class="tag-dot"></span>'}<span data-t-tag="${esc(tg)}"></span></button>`).join('')}
-      ${ALLERGENS.length ? `<button type="button" class="tag ${state.avoid?.length ? 'on warn' : ''}" id="avoidGo"
-          aria-expanded="${state.avoidOpen ? 'true' : 'false'}" aria-controls="avoidBox">
-        ${icon('alert-circle')}<span><span data-t="avoid"></span><span id="avoidN">${state.avoid?.length ? ` · ${state.avoid.length}` : ''}</span></span></button>` : ''}
-      <label class="tag chk"><input type="checkbox" id="availOnly" ${state.availOnly ? 'checked' : ''}><span data-t="onlyAvail"></span></label>
       <label class="tag sel">${icon('filter')}<select id="sort" data-t-attr="aria-label:sortBy">
-        <option value="pop" ${state.sort === 'pop' ? 'selected' : ''} data-t="sortPop"></option>
-        <option value="low" ${state.sort === 'low' ? 'selected' : ''} data-t="sortLow"></option>
-        <option value="high" ${state.sort === 'high' ? 'selected' : ''} data-t="sortHigh"></option>
-        <option value="az" ${state.sort === 'az' ? 'selected' : ''} data-t="sortAz"></option>
+        ${SORTS.map(s => `<option value="${s}" ${state.sort === s ? 'selected' : ''} data-t="sort${s[0].toUpperCase()}${s.slice(1)}"></option>`).join('')}
       </select></label>
-    </div>
-    <div class="avoid" id="avoidBox" ${state.avoidOpen ? '' : 'hidden'}>
-      <p class="avoid-h" data-t="avoidHint"></p>
-      <div class="avoid-in">${ALLERGENS.map(([code]) => `<button type="button" class="chip ${state.avoid?.includes(code) ? 'on' : ''}"
-         data-avoid="${code}" aria-pressed="${state.avoid?.includes(code) ? 'true' : 'false'}">${esc(allergenName(code))}</button>`).join('')}</div>
-      <p class="avoid-h" id="avoidCount"></p>
     </div>
   </div>`;
 }
@@ -138,7 +159,6 @@ export function applyFilters({ animate = false } = {}){
     for (const el of cards) {
       const p = findProduct(el.dataset.p);
       let ok = !!p;
-      if (ok && state.availOnly && el.dataset.avail !== '1') ok = false;
       if (ok && state.tag && !(` ${el.dataset.tags} `).includes(` ${state.tag} `)) ok = false;
       if (ok) { const why = hiddenBecause(p); if (why) { hidden[why]++; ok = false; } }
       if (ok && terms.length) {
@@ -150,16 +170,12 @@ export function applyFilters({ animate = false } = {}){
     }
     // Sort by reordering nodes. 'pop' is the venue's own order; a restaurant
     // arranges its menu deliberately and we should not overrule it.
-    if (state.sort !== 'pop') {
-      const key = state.sort === 'low' ? (a, b) => a.dataset.price - b.dataset.price
-        : state.sort === 'high' ? (a, b) => b.dataset.price - a.dataset.price
-        : (a, b) => findProduct(a.dataset.p).name.localeCompare(findProduct(b.dataset.p).name, lang);
-      const wrap = sec.querySelector('.cards');
-      for (const el of [...cards].sort(key)) wrap.appendChild(el);
-    } else {
-      const wrap = sec.querySelector('.cards');
-      for (const el of [...cards].sort((a, b) => a.dataset.sort - b.dataset.sort)) wrap.appendChild(el);
-    }
+    const key = state.sort === 'low' ? (a, b) => a.dataset.price - b.dataset.price
+      : state.sort === 'high' ? (a, b) => b.dataset.price - a.dataset.price
+      : state.sort === 'az' ? (a, b) => findProduct(a.dataset.p).name.localeCompare(findProduct(b.dataset.p).name, lang)
+      : (a, b) => a.dataset.sort - b.dataset.sort;
+    const wrap = sec.querySelector('.cards');
+    for (const el of [...cards].sort(key)) wrap.appendChild(el);
     sec.hidden = n === 0;
     const rc = $(`.rail-chip[data-c="${CSS.escape(sec.dataset.cat)}"]`);
     if (rc) rc.hidden = n === 0;
@@ -167,29 +183,27 @@ export function applyFilters({ animate = false } = {}){
     shown += n;
   }
   $('#noHits').hidden = shown > 0;
+  // The count of what the allergen filter hid, wherever that panel is open.
   const count = $('#avoidCount');
   if (count) {
     const avoidOn = state.avoid?.length;
     count.hidden = !avoidOn;
     if (avoidOn) count.innerHTML = `${hidden.contains} ${esc(t('avoidOn'))}${hidden.undeclared ? `, ${hidden.undeclared} ${esc(t('avoidUnknown'))}` : ''}
       · <button type="button" class="linky" id="avoidClear">${esc(t('clearAvoid'))}</button>`;
-    const clr = $('#avoidClear'); if (clr) clr.onclick = () => { state.avoid = []; saveAvoid(); syncAvoidChips(); applyFilters(); };
+    const clr = $('#avoidClear'); if (clr) clr.onclick = () => {
+      state.avoid = []; saveAvoid();
+      for (const b of $$('[data-avoid]')) { b.classList.remove('on'); b.setAttribute('aria-pressed', 'false'); }
+      applyFilters();
+    };
   }
-  const n = $('#avoidN'); if (n) n.textContent = state.avoid?.length ? ` · ${state.avoid.length}` : '';
-  $('#avoidGo')?.classList.toggle('on', !!state.avoid?.length);
-  $('#avoidGo')?.classList.toggle('warn', !!state.avoid?.length);
-  if (animate) spread($$('.card:not([hidden])').slice(0, 24));
-}
-
-function syncAvoidChips(){
-  for (const b of $$('[data-avoid]')) {
-    const onn = state.avoid.includes(b.dataset.avoid);
-    b.classList.toggle('on', onn); b.setAttribute('aria-pressed', String(onn));
-  }
+  // The header says when a diet filter is on, since the control is one sheet away.
+  $('#langBtn')?.classList.toggle('warn', !!state.avoid?.length);
+  if (animate) spread($$('.card:not([hidden])').slice(0, SPREAD_ON_FILTER));
 }
 
 // ── scroll-spy: the rail follows the reader ─────────────────────────────────
 let spyIO = null;
+let spyPaused = false;
 function spy(){
   if (spyIO) spyIO.disconnect();
   const chips = $$('.rail-chip');
@@ -207,7 +221,6 @@ function spy(){
   }, { rootMargin: '-140px 0px -60% 0px', threshold: [0, 0.1] });
   for (const s of $$('.sec')) spyIO.observe(s);
 }
-let spyPaused = false;
 
 function bind(){
   const app = $('#app');
@@ -226,8 +239,8 @@ function bind(){
       sec.scrollIntoView({ block: 'start', behavior: 'smooth' });
       // The section's cards SPREAD from the tap: the category change is a
       // re-diffusion, not a page swap.
-      spread($$('.card:not([hidden])', sec).slice(0, 16));
-      setTimeout(() => { spyPaused = false; }, 700);
+      spread($$('.card:not([hidden])', sec).slice(0, SPREAD_ON_TAP));
+      setTimeout(() => { spyPaused = false; }, SPY_PAUSE_MS);
       return;
     }
     const tag = e.target.closest('[data-tag]');
@@ -237,35 +250,19 @@ function bind(){
       applyFilters({ animate: true });
       return;
     }
-    const av = e.target.closest('[data-avoid]');
-    if (av) {
-      const code = av.dataset.avoid;
-      state.avoid = state.avoid.includes(code) ? state.avoid.filter(c => c !== code) : [...state.avoid, code];
-      saveAvoid(); syncAvoidChips(); applyFilters();
-      return;
-    }
-    if (e.target.closest('#avoidGo')) {
-      state.avoidOpen = !state.avoidOpen;
-      $('#avoidBox').hidden = !state.avoidOpen;
-      $('#avoidGo').setAttribute('aria-expanded', String(state.avoidOpen));
-      return;
-    }
     if (e.target.closest('#qx')) { state.q = ''; $('#q').value = ''; $('#qx').hidden = true; applyFilters(); $('#q').focus(); return; }
     if (e.target.closest('#qreset')) {
-      state.q = ''; state.tag = null; state.availOnly = false; state.sort = 'pop';
-      $('#q').value = ''; $('#qx').hidden = true; $('#availOnly').checked = false; $('#sort').value = 'pop';
+      state.q = ''; state.tag = null; state.sort = SORTS[0];
+      $('#q').value = ''; $('#qx').hidden = true; $('#sort').value = SORTS[0];
       for (const b of $$('[data-tag]')) { const onn = !b.dataset.tag; b.classList.toggle('on', onn); b.setAttribute('aria-pressed', String(onn)); }
       applyFilters({ animate: true });
       return;
     }
   });
-  // Search runs on every keystroke because it is local; debounced only to
-  // coalesce a fast typist's frames, never to wait for a server.
   const q = $('#q');
-  const run = debounce(() => { state.q = q.value; $('#qx').hidden = !state.q; applyFilters(); }, 60);
+  const run = debounce(() => { state.q = q.value; $('#qx').hidden = !state.q; applyFilters(); }, SEARCH_DEBOUNCE_MS);
   q.addEventListener('input', run);
   $('#sort').onchange = e => { state.sort = e.target.value; applyFilters({ animate: true }); };
-  $('#availOnly').onchange = e => { state.availOnly = e.target.checked; applyFilters(); };
 }
 
 /// The venue's own words in a new language, patched by id. Names, descriptions
@@ -289,5 +286,5 @@ export function patchTexts(cats){
   applyFilters();
 }
 
-export const focusSearch = () => { $('#find')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); setTimeout(() => $('#q')?.focus(), 350); };
+export const focusSearch = () => { $('#find')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); setTimeout(() => $('#q')?.focus(), FOCUS_AFTER_SCROLL_MS); };
 export const scrollTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });

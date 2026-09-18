@@ -973,3 +973,25 @@ explicit go-ahead, because `--provision` creates a billed machine.
 
 **Branch:** `bebop/main-2026-09-15` @ fcde986. No deploy yet.
 Counts: 136 dowiz-hub, 50 native-spa-server lib, 32 operator-loop integration.
+
+## 2026-09-18 — storefront: Dubin & Sushi, staged; three languages; the map works
+
+**Deployed** (three deploys; the last is `57925822`): the Worker had been a day behind
+its source, which is why translations, logo and hours "did not work". Verified live with
+`_probe_ui.mjs`, `_probe_map.mjs` and `ONLY=render node e2e/kit-regression/run.mjs` (PASS).
+
+- `content_i18n` join failed SILENTLY: 187 binds in one `IN()`, D1's limit is 100. Chunked
+  (`D1_MAX_BINDS`), loud on failure, `warnings[]` on the menu payload. Categories, names,
+  descriptions and `ingredients` (JSON array field) now translate; `POST /api/owner/i18n` is
+  the bulk write side. NOTE: the table has no venue column.
+- Map pick: `maplibre-gl.js` is UMD; `import()` had no default. `loadMapLib()` in `ui.js`.
+  The stand now reads the CSP from `public/_headers` instead of a hand copy.
+- Venue: name "Dubin & Sushi", `delivery_fee` 300 on BOTH hubs (same restaurant); brand paper
+  `#0b1717`, gold `#c9a35a`. `update_location` grew name/fees/`crypto_wallets`.
+- `enrich_menu.py`: tags, uk/en names for 88 Albanian-named drinks, approximate nutrition
+  (`nutrition.approx=true`, rendered "≈") on 163 dishes, served weight.
+- Payments: hub-sent `location.payments`; kinds `cash|card|apple_pay|google_pay|crypto`.
+  **Open:** no `STRIPE_*` secrets and no wallets are configured, so only cash shows.
+- Storefront: language and currency are two controls; allergens moved to the language
+  sheet; "available only" removed; pickup hides address/tip/courier note; no-photo dish
+  wears the logo; hero = mark in a drawn ring + tracked capitals + rule; film grain.

@@ -73,6 +73,11 @@ pub struct PlaceIn {
     /// whole way so it never lands in the venue's takings.
     #[serde(default)]
     pub tip: Option<i64>,
+    /// For `payment: "crypto"`: which of the venue's wallets the customer
+    /// will pay into, by symbol (`USDT`, `BTC`). Resolved against the venue's
+    /// own list; the address never comes from the browser.
+    #[serde(default)]
+    pub crypto_symbol: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -259,30 +264,45 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 
     let mut i18n: std::collections::HashMap<(String, String), String> =
         std::collections::HashMap::new();
+    // What could not be translated and why. A failure here must not take the
+    // menu down -- the venue's own words are still a menu -- but it must not
+    // look like "no translations exist" either, which is exactly how 146
+    // stored rows were served as Albanian for a day.
+    let mut warnings: Vec<String> = Vec::new();
     if want_locale != loc.default_locale && !want_locale.is_empty() {
         let mut ids: Vec<String> = products.iter().map(|(id, _)| id.clone()).collect();
         ids.extend(cat_meta.iter().map(|(id, _, _)| id.clone()));
-        if !ids.is_empty() {
-            // One statement, one round trip. The placeholder list is built from
-            // the catalogue's own ids, never from anything a caller sent.
-            let marks = (2..ids.len() + 2)
+        // D1 refuses a statement with more than `D1_MAX_BINDS` bound values,
+        // and a 165-dish catalogue plus its headings is 186 of them. The ids
+        // go in chunks of what one statement can carry, one bind kept back
+        // for the locale. Built from the catalogue's own ids, never from
+        // anything a caller sent.
+        for chunk in ids.chunks(D1_MAX_BINDS - 1) {
+            let marks = (2..chunk.len() + 2)
                 .map(|i| format!("?{i}"))
                 .collect::<Vec<_>>()
                 .join(",");
             let sql = format!(
                 "SELECT entity_id, field, value FROM content_i18n \
-                 WHERE locale = ?1 AND field IN ('name','description') AND entity_id IN ({marks})"
+                 WHERE locale = ?1 AND field IN ('name','description','ingredients') \
+                 AND entity_id IN ({marks})"
             );
             let mut binds: Vec<worker::wasm_bindgen::JsValue> =
                 vec![want_locale.clone().into()];
-            binds.extend(ids.into_iter().map(|i| i.into()));
-            if let Ok(stmt) = db.prepare(&sql).bind(&binds) {
-                if let Ok(rows) = stmt.all().await {
-                    if let Ok(list) = rows.results::<I18nRow>() {
-                        for r in list {
-                            i18n.insert((r.entity_id, r.field), r.value);
-                        }
+            binds.extend(chunk.iter().map(|i| i.clone().into()));
+            let rows = match db.prepare(&sql).bind(&binds) {
+                Ok(stmt) => stmt.all().await,
+                Err(e) => Err(e),
+            };
+            match rows.and_then(|r| r.results::<I18nRow>()) {
+                Ok(list) => {
+                    for r in list {
+                        i18n.insert((r.entity_id, r.field), r.value);
                     }
+                }
+                Err(e) => {
+                    console_error!("menu i18n {want_locale}: {e}");
+                    warnings.push(format!("translations unavailable: {e}"));
                 }
             }
         }
@@ -291,6 +311,18 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         match i18n.get(&(id.to_string(), field.to_string())) {
             Some(v) => json!(v),
             None => fallback,
+        }
+    };
+    // A list field: the stored value is a JSON array of strings. One that does
+    // not parse as such falls back to the venue's own list rather than to a
+    // one-element list holding the raw text.
+    let translated_list = |id: &str, field: &str, fallback: Value| -> Value {
+        match i18n
+            .get(&(id.to_string(), field.to_string()))
+            .and_then(|v| serde_json::from_str::<Value>(v).ok())
+        {
+            Some(Value::Array(a)) if a.iter().all(|x| x.is_string()) => Value::Array(a),
+            _ => fallback,
         }
     };
 
@@ -347,7 +379,8 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
                         // these, so a venue that has declared none gets no
                         // filter rather than an empty one.
                         "tags": p.get("tags").cloned().unwrap_or(Value::Null),
-                        "ingredients": p.get("ingredients").cloned().unwrap_or(Value::Null),
+                        "ingredients": translated_list(id, "ingredients",
+                            p.get("ingredients").cloned().unwrap_or(Value::Null)),
                         "weightG": p.get("weightG").cloned().unwrap_or(Value::Null),
                         "nutrition": p.get("nutrition").cloned().unwrap_or(Value::Null),
                         "calories": p.get("calories").cloned().unwrap_or(Value::Null),
@@ -448,10 +481,31 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         .secret("TELEGRAM_BOT_USERNAME")
         .map(|v| Value::from(v.to_string()))
         .unwrap_or(Value::Null);
+    // ── HOW THIS VENUE CAN BE PAID ──
+    //
+    // One block, decided here, so the storefront never offers a rail that
+    // cannot complete. Cash is always on. Card, Apple Pay and Google Pay are
+    // all the Stripe rail -- the wallets are the Payment Element's own tabs --
+    // and exist exactly when the publishable key does. Crypto is the venue's
+    // own wallets, declared by the owner (`payments.crypto` on the venue
+    // record): a network, a symbol and an address each, and nothing is
+    // invented for a venue that declared none.
+    let stripe_on = ctx.env.secret("STRIPE_PUBLISHABLE_KEY").is_ok();
+    let crypto = payment_wallets(&raw);
+    location["payments"] = json!({
+        "cash": true,
+        "card": stripe_on,
+        "applePay": stripe_on,
+        "googlePay": stripe_on,
+        "crypto": crypto,
+    });
 
     let out = json!({
         "location": location,
         "categories": cats,
+        // Empty when everything the menu needed was read. Anything here is a
+        // degraded answer and says so, rather than a full one that is wrong.
+        "warnings": warnings,
         // The PUBLISHABLE key only. It is designed to be public -- it can create
         // a payment method and nothing else -- and the browser needs it to mount
         // the Payment Element. Absent when the card rail is off, so the storefront
@@ -470,6 +524,37 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     }
     Ok(res)
 }
+
+/// The venue's crypto wallets, validated on the way OUT as well as in: only
+/// entries with a network, a symbol and a non-empty address are ever shown.
+pub(crate) fn payment_wallets(raw: &Value) -> Vec<Value> {
+    raw.pointer("/payments/crypto")
+        .and_then(Value::as_array)
+        .map(|list| {
+            list.iter()
+                .filter(|w| {
+                    ["network", "symbol", "address"].iter().all(|k| {
+                        w.get(k).and_then(Value::as_str).map_or(false, |s| !s.trim().is_empty())
+                    })
+                })
+                .map(|w| {
+                    json!({
+                        "network": w["network"], "symbol": w["symbol"], "address": w["address"],
+                        "note": w.get("note").cloned().unwrap_or(Value::Null)
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The most values one D1 statement may bind. Cloudflare's documented limit
+/// is 100; a statement over it is refused at prepare time.
+const D1_MAX_BINDS: usize = 100;
+
+/// Every way an order can say it will be paid. Anything else is refused at
+/// the boundary rather than stored as a word the kitchen has to interpret.
+const PAYMENT_KINDS: [&str; 5] = ["cash", "card", "apple_pay", "google_pay", "crypto"];
 
 /// `POST /api/public/locations/:slug/orders`
 pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
@@ -625,7 +710,38 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
         "fee": fee
     });
     let payment_kind = body.payment.clone().unwrap_or_else(|| "cash".into());
+    if !PAYMENT_KINDS.contains(&payment_kind.as_str()) {
+        return Response::error("unknown payment method", 400);
+    }
+    // A rail the venue does not have is refused BEFORE the order exists, so a
+    // crypto order at a venue with no wallet never sits in the queue waiting
+    // for money that has nowhere to go.
+    let raw_loc: Value = serde_json::from_str(&loc_json).unwrap_or(json!({}));
+    let wallets = payment_wallets(&raw_loc);
+    let stripe_on = ctx.env.secret("STRIPE_PUBLISHABLE_KEY").is_ok();
+    match payment_kind.as_str() {
+        "crypto" if wallets.is_empty() => {
+            return Response::error("this venue does not take crypto", 409)
+        }
+        "card" | "apple_pay" | "google_pay" if !stripe_on => {
+            return Response::error("card payments are not configured", 409)
+        }
+        _ => {}
+    }
     envelope["payment"] = json!(payment_kind);
+    // Which wallet the customer chose to pay into, when there is a choice. The
+    // symbol is enough: the address is looked up from the venue's own list, so
+    // nothing a browser sent can redirect the money.
+    if payment_kind == "crypto" {
+        let want = body.crypto_symbol.as_deref().map(str::trim).unwrap_or("");
+        let chosen = wallets
+            .iter()
+            .find(|w| w["symbol"].as_str() == Some(want))
+            .or_else(|| wallets.first())
+            .cloned()
+            .unwrap_or(Value::Null);
+        envelope["crypto"] = json!({ "wallet": chosen, "paid": false });
+    }
 
     let phone_hash = auth::sha256_hex(&body.contact.phone);
     // ── INGREDIENTS ARE RESERVED BEFORE THE ORDER EXISTS ──
@@ -771,7 +887,9 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     if let Some(tok) = customer_token {
         out["access_token"] = json!(tok);
     }
-    if payment_kind == "card" {
+    // Apple Pay and Google Pay ARE the card rail: the Payment Element shows
+    // them as tabs on the same intent, and the intent is what a wallet pays.
+    if matches!(payment_kind.as_str(), "card" | "apple_pay" | "google_pay") {
         match crate::stripe::create_intent(&ctx.env, &id, total, &loc.currency_code).await {
             Ok((intent_id, client_secret)) => {
                 out["payment_intent"] = json!(intent_id);

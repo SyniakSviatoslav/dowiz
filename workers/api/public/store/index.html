@@ -26,18 +26,24 @@
 <!-- SEA — the dowiz ambient layer. It lives BEHIND the Sheet and never carries
      text, a price or a decision: those are Sheet-owned by contract. The veil
      above it keeps the top and bottom of the field darker than the middle, so
-     the header and the bar read as chrome and the cards sit in the light. -->
+     the header and the bar read as chrome and the cards sit in the light. The
+     grain is a film texture over everything: it is what makes a flat dark
+     paper read as velvet rather than as a screen. -->
 <canvas id="sea" aria-hidden="true"></canvas>
 <div class="veil" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
 <div id="offline" class="offline" hidden></div>
 
 <header class="top"><div class="wrap top-in">
   <!-- The mark is hidden until the venue has one; the name is always there
        behind it, so a logo that does not load leaves a readable header. -->
-  <img class="brand-mark" id="brandMark" alt="" width="36" height="36" hidden>
+  <img class="brand-mark" id="brandMark" alt="" width="40" height="40" hidden>
   <span class="brand" id="brandName">…</span>
-  <button class="icon-btn glass" id="prefsBtn" type="button" data-t-attr="aria-label:prefs title:prefs">
+  <!-- Two decisions, two controls: what I read in, what I count in. -->
+  <button class="icon-btn glass" id="langBtn" type="button" data-t-attr="aria-label:language title:language">
     <i class="ti ti-language" aria-hidden="true"></i></button>
+  <button class="icon-btn glass cur-btn" id="curBtn" type="button" data-t-attr="aria-label:currency title:currency">
+    <i class="ti ti-coin" aria-hidden="true"></i><span class="cur-code money" id="curCode"></span></button>
 </div></header>
 
 <main id="app" class="wrap" aria-live="polite"></main>

@@ -16,15 +16,24 @@ import { openVenue, refreshHero } from '/store/venue.js';
 import { mountNav, onChangeLang } from '/store/nav.js';
 import { initSea, seaArrive } from '/store/sea.js';
 
+/// How many placeholder cards the skeleton shows while the menu loads.
+const SKELETON_CARDS = 3;
+
 const skeleton = () => `
-  <div class="hero"><div class="skel skel-eyebrow"></div><div class="skel skel-title"></div><div class="skel skel-chips"></div></div>
+  <div class="hero"><div class="skel skel-mark"></div><div class="skel skel-title"></div><div class="skel skel-chips"></div></div>
   <div class="skel skel-rail"></div>
-  <div class="cards">${'<div class="skel skel-card"></div>'.repeat(3)}</div>`;
+  <div class="cards">${'<div class="skel skel-card"></div>'.repeat(SKELETON_CARDS)}</div>`;
 
 async function fetchMenu(){
   const r = await fetch(`${API}/public/locations/${encodeURIComponent(SLUG)}/menu?locale=${lang}`);
   if (!r.ok) throw new Error('HTTP ' + r.status);
-  return r.json();
+  const d = await r.json();
+  // The key rides beside the location in the payload; the checkout reads it
+  // off the location. Carried across once, here, so no module has to know.
+  if (d.location && d.stripePublishableKey) d.location.stripePublishableKey = d.stripePublishableKey;
+  // A degraded answer says so on the console, where a developer looks.
+  if (Array.isArray(d.warnings) && d.warnings.length) console.warn('menu:', d.warnings.join('; '));
+  return d;
 }
 
 function paintHeader(L){
@@ -48,6 +57,8 @@ async function load(){
     buildMenu(state.cats);
     refreshBar();
     retranslate(document);
+    repaintMoney(document);
+    dispatchEvent(new Event('dw:money'));
     initSea().then(seaArrive);
     netState();
     returnFromCard();
