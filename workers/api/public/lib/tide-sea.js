@@ -1,8 +1,9 @@
 // The Sea -- an ink-wash ocean that develops with the order, in WebGL2.
 //
 // The "Tide over Bedrock" direction, drawn the way the venue's own mark is
-// drawn: in ink on dark paper. Particles are the brush's grain, laid across
-// a dispersive sea of seven wave components (deep water, w = sqrt(g k)); as
+// drawn: in ink on dark paper, and seen FLAT -- the whole surface is water,
+// there is no horizon and no angle. Particles are the brush's grain, laid
+// across a dispersive sea of seven wave components (deep water, w = sqrt(g k)); as
 // the order matures the sea DEVELOPS the way a wind sea does, from weak
 // scattered ripples to a strong aligned swell, and its crests go from the
 // warm of dawn to the gold of the mark. A sun -- the seal's red disc -- rises
@@ -78,14 +79,14 @@ const VERT = '#version 300 es\n' + HASH + '\n' + [
   '   v_col=vec4(mix(u_sage,u_gold,step(0.72,h2)), 0.9*u_alpha*fade);',
   '   v_kind=1.0; v_rot=u_time*mix(0.5,1.3,h3)+h1*6.28;',
   '   gl_Position=vec4(x, y*0.92, 0.0, 1.0); gl_PointSize=mix(9.0,15.0,h2)*u_dpr*u_size; return; }',
-  // ── the brush's grain across the sea ──
-  ' float z=hash11(id*0.00097); float hx=hash11(id*0.0011)*2.0-1.0; float jit=hash11(id*0.0017+3.1)*2.0-1.0;',
-  ' vec2 b; b.x=hx*mix(0.62,1.85,z); b.y=mix(0.70,-1.22,pow(z,1.22))+jit*0.024;',
+  // ── the brush's grain across the whole surface, seen flat ──
+  ' float z=hash11(id*0.00097); float hx=hash11(id*0.0011)*2.0-1.0; float hy=hash11(id*0.0017+3.1)*2.0-1.0;',
+  ' vec2 b=vec2(hx*1.5, hy*1.15);',                                                    // a little past every edge
   ' float breath=0.85+0.15*sin(u_time*0.10+1.3);',
   ' float degrade=(u_mode==5)?clamp(u_energy,0.0,1.0):0.0;',
-  ' float amp=breath*mix(0.30,1.30,z)*(1.0-0.72*degrade)*mix(0.40,1.55,grow);',
+  ' float amp=breath*mix(0.55,1.15,z)*(1.0-0.72*degrade)*mix(0.40,1.55,grow);',
   ' float warp=sin(b.x*2.1+u_time*0.18)*0.5+sin(b.y*2.6-u_time*0.13)*0.5;',
-  ' vec2 wp=vec2(b.x*1.10+warp*0.08, z*3.3+warp*0.05);',
+  ' vec2 wp=vec2(b.x*1.4+warp*0.08, b.y*1.6+warp*0.05);',
   ' float ang=grow*0.55; wp=mat2(cos(ang),-sin(ang),sin(ang),cos(ang))*wp;',      // the sea aligns as it grows
   ' amp*=0.70+0.30*sin(b.x*0.8+u_time*0.11)*cos(b.y*0.6-u_time*0.075+warp);',
   ' float en=u_energy; float dx=0.0,hgt=0.0,phz; const float G=0.30;',
@@ -105,19 +106,19 @@ const VERT = '#version 300 es\n' + HASH + '\n' + [
   '   if(R.w>0.001 && age>0.0 && age<3.6){ float d=distance(b,R.xy); float kk=9.0; float cg=0.5*sqrt(0.30/kk); float front=cg*age*3.0;',
   '     float omega=sqrt(0.30*kk+kk*kk*kk*0.0004); float pk=exp(-pow((d-front)/(0.15+age*0.05),2.0));',
   '     float ring=sin(d*kk-age*omega*3.0)*pk/sqrt(d+0.35)*exp(-age*1.05)*R.w; hgt+=ring*0.10; dx+=(d>1e-4?(b.x-R.x)/d:0.0)*ring*0.045; } }',
-  ' vec2 p; p.x=b.x+dx*mix(0.35,0.9,z)*0.6; p.y=b.y+hgt*mix(0.11,0.26,z);',
+  ' vec2 p=b+vec2(dx*0.5, hgt*0.12);',                                                  // the grain drifts with the wave
   ' float t=clamp(hgt*1.7+0.5,0.0,1.0);',
   ' vec3 hue=mix(u_warm,u_gold,smoothstep(0.12,0.85,u_phase));',                     // dawn → gold
   ' vec3 col=mix(INK, hue, t);',                                                       // troughs ink, crests lit
   ' if(u_mode==4 && hash11(id*1.3)<0.40) col=vec3(0.86,0.30,0.60);',                  // anomaly: solo magenta
-  ' col=mix(INK, col, mix(0.34,1.0,z));',                                              // deep-water absorption
+  ' col=mix(INK, col, mix(0.6,1.0,z));',                                               // the brush loads unevenly
   ' col=mix(col, vec3(0.42,0.40,0.36), degrade);',
   ' float crest=smoothstep(0.28,0.96,t);',
   ' float grain=mix(0.5,1.0,hash11(id*0.013+7.0));',                                  // the dry brush
-  ' float aB=(0.075+crest*0.5)*(0.80+0.20*breath)*(1.0+en*0.35)*mix(0.5,1.0,z)*grain;',
+  ' float aB=(0.075+crest*0.5)*(0.80+0.20*breath)*(1.0+en*0.35)*mix(0.7,1.0,z)*grain;',
   ' v_col=vec4(col, aB*u_alpha); v_kind=0.0; v_rot=0.0;',
   ' gl_Position=vec4(p.x*0.70, p.y*0.92, 0.0, 1.0);',
-  ' gl_PointSize=(0.75+crest*2.3+en*1.0)*u_dpr*u_size*mix(0.5,1.35,z); }',
+  ' gl_PointSize=(0.9+crest*2.4+en*1.0)*u_dpr*u_size*mix(0.7,1.3,z); }',
 ].join('\n');
 const FRAG = '#version 300 es\nprecision highp float;\nin vec4 v_col; in float v_kind; in float v_rot; out vec4 o;\n' +
   'void main(){ vec2 d=gl_PointCoord-0.5;' +
@@ -130,15 +131,15 @@ const FADE = '#version 300 es\nprecision highp float;\nuniform sampler2D u_prev;
 const COMP = '#version 300 es\nprecision highp float;\nuniform sampler2D u_src; uniform vec2 u_res; uniform float u_t,u_grow; uniform vec3 u_warm,u_gold; out vec4 o;\n' +
   'void main(){ vec2 uv=gl_FragCoord.xy/u_res; vec3 c=texture(u_src,uv).rgb; c=c/(c+vec3(0.64)); c=pow(c,vec3(0.85));' +
   // the sun: the seal's disc, rising with the order, behind the ink
-  ' vec2 su=vec2(0.5, mix(0.14,0.72,u_grow)); float ar=u_res.x/u_res.y; float dist=length((uv-su)*vec2(ar,1.0));' +
-  ' float R=0.085; float disc=smoothstep(R+0.005,R-0.008,dist); float halo=exp(-dist*dist*55.0)*0.32;' +
+  ' vec2 su=vec2(0.5, mix(0.30,0.80,u_grow)); float ar=u_res.x/u_res.y; float dist=length((uv-su)*vec2(ar,1.0));' +
+  ' float R=0.11; float disc=smoothstep(R+0.005,R-0.008,dist); float halo=exp(-dist*dist*40.0)*0.34;' +
   ' vec3 sun=mix(u_warm,u_gold,u_grow); c=mix(c, sun*0.9, disc*0.8*(1.0-c.g*0.5)); c+=sun*halo*(0.55+u_grow*0.45);' +
   // the sky's warmth at the top, the paper's at the bottom
   ' c+=vec3(0.06,0.045,0.022)*smoothstep(0.50,0.98,uv.y)*0.65;' +
   ' c+=vec3(0.03,0.028,0.02)*smoothstep(0.5,0.0,uv.y)*0.5;' +
   // the sun's path on the water
   ' float glint=exp(-pow((uv.x-0.5)/0.20,2.0))*(0.5+0.5*sin(uv.y*30.0-u_t*2.2+sin(uv.x*8.0)));' +
-  ' c+=sun*glint*smoothstep(0.22,0.7,uv.y)*(0.05+u_grow*0.05);' +
+  ' c+=sun*glint*smoothstep(0.1,0.7,uv.y)*(0.04+u_grow*0.05);' +
   ' float vig=smoothstep(1.45,0.30,length((uv-0.5)*vec2(1.02,1.2))); c*=mix(0.62,1.0,vig);' +
   ' o=vec4(c+vec3(0.02,0.022,0.024),1.0); }';
 

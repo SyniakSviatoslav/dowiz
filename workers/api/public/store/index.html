@@ -12,6 +12,15 @@
 <!-- ONE VENUE'S NAME WAS BAKED INTO EVERY VENUE'S PAGE. The real name arrives
      with the catalogue; what belongs here is the platform. -->
 <title>dowiz</title>
+<!-- The storefront installs as the venue's own app: the manifest is written
+     per venue by the Worker, and the icon links below are pointed at the
+     venue's mark the moment it arrives (app.js). -->
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" id="favicon" href="data:,">
+<link rel="apple-touch-icon" id="touchIcon" href="data:,">
 <!-- NO WEB FONTS, by design: the type pairs are system-resident, chosen by the
      venue's theme, and paint instantly on a Durrës 3G connection. -->
 <link rel="stylesheet" href="/lib/icons.css">
@@ -41,9 +50,9 @@
   <span class="brand" id="brandName">…</span>
   <!-- Two decisions, two controls: what I read in, what I count in. -->
   <button class="icon-btn glass" id="langBtn" type="button" data-t-attr="aria-label:language title:language">
-    <i class="ti ti-language" aria-hidden="true"></i></button>
+    <i class="ti ti-torii" aria-hidden="true"></i></button>
   <button class="icon-btn glass cur-btn" id="curBtn" type="button" data-t-attr="aria-label:currency title:currency">
-    <i class="ti ti-coin" aria-hidden="true"></i><span class="cur-code money" id="curCode"></span></button>
+    <i class="ti ti-coin-hole" aria-hidden="true"></i><span class="cur-code money" id="curCode"></span></button>
 </div></header>
 
 <main id="app" class="wrap" aria-live="polite"></main>

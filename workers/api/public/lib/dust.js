@@ -40,6 +40,14 @@ const SPARK_LIFE_S = 1.6;
 const ENERGY_EASE = 2.0;
 /// Frame budget: no more than thirty a second; the dust is slow by nature.
 const FRAME_MIN_MS = 33;
+/// Now and then a leaf falls across the page: how often, how big, how fast.
+const LEAF_EVERY_S_MIN = 7;
+const LEAF_EVERY_S_MAX = 16;
+const LEAF_LEN = 14;
+const LEAF_FALL = 26;
+const LEAF_DRIFT = 18;
+const LEAF_SPIN = 1.1;
+const LEAF_ALPHA = 0.55;
 
 function hexToRgb(hex){
   const n = parseInt(String(hex).replace('#', ''), 16);
@@ -50,6 +58,8 @@ export function createDust(){
   let canvas = null, ctx = null, W = 0, H = 0, DPR = 1;
   let motes = [], sparks = [];
   let rgb = [201, 163, 90];
+  let leafRgb = [138, 154, 123];
+  let leaves = [], nextLeafAt = 0;
   let energy = 1, energyTarget = 1;
   let last = 0, raf = 0, running = false, reduced = false;
 
@@ -83,6 +93,22 @@ export function createDust(){
       ctx.fillStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${glow.toFixed(3)})`;
       ctx.beginPath(); ctx.arc(x, m.y, m.r, 0, Math.PI * 2); ctx.fill();
     }
+    // a leaf, now and then
+    if (t >= nextLeafAt && energy > 0.5) {
+      nextLeafAt = t + LEAF_EVERY_S_MIN + Math.random() * (LEAF_EVERY_S_MAX - LEAF_EVERY_S_MIN);
+      leaves.push({ x: Math.random() * W, y: -LEAF_LEN, rot: Math.random() * Math.PI, ph: Math.random() * 6.28, gold: Math.random() < 0.3 });
+    }
+    leaves = leaves.filter(l => l.y < H + LEAF_LEN);
+    for (const l of leaves) {
+      l.y += LEAF_FALL * dt; l.x += Math.sin(t * 0.8 + l.ph) * LEAF_DRIFT * dt; l.rot += LEAF_SPIN * dt;
+      const c = l.gold ? rgb : leafRgb;
+      ctx.save(); ctx.translate(l.x, l.y); ctx.rotate(l.rot);
+      ctx.fillStyle = `rgba(${c[0]},${c[1]},${c[2]},${LEAF_ALPHA})`;
+      ctx.beginPath(); ctx.ellipse(0, 0, LEAF_LEN / 2, LEAF_LEN / 5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${LEAF_ALPHA})`; ctx.lineWidth = 0.6;
+      ctx.beginPath(); ctx.moveTo(-LEAF_LEN / 2, 0); ctx.lineTo(LEAF_LEN / 2, 0); ctx.stroke();
+      ctx.restore();
+    }
     sparks = sparks.filter(s => s.age < SPARK_LIFE_S);
     for (const s of sparks) {
       s.age += dt;
@@ -107,10 +133,11 @@ export function createDust(){
   const onVisible = () => { if (document.hidden) stop(); else if (!reduced) start(); };
 
   return {
-    init(el, { colour } = {}){
+    init(el, { colour, leaf } = {}){
       canvas = el; ctx = canvas.getContext('2d');
       if (!ctx) return false;
       if (colour) rgb = hexToRgb(colour);
+      if (leaf) leafRgb = hexToRgb(leaf);
       alloc();
       addEventListener('resize', onResize);
       document.addEventListener('visibilitychange', onVisible);

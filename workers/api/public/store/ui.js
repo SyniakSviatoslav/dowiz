@@ -37,7 +37,7 @@ const MAP_CSS = '/lib/map/maplibre-gl.css';
 // `name` tells the bottom navigation which tab to light and lets a re-open
 // (a cart quantity change re-drawing the cart) keep the sheet's scroll.
 let onClose = null;
-export function sheet(html, { name = null, keepScroll = false, attending = false } = {}){
+export function sheet(html, { name = null, keepScroll = false, attending = false, full = false } = {}){
   const box = $('#sheet'), inner = $('#sheetIn');
   const wasOpen = box.classList.contains('show');
   const top = keepScroll && wasOpen ? box.scrollTop : 0;
@@ -46,6 +46,7 @@ export function sheet(html, { name = null, keepScroll = false, attending = false
   retranslate(inner);
   repaintMoney(inner);
   box.classList.toggle('attending', attending);
+  box.classList.toggle('full', full);
   box.dataset.name = name || '';
   box.classList.add('show');
   $('#scrim').classList.add('show');
@@ -56,7 +57,7 @@ export function sheet(html, { name = null, keepScroll = false, attending = false
 export function closeSheet(){
   const box = $('#sheet');
   if (!box.classList.contains('show')) return;
-  box.classList.remove('show', 'attending');
+  box.classList.remove('show', 'attending', 'full');
   $('#scrim').classList.remove('show');
   document.body.classList.remove('sheet-open');
   const fn = onClose; onClose = null;

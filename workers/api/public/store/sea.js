@@ -45,7 +45,7 @@ export async function initSea(){
     const { createDust } = await import('/lib/dust.js');
     const d = createDust();
     const colour = state.loc?.stage?.warm || getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim();
-    if (!d.init(document.getElementById('sea'), { colour })) return null;
+    if (!d.init(document.getElementById('sea'), { colour, leaf: state.loc?.stage?.sage })) return null;
     d.setReducedMotion(matchMedia('(prefers-reduced-motion: reduce)').matches);
     dust = d;
   } catch { dust = null; }

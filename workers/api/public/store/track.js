@@ -1,24 +1,24 @@
-// Act 3 -- RECEIVE. The order, watched over the Sea.
+// Act 3 -- RECEIVE. The order, watched, like waiting for the next episode.
 //
-// This is where the Sea lives: a window of ink-wash ocean at the top of the
-// sheet, developing with the order -- a young scattered sea when it is
-// received, an aligned swell with the courier on the road, a full gold sea
-// with the sun high when it is delivered. Over it floats one glass card, the
-// way the direction's example draws it: status in the money face, the total,
-// the order's line, a progress bar that is the same phase the sea has. The
-// Sheet carries what the Sea cannot -- the words, the honest time range, the
-// wallet to pay into for a crypto order, the way to be told, and the sentence
-// the customer can leave. A customer with reduced motion or no WebGL loses
-// nothing: the pills say it all.
+// The whole screen is the Sea: an ink-wash ocean across the entire surface,
+// developing with the order. Over it, ONE state -- the one the order is in
+// now -- as a title, the way an episode's name comes up, with the step count
+// beneath it and the honest time range. Not six pills: a customer waiting
+// wants to know where their food is, not a diagram of where it could be.
+// While they wait, the venue's own guests speak: one positive review at a
+// time, fading in and out like end credits. The wallet to pay into (crypto),
+// the way to be told (Telegram) and the sentence the customer can leave are
+// below, quiet.
 //
 // The state belongs to the server, so it is asked every twelve seconds with
 // the order's OWN token; a poll that fails three times says so. The ocean's
-// canvas SURVIVES each re-render: it is lifted out before the sheet is
-// redrawn and put back after, so the sea keeps its time and its phase.
+// canvas and the review reel SURVIVE each re-render: lifted out before the
+// sheet is redrawn and put back after, so the sea keeps its time and the
+// credits keep their place. The title changes only when the status does.
 
 import { state, tokenFor, moneyEl, on, API } from '/store/state.js';
 import { t } from '/store/i18n.js';
-import { $, esc, icon, sheet, closeSheet, toast, whenSheetCloses } from '/store/ui.js';
+import { $, $$, esc, icon, sheet, closeSheet, toast, whenSheetCloses, stars } from '/store/ui.js';
 import { openOcean, phaseOf, seaRest } from '/store/sea.js';
 
 const FLOW = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY', 'DELIVERED'];
@@ -31,8 +31,20 @@ const POLL_FAILS_TO_TELL = 3;
 const ORDER_ID_SHOWN = 8;
 /// A customer may write this much about the meal.
 const FEEDBACK_MAX = 600;
-/// The progress bar never reads empty while an order exists.
+/// The progress line never reads empty while an order exists.
 const PROGRESS_FLOOR = 0.06;
+/// The credits: a review is positive from this rating, long enough to say
+/// something from this many characters, shown for this long, and cut here.
+const REVIEW_MIN_RATING = 4;
+const REVIEW_MIN_CHARS = 24;
+const REVIEW_MAX_CHARS = 220;
+const REVIEW_MS = 7000;
+const REVIEW_FADE_MS = 700;
+/// The payment, as one word for the line.
+const PAY_KEY = { cash: 'cash', card: 'card', apple_pay: 'applePay', google_pay: 'googlePay', crypto: 'crypto' };
+
+let lastStatus = null;
+let reel = null;
 
 function sayBlock(order){
   const over = order.status === 'DELIVERED' || DEAD.has(order.status);
@@ -81,53 +93,92 @@ function bindCopy(){
   };
 }
 
-/// The payment, as one word for the card's line.
-const PAY_KEY = { cash: 'cash', card: 'card', apple_pay: 'applePay', google_pay: 'googlePay', crypto: 'crypto' };
+// ── the credits: the venue's guests, one at a time ──────────────────────────
+function goodReviews(){
+  const list = state.loc?.google?.reviews;
+  if (!Array.isArray(list)) return [];
+  return list.filter(r => (r.rating || 0) >= REVIEW_MIN_RATING && String(r.text || '').trim().length >= REVIEW_MIN_CHARS);
+}
+function reviewMarkup(r){
+  const text = String(r.text).trim();
+  return `<figure class="credit">
+    <blockquote>“${esc(text.length > REVIEW_MAX_CHARS ? text.slice(0, REVIEW_MAX_CHARS - 1) + '…' : text)}”</blockquote>
+    <figcaption><span class="rev-stars" aria-hidden="true">${stars(r.rating)}</span><b>${esc(r.author || '')}</b></figcaption>
+  </figure>`;
+}
+/// Start the reel in `host`, or keep the one already running.
+function startReel(host){
+  const list = goodReviews();
+  if (!host || !list.length) return;
+  if (reel && reel.host === host) return;
+  stopReel();
+  let i = Math.floor(Math.random() * list.length);
+  const show = () => {
+    host.innerHTML = reviewMarkup(list[i]);
+    i = (i + 1) % list.length;
+  };
+  show();
+  const timer = setInterval(() => {
+    const fig = host.querySelector('.credit'); if (fig) fig.classList.add('out');
+    setTimeout(show, REVIEW_FADE_MS);
+  }, REVIEW_MS);
+  reel = { host, timer };
+}
+function stopReel(){ if (reel) { clearInterval(reel.timer); reel = null; } }
 
-/// The window of sea and the card that floats on it.
-function oceanMarkup(order, eta){
-  const st = order.status, dead = DEAD.has(st);
-  return `<div class="ocean" data-status="${esc(st)}">
-    <canvas class="ocean-cv" aria-hidden="true"></canvas>
-    <div class="ocean-card" id="oceanCard">
-      <span class="edge"></span>
-      <div class="oc-row"><span class="oc-st" data-t-st="${esc(st)}"></span><span class="oc-amt">${moneyEl(order.total ?? order.subtotal ?? 0)}</span></div>
-      <p class="oc-ln">#${esc(String(order.id).slice(0, ORDER_ID_SHOWN))} · ${esc(state.loc?.name || '')}${PAY_KEY[order.payment] ? ` · <span data-t="${PAY_KEY[order.payment]}"></span>` : ''}</p>
-      <div class="pg" role="progressbar" aria-valuemin="0" aria-valuemax="100"><i id="oceanBar"></i></div>
-      ${eta && !dead && st !== 'DELIVERED' ? `<p class="oc-note">${icon('clock')}<span data-t="etaRange"></span>: <b>${esc(eta.text)} <span data-t="etaMin"></span></b></p>` : ''}
+/// The episode: eyebrow, the one state as the title, the step, the time.
+function episodeMarkup(order, eta){
+  const st = order.status, dead = DEAD.has(st), i = FLOW.indexOf(st);
+  const phase = dead ? PROGRESS_FLOOR : Math.max(PROGRESS_FLOOR, phaseOf(st));
+  const done = st === 'DELIVERED';
+  return `<div class="ep">
+    <p class="ep-eyebrow"><span data-t="episode"></span> · #${esc(String(order.id).slice(0, ORDER_ID_SHOWN))} · ${esc(state.loc?.name || '')}</p>
+    <h2 class="ep-title ${st !== lastStatus ? 'flip' : ''}" data-t-st="${esc(st)}"></h2>
+    ${!dead ? `<p class="ep-step mono"><span data-t="stepOf"></span> ${i + 1} <span data-t="ofSteps"></span> ${FLOW.length}${!done && i + 1 < FLOW.length ? ` · <span data-t="nextUp"></span>: <span data-t-st="${FLOW[i + 1]}"></span>` : ''}</p>` : ''}
+    <div class="ep-line" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(phase * 100)}"><i id="epBar"></i></div>
+    <div class="ep-facts">
+      ${eta && !dead && !done ? `<span>${icon('clock')}<b>${esc(eta.text)} <span data-t="etaMin"></span></b></span>` : ''}
+      <span>${icon('coin-hole')}<b>${moneyEl(order.total ?? order.subtotal ?? 0)}</b></span>
+      ${PAY_KEY[order.payment] ? `<span>${icon(order.payment === 'cash' ? 'cash' : order.payment === 'crypto' ? 'currency-bitcoin' : 'credit-card')}<b data-t="${PAY_KEY[order.payment]}"></b></span>` : ''}
     </div>
   </div>`;
 }
 
 export function openTracking(order){
-  const st = order.status, i = FLOW.indexOf(st);
+  const st = order.status;
   const dead = DEAD.has(st);
   const bot = state.loc?.telegramBot;
   const eta = order.eta || state.lastEta;
   const follow = (bot && !dead && st !== 'DELIVERED') ? `
     <a class="btn btn-ghost mb-1" href="https://t.me/${encodeURIComponent(bot)}?start=${encodeURIComponent(order.id)}" target="_blank" rel="noopener noreferrer">
-      ${icon('brand-telegram')}<span data-t="notify"></span></a>
-    <p class="muted trk-note" data-t="notifyHint"></p>` : '';
-  // The sea's canvas outlives the sheet's markup: lifted here, put back below.
-  const keep = $('#sheet').dataset.name === 'track' ? $('.ocean-cv') : null;
-  whenSheetCloses(seaRest);
+      ${icon('brand-telegram')}<span data-t="notify"></span></a>` : '';
+  // The sea's canvas and the credits outlive the sheet's markup.
+  const wasTrack = $('#sheet').dataset.name === 'track';
+  const keepCanvas = wasTrack ? $('.ocean-cv') : null;
+  const keepReel = wasTrack ? $('#credits') : null;
+  whenSheetCloses(() => { stopReel(); lastStatus = null; seaRest(); });
   sheet(`
     <div class="tsheet" data-status="${esc(st)}">
-      ${oceanMarkup(order, eta)}
-      <h2 class="tsheet-h">${dead ? `<span data-t-st="${esc(st)}"></span>` : `<span data-t="sent"></span>`}</h2>
-      ${!dead ? `<div class="pills" role="list">${FLOW.map((s, n) => `
-        <span class="pill-st ${n < i ? 'done' : n === i ? 'now' : ''}" role="listitem">
-          <span class="pill-dot">${n < i ? icon('check') : ''}</span><span data-t-st="${s}"></span></span>`).join('')}</div>` : ''}
-      ${cryptoBlock(order)}
-      ${follow}
-      ${sayBlock(order)}
-      <button class="btn btn-ghost mb-2" id="closeTrack" data-t="done"></button>
-    </div>`, { name: 'track', attending: !dead && st !== 'DELIVERED' });
-  if (keep) $('.ocean-cv')?.replaceWith(keep);
+      <canvas class="ocean-cv" aria-hidden="true"></canvas>
+      <div class="tsheet-in">
+        ${episodeMarkup(order, eta)}
+        ${goodReviews().length ? `<section class="credits-wrap"><p class="eyebrow" data-t="whatTheySay"></p><div class="credits" id="credits"></div></section>` : ''}
+        <div class="ep-more">
+          ${cryptoBlock(order)}
+          ${follow}
+          ${sayBlock(order)}
+          <button class="btn btn-ghost mb-2" id="closeTrack" data-t="done"></button>
+        </div>
+      </div>
+    </div>`, { name: 'track', attending: !dead && st !== 'DELIVERED', full: true });
+  if (keepCanvas) $('.ocean-cv')?.replaceWith(keepCanvas);
+  if (keepReel) $('#credits')?.replaceWith(keepReel);
   const phase = dead ? PROGRESS_FLOOR : Math.max(PROGRESS_FLOOR, phaseOf(st));
-  const bar = $('#oceanBar'); if (bar) { bar.style.width = `${Math.round(phase * 100)}%`; bar.parentElement.setAttribute('aria-valuenow', String(Math.round(phase * 100))); }
-  const card = $('#oceanCard'); if (card) card.style.setProperty('--pg', String(phase));
+  const bar = $('#epBar'); if (bar) bar.style.width = `${Math.round(phase * 100)}%`;
+  const ep = $('.ep'); if (ep) ep.style.setProperty('--pg', String(phase));
+  lastStatus = st;
   openOcean($('.ocean-cv'), st);
+  startReel($('#credits'));
   bindSay(order);
   bindCopy();
   $('#closeTrack').onclick = closeSheet;

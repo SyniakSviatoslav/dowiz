@@ -8,27 +8,30 @@
 // language switch rewrites text by product id. Nothing is rebuilt until the
 // venue is reloaded.
 //
-// The card: a full-width photograph, four by three, the price on the photo in
-// the money face, the name in the venue's display face beneath, one line of
-// what is in it, the approximate calories, and the add control in reach of a
-// thumb. A dish with no photograph wears the venue's own mark.
+// THE PAGE IS A SPREAD. Every category opens on a feature -- its first dish
+// as a tall photograph with the name set large across its foot, the way a
+// magazine opens a story -- then runs in a two-column grid of square plates,
+// and every fifth dish turns wide, photograph beside words, to break the
+// rhythm. The section's number stands beside its name in outline figures,
+// the folio of the spread. A dish with no photograph wears the venue's mark.
 //
-// THE SEARCH BAR IS A SEARCH BAR. The allergen filter and the "available
-// only" checkbox sat in it and pushed the tags off the screen; a customer
-// looking for salmon saw a warning triangle and a checkbox. Allergens moved
-// to the language sheet, where diet belongs beside language; sold-out dishes
-// are already marked on the card and do not need a second control.
+// THE SEARCH BAR IS A SEARCH BAR, with one more way in: the microphone. A
+// customer who says "two Philadelphia" gets the dish shown back with its
+// price and adds it with one tap (store/voice-order.js). Sold-out dishes are
+// marked on the card and need no second control; allergens are not this
+// storefront's to declare (operator decision, 2026-09-18).
 
-import { state, findProduct, normalise, hiddenBecause, saveAvoid, moneyEl } from '/store/state.js';
+import { state, findProduct, normalise, moneyEl } from '/store/state.js';
 import { t, tagName, lang } from '/store/i18n.js';
 import { $, $$, esc, icon, fallbackArt, paintFallbacks, spread, debounce } from '/store/ui.js';
+import { morph } from '/store/motion.js';
 import { heroMarkup } from '/store/venue.js';
 
 // The venue's tags → an icon each. A tag with no icon still gets a chip, with
 // a dot; the venue wrote it down and it filters just the same.
 const TAG_ICON = {
-  salmon: 'fish', tuna: 'fish', shrimp: 'fish', vegetarian: 'leaf', hot: 'flame', popular: 'sparkles',
-  sets: 'category', bowls: 'bowl', soups: 'soup', drinks: 'cup', freskuese: 'cup', kafeteria: 'cup',
+  salmon: 'nigiri', tuna: 'nigiri', shrimp: 'shrimp', vegetarian: 'leaf', hot: 'flame', popular: 'sakura',
+  sets: 'bento', bowls: 'bowl-chopsticks', soups: 'bowl', drinks: 'teacup', freskuese: 'cup', kafeteria: 'teacup',
   'lengje-frutash': 'cup', alkool: 'glass-cocktail', birra: 'beer',
 };
 // Tags that mirror a category heading are noise in the rail: the customer has
@@ -67,15 +70,21 @@ export function kcalText(p){
   return `${n.approx ? APPROX + ' ' : ''}${kcal}`;
 }
 
-function card(p, catId){
+/// Which shape a dish takes on the spread, by its place in the section.
+const WIDE_EVERY = 5;
+const shapeOf = i => i === 0 ? 'feat' : (i % WIDE_EVERY === WIDE_EVERY - 1 ? 'wide' : 'plate');
+/// The section's number as the spread's folio: two figures.
+const FOLIO_DIGITS = 2;
+
+function card(p, catId, i = 1){
   const out = !p.available;
+  const shape = shapeOf(i);
   const tags = Array.isArray(p.tags) ? p.tags : [];
   const facts = [];
   const kcal = kcalText(p);
   if (kcal) facts.push(`${icon('flame')}${kcal} <span data-t="kcal"></span>`);
-  if (Number.isFinite(p.weightG)) facts.push(`${p.nutrition?.approx ? APPROX + ' ' : ''}${p.weightG} g`);
   if (Number.isFinite(p.cookingMin)) facts.push(`${icon('clock')}${p.cookingMin} <span data-t="etaMin"></span>`);
-  return `<article class="card ${out ? 'sold-out' : ''}" data-p="${esc(p.id)}" data-cat="${esc(catId)}"
+  return `<article class="card ${shape} ${out ? 'sold-out' : ''}" data-p="${esc(p.id)}" data-cat="${esc(catId)}"
       data-price="${p.price | 0}" data-avail="${out ? 0 : 1}" data-tags="${esc(tags.join(' '))}"
       data-search="${esc(normalise(`${p.name} ${p.description || ''}`))}" data-sort="${p.sortOrder | 0}">
     <button type="button" class="card-hit" data-open="${esc(p.id)}" ${out ? 'aria-disabled="true"' : ''}
@@ -116,10 +125,11 @@ function filtersMarkup(cats){
       <input id="q" type="search" inputmode="search" autocomplete="off"
              data-t-attr="placeholder:search aria-label:search" value="${esc(state.q || '')}">
       <button id="qx" type="button" data-t-attr="aria-label:clear" ${state.q ? '' : 'hidden'}>${icon('x')}</button>
+      <button id="qmic" type="button" class="mic" data-t-attr="aria-label:voice title:voice">${icon('microphone')}</button>
     </label>
     <div class="tags" id="tags" role="group" aria-label="${esc(t('filters'))}">
       <button type="button" class="tag ${!state.tag ? 'on' : ''}" data-tag="" aria-pressed="${!state.tag}">
-        ${icon('category')}<span data-t="all"></span></button>
+        ${icon('fan')}<span data-t="all"></span></button>
       ${tags.map(tg => `<button type="button" class="tag ${state.tag === tg ? 'on' : ''}" data-tag="${esc(tg)}" aria-pressed="${state.tag === tg}">
         ${TAG_ICON[tg] ? icon(TAG_ICON[tg]) : '<span class="tag-dot"></span>'}<span data-t-tag="${esc(tg)}"></span></button>`).join('')}
       <label class="tag sel">${icon('filter')}<select id="sort" data-t-attr="aria-label:sortBy">
@@ -132,10 +142,10 @@ function filtersMarkup(cats){
 export function buildMenu(cats){
   const app = $('#app');
   app.innerHTML = `${heroMarkup()}${filtersMarkup(cats)}${railMarkup(cats)}
-    <div id="sections">${cats.map(c => `
+    <div id="sections">${cats.map((c, ci) => `
       <section class="sec" id="c-${esc(c.id)}" data-cat="${esc(c.id)}">
-        <h2 class="sec-h"><span class="sec-name">${esc(c.name)}</span><span class="sec-n muted">${(c.products || []).length}</span></h2>
-        <div class="cards">${(c.products || []).map(p => card(p, c.id)).join('')}</div>
+        <h2 class="sec-h"><span class="sec-idx" aria-hidden="true">${String(ci + 1).padStart(FOLIO_DIGITS, '0')}</span><span class="sec-name">${esc(c.name)}</span><i class="sec-rule" aria-hidden="true"></i><span class="sec-n muted">${(c.products || []).length}</span></h2>
+        <div class="cards">${(c.products || []).map((p, i) => card(p, c.id, i)).join('')}</div>
       </section>`).join('')}
     </div>
     <div class="empty" id="noHits" hidden>${icon('search-off', 'ico-lg')}<b data-t="noHits"></b>
@@ -145,14 +155,30 @@ export function buildMenu(cats){
   bind();
   applyFilters({ animate: true });
   spy();
+  arrive();
+}
+
+/// A heading's brush stroke is drawn as it scrolls into view, once.
+let arriveIO = null;
+function arrive(){
+  if (arriveIO) arriveIO.disconnect();
+  arriveIO = new IntersectionObserver(entries => {
+    for (const e of entries) if (e.isIntersecting) { e.target.classList.add('in'); arriveIO.unobserve(e.target); }
+  }, { rootMargin: '0px 0px -10% 0px' });
+  for (const h of $$('.sec-h')) arriveIO.observe(h);
 }
 
 // ── filtering: toggles, never rebuilds ──────────────────────────────────────
+/// The same filter, in motion: cards scatter, slide and deal (store/motion.js).
+/// A search keystroke is the quick version, so a fast typist is not waiting
+/// on the last letter's animation.
+export function refilter(opts, { quick = false } = {}){
+  return morph(() => applyFilters({ ...opts, animate: false }), { quick });
+}
 export function applyFilters({ animate = false } = {}){
   const q = normalise(state.q).trim();
   const terms = q ? q.split(/\s+/) : [];
   let shown = 0;
-  const hidden = { contains: 0, undeclared: 0 };
   for (const sec of $$('.sec')) {
     const cards = $$('.card', sec);
     let n = 0;
@@ -160,7 +186,6 @@ export function applyFilters({ animate = false } = {}){
       const p = findProduct(el.dataset.p);
       let ok = !!p;
       if (ok && state.tag && !(` ${el.dataset.tags} `).includes(` ${state.tag} `)) ok = false;
-      if (ok) { const why = hiddenBecause(p); if (why) { hidden[why]++; ok = false; } }
       if (ok && terms.length) {
         const hay = `${el.dataset.search} ${normalise(sec.querySelector('.sec-name')?.textContent)}`;
         ok = terms.every(x => hay.includes(x));
@@ -183,21 +208,6 @@ export function applyFilters({ animate = false } = {}){
     shown += n;
   }
   $('#noHits').hidden = shown > 0;
-  // The count of what the allergen filter hid, wherever that panel is open.
-  const count = $('#avoidCount');
-  if (count) {
-    const avoidOn = state.avoid?.length;
-    count.hidden = !avoidOn;
-    if (avoidOn) count.innerHTML = `${hidden.contains} ${esc(t('avoidOn'))}${hidden.undeclared ? `, ${hidden.undeclared} ${esc(t('avoidUnknown'))}` : ''}
-      · <button type="button" class="linky" id="avoidClear">${esc(t('clearAvoid'))}</button>`;
-    const clr = $('#avoidClear'); if (clr) clr.onclick = () => {
-      state.avoid = []; saveAvoid();
-      for (const b of $$('[data-avoid]')) { b.classList.remove('on'); b.setAttribute('aria-pressed', 'false'); }
-      applyFilters();
-    };
-  }
-  // The header says when a diet filter is on, since the control is one sheet away.
-  $('#langBtn')?.classList.toggle('warn', !!state.avoid?.length);
   if (animate) spread($$('.card:not([hidden])').slice(0, SPREAD_ON_FILTER));
 }
 
@@ -227,7 +237,7 @@ function bind(){
   // One delegated listener for the whole menu: the cards are many and change.
   app.addEventListener('click', e => {
     const open = e.target.closest('[data-open]');
-    if (open) { const p = findProduct(open.dataset.open); if (p && p.available) openDishFn?.(p, open); return; }
+    if (open) { const p = findProduct(open.dataset.open); if (p && p.available) openDishFn?.(p, open.closest('.card')); return; }
     const add = e.target.closest('[data-add]');
     if (add) { const p = findProduct(add.dataset.add); if (p && p.available) onAdd?.(p, add); return; }
     const chip = e.target.closest('.rail-chip');
@@ -247,22 +257,23 @@ function bind(){
     if (tag) {
       state.tag = tag.dataset.tag || null;
       for (const b of $$('[data-tag]')) { const onn = (b.dataset.tag || null) === state.tag; b.classList.toggle('on', onn); b.setAttribute('aria-pressed', String(onn)); }
-      applyFilters({ animate: true });
+      refilter({ animate: true });
       return;
     }
-    if (e.target.closest('#qx')) { state.q = ''; $('#q').value = ''; $('#qx').hidden = true; applyFilters(); $('#q').focus(); return; }
+    if (e.target.closest('#qx')) { state.q = ''; $('#q').value = ''; $('#qx').hidden = true; refilter(); $('#q').focus(); return; }
+    if (e.target.closest('#qmic')) { import('/store/voice-order.js').then(m => m.openVoice()); return; }
     if (e.target.closest('#qreset')) {
       state.q = ''; state.tag = null; state.sort = SORTS[0];
       $('#q').value = ''; $('#qx').hidden = true; $('#sort').value = SORTS[0];
       for (const b of $$('[data-tag]')) { const onn = !b.dataset.tag; b.classList.toggle('on', onn); b.setAttribute('aria-pressed', String(onn)); }
-      applyFilters({ animate: true });
+      refilter({ animate: true });
       return;
     }
   });
   const q = $('#q');
-  const run = debounce(() => { state.q = q.value; $('#qx').hidden = !state.q; applyFilters(); }, SEARCH_DEBOUNCE_MS);
+  const run = debounce(() => { state.q = q.value; $('#qx').hidden = !state.q; refilter({}, { quick: true }); }, SEARCH_DEBOUNCE_MS);
   q.addEventListener('input', run);
-  $('#sort').onchange = e => { state.sort = e.target.value; applyFilters({ animate: true }); };
+  $('#sort').onchange = e => { state.sort = e.target.value; refilter({ animate: true }); };
 }
 
 /// The venue's own words in a new language, patched by id. Names, descriptions

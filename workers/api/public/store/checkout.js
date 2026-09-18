@@ -75,6 +75,45 @@ function savedAddressMarkup(){
   </div>`;
 }
 
+/// The address as parts: street and house on one row, then -- unless it is
+/// a private house -- apartment, entrance and floor. The parts are kept and
+/// the line the courier reads is composed from them at placement.
+const ADDR_KEY = 'dw_addr_parts';
+const ADDR_PARTS = ['street', 'house', 'apartment', 'entrance', 'floor'];
+function savedParts(){
+  try { const v = JSON.parse(safeGet(ADDR_KEY) || 'null'); return v && typeof v === 'object' ? v : {}; } catch { return {}; }
+}
+function addressFieldsMarkup(){
+  const v = savedParts();
+  const priv = !!v.private;
+  const field = (k, extra = '') => `<label class="afield"><span data-t="${k}"></span><input id="f-${k}" value="${esc(v[k] || '')}" ${extra}></label>`;
+  return `<div class="addr-grid">
+    ${field('street', 'autocomplete="address-line1" class="wide"')}${field('house', 'inputmode="text"')}
+    <label class="switch"><input type="checkbox" id="f-private" ${priv ? 'checked' : ''}><span class="switch-k"></span>${icon('home')}<span data-t="privateHouse"></span></label>
+    <div class="addr-flat" id="addrFlat" ${priv ? 'hidden' : ''}>${field('apartment', 'inputmode="text"')}${field('entrance', 'inputmode="text"')}${field('floor', 'inputmode="numeric"')}</div>
+  </div>`;
+}
+/// The parts as typed, and the one line the courier reads.
+function addressParts(){
+  const out = {};
+  for (const k of ADDR_PARTS) { const el = $(`#f-${k}`); if (el && el.value.trim()) out[k] = el.value.trim(); }
+  out.private = !!$('#f-private')?.checked;
+  return out;
+}
+function addressLine(p){
+  const head = [p.street, p.house].filter(Boolean).join(' ');
+  if (p.private) return head;
+  const flat = [p.apartment && `${t('apartment').toLowerCase()} ${p.apartment}`, p.entrance && `${t('entrance').toLowerCase()} ${p.entrance}`, p.floor && `${t('floor').toLowerCase()} ${p.floor}`].filter(Boolean);
+  return [head, ...flat].join(', ');
+}
+/// A saved line (older browsers, or a chip) split back into street and house.
+function fillFromLine(line){
+  const m = String(line || '').match(/^(.*?)(?:\s+(\d+[a-zA-Z]?(?:\/\d+)?))?(?:,|$)/);
+  const st = $('#f-street'), ho = $('#f-house');
+  if (st) st.value = m ? m[1].trim() : String(line || '');
+  if (ho) ho.value = m && m[2] ? m[2] : '';
+}
+
 function railMarkup(){
   const list = rails();
   const syms = wallets().map(w => w.symbol).join(' · ');
@@ -107,8 +146,8 @@ export function openCheckout(){
     <div id="addrBox" ${pickup ? 'hidden' : ''}>
       <h3 class="fsec" data-t="address"></h3>
       ${savedAddressMarkup()}
-      <button type="button" class="btn btn-ghost mb-2" id="pinGo">${icon('gps')}<span data-t="pickOnMap"></span></button>
-      <textarea id="f-addr" autocomplete="street-address" data-t-attr="placeholder:address">${esc(safeGet('dw_addr') || '')}</textarea>
+      <button type="button" class="btn btn-ghost mb-2" id="pinGo">${icon('navigation')}<span data-t="pickOnMap"></span></button>
+      ${addressFieldsMarkup()}
       <p class="geo ok" id="pinLine" ${state.pin ? '' : 'hidden'}>${icon('map-pin-check')}<span data-t="confirmPin"></span></p>
       ${L?.hasDeliveryZones ? `<button type="button" class="btn btn-ghost mb-1" id="f-geo">${icon('map-pin-check')}<span data-t="checkArea"></span></button>
         <p id="f-geo-out" class="geo" hidden></p>` : ''}
@@ -188,14 +227,16 @@ export function openCheckout(){
   const addrBox = $('#addrBox');
   if (addrBox) {
     for (const b of $$('[data-addr]', addrBox)) b.onclick = () => {
-      const f = $('#f-addr'); f.value = b.dataset.addr;
+      fillFromLine(b.dataset.addr);
       for (const x of $$('[data-addr]', addrBox)) { x.classList.toggle('on', x === b); x.setAttribute('aria-checked', String(x === b)); }
       const la = Number(b.dataset.lat), ln = Number(b.dataset.lng);
       state.pin = Number.isFinite(la) && Number.isFinite(ln) && b.dataset.lat !== '' ? { lat: la, lng: ln } : null;
       $('#pinLine').hidden = !state.pin;
-      f.focus(); try { f.setSelectionRange(f.value.length, f.value.length); } catch {}
+      $('#f-house')?.focus();
       etaLine();
     };
+    const priv = $('#f-private');
+    if (priv) priv.onchange = () => { const flat = $('#addrFlat'); if (flat) flat.hidden = priv.checked; };
     for (const b of $$('[data-addr-del]', addrBox)) b.onclick = () => {
       forgetAddress(b.dataset.addrDel);
       b.closest('.addr-chip')?.remove();
@@ -203,23 +244,24 @@ export function openCheckout(){
     };
     // the map
     $('#pinGo').onclick = async () => {
-      const cur = $('#f-addr').value.trim();
+      safeSet(ADDR_KEY, JSON.stringify(addressParts()));   // what is typed survives the trip to the map
+      const cur = addressLine(addressParts());
       const { pickOnMap } = await import('/store/address.js');
       const r = await pickOnMap({ initial: state.pin ? { ...state.pin, line: cur } : null });
       openCheckout();   // the checkout re-opens with what was chosen
       if (r) {
         state.pin = { lat: r.lat, lng: r.lng };
-        const f = $('#f-addr');
-        if (r.line && (!f.value.trim() || confirmReplace(f.value.trim(), r.line))) f.value = r.line;
+        // The map fills the street and the house; the apartment is the
+        // customer's, and a street already typed by hand is kept.
+        const st = $('#f-street'), ho = $('#f-house');
+        if (st && r.street && !st.value.trim()) st.value = r.street;
+        if (ho && r.house && !ho.value.trim()) ho.value = r.house;
+        if (st && !st.value.trim()) st.focus();   // no street on the map here: the customer names it
         $('#pinLine').hidden = false;
         etaLine();
       }
     };
   }
-  // A typed line the customer already has is not overwritten by a geocode
-  // silently: if it starts with the same street it is kept, else replaced.
-  const STREET_PREFIX = 6;
-  const confirmReplace = (typed, found) => !typed || !found.split(',')[0] || !typed.toLowerCase().startsWith(found.split(',')[0].toLowerCase().slice(0, STREET_PREFIX));
 
   // when
   for (const b of $$('[data-when]', $('#sheetIn'))) b.onclick = () => {
@@ -289,8 +331,9 @@ function scheduledAt(){
 
 async function place(pay, wallet){
   if (state.placing) return;
-  const name = $('#f-name').value.trim(), phone = $('#f-phone').value.trim(),
-        addr = $('#f-addr')?.value.trim() || '', note = $('#f-note').value.trim();
+  const name = $('#f-name').value.trim(), phone = $('#f-phone').value.trim(), note = $('#f-note').value.trim();
+  const parts = addressParts();
+  const addr = $('#f-street') ? addressLine(parts) : '';
   const errs = [];
   if (phone && phone.replace(/\D/g, '').length < PHONE_MIN_DIGITS) errs.push(t('badPhone'));
   const collecting = state.how === 'pickup' && state.loc?.pickup;
@@ -298,7 +341,7 @@ async function place(pay, wallet){
   $('#f-err').innerHTML = errs.map(e => `<div class="err">${esc(e)}</div>`).join('');
   if (errs.length) { $('#f-err').scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
 
-  safeSet('dw_name', name); safeSet('dw_phone', phone); safeSet('dw_addr', addr);
+  safeSet('dw_name', name); safeSet('dw_phone', phone); safeSet('dw_addr', addr); safeSet(ADDR_KEY, JSON.stringify(parts));
   if (!collecting) rememberAddress({ line: addr, lat: state.pin?.lat ?? null, lng: state.pin?.lng ?? null });
   state.placing = true; $('#place').disabled = true; $('#place').textContent = t('ordering');
   const geo = state.pin ? { lat_udeg: Math.round(state.pin.lat * 1e6), lon_udeg: Math.round(state.pin.lng * 1e6) } : (state.geo || {});
@@ -309,7 +352,7 @@ async function place(pay, wallet){
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ items, contact: { name, phone },
         fulfilment: collecting ? { kind: 'pickup', note: note || null }
-                               : { kind: 'delivery', address: { line: addr, note: note || null, ...geo } },
+                               : { kind: 'delivery', address: { line: addr, note: note || null, parts, ...geo } },
         payment: pay, locale: lang,
         ...(pay === 'crypto' && wallet ? { crypto_symbol: wallet } : {}),
         ...(state.promo ? { promo: state.promo.code } : {}),

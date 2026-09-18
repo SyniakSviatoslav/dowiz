@@ -15,7 +15,7 @@
 
 import { state, hhmm, todayAt, whenOpens, DAY_NAMES } from '/store/state.js';
 import { t, lang } from '/store/i18n.js';
-import { $, esc, icon, sheet, stars, loadMapLib } from '/store/ui.js';
+import { $, esc, icon, sheet, stars, loadMapLib, toast } from '/store/ui.js';
 import { publishedEta } from '/store/eta.js';
 
 /// How many reviews the venue sheet shows.
@@ -127,18 +127,19 @@ export function heroMarkup(){
     ${where ? `<p class="eyebrow hero-eyebrow">${esc(where)}</p>` : ''}
     <h1 class="hero-name">${nameMarkup(L.name)}</h1>
     ${ruleMarkup()}
-    <div class="hero-chips">
-      <button type="button" class="chip-state ${open ? 'open' : 'shut'}" id="stateChip" data-open-venue>
-        <span class="dot"></span><span id="openLine">${esc(openLine())}</span></button>
-      ${g && g.rating ? `<button type="button" class="chip-glass" data-open-venue="reviews">
-        ${icon('star-filled', 'gold')}<b>${esc(String(g.rating).replace('.', lang === 'en' ? '.' : ','))}</b>
-        ${g.reviewCount ? `<span class="muted">(${g.reviewCount})</span>` : ''}</button>` : ''}
-      ${eta && open ? `<span class="chip-glass">${icon('clock')}<span>${esc(eta)} <span data-t="etaMin"></span></span></span>` : ''}
-      ${L.deliveryFee ? `<span class="chip-glass">${icon('bike')}<span class="money" data-money="${L.deliveryFee}"></span></span>`
-                      : `<span class="chip-glass">${icon('bike')}<span data-t="free"></span></span>`}
+    <div class="vpanel">
+      <div class="vp-grid">
+        <button type="button" class="vp-cell state ${open ? 'open' : 'shut'}" id="stateChip" data-open-venue>
+          <span class="dot"></span><small data-t="stateLbl"></small><b id="openLine">${esc(openLine())}</b></button>
+        ${g && g.rating ? `<button type="button" class="vp-cell" data-open-venue="reviews">
+          ${icon('star-filled')}<small data-t="ratingLbl"></small><b>${esc(String(g.rating).replace('.', lang === 'en' ? '.' : ','))} <span class="muted">(${g.reviewCount || ''})</span></b></button>` : ''}
+        ${eta ? `<div class="vp-cell">${icon('clock')}<small data-t="timeLbl"></small><b>${esc(eta)} <span data-t="etaMin"></span></b></div>` : ''}
+        <div class="vp-cell">${icon('bike')}<small data-t="feeLbl"></small>
+          <b>${L.deliveryFee ? `<span class="money" data-money="${L.deliveryFee}"></span>` : `<span data-t="free"></span>`}</b></div>
+      </div>
+      ${L.address ? `<button type="button" class="vp-addr" data-open-venue>
+        ${icon('map-pin')}<span>${esc(L.address)}</span>${icon('chevron-right', 'chev')}</button>` : ''}
     </div>
-    ${L.address ? `<button type="button" class="hero-addr" data-open-venue>
-      ${icon('map-pin')}<span>${esc(L.address)}</span>${icon('chevron-right', 'chev')}</button>` : ''}
   </section>`;
 }
 
@@ -174,6 +175,8 @@ export function openVenue(focus){
 
       ${L.address ? `<h3 class="vsec-h" id="v-where">${esc(L.address)}</h3>` : ''}
       <div class="vrows">
+        <button class="vrow" type="button" id="installGo" hidden>${icon('bento')}<span data-t="installApp"></span>${icon('chevron-right', 'chev')}</button>
+        <p class="geo" id="installHint" hidden>${icon('bento')}<span data-t="installHint"></span></p>
         ${href ? `<a class="vrow" href="${esc(href)}" target="_blank" rel="noopener noreferrer">
           ${icon('map-pin')}<span data-t="directions"></span>${icon('chevron-right', 'chev')}</a>` : ''}
         ${L.phone ? `<a class="vrow" href="tel:${esc(L.phone)}">${icon('phone')}<span>${esc(L.phone)}</span><span class="vrow-act" data-t="callUs"></span></a>` : ''}
@@ -195,7 +198,21 @@ export function openVenue(focus){
           </figure>`).join('')}</div>` : ''}
     </div>`, { name: 'info' });
   const mg = $('#mapGo'); if (mg) mg.onclick = showMap;
+  bindInstall();
   if (focus) $(`#v-${focus}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
+
+/// The install row: shown when the browser has offered (Chrome, Android), a
+/// hint on iOS Safari, nothing at all when the page already runs as an app.
+const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+async function bindInstall(){
+  const app = await import('/app.js');
+  const go = $('#installGo'), hint = $('#installHint');
+  if (!go || app.isStandalone()) return;
+  const paint = () => { go.hidden = !app.canInstall(); if (hint) hint.hidden = app.canInstall() || !IOS; };
+  paint();
+  addEventListener('dw:installable', paint);
+  go.onclick = async () => { if (await app.promptInstall()) { go.hidden = true; toast(t('installed')); } };
 }
 
 /// MapLibre, loaded the first time somebody asks to see the map. A third of a

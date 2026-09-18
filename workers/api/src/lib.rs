@@ -191,6 +191,7 @@ async fn route(req: Request, env: Env) -> Result<Response> {
         .get("/healthz", |_, _| Response::ok("ok"))
         // ── public storefront ──
         .get_async("/api/public/locations/:slug/menu", storefront::menu)
+        .get_async("/manifest.webmanifest", storefront::manifest)
         .post_async("/api/public/locations/:slug/orders", storefront::place)
         // ── reservations: the transport for `dowiz_kernel::reservation` ──
         .get_async("/api/public/locations/:slug/reservations", booking::list)

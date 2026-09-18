@@ -43,6 +43,35 @@ pub struct AddressIn {
     pub line: String,
     #[serde(default)]
     pub note: Option<String>,
+    /// The address as the customer filled it in, part by part: street, house,
+    /// apartment, entrance, floor, and whether it is a private house. The
+    /// `line` is what the courier reads; the parts are what the console can
+    /// sort and the courier app can show as fields. Free-form on the wire,
+    /// bounded here: five short strings and a flag, nothing else survives.
+    #[serde(default)]
+    pub parts: Option<Value>,
+}
+
+/// The address parts a customer may give, and how long each may be.
+const ADDRESS_PART_KEYS: [&str; 5] = ["street", "house", "apartment", "entrance", "floor"];
+const ADDRESS_PART_MAX_CHARS: usize = 80;
+
+/// Only the named keys, each a short trimmed string, plus the `private` flag.
+fn clean_address_parts(v: &Value) -> Value {
+    let mut out = serde_json::Map::new();
+    if let Some(o) = v.as_object() {
+        for k in ADDRESS_PART_KEYS {
+            if let Some(t) = o.get(k).and_then(Value::as_str).map(str::trim) {
+                if !t.is_empty() {
+                    out.insert(k.into(), json!(t.chars().take(ADDRESS_PART_MAX_CHARS).collect::<String>()));
+                }
+            }
+        }
+        if let Some(p) = o.get("private").and_then(Value::as_bool) {
+            out.insert("private".into(), json!(p));
+        }
+    }
+    Value::Object(out)
 }
 
 #[derive(Deserialize)]
@@ -559,6 +588,102 @@ const D1_MAX_BINDS: usize = 100;
 /// the boundary rather than stored as a word the kitchen has to interpret.
 const PAYMENT_KINDS: [&str; 5] = ["cash", "card", "apple_pay", "google_pay", "crypto"];
 
+/// `GET /manifest.webmanifest` -- the venue's storefront as an app.
+///
+/// One manifest per venue, written from the venue's own record: its name,
+/// its paper as the splash and chrome colour, its mark as the icon. The mark's
+/// real size is read from the PNG's own header (IHDR, bytes 16..24) so the
+/// manifest declares what the file is, which is what a browser checks before
+/// it offers to install. A venue with no mark gets no icon and the browser
+/// says so; a placeholder would install a nameless square.
+pub async fn manifest(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let slug = req
+        .url()?
+        .query_pairs()
+        .find(|(k, _)| k == "s")
+        .map(|(_, v)| v.to_string())
+        .or_else(|| crate::hubstore::Place::slug_of_host(&req, &ctx));
+    let Some(slug) = slug else {
+        return Response::error("not found", 404);
+    };
+    let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
+    let loaded = crate::hubstore::load_catalog(&place).await?;
+    let Some(loc_json) = loaded.catalog.location() else {
+        return Response::error("not found", 404);
+    };
+    let raw: Value = serde_json::from_str(&loc_json).unwrap_or(json!({}));
+    let name = raw.get("name").and_then(Value::as_str).unwrap_or("dowiz");
+    let paper = raw
+        .pointer("/theme/paper")
+        .and_then(Value::as_str)
+        .unwrap_or(MANIFEST_DEFAULT_PAPER);
+    let lang = raw.get("default_locale").and_then(Value::as_str).unwrap_or("sq");
+    let mut icons: Vec<Value> = Vec::new();
+    if let Some(logo) = raw.get("logo_url").and_then(Value::as_str) {
+        if let Some(key) = logo.strip_prefix("/media/") {
+            let kv = ctx.kv("MEDIA")?;
+            if let Some(bytes) = kv.get(key).bytes().await? {
+                if let Some((w, h)) = png_size(&bytes) {
+                    icons.push(json!({ "src": logo, "sizes": format!("{w}x{h}"), "type": "image/png", "purpose": "any maskable" }));
+                }
+            }
+        }
+    }
+    let out = json!({
+        "id": "/", "name": name, "short_name": short_name(name),
+        "lang": lang, "dir": "ltr", "start_url": "/", "scope": "/",
+        "display": "standalone", "display_override": ["standalone", "minimal-ui", "browser"],
+        "orientation": "portrait", "background_color": paper, "theme_color": paper,
+        "categories": ["food", "shopping"], "icons": icons,
+    });
+    let mut res = Response::from_json(&out)?;
+    res.headers_mut().set("content-type", "application/manifest+json; charset=utf-8")?;
+    res.headers_mut().set("cache-control", "public, max-age=300")?;
+    Ok(res)
+}
+
+/// The paper a venue with no theme gets in its manifest: the shipped light paper.
+const MANIFEST_DEFAULT_PAPER: &str = "#fbfaf8";
+/// A launcher shows about this many characters under an icon. The short name
+/// is the longest run of WHOLE words that fits ("Dubin", not "Dubin & Sush"),
+/// and the first word cut only when even that is too long.
+const MANIFEST_SHORT_NAME_CHARS: usize = 12;
+fn short_name(name: &str) -> String {
+    if name.chars().count() <= MANIFEST_SHORT_NAME_CHARS {
+        return name.to_string();
+    }
+    let mut out = String::new();
+    for word in name.split_whitespace() {
+        let next = if out.is_empty() { word.to_string() } else { format!("{out} {word}") };
+        if next.chars().count() > MANIFEST_SHORT_NAME_CHARS {
+            break;
+        }
+        out = next;
+    }
+    // A trailing word with no letter in it ("&", "-") is not a name's end.
+    while let Some(last) = out.split_whitespace().last() {
+        if last.chars().any(char::is_alphanumeric) {
+            break;
+        }
+        out = out[..out.len() - last.len()].trim_end().to_string();
+    }
+    if out.is_empty() {
+        out = name.chars().take(MANIFEST_SHORT_NAME_CHARS).collect();
+    }
+    out
+}
+/// A PNG's size from its IHDR chunk, which every PNG starts with.
+const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
+const PNG_IHDR_WIDTH_AT: usize = 16;
+fn png_size(bytes: &[u8]) -> Option<(u32, u32)> {
+    if bytes.len() < PNG_IHDR_WIDTH_AT + 8 || bytes[..8] != PNG_SIGNATURE {
+        return None;
+    }
+    let w = u32::from_be_bytes(bytes[PNG_IHDR_WIDTH_AT..PNG_IHDR_WIDTH_AT + 4].try_into().ok()?);
+    let h = u32::from_be_bytes(bytes[PNG_IHDR_WIDTH_AT + 4..PNG_IHDR_WIDTH_AT + 8].try_into().ok()?);
+    (w > 0 && h > 0).then_some((w, h))
+}
+
 /// `POST /api/public/locations/:slug/orders`
 pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let Some(slug) = ctx.param("slug").cloned() else {
@@ -709,7 +834,10 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
         "kind": body.fulfilment.kind,
         "note": body.fulfilment.note.as_deref().map(str::trim).filter(|n| !n.is_empty())
             .map(|n| json!(n)).unwrap_or(Value::Null),
-        "address": body.fulfilment.address.as_ref().map(|a| json!({ "line": a.line, "note": a.note })),
+        "address": body.fulfilment.address.as_ref().map(|a| json!({
+            "line": a.line, "note": a.note,
+            "parts": a.parts.as_ref().map(clean_address_parts).unwrap_or(Value::Null)
+        })),
         "fee": fee
     });
     let payment_kind = body.payment.clone().unwrap_or_else(|| "cash".into());

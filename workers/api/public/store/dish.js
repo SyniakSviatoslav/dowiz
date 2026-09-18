@@ -13,7 +13,7 @@
 // The add control is a snap. The price is an integer written as text and the
 // quantity is a number; neither ever tweens.
 
-import { state, addLine, lineUnit, moneyEl, money, on, allergenName } from '/store/state.js';
+import { state, addLine, lineUnit, moneyEl, money, on } from '/store/state.js';
 import { t, tagName } from '/store/i18n.js';
 import { $, $$, esc, icon, sheet, closeSheet, fallbackArt, toast } from '/store/ui.js';
 import { seaEvent } from '/store/sea.js';
@@ -27,19 +27,20 @@ const QTY_MIN = 1;
 const QTY_MAX = 99;
 /// The prefix on every figure the venue has not measured.
 const APPROX = '≈';
+/// The photograph's journey from the card to the sheet, and the sheet's rise
+/// it travels over (store.css: .sheet transition).
+const ZOOM_MS = 560;
+const SHEET_RISE_MS = 420;
+/// A touch has weight: the phone answers an add and a choice with a tap of
+/// its own, where it can (Android). Milliseconds of vibration.
+const HAPTIC_ADD_MS = 12;
+const HAPTIC_TAP_MS = 6;
+export const haptic = ms => { try { navigator.vibrate?.(ms); } catch {} };
 
 let onAdded = null;
 export function onDishAdded(fn){ onAdded = fn; }
 /// Where a control is on the page, for the sparks to rise from.
 const centreOf = el => { const r = el?.getBoundingClientRect?.(); return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : undefined; };
-
-function allergenLine(p){
-  if (!Array.isArray(p.allergens))
-    return `<p class="allerg unknown">${icon('help-circle')}<span data-t="notDeclared"></span></p>`;
-  if (!p.allergens.length)
-    return `<p class="allerg none">${icon('check')}<span data-t="noneOf14"></span></p>`;
-  return `<p class="allerg">${icon('alert-circle')}<span>${p.allergens.map(c => esc(allergenName(c))).join(', ')}</span></p>`;
-}
 
 function groupMarkup(g){
   const single = g.max === 1;
@@ -77,7 +78,32 @@ function factsMarkup(p){
     ${approx ? `<p class="fact-note muted" data-t="approx"></p>` : ''}`;
 }
 
-export function openDish(p){
+/// The card's photograph lifts off the card and lands as the sheet's hero:
+/// a fixed copy animated from the card's rectangle to the hero's, over the
+/// sheet's rise, then removed -- the hero underneath is already there.
+function zoomFrom(el){
+  const img = el?.querySelector?.('.card-media img');
+  const hero = $('.dhero'); const box = $('#sheet');
+  if (!img || !hero || !box || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const from = img.getBoundingClientRect();
+  // The hero's rectangle once the sheet has risen: measured with the rise
+  // switched off for one frame, then restored.
+  box.style.transition = 'none'; box.classList.add('show');
+  const to = hero.getBoundingClientRect();
+  box.classList.remove('show'); void box.offsetHeight; box.style.transition = ''; box.classList.add('show');
+  const ghost = document.createElement('img');
+  ghost.src = img.currentSrc || img.src; ghost.className = 'zoom-ghost'; ghost.alt = '';
+  Object.assign(ghost.style, { left: `${from.left}px`, top: `${from.top}px`, width: `${from.width}px`, height: `${from.height}px` });
+  document.body.appendChild(ghost);
+  hero.classList.add('under');
+  const a = ghost.animate([
+    { transform: 'translate(0,0) scale(1,1)', borderRadius: '16px' },
+    { transform: `translate(${to.left - from.left}px, ${to.top - from.top}px) scale(${to.width / from.width}, ${to.height / from.height})`, borderRadius: '0px' },
+  ], { duration: ZOOM_MS, easing: 'cubic-bezier(.37,0,.63,1)', fill: 'forwards' });
+  a.finished.catch(() => {}).then(() => { hero.classList.remove('under'); ghost.remove(); });
+}
+
+export function openDish(p, fromEl){
   const groups = Array.isArray(p.modifierGroups) ? p.modifierGroups : [];
   const tags = Array.isArray(p.tags) ? p.tags : [];
   const ingredients = Array.isArray(p.ingredients) ? p.ingredients.filter(Boolean) : [];
@@ -95,7 +121,6 @@ export function openDish(p){
         ${p.description && !ingredients.length ? `<p class="muted ddesc">${esc(p.description)}</p>` : ''}
         ${ingredients.length ? `<h3 class="dsec" data-t="ingredients"></h3>
           <ul class="ings">${ingredients.map(i => `<li>${esc(i)}</li>`).join('')}</ul>` : ''}
-        ${allergenLine(p)}
         ${factsMarkup(p)}
         ${groups.map(groupMarkup).join('')}
         <p id="derr" class="err" hidden></p>
@@ -107,6 +132,9 @@ export function openDish(p){
         <button class="btn dadd" id="dadd"><span data-t="add"></span><span class="money" id="dprice" data-money="${p.price | 0}">${money(p.price)}</span></button>
       </div>
     </div>`, { name: 'dish' });
+  zoomFrom(fromEl);
+  for (const [i, li] of $$('.ings li', $('#sheetIn')).entries()) li.style.setProperty('--i', String(i));
+  haptic(HAPTIC_TAP_MS);
   $('#dback').onclick = closeSheet;
   bindAr(p);
   let q = QTY_MIN;
@@ -136,6 +164,7 @@ export function openDish(p){
   $('#dadd').onclick = () => {
     const mods = chosen().map(el => el.value);
     addLine(p.id, mods, q);
+    haptic(HAPTIC_ADD_MS);
     seaEvent('order_created', SEA_PULSE_SHEET, centreOf($('#dadd')));
     toast(`${p.name} · ${q}`);
     onAdded?.(p, q);
@@ -151,8 +180,9 @@ export function quickAdd(p, el){
   const groups = Array.isArray(p.modifierGroups) ? p.modifierGroups : [];
   if (groups.some(g => (g.min | 0) >= 1)) return openDish(p);
   addLine(p.id, [], 1);
+  haptic(HAPTIC_ADD_MS);
   seaEvent('order_created', SEA_PULSE_CARD, centreOf(el));
-  onAdded?.(p, 1);
+  onAdded?.(p, 1, el);
 }
 
 // "How big is it, actually?" -- the AR button, on devices that can, for dishes

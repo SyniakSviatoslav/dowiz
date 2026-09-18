@@ -1005,3 +1005,13 @@ its source, which is why translations, logo and hours "did not work". Verified l
   branch, seal, gold `&`); waiting = ink ocean in the tracking sheet (`lib/tide-sea.js`:
   sun rises with phase, leaves on the wind) under a glass status card. `.stage-art` clipped at
   the viewport — an overflowing enso had zoomed the mobile layout viewport to 453px.
+- Fourth pass (operator, same night): allergens gone; voice ordering (`store/voice-order.js`,
+  client-side match against the loaded menu); address as parts + private-house switch, `parts`
+  in the envelope; waypoint HUD on the map (bearing/distance/wind, follow-my-heading); venue
+  panel; episode sheet full-screen over a FLAT ink sea with one state + review reel; loader =
+  enso + seal + name letters, venue remembered in `dw_boot_<slug>`; PWA (`/manifest.webmanifest`
+  per venue from the Worker, `public/sw.js`, install row); `store/motion.js` (morph: scatter /
+  FLIP / deal; sweep: fog + wisps) for sort/filter/currency/language; magazine spread (feat /
+  plate / wide, outline folio); the dish's photo flies from card to sheet, rows dealt, haptics.
+  Two CSS lessons: `.card-media` was an inline <span> so `aspect-ratio` never applied (photos
+  were always 3:2), and `height:100%` on the card button made the grid row size the card.

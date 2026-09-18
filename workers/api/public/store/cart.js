@@ -16,7 +16,12 @@ export function refreshBar(){
   pill.classList.toggle('show', n > 0);
   $('#pillCount').textContent = n;
   const total = $('#pillTotal'); total.dataset.money = String(subtotal()); total.textContent = money(subtotal());
-  const badge = $('#navCartN'); if (badge) { badge.textContent = n; badge.hidden = n === 0; }
+  const badge = $('#navCartN');
+  if (badge) {
+    const grew = Number(badge.textContent) < n;
+    badge.textContent = n; badge.hidden = n === 0;
+    if (grew) { badge.classList.remove('pop'); void badge.offsetWidth; badge.classList.add('pop'); }
+  }
   document.body.classList.toggle('has-cart', n > 0);
 }
 
