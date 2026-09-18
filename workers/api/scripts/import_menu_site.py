@@ -25,7 +25,7 @@ Every imported dish arrives with allergens ABSENT, which every dowiz surface
 renders as "not declared": the loud state, on purpose. The venue declares them
 in the console, where the publish gate can hold them to it.
 """
-import argparse, json, os, re, sys, urllib.request
+import argparse, json, os, re, sys, urllib.parse, urllib.request
 
 SITE = "https://sushi-durres-menu.netlify.app/"
 SLUG = "sushi-durres"
@@ -46,12 +46,45 @@ def fetch(url: str) -> bytes:
         return r.read()
 
 
-def site_data(src: str) -> dict:
+def site_data(src: str) -> tuple[dict, str]:
+    """The catalogue AND the page it came from.
+
+    The page is returned too because the venue's identity -- its mark and its
+    colours -- is declared in the same document as its menu, and fetching that
+    document twice is two chances to read two different versions of it.
+    """
     raw = fetch(src).decode("utf-8", "replace") if src.startswith("http") else open(src, encoding="utf-8").read()
     m = re.search(r'<script id="menu-data" type="application/json">(.*?)</script>', raw, re.S)
     if not m:
         sys.exit("import: the page has no <script id=\"menu-data\"> block")
-    return json.loads(m.group(1))
+    return json.loads(m.group(1)), raw
+
+
+def site_brand(html: str, base: str) -> dict:
+    """The venue's own mark and colours, read from the site that publishes them.
+
+    THE SITE IS THE VENUE'S OWN STATEMENT OF ITS IDENTITY. Guessing a brand
+    colour out of a photograph is how a sushi bar ends up salmon pink; these are
+    the values its own stylesheet declares, by name.
+
+    Absent is absent: a site that declares no logo or no accent yields nothing
+    here, and the venue keeps the platform's shipped look until somebody
+    chooses otherwise. An invented brand is worse than a default one.
+    """
+    var = lambda name: (re.search(r"--%s:\s*(#[0-9a-fA-F]{3,8})" % name, html) or [None, None])[1]
+    logo = re.search(r'(?:src|href)="([^"]*logo[^"]*\.(?:png|svg|webp|jpe?g))"', html, re.I)
+    out = {}
+    if logo:
+        href = logo.group(1)
+        out["logo"] = href if href.startswith("http") else urllib.parse.urljoin(base, href)
+    # `gold` is this venue's accent and `bg`/`cream` its paper and ink. The names
+    # are the site's own; a site that uses other names contributes no colour
+    # rather than a colour picked by resemblance.
+    for key, name in (("primary", "gold"), ("paper", "bg"), ("ink", "cream")):
+        v = var(name)
+        if v:
+            out[key] = v
+    return out
 
 
 def minor_units(text: str) -> int | None:
@@ -84,7 +117,7 @@ def main() -> int:
                          "venue's real currency and delivery terms")
     args = ap.parse_args()
 
-    data = site_data(args.src)
+    data, raw_html = site_data(args.src)
     items, cats = data.get("items", []), data.get("categories", [])
     if not items or not cats:
         sys.exit("import: the data block has no items or no categories")
@@ -178,13 +211,57 @@ def main() -> int:
         "stripePublishableKey": None,
     }
 
+    # ── The photographs themselves ──
+    #
+    # `photos.json` names them; without the bytes beside it the apply step has
+    # nothing to upload, and the venue gets 165 dishes with 0 pictures -- which
+    # is the state this whole import exists to end. They are fetched ONCE, here,
+    # and written under `<out>/photos/<id><ext>`, which is exactly where
+    # `apply_menu_import.py --photos` looks.
+    shots = os.path.join(args.out, "photos")
+    if args.photos:
+        print(f"photographs: using the directory given ({args.photos})")
+    else:
+        os.makedirs(shots, exist_ok=True)
+        got = failed = 0
+        for pid, rel in photos.items():
+            dest = os.path.join(shots, pid + os.path.splitext(rel)[1])
+            if os.path.exists(dest):
+                got += 1
+                continue
+            try:
+                blob = fetch(urllib.parse.urljoin(args.src if args.src.startswith("http") else SITE, rel))
+                with open(dest, "wb") as f:
+                    f.write(blob)
+                got += 1
+            except Exception as e:
+                failed += 1
+                print(f"  photo {pid}: {e}")
+        print(f"photographs fetched: {got} of {len(photos)}" + (f", {failed} failed" if failed else ""))
+
+    # ── The venue's own mark and colours ──
+    brand = site_brand(raw_html, args.src if args.src.startswith("http") else SITE)
+    if brand.get("logo"):
+        try:
+            blob = fetch(brand["logo"])
+            ext = os.path.splitext(urllib.parse.urlparse(brand["logo"]).path)[1] or ".png"
+            with open(os.path.join(args.out, "logo" + ext), "wb") as f:
+                f.write(blob)
+            brand["logoFile"] = "logo" + ext
+        except Exception as e:
+            print(f"logo: could not be fetched ({e}) -- the venue keeps the shipped mark")
+            brand.pop("logo", None)
+
     for name, payload in (("bundle.json", bundle), ("i18n.json", i18n),
-                          ("photos.json", photos), ("menu.json", menu)):
+                          ("photos.json", photos), ("menu.json", menu),
+                          ("brand.json", brand)):
         with open(os.path.join(args.out, name), "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=1)
 
     print(f"categories {len(out_cats)}  products {len(out_products)}  "
           f"photos {len(photos)}  translated {len(i18n)}  skipped {len(skipped)}")
+    print("brand: " + (", ".join(f"{k}={v}" for k, v in brand.items()) if brand
+                       else "the site declares none -- the venue keeps the shipped look"))
     for s in skipped:
         print(f"  skipped {s['id']}: {s['why']}")
     print(f"NO ALLERGENS DECLARED for {len(out_products)} dishes — the venue must "

@@ -512,7 +512,23 @@ async function load(){
     state.avoid = loadAvoid();
     applyTheme(d.location.theme);
     document.title = d.location.name;
+    // THE VENUE'S OWN MARK, WHEN IT HAS ONE. The name is always written, because
+    // a logo that fails to load must still leave something readable, and the
+    // <img> is added beside it rather than instead of it -- the alt text is the
+    // venue's name for exactly the same reason. `logoUrl` was dead in the
+    // schema until the menu route started serving it; a venue without one is
+    // the common case and renders as it always did.
     $('#brandName').textContent = d.location.name;
+    const mark = $('#brandMark');
+    if (mark) {
+      if (d.location.logoUrl) {
+        mark.src = d.location.logoUrl;
+        mark.alt = d.location.name;
+        mark.hidden = false;
+      } else {
+        mark.hidden = true;
+      }
+    }
     document.documentElement.lang = lang;
     // THE VENUE'S CURRENCY IS KNOWN ONLY NOW, so the reading currency is
     // resolved here: whatever this browser last chose, if the product still

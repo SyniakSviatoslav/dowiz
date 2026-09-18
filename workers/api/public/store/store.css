@@ -141,6 +141,10 @@ button,input,textarea,select{font:inherit;color:inherit}
      background:var(--brand-bg);
      background:color-mix(in srgb,var(--brand-bg) 90%,transparent);
      backdrop-filter:blur(12px);border-bottom:1px solid var(--brand-border)}
+/* The venue's mark sits before its name, at the header's own height. It is
+   `object-fit:contain` because a logo is not a photograph: cropping one is
+   editing somebody's trademark. */
+.brand-mark{width:32px;height:32px;border-radius:8px;object-fit:contain;flex:none}
 .brand{font-family:var(--brand-font-heading);font-size:var(--text-xl);flex:1;
        white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .langs{display:flex;gap:2px;background:var(--brand-surface-raised);border-radius:var(--radius-full);padding:var(--space-1)}

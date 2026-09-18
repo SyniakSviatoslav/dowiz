@@ -392,6 +392,11 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // said "closed" instead of "opens at eleven", and a customer told only that
     // a place is shut goes somewhere else.
     location["theme"] = raw.get("theme").cloned().unwrap_or(Value::Null);
+    // The venue's own mark, for the same reason its own colours are here: a
+    // storefront that carries the platform's name and not the venue's is a
+    // storefront the customer does not recognise as the place they are
+    // ordering from.
+    location["logoUrl"] = raw.get("logo_url").cloned().unwrap_or(Value::Null);
     location["pickup"] = json!(raw.get("pickup").and_then(Value::as_bool).unwrap_or(false));
     location["hasDeliveryZones"] = json!(raw.get("delivery_zones").is_some());
     location["nextOpen"] = next_open

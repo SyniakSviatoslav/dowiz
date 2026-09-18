@@ -271,6 +271,9 @@ async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/owner/apikeys/revoke", extra::revoke_api_key)
         .post_async("/api/owner/products/:id/image", extra::set_product_image)
         .post_async("/api/owner/products/:id/image/clear", extra::clear_product_image)
+        // The venue's own mark, stored the way its dishes' photographs are.
+        .post_async("/api/owner/logo", extra::set_venue_logo)
+        .post_async("/api/owner/logo/clear", extra::clear_venue_logo)
         .get_async("/media/:name", extra::media)
         // ── courier ──
         .get_async("/api/courier/tasks", courier::tasks)

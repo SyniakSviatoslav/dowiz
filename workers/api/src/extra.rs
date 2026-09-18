@@ -2384,6 +2384,77 @@ pub async fn set_product_image(mut req: Request, ctx: RouteContext<()>) -> Resul
     }))
 }
 
+/// `POST /api/owner/logo`
+///
+/// THE VENUE'S OWN MARK. `locations.logo_url` has existed since the catalogue
+/// migration and NOTHING HAS EVER READ OR WRITTEN IT -- the column was created,
+/// documented, and left dead, which is why every venue's storefront carried the
+/// platform's name and none carried its own. A logo is the one thing a customer
+/// recognises before they read anything, so it belongs beside the venue's
+/// colours in the location record, not in a column no route touches.
+///
+/// It is stored exactly as a dish photograph is: sniffed, checked for
+/// completeness, content-addressed, written to MEDIA with its media type beside
+/// it. The same rules apply for the same reasons -- a truncated logo is a
+/// broken logo on every screen at once.
+pub async fn set_venue_logo(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
+    };
+    let _ = &loc;
+
+    let bytes = req.bytes().await?;
+    let stored = match dowiz_hub::media::prepare(&bytes) {
+        Ok(s) => s,
+        Err(e) => return Response::error(e.to_string(), 400),
+    };
+    let url = stored.url();
+    let key = url.trim_start_matches("/media/").to_string();
+
+    let kv = ctx.kv("MEDIA")?;
+    // No expiry, for the reason a dish photo has none: a receipt printed last
+    // week still names this mark.
+    kv.put_bytes(&key, &bytes)?.execute().await?;
+    kv.put(&format!("{key}#type"), stored.kind.mime())?.execute().await?;
+
+    let u = url.clone();
+    crate::hubstore::with_catalog(&place, move |cat| {
+        let raw = cat.location().ok_or_else(|| Error::RustError("no venue".into()))?;
+        let mut l: Value = serde_json::from_str(&raw).unwrap_or(json!({}));
+        // The PREVIOUS logo is not deleted, exactly as a dish's previous photo
+        // is not: the bytes are content-addressed and may be referenced by
+        // anything already printed.
+        l["logo_url"] = json!(u);
+        cat.set_location(&serde_json::to_string(&l).unwrap_or(raw));
+        Ok(())
+    })
+    .await?;
+    Response::from_json(&json!({
+        "logoUrl": url, "bytes": stored.bytes, "type": stored.kind.mime()
+    }))
+}
+
+/// `POST /api/owner/logo/clear`
+pub async fn clear_venue_logo(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
+    if let Err(r) = owner_and_venue(&req, &ctx, &db).await {
+        return Ok(r);
+    }
+    crate::hubstore::with_catalog(&place, move |cat| {
+        let raw = cat.location().ok_or_else(|| Error::RustError("no venue".into()))?;
+        let mut l: Value = serde_json::from_str(&raw).unwrap_or(json!({}));
+        l["logo_url"] = Value::Null;
+        cat.set_location(&serde_json::to_string(&l).unwrap_or(raw));
+        Ok(())
+    })
+    .await?;
+    Response::from_json(&json!({ "ok": true }))
+}
+
 /// `POST /api/owner/products/:id/image/clear`
 pub async fn clear_product_image(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;

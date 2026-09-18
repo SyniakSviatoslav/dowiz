@@ -46,6 +46,9 @@
 <canvas id="sea" aria-hidden="true"></canvas>
 <div id="offline" class="offline" hidden></div>
 <header class="top"><div class="wrap top-in">
+  <!-- The mark is hidden until the venue has one; the name is always there
+       behind it, so a logo that does not load leaves a readable header. -->
+  <img class="brand-mark" id="brandMark" alt="" width="32" height="32" hidden>
   <span class="brand" id="brandName">…</span>
   <!-- Hidden until there is something to show: a "my orders" button that opens
        an empty list on a first visit is a promise the site has not kept yet. -->

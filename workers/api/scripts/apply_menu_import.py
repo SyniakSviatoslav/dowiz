@@ -57,7 +57,9 @@ def whole_image(b: bytes) -> tuple[bool, str]:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", default="./import")
-    ap.add_argument("--photos", default="./refimg")
+    # Default to where the import step writes them, so the two halves of the
+    # pipeline agree without a flag anybody has to remember.
+    ap.add_argument("--photos", default=None)
     ap.add_argument("--hub", default=os.environ.get("HUB", ""))
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--skip-catalogue", action="store_true")
@@ -65,6 +67,8 @@ def main() -> int:
     if not a.hub:
         sys.exit("apply: set HUB (e.g. https://sushi-durres.dowiz.org)")
 
+    if not a.photos:
+        a.photos = os.path.join(a.dir, "photos")
     load = lambda n: json.load(open(os.path.join(a.dir, n), encoding="utf-8"))
     bundle, photos, i18n = load("bundle.json"), load("photos.json"), load("i18n.json")
 
@@ -104,7 +108,7 @@ def main() -> int:
     # owner session for steps 2 and 3
     email, password = os.environ.get("OWNER_EMAIL"), os.environ.get("OWNER_PASSWORD")
     if not (email and password):
-        print("apply: no OWNER_EMAIL/OWNER_PASSWORD — photographs and translations skipped")
+        print("apply: no OWNER_EMAIL/OWNER_PASSWORD — photographs, translations, logo and colours skipped")
         return 0
     code, body = http("POST", f"{a.hub}/api/auth/login",
                       json.dumps({"email": email, "password": password}).encode(),
@@ -137,6 +141,38 @@ def main() -> int:
             bad += 1
             print(f"  i18n {pid} → {code} {resp[:120].decode('utf-8','replace')}")
     print(f"translations written: {ok} ok, {bad} refused")
+
+    # 4. the venue's own mark
+    #
+    # LAST, DELIBERATELY. A logo on a venue whose catalogue was refused is a
+    # brand on an empty shop; the order here is the order in which the venue
+    # stays servable, and the mark is the only step whose failure changes
+    # nothing a customer can order from.
+    brand_path = os.path.join(a.dir, "brand.json")
+    brand = json.load(open(brand_path, encoding="utf-8")) if os.path.exists(brand_path) else {}
+    if brand.get("logoFile"):
+        blob = open(os.path.join(a.dir, brand["logoFile"]), "rb").read()
+        whole, why = whole_image(blob)
+        if not whole:
+            print(f"  logo: NOT UPLOADED — {why}")
+        else:
+            code, resp = http("POST", f"{a.hub}/api/owner/logo", blob,
+                              {**auth, "content-type": "application/octet-stream"})
+            print(f"logo → {code} {resp[:160].decode('utf-8','replace')}")
+
+    # 5. the venue's own colours
+    #
+    # The hub DERIVES a whole theme from the seed and refuses one whose text
+    # would be unreadable (409 with the contrast it measured). A refusal is
+    # printed and not worked around: a venue's brand is not worth a customer
+    # who cannot read the price.
+    if brand.get("primary"):
+        payload = {k: v for k, v in
+                   (("primary", brand.get("primary")), ("ink", brand.get("ink")),
+                    ("paper", brand.get("paper"))) if v}
+        code, resp = http("POST", f"{a.hub}/api/owner/branding", json.dumps(payload).encode(),
+                          {**auth, "content-type": "application/json"})
+        print(f"branding {payload} → {code} {resp[:200].decode('utf-8','replace')}")
     return 0
 
 
