@@ -354,8 +354,30 @@ impl Theme {
         // The accent has to clear AA-large on the venue's own surface too, not
         // only on white: a pale gold on a cream page is invisible even though
         // it passed against a ground this venue does not have.
-        let (on_surface, _) = ensure_contrast(t.primary, t.surface, AA_LARGE);
+        //
+        // FROM THE SEED, NOT FROM `t.primary`. `from_seed` has already walked
+        // the accent darker to clear a WHITE ground, and `ensure_contrast` only
+        // ever fixes a FAILURE -- so on a DARK paper the darkened accent passed
+        // and stayed darkened, and there was nothing to walk it back. A venue
+        // whose gold is #d4af37 was served #8c721e on its own near-black page,
+        // where the real gold clears AA-large several times over. Starting from
+        // the accent the venue actually chose makes the correction depend on
+        // the ground it is correcting for, which is what the comment above
+        // always claimed.
+        let (on_surface, _) = ensure_contrast(accent, t.surface, AA_LARGE);
         t.primary = on_surface;
+        // `on_primary` was chosen against the OLD primary, so it is re-derived:
+        // a brighter accent can need black where the darker one needed white.
+        // White or near-black, whichever a label can actually be read in. The
+        // dark set already derives its accent from the seed this way (see
+        // `dark_primary`); this is the light set catching up.
+        let white = Rgb { r: 255, g: 255, b: 255 };
+        let near_black = Rgb { r: 17, g: 17, b: 17 };
+        t.on_primary = if contrast(white, t.primary) >= contrast(near_black, t.primary) {
+            white
+        } else {
+            near_black
+        };
         let (ah, as_, al) = t.primary.hsl();
         t.primary_hover = Rgb::from_hsl(ah, as_, (al - 0.06).max(0.0));
         t
@@ -571,6 +593,43 @@ mod tests {
         // An image with no chromatic pixels at all also yields nothing, so the
         // caller can say "no colours found" rather than invent one.
         assert!(dominant(&vec![Rgb::new(255, 255, 255); 100], 4).is_empty());
+    }
+
+    /// THE PAPER DECIDES THE CORRECTION. sushi-durres chose gold #d4af37 on a
+    /// near-black #07141c, and for a week its light set carried #8c721e: the
+    /// accent had been darkened to clear WHITE and nothing walked it back once
+    /// the venue's own dark ground was known. Gold on near-black clears AA-large
+    /// several times over, so the venue's colour must be served untouched.
+    #[test]
+    fn a_dark_paper_keeps_the_venues_own_accent() {
+        let gold = Rgb::from_hex("#d4af37").unwrap();
+        let t = Theme::from_brand(
+            gold,
+            Rgb::from_hex("#f8f5ee").unwrap(),
+            Rgb::from_hex("#07141c").unwrap(),
+        );
+        assert_eq!(t.primary, gold, "served {} on a dark paper", t.primary.hex());
+        // Gold needs dark lettering, and the label colour follows the accent
+        // that is actually served rather than the one that was replaced.
+        assert!(contrast(t.on_primary, t.primary) >= AA_TEXT, "on-primary {} on {}", t.on_primary.hex(), t.primary.hex());
+        for (what, got, want) in t.contrast_report() {
+            assert!(got >= want, "{what} is {got:.2}:1, needs {want}:1");
+        }
+    }
+
+    /// The control: on a WHITE paper the same pale accent still has to move,
+    /// so the fix above is a change of ground and not a change of policy.
+    #[test]
+    fn a_light_paper_still_corrects_a_pale_accent() {
+        let pale = Rgb::from_hex("#ffd9e3").unwrap();
+        let t = Theme::from_brand(
+            pale,
+            Rgb::from_hex("#111111").unwrap(),
+            Rgb::from_hex("#ffffff").unwrap(),
+        );
+        assert_ne!(t.primary, pale);
+        assert!(contrast(t.primary, t.surface) >= AA_LARGE);
+        assert!(contrast(t.on_primary, t.primary) >= AA_TEXT);
     }
 
     #[test]
