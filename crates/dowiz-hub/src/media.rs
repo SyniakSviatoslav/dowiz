@@ -82,6 +82,44 @@ pub fn sniff(bytes: &[u8]) -> Option<Kind> {
     None
 }
 
+/// Does the container close the way its format says it must?
+///
+/// One rule per format, and each is the format's own end-of-file marker:
+///   * JPEG must carry a frame header (SOF), a scan (SOS) and end with EOI;
+///   * PNG must end with the `IEND` chunk;
+///   * GIF must end with the trailer byte `0x3B`;
+///   * WEBP's RIFF header states its own length, so the file must be at least
+///     that long.
+/// Trailing NUL padding is tolerated on the marker formats: some tools pad, and
+/// a padded file still decodes.
+pub fn complete(bytes: &[u8], kind: Kind) -> bool {
+    let trimmed = {
+        let mut end = bytes.len();
+        while end > 0 && bytes[end - 1] == 0 {
+            end -= 1;
+        }
+        &bytes[..end]
+    };
+    match kind {
+        Kind::Jpeg => {
+            trimmed.ends_with(&[0xFF, 0xD9])
+                && trimmed.windows(2).any(|w| w == [0xFF, 0xDA])
+                && trimmed
+                    .windows(2)
+                    .any(|w| w[0] == 0xFF && matches!(w[1], 0xC0 | 0xC1 | 0xC2))
+        }
+        Kind::Png => trimmed.ends_with(b"IEND\xae\x42\x60\x82"),
+        Kind::Gif => trimmed.last() == Some(&0x3B),
+        Kind::Webp => {
+            if trimmed.len() < 12 {
+                return false;
+            }
+            let stated = u32::from_le_bytes([trimmed[4], trimmed[5], trimmed[6], trimmed[7]]);
+            trimmed.len() as u64 >= stated as u64 + 8
+        }
+    }
+}
+
 /// The largest file accepted.
 ///
 /// A dish photo that has been through a browser canvas at 1600px is well under
@@ -94,6 +132,8 @@ pub enum MediaError {
     TooLarge(usize),
     /// The bytes are not one of the four image formats.
     NotAnImage,
+    /// It begins as an image and does not finish as one.
+    Truncated(Kind),
     Io(String),
 }
 
@@ -101,6 +141,11 @@ impl std::fmt::Display for MediaError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             MediaError::TooLarge(n) => write!(f, "{n} bytes is larger than the {MAX_BYTES} limit"),
+            MediaError::Truncated(k) => write!(
+                f,
+                "that {k:?} file is incomplete -- it starts like an image and has no end marker, \
+                 so a browser will show nothing where the photograph should be"
+            ),
             MediaError::NotAnImage => {
                 write!(f, "that file is not a jpeg, png, webp or gif")
             }
@@ -137,6 +182,22 @@ pub fn prepare(bytes: &[u8]) -> Result<Stored, MediaError> {
         return Err(MediaError::TooLarge(bytes.len()));
     }
     let kind = sniff(bytes).ok_or(MediaError::NotAnImage)?;
+    // ── THE FILE MUST END AS WELL AS BEGIN ──
+    //
+    // `sniff` reads the first twelve bytes, which is what a FORMAT check needs
+    // and not what an INTEGRITY check needs. A truncated upload -- a dropped
+    // connection, a half-written file -- still starts with the right magic, so
+    // it was accepted, stored, served with a 200 and an `image/jpeg` header, and
+    // drawn by the browser as nothing at all. That is exactly what happened to
+    // this product's only dish photograph: 4012 bytes, a JFIF header, and no end
+    // marker (found 2026-09-17; Chromium reports `naturalWidth 0`).
+    //
+    // Nothing here decodes the image -- that is a decoder's job and a Worker has
+    // no room for one. It checks that the container is closed, which is cheap,
+    // has no false positives on a whole file, and catches every truncation.
+    if !complete(bytes, kind) {
+        return Err(MediaError::Truncated(kind));
+    }
     let digest = hex(&Sha256::digest(bytes));
     Ok(Stored { digest, kind, bytes: bytes.len() })
 }
@@ -165,7 +226,25 @@ pub fn parse_name(name: &str) -> Option<(String, Kind)> {
 mod tests {
     use super::*;
 
+    /// A WHOLE jpeg, not just one that starts like one.
+    ///
+    /// These fixtures used to stop after the JFIF header, which made every test
+    /// in this module assert against a file no browser can draw -- the same
+    /// shape as the truncated photograph that reached production. A fixture
+    /// that could not survive the thing being tested is not a fixture.
     fn jpeg() -> Vec<u8> {
+        let mut v = vec![0xFF, 0xD8, 0xFF, 0xE0];
+        v.extend_from_slice(b"\x00\x10JFIF\x00\x01");
+        v.extend(std::iter::repeat_n(0u8, 64));
+        v.extend_from_slice(&[0xFF, 0xC0]); // SOF0: a frame
+        v.extend(std::iter::repeat_n(0u8, 15));
+        v.extend_from_slice(&[0xFF, 0xDA]); // SOS: the scan
+        v.extend(std::iter::repeat_n(3u8, 32));
+        v.extend_from_slice(&[0xFF, 0xD9]); // EOI
+        v
+    }
+    /// Truncated at the header, exactly like the one that shipped.
+    fn jpeg_cut_short() -> Vec<u8> {
         let mut v = vec![0xFF, 0xD8, 0xFF, 0xE0];
         v.extend_from_slice(b"\x00\x10JFIF\x00\x01");
         v.extend(std::iter::repeat_n(0u8, 64));
@@ -174,7 +253,26 @@ mod tests {
     fn png() -> Vec<u8> {
         let mut v = b"\x89PNG\r\n\x1a\n".to_vec();
         v.extend(std::iter::repeat_n(7u8, 64));
+        v.extend_from_slice(b"IEND\xae\x42\x60\x82");
         v
+    }
+
+    /// RED before `complete()` existed: `prepare` accepted this and the hub
+    /// served 4012 bytes of header as a photograph, with a 200 and an
+    /// `image/jpeg` content type, which every browser drew as nothing.
+    #[test]
+    fn a_file_that_starts_like_an_image_and_stops_is_refused() {
+        assert_eq!(sniff(&jpeg_cut_short()), Some(Kind::Jpeg), "it still sniffs as a jpeg");
+        assert!(matches!(
+            prepare(&jpeg_cut_short()),
+            Err(MediaError::Truncated(Kind::Jpeg))
+        ));
+        // And the whole one is still accepted, so the check is not just strict.
+        assert!(prepare(&jpeg()).is_ok());
+
+        let mut cut_png = png();
+        cut_png.truncate(cut_png.len() - 8);
+        assert!(matches!(prepare(&cut_png), Err(MediaError::Truncated(Kind::Png))));
     }
 
     #[test]
@@ -182,11 +280,12 @@ mod tests {
         assert_eq!(sniff(&jpeg()), Some(Kind::Jpeg));
         assert_eq!(sniff(&png()), Some(Kind::Png));
         let mut webp = b"RIFF".to_vec();
-        webp.extend_from_slice(&[0, 0, 0, 0]);
+        webp.extend_from_slice(&4u32.to_le_bytes());
         webp.extend_from_slice(b"WEBPVP8 ");
         assert_eq!(sniff(&webp), Some(Kind::Webp));
         let mut gif = b"GIF89a".to_vec();
         gif.extend(std::iter::repeat_n(0u8, 16));
+        gif.push(0x3B);
         assert_eq!(sniff(&gif), Some(Kind::Gif));
     }
 
@@ -226,9 +325,13 @@ mod tests {
         let b = prepare(&jpeg()).expect("b");
         assert_eq!(a.digest, b.digest);
         assert_eq!(a.url(), b.url());
-        // And one changed byte is a different file.
+        // And one changed byte is a different file. The byte changed is one in
+        // the SCAN, not the last one: the last byte is now half of the EOI
+        // marker, and flipping it makes a TRUNCATED file rather than a
+        // different image -- which is a different test, two lines up.
         let mut other = jpeg();
-        *other.last_mut().unwrap() = 1;
+        let mid = other.len() - 8;
+        other[mid] ^= 0x01;
         assert_ne!(prepare(&other).expect("c").digest, a.digest);
     }
 

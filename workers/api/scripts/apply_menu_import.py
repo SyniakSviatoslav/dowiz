@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+"""Apply an import produced by `import_menu_site.py` to a live hub.
+
+Three writes, in the order that keeps the venue servable at every step:
+
+  1. the catalogue        POST  /api/bootstrap                     (bootstrap secret)
+  2. the photographs      POST  /api/owner/products/:id/image      (owner login)
+  3. the other languages  PATCH /api/owner/products/:id            (owner login)
+
+Nothing here guesses a credential. Set them in the environment:
+
+    export HUB=https://sushi-durres.dowiz.org
+    export BOOTSTRAP_SECRET=…          # only for step 1
+    export OWNER_EMAIL=… OWNER_PASSWORD=…   # steps 2 and 3
+
+    python3 scripts/apply_menu_import.py --dir ./import --photos ./refimg --dry-run
+    python3 scripts/apply_menu_import.py --dir ./import --photos ./refimg
+
+`--dry-run` performs every check and every read and writes NOTHING, so the whole
+import can be rehearsed against the real hub before it changes anything.
+
+PHOTOGRAPHS ARE CHECKED BEFORE THEY ARE SENT. A file that starts like an image
+and stops -- a dropped download, a half-written file -- used to be accepted by
+the hub, stored, and served with a 200 that every browser drew as nothing. The
+hub now refuses those (`dowiz_hub::media::complete`), and this script refuses
+them one step earlier, where the error can still name the file on disk.
+"""
+import argparse, json, os, sys, urllib.error, urllib.request
+
+def http(method, url, data=None, headers=None, timeout=120):
+    req = urllib.request.Request(url, data=data, method=method, headers=headers or {})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status, r.read()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read()
+    except Exception as e:                      # a refused connection is not a 500
+        return 0, str(e).encode()
+
+
+def whole_image(b: bytes) -> tuple[bool, str]:
+    """The same rule the hub applies, so a refusal happens here with a filename."""
+    if b[:3] == b"\xff\xd8\xff":
+        t = b.rstrip(b"\x00")
+        if not t.endswith(b"\xff\xd9"):        return False, "jpeg with no end marker (truncated)"
+        if b"\xff\xda" not in t:               return False, "jpeg with no scan"
+        if not any(m in t for m in (b"\xff\xc0", b"\xff\xc1", b"\xff\xc2")):
+            return False, "jpeg with no frame header"
+        return True, "jpeg"
+    if b[:8] == b"\x89PNG\r\n\x1a\n":
+        return (b.rstrip(b"\x00").endswith(b"IEND\xae\x42\x60\x82"), "png")
+    if b[:4] == b"RIFF" and b[8:12] == b"WEBP":  return True, "webp"
+    if b[:6] in (b"GIF87a", b"GIF89a"):          return True, "gif"
+    return False, "not a jpeg, png, webp or gif"
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--dir", default="./import")
+    ap.add_argument("--photos", default="./refimg")
+    ap.add_argument("--hub", default=os.environ.get("HUB", ""))
+    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--skip-catalogue", action="store_true")
+    a = ap.parse_args()
+    if not a.hub:
+        sys.exit("apply: set HUB (e.g. https://sushi-durres.dowiz.org)")
+
+    load = lambda n: json.load(open(os.path.join(a.dir, n), encoding="utf-8"))
+    bundle, photos, i18n = load("bundle.json"), load("photos.json"), load("i18n.json")
+
+    # ── Every photograph is read and checked BEFORE anything is written ──
+    files, broken, missing = {}, [], []
+    for pid, rel in photos.items():
+        path = os.path.join(a.photos, pid + os.path.splitext(rel)[1])
+        if not os.path.exists(path):
+            missing.append(pid); continue
+        b = open(path, "rb").read()
+        ok, why = whole_image(b)
+        (files.setdefault(pid, b) if ok else broken.append((pid, why)))
+    print(f"photographs: {len(files)} whole, {len(broken)} broken, {len(missing)} missing")
+    for pid, why in broken:
+        print(f"  BROKEN {pid}: {why}")
+    if broken:
+        sys.exit("apply: refusing to upload a broken photograph — fix or remove it first")
+
+    print(f"catalogue: {len(bundle['categories'])} categories, {len(bundle['products'])} products")
+    print(f"translations: {len(i18n)} products")
+    if a.dry_run:
+        print("DRY RUN — nothing was written")
+        return 0
+
+    # 1. the catalogue
+    if not a.skip_catalogue:
+        secret = os.environ.get("BOOTSTRAP_SECRET")
+        if not secret:
+            sys.exit("apply: BOOTSTRAP_SECRET is not set (or pass --skip-catalogue)")
+        code, body = http("POST", f"{a.hub}/api/bootstrap",
+                          json.dumps(bundle).encode(),
+                          {"content-type": "application/json", "x-dowiz-bootstrap": secret})
+        print(f"bootstrap → {code} {body[:200].decode('utf-8','replace')}")
+        if code != 200:
+            sys.exit("apply: the catalogue was refused; nothing else was attempted")
+
+    # owner session for steps 2 and 3
+    email, password = os.environ.get("OWNER_EMAIL"), os.environ.get("OWNER_PASSWORD")
+    if not (email and password):
+        print("apply: no OWNER_EMAIL/OWNER_PASSWORD — photographs and translations skipped")
+        return 0
+    code, body = http("POST", f"{a.hub}/api/auth/login",
+                      json.dumps({"email": email, "password": password}).encode(),
+                      {"content-type": "application/json"})
+    if code != 200:
+        sys.exit(f"apply: owner login failed {code}: {body[:200].decode('utf-8','replace')}")
+    token = json.loads(body)["access_token"]
+    auth = {"authorization": f"Bearer {token}"}
+
+    # 2. the photographs
+    ok = bad = 0
+    for pid, b in files.items():
+        code, resp = http("POST", f"{a.hub}/api/owner/products/{pid}/image", b,
+                          {**auth, "content-type": "application/octet-stream"})
+        if code == 200: ok += 1
+        else:
+            bad += 1
+            print(f"  photo {pid} → {code} {resp[:120].decode('utf-8','replace')}")
+    print(f"photographs uploaded: {ok} ok, {bad} refused")
+
+    # 3. the other languages
+    ok = bad = 0
+    loc = bundle["location"]["id"]
+    for pid, by_locale in i18n.items():
+        payload = {"location_id": loc, "translations": by_locale}
+        code, resp = http("PATCH", f"{a.hub}/api/owner/products/{pid}", json.dumps(payload).encode(),
+                          {**auth, "content-type": "application/json"})
+        if code == 200: ok += 1
+        else:
+            bad += 1
+            print(f"  i18n {pid} → {code} {resp[:120].decode('utf-8','replace')}")
+    print(f"translations written: {ok} ok, {bad} refused")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
