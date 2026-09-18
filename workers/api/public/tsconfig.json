@@ -1,0 +1,38 @@
+{
+  // TYPESCRIPT FOR THE BROWSER SURFACES, compiled BESIDE its source.
+  //
+  // `outDir` is the source directory on purpose. Every screen imports its
+  // neighbours by absolute served path (`/kit/app.js`, `/lib/money.js`), and
+  // the Worker serves this directory as static assets, so moving the output to
+  // a `dist/` would rewrite every import in the app and every path in the
+  // Worker's asset config for no gain. A module is migrated by deleting its
+  // `.js` and adding the `.ts`; tsc then emits the same filename back.
+  //
+  // The emitted `.js` IS COMMITTED, like `kernel/src/eqc_gen.rs`, because the
+  // deploy serves this tree directly and a build that has not run yet would
+  // serve an empty route. `scripts/ts-parity.sh` re-runs the compiler and fails
+  // if the committed output differs from what the source produces, so the two
+  // cannot drift the way generated code silently does.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": false,
+    "forceConsistentCasingInFileNames": true,
+    "allowJs": false,
+    "removeComments": false,
+    "newLine": "lf",
+    "outDir": ".",
+    "rootDir": ".",
+    "sourceMap": false,
+    "declaration": false,
+    "skipLibCheck": true,
+    "verbatimModuleSyntax": true
+  },
+  "include": ["**/*.ts"],
+  "exclude": ["node_modules", "**/*.d.ts"]
+}
