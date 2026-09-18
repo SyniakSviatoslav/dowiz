@@ -29,3 +29,23 @@
 .toast.show{opacity:1;transform:none}
 .btn:active{transform:scale(.97)}
 .icon-btn:active{transform:scale(.94)}
+
+/* ── Utilities ─────────────────────────────────────────────────────────────
+ * WHY THESE EXIST. `style-src 'self'` in public/_headers governs `style=`
+ * ATTRIBUTES as well as <style> elements, and the rendered markup carried 62
+ * of them -- every one silently dropped by the browser. These are the exact
+ * declarations those attributes held, not a spacing scale invented here, so
+ * the port is a rename and nothing moves.
+ */
+.muted{color:var(--brand-text-muted)}
+.mt-1{margin-top:8px}
+.mt-2{margin-top:12px}
+.mt-3{margin-top:14px}
+.mt-s3{margin-top:var(--space-3)}
+.mt-s4{margin-top:var(--space-4)}
+.mb-1{margin-bottom:8px}
+.mb-2{margin-bottom:12px}
+.mb-3{margin-bottom:14px}
+.my-3{margin:14px 0}
+/* A leading icon that heads an empty/error state. */
+.ico-lg{font-size:2rem;display:block;margin-bottom:8px}

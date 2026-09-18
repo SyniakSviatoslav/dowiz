@@ -150,6 +150,39 @@ function logout(){ store.t = null; store.r = null; S.booted = false; $('#top').h
 $('#logout').onclick = async () => { try { await api('/auth/logout', { method:'POST' }); } catch {} logout(); };
 
 // ── login ──
+// ── CSSOM hydration ────────────────────────────────────────────────────────
+// `style-src 'self'` (public/_headers) drops a `style=` attribute, so the three
+// values this console computes per render -- a gauge width, a stagger index and
+// a venue's own palette swatch -- travel as data- attributes and are written
+// through CSSOM, which the policy does not govern.
+//
+// An observer rather than a call at each site: this file writes innerHTML in 36
+// places, and a hydration that has to be remembered is one that gets forgotten.
+const HEX = /^#[0-9a-fA-F]{3,8}$/;
+
+function hydrate(root){
+  if (!root || root.nodeType !== 1) return;
+  const all = sel => [...(root.matches?.(sel) ? [root] : []), ...root.querySelectorAll(sel)];
+  for (const el of all('[data-w]')){
+    el.style.width = Number(el.dataset.w) + '%';
+    el.removeAttribute('data-w');
+  }
+  for (const el of all('[data-i]')){
+    el.style.setProperty('--i', String(Number(el.dataset.i) || 0));
+    el.removeAttribute('data-i');
+  }
+  for (const el of all('[data-bg]')){
+    // The colour comes from this venue's own hub, but the root of a stylesheet
+    // is no place to relax about what lands in it: hex or nothing.
+    if (HEX.test(el.dataset.bg)) el.style.background = el.dataset.bg;
+    el.removeAttribute('data-bg');
+  }
+}
+
+new MutationObserver(records => {
+  for (const r of records) for (const n of r.addedNodes) hydrate(n);
+}).observe(document.documentElement, { childList: true, subtree: true });
+
 function renderLogin(err){
   $('#app').innerHTML = `<div class="login">
     <h1>dowiz</h1><p>Панель власника</p>
@@ -245,7 +278,7 @@ function render(){
         <div class="stat"><div class="k">${label}</div>
           <div class="v money" data-k="${k}">${s
             ? (k === 'todayRevenue' ? money(s[k]) : s[k])
-            : `<span class="skel" style="display:inline-block;width:3rem;height:1.4rem;vertical-align:-.2em"></span>`}</div></div>`).join('')}
+            : `<span class="skel skel-inline"></span>`}</div></div>`).join('')}
     </div>
     ${readinessBanner(s)}
     <div class="tabs" role="tablist" aria-label="Розділи">
@@ -457,7 +490,7 @@ function ordersView(){
       <i class="ti ti-alert-triangle i" aria-hidden="true"></i>
       <b>Не вдалося завантажити замовлення</b>
       <span class="reason">${esc(S.error || '')}</span>
-      <button class="btn" id="retry" style="margin-top:12px">Спробувати ще раз</button>
+      <button class="btn mt-2" id="retry">Спробувати ще раз</button>
     </div></div>`;
   const live = ordersMatching();
   const searching = Boolean(String(S.oq || '').trim());
@@ -505,7 +538,7 @@ function statsView(){
       <i class="ti ti-alert-triangle i" aria-hidden="true"></i>
       <b>Аналітика не завантажилась</b>
       <span class="reason">${esc(S.statsError || '')}</span>
-      <button class="btn" id="retryStats" style="margin-top:12px">Спробувати ще раз</button>
+      <button class="btn mt-2" id="retryStats">Спробувати ще раз</button>
     </div></div>`;
   const a = S.analytics;
   if (!a || !a.orders) return `
@@ -618,7 +651,7 @@ function healthView(){
       <i class="ti ti-alert-triangle i" aria-hidden="true"></i>
       <b>Стан не завантажився</b>
       <span class="reason">${esc(S.healthError || '')}</span>
-      <button class="btn" id="retryHealth" style="margin-top:12px">Спробувати ще раз</button>
+      <button class="btn mt-2" id="retryHealth">Спробувати ще раз</button>
     </div></div>`;
   const h = S.health || {};
   const imgs = h.images || {};
@@ -642,7 +675,7 @@ function healthView(){
           <span class="grow">
             <div class="row"><b>${esc(name)}</b><span class="spacer"></span>
               <span class="chip ${cls === 'bad' ? 'warn' : ''}">${(pm / 10).toFixed(1)}%</span></div>
-            <div class="gauge ${cls}"><span style="width:${Math.max(1, Math.min(100, pm / 10))}%"></span></div>
+            <div class="gauge ${cls}"><span data-w="${Math.max(1, Math.min(100, pm / 10))}"></span></div>
             <small class="hint">${esc(sub)} · ${g.usedCells} з ${g.ceilingCells} комірок · покоління ${g.generation}${
               g.grows ? ' · росте сам' : ''}</small>
           </span>
@@ -661,7 +694,7 @@ function healthView(){
           не звільняються. Коли образ заповнюється, він ПЕРЕСТАЄ приймати записи,
           і це трапляється посеред робочого дня. Тут видно це заздалегідь.</p>
         <div class="elist">${rows}</div>
-        <div class="row" style="margin-top:var(--space-3)">
+        <div class="row mt-s3">
           <small class="hint">${h.orders || 0} замовлень · ${esc(h.venue || '')}</small>
           <span class="spacer"></span>
           <button class="btn narrow" id="refreshHealth">Оновити</button>
@@ -884,7 +917,7 @@ async function revealCustomer(key, reason){
   try {
     const d = await api(`/owner/customers/${encodeURIComponent(key)}/reveal`, { reason });
     box.innerHTML = `<b>${esc(d.name)}</b> · <a href="tel:${esc(d.phone)}">${esc(d.phone)}</a>
-      <div class="elist" style="margin-top:8px">
+      <div class="elist mt-1">
         ${d.orders.slice(0, 8).map(o => `<div class="erow">
           <span>${new Date(o.at).toLocaleDateString('uk', { day:'numeric', month:'short' })}
             ${o.address ? `<br><small class="hint">${esc(o.address)}</small>` : ''}</span>
@@ -1208,11 +1241,11 @@ function bindPromos(){
 
 function skeletonMenu(){
   return `<div class="panel" aria-busy="true" aria-label="Завантажуємо меню">
-    <div class="panel-h"><span class="skel" style="width:8rem;height:1rem"></span></div>
+    <div class="panel-h"><span class="skel skel-w8"></span></div>
     ${`<div class="prod">
-        <span class="n"><span class="skel" style="width:9rem;height:1rem"></span></span>
-        <span class="skel" style="width:5rem;height:var(--tap)"></span>
-        <span class="skel" style="width:3rem;height:1.5rem"></span>
+        <span class="n"><span class="skel skel-w9"></span></span>
+        <span class="skel skel-tap5"></span>
+        <span class="skel skel-w3h"></span>
       </div>`.repeat(4)}
   </div>`;
 }
@@ -1220,11 +1253,11 @@ function skeletonMenu(){
 function skeletonOrders(){
   return `<div class="panel" aria-busy="true" aria-label="Завантажуємо замовлення">
     ${`<article class="order sk">
-        <div class="o-h"><span class="skel" style="width:5rem;height:1rem"></span>
-          <span class="skel" style="width:7rem;height:1.5rem"></span>
-          <span class="skel" style="width:4rem;height:1rem;margin-left:auto"></span></div>
-        <div class="skel" style="width:70%;height:1rem;margin:10px 0"></div>
-        <div class="skel" style="width:45%;height:1rem"></div>
+        <div class="o-h"><span class="skel skel-w5"></span>
+          <span class="skel skel-w7h"></span>
+          <span class="skel skel-w4e"></span></div>
+        <div class="skel skel-p70"></div>
+        <div class="skel skel-p45"></div>
       </article>`.repeat(3)}
   </div>`;
 }
@@ -1246,7 +1279,7 @@ function row(o, newIdx){
     ? new Date(o.scheduled_for_ms).toLocaleString('uk', { day:'numeric', month:'short',
         hour:'2-digit', minute:'2-digit' })
     : null;
-  return `<article class="order ${o.status === 'PENDING' ? 'attn' : ''} ${newIdx >= 0 ? 'is-new' : ''}" ${newIdx >= 0 ? `style="--i:${newIdx}"` : ''}>
+  return `<article class="order ${o.status === 'PENDING' ? 'attn' : ''} ${newIdx >= 0 ? 'is-new' : ''}" ${newIdx >= 0 ? `data-i="${newIdx}"` : ''}>
     <div class="o-h">
       <span class="oid">#${esc(String(o.id).slice(0,8))}</span>
       <span class="chip ${st}"><i aria-hidden="true"></i>${esc(STATUS_LABEL[o.status] || o.status)}</span>
@@ -1692,9 +1725,9 @@ async function loadBrand(){
   $('#presets').innerHTML = presets.map(p => `
     <button class="preset ${p.id === S.presetOn ? 'on' : ''}" data-preset="${esc(p.id)}"
             title="${esc(p.label)}">
-      <span class="pchip" style="background:${esc(p.paper)}">
-        <span class="pdot" style="background:${esc(p.primary)}"></span>
-        <span class="pbar" style="background:${esc(p.ink)}"></span>
+      <span class="pchip" data-bg="${esc(p.paper)}">
+        <span class="pdot" data-bg="${esc(p.primary)}"></span>
+        <span class="pbar" data-bg="${esc(p.ink)}"></span>
       </span>
       <span>${esc(p.label)}</span>
     </button>`).join('');
@@ -2115,7 +2148,7 @@ function bindSetup(){
       // different one would be a bait and switch the owner only notices later.
       sw.innerHTML = d.swatches.map(s => `
         <button class="swatch" data-hex="${esc(s.hex)}" title="${esc(s.hex)}">
-          <span class="chipc" style="background:${esc(s.theme.primary)}"></span>
+          <span class="chipc" data-bg="${esc(s.theme.primary)}"></span>
           <span>${esc(s.theme.primary)}</span>
           <span class="hint">${s.sharePct}%${s.theme.primaryAdjustedPct ? ' · підсилено' : ''}</span>
         </button>`).join('');
@@ -2214,14 +2247,14 @@ function menuView(){
       <i class="ti ti-alert-triangle i" aria-hidden="true"></i>
       <b>Меню не завантажилось</b>
       <span class="reason">${esc(S.menuError || '')}</span>
-      <button class="btn" id="retryMenu" style="margin-top:12px">Спробувати ще раз</button>
+      <button class="btn mt-2" id="retryMenu">Спробувати ще раз</button>
     </div></div>`;
   if (!S.products.length) return `
     <div class="panel"><div class="empty">
       <i class="ti ti-tools-kitchen-2 i" aria-hidden="true"></i>
       <b>У меню ще немає страв</b>
       Завантажте CSV у розділі «Налаштування» — і меню з'явиться тут
-      <button class="btn" id="toSetup" style="margin-top:12px">До налаштувань</button>
+      <button class="btn mt-2" id="toSetup">До налаштувань</button>
     </div></div>`;
   let cat = null; const out = [];
   for (const p of S.products) {

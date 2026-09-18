@@ -416,10 +416,10 @@ function render(){
   // decoration: the alternative is asserting "you are offline" on no evidence.
   if (S.phase === 'loading' && !S.loadedOnce) {
     $('#app').innerHTML = `<div class="loadwrap" aria-busy="true" aria-label="Завантажуємо">
-      <div class="skel" style="height:1.2rem;width:9rem"></div>
-      <div class="skel" style="height:4.5rem"></div>
-      <div class="skel" style="height:4.5rem"></div>
-      <div class="skel" style="height:var(--tap);width:60%"></div>
+      <div class="skel skel-line"></div>
+      <div class="skel skel-block"></div>
+      <div class="skel skel-block"></div>
+      <div class="skel skel-cta"></div>
     </div>`;
     return;
   }
@@ -509,7 +509,7 @@ function orderHead(o, picked){
   const addr = o.address?.line || '';
   return `
     <h2>${picked ? 'Доставляєте' : 'Заберіть замовлення'}</h2>
-    <p class="sub"><span class="status${picked ? ' live' : ''}" style="--st:var(--st-${picked ? 'IN_DELIVERY' : 'READY'})">${picked ? 'В дорозі' : 'Готове'}</span>
+    <p class="sub"><span class="status st-${picked ? 'delivery' : 'ready'}${picked ? ' live' : ''}">${picked ? 'В дорозі' : 'Готове'}</span>
       <span>#${short(o.id)} · ${esc(o.items)} поз.</span></p>
     <div class="addr">${icon('map-pin')}<span>${esc(addr || '—')}</span></div>
     ${o.address?.note ? `<div class="note">${esc(o.address.note)}</div>` : ''}
@@ -673,7 +673,7 @@ async function panel(title, bodyHtml){
 }
 
 async function openEarnings(){
-  await panel('Мої зміни', `<div class="skel" style="height:5rem"></div>`);
+  await panel('Мої зміни', `<div class="skel skel-5"></div>`);
   let d;
   try { d = await api('/courier/earnings'); }
   catch (e) { return panel('Мої зміни', `<p class="answer">${esc(String(e.message || e))}</p>`); }
@@ -699,7 +699,7 @@ async function openEarnings(){
 }
 
 async function openHistory(){
-  await panel('Історія', `<div class="skel" style="height:4rem"></div>`);
+  await panel('Історія', `<div class="skel skel-4"></div>`);
   let d;
   try { d = await api('/courier/history'); }
   catch (e) { return panel('Історія', `<p class="answer">${esc(String(e.message || e))}</p>`); }
