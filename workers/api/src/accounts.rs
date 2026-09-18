@@ -26,6 +26,20 @@ const CONCURRENT_REFRESH_GRACE_MS: i64 = 5_000;
 pub struct LoginIn {
     pub email: String,
     pub password: String,
+    /// WHICH VENUE, when the caller owns more than one.
+    ///
+    /// The token carries `active_location_id`, and `Place::of_any` trusts that
+    /// claim BEFORE the host: an owner of two venues signing in without saying
+    /// which one got a token for the OLDEST membership, and every write they
+    /// then made -- a photograph, a logo, an address -- landed on that venue
+    /// however the request was addressed. Two hundred writes went to the wrong
+    /// restaurant that way, each answering 200.
+    ///
+    /// It is checked against this caller's OWN memberships, so naming a venue
+    /// grants nothing: an id they do not own finds no row and the login is
+    /// refused exactly as if they had no membership at all.
+    #[serde(default)]
+    pub location_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -142,15 +156,30 @@ pub async fn owner_login(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
     struct M {
         location_id: String,
     }
-    let m: Option<M> = db
-        .prepare(
-            "SELECT location_id FROM memberships \
-             WHERE user_id = ?1 AND role = 'owner' AND status = 'active' \
-             ORDER BY created_at_ms LIMIT 1",
-        )
-        .bind(&[user.id.clone().into()])?
-        .first(None)
-        .await?;
+    let wanted = body.location_id.as_deref().map(str::trim).filter(|s| !s.is_empty());
+    let m: Option<M> = match wanted {
+        Some(l) => {
+            db.prepare(
+                "SELECT location_id FROM memberships \
+                 WHERE user_id = ?1 AND location_id = ?2 AND role = 'owner' \
+                 AND status = 'active' LIMIT 1",
+            )
+            .bind(&[user.id.clone().into(), l.into()])?
+            .first(None)
+            .await?
+        }
+        // Unchanged for everyone who owns one venue: the oldest membership.
+        None => {
+            db.prepare(
+                "SELECT location_id FROM memberships \
+                 WHERE user_id = ?1 AND role = 'owner' AND status = 'active' \
+                 ORDER BY created_at_ms LIMIT 1",
+            )
+            .bind(&[user.id.clone().into()])?
+            .first(None)
+            .await?
+        }
+    };
     // A PLATFORM ADMINISTRATOR OWNS NO RESTAURANT, and that is the point of
     // them. Authority still comes from a table and not from the request -- it
     // just comes from a different one. Without this, the only way to sign in to

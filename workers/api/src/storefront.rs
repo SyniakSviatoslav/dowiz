@@ -342,6 +342,11 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
                         // a zero here would reach it as "0 g" instead — the
                         // same distinction `allergens` is careful about, for
                         // the same reason.
+                        // WHAT THE DISH IS, as the venue files it: salmon, tuna,
+                        // vegetarian, hot. The customer's filter is built from
+                        // these, so a venue that has declared none gets no
+                        // filter rather than an empty one.
+                        "tags": p.get("tags").cloned().unwrap_or(Value::Null),
                         "ingredients": p.get("ingredients").cloned().unwrap_or(Value::Null),
                         "weightG": p.get("weightG").cloned().unwrap_or(Value::Null),
                         "nutrition": p.get("nutrition").cloned().unwrap_or(Value::Null),

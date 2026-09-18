@@ -110,6 +110,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", default=SITE, help="the menu site, or a saved copy of its HTML")
     ap.add_argument("--slug", default=SLUG)
+    ap.add_argument("--venue-id", default=None,
+                    help="the venue's own id when it differs from the slug")
     ap.add_argument("--out", default="./import")
     ap.add_argument("--photos", default=None, help="directory of already-downloaded photographs")
     ap.add_argument("--owner-email", default=os.environ.get("OWNER_EMAIL"))
@@ -158,6 +160,12 @@ def main() -> int:
             # Absent, not empty: see the module docstring.
             "allergens": None,
             "ingredients": tr(it, "sq", "ingredients") or None,
+            # WHAT THE DISH IS, in the venue's own words: salmon, tuna, shrimp,
+            # vegetarian, hot, popular. The site files every dish under these
+            # and nothing carried them, so the storefront had 165 dishes and no
+            # way to say "show me the vegetarian ones" -- a filter the venue had
+            # already written down.
+            "tags": [t for t in (it.get("filters") or []) if t] or None,
             "imageUrl": None,          # filled by the photo upload, never guessed
             "sortOrder": n,
         })
@@ -173,7 +181,12 @@ def main() -> int:
         # MERGES the venue record, so the name, currency, locales, delivery
         # terms, hours, theme and logo the venue already has all survive -- it
         # used to overwrite them with exactly these two fields.
-        "location": {"id": args.slug, "slug": args.slug},
+        # THE ID AND THE SLUG ARE NOT THE SAME THING. `dubin-sushi.dowiz.org`
+        # serves a venue whose id is `dubin-durres`; writing the slug into both
+        # would rename the venue's own key and orphan every row that points at
+        # it. `--venue-id` defaults to the slug, because for most hubs they do
+        # match, and is given explicitly when they do not.
+        "location": {"id": args.venue_id or args.slug, "slug": args.slug},
         "categories": out_cats,
         "products": out_products,
         # THIS BUNDLE IS THE CATALOGUE, not an addition to one. Without it the

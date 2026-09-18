@@ -115,12 +115,19 @@ def main() -> int:
             sys.exit("apply: the catalogue was refused; nothing else was attempted")
 
     # owner session for steps 2 and 3
+    loc_id = bundle["location"]["id"]
     email, password = os.environ.get("OWNER_EMAIL"), os.environ.get("OWNER_PASSWORD")
     if not (email and password):
         print("apply: no OWNER_EMAIL/OWNER_PASSWORD — photographs, translations, logo and colours skipped")
         return 0
+    # NAME THE VENUE. The owner token carries `active_location_id` and every
+    # write resolves its venue from that claim BEFORE the host, so an owner of
+    # two venues who does not say which one gets a token for the oldest
+    # membership -- and 77 photographs, a logo and an address then landed on the
+    # wrong restaurant, each answering 200.
     code, body = http("POST", f"{a.hub}/api/auth/login",
-                      json.dumps({"email": email, "password": password}).encode(),
+                      json.dumps({"email": email, "password": password,
+                                  "location_id": loc_id}).encode(),
                       {"content-type": "application/json"})
     if code != 200:
         sys.exit(f"apply: owner login failed {code}: {body[:200].decode('utf-8','replace')}")
@@ -140,9 +147,8 @@ def main() -> int:
 
     # 3. the other languages
     ok = bad = 0
-    loc = bundle["location"]["id"]
     for pid, by_locale in i18n.items():
-        payload = {"location_id": loc, "translations": by_locale}
+        payload = {"location_id": loc_id, "translations": by_locale}
         # POST, not PATCH. The route is `.post_async("/api/owner/products/:id")`
         # and a PATCH to it is a 405 -- seventy-three of them, once each.
         code, resp = http("POST", f"{a.hub}/api/owner/products/{pid}", json.dumps(payload).encode(),
