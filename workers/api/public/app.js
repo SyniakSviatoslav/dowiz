@@ -35,7 +35,7 @@ const T = {
         subtotal:'Nëntotali', delivery:'Dërgesa', free:'Falas', closed:'Mbyllur tani',
         closedHint:'Telefononi për të porositur', soldOut:'S’ka', min:'Porosia minimale',
         sent:'Porosia u dërgua', track:'Ndiqni porosinë', offline:'Jeni offline — telefononi',
-        required:'E detyrueshme', badPhone:'Numër i pavlefshëm', ordering:'Duke dërguar…',
+        required:'E detyrueshme', optional:'(opsionale)', badPhone:'Numër i pavlefshëm', ordering:'Duke dërguar…',
         checkArea:'Kontrolloni adresën', checking:'Po kontrollojmë…',
         retry:'Provo përsëri', loadFail:'Menuja nuk u ngarkua', loading:'Po ngarkohet…',
         myOrders:'Porositë e mia', noOrders:'Ende asnjë porosi', when:'Kur', asap:'Sa më shpejt',
@@ -65,7 +65,7 @@ const T = {
         subtotal:'Subtotal', delivery:'Delivery', free:'Free', closed:'Closed right now',
         closedHint:'Call to order', soldOut:'Sold out', min:'Minimum order',
         sent:'Order placed', track:'Track your order', offline:'You are offline — call instead',
-        required:'Required', badPhone:'Invalid number', ordering:'Sending…',
+        required:'Required', optional:'(optional)', badPhone:'Invalid number', ordering:'Sending…',
         checkArea:'Check this address', checking:'Checking…',
         retry:'Try again', loadFail:'The menu did not load', loading:'Loading…',
         myOrders:'My orders', noOrders:'No orders yet', when:'When', asap:'As soon as possible',
@@ -95,7 +95,7 @@ const T = {
         subtotal:'Сума', delivery:'Доставка', free:'Безкоштовно', closed:'Зараз зачинено',
         closedHint:'Зателефонуйте, щоб замовити', soldOut:'Немає', min:'Мінімальне замовлення',
         sent:'Замовлення прийнято', track:'Стежити за замовленням', offline:'Немає зв’язку — телефонуйте',
-        required:'Обов’язкове поле', badPhone:'Некоректний номер', ordering:'Надсилаємо…',
+        required:'Обов’язкове поле', optional:'(необов’язково)', badPhone:'Некоректний номер', ordering:'Надсилаємо…',
         checkArea:'Перевірити адресу', checking:'Перевіряємо…',
         retry:'Спробувати ще раз', loadFail:'Меню не завантажилось', loading:'Завантажуємо…',
         myOrders:'Мої замовлення', noOrders:'Замовлень ще немає', when:'Коли', asap:'Якнайшвидше',
@@ -207,13 +207,20 @@ const money = n => Money.formatter({
   locale: lang === 'uk' ? 'uk' : lang === 'en' ? 'en' : 'sq',
 })(n);
 /// Switch the reading currency. Rates are fetched once and reused.
+///
+/// IT REDRAWS THE MENU, not `render()`. `render` is the low-level writer --
+/// `render(html)` puts its argument into `#app` -- so calling it with no
+/// argument wrote the string `undefined` over the whole storefront: every dish,
+/// every price and every control disappeared the moment anyone chose EUR or
+/// USD, with nothing in the console to say why. Measured against production on
+/// 2026-09-17: 52 dish cards before the tap, 0 after.
 async function setDisplayCurrency(code){
   state.currency = code;
   Money.remember(code);
   if (code !== baseCurrency() && (!MoneyRates || MoneyRates.base !== baseCurrency())) {
     MoneyRates = await Money.loadRates(baseCurrency());
   }
-  render();
+  renderMenu();
 }
 
 // A dish without a photo gets a deliberate mark, not a grey rectangle. Hue is a
@@ -221,9 +228,35 @@ async function setDisplayCurrency(code){
 function fallbackArt(name){
   let h = 0; for (const ch of name) h = (h * 31 + ch.codePointAt(0)) >>> 0;
   const hue = h % 360;
-  return `<div class="fallback" style="background:linear-gradient(140deg,
-    hsl(${hue} 46% 58%),hsl(${(hue + 38) % 360} 52% 42%))" aria-hidden="true">${esc(name.trim()[0] || '·')}</div>`;
+  return `<div class="fallback" data-hue="${hue}" aria-hidden="true">${esc(name.trim()[0] || '·')}</div>`;
 }
+
+// The gradient is per-dish and computed, so it cannot be a stylesheet rule --
+// and `style-src 'self'` (public/_headers) forbids the `style=` attribute it
+// used to ride in. CSSOM is neither an inline stylesheet nor an attribute, so
+// the value is written once the markup is in the tree. Every path that inserts
+// dish markup calls this; a missed call shows as a flat tile, not a blank one.
+function paintFallbacks(root){
+  for (const el of (root || document).querySelectorAll('.fallback[data-hue]')){
+    const hue = Number(el.dataset.hue);
+    el.style.background =
+      `linear-gradient(140deg,hsl(${hue} 46% 58%),hsl(${(hue + 38) % 360} 52% 42%))`;
+    el.removeAttribute('data-hue');
+  }
+}
+
+// A dish photo that 404s used to swap itself out through an inline `onerror=`,
+// which is script under `script-src 'self'` and never ran. `error` does not
+// bubble, but it does capture, so one delegated listener covers every image on
+// every surface of this page.
+document.addEventListener('error', e => {
+  const img = e.target;
+  if (!(img instanceof HTMLImageElement) || !img.dataset.fb) return;
+  const holder = img.parentNode;
+  if (!holder) return;
+  holder.innerHTML = fallbackArt(img.dataset.fb);
+  paintFallbacks(holder);
+}, true);
 
 // ── SEA ─────────────────────────────────────────────────────────────────────
 // The dowiz ambient layer, wired rather than rewritten: webgl/particle-cloud is
@@ -331,42 +364,74 @@ function on(name){
   return f[name] !== false;
 }
 
+// The venue's palette used to be written into a <style> element this function
+// created. `style-src 'self'` (public/_headers) blocks a created <style> exactly
+// as it blocks a hand-written one, so the venue's branding never applied. The
+// tokens are now set as custom properties on :root through CSSOM, which the
+// policy does not govern -- and an inline property on the root element outranks
+// any :root rule in a sheet, which is the precedence the <style> block had.
+//
+// One cost of the move: CSSOM holds no @media, so the light/dark choice that the
+// stylesheet made declaratively is made here instead, and re-made whenever the
+// answer changes.
+let VENUE_THEME = null;
+
+function themeMode(){
+  const explicit = document.documentElement.getAttribute('data-theme');
+  if (explicit === 'dark' || explicit === 'light') return explicit;
+  return matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light';
+}
+
+// Names written last time, so a venue (or a theme switch) that drops a token
+// does not leave the previous venue's value standing on the root element.
+let themeApplied = [];
+
+function paintTheme(){
+  const root = document.documentElement;
+  for (const name of themeApplied) root.style.removeProperty(name);
+  themeApplied = [];
+  if (!VENUE_THEME) return;
+  const decls = (themeMode() === 'dark' && VENUE_THEME.dark.length)
+    ? VENUE_THEME.dark : VENUE_THEME.light;
+  for (const [name, value] of decls){ root.style.setProperty(name, value); themeApplied.push(name); }
+  for (const [name, value] of VENUE_THEME.shape){ root.style.setProperty(name, value); themeApplied.push(name); }
+}
+
 function applyTheme(theme){
-  const el = document.getElementById('venue-theme') || (() => {
-    const s = document.createElement('style'); s.id = 'venue-theme';
-    document.head.appendChild(s); return s;
-  })();
-  if (!theme || !theme.light) { el.textContent = ''; return; }
+  if (!theme || !theme.light) { VENUE_THEME = null; paintTheme(); return; }
   // Only tokens, and only ones that look like tokens. The string arrives from
-  // this venue's own hub, but a stylesheet is the wrong place to relax about
-  // what goes into it.
+  // this venue's own hub, but the root element is the wrong place to relax
+  // about what goes into it.
   const safe = s => String(s || '').split(';')
     .map(d => d.trim())
     .filter(d => /^--brand-[a-z-]+:\s*#[0-9a-fA-F]{3,8}$/.test(d))
-    .join(';');
+    .map(d => { const i = d.indexOf(':'); return [d.slice(0, i).trim(), d.slice(i + 1).trim()]; });
   const light = safe(theme.light), dark = safe(theme.dark);
-  if (!light) { el.textContent = ''; return; }
+  if (!light.length) { VENUE_THEME = null; paintTheme(); return; }
 
   // The two non-colour tokens. Neither value from the hub reaches CSS: the
   // pair is an index into the table above, and the radius is put through
-  // parseInt and clamped, so the only thing that can land in the stylesheet is
+  // parseInt and clamped, so the only thing that can land on the element is
   // a number this function produced.
   const pair = TYPE_PAIRS[theme.typePair] || TYPE_PAIRS.classic;
   const r = Math.max(0, Math.min(20, parseInt(theme.radius, 10) || 0));
-  const shape =
-    `--brand-font-heading:${pair.heading};--brand-font-body:${pair.body};` +
+  const shape = [
+    ['--brand-font-heading', pair.heading],
+    ['--brand-font-body', pair.body],
     // One number, four steps. A venue picking "round" should get round
     // consistently rather than having to set four values that drift apart.
-    `--radius-sm:${Math.round(r / 2)}px;--radius-md:${r}px;` +
-    `--radius-lg:${Math.round(r * 1.5)}px;--radius-xl:${r * 2}px;`;
-  // Same three-state structure the shipped palette uses: bare :root, then the
-  // system preference guarded so an explicit light choice still wins, then the
-  // explicit dark choice.
-  el.textContent =
-    `:root{${shape}${light}}` +
-    (dark ? `@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){${dark}}}` +
-            `:root[data-theme="dark"]{${dark}}` : '');
+    ['--radius-sm', `${Math.round(r / 2)}px`],
+    ['--radius-md', `${r}px`],
+    ['--radius-lg', `${Math.round(r * 1.5)}px`],
+    ['--radius-xl', `${r * 2}px`],
+  ];
+  VENUE_THEME = { light, dark, shape };
+  paintTheme();
 }
+
+// The system preference is the one input to themeMode() that changes without
+// this page doing anything.
+matchMedia('(prefers-color-scheme:dark)').addEventListener('change', paintTheme);
 
 // ── my orders ───────────────────────────────────────────────────────────────
 // NO ACCOUNT, and that is the design rather than a shortcut. The hub keeps no
@@ -401,7 +466,7 @@ async function openHistory(){
   if (!list.length) {
     sheet(`<h2>${esc(t('myOrders'))}</h2>
       <div class="empty"><i class="ti ti-receipt" aria-hidden="true"
-        style="font-size:2rem;display:block;margin-bottom:8px"></i>
+        class="ico-lg"></i>
         <b>${esc(t('noOrders'))}</b><span>${esc(t('emptyHint'))}</span></div>
       <button class="btn btn-ghost" id="closeHist">OK</button>`);
     $('#closeHist').onclick = closeSheet;
@@ -409,7 +474,7 @@ async function openHistory(){
   }
   sheet(`<h2>${esc(t('myOrders'))}</h2>
     <div id="histList">${list.map(() =>
-      `<div class="skel" style="height:56px;margin-bottom:8px"></div>`).join('')}</div>
+      `<div class="skel skel-row"></div>`).join('')}</div>
     <button class="btn btn-ghost" id="closeHist">OK</button>`);
   $('#closeHist').onclick = closeSheet;
 
@@ -472,19 +537,19 @@ async function load(){
     const off = !navigator.onLine;
     render(`<div class="empty" role="alert">
       <i class="ti ti-${off ? 'wifi-off' : 'alert-triangle'}" aria-hidden="true"
-         style="font-size:2rem;display:block;margin-bottom:8px"></i>
+         class="ico-lg"></i>
       <b>${esc(off ? t('offline') : t('loadFail'))}</b>
       <span class="reason">${esc(String(e.message || e))}</span>
-      <button class="btn" style="margin-top:14px" id="retry">${esc(t('retry'))}</button>
-      ${state.loc?.phone ? `<a class="btn btn-ghost" style="margin-top:8px" href="tel:${esc(state.loc.phone)}">${esc(state.loc.phone)}</a>` : ''}
+      <button class="btn mt-3" id="retry">${esc(t('retry'))}</button>
+      ${state.loc?.phone ? `<a class="btn btn-ghost mt-1" href="tel:${esc(state.loc.phone)}">${esc(state.loc.phone)}</a>` : ''}
     </div>`);
     $('#retry').onclick = load;
   }
 }
-const render = html => { $('#app').innerHTML = html; };
-const skeleton = () => `<div class="hero"><div class="skel" style="height:44px;width:70%"></div>
-  <div class="skel" style="height:18px;width:45%;margin-top:10px"></div></div>
-  ${'<div class="skel" style="height:132px;margin-bottom:10px"></div>'.repeat(4)}`;
+const render = html => { $('#app').innerHTML = html; paintFallbacks($('#app')); };
+const skeleton = () => `<div class="hero"><div class="skel skel-title"></div>
+  <div class="skel skel-sub"></div></div>
+  ${'<div class="skel skel-card"></div>'.repeat(4)}`;
 
 // ── search, sort, filter ────────────────────────────────────────────────────
 // A fifty-dish menu is a scroll; a search box turns it into a menu. All three
@@ -671,11 +736,11 @@ function renderMenu(){
     ${cats.map(c => `<h2 class="sec-h" id="c-${esc(c.id)}">${esc(c.name)}</h2>
       <div class="dishes">${c.products.map(dish).join('')}</div>`).join('')}`
     : `<div class="empty">
-        <i class="ti ti-search-off" aria-hidden="true" style="font-size:2rem;display:block;margin-bottom:8px"></i>
+        <i class="ti ti-search-off" aria-hidden="true" class="ico-lg"></i>
         <b>${esc(t('noHits'))}</b>
-        ${filtering ? `<button class="btn btn-ghost" id="qreset" style="margin-top:14px;max-width:16rem">${esc(t('clear'))}</button>` : ''}
+        ${filtering ? `<button class="btn btn-ghost mt-3 w-cap" id="qreset">${esc(t('clear'))}</button>` : ''}
       </div>`}
-    <div style="height:28px"></div>`);
+    <div class="tail-gap"></div>`);
   bindMenu(); updateBar();
 }
 
@@ -690,7 +755,7 @@ function dish(p){
     </span>
     <span class="dish-media">${p.imageUrl
       ? `<img src="${esc(p.imageUrl)}" alt="" loading="lazy" decoding="async"
-           onerror="this.parentNode.innerHTML=this.dataset.fb" data-fb='${fallbackArt(p.name).replace(/'/g,"&#39;")}'>`
+           data-fb="${esc(p.name)}">`
       : fallbackArt(p.name)}</span>
   </button>`;
 }
@@ -762,7 +827,7 @@ function bindMenu(){
 const findProduct = id => state.cats.flatMap(c => c.products || []).find(p => p.id === id);
 
 // ── sheets ──
-function sheet(html){ $('#sheetIn').innerHTML = html; $('#sheet').classList.add('show'); $('#scrim').classList.add('show'); }
+function sheet(html){ $('#sheetIn').innerHTML = html; paintFallbacks($('#sheetIn')); $('#sheet').classList.add('show'); $('#scrim').classList.add('show'); }
 function closeSheet(){ $('#sheet').classList.remove('show'); $('#scrim').classList.remove('show'); }
 $('#scrim').onclick = closeSheet;
 addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
@@ -841,14 +906,14 @@ function groupMarkup(g){
 function openDish(p){
   const groups = Array.isArray(p.modifierGroups) ? p.modifierGroups : [];
   sheet(`<h2>${esc(p.name)}</h2>
-    ${p.description ? `<p style="color:var(--brand-text-muted);margin:8px 0 4px">${esc(p.description)}</p>` : ''}
+    ${p.description ? `<p class="muted d-desc">${esc(p.description)}</p>` : ''}
     ${allergenLine(p)}
     ${groups.map(groupMarkup).join('')}
     <div class="row"><span class="dish-price money" id="dprice">${money(p.price)}</span>
       <span class="qty"><button id="dm" aria-label="−">−</button><span id="dq">1</span><button id="dp" aria-label="+">+</button></span></div>
     <p id="derr" class="err" hidden></p>
-    <button class="btn" id="dadd" style="margin:14px 0">${esc(t('add'))}</button>
-    <button class="btn btn-ghost" id="dar" style="margin-bottom:14px" hidden>
+    <button class="btn my-3" id="dadd">${esc(t('add'))}</button>
+    <button class="btn btn-ghost mb-3" id="dar" hidden>
       <i class="ti ti-cube-3d-sphere" aria-hidden="true"></i><span>${esc(t('onTable'))}</span></button>
     <p id="darNote" class="geo" hidden></p>`);
   bindAr(p);
@@ -946,12 +1011,12 @@ function openCart(){
   if (!lines.length) return sheet(`<div class="empty"><b>${esc(t('empty'))}</b>${esc(t('emptyHint'))}</div>`);
   sheet(`<h2>${esc(t('cart'))}</h2>
     ${lines.map(l => `<div class="row"><span><b>${esc(l.p.name)}</b>
-      ${lineNames(l.p, l.m).length ? `<br><small style="color:var(--brand-text-muted)">${lineNames(l.p, l.m).map(esc).join(' · ')}</small>` : ''}
-      <br><small class="money" style="color:var(--brand-text-muted)">${money(lineUnit(l.p, l.m))}</small></span>
+      ${lineNames(l.p, l.m).length ? `<br><small class="muted">${lineNames(l.p, l.m).map(esc).join(' · ')}</small>` : ''}
+      <br><small class="money muted">${money(lineUnit(l.p, l.m))}</small></span>
       <span class="qty"><button data-m="${esc(l.k)}" aria-label="−">−</button>
       <span>${l.q}</span><button data-a="${esc(l.k)}" aria-label="+">+</button></span></div>`).join('')}
     ${totalsBlock()}
-    <button class="btn" id="toCheckout" style="margin-bottom:12px">${esc(t('checkout'))}</button>`);
+    <button class="btn mb-2" id="toCheckout">${esc(t('checkout'))}</button>`);
   $('#sheetIn').querySelectorAll('[data-a]').forEach(b => b.onclick = () => {
     const l = state.cart[b.dataset.a]; if (!l) return;
     l.q++; saveCart(); updateBar(); openCart();
@@ -996,7 +1061,7 @@ function openCheckout(){
   sheet(`<h2>${esc(t('checkout'))}</h2>
     <label for="f-name">${esc(t('name'))}</label>
     <input id="f-name" autocomplete="name" value="${esc(safeGet('dw_name') || '')}">
-    <label for="f-phone">${esc(t('phone'))}</label>
+    <label for="f-phone">${esc(t('phone'))} <span class="opt">${esc(t('optional'))}</span></label>
     <input id="f-phone" type="tel" inputmode="tel" autocomplete="tel" placeholder="+355…" value="${esc(safeGet('dw_phone') || '')}">
     ${state.loc?.pickup ? `
     <label>${esc(t('how'))}</label>
@@ -1019,7 +1084,7 @@ function openCheckout(){
     </div>
     <input type="datetime-local" id="f-when" hidden>
     ${state.loc?.hasDeliveryZones ? `
-      <button type="button" class="btn btn-ghost" id="f-geo" style="margin-bottom:8px">
+      <button type="button" class="btn btn-ghost mb-1" id="f-geo">
         <i class="ti ti-map-pin-check" aria-hidden="true"></i><span>${esc(t('checkArea'))}</span></button>
       <p id="f-geo-out" class="geo" hidden></p>` : ''}
     <label for="f-note">${esc(t('note'))}</label>
@@ -1048,7 +1113,7 @@ function openCheckout(){
     <p id="f-promo-out" class="geo" hidden></p>` : ''}
     <div id="f-err"></div>
     ${totalsBlock()}
-    <button class="btn" id="place" style="margin-bottom:12px">${esc(t('place'))}</button>`);
+    <button class="btn mb-2" id="place">${esc(t('place'))}</button>`);
   let pay = 'cash';
   $('#sheetIn').querySelectorAll('[data-pay]').forEach(b => b.onclick = () => {
     if (b.disabled) return;
@@ -1191,7 +1256,12 @@ async function place(pay){
   const name = $('#f-name').value.trim(), phone = $('#f-phone').value.trim(),
         addr = $('#f-addr').value.trim(), note = $('#f-note').value.trim();
   const errs = [];
-  if (!phone || phone.replace(/\D/g,'').length < 8) errs.push(t('badPhone'));
+  // THE TELEPHONE NUMBER IS OPTIONAL (operator decision, 2026-09-17). It is a
+  // courtesy to the courier, not something the order depends on -- the order
+  // has its own id and its own tracking link. A number that IS typed must still
+  // be a number, because a half-typed one is worse than none: the courier will
+  // try it, and the customer will never know it did not connect.
+  if (phone && phone.replace(/\D/g,'').length < 8) errs.push(t('badPhone'));
   const collecting = state.how === 'pickup' && state.loc?.pickup;
   if (!collecting && !addr) errs.push(t('address') + ': ' + t('required'));
   $('#f-err').innerHTML = errs.map(e => `<div class="err">${esc(e)}</div>`).join('');
@@ -1260,8 +1330,8 @@ async function loadStripe(){
 
 async function collectCard(order){
   sheet(`<h2>${esc(t('pay'))}</h2>
-    <p style="color:var(--brand-text-muted)">#${esc(String(order.id).slice(0,8))} · <span class="money">${money(order.total)}</span></p>
-    <div id="pe" style="margin:var(--space-4) 0;min-height:180px"></div>
+    <p class="muted">#${esc(String(order.id).slice(0,8))} · <span class="money">${money(order.total)}</span></p>
+    <div id="pe" class="pe-box"></div>
     <div id="pe-err"></div>
     <button class="btn" id="pay">${esc(t('place'))}</button>`);
   let stripe, elements;
@@ -1311,12 +1381,12 @@ function sayBlock(order){
   const over = ['DELIVERED', 'REJECTED', 'CANCELLED'].includes(order.status);
   if (!over || !on('feedback')) return '';
   if (order.feedback) {
-    return `<p class="geo ok" style="margin-bottom:12px">${esc(t('saidIt'))}</p>`;
+    return `<p class="geo ok mb-2">${esc(t('saidIt'))}</p>`;
   }
   return `<label for="f-say">${esc(t('sayHow'))}</label>
     <textarea id="f-say" maxlength="600" rows="2"></textarea>
     <p class="avoid-h">${esc(t('sayHint'))}</p>
-    <button class="btn btn-ghost" id="sayGo" style="margin-bottom:12px">${esc(t('sayGo'))}</button>`;
+    <button class="btn btn-ghost mb-2" id="sayGo">${esc(t('sayGo'))}</button>`;
 }
 
 function bindSay(order){
@@ -1361,14 +1431,14 @@ function openTracking(order){
   // hidden once the order is finished, when there is nothing left to follow.
   const bot = state.loc?.telegramBot;
   const follow = (bot && !dead && st !== 'DELIVERED') ? `
-    <a class="btn btn-ghost" style="margin-bottom:8px"
+    <a class="btn btn-ghost mb-1"
        href="https://t.me/${encodeURIComponent(bot)}?start=${encodeURIComponent(order.id)}"
        target="_blank" rel="noopener noreferrer">
       <i class="ti ti-brand-telegram" aria-hidden="true"></i><span>${esc(t('notify'))}</span></a>
-    <p style="color:var(--brand-text-muted);font-size:var(--text-sm);margin:0 0 12px">
+    <p class="muted trk-note">
       ${esc(t('notifyHint'))}</p>` : '';
   sheet(`<h2>${esc(dead ? t('st')[st] : t('sent'))}</h2>
-    <p style="color:var(--brand-text-muted);margin:6px 0 2px">#${esc(String(order.id).slice(0,8))}</p>
+    <p class="muted trk-id">#${esc(String(order.id).slice(0,8))}</p>
     ${dead ? '' : `<div class="track">${FLOW.map((s, n) => `
       <div class="step ${n < i ? 'done' : n === i ? 'now' : ''}">
         <span class="dot">${n < i ? `<i class="ti ti-check" aria-hidden="true"></i>` : ""}</span>
@@ -1378,7 +1448,7 @@ function openTracking(order){
       <span class="money">${money(order.total ?? order.subtotal ?? 0)}</span></div></div>
     ${follow}
     ${sayBlock(order)}
-    <button class="btn btn-ghost" id="closeTrack" style="margin-bottom:12px">OK</button>`);
+    <button class="btn btn-ghost mb-2" id="closeTrack">OK</button>`);
   bindSay(order);
   $('#closeTrack').onclick = closeSheet;
   clearTimeout(openTracking._t);
