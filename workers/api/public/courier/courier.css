@@ -155,7 +155,7 @@ button{cursor:pointer;touch-action:manipulation}
    spectral edge, its lower half hidden by the sheet, its upper half fading over
    the bottom of the map — the one region fitBounds already keeps clear. It has
    no ambient loop: the library stops its RAF when the burst dies. */
-#sea{position:fixed;left:0;right:0;height:192px;bottom:calc(var(--sheet-h) - 96px);
+#sea{position:fixed;left:0;right:0;width:100%;height:192px;bottom:calc(var(--sheet-h) - 96px);
      z-index:1;pointer-events:none}
 
 /* ── HUD: two chips over the map and the theme control. Chip text is 16px

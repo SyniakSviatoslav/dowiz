@@ -142,7 +142,7 @@ h1,h2,h3{line-height:var(--leading-tight);letter-spacing:-.01em;text-wrap:balanc
    window, not the view. The plan's owner Act 1 is "the field IS the business"
    -- each order a ripple, volume = amplitude -- and that is exactly what it is
    wired to in app.js. It carries no text, no price, no decision. */
-#sea{position:fixed;inset:0;z-index:0;pointer-events:none;
+#sea{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;
      opacity:var(--sea-opacity);transition:opacity .6s ease-out}
 #sea.calm{opacity:var(--sea-opacity-calm)}
 /* Only the main column needs lifting above the canvas; the header and toast

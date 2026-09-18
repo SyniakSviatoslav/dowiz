@@ -49,4 +49,4 @@
   # connect-src: the API is same-origin; the tile server is not.
   # base-uri 'none': a `<base>` injected into the page would silently re-point
   #   every relative fetch, including the API ones.
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self'; img-src 'self' data: blob: https://tiles.openfreemap.org; font-src 'self'; connect-src 'self' https://tiles.openfreemap.org https://api.stripe.com; worker-src 'self' blob:; frame-src https://js.stripe.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self'; img-src 'self' data: blob: https://tiles.openfreemap.org; font-src 'self'; connect-src 'self' https://tiles.openfreemap.org https://api.stripe.com https://nominatim.openstreetmap.org; worker-src 'self' blob:; frame-src https://js.stripe.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; upgrade-insecure-requests

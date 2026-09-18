@@ -157,6 +157,38 @@ var createParticleCloud;
       }
     }
 
+    // ── THE TIDE ────────────────────────────────────────────────────────
+    // A burst is an EVENT; a tide is a STATE. The tracking screen needs the
+    // field to hold a colour and an energy for minutes at a time -- "your
+    // order is being cooked" is not a moment, it is a while -- so this emits a
+    // few particles a second along the bottom edge, drifting upward, in the
+    // vocabulary colour of the status, until told otherwise. `rate` is
+    // particles per second; zero or a null status stops it. The loop keeps
+    // running while a tide is set, and stops the frame after it is cleared.
+    var tideStatus = null, tideRate = 0, tideAcc = 0;
+    function tide(status, rate) {
+      tideStatus = (status && VOCAB[status]) ? status : null;
+      tideRate = tideStatus ? Math.max(0, rate || 6) : 0;
+      if (reduced) tideRate = Math.min(tideRate, 2);
+      if (tideStatus) ensureRunning();
+    }
+    function emitTide(dt) {
+      if (!tideStatus || !gl) return;
+      var v = VOCAB[tideStatus];
+      tideAcc += tideRate * dt / 1000;
+      while (tideAcc >= 1) {
+        tideAcc -= 1;
+        if (n >= MAX) break;
+        var x = Math.random() * W;
+        var y = H * (0.86 + Math.random() * 0.14);
+        var vx = (Math.random() - 0.5) * 8 * dpr * (1 + v.swirl * 0.2);
+        var vy = -(10 + Math.random() * 22) * dpr * (0.6 + v.energy * 0.6);
+        var life = (2600 + Math.random() * 2600);
+        pushParticle(x, y, vx, vy, life, life, v.color[0], v.color[1]);
+      }
+      energy = Math.max(energy, v.energy * 0.18);
+    }
+
     function setPalette(status, rgb) {
       if (VOCAB[status]) VOCAB[status].color = rgb;
     }
@@ -243,10 +275,11 @@ var createParticleCloud;
       var dt = Math.min(64, t - last);
       last = t;
       resize();
+      emitTide(dt);
       step(dt);
       draw();
       // stop the loop when idle to save battery, auto-resume on burst
-      if (n === 0 && energy < 0.02) {
+      if (n === 0 && energy < 0.02 && !tideStatus) {
         running = false; raf = 0; return;
       }
       raf = root.requestAnimationFrame(frame);
@@ -300,6 +333,7 @@ var createParticleCloud;
     return {
       init,
       burst,
+      tide,
       setReducedMotion,
       setPalette,
       setPointer,

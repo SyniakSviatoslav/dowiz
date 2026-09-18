@@ -3,79 +3,64 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- The browser chrome must be a colour the page actually contains. This was
-     #C1121F, a red left over from an older palette that appears nowhere in the
-     token set -- so a phone's status bar sat in a colour the design system does
-     not know about. These are --brand-bg in each theme; a <meta> cannot read a
-     CSS variable, so the values are repeated here and the design gate checks
-     that they still match. -->
+<!-- The browser chrome must be a colour the page actually contains. These are
+     --brand-bg in each shipped theme; app.js rewrites them to the venue's own
+     paper the moment its theme arrives, so a dark venue gets a dark status bar. -->
 <meta name="theme-color" content="#fbfaf8" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#141210" media="(prefers-color-scheme: dark)">
-<!-- ONE VENUE'S NAME WAS BAKED INTO EVERY VENUE'S PAGE. This document is now
-     served for every client hub, so a hardcoded title showed "Dubin & Sushi" in
-     the tab of a different restaurant until the menu fetch returned and the
-     script replaced it. The real name arrives with the catalogue and is set
-     there; what belongs here is the platform, which is true before any fetch. -->
+<meta name="color-scheme" content="light dark">
+<!-- ONE VENUE'S NAME WAS BAKED INTO EVERY VENUE'S PAGE. The real name arrives
+     with the catalogue; what belongs here is the platform. -->
 <title>dowiz</title>
-<!-- NO WEB FONTS, AND THAT IS A DESIGN DECISION RATHER THAN A SAVING.
-     
-     These surfaces loaded two hundred kilobytes of render-blocking typeface
-     from Google before anything could paint, and every customer's IP reached
-     Google to do it -- on a service whose first invariant is local-first. The
-     Cyrillic the console is written in needed a further subset again.
-     
-     What is lost is small: at fourteen to thirty-three pixels, on a phone, the
-     difference between DM Sans and the system face is not what anyone notices.
-     What Swiss typography actually asks for is the grid, the measure, the one
-     ratio and the restraint -- Müller-Brockmann worked in Akzidenz-Grotesk
-     because it was the face that was already there. The system stack is ours.
-     
-     It also renders instantly with no swap: no flash of fallback text, no
-     layout shift when the real face arrives, nothing to wait for. -->
-
+<!-- NO WEB FONTS, by design: the type pairs are system-resident, chosen by the
+     venue's theme, and paint instantly on a Durrës 3G connection. -->
 <link rel="stylesheet" href="/lib/icons.css">
 <link rel="stylesheet" href="/lib/tokens.css">
 <link rel="stylesheet" href="/lib/components.css">
 <link rel="stylesheet" href="/store/store.css">
+<link rel="modulepreload" href="/app.js">
+<link rel="modulepreload" href="/store/state.js">
+<link rel="modulepreload" href="/store/menu.js">
 </head>
 <body>
 <!-- SEA — the dowiz ambient layer. It lives BEHIND the Sheet and never carries
-     text, a price or a decision: those are Sheet-owned by contract. Because every
-     card sits on an opaque --brand-surface, the measured text contrast is
-     unaffected by whatever the field is doing. -->
+     text, a price or a decision: those are Sheet-owned by contract. The veil
+     above it keeps the top and bottom of the field darker than the middle, so
+     the header and the bar read as chrome and the cards sit in the light. -->
 <canvas id="sea" aria-hidden="true"></canvas>
+<div class="veil" aria-hidden="true"></div>
 <div id="offline" class="offline" hidden></div>
+
 <header class="top"><div class="wrap top-in">
   <!-- The mark is hidden until the venue has one; the name is always there
        behind it, so a logo that does not load leaves a readable header. -->
-  <img class="brand-mark" id="brandMark" alt="" width="32" height="32" hidden>
+  <img class="brand-mark" id="brandMark" alt="" width="36" height="36" hidden>
   <span class="brand" id="brandName">…</span>
-  <!-- Hidden until there is something to show: a "my orders" button that opens
-       an empty list on a first visit is a promise the site has not kept yet. -->
-  <button class="icon-btn" id="histBtn" type="button" title="Мої замовлення" hidden>
-    <i class="ti ti-receipt" aria-hidden="true"></i><span class="sr">Мої замовлення</span></button>
-  <!-- The currency is a READING, not the charge. Same control shape as the
-       language switcher because it is the same kind of choice: how this page is
-       rendered for me, changing nothing about the order. -->
-  <div class="langs" role="group" aria-label="Currency" id="curs"></div>
-  <div class="langs" role="group" aria-label="Language">
-    <button class="lang" data-l="sq">sq</button>
-    <button class="lang" data-l="en">en</button>
-    <button class="lang" data-l="uk">uk</button>
-  </div>
+  <button class="icon-btn glass" id="prefsBtn" type="button" data-t-attr="aria-label:prefs title:prefs">
+    <i class="ti ti-language" aria-hidden="true"></i></button>
 </div></header>
+
 <main id="app" class="wrap" aria-live="polite"></main>
-<div class="bar" id="bar"><div class="bar-in">
-  <button class="btn" id="barBtn"><span id="barCount" class="pill">0</span><span id="barLabel">Cart</span><span id="barTotal" class="money"></span></button>
-</div></div>
+
+<!-- The floating order pill: count, label, total. A <Money> that snaps. -->
+<button class="cart-pill" id="cartPill" type="button">
+  <span class="pill-n" id="pillCount">0</span>
+  <span class="pill-l" data-t="viewOrder">View order</span>
+  <span class="money pill-t" id="pillTotal" data-money="0"></span>
+</button>
+
+<!-- Five tabs, glass, above the safe area. Filled by store/nav.js. -->
+<nav class="nav" id="nav" aria-label="dowiz"></nav>
+
 <div class="scrim" id="scrim"></div>
-<div class="sheet" id="sheet" role="dialog" aria-modal="true"><div class="grab"></div><div class="sheet-in" id="sheetIn"></div></div>
-<!-- role=status + aria-live: a toast is the only notice of several actions
-     (order sent, address checked, poll failing) and a silent one is no notice
-     at all for anyone not looking at that corner of the screen. -->
+<!-- ONE sheet. It rises over the Sea with the tide easing and wears the
+     spectral rim, which is the one dowiz mark on a venue's own surface. -->
+<div class="sheet" id="sheet" role="dialog" aria-modal="true">
+  <div class="grab" id="grab" aria-hidden="true"></div>
+  <div class="sheet-in" id="sheetIn"></div>
+</div>
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
-<!-- Stripe.js is loaded ONLY when the card rail is configured (app.js injects it
-     after the menu says so), so a cash-only venue ships no payment SDK at all. -->
+<!-- Stripe.js is loaded ONLY when a card is chosen, so a cash-only venue ships no payment SDK. -->
 <script type="module" src="/app.js"></script>
 </body>
 </html>
