@@ -1,0 +1,62 @@
+/* Catalogue: the venue's real menu inside the Figma kit.
+ *
+ * Everything the catalogue adds ON TOP of the kit's cards, and nothing the kit
+ * already draws: the card, the photo box, the chip and the category ring keep
+ * their rules in kit.css, and this file only names the states a venue's data
+ * can put them in. External, never inline -- `style-src 'self'` drops a style
+ * attribute outright, and that was the incident every dowiz surface shipped.
+ */
+
+/* ── A category with no glyph of its own ───────────────────────────────────
+ * The frame's rings hold an icon; the venue's categories hold the plate keyed to
+ * the category's name and its first letter. The plate is absolutely positioned
+ * (kit.css .k-plate), so the ring must be the box it fills and must clip it to
+ * the circle, or the gradient paints a square over the label. */
+.k-cat-ring.is-plate,.k-cat-img.is-plate{position:relative;overflow:hidden}
+.k-cat-initial{position:relative;font-size:24px;font-weight:var(--k-w-semibold);
+  line-height:1;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35)}
+/* The chosen cell is the frame's orange fill. The plate would cover it, so the
+   plate steps aside on the chosen cell and the letter stays. */
+.k-cat-cell[aria-pressed="true"] .k-cat-ring.is-plate .k-plate{display:none}
+/* Inside the Home rail's 28px disc the plate is the whole content. */
+.k-cat-img.is-plate .k-plate{border-radius:inherit}
+
+/* ── Sold out ──────────────────────────────────────────────────────────────
+ * A sold-out dish stays on the grid: the photo dims, a pill says so on the
+ * photo, and the venue's own reason sits between the name and the price. The
+ * PRICE keeps its weight -- the customer is told what it costs when it is back,
+ * not shown a card with a hole where the number was. */
+.is-sold .k-photo>img,.is-sold .k-photo>.k-plate{opacity:.45;filter:grayscale(.6)}
+.k-sold-pill{position:absolute;left:8px;bottom:8px;padding:3px 8px;border-radius:var(--k-r-pill);
+  background:rgba(0,0,0,.62);color:#fff;font-size:var(--k-text-10);
+  font-weight:var(--k-w-semibold);letter-spacing:.02em;pointer-events:none}
+.k-sold-note{display:block;color:var(--k-orange);font-size:var(--k-text-10);
+  font-weight:var(--k-w-medium);line-height:1.3}
+
+/* ── The Home rail's dish card ─────────────────────────────────────────────
+ * Two rows above the price -- a category line and a sold-out note -- on a card
+ * that was drawn for one, so the name must ellipsise rather than wrap: a name
+ * that wraps to three lines pushes the price under the fold of the card. */
+.k-dish .k-sold-note{margin-top:4px}
+
+/* ── The price ceiling chip on the listing ─────────────────────────────────
+ * The × inherits the recent-search tag's glyph: a 10px cross rotated from the
+ * plus in the sprite. Drawn in the chip's own colour, not the tag's grey, so it
+ * is legible on the orange fill. */
+.k-chip .ic-wrap{display:inline-grid;place-items:center;margin-left:2px}
+.k-chip .ic-wrap .ic{font-size:10px;transform:rotate(45deg);color:currentColor}
+
+/* The category screen's own grid sits under its cells with the kit's section
+   gap, and the chip rows under a heading need no extra top margin of their own
+   -- kit.css gives .k-chips 12px, which is the frame's. */
+.k-cat-grid+.k-sec{margin-top:28px}
+
+/* ── The search card inside the two-column grid ────────────────────────────
+ * kit.css draws .k-vcard at the rail's fixed 200px. The Dishes result frame
+ * puts two of them in the 327px grid, where 200 + 15 + 200 is 88px wider than
+ * the phone: the right-hand card was clipped and the page scrolled sideways
+ * (measured: scrollWidth 448 at a 390 viewport). In the grid the card takes
+ * its cell. The category line under the name is the Home card's meta line, not
+ * .k-rrow-line, whose text-transform would recase the venue's own words. */
+.k-grid>.k-vcard{width:auto;min-width:0}
+.k-vcard-body .k-meta{margin-top:0}

@@ -1,0 +1,134 @@
+/* dowiz — the Food Delivery Mobile App UI kit, as tokens.
+ *
+ * SOURCE OF TRUTH. Every value below is read from the Figma file
+ * 0CR9FTDXuyuHE6c34EmOR9, not chosen here. The colours are that file's own
+ * variables, verbatim, from its two "Color" frames:
+ *   dark  -> node 1:10794   light -> node 1:11079
+ * The kit ships both themes as complete screen sets, which is why the dark
+ * values are a full background ramp and the light values are not: the light
+ * theme paints depth with one grey and a stroke, the dark theme with four.
+ *
+ * WHY A SEPARATE FILE FROM lib/tokens.css. tokens.css is dowiz's OWN design
+ * system -- the palette the storefront, the owner console and the courier app
+ * share. This is a second, whole design language that a venue's customer-facing
+ * surface can wear instead. Merging them would leave neither intact, and the
+ * kit's screens are specified against these exact values.
+ *
+ * NO WEB FONT REQUEST. `font-src 'self'` (public/_headers) blocks fonts.gstatic
+ * and every other origin, so Inter is served from lib/font/. The kit uses only
+ * Inter; the cyrillic subset is here because dowiz's own UI strings are
+ * Ukrainian even where the kit's are English.
+ */
+
+@font-face{
+  font-family:'InterVar';
+  font-style:normal;
+  font-weight:100 900;            /* one variable file covers Regular..ExtraBold */
+  font-display:swap;
+  src:url('/lib/font/inter-latin.woff2') format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,
+                U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,
+                U+2193,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:'InterVar';
+  font-style:normal;
+  font-weight:100 900;
+  font-display:swap;
+  src:url('/lib/font/inter-latin-ext.woff2') format('woff2');
+  unicode-range:U+0100-02AF,U+0304,U+0308,U+0329,U+1E00-1E9F,U+1EF2-1EFF,
+                U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF;
+}
+@font-face{
+  font-family:'InterVar';
+  font-style:normal;
+  font-weight:100 900;
+  font-display:swap;
+  src:url('/lib/font/inter-cyrillic.woff2') format('woff2');
+  unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;
+}
+
+:root{
+  /* ── Colour, light. The kit's second screen set (nodes 1:11101 and up). ──
+     Seven variables is the whole light palette; the kit does not define more.
+     `--k-surface` is White because a light card sits ON the grey background,
+     which is the inverse of the dark theme's arrangement. */
+  --k-orange:#fb5b21;
+  --k-yellow:#fcaf23;
+  --k-bg:#f6f6f6;
+  --k-surface:#ffffff;
+  --k-surface-2:#ffffff;
+  --k-surface-3:#f6f6f6;
+  --k-text:#010101;
+  --k-text-2:#797979;
+  --k-stroke:#e0e0e0;
+  --k-stroke-2:#e0e0e0;
+  --k-icon:#797979;
+  --k-icon-strong:#010101;
+  --k-on-orange:#ffffff;
+
+  /* ── Type. Inter at the six sizes the screens actually use. ──
+     Measured across the kit's frames rather than invented: 34px appears once
+     per screen at most (a page title), 12px carries most of the interface. */
+  --k-font:'InterVar','Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --k-text-10:10px;
+  --k-text-12:12px;
+  --k-text-14:14px;
+  --k-text-15:15px;
+  --k-text-18:18px;
+  --k-text-34:34px;
+  --k-w-regular:400;
+  --k-w-medium:500;
+  --k-w-semibold:600;
+  --k-w-bold:700;
+  --k-w-extrabold:800;
+
+  /* ── Geometry. The kit's radii cluster at three jobs: a pill, a card, a
+     tile. The odd exact values in the file (93px, 58px, 108.316px) are pills
+     on differently-sized elements, so they are one token here, not five. */
+  --k-r-pill:999px;
+  --k-r-card:16px;
+  --k-r-tile:12px;
+  --k-r-sheet:23px;
+
+  /* The device the kit is drawn on: iPhone X at 375x812. Screens that scroll
+     are taller; the width never changes. */
+  --k-frame:375px;
+}
+
+/* The dark set (nodes 1:884 and up) is the kit's FIRST and more complete
+   drawing, and its background ramp is four steps deep. Same three-state
+   structure the rest of dowiz uses: system preference, guarded so an explicit
+   light choice still wins, then the explicit dark choice. */
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --k-orange:#ea4f16;
+    --k-yellow:#fcaf23;
+    --k-bg:#121212;
+    --k-surface:#1e1e1e;
+    --k-surface-2:#2a2a2a;
+    --k-surface-3:#3a3a3a;
+    --k-text:#ffffff;
+    --k-text-2:#a8a8a8;
+    --k-stroke:#2c2c2c;
+    --k-stroke-2:#3c3c3c;
+    --k-icon:#b0b0b0;
+    --k-icon-strong:#e0e0e0;
+    --k-on-orange:#ffffff;
+  }
+}
+:root[data-theme="dark"]{
+  --k-orange:#ea4f16;
+  --k-yellow:#fcaf23;
+  --k-bg:#121212;
+  --k-surface:#1e1e1e;
+  --k-surface-2:#2a2a2a;
+  --k-surface-3:#3a3a3a;
+  --k-text:#ffffff;
+  --k-text-2:#a8a8a8;
+  --k-stroke:#2c2c2c;
+  --k-stroke-2:#3c3c3c;
+  --k-icon:#b0b0b0;
+  --k-icon-strong:#e0e0e0;
+  --k-on-orange:#ffffff;
+}

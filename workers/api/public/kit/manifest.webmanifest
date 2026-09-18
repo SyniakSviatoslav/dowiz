@@ -1,0 +1,29 @@
+{
+  "id": "/kit/",
+  "name": "dowiz — доставка їжі",
+  "short_name": "dowiz",
+  "description": "Замовлення їжі, бронювання столика, гаманець і живе відстеження курʼєра.",
+  "lang": "uk",
+  "dir": "ltr",
+  "start_url": "/kit/",
+  "scope": "/kit/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "orientation": "portrait",
+  "background_color": "#f6f6f6",
+  "theme_color": "#f6f6f6",
+  "categories": ["food", "shopping", "lifestyle"],
+  "icons": [
+    { "src": "/kit/img/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/kit/img/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/kit/img/icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Кошик", "short_name": "Кошик", "url": "/kit/#/cart",
+      "icons": [{ "src": "/kit/img/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Мої замовлення", "short_name": "Замовлення", "url": "/kit/#/my-orders",
+      "icons": [{ "src": "/kit/img/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Поблизу", "short_name": "Поблизу", "url": "/kit/#/explore",
+      "icons": [{ "src": "/kit/img/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

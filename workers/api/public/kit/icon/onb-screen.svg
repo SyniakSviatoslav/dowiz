@@ -1,0 +1,10 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="217.376" height="478.535" viewBox="0 0 217.376 478.535" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Screen">
+<mask id="mask0_0_15" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="0" y="0" width="218" height="479">
+<path id="Screen Mask" d="M0 29.1149C0 13.0352 13.0352 0 29.1149 0H188.262C204.341 0 217.376 13.0352 217.376 29.1149V451.828C217.376 466.578 205.419 478.535 190.67 478.535H26.7069C11.9571 478.535 0 466.578 0 451.828V29.1149Z" fill="white"/>
+</mask>
+<g mask="url(#mask0_0_15)">
+<rect id="Add Image Here" x="-4.03906" y="-0.194336" width="226" height="489.365" fill="#D9D9D9"/>
+</g>
+</g>
+</svg>

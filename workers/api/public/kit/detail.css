@@ -1,0 +1,96 @@
+/* Dish detail and comparison. */
+
+/* ── The venue's dish on Item Details ──────────────────────────────────────
+   The frame draws a stock pizza; a real dish brings a photograph, a category,
+   a price line and the facts the venue declared. Nothing here is a number the
+   venue did not give: an undeclared fact is named in a sentence, not drawn as
+   an empty cell. Tokens only, so both palettes are covered by figma.css. */
+.k-hero-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.k-kind{font-size:var(--k-text-12);color:var(--k-text-2);margin:0 0 4px;text-transform:uppercase;
+  letter-spacing:.04em}
+.k-dprice{display:flex;align-items:baseline;gap:10px;margin:8px 0 0}
+.k-dprice b{font-size:var(--k-text-18);font-weight:var(--k-w-semibold)}
+.k-dprice span{color:var(--k-text-2);font-size:var(--k-text-14)}
+.k-out{margin:8px 0 0;font-size:var(--k-text-14);color:var(--k-orange)}
+
+/* The facts the venue declared, two to a row. */
+.k-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:0 0 12px}
+.k-fact{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:var(--k-r-tile);
+  background:var(--k-surface);border:1px solid var(--k-stroke);min-width:0}
+.k-fact dt{font-size:11px;color:var(--k-text-2)}
+.k-fact dd{margin:0;font-size:var(--k-text-14);font-weight:var(--k-w-medium);overflow-wrap:anywhere}
+/* The undeclared ones, in one calm sentence: this is the common case today. */
+.k-facts-none{margin:0 0 20px;font-size:var(--k-text-14);line-height:1.5;color:var(--k-text-2)}
+.k-allergens{margin:0 0 20px}
+.k-allergens .k-tag{font-size:var(--k-text-12)}
+.k-desc.is-open + .k-ing,.k-facts-none + .k-pick-h{margin-top:4px}
+
+/* Mark for comparison, and the way to the comparison once something is in it.
+   The toggle is a pill that fills when pressed, so the state is visible without
+   reading the label; the count beside it moves on every tap. */
+.k-cmp-row{display:flex;align-items:center;gap:10px;margin-top:14px;flex-wrap:wrap}
+.k-cmp-btn{display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 14px;
+  border-radius:var(--k-r-pill);border:1px solid var(--k-orange);background:none;
+  color:var(--k-orange);font:inherit;font-size:var(--k-text-14);font-weight:var(--k-w-medium);
+  cursor:pointer;transition:background .15s,color .15s}
+.k-cmp-btn .ic{font-size:18px}
+.k-cmp-btn:hover{background:color-mix(in srgb,var(--k-orange) 10%,transparent)}
+.k-cmp-btn[aria-pressed="true"]{background:var(--k-orange);color:var(--k-on-orange)}
+.k-cmp-btn[disabled]{opacity:.5;cursor:not-allowed}
+.k-cmp-go{display:inline-flex;align-items:center;gap:4px;height:38px;padding:0 4px;border:0;
+  background:none;color:var(--k-text);font:inherit;font-size:var(--k-text-14);cursor:pointer}
+.k-cmp-go b{font-weight:var(--k-w-semibold);color:var(--k-orange)}
+.k-cmp-go .ic{font-size:16px;color:var(--k-icon)}
+.k-cmp-go:hover{color:var(--k-orange)}
+/* An author `display` outranks the UA's `[hidden]{display:none}`, so without
+   this the link to an empty comparison was drawn with a zero beside it. */
+.k-cmp-go[hidden]{display:none}
+
+/* ── Compare ───────────────────────────────────────────────────────────────
+   A table, because it is one: a screen reader hears the fact and the dish for
+   every cell. The first column sticks while the dishes scroll under it, and
+   the scroll is the table's own -- the page never goes sideways. The scroller
+   bleeds into the wrap's 24px gutters so the first and last columns can sit
+   flush with the rest of the screen. */
+.k-cmp-wrap{padding-bottom:110px}
+.k-cmp-scroll{overflow-x:auto;margin-inline:-24px;-webkit-overflow-scrolling:touch;
+  scrollbar-width:thin}
+.k-cmp{border-collapse:separate;border-spacing:0;min-width:100%;font-size:var(--k-text-14)}
+.k-cmp-cap{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);
+  white-space:nowrap}
+.k-cmp th,.k-cmp td{padding:10px 8px;vertical-align:top;text-align:left;
+  border-bottom:1px solid var(--k-stroke)}
+.k-cmp th:first-child,.k-cmp td:first-child{padding-left:24px}
+.k-cmp th:last-child,.k-cmp td:last-child{padding-right:24px}
+.k-cmp thead th{vertical-align:bottom}
+.k-cmp th[scope="row"],.k-cmp-corner{position:sticky;left:0;z-index:1;background:var(--k-bg);
+  width:108px;min-width:108px;font-size:var(--k-text-12);
+  font-weight:var(--k-w-medium);color:var(--k-text-2)}
+/* No `overflow-wrap:anywhere` on the labels: it let the table squeeze the
+   column and break «Калорійність» mid-word. The longest label sets the width. */
+.k-cmp-corner span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.k-cmp td{min-width:124px;max-width:160px;overflow-wrap:anywhere}
+.k-cmp td.is-none{color:var(--k-text-2);font-style:italic}
+.k-cmp-head{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-width:0}
+.k-cmp-photo{position:relative;width:64px;height:64px;border-radius:var(--k-r-tile);overflow:hidden;
+  border:0;padding:0;cursor:pointer;background:var(--k-surface-2);flex:none}
+.k-cmp-photo img{width:100%;height:100%;object-fit:cover;display:block}
+.k-cmp-photo .k-plate{position:absolute;inset:0}
+.k-cmp-name{font-size:var(--k-text-14);font-weight:var(--k-w-medium);color:var(--k-text);
+  line-height:1.3}
+.k-cmp-price{font-size:var(--k-text-14);font-weight:var(--k-w-semibold)}
+.k-cmp-out{font-size:11px;color:var(--k-orange)}
+.k-cmp-rm{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 8px 0 4px;
+  border:0;border-radius:var(--k-r-pill);background:var(--k-surface-2);color:var(--k-text-2);
+  font:inherit;font-size:var(--k-text-12);cursor:pointer}
+.k-cmp-rm .ic{font-size:16px}
+.k-cmp-rm:hover{color:var(--k-orange)}
+.k-cmp-foot{margin-top:16px}
+
+/* Fewer than two: what to do, said plainly, and the one dish already marked. */
+.k-cmp-how{display:flex;flex-direction:column;gap:8px;margin-bottom:24px}
+.k-cmp-steps{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:8px;
+  color:var(--k-text-2);font-size:var(--k-text-14);line-height:1.5}
+.k-cmp-one{padding:12px}
+.k-cmp-one .k-cmp-head{flex-direction:row;align-items:center;flex-wrap:wrap}
+.k-cmp-one .k-cmp-name{flex:1;min-width:120px}
