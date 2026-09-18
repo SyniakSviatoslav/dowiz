@@ -38,6 +38,7 @@ const T = {
         required:'E detyrueshme', optional:'(opsionale)', badPhone:'Numër i pavlefshëm', ordering:'Duke dërguar…',
         checkArea:'Kontrolloni adresën', checking:'Po kontrollojmë…',
         retry:'Provo përsëri', loadFail:'Menuja nuk u ngarkua', loading:'Po ngarkohet…',
+        hoursTitle:'Orari', openUntil:'Hapur deri në', opensAt2:'Hap në', closedNow:'Mbyllur tani', onMap:'Shfaq në hartë', directions:'Udhëzime', reviewsTitle:'Vlerësime', fromGoogle:'nga Google Maps', allReviews:'Të gjitha vlerësimet', callUs:'Telefono',
         myOrders:'Porositë e mia', noOrders:'Ende asnjë porosi', when:'Kur', asap:'Sa më shpejt',
         onTable:'Shikoni në tryezë', arScan:'Drejtojeni nga tryeza…', arTap:'Prekni për ta vendosur', arFail:'Nuk u hap',
         opensAt:'Hapet', pausedNow:'Dërgesat janë ndalur',
@@ -68,6 +69,7 @@ const T = {
         required:'Required', optional:'(optional)', badPhone:'Invalid number', ordering:'Sending…',
         checkArea:'Check this address', checking:'Checking…',
         retry:'Try again', loadFail:'The menu did not load', loading:'Loading…',
+        hoursTitle:'Opening hours', openUntil:'Open until', opensAt2:'Opens at', closedNow:'Closed now', onMap:'Show on map', directions:'Directions', reviewsTitle:'Reviews', fromGoogle:'from Google Maps', allReviews:'All reviews', callUs:'Call',
         myOrders:'My orders', noOrders:'No orders yet', when:'When', asap:'As soon as possible',
         onTable:'See it on your table', arScan:'Point at your table…', arTap:'Tap to place it', arFail:'Could not open',
         opensAt:'Opens', pausedNow:'Delivery is paused',
@@ -98,6 +100,7 @@ const T = {
         required:'Обов’язкове поле', optional:'(необов’язково)', badPhone:'Некоректний номер', ordering:'Надсилаємо…',
         checkArea:'Перевірити адресу', checking:'Перевіряємо…',
         retry:'Спробувати ще раз', loadFail:'Меню не завантажилось', loading:'Завантажуємо…',
+        hoursTitle:'Години роботи', openUntil:'Відчинено до', opensAt2:'Відчиняється о', closedNow:'Зараз зачинено', onMap:'Показати на карті', directions:'Маршрут', reviewsTitle:'Відгуки', fromGoogle:'з Google Maps', allReviews:'Усі відгуки', callUs:'Зателефонувати',
         myOrders:'Мої замовлення', noOrders:'Замовлень ще немає', when:'Коли', asap:'Якнайшвидше',
         onTable:'Подивитись на столі', arScan:'Наведіть на стіл…', arTap:'Торкніться, щоб поставити', arFail:'Не вдалося відкрити',
         opensAt:'Відчиняється', pausedNow:'Доставку призупинено',
@@ -677,6 +680,163 @@ function whenOpens(n){
   return n.weekday === todayIdx ? `${hh}:${mm}` : `${d} ${hh}:${mm}`;
 }
 
+
+// ── The venue, as a place and not only as a menu ───────────────────────────
+//
+// A storefront that lists food and says nothing about WHERE it is, WHEN it
+// opens or WHAT ANYBODY THINKS OF IT is half a page: the customer leaves to
+// find those three things on a map and orders from whatever they find there.
+// This is the other half, and every part of it is the venue's own material --
+// the schedule the kernel already enforces, the coordinates the owner set, and
+// the Google listing, attributed to Google and linked back to it.
+//
+// EACH ROW APPEARS ONLY IF ITS FACT EXISTS. A venue with no coordinates draws
+// no map link, one with no schedule draws no hours; a row that says "—" is a
+// row that teaches the customer the page is broken.
+const DAY_NAMES = {
+  sq: ['E hënë','E martë','E mërkurë','E enjte','E premte','E shtunë','E diel'],
+  en: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'],
+  uk: ['Понеділок','Вівторок','Середа','Четвер','Пʼятниця','Субота','Неділя'],
+};
+const hhmm = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+
+/// Which weekday it is where the VENUE is, not where the phone is. A customer
+/// reading this in Kyiv must see the venue's Friday, and `nextOpen.weekday`
+/// from the server is already in the venue's own frame.
+const todayAt = () => {
+  const off = Number.isFinite(state.loc?.tzOffsetMinutes) ? state.loc.tzOffsetMinutes : 120;
+  const local = new Date(Date.now() + off * 60_000);
+  return { day: (local.getUTCDay() + 6) % 7, minute: local.getUTCHours() * 60 + local.getUTCMinutes() };
+};
+
+function hoursRows(){
+  const week = state.loc?.hours;
+  if (!Array.isArray(week) || week.length !== 7) return '';
+  const names = DAY_NAMES[lang] || DAY_NAMES.en;
+  const now = todayAt();
+  return `<div class="hours" id="hoursBox" ${state.hoursOpen ? '' : 'hidden'}>${
+    week.map((wins, i) => `<div class="hours-row${i === now.day ? ' on' : ''}">
+      <span>${esc(names[i])}</span>
+      <span>${wins.length ? wins.map(w => `${hhmm(w.open)}–${hhmm(w.close)}`).join(', ')
+                          : esc(t('closedNow'))}</span></div>`).join('')}</div>`;
+}
+
+/// The one line at the top of the hours row: what the customer needs before the
+/// table, which is whether they can order in the next minute.
+function openLine(){
+  const L = state.loc;
+  if (L.status === 'open') {
+    const week = Array.isArray(L.hours) ? L.hours : null;
+    const now = todayAt();
+    const win = week && (week[now.day] || []).find(w => now.minute >= w.open && now.minute < w.close);
+    return win ? `${t('openUntil')} ${hhmm(win.close)}` : t('open') || t('openUntil');
+  }
+  if (L.nextOpen) return `${t('closedNow')} · ${t('opensAt2')} ${whenOpens(L.nextOpen)}`;
+  return t('closedNow');
+}
+
+function venueCard(){
+  const L = state.loc;
+  const g = L.google || null;
+  const hasGeo = Number.isFinite(L.lat) && Number.isFinite(L.lng);
+  // Google's own deep link, built from coordinates rather than pasted: the
+  // harvested short link can expire, a coordinate cannot.
+  const mapsHref = hasGeo
+    ? `https://www.google.com/maps/search/?api=1&query=${L.lat},${L.lng}`
+    : (g && g.url) || null;
+  const rows = [];
+
+  if (Array.isArray(L.hours) && L.hours.length === 7) {
+    rows.push(`<button class="vrow" type="button" id="hoursGo"
+        aria-expanded="${state.hoursOpen ? 'true' : 'false'}" aria-controls="hoursBox">
+      <i class="ti ti-clock-hour-9" aria-hidden="true"></i>
+      <span>${esc(openLine())}</span>
+      <i class="ti ti-chevron-right vrow-chev" aria-hidden="true"></i></button>${hoursRows()}`);
+  }
+  if (L.address) {
+    rows.push(mapsHref
+      ? `<a class="vrow" href="${esc(mapsHref)}" target="_blank" rel="noopener noreferrer">
+          <i class="ti ti-map-pin" aria-hidden="true"></i><span>${esc(L.address)}</span>
+          <span class="vrow-act">${esc(t('directions'))}</span></a>`
+      : `<div class="vrow"><i class="ti ti-map-pin" aria-hidden="true"></i>
+          <span>${esc(L.address)}</span></div>`);
+  }
+  if (L.phone) {
+    rows.push(`<a class="vrow" href="tel:${esc(L.phone)}">
+      <i class="ti ti-phone" aria-hidden="true"></i><span>${esc(L.phone)}</span>
+      <span class="vrow-act">${esc(t('callUs'))}</span></a>`);
+  }
+  if (hasGeo) {
+    // THE MAP IS NOT LOADED UNTIL IT IS ASKED FOR. MapLibre and a tile session
+    // are a third of a megabyte and a round trip to another origin; a customer
+    // who came to read a menu should not pay for either.
+    rows.push(`<button class="vrow" type="button" id="mapGo"
+        aria-expanded="false" aria-controls="mapBox">
+      <i class="ti ti-gps" aria-hidden="true"></i><span>${esc(t('onMap'))}</span>
+      <i class="ti ti-chevron-right vrow-chev" aria-hidden="true"></i></button>
+      <div class="vmap" id="mapBox" hidden></div>`);
+  }
+
+  const reviews = (g && Array.isArray(g.reviews) ? g.reviews : []).slice(0, 6);
+  const stars = n => '★'.repeat(Math.round(n || 0)) + '☆'.repeat(5 - Math.round(n || 0));
+  const revs = reviews.length ? `
+    <div class="revs">
+      <h2 class="vsec-h">${esc(t('reviewsTitle'))}
+        <span class="vsrc">${esc(t('fromGoogle'))}</span></h2>
+      <div class="revs-in">${reviews.map(r => `
+        <figure class="rev">
+          <figcaption>
+            <span class="rev-who" aria-hidden="true">${esc((r.author || '?').trim().charAt(0))}</span>
+            <span><b>${esc(r.author || '')}</b>
+            <span class="rev-stars" aria-label="${r.rating || 0}/5">${stars(r.rating)}</span></span>
+          </figcaption>
+          <blockquote>${esc(r.text || '')}</blockquote>
+        </figure>`).join('')}</div>
+    </div>` : '';
+
+  if (!rows.length && !g) return '';
+  return `
+    <section class="venue">
+      ${g && g.rating ? `<div class="vrate">
+        <b>${esc(String(g.rating).replace('.', lang === 'en' ? '.' : ','))}</b>
+        <span class="rev-stars" aria-hidden="true">${stars(g.rating)}</span>
+        ${g.reviewCount ? `<span class="vcount">${g.reviewCount}</span>` : ''}
+        ${g.url ? `<a class="vsrc" href="${esc(g.url)}" target="_blank" rel="noopener noreferrer"
+           >${esc(t('fromGoogle'))}</a>` : `<span class="vsrc">${esc(t('fromGoogle'))}</span>`}
+      </div>` : ''}
+      ${rows.join('')}
+      ${revs}
+    </section>`;
+}
+
+/// MapLibre, imported the first time somebody asks to see the map.
+async function showMap(){
+  const box = $('#mapBox');
+  const btn = $('#mapGo');
+  if (!box) return;
+  const opening = box.hidden;
+  box.hidden = !opening;
+  btn?.setAttribute('aria-expanded', String(opening));
+  if (!opening || box.dataset.drawn) return;
+  box.dataset.drawn = '1';
+  try {
+    const { default: maplibregl } = await import('/lib/map/maplibre-gl.js');
+    const map = new maplibregl.Map({
+      container: box,
+      style: 'https://tiles.openfreemap.org/styles/liberty',
+      center: [state.loc.lng, state.loc.lat],
+      zoom: 16,
+      attributionControl: true,
+    });
+    new maplibregl.Marker().setLngLat([state.loc.lng, state.loc.lat]).addTo(map);
+  } catch (e) {
+    // A map that will not load is a missing map, not a broken page: say so in
+    // the box that was opened for it and leave everything else alone.
+    box.textContent = t('loadFail');
+    box.dataset.drawn = '';
+  }
+}
+
 function renderMenu(){
   const L = state.loc, open = L.status === 'open';
   const cats = visibleCats();
@@ -710,6 +870,7 @@ function renderMenu(){
           : esc(t('closedHint'))}
         ${L.phone ? `<br><a href="tel:${esc(L.phone)}">${esc(L.phone)}</a>` : ''}</div></div>`}
     </section>
+    ${venueCard()}
     <div class="find">
       <label class="srch">
         <i class="ti ti-search" aria-hidden="true"></i>
@@ -777,6 +938,22 @@ function dish(p){
 }
 
 function bindMenu(){
+  // The hours table and the map toggle the node they already have rather than
+  // re-rendering the menu: a re-render loses the scroll position, and the
+  // customer opened the hours to read them, not to be sent back to the top.
+  const hg = $('#hoursGo');
+  if (hg) {
+    hg.onclick = () => {
+      const box = $('#hoursBox');
+      if (!box) return;
+      state.hoursOpen = box.hidden;
+      box.hidden = !box.hidden;
+      hg.setAttribute('aria-expanded', String(!box.hidden));
+    };
+  }
+  const mg = $('#mapGo');
+  if (mg) mg.onclick = showMap;
+
   // Search runs on every keystroke because it is local: there is no request to
   // debounce, and a fifty-item filter is microseconds. Focus and caret are
   // restored because renderMenu replaces the whole node.

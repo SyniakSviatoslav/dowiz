@@ -397,6 +397,16 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // storefront the customer does not recognise as the place they are
     // ordering from.
     location["logoUrl"] = raw.get("logo_url").cloned().unwrap_or(Value::Null);
+    // Where the venue is, and what its Google listing says. Both are the
+    // venue's own material about itself; the storefront draws a map from the
+    // first and attributes the second to where it came from.
+    location["lat"] = raw.get("lat").cloned().unwrap_or(Value::Null);
+    location["lng"] = raw.get("lng").cloned().unwrap_or(Value::Null);
+    location["google"] = raw.get("google").cloned().unwrap_or(Value::Null);
+    // The WEEK, not just today. `status` and `nextOpen` answer "can I order
+    // now"; a customer deciding whether to come on Sunday needs the table, and
+    // the schedule has never left the Worker.
+    location["hours"] = raw.get("hours").cloned().unwrap_or(Value::Null);
     location["pickup"] = json!(raw.get("pickup").and_then(Value::as_bool).unwrap_or(false));
     location["hasDeliveryZones"] = json!(raw.get("delivery_zones").is_some());
     location["nextOpen"] = next_open

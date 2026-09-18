@@ -112,6 +112,8 @@ def main() -> int:
     ap.add_argument("--slug", default=SLUG)
     ap.add_argument("--out", default="./import")
     ap.add_argument("--photos", default=None, help="directory of already-downloaded photographs")
+    ap.add_argument("--owner-email", default=os.environ.get("OWNER_EMAIL"))
+    ap.add_argument("--owner-password", default=os.environ.get("OWNER_PASSWORD"))
     ap.add_argument("--hub", default=None,
                     help="a live hub to read the venue record from, so the fixture carries the "
                          "venue's real currency and delivery terms")
@@ -167,10 +169,24 @@ def main() -> int:
             photos[it["id"]] = it["image"]
 
     bundle = {
+        # ONLY the keys this importer actually knows. `POST /api/bootstrap`
+        # MERGES the venue record, so the name, currency, locales, delivery
+        # terms, hours, theme and logo the venue already has all survive -- it
+        # used to overwrite them with exactly these two fields.
         "location": {"id": args.slug, "slug": args.slug},
         "categories": out_cats,
         "products": out_products,
+        # THIS BUNDLE IS THE CATALOGUE, not an addition to one. Without it the
+        # venue's real 165 dishes land beside the 18 placeholder ones and the
+        # customer chooses between them.
+        "replace": True,
     }
+    if args.owner_email and args.owner_password:
+        # Seeding an owner is idempotent in the hub: an email that already has
+        # an account keeps its password. This is how a hub nobody can log into
+        # gets its first console user.
+        bundle["owner"] = {"email": args.owner_email, "password": args.owner_password,
+                           "name": "Owner"}
 
     # ── The same catalogue in the PUBLIC menu shape ──
     # So the whole import can be looked at in a browser, on a local stand,

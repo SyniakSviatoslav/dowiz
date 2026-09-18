@@ -27,6 +27,14 @@ pub struct Bundle {
     pub categories: Vec<Value>,
     #[serde(default)]
     pub products: Vec<Value>,
+    /// Remove what this bundle does not name.
+    ///
+    /// Default false, because an incremental seed must stay incremental. Set
+    /// when the bundle IS the catalogue -- a venue's real menu replacing the
+    /// placeholder one -- and the dishes and categories the bundle leaves out
+    /// are deleted rather than left beside it.
+    #[serde(default)]
+    pub replace: bool,
     /// The first owner. Optional: a hub can be seeded with a menu before anyone
     /// claims it, which is exactly the "shadow org" the old schema allowed for.
     #[serde(default)]
@@ -109,8 +117,57 @@ pub async fn seed(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // 32-byte secret, so the caller is the operator seeding their own hub, and
     // telling them what actually failed costs nothing and saves a round trip
     // through `wrangler tail` that produced nothing twice.
+    let replace = bundle.replace;
     let seeded = crate::hubstore::with_catalog(&place, move |cat| {
-        cat.set_location(&serde_json::to_string(&loc).unwrap_or_else(|_| "{}".into()));
+        // ── THE VENUE RECORD IS MERGED, NEVER REPLACED WHOLESALE ──
+        //
+        // This wrote the bundle's `location` straight over the stored one, and
+        // a bundle carries the two fields an importer knows: `id` and `slug`.
+        // Seeding a catalogue into a LIVE venue therefore erased its name, its
+        // currency, its locales, its delivery terms, its opening hours, its
+        // theme and its logo -- everything a storefront reads -- and the route
+        // reported success. The bundle's keys win where they are present; every
+        // other key the venue already had survives.
+        let existing: serde_json::Value = cat
+            .location()
+            .and_then(|j| serde_json::from_str(&j).ok())
+            .unwrap_or_else(|| serde_json::json!({}));
+        let mut merged = existing;
+        if let (Some(m), Some(incoming)) = (merged.as_object_mut(), loc.as_object()) {
+            for (k, v) in incoming {
+                m.insert(k.clone(), v.clone());
+            }
+        } else {
+            merged = loc.clone();
+        }
+        cat.set_location(&serde_json::to_string(&merged).unwrap_or_else(|_| "{}".into()));
+
+        // ── REPLACE, when the caller asks for it ──
+        //
+        // Seeding only ever ADDED, so importing a real 165-dish catalogue over
+        // an 18-dish placeholder left 183 dishes and the customer choosing
+        // between them. `replace` removes what the bundle does not name; the
+        // default stays merge, because that is what an incremental seed means.
+        if replace {
+            let keep_p: std::collections::BTreeSet<String> = prods
+                .iter()
+                .filter_map(|p| p.get("id").and_then(|x| x.as_str()).map(String::from))
+                .collect();
+            let keep_c: std::collections::BTreeSet<String> = cats
+                .iter()
+                .filter_map(|c| c.get("id").and_then(|x| x.as_str()).map(String::from))
+                .collect();
+            for (id, _) in cat.products() {
+                if !keep_p.contains(&id) {
+                    cat.remove_product(&id);
+                }
+            }
+            for (id, _) in cat.categories() {
+                if !keep_c.contains(&id) {
+                    cat.remove_category(&id);
+                }
+            }
+        }
         let mut nc = 0;
         for c in &cats {
             let Some(id) = c.get("id").and_then(|x| x.as_str()) else { continue };

@@ -27,8 +27,17 @@ them one step earlier, where the error can still name the file on disk.
 """
 import argparse, json, os, sys, urllib.error, urllib.request
 
+# Cloudflare's bot rules answer urllib's default User-Agent with a 403 whose
+# body is "error code: 1010" -- the edge's own signature block, not the hub's
+# 403. It looks exactly like a rejected secret and cost one debugging round, so
+# every request from this script names a browser.
+UA = ('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
+      '(KHTML, like Gecko) Chrome/124.0 Safari/537.36')
+
+
 def http(method, url, data=None, headers=None, timeout=120):
-    req = urllib.request.Request(url, data=data, method=method, headers=headers or {})
+    h = {"user-agent": UA, "accept": "*/*", **(headers or {})}
+    req = urllib.request.Request(url, data=data, method=method, headers=h)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.status, r.read()
@@ -134,7 +143,9 @@ def main() -> int:
     loc = bundle["location"]["id"]
     for pid, by_locale in i18n.items():
         payload = {"location_id": loc, "translations": by_locale}
-        code, resp = http("PATCH", f"{a.hub}/api/owner/products/{pid}", json.dumps(payload).encode(),
+        # POST, not PATCH. The route is `.post_async("/api/owner/products/:id")`
+        # and a PATCH to it is a 405 -- seventy-three of them, once each.
+        code, resp = http("POST", f"{a.hub}/api/owner/products/{pid}", json.dumps(payload).encode(),
                           {**auth, "content-type": "application/json"})
         if code == 200: ok += 1
         else:
@@ -166,6 +177,28 @@ def main() -> int:
     # would be unreadable (409 with the contrast it measured). A refusal is
     # printed and not worked around: a venue's brand is not worth a customer
     # who cannot read the price.
+    # 6. where the venue is, when it opens, and what Google says
+    #
+    # `place.json` comes from `harvest_google_place.mjs`. Only the fields that
+    # were actually read are sent: the hub writes what it is given and leaves
+    # the rest alone, so a harvest that could not find the telephone number does
+    # not erase the one the owner typed.
+    place_path = os.path.join(a.dir, "place.json")
+    if os.path.exists(place_path):
+        pl = json.load(open(place_path, encoding="utf-8"))
+        payload = {}
+        if pl.get("address"): payload["address"] = pl["address"]
+        if pl.get("lat") is not None and pl.get("lng") is not None:
+            payload["lat"], payload["lng"] = pl["lat"], pl["lng"]
+        if pl.get("hoursMinutes"): payload["hours"] = pl["hoursMinutes"]
+        goog = {k: pl[k] for k in ("url", "rating", "reviewCount", "reviews", "harvestedAt")
+                if pl.get(k) is not None}
+        if goog: payload["google"] = goog
+        if payload:
+            code, resp = http("POST", f"{a.hub}/api/owner/place", json.dumps(payload).encode(),
+                              {**auth, "content-type": "application/json"})
+            print(f"place {sorted(payload)} → {code} {resp[:160].decode('utf-8','replace')}")
+
     if brand.get("primary"):
         payload = {k: v for k, v in
                    (("primary", brand.get("primary")), ("ink", brand.get("ink")),

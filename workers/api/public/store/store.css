@@ -477,3 +477,59 @@ input:focus,textarea:focus,select:focus{border-color:var(--brand-primary);outlin
    weight: a customer should not have to submit the form to discover that the
    telephone number was optional all along. */
 .opt{color:var(--muted,#8a8a8a);font-weight:400;font-size:.85em}
+
+/* ── The venue as a place ───────────────────────────────────────────────────
+ * Rating, opening hours, address, telephone, map and reviews: the half of a
+ * storefront that is not the menu. Every colour here is a brand token, so a
+ * venue that has set its own palette gets this section in its own colours and
+ * one that has not gets the shipped look — there is no literal colour below.
+ */
+.venue{margin:0 0 var(--space-4)}
+.vrate{display:flex;align-items:baseline;gap:8px;padding:10px 0;flex-wrap:wrap}
+.vrate b{font-size:var(--text-xl);font-family:var(--brand-font-heading)}
+.vcount{color:var(--brand-text-muted)}
+.vsrc{color:var(--brand-text-muted);font-size:var(--text-sm)}
+a.vsrc{text-decoration:underline}
+.rev-stars{color:var(--brand-primary);letter-spacing:1px}
+
+/* One row shape for every fact, whether it is a button, a link or neither, so
+   the column reads as one list and not as three kinds of control. */
+.vrow{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;
+  padding:10px 0;border:0;border-top:1px solid var(--brand-border);
+  background:none;color:var(--brand-text);font:inherit;text-align:left;cursor:pointer}
+.vrow:first-of-type{border-top:0}
+.vrow > span:first-of-type{flex:1;min-width:0}
+.vrow .ti{font-size:20px;color:var(--brand-text-muted);flex:none}
+.vrow-act{color:var(--brand-primary);font-size:var(--text-sm);flex:none}
+/* THE SET HAS FORTY-SEVEN ICONS AND `chevron-down` IS NOT ONE OF THEM. It
+   rendered as a filled box on the two expanders -- the self-hosted mask set is
+   deliberately small, and an icon that is not in it is not a fallback, it is a
+   square. The chevron that IS in the set is rotated instead, which costs
+   nothing and adds no asset. */
+.vrow-chev{transition:transform 150ms ease;transform:rotate(90deg)}
+.vrow[aria-expanded="true"] .vrow-chev{transform:rotate(-90deg)}
+
+.hours{padding:4px 0 10px 30px}
+.hours-row{display:flex;justify-content:space-between;gap:12px;padding:3px 0;
+  color:var(--brand-text-muted);font-size:var(--text-sm)}
+/* Today is the row the customer is actually looking for. */
+.hours-row.on{color:var(--brand-text);font-weight:600}
+
+.vmap{height:220px;border-radius:var(--radius-card);overflow:hidden;margin:0 0 10px}
+
+.revs{margin-top:var(--space-3)}
+.vsec-h{display:flex;align-items:baseline;gap:8px;font-size:var(--text-lg);
+  font-family:var(--brand-font-heading);margin:0 0 8px}
+/* A rail, because reviews are read one at a time and a column of six pushes the
+   menu off the screen. */
+.revs-in{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;
+  padding-bottom:4px;-webkit-overflow-scrolling:touch}
+.rev{flex:0 0 78%;max-width:320px;scroll-snap-align:start;margin:0;
+  padding:12px;border:1px solid var(--brand-border);border-radius:var(--radius-card);
+  background:var(--brand-surface)}
+.rev figcaption{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+/* An initial, not a photograph: the author avatars are on Google's own domain
+   and `img-src` does not allow it — a broken image is worse than a letter. */
+.rev-who{width:32px;height:32px;flex:none;display:grid;place-items:center;
+  border-radius:var(--radius-full);background:var(--brand-primary);color:var(--brand-on-primary);font-weight:700}
+.rev blockquote{margin:0;color:var(--brand-text-muted);font-size:var(--text-sm);line-height:1.45}

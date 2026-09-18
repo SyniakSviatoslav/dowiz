@@ -155,6 +155,21 @@ impl Catalog {
         self.kv.remove(&format!("{P_PROMO}{code}"))
     }
 
+    /// Removing a dish is a real delete, for the same reason removing a promo
+    /// is: a dish the venue took off the menu must stop being orderable, and
+    /// `available: false` is the separate, reversible thing that says "not
+    /// today". Used by the catalogue seed when it is asked to REPLACE rather
+    /// than merge -- an import that only ever adds leaves the placeholder menu
+    /// sitting beside the real one, which is how a venue ends up selling
+    /// eighteen dishes it does not make.
+    pub fn remove_product(&mut self, id: &str) -> bool {
+        self.kv.remove(&format!("{P_PRODUCT}{id}"))
+    }
+
+    pub fn remove_category(&mut self, id: &str) -> bool {
+        self.kv.remove(&format!("{P_CATEGORY}{id}"))
+    }
+
     pub fn categories(&self) -> Vec<(String, String)> {
         self.entries_with_prefix(P_CATEGORY)
     }
