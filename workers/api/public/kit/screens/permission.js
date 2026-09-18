@@ -92,6 +92,12 @@ async function askNotify(said){
     said.textContent = 'Цей браузер не показує сповіщень.';
     return;
   }
+  // SAY SOMETHING BEFORE WAITING ON THE BROWSER, exactly as askGeo does. The
+  // permission prompt is the platform's, it can take as long as it likes, and
+  // on a headless browser it may never answer at all -- so without this line
+  // the tap produced no observable change and read as a button wired to
+  // nothing.
+  said.textContent = 'Питаємо браузер…';
   try {
     const answer = await Notification.requestPermission();
     said.textContent = answer === 'granted' ? 'Дозволено.' : 'Відхилено — можна ввімкнути пізніше.';

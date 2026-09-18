@@ -226,8 +226,18 @@ window.__ix = (() => {
       // attribute with exactly one of them true.
       group: (() => {
         const a = STATES.find(x => el.hasAttribute(x));
-        if (!a || !el.parentElement) return 0;
-        const sibs = [...el.parentElement.querySelectorAll('[' + a + ']')];
+        if (!a) return 0;
+        // THE GROUP IS THE ONE THE MARKUP DECLARES, NOT THE ONE THE PARENT
+        // IMPLIES. Payment Methods draws its radios under four headings, so
+        // "Cash" and "Wallet" sit alone in their own container: the parent held
+        // exactly one radio, no group was detected, and both were then judged
+        // as toggles that refused to turn off. Two false defects per engine,
+        // against markup that is correct -- the radios carry role="radio"
+        // inside a role="radiogroup", which is the group and says so.
+        const host = el.closest('[role="radiogroup"],[role="tablist"],fieldset')
+          || el.parentElement;
+        if (!host) return 0;
+        const sibs = [...host.querySelectorAll('[' + a + ']')];
         const on = sibs.filter(s2 => s2.getAttribute(a) === 'true').length;
         // At most one on: that is single-select. ZERO on is the same group
         // before anything has been chosen — a time slot, a payment method — and
@@ -289,6 +299,25 @@ window.__ix = (() => {
     // and every one of them reported as a dead control — a whole screen of
     // false findings from one missing scroll. So the element is brought on
     // screen first and the box is read after.
+    // Dismiss an open scrim/backdrop the app's own way, then re-measure.
+    // Escape first, because a dialog that only closes by tapping its backdrop
+    // is a keyboard trap; the backdrop tap is the fallback the app documents.
+    undim: i => {
+      const el = at(i); if (!el) return null;
+      const dismiss = () => {
+        const on = [...document.querySelectorAll('[class*="scrim"],[class*="backdrop"]')]
+          .filter(s2 => !s2.hidden && getComputedStyle(s2).display !== 'none');
+        for (const s2 of on) {
+          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+          el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+          if (!s2.hidden && getComputedStyle(s2).display !== 'none')
+            s2.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        }
+        return on.length;
+      };
+      if (!dismiss()) return null;
+      return window.__ix.box(i);
+    },
     box: i => { const el = at(i); if (!el) return null;
                 if (!visible(el)) return null;
                 const r0 = el.getBoundingClientRect();
@@ -476,10 +505,24 @@ async function screen(ctx, engine, route) {
     const box = await page.evaluate(`window.__ix.box(${c.i})`);
     if (!box) continue;                       // a previous tap hid it; not its turn
     if (!box.owns) {
-      note(engine, route, 'COVERED',
-        `${c.label} — ${box.over} is on top of its centre` +
-        (process.env.IXDEBUG ? ` @${Math.round(box.x)},${Math.round(box.y)}` : ''));
-      continue;
+      // A MODAL IS SUPPOSED TO COVER WHAT IS BEHIND IT. This gate taps a
+      // screen's controls in one session, so tapping the row that opens the
+      // theme sheet leaves its scrim over every row below -- and each was then
+      // reported as covered, in all three engines, against an app that was
+      // behaving exactly as a dialog must.
+      //
+      // So an open dismissable overlay is dismissed the way the app itself
+      // dismisses it (Escape, then a tap on the scrim) and the control is
+      // measured again. Only a control that is STILL covered is a defect. The
+      // scrim is clicked only when it names itself one: `.k-map-over` is a
+      // panel, not a backdrop, and clicking it would be a tap nobody asked for.
+      const box2 = await page.evaluate(`window.__ix.undim(${c.i})`);
+      if (!box2 || !box2.owns) {
+        note(engine, route, 'COVERED',
+          `${c.label} — ${box.over} is on top of its centre` +
+          (process.env.IXDEBUG ? ` @${Math.round(box.x)},${Math.round(box.y)}` : ''));
+        continue;
+      }
     }
 
     // AFTER the scroll box() may have done, or the scroll itself reads as the

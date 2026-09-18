@@ -333,9 +333,23 @@ export function bind(root){
     if (e.target.closest('#applyCoupon')){
       // The coupon's worth is the server's answer, not this screen's. Until it
       // is wired, the field records what was typed and says so plainly.
-      state.coupon = root.querySelector('#coupon').value.trim();
+      const field = root.querySelector('#coupon');
+      state.coupon = field.value.trim();
       const box = root.querySelector('#applyCoupon');
-      box.textContent = state.coupon ? 'Applied' : 'Apply';
+      // AN EMPTY FIELD USED TO BE A NO-OP. The label was rewritten from "Apply"
+      // to "Apply", nothing else moved, and the tap was indistinguishable from
+      // a button wired to nothing -- which is exactly how the interaction gate
+      // read it. A control that cannot do its job says why and puts the cursor
+      // where the answer goes.
+      if (!state.coupon){
+        field.setAttribute('aria-invalid', 'true');
+        field.placeholder = 'Введіть код купона';
+        field.focus();
+        box.textContent = 'Apply';
+        return;
+      }
+      field.removeAttribute('aria-invalid');
+      box.textContent = 'Applied';
     }
   });
 

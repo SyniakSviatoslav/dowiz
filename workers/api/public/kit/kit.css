@@ -140,7 +140,9 @@ body{
   border-radius:var(--k-r-pill);background:var(--k-surface);color:var(--k-text);cursor:pointer;
   font:inherit;font-size:var(--k-text-12);font-weight:var(--k-w-medium)}
 .k-cat.on{background:var(--k-orange);border-color:var(--k-orange);color:#fff}
-.k-cat-img{width:28px;height:28px;border-radius:var(--k-r-pill);background:var(--k-surface-2);flex:none}
+/* Same rule as `.k-choice-ring` below: this one hosts a plate too. */
+.k-cat-img{position:relative;overflow:hidden;
+  width:28px;height:28px;border-radius:var(--k-r-pill);background:var(--k-surface-2);flex:none}
 .k-cat.on .k-cat-img{background:rgba(255,255,255,.25)}
 
 /* ── Dish card ─────────────────────────────────────────────────────────────*/
@@ -553,7 +555,16 @@ body{
 
 /* ── A row that names a choice and offers to change it ──*/
 .k-choice{display:flex;align-items:center;gap:13px}
-.k-choice-ring{width:50px;height:50px;border-radius:28px;background:var(--k-surface-2);flex:none;
+/* `position:relative` IS LOAD-BEARING, not tidiness. `.k-plate` is
+   `position:absolute;inset:0`, so an unpositioned host does not contain it:
+   the plate escapes to the nearest positioned ancestor and stretches over
+   the whole row. Here that put a 50px avatar across the CHAT and CALL
+   buttons on Track Live -- both hit-tested as covered, in every engine. It
+   is the same defect the dish card had, where the plate covered the name,
+   the price and the rating. `overflow:hidden` is what makes the radius
+   clip it. */
+.k-choice-ring{position:relative;overflow:hidden;
+  width:50px;height:50px;border-radius:28px;background:var(--k-surface-2);flex:none;
   display:grid;place-items:center;color:var(--k-icon-strong)}
 .k-choice-ring .ic{font-size:24px}
 .k-choice-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
@@ -1480,7 +1491,11 @@ button,a,[role="button"],[role="radio"],[role="tab"]{touch-action:manipulation}
 .k-field{height:var(--k-field-h)}
 .k-obtn{padding:11px 18px}
 .k-heart{width:32px;height:32px}
-.k-heart::after{inset:-12px}
+/* `inset` ALONE GENERATES NOTHING. A pseudo-element without `content` is not
+   created at all, so this rule read as a 56px tap target and was a no-op --
+   the hit test measured the painted 32px disc and nothing more. The working
+   pattern is `.k-qty-sm button::after` above: content, position, inset. */
+.k-heart::after{content:"";position:absolute;inset:-12px}
 .k-heart .ic{font-size:18px}
 
 /* Navigation labels and a message's timestamp were 10px. A tab label is read
@@ -1640,7 +1655,7 @@ input[type="range"]{font-size:16px;height:44px}
  * which is really there because the padded cards do not clip. */
 .k-heart{position:absolute;width:32px;height:32px;right:14px;top:14px;
   background:var(--k-surface);color:var(--k-text-2)}
-.k-heart::after{inset:-6px}
+.k-heart::after{content:"";position:absolute;inset:-6px}
 .k-heart .ic{font-size:18px}
 .k-heart[aria-pressed="true"]{color:#ff4747}
 .k-mcard .k-heart,.k-vcard .k-heart,.k-dish .k-heart{width:32px;height:32px;right:14px;top:14px}
