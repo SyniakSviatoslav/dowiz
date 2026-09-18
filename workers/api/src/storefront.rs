@@ -435,6 +435,9 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // storefront the customer does not recognise as the place they are
     // ordering from.
     location["logoUrl"] = raw.get("logo_url").cloned().unwrap_or(Value::Null);
+    // What the venue puts around its mark (seal, motif, two supporting
+    // colours), validated on the way in by `owner::clean_stage`.
+    location["stage"] = raw.get("stage").cloned().unwrap_or(Value::Null);
     // Where the venue is, and what its Google listing says. Both are the
     // venue's own material about itself; the storefront draws a map from the
     // first and attributes the second to where it came from.

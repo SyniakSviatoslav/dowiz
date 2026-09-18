@@ -995,3 +995,8 @@ its source, which is why translations, logo and hours "did not work". Verified l
 - Storefront: language and currency are two controls; allergens moved to the language
   sheet; "available only" removed; pickup hides address/tip/courier note; no-photo dish
   wears the logo; hero = mark in a drawn ring + tracked capitals + rule; film grain.
+- Later the same day: the Sea is the Tide-over-Bedrock ocean (`lib/tide-sea.js`, artifact shaders
+  verbatim; status → phase, add → ripple, rejection → magenta, checkout → still). Venue `stage`
+  block (seal/motif/warm/sage) on `/api/owner/location`; Dubin: ドウビン, leaf, #e0754d, #8a9a7b.
+  Headless Chromium here cannot screenshot ANY WebGL canvas (broken-image placeholder) — judge
+  the Sea by `_probe_sea.mjs` counts, see it on a phone.

@@ -231,6 +231,21 @@ export function applyTheme(theme){
 }
 matchMedia('(prefers-color-scheme:dark)').addEventListener('change', paintTheme);
 
+// ── the venue's stage ───────────────────────────────────────────────────────
+// Two supporting colours from the venue's own mark, as tokens on the root.
+// The hub checks them on the way in; they are checked again here, because
+// a value that reaches CSS is a value that has to be a colour.
+const STAGE_COLOURS = { warm: '--stage-warm', sage: '--stage-sage' };
+const HEX_COLOUR = /^#[0-9a-fA-F]{6}$/;
+export function applyStage(stage){
+  const root = document.documentElement;
+  for (const [key, name] of Object.entries(STAGE_COLOURS)) {
+    const v = stage?.[key];
+    if (typeof v === 'string' && HEX_COLOUR.test(v)) root.style.setProperty(name, v);
+    else root.style.removeProperty(name);
+  }
+}
+
 // ── my orders ───────────────────────────────────────────────────────────────
 // NO ACCOUNT, and that is the design. Each order comes back with a token
 // scoped to that ONE order, and the browser keeps the list.

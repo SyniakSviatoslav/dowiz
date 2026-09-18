@@ -63,9 +63,18 @@ function town(){
   return parts[parts.length - 2];
 }
 
-/// The rule in the accent with a dot at its centre: the venue mark's own
-/// ornament, drawn once here and reused under every section heading.
-export const ruleMarkup = () => `<div class="rule" aria-hidden="true"><i></i><b></b><i></i></div>`;
+/// The ornaments a rule can carry, by the venue's `stage.motif`. A leaf is
+/// two sprigs in the sage tone; a wave is two short crests in the accent.
+const MOTIF_SVG = {
+  leaf: `<svg class="motif" viewBox="0 0 40 16"><path d="M2 14c6-9 14-11 22-10-3 8-11 12-22 10z"/><path d="M38 14c-6-9-14-11-22-10 3 8 11 12 22 10z"/><path d="M2 14c8-3 14-6 20-9M38 14c-8-3-14-6-20-9" class="vein"/></svg>`,
+  wave: `<svg class="motif" viewBox="0 0 40 16"><path d="M1 11c4-6 8-6 12 0s8 6 12 0 8-6 12 0" class="vein"/><path d="M1 6c4-6 8-6 12 0s8 6 12 0 8-6 12 0" class="vein"/></svg>`,
+};
+/// The rule in the accent with a dot at its centre -- the venue mark's own
+/// ornament -- and the venue's motif on either side of the dot when it has one.
+export function ruleMarkup(){
+  const motif = MOTIF_SVG[state.loc?.stage?.motif] || '';
+  return `<div class="rule ${motif ? 'has-motif' : ''}" aria-hidden="true"><i></i>${motif}<b></b>${motif}<i></i></div>`;
+}
 
 /// The hero markup. Text nodes that depend on the language carry an id so
 /// `refreshHero` can rewrite them without rebuilding the block.
@@ -79,6 +88,7 @@ export function heroMarkup(){
     ${L.logoUrl ? `<div class="hero-art" aria-hidden="true">
       <svg class="ring" viewBox="0 0 100 100"><circle cx="50" cy="50" r="${RING_R}" pathLength="${RING_LEN}"/></svg>
       <img class="hero-mark" src="${esc(L.logoUrl)}" alt="">
+      ${L.stage?.seal ? `<span class="seal">${esc(L.stage.seal)}</span>` : ''}
     </div>` : ''}
     ${where ? `<p class="eyebrow hero-eyebrow">${esc(where)}</p>` : ''}
     <h1 class="hero-name">${esc(L.name)}</h1>

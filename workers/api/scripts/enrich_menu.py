@@ -364,6 +364,10 @@ def main():
     ap.add_argument("--free-over", type=int, default=None, help="free delivery from this subtotal; -1 clears")
     ap.add_argument("--min-order", type=int, default=None)
     ap.add_argument("--brand", default=None, help="primary,ink,paper hex triple, e.g. #c9a35a,#f1e8d8,#0b1717")
+    ap.add_argument("--seal", default=None, help="the venue's stamp text, e.g. ドウビン")
+    ap.add_argument("--motif", default=None, choices=("leaf", "wave", "none"))
+    ap.add_argument("--warm", default=None, help="the mark's warm tone, #rrggbb")
+    ap.add_argument("--sage", default=None, help="the mark's leaf tone, #rrggbb")
     ap.add_argument("--out", default=None, help="write i18n.json / products.json here as well")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--skip-products", action="store_true")
@@ -422,6 +426,8 @@ def main():
     if a.delivery_fee is not None: loc["delivery_fee"] = a.delivery_fee
     if a.min_order is not None: loc["min_order"] = a.min_order
     if a.free_over is not None: loc["free_delivery_threshold"] = None if a.free_over < 0 else a.free_over
+    stage = {k: v for k, v in (("seal", a.seal), ("motif", a.motif), ("warm", a.warm), ("sage", a.sage)) if v}
+    if stage: loc["stage"] = stage
     if loc:
         code, resp = http("POST", f"{a.hub}/api/owner/location",
                           json.dumps({"location_id": a.location_id, **loc}).encode(), auth)

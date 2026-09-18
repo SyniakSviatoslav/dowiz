@@ -6,7 +6,7 @@
 // which is what makes a category tap instant and a language switch a change
 // of words rather than a change of screen.
 
-import { state, API, SLUG, indexProducts, loadAvoid, applyTheme, resolveCurrency, repaintMoney, tokenFor, fetchRemembered } from '/store/state.js';
+import { state, API, SLUG, indexProducts, loadAvoid, applyTheme, applyStage, resolveCurrency, repaintMoney, tokenFor, fetchRemembered } from '/store/state.js';
 import { t, lang, setLang, retranslate } from '/store/i18n.js';
 import { $, esc, icon, bindSheetChrome } from '/store/ui.js';
 import { buildMenu, patchTexts, onOpenDish, onQuickAdd } from '/store/menu.js';
@@ -14,7 +14,10 @@ import { openDish, quickAdd, onDishAdded } from '/store/dish.js';
 import { refreshBar, bounceBar, openCart } from '/store/cart.js';
 import { openVenue, refreshHero } from '/store/venue.js';
 import { mountNav, onChangeLang } from '/store/nav.js';
-import { initSea, seaArrive } from '/store/sea.js';
+import { initSea, seaArrive, seaTouch } from '/store/sea.js';
+
+/// A touch on the venue's mark is a touch on the water beneath it.
+const TOUCH_STRENGTH = 0.55;
 
 /// How many placeholder cards the skeleton shows while the menu loads.
 const SKELETON_CARDS = 3;
@@ -51,6 +54,7 @@ async function load(){
     indexProducts(state.cats);
     state.avoid = loadAvoid();
     applyTheme(d.location.theme);
+    applyStage(d.location.stage);
     paintHeader(d.location);
     document.documentElement.lang = lang;
     await resolveCurrency();
@@ -124,5 +128,6 @@ $('#app').addEventListener('click', e => {
   const v = e.target.closest('[data-open-venue]');
   if (v) openVenue(v.dataset.openVenue || null);
 });
+$('#app').addEventListener('pointerdown', e => { if (e.target.closest('.hero-art')) seaTouch(e.clientX, e.clientY, TOUCH_STRENGTH); }, { passive: true });
 addEventListener('online', netState); addEventListener('offline', netState);
 load();

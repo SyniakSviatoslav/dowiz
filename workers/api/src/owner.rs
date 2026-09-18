@@ -837,6 +837,14 @@ pub async fn update_location(mut req: Request, ctx: RouteContext<()>) -> Result<
         /// no address never reaches a customer as a way to pay.
         #[serde(default)]
         crypto_wallets: Option<Vec<Value>>,
+        /// THE VENUE'S STAGE: what its storefront puts around its mark.
+        /// `{ "seal": "ドウビン", "motif": "leaf", "warm": "#e0754d", "sage": "#8a9a7b" }`
+        /// -- a short seal text drawn as a vertical stamp beside the mark, an
+        /// ornament for the rule, and two supporting colours taken from the
+        /// mark itself. A storefront is one venue's, so these are the venue's
+        /// to set; an absent block leaves the five brand tokens alone.
+        #[serde(default)]
+        stage: Option<Value>,
     }
     let body: In = match req.json().await {
         Ok(b) => b,
@@ -847,6 +855,13 @@ pub async fn update_location(mut req: Request, ctx: RouteContext<()>) -> Result<
     if let Err(r) = owner_at(&req, &ctx, &db, &body.location_id).await {
         return Ok(r);
     }
+    let stage = match &body.stage {
+        None => None,
+        Some(v) => match clean_stage(v) {
+            Ok(s) => Some(s),
+            Err(e) => return Response::error(e, 400),
+        },
+    };
     if let Some(n) = &body.name {
         let n = n.trim();
         if n.is_empty() || n.chars().count() > 80 {
@@ -952,6 +967,9 @@ pub async fn update_location(mut req: Request, ctx: RouteContext<()>) -> Result<
             }
             l["payments"]["crypto"] = json!(w);
         }
+        if let Some(s) = &stage {
+            l["stage"] = s.clone();
+        }
         // Delivery terms are read by every basket, so they move the menu
         // version the way a price does.
         if name.is_some() || delivery_fee.is_some() || free_th.is_some() || min_order.is_some() {
@@ -964,6 +982,45 @@ pub async fn update_location(mut req: Request, ctx: RouteContext<()>) -> Result<
     .await?;
 
     Response::from_json(&json!({ "ok": true }))
+}
+
+/// The stage's bounds. A seal is a stamp, not a sentence; the motifs are the
+/// ones the storefront can draw; a colour is six hex digits.
+const STAGE_SEAL_MAX_CHARS: usize = 12;
+const STAGE_MOTIFS: [&str; 3] = ["leaf", "wave", "none"];
+
+fn hex_colour(s: &str) -> bool {
+    s.len() == 7 && s.starts_with('#') && s[1..].chars().all(|c| c.is_ascii_hexdigit())
+}
+
+/// Only the four keys, each checked, so nothing reaches the storefront's CSS
+/// that is not a short text, a named motif or a colour.
+fn clean_stage(v: &Value) -> std::result::Result<Value, String> {
+    let Some(o) = v.as_object() else { return Err("stage must be an object".into()) };
+    let mut out = serde_json::Map::new();
+    if let Some(seal) = o.get("seal").and_then(Value::as_str).map(str::trim) {
+        if seal.chars().count() > STAGE_SEAL_MAX_CHARS {
+            return Err(format!("a seal is at most {STAGE_SEAL_MAX_CHARS} characters"));
+        }
+        if !seal.is_empty() {
+            out.insert("seal".into(), json!(seal));
+        }
+    }
+    if let Some(m) = o.get("motif").and_then(Value::as_str).map(str::trim) {
+        if !STAGE_MOTIFS.contains(&m) {
+            return Err(format!("motif must be one of {}", STAGE_MOTIFS.join(", ")));
+        }
+        out.insert("motif".into(), json!(m));
+    }
+    for key in ["warm", "sage"] {
+        if let Some(c) = o.get(key).and_then(Value::as_str).map(str::trim) {
+            if !hex_colour(c) {
+                return Err(format!("{key} must be a #rrggbb colour"));
+            }
+            out.insert(key.into(), json!(c.to_lowercase()));
+        }
+    }
+    Ok(Value::Object(out))
 }
 
 /// `Option<Option<T>>`: absent means "leave it", `null` means "clear it".
