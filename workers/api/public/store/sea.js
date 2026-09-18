@@ -1,114 +1,117 @@
-// The Sea -- the dowiz ambient layer, as the developing ocean of the
-// "Tide over Bedrock" direction (/lib/tide-sea.js).
+// The ambient layer, in two registers.
 //
-// ONE PROCESS, NOT A SET OF EVENTS. The sea has a PHASE, 0 to 1, which is
-// where the order is in its life: a resting page sits near zero, a placed
-// order begins to build, a courier on the road is a strong aligned swell in
-// teal, and Delivered is a full gold sea. Every status is a target the field
-// eases toward; nothing jumps. Adding a dish is a touch -- a ring that
-// spreads and fades -- and a rejection is the one magenta glimmer.
+// AT REST: gold dust (/lib/dust.js). A page with nothing happening on it is a
+// dark garden at night -- a few motes of the venue's accent drift and
+// twinkle, and that is all. Adding a dish is a small rise of sparks from the
+// button the finger left; checkout stills them to almost nothing.
 //
-// THE DRAMATURGY IS RESTRAINT (BLUEPRINTS-DOWIZ-INTERFACES §C). Arrival is a
-// calm, brand-graded field. Browsing gets almost nothing. Adding to the cart
-// is one small ring. CHECKOUT IS THE STILLEST MOMENT ON THE PAGE -- the field
-// drops to near-nothing so all attention sits on the numbers. Tracking is the
-// centrepiece. The Sea carries no text, ever: content, words, prices and
-// decisions belong to the Sheet.
+// WHILE WAITING: the Sea (/lib/tide-sea.js), the developing ocean of the
+// "Tide over Bedrock" direction. It exists only while there is an order to
+// wait for, drawn in the tracking sheet's own window, and its phase is
+// where that order is in its life: a placed order is a young scattered
+// sea, a courier on the road is an aligned teal swell, Delivered is a full
+// gold sea, a rejection one magenta glimmer. The Sea carries no text, ever:
+// content, words, prices and decisions belong to the Sheet.
 
-import { on } from '/store/state.js';
+import { on, state } from '/store/state.js';
 
-let sea = null;
+let dust = null;
 let calm = false;
-let tideStatus = null;
+let ocean = null;
 
-/// Where in its life an order is, as the sea's phase. Monotonic toward the
-/// climax and never past it; the failures fall back to rest after the beat.
-const PHASE = {
-  REST: 0.14, PENDING: 0.2, CONFIRMED: 0.24, PREPARING: 0.40, READY: 0.55,
-  IN_DELIVERY: 0.74, DELIVERED: 1.0, REJECTED: 0.14, CANCELLED: 0.14,
+/// Where in its life an order is, as the sea's phase, 0..1.
+export const PHASE = {
+  PENDING: 0.12, CONFIRMED: 0.26, PREPARING: 0.42, READY: 0.58,
+  IN_DELIVERY: 0.76, DELIVERED: 1.0, REJECTED: 0.12, CANCELLED: 0.12,
 };
-/// The energy at rest, while tracking, and while checkout holds still.
-const ENERGY_REST = 0.22;
-const ENERGY_TRACKING = 0.28;
-const ENERGY_CALM = 0.04;
-/// A burst's particle count (the old vocabulary) becomes rings: one ring per
-/// this many particles, at most a handful, strength rising with the count.
-const PARTICLES_PER_RING = 40;
-const RINGS_MAX = 5;
-const RING_STRENGTH_MIN = 0.25;
-const RING_STRENGTH_PER_PARTICLE = 0.002;
-/// How long the failure glimmer holds.
+/// The sea's energy while an order is live, and after it has ended.
+const OCEAN_ENERGY_LIVE = 0.3;
+const OCEAN_ENERGY_DONE = 0.16;
+/// The dust: how much of it shows at rest and while checkout holds still.
+const DUST_REST = 1.0;
+const DUST_CALM = 0.15;
+/// Sparks per added dish, from a card and from the sheet.
+const SPARKS_MIN = 4;
+const SPARKS_PER_PARTICLE = 0.25;
+const SPARKS_MAX = 14;
+/// How long a rejection's glimmer holds on the sea.
 const ANOMALY_MS = 3200;
-const FAILED = new Set(['dispatch_failed']);
+const FAILED = new Set(['REJECTED', 'CANCELLED']);
 
+/// The dust, on the page's own canvas. Off must mean the module is never fetched.
 export async function initSea(){
-  // A venue whose customers are on older phones can turn the Sea off, and off
-  // must mean the module is never fetched.
-  if (!on('sea') || sea) return sea;
+  if (!on('sea') || dust) return dust;
   try {
-    const { createTideSea } = await import('/lib/tide-sea.js');
-    const s = createTideSea();
-    if (!s.init(document.getElementById('sea'))) return null;
-    s.setReducedMotion(matchMedia('(prefers-reduced-motion: reduce)').matches);
-    sea = s;
-  } catch { sea = null; }
-  return sea;
+    const { createDust } = await import('/lib/dust.js');
+    const d = createDust();
+    const colour = state.loc?.stage?.warm || getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim();
+    if (!d.init(document.getElementById('sea'), { colour })) return null;
+    d.setReducedMotion(matchMedia('(prefers-reduced-motion: reduce)').matches);
+    dust = d;
+  } catch { dust = null; }
+  return dust;
 }
 
-/// One event, one touch. `n` is the old particle budget and sets how many
-/// rings and how strong; a failure is the magenta accent instead.
-export function seaEvent(kind, n){
-  if (calm || !sea) return;
-  try {
-    if (FAILED.has(kind)) return sea.accent('anomaly', ANOMALY_MS);
-    const rings = Math.max(1, Math.min(RINGS_MAX, Math.round((n || 0) / PARTICLES_PER_RING)));
-    const strength = RING_STRENGTH_MIN + (n || 0) * RING_STRENGTH_PER_PARTICLE;
-    for (let i = 0; i < rings; i++) sea.ripple(undefined, undefined, strength);
-  } catch {}
+/// One event, one small rise of sparks. `n` is the old particle budget.
+export function seaEvent(kind, n, at){
+  if (calm || !dust) return;
+  const count = Math.max(SPARKS_MIN, Math.min(SPARKS_MAX, Math.round((n || 0) * SPARKS_PER_PARTICLE)));
+  const x = at?.x ?? innerWidth / 2, y = at?.y ?? innerHeight * 0.8;
+  try { dust.spark(x, y, count); } catch {}
 }
 
-/// A touch under a finger, for the hero: the page is the sea's surface.
-export function seaTouch(clientX, clientY, strength){
-  if (calm || !sea) return;
-  try { const p = sea.fieldPoint(clientX, clientY); sea.ripple(p.x, p.y, strength); } catch {}
+/// A touch under a finger: sparks from that point.
+export function seaTouch(clientX, clientY){
+  if (calm || !dust) return;
+  try { dust.spark(clientX, clientY, SPARKS_MIN); } catch {}
 }
 
-/// The arrival field: a low ember drift, so the page breathes before anything
-/// has happened. Not a loop for its own sake -- it is the Sea's resting state.
-export function seaArrive(){
-  setTide(null);
-}
+export function seaArrive(){ try { dust && dust.setEnergy(DUST_REST); } catch {} }
 
-/// The tracking field, held for as long as the order is in this status.
-export function seaForOrder(status){
-  if (!(status in PHASE)) return;
-  if (tideStatus !== status) {
-    if (status === 'REJECTED' || status === 'CANCELLED') seaEvent('dispatch_failed', 0);
-    setTide(status);
-  }
-}
-
-function setTide(status){
-  tideStatus = status;
-  try {
-    sea && sea.setPhase(PHASE[status] ?? PHASE.REST);
-    sea && sea.setEnergy(status && status !== 'DELIVERED' ? ENERGY_TRACKING : ENERGY_REST);
-  } catch {}
-  const cv = document.getElementById('sea');
-  if (cv) cv.dataset.tide = status || '';
-}
-
-/// Checkout stillness. The field fades to near nothing and no touch lands
-/// until the sheet closes; the outcome of the order is the next thing the Sea
-/// says, and it says it from the tracking sheet.
+/// Checkout stillness: the dust fades to almost nothing until the sheet closes.
 export function seaCalm(onoff){
   calm = !!onoff;
   const cv = document.getElementById('sea');
   if (cv) cv.classList.toggle('calm', calm);
-  try { sea && sea.setEnergy(calm ? ENERGY_CALM : (tideStatus ? ENERGY_TRACKING : ENERGY_REST)); } catch {}
+  try { dust && dust.setEnergy(calm ? DUST_CALM : DUST_REST); } catch {}
 }
+export function seaRest(){ closeOcean(); seaArrive(); }
 
-/// Back to the resting field after tracking is dismissed.
-export function seaRest(){
-  setTide(null);
+// ── the Sea, while waiting ──────────────────────────────────────────────────
+/// Draw the ocean into a canvas the tracking sheet owns. One at a time; a
+/// second call for another canvas closes the first.
+export async function openOcean(canvas, status){
+  if (!on('sea')) return null;
+  if (ocean && ocean.canvas !== canvas) closeOcean();
+  if (!ocean) {
+    try {
+      const { createTideSea } = await import('/lib/tide-sea.js');
+      const s = createTideSea();
+      const st = state.loc?.stage || {};
+      const gold = getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim();
+      if (!s.init(canvas, { gold, warm: st.warm, sage: st.sage })) return null;
+      s.setReducedMotion(matchMedia('(prefers-reduced-motion: reduce)').matches);
+      ocean = { sea: s, canvas, status: null };
+    } catch { return null; }
+  }
+  oceanStatus(status);
+  return ocean.sea;
 }
+/// The order moved: the sea eases to the new phase; a failure is the one beat.
+export function oceanStatus(status){
+  if (!ocean || !(status in PHASE)) return;
+  if (ocean.status === status) return;
+  ocean.status = status;
+  try {
+    ocean.sea.setPhase(PHASE[status]);
+    ocean.sea.setEnergy(status === 'DELIVERED' || FAILED.has(status) ? OCEAN_ENERGY_DONE : OCEAN_ENERGY_LIVE);
+    if (FAILED.has(status)) ocean.sea.accent('anomaly', ANOMALY_MS);
+  } catch {}
+}
+export function closeOcean(){
+  if (!ocean) return;
+  try { ocean.sea.destroy(); } catch {}
+  ocean = null;
+}
+/// The sea's phase for a status, for the card beside it.
+export const phaseOf = status => PHASE[status] ?? 0;

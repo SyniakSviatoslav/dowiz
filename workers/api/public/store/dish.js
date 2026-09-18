@@ -30,6 +30,8 @@ const APPROX = '≈';
 
 let onAdded = null;
 export function onDishAdded(fn){ onAdded = fn; }
+/// Where a control is on the page, for the sparks to rise from.
+const centreOf = el => { const r = el?.getBoundingClientRect?.(); return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : undefined; };
 
 function allergenLine(p){
   if (!Array.isArray(p.allergens))
@@ -134,7 +136,7 @@ export function openDish(p){
   $('#dadd').onclick = () => {
     const mods = chosen().map(el => el.value);
     addLine(p.id, mods, q);
-    seaEvent('order_created', SEA_PULSE_SHEET);
+    seaEvent('order_created', SEA_PULSE_SHEET, centreOf($('#dadd')));
     toast(`${p.name} · ${q}`);
     onAdded?.(p, q);
     closeSheet();
@@ -145,11 +147,11 @@ export function openDish(p){
 /// Straight from the card, one of it, when the dish has no choices to make. A
 /// dish with options opens the sheet instead, because "add" without choosing
 /// would add a dish the kitchen cannot make.
-export function quickAdd(p){
+export function quickAdd(p, el){
   const groups = Array.isArray(p.modifierGroups) ? p.modifierGroups : [];
   if (groups.some(g => (g.min | 0) >= 1)) return openDish(p);
   addLine(p.id, [], 1);
-  seaEvent('order_created', SEA_PULSE_CARD);
+  seaEvent('order_created', SEA_PULSE_CARD, centreOf(el));
   onAdded?.(p, 1);
 }
 

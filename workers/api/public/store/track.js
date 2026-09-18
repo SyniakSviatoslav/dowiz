@@ -1,19 +1,25 @@
-// Act 3 -- RECEIVE. The order, watched.
+// Act 3 -- RECEIVE. The order, watched over the Sea.
 //
-// The Sea is the centrepiece here: it holds the order's colour and grows with
-// its status, terracotta to gold, and Delivered is the one loud beat. The
+// This is where the Sea lives: a window of ink-wash ocean at the top of the
+// sheet, developing with the order -- a young scattered sea when it is
+// received, an aligned swell with the courier on the road, a full gold sea
+// with the sun high when it is delivered. Over it floats one glass card, the
+// way the direction's example draws it: status in the money face, the total,
+// the order's line, a progress bar that is the same phase the sea has. The
 // Sheet carries what the Sea cannot -- the words, the honest time range, the
-// total, the way to be told, the wallet to pay into when the order is paid in
-// crypto, and the sentence the customer can leave. A customer with reduced
-// motion or no WebGL loses nothing: the pills say it all.
+// wallet to pay into for a crypto order, the way to be told, and the sentence
+// the customer can leave. A customer with reduced motion or no WebGL loses
+// nothing: the pills say it all.
 //
 // The state belongs to the server, so it is asked every twelve seconds with
-// the order's OWN token; a poll that fails three times says so.
+// the order's OWN token; a poll that fails three times says so. The ocean's
+// canvas SURVIVES each re-render: it is lifted out before the sheet is
+// redrawn and put back after, so the sea keeps its time and its phase.
 
 import { state, tokenFor, moneyEl, on, API } from '/store/state.js';
 import { t } from '/store/i18n.js';
 import { $, esc, icon, sheet, closeSheet, toast, whenSheetCloses } from '/store/ui.js';
-import { seaForOrder, seaRest } from '/store/sea.js';
+import { openOcean, phaseOf, seaRest } from '/store/sea.js';
 
 const FLOW = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY', 'DELIVERED'];
 const DEAD = new Set(['REJECTED', 'CANCELLED']);
@@ -25,6 +31,8 @@ const POLL_FAILS_TO_TELL = 3;
 const ORDER_ID_SHOWN = 8;
 /// A customer may write this much about the meal.
 const FEEDBACK_MAX = 600;
+/// The progress bar never reads empty while an order exists.
+const PROGRESS_FLOOR = 0.06;
 
 function sayBlock(order){
   const over = order.status === 'DELIVERED' || DEAD.has(order.status);
@@ -51,9 +59,7 @@ function bindSay(order){
   };
 }
 
-/// The wallet to pay into, for an order paid in crypto and not yet paid. The
-/// amount is the venue's own total in its own currency; the conversion is the
-/// customer's wallet's business at the moment they pay, and the line says so.
+/// The wallet to pay into, for an order paid in crypto and not yet paid.
 function cryptoBlock(order){
   const w = order.crypto?.wallet;
   if (!w || order.crypto?.paid || DEAD.has(order.status)) return '';
@@ -75,31 +81,53 @@ function bindCopy(){
   };
 }
 
+/// The payment, as one word for the card's line.
+const PAY_KEY = { cash: 'cash', card: 'card', apple_pay: 'applePay', google_pay: 'googlePay', crypto: 'crypto' };
+
+/// The window of sea and the card that floats on it.
+function oceanMarkup(order, eta){
+  const st = order.status, dead = DEAD.has(st);
+  return `<div class="ocean" data-status="${esc(st)}">
+    <canvas class="ocean-cv" aria-hidden="true"></canvas>
+    <div class="ocean-card" id="oceanCard">
+      <span class="edge"></span>
+      <div class="oc-row"><span class="oc-st" data-t-st="${esc(st)}"></span><span class="oc-amt">${moneyEl(order.total ?? order.subtotal ?? 0)}</span></div>
+      <p class="oc-ln">#${esc(String(order.id).slice(0, ORDER_ID_SHOWN))} · ${esc(state.loc?.name || '')}${PAY_KEY[order.payment] ? ` · <span data-t="${PAY_KEY[order.payment]}"></span>` : ''}</p>
+      <div class="pg" role="progressbar" aria-valuemin="0" aria-valuemax="100"><i id="oceanBar"></i></div>
+      ${eta && !dead && st !== 'DELIVERED' ? `<p class="oc-note">${icon('clock')}<span data-t="etaRange"></span>: <b>${esc(eta.text)} <span data-t="etaMin"></span></b></p>` : ''}
+    </div>
+  </div>`;
+}
+
 export function openTracking(order){
   const st = order.status, i = FLOW.indexOf(st);
   const dead = DEAD.has(st);
-  seaForOrder(st);
-  whenSheetCloses(seaRest);
   const bot = state.loc?.telegramBot;
   const eta = order.eta || state.lastEta;
   const follow = (bot && !dead && st !== 'DELIVERED') ? `
     <a class="btn btn-ghost mb-1" href="https://t.me/${encodeURIComponent(bot)}?start=${encodeURIComponent(order.id)}" target="_blank" rel="noopener noreferrer">
       ${icon('brand-telegram')}<span data-t="notify"></span></a>
     <p class="muted trk-note" data-t="notifyHint"></p>` : '';
+  // The sea's canvas outlives the sheet's markup: lifted here, put back below.
+  const keep = $('#sheet').dataset.name === 'track' ? $('.ocean-cv') : null;
+  whenSheetCloses(seaRest);
   sheet(`
     <div class="tsheet" data-status="${esc(st)}">
-      <p class="eyebrow">#${esc(String(order.id).slice(0, ORDER_ID_SHOWN))}</p>
-      <h2>${dead ? `<span data-t-st="${esc(st)}"></span>` : `<span data-t="sent"></span>`}</h2>
+      ${oceanMarkup(order, eta)}
+      <h2 class="tsheet-h">${dead ? `<span data-t-st="${esc(st)}"></span>` : `<span data-t="sent"></span>`}</h2>
       ${!dead ? `<div class="pills" role="list">${FLOW.map((s, n) => `
         <span class="pill-st ${n < i ? 'done' : n === i ? 'now' : ''}" role="listitem">
           <span class="pill-dot">${n < i ? icon('check') : ''}</span><span data-t-st="${s}"></span></span>`).join('')}</div>` : ''}
-      ${eta && !dead && st !== 'DELIVERED' ? `<p class="teta">${icon('clock')}<span data-t="etaRange"></span>: <b>${esc(eta.text)} <span data-t="etaMin"></span></b></p>` : ''}
-      <div class="totals"><div class="row grand"><span data-t="total"></span>${moneyEl(order.total ?? order.subtotal ?? 0)}</div></div>
       ${cryptoBlock(order)}
       ${follow}
       ${sayBlock(order)}
       <button class="btn btn-ghost mb-2" id="closeTrack" data-t="done"></button>
     </div>`, { name: 'track', attending: !dead && st !== 'DELIVERED' });
+  if (keep) $('.ocean-cv')?.replaceWith(keep);
+  const phase = dead ? PROGRESS_FLOOR : Math.max(PROGRESS_FLOOR, phaseOf(st));
+  const bar = $('#oceanBar'); if (bar) { bar.style.width = `${Math.round(phase * 100)}%`; bar.parentElement.setAttribute('aria-valuenow', String(Math.round(phase * 100))); }
+  const card = $('#oceanCard'); if (card) card.style.setProperty('--pg', String(phase));
+  openOcean($('.ocean-cv'), st);
   bindSay(order);
   bindCopy();
   $('#closeTrack').onclick = closeSheet;

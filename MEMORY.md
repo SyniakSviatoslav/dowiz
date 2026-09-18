@@ -1000,3 +1000,8 @@ its source, which is why translations, logo and hours "did not work". Verified l
   block (seal/motif/warm/sage) on `/api/owner/location`; Dubin: ドウビン, leaf, #e0754d, #8a9a7b.
   Headless Chromium here cannot screenshot ANY WebGL canvas (broken-image placeholder) — judge
   the Sea by `_probe_sea.mjs` counts, see it on a phone.
+- Third pass, same day (operator: "ocean only while waiting; no big logo; theme the whole
+  storefront"): rest = gold dust (`lib/dust.js`); hero = night garden (ink enso, fluttering
+  branch, seal, gold `&`); waiting = ink ocean in the tracking sheet (`lib/tide-sea.js`:
+  sun rises with phase, leaves on the wind) under a glass status card. `.stage-art` clipped at
+  the viewport — an overflowing enso had zoomed the mobile layout viewport to 453px.

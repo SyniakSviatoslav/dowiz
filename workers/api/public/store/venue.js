@@ -23,10 +23,6 @@ const REVIEWS_SHOWN = 8;
 /// The venue's own map: a street-level zoom.
 const ZOOM_STREET = 16;
 const TILES = 'https://tiles.openfreemap.org/styles/liberty';
-/// The ring behind the mark: a circle of this radius in a 100-unit box, and a
-/// circumference to draw it with. 2π·46 ≈ 289.
-const RING_R = 46;
-const RING_LEN = Math.round(2 * Math.PI * RING_R);
 
 function openWindowNow(){
   const week = Array.isArray(state.loc?.hours) && state.loc.hours.length === 7 ? state.loc.hours : null;
@@ -76,6 +72,46 @@ export function ruleMarkup(){
   return `<div class="rule ${motif ? 'has-motif' : ''}" aria-hidden="true"><i></i>${motif}<b></b>${motif}<i></i></div>`;
 }
 
+/// THE ENSO. One brush circle in the accent, drawn once from the top, left
+/// open the way a hand leaves it. An ink filter roughens the edge so it is a
+/// stroke, not a geometry; a second, drier pass sits a little off it.
+const ENSO_R = 78;
+const ENSO_STROKE_LEN = 88;   // of 100: the opening is the rest
+const ENSO_SVG = `<svg class="enso" viewBox="0 0 200 200" aria-hidden="true">
+  <defs><filter id="ink" x="-10%" y="-10%" width="120%" height="120%">
+    <feTurbulence type="fractalNoise" baseFrequency=".055" numOctaves="3" seed="7" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="7" xChannelSelector="R" yChannelSelector="G"/></filter></defs>
+  <g filter="url(#ink)">
+    <circle class="enso-dry" cx="100" cy="100" r="${ENSO_R}" pathLength="100"/>
+    <circle class="enso-stroke" cx="100" cy="100" r="${ENSO_R}" pathLength="100"/>
+  </g></svg>`;
+
+/// THE BRANCH. Bark in two weights, sprigs, and eleven leaves -- sage with
+/// gold veins, three of them gold -- each one on its own slow flutter. It
+/// grows in from the top-left corner behind the name, the way the mark's
+/// branch curls over its bowl.
+const LEAVES = [
+  // x, y, angle, scale, gold?
+  [56, 196, -62, 1.0, false], [78, 150, -40, 1.05, true], [98, 170, 24, .8, false],
+  [112, 118, -58, 1.0, false], [132, 128, 18, .85, true], [150, 88, -46, 1.0, false],
+  [172, 100, 26, .9, false], [196, 62, -52, .95, true], [218, 74, 20, .85, false],
+  [242, 40, -44, .9, false], [266, 28, 12, .75, false],
+];
+const BRANCH_SVG = `<svg class="branch" viewBox="0 0 300 240" aria-hidden="true">
+  <defs><symbol id="lf" viewBox="-2 -14 44 28"><path class="blade" d="M0 0C8-13 26-15 38-3 26 9 8 9 0 0z"/><path class="vein" d="M2 0C12-4 24-6 36-3"/></symbol></defs>
+  <path class="bark" d="M4 236C50 190 70 130 120 92S210 30 296 14"/>
+  <path class="bark thin" d="M150 70C200 40 240 24 296 14"/>
+  <path class="bark thin" d="M110 100C130 80 150 78 175 84"/>
+  <path class="bark thin" d="M60 165C80 150 95 148 118 152"/>
+  ${LEAVES.map(([x, y, a, sc, gold]) => `<g transform="translate(${x} ${y}) rotate(${a}) scale(${sc})"><use href="#lf" class="leaf ${gold ? 'gold' : ''}" width="44" height="28" x="-2" y="-14"/></g>`).join('')}
+</svg>`;
+/// The stage's art, by motif: the enso always; the branch for a leaf venue.
+const STAGE_ART = { leaf: BRANCH_SVG, wave: '', none: '' };
+
+/// The name with its ampersand set apart, the way the mark sets it: gold,
+/// italic. A name without one is left exactly as it is.
+const nameMarkup = name => esc(name).replace('&amp;', '<em>&amp;</em>');
+
 /// The hero markup. Text nodes that depend on the language carry an id so
 /// `refreshHero` can rewrite them without rebuilding the block.
 export function heroMarkup(){
@@ -83,15 +119,13 @@ export function heroMarkup(){
   const open = L.status === 'open';
   const eta = publishedEta();
   const where = town();
+  const stage = L.stage || {};
   return `
   <section class="hero" id="hero">
-    ${L.logoUrl ? `<div class="hero-art" aria-hidden="true">
-      <svg class="ring" viewBox="0 0 100 100"><circle cx="50" cy="50" r="${RING_R}" pathLength="${RING_LEN}"/></svg>
-      <img class="hero-mark" src="${esc(L.logoUrl)}" alt="">
-      ${L.stage?.seal ? `<span class="seal">${esc(L.stage.seal)}</span>` : ''}
-    </div>` : ''}
+    <div class="stage-art" aria-hidden="true">${ENSO_SVG}${STAGE_ART[stage.motif] || ''}</div>
+    ${stage.seal ? `<span class="seal">${esc(stage.seal)}</span>` : ''}
     ${where ? `<p class="eyebrow hero-eyebrow">${esc(where)}</p>` : ''}
-    <h1 class="hero-name">${esc(L.name)}</h1>
+    <h1 class="hero-name">${nameMarkup(L.name)}</h1>
     ${ruleMarkup()}
     <div class="hero-chips">
       <button type="button" class="chip-state ${open ? 'open' : 'shut'}" id="stateChip" data-open-venue>

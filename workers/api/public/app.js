@@ -23,7 +23,7 @@ const TOUCH_STRENGTH = 0.55;
 const SKELETON_CARDS = 3;
 
 const skeleton = () => `
-  <div class="hero"><div class="skel skel-mark"></div><div class="skel skel-title"></div><div class="skel skel-chips"></div></div>
+  <div class="hero"><div class="skel skel-eyebrow"></div><div class="skel skel-title"></div><div class="skel skel-chips"></div></div>
   <div class="skel skel-rail"></div>
   <div class="cards">${'<div class="skel skel-card"></div>'.repeat(SKELETON_CARDS)}</div>`;
 
@@ -128,6 +128,6 @@ $('#app').addEventListener('click', e => {
   const v = e.target.closest('[data-open-venue]');
   if (v) openVenue(v.dataset.openVenue || null);
 });
-$('#app').addEventListener('pointerdown', e => { if (e.target.closest('.hero-art')) seaTouch(e.clientX, e.clientY, TOUCH_STRENGTH); }, { passive: true });
+$('#app').addEventListener('pointerdown', e => { if (e.target.closest('.hero')) seaTouch(e.clientX, e.clientY, TOUCH_STRENGTH); }, { passive: true });
 addEventListener('online', netState); addEventListener('offline', netState);
 load();
