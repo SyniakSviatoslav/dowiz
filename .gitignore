@@ -120,3 +120,16 @@ kernel/src/trader.rs
 .claude/worktrees/
 .lanes/
 .claude/lanes/
+
+# the Figma document dumps behind `workers/api/design/` — 22 MB and 1.9 MB of
+# one vendor's JSON, pulled with a personal access token and re-pullable at any
+# time. The SCRIPTS that read them are committed; the dumps are not, for the
+# same reason `.living-memory/` is not.
+workers/api/design/file.json
+workers/api/design/document.json
+
+# one-suspect probes written while chasing a single defect (`_probe.mjs`,
+# `_kitorder2.mjs`, …). The gates they graduated into — render/mobile/interact/
+# pwa/domains — are committed; the scratch that produced them is not.
+e2e/kit-regression/_*.mjs
+*.tmp.mjs

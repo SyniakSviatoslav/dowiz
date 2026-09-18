@@ -1,0 +1,11 @@
+{
+  "name": "dowiz-kit-regression",
+  "private": true,
+  "type": "module",
+  "description": "Render and domain-contract gates for the kit and the three kernel domains. Zero dependencies beyond the `playwright` library already in the tree.",
+  "scripts": {
+    "test": "node run.mjs",
+    "render": "ONLY=render node run.mjs",
+    "domains": "ONLY=domains node run.mjs"
+  }
+}
