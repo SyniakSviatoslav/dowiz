@@ -404,6 +404,11 @@ pub mod messenger;
 /// kernel-side fitting primitive (Tier B2: capture-field SIREN/splat fits).
 pub mod micrograd;
 pub mod money;
+pub mod reservation;
+pub mod ledger_account;
+pub mod thread;
+pub mod pass;
+pub mod eta;
 /// P9 / C-tier "invariance note": executable Noether check — verify a conserved
 /// quantity survives a deterministic update (catches self-improvement drift).
 pub mod noether;
