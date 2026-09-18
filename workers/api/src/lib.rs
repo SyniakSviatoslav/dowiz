@@ -10,6 +10,10 @@
 //! `place_order_at`. A process-local counter is unsound here by construction:
 //! Workers recycles isolates constantly and runs many at once.
 
+mod booking;
+mod eta;
+mod social;
+mod wallet;
 mod accounts;
 mod auth;
 mod bootstrap;
@@ -188,6 +192,22 @@ async fn route(req: Request, env: Env) -> Result<Response> {
         // ── public storefront ──
         .get_async("/api/public/locations/:slug/menu", storefront::menu)
         .post_async("/api/public/locations/:slug/orders", storefront::place)
+        // ── reservations: the transport for `dowiz_kernel::reservation` ──
+        .get_async("/api/public/locations/:slug/reservations", booking::list)
+        .post_async("/api/public/locations/:slug/reservations", booking::create)
+        .get_async("/api/public/locations/:slug/reservations/:id", booking::detail)
+        .post_async("/api/public/locations/:slug/reservations/:id/action", booking::action)
+        .get_async("/api/public/locations/:slug/reservations/:id/pass", booking::issue_pass)
+        .post_async("/api/public/locations/:slug/pass/verify", booking::verify_pass)
+        // ── threads: the transport for `dowiz_kernel::thread` ──
+        .get_async("/api/public/locations/:slug/threads/:id", social::messages)
+        .post_async("/api/public/locations/:slug/threads/:id/messages", social::send)
+        // ── the wallet journal: `dowiz_kernel::ledger_account` ──
+        .get_async("/api/public/locations/:slug/wallet", wallet::balance)
+        .get_async("/api/public/locations/:slug/wallet/statement", wallet::statement)
+        .post_async("/api/public/locations/:slug/wallet/topup", wallet::top_up)
+        // ── the delivery estimate: `dowiz_kernel::eta` ──
+        .post_async("/api/public/locations/:slug/eta", eta::quote)
         .post_async("/api/promo/check", extra::promo_check)
         .get_async("/api/public/reach", extra::reach)
         .get_async("/api/public/rates", extra::rates)
