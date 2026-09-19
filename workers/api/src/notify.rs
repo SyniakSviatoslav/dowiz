@@ -166,18 +166,25 @@ pub async fn order_placed(
             return;
         }
     };
+    let text = order_text(envelope, lines, currency, venue);
     let chat = settings.known("notify.telegram.chat");
     let chat = chat.trim();
-    if chat.is_empty() {
-        return; // the owner has not asked to be told
+    if !chat.is_empty() {
+        match bot_token(env, &settings) {
+            Some(token) => {
+                if let Err(e) = telegram(&token, chat, &text).await {
+                    console_error!("notify: telegram refused for {}: {e}", place.venue);
+                }
+            }
+            None => console_error!("notify: chat is set but no bot token exists for {}", place.venue),
+        }
     }
-    let Some(token) = bot_token(env, &settings) else {
-        console_error!("notify: chat is set but no bot token exists for {}", place.venue);
-        return;
-    };
-    let text = order_text(envelope, lines, currency, venue);
-    if let Err(e) = telegram(&token, chat, &text).await {
-        console_error!("notify: telegram refused for {}: {e}", place.venue);
+    if let Some(wa) = crate::channels::whatsapp_cfg(&settings) {
+        if !wa.to.is_empty() {
+            if let Err(e) = crate::channels::whatsapp_text(&wa, &wa.to, &text).await {
+                console_error!("notify: whatsapp refused for {}: {e}", place.venue);
+            }
+        }
     }
 }
 
@@ -194,18 +201,35 @@ pub async fn test(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         Err(r) => return Ok(r),
     };
     let settings = crate::hubstore::load_settings(&place).await?.settings;
-    let chat = settings.known("notify.telegram.chat");
-    if chat.trim().is_empty() {
-        return Response::error("no chat is set", 400);
-    }
-    let Some(token) = bot_token(&ctx.env, &settings) else {
-        return Response::error("no bot token is set", 400);
-    };
     let text = format!("✅ dowiz · {venue} — notifications work");
-    match telegram(&token, chat.trim(), &text).await {
-        Ok(()) => Response::from_json(&json!({ "ok": true })),
-        Err(e) => Response::error(e, 502),
+    // One verdict per channel, so the owner sees which bell rang. "unset" is
+    // not a failure; a channel with a chat but no token is.
+    let chat = settings.known("notify.telegram.chat");
+    let telegram_v = if chat.trim().is_empty() {
+        json!("unset")
+    } else {
+        match bot_token(&ctx.env, &settings) {
+            None => json!({ "error": "no bot token is set" }),
+            Some(token) => match telegram(&token, chat.trim(), &text).await {
+                Ok(()) => json!("ok"),
+                Err(e) => json!({ "error": e }),
+            },
+        }
+    };
+    let whatsapp_v = match crate::channels::whatsapp_cfg(&settings) {
+        None => json!("unset"),
+        Some(wa) if wa.to.is_empty() => json!({ "error": "no number to notify is set" }),
+        Some(wa) => match crate::channels::whatsapp_text(&wa, &wa.to, &text).await {
+            Ok(_) => json!("ok"),
+            Err(e) => json!({ "error": e }),
+        },
+    };
+    let any_ok = telegram_v == json!("ok") || whatsapp_v == json!("ok");
+    let mut res = Response::from_json(&json!({ "ok": any_ok, "telegram": telegram_v, "whatsapp": whatsapp_v }))?;
+    if !any_ok {
+        res = res.with_status(502);
     }
+    Ok(res)
 }
 
 #[cfg(test)]

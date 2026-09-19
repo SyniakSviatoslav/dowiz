@@ -301,3 +301,25 @@ input[type="color"]{padding:4px;height:var(--tap);width:64px}
   .sheet,.scrim,.nav{transition-duration:.01ms!important}
   .sheet::before,.steps i.now,.skel::after{animation:none}
 }
+
+/* ── the inbox thread: customer left in glass, the venue right in ink ── */
+.thread{display:flex;flex-direction:column;gap:6px;max-height:52dvh;overflow-y:auto;padding:var(--space-2) 0;overscroll-behavior:contain}
+.msg{max-width:82%;padding:8px 12px;border-radius:16px;font-size:var(--text-sm);line-height:1.35;display:flex;flex-direction:column;gap:2px;animation:rise var(--dur-fast) var(--ease) both}
+.msg small{font-family:var(--font-mono);font-size:10px;color:var(--brand-text-muted);align-self:flex-end}
+.msg.them{align-self:flex-start;background:var(--glass-strong);border:1px solid var(--glass-border);border-bottom-left-radius:4px}
+.msg.me{align-self:flex-end;background:var(--brand-text);color:var(--brand-bg);border-bottom-right-radius:4px}
+.msg.me small{color:color-mix(in srgb,var(--brand-bg) 70%,transparent)}
+.reply-row{display:flex;gap:var(--space-2);align-items:center;margin-top:var(--space-2)}
+.reply-row input{flex:1;min-width:0}
+.chip.mono{font-family:var(--font-mono);font-size:var(--text-xs);letter-spacing:0}
+.code.small{font-size:var(--text-sm);letter-spacing:0}
+
+/* folds, small stats, and the one green line */
+.fold{margin-top:var(--space-2);border:1px solid var(--glass-border);border-radius:var(--radius-card);padding:6px 12px;background:var(--glass)}
+.fold summary{cursor:pointer;font-size:var(--text-sm);color:var(--brand-text-muted);padding:6px 0;list-style:none;display:flex;align-items:center;gap:6px}
+.fold summary::before{content:"";width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);transition:transform var(--dur-fast) var(--ease)}
+.fold[open] summary::before{transform:rotate(45deg)}
+.stat small.muted{display:block;margin-top:2px;text-transform:none;letter-spacing:0}
+.ok{color:var(--ok, #2f8f6b);font-weight:var(--weight-medium)}
+.contrast{display:grid;grid-template-columns:1fr auto auto;gap:4px 10px;font-size:var(--text-xs);font-family:var(--font-mono)}
+.answer{white-space:pre-wrap;padding:12px 14px;border-radius:var(--radius-card);background:var(--glass-strong);border:1px solid var(--glass-border);font-size:var(--text-sm);line-height:1.45}

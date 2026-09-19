@@ -116,3 +116,7 @@ class_name = "HubImages"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["HubImages"]
+
+# Nightly off-site copy for every venue that set a bucket (src/cloud.rs, NIGHTLY_CRON).
+[triggers]
+crons = ["17 3 * * *"]

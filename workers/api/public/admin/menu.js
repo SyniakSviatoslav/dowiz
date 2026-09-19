@@ -7,7 +7,7 @@
 // two languages. The stop-list is one switch: a dish off sale is off for the
 // customer within the menu's thirty-second cache.
 
-import { $, $$, esc, icon, t, S, api, post, withLoc, toast, sheet, closeSheet, money, moneyEl, busy, switchEl, store } from '/admin/core.js';
+import { $, $$, esc, icon, t, S, api, post, withLoc, toast, sheet, closeSheet, money, moneyEl, busy, switchEl, store, retranslate } from '/admin/core.js';
 import { lang, LANGS } from '/admin/i18n.js';
 import { loadVenue, rerender } from '/admin/app.js';
 
@@ -36,7 +36,7 @@ export async function render(host){
   const q = norm(view.q).trim();
   host.innerHTML = `
     <div class="screen-h"><div><p class="eyebrow" data-t="tabMenu"></p><h1>${esc(S.venue?.name || '')}</h1></div>
-      <span class="pill mono">${S.products.length} <span data-t="dishes"></span></span></div>
+      <button type="button" class="act" id="mImport">${icon('download')}<span data-t="importMenu"></span></button></div>
     <label class="srch">${icon('search')}<input id="mq" type="search" value="${esc(view.q)}" data-t-attr="placeholder:search"></label>
     ${cats.map(c => { const open = q ? true : view.open.has(c.id); const rows = (c.products || []).map(dishRow).join(''); if (q && !rows) return ''; return `
       <section class="group">
@@ -49,6 +49,35 @@ export async function render(host){
     const r = e.target.closest('[data-p]'); if (r) openDish(r.dataset.p);
   };
   const mq = $('#mq', host); mq.oninput = () => { view.q = mq.value; rerender().then(() => $('#mq')?.focus()); };
+  $('#mImport', host).onclick = openImport;
+}
+
+/// The plate's diameter, for the storefront's "see it on the table" view.
+const SIZE_CM_MIN = 3, SIZE_CM_MAX = 120;
+
+/// CSV import: a dry run first, with what would change, then apply.
+function openImport(){
+  sheet(`<p class="eyebrow" data-t="tabMenu"></p><h2 data-t="importMenu"></h2><p class="muted small" data-t="importHint"></p>
+    <input type="file" id="imFile" accept=".csv,text/csv">
+    ${switchEl('imRetire', false, 'retireMissing', 'retireHint')}
+    <div class="btn-row"><button class="btn ghost" id="imDry" disabled>${icon('eye')}<span data-t="dryRun"></span></button><button class="btn" id="imApply" disabled>${icon('check')}<span data-t="applyImport"></span></button></div>
+    <div id="imOut"></div>`, { name: 'import' });
+  let csv = null;
+  $('#imFile').onchange = async e => { const f = e.target.files?.[0]; csv = f ? await f.text() : null; $('#imDry').disabled = $('#imApply').disabled = !csv; };
+  const run = async (apply) => {
+    const q = apply ? `?apply=true${$('#imRetire').checked ? '&retire=true' : ''}` : '';
+    try {
+      const r = await busy($(apply ? '#imApply' : '#imDry'), () => api(`/owner/menu/import${q}`, { method: 'POST', body: csv, headers: { 'content-type': 'text/csv' } }));
+      $('#imOut').innerHTML = `<div class="stats mt-3"><div class="stat"><small data-t="dishes"></small><b>${r.products ?? 0}</b></div><div class="stat"><small data-t="categories"></small><b>${r.categories ?? 0}</b></div></div>
+        ${(r.warnings || []).length ? `<details class="fold"><summary>${(r.warnings || []).length} · <span data-t="warnings"></span></summary>${r.warnings.map(w => `<p class="hint">${esc(w)}</p>`).join('')}</details>` : ''}
+        ${(r.notInFile || []).length ? `<details class="fold"><summary>${r.notInFile.length} · <span data-t="notInFile"></span></summary>${r.notInFile.map(w => `<p class="hint">${esc(w)}</p>`).join('')}</details>` : ''}
+        ${apply ? `<p class="ok">${esc(t('saved'))}${r.retired ? ` · ${r.retired} ${esc(t('retired'))}` : ''}</p>` : ''}`;
+      retranslate($('#imOut'));
+      if (apply) { await loadVenue(); rerender(); }
+    } catch (err) { toast(String(err.message || err)); }
+  };
+  $('#imDry').onclick = () => run(false);
+  $('#imApply').onclick = () => run(true);
 }
 
 /// The number as typed, or null when the field is empty.
@@ -86,6 +115,7 @@ export function openDish(id){
       <div><label for="d-carb" data-t="carbs"></label><input id="d-carb" inputmode="numeric" value="${n.carbs ?? ''}"></div>
       <div><label for="d-weight" data-t="weight"></label><input id="d-weight" inputmode="numeric" value="${p.weightG ?? ''}"></div>
     </div>
+    <label for="d-size" data-t="sizeCm"></label><input id="d-size" inputmode="numeric" min="${SIZE_CM_MIN}" max="${SIZE_CM_MAX}" value="${p.sizeCm ?? ''}"><p class="hint" data-t="sizeCmHint"></p>
     <label data-t="translations"></label>
     ${LANGS.filter(l => l !== (S.venue?.defaultLocale || 'sq')).map(l => `<div class="grid2">
       <div><label for="d-name-${l}">${l.toUpperCase()} · <span data-t="name"></span></label><input id="d-name-${l}" value="${esc(tr[l]?.name || '')}"></div>
@@ -121,6 +151,7 @@ export function openDish(id){
       ingredients: $('#d-ings').value.split(',').map(s => s.trim()).filter(Boolean),
       nutrition: Object.keys(nutrition).length ? nutrition : null,
       weight_g: num($('#d-weight').value),
+      ...(num($('#d-size').value) != null ? { size_cm: num($('#d-size').value) } : {}),
       translations,
     });
     for (const k of Object.keys(body)) if (body[k] === null) delete body[k];

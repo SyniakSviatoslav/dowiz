@@ -29,6 +29,9 @@ mod extra;
 mod storefront;
 mod stripe;
 mod notify;
+mod channels;
+mod cloud;
+mod mcp;
 
 use dowiz_kernel::json_api;
 use serde::Deserialize;
@@ -182,7 +185,7 @@ async fn serve_root(req: &Request, env: &Env) -> Result<Response> {
     env.assets("ASSETS")?.fetch(url.to_string(), None).await
 }
 
-async fn route(req: Request, env: Env) -> Result<Response> {
+pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
     // Before the router, because this is about the HOST and not the path.
     if let Ok(u) = req.url() {
         if u.path() == "/" || u.path() == "/index.html" {
@@ -258,6 +261,15 @@ async fn route(req: Request, env: Env) -> Result<Response> {
         .get_async("/api/owner/settings", extra::settings)
         .post_async("/api/owner/settings", extra::set_setting)
         .post_async("/api/owner/notify/test", notify::test)
+        .get_async("/api/owner/inbox", channels::inbox)
+        .get_async("/api/owner/inbox/:peer", channels::thread)
+        .post_async("/api/owner/inbox/:peer", channels::reply)
+        .get_async("/api/owner/backup/cloud", cloud::status)
+        .post_async("/api/owner/backup/cloud", cloud::push)
+        .get_async("/api/webhooks/meta", channels::webhook_verify)
+        .post_async("/api/webhooks/meta", channels::webhook)
+        .get_async("/api/mcp", mcp::describe)
+        .post_async("/api/mcp", mcp::rpc)
         .post_async("/api/owner/menu/import", extra::import_menu)
         .get_async("/api/owner/couriers", extra::couriers)
         .post_async("/api/owner/couriers/invite", extra::invite_courier)
@@ -452,4 +464,11 @@ fn carry_envelope(old_raw: &str, updated: &str) -> String {
         }
     }
     serde_json::to_string(&merged).unwrap_or_else(|_| updated.to_string())
+}
+
+/// The cron in wrangler.toml (`cloud::NIGHTLY_CRON`): every venue with a
+/// bucket gets its nightly copy.
+#[event(scheduled)]
+pub async fn scheduled(_event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
+    cloud::nightly(&env).await;
 }

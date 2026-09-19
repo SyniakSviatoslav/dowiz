@@ -16,18 +16,36 @@ const FLOW = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY', 'DELI
 const DEAD = new Set(['REJECTED', 'CANCELLED']);
 /// The one next step for each state: the action the hub takes, its word.
 const NEXT = { PENDING: ['confirm', 'accept'], CONFIRMED: ['preparing', 'startCooking'], PREPARING: ['ready', 'markReady'] };
-/// History shows this many, newest first.
-const HISTORY_MAX = 60;
+/// History shows this many at a time; "more" adds another page.
+const HISTORY_PAGE = 60;
+/// The CSV's byte-order mark, so Excel reads the Albanian and Ukrainian letters.
+const CSV_BOM = '\ufeff';
 /// The items line on a row shows this many dishes before "…".
 const ITEMS_SHOWN = 3;
 
-const view = { mode: 'live', q: '' };
+const view = { mode: 'live', q: '', pages: 1 };
 
 const norm = s => String(s ?? '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
 function matching(){
-  const all = view.mode === 'history' ? S.orders.filter(o => !liveOrders().includes(o)).slice(0, HISTORY_MAX) : liveOrders();
+  const all = view.mode === 'history' ? S.orders.filter(o => !liveOrders().includes(o)) : liveOrders();
   const q = norm(view.q).trim(); if (!q) return all;
-  return all.filter(o => norm([o.id.slice(0, ORDER_ID_SHOWN), o.contact?.name, o.contact?.phone, ...(o.items || []).map(i => i.name)].join(' ')).includes(q));
+  // Every term must match somewhere: id, name, phone, street, status word, a dish.
+  const terms = q.split(/\s+/).filter(Boolean);
+  return all.filter(o => { const hay = norm([o.id.slice(0, ORDER_ID_SHOWN), o.contact?.name, o.contact?.phone, o.fulfilment?.address?.line, o.status, st(o.status), o.promo?.code, ...(o.items || []).map(i => i.name)].join(' ')); return terms.every(tm => hay.includes(tm)); });
+}
+const historyAll = () => S.orders.filter(o => !liveOrders().includes(o));
+
+/// The current view as a spreadsheet: one row per order, money as integers in
+/// the venue's currency (never a formatted string, which Excel would mangle).
+function exportCsv(){
+  const rows = matching();
+  const cell = v => { const s = String(v ?? ''); return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const head = ['id', t('when'), t('status') === 'status' ? 'status' : t('status'), t('delivery'), t('customer'), t('phone'), t('address'), t('items'), t('total'), 'currency', t('discount'), t('promo'), t('courier')];
+  const lines = rows.map(o => [o.id, new Date(o.created_at_ms || 0).toISOString(), o.status, isPickup(o) ? 'pickup' : 'delivery', o.contact?.name, o.contact?.phone,
+    isPickup(o) ? '' : o.fulfilment?.address?.line, (o.items || []).map(i => `${i.quantity}x ${i.name || i.product_id}`).join('; '), o.total ?? 0, S.venue?.currencyCode || '', o.discount ?? 0, o.promo?.code, o.courier_id ? courierName(o.courier_id) : ''].map(cell).join(','));
+  const blob = new Blob([CSV_BOM + [head.map(cell).join(','), ...lines].join('\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `dowiz-${view.mode}-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+  requestAnimationFrame(() => URL.revokeObjectURL(a.href));
 }
 const etaText = o => o.eta && o.eta.range ? `${o.eta.range} ${t('etaMin') === 'etaMin' ? 'min' : ''}`.trim() : '';
 const isPickup = o => o.fulfilment?.kind === 'pickup';
@@ -59,7 +77,8 @@ const courierName = id => (S.couriers.find(c => c.id === id) || {}).name || id.s
 
 export async function render(host){
   const s = S.stats || {};
-  const list = matching();
+  const all = matching();
+  const list = view.mode === 'history' ? all.slice(0, HISTORY_PAGE * view.pages) : all;
   host.innerHTML = `
     <div class="stats">
       <div class="stat"><small data-t="todayOrders"></small><b>${s.todayOrders ?? '—'}</b></div>
@@ -69,27 +88,31 @@ export async function render(host){
     </div>
     <div class="seg" role="tablist">
       <button type="button" class="seg-b ${view.mode === 'live' ? 'on' : ''}" data-mode="live"><span data-t="live"></span><span class="n">${liveOrders().length}</span></button>
-      <button type="button" class="seg-b ${view.mode === 'history' ? 'on' : ''}" data-mode="history"><span data-t="history"></span></button>
+      <button type="button" class="seg-b ${view.mode === 'history' ? 'on' : ''}" data-mode="history"><span data-t="history"></span><span class="n">${historyAll().length}</span></button>
     </div>
     <label class="srch">${icon('search')}<input id="oq" type="search" value="${esc(view.q)}" data-t-attr="placeholder:findOrder"></label>
     ${S.phase === 'error' ? `<div class="empty">${icon('alert-triangle')}<b>${esc(t('loadFail'))}</b><span class="muted small">${esc(S.error || '')}</span></div>` : ''}
     ${S.phase === 'ready' && !list.length ? `<div class="empty">${icon('scroll')}<b data-t="${view.mode === 'live' ? 'noLive' : 'noOrders'}"></b></div>` : ''}
-    <div class="orders" id="olist">${list.map(row).join('')}</div>`;
+    <div class="orders" id="olist">${list.map(row).join('')}</div>
+    <div class="btn-row">${view.mode === 'history' && all.length > list.length ? `<button type="button" class="btn ghost" id="oMore">${icon('chevron-down')}<span data-t="more"></span> · ${all.length - list.length}</button>` : ''}
+      ${list.length ? `<button type="button" class="btn ghost" id="oCsv">${icon('download')}<span data-t="exportCsv"></span></button>` : ''}</div>`;
   S.fresh.clear();
   host.onclick = async e => {
-    const mode = e.target.closest('[data-mode]'); if (mode) { view.mode = mode.dataset.mode; return rerender(); }
+    const mode = e.target.closest('[data-mode]'); if (mode) { view.mode = mode.dataset.mode; view.pages = 1; return rerender(); }
+    if (e.target.closest('#oMore')) { view.pages += 1; return rerender(); }
+    if (e.target.closest('#oCsv')) return exportCsv();
     const act = e.target.closest('[data-act]'); if (act) { e.stopPropagation(); return doAction(act.dataset.o, act.dataset.act, act); }
     const asg = e.target.closest('[data-assign]'); if (asg) { e.stopPropagation(); return openAssign(asg.dataset.assign); }
     const r = e.target.closest('.orow'); if (r) return openOrder(r.dataset.o);
   };
   const q = $('#oq', host);
-  q.oninput = () => { view.q = q.value; const l = $('#olist', host); if (l) l.innerHTML = matching().map(row).join(''); };
+  q.oninput = () => { view.q = q.value; view.pages = 1; const l = $('#olist', host); if (l) l.innerHTML = (view.mode === 'history' ? matching().slice(0, HISTORY_PAGE) : matching()).map(row).join(''); };
 }
 
 async function doAction(id, action, el){
   let reason = '';
   if (action === 'reject' || action === 'cancel') {
-    const c = await confirm(t(action === 'reject' ? 'reject' : 'cancelOrder'), '#' + id.slice(0, ORDER_ID_SHOWN), { danger: true, reasonLabel: t('reason') });
+    const c = await confirm(t(action === 'reject' ? 'reject' : 'cancelOrder'), '#' + id.slice(0, ORDER_ID_SHOWN), { danger: true, reasonLabel: t('reason'), reasonDefault: t('outOfStock') });
     if (!c) return; reason = c.reason;
   }
   try {
@@ -101,10 +124,11 @@ async function doAction(id, action, el){
 }
 
 async function openAssign(id){
-  const list = S.couriers.filter(c => c.active);
+  const on = S.couriers.filter(c => c.active && c.onShift), off = S.couriers.filter(c => c.active && !c.onShift);
+  const choice = c => `<button type="button" class="choice" data-c="${esc(c.id)}">${icon('bike')}<span class="t"><b>${esc(c.name)}</b><br><small class="muted" data-t="${c.onShift ? 'onShift' : 'offShift'}"></small></span>${icon('chevron-right', 'ck')}</button>`;
   sheet(`<p class="eyebrow">#${esc(id.slice(0, ORDER_ID_SHOWN))}</p><h2 data-t="assign"></h2>
-    ${list.length ? list.map(c => `<button type="button" class="choice" data-c="${esc(c.id)}">${icon('bike')}<span class="t"><b>${esc(c.name)}</b><br><small class="muted" data-t="${c.onShift ? 'onShift' : 'offShift'}"></small></span>${icon('chevron-right', 'ck')}</button>`).join('')
-              : `<div class="empty">${icon('bike')}<b data-t="noCouriers"></b></div>`}`, { name: 'assign' });
+    ${on.length ? on.map(choice).join('') : `<div class="empty">${icon('bike')}<b data-t="noneOnShift"></b></div>`}
+    ${off.length ? `<details class="fold"><summary data-t="offShift"></summary>${off.map(choice).join('')}</details>` : ''}`, { name: 'assign' });
   for (const b of $$('[data-c]', $('#sheetIn'))) b.onclick = async () => {
     try { await busy(b, () => post(`/owner/orders/${encodeURIComponent(id)}/assign`, withLoc({ courier_id: b.dataset.c }))); toast(t('saved')); await loadOrders(); await rerender(); openOrder(id); }
     catch (e) { toast(String(e.message || e)); }
@@ -140,7 +164,7 @@ export function openOrder(id){
     <p class="eyebrow mt-3" data-t="items"></p>
     ${(o.items || []).map(it => `<div class="line"><span class="q">${it.quantity}×</span><span class="n">${esc(it.name || it.product_id)}${it.modifier_ids?.length ? `<small>${esc(it.modifier_ids.join(', '))}</small>` : ''}</span>${moneyEl((it.unit_price ?? 0) * (it.quantity || 1))}</div>`).join('')}
     ${o.delivery_fee ? `<div class="line"><span class="n" data-t="delivery"></span>${moneyEl(o.delivery_fee)}</div>` : ''}
-    ${o.discount ? `<div class="line"><span class="n" data-t="discount"></span><span>−${moneyEl(o.discount)}</span></div>` : ''}
+    ${o.discount ? `<div class="line"><span class="n"><span data-t="discount"></span>${o.promo?.code ? ` <span class="mono">${esc(o.promo.code)}</span>` : ''}</span><span>−${moneyEl(o.discount)}</span></div>` : ''}
     <div class="line total"><span class="n" data-t="total"></span>${moneyEl(o.total ?? 0)}</div>
     ${o.rejection_reason ? `<p class="err">${esc(o.rejection_reason)}</p>` : ''}
     ${o.feedback?.text ? `<div class="fact">${icon('message-2')}<span class="v">${esc(o.feedback.text)}</span></div>` : ''}

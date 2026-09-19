@@ -177,10 +177,10 @@ export async function busy(el, fn){
 }
 
 /// A confirmation sheet for a consequential action: the one path to it.
-export function confirm(title, body, { danger = false, reasonLabel = null } = {}){
+export function confirm(title, body, { danger = false, reasonLabel = null, reasonDefault = '' } = {}){
   return new Promise(resolve => {
     sheet(`<p class="eyebrow">${esc(title)}</p><h2>${esc(body)}</h2>
-      ${reasonLabel ? `<label for="cf-reason">${esc(reasonLabel)}</label><input id="cf-reason">` : ''}
+      ${reasonLabel ? `<label for="cf-reason">${esc(reasonLabel)}</label><input id="cf-reason" value="${esc(reasonDefault)}">` : ''}
       <div class="btn-row"><button class="btn ghost" id="cfNo" data-t="cancel"></button><button class="btn ${danger ? 'danger' : ''}" id="cfYes" data-t="done"></button></div>`, { name: 'confirm' });
     let settled = false;
     const done = v => { if (settled) return; settled = true; resolve(v); closeSheet(); };

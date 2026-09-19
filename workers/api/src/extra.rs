@@ -1354,11 +1354,32 @@ pub async fn courier_detail(req: Request, ctx: RouteContext<()>) -> Result<Respo
         .bind(&[c.id.clone().into(), loc.clone().into(), JsValue::from_f64(day_start as f64)])?
         .first(None)
         .await?;
+    // The old console's two other tiles, restored: a month of runs, and what
+    // is on the road right now (assigned, not yet delivered). Counts only --
+    // there is deliberately no average, no rank (DECISIONS D0: trust is a
+    // capability, never a score).
+    const THIRTY_DAYS_MS: i64 = 30 * 24 * 60 * 60 * 1000;
+    #[derive(Deserialize)]
+    struct Span {
+        delivered30d: f64,
+        in_flight: f64,
+    }
+    let span: Option<Span> = db
+        .prepare(
+            "SELECT COALESCE(SUM(CASE WHEN delivered_at_ms >= ?3 THEN 1 ELSE 0 END),0) AS delivered30d, \
+             COALESCE(SUM(CASE WHEN delivered_at_ms IS NULL THEN 1 ELSE 0 END),0) AS in_flight \
+             FROM courier_assignments WHERE courier_id = ?1 AND location_id = ?2",
+        )
+        .bind(&[c.id.clone().into(), loc.clone().into(), JsValue::from_f64((now - THIRTY_DAYS_MS) as f64)])?
+        .first(None)
+        .await?;
     Response::from_json(&json!({
         "id": c.id, "phone": c.phone, "name": c.name.clone().unwrap_or_default(), "active": c.status == "active", "onShift": c.on_shift > 0,
         "lastFix": fix.map(|f| json!({ "latUdeg": f.lat_udeg, "lonUdeg": f.lon_udeg, "recordedAtMs": f.recorded_at_ms })),
         "today": { "deliveries": today.as_ref().map(|t| t.deliveries as i64).unwrap_or(0),
                    "cashCollected": today.as_ref().map(|t| t.cash as i64).unwrap_or(0) },
+        "delivered30d": span.as_ref().map(|s| s.delivered30d as i64).unwrap_or(0),
+        "inFlight": span.as_ref().map(|s| s.in_flight as i64).unwrap_or(0),
     }))
 }
 
@@ -1796,6 +1817,40 @@ pub async fn approve_post(mut req: Request, ctx: RouteContext<()>) -> Result<Res
                 // the channel's admin list, which is where the fix is.
                 let body = res.text().await.unwrap_or_default();
                 (PostState::Failed, Some(body[..body.len().min(200)].to_string()))
+            }
+        }
+    };
+    // ── Instagram, when the venue connected one ──
+    //
+    // A post about a dish carries that dish's photo; Instagram has no
+    // text-only posts, so a post whose subject has no photo is Telegram-only
+    // and says so. The two channels are judged together: published if either
+    // took it, and the error names the one that did not.
+    let (state, error) = match crate::channels::instagram_cfg(&s) {
+        None => (state, error),
+        Some(ig) => {
+            let subject = p.subject_key.split_once(':').map(|(_, v)| v).unwrap_or(&p.subject_key).to_string();
+            let origin = req.url().map(|u| u.origin().ascii_serialization()).unwrap_or_default();
+            let photo = crate::hubstore::load_catalog(&place).await.ok().and_then(|c| {
+                c.catalog.products().into_iter().find_map(|(id, pj)| {
+                    let v: Value = serde_json::from_str(&pj).ok()?;
+                    let name = v.get("name").and_then(Value::as_str).unwrap_or("");
+                    if id != subject && name != subject {
+                        return None;
+                    }
+                    let url = v.get("imageUrl").and_then(Value::as_str)?;
+                    Some(if url.starts_with("http") { url.to_string() } else { format!("{origin}{url}") })
+                })
+            });
+            let ig_result = match photo {
+                None => Err("Instagram: the post's dish has no photo".to_string()),
+                Some(url) => crate::channels::instagram_publish(&ig, &url, &p.text).await.map_err(|e| format!("Instagram: {e}")),
+            };
+            match (state, ig_result) {
+                (PostState::Published, Ok(_)) => (PostState::Published, None),
+                (PostState::Published, Err(e)) => (PostState::Published, Some(e)),
+                (_, Ok(_)) => (PostState::Published, error.map(|e| format!("Telegram: {e}"))),
+                (st, Err(e)) => (st, Some(format!("{} · {e}", error.unwrap_or_default()))),
             }
         }
     };

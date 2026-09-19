@@ -4,24 +4,29 @@
 // payments, notifications, order channels, brand, features, API keys, health,
 // backup). The list is the map; nothing is buried under a fold.
 
-import { $, $$, esc, icon, t, S, api, post, withLoc, toast, sheet, closeSheet, money, moneyEl, busy, confirm, switchEl, store, day, hydrate } from '/admin/core.js';
+import { $, $$, esc, icon, t, S, api, post, withLoc, toast, sheet, closeSheet, money, moneyEl, busy, confirm, switchEl, store, day, ago, clock, hydrate } from '/admin/core.js';
 import { retranslate, lang, LANGS } from '/admin/i18n.js';
 import { loadVenue, rerender } from '/admin/app.js';
 
 /// The rows, in groups, with the sheet each opens.
 const GROUPS = [
+  ['inbox', [['inbox', 'message-2', openInbox]]],
   ['marketing', [['promos', 'ticket', openPromos], ['posts', 'send', openPosts], ['social', 'sparkles', openSocial]]],
   ['analytics', [['analytics', 'chart-bar', openAnalytics], ['customers', 'user', openCustomers]]],
   ['settings',  [['venue', 'home', openVenue], ['hours', 'clock', openHours], ['deliveryTerms', 'bike', openDelivery], ['payments', 'coin-hole', openPayments],
-                 ['notifications', 'brand-telegram', openNotifications], ['channels', 'scroll', openChannels], ['branding', 'fan', openBranding],
-                 ['features', 'tools-kitchen-2', openFeatures], ['apiKeys', 'key', openKeys], ['activation', 'check', openActivation], ['health', 'cube-3d-sphere', openHealth]]],
+                 ['notifications', 'brand-telegram', openNotifications], ['channels', 'scroll', openChannels], ['mcp', 'cube-3d-sphere', openMcp], ['cloud', 'cloud-upload', openCloud], ['branding', 'fan', openBranding],
+                 ['features', 'tools-kitchen-2', openFeatures], ['assistant', 'sparkles', openAssistant], ['apiKeys', 'key', openKeys], ['activation', 'check', openActivation], ['health', 'cube-3d-sphere', openHealth]]],
 ];
 /// The analytics windows the hub answers, in days.
 const WINDOWS = [7, 30];
 /// The hours grid: minutes of a day, and the minute steps a venue picks from.
 const DAY_MIN = 24 * 60;
 /// Promo kinds the hub knows.
-const PROMO_KINDS = ['percent', 'amount'];
+const PROMO_KINDS = ['percent', 'fixed'];
+/// One day, for a promo window that ends at the NEXT local midnight (half-open).
+const DAY_MS = 24 * 60 * 60 * 1000;
+/// What a promo is right now, from its own fields (the hub sends `status` too).
+const promoStatus = p => p.status || (!p.active ? 'inactive' : p.maxUses && (p.used || 0) >= p.maxUses ? 'exhausted' : p.fromMs && p.fromMs > Date.now() ? 'scheduled' : p.untilMs && p.untilMs < Date.now() ? 'expired' : 'active');
 /// A photograph's max side for the logo upload.
 const LOGO_MAX_PX = 800;
 
@@ -44,9 +49,10 @@ async function openPromos(){
   const draw = async () => {
     let d; try { d = await api('/owner/promotions'); } catch (e) { return fail(e); }
     const list = d.promotions || [];
-    $('#pList').innerHTML = list.length ? `<div class="rows">${list.map(p => `<div class="rowc">${icon('ticket')}<span class="t"><b class="mono">${esc(p.code)}</b><small>${p.kind === 'percent' ? `−${p.value}%` : `−${money(p.value)}`}${p.minOrder ? ` · ${t('minOrder')} ${money(p.minOrder)}` : ''} · ${p.used || 0}${p.maxUses ? '/' + p.maxUses : ''}</small></span>
-      <span class="pill ${p.active ? 'ok' : ''}" data-t="${p.active ? 'on' : 'off'}"></span><button type="button" class="act danger" data-del="${esc(p.code)}">${icon('trash')}</button></div>`).join('')}</div>` : `<div class="empty">${icon('ticket')}<b data-t="none"></b></div>`;
+    $('#pList').innerHTML = list.length ? `<div class="rows">${list.map(p => { const stt = promoStatus(p); return `<div class="rowc ${stt === 'active' ? '' : 'off'}">${icon('ticket')}<span class="t"><b class="mono">${esc(p.code)}</b><small>${p.kind === 'percent' ? `−${p.value}%` : `−${money(p.value)}`}${p.minOrder ? ` · ${t('minOrder')} ${money(p.minOrder)}` : ''} · ${p.used || 0}${p.maxUses ? '/' + p.maxUses : ''}${p.fromMs ? ` · ${t('when')} ${day(p.fromMs)}` : ''}${p.untilMs ? ` · ${t('until')} ${day(p.untilMs - 1)}` : ''}</small></span>
+      <button type="button" class="pill ${stt === 'active' ? 'ok' : stt === 'scheduled' ? 'warn' : ''}" data-flip="${esc(p.code)}" data-t="promo_${stt}"></button><button type="button" class="act danger" data-del="${esc(p.code)}">${icon('trash')}</button></div>`; }).join('')}</div>` : `<div class="empty">${icon('ticket')}<b data-t="none"></b></div>`;
     paint();
+    for (const b of $$('[data-flip]', $('#pList'))) b.onclick = async () => { const p = list.find(x => x.code === b.dataset.flip); if (!p) return; try { await busy(b, () => post('/owner/promotions', { ...p, active: !p.active, used: undefined, status: undefined })); draw(); } catch (e) { fail(e); } };
     for (const b of $$('[data-del]', $('#pList'))) b.onclick = async () => { const c = await confirm(t('remove'), b.dataset.del, { danger: true }); if (!c) return openPromos(); try { await post(`/owner/promotions/${encodeURIComponent(b.dataset.del)}/delete`, withLoc()); openPromos(); } catch (e) { fail(e); } };
   };
   draw();
@@ -64,8 +70,9 @@ async function openPromos(){
       const body = { code: $('#pr-code').value.trim().toUpperCase(), kind, value: Number($('#pr-value').value) || 0, active: true };
       if ($('#pr-min').value) body.minOrder = Number($('#pr-min').value);
       if ($('#pr-max').value) body.maxUses = Number($('#pr-max').value);
-      if ($('#pr-from').value) body.fromMs = new Date($('#pr-from').value).getTime();
-      if ($('#pr-until').value) body.untilMs = new Date($('#pr-until').value).getTime() + DAY_MIN * 60_000 - 1;
+      // Local midnight, not UTC: "from the 20th" means the venue's 20th.
+      if ($('#pr-from').value) body.fromMs = new Date($('#pr-from').value + 'T00:00').getTime();
+      if ($('#pr-until').value) body.untilMs = new Date($('#pr-until').value + 'T00:00').getTime() + DAY_MS;
       try { await busy($('#prSave'), () => post('/owner/promotions', body)); toast(t('saved')); openPromos(); } catch (e) { fail(e); }
     };
   };
@@ -97,17 +104,27 @@ function openPost(p){
 async function openSocial(){
   let s; try { s = await api('/owner/settings'); } catch (e) { return fail(e); }
   const v = s.values || {};
+  const igOn = v['social.instagram.token'] === SECRET_SET_MARK && !!(v['social.instagram.user_id'] || '').trim();
   sheet(`${head('marketing', 'social')}<p class="muted small" data-t="autopostHint"></p>
     ${switchEl('so-on', v['social.enabled'] === '1', 'autopost')}
     <label for="so-ch" data-t="tgChannel"></label><input id="so-ch" value="${esc(v['social.telegram.channel'] || '')}" placeholder="@channel">
+    <p class="eyebrow mt-3" data-t="instagram"></p>
+    <div class="rows"><div class="rowc ${igOn ? '' : 'off'}">${icon('sparkles')}<span class="t"><b data-t="instagram"></b><small data-t="${igOn ? 'instagramOn' : 'socialNotYet'}"></small></span><span class="pill ${igOn ? 'ok' : ''}" data-t="${igOn ? 'on' : 'off'}"></span></div></div>
+    <p class="hint" data-t="instagramHint"></p>
+    <label for="ig-token" data-t="instagramToken"></label><input id="ig-token" autocomplete="off" spellcheck="false" placeholder="${igOn ? esc(SECRET_SET_MARK) : 'EAAB…'}">
+    <label for="ig-user" data-t="instagramUserId"></label><input id="ig-user" inputmode="numeric" value="${esc(v['social.instagram.user_id'] || '')}">
     <div class="rows mt-3">
-      ${['instagram', 'facebook', 'tiktok'].map(n => `<div class="rowc off">${icon('sparkles')}<span class="t"><b data-t="${n}"></b><small data-t="socialNotYet"></small></span><span class="pill" data-t="comingSoon"></span></div>`).join('')}
+      ${['facebook', 'tiktok'].map(n => `<div class="rowc off">${icon('sparkles')}<span class="t"><b data-t="${n}"></b><small data-t="socialNotYet"></small></span><span class="pill" data-t="comingSoon"></span></div>`).join('')}
     </div>
     <div class="btn-row"><button class="btn" id="soSave">${icon('check')}<span data-t="save"></span></button></div>`, { name: 'social' });
   $('#soSave').onclick = async () => {
     try {
-      await post('/owner/settings', { key: 'social.enabled', value: $('#so-on').checked ? '1' : '0' });
-      await post('/owner/settings', { key: 'social.telegram.channel', value: $('#so-ch').value.trim() });
+      await busy($('#soSave'), async () => {
+        await post('/owner/settings', { key: 'social.enabled', value: $('#so-on').checked ? '1' : '0' });
+        await post('/owner/settings', { key: 'social.telegram.channel', value: $('#so-ch').value.trim() });
+        const tok = $('#ig-token').value.trim(); if (tok) await post('/owner/settings', { key: 'social.instagram.token', value: tok });
+        await post('/owner/settings', { key: 'social.instagram.user_id', value: $('#ig-user').value.trim() });
+      });
       toast(t('saved')); closeSheet();
     } catch (e) { fail(e); }
   };
@@ -124,18 +141,57 @@ async function openAnalytics(days = WINDOWS[0]){
   const byHour = a.byHour || [], maxH = Math.max(1, ...byHour);
   $('#anBody').innerHTML = `
     <div class="stats"><div class="stat"><small data-t="orders7"></small><b>${a.orders ?? 0}</b></div><div class="stat"><small data-t="revenue7"></small><b>${money(a.revenue || 0)}</b></div>
-      <div class="stat"><small data-t="avgCheck"></small><b>${money(a.averageOrder || 0)}</b></div><div class="stat"><small data-t="delivery"></small><b>${a.delivery ?? 0}/${a.pickup ?? 0}</b></div></div>
-    <p class="eyebrow" data-t="byDay"></p><div class="bars">${byDay.map(d => `<i data-h="${Math.round(100 * (d.revenue || 0) / maxRev)}"></i>`).join('')}</div>
+      <div class="stat"><small data-t="avgCheck"></small><b>${money(a.averageOrder || 0)}</b></div><div class="stat ${a.rejected ? 'warn' : ''}"><small data-t="rejected"></small><b>${a.rejected ?? 0}</b></div></div>
+    <div class="rows"><div class="rowc">${icon('bike')}<span class="t"><b data-t="delivery"></b></span><b class="mono">${a.delivery ?? 0}</b></div><div class="rowc">${icon('walk')}<span class="t"><b data-t="pickup"></b></span><b class="mono">${a.pickup ?? 0}</b></div></div>
+    <p class="eyebrow mt-3" data-t="byDay"></p><div class="bars" role="img" aria-label="${esc(t('byDay'))} · max ${esc(money(maxRev))}">${byDay.map(d => `<i data-h="${Math.round(100 * (d.revenue || 0) / maxRev)}" title="${esc(day(d.at))} · ${esc(money(d.revenue || 0))}"></i>`).join('')}</div>
     <div class="axis"><span>${byDay.length ? day(byDay[0].at) : ''}</span><span>${byDay.length ? day(byDay[byDay.length - 1].at) : ''}</span></div>
-    <p class="eyebrow mt-3" data-t="byHour"></p><div class="bars">${byHour.map((n, h) => `<i class="${n === maxH ? 'hi' : ''}" data-h="${Math.round(100 * n / maxH)}"></i>`).join('')}</div><div class="axis"><span>00</span><span>12</span><span>23</span></div>
-    <p class="eyebrow mt-3" data-t="topDishes"></p><div class="rows">${(a.topProducts || []).slice(0, 8).map(p => `<div class="rowc">${icon('bowl-chopsticks')}<span class="t"><b>${esc(p.name || p.id)}</b></span><span class="mono">${p.count ?? p.orders ?? ''}</span></div>`).join('')}</div>`;
+    <p class="eyebrow mt-3" data-t="byHour"></p><div class="bars" role="img" aria-label="${esc(t('byHour'))} · max ${maxH}">${byHour.map((n, h) => `<i class="${n === maxH ? 'hi' : ''}" data-h="${Math.round(100 * n / maxH)}" title="${String(h).padStart(2, '0')}:00 · ${n}"></i>`).join('')}</div><div class="axis"><span>00</span><span>12</span><span>23</span></div>
+    <p class="eyebrow mt-3" data-t="topDishes"></p><div class="rows">${(a.topProducts || []).slice(0, 8).map(p => `<div class="rowc">${icon('bowl-chopsticks')}<span class="t"><b>${esc(p.name || p.id)}</b><small class="mono">${p.quantity ?? 0} ${esc(t('portions'))}</small></span><span class="money">${money(p.revenue || 0)}</span></div>`).join('')}</div>`;
   paint();
 }
-async function openCustomers(){
-  sheet(`${head('analytics', 'customers')}<div id="cuBody"><div class="skel skel-row"></div></div>`, { name: 'customers' });
-  let d; try { d = await api('/owner/customers'); } catch (e) { return fail(e); }
+/// Customers are MASKED by default; a name and phone are revealed one at a
+/// time, for a written reason, and every reveal is in a log the owner can read.
+const CUSTOMER_SORTS = ['spent', 'orders', 'recent'];
+const REVEAL_REASON_MIN = 3;
+async function openCustomers(sort = CUSTOMER_SORTS[0]){
+  sheet(`${head('analytics', 'customers')}
+    <div class="seg">${CUSTOMER_SORTS.map(k => `<button type="button" class="seg-b ${k === sort ? 'on' : ''}" data-sort="${k}" data-t="sort_${k}"></button>`).join('')}</div>
+    <div id="cuBody"><div class="skel skel-row"></div></div>
+    <div class="btn-row"><button class="btn ghost" id="cuCsv">${icon('download')}<span data-t="exportCsv"></span></button><button class="btn ghost" id="cuLog">${icon('eye')}<span data-t="revealLog"></span></button></div>`, { name: 'customers' });
+  for (const b of $$('[data-sort]', $('#sheetIn'))) b.onclick = () => openCustomers(b.dataset.sort);
+  let d; try { d = await api(`/owner/customers?sort=${sort}`); } catch (e) { return fail(e); }
   const list = d.customers || [];
-  $('#cuBody').innerHTML = list.length ? `<div class="rows">${list.map(c => `<div class="rowc">${icon('user')}<span class="t"><b>${esc(c.name || c.phone || c.key)}</b><small class="mono">${esc(c.phone || '')} · ${c.orders} · ${money(c.spent || 0)}</small></span>${c.lastAt ? `<small class="muted">${esc(day(c.lastAt))}</small>` : ''}</div>`).join('')}</div>` : `<div class="empty">${icon('user')}<b data-t="none"></b></div>`;
+  $('#cuBody').innerHTML = list.length ? `<div class="rows">${list.map(c => `<button type="button" class="rowc" data-key="${esc(c.key)}">${icon('user')}<span class="t"><b>${esc(c.name || c.phone || c.key)}</b><small class="mono">${esc(c.phone || '')} · ${c.orders} · ${money(c.spent || 0)}</small></span>${c.lastAt ? `<small class="muted">${esc(day(c.lastAt))}</small>` : ''}${icon('chevron-right', 'chev')}</button>`).join('')}</div>` : `<div class="empty">${icon('user')}<b data-t="none"></b></div>`;
+  paint();
+  for (const b of $$('[data-key]', $('#cuBody'))) b.onclick = () => openReveal(b.dataset.key, list.find(c => c.key === b.dataset.key));
+  $('#cuCsv').onclick = () => {
+    const cell = v => { const x = String(v ?? ''); return /[",\n;]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; };
+    const rows = [[t('customer'), t('phone'), t('orders7'), t('total'), t('lastSeen')].map(cell).join(','), ...list.map(c => [c.name, c.phone, c.orders, c.spent ?? 0, c.lastAt ? new Date(c.lastAt).toISOString() : ''].map(cell).join(','))];
+    const blob = new Blob(['\ufeff' + rows.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `dowiz-customers-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); requestAnimationFrame(() => URL.revokeObjectURL(a.href));
+  };
+  $('#cuLog').onclick = openRevealLog;
+}
+async function openReveal(key, c){
+  sheet(`${head('customers', 'reveal')}<p class="muted small" data-t="revealHint"></p>
+    <div class="fact">${icon('user')}<span class="v">${esc(c?.name || key)}<br><small class="mono">${esc(c?.phone || '')}</small></span></div>
+    <label for="rv-reason" data-t="revealReason"></label><input id="rv-reason" autocomplete="off">
+    <div class="btn-row"><button class="btn" id="rvGo">${icon('eye')}<span data-t="reveal"></span></button></div><div id="rvOut"></div>`, { name: 'reveal' });
+  $('#rvGo').onclick = async () => {
+    const reason = $('#rv-reason').value.trim(); if (reason.length < REVEAL_REASON_MIN) return toast(t('required'));
+    try {
+      const r = await busy($('#rvGo'), () => post(`/owner/customers/${encodeURIComponent(key)}/reveal`, { reason }));
+      $('#rvOut').innerHTML = `<div class="fact mt-3">${icon('phone')}<span class="v"><b>${esc(r.name || '')}</b><br>${r.phone ? `<a href="tel:${esc(r.phone)}">${esc(r.phone)}</a>` : ''}</span></div>
+        <p class="eyebrow mt-3" data-t="lastOrders"></p>${(r.orders || []).map(o => `<div class="line"><span class="n">${esc(day(o.at || o.created_at_ms || 0))}<small>${esc(o.address || '')}</small></span>${moneyEl(o.total || 0)}</div>`).join('')}`;
+      paint();
+    } catch (e) { fail(e); }
+  };
+}
+async function openRevealLog(){
+  sheet(`${head('customers', 'revealLog')}<div id="rlBody"><div class="skel skel-row"></div></div>`, { name: 'reveals' });
+  let d; try { d = await api('/owner/customers/reveals'); } catch (e) { return fail(e); }
+  const list = d.reveals || [];
+  $('#rlBody').innerHTML = list.length ? `<div class="rows">${list.map(r => `<div class="rowc">${icon('eye')}<span class="t"><b>${esc(r.reason || '')}</b><small class="mono">${esc(r.by || '')} · ${esc(day(r.atMs || r.at || 0))} ${esc(clock(r.atMs || r.at || 0))}</small></span></div>`).join('')}</div>` : `<div class="empty">${icon('eye')}<b data-t="none"></b></div>`;
   paint();
 }
 
@@ -213,6 +269,8 @@ async function openNotifications(){
   const tokenSet = v['notify.telegram.token'] === SECRET_SET_MARK || !!(S.venue?.telegramBot);
   const chat = v['notify.telegram.chat'] || '';
   const live = tokenSet && !!chat.trim();
+  const waSet = v['notify.whatsapp.token'] === SECRET_SET_MARK;
+  const waOn = waSet && !!(v['notify.whatsapp.phone_id'] || '').trim();
   sheet(`${head('settings', 'notifications')}
     <div class="rows">
       <div class="rowc">${icon('brand-telegram')}<span class="t"><b data-t="telegram"></b><small data-t="${live ? 'tgHow' : 'tgNotSet'}"></small></span><span class="pill ${live ? 'ok' : 'warn'}" data-t="${live ? 'on' : 'off'}"></span></div>
@@ -220,33 +278,134 @@ async function openNotifications(){
     <label for="n-token" data-t="tgToken"></label><input id="n-token" autocomplete="off" spellcheck="false" placeholder="${tokenSet ? esc(SECRET_SET_MARK) : '123456:ABC…'}"><p class="hint" data-t="tgTokenHint"></p>
     <label for="n-chat" data-t="ownerChat"></label><input id="n-chat" inputmode="numeric" value="${esc(chat)}" placeholder="chat id"><p class="hint" data-t="tgChatHint"></p>
     <div class="btn-row"><button class="btn ghost" id="nTest">${icon('send')}<span data-t="testMessage"></span></button><button class="btn" id="nSave">${icon('check')}<span data-t="save"></span></button></div>
-    <div class="rows mt-3"><div class="rowc off">${icon('phone')}<span class="t"><b data-t="whatsapp"></b><small data-t="waNotYet"></small></span><span class="pill" data-t="comingSoon"></span></div></div>`, { name: 'notify' });
+    <p class="eyebrow mt-3" data-t="whatsapp"></p>
+    <div class="rows"><div class="rowc ${waOn ? '' : 'off'}">${icon('phone')}<span class="t"><b data-t="whatsapp"></b><small data-t="${waOn ? 'whatsappOn' : 'waNotYet'}"></small></span><span class="pill ${waOn ? 'ok' : 'warn'}" data-t="${waOn ? 'on' : 'off'}"></span></div></div>
+    <p class="hint" data-t="whatsappHint"></p>
+    <label for="wa-token" data-t="whatsappToken"></label><input id="wa-token" autocomplete="off" spellcheck="false" placeholder="${waSet ? esc(SECRET_SET_MARK) : 'EAAB…'}">
+    <div class="grid2"><div><label for="wa-phone" data-t="whatsappPhoneId"></label><input id="wa-phone" inputmode="numeric" value="${esc(v['notify.whatsapp.phone_id'] || '')}"></div>
+      <div><label for="wa-to" data-t="whatsappTo"></label><input id="wa-to" inputmode="numeric" value="${esc(v['notify.whatsapp.to'] || '')}"></div></div>
+    <div class="btn-row"><button class="btn ghost" id="nTest2">${icon('send')}<span data-t="testMessage"></span></button><button class="btn" id="nSave2">${icon('check')}<span data-t="save"></span></button></div>`, { name: 'notify' });
   const save = async () => {
-    // An empty value CLEARS a setting on the hub, so the token is only sent when typed.
+    // An empty value CLEARS a setting on the hub, so a token is only sent when typed.
     const tok = $('#n-token').value.trim();
     if (tok) await post('/owner/settings', { key: 'notify.telegram.token', value: tok });
     await post('/owner/settings', { key: 'notify.telegram.chat', value: $('#n-chat').value.trim() });
+    const wtok = $('#wa-token').value.trim();
+    if (wtok) await post('/owner/settings', { key: 'notify.whatsapp.token', value: wtok });
+    await post('/owner/settings', { key: 'notify.whatsapp.phone_id', value: $('#wa-phone').value.trim() });
+    await post('/owner/settings', { key: 'notify.whatsapp.to', value: $('#wa-to').value.trim() });
   };
-  $('#nSave').onclick = async () => { try { await busy($('#nSave'), save); toast(t('saved')); openNotifications(); } catch (e) { fail(e); } };
-  $('#nTest').onclick = async () => { try { await busy($('#nTest'), async () => { await save(); await post('/owner/notify/test', withLoc()); }); toast(t('testOk')); } catch (e) { fail(e); } };
+  const test = async b => { try { const r = await busy(b, async () => { await save(); return post('/owner/notify/test', withLoc()); }); toast(`${t('telegram')}: ${verdict(r.telegram)} · WhatsApp: ${verdict(r.whatsapp)}`); } catch (e) { fail(e); } };
+  for (const id of ['nSave', 'nSave2']) $('#' + id).onclick = async () => { try { await busy($('#' + id), save); toast(t('saved')); openNotifications(); } catch (e) { fail(e); } };
+  for (const id of ['nTest', 'nTest2']) $('#' + id).onclick = () => test($('#' + id));
 }
+/// A channel's verdict from /owner/notify/test, as one word or Meta's/Telegram's reason.
+const verdict = v => v === 'ok' ? t('testOk') : v === 'unset' ? t('off') : (v && v.error) || String(v);
 async function openChannels(){
+  let s = { values: {} }; try { s = await api('/owner/settings'); } catch {}
+  const v = s.values || {};
+  const waOn = v['notify.whatsapp.token'] === SECRET_SET_MARK && !!(v['notify.whatsapp.phone_id'] || '').trim();
+  const igOn = v['social.instagram.token'] === SECRET_SET_MARK && !!(v['social.instagram.user_id'] || '').trim();
+  const webhook = `${location.origin}/api/webhooks/meta`;
   sheet(`${head('settings', 'channels')}
     <div class="rows">
       <div class="rowc">${icon('bowl-chopsticks')}<span class="t"><b data-t="chStore"></b><small class="mono">${esc(location.host)}</small></span><span class="pill ok" data-t="on"></span></div>
       <div class="rowc">${icon('phone')}<span class="t"><b data-t="chPhone"></b><small>${esc(S.venue?.phone || '')}</small></span><span class="pill ok" data-t="on"></span></div>
+      <button type="button" class="rowc ${waOn ? '' : 'off'}" data-go="notifications">${icon('brand-whatsapp')}<span class="t"><b data-t="whatsapp"></b><small data-t="${waOn ? 'whatsappOn' : 'waNotYet'}"></small></span><span class="pill ${waOn ? 'ok' : ''}" data-t="${waOn ? 'on' : 'off'}"></span></button>
+      <button type="button" class="rowc ${igOn ? '' : 'off'}" data-go="social">${icon('sparkles')}<span class="t"><b data-t="instagram"></b><small data-t="${igOn ? 'instagramOn' : 'socialNotYet'}"></small></span><span class="pill ${igOn ? 'ok' : ''}" data-t="${igOn ? 'on' : 'off'}"></span></button>
       <div class="rowc off">${icon('brand-telegram')}<span class="t"><b data-t="chTelegramBot"></b></span><span class="pill" data-t="comingSoon"></span></div>
-      <div class="rowc">${icon('key')}<span class="t"><b data-t="chApi"></b><small data-t="apiHint"></small></span><button type="button" class="act" id="toKeys">${icon('chevron-right')}</button></div>
+      <button type="button" class="rowc" data-go="mcp">${icon('cube-3d-sphere')}<span class="t"><b data-t="mcp"></b><small class="mono">${esc(location.origin)}/api/mcp</small></span><span class="pill ok" data-t="on"></span></button>
+      <button type="button" class="rowc" data-go="keys">${icon('key')}<span class="t"><b data-t="chApi"></b><small data-t="apiHint"></small></span>${icon('chevron-right', 'chev')}</button>
       <div class="rowc off">${icon('scroll')}<span class="t"><b data-t="chAggregators"></b></span><span class="pill" data-t="comingSoon"></span></div>
-    </div>`, { name: 'channels' });
-  $('#toKeys').onclick = openKeys;
+    </div>
+    <p class="eyebrow mt-3" data-t="webhookUrl"></p>
+    <div class="code small" id="whUrl">${esc(webhook)}</div><p class="hint" data-t="webhookHint"></p>
+    <label for="wh-verify" data-t="verifyToken"></label><input id="wh-verify" autocomplete="off" value="${esc(v['notify.whatsapp.verify'] || '')}"><p class="hint" data-t="verifyHint"></p>
+    <label for="wh-secret" data-t="appSecret"></label><input id="wh-secret" autocomplete="off" placeholder="${v['notify.meta.secret'] === SECRET_SET_MARK ? esc(SECRET_SET_MARK) : ''}">
+    <div class="btn-row"><button class="btn ghost" id="whCopy">${icon('copy')}<span data-t="copy"></span></button><button class="btn" id="whSave">${icon('check')}<span data-t="save"></span></button></div>`, { name: 'channels' });
+  const go = { notifications: openNotifications, social: openSocial, mcp: openMcp, keys: openKeys };
+  for (const b of $$('[data-go]', $('#sheetIn'))) b.onclick = () => go[b.dataset.go]();
+  $('#whCopy').onclick = async () => { try { await navigator.clipboard.writeText(webhook); toast(t('copied')); } catch {} };
+  $('#whSave').onclick = async () => {
+    try {
+      await busy($('#whSave'), async () => {
+        await post('/owner/settings', { key: 'notify.whatsapp.verify', value: $('#wh-verify').value.trim() });
+        const sec = $('#wh-secret').value.trim(); if (sec) await post('/owner/settings', { key: 'notify.meta.secret', value: sec });
+      });
+      toast(t('saved'));
+    } catch (e) { fail(e); }
+  };
 }
+
+/// The venue as an MCP server: the URL, the auth, the tools it offers.
+async function openMcp(){
+  sheet(`${head('settings', 'mcp')}<p class="muted small" data-t="mcpHint"></p>
+    <p class="eyebrow mt-3">URL</p><div class="code small" id="mcpUrl">${esc(location.origin)}/api/mcp</div>
+    <p class="eyebrow mt-3">Authorization</p><div class="code small">Bearer dowiz_…</div>
+    <div class="btn-row"><button class="btn ghost" id="mcpCopy">${icon('copy')}<span data-t="copy"></span></button><button class="btn" id="mcpKeys">${icon('key')}<span data-t="apiKeys"></span></button></div>
+    <div id="mcpTools"><div class="skel skel-row"></div></div>`, { name: 'mcp' });
+  $('#mcpCopy').onclick = async () => { try { await navigator.clipboard.writeText(`${location.origin}/api/mcp`); toast(t('copied')); } catch {} };
+  $('#mcpKeys').onclick = openKeys;
+  try {
+    const d = await fetch('/api/mcp').then(r => r.json());
+    $('#mcpTools').innerHTML = `<p class="eyebrow mt-3">${(d.tools || []).length} ${esc(t('tools'))}</p><div class="chips">${(d.tools || []).map(n => `<span class="chip mono">${esc(n)}</span>`).join('')}</div>`;
+  } catch (e) { $('#mcpTools').innerHTML = ''; }
+}
+
+/// Off-site copies in the venue's own bucket.
+async function openCloud(){
+  let s = { values: {} }, st = {}; try { [s, st] = await Promise.all([api('/owner/settings'), api('/owner/backup/cloud')]); } catch (e) { fail(e); }
+  const v = s.values || {};
+  sheet(`${head('settings', 'cloud')}<p class="muted small" data-t="cloudHint"></p>
+    <div class="rows"><div class="rowc ${st.configured ? '' : 'off'}">${icon('cloud-upload')}<span class="t"><b data-t="lastCopy"></b><small class="mono">${st.last ? `${esc(day(st.last.atMs))} · ${Math.round((st.last.bytes || 0) / 1024)} KB · ${esc(st.last.key || '')}` : t('neverPushed')}</small></span><span class="pill ${st.configured ? 'ok' : ''}" data-t="${st.configured ? 'nightly' : 'off'}"></span></div></div>
+    <label for="cl-endpoint" data-t="endpoint"></label><input id="cl-endpoint" inputmode="url" value="${esc(v['cloud.s3.endpoint'] || '')}" placeholder="https://<account>.r2.cloudflarestorage.com">
+    <div class="grid2"><div><label for="cl-region" data-t="region"></label><input id="cl-region" value="${esc(v['cloud.s3.region'] || 'auto')}"></div><div><label for="cl-bucket" data-t="bucket"></label><input id="cl-bucket" value="${esc(v['cloud.s3.bucket'] || '')}"></div></div>
+    <div class="grid2"><div><label for="cl-key" data-t="accessKey"></label><input id="cl-key" autocomplete="off" placeholder="${v['cloud.s3.key'] === SECRET_SET_MARK ? esc(SECRET_SET_MARK) : ''}"></div><div><label for="cl-secret" data-t="secretKey"></label><input id="cl-secret" autocomplete="off" placeholder="${v['cloud.s3.secret'] === SECRET_SET_MARK ? esc(SECRET_SET_MARK) : ''}"></div></div>
+    <label for="cl-prefix" data-t="prefix"></label><input id="cl-prefix" value="${esc(v['cloud.s3.prefix'] || 'dowiz')}">
+    <div class="btn-row"><button class="btn ghost" id="clPush" ${st.configured ? '' : 'disabled'}>${icon('cloud-upload')}<span data-t="pushNow"></span></button><button class="btn" id="clSave">${icon('check')}<span data-t="save"></span></button></div>`, { name: 'cloud' });
+  $('#clSave').onclick = async () => {
+    try {
+      await busy($('#clSave'), async () => {
+        for (const [id, key] of [['cl-endpoint', 'cloud.s3.endpoint'], ['cl-region', 'cloud.s3.region'], ['cl-bucket', 'cloud.s3.bucket'], ['cl-prefix', 'cloud.s3.prefix']]) await post('/owner/settings', { key, value: $('#' + id).value.trim() });
+        for (const [id, key] of [['cl-key', 'cloud.s3.key'], ['cl-secret', 'cloud.s3.secret']]) { const val = $('#' + id).value.trim(); if (val) await post('/owner/settings', { key, value: val }); }
+      });
+      toast(t('saved')); openCloud();
+    } catch (e) { fail(e); }
+  };
+  $('#clPush').onclick = async () => { try { const r = await busy($('#clPush'), () => post('/owner/backup/cloud', withLoc())); toast(`${t('pushed')} · ${Math.round((r.bytes || 0) / 1024)} KB`); openCloud(); } catch (e) { fail(e); } };
+}
+
+/// Customers who wrote on WhatsApp or Instagram, and the answers.
+async function openInbox(){
+  sheet(`${head('inbox', 'inbox')}<p class="muted small" data-t="inboxHint"></p><div id="ibList"><div class="skel skel-row"></div></div>`, { name: 'inbox' });
+  let d; try { d = await api('/owner/inbox'); } catch (e) { return fail(e); }
+  const th = d.threads || [];
+  $('#ibList').innerHTML = th.length ? `<div class="rows">${th.map(x => `<button type="button" class="rowc" data-peer="${esc(x.peer)}" data-ch="${esc(x.channel)}">${icon(x.channel === 'whatsapp' ? 'brand-whatsapp' : 'sparkles')}
+      <span class="t"><b>${esc(x.name || x.peer)}</b><small>${x.fromThem ? '' : '↩ '}${esc(x.last)}</small></span>${x.unread ? `<span class="pill warn">${x.unread}</span>` : `<small class="muted">${esc(ago(x.atMs))}</small>`}</button>`).join('')}</div>`
+    : `<div class="empty">${icon('message-2')}<b data-t="noMessages"></b><span class="muted small">${d.channels?.whatsapp || d.channels?.instagram ? '' : t('waNotYet')}</span></div>`;
+  paint();
+  for (const b of $$('[data-peer]', $('#ibList'))) b.onclick = () => openThread(b.dataset.ch, b.dataset.peer, th.find(x => x.peer === b.dataset.peer && x.channel === b.dataset.ch)?.name);
+}
+async function openThread(channel, peer, name){
+  sheet(`<p class="eyebrow">${esc(channel)}</p><h2>${esc(name || peer)}</h2><div class="thread" id="thread"><div class="skel skel-row"></div></div>
+    <div class="reply-row"><input id="rp-text" data-t-attr="placeholder:writeReply" autocomplete="off"><button type="button" class="act pri" id="rpGo">${icon('send')}</button></div>`, { name: 'thread' });
+  retranslate($('#sheetIn'));
+  const draw = async () => {
+    let d; try { d = await api(`/owner/inbox/${encodeURIComponent(peer)}?channel=${encodeURIComponent(channel)}`); } catch (e) { return fail(e); }
+    $('#thread').innerHTML = (d.messages || []).map(m => `<div class="msg ${m.fromThem ? 'them' : 'me'}"><span>${esc(m.text)}</span><small>${esc(clock(m.atMs))}</small></div>`).join('') || `<div class="empty"><b data-t="noMessages"></b></div>`;
+    paint(); $('#thread').scrollTop = $('#thread').scrollHeight;
+  };
+  draw();
+  const send = async () => { const text = $('#rp-text').value.trim(); if (!text) return; try { await busy($('#rpGo'), () => post(`/owner/inbox/${encodeURIComponent(peer)}`, withLoc({ channel, text }))); $('#rp-text').value = ''; draw(); } catch (e) { fail(e); } };
+  $('#rpGo').onclick = send; $('#rp-text').onkeydown = e => { if (e.key === 'Enter') send(); };
+}
+
 async function openKeys(){
   sheet(`${head('settings', 'apiKeys')}<p class="muted small" data-t="apiHint"></p><div id="kList"><div class="skel skel-row"></div></div>
     <label for="k-label" data-t="name"></label><input id="k-label"><div class="btn-row"><button class="btn" id="kNew">${icon('key')}<span data-t="newKey"></span></button></div><div id="kOut"></div>`, { name: 'keys' });
   const draw = async () => { let d; try { d = await api('/owner/apikeys'); } catch (e) { return fail(e); }
-    $('#kList').innerHTML = (d.keys || []).length ? `<div class="rows">${d.keys.map(k => `<div class="rowc">${icon('key')}<span class="t"><b>${esc(k.label || '')}</b><small class="mono">${esc(k.session || '')}</small></span><button type="button" class="act danger" data-rev="${esc(k.session || '')}">${icon('trash')}</button></div>`).join('')}</div>` : `<div class="empty">${icon('key')}<b data-t="none"></b></div>`;
-    paint(); for (const b of $$('[data-rev]', $('#kList'))) b.onclick = async () => { try { await post('/owner/apikeys/revoke', { session: b.dataset.rev }); draw(); } catch (e) { fail(e); } }; };
+    $('#kList').innerHTML = (d.keys || []).length ? `<div class="rows">${d.keys.map(k => `<div class="rowc">${icon('key')}<span class="t"><b>${esc(k.label || '')}</b><small class="mono">${esc(k.id.slice(0, 8))} · ${k.lastUsedMs ? esc(ago(k.lastUsedMs)) : '—'} · ${t('until')} ${esc(day(k.expiresMs || 0))}</small></span><button type="button" class="act danger" data-rev="${esc(k.id)}">${icon('trash')}</button></div>`).join('')}</div>` : `<div class="empty">${icon('key')}<b data-t="none"></b></div>`;
+    paint(); for (const b of $$('[data-rev]', $('#kList'))) b.onclick = async () => { const ok = await confirm(t('remove'), t('revokeHint'), { danger: true }); if (!ok) return openKeys(); try { await post('/owner/apikeys/revoke', { id: b.dataset.rev }); draw(); } catch (e) { fail(e); } }; };
   draw();
   $('#kNew').onclick = async () => { try { const d = await busy($('#kNew'), () => post('/owner/apikeys', { label: $('#k-label').value.trim() || 'api' })); $('#kOut').innerHTML = `<div class="code">${esc(d.key || d.token || JSON.stringify(d))}</div><p class="hint" data-t="keyOnce"></p>`; paint(); draw(); } catch (e) { fail(e); } };
 }
@@ -277,22 +436,69 @@ async function openBranding(){
 }
 async function openFeatures(){
   let d; try { d = await api('/owner/features'); } catch (e) { return fail(e); }
-  sheet(`${head('settings', 'features')}${(d.features || []).map(f => `<label class="switch"><input type="checkbox" data-f="${esc(f.key)}" ${f.on ? 'checked' : ''}><span class="switch-k"></span><span class="t">${esc(f.label)}<small>${esc(f.hint || '')}</small></span></label>`).join('')}`, { name: 'features' });
+  const tl = (k, fb) => { const v = t(k); return v === k ? fb : v; };
+  const groups = [...new Set((d.features || []).map(f => f.surface || 'storefront'))];
+  sheet(`${head('settings', 'features')}${groups.map(g => `<p class="eyebrow mt-3">${esc(tl('surface_' + g, g))}</p>${(d.features || []).filter(f => (f.surface || 'storefront') === g).map(f => `<label class="switch"><input type="checkbox" data-f="${esc(f.key)}" ${f.on ? 'checked' : ''}><span class="switch-k"></span><span class="t">${esc(tl('feat_' + f.key, f.label))}${f.defaultOn != null && f.on !== f.defaultOn ? ` <span class="pill warn">${esc(t('changed'))}</span>` : ''}<small>${esc(tl('feat_' + f.key + '_h', f.hint || ''))}</small></span></label>`).join('')}`).join('')}`, { name: 'features' });
   for (const el of $$('[data-f]', $('#sheetIn'))) el.onchange = async () => { try { await post('/owner/features', { key: el.dataset.f, on: el.checked }); toast(t('saved')); } catch (e) { fail(e); el.checked = !el.checked; } };
 }
 async function openActivation(){
   let a; try { a = await api('/owner/activation'); } catch (e) { return fail(e); }
+  const tl = (k, fb) => { const v = t(k); return v === k ? fb : v; };
+  const word = v => typeof v === 'boolean' ? t(v ? 'yes' : 'no') : String(v);
+  const missing = new Map((a.missing || []).map(m => [m.key, m.why]));
+  const CHECKS = [['menu', ['sellableDishes']], ['notifications', ['telegramChats']], ['fulfilment', ['hasVenuePhone', 'deliveryConfigured', 'pickupEnabled']]];
   sheet(`${head('settings', 'activation')}
-    <div class="rows">${(a.missing || []).map(m => `<div class="rowc">${icon('alert-circle')}<span class="t"><b>${esc(m.key)}</b><small>${esc(m.why)}</small></span><span class="pill warn">!</span></div>`).join('')}
-      ${!(a.missing || []).length ? `<div class="rowc">${icon('check')}<span class="t"><b data-t="hubOk"></b></span><span class="pill ok" data-t="on"></span></div>` : ''}</div>
-    <p class="hint mono">${Object.entries(a.facts || {}).map(([k, v]) => `${esc(k)}: ${esc(String(v))}`).join(' · ')}</p>`, { name: 'activation' });
+    <div class="rows">${CHECKS.map(([key, facts]) => `<div class="rowc ${missing.has(key) ? '' : ''}">${icon(missing.has(key) ? 'alert-circle' : 'check')}<span class="t"><b>${esc(tl('req_' + key, key))}</b><small>${missing.has(key) ? esc(missing.get(key)) : facts.map(f => `${esc(tl('fact_' + f, f))}: ${esc(word(a.facts?.[f]))}`).join(' · ')}</small></span><span class="pill ${missing.has(key) ? 'warn' : 'ok'}">${missing.has(key) ? '!' : '✓'}</span></div>`).join('')}</div>
+    ${!(a.missing || []).length ? `<p class="ok mt-3" data-t="hubOk"></p>` : ''}`, { name: 'activation' });
 }
+/// Fullness per mille at which a fixed-size image turns amber, then red.
+const HEALTH_WARN_PM = 650, HEALTH_BAD_PM = 850;
 async function openHealth(){
   sheet(`${head('settings', 'health')}<div id="hBody"><div class="skel skel-row"></div></div>
     <div class="btn-row"><a class="btn ghost" id="hBackup" href="/api/owner/backup" download>${icon('download')}<span data-t="backup"></span></a></div>`, { name: 'health' });
   let h; try { h = await api('/owner/health'); } catch (e) { return fail(e); }
-  $('#hBody').innerHTML = `<div class="rows">${Object.entries(h.images || {}).map(([k, im]) => `<div class="rowc">${icon('cube-3d-sphere')}<span class="t"><b>${esc(k)}</b><small class="mono">${im.usedCells}/${im.ceilingCells} · gen ${im.generation}</small><span class="gauge"><i class="${im.usedPerMille > 850 ? 'bad' : im.usedPerMille > 650 ? 'warn' : ''}" data-w="${Math.round(im.usedPerMille / 10)}"></i></span></span></div>`).join('')}</div>
-    <p class="hint mono">${esc(h.verdict || '')} · ${h.orders ?? ''}</p>`;
+  // A self-growing image is never amber: fullness is not a warning when the
+  // ceiling moves. Fixed-size images first, then the fullest.
+  const entries = Object.entries(h.images || {}).sort(([, a], [, b]) => (a.grows === b.grows ? (b.usedPerMille || 0) - (a.usedPerMille || 0) : a.grows ? 1 : -1));
+  const tone = im => im.grows ? '' : im.usedPerMille > HEALTH_BAD_PM ? 'bad' : im.usedPerMille > HEALTH_WARN_PM ? 'warn' : '';
+  $('#hBody').innerHTML = `<div class="rows">${entries.map(([k, im]) => `<div class="rowc">${icon('cube-3d-sphere')}<span class="t"><b>${esc(t('img_' + k) === 'img_' + k ? k : t('img_' + k))}</b><small class="mono">${Math.round((im.usedPerMille || 0) / 10)}% · ${im.usedCells}/${im.ceilingCells} · gen ${im.generation}${im.grows ? ` · ${esc(t('grows'))}` : ''}</small><span class="gauge"><i class="${tone(im)}" data-w="${Math.round((im.usedPerMille || 0) / 10)}"></i></span></span></div>`).join('')}</div>
+    <div class="rows mt-3"><div class="rowc">${icon(h.verdict === 'ok' ? 'check' : 'alert-circle')}<span class="t"><b data-t="verdict_${esc(h.verdict || 'ok')}"></b><small class="mono">${h.orders ?? ''} · ${esc(t('orders7'))}</small></span><span class="pill ${h.verdict === 'ok' ? 'ok' : h.verdict === 'watch' ? 'warn' : 'bad'}">${esc(h.verdict || '')}</span></div></div>`;
   paint();
   $('#hBackup').onclick = async e => { e.preventDefault(); try { const r = await fetch('/api/owner/backup', { headers: { authorization: 'Bearer ' + store.t } }); const blob = await r.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `dowiz-${store.loc}-${new Date().toISOString().slice(0, 10)}.json`; a.click(); } catch (err) { fail(err); } };
+}
+
+/// The owner's assistant: a question about the venue's own live data, answered
+/// by the model the venue chose (a local Ollama by default, a hosted one by
+/// token), with the provenance line the old console printed.
+async function openAssistant(){
+  let s = { values: {} }; try { s = await api('/owner/settings'); } catch {}
+  const v = s.values || {};
+  sheet(`${head('settings', 'assistant')}<p class="muted small" data-t="askHint"></p>
+    <label for="as-q" data-t="ask"></label><textarea id="as-q" rows="2"></textarea>
+    <div class="btn-row"><button class="btn" id="asGo">${icon('sparkles')}<span data-t="ask"></span></button></div>
+    <div id="asOut"></div>
+    <p class="eyebrow mt-3" data-t="aiSettings"></p>
+    ${switchEl('ai-on', v['ai.enabled'] === '1', 'aiEnabled', 'aiEnabledHint')}
+    <label for="ai-endpoint" data-t="aiEndpoint"></label><input id="ai-endpoint" inputmode="url" value="${esc(v['ai.endpoint'] || '')}" placeholder="https://…/v1">
+    <div class="grid2"><div><label for="ai-model" data-t="aiModel"></label><input id="ai-model" value="${esc(v['ai.model'] || '')}"></div>
+      <div><label for="ai-token" data-t="aiToken"></label><input id="ai-token" autocomplete="off" placeholder="${v['ai.token'] === SECRET_SET_MARK ? esc(SECRET_SET_MARK) : ''}"></div></div>
+    <div class="btn-row"><button class="btn" id="aiSave">${icon('check')}<span data-t="save"></span></button></div>`, { name: 'assistant' });
+  $('#asGo').onclick = async () => {
+    const question = $('#as-q').value.trim(); if (!question) return;
+    try {
+      const r = await busy($('#asGo'), () => post('/owner/assist', withLoc({ question })));
+      $('#asOut').innerHTML = `<div class="answer mt-3">${esc(r.answer || '')}</div><p class="hint" data-t="${r.local ? 'localModel' : 'cloudModel'}"></p>`; paint();
+    } catch (e) { fail(e); }
+  };
+  $('#aiSave').onclick = async () => {
+    try {
+      await busy($('#aiSave'), async () => {
+        await post('/owner/settings', { key: 'ai.enabled', value: $('#ai-on').checked ? '1' : '0' });
+        await post('/owner/settings', { key: 'ai.endpoint', value: $('#ai-endpoint').value.trim() });
+        await post('/owner/settings', { key: 'ai.model', value: $('#ai-model').value.trim() });
+        const tok = $('#ai-token').value.trim(); if (tok) await post('/owner/settings', { key: 'ai.token', value: tok });
+      });
+      toast(t('saved'));
+    } catch (e) { fail(e); }
+  };
 }

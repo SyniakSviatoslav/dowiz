@@ -8,7 +8,7 @@
 // an action names an intent, the hub's FSM answers.
 
 import { $, $$, esc, icon, t, lang, LANGS, setLang, retranslate, store, S, api, post, withLoc, logout, whenLoggedOut,
-         toast, sheet, closeSheet, bindSheetChrome, hydrate, setCurrency, displayCurrency, CURRENCIES, baseCurrency, POLL_MS } from '/admin/core.js';
+         toast, sheet, closeSheet, bindSheetChrome, hydrate, setCurrency, displayCurrency, CURRENCIES, baseCurrency, POLL_MS , confirm } from '/admin/core.js';
 import { safeGet, safeSet } from '/store/storage.js';
 
 /// The five tabs, their icons, their words, their modules.
@@ -110,6 +110,11 @@ function openState(){
     ${STATES.map(s => `<button type="button" class="choice ${v.status === s && !v.deliveryPaused ? 'on' : ''}" data-state="${s}">${icon(s === 'open' ? 'check' : s === 'busy' ? 'clock' : 'x')}<span class="t" data-t="${s}"></span>${icon('check', 'ck')}</button>`).join('')}
     <label class="switch mt-2"><input type="checkbox" id="pauseD" ${v.deliveryPaused ? 'checked' : ''}><span class="switch-k"></span><span class="t" data-t="paused"></span></label>`, { name: 'state' });
   for (const b of $$('[data-state]')) b.onclick = async () => {
+    if (b.dataset.state === 'closed' && v.status !== 'closed') {
+      // Closing stops every new order; the old console asked, and so does this one.
+      const ok = await confirm(t('closed'), t('closeVenueHint'), { danger: true });
+      if (!ok) return openState();
+    }
     try { await post('/owner/location', withLoc({ status: b.dataset.state })); await loadVenue(); paintVenue(); closeSheet(); toast(t('saved')); }
     catch (e) { toast(String(e.message || e)); }
   };

@@ -13,6 +13,8 @@ import { rerender } from '/admin/app.js';
 const FULL_AT_LOW_MULTIPLE = 4;
 /// The movements an owner can make by hand.
 const MOVES = [['received', 'received', 'download'], ['wasted', 'wasted', 'trash'], ['stocktake', 'counted', 'check']];
+/// The reasons a kitchen writes off stock, as the hub's vocabulary spells them.
+const WASTE_REASONS = ['spoiled', 'dropped', 'unsold'];
 
 let stock = null;
 
@@ -23,15 +25,17 @@ export async function render(host){
   $('#addSupply', host).onclick = () => openSupply(null);
   try { stock = await api('/owner/stock'); } catch (e) { $('#stockList', host).innerHTML = `<div class="empty">${icon('alert-triangle')}<b>${esc(t('loadFail'))}</b><span class="muted small">${esc(e.message || e)}</span></div>`; return; }
   const list = stock.supplies || [];
+  const lowN = list.filter(s => s.low || (s.available || 0) <= 0).length;
+  const h1 = $('.screen-h', host); if (h1 && lowN) h1.insertAdjacentHTML('beforeend', `<span class="pill warn">${lowN} <span data-t="low"></span></span>`);
   $('#stockList', host).innerHTML = list.length ? `<div class="rows">${list.map(sup => {
     const low = sup.lowAt || 0;
     const pct = low ? Math.min(100, Math.round(100 * (sup.available || 0) / (low * FULL_AT_LOW_MULTIPLE))) : 100;
     const state = (sup.available || 0) <= 0 ? 'bad' : sup.low ? 'warn' : 'ok';
     return `<button type="button" class="rowc" data-s="${esc(sup.id)}">${icon('bento')}
-      <span class="t"><b>${esc(sup.name || sup.id)}</b><small class="mono">${sup.available ?? 0} ${esc(sup.unit || '')}${sup.reserved ? ` · ${t('reserved') === 'reserved' ? 'held' : t('reserved')} ${sup.reserved}` : ''}${low ? ` · ${t('minLevel')} ${low}` : ''}</small>
+      <span class="t"><b>${esc(sup.name || sup.id)}</b><small class="mono">${sup.available ?? 0} ${esc(sup.unit || '')}${sup.reserved ? ` · ${t('reserved')} ${sup.reserved}` : ''}${sup.onHand != null ? ` · ${t('onShelf')} ${sup.onHand}` : ''}${low ? ` · ${t('minLevel')} ${low}` : ''}</small>
         <span class="gauge"><i class="${state === 'ok' ? '' : state}" data-w="${pct}"></i></span></span>
       <span class="pill ${state}" data-t="${state === 'bad' ? 'out' : state === 'warn' ? 'low' : 'onSale'}"></span></button>`; }).join('')}</div>
-    ${stock.stranded?.length ? `<p class="hint mt-3">${stock.stranded.map(s => `#${esc(String(s.order).slice(0, 8))} · ${esc(s.item)} × ${s.qty}`).join(' · ')}</p>` : ''}`
+    ${stock.stranded?.length ? `<section class="group mt-3"><p class="eyebrow" data-t="stranded"></p><p class="muted small" data-t="strandedHint"></p><div class="rows">${stock.stranded.map(s => `<div class="rowc off">${icon('alert-triangle')}<span class="t"><b>${esc(s.item)} × ${s.qty}</b><small class="mono">#${esc(String(s.order).slice(0, 8))}</small></span></div>`).join('')}</div></section>` : ''}`
     : `<div class="empty">${icon('bento')}<b data-t="noStock"></b><span class="muted small" data-t="stockHint"></span></div>`;
   host.onclick = e => { const r = e.target.closest('[data-s]'); if (r) openMove(r.dataset.s); };
 }
@@ -57,10 +61,12 @@ function openMove(id){
     <p class="mono muted">${sup.available ?? 0} ${esc(sup.unit || '')}</p>
     <div class="seg" id="kind">${MOVES.map(([k, key, ic], i) => `<button type="button" class="seg-b ${i === 0 ? 'on' : ''}" data-k="${k}">${icon(ic)}<span data-t="${key}"></span></button>`).join('')}</div>
     <label for="m-qty" data-t="level"></label><input id="m-qty" inputmode="decimal">
+    <div id="mReasons" hidden><label data-t="reason"></label><div class="chips">${WASTE_REASONS.map(r => `<button type="button" class="chip" data-r="${r}" data-t="${r}"></button>`).join('')}</div></div>
     <label for="m-reason" data-t="reason"></label><input id="m-reason">
     <div class="btn-row"><button class="btn ghost" id="mEdit">${icon('tools-kitchen-2')}<span data-t="edit"></span></button><button class="btn" id="mGo">${icon('check')}<span data-t="save"></span></button></div>`, { name: 'move' });
   let kind = MOVES[0][0];
-  for (const b of $$('[data-k]', $('#sheetIn'))) b.onclick = () => { kind = b.dataset.k; for (const x of $$('[data-k]', $('#sheetIn'))) x.classList.toggle('on', x === b); };
+  for (const b of $$('[data-k]', $('#sheetIn'))) b.onclick = () => { kind = b.dataset.k; for (const x of $$('[data-k]', $('#sheetIn'))) x.classList.toggle('on', x === b); $('#mReasons').hidden = kind !== 'wasted'; };
+  for (const b of $$('[data-r]', $('#sheetIn'))) b.onclick = () => { $('#m-reason').value = b.dataset.r; for (const x of $$('[data-r]', $('#sheetIn'))) x.classList.toggle('on', x === b); };
   $('#mEdit').onclick = () => openSupply(sup);
   $('#mGo').onclick = async () => {
     const qty = Number($('#m-qty').value); if (!Number.isFinite(qty)) return toast(t('required'));

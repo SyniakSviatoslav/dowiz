@@ -224,6 +224,96 @@ pub const KNOWN: &[Known] = &[
                Send the bot any message first, then use the test button.",
         default: "",
     },
+    // ── WhatsApp, through Meta's Cloud API ──
+    //
+    // The venue's own WhatsApp Business number. A permanent System User token
+    // and the number's phone-number id come from the Meta developer console;
+    // `to` is where new orders are announced. The same credentials answer
+    // customers who write to the number (see `channel_messages`).
+    Known {
+        key: "notify.whatsapp.token",
+        label: "WhatsApp access token",
+        hint: "A permanent token from Meta Business (System User, whatsapp_business_messaging).",
+        default: "",
+    },
+    Known {
+        key: "notify.whatsapp.phone_id",
+        label: "WhatsApp phone number id",
+        hint: "The numeric id of your business number in the WhatsApp Manager, not the number itself.",
+        default: "",
+    },
+    Known {
+        key: "notify.whatsapp.to",
+        label: "WhatsApp number to notify",
+        hint: "International format without +, e.g. 355691234567. Message the business number \
+               from it once a day, or Meta only allows approved templates.",
+        default: "",
+    },
+    Known {
+        key: "notify.whatsapp.verify",
+        label: "Webhook verify token",
+        hint: "Any phrase you choose; paste the same one into the webhook form in Meta's console.",
+        default: "",
+    },
+    Known {
+        key: "notify.meta.secret",
+        label: "Meta app secret",
+        hint: "Optional. When set, every webhook delivery must carry Meta's signature over it.",
+        default: "",
+    },
+    // ── Instagram, through the Graph API ──
+    Known {
+        key: "social.instagram.token",
+        label: "Instagram access token",
+        hint: "A long-lived token with instagram_content_publish and instagram_manage_messages.",
+        default: "",
+    },
+    Known {
+        key: "social.instagram.user_id",
+        label: "Instagram account id",
+        hint: "The numeric id of the professional account, from the Graph API or the Meta console.",
+        default: "",
+    },
+    // ── cloud storage: any S3-compatible bucket ──
+    //
+    // R2, AWS S3, Backblaze B2, Wasabi, MinIO: keys alone connect them, which
+    // is why this and not a Drive OAuth dance is the venue's off-site copy.
+    Known {
+        key: "cloud.s3.endpoint",
+        label: "Storage endpoint",
+        hint: "https://<account>.r2.cloudflarestorage.com, https://s3.eu-central-1.amazonaws.com, …",
+        default: "",
+    },
+    Known {
+        key: "cloud.s3.region",
+        label: "Storage region",
+        hint: "auto for R2; the region name for AWS and others.",
+        default: "auto",
+    },
+    Known {
+        key: "cloud.s3.bucket",
+        label: "Bucket",
+        hint: "The bucket the backups land in. It must already exist.",
+        default: "",
+    },
+    Known {
+        key: "cloud.s3.key",
+        label: "Access key id",
+        hint: "The key pair of a user allowed to write to that bucket.",
+        default: "",
+    },
+    Known {
+        key: "cloud.s3.secret",
+        label: "Secret access key",
+        hint: "Stored, never shown again.",
+        default: "",
+    },
+    Known {
+        key: "cloud.s3.prefix",
+        label: "Object prefix",
+        hint: "A folder inside the bucket; the venue's id is appended.",
+        default: "dowiz",
+    },
 ];
 
 impl Settings {

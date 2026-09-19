@@ -6,7 +6,7 @@
 // the last place they were seen (from the same fixes the live estimate
 // uses), and the switch that lets them take orders at all.
 
-import { $, $$, esc, icon, t, S, api, post, withLoc, toast, sheet, closeSheet, busy, ago, switchEl } from '/admin/core.js';
+import { $, $$, esc, icon, t, S, api, post, withLoc, toast, sheet, closeSheet, busy, ago, switchEl, money, confirm } from '/admin/core.js';
 import { loadCouriers, rerender } from '/admin/app.js';
 
 /// A courier's last fix is shown as a map link at this zoom.
@@ -19,13 +19,13 @@ export async function render(host){
   $('#invite', host).onclick = openInvite;
   let d;
   try { d = await api('/owner/couriers'); S.couriers = d.couriers || []; } catch (e) { $('#clist', host).innerHTML = `<div class="empty">${icon('alert-triangle')}<b>${esc(t('loadFail'))}</b></div>`; return; }
-  const cs = d.couriers || [], inv = (d.invites || []).filter(i => !i.expired);
+  const cs = d.couriers || [], inv = d.invites || [];
   $('#clist', host).innerHTML = `
     ${cs.length ? `<div class="rows">${cs.map(c => `<button type="button" class="rowc ${c.active ? '' : 'off'}" data-c="${esc(c.id)}">${icon('bike')}
       <span class="t"><b>${esc(c.name || c.phone || c.id)}</b><small class="mono">${esc(c.phone || '')}</small></span>
       <span class="pill ${c.onShift ? 'ok' : ''}" data-t="${c.onShift ? 'onShift' : 'offShift'}"></span>${icon('chevron-right', 'chev')}</button>`).join('')}</div>`
       : `<div class="empty">${icon('bike')}<b data-t="noCouriers"></b><span class="muted small" data-t="inviteHint"></span></div>`}
-    ${inv.length ? `<div class="group mt-3"><p class="eyebrow" data-t="invite"></p><div class="rows">${inv.map(i => `<div class="rowc">${icon('ticket')}<span class="t"><b>${esc(i.name)}</b><small>${esc(t('inviteCode'))} · ${esc(new Date(i.untilMs).toLocaleDateString())}</small></span>
+    ${inv.length ? `<div class="group mt-3"><p class="eyebrow" data-t="invite"></p><div class="rows">${inv.map(i => `<div class="rowc ${i.expired ? 'off' : ''}">${icon('ticket')}<span class="t"><b>${esc(i.name)}</b><small>${esc(t(i.expired ? 'inviteExpired' : 'inviteWaiting'))} · ${esc(new Date(i.untilMs).toLocaleDateString())}</small></span>
       <button type="button" class="act danger" data-uninvite="${esc(i.id)}">${icon('x')}</button></div>`).join('')}</div></div>` : ''}`;
   host.onclick = async e => {
     const u = e.target.closest('[data-uninvite]'); if (u) { try { await busy(u, () => post(`/owner/couriers/${encodeURIComponent(u.dataset.uninvite)}/uninvite`, withLoc())); rerender(); } catch (err) { toast(String(err.message || err)); } return; }
@@ -60,12 +60,22 @@ async function openCourier(id){
   $('#cBody').innerHTML = `
     <div class="fact">${icon('phone')}<span class="v"><span class="k" data-t="phone"></span>${c.phone ? `<a href="tel:${esc(c.phone)}">${esc(c.phone)}</a>` : '—'}</span></div>
     <div class="fact">${icon('clock')}<span class="v"><span class="k" data-t="onShift"></span><span data-t="${(d?.onShift ?? c.onShift) ? 'onShift' : 'offShift'}"></span></span></div>
-    <div class="fact">${icon('scroll')}<span class="v"><span class="k" data-t="deliveries"></span><b class="mono">${d?.today?.deliveries ?? 0}</b> · ${t('today')}</span></div>
+    <div class="stats">
+      <div class="stat"><small data-t="deliveries"></small><b>${d?.today?.deliveries ?? 0}</b><small class="muted" data-t="today"></small></div>
+      <div class="stat"><small data-t="deliveries30"></small><b>${d?.delivered30d ?? 0}</b></div>
+      <div class="stat"><small data-t="inFlight"></small><b>${d?.inFlight ?? 0}</b></div>
+      <div class="stat"><small data-t="cashHeld"></small><b>${money(d?.today?.cashCollected ?? 0)}</b></div>
+    </div>
     <div class="fact">${icon('map-pin')}<span class="v"><span class="k" data-t="lastSeen"></span>${fix ? `${esc(ago(fix.recordedAtMs))} · <a href="https://www.google.com/maps/search/?api=1&query=${fix.latUdeg / 1e6},${fix.lonUdeg / 1e6}&z=${MAP_ZOOM}" target="_blank" rel="noopener">Google Maps</a>` : '—'}</span></div>
     ${switchEl('c-active', d?.active ?? c.active, 'activeC')}`;
   for (const el of $$('[data-t]', $('#cBody'))) el.textContent = t(el.dataset.t);
   $('#c-active').onchange = async e => {
-    try { await post(`/owner/couriers/${encodeURIComponent(id)}/active`, withLoc({ active: e.target.checked })); toast(t('saved')); loadCouriers().then(rerender); }
+    if (!e.target.checked) {
+      // Deactivating ends every session the courier holds; that deserves a pause.
+      const ok = await confirm(t('deactivate'), t('deactivateHint'), { danger: true });
+      if (!ok) return openCourier(id);
+    }
+    try { await post(`/owner/couriers/${encodeURIComponent(id)}/active`, withLoc({ active: e.target.checked })); toast(t('saved')); loadCouriers().then(rerender); openCourier(id); }
     catch (err) { toast(String(err.message || err)); e.target.checked = !e.target.checked; }
   };
 }
