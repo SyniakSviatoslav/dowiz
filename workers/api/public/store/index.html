@@ -55,6 +55,14 @@
     <i class="ti ti-coin-hole" aria-hidden="true"></i><span class="cur-code money" id="curCode"></span></button>
 </div></header>
 
+<!-- The metal, for SVG strokes: the same foil the CSS draws, as a gradient any
+     stroke on the page can refer to by id. The colours are the venue's accent
+     lightened and darkened at runtime (app.js paints the stops). -->
+<svg width="0" height="0" aria-hidden="true" class="defs"><defs>
+  <linearGradient id="gold-stroke" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" class="stop-lo"/><stop offset=".3" class="stop-mid"/><stop offset=".52" class="stop-hi"/><stop offset=".74" class="stop-mid"/><stop offset="1" class="stop-lo"/>
+  </linearGradient>
+</defs></svg>
 <main id="app" class="wrap" aria-live="polite"></main>
 
 <!-- The floating order pill: count, label, total. A <Money> that snaps. -->

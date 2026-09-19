@@ -9,12 +9,8 @@
 // degree, one beat after the one before it. The Web Animations API drives
 // all of it, so the DOM is settled at once and the screen catches up.
 //
-// SWEEP -- a change of language or currency. A bank of fog rolls across the
-// screen, left to right, with a hairline of the accent on its leading edge;
-// the words and the numbers are replaced while the fog is over them, and each
-// node that changed gets a wisp of its own -- the old value blurs and drifts,
-// the new one settles -- so what emerges from the fog is the new page, and
-// the eye saw the weather, not a cut.
+// RELABEL -- a change of language or currency: each changed value turns
+// over where it stands, in one wave down the page. See below.
 //
 // Money is never counted up or tweened: it is replaced under the fog, whole.
 // With reduced motion every one of these is the plain change.
@@ -22,9 +18,9 @@
 import { $$, reduced } from '/store/ui.js';
 
 /// The morph's beats.
-const LEAVE_MS = 340;
-const MOVE_MS = 460;
-const ENTER_MS = 380;
+const LEAVE_MS = 320;
+const MOVE_MS = 420;
+const ENTER_MS = 420;
 const ENTER_STAGGER_MS = 28;
 const ENTER_STAGGER_CAP_MS = 420;
 /// A leaving card drifts this far and turns this much, at most.
@@ -35,12 +31,6 @@ const DEAL_PX = 28;
 const DEAL_DEG = -2.5;
 /// Only cards near the screen are animated; the rest change under the fold.
 const NEAR_SCREEN_PX = 400;
-/// The sweep's beats: the fog crosses in this long and the values swap when
-/// its thick middle is over the screen's middle.
-const SWEEP_MS = 980;
-const SWEEP_SWAP_AT = 0.46;
-const WISP_MS = 520;
-const WISP_PX = 10;
 const EASE_TIDE = 'cubic-bezier(.37,0,.63,1)';
 const EASE_SNAP = 'cubic-bezier(.32,.72,0,1)';
 
@@ -102,47 +92,29 @@ export function morph(change, { quick = false } = {}){
   return Promise.all(done);
 }
 
-/// The fog: one element, made once, kept.
-function mist(){
-  let el = document.getElementById('mist');
-  if (!el) {
-    el = document.createElement('div'); el.id = 'mist'; el.className = 'mist'; el.setAttribute('aria-hidden', 'true');
-    el.innerHTML = '<i class="mist-edge"></i>';
-    document.body.appendChild(el);
+/// RELABEL -- a change of language or currency. Nothing sweeps the page:
+/// every node whose text changed turns over where it stands -- the new value
+/// rises into place from a hair below, out of a small blur -- in a wave that
+/// runs down the screen, so the eye reads the change as one gesture across
+/// the page and not as a hundred cuts. Money is replaced whole, never
+/// counted. `swap` is a DOM write; data must be in hand before it is called.
+const RELABEL_MS = 420;
+const RELABEL_WAVE_MS = 260;
+const RELABEL_RISE = '.45em';
+const RELABEL_SELECTOR = '[data-money],[data-t],[data-t-tag],[data-t-st],.card-name,.card-desc,.sec-name,.rail-chip,.vp-cell b,.brand,#curCode';
+export async function relabel(swap){
+  if (reduced()) { await swap(); return; }
+  const before = new Map();
+  for (const n of document.querySelectorAll(RELABEL_SELECTOR)) before.set(n, n.textContent);
+  await swap();
+  for (const [n, was] of before) {
+    if (!n.isConnected || n.textContent === was) continue;
+    const r = n.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > innerHeight || r.width === 0) continue;
+    const delay = Math.max(0, Math.min(1, r.top / innerHeight)) * RELABEL_WAVE_MS;
+    n.animate([
+      { opacity: 0, transform: `translateY(${RELABEL_RISE})`, filter: 'blur(3px)' },
+      { opacity: 1, transform: 'translateY(0)', filter: 'blur(0)' },
+    ], { duration: RELABEL_MS, delay, easing: EASE_TIDE, fill: 'backwards' });
   }
-  return el;
-}
-
-/// Roll the fog across and run `swap` when it covers the middle. `swap` may
-/// return a promise; the fog's thick part waits for nothing -- data must be
-/// in hand before the sweep starts, so the swap is a DOM write.
-export function sweep(swap){
-  if (reduced()) { swap(); return Promise.resolve(); }
-  const el = mist();
-  const snapshot = () => {
-    const out = new Map();
-    for (const n of document.querySelectorAll('[data-money],[data-t],[data-t-tag],[data-t-st],.card-name,.card-desc,.sec-name,.rail-chip')) out.set(n, n.textContent);
-    return out;
-  };
-  const beforeText = snapshot();
-  el.classList.add('on');
-  const run = el.animate([
-    { transform: 'translateX(-105%)' }, { transform: 'translateX(105%)' },
-  ], { duration: SWEEP_MS, easing: EASE_TIDE, fill: 'forwards' });
-  return new Promise(resolve => {
-    setTimeout(async () => {
-      await swap();
-      // The wisps: every node whose value changed drifts from the old to the new.
-      for (const [n, was] of beforeText) {
-        if (!n.isConnected || n.textContent === was) continue;
-        const r = n.getBoundingClientRect();
-        if (r.bottom < 0 || r.top > innerHeight) continue;
-        n.animate([
-          { opacity: .1, filter: 'blur(4px)', transform: `translateX(${WISP_PX}px)` },
-          { opacity: 1, filter: 'blur(0)', transform: 'translateX(0)' },
-        ], { duration: WISP_MS, easing: EASE_TIDE });
-      }
-      run.finished.catch(() => {}).then(() => { el.classList.remove('on'); run.cancel(); resolve(); });
-    }, SWEEP_MS * SWEEP_SWAP_AT);
-  });
 }

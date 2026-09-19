@@ -39,13 +39,13 @@ const ANOMALY_MS = 3200;
 const FAILED = new Set(['REJECTED', 'CANCELLED']);
 
 /// The dust, on the page's own canvas. Off must mean the module is never fetched.
-export async function initSea(){
+export async function initSea({ colour: given, leaf: givenLeaf } = {}){
   if (!on('sea') || dust) return dust;
   try {
     const { createDust } = await import('/lib/dust.js');
     const d = createDust();
-    const colour = state.loc?.stage?.warm || getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim();
-    if (!d.init(document.getElementById('sea'), { colour, leaf: state.loc?.stage?.sage })) return null;
+    const colour = given || state.loc?.stage?.warm || getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim();
+    if (!d.init(document.getElementById('sea'), { colour, leaf: givenLeaf || state.loc?.stage?.sage })) return null;
     d.setReducedMotion(matchMedia('(prefers-reduced-motion: reduce)').matches);
     dust = d;
   } catch { dust = null; }

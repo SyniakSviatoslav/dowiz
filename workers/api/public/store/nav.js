@@ -14,7 +14,7 @@
 import { history, fetchRemembered, CURRENCIES, baseCurrency, displayCurrency, setDisplayCurrency, moneyEl, repaintMoney } from '/store/state.js';
 import { t, lang, LANGS, retranslate } from '/store/i18n.js';
 import { $, $$, esc, icon, sheet, closeSheet, isSheetOpen, sheetName } from '/store/ui.js';
-import { sweep } from '/store/motion.js';
+import { relabel } from '/store/motion.js';
 import { openCart } from '/store/cart.js';
 import { openVenue } from '/store/venue.js';
 import { focusSearch, scrollTop } from '/store/menu.js';
@@ -108,7 +108,7 @@ export function openCurrency(){
     <p class="muted small"><span data-t="chargedIn"></span>: <b class="money">${esc(base)}</b></p>`, { name: 'currency' });
   for (const b of $$('[data-c]', $('#sheetIn'))) b.onclick = async () => {
     for (const x of $$('[data-c]', $('#sheetIn'))) { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); }
-    await sweep(() => setDisplayCurrency(b.dataset.c));
+    await relabel(() => setDisplayCurrency(b.dataset.c));
   };
 }
 

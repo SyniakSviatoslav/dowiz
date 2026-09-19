@@ -70,15 +70,28 @@ export function kcalText(p){
   return `${n.approx ? APPROX + ' ' : ''}${kcal}`;
 }
 
-/// Which shape a dish takes on the spread, by its place in the section.
-const WIDE_EVERY = 5;
-const shapeOf = i => i === 0 ? 'feat' : (i % WIDE_EVERY === WIDE_EVERY - 1 ? 'wide' : 'plate');
+/// The shapes of a section's dishes, laid so the two-column grid never has a
+/// hole: the first is the feature; the rest go in pairs of plates, every
+/// third pair replaced by one wide dish, and a plate left alone at the end
+/// is made wide too.
+const WIDE_EVERY_PAIRS = 3;
+function shapesOf(n){
+  const out = ['feat'];
+  let pair = 0;
+  for (let i = 1; i < n;) {
+    const remaining = n - i;
+    if (remaining === 1) { out.push('wide'); i++; break; }
+    pair++;
+    if (pair % WIDE_EVERY_PAIRS === 0) { out.push('wide'); i++; continue; }
+    out.push('plate', 'plate'); i += 2;
+  }
+  return out;
+}
 /// The section's number as the spread's folio: two figures.
 const FOLIO_DIGITS = 2;
 
-function card(p, catId, i = 1){
+function card(p, catId, shape = 'plate'){
   const out = !p.available;
-  const shape = shapeOf(i);
   const tags = Array.isArray(p.tags) ? p.tags : [];
   const facts = [];
   const kcal = kcalText(p);
@@ -94,7 +107,7 @@ function card(p, catId, i = 1){
         : fallbackArt(p.name)}
         <span class="card-price">${moneyEl(p.price)}</span>
         ${out ? `<span class="card-out" data-t="soldOut"></span>` : ''}
-        ${tags.includes('popular') ? `<span class="card-flag">${icon('sparkles')}<span data-t-tag="popular"></span></span>` : ''}
+        ${tags.includes('popular') ? `<span class="card-flag">${icon('sakura')}<span data-t-tag="popular"></span></span>` : ''}
       </span>
       <span class="card-body">
         <span class="card-name">${esc(p.name)}</span>
@@ -126,15 +139,13 @@ function filtersMarkup(cats){
              data-t-attr="placeholder:search aria-label:search" value="${esc(state.q || '')}">
       <button id="qx" type="button" data-t-attr="aria-label:clear" ${state.q ? '' : 'hidden'}>${icon('x')}</button>
       <button id="qmic" type="button" class="mic" data-t-attr="aria-label:voice title:voice">${icon('microphone')}</button>
+      <button id="qsort" type="button" class="mic ${state.sort !== SORTS[0] ? 'on' : ''}" data-t-attr="aria-label:sortBy title:sortBy">${icon('arrows-sort')}</button>
     </label>
     <div class="tags" id="tags" role="group" aria-label="${esc(t('filters'))}">
       <button type="button" class="tag ${!state.tag ? 'on' : ''}" data-tag="" aria-pressed="${!state.tag}">
         ${icon('fan')}<span data-t="all"></span></button>
       ${tags.map(tg => `<button type="button" class="tag ${state.tag === tg ? 'on' : ''}" data-tag="${esc(tg)}" aria-pressed="${state.tag === tg}">
         ${TAG_ICON[tg] ? icon(TAG_ICON[tg]) : '<span class="tag-dot"></span>'}<span data-t-tag="${esc(tg)}"></span></button>`).join('')}
-      <label class="tag sel">${icon('filter')}<select id="sort" data-t-attr="aria-label:sortBy">
-        ${SORTS.map(s => `<option value="${s}" ${state.sort === s ? 'selected' : ''} data-t="sort${s[0].toUpperCase()}${s.slice(1)}"></option>`).join('')}
-      </select></label>
     </div>
   </div>`;
 }
@@ -145,7 +156,7 @@ export function buildMenu(cats){
     <div id="sections">${cats.map((c, ci) => `
       <section class="sec" id="c-${esc(c.id)}" data-cat="${esc(c.id)}">
         <h2 class="sec-h"><span class="sec-idx" aria-hidden="true">${String(ci + 1).padStart(FOLIO_DIGITS, '0')}</span><span class="sec-name">${esc(c.name)}</span><i class="sec-rule" aria-hidden="true"></i><span class="sec-n muted">${(c.products || []).length}</span></h2>
-        <div class="cards">${(c.products || []).map((p, i) => card(p, c.id, i)).join('')}</div>
+        <div class="cards">${(() => { const shapes = shapesOf((c.products || []).length); return (c.products || []).map((p, i) => card(p, c.id, shapes[i])).join(''); })()}</div>
       </section>`).join('')}
     </div>
     <div class="empty" id="noHits" hidden>${icon('search-off', 'ico-lg')}<b data-t="noHits"></b>
@@ -262,9 +273,10 @@ function bind(){
     }
     if (e.target.closest('#qx')) { state.q = ''; $('#q').value = ''; $('#qx').hidden = true; refilter(); $('#q').focus(); return; }
     if (e.target.closest('#qmic')) { import('/store/voice-order.js').then(m => m.openVoice()); return; }
+    if (e.target.closest('#qsort')) { openSort(); return; }
     if (e.target.closest('#qreset')) {
       state.q = ''; state.tag = null; state.sort = SORTS[0];
-      $('#q').value = ''; $('#qx').hidden = true; $('#sort').value = SORTS[0];
+      $('#q').value = ''; $('#qx').hidden = true; $('#qsort')?.classList.remove('on');
       for (const b of $$('[data-tag]')) { const onn = !b.dataset.tag; b.classList.toggle('on', onn); b.setAttribute('aria-pressed', String(onn)); }
       refilter({ animate: true });
       return;
@@ -273,7 +285,24 @@ function bind(){
   const q = $('#q');
   const run = debounce(() => { state.q = q.value; $('#qx').hidden = !state.q; refilter({}, { quick: true }); }, SEARCH_DEBOUNCE_MS);
   q.addEventListener('input', run);
-  $('#sort').onchange = e => { state.sort = e.target.value; refilter({ animate: true }); };
+
+}
+
+/// The sort, chosen from a sheet of four the way a language is: one row each,
+/// the chosen one ticked. The button by the search lights when a sort other
+/// than the venue's own order is on.
+const SORT_ICON = { pop: 'scroll', low: 'chevron-down', high: 'chevron-up', az: 'fan' };
+async function openSort(){
+  const { sheet, closeSheet } = await import('/store/ui.js');
+  sheet(`<p class="eyebrow" data-t="filters"></p><h2 data-t="sortBy"></h2>
+    <div class="choices" role="radiogroup">${SORTS.map(k => `<button type="button" class="choice ${state.sort === k ? 'on' : ''}" data-sort="${k}" aria-pressed="${state.sort === k}">
+      ${icon(SORT_ICON[k], 'choice-ic')}<span class="choice-name" data-t="sort${k[0].toUpperCase()}${k.slice(1)}"></span>${icon('check', 'choice-ck')}</button>`).join('')}</div>`, { name: 'sort' });
+  for (const b of $$('[data-sort]', $('#sheetIn'))) b.onclick = () => {
+    state.sort = b.dataset.sort;
+    $('#qsort')?.classList.toggle('on', state.sort !== SORTS[0]);
+    closeSheet();
+    refilter({ animate: true });
+  };
 }
 
 /// The venue's own words in a new language, patched by id. Names, descriptions

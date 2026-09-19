@@ -17,7 +17,7 @@
 // credits keep their place. The title changes only when the status does.
 
 import { state, tokenFor, moneyEl, on, API } from '/store/state.js';
-import { t } from '/store/i18n.js';
+import { t, lang } from '/store/i18n.js';
 import { $, $$, esc, icon, sheet, closeSheet, toast, whenSheetCloses, stars } from '/store/ui.js';
 import { openOcean, phaseOf, seaRest } from '/store/sea.js';
 
@@ -94,13 +94,30 @@ function bindCopy(){
 }
 
 // ── the credits: the venue's guests, one at a time ──────────────────────────
+/// The language a review is written in, from its letters: Cyrillic is
+/// Ukrainian here, the Albanian diacritics are Albanian, the rest English.
+const CYRILLIC = /[\u0400-\u04FF]/;
+const ALBANIAN = /[ëçË]|\b(dhe|është|shumë|për|nuk)\b/i;
+const langOf = text => CYRILLIC.test(text) ? 'uk' : ALBANIAN.test(text) ? 'sq' : 'en';
+/// The review in the reader's language: a translation the venue holds, else
+/// the original when it already is that language, else nothing.
+function reviewText(r){
+  const own = String(r.text || '').trim();
+  const tr = r.translations?.[lang];
+  if (tr && String(tr).trim()) return String(tr).trim();
+  return langOf(own) === lang ? own : null;
+}
 function goodReviews(){
   const list = state.loc?.google?.reviews;
   if (!Array.isArray(list)) return [];
-  return list.filter(r => (r.rating || 0) >= REVIEW_MIN_RATING && String(r.text || '').trim().length >= REVIEW_MIN_CHARS);
+  const good = list.filter(r => (r.rating || 0) >= REVIEW_MIN_RATING && String(r.text || '').trim().length >= REVIEW_MIN_CHARS);
+  const inLang = good.filter(r => reviewText(r));
+  // A venue with no review in the reader's language still has guests: the
+  // originals are shown rather than nothing.
+  return inLang.length ? inLang : good;
 }
 function reviewMarkup(r){
-  const text = String(r.text).trim();
+  const text = reviewText(r) || String(r.text).trim();
   return `<figure class="credit">
     <blockquote>“${esc(text.length > REVIEW_MAX_CHARS ? text.slice(0, REVIEW_MAX_CHARS - 1) + '…' : text)}”</blockquote>
     <figcaption><span class="rev-stars" aria-hidden="true">${stars(r.rating)}</span><b>${esc(r.author || '')}</b></figcaption>
@@ -133,7 +150,10 @@ function episodeMarkup(order, eta){
   const done = st === 'DELIVERED';
   return `<div class="ep">
     <p class="ep-eyebrow"><span data-t="episode"></span> · #${esc(String(order.id).slice(0, ORDER_ID_SHOWN))} · ${esc(state.loc?.name || '')}</p>
-    <h2 class="ep-title ${st !== lastStatus ? 'flip' : ''}" data-t-st="${esc(st)}"></h2>
+    <div class="ep-plate">
+      <h2 class="ep-title ${st !== lastStatus ? 'flip' : ''}" data-t-st="${esc(st)}"></h2>
+      ${!dead ? `<div class="ep-dots" aria-hidden="true">${FLOW.map((f, n) => `<i class="${n < i ? 'done' : n === i ? 'now' : ''}"></i>`).join('')}</div>` : ''}
+    </div>
     ${!dead ? `<p class="ep-step mono"><span data-t="stepOf"></span> ${i + 1} <span data-t="ofSteps"></span> ${FLOW.length}${!done && i + 1 < FLOW.length ? ` · <span data-t="nextUp"></span>: <span data-t-st="${FLOW[i + 1]}"></span>` : ''}</p>` : ''}
     <div class="ep-line" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(phase * 100)}"><i id="epBar"></i></div>
     <div class="ep-facts">

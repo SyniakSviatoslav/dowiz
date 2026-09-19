@@ -90,7 +90,7 @@ const ENSO_SVG = `<svg class="enso" viewBox="0 0 200 200" aria-hidden="true">
 /// gold veins, three of them gold -- each one on its own slow flutter. It
 /// grows in from the top-left corner behind the name, the way the mark's
 /// branch curls over its bowl.
-const LEAVES = [
+export const LEAVES = [
   // x, y, angle, scale, gold?
   [56, 196, -62, 1.0, false], [78, 150, -40, 1.05, true], [98, 170, 24, .8, false],
   [112, 118, -58, 1.0, false], [132, 128, 18, .85, true], [150, 88, -46, 1.0, false],

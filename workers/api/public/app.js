@@ -16,7 +16,8 @@ import { refreshBar, bounceBar, openCart } from '/store/cart.js';
 import { openVenue, refreshHero } from '/store/venue.js';
 import { mountNav, onChangeLang } from '/store/nav.js';
 import { initSea, seaArrive, seaTouch } from '/store/sea.js';
-import { sweep } from '/store/motion.js';
+import { relabel } from '/store/motion.js';
+import { LEAVES } from '/store/venue.js';
 
 /// A touch on the venue's mark is a touch on the water beneath it.
 const TOUCH_STRENGTH = 0.55;
@@ -25,20 +26,38 @@ const TOUCH_STRENGTH = 0.55;
 const PARALLAX = 0.28;
 const PARALLAX_MAX_PX = 140;
 
-/// THE LOADER IS THE FIRST FRAME OF THE FILM, not a grey placeholder. While
-/// the menu is on its way the page shows the venue's stage the way the hero
-/// will: an enso drawing itself in the accent, the seal, the name arriving
-/// letter by letter, a hairline growing under it. The venue's colours, seal
-/// and name are REMEMBERED from the last visit (one small record per venue),
-/// so a returning customer never sees the platform's default paper flash
-/// before their venue's own; the first visit gets the same frame in dowiz's
-/// tones with the platform's name.
+/// THE LOADER IS THE FIRST FRAME OF THE FILM, not a grey placeholder, and
+/// not a spinner. While the menu is on its way the page shows the venue's
+/// mark being MADE: ink blooms on the paper, the branch draws itself from its
+/// root, the leaves open one by one, the enso is brushed round, the seal is
+/// stamped down with a press, the name rises letter by letter, a hairline
+/// grows under it; then the whole frame breathes -- leaves flutter, dust
+/// drifts -- until the menu arrives and the frame dissolves upward. The
+/// venue's colours, seal and name are REMEMBERED from the last visit, so a
+/// returning customer never sees the platform's paper flash before their
+/// venue's own; the first visit gets the same scene in dowiz's tones.
 const BOOT_KEY = 'dw_boot_' + SLUG;
 const ENSO_R = 78;
-const loader = ({ name, seal }) => `
+/// How long the frame takes to dissolve when the menu arrives.
+const LOADER_OUT_MS = 450;
+const loader = ({ name, seal, motif }) => `
   <div class="loader" aria-busy="true">
-    <div class="loader-ring"><svg class="loader-enso" viewBox="0 0 200 200" aria-hidden="true"><circle cx="100" cy="100" r="${ENSO_R}" pathLength="100"/></svg>
-    ${seal ? `<span class="loader-seal" aria-hidden="true">${esc(seal)}</span>` : ''}</div>
+    <div class="ld-scene" aria-hidden="true">
+      <svg class="ld-bloom" viewBox="0 0 200 200"><defs><filter id="ld-soft"><feGaussianBlur stdDeviation="12"/></filter></defs><circle cx="100" cy="100" r="70" filter="url(#ld-soft)"/></svg>
+      ${motif === 'leaf' ? `<svg class="ld-branch" viewBox="0 0 300 240">
+        <defs><symbol id="ld-lf" viewBox="-2 -14 44 28"><path class="blade" d="M0 0C8-13 26-15 38-3 26 9 8 9 0 0z"/><path class="vein" d="M2 0C12-4 24-6 36-3"/></symbol></defs>
+        <path class="bark ld-draw" pathLength="100" d="M4 236C50 190 70 130 120 92S210 30 296 14"/>
+        <path class="bark thin ld-draw" pathLength="100" d="M150 70C200 40 240 24 296 14"/>
+        <path class="bark thin ld-draw" pathLength="100" d="M110 100C130 80 150 78 175 84"/>
+        <path class="bark thin ld-draw" pathLength="100" d="M60 165C80 150 95 148 118 152"/>
+        ${LEAVES.map(([x, y, a, sc, gold], i) => `<g transform="translate(${x} ${y}) rotate(${a}) scale(${sc})"><use href="#ld-lf" class="leaf ld-leaf ${gold ? 'gold' : ''}" data-i="${i}" width="44" height="28" x="-2" y="-14"/></g>`).join('')}
+      </svg>` : ''}
+      <svg class="ld-enso" viewBox="0 0 200 200">
+        <defs><filter id="ld-ink" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency=".055" numOctaves="3" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="7" xChannelSelector="R" yChannelSelector="G"/></filter></defs>
+        <g filter="url(#ld-ink)"><circle class="enso-dry" cx="100" cy="100" r="${ENSO_R}" pathLength="100"/><circle class="ld-stroke" cx="100" cy="100" r="${ENSO_R}" pathLength="100"/></g>
+      </svg>
+      ${seal ? `<span class="ld-seal">${esc(seal)}</span><span class="ld-press"></span>` : ''}
+    </div>
     <p class="loader-name">${[...String(name)].map((ch, i) => `<i data-i="${i}">${ch === ' ' ? '&nbsp;' : esc(ch)}</i>`).join('')}</p>
     <span class="loader-line" aria-hidden="true"></span>
   </div>`;
@@ -92,9 +111,11 @@ async function load(){
   if (boot.theme) applyTheme(boot.theme);
   if (boot.stage) applyStage(boot.stage);
   if (boot.name) paintHeader({ name: boot.name, logoUrl: boot.logoUrl });
-  $('#app').innerHTML = loader({ name: boot.name || 'dowiz', seal: boot.stage?.seal || '' });
-  // Each letter's delay through CSSOM: `style-src 'self'` forbids the attribute.
-  for (const el of $('#app').querySelectorAll('.loader-name i')) el.style.setProperty('--i', el.dataset.i);
+  $('#app').innerHTML = loader({ name: boot.name || 'dowiz', seal: boot.stage?.seal || '', motif: boot.stage?.motif || 'leaf' });
+  // Each letter's and leaf's delay through CSSOM: `style-src 'self'` forbids the attribute.
+  for (const el of $('#app').querySelectorAll('.loader-name i, .ld-leaf')) el.style.setProperty('--i', el.dataset.i);
+  // The dust drifts from the first frame, in the remembered tones.
+  initSea({ colour: boot.stage?.warm, leaf: boot.stage?.sage }).then(seaArrive);
   try {
     const d = await fetchMenu();
     state.loc = d.location; state.cats = d.categories || [];
@@ -105,6 +126,12 @@ async function load(){
     rememberBoot(d.location);
     document.documentElement.lang = lang;
     await resolveCurrency();
+    // The frame dissolves upward before the spread takes its place.
+    const ld = $('.loader');
+    if (ld && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      ld.classList.add('out');
+      await new Promise(r => setTimeout(r, LOADER_OUT_MS));
+    }
     buildMenu(state.cats);
     refreshBar();
     retranslate(document);
@@ -136,7 +163,7 @@ async function changeLang(code){
   // something to leave behind; then everything is rewritten under it.
   let d = null;
   try { d = await fetchMenuIn(code); } catch { /* the words stay as they were */ }
-  await sweep(() => {
+  await relabel(() => {
     setLang(code);
     if (d) { state.loc = d.location; state.cats = d.categories || []; indexProducts(state.cats); patchTexts(state.cats); }
     refreshHero();

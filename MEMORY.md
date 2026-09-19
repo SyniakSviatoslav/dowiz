@@ -1015,3 +1015,10 @@ its source, which is why translations, logo and hours "did not work". Verified l
   plate / wide, outline folio); the dish's photo flies from card to sheet, rows dealt, haptics.
   Two CSS lessons: `.card-media` was an inline <span> so `aspect-ratio` never applied (photos
   were always 3:2), and `height:100%` on the card button made the grid row size the card.
+- 2026-09-19: loader is a scene (ink bloom → branch draws → leaves open → enso brushed →
+  seal stamped → letters → line, then breathes, dissolves on arrival); gold is a FOIL
+  (`--gold-grad`/`--gold-text` + grain, `#gold-stroke` for SVG) derived from the accent; fog
+  replaced by `relabel` (per-node turnover in a wave); sort is a button + choice sheet; spread
+  shapes paired + dense grid; every frame 3:2, no image zoom (photos are 1080×720); status
+  plate with six dots; reviews carry translations and show in the reader's language; one
+  tempo (`--dur-fast/--dur/--dur-slow`).
