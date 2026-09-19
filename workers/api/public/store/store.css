@@ -192,6 +192,8 @@ button{cursor:pointer}
 /* The name in the header is the sign, small: capitals, tracked. */
 .brand{font-family:var(--brand-font-heading);font-size:var(--text-base);flex:1;
        text-transform:uppercase;letter-spacing:var(--track-head);
+       /* On the narrowest phones the name gives up tracking before it gives up letters. */
+       @media (max-width:359px){ font-size:var(--text-sm);letter-spacing:.08em }
        white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .icon-btn{display:grid;place-items:center;width:var(--tap);height:var(--tap);border:0;
      border-radius:var(--radius-full);background:transparent;color:var(--brand-text);font-size:1.2rem;position:relative}

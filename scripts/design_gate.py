@@ -51,6 +51,19 @@ for name, (html_p, js_p) in SURFACES.items():
     html = (BASE / html_p).read_text(encoding="utf-8")
     js = (BASE / js_p).read_text(encoding="utf-8")
     both = html + js
+    # THE SURFACE'S OWN STYLESHEETS, AS LINKED. Since 2026-09-16 every surface's
+    # styles live in a file (`style-src 'self'` dropped the <style> element),
+    # so a rule is no longer in the HTML; a gate that reads only the HTML
+    # reported every class as unstyled -- twenty on the storefront -- and the
+    # true count of missing rules was invisible in the noise. Shared /lib
+    # sheets are handled separately above; the rest are read here.
+    css_own = ""
+    for href in re.findall(r'<link[^>]*rel="stylesheet"[^>]*href="(/[^"]+\.css)"', html):
+        if href.startswith("/lib/"):
+            continue
+        sheet_path = BASE / href.lstrip("/")
+        if sheet_path.exists():
+            css_own += "\n" + re.sub(r"/\*.*?\*/", "", sheet_path.read_text(encoding="utf-8"), flags=re.S)
 
     # ── §8.1 the fixed tokens exist ───────────────────────────────────────
     # A surface resolves a token if it declares it OR the shared layer does.
@@ -234,12 +247,14 @@ for name, (html_p, js_p) in SURFACES.items():
     # reached the courier surface unstyled while the gate reported GREEN. The
     # match now has to end where a CSS identifier ends.
     for cls in sorted(used):
-        if cls.startswith("ti") or not cls:
+        # A class that ends in a hyphen is a PREFIX the script completes at
+        # run time (`st-` + status); its concrete values cannot be read here.
+        if cls.startswith("ti") or not cls or cls.endswith("-"):
             continue
         sel = re.compile(r"\." + re.escape(cls) + r"(?![A-Za-z0-9_-])")
         # The shared component layer counts as a rule the surface has: it is
         # linked by every surface, so a class defined there IS styled here.
-        if not sel.search(html) and not sel.search(js) and cls not in SHARED_CLASSES:
+        if not sel.search(html) and not sel.search(js) and not sel.search(css_own) and cls not in SHARED_CLASSES:
             fail(name, "R5", f'class "{cls}" is used and has no rule')
 
     # ── NOTHING THIRD-PARTY MAY BLOCK THE FIRST PAINT ─────────────────────
@@ -271,7 +286,8 @@ for name, (html_p, js_p) in SURFACES.items():
     # bar sat in a colour found nowhere else on the page.
     theme_colors = re.findall(r'<meta[^>]*name="theme-color"[^>]*content="(#[0-9a-fA-F]{3,8})"', html)
     palette = set()
-    for tm in re.finditer(r"--[A-Za-z0-9_-]+\s*:\s*([^;}]*)", html):
+    # The palette lives in the surface's own stylesheet now, not in the HTML.
+    for tm in re.finditer(r"--[A-Za-z0-9_-]+\s*:\s*([^;}]*)", html + css_own):
         palette.update(h.lower() for h in re.findall(r"#[0-9a-fA-F]{3,8}", tm.group(1)))
     if not theme_colors:
         fail(name, "chrome", "no theme-color: the browser paints its own")
