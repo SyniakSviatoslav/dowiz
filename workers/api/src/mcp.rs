@@ -175,7 +175,7 @@ async fn call_tool(caller: &Caller<'_>, name: &str, args: Value) -> std::result:
     let status_filter = if name == "orders" { args.remove("status").and_then(|v| v.as_str().map(str::to_uppercase)) } else { None };
     let lang = if name == "menu" { args.remove("lang").and_then(|v| v.as_str().map(str::to_string)) } else { None };
     let path = fill_path(tool.path, &mut args, &caller.slug)?;
-    let mut headers = Headers::new();
+    let headers = Headers::new();
     headers.set("authorization", &format!("Bearer {}", caller.token)).map_err(|e| e.to_string())?;
     headers.set("accept", "application/json").map_err(|e| e.to_string())?;
     let (url, method, body) = match tool.verb {

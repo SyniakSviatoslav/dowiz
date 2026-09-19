@@ -187,7 +187,8 @@ pub fn estimate(
 
     let mut to_venue = 0u32;
     let mut to_door = 0u32;
-    let mut overhead = 0u32;
+    // Every arm below sets it; the compiler holds that promise.
+    let overhead: u32;
     if pickup {
         overhead = k.pickup_min as u32;
     } else {
@@ -317,7 +318,7 @@ pub async fn attach_one(
 /// Every status transition leaves its time on the order, so the estimate can
 /// measure from the moment cooking began rather than guess.
 pub fn stamp(order: &mut Value, status: &str, now_ms: i64) {
-    if !order.get("at").map_or(false, Value::is_object) {
+    if !order.get("at").is_some_and(Value::is_object) {
         order["at"] = json!({});
     }
     order["at"][status] = json!(now_ms);

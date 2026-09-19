@@ -105,7 +105,7 @@ pub fn instagram_cfg(s: &dowiz_hub::settings::Settings) -> Option<Instagram> {
 /// fix ("(#131030) Recipient phone number not in allowed list" tells a venue
 /// still in sandbox exactly what to do).
 async fn graph_post(token: &str, path: &str, payload: Value) -> std::result::Result<Value, String> {
-    let mut headers = Headers::new();
+    let headers = Headers::new();
     headers.set("content-type", "application/json").map_err(|e| e.to_string())?;
     headers.set("authorization", &format!("Bearer {token}")).map_err(|e| e.to_string())?;
     let r = Request::new_with_init(

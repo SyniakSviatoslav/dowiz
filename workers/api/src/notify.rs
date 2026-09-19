@@ -58,7 +58,7 @@ pub fn bot_token(env: &Env, settings: &dowiz_hub::settings::Settings) -> Option<
 /// fix ("chat not found" means the owner never wrote to the bot).
 pub async fn telegram(token: &str, chat: &str, text: &str) -> std::result::Result<(), String> {
     let url = format!("https://api.telegram.org/bot{token}/sendMessage");
-    let mut headers = Headers::new();
+    let headers = Headers::new();
     headers.set("content-type", "application/json").map_err(|e| e.to_string())?;
     let text: String = text.chars().take(TELEGRAM_TEXT_MAX).collect();
     let payload = json!({ "chat_id": chat, "text": text, "disable_web_page_preview": true });

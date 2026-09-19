@@ -26,7 +26,7 @@ pub const WEBHOOK_LAST_KEY: &str = "notify.meta.last";
 const PROBE_BODY: &str = "dowiz cloud check\n";
 
 fn settings_flag(s: &dowiz_hub::settings::Settings, key: &str) -> bool {
-    !s.known(key).trim().is_empty() || s.get(key).map_or(false, |v| !v.trim().is_empty())
+    !s.known(key).trim().is_empty() || s.get(key).is_some_and(|v| !v.trim().is_empty())
 }
 
 /// `GET /api/owner/integrations`
@@ -64,7 +64,7 @@ pub async fn status(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 }
 
 async fn graph_get(token: &str, path: &str) -> std::result::Result<Value, String> {
-    let mut headers = Headers::new();
+    let headers = Headers::new();
     headers.set("authorization", &format!("Bearer {token}")).map_err(|e| e.to_string())?;
     let r = Request::new_with_init(&format!("{GRAPH}/{path}"), RequestInit::new().with_method(Method::Get).with_headers(headers))
         .map_err(|e| e.to_string())?;
@@ -140,7 +140,7 @@ pub async fn check(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
                     "{origin}/api/webhooks/meta?hub.mode=subscribe&hub.verify_token={}&hub.challenge={CHALLENGE}",
                     crate::mcp::enc(want.trim())
                 );
-                let mut headers = Headers::new();
+                let headers = Headers::new();
                 if let Ok(Some(h)) = req.headers().get("host") {
                     headers.set("host", &h)?;
                 }
@@ -182,7 +182,7 @@ pub async fn check(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
                 // The endpoint's model list is the cheapest question an
                 // OpenAI-compatible server answers.
                 let base = s.known("ai.endpoint");
-                let mut headers = Headers::new();
+                let headers = Headers::new();
                 if let Some(tok) = s.get("ai.token") { headers.set("authorization", &format!("Bearer {}", tok.trim()))?; }
                 let r = Request::new_with_init(&format!("{}/models", base.trim_end_matches('/')), RequestInit::new().with_method(Method::Get).with_headers(headers))?;
                 match Fetch::Request(r).send().await {

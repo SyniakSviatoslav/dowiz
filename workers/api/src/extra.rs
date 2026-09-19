@@ -19,7 +19,7 @@ use serde_json::{json, Value};
 use worker::wasm_bindgen::JsValue;
 use worker::*;
 
-use crate::owner::{now_ms, owner_and_venue, owner_at, venue_of};
+use crate::owner::{now_ms, owner_and_venue};
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
@@ -1797,7 +1797,7 @@ pub async fn approve_post(mut req: Request, ctx: RouteContext<()>) -> Result<Res
         (_, true) => (PostState::Failed, Some("no channel is set".to_string())),
         (Some(token), false) => {
             let url = format!("https://api.telegram.org/bot{token}/sendMessage");
-            let mut headers = Headers::new();
+            let headers = Headers::new();
             headers.set("content-type", "application/json")?;
             let payload =
                 json!({ "chat_id": channel, "text": p.text, "disable_web_page_preview": true });

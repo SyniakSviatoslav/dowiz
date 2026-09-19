@@ -110,7 +110,7 @@ pub async fn put(s3: &S3, object_key: &str, body: Vec<u8>, content_type: &str, n
     let signature = hex(&hmac(&k_signing, string_to_sign.as_bytes()));
     let authorization = format!("{ALGORITHM} Credential={}/{scope}, SignedHeaders={SIGNED_HEADERS}, Signature={signature}", s3.key);
 
-    let mut headers = Headers::new();
+    let headers = Headers::new();
     headers.set("authorization", &authorization).map_err(|e| e.to_string())?;
     headers.set("x-amz-date", &amz_date).map_err(|e| e.to_string())?;
     headers.set("x-amz-content-sha256", &payload_hash).map_err(|e| e.to_string())?;
