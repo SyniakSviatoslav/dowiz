@@ -1117,3 +1117,23 @@ its source, which is why translations, logo and hours "did not work". Verified l
   Serif h2, foil gold on the primary CTA, tinted status pills. Verified live on
   dubin-sushi.dowiz.org/courier/ (login sq→uk→en, shift opened, no errors, 390px). The active-run
   screen was not exercised: no free order existed on that hub and none was fabricated.
+
+## 2026-09-19 (night) — full error pass + the tracking map
+- Gates run: clippy (new Worker modules 0 warnings), Worker lib tests 21, dowiz-hub 253, kernel 204,
+  every public JS `node --check`, import/export resolution for admin+store modules, design gate
+  GREEN, storefront/console/courier/platform live probes with zero page errors. `wrangler tail`
+  45 s sample: no errors. D1 `d1_migrations` bookkeeping repaired (0004–0007 recorded; `migrations
+  apply` now says "No migrations to apply").
+- Independent review (subagent) found 12 real bugs, all fixed in commit 7fc9cf4: courier invite /
+  activate bodies (deny_unknown_fields → 400), MCP body injection + promo kind, notify test 502 hid
+  verdicts, `deliveryPaused`/`ownerStatus` now in the public location, live ETA returns None
+  without a door pin (and no longer overwrites a stored eta), SigV4 path encoding + endpoint
+  normalisation, Meta webhook now REQUIRES the app secret (unsigned = acknowledged and dropped),
+  AI check `no_endpoint`, empty slug → 403, post preview escape order, venue slug from the host.
+- Storefront tracking map (`public/store/track-map.js`): OpenFreeMap **positron** (simplified),
+  desaturated canvas, venue (gold seal), door (blue home), courier (teal bike, pulsing, glides
+  between polls over 1.2 s), dashed straight route; shown CONFIRMED…IN_DELIVERY for pinned
+  deliveries only; the map element survives the 12 s re-render like the ocean canvas. The customer
+  receives `eta.courierAt` ONLY while IN_DELIVERY (`attach_one` strips it otherwise).
+- `/ultrareview` reported "no commits yet": it ran outside the repo's git context; use
+  `/code-review ultra` from /root/dowiz.

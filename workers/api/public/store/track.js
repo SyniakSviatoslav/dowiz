@@ -20,6 +20,7 @@ import { state, tokenFor, moneyEl, on, API } from '/store/state.js';
 import { t, lang } from '/store/i18n.js';
 import { $, $$, esc, icon, sheet, closeSheet, toast, whenSheetCloses, stars } from '/store/ui.js';
 import { openOcean, phaseOf, seaRest } from '/store/sea.js';
+import * as trackMap from '/store/track-map.js';
 
 const FLOW = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY', 'DELIVERED'];
 const DEAD = new Set(['REJECTED', 'CANCELLED']);
@@ -180,12 +181,14 @@ export function openTracking(order){
   const wasTrack = $('#sheet').dataset.name === 'track';
   const keepCanvas = wasTrack ? $('.ocean-cv') : null;
   const keepReel = wasTrack ? $('#credits') : null;
-  whenSheetCloses(() => { stopReel(); lastStatus = null; seaRest(); });
+  const keepMap = wasTrack ? trackMap.keep() : null;
+  whenSheetCloses(() => { stopReel(); lastStatus = null; seaRest(); trackMap.destroy(); });
   sheet(`
     <div class="tsheet" data-status="${esc(st)}">
       <canvas class="ocean-cv" aria-hidden="true"></canvas>
       <div class="tsheet-in">
         ${episodeMarkup(order, eta)}
+        ${trackMap.markup(order)}
         ${goodReviews().length ? `<section class="credits-wrap"><p class="eyebrow" data-t="whatTheySay"></p><div class="credits" id="credits"></div></section>` : ''}
         <div class="ep-more">
           ${cryptoBlock(order)}
@@ -197,6 +200,7 @@ export function openTracking(order){
     </div>`, { name: 'track', attending: !dead && st !== 'DELIVERED', full: true });
   if (keepCanvas) $('.ocean-cv')?.replaceWith(keepCanvas);
   if (keepReel) $('#credits')?.replaceWith(keepReel);
+  trackMap.mount(order, keepMap);
   const phase = dead ? PROGRESS_FLOOR : Math.max(PROGRESS_FLOOR, phaseOf(st));
   const bar = $('#epBar'); if (bar) bar.style.width = `${Math.round(phase * 100)}%`;
   const ep = $('.ep'); if (ep) ep.style.setProperty('--pg', String(phase));

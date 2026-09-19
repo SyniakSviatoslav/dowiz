@@ -965,3 +965,21 @@ a.vsrc{text-decoration:underline}
   .sheet::before,.skel::after,.pill-st.now .pill-dot::after,.cart-pill.bounce{animation:none!important}
   .card:hover,.card-add:active,.tag:active,.qty button:active{transform:none!important}
 }
+
+/* ── the way home: a quiet map in the episode sheet ── */
+.ep-mapwrap{margin:0 0 var(--space-4)}
+.ep-map{height:38vh;min-height:220px;border-radius:14px;overflow:hidden;border:1px solid var(--accent-line);background:color-mix(in srgb,var(--brand-bg) 70%,#fff)}
+.ep-map .maplibregl-canvas{filter:saturate(.5) contrast(.96)}
+.ep-map .maplibregl-ctrl-attrib{font-size:10px;opacity:.7}
+.ep-legend{display:flex;gap:var(--space-3);margin-top:6px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--brand-text-muted)}
+.ep-legend span{display:inline-flex;align-items:center;gap:6px}
+.tm-key{width:10px;height:10px;border-radius:50%;display:inline-block}
+.tm-key-venue{background:var(--brand-primary)}
+.tm-key-door{background:#2f6b8f}
+.tm-key-courier{background:#0D9488;box-shadow:0 0 0 3px color-mix(in srgb,#0D9488 30%,transparent)}
+.tm{display:grid;place-items:center;border-radius:50%;box-shadow:0 4px 14px rgba(0,0,0,.25);font-size:16px}
+.tm-venue{width:34px;height:34px;background-color:var(--brand-primary);background-image:var(--gold-grain),var(--gold-grad);background-size:120px 120px,200% 200%;background-blend-mode:overlay,normal;color:#1a1408;font-family:var(--brand-font-heading);font-size:18px}
+.tm-door{width:32px;height:32px;background:#2f6b8f;color:#fff;border:2px solid #fff}
+.tm-courier{width:36px;height:36px;background:#0D9488;color:#fff;border:2px solid #fff;animation:tmPulse 1.6s ease-in-out infinite}
+@keyframes tmPulse{0%,100%{box-shadow:0 4px 14px rgba(0,0,0,.25),0 0 0 0 rgba(13,148,136,.45)}50%{box-shadow:0 4px 14px rgba(0,0,0,.25),0 0 0 10px rgba(13,148,136,0)}}
+@media (prefers-reduced-motion:reduce){.tm-courier{animation:none}}

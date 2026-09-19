@@ -319,7 +319,18 @@ pub async fn attach_one(
             .and_then(|p| p.get("cookingMin").and_then(Value::as_u64))
             .map(|n| n as u16)
     };
-    if let Some(e) = estimate(order, &loc, &k, &cooking, &fixes, &busy, now_ms) { order["eta"] = e; }
+    if let Some(mut e) = estimate(order, &loc, &k, &cooking, &fixes, &busy, now_ms) {
+        // THE CUSTOMER SEES THE COURIER ONLY WHILE THE COURIER CARRIES THEIR
+        // ORDER. Before pickup the fix is a person's whereabouts on someone
+        // else's run; the console keeps it, the storefront does not get it.
+        if order.get("status").and_then(Value::as_str) != Some("IN_DELIVERY") {
+            if let Some(m) = e.as_object_mut() {
+                m.remove("courierAt");
+                m.remove("courierId");
+            }
+        }
+        order["eta"] = e;
+    }
 }
 
 /// Every status transition leaves its time on the order, so the estimate can
