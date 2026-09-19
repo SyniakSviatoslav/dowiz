@@ -2792,12 +2792,22 @@ pub async fn stock(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         .into_iter()
         .filter_map(|(id, j)| {
             let v: Value = serde_json::from_str(&j).ok()?;
+            // A retired supply keeps its ledger history and leaves the list.
+            if v.get("active").and_then(Value::as_bool) == Some(false) {
+                return None;
+            }
             let level = led.level(&id);
             let low_at = v.get("lowAt").and_then(Value::as_i64).unwrap_or(0);
+            let take = |k: &str| v.get(k).cloned().unwrap_or(Value::Null);
             Some(json!({
                 "id": id,
                 "name": v.get("name").cloned().unwrap_or(Value::Null),
                 "unit": v.get("unit").cloned().unwrap_or(json!("g")),
+                "kind": v.get("kind").cloned().unwrap_or(json!(crate::recipe::KINDS[0])),
+                "category": v.get("category").cloned().unwrap_or(json!("")),
+                "kcalPer100": take("kcalPer100"), "proteinPer100": take("proteinPer100"), "fatPer100": take("fatPer100"), "carbsPer100": take("carbsPer100"),
+                "costPerBasis": take("costPerBasis"), "weightPerUnit": take("weightPerUnit"),
+                "nutritionConfirmed": v.get("nutritionConfirmed").and_then(Value::as_bool).unwrap_or(false),
                 "onHand": level.on_hand,
                 "reserved": level.reserved,
                 "available": level.available(),
@@ -2826,6 +2836,31 @@ struct SupplyIn {
     unit: Option<String>,
     #[serde(default)]
     low_at: Option<i64>,
+    /// food_ingredient | condiment | packaging | utensil (`recipe::KINDS`).
+    #[serde(default)]
+    kind: Option<String>,
+    /// Free text: "Fish", "Sauces", "Containers"…
+    #[serde(default)]
+    category: Option<String>,
+    /// Per 100 g/ml, or per piece: kcal and grams of macros.
+    #[serde(default)]
+    kcal_per100: Option<f64>,
+    #[serde(default)]
+    protein_per100: Option<f64>,
+    #[serde(default)]
+    fat_per100: Option<f64>,
+    #[serde(default)]
+    carbs_per100: Option<f64>,
+    /// Minor units per 100 g/ml, or per piece.
+    #[serde(default)]
+    cost_per_basis: Option<i64>,
+    /// Grams per piece, for supplies counted in units.
+    #[serde(default)]
+    weight_per_unit: Option<f64>,
+    #[serde(default)]
+    nutrition_confirmed: Option<bool>,
+    #[serde(default)]
+    active: Option<bool>,
 }
 
 /// `POST /api/owner/supplies` — add or edit an ingredient.
@@ -2847,17 +2882,47 @@ pub async fn set_supply(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
     if body.low_at.is_some_and(|v| v < 0) {
         return Response::error("a threshold cannot be negative", 400);
     }
+    if let Some(k) = &body.kind {
+        if !crate::recipe::KINDS.contains(&k.as_str()) {
+            return Response::error("kind is food_ingredient, condiment, packaging or utensil", 400);
+        }
+    }
+    if let Some(u) = &body.unit {
+        if !crate::recipe::UNITS.contains(&u.as_str()) {
+            return Response::error("unit is g, ml or unit", 400);
+        }
+    }
+    for (name, v) in [("kcal", body.kcal_per100), ("protein", body.protein_per100), ("fat", body.fat_per100), ("carbs", body.carbs_per100), ("weight", body.weight_per_unit)] {
+        if v.is_some_and(|x| !x.is_finite() || x < 0.0) {
+            return Response::error(format!("{name} cannot be negative"), 400);
+        }
+    }
+    if body.cost_per_basis.is_some_and(|c| c < 0) {
+        return Response::error("cost cannot be negative", 400);
+    }
     let rec = crate::hubstore::with_catalog(&place, move |cat| {
         let existing: Value =
             cat.supply(&id).and_then(|j| serde_json::from_str(&j).ok()).unwrap_or(json!({}));
+        // Each field: the body's value, else what was there, else the default.
+        let keep = |key: &str, given: Option<Value>, default: Value| given.or_else(|| existing.get(key).cloned()).unwrap_or(default);
+        let opt = |key: &str, given: Option<Value>| given.or_else(|| existing.get(key).cloned()).unwrap_or(Value::Null);
         let rec = json!({
             "id": id,
-            "name": body.name.clone().map(Value::String)
-                .or_else(|| existing.get("name").cloned()).unwrap_or(json!(id)),
-            "unit": body.unit.clone().map(Value::String)
-                .or_else(|| existing.get("unit").cloned()).unwrap_or(json!("g")),
-            "lowAt": body.low_at.map(|v| json!(v))
-                .or_else(|| existing.get("lowAt").cloned()).unwrap_or(json!(0)),
+            "name": keep("name", body.name.clone().map(Value::String), json!(id)),
+            "unit": keep("unit", body.unit.clone().map(Value::String), json!("g")),
+            "lowAt": keep("lowAt", body.low_at.map(|v| json!(v)), json!(0)),
+            "kind": keep("kind", body.kind.clone().map(Value::String), json!(crate::recipe::KINDS[0])),
+            "category": keep("category", body.category.clone().map(|c| json!(c.trim())), json!("")),
+            "kcalPer100": opt("kcalPer100", body.kcal_per100.map(|v| json!(v))),
+            "proteinPer100": opt("proteinPer100", body.protein_per100.map(|v| json!(v))),
+            "fatPer100": opt("fatPer100", body.fat_per100.map(|v| json!(v))),
+            "carbsPer100": opt("carbsPer100", body.carbs_per100.map(|v| json!(v))),
+            "costPerBasis": opt("costPerBasis", body.cost_per_basis.map(|v| json!(v))),
+            "weightPerUnit": opt("weightPerUnit", body.weight_per_unit.map(|v| json!(v))),
+            "nutritionConfirmed": keep("nutritionConfirmed", body.nutrition_confirmed.map(|v| json!(v)), json!(false)),
+            // Saving through the editor is an act of keeping: a retired supply
+            // written again comes back to the list unless the body says otherwise.
+            "active": json!(body.active.unwrap_or(true)),
         });
         cat.set_supply(&id, &rec.to_string());
         Ok(rec)
@@ -3435,4 +3500,36 @@ pub async fn rates(req: Request, _ctx: RouteContext<()>) -> Result<Response> {
     let to_cache = res.cloned()?;
     cache.put(&key, to_cache).await?;
     Ok(res)
+}
+
+
+/// `POST /api/owner/supplies/:id/retire` — off the list, ledger kept. A dish
+/// whose recipe still names it keeps reserving it, which is the honest
+/// outcome: the kitchen still uses it, the owner just stopped tracking it.
+pub async fn retire_supply(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct In {
+        #[allow(dead_code)]
+        location_id: Option<String>,
+    }
+    let _body: In = req.json().await.unwrap_or(In { location_id: None });
+    let Some(id) = ctx.param("id").cloned() else { return Response::error("missing supply id", 400) };
+    let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
+    if let Err(r) = owner_and_venue(&req, &ctx, &db).await {
+        return Ok(r);
+    }
+    let done = crate::hubstore::with_catalog(&place, move |cat| {
+        let Some(j) = cat.supply(&id) else { return Ok(false) };
+        let mut v: Value = serde_json::from_str(&j).unwrap_or(json!({}));
+        v["active"] = json!(false);
+        cat.set_supply(&id, &v.to_string());
+        Ok(true)
+    })
+    .await?;
+    if !done {
+        return Response::error("unknown supply", 404);
+    }
+    Response::from_json(&json!({ "ok": true }))
 }

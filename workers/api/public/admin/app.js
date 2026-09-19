@@ -156,14 +156,14 @@ const venueSlug = () => { const h = location.hostname.split('.'); return h.lengt
 export async function loadVenue(){
   try {
     const slug = venueSlug();
-    const d = await api(`/public/locations/${encodeURIComponent(slug)}/menu?locale=${lang}`);
+    const d = await api(`/public/locations/${encodeURIComponent(slug)}/menu?locale=${lang}&fresh=1`);
     S.venue = d.location; S.categories = d.categories || [];
     S.products = S.categories.flatMap(c => (c.products || []).map(p => ({ ...p, categoryId: c.id, categoryName: c.name, translations: {} })));
     // The other two languages, so a dish's translations can be edited: the
     // public menu answers in one language at a time, and it is the only
     // read of the catalogue this console has.
     const others = LANGS.filter(l => l !== lang);
-    const rest = await Promise.all(others.map(l => api(`/public/locations/${encodeURIComponent(slug)}/menu?locale=${l}`).catch(() => null)));
+    const rest = await Promise.all(others.map(l => api(`/public/locations/${encodeURIComponent(slug)}/menu?locale=${l}&fresh=1`).catch(() => null)));
     for (const [i, r] of rest.entries()) {
       if (!r) continue;
       for (const c of r.categories || []) for (const p of c.products || []) {

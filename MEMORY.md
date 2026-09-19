@@ -1137,3 +1137,40 @@ its source, which is why translations, logo and hours "did not work". Verified l
   receives `eta.courierAt` ONLY while IN_DELIVERY (`attach_one` strips it otherwise).
 - `/ultrareview` reported "no commits yet": it ran outside the repo's git context; use
   `/code-review ultra` from /root/dowiz.
+
+## 2026-09-19 (late night) — inventory as ingredients, recipes, taste; menu CRUD; device matrix; install offer
+- The old service's model (last JS tree = commit 7781120, `origin/backup-wip-2026-07-08`; there was
+  never a "drop js" commit) is restored in Rust: supply = {kind food_ingredient|condiment|packaging|
+  utensil, category (free text), unit g|ml|unit, kcal/protein/fat/carbs per 100 (per 1 for pieces),
+  lowAt, nutritionConfirmed, active} + NEW costPerBasis (minor units) and weightPerUnit (g).
+  `workers/api/src/recipe.rs`: `line_of` snapshots a supply into a bom line, `derive` sums food lines
+  per serving (nutrition, weight; cost sums every line), `bom_json` keeps the ledger's `supply`/`qty`
+  keys first so `dowiz_hub::stock::bom_of` still reserves stock per order. `POST /owner/products/:id`
+  takes `bom` and `taste` (5 axes spicy/sweet/salty/sour/richness, levels 1–3, absent = undeclared,
+  exactly the old contract); derived nutrition/weight/ingredients are written unless typed by hand.
+  Storefront passes `taste` and `nutritionDerived`; the dish sheet draws taste as dot levels.
+- `catalog_edit.rs`: create/delete product, create/rename/delete category (only when empty),
+  `GET /owner/categories` INCLUDING empty ones (the public menu drops them, so a new category could
+  never get its first dish). `POST /owner/supplies/:id/retire` soft-deletes; saving a retired supply
+  through the editor reactivates it.
+- The public menu is served from the Worker Cache API (30 s + stale-while-revalidate 300 s): the
+  console now reads `?fresh=1`, which skips the cache both ways. Without it the editor showed a
+  saved dish up to five minutes late (and `openDish` after create found nothing).
+- Console: menu filters (category chips, on-sale/stop, no-photo) + sort (menu/name/price ↑↓), New
+  dish, Categories sheet, Delete dish; stock: kind chips, search, sort by name/category/low,
+  category groups, "unconfirmed" pill, the full editor; dish editor: recipe lines with −/+ steppers
+  (10 g/ml, 1 piece), inline supply picker (search + kind tabs + multi-select), live sums
+  (kcal/protein/fat/carbs, weight, food cost and % of price), taste profile chips.
+  Verified live end to end by `_probe_recipe.mjs`: salmon 40 g + box → 83 kcal, 8 g protein,
+  40 g, cost 760 = 77% of 990; taste stored and shown on the storefront; cleanup verified.
+- Allergen publish gate now follows `feature.allergen_filter` (off on both hubs); it was refusing
+  every console dish save with `available:true` (409) since the operator removed allergens.
+- Device matrix (`_matrix_store/_admin/_courier.mjs`, Chromium presets iPhone SE/14 Pro/15 Pro Max,
+  Galaxy S24, Pixel 7, iPad Mini, desktop; Firefox 360/1280; WebKit cannot launch on this box):
+  console and courier OK everywhere; storefront OK except a probe-side race on the currency step
+  (Playwright retries a click while the relabel animation runs; users tap once). Fixed from the
+  matrix: courier HUD overflowed at 360px, sign-in sheet was capped at 48vh, the poll redrew over an
+  open panel, MapLibre threw uncaught on WebGL refusal (courier + tracking map now fail quietly).
+- Storefront install offer (`store/install.js`): rises 1.8 s after the loader, once per visit,
+  Chrome prompt or the iOS two-tap hint, "don't show again" in localStorage `dw_install_hide`,
+  never inside an installed app. Verified live on an iPhone UA.

@@ -33,6 +33,8 @@ mod channels;
 mod cloud;
 mod mcp;
 mod integrations;
+mod catalog_edit;
+mod recipe;
 
 use dowiz_kernel::json_api;
 use serde::Deserialize;
@@ -239,6 +241,11 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/owner/orders/:id/assign", owner::assign_courier)
         .get_async("/api/owner/couriers/:id", extra::courier_detail)
         .get_async("/api/owner/dashboard", owner::dashboard)
+        .post_async("/api/owner/products", catalog_edit::create_product)
+        .post_async("/api/owner/products/:id/delete", catalog_edit::delete_product)
+        .get_async("/api/owner/categories", catalog_edit::list_categories)
+        .post_async("/api/owner/categories", catalog_edit::set_category)
+        .post_async("/api/owner/categories/:id/delete", catalog_edit::delete_category)
         .post_async("/api/owner/products/:id", owner::update_product)
         .post_async("/api/owner/location", owner::update_location)
         .post_async("/api/owner/i18n", owner::write_translations)
@@ -257,6 +264,7 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .get_async("/api/owner/stock", extra::stock)
         .post_async("/api/owner/stock/:kind", extra::stock_move)
         .post_async("/api/owner/supplies", extra::set_supply)
+        .post_async("/api/owner/supplies/:id/retire", extra::retire_supply)
         .get_async("/api/owner/features", extra::features)
         .post_async("/api/owner/features", extra::set_feature)
         .get_async("/api/owner/settings", extra::settings)

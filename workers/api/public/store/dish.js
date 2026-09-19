@@ -67,11 +67,23 @@ function factsMarkup(p){
   if (Number.isFinite(n.carbs)) facts.push(['', 'carbs', `${mark}${n.carbs} g`]);
   if (Number.isFinite(p.weightG)) facts.push([icon('bowl'), 'weight', `${mark}${p.weightG} g`]);
   if (Number.isFinite(p.cookingMin)) facts.push([icon('clock'), 'prep', `${p.cookingMin} ${t('etaMin')}`]);
-  if (!facts.length) return '';
+  const taste = tasteMarkup(p);
+  if (!facts.length) return taste;
   return `<h3 class="dsec" data-t="nutrition"></h3>
     <div class="facts">${facts.map(([ic, key, val]) => `<div class="fact">
       <span class="fact-v">${val}</span><span class="fact-k">${ic}<span data-t="${key}"></span></span></div>`).join('')}</div>
-    ${approx ? `<p class="fact-note muted" data-t="approx"></p>` : ''}`;
+    ${approx ? `<p class="fact-note muted" data-t="approx"></p>` : ''}${taste}`;
+}
+
+/// The kitchen's taste profile: five axes, three levels, drawn as filled dots.
+const TASTE_AXES = ['spicy', 'sweet', 'salty', 'sour', 'richness'];
+const TASTE_ICON = { spicy: 'pepper', sweet: 'candy', salty: 'salt', sour: 'lemon-2', richness: 'flame' };
+const TASTE_LEVELS = 3;
+function tasteMarkup(p){
+  const tz = p.taste && typeof p.taste === 'object' ? p.taste : null;
+  const axes = tz ? TASTE_AXES.filter(a => Number(tz[a]) >= 1) : [];
+  if (!axes.length) return '';
+  return `<h3 class="dsec" data-t="taste"></h3><div class="taste-row-s">${axes.map(a => `<span class="taste-s">${icon(TASTE_ICON[a])}<span data-t="taste_${a}"></span><i class="tdots" aria-hidden="true">${Array.from({ length: TASTE_LEVELS }, (_, i) => `<b class="${i < Number(tz[a]) ? 'on' : ''}"></b>`).join('')}</i></span>`).join('')}</div>`;
 }
 
 export function openDish(p){

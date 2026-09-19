@@ -207,8 +207,14 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // moves in minutes, not seconds, so thirty is inside its resolution too.
     let cache = Cache::default();
     let key = req.url()?.to_string();
-    if let Some(hit) = cache.get(&key, false).await? {
-        return Ok(hit);
+    // `fresh` is the console's word: an owner who just saved a dish reads the
+    // catalogue as it is, not as the edge remembers it. Neither read nor
+    // written to the cache, so customers keep the thirty-second window.
+    let fresh = req.url()?.query_pairs().any(|(k, _)| k == "fresh");
+    if !fresh {
+        if let Some(hit) = cache.get(&key, false).await? {
+            return Ok(hit);
+        }
     }
     let db = ctx.d1("DB")?;
     // The slug is not the id — see `Place::of_slug`.
@@ -419,6 +425,8 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
                             p.get("ingredients").cloned().unwrap_or(Value::Null)),
                         "weightG": p.get("weightG").cloned().unwrap_or(Value::Null),
                         "nutrition": p.get("nutrition").cloned().unwrap_or(Value::Null),
+                        "nutritionDerived": p.get("nutritionDerived").cloned().unwrap_or(Value::Null),
+                        "taste": p.get("taste").cloned().unwrap_or(Value::Null),
                         "calories": p.get("calories").cloned().unwrap_or(Value::Null),
                         "sortOrder": p.get("sortOrder").cloned().unwrap_or(json!(0))
                     }),
@@ -563,7 +571,9 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // Stored AFTER the response is built and cloned, so the store cannot fail
     // the request: a cache that breaks a page is worse than no cache.
     if let Ok(copy) = res.cloned() {
-        let _ = cache.put(&key, copy).await;
+        if !fresh {
+            let _ = cache.put(&key, copy).await;
+        }
     }
     Ok(res)
 }

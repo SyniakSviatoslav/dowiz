@@ -371,3 +371,28 @@ input[type="color"]{padding:4px;height:var(--tap);width:64px}
 .login-line{font-size:var(--text-sm)}
 .btn-row.compact{justify-content:flex-end;flex-wrap:wrap}
 .btn-row.compact .act{flex:none}
+
+/* menu filters: chips that scroll sideways, a sort in the same row */
+.chips.filters{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;margin-bottom:var(--space-2);-webkit-overflow-scrolling:touch}
+.chips.filters::-webkit-scrollbar{display:none}
+.chips.filters .chip{flex:none;white-space:nowrap}
+.chip.sortsel{appearance:none;-webkit-appearance:none;padding-right:26px;background-image:none}
+.rowc input.inline{width:100%;min-height:36px;padding:4px 8px;font-size:var(--text-sm)}
+
+/* the recipe editor: one line per supply, a stepper, the sums */
+.rc-line{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--glass-border)}
+.rc-line .rc-ic .ti{font-size:18px;color:var(--brand-primary)}
+.rc-line .t{flex:1;min-width:0}
+.rc-line .t b{display:block;font-size:var(--text-sm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rc-line .t small{display:block;color:var(--brand-text-muted);font-size:var(--text-xs)}
+.rc-qty{display:inline-flex;align-items:center;gap:4px}
+.rc-qty input{width:64px;min-height:36px;padding:4px 6px;text-align:right;font-size:var(--text-sm)}
+.rc-qty .act{min-height:36px;padding:0 10px}
+.rc-sum{margin-top:var(--space-3)}
+.rowc.pick{cursor:pointer}
+.rowc.pick input{width:18px;height:18px;min-height:0;flex:none;accent-color:var(--brand-primary)}
+.taste-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--glass-border)}
+.taste-ax{display:inline-flex;align-items:center;gap:6px;font-size:var(--text-sm)}
+.taste-ax .ti{color:var(--brand-primary);font-size:18px}
+.taste-lv{display:inline-flex;gap:4px}
+.taste-lv .chip{min-height:32px;padding:0 10px;font-size:var(--text-xs)}

@@ -11,6 +11,12 @@ import { safeGet, safeSet } from '/store/storage.js';
 
 export const T = {
   sq: {
+    // inventory as the old service had it, and the recipe
+    kind_food_ingredient:'Përbërës', kind_condiment:'Salcë', kind_packaging:'Paketim', kind_utensil:'Vegël', kind:'Lloji', ssort_name:'Sipas emrit', ssort_category:'Sipas kategorisë', ssort_low:'Së pari pak', supplyIdHint:'Id i shkurtër, latin; pjatat e referojnë.',
+    nutritionPer:'Vlera ushqyese për', costPer:'Kosto për', weightPerUnit:'Pesha e një cope, g', nutritionConfirmed:'Vlerat e konfirmuara', nutritionConfirmedHint:'Kontrolluar nga një burim; pa këtë shfaqet «e pakonfirmuar».', unconfirmed:'e pakonfirmuar', retireSupply:'Hiq nga lista', retireSupplyHint:'Historia e lëvizjeve mbetet; recetat që e përdorin vazhdojnë ta rezervojnë.',
+    recipe:'Receta (për porcion)', recipeHint:'Përbërësit nga magazina me sasinë për një porcion. Vlerat, pesha dhe kostoja mblidhen vetë; magazina rezervohet me çdo porosi.', addSupplyToRecipe:'Shto përbërës', addSelected:'Shto të zgjedhurit', noRecipe:'Ende pa recetë', noData:'pa të dhëna', nutritionPerServing:'Vlera ushqyese për porcion', nutritionIncomplete:'E paplotë — disa përbërës s’kanë të dhëna', foodCost:'Kosto e ushqimit', costUnknown:'Kostoja s’dihet: vendosni çmimin te përbërësit', nutritionFromRecipe:'Llogaritur nga receta; një vlerë e shkruar këtu e zëvendëson.',
+    taste:'Profili i shijes', tasteHint:'Pesë boshte, tri nivele. Prekni sërish për ta hequr.', taste_spicy:'Djegës', taste_sweet:'I ëmbël', taste_salty:'I kripur', taste_sour:'I thartë', taste_richness:'I pasur', tlevel_1:'Pak', tlevel_2:'Mesatar', tlevel_3:'Shumë',
+    addDish:'Pjatë e re', addCategory:'Kategori e re', category:'Kategoria', allDishes:'Të gjitha', withoutPhoto:'Pa foto', sort:'Renditja', sort_default:'Si në meny', sort_name:'Sipas emrit', sort_priceAsc:'Çmimi ↑', sort_priceDesc:'Çmimi ↓', deleteDish:'Fshi pjatën', deleteDishHint:'hiqet nga menyja; porositë e kaluara e mbajnë', needCategory:'Krijoni një kategori më parë.',
     // screen hints and tile captions, 2026-09-19 design pass
     loginLine:'Paneli i lokalit tuaj, në xhep.', close:'Mbyll',
     moreHint:'Marketingu, numrat, klientët dhe çdo cilësim i lokalit. Prekni një pllakë.', menuHint:'Prekni një kategori për ta hapur, një pjatë për ta ndryshuar ose hequr nga shitja.', stockScreenHint:'Sasitë ndryshojnë vetëm me lëvizje: erdhi, u hodh, u numërua.', couriersHint:'Kush është në turn tani, kush mund të marrë porosi. Ftoni me kod.',
@@ -109,6 +115,12 @@ export const T = {
     loadFail:'Nuk u ngarkua', sessionOver:'Sesioni mbaroi', required:'E detyrueshme',
   },
   en: {
+    // inventory as the old service had it, and the recipe
+    kind_food_ingredient:'Ingredient', kind_condiment:'Condiment', kind_packaging:'Packaging', kind_utensil:'Utensil', kind:'Kind', ssort_name:'By name', ssort_category:'By category', ssort_low:'Low first', supplyIdHint:'A short latin id; recipes refer to it.',
+    nutritionPer:'Nutrition per', costPer:'Cost per', weightPerUnit:'Weight of one piece, g', nutritionConfirmed:'Values confirmed', nutritionConfirmedHint:'Checked against a source; without it the row says “unconfirmed”.', unconfirmed:'unconfirmed', retireSupply:'Retire from the list', retireSupplyHint:'Movement history stays; recipes that use it keep reserving it.',
+    recipe:'Recipe (per serving)', recipeHint:'Supplies from stock with one serving’s quantity. Nutrition, weight and cost add up by themselves; stock is reserved with every order.', addSupplyToRecipe:'Add supply', addSelected:'Add selected', noRecipe:'No recipe yet', noData:'no data', nutritionPerServing:'Nutrition per serving', nutritionIncomplete:'Incomplete — some supplies lack nutrition data', foodCost:'Food cost', costUnknown:'Cost unknown: set a cost on the supplies', nutritionFromRecipe:'Computed from the recipe; a value typed here overrides it.',
+    taste:'Taste profile', tasteHint:'Five axes, three levels. Tap again to clear.', taste_spicy:'Spicy', taste_sweet:'Sweet', taste_salty:'Salty', taste_sour:'Sour', taste_richness:'Rich', tlevel_1:'Low', tlevel_2:'Med', tlevel_3:'High',
+    addDish:'New dish', addCategory:'New category', category:'Category', allDishes:'All', withoutPhoto:'No photo', sort:'Sort', sort_default:'Menu order', sort_name:'By name', sort_priceAsc:'Price ↑', sort_priceDesc:'Price ↓', deleteDish:'Delete dish', deleteDishHint:'removed from the menu; past orders keep it', needCategory:'Create a category first.',
     // screen hints and tile captions, 2026-09-19 design pass
     loginLine:'Your venue\'s console, in your pocket.', close:'Close',
     moreHint:'Marketing, numbers, customers and every venue setting. Tap a tile.', menuHint:'Tap a category to open it, a dish to change it or take it off sale.', stockScreenHint:'Quantities change only by movements: received, wasted, counted.', couriersHint:'Who is on shift now, who may take orders. Invite by code.',
@@ -191,6 +203,12 @@ export const T = {
     loadFail:'Could not load', sessionOver:'Session expired', required:'Required',
   },
   uk: {
+    // inventory as the old service had it, and the recipe
+    kind_food_ingredient:'Інгредієнт', kind_condiment:'Соус', kind_packaging:'Пакування', kind_utensil:'Посуд', kind:'Вид', ssort_name:'За назвою', ssort_category:'За категорією', ssort_low:'Спершу дефіцит', supplyIdHint:'Короткий id латиницею; на нього посилаються рецепти.',
+    nutritionPer:'Поживність на', costPer:'Собівартість за', weightPerUnit:'Вага однієї штуки, г', nutritionConfirmed:'Значення підтверджено', nutritionConfirmedHint:'Звірено з джерелом; без цього рядок позначено «не підтверджено».', unconfirmed:'не підтверджено', retireSupply:'Прибрати зі списку', retireSupplyHint:'Історія рухів лишається; рецепти, що його використовують, далі резервують.',
+    recipe:'Рецепт (на порцію)', recipeHint:'Складники зі складу з кількістю на одну порцію. Поживність, вага й собівартість рахуються самі; склад резервується з кожним замовленням.', addSupplyToRecipe:'Додати складник', addSelected:'Додати вибрані', noRecipe:'Рецепту ще немає', noData:'без даних', nutritionPerServing:'Поживність на порцію', nutritionIncomplete:'Неповно — у частини складників немає даних', foodCost:'Собівартість', costUnknown:'Собівартість невідома: задайте ціну складникам', nutritionFromRecipe:'Пораховано з рецепту; значення, введене тут, має пріоритет.',
+    taste:'Смаковий профіль', tasteHint:'П’ять осей, три рівні. Торкніться ще раз, щоб зняти.', taste_spicy:'Гострий', taste_sweet:'Солодкий', taste_salty:'Солоний', taste_sour:'Кислий', taste_richness:'Насичений', tlevel_1:'Слабо', tlevel_2:'Середньо', tlevel_3:'Сильно',
+    addDish:'Нова страва', addCategory:'Нова категорія', category:'Категорія', allDishes:'Усі', withoutPhoto:'Без фото', sort:'Сортування', sort_default:'Як у меню', sort_name:'За назвою', sort_priceAsc:'Ціна ↑', sort_priceDesc:'Ціна ↓', deleteDish:'Видалити страву', deleteDishHint:'зникне з меню; минулі замовлення її збережуть', needCategory:'Спершу створіть категорію.',
     // screen hints and tile captions, 2026-09-19 design pass
     loginLine:'Консоль вашого закладу в кишені.', close:'Закрити',
     moreHint:'Маркетинг, цифри, клієнти й усі налаштування закладу. Торкніться плитки.', menuHint:'Торкніться категорії, щоб розгорнути, страви, щоб змінити або зняти з продажу.', stockScreenHint:'Кількості змінюються лише рухами: прийшло, списано, порахували.', couriersHint:'Хто зараз на зміні, хто може брати замовлення. Запрошуйте кодом.',

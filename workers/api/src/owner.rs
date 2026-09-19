@@ -607,6 +607,12 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<()>) -> Result<R
         /// these. Lower-case slugs; an empty list clears them.
         #[serde(default)]
         tags: Option<Vec<String>>,
+        /// One portion's recipe: `[{supply, qty}]`. An empty list clears it.
+        #[serde(default)]
+        bom: Option<Vec<crate::recipe::BomLineIn>>,
+        /// Five axes, levels 1…3; absent = not declared.
+        #[serde(default)]
+        taste: Option<serde_json::Map<String, Value>>,
     }
     let body: In = match req.json().await {
         Ok(b) => b,
@@ -651,6 +657,21 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<()>) -> Result<R
         }
     }
 
+    if let Some(lines) = &body.bom {
+        for l in lines {
+            if l.supply.trim().is_empty() || l.qty <= 0 || l.qty > crate::recipe::QTY_MAX {
+                return Response::error("a recipe line is a supply and a positive quantity", 400);
+            }
+        }
+    }
+    let taste = match &body.taste {
+        None => None,
+        Some(m) => match crate::recipe::validate_taste(m) {
+            Ok(t) => Some(t),
+            Err(e) => return Response::error(e, 400),
+        },
+    };
+    let bom = body.bom.clone();
     let want_id = id.clone();
     let price = body.price;
     let available = body.available;
@@ -674,6 +695,14 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<()>) -> Result<R
             }
             Some(clean)
         }
+    };
+    // THE GATE FOLLOWS THE FEATURE. A venue that switched the allergen filter
+    // off (this one did, 2026-09-18: no allergens anywhere on its storefront)
+    // is not asked to declare what it no longer shows; with the filter on, the
+    // refusal below stands, per dish, as before.
+    let allergen_gate = match crate::hubstore::load_settings(&place).await {
+        Ok(l) => dowiz_hub::features::is_on(&l.settings, "feature.allergen_filter"),
+        Err(_) => true,
     };
     let written = crate::hubstore::with_catalog(&place, move |cat| {
         let Some(pj) = cat.product(&want_id) else {
@@ -702,6 +731,53 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<()>) -> Result<R
         if let Some(list) = &tags {
             p["tags"] = if list.is_empty() { Value::Null } else { json!(list) };
         }
+        if let Some(t) = &taste {
+            p["taste"] = if t.is_empty() { Value::Null } else { Value::Object(t.clone()) };
+        }
+        // ── THE RECIPE, AND WHAT FOLLOWS FROM IT ──
+        // Each line is snapshotted from the supply as it is now; the dish's
+        // nutrition, ingredient list, weight and cost are summed from the
+        // lines. A value the owner typed in the same request wins over the
+        // sum, and stays marked as theirs.
+        if let Some(lines) = &bom {
+            let mut snap = Vec::with_capacity(lines.len());
+            for l in lines {
+                let Some(sj) = cat.supply(&l.supply) else {
+                    return Err(Error::RustError(format!("unknown supply {}", l.supply)));
+                };
+                let sv: Value = serde_json::from_str(&sj).unwrap_or(json!({}));
+                if snap.iter().any(|x: &crate::recipe::Line| x.supply == l.supply) {
+                    continue; // one line per supply, as the old editor enforced
+                }
+                snap.push(crate::recipe::line_of(&l.supply, l.qty, &sv));
+            }
+            if snap.is_empty() {
+                p["bom"] = Value::Null;
+                p["nutritionDerived"] = Value::Null;
+                p["cost"] = Value::Null;
+            } else {
+                let d = crate::recipe::derive(&snap);
+                p["bom"] = crate::recipe::bom_json(&snap);
+                if nutrition.is_none() && d.nutrition_complete {
+                    p["nutrition"] = json!({ "kcal": d.kcal, "protein": d.protein, "fat": d.fat, "carbs": d.carbs, "approx": false });
+                    p["nutritionDerived"] = json!(true);
+                } else if nutrition.is_some() {
+                    p["nutritionDerived"] = json!(false);
+                }
+                if weight_g.is_none() {
+                    if let Some(w) = d.weight_g {
+                        p["weightG"] = json!(w);
+                    }
+                }
+                // The console always sends the ingredients box, empty or not;
+                // an empty box beside a recipe means "use the recipe's names".
+                if ingredients.as_ref().is_none_or(|l| l.is_empty()) && !d.ingredients.is_empty() {
+                    p["ingredients"] = json!(d.ingredients);
+                }
+                p["cost"] = d.cost.map(|c| json!(c)).unwrap_or(Value::Null);
+                p["nutritionComplete"] = json!(d.nutrition_complete);
+            }
+        }
         if let Some(list) = &allergens {
             p["allergens"] = json!(list);
         }
@@ -713,7 +789,7 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<()>) -> Result<R
         // warning. Declaring costs one action and "none of the fourteen" is a
         // valid answer; the gate is per DISH, so a venue is never blocked
         // wholesale.
-        if available == Some(true) {
+        if available == Some(true) && allergen_gate {
             let decided = allergens.as_ref().map(|l| {
                 if l.is_empty() {
                     dowiz_hub::allergens::Declaration::None
@@ -756,6 +832,9 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<()>) -> Result<R
                  'none of the fourteen' is a valid answer, an empty field is not",
                 409,
             );
+        }
+        if e.to_string().starts_with("unknown supply") {
+            return Response::error(e.to_string(), 400);
         }
         if e.to_string().contains("unknown product") {
             return Response::error("not found", 404);

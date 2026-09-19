@@ -18,6 +18,7 @@ import { mountNav, onChangeLang } from '/store/nav.js';
 import { initSea, seaArrive, seaTouch } from '/store/sea.js';
 import { relabel } from '/store/motion.js';
 import { LEAVES } from '/store/venue.js';
+import { bindInstall, offerInstall } from '/store/install.js';
 
 /// A touch on the venue's mark is a touch on the water beneath it.
 const TOUCH_STRENGTH = 0.55;
@@ -104,6 +105,7 @@ export async function promptInstall(){
   return outcome === 'accepted';
 }
 if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+bindInstall({ canInstall, isStandalone, promptInstall });
 
 async function load(){
   // The remembered venue, before the network: colours, seal, name.
@@ -140,6 +142,7 @@ async function load(){
     initSea().then(seaArrive);
     netState();
     returnFromCard();
+    offerInstall();
   } catch (e) {
     const off = !navigator.onLine;
     $('#app').innerHTML = `<div class="empty" role="alert">

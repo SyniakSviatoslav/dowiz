@@ -983,3 +983,21 @@ a.vsrc{text-decoration:underline}
 .tm-courier{width:36px;height:36px;background:#0D9488;color:#fff;border:2px solid #fff;animation:tmPulse 1.6s ease-in-out infinite}
 @keyframes tmPulse{0%,100%{box-shadow:0 4px 14px rgba(0,0,0,.25),0 0 0 0 rgba(13,148,136,.45)}50%{box-shadow:0 4px 14px rgba(0,0,0,.25),0 0 0 10px rgba(13,148,136,0)}}
 @media (prefers-reduced-motion:reduce){.tm-courier{animation:none}}
+
+/* the taste profile in the dish sheet */
+.taste-row-s{display:flex;flex-wrap:wrap;gap:8px}
+.taste-s{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 10px;border-radius:var(--radius-full);border:1px solid var(--accent-line);font-size:var(--text-sm)}
+.taste-s .ti{color:var(--brand-primary)}
+.tdots{display:inline-flex;gap:3px}
+.tdots b{width:6px;height:6px;border-radius:50%;background:color-mix(in srgb,var(--brand-text) 22%,transparent)}
+.tdots b.on{background:var(--brand-primary)}
+
+/* the install offer: the mark, two lines, one button, one honest checkbox */
+.install-pop{text-align:center;padding:var(--space-2) 0 var(--space-3)}
+.install-mark{width:72px;height:72px;border-radius:18px;object-fit:cover;margin:0 auto var(--space-3);display:block;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.install-mark-ink{display:grid;place-items:center;background:var(--brand-primary);color:var(--brand-bg);font-size:32px}
+.install-pop h2{margin-bottom:var(--space-2)}
+.install-pop .muted{margin-bottom:var(--space-4)}
+.install-ios{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:var(--space-3);color:var(--brand-text-muted);font-size:var(--text-sm)}
+.install-never{display:inline-flex;align-items:center;gap:8px;font-size:var(--text-sm);color:var(--brand-text-muted);cursor:pointer}
+.install-never input{width:18px;height:18px;accent-color:var(--brand-primary)}
