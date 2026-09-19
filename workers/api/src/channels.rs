@@ -324,10 +324,15 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Response
     let raw = req.bytes().await?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let settings = crate::hubstore::load_settings(&place).await?.settings;
-    if let Some(secret) = settings.get("notify.meta.secret") {
-        if !signature_ok(secret.trim(), req.headers().get(SIGNATURE_HEADER).ok().flatten(), &raw) {
-            return Response::error("bad signature", 401);
-        }
+    // THE SIGNATURE IS THE ONLY AUTHORITY on this URL: without the app secret,
+    // anyone could write into the venue's inbox and ring the owner's bell.
+    // An unsigned hub acknowledges (Meta would retry a 4xx for days) and drops.
+    let Some(secret) = settings.get("notify.meta.secret") else {
+        console_error!("webhook: delivery for {} dropped, no app secret is set", place.venue);
+        return Response::from_json(&json!({ "stored": 0, "ignored": "no app secret is set" }));
+    };
+    if !signature_ok(secret.trim(), req.headers().get(SIGNATURE_HEADER).ok().flatten(), &raw) {
+        return Response::error("bad signature", 401);
     }
     let body: Value = serde_json::from_slice(&raw).unwrap_or(Value::Null);
     let db = ctx.d1("DB")?;

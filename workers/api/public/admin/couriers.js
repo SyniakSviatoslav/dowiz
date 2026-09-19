@@ -42,7 +42,7 @@ function openInvite(){
     <div id="iOut"></div>`, { name: 'invite' });
   $('#iGo').onclick = async () => {
     try {
-      const d = await busy($('#iGo'), () => post('/owner/couriers/invite', withLoc({ phone: $('#i-phone').value.trim(), name: $('#i-name').value.trim() })));
+      const d = await busy($('#iGo'), () => post('/owner/couriers/invite', { phone: $('#i-phone').value.trim(), name: $('#i-name').value.trim() }));
       $('#iOut').innerHTML = `<p class="eyebrow mt-3" data-t="inviteCode"></p><div class="code" id="iCode">${esc(d.code)}</div><p class="hint" data-t="keyOnce"></p>
         <button class="btn ghost mt-2" id="iCopy">${icon('copy')}<span data-t="copy"></span></button>`;
       for (const el of $$('[data-t]', $('#iOut'))) el.textContent = t(el.dataset.t);
@@ -76,7 +76,7 @@ async function openCourier(id){
       const ok = await confirm(t('deactivate'), t('deactivateHint'), { danger: true });
       if (!ok) return openCourier(id);
     }
-    try { await post(`/owner/couriers/${encodeURIComponent(id)}/active`, withLoc({ active: e.target.checked })); toast(t('saved')); loadCouriers().then(rerender); openCourier(id); }
+    try { await post(`/owner/couriers/${encodeURIComponent(id)}/active`, { active: e.target.checked }); toast(t('saved')); loadCouriers().then(rerender); openCourier(id); }
     catch (err) { toast(String(err.message || err)); e.target.checked = !e.target.checked; }
   };
 }

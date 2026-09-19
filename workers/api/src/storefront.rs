@@ -489,6 +489,10 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     location["nextOpen"] = next_open
         .map(|(d, m)| json!({ "weekday": d, "minute": m }))
         .unwrap_or(Value::Null);
+    // The owner's OWN switches, for the console: `status` above is what a
+    // customer sees (closed outside hours or when paused), not what was set.
+    location["ownerStatus"] = json!(loc.status);
+    location["deliveryPaused"] = json!(paused);
     // Which KIND of closed, so the storefront can say which.
     location["closedReason"] = if paused {
         json!("paused")

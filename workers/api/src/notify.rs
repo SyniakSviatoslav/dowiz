@@ -224,12 +224,10 @@ pub async fn test(req: Request, ctx: RouteContext<()>) -> Result<Response> {
             Err(e) => json!({ "error": e }),
         },
     };
+    // 200 whatever happened: the per-channel verdict IS the answer, and a 502
+    // would hide it behind the console's generic "HTTP 502".
     let any_ok = telegram_v == json!("ok") || whatsapp_v == json!("ok");
-    let mut res = Response::from_json(&json!({ "ok": any_ok, "telegram": telegram_v, "whatsapp": whatsapp_v }))?;
-    if !any_ok {
-        res = res.with_status(502);
-    }
-    Ok(res)
+    Response::from_json(&json!({ "ok": any_ok, "telegram": telegram_v, "whatsapp": whatsapp_v }))
 }
 
 #[cfg(test)]

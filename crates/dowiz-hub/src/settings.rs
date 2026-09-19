@@ -258,7 +258,8 @@ pub const KNOWN: &[Known] = &[
     Known {
         key: "notify.meta.secret",
         label: "Meta app secret",
-        hint: "Optional. When set, every webhook delivery must carry Meta's signature over it.",
+        hint: "Required for the inbox: every delivery must carry Meta's signature over it, \
+               and an unsigned delivery is acknowledged and dropped.",
         default: "",
     },
     // ── Instagram, through the Graph API ──

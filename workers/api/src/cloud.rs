@@ -50,7 +50,13 @@ pub fn cfg(s: &dowiz_hub::settings::Settings) -> Option<S3> {
     }
     let region = { let r = get("cloud.s3.region"); if r.is_empty() { "auto".into() } else { r } };
     let prefix = get("cloud.s3.prefix").trim_matches('/').to_string();
-    Some(S3 { endpoint: endpoint.trim_end_matches('/').to_string(), region, bucket, key, secret, prefix })
+    // Scheme and host only: SigV4 signs the host, and a path typed into the
+    // endpoint would be in the URL but not in the canonical request.
+    let endpoint = match endpoint.split_once("://") {
+        Some((scheme, rest)) => format!("{scheme}://{}", rest.split('/').next().unwrap_or("")),
+        None => format!("https://{}", endpoint.split('/').next().unwrap_or("")),
+    };
+    Some(S3 { endpoint, region, bucket, key, secret, prefix })
 }
 
 fn hmac(key: &[u8], msg: &[u8]) -> Vec<u8> {
@@ -97,7 +103,9 @@ fn host_of(endpoint: &str) -> &str {
 pub async fn put(s3: &S3, object_key: &str, body: Vec<u8>, content_type: &str, now_ms: i64) -> std::result::Result<String, String> {
     let (amz_date, date) = amz_dates(now_ms);
     let host = host_of(&s3.endpoint);
-    let path = format!("/{}/{}", s3.bucket, object_key);
+    // Each segment percent-encoded ONCE, identically in the canonical request
+    // and in the URL sent, or a space in a prefix is a SignatureDoesNotMatch.
+    let path = format!("/{}/{}", crate::mcp::enc(&s3.bucket), object_key.split('/').map(crate::mcp::enc).collect::<Vec<_>>().join("/"));
     let payload_hash = hex(&Sha256::digest(&body));
     let canonical_headers = format!("host:{host}\nx-amz-content-sha256:{payload_hash}\nx-amz-date:{amz_date}\n");
     let canonical_request = format!("PUT\n{path}\n\n{canonical_headers}\n{SIGNED_HEADERS}\n{payload_hash}");

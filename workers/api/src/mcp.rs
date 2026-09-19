@@ -77,7 +77,7 @@ const TOOLS: &[Tool] = &[
     Tool { name: "promotions", description: "Promo codes and how used each is.",
         schema: r#"{"type":"object","properties":{}}"#, verb: Verb::Get, path: "/api/owner/promotions" },
     Tool { name: "create_promotion", description: "Create a promo code: percent or a fixed amount off, optional minimum order and use cap.",
-        schema: r#"{"type":"object","required":["code","kind","value"],"properties":{"code":{"type":"string"},"kind":{"type":"string","enum":["percent","amount"]},"value":{"type":"integer"},"minOrder":{"type":"integer"},"maxUses":{"type":"integer"}}}"#, verb: Verb::Post, path: "/api/owner/promotions" },
+        schema: r#"{"type":"object","required":["code","kind","value"],"properties":{"code":{"type":"string"},"kind":{"type":"string","enum":["percent","fixed"]},"value":{"type":"integer"},"minOrder":{"type":"integer"},"maxUses":{"type":"integer"}}}"#, verb: Verb::Post, path: "/api/owner/promotions" },
     Tool { name: "venue_state", description: "Open, mark busy or close the venue; pause or resume delivery.",
         schema: r#"{"type":"object","properties":{"status":{"type":"string","enum":["open","busy","closed"]},"delivery_paused":{"type":"boolean"}}}"#, verb: Verb::Post, path: "/api/owner/location" },
     Tool { name: "inbox", description: "Customer conversations from WhatsApp and Instagram, newest first, with unread counts.",
@@ -89,6 +89,10 @@ const TOOLS: &[Tool] = &[
     Tool { name: "backup_to_cloud", description: "Push a full backup of the venue to its configured S3-compatible bucket now.",
         schema: r#"{"type":"object","properties":{}}"#, verb: Verb::Post, path: "/api/owner/backup/cloud" },
 ];
+
+/// The POST handlers whose body names the venue. The others refuse unknown
+/// fields (`deny_unknown_fields`), so `location_id` is injected only here.
+const LOCATION_IN_BODY: &[&str] = &["order_action", "assign_courier", "set_dish", "venue_state", "inbox_reply"];
 
 /// RFC 3986 unreserved characters pass; everything else is %XX. A local
 /// twelve-line function rather than a crate, per the feature discipline.
@@ -191,7 +195,9 @@ async fn call_tool(caller: &Caller<'_>, name: &str, args: Value) -> std::result:
             (url, Method::Get, None)
         }
         Verb::Post => {
-            args.insert("location_id".into(), json!(caller.location_id));
+            if LOCATION_IN_BODY.contains(&name) {
+                args.insert("location_id".into(), json!(caller.location_id));
+            }
             headers.set("content-type", "application/json").map_err(|e| e.to_string())?;
             (format!("{}{}", caller.origin, path), Method::Post, Some(Value::Object(args).to_string()))
         }
@@ -302,6 +308,9 @@ pub async fn rpc(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
         .await?
         .map(|r| r.slug)
         .unwrap_or_default();
+    if slug.trim().is_empty() {
+        return Response::error("this key names no venue", 403);
+    }
     let token = match auth::sign(
         &ctx.env,
         &Claims::Owner {

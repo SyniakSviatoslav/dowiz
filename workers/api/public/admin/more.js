@@ -86,7 +86,7 @@ async function openPosts(){
     let d; try { d = await api('/owner/posts'); } catch (e) { return fail(e); }
     const list = d.posts || [];
     $('#postList').innerHTML = `<p class="hint">${d.enabled ? `${t('autopost')}: ${t('on')}` : `${t('autopost')}: ${t('off')}`} · ${t('tgChannel')}: ${esc(d.channel || '—')}</p>` +
-      (list.length ? list.map(p => `<div class="rowc" data-post="${esc(p.id)}">${icon('send')}<span class="t"><b>${esc(p.text).slice(0, 80)}</b><small>${esc(p.about || '')} · <span data-t="${p.state === 'draft' ? 'draft' : p.state === 'published' ? 'published' : p.state === 'failed' ? 'failed' : 'rejectPost'}"></span>${p.error ? ' · ' + esc(p.error) : ''}</small></span></div>`).join('') : `<div class="empty">${icon('send')}<b data-t="noPosts"></b></div>`);
+      (list.length ? list.map(p => `<div class="rowc" data-post="${esc(p.id)}">${icon('send')}<span class="t"><b>${esc(p.text.slice(0, 80))}</b><small>${esc(p.about || '')} · <span data-t="${p.state === 'draft' ? 'draft' : p.state === 'published' ? 'published' : p.state === 'failed' ? 'failed' : 'rejectPost'}"></span>${p.error ? ' · ' + esc(p.error) : ''}</small></span></div>`).join('') : `<div class="empty">${icon('send')}<b data-t="noPosts"></b></div>`);
     paint();
     for (const r of $$('[data-post]', $('#postList'))) r.onclick = () => openPost(list.find(p => p.id === r.dataset.post));
   };

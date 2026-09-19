@@ -170,6 +170,13 @@ pub fn estimate(
         order.pointer("/fulfilment/address/lat_udeg").and_then(Value::as_i64).map(|n| n as i32),
         order.pointer("/fulfilment/address/lon_udeg").and_then(Value::as_i64).map(|n| n as i32),
     );
+    // NO DOOR, NO LIVE ESTIMATE. A delivery placed without a map pin has no
+    // road leg to compute; an estimate that silently dropped it read "18–24"
+    // against a quoted "35–45", and the storefront preferred it. The quote
+    // made at checkout stays the number until a courier's fix says otherwise.
+    if !pickup && door.0.is_none() {
+        return None;
+    }
     let mut known = json!({ "venue": venue.0.is_some(), "door": door.0.is_some(), "courier": false });
     let assigned = order.get("courier_id").and_then(Value::as_str);
     let courier_fix = match assigned {
@@ -276,7 +283,7 @@ pub async fn attach_all(
             .map(|n| n as u16)
     };
     for o in orders.iter_mut() {
-        o["eta"] = estimate(o, &loc, &k, &cooking, &fixes, &busy, now_ms).unwrap_or(Value::Null);
+        if let Some(e) = estimate(o, &loc, &k, &cooking, &fixes, &busy, now_ms) { o["eta"] = e; }
     }
 }
 
@@ -312,7 +319,7 @@ pub async fn attach_one(
             .and_then(|p| p.get("cookingMin").and_then(Value::as_u64))
             .map(|n| n as u16)
     };
-    order["eta"] = estimate(order, &loc, &k, &cooking, &fixes, &busy, now_ms).unwrap_or(Value::Null);
+    if let Some(e) = estimate(order, &loc, &k, &cooking, &fixes, &busy, now_ms) { order["eta"] = e; }
 }
 
 /// Every status transition leaves its time on the order, so the estimate can

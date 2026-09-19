@@ -182,6 +182,9 @@ pub async fn check(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
                 // The endpoint's model list is the cheapest question an
                 // OpenAI-compatible server answers.
                 let base = s.known("ai.endpoint");
+                if base.trim().is_empty() {
+                    return Response::from_json(&json!({ "ok": false, "which": "ai", "code": "no_endpoint", "error": "no endpoint is set" })).map(|r| r.with_status(502));
+                }
                 let headers = Headers::new();
                 if let Some(tok) = s.get("ai.token") { headers.set("authorization", &format!("Bearer {}", tok.trim()))?; }
                 let r = Request::new_with_init(&format!("{}/models", base.trim_end_matches('/')), RequestInit::new().with_method(Method::Get).with_headers(headers))?;

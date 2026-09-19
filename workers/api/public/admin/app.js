@@ -98,7 +98,7 @@ function paintLive(){
 // ── the header: the venue's state ───────────────────────────────────────────
 function paintVenue(){
   const v = S.venue; if (!v) return;
-  const st = v.deliveryPaused ? 'closed' : (v.status || 'open');
+  const st = v.deliveryPaused ? 'closed' : (v.ownerStatus || v.status || 'open');
   const chip = $('#vstate'); chip.className = `vstate ${st}`;
   $('#vstateT').textContent = v.deliveryPaused ? t('paused') : t(st);
   $('#brandName').textContent = v.name || 'dowiz';
@@ -108,10 +108,10 @@ function paintVenue(){
 function openState(){
   const v = S.venue || {};
   sheet(`<p class="eyebrow" data-t="venue"></p><h2 data-t="setState"></h2>
-    ${STATES.map(s => `<button type="button" class="choice ${v.status === s && !v.deliveryPaused ? 'on' : ''}" data-state="${s}">${icon(s === 'open' ? 'check' : s === 'busy' ? 'clock' : 'x')}<span class="t" data-t="${s}"></span>${icon('check', 'ck')}</button>`).join('')}
+    ${STATES.map(s => `<button type="button" class="choice ${(v.ownerStatus || v.status) === s && !v.deliveryPaused ? 'on' : ''}" data-state="${s}">${icon(s === 'open' ? 'check' : s === 'busy' ? 'clock' : 'x')}<span class="t" data-t="${s}"></span>${icon('check', 'ck')}</button>`).join('')}
     <label class="switch mt-2"><input type="checkbox" id="pauseD" ${v.deliveryPaused ? 'checked' : ''}><span class="switch-k"></span><span class="t" data-t="paused"></span></label>`, { name: 'state' });
   for (const b of $$('[data-state]')) b.onclick = async () => {
-    if (b.dataset.state === 'closed' && v.status !== 'closed') {
+    if (b.dataset.state === 'closed' && (v.ownerStatus || v.status) !== 'closed') {
       // Closing stops every new order; the old console asked, and so does this one.
       const ok = await confirm(t('closed'), t('closeVenueHint'), { danger: true });
       if (!ok) return openState();
@@ -148,9 +148,14 @@ export async function loadOrders(){
   if (fresh.length && S.booted && S.phase === 'ready') { S.fresh = new Set(fresh.map(o => o.id)); ring(); }
 }
 export async function loadStats(){ try { S.stats = await api(`/owner/dashboard?location_id=${encodeURIComponent(store.loc)}`); } catch {} }
+/// The venue's storefront slug: the first label of the host on a venue
+/// subdomain, else the location id (which is the slug at birth, but a venue
+/// restored from a bundle may carry a different one).
+const HOST_LABELS_OF_A_VENUE = 3;
+const venueSlug = () => { const h = location.hostname.split('.'); return h.length >= HOST_LABELS_OF_A_VENUE ? h[0] : store.loc; };
 export async function loadVenue(){
   try {
-    const slug = store.loc;
+    const slug = venueSlug();
     const d = await api(`/public/locations/${encodeURIComponent(slug)}/menu?locale=${lang}`);
     S.venue = d.location; S.categories = d.categories || [];
     S.products = S.categories.flatMap(c => (c.products || []).map(p => ({ ...p, categoryId: c.id, categoryName: c.name, translations: {} })));
