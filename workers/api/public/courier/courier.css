@@ -458,6 +458,7 @@ h2{font-family:var(--brand-font-heading);font-weight:var(--weight-normal);font-s
 /* The map's top-left logo control sits under the shift chip and showed
    through it as a broken glyph; the attribution at the bottom stays. */
 .maplibregl-ctrl-top-left{display:none}
-/* The zoom control sat at y=0 under the HUD's microphone (the old rule leaned
-   on a spacing token this sheet never defines). Below the chips, always. */
-.maplibregl-ctrl-top-right{top:calc(env(safe-area-inset-top,0px) + var(--space-3) + var(--tap) + var(--space-3))}
+/* The zoom control sat at y=0 under the HUD's microphone: maplibre's own
+   stylesheet is appended to <head> AFTER this one when the map loads, so its
+   `top:0` won on source order. The id wins on specificity. */
+#map .maplibregl-ctrl-top-right{top:calc(env(safe-area-inset-top,0px) + var(--space-3) + var(--tap) + var(--space-3))}
