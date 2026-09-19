@@ -1,0 +1,22 @@
+{
+  "name": "dowiz-promo-30s",
+  "private": true,
+  "version": "0.1.0",
+  "description": "dowiz × Dubin & Sushi — the 30-second keynote cut (Remotion composition)",
+  "scripts": {
+    "studio": "remotion studio src/index.tsx",
+    "render:en": "remotion render src/index.tsx DowizPromo out/promo-en.mp4 --crf=18 --props='{\"lang\":\"en\",\"music\":null,\"musicInSeconds\":12}'",
+    "render:uk": "remotion render src/index.tsx DowizPromo out/promo-uk.mp4 --crf=18 --props='{\"lang\":\"uk\",\"music\":null,\"musicInSeconds\":12}'",
+    "render:sq": "remotion render src/index.tsx DowizPromo out/promo-sq.mp4 --crf=18 --props='{\"lang\":\"sq\",\"music\":null,\"musicInSeconds\":12}'"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.441",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "remotion": "^4.0.441"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "typescript": "^5.3.0"
+  }
+}

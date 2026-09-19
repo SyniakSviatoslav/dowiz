@@ -143,10 +143,18 @@ Shot | EN (master) | UK | SQ
 12 | Installs as an app | Встановлюється як додаток | Instalohet si aplikacion
 13 | Launch your fee-free mini-app · dowiz.org | Запусти свій міні-додаток без тарифів · dowiz.org | Nis mini-aplikacionin tënd pa tarifa · dowiz.org
 
-## 8. Next
+## 8. State — 2026-09-19, late
 
-1. Import the track, mark the beat grid from 0:12, export `beat-grid.json`.
-2. Capture the six UI clips (Playwright script `_promo_capture.mjs`); shoot the ocean and map on a phone.
-3. Generate H1 and H4 in Higgsfield; grade both to true black.
-4. Build `DowizPromo30` from §6; render the 9:16 draft; check every cut against the grid.
-5. Secure the sync licence for "Space Cowboy" before publishing.
+Built: `marketing/promo-30s/` holds the Remotion composition (`DowizPromo`, 1080×1920, 30 fps,
+three languages by prop), the three faces it ships with (EB Garamond for the headlines, JetBrains
+Mono for captions, DM Sans for the numerals and subtitles — Iowan Old Style is not on any render
+box), and the two capture scripts. Six UI clips are captured; the posts clip stages a draft by
+intercepting the API and really presses Publish. Silent drafts of all three languages render.
+
+Next, in order:
+1. Get "Space Cowboy" on disk, tap the beat grid from 0:12, nudge `SHOTS` so every cut is on a
+   beat; secure the sync licence before publishing.
+2. Shoot the ocean and the map on a phone (shot 6 is the tracking panel in the phone frame
+   until then; headless Chromium has no WebGL).
+3. Generate H1 and H4 in Higgsfield; grade both to true black; drop them in `public/promo/`.
+4. Render the three 9:16 masters at full scale; re-frame 1:1 and 16:9 on the same timeline.
