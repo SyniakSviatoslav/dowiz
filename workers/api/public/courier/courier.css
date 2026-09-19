@@ -450,3 +450,11 @@ h2{font-family:var(--brand-font-heading);font-weight:var(--weight-normal);font-s
 .eta{display:inline-flex;align-items:center;gap:var(--space-2);margin:0 0 var(--space-2);padding:4px 10px;border-radius:var(--radius-full);background:color-mix(in srgb,var(--brand-primary) 14%,transparent);color:var(--brand-text);font-family:var(--font-mono);font-size:var(--text-sm);font-variant-numeric:tabular-nums}
 .eta:empty{display:none}
 .status{padding:3px 10px;border-radius:var(--radius-full);background:color-mix(in srgb,var(--st,var(--brand-text-muted)) 14%,transparent);color:var(--st,var(--brand-text))}
+/* The toast's ink is the PAPER token, which both themes define; `--brand-surface`
+   is not set in the light block here and fell through to the dark default, so
+   the toast drew dark text on its dark fill (measured 2026-09-19: a black box). */
+.toast{color:var(--brand-bg)}
+.empty .ti{display:block;margin:0 auto var(--space-2);font-size:2rem}
+/* The map's top-left logo control sits under the shift chip and showed
+   through it as a broken glyph; the attribution at the bottom stays. */
+.maplibregl-ctrl-top-left{display:none}
