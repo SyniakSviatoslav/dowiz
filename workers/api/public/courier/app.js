@@ -9,6 +9,7 @@
 // "one incoming ripple + ping" on a new task.
 import { create as vcreate, speak, supported as vsupported } from '/lib/voice.js';
 import { createGuide } from '/lib/guide.js';
+import { t, lang, LANGS, setLang, nextLang, retranslate, intlLocale, voiceLocale } from '/courier/i18n.js';
 
 const API = '/api';
 const $ = (s, r = document) => r.querySelector(s);
@@ -59,16 +60,16 @@ let S = { onShift:false, mine:[], available:[], shift:null, watchId:null, wake:n
 const mqDark = matchMedia('(prefers-color-scheme: dark)');
 const isDark = () => (store.theme ? store.theme === 'dark' : mqDark.matches);
 const THEME_UI = {
-  '':      { icon:'sun-moon', label:'Тема: як на телефоні' },
-  'dark':  { icon:'moon',     label:'Тема: темна' },
-  'light': { icon:'sun',      label:'Тема: світла' },
+  '':      { icon:'sun-moon', label:'themeSystem' },
+  'dark':  { icon:'moon',     label:'themeDark' },
+  'light': { icon:'sun',      label:'themeLight' },
 };
 function applyTheme(){
   const p = store.theme;
   if (p) document.documentElement.dataset.theme = p; else delete document.documentElement.dataset.theme;
   const ui = THEME_UI[p] || THEME_UI[''];
   $('#themeBtn').innerHTML = icon(ui.icon);
-  $('#themeBtn').setAttribute('aria-label', ui.label);
+  $('#themeBtn').setAttribute('aria-label', t(ui.label)); $('#themeBtn').title = t('theme');
   // The two media-scoped theme-color metas follow the OS; a forced theme has
   // to drive the browser chrome itself, from the token the theme resolved to.
   if (p) document.querySelectorAll('meta[name="theme-color"]').forEach(m => m.setAttribute('content', cssVar('--brand-surface')));
@@ -147,6 +148,8 @@ function syncMapStyle(){
 }
 function sheetHeight(){ const s = $('#sheet'); return s ? Math.round(s.getBoundingClientRect().height) : 288; }
 function markMe(lon, lat){
+  S.me = { lat, lon };
+  const line = $('#etaLine'); if (line && S.mine[0]) line.textContent = etaText(S.mine[0]);
   if (!map) return;
   if (!meMarker) {
     const el = document.createElement('div');
@@ -241,7 +244,7 @@ async function api(path, opts = {}){
     const r = await fetch(API + path, { ...rest,
       headers: { 'content-type':'application/json', ...(rest.headers || {}),
                  ...(store.t ? { authorization:'Bearer ' + store.t } : {}) } });
-    if (r.status === 401) { store.t = null; renderLogin('Сесію завершено'); throw new Error('unauthorised'); }
+    if (r.status === 401) { store.t = null; renderLogin(t('sessionOver')); throw new Error('unauthorised'); }
     if (!r.ok) { let m = 'HTTP ' + r.status; try { const d = await r.json(); m = d.error || d.message || m; } catch {} throw new Error(m); }
     return r.status === 204 ? null : r.json();
   } finally {
@@ -266,11 +269,11 @@ function startTracking(){
     S.moving = speed != null && speed > MOVING_MPS;
     if (accuracy > MAX_ACCURACY_M) {
       // Say so rather than quietly sending it: a 500m fix looks like a position.
-      gps(`±${Math.round(accuracy)} м`, true);
+      gps(`±${Math.round(accuracy)} ${t('gpsUnit')}`, true);
       return;
     }
     if (speed != null && speed > MAX_SPEED_MPS) return;
-    gps(`±${Math.round(accuracy)} м`, false);
+    gps(`±${Math.round(accuracy)} ${t('gpsUnit')}`, false);
     const active = S.mine[0];
     try {
       await api('/courier/position', { method:'POST', body: JSON.stringify({
@@ -278,7 +281,7 @@ function startTracking(){
         speed_mps: speed ?? null, order_id: active ? active.id : null }) });
     } catch {}
   }, err => {
-    gps(err.code === 1 ? 'GPS заборонено' : 'GPS недоступний', true);
+    gps(err.code === 1 ? t('gpsDenied') : t('gpsUnavailable'), true);
   }, { enableHighAccuracy:true, maximumAge:5000, timeout:20000 });
 }
 function stopTracking(){
@@ -301,7 +304,7 @@ document.addEventListener('visibilitychange', () => {
     keepAwake(true);
     // Page Visibility warning (product-context §14): in the background the
     // browser throttles the GPS watch, so a run's trace has a hole in it.
-    if (away > 5000) toast('Застосунок був у фоні — GPS міг перерватися', 'alert-triangle');
+    if (away > 5000) toast(t('backgroundGps'), 'alert-triangle');
   }
   if (S.booted) load();
 });
@@ -309,19 +312,22 @@ document.addEventListener('visibilitychange', () => {
 // ── login ──
 function renderLogin(err){
   $('#app').innerHTML = `<form class="login" id="loginForm" novalidate>
-    <h2>Вхід для кур'єра</h2>
-    <label for="em">Email або телефон</label>
+    <div class="login-mark" aria-hidden="true"><span>d</span></div>
+    <h2>${esc(t('loginTitle'))}</h2><p class="hint2 center">${esc(t('loginLine'))}</p>
+    <label for="em">${esc(t('emailOrPhone'))}</label>
     <input id="em" autocomplete="username" inputmode="email" enterkeyhint="next">
-    <label for="pw">Пароль</label>
+    <label for="pw">${esc(t('password'))}</label>
     <input id="pw" type="password" autocomplete="current-password" enterkeyhint="go">
     ${err ? `<div class="err" role="alert">${icon('alert-circle')}<span>${esc(err)}</span></div>` : ''}
-    <button class="cta" id="go" type="submit">${icon('login')}Увійти</button>
-    <button class="ghost" id="toClaim" type="button">${icon('ticket')}У мене код запрошення</button>
+    <button class="cta" id="go" type="submit">${icon('login')}${esc(t('signIn'))}</button>
+    <button class="ghost" id="toClaim" type="button">${icon('ticket')}${esc(t('haveCode'))}</button>
+    <div class="langs">${LANGS.map(l => `<button type="button" class="chip ${l === lang ? 'on' : ''}" data-l="${l}">${l.toUpperCase()}</button>`).join('')}</div>
   </form>`;
   $('#toClaim').onclick = () => renderClaim();
+  for (const b of document.querySelectorAll('[data-l]')) b.onclick = () => { setLang(b.dataset.l); renderLogin(err); };
   $('#loginForm').onsubmit = async ev => {
     ev.preventDefault();
-    const b = $('#go'); b.disabled = true; b.innerHTML = `${icon('loader-2')}Входимо…`;
+    const b = $('#go'); b.disabled = true; b.innerHTML = `${icon('loader-2')}${esc(t('signingIn'))}`;
     const v = $('#em').value.trim();
     try {
       const r = await fetch(API + '/courier/auth/login', { method:'POST',
@@ -341,24 +347,24 @@ function renderLogin(err){
 // would know it, and a shared password is not a password.
 function renderClaim(err){
   $('#app').innerHTML = `<form class="login" id="claimForm" novalidate>
-    <h2>Код запрошення</h2>
-    <p class="hint2">Код дав вам заклад. Він діє тиждень і спрацьовує один раз.</p>
-    <label for="cph">Ваш телефон</label>
+    <h2>${esc(t('claimTitle'))}</h2>
+    <p class="hint2">${esc(t('claimHint'))}</p>
+    <label for="cph">${esc(t('yourPhone'))}</label>
     <input id="cph" type="tel" inputmode="tel" autocomplete="tel" enterkeyhint="next">
-    <label for="cod">Код</label>
+    <label for="cod">${esc(t('code'))}</label>
     <input id="cod" autocomplete="one-time-code" autocapitalize="characters"
            spellcheck="false" maxlength="16" enterkeyhint="next">
-    <label for="cpw">Придумайте пароль</label>
+    <label for="cpw">${esc(t('choosePassword'))}</label>
     <input id="cpw" type="password" autocomplete="new-password" minlength="8" enterkeyhint="go">
-    <p class="hint2">Щонайменше 8 символів. Заклад його не побачить.</p>
+    <p class="hint2">${esc(t('passwordHint'))}</p>
     ${err ? `<div class="err" role="alert">${icon('alert-circle')}<span>${esc(err)}</span></div>` : ''}
-    <button class="cta" id="cgo" type="submit">${icon('check')}Почати</button>
-    <button class="ghost" id="toLogin" type="button">${icon('arrow-left')}У мене вже є пароль</button>
+    <button class="cta" id="cgo" type="submit">${icon('check')}${esc(t('start'))}</button>
+    <button class="ghost" id="toLogin" type="button">${icon('arrow-left')}${esc(t('havePassword'))}</button>
   </form>`;
   $('#toLogin').onclick = () => renderLogin();
   $('#claimForm').onsubmit = async ev => {
     ev.preventDefault();
-    const b = $('#cgo'); b.disabled = true; b.innerHTML = `${icon('loader-2')}Перевіряємо…`;
+    const b = $('#cgo'); b.disabled = true; b.innerHTML = `${icon('loader-2')}${esc(t('checking'))}`;
     try {
       const r = await fetch(API + '/courier/auth/claim', { method:'POST',
         headers:{ 'content-type':'application/json' },
@@ -405,8 +411,8 @@ function setShiftTag(){
   const tag = $('#shiftTag');
   tag.classList.toggle('on', !!S.onShift);
   $('#shiftText').innerHTML = S.onShift
-    ? `на зміні · ${esc(S.shift?.deliveries ?? 0)} · <span class="money">${esc(money(S.shift?.cash ?? 0))}</span>`
-    : 'офлайн';
+    ? `${esc(t('onShift'))} · ${esc(S.shift?.deliveries ?? 0)} · <span class="money">${esc(money(S.shift?.cash ?? 0))}</span>`
+    : esc(t('offline'));
 }
 
 function render(){
@@ -415,7 +421,7 @@ function render(){
   // BEFORE anything is claimed about the shift. A skeleton here is not
   // decoration: the alternative is asserting "you are offline" on no evidence.
   if (S.phase === 'loading' && !S.loadedOnce) {
-    $('#app').innerHTML = `<div class="loadwrap" aria-busy="true" aria-label="Завантажуємо">
+    $('#app').innerHTML = `<div class="loadwrap" aria-busy="true" aria-label="${esc(t('loading'))}">
       <div class="skel skel-line"></div>
       <div class="skel skel-block"></div>
       <div class="skel skel-block"></div>
@@ -425,9 +431,9 @@ function render(){
   }
   if (S.phase === 'error' && !S.loadedOnce) {
     $('#app').innerHTML = `<div class="empty" role="alert">${icon('plug-connected-x')}
-      <b>Немає зв'язку із закладом</b>
+      <b>${esc(t('noLink'))}</b>
       <span class="reason">${esc(S.error || '')}</span></div>
-      <button class="cta go" id="retry" type="button">${icon('refresh')}Спробувати ще раз</button>`;
+      <button class="cta go" id="retry" type="button">${icon('refresh')}${esc(t('retry'))}</button>`;
     $('#retry').onclick = async () => {
       S.phase = 'loading'; render(); await load();
     };
@@ -436,8 +442,8 @@ function render(){
 
   if (!S.onShift) {
     stopTracking(); keepAwake(false); S.cashFor = null;
-    $('#app').innerHTML = `<div class="empty">${icon('moon-stars')}<b>Ви офлайн</b>Замовлення не надходитимуть, поки зміну не відкрито</div>
-      <button class="cta go" id="openShift" type="button">${icon('player-play')}Почати зміну</button>`;
+    $('#app').innerHTML = `<div class="empty">${icon('moon-stars')}<b>${esc(t('youAreOffline'))}</b>${esc(t('offlineHint'))}</div>
+      <button class="cta go" id="openShift" type="button">${icon('player-play')}${esc(t('openShift'))}</button>`;
     $('#openShift').onclick = () => setShift(true);
     return;
   }
@@ -459,18 +465,18 @@ function render(){
     // on purpose, and a text field on a live delivery screen would compete with
     // the address and the call button for a thumb that is on a handlebar. This
     // is the one state where the courier is standing still.
-    $('#app').innerHTML = `<div class="empty">${icon('radar-2')}<b>Вільних замовлень немає</b>Щойно щось буде готове — з'явиться тут</div>
+    $('#app').innerHTML = `<div class="empty">${icon('radar-2')}<b>${esc(t('noneFree'))}</b>${esc(t('noneFreeHint'))}</div>
       <div class="askrow">
-        <input id="askBox" class="ask" type="text" placeholder="Спитати про мої доставки…"
+        <input id="askBox" class="ask" type="text" placeholder="${esc(t('askPlaceholder'))}"
                autocomplete="off" enterkeyhint="send">
         <button class="ghost narrow" id="askGo" type="button">${icon('send')}</button>
       </div>
       <p id="answer" class="answer" hidden></p>
       <div class="row2">
-        <button class="ghost" id="earn" type="button">${icon('coins')}Мої зміни</button>
-        <button class="ghost" id="hist" type="button">${icon('history')}Історія</button>
+        <button class="ghost" id="earn" type="button">${icon('coins')}${esc(t('myShifts'))}</button>
+        <button class="ghost" id="hist" type="button">${icon('history')}${esc(t('history'))}</button>
       </div>
-      <button class="ghost" id="endShift" type="button">${icon('power')}Завершити зміну</button>`;
+      <button class="ghost" id="endShift" type="button">${icon('power')}${esc(t('endShift'))}</button>`;
     $('#endShift').onclick = () => setShift(false);
     $('#earn').onclick = openEarnings;
     $('#hist').onclick = openHistory;
@@ -482,15 +488,15 @@ function render(){
   // one screen, which the courier rules forbid.
   if (!S.available.some(o => o.id === S.sel)) S.sel = S.available[0].id;
   const chosen = S.available.find(o => o.id === S.sel);
-  $('#app').innerHTML = `<h2>Готові до забору</h2><p class="sub">${S.available.length} шт. · оберіть і візьміть</p>
+  $('#app').innerHTML = `<h2>${esc(t('readyForPickup'))}</h2><p class="sub">${S.available.length} ${esc(t('pcs'))} · ${esc(t('pickOne'))}</p>
     ${S.available.map(o => `<button class="task" type="button" data-sel="${esc(o.id)}" aria-pressed="${o.id === S.sel}">
       ${icon(o.id === S.sel ? 'circle-check-filled' : 'circle', 'pick')}
       <b>#${short(o.id)}</b>
       <span class="amt money">${esc(money(o.total))}</span>
       <span class="note">${esc(o.address?.line || '—')}</span>
     </button>`).join('')}
-    <button class="cta" id="take" type="button">${icon('package')}Взяти #${short(chosen.id)}</button>
-    <button class="ghost" id="endShift" type="button">${icon('power')}Завершити зміну</button>`;
+    <button class="cta" id="take" type="button">${icon('package')}${esc(t('take'))} #${short(chosen.id)}</button>
+    <button class="ghost" id="endShift" type="button">${icon('power')}${esc(t('endShift'))}</button>`;
   $('#endShift').onclick = () => setShift(false);
   document.querySelectorAll('[data-sel]').forEach(b => b.onclick = () => { S.sel = b.dataset.sel; render(); });
   $('#take').onclick = async () => {
@@ -504,18 +510,41 @@ function render(){
   };
 }
 
+/// A courier's own estimate to the door: straight-line distance from the last
+/// fix at a city cycling pace, plus the handover. The hub's kitchen profile
+/// does the same sum for the customer; here the courier sees their leg of it.
+const COURIER_SPEED_M_PER_MIN = 250, HANDOVER_MIN = 2, EARTH_R_M = 6_371_000;
+function straightLineM(a, b){
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(b.lat - a.lat), dLon = toRad(b.lon - a.lon);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLon / 2) ** 2;
+  return 2 * EARTH_R_M * Math.asin(Math.sqrt(h));
+}
+function etaText(o){
+  const lat = o.address?.lat_udeg, lon = o.address?.lon_udeg;
+  if (!S.me || !Number.isFinite(lat) || !Number.isFinite(lon)) return '';
+  const m = straightLineM(S.me, { lat: lat / 1e6, lon: lon / 1e6 });
+  const min = Math.max(1, Math.round(m / COURIER_SPEED_M_PER_MIN) + HANDOVER_MIN);
+  return `≈ ${min} ${t('min')} · ${(m / 1000).toFixed(1)} ${t('km')} ${t('etaToDoor')}`;
+}
+function bindLangChrome(){
+  const b = $('#langBtn'); if (!b) return;
+  b.textContent = lang.toUpperCase();
+  b.onclick = () => { setLang(nextLang()); b.textContent = lang.toUpperCase(); applyTheme(); guide = null; initGuide(); if (store.t) render(); else renderLogin(); };
+}
 function orderHead(o, picked){
   const cash = o.payment === 'cash' ? o.total : 0;
   const addr = o.address?.line || '';
   return `
-    <h2>${picked ? 'Доставляєте' : 'Заберіть замовлення'}</h2>
-    <p class="sub"><span class="status st-${picked ? 'delivery' : 'ready'}${picked ? ' live' : ''}">${picked ? 'В дорозі' : 'Готове'}</span>
-      <span>#${short(o.id)} · ${esc(o.items)} поз.</span></p>
+    <h2>${picked ? esc(t('delivering')) : esc(t('pickUpOrder'))}</h2>
+    <p class="sub"><span class="status st-${picked ? 'delivery' : 'ready'}${picked ? ' live' : ''}">${picked ? esc(t('onTheWay')) : esc(t('ready'))}</span>
+      <span>#${short(o.id)} · ${esc(o.items)} ${esc(t('items'))}</span></p>
+    <p class="eta" id="etaLine">${etaText(o)}</p>
     <div class="addr">${icon('map-pin')}<span>${esc(addr || '—')}</span></div>
     ${o.address?.note ? `<div class="note">${esc(o.address.note)}</div>` : ''}
     <div class="meta">
       ${cash ? `<span class="cash">${icon('cash')}<span class="money">${esc(money(cash))}</span></span>`
-             : `<span class="note">${icon('credit-card')} Оплачено онлайн</span>`}
+             : `<span class="note">${icon('credit-card')} ${esc(t('paidOnline'))}</span>`}
       ${o.contact?.phone ? `<a class="tel" href="tel:${esc(o.contact.phone)}">${icon('phone')}${esc(o.contact.phone)}</a>` : ''}
     </div>`;
 }
@@ -531,7 +560,7 @@ function orderHead(o, picked){
 
 let vrec = null, vlistening = false;
 
-function voiceLang(){ return 'uk-UA'; }          // this surface ships Ukrainian only
+function voiceLang(){ return voiceLocale(); }
 
 async function sendVoice(payload){
   return api('/voice', { method:'POST', body: JSON.stringify(payload) });
@@ -566,12 +595,12 @@ async function handleVoice(r){
   }
   if (!r.needsConfirmation) {
     if (r.action === 'status') {
-      const line = `Відкритих ${r.open}, чекає ${r.waiting}`;
+      const line = t('openWaiting', { open: r.open, waiting: r.waiting });
       voiceSay(line); speak(line, voiceLang());
     } else if (r.action === 'ask') {
       // NOT answered here. Voice works with the assistant off; if it is on, the
       // question goes to it, and if it is off the courier is told plainly.
-      voiceSay('Питаю…');
+      voiceSay(t('asking'));
       try {
         const d = await api('/courier/assist', { method:'POST', body: JSON.stringify({ question: r.question }) });
         voiceSay(d.answer); speak(d.answer, voiceLang());
@@ -598,7 +627,7 @@ async function confirmVoice(){
 
 function startVoice(){
   if (vlistening) { vrec?.stop(); return; }
-  if (!vsupported()) { toast('Браузер не розпізнає голос', 'microphone-off'); return; }
+  if (!vsupported()) { toast(t('voiceUnsupported'), 'microphone-off'); return; }
   clearVoice();
   vrec = vcreate({
     lang: voiceLang(),
@@ -613,8 +642,8 @@ function startVoice(){
     onError: err => {
       vlistening = false; setMicState();
       voiceSay(err === 'microphone-denied'
-        ? 'Немає дозволу на мікрофон'
-        : err === 'network' ? 'Розпізнавання недоступне офлайн' : String(err), 'bad');
+        ? t('micDenied')
+        : err === 'network' ? t('voiceOffline') : String(err), 'bad');
     },
     onEnd: () => { vlistening = false; setMicState(); },
   });
@@ -627,7 +656,7 @@ function setMicState(){
   const b = $('#mic'); if (!b) return;
   b.classList.toggle('on', vlistening);
   b.setAttribute('aria-pressed', String(vlistening));
-  b.setAttribute('aria-label', vlistening ? 'Зупинити запис' : 'Сказати команду');
+  b.setAttribute('aria-label', vlistening ? t('stopListening') : t('sayCommand'));
 }
 
 // The courier's own assistant. Its facts are only this courier's open
@@ -638,7 +667,7 @@ function bindAsk(){
   if (!box || !go) return;
   const ask = async () => {
     const q = box.value.trim(); if (!q) return;
-    go.disabled = true; out.hidden = false; out.textContent = 'Думає…';
+    go.disabled = true; out.hidden = false; out.textContent = t('thinking');
     try {
       const d = await api('/courier/assist', { method:'POST', body: JSON.stringify({ question: q }) });
       out.textContent = d.answer;
@@ -665,7 +694,7 @@ function bindAsk(){
 async function panel(title, bodyHtml){
   $('#app').innerHTML = `
     <div class="phead">
-      <button class="icon-btn" id="pback" type="button" aria-label="Назад">${icon('arrow-left')}</button>
+      <button class="icon-btn" id="pback" type="button" aria-label="${esc(t('back'))}">${icon('arrow-left')}</button>
       <b>${esc(title)}</b>
     </div>
     ${bodyHtml}`;
@@ -673,10 +702,10 @@ async function panel(title, bodyHtml){
 }
 
 async function openEarnings(){
-  await panel('Мої зміни', `<div class="skel skel-5"></div>`);
+  await panel(t('myShifts'), `<div class="skel skel-5"></div>`);
   let d;
   try { d = await api('/courier/earnings'); }
-  catch (e) { return panel('Мої зміни', `<p class="answer">${esc(String(e.message || e))}</p>`); }
+  catch (e) { return panel(t('myShifts'), `<p class="answer">${esc(String(e.message || e))}</p>`); }
   // TIPS ARE SHOWN APART FROM THE FLOAT. The cash on the first line is money
   // the courier is holding FOR the venue and will hand over; the tips are
   // theirs. One combined figure at the end of a shift is the wrong number to
@@ -685,33 +714,32 @@ async function openEarnings(){
     <div class="erow"><span>${esc(label)}</span>
       <span><b>${w.deliveries}</b> · <span class="money">${money(w.cash)}</span>${
         w.tips ? ` · <span class="money tips">+${money(w.tips)}</span>` : ''}</span></div>`;
-  await panel('Мої зміни', `
+  await panel(t('myShifts'), `
     <div class="ecash">
-      <span class="k">Готівка на руках</span>
+      <span class="k">${esc(t('cashInHand'))}</span>
       <span class="v money">${money(d.cashInHand)}</span>
     </div>
-    ${d.expectedCash ? `<p class="hint2">Ще в дорозі: <span class="money">${money(d.expectedCash)}</span></p>` : ''}
+    ${d.expectedCash ? `<p class="hint2">${esc(t('stillOnRoad'))}: <span class="money">${money(d.expectedCash)}</span></p>` : ''}
     <div class="elist">
-      ${row('Сьогодні', d.today)}${row('7 днів', d.week)}${row('30 днів', d.month)}
+      ${row(t('today'), d.today)}${row(t('days7'), d.week)}${row(t('days30'), d.month)}
     </div>
-    <p class="hint2">Доставки, зібрана готівка й <span class="tips">чайові</span>.
-       Готівку віддаєте закладу, чайові — ваші. Розрахунок оплати dowiz не веде.</p>`);
+    <p class="hint2">${esc(t('earningsHint'))}</p>`);
 }
 
 async function openHistory(){
-  await panel('Історія', `<div class="skel skel-4"></div>`);
+  await panel(t('history'), `<div class="skel skel-4"></div>`);
   let d;
   try { d = await api('/courier/history'); }
-  catch (e) { return panel('Історія', `<p class="answer">${esc(String(e.message || e))}</p>`); }
+  catch (e) { return panel(t('history'), `<p class="answer">${esc(String(e.message || e))}</p>`); }
   const rows = d.history || [];
-  await panel('Історія', rows.length ? `
+  await panel(t('history'), rows.length ? `
     <div class="elist">${rows.map(r => `
       <div class="erow">
         <span>${esc(r.street || '—')}<br>
-          <small class="hint2">${new Date(r.at || 0).toLocaleDateString('uk', { day:'numeric', month:'short' })} · ${esc(r.status)}</small></span>
+          <small class="hint2">${new Date(r.at || 0).toLocaleDateString(intlLocale(), { day:'numeric', month:'short' })} · ${esc(r.status)}</small></span>
         <span class="money">${money(r.cashCollected ?? r.total ?? 0)}</span>
       </div>`).join('')}</div>`
-    : `<div class="empty">${icon('history')}<b>Поки порожньо</b>Завершені доставки з'являться тут</div>`);
+    : `<div class="empty">${icon('history')}<b>${esc(t('emptyHistory'))}</b>${esc(t('emptyHistoryHint'))}</div>`);
 }
 
 // ── an offer, with the time left on it ──────────────────────────────────────
@@ -731,16 +759,16 @@ function renderOffer(o){
   const lapsed = left() === 0;
   $('#app').innerHTML = `
     <div class="offer">
-      <span class="tag on"><span class="dot"></span>Вам пропонують</span>
+      <span class="tag on"><span class="dot"></span>${esc(t('offered'))}</span>
       <b class="oid">#${short(o.id)}</b>
       <span class="amt money">${esc(money(o.total))}</span>
       <p class="note">${esc(o.address?.line || '—')}</p>
       <p class="hint2" id="offerLeft">${lapsed
-        ? 'Час вийшов — замовлення знову вільне, але ви ще можете його взяти'
-        : `Залишилось <b id="offerClock">${mmss(left())}</b>`}</p>
+        ? esc(t('offerLapsed'))
+        : `${esc(t('timeLeft'))} <b id="offerClock">${mmss(left())}</b>`}</p>
     </div>
-    <button class="cta" id="takeOffer" type="button">${icon('package')}Взяти</button>
-    <button class="ghost" id="endShift" type="button">${icon('power')}Завершити зміну</button>`;
+    <button class="cta" id="takeOffer" type="button">${icon('package')}${esc(t('take'))}</button>
+    <button class="ghost" id="endShift" type="button">${icon('power')}${esc(t('endShift'))}</button>`;
   $('#endShift').onclick = () => setShift(false);
   $('#takeOffer').onclick = async () => {
     const b = $('#takeOffer'); b.disabled = true;
@@ -775,15 +803,15 @@ function renderActive(o){
       ? `<div class="slide" id="slide">
            <div class="slide-fill" id="slideFill"></div>
            <button class="cta go slide-knob" id="done" type="button"
-                   aria-label="Доставлено — проведіть або натисніть">
-             ${icon('circle-check')}Доставлено</button>
-           <span class="slide-hint" aria-hidden="true">проведіть →</span>
+                   aria-label="${esc(t('deliveredAria'))}">
+             ${icon('circle-check')}${esc(t('delivered'))}</button>
+           <span class="slide-hint" aria-hidden="true">${esc(t('swipe'))}</span>
          </div>`
-      : `<button class="cta" id="pick" type="button">${icon('package')}Забрав</button>`}
+      : `<button class="cta" id="pick" type="button">${icon('package')}${esc(t('pickedUp'))}</button>`}
     <div class="row2">
       ${addr ? `<a class="ghost" target="_blank" rel="noopener"
-          href="https://www.openstreetmap.org/search?query=${encodeURIComponent(addr)}">${icon('external-link')}У картах</a>` : ''}
-      ${o.contact?.phone ? `<a class="ghost" href="tel:${esc(o.contact.phone)}">${icon('phone')}Подзвонити</a>` : ''}
+          href="https://www.openstreetmap.org/search?query=${encodeURIComponent(addr)}">${icon('external-link')}${esc(t('inMaps'))}</a>` : ''}
+      ${o.contact?.phone ? `<a class="ghost" href="tel:${esc(o.contact.phone)}">${icon('phone')}${esc(t('call'))}</a>` : ''}
     </div>`;
 
   // THE DESTINATION ON THE MAP. Micro-degrees back to degrees here and nowhere
@@ -803,7 +831,7 @@ function renderActive(o){
     const b = $('#pick');
     const had = b.innerHTML;
     b.disabled = true; b.setAttribute('aria-busy', 'true');
-    b.innerHTML = `${icon('loader-2')}Записуємо…`;
+    b.innerHTML = `${icon('loader-2')}${esc(t('saving'))}`;
     b.querySelector('.ti')?.classList.add('spin');
     try { await api(`/courier/orders/${encodeURIComponent(o.id)}/pickup`, { method:'POST', attend:true }); await load(); }
     catch (e) {
@@ -850,7 +878,7 @@ function renderActive(o){
       // instead of dragging. Confirm rather than refuse -- refusing would leave
       // a keyboard user with no way to finish a delivery at all.
       if (fired || travelled > 4) { e.preventDefault(); return; }
-      if (confirm('Позначити як доставлене?')) finish();
+      if (confirm(t('confirmDelivered'))) finish();
     };
   }
 
@@ -867,16 +895,16 @@ function renderActive(o){
 function renderCash(o){
   const cash = o.total;
   $('#app').innerHTML = `${orderHead(o, true)}
-    <label for="got">Скільки готівки отримано?</label>
+    <label for="got">${esc(t('howMuchCash'))}</label>
     <input id="got" class="money" inputmode="numeric" pattern="[0-9]*" autocomplete="off" enterkeyhint="done" value="${esc(cash)}">
-    <button class="cta go" id="confirm" type="button">${icon('circle-check')}Підтвердити</button>
-    <button class="ghost" id="back" type="button">${icon('arrow-left')}Назад</button>`;
+    <button class="cta go" id="confirm" type="button">${icon('circle-check')}${esc(t('confirm'))}</button>
+    <button class="ghost" id="back" type="button">${icon('arrow-left')}${esc(t('back'))}</button>`;
   const inp = $('#got');
   inp.focus(); inp.select();
   $('#back').onclick = () => { S.cashFor = null; renderActive(o); };
   const go = () => {
     const collected = parseInt(inp.value, 10);
-    if (!Number.isFinite(collected) || collected < 0) return toast('Некоректна сума', 'alert-circle');
+    if (!Number.isFinite(collected) || collected < 0) return toast(t('badAmount'), 'alert-circle');
     $('#confirm').disabled = true;
     deliver(o, collected);
   };
@@ -893,8 +921,8 @@ async function deliver(o, collected){
     S.cashFor = null;
     // A toast is plain text and cannot carry a class; the value is still the
     // kernel's integer. // money:toast
-    if (d.short > 0) toast(`Недостача ${money(d.short)} — записано`, 'alert-triangle'); // money:toast
-    else toast('Доставлено', 'circle-check');
+    if (d.short > 0) toast(`${t('shortfall')} ${money(d.short)} — ${t('recorded')}`, 'alert-triangle'); // money:toast
+    else toast(t('delivered'), 'circle-check');
     seaEvent('delivered', 160);
     await load();
   } catch (e) {
@@ -914,26 +942,23 @@ async function setShift(open){
 // over it. The help entry lives in the sheet and only while the courier is
 // standing still (offline, or on shift with nothing in hand): a "Довідка"
 // button beside a live delivery is one more thing to mis-tap on a handlebar.
-const HELP = {
-  welcome: { hint:false, title:'Це ваш застосунок кур’єра',
-    body:'Один екран — одна справа. Три короткі кроки покажуть, що тут до чого. Можна пропустити або завершити пізніше.' },
-  shift: { at:'#shiftTag', hint:false, title:'Зміна',
-    body:'Поки зміну не відкрито, замовлення не надходять. На зміні тут видно кількість доставок і зібрану готівку.' },
-  sheet: { at:'#sheet', hint:false, title:'Одна справа на екрані',
-    body:'Готові замовлення з’являються тут. Оберіть одне, натисніть «Взяти» — і далі екран веде крок за кроком до «Доставлено».' },
-  mic: { at:'#mic', hint:false, title:'Голосом',
-    body:'Скажіть «взяв», «доставив» або «де наступне». Застосунок повторить, що почув, і попросить підтвердити.' },
-  ask: { at:'#askBox', title:'Питання про доставки',
-    body:'Відповідає лише про ваші зміни й замовлення: скільки заробили, куди їхати далі, що було вчора.' },
-  help: { at:'.gd-help', hint:false, title:'Довідка',
-    body:'Ця кнопка повторить тур. Вона є лише тоді, коли ви стоїте, не на маршруті.' },
-};
+const HELP = () => ({
+  welcome: { hint:false, title:t('hWelcomeT'), body:t('hWelcome') },
+  shift: { at:'#shiftTag', hint:false, title:t('hShiftT'), body:t('hShift') },
+  sheet: { at:'#sheet', hint:false, title:t('hSheetT'), body:t('hSheet') },
+  mic: { at:'#mic', hint:false, title:t('hMicT'), body:t('hMic') },
+  ask: { at:'#askBox', title:t('hAskT'), body:t('hAsk') },
+  help: { at:'.gd-help', hint:false, title:t('hHelpT'), body:t('hHelp') },
+});
+/// The guide's own buttons, in the reader's language.
+const guideWords = () => ({ step: (i, n) => t('gStep', { i, n }), skip: t('gSkip'), later: t('gLater'), back: t('gBack'), next: t('gNext'), done: t('gDone'),
+  paused: t('gPaused'), skipped: t('gSkipped'), finished: t('gFinished'), unfinished: t('gUnfinished'), what: t('gWhat'), close: t('gClose'), help: t('help') });
 const TOUR = ['welcome', 'shift', 'sheet', 'mic', 'help'];
 let guide = null;
 function initGuide(){
   guide ??= createGuide({
-    key:'courier', help: HELP, tour: TOUR, toast,
-    mount: { into:'#app', className:'ghost', text:'Довідка',
+    key:'courier', help: HELP(), tour: TOUR, toast, words: guideWords(),
+    mount: { into:'#app', className:'ghost', text:t('help'),
              when: () => S.loadedOnce && !S.mine.length && !$('#pback') },
   });
   guide.init();
@@ -948,7 +973,7 @@ function bindVoiceChrome(){
 }
 
 async function boot(){ S.booted = true;
-  bindVoiceChrome();
+  bindVoiceChrome(); bindLangChrome();
   initGuide();
   // NOT awaited. The task list is what this screen is for; the map is how the
   // task is easier. Blocking the first paint on a 245 KB download would make
@@ -959,5 +984,6 @@ async function boot(){ S.booted = true;
   clearInterval(boot._i);
   boot._i = setInterval(() => { if (!document.hidden && S.booted) load(); }, 12000); }
 
-applyTheme();
+document.documentElement.lang = lang; document.title = t('appTitle'); retranslate(document);
+applyTheme(); bindLangChrome();
 store.t ? boot() : renderLogin();

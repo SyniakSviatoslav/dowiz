@@ -1107,3 +1107,13 @@ its source, which is why translations, logo and hours "did not work". Verified l
   Configure/Check; each tab screen carries a one-line `.screen-hint`; login shows a gold mark.
   Added icons `adjustments`, `sun-high`. Verified live at 390px: no overflow, no page errors;
   design gate GREEN. Headless Chromium has no `sq` ICU data, so dates render English there only.
+
+## 2026-09-19 (late) — courier app design pass: three languages, foil, a mark, the leg to the door
+- `public/courier/i18n.js` (sq/en/uk, 117 keys each, parity checked); `app.js` calls `t()` for
+  every string, the guide takes `words` (lib/guide.js keeps Ukrainian defaults), voice recogniser
+  follows the language (`sq-AL`/`en-US`/`uk-UA`). HUD has a one-tap language ring button; login
+  has chips + the dowiz mark. `etaText()` shows the courier's own leg: straight-line from the last
+  GPS fix at 250 m/min + 2 min handover, refreshed on every fix (`markMe` keeps `S.me`).
+  Serif h2, foil gold on the primary CTA, tinted status pills. Verified live on
+  dubin-sushi.dowiz.org/courier/ (login sq→uk→en, shift opened, no errors, 390px). The active-run
+  screen was not exercised: no free order existed on that hub and none was fabricated.

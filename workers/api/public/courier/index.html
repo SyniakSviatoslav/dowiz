@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="uk">
+<html lang="sq">
 <head>
 <meta charset="utf-8">
 <!-- PINCH ZOOM STAYS. `maximum-scale=1,user-scalable=no` was here to stop iOS
@@ -12,7 +12,7 @@
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#061b1a">
-<title>dowiz · кур'єр</title>
+<title>dowiz · courier</title>
 <!-- The map library (932 KB raw, 245 KB gzipped, measured) is fetched only when
      a delivery is actually on screen -- see loadMapLibrary in app.js -- and it
      is served from this origin, so there is no third party left to preconnect
@@ -42,7 +42,7 @@
 <div id="map"></div>
 <canvas id="sea" aria-hidden="true"></canvas>
 <div class="hud">
-  <span class="tag" id="shiftTag"><span class="dot" aria-hidden="true"></span><span id="shiftText">офлайн</span></span>
+  <span class="tag" id="shiftTag"><span class="dot" aria-hidden="true"></span><span id="shiftText" data-t="offline"></span></span>
   <span class="sp"></span>
   <span class="tag" id="gpsTag" hidden><i class="ti ti-gps i" aria-hidden="true"></i><span id="gpsText">GPS</span></span>
   <!-- The microphone sits in the HUD, reachable in EVERY state including
@@ -50,18 +50,19 @@
        Hidden entirely where the browser has no recogniser -- a button that
        cannot work is worse than no button. -->
   <button class="icon-btn" id="mic" type="button" aria-pressed="false"
-          aria-label="Сказати команду" title="Голос" hidden>
+          data-t-attr="aria-label:sayCommand title:voice" hidden>
     <i class="ti ti-microphone" aria-hidden="true"></i></button>
-  <button class="icon-btn" id="themeBtn" type="button" aria-label="Тема: системна" title="Тема"><i class="ti ti-sun-moon" aria-hidden="true"></i></button>
+  <button class="icon-btn lang" id="langBtn" type="button" data-t-attr="aria-label:language title:language">SQ</button>
+  <button class="icon-btn" id="themeBtn" type="button" data-t-attr="aria-label:theme title:theme"><i class="ti ti-sun-moon" aria-hidden="true"></i></button>
 </div>
 <!-- What was heard and what is about to happen. Above the sheet so it is
      readable at a glance without opening anything. -->
 <div class="vsay" id="vsay" role="status" aria-live="polite" hidden></div>
 <div class="vconfirm" id="vconfirm" hidden>
-  <button class="cta go" id="vyes" type="button"><i class="ti ti-check" aria-hidden="true"></i>Так</button>
-  <button class="ghost" id="vno" type="button"><i class="ti ti-x" aria-hidden="true"></i>Ні</button>
+  <button class="cta go" id="vyes" type="button"><i class="ti ti-check" aria-hidden="true"></i><span data-t="yes"></span></button>
+  <button class="ghost" id="vno" type="button"><i class="ti ti-x" aria-hidden="true"></i><span data-t="no"></span></button>
 </div>
-<section class="sheet" id="sheet" aria-label="Панель кур'єра">
+<section class="sheet" id="sheet" aria-label="dowiz">
   <div class="grab" aria-hidden="true"></div>
   <div class="sheet-in" id="app" aria-live="polite"></div>
 </section>

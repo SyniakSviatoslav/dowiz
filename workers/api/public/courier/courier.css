@@ -426,3 +426,27 @@ input.money{font-size:var(--text-2xl)}
 .skel-4{height:4rem}
 .status.st-ready{--st:var(--st-READY)}
 .status.st-delivery{--st:var(--st-IN_DELIVERY)}
+
+/* ── 2026-09-19 design pass: the console's language on the courier's sheet ──
+   Serif display for what is read, the gold as brushed foil on the one CTA,
+   a mark on the door, the leg to the door as one line, one button for the
+   language. Everything read while moving stays 16px or larger. */
+:root{--brand-font-heading:'Iowan Old Style','Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif;
+  --gold-lo:color-mix(in srgb,var(--brand-primary) 62%,#2a1d08);
+  --gold-hi:color-mix(in srgb,var(--brand-primary) 58%,#fff3d0);
+  --gold-grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9 .08' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23g)'/%3E%3C/svg%3E");
+  --gold-grad:linear-gradient(135deg,var(--gold-lo) 0%,var(--brand-primary) 28%,var(--gold-hi) 50%,var(--brand-primary) 72%,var(--gold-lo) 100%)}
+h2{font-family:var(--brand-font-heading);font-weight:var(--weight-normal);font-size:var(--text-2xl);letter-spacing:-.01em}
+.cta:not(.go){background-color:var(--brand-primary);background-image:var(--gold-grain),var(--gold-grad);background-size:120px 120px,200% 200%;background-blend-mode:overlay,normal;border-color:transparent}
+.cta:not(.go)[disabled]{background-image:none}
+.login-mark{width:56px;height:56px;margin:0 auto var(--space-2);border-radius:50%;display:grid;place-items:center;background-color:var(--brand-primary);background-image:var(--gold-grain),var(--gold-grad);background-size:120px 120px,200% 200%;background-blend-mode:overlay,normal;box-shadow:0 8px 24px rgba(214,154,61,.25)}
+.login-mark span{font-family:var(--brand-font-heading);font-style:italic;font-size:30px;line-height:1;color:var(--brand-on-primary)}
+.login h2{text-align:center}
+.hint2.center{text-align:center;margin-bottom:var(--space-3)}
+.langs{display:flex;justify-content:center;gap:var(--space-2);margin-top:var(--space-3)}
+.chip{min-height:40px;padding:0 14px;border-radius:var(--radius-full);border:1px solid var(--brand-border);background:var(--brand-surface);color:var(--brand-text);font-size:var(--text-sm);font-weight:var(--weight-semibold)}
+.chip.on{background-color:var(--brand-primary);background-image:var(--gold-grain),var(--gold-grad);background-size:120px 120px,200% 200%;background-blend-mode:overlay,normal;color:var(--brand-on-primary);border-color:transparent}
+.icon-btn.lang{width:auto;padding:0 12px;font-family:var(--font-mono);font-size:var(--text-sm);font-weight:var(--weight-semibold);letter-spacing:.06em}
+.eta{display:inline-flex;align-items:center;gap:var(--space-2);margin:0 0 var(--space-2);padding:4px 10px;border-radius:var(--radius-full);background:color-mix(in srgb,var(--brand-primary) 14%,transparent);color:var(--brand-text);font-family:var(--font-mono);font-size:var(--text-sm);font-variant-numeric:tabular-nums}
+.eta:empty{display:none}
+.status{padding:3px 10px;border-radius:var(--radius-full);background:color-mix(in srgb,var(--st,var(--brand-text-muted)) 14%,transparent);color:var(--st,var(--brand-text))}

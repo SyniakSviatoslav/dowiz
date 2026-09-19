@@ -80,7 +80,13 @@ function box(el, left, top, width, height){
 ///   mount  -- the help entry: { into, before, className, text, when }
 ///   toast  -- the surface's own toast(message)
 ///   onEnd  -- called with 'done' | 'paused' when the tour closes
-export function createGuide({ key, help = {}, tour = [], mount = null, toast = () => {}, onEnd = null } = {}){
+/// The guide's own words. A caller passes its language's; these are the defaults.
+const WORDS = { step: (i, n) => `Крок ${i} з ${n}`, skip: 'Пропустити', later: 'Завершити пізніше', back: 'Назад', next: 'Далі', done: 'Готово',
+  paused: 'Тур збережено — «Довідка» продовжить з цього місця', skipped: 'Тур пропущено — його завжди можна відкрити через «Довідка»',
+  finished: 'Готово. Маленькі «?» біля елементів пояснюють кожен окремо', unfinished: 'Тур не завершено — «Довідка» продовжить з того ж місця',
+  what: 'Що це', close: 'Закрити', help: 'Довідка' };
+export function createGuide({ key, help = {}, tour = [], mount = null, toast = () => {}, onEnd = null, words = {} } = {}){
+  const W = { ...WORDS, ...words };
   const SK = `dw_guide_${key}`;
   const read = () => { try { const v = JSON.parse(localStorage.getItem(SK) || 'null'); return v && typeof v === 'object' ? v : null; } catch { return null; } };
   const write = v => { try { localStorage.setItem(SK, JSON.stringify(v)); } catch {} };
@@ -128,16 +134,16 @@ export function createGuide({ key, help = {}, tour = [], mount = null, toast = (
   function renderCard(s, i){
     const n = steps.length, last = i + 1 === n;
     card.innerHTML = `
-      <button type="button" class="gd-x" aria-label="Завершити пізніше">${ICON('x')}</button>
-      <div class="gd-n">Крок ${i + 1} з ${n}</div>
+      <button type="button" class="gd-x" aria-label="${W.later}">${ICON('x')}</button>
+      <div class="gd-n">${W.step(i + 1, n)}</div>
       <h2 id="gd-title-${key}"></h2>
       <p></p>
       <div class="gd-acts">
-        ${last ? '' : `<button type="button" class="gd-btn gd-quiet" data-gd-act="skip">Пропустити</button>`}
-        <button type="button" class="gd-btn gd-quiet" data-gd-act="later">Завершити пізніше</button>
+        ${last ? '' : `<button type="button" class="gd-btn gd-quiet" data-gd-act="skip">${W.skip}</button>`}
+        <button type="button" class="gd-btn gd-quiet" data-gd-act="later">${W.later}</button>
         <span class="gd-sp"></span>
-        ${i > 0 ? `<button type="button" class="gd-btn" data-gd-act="back">Назад</button>` : ''}
-        <button type="button" class="gd-btn gd-pri" data-gd-act="next">${last ? 'Готово' : 'Далі'}</button>
+        ${i > 0 ? `<button type="button" class="gd-btn" data-gd-act="back">${W.back}</button>` : ''}
+        <button type="button" class="gd-btn gd-pri" data-gd-act="next">${last ? W.done : W.next}</button>
       </div>`;
     card.setAttribute('aria-labelledby', `gd-title-${key}`);
     card.querySelector('h2').textContent = s.title || '';
@@ -182,9 +188,9 @@ export function createGuide({ key, help = {}, tour = [], mount = null, toast = (
     const state = how === 'paused' ? 'paused' : 'done';
     write({ state, step: state === 'paused' ? cur : 0 });
     syncHelp();
-    if (how === 'paused') toast('Тур збережено — «Довідка» продовжить з цього місця');
-    else if (how === 'skip') toast('Тур пропущено — його завжди можна відкрити через «Довідка»');
-    else toast('Готово. Маленькі «?» біля елементів пояснюють кожен окремо');
+    if (how === 'paused') toast(W.paused);
+    else if (how === 'skip') toast(W.skipped);
+    else toast(W.finished);
     try { lastFocus?.focus?.({ preventScroll: true }); } catch {}
     onEnd?.(state);
   }
@@ -207,7 +213,7 @@ export function createGuide({ key, help = {}, tour = [], mount = null, toast = (
       try {
         if (!sessionStorage.getItem(`${SK}_said`)) {
           sessionStorage.setItem(`${SK}_said`, '1');
-          toast('Тур не завершено — «Довідка» продовжить з того ж місця');
+          toast(W.unfinished);
         }
       } catch {}
     }
@@ -222,7 +228,7 @@ export function createGuide({ key, help = {}, tour = [], mount = null, toast = (
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'gd-help' + (mount.className ? ` ${mount.className}` : '');
-    b.setAttribute('aria-label', 'Довідка'); b.title = 'Довідка';
+    b.setAttribute('aria-label', W.help); b.title = W.help;
     b.innerHTML = ICON('help-circle');
     if (mount.text) { const s = document.createElement('span'); s.textContent = mount.text; b.appendChild(s); }
     b.onclick = () => {
@@ -252,7 +258,7 @@ export function createGuide({ key, help = {}, tour = [], mount = null, toast = (
       el.dataset.gdHinted = name;
       const b = document.createElement('button');
       b.type = 'button'; b.className = 'gd-hint'; b.dataset.gd = name;
-      b.setAttribute('aria-label', `Що це: ${row.title || name}`);
+      b.setAttribute('aria-label', `${W.what}: ${row.title || name}`);
       b.setAttribute('aria-expanded', 'false');
       b.setAttribute('aria-controls', pop.id);
       b.innerHTML = ICON('help-circle');
@@ -275,7 +281,7 @@ export function createGuide({ key, help = {}, tour = [], mount = null, toast = (
     if (popFor) popFor.setAttribute('aria-expanded', 'false');
     popFor = btn;
     btn.setAttribute('aria-expanded', 'true');
-    pop.innerHTML = `<button type="button" class="gd-x" aria-label="Закрити">${ICON('x')}</button><b id="${pop.id}-t"></b><p></p>`;
+    pop.innerHTML = `<button type="button" class="gd-x" aria-label="${W.close}">${ICON('x')}</button><b id="${pop.id}-t"></b><p></p>`;
     pop.setAttribute('aria-labelledby', `${pop.id}-t`);
     pop.querySelector('b').textContent = row.title || '';
     pop.querySelector('p').textContent = text(row);
