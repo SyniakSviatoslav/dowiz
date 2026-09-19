@@ -1,0 +1,127 @@
+# dowiz × Dubin & Sushi — the 30-second cut, keynote style
+
+Version 3 · 2026-09-19 · **this is the cut we make.** The 50-second plan
+(`promo-dubin-sushi-2026-09.en.md`) stays as the asset list, prompts and rationale.
+
+## 1. The brief in one line
+
+An Apple product film: one idea per shot, the product floating in space, enormous type, no
+narrator, the music carries it. Thirty seconds, English, no amount on screen, ever; the message
+is the absence of fees. Dubin & Sushi is the venue on screen, with full permission.
+
+## 2. Soundtrack
+
+**Track:** "Space Cowboy" — Caib. **Plays through the whole film.**
+- Audio in-point: **song 0:12.000** = video 0:00. Out-point: song 0:42 = video 0:30, with a 600 ms
+  fade at the end (or a hard stop on the last downbeat if one falls within the final 400 ms).
+- First step in the edit: import the track, mark the beat grid from 0:12 (tap the tempo in the
+  editor, the exact BPM is read from the file, not assumed), and snap every cut below to a beat.
+  Titles land on downbeats; the phone's push-ins run across bars.
+- Dynamics: no ducking (there is no voice). UI taps and the one "burn" hit sit at −16 dB under the
+  track. Nothing else.
+- **Rights:** the track is copyrighted. A sync licence (or written permission from Caib / the
+  label) is needed before the film is published on Reels, TikTok or YouTube; without it the
+  platforms will mute or block it. The edit is built so the track can be swapped for a licensed
+  sound-alike at the same tempo if the licence does not come through.
+
+## 3. Look
+
+- **Stage:** true black `#000` with a faint gold floor reflection; not the storefront's paper. The
+  product (a phone at 390×844, DPR 3) floats centred, slight 8–12° perspective, slow push-ins
+  (2–4% over a shot), specular sweep across the glass every second shot.
+- **Type:** headline serif (`Iowan Old Style` / Palatino), 96–140 px, white `#f1e8d8`, tracking −2%,
+  one line, centred; the key numbers in mono 260 px; captions mono 24 px, uppercase, tracking 24%,
+  gold `#c9a35a`. Text enters with `opacity 0→1`, `translateY 24px→0`, `blur 6→0`, 360 ms,
+  `cubic-bezier(.2,.8,.2,1)`; leaves with a 180 ms fade. Never two headlines at once.
+- **Cuts:** hard cuts on beats. Two crossfades only (into the ocean, out of the ocean). Nothing
+  wipes, nothing slides.
+- **Colour:** black, white, gold; the storefront's own colours appear only inside the phone.
+
+## 4. The thirty seconds
+
+Video | Song | Shot | Visual | On screen
+---|---|---|---|---
+0:00–0:02 | 0:12 | 1 | Black. A craft box (Higgsfield H1, graded to black) closes; on the beat, banknotes lift from under the lid and burn to ash (Remotion particles). | **Giving away a third of every order?**
+0:02–0:04 | 0:14 | 2 | Black. Mono counter `−25%  −30%  −35%` in red, one tick per beat, shaking. | `per-order fees`
+0:04–0:07 | 0:16 | 3 | The counter flips on the downbeat to a gold **0**, foil breathing. Under it, one thin caption. Hold three seconds; the number does the talking. | **0** `no per-order fees · no tariffs · no commission`
+0:07–0:10 | 0:19 | 4 | The phone rises from below into centre frame, glass catching the light. On it: the storefront loader, the enso drawn in ink, the branch, the seal, DUBIN & SUSHI rising. | **Your own mini-app**
+0:10–0:13 | 0:22 | 5 | Same phone, the loader dissolves into the magazine grid; a tap; the dish reveal; "Add"; the cart pill grows. One continuous capture, slow push-in. | **Your brand. Your customers. Your orders.**
+0:13–0:16 | 0:25 | 6 | Crossfade into the tracking page filling the whole frame (shot on a phone): the ink ocean, "Being made for you", then the map: venue, door, the courier gliding. Crossfade back to black. | **They watch it come.**
+0:16–0:18 | 0:28 | 7 | Black. Five gold dots fly in on beats to one node: `storefront · phone · WhatsApp · Instagram · API`. The node pulses once. | **One hub for every order**
+0:18–0:20 | 0:30 | 8 | The phone, console: a draft post with a dish photo, "Publish", two ticks: Telegram, Instagram. | **Autoposting, on your approval**
+0:20–0:22 | 0:32 | 9 | Black. A lattice lock draws itself in one gold stroke; noise digits freeze into a crystal. | **Post-quantum security** `ML-KEM-768 · ML-DSA-65`
+0:22–0:24 | 0:34 | 10 | The phone, console: the assistant answers; a chip-in-a-house glyph, no cloud. | **Local AI. Data never leaves the venue.**
+0:24–0:26 | 0:36 | 11 | The phone, console: the orders tab, live ETA `8–12 min`, "Accept", the status flips gold. | **Keep 100% of every order**
+0:26–0:28 | 0:38 | 12 | The owner's hand lifts the phone (Higgsfield H4); the Dubin & Sushi icon on the home screen; a tap; the storefront opens. | **Installs as an app**
+0:28–0:30 | 0:40 | 13 | Black. The dowiz mark (gold `d`) lands on the last downbeat; `dowiz.org` beneath; fade. | **dowiz** `Launch your fee-free mini-app · dowiz.org`
+
+Rules of thumb while cutting: every shot starts on a beat; shots 3, 7, 9 and 13 start on
+downbeats; if the grid does not allow a 2-second shot, borrow from shot 5 or 6, never from 3.
+
+## 5. What is captured, what is generated
+
+Captured (Playwright `recordVideo`, iPhone 14 Pro preset, 60 fps), then composited onto the black
+stage inside a phone frame with reflections:
+- storefront: loader → grid → dish reveal → Add → cart pill (shots 4–5);
+- console: orders + ETA + Accept (11), posts + Publish (8), assistant (10);
+- tracking with the ocean and the map (6): **on a real phone**, headless Chromium here has no WebGL.
+
+Generated (Higgsfield, 9:16, 24 fps, graded to true black): H1 the box and the hands (shot 1),
+H4 the hand lifting the phone (shot 12). Prompts in the 50-second plan, §5. H2 and H3 are not
+used in this cut.
+
+Remotion only: counter and flip (2–3), the hub dots (7), the lattice lock (9), the end card (13),
+banknote and ash particles (1), the phone frame and its specular sweep.
+
+## 6. Assembly notes (OpenMontage / Remotion)
+
+Composition `DowizPromo30`, 1080×1920, 30 fps, 900 frames. Audio: `space-cowboy.wav` trimmed to
+`[12.000, 42.000]`, gain 0 dB, 600 ms fade-out; beat grid exported as a marker list and used for
+every `<Sequence from>`.
+
+```
+audio   space-cowboy.wav in=12.000 out=42.000 fade=0.6 markers=beat-grid.json
+stage   black + gold floor reflection (radial, 6%) + vignette 14%
+shot1   0.0–2.0   broll(H1, grade:black) + particles(notes→ash on beat 1) + title
+shot2   2.0–4.0   counter(-25,-30,-35, tick per beat, red, jitter 2px) + caption
+shot3   4.0–7.0   counter.flip("0", downbeat, gold-foil breathe 6.4s) + caption
+shot4   7.0–10.0  phone.rise(from -40%, 900ms) + screen(store-loader.mp4) + title
+shot5   10.0–13.0 phone.pushin(3%) + screen(store-grid-dish-add.mp4) + title
+shot6   13.0–16.0 xfade(12f) fullframe(track-ocean-map.mp4, phone-shot) xfade(12f) + title
+shot7   16.0–18.0 dots×5 fly-in on beats → node pulse + title
+shot8   18.0–20.0 phone + screen(admin-posts-approve.mp4) + ticks(telegram, instagram) + title
+shot9   20.0–22.0 lattice-lock(draw-on 700ms) + noise-digits(freeze 500ms) + title + mono
+shot10  22.0–24.0 phone + screen(admin-assistant.mp4) + glyph(chip-in-house) + title
+shot11  24.0–26.0 phone + screen(admin-orders-accept.mp4) + title
+shot12  26.0–28.0 broll(H4, grade:black) + screen-replace(store-open.mp4) + title
+shot13  28.0–30.0 mark(dowiz, land on last downbeat) + url + fade
+sfx     hit@0.9s(-16dB) · tap@10.6s · tap@18.9s · tap@24.8s · stamp@28.2s (all -16dB)
+titles  serif 96–140px white centred, captions mono 24px gold uppercase; enter 360ms, leave 180ms
+export  9:16 H.264 12Mbps AAC 256k; 1:1 and 16:9 re-framed on the same timeline
+```
+
+## 7. Titles in three languages
+
+Shot | EN (master) | UK | SQ
+---|---|---|---
+1 | Giving away a third of every order? | Віддаєш третину кожного замовлення? | Jep një të tretën e çdo porosie?
+2 | per-order fees | тарифи за замовлення | tarifa për porosi
+3 | 0 · no per-order fees · no tariffs · no commission | 0 · без тарифів за замовлення · без комісій | 0 · pa tarifa për porosi · pa komisione
+4 | Your own mini-app | Твій власний міні-додаток | Mini-aplikacioni yt
+5 | Your brand. Your customers. Your orders. | Твій бренд. Твої клієнти. Твої замовлення. | Marka jote. Klientët e tu. Porositë e tua.
+6 | They watch it come. | Вони бачать, як воно їде. | E shohin duke ardhur.
+7 | One hub for every order | Один хаб для всіх замовлень | Një qendër për të gjitha porositë
+8 | Autoposting, on your approval | Автопостинг з вашого схвалення | Autopostim me miratimin tuaj
+9 | Post-quantum security · ML-KEM-768 · ML-DSA-65 | Постквантова безпека · ML-KEM-768 · ML-DSA-65 | Siguri post-kuantike · ML-KEM-768 · ML-DSA-65
+10 | Local AI. Data never leaves the venue. | Локальний ШІ. Дані не виходять за поріг. | AI lokal. Të dhënat nuk dalin nga lokali.
+11 | Keep 100% of every order | Зберігай 100% кожного замовлення | Mbaj 100% të çdo porosie
+12 | Installs as an app | Встановлюється як додаток | Instalohet si aplikacion
+13 | Launch your fee-free mini-app · dowiz.org | Запусти свій міні-додаток без тарифів · dowiz.org | Nis mini-aplikacionin tënd pa tarifa · dowiz.org
+
+## 8. Next
+
+1. Import the track, mark the beat grid from 0:12, export `beat-grid.json`.
+2. Capture the six UI clips (Playwright script `_promo_capture.mjs`); shoot the ocean and map on a phone.
+3. Generate H1 and H4 in Higgsfield; grade both to true black.
+4. Build `DowizPromo30` from §6; render the 9:16 draft; check every cut against the grid.
+5. Secure the sync licence for "Space Cowboy" before publishing.
