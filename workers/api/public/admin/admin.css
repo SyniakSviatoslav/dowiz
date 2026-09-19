@@ -328,3 +328,46 @@ input[type="color"]{padding:4px;height:var(--tap);width:64px}
 .ig-out.ok{color:var(--ok,#2f8f6b)}
 .ig-out.err{color:var(--danger,#b3261e)}
 .rowc .act+.act{margin-left:4px}
+
+/* ── 2026-09-19 design pass: clearer hierarchy, one way to close, tiles ── */
+/* the sheet's close button: swipe and Escape stay, but a visible × is what a
+   kitchen thumb finds first */
+.sheet-x{position:sticky;top:10px;display:grid;place-items:center;width:36px;height:36px;margin:-10px var(--space-4) -26px auto;border-radius:var(--radius-full);border:1px solid var(--glass-border);background:var(--glass-strong);color:var(--brand-text);z-index:4;box-shadow:0 2px 10px rgba(0,0,0,.12)}
+.sheet-x .ti{font-size:18px}
+.sheet-in > .eyebrow:first-child,.sheet-in > p.eyebrow:first-of-type{padding-right:44px}
+/* screen hints: one quiet line under a title that says what the screen is for */
+.screen-hint{color:var(--brand-text-muted);font-size:var(--text-sm);margin:calc(var(--space-3) * -1) 0 var(--space-4);line-height:1.4}
+.screen-h .clock{font-size:var(--text-lg);color:var(--brand-text-muted);align-self:center}
+/* the day strip: four numbers in one row, label under the number, at every width */
+.stats.strip{grid-template-columns:repeat(4,1fr);gap:6px}
+.stats.strip .stat{padding:10px 6px;text-align:center}
+.stats.strip .stat b{display:block;font-size:var(--text-lg)}
+.stats.strip .stat.money b{font-size:var(--text-sm);letter-spacing:-.02em}
+.stats.strip .stat small{margin:4px 0 0;font-size:9px;letter-spacing:.08em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* an order's status as a tinted pill with its dot, not a bare mono word */
+.orow .st{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:var(--radius-full);background:color-mix(in srgb,var(--st,var(--brand-text-muted)) 14%,transparent);color:var(--st,var(--brand-text-muted));font-size:10px}
+.orow .st .dot{width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 6px currentColor}
+.orow[data-st="PENDING"] .st .dot{animation:pulse 1.2s ease-in-out infinite}
+/* tiles: the More screen as a grid a thumb can scan, two across */
+.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-2)}
+.tile{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-height:96px;padding:12px 12px 10px;border-radius:var(--radius-card);border:1px solid var(--glass-border);background:var(--glass);color:var(--brand-text);text-align:left;transition:transform var(--dur-fast) var(--ease),border-color var(--dur-fast) var(--ease)}
+.tile:active{transform:scale(.97)}
+.tile .tile-ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:color-mix(in srgb,var(--brand-primary) 14%,transparent);color:var(--brand-primary)}
+.tile .tile-ic .ti{font-size:19px}
+.tile b{font-weight:var(--weight-medium);font-size:var(--text-sm);line-height:1.2;margin-top:auto}
+.tile small{color:var(--brand-text-muted);font-size:var(--text-xs);line-height:1.2}
+/* an integration as a stacked card: name and state, the line, the proof, then the two actions */
+.igrow{padding:12px 14px;border-radius:var(--radius-card);border:1px solid var(--glass-border);background:var(--glass);display:flex;flex-direction:column;gap:6px}
+.igrow.on{background:var(--glass-strong)}
+.igrow-h{display:flex;align-items:center;gap:10px}
+.igrow-h .ti{font-size:20px;color:var(--brand-primary)}
+.igrow-h b{flex:1;font-weight:var(--weight-medium)}
+.igrow .ig-line,.igrow .ig-out{display:block;font-size:var(--text-xs);color:var(--brand-text-muted);line-height:1.35;white-space:normal}
+.igrow-a{display:flex;gap:8px;margin-top:4px}
+.igrow-a .act{flex:1}
+/* login: a mark above the name, the line under it */
+.login-mark{width:64px;height:64px;margin:0 auto var(--space-3);border-radius:50%;display:grid;place-items:center;background-color:var(--brand-primary);background-image:var(--gold-grain),var(--gold-grad);background-size:120px 120px,200% 200%;background-blend-mode:overlay,normal;box-shadow:0 10px 30px var(--accent-glow)}
+.login-mark span{font-family:var(--brand-font-heading);font-size:34px;color:var(--brand-on-primary);font-style:italic;line-height:1}
+.login-line{font-size:var(--text-sm)}
+.btn-row.compact{justify-content:flex-end;flex-wrap:wrap}
+.btn-row.compact .act{flex:none}

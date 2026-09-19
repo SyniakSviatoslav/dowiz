@@ -37,7 +37,8 @@ async function module(id){
 function renderLogin(err){
   $('#top').hidden = true; $('#nav').hidden = true;
   $('#app').innerHTML = `<div class="login">
-    <h1>dowiz</h1><p data-t="console"></p>
+    <div class="login-mark" aria-hidden="true"><span>d</span></div>
+    <h1>dowiz</h1><p data-t="console"></p><p class="login-line" data-t="loginLine"></p>
     <label for="e" data-t="email"></label><input id="e" type="email" autocomplete="username" inputmode="email">
     <label for="p" data-t="password"></label><input id="p" type="password" autocomplete="current-password">
     ${err ? `<div class="err" role="alert">${icon('alert-circle')}<span>${esc(err)}</span></div>` : ''}

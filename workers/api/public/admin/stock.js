@@ -21,6 +21,7 @@ let stock = null;
 export async function render(host){
   host.innerHTML = `<div class="screen-h"><div><p class="eyebrow" data-t="tabStock"></p><h1 data-t="supplies"></h1></div>
     <button type="button" class="act" id="addSupply">${icon('plus')}<span data-t="addSupply"></span></button></div>
+    <p class="screen-hint" data-t="stockScreenHint"></p>
     <div id="stockList"><div class="skel skel-row"></div><div class="skel skel-row"></div></div>`;
   $('#addSupply', host).onclick = () => openSupply(null);
   try { stock = await api('/owner/stock'); } catch (e) { $('#stockList', host).innerHTML = `<div class="empty">${icon('alert-triangle')}<b>${esc(t('loadFail'))}</b><span class="muted small">${esc(e.message || e)}</span></div>`; return; }

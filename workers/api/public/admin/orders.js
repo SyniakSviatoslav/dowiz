@@ -9,7 +9,7 @@
 
 import { $, $$, esc, icon, t, S, api, post, withLoc, toast, sheet, closeSheet, money, moneyEl, ago, clock, day,
          busy, confirm, ORDER_ID_SHOWN } from '/admin/core.js';
-import { st, payName } from '/admin/i18n.js';
+import { st, payName, intlLocale } from '/admin/i18n.js';
 import { liveOrders, loadOrders, rerender } from '/admin/app.js';
 
 const FLOW = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY', 'DELIVERED'];
@@ -56,7 +56,7 @@ function row(o){
   const line = items.slice(0, ITEMS_SHOWN).map(i => `${i.quantity}× ${esc(i.name || i.product_id)}`).join(' · ') + (items.length > ITEMS_SHOWN ? ' …' : '');
   const fresh = S.fresh.has(o.id) ? 'fresh' : '';
   return `<article class="orow ${fresh}" data-st="${esc(o.status)}" data-st-var="${esc(o.status)}" data-o="${esc(o.id)}">
-    <span class="st" data-t-st="${esc(o.status)}"></span>
+    <span class="st"><i class="dot"></i><span data-t-st="${esc(o.status)}"></span></span>
     <span class="who">${esc(o.contact?.name || o.contact?.phone || '#' + o.id.slice(0, ORDER_ID_SHOWN))}</span>
     <span class="amt">${moneyEl(o.total ?? 0)}</span>
     <span class="num">${o.contact?.name || o.contact?.phone ? '#' + esc(o.id.slice(0, ORDER_ID_SHOWN)) : ''}</span>
@@ -79,12 +79,15 @@ export async function render(host){
   const s = S.stats || {};
   const all = matching();
   const list = view.mode === 'history' ? all.slice(0, HISTORY_PAGE * view.pages) : all;
+  const now = new Date();
   host.innerHTML = `
-    <div class="stats">
-      <div class="stat"><small data-t="todayOrders"></small><b>${s.todayOrders ?? '—'}</b></div>
-      <div class="stat ${s.pending ? 'warn' : ''}"><small data-t="pending"></small><b>${s.pending ?? '—'}</b></div>
-      <div class="stat"><small data-t="active"></small><b>${s.active ?? '—'}</b></div>
-      <div class="stat"><small data-t="revenue"></small><b>${s.todayRevenue != null ? money(s.todayRevenue) : '—'}</b></div>
+    <div class="screen-h"><div><p class="eyebrow">${esc(t('today'))} · ${esc(now.toLocaleDateString(intlLocale(), { weekday: 'short', day: 'numeric', month: 'short' }))}</p><h1 data-t="tabOrders"></h1></div>
+      <span class="clock mono">${esc(clock(now.getTime()))}</span></div>
+    <div class="stats strip">
+      <div class="stat"><b>${s.todayOrders ?? '—'}</b><small data-t="todayOrders"></small></div>
+      <div class="stat ${s.pending ? 'warn' : ''}"><b>${s.pending ?? '—'}</b><small data-t="pending"></small></div>
+      <div class="stat"><b>${s.active ?? '—'}</b><small data-t="active"></small></div>
+      <div class="stat money"><b>${s.todayRevenue != null ? money(s.todayRevenue) : '—'}</b><small data-t="revenue"></small></div>
     </div>
     <div class="seg" role="tablist">
       <button type="button" class="seg-b ${view.mode === 'live' ? 'on' : ''}" data-mode="live"><span data-t="live"></span><span class="n">${liveOrders().length}</span></button>
@@ -94,8 +97,8 @@ export async function render(host){
     ${S.phase === 'error' ? `<div class="empty">${icon('alert-triangle')}<b>${esc(t('loadFail'))}</b><span class="muted small">${esc(S.error || '')}</span></div>` : ''}
     ${S.phase === 'ready' && !list.length ? `<div class="empty">${icon('scroll')}<b data-t="${view.mode === 'live' ? 'noLive' : 'noOrders'}"></b></div>` : ''}
     <div class="orders" id="olist">${list.map(row).join('')}</div>
-    <div class="btn-row">${view.mode === 'history' && all.length > list.length ? `<button type="button" class="btn ghost" id="oMore">${icon('chevron-down')}<span data-t="more"></span> · ${all.length - list.length}</button>` : ''}
-      ${list.length ? `<button type="button" class="btn ghost" id="oCsv">${icon('download')}<span data-t="exportCsv"></span></button>` : ''}</div>`;
+    <div class="btn-row compact">${view.mode === 'history' && all.length > list.length ? `<button type="button" class="act" id="oMore">${icon('chevron-down')}<span data-t="more"></span> · ${all.length - list.length}</button>` : ''}
+      ${list.length ? `<button type="button" class="act" id="oCsv">${icon('download')}<span data-t="exportCsv"></span></button>` : ''}</div>`;
   S.fresh.clear();
   host.onclick = async e => {
     const mode = e.target.closest('[data-mode]'); if (mode) { view.mode = mode.dataset.mode; view.pages = 1; return rerender(); }
@@ -151,8 +154,7 @@ export function openOrder(id){
     <p class="eyebrow">#${esc(o.id.slice(0, ORDER_ID_SHOWN))} · ${esc(clock(o.created_at_ms || Date.now()))} · ${esc(day(o.created_at_ms || Date.now()))}</p>
     <h2 data-t-st="${esc(o.status)}"></h2>
     ${!dead ? `<div class="steps">${FLOW.map((f, n) => `<i class="${n < i ? 'done' : n === i ? 'now' : ''}"></i>`).join('')}</div>` : ''}
-    ${o.eta?.range && !dead ? `<div class="fact">${icon('clock')}<span class="v"><span class="k" data-t="etaRange"></span><b>${esc(o.eta.range)} min</b>
-      <small class="muted"> · ${[o.eta.parts?.prepLeftMin ? `${t('cookingMin')} ${o.eta.parts.prepLeftMin}` : '', o.eta.parts?.courierToVenueMin ? `${t('courier')} → ${o.eta.parts.courierToVenueMin}` : '', o.eta.parts?.toDoorMin ? `→ ${t('address')} ${o.eta.parts.toDoorMin}` : ''].filter(Boolean).join(' · ')}</small></span></div>` : ''}
+    ${o.eta?.range && !dead ? (() => { const parts = [o.eta.parts?.prepLeftMin ? `${t('cookingMin')} ${o.eta.parts.prepLeftMin}` : '', o.eta.parts?.courierToVenueMin ? `${t('courier')} → ${o.eta.parts.courierToVenueMin}` : '', o.eta.parts?.toDoorMin ? `→ ${t('address')} ${o.eta.parts.toDoorMin}` : ''].filter(Boolean); return `<div class="fact">${icon('clock')}<span class="v"><span class="k" data-t="etaRange"></span><b>${esc(o.eta.range)} min</b>${parts.length ? `<small class="muted"> · ${parts.join(' · ')}</small>` : ''}</span></div>`; })() : ''}
     <div class="fact">${icon('user')}<span class="v"><span class="k" data-t="customer"></span>${esc(o.contact?.name || '—')}${o.contact?.phone ? ` · <a href="tel:${esc(o.contact.phone)}">${esc(o.contact.phone)}</a>` : ''}</span></div>
     <div class="fact">${icon(isPickup(o) ? 'walk' : 'map-pin')}<span class="v"><span class="k" data-t="${isPickup(o) ? 'pickup' : 'address'}"></span>
       ${isPickup(o) ? `<span data-t="pickup"></span>` : `${esc(addr?.line || '—')}

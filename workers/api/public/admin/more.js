@@ -32,8 +32,9 @@ const LOGO_MAX_PX = 800;
 
 export async function render(host){
   host.innerHTML = `<div class="screen-h"><div><p class="eyebrow" data-t="tabMore"></p><h1>${esc(S.venue?.name || '')}</h1></div></div>
-    ${GROUPS.map(([g, rows]) => `<section class="group"><p class="eyebrow" data-t="${g}"></p><div class="rows">
-      ${rows.map(([key, ic]) => `<button type="button" class="rowc" data-open="${key}">${icon(ic)}<span class="t"><b data-t="${key}"></b></span>${icon('chevron-right', 'chev')}</button>`).join('')}</div></section>`).join('')}
+    <p class="screen-hint" data-t="moreHint"></p>
+    ${GROUPS.map(([g, rows]) => `<section class="group"><p class="eyebrow" data-t="${g}"></p><div class="tiles">
+      ${rows.map(([key, ic]) => `<button type="button" class="tile" data-open="${key}"><span class="tile-ic">${icon(ic)}</span><b data-t="${key}"></b><small data-t="${key}Sub"></small></button>`).join('')}</div></section>`).join('')}
     <p class="hint mono">${esc(store.loc)} · ${esc(S.venue?.slug || '')}</p>`;
   host.onclick = e => { const r = e.target.closest('[data-open]'); if (!r) return; for (const [, rows] of GROUPS) for (const [key, , fn] of rows) if (key === r.dataset.open) fn(); };
 }
@@ -522,10 +523,10 @@ const integrationLine = (k, st) => ({
   whatsapp: st.whatsapp?.configured ? `${t('whatsappOn')}${st.whatsapp.notifies ? '' : ' · ' + t('whatsappTo') + ': —'}` : t('waNotYet'),
   instagram: st.instagram?.configured ? t('instagramOn') : t('socialNotYet'),
   webhook: `${st.webhook?.lastMs ? t('lastDelivery') + ' ' + ago(st.webhook.lastMs) : t('noDelivery')}${st.webhook?.secretSet ? ' · HMAC' : ''}`,
-  cloud: st.cloud?.configured ? st.cloud.bucket : t('off'),
+  cloud: st.cloud?.configured ? st.cloud.bucket : t('cloudSub'),
   mcp: `${st.mcp?.tools ?? 0} ${t('tools')}`,
   stripe: st.stripe?.configured ? t('on') : t('stripeNotSet'),
-  ai: st.ai?.enabled ? st.ai.endpoint : t('off'),
+  ai: st.ai?.enabled ? st.ai.endpoint : t('assistantSub'),
 })[k] || '';
 const detailWords = (k, d) => {
   if (!d) return '';
@@ -544,9 +545,10 @@ async function openIntegrations(){
   sheet(`${head('settings', 'integrations')}<p class="muted small" data-t="integrationsHint"></p><div id="igList"><div class="skel skel-row"></div><div class="skel skel-row"></div></div>
     <div class="btn-row"><button class="btn" id="igAll">${icon('check')}<span data-t="checkAll"></span></button></div>`, { name: 'integrations' });
   let st; try { st = await api('/owner/integrations'); } catch (e) { return fail(e); }
-  $('#igList').innerHTML = `<div class="rows">${INTEGRATIONS.map(([k, ic]) => `<div class="rowc ${integrationOn(k, st) ? '' : 'off'}" data-ig="${k}">${icon(ic)}
-      <span class="t"><b data-t="${k}"></b><small class="ig-line">${esc(integrationLine(k, st))}</small><small class="ig-out mono" hidden></small></span>
-      <button type="button" class="act" data-cfg="${k}">${icon('tools-kitchen-2')}</button><button type="button" class="act pri" data-chk="${k}"><span data-t="check"></span></button></div>`).join('')}</div>`;
+  $('#igList').innerHTML = `<div class="rows">${INTEGRATIONS.map(([k, ic]) => `<div class="igrow ${integrationOn(k, st) ? 'on' : ''}" data-ig="${k}">
+      <div class="igrow-h">${icon(ic)}<b data-t="${k}"></b><span class="pill ${integrationOn(k, st) ? 'ok' : ''}" data-t="${integrationOn(k, st) ? 'on' : 'off'}"></span></div>
+      <small class="ig-line">${esc(integrationLine(k, st))}</small><small class="ig-out mono" hidden></small>
+      <div class="igrow-a"><button type="button" class="act" data-cfg="${k}">${icon('adjustments')}<span data-t="configure"></span></button><button type="button" class="act pri" data-chk="${k}">${icon('check')}<span data-t="check"></span></button></div></div>`).join('')}</div>`;
   paint();
   const run = async k => {
     const row = $(`[data-ig="${k}"]`), out = $('.ig-out', row), b = $(`[data-chk="${k}"]`, row);

@@ -11,6 +11,10 @@ import { safeGet, safeSet } from '/store/storage.js';
 
 export const T = {
   sq: {
+    // screen hints and tile captions, 2026-09-19 design pass
+    loginLine:'Paneli i lokalit tuaj, në xhep.', close:'Mbyll',
+    moreHint:'Marketingu, numrat, klientët dhe çdo cilësim i lokalit. Prekni një pllakë.', menuHint:'Prekni një kategori për ta hapur, një pjatë për ta ndryshuar ose hequr nga shitja.', stockScreenHint:'Sasitë ndryshojnë vetëm me lëvizje: erdhi, u hodh, u numërua.', couriersHint:'Kush është në turn tani, kush mund të marrë porosi. Ftoni me kod.',
+    promosSub:'kode zbritjeje', postsSub:'drafte për kanalet', socialSub:'Telegram, Instagram', analyticsSub:'7 dhe 30 ditë', customersSub:'të maskuar', venueSub:'emri, telefoni, adresa', hoursSub:'orari javor', deliveryTermsSub:'tarifa, minimumi', paymentsSub:'kartë, kripto', notificationsSub:'Telegram, WhatsApp', channelsSub:'nga vjen porosia', mcpSub:'agjentët', cloudSub:'kopje çdo natë', brandingSub:'ngjyra, vula', featuresSub:'ndez / fik', apiKeysSub:'për partnerët', activationSub:'gati për punë?', healthSub:'imazhet, kopja', integrationsSub:'provo çdo lidhje', assistantSub:'pyet për lokalin', inboxSub:'WhatsApp, Instagram',
     integrations:'Integrimet', integrationsHint:'Çdo lidhje e jashtme në një vend: futeni çelësat te fleta e saj dhe provojeni këtu. Prova nuk i dërgon asgjë klientit.', check:'Provo', checkAll:'Provo të gjitha', configure:'Konfiguro', lastDelivery:'Dorëzimi i fundit', noDelivery:'ende asnjë dorëzim', probeWritten:'objekt prove u shkrua', botName:'boti', followers:'ndjekës', models:'modele', webhook:'Webhook (Meta)', ai:'Asistenti AI',
     ck_no_token:'tokeni i botit s’është vendosur', ck_no_phone:'mungon tokeni ose ID e numrit', ck_no_account:'mungon tokeni ose ID e llogarisë', ck_no_verify:'fjala e verifikimit s’është vendosur', ck_no_bucket:'mungon endpoint, bucket, çelësi ose sekreti', ck_no_stripe:'çelësat e Stripe mungojnë në Worker', ck_ai_off:'asistenti është fikur', ck_handshake:'shtrëngimi i duarve u refuzua',
     // hub-declared features and activation checks, in the reader's language
@@ -105,6 +109,10 @@ export const T = {
     loadFail:'Nuk u ngarkua', sessionOver:'Sesioni mbaroi', required:'E detyrueshme',
   },
   en: {
+    // screen hints and tile captions, 2026-09-19 design pass
+    loginLine:'Your venue\'s console, in your pocket.', close:'Close',
+    moreHint:'Marketing, numbers, customers and every venue setting. Tap a tile.', menuHint:'Tap a category to open it, a dish to change it or take it off sale.', stockScreenHint:'Quantities change only by movements: received, wasted, counted.', couriersHint:'Who is on shift now, who may take orders. Invite by code.',
+    promosSub:'discount codes', postsSub:'drafts for channels', socialSub:'Telegram, Instagram', analyticsSub:'7 and 30 days', customersSub:'masked', venueSub:'name, phone, address', hoursSub:'weekly schedule', deliveryTermsSub:'fee, minimum', paymentsSub:'card, crypto', notificationsSub:'Telegram, WhatsApp', channelsSub:'where orders come from', mcpSub:'agents', cloudSub:'a copy every night', brandingSub:'colours, seal', featuresSub:'on / off', apiKeysSub:'for partners', activationSub:'ready to work?', healthSub:'images, backup', integrationsSub:'prove every connection', assistantSub:'ask about the venue', inboxSub:'WhatsApp, Instagram',
     integrations:'Integrations', integrationsHint:'Every outside connection in one place: enter the keys in its sheet, prove it here. A check sends nothing to a customer.', check:'Check', checkAll:'Check all', configure:'Set up', lastDelivery:'Last delivery', noDelivery:'no delivery yet', probeWritten:'probe object written', botName:'bot', followers:'followers', models:'models', webhook:'Webhook (Meta)', ai:'AI assistant',
     ck_no_token:'no bot token is set', ck_no_phone:'token or phone number id missing', ck_no_account:'token or account id missing', ck_no_verify:'no verify token is set', ck_no_bucket:'endpoint, bucket, key or secret missing', ck_no_stripe:'Stripe keys are missing on the Worker', ck_ai_off:'the assistant is off', ck_handshake:'the handshake was refused',
     // hub-declared features and activation checks, in the reader's language
@@ -183,6 +191,10 @@ export const T = {
     loadFail:'Could not load', sessionOver:'Session expired', required:'Required',
   },
   uk: {
+    // screen hints and tile captions, 2026-09-19 design pass
+    loginLine:'Консоль вашого закладу в кишені.', close:'Закрити',
+    moreHint:'Маркетинг, цифри, клієнти й усі налаштування закладу. Торкніться плитки.', menuHint:'Торкніться категорії, щоб розгорнути, страви, щоб змінити або зняти з продажу.', stockScreenHint:'Кількості змінюються лише рухами: прийшло, списано, порахували.', couriersHint:'Хто зараз на зміні, хто може брати замовлення. Запрошуйте кодом.',
+    promosSub:'коди знижок', postsSub:'чернетки для каналів', socialSub:'Telegram, Instagram', analyticsSub:'7 і 30 днів', customersSub:'замасковані', venueSub:'назва, телефон, адреса', hoursSub:'тижневий графік', deliveryTermsSub:'вартість, мінімум', paymentsSub:'картка, крипто', notificationsSub:'Telegram, WhatsApp', channelsSub:'звідки замовлення', mcpSub:'агенти', cloudSub:'копія щоночі', brandingSub:'кольори, печатка', featuresSub:'увімк / вимк', apiKeysSub:'для партнерів', activationSub:'готово до роботи?', healthSub:'образи, копія', integrationsSub:'перевірити кожне', assistantSub:'спитати про заклад', inboxSub:'WhatsApp, Instagram',
     integrations:'Інтеграції', integrationsHint:'Усі зовнішні підключення в одному місці: введіть ключі у відповідному аркуші й перевірте тут. Перевірка нічого не надсилає клієнтам.', check:'Перевірити', checkAll:'Перевірити все', configure:'Налаштувати', lastDelivery:'Остання доставка', noDelivery:'доставок ще не було', probeWritten:'тестовий об’єкт записано', botName:'бот', followers:'підписників', models:'моделей', webhook:'Вебхук (Meta)', ai:'AI-асистент',
     ck_no_token:'токен бота не задано', ck_no_phone:'бракує токена або ID номера', ck_no_account:'бракує токена або ID акаунта', ck_no_verify:'слово перевірки не задано', ck_no_bucket:'бракує endpoint, bucket, ключа або секрету', ck_no_stripe:'ключів Stripe немає у Worker', ck_ai_off:'асистент вимкнений', ck_handshake:'рукостискання відхилено',
     // hub-declared features and activation checks, in the reader's language

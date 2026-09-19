@@ -15,6 +15,7 @@ const MAP_ZOOM = 16;
 export async function render(host){
   host.innerHTML = `<div class="screen-h"><div><p class="eyebrow" data-t="tabCouriers"></p><h1 data-t="tabCouriers"></h1></div>
     <button type="button" class="act pri" id="invite">${icon('user-plus')}<span data-t="invite"></span></button></div>
+    <p class="screen-hint" data-t="couriersHint"></p>
     <div id="clist"><div class="skel skel-row"></div></div>`;
   $('#invite', host).onclick = openInvite;
   let d;

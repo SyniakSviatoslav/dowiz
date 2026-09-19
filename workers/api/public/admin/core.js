@@ -148,6 +148,7 @@ export const sheetName = () => $('#sheet').dataset.name || null;
 export function whenSheetCloses(fn){ onClose = fn; }
 export function bindSheetChrome(){
   $('#scrim').onclick = closeSheet;
+  $('#sheetClose').onclick = closeSheet;
   addEventListener('keydown', e => { if (e.key === 'Escape') closeSheet(); });
   const box = $('#sheet'), grip = $('#grab');
   let y0 = null, dy = 0;

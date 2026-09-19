@@ -37,6 +37,7 @@ export async function render(host){
   host.innerHTML = `
     <div class="screen-h"><div><p class="eyebrow" data-t="tabMenu"></p><h1>${esc(S.venue?.name || '')}</h1></div>
       <button type="button" class="act" id="mImport">${icon('download')}<span data-t="importMenu"></span></button></div>
+    <p class="screen-hint" data-t="menuHint"></p>
     <label class="srch">${icon('search')}<input id="mq" type="search" value="${esc(view.q)}" data-t-attr="placeholder:search"></label>
     ${cats.map(c => { const open = q ? true : view.open.has(c.id); const rows = (c.products || []).map(dishRow).join(''); if (q && !rows) return ''; return `
       <section class="group">
