@@ -50,6 +50,13 @@ pub struct AddressIn {
     /// bounded here: five short strings and a flag, nothing else survives.
     #[serde(default)]
     pub parts: Option<Value>,
+    /// The door on the map, in micro-degrees, when the customer placed a pin.
+    /// The live estimate measures the courier's road to it; without them the
+    /// road is unknown and the estimate says so.
+    #[serde(default)]
+    pub lat_udeg: Option<i64>,
+    #[serde(default)]
+    pub lon_udeg: Option<i64>,
 }
 
 /// The address parts a customer may give, and how long each may be.
@@ -730,6 +737,8 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     // sent is discarded, and an unknown product fails CLOSED rather than being
     // priced at zero.
     let mut lines = Vec::with_capacity(body.items.len());
+    // The same lines as the owner will read them, for the bell.
+    let mut told: Vec<crate::notify::LineOut> = Vec::with_capacity(body.items.len());
     let mut subtotal: i64 = 0;
     for it in &body.items {
         if it.quantity < 1 || it.quantity > 99 {
@@ -748,6 +757,11 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
             return Response::error(format!("product has no price: {}", it.product_id), 409);
         }
         subtotal += price * it.quantity;
+        told.push(crate::notify::LineOut {
+            name: p.get("name").and_then(Value::as_str).unwrap_or(&it.product_id).to_string(),
+            quantity: it.quantity,
+            unit_price: price,
+        });
         lines.push(json!({
             "product_id": it.product_id, "modifier_ids": it.modifier_ids,
             "quantity": it.quantity, "unit_price": price   // trusted, from the catalogue
@@ -836,7 +850,8 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
             .map(|n| json!(n)).unwrap_or(Value::Null),
         "address": body.fulfilment.address.as_ref().map(|a| json!({
             "line": a.line, "note": a.note,
-            "parts": a.parts.as_ref().map(clean_address_parts).unwrap_or(Value::Null)
+            "parts": a.parts.as_ref().map(clean_address_parts).unwrap_or(Value::Null),
+            "lat_udeg": a.lat_udeg, "lon_udeg": a.lon_udeg
         })),
         "fee": fee
     });
@@ -1012,6 +1027,9 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     // tap, a replay after a lost generation guard -- returns the SAME intent
     // rather than charging twice.
     let mut out: Value = serde_json::from_str(&stored).unwrap_or(json!({}));
+    // The owner's phone, AFTER the log and BEFORE the card rail: a bell that
+    // waits on Stripe is a bell that stays silent when Stripe is down.
+    crate::notify::order_placed(&ctx.env, &place, &out, &told, &loc.currency_code, &loc.name).await;
     // Returned once and never again: the hub keeps no copy, so a customer who
     // loses the link has lost it, which is the same guarantee the native
     // adapter gives.

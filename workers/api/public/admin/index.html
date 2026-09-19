@@ -1,45 +1,44 @@
 <!doctype html>
-<html lang="uk">
+<html lang="sq">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f5efe5" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#061b1a" media="(prefers-color-scheme: dark)">
-<title>dowiz · admin</title>
-<!-- NO WEB FONTS, AND THAT IS A DESIGN DECISION RATHER THAN A SAVING.
-     
-     These surfaces loaded two hundred kilobytes of render-blocking typeface
-     from Google before anything could paint, and every customer's IP reached
-     Google to do it -- on a service whose first invariant is local-first. The
-     Cyrillic the console is written in needed a further subset again.
-     
-     What is lost is small: at fourteen to thirty-three pixels, on a phone, the
-     difference between DM Sans and the system face is not what anyone notices.
-     What Swiss typography actually asks for is the grid, the measure, the one
-     ratio and the restraint -- Müller-Brockmann worked in Akzidenz-Grotesk
-     because it was the face that was already there. The system stack is ours.
-     
-     It also renders instantly with no swap: no flash of fallback text, no
-     layout shift when the real face arrives, nothing to wait for. -->
-
+<meta name="theme-color" content="#0b1717" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>dowiz · console</title>
+<!-- NO WEB FONTS, by design: the system stack paints instantly on a kitchen's
+     phone, and the console is a tool scanned during a rush, not a brand page. -->
 <link rel="stylesheet" href="/lib/icons.css">
 <link rel="stylesheet" href="/lib/tokens.css">
 <link rel="stylesheet" href="/lib/components.css">
 <link rel="stylesheet" href="/admin/admin.css">
+<link rel="modulepreload" href="/admin/core.js">
+<link rel="modulepreload" href="/admin/i18n.js">
 </head>
 <body>
-<!-- SEA: the dowiz ambient layer, behind the Sheet. No text, no price, no
-     decision lives here; every status the owner reads sits on an opaque
-     surface above it. -->
-<canvas id="sea" aria-hidden="true"></canvas>
+<div class="veil" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
+<!-- The header: the venue's mark and name, its state as one chip, the words
+     and the currency behind one button, the way out. -->
 <header class="top" id="top" hidden><div class="wrap top-in">
-  <span class="logo">dowiz</span>
-  <span class="spacer"></span>
-  <button class="vstatus" id="vstatus" title="Змінити статус закладу"><span class="d" aria-hidden="true"></span><span id="vstatusT">—</span></button>
-  <button class="icon-btn" id="logout" aria-label="Вийти" title="Вийти"><i class="ti ti-logout" aria-hidden="true"></i></button>
+  <img class="brand-mark" id="brandMark" alt="" width="34" height="34" hidden>
+  <span class="brand" id="brandName">dowiz</span>
+  <button type="button" class="vstate" id="vstate" data-t-attr="title:setState"><span class="dot" aria-hidden="true"></span><span id="vstateT">—</span></button>
+  <button type="button" class="icon-btn" id="prefs" data-t-attr="aria-label:language title:language"><i class="ti ti-torii" aria-hidden="true"></i></button>
+  <button type="button" class="icon-btn" id="logout" data-t-attr="aria-label:signOut title:signOut"><i class="ti ti-logout" aria-hidden="true"></i></button>
 </div></header>
 <main id="app" class="wrap" aria-live="polite"></main>
-<div class="toast" id="toast" role="status"></div>
+<!-- Five tabs under the thumb. Filled by admin/app.js. -->
+<nav class="nav" id="nav" aria-label="dowiz" hidden></nav>
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true">
+  <div class="grab" id="grab" aria-hidden="true"></div>
+  <div class="sheet-in" id="sheetIn"></div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 <script type="module" src="/admin/app.js"></script>
 </body>
 </html>

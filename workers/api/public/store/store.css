@@ -797,6 +797,8 @@ a.vsrc{text-decoration:underline}
   background:color-mix(in srgb,var(--brand-bg) 55%,transparent);border:1px solid var(--glass-border);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
   font-size:var(--text-sm)}
 .ep-facts .ti{font-size:16px;color:var(--brand-primary)}
+/* A live estimate carries a pulse: it is being re-measured, not remembered. */
+.dot-live{width:6px;height:6px;border-radius:var(--radius-full);background:var(--sage);animation:pulse 1.6s ease-in-out infinite;margin-left:2px}
 .ep-facts b{font-weight:var(--weight-semibold)}
 /* The credits: one guest at a time, in and out like the end of an episode. */
 .credits-wrap{flex:1;display:flex;flex-direction:column;justify-content:center;margin:var(--space-4) 0 var(--space-6);min-height:180px}

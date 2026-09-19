@@ -12,6 +12,7 @@
 
 mod booking;
 mod eta;
+mod live_eta;
 mod social;
 mod wallet;
 mod accounts;
@@ -27,6 +28,7 @@ mod assist;
 mod extra;
 mod storefront;
 mod stripe;
+mod notify;
 
 use dowiz_kernel::json_api;
 use serde::Deserialize;
@@ -230,6 +232,8 @@ async fn route(req: Request, env: Env) -> Result<Response> {
         // ── owner ──
         .get_async("/api/owner/orders", owner::orders)
         .post_async("/api/owner/orders/:id/action", owner::order_action)
+        .post_async("/api/owner/orders/:id/assign", owner::assign_courier)
+        .get_async("/api/owner/couriers/:id", extra::courier_detail)
         .get_async("/api/owner/dashboard", owner::dashboard)
         .post_async("/api/owner/products/:id", owner::update_product)
         .post_async("/api/owner/location", owner::update_location)
@@ -253,6 +257,7 @@ async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/owner/features", extra::set_feature)
         .get_async("/api/owner/settings", extra::settings)
         .post_async("/api/owner/settings", extra::set_setting)
+        .post_async("/api/owner/notify/test", notify::test)
         .post_async("/api/owner/menu/import", extra::import_menu)
         .get_async("/api/owner/couriers", extra::couriers)
         .post_async("/api/owner/couriers/invite", extra::invite_courier)
@@ -362,7 +367,10 @@ async fn route(req: Request, env: Env) -> Result<Response> {
             if !allowed {
                 return Response::error("this order needs the link you were given", 401);
             }
-            let mut res = Response::ok(order_json)?;
+            // The order as it stands NOW: the time that is left rides with it.
+            let mut live = envelope.clone();
+            live_eta::attach_one(&db, &place, &mut live, Date::now().as_millis() as i64).await;
+            let mut res = Response::ok(serde_json::to_string(&live).unwrap_or(order_json))?;
             res.headers_mut().set("content-type", "application/json; charset=utf-8")?;
             // Never cached by anything between here and the browser: it holds
             // an address.
@@ -437,7 +445,7 @@ fn carry_envelope(old_raw: &str, updated: &str) -> String {
     let old: serde_json::Value = serde_json::from_str(old_raw).unwrap_or(serde_json::Value::Null);
     for k in [
         "location_id", "contact", "fulfilment", "payment", "delivery_fee", "total",
-        "courier_id", "rejection_reason",
+        "courier_id", "rejection_reason", "at", "accepted_at_ms", "crypto", "tip",
     ] {
         if let Some(v) = old.get(k) {
             merged[k] = v.clone();

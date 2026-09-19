@@ -1031,6 +1031,8 @@ pub const HUB_OWNED: &[&str] = &[
     "assigned_at_ms",
     "accepted_at_ms",
     "total",
+    // When each status was entered: the live estimate measures from these.
+    "at",
 ];
 
 /// Copy `HUB_OWNED` from the order as it was onto the order the kernel returned.

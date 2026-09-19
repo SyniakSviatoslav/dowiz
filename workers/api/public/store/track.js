@@ -157,7 +157,7 @@ function episodeMarkup(order, eta){
     ${!dead ? `<p class="ep-step mono"><span data-t="stepOf"></span> ${i + 1} <span data-t="ofSteps"></span> ${FLOW.length}${!done && i + 1 < FLOW.length ? ` · <span data-t="nextUp"></span>: <span data-t-st="${FLOW[i + 1]}"></span>` : ''}</p>` : ''}
     <div class="ep-line" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(phase * 100)}"><i id="epBar"></i></div>
     <div class="ep-facts">
-      ${eta && !dead && !done ? `<span>${icon('clock')}<b>${esc(eta.text)} <span data-t="etaMin"></span></b></span>` : ''}
+      ${eta && !dead && !done ? `<span class="${eta.live ? 'live' : ''}">${icon('clock')}<b>${esc(eta.text)} <span data-t="etaMin"></span></b>${eta.live ? `<i class="dot-live" aria-hidden="true"></i>` : ''}</span>` : ''}
       <span>${icon('coin-hole')}<b>${moneyEl(order.total ?? order.subtotal ?? 0)}</b></span>
       ${PAY_KEY[order.payment] ? `<span>${icon(order.payment === 'cash' ? 'cash' : order.payment === 'crypto' ? 'currency-bitcoin' : 'credit-card')}<b data-t="${PAY_KEY[order.payment]}"></b></span>` : ''}
     </div>
@@ -168,7 +168,11 @@ export function openTracking(order){
   const st = order.status;
   const dead = DEAD.has(st);
   const bot = state.loc?.telegramBot;
-  const eta = order.eta || state.lastEta;
+  // THE TIME THAT IS LEFT, from the hub, as the order stands now -- the
+  // kitchen's remaining minutes and the courier's real road -- re-read with
+  // every poll. The checkout's quote is only the first frame's fallback.
+  const live = order.eta && typeof order.eta === 'object' && order.eta.range ? { text: order.eta.range, live: true, parts: order.eta.parts, known: order.eta.known } : null;
+  const eta = live || state.lastEta;
   const follow = (bot && !dead && st !== 'DELIVERED') ? `
     <a class="btn btn-ghost mb-1" href="https://t.me/${encodeURIComponent(bot)}?start=${encodeURIComponent(order.id)}" target="_blank" rel="noopener noreferrer">
       ${icon('brand-telegram')}<span data-t="notify"></span></a>` : '';
@@ -211,7 +215,7 @@ export function openTracking(order){
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const d = await r.json();
         openTracking._fails = 0;
-        if ($('#sheet').dataset.name === 'track') openTracking({ ...d, eta: d.eta || eta });
+        if ($('#sheet').dataset.name === 'track') openTracking({ ...d, eta: d.eta || (eta && !eta.live ? eta : undefined) });
       } catch {
         openTracking._fails = (openTracking._fails || 0) + 1;
         if (openTracking._fails === POLL_FAILS_TO_TELL) toast(t('loadFail'));

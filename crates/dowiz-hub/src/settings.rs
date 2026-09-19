@@ -204,6 +204,26 @@ pub const KNOWN: &[Known] = &[
         hint: "Off by default. Nothing is sent anywhere until this is on.",
         default: "0",
     },
+    // ── owner notifications ──
+    //
+    // The bot is the VENUE'S, not the platform's: an owner makes one with
+    // @BotFather in a minute and pastes its token here, so a hub needs no
+    // operator to hand out Telegram. The token's key ends in `token`, so
+    // `is_secret` redacts it everywhere it is read back.
+    Known {
+        key: "notify.telegram.token",
+        label: "Telegram bot token",
+        hint: "From @BotFather. The bot messages you about every new order; it \
+               is also what posts to your channel when no platform bot exists.",
+        default: "",
+    },
+    Known {
+        key: "notify.telegram.chat",
+        label: "Telegram chat",
+        hint: "The chat the bot writes to: your own user id, or a group's id. \
+               Send the bot any message first, then use the test button.",
+        default: "",
+    },
 ];
 
 impl Settings {

@@ -61,7 +61,7 @@ struct EtaBody {
 /// Read a venue's kitchen settings off its location record, falling back to the
 /// kernel's defaults field by field — so a venue that has set only its courier
 /// speed keeps every other default.
-fn profile_of(loc: &Value) -> KitchenProfile {
+pub(crate) fn profile_of(loc: &Value) -> KitchenProfile {
     let d = KitchenProfile::default_profile();
     let u16f = |k: &str, fallback: u16| {
         loc.get(k).and_then(|v| v.as_u64()).map(|n| n as u16).unwrap_or(fallback)

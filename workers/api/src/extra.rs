@@ -1278,7 +1278,10 @@ pub async fn couriers(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let now = now_ms();
     Response::from_json(&json!({
         "couriers": rows.iter().map(|c| json!({
-            "id": c.phone.clone().unwrap_or_else(|| c.id.clone()),
+            // THE REAL ID, and the phone beside it. This sent the phone AS the id,
+            // and an assignment by that "id" found no courier.
+            "id": c.id,
+            "phone": c.phone.clone().unwrap_or_default(),
             "name": c.name.clone().unwrap_or_default(),
             "active": c.status == "active",
             "onShift": c.on_shift > 0,
@@ -1299,6 +1302,64 @@ pub async fn couriers(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 struct InviteIn {
     phone: String,
     name: String,
+}
+
+/// `GET /api/owner/couriers/:id` -- one courier: who, whether on shift, where
+/// they were last seen, what they did today.
+pub async fn courier_detail(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let Some(id) = ctx.param("id").cloned() else {
+        return Response::error("missing courier id", 400);
+    };
+    let db = ctx.d1("DB")?;
+    let (_, loc) = match owner_and_venue(&req, &ctx, &db).await {
+        Ok(v) => v,
+        Err(r) => return Ok(r),
+    };
+    #[derive(Deserialize)]
+    struct C {
+        id: String,
+        name: Option<String>,
+        phone: Option<String>,
+        status: String,
+        on_shift: i64,
+    }
+    let c: Option<C> = db
+        .prepare(
+            "SELECT c.id, c.full_name_encrypted AS name, c.phone_encrypted AS phone, c.status, \
+             EXISTS(SELECT 1 FROM courier_shifts s WHERE s.courier_id = c.id AND s.location_id = ?2 \
+                    AND s.ended_at_ms IS NULL) AS on_shift \
+             FROM couriers c JOIN courier_locations cl ON cl.courier_id = c.id \
+             WHERE (c.id = ?1 OR c.phone_encrypted = ?1) AND cl.location_id = ?2",
+        )
+        .bind(&[id.clone().into(), loc.clone().into()])?
+        .first(None)
+        .await?;
+    let Some(c) = c else {
+        return Response::error("not found", 404);
+    };
+    let now = now_ms();
+    let fix = crate::live_eta::fixes(&db, &loc, now).await.into_iter().find(|f| f.courier_id == c.id);
+    #[derive(Deserialize)]
+    struct Today {
+        deliveries: f64,
+        cash: f64,
+    }
+    let day_start = now - now.rem_euclid(24 * 60 * 60 * 1000);
+    let today: Option<Today> = db
+        .prepare(
+            "SELECT COUNT(*) AS deliveries, COALESCE(SUM(cash_collected),0) AS cash \
+             FROM courier_assignments WHERE courier_id = ?1 AND location_id = ?2 \
+             AND delivered_at_ms >= ?3",
+        )
+        .bind(&[c.id.clone().into(), loc.clone().into(), JsValue::from_f64(day_start as f64)])?
+        .first(None)
+        .await?;
+    Response::from_json(&json!({
+        "id": c.id, "phone": c.phone, "name": c.name.clone().unwrap_or_default(), "active": c.status == "active", "onShift": c.on_shift > 0,
+        "lastFix": fix.map(|f| json!({ "latUdeg": f.lat_udeg, "lonUdeg": f.lon_udeg, "recordedAtMs": f.recorded_at_ms })),
+        "today": { "deliveries": today.as_ref().map(|t| t.deliveries as i64).unwrap_or(0),
+                   "cashCollected": today.as_ref().map(|t| t.cash as i64).unwrap_or(0) },
+    }))
 }
 
 /// `POST /api/owner/couriers/invite` — mint a code, shown ONCE.
@@ -1709,7 +1770,7 @@ pub async fn approve_post(mut req: Request, ctx: RouteContext<()>) -> Result<Res
 
     let s = crate::hubstore::load_settings(&place).await?.settings;
     let channel = s.known("social.telegram.channel");
-    let token = ctx.env.secret("TELEGRAM_BOT_TOKEN").map(|v| v.to_string()).ok();
+    let token = crate::notify::bot_token(&ctx.env, &s);
     let (state, error) = match (token, channel.trim().is_empty()) {
         (None, _) => (PostState::Failed, Some("no Telegram bot is configured".to_string())),
         (_, true) => (PostState::Failed, Some("no channel is set".to_string())),

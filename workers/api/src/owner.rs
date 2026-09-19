@@ -227,7 +227,7 @@ pub async fn orders(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         .and_then(|u| u.query_pairs().find(|(k, _)| k == "status").map(|(_, v)| v.to_string()));
     // The hub log is the source. Reading it folds every order to its newest
     // state, so the queue cannot show a status the events do not support.
-    let out: Vec<Value> = loaded
+    let mut out: Vec<Value> = loaded
         .hub
         .orders()
         .into_iter()
@@ -261,7 +261,102 @@ pub async fn orders(req: Request, ctx: RouteContext<()>) -> Result<Response> {
             Some(o)
         })
         .collect();
+    // The time that is left on each live order, from where it is and where
+    // the courier is, with one read of the map for the whole queue.
+    if let Ok(loaded) = crate::hubstore::load_catalog(&place).await {
+        crate::live_eta::attach_all(&db, &place, &loaded, &mut out, now_ms()).await;
+    }
     Response::from_json(&json!({ "orders": out }))
+}
+
+/// `POST /api/owner/orders/:id/assign` -- the owner hands an order to a courier.
+///
+/// The same row and the same note the courier's own `accept` writes, so a
+/// hand-off from the counter and a claim from the phone are one fact in one
+/// place; the courier app shows it as theirs on its next read. An order that
+/// already has a courier is refused rather than quietly reassigned.
+pub async fn assign_courier(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    #[derive(Deserialize)]
+    struct In {
+        location_id: String,
+        courier_id: String,
+    }
+    let body: In = match req.json().await {
+        Ok(b) => b,
+        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
+    };
+    let Some(id) = ctx.param("id").cloned() else {
+        return Response::error("missing order id", 400);
+    };
+    let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
+    if let Err(r) = owner_at(&req, &ctx, &db, &body.location_id).await {
+        return Ok(r);
+    }
+    // The courier must be this venue's and active.
+    #[derive(Deserialize)]
+    struct C {
+        id: String,
+    }
+    let known: Option<C> = db
+        .prepare(
+            "SELECT c.id FROM couriers c JOIN courier_locations cl ON cl.courier_id = c.id \
+             WHERE (c.id = ?1 OR c.phone_encrypted = ?1) AND cl.location_id = ?2 AND c.status = 'active'",
+        )
+        .bind(&[body.courier_id.clone().into(), body.location_id.clone().into()])?
+        .first(None)
+        .await?;
+    let Some(known) = known else {
+        return Response::error("no such courier at this venue", 404);
+    };
+    let courier_id = known.id;
+    let hub = crate::hubstore::load(&place).await?;
+    let Ok(current) = hub.hub.order(&id) else {
+        return Response::error("order not found", 404);
+    };
+    let v: Value = serde_json::from_str(&current).unwrap_or(json!({}));
+    if v.get("location_id").and_then(Value::as_str) != Some(body.location_id.as_str()) {
+        return Response::error("order not found", 404);
+    }
+    if !matches!(v.get("status").and_then(Value::as_str), Some("CONFIRMED" | "PREPARING" | "READY")) {
+        return Response::error("only an accepted order can be handed to a courier", 409);
+    }
+    let cash_due = if v.get("payment").and_then(Value::as_str) == Some("cash") {
+        v.get("total").and_then(Value::as_i64).unwrap_or(0)
+    } else {
+        0
+    };
+    let now = now_ms();
+    let inserted = db
+        .prepare(
+            "INSERT INTO courier_assignments (order_id,courier_id,location_id,assigned_at_ms,cash_due) \
+             VALUES (?1,?2,?3,?4,?5)",
+        )
+        .bind(&[
+            id.clone().into(),
+            courier_id.clone().into(),
+            body.location_id.clone().into(),
+            JsValue::from_f64(now as f64),
+            JsValue::from_f64(cash_due as f64),
+        ])?
+        .run()
+        .await;
+    if inserted.is_err() {
+        return Response::error("this order already has a courier", 409);
+    }
+    let who = courier_id.clone();
+    let oid = id.clone();
+    crate::hubstore::with_hub(&place, move |hub| {
+        let current = hub.order(&oid).map_err(|_| Error::RustError("order not found".into()))?;
+        let mut o: Value = serde_json::from_str(&current).unwrap_or(json!({}));
+        o["courier_id"] = json!(who);
+        o["assigned_at_ms"] = json!(now);
+        let body = serde_json::to_string(&o).unwrap_or(current);
+        hub.append(dowiz_hub::EventKind::Noted, &oid, &body, now as u64, [0u8; 32])
+            .map_err(|e| Error::RustError(format!("{e:?}")))
+    })
+    .await?;
+    Response::from_json(&json!({ "ok": true, "orderId": id, "courierId": courier_id }))
 }
 
 /// `POST /api/owner/orders/:id/action` — `{location_id, action, reason?}`
@@ -319,6 +414,7 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
             .map_err(|e| Error::RustError(format!("kernel order json unreadable: {e}")))?;
         let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
         crate::hubstore::carry_over(&old, &mut merged);
+        crate::live_eta::stamp(&mut merged, next, now_ms());
         // A rejection carries WHY, recorded with the event so the customer can be
         // told something true rather than "rejected".
         if next == "REJECTED" {

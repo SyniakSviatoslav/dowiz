@@ -234,6 +234,7 @@ async fn write_status_with(
             .map_err(|e| Error::RustError(format!("kernel order json unreadable: {e}")))?;
         let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
         crate::hubstore::carry_over(&old, &mut merged);
+        crate::live_eta::stamp(&mut merged, next, now_ms());
         if cash >= 0 {
             merged["cash_collected"] = json!(cash);
         }

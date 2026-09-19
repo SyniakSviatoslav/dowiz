@@ -1022,3 +1022,29 @@ its source, which is why translations, logo and hours "did not work". Verified l
   shapes paired + dense grid; every frame 3:2, no image zoom (photos are 1080×720); status
   plate with six dots; reviews carry translations and show in the reader's language; one
   tempo (`--dur-fast/--dur/--dur-slow`).
+
+## 2026-09-19 — owner console rebuilt as a phone app; live ETA; venue-owned Telegram bell
+
+- `workers/api/public/admin/` is new: `index.html` shell, `app.js` (tabs, login, venue state,
+  polling, ring on a new PENDING), `core.js` (api/sheet/money/hydrate), `i18n.js` (sq/en/uk,
+  249 keys each, parity checked by a throwaway script), `orders.js`, `menu.js`, `stock.js`,
+  `couriers.js`, `more.js` (promos, posts, social, analytics, customers, venue, hours, delivery,
+  payments, notifications, channels, branding, features, API keys, activation, health/backup).
+  The old 2471-line Ukrainian-only `app.js` is gone.
+- Live ETA: `src/live_eta.rs` attaches `order.eta{minMin,maxMin,range,parts,known}` to
+  `/api/owner/orders`, `/api/order/:id`; `order_action` stamps `at[STATUS]`; new
+  `POST /api/owner/orders/:id/assign`, `GET /api/owner/couriers/:id`. Verified on live:
+  a READY order reads `8–12 min`.
+- Telegram: the Worker has NO `TELEGRAM_BOT_TOKEN` secret. Added `notify.telegram.token`
+  (secret by shape) and `notify.telegram.chat` to `dowiz_hub::settings::KNOWN`; `src/notify.rs`
+  sends the order text after the log write and before Stripe, and `POST /api/owner/notify/test`
+  reports Telegram's own description. Post approval falls back to the venue token too.
+  WhatsApp/aggregators/Instagram are shown as "coming soon" — nothing server-side exists.
+- Two phone-width bugs measured and fixed in `admin.css`: `.rows` needed
+  `grid-template-columns:minmax(0,1fr)` (dish rows were 883px → viewport zoomed out, bottom
+  tabs unreachable), and `.grid2/.grid3` cells + inputs needed `min-width:0`.
+  Probe: `e2e/kit-regression/_probe_admin{,3,4}.mjs` (gitignored) — every sheet 390/390.
+- The one console error on live is Cloudflare's injected `__CF$cv$params` inline script,
+  blocked by our CSP; not ours, harmless.
+- Local stand proxies to `dubin-sushi.dowiz.org`, so owner data for `sushi-durres` reads 401
+  there; use live for data checks, the stand for layout.
