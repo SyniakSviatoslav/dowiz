@@ -462,3 +462,15 @@ h2{font-family:var(--brand-font-heading);font-weight:var(--weight-normal);font-s
    stylesheet is appended to <head> AFTER this one when the map loads, so its
    `top:0` won on source order. The id wins on specificity. */
 #map .maplibregl-ctrl-top-right{top:calc(env(safe-area-inset-top,0px) + var(--space-3) + var(--tap) + var(--space-3))}
+/* The HUD on a narrow phone: the shift chip shrinks and trims its text, the
+   buttons never leave the screen (measured on a 360px phone: the theme
+   button sat at x=439). Under 380px the GPS chip keeps only its icon. */
+.hud{min-width:0}
+.hud .tag{flex:0 1 auto;min-width:0;overflow:hidden}
+.hud .tag > span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hud .icon-btn{flex:none}
+@media (max-width:380px){ .hud #gpsText{display:none} .hud #gpsTag{padding-inline:10px} }
+/* Before sign-in there is no run to watch: the sheet may take the screen, so
+   a 320px phone reads the whole form without scrolling a 270px window
+   (measured: the language chips sat 240px below the sheet's edge). */
+.sheet.tall{max-height:88dvh}

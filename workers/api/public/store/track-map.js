@@ -63,6 +63,9 @@ export function markup(order){
 /// Lift the live map out of a sheet about to be rebuilt.
 export function keep(){ return m ? m.el : null; }
 
+/// The slot and its legend, gone: a map that cannot draw is not a blank box.
+function hideSlot(){ document.querySelector('.ep-mapwrap')?.remove(); }
+
 function markerEl(kind, inner){
   const el = document.createElement('div');
   el.className = `tm ${kind}`;
@@ -84,7 +87,13 @@ export async function mount(order, keptEl){
     let lib;
     try { lib = await loadMapLib(); } catch { return; }
     if (!document.getElementById('epMap')) return;
-    const map = new lib.Map({ container: 'epMap', style: STYLE, center: venue, zoom: 13, attributionControl: false, interactive: true, dragRotate: false, pitchWithRotate: false });
+    // A phone without WebGL, or a WebGL that refuses this canvas, gets no map
+    // and no error: the sheet keeps its words, the slot goes away.
+    let map;
+    try {
+      map = new lib.Map({ container: 'epMap', style: STYLE, center: venue, zoom: 13, attributionControl: false, interactive: true, dragRotate: false, pitchWithRotate: false, failIfMajorPerformanceCaveat: false });
+    } catch (e) { hideSlot(); return; }
+    map.on('error', e => { if (!m || !m.map.loaded()) { try { map.remove(); } catch {} m = null; hideSlot(); } });
     map.addControl(new lib.AttributionControl({ compact: true }));
     map.touchZoomRotate.disableRotation();
     const venueM = new lib.Marker({ element: markerEl('tm-venue', `<b>${(state.loc?.stage?.seal || '').slice(0, 1) || icon('torii')}</b>`), anchor: 'center' }).setLngLat(venue).addTo(map);

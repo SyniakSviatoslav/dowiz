@@ -131,12 +131,17 @@ async function initMap(){
   catch { return; }
   if (map || !window.maplibregl) return;
   mapDark = isDark();
-  map = new maplibregl.Map({
-    container: 'map',
-    style: STYLE[mapDark ? 'dark' : 'light'],
-    center: [19.4449964, 41.315347],   // the venue, until a fix arrives
-    zoom: 13, attributionControl: { compact: true },
-  });
+  // A phone whose WebGL refuses the canvas gets the sheet without the map,
+  // not an uncaught error over it (measured on emulated dpr-3 devices).
+  try {
+    map = new maplibregl.Map({
+      container: 'map',
+      style: STYLE[mapDark ? 'dark' : 'light'],
+      center: [19.4449964, 41.315347],   // the venue, until a fix arrives
+      zoom: 13, attributionControl: { compact: true }, failIfMajorPerformanceCaveat: false,
+    });
+  } catch (e) { map = null; return; }
+  map.on('error', e => { if (map && !map.loaded()) { try { map.remove(); } catch {} map = null; } });
   map.addControl(new maplibregl.NavigationControl({ showCompass:false }), 'top-right');
 }
 function syncMapStyle(){
@@ -311,6 +316,7 @@ document.addEventListener('visibilitychange', () => {
 
 // ── login ──
 function renderLogin(err){
+  $('#sheet').classList.add('tall');
   $('#app').innerHTML = `<form class="login" id="loginForm" novalidate>
     <div class="login-mark" aria-hidden="true"><span>d</span></div>
     <h2>${esc(t('loginTitle'))}</h2><p class="hint2 center">${esc(t('loginLine'))}</p>
@@ -346,6 +352,7 @@ function renderLogin(err){
 // their own password here, which is the point -- an owner who typed it for them
 // would know it, and a shared password is not a password.
 function renderClaim(err){
+  $('#sheet').classList.add('tall');
   $('#app').innerHTML = `<form class="login" id="claimForm" novalidate>
     <h2>${esc(t('claimTitle'))}</h2>
     <p class="hint2">${esc(t('claimHint'))}</p>
@@ -395,6 +402,11 @@ async function load(){
     }
     S.loadedOnce = true;
     S.phase = 'ready'; S.error = null;
+    // A COURIER READING A PANEL IS NOT INTERRUPTED BY THE POLL. Earnings and
+    // history live in #app too; redrawing it every twelve seconds threw them
+    // back to the queue mid-read. The chip still updates; the panel stays
+    // until a job actually arrives or the shift ends.
+    if ($('#pback') && S.onShift && !S.mine.length) { setShiftTag(); return; }
     render();
   } catch (e) {
     if (String(e.message) === 'unauthorised') return;
@@ -417,6 +429,8 @@ function setShiftTag(){
 
 function render(){
   setShiftTag();
+  // Signed in: the map is the point again, so the sheet gives it back its half.
+  $('#sheet').classList.remove('tall');
 
   // BEFORE anything is claimed about the shift. A skeleton here is not
   // decoration: the alternative is asserting "you are offline" on no evidence.
