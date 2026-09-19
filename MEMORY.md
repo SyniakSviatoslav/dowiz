@@ -1098,3 +1098,12 @@ its source, which is why translations, logo and hours "did not work". Verified l
   0004–0006 although their schema exists. 0007 was applied with `d1 execute --file`; the table and
   both indexes exist. Left open: record 0004–0007 in `d1_migrations` so `migrations apply` stops
   failing. `npx skills add heygen-com/hyperframes` was refused a second time ("Auto-Mode Bypass").
+
+## 2026-09-19 (night) — console design pass, operator-granted freedom
+- Every sheet has a visible × (`#sheetClose`, `.sheet-x` sticky top-right); More is a 2-column
+  tile grid (`.tiles/.tile`, captions `<key>Sub` in i18n); Orders opens with a day strip
+  (`.stats.strip`, four numbers in one row at every width) and a clock; order status is a tinted
+  pill with a pulsing dot for PENDING; integrations are stacked cards (`.igrow`) with labelled
+  Configure/Check; each tab screen carries a one-line `.screen-hint`; login shows a gold mark.
+  Added icons `adjustments`, `sun-high`. Verified live at 390px: no overflow, no page errors;
+  design gate GREEN. Headless Chromium has no `sq` ICU data, so dates render English there only.
