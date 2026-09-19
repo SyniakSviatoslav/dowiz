@@ -92,7 +92,7 @@ const TOOLS: &[Tool] = &[
 
 /// RFC 3986 unreserved characters pass; everything else is %XX. A local
 /// twelve-line function rather than a crate, per the feature discipline.
-fn enc(s: &str) -> String {
+pub(crate) fn enc(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for b in s.bytes() {
         match b {
@@ -102,6 +102,10 @@ fn enc(s: &str) -> String {
     }
     out
 }
+
+/// For the integrations screen: how many tools, and their names.
+pub(crate) fn tool_count() -> usize { TOOLS.len() }
+pub(crate) fn tool_names() -> Vec<&'static str> { TOOLS.iter().map(|t| t.name).collect() }
 
 fn rpc_error(id: Value, code: i64, message: impl Into<String>) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message.into() } })

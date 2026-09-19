@@ -323,3 +323,8 @@ input[type="color"]{padding:4px;height:var(--tap);width:64px}
 .ok{color:var(--ok, #2f8f6b);font-weight:var(--weight-medium)}
 .contrast{display:grid;grid-template-columns:1fr auto auto;gap:4px 10px;font-size:var(--text-xs);font-family:var(--font-mono)}
 .answer{white-space:pre-wrap;padding:12px 14px;border-radius:var(--radius-card);background:var(--glass-strong);border:1px solid var(--glass-border);font-size:var(--text-sm);line-height:1.45}
+
+.ig-out{display:block;white-space:normal;margin-top:2px}
+.ig-out.ok{color:var(--ok,#2f8f6b)}
+.ig-out.err{color:var(--danger,#b3261e)}
+.rowc .act+.act{margin-left:4px}

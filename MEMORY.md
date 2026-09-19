@@ -1080,3 +1080,21 @@ its source, which is why translations, logo and hours "did not work". Verified l
   Allergen editor deliberately NOT restored (operator removed allergens 2026-09-18).
 - `npx skills add heygen-com/hyperframes` was refused by the permission classifier
   (untrusted code); HyperFrames not used.
+
+## 2026-09-19 (evening) — the Integrations screen; D1 migration applied by hand
+
+- `workers/api/src/integrations.rs`: `GET /api/owner/integrations` (configured flags, last webhook
+  delivery, MCP tool count, Stripe/crypto presence) and `POST /api/owner/integrations/check {which}`
+  — proofs that send nothing to a customer: Telegram getMe, WhatsApp number record, Instagram
+  username, the Meta handshake run through `crate::route()` with the stored verify token, a probe
+  object PUT in the bucket, MCP tool list, Stripe secrets, the AI endpoint's /models. Failures carry
+  a `code` (`no_token`, `no_phone`, `no_account`, `no_verify`, `no_bucket`, `no_stripe`, `ai_off`,
+  `handshake`, `provider`) the console translates (`ck_*`); `core.js api()` now attaches
+  `err.code`/`err.status`. Console: Settings → Integrations, one row per connection with Configure
+  and Check, "Check all". Verified live in sq/en/uk; webhook handshake proven with a real token
+  (`notify.whatsapp.verify` = dubin-2026 on sushi-durres).
+- The operator granted all permissions; `wrangler d1 migrations apply --remote` then ran but failed
+  on 0004 (`duplicate column name: invited_phone_hash`): D1's `d1_migrations` bookkeeping lacks
+  0004–0006 although their schema exists. 0007 was applied with `d1 execute --file`; the table and
+  both indexes exist. Left open: record 0004–0007 in `d1_migrations` so `migrations apply` stops
+  failing. `npx skills add heygen-com/hyperframes` was refused a second time ("Auto-Mode Bypass").

@@ -13,7 +13,7 @@ const GROUPS = [
   ['inbox', [['inbox', 'message-2', openInbox]]],
   ['marketing', [['promos', 'ticket', openPromos], ['posts', 'send', openPosts], ['social', 'sparkles', openSocial]]],
   ['analytics', [['analytics', 'chart-bar', openAnalytics], ['customers', 'user', openCustomers]]],
-  ['settings',  [['venue', 'home', openVenue], ['hours', 'clock', openHours], ['deliveryTerms', 'bike', openDelivery], ['payments', 'coin-hole', openPayments],
+  ['settings',  [['integrations', 'check', openIntegrations], ['venue', 'home', openVenue], ['hours', 'clock', openHours], ['deliveryTerms', 'bike', openDelivery], ['payments', 'coin-hole', openPayments],
                  ['notifications', 'brand-telegram', openNotifications], ['channels', 'scroll', openChannels], ['mcp', 'cube-3d-sphere', openMcp], ['cloud', 'cloud-upload', openCloud], ['branding', 'fan', openBranding],
                  ['features', 'tools-kitchen-2', openFeatures], ['assistant', 'sparkles', openAssistant], ['apiKeys', 'key', openKeys], ['activation', 'check', openActivation], ['health', 'cube-3d-sphere', openHealth]]],
 ];
@@ -501,4 +501,60 @@ async function openAssistant(){
       toast(t('saved'));
     } catch (e) { fail(e); }
   };
+}
+
+/// Every outside connection, its state, and a proof button. The proof is the
+/// provider's own answer (a bot's username, a number's verified name, an
+/// object's etag), never a message to a customer.
+const INTEGRATIONS = [
+  ['telegram', 'brand-telegram', () => openNotifications()],
+  ['whatsapp', 'brand-whatsapp', () => openNotifications()],
+  ['instagram', 'sparkles', () => openSocial()],
+  ['webhook', 'scroll', () => openChannels()],
+  ['cloud', 'cloud-upload', () => openCloud()],
+  ['mcp', 'cube-3d-sphere', () => openMcp()],
+  ['stripe', 'credit-card', () => openPayments()],
+  ['ai', 'sparkles', () => openAssistant()],
+];
+const integrationOn = (k, st) => ({ telegram: st.telegram?.configured, whatsapp: st.whatsapp?.configured, instagram: st.instagram?.configured, webhook: st.webhook?.verifySet, cloud: st.cloud?.configured, mcp: true, stripe: st.stripe?.configured, ai: st.ai?.enabled })[k];
+const integrationLine = (k, st) => ({
+  telegram: st.telegram?.configured ? t('telegramOn') : t('tgNotSet'),
+  whatsapp: st.whatsapp?.configured ? `${t('whatsappOn')}${st.whatsapp.notifies ? '' : ' · ' + t('whatsappTo') + ': —'}` : t('waNotYet'),
+  instagram: st.instagram?.configured ? t('instagramOn') : t('socialNotYet'),
+  webhook: `${st.webhook?.lastMs ? t('lastDelivery') + ' ' + ago(st.webhook.lastMs) : t('noDelivery')}${st.webhook?.secretSet ? ' · HMAC' : ''}`,
+  cloud: st.cloud?.configured ? st.cloud.bucket : t('off'),
+  mcp: `${st.mcp?.tools ?? 0} ${t('tools')}`,
+  stripe: st.stripe?.configured ? t('on') : t('stripeNotSet'),
+  ai: st.ai?.enabled ? st.ai.endpoint : t('off'),
+})[k] || '';
+const detailWords = (k, d) => {
+  if (!d) return '';
+  switch (k) {
+    case 'telegram': return `${t('botName')} @${d.bot ?? ''}`;
+    case 'whatsapp': return [d.name, d.number, d.quality].filter(Boolean).join(' · ');
+    case 'instagram': return `@${d.username ?? ''} · ${d.followers ?? 0} ${t('followers')}`;
+    case 'webhook': return d.url;
+    case 'cloud': return `${t('probeWritten')} · ${d.key}`;
+    case 'mcp': return `${d.tools} ${t('tools')}`;
+    case 'ai': return `${d.models} ${t('models')} · ${d.model}`;
+    default: return t('on');
+  }
+};
+async function openIntegrations(){
+  sheet(`${head('settings', 'integrations')}<p class="muted small" data-t="integrationsHint"></p><div id="igList"><div class="skel skel-row"></div><div class="skel skel-row"></div></div>
+    <div class="btn-row"><button class="btn" id="igAll">${icon('check')}<span data-t="checkAll"></span></button></div>`, { name: 'integrations' });
+  let st; try { st = await api('/owner/integrations'); } catch (e) { return fail(e); }
+  $('#igList').innerHTML = `<div class="rows">${INTEGRATIONS.map(([k, ic]) => `<div class="rowc ${integrationOn(k, st) ? '' : 'off'}" data-ig="${k}">${icon(ic)}
+      <span class="t"><b data-t="${k}"></b><small class="ig-line">${esc(integrationLine(k, st))}</small><small class="ig-out mono" hidden></small></span>
+      <button type="button" class="act" data-cfg="${k}">${icon('tools-kitchen-2')}</button><button type="button" class="act pri" data-chk="${k}"><span data-t="check"></span></button></div>`).join('')}</div>`;
+  paint();
+  const run = async k => {
+    const row = $(`[data-ig="${k}"]`), out = $('.ig-out', row), b = $(`[data-chk="${k}"]`, row);
+    out.hidden = false; out.className = 'ig-out mono'; out.textContent = '…';
+    try { const r = await busy(b, () => post('/owner/integrations/check', withLoc({ which: k }))); out.textContent = '✓ ' + detailWords(k, r.detail); out.classList.add('ok'); row.classList.remove('off'); }
+    catch (e) { const code = e.code || (e.body && e.body.code); const word = code && t('ck_' + code) !== 'ck_' + code ? t('ck_' + code) : String(e.message || e); out.textContent = '✕ ' + word; out.classList.add('err'); }
+  };
+  for (const b of $$('[data-chk]', $('#igList'))) b.onclick = () => run(b.dataset.chk);
+  for (const b of $$('[data-cfg]', $('#igList'))) b.onclick = () => INTEGRATIONS.find(([k]) => k === b.dataset.cfg)[2]();
+  $('#igAll').onclick = async () => { for (const [k] of INTEGRATIONS) await run(k); };
 }

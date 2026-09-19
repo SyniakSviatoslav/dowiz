@@ -62,9 +62,12 @@ export async function api(path, opts = {}, retried = false){
     logout(); throw new Error(t('sessionOver'));
   }
   if (!r.ok) {
-    let msg = 'HTTP ' + r.status;
-    try { const d = await r.json(); msg = d.error || d.message || msg; } catch {}
-    throw new Error(msg);
+    // The hub's refusal, with the machine-readable `code` when it sends one,
+    // so a screen can say it in the reader's language.
+    let msg = 'HTTP ' + r.status, code = null;
+    try { const d = await r.json(); msg = d.error || d.message || msg; code = d.code || null; } catch {}
+    const err = new Error(msg); err.status = r.status; if (code) err.code = code;
+    throw err;
   }
   return r.status === 204 ? null : r.json();
 }

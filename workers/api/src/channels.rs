@@ -350,6 +350,10 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Response
             Err(e) => console_error!("inbox: could not store a {} message: {e}", m.channel.as_str()),
         }
     }
+    // The moment of the last delivery, for the integrations screen: "Meta
+    // reached this hub at …" is the fact an owner wants when nothing arrives.
+    let stamp = now_ms().to_string();
+    let _ = crate::hubstore::with_settings(&place, move |s| { s.set(crate::integrations::WEBHOOK_LAST_KEY, &stamp); Ok(()) }).await;
     Response::from_json(&json!({ "stored": stored }))
 }
 

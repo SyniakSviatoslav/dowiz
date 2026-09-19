@@ -32,6 +32,7 @@ mod notify;
 mod channels;
 mod cloud;
 mod mcp;
+mod integrations;
 
 use dowiz_kernel::json_api;
 use serde::Deserialize;
@@ -268,6 +269,8 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/owner/backup/cloud", cloud::push)
         .get_async("/api/webhooks/meta", channels::webhook_verify)
         .post_async("/api/webhooks/meta", channels::webhook)
+        .get_async("/api/owner/integrations", integrations::status)
+        .post_async("/api/owner/integrations/check", integrations::check)
         .get_async("/api/mcp", mcp::describe)
         .post_async("/api/mcp", mcp::rpc)
         .post_async("/api/owner/menu/import", extra::import_menu)
