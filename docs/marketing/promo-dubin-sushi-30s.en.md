@@ -58,6 +58,30 @@ Video | Song | Shot | Visual | On screen
 Rules of thumb while cutting: every shot starts on a beat; shots 3, 7, 9 and 13 start on
 downbeats; if the grid does not allow a 2-second shot, borrow from shot 5 or 6, never from 3.
 
+## 4b. Subtitles — mandatory, burned in
+
+Every shot carries a subtitle line, separate from the headline: one short sentence, bottom safe
+area (baseline 260 px from the bottom in 9:16), mono 30 px, white on `rgba(0,0,0,.62)` with
+12 px padding and 8 px radius, entering 120 ms after the cut, leaving with it. Subtitles exist
+in all three languages and are rendered as three versions of the film (feeds play muted; the
+subtitle is what most viewers actually read).
+
+Shot | EN subtitle | UK | SQ
+---|---|---|---
+1 | Aggregators take a cut of every order you sell. | Агрегатори беруть частку з кожного вашого замовлення. | Agregatorët marrin një pjesë nga çdo porosi.
+2 | Twenty-five to thirty-five percent, every day. | Від двадцяти п'яти до тридцяти п'яти відсотків, щодня. | Nga 25 në 35 përqind, çdo ditë.
+3 | dowiz charges nothing per order. One flat subscription. | dowiz не бере нічого за замовлення. Одна фіксована підписка. | dowiz s'merr asgjë për porosi. Një abonim fiks.
+4 | Your venue gets its own app, on its own domain. | Ваш заклад отримує власний додаток на власному домені. | Lokali juaj merr aplikacionin e vet, në domenin e vet.
+5 | Your colours, your seal, your menu — and an order in a few taps. | Ваші кольори, ваша печатка, ваше меню — і замовлення в кілька дотиків. | Ngjyrat, vula, menyja juaj — dhe porosi me pak prekje.
+6 | Customers watch the courier come, in real time. | Клієнти бачать, як їде кур'єр, у реальному часі. | Klientët shohin korrierin duke ardhur, në kohë reale.
+7 | Storefront, phone, WhatsApp, Instagram, partner APIs — one order log. | Вітрина, телефон, WhatsApp, Instagram, API партнерів — один журнал замовлень. | Vitrina, telefoni, WhatsApp, Instagram, API — një regjistër porosish.
+8 | dowiz drafts posts about your menu; you approve, it publishes. | dowiz пише пости про ваше меню; ви схвалюєте, воно публікує. | dowiz shkruan postime për menynë; ju miratoni, ai boton.
+9 | Post-quantum encryption protects your data and your customers'. | Постквантове шифрування захищає ваші дані й дані клієнтів. | Kriptimi post-kuantik mbron të dhënat tuaja dhe të klientëve.
+10 | The AI assistant runs on your own server. Nothing is sent away. | ШІ-помічник працює на вашому сервері. Нічого не надсилається. | Asistenti AI punon në serverin tuaj. Asgjë nuk dërgohet.
+11 | Every order's profit stays with you. | Прибуток з кожного замовлення лишається вам. | Fitimi i çdo porosie mbetet me ju.
+12 | It installs on the phone like any app. No store needed. | Встановлюється на телефон як звичайний додаток. Без магазину. | Instalohet si çdo aplikacion. Pa dyqan.
+13 | Launch your fee-free mini-app at dowiz.org. | Запустіть свій міні-додаток без тарифів на dowiz.org. | Nisni mini-aplikacionin pa tarifa në dowiz.org.
+
 ## 5. What is captured, what is generated
 
 Captured (Playwright `recordVideo`, iPhone 14 Pro preset, 60 fps), then composited onto the black
@@ -97,6 +121,7 @@ shot12  26.0–28.0 broll(H4, grade:black) + screen-replace(store-open.mp4) + ti
 shot13  28.0–30.0 mark(dowiz, land on last downbeat) + url + fade
 sfx     hit@0.9s(-16dB) · tap@10.6s · tap@18.9s · tap@24.8s · stamp@28.2s (all -16dB)
 titles  serif 96–140px white centred, captions mono 24px gold uppercase; enter 360ms, leave 180ms
+subs    mono 30px white on rgba(0,0,0,.62), baseline 260px from bottom, one line per shot, +120ms after the cut; three language renders
 export  9:16 H.264 12Mbps AAC 256k; 1:1 and 16:9 re-framed on the same timeline
 ```
 
