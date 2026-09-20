@@ -8,8 +8,9 @@ The Remotion composition behind `docs/marketing/promo-dubin-sushi-30s.en.md`. On
 ## Layout
 
 - `src/DowizPromo.tsx` — the thirteen shots, the stage, the phone frame, every graphic.
-- `fonts/` — EB Garamond, JetBrains Mono, DM Sans (OFL). Copy to `public/fonts/`; the
-  composition loads them itself, so every machine renders the same glyphs.
+- `fonts/` — Unbounded, Manrope, JetBrains Mono as woff2 (the landing's faces) and EB Garamond
+  for the drawn tracking sheet (all OFL). Copy to `public/fonts/`; the composition loads them
+  itself, so every machine renders the same glyphs.
 - `capture/` — the Playwright scripts that record the six UI clips from the live hub. They read
   the owner credentials from `/root/.dowiz_owner` and run from the repo root.
 - `public/promo/` (not committed) — the clips and the track.
@@ -31,6 +32,24 @@ under both `--use-gl=angle` (and the GPU process dies as soon as the storefront 
 `--use-gl=swiftshader` (contexts live, draws return 0,0,0,0). Measured 2026-09-20 with
 `e2e/kit-regression/_webgl_probe*.mjs`. The `track-ocean-map` clip the capture script still
 records shows the sheet with a white map; it is not used.
+
+## The world
+
+The cut wears the landing's world (`workers/api/public/platform/landing.css`): bone paper
+`#f2f1ec`, ink `#0b0b0c`, one hot accent `#ff4d1c`; Unbounded 800 for the headlines, Manrope
+for the subtitles, JetBrains Mono for captions and numerals. No gold, no gradients, no
+textures on the stage. The one place gold survives is inside the phone on shot 6: the tracking
+sheet is drawn in the venue's own palette (its seal gold, cream ink, EB Garamond), because
+that is what the product looks like, not what the promo looks like.
+
+Motion: everything sits inside `Camera` (the whole picture kicks on the three hits at 0.9, 4
+and 28 s) and each shot inside `Shot` (a slow push-in with a little drift, alternating
+direction). Headlines reveal word by word with a blur-in. The phone turns in as it rises.
+`Impact` is the flash-and-shockwave on a beat: the burn, the zero, the lock, the mark. There is
+no grain and no bokeh: `assets/grain.png` is left over from an earlier pass and is not loaded.
+
+The cut is delivered in English. The `lang` prop still renders `uk` and `sq` (titles and
+subtitles), but those are not part of the deliverable.
 
 ## Soundtrack
 
@@ -54,15 +73,15 @@ mkdir -p public/fonts public/promo && cp fonts/*.ttf public/fonts/
 python3 music/pulse.py public/promo/dowiz-pulse-120.wav
 node capture/capture-surfaces.mjs $PWD/public/promo      # from the repo root
 node capture/capture-posts.mjs $PWD/public/promo
-npm run render:en && npm run render:uk && npm run render:sq
+npm run render:en            # the deliverable; render:uk and render:sq exist
 ```
 
 On this box Remotion cannot download its own Chrome; point it at Playwright's:
 `--browser-executable=$HOME/.cache/ms-playwright/chromium-*/chrome-linux-arm64/chrome --gl=swiftshader --concurrency=2`.
-`--scale=0.5` gives a five-minute proof render; full scale takes about ten minutes per language.
+`--scale=0.5` gives a ten-minute proof render; full scale takes about twenty minutes.
 
-Other frames from the same 9:16 master, on the black stage (`scripts/reframe.sh`):
-16:9 letterboxes the phone-tall frame centred on 1920×1080; 1:1 does the same on 1080×1080.
+Other frames from the same 9:16 master, on the bone stage (`scripts/reframe.sh`):
+16:9 pillarboxes the phone-tall frame on bone, centred on 1920×1080; 1:1 does the same on 1080×1080.
 
 ## Open
 

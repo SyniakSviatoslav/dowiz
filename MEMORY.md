@@ -1191,3 +1191,9 @@ its source, which is why translations, logo and hours "did not work". Verified l
   console can preview the storefront in an iframe on the same host.
 - design_gate.py: `platform` row → hub.html, new `landing` row; canonical/alternate links exempt from the
   origin rule.
+- Promo (`marketing/promo-30s`) re-skinned to the landing's world: bone/ink/hot, Unbounded + Manrope +
+  JetBrains Mono woff2 in `fonts/`; no gold on the stage. The venue's gold + cream + EB Garamond survive only
+  inside the phone on the drawn tracking sheet (`S_GOLD`/`S_INK`/`S_SERIF`). EN is the deliverable
+  (`out/promo-en-1080x1920.mp4`, rendered 2026-09-20 14:47, 30.06 s, plus 16:9 and 1:1 padded on bone by
+  `scripts/reframe.sh`); `uk`/`sq` still render by prop. `assets/grain.png` is unused. Full-scale render
+  took ~10 min with `--concurrency=2`.

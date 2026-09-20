@@ -26,12 +26,21 @@ export const FPS = 30;
 export const DURATION_S = 30;
 const W = 1080, H = 1920;
 
-const GOLD = "#c9a35a", INK = "#f1e8d8", RED = "#DC2626", TEAL = "#0D9488";
+const BONE = "#f2f1ec", INK = "#0b0b0c", HOT = "#ff4d1c", MUTE = "#6f6f6b", BONE_2 = "#e9e7e0";
 // The fonts ship with the composition (public/fonts), so every machine renders the same glyphs.
-const SERIF = '"EB Garamond", "Iowan Old Style", Palatino, Georgia, serif';
+const DISPLAY = '"Unbounded", "Manrope", system-ui, sans-serif';
 const MONO = '"JetBrains Mono", "SF Mono", Menlo, Consolas, monospace';
-const SANS = '"DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
-const FONT_FACES = [["EB Garamond", "EBGaramond.ttf"], ["JetBrains Mono", "JetBrainsMono.ttf"], ["DM Sans", "DMSans.ttf"]] as const;
+const SANS = '"Manrope", system-ui, sans-serif';
+const FONT_FACES = [
+  ["Unbounded", "unbounded-latin.woff2"],
+  ["Unbounded", "unbounded-latin-ext.woff2"],
+  ["Unbounded", "unbounded-cyrillic.woff2"],
+  ["Manrope", "manrope-latin.woff2"],
+  ["Manrope", "manrope-latin-ext.woff2"],
+  ["Manrope", "manrope-cyrillic.woff2"],
+  ["JetBrains Mono", "jetbrains-mono.woff2"],
+  ["EB Garamond", "EBGaramond.ttf"],
+] as const;
 
 /// Declares the three faces and holds the render until Chrome has loaded them.
 const Fonts: React.FC = () => {
@@ -85,23 +94,62 @@ const rise = (frame: number, delay = 0, ms = 360) => {
   return { opacity: k, transform: `translateY(${(1 - k) * 24}px)`, filter: `blur(${(1 - k) * 6}px)` };
 };
 
+/// Global camera: the whole picture kicks on the three hits (0.9 s, 4 s, 28 s) and settles.
+const HITS = [0.9, 4.0, 28.0];
+const Camera: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
+  const frame = useCurrentFrame();
+  let dx = 0, dy = 0, sc = 1;
+  for (const h of HITS) {
+    const f = frame - h * FPS;
+    if (f >= 0 && f < 16) { const k = Math.exp(-f / 4); dx += Math.sin(f * 2.7) * 9 * k; dy += Math.cos(f * 3.1) * 7 * k; sc += 0.018 * k; }
+  }
+  return <AbsoluteFill style={{ transform: `translate(${dx}px, ${dy}px) scale(${sc})`, transformOrigin: "50% 50%" }}>{children}</AbsoluteFill>;
+};
+
+/// Per-shot camera: a slow push-in with a little drift, so nothing is ever static.
+const Shot: React.FC<{ index: number; children?: React.ReactNode }> = ({ index, children }) => {
+  const frame = useCurrentFrame();
+  const { durationInFrames } = useVideoConfig();
+  const k = frame / durationInFrames;
+  const dir = index % 2 ? 1 : -1;
+  return <AbsoluteFill style={{ transform: `scale(${1 + 0.035 * k}) translate(${dir * 6 * k}px, ${-4 * k}px)`, transformOrigin: index % 3 === 0 ? "50% 45%" : "50% 55%" }}>{children}</AbsoluteFill>;
+};
+
+/// A flash and a shockwave on a beat: white-gold bloom for six frames, one ring expanding out.
+const Impact: React.FC<{ at?: number; x?: number; y?: number; strength?: number }> = ({ at = 0, x = W / 2, y = H / 2, strength = 1 }) => {
+  const frame = useCurrentFrame();
+  const f = frame - at * FPS;
+  if (f < 0 || f > 26) return null;
+  const flash = Math.max(0, 1 - f / 6) * 0.45 * strength;
+  const ring = interpolate(f, [0, 26], [0, 1], { extrapolateRight: "clamp", easing: Easing.out(Easing.cubic) });
+  return (
+    <>
+      <AbsoluteFill style={{ pointerEvents: "none", background: `radial-gradient(60% 40% at ${(x / W) * 100}% ${(y / H) * 100}%, rgba(255,77,28,${flash * 0.35}), transparent 70%)` }} />
+      <div style={{ position: "absolute", left: x - 400 * ring, top: y - 400 * ring, width: 800 * ring, height: 800 * ring, borderRadius: "50%", border: `${3 * (1 - ring) + 1}px solid rgba(11,11,12,${(1 - ring) * 0.7 * strength})` }} />
+    </>
+  );
+};
+
 const Stage: React.FC<{ children?: React.ReactNode }> = ({ children }) => (
-  <AbsoluteFill style={{ background: "radial-gradient(60% 18% at 50% 92%, rgba(201,163,90,.14), transparent 70%), #000" }}>
+  <AbsoluteFill style={{ background: BONE }}>
     {children}
-    <AbsoluteFill style={{ pointerEvents: "none", background: "radial-gradient(120% 90% at 50% 50%, transparent 60%, rgba(0,0,0,.55) 100%)" }} />
   </AbsoluteFill>
 );
 
 const Headline: React.FC<{ text: string; size?: number; mono?: boolean; color?: string; top?: number; delay?: number }> = ({ text, size = 104, mono = false, color = INK, top = 180, delay = 0 }) => {
   const frame = useCurrentFrame();
+  const words = text.split(" ");
+  const displaySize = size * 0.8;
   return (
-    <div style={{ position: "absolute", left: 72, right: 72, top, textAlign: "center", fontFamily: mono ? MONO : SERIF, fontSize: size, lineHeight: 1.08, letterSpacing: mono ? "0.02em" : "-0.02em", color, textWrap: "balance" as any, ...rise(frame, delay) }}>{text}</div>
+    <div style={{ position: "absolute", left: 72, right: 72, top, textAlign: "left", fontFamily: DISPLAY, fontSize: displaySize, fontWeight: 800, lineHeight: 1.0, letterSpacing: "-0.035em", color, textWrap: "balance" as any }}>
+      {words.map((w, i) => <span key={i} style={{ display: "inline-block", whiteSpace: "pre", ...rise(frame, delay + i * 0.07, 420) }}>{w}{i < words.length - 1 ? " " : ""}</span>)}
+    </div>
   );
 };
 
 const Caption: React.FC<{ text: string; top?: number; delay?: number }> = ({ text, top = 1080, delay = 0.12 }) => {
   const frame = useCurrentFrame();
-  return <div style={{ position: "absolute", left: 60, right: 60, top, textAlign: "center", fontFamily: MONO, fontSize: 24, letterSpacing: "0.24em", textTransform: "uppercase", color: GOLD, ...rise(frame, delay) }}>{text}</div>;
+  return <div style={{ position: "absolute", left: 60, right: 60, top, textAlign: "center", fontFamily: MONO, fontSize: 26, letterSpacing: "0.12em", textTransform: "uppercase", color: HOT, ...rise(frame, delay) }}>{text}</div>;
 };
 
 const Subtitle: React.FC<{ text: string }> = ({ text }) => {
@@ -109,7 +157,7 @@ const Subtitle: React.FC<{ text: string }> = ({ text }) => {
   const k = interpolate(frame, [4, 12], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: ease });
   return (
     <div style={{ position: "absolute", left: 0, right: 0, bottom: 260, display: "flex", justifyContent: "center", opacity: k }}>
-      <div style={{ maxWidth: 940, padding: "12px 20px", borderRadius: 8, background: "rgba(0,0,0,.62)", color: "#fff", fontFamily: SANS, fontSize: 30, lineHeight: 1.3, textAlign: "center" }}>{text}</div>
+      <div style={{ maxWidth: 940, padding: "12px 20px", borderRadius: 12, background: INK, color: BONE, fontFamily: SANS, fontWeight: 500, fontSize: 30, lineHeight: 1.3, textAlign: "center" }}>{text}</div>
     </div>
   );
 };
@@ -119,14 +167,15 @@ const Phone: React.FC<{ src?: string; from?: number; push?: number; rise?: boole
   const frame = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
   const scale = 1 + push * interpolate(frame, [0, durationInFrames], [0, 1], { extrapolateRight: "clamp" });
-  const y = rises ? interpolate(spring({ frame, fps: FPS, config: { damping: 18, stiffness: 60 } }), [0, 1], [900, 0]) : 0;
+  const sp = rises ? spring({ frame, fps: FPS, config: { damping: 18, stiffness: 60 } }) : 1;
+  const y = interpolate(sp, [0, 1], [900, 0]), ry = interpolate(sp, [0, 1], [-14, -3]);
   const sweep = interpolate(frame, [0, durationInFrames], [-40, 140]);
   const w = 570, h = 1235;
   return (
-    <div style={{ position: "absolute", left: (W - w) / 2, top: 320, width: w, height: h, transform: `translateY(${y}px) perspective(2200px) rotateX(6deg) scale(${scale})`, transformOrigin: "50% 60%" }}>
-      <div style={{ position: "absolute", inset: 0, borderRadius: 44, overflow: "hidden", background: "#0b1717", boxShadow: "0 40px 90px rgba(0,0,0,.6), 0 0 0 2px rgba(255,255,255,.08), inset 0 0 0 1px rgba(255,255,255,.05)" }}>
+    <div style={{ position: "absolute", left: (W - w) / 2, top: 320, width: w, height: h, transform: `translateY(${y}px) perspective(2200px) rotateX(6deg) rotateY(${ry}deg) scale(${scale})`, transformOrigin: "50% 60%" }}>
+      <div style={{ position: "absolute", inset: 0, borderRadius: 44, overflow: "hidden", background: INK, boxShadow: "0 40px 80px rgba(11,11,12,.25), 0 0 0 2px rgba(11,11,12,.06)" }}>
         {src ? <OffthreadVideo muted src={staticFile(`promo/${src}`)} trimBefore={Math.round(from * FPS)} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : children}
-        <div style={{ position: "absolute", inset: 0, background: `linear-gradient(115deg, transparent ${sweep - 12}%, rgba(255,255,255,.10) ${sweep}%, transparent ${sweep + 12}%)`, pointerEvents: "none" }} />
+        <div style={{ position: "absolute", inset: 0, background: `linear-gradient(115deg, transparent ${sweep - 14}%, rgba(255,255,255,.10) ${sweep}%, transparent ${sweep + 14}%)`, pointerEvents: "none" }} />
       </div>
     </div>
   );
@@ -136,6 +185,9 @@ const Phone: React.FC<{ src?: string; from?: number; push?: number; rise?: boole
 /// order is being made, then (on the beat at 1.5 s) the map — venue, door, and the courier gliding.
 /// Headless WebGL on the render box rasterises nothing, so the real sheet cannot be captured here.
 const PAPER = "#0f1c1a", CARD = "#17302b", LINE = "#274640", MUTED = "rgba(241,232,216,.55)";
+// The venue's own brand inside the phone: its seal gold, cream ink and serif. The promo chrome never uses them.
+const S_GOLD = "#c9a35a", S_INK = "#f1e8d8";
+const S_SERIF = '"EB Garamond", "Iowan Old Style", Palatino, Georgia, serif';
 const Ocean: React.FC = () => {
   const frame = useCurrentFrame();
   const waves = [0, 1, 2, 3, 4, 5];
@@ -150,11 +202,11 @@ const Ocean: React.FC = () => {
         let d = `M0 ${y0}`;
         for (let x = 0; x <= 540; x += 20) d += ` L${x} ${y0 + Math.sin(x / 70 + ph) * amp + Math.sin(x / 31 - ph * 1.7) * amp * 0.35}`;
         d += " L540 300 L0 300 Z";
-        return <path key={i} d={d} fill={`rgba(${10 + i * 6}, ${40 + i * 9}, ${38 + i * 8}, ${0.55})`} stroke={i % 2 ? GOLD : "rgba(201,163,90,.35)"} strokeWidth={i % 2 ? 1.2 : 0.7} strokeOpacity={0.5 + 0.1 * Math.sin(ph * 2)} />;
+        return <path key={i} d={d} fill={`rgba(${10 + i * 6}, ${40 + i * 9}, ${38 + i * 8}, ${0.55})`} stroke={i % 2 ? S_GOLD : "rgba(201,163,90,.35)"} strokeWidth={i % 2 ? 1.2 : 0.7} strokeOpacity={0.5 + 0.1 * Math.sin(ph * 2)} />;
       })}
       {Array.from({ length: 18 }, (_, i) => {
         const x = (i * 131) % 540, y = 40 + ((i * 71) % 220), tw = 0.5 + 0.5 * Math.sin(frame / 6 + i);
-        return <circle key={i} cx={x} cy={y} r={1.2 + tw} fill={GOLD} opacity={0.25 + 0.5 * tw} />;
+        return <circle key={i} cx={x} cy={y} r={1.2 + tw} fill={S_GOLD} opacity={0.25 + 0.5 * tw} />;
       })}
     </svg>
   );
@@ -173,8 +225,8 @@ const InkMap: React.FC<{ t: number }> = ({ t }) => {
       <path d="M0 300 L0 250 Q60 235 90 300 Z" fill="#12312e" />
       <path d="M450 0 L540 0 L540 120 Q500 90 470 60 Q445 30 450 0 Z" fill="#12312e" />
       {streets.map(([x1, y1, x2, y2], i) => <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={LINE} strokeWidth={i < 4 ? 3 : 2} />)}
-      <path d={`M${venue.x} ${venue.y} Q${mid.x} ${mid.y} ${door.x} ${door.y}`} fill="none" stroke={GOLD} strokeWidth={2} strokeDasharray="6 6" strokeOpacity={0.85} />
-      <circle cx={venue.x} cy={venue.y} r={16} fill={GOLD} /><text x={venue.x} y={venue.y + 6} textAnchor="middle" fontFamily={SERIF} fontSize={18} fill="#1a1408">ド</text>
+      <path d={`M${venue.x} ${venue.y} Q${mid.x} ${mid.y} ${door.x} ${door.y}`} fill="none" stroke={S_GOLD} strokeWidth={2} strokeDasharray="6 6" strokeOpacity={0.85} />
+      <circle cx={venue.x} cy={venue.y} r={16} fill={S_GOLD} /><text x={venue.x} y={venue.y + 6} textAnchor="middle" fontFamily={S_SERIF} fontSize={18} fill="#1a1408">ド</text>
       <g transform={`translate(${door.x} ${door.y})`}><circle r={15} fill="#1d5f7a" stroke="#7fc4dd" strokeWidth={2} /><path d="M-7 3 L0 -5 L7 3 V9 H-7 Z" fill="#e8f4f8" /></g>
       <g transform={`translate(${c.x} ${c.y})`}><circle r={17} fill="#0f8f83" stroke="#9de7dc" strokeWidth={2} /><circle r={5} fill="#e6fff9" /><circle r={26} fill="none" stroke="#0f8f83" strokeOpacity={0.5 - 0.5 * ((t * 1.5) % 1)} strokeWidth={2} transform={`scale(${1 + ((t * 1.5) % 1) * 0.8})`} /></g>
     </svg>
@@ -186,27 +238,27 @@ const TrackingScreen: React.FC = () => {
   const step = riding ? 5 : 3;
   const dots = [1, 2, 3, 4, 5, 6];
   const eta = riding ? (t > 2.6 ? "3–5 min" : "6–9 min") : "12–18 min";
-  const Chip: React.FC<{ children: React.ReactNode }> = ({ children }) => <div style={{ padding: "10px 16px", borderRadius: 22, background: CARD, color: INK, fontFamily: SANS, fontSize: 16, fontWeight: 600, letterSpacing: "0.02em" }}>{children}</div>;
+  const Chip: React.FC<{ children: React.ReactNode }> = ({ children }) => <div style={{ padding: "10px 16px", borderRadius: 22, background: CARD, color: S_INK, fontFamily: SANS, fontSize: 16, fontWeight: 600, letterSpacing: "0.02em" }}>{children}</div>;
   return (
-    <div style={{ position: "absolute", inset: 0, background: PAPER, fontFamily: SANS, color: INK }}>
-      <div style={{ position: "absolute", left: 0, right: 0, top: 0, height: 4, background: `linear-gradient(90deg, ${GOLD}, #e8c77a)` }} />
-      <div style={{ position: "absolute", left: 28, top: 44, fontFamily: MONO, fontSize: 12, letterSpacing: "0.22em", color: GOLD }}>ORDER · #PROMO0001 · DUBIN & SUSHI</div>
-      <div style={{ position: "absolute", left: 22, right: 22, top: 84, height: 88, borderRadius: 16, overflow: "hidden", background: CARD, borderLeft: `4px solid ${GOLD}` }}>
-        <div style={{ position: "absolute", left: 24, top: 16, fontFamily: SERIF, fontSize: 32, color: INK }}>{riding ? "On the way" : "Being prepared"}</div>
-        <div style={{ position: "absolute", left: 26, top: 62, display: "flex", gap: 10 }}>{dots.map(d => <div key={d} style={{ width: 10, height: 10, borderRadius: 5, background: d <= step ? GOLD : "transparent", border: `1.5px solid ${d <= step ? GOLD : MUTED}`, opacity: d === step ? 0.7 + 0.3 * Math.sin(frame / 3) : 1 }} />)}</div>
+    <div style={{ position: "absolute", inset: 0, background: PAPER, fontFamily: SANS, color: S_INK }}>
+      <div style={{ position: "absolute", left: 0, right: 0, top: 0, height: 4, background: `linear-gradient(90deg, ${S_GOLD}, #e8c77a)` }} />
+      <div style={{ position: "absolute", left: 28, top: 44, fontFamily: MONO, fontSize: 12, letterSpacing: "0.22em", color: S_GOLD }}>ORDER · #PROMO0001 · DUBIN & SUSHI</div>
+      <div style={{ position: "absolute", left: 22, right: 22, top: 84, height: 88, borderRadius: 16, overflow: "hidden", background: CARD, borderLeft: `4px solid ${S_GOLD}` }}>
+        <div style={{ position: "absolute", left: 24, top: 16, fontFamily: S_SERIF, fontSize: 32, color: S_INK }}>{riding ? "On the way" : "Being prepared"}</div>
+        <div style={{ position: "absolute", left: 26, top: 62, display: "flex", gap: 10 }}>{dots.map(d => <div key={d} style={{ width: 10, height: 10, borderRadius: 5, background: d <= step ? S_GOLD : "transparent", border: `1.5px solid ${d <= step ? S_GOLD : MUTED}`, opacity: d === step ? 0.7 + 0.3 * Math.sin(frame / 3) : 1 }} />)}</div>
       </div>
-      <div style={{ position: "absolute", left: 28, top: 190, fontFamily: MONO, fontSize: 12, letterSpacing: "0.2em", color: GOLD }}>STEP {step} OF 6 · UP NEXT: {riding ? "DELIVERED" : "READY"}</div>
-      <div style={{ position: "absolute", left: 28, right: 28, top: 214, height: 2, background: LINE }}><div style={{ width: `${(step / 6) * 100}%`, height: 2, background: GOLD }} /></div>
+      <div style={{ position: "absolute", left: 28, top: 190, fontFamily: MONO, fontSize: 12, letterSpacing: "0.2em", color: S_GOLD }}>STEP {step} OF 6 · UP NEXT: {riding ? "DELIVERED" : "READY"}</div>
+      <div style={{ position: "absolute", left: 28, right: 28, top: 214, height: 2, background: LINE }}><div style={{ width: `${(step / 6) * 100}%`, height: 2, background: S_GOLD }} /></div>
       <div style={{ position: "absolute", left: 28, top: 236, display: "flex", gap: 10 }}><Chip>◷ {eta}</Chip><Chip>ALL 1,800</Chip><Chip>Cash</Chip></div>
       <div style={{ position: "absolute", left: 22, right: 22, top: 300, height: 300, borderRadius: 16, overflow: "hidden", border: `1px solid ${LINE}` }}>
         {riding ? <InkMap t={t - 1.5} /> : <Ocean />}
-        {!riding && <div style={{ position: "absolute", left: 0, right: 0, top: 118, textAlign: "center", fontFamily: SERIF, fontSize: 30, color: INK, textShadow: "0 2px 12px rgba(0,0,0,.6)" }}>Being made for you</div>}
+        {!riding && <div style={{ position: "absolute", left: 0, right: 0, top: 118, textAlign: "center", fontFamily: S_SERIF, fontSize: 30, color: S_INK, textShadow: "0 2px 12px rgba(0,0,0,.6)" }}>Being made for you</div>}
       </div>
       <div style={{ position: "absolute", left: 28, top: 612, fontFamily: MONO, fontSize: 11, letterSpacing: "0.2em", color: MUTED }}>{riding ? "● VENUE   ● YOU   ● COURIER" : "● VENUE   ● YOU"}</div>
-      <div style={{ position: "absolute", left: 28, top: 660, fontFamily: MONO, fontSize: 12, letterSpacing: "0.22em", color: GOLD }}>WHAT PEOPLE SAY</div>
-      <div style={{ position: "absolute", left: 28, right: 28, top: 686, fontFamily: SERIF, fontSize: 19, lineHeight: 1.35, color: INK }}>“Very tasty rolls — if you want them ‘like in Ukraine’, this is the place.”</div>
-      <div style={{ position: "absolute", left: 28, top: 770, fontFamily: MONO, fontSize: 12, color: GOLD }}>★★★★★ <span style={{ color: MUTED }}>Volo SLD</span></div>
-      <div style={{ position: "absolute", left: 28, right: 28, bottom: 36, height: 56, borderRadius: 28, background: CARD, display: "grid", placeItems: "center", fontFamily: MONO, fontSize: 14, letterSpacing: "0.2em", color: INK }}>DONE</div>
+      <div style={{ position: "absolute", left: 28, top: 660, fontFamily: MONO, fontSize: 12, letterSpacing: "0.22em", color: S_GOLD }}>WHAT PEOPLE SAY</div>
+      <div style={{ position: "absolute", left: 28, right: 28, top: 686, fontFamily: S_SERIF, fontSize: 19, lineHeight: 1.35, color: S_INK }}>“Very tasty rolls — if you want them ‘like in Ukraine’, this is the place.”</div>
+      <div style={{ position: "absolute", left: 28, top: 770, fontFamily: MONO, fontSize: 12, color: S_GOLD }}>★★★★★ <span style={{ color: MUTED }}>Volo SLD</span></div>
+      <div style={{ position: "absolute", left: 28, right: 28, bottom: 36, height: 56, borderRadius: 28, background: CARD, display: "grid", placeItems: "center", fontFamily: MONO, fontSize: 14, letterSpacing: "0.2em", color: S_INK }}>DONE</div>
     </div>
   );
 };
@@ -217,17 +269,19 @@ const Counter: React.FC = () => {
   const steps = [-25, -30, -35];
   const i = Math.min(steps.length - 1, Math.floor(frame / (FPS * 0.66)));
   const jit = Math.sin(frame * 2.3) * 2;
-  return <div style={{ position: "absolute", left: 0, right: 0, top: 640, textAlign: "center", fontFamily: SANS, fontSize: 260, fontWeight: 700, color: RED, transform: `translate(${jit}px, ${-jit}px)`, letterSpacing: "-0.04em" }}>{steps[i]}%</div>;
+  const tick = (frame % Math.round(FPS * 0.66)) / (FPS * 0.66);
+  return (
+    <div style={{ position: "absolute", left: 0, right: 0, top: 640, textAlign: "center", fontFamily: MONO, fontSize: 260, fontWeight: 700, color: HOT, transform: `translate(${jit}px, ${-jit}px) scale(${1 + 0.05 * Math.max(0, 1 - tick * 4)})`, letterSpacing: "-0.04em" }}>{steps[i]}%</div>
+  );
 };
 
-/// The gold zero: flips in on the first frame, then the foil breathes.
+/// The orange zero: flips in on the first frame.
 const Zero: React.FC = () => {
   const frame = useCurrentFrame();
   const flip = interpolate(frame, [0, 8], [90, 0], { extrapolateRight: "clamp", easing: ease });
-  const pos = (frame / (FPS * 6.4)) * 200;
   return (
     <div style={{ position: "absolute", left: 0, right: 0, top: 600, textAlign: "center", perspective: 1200 }}>
-      <div style={{ display: "inline-block", fontFamily: SANS, fontSize: 440, fontWeight: 700, letterSpacing: "-0.06em", transform: `rotateX(${flip}deg)`, backgroundImage: `linear-gradient(135deg, #6b4f1c 0%, ${GOLD} 28%, #f3dea0 50%, ${GOLD} 72%, #6b4f1c 100%)`, backgroundSize: "200% 200%", backgroundPosition: `${pos}% 50%`, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>0</div>
+      <div style={{ display: "inline-block", fontFamily: MONO, fontSize: 400, fontWeight: 700, letterSpacing: "-0.08em", transform: `rotateX(${flip}deg)`, color: HOT }}>0%</div>
     </div>
   );
 };
@@ -239,18 +293,27 @@ const Hub: React.FC = () => {
   const cx = W / 2, cy = 900, r = 330;
   return (
     <>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ position: "absolute", left: 0, top: 0 }}>
+        {labels.map((l, i) => {
+          const a = -Math.PI / 2 + (i * 2 * Math.PI) / labels.length;
+          const k = spring({ frame: frame - i * 4, fps: FPS, config: { damping: 14, stiffness: 90 } });
+          const x = cx + Math.cos(a) * r * k, y = cy + Math.sin(a) * r * k;
+          const pulse = ((frame - i * 4) / 24) % 1;
+          return <g key={l}><line x1={x} y1={y} x2={cx} y2={cy} stroke={INK} strokeWidth={1.5} strokeOpacity={0.25} /><circle cx={x + (cx - x) * pulse} cy={y + (cy - y) * pulse} r={5} fill={HOT} opacity={k * (1 - pulse)} /></g>;
+        })}
+      </svg>
       {labels.map((l, i) => {
         const a = -Math.PI / 2 + (i * 2 * Math.PI) / labels.length;
         const k = spring({ frame: frame - i * 4, fps: FPS, config: { damping: 14, stiffness: 90 } });
         const x = cx + Math.cos(a) * r * k, y = cy + Math.sin(a) * r * k;
         return (
           <div key={l} style={{ position: "absolute", left: x - 90, top: y - 26, width: 180, textAlign: "center", opacity: k }}>
-            <div style={{ width: 16, height: 16, borderRadius: 8, background: GOLD, margin: "0 auto 8px", boxShadow: `0 0 18px ${GOLD}` }} />
+            <div style={{ width: 16, height: 16, borderRadius: 8, background: HOT, margin: "0 auto 8px" }} />
             <div style={{ fontFamily: MONO, fontSize: 22, letterSpacing: "0.12em", color: INK, textTransform: "uppercase" }}>{l}</div>
           </div>
         );
       })}
-      <div style={{ position: "absolute", left: cx - 70, top: cy - 70, width: 140, height: 140, borderRadius: 70, background: `radial-gradient(circle, #f3dea0, ${GOLD} 60%, #6b4f1c)`, boxShadow: `0 0 ${40 + 30 * Math.abs(Math.sin(frame / 9))}px ${GOLD}`, display: "grid", placeItems: "center", fontFamily: SERIF, fontStyle: "italic", fontSize: 72, color: "#1a1408" }}>d</div>
+      <div style={{ position: "absolute", left: cx - 70, top: cy - 70, width: 140, height: 140, borderRadius: 70, background: HOT, display: "grid", placeItems: "center", fontFamily: DISPLAY, fontSize: 72, color: BONE }}>d</div>
     </>
   );
 };
@@ -263,7 +326,7 @@ const Lock: React.FC = () => {
   return (
     <>
       <svg width={W} height={H} style={{ position: "absolute", left: 0, top: 0 }} viewBox={`0 0 ${W} ${H}`}>
-        <g fill="none" stroke={GOLD} strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" style={{ strokeDasharray: 2200, strokeDashoffset: 2200 * draw }}>
+        <g fill="none" stroke={INK} strokeWidth={6} strokeLinecap="round" strokeLinejoin="round" style={{ strokeDasharray: 2200, strokeDashoffset: 2200 * draw }}>
           <rect x={380} y={860} width={320} height={260} rx={28} />
           <path d="M440 860 V760 a100 100 0 0 1 200 0 V860" />
           <path d="M380 930 L540 860 L700 930 M380 1050 L540 980 L700 1050 M540 860 V1120" />
@@ -274,7 +337,9 @@ const Lock: React.FC = () => {
         const x = 120 + seed * 840, y = 560 + ((i * 7919) % 700);
         const settle = Math.min(1, Math.max(0, (frame - i) / 16));
         const ch = settle < 1 ? String((frame * (i + 3)) % 10) : (i % 2 ? "1" : "0");
-        return <div key={i} style={{ position: "absolute", left: x, top: y, fontFamily: MONO, fontSize: 28, color: GOLD, opacity: 0.25 + 0.5 * settle }}>{ch}</div>;
+        const isOne = i % 2 === 1;
+        const digitColor = settle < 1 ? MUTE : (isOne ? HOT : MUTE);
+        return <div key={i} style={{ position: "absolute", left: x, top: y, fontFamily: MONO, fontSize: 28, color: digitColor, opacity: 0.25 + 0.5 * settle }}>{ch}</div>;
       })}
     </>
   );
@@ -283,11 +348,18 @@ const Lock: React.FC = () => {
 const EndCard: React.FC = () => {
   const frame = useCurrentFrame();
   const k = spring({ frame, fps: FPS, config: { damping: 12, stiffness: 120 } });
+  const sparks = Array.from({ length: 16 }, (_, i) => i);
   return (
     <>
-      <div style={{ position: "absolute", left: W / 2 - 110, top: 640, width: 220, height: 220, borderRadius: 110, transform: `scale(${k})`, background: `linear-gradient(135deg, #6b4f1c, ${GOLD} 40%, #f3dea0 55%, ${GOLD})`, boxShadow: `0 30px 80px rgba(201,163,90,.35)`, display: "grid", placeItems: "center", fontFamily: SERIF, fontStyle: "italic", fontSize: 130, color: "#1a1408" }}>d</div>
-      <div style={{ position: "absolute", left: 0, right: 0, top: 900, textAlign: "center", fontFamily: SERIF, fontSize: 120, letterSpacing: "0.12em", color: INK, ...rise(frame, 0.2) }}>dowiz</div>
-      <div style={{ position: "absolute", left: 0, right: 0, top: 1060, textAlign: "center", fontFamily: MONO, fontSize: 30, letterSpacing: "0.22em", color: GOLD, textTransform: "uppercase", ...rise(frame, 0.35) }}>dowiz.org</div>
+      <Impact at={0.05} y={750} strength={1.2} />
+      {sparks.map(i => {
+        const a = (i / sparks.length) * Math.PI * 2, t = Math.min(1, Math.max(0, (frame - 2) / 22));
+        const d = 60 + t * 260;
+        return <div key={i} style={{ position: "absolute", left: W / 2 + Math.cos(a) * d - 3, top: 750 + Math.sin(a) * d - 3, width: 6, height: 6, borderRadius: 3, background: HOT, opacity: (1 - t) * 0.9 }} />;
+      })}
+      <div style={{ position: "absolute", left: W / 2 - 110, top: 640, width: 220, height: 220, borderRadius: 110, transform: `scale(${k})`, background: HOT, display: "grid", placeItems: "center", fontFamily: DISPLAY, fontSize: 130, color: BONE }}>d</div>
+      <div style={{ position: "absolute", left: 0, right: 0, top: 900, textAlign: "center", fontFamily: DISPLAY, fontSize: 150, fontWeight: 800, letterSpacing: "-0.05em", color: INK, ...rise(frame, 0.2) }}>dowiz</div>
+      <div style={{ position: "absolute", left: 0, right: 0, top: 1060, textAlign: "center", fontFamily: MONO, fontSize: 30, letterSpacing: "0.22em", color: HOT, textTransform: "uppercase", ...rise(frame, 0.35) }}>dowiz.org</div>
     </>
   );
 };
@@ -317,7 +389,7 @@ const Notes: React.FC = () => {
         const x = 280 + seed * 500 + Math.sin(t * 6 + i) * 30, y = 1060 - t * (700 + seed * 220);
         const o = Math.max(0, 1 - Math.max(0, t - 0.7) / 0.3);
         return (
-          <div key={i} style={{ position: "absolute", left: x, top: y, width: 150, height: 68, borderRadius: 6, opacity: o, transform: `rotate(${seed * 70 - 35 + t * 60}deg) scale(${1 - burn * 0.35})`, background: `linear-gradient(90deg, hsl(${140 - burn * 130}, 45%, ${32 - burn * 10}%), hsl(${140 - burn * 130}, 55%, ${44 - burn * 12}%))`, boxShadow: `inset 0 0 0 4px rgba(255,255,255,.14), 0 0 ${30 * burn}px hsl(20, 100%, 50%)` }}>
+          <div key={i} style={{ position: "absolute", left: x, top: y, width: 150, height: 68, borderRadius: 6, opacity: o, transform: `rotate(${seed * 70 - 35 + t * 60}deg) scale(${1 - burn * 0.35})`, background: `linear-gradient(90deg, hsl(${140 - burn * 130}, 45%, ${32 - burn * 10}%), hsl(${140 - burn * 130}, 55%, ${44 - burn * 12}%))`, boxShadow: `inset 0 0 0 4px rgba(255,255,255,.14), 0 0 ${30 * burn}px rgba(255,77,28,${burn})` }}>
             <div style={{ position: "absolute", left: 58, top: 17, width: 34, height: 34, borderRadius: 17, border: "2px solid rgba(255,255,255,.28)" }} />
           </div>
         );
@@ -327,7 +399,7 @@ const Notes: React.FC = () => {
         if (t <= 0) return null;
         const ember = i % 4 === 0;
         const x = 330 + ((i * 53) % 460) + Math.sin(t * 9 + i) * 40, y = 980 - t * 900 - (i % 5) * 20;
-        return <div key={i} style={{ position: "absolute", left: x, top: y, width: ember ? 6 : 9, height: ember ? 6 : 9, borderRadius: ember ? 3 : 2, background: ember ? `hsl(${30 - t * 20}, 100%, ${65 - t * 30}%)` : "#3a3128", opacity: Math.max(0, (ember ? 1 : 0.7) - t), boxShadow: ember ? `0 0 ${10 * (1 - t)}px orange` : "none", transform: `rotate(${t * 300}deg)` }} />;
+        return <div key={i} style={{ position: "absolute", left: x, top: y, width: ember ? 6 : 9, height: ember ? 6 : 9, borderRadius: ember ? 3 : 2, background: ember ? `hsl(${20 - t * 20}, 100%, ${65 - t * 30}%)` : "#3a3128", opacity: Math.max(0, (ember ? 1 : 0.7) - t), boxShadow: ember ? `0 0 ${10 * (1 - t)}px ${HOT}` : "none", transform: `rotate(${t * 300}deg)` }} />;
       })}
     </>
   );
@@ -345,18 +417,18 @@ const HomeScreen: React.FC<{ tapAt?: number }> = ({ tapAt = 0.55 }) => {
   const ours = 9;
   return (
     <div style={{ position: "absolute", left: (W - w) / 2, top: 320, width: w, height: h, transform: "perspective(2200px) rotateX(6deg)", transformOrigin: "50% 60%" }}>
-      <div style={{ position: "absolute", inset: 0, borderRadius: 44, overflow: "hidden", background: "radial-gradient(90% 60% at 50% 20%, #17302b 0%, #07100f 70%, #000 100%)", boxShadow: "0 40px 90px rgba(0,0,0,.6), 0 0 0 2px rgba(255,255,255,.08)" }}>
+      <div style={{ position: "absolute", inset: 0, borderRadius: 44, overflow: "hidden", background: "#ffffff", boxShadow: "0 40px 80px rgba(11,11,12,.25), 0 0 0 2px rgba(11,11,12,.06)" }}>
         <div style={{ position: "absolute", left: 0, right: 0, top: 22, textAlign: "center", fontFamily: SANS, fontSize: 22, fontWeight: 600, color: INK }}>9:41</div>
         <div style={{ position: "absolute", left: 46, top: 140, width: w - 92, display: "grid", gridTemplateColumns: "repeat(4, 1fr)", rowGap: 34, opacity: 1 - open }}>
           {icons.map(i => {
             const mine = i === ours;
             return (
               <div key={i} style={{ display: "grid", justifyItems: "center", gap: 8 }}>
-                <div style={{ width: cell - 34, height: cell - 34, borderRadius: 22, background: mine ? "linear-gradient(160deg, #123a33, #0b1717)" : `hsl(${(i * 47) % 360}, 12%, ${18 + (i % 3) * 4}%)`, boxShadow: mine ? `0 0 0 2px ${GOLD}, 0 12px 30px rgba(201,163,90,.35)` : "inset 0 0 0 1px rgba(255,255,255,.05)", display: "grid", placeItems: "center", fontFamily: SERIF, fontSize: 34, color: GOLD, letterSpacing: "-0.02em", position: "relative" }}>
+                <div style={{ width: cell - 34, height: cell - 34, borderRadius: 22, background: mine ? INK : `hsl(${(i * 47) % 360}, 12%, ${18 + (i % 3) * 4}%)`, boxShadow: mine ? `0 0 0 3px ${HOT}` : "inset 0 0 0 1px rgba(255,255,255,.05)", display: "grid", placeItems: "center", fontFamily: DISPLAY, fontSize: 34, color: mine ? BONE : HOT, letterSpacing: "-0.02em", position: "relative" }}>
                   {mine ? "D&S" : ""}
-                  {mine && ripple > 0 && <div style={{ position: "absolute", left: "50%", top: "50%", width: 40, height: 40, marginLeft: -20, marginTop: -20, borderRadius: 20, border: `3px solid ${GOLD}`, transform: `scale(${1 + ripple * 3})`, opacity: 1 - ripple }} />}
+                  {mine && ripple > 0 && <div style={{ position: "absolute", left: "50%", top: "50%", width: 40, height: 40, marginLeft: -20, marginTop: -20, borderRadius: 20, border: `3px solid ${HOT}`, transform: `scale(${1 + ripple * 3})`, opacity: 1 - ripple }} />}
                 </div>
-                <div style={{ fontFamily: SANS, fontSize: 15, color: mine ? INK : "rgba(241,232,216,.35)" }}>{mine ? "Dubin & Sushi" : "\u00a0"}</div>
+                <div style={{ fontFamily: SANS, fontSize: 15, color: mine ? INK : "rgba(11,11,12,.35)" }}>{mine ? "Dubin & Sushi" : "\u00a0"}</div>
               </div>
             );
           })}
@@ -377,26 +449,30 @@ export const DowizPromo: React.FC<PromoProps> = ({ lang, music, musicInSeconds }
   return (
     <Stage>
       <Fonts />
+      <Camera>
       {music ? <Audio src={staticFile(`promo/${music}`)} trimBefore={Math.round(musicInSeconds * FPS)} volume={f => interpolate(f, [DURATION_S * FPS - 18, DURATION_S * FPS], [1, 0], { extrapolateLeft: "clamp" })} /> : null}
       {SHOTS.map((s, i) => (
         <Sequence key={i} from={s.start * FPS} durationInFrames={(s.end - s.start) * FPS}>
-          {i === 0 && <Notes />}
+          <Shot index={i}>
+          {i === 0 && <><Notes /><Impact at={0.9} y={1100} strength={0.8} /></>}
           {i === 0 && <Headline text={t.title[0]} size={92} top={220} />}
           {i === 1 && <><Counter /><Caption text={t.title[1]} top={1000} /></>}
-          {i === 2 && <><Zero /><Caption text={t.title[2]} top={1120} /></>}
+          {i === 2 && <><Zero /><Impact at={0} y={820} strength={1.3} /><Caption text={t.title[2]} top={1120} /></>}
           {i === 3 && <><Phone src={s.src!} from={s.from!} rise /><Headline text={t.title[3]} top={120} delay={0.3} /></>}
           {i === 4 && <><Phone src={s.src!} from={s.from!} /><Headline text={t.title[4]} size={72} top={120} /></>}
           {i === 5 && <><Phone push={0.04}><div style={{ position: "absolute", inset: 0, transform: "scale(1.0556)", transformOrigin: "0 0" }}><div style={{ position: "absolute", left: 0, top: 0, width: 540, height: 1170 }}><TrackingScreen /></div></div></Phone><Headline text={t.title[5]} size={96} top={130} /></>}
           {i === 6 && <><Hub /><Headline text={t.title[6]} size={88} top={220} /></>}
           {i === 7 && <><Phone src={s.src!} from={s.from!} /><Headline text={t.title[7]} size={80} top={120} /></>}
-          {i === 8 && <><Lock /><Headline text={t.title[8]} size={92} top={220} /><Caption text="ML-KEM-768 · ML-DSA-65" top={1220} delay={0.5} /></>}
+          {i === 8 && <><Lock /><Impact at={0.75} y={990} strength={0.7} /><Headline text={t.title[8]} size={92} top={220} /><Caption text="ML-KEM-768 · ML-DSA-65" top={1220} delay={0.5} /></>}
           {i === 9 && <><Phone src={s.src!} from={s.from!} /><Headline text={t.title[9]} size={68} top={120} /></>}
           {i === 10 && <><Phone src={s.src!} from={s.from!} /><Headline text={t.title[10]} size={84} top={120} /></>}
           {i === 11 && <><HomeScreen /><Headline text={t.title[11]} size={92} top={120} delay={0.2} /></>}
           {i === 12 && <><EndCard /><Caption text={t.title[12]} top={1140} delay={0.5} /></>}
+          </Shot>
           <Subtitle text={t.sub[i]} />
         </Sequence>
       ))}
+      </Camera>
     </Stage>
   );
 };

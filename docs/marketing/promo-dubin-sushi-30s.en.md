@@ -145,11 +145,20 @@ Shot | EN (master) | UK | SQ
 
 ## 8. State — 2026-09-20
 
+**Delivered in English only, in the landing's world.** Bone paper, ink, one hot accent, no
+gold and no textures: the film now looks like dowiz.org (Unbounded headlines, Manrope
+subtitles, JetBrains Mono captions). A camera that kicks on the three hits and pushes in on
+every shot, word-by-word headlines, the phone turning in as it rises, a flash and a shockwave
+on the burn, the zero, the lock and the mark. The venue's own gold survives only inside the
+phone, on the drawn tracking sheet, because that is the product. The Ukrainian and Albanian
+titles remain in the composition but are not rendered.
+
 Built and rendered: `marketing/promo-30s/` holds the Remotion composition (`DowizPromo`,
-1080×1920, 30 fps, three languages by prop), the three faces it ships with (EB Garamond for the
-headlines, JetBrains Mono for captions, DM Sans for numerals and subtitles), the capture scripts,
-and the soundtrack generator. The three 9:16 masters render with sound; 16:9 and 1:1 come from
-the same master on the black stage.
+1080×1920, 30 fps, three languages by prop), the faces it ships with (Unbounded for the
+headlines, Manrope for subtitles, JetBrains Mono for captions and numerals, EB Garamond inside
+the drawn tracking sheet), the capture scripts,
+and the soundtrack generator. The 9:16 master renders with sound; 16:9 and 1:1 come from
+the same master on the bone stage.
 
 What changed against the cut above, and why:
 - **Soundtrack.** "Space Cowboy" is not on disk and would need a sync licence. The film now runs
