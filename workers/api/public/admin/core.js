@@ -48,7 +48,14 @@ export const S = {
 
 let onLogout = null;
 export function whenLoggedOut(fn){ onLogout = fn; }
-export function logout(){ store.t = null; store.r = null; S.booted = false; onLogout?.(); }
+export function logout(){
+  store.t = null; store.r = null; S.booted = false;
+  // THE NEXT PERSON AT THIS SCREEN IS NOT ENTITLED TO THIS QUEUE. The replica
+  // holds customers' names and addresses; a logout that left it behind would
+  // be a privacy hole with a friendly name.
+  import('/lib/replica.js').then(R => R.forget()).catch(() => {});
+  onLogout?.();
+}
 
 /// One fetch wrapper so a 401 has exactly one meaning everywhere: the session is
 /// over. It tries a refresh once, then stops.

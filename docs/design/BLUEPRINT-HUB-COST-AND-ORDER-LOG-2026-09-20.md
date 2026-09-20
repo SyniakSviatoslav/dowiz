@@ -43,14 +43,29 @@ holds; "$5" = venues the paid plan's included amounts hold before usage is bille
 | Phase | requests/day (Worker + DO) | $/venue-month | venues free | venues in $5 | KB per delivered order | hot image after a year | MB per cold visit | KB per poll |
 |---|---|---|---|---|---|---|---|---|
 | 0 today | 41,880 | 1.73 | 4 | 1.4 | 28 | 299 MB | 2.69 | 4,300 |
-| 1 shipped | 33,930 | 1.02 | 5 | 1.6 | 28 | 299 MB | 2.69 | 4,300 |
-| 1.5 quick wins | 27,800 | 0.32 | 6 | 2.0 | 28 | 299 MB | 0.5 | 4,300 |
-| 2 the object IS the hub | 19,800 | 0.27 | 9 | 3.7 | 28 | 299 MB | 0.5 | 10 |
-| 3 deltas + codebook | 19,800 | 0.27 | 9 | 3.7 | 2 | 21 MB | 0.5 | 10 |
-| 4 format v2 | 19,800 | 0.26 | 9 | 3.7 | 0.8 | 9 MB | 0.5 | 10 |
-| 5 bounded hot log | 19,800 | 0.26 | 9 | 3.7 | 0.8 | ≈ 1 MB | 0.5 | 10 |
-| 6 push, not poll | 3,900 | 0.06 | 45 | 20 | 0.8 | ≈ 1 MB | 0.5 | 0 |
-| 7 local-first replicas (wild) | 1,100 | 0.03 | 167 | 67 | 0.8 | ≈ 1 MB | 0.5 | 0 |
+| 1 SHIPPED | 33,930 | 1.02 | 5 | 1.6 | 28 | 299 MB | 2.69 | 4,300 |
+| 1.5 SHIPPED | 27,800 | 0.32 | 6 | 2.0 | 28 | 299 MB | 0.5 | 4,300 |
+| 2 SHIPPED — the object IS the hub | 19,800 | 0.27 | 9 | 3.7 | 28 | 299 MB | 0.5 | 10 |
+| 3 SHIPPED — deltas | 19,800 | 0.27 | 9 | 3.7 | 2 | 21 MB | 0.5 | 10 |
+| 4 SHIPPED — format v2 | 19,800 | 0.26 | 9 | 3.7 | 0.8 | 9 MB | 0.5 | 10 |
+| 5 SHIPPED — bounded hot log | 19,800 | 0.26 | 9 | 3.7 | 0.8 | ≈ 1 MB | 0.5 | 10 |
+| 6 SHIPPED — push, not poll | 3,900 | 0.06 | 45 | 20 | 0.8 | ≈ 1 MB | 0.5 | 0 |
+| 7 first step shipped, rest open | 1,100 | 0.03 | 167 | 67 | 0.8 | ≈ 1 MB | 0.5 | 0 |
+
+**WHAT OF THIS IS NOW MEASURED** (2026-09-20/21, on this box, in the tests named in each
+phase) rather than modelled:
+
+| Column | Modelled | Measured | Where |
+|---|---|---|---|
+| KB per delivered order | 0.8 after phase 4 | **1.2** (148 cells/order at v2 + deltas) | `hubstore.rs a_log_of_deltas_…` |
+| hot image after a year | ≈ 1 MB after phase 5 | **≈ 1.1 MB** (30 days × 30 orders × 148 cells) | derived from the row above + `HOT_KEEP_MS` |
+| ten delivered orders on the wire | — | **38,032 B**, from 165,664 | `cap.rs a_days_orders_…` |
+| 20,001 order events | — | **16.8 MB image**, from 67.1 MB | `cap.rs how_much_history_…` |
+
+The request counts and the money are still the MODEL. Nothing on this box can read a
+deployed Worker's request count — no token here has the permission — so the live proof of
+phases 2 and 6 is a number that has to be read from the Cloudflare dashboard after a day
+of real service. The calculator artifact takes the new per-order figure directly.
 
 Two lines the first model missed and this one carries: **Workers Logs** (unsampled, ≥ 1
 event per request: at 40 venues ≈ 60M events/month = $25, the largest line on the bill
@@ -432,13 +447,48 @@ names exactly one order and is never a console's), and the rest is `cargo check
 is a request count on the deployed venue, which this box cannot read; `/api/owner/health`
 is where it will be visible.
 
-### Phase 7 — local-first replicas (the wild end; effort weeks; risk research)
+### Phase 7 — local-first replicas — FIRST STEP SHIPPED, the rest is the manifesto
 
-W2 + W3: devices hold the hot log, sign their appends with the actor key, exchange heads
-over bebop2 (the PQ mesh, `mesh-adapter/`), and treat the object as relay + mirror. Depends
-on phase 4's real hash chain and phase 5's bounded hot image. Deliverable of the first
-step: the console folds the log it receives over the socket (phase 6) and survives a
-15-minute outage without a request. Everything after that is the manifesto.
+The blueprint's own deliverable for the first step was: *the console folds the log it
+receives over the socket and survives a 15-minute outage without a request.* That is what
+is here.
+
+- **A catch-up window in the object.** `GET /fold/changes?since=<generation>` answers with
+  the events after a generation, out of a 256-entry ring kept beside the projection. Past
+  the window — a cold object, a long absence — it answers `full: true`, and the caller
+  reads the list. RETURNING AN EMPTY LIST THERE WOULD BE A LIE shaped exactly like
+  "nothing has changed", and a console would believe it for as long as it stayed open.
+  Snapshot-and-delta, as game netcode settled it: the delta is the optimisation, the
+  snapshot is the truth.
+- **`GET /api/owner/orders?since=N`** passes it through, authorised exactly as the full
+  read is and before the object is asked anything. The full list now carries its
+  `generation`, or a client would have no starting point.
+- **`/lib/replica.js`** is the console's own copy: the orders as the server last described
+  them, the generation they were current at, and when. On boot the console DRAWS IT
+  BEFORE ASKING ANYTHING — a console reopened at the pass shows its queue immediately —
+  and reconciles a moment later. Through an outage it keeps drawing and says so: `S.stale`
+  paints an "offline — last known queue" tag, because a queue that looks live while the
+  venue has been unreachable for twenty minutes is worse than no queue, since a cook
+  trusts it.
+- **The merge is the server's merge**, in JavaScript: `null` deletes, objects recurse,
+  arrays are replaced whole, the `_d` marker never reaches an order. A DELTA FOR AN ORDER
+  THE COPY DOES NOT HOLD IS REFUSED and the caller reads the list — folding a delta onto
+  nothing would draw a row with a status and no items, and a kitchen would cook it.
+- **Logging out forgets the copy.** It holds customers' names and addresses; the next
+  person at that screen is not entitled to the last one's queue.
+- Tests: `public/lib/replica.test.mjs`, 11 of them, run by `scripts/design-gate.sh` beside
+  the money ones — this is a fold that runs in a BROWSER, and a Rust test passing says
+  nothing about what a kitchen sees. Plus `changes_since` in `hubdo.rs` (the window's
+  edges, including the one-before-oldest case and the cold object).
+
+**WHAT IS NOT HERE, and it is most of the wild end.** Devices do not sign their appends —
+`actor_pubkey` is a real field with a real flag bit since phase 4 and every dowiz caller
+still leaves it zero. Devices do not exchange heads with each other; there is no peer
+mesh in the browser, no WebRTC, no bebop2 PQ transport, and the object is not yet a relay
+between two consoles that can both write. A phone that goes offline can still only READ
+from its copy: an append while offline needs the signing key and a conflict rule, and
+neither exists. That is W2 and W3 from §4, it is weeks of work, and calling this phase
+"done" would be the kind of claim this repository has a rule against.
 
 ## 6. What is deliberately NOT done
 

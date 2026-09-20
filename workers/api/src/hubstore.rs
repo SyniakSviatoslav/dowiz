@@ -1025,6 +1025,32 @@ pub async fn order(place: &Place, order_id: &str) -> Result<Option<String>> {
     }
 }
 
+/// What changed since a generation the caller already has.
+///
+/// `Ok(None)` means the object cannot say -- a cold object, or an absence
+/// longer than its window -- and the caller should read the list. It is not an
+/// error and must not be logged as one: it is the ordinary answer after a
+/// venue has been quiet long enough for its object to go to sleep.
+pub async fn changes_since(
+    place: &Place,
+    since: i64,
+) -> Result<(i64, Option<Vec<crate::hubdo::Change>>)> {
+    let stub = place.stub()?;
+    let req = Request::new(&format!("https://hub/fold/changes?since={since}"), Method::Get)?;
+    let mut res = stub.fetch_with_request(req).await?;
+    if res.status_code() != 200 {
+        return Err(Error::RustError(format!("hub object refused a catch-up: {}", res.status_code())));
+    }
+    #[derive(serde::Deserialize)]
+    struct Out {
+        generation: i64,
+        full: bool,
+        changes: Vec<crate::hubdo::Change>,
+    }
+    let out: Out = res.json().await?;
+    Ok((out.generation, if out.full { None } else { Some(out.changes) }))
+}
+
 /// The generation the object's log is at, without fetching the log.
 ///
 /// The append path needs it to guard its write, and a HEAD-shaped question is

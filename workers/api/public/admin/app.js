@@ -93,6 +93,23 @@ function paintLive(){
   const grew = Number(b.textContent) < n;
   b.textContent = n; b.hidden = n === 0;
   if (grew) { b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop'); }
+  paintStale();
+}
+// A SCREEN THAT IS NOT NOW MUST SAY SO. The copy keeps drawing through an
+// outage, which is the point of it -- and a queue that looks live while the
+// venue has been unreachable for twenty minutes is worse than no queue at
+// all, because a cook trusts it.
+function paintStale(){
+  const top = $('#top'); if (!top) return;
+  let tag = $('#staleTag');
+  if (!S.stale) { tag?.remove(); return; }
+  if (!tag) {
+    tag = document.createElement('span');
+    tag.id = 'staleTag';
+    tag.className = 'vstate closed';
+    top.appendChild(tag);
+  }
+  tag.textContent = t('offlineCopy');
 }
 
 // ── the header: the venue's state ───────────────────────────────────────────
@@ -138,14 +155,37 @@ function openPrefs(){
 $('#prefs').onclick = openPrefs;
 
 // ── loading ─────────────────────────────────────────────────────────────────
-export async function loadOrders(){
-  const d = await api(`/owner/orders?location_id=${encodeURIComponent(store.loc)}`);
-  const list = d.orders || [];
+//
+// THE CONSOLE KEEPS ITS OWN COPY of the queue (`/lib/replica.js`), drawn on
+// boot before any request and kept through an outage. A read asks for what
+// CHANGED since the generation that copy is at; the server answers with the
+// changes, or says it cannot and sends the whole list. Either way what lands
+// in `S.orders` is what the server last said.
+let copy = null;
+function announce(list){
   // A new order rings once: the ids seen before are remembered per session.
   const fresh = list.filter(o => o.status === 'PENDING' && !S.seen.has(o.id));
   for (const o of list) S.seen.add(o.id);
   S.orders = list;
   if (fresh.length && S.booted && S.phase === 'ready') { S.fresh = new Set(fresh.map(o => o.id)); ring(); }
+}
+export async function loadOrders(){
+  const R = await import('/lib/replica.js');
+  copy = copy || R.load(store.loc);
+  const since = copy.generation >= 0 ? `&since=${copy.generation}` : '';
+  const d = await api(`/owner/orders?location_id=${encodeURIComponent(store.loc)}${since}`);
+  if (d.full === false && Array.isArray(d.changes)) {
+    const next = R.apply(copy, d.changes, d.generation);
+    if (next) { copy = next; announce(copy.orders); return; }
+    // The changes did not fit what is held -- a gap this copy cannot bridge.
+    // Ask for the list rather than guess.
+    const whole = await api(`/owner/orders?location_id=${encodeURIComponent(store.loc)}`);
+    copy = R.replace(store.loc, whole.orders || [], whole.generation ?? -1);
+    announce(copy.orders);
+    return;
+  }
+  copy = R.replace(store.loc, d.orders || [], d.generation ?? -1);
+  announce(copy.orders);
 }
 export async function loadStats(){ try { S.stats = await api(`/owner/dashboard?location_id=${encodeURIComponent(store.loc)}`); } catch {} }
 /// The venue's storefront slug: the first label of the host on a venue
@@ -196,7 +236,21 @@ async function boot(){
   $('#top').hidden = false; $('#nav').hidden = false;
   S.booted = true; S.phase = 'loading';
   mountNav();
-  $('#app').innerHTML = `<div class="screen"><div class="skel skel-row"></div><div class="skel skel-row"></div><div class="skel skel-row"></div></div>`;
+  // THE COPY IS DRAWN BEFORE ANYTHING IS ASKED. A console reopened at the
+  // pass shows the queue it had, immediately; the reconciliation below
+  // replaces it a moment later. An empty copy falls back to the skeleton.
+  try {
+    const R = await import('/lib/replica.js');
+    copy = R.load(store.loc);
+    if (copy.orders.length) {
+      S.orders = copy.orders;
+      S.stale = R.isStale(copy);
+      await show(S.tab);
+    }
+  } catch { /* no replica: the skeleton below is what a first visit sees */ }
+  if (!S.orders?.length) {
+    $('#app').innerHTML = `<div class="screen"><div class="skel skel-row"></div><div class="skel skel-row"></div><div class="skel skel-row"></div></div>`;
+  }
   await Promise.all([loadVenue(), loadStats(), loadCouriers()]);
   try { await loadOrders(); S.phase = 'ready'; S.error = null; } catch (e) { S.phase = 'error'; S.error = String(e.message || e); }
   paintVenue();
@@ -237,7 +291,13 @@ function poll(){
   pollTimer = setTimeout(async () => {
     if (!S.booted) return;
     if (!document.hidden && (!socket || socket.due())) {
-      try { await loadOrders(); S.phase = 'ready'; socket?.polled(); } catch {}
+      try { await loadOrders(); S.phase = 'ready'; S.stale = false; socket?.polled(); }
+      catch {
+        // OFFLINE IS A STATE, NOT A BLANK SCREEN. The copy stays on screen and
+        // says how old it is; `paintLive` reads `S.stale`.
+        const R = await import('/lib/replica.js').catch(() => null);
+        if (R && copy) S.stale = R.isStale(copy);
+      }
       if (++pollN % STATS_EVERY === 0) await loadStats();
       await rerender();
     }

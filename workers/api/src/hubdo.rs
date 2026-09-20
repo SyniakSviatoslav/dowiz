@@ -61,6 +61,42 @@ struct Meta {
     len: usize,
 }
 
+/// The last few events, so a client that was away can be told what it missed
+/// instead of being handed the whole venue again.
+///
+/// A RING, AND A SMALL ONE. This is not a second copy of the log -- the log is
+/// the log -- it is the window in which "what changed since generation N" can
+/// be answered cheaply. Past the window the honest answer is "ask for
+/// everything", which is also the answer after a hibernation, and a client
+/// that hears it re-reads the list. Snapshot-and-delta from twenty years of
+/// game netcode: the delta is an optimisation, the snapshot is the truth.
+const RECENT_KEEP: usize = 256;
+
+/// One event as a catch-up carries it.
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct Change {
+    pub generation: i64,
+    pub kind: u8,
+    pub order_id: String,
+    pub payload: String,
+}
+
+/// The changes after `since`, or `None` when this object cannot say.
+///
+/// `None` is not an error and must not be treated as one: it means the window
+/// does not reach back that far -- a cold object, a long absence, a busy hour
+/// -- and the caller should read the list instead. Returning an empty slice
+/// there would be a lie shaped exactly like "nothing has changed".
+pub fn changes_since(recent: &[Change], since: i64) -> Option<Vec<Change>> {
+    let oldest = recent.first().map(|c| c.generation)?;
+    // The client's generation must be one this window covers. `since` equal to
+    // the oldest - 1 is the edge that still works: everything after it is here.
+    if since + 1 < oldest {
+        return None;
+    }
+    Some(recent.iter().filter(|c| c.generation > since).cloned().collect())
+}
+
 /// What a socket is subscribed to. Tags are how a hibernated object finds its
 /// sockets again -- it has forgotten everything else about them.
 ///
@@ -132,6 +168,8 @@ pub struct HubImages {
     /// outlives a request, so this survives between them and the storage below
     /// is touched only when the object is cold or something is written.
     mem: RefCell<HashMap<String, (Meta, Vec<u8>)>>,
+    /// The catch-up window: recent changes, oldest first. See `changes_since`.
+    recent: RefCell<Vec<Change>>,
     /// Where the couriers are, as they last said. Not persisted on purpose:
     /// see `Fix`.
     positions: RefCell<HashMap<String, Fix>>,
@@ -171,6 +209,41 @@ fn changed_chunks(old: Option<&[u8]>, new: &[u8], chunk: usize) -> Vec<usize> {
 #[cfg(test)]
 mod tests {
     use super::{changed_chunks, OrderView};
+
+    /// A CLIENT THAT WAS AWAY IS TOLD WHAT IT MISSED, or told to ask again --
+    /// and the difference matters more than either answer. An empty list where
+    /// the window does not reach is a lie shaped exactly like "nothing has
+    /// changed", and a console would believe it for as long as it stayed open.
+    #[test]
+    fn a_catch_up_says_what_changed_or_says_it_cannot() {
+        let mk = |g: i64| super::Change {
+            generation: g,
+            kind: dowiz_hub::EventKind::Advanced as u8,
+            order_id: format!("ord_{g}"),
+            payload: String::new(),
+        };
+        let window: Vec<super::Change> = (10..=14).map(mk).collect();
+
+        // Inside the window: only what is newer.
+        let got = super::changes_since(&window, 12).expect("the window covers 12");
+        assert_eq!(got.len(), 2);
+        assert_eq!(got[0].generation, 13);
+        assert_eq!(got[1].generation, 14);
+
+        // The exact edge: a client at 9 has seen everything before 10.
+        assert!(super::changes_since(&window, 9).is_some());
+        assert_eq!(super::changes_since(&window, 9).unwrap().len(), 5);
+
+        // Before the edge: the window cannot say, and says so.
+        assert!(super::changes_since(&window, 8).is_none());
+        assert!(super::changes_since(&window, 0).is_none());
+
+        // Up to date: nothing changed, which is a real answer.
+        assert_eq!(super::changes_since(&window, 14).unwrap().len(), 0);
+
+        // A cold object has no window at all.
+        assert!(super::changes_since(&[], 14).is_none());
+    }
 
     /// The projection crosses a boundary as JSON, so its shape is a contract.
     /// `kind` travels as the byte the log itself stores, because the enum
@@ -335,6 +408,19 @@ impl HubImages {
     /// seconds whether anything happened, and the object tells them when
     /// something does.
     fn broadcast(&self, kind: u8, order_id: &str, payload: &str, generation: i64) {
+        {
+            let mut recent = self.recent.borrow_mut();
+            recent.push(Change {
+                generation,
+                kind,
+                order_id: order_id.to_string(),
+                payload: payload.to_string(),
+            });
+            if recent.len() > RECENT_KEEP {
+                let cut = recent.len() - RECENT_KEEP;
+                recent.drain(0..cut);
+            }
+        }
         let msg = serde_json::json!({
             "t": "event",
             "kind": kind,
@@ -489,6 +575,7 @@ impl DurableObject for HubImages {
         Self {
             state,
             mem: RefCell::new(HashMap::new()),
+            recent: RefCell::new(Vec::new()),
             positions: RefCell::new(HashMap::new()),
             folded: RefCell::new(None),
         }
@@ -554,6 +641,31 @@ impl DurableObject for HubImages {
                     let mut res = Response::from_json(
                         &serde_json::json!({ "generation": generation }),
                     )?;
+                    res.headers_mut().set("x-generation", &generation.to_string())?;
+                    Ok(res)
+                }
+                // WHAT CHANGED SINCE, for a client that already has a copy.
+                // `full: true` means the window does not reach that far and
+                // the list is the answer -- which is also what a cold object
+                // says, and is not an error.
+                (Method::Get, "changes") => {
+                    let url = req.url()?;
+                    let since: i64 = url
+                        .query_pairs()
+                        .find(|(k, _)| k == "since")
+                        .and_then(|(_, v)| v.parse().ok())
+                        .unwrap_or(-1);
+                    let generation =
+                        self.image(LOG_IMAGE).await?.map(|(m, _)| m.generation).unwrap_or(0);
+                    let body = match changes_since(&self.recent.borrow(), since) {
+                        Some(changes) => serde_json::json!({
+                            "generation": generation, "full": false, "changes": changes
+                        }),
+                        None => serde_json::json!({
+                            "generation": generation, "full": true, "changes": []
+                        }),
+                    };
+                    let mut res = Response::from_json(&body)?;
                     res.headers_mut().set("x-generation", &generation.to_string())?;
                     Ok(res)
                 }

@@ -235,6 +235,39 @@ pub(crate) fn location_of(req: &Request) -> Option<String> {
 pub async fn orders(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
+    // ── A CONSOLE THAT ALREADY HAS A COPY ──
+    //
+    // `?since=<generation>` asks what CHANGED. The object answers from a small
+    // window of recent events; past it -- a cold object, a long absence -- it
+    // says so and this falls through to the whole list below. A client applies
+    // the changes to the copy it holds, which is what lets a console keep
+    // drawing a queue while the network is gone.
+    //
+    // THE FULL LIST IS STILL THE TRUTH. The catch-up is an optimisation over
+    // it, in the snapshot-and-delta shape game netcode settled on decades ago:
+    // when the delta cannot be trusted, send the snapshot.
+    let since: Option<i64> = req
+        .url()
+        .ok()
+        .and_then(|u| u.query_pairs().find(|(k, _)| k == "since").map(|(_, v)| v.to_string()))
+        .and_then(|v| v.parse().ok());
+    if let Some(since) = since {
+        // Authorised exactly as the full read is, and before the object is
+        // asked anything.
+        if let Err(r) = owner_and_venue(&req, &ctx, &db).await {
+            return Ok(r);
+        }
+        if let Ok((generation, Some(changes))) =
+            crate::hubstore::changes_since(&place, since).await
+        {
+            return Response::from_json(&json!({
+                "generation": generation,
+                "changes": changes,
+                "full": false,
+            }));
+        }
+        // Falls through: the object could not say, so the whole list it is.
+    }
     // The membership query and the image read do not depend on each other, so
     // `owner_beside` runs them together. The token is still verified before
     // either is issued -- see it for why that order matters.
@@ -291,7 +324,11 @@ pub async fn orders(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     if let Ok(loaded) = crate::hubstore::load_catalog(&place).await {
         crate::live_eta::attach_all(&db, &place, &loaded, &mut out, now_ms()).await;
     }
-    Response::from_json(&json!({ "orders": out }))
+    // The generation travels with the list so a client can ask for changes
+    // after it next time. Without it the catch-up has no starting point and a
+    // console would have to poll the whole queue forever.
+    let generation = crate::hubstore::log_generation(&place).await.unwrap_or(0);
+    Response::from_json(&json!({ "orders": out, "generation": generation, "full": true }))
 }
 
 /// `POST /api/owner/orders/:id/assign` -- the owner hands an order to a courier.

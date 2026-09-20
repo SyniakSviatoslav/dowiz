@@ -47,6 +47,15 @@ node workers/api/public/lib/money.test.mjs >/dev/null || {
   exit 1
 }
 
+# The console's replica: the fold that runs in a BROWSER, on a copy the server
+# does not hold. It has to agree with `workers/api/src/fold.rs` exactly -- two
+# folds that disagree are a queue that disagrees with the venue's own log.
+node workers/api/public/lib/replica.test.mjs >/dev/null || {
+  echo "replica-gate: workers/api/public/lib/replica.test.mjs FAILED" >&2
+  node workers/api/public/lib/replica.test.mjs >&2
+  exit 1
+}
+
 python3 scripts/design_gate.py "$@"
 gate=$?
 [ "$mod_fail" = 0 ] || exit 1

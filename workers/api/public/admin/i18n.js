@@ -64,6 +64,7 @@ export const T = {
     tabOrders:'Porositë', tabMenu:'Menyja', tabStock:'Magazina', tabCouriers:'Korrierët', tabMore:'Tjetër',
     // venue state
     open:'Hapur', closed:'Mbyllur', busy:'I zënë', paused:'Dërgesat ndalur', setState:'Gjendja e lokalit',
+    offlineCopy:'Pa lidhje — kopja e fundit',
     // dashboard
     todayOrders:'Porosi sot', pending:'Presin', active:'Në punë', revenue:'Xhiro', scheduled:'Me orar',
     // orders
@@ -166,6 +167,7 @@ export const T = {
     on:'On', off:'Off', today:'Today', week:'7 days', month:'30 days', more:'More', none:'None', all:'All',
     tabOrders:'Orders', tabMenu:'Menu', tabStock:'Stock', tabCouriers:'Couriers', tabMore:'More',
     open:'Open', closed:'Closed', busy:'Busy', paused:'Delivery paused', setState:'Venue state',
+    offlineCopy:'Offline — last known queue',
     todayOrders:'Orders today', pending:'Waiting', active:'In progress', revenue:'Revenue', scheduled:'Scheduled',
     live:'Live', history:'History', noOrders:'No orders yet', noLive:'Nothing in progress', findOrder:'Number, name, phone, dish…',
     newOrder:'New order', order:'Order', items:'Items', customer:'Customer', address:'Address', pickup:'Pickup', delivery:'Delivery',
@@ -255,6 +257,7 @@ export const T = {
     on:'Увімкнено', off:'Вимкнено', today:'Сьогодні', week:'7 днів', month:'30 днів', more:'Ще', none:'Немає', all:'Усі',
     tabOrders:'Замовлення', tabMenu:'Меню', tabStock:'Склад', tabCouriers:'Кур’єри', tabMore:'Ще',
     open:'Відчинено', closed:'Зачинено', busy:'Зайнято', paused:'Доставку призупинено', setState:'Стан закладу',
+    offlineCopy:'Без зв’язку — остання копія',
     todayOrders:'Замовлень сьогодні', pending:'Чекають', active:'У роботі', revenue:'Виручка', scheduled:'На час',
     live:'У роботі', history:'Історія', noOrders:'Замовлень ще немає', noLive:'Зараз нічого в роботі', findOrder:'Номер, ім’я, телефон, страва…',
     newOrder:'Нове замовлення', order:'Замовлення', items:'Позиції', customer:'Клієнт', address:'Адреса', pickup:'Самовивіз', delivery:'Доставка',
