@@ -89,6 +89,57 @@ fn how_much_history_a_hub_image_holds() {
     assert_eq!(evs[0].order_id, "ord_20000", "walk must still be newest-first");
 }
 
+/// WHAT A VENUE ACTUALLY PUTS ON THE WIRE, full image against trimmed one.
+///
+/// This is the number the hub's cost is made of: the image crosses the
+/// Worker-to-object hop on every write and comes back on every read, and until
+/// the trim it carried the whole arena -- a 64 KiB hub that has taken ten
+/// orders is mostly zeros, and after one doubling it is mostly zeros twice as
+/// large. Printed rather than pinned to a constant, with only the SHAPE
+/// asserted, because the exact byte count moves with every format change and a
+/// magic number here would be a gate that fails for the wrong reason.
+#[test]
+fn a_days_orders_on_the_wire_full_against_trimmed() {
+    let mut h = dowiz_hub::Hub::create_sized(64 * 1024).unwrap();
+    let body = |id: &str, status: &str| {
+        format!(
+            r#"{{"id":"{id}","status":"{status}","total":2650,"created_at_ms":1789000000000,"items":[{{"product_id":"item-01","quantity":2,"unit_price":900,"name":"Sake Futomaki"}}],"contact":{{"name":"Ana Hoxha","phone":"+355691234567"}},"fulfilment":{{"kind":"delivery","address":{{"line":"Rruga Taulantia 12"}}}}}}"#
+        )
+    };
+    // Ten delivered orders: one Placed and five Advanced each, which is what a
+    // delivery actually writes.
+    let mut clock = 1u64;
+    for n in 0..10u64 {
+        let id = format!("ord_{n}");
+        h.append(dowiz_hub::EventKind::Placed, &id, &body(&id, "PENDING"), clock, [0u8; 32])
+            .unwrap();
+        clock += 1;
+        for status in ["CONFIRMED", "COOKING", "READY", "COLLECTED", "DELIVERED"] {
+            h.append(dowiz_hub::EventKind::Advanced, &id, &body(&id, status), clock, [0u8; 32])
+                .unwrap();
+            clock += 1;
+        }
+    }
+    assert_eq!(h.len(), 60, "ten delivered orders are sixty events");
+
+    let full = h.to_bytes().len();
+    let trimmed = h.to_bytes_trimmed().len();
+    println!(
+        "TEN DELIVERED ORDERS: full image {full} bytes, trimmed {trimmed} bytes ({}% of it), {} bytes per delivered order on the wire",
+        trimmed * 100 / full,
+        trimmed / 10
+    );
+
+    // The shape, not the number: the trim must be a real saving, and the
+    // trimmed image must still be the whole hub.
+    assert!(trimmed < full, "the trim has to remove something");
+    let back = dowiz_hub::Hub::load(&h.to_bytes_trimmed()).unwrap();
+    assert_eq!(back.len(), 60);
+    assert_eq!(back.orders().len(), 10);
+    assert_eq!(back.to_bytes().len(), full, "the padded image is the full image again");
+    assert!(back.order("ord_0").unwrap().contains("DELIVERED"), "the fold survives the trim");
+}
+
 /// A grown image is still a valid image: it round-trips through bytes, and a
 /// hub loaded from it can append again.
 #[test]

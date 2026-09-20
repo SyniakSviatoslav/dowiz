@@ -726,7 +726,11 @@ async fn save_image_d1(db: &D1Database, id: &str, bytes: Vec<u8>, generation: i6
 }
 
 pub async fn save(place: &Place, loaded: &Loaded) -> Result<bool> {
-    save_image(place, IMAGE_LOG, loaded.hub.to_bytes(), loaded.generation).await
+    // TRIMMED. The object stores the cells the arena actually uses; the tail of
+    // zeros is re-created on load from the capacity in the superblock. A hub is
+    // created at 64 KiB and doubles, so most of what a full image carries is
+    // nothing, and it crossed the Worker-to-object hop on every single write.
+    save_image(place, IMAGE_LOG, loaded.hub.to_bytes_trimmed(), loaded.generation).await
 }
 
 /// Read the catalogue image, creating an empty one the first time.
@@ -861,7 +865,9 @@ where
         if loaded.stock.len() == before {
             return Ok(out);
         }
-        if save_image(place, IMAGE_STOCK, loaded.stock.to_bytes(), loaded.generation).await? {
+        if save_image(place, IMAGE_STOCK, loaded.stock.to_bytes_trimmed(), loaded.generation)
+            .await?
+        {
             return Ok(out);
         }
     }
@@ -922,10 +928,10 @@ pub async fn seed_fresh_hub(place: &Place, location_json: &str) -> Result<()> {
         .and_then(|mut p| p.to_bytes())
         .map_err(|e| Error::RustError(format!("cannot create posts: {e:?}")))?;
     let stock = dowiz_hub::stock::StockLog::create_sized(64 * 1024)
-        .map(|s| s.to_bytes())
+        .map(|s| s.to_bytes_trimmed())
         .map_err(|e| Error::RustError(format!("cannot create stock: {e:?}")))?;
     let log = Hub::create_sized(64 * 1024)
-        .map(|mut h| h.to_bytes())
+        .map(|mut h| h.to_bytes_trimmed())
         .map_err(|e| Error::RustError(format!("cannot create hub log: {e:?}")))?;
 
     for (id, bytes) in [

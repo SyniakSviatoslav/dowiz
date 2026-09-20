@@ -1,7 +1,8 @@
 # Blueprint: the cheapest hub — where every byte and every request goes, and how to remove most of them
 
 Date: 2026-09-20, revision 2 (after the operator's brainstorm request). Status: phase 1
-SHIPPED (af5b0fc), phases 1.5–7 DESIGNED. Numbers are MEASURED unless marked *estimate*.
+SHIPPED (af5b0fc), phase 1.5 items 1 (part), 3 and 4 SHIPPED, the rest of 1.5–7 DESIGNED.
+Numbers are MEASURED unless marked *estimate*.
 Calculator: https://claude.ai/artifact/XLTpcL2RXZ1z52yeJC1UnY
 
 ## 0. The measured state (one venue, 30 orders/day, 10 h open, 1 courier, 5 visits per order)
@@ -172,20 +173,39 @@ on the second fetch.
 
 ### Phase 1.5 — quick wins (effort ½ day, risk low)
 
-1. `[observability] head_sampling_rate = 0.1`; errors also written to a `worker_errors`
-   D1 row (kept 7 days) so failures stay loud. Test: a probe error appears in the table.
+Status 2026-09-20 night: items 1 (SAMPLING ONLY), 3 and 4 are shipped; the rest stand.
+
+1. PART SHIPPED (ccd9298). `[observability] head_sampling_rate = 0.1` is live. The other
+   half is NOT: errors are still only in the sampled trace, and nothing writes a
+   `worker_errors` D1 row (kept 7 days) that the console can read. Test when it lands: a
+   probe error appears in the table.
 2. Photos: resize at upload with the `image` crate (already wasm-safe) to 320 px and
    1024 px JPEG q72, both content-addressed; `srcset` in `menu.js` and the dish sheet.
+   `menu.js` ALREADY emits the `srcset` (ccd9298) and it is inert until the upload path
+   makes the small file — that is the whole of what is left.
    Test: an upload yields two keys; the grid requests the small one (Playwright: bytes per
    cold visit < 0.6 MB).
-3. Adaptive polling: `POLL_MS` 60 s when no order is live, 5 s while one is
-   (console, courier, tracking). Test: request count per idle hour < 150.
-4. `to_bytes()` ships used cells only; `from_bytes` re-pads to capacity from cell 12.
-   Test in bebop-store: round trip of a grown image equals the full one; a fresh 4 MB hub
-   serialises to ≈ 10 KB.
+3. SHIPPED (ccd9298). Adaptive polling: console 15 s live / 60 s idle, courier 12 s on
+   shift / 60 s off, tracking 12 s moving / 30 s before. An idle venue with an open console
+   falls from 480 requests an hour to 120.
+4. SHIPPED (this commit). `to_bytes_trimmed()` ships the cells the arena has actually
+   used; `from_bytes` re-pads to capacity from superblock cell 12, refusing to pad an image
+   cut BELOW `arena_used` (truncated, not trimmed) or one whose capacity cell claims more
+   than `MAX_PAD_CELLS` (512 MiB — a restore must not choose the reader's allocation).
+   The Kv images trim the same way inside `compacted_bytes`.
+   MEASURED, and smaller than this document estimated: a fresh 4 MiB hub is 1,072 bytes
+   instead of 4,194,304; ten delivered orders (60 events) in a hub born at 64 KiB are
+   165,664 bytes instead of 262,144 — **63 %**, not the "half on average" guessed above.
+   The saving is a sawtooth, because what is dropped is the slack left by the last
+   doubling: ≈ 50 % the moment an image doubles, ≈ 0 % just before the next one. It is the
+   FRESH venue and the doubling that this wins, not the busy one. Tests: `bebop-store`
+   `the_trim_lands_on_the_arena_cursor`, `a_truncated_image_is_left_as_it_arrived`,
+   `an_absurd_capacity_is_not_padded_to`; `dowiz-hub` `a_trimmed_log_reloads_into_the_same_hub`,
+   `a_trimmed_log_keeps_appending`, `a_days_orders_on_the_wire_full_against_trimmed`.
 5. `owner_at` → `owner_and_venue` (one membership read).
 6. Nightly bundle gzipped and rotated (7 daily + 4 weekly). Test: object size of a fresh
-   venue < 20 KB.
+   venue < 20 KB. (The trim in item 4 already shrinks the bundle: it base64s whatever the
+   object stores, which is now the trimmed image.)
 7. WhatsApp status pushes default off; Web Push (VAPID keys as Worker secrets, subscription
    stored on the customer row) for the tracking sheet; Telegram stays. Test: a placed
    order produces a push, no Meta call unless `notify.whatsapp.status = on`.

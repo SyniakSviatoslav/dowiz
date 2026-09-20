@@ -279,8 +279,25 @@ impl Hub {
     }
 
     /// The image to persist. The caller writes this wherever the hub lives.
+    ///
+    /// FULL CAPACITY, zeros included. `grow()` reads its own length to choose
+    /// the next size, so this one must keep saying how big the arena is.
+    /// Callers that only store and reload the image want
+    /// `to_bytes_trimmed` instead.
     pub fn to_bytes(&self) -> Vec<u8> {
         self.store.to_bytes()
+    }
+
+    /// The image without the unused tail of its arena -- what a hub that lives
+    /// in a Durable Object or a backup should actually write.
+    ///
+    /// The tail is zeros the reader re-creates from the capacity in the
+    /// superblock, so `Hub::load` on this is the same hub, with the same
+    /// capacity, and the next `grow()` doubles from the same number. A fresh
+    /// 64 KiB hub is a few hundred bytes; a 4 MiB one that has taken ten
+    /// orders is about 50 KB rather than 4 MB.
+    pub fn to_bytes_trimmed(&self) -> Vec<u8> {
+        self.store.to_bytes_trimmed()
     }
 
     /// What this image has spent. See `Usage`.
@@ -577,6 +594,59 @@ mod tests {
         assert_eq!(back.orders().len(), 5);
         assert!(back.order("ord_3").unwrap().contains("ord_3"));
         assert_eq!(back.to_bytes(), bytes, "reloading changes nothing");
+    }
+
+    /// THE TRIMMED IMAGE IS THE SAME HUB. This is the image the object stores
+    /// and the backup carries, so "the same" has to mean byte-for-byte after a
+    /// reload, not merely "the orders come back": the padding must land the
+    /// arena, the capacity and the superblocks exactly where the full image
+    /// had them, or the next append writes into a different store.
+    #[test]
+    fn a_trimmed_log_reloads_into_the_same_hub() {
+        let mut h = Hub::create_sized(1 << 20).unwrap();
+        for i in 0..5 {
+            h.append(EventKind::Placed, &format!("ord_{i}"), &order(&format!("ord_{i}"), "PENDING"),
+                     i as u64 + 1, ACTOR).unwrap();
+        }
+        let full = h.to_bytes();
+        let trimmed = h.to_bytes_trimmed();
+        assert!(trimmed.len() < full.len() / 4, "a 1 MiB image of five orders is mostly zeros");
+
+        let back = Hub::load(&trimmed).unwrap();
+        assert_eq!(back.len(), 5);
+        assert_eq!(back.orders().len(), 5);
+        assert!(back.order("ord_3").unwrap().contains("ord_3"));
+        assert_eq!(back.to_bytes(), full, "the padded image is the full image");
+        assert_eq!(back.usage().capacity_cells, h.usage().capacity_cells, "capacity survives");
+    }
+
+    /// A hub reloaded from a trimmed image keeps appending where it left off,
+    /// and what it writes next is still the same bytes as the one that never
+    /// left memory. A capacity lost in the round trip would show here as an
+    /// early refusal or a `grow` at the wrong size.
+    #[test]
+    fn a_trimmed_log_keeps_appending() {
+        let mut h = Hub::create_sized(64 * 1024).unwrap();
+        h.append(EventKind::Placed, "ord_1", &order("ord_1", "PENDING"), 1, ACTOR).unwrap();
+
+        let mut back = Hub::load(&h.to_bytes_trimmed()).unwrap();
+        h.append(EventKind::Advanced, "ord_1", &order("ord_1", "COOKING"), 2, ACTOR).unwrap();
+        back.append(EventKind::Advanced, "ord_1", &order("ord_1", "COOKING"), 2, ACTOR).unwrap();
+        assert_eq!(back.len(), 2);
+        assert_eq!(back.to_bytes(), h.to_bytes(), "the reloaded hub writes the same image");
+        assert_eq!(back.to_bytes_trimmed(), h.to_bytes_trimmed());
+    }
+
+    /// The number this change exists for: a fresh hub is a few hundred bytes on
+    /// the wire, not its whole arena. It crossed the Worker-to-object hop on
+    /// every write.
+    #[test]
+    fn a_fresh_log_is_tiny_on_the_wire() {
+        let h = Hub::create_sized(4 << 20).unwrap();
+        let trimmed = h.to_bytes_trimmed();
+        assert_eq!(h.to_bytes().len(), 4 << 20);
+        assert!(trimmed.len() < 16 * 1024, "a fresh 4 MiB hub trims to {} bytes", trimmed.len());
+        assert_eq!(Hub::load(&trimmed).unwrap().len(), 0);
     }
 
     #[test]

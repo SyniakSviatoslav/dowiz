@@ -701,8 +701,16 @@ impl StockLog {
         Ok(StockLog { store })
     }
 
+    /// FULL CAPACITY: `grow()` doubles from this length, so it keeps the
+    /// zeros. Persist `to_bytes_trimmed`.
     pub fn to_bytes(&self) -> Vec<u8> {
         self.store.to_bytes()
+    }
+
+    /// The image without the unused tail of its arena. Reloads identical:
+    /// `Store::from_bytes` pads the zeros back from the superblock's capacity.
+    pub fn to_bytes_trimmed(&self) -> Vec<u8> {
+        self.store.to_bytes_trimmed()
     }
 
     /// Every event, OLDEST FIRST.

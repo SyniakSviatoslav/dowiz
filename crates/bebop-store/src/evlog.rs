@@ -27,6 +27,36 @@ pub const DIGEST_EVLOG_ROOT: i64 = 0x4556_4C47;
 /// `st_digest("EV{...}")`.
 pub const DIGEST_EV: i64 = 0x4556_5F52;
 
+/// Pack payload bytes into cells, 8 bytes per cell, little-endian.
+/// The last cell is zero-padded if the payload is not a multiple of 8.
+/// This is the packing format a v2 record will use; nothing writes it yet.
+pub fn pack_payload(bytes: &[u8]) -> Vec<i64> {
+    let n_cells = (bytes.len() + 7) / 8;
+    let mut cells = vec![0i64; n_cells];
+    for i in 0..bytes.len() {
+        let cell_idx = i / 8;
+        let byte_idx = i % 8;
+        cells[cell_idx] |= (bytes[i] as i64) << (byte_idx * 8);
+    }
+    cells
+}
+
+/// Unpack cells back to payload bytes. `len` is the payload's true length,
+/// which the header carries; cells beyond len are discarded.
+pub fn unpack_payload(cells: &[i64], len: usize) -> Vec<u8> {
+    // A `len` longer than the cells hold is a corrupt header, not a panic: the
+    // caller gets the bytes that are really there and can refuse them itself.
+    let len = len.min(cells.len() * 8);
+    let mut bytes = Vec::with_capacity(len);
+    for i in 0..len {
+        let cell_idx = i / 8;
+        let byte_idx = i % 8;
+        let b = ((cells[cell_idx] >> (byte_idx * 8)) & 0xFF) as u8;
+        bytes.push(b);
+    }
+    bytes
+}
+
 /// One event as this log stores it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Record {
@@ -323,5 +353,123 @@ mod tests {
         assert_eq!(EvLog::len(&st), 40);
         assert_eq!(EvLog::walk(&st).len(), 40);
         let _ = std::fs::remove_file(p);
+    }
+
+    /// Measure what a realistic 330-byte event actually costs in cells.
+    /// The layout stores one payload byte per cell, so a 330-byte event needs
+    /// 15 header + 330 payload + 2 object header = 347 cells per event,
+    /// plus 7 + 2 root cells per commit = 356 cells total delta.
+    /// The ratio (cells × 8) / payload_len gives the storage cost in bytes per byte.
+    #[test]
+    fn cells_per_event_for_a_realistic_payload() {
+        let mut st = Store::create_bytes(8 << 20);
+        EvLog::init_bytes(&mut st).unwrap();
+
+        // Build a 330-byte payload
+        let payload: Vec<u8> = (0..330).map(|i| (i % 256) as u8).collect();
+
+        // Measure arena before
+        let before = st.pick().unwrap().arena_used;
+
+        // Append one record with the 330-byte payload
+        EvLog::append_bytes(&mut st, &rec(1, &payload)).unwrap();
+
+        // Measure arena after
+        let after = st.pick().unwrap().arena_used;
+        let delta = after - before;
+
+        // The formula: 15 header + payload.len() + 2 object header + 7 root + 2 root header
+        let expected = 15 + payload.len() as i64 + 2 + 7 + 2;
+        assert_eq!(delta, expected, "cell delta should match layout formula");
+
+        let ratio = (delta as f64 * 8.0) / payload.len() as f64;
+        println!("Event with {} byte payload: {} cells used, ratio = {:.2} bytes/byte",
+                 payload.len(), delta, ratio);
+    }
+
+    /// Packing primitives: test round-trip of empty payload.
+    #[test]
+    fn pack_payload_empty_roundtrip() {
+        let payload = b"";
+        let packed = pack_payload(payload);
+        assert_eq!(packed.len(), 0, "empty payload packs to zero cells");
+        let unpacked = unpack_payload(&packed, 0);
+        assert_eq!(unpacked, payload);
+    }
+
+    /// Test round-trip of 1-byte payload.
+    #[test]
+    fn pack_payload_one_byte_roundtrip() {
+        let payload = b"A";
+        let packed = pack_payload(payload);
+        assert_eq!(packed.len(), 1, "1 byte packs into 1 cell");
+        let unpacked = unpack_payload(&packed, payload.len());
+        assert_eq!(unpacked, payload);
+    }
+
+    /// Test round-trip of 7-byte payload (one cell minus 1).
+    #[test]
+    fn pack_payload_seven_bytes_roundtrip() {
+        let payload = b"abcdefg";
+        let packed = pack_payload(payload);
+        assert_eq!(packed.len(), 1, "7 bytes pack into 1 cell");
+        let unpacked = unpack_payload(&packed, payload.len());
+        assert_eq!(unpacked, payload);
+    }
+
+    /// Test round-trip of 8-byte payload (exactly one cell).
+    #[test]
+    fn pack_payload_eight_bytes_roundtrip() {
+        let payload = b"12345678";
+        let packed = pack_payload(payload);
+        assert_eq!(packed.len(), 1, "8 bytes pack into 1 cell");
+        let unpacked = unpack_payload(&packed, payload.len());
+        assert_eq!(unpacked, payload);
+    }
+
+    /// Test round-trip of 9-byte payload (one cell plus 1).
+    #[test]
+    fn pack_payload_nine_bytes_roundtrip() {
+        let payload = b"123456789";
+        let packed = pack_payload(payload);
+        assert_eq!(packed.len(), 2, "9 bytes pack into 2 cells");
+        let unpacked = unpack_payload(&packed, payload.len());
+        assert_eq!(unpacked, payload);
+    }
+
+    /// Test round-trip of 330-byte payload.
+    #[test]
+    fn pack_payload_330_bytes_roundtrip() {
+        let payload: Vec<u8> = (0..330).map(|i| (i % 256) as u8).collect();
+        let packed = pack_payload(&payload);
+        // 330 bytes / 8 = 41 full cells + 2 extra bytes = 42 cells
+        assert_eq!(packed.len(), 42, "330 bytes pack into exactly 42 cells");
+        let unpacked = unpack_payload(&packed, payload.len());
+        assert_eq!(unpacked, payload);
+    }
+
+    /// Verify the saving: old layout needs 330 cells for 330 bytes,
+    /// new packing layout needs only 42 cells.
+    #[test]
+    fn pack_payload_saves_space_on_330_bytes() {
+        let payload: Vec<u8> = (0..330).map(|i| (i % 256) as u8).collect();
+        let packed = pack_payload(&payload);
+        assert_eq!(payload.len(), 330, "payload is 330 bytes");
+        assert_eq!(packed.len(), 42, "packed payload is 42 cells (vs 330 in v1)");
+        // Verify round-trip
+        let unpacked = unpack_payload(&packed, payload.len());
+        assert_eq!(unpacked, payload);
+    }
+
+    /// Verify cell count formula for various sizes.
+    #[test]
+    fn pack_payload_cell_count_formula() {
+        for len in [0, 1, 7, 8, 9, 15, 16, 17, 330] {
+            let payload = vec![0u8; len];
+            let packed = pack_payload(&payload);
+            let expected_cells = (len + 7) / 8;
+            assert_eq!(packed.len(), expected_cells,
+                      "payload of {} bytes packs into {} cells", len, expected_cells);
+        }
     }
 }

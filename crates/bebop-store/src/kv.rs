@@ -236,7 +236,12 @@ impl Kv {
         Kv::init_bytes(&mut fresh)?;
         let (tx, root) = self.stage_commit_into(&mut fresh)?;
         fresh.commit_bytes(&tx, root);
-        Ok(fresh.to_bytes())
+        // TRIMMED. The fresh image was sized by doubling until the content
+        // fitted, so most of the arena it ended up with is untouched zeros --
+        // the tail `Store::from_bytes` re-creates from the capacity in the
+        // superblock. Writing it would send up to half an image of nothing on
+        // every settings change and every menu import.
+        Ok(fresh.to_bytes_trimmed())
     }
 
     /// Commit into the SMALLEST image that holds the data, up to `max`.

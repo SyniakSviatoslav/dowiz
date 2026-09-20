@@ -70,6 +70,11 @@ pub struct Superblock {
     pub superseded_cells: i64,
 }
 
+/// The largest image `from_bytes` will pad a trimmed one back up to: 512 MiB.
+/// Far above anything dowiz stores (a hub that has traded for a year is tens of
+/// megabytes) and far below what would hurt to allocate by accident.
+pub const MAX_PAD_CELLS: usize = (512 << 20) / 8;
+
 impl Store {
     /// Create a FRESH store file of `size_bytes`, initialised exactly as `st_open` does on a
     /// file with no valid superblock: superblock A only, generation 0, root 0, cursor at the
@@ -115,6 +120,14 @@ impl Store {
     /// Load a store from a byte image. Trailing bytes that do not fill a whole
     /// cell are ignored rather than padded: a truncated image must not silently
     /// become a valid one.
+    ///
+    /// A TRIMMED image is padded back to capacity; a TRUNCATED one is not, and
+    /// the difference is the whole guarantee. `to_bytes_trimmed` drops the tail
+    /// of zeros past `arena_used`, which a reader can re-create exactly. An
+    /// image cut BELOW `arena_used` is missing objects the superblock still
+    /// names, and padding it would hand the caller a store whose arena reads as
+    /// zeros where records used to be -- valid-looking and wrong. So the padding
+    /// is allowed only up from `arena_used`, never up to it.
     pub fn from_bytes(bytes: &[u8]) -> Self {
         let n = bytes.len() / 8;
         let mut cells = Vec::with_capacity(n);
@@ -123,6 +136,42 @@ impl Store {
             w.copy_from_slice(&bytes[i * 8..i * 8 + 8]);
             cells.push(i64::from_le_bytes(w));
         }
+
+        // The live superblock names both the arena's end (cell 4, an ABSOLUTE
+        // cell index) and its capacity (cell 12, a count of cells from ARENA).
+        // Pick the valid one with the higher generation, the same rule every
+        // reader uses.
+        let mut best: Option<(i64, i64, i64)> = None; // (generation, arena_used, capacity)
+        for at in [SB_A, SB_B] {
+            if at + 15 < cells.len()
+                && cells[at] == MAGIC
+                && crc32_cells(&cells, at, 15) as i64 == cells[at + 15]
+            {
+                let gen = cells[at + 2];
+                if best.is_none_or(|(g, _, _)| gen > g) {
+                    best = Some((gen, cells[at + 4], cells[at + 12]));
+                }
+            }
+        }
+        if let Some((_, arena_used, capacity)) = best {
+            let full = ARENA + capacity.max(0) as usize;
+            // EVERY CELL THE ARENA CLAIMS MUST ALREADY BE HERE. Below that the
+            // image is truncated, not trimmed, and it is left exactly as it
+            // arrived so whatever reads it next fails on the real bytes.
+            //
+            // AND THE CLAIM IS NOT TRUSTED FOR ITS SIZE. A restore hands this
+            // bytes the caller chose: a superblock whose capacity cell says a
+            // hundred million cells would have the reader allocate 800 MB for
+            // an image that is a few kilobytes long, which on a Worker is the
+            // isolate, not an error message. Past the bound the image is left
+            // as it arrived, exactly like a truncated one -- padding is a
+            // convenience for images we wrote, never an instruction we follow.
+            let bound = MAX_PAD_CELLS.max(cells.len());
+            if cells.len() >= arena_used.max(0) as usize && cells.len() < full && full <= bound {
+                cells.resize(full, 0);
+            }
+        }
+
         Store { cells }
     }
 
@@ -133,6 +182,30 @@ impl Store {
         let mut buf = Vec::with_capacity(self.cells.len() * 8);
         for c in &self.cells {
             buf.extend_from_slice(&c.to_le_bytes());
+        }
+        buf
+    }
+
+    /// The image without its unused tail. The arena is a bump allocator, so every
+    /// cell past `arena_used` is a zero that the reader re-creates from the
+    /// capacity in the superblock. A freshly doubled image is mostly nothing.
+    ///
+    /// The cut is at `arena_used` (superblock cell 4), which is an ABSOLUTE cell
+    /// index rather than a count from `ARENA` -- `create_bytes` seeds it with
+    /// `ARENA` itself and every commit writes `tx.cursor` into it. Reopen with
+    /// `Store::from_bytes`, which pads the zeros back.
+    ///
+    /// Without a readable superblock nothing may be dropped: a store that cannot
+    /// say where its arena ends is handed back whole.
+    pub fn to_bytes_trimmed(&self) -> Vec<u8> {
+        let trim_at = match self.pick() {
+            Some(sb) => sb.arena_used.max(ARENA as i64),
+            None => self.cells.len() as i64,
+        };
+        let trim_len = (trim_at as usize).min(self.cells.len());
+        let mut buf = Vec::with_capacity(trim_len * 8);
+        for i in 0..trim_len {
+            buf.extend_from_slice(&self.cells[i].to_le_bytes());
         }
         buf
     }
@@ -483,5 +556,141 @@ mod bytes_tests {
         let back = Store::from_bytes(&b);
         assert_eq!(back.cells.len(), st.cells.len(), "a partial cell is dropped, not padded");
         assert_eq!(back.cells, st.cells);
+    }
+
+    /// The cut lands exactly where the superblock says the arena ends: one cell
+    /// more would keep a zero nobody needs, one cell less would drop a record.
+    #[test]
+    fn the_trim_lands_on_the_arena_cursor() {
+        let mut st = Store::create_bytes(4 << 20);
+        let mut tx = st.begin().unwrap();
+        let root = st.alloc(&mut tx, 3, 0x1111).unwrap();
+        st.seal(root);
+        st.commit_bytes(&tx, root);
+        let used = st.pick().unwrap().arena_used;
+        assert_eq!(st.to_bytes_trimmed().len(), used as usize * 8);
+        assert!(used > ARENA as i64, "the arena moved past its base");
+    }
+
+    /// A TRUNCATED image is not a trimmed one and must not be padded into
+    /// looking valid: the cells the superblock claims are simply not there.
+    #[test]
+    fn a_truncated_image_is_left_as_it_arrived() {
+        let mut st = Store::create_bytes(1 << 20);
+        let mut tx = st.begin().unwrap();
+        let root = st.alloc(&mut tx, 8, 0x2222).unwrap();
+        for i in 0..8 { st.put_cell(root, i, 7); }
+        st.seal(root);
+        st.commit_bytes(&tx, root);
+
+        let trimmed = st.to_bytes_trimmed();
+        assert_eq!(Store::from_bytes(&trimmed).cells.len(), st.cells.len(), "trimmed pads back");
+
+        // Cut one cell BELOW the arena cursor: an object the superblock names
+        // is now missing, so nothing may be invented in its place.
+        let cut = &trimmed[..trimmed.len() - 8];
+        let back = Store::from_bytes(cut);
+        assert_eq!(back.cells.len(), cut.len() / 8, "a truncated image is not padded");
+        assert!(back.cells.len() < st.cells.len());
+    }
+
+    /// A trimmed image reopens identical to the full image.
+    #[test]
+    fn a_trimmed_image_reopens_identical() {
+        let mut st = Store::create_bytes(4 << 20);
+        let mut tx = st.begin().unwrap();
+
+        // Write a few objects to move the cursor forward
+        for i in 0..5 {
+            let obj = st.alloc(&mut tx, 4, 0x1234 + i).unwrap();
+            for j in 0..4 {
+                st.put_cell(obj, j, (i as i64 + 1) * 11 + j as i64);
+            }
+            st.seal(obj);
+        }
+
+        let root = st.alloc(&mut tx, 2, 0x5678).unwrap();
+        st.put_cell(root, 0, 42);
+        st.put_cell(root, 1, 99);
+        st.seal(root);
+
+        st.commit_bytes(&tx, root);
+
+        // Get both the full and trimmed images
+        let full = st.to_bytes();
+        let trimmed = st.to_bytes_trimmed();
+
+        // Trimmed must be smaller
+        assert!(trimmed.len() < full.len(), "trimmed image must be smaller");
+
+        // Reopen both
+        let st_full = Store::from_bytes(&full);
+        let st_trimmed = Store::from_bytes(&trimmed);
+
+        // They must produce the same root
+        let root_full = st_full.root();
+        let root_trimmed = st_trimmed.root();
+        assert_eq!(root_full, root_trimmed, "root must resolve the same");
+
+        // The payload cells must be identical
+        if let (Some(r_full), Some(r_trimmed)) = (root_full, root_trimmed) {
+            for i in 0..2 {
+                assert_eq!(st_full.get(r_full, i), st_trimmed.get(r_trimmed, i),
+                          "payload cell {} must match", i);
+            }
+        }
+    }
+
+    /// A superblock that claims an absurd capacity is not obeyed. The image is
+    /// left as it arrived: the alternative is a restore choosing how much
+    /// memory the reader allocates.
+    #[test]
+    fn an_absurd_capacity_is_not_padded_to() {
+        let mut st = Store::create_bytes(1 << 20);
+        let mut tx = st.begin().unwrap();
+        let root = st.alloc(&mut tx, 2, 0x3333).unwrap();
+        st.seal(root);
+        st.commit_bytes(&tx, root);
+
+        let mut cells = st.cells.clone();
+        let at = st.pick().unwrap().at;
+        cells[at + 12] = (MAX_PAD_CELLS as i64) * 4; // a capacity nothing could hold
+        cells[at + 15] = crc32_cells(&cells, at, 15) as i64; // and a CRC that agrees
+        let mut bytes = Vec::new();
+        for c in &cells[..st.pick().unwrap().arena_used as usize] {
+            bytes.extend_from_slice(&c.to_le_bytes());
+        }
+
+        let back = Store::from_bytes(&bytes);
+        assert_eq!(back.cells.len(), bytes.len() / 8, "no padding on an absurd claim");
+    }
+
+    /// A trimmed image is much smaller than the full one.
+    #[test]
+    fn a_trimmed_image_is_much_smaller() {
+        let mut st = Store::create_bytes(4 << 20);
+        let mut tx = st.begin().unwrap();
+
+        // Write a small object to a huge store
+        let obj = st.alloc(&mut tx, 4, 0x1234).unwrap();
+        for j in 0..4 {
+            st.put_cell(obj, j, 42 + j as i64);
+        }
+        st.seal(obj);
+
+        st.commit_bytes(&tx, obj);
+
+        let full = st.to_bytes();
+        let trimmed = st.to_bytes_trimmed();
+
+        // The trimmed image should be much smaller -- much less than 1/20th the size
+        // since we only used a handful of cells in a 4MiB store
+        println!("Full: {} bytes, Trimmed: {} bytes", full.len(), trimmed.len());
+        assert!(
+            (trimmed.len() * 20) < full.len(),
+            "trimmed ({}) should be < 1/20th of full ({})",
+            trimmed.len(),
+            full.len()
+        );
     }
 }
