@@ -300,9 +300,7 @@ pub async fn attach_one(
     // from the image the caller has ALREADY read to find this order. This
     // function used to load the log a second time, so every status poll read
     // and folded the whole venue history twice.
-    let busy: Vec<String> = hub
-        .hub
-        .orders()
+    let busy: Vec<String> = crate::hubstore::orders_state(&hub.hub)
         .into_iter()
         .filter_map(|e| serde_json::from_str::<Value>(&e.order_json).ok())
         .filter(|o| o.get("status").and_then(Value::as_str) == Some("IN_DELIVERY"))

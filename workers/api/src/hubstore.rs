@@ -984,6 +984,66 @@ fn bytes_to_js(b: &[u8]) -> JsValue {
 ///
 /// Bounded at five attempts: an append-only log makes a replay safe, but an
 /// unbounded retry would turn a hot hub into a livelock rather than an error.
+/// The folded state of one order, or `None` if this hub never saw it.
+///
+/// `Hub::order` returns the newest EVENT, which since phase 3 may be a delta.
+/// Everything that wants the ORDER asks here, and for a log written before
+/// deltas the two answers are identical -- a snapshot replaces the state, so
+/// folding a history of snapshots yields the newest one.
+pub fn order_state(hub: &Hub, order_id: &str) -> Option<String> {
+    let history = hub.history(order_id);
+    if history.is_empty() {
+        return None;
+    }
+    let folded = crate::fold::fold(history.iter().map(|e| e.order_json.as_str()));
+    if folded.is_null() {
+        return None;
+    }
+    Some(folded.to_string())
+}
+
+/// Every order's folded state, newest order first — the shape `Hub::orders`
+/// had, with `order_json` holding the FOLD rather than the last event.
+///
+/// ONE PASS. Folding each order by calling `order_state` in a loop would walk
+/// the whole log once per order, which is the O(events × orders) shape phase 1
+/// removed from `orders()` and must not come back through the fold. The events
+/// are walked once, oldest first, and each order's state is built as they go.
+pub fn orders_state(hub: &Hub) -> Vec<dowiz_hub::Event> {
+    use std::collections::HashMap;
+    let events = hub.events_oldest_first();
+    // id → (index of its newest event, folded state, that newest event)
+    let mut at: HashMap<String, usize> = HashMap::new();
+    let mut state: HashMap<String, serde_json::Value> = HashMap::new();
+    let mut newest: HashMap<String, dowiz_hub::Event> = HashMap::new();
+    for (i, e) in events.into_iter().enumerate() {
+        // NON-ORDER EVENTS ARE SKIPPED, exactly as `Hub::orders` skips them:
+        // `Revealed` records an audit fact under a subject that is not an
+        // order id, and counting it as a sale is how analytics lie.
+        if !e.kind.is_order() {
+            continue;
+        }
+        let entry = state.entry(e.order_id.clone()).or_insert(serde_json::Value::Null);
+        *entry = crate::fold::fold_one(entry.take(), &e.order_json);
+        at.insert(e.order_id.clone(), i);
+        newest.insert(e.order_id.clone(), e);
+    }
+    let mut ids: Vec<(usize, String)> = at.into_iter().map(|(id, i)| (i, id)).collect();
+    // Newest order first, which is the order every console renders in.
+    ids.sort_by(|a, b| b.0.cmp(&a.0));
+    ids.into_iter()
+        .filter_map(|(_, id)| {
+            let mut e = newest.remove(&id)?;
+            let folded = state.remove(&id)?;
+            if folded.is_null() {
+                return None;
+            }
+            e.order_json = folded.to_string();
+            Some(e)
+        })
+        .collect()
+}
+
 /// How many times a promo code has been redeemed, folded from the orders.
 ///
 /// No counter is stored, for the reason the analytics give: a tally kept beside
@@ -992,7 +1052,7 @@ fn bytes_to_js(b: &[u8]) -> JsValue {
 /// gives its use back -- the venue never took the money, so holding a use
 /// against the customer would charge them for a refusal.
 pub fn promo_uses(hub: &Hub, code: &str) -> i64 {
-    hub.orders()
+    orders_state(hub)
         .iter()
         .filter(|ev| {
             let Ok(o) = serde_json::from_str::<serde_json::Value>(&ev.order_json) else {
@@ -1084,6 +1144,134 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// THE PHASE-3 PROPERTY, AT THE LEVEL THE CONSOLE READS. A hub whose
+    /// events are full envelopes and a hub whose events are deltas must
+    /// produce the same list of orders -- same fields, same values, same
+    /// order. Every image in production is the first kind; everything written
+    /// from now on is the second.
+    #[test]
+    fn a_log_of_deltas_lists_the_same_orders_as_a_log_of_envelopes() {
+        let envelope = |id: &str, status: &str, extra: &str| -> String {
+            format!(
+                r#"{{"id":"{id}","location_id":"v1","status":"{status}","total":2650,{extra}"items":[{{"product_id":"item-01","quantity":2}}],"contact":{{"name":"Ana","phone":"+355691234567"}}}}"#
+            )
+        };
+        let mut full = Hub::create_sized(256 * 1024).unwrap();
+        let mut deltas = Hub::create_sized(256 * 1024).unwrap();
+        let mut clock = 1u64;
+        for n in 0..3u64 {
+            let id = format!("ord_{n}");
+            let placed = envelope(&id, "PENDING", "");
+            full.append(dowiz_hub::EventKind::Placed, &id, &placed, clock, [0u8; 32]).unwrap();
+            deltas.append(dowiz_hub::EventKind::Placed, &id, &placed, clock, [0u8; 32]).unwrap();
+            clock += 1;
+            let mut state: serde_json::Value = serde_json::from_str(&placed).unwrap();
+            for (status, stamp) in
+                [("CONFIRMED", "confirmed_ms"), ("COOKING", "cooking_ms"), ("DELIVERED", "delivered_ms")]
+            {
+                let next = envelope(&id, status, &format!(r#""{stamp}":{clock},"#));
+                let next_v: serde_json::Value = serde_json::from_str(&next).unwrap();
+                full.append(dowiz_hub::EventKind::Advanced, &id, &next, clock, [0u8; 32]).unwrap();
+                let d = crate::fold::delta(&state, &next_v).to_string();
+                deltas.append(dowiz_hub::EventKind::Advanced, &id, &d, clock, [0u8; 32]).unwrap();
+                state = next_v;
+                clock += 1;
+            }
+        }
+
+        let a = orders_state(&full);
+        let b = orders_state(&deltas);
+        assert_eq!(a.len(), 3);
+        assert_eq!(a.len(), b.len(), "same number of orders");
+        for (x, y) in a.iter().zip(b.iter()) {
+            assert_eq!(x.order_id, y.order_id, "same order, same place in the list");
+            let xv: serde_json::Value = serde_json::from_str(&x.order_json).unwrap();
+            let yv: serde_json::Value = serde_json::from_str(&y.order_json).unwrap();
+            assert_eq!(xv, yv, "same state for {}", x.order_id);
+            assert_eq!(xv["status"], serde_json::json!("DELIVERED"));
+            assert_eq!(xv["contact"]["name"], serde_json::json!("Ana"));
+        }
+
+        // And the point of the exercise, MEASURED rather than hoped for.
+        //
+        // Twelve events over three orders: 2,619 cells of envelopes against
+        // 1,545 of deltas, a 41 % cut rather than the 90 % the payloads alone
+        // would suggest. The difference is the RECORD HEADER -- 15 cells, plus
+        // two object headers and a nine-cell root per commit, about 26 cells
+        // whatever the payload says -- and one payload byte per eight-byte
+        // cell on top. That header is phase 4's business, not this one's; what
+        // this phase can remove, it has removed.
+        let (d, f) = (deltas.usage().used_cells, full.usage().used_cells);
+        println!("THREE ORDERS, TWELVE EVENTS: deltas {d} cells, envelopes {f} ({}%)", d * 100 / f);
+        assert!(d * 10 < f * 7, "deltas {d} cells vs envelopes {f}: expected at least a third off");
+    }
+
+    /// A courier taking an order writes a `Noted` event, which is an order
+    /// event -- so its delta has to reach the list. Before the fold the
+    /// assignment survived only because the NEXT full envelope happened to
+    /// carry it; with deltas, dropping it would make the console show an
+    /// unassigned order that a courier is already carrying.
+    #[test]
+    fn a_noted_assignment_reaches_the_folded_order() {
+        let mut hub = Hub::create_sized(64 * 1024).unwrap();
+        let placed = r#"{"id":"ord_1","location_id":"v1","status":"CONFIRMED"}"#;
+        hub.append(dowiz_hub::EventKind::Placed, "ord_1", placed, 1, [0u8; 32]).unwrap();
+        let before: serde_json::Value = serde_json::from_str(placed).unwrap();
+        let mut after = before.clone();
+        after["courier_id"] = serde_json::json!("cour_7");
+        let d = crate::fold::delta(&before, &after).to_string();
+        hub.append(dowiz_hub::EventKind::Noted, "ord_1", &d, 2, [0u8; 32]).unwrap();
+
+        let listed = orders_state(&hub);
+        assert_eq!(listed.len(), 1);
+        let v: serde_json::Value = serde_json::from_str(&listed[0].order_json).unwrap();
+        assert_eq!(v["courier_id"], serde_json::json!("cour_7"));
+        assert_eq!(v["status"], serde_json::json!("CONFIRMED"), "the rest of the order survives");
+
+        // And the single-order read agrees with the list.
+        let one: serde_json::Value =
+            serde_json::from_str(&order_state(&hub, "ord_1").unwrap()).unwrap();
+        assert_eq!(one, v);
+    }
+
+    /// An audit record is not an order and must not become one -- not in the
+    /// list, and not inside the order it names.
+    #[test]
+    fn an_audit_record_is_neither_an_order_nor_part_of_one() {
+        let mut hub = Hub::create_sized(64 * 1024).unwrap();
+        hub.append(
+            dowiz_hub::EventKind::Placed,
+            "ord_1",
+            r#"{"id":"ord_1","status":"PENDING"}"#,
+            1,
+            [0u8; 32],
+        )
+        .unwrap();
+        hub.append(
+            dowiz_hub::EventKind::Revealed,
+            "ord_1",
+            r#"{"who":"owner_1","at_ms":2}"#,
+            2,
+            [0u8; 32],
+        )
+        .unwrap();
+        let listed = orders_state(&hub);
+        assert_eq!(listed.len(), 1);
+        let v: serde_json::Value = serde_json::from_str(&listed[0].order_json).unwrap();
+        assert!(v.get("who").is_none(), "the audit fact must not be in the order: {v}");
+        let one: serde_json::Value =
+            serde_json::from_str(&order_state(&hub, "ord_1").unwrap()).unwrap();
+        assert!(one.get("who").is_none(), "{one}");
+    }
+
+    /// An order nobody placed has no state, rather than an empty one.
+    #[test]
+    fn an_unknown_order_has_no_state() {
+        let hub = Hub::create_sized(64 * 1024).unwrap();
+        assert!(order_state(&hub, "ord_missing").is_none());
+        assert!(orders_state(&hub).is_empty());
+    }
 
     /// SQLite's `hex()` emits UPPERCASE. Getting that wrong would decode every
     /// image to garbage while still returning `true`, which is the shape of

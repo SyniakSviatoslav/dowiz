@@ -63,7 +63,7 @@ pub async fn tasks(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 
     let mut mine = Vec::new();
     let mut open = Vec::new();
-    for e in loaded.hub.orders() {
+    for e in crate::hubstore::orders_state(&loaded.hub) {
         let Ok(v) = serde_json::from_str::<Value>(&e.order_json) else { continue };
         if v.get("location_id").and_then(|x| x.as_str()) != Some(loc.as_str()) {
             continue;
@@ -199,7 +199,7 @@ pub async fn shift(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
 /// Read one order out of the hub log, scoped to this hub's location.
 async fn load_order(place: &crate::hubstore::Place, id: &str, loc: &str) -> Result<Option<(String, Value)>> {
     let loaded = crate::hubstore::load(&place).await?;
-    let Ok(raw) = loaded.hub.order(id) else { return Ok(None) };
+    let Some(raw) = crate::hubstore::order_state(&loaded.hub, id) else { return Ok(None) };
     let v: Value = serde_json::from_str(&raw).unwrap_or(json!({}));
     if v.get("location_id").and_then(|x| x.as_str()) != Some(loc) {
         return Ok(None);
@@ -226,9 +226,8 @@ async fn write_status_with(
 ) -> Result<Value> {
     let id_s = id.to_string();
     crate::hubstore::with_hub(&place, move |hub| {
-        let current = hub
-            .order(&id_s)
-            .map_err(|_| Error::RustError("order not found".into()))?;
+        let current = crate::hubstore::order_state(hub, &id_s)
+            .ok_or_else(|| Error::RustError("order not found".into()))?;
         let updated = json_api::apply_event_logic(&current, next).map_err(Error::RustError)?;
         let mut merged: Value = serde_json::from_str(&updated)
             .map_err(|e| Error::RustError(format!("kernel order json unreadable: {e}")))?;
@@ -238,7 +237,9 @@ async fn write_status_with(
         if cash >= 0 {
             merged["cash_collected"] = json!(cash);
         }
-        let body = serde_json::to_string(&merged).unwrap_or(updated);
+        // WHAT CHANGED, not what is. The whole envelope was written six times
+        // per delivery; the fold puts it back together on the way out.
+        let body = crate::fold::delta(&old, &merged).to_string();
         hub.append(dowiz_hub::EventKind::Advanced, &id_s, &body, now_ms() as u64, [0u8; 32])
             .map_err(|e| Error::RustError(format!("hub append failed: {e:?}")))?;
         Ok(merged)
@@ -301,15 +302,15 @@ pub async fn accept(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let oid = id.clone();
     let who = courier_id.clone();
     let claimed = crate::hubstore::with_hub(&place, move |hub| {
-        let current = hub
-            .order(&oid)
-            .map_err(|_| Error::RustError("order not found".into()))?;
-        let mut o: Value = serde_json::from_str(&current).unwrap_or(json!({}));
+        let current = crate::hubstore::order_state(hub, &oid)
+            .ok_or_else(|| Error::RustError("order not found".into()))?;
+        let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
+        let mut o = old.clone();
         o["courier_id"] = json!(who);
         // Taking it ends any offer window: from here it is theirs until it is
         // delivered or the owner moves it.
         o["accepted_at_ms"] = json!(now);
-        let body = serde_json::to_string(&o).unwrap_or(current);
+        let body = crate::fold::delta(&old, &o).to_string();
         // `Noted`, not `Advanced`: taking an order is not a transition the
         // order machine decided, and writing it as one would put an edge in
         // the log that does not exist.
@@ -518,7 +519,7 @@ pub async fn earnings(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let mut open_cash = 0i64;
     let mut in_hand = 0i64;
 
-    for e in loaded.hub.orders() {
+    for e in crate::hubstore::orders_state(&loaded.hub) {
         let Ok(v) = serde_json::from_str::<Value>(&e.order_json) else { continue };
         if v.get("location_id").and_then(Value::as_str).map(|l| l != loc).unwrap_or(false) {
             continue;

@@ -46,9 +46,7 @@ fn currency_of(cat: &dowiz_hub::catalog::Catalog) -> String {
 /// though a hub is not, so every fold filters -- an unfiltered one would show a
 /// neighbouring venue's takings.
 fn orders_of(loaded: &crate::hubstore::Loaded, loc: &str) -> Vec<Value> {
-    loaded
-        .hub
-        .orders()
+    crate::hubstore::orders_state(&loaded.hub)
         .into_iter()
         .filter_map(|e| serde_json::from_str::<Value>(&e.order_json).ok())
         .filter(|o| {
@@ -156,9 +154,8 @@ pub async fn feedback(mut req: Request, ctx: RouteContext<()>) -> Result<Respons
     let at = now_ms();
     let oid = id.clone();
     let outcome = crate::hubstore::with_hub(&place, move |hub| {
-        let current = hub
-            .order(&oid)
-            .map_err(|_| Error::RustError("no such order".into()))?;
+        let current = crate::hubstore::order_state(hub, &oid)
+            .ok_or_else(|| Error::RustError("no such order".into()))?;
         let mut o: Value = serde_json::from_str(&current).unwrap_or(json!({}));
         if o.get("feedback").is_some() {
             return Err(Error::RustError("already".into()));
@@ -944,9 +941,7 @@ pub async fn courier_history(req: Request, ctx: RouteContext<()>) -> Result<Resp
         Err(e) => return e.into_response(),
     };
     let loaded = crate::hubstore::load(&place).await?;
-    let mut rows: Vec<Value> = loaded
-        .hub
-        .orders()
+    let mut rows: Vec<Value> = crate::hubstore::orders_state(&loaded.hub)
         .into_iter()
         .filter_map(|e| serde_json::from_str::<Value>(&e.order_json).ok())
         .filter(|o| o.get("courier_id").and_then(Value::as_str) == Some(me.as_str()))
@@ -2283,9 +2278,7 @@ pub async fn courier_assist(mut req: Request, ctx: RouteContext<()>) -> Result<R
     let now = now_ms();
     // THEIR OWN RUN AND NOTHING ELSE. A courier asking the assistant must not
     // be able to reach a neighbour's address through it.
-    let mine: Vec<Value> = loaded
-        .hub
-        .orders()
+    let mine: Vec<Value> = crate::hubstore::orders_state(&loaded.hub)
         .into_iter()
         .filter_map(|e| serde_json::from_str::<Value>(&e.order_json).ok())
         .filter(|o| o.get("courier_id").and_then(Value::as_str) == Some(me.as_str()))
@@ -3319,9 +3312,7 @@ pub async fn voice(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     // a courier sees only their own run -- so a misheard number can never reach
     // somebody else's delivery.
     let loaded = crate::hubstore::load(&place).await?;
-    let pool: Vec<Value> = loaded
-        .hub
-        .orders()
+    let pool: Vec<Value> = crate::hubstore::orders_state(&loaded.hub)
         .into_iter()
         .filter_map(|e| serde_json::from_str::<Value>(&e.order_json).ok())
         .filter(|o| {

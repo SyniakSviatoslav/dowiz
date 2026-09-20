@@ -438,9 +438,45 @@ impl Hub {
             .collect()
     }
 
-    /// The current state of one order: the payload of its most recent event.
-    /// A fold, not a lookup — which is why a status can never disagree with the
-    /// log that produced it.
+    /// One order's events, OLDEST FIRST — the input to a fold.
+    ///
+    /// `events()` is newest-first, which is right for "what just happened" and
+    /// backwards for replaying a history: applied in that order a delta lands
+    /// before the state it changes. This is the order a fold needs, and it is
+    /// the only order in which the answer is the same for a log of snapshots
+    /// and a log of deltas.
+    /// NON-ORDER EVENTS ARE LEFT OUT, the same rule `orders()` applies: a
+    /// `Revealed` record names who read a customer's details, and its payload
+    /// is an audit fact rather than an order. Folded into an order it would add
+    /// fields no consumer expects to a record that is served to customers.
+    pub fn history(&self, order_id: &str) -> Vec<Event> {
+        let mut out: Vec<Event> = self
+            .events()
+            .into_iter()
+            .filter(|e| e.order_id == order_id && e.kind.is_order())
+            .collect();
+        out.reverse();
+        out
+    }
+
+    /// Every event, OLDEST FIRST. One pass for a caller that folds them all.
+    pub fn events_oldest_first(&self) -> Vec<Event> {
+        let mut out = self.events();
+        out.reverse();
+        out
+    }
+
+    /// The payload of an order's most recent EVENT.
+    ///
+    /// NOT NECESSARILY THE ORDER'S STATE any more, and the distinction is the
+    /// whole of phase 3. An event may now be a DELTA -- what changed, not what
+    /// is -- so the state is the fold of `history()`, which the Worker does
+    /// with a real JSON parser (`fold.rs`; see `minijson`'s header for why not
+    /// here). For a log written before deltas the two are the same thing,
+    /// which is what makes every existing image read correctly.
+    ///
+    /// Kept because `events()`/`orders()` return events and a caller that
+    /// genuinely wants the last one written should be able to say so.
     pub fn order(&self, order_id: &str) -> Result<String, HubError> {
         self.events()
             .into_iter()

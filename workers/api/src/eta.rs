@@ -129,7 +129,7 @@ pub async fn quote(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     // against.
     let hub = crate::hubstore::load(&place).await?;
     let mut ahead: Vec<QueuedOrder> = Vec::new();
-    for e in hub.hub.orders() {
+    for e in crate::hubstore::orders_state(&hub.hub) {
         let Ok(v) = serde_json::from_str::<Value>(&e.order_json) else { continue };
         if v.get("location_id").and_then(|x| x.as_str()) != Some(place.venue.as_str()) {
             continue;

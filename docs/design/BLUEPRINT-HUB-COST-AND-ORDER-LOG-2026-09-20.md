@@ -232,22 +232,48 @@ COMMANDS and reads PROJECTIONS; the image never crosses the Worker↔object hop 
 - Live proof: `/api/owner/health` gains `objectReads`, `bytesShipped`, `chunksWritten`
   counters kept in the object; a console hour ships < 1 MB where it shipped 400 MB.
 
-### Phase 3 — deltas and the codebook (effort 1 day, risk low; inside `dowiz-hub`)
+### Phase 3 — deltas — SHIPPED
 
-- `Hub::orders()`/`order()` fold events oldest → newest by JSON-object merge onto the
-  `Placed` envelope. Old full-JSON events merge identically (backward compatible with
-  every image in production).
-- `Advanced` callers (`lib.rs:431`, `owner.rs:425`, `courier.rs:242`) pass
-  `{status, <stamp>_ms, courier_id?}`.
-- Lines carry `product_id, qty, modifier_ids, unit_minor, line_minor`; names, descriptions,
-  photos, kcal come from the catalogue at render (`storefront.rs` already re-derives
-  prices from the catalogue at placement). Derived fields (ETA, formatted money) are never
-  stored.
-- Tests: fold(full history) == fold(delta history) for the `cap.rs` fixture; bytes per
-  delivered order in `tests/cap.rs` drop from ≈ 2,190 cells to ≈ 260 (*estimate*).
-- Live proof: `usedCells / orders` on the live venue after ten real orders.
+An event carries WHAT CHANGED. The fold lives in `workers/api/src/fold.rs`, not in
+`dowiz-hub`: that crate's `minijson` says plainly that it is not a general JSON parser
+and is never pointed at untrusted documents, and an order envelope holds a customer's
+own words. `dowiz-hub` hands out events (`history`, `events_oldest_first`, both
+order-kind only); the Worker folds them with `serde_json`.
+
+- A delta is MARKED (`"_d": true`); anything unmarked is a snapshot that REPLACES the
+  state. So every image written before this change folds to exactly what `Hub::order`
+  used to return — the newest envelope — and there is no migration and no moment where
+  the two disagree. `a_history_of_snapshots_folds_to_the_newest_snapshot` is that
+  guarantee as a test.
+- The delta is DERIVED (`fold::delta(old, new)`), not declared by each caller. A list of
+  "fields this transition changes" drifts from what the kernel actually returned, and the
+  first thing it drops is the field somebody added last week. A key the new state lost
+  becomes an explicit `null`, so a delta can delete as well as add.
+- Writers: `lib.rs` advance, `owner.rs` advance and assign, `courier.rs` advance and
+  claim, `stripe.rs` paid. Readers: `hubstore::order_state` / `orders_state`, which
+  replaced every `hub.order()` / `hub.orders()` call in the Worker (22 sites).
+  `orders_state` folds the whole log in ONE pass — folding per order would restore the
+  O(events × orders) shape phase 1 removed.
+- MEASURED: three orders, twelve events — 2,619 cells of envelopes against 1,545 of
+  deltas, **58 %**. Not the 90 % the payloads alone suggest, because what is left is the
+  RECORD HEADER: 15 cells plus two object headers and a nine-cell root per commit, about
+  26 cells whatever the payload says, and then one payload byte per eight-byte cell.
+  That header is phase 4's business.
+- Tests: `fold.rs` 9 (the snapshot/delta equivalence, deletion, nested merge, arrays
+  replaced whole, a damaged payload skipped, the marker never reaching a consumer),
+  `hubstore.rs` 4 (the same equivalence through `orders_state`, a `Noted` assignment
+  reaching the fold, an audit record being neither an order nor part of one).
+
+**NOT DONE, and deliberately: the line codebook.** The plan had lines carry ids only,
+with names and photos re-derived from the catalogue at render. With deltas the name is
+written ONCE per order rather than six times, so what is left to save is about thirty
+bytes a line — while the cost is that a receipt stops being self-contained: rename a
+dish and last month's order re-renders under the new name, because this catalogue is not
+versioned per order. That trade is bad at this size. Revisit only if a venue's catalogue
+becomes versioned.
 
 ### Phase 4 — EvLog v2 in bebop-store (effort 3 days, risk HIGH: a written format)
+
 
 - Record: 8 payload bytes per cell; the tip written in the same commit as the record (one
   root); `actor_pubkey` present only when non-zero (a flag bit in cell 0); `prev` and the

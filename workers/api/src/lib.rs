@@ -38,6 +38,7 @@ mod catalog_edit;
 mod recipe;
 mod waitlist;
 mod errlog;
+mod fold;
 
 use dowiz_kernel::json_api;
 use serde::Deserialize;
@@ -380,7 +381,7 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
             let db = ctx.d1("DB")?;
             let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
             let loaded = hubstore::load(&place).await?;
-            let Ok(order_json) = loaded.hub.order(&id) else {
+            let Some(order_json) = hubstore::order_state(&loaded.hub, &id) else {
                 return Response::error("order not found", 404);
             };
             let envelope: serde_json::Value =
@@ -423,16 +424,22 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
             // writer moved it first. The kernel decides whether the edge is
             // legal; the Worker only records its answer.
             let out = hubstore::with_hub(&place, move |hub| {
-                let current = hub
-                    .order(&id)
-                    .map_err(|_| Error::RustError("order not found".into()))?;
+                let current = hubstore::order_state(hub, &id)
+                    .ok_or_else(|| Error::RustError("order not found".into()))?;
                 let updated = json_api::apply_event_logic(&current, &next)
                     .map_err(Error::RustError)?;
                 let merged = carry_envelope(&current, &updated);
+                // The event carries the CHANGE; the response still carries the
+                // whole order, because that is what the caller asked for.
+                let change = crate::fold::delta(
+                    &serde_json::from_str(&current).unwrap_or(serde_json::json!({})),
+                    &serde_json::from_str(&merged).unwrap_or(serde_json::json!({})),
+                )
+                .to_string();
                 hub.append(
                     dowiz_hub::EventKind::Advanced,
                     &id,
-                    &merged,
+                    &change,
                     Date::now().as_millis() as u64,
                     [0u8; 32],
                 )

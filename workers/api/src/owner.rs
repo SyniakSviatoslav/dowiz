@@ -250,9 +250,7 @@ pub async fn orders(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         .and_then(|u| u.query_pairs().find(|(k, _)| k == "status").map(|(_, v)| v.to_string()));
     // The hub log is the source. Reading it folds every order to its newest
     // state, so the queue cannot show a status the events do not support.
-    let mut out: Vec<Value> = loaded
-        .hub
-        .orders()
+    let mut out: Vec<Value> = crate::hubstore::orders_state(&loaded.hub)
         .into_iter()
         .filter_map(|e| {
             let v: Value = serde_json::from_str(&e.order_json).ok()?;
@@ -334,7 +332,7 @@ pub async fn assign_courier(mut req: Request, ctx: RouteContext<()>) -> Result<R
     };
     let courier_id = known.id;
     let hub = crate::hubstore::load(&place).await?;
-    let Ok(current) = hub.hub.order(&id) else {
+    let Some(current) = crate::hubstore::order_state(&hub.hub, &id) else {
         return Response::error("order not found", 404);
     };
     let v: Value = serde_json::from_str(&current).unwrap_or(json!({}));
@@ -370,11 +368,13 @@ pub async fn assign_courier(mut req: Request, ctx: RouteContext<()>) -> Result<R
     let who = courier_id.clone();
     let oid = id.clone();
     crate::hubstore::with_hub(&place, move |hub| {
-        let current = hub.order(&oid).map_err(|_| Error::RustError("order not found".into()))?;
-        let mut o: Value = serde_json::from_str(&current).unwrap_or(json!({}));
+        let current = crate::hubstore::order_state(hub, &oid)
+            .ok_or_else(|| Error::RustError("order not found".into()))?;
+        let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
+        let mut o = old.clone();
         o["courier_id"] = json!(who);
         o["assigned_at_ms"] = json!(now);
-        let body = serde_json::to_string(&o).unwrap_or(current);
+        let body = crate::fold::delta(&old, &o).to_string();
         hub.append(dowiz_hub::EventKind::Noted, &oid, &body, now as u64, [0u8; 32])
             .map_err(|e| Error::RustError(format!("{e:?}")))
     })
@@ -422,9 +422,8 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
     // taken ownership of its own copy.
     let order_id = id.clone();
     let out = crate::hubstore::with_hub(&place, move |hub| {
-        let current = hub
-            .order(&id)
-            .map_err(|_| Error::RustError("order not found".into()))?;
+        let current = crate::hubstore::order_state(hub, &id)
+            .ok_or_else(|| Error::RustError("order not found".into()))?;
         {
             let v: Value = serde_json::from_str(&current).unwrap_or(json!({}));
             if v.get("location_id").and_then(|x| x.as_str()) != Some(want_loc.as_str()) {
@@ -443,7 +442,8 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
         if next == "REJECTED" {
             merged["rejection_reason"] = json!(reason);
         }
-        let body_s = serde_json::to_string(&merged).unwrap_or(updated);
+        // The delta against the state this transition started from.
+        let body_s = crate::fold::delta(&old, &merged).to_string();
         hub.append(
             dowiz_hub::EventKind::Advanced,
             &id,
@@ -527,7 +527,7 @@ pub async fn dashboard(req: Request, ctx: RouteContext<()>) -> Result<Response> 
     // count needs the catalogue, and asking twice is the cost this route used
     // to be made of.
     let (mut count, mut revenue, mut pending, mut active) = (0i64, 0i64, 0i64, 0i64);
-    for e in loaded.hub.orders() {
+    for e in crate::hubstore::orders_state(&loaded.hub) {
         let Ok(v) = serde_json::from_str::<Value>(&e.order_json) else { continue };
         if v.get("location_id").and_then(|x| x.as_str()) != Some(loc.as_str()) {
             continue;

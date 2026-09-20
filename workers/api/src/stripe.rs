@@ -269,17 +269,17 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Response
         if already {
             return Ok(false);
         }
-        let current = hub
-            .order(&oid)
-            .map_err(|_| Error::RustError("order not found".into()))?;
-        let mut v: serde_json::Value = serde_json::from_str(&current).unwrap_or_default();
+        let current = crate::hubstore::order_state(hub, &oid)
+            .ok_or_else(|| Error::RustError("order not found".into()))?;
+        let old: serde_json::Value = serde_json::from_str(&current).unwrap_or_default();
+        let mut v = old.clone();
         v["payment_status"] = serde_json::json!("paid");
         v["payment_intent"] = serde_json::json!(intent_id);
         // Recorded as RECEIVED, not as the order total. If they differ, the
         // difference is the thing someone will need later.
         v["amount_received"] = serde_json::json!(amount);
         v["stripe_event"] = serde_json::json!(fingerprint);
-        let body = serde_json::to_string(&v).unwrap_or(current);
+        let body = crate::fold::delta(&old, &v).to_string();
         hub.append(
             dowiz_hub::EventKind::Paid,
             &oid,
