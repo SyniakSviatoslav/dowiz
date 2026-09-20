@@ -1214,3 +1214,10 @@ its source, which is why translations, logo and hours "did not work". Verified l
   it. Pre-existing (the storefront has it too), harmless to the page; fix is a zone setting (Bot Fight
   Mode JS detections off) or allowing it in `_headers`. Not a change of today.
 - Local: 7 commits ahead of origin/main, not pushed (not asked).
+- Waiting list, later the same evening (ae5ba32, version 19bee7e6): the landing form is the email
+  field alone. Probed live: POST 204, row in D1 (`wrangler d1 execute dowiz --remote --json`), probe
+  deleted; the list was otherwise empty. MAIL STILL OFF: Email Routing must be enabled on the zone
+  (adds MX + SPF; the zone has neither today) and syniaksviatoslav@proton.me verified as a destination;
+  both API calls were refused by the auto-mode classifier (token mint, DNS change), so the operator
+  does it in the dashboard, then the `[[send_email]]` block in wrangler.toml is uncommented and deployed.
+  The D1 MCP connector is bound to another Cloudflare account (403 7403). All commits pushed.
