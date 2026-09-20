@@ -39,6 +39,7 @@ mod recipe;
 mod waitlist;
 mod errlog;
 mod fold;
+mod live;
 
 use dowiz_kernel::json_api;
 use serde::Deserialize;
@@ -299,6 +300,7 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/owner/posts/:id/approve", extra::approve_post)
         .post_async("/api/owner/posts/:id/reject", extra::reject_post)
         .get_async("/api/owner/graph", extra::graph)
+        .get_async("/api/live", live::connect)
         .get_async("/api/owner/health", extra::health)
         .get_async("/api/owner/history", extra::history)
         .post_async("/api/owner/hub/rotate", extra::rotate_now)

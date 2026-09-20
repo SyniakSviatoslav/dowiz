@@ -167,6 +167,44 @@ function episodeMarkup(order, eta){
   </div>`;
 }
 
+/// One socket for the order on screen. Opened lazily -- a customer who never
+/// opens the sheet never opens a socket -- and closed when the order is done
+/// or another one takes the screen.
+///
+/// WHAT ARRIVES IS A NUDGE, NOT A STATE. The message says an event landed for
+/// this order; the sheet then asks for the order the ordinary way, so there is
+/// exactly one place that decides what an order looks like. A delta applied in
+/// the browser would be a second fold, and two folds disagree eventually.
+function ensureSocket(order){
+  const tok = tokenFor(order.id);
+  if (!tok) return;
+  if (openTracking._live && openTracking._liveFor === order.id) return;
+  openTracking._live?.close();
+  openTracking._liveFor = order.id;
+  import('/lib/live.js').then(({ live }) => {
+    if (openTracking._liveFor !== order.id) return;
+    openTracking._live = live({
+      token: tok,
+      onEvent: m => {
+        if (m.orderId !== order.id) return;
+        if ($('#sheet').dataset.name !== 'track') return;
+        refreshNow(order.id);
+      },
+    });
+  }).catch(() => { /* no socket: the poll below is the whole story */ });
+}
+
+async function refreshNow(id){
+  try {
+    const tok = tokenFor(id);
+    const r = await fetch(`${API}/order/${encodeURIComponent(id)}`, tok ? { headers: { authorization: 'Bearer ' + tok } } : undefined);
+    if (!r.ok) return;
+    const d = await r.json();
+    openTracking._live?.polled();
+    if ($('#sheet').dataset.name === 'track') openTracking(d);
+  } catch { /* the interval will try again */ }
+}
+
 export function openTracking(order){
   const st = order.status;
   const dead = DEAD.has(st);
@@ -213,14 +251,25 @@ export function openTracking(order){
   bindCopy();
   $('#closeTrack').onclick = closeSheet;
   clearTimeout(openTracking._t);
+  // THE HUB TELLS US, and the poll is what catches what the socket missed.
+  // One socket per customer, opened the first time a sheet is live and closed
+  // when the order is done; the interval below still runs, but `due()` holds
+  // it back while the socket is up and healthy.
+  ensureSocket(order);
   if (!dead && st !== 'DELIVERED') {
     openTracking._t = setTimeout(async () => {
+      if (openTracking._live && !openTracking._live.due()) {
+        // Nothing has been missed: re-arm and say nothing.
+        if ($('#sheet').dataset.name === 'track') openTracking(order);
+        return;
+      }
       try {
         const tok = tokenFor(order.id);
         const r = await fetch(`${API}/order/${encodeURIComponent(order.id)}`, tok ? { headers: { authorization: 'Bearer ' + tok } } : undefined);
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const d = await r.json();
         openTracking._fails = 0;
+        openTracking._live?.polled();
         if ($('#sheet').dataset.name === 'track') openTracking({ ...d, eta: d.eta || (eta && !eta.live ? eta : undefined) });
       } catch {
         openTracking._fails = (openTracking._fails || 0) + 1;

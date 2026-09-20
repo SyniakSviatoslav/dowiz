@@ -49,12 +49,42 @@ const CHUNK: usize = 96 * 1024;
 /// error.
 const LOG_IMAGE: &str = "log";
 
+/// How long a courier's fix is worth serving. `live_eta` reads the newest fix
+/// within twenty minutes; anything older is not a position, it is a memory.
+const POSITION_KEEP_MS: i64 = 20 * 60 * 1000;
+
 /// What a stored image is, apart from its bytes.
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy)]
 struct Meta {
     generation: i64,
     chunks: usize,
     len: usize,
+}
+
+/// What a socket is subscribed to. Tags are how a hibernated object finds its
+/// sockets again -- it has forgotten everything else about them.
+///
+/// THREE AUDIENCES, THREE TAGS, and the separation is not tidiness: a customer
+/// watching one order must not be sent another customer's address, and the
+/// broadcast is the only thing standing between the two.
+pub const TAG_CONSOLE: &str = "console";
+pub const TAG_COURIER: &str = "courier";
+/// `order:<id>` — one customer, one order.
+pub fn tag_order(order_id: &str) -> String {
+    format!("order:{order_id}")
+}
+
+/// A courier's last known position, held in the object rather than in D1.
+///
+/// GPS was a D1 ROW PER FIX, kept for nobody: the map reads the newest fix per
+/// courier within twenty minutes and nothing else ever reads the table. In
+/// memory it is a field; when the object hibernates the fixes are lost, which
+/// is exactly right for a value whose meaning expires in minutes.
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy)]
+pub struct Fix {
+    pub lat_e6: i64,
+    pub lng_e6: i64,
+    pub at_ms: i64,
 }
 
 /// One order as a projection carries it: the fold, and the two facts about the
@@ -102,6 +132,9 @@ pub struct HubImages {
     /// outlives a request, so this survives between them and the storage below
     /// is touched only when the object is cold or something is written.
     mem: RefCell<HashMap<String, (Meta, Vec<u8>)>>,
+    /// Where the couriers are, as they last said. Not persisted on purpose:
+    /// see `Fix`.
+    positions: RefCell<HashMap<String, Fix>>,
     /// The log image, FOLDED, at the generation it was folded from.
     ///
     /// A venue's consoles, couriers and customers all poll; between two polls
@@ -287,6 +320,57 @@ impl HubImages {
         Ok((meta.generation, view))
     }
 
+    /// Tell everyone who is watching that an event landed.
+    ///
+    /// INTEREST MANAGEMENT, the oldest trick in multiplayer networking: the
+    /// console hears about every order, a courier hears about the queue, and a
+    /// customer hears about THEIR order and nothing else. The alternative --
+    /// one channel carrying everything -- would put one customer's address on
+    /// another customer's socket, and no amount of client-side filtering makes
+    /// that acceptable.
+    ///
+    /// A BROADCAST IS NOT A REQUEST. Outgoing messages on an accepted socket
+    /// are not billed as requests, which is the whole economy of this phase: a
+    /// venue's consoles, couriers and customers stop asking every twelve
+    /// seconds whether anything happened, and the object tells them when
+    /// something does.
+    fn broadcast(&self, kind: u8, order_id: &str, payload: &str, generation: i64) {
+        let msg = serde_json::json!({
+            "t": "event",
+            "kind": kind,
+            "orderId": order_id,
+            "payload": payload,
+            "generation": generation,
+        })
+        .to_string();
+        let mut seen: Vec<String> = Vec::new();
+        for tag in [TAG_CONSOLE.to_string(), TAG_COURIER.to_string(), tag_order(order_id)] {
+            if seen.contains(&tag) {
+                continue;
+            }
+            for ws in self.state.get_websockets_with_tag(&tag) {
+                // A SEND THAT FAILS IS A SOCKET THAT WENT AWAY, which is the
+                // ordinary end of every socket. It is not this append's
+                // problem and must not become the caller's error.
+                let _ = ws.send_with_str(&msg);
+            }
+            seen.push(tag);
+        }
+    }
+
+    /// Accept one socket, tagged by what it is allowed to hear.
+    ///
+    /// HIBERNATION IS THE POINT. `accept_websocket_with_tags` hands the socket
+    /// to the runtime, which keeps it open while the object sleeps; duration
+    /// is billed only while the object is actually running. A socket held by
+    /// the object itself would keep it awake and turn a free connection into a
+    /// billed one.
+    fn accept(&self, tag: &str) -> Result<Response> {
+        let pair = WebSocketPair::new()?;
+        self.state.accept_websocket_with_tags(&pair.server, &[tag]);
+        Response::from_websocket(pair.client)
+    }
+
     /// Append one event to the log and persist it, under the same generation
     /// guard a write of the whole image carries.
     ///
@@ -316,7 +400,13 @@ impl HubImages {
             .map_err(|e| Error::RustError(format!("hub append failed: {e:?}")))?;
         let len = hub.len();
         match self.put_image(LOG_IMAGE, generation, &hub.to_bytes_trimmed()).await? {
-            Some(next) => Ok(Some((next, len))),
+            Some(next) => {
+                // AFTER THE WRITE LANDED, never before: a subscriber told about
+                // an event that was not persisted would be told the truth about
+                // a log that does not say it.
+                self.broadcast(ev.kind, &ev.order_id, &ev.payload, next);
+                Ok(Some((next, len)))
+            }
             // Cannot happen inside a serialised object -- the generation was
             // read two lines ago -- but the caller's contract already says
             // what to do about it, so say it rather than assume.
@@ -396,7 +486,12 @@ impl HubImages {
 
 impl DurableObject for HubImages {
     fn new(state: State, _env: Env) -> Self {
-        Self { state, mem: RefCell::new(HashMap::new()), folded: RefCell::new(None) }
+        Self {
+            state,
+            mem: RefCell::new(HashMap::new()),
+            positions: RefCell::new(HashMap::new()),
+            folded: RefCell::new(None),
+        }
     }
 
     /// The object's whole surface. NOT REACHABLE FROM THE INTERNET: a Durable
@@ -417,6 +512,38 @@ impl DurableObject for HubImages {
         if head == "fold" {
             let what = seg.next().unwrap_or("");
             return match (req.method(), what) {
+                // ── THE SOCKET ──
+                //
+                // The Worker has already decided WHO this is and which topic
+                // they may hear; the tag it sends is that decision. This object
+                // is not reachable from the internet, so the tag arriving here
+                // is the Worker's word, not a client's.
+                (Method::Get, "socket") => {
+                    let url = req.url()?;
+                    let tag = url
+                        .query_pairs()
+                        .find(|(k, _)| k == "tag")
+                        .map(|(_, v)| v.to_string())
+                        .unwrap_or_default();
+                    if tag.is_empty() {
+                        return Response::error("a socket needs a tag", 400);
+                    }
+                    self.accept(&tag)
+                }
+                // Where the couriers are, as they last said over their sockets.
+                // Empty after a hibernation, which is honest: a position whose
+                // meaning expires in minutes should not survive a sleep.
+                (Method::Get, "positions") => {
+                    let now = Date::now().as_millis() as i64;
+                    let fresh: HashMap<String, Fix> = self
+                        .positions
+                        .borrow()
+                        .iter()
+                        .filter(|(_, f)| now - f.at_ms < POSITION_KEEP_MS)
+                        .map(|(k, v)| (k.clone(), *v))
+                        .collect();
+                    Response::from_json(&fresh)
+                }
                 // THE GENERATION ALONE. A writer that needs nothing but the
                 // guard used to ask for the orders and throw them away, which
                 // on a venue with a thousand of them is a list built for a
@@ -532,5 +659,85 @@ impl DurableObject for HubImages {
             }
             _ => Response::error("method not allowed", 405),
         }
+    }
+
+    /// What a client may say over its socket.
+    ///
+    /// DELIBERATELY SMALL. A socket is not a second API: everything that
+    /// changes an order still goes through the Worker, where the kernel
+    /// decides and the caller is authenticated per request. Two messages are
+    /// accepted here and both are about the connection itself.
+    ///
+    ///   `{"t":"ping"}`  — keep-alive; answered with a pong.
+    ///   `{"t":"gps", "courier":"…", "lat_e6":…, "lng_e6":…}` — a courier's
+    ///   position, which lands in memory and in no table.
+    ///
+    /// A MESSAGE FROM A SOCKET IS NOT A PRINCIPAL. The tag the Worker attached
+    /// at accept time is what this object knows about the client, so a GPS fix
+    /// is taken only from a socket tagged `courier`; a console or a customer
+    /// saying the same thing is ignored rather than believed.
+    async fn websocket_message(
+        &self,
+        ws: WebSocket,
+        message: WebSocketIncomingMessage,
+    ) -> Result<()> {
+        let WebSocketIncomingMessage::String(text) = message else {
+            // Binary frames mean nothing here. Dropping them is the whole
+            // handling: answering would teach a client to send more.
+            return Ok(());
+        };
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else { return Ok(()) };
+        match v.get("t").and_then(serde_json::Value::as_str) {
+            Some("ping") => {
+                let _ = ws.send_with_str(r#"{"t":"pong"}"#);
+            }
+            Some("gps") => {
+                if !self.state.get_tags(&ws).iter().any(|t| t == TAG_COURIER) {
+                    return Ok(());
+                }
+                let (Some(courier), Some(lat), Some(lng)) = (
+                    v.get("courier").and_then(serde_json::Value::as_str),
+                    v.get("lat_e6").and_then(serde_json::Value::as_i64),
+                    v.get("lng_e6").and_then(serde_json::Value::as_i64),
+                ) else {
+                    return Ok(());
+                };
+                // MICRO-DEGREES, as integers, exactly as an order carries them:
+                // a float crossing into this system is what MANIFESTO C2
+                // forbids, and a position is not an exception.
+                if !(-90_000_000..=90_000_000).contains(&lat)
+                    || !(-180_000_000..=180_000_000).contains(&lng)
+                {
+                    return Ok(());
+                }
+                self.positions.borrow_mut().insert(
+                    courier.to_string(),
+                    Fix { lat_e6: lat, lng_e6: lng, at_ms: Date::now().as_millis() as i64 },
+                );
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    /// A socket closing is the ordinary end of a socket. The runtime forgets
+    /// it; there is nothing here to clean up, and the default handler would
+    /// have panicked.
+    async fn websocket_close(
+        &self,
+        _ws: WebSocket,
+        _code: usize,
+        _reason: String,
+        _was_clean: bool,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    /// Same, for a socket that ended badly. Logged, because a storm of these
+    /// is worth seeing, and not turned into an error that would take the
+    /// object down with it.
+    async fn websocket_error(&self, _ws: WebSocket, error: Error) -> Result<()> {
+        console_log!("hub socket error: {error}");
+        Ok(())
     }
 }

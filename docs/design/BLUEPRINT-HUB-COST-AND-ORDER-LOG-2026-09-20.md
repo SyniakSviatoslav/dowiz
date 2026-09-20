@@ -383,22 +383,54 @@ sides of the cut; every event of a kept order travels with it). `workers/api` 57
 the archive-name check). MEASURED in the rotation test: 198 arena cells hot against 436
 archived.
 
-### Phase 6 — push, not poll (effort 3 days, risk medium)
+### Phase 6 — push, not poll — SHIPPED
 
-- The object accepts WebSockets with the Hibernation API (`state.accept_web_socket`, in
-  workers-rs 0.8.5), tagged by topic (`console`, `courier:<id>`, `order:<id>`); it
-  hibernates between messages, so duration stays unbilled; each incoming message is one
-  request, outgoing broadcasts are not.
-- On every append the object broadcasts the delta to the interested topics (interest
-  management); clients apply it (client-side prediction already renders the optimistic
-  state).
-- Courier GPS goes over the socket into object memory (dead reckoning on the client: send
-  only when the prediction is off by > 20 m); `live_eta::fixes` reads the object;
-  `courier_positions` in D1 is retired (kept 48 h for the audit log only).
-- Fallback: the existing polling endpoints remain for clients without a socket.
-- Tests: a fixture object with two sockets receives one broadcast per append; a
-  hibernated object wakes on a message and answers from the memo.
-- Live proof: requests/day for an idle open venue < 500 (today ≈ 10,000).
+The object tells its clients when something happens; the poll stays as the thing that
+catches what a socket missed.
+
+- **The object accepts sockets with the Hibernation API.** `accept_websocket_with_tags`
+  hands the socket to the runtime, so the object sleeps between messages and duration
+  stays unbilled; a socket held by the object itself would keep it awake and turn a free
+  connection into a billed one. `websocket_close` and `websocket_error` are implemented
+  because the defaults PANIC.
+- **Three tags, three audiences**: `console`, `courier`, `order:<id>`. Interest management
+  is not tidiness here — one channel carrying everything would put one customer's address
+  on another customer's socket, and no client-side filter makes that acceptable. The tag
+  is decided by the WORKER at connect time and travels to the object, which is not
+  reachable from the internet, so it is the Worker's word rather than the client's claim.
+- **The token arrives as a subprotocol.** A browser cannot set a header on a WebSocket,
+  and a token in the URL is a token in every log and every history.
+  `Sec-WebSocket-Protocol: bearer, <token>`, echoed back as `bearer` or the browser fails
+  the handshake itself. `auth::authenticate_token` is `authenticate` with the token
+  handed in rather than read from a header.
+- **A broadcast is not a request.** Outgoing messages on an accepted socket are not
+  billed; the append that caused them already paid. Broadcast happens AFTER the write
+  lands, never before.
+- **What arrives is a NUDGE, not a state.** The message says an event landed; the client
+  then asks for the order the ordinary way, so exactly one place decides what an order
+  looks like. Applying the delta in the browser would be a second fold, and two folds
+  disagree eventually.
+- **The poll is never switched off.** `live()` returns `due()`, and each surface keeps its
+  own interval and asks: while the socket is up and has been heard from within ninety
+  seconds, `due()` says no. A socket dies for reasons a kitchen, a courier on a motorbike
+  and a customer in a lift can do nothing about; a queue that stops updating during
+  service is worse than any number of requests.
+- **Courier GPS goes over the socket** into the object's memory — no row, no request —
+  and `live_eta::fixes_at` reads the object first and D1 second, so a courier with no
+  socket still appears on the map. The POST stays: it is also the 48-hour audit trail the
+  data map promises. A fix is only taken from a socket tagged `courier`; a console saying
+  the same thing is ignored rather than believed, and micro-degrees are range-checked as
+  integers (a float crossing into this system is what MANIFESTO C2 forbids).
+- **The CSP says so out loud.** `connect-src` gains `wss://*.dowiz.org`: CSP3 says `'self'`
+  covers a same-host `wss:`, Safari has wanted it spelled out, and a socket that silently
+  fails to open looks exactly like a venue where nothing is happening.
+
+**Not testable on this box**, and said plainly: a Durable Object's socket surface needs
+the runtime. What IS tested is the tag contract (`workers/api` 58, 1 new: an order tag
+names exactly one order and is never a console's), and the rest is `cargo check
+--target wasm32-unknown-unknown` plus `node --check` on the four scripts. The live proof
+is a request count on the deployed venue, which this box cannot read; `/api/owner/health`
+is where it will be visible.
 
 ### Phase 7 — local-first replicas (the wild end; effort weeks; risk research)
 

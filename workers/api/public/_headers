@@ -48,7 +48,12 @@
   #   the owner has chosen but not yet uploaded.
   # worker-src `blob:`: MapLibre builds its tile workers from blob URLs. Without
   #   it the map renders nothing and says nothing about why.
-  # connect-src: the API is same-origin; the tile server is not.
+  # connect-src: the API is same-origin; the tile server is not. The LIVE
+  #   SOCKET is same-origin too, and CSP3 says `'self'` covers `wss:` to the
+  #   same host -- but Safari has wanted the scheme spelled out, and a socket
+  #   that silently fails to open looks exactly like a venue with nothing
+  #   happening. `wss://*.dowiz.org` is that sentence said out loud; a venue on
+  #   its own domain is covered by `'self'`.
   # base-uri 'none': a `<base>` injected into the page would silently re-point
   #   every relative fetch, including the API ones.
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self'; img-src 'self' data: blob: https://tiles.openfreemap.org; font-src 'self'; connect-src 'self' https://tiles.openfreemap.org https://api.stripe.com https://nominatim.openstreetmap.org; worker-src 'self' blob:; frame-src 'self' https://js.stripe.com; base-uri 'none'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self'; img-src 'self' data: blob: https://tiles.openfreemap.org; font-src 'self'; connect-src 'self' wss://*.dowiz.org https://tiles.openfreemap.org https://api.stripe.com https://nominatim.openstreetmap.org; worker-src 'self' blob:; frame-src 'self' https://js.stripe.com; base-uri 'none'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; upgrade-insecure-requests

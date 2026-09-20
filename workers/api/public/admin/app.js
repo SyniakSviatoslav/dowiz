@@ -203,17 +203,41 @@ async function boot(){
   await show(S.tab);
   paintLive();
   poll();
+  openSocket();
 }
 let pollTimer = null, pollN = 0;
 // The queue moves in seconds; the dashboard's totals move in minutes. Reading
 // both every 15 s doubled every poll for a number nobody watches that closely.
 const STATS_EVERY = 4;
+// THE HUB TELLS THIS CONSOLE when an order moves; the interval below is what
+// catches whatever the socket missed. It is never switched off: a socket dies
+// for reasons a kitchen cannot do anything about, and a queue that stops
+// updating during service is worse than any number of requests.
+let socket = null;
+function openSocket(){
+  import('/lib/live.js').then(({ live }) => {
+    socket = live({
+      token: store.t,
+      // One nudge, one read. The message says an order moved; what an order
+      // IS still comes from the same place it always did.
+      onEvent: () => { if (!document.hidden) refreshNow(); },
+    });
+  }).catch(() => { /* no socket: the poll is the whole story */ });
+}
+let refreshing = false;
+async function refreshNow(){
+  if (refreshing || !S.booted) return;
+  refreshing = true;
+  try { await loadOrders(); S.phase = 'ready'; socket?.polled(); await rerender(); }
+  catch {}
+  finally { refreshing = false; }
+}
 function poll(){
   clearTimeout(pollTimer);
   pollTimer = setTimeout(async () => {
     if (!S.booted) return;
-    if (!document.hidden) {
-      try { await loadOrders(); S.phase = 'ready'; } catch {}
+    if (!document.hidden && (!socket || socket.due())) {
+      try { await loadOrders(); S.phase = 'ready'; socket?.polled(); } catch {}
       if (++pollN % STATS_EVERY === 0) await loadStats();
       await rerender();
     }

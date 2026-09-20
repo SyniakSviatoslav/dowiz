@@ -129,11 +129,15 @@ pub async fn tasks(req: Request, ctx: RouteContext<()>) -> Result<Response> {
             "SELECT id, deliveries, cash_collected FROM courier_shifts \
              WHERE courier_id = ?1 AND ended_at_ms IS NULL ORDER BY started_at_ms DESC LIMIT 1",
         )
-        .bind(&[courier_id.into()])?
+        .bind(&[courier_id.clone().into()])?
         .first(None)
         .await?;
 
     Response::from_json(&json!({
+        // WHO THIS IS, said by the server. The app needs its own id to put a
+        // position on the socket, and reading it out of a token in JavaScript
+        // is how a client ends up believing something the server did not say.
+        "courierId": courier_id,
         "onShift": shift.is_some(),
         "shift": shift.map(|s| json!({ "id": s.id, "deliveries": s.deliveries, "cash": s.cash_collected })),
         "mine": mine, "available": open

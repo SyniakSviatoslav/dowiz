@@ -291,6 +291,14 @@ function startTracking(){
     if (last && now - last.t < FIX_MIN_MS && metresBetween(last.lat, last.lon, latitude, longitude) < FIX_MIN_M) return;
     S.lastFix = { t: now, lat: latitude, lon: longitude };
     const active = S.mine[0];
+    // OVER THE SOCKET WHEN THERE IS ONE. A fix was a D1 row per fix, written
+    // for a map that reads the newest one per courier and nothing else -- the
+    // largest write source in the system, kept for nobody. On the socket it is
+    // a message into the object's memory: no row, no request. The POST stays
+    // for a courier with no socket, and it is also what keeps the 48-hour
+    // audit trail the data map promises.
+    const sent = S.live?.gps(S.courierId, Math.round(latitude * 1e6), Math.round(longitude * 1e6));
+    if (sent) return;
     try {
       await api('/courier/position', { method:'POST', body: JSON.stringify({
         lat: latitude, lon: longitude, accuracy_m: accuracy,
@@ -405,6 +413,7 @@ async function load(){
     const before = new Set(S.available.map(o => o.id));
     const d = await api('/courier/tasks');
     S.onShift = d.onShift; S.mine = d.mine || []; S.available = d.available || []; S.shift = d.shift;
+    S.courierId = d.courierId || S.courierId;
     // "task_assigned = one incoming ripple + ping": a task that was not on the
     // last poll, arriving while the courier is on shift and free.
     const fresh = S.available.filter(o => !before.has(o.id));
@@ -1012,9 +1021,27 @@ async function boot(){ S.booted = true;
     // courier has nothing, and waiting a minute to see it is how a courier
     // loses the run. Off shift the app is a sign-in screen.
     const wait = S.onShift ? 12000 : 60000;
-    boot._i = setTimeout(() => { if (!document.hidden && S.booted) load(); scheduleLoad(); }, wait);
+    boot._i = setTimeout(() => {
+      // The socket has been quiet and healthy: nothing has been missed.
+      if (!document.hidden && S.booted && (!S.live || S.live.due())) { S.live?.polled(); load(); }
+      scheduleLoad();
+    }, wait);
   };
   scheduleLoad();
+  openSocket();
+}
+
+/// THE HUB TELLS THIS APP when the queue moves, and carries this courier's
+/// position back the other way. The interval above still runs -- a socket dies
+/// for reasons a courier on a motorbike cannot do anything about -- but while
+/// the socket is healthy it is the socket that wakes the screen.
+function openSocket(){
+  import('/lib/live.js').then(({ live }) => {
+    S.live = live({
+      token: store.t,
+      onEvent: () => { if (!document.hidden && S.booted) load(); },
+    });
+  }).catch(() => { /* no socket: the interval is the whole story */ });
 }
 
 document.documentElement.lang = lang; document.title = t('appTitle'); retranslate(document);

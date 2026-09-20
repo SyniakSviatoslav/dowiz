@@ -368,6 +368,24 @@ pub async fn authenticate(
     now_ms: i64,
 ) -> std::result::Result<Principal, AuthError> {
     let raw = bearer(req)?;
+    authenticate_token(&raw, env, db, now_ms).await
+}
+
+/// The same, for a caller that holds the token rather than the request.
+///
+/// A BROWSER CANNOT SET A HEADER ON A WEBSOCKET. The handshake carries the
+/// token as a subprotocol instead (`Sec-WebSocket-Protocol: bearer, <token>`),
+/// which is the standard way round it and keeps the token out of the URL --
+/// out of logs, out of history, out of anything that keeps URLs. This is the
+/// door that path comes in by; everything it does afterwards is what
+/// `authenticate` does.
+pub async fn authenticate_token(
+    raw: &str,
+    env: &Env,
+    db: &D1Database,
+    now_ms: i64,
+) -> std::result::Result<Principal, AuthError> {
+    let raw = raw.to_string();
 
     // ── AN API KEY IS NOT A JWT AND IS NOT VERIFIED LIKE ONE ──
     //

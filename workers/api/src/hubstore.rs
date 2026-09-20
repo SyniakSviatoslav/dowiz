@@ -205,7 +205,7 @@ impl Place {
         }
     }
 
-    fn stub(&self) -> Result<Stub> {
+    pub(crate) fn stub(&self) -> Result<Stub> {
         self.ns.id_from_name(&self.venue)?.get_stub()
     }
 }
@@ -1240,6 +1240,31 @@ pub async fn rotate(place: &Place, now_ms: i64) -> Result<serde_json::Value> {
         "eventsBefore": before,
         "eventsAfter": hub.len(),
     }))
+}
+
+/// Where the couriers are, from the object's memory.
+///
+/// Returns an empty list rather than an error when the object has hibernated
+/// since the last fix: a position whose meaning expires in minutes is supposed
+/// to disappear, and the caller falls back to the rows in D1.
+pub async fn positions(place: &Place, now_ms: i64) -> Result<Vec<crate::live_eta::CourierFix>> {
+    let stub = place.stub()?;
+    let req = Request::new("https://hub/fold/positions", Method::Get)?;
+    let mut res = stub.fetch_with_request(req).await?;
+    if res.status_code() != 200 {
+        return Ok(Vec::new());
+    }
+    let raw: std::collections::HashMap<String, crate::hubdo::Fix> = res.json().await?;
+    Ok(raw
+        .into_iter()
+        .filter(|(_, f)| now_ms - f.at_ms < crate::live_eta::POSITION_FRESH_MS)
+        .map(|(courier_id, f)| crate::live_eta::CourierFix {
+            courier_id,
+            lat_udeg: f.lat_e6 as i32,
+            lon_udeg: f.lng_e6 as i32,
+            recorded_at_ms: f.at_ms,
+        })
+        .collect())
 }
 
 /// Is this the name of an archive this module wrote?
