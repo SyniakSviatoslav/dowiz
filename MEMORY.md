@@ -1174,3 +1174,20 @@ its source, which is why translations, logo and hours "did not work". Verified l
 - Storefront install offer (`store/install.js`): rises 1.8 s after the loader, once per visit,
   Chrome prompt or the iOS two-tap hint, "don't show again" in localStorage `dw_install_hide`,
   never inside an installed app. Verified live on an iPhone UA.
+
+## 2026-09-20 — dowiz.org front door, waiting list, console restyle
+
+- The apex serves a public landing (`platform/index.html` + `landing.css` + `landing.js`); the
+  administrators' sign-in moved to `platform/hub.html`. Route unchanged (`serve_root` → /platform/index.html).
+  Bone/ink/hot, Unbounded + Manrope + JetBrains Mono self-hosted in `lib/font`; GSAP 3.13 + ScrollTrigger +
+  SplitText (free) + Lenis vendored in `lib/vendor` (script-src 'self'). Three languages in `landing.js`.
+- Waiting list: `POST /api/waitlist` (public) writes D1 `waitlist` (migration 0008, APPLIED remote
+  2026-09-20) keyed by email; `GET /api/platform/waitlist` (admins) lists it; the hub console shows it.
+  The mail to `WAITLIST_TO` (syniaksviatoslav@proton.me, wrangler [vars]) rides the `send_email` binding
+  `WAITLIST_MAIL`, which is COMMENTED OUT in wrangler.toml until Email Routing is enabled on the dowiz.org
+  zone and the address is verified there — the deploy token has no email permissions and the classifier
+  refused enabling it from here (it changes MX). Until then rows are stored, not mailed (`notified_ms` NULL).
+- `_headers`: `frame-ancestors 'self'`, `X-Frame-Options: SAMEORIGIN`, `frame-src 'self' …` so the owner
+  console can preview the storefront in an iframe on the same host.
+- design_gate.py: `platform` row → hub.html, new `landing` row; canonical/alternate links exempt from the
+  origin rule.

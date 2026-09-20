@@ -30,9 +30,11 @@
   # script because its first bytes look like one.
   X-Content-Type-Options: nosniff
 
-  # The storefront is never a frame. `frame-ancestors` below is the real
+  # The storefront is framed by ONE page: the owner console's preview, on the
+  # SAME origin (2026-09-20). Any other site still gets DENY; `frame-ancestors`
+  # below is the real
   # control; this is for the browsers that still only understand the old one.
-  X-Frame-Options: DENY
+  X-Frame-Options: SAMEORIGIN
 
   # Nothing here needs a camera, a microphone or a payment handler. The AR view
   # is WebXR over the device's own session, and geolocation is asked for by the
@@ -49,4 +51,4 @@
   # connect-src: the API is same-origin; the tile server is not.
   # base-uri 'none': a `<base>` injected into the page would silently re-point
   #   every relative fetch, including the API ones.
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self'; img-src 'self' data: blob: https://tiles.openfreemap.org; font-src 'self'; connect-src 'self' https://tiles.openfreemap.org https://api.stripe.com https://nominatim.openstreetmap.org; worker-src 'self' blob:; frame-src https://js.stripe.com; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; upgrade-insecure-requests
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://js.stripe.com; style-src 'self'; img-src 'self' data: blob: https://tiles.openfreemap.org; font-src 'self'; connect-src 'self' https://tiles.openfreemap.org https://api.stripe.com https://nominatim.openstreetmap.org; worker-src 'self' blob:; frame-src 'self' https://js.stripe.com; base-uri 'none'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; upgrade-insecure-requests

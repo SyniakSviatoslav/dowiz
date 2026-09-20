@@ -35,6 +35,7 @@ mod mcp;
 mod integrations;
 mod catalog_edit;
 mod recipe;
+mod waitlist;
 
 use dowiz_kernel::json_api;
 use serde::Deserialize;
@@ -226,6 +227,10 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/order/:id/feedback", extra::feedback)
         // ── accounts ──
         .post_async("/api/bootstrap", bootstrap::seed)
+        // The waiting list: the landing page's one form. Public to write,
+        // administrators only to read -- see `waitlist`.
+        .post_async("/api/waitlist", waitlist::join)
+        .get_async("/api/platform/waitlist", waitlist::list)
         // The main hub. Platform administrators only -- see `platform`.
         .get_async("/api/platform/hubs", platform::hubs)
         .post_async("/api/platform/hubs", platform::create_hub)

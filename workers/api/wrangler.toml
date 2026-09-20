@@ -54,9 +54,25 @@ PLATFORM_HOST = "dowiz.org"
 # on this platform came up serving the first's catalogue. Remove both when the
 # legacy rows are gone.
 LEGACY_VENUE = "dubin-durres"
+# THE WAITING LIST'S MAILBOX. A venue that leaves its address on dowiz.org is
+# written to D1 (`waitlist`) and, when the `WAITLIST_MAIL` binding below is
+# live, mailed to this address from the platform's own. The row is the record;
+# the mail is the bell. Without the binding the row is still written and the
+# hub console lists it, so nothing a venue typed is ever lost to a mail setup.
+WAITLIST_TO = "syniaksviatoslav@proton.me"
+WAITLIST_FROM = "waitlist@dowiz.org"
 
 [build]
 command = "worker-build --release"
+
+# THE BELL FOR THE WAITING LIST. `send_email` needs Email Routing ENABLED on
+# the dowiz.org zone and WAITLIST_TO VERIFIED as a destination address there
+# (Cloudflare dashboard -> dowiz.org -> Email -> Email Routing). A binding to
+# an unverified address fails the deploy, so it stays commented until both are
+# true; the code treats the missing binding as "store only".
+# [[send_email]]
+# name = "WAITLIST_MAIL"
+# destination_address = "syniaksviatoslav@proton.me"
 
 # The storefront ships WITH the API, from one Worker. Static files win for paths
 # that exist on disk; /api/* has no file, so it falls through to the fetch
