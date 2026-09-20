@@ -157,10 +157,39 @@ async function createHub() {
   }
 }
 
-$('#go').onclick = signIn;
-$('#make').onclick = createHub;
-// Enter submits the form it is in, because a sign-in that needs the mouse is
-// not one anybody uses twice.
-['email', 'pw'].forEach(id => {
-  $('#' + id).onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); signIn(); } };
-});
+// Both are forms, so Enter submits the one the cursor is in; a sign-in that
+// needs the mouse is not one anybody uses twice.
+$('#signinForm').onsubmit = e => { e.preventDefault(); signIn(); };
+$('#createForm').onsubmit = e => { e.preventDefault(); createHub(); };
+
+// ── the landing's motion, the little of it this screen needs ───────────────
+// GSAP and SplitText are vendored under /lib/vendor (script-src 'self'). The
+// headline rises line by line and the buttons follow the pointer, exactly as
+// on dowiz.org; without the libraries, or with reduced motion, the page is
+// simply its still frame.
+(function motion() {
+  const gsap = window.gsap, SplitText = window.SplitText;
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!gsap || !SplitText || still) return;
+  gsap.registerPlugin(SplitText);
+  const arrive = 'expo.out';
+  document.querySelectorAll('.mask-lines').forEach(el => {
+    const split = SplitText.create(el, { type: 'lines', linesClass: 'line', autoSplit: true,
+      onSplit(self) { return gsap.from(self.lines, { yPercent: 110, duration: 1.1, ease: arrive, stagger: 0.09, delay: el.dataset.reveal === 'hero' ? 0.15 : 0.35 }); } });
+    return split;
+  });
+  gsap.from('.hub-hero .k, .hub-hero .lede', { opacity: 0, y: 16, duration: 0.9, ease: arrive, delay: 0.5, stagger: 0.1 });
+  if (!matchMedia('(pointer: fine)').matches) return;
+  document.querySelectorAll('[data-magnet]').forEach(btn => {
+    const label = btn.querySelector('span');
+    btn.addEventListener('pointermove', e => {
+      const r = btn.getBoundingClientRect();
+      const dx = (e.clientX - (r.left + r.width / 2)) / r.width, dy = (e.clientY - (r.top + r.height / 2)) / r.height;
+      gsap.to(btn, { x: dx * 14, y: dy * 10, duration: 0.4, ease: 'power3.out' });
+      if (label) gsap.to(label, { x: dx * 6, y: dy * 4, duration: 0.4, ease: 'power3.out' });
+    });
+    btn.addEventListener('pointerleave', () => {
+      gsap.to([btn, label].filter(Boolean), { x: 0, y: 0, duration: 0.7, ease: 'elastic.out(1, 0.5)' });
+    });
+  });
+})();

@@ -496,14 +496,17 @@ function setupLangButtons() {
 // The source follows the language (one file per language), the poster shows
 // before anything loads, autoplay is muted and only while the phone is on
 // screen; the button turns the sound on and restarts from the top.
-function filmSrc(v) {
-  const lang = document.documentElement.lang;
-  return v.dataset.src.replace('{lang}', T[lang] ? lang : 'uk');
-}
+// The poster follows it too: the frame carries a burned-in subtitle, so a
+// Ukrainian page must not open on an English still.
+function filmLang() { const lang = document.documentElement.lang; return T[lang] ? lang : 'uk'; }
+function filmSrc(v) { return v.dataset.src.replace('{lang}', filmLang()); }
+function filmPoster(v) { return v.dataset.poster.replace('{lang}', filmLang()); }
 function setupFilm() {
   const v = $('#promo'), btn = $('#filmSound');
   if (!v) return;
   const load = () => { const src = filmSrc(v); if (v.getAttribute('src') !== src) { v.setAttribute('src', src); v.load(); } };
+  const repost = () => { const poster = filmPoster(v); if (v.getAttribute('poster') !== poster) v.setAttribute('poster', poster); };
+  repost();
   let onScreen = false;
   if ('IntersectionObserver' in window) {
     new IntersectionObserver(([e]) => {
@@ -518,7 +521,7 @@ function setupFilm() {
     const t = T[document.documentElement.lang] || T.uk; btn.querySelector('span').textContent = on ? t.filmMute : t.filmSound;
     if (on) { v.currentTime = 0; v.play().catch(() => {}); }
   });
-  document.addEventListener('dowiz:lang', () => { if (onScreen) { load(); v.play().catch(() => {}); } else { v.removeAttribute('src'); } });
+  document.addEventListener('dowiz:lang', () => { repost(); if (onScreen) { load(); v.play().catch(() => {}); } else { v.removeAttribute('src'); } });
 }
 
 // ── the waiting list ───────────────────────────────────────────────────────

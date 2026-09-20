@@ -1,0 +1,65 @@
+/* dowiz — the main hub, in the landing's world.
+ *
+ * landing.css is the design (fonts, bone and ink, the top bar, the pill
+ * buttons, the underlined fields, the footer wordmark). This sheet only adds
+ * what the landing has no need for: a hub row, a status line, the create form's
+ * third column. External because public/_headers says `style-src 'self'`. */
+
+.hub-body{min-height:100dvh;display:flex;flex-direction:column}
+.hub-body main{flex:1 0 auto;display:flex;flex-direction:column}
+
+/* ── the hero: the name of the screen, and who is signed in ─────────────── */
+.hub-hero{padding-block:calc(120px + env(safe-area-inset-top,0px)) clamp(48px,8vh,96px);display:grid;align-content:end;
+          min-height:min(70svh,640px)}
+.hub-hero .k{display:block;font-family:var(--font-counter);font-size:var(--text-sm);letter-spacing:.06em;color:var(--hot-ink);
+             margin-bottom:var(--space-4);overflow-wrap:anywhere}
+.hub-hero h1{font-size:clamp(2.75rem,9vw,8.2rem);max-width:10ch;overflow-wrap:anywhere}
+.hub-hero h1 b{color:var(--hot);font-weight:inherit}
+.hub-hero .lede{margin-top:var(--space-6);max-width:38ch}
+
+/* ── a block: one section, one job ──────────────────────────────────────── */
+.hub-block{padding-block:clamp(64px,10vh,128px)}
+.hub-block + .hub-block:not(.on-ink){border-top:1px solid var(--line)}
+.hub-block h2{font-size:clamp(2rem,5vw,4.5rem);max-width:14ch;margin-bottom:var(--space-5)}
+.hub-p{font-size:var(--text-lg);line-height:1.45;color:var(--mute);max-width:44ch;text-wrap:pretty}
+.on-ink .hub-p{color:var(--mute-on-ink)}
+.hub-p code{font-family:var(--font-counter);font-size:.92em;color:var(--bone)}
+.hub-h3{font-size:clamp(1.25rem,2.2vw,1.75rem);margin-top:clamp(40px,6vh,64px);margin-bottom:var(--space-3)}
+.hub-head{display:grid;gap:var(--space-4);margin-bottom:clamp(32px,5vh,56px)}
+@media (min-width:56rem){.hub-head{grid-template-columns:minmax(0,7fr) minmax(0,5fr);align-items:end}.hub-head h2{margin-bottom:0}}
+.join{max-width:64rem}
+.join-row.three{grid-template-columns:1fr}
+@media (min-width:56rem){.join-row.three{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)}}
+.join-row + .join-row{margin-top:var(--space-6)}
+.join-field input:-webkit-autofill{-webkit-text-fill-color:var(--bone);box-shadow:0 0 0 1000px var(--ink) inset;caret-color:var(--bone)}
+
+/* ── the answer under a form: mono, kept as typed ───────────────────────── */
+.said{margin-top:var(--space-5);font-family:var(--font-counter);font-size:var(--text-sm);line-height:1.6;white-space:pre-wrap;
+      overflow-wrap:anywhere;color:var(--mute-on-ink);max-width:64ch}
+.said.bad{color:var(--hot)}
+.said.good{color:var(--bone)}
+.hidden{display:none}
+.hint{color:var(--mute);font-size:var(--text-base)}
+
+/* ── the rows: hubs and the waiting list, like the landing's list ───────── */
+.rows{border-top:1px solid var(--line)}
+.hub{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-4);align-items:start;
+     padding:var(--space-6) 0;border-bottom:1px solid var(--line);transition:background 250ms var(--ease-arrive)}
+.hub .grow{min-width:0;display:grid;gap:var(--space-2)}
+.hub b{display:block;font-family:var(--brand-font-heading);font-weight:var(--weight-bold);font-size:clamp(1.25rem,2.4vw,1.75rem);
+       letter-spacing:-.03em;line-height:1.1;overflow-wrap:anywhere}
+.hub a{color:var(--ink);text-decoration:none;overflow-wrap:anywhere;min-height:var(--tap);display:inline-flex;align-items:center}
+.hub a:hover{text-decoration:underline;text-decoration-color:var(--hot)}
+.hub .hint{font-family:var(--font-counter);font-size:var(--text-sm);letter-spacing:.02em}
+.hub .hint a{min-height:0;display:inline}
+.tag{font-family:var(--font-counter);font-size:var(--text-xs);letter-spacing:.08em;text-transform:uppercase;color:var(--ink);
+     border:1px solid var(--ink);border-radius:var(--radius-full);padding:var(--space-1) var(--space-3);white-space:nowrap;
+     margin-top:var(--space-1)}
+@media (hover:hover){.hub:hover{background:var(--bone-2);box-shadow:0 0 0 var(--space-4) var(--bone-2)}}
+
+/* ── the footer: the landing's, sitting on the ink block above it ───────── */
+.hub-foot{margin-top:auto;padding-top:var(--space-6)}
+.hub-foot.on-ink{border-top:0}
+.hub-block.on-ink + .hub-foot{margin-top:0}
+
+@media (prefers-reduced-motion:reduce){.hub{transition:none}}

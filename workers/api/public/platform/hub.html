@@ -3,77 +3,130 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#f2f1ec" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0b0b0c" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#0b0b0c">
 <title>dowiz · головний хаб</title>
 <meta name="robots" content="noindex">
 <link rel="preload" href="/lib/font/unbounded-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/lib/font/unbounded-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/lib/font/manrope-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/lib/icons.css">
 <link rel="stylesheet" href="/lib/tokens.css">
 <link rel="stylesheet" href="/lib/components.css">
-<link rel="stylesheet" href="/platform/platform.css">
+<link rel="stylesheet" href="/platform/landing.css">
+<link rel="stylesheet" href="/platform/hub.css">
 </head>
-<body>
-<div class="wrap">
-  <header>
-    <div class="mark" aria-hidden="true">d</div>
-    <div>
-      <h1>Головний хаб</h1>
-      <div class="sub" id="who">dowiz · платформа</div>
-    </div>
-  </header>
+<body class="hub-body">
 
-  <section class="card" id="signin">
-    <h2>Вхід</h2>
-    <p class="hint">Тільки для адміністраторів платформи.</p>
-    <div class="field mt-s3">
-      <label for="email">Пошта</label>
-      <input id="email" type="email" autocomplete="username" inputmode="email">
+<header class="top" id="top">
+  <div class="wide top-in">
+    <a class="brand" href="/" aria-label="dowiz"><i aria-hidden="true"></i><span>dowiz</span></a>
+    <nav aria-label="Навігація">
+      <a class="signin" href="/">dowiz.org</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hub-hero" aria-labelledby="h1">
+    <div class="wide">
+      <span class="k" id="who">dowiz · платформа</span>
+      <h1 id="h1" class="mask-lines" data-reveal="hero">Головний<br>хаб<b>.</b></h1>
+      <p class="lede" data-reveal="hero">Один екран, з якого з'являється хаб клієнта: увійти, побачити хаби, створити новий. Усе інше заклад робить на власному домені.</p>
     </div>
-    <div class="field">
-      <label for="pw">Пароль</label>
-      <input id="pw" type="password" autocomplete="current-password">
-    </div>
-    <button class="btn pri" id="go">Увійти</button>
-    <div class="said bad hidden" id="signinSaid" role="alert"></div>
   </section>
 
-  <section class="card hidden" id="hubs">
-    <h2>Хаби клієнтів</h2>
-    <div id="hubList"><p class="hint">Завантаження…</p></div>
+  <section class="on-ink hub-block" id="signin" aria-labelledby="h-signin">
+    <div class="wide">
+      <h2 id="h-signin" class="mask-lines" data-reveal>Вхід</h2>
+      <p class="hub-p">Тільки для адміністраторів платформи. Токен живе в пам'яті сторінки: перезавантаження запитає пароль знову.</p>
+      <form class="join" id="signinForm" novalidate>
+        <div class="join-row">
+          <div class="join-field">
+            <label for="email">Пошта</label>
+            <input id="email" type="email" autocomplete="username" inputmode="email" spellcheck="false">
+          </div>
+          <div class="join-field">
+            <label for="pw">Пароль</label>
+            <input id="pw" type="password" autocomplete="current-password">
+          </div>
+          <button class="btn" type="submit" id="go" data-magnet><span>Увійти</span><i class="ti ti-arrow-right" aria-hidden="true"></i></button>
+        </div>
+        <p class="said hidden" id="signinSaid" role="alert"></p>
+      </form>
+    </div>
   </section>
 
-  <section class="card hidden" id="wait">
-    <h2>Список очікування</h2>
-    <p class="hint">Заклади, що лишили пошту на dowiz.org. Найновіші згори.</p>
-    <div id="waitList" class="mt-s3"><p class="hint">Завантаження…</p></div>
+  <section class="hub-block hidden" id="hubs" aria-labelledby="h-hubs">
+    <div class="wide">
+      <div class="hub-head">
+        <h2 id="h-hubs">Хаби клієнтів</h2>
+        <p class="hub-p">Кожен хаб — власний піддомен, консоль і кур'єрський застосунок.</p>
+      </div>
+      <div class="rows" id="hubList"><p class="hint">Завантаження…</p></div>
+    </div>
   </section>
 
-  <section class="card hidden" id="create">
-    <h2>Створити хаб</h2>
-    <p class="hint">Адреса буде <code>&lt;slug&gt;.<span id="pHost">dowiz.org</span></code>.
-       Це стає іменем у DNS, тому тільки малі літери, цифри та дефіс.</p>
-    <div class="two mt-s3">
-      <div class="field"><label for="slug">Slug</label>
-        <input id="slug" placeholder="sushi-durres" autocapitalize="off" spellcheck="false"></div>
-      <div class="field"><label for="name">Назва</label>
-        <input id="name" placeholder="Sushi Durrës"></div>
+  <section class="hub-block hidden" id="wait" aria-labelledby="h-wait">
+    <div class="wide">
+      <div class="hub-head">
+        <h2 id="h-wait">Список очікування</h2>
+        <p class="hub-p">Заклади, що лишили пошту на dowiz.org. Найновіші згори.</p>
+      </div>
+      <div class="rows" id="waitList"><p class="hint">Завантаження…</p></div>
     </div>
-    <div class="field"><label for="phone">Телефон</label>
-      <input id="phone" placeholder="+355 …" inputmode="tel"></div>
-    <h2 class="mt-s4">Перший власник</h2>
-    <p class="hint">Можна лишити порожнім — хаб створиться без власника.</p>
-    <div class="two mt-s3">
-      <div class="field"><label for="oemail">Пошта власника</label>
-        <input id="oemail" type="email" autocomplete="off"></div>
-      <div class="field"><label for="opw">Пароль</label>
-        <input id="opw" type="text" autocomplete="off"></div>
-    </div>
-    <button class="btn pri" id="make">Створити</button>
-    <div class="said hidden" id="makeSaid" role="status"></div>
   </section>
-</div>
+
+  <section class="on-ink hub-block hidden" id="create" aria-labelledby="h-create">
+    <div class="wide">
+      <h2 id="h-create">Створити хаб</h2>
+      <p class="hub-p">Адреса буде <code>&lt;slug&gt;.<span id="pHost">dowiz.org</span></code>. Це стає іменем у DNS, тому тільки малі літери, цифри та дефіс.</p>
+      <form class="join" id="createForm" novalidate>
+        <div class="join-row three">
+          <div class="join-field">
+            <label for="slug">Slug</label>
+            <input id="slug" placeholder="sushi-durres" autocapitalize="off" spellcheck="false">
+          </div>
+          <div class="join-field">
+            <label for="name">Назва</label>
+            <input id="name" placeholder="Sushi Durrës">
+          </div>
+          <div class="join-field">
+            <label for="phone">Телефон</label>
+            <input id="phone" placeholder="+355 …" inputmode="tel">
+          </div>
+        </div>
+        <h3 class="hub-h3">Перший власник</h3>
+        <p class="hub-p">Можна лишити порожнім — хаб створиться без власника.</p>
+        <div class="join-row">
+          <div class="join-field">
+            <label for="oemail">Пошта власника</label>
+            <input id="oemail" type="email" autocomplete="off" spellcheck="false">
+          </div>
+          <div class="join-field">
+            <label for="opw">Пароль</label>
+            <input id="opw" type="text" autocomplete="off">
+          </div>
+          <button class="btn" type="submit" id="make" data-magnet><span>Створити</span><i class="ti ti-plus" aria-hidden="true"></i></button>
+        </div>
+        <p class="said hidden" id="makeSaid" role="status"></p>
+      </form>
+    </div>
+  </section>
+
+  <footer class="foot on-ink hub-foot">
+    <div class="wide foot-in">
+      <ul>
+        <li><a href="/">dowiz.org</a></li>
+        <li><a href="https://sushi-durres.dowiz.org/">Живий заклад</a></li>
+      </ul>
+      <small>© 2026 dowiz · відкритий код, AGPL-3.0</small>
+    </div>
+    <div class="wordmark" aria-hidden="true">dowiz<b>.</b></div>
+  </footer>
+</main>
+
+<script src="/lib/vendor/gsap.min.js"></script>
+<script src="/lib/vendor/SplitText.min.js"></script>
 <script type="module" src="/platform/app.js"></script>
 </body>
 </html>
