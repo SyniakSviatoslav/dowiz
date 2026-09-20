@@ -6,8 +6,12 @@ const OUT = process.argv[2] || 'public/promo';
 const env = Object.fromEntries(fs.readFileSync('/root/.dowiz_owner', 'utf8').split('\n').filter(l => l.startsWith('export ')).map(l => l.slice(7).split('=').map(s => s.trim())));
 const H = 'https://sushi-durres.dowiz.org';
 const VP = { width: 540, height: 1170 };
-const b = await chromium.launch({ args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=angle', '--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader'] });
+// `--use-gl=swiftshader`, not ANGLE: with ANGLE the GPU process dies as soon as the storefront
+// runs and every later WebGL context (the ocean, the map) is refused. Measured 2026-09-20.
+const b = await chromium.launch({ args: ['--no-sandbox', '--disable-dev-shm-usage', '--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader'] });
+const ONLY = process.argv[3] ? new Set(process.argv[3].split(',')) : null;
 const record = async (name, fn) => {
+  if (ONLY && !ONLY.has(name)) return;
   const ctx = await b.newContext({ viewport: VP, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme: 'dark', locale: 'en-US', recordVideo: { dir: OUT, size: { width: 540, height: 1170 } } });
   await ctx.addInitScript(() => { try { localStorage.setItem('dw_lang', 'en'); localStorage.setItem('dw_admin_lang', 'en'); } catch {} });
   const p = await ctx.newPage();
@@ -24,7 +28,7 @@ await record('store-loader-grid-dish', async p => {
 await record('track-ocean-map', async p => {
   await p.goto(`${H}/`, { waitUntil: 'networkidle', timeout: 90_000 }); await p.waitForSelector('.card'); await p.waitForTimeout(800); await storeEn(p);
   const open = (st, eta, courier) => p.evaluate(async ({ st, eta, courier }) => { const s = await import('/store/state.js'); const m = await import('/store/track.js'); const lat = s.state.loc.lat, lng = s.state.loc.lng; m.openTracking({ id: 'promo00001', status: st, total: 1800, subtotal: 1500, payment: 'cash', fulfilment: { kind: 'delivery', address: { line: 'Rruga Taulantia 12', lat_udeg: Math.round((lat + .011) * 1e6), lon_udeg: Math.round((lng + .009) * 1e6) } }, eta: { range: eta, ...(courier ? { courierAt: { latUdeg: Math.round((lat + courier[0]) * 1e6), lonUdeg: Math.round((lng + courier[1]) * 1e6) } } : {}) } }); }, { st, eta, courier });
-  await open('PREPARING', '12–18', null); await p.waitForTimeout(4000); await open('IN_DELIVERY', '6–9', [.003, .002]); await p.waitForTimeout(2500); await open('IN_DELIVERY', '3–5', [.008, .007]); await p.waitForTimeout(3500);
+  await open('PREPARING', '12–18', null); await p.waitForTimeout(5000); await open('IN_DELIVERY', '6–9', [.003, .002]); await p.waitForTimeout(4000); await open('IN_DELIVERY', '3–5', [.008, .007]); await p.waitForTimeout(4500);
 });
 await record('admin-orders', async p => { await login(p); await p.waitForTimeout(1200); const row = await p.$('.orow'); if (row) { await row.click(); await p.waitForTimeout(2400); await p.keyboard.press('Escape'); } await p.waitForTimeout(900); });
 await record('admin-posts', async p => { await login(p); await p.click('#nav .tab[data-tab="more"]'); await p.waitForSelector('[data-open="posts"]'); await p.waitForTimeout(600); await p.click('[data-open="posts"]'); await p.waitForTimeout(2500); const d = await p.$('#postDraft'); if (d) { await d.click(); await p.waitForTimeout(2500); } const first = await p.$('[data-post]'); if (first) { await first.click(); await p.waitForTimeout(2400); } });

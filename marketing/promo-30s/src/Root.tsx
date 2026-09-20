@@ -9,6 +9,6 @@ export const Root: React.FC = () => (
     fps={FPS}
     width={1080}
     height={1920}
-    defaultProps={{ lang: "en" as const, music: null, musicInSeconds: 12 }}
+    defaultProps={{ lang: "en" as const, music: "dowiz-pulse-120.wav", musicInSeconds: 0 }}
   />
 );

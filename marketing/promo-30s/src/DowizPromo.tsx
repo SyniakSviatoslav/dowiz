@@ -63,18 +63,18 @@ const T: Record<Lang, { title: string[]; sub: string[] }> = {
 
 /// The thirteen shots: start, end (seconds), and the source clip's in-point.
 const SHOTS: { start: number; end: number; kind: "broll" | "graphic" | "screen"; src?: string; from?: number }[] = [
-  { start: 0, end: 2, kind: "broll", src: "h1-craft-box.mp4" },
+  { start: 0, end: 2, kind: "graphic" },
   { start: 2, end: 4, kind: "graphic" },
   { start: 4, end: 7, kind: "graphic" },
   { start: 7, end: 10, kind: "screen", src: "store-loader-grid-dish.webm", from: 0.2 },
   { start: 10, end: 13, kind: "screen", src: "store-loader-grid-dish.webm", from: 5.2 },
-  { start: 13, end: 16, kind: "screen", src: "track-ocean-map.webm", from: 5.6 },
+  { start: 13, end: 16, kind: "graphic" },
   { start: 16, end: 18, kind: "graphic" },
   { start: 18, end: 20, kind: "screen", src: "admin-posts-approve.webm", from: 7.0 },
   { start: 20, end: 22, kind: "graphic" },
   { start: 22, end: 24, kind: "screen", src: "admin-assistant.webm", from: 8.5 },
   { start: 24, end: 26, kind: "screen", src: "admin-orders.webm", from: 4.9 },
-  { start: 26, end: 28, kind: "broll", src: "h4-hand-phone.mp4" },
+  { start: 26, end: 28, kind: "graphic" },
   { start: 28, end: 30, kind: "graphic" },
 ];
 
@@ -115,7 +115,7 @@ const Subtitle: React.FC<{ text: string }> = ({ text }) => {
 };
 
 /// A phone on the stage: the clip inside a 44px-radius frame with a glass sweep.
-const Phone: React.FC<{ src: string; from: number; push?: number; rise?: boolean }> = ({ src, from, push = 0.03, rise: rises = false }) => {
+const Phone: React.FC<{ src?: string; from?: number; push?: number; rise?: boolean; children?: React.ReactNode }> = ({ src, from = 0, push = 0.03, rise: rises = false, children }) => {
   const frame = useCurrentFrame();
   const { durationInFrames } = useVideoConfig();
   const scale = 1 + push * interpolate(frame, [0, durationInFrames], [0, 1], { extrapolateRight: "clamp" });
@@ -125,9 +125,88 @@ const Phone: React.FC<{ src: string; from: number; push?: number; rise?: boolean
   return (
     <div style={{ position: "absolute", left: (W - w) / 2, top: 320, width: w, height: h, transform: `translateY(${y}px) perspective(2200px) rotateX(6deg) scale(${scale})`, transformOrigin: "50% 60%" }}>
       <div style={{ position: "absolute", inset: 0, borderRadius: 44, overflow: "hidden", background: "#0b1717", boxShadow: "0 40px 90px rgba(0,0,0,.6), 0 0 0 2px rgba(255,255,255,.08), inset 0 0 0 1px rgba(255,255,255,.05)" }}>
-        <OffthreadVideo muted src={staticFile(`promo/${src}`)} trimBefore={Math.round(from * FPS)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        {src ? <OffthreadVideo muted src={staticFile(`promo/${src}`)} trimBefore={Math.round(from * FPS)} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : children}
         <div style={{ position: "absolute", inset: 0, background: `linear-gradient(115deg, transparent ${sweep - 12}%, rgba(255,255,255,.10) ${sweep}%, transparent ${sweep + 12}%)`, pointerEvents: "none" }} />
       </div>
+    </div>
+  );
+};
+
+/// Shot 6, drawn in the storefront's own palette: the tracking sheet, first the ink ocean while the
+/// order is being made, then (on the beat at 1.5 s) the map — venue, door, and the courier gliding.
+/// Headless WebGL on the render box rasterises nothing, so the real sheet cannot be captured here.
+const PAPER = "#0f1c1a", CARD = "#17302b", LINE = "#274640", MUTED = "rgba(241,232,216,.55)";
+const Ocean: React.FC = () => {
+  const frame = useCurrentFrame();
+  const waves = [0, 1, 2, 3, 4, 5];
+  return (
+    <svg width={540} height={300} viewBox="0 0 540 300" style={{ position: "absolute", left: 0, top: 0 }}>
+      <defs>
+        <linearGradient id="ink" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#12302c" /><stop offset="1" stopColor="#061110" /></linearGradient>
+      </defs>
+      <rect width={540} height={300} fill="url(#ink)" />
+      {waves.map(i => {
+        const amp = 8 + i * 3, y0 = 90 + i * 34, sp = 0.9 + i * 0.25, ph = frame / FPS * sp + i;
+        let d = `M0 ${y0}`;
+        for (let x = 0; x <= 540; x += 20) d += ` L${x} ${y0 + Math.sin(x / 70 + ph) * amp + Math.sin(x / 31 - ph * 1.7) * amp * 0.35}`;
+        d += " L540 300 L0 300 Z";
+        return <path key={i} d={d} fill={`rgba(${10 + i * 6}, ${40 + i * 9}, ${38 + i * 8}, ${0.55})`} stroke={i % 2 ? GOLD : "rgba(201,163,90,.35)"} strokeWidth={i % 2 ? 1.2 : 0.7} strokeOpacity={0.5 + 0.1 * Math.sin(ph * 2)} />;
+      })}
+      {Array.from({ length: 18 }, (_, i) => {
+        const x = (i * 131) % 540, y = 40 + ((i * 71) % 220), tw = 0.5 + 0.5 * Math.sin(frame / 6 + i);
+        return <circle key={i} cx={x} cy={y} r={1.2 + tw} fill={GOLD} opacity={0.25 + 0.5 * tw} />;
+      })}
+    </svg>
+  );
+};
+const InkMap: React.FC<{ t: number }> = ({ t }) => {
+  // the route from the venue (bottom left) to the door (top right); the courier rides it
+  const venue = { x: 110, y: 240 }, door = { x: 430, y: 70 };
+  const mid = { x: 300, y: 250 };
+  const k = Math.min(1, Math.max(0, (t - 0.1) / 1.3));
+  const bez = (a: number) => { const u = 1 - a; return { x: u * u * venue.x + 2 * u * a * mid.x + a * a * door.x, y: u * u * venue.y + 2 * u * a * mid.y + a * a * door.y }; };
+  const c = bez(k * 0.78);
+  const streets = [[0, 60, 540, 40], [0, 130, 540, 150], [0, 210, 540, 190], [0, 270, 540, 285], [70, 0, 90, 300], [180, 0, 160, 300], [260, 0, 280, 300], [360, 0, 350, 300], [470, 0, 490, 300]];
+  return (
+    <svg width={540} height={300} viewBox="0 0 540 300" style={{ position: "absolute", left: 0, top: 0 }}>
+      <rect width={540} height={300} fill={PAPER} />
+      <path d="M0 300 L0 250 Q60 235 90 300 Z" fill="#12312e" />
+      <path d="M450 0 L540 0 L540 120 Q500 90 470 60 Q445 30 450 0 Z" fill="#12312e" />
+      {streets.map(([x1, y1, x2, y2], i) => <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={LINE} strokeWidth={i < 4 ? 3 : 2} />)}
+      <path d={`M${venue.x} ${venue.y} Q${mid.x} ${mid.y} ${door.x} ${door.y}`} fill="none" stroke={GOLD} strokeWidth={2} strokeDasharray="6 6" strokeOpacity={0.85} />
+      <circle cx={venue.x} cy={venue.y} r={16} fill={GOLD} /><text x={venue.x} y={venue.y + 6} textAnchor="middle" fontFamily={SERIF} fontSize={18} fill="#1a1408">ド</text>
+      <g transform={`translate(${door.x} ${door.y})`}><circle r={15} fill="#1d5f7a" stroke="#7fc4dd" strokeWidth={2} /><path d="M-7 3 L0 -5 L7 3 V9 H-7 Z" fill="#e8f4f8" /></g>
+      <g transform={`translate(${c.x} ${c.y})`}><circle r={17} fill="#0f8f83" stroke="#9de7dc" strokeWidth={2} /><circle r={5} fill="#e6fff9" /><circle r={26} fill="none" stroke="#0f8f83" strokeOpacity={0.5 - 0.5 * ((t * 1.5) % 1)} strokeWidth={2} transform={`scale(${1 + ((t * 1.5) % 1) * 0.8})`} /></g>
+    </svg>
+  );
+};
+const TrackingScreen: React.FC = () => {
+  const frame = useCurrentFrame(); const t = frame / FPS;
+  const riding = t >= 1.5;
+  const step = riding ? 5 : 3;
+  const dots = [1, 2, 3, 4, 5, 6];
+  const eta = riding ? (t > 2.6 ? "3–5 min" : "6–9 min") : "12–18 min";
+  const Chip: React.FC<{ children: React.ReactNode }> = ({ children }) => <div style={{ padding: "10px 16px", borderRadius: 22, background: CARD, color: INK, fontFamily: SANS, fontSize: 16, fontWeight: 600, letterSpacing: "0.02em" }}>{children}</div>;
+  return (
+    <div style={{ position: "absolute", inset: 0, background: PAPER, fontFamily: SANS, color: INK }}>
+      <div style={{ position: "absolute", left: 0, right: 0, top: 0, height: 4, background: `linear-gradient(90deg, ${GOLD}, #e8c77a)` }} />
+      <div style={{ position: "absolute", left: 28, top: 44, fontFamily: MONO, fontSize: 12, letterSpacing: "0.22em", color: GOLD }}>ORDER · #PROMO0001 · DUBIN & SUSHI</div>
+      <div style={{ position: "absolute", left: 22, right: 22, top: 84, height: 88, borderRadius: 16, overflow: "hidden", background: CARD, borderLeft: `4px solid ${GOLD}` }}>
+        <div style={{ position: "absolute", left: 24, top: 16, fontFamily: SERIF, fontSize: 32, color: INK }}>{riding ? "On the way" : "Being prepared"}</div>
+        <div style={{ position: "absolute", left: 26, top: 62, display: "flex", gap: 10 }}>{dots.map(d => <div key={d} style={{ width: 10, height: 10, borderRadius: 5, background: d <= step ? GOLD : "transparent", border: `1.5px solid ${d <= step ? GOLD : MUTED}`, opacity: d === step ? 0.7 + 0.3 * Math.sin(frame / 3) : 1 }} />)}</div>
+      </div>
+      <div style={{ position: "absolute", left: 28, top: 190, fontFamily: MONO, fontSize: 12, letterSpacing: "0.2em", color: GOLD }}>STEP {step} OF 6 · UP NEXT: {riding ? "DELIVERED" : "READY"}</div>
+      <div style={{ position: "absolute", left: 28, right: 28, top: 214, height: 2, background: LINE }}><div style={{ width: `${(step / 6) * 100}%`, height: 2, background: GOLD }} /></div>
+      <div style={{ position: "absolute", left: 28, top: 236, display: "flex", gap: 10 }}><Chip>◷ {eta}</Chip><Chip>ALL 1,800</Chip><Chip>Cash</Chip></div>
+      <div style={{ position: "absolute", left: 22, right: 22, top: 300, height: 300, borderRadius: 16, overflow: "hidden", border: `1px solid ${LINE}` }}>
+        {riding ? <InkMap t={t - 1.5} /> : <Ocean />}
+        {!riding && <div style={{ position: "absolute", left: 0, right: 0, top: 118, textAlign: "center", fontFamily: SERIF, fontSize: 30, color: INK, textShadow: "0 2px 12px rgba(0,0,0,.6)" }}>Being made for you</div>}
+      </div>
+      <div style={{ position: "absolute", left: 28, top: 612, fontFamily: MONO, fontSize: 11, letterSpacing: "0.2em", color: MUTED }}>{riding ? "● VENUE   ● YOU   ● COURIER" : "● VENUE   ● YOU"}</div>
+      <div style={{ position: "absolute", left: 28, top: 660, fontFamily: MONO, fontSize: 12, letterSpacing: "0.22em", color: GOLD }}>WHAT PEOPLE SAY</div>
+      <div style={{ position: "absolute", left: 28, right: 28, top: 686, fontFamily: SERIF, fontSize: 19, lineHeight: 1.35, color: INK }}>“Very tasty rolls — if you want them ‘like in Ukraine’, this is the place.”</div>
+      <div style={{ position: "absolute", left: 28, top: 770, fontFamily: MONO, fontSize: 12, color: GOLD }}>★★★★★ <span style={{ color: MUTED }}>Volo SLD</span></div>
+      <div style={{ position: "absolute", left: 28, right: 28, bottom: 36, height: 56, borderRadius: 28, background: CARD, display: "grid", placeItems: "center", fontFamily: MONO, fontSize: 14, letterSpacing: "0.2em", color: INK }}>DONE</div>
     </div>
   );
 };
@@ -213,26 +292,83 @@ const EndCard: React.FC = () => {
   );
 };
 
-/// A generated insert when the file exists; a stand-in when it does not yet.
-const Broll: React.FC<{ src: string; fallback: React.ReactNode }> = ({ src, fallback }) => {
-  const [ok, setOk] = React.useState<boolean | null>(null);
-  React.useEffect(() => { fetch(staticFile(`promo/${src}`), { method: "HEAD" }).then(r => setOk(r.ok)).catch(() => setOk(false)); }, [src]);
-  if (ok) return <OffthreadVideo muted src={staticFile(`promo/${src}`)} style={{ width: "100%", height: "100%", objectFit: "cover", filter: "saturate(.8) contrast(1.05)" }} />;
-  return <>{fallback}</>;
-};
-
-/// Banknotes lifting and burning, for the first shot's stand-in and overlay.
+/// Shot 1, drawn: a craft box on the black stage, its lid closing in the first half second;
+/// on the hit (0.9 s) banknotes lift from under the lid, catch, and break into ash and embers.
+const KRAFT = "linear-gradient(180deg, #a5824f 0%, #8a6a3d 55%, #6d5230 100%)";
 const Notes: React.FC = () => {
   const frame = useCurrentFrame();
+  const lid = interpolate(frame, [0, 16], [-62, 0], { extrapolateRight: "clamp", easing: ease });
+  const HIT = 27; // 0.9 s
+  const notes = Array.from({ length: 14 }, (_, i) => i);
+  const ash = Array.from({ length: 60 }, (_, i) => i);
   return (
     <>
-      {Array.from({ length: 20 }, (_, i) => {
-        const t = Math.max(0, frame - 12 - i * 1.5) / 24;
-        const x = 240 + (i * 37) % 600, y = 1100 - t * 900, o = Math.max(0, 1 - t);
-        return <div key={i} style={{ position: "absolute", left: x, top: y, width: 120, height: 56, borderRadius: 6, background: `linear-gradient(90deg, #2e6b3f, #4f9a5b)`, opacity: o, transform: `rotate(${(i * 23) % 60 - 30 + t * 40}deg)`, boxShadow: `0 0 ${20 * t}px ${RED}` }} />;
+      <div style={{ position: "absolute", left: 250, top: 1000, width: 580, height: 330, perspective: 1600, perspectiveOrigin: "50% 0%" }}>
+        <div style={{ position: "absolute", left: 0, top: 90, width: 580, height: 240, borderRadius: 18, background: KRAFT, boxShadow: "0 50px 90px rgba(0,0,0,.75), inset 0 -30px 60px rgba(0,0,0,.35)" }} />
+        <div style={{ position: "absolute", left: 20, top: 118, width: 540, height: 2, background: "rgba(0,0,0,.35)" }} />
+        <div style={{ position: "absolute", left: 200, top: 190, width: 180, height: 44, borderRadius: 4, border: "1px solid rgba(0,0,0,.28)", display: "grid", placeItems: "center", fontFamily: MONO, fontSize: 18, letterSpacing: "0.3em", color: "rgba(0,0,0,.55)" }}>SUSHI</div>
+        <div style={{ position: "absolute", left: -6, top: 60, width: 592, height: 70, borderRadius: 14, background: "linear-gradient(180deg, #b6925c, #8f6f41)", transformOrigin: "50% 0%", transform: `rotateX(${lid}deg)`, boxShadow: "0 18px 30px rgba(0,0,0,.5)" }} />
+      </div>
+      {notes.map(i => {
+        const t = Math.max(0, frame - HIT - i * 1.3) / 30;
+        if (t <= 0) return null;
+        const burn = Math.min(1, Math.max(0, (t - 0.35) / 0.5));
+        const seed = ((i * 2654435761) >>> 0) % 1000 / 1000;
+        const x = 280 + seed * 500 + Math.sin(t * 6 + i) * 30, y = 1060 - t * (700 + seed * 220);
+        const o = Math.max(0, 1 - Math.max(0, t - 0.7) / 0.3);
+        return (
+          <div key={i} style={{ position: "absolute", left: x, top: y, width: 150, height: 68, borderRadius: 6, opacity: o, transform: `rotate(${seed * 70 - 35 + t * 60}deg) scale(${1 - burn * 0.35})`, background: `linear-gradient(90deg, hsl(${140 - burn * 130}, 45%, ${32 - burn * 10}%), hsl(${140 - burn * 130}, 55%, ${44 - burn * 12}%))`, boxShadow: `inset 0 0 0 4px rgba(255,255,255,.14), 0 0 ${30 * burn}px hsl(20, 100%, 50%)` }}>
+            <div style={{ position: "absolute", left: 58, top: 17, width: 34, height: 34, borderRadius: 17, border: "2px solid rgba(255,255,255,.28)" }} />
+          </div>
+        );
       })}
-      <div style={{ position: "absolute", left: 300, top: 1040, width: 480, height: 300, borderRadius: 24, background: "linear-gradient(180deg, #4a3a25, #2b2116)", boxShadow: "0 40px 80px rgba(0,0,0,.7)" }} />
+      {ash.map(i => {
+        const t = Math.max(0, frame - HIT - 8 - (i % 12) * 1.2) / 34;
+        if (t <= 0) return null;
+        const ember = i % 4 === 0;
+        const x = 330 + ((i * 53) % 460) + Math.sin(t * 9 + i) * 40, y = 980 - t * 900 - (i % 5) * 20;
+        return <div key={i} style={{ position: "absolute", left: x, top: y, width: ember ? 6 : 9, height: ember ? 6 : 9, borderRadius: ember ? 3 : 2, background: ember ? `hsl(${30 - t * 20}, 100%, ${65 - t * 30}%)` : "#3a3128", opacity: Math.max(0, (ember ? 1 : 0.7) - t), boxShadow: ember ? `0 0 ${10 * (1 - t)}px orange` : "none", transform: `rotate(${t * 300}deg)` }} />;
+      })}
     </>
+  );
+};
+
+/// Shot 12, drawn: a home screen with the venue's icon among muted neighbours; a tap, the icon
+/// grows to fill the glass, and the storefront's loader takes over.
+const HomeScreen: React.FC<{ tapAt?: number }> = ({ tapAt = 0.55 }) => {
+  const frame = useCurrentFrame();
+  const tap = Math.max(0, frame - tapAt * FPS);
+  const ripple = interpolate(tap, [0, 14], [0, 1], { extrapolateRight: "clamp" });
+  const open = interpolate(tap, [10, 34], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: ease });
+  const icons = Array.from({ length: 20 }, (_, i) => i);
+  const w = 570, h = 1235, cell = (w - 2 * 46) / 4;
+  const ours = 9;
+  return (
+    <div style={{ position: "absolute", left: (W - w) / 2, top: 320, width: w, height: h, transform: "perspective(2200px) rotateX(6deg)", transformOrigin: "50% 60%" }}>
+      <div style={{ position: "absolute", inset: 0, borderRadius: 44, overflow: "hidden", background: "radial-gradient(90% 60% at 50% 20%, #17302b 0%, #07100f 70%, #000 100%)", boxShadow: "0 40px 90px rgba(0,0,0,.6), 0 0 0 2px rgba(255,255,255,.08)" }}>
+        <div style={{ position: "absolute", left: 0, right: 0, top: 22, textAlign: "center", fontFamily: SANS, fontSize: 22, fontWeight: 600, color: INK }}>9:41</div>
+        <div style={{ position: "absolute", left: 46, top: 140, width: w - 92, display: "grid", gridTemplateColumns: "repeat(4, 1fr)", rowGap: 34, opacity: 1 - open }}>
+          {icons.map(i => {
+            const mine = i === ours;
+            return (
+              <div key={i} style={{ display: "grid", justifyItems: "center", gap: 8 }}>
+                <div style={{ width: cell - 34, height: cell - 34, borderRadius: 22, background: mine ? "linear-gradient(160deg, #123a33, #0b1717)" : `hsl(${(i * 47) % 360}, 12%, ${18 + (i % 3) * 4}%)`, boxShadow: mine ? `0 0 0 2px ${GOLD}, 0 12px 30px rgba(201,163,90,.35)` : "inset 0 0 0 1px rgba(255,255,255,.05)", display: "grid", placeItems: "center", fontFamily: SERIF, fontSize: 34, color: GOLD, letterSpacing: "-0.02em", position: "relative" }}>
+                  {mine ? "D&S" : ""}
+                  {mine && ripple > 0 && <div style={{ position: "absolute", left: "50%", top: "50%", width: 40, height: 40, marginLeft: -20, marginTop: -20, borderRadius: 20, border: `3px solid ${GOLD}`, transform: `scale(${1 + ripple * 3})`, opacity: 1 - ripple }} />}
+                </div>
+                <div style={{ fontFamily: SANS, fontSize: 15, color: mine ? INK : "rgba(241,232,216,.35)" }}>{mine ? "Dubin & Sushi" : "\u00a0"}</div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ position: "absolute", left: 40, right: 40, bottom: 24, height: 108, borderRadius: 30, background: "rgba(255,255,255,.06)", opacity: 1 - open }} />
+        {open > 0 && (
+          <div style={{ position: "absolute", inset: 0, opacity: open, transform: `scale(${0.4 + 0.6 * open})`, transformOrigin: "62% 42%" }}>
+            <OffthreadVideo muted src={staticFile("promo/store-loader-grid-dish.webm")} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          </div>
+        )}
+      </div>
+    </div>
   );
 };
 
@@ -244,19 +380,19 @@ export const DowizPromo: React.FC<PromoProps> = ({ lang, music, musicInSeconds }
       {music ? <Audio src={staticFile(`promo/${music}`)} trimBefore={Math.round(musicInSeconds * FPS)} volume={f => interpolate(f, [DURATION_S * FPS - 18, DURATION_S * FPS], [1, 0], { extrapolateLeft: "clamp" })} /> : null}
       {SHOTS.map((s, i) => (
         <Sequence key={i} from={s.start * FPS} durationInFrames={(s.end - s.start) * FPS}>
-          {i === 0 && <Broll src={s.src!} fallback={<Notes />} />}
+          {i === 0 && <Notes />}
           {i === 0 && <Headline text={t.title[0]} size={92} top={220} />}
           {i === 1 && <><Counter /><Caption text={t.title[1]} top={1000} /></>}
           {i === 2 && <><Zero /><Caption text={t.title[2]} top={1120} /></>}
           {i === 3 && <><Phone src={s.src!} from={s.from!} rise /><Headline text={t.title[3]} top={120} delay={0.3} /></>}
           {i === 4 && <><Phone src={s.src!} from={s.from!} /><Headline text={t.title[4]} size={72} top={120} /></>}
-          {i === 5 && <><Phone src={s.src!} from={s.from!} push={0.04} /><Headline text={t.title[5]} size={96} top={130} /></>}
+          {i === 5 && <><Phone push={0.04}><div style={{ position: "absolute", inset: 0, transform: "scale(1.0556)", transformOrigin: "0 0" }}><div style={{ position: "absolute", left: 0, top: 0, width: 540, height: 1170 }}><TrackingScreen /></div></div></Phone><Headline text={t.title[5]} size={96} top={130} /></>}
           {i === 6 && <><Hub /><Headline text={t.title[6]} size={88} top={220} /></>}
           {i === 7 && <><Phone src={s.src!} from={s.from!} /><Headline text={t.title[7]} size={80} top={120} /></>}
           {i === 8 && <><Lock /><Headline text={t.title[8]} size={92} top={220} /><Caption text="ML-KEM-768 · ML-DSA-65" top={1220} delay={0.5} /></>}
           {i === 9 && <><Phone src={s.src!} from={s.from!} /><Headline text={t.title[9]} size={68} top={120} /></>}
           {i === 10 && <><Phone src={s.src!} from={s.from!} /><Headline text={t.title[10]} size={84} top={120} /></>}
-          {i === 11 && <><Broll src={s.src!} fallback={<Phone src="store-loader-grid-dish.webm" from={0.2} rise />} /><Headline text={t.title[11]} size={92} top={120} delay={0.2} /></>}
+          {i === 11 && <><HomeScreen /><Headline text={t.title[11]} size={92} top={120} delay={0.2} /></>}
           {i === 12 && <><EndCard /><Caption text={t.title[12]} top={1140} delay={0.5} /></>}
           <Subtitle text={t.sub[i]} />
         </Sequence>

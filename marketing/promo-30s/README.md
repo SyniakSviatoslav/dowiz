@@ -18,31 +18,54 @@ The Remotion composition behind `docs/marketing/promo-dubin-sushi-30s.en.md`. On
 
 | clip | shots | in-point | how it is made |
 |---|---|---|---|
-| `store-loader-grid-dish.webm` | 4, 5, 12 (stand-in) | 0.2 s, 5.2 s | `capture-surfaces.mjs` |
-| `track-ocean-map.webm` | 6 | 5.6 s | `capture-surfaces.mjs`; headless has no WebGL, so no ocean and no map — shoot this on a phone |
+| `store-loader-grid-dish.webm` | 4, 5, 12 | 0.2 s, 5.2 s, 0 s | `capture-surfaces.mjs` |
 | `admin-posts-approve.webm` | 8 | 7.0 s | `capture-posts.mjs`: the posts API is intercepted so a draft exists, then Publish |
 | `admin-assistant.webm` | 10 | 8.5 s | `capture-surfaces.mjs`; the answer is staged in the DOM |
-| `admin-orders.webm` | 11 | 4.9 s | `capture-surfaces.mjs` |
-| `h1-craft-box.mp4`, `h4-hand-phone.mp4` | 1, 12 | — | Higgsfield; until they exist the shots use a drawn stand-in |
+| `admin-orders.webm` | 11 | 4.9 s | `capture-surfaces.mjs`; the detail sheet opens at 6.0 s of the clip |
+
+Drawn in the composition, no footage: shot 1 (the craft box, the notes lifting and burning),
+shot 6 (the tracking sheet with the ink ocean and the map, in the storefront's palette), shot 12
+(a home screen, the tap, the storefront opening). Shot 6 is drawn because software WebGL on the
+render box rasterises nothing: the storefront's ocean shader and maplibre's layers come out blank
+under both `--use-gl=angle` (and the GPU process dies as soon as the storefront runs) and
+`--use-gl=swiftshader` (contexts live, draws return 0,0,0,0). Measured 2026-09-20 with
+`e2e/kit-regression/_webgl_probe*.mjs`. The `track-ocean-map` clip the capture script still
+records shows the sheet with a white map; it is not used.
+
+## Soundtrack
+
+`music/pulse.py` synthesises the track from nothing with numpy: 30 s at exactly 120 BPM, A minor,
+a ticking intro, the drop on the gold zero at 4 s, plucks under the phone, claps from the hub
+shot, the final hit on the mark at 28 s, a 600 ms fade. The plan's UI taps and the burn hit are
+baked in at −16 dB. It writes `dowiz-pulse-120.wav` and `dowiz-pulse-120-beat-grid.json`
+(beat = 0.5 s, bar = 2 s, downbeats at 0, 4, 16, 20, 28 s, which is why every shot boundary in
+`SHOTS` already sits on a beat). Loudness −15.4 LUFS integrated, peak −2 dBFS. It is ours, so
+nothing needs licensing; a licensed track can replace it via the `music` prop.
+
+```
+python3 music/pulse.py public/promo/dowiz-pulse-120.wav
+```
 
 ## Render
 
 ```
 npm install
 mkdir -p public/fonts public/promo && cp fonts/*.ttf public/fonts/
+python3 music/pulse.py public/promo/dowiz-pulse-120.wav
 node capture/capture-surfaces.mjs $PWD/public/promo      # from the repo root
 node capture/capture-posts.mjs $PWD/public/promo
-npm run render:en
+npm run render:en && npm run render:uk && npm run render:sq
 ```
 
 On this box Remotion cannot download its own Chrome; point it at Playwright's:
 `--browser-executable=$HOME/.cache/ms-playwright/chromium-*/chrome-linux-arm64/chrome --gl=swiftshader --concurrency=2`.
-`--scale=0.5` gives a five-minute proof render.
+`--scale=0.5` gives a five-minute proof render; full scale takes about ten minutes per language.
+
+Other frames from the same 9:16 master, on the black stage (`scripts/reframe.sh`):
+16:9 letterboxes the phone-tall frame centred on 1920×1080; 1:1 does the same on 1080×1080.
 
 ## Open
 
-1. The soundtrack is not on disk. When it is: `public/promo/space-cowboy.wav`, set `music`, tap
-   the beat grid from 0:12 and nudge `SHOTS` so every cut lands on a beat (shots 3, 7, 9, 13 on
-   downbeats). The sync licence is needed before publishing.
-2. Shot 6 is the tracking panel in the phone frame; the ocean and the map need real phone footage.
-3. Shots 1 and 12 wait for the Higgsfield inserts (prompts in the 50-second plan, §5).
+1. Higgsfield video generation needs a paid plan (`Requires basic plan or higher`); shots 1 and
+   12 are drawn instead, and stay drawn unless real footage is wanted.
+2. The three masters are silent-safe: feeds play muted, the subtitles carry the message.
