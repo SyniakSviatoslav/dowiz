@@ -1221,3 +1221,15 @@ its source, which is why translations, logo and hours "did not work". Verified l
   both API calls were refused by the auto-mode classifier (token mint, DNS change), so the operator
   does it in the dashboard, then the `[[send_email]]` block in wrangler.toml is uncommented and deployed.
   The D1 MCP connector is bound to another Cloudflare account (403 7403). All commits pushed.
+- 2026-09-20 17:22 (ddcc99f, version dc852ae4): MAIL IS ON. Operator authorised it explicitly; a
+  `dowiz-mail` token was minted from the Bebop token (`/root/.cf_mail_token`: Email Routing Addresses
+  Write on the account, Rules Write + DNS Write on the zone), Email Routing enabled on dowiz.org (MX
+  route1-3.mx.cloudflare.net, SPF, DKIM), syniaksviatoslav@proton.me verified 15:00Z, `[[send_email]]
+  WAITLIST_MAIL` live. Probe POST → `notified_ms` set (= mail accepted), probe row deleted.
+  The account also holds an older verified destination gortai.sviat@gmail.com (2026-03-04).
+- Landing phone screens: `.phone-screen` owns the aspect (393/844; the film's is 9/16), storefront
+  captures re-shot at 393×844 @3x (1179×2532) from sushi-durres.dowiz.org (window scroll, `span.card-name`
+  for the second state); the film is 1080×1920 crf 26 (≈4.4 MB a language), 540p files removed. Favicon:
+  Unbounded d (wght 800, extracted with fontTools from lib/font/unbounded-latin.woff2) in bone on a hot
+  circle, SVG + PNGs under `/platform/icon`, linked from the landing and the hub. Playwright on the live
+  page needs `waitUntil: 'load'` now: the looping 1080p video keeps the network from going idle.
