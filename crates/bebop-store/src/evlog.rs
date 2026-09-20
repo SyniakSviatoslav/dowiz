@@ -9,16 +9,40 @@
 //! is O(1) per insert, which is what an event log needs and what bebop's append-only arena is
 //! already built for.
 //!
-//! Record object EV, `15 + payload_len` cells:
+//! ── TWO VERSIONS, AND THE ROOT SAYS WHICH ──
+//!
+//! v1 root, 7 cells: `{n, ref LAST, has_tip, tip0..tip3}`
+//! v1 record EV, `15 + payload_len` cells:
 //!   0        actor_seq
 //!   1        payload_len
 //!   2        ref to the previous EV (object-relative, 0 = genesis)
 //!   3..6     content-id, 32 bytes as 4 little-endian cells
 //!   7..10    prev content-id
 //!   11..14   actor_pubkey
-//!   15..     payload bytes, one per cell
+//!   15..     payload bytes, ONE PER CELL -- eight bytes of arena for one byte of event
 //!
-//! Root EVLOG, 7 cells: {n, ref LAST, has_tip, tip0..tip3}
+//! v2 root, 8 cells: `{n, ref LAST, has_tip, tip0..tip3, VERSION}`
+//! v2 record EV, `12 + (4 if the actor is named) + ceil(payload_len / 8)` cells:
+//!   0        actor_seq
+//!   1        payload_len IN BYTES
+//!   2        ref to the previous EV
+//!   3..6     content-id
+//!   7..10    prev content-id
+//!   11       flags: bit 0 = an actor_pubkey follows
+//!   12..     the actor_pubkey (4 cells) when that bit is set, then the payload
+//!            PACKED EIGHT BYTES TO A CELL, little-endian, last cell zero-filled
+//!
+//! WHY v2 EXISTS. Measured on the live venue: 583 cells -- 4.66 KB -- per event, for a
+//! payload of a few hundred bytes. One byte per eight-byte cell is an 8x amplification, and
+//! the 32-byte actor key every dowiz caller leaves zero cost four cells of nothing each.
+//! A 330-byte event is 345 cells in v1 and 54 in v2.
+//!
+//! HOW THE TWO LIVE TOGETHER. The version is read off the ROOT, so a store answers for itself:
+//! a v1 image keeps being appended to in v1 -- its records are v1 and a mixed chain would be
+//! unreadable -- and every image created from now on is v2. An old image becomes v2 when its
+//! owner rebuilds it, which `Hub::grow` and `StockLog::grow` do on the next doubling: they
+//! init a FRESH store and replay the chain into it. No migration runs, nothing is rewritten
+//! in place, and there is no moment where a reader has to guess.
 
 use crate::{Store, StoreError};
 
@@ -85,18 +109,71 @@ fn cells_to_b32(c: &[i64]) -> [u8; 32] {
     out
 }
 
+/// The version this module writes. A store says its own version in its root;
+/// this is only what a FRESH log is created as.
+pub const VERSION: i64 = 2;
+
+/// Cells in a v1 root, and in a v2 one. The extra cell is the version itself.
+const ROOT_V1: i64 = 7;
+const ROOT_V2: i64 = 8;
+
+/// v2 record header, before the optional actor key and the packed payload.
+const HEAD_V2: i64 = 12;
+/// Bit 0 of cell 11: an `actor_pubkey` follows the header.
+const FLAG_ACTOR: i64 = 1;
+
 /// The log's read/write handle.
 pub struct EvLog;
 
 impl EvLog {
+    /// Which version this store's log is written in.
+    ///
+    /// READ OFF THE ROOT, never guessed from a record: a record carries no
+    /// version of its own, and it does not need one -- a log is entirely one
+    /// version or entirely the other, because an append writes what the root
+    /// says. A root with no version cell is v1, which is exactly what every
+    /// image written before this change looks like.
+    pub fn version(st: &Store) -> i64 {
+        let Some(root) = st.root() else { return VERSION };
+        if st.obj_len(root) >= ROOT_V2 {
+            let v = st.get(root, 7);
+            if v > 0 {
+                return v;
+            }
+        }
+        1
+    }
+
     /// Stage the empty EVLOG schema. Shared by both commit paths so the layout
     /// has exactly one definition.
     fn stage_init(st: &mut Store) -> Result<(crate::Tx, usize), StoreError> {
         let mut tx = st.begin()?;
-        let root = st.alloc(&mut tx, 7, DIGEST_EVLOG_ROOT)?;
-        for i in 0..7 { st.put_cell(root, i, 0); }
+        let root = st.alloc(&mut tx, ROOT_V2, DIGEST_EVLOG_ROOT)?;
+        for i in 0..ROOT_V2 as usize {
+            st.put_cell(root, i, 0);
+        }
+        st.put_cell(root, 7, VERSION);
         st.seal(root);
         Ok((tx, root))
+    }
+
+    /// Stage an empty V1 schema — for the tests that have to prove an old image
+    /// still reads, and for nothing else.
+    #[cfg(test)]
+    fn stage_init_v1(st: &mut Store) -> Result<(crate::Tx, usize), StoreError> {
+        let mut tx = st.begin()?;
+        let root = st.alloc(&mut tx, ROOT_V1, DIGEST_EVLOG_ROOT)?;
+        for i in 0..ROOT_V1 as usize {
+            st.put_cell(root, i, 0);
+        }
+        st.seal(root);
+        Ok((tx, root))
+    }
+
+    #[cfg(test)]
+    fn init_v1_bytes(st: &mut Store) -> Result<i64, StoreError> {
+        let (tx, root) = Self::stage_init_v1(st)?;
+        Ok(st.commit_bytes(&tx, root))
     }
 
     /// Create the empty EVLOG schema in a fresh store.
@@ -119,25 +196,64 @@ impl EvLog {
     /// The chain tip, if one has been set.
     pub fn tip(st: &Store) -> Option<[u8; 32]> {
         let r = st.root()?;
-        if st.get(r, 2) == 0 { return None; }
+        if st.get(r, 2) == 0 {
+            return None;
+        }
         let c: Vec<i64> = (3..7).map(|i| st.get(r, i)).collect();
         Some(cells_to_b32(&c))
     }
 
-    /// Read a record object.
-    fn read_at(st: &Store, obj: usize) -> Record {
+    /// How many cells a record of this payload takes, in the version this
+    /// store is written in. The one place the size is computed, so `alloc` and
+    /// any measurement of it cannot disagree.
+    fn record_cells(version: i64, rec: &Record) -> i64 {
+        if version >= 2 {
+            let named = rec.actor_pubkey != [0u8; 32];
+            HEAD_V2 + if named { 4 } else { 0 } + rec.payload.len().div_ceil(8) as i64
+        } else {
+            15 + rec.payload.len() as i64
+        }
+    }
+
+    /// Read a record object, in the version the log is written in.
+    fn read_at(st: &Store, version: i64, obj: usize) -> Record {
         let seq = st.get(obj, 0) as u64;
         let plen = st.get(obj, 1) as usize;
         let idc: Vec<i64> = (3..7).map(|i| st.get(obj, i)).collect();
         let prevc: Vec<i64> = (7..11).map(|i| st.get(obj, i)).collect();
-        let pkc: Vec<i64> = (11..15).map(|i| st.get(obj, i)).collect();
-        let payload: Vec<u8> = (0..plen).map(|j| st.get(obj, 15 + j) as u8).collect();
-        Record {
-            id: cells_to_b32(&idc),
-            prev: cells_to_b32(&prevc),
-            actor_pubkey: cells_to_b32(&pkc),
-            actor_seq: seq,
-            payload,
+        if version >= 2 {
+            let flags = st.get(obj, 11);
+            let named = flags & FLAG_ACTOR != 0;
+            let at = HEAD_V2 as usize;
+            let (actor, payload_at) = if named {
+                let pkc: Vec<i64> = (at..at + 4).map(|i| st.get(obj, i)).collect();
+                (cells_to_b32(&pkc), at + 4)
+            } else {
+                ([0u8; 32], at)
+            };
+            // What the object actually holds, not what the header claims: a
+            // truncated record must hand back the bytes that are there rather
+            // than read past its own end.
+            let have = st.obj_len(obj).saturating_sub(payload_at as i64).max(0) as usize;
+            let cells: Vec<i64> =
+                (0..have).map(|j| st.get(obj, payload_at + j)).collect();
+            Record {
+                id: cells_to_b32(&idc),
+                prev: cells_to_b32(&prevc),
+                actor_pubkey: actor,
+                actor_seq: seq,
+                payload: unpack_payload(&cells, plen),
+            }
+        } else {
+            let pkc: Vec<i64> = (11..15).map(|i| st.get(obj, i)).collect();
+            let payload: Vec<u8> = (0..plen).map(|j| st.get(obj, 15 + j) as u8).collect();
+            Record {
+                id: cells_to_b32(&idc),
+                prev: cells_to_b32(&prevc),
+                actor_pubkey: cells_to_b32(&pkc),
+                actor_seq: seq,
+                payload,
+            }
         }
     }
 
@@ -145,42 +261,97 @@ impl EvLog {
     pub fn walk(st: &Store) -> Vec<Record> {
         let mut out = Vec::new();
         let Some(root) = st.root() else { return out };
+        let version = Self::version(st);
         let mut cur = st.follow(root, 1);
         while let Some(obj) = cur {
-            out.push(Self::read_at(st, obj));
+            out.push(Self::read_at(st, version, obj));
             cur = st.follow(obj, 2);
         }
         out
     }
 
-    /// Stage one appended record. The record layout lives HERE and nowhere else:
-    /// two copies of it would drift, and a drifted layout reads as corruption.
-    fn stage_append(st: &mut Store, rec: &Record) -> Result<(crate::Tx, usize), StoreError> {
+    /// Stage one appended record, optionally moving the chain tip in the SAME
+    /// commit.
+    ///
+    /// THE TIP TRAVELS WITH THE RECORD when the caller asks for it. Appending
+    /// and then setting the tip was two commits, and a commit is not free: a
+    /// fresh root plus a 21-cell PartTab page each time, so the bookkeeping for
+    /// one event cost more arena than a short event does. It is also two
+    /// moments at which the log can be interrupted, and the second leaves a tip
+    /// that does not name the newest record.
+    ///
+    /// The record layout lives HERE and nowhere else: two copies of it would
+    /// drift, and a drifted layout reads as corruption.
+    fn stage_append(
+        st: &mut Store,
+        rec: &Record,
+        tip: Option<&[u8; 32]>,
+    ) -> Result<(crate::Tx, usize), StoreError> {
         let old_root = st.root().ok_or(StoreError::NoSuperblock)?;
+        let version = Self::version(st);
         let n = st.get(old_root, 0);
         let has_tip = st.get(old_root, 2);
         let tipc: Vec<i64> = (3..7).map(|i| st.get(old_root, i)).collect();
         let last = st.follow(old_root, 1);
 
         let mut tx = st.begin()?;
-        let ev = st.alloc(&mut tx, 15 + rec.payload.len() as i64, DIGEST_EV)?;
+        let ev = st.alloc(&mut tx, Self::record_cells(version, rec), DIGEST_EV)?;
         st.put_cell(ev, 0, rec.actor_seq as i64);
         st.put_cell(ev, 1, rec.payload.len() as i64);
         match last {
             Some(prev_obj) => st.link(ev, 2, prev_obj),
             None => st.put_cell(ev, 2, 0),
         }
-        for (i, c) in b32_to_cells(&rec.id).iter().enumerate() { st.put_cell(ev, 3 + i, *c); }
-        for (i, c) in b32_to_cells(&rec.prev).iter().enumerate() { st.put_cell(ev, 7 + i, *c); }
-        for (i, c) in b32_to_cells(&rec.actor_pubkey).iter().enumerate() { st.put_cell(ev, 11 + i, *c); }
-        for (j, b) in rec.payload.iter().enumerate() { st.put_cell(ev, 15 + j, *b as i64); }
+        for (i, c) in b32_to_cells(&rec.id).iter().enumerate() {
+            st.put_cell(ev, 3 + i, *c);
+        }
+        for (i, c) in b32_to_cells(&rec.prev).iter().enumerate() {
+            st.put_cell(ev, 7 + i, *c);
+        }
+        if version >= 2 {
+            let named = rec.actor_pubkey != [0u8; 32];
+            st.put_cell(ev, 11, if named { FLAG_ACTOR } else { 0 });
+            let mut at = HEAD_V2 as usize;
+            if named {
+                for (i, c) in b32_to_cells(&rec.actor_pubkey).iter().enumerate() {
+                    st.put_cell(ev, at + i, *c);
+                }
+                at += 4;
+            }
+            for (j, c) in pack_payload(&rec.payload).iter().enumerate() {
+                st.put_cell(ev, at + j, *c);
+            }
+        } else {
+            for (i, c) in b32_to_cells(&rec.actor_pubkey).iter().enumerate() {
+                st.put_cell(ev, 11 + i, *c);
+            }
+            for (j, b) in rec.payload.iter().enumerate() {
+                st.put_cell(ev, 15 + j, *b as i64);
+            }
+        }
         st.seal(ev);
 
-        let root = st.alloc(&mut tx, 7, DIGEST_EVLOG_ROOT)?;
+        let root_cells = if version >= 2 { ROOT_V2 } else { ROOT_V1 };
+        let root = st.alloc(&mut tx, root_cells, DIGEST_EVLOG_ROOT)?;
         st.put_cell(root, 0, n + 1);
         st.link(root, 1, ev);
-        st.put_cell(root, 2, has_tip);
-        for i in 0..4 { st.put_cell(root, 3 + i, tipc[i]); }
+        match tip {
+            Some(id) => {
+                st.put_cell(root, 2, 1);
+                for (i, c) in b32_to_cells(id).iter().enumerate() {
+                    st.put_cell(root, 3 + i, *c);
+                }
+            }
+            None => {
+                st.put_cell(root, 2, has_tip);
+                for i in 0..4 {
+                    st.put_cell(root, 3 + i, tipc[i]);
+                }
+            }
+        }
+        if version >= 2 {
+            st.put_cell(root, 7, version);
+        }
         st.seal(root);
         Ok((tx, root))
     }
@@ -188,30 +359,48 @@ impl EvLog {
     /// Append one record and commit. Allocates a SINGLE object and relinks the
     /// root — O(1), which is what an event log needs.
     pub fn append(st: &mut Store, path: &str, rec: &Record) -> Result<i64, StoreError> {
-        let (tx, root) = Self::stage_append(st, rec)?;
+        let (tx, root) = Self::stage_append(st, rec, None)?;
         st.commit(&tx, root, path)
     }
 
     /// `append` with no filesystem.
     pub fn append_bytes(st: &mut Store, rec: &Record) -> Result<i64, StoreError> {
-        let (tx, root) = Self::stage_append(st, rec)?;
+        let (tx, root) = Self::stage_append(st, rec, None)?;
+        Ok(st.commit_bytes(&tx, root))
+    }
+
+    /// Append a record AND name it as the chain tip, in one commit.
+    ///
+    /// What every dowiz caller actually means by "append": the record is the
+    /// newest thing in the log, so the tip is it. Two commits wrote the same
+    /// answer twice and paid two PartTab pages for it.
+    pub fn append_tip_bytes(st: &mut Store, rec: &Record) -> Result<i64, StoreError> {
+        let id = rec.id;
+        let (tx, root) = Self::stage_append(st, rec, Some(&id))?;
         Ok(st.commit_bytes(&tx, root))
     }
 
     /// Stage a chain-tip change.
     fn stage_set_tip(st: &mut Store, id: &[u8; 32]) -> Result<(crate::Tx, usize), StoreError> {
         let old_root = st.root().ok_or(StoreError::NoSuperblock)?;
+        let version = Self::version(st);
         let n = st.get(old_root, 0);
         let last = st.follow(old_root, 1);
         let mut tx = st.begin()?;
-        let root = st.alloc(&mut tx, 7, DIGEST_EVLOG_ROOT)?;
+        let root_cells = if version >= 2 { ROOT_V2 } else { ROOT_V1 };
+        let root = st.alloc(&mut tx, root_cells, DIGEST_EVLOG_ROOT)?;
         st.put_cell(root, 0, n);
         match last {
             Some(o) => st.link(root, 1, o),
             None => st.put_cell(root, 1, 0),
         }
         st.put_cell(root, 2, 1);
-        for (i, c) in b32_to_cells(id).iter().enumerate() { st.put_cell(root, 3 + i, *c); }
+        for (i, c) in b32_to_cells(id).iter().enumerate() {
+            st.put_cell(root, 3 + i, *c);
+        }
+        if version >= 2 {
+            st.put_cell(root, 7, version);
+        }
         st.seal(root);
         Ok((tx, root))
     }
@@ -229,6 +418,7 @@ impl EvLog {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -236,6 +426,160 @@ mod tests {
     fn rec(n: u8, payload: &[u8]) -> Record {
         Record { id: [n; 32], prev: [n.wrapping_sub(1); 32], actor_pubkey: [0xAA; 32],
                  actor_seq: n as u64, payload: payload.to_vec() }
+    }
+
+    /// A V1 IMAGE STILL READS, and that is the whole risk of this change.
+    /// Every hub in production is v1; if a v2 reader could not read one, a
+    /// deploy would blank every venue's history at once.
+    #[test]
+    fn a_v1_log_is_read_and_appended_to_as_v1() {
+        let mut st = Store::create_bytes(1 << 20);
+        EvLog::init_v1_bytes(&mut st).unwrap();
+        assert_eq!(EvLog::version(&st), 1, "a root with no version cell is v1");
+        for (i, body) in [b"alpha".as_slice(), b"beta", b"gamma"].iter().enumerate() {
+            EvLog::append_bytes(&mut st, &rec(i as u8 + 1, body)).unwrap();
+        }
+        assert_eq!(EvLog::version(&st), 1, "appending to a v1 log must not change its version");
+        let got = EvLog::walk(&st);
+        assert_eq!(got.len(), 3);
+        assert_eq!(got[0].payload, b"gamma", "newest first");
+        assert_eq!(got[2].payload, b"alpha");
+        assert_eq!(got[0].actor_pubkey, [0xAA; 32], "v1 always stores the actor key");
+        assert_eq!(got[0].id, [3u8; 32]);
+
+        // And a v1 record still costs what v1 records cost: 15 + payload + 2,
+        // plus a 7-cell root and its header.
+        let mut st2 = Store::create_bytes(1 << 20);
+        EvLog::init_v1_bytes(&mut st2).unwrap();
+        let before = st2.pick().unwrap().arena_used;
+        EvLog::append_bytes(&mut st2, &rec(1, b"payload-of-fixed-size")).unwrap();
+        let after = st2.pick().unwrap().arena_used;
+        assert_eq!(after - before, (15 + 21 + 2) + (7 + 2), "v1 cost must not move");
+    }
+
+    /// A REPLAY INTO A FRESH STORE IS THE MIGRATION -- what `Hub::grow` does on
+    /// the next doubling. The records come out identical and the new image is
+    /// v2, which is the only way an old log ever becomes a new one.
+    #[test]
+    fn replaying_a_v1_log_into_a_fresh_store_makes_it_v2() {
+        let mut old = Store::create_bytes(1 << 20);
+        EvLog::init_v1_bytes(&mut old).unwrap();
+        for i in 0..5u8 {
+            EvLog::append_bytes(&mut old, &rec(i + 1, b"a realistic little payload")).unwrap();
+        }
+        EvLog::set_tip_bytes(&mut old, &[5u8; 32]).unwrap();
+
+        let mut fresh = Store::create_bytes(1 << 20);
+        EvLog::init_bytes(&mut fresh).unwrap();
+        let mut records = EvLog::walk(&old);
+        records.reverse();
+        for r in &records {
+            EvLog::append_bytes(&mut fresh, r).unwrap();
+        }
+        EvLog::set_tip_bytes(&mut fresh, &[5u8; 32]).unwrap();
+
+        assert_eq!(EvLog::version(&fresh), 2);
+        assert_eq!(EvLog::walk(&fresh), EvLog::walk(&old), "every record survives the move");
+        assert_eq!(EvLog::tip(&fresh), EvLog::tip(&old));
+        // MEASURED AS ARENA GROWTH, not as `arena_used`: that is an absolute
+        // cell index starting at the 1024-cell superblock region, so comparing
+        // the raw numbers would quietly dilute the difference by a thousand
+        // cells of header that neither version pays for.
+        let grown = |st: &Store| st.pick().unwrap().arena_used - crate::ARENA as i64;
+        let (v1, v2) = (grown(&old), grown(&fresh));
+        println!("five 26-byte events: v1 {v1} cells, v2 {v2} ({}%)", v2 * 100 / v1);
+        // 26 bytes is a SHORT event and the header dominates it: v1 pays
+        // 15 + 26 + 2 + 9 per append, v2 pays 12 + 4 + 4 + 2 + 10. The saving
+        // is a third here and four fifths at the 330-byte events a real order
+        // writes -- see `cells_per_event_for_a_realistic_payload`.
+        assert!(v2 * 4 < v1 * 3, "v2 {v2} cells against v1 {v1}");
+    }
+
+    /// The payload comes back byte for byte at every awkward length: empty, one
+    /// short of a cell, exactly a cell, one past it.
+    #[test]
+    fn a_v2_payload_survives_at_every_length() {
+        let mut st = Store::create_bytes(1 << 20);
+        EvLog::init_bytes(&mut st).unwrap();
+        let sizes = [0usize, 1, 7, 8, 9, 63, 64, 65, 330];
+        for (i, n) in sizes.iter().enumerate() {
+            let payload: Vec<u8> = (0..*n).map(|j| (j % 251) as u8).collect();
+            EvLog::append_bytes(&mut st, &rec(i as u8 + 1, &payload)).unwrap();
+        }
+        let got = EvLog::walk(&st);
+        assert_eq!(got.len(), sizes.len());
+        for (k, n) in sizes.iter().rev().enumerate() {
+            let want: Vec<u8> = (0..*n).map(|j| (j % 251) as u8).collect();
+            assert_eq!(got[k].payload, want, "payload of {n} bytes came back wrong");
+        }
+    }
+
+    /// AN ACTOR NOBODY NAMED COSTS NOTHING. Every dowiz caller passes a zero
+    /// key, and v1 wrote 32 bytes of zeros for each of them.
+    #[test]
+    fn an_unnamed_actor_takes_no_cells() {
+        let mut st = Store::create_bytes(1 << 20);
+        EvLog::init_bytes(&mut st).unwrap();
+        let anon = Record {
+            id: [1u8; 32],
+            prev: [0u8; 32],
+            actor_pubkey: [0u8; 32],
+            actor_seq: 1,
+            payload: b"eight!!!".to_vec(),
+        };
+        let before = st.pick().unwrap().arena_used;
+        EvLog::append_bytes(&mut st, &anon).unwrap();
+        let anon_cost = st.pick().unwrap().arena_used - before;
+
+        let named = Record { actor_pubkey: [0xAA; 32], ..anon.clone() };
+        let before = st.pick().unwrap().arena_used;
+        EvLog::append_bytes(&mut st, &named).unwrap();
+        let named_cost = st.pick().unwrap().arena_used - before;
+
+        assert_eq!(named_cost - anon_cost, 4, "the key is four cells and only when it is there");
+        let got = EvLog::walk(&st);
+        assert_eq!(got[1].actor_pubkey, [0u8; 32], "an absent key reads back as zero");
+        assert_eq!(got[0].actor_pubkey, [0xAA; 32], "a present one reads back whole");
+    }
+
+    /// THE TIP TRAVELS WITH THE RECORD. One commit, not two, and what the
+    /// second one cost is measured here rather than assumed: a fresh root
+    /// object, ten cells. The PartTab is NOT part of it -- `stage_commit`
+    /// writes it into the fixed superblock region, not into the arena -- which
+    /// is worth stating because the opposite is written down elsewhere.
+    #[test]
+    fn appending_with_the_tip_costs_one_commit_not_two() {
+        let payload = b"a realistic little payload";
+        let mut two = Store::create_bytes(1 << 20);
+        EvLog::init_bytes(&mut two).unwrap();
+        let before = two.pick().unwrap().arena_used;
+        EvLog::append_bytes(&mut two, &rec(1, payload)).unwrap();
+        EvLog::set_tip_bytes(&mut two, &[1u8; 32]).unwrap();
+        let two_cost = two.pick().unwrap().arena_used - before;
+
+        let mut one = Store::create_bytes(1 << 20);
+        EvLog::init_bytes(&mut one).unwrap();
+        let before = one.pick().unwrap().arena_used;
+        EvLog::append_tip_bytes(&mut one, &rec(1, payload)).unwrap();
+        let one_cost = one.pick().unwrap().arena_used - before;
+
+        assert_eq!(EvLog::tip(&one), Some([1u8; 32]), "the tip is the record just written");
+        assert_eq!(EvLog::walk(&one), EvLog::walk(&two), "the same log, written once");
+        // The second commit was a whole root (8 + 2 cells) on top of the record.
+        assert_eq!(two_cost - one_cost, 10, "one root's worth, saved");
+    }
+
+    /// A v2 log says so in its root, and the say-so survives the byte trip that
+    /// every hub image takes on every request.
+    #[test]
+    fn the_version_survives_the_byte_round_trip() {
+        let mut st = Store::create_bytes(1 << 20);
+        EvLog::init_bytes(&mut st).unwrap();
+        EvLog::append_tip_bytes(&mut st, &rec(1, b"hello")).unwrap();
+        let back = Store::from_bytes(&st.to_bytes_trimmed());
+        assert_eq!(EvLog::version(&back), 2);
+        assert_eq!(EvLog::walk(&back)[0].payload, b"hello");
+        assert_eq!(EvLog::tip(&back), Some([1u8; 32]));
     }
 
     /// The byte path and the file path must produce the SAME log. If they ever
@@ -347,8 +691,18 @@ mod tests {
         let first = deltas[0];
         assert!(deltas.iter().all(|d| *d == first),
                 "arena growth per append must be constant, got {deltas:?}");
-        // 15 header cells + 21 payload bytes + 2 object header cells, plus the 7+2 root
-        assert_eq!(first, (15 + 21 + 2) + (7 + 2), "unexpected per-append cost");
+        // DERIVED FROM THE LAYOUT, not read off a run. In v2 a record is
+        // 12 header cells, 4 more because `rec()` names an actor, and the
+        // payload packed eight bytes to a cell -- ceil(21/8) = 3. Add the
+        // store's 2-cell object header, and the new root: 8 cells and its own
+        // 2-cell header.
+        //
+        // It was 47 in v1: 15 + 21 + 2 + 7 + 2, with one arena cell per payload
+        // BYTE. The oracle here is the layout in this file's header; if the two
+        // disagree, one of them is the bug.
+        let payload_cells = (21usize.div_ceil(8)) as i64;
+        assert_eq!(first, (12 + 4 + payload_cells + 2) + (8 + 2), "unexpected per-append cost");
+        assert_eq!(first, 31, "and that is 31 cells, down from 47");
         let st = Store::open(p).unwrap();
         assert_eq!(EvLog::len(&st), 40);
         assert_eq!(EvLog::walk(&st).len(), 40);
@@ -378,13 +732,20 @@ mod tests {
         let after = st.pick().unwrap().arena_used;
         let delta = after - before;
 
-        // The formula: 15 header + payload.len() + 2 object header + 7 root + 2 root header
-        let expected = 15 + payload.len() as i64 + 2 + 7 + 2;
+        // v2: 12 header + 4 for the named actor + ceil(P/8) packed payload,
+        // + 2 object header, + an 8-cell root and its 2-cell header.
+        let expected = 12 + 4 + payload.len().div_ceil(8) as i64 + 2 + 8 + 2;
         assert_eq!(delta, expected, "cell delta should match layout formula");
 
         let ratio = (delta as f64 * 8.0) / payload.len() as f64;
         println!("Event with {} byte payload: {} cells used, ratio = {:.2} bytes/byte",
                  payload.len(), delta, ratio);
+        // v1 stored one payload byte per cell and wrote the actor key whether
+        // or not it was there: 356 cells for the same event, 8.6 bytes of
+        // arena per byte of event.
+        let v1 = 15 + payload.len() as i64 + 2 + 7 + 2;
+        println!("v1 would have used {v1} cells; v2 uses {delta} ({}%)", delta * 100 / v1);
+        assert!(delta * 5 < v1, "v2 must be far smaller: {delta} against {v1}");
     }
 
     /// Packing primitives: test round-trip of empty payload.

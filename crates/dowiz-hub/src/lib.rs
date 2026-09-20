@@ -348,8 +348,10 @@ impl Hub {
         payload.extend_from_slice(idb);
         payload.extend_from_slice(order_json.as_bytes());
 
-        let id = content_id(&payload);
         let prev = EvLog::tip(&self.store).unwrap_or([0u8; 32]);
+        // CHAINED: the id commits to the record BEFORE it, so an edit anywhere
+        // in the log breaks every id after it. See `content_id_chained`.
+        let id = content_id_chained(&prev, &payload);
         let rec = Record { id, prev, actor_pubkey, actor_seq: seq, payload };
 
         // ── THE IMAGE GROWS RATHER THAN REFUSING ──
@@ -369,37 +371,29 @@ impl Hub {
         // It costs one O(n) copy per doubling, which is a handful of
         // milliseconds a few times in a hub's life, and it happens under the
         // same write lock that serialises every other append.
-        // ── THE RECORD AND THE TIP FILL THE ARENA SEPARATELY ──
+        // ── THE RECORD AND THE TIP ARE ONE COMMIT ──
         //
-        // MEASURED: the order log refused order 2450 with FIFTY-SIX CELLS still
-        // free. The record fitted; the tip update that follows it did not, and
-        // only the record's failure was handled -- so a hub with room to grow
-        // answered `arena_full` and a venue stopped taking orders mid-service.
-        // `stock.rs` had already found this exact shape and says so in its own
-        // header ("on a nearly full arena the RECORD still fits while the tip
-        // update does not"); the fix was made there and never brought here.
+        // They were two, and the gap between them was a live defect. MEASURED:
+        // the order log refused order 2450 with FIFTY-SIX CELLS still free.
+        // The record fitted; the tip update after it did not, and only the
+        // record's failure was handled -- so a hub with room to grow answered
+        // `arena_full` and a venue stopped taking orders mid-service. The fix
+        // then was to handle the second failure too, in four places, in two
+        // files, each remembering that re-appending the record would count it
+        // twice (that is how the stock ledger once recorded 3002 deliveries
+        // for 3000 made).
         //
-        // GROWING AFTER THE RECORD IS IN IS SAFE AND RE-APPENDING IS NOT.
-        // `grow` copies the object chain verbatim and re-points the tip at its
-        // last record -- which IS this one -- so a tip that failed needs only
-        // the copy. Re-appending the record instead would count it twice, which
-        // is how the stock ledger once recorded 3002 deliveries for 3000 made.
-        match EvLog::append_bytes(&mut self.store, &rec) {
-            Ok(gen) => {
-                if EvLog::set_tip_bytes(&mut self.store, &id).is_err() {
-                    self.grow()?;
-                    EvLog::set_tip_bytes(&mut self.store, &id)?;
-                }
-                Ok(gen)
-            }
+        // `append_tip_bytes` removes the gap instead of guarding it. The record
+        // and the new root are allocated in ONE transaction, so if either does
+        // not fit, NOTHING is committed and the arena cursor has not moved --
+        // "the record is in but the tip is not" is no longer a state this log
+        // can be in. Growing and trying again is then the whole recovery, and
+        // it cannot double-count because the failed attempt left no record.
+        match EvLog::append_tip_bytes(&mut self.store, &rec) {
+            Ok(gen) => Ok(gen),
             Err(e) if e_is_full(&e) => {
                 self.grow()?;
-                let gen = EvLog::append_bytes(&mut self.store, &rec)?;
-                if EvLog::set_tip_bytes(&mut self.store, &id).is_err() {
-                    self.grow()?;
-                    EvLog::set_tip_bytes(&mut self.store, &id)?;
-                }
-                Ok(gen)
+                Ok(EvLog::append_tip_bytes(&mut self.store, &rec)?)
             }
             Err(e) => Err(e.into()),
         }
@@ -516,6 +510,27 @@ impl Hub {
         out
     }
 
+    /// Walk the chain and check every id against the payload it names.
+    ///
+    /// THE POINT IS THAT IT CAN FAIL. An append-only log whose ids are never
+    /// recomputed is an append-only log by assertion; this is the assertion
+    /// being checked, and it is the half of I4 that was claimed in a comment
+    /// and not delivered by any code.
+    pub fn chain_check(&self) -> ChainCheck {
+        let mut out = ChainCheck::default();
+        for r in EvLog::walk(&self.store) {
+            out.records += 1;
+            if r.id == content_id_chained(&r.prev, &r.payload) {
+                out.chained += 1;
+            } else if r.id == content_id(&r.payload) {
+                out.legacy += 1;
+            } else {
+                out.broken += 1;
+            }
+        }
+        out
+    }
+
     /// Every audit event, newest first.
     pub fn reveals(&self) -> Vec<Event> {
         self.events().into_iter().filter(|e| e.kind == EventKind::Revealed).collect()
@@ -540,6 +555,50 @@ fn decode(r: &Record) -> Option<Event> {
     let order_id = String::from_utf8(r.payload[2..2 + id_len].to_vec()).ok()?;
     let order_json = String::from_utf8(r.payload[2 + id_len..].to_vec()).ok()?;
     Some(Event { kind, order_id, order_json, seq: r.actor_seq })
+}
+
+/// Content id over the PREVIOUS ID AND THE PAYLOAD — the cascade that makes
+/// the chain tamper-evident.
+///
+/// WHAT THIS FIXES. `content_id` hashes the payload alone, so editing an event
+/// in an image changed that event's id and NOTHING ELSE: the records after it
+/// still verified, and `stock.rs` said in as many words that "editing any
+/// event changes every content id after it", which was not true of the code
+/// under the comment. Folding the previous id in makes it true: rewriting
+/// event N breaks N's own id, and repairing that id breaks N+1's `prev` and
+/// therefore N+1's id, all the way to the tip.
+///
+/// Still FNV rather than sha256, for the reason below: this crate has no
+/// dependencies and the cryptographic commitment lives in the kernel, where
+/// the keys are. What this gives is detection of an EDIT, not resistance to a
+/// determined forger.
+pub(crate) fn content_id_chained(prev: &[u8; 32], payload: &[u8]) -> [u8; 32] {
+    let mut buf = Vec::with_capacity(32 + payload.len());
+    buf.extend_from_slice(prev);
+    buf.extend_from_slice(payload);
+    content_id(&buf)
+}
+
+/// What a walk of the chain found. `legacy` records were written before the
+/// cascade and can only be checked against the old scheme, which is a fact
+/// about them rather than a fault: pretending otherwise would make every image
+/// in production look broken.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ChainCheck {
+    pub records: usize,
+    /// Verified against `content_id_chained(prev, payload)`.
+    pub chained: usize,
+    /// Verified only against the old `content_id(payload)`.
+    pub legacy: usize,
+    /// Matched neither. An edited event, or a damaged one.
+    pub broken: usize,
+}
+
+impl ChainCheck {
+    /// Nothing in this log fails BOTH schemes.
+    pub fn intact(&self) -> bool {
+        self.broken == 0
+    }
 }
 
 /// Content id over the payload. Not a cryptographic commitment — it is the
@@ -619,6 +678,93 @@ mod tests {
     fn unknown_order_is_an_error_not_an_empty_string() {
         let h = Hub::create_sized(1 << 20).unwrap();
         assert!(matches!(h.order("nope"), Err(HubError::UnknownOrder)));
+    }
+
+    /// THE CASCADE IS REAL NOW, and this is the test that would have caught the
+    /// comment being wrong. Every id commits to the record before it, so a
+    /// walk can say whether the log has been edited.
+    #[test]
+    fn every_id_commits_to_the_record_before_it() {
+        let mut h = Hub::create_sized(256 * 1024).unwrap();
+        for i in 0..6 {
+            h.append(EventKind::Placed, &format!("ord_{i}"), &order(&format!("ord_{i}"), "PENDING"),
+                     i as u64 + 1, ACTOR).unwrap();
+        }
+        let check = h.chain_check();
+        assert_eq!(check.records, 6);
+        assert_eq!(check.chained, 6, "every record verifies against prev + payload");
+        assert_eq!(check.legacy, 0);
+        assert!(check.intact());
+
+        // The same payload after a DIFFERENT predecessor is a different id.
+        // Under the old scheme these two were identical, which is what made
+        // "editing any event changes every id after it" false.
+        let one = content_id_chained(&[0u8; 32], b"same bytes");
+        let two = content_id_chained(&[9u8; 32], b"same bytes");
+        assert_ne!(one, two, "the id has to depend on where in the chain it sits");
+    }
+
+    /// An event edited in the image is found. This is the property the log is
+    /// FOR: the record keeps its old id, the payload no longer hashes to it,
+    /// and the walk says so instead of folding the forgery into an order.
+    #[test]
+    fn an_edited_event_is_reported_as_broken() {
+        let mut h = Hub::create_sized(256 * 1024).unwrap();
+        for i in 0..4 {
+            h.append(EventKind::Placed, &format!("ord_{i}"), &order(&format!("ord_{i}"), "PENDING"),
+                     i as u64 + 1, ACTOR).unwrap();
+        }
+        assert!(h.chain_check().intact());
+
+        // Edit one byte of one payload in the raw image: "PENDING" -> "PENDINH".
+        let mut bytes = h.to_bytes();
+        let at = bytes
+            .windows(7)
+            .position(|w| w == b"PENDING")
+            .expect("the status is in the image as text");
+        bytes[at + 6] = b'H';
+        let tampered = Hub::load(&bytes).unwrap();
+
+        let check = tampered.chain_check();
+        assert_eq!(check.records, 4);
+        assert_eq!(check.broken, 1, "the edited record must not verify: {check:?}");
+        assert!(!check.intact());
+    }
+
+    /// A log written before the cascade reads as LEGACY, not as broken. Every
+    /// image in production is one of these, and a check that called them
+    /// tampered with would be an alarm that is always on.
+    #[test]
+    fn a_pre_cascade_log_is_legacy_rather_than_broken() {
+        // One record written the OLD way, by hand: id over the payload alone.
+        let payload = {
+            let mut p = vec![EventKind::Placed as u8];
+            let id = b"ord_old";
+            p.push(id.len() as u8);
+            p.extend_from_slice(id);
+            p.extend_from_slice(br#"{"id":"ord_old","status":"PENDING"}"#);
+            p
+        };
+        let rec = Record {
+            // The OLD scheme: the payload alone.
+            id: content_id(&payload),
+            prev: [0u8; 32],
+            actor_pubkey: [0u8; 32],
+            actor_seq: 1,
+            payload,
+        };
+        // Written straight into a store, because no public path writes an old
+        // id any more -- which is the point.
+        let mut st = Store::create_bytes(64 * 1024);
+        EvLog::init_bytes(&mut st).unwrap();
+        EvLog::append_tip_bytes(&mut st, &rec).unwrap();
+        let h = Hub::load(&st.to_bytes()).unwrap();
+
+        let check = h.chain_check();
+        assert_eq!(check.records, 1);
+        assert_eq!(check.legacy, 1, "an old id is old, not wrong: {check:?}");
+        assert_eq!(check.broken, 0);
+        assert!(check.intact());
     }
 
     /// The whole hub survives being written out and read back — which is the

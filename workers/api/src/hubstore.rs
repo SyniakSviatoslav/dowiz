@@ -1360,18 +1360,24 @@ mod tests {
             assert_eq!(xv["contact"]["name"], serde_json::json!("Ana"));
         }
 
-        // And the point of the exercise, MEASURED rather than hoped for.
+        // And the point of the exercise, MEASURED rather than hoped for -- and
+        // the measurement MOVED when the format underneath it did.
         //
-        // Twelve events over three orders: 2,619 cells of envelopes against
-        // 1,545 of deltas, a 41 % cut rather than the 90 % the payloads alone
-        // would suggest. The difference is the RECORD HEADER -- 15 cells, plus
-        // two object headers and a nine-cell root per commit, about 26 cells
-        // whatever the payload says -- and one payload byte per eight-byte
-        // cell on top. That header is phase 4's business, not this one's; what
-        // this phase can remove, it has removed.
+        // Twelve events over three orders:
+        //   v1 format: 2,619 cells of envelopes against 1,545 of deltas (41 % off)
+        //   v2 format:   578 cells of envelopes against   444 of deltas (24 % off)
+        //
+        // The deltas did not get worse; the baseline got better. v2 packs eight
+        // payload bytes into a cell, so the payload stopped being what an event
+        // costs: what is left is the fixed header -- 12 cells, the store's
+        // 2-cell object header and a 10-cell root -- which a delta and an
+        // envelope pay alike. Against the original v1 envelope the two changes
+        // together are 2,619 cells down to 444, 83 % off, and neither of them
+        // gets there alone.
         let (d, f) = (deltas.usage().used_cells, full.usage().used_cells);
         println!("THREE ORDERS, TWELVE EVENTS: deltas {d} cells, envelopes {f} ({}%)", d * 100 / f);
-        assert!(d * 10 < f * 7, "deltas {d} cells vs envelopes {f}: expected at least a third off");
+        assert!(d < f, "a delta log must still be smaller: {d} against {f}");
+        assert!(d * 10 < f * 9, "and by a tenth at least: {d} against {f}");
     }
 
     /// A courier taking an order writes a `Noted` event, which is an order

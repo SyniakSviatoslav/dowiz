@@ -287,22 +287,61 @@ dish and last month's order re-renders under the new name, because this catalogu
 versioned per order. That trade is bad at this size. Revisit only if a venue's catalogue
 becomes versioned.
 
-### Phase 4 — EvLog v2 in bebop-store (effort 3 days, risk HIGH: a written format)
+### Phase 4 — EvLog v2 — SHIPPED
 
+A written format changed, so every reader moved with it. There is exactly one reader of
+this layout — `crates/bebop-store/src/evlog.rs` — which was checked rather than assumed:
+nothing in `bebop-lang/`, no oracle script and no `.bp` file names EVLOG, and `dowiz-hub`,
+the kernel's `bebop_event_store` and the Worker all go through the `EvLog` API.
 
-- Record: 8 payload bytes per cell; the tip written in the same commit as the record (one
-  root); `actor_pubkey` present only when non-zero (a flag bit in cell 0); `prev` and the
-  content id kept; the content id NOW hashes `prev` too, so the chain is tamper-evident by
-  cascade (today `stock.rs:723` claims it and `lib.rs:488` does not deliver it).
-- Version cell in the EVLOG root; `walk`/`read_at` dispatch on it; `grow()` migrates v1 →
-  v2 on the next doubling; `Kv` entries pack the same way (catalogue 538 KB → ≈ 70 KB).
-- Repo rules: the ORACLE for `append_is_constant_cost` (`evlog.rs:321`, golden 47) is
-  re-derived first; the bebop-lang reader of this format (`bebop-lang/`, `bpref`) moves in
-  the same commit, per `bebop-lang/AGENTS.md` ("every reader, oracle, golden and harness
-  model in the SAME commit"). `arch_check` and `invariants.sh` stay green.
-- Tests: v1 fixture image loads, folds identically, and after one append is v2; cells per
-  event = 12 + ⌈P/8⌉; the 3,000-order regression in `tests/log_growth.rs` runs in a fraction
-  of the image.
+- **v2 record**: `12 + (4 if the actor is named) + ceil(P/8)` cells, against v1's
+  `15 + P`. The payload is packed EIGHT BYTES TO A CELL; the 32-byte `actor_pubkey` that
+  every dowiz caller leaves zero is behind a flag bit and costs nothing when absent.
+- **v2 root**: 8 cells, the eighth being the VERSION. A root with no version cell is v1,
+  which is what every image in production looks like. `walk`, `read_at` and `append`
+  dispatch on it, so a v1 log keeps being read and appended to as v1 — a mixed chain is
+  never created.
+- **The migration is a replay.** `Hub::grow` and `StockLog::grow` init a FRESH store and
+  copy the chain into it, so an old image becomes v2 the next time it doubles. Nothing is
+  rewritten in place and no migration step runs anywhere.
+- **The tip travels with the record.** `append_tip_bytes` allocates the record and the new
+  root in ONE transaction. That removes a whole root per event AND removes a defect class
+  by construction: "the record fitted but the tip update did not" (the order log refused
+  order 2450 with 56 cells free) cannot happen when both are allocated in one tx — either
+  everything is committed or the arena cursor has not moved, so a retry after growing
+  cannot double-count.
+- **The content id now commits to the previous one.** `stock.rs` said "editing any event
+  changes every content id after it" and the code hashed the payload alone, so it did not.
+  `content_id_chained(prev, payload)` makes it true, and `Hub::chain_check()` is the walk
+  that checks it: `chained`, `legacy` (written before the cascade — every image in
+  production, and not an alarm) and `broken`.
+
+**MEASURED.**
+
+| | v1 | v2 |
+|---|---|---|
+| a 330-byte event | 356 cells | 70 cells |
+| an append with its tip (21-byte payload, named actor) | 47 + 9 cells | 31 cells |
+| ten delivered orders, full envelopes, on the wire | 165,664 B | **38,032 B** |
+| 20,001 order events | 67,108,864 B image | **16,777,216 B** |
+
+And the interaction with phase 3, which moved: deltas were 41 % off the v1 envelope and
+are 24 % off the v2 one. The deltas did not get worse — the baseline got better, because
+v2 stopped the payload being what an event costs. Together: 2,619 cells → 444, **83 %**,
+and neither change reaches that alone.
+
+**Tests.** `bebop-store` 31 (6 new: a v1 log reads and appends as v1 at exactly its old
+cost; a replay into a fresh store is v2 and byte-identical in content; payloads survive at
+0, 1, 7, 8, 9, 63, 64, 65 and 330 bytes; an unnamed actor takes no cells; the tip in one
+commit costs one root less; the version survives the byte round trip). `dowiz-hub` 259 + 7
++ 2 (3 new: the cascade verifies, an edited byte in the image is found, a pre-cascade log
+reads as legacy rather than broken). `workers/api` 56. Kernel `bebopdb` 4.
+
+**NOT DONE: the Kv packing.** The catalogue's 538 KB has the same 8× amplification, and
+the same fix would work — but that layout is created and read by
+`bebop-lang/selfhost/std/kv.bp` as well as by Rust, and this repo's rule 10 says a written
+format is not changed until every reader moves in the SAME commit. That is a bebop-lang
+change on a different toolchain; it is phase 4b and it is not this.
 
 ### Phase 5 — a bounded hot log with cold history (effort 2 days, risk medium)
 

@@ -738,8 +738,11 @@ impl StockLog {
     /// which is I4's other half.
     fn write(&mut self, ev: &StockEvent) -> Result<(), StockError> {
         let payload = encode(ev).into_bytes();
-        let id = crate::content_id(&payload);
         let prev = EvLog::tip(&self.store).unwrap_or([0u8; 32]);
+        // CHAINED, which is what the comment above has always claimed: the id
+        // commits to the previous record, so editing an event breaks every id
+        // after it. It hashed the payload alone until 2026-09-20.
+        let id = crate::content_id_chained(&prev, &payload);
         let rec = Record {
             id,
             prev,
@@ -755,33 +758,30 @@ impl StockLog {
         // THE IMAGE GROWS RATHER THAN REFUSING, like the order log. A shelf
         // that cannot record a delivery because its arena is full is a kitchen
         // that stops being able to sell -- the refusal path reads this ledger.
-        // ── APPEND AND TIP FAIL DIFFERENTLY, SO THEY ARE HANDLED DIFFERENTLY ──
+        // ── APPEND AND TIP ARE ONE COMMIT ──
         //
-        // Measured: on a nearly full arena the RECORD still fits while the tip
-        // update does not. And `walk` follows the store's object chain rather
-        // than the tip hash, so a record written without its tip is already IN
-        // the chain -- re-appending it after growing counts it twice, which is
-        // exactly what the first version of this did (3002 deliveries recorded
-        // for 3000 made).
+        // They used to be two, and they failed differently: measured, on a
+        // nearly full arena the RECORD still fits while the tip update does
+        // not. `walk` follows the store's object chain rather than the tip
+        // hash, so a record written without its tip is already IN the chain --
+        // re-appending it after growing counted it twice, which is exactly
+        // what the first version of this did (3002 deliveries recorded for
+        // 3000 made).
         //
-        // So: grow-and-retry only the APPEND. Once the record is in, the tip is
-        // set; if that is what ran out of room, growing is enough on its own,
-        // because `grow` copies the chain and points the tip at its last
-        // record -- which is this one.
-        let mut placed = EvLog::append_bytes(&mut self.store, &rec).is_ok();
+        // `append_tip_bytes` allocates the record and the new root in ONE
+        // transaction: either both fit or nothing is committed and the arena
+        // cursor has not moved. So a failure leaves no record to double-count,
+        // and growing and trying again is the whole recovery.
+        let mut placed = EvLog::append_tip_bytes(&mut self.store, &rec).is_ok();
         for _ in 0..6 {
             if placed {
                 break;
             }
             self.grow().map_err(|_| StockError::Malformed)?;
-            placed = EvLog::append_bytes(&mut self.store, &rec).is_ok();
+            placed = EvLog::append_tip_bytes(&mut self.store, &rec).is_ok();
         }
         if !placed {
             return Err(StockError::Malformed);
-        }
-        if EvLog::set_tip_bytes(&mut self.store, &id).is_err() {
-            self.grow().map_err(|_| StockError::Malformed)?;
-            EvLog::set_tip_bytes(&mut self.store, &id).map_err(|_| StockError::Malformed)?;
         }
         Ok(())
     }
