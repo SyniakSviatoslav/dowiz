@@ -9,7 +9,10 @@ SURFACES = {
     # The main hub. A fourth dowiz-owned surface, on the gate from its first
     # commit rather than added after it had already drifted -- which is the
     # order the other three learned this in.
-    "platform": ("platform/index.html", "platform/app.js"),
+    "platform": ("platform/hub.html", "platform/app.js"),
+    # dowiz.org's front door (2026-09-20). The hub moved to hub.html so the
+    # apex could carry a public page; the landing has its own script.
+    "landing": ("platform/index.html", "platform/landing.js"),
 }
 
 # §8.1 T2 — DOWIZ-FIXED tokens every surface must resolve. The plan flags
@@ -270,6 +273,10 @@ for name, (html_p, js_p) in SURFACES.items():
     for m in re.finditer(r'<link[^>]*href="(https?://[^"]+)"[^>]*>', html):
         tag, url = m.group(0), m.group(1)
         host = url.split("/")[2]
+        # A canonical or alternate link is an ADDRESS, not a fetch: the browser
+        # loads nothing from it. The landing's canonical is dowiz.org itself.
+        if 'rel="canonical"' in tag or 'rel="alternate"' in tag:
+            continue
         if 'rel="preconnect"' in tag:
             # A preconnect is a handshake, not a payload. It is legitimate when
             # the page really does fetch from that host later -- and waste when

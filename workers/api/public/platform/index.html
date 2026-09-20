@@ -3,69 +3,338 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#f5efe5" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#061b1a" media="(prefers-color-scheme: dark)">
-<title>dowiz · головний хаб</title>
-<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0b0b0c">
+<title>dowiz — власний додаток закладу, 0% комісії</title>
+<meta name="description" content="dowiz дає ресторану власний додаток на власному домені: меню, кошик, оплата, відстеження кур'єра наживо. Жодної комісії за замовлення — одна фіксована підписка. Постквантове шифрування, локальний ШІ, відкритий протокол.">
+<meta property="og:title" content="dowiz — 0% комісії за замовлення">
+<meta property="og:description" content="Власний додаток закладу на власному домені. Одна фіксована підписка, 100% кожного замовлення — ваші.">
+<meta property="og:url" content="https://dowiz.org/">
+<meta property="og:image" content="https://dowiz.org/platform/img/store-dubin-b.jpg">
+<link rel="canonical" href="https://dowiz.org/">
+<link rel="preload" href="/lib/font/unbounded-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/lib/font/unbounded-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/lib/font/manrope-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/lib/icons.css">
 <link rel="stylesheet" href="/lib/tokens.css">
 <link rel="stylesheet" href="/lib/components.css">
-<link rel="stylesheet" href="/platform/platform.css">
+<link rel="stylesheet" href="/platform/landing.css">
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <div class="mark" aria-hidden="true">d</div>
-    <div>
-      <h1>Головний хаб</h1>
-      <div class="sub" id="who">dowiz · платформа</div>
-    </div>
-  </header>
 
-  <section class="card" id="signin">
-    <h2>Вхід</h2>
-    <p class="hint">Тільки для адміністраторів платформи.</p>
-    <div class="field mt-s3">
-      <label for="email">Пошта</label>
-      <input id="email" type="email" autocomplete="username" inputmode="email">
-    </div>
-    <div class="field">
-      <label for="pw">Пароль</label>
-      <input id="pw" type="password" autocomplete="current-password">
-    </div>
-    <button class="btn pri" id="go">Увійти</button>
-    <div class="said bad hidden" id="signinSaid" role="alert"></div>
-  </section>
-
-  <section class="card hidden" id="hubs">
-    <h2>Хаби клієнтів</h2>
-    <div id="hubList"><p class="hint">Завантаження…</p></div>
-  </section>
-
-  <section class="card hidden" id="create">
-    <h2>Створити хаб</h2>
-    <p class="hint">Адреса буде <code>&lt;slug&gt;.<span id="pHost">dowiz.org</span></code>.
-       Це стає іменем у DNS, тому тільки малі літери, цифри та дефіс.</p>
-    <div class="two mt-s3">
-      <div class="field"><label for="slug">Slug</label>
-        <input id="slug" placeholder="sushi-durres" autocapitalize="off" spellcheck="false"></div>
-      <div class="field"><label for="name">Назва</label>
-        <input id="name" placeholder="Sushi Durrës"></div>
-    </div>
-    <div class="field"><label for="phone">Телефон</label>
-      <input id="phone" placeholder="+355 …" inputmode="tel"></div>
-    <h2 class="mt-s4">Перший власник</h2>
-    <p class="hint">Можна лишити порожнім — хаб створиться без власника.</p>
-    <div class="two mt-s3">
-      <div class="field"><label for="oemail">Пошта власника</label>
-        <input id="oemail" type="email" autocomplete="off"></div>
-      <div class="field"><label for="opw">Пароль</label>
-        <input id="opw" type="text" autocomplete="off"></div>
-    </div>
-    <button class="btn pri" id="make">Створити</button>
-    <div class="said hidden" id="makeSaid" role="status"></div>
-  </section>
+<div class="loader" id="loader" aria-hidden="true">
+  <div class="loader-in">
+    <div class="loader-n" id="loaderN">−35%</div>
+    <div class="loader-w">dowiz</div>
+  </div>
 </div>
-<script type="module" src="/platform/app.js"></script>
+<div class="cursor" id="cursor" aria-hidden="true"></div>
+
+<header class="top" id="top">
+  <div class="wide top-in">
+    <a class="brand" href="/" aria-label="dowiz"><i aria-hidden="true"></i><span>dowiz</span></a>
+    <nav aria-label="Мова та вхід" data-i18n-attr="aria-label:nav">
+      <div class="langs" role="group" aria-label="Мова" data-i18n-attr="aria-label:langs">
+        <button class="lang" type="button" id="lang-uk" data-lang="uk" aria-pressed="true" lang="uk">UK</button>
+        <button class="lang" type="button" id="lang-en" data-lang="en" aria-pressed="false" lang="en">EN</button>
+        <button class="lang" type="button" id="lang-sq" data-lang="sq" aria-pressed="false" lang="sq">SQ</button>
+      </div>
+      <a class="signin" href="/platform/hub.html" data-i18n="signin">Вхід</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero" id="hero" aria-labelledby="h1">
+    <div class="zero" id="zero" aria-hidden="true">0%</div>
+    <div class="wide">
+      <h1 id="h1" class="mask-lines" data-reveal="hero" data-i18n-html="h1">Ваш заклад.<br>Ваш додаток.<br><em>Нуль</em> комісії.</h1>
+      <div class="hero-row">
+        <p class="lede" data-reveal="hero" data-i18n="lede">Агрегатори забирають 25–35% кожного замовлення. dowiz дає закладу власний додаток на власному домені — меню, оплата, кур'єр наживо — за одну фіксовану підписку.</p>
+        <div class="cta" data-reveal="hero">
+          <a class="btn" href="#join" data-magnet><span data-i18n="ctaJoin">Стати в чергу</span><i class="ti ti-chevron-down" aria-hidden="true"></i></a>
+          <a class="btn ghost" href="https://sushi-durres.dowiz.org/" data-magnet><span data-i18n="ctaLive">Живий заклад</span><i class="ti ti-external-link" aria-hidden="true"></i></a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="marq" id="marq" aria-hidden="true">
+    <div class="marq-in">
+      <span data-i18n="mq1">вітрина</span><span data-i18n="mq2">телефон</span><span>WhatsApp</span><span>Instagram</span><span>API</span><span data-i18n="mq3">один журнал замовлень</span>
+      <span data-i18n="mq1">вітрина</span><span data-i18n="mq2">телефон</span><span>WhatsApp</span><span>Instagram</span><span>API</span><span data-i18n="mq3">один журнал замовлень</span>
+    </div>
+  </div>
+
+  <section class="product" id="product" aria-labelledby="h-product">
+    <div class="wide">
+      <h2 id="h-product" class="mask-lines" data-reveal data-i18n="productH">Ваші кольори, ваше меню, ваші клієнти — і замовлення в кілька дотиків.</h2>
+      <div class="product-grid">
+        <div class="product-media" id="productMedia">
+          <div class="phone" aria-hidden="true">
+            <div class="phone-screen">
+              <img src="/platform/img/store-dubin-a.jpg" width="786" height="1688" alt="" decoding="async" id="screenA">
+              <img src="/platform/img/store-dubin-b.jpg" width="786" height="1688" alt="" decoding="async" loading="lazy" id="screenB">
+              <div class="chip" id="chip"><i class="pulse" aria-hidden="true"></i><b>8–12</b><span data-i18n="chip">хв · кур'єр у дорозі</span></div>
+            </div>
+          </div>
+          <p class="phone-cap"><span data-i18n="phoneCap">Dubin &amp; Sushi, Дуррес — живий заклад на dowiz:</span> <a href="https://sushi-durres.dowiz.org/">sushi-durres.dowiz.org</a></p>
+        </div>
+        <div class="steps" id="steps">
+          <div class="step active" data-screen="a">
+            <span class="k" data-i18n="s1k">власний домен</span>
+            <h3 data-i18n="s1h">Додаток закладу, не платформи</h3>
+            <p data-i18n="s1p">Адреса на власному домені, ваш логотип і кольори, три мови одразу. Встановлюється на телефон як звичайний додаток — без магазину — і відкриває меню навіть без зв'язку.</p>
+          </div>
+          <div class="step" data-screen="b">
+            <span class="k" data-i18n="s2k">меню й кошик</span>
+            <h3 data-i18n="s2h">Фото шефа, калорії, алергени</h3>
+            <p data-i18n="s2p">Меню, кошик, оплата карткою чи готівкою і підтвердження за хвилину. Кожна страва — з фото, калоріями та алергенами, а не сірою плашкою.</p>
+          </div>
+          <div class="step" data-screen="c">
+            <span class="k" data-i18n="s3k">наживо</span>
+            <h3 data-i18n="s3h">Вони бачать, як воно їде</h3>
+            <p data-i18n="s3p">Прийнято, готується, у дорозі, час прибуття — клієнт стежить за кур'єром на мапі. Менше дзвінків «де моє замовлення», більше повторних замовлень.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <section class="film" id="film" aria-labelledby="h-film">
+    <div class="wide film-grid">
+      <div class="film-text">
+        <h2 id="h-film" class="mask-lines" data-reveal data-i18n="filmH">Тридцять секунд, і все зрозуміло</h2>
+        <p data-i18n="filmP">Один кадр — одна думка: третина чека, що згорає; нуль; ваш додаток; кур'єр на мапі; замок; ваша каса. Звук — за кнопкою.</p>
+        <div class="film-ctl">
+          <button class="btn ghost" type="button" id="filmSound" aria-pressed="false" data-magnet><i class="ti ti-player-play" aria-hidden="true"></i><span data-i18n="filmSound">Зі звуком</span></button>
+        </div>
+      </div>
+      <div class="film-media">
+        <div class="phone film-phone">
+          <div class="phone-screen">
+            <video id="promo" class="promo" playsinline muted loop preload="metadata" poster="/platform/video/poster-uk.jpg" width="540" height="960" data-src="/platform/video/promo-{lang}-540x960.mp4"></video>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="adv" id="adv" aria-labelledby="h-adv">
+    <div class="wide">
+      <div class="adv-head">
+        <h2 id="h-adv" class="mask-lines" data-reveal data-i18n="advH">Усе, що входить. Без зірочок.</h2>
+        <p data-i18n="advP">Двадцять речей, за які агрегатор бере відсоток, а dowiz — ні. Кожна з них уже працює в живому закладі.</p>
+      </div>
+      <ol class="adv-list" id="advList">
+        <li class="adv-item">
+          <h3 data-i18n="a1t">0% комісії</h3>
+          <p data-i18n="a1p">Одна фіксована підписка. Жодного відсотка з чека і жодного тарифу за доставку.</p>
+        </li>
+        <li class="adv-item">
+          <h3 data-i18n="a2t">Власний домен і бренд</h3>
+          <p data-i18n="a2p">Адреса закладу, його логотип, кольори й печатка — не платформи.</p>
+        </li>
+        <li class="adv-item">
+          <h3 data-i18n="a3t">Встановлюється як додаток</h3>
+          <p data-i18n="a3p">На iPhone і Android без магазинів; меню відкривається навіть без зв'язку.</p>
+        </li>
+        <li class="adv-item">
+          <h3 data-i18n="a4t">Три мови й валюта клієнта</h3>
+          <p data-i18n="a4p">Shqip, English, українська — і ціни в тій валюті, якою платить клієнт.</p>
+        </li>
+        <li class="adv-item">
+          <h3 data-i18n="a5t">Меню, як у шефа</h3>
+          <p data-i18n="a5p">Фото, калорії, алергени, склад і рецептури — не сірі плашки.</p>
+        </li>
+        <li class="adv-item">
+          <h3 data-i18n="a6t">Кошик і оплата</h3>
+          <p data-i18n="a6p">Карткою або готівкою, промокоди, підтвердження за хвилину.</p>
+        </li>
+        <li class="adv-item">
+          <h3 data-i18n="a7t">Кур'єр наживо</h3>
+          <p data-i18n="a7p">Клієнт бачить кур'єра на мапі; час прибуття рахується з маршруту.</p>
+        </li>
+        <li class="adv-item">
+          <h3 data-i18n="a8t">Один журнал замовлень</h3>
+          <p data-i18n="a8p">Вітрина, телефон, WhatsApp, Instagram і API партнерів — одна черга для кухні.</p>
+        </li>
+        <li class="adv-item">
+          <h3 data-i18n="a9t">Консоль власника в телефоні</h3>
+          <p data-i18n="a9p">Замовлення, меню, кур'єри, склад і статистика — одним великим пальцем.</p>
+        </li>
+        <li class="adv-item">
+          <h3 data-i18n="a10t">Застосунок кур'єра</h3>
+          <p data-i18n="a10p">Маршрут, статуси, готівка й підтвердження доставки — читається однією рукою.</p>
+        </li>
+        <li class="adv-item">
+          <h3 data-i18n="a11t">Сповіщення в Telegram</h3>
+          <p data-i18n="a11p">Кожне замовлення — у ваш бот, за секунди, з усіма рядками й сумою.</p>
+        </li>
+        <li class="adv-item">
+          <h3 data-i18n="a12t">Автопостинг з вашого схвалення</h3>
+          <p data-i18n="a12p">dowiz пише пости про страви; ви натискаєте «Опублікувати» — Telegram та Instagram.</p>
+        </li>
+        <li class="adv-item">
+          <h3 data-i18n="a13t">Локальний ШІ-помічник</h3>
+          <p data-i18n="a13p">Відповідає про меню й замовлення на вашому сервері. Нічого не надсилається назовні.</p>
+        </li>
+        <li class="adv-item">
+          <h3 data-i18n="a14t">Бронювання і чати</h3>
+          <p data-i18n="a14p">Столики з перепусткою, розмова з клієнтом і гаманець — усе в тому ж додатку.</p>
+        </li>
+        <li class="adv-item">
+          <h3 data-i18n="a15t">Склад і рецептури</h3>
+          <p data-i18n="a15p">Залишки списуються з кожного замовлення; закінчується — страва ховається сама.</p>
+        </li>
+        <li class="adv-item">
+          <h3 data-i18n="a16t">Постквантове шифрування</h3>
+          <p data-i18n="a16p">X25519 + ML-KEM-768 у каналі, ML-DSA-65 на кожному пакеті, AES-256-GCM локально.</p>
+        </li>
+        <li class="adv-item">
+          <h3 data-i18n="a17t">Гроші без округлень</h3>
+          <p data-i18n="a17p">Цілі числа, подвійний запис, повернення сходяться в нуль — без плаваючої коми.</p>
+        </li>
+        <li class="adv-item">
+          <h3 data-i18n="a18t">Нічні копії й API</h3>
+          <p data-i18n="a18p">Резервні копії в S3 щоночі; хаб відкритий як MCP-сервер для ваших інструментів.</p>
+        </li>
+        <li class="adv-item">
+          <h3 data-i18n="a19t">Ваші дані — у закладі</h3>
+          <p data-i18n="a19p">Кожен вузол тримає власну базу; хмара необов'язкова, посередника немає.</p>
+        </li>
+        <li class="adv-item">
+          <h3 data-i18n="a20t">Відкритий код, AGPL-3.0</h3>
+          <p data-i18n="a20p">Протокол відкритий, без рейтингів кур'єрів і прихованих алгоритмів.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="engine on-ink" id="engine" aria-labelledby="h-engine">
+    <div class="wide engine-head">
+      <h2 id="h-engine" class="mask-lines" data-reveal data-i18n="engineH">Рушій, якому не потрібен посередник</h2>
+      <p data-i18n="engineP">Під додатком — відкритий протокол доставки: один журнал замовлень, постквантове шифрування, локальний ШІ і жодного сервера, без якого все зупиниться.</p>
+    </div>
+    <div class="track" id="track">
+      <article class="panel" id="p-hub">
+        <svg class="glyph" viewBox="0 0 96 96" aria-hidden="true">
+          <path class="draw" pathLength="1" d="M14 18 C 40 18, 50 48, 72 48 M14 33 C 40 33, 50 48, 72 48 M14 48 H72 M14 63 C 40 63, 50 48, 72 48 M14 78 C 40 78, 50 48, 72 48"/>
+          <circle class="hot draw late" pathLength="1" cx="78" cy="48" r="8"/>
+        </svg>
+        <h3 data-i18n="p1h">Один хаб для кожного замовлення</h3>
+        <p data-i18n="p1p">Вітрина, телефон, WhatsApp, Instagram, API партнерів — усе приходить в один журнал. Кухня бачить одну чергу, кур'єр — один маршрут, ви — одну касу. Кожна зміна стану — подія в незмінному журналі; заборонений перехід — помилка, а не тихе «нічого».</p>
+      </article>
+      <article class="panel" id="p-track">
+        <svg class="glyph" viewBox="0 0 96 96" aria-hidden="true">
+          <path class="draw" pathLength="1" d="M12 70 C 30 66, 34 30, 52 30 C 70 30, 68 58, 84 26"/>
+          <path class="draw late" pathLength="1" d="M8 78 l4 -8 l4 8 z M80 18 l4 8 l4 -8 z"/>
+          <circle class="fill" cx="52" cy="30" r="5"/>
+        </svg>
+        <h3 data-i18n="p2h">Час прибуття — з дороги, не з голови</h3>
+        <p data-i18n="p2p">Кур'єр на мапі в реальному часі, ETA рахується з маршруту. Мапа — відкриті тайли без трекерів, тому в чужих логах не лишається ні адреси, ні номера замовлення.</p>
+      </article>
+      <article class="panel" id="p-pq">
+        <svg class="glyph" viewBox="0 0 96 96" aria-hidden="true">
+          <path class="draw" pathLength="1" d="M30 44 V32 a18 18 0 0 1 36 0 V44"/>
+          <rect class="draw late" pathLength="1" x="22" y="44" width="52" height="38" rx="6"/>
+          <circle class="fill" cx="48" cy="62" r="4"/>
+        </svg>
+        <h3 data-i18n="p3h">Постквантовий захист</h3>
+        <p data-i18n="p3p">Канал узгоджується гібридом X25519 + ML-KEM-768, кожен пакет підписано ML-DSA-65. Дані закладу й клієнтів зашифровано локально і в дорозі; класичного «запасного» шляху немає.</p>
+        <span class="spec">FIPS 203 · FIPS 204 · AES-256-GCM</span>
+      </article>
+      <article class="panel" id="p-ai">
+        <svg class="glyph" viewBox="0 0 96 96" aria-hidden="true">
+          <path class="draw" pathLength="1" d="M18 44 L48 18 L78 44 M26 38 V78 H70 V38"/>
+          <rect class="hot draw late" pathLength="1" x="38" y="50" width="20" height="20" rx="3"/>
+          <path class="draw late" pathLength="1" d="M38 56 h-6 M38 64 h-6 M58 56 h6 M58 64 h6 M44 50 v-6 M52 50 v-6 M44 70 v6 M52 70 v6"/>
+        </svg>
+        <h3 data-i18n="p4h">Локальний ШІ. Нічого не надсилається назовні.</h3>
+        <p data-i18n="p4p">Помічник відповідає про меню й замовлення на вашому сервері, пише чернетки постів — ви схвалюєте, він публікує в Telegram та Instagram. Гроші, стани і підписи рахує детермінований код, а не модель.</p>
+      </article>
+      <article class="panel" id="p-open">
+        <svg class="glyph" viewBox="0 0 96 96" aria-hidden="true">
+          <path class="draw" pathLength="1" d="M48 20 L18 72 H78 Z"/>
+          <path class="draw late" pathLength="1" d="M48 20 V72 M18 72 L63 46 M78 72 L33 46"/>
+          <circle class="fill" cx="48" cy="20" r="4"/><circle class="fill" cx="18" cy="72" r="4"/><circle class="fill" cx="78" cy="72" r="4"/>
+        </svg>
+        <h3 data-i18n="p5h">Протокол, а не платформа</h3>
+        <p data-i18n="p5p">Відкритий код під AGPL-3.0. Кожен вузол — заклад, кур'єр, клієнт — тримає власну базу; хмара необов'язкова. Немає рейтингів кур'єрів і прихованих алгоритмів.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="statement" id="statement" aria-label="Маніфест" data-i18n-attr="aria-label:manifesto">
+    <div class="wide">
+      <p id="statementP" data-i18n="statement">Немає нікого між тим, хто замовляє, і тим, хто везе. Немає відсотка з кожного чека. Немає сервера, без якого все зупиниться.</p>
+    </div>
+  </section>
+
+  <section class="terms" id="terms" aria-labelledby="h-terms">
+    <div class="wide">
+      <h2 id="h-terms" class="mask-lines" data-reveal data-i18n="termsH">Одна фіксована підписка. Сто відсотків кожного замовлення — ваші.</h2>
+      <div class="terms-grid">
+        <div class="term">
+          <span class="term-h" data-i18n="t1h">агрегатор</span>
+          <div class="n" data-count="35" data-prefix="−" data-suffix="%">−35%</div>
+          <p data-i18n="t1p">З кожного замовлення. Щодня. Плюс ваш клієнт, ваша статистика і ваш бренд — у чужому додатку поруч із конкурентом.</p>
+        </div>
+        <div class="term ours">
+          <span class="term-h">dowiz</span>
+          <div class="n" data-count="0" data-suffix="%">0%</div>
+          <p data-i18n="t2p">Жодного відсотка з чека, жодного тарифу за доставку. Ціна не залежить від того, скільки ви продали, — тому на цій сторінці немає суми, а є розмова.</p>
+          <ul class="facts">
+            <li data-i18n="t2f1">Власний домен і додаток без магазину</li>
+            <li data-i18n="t2f2">Три мови, оплата, кур'єр наживо</li>
+            <li data-i18n="t2f3">Дані лишаються у закладі</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="close on-ink" id="close" aria-labelledby="h-close">
+    <div class="wide">
+      <h2 id="h-close" class="mask-lines" data-reveal data-i18n="closeH">Запускаймо ваш додаток.</h2>
+      <p data-i18n="closeP">Лишіть пошту закладу — напишемо, коли відкриємо наступний хаб. Без розсилок: один лист, від людини.</p>
+      <form class="join" id="join" novalidate>
+        <div class="join-row">
+          <div class="join-field">
+            <label for="joinEmail" data-i18n="joinEmail">Пошта закладу</label>
+            <input id="joinEmail" name="email" type="email" required autocomplete="email" inputmode="email" spellcheck="false" maxlength="254">
+          </div>
+          <div class="join-field">
+            <label for="joinVenue" data-i18n="joinVenue">Назва закладу (необов'язково)</label>
+            <input id="joinVenue" name="venue" type="text" autocomplete="organization" maxlength="120">
+          </div>
+          <button class="btn" type="submit" id="joinGo" data-magnet><span data-i18n="joinGo">Стати в чергу</span><i class="ti ti-send" aria-hidden="true"></i></button>
+        </div>
+        <p class="join-said" id="joinSaid" role="status" aria-live="polite"></p>
+      </form>
+      <div class="cta">
+        <a class="btn ghost" href="https://sushi-durres.dowiz.org/" data-magnet><span data-i18n="ctaLive2">Живий заклад</span><i class="ti ti-external-link" aria-hidden="true"></i></a>
+        <a class="btn ghost" href="/platform/hub.html" data-magnet><span data-i18n="ctaSignin">Вхід для адміністраторів</span></a>
+      </div>
+    </div>
+    <footer class="foot">
+      <div class="wide foot-in">
+        <ul>
+          <li><a href="https://sushi-durres.dowiz.org/" data-i18n="fLive">Живий заклад</a></li>
+          <li><a href="/platform/hub.html" data-i18n="fSignin">Вхід</a></li>
+          <li><a href="#p-pq" data-i18n="fSecurity">Безпека</a></li>
+        </ul>
+        <small data-i18n="fNote">© 2026 dowiz · відкритий код, AGPL-3.0 · децентралізований, локальний, постквантовий протокол доставки</small>
+      </div>
+      <div class="wordmark" id="wordmark" aria-hidden="true">dowiz<b>.</b></div>
+    </footer>
+  </section>
+</main>
+
+<script src="/lib/vendor/gsap.min.js"></script>
+<script src="/lib/vendor/ScrollTrigger.min.js"></script>
+<script src="/lib/vendor/SplitText.min.js"></script>
+<script src="/lib/vendor/lenis.min.js"></script>
+<script type="module" src="/platform/landing.js"></script>
 </body>
 </html>

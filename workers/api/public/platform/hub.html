@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f5efe5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#061b1a" media="(prefers-color-scheme: dark)">
+<title>dowiz · головний хаб</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="/lib/icons.css">
+<link rel="stylesheet" href="/lib/tokens.css">
+<link rel="stylesheet" href="/lib/components.css">
+<link rel="stylesheet" href="/platform/platform.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="mark" aria-hidden="true">d</div>
+    <div>
+      <h1>Головний хаб</h1>
+      <div class="sub" id="who">dowiz · платформа</div>
+    </div>
+  </header>
+
+  <section class="card" id="signin">
+    <h2>Вхід</h2>
+    <p class="hint">Тільки для адміністраторів платформи.</p>
+    <div class="field mt-s3">
+      <label for="email">Пошта</label>
+      <input id="email" type="email" autocomplete="username" inputmode="email">
+    </div>
+    <div class="field">
+      <label for="pw">Пароль</label>
+      <input id="pw" type="password" autocomplete="current-password">
+    </div>
+    <button class="btn pri" id="go">Увійти</button>
+    <div class="said bad hidden" id="signinSaid" role="alert"></div>
+  </section>
+
+  <section class="card hidden" id="hubs">
+    <h2>Хаби клієнтів</h2>
+    <div id="hubList"><p class="hint">Завантаження…</p></div>
+  </section>
+
+  <section class="card hidden" id="create">
+    <h2>Створити хаб</h2>
+    <p class="hint">Адреса буде <code>&lt;slug&gt;.<span id="pHost">dowiz.org</span></code>.
+       Це стає іменем у DNS, тому тільки малі літери, цифри та дефіс.</p>
+    <div class="two mt-s3">
+      <div class="field"><label for="slug">Slug</label>
+        <input id="slug" placeholder="sushi-durres" autocapitalize="off" spellcheck="false"></div>
+      <div class="field"><label for="name">Назва</label>
+        <input id="name" placeholder="Sushi Durrës"></div>
+    </div>
+    <div class="field"><label for="phone">Телефон</label>
+      <input id="phone" placeholder="+355 …" inputmode="tel"></div>
+    <h2 class="mt-s4">Перший власник</h2>
+    <p class="hint">Можна лишити порожнім — хаб створиться без власника.</p>
+    <div class="two mt-s3">
+      <div class="field"><label for="oemail">Пошта власника</label>
+        <input id="oemail" type="email" autocomplete="off"></div>
+      <div class="field"><label for="opw">Пароль</label>
+        <input id="opw" type="text" autocomplete="off"></div>
+    </div>
+    <button class="btn pri" id="make">Створити</button>
+    <div class="said hidden" id="makeSaid" role="status"></div>
+  </section>
+</div>
+<script type="module" src="/platform/app.js"></script>
+</body>
+</html>
