@@ -1145,6 +1145,128 @@ where
     Err(Error::RustError("hub log is contended; five attempts lost the generation guard".into()))
 }
 
+/// ── ROTATION: A BOUNDED HOT LOG WITH COLD HISTORY ──
+///
+/// How long a finished order stays on the hot path. Thirty days is what an
+/// owner reaches for -- last month's numbers -- and everything older is read
+/// from an archive, which is a different question and a different route.
+pub const HOT_KEEP_MS: i64 = 30 * 24 * 60 * 60 * 1000;
+
+/// Statuses that mean the order is still happening. These stay whatever their
+/// age: an order that has been PENDING for forty days is a problem, and
+/// archiving it would be hiding one.
+const LIVE: &[&str] = &["PENDING", "CONFIRMED", "PREPARING", "READY", "IN_DELIVERY"];
+
+/// Where a venue's archives are listed. Written by the rotation, read by the
+/// history route and the backup; kept in settings rather than derived by
+/// listing the object's keys, because a Durable Object cannot be asked what it
+/// holds.
+const ARCHIVES_KEY: &str = "log.archives";
+
+/// The archives this hub has, oldest first.
+pub fn archives_of(settings: &dowiz_hub::settings::Settings) -> Vec<String> {
+    settings
+        .get(ARCHIVES_KEY)
+        .unwrap_or_default()
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+/// Move everything finished and older than `HOT_KEEP_MS` out of the hot log.
+///
+/// THE ARCHIVE IS WRITTEN FIRST AND THE HOT LOG SECOND, and if the second
+/// write fails the venue has one extra copy of its history rather than none of
+/// it. Re-running lands on the same archive id, which the object refuses to
+/// overwrite -- an archive is written once by construction.
+pub async fn rotate(place: &Place, now_ms: i64) -> Result<serde_json::Value> {
+    let loaded = load(place).await?;
+    let generation = loaded.generation;
+    let before = loaded.hub.len();
+
+    let mut keep: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut moved = 0usize;
+    for e in orders_state(&loaded.hub) {
+        let v: serde_json::Value = serde_json::from_str(&e.order_json).unwrap_or_default();
+        let status = v.get("status").and_then(serde_json::Value::as_str).unwrap_or("");
+        let fresh = (e.seq as i64) > now_ms - HOT_KEEP_MS;
+        if LIVE.contains(&status) || fresh {
+            keep.insert(e.order_id);
+        } else {
+            moved += 1;
+        }
+    }
+    if moved == 0 {
+        return Ok(serde_json::json!({ "rotated": false, "events": before, "reason": "nothing is old enough" }));
+    }
+
+    let mut hub = loaded.hub;
+    let archived = hub
+        .rotate(|id| keep.contains(id))
+        .map_err(|e| Error::RustError(format!("rotation failed: {e:?}")))?;
+    let archive_id = format!("{IMAGE_LOG}@{generation}");
+    let archive_bytes = archived.len();
+
+    // Generation 0: this id has never been written, and if it has -- a retry of
+    // a rotation whose second write failed -- the object refuses and the
+    // archive that is already there stands.
+    let stored = save_image(place, &archive_id, archived, 0).await?;
+    if !save_image(place, IMAGE_LOG, hub.to_bytes_trimmed(), generation).await? {
+        return Err(Error::RustError(
+            "the log moved while it was being rotated; the archive is written and nothing was lost"
+                .into(),
+        ));
+    }
+    let listed = archive_id.clone();
+    let _ = with_settings(place, move |s| {
+        let mut all = archives_of(s);
+        if !all.contains(&listed) {
+            all.push(listed.clone());
+        }
+        s.set(ARCHIVES_KEY, &all.join(","));
+        Ok(())
+    })
+    .await;
+
+    Ok(serde_json::json!({
+        "rotated": true,
+        "archive": archive_id,
+        "archiveWasNew": stored,
+        "archiveBytes": archive_bytes,
+        "ordersMoved": moved,
+        "ordersKept": keep.len(),
+        "eventsBefore": before,
+        "eventsAfter": hub.len(),
+    }))
+}
+
+/// Is this the name of an archive this module wrote?
+///
+/// CHECKED, NOT TRUSTED. The id reaches the object's storage, and it arrives
+/// in a query parameter: an id that could name any image would let the history
+/// route read the settings or the catalogue as if they were orders, and an id
+/// with a path in it would be worth more than that. `log@` and digits, nothing
+/// else -- and an empty generation is not digits.
+pub fn is_archive_id(id: &str) -> bool {
+    let Some(rest) = id.strip_prefix(IMAGE_LOG).and_then(|r| r.strip_prefix('@')) else {
+        return false;
+    };
+    !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit())
+}
+
+/// One archive's orders, folded — the cold half of the history.
+pub async fn archive_orders(place: &Place, archive_id: &str) -> Result<Option<Vec<crate::hubdo::OrderView>>> {
+    if !is_archive_id(archive_id) {
+        return Ok(None);
+    }
+    let Some((bytes, _)) = load_bytes(place, archive_id).await? else { return Ok(None) };
+    let hub =
+        Hub::load(&bytes).map_err(|_| Error::RustError("archive image is unreadable".into()))?;
+    Ok(Some(orders_state(&hub).into_iter().map(crate::hubdo::OrderView::of_event).collect()))
+}
+
 /// The folded state of one order, or `None` if this hub never saw it.
 ///
 /// `Hub::order` returns the newest EVENT, which since phase 3 may be a delta.
@@ -1311,6 +1433,23 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// AN ARCHIVE NAME IS A KEY INTO THE OBJECT'S STORAGE, and it arrives in a
+    /// query parameter. Everything but `log@<digits>` has to be refused, or
+    /// the history route is a way to read the settings image -- which holds
+    /// this venue's tokens -- as if it were a list of orders.
+    #[test]
+    fn only_a_log_archive_name_is_accepted() {
+        for good in ["log@0", "log@1", "log@1789000000000"] {
+            assert!(is_archive_id(good), "{good} is an archive");
+        }
+        for bad in [
+            "log", "log@", "settings", "catalog", "log@abc", "log@1x", "log@-1", "log@ 1",
+            "log@1/../settings", "m:log@1", "c:log@1:0", "LOG@1", "log@1,log@2", "",
+        ] {
+            assert!(!is_archive_id(bad), "{bad:?} must not be read as an archive");
+        }
+    }
 
     /// THE PHASE-3 PROPERTY, AT THE LEVEL THE CONSOLE READS. A hub whose
     /// events are full envelopes and a hub whose events are deltas must
@@ -1540,6 +1679,49 @@ mod tests {
 pub const IMAGES: &[&str] =
     &[IMAGE_LOG, IMAGE_CATALOG, IMAGE_SETTINGS, IMAGE_POSTS, IMAGE_STOCK];
 
+/// Archives already copied off-site, so a nightly bundle carries each one ONCE.
+const ARCHIVES_BACKED_KEY: &str = "log.archives.backed";
+
+/// Which archives this venue has that have never been in a backup.
+pub async fn archives_pending(place: &Place) -> Result<Vec<String>> {
+    let settings = load_settings(place).await?.settings;
+    let done: Vec<String> = settings
+        .get(ARCHIVES_BACKED_KEY)
+        .unwrap_or_default()
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect();
+    Ok(archives_of(&settings).into_iter().filter(|a| !done.contains(a)).collect())
+}
+
+/// Mark archives as copied. Called after a bundle lands, never before.
+pub async fn archives_marked(place: &Place, ids: &[String]) -> Result<()> {
+    if ids.is_empty() {
+        return Ok(());
+    }
+    let ids = ids.to_vec();
+    with_settings(place, move |s| {
+        let mut done: Vec<String> = s
+            .get(ARCHIVES_BACKED_KEY)
+            .unwrap_or_default()
+            .split(',')
+            .map(str::trim)
+            .filter(|x| !x.is_empty())
+            .map(str::to_string)
+            .collect();
+        for id in &ids {
+            if !done.contains(id) {
+                done.push(id.clone());
+            }
+        }
+        s.set(ARCHIVES_BACKED_KEY, &done.join(","));
+        Ok(())
+    })
+    .await
+}
+
 pub async fn export(place: &Place) -> Result<serde_json::Value> {
     use sha2::{Digest, Sha256};
     let got = load_images(place, IMAGES).await?;
@@ -1562,11 +1744,41 @@ pub async fn export(place: &Place) -> Result<serde_json::Value> {
             }),
         );
     }
+    // THE ARCHIVES THAT HAVE NEVER BEEN COPIED, and only those.
+    //
+    // Rotation makes history into its own image, and an image nobody copies
+    // off-site is history kept in exactly one place. Carrying EVERY archive in
+    // EVERY nightly bundle would put it back where it started -- a file that
+    // grows forever -- so each archive travels once and is marked by the
+    // caller after the bundle lands.
+    let pending = archives_pending(place).await.unwrap_or_default();
+    let mut archives = serde_json::Map::new();
+    if !pending.is_empty() {
+        let ids: Vec<&str> = pending.iter().map(String::as_str).collect();
+        let got = load_images(place, &ids).await?;
+        for id in &pending {
+            let Some((bytes, generation)) = got.get(id) else { continue };
+            let digest: String =
+                Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect();
+            archives.insert(
+                id.clone(),
+                serde_json::json!({
+                    "generation": generation,
+                    "bytes": bytes.len(),
+                    "sha256": digest,
+                    "image": base64::Engine::encode(
+                        &base64::engine::general_purpose::STANDARD, bytes),
+                }),
+            );
+        }
+    }
+
     Ok(serde_json::json!({
         "format": "dowiz-hub-backup/1",
         "venue": place.venue,
         "taken_at_ms": Date::now().as_millis() as i64,
         "images": images,
+        "archives": archives,
     }))
 }
 
@@ -1590,9 +1802,18 @@ pub async fn import(place: &Place, bundle: &serde_json::Value) -> Result<Vec<Str
         return Err(Error::RustError("backup has no images".into()));
     };
 
+    // A BUNDLE MAY CARRY ARCHIVES, and a restore that dropped them would put a
+    // venue back with its live orders and no history -- which is the shape of
+    // loss rotation is supposed to prevent. They are checked and written
+    // exactly as the five fixed images are; only the name test differs,
+    // because an archive's name carries the generation it was cut at.
+    let archives = bundle.get("archives").and_then(|v| v.as_object());
+    let named: Vec<(&String, &serde_json::Value)> =
+        images.iter().chain(archives.into_iter().flatten()).collect();
+
     let mut staged: Vec<(String, Vec<u8>)> = Vec::new();
-    for (id, entry) in images {
-        if !IMAGES.contains(&id.as_str()) {
+    for (id, entry) in named {
+        if !IMAGES.contains(&id.as_str()) && !is_archive_id(id) {
             return Err(Error::RustError(format!("backup names an unknown image: {id}")));
         }
         let Some(b64) = entry.get("image").and_then(|v| v.as_str()) else {

@@ -82,6 +82,14 @@ pub enum EventKind {
     /// log that the order machine never decided, and the first person to audit
     /// the lifecycle would find a status change with no edge behind it.
     Noted = 5,
+    /// A MARK IN THE LOG WHERE HISTORY WAS MOVED OUT OF IT.
+    ///
+    /// Written by `rotate` as the first record of a fresh hot image, naming the
+    /// archived image's tip and how many events it holds. It is not an order
+    /// and never folds into one; it exists so that a log can be read and the
+    /// reader can tell the difference between "this venue has never taken an
+    /// order" and "the older ones are somewhere else, and here is where".
+    Checkpoint = 6,
 }
 
 impl EventKind {
@@ -107,6 +115,7 @@ impl EventKind {
             3 => Some(EventKind::Paid),
             4 => Some(EventKind::Revealed),
             5 => Some(EventKind::Noted),
+            6 => Some(EventKind::Checkpoint),
             _ => None,
         }
     }
@@ -510,6 +519,92 @@ impl Hub {
         out
     }
 
+    /// Move old history out of the hot image and hand it back for cold storage.
+    ///
+    /// WHY A LOG THAT ONLY GROWS IS A PROBLEM AT ALL. Every read of this hub
+    /// loads the whole image and folds it; a venue at thirty orders a day
+    /// writes about six events each, so after a year the thing a console polls
+    /// is mostly orders nobody will ever look at again. The fold is O(events)
+    /// and the Worker has 128 MB. Growth is not waste -- the history is real --
+    /// but keeping ALL of it on the hot path is.
+    ///
+    /// WHAT COMES BACK is the image as it stood, complete, for the caller to
+    /// store somewhere cold. What stays is a fresh image holding a CHECKPOINT
+    /// record and every event of every order `keep` says to keep.
+    ///
+    /// THE RECORDS ARE MOVED VERBATIM -- same ids, same `prev` links, same
+    /// payloads -- so `chain_check` still verifies each one: an id commits to
+    /// the id BEFORE it, and that id is a value in the record, not a pointer
+    /// into the image. A gap in the walk is exactly what the checkpoint
+    /// announces; it is not damage.
+    ///
+    /// `keep` is asked once per ORDER ID, not once per event, because an order
+    /// half of whose events survived would fold to a lie.
+    pub fn rotate<F>(&mut self, keep: F) -> Result<Vec<u8>, HubError>
+    where
+        F: Fn(&str) -> bool,
+    {
+        let archived = self.store.to_bytes_trimmed();
+        let mut records = EvLog::walk(&self.store);
+        records.reverse();
+
+        let tip = EvLog::tip(&self.store).unwrap_or([0u8; 32]);
+        let archived_events = records.len();
+
+        // The descriptor is text and deliberately not JSON: this crate has no
+        // parser for reading one back (see `minijson`), and what a reader needs
+        // here is two numbers and a hex string.
+        let descriptor = format!(
+            "tip={} events={} bytes={}",
+            crate::crypto::hex(&tip),
+            archived_events,
+            archived.len()
+        );
+        let mut payload = Vec::with_capacity(2 + descriptor.len());
+        payload.push(EventKind::Checkpoint as u8);
+        payload.push(0); // no order id: a checkpoint is about the log, not an order
+        payload.extend_from_slice(descriptor.as_bytes());
+
+        // A fresh image sized for what it will hold, never smaller than a hub's
+        // birth size: the whole point is that it is not the old one.
+        let mut fresh = Store::create_bytes(self.store.to_bytes().len().max(64 * 1024));
+        EvLog::init_bytes(&mut fresh)?;
+        let check_id = content_id_chained(&tip, &payload);
+        EvLog::append_tip_bytes(
+            &mut fresh,
+            &Record { id: check_id, prev: tip, actor_pubkey: [0u8; 32], actor_seq: 0, payload },
+        )?;
+
+        let mut last = check_id;
+        for r in &records {
+            let Some(ev) = decode(r) else { continue };
+            // A checkpoint from an EARLIER rotation is not carried forward: the
+            // new one names the image that holds it, so the chain of
+            // checkpoints runs through the archives rather than piling up here.
+            if ev.kind == EventKind::Checkpoint {
+                continue;
+            }
+            if !keep(&ev.order_id) {
+                continue;
+            }
+            EvLog::append_bytes(&mut fresh, r)?;
+            last = r.id;
+        }
+        EvLog::set_tip_bytes(&mut fresh, &last)?;
+        self.store = fresh;
+        Ok(archived)
+    }
+
+    /// The checkpoints this image carries, newest first — what a reader follows
+    /// to find the archives.
+    pub fn checkpoints(&self) -> Vec<String> {
+        self.events()
+            .into_iter()
+            .filter(|e| e.kind == EventKind::Checkpoint)
+            .map(|e| e.order_json)
+            .collect()
+    }
+
     /// Walk the chain and check every id against the payload it names.
     ///
     /// THE POINT IS THAT IT CAN FAIL. An append-only log whose ids are never
@@ -678,6 +773,138 @@ mod tests {
     fn unknown_order_is_an_error_not_an_empty_string() {
         let h = Hub::create_sized(1 << 20).unwrap();
         assert!(matches!(h.order("nope"), Err(HubError::UnknownOrder)));
+    }
+
+    /// ROTATION KEEPS WHAT IS LIVE AND MOVES WHAT IS NOT. The orders that stay
+    /// must fold to exactly what they folded to before: a venue must not see
+    /// its kitchen change because the log was tidied.
+    #[test]
+    fn a_rotation_keeps_the_live_orders_untouched() {
+        let mut h = Hub::create_sized(256 * 1024).unwrap();
+        for i in 0..6u64 {
+            let id = format!("ord_{i}");
+            h.append(EventKind::Placed, &id, &order(&id, "PENDING"), i + 1, ACTOR).unwrap();
+            h.append(EventKind::Advanced, &id, &order(&id, "CONFIRMED"), i + 10, ACTOR).unwrap();
+        }
+        let before: Vec<String> =
+            ["ord_4", "ord_5"].iter().map(|id| h.order(id).unwrap()).collect();
+
+        let archived = h.rotate(|id| id == "ord_4" || id == "ord_5").unwrap();
+
+        let after: Vec<String> =
+            ["ord_4", "ord_5"].iter().map(|id| h.order(id).unwrap()).collect();
+        assert_eq!(before, after, "a kept order must be untouched by the rotation");
+        assert_eq!(h.orders().len(), 2, "and nothing else stayed");
+        assert!(h.order("ord_0").is_err(), "a moved order is not in the hot log");
+
+        // THE HISTORY IS NOT GONE, it is in the bytes the caller now holds.
+        let cold = Hub::load(&archived).unwrap();
+        assert_eq!(cold.orders().len(), 6, "every order is in the archive");
+        assert!(cold.order("ord_0").unwrap().contains("ord_0"));
+
+        // And the hot image holds much less than what it replaced. MEASURED
+        // IN ARENA CELLS, not in bytes of image: every image carries a fixed
+        // 1024-cell superblock region -- eight kilobytes that neither side
+        // pays for twice -- and at this size that header is most of the file.
+        let hot_cells = h.usage().used_cells;
+        let cold_cells = Hub::load(&archived).unwrap().usage().used_cells;
+        println!("rotation: hot {hot_cells} cells, archive {cold_cells}");
+        assert!(hot_cells * 2 < cold_cells, "hot {hot_cells} cells against archive {cold_cells}");
+    }
+
+    /// THE CHECKPOINT IS VISIBLE. An unknown event kind used to be dropped by
+    /// `decode` without a sound, so a mark in the log would have been a mark
+    /// nobody could see -- which is the failure this project keeps meeting.
+    #[test]
+    fn the_checkpoint_is_an_event_the_log_returns() {
+        let mut h = Hub::create_sized(128 * 1024).unwrap();
+        h.append(EventKind::Placed, "ord_1", &order("ord_1", "PENDING"), 1, ACTOR).unwrap();
+        let tip_before = h.checkpoints().len();
+        assert_eq!(tip_before, 0);
+
+        let archived = h.rotate(|_| false).unwrap();
+
+        let events = h.events();
+        assert_eq!(events.len(), 1, "the checkpoint is the only thing left: {events:?}");
+        assert_eq!(events[0].kind, EventKind::Checkpoint);
+        assert!(!events[0].kind.is_order(), "a checkpoint is not an order");
+        assert!(h.orders().is_empty(), "and it does not appear as one");
+
+        let marks = h.checkpoints();
+        assert_eq!(marks.len(), 1);
+        assert!(marks[0].starts_with("tip="), "{}", marks[0]);
+        assert!(marks[0].contains("events=1"), "{}", marks[0]);
+        assert!(
+            marks[0].contains(&format!("bytes={}", archived.len())),
+            "the mark names the archive it describes: {}",
+            marks[0]
+        );
+    }
+
+    /// A SECOND ROTATION CHAINS. Each archive names the tip of the one before
+    /// it, so the archives form a list a reader can walk backwards; the hot
+    /// image carries exactly one mark, never a pile of them.
+    #[test]
+    fn a_second_rotation_chains_to_the_first() {
+        let mut h = Hub::create_sized(256 * 1024).unwrap();
+        h.append(EventKind::Placed, "ord_1", &order("ord_1", "PENDING"), 1, ACTOR).unwrap();
+        let first = h.rotate(|_| false).unwrap();
+        let mark_one = h.checkpoints()[0].clone();
+
+        h.append(EventKind::Placed, "ord_2", &order("ord_2", "PENDING"), 2, ACTOR).unwrap();
+        let second = h.rotate(|_| false).unwrap();
+        let mark_two = h.checkpoints()[0].clone();
+
+        assert_eq!(h.checkpoints().len(), 1, "one mark, not a pile");
+        assert_ne!(mark_one, mark_two);
+        // The second archive holds the first mark, so the chain is walkable.
+        let cold_two = Hub::load(&second).unwrap();
+        assert_eq!(cold_two.checkpoints(), vec![mark_one], "the archive carries the older mark");
+        let cold_one = Hub::load(&first).unwrap();
+        assert!(cold_one.checkpoints().is_empty(), "the first archive predates any mark");
+    }
+
+    /// The cascade survives a rotation. Records move verbatim, so each still
+    /// commits to the id before it -- even where the record before it is now
+    /// in a different image.
+    #[test]
+    fn a_rotated_log_still_verifies() {
+        let mut h = Hub::create_sized(256 * 1024).unwrap();
+        for i in 0..4u64 {
+            let id = format!("ord_{i}");
+            h.append(EventKind::Placed, &id, &order(&id, "PENDING"), i + 1, ACTOR).unwrap();
+        }
+        let archived = h.rotate(|id| id == "ord_3").unwrap();
+        let hot = h.chain_check();
+        assert!(hot.intact(), "{hot:?}");
+        assert_eq!(hot.broken, 0);
+        assert_eq!(hot.records, 2, "the checkpoint and the one kept order");
+        let cold = Hub::load(&archived).unwrap().chain_check();
+        assert!(cold.intact(), "{cold:?}");
+        assert_eq!(cold.records, 4);
+    }
+
+    /// An order half of whose events survived would fold to a lie, so `keep` is
+    /// asked about the ORDER and every event of a kept order travels with it.
+    #[test]
+    fn a_kept_order_keeps_all_of_its_events() {
+        let mut h = Hub::create_sized(256 * 1024).unwrap();
+        for (status, at) in [("PENDING", 1u64), ("CONFIRMED", 2), ("COOKING", 3), ("DELIVERED", 4)]
+        {
+            h.append(
+                if at == 1 { EventKind::Placed } else { EventKind::Advanced },
+                "ord_1",
+                &order("ord_1", status),
+                at,
+                ACTOR,
+            )
+            .unwrap();
+        }
+        h.rotate(|id| id == "ord_1").unwrap();
+        let kept: Vec<Event> = h.history("ord_1");
+        assert_eq!(kept.len(), 4, "every event of a kept order travels with it");
+        assert!(kept[0].order_json.contains("PENDING"), "oldest first, and the first is the placement");
+        assert!(kept[3].order_json.contains("DELIVERED"));
     }
 
     /// THE CASCADE IS REAL NOW, and this is the test that would have caught the

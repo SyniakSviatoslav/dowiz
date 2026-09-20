@@ -2131,6 +2131,71 @@ pub async fn health(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     }))
 }
 
+/// `GET /api/owner/history` — what has been archived, and what is in one.
+///
+/// THE HOT LOG IS NOT THE WHOLE HISTORY ANY MORE. Without a route that reads
+/// the archives, rotation would be deletion with extra steps: the bytes would
+/// exist and nothing could reach them. `?archive=log@<n>` returns that
+/// archive's orders, folded exactly as the live ones are.
+pub async fn history(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
+    let (_, _loc, settings) = match crate::owner::owner_beside(
+        &req,
+        &ctx,
+        &db,
+        crate::hubstore::load_settings(&place),
+    )
+    .await
+    {
+        Ok(v) => v,
+        Err(r) => return Ok(r),
+    };
+    let archives = crate::hubstore::archives_of(&settings.settings);
+    let wanted = req
+        .url()
+        .ok()
+        .and_then(|u| u.query_pairs().find(|(k, _)| k == "archive").map(|(_, v)| v.to_string()));
+
+    let Some(id) = wanted else {
+        return Response::from_json(&json!({ "archives": archives, "keepMs": crate::hubstore::HOT_KEEP_MS }));
+    };
+    match crate::hubstore::archive_orders(&place, &id).await? {
+        Some(orders) => {
+            let rows: Vec<Value> = orders
+                .into_iter()
+                .filter_map(|e| serde_json::from_str::<Value>(&e.order_json).ok())
+                .collect();
+            let mut res = Response::from_json(&json!({ "archive": id, "orders": rows }))?;
+            // An archive holds customers' addresses, exactly as the live log
+            // does: nothing between here and the owner's screen keeps a copy.
+            res.headers_mut().set("cache-control", "private, no-store")?;
+            Ok(res)
+        }
+        None => Response::error("no such archive", 404),
+    }
+}
+
+/// `POST /api/owner/hub/rotate` — move finished history out of the hot log now.
+///
+/// The nightly cron does this for every venue; this is the same call for an
+/// owner who wants it done before then, and for a test that wants to see it
+/// happen.
+pub async fn rotate_now(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
+    if let Err(r) = crate::owner::owner_and_venue(&req, &ctx, &db).await {
+        return Ok(r);
+    }
+    match crate::hubstore::rotate(&place, now_ms()).await {
+        Ok(v) => Response::from_json(&v),
+        Err(e) => {
+            crate::loud!(&place.db, Some(&place.venue), "hub.rotate", "{e}");
+            Response::error(e.to_string(), 500)
+        }
+    }
+}
+
 /// `GET /api/owner/backup` — the venue's own copy of everything.
 ///
 /// A DOWNLOAD, NOT A DASHBOARD. The point is that the file leaves this platform

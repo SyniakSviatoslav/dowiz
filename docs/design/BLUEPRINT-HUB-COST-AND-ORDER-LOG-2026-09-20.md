@@ -343,17 +343,45 @@ the same fix would work — but that layout is created and read by
 format is not changed until every reader moves in the SAME commit. That is a bebop-lang
 change on a different toolchain; it is phase 4b and it is not this.
 
-### Phase 5 — a bounded hot log with cold history (effort 2 days, risk medium)
+### Phase 5 — a bounded hot log with cold history — SHIPPED
 
-- `EventKind::Checkpoint = 6` with a LOUD test that `events()` returns it (today unknown
-  kinds are skipped silently, `lib.rs:471`).
-- `Hub::rotate(keep)` next to `grow()`: replay only events of orders that are open or
-  closed within 30 days, preceded by a `Checkpoint` naming the archived image's tip and
-  generation. Object stores the outgoing image under `log@<generation>` (never on the hot
-  path; served by `/api/owner/history?before=`); the nightly S3 bundle carries it too.
-- Trigger: `usage().used_cells` above a threshold on a write, or the nightly cron.
-- Tests: every open order folds identically before and after; a closed-old order is in the
-  archive and not in `orders()`; a second rotation chains checkpoints.
+The hot log holds what is live and what is recent; everything else becomes its own image.
+
+- `EventKind::Checkpoint = 6`, and it is VISIBLE: `decode` used to drop an unknown kind
+  without a sound, so a mark in the log would have been a mark nobody could see. A test
+  asserts `events()` returns it, that `is_order()` is false for it, and that it never
+  appears in `orders()`.
+- `Hub::rotate(keep)` returns the image as it stood — for the caller to store cold — and
+  leaves a fresh one holding a CHECKPOINT (`tip=<hex> events=<n> bytes=<n>`) and every
+  event of every order `keep` kept. `keep` is asked once per ORDER, never per event: an
+  order half of whose events survived would fold to a lie.
+- THE RECORDS MOVE VERBATIM — same ids, same `prev`, same payloads — so `chain_check`
+  still verifies every one of them. An id commits to the id before it, and that id is a
+  VALUE in the record rather than a pointer into the image, so a gap in the walk is what
+  the checkpoint announces rather than damage.
+- Worker: `hubstore::rotate` keeps an order if its status is live (PENDING … IN_DELIVERY,
+  whatever its age — a PENDING order forty days old is a problem, and archiving it would
+  be hiding one) or its last event is within `HOT_KEEP_MS` (30 days). The archive is
+  written FIRST, under `log@<generation>`, and the hot image second: if the second write
+  fails the venue has one extra copy of its history rather than none of it, and a retry
+  lands on the same archive id, which the object refuses to overwrite.
+- Reachable, or it would be deletion with extra steps: `GET /api/owner/history` lists the
+  archives, `?archive=log@<n>` folds one, `POST /api/owner/hub/rotate` runs it now, and
+  the nightly cron runs it for every venue before the backup.
+- The nightly bundle carries each archive ONCE (`archives_pending` / `archives_marked`,
+  marked only after the PUT lands), and `import` restores archives beside the five fixed
+  images — a restore that dropped them would put a venue back with its live orders and no
+  history.
+- `is_archive_id` is a checked name, not a trusted one: the id arrives in a query
+  parameter and reaches the object's storage, so anything but `log@<digits>` is refused.
+  Fourteen refusals in the test, including `log@1/../settings` and `m:log@1`.
+
+**Tests.** `dowiz-hub` 264 lib (5 new: a kept order is untouched and a moved one is in the
+archive; the checkpoint is an event the log returns and not an order; a second rotation
+chains and the hot image keeps exactly one mark; a rotated log still verifies on both
+sides of the cut; every event of a kept order travels with it). `workers/api` 57 (1 new:
+the archive-name check). MEASURED in the rotation test: 198 arena cells hot against 436
+archived.
 
 ### Phase 6 — push, not poll (effort 3 days, risk medium)
 

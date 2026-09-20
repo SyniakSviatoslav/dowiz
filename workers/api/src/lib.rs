@@ -300,6 +300,8 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/owner/posts/:id/reject", extra::reject_post)
         .get_async("/api/owner/graph", extra::graph)
         .get_async("/api/owner/health", extra::health)
+        .get_async("/api/owner/history", extra::history)
+        .post_async("/api/owner/hub/rotate", extra::rotate_now)
         .get_async("/api/owner/backup", extra::backup)
         .post_async("/api/owner/restore", extra::restore)
         .post_async("/api/owner/assist", extra::owner_assist)

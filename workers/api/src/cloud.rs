@@ -375,6 +375,15 @@ pub async fn push_place(place: &crate::hubstore::Place, now_ms: i64) -> std::res
         .await?;
     let note = format!("{now_ms} {key} {bytes}");
     let _ = crate::hubstore::with_settings(place, move |s| { s.set(LAST_KEY, &note); Ok(()) }).await;
+    // MARKED ONLY NOW. The archives in this bundle are off-site as of this
+    // PUT; marking them before it landed would be a promise about bytes that
+    // might never have left.
+    let carried: Vec<String> = bundle
+        .get("archives")
+        .and_then(Value::as_object)
+        .map(|m| m.keys().cloned().collect())
+        .unwrap_or_default();
+    let _ = crate::hubstore::archives_marked(place, &carried).await;
     // ROTATION AFTER THE COPY IS SAFE, never before: the newest object exists
     // before anything old is removed, so an interrupted night leaves too many
     // copies rather than too few. A rotation that fails is reported beside the
@@ -473,6 +482,21 @@ pub async fn nightly(env: &Env) {
             Ok(l) => cfg(&l.settings).is_some(),
             Err(_) => false,
         };
+        // ROTATION BEFORE THE COPY. Finished history older than thirty days
+        // leaves the hot log and becomes its own image; the backup that runs a
+        // moment later carries both, so the night a venue's log is bounded is
+        // also the night its archive is first copied off-site.
+        //
+        // A rotation that fails does not stop the backup: the copy of an
+        // unrotated log is still a copy.
+        match crate::hubstore::rotate(&place, now).await {
+            Ok(v) => {
+                if v.get("rotated").and_then(serde_json::Value::as_bool) == Some(true) {
+                    console_log!("nightly rotate {}: {}", r.id, v);
+                }
+            }
+            Err(e) => crate::loud!(&place.db, Some(&r.id), "hub.rotate", "nightly: {e}"),
+        }
         if !configured { continue }
         match push_place(&place, now).await {
             Ok(v) => console_log!("nightly backup {}: {}", r.id, v),
