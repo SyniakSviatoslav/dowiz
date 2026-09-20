@@ -1246,3 +1246,8 @@ its source, which is why translations, logo and hours "did not work". Verified l
   `len()` did not move (NOT generation — `grow()` restarts it); GPS one fix per 10 s/20 m + nightly
   prune of positions > 48 h; dashboard totals every 4th poll. dowiz-hub 261 tests, workers/api 35,
   wasm check clean, design gate GREEN.
+- Review (independent agent) found two cold-load-only defects in the chunk diff (shrunk chunk
+  treated as unchanged; memory copy trusted after a partial write) — fixed in 2nd commit, GPS
+  retention 24 h per compliance/data-map.md. DEPLOYED version 06a8917b 21:04: `/media` second
+  fetch `cf-cache-status: HIT`, health ok (log gen 21, 5830 cells unchanged), owner/orders 200.
+  Blueprint rev 2 has the brainstorm, the game-netcode table, three wild ideas, savings per phase.
