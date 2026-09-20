@@ -268,7 +268,7 @@ p{max-width:var(--measure)}
 .close .cta{margin-top:var(--space-6)}
 .join{margin-top:var(--space-8);max-width:56rem}
 .join-row{display:grid;gap:var(--space-5);align-items:end}
-@media (min-width:56rem){.join-row{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) auto}}
+@media (min-width:56rem){.join-row{grid-template-columns:minmax(0,1fr) auto}}
 .join-field{display:grid;gap:var(--space-2)}
 .join-field label{font-size:var(--text-sm);color:var(--mute-on-ink);font-weight:var(--weight-medium)}
 .join-field input{width:100%;min-height:56px;padding:0 0 var(--space-2);border:0;border-bottom:1px solid var(--line-on-ink);

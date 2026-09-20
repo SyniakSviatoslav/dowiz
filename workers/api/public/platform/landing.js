@@ -530,7 +530,7 @@ function setupFilm() {
 function setupJoin() {
   const form = $('#join');
   if (!form) return;
-  const email = $('#joinEmail'), venue = $('#joinVenue'), go = $('#joinGo'), said = $('#joinSaid');
+  const email = $('#joinEmail'), go = $('#joinGo'), said = $('#joinSaid');
   const t = () => T[document.documentElement.lang] || T.uk;
   const tell = (msg, kind) => { said.textContent = msg; said.className = 'join-said ' + (kind || ''); };
   form.addEventListener('submit', async e => {
@@ -542,7 +542,7 @@ function setupJoin() {
     try {
       const r = await fetch('/api/waitlist', {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email: addr, venue: venue.value.trim(), lang: document.documentElement.lang }),
+        body: JSON.stringify({ email: addr, venue: '', lang: document.documentElement.lang }),
       });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       tell(t().joinOk.replace('{email}', addr), 'ok');

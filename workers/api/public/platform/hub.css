@@ -30,6 +30,8 @@
 .join{max-width:64rem}
 .join-row.three{grid-template-columns:1fr}
 @media (min-width:56rem){.join-row.three{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)}}
+/* Two fields and a button on one line; the landing's own row is one field and a button. */
+@media (min-width:56rem){.hub-body .join-row:not(.three){grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) auto}}
 .join-row + .join-row{margin-top:var(--space-6)}
 .join-field input:-webkit-autofill{-webkit-text-fill-color:var(--bone);box-shadow:0 0 0 1000px var(--ink) inset;caret-color:var(--bone)}
 
