@@ -1,7 +1,29 @@
 /* dowiz platform console — this surface's own rules.
  * External for the same reason as store.css: `style-src 'self'` blocks an
  * inline <style> element outright. See public/_headers.
+ * Flat, no textures or gradients. Bone and ink, one hot accent.
  */
+
+/* @fonts — a self-contained preview build swaps this block for a CDN link */
+@font-face{font-family:'Unbounded';font-style:normal;font-weight:300 900;font-display:swap;
+  src:url('/lib/font/unbounded-cyrillic.woff2') format('woff2');
+  unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
+@font-face{font-family:'Unbounded';font-style:normal;font-weight:300 900;font-display:swap;
+  src:url('/lib/font/unbounded-latin-ext.woff2') format('woff2');
+  unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:'Unbounded';font-style:normal;font-weight:300 900;font-display:swap;
+  src:url('/lib/font/unbounded-latin.woff2') format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:'Manrope';font-style:normal;font-weight:200 800;font-display:swap;
+  src:url('/lib/font/manrope-cyrillic.woff2') format('woff2');
+  unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116}
+@font-face{font-family:'Manrope';font-style:normal;font-weight:200 800;font-display:swap;
+  src:url('/lib/font/manrope-latin-ext.woff2') format('woff2');
+  unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+@font-face{font-family:'Manrope';font-style:normal;font-weight:200 800;font-display:swap;
+  src:url('/lib/font/manrope-latin.woff2') format('woff2');
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+/* /@fonts */
 
 /* ── dowiz platform console ───────────────────────────────────────
    The main hub: where a client's hub is created. dowiz's OWN surface, so it
@@ -13,27 +35,12 @@
   /* T3 dowiz chrome -- light. Paper is the page GROUND, white the panel, ink
      the text; ink and paper swap roles in the dark theme (as on the courier),
      which is what keeps the two themes one design. */
-  --brand-bg:#f5efe5; --brand-surface-raised:#f5efe5;
-  --brand-text:#061b1a;
-  /* The courier's muted, not DESIGN.md's #6B7280: that one measures 4.23:1 on
-     paper and fails. This carries the ink's own hue: 7.26:1 on white, 6.34:1
-     on paper, 6.82:1 on the pending-row tint. */
-  --brand-text-muted:#4a5a58;
-  --brand-border:#d9d2c5;
-  /* Gold is a GROUND, never a carrier of white: white on #d69a3d is 2.46:1,
-     ink on it is 7.25:1 (hover ground #c98b2c: 6.12:1). The CTA always carries
-     ink. Gold is also never text on a light ground (2.15:1 on paper). */
-  --brand-primary:#d69a3d; --brand-primary-hover:#c98b2c; --brand-on-primary:#061b1a;
-  /* The gold CTA's EDGE, not its fill. Gold on a light ground is 2.46:1 against
-     white and 2.15:1 against paper -- under the 3:1 non-text floor, so the button
-     is legible by its 7.25:1 ink label while its boundary is not delimited. Gold
-     darkened 25% toward ink measures 3.91:1 on white and 3.42:1 on paper, which
-     clears the floor without touching the palette the plan mandates. In dark the
-     fill is already 6.49:1 against the sheet, so the edge collapses into it. */
-  --primary-edge:#a27a34;
-  /* Focus ring: ink in light (gold on white is 2.46:1, invisible), gold in
-     dark (6.49:1 on the dark surface) -- the courier's rule. */
-  --focus-ring:#061b1a;
+  --brand-bg:#f2f1ec; --brand-surface:#ffffff; --brand-surface-raised:#e9e7e0;
+  --brand-text:#0b0b0c;
+  --brand-text-muted:#6f6f6b;
+  --brand-border:#d6d4cc;
+  --brand-primary:#ff4d1c; --brand-primary-hover:#e6431a; --brand-on-primary:#ffffff;
+  --focus-ring:#0b0b0c;
 
   /* IMMUTABLE across every preset and theme -- DESIGN.md §1. Never redefined below. */
   --st-PENDING:#D97706; --st-CONFIRMED:#2563EB; --st-PREPARING:#F59E0B;
@@ -55,12 +62,9 @@
   --toggle-off:#d9d2c5; --toggle-thumb:#ffffff;
   --on-danger:#ffffff;                 /* 4.83:1 on --color-danger, both themes */
   --sea-opacity:.28; --sea-opacity-calm:.14;
-  /* Spectral edge -- the dowiz seam, terracotta -> accent -> gold (plan §2.4),
-     the courier's exact stops: one seam across the dowiz-owned surfaces. */
-  --spectral-a:#b5541c; --spectral-b:#f2c14e;
-  --spectral:linear-gradient(90deg,transparent 0%,var(--spectral-a) 30%,var(--brand-primary) 50%,var(--spectral-b) 70%,transparent 100%);
+  --spectral:var(--brand-primary);
 
-  --brand-font-body:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --brand-font-body:'Manrope',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
 
   /* Type scale = web/src/styles/tokens.css (11/12/14/16/20/24/36), in rem.
      14px base is the product register's density; nothing sets a raw size. */
@@ -85,26 +89,22 @@
    gold stays gold with ink on it (7.25:1 does not depend on the theme). */
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --brand-bg:#061b1a; --brand-surface:#0b2624; --brand-surface-raised:#12302d;
-    --brand-text:#f5efe5; --brand-text-muted:#a9b8b5; --brand-border:#22403c;
-    --focus-ring:#d69a3d; --primary-edge:#d69a3d;                                             /* 6.49:1 on #0b2624 */
+    --brand-bg:#0b0b0c; --brand-surface:#161618; --brand-surface-raised:#242427;
+    --brand-text:#f2f1ec; --brand-text-muted:#9a9a95; --brand-border:#2b2b2f;
+    --focus-ring:#ff4d1c;
     --accent-ink:var(--color-info);
-    --accent-ink:color-mix(in srgb,var(--color-info) 65%,#ffffff);   /* 5.78:1 on #0b2624 */
     --danger-ink:var(--color-danger);
-    --danger-ink:color-mix(in srgb,var(--color-danger) 60%,#ffffff); /* 5.87:1 on #0b2624 */
-    --row-attn:var(--brand-surface);
-    --row-attn:color-mix(in srgb,var(--st-PENDING) 12%,var(--brand-surface)); /* muted 6.72:1 */
+    --row-attn:color-mix(in srgb,var(--st-PENDING) 12%,var(--brand-surface));
     --chip-mix:18%;
-    --toggle-off:#22403c; --toggle-thumb:#f5efe5;
+    --toggle-off:#2b2b2f; --toggle-thumb:#f2f1ec;
     --sea-opacity:.4; --sea-opacity-calm:.2;
   }
 }
 :root[data-theme="dark"]{
-  --brand-bg:#061b1a; --brand-surface:#0b2624; --brand-surface-raised:#12302d;
-  --brand-text:#f5efe5; --brand-text-muted:#a9b8b5; --brand-border:#22403c;
-  --focus-ring:#d69a3d;
+  --brand-bg:#0b0b0c; --brand-surface:#161618; --brand-surface-raised:#242427;
+  --brand-text:#f2f1ec; --brand-text-muted:#9a9a95; --brand-border:#2b2b2f;
+  --focus-ring:#ff4d1c;
   --accent-ink:var(--color-info);
-  --accent-ink:color-mix(in srgb,var(--color-info) 65%,#ffffff);
   --danger-ink:var(--color-danger);
   --danger-ink:color-mix(in srgb,var(--color-danger) 60%,#ffffff);
   --row-attn:var(--brand-surface);
@@ -124,8 +124,8 @@ header{display:flex;align-items:center;gap:var(--space-3);margin-bottom:var(--sp
 .mark{width:var(--space-6);height:var(--space-6);border-radius:var(--radius-md);
       background:var(--brand-primary);color:var(--brand-on-primary);
       display:grid;place-items:center;font-weight:var(--weight-bold)}
-h1{font-size:var(--text-xl);font-weight:var(--weight-semibold);letter-spacing:-.01em}
-h2{font-size:var(--text-lg);font-weight:var(--weight-semibold);margin-bottom:var(--space-2)}
+h1{font-family:'Unbounded','Manrope',system-ui,sans-serif;font-size:var(--text-xl);font-weight:var(--weight-bold);letter-spacing:-.03em}
+h2{font-family:'Unbounded','Manrope',system-ui,sans-serif;font-size:var(--text-lg);font-weight:var(--weight-bold);margin-bottom:var(--space-2);letter-spacing:-.03em}
 .sub{color:var(--brand-text-muted);font-size:var(--text-sm)}
 .card{background:var(--brand-surface);border:1px solid var(--brand-border);
       border-radius:var(--radius-md);box-shadow:var(--elevation-1);padding:var(--space-4)}

@@ -3,10 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#f5efe5" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#061b1a" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f2f1ec" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0b0c" media="(prefers-color-scheme: dark)">
 <title>dowiz · головний хаб</title>
 <meta name="robots" content="noindex">
+<link rel="preload" href="/lib/font/unbounded-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/lib/font/manrope-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/lib/icons.css">
 <link rel="stylesheet" href="/lib/tokens.css">
 <link rel="stylesheet" href="/lib/components.css">
@@ -40,6 +42,12 @@
   <section class="card hidden" id="hubs">
     <h2>Хаби клієнтів</h2>
     <div id="hubList"><p class="hint">Завантаження…</p></div>
+  </section>
+
+  <section class="card hidden" id="wait">
+    <h2>Список очікування</h2>
+    <p class="hint">Заклади, що лишили пошту на dowiz.org. Найновіші згори.</p>
+    <div id="waitList" class="mt-s3"><p class="hint">Завантаження…</p></div>
   </section>
 
   <section class="card hidden" id="create">

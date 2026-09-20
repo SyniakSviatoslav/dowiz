@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#f5efe5" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0b1717" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f2f1ec" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0b0c" media="(prefers-color-scheme: dark)">
 <meta name="color-scheme" content="light dark">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>dowiz · console</title>
-<!-- NO WEB FONTS, by design: the system stack paints instantly on a kitchen's
-     phone, and the console is a tool scanned during a rush, not a brand page. -->
+<link rel="preload" href="/lib/font/unbounded-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/lib/font/manrope-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/lib/icons.css">
 <link rel="stylesheet" href="/lib/tokens.css">
 <link rel="stylesheet" href="/lib/components.css">
@@ -19,8 +19,6 @@
 <link rel="modulepreload" href="/admin/i18n.js">
 </head>
 <body>
-<div class="veil" aria-hidden="true"></div>
-<div class="grain" aria-hidden="true"></div>
 <!-- The header: the venue's mark and name, its state as one chip, the words
      and the currency behind one button, the way out. -->
 <header class="top" id="top" hidden><div class="wrap top-in">

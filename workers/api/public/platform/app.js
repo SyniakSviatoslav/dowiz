@@ -58,7 +58,9 @@ async function signIn() {
     await loadHubs();
     $('#signin').classList.add('hidden');
     $('#hubs').classList.remove('hidden');
+    $('#wait').classList.remove('hidden');
     $('#create').classList.remove('hidden');
+    loadWaitlist().catch(e => { $('#waitList').innerHTML = `<p class="hint">${esc(String(e.message || e))}</p>`; });
     $('#who').textContent = email;
     said.classList.add('hidden');
   } catch (e) {
@@ -91,6 +93,29 @@ async function loadHubs() {
         </div>
       </span>
       <span class="tag">${esc(h.status)}</span>
+    </div>`).join('');
+  return d;
+}
+
+// ── the waiting list ────────────────────────────────────────────────────────
+// What the landing page collected. The mail is the bell; this is the record,
+// and it is here so a mail that never arrived costs nobody a lead.
+async function loadWaitlist() {
+  const d = await api('/platform/waitlist');
+  const list = $('#waitList');
+  if (!d.rows || !d.rows.length) {
+    list.innerHTML = '<p class="hint">Поки порожньо.</p>';
+    return d;
+  }
+  const when = ms => new Date(ms).toLocaleString('uk-UA', { dateStyle: 'short', timeStyle: 'short' });
+  list.innerHTML = d.rows.map(r => `
+    <div class="hub">
+      <span class="grow">
+        <b>${esc(r.email)}</b>
+        <div>${esc(r.venue || '—')}</div>
+        <div class="hint">${esc(when(r.updated_ms))} · ${esc(r.lang)} · ${esc(r.source || '')}${r.notified_ms ? '' : ' · лист не надіслано'}</div>
+      </span>
+      <span class="tag">${r.notified_ms ? 'mailed' : 'stored'}</span>
     </div>`).join('');
   return d;
 }

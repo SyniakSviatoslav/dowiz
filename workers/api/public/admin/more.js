@@ -13,7 +13,7 @@ const GROUPS = [
   ['inbox', [['inbox', 'message-2', openInbox]]],
   ['marketing', [['promos', 'ticket', openPromos], ['posts', 'send', openPosts], ['social', 'sparkles', openSocial]]],
   ['analytics', [['analytics', 'chart-bar', openAnalytics], ['customers', 'user', openCustomers]]],
-  ['settings',  [['integrations', 'check', openIntegrations], ['venue', 'home', openVenue], ['hours', 'clock', openHours], ['deliveryTerms', 'bike', openDelivery], ['payments', 'coin-hole', openPayments],
+  ['settings',  [['integrations', 'check', openIntegrations], ['preview', 'eye', openPreview], ['venue', 'home', openVenue], ['hours', 'clock', openHours], ['deliveryTerms', 'bike', openDelivery], ['payments', 'coin-hole', openPayments],
                  ['notifications', 'brand-telegram', openNotifications], ['channels', 'scroll', openChannels], ['mcp', 'cube-3d-sphere', openMcp], ['cloud', 'cloud-upload', openCloud], ['branding', 'fan', openBranding],
                  ['features', 'tools-kitchen-2', openFeatures], ['assistant', 'sparkles', openAssistant], ['apiKeys', 'key', openKeys], ['activation', 'check', openActivation], ['health', 'cube-3d-sphere', openHealth]]],
 ];
@@ -541,6 +541,15 @@ const detailWords = (k, d) => {
     default: return t('on');
   }
 };
+async function openPreview(){
+  sheet(`<p class="eyebrow" data-t="previewH"></p><h2 data-t="previewH"></h2>
+    <p class="muted small" data-t="previewP"></p>
+    <div class="phone"><div class="phone-screen"><iframe class="preview-frame" id="previewFrame" title="Storefront" loading="lazy" src="/?preview=1" referrerpolicy="same-origin"></iframe></div></div>
+    <div class="preview-row"><button class="btn ghost" id="previewReload">${icon('refresh')}<span data-t="previewReload"></span></button><a class="btn" href="/" target="_blank" rel="noopener">${icon('external-link')}<span data-t="previewOpen"></span></a></div>`, { name: 'preview' });
+  $('#previewReload').onclick = () => { const frame = $('#previewFrame'); if (frame) frame.src = frame.src; };
+  paint();
+}
+
 async function openIntegrations(){
   sheet(`${head('settings', 'integrations')}<p class="muted small" data-t="integrationsHint"></p><div id="igList"><div class="skel skel-row"></div><div class="skel skel-row"></div></div>
     <div class="btn-row"><button class="btn" id="igAll">${icon('check')}<span data-t="checkAll"></span></button></div>`, { name: 'integrations' });
