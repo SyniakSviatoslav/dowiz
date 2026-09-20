@@ -397,7 +397,7 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
             }
             // The order as it stands NOW: the time that is left rides with it.
             let mut live = envelope.clone();
-            live_eta::attach_one(&db, &place, &mut live, Date::now().as_millis() as i64).await;
+            live_eta::attach_one(&db, &place, &loaded, &mut live, Date::now().as_millis() as i64).await;
             let mut res = Response::ok(serde_json::to_string(&live).unwrap_or(order_json))?;
             res.headers_mut().set("content-type", "application/json; charset=utf-8")?;
             // Never cached by anything between here and the browser: it holds

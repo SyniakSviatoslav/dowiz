@@ -2719,7 +2719,7 @@ pub async fn clear_product_image(req: Request, ctx: RouteContext<()>) -> Result<
 /// never change and the cache can hold them for a year. That is the whole
 /// benefit of content addressing and it is why the header is written here
 /// rather than left to a default.
-pub async fn media(_req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn media(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let Some(name) = ctx.param("name").cloned() else {
         return Response::error("not found", 404);
     };
@@ -2727,6 +2727,16 @@ pub async fn media(_req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // refusing early keeps anything with a slash or a dot-dot out of the key.
     if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '.') || name.len() > 80 {
         return Response::error("not found", 404);
+    }
+    // THE EDGE KEEPS IT. A Worker's response is not edge-cached unless the
+    // Worker puts it there (see `storefront::menu`), so the year of
+    // `immutable` below was a promise kept only by browsers: every new device
+    // paid two KV reads per photograph. Content-addressed and immutable is the
+    // easiest thing in the world to cache, so cache it.
+    let cache = Cache::default();
+    let key = req.url()?.to_string();
+    if let Some(hit) = cache.get(&key, false).await? {
+        return Ok(hit);
     }
     let kv = ctx.kv("MEDIA")?;
     let Some(bytes) = kv.get(&name).bytes().await? else {
@@ -2741,6 +2751,11 @@ pub async fn media(_req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // into running one.
     h.set("x-content-type-options", "nosniff")?;
     h.set("content-security-policy", "default-src 'none'; sandbox")?;
+    // Stored after the response is built, so a store that fails cannot fail
+    // the image.
+    if let Ok(copy) = res.cloned() {
+        let _ = cache.put(&key, copy).await;
+    }
     Ok(res)
 }
 

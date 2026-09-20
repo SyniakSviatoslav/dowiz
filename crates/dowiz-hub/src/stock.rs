@@ -666,6 +666,12 @@ impl StockLog {
     /// chain when the arena fills, retrying up to six times. Measured at 7168
     /// cells growing to 523264 over four thousand events with no refusal, so
     /// this reading predicts a doubling rather than a failure.
+    /// How many events the log holds, from the root's counter. Survives
+    /// `grow()` unchanged, which the store generation does not.
+    pub fn len(&self) -> usize {
+        EvLog::len(&self.store)
+    }
+
     pub fn usage(&self) -> crate::Usage {
         let cap = self.store.capacity_cells();
         crate::usage_of_kind(&self.store, cap, true)
@@ -733,7 +739,9 @@ impl StockLog {
             // signed by a person; the actor slot is zero rather than borrowing
             // an identity that did not act.
             actor_pubkey: [0u8; 32],
-            actor_seq: self.events().len() as u64,
+            // The root's own counter, not a walk: `events().len()` decoded the
+            // whole stock log on every single delivery just to number it.
+            actor_seq: EvLog::len(&self.store) as u64,
             payload,
         };
         // THE IMAGE GROWS RATHER THAN REFUSING, like the order log. A shelf

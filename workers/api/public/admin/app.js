@@ -204,14 +204,17 @@ async function boot(){
   paintLive();
   poll();
 }
-let pollTimer = null;
+let pollTimer = null, pollN = 0;
+// The queue moves in seconds; the dashboard's totals move in minutes. Reading
+// both every 15 s doubled every poll for a number nobody watches that closely.
+const STATS_EVERY = 4;
 function poll(){
   clearTimeout(pollTimer);
   pollTimer = setTimeout(async () => {
     if (!S.booted) return;
     if (!document.hidden) {
       try { await loadOrders(); S.phase = 'ready'; } catch {}
-      await loadStats();
+      if (++pollN % STATS_EVERY === 0) await loadStats();
       await rerender();
     }
     poll();

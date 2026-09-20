@@ -63,6 +63,71 @@ pub struct HubImages {
 /// A stored chunk comes back as whatever the platform decided to hand us —
 /// `Uint8Array` or the `ArrayBuffer` behind one. Accept both rather than assume,
 /// because assuming is a corrupt image reported a long way from here.
+/// Which chunks of `new` differ from `old`, by index. Without an old image
+/// every chunk is new. A chunk past the end of the old image is new. A chunk
+/// that exists in both and holds the same bytes is not written again.
+fn changed_chunks(old: Option<&[u8]>, new: &[u8], chunk: usize) -> Vec<usize> {
+    let chunks = new.len().div_ceil(chunk).max(1);
+    (0..chunks)
+        .filter(|&n| {
+            let at = n * chunk;
+            let end = (at + chunk).min(new.len());
+            match old {
+                Some(o) if o.len() >= end => o[at..end] != new[at..end],
+                _ => true,
+            }
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::changed_chunks;
+
+    #[test]
+    fn without_an_old_image_every_chunk_is_written() {
+        assert_eq!(changed_chunks(None, &[1u8; 250], 100), vec![0, 1, 2]);
+        assert_eq!(changed_chunks(None, &[], 100), vec![0]);
+    }
+
+    #[test]
+    fn an_identical_image_writes_nothing() {
+        let img = [7u8; 250];
+        assert_eq!(changed_chunks(Some(&img), &img, 100), Vec::<usize>::new());
+    }
+
+    #[test]
+    fn an_append_touches_the_front_and_the_tail_only() {
+        let mut old = vec![0u8; 250];
+        old[3] = 1;
+        let mut new = old.clone();
+        new[3] = 2; // the superblock moved
+        new[249] = 9; // the tail moved
+        assert_eq!(changed_chunks(Some(&old), &new, 100), vec![0, 2]);
+    }
+
+    #[test]
+    fn growth_writes_the_new_chunks_and_the_last_old_one_it_extends() {
+        let old = vec![0u8; 250];
+        let mut new = vec![0u8; 420];
+        new[300] = 1;
+        // chunk 2 is now [200,300) where before it was [200,250): a longer
+        // slice than storage holds, so it is written; chunks 3 and 4 are
+        // wholly new; chunks 0 and 1 are untouched.
+        assert_eq!(changed_chunks(Some(&old), &new, 100), vec![2, 3, 4]);
+    }
+
+    #[test]
+    fn a_shorter_image_writes_only_what_changed() {
+        let old = vec![5u8; 420];
+        let new = vec![5u8; 250];
+        // chunk 2 is [200,250): same bytes as the old image's prefix, so not
+        // written; the meta shrinks the chunk count and chunk 3 is deleted
+        // by the caller.
+        assert_eq!(changed_chunks(Some(&old), &new, 100), Vec::<usize>::new());
+    }
+}
+
 fn chunk_bytes(v: &JsValue) -> Option<Vec<u8>> {
     if let Some(a) = v.dyn_ref::<js_sys::Uint8Array>() {
         return Some(a.to_vec());
@@ -134,7 +199,18 @@ impl HubImages {
         let store = self.state.storage();
 
         let chunks = bytes.len().div_ceil(CHUNK).max(1);
-        for n in 0..chunks {
+        // ONLY THE CHUNKS THAT MOVED. The log is append-only: an append touches
+        // the superblock at the front and the tail at the back, and every
+        // chunk between them is byte-for-byte what storage already holds.
+        // Writing all of them made one order cost `ceil(image / 96 KiB)` row
+        // writes -- 45 at a 4 MB log, and growing with every order the venue
+        // ever took. The comparison is against the copy in memory, which
+        // `image()` above has just made current.
+        let changed = {
+            let mem = self.mem.borrow();
+            changed_chunks(mem.get(id).map(|(_, b)| b.as_slice()), bytes, CHUNK)
+        };
+        for n in changed {
             let at = n * CHUNK;
             let end = (at + CHUNK).min(bytes.len());
             let part = js_sys::Uint8Array::from(&bytes[at..end]);

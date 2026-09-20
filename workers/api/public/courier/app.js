@@ -265,6 +265,14 @@ function gps(text, warn){
   const tag = $('#gpsTag');
   tag.hidden = false; $('#gpsText').textContent = text; tag.classList.toggle('warn', !!warn);
 }
+// ONE FIX EVERY TEN SECONDS OR TWENTY METRES, whichever comes first. The map
+// shows the newest fix per courier and nothing reads the ones between, so a fix
+// a second was a database row a second for nobody.
+const FIX_MIN_MS = 10_000, FIX_MIN_M = 20;
+function metresBetween(lat1, lon1, lat2, lon2){
+  const k = Math.PI / 180, x = (lon2 - lon1) * k * Math.cos(((lat1 + lat2) / 2) * k), y = (lat2 - lat1) * k;
+  return Math.sqrt(x * x + y * y) * 6371000;
+}
 function startTracking(){
   if (S.watchId != null || !navigator.geolocation) return;
   gps('GPS', false);
@@ -279,6 +287,9 @@ function startTracking(){
     }
     if (speed != null && speed > MAX_SPEED_MPS) return;
     gps(`±${Math.round(accuracy)} ${t('gpsUnit')}`, false);
+    const now = Date.now(), last = S.lastFix;
+    if (last && now - last.t < FIX_MIN_MS && metresBetween(last.lat, last.lon, latitude, longitude) < FIX_MIN_M) return;
+    S.lastFix = { t: now, lat: latitude, lon: longitude };
     const active = S.mine[0];
     try {
       await api('/courier/position', { method:'POST', body: JSON.stringify({

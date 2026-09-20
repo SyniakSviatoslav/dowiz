@@ -441,16 +441,17 @@ impl Hub {
     /// every fold built on it -- the analytics, the promo use-count, the
     /// dashboard -- would count an audit entry as a sale.
     pub fn orders(&self) -> Vec<Event> {
-        let mut seen: Vec<String> = Vec::new();
+        // A set, not a scanned list: with a list this was O(events × orders),
+        // and it runs on every poll of every console and every tracking sheet.
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
         let mut out = Vec::new();
         for e in self.events() {
             if !e.kind.is_order() {
                 continue;
             }
-            if seen.iter().any(|s| s == &e.order_id) {
+            if !seen.insert(e.order_id.clone()) {
                 continue;
             }
-            seen.push(e.order_id.clone());
             out.push(e);
         }
         out

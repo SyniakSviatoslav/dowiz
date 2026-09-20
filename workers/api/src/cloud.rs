@@ -192,6 +192,26 @@ pub async fn status(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     }))
 }
 
+/// GPS fixes older than this are nobody's. The map reads the newest fix per
+/// courier within `live_eta::POSITION_FRESH_MS` (twenty minutes) and nothing
+/// else reads the table, yet every fix ever sent stayed in it: the largest
+/// D1 write source in the system, kept forever, read never.
+const POSITIONS_KEEP_MS: i64 = 48 * 60 * 60 * 1000;
+
+async fn prune_positions(db: &D1Database, now_ms: i64) {
+    let before = now_ms - POSITIONS_KEEP_MS;
+    let stmt = db
+        .prepare("DELETE FROM courier_positions WHERE recorded_at_ms < ?1")
+        .bind(&[worker::wasm_bindgen::JsValue::from_f64(before as f64)]);
+    match stmt {
+        Ok(s) => match s.run().await {
+            Ok(r) => console_log!("nightly prune: positions older than 48 h removed ({:?})", r.meta().ok().flatten().and_then(|m| m.changes)),
+            Err(e) => console_error!("nightly prune refused: {e}"),
+        },
+        Err(e) => console_error!("nightly prune: bad statement: {e}"),
+    }
+}
+
 /// The nightly cron: every venue with a store set gets a copy. A venue whose
 /// store refuses is logged and skipped; the next venue is not its problem.
 pub async fn nightly(env: &Env) {
@@ -204,6 +224,7 @@ pub async fn nightly(env: &Env) {
     };
     let legacy = env.var("LEGACY_VENUE").ok().map(|v| v.to_string()).filter(|v| !v.is_empty());
     let now = crate::owner::now_ms();
+    prune_positions(&db, now).await;
     for r in rows {
         let (Ok(db), Ok(ns)) = (env.d1("DB"), env.durable_object("HUB")) else { continue };
         let place = crate::hubstore::Place { db, ns, venue: r.id.clone(), legacy_venue: legacy.clone() };

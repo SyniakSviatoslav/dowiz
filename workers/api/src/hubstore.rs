@@ -856,7 +856,11 @@ where
 {
     for _ in 0..5 {
         let mut loaded = load_stock(place).await?;
+        let before = loaded.stock.len();
         let out = f(&mut loaded.stock)?;
+        if loaded.stock.len() == before {
+            return Ok(out);
+        }
         if save_image(place, IMAGE_STOCK, loaded.stock.to_bytes(), loaded.generation).await? {
             return Ok(out);
         }
@@ -1050,7 +1054,18 @@ where
 {
     for _ in 0..5 {
         let mut loaded = load(place).await?;
+        let before = loaded.hub.len();
         let out = f(&mut loaded.hub)?;
+        // NOTHING APPENDED, NOTHING WRITTEN. A read-check-then-maybe-append
+        // (the Stripe webhook replaying an order already paid) used to rewrite
+        // and re-chunk the whole image and bump the object's generation for
+        // an image that had not changed. The EVENT COUNT is the signal, not
+        // the store generation: `grow()` rebuilds the store from scratch and
+        // its generation restarts, so two generations can be equal across a
+        // real append while the count never is.
+        if loaded.hub.len() == before {
+            return Ok(out);
+        }
         if save(place, &loaded).await? {
             return Ok(out);
         }

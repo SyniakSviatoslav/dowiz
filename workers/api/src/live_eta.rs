@@ -291,22 +291,23 @@ pub async fn attach_all(
 pub async fn attach_one(
     db: &D1Database,
     place: &crate::hubstore::Place,
+    hub: &crate::hubstore::Loaded,
     order: &mut Value,
     now_ms: i64,
 ) {
     let Ok(loaded) = crate::hubstore::load_catalog(place).await else { return };
-    // Whether a courier is busy is read from the venue's other live orders.
-    let busy: Vec<String> = match crate::hubstore::load(place).await {
-        Ok(hub) => hub
-            .hub
-            .orders()
-            .into_iter()
-            .filter_map(|e| serde_json::from_str::<Value>(&e.order_json).ok())
-            .filter(|o| o.get("status").and_then(Value::as_str) == Some("IN_DELIVERY"))
-            .filter_map(|o| o.get("courier_id").and_then(Value::as_str).map(String::from))
-            .collect(),
-        Err(_) => Vec::new(),
-    };
+    // Whether a courier is busy is read from the venue's other live orders --
+    // from the image the caller has ALREADY read to find this order. This
+    // function used to load the log a second time, so every status poll read
+    // and folded the whole venue history twice.
+    let busy: Vec<String> = hub
+        .hub
+        .orders()
+        .into_iter()
+        .filter_map(|e| serde_json::from_str::<Value>(&e.order_json).ok())
+        .filter(|o| o.get("status").and_then(Value::as_str) == Some("IN_DELIVERY"))
+        .filter_map(|o| o.get("courier_id").and_then(Value::as_str).map(String::from))
+        .collect();
     let Some(loc_json) = loaded.catalog.location() else { return };
     let loc: Value = serde_json::from_str(&loc_json).unwrap_or(json!({}));
     let k = crate::eta::profile_of(&loc);

@@ -1233,3 +1233,16 @@ its source, which is why translations, logo and hours "did not work". Verified l
   Unbounded d (wght 800, extracted with fontTools from lib/font/unbounded-latin.woff2) in bone on a hot
   circle, SVG + PNGs under `/platform/icon`, linked from the landing and the hub. Playwright on the live
   page needs `waitUntil: 'load'` now: the looping 1080p video keeps the network from going idle.
+
+### 2026-09-20 (night) — cost model corrected, phase 1 of the cost/log blueprint
+- Blueprint: `docs/design/BLUEPRINT-HUB-COST-AND-ORDER-LOG-2026-09-20.md`. CORRECTION to the earlier
+  model: DO duration is NOT billed between polls (hibernatable, docs lifecycle page); what binds is
+  DO/Worker REQUEST counts (free plan ~4 venues) and the order log: 583 cells = 4.66 KB per EVENT
+  measured live, 6 events per delivered order each carrying the whole JSON, one payload byte per
+  8-byte cell (`evlog.rs:146`), image rewritten whole 8× per order and read whole per poll.
+- Phase 1 shipped: DO writes only changed chunks (`hubdo.rs changed_chunks`, 5 tests: an append =
+  chunk 0 + tail); `attach_one` reuses the loaded hub; `/media` behind `caches.default`; `orders()`
+  HashSet; `StockLog::write` uses the root counter; `with_hub`/`with_stock` skip the save when
+  `len()` did not move (NOT generation — `grow()` restarts it); GPS one fix per 10 s/20 m + nightly
+  prune of positions > 48 h; dashboard totals every 4th poll. dowiz-hub 261 tests, workers/api 35,
+  wasm check clean, design gate GREEN.
