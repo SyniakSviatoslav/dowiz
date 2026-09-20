@@ -1191,7 +1191,8 @@ pub async fn import_menu(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
                     "id": p.id, "categoryId": p.category_id, "name": p.name,
                     "description": p.description, "price": p.price,
                     "available": p.available, "sortOrder": p.sort_order,
-                    "imageUrl": keep("imageUrl"), "sizeCm": keep("sizeCm"),
+                    "imageUrl": keep("imageUrl"), "imageUrlSmall": keep("imageUrlSmall"),
+                    "sizeCm": keep("sizeCm"),
                     "modifierGroups": keep("modifierGroups"), "allergens": keep("allergens")
                 })
                 .to_string(),
@@ -2101,6 +2102,12 @@ pub async fn health(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         _ => "compact",
     };
 
+    // THE FAILURES THE LOGS NO LONGER CARRY. Workers Logs are sampled at one
+    // request in ten and no token on this box can read them at all, so the
+    // errors that matter are also rows -- and this is the screen that already
+    // answers "is this venue healthy". An empty list is the good answer.
+    let errors = crate::errlog::recent(&db, &place.venue, 20).await.unwrap_or_default();
+
     Response::from_json(&json!({
         "venue": loc,
         "images": images,
@@ -2108,6 +2115,7 @@ pub async fn health(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         "worstGrowingPerMille": worst_growing,
         "verdict": verdict,
         "orders": hub.hub.len(),
+        "errors": errors,
     }))
 }
 
@@ -2481,6 +2489,14 @@ pub async fn set_product_image(mut req: Request, ctx: RouteContext<()>) -> Resul
     // time: sniffing twice is two chances to disagree.
     kv.put(&format!("{key}#type"), stored.kind.mime())?.execute().await?;
 
+    // WHICH PICTURE OF THE DISH THIS IS. `?variant=small` is the grid's card --
+    // about 480 px, a tenth of the bytes -- and the sheet's photograph is
+    // everything else. The menu emits a `srcset` when both exist, so a cold
+    // visit that used to pull eighteen full photographs pulls eighteen cards.
+    // Both are content-addressed blobs under the same rules; only the field in
+    // the catalogue differs.
+    let small = matches!(req.url()?.query_pairs().find(|(k, _)| k == "variant"), Some((_, v)) if v == "small");
+    let field = if small { "imageUrlSmall" } else { "imageUrl" };
     let (pid, u) = (id.clone(), url.clone());
     crate::hubstore::with_catalog(&place, move |cat| {
         let Some(raw) = cat.product(&pid) else {
@@ -2490,13 +2506,21 @@ pub async fn set_product_image(mut req: Request, ctx: RouteContext<()>) -> Resul
         // The PREVIOUS image is not deleted. Another product may reference the
         // same bytes -- content addressing makes that likely, not rare -- and an
         // order placed an hour ago still names the dish it was sold as.
-        p["imageUrl"] = json!(u);
+        p[field] = json!(u);
+        // A NEW FULL PHOTOGRAPH DROPS THE OLD CARD. They are two renderings of
+        // one picture, so leaving the previous small one beside a new large one
+        // would show the customer the dish that was replaced.
+        if !small {
+            if let Some(obj) = p.as_object_mut() {
+                obj.remove("imageUrlSmall");
+            }
+        }
         cat.set_product(&pid, &serde_json::to_string(&p).unwrap_or(raw));
         Ok(())
     })
     .await?;
     Response::from_json(&json!({
-        "imageUrl": url, "bytes": stored.bytes, "type": stored.kind.mime()
+        field: url, "bytes": stored.bytes, "type": stored.kind.mime()
     }))
 }
 
@@ -2706,6 +2730,11 @@ pub async fn clear_product_image(req: Request, ctx: RouteContext<()>) -> Result<
         };
         let mut p: Value = serde_json::from_str(&raw).unwrap_or(json!({}));
         p["imageUrl"] = Value::Null;
+        // Both renderings go: a card left behind would be the only picture the
+        // grid still had, of a dish whose photograph the owner just removed.
+        if let Some(obj) = p.as_object_mut() {
+            obj.remove("imageUrlSmall");
+        }
         cat.set_product(&id, &serde_json::to_string(&p).unwrap_or(raw));
         Ok(())
     })

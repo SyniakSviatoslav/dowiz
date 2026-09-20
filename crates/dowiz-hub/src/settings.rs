@@ -249,6 +249,21 @@ pub const KNOWN: &[Known] = &[
                from it once a day, or Meta only allows approved templates.",
         default: "",
     },
+    // OFF BY DEFAULT, and this is the only setting in this list whose default
+    // is chosen by somebody else's price list. From 2026-10-01 Meta bills
+    // service and utility messages per message ($0.004-$0.046 each): two per
+    // order at thirty orders a day is $7-$80 per venue per month, up to forty
+    // times the whole Cloudflare bill. Telegram is free and carries the same
+    // text, so a venue that has not asked for WhatsApp pushes does not pay for
+    // them. Answering a customer who wrote first is NOT this setting: that is
+    // inside Meta's free 24-hour window and stays on.
+    Known {
+        key: "notify.whatsapp.status",
+        label: "Announce orders on WhatsApp",
+        hint: "off by default. Meta bills each of these messages; Telegram carries the same \
+               notice for nothing. Set to `on` to turn them on.",
+        default: "off",
+    },
     Known {
         key: "notify.whatsapp.verify",
         label: "Webhook verify token",

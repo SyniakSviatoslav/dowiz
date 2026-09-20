@@ -162,7 +162,7 @@ pub async fn order_placed(
     let settings = match crate::hubstore::load_settings(place).await {
         Ok(l) => l.settings,
         Err(e) => {
-            console_error!("notify: settings unreadable: {e}");
+            crate::loud!(&place.db, Some(&place.venue), "notify.settings", "unreadable: {e}");
             return;
         }
     };
@@ -173,16 +173,30 @@ pub async fn order_placed(
         match bot_token(env, &settings) {
             Some(token) => {
                 if let Err(e) = telegram(&token, chat, &text).await {
-                    console_error!("notify: telegram refused for {}: {e}", place.venue);
+                    crate::loud!(&place.db, Some(&place.venue), "notify.telegram", "refused: {e}");
                 }
             }
-            None => console_error!("notify: chat is set but no bot token exists for {}", place.venue),
+            None => {
+                crate::loud!(
+                    &place.db,
+                    Some(&place.venue),
+                    "notify.telegram",
+                    "a chat is set but this venue has no bot token"
+                )
+            }
         }
     }
-    if let Some(wa) = crate::channels::whatsapp_cfg(&settings) {
-        if !wa.to.is_empty() {
-            if let Err(e) = crate::channels::whatsapp_text(&wa, &wa.to, &text).await {
-                console_error!("notify: whatsapp refused for {}: {e}", place.venue);
+    // ASKED FOR, NOT ASSUMED. Meta bills every one of these from 2026-10-01
+    // and Telegram carries the same text for nothing, so a venue that has not
+    // set `notify.whatsapp.status = on` is not billed for announcements it
+    // never asked for. Replies to a customer who wrote first are a different
+    // path (`channels.rs`) inside Meta's free window and are unaffected.
+    if settings.flag("notify.whatsapp.status") {
+        if let Some(wa) = crate::channels::whatsapp_cfg(&settings) {
+            if !wa.to.is_empty() {
+                if let Err(e) = crate::channels::whatsapp_text(&wa, &wa.to, &text).await {
+                    crate::loud!(&place.db, Some(&place.venue), "notify.whatsapp", "refused: {e}");
+                }
             }
         }
     }

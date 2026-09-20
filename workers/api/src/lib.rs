@@ -37,6 +37,7 @@ mod integrations;
 mod catalog_edit;
 mod recipe;
 mod waitlist;
+mod errlog;
 
 use dowiz_kernel::json_api;
 use serde::Deserialize;

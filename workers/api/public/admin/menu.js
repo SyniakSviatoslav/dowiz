@@ -166,9 +166,15 @@ export function openDish(id){
   $('#photoFile').onchange = async e => {
     const f = e.target.files?.[0]; if (!f) return;
     try {
-      const { shrinkImage } = await import('/lib/shrink.js');
-      const blob = await shrinkImage(f, { max: PHOTO_MAX_PX, quality: PHOTO_QUALITY }).catch(() => f);
-      await busy($('#photoPick'), () => api(`/owner/products/${encodeURIComponent(id)}/image`, { method: 'POST', body: blob, headers: { 'content-type': 'application/octet-stream' } }));
+      const { shrinkPair } = await import('/lib/shrink.js');
+      // The sheet's photograph and the grid's card, both made here: the
+      // browser has the pixels and a decoder, the Worker has neither.
+      const { full, small } = await shrinkPair(f, { max: PHOTO_MAX_PX, quality: PHOTO_QUALITY })
+        .catch(() => ({ full: f, small: null }));
+      await busy($('#photoPick'), async () => {
+        await api(`/owner/products/${encodeURIComponent(id)}/image`, { method: 'POST', body: full, headers: { 'content-type': 'application/octet-stream' } });
+        if (small) await api(`/owner/products/${encodeURIComponent(id)}/image?variant=small`, { method: 'POST', body: small, headers: { 'content-type': 'application/octet-stream' } });
+      });
       toast(t('saved')); await loadVenue(); openDish(id); rerender();
     } catch (err) { toast(String(err.message || err)); }
   };

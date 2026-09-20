@@ -328,7 +328,12 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Response
     // anyone could write into the venue's inbox and ring the owner's bell.
     // An unsigned hub acknowledges (Meta would retry a 4xx for days) and drops.
     let Some(secret) = settings.get("notify.meta.secret") else {
-        console_error!("webhook: delivery for {} dropped, no app secret is set", place.venue);
+        crate::loud!(
+            &place.db,
+            Some(&place.venue),
+            "channels.webhook",
+            "a delivery was dropped: this venue has no Meta app secret set"
+        );
         return Response::from_json(&json!({ "stored": 0, "ignored": "no app secret is set" }));
     };
     if !signature_ok(secret.trim(), req.headers().get(SIGNATURE_HEADER).ok().flatten(), &raw) {
@@ -347,12 +352,20 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Response
                     let who = m.peer_name.clone().unwrap_or_else(|| m.peer.clone());
                     let text = format!("💬 {} · {who}\n{}", m.channel.as_str(), m.text);
                     if let Err(e) = crate::notify::telegram(&token, chat.trim(), &text).await {
-                        console_error!("inbox → telegram refused: {e}");
+                        crate::loud!(&db, Some(&place.venue), "channels.telegram", "inbox relay refused: {e}");
                     }
                 }
             }
             Ok(false) => {}
-            Err(e) => console_error!("inbox: could not store a {} message: {e}", m.channel.as_str()),
+            Err(e) => {
+                crate::loud!(
+                    &db,
+                    Some(&place.venue),
+                    "channels.inbox",
+                    "could not store a {} message: {e}",
+                    m.channel.as_str()
+                )
+            }
         }
     }
     // The moment of the last delivery, for the integrations screen: "Meta

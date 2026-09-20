@@ -21,18 +21,41 @@ pub(crate) fn now_ms() -> i64 {
 /// Authenticate, require the owner role, and confirm the membership covers this
 /// location. The membership is read LIVE — an owner removed a moment ago is
 /// refused here even holding a valid token.
+///
+/// ONE READ, NOT TWO. `authenticate` re-derives the owner's membership with a
+/// SELECT of its own and this function then asked a second, narrower question
+/// about the same rows: "is there a membership at all" followed by "is there
+/// one HERE". The second answer implies the first, so the first query was a
+/// round trip -- about sixty milliseconds -- bought nothing. Nine owner write
+/// paths pay this on every call.
+///
+/// AN API KEY IS STILL A DIFFERENT CREDENTIAL. `dowiz_`-prefixed keys are not
+/// JWTs and carry their own row, so they keep the full `authenticate` path;
+/// they are the integration surface, not the console's hot path, and making
+/// them cheap here would have meant making them wrong.
 pub(crate) async fn owner_at(
     req: &Request,
     ctx: &RouteContext<()>,
     db: &D1Database,
     location_id: &str,
 ) -> std::result::Result<String, Response> {
-    let p = match auth::authenticate(req, &ctx.env, db, now_ms()).await {
-        Ok(p) => p,
+    let raw = match auth::bearer(req) {
+        Ok(r) => r,
         Err(e) => return Err(e.into_response().unwrap()),
     };
-    let Principal::Owner { user_id, .. } = p else {
-        return Err(Response::error("forbidden role", 403).unwrap());
+    let user_id = if raw.starts_with("dowiz_") {
+        match auth::authenticate(req, &ctx.env, db, now_ms()).await {
+            Ok(Principal::Owner { user_id, .. }) => user_id,
+            Ok(_) => return Err(Response::error("forbidden role", 403).unwrap()),
+            Err(e) => return Err(e.into_response().unwrap()),
+        }
+    } else {
+        // Pure HMAC, no I/O: a forged or expired token never reaches D1.
+        match auth::verify(&ctx.env, &raw, now_ms()) {
+            Ok(auth::Claims::Owner { user_id, .. }) => user_id,
+            Ok(_) => return Err(Response::error("forbidden role", 403).unwrap()),
+            Err(e) => return Err(e.into_response().unwrap()),
+        }
     };
     #[derive(Deserialize)]
     struct M {

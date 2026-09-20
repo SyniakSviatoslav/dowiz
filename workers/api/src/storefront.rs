@@ -386,6 +386,12 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
                         "available": p.get("available").and_then(|x| x.as_bool()).unwrap_or(true),
                         "unavailableNote": p.get("unavailableNote").cloned().unwrap_or(Value::Null),
                         "imageUrl": p.get("imageUrl").cloned().unwrap_or(Value::Null),
+                        // The grid's card, when the venue has uploaded one.
+                        // `menu.js` turns the pair into a `srcset`, so a phone
+                        // fetches about a tenth of the bytes for the same
+                        // picture; absent, the full photograph is used exactly
+                        // as before.
+                        "imageUrlSmall": p.get("imageUrlSmall").cloned().unwrap_or(Value::Null),
                         // ── the four fields the storefront reads and this
                         // payload did not send ──
                         //

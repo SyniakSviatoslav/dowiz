@@ -50,7 +50,47 @@ const WINDS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 /// The map's bearing follows the phone no more often than this.
 const HEADING_MIN_MS = 120;
 
+/// A reverse lookup is cached by a FIFTY-METRE CELL, in this browser.
+///
+/// Nominatim asks for courtesy -- roughly a request a second -- and a customer
+/// nudging the pin around their own building asks the same question of the same
+/// doorway a dozen times. The cell is the unit of the answer: fifty metres is
+/// one building, and two pins in the same cell get the same street.
+///
+/// NOT IN KV, and that is deliberate. The lookup happens in the BROWSER, so it
+/// costs this platform nothing today; routing it through the Worker to cache it
+/// would ADD a Worker request and two KV reads per pin in order to save
+/// somebody else's free service. The browser is where the repetition is, so the
+/// browser is where the cache belongs.
+const CELL_LAT = 0.00045;          // ~50 m of latitude
+const CELL_LNG = 0.0006;           // ~50 m of longitude at Durrës's latitude
+const REVERSE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const REVERSE_PREFIX = 'dowiz.rev.';
+
+function cellOf(lat, lng){
+  return `${REVERSE_PREFIX}${Math.round(lat / CELL_LAT)},${Math.round(lng / CELL_LNG)}`;
+}
+
+function cached(key){
+  // Storage can throw outright in a private window; a cache that cannot be
+  // read is a cache miss, never a broken address sheet.
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const { t, v } = JSON.parse(raw);
+    if (!t || Date.now() - t > REVERSE_TTL_MS) { localStorage.removeItem(key); return null; }
+    return v;
+  } catch { return null; }
+}
+
+function remember(key, value){
+  try { localStorage.setItem(key, JSON.stringify({ t: Date.now(), v: value })); } catch { /* full or blocked */ }
+}
+
 async function reverse(lat, lng){
+  const key = cellOf(lat, lng);
+  const hit = cached(key);
+  if (hit) return hit;
   try {
     const r = await fetch(`${NOMINATIM}?format=jsonv2&lat=${lat}&lon=${lng}&zoom=${REVERSE_ZOOM}&accept-language=${document.documentElement.lang || 'sq'}`,
       { headers: { accept: 'application/json' } });
@@ -61,7 +101,11 @@ async function reverse(lat, lng){
     const house = a.house_number || '';
     const town = a.city || a.town || a.village || a.suburb || '';
     const line = [[street, house].filter(Boolean).join(' '), town].filter(Boolean).join(', ');
-    return { street, house, town, line: line || d.display_name?.split(',').slice(0, 3).join(',') || '' };
+    const out = { street, house, town, line: line || d.display_name?.split(',').slice(0, 3).join(',') || '' };
+    // Only a real answer is remembered: caching "nothing found" for thirty days
+    // would make one bad lookup permanent for that doorway.
+    if (out.line) remember(key, out);
+    return out;
   } catch { return null; }
 }
 
