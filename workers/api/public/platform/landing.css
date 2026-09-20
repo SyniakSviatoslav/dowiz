@@ -169,9 +169,10 @@ p{max-width:var(--measure)}
 .step .k{display:block;font-family:var(--font-counter);font-size:var(--text-sm);letter-spacing:.06em;color:var(--hot-ink);margin-bottom:var(--space-3)}
 .product-media{position:relative;display:grid;place-items:center;min-height:min(84svh,760px)}
 @media (min-width:56rem){.product-media{position:sticky;top:0;height:100svh;order:2}}
-.phone{position:relative;width:min(320px,80vw);aspect-ratio:393/844;border-radius:46px;background:var(--ink);padding:10px;
+.phone{position:relative;width:min(320px,80vw);border-radius:46px;background:var(--ink);padding:10px;
        box-shadow:0 40px 80px -30px rgba(11,11,12,.45),0 0 0 1px rgba(11,11,12,.06)}
-.phone-screen{position:relative;width:100%;height:100%;border-radius:36px;overflow:hidden;background:var(--ink-2)}
+/* The SCREEN carries the aspect (393×844, the screenshots' own), so a 3x capture fills it edge to edge with nothing cropped. */
+.phone-screen{position:relative;width:100%;height:auto;aspect-ratio:393/844;border-radius:36px;overflow:hidden;background:var(--ink-2)}
 .phone-screen img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top}
 .phone-screen img + img{opacity:0}
 .chip{position:absolute;left:14px;right:14px;bottom:18px;background:var(--bone);color:var(--ink);border-radius:var(--radius-lg);
@@ -192,6 +193,8 @@ p{max-width:var(--measure)}
 .film-ctl{margin-top:var(--space-6)}
 .film-media{display:grid;justify-items:center}
 .film-phone{width:min(360px,84vw)}
+/* The film IS the screen: the frame takes the video's 9:16, so nothing is cropped away. */
+.film-phone .phone-screen{height:auto;aspect-ratio:9/16}
 .promo{width:100%;height:100%;object-fit:cover;display:block;background:var(--ink)}
 .film-phone{transition:transform 900ms var(--ease-arrive)}
 

@@ -70,9 +70,11 @@ command = "worker-build --release"
 # (Cloudflare dashboard -> dowiz.org -> Email -> Email Routing). A binding to
 # an unverified address fails the deploy, so it stays commented until both are
 # true; the code treats the missing binding as "store only".
-# [[send_email]]
-# name = "WAITLIST_MAIL"
-# destination_address = "syniaksviatoslav@proton.me"
+# Both true since 2026-09-20 17:00: Email Routing enabled on the zone (MX + SPF +
+# DKIM written by Cloudflare), the address verified by the operator.
+[[send_email]]
+name = "WAITLIST_MAIL"
+destination_address = "syniaksviatoslav@proton.me"
 
 # The storefront ships WITH the API, from one Worker. Static files win for paths
 # that exist on disk; /api/* has no file, so it falls through to the fetch
