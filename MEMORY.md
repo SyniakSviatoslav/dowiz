@@ -1197,3 +1197,20 @@ its source, which is why translations, logo and hours "did not work". Verified l
   (`out/promo-en-1080x1920.mp4`, rendered 2026-09-20 14:47, 30.06 s, plus 16:9 and 1:1 padded on bone by
   `scripts/reframe.sh`); `uk`/`sq` still render by prop. `assets/grain.png` is unused. Full-scale render
   took ~10 min with `--concurrency=2`.
+
+### 2026-09-20 (evening) — landing + film deployed, hub restyled (commit f4c950f, version 0a3ead73)
+- DEPLOYED: dowiz.org now serves the landing (title "dowiz — власний додаток закладу, 0% комісії"); the
+  admin sign-in is `/platform/hub` (Workers assets 307 `hub.html` → `hub`; links to `hub.html` still work).
+  Verified by reading back: `/`, `/platform/hub.css`, three mp4s, three posters all 200 with the sizes
+  in the tree; storefront `dubin-sushi.dowiz.org` still 200.
+- Hub (`platform/hub.html` + `hub.css` on top of `landing.css`; `app.js`): bone/ink/hot, Unbounded,
+  hero + one block per job, landing rows/footer; Enter submits both forms; GSAP motion when present.
+- Film on the landing: `platform/video/promo-{en,uk,sq}-540x960.mp4` (uk/sq rendered at `--scale=0.5`
+  in the landing's world, ≈5 min each with `--concurrency=2`; encoded crf 27 / aac 128k / faststart)
+  and `poster-{lang}.jpg` (frame at 5.5 s, the clean "0%"); `landing.js` switches src AND poster by
+  language. Playwright on the live site: `readyState 4`, playing, src/poster follow the language.
+- OPEN: every page on the zone logs one CSP error — Cloudflare injects an inline bot-detection script
+  (`/cdn-cgi/challenge-platform/scripts/jsd/main.js`) before `</body>`, and `script-src 'self'` blocks
+  it. Pre-existing (the storefront has it too), harmless to the page; fix is a zone setting (Bot Fight
+  Mode JS detections off) or allowing it in `_headers`. Not a change of today.
+- Local: 7 commits ahead of origin/main, not pushed (not asked).
