@@ -65,7 +65,10 @@ pub struct HubImages {
 /// because assuming is a corrupt image reported a long way from here.
 /// Which chunks of `new` differ from `old`, by index. Without an old image
 /// every chunk is new. A chunk past the end of the old image is new. A chunk
-/// that exists in both and holds the same bytes is not written again.
+/// is unchanged only when the STORED chunk has the same length as the new
+/// slice and the same bytes: a stored chunk that is longer (the image shrank
+/// and the new tail is a prefix of the old one) must be rewritten, or the
+/// meta's `len` and the bytes on disk disagree on the next cold load.
 fn changed_chunks(old: Option<&[u8]>, new: &[u8], chunk: usize) -> Vec<usize> {
     let chunks = new.len().div_ceil(chunk).max(1);
     (0..chunks)
@@ -73,7 +76,7 @@ fn changed_chunks(old: Option<&[u8]>, new: &[u8], chunk: usize) -> Vec<usize> {
             let at = n * chunk;
             let end = (at + chunk).min(new.len());
             match old {
-                Some(o) if o.len() >= end => o[at..end] != new[at..end],
+                Some(o) if (at + chunk).min(o.len()) == end => o[at..end] != new[at..end],
                 _ => true,
             }
         })
@@ -118,13 +121,14 @@ mod tests {
     }
 
     #[test]
-    fn a_shorter_image_writes_only_what_changed() {
+    fn a_shorter_image_rewrites_the_chunk_that_got_shorter() {
         let old = vec![5u8; 420];
         let new = vec![5u8; 250];
-        // chunk 2 is [200,250): same bytes as the old image's prefix, so not
-        // written; the meta shrinks the chunk count and chunk 3 is deleted
-        // by the caller.
-        assert_eq!(changed_chunks(Some(&old), &new, 100), Vec::<usize>::new());
+        // chunks 0 and 1 are the same 100 bytes; chunk 2 is now 50 bytes
+        // where storage holds 100, so it MUST be written even though those
+        // 50 bytes match -- the reviewer's case: skip it and the next cold
+        // load assembles 300 bytes under a meta that says 250.
+        assert_eq!(changed_chunks(Some(&old), &new, 100), vec![2]);
     }
 }
 
@@ -210,18 +214,30 @@ impl HubImages {
             let mem = self.mem.borrow();
             changed_chunks(mem.get(id).map(|(_, b)| b.as_slice()), bytes, CHUNK)
         };
-        for n in changed {
-            let at = n * CHUNK;
-            let end = (at + CHUNK).min(bytes.len());
-            let part = js_sys::Uint8Array::from(&bytes[at..end]);
-            store.put_raw(&Self::chunk_key(id, n), part).await?;
-        }
-        // META LAST. Between the chunks and this line the old meta still
-        // describes the old image, so an interruption leaves the previous
-        // generation readable rather than a head pointing at a tail that has
-        // not landed.
         let meta = Meta { generation: next, chunks, len: bytes.len() };
-        store.put(&Self::meta_key(id), meta).await?;
+        let written = async {
+            for n in changed {
+                let at = n * CHUNK;
+                let end = (at + CHUNK).min(bytes.len());
+                let part = js_sys::Uint8Array::from(&bytes[at..end]);
+                store.put_raw(&Self::chunk_key(id, n), part).await?;
+            }
+            // META LAST. Between the chunks and this line the old meta still
+            // describes the old image, so an interruption leaves the previous
+            // generation readable rather than a head pointing at a tail that
+            // has not landed.
+            store.put(&Self::meta_key(id), meta).await
+        }
+        .await;
+        if let Err(e) = written {
+            // STORAGE IS THE ONLY TRUTH AFTER A FAILED WRITE. Some chunks may
+            // have landed and some not; the copy in memory no longer says
+            // what is on disk, and the next write's diff would trust it and
+            // skip a chunk that is wrong. Forget the copy: the next read
+            // rebuilds it from storage and the next diff is against the truth.
+            self.mem.borrow_mut().remove(id);
+            return Err(e);
+        }
 
         // Chunks past the end of the new image are unreachable now that the
         // meta describes a shorter one, and only now.

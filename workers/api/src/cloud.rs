@@ -195,8 +195,9 @@ pub async fn status(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 /// GPS fixes older than this are nobody's. The map reads the newest fix per
 /// courier within `live_eta::POSITION_FRESH_MS` (twenty minutes) and nothing
 /// else reads the table, yet every fix ever sent stayed in it: the largest
-/// D1 write source in the system, kept forever, read never.
-const POSITIONS_KEEP_MS: i64 = 48 * 60 * 60 * 1000;
+/// D1 write source in the system, kept forever, read never. Twenty-four
+/// hours is the retention `compliance/data-map.md` promises for courier GPS.
+const POSITIONS_KEEP_MS: i64 = 24 * 60 * 60 * 1000;
 
 async fn prune_positions(db: &D1Database, now_ms: i64) {
     let before = now_ms - POSITIONS_KEEP_MS;
@@ -205,7 +206,7 @@ async fn prune_positions(db: &D1Database, now_ms: i64) {
         .bind(&[worker::wasm_bindgen::JsValue::from_f64(before as f64)]);
     match stmt {
         Ok(s) => match s.run().await {
-            Ok(r) => console_log!("nightly prune: positions older than 48 h removed ({:?})", r.meta().ok().flatten().and_then(|m| m.changes)),
+            Ok(r) => console_log!("nightly prune: positions older than 24 h removed ({:?})", r.meta().ok().flatten().and_then(|m| m.changes)),
             Err(e) => console_error!("nightly prune refused: {e}"),
         },
         Err(e) => console_error!("nightly prune: bad statement: {e}"),

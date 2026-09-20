@@ -1,121 +1,289 @@
-# Blueprint: what one hub costs, and the order log that makes it cost more every day
+# Blueprint: the cheapest hub — where every byte and every request goes, and how to remove most of them
 
-Date: 2026-09-20. Status: phase 1 SHIPPED (this commit), phases 2–5 DESIGNED, numbers
-measured unless marked *estimate*. Calculator: https://claude.ai/artifact/XLTpcL2RXZ1z52yeJC1UnY
+Date: 2026-09-20, revision 2 (after the operator's brainstorm request). Status: phase 1
+SHIPPED (af5b0fc), phases 1.5–7 DESIGNED. Numbers are MEASURED unless marked *estimate*.
+Calculator: https://claude.ai/artifact/XLTpcL2RXZ1z52yeJC1UnY
 
-## 0. The measured state
+## 0. The measured state (one venue, 30 orders/day, 10 h open, 1 courier, 5 visits per order)
 
 | Fact | Value | Source |
 |---|---|---|
-| Cloudflare plan | Workers Free, zone Free | `wrangler.toml` (error 10097 forced `new_sqlite_classes`); zone API `plan.name` |
-| One cold storefront visit | 40 responses: 20 static (free), 1 root, 1 API, **18 `/media` photos** | Playwright on `sushi-durres.dowiz.org` |
-| One `/media` photo | 2 KV reads, no edge cache (`cache.put` absent) | `extra.rs` media handler |
-| One delivered order | D1 12 reads + 5 writes; DO 12 GET + **8 PUT of the whole image** | code walk, `hubstore::with_hub` |
-| Status poll `/api/order/:id` | every 12 s; loaded the log **twice** + catalogue | `store/track.js`, `live_eta.rs:299` |
-| Owner console | every 15 s, 2 requests (orders + dashboard) | `admin/core.js POLL_MS` |
-| Courier app | every 12 s; GPS `watchPosition` POSTs a D1 row per fix, never pruned | `courier/app.js`, `courier.rs` |
-| Live venue log | 5830 cells for 10 orders at generation 21 → **583 cells = 4.66 KB per EVENT** | `/api/owner/health` |
-| Events per delivered order | 6 (Placed + 5 Advanced), each carrying the WHOLE order JSON | `domain.rs:715`, `lib.rs:431` |
+| Cloudflare plan | Workers Free, zone Free | `wrangler.toml` (error 10097 forced `new_sqlite_classes`); zone API |
+| One cold storefront visit | 40 responses: 20 static (free), 1 root, 1 API, **18 `/media` photos = 2.69 MB, 150 KB each** | Playwright on `sushi-durres.dowiz.org` |
+| Photo pipeline | stored as uploaded, no resize, no thumbnail; grid cards load the full photo | `extra.rs` upload, `store/menu.js` |
+| One `/media` photo | 2 KV reads, no edge cache | `extra.rs` media (fixed in phase 1) |
+| One delivered order | D1 12 reads + 5 writes; DO 12 GET + **8 PUT of the whole image** | `hubstore::with_hub` call sites |
+| Status poll | every 12 s; loaded the log twice + catalogue | `store/track.js`, `live_eta.rs:299` (fixed) |
+| Owner console | every 15 s, 2 requests | `admin/core.js` |
+| Courier app | every 12 s; GPS row per fix, never pruned | `courier/app.js`, `courier.rs` (fixed) |
+| Live venue log | 5830 cells / 10 orders at generation 21 → **583 cells = 4.66 KB per EVENT** | `/api/owner/health` |
+| Events per delivered order | 6, each carrying the WHOLE order JSON | `domain.rs:715`, `lib.rs:431` |
 | Cell packing | **one payload byte per 8-byte cell** | `bebop-store/src/evlog.rs:146` |
-| Image on the wire | always full capacity; doubles when full; never compacted | `bebop-store/src/lib.rs:103`, `dowiz-hub/src/lib.rs:399` |
+| Record header | 35 cells = 280 B per event (2 obj + 15 record + two 9-cell roots: two commits per append) | `evlog.rs`, `dowiz-hub/src/lib.rs:364` |
+| Image on the wire | ALWAYS full capacity (zeros included); doubles; never compacted | `bebop-store/src/lib.rs:103,132` |
+| Catalogue image | 67,242 cells = 538 KB for 165 dishes (JSON would be ≈ 70 KB): same 8× | `/api/owner/health` |
+| Workers Logs | enabled, unsampled: ≥ 1 event per request | `wrangler.toml [observability]` |
+| Notifications | Telegram (free) and WhatsApp (Meta: per message from 2026-10-01) on every order | `notify.rs`, `channels.rs` |
+| Nightly backup | base64 of all five FULL-CAPACITY images, a new object every night, never rotated | `cloud.rs`, `hubstore::export` |
 
-So a delivered order writes ≈ 28 KB into an image that is then rewritten whole eight
-times and transferred whole on every poll. At 30 orders/day the hot image passes 25 MB in
-about a month. That is the constraint. Money is not: one venue is $5.93/month all-in
-(the $5 subscription is per account), ten venues are $1.88 each, and a delivery is
-≈ 0.01 lek. Durable Object DURATION is not billed between polls (the object has no
-sockets, timers or outbound fetches, so it is hibernatable within 10 s of every
-response); the first free-plan limit is DO REQUESTS at ~4 venues.
+Durable Object DURATION is not billed between polls: the object has no sockets, timers or
+outbound fetches, so it is hibernatable within 10 s of every response (Cloudflare,
+"Lifecycle of a Durable Object"). What binds is REQUEST COUNT (DO 100k/day free, 1M/month
+included on paid) and the order log, which is rewritten whole per append and read whole per
+poll and grows 28 KB per delivered order — 300 MB a year at 30 orders/day, into a Worker
+with 128 MB.
 
-## 1. Phase 1 — shipped in this commit
+## 1. Estimated savings by phase (the deliverable of this document)
 
-| Change | File | Effect |
+Per venue, 30 orders/day. "$/venue-month" is the marginal cost at overage rates, i.e. what
+the NEXT venue costs once the included amounts are used; "free" = venues the free plan
+holds; "$5" = venues the paid plan's included amounts hold before usage is billed.
+
+| Phase | requests/day (Worker + DO) | $/venue-month | venues free | venues in $5 | KB per delivered order | hot image after a year | MB per cold visit | KB per poll |
+|---|---|---|---|---|---|---|---|---|
+| 0 today | 41,880 | 1.73 | 4 | 1.4 | 28 | 299 MB | 2.69 | 4,300 |
+| 1 shipped | 33,930 | 1.02 | 5 | 1.6 | 28 | 299 MB | 2.69 | 4,300 |
+| 1.5 quick wins | 27,800 | 0.32 | 6 | 2.0 | 28 | 299 MB | 0.5 | 4,300 |
+| 2 the object IS the hub | 19,800 | 0.27 | 9 | 3.7 | 28 | 299 MB | 0.5 | 10 |
+| 3 deltas + codebook | 19,800 | 0.27 | 9 | 3.7 | 2 | 21 MB | 0.5 | 10 |
+| 4 format v2 | 19,800 | 0.26 | 9 | 3.7 | 0.8 | 9 MB | 0.5 | 10 |
+| 5 bounded hot log | 19,800 | 0.26 | 9 | 3.7 | 0.8 | ≈ 1 MB | 0.5 | 10 |
+| 6 push, not poll | 3,900 | 0.06 | 45 | 20 | 0.8 | ≈ 1 MB | 0.5 | 0 |
+| 7 local-first replicas (wild) | 1,100 | 0.03 | 167 | 67 | 0.8 | ≈ 1 MB | 0.5 | 0 |
+
+Two lines the first model missed and this one carries: **Workers Logs** (unsampled, ≥ 1
+event per request: at 40 venues ≈ 60M events/month = $25, the largest line on the bill
+by then) and **WhatsApp** (Meta bills service and utility messages per message from
+2026-10-01, $0.004–0.046 each: two per order at 30 orders/day is $7–80 per venue per
+month — up to 40× the whole Cloudflare bill). Neither is a byte problem; both are a
+setting.
+
+## 2. Brainstorm — every place a byte or a request hides
+
+Ordered by leverage. ✔ = in a phase below.
+
+**Requests.** Polling is 65 % of all requests (console 2 × every 15 s, courier every 12 s,
+tracking every 12 s per live order) ✔6. Adaptive tick: back off to 60 s when the queue is
+empty, 5 s while an order is in flight ✔1.5. The dashboard totals every 4th poll ✔1.
+`owner_at` runs the membership query twice per owner action (`owner.rs:24,41`) ✔1.5. The
+storefront root goes through the Worker only to pick a host — unavoidable, 1 per visit.
+
+**Bytes on the wire to the phone.** Photos: 150 KB each, 18 per first paint, stored as
+uploaded. Resize at upload to two sizes (grid 320 px ≈ 12 KB, sheet 1024 px ≈ 45 KB), serve
+by `srcset`; 2.69 MB → ≈ 0.5 MB per cold visit ✔1.5. Lazy-load below the fold (present in
+`menu.js`; verify it applies to the grid). A menu "atlas": one KV blob with every thumbnail
+of the menu, one request, one edge-cache entry — game-dev's sprite sheet — worth it only if
+per-photo caching proves insufficient. Fonts, CSS, JS: static, free, cached — leave.
+
+**Bytes between Worker and object.** Whole image both ways on every read and write ✔2.
+`to_bytes()` ships the FULL CAPACITY, zeros included: a freshly doubled 8 MB image is 8 MB
+of mostly nothing. Persist `1024 + arena_used` cells and re-pad on load from superblock
+cell 12 (capacity) ✔1.5 — halves write transfer on average, no format change (the on-disk
+`Store::open` path can keep writing full files).
+
+**Bytes in the log.** Six full JSON envelopes per order ✔3; names and descriptions copied
+from the catalogue into every line ✔3a; one payload byte per cell ✔4; 280 B of header per
+event, two commits per append, a 32-byte actor key that is always zero ✔4; nothing ever
+leaves the hot image ✔5. The catalogue and settings images have the same 8× ✔4 (Kv
+entries pack the same way).
+
+**Writes to D1.** GPS a row per fix ✔1 (throttle + prune); positions have no business in
+D1 at all once a socket exists — they are ephemeral state, kept in the object's memory ✔6.
+Every fix a courier sends is 1 auth read + 1 insert; over a socket it is one message.
+
+**CPU.** `orders()` was O(events × orders) ✔1; `order(id)` walks the whole log; every
+reader folds from bytes ✔2 (fold once per generation in the object). `serde_json` per event
+per poll ✔2/3.
+
+**Logs.** `head_sampling_rate = 0.1` in `[observability]` — one line, and a 10× cut on the
+line that dominates at 40 venues ✔1.5. Keep 100 % for `console_error!` by logging errors to
+a D1 table the console reads (loud failures stay loud; the memory of "instruments that
+measure nothing" applies).
+
+**External services.** WhatsApp → default OFF for status pushes; Telegram (free) and Web
+Push (VAPID, free, the storefront is already an installable PWA) carry them; WhatsApp only
+inside a customer-initiated window ✔1.5. Nominatim reverse geocoding: free but 1 req/s
+policy — cache by 50 m grid cell in KV, or resolve against the venue's delivery polygon on
+the device ✔1.5. Nightly S3 bundle: gzip the JSON (a full-capacity image of mostly zeros
+compresses ≈ 50×) and rotate (7 daily + 4 weekly) ✔1.5 — the venue's bucket, the venue's
+bill, but it grows unbounded today.
+
+## 3. Ideas from game networking (the operator asked; they fit unusually well)
+
+A delivery hub is a small multiplayer game: a few entities, positions, state transitions,
+many observers, unreliable phones. Game netcode solved these constraints twenty years ago.
+
+| Game technique | What it becomes here | Phase |
 |---|---|---|
-| DO writes only the chunks whose bytes moved | `hubdo.rs` `changed_chunks` + 5 unit tests | an append = chunk 0 + tail chunk: **2 row writes instead of ⌈image/96 KiB⌉** (43 at 4 MB) |
-| `attach_one` takes the already-loaded hub | `live_eta.rs`, `lib.rs` | status poll reads the log **once**, not twice |
-| `/media` behind `caches.default` | `extra.rs` | photos cost KV reads once per POP, not per device |
-| `orders()` dedups with a set | `dowiz-hub/src/lib.rs` | fold O(events) instead of O(events × orders) |
-| `StockLog::write` numbers from the root counter | `stock.rs` | no full walk per delivery |
-| `with_hub`/`with_stock` skip the save when nothing was appended | `hubstore.rs` | a webhook replay no longer rewrites the image |
-| GPS: one fix per 10 s or 20 m; positions older than 48 h pruned nightly | `courier/app.js`, `cloud.rs` | D1 writes ÷ ~3, table bounded |
-| Dashboard totals every 4th poll | `admin/app.js` | console requests −40 % |
+| Snapshot + delta compression (Quake 3: send the diff against the last acked state) | The object keeps per-client "last seen generation"; a poll or push carries only events since it | 2, 6 |
+| Dead reckoning (send velocity, extrapolate; correct only when the error exceeds a threshold) | Courier sends a fix only when the straight-line prediction is off by > 20 m; the map extrapolates between fixes | 1.5 (client), 6 |
+| Quantisation + bit-packing (Fiedler, "Snapshot Compression": 10× typical) | Positions to 1 m inside the delivery zone (2 × 15 bits), status/time/courier in one cell | 4 |
+| Tick rate scaling | Poll every 60 s when idle, 5 s in flight; push makes the tick zero | 1.5, 6 |
+| Interest management / area of interest | A client receives only its topic: the customer its order, the courier its run, the console the queue | 2, 6 |
+| Level of detail | Three projections, not one: tracking sheet (status + ETA), courier (assigned + open), console (full); archived orders at "far LOD" — a count and a link | 2, 5 |
+| Mipmaps | Grid thumbnails vs dish-sheet photos | 1.5 |
+| Texture atlas | One menu thumbnail blob | optional |
+| Occlusion culling | Fold and send only live orders; closed ones are not in the hot path | 5 |
+| Lockstep / deterministic replay from inputs | The kernel already replays identically everywhere: clients can fold the log themselves | 7 |
+| Client-side prediction + reconciliation | The console shows a status change at once and reconciles with the object's answer | 2 |
+| Baked lighting (precompute at build) | ETA profile per zone computed nightly, not per request | 1.5 |
+| Entity-component / structure-of-arrays | Columnar fold in the object: one array per field, cache-friendly and compressible | 2 |
 
-Verification: `cd crates/dowiz-hub && cargo test`, `cd workers/api && cargo test --lib`
-(35, five of them new), `cargo check --target wasm32-unknown-unknown`, design gate GREEN,
-`/media` answers `cf-cache-status: HIT` on the second fetch from one POP.
+## 4. Three wild ideas (they look impossible; they are the direction)
 
-## 2. Phase 2 — the object answers with orders, not with bytes
+**W1 — Zero-byte orders: the cart is a tensor over the catalogue.** A cart is a sparse
+vector over the venue's 165 dishes: `(index: 8 bits, qty: 4 bits, modifiers: 8 bits)` per
+line, the address an index into the customer's saved addresses, the price snapshot the
+catalogue's version number (prices are re-derived by the deterministic kernel, exactly, as
+`storefront.rs:762` already does). A `Placed` event becomes ≈ 3 cells of payload; with the
+v2 header, a delivered order ≈ 15 cells = 120 bytes. Two hundred times smaller than today.
+"Impossible" because the receipt must survive a menu change — it does: the catalogue is
+itself a versioned image, and the version is in the event.
 
-Today every reader (console, courier, tracking sheet, ETA) fetches the whole image from
-the DO and folds it in the Worker: O(image) transfer and O(events) CPU per poll, growing
-with the venue's life. The DO already keeps the image in `self.mem`.
+**W2 — The phone is the hub, Cloudflare is the mirror.** "bebop IS dowiz's database" and
+the kernel is local-first by decision D0. The console device in the kitchen holds the
+authoritative hot log (≈ 1 MB after phase 5); the object is a relay and a backup that
+accepts appends while the phone is away and hands them over when it returns. Devices
+exchange hashed heads, not images; the `actor_pubkey` slot every caller leaves zero becomes
+real (each device signs its appends). Cloudflare usage per venue collapses to relay
+messages; the platform costs $5 flat however many venues. "Impossible" because phones go
+offline — which is exactly what an append-only log with a mirror tolerates.
 
-Design: the DO folds once per generation and caches the projection.
-`GET /img/log` stays for writers. New: `GET /orders` → the `orders()` fold as JSON;
-`GET /order/:id`; both served from a `(generation, Vec<Event>)` memo invalidated by
-`put_image`. Readers in `owner.rs`, `courier.rs`, `lib.rs` `/api/order/:id`, `eta.rs`,
-`live_eta.rs` switch to it; `with_hub` keeps the image path. A poll becomes one small
-JSON hop, constant in the venue's history. Tests: the memo returns the same list as
-`Hub::load(bytes).orders()` for a fixture image; generation bump drops the memo.
+**W3 — The customer never talks to the server about their order.** After placement the
+tracking sheet subscribes to the venue's peer set over WebRTC (bebop2's mesh, in the browser)
+and folds status events locally; the object is contacted only when no peer answers.
+Polling disappears not because it got cheaper but because there is nothing to poll. This is
+W2 seen from the customer's side and is the actual end state of phase 7.
 
-Effect: DO requests per poll 2–3 → 1; Worker CPU per poll O(events) → O(orders); the
-Worker never holds a 4 MB image on a read path.
+## 5. The blueprints
 
-## 3. Phase 3 — `Advanced` carries the change, not the order
+Each phase: scope, files, the test that is RED before and GREEN after, the live number
+that proves it, effort (*estimate*), risk. Order is by leverage ÷ risk.
 
-Every transition stores the whole envelope again: 6 × the order's JSON per delivered
-order. Change inside `dowiz-hub` only: the fold merges events oldest → newest onto the
-`Placed` envelope (`serde_json` object merge); `Advanced` callers then pass a delta
-(`status`, the stamped timestamps, `courier_id`). Old events with full JSON merge
-identically, so the change is backward compatible with every image in production.
-Tests: an order folded from a full-JSON history equals one folded from deltas; the
-`cap.rs` history walk shrinks by ≈ 5× for the same orders.
+### Phase 1 — shipped (af5b0fc)
 
-Effect: bytes per delivered order ≈ 28 KB → ≈ 6 KB.
+DO writes only changed chunks (`hubdo.rs changed_chunks`, 5 tests: an append = chunk 0 +
+tail); `attach_one` reuses the loaded hub; `/media` behind `caches.default`; `orders()`
+HashSet; `StockLog::write` numbers from the root counter; `with_hub`/`with_stock` skip the
+save when `len()` did not move (not the generation: `grow()` restarts it); GPS one fix per
+10 s / 20 m and a nightly prune > 48 h; dashboard totals every 4th poll. Proof: dowiz-hub
+261 tests, workers/api 35 (5 new), wasm check, design gate; `/media` `cf-cache-status: HIT`
+on the second fetch.
 
-## 4. Phase 4 — EvLog v2: eight payload bytes per cell (bebop-store format)
+### Phase 1.5 — quick wins (effort ½ day, risk low)
 
-`evlog.rs:146` writes one payload byte per cell and `read_at` mirrors it; the image is
-8× the data. A v2 record packs 8 bytes per cell (little-endian), flagged by a version
-cell in the EVLOG root so a reader tells v1 from v2 and `grow()` migrates a v1 image
-into a v2 arena on its next doubling. Rules from the repo: re-derive
-`append_is_constant_cost` (`evlog.rs:321`, today `47`) with an ORACLE before touching
-the golden; the bebop-lang side that reads this format moves in the same commit
-(see `bebop-lang/AGENTS.md`, "a change to a written format is not finished until every
-reader, oracle, golden and harness model is re-derived in the SAME commit").
+1. `[observability] head_sampling_rate = 0.1`; errors also written to a `worker_errors`
+   D1 row (kept 7 days) so failures stay loud. Test: a probe error appears in the table.
+2. Photos: resize at upload with the `image` crate (already wasm-safe) to 320 px and
+   1024 px JPEG q72, both content-addressed; `srcset` in `menu.js` and the dish sheet.
+   Test: an upload yields two keys; the grid requests the small one (Playwright: bytes per
+   cold visit < 0.6 MB).
+3. Adaptive polling: `POLL_MS` 60 s when no order is live, 5 s while one is
+   (console, courier, tracking). Test: request count per idle hour < 150.
+4. `to_bytes()` ships used cells only; `from_bytes` re-pads to capacity from cell 12.
+   Test in bebop-store: round trip of a grown image equals the full one; a fresh 4 MB hub
+   serialises to ≈ 10 KB.
+5. `owner_at` → `owner_and_venue` (one membership read).
+6. Nightly bundle gzipped and rotated (7 daily + 4 weekly). Test: object size of a fresh
+   venue < 20 KB.
+7. WhatsApp status pushes default off; Web Push (VAPID keys as Worker secrets, subscription
+   stored on the customer row) for the tracking sheet; Telegram stays. Test: a placed
+   order produces a push, no Meta call unless `notify.whatsapp.status = on`.
+8. Nominatim results cached in KV by 50 m cell for 30 days.
 
-Effect: image ÷ ~8 for the same events; with phase 3, a delivered order ≈ 0.8 KB.
+### Phase 2 — the object IS the hub (effort 2 days, risk medium)
 
-## 5. Phase 5 — a bounded hot log, with the history kept cold
+The Durable Object owns a live `Hub` (and `StockLog`) in memory; the Worker sends
+COMMANDS and reads PROJECTIONS; the image never crosses the Worker↔object hop again.
 
-No primitive exists for compaction, snapshot or truncation of an append log; `grow()`
-is a verbatim replay into a fresh arena and is the machinery to reuse. `prev` is not
-verified anywhere and content ids do not chain (`lib.rs:488`), so dropping head records
-is mechanically safe; `EventKind::from_byte` silently skips unknown kinds, so a new
-`Checkpoint` kind must be added with a loud test rather than relied on.
+- `hubdo.rs`: `POST /append {kind, order_id, payload}` → `Hub::append` + persist (chunk
+  diff) + bump memo; `GET /orders?lod=console|courier|track&since=<generation>` → the
+  fold, cached per generation, filtered per LOD; `GET /order/:id`; `GET /catalog` stays
+  bytes for `with_catalog` writers but `GET /catalog/product/:id` and `/catalog/location`
+  serve JSON from a memo. Snapshot+delta: `since` returns only events after that
+  generation, with the new generation in a header.
+- `hubstore.rs`: `with_hub` becomes `append(place, ev)`; readers call the projection.
+  `load()` remains for export/import/health.
+- Readers: `owner.rs orders/dashboard`, `courier.rs tasks`, `lib.rs /api/order/:id`,
+  `eta.rs quote`, `live_eta.rs` — each drops its `load()`.
+- Tests (workers/api, native): the projection of a fixture image equals
+  `Hub::load(bytes).orders()`; `since` returns exactly the appended events; a generation
+  bump invalidates the memo; LOD `track` never contains another customer's address.
+- Live proof: `/api/owner/health` gains `objectReads`, `bytesShipped`, `chunksWritten`
+  counters kept in the object; a console hour ships < 1 MB where it shipped 400 MB.
 
-Design (inside `dowiz-hub`, next to `grow`): `Hub::rotate(keep: |order| bool)` replays
-into a fresh image only the events of orders that are open or closed within 30 days,
-preceded by one `Checkpoint` record naming the archived image's tip. The DO stores the
-outgoing image under `log@<generation>` (never read on the hot path); the nightly S3
-bundle already carries the full image. Trigger: `usage().used_cells` above a threshold
-on a write, or the nightly cron. Tests: every open order folds identically before and
-after; a closed-old order is absent from `orders()` and present in the archive;
-`Checkpoint` survives `events()` rather than being skipped.
+### Phase 3 — deltas and the codebook (effort 1 day, risk low; inside `dowiz-hub`)
 
-Effect: the hot image is bounded by activity, not by lifetime.
+- `Hub::orders()`/`order()` fold events oldest → newest by JSON-object merge onto the
+  `Placed` envelope. Old full-JSON events merge identically (backward compatible with
+  every image in production).
+- `Advanced` callers (`lib.rs:431`, `owner.rs:425`, `courier.rs:242`) pass
+  `{status, <stamp>_ms, courier_id?}`.
+- Lines carry `product_id, qty, modifier_ids, unit_minor, line_minor`; names, descriptions,
+  photos, kcal come from the catalogue at render (`storefront.rs` already re-derives
+  prices from the catalogue at placement). Derived fields (ETA, formatted money) are never
+  stored.
+- Tests: fold(full history) == fold(delta history) for the `cap.rs` fixture; bytes per
+  delivered order in `tests/cap.rs` drop from ≈ 2,190 cells to ≈ 260 (*estimate*).
+- Live proof: `usedCells / orders` on the live venue after ten real orders.
 
-## 6. Expected numbers (30 orders/day, estimate from the measurements above)
+### Phase 4 — EvLog v2 in bebop-store (effort 3 days, risk HIGH: a written format)
 
-| | today | phase 1 | + 2 | + 3 | + 4 | + 5 |
-|---|---|---|---|---|---|---|
-| DO row writes per order | 8 × ⌈img/96K⌉ (≈ 360 at 4 MB) | 16 | 16 | 16 | 16 | 16 |
-| bytes per poll | whole image | whole image | ≈ orders JSON | same | same | same |
-| bytes per delivered order | 28 KB | 28 KB | 28 KB | 6 KB | 0.8 KB | 0.8 KB |
-| hot image after a year | 300 MB | 300 MB | 300 MB | 66 MB | 8 MB | ≈ 1 MB |
+- Record: 8 payload bytes per cell; the tip written in the same commit as the record (one
+  root); `actor_pubkey` present only when non-zero (a flag bit in cell 0); `prev` and the
+  content id kept; the content id NOW hashes `prev` too, so the chain is tamper-evident by
+  cascade (today `stock.rs:723` claims it and `lib.rs:488` does not deliver it).
+- Version cell in the EVLOG root; `walk`/`read_at` dispatch on it; `grow()` migrates v1 →
+  v2 on the next doubling; `Kv` entries pack the same way (catalogue 538 KB → ≈ 70 KB).
+- Repo rules: the ORACLE for `append_is_constant_cost` (`evlog.rs:321`, golden 47) is
+  re-derived first; the bebop-lang reader of this format (`bebop-lang/`, `bpref`) moves in
+  the same commit, per `bebop-lang/AGENTS.md` ("every reader, oracle, golden and harness
+  model in the SAME commit"). `arch_check` and `invariants.sh` stay green.
+- Tests: v1 fixture image loads, folds identically, and after one append is v2; cells per
+  event = 12 + ⌈P/8⌉; the 3,000-order regression in `tests/log_growth.rs` runs in a fraction
+  of the image.
 
-## 7. What is deliberately NOT done
+### Phase 5 — a bounded hot log with cold history (effort 2 days, risk medium)
 
-Polling is not replaced by WebSockets: the object already hibernates between polls, so
-duration is not the cost, requests are, and phase 2 makes a poll one small hop. Lower
-poll rates trade liveness the console and the tracking sheet exist for.
+- `EventKind::Checkpoint = 6` with a LOUD test that `events()` returns it (today unknown
+  kinds are skipped silently, `lib.rs:471`).
+- `Hub::rotate(keep)` next to `grow()`: replay only events of orders that are open or
+  closed within 30 days, preceded by a `Checkpoint` naming the archived image's tip and
+  generation. Object stores the outgoing image under `log@<generation>` (never on the hot
+  path; served by `/api/owner/history?before=`); the nightly S3 bundle carries it too.
+- Trigger: `usage().used_cells` above a threshold on a write, or the nightly cron.
+- Tests: every open order folds identically before and after; a closed-old order is in the
+  archive and not in `orders()`; a second rotation chains checkpoints.
+
+### Phase 6 — push, not poll (effort 3 days, risk medium)
+
+- The object accepts WebSockets with the Hibernation API (`state.accept_web_socket`, in
+  workers-rs 0.8.5), tagged by topic (`console`, `courier:<id>`, `order:<id>`); it
+  hibernates between messages, so duration stays unbilled; each incoming message is one
+  request, outgoing broadcasts are not.
+- On every append the object broadcasts the delta to the interested topics (interest
+  management); clients apply it (client-side prediction already renders the optimistic
+  state).
+- Courier GPS goes over the socket into object memory (dead reckoning on the client: send
+  only when the prediction is off by > 20 m); `live_eta::fixes` reads the object;
+  `courier_positions` in D1 is retired (kept 48 h for the audit log only).
+- Fallback: the existing polling endpoints remain for clients without a socket.
+- Tests: a fixture object with two sockets receives one broadcast per append; a
+  hibernated object wakes on a message and answers from the memo.
+- Live proof: requests/day for an idle open venue < 500 (today ≈ 10,000).
+
+### Phase 7 — local-first replicas (the wild end; effort weeks; risk research)
+
+W2 + W3: devices hold the hot log, sign their appends with the actor key, exchange heads
+over bebop2 (the PQ mesh, `mesh-adapter/`), and treat the object as relay + mirror. Depends
+on phase 4's real hash chain and phase 5's bounded hot image. Deliverable of the first
+step: the console folds the log it receives over the socket (phase 6) and survives a
+15-minute outage without a request. Everything after that is the manifesto.
+
+## 6. What is deliberately NOT done
+
+Poll rates are not simply lowered below what liveness needs: phase 6 removes the poll.
+Hypervectors are not used for the log (lossy; money is exact by D0) — they belong to
+retrieval and taste. Encrypting the order does not save bytes; encrypting the PERSON
+(address, phone, to the venue's key) is a privacy feature to design into phase 3's payload,
+size-neutral.
