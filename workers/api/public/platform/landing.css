@@ -263,6 +263,14 @@ p{max-width:var(--measure)}
 .term .facts li{display:flex;gap:var(--space-3);align-items:baseline}
 .term .facts li::before{content:"";flex:none;width:8px;height:8px;border-radius:var(--radius-full);background:var(--ink);transform:translateY(-2px)}
 .term.ours .facts li::before{background:var(--hot)}
+/* THE PRICE, said out loud. The big 0% answers the aggregator's −35%; this
+   line answers the question that follows it, which is "then what does it
+   cost". Counter face and tabular figures so it sits with the number above it
+   rather than with the prose below. */
+.term .price{font-family:var(--font-counter);font-variant-numeric:tabular-nums;
+             font-size:clamp(1.6rem,4vw,2.6rem);font-weight:var(--weight-bold);
+             letter-spacing:-.02em;line-height:1;display:flex;gap:var(--space-3);align-items:baseline}
+.term .price span{font-family:var(--font-body);font-size:var(--text-base);font-weight:400;color:var(--mute)}
 
 /* ── the close: the ask, then the wordmark rises out of the ground ──────── */
 .close{padding-block:clamp(96px,16vh,200px) 0;overflow:clip}

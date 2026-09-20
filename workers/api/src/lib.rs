@@ -41,24 +41,10 @@ mod errlog;
 mod fold;
 mod live;
 
-use dowiz_kernel::json_api;
-use serde::Deserialize;
 use worker::wasm_bindgen::{JsCast, JsValue};
 use worker::*;
 
-#[derive(Deserialize)]
-struct PlaceOrderBody {
-    #[serde(default)]
-    customer_id: Option<String>,
-    items_json: String,
-    #[serde(default)]
-    channel: Option<String>,
-}
 
-#[derive(Deserialize)]
-struct AdvanceBody {
-    next_status: String,
-}
 
 /// A CSPRNG-backed order id from the platform's Web Crypto.
 ///
@@ -72,24 +58,6 @@ pub fn edge_id() -> Option<String> {
     let f = js_sys::Reflect::get(&crypto, &JsValue::from_str("randomUUID")).ok()?;
     let f = f.dyn_ref::<js_sys::Function>()?;
     f.call0(&crypto).ok()?.as_string()
-}
-
-/// Pull `status` out of a kernel-serialized order so it can live in its own
-/// column. The kernel's JSON stays the single source of truth in `order_json`;
-/// this is a projection for querying, never a second authority.
-fn status_of(order_json: &str) -> Result<String> {
-    let v: serde_json::Value = serde_json::from_str(order_json)
-        .map_err(|e| Error::RustError(format!("kernel order json unreadable: {e}")))?;
-    v.get("status")
-        .and_then(|s| s.as_str())
-        .map(|s| s.to_string())
-        .ok_or_else(|| Error::RustError("kernel order json has no status".into()))
-}
-
-/// The kernel answers `Err(String)` for malformed input and illegal transitions
-/// alike; both are client errors at this boundary, never a 500.
-fn kernel_reject(msg: String) -> Result<Response> {
-    Response::error(msg, 400)
 }
 
 #[event(fetch)]
@@ -327,52 +295,6 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/courier/position", courier::position)
         .get_async("/api/courier/earnings", courier::earnings)
         .get_async("/api/courier/history", extra::courier_history)
-        .post_async("/api/order", |mut req, ctx| async move {
-        let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-            let body: PlaceOrderBody = match req.json().await {
-                Ok(b) => b,
-                Err(e) => return Response::error(format!("bad request body: {e}"), 400),
-            };
-            let Some(id) = edge_id() else {
-                return Response::error("no platform CSPRNG for order id", 500);
-            };
-            let created_at_ms = Date::now().as_millis() as i64;
-
-            let order_json = match json_api::place_order_at(
-                id.clone(),
-                body.customer_id,
-                &body.items_json,
-                created_at_ms,
-                body.channel,
-            ) {
-                Ok(j) => j,
-                Err(e) => return kernel_reject(e),
-            };
-            let status = status_of(&order_json)?;
-
-
-            let seq = created_at_ms as u64;
-            let ev_id = id.clone();
-            let ev_json = order_json.clone();
-            // THE EVENT, NOT THE IMAGE. The object appends and persists; this
-            // path used to fetch the whole log, add one record and ship it all
-            // back. `seq` is the order's own creation stamp and the object
-            // stamps the record's clock, which is the same millisecond.
-            let _ = seq;
-            crate::hubstore::append_blind(
-                &crate::hubstore::Place::of_any(&req, &ctx).await?,
-                dowiz_hub::EventKind::Placed,
-                &ev_id,
-                &ev_json,
-            )
-            .await?;
-
-
-            let mut res = Response::ok(order_json)?;
-            res.headers_mut()
-                .set("content-type", "application/json; charset=utf-8")?;
-            Ok(res)
-        })
         .get_async("/api/order/:id", |req, ctx| async move {
             let Some(id) = ctx.param("id").cloned() else {
                 return Response::error("missing order id", 400);
@@ -399,7 +321,19 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
 
             let allowed = match auth::authenticate(&req, &ctx.env, &db, Date::now().as_millis() as i64).await {
                 Ok(auth::Principal::Customer { order_id, .. }) => order_id == id,
-                Ok(auth::Principal::Owner { .. }) => true,
+                // AN OWNER OF THIS VENUE, not an owner of any venue.
+                //
+                // `authenticate`'s owner check asks "is this user an owner
+                // somewhere", because that is all a role needs. Here the
+                // question is about a VENUE: a platform-admin token carries no
+                // location at all and this route used to answer `true` for it,
+                // so it read any venue's orders -- name, phone and address --
+                // on the venue's own host, which `accounts.rs` states in as
+                // many words that it cannot do. The claim has to name THIS
+                // hub.
+                Ok(auth::Principal::Owner { active_location_id, .. }) => {
+                    active_location_id.as_deref() == Some(place.venue.as_str())
+                }
                 Ok(auth::Principal::Courier { courier_id, .. }) => {
                     envelope.get("courier_id").and_then(|c| c.as_str()) == Some(courier_id.as_str())
                 }
@@ -418,82 +352,28 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
             res.headers_mut().set("cache-control", "private, no-store")?;
             Ok(res)
         })
-        .post_async("/api/order/:id/advance", |mut req, ctx| async move {
-            let Some(id) = ctx.param("id").cloned() else {
-                return Response::error("missing order id", 400);
-            };
-            let body: AdvanceBody = match req.json().await {
-                Ok(b) => b,
-                Err(e) => return Response::error(format!("bad request body: {e}"), 400),
-            };
-            let db = ctx.d1("DB")?;
-            let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-            let next = body.next_status.clone();
-
-            // One read-modify-write against the hub image, replayed if another
-            // writer moved it first. The kernel decides whether the edge is
-            // legal; the Worker only records its answer.
-            // ONE ORDER IN, ONE EVENT OUT. The object hands over the folded
-            // order, the kernel decides, and what goes back is the delta.
-            let out = hubstore::append_for(&place, &id.clone(), move |current| {
-                let current = current
-                    .ok_or_else(|| Error::RustError("order not found".into()))?;
-                let updated = json_api::apply_event_logic(&current, &next)
-                    .map_err(Error::RustError)?;
-                let merged = carry_envelope(&current, &updated);
-                // The event carries the CHANGE; the response still carries the
-                // whole order, because that is what the caller asked for.
-                let change = crate::fold::delta(
-                    &serde_json::from_str(&current).unwrap_or(serde_json::json!({})),
-                    &serde_json::from_str(&merged).unwrap_or(serde_json::json!({})),
-                )
-                .to_string();
-                Ok(Some((dowiz_hub::EventKind::Advanced, change, serde_json::json!(merged))))
-            })
-            .await
-            .map(|v| v.and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default());
-
-            match out {
-                Ok(merged) => {
-                    let mut res = Response::ok(merged)?;
-                    res.headers_mut()
-                        .set("content-type", "application/json; charset=utf-8")?;
-                    Ok(res)
-                }
-                // An illegal transition is the caller's mistake, so 409 -- never
-                // a 500, which would blame the server for a refusal it was right
-                // to make.
-                Err(e) => {
-                    let msg = e.to_string();
-                    let code = if msg.contains("not found") { 404 } else { 409 };
-                    Response::error(msg, code)
-                }
-            }
-        })
+        // ── TWO LEGACY WRITE ROUTES, DELETED 2026-09-21 ──
+        //
+        // `POST /api/order` and `POST /api/order/:id/advance` took NO
+        // authentication of any kind. Anyone who knew a venue's host could
+        // append orders to its log, and anyone who had an order id -- which is
+        // in a URL, a browser history, a shared tracking link -- could walk
+        // that order to CANCELLED, or to DELIVERED, past the courier's cash
+        // handover. A red-team pass found them; nothing in `public/` had
+        // called either since the real routes existed.
+        //
+        // What replaces them, and always did: placement is
+        // `POST /api/public/locations/:slug/orders` (`storefront::place`),
+        // which re-derives every price from the catalogue, validates the
+        // address, reserves the stock and mints the customer's key; transitions
+        // are `owner::order_action` (owner token, membership scoped to the
+        // venue, a whitelist of five actions) and the courier routes (an
+        // assignment row the courier must own). A duplicate write path with
+        // weaker authentication is not a convenience, it is the hole.
+        //
+        // `scripts/smoke.sh` used them and now speaks the authenticated ones.
         .run(req, env)
         .await
-}
-
-/// Carry the fields the kernel does not model across a transition.
-///
-/// The kernel owns items, status, subtotal and the ledger. Delivery address,
-/// contact and payment ride alongside until the aggregate's new fields reach
-/// this boundary, and they have to survive every advance: losing a delivery
-/// address on a status change is a silent loss that only surfaces at the door.
-fn carry_envelope(old_raw: &str, updated: &str) -> String {
-    let Ok(mut merged) = serde_json::from_str::<serde_json::Value>(updated) else {
-        return updated.to_string();
-    };
-    let old: serde_json::Value = serde_json::from_str(old_raw).unwrap_or(serde_json::Value::Null);
-    for k in [
-        "location_id", "contact", "fulfilment", "payment", "delivery_fee", "total",
-        "courier_id", "rejection_reason", "at", "accepted_at_ms", "crypto", "tip",
-    ] {
-        if let Some(v) = old.get(k) {
-            merged[k] = v.clone();
-        }
-    }
-    serde_json::to_string(&merged).unwrap_or_else(|_| updated.to_string())
 }
 
 /// The cron in wrangler.toml (`cloud::NIGHTLY_CRON`): every venue with a

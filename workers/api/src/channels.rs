@@ -181,7 +181,11 @@ pub async fn webhook_verify(req: Request, ctx: RouteContext<()>) -> Result<Respo
     let settings = crate::hubstore::load_settings(&place).await?.settings;
     let want = settings.known("notify.whatsapp.verify");
     match (q(HUB_VERIFY_PARAM), q(HUB_CHALLENGE_PARAM)) {
-        (Some(got), Some(challenge)) if !want.trim().is_empty() && got == want.trim() => Response::ok(challenge),
+        (Some(got), Some(challenge))
+            if !want.trim().is_empty() && ct_eq(got.as_bytes(), want.trim().as_bytes()) =>
+        {
+            Response::ok(challenge)
+        }
         _ => Response::error("verify token mismatch", 403),
     }
 }
@@ -192,7 +196,23 @@ fn signature_ok(secret: &str, header: Option<String>, raw: &[u8]) -> bool {
     let mut m = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).expect("any key length");
     m.update(raw);
     let want: String = m.finalize().into_bytes().iter().map(|b| format!("{b:02x}")).collect();
-    want == hex_sig
+    // CONSTANT TIME. `want == hex_sig` short-circuits on the first byte that
+    // differs, so the time to answer measures how much of a forged signature
+    // was right -- which is a way to find the rest of it, one byte at a time,
+    // from outside. `stripe.rs` already compares this way and says why;
+    // `subtle` is already a dependency of this crate.
+    ct_eq(want.as_bytes(), hex_sig.as_bytes())
+}
+
+/// Equal, without telling anyone WHERE two byte strings first differ.
+fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+    // The LENGTH is not a secret (a signature's length is fixed and public);
+    // the bytes are.
+    if a.len() != b.len() {
+        return false;
+    }
+    use subtle::ConstantTimeEq;
+    a.ct_eq(b).into()
 }
 
 struct Inbound {
@@ -321,22 +341,45 @@ async fn store(db: &D1Database, venue: &str, direction: &str, m: &Inbound) -> Re
 /// on Telegram when that bell is set, so a WhatsApp question does not wait for
 /// the next glance at the console.
 pub async fn webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    // ── WHAT AN UNSIGNED REQUEST IS ALLOWED TO COST ──
+    //
+    // This URL is public and takes no credential, so its cost per request is
+    // its exposure. A missing signature header is settled BEFORE the body is
+    // read and before the venue's settings image is fetched: a request with no
+    // signature cannot be from Meta, and answering it used to cost a Durable
+    // Object read and -- for the default venue, which has no Meta secret -- a
+    // D1 row in `worker_errors` per request.
+    let signature = req.headers().get(SIGNATURE_HEADER).ok().flatten();
+    if signature.is_none() {
+        return Response::error("unsigned", 401);
+    }
     let raw = req.bytes().await?;
-    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
+    // A WEBHOOK MUST NOT 500 ON A URL THAT NAMES NO VENUE. Meta retries a 5xx
+    // for days; this answers once, says what is wrong, and stops. The venue is
+    // named by the HOST here -- `sushi-durres.dowiz.org/api/webhooks/meta` --
+    // and the platform's apex names none.
+    let place = match crate::hubstore::Place::of_any(&req, &ctx).await {
+        Ok(p) => p,
+        Err(e) => {
+            console_log!("channels.webhook: no venue in this URL: {e}");
+            return Response::from_json(
+                &json!({ "stored": 0, "ignored": "this URL does not name a venue" }),
+            );
+        }
+    };
     let settings = crate::hubstore::load_settings(&place).await?.settings;
     // THE SIGNATURE IS THE ONLY AUTHORITY on this URL: without the app secret,
     // anyone could write into the venue's inbox and ring the owner's bell.
     // An unsigned hub acknowledges (Meta would retry a 4xx for days) and drops.
     let Some(secret) = settings.get("notify.meta.secret") else {
-        crate::loud!(
-            &place.db,
-            Some(&place.venue),
-            "channels.webhook",
-            "a delivery was dropped: this venue has no Meta app secret set"
-        );
+        // NOT `loud!`. This is the configuration of a venue that has never set
+        // up Meta, not a failure of this delivery, and an unauthenticated
+        // caller must not be able to write a row per request into the errors
+        // table by pointing at such a venue.
+        console_log!("channels.webhook: a delivery was dropped, {} has no Meta app secret", place.venue);
         return Response::from_json(&json!({ "stored": 0, "ignored": "no app secret is set" }));
     };
-    if !signature_ok(secret.trim(), req.headers().get(SIGNATURE_HEADER).ok().flatten(), &raw) {
+    if !signature_ok(secret.trim(), signature, &raw) {
         return Response::error("bad signature", 401);
     }
     let body: Value = serde_json::from_slice(&raw).unwrap_or(Value::Null);

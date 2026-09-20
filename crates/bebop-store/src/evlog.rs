@@ -223,7 +223,14 @@ impl EvLog {
         let prevc: Vec<i64> = (7..11).map(|i| st.get(obj, i)).collect();
         if version >= 2 {
             let flags = st.get(obj, 11);
-            let named = flags & FLAG_ACTOR != 0;
+            // THE FLAG IS A CLAIM AND THE OBJECT'S LENGTH IS THE FACT. A
+            // damaged record with the bit set and nothing behind it would have
+            // read four cells past its own end -- and `Store::get` is an
+            // unchecked index, so at the end of an arena that is a panic
+            // rather than a report. The payload below has been bounded since
+            // it was written; the key was not.
+            let named = flags & FLAG_ACTOR != 0
+                && st.obj_len(obj) >= HEAD_V2 + 4;
             let at = HEAD_V2 as usize;
             let (actor, payload_at) = if named {
                 let pkc: Vec<i64> = (at..at + 4).map(|i| st.get(obj, i)).collect();
@@ -567,6 +574,33 @@ mod tests {
         assert_eq!(EvLog::walk(&one), EvLog::walk(&two), "the same log, written once");
         // The second commit was a whole root (8 + 2 cells) on top of the record.
         assert_eq!(two_cost - one_cost, 10, "one root's worth, saved");
+    }
+
+    /// A DAMAGED RECORD IS REPORTED, NOT PANICKED ON. A record whose flag
+    /// claims an actor key that is not there used to read four cells past its
+    /// own end; at the end of an arena that is an out-of-bounds index, which
+    /// is a crash rather than a corrupt-image message.
+    #[test]
+    fn a_record_that_lies_about_its_actor_key_is_read_as_unnamed() {
+        let mut st = Store::create_bytes(1 << 20);
+        EvLog::init_bytes(&mut st).unwrap();
+        EvLog::append_tip_bytes(&mut st, &Record {
+            id: [1u8; 32],
+            prev: [0u8; 32],
+            actor_pubkey: [0u8; 32], // unnamed: the record is 12 cells + payload
+            actor_seq: 1,
+            payload: b"x".to_vec(),
+        })
+        .unwrap();
+
+        // Flip the flag bit on, leaving the record its unnamed length.
+        let root = st.root().unwrap();
+        let obj = st.follow(root, 1).unwrap();
+        st.put_cell(obj, 11, FLAG_ACTOR);
+
+        let got = EvLog::walk(&st);
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].actor_pubkey, [0u8; 32], "a key that is not there reads as absent");
     }
 
     /// A v2 log says so in its root, and the say-so survives the byte trip that

@@ -124,14 +124,39 @@ impl Place {
         if let Some(slug) = Self::slug_of_host(req, ctx) {
             return Self::of_slug(ctx, &slug).await;
         }
+        // ── AND WHERE IT IS NOT TRUE, IT FAILS CLOSED ──
+        //
+        // The guess below is `SELECT id FROM locations LIMIT 1` with no
+        // ORDER BY: whatever SQLite hands back. It is reached on the apex, on
+        // `www.`, and on the `*.workers.dev` URL -- which is exactly the URL an
+        // owner is shown when they open the console there and copy a webhook
+        // address out of it. On a platform with two venues that guess files one
+        // venue's customer messages under another venue's id, and hands a
+        // validly-signed Stripe event to a hub that has never heard of the
+        // order.
+        //
+        // So it is allowed only while it is TRUE: one venue, one answer. With
+        // more than one the request is refused, because a wrong tenant is worse
+        // than no answer, and the caller is told which header would have
+        // settled it.
         #[derive(serde::Deserialize)]
         struct Row {
             id: String,
         }
         let db = ctx.d1("DB")?;
-        let row: Option<Row> =
-            db.prepare("SELECT id FROM locations LIMIT 1").first(None).await?;
-        let venue = row.map(|r| r.id).unwrap_or_else(|| UNNAMED_VENUE.to_string());
+        let rows: Vec<Row> =
+            db.prepare("SELECT id FROM locations LIMIT 2").all().await?.results()?;
+        let venue = match rows.len() {
+            0 => UNNAMED_VENUE.to_string(),
+            1 => rows.into_iter().next().map(|r| r.id).unwrap_or_else(|| UNNAMED_VENUE.to_string()),
+            _ => {
+                return Err(Error::RustError(
+                    "this platform has more than one venue and this request named none: \
+                     use the venue's own host, or a token that carries its id"
+                        .into(),
+                ))
+            }
+        };
         Ok(Place { db, ns: ctx.durable_object("HUB")?, venue, legacy_venue: legacy_venue(ctx) })
     }
 
@@ -998,13 +1023,28 @@ fn bytes_to_js(b: &[u8]) -> JsValue {
 
 /// Every order, newest first, folded.
 pub async fn orders(place: &Place) -> Result<Vec<crate::hubdo::OrderView>> {
+    Ok(orders_at(place).await?.1)
+}
+
+/// The same, with the GENERATION the list was folded from.
+///
+/// THE TWO COME FROM ONE ANSWER, and that is the whole point of this function
+/// existing. The orders route used to fetch the list and then ask a second
+/// time for the generation; an append landing between the two made a client
+/// store a list at generation G labelled G+1, and its next `?since=G+1` would
+/// be answered "nothing changed" about the event at G+1 -- which the client
+/// then never sees, because its copy is already past it. The object sets
+/// `x-generation` on the same response; this reads it there.
+pub async fn orders_at(place: &Place) -> Result<(i64, Vec<crate::hubdo::OrderView>)> {
     let stub = place.stub()?;
     let req = Request::new("https://hub/fold/orders", Method::Get)?;
     let mut res = stub.fetch_with_request(req).await?;
     if res.status_code() != 200 {
         return Err(Error::RustError(format!("hub object refused a projection: {}", res.status_code())));
     }
-    res.json().await
+    let generation =
+        res.headers().get("x-generation").ok().flatten().and_then(|v| v.parse().ok()).unwrap_or(0);
+    Ok((generation, res.json().await?))
 }
 
 /// One order's folded state, or `None` if this hub never saw it.
@@ -1235,10 +1275,45 @@ pub async fn rotate(place: &Place, now_ms: i64) -> Result<serde_json::Value> {
     let archive_id = format!("{IMAGE_LOG}@{generation}");
     let archive_bytes = archived.len();
 
-    // Generation 0: this id has never been written, and if it has -- a retry of
-    // a rotation whose second write failed -- the object refuses and the
-    // archive that is already there stands.
+    // ── THE ARCHIVE IS WRITTEN FIRST, AND IT IS CHECKED ──
+    //
+    // Generation 0 means "this id has never been written". A refusal is not
+    // automatically our own retry: a venue restored from a backup starts its
+    // object's generation at 1 again while the RESTORED archives carry the old
+    // object's high numbers, so a later rotation can compute an `archive_id`
+    // that already names somebody else's bytes. Truncating the hot log against
+    // that would put the rotated events nowhere, silently.
+    //
+    // So a refusal is verified: the archive already there must hold the same
+    // events we were about to write. If it does, this is the retry the comment
+    // assumed and the rotation carries on. If it does not, nothing is
+    // truncated and the caller is told which id collided.
+    let events_archived = before;
     let stored = save_image(place, &archive_id, archived, 0).await?;
+    if !stored {
+        let same = match load_bytes(place, &archive_id).await? {
+            Some((bytes, _)) => Hub::load(&bytes).map(|h| h.len() == events_archived).unwrap_or(false),
+            None => false,
+        };
+        if !same {
+            return Err(Error::RustError(format!(
+                "{archive_id} already holds a different archive; the hot log was left alone"
+            )));
+        }
+    }
+    // REGISTERED BEFORE THE HOT LOG IS CUT. If the cut fails, the archive is
+    // still the venue's -- listed, backed up, readable -- rather than an
+    // orphan nothing names.
+    let listed = archive_id.clone();
+    let _ = with_settings(place, move |s| {
+        let mut all = archives_of(s);
+        if !all.contains(&listed) {
+            all.push(listed.clone());
+        }
+        s.set(ARCHIVES_KEY, &all.join(","));
+        Ok(())
+    })
+    .await;
     if !save_image(place, IMAGE_LOG, hub.to_bytes_trimmed(), generation).await? {
         return Err(Error::RustError(
             "the log moved while it was being rotated; the archive is written and nothing was lost"

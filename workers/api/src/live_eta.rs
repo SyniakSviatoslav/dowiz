@@ -65,12 +65,6 @@ struct FixRow {
 /// The latest fresh position of every courier ON SHIFT at this venue. One
 /// query for a whole queue: the console asks for fifty orders at once and
 /// must not ask the map fifty times.
-pub async fn fixes(db: &D1Database, location_id: &str, now_ms: i64) -> Vec<CourierFix> {
-    let since = now_ms - POSITION_FRESH_MS;
-    let _ = since;
-    fixes_from_d1(db, location_id, now_ms).await
-}
-
 /// The object first, D1 second.
 ///
 /// A courier on a socket sends their position into the OBJECT's memory, where
@@ -82,8 +76,19 @@ pub async fn fixes_at(
     place: &crate::hubstore::Place,
     location_id: &str,
     now_ms: i64,
+    anyone_carrying: bool,
 ) -> Vec<CourierFix> {
-    let mut out = crate::hubstore::positions(place, now_ms).await.unwrap_or_default();
+    // ASKED FOR ONLY WHEN SOMEBODY IS CARRYING SOMETHING. The object holds the
+    // fixes a courier sent over its socket, and asking for them is a request;
+    // adding one to every status poll of a venue with nothing on the road
+    // would be this file paying for a feature nobody is using. When no order
+    // is IN_DELIVERY the map has nothing to draw and D1 answers the audit
+    // question on its own.
+    let mut out = if anyone_carrying {
+        crate::hubstore::positions(place, now_ms).await.unwrap_or_default()
+    } else {
+        Vec::new()
+    };
     let known: Vec<String> = out.iter().map(|f| f.courier_id.clone()).collect();
     for f in fixes_from_d1(&place.db, location_id, now_ms).await {
         if !known.contains(&f.courier_id) {
@@ -296,12 +301,12 @@ pub async fn attach_all(
     let Some(loc_json) = loaded.catalog.location() else { return };
     let loc: Value = serde_json::from_str(&loc_json).unwrap_or(json!({}));
     let k = crate::eta::profile_of(&loc);
-    let fixes = fixes_at(place, &place.venue, now_ms).await;
     let busy: Vec<String> = orders
         .iter()
         .filter(|o| o.get("status").and_then(Value::as_str) == Some("IN_DELIVERY"))
         .filter_map(|o| o.get("courier_id").and_then(Value::as_str).map(String::from))
         .collect();
+    let fixes = fixes_at(place, &place.venue, now_ms, !busy.is_empty()).await;
     let cooking = |id: &str| -> Option<u16> {
         loaded
             .catalog
@@ -339,7 +344,7 @@ pub async fn attach_one(
     let Some(loc_json) = loaded.catalog.location() else { return };
     let loc: Value = serde_json::from_str(&loc_json).unwrap_or(json!({}));
     let k = crate::eta::profile_of(&loc);
-    let fixes = fixes_at(place, &place.venue, now_ms).await;
+    let fixes = fixes_at(place, &place.venue, now_ms, !busy.is_empty()).await;
     let cooking = |id: &str| -> Option<u16> {
         loaded
             .catalog

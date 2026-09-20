@@ -89,9 +89,18 @@ pub struct Change {
 /// there would be a lie shaped exactly like "nothing has changed".
 pub fn changes_since(recent: &[Change], since: i64) -> Option<Vec<Change>> {
     let oldest = recent.first().map(|c| c.generation)?;
+    let newest = recent.last().map(|c| c.generation)?;
     // The client's generation must be one this window covers. `since` equal to
     // the oldest - 1 is the edge that still works: everything after it is here.
     if since + 1 < oldest {
+        return None;
+    }
+    // AND A CLIENT AHEAD OF THIS WINDOW IS NOT UP TO DATE, it is somewhere
+    // else. A venue restored from a backup starts its object at generation 1
+    // while a console's copy still says 500; answering "nothing changed"
+    // would pin that copy forever, because `apply` ignores a generation it is
+    // already past. Say the window cannot help and let it read the list.
+    if since > newest {
         return None;
     }
     Some(recent.iter().filter(|c| c.generation > since).cloned().collect())
@@ -108,6 +117,20 @@ pub const TAG_COURIER: &str = "courier";
 /// `order:<id>` — one customer, one order.
 pub fn tag_order(order_id: &str) -> String {
     format!("order:{order_id}")
+}
+/// `courier:<id>` — WHICH courier, said by the Worker at connect time.
+///
+/// A socket carries this BESIDE `courier`, so the queue broadcast still finds
+/// every courier with one tag while a GPS frame is attributed from the tag
+/// rather than from the frame. A message cannot name a principal; a tag the
+/// Worker attached can.
+pub fn tag_courier(courier_id: &str) -> String {
+    format!("{TAG_COURIER}:{courier_id}")
+}
+
+/// The courier a socket belongs to, from its tags.
+fn courier_of(tags: &[String]) -> Option<String> {
+    tags.iter().find_map(|t| t.strip_prefix("courier:").map(str::to_string))
 }
 
 /// A courier's last known position, held in the object rather than in D1.
@@ -408,6 +431,23 @@ impl HubImages {
     /// seconds whether anything happened, and the object tells them when
     /// something does.
     fn broadcast(&self, kind: u8, order_id: &str, payload: &str, generation: i64) {
+        // ONLY ORDER EVENTS TRAVEL. A `Revealed` record is an audit fact under
+        // a subject that is not an order id ("cust:<key>"), and its payload is
+        // not a delta -- a client folding it would invent a row with a
+        // reason and a reader and no items, and keep it. The Rust folds have
+        // skipped non-order kinds since they were written; this is the same
+        // rule on the wire, applied before the event leaves.
+        //
+        // The generation still moved, so the window gets a gap instead: the
+        // next `?since=` is answered with "ask for the list".
+        if dowiz_hub::EventKind::from_u8(kind).is_none_or(|k| !k.is_order()) {
+            self.recent.borrow_mut().clear();
+            let msg = serde_json::json!({ "t": "moved", "generation": generation }).to_string();
+            for ws in self.state.get_websockets_with_tag(TAG_CONSOLE) {
+                let _ = ws.send_with_str(&msg);
+            }
+            return;
+        }
         {
             let mut recent = self.recent.borrow_mut();
             recent.push(Change {
@@ -453,7 +493,17 @@ impl HubImages {
     /// billed one.
     fn accept(&self, tag: &str) -> Result<Response> {
         let pair = WebSocketPair::new()?;
-        self.state.accept_websocket_with_tags(&pair.server, &[tag]);
+        // A COURIER GETS TWO TAGS: `courier`, which the queue broadcast fans
+        // out to, and `courier:<id>`, which says whose socket this is. The
+        // second is the only thing the object knows about the client, so it is
+        // what a position is attributed to.
+        if let Some(id) = tag.strip_prefix("courier:") {
+            let both = [TAG_COURIER, tag];
+            let _ = id;
+            self.state.accept_websocket_with_tags(&pair.server, &both);
+        } else {
+            self.state.accept_websocket_with_tags(&pair.server, &[tag]);
+        }
         Response::from_websocket(pair.client)
     }
 
@@ -554,10 +604,14 @@ impl HubImages {
 
         // Chunks past the end of the new image are unreachable now that the
         // meta describes a shorter one, and only now.
-        if let Some((old, _)) = self.mem.borrow().get(id) {
-            for n in chunks..old.chunks {
-                let _ = store.delete(&Self::chunk_key(id, n)).await;
-            }
+        //
+        // THE BORROW IS RELEASED BEFORE THE AWAITS. Holding a `Ref` across a
+        // storage call leaves a window in which any re-entry that borrows
+        // mutably -- `image()` on a cold key -- panics the whole object. The
+        // number is copied out first; it is a `usize`.
+        let old_chunks = self.mem.borrow().get(id).map(|(m, _)| m.chunks).unwrap_or(0);
+        for n in chunks..old_chunks {
+            let _ = store.delete(&Self::chunk_key(id, n)).await;
         }
         self.mem.borrow_mut().insert(id.to_string(), (meta, bytes.to_vec()));
         // THE PROJECTION IS DERIVED FROM THIS IMAGE, so it dies with the write
@@ -565,6 +619,27 @@ impl HubImages {
         // for a moment; dropped here it cannot be stale at all.
         if id == LOG_IMAGE {
             *self.folded.borrow_mut() = None;
+            // ── A WHOLE-IMAGE WRITE IS A GAP, AND IT HAS TO BE ONE ──
+            //
+            // Not every write to this log comes through `append`. A placement
+            // still does its own read-modify-write (a promotion's last use has
+            // to be counted and spent in one breath), and so does a rotation.
+            // Those move the generation WITHOUT putting a `Change` in the
+            // window -- and a window that stayed quiet would answer the next
+            // `?since=` with "nothing changed" about a log that gained an
+            // order. A console would believe it, advance its copy's
+            // generation, and never see that order again.
+            //
+            // So the window is CLEARED, which makes `changes_since` answer
+            // `None` -- "ask for the list" -- and the sockets are told the log
+            // moved so they ask now rather than in ninety seconds.
+            self.recent.borrow_mut().clear();
+            let msg = serde_json::json!({ "t": "moved", "generation": next }).to_string();
+            for tag in [TAG_CONSOLE, TAG_COURIER] {
+                for ws in self.state.get_websockets_with_tag(tag) {
+                    let _ = ws.send_with_str(&msg);
+                }
+            }
         }
         Ok(Some(next))
     }
@@ -804,11 +879,15 @@ impl DurableObject for HubImages {
                 let _ = ws.send_with_str(r#"{"t":"pong"}"#);
             }
             Some("gps") => {
-                if !self.state.get_tags(&ws).iter().any(|t| t == TAG_COURIER) {
+                // WHOSE POSITION THIS IS COMES FROM THE TAG. It used to come
+                // from the frame, so one courier's socket could move another
+                // courier's pin on the venue's map -- and through it every
+                // customer's estimate. The tag was attached by the Worker from
+                // a verified claim; the frame is whatever was typed into it.
+                let Some(courier) = courier_of(&self.state.get_tags(&ws)) else {
                     return Ok(());
-                }
-                let (Some(courier), Some(lat), Some(lng)) = (
-                    v.get("courier").and_then(serde_json::Value::as_str),
+                };
+                let (Some(lat), Some(lng)) = (
                     v.get("lat_e6").and_then(serde_json::Value::as_i64),
                     v.get("lng_e6").and_then(serde_json::Value::as_i64),
                 ) else {
@@ -823,7 +902,7 @@ impl DurableObject for HubImages {
                     return Ok(());
                 }
                 self.positions.borrow_mut().insert(
-                    courier.to_string(),
+                    courier,
                     Fix { lat_e6: lat, lng_e6: lng, at_ms: Date::now().as_millis() as i64 },
                 );
             }

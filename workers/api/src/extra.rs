@@ -1324,6 +1324,7 @@ pub async fn courier_detail(req: Request, ctx: RouteContext<()>) -> Result<Respo
         return Response::error("missing courier id", 400);
     };
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (_, loc) = match owner_and_venue(&req, &ctx, &db).await {
         Ok(v) => v,
         Err(r) => return Ok(r),
@@ -1351,7 +1352,12 @@ pub async fn courier_detail(req: Request, ctx: RouteContext<()>) -> Result<Respo
         return Response::error("not found", 404);
     };
     let now = now_ms();
-    let fix = crate::live_eta::fixes(&db, &loc, now).await.into_iter().find(|f| f.courier_id == c.id);
+    // THE OBJECT FIRST HERE TOO: this screen is an owner looking at one
+    // courier, so the fresher answer is the one worth a request.
+    let fix = crate::live_eta::fixes_at(&place, &loc, now, true)
+        .await
+        .into_iter()
+        .find(|f| f.courier_id == c.id);
     #[derive(Deserialize)]
     struct Today {
         deliveries: f64,

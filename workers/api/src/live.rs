@@ -45,10 +45,47 @@ pub async fn connect(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     if token.is_empty() {
         return Response::error("a socket needs its token as the second subprotocol", 401);
     }
+    // ── THE PRINCIPAL MUST BELONG TO THIS VENUE ──
+    //
+    // This was a cross-tenant hole and it was mine. `Place::of_any` resolves
+    // the venue from the token's claim FIRST and the Host second -- but a
+    // WebSocket carries no `Authorization` header, so the claim is never seen
+    // here and the venue is always the HOST. Choosing the tag from the ROLE
+    // alone then meant: an owner (or a courier) of venue B, connecting to
+    // venue A's host with their own valid token, was handed venue A's console
+    // stream -- every order, every address, every rejection reason -- and, on
+    // the courier tag, the ability to write positions into venue A's map.
+    //
+    // `authenticate`'s owner check is deliberately NOT location-scoped ("is
+    // this user an owner somewhere"), so it cannot answer this question; the
+    // claim's `active_location_id` can, and it is what every other hub route
+    // resolves the venue from. A principal whose location is not this hub is
+    // refused with 404, the same answer a cross-tenant read gets everywhere
+    // else -- a 403 would confirm the venue exists.
     let tag = match auth::authenticate_token(&token, &ctx.env, &db, now).await {
-        Ok(Principal::Owner { .. }) => crate::hubdo::TAG_CONSOLE.to_string(),
-        Ok(Principal::Courier { .. }) => crate::hubdo::TAG_COURIER.to_string(),
-        Ok(Principal::Customer { order_id, .. }) => crate::hubdo::tag_order(&order_id),
+        Ok(Principal::Owner { active_location_id, .. }) => {
+            if active_location_id.as_deref() != Some(place.venue.as_str()) {
+                return Response::error("not found", 404);
+            }
+            crate::hubdo::TAG_CONSOLE.to_string()
+        }
+        Ok(Principal::Courier { courier_id, active_location_id, .. }) => {
+            if active_location_id != place.venue {
+                return Response::error("not found", 404);
+            }
+            // THE COURIER'S ID TRAVELS IN THE TAG, not in the messages they
+            // send. A GPS frame used to name its own courier, so one courier's
+            // socket could move another's pin -- and the object, which cannot
+            // see a token, had no way to know better. A tag is attached here,
+            // by the Worker, from the verified claim.
+            crate::hubdo::tag_courier(&courier_id)
+        }
+        Ok(Principal::Customer { order_id, location_id, .. }) => {
+            if location_id != place.venue {
+                return Response::error("not found", 404);
+            }
+            crate::hubdo::tag_order(&order_id)
+        }
         Err(e) => return e.into_response(),
     };
 

@@ -584,6 +584,24 @@ impl Hub {
             if ev.kind == EventKind::Checkpoint {
                 continue;
             }
+            // THE AUDIT TRAIL IS NOT AN ORDER AND IS NOT ROTATED OUT.
+            //
+            // A `Revealed` record names who looked at a customer's contact
+            // details; its subject is "cust:<key>", which is not an order id,
+            // so `keep` -- built from the orders -- was never going to say yes
+            // to one. The first rotation would have taken the whole trail out
+            // of the hot log, and the only archive reader folds orders, so it
+            // would have been unreachable from every surface. For a log whose
+            // header calls itself the only tamper-evident thing this hub has,
+            // that is the opposite of the point.
+            //
+            // They are small (one short record per read of a phone number) and
+            // they stay.
+            if !ev.kind.is_order() {
+                EvLog::append_bytes(&mut fresh, r)?;
+                last = r.id;
+                continue;
+            }
             if !keep(&ev.order_id) {
                 continue;
             }
@@ -839,6 +857,26 @@ mod tests {
             "the mark names the archive it describes: {}",
             marks[0]
         );
+    }
+
+    /// THE AUDIT TRAIL SURVIVES A ROTATION. It is not an order, so `keep` was
+    /// never asked about it and the first rotation would have deleted the
+    /// venue's entire record of who read whose phone number -- out of the hot
+    /// log, and out of every archive reader, which folds orders.
+    #[test]
+    fn a_rotation_keeps_the_audit_trail() {
+        let mut h = Hub::create_sized(128 * 1024).unwrap();
+        h.append(EventKind::Placed, "ord_1", &order("ord_1", "DELIVERED"), 1, ACTOR).unwrap();
+        h.append(EventKind::Revealed, "cust:abc", r#"{"by":"owner_1","at":2}"#, 2, ACTOR).unwrap();
+
+        // Nothing is kept: the strongest version of the test.
+        h.rotate(|_| false).unwrap();
+
+        let reveals = h.reveals();
+        assert_eq!(reveals.len(), 1, "the reveal must still be in the hot log");
+        assert_eq!(reveals[0].order_id, "cust:abc");
+        assert!(reveals[0].order_json.contains("owner_1"));
+        assert!(h.orders().is_empty(), "and it is still not an order");
     }
 
     /// A SECOND ROTATION CHAINS. Each archive names the tip of the one before

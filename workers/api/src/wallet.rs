@@ -176,6 +176,14 @@ pub async fn balance(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 
     let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
+    // AUTHENTICATED, AND TO THIS VENUE. `?user=` was a client-declared
+    // identity on a public route: anyone could read anyone's balance and
+    // their whole transaction history by naming them.
+    if let Err(r) =
+        crate::auth::principal_at(&req, &ctx.env, &db, &place.venue, now_ms()).await
+    {
+        return Ok(r);
+    }
     let journal = match load_journal(&db, &place.venue).await? {
         Ok(j) => j,
         Err(why) => return Response::error(format!("journal unreadable: {why}"), 500),
@@ -241,6 +249,17 @@ pub async fn top_up(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
 
     let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
+    // THE OWNER, AND ONLY THE OWNER. This route wrote balanced ledger rows --
+    // the money this system treats as authoritative -- for any amount any
+    // caller asked for, with `providerRef` as its only "proof" and the caller
+    // writing that too. Until a payment provider's webhook signs the top-up
+    // (as `stripe::webhook` already does for orders), the venue's own console
+    // is the only thing allowed to move this ledger.
+    match crate::auth::principal_at(&req, &ctx.env, &db, &place.venue, now_ms()).await {
+        Ok(crate::auth::Principal::Owner { .. }) => {}
+        Ok(_) => return Response::error("only the venue can record a top-up", 403),
+        Err(r) => return Ok(r),
+    }
 
     let tx_id = format!("tx_{:016x}", id64(&format!("{}:{}", place.venue, b.request_id)));
     let already: Option<serde_json::Value> = db
@@ -324,6 +343,14 @@ pub async fn statement(req: Request, ctx: RouteContext<()>) -> Result<Response> 
 
     let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
+    // AUTHENTICATED, AND TO THIS VENUE. `?user=` was a client-declared
+    // identity on a public route: anyone could read anyone's balance and
+    // their whole transaction history by naming them.
+    if let Err(r) =
+        crate::auth::principal_at(&req, &ctx.env, &db, &place.venue, now_ms()).await
+    {
+        return Ok(r);
+    }
     let journal = match load_journal(&db, &place.venue).await? {
         Ok(j) => j,
         Err(why) => return Response::error(format!("journal unreadable: {why}"), 500),

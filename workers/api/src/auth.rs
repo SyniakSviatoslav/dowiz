@@ -360,6 +360,59 @@ impl Principal {
     }
 }
 
+/// Does this principal belong to this venue?
+///
+/// THE CLAIM DECIDES, not a membership table. An owner's token carries the hub
+/// they opened (`active_location_id`); a platform-admin token carries NONE, so
+/// it is not an owner here -- which is what `accounts.rs` says a platform
+/// admin is, and what three routes did not enforce. An owner of two venues
+/// acting on the other one re-opens it and gets a token that says so; that is
+/// the same narrowing `/api/order/:id` already applies.
+pub fn belongs_to(p: &Principal, venue: &str) -> bool {
+    match p {
+        Principal::Owner { active_location_id, .. } => {
+            active_location_id.as_deref() == Some(venue)
+        }
+        Principal::Courier { active_location_id, .. } => active_location_id == venue,
+        Principal::Customer { location_id, .. } => location_id == venue,
+    }
+}
+
+/// Authenticate, and require the principal to belong to THIS venue.
+///
+/// WHY THIS EXISTS. Three whole route families -- reservations, threads and the
+/// wallet journal -- were mounted under `/api/public/` with no authentication
+/// at all: a reservation's detail returned the guest's name and phone to
+/// anyone with the id, its `action` route drove the state machine and wrote a
+/// caller-supplied `actor` into the audit trail, `issue_pass` minted a signed
+/// entry pass, and `wallet/topup` wrote balanced ledger rows for any amount
+/// anybody asked for. They had no caller in `public/`; they were surface.
+///
+/// This is the guard they now share, and it asks the question every hub route
+/// asks: is the caller authenticated, and is the venue they belong to THIS
+/// one. A principal from another venue is answered 404 -- a 403 would confirm
+/// the venue exists.
+///
+/// It is deliberately NOT a role check. Which roles a route accepts is the
+/// route's business; this one only settles identity and tenancy.
+pub async fn principal_at(
+    req: &Request,
+    env: &Env,
+    db: &D1Database,
+    venue: &str,
+    now_ms: i64,
+) -> std::result::Result<Principal, Response> {
+    let p = match authenticate(req, env, db, now_ms).await {
+        Ok(p) => p,
+        Err(e) => return Err(e.into_response().unwrap()),
+    };
+    if belongs_to(&p, venue) {
+        Ok(p)
+    } else {
+        Err(Response::error("not found", 404).unwrap())
+    }
+}
+
 /// Verify the token AND the live state behind it.
 pub async fn authenticate(
     req: &Request,
@@ -529,6 +582,47 @@ pub fn require_location(p: &Principal, location_id: &str) -> std::result::Result
         Ok(())
     } else {
         Err(Response::error("not found", 404).unwrap())
+    }
+}
+
+#[cfg(test)]
+mod tenancy_tests {
+    use super::*;
+
+    fn owner(at: Option<&str>) -> Principal {
+        Principal::Owner { user_id: "u1".into(), active_location_id: at.map(str::to_string) }
+    }
+
+    /// THE TENANCY TEST, WHICH THREE ROUTE FAMILIES DID NOT HAVE. A token is
+    /// proof of who, never of where; the venue comes from the URL, and these
+    /// two have to be compared or one venue's owner reads another's.
+    #[test]
+    fn a_principal_belongs_only_to_the_venue_its_claim_names() {
+        assert!(belongs_to(&owner(Some("sushi-durres")), "sushi-durres"));
+        assert!(!belongs_to(&owner(Some("sushi-durres")), "dubin-durres"));
+
+        // A PLATFORM ADMIN BELONGS TO NO HUB. Its token carries no location at
+        // all, and `accounts.rs` states plainly that it "cannot be used to
+        // read a hub" -- which was true of every route that asked for a
+        // membership and false of the three that only asked for a role.
+        assert!(!belongs_to(&owner(None), "sushi-durres"));
+        assert!(!belongs_to(&owner(None), ""));
+
+        let courier = Principal::Courier {
+            courier_id: "c1".into(),
+            active_location_id: "sushi-durres".into(),
+            session_id: "s1".into(),
+        };
+        assert!(belongs_to(&courier, "sushi-durres"));
+        assert!(!belongs_to(&courier, "dubin-durres"));
+
+        let customer = Principal::Customer {
+            customer_id: "cu1".into(),
+            order_id: "ord_1".into(),
+            location_id: "sushi-durres".into(),
+        };
+        assert!(belongs_to(&customer, "sushi-durres"));
+        assert!(!belongs_to(&customer, "dubin-durres"));
     }
 }
 

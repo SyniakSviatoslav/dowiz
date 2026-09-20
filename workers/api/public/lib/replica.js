@@ -53,6 +53,14 @@ export function replace(venue, orders, generation){
   return v;
 }
 
+/// The event kinds that describe an ORDER, as `EventKind::is_order` names them:
+/// Placed(1), Advanced(2), Paid(3), Noted(5). Revealed(4) is an audit record
+/// under a subject that is not an order id, and Checkpoint(6) is a mark in the
+/// log. Both must be ignored here, exactly as the server's folds ignore them —
+/// a reveal folded as an order puts a row with a reader's name and no items in
+/// a kitchen's queue, and it survives reloads.
+const ORDER_KINDS = new Set([1, 2, 3, 5]);
+
 /// Apply what changed since. Returns the new copy, or `null` when the changes
 /// cannot be applied on top of what is held -- a gap, a different venue -- in
 /// which case the caller reads the list.
@@ -66,7 +74,12 @@ export function apply(current, changes, generation){
   if (generation <= current.generation) return current;
   const byId = new Map(current.orders.map(o => [o.id, o]));
   for (const c of changes) {
-    if (!c || !c.order_id) return null;
+    if (!c) return null;
+    // THE KIND IS CHECKED FIRST. A checkpoint's subject is empty and a
+    // reveal's is not an order id; testing the id first would turn either into
+    // "this copy is broken, read the list" instead of "this is not an order".
+    if (c.kind != null && !ORDER_KINDS.has(c.kind)) continue;
+    if (!c.order_id) return null;
     let payload;
     try { payload = JSON.parse(c.payload || '{}'); } catch { return null; }
     if (!payload || typeof payload !== 'object') return null;
@@ -85,13 +98,15 @@ export function apply(current, changes, generation){
   return next;
 }
 
-/// The same merge the server folds with: `null` deletes, objects recurse,
-/// everything else is replaced whole. The marker never reaches the order.
+/// The same merge the server folds with (`workers/api/src/fold.rs`): a `_x`
+/// list names the keys this delta DELETES, objects recurse, and everything
+/// else -- including a null, which is a value the kernel really writes -- is
+/// replaced whole. Neither marker reaches the order.
 function merge(base, delta){
   const out = { ...base };
+  if (Array.isArray(delta._x)) for (const k of delta._x) delete out[k];
   for (const [k, v] of Object.entries(delta)) {
-    if (k === '_d') continue;
-    if (v === null) { delete out[k]; continue; }
+    if (k === '_d' || k === '_x') continue;
     if (v && typeof v === 'object' && !Array.isArray(v)
         && out[k] && typeof out[k] === 'object' && !Array.isArray(out[k])) {
       out[k] = merge(out[k], v);

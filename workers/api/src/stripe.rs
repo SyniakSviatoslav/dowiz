@@ -258,7 +258,17 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Response
     let fingerprint = event_fingerprint(&ev.id);
 
     let db = ctx.d1("DB")?;
-    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
+    // THE SAME RULE AS THE META WEBHOOK: a URL that names no venue is answered
+    // once, not retried for days. Stripe stops on a 2xx.
+    let place = match crate::hubstore::Place::of_any(&req, &ctx).await {
+        Ok(p) => p,
+        Err(e) => {
+            console_log!("stripe.webhook: no venue in this URL: {e}");
+            return Response::from_json(
+                &serde_json::json!({ "ok": true, "ignored": "this URL does not name a venue" }),
+            );
+        }
+    };
     let oid = order_id.clone();
     let applied = crate::hubstore::append_for(&place, &oid.clone(), move |current| {
         let current = current.ok_or_else(|| Error::RustError("order not found".into()))?;

@@ -253,20 +253,61 @@ pub async fn orders(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         .and_then(|v| v.parse().ok());
     if let Some(since) = since {
         // Authorised exactly as the full read is, and before the object is
-        // asked anything.
-        if let Err(r) = owner_and_venue(&req, &ctx, &db).await {
-            return Ok(r);
+        // asked anything. The VENUE it answers with is kept: the delta path
+        // has to filter by the same location the full path does, or a console
+        // could be handed orders the full list would never have shown it.
+        let want_loc = match owner_and_venue(&req, &ctx, &db).await {
+            Ok((_, l)) => l,
+            Err(r) => return Ok(r),
+        };
+        // A STATUS FILTER IS NOT EXPRESSIBLE AS A DELTA. The full list drops
+        // the orders that do not match; a change set says what MOVED, and an
+        // order that moved out of the filtered status has to disappear from
+        // the client's copy, which a change cannot say. So a filtered read is
+        // always the whole list.
+        let filtered = req
+            .url()
+            .ok()
+            .and_then(|u| u.query_pairs().find(|(k, _)| k == "status").map(|_| ()))
+            .is_some();
+        if !filtered {
+            if let Ok((generation, Some(changes))) =
+                crate::hubstore::changes_since(&place, since).await
+            {
+                // THE SAME TENANCY TEST THE FULL PATH APPLIES. `place` comes
+                // from the token's claim or the Host; `want_loc` is the venue
+                // the membership was checked against. Where they differ, the
+                // full list returns nothing and this must not return more.
+                let mine: Vec<Value> = changes
+                    .into_iter()
+                    .filter(|c| {
+                        serde_json::from_str::<Value>(&c.payload)
+                            .ok()
+                            .and_then(|v| {
+                                v.get("location_id").and_then(Value::as_str).map(String::from)
+                            })
+                            // A delta carries only what changed, so most
+                            // changes have no `location_id` at all; those are
+                            // about an order this venue already holds, and the
+                            // client keeps them only if it holds it.
+                            .is_none_or(|l| l == want_loc)
+                    })
+                    .map(|c| json!({
+                        "generation": c.generation,
+                        "kind": c.kind,
+                        "order_id": c.order_id,
+                        "payload": c.payload,
+                    }))
+                    .collect();
+                return Response::from_json(&json!({
+                    "generation": generation,
+                    "changes": mine,
+                    "full": false,
+                }));
+            }
         }
-        if let Ok((generation, Some(changes))) =
-            crate::hubstore::changes_since(&place, since).await
-        {
-            return Response::from_json(&json!({
-                "generation": generation,
-                "changes": changes,
-                "full": false,
-            }));
-        }
-        // Falls through: the object could not say, so the whole list it is.
+        // Falls through: the object could not say, or the read is filtered,
+        // so the whole list it is.
     }
     // The membership query and the image read do not depend on each other, so
     // `owner_beside` runs them together. The token is still verified before
@@ -275,8 +316,8 @@ pub async fn orders(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // generation; a console polling every fifteen seconds used to be handed
     // every order the venue had ever taken so that this function could keep
     // the ones from today.
-    let (_, loc, listed) =
-        match owner_beside(&req, &ctx, &db, crate::hubstore::orders(&place)).await {
+    let (_, loc, (generation, listed)) =
+        match owner_beside(&req, &ctx, &db, crate::hubstore::orders_at(&place)).await {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };
@@ -325,9 +366,8 @@ pub async fn orders(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         crate::live_eta::attach_all(&db, &place, &loaded, &mut out, now_ms()).await;
     }
     // The generation travels with the list so a client can ask for changes
-    // after it next time. Without it the catch-up has no starting point and a
-    // console would have to poll the whole queue forever.
-    let generation = crate::hubstore::log_generation(&place).await.unwrap_or(0);
+    // after it next time -- and it is the generation THIS list was folded
+    // from, read off the same response, never asked for afterwards.
     Response::from_json(&json!({ "orders": out, "generation": generation, "full": true }))
 }
 

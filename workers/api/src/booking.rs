@@ -117,12 +117,19 @@ async fn load_events(db: &D1Database, reservation_id: &str) -> Result<Vec<EventR
 }
 
 /// `GET /api/public/locations/:slug/reservations/:id`
-pub async fn detail(_req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn detail(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let (Some(slug), Some(id)) = (ctx.param("slug").cloned(), ctx.param("id").cloned()) else {
         return Response::error("missing slug or id", 400);
     };
     let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
+    // AUTHENTICATED, AND TO THIS VENUE. See `auth::principal_at`: this family
+    // was mounted under `/api/public/` with no guard at all.
+    if let Err(r) =
+        crate::auth::principal_at(&req, &ctx.env, &db, &place.venue, now_ms()).await
+    {
+        return Ok(r);
+    }
 
     // The location is bound into the query, not checked afterwards: a booking
     // belonging to another venue must not be readable through this venue's host.
@@ -183,6 +190,13 @@ pub async fn list(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 
     let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
+    // AUTHENTICATED, AND TO THIS VENUE. `?user=` was a client-declared
+    // identity: anyone could list anyone's reservations by naming them.
+    if let Err(r) =
+        crate::auth::principal_at(&req, &ctx.env, &db, &place.venue, now_ms()).await
+    {
+        return Ok(r);
+    }
     let rows: Vec<ReservationRow> = db
         .prepare(
             "SELECT id, location_id, party, slot_min, occasion, contact_name, contact_phone, \
@@ -247,6 +261,15 @@ pub async fn create(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
         Ok(p) => p,
         Err(e) => return Response::error(format!("create/place: {e}"), 500),
     };
+    // AUTHENTICATED, AND TO THIS VENUE. A booking form open to the world is a
+    // way to fill a restaurant with tables nobody will sit at, under names
+    // nobody chose; when a public one exists it will mint a token the way the
+    // storefront does for an order.
+    if let Err(r) =
+        crate::auth::principal_at(&req, &ctx.env, &db, &place.venue, now_ms()).await
+    {
+        return Ok(r);
+    }
 
     // The request id IS the reservation id, scoped to the venue. Replaying the
     // request finds the existing row and returns it.
@@ -361,6 +384,15 @@ pub async fn action(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
 
     let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
+    // AUTHENTICATED, AND TO THIS VENUE. This route drives the reservation's
+    // state machine and writes `body.actor` into the audit trail, so an
+    // unauthenticated caller could both cancel a stranger's table and sign
+    // somebody else's name to it.
+    if let Err(r) =
+        crate::auth::principal_at(&req, &ctx.env, &db, &place.venue, now_ms()).await
+    {
+        return Ok(r);
+    }
 
     let owns: Option<ReservationRow> = db
         .prepare("SELECT id, location_id, party, slot_min, occasion, contact_name, \
@@ -486,12 +518,19 @@ fn base64_decode(s: &str) -> Option<Vec<u8>> {
 ///
 /// Only a CONFIRMED booking gets a pass. Minting one for a request the venue has
 /// not answered would put a code on a phone that the door will refuse.
-pub async fn issue_pass(_req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn issue_pass(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let (Some(slug), Some(id)) = (ctx.param("slug").cloned(), ctx.param("id").cloned()) else {
         return Response::error("missing slug or id", 400);
     };
     let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
+    // AUTHENTICATED, AND TO THIS VENUE. See `auth::principal_at`: this family
+    // was mounted under `/api/public/` with no guard at all.
+    if let Err(r) =
+        crate::auth::principal_at(&req, &ctx.env, &db, &place.venue, now_ms()).await
+    {
+        return Ok(r);
+    }
 
     let row: Option<ReservationRow> = db
         .prepare("SELECT id, location_id, party, slot_min, occasion, contact_name, \

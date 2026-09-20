@@ -28,27 +28,47 @@ use serde_json::{Map, Value};
 /// order envelope's own fields come from the kernel and never start with one.
 pub const DELTA_MARK: &str = "_d";
 
+/// The key that lists what a delta DELETES.
+///
+/// A NULL IS A VALUE, NOT AN ABSENCE, and conflating the two was a real
+/// divergence. The first version of this module said a deletion by writing
+/// `"k": null` -- and the kernel writes explicit nulls of its own
+/// (`customer_id`, `channel`, `cash_pay_with`), as does the Worker
+/// (`rejection_reason` for a rejection with no reason, `fulfilment.note` for a
+/// pickup). Folding those deleted the key instead of storing it, so a snapshot
+/// history and a delta history disagreed about a field the pre-delta log had
+/// always carried.
+///
+/// Deletions travel in their own list instead, at each nesting level, so a
+/// null can be exactly what it is.
+pub const DELTA_DROP: &str = "_x";
+
 /// Merge `delta` into `base`. A `null` DELETES the key -- that is how an
 /// envelope that dropped a field (an unassigned courier, a cleared note) says
 /// so, and without it a delta could only ever add.
 fn merge(base: &mut Map<String, Value>, delta: &Map<String, Value>) {
+    // The deletions first, so a delta that drops a key and sets it again in
+    // the same breath ends with it set. (`delta` never produces that; a
+    // hand-written one might.)
+    if let Some(Value::Array(dropped)) = delta.get(DELTA_DROP) {
+        for k in dropped.iter().filter_map(Value::as_str) {
+            base.remove(k);
+        }
+    }
     for (k, v) in delta {
-        if k == DELTA_MARK {
+        if k == DELTA_MARK || k == DELTA_DROP {
             continue;
         }
         match (base.get_mut(k), v) {
-            (_, Value::Null) => {
-                base.remove(k);
-            }
             // Both objects: recurse, so `{"fulfilment":{"eta_ms":…}}` does not
             // throw away the address beside it.
             (Some(Value::Object(b)), Value::Object(d)) => {
                 let d = d.clone();
                 merge(b, &d);
             }
-            // Anything else -- an array, a number, a type change -- is replaced
-            // whole. An items list is one value; merging two of them index by
-            // index would invent an order nobody placed.
+            // Anything else -- an array, a number, a NULL, a type change -- is
+            // the value now. An items list is one value; merging two of them
+            // index by index would invent an order nobody placed.
             _ => {
                 base.insert(k.clone(), v.clone());
             }
@@ -113,6 +133,8 @@ pub fn delta(old: &Value, new: &Value) -> Value {
             Some(Value::Object(po)) if v.is_object() => {
                 let nested = delta(&Value::Object(po.clone()), v);
                 if let Value::Object(mut m) = nested {
+                    // The marker is the OUTER envelope's; the drop list is
+                    // this level's and stays.
                     m.remove(DELTA_MARK);
                     if !m.is_empty() {
                         out.insert(k.clone(), Value::Object(m));
@@ -125,11 +147,13 @@ pub fn delta(old: &Value, new: &Value) -> Value {
         }
     }
     // A key the new state no longer has is a DELETION, and it has to be said
-    // out loud: silence means "unchanged" in a delta.
-    for k in o.keys() {
-        if !n.contains_key(k) {
-            out.insert(k.clone(), Value::Null);
-        }
+    // out loud: silence means "unchanged" in a delta. It is said in the drop
+    // list rather than as a null, because a null is a value this envelope
+    // really carries.
+    let dropped: Vec<Value> =
+        o.keys().filter(|k| !n.contains_key(*k)).map(|k| Value::String(k.clone())).collect();
+    if !dropped.is_empty() {
+        out.insert(DELTA_DROP.to_string(), Value::Array(dropped));
     }
     out.insert(DELTA_MARK.to_string(), Value::Bool(true));
     Value::Object(out)
@@ -210,7 +234,53 @@ mod tests {
         let before = json!({"id": "o", "courier_id": "c1", "status": "IN_DELIVERY"});
         let after = json!({"id": "o", "status": "READY"});
         let d = delta(&before, &after);
-        assert_eq!(d["courier_id"], Value::Null);
+        assert_eq!(d[DELTA_DROP], json!(["courier_id"]));
+        let raw = [before.to_string(), d.to_string()];
+        assert_eq!(fold(raw.iter().map(String::as_str)), after);
+    }
+
+    /// A NULL IS A VALUE AND SURVIVES. The kernel writes explicit nulls --
+    /// `customer_id`, `channel`, `cash_pay_with` -- and so does this Worker:
+    /// `rejection_reason` is null when an order is rejected without a reason.
+    /// While a null MEANT deletion, folding a delta lost a key that every
+    /// pre-delta snapshot carried, and a snapshot history and a delta history
+    /// disagreed about the shape of the same order.
+    #[test]
+    fn an_explicit_null_is_stored_rather_than_treated_as_a_deletion() {
+        let before = json!({"id": "o", "status": "PENDING"});
+        let after = json!({"id": "o", "status": "REJECTED", "rejection_reason": null});
+        let d = delta(&before, &after);
+        assert_eq!(d["rejection_reason"], Value::Null, "the null is in the delta");
+        assert!(d.get(DELTA_DROP).is_none(), "and nothing was dropped");
+
+        let raw = [before.to_string(), d.to_string()];
+        let folded = fold(raw.iter().map(String::as_str));
+        assert_eq!(folded, after, "the fold keeps the key, with its null");
+        assert!(
+            folded.as_object().unwrap().contains_key("rejection_reason"),
+            "the key must be present: {folded}"
+        );
+    }
+
+    /// A null that turns into a value, and a value that turns into a null,
+    /// both travel as themselves.
+    #[test]
+    fn a_null_and_a_value_replace_each_other_in_both_directions() {
+        let none = json!({"note": null, "id": "o"});
+        let some = json!({"note": "ring twice", "id": "o"});
+        let there = [none.to_string(), delta(&none, &some).to_string()];
+        assert_eq!(fold(there.iter().map(String::as_str)), some);
+        let back = [some.to_string(), delta(&some, &none).to_string()];
+        assert_eq!(fold(back.iter().map(String::as_str)), none);
+    }
+
+    /// A nested deletion is said at the level it happened.
+    #[test]
+    fn a_nested_deletion_travels_with_its_own_level() {
+        let before = json!({"fulfilment": {"kind": "delivery", "eta_ms": 900}});
+        let after = json!({"fulfilment": {"kind": "delivery"}});
+        let d = delta(&before, &after);
+        assert_eq!(d["fulfilment"][DELTA_DROP], json!(["eta_ms"]));
         let raw = [before.to_string(), d.to_string()];
         assert_eq!(fold(raw.iter().map(String::as_str)), after);
     }
@@ -255,6 +325,7 @@ mod tests {
         let s = placed();
         let d = delta(&s, &s);
         assert_eq!(d, json!({ DELTA_MARK: true }));
+        assert!(d.get(DELTA_DROP).is_none());
         let raw = [s.to_string(), d.to_string()];
         assert_eq!(fold(raw.iter().map(String::as_str)), s);
     }
@@ -278,6 +349,7 @@ mod tests {
         let raw = [before.to_string(), delta(&before, &after).to_string()];
         let folded = fold(raw.iter().map(String::as_str));
         assert!(folded.get(DELTA_MARK).is_none(), "{folded}");
+        assert!(folded.get(DELTA_DROP).is_none(), "nor the drop list: {folded}");
         assert_eq!(folded, after);
     }
 }

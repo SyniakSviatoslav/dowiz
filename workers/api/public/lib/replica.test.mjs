@@ -29,7 +29,7 @@ const placed = (id, extra = {}) => ({
 });
 const change = (generation, order_id, payload) => ({
   generation,
-  kind: 2,
+  kind: 2, // Advanced: an order event
   order_id,
   payload: JSON.stringify(payload),
 });
@@ -52,10 +52,40 @@ test('a delta is merged into the order it names', () => {
   assert.equal(next.orders[0]._d, undefined, 'the marker never reaches the order');
 });
 
-test('a null in a delta deletes the key, exactly as the server folds it', () => {
+test('the _x list deletes keys, exactly as the server folds it', () => {
   const copy = replace('v1', [placed('ord_1', { courier_id: 'c1' })], 1);
-  const next = apply(copy, [change(2, 'ord_1', { _d: true, courier_id: null })], 2);
+  const next = apply(copy, [change(2, 'ord_1', { _d: true, _x: ['courier_id'] })], 2);
   assert.equal('courier_id' in next.orders[0], false);
+});
+
+test('A NULL IS A VALUE AND IS KEPT, not read as a deletion', () => {
+  // The kernel writes explicit nulls (customer_id, channel, cash_pay_with) and
+  // so does the Worker (rejection_reason). While a null meant "delete", this
+  // fold and the server's disagreed about the shape of the same order.
+  const copy = replace('v1', [placed('ord_1')], 1);
+  const next = apply(copy, [change(2, 'ord_1', { _d: true, rejection_reason: null })], 2);
+  assert.equal('rejection_reason' in next.orders[0], true);
+  assert.equal(next.orders[0].rejection_reason, null);
+});
+
+test('AN AUDIT RECORD IS NOT AN ORDER and never enters the copy', () => {
+  // `Revealed` (kind 4) names who read a customer's details, under a subject
+  // that is not an order id. Folded as an order it would put a row with a
+  // reader's name and no items in the kitchen's queue -- and keep it across
+  // reloads.
+  const copy = replace('v1', [placed('ord_1')], 1);
+  const reveal = { generation: 2, kind: 4, order_id: 'cust:abc',
+                   payload: JSON.stringify({ by: 'owner_1', at: 2, reason: 'call' }) };
+  const next = apply(copy, [reveal], 2);
+  assert.equal(next.orders.length, 1, 'still one order');
+  assert.equal(next.orders[0].id, 'ord_1');
+  assert.equal(next.generation, 2, 'and the copy still advances');
+});
+
+test('a checkpoint is ignored too', () => {
+  const copy = replace('v1', [placed('ord_1')], 1);
+  const mark = { generation: 2, kind: 6, order_id: '', payload: 'tip=abc events=3' };
+  assert.equal(apply(copy, [mark], 2).orders.length, 1);
 });
 
 test('nested objects recurse and their siblings survive', () => {

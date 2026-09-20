@@ -297,7 +297,7 @@ function startTracking(){
     // a message into the object's memory: no row, no request. The POST stays
     // for a courier with no socket, and it is also what keeps the 48-hour
     // audit trail the data map promises.
-    const sent = S.live?.gps(S.courierId, Math.round(latitude * 1e6), Math.round(longitude * 1e6));
+    const sent = S.live?.gps(Math.round(latitude * 1e6), Math.round(longitude * 1e6));
     if (sent) return;
     try {
       await api('/courier/position', { method:'POST', body: JSON.stringify({

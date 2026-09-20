@@ -49,7 +49,10 @@ export function live({ token, onEvent, onState } = {}) {
     ws.onmessage = e => {
       lastHeard = Date.now();
       let m; try { m = JSON.parse(e.data); } catch { return; }
-      if (m.t === 'event') onEvent?.(m);
+      // `event` names an order; `moved` says only that the log changed -- a
+      // placement, a rotation, anything that did not come through the append
+      // path. Both mean "ask", which is all a caller does with either.
+      if (m.t === 'event' || m.t === 'moved') onEvent?.(m);
     };
     ws.onerror = () => { /* onclose follows, and that is where we recover */ };
     ws.onclose = () => { ws = null; set('polling'); schedule(); };
@@ -74,11 +77,14 @@ export function live({ token, onEvent, onState } = {}) {
     },
     /// Note that the caller has just polled, whatever the reason.
     polled(){ lastHeard = Date.now(); },
-    /// Send a courier's position. Ignored by the hub on any other socket.
-    gps(courier, latE6, lngE6){
+    /// Send a courier's position. WHOSE it is comes from the socket's tag,
+    /// which the server attached from the token: this frame carries only the
+    /// coordinates, because a frame that named its own courier let one
+    /// courier move another's pin.
+    gps(latE6, lngE6){
       if (state !== 'live' || !ws) return false;
       try {
-        ws.send(JSON.stringify({ t: 'gps', courier, lat_e6: latE6, lng_e6: lngE6 }));
+        ws.send(JSON.stringify({ t: 'gps', lat_e6: latE6, lng_e6: lngE6 }));
         return true;
       } catch { return false; }
     },
