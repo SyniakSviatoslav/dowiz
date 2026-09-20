@@ -114,6 +114,10 @@ id = "0af8bfcd828e4802a4ec7f5bb399666f"
 
 [observability]
 enabled = true
+# One request in ten is logged. Unsampled, this is the biggest line on the bill
+# at forty venues; the errors that matter are written by `console_error!` inside
+# a sampled trace, so keep an eye on that when a failure needs chasing.
+head_sampling_rate = 0.1
 
 # THE HUB'S IMAGES, one Durable Object per venue.
 #

@@ -20,6 +20,9 @@ export { t, lang, LANGS, setLang, retranslate };
 /// The toast shows for this long; the queue is re-read this often.
 const TOAST_MS = 2600;
 export const POLL_MS = 15_000;
+/// When nothing is live, the queue is re-read this much more slowly: an idle
+/// venue with an open console used to cost as many requests as a busy one.
+export const POLL_IDLE_MS = 60_000;
 /// A drag on the sheet's grip past this many pixels dismisses it.
 const SHEET_DISMISS_PX = 90;
 /// The order id is shown short: enough to tell two apart, short enough to say.

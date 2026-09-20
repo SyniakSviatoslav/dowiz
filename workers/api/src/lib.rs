@@ -28,6 +28,7 @@ mod assist;
 mod extra;
 mod storefront;
 mod stripe;
+mod project;
 mod notify;
 mod channels;
 mod cloud;

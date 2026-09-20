@@ -103,7 +103,7 @@ function card(p, catId, shape = 'plate'){
     <button type="button" class="card-hit" data-open="${esc(p.id)}" ${out ? 'aria-disabled="true"' : ''}
             aria-label="${esc(p.name)}">
       <span class="card-media">${p.imageUrl
-        ? `<img src="${esc(p.imageUrl)}" alt="" loading="lazy" decoding="async" data-fb="${esc(p.name)}">`
+        ? `<img src="${esc(p.imageUrl)}" alt="" loading="lazy" decoding="async" data-fb="${esc(p.name)}"${p.imageUrlSmall ? ` srcset="${esc(p.imageUrlSmall)} 480w, ${esc(p.imageUrl)} 1200w" sizes="(max-width: 640px) 50vw, 400px"` : ''}>`
         : fallbackArt(p.name)}
         <span class="card-price">${moneyEl(p.price)}</span>
         ${out ? `<span class="card-out" data-t="soldOut"></span>` : ''}

@@ -8,7 +8,7 @@
 // an action names an intent, the hub's FSM answers.
 
 import { $, $$, esc, icon, t, lang, LANGS, setLang, retranslate, store, S, api, post, withLoc, logout, whenLoggedOut,
-         toast, sheet, closeSheet, bindSheetChrome, hydrate, setCurrency, displayCurrency, CURRENCIES, baseCurrency, POLL_MS , confirm } from '/admin/core.js';
+         toast, sheet, closeSheet, bindSheetChrome, hydrate, setCurrency, displayCurrency, CURRENCIES, baseCurrency, POLL_MS, POLL_IDLE_MS, confirm } from '/admin/core.js';
 import { safeGet, safeSet } from '/store/storage.js';
 
 /// The five tabs, their icons, their words, their modules.
@@ -218,7 +218,8 @@ function poll(){
       await rerender();
     }
     poll();
-  }, POLL_MS);
+  // Idle venues poll slowly; when there's live activity, stay in sync.
+  }, liveOrders().length ? POLL_MS : POLL_IDLE_MS);
 }
 document.addEventListener('visibilitychange', async () => { if (!document.hidden && S.booted) { try { await loadOrders(); } catch {} await rerender(); } });
 

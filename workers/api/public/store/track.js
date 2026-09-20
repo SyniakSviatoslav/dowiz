@@ -27,6 +27,8 @@ const DEAD = new Set(['REJECTED', 'CANCELLED']);
 /// How often the order is re-asked while it is live, and how many misses in a
 /// row before the customer is told the page has lost the hub.
 const POLL_MS = 12_000;
+// Before the courier moves, nothing changes in seconds.
+const POLL_SLOW_MS = 30_000;
 const POLL_FAILS_TO_TELL = 3;
 /// The order id is shown short: enough to tell two apart, short enough to say.
 const ORDER_ID_SHOWN = 8;
@@ -225,6 +227,6 @@ export function openTracking(order){
         if (openTracking._fails === POLL_FAILS_TO_TELL) toast(t('loadFail'));
         if ($('#sheet').dataset.name === 'track') openTracking(order);
       }
-    }, POLL_MS);
+    }, st === 'IN_DELIVERY' || st === 'READY' ? POLL_MS : POLL_SLOW_MS);
   }
 }

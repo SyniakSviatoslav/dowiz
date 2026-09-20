@@ -1006,8 +1006,16 @@ async function boot(){ S.booted = true;
   initMap();
   await load();
   guide.autoStart();
-  clearInterval(boot._i);
-  boot._i = setInterval(() => { if (!document.hidden && S.booted) load(); }, 12000); }
+  clearTimeout(boot._i);
+  const scheduleLoad = () => {
+    // ON SHIFT IS THE LIVE CASE, not "has work": an offer arrives when the
+    // courier has nothing, and waiting a minute to see it is how a courier
+    // loses the run. Off shift the app is a sign-in screen.
+    const wait = S.onShift ? 12000 : 60000;
+    boot._i = setTimeout(() => { if (!document.hidden && S.booted) load(); scheduleLoad(); }, wait);
+  };
+  scheduleLoad();
+}
 
 document.documentElement.lang = lang; document.title = t('appTitle'); retranslate(document);
 applyTheme(); bindLangChrome();
