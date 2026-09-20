@@ -43,12 +43,56 @@ use worker::*;
 /// next person can check it: 96 * 1024.
 const CHUNK: usize = 96 * 1024;
 
+/// The image the projections are about. Named here as well as in `hubstore`
+/// because this object folds THAT image and no other: a settings image has no
+/// orders in it, and a projection of one would be an empty list rather than an
+/// error.
+const LOG_IMAGE: &str = "log";
+
 /// What a stored image is, apart from its bytes.
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy)]
 struct Meta {
     generation: i64,
     chunks: usize,
     len: usize,
+}
+
+/// One order as a projection carries it: the fold, and the two facts about the
+/// event that produced it.
+///
+/// This is what crosses the Worker↔object hop instead of the image. A console
+/// poll used to ship the whole log -- every order the venue has ever taken --
+/// so that the Worker could throw away all but the last day of it.
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct OrderView {
+    pub order_id: String,
+    /// `dowiz_hub::EventKind` as its byte, because the enum is not serialisable
+    /// and the number is what the log itself stores.
+    pub kind: u8,
+    pub seq: u64,
+    /// The FOLDED order, as JSON text. Text rather than a `Value` because every
+    /// consumer parses it themselves and re-serialising it here would be a
+    /// second encoding of the same bytes.
+    pub order_json: String,
+}
+
+impl OrderView {
+    pub(crate) fn of_event(e: dowiz_hub::Event) -> Self {
+        Self::of(e)
+    }
+
+    fn of(e: dowiz_hub::Event) -> Self {
+        OrderView { order_id: e.order_id, kind: e.kind as u8, seq: e.seq, order_json: e.order_json }
+    }
+}
+
+/// What an append asks for. The kernel has already decided; this is the record.
+#[derive(serde::Deserialize)]
+struct AppendIn {
+    kind: u8,
+    order_id: String,
+    payload: String,
+    clock: u64,
 }
 
 #[durable_object]
@@ -58,6 +102,14 @@ pub struct HubImages {
     /// outlives a request, so this survives between them and the storage below
     /// is touched only when the object is cold or something is written.
     mem: RefCell<HashMap<String, (Meta, Vec<u8>)>>,
+    /// The log image, FOLDED, at the generation it was folded from.
+    ///
+    /// A venue's consoles, couriers and customers all poll; between two polls
+    /// nothing has usually changed, and re-folding an unchanged log is the
+    /// same answer computed again. Keyed by generation so it cannot go stale:
+    /// a write bumps the generation, and a generation that does not match is
+    /// simply refolded.
+    folded: RefCell<Option<(i64, Vec<OrderView>)>>,
 }
 
 /// A stored chunk comes back as whatever the platform decided to hand us —
@@ -85,7 +137,31 @@ fn changed_chunks(old: Option<&[u8]>, new: &[u8], chunk: usize) -> Vec<usize> {
 
 #[cfg(test)]
 mod tests {
-    use super::changed_chunks;
+    use super::{changed_chunks, OrderView};
+
+    /// The projection crosses a boundary as JSON, so its shape is a contract.
+    /// `kind` travels as the byte the log itself stores, because the enum
+    /// cannot cross and a name could drift from the number.
+    #[test]
+    fn an_order_view_survives_the_json_it_crosses_on() {
+        let view = OrderView {
+            order_id: "ord_1".into(),
+            kind: dowiz_hub::EventKind::Advanced as u8,
+            seq: 1789000000000,
+            order_json: r#"{"id":"ord_1","status":"COOKING"}"#.into(),
+        };
+        let wire = serde_json::to_string(&view).expect("serialise");
+        let back: OrderView = serde_json::from_str(&wire).expect("parse");
+        assert_eq!(back.order_id, view.order_id);
+        assert_eq!(back.seq, view.seq);
+        assert_eq!(back.order_json, view.order_json);
+        assert_eq!(
+            dowiz_hub::EventKind::from_u8(back.kind),
+            Some(dowiz_hub::EventKind::Advanced),
+            "the byte has to name the same kind on the other side"
+        );
+    }
+
 
     #[test]
     fn without_an_old_image_every_chunk_is_written() {
@@ -187,6 +263,67 @@ impl HubImages {
         Ok(Some(entry))
     }
 
+    /// The log image's folded orders, newest first — from the memo when the
+    /// generation has not moved, from the bytes when it has.
+    ///
+    /// THE FOLD HAPPENS HERE AND NOT IN THE WORKER, which is the whole of
+    /// phase 2. The image lives in this object; a Worker that wants the queue
+    /// used to be handed every order the venue had ever taken so it could keep
+    /// the last day. Now it is handed the last day.
+    async fn orders_view(&self) -> Result<(i64, Vec<OrderView>)> {
+        let Some((meta, bytes)) = self.image(LOG_IMAGE).await? else {
+            return Ok((0, Vec::new()));
+        };
+        if let Some((gen, view)) = self.folded.borrow().as_ref() {
+            if *gen == meta.generation {
+                return Ok((*gen, view.clone()));
+            }
+        }
+        let hub = dowiz_hub::Hub::load(&bytes)
+            .map_err(|_| Error::RustError("hub image is unreadable".into()))?;
+        let view: Vec<OrderView> =
+            crate::hubstore::orders_state(&hub).into_iter().map(OrderView::of).collect();
+        *self.folded.borrow_mut() = Some((meta.generation, view.clone()));
+        Ok((meta.generation, view))
+    }
+
+    /// Append one event to the log and persist it, under the same generation
+    /// guard a write of the whole image carries.
+    ///
+    /// THE DECISION IS STILL THE WORKER'S. The kernel decided this transition
+    /// was legal and computed the payload; this is the record of it. What
+    /// moves here is the WRITE, which no longer means shipping the whole image
+    /// back -- an append sends a few hundred bytes instead of the log.
+    async fn append(&self, expected: i64, ev: AppendIn) -> Result<Option<(i64, usize)>> {
+        let (generation, bytes) = match self.image(LOG_IMAGE).await? {
+            Some((meta, bytes)) => (meta.generation, Some(bytes)),
+            None => (0, None),
+        };
+        if expected != generation {
+            return Ok(None);
+        }
+        let mut hub = match bytes {
+            Some(b) => dowiz_hub::Hub::load(&b)
+                .map_err(|_| Error::RustError("hub image is unreadable".into()))?,
+            // BORN SMALL, as `hubstore::load` does it: a hub created at 4 MiB
+            // made the third order of the day exceed the isolate's limit.
+            None => dowiz_hub::Hub::create_sized(64 * 1024)
+                .map_err(|_| Error::RustError("cannot create hub image".into()))?,
+        };
+        let kind = dowiz_hub::EventKind::from_u8(ev.kind)
+            .ok_or_else(|| Error::RustError(format!("unknown event kind {}", ev.kind)))?;
+        hub.append(kind, &ev.order_id, &ev.payload, ev.clock, [0u8; 32])
+            .map_err(|e| Error::RustError(format!("hub append failed: {e:?}")))?;
+        let len = hub.len();
+        match self.put_image(LOG_IMAGE, generation, &hub.to_bytes_trimmed()).await? {
+            Some(next) => Ok(Some((next, len))),
+            // Cannot happen inside a serialised object -- the generation was
+            // read two lines ago -- but the caller's contract already says
+            // what to do about it, so say it rather than assume.
+            None => Ok(None),
+        }
+    }
+
     /// Write, with the SAME generation guard the D1 version used.
     ///
     /// A Durable Object serialises its own requests, so two writers cannot
@@ -247,21 +384,108 @@ impl HubImages {
             }
         }
         self.mem.borrow_mut().insert(id.to_string(), (meta, bytes.to_vec()));
+        // THE PROJECTION IS DERIVED FROM THIS IMAGE, so it dies with the write
+        // that replaced it. Keyed by generation it could only ever be stale
+        // for a moment; dropped here it cannot be stale at all.
+        if id == LOG_IMAGE {
+            *self.folded.borrow_mut() = None;
+        }
         Ok(Some(next))
     }
 }
 
 impl DurableObject for HubImages {
     fn new(state: State, _env: Env) -> Self {
-        Self { state, mem: RefCell::new(HashMap::new()) }
+        Self { state, mem: RefCell::new(HashMap::new()), folded: RefCell::new(None) }
     }
 
     /// The object's whole surface. NOT REACHABLE FROM THE INTERNET: a Durable
     /// Object is addressable only through a stub held by a Worker that has the
     /// binding, so these paths need no authentication of their own — the
     /// handlers that call them have already done it.
+    ///
+    /// TWO KINDS OF ROUTE, and the difference is phase 2. `/img/...` hands over
+    /// BYTES: the catalogue, the settings, a backup, anything whose reader is
+    /// not this object. `/fold/...` hands over ANSWERS: the queue, one order,
+    /// an append. The bytes route stays because an image still has to be
+    /// exportable and importable; the fold route exists so that asking what is
+    /// in the queue stops costing the whole history of the venue.
     async fn fetch(&self, req: Request) -> Result<Response> {
         let path = req.path();
+        let mut seg = path.split('/').filter(|s| !s.is_empty());
+        let head = seg.next().unwrap_or("");
+        if head == "fold" {
+            let what = seg.next().unwrap_or("");
+            return match (req.method(), what) {
+                // THE GENERATION ALONE. A writer that needs nothing but the
+                // guard used to ask for the orders and throw them away, which
+                // on a venue with a thousand of them is a list built for a
+                // number.
+                (Method::Get, "generation") => {
+                    let generation =
+                        self.image(LOG_IMAGE).await?.map(|(m, _)| m.generation).unwrap_or(0);
+                    let mut res = Response::from_json(
+                        &serde_json::json!({ "generation": generation }),
+                    )?;
+                    res.headers_mut().set("x-generation", &generation.to_string())?;
+                    Ok(res)
+                }
+                (Method::Get, "orders") => {
+                    let (generation, view) = self.orders_view().await?;
+                    let mut res = Response::from_json(&view)?;
+                    res.headers_mut().set("x-generation", &generation.to_string())?;
+                    Ok(res)
+                }
+                (Method::Get, "order") => {
+                    // THE ID TRAVELS AS A QUERY PARAMETER, not as a path
+                    // segment: an order id is not this object's to constrain,
+                    // and `query_pairs` decodes it exactly once, where a hand
+                    // written path split would decode it never.
+                    let url = req.url()?;
+                    let Some(id) = url
+                        .query_pairs()
+                        .find(|(k, _)| k == "id")
+                        .map(|(_, v)| v.to_string())
+                    else {
+                        return Response::error("no order named", 400);
+                    };
+                    let (generation, view) = self.orders_view().await?;
+                    let found = view.into_iter().find(|o| o.order_id == id);
+                    let mut res = match found {
+                        Some(o) => Response::from_json(&o)?,
+                        None => Response::empty()?.with_status(404),
+                    };
+                    res.headers_mut().set("x-generation", &generation.to_string())?;
+                    Ok(res)
+                }
+                (Method::Post, "append") => {
+                    let expected: i64 = req
+                        .headers()
+                        .get("x-generation")
+                        .ok()
+                        .flatten()
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(-1);
+                    if expected < 0 {
+                        return Response::error("x-generation is required on a write", 400);
+                    }
+                    let mut req = req;
+                    let ev: AppendIn = req.json().await?;
+                    match self.append(expected, ev).await? {
+                        Some((generation, len)) => {
+                            let mut res = Response::from_json(
+                                &serde_json::json!({ "generation": generation, "events": len }),
+                            )?;
+                            res.headers_mut().set("x-generation", &generation.to_string())?;
+                            Ok(res)
+                        }
+                        None => Response::error("generation moved", 409),
+                    }
+                }
+                _ => Response::error("no such projection", 404),
+            };
+        }
+
         let id = path.rsplit('/').next().unwrap_or("").to_string();
         if id.is_empty() {
             return Response::error("no image named", 400);

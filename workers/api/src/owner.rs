@@ -238,8 +238,12 @@ pub async fn orders(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // The membership query and the image read do not depend on each other, so
     // `owner_beside` runs them together. The token is still verified before
     // either is issued -- see it for why that order matters.
-    let (_, loc, loaded) =
-        match owner_beside(&req, &ctx, &db, crate::hubstore::load(&place)).await {
+    // THE PROJECTION, NOT THE IMAGE. The object folds its own log once per
+    // generation; a console polling every fifteen seconds used to be handed
+    // every order the venue had ever taken so that this function could keep
+    // the ones from today.
+    let (_, loc, listed) =
+        match owner_beside(&req, &ctx, &db, crate::hubstore::orders(&place)).await {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };
@@ -250,7 +254,7 @@ pub async fn orders(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         .and_then(|u| u.query_pairs().find(|(k, _)| k == "status").map(|(_, v)| v.to_string()));
     // The hub log is the source. Reading it folds every order to its newest
     // state, so the queue cannot show a status the events do not support.
-    let mut out: Vec<Value> = crate::hubstore::orders_state(&loaded.hub)
+    let mut out: Vec<Value> = listed
         .into_iter()
         .filter_map(|e| {
             let v: Value = serde_json::from_str(&e.order_json).ok()?;
@@ -331,8 +335,7 @@ pub async fn assign_courier(mut req: Request, ctx: RouteContext<()>) -> Result<R
         return Response::error("no such courier at this venue", 404);
     };
     let courier_id = known.id;
-    let hub = crate::hubstore::load(&place).await?;
-    let Some(current) = crate::hubstore::order_state(&hub.hub, &id) else {
+    let Some(current) = crate::hubstore::order(&place, &id).await? else {
         return Response::error("order not found", 404);
     };
     let v: Value = serde_json::from_str(&current).unwrap_or(json!({}));
@@ -367,16 +370,14 @@ pub async fn assign_courier(mut req: Request, ctx: RouteContext<()>) -> Result<R
     }
     let who = courier_id.clone();
     let oid = id.clone();
-    crate::hubstore::with_hub(&place, move |hub| {
-        let current = crate::hubstore::order_state(hub, &oid)
-            .ok_or_else(|| Error::RustError("order not found".into()))?;
+    crate::hubstore::append_for(&place, &oid, move |current| {
+        let current = current.ok_or_else(|| Error::RustError("order not found".into()))?;
         let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
         let mut o = old.clone();
         o["courier_id"] = json!(who);
         o["assigned_at_ms"] = json!(now);
         let body = crate::fold::delta(&old, &o).to_string();
-        hub.append(dowiz_hub::EventKind::Noted, &oid, &body, now as u64, [0u8; 32])
-            .map_err(|e| Error::RustError(format!("{e:?}")))
+        Ok(Some((dowiz_hub::EventKind::Noted, body, json!(true))))
     })
     .await?;
     Response::from_json(&json!({ "ok": true, "orderId": id, "courierId": courier_id }))
@@ -421,9 +422,8 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
     // Kept for the stock settlement below, which runs after the closure has
     // taken ownership of its own copy.
     let order_id = id.clone();
-    let out = crate::hubstore::with_hub(&place, move |hub| {
-        let current = crate::hubstore::order_state(hub, &id)
-            .ok_or_else(|| Error::RustError("order not found".into()))?;
+    let out = crate::hubstore::append_for(&place, &id, move |current| {
+        let current = current.ok_or_else(|| Error::RustError("order not found".into()))?;
         {
             let v: Value = serde_json::from_str(&current).unwrap_or(json!({}));
             if v.get("location_id").and_then(|x| x.as_str()) != Some(want_loc.as_str()) {
@@ -444,20 +444,15 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
         }
         // The delta against the state this transition started from.
         let body_s = crate::fold::delta(&old, &merged).to_string();
-        hub.append(
-            dowiz_hub::EventKind::Advanced,
-            &id,
-            &body_s,
-            now_ms() as u64,
-            [0u8; 32],
-        )
-        .map_err(|e| Error::RustError(format!("hub append failed: {e:?}")))?;
-        Ok(merged)
+        Ok(Some((dowiz_hub::EventKind::Advanced, body_s, merged)))
     })
     .await;
 
     let merged = match out {
-        Ok(m) => m,
+        Ok(Some(m)) => m,
+        // `append_for` only answers `None` when the closure declines to write,
+        // and this one always writes or fails.
+        Ok(None) => return Response::error("order not found", 404),
         Err(e) => {
             let msg = e.to_string();
             let code = if msg.contains("not found") { 404 } else { 409 };
@@ -510,8 +505,12 @@ pub async fn dashboard(req: Request, ctx: RouteContext<()>) -> Result<Response> 
     // The membership query and the image read do not depend on each other, so
     // `owner_beside` runs them together. The token is still verified before
     // either is issued -- see it for why that order matters.
-    let (_, loc, (loaded, loaded_cat)) =
-        match owner_beside(&req, &ctx, &db, crate::hubstore::load_both(&place)).await {
+    // THE ORDERS, FOLDED, AND NOTHING ELSE. This route fetched the catalogue
+    // beside the log "because the readiness count needs it" -- and then never
+    // touched it: the tally below reads only the orders. So the dashboard was
+    // paying for a whole second image on every poll to satisfy a comment.
+    let (_, loc, listed) =
+        match owner_beside(&req, &ctx, &db, crate::hubstore::orders(&place)).await {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };
@@ -523,11 +522,8 @@ pub async fn dashboard(req: Request, ctx: RouteContext<()>) -> Result<Response> 
     let now = now_ms();
     let day_start = ((now + tz_offset_ms) / 86_400_000) * 86_400_000 - tz_offset_ms;
 
-    // Both images in one round trip: the fold needs the orders, the readiness
-    // count needs the catalogue, and asking twice is the cost this route used
-    // to be made of.
     let (mut count, mut revenue, mut pending, mut active) = (0i64, 0i64, 0i64, 0i64);
-    for e in crate::hubstore::orders_state(&loaded.hub) {
+    for e in listed {
         let Ok(v) = serde_json::from_str::<Value>(&e.order_json) else { continue };
         if v.get("location_id").and_then(|x| x.as_str()) != Some(loc.as_str()) {
             continue;

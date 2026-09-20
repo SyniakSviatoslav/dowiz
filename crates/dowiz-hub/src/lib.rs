@@ -94,6 +94,12 @@ impl EventKind {
         )
     }
 
+    /// The kind a stored byte names, for a caller that carries events across
+    /// a boundary the enum cannot cross -- a Durable Object's JSON body, say.
+    pub fn from_u8(b: u8) -> Option<Self> {
+        Self::from_byte(b)
+    }
+
     fn from_byte(b: u8) -> Option<Self> {
         match b {
             1 => Some(EventKind::Placed),

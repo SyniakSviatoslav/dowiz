@@ -260,18 +260,18 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Response
     let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let oid = order_id.clone();
-    let applied = crate::hubstore::with_hub(&place, move |hub| {
-        // Already paid? Then this is a retry of a delivery we handled.
-        let already = hub
-            .events()
-            .into_iter()
-            .any(|e| e.order_id == oid && e.kind == dowiz_hub::EventKind::Paid);
-        if already {
-            return Ok(false);
-        }
-        let current = crate::hubstore::order_state(hub, &oid)
-            .ok_or_else(|| Error::RustError("order not found".into()))?;
+    let applied = crate::hubstore::append_for(&place, &oid.clone(), move |current| {
+        let current = current.ok_or_else(|| Error::RustError("order not found".into()))?;
         let old: serde_json::Value = serde_json::from_str(&current).unwrap_or_default();
+        // ALREADY PAID? Then this is a retry of a delivery already handled.
+        //
+        // Read off the ORDER rather than by scanning the log for a `Paid`
+        // event: the folded order carries `payment_status` and the fingerprint
+        // of the event that set it, which is the same answer without the walk
+        // -- and with the projection there is no log here to walk.
+        if old.get("payment_status").and_then(serde_json::Value::as_str) == Some("paid") {
+            return Ok(None);
+        }
         let mut v = old.clone();
         v["payment_status"] = serde_json::json!("paid");
         v["payment_intent"] = serde_json::json!(intent_id);
@@ -280,17 +280,10 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Response
         v["amount_received"] = serde_json::json!(amount);
         v["stripe_event"] = serde_json::json!(fingerprint);
         let body = crate::fold::delta(&old, &v).to_string();
-        hub.append(
-            dowiz_hub::EventKind::Paid,
-            &oid,
-            &body,
-            now_s as u64 * 1000,
-            [0u8; 32],
-        )
-        .map_err(|e| Error::RustError(format!("hub append failed: {e:?}")))?;
-        Ok(true)
+        Ok(Some((dowiz_hub::EventKind::Paid, body, serde_json::json!(true))))
     })
-    .await;
+    .await
+    .map(|v| v.is_some());
 
     match applied {
         Ok(true) => Response::from_json(&serde_json::json!({ "ok": true, "applied": order_id })),

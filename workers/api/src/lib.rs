@@ -350,10 +350,17 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
             let seq = created_at_ms as u64;
             let ev_id = id.clone();
             let ev_json = order_json.clone();
-            crate::hubstore::with_hub(&crate::hubstore::Place::of_any(&req, &ctx).await?, move |hub| {
-                hub.append(dowiz_hub::EventKind::Placed, &ev_id, &ev_json, seq, [0u8; 32])
-                    .map_err(|e| Error::RustError(format!("hub append failed: {e:?}")))
-            })
+            // THE EVENT, NOT THE IMAGE. The object appends and persists; this
+            // path used to fetch the whole log, add one record and ship it all
+            // back. `seq` is the order's own creation stamp and the object
+            // stamps the record's clock, which is the same millisecond.
+            let _ = seq;
+            crate::hubstore::append_blind(
+                &crate::hubstore::Place::of_any(&req, &ctx).await?,
+                dowiz_hub::EventKind::Placed,
+                &ev_id,
+                &ev_json,
+            )
             .await?;
 
 
@@ -380,8 +387,7 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
             // address in the venue.
             let db = ctx.d1("DB")?;
             let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-            let loaded = hubstore::load(&place).await?;
-            let Some(order_json) = hubstore::order_state(&loaded.hub, &id) else {
+            let Some(order_json) = hubstore::order(&place, &id).await? else {
                 return Response::error("order not found", 404);
             };
             let envelope: serde_json::Value =
@@ -400,7 +406,7 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
             }
             // The order as it stands NOW: the time that is left rides with it.
             let mut live = envelope.clone();
-            live_eta::attach_one(&db, &place, &loaded, &mut live, Date::now().as_millis() as i64).await;
+            live_eta::attach_one(&db, &place, &mut live, Date::now().as_millis() as i64).await;
             let mut res = Response::ok(serde_json::to_string(&live).unwrap_or(order_json))?;
             res.headers_mut().set("content-type", "application/json; charset=utf-8")?;
             // Never cached by anything between here and the browser: it holds
@@ -423,8 +429,10 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
             // One read-modify-write against the hub image, replayed if another
             // writer moved it first. The kernel decides whether the edge is
             // legal; the Worker only records its answer.
-            let out = hubstore::with_hub(&place, move |hub| {
-                let current = hubstore::order_state(hub, &id)
+            // ONE ORDER IN, ONE EVENT OUT. The object hands over the folded
+            // order, the kernel decides, and what goes back is the delta.
+            let out = hubstore::append_for(&place, &id.clone(), move |current| {
+                let current = current
                     .ok_or_else(|| Error::RustError("order not found".into()))?;
                 let updated = json_api::apply_event_logic(&current, &next)
                     .map_err(Error::RustError)?;
@@ -436,17 +444,10 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
                     &serde_json::from_str(&merged).unwrap_or(serde_json::json!({})),
                 )
                 .to_string();
-                hub.append(
-                    dowiz_hub::EventKind::Advanced,
-                    &id,
-                    &change,
-                    Date::now().as_millis() as u64,
-                    [0u8; 32],
-                )
-                .map_err(|e| Error::RustError(format!("hub append failed: {e:?}")))?;
-                Ok(merged)
+                Ok(Some((dowiz_hub::EventKind::Advanced, change, serde_json::json!(merged))))
             })
-            .await;
+            .await
+            .map(|v| v.and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default());
 
             match out {
                 Ok(merged) => {

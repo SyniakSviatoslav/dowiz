@@ -946,6 +946,15 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     let seq = created_at_ms as u64;
     let ev_id = id.clone();
     let now_for_promo = Date::now().as_millis() as i64;
+    // THE ONE WRITER THAT STILL TAKES THE WHOLE IMAGE, and it is not an
+    // oversight. Every other path appends through the object -- the Worker
+    // sends an event and the object holds the log -- but a promotion's LAST
+    // USE has to be counted and spent in the same breath as the append, or two
+    // customers redeem it at once. `with_hub` is that breath: one read, one
+    // decision, one write, guarded by the generation. A placement is once per
+    // order, not once per poll, so what it costs is paid rarely; moving the
+    // redemption into the object is phase 6's business, where the object gains
+    // a command surface of its own.
     let stored = crate::hubstore::with_hub(&place, move |hub| {
         // CLONED per attempt, not moved: `with_hub` retries when it loses the
         // generation guard, so the closure runs more than once and must not

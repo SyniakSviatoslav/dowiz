@@ -45,8 +45,8 @@ fn currency_of(cat: &dowiz_hub::catalog::Catalog) -> String {
 /// Orders belonging to this venue. The Worker is multi-tenant in its tables even
 /// though a hub is not, so every fold filters -- an unfiltered one would show a
 /// neighbouring venue's takings.
-fn orders_of(loaded: &crate::hubstore::Loaded, loc: &str) -> Vec<Value> {
-    crate::hubstore::orders_state(&loaded.hub)
+fn orders_of(listed: Vec<crate::hubdo::OrderView>, loc: &str) -> Vec<Value> {
+    listed
         .into_iter()
         .filter_map(|e| serde_json::from_str::<Value>(&e.order_json).ok())
         .filter(|o| {
@@ -82,7 +82,11 @@ pub async fn promo_check(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
     // TWO IMAGES, one hub: the log and the catalogue have different roots and
     // cannot share one, so a route that reads both loads both.
     // ONE ROUND TRIP for both images: see `load_both`.
-    let (loaded, cat) = crate::hubstore::load_both(&place).await?;
+    let (listed, cat) = futures_util::future::try_join(
+        crate::hubstore::orders(&place),
+        crate::hubstore::load_catalog(&place),
+    )
+    .await?;
     let cat = cat.catalog;
     let code = dowiz_hub::promo::normalise(&body.code);
     let Some(p) = cat.promo(&code).as_deref().and_then(dowiz_hub::promo::Promo::parse)
@@ -104,7 +108,7 @@ pub async fn promo_check(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
         subtotal += (base + delta).max(0) * it.quantity.clamp(1, 99);
     }
 
-    let used = crate::hubstore::promo_uses(&loaded.hub, &code);
+    let used = crate::hubstore::promo_uses_in(&listed, &code);
     match p.redeem(subtotal, now_ms(), used) {
         Ok(cut) => Response::from_json(&json!({
             "code": p.code, "discount": cut, "subtotal": subtotal, "total": subtotal - cut
@@ -153,29 +157,27 @@ pub async fn feedback(mut req: Request, ctx: RouteContext<()>) -> Result<Respons
 
     let at = now_ms();
     let oid = id.clone();
-    let outcome = crate::hubstore::with_hub(&place, move |hub| {
-        let current = crate::hubstore::order_state(hub, &oid)
-            .ok_or_else(|| Error::RustError("no such order".into()))?;
-        let mut o: Value = serde_json::from_str(&current).unwrap_or(json!({}));
-        if o.get("feedback").is_some() {
+    let outcome = crate::hubstore::append_for(&place, &oid, move |current| {
+        let current = current.ok_or_else(|| Error::RustError("no such order".into()))?;
+        let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
+        if old.get("feedback").is_some() {
             return Err(Error::RustError("already".into()));
         }
-        let status = o.get("status").and_then(Value::as_str).unwrap_or("");
+        let status = old.get("status").and_then(Value::as_str).unwrap_or("");
         if !matches!(status, "DELIVERED" | "REJECTED" | "CANCELLED") {
             return Err(Error::RustError("running".into()));
         }
+        let mut o = old.clone();
         o["feedback"] = json!({ "text": text, "at": at });
-        let stored = serde_json::to_string(&o).unwrap_or(current);
         // `Noted`, not `Advanced`: a note is not a transition the order machine
         // decided, and writing it as one puts an edge in the log that does not
         // exist.
-        hub.append(dowiz_hub::EventKind::Noted, &oid, &stored, at as u64, [0u8; 32])
-            .map_err(|e| Error::RustError(format!("{e:?}")))?;
-        Ok(())
+        let change = crate::fold::delta(&old, &o).to_string();
+        Ok(Some((dowiz_hub::EventKind::Noted, change, json!(true))))
     })
     .await;
     match outcome {
-        Ok(()) => Response::from_json(&json!({ "ok": true })),
+        Ok(_) => Response::from_json(&json!({ "ok": true })),
         Err(e) if e.to_string().contains("already") => {
             Response::error("you have already left a note", 409)
         }
@@ -214,8 +216,13 @@ pub async fn analytics(req: Request, ctx: RouteContext<()>) -> Result<Response> 
     let now = now_ms();
     let day_ms = 86_400_000;
     let from = start_of_day_ms(now) - (days - 1) * day_ms;
-    // ONE ROUND TRIP for both images: see `load_both`.
-    let (loaded, cat) = crate::hubstore::load_both(&place).await?;
+    // The folded orders and the catalogue, fetched together: neither answer
+    // depends on the other, and the analytics need a product's name.
+    let (listed, cat) = futures_util::future::try_join(
+        crate::hubstore::orders(&place),
+        crate::hubstore::load_catalog(&place),
+    )
+    .await?;
     let cat = cat.catalog;
 
     let mut by_day: Vec<(i64, i64, i64)> = (0..days).map(|i| (from + i * day_ms, 0, 0)).collect();
@@ -224,7 +231,7 @@ pub async fn analytics(req: Request, ctx: RouteContext<()>) -> Result<Response> 
     let (mut orders, mut revenue, mut rejected) = (0i64, 0i64, 0i64);
     let (mut delivery, mut pickup) = (0i64, 0i64);
 
-    for o in orders_of(&loaded, &loc) {
+    for o in orders_of(listed, &loc) {
         let at = o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(0);
         if at < from {
             continue;
@@ -739,8 +746,17 @@ pub async fn customers(req: Request, ctx: RouteContext<()>) -> Result<Response> 
     // `owner_beside` runs them together. Measured against this very handler
     // before it was converted: 293 ms of server time against the dashboard's
     // 235 for the same 655 KB, on the same deployment at the same minute.
-    let (_, loc, (loaded, loaded_cat)) =
-        match crate::owner::owner_beside(&req, &ctx, &db, crate::hubstore::load_both(&place)).await {
+    let (_, loc, (listed, loaded_cat)) = match crate::owner::owner_beside(
+        &req,
+        &ctx,
+        &db,
+        futures_util::future::try_join(
+            crate::hubstore::orders(&place),
+            crate::hubstore::load_catalog(&place),
+        ),
+    )
+    .await
+    {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };
@@ -751,7 +767,7 @@ pub async fn customers(req: Request, ctx: RouteContext<()>) -> Result<Response> 
     let secret = signing_secret(&ctx.env);
 
     let mut rows: Vec<(String, String, String, i64, i64, i64)> = Vec::new();
-    for o in orders_of(&loaded, &loc) {
+    for o in orders_of(listed, &loc) {
         let Some(phone) = o.get("contact").and_then(|c| c.get("phone")).and_then(Value::as_str)
         else {
             continue;
@@ -824,9 +840,9 @@ pub async fn reveal_customer(mut req: Request, ctx: RouteContext<()>) -> Result<
     };
 
     let secret = signing_secret(&ctx.env);
-    let loaded = crate::hubstore::load(&place).await?;
+    let listed = crate::hubstore::orders(&place).await?;
     let mut found: Option<(String, String, Vec<Value>)> = None;
-    for o in orders_of(&loaded, &loc) {
+    for o in orders_of(listed, &loc) {
         let Some(phone) = o.get("contact").and_then(|c| c.get("phone")).and_then(Value::as_str)
         else {
             continue;
@@ -860,11 +876,10 @@ pub async fn reveal_customer(mut req: Request, ctx: RouteContext<()>) -> Result<
     let at = now_ms();
     let entry = json!({ "by": who, "at": at, "reason": reason }).to_string();
     let subject = format!("cust:{key}");
-    crate::hubstore::with_hub(&place, move |hub| {
-        hub.append(dowiz_hub::EventKind::Revealed, &subject, &entry, at as u64, [0u8; 32])
-            .map_err(|e| Error::RustError(format!("{e:?}")))
-    })
-    .await?;
+    // AN AUDIT RECORD DEPENDS ON NOTHING THE LOG ALREADY SAYS, so it is
+    // written without reading anything first.
+    crate::hubstore::append_blind(&place, dowiz_hub::EventKind::Revealed, &subject, &entry)
+        .await?;
 
     Response::from_json(&json!({ "name": name, "phone": phone, "orders": orders }))
 }
@@ -876,6 +891,8 @@ pub async fn reveals(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // The membership query and this read do not depend on each other, so
     // `owner_beside` runs them together. The token is still verified before
     // either is issued -- see it for why that order matters.
+    // THE AUDIT TRAIL IS NOT A PROJECTION. `reveals()` reads the events the
+    // fold deliberately skips, so this route still reads the image.
     let (_, loc, loaded) =
         match crate::owner::owner_beside(&req, &ctx, &db, crate::hubstore::load(&place)).await {
             Ok(v) => v,
@@ -940,8 +957,8 @@ pub async fn courier_history(req: Request, ctx: RouteContext<()>) -> Result<Resp
         Ok(_) => return Response::error("forbidden role", 403),
         Err(e) => return e.into_response(),
     };
-    let loaded = crate::hubstore::load(&place).await?;
-    let mut rows: Vec<Value> = crate::hubstore::orders_state(&loaded.hub)
+    let mut rows: Vec<Value> = crate::hubstore::orders(&place)
+        .await?
         .into_iter()
         .filter_map(|e| serde_json::from_str::<Value>(&e.order_json).ok())
         .filter(|o| o.get("courier_id").and_then(Value::as_str) == Some(me.as_str()))
@@ -1646,10 +1663,10 @@ pub async fn draft_post(req: Request, ctx: RouteContext<()>) -> Result<Response>
 
     // The week's most-ordered dish, COUNTED HERE. The model never counts; it is
     // handed the number.
-    let (loaded, _) = crate::hubstore::load_both(&place).await?;
+    let listed = crate::hubstore::orders(&place).await?;
     let week_ago = now_ms() - 7 * 24 * 60 * 60 * 1000;
     let mut tally: Vec<(String, i64)> = Vec::new();
-    for o in orders_of(&loaded, &loc) {
+    for o in orders_of(listed, &loc) {
         if o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(0) < week_ago {
             continue;
         }
@@ -2205,6 +2222,10 @@ pub async fn owner_assist(mut req: Request, ctx: RouteContext<()>) -> Result<Res
     // The membership query and this read do not depend on each other, so
     // `owner_beside` runs them together. The token is still verified before
     // either is issued -- see it for why that order matters.
+    // THE IMAGE, not the projection, and for once that is right: `graph_facts`
+    // walks the hub itself -- reveals, stock, the shape of the log -- to answer
+    // a question in words. The orders are folded out of the same image rather
+    // than asked for a second time.
     let (_, loc, loaded) =
         match crate::owner::owner_beside(&req, &ctx, &db, crate::hubstore::load(&place)).await {
             Ok(v) => v,
@@ -2214,7 +2235,11 @@ pub async fn owner_assist(mut req: Request, ctx: RouteContext<()>) -> Result<Res
     // THE FACTS ARE COMPUTED HERE and handed over. The model is told plainly
     // that they are the truth and it is not; a model that invented a number
     // would have an owner phoning a customer about an order that does not exist.
-    let mut live: Vec<Value> = orders_of(&loaded, &loc)
+    let listed: Vec<crate::hubdo::OrderView> = crate::hubstore::orders_state(&loaded.hub)
+        .into_iter()
+        .map(crate::hubdo::OrderView::of_event)
+        .collect();
+    let mut live: Vec<Value> = orders_of(listed, &loc)
         .into_iter()
         .filter(|o| {
             matches!(
@@ -2274,11 +2299,11 @@ pub async fn courier_assist(mut req: Request, ctx: RouteContext<()>) -> Result<R
         Ok(_) => return Response::error("forbidden role", 403),
         Err(e) => return e.into_response(),
     };
-    let loaded = crate::hubstore::load(&place).await?;
     let now = now_ms();
     // THEIR OWN RUN AND NOTHING ELSE. A courier asking the assistant must not
     // be able to reach a neighbour's address through it.
-    let mine: Vec<Value> = crate::hubstore::orders_state(&loaded.hub)
+    let mine: Vec<Value> = crate::hubstore::orders(&place)
+        .await?
         .into_iter()
         .filter_map(|e| serde_json::from_str::<Value>(&e.order_json).ok())
         .filter(|o| o.get("courier_id").and_then(Value::as_str) == Some(me.as_str()))
@@ -3311,8 +3336,8 @@ pub async fn voice(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     // The orders this speaker may act on. An owner sees the venue's live queue;
     // a courier sees only their own run -- so a misheard number can never reach
     // somebody else's delivery.
-    let loaded = crate::hubstore::load(&place).await?;
-    let pool: Vec<Value> = crate::hubstore::orders_state(&loaded.hub)
+    let pool: Vec<Value> = crate::hubstore::orders(&place)
+        .await?
         .into_iter()
         .filter_map(|e| serde_json::from_str::<Value>(&e.order_json).ok())
         .filter(|o| {

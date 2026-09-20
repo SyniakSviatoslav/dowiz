@@ -931,7 +931,7 @@ pub async fn seed_fresh_hub(place: &Place, location_json: &str) -> Result<()> {
         .map(|s| s.to_bytes_trimmed())
         .map_err(|e| Error::RustError(format!("cannot create stock: {e:?}")))?;
     let log = Hub::create_sized(64 * 1024)
-        .map(|mut h| h.to_bytes_trimmed())
+        .map(|h| h.to_bytes_trimmed())
         .map_err(|e| Error::RustError(format!("cannot create hub log: {e:?}")))?;
 
     for (id, bytes) in [
@@ -984,6 +984,167 @@ fn bytes_to_js(b: &[u8]) -> JsValue {
 ///
 /// Bounded at five attempts: an append-only log makes a replay safe, but an
 /// unbounded retry would turn a hot hub into a livelock rather than an error.
+/// ── THE PROJECTION PATH ──
+///
+/// What a reader asks the object for. `load()` still exists and still hands
+/// back the whole image, because export, import, health and the catalogue
+/// writers need the bytes; these three do not, and they are the hot ones.
+///
+/// ONE OBJECT CALL, ONE ANSWER. `orders()` used to mean: fetch every chunk of
+/// the image, reassemble it, parse it into a store, fold every event the venue
+/// has ever written, and keep the handful that matter. All of that still
+/// happens -- inside the object, once per generation, cached -- and what
+/// crosses the hop is the answer.
+
+/// Every order, newest first, folded.
+pub async fn orders(place: &Place) -> Result<Vec<crate::hubdo::OrderView>> {
+    let stub = place.stub()?;
+    let req = Request::new("https://hub/fold/orders", Method::Get)?;
+    let mut res = stub.fetch_with_request(req).await?;
+    if res.status_code() != 200 {
+        return Err(Error::RustError(format!("hub object refused a projection: {}", res.status_code())));
+    }
+    res.json().await
+}
+
+/// One order's folded state, or `None` if this hub never saw it.
+pub async fn order(place: &Place, order_id: &str) -> Result<Option<String>> {
+    let stub = place.stub()?;
+    let req = Request::new(
+        &format!("https://hub/fold/order?id={}", crate::mcp::enc(order_id)),
+        Method::Get,
+    )?;
+    let mut res = stub.fetch_with_request(req).await?;
+    match res.status_code() {
+        200 => {
+            let view: crate::hubdo::OrderView = res.json().await?;
+            Ok(Some(view.order_json))
+        }
+        404 => Ok(None),
+        other => Err(Error::RustError(format!("hub object refused an order: {other}"))),
+    }
+}
+
+/// The generation the object's log is at, without fetching the log.
+///
+/// The append path needs it to guard its write, and a HEAD-shaped question is
+/// the cheapest thing this object answers: the projection is memoised, so on a
+/// warm object this touches no storage at all.
+pub async fn log_generation(place: &Place) -> Result<i64> {
+    let stub = place.stub()?;
+    let req = Request::new("https://hub/fold/generation", Method::Get)?;
+    let res = stub.fetch_with_request(req).await?;
+    Ok(res.headers().get("x-generation").ok().flatten().and_then(|v| v.parse().ok()).unwrap_or(0))
+}
+
+/// Append one event that does not depend on what the log already says.
+///
+/// A placement, an audit record: the payload is already decided, so there is
+/// nothing to read and nothing to re-decide. The generation guard is still
+/// carried -- it is what tells "somebody else wrote" from "it failed" -- and a
+/// lost guard simply asks the object for the new generation and writes again.
+pub async fn append_blind(
+    place: &Place,
+    kind: dowiz_hub::EventKind,
+    subject: &str,
+    payload: &str,
+) -> Result<i64> {
+    for _ in 0..5 {
+        let generation = log_generation(place).await?;
+        let body = serde_json::json!({
+            "kind": kind as u8,
+            "order_id": subject,
+            "payload": payload,
+            "clock": Date::now().as_millis(),
+        });
+        let stub = place.stub()?;
+        let mut write = Request::new_with_init(
+            "https://hub/fold/append",
+            RequestInit::new()
+                .with_method(Method::Post)
+                .with_body(Some(JsValue::from_str(&body.to_string()))),
+        )?;
+        write.headers_mut()?.set("x-generation", &generation.to_string())?;
+        write.headers_mut()?.set("content-type", "application/json")?;
+        let mut res = stub.fetch_with_request(write).await?;
+        match res.status_code() {
+            200 => {
+                let v: serde_json::Value = res.json().await.unwrap_or(serde_json::json!({}));
+                return Ok(v.get("generation").and_then(serde_json::Value::as_i64).unwrap_or(0));
+            }
+            409 => continue,
+            other => {
+                return Err(Error::RustError(format!("hub object refused an append: {other}")))
+            }
+        }
+    }
+    Err(Error::RustError("hub log is contended; five attempts lost the generation guard".into()))
+}
+
+/// Append one event, retrying if another writer moved the log first.
+///
+/// `read` is given the CURRENT state of the order (`None` when the hub has
+/// never seen it) and returns the event to write: its kind and its payload.
+/// Returning `Ok(None)` means "nothing to record", which is not a failure --
+/// the Stripe webhook replaying a payment already recorded takes that branch.
+///
+/// THE RETRY IS THE SAME CONTRACT `with_hub` had. A Durable Object serialises
+/// its own requests, so the guard fires only if a second Worker appended
+/// between this reader's question and this writer's answer; then the decision
+/// is made again against the newer state, which is correct for a log whose
+/// events are deltas.
+pub async fn append_for<F>(
+    place: &Place,
+    order_id: &str,
+    mut decide: F,
+) -> Result<Option<serde_json::Value>>
+where
+    F: FnMut(Option<String>) -> Result<Option<(dowiz_hub::EventKind, String, serde_json::Value)>>,
+{
+    for _ in 0..5 {
+        let stub = place.stub()?;
+        let req = Request::new(
+            &format!("https://hub/fold/order?id={}", crate::mcp::enc(order_id)),
+            Method::Get,
+        )?;
+        let mut res = stub.fetch_with_request(req).await?;
+        let generation: i64 =
+            res.headers().get("x-generation").ok().flatten().and_then(|v| v.parse().ok()).unwrap_or(0);
+        let current = match res.status_code() {
+            200 => Some(res.json::<crate::hubdo::OrderView>().await?.order_json),
+            404 => None,
+            other => {
+                return Err(Error::RustError(format!("hub object refused an order: {other}")))
+            }
+        };
+        let Some((kind, payload, out)) = decide(current)? else { return Ok(None) };
+        let body = serde_json::json!({
+            "kind": kind as u8,
+            "order_id": order_id,
+            "payload": payload,
+            "clock": Date::now().as_millis(),
+        });
+        let mut write = Request::new_with_init(
+            "https://hub/fold/append",
+            RequestInit::new()
+                .with_method(Method::Post)
+                .with_body(Some(JsValue::from_str(&body.to_string()))),
+        )?;
+        write.headers_mut()?.set("x-generation", &generation.to_string())?;
+        write.headers_mut()?.set("content-type", "application/json")?;
+        let res = stub.fetch_with_request(write).await?;
+        match res.status_code() {
+            200 => return Ok(Some(out)),
+            // Someone else appended first: ask again and decide again.
+            409 => continue,
+            other => {
+                return Err(Error::RustError(format!("hub object refused an append: {other}")))
+            }
+        }
+    }
+    Err(Error::RustError("hub log is contended; five attempts lost the generation guard".into()))
+}
+
 /// The folded state of one order, or `None` if this hub never saw it.
 ///
 /// `Hub::order` returns the newest EVENT, which since phase 3 may be a delta.
@@ -1052,7 +1213,13 @@ pub fn orders_state(hub: &Hub) -> Vec<dowiz_hub::Event> {
 /// gives its use back -- the venue never took the money, so holding a use
 /// against the customer would charge them for a refusal.
 pub fn promo_uses(hub: &Hub, code: &str) -> i64 {
-    orders_state(hub)
+    promo_uses_in(&orders_state(hub).into_iter().map(crate::hubdo::OrderView::of_event).collect::<Vec<_>>(), code)
+}
+
+/// The same count over a PROJECTION, for a caller that already has one and
+/// must not fetch the whole log to answer a discount.
+pub fn promo_uses_in(listed: &[crate::hubdo::OrderView], code: &str) -> i64 {
+    listed
         .iter()
         .filter(|ev| {
             let Ok(o) = serde_json::from_str::<serde_json::Value>(&ev.order_json) else {

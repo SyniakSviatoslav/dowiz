@@ -48,7 +48,9 @@ pub async fn tasks(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         Err(r) => return Ok(r),
     };
 
-    let loaded = crate::hubstore::load(&place).await?;
+    // The folded queue from the object. A courier app polls every twelve
+    // seconds on shift; what it needs is the orders, not the log.
+    let listed = crate::hubstore::orders(&place).await?;
 
     #[derive(Deserialize)]
     struct A {
@@ -63,7 +65,7 @@ pub async fn tasks(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 
     let mut mine = Vec::new();
     let mut open = Vec::new();
-    for e in crate::hubstore::orders_state(&loaded.hub) {
+    for e in listed {
         let Ok(v) = serde_json::from_str::<Value>(&e.order_json) else { continue };
         if v.get("location_id").and_then(|x| x.as_str()) != Some(loc.as_str()) {
             continue;
@@ -198,8 +200,9 @@ pub async fn shift(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
 
 /// Read one order out of the hub log, scoped to this hub's location.
 async fn load_order(place: &crate::hubstore::Place, id: &str, loc: &str) -> Result<Option<(String, Value)>> {
-    let loaded = crate::hubstore::load(&place).await?;
-    let Some(raw) = crate::hubstore::order_state(&loaded.hub, id) else { return Ok(None) };
+    // ONE ORDER, NOT THE WHOLE LOG. The object folds and answers; this used to
+    // pull every order the venue had ever taken to read one of them.
+    let Some(raw) = crate::hubstore::order(place, id).await? else { return Ok(None) };
     let v: Value = serde_json::from_str(&raw).unwrap_or(json!({}));
     if v.get("location_id").and_then(|x| x.as_str()) != Some(loc) {
         return Ok(None);
@@ -225,9 +228,8 @@ async fn write_status_with(
     cash: i64,
 ) -> Result<Value> {
     let id_s = id.to_string();
-    crate::hubstore::with_hub(&place, move |hub| {
-        let current = crate::hubstore::order_state(hub, &id_s)
-            .ok_or_else(|| Error::RustError("order not found".into()))?;
+    crate::hubstore::append_for(&place, &id_s.clone(), move |current| {
+        let current = current.ok_or_else(|| Error::RustError("order not found".into()))?;
         let updated = json_api::apply_event_logic(&current, next).map_err(Error::RustError)?;
         let mut merged: Value = serde_json::from_str(&updated)
             .map_err(|e| Error::RustError(format!("kernel order json unreadable: {e}")))?;
@@ -240,11 +242,10 @@ async fn write_status_with(
         // WHAT CHANGED, not what is. The whole envelope was written six times
         // per delivery; the fold puts it back together on the way out.
         let body = crate::fold::delta(&old, &merged).to_string();
-        hub.append(dowiz_hub::EventKind::Advanced, &id_s, &body, now_ms() as u64, [0u8; 32])
-            .map_err(|e| Error::RustError(format!("hub append failed: {e:?}")))?;
-        Ok(merged)
+        Ok(Some((dowiz_hub::EventKind::Advanced, body, merged)))
     })
     .await
+    .and_then(|v| v.ok_or_else(|| Error::RustError("order not found".into())))
 }
 
 /// `POST /api/courier/orders/:id/accept`
@@ -301,9 +302,8 @@ pub async fn accept(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let now = now_ms();
     let oid = id.clone();
     let who = courier_id.clone();
-    let claimed = crate::hubstore::with_hub(&place, move |hub| {
-        let current = crate::hubstore::order_state(hub, &oid)
-            .ok_or_else(|| Error::RustError("order not found".into()))?;
+    let claimed = crate::hubstore::append_for(&place, &oid.clone(), move |current| {
+        let current = current.ok_or_else(|| Error::RustError("order not found".into()))?;
         let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
         let mut o = old.clone();
         o["courier_id"] = json!(who);
@@ -314,8 +314,7 @@ pub async fn accept(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         // `Noted`, not `Advanced`: taking an order is not a transition the
         // order machine decided, and writing it as one would put an edge in
         // the log that does not exist.
-        hub.append(dowiz_hub::EventKind::Noted, &oid, &body, now as u64, [0u8; 32])
-            .map_err(|e| Error::RustError(format!("{e:?}")))
+        Ok(Some((dowiz_hub::EventKind::Noted, body, json!(true))))
     })
     .await;
     if let Err(e) = claimed {
@@ -504,7 +503,7 @@ pub async fn earnings(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // place the same numbers lived, and the response it produced did not even
     // have the shape the courier app reads -- `d.today.cash` was undefined, so
     // the wallet showed nothing at all.
-    let loaded = crate::hubstore::load(&place).await?;
+    let listed = crate::hubstore::orders(&place).await?;
     let now = now_ms();
     let day = 86_400_000i64;
     let today = ((now + 2 * 60 * 60 * 1000) / day) * day - 2 * 60 * 60 * 1000;
@@ -519,7 +518,7 @@ pub async fn earnings(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let mut open_cash = 0i64;
     let mut in_hand = 0i64;
 
-    for e in crate::hubstore::orders_state(&loaded.hub) {
+    for e in listed {
         let Ok(v) = serde_json::from_str::<Value>(&e.order_json) else { continue };
         if v.get("location_id").and_then(Value::as_str).map(|l| l != loc).unwrap_or(false) {
             continue;

@@ -127,9 +127,8 @@ pub async fn quote(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     // carries no items the venue's default stands in, and the response says how
     // many orders were counted so a venue can see the queue it is being quoted
     // against.
-    let hub = crate::hubstore::load(&place).await?;
     let mut ahead: Vec<QueuedOrder> = Vec::new();
-    for e in crate::hubstore::orders_state(&hub.hub) {
+    for e in crate::hubstore::orders(&place).await? {
         let Ok(v) = serde_json::from_str::<Value>(&e.order_json) else { continue };
         if v.get("location_id").and_then(|x| x.as_str()) != Some(place.venue.as_str()) {
             continue;

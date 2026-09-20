@@ -211,26 +211,41 @@ Status 2026-09-20 night: items 1 (SAMPLING ONLY), 3 and 4 are shipped; the rest 
    order produces a push, no Meta call unless `notify.whatsapp.status = on`.
 8. Nominatim results cached in KV by 50 m cell for 30 days.
 
-### Phase 2 — the object IS the hub (effort 2 days, risk medium)
+### Phase 2 — the object IS the hub — SHIPPED
 
-The Durable Object owns a live `Hub` (and `StockLog`) in memory; the Worker sends
-COMMANDS and reads PROJECTIONS; the image never crosses the Worker↔object hop again.
+The Durable Object folds its own log and answers with ORDERS; the Worker sends EVENTS.
+The image crosses the hop only where something genuinely needs the bytes.
 
-- `hubdo.rs`: `POST /append {kind, order_id, payload}` → `Hub::append` + persist (chunk
-  diff) + bump memo; `GET /orders?lod=console|courier|track&since=<generation>` → the
-  fold, cached per generation, filtered per LOD; `GET /order/:id`; `GET /catalog` stays
-  bytes for `with_catalog` writers but `GET /catalog/product/:id` and `/catalog/location`
-  serve JSON from a memo. Snapshot+delta: `since` returns only events after that
-  generation, with the new generation in a header.
-- `hubstore.rs`: `with_hub` becomes `append(place, ev)`; readers call the projection.
-  `load()` remains for export/import/health.
-- Readers: `owner.rs orders/dashboard`, `courier.rs tasks`, `lib.rs /api/order/:id`,
-  `eta.rs quote`, `live_eta.rs` — each drops its `load()`.
-- Tests (workers/api, native): the projection of a fixture image equals
-  `Hub::load(bytes).orders()`; `since` returns exactly the appended events; a generation
-  bump invalidates the memo; LOD `track` never contains another customer's address.
-- Live proof: `/api/owner/health` gains `objectReads`, `bytesShipped`, `chunksWritten`
-  counters kept in the object; a console hour ships < 1 MB where it shipped 400 MB.
+- `hubdo.rs` gained a second kind of route. `/img/...` still hands over bytes — the
+  catalogue, the settings, a backup, anything whose reader is not this object.
+  `/fold/...` hands over answers: `GET /fold/orders` (every order, folded, newest first),
+  `GET /fold/order?id=` (one), `GET /fold/generation` (the guard, without the list),
+  `POST /fold/append` (one event, under the same `x-generation` guard a whole-image
+  write carried). The projection is MEMOISED by generation and dropped on every write
+  to the log, so a venue whose consoles, couriers and customers all poll folds its log
+  once per change rather than once per request.
+- `hubstore.rs` gained the Worker's half: `orders`, `order`, `log_generation`,
+  `append_for` (read the order, decide, append, retry on 409 — the contract `with_hub`
+  had) and `append_blind` (a placement or an audit record, which depend on nothing the
+  log already says).
+- Converted: every list reader (owner queue and dashboard, courier tasks and wallet,
+  eta quote, analytics, customers, promo check, courier history, both assistants),
+  every single-order reader (`/api/order/:id`, courier `load_order`, owner assign) and
+  every writer but one (`lib.rs` place and advance, owner advance and assign, courier
+  advance and claim, stripe paid, feedback, reveal).
+- STILL TAKES THE IMAGE, and each for a reason written at the call site: the storefront's
+  PLACEMENT, because a promotion's last use must be counted and spent in one guarded
+  breath; the REVEALS audit route, because `reveals()` reads the events the fold skips;
+  the owner ASSISTANT, because `graph_facts` walks the hub itself; and health, export,
+  import and the catalogue writers, which are about bytes by definition.
+- Found while converting: the dashboard fetched the CATALOGUE beside the log "because
+  the readiness count needs it" and then never touched it. Every console poll paid for
+  a second image to satisfy a comment.
+- Tests: `hubdo.rs` 1 (the projection's JSON shape is a contract — `kind` travels as the
+  byte the log stores, and must name the same kind on the other side), on top of the
+  four `hubstore` fold tests that phase 3 added and that the object now runs inside
+  itself. The object's own plumbing is not natively testable; what it does is
+  `hubstore::orders_state`, which is.
 
 ### Phase 3 — deltas — SHIPPED
 
