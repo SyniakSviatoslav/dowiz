@@ -29,6 +29,13 @@ jobs:
         run: sh tools/gates/no-sql.sh
       - name: the file-size ratchet (may only fall)
         run: sh tools/gates/file-size.sh
+      # The conservation audit itself needs live venues and an owner token, so
+      # it cannot run here. Its PROOF can: the gate is run against a stubbed
+      # platform and each law is checked for going red when it should and
+      # green when it should not. A gate whose alarm has never been heard is
+      # the failure this repo keeps a catalogue of.
+      - name: the conservation gate fires as described
+        run: node e2e/gates/conservation.prove.mjs
 
   mutations:
     runs-on: ubuntu-latest

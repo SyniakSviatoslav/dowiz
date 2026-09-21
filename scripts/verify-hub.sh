@@ -30,4 +30,8 @@ echo "== the file-size ratchet (may only fall) =="
 sh tools/gates/file-size.sh
 echo "   ratchet OK"
 
+echo "== the conservation gate's own proof =="
+node e2e/gates/conservation.prove.mjs
+echo "   proof OK"
+
 echo "ALL GREEN — the hub crates and the Worker are verified."
