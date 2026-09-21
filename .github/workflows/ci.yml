@@ -11,6 +11,23 @@ jobs:
       - run: cd engine && cargo test --lib
       - run: cd apps/courier && cargo test
 
+  # THE CRATES THE LIVE PRODUCT IS MADE OF. `test` above runs the kernel, the
+  # engine and the courier app; until this job existed nothing ran the order
+  # log, the storage format, the tables that replaced D1, or a single Worker
+  # route. Four hundred and fifty tests, no gate. Mirrors scripts/verify-hub.sh.
+  hub:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      # No workspace: each crate is standalone and is entered on purpose.
+      - run: cd crates/bebop-store && cargo test
+      - run: cd crates/dowiz-core && cargo test
+      - run: cd crates/dowiz-hub && cargo test
+      - run: cd workers/api && cargo test
+      - name: the SQL ratchet (may only fall)
+        run: sh tools/gates/no-sql.sh
+
   mutations:
     runs-on: ubuntu-latest
     timeout-minutes: 30

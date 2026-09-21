@@ -171,11 +171,34 @@ runs in CI or a gate; *continuous* = runs in production.
 | F22 | two-venue probe on every venue-resolving route | holistic · triggered | blueprint 1 L3 |
 | F23 | cycle test per feature, asserting the **answer**, ending by putting the venue back | holistic · triggered | blueprint 1 L4 |
 | F24 | config contracts: CSP, cron, defaults, no PAN-shaped string in any log or column | atomic · triggered | 3-D Secure; PCI shape |
-| F25 | fuzz: `dowiz-core/src/json.rs`, and `Hub::load` over arbitrary bytes | atomic · triggered | a hand-written parser on every request path |
+| F25 | **named corruption tests** on every loader that reads bytes off a network — NOT a fuzzer | atomic · triggered | a hand-written parser on every request path |
+| F26 | the SQL ratchet, `tools/gates/no-sql.sh` (at 0) | atomic · triggered | blueprint 5 |
+| F27 | **the product's own crates run in CI at all** — `bebop-store`, `dowiz-core`, `dowiz-hub`, `workers/api` | atomic · triggered | the gap below |
 
 **F8 is the one to build first among the holistic ones**, because it is this
 product's steady-state hypothesis: every chaos, soak and concurrency test in the
 list is defined as *"F8 still holds while X is happening"*.
+
+**F25 IS NOT A FUZZER, and the change is the operator's, 2026-09-21.** A seeded
+generator over corrupted images was written, it found two real defects in a day
+— an 8 GiB allocation that ABORTS the process rather than failing a test, and a
+truncated log that loaded and then answered `len() == 40` while handing back two
+records — and it was then deleted. It ran for minutes, and on this box an
+allocation that size is not a red test, it is the session. What replaces it is
+one named test per corruption, each setting one known cell: *the key length with
+bit 33 set*, *a chain that loops*, *nine truncations of a forty-record log*, *a
+`next` ref aimed out of the image*. A named corruption says what it protects and
+costs milliseconds; a generator says "something, somewhere" and costs the box.
+The defects it found are in `crates/bebop-store` (`Store::obj_cells`, and the
+refusals above it) and the law is stated there.
+
+**F27 IS THE GAP NOBODY HAD LOOKED FOR.** Until 2026-09-21 CI ran `kernel`,
+`engine` and `apps/courier` — and nothing else. The order log, the storage
+format, the tables that replaced D1 and every Worker route had four hundred and
+fifty passing tests and **no gate that ran them**, so a green badge was a
+statement about code the venue does not execute. `scripts/verify-hub.sh` and the
+`hub` job in `.github/workflows/ci.yml` run them. Wiring an existing test suite
+is the cheapest fitness function in this registry and it was the missing one.
 
 ---
 
@@ -195,6 +218,8 @@ the plan.
   Sunday of October.
 - F10 nightly `chain_check`. One call site, closes a dormant instrument.
 - F8 the conservation audit, as a runnable gate after every E2E.
+- **F27 the hub crates in CI**, and F25's loaders hardened against the bytes
+  they are handed. **DONE 2026-09-21** — see the registry note above.
 
 ### Phase 1 — `platform/` (2 weeks, was 1)
 `Ctx`, `Ports`, `Fault`, `Handler`, the schema derive, committed `contracts/`.
