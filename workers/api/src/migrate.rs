@@ -124,10 +124,40 @@ pub async fn migrate_i18n(req: Request, ctx: RouteContext<()>) -> Result<Respons
         }
     }
 
-    let mut batches: std::collections::HashMap<String, Vec<(String, String, String, String, String)>> =
+    // WHAT THE VENUE'S CATALOGUE CALLS EACH ID, so a contested row can be
+    // settled without guessing. Two venues holding the same id is not by itself
+    // a collision: this platform's second venue was seeded from the first's
+    // catalogue, so the SAME dish has the SAME id in both and a translation of
+    // it is true in both. What would be a collision is the same id naming
+    // DIFFERENT dishes, and that is visible -- the venues' own names for it
+    // would differ.
+    let mut names: std::collections::HashMap<(String, String), String> =
         std::collections::HashMap::new();
+    for l in &locs {
+        let (Ok(d), Ok(ns)) = (ctx.d1("DB"), ctx.durable_object("HUB")) else { continue };
+        let place = crate::hubstore::Place {
+            db: d,
+            ns,
+            venue: l.id.clone(),
+            legacy_venue: legacy.clone(),
+        };
+        let cat = crate::hubstore::load_catalog(&place).await?.catalog;
+        for (pid, json) in cat.products().into_iter().chain(cat.categories()) {
+            let name = serde_json::from_str::<serde_json::Value>(&json)
+                .ok()
+                .and_then(|v| v.get("name").and_then(|n| n.as_str().map(str::to_string)))
+                .unwrap_or_default();
+            names.insert((l.id.clone(), pid), name);
+        }
+    }
+
+    let mut batches: std::collections::HashMap<
+        String,
+        Vec<(String, String, String, String, String)>,
+    > = std::collections::HashMap::new();
     let mut orphans: Vec<String> = Vec::new();
     let mut contested: Vec<String> = Vec::new();
+    let mut collided: Vec<String> = Vec::new();
     for r in rows {
         match owners.get(&r.entity_id).map(|v| v.as_slice()) {
             Some([venue]) => batches.entry(venue.clone()).or_default().push((
@@ -137,7 +167,36 @@ pub async fn migrate_i18n(req: Request, ctx: RouteContext<()>) -> Result<Respons
                 r.field,
                 r.value,
             )),
-            Some(_) => contested.push(r.entity_id),
+            Some(many) => {
+                // THE SAME DISH, OR TWO DIFFERENT ONES? Ask each venue what it
+                // calls the id. All the same name means one dish in several
+                // catalogues and the translation is true in each. Different
+                // names mean the id has been reused for something else, and a
+                // copy would put one restaurant's words on another's dish --
+                // so it is reported and LEFT, which is the same refusal this
+                // route makes for an orphan.
+                let mut seen: Vec<&str> = many
+                    .iter()
+                    .filter_map(|v| names.get(&(v.clone(), r.entity_id.clone())))
+                    .map(String::as_str)
+                    .collect();
+                seen.sort();
+                seen.dedup();
+                if seen.len() == 1 {
+                    for venue in many {
+                        batches.entry(venue.clone()).or_default().push((
+                            r.entity_type.clone(),
+                            r.entity_id.clone(),
+                            r.locale.clone(),
+                            r.field.clone(),
+                            r.value.clone(),
+                        ));
+                    }
+                    contested.push(r.entity_id);
+                } else {
+                    collided.push(r.entity_id);
+                }
+            }
             None => orphans.push(r.entity_id),
         }
     }
@@ -188,10 +247,17 @@ pub async fn migrate_i18n(req: Request, ctx: RouteContext<()>) -> Result<Respons
     orphans.dedup();
     contested.sort();
     contested.dedup();
+    collided.sort();
+    collided.dedup();
     Response::from_json(&serde_json::json!({
         "wrote": wrote,
+        // Left in D1: no venue's catalogue knows this id.
         "orphans": orphans,
-        "contested": contested,
+        // Copied to every venue that serves the dish, because they all call it
+        // the same thing.
+        "sharedAcrossVenues": contested,
+        // Left in D1: the id names a DIFFERENT dish in each venue.
+        "collided": collided,
     }))
 }
 
