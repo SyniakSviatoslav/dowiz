@@ -355,6 +355,28 @@ fn object_key(s3: &S3, venue: &str, now_ms: i64, gzipped: bool) -> String {
     }
 }
 
+/// Where the night's census lands: `<prefix>/<venue>/<YYYYMMDD>T<HHMMSS>Z.witness.json`.
+///
+/// BESIDE THE BUNDLE AND NOT INSIDE IT, and never compressed: a witness carried
+/// by the thing it witnesses is worth nothing, and evidence that needs a tool
+/// to open is evidence nobody opens.
+///
+/// KEPT WHEN THE BUNDLE IS ROTATED AWAY, deliberately. `stamp_of_key` does not
+/// recognise this name, so the nightly rotation leaves it — which is the right
+/// way round: a backup is large and loses its value as it ages, while a census
+/// is a few hundred bytes and GAINS value, because what it proves is what the
+/// log looked like months ago. A venue writing one a night costs about 150 KB
+/// a year. `a_witness_is_never_rotated_away` pins it so a later tidy-up of the
+/// stamp rule cannot start deleting the evidence quietly.
+fn witness_key(s3: &S3, venue: &str, now_ms: i64) -> String {
+    let (stamp, _) = amz_dates(now_ms);
+    if s3.prefix.is_empty() {
+        format!("{venue}/{stamp}.witness.json")
+    } else {
+        format!("{}/{venue}/{stamp}.witness.json", s3.prefix)
+    }
+}
+
 /// Export the venue and put it in its bucket. Returns what was written.
 pub async fn push_place(place: &crate::hubstore::Place, now_ms: i64) -> std::result::Result<Value, String> {
     let settings = crate::hubstore::load_settings(place).await.map_err(|e| e.to_string())?.settings;
@@ -373,6 +395,40 @@ pub async fn push_place(place: &crate::hubstore::Place, now_ms: i64) -> std::res
     let bytes = body.len();
     let etag = put(&s3, &key, body, if gzipped { "application/gzip" } else { "application/json" }, now_ms)
         .await?;
+    // ── THE OFF-SITE WITNESS, WHICH IS NEARLY FREE ──
+    //
+    // The census the nightly wrote to the platform object goes up beside the
+    // bundle as its own small, plain, UNCOMPRESSED object. Three reasons it is
+    // not simply a field inside the bundle: a witness carried by the thing it
+    // witnesses is worth nothing; last night's copy is still in the bucket
+    // under its own key, so the bucket holds a SERIES of accounts rather than
+    // one; and it stays readable when the bundle is a 20 MB gzip.
+    //
+    // A COPY WITHOUT ONE STILL HAPPENS. The bundle is the backup; the witness
+    // is evidence about it, and refusing to take a backup because the evidence
+    // could not be read would trade the larger loss for the smaller.
+    let witness_key = match crate::witness::last(&place.ns, &place.venue).await {
+        Ok(Some(c)) => {
+            let body = serde_json::to_vec(&c).map_err(|e| e.to_string())?;
+            let wkey = witness_key(&s3, &place.venue, now_ms);
+            match put(&s3, &wkey, body, "application/json", now_ms).await {
+                Ok(_) => Some(wkey),
+                Err(e) => {
+                    crate::loud!(&place.ns, Some(&place.venue), "cloud.witness", "not copied: {e}");
+                    None
+                }
+            }
+        }
+        // No census yet is an ordinary state -- the first night, or a venue
+        // whose nightly has not run. A REFUSAL is not, and is said out loud
+        // rather than becoming an absence.
+        Ok(None) => None,
+        Err(e) => {
+            crate::loud!(&place.ns, Some(&place.venue), "cloud.witness", "not read: {e}");
+            None
+        }
+    };
+
     let note = format!("{now_ms} {key} {bytes}");
     let _ = crate::hubstore::with_settings(place, move |s| { s.set(LAST_KEY, &note); Ok(()) }).await;
     // MARKED ONLY NOW. The archives in this bundle are off-site as of this
@@ -402,6 +458,7 @@ pub async fn push_place(place: &crate::hubstore::Place, now_ms: i64) -> std::res
         "atMs": now_ms,
         "rotated": removed,
         "rotateError": rotate_error,
+        "witnessKey": witness_key,
     }))
 }
 
@@ -426,6 +483,22 @@ pub async fn status(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         return Ok(r);
     }
     let settings = crate::hubstore::load_settings(&place).await?.settings;
+    // THE WITNESS IS VISIBLE OR IT IS NOT AN INSTRUMENT. A census taken every
+    // night and read by nobody is the shape of instrument this codebase has a
+    // catalogue of; `e2e/gates/conservation.mjs` reads this field, and a
+    // non-empty `found` is a breach rather than a line in a log.
+    let witness = crate::witness::last(&place.ns, &place.venue).await?.map(|c| {
+        json!({
+            "atMs": c.at_ms,
+            "records": c.records,
+            "archived": c.archived(),
+            "archives": c.seals.len(),
+            "total": c.total,
+            "tip": c.tip,
+            "generation": c.generation,
+            "found": c.found,
+        })
+    });
     let last = settings.get(LAST_KEY).unwrap_or_default();
     let mut it = last.split(' ');
     let at_ms = it.next().and_then(|s| s.parse::<i64>().ok());
@@ -437,6 +510,7 @@ pub async fn status(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         "endpoint": settings.known("cloud.s3.endpoint"),
         "nightly": NIGHTLY_CRON,
         "last": at_ms.map(|at| json!({ "atMs": at, "key": key, "bytes": bytes })),
+        "witness": witness,
     }))
 }
 
@@ -500,9 +574,14 @@ pub async fn nightly(env: &Env) {
             Err(e) => console_error!("nightly prune {}: no object: {e}", r.id),
         }
 
-        // THE CHAIN, BEFORE ANYTHING TOUCHES THE LOG.
+        // THE CHAIN AND THE WITNESS, BEFORE ANYTHING TOUCHES THE LOG.
         //
-        // `Hub::chain_check` shipped in phase 4 and NOTHING IN PRODUCTION HAS
+        // ONE LOAD FOR BOTH. The image is the largest thing this job reads and
+        // reading it twice would double the night's bill for the same bytes;
+        // the two checks are different questions about the same image, not two
+        // errands.
+        //
+        // `Hub::chain_check` shipped in phase 4 and NOTHING IN PRODUCTION HAD
         // EVER CALLED IT. An append-only log whose ids are never recomputed is
         // append-only by assertion; this is the night the assertion is checked.
         // It runs before the rotation so that what it reports is the log as the
@@ -513,10 +592,19 @@ pub async fn nightly(env: &Env) {
         // is misunderstood is worse than none: it detects an EDITED record --
         // an id that no longer commits to its payload, and every id after it,
         // because the chain cascades. It cannot detect a record REMOVED from
-        // the end, because what is left is a shorter valid chain. The length
-        // and tip commitment that closes that gap is a separate item.
-        match crate::hubstore::load(&place).await {
-            Ok(l) => {
+        // the end, because what is left is a shorter valid chain, nor a log
+        // rebuilt from scratch, because whoever can write the image can
+        // recompute every id in it. THAT is what the witness beside it is for:
+        // the census goes to the platform object -- which is not the venue's --
+        // and from there into the night's off-site copy, so a truncation has to
+        // contradict a second account kept somewhere the editor cannot reach.
+        match futures_util::future::try_join(
+            crate::hubstore::load(&place),
+            crate::hubstore::load_settings(&place),
+        )
+        .await
+        {
+            Ok((l, s)) => {
                 let c = l.hub.chain_check();
                 if c.intact() {
                     console_log!(
@@ -531,6 +619,22 @@ pub async fn nightly(env: &Env) {
                         "BROKEN CHAIN: {} of {} records match neither scheme ({} chained, {} legacy)",
                         c.broken, c.records, c.chained, c.legacy
                     );
+                }
+                match crate::witness::nightly(&place, &l.hub, &s.settings, now).await {
+                    Ok((w, found)) if found.is_empty() => console_log!(
+                        "nightly witness {}: {} records, {} archived, tip {}",
+                        r.id, w.records, w.archived(), w.tip.as_deref().unwrap_or("-")
+                    ),
+                    Ok((_, found)) => {
+                        // Said once per contradiction, so the record names what
+                        // disagreed rather than that something did.
+                        for what in found {
+                            crate::loud!(&place.ns, Some(&r.id), "hub.witness", "CONTRADICTED: {what}");
+                        }
+                    }
+                    Err(e) => {
+                        crate::loud!(&place.ns, Some(&r.id), "hub.witness", "not witnessed: {e}")
+                    }
                 }
             }
             // A venue with no log yet is not a failure; an unreadable one is.
@@ -626,6 +730,50 @@ mod tests {
         }
         let foreign: Vec<String> = ["sushi/notes.txt".to_string(), "sushi/menu.csv".to_string()].into();
         assert!(keys_to_drop(&foreign, 1_789_808_707_000).is_empty());
+    }
+
+    /// THE EVIDENCE OUTLIVES THE BACKUP, and it does so by construction rather
+    /// than by a rule somebody has to remember. A census is a few hundred
+    /// bytes and proves what the log looked like on a night that is now old —
+    /// which is exactly when it is worth having. A bundle is megabytes and is
+    /// worth less every week.
+    ///
+    /// This is pinned because it rests on `stamp_of_key` NOT recognising the
+    /// name: a later tidy-up that taught it this suffix would start deleting
+    /// five-week-old evidence and nothing would say so.
+    #[test]
+    fn a_witness_is_never_rotated_away() {
+        const DAY: i64 = 24 * 60 * 60 * 1000;
+        let now = 1_789_808_707_000;
+        let s3 = S3 {
+            endpoint: "https://x".into(),
+            region: "auto".into(),
+            bucket: "b".into(),
+            key: "k".into(),
+            secret: "s".into(),
+            prefix: "backups".into(),
+        };
+        let mut keys = Vec::new();
+        for days in [0i64, 8, 40, 400] {
+            let at = now - days * DAY;
+            keys.push(object_key(&s3, "sushi-durres", at, true));
+            keys.push(witness_key(&s3, "sushi-durres", at));
+        }
+        // The bundle from 400 days ago goes; no witness does, at any age.
+        let dropped = keys_to_drop(&keys, now);
+        assert!(!dropped.is_empty(), "a 400-day-old bundle should be rotated away");
+        for k in &dropped {
+            assert!(!k.contains(".witness."), "a witness was rotated away: {k}");
+        }
+        // And the two land beside each other, under the same stamp.
+        let bundle = object_key(&s3, "sushi-durres", now, true);
+        let w = witness_key(&s3, "sushi-durres", now);
+        assert_eq!(
+            bundle.rsplit('/').next().unwrap().split('.').next(),
+            w.rsplit('/').next().unwrap().split('.').next(),
+            "{bundle} and {w} must share a stamp"
+        );
+        assert_eq!(stamp_of_key(&w), None, "the rotation does not recognise a witness");
     }
 
     /// The policy: every copy of the last seven days, then the newest copy of

@@ -687,6 +687,29 @@ impl Hub {
         out
     }
 
+    /// The newest record's chain id, in hex. `None` for a log with no records.
+    ///
+    /// THE ONE VALUE A WITNESS NEEDS. Every id commits to the id before it, so
+    /// the tip commits to the whole history: two logs with the same tip are the
+    /// same log, and a log that no longer holds last night's tip has had its
+    /// end rewritten. That is the failure `chain_check` cannot see — a
+    /// truncation leaves a shorter chain that is perfectly valid — and it is
+    /// why this is published rather than kept inside the check.
+    pub fn tip(&self) -> Option<String> {
+        EvLog::tip(&self.store).map(|t| hex32(&t))
+    }
+
+    /// Is this chain id anywhere in this log?
+    ///
+    /// The question a witness asks the next night: the tip I wrote down is
+    /// still in there, so nothing between it and the start was rewritten. A
+    /// `false` after a rotation is not yet an accusation — the record may have
+    /// moved to an archive, verbatim and with the same id — so the caller asks
+    /// the archives before it says anything out loud.
+    pub fn holds(&self, id_hex: &str) -> bool {
+        EvLog::walk(&self.store).iter().any(|r| hex32(&r.id) == id_hex)
+    }
+
     /// Every audit event, newest first.
     pub fn reveals(&self) -> Vec<Event> {
         self.events().into_iter().filter(|e| e.kind == EventKind::Revealed).collect()
@@ -1098,6 +1121,62 @@ mod tests {
         assert_eq!(cold_two.checkpoints(), vec![mark_one], "the archive carries the older mark");
         let cold_one = Hub::load(&first).unwrap();
         assert!(cold_one.checkpoints().is_empty(), "the first archive predates any mark");
+    }
+
+    /// WHAT A WITNESS IS FOR, and it is the failure `chain_check` is blind to.
+    ///
+    /// Removing records from the END leaves a shorter chain that verifies
+    /// perfectly: every id still commits to the one before it, because the
+    /// cascade only ever looks backwards. What does change is the TIP. So a
+    /// tip written down somewhere the editor cannot reach — off-site, or in
+    /// another object — turns a silent truncation into a contradiction.
+    #[test]
+    fn a_truncated_log_still_verifies_and_no_longer_holds_its_tip() {
+        let mut h = Hub::create_sized(256 * 1024).unwrap();
+        for i in 0..6u64 {
+            let id = format!("ord_{i}");
+            h.append(EventKind::Placed, &id, &order(&id, "PENDING"), i + 1, ACTOR).unwrap();
+        }
+        let witnessed = h.tip().expect("a log with records has a tip");
+        assert!(h.holds(&witnessed), "the tip is in its own log");
+
+        // The truncation: rebuild the log from the first five records only,
+        // which is what an editor with write access can do.
+        let mut cut = Hub::create_sized(256 * 1024).unwrap();
+        for i in 0..5u64 {
+            let id = format!("ord_{i}");
+            cut.append(EventKind::Placed, &id, &order(&id, "PENDING"), i + 1, ACTOR).unwrap();
+        }
+        assert!(cut.chain_check().intact(), "a truncated log passes the chain check");
+        assert_eq!(cut.len(), 5);
+        assert!(!cut.holds(&witnessed), "and the witnessed tip is gone — which is the tell");
+        assert_ne!(cut.tip(), Some(witnessed), "the tip moved backwards");
+    }
+
+    /// AND A ROTATION IS NOT A TRUNCATION, which is the distinction that makes
+    /// the witness usable rather than an alarm every night. The records move
+    /// verbatim, ids and all, so last night's tip is still held — by the
+    /// archive. A witness that could not tell these apart would be switched
+    /// off within a week.
+    #[test]
+    fn a_rotation_moves_the_tip_into_the_archive_rather_than_losing_it() {
+        let mut h = Hub::create_sized(256 * 1024).unwrap();
+        for i in 0..4u64 {
+            let id = format!("ord_{i}");
+            h.append(EventKind::Placed, &id, &order(&id, "PENDING"), i + 1, ACTOR).unwrap();
+        }
+        let witnessed = h.tip().expect("tip");
+        let archived = h.rotate(|id| id == "ord_3").unwrap();
+        let cold = Hub::load(&archived).unwrap();
+        assert!(cold.holds(&witnessed), "the archive holds the record verbatim");
+        // The hot log holds it too here, because `ord_3` was kept; what
+        // matters is that the pair of images between them never loses it.
+        assert!(
+            h.holds(&witnessed) || cold.holds(&witnessed),
+            "a rotation must not lose a record between the two images"
+        );
+        // An empty log has no tip, and that is not a failure either.
+        assert_eq!(Hub::create_sized(1 << 16).unwrap().tip(), None);
     }
 
     /// The cascade survives a rotation. Records move verbatim, so each still

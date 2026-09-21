@@ -19,6 +19,7 @@
 //   4. every delivered order's cash is accounted to a courier
 //   5. the image gauges read against their CEILING and are under it
 //   6. nothing is quarantined, and the log's claim equals served + withheld
+//   7. the nightly witness is not contradicted, and it is still being taken
 //
 // It takes an owner token per venue and reads only. Exit 1 on any breach, with
 // the order named -- a gate whose failure cannot be chased is a dashboard.
@@ -159,7 +160,28 @@ for (const host of HOSTS) {
     note(venue, 'quarantine', `log claims ${claimed} records, serves ${served}, withholds ${qLog.length}`);
   }
 
-  console.log(`${venue}: ${list.length} orders, ${ENDED.size} terminal states known, ${Object.keys(health?.images || {}).length} images gauged, ${q.length} quarantined`);
+  // ── 7. the witness is not contradicted, and it is not stale ─────────────
+  //
+  // The nightly writes a census of the venue's history — record count, tip,
+  // and a seal per archive — to the PLATFORM object and into the off-site
+  // copy. `found` is what tonight's census said about last night's: an empty
+  // list is the good answer, and anything in it means the log no longer
+  // agrees with an account kept somewhere its writer does not own.
+  //
+  // ABSENT IS NOT ZERO. A venue whose nightly has not run since this shipped
+  // has no census, and a gate that goes red for that is a gate switched off
+  // in a week. A census that EXISTS and is older than two nights is a
+  // different thing: the instrument has stopped, and an instrument that has
+  // stopped is the failure this repo keeps a catalogue of.
+  const backup = (await j(host, `/api/owner/backup/cloud?location_id=${venue}`, { headers: auth })).body;
+  const w = backup?.witness;
+  if (w) {
+    for (const what of w.found || []) note(venue, 'witness', what);
+    const ageH = Math.round((Date.now() - w.atMs) / 3600e3);
+    if (ageH > 48) note(venue, 'witness', `the last census is ${ageH}h old: the nightly has stopped`);
+  }
+
+  console.log(`${venue}: ${list.length} orders, ${ENDED.size} terminal states known, ${Object.keys(health?.images || {}).length} images gauged, ${q.length} quarantined, witness ${w ? (w.found?.length ? 'CONTRADICTED' : `${w.total} records`) : 'not taken yet'}`);
 }
 
 if (breaches.length === 0) {

@@ -157,7 +157,7 @@ runs in CI or a gate; *continuous* = runs in production.
 | F8 | **conservation audit** — ledger nets to zero, `stranded()` empty, fold equals stored status | holistic · triggered **and** continuous | the steady-state hypothesis |
 | F9 | replay: every archived log folds to its stored status | holistic · triggered | divergence between the two truths |
 | F10 | `chain_check` nightly, before the backup, loud on failure | holistic · **continuous** | a dormant instrument |
-| F11 | the off-site archive manifest carries `(count, tip, generation)` | holistic · continuous | tamper evidence with an external witness |
+| F11 | the off-site archive manifest carries `(count, tip, generation)` | holistic · continuous | tamper evidence with an external witness — **DONE 2026-09-21** |
 | F12 | idempotency replay matrix on every unsafe route | atomic · triggered | the duplicate order |
 | F13 | N-way placement collision: exactly `min(N,k)` succeed | holistic · triggered | the last unit |
 | F14 | year-long timezone simulation: the day boundary moves exactly twice | atomic · triggered | the live DST defect |

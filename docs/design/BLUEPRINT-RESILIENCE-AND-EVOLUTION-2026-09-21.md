@@ -246,6 +246,35 @@ phase 4. What is wrong with it is more interesting than its absence.
   principal at a time the editor cannot revisit. Closes gap 3 without a chain of
   anything.
 
+### BUILT 2026-09-21 — and the D1 row became an object
+
+D1 is gone (blueprint 5), so "a row in a different store" is now **the platform
+object's `witness` log**: a different Durable Object from the venue's, written
+by the nightly before the rotation, and itself an append log whose records are
+hash-chained. The same census then goes off-site as its own small plain object
+beside the bundle, `<stamp>.witness.json`.
+
+The census is `(records, tip, generation)` for the hot log plus **a seal per
+archive** — `(id, records, tip)`, read once on the night the archive appears,
+because a cold image is written once by construction. `total` is the sum, and
+it is the number that may never fall.
+
+**A rotation is not a truncation**, and that distinction is what makes this
+usable rather than an alarm every night: records move into an archive verbatim,
+so last night's tip is still held — by a different image. `Hub::tip` and
+`Hub::holds` are the two accessors that let the check say so.
+
+Three things a night can contradict, each named in plain words on
+`/api/owner/backup/cloud` and gated by law 7 of the conservation audit: the
+history shrank; an archive vanished or was rewritten under its own name; the
+record witnessed as the tip is in neither the log nor any archive. The last is
+the one that catches a log **rebuilt from scratch** — every id recomputed, the
+chain perfect — which is precisely what `chain_check` cannot see.
+
+The deciding half is pure and tested against nine nights, real and hostile; the
+fetching half is separate because it cannot be tested on this box, and a
+judgement nobody can check is a judgement nobody should trust.
+
 **Merkle trees are explicitly deferred.** Their advantage is proving *one*
 receipt without shipping the log, which nobody has needed yet. Named here so
 that when a tax inspection or a dispute does need it, the reason is on record.

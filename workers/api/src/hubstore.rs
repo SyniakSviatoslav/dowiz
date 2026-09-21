@@ -1306,6 +1306,36 @@ pub fn is_archive_id(id: &str) -> bool {
     !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit())
 }
 
+/// One archive's seal: how many records it holds and what its tip is.
+///
+/// READ ONCE, THE NIGHT THE ARCHIVE APPEARS. A cold image is written once by
+/// construction — this module refuses to overwrite one — so the answer cannot
+/// change, and a witness that re-read every archive every night would pay a
+/// request per month of history for a number it already had.
+pub async fn archive_seal(place: &Place, archive_id: &str) -> Result<Option<(usize, Option<String>)>> {
+    if !is_archive_id(archive_id) {
+        return Ok(None);
+    }
+    let Some((bytes, _)) = load_bytes(place, archive_id).await? else { return Ok(None) };
+    let hub =
+        Hub::load(&bytes).map_err(|_| Error::RustError("archive image is unreadable".into()))?;
+    Ok(Some((hub.len(), hub.tip())))
+}
+
+/// Is this chain id in this archive?
+///
+/// Asked by the witness, and only about an archive created since the last
+/// census — see `crate::witness::tip_held_by` for why that bounds the cost.
+pub async fn archive_holds(place: &Place, archive_id: &str, id_hex: &str) -> Result<bool> {
+    if !is_archive_id(archive_id) {
+        return Ok(false);
+    }
+    let Some((bytes, _)) = load_bytes(place, archive_id).await? else { return Ok(false) };
+    let hub =
+        Hub::load(&bytes).map_err(|_| Error::RustError("archive image is unreadable".into()))?;
+    Ok(hub.holds(id_hex))
+}
+
 /// One archive's orders, folded — the cold half of the history.
 pub async fn archive_orders(place: &Place, archive_id: &str) -> Result<Option<Vec<crate::hubdo::OrderView>>> {
     if !is_archive_id(archive_id) {

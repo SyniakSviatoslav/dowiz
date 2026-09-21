@@ -42,6 +42,7 @@ mod integrations;
 mod catalog_edit;
 mod recipe;
 mod waitlist;
+mod witness;
 mod errlog;
 mod gauges;
 mod quarantine;
