@@ -16,6 +16,14 @@ const FLOW = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY', 'DELI
 const DEAD = new Set(['REJECTED', 'CANCELLED']);
 /// The one next step for each state: the action the hub takes, its word.
 const NEXT = { PENDING: ['confirm', 'accept'], CONFIRMED: ['preparing', 'startCooking'], PREPARING: ['ready', 'markReady'] };
+/// THE NEXT STEP FOR THIS ORDER, which is not the same as for this STATUS.
+///
+/// A delivery leaves READY in a courier's hands, so the console offers nothing
+/// there and that is right. A COLLECTION order has no courier: the customer
+/// walks in, takes it, and the order has to end. It had no ending — the five
+/// actions could not reach one and a pickup order sat at READY for ever — so
+/// READY on a pickup now offers the step that closes it.
+const nextOf = o => (o.status === 'READY' && isPickup(o) ? ['collected', 'markCollected'] : NEXT[o.status]);
 /// History shows this many at a time; "more" adds another page.
 const HISTORY_PAGE = 60;
 /// The CSV's byte-order mark, so Excel reads the Albanian and Ukrainian letters.
@@ -51,7 +59,7 @@ const etaText = o => o.eta && o.eta.range ? `${o.eta.range} ${t('etaMin') === 'e
 const isPickup = o => o.fulfilment?.kind === 'pickup';
 
 function row(o){
-  const step = NEXT[o.status];
+  const step = nextOf(o);
   const items = (o.items || []);
   const line = items.slice(0, ITEMS_SHOWN).map(i => `${i.quantity}× ${esc(i.name || i.product_id)}`).join(' · ') + (items.length > ITEMS_SHOWN ? ' …' : '');
   const fresh = S.fresh.has(o.id) ? 'fresh' : '';
@@ -149,7 +157,7 @@ export function openOrder(id){
   const o = S.orders.find(x => x.id === id); if (!o) return;
   const i = FLOW.indexOf(o.status), dead = DEAD.has(o.status);
   const addr = o.fulfilment?.address, parts = addr?.parts || {};
-  const step = NEXT[o.status];
+  const step = nextOf(o);
   sheet(`
     <p class="eyebrow">#${esc(o.id.slice(0, ORDER_ID_SHOWN))} · ${esc(clock(o.created_at_ms || Date.now()))} · ${esc(day(o.created_at_ms || Date.now()))}</p>
     <h2 data-t-st="${esc(o.status)}"></h2>

@@ -74,6 +74,15 @@ pub async fn tasks(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         if !matches!(status, "READY" | "IN_DELIVERY") {
             continue;
         }
+        // A COLLECTION ORDER IS NOT A DELIVERY. The customer said they would
+        // come and get it; nothing about it belongs in a courier's pool. This
+        // list filtered on status alone, so every pickup order that reached
+        // READY was offered to every courier on shift as a job -- and a
+        // courier who took one would carry food to an address the customer
+        // never gave, while the customer waited at the counter.
+        if v.get("fulfilment").and_then(|f| f.get("kind")).and_then(Value::as_str) == Some("pickup") {
+            continue;
+        }
         let holder = assigned
             .iter()
             .find(|a| a.order_id == e.order_id)

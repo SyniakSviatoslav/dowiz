@@ -505,6 +505,13 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
         "reject" => "REJECTED",
         "preparing" => "PREPARING",
         "ready" => "READY",
+        // THE END OF A COLLECTION ORDER, which the product had no way to
+        // reach. `allowed_next` has offered Ready -> PickedUp since the FSM
+        // was written and no route ever emitted it, so a customer who chose to
+        // collect left an order sitting at READY for ever: the owner's five
+        // actions could not end it and a courier is the wrong answer. PickedUp
+        // is terminal, and the ingredients were already consumed at PREPARING.
+        "collected" => "PICKED_UP",
         "cancel" => "CANCELLED",
         other => return Response::error(format!("unknown action: {other}"), 400),
     };
