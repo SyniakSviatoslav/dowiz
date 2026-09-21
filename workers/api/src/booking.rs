@@ -121,7 +121,7 @@ const K_EV: &str = "ev";
 /// An event's key. ZERO-PADDED, because keys sort as strings and `.../10` must
 /// not come before `.../2` — that would replay a reservation's history in the
 /// wrong order and the fold would reach a different status.
-fn ev_key(reservation_id: &str, seq: i64) -> String {
+pub(crate) fn ev_key(reservation_id: &str, seq: i64) -> String {
     format!("{reservation_id}/{seq:012}")
 }
 
@@ -134,7 +134,7 @@ fn ev_key(reservation_id: &str, seq: i64) -> String {
 /// check it: minutes in ten thousand years.
 const SLOT_MAX: i64 = 10_000 * 365 * 24 * 60;
 
-fn user_key(user_id: &str, slot_min: i64, id: &str) -> String {
+pub(crate) fn user_key(user_id: &str, slot_min: i64, id: &str) -> String {
     format!("rsv.user/{user_id}/{:012}/{id}", SLOT_MAX - slot_min)
 }
 

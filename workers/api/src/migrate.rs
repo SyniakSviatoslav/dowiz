@@ -352,3 +352,780 @@ pub(crate) async fn load_images_d1(
     }
     Ok(out)
 }
+
+/// `POST /api/platform/migrate/all` — move every remaining table into the
+/// images. Administrators only, idempotent, and safe to run again.
+///
+/// THE ORDER MATTERS AND IS NOT ALPHABETICAL. The registry first, because
+/// everything else is keyed by a venue that has to exist; identity next,
+/// because a session points at a person; the venue-scoped families last, one
+/// object at a time.
+///
+/// IDEMPOTENT MEANS THE SAME BYTES, not "does not crash". Every write here is a
+/// `put` under a key derived from the row, so a second run replaces each record
+/// with itself and the image's fold does not move. The report carries each
+/// image's root so two runs can be compared without trusting this sentence.
+pub async fn migrate_all(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let db = ctx.d1("DB")?;
+    if let Err(r) = admin_only(&req, &ctx, &db).await {
+        return Ok(r);
+    }
+    let mut report = serde_json::Map::new();
+    let legacy = ctx.var("LEGACY_VENUE").ok().map(|v| v.to_string()).filter(|v| !v.is_empty());
+
+    // ── the registry ──────────────────────────────────────────────────────
+    #[derive(serde::Deserialize)]
+    struct Loc {
+        id: String,
+        slug: String,
+        name: Option<String>,
+        phone: Option<String>,
+        status: Option<String>,
+        created_at_ms: Option<i64>,
+        updated_at_ms: Option<i64>,
+    }
+    let locs: Vec<Loc> = db
+        .prepare("SELECT id,slug,name,phone,status,created_at_ms,updated_at_ms FROM locations")
+        .all()
+        .await?
+        .results()?;
+    let venues: Vec<String> = locs.iter().map(|l| l.id.clone()).collect();
+    let n = locs.len();
+    crate::identity_store::with_registry(&ctx.env, move |t| {
+        for l in &locs {
+            let rec = serde_json::json!({
+                "id": l.id, "slug": l.slug,
+                "name": l.name.clone().unwrap_or_default(),
+                "phone": l.phone.clone().unwrap_or_default(),
+                "status": l.status.clone().unwrap_or_else(|| "closed".into()),
+                "created_at_ms": l.created_at_ms.unwrap_or(0),
+                "updated_at_ms": l.updated_at_ms.unwrap_or(0),
+            })
+            .to_string();
+            t.put(
+                crate::identity_store::K_LOC,
+                &l.id,
+                &rec,
+                &[(crate::identity_store::loc_by_slug(&l.slug), l.id.clone())],
+                &[],
+            )
+            .map_err(|e| Error::RustError(format!("registry: {e}")))?;
+        }
+        Ok(())
+    })
+    .await?;
+    report.insert("locations".into(), serde_json::json!(n));
+
+    // ── identity ──────────────────────────────────────────────────────────
+    #[derive(serde::Deserialize)]
+    struct U {
+        id: String,
+        email: String,
+        display_name: Option<String>,
+        password_hash: Option<String>,
+        created_at_ms: Option<i64>,
+    }
+    #[derive(serde::Deserialize)]
+    struct M {
+        user_id: String,
+        location_id: String,
+        role: String,
+        status: String,
+        created_at_ms: Option<i64>,
+    }
+    #[derive(serde::Deserialize)]
+    struct A {
+        user_id: String,
+    }
+    let users: Vec<U> = db
+        .prepare("SELECT id,email,display_name,password_hash,created_at_ms FROM users")
+        .all()
+        .await?
+        .results()?;
+    let members: Vec<M> = db
+        .prepare("SELECT user_id,location_id,role,status,created_at_ms FROM memberships")
+        .all()
+        .await?
+        .results()?;
+    let admins: Vec<A> = db.prepare("SELECT user_id FROM platform_admins").all().await?.results()?;
+    let (nu, nm, na) = (users.len(), members.len(), admins.len());
+    crate::identity_store::with_identity(&ctx.env, move |t| {
+        for u in &users {
+            let email = u.email.trim().to_ascii_lowercase();
+            let rec = serde_json::json!({
+                "id": u.id, "email": email,
+                "display_name": u.display_name.clone().unwrap_or_default(),
+                "password_hash": u.password_hash.clone().unwrap_or_default(),
+                "created_at_ms": u.created_at_ms.unwrap_or(0),
+            })
+            .to_string();
+            t.put(
+                crate::identity_store::K_USER,
+                &u.id,
+                &rec,
+                &[(crate::identity_store::user_by_email(&email), u.id.clone())],
+                &[],
+            )
+            .map_err(|e| Error::RustError(format!("user: {e}")))?;
+        }
+        for m in &members {
+            let rec = serde_json::json!({
+                "user_id": m.user_id, "location_id": m.location_id,
+                "role": m.role, "status": m.status,
+                "created_at_ms": m.created_at_ms.unwrap_or(0),
+            })
+            .to_string();
+            t.put(
+                crate::identity_store::K_MEMBER,
+                &crate::identity_store::member_id(&m.location_id, &m.user_id),
+                &rec,
+                &[
+                    (
+                        crate::identity_store::member_by_venue(&m.location_id, &m.user_id),
+                        m.user_id.clone(),
+                    ),
+                    (
+                        crate::identity_store::member_by_user(&m.user_id, &m.location_id),
+                        m.location_id.clone(),
+                    ),
+                ],
+                &[],
+            )
+            .map_err(|e| Error::RustError(format!("membership: {e}")))?;
+        }
+        for a in &admins {
+            t.put(
+                crate::identity_store::K_ADMIN,
+                &a.user_id,
+                &serde_json::json!({ "user_id": a.user_id }).to_string(),
+                &[],
+                &[],
+            )
+            .map_err(|e| Error::RustError(format!("admin: {e}")))?;
+        }
+        Ok(())
+    })
+    .await?;
+    report.insert("users".into(), serde_json::json!(nu));
+    report.insert("memberships".into(), serde_json::json!(nm));
+    report.insert("platform_admins".into(), serde_json::json!(na));
+
+    // ── couriers, their rosters and their invites ─────────────────────────
+    #[derive(serde::Deserialize)]
+    struct Cr {
+        id: String,
+        email_encrypted: Option<String>,
+        email_hash: Option<String>,
+        phone_encrypted: Option<String>,
+        phone_hash: Option<String>,
+        full_name_encrypted: Option<String>,
+        password_hash: Option<String>,
+        status: Option<String>,
+        created_at_ms: Option<i64>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Rs {
+        courier_id: String,
+        location_id: String,
+        role: Option<String>,
+        added_at_ms: Option<i64>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Iv {
+        id: String,
+        location_id: String,
+        created_by_owner_id: Option<String>,
+        invited_phone_hash: Option<String>,
+        invited_name: Option<String>,
+        code_hash: Option<String>,
+        expires_at_ms: Option<i64>,
+        created_at_ms: Option<i64>,
+        used_at_ms: Option<i64>,
+        revoked_at_ms: Option<i64>,
+    }
+    let crs: Vec<Cr> = db
+        .prepare(
+            "SELECT id,email_encrypted,email_hash,phone_encrypted,phone_hash,\
+             full_name_encrypted,password_hash,status,created_at_ms FROM couriers",
+        )
+        .all()
+        .await?
+        .results()?;
+    let rss: Vec<Rs> = db
+        .prepare("SELECT courier_id,location_id,role,added_at_ms FROM courier_locations")
+        .all()
+        .await?
+        .results()?;
+    let ivs: Vec<Iv> = db
+        .prepare(
+            "SELECT id,location_id,created_by_owner_id,invited_phone_hash,invited_name,\
+             code_hash,expires_at_ms,created_at_ms,used_at_ms,revoked_at_ms FROM courier_invites",
+        )
+        .all()
+        .await?
+        .results()?;
+    let (nc, nr, ni) = (crs.len(), rss.len(), ivs.len());
+    crate::identity_store::with_couriers(&ctx.env, move |t| {
+        for c in &crs {
+            let rec = serde_json::json!({
+                "id": c.id,
+                "email_encrypted": c.email_encrypted.clone().unwrap_or_default(),
+                "email_hash": c.email_hash.clone().unwrap_or_default(),
+                "phone_encrypted": c.phone_encrypted.clone().unwrap_or_default(),
+                "phone_hash": c.phone_hash.clone().unwrap_or_default(),
+                "full_name_encrypted": c.full_name_encrypted.clone().unwrap_or_default(),
+                "password_hash": c.password_hash.clone().unwrap_or_default(),
+                "status": c.status.clone().unwrap_or_else(|| "active".into()),
+                "created_at_ms": c.created_at_ms.unwrap_or(0),
+            });
+            let index = crate::identity_store::courier_index(&c.id, &rec);
+            t.put(crate::identity_store::K_COURIER, &c.id, &rec.to_string(), &index, &[])
+                .map_err(|e| Error::RustError(format!("courier: {e}")))?;
+        }
+        for r in &rss {
+            let rec = serde_json::json!({
+                "courier_id": r.courier_id, "location_id": r.location_id,
+                "role": r.role.clone().unwrap_or_else(|| "courier".into()),
+                "added_at_ms": r.added_at_ms.unwrap_or(0),
+            })
+            .to_string();
+            t.put(
+                crate::identity_store::K_ROSTER,
+                &crate::identity_store::roster_id(&r.location_id, &r.courier_id),
+                &rec,
+                &[
+                    (
+                        crate::identity_store::roster_by_venue(&r.location_id, &r.courier_id),
+                        r.courier_id.clone(),
+                    ),
+                    (
+                        crate::identity_store::roster_by_courier(&r.courier_id, &r.location_id),
+                        r.location_id.clone(),
+                    ),
+                ],
+                &[],
+            )
+            .map_err(|e| Error::RustError(format!("roster: {e}")))?;
+        }
+        for i in &ivs {
+            let ph = i.invited_phone_hash.clone().unwrap_or_default();
+            let spent =
+                i.used_at_ms.is_some() || i.revoked_at_ms.is_some();
+            let rec = serde_json::json!({
+                "id": i.id, "location_id": i.location_id,
+                "created_by_owner_id": i.created_by_owner_id.clone().unwrap_or_default(),
+                "role": "courier",
+                "invited_email_hash": ph, "invited_phone_hash": ph,
+                "invited_name": i.invited_name.clone().unwrap_or_default(),
+                "code_hash": i.code_hash.clone().unwrap_or_default(),
+                "expires_at_ms": i.expires_at_ms.unwrap_or(0),
+                "created_at_ms": i.created_at_ms.unwrap_or(0),
+                "used_at_ms": i.used_at_ms,
+                "revoked_at_ms": i.revoked_at_ms,
+            })
+            .to_string();
+            // A SPENT INVITE KEEPS NO PHONE INDEX. That is the rule the live
+            // code enforces on use and revocation, and a migration that carried
+            // one across would make a used code claimable again.
+            let mut index =
+                vec![(crate::identity_store::invite_at(&i.location_id, &i.id), i.id.clone())];
+            if !spent && !ph.is_empty() {
+                index.push((crate::identity_store::invite_by_phone(&ph), i.id.clone()));
+            }
+            t.put(crate::identity_store::K_INVITE, &i.id, &rec, &index, &[])
+                .map_err(|e| Error::RustError(format!("invite: {e}")))?;
+        }
+        Ok(())
+    })
+    .await?;
+    report.insert("couriers".into(), serde_json::json!(nc));
+    report.insert("courier_locations".into(), serde_json::json!(nr));
+    report.insert("courier_invites".into(), serde_json::json!(ni));
+
+    // ── sessions ──────────────────────────────────────────────────────────
+    //
+    // Refresh tokens are carried across rather than dropped. Dropping them is
+    // defensible — they expire anyway — but it signs every owner and courier
+    // out at the moment of the deploy, which is the worst time to ask somebody
+    // to find their password.
+    #[derive(serde::Deserialize)]
+    struct Rt {
+        user_id: String,
+        family_id: String,
+        token_hash: String,
+        used: Option<i64>,
+        expires_at_ms: i64,
+        created_at_ms: Option<i64>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Ak {
+        id: String,
+        location_id: String,
+        owner_id: Option<String>,
+        label: Option<String>,
+        key_hash: String,
+        created_at_ms: Option<i64>,
+        expires_at_ms: i64,
+        last_used_ms: Option<i64>,
+        revoked_at_ms: Option<i64>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Cs {
+        id: String,
+        courier_id: String,
+        family_id: Option<String>,
+        token_hash: Option<String>,
+        active_location_id: Option<String>,
+        issued_at_ms: Option<i64>,
+        expires_at_ms: i64,
+        revoked_at_ms: Option<i64>,
+    }
+    let rts: Vec<Rt> = db
+        .prepare(
+            "SELECT user_id,family_id,token_hash,used,expires_at_ms,created_at_ms \
+             FROM auth_refresh_tokens",
+        )
+        .all()
+        .await?
+        .results()?;
+    let aks: Vec<Ak> = db
+        .prepare(
+            "SELECT id,location_id,owner_id,label,key_hash,created_at_ms,expires_at_ms,\
+             last_used_ms,revoked_at_ms FROM owner_api_keys",
+        )
+        .all()
+        .await?
+        .results()?;
+    let css: Vec<Cs> = db
+        .prepare(
+            "SELECT id,courier_id,family_id,token_hash,active_location_id,issued_at_ms,\
+             expires_at_ms,revoked_at_ms FROM courier_sessions",
+        )
+        .all()
+        .await?
+        .results()?;
+    let (nt, nk, ns) = (rts.len(), aks.len(), css.len());
+    crate::identity_store::with_sessions(&ctx.env, move |t| {
+        for r in &rts {
+            let created = r.created_at_ms.unwrap_or(0);
+            let rec = serde_json::json!({
+                "user_id": r.user_id, "family_id": r.family_id,
+                "used": r.used.unwrap_or(0) == 1,
+                "expires_at_ms": r.expires_at_ms, "created_at_ms": created,
+            })
+            .to_string();
+            t.put(
+                crate::identity_store::K_REFRESH,
+                &r.token_hash,
+                &rec,
+                &[(
+                    crate::identity_store::refresh_family(&r.family_id, created),
+                    r.token_hash.clone(),
+                )],
+                &[],
+            )
+            .map_err(|e| Error::RustError(format!("refresh: {e}")))?;
+        }
+        for k in &aks {
+            let rec = serde_json::json!({
+                "id": k.id, "location_id": k.location_id,
+                "owner_id": k.owner_id.clone().unwrap_or_default(),
+                "label": k.label.clone().unwrap_or_default(),
+                "key_hash": k.key_hash,
+                "created_at_ms": k.created_at_ms.unwrap_or(0),
+                "expires_at_ms": k.expires_at_ms,
+                "last_used_ms": k.last_used_ms, "revoked_at_ms": k.revoked_at_ms,
+            })
+            .to_string();
+            t.put(
+                crate::identity_store::K_APIKEY,
+                &k.id,
+                &rec,
+                &[(crate::identity_store::apikey_at(&k.location_id, &k.id), k.id.clone())],
+                &[],
+            )
+            .map_err(|e| Error::RustError(format!("api key: {e}")))?;
+        }
+        for c in &css {
+            let rec = serde_json::json!({
+                "courier_id": c.courier_id,
+                "family_id": c.family_id.clone().unwrap_or_default(),
+                "token_hash": c.token_hash.clone().unwrap_or_default(),
+                "active_location_id": c.active_location_id.clone().unwrap_or_default(),
+                "issued_at_ms": c.issued_at_ms.unwrap_or(0),
+                "expires_at_ms": c.expires_at_ms, "revoked_at_ms": c.revoked_at_ms,
+            })
+            .to_string();
+            t.put(crate::identity_store::K_CSESSION, &c.id, &rec, &[], &[])
+                .map_err(|e| Error::RustError(format!("courier session: {e}")))?;
+        }
+        Ok(())
+    })
+    .await?;
+    report.insert("auth_refresh_tokens".into(), serde_json::json!(nt));
+    report.insert("owner_api_keys".into(), serde_json::json!(nk));
+    report.insert("courier_sessions".into(), serde_json::json!(ns));
+
+    // ── per venue ─────────────────────────────────────────────────────────
+    let mut per_venue = serde_json::Map::new();
+    for venue in &venues {
+        let (Ok(d), Ok(ns_do)) = (ctx.d1("DB"), ctx.durable_object("HUB")) else { continue };
+        let place = crate::hubstore::Place {
+            db: d,
+            ns: ns_do,
+            venue: venue.clone(),
+            legacy_venue: legacy.clone(),
+        };
+        let counts = migrate_venue(&db, &place, venue).await?;
+        per_venue.insert(venue.clone(), counts);
+    }
+    report.insert("venues".into(), serde_json::Value::Object(per_venue));
+
+    // THE ROOTS, so two runs can be compared without trusting the word
+    // "idempotent". A second run must print the same four.
+    let mut roots = serde_json::Map::new();
+    for (name, t) in [
+        ("registry", crate::identity_store::registry(&ctx.env).await?),
+        ("identity", crate::identity_store::identity(&ctx.env).await?),
+        ("sessions", crate::identity_store::sessions(&ctx.env).await?),
+        ("couriers", crate::identity_store::couriers(&ctx.env).await?),
+    ] {
+        roots.insert(name.into(), serde_json::json!(t.root()));
+    }
+    report.insert("roots".into(), serde_json::Value::Object(roots));
+
+    Response::from_json(&serde_json::Value::Object(report))
+}
+
+/// One venue's own families: assignments, shifts, customers, bookings, ledger,
+/// threads and the inbox.
+async fn migrate_venue(
+    db: &D1Database,
+    place: &crate::hubstore::Place,
+    venue: &str,
+) -> Result<serde_json::Value> {
+    let mut out = serde_json::Map::new();
+
+    // assignments and shifts, into the ops image
+    #[derive(serde::Deserialize)]
+    struct Asg {
+        order_id: String,
+        courier_id: String,
+        assigned_at_ms: Option<i64>,
+        picked_up_at_ms: Option<i64>,
+        delivered_at_ms: Option<i64>,
+        cash_due: Option<i64>,
+        cash_collected: Option<i64>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Sh {
+        id: String,
+        courier_id: String,
+        started_at_ms: Option<i64>,
+        ended_at_ms: Option<i64>,
+        deliveries: Option<i64>,
+        cash_collected: Option<i64>,
+    }
+    let asgs: Vec<Asg> = db
+        .prepare(
+            "SELECT order_id,courier_id,assigned_at_ms,picked_up_at_ms,delivered_at_ms,\
+             cash_due,cash_collected FROM courier_assignments WHERE location_id = ?1",
+        )
+        .bind(&[venue.into()])?
+        .all()
+        .await?
+        .results()?;
+    let shs: Vec<Sh> = db
+        .prepare(
+            "SELECT id,courier_id,started_at_ms,ended_at_ms,deliveries,cash_collected \
+             FROM courier_shifts WHERE location_id = ?1",
+        )
+        .bind(&[venue.into()])?
+        .all()
+        .await?
+        .results()?;
+    let (na, nsh) = (asgs.len(), shs.len());
+    crate::hubstore::with_table(
+        place,
+        crate::hubstore::IMAGE_OPS,
+        crate::hubstore::OPS_BYTES,
+        move |t| {
+            for a in &asgs {
+                let rec = serde_json::json!({
+                    "order_id": a.order_id, "courier_id": a.courier_id,
+                    "assigned_at_ms": a.assigned_at_ms.unwrap_or(0),
+                    "cash_due": a.cash_due.unwrap_or(0),
+                    "picked_up_at_ms": a.picked_up_at_ms,
+                    "delivered_at_ms": a.delivered_at_ms,
+                    "cash_collected": a.cash_collected,
+                })
+                .to_string();
+                t.put("asg", &a.order_id, &rec, &[], &[])
+                    .map_err(|e| Error::RustError(format!("assignment: {e}")))?;
+            }
+            // ONE SHIFT RECORD PER COURIER, keyed by the courier, so a history
+            // of closed shifts collapses to the newest. The live code cannot
+            // represent two open shifts and this must not import a pair.
+            let mut newest: std::collections::HashMap<&str, &Sh> =
+                std::collections::HashMap::new();
+            for s in &shs {
+                let keep = match newest.get(s.courier_id.as_str()) {
+                    None => true,
+                    Some(prev) => {
+                        // An open shift always wins; otherwise the later start.
+                        (s.ended_at_ms.is_none() && prev.ended_at_ms.is_some())
+                            || (s.ended_at_ms.is_none() == prev.ended_at_ms.is_none()
+                                && s.started_at_ms.unwrap_or(0)
+                                    > prev.started_at_ms.unwrap_or(0))
+                    }
+                };
+                if keep {
+                    newest.insert(s.courier_id.as_str(), s);
+                }
+            }
+            for (cid, s) in newest {
+                let rec = serde_json::json!({
+                    "id": s.id, "courier_id": cid,
+                    "started_at_ms": s.started_at_ms.unwrap_or(0),
+                    "ended_at_ms": s.ended_at_ms,
+                    "deliveries": s.deliveries.unwrap_or(0),
+                    "cash_collected": s.cash_collected.unwrap_or(0),
+                })
+                .to_string();
+                t.put("shift", cid, &rec, &[], &[])
+                    .map_err(|e| Error::RustError(format!("shift: {e}")))?;
+            }
+            Ok(())
+        },
+    )
+    .await?;
+    out.insert("courier_assignments".into(), serde_json::json!(na));
+    out.insert("courier_shifts".into(), serde_json::json!(nsh));
+
+    // customers
+    #[derive(serde::Deserialize)]
+    struct Cu {
+        id: String,
+        phone_hash: String,
+        name: Option<String>,
+        created_at_ms: Option<i64>,
+    }
+    let cus: Vec<Cu> = db
+        .prepare("SELECT id,phone_hash,name,created_at_ms FROM customers WHERE location_id = ?1")
+        .bind(&[venue.into()])?
+        .all()
+        .await?
+        .results()?;
+    let ncu = cus.len();
+    crate::hubstore::with_table(
+        place,
+        crate::hubstore::IMAGE_PEOPLE,
+        crate::hubstore::PEOPLE_BYTES,
+        move |t| {
+            for c in &cus {
+                let rec = serde_json::json!({
+                    "id": c.id, "phone_hash": c.phone_hash,
+                    "name": c.name.clone().unwrap_or_default(),
+                    "created_at_ms": c.created_at_ms.unwrap_or(0),
+                })
+                .to_string();
+                t.put("cust", &c.phone_hash, &rec, &[], &[])
+                    .map_err(|e| Error::RustError(format!("customer: {e}")))?;
+            }
+            Ok(())
+        },
+    )
+    .await?;
+    out.insert("customers".into(), serde_json::json!(ncu));
+
+    // bookings: the reservations and their events, into one image, because a
+    // status is the fold of the events and the two must not be two writes.
+    #[derive(serde::Deserialize)]
+    struct Rv {
+        id: String,
+        user_id: Option<String>,
+        party: i64,
+        slot_min: i64,
+        occasion: Option<String>,
+        contact_name: Option<String>,
+        contact_phone: Option<String>,
+        status: String,
+        created_at_ms: Option<i64>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Rve {
+        reservation_id: String,
+        to_status: String,
+        seq: i64,
+        actor: Option<String>,
+        reason: Option<String>,
+        at_ms: Option<i64>,
+    }
+    let rvs: Vec<Rv> = db
+        .prepare(
+            "SELECT id,user_id,party,slot_min,occasion,contact_name,contact_phone,status,             created_at_ms FROM reservations WHERE location_id = ?1",
+        )
+        .bind(&[venue.into()])?
+        .all()
+        .await?
+        .results()?;
+    let rves: Vec<Rve> = db
+        .prepare(
+            "SELECT reservation_id,to_status,seq,actor,reason,at_ms FROM reservation_events \
+             WHERE location_id = ?1",
+        )
+        .bind(&[venue.into()])?
+        .all()
+        .await?
+        .results()?;
+    let (nrv, nrve) = (rvs.len(), rves.len());
+    let venue_owned = venue.to_string();
+    crate::hubstore::with_table(
+        place,
+        crate::booking::IMAGE_BOOKINGS,
+        crate::booking::BOOKINGS_BYTES,
+        move |t| {
+            for r in &rvs {
+                let user_id = r.user_id.clone().filter(|u| !u.trim().is_empty());
+                let rec = serde_json::json!({
+                    "id": r.id, "location_id": venue_owned, "party": r.party,
+                    "slot_min": r.slot_min,
+                    "occasion": r.occasion.clone().unwrap_or_default(),
+                    "contact_name": r.contact_name.clone().unwrap_or_default(),
+                    "contact_phone": r.contact_phone.clone().unwrap_or_default(),
+                    "status": r.status,
+                    "created_at_ms": r.created_at_ms.unwrap_or(0),
+                    "user_id": user_id,
+                })
+                .to_string();
+                let index: Vec<(String, String)> = match &user_id {
+                    Some(u) => vec![(
+                        crate::booking::user_key(u, r.slot_min, &r.id),
+                        r.id.clone(),
+                    )],
+                    None => vec![],
+                };
+                t.put("rsv", &r.id, &rec, &index, &[])
+                    .map_err(|e| Error::RustError(format!("reservation: {e}")))?;
+            }
+            for e in &rves {
+                let rec = serde_json::json!({
+                    "to_status": e.to_status, "seq": e.seq,
+                    "actor": e.actor.clone().unwrap_or_default(),
+                    "reason": e.reason.clone().unwrap_or_default(),
+                    "at_ms": e.at_ms.unwrap_or(0),
+                })
+                .to_string();
+                t.put("ev", &crate::booking::ev_key(&e.reservation_id, e.seq), &rec, &[], &[])
+                    .map_err(|x| Error::RustError(format!("reservation event: {x}")))?;
+            }
+            Ok(())
+        },
+    )
+    .await?;
+    out.insert("reservations".into(), serde_json::json!(nrv));
+    out.insert("reservation_events".into(), serde_json::json!(nrve));
+
+    // the ledger: a transaction carries its own postings, so the join happens
+    // here and the two are never separable again.
+    #[derive(serde::Deserialize)]
+    struct Tx {
+        id: String,
+        kind: String,
+        reverses: Option<String>,
+        memo: Option<String>,
+        at_ms: i64,
+    }
+    #[derive(serde::Deserialize)]
+    struct Po {
+        tx_id: String,
+        account: String,
+        minor: i64,
+        currency: String,
+    }
+    let txs: Vec<Tx> = db
+        .prepare(
+            "SELECT id,kind,reverses,memo,at_ms FROM ledger_tx WHERE location_id = ?1 \
+             ORDER BY at_ms ASC, id ASC",
+        )
+        .bind(&[venue.into()])?
+        .all()
+        .await?
+        .results()?;
+    let pos: Vec<Po> = db
+        .prepare(
+            "SELECT tx_id,account,minor,currency FROM ledger_postings WHERE location_id = ?1",
+        )
+        .bind(&[venue.into()])?
+        .all()
+        .await?
+        .results()?;
+    let ntx = txs.len();
+    // An append log cannot be re-written, so this is written ONLY when the log
+    // is empty. Re-running the migration against a log that already holds these
+    // entries would append them a second time and the journal would double.
+    let existing = crate::hubstore::load_log(place, crate::wallet::IMAGE_LEDGER)
+        .await?
+        .log
+        .len();
+    if existing == 0 {
+        crate::hubstore::with_log(place, crate::wallet::IMAGE_LEDGER, move |log| {
+            for t in &txs {
+                let legs: Vec<serde_json::Value> = pos
+                    .iter()
+                    .filter(|p| p.tx_id == t.id)
+                    .map(|p| {
+                        serde_json::json!({
+                            "account": p.account, "minor": p.minor, "currency": p.currency,
+                        })
+                    })
+                    .collect();
+                let rec = serde_json::json!({
+                    "id": t.id, "kind": t.kind, "reverses": t.reverses,
+                    "memo": t.memo.clone().unwrap_or_default(),
+                    "at_ms": t.at_ms, "postings": legs,
+                })
+                .to_string();
+                log.append("tx", &t.id, &rec)
+                    .map_err(|e| Error::RustError(format!("ledger: {e:?}")))?;
+            }
+            Ok(())
+        })
+        .await?;
+        out.insert("ledger_tx".into(), serde_json::json!(ntx));
+    } else {
+        // Reported rather than silently skipped: "0 written because there were
+        // already 12 entries" is a different fact from "0 to write".
+        out.insert(
+            "ledger_tx".into(),
+            serde_json::json!(format!("skipped: log already holds {existing}")),
+        );
+    }
+
+    // the venue's pass key, into its settings
+    #[derive(serde::Deserialize)]
+    struct Pk {
+        key_b64: String,
+    }
+    let pk: Option<Pk> = db
+        .prepare("SELECT key_b64 FROM venue_pass_keys WHERE location_id = ?1")
+        .bind(&[venue.into()])?
+        .first(None)
+        .await?;
+    if let Some(pk) = pk {
+        let key = pk.key_b64.clone();
+        crate::hubstore::with_settings(place, move |s| {
+            // NEVER OVERWRITTEN. A pass already issued was signed with whatever
+            // the venue had; replacing the key would make every one of them
+            // fail to verify.
+            if s.get("venue.pass.key").filter(|v| !v.is_empty()).is_none() {
+                s.set("venue.pass.key", &key);
+            }
+            Ok(())
+        })
+        .await?;
+        out.insert("venue_pass_keys".into(), serde_json::json!(1));
+    }
+
+    Ok(serde_json::Value::Object(out))
+}
