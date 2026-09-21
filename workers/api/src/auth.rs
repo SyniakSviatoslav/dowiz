@@ -455,16 +455,43 @@ pub async fn authenticate_token(
     match claims {
         Claims::Owner { user_id, active_location_id, .. } => {
             // Authority is re-derived, never trusted from the token.
-            let still: Option<String> = db
-                .prepare(
-                    "SELECT m.id FROM memberships m \
-                     WHERE m.user_id = ?1 AND m.role = 'owner' AND m.status = 'active' LIMIT 1",
-                )
-                .bind(&[user_id.clone().into()])
-                .map_err(|e| AuthError::Db(e.to_string()))?
-                .first(Some("id"))
-                .await
-                .map_err(|e| AuthError::Db(e.to_string()))?;
+            //
+            // AND IT IS RE-DERIVED FOR THE VENUE THE CLAIM NAMES, not for
+            // "somewhere". The question this used to ask was "is this user an
+            // owner of anything", which is the wrong question for an owner of
+            // two venues: remove them from venue A and, while they still own
+            // B, every route that trusts `belongs_to` -- which compares the
+            // claim and nothing else -- kept letting them into A for the whole
+            // 24-hour life of the access token. Those are exactly the routes
+            // moved behind `principal_at` in the red-team pass: a reservation's
+            // guest name and phone, its FSM, its signed entry pass, a thread,
+            // and the wallet.
+            //
+            // A claim that names NO venue is a platform-admin token and is
+            // handled below as it always was; it owns no restaurant by design.
+            let still: Option<String> = match active_location_id.as_deref() {
+                Some(venue) => db
+                    .prepare(
+                        "SELECT m.id FROM memberships m \
+                         WHERE m.user_id = ?1 AND m.location_id = ?2 \
+                         AND m.role = 'owner' AND m.status = 'active' LIMIT 1",
+                    )
+                    .bind(&[user_id.clone().into(), venue.into()])
+                    .map_err(|e| AuthError::Db(e.to_string()))?
+                    .first(Some("id"))
+                    .await
+                    .map_err(|e| AuthError::Db(e.to_string()))?,
+                None => db
+                    .prepare(
+                        "SELECT m.id FROM memberships m \
+                         WHERE m.user_id = ?1 AND m.role = 'owner' AND m.status = 'active' LIMIT 1",
+                    )
+                    .bind(&[user_id.clone().into()])
+                    .map_err(|e| AuthError::Db(e.to_string()))?
+                    .first(Some("id"))
+                    .await
+                    .map_err(|e| AuthError::Db(e.to_string()))?,
+            };
             if still.is_none() {
                 return Err(AuthError::Revoked("owner membership is gone or suspended"));
             }

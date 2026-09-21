@@ -45,7 +45,24 @@ pub(crate) async fn owner_at(
     };
     let user_id = if raw.starts_with("dowiz_") {
         match auth::authenticate(req, &ctx.env, db, now_ms()).await {
-            Ok(Principal::Owner { user_id, .. }) => user_id,
+            // A KEY IS SCOPED TO THE VENUE IT WAS MINTED FOR, and that scope
+            // used to be dropped on the floor here -- `active_location_id`
+            // carries the key's own `location_id` (see `api_key_principal`)
+            // and nothing compared it to the venue being written.
+            //
+            // An owner of two venues mints a key from A's console and hands it
+            // to A's integrator; the integrator posts `{"location_id": "B"}`
+            // and it is accepted, because the membership check only asks
+            // whether the OWNER owns B. B's console never listed that key and
+            // `revoke_api_key` is scoped by venue, so B cannot take it away
+            // either. `mcp.rs` already honoured the scope; the REST surface
+            // did not.
+            Ok(Principal::Owner { user_id, active_location_id, .. }) => {
+                if active_location_id.as_deref() != Some(location_id) {
+                    return Err(Response::error("not found", 404).unwrap());
+                }
+                user_id
+            }
             Ok(_) => return Err(Response::error("forbidden role", 403).unwrap()),
             Err(e) => return Err(e.into_response().unwrap()),
         }
@@ -1049,7 +1066,15 @@ pub async fn write_translations(mut req: Request, ctx: RouteContext<()>) -> Resu
     }
     // Only ids the catalogue actually has: a translation of a dish that does
     // not exist is a row nothing will ever read.
-    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
+    //
+    // THE AUTHORISED VENUE, not the token's. Its four siblings were switched
+    // to `of_authorised` when that helper was written and this one was missed:
+    // `owner_at` authorises `body.location_id` while `of_any` resolved the
+    // catalogue from the CLAIM, so for an owner of two venues the ids were
+    // checked against the wrong restaurant. `content_i18n` has no venue column
+    // (migration 0002), so this id check is the only thing keeping a
+    // translation in its own venue.
+    let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
     let loaded = crate::hubstore::load_catalog(&place).await?;
     let products: std::collections::BTreeSet<String> =
         loaded.catalog.products().into_iter().map(|(id, _)| id).collect();

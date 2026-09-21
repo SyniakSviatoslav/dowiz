@@ -327,19 +327,54 @@ pub async fn owner_refresh(mut req: Request, ctx: RouteContext<()>) -> Result<Re
     }
 
     // Re-derive authority. A revoked owner does not roll forward on a refresh.
+    //
+    // AND NEITHER DOES THE VENUE MOVE. This was the third place with the
+    // oldest-membership guess, and the worst of them, because it changes a
+    // session that was already correct. Measured against the deployed Worker:
+    // signing in at `dubin-sushi.dowiz.org` gave a `dubin-durres` token, and
+    // ONE refresh on the same host gave `sushi-durres`.
+    //
+    // The console reaches this on its own — it refreshes on the first 401, so
+    // any tab left open past the access TTL flips — and it keeps sending the
+    // venue it is showing in the BODY. `owner_and_venue` then authorises that
+    // venue while `Place::of_any` resolves the image from the CLAIM, so the
+    // owner reads an empty queue for their own restaurant and their writes
+    // land in the other one. That is the "two hundred writes to the wrong
+    // restaurant" failure this module's header describes, re-entering through
+    // the back door.
+    //
+    // The refresh family stores no venue (migration 0003), so the host is
+    // asked, exactly as the login does — same helper, same rule, so the two
+    // agree by construction rather than by coincidence.
     #[derive(Deserialize)]
     struct M {
         location_id: String,
     }
-    let m: Option<M> = db
-        .prepare(
-            "SELECT location_id FROM memberships \
-             WHERE user_id = ?1 AND role = 'owner' AND status = 'active' \
-             ORDER BY created_at_ms LIMIT 1",
-        )
-        .bind(&[row.user_id.clone().into()])?
-        .first(None)
-        .await?;
+    let host_venue = venue_of_host(&req, &ctx).await?;
+    let m: Option<M> = match host_venue.as_deref() {
+        Some(v) => {
+            db.prepare(
+                "SELECT location_id FROM memberships \
+                 WHERE user_id = ?1 AND location_id = ?2 AND role = 'owner' \
+                 AND status = 'active' LIMIT 1",
+            )
+            .bind(&[row.user_id.clone().into(), v.into()])?
+            .first(None)
+            .await?
+        }
+        // A host that names no venue: the apex, `*.workers.dev`. The caller has
+        // said nothing, and for an owner of one venue this is still that venue.
+        None => {
+            db.prepare(
+                "SELECT location_id FROM memberships \
+                 WHERE user_id = ?1 AND role = 'owner' AND status = 'active' \
+                 ORDER BY created_at_ms LIMIT 1",
+            )
+            .bind(&[row.user_id.clone().into()])?
+            .first(None)
+            .await?
+        }
+    };
     let Some(m) = m else {
         return Response::error("owner access revoked", 401);
     };
