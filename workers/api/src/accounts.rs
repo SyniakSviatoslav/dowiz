@@ -156,8 +156,30 @@ pub async fn owner_login(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
     struct M {
         location_id: String,
     }
-    let wanted = body.location_id.as_deref().map(str::trim).filter(|s| !s.is_empty());
-    let m: Option<M> = match wanted {
+    // ── AND THE HOST NAMES THE VENUE HERE TOO ──
+    //
+    // This owner owns two venues, and the fallback below is `ORDER BY
+    // created_at_ms LIMIT 1`: the OLDEST membership, whichever host the login
+    // arrived on. Measured against the deployed Worker: signing in at
+    // `dubin-sushi.dowiz.org` returned a token whose `active_location_id` was
+    // `sushi-durres`.
+    //
+    // That is not a cosmetic mismatch, because `owner_and_venue` was fixed to
+    // resolve the venue from the TOKEN's claim -- so every writer that trusts
+    // it inherits the coin toss one level up. `invite_courier` is one of them:
+    // a code created from the dubin console mints a courier attached to sushi.
+    // Five of the six couriers on this platform sit on one venue and one on
+    // the other, which is what that looks like after a few weeks.
+    //
+    // Same rule as the courier's, and the same function.
+    let host_venue = venue_of_host(&req, &ctx).await?;
+    let wanted = match venue_for_login(host_venue.as_deref(), body.location_id.as_deref()) {
+        Ok(v) => v,
+        Err(VenueContradiction) => {
+            return Response::error("that location is not this venue", 403)
+        }
+    };
+    let m: Option<M> = match wanted.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
         Some(l) => {
             db.prepare(
                 "SELECT location_id FROM memberships \
@@ -168,7 +190,9 @@ pub async fn owner_login(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
             .first(None)
             .await?
         }
-        // Unchanged for everyone who owns one venue: the oldest membership.
+        // Reached where the host names no venue: the apex, `*.workers.dev`.
+        // For everyone who owns one venue this is still the oldest membership,
+        // which is the only one.
         None => {
             db.prepare(
                 "SELECT location_id FROM memberships \
@@ -358,15 +382,32 @@ pub async fn owner_logout(req: Request, ctx: RouteContext<()>) -> Result<Respons
 }
 
 /// `POST /api/courier/auth/login`
+/// The venue this request's Host header names, if it names one.
+///
+/// `None` on the apex, on `www.`, and on `*.workers.dev` -- the hosts that
+/// belong to the platform rather than to a venue -- and on a subdomain that
+/// matches no venue's slug.
+async fn venue_of_host(req: &Request, ctx: &RouteContext<()>) -> Result<Option<String>> {
+    let Some(slug) = crate::hubstore::Place::slug_of_host(req, ctx) else {
+        return Ok(None);
+    };
+    let venue = crate::hubstore::Place::of_slug(ctx, &slug).await?.venue;
+    Ok((venue != crate::hubstore::UNNAMED_VENUE).then_some(venue))
+}
+
 /// The body named a venue and the host named a different one.
 pub struct VenueContradiction;
 
-/// WHICH VENUE A COURIER'S SESSION IS FOR, as a rule that can be read.
+/// WHICH VENUE A SESSION IS FOR, as a rule that can be read.
+///
+/// Used by BOTH logins. An owner may own two venues and a courier may carry
+/// bags for two, and in each case the request has already named one -- in the
+/// host it arrived on -- long before any table is consulted.
 ///
 /// `None` means "the caller has named no venue and the host names none
 /// either" -- the single-membership fallback is then honest. Everything else
 /// is a name the membership lookup must confirm.
-pub fn venue_for_courier_login(
+pub fn venue_for_login(
     host_venue: Option<&str>,
     body_location: Option<&str>,
 ) -> std::result::Result<Option<String>, VenueContradiction> {
@@ -454,14 +495,8 @@ pub async fn courier_login(mut req: Request, ctx: RouteContext<()>) -> Result<Re
     // ever true: a host that names no venue (the apex, `*.workers.dev`), where
     // the caller genuinely has not said, and a single membership is an answer
     // rather than a coin toss.
-    let host_venue: Option<String> = match crate::hubstore::Place::slug_of_host(&req, &ctx) {
-        Some(slug) => {
-            let venue = crate::hubstore::Place::of_slug(&ctx, &slug).await?.venue;
-            (venue != crate::hubstore::UNNAMED_VENUE).then_some(venue)
-        }
-        None => None,
-    };
-    let want = match venue_for_courier_login(host_venue.as_deref(), body.location_id.as_deref()) {
+    let host_venue = venue_of_host(&req, &ctx).await?;
+    let want = match venue_for_login(host_venue.as_deref(), body.location_id.as_deref()) {
         Ok(v) => v,
         Err(VenueContradiction) => {
             return Response::error("that location is not this venue", 403)
@@ -715,7 +750,7 @@ pub async fn courier_claim(mut req: Request, ctx: RouteContext<()>) -> Result<Re
 
 #[cfg(test)]
 mod tests {
-    use super::{venue_for_courier_login as venue, VenueContradiction};
+    use super::{venue_for_login as venue, VenueContradiction};
 
     /// THE BUG THIS ENCODES. A courier of `dubin-durres` signed in at
     /// `sushi-durres.dowiz.org` and was given a dubin session, because the app
