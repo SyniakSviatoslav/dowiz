@@ -374,6 +374,18 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
                 warnings.push(format!("translations unavailable: {e}"));
             }
         }
+        // NOT MIGRATED YET? An empty image is indistinguishable from a venue
+        // with no translations, and only one of those is worth a fallback. The
+        // old table answers while it still has rows, and says so loudly every
+        // time -- a silent fallback would work forever and the migration would
+        // never be finished. Deleted with `migrate.rs`.
+        if i18n.is_empty() {
+            let mut ids: Vec<String> = products.iter().map(|(id, _)| id.clone()).collect();
+            ids.extend(cat_meta.iter().map(|(id, _, _)| id.clone()));
+            if let Some(old) = crate::migrate::i18n_fallback(&db, &want_locale, &ids).await {
+                i18n = old;
+            }
+        }
     }
     let translated = |id: &str, field: &str, fallback: Value| -> Value {
         match i18n.get(&(id.to_string(), field.to_string())) {

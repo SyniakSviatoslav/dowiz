@@ -157,3 +157,72 @@ pub async fn migrate_i18n(req: Request, ctx: RouteContext<()>) -> Result<Respons
         "contested": contested,
     }))
 }
+
+/// The translations a venue has NOT yet migrated, read from the table on its
+/// way out.
+///
+/// WHY A FALLBACK EXISTS AT ALL. The read path now reads the venue's own image,
+/// and that image is empty until `migrate_i18n` has run. Deploying the cutover
+/// without one would mean every menu served in a second language falls back to
+/// the venue's own words for however long it takes somebody to notice and run
+/// the migration — visible, harmless, and entirely avoidable.
+///
+/// This is expand-and-contract as the no-SQL blueprint prescribes it: read the
+/// new home, fall back to the old, SAY SO OUT LOUD, and delete the fallback
+/// when the old home is empty. The loud part is what stops a fallback from
+/// becoming the permanent path — a silent one would work forever and nobody
+/// would ever finish the migration.
+///
+/// It returns `(entity_id, field) -> value`, the shape the menu wants.
+pub async fn i18n_fallback(
+    db: &D1Database,
+    locale: &str,
+    ids: &[String],
+) -> Option<std::collections::HashMap<(String, String), String>> {
+    #[derive(serde::Deserialize)]
+    struct Row {
+        entity_id: String,
+        field: String,
+        value: String,
+    }
+    /// D1 refuses a statement with more than a hundred bound values, and a
+    /// 165-dish catalogue plus its headings is 186 of them. One bind is kept
+    /// back for the locale.
+    const MAX_BINDS: usize = 100;
+    let mut out = std::collections::HashMap::new();
+    for chunk in ids.chunks(MAX_BINDS - 1) {
+        let marks =
+            (2..chunk.len() + 2).map(|i| format!("?{i}")).collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "SELECT entity_id, field, value FROM content_i18n \
+             WHERE locale = ?1 AND field IN ('name','description','ingredients') \
+             AND entity_id IN ({marks})"
+        );
+        let mut binds: Vec<worker::wasm_bindgen::JsValue> = vec![locale.into()];
+        binds.extend(chunk.iter().map(|i| i.clone().into()));
+        let rows = match db.prepare(&sql).bind(&binds) {
+            Ok(stmt) => stmt.all().await.and_then(|r| r.results::<Row>()),
+            Err(e) => Err(e),
+        };
+        match rows {
+            Ok(list) => {
+                for r in list {
+                    out.insert((r.entity_id, r.field), r.value);
+                }
+            }
+            Err(e) => {
+                console_error!("i18n fallback {locale}: {e}");
+                return None;
+            }
+        }
+    }
+    if out.is_empty() {
+        return None;
+    }
+    console_error!(
+        "i18n fallback served {} entries for {locale}: THIS VENUE HAS NOT BEEN MIGRATED. \
+         Run POST /api/platform/migrate/i18n.",
+        out.len()
+    );
+    Some(out)
+}
