@@ -26,4 +26,8 @@ echo "== the SQL ratchet (may only fall) =="
 sh tools/gates/no-sql.sh
 echo "   ratchet OK"
 
+echo "== the file-size ratchet (may only fall) =="
+sh tools/gates/file-size.sh
+echo "   ratchet OK"
+
 echo "ALL GREEN — the hub crates and the Worker are verified."

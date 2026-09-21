@@ -147,7 +147,7 @@ runs in CI or a gate; *continuous* = runs in production.
 
 | # | Fitness function | Kind | Owns |
 |---|---|---|---|
-| F1 | file-size ratchet, 300 hard / 150 target, may only fall | atomic · triggered | blueprint 2 §5 |
+| F1 | file-size ratchet, 300 hard / 150 target, may only fall — `tools/gates/file-size.sh`, at `over=42 worst=3853` | atomic · triggered | blueprint 2 §5 |
 | F2 | no tenancy/pricing/permission `match` inside an `async fn` | atomic · triggered | 6 venue defects, 2 money defects |
 | F3 | line + branch coverage on money, stock, tenancy, **beside mutation score** | atomic · triggered | blueprint 2 §6 |
 | F4 | every fixed defect ships with the test that would have caught it | holistic · triggered | the Beyoncé rule |
@@ -220,6 +220,11 @@ the plan.
 - F8 the conservation audit, as a runnable gate after every E2E.
 - **F27 the hub crates in CI**, and F25's loaders hardened against the bytes
   they are handed. **DONE 2026-09-21** — see the registry note above.
+- **F1 the file-size ratchet. DONE 2026-09-21** at `over=42 worst=3853`
+  (`workers/api/src/extra.rs`). Two numbers rather than one, because a gate that
+  counts only the files past 300 lines lets THE big file keep growing, and a
+  gate that watches only the biggest lets every other file drift to 299. Both
+  halves were proved to fire before the gate was wired.
 
 ### Phase 1 — `platform/` (2 weeks, was 1)
 `Ctx`, `Ports`, `Fault`, `Handler`, the schema derive, committed `contracts/`.

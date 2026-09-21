@@ -27,6 +27,8 @@ jobs:
       - run: cd workers/api && cargo test
       - name: the SQL ratchet (may only fall)
         run: sh tools/gates/no-sql.sh
+      - name: the file-size ratchet (may only fall)
+        run: sh tools/gates/file-size.sh
 
   mutations:
     runs-on: ubuntu-latest
