@@ -358,6 +358,26 @@ pub async fn owner_logout(req: Request, ctx: RouteContext<()>) -> Result<Respons
 }
 
 /// `POST /api/courier/auth/login`
+/// The body named a venue and the host named a different one.
+pub struct VenueContradiction;
+
+/// WHICH VENUE A COURIER'S SESSION IS FOR, as a rule that can be read.
+///
+/// `None` means "the caller has named no venue and the host names none
+/// either" -- the single-membership fallback is then honest. Everything else
+/// is a name the membership lookup must confirm.
+pub fn venue_for_courier_login(
+    host_venue: Option<&str>,
+    body_location: Option<&str>,
+) -> std::result::Result<Option<String>, VenueContradiction> {
+    match (host_venue, body_location) {
+        (Some(h), Some(b)) if h != b => Err(VenueContradiction),
+        (Some(h), _) => Ok(Some(h.to_string())),
+        (None, Some(b)) => Ok(Some(b.to_string())),
+        (None, None) => Ok(None),
+    }
+}
+
 pub async fn courier_login(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
     #[derive(Deserialize)]
     struct In {
@@ -411,7 +431,43 @@ pub async fn courier_login(mut req: Request, ctx: RouteContext<()>) -> Result<Re
     struct L {
         location_id: String,
     }
-    let loc: Option<L> = match &body.location_id {
+    // ── WHICH VENUE, AND WHY THE HOST DECIDES IT ──
+    //
+    // This was the courier half of the bug that `owner_and_venue` had: with no
+    // `location_id` in the body it fell to `ORDER BY added_at_ms LIMIT 1`, the
+    // courier's FIRST venue, whatever host they were standing on. The courier
+    // app never sends the field, so that branch is the one every real login
+    // takes -- and a courier of `dubin-durres` signing in at
+    // `sushi-durres.dowiz.org` was handed a dubin session on the sushi domain.
+    // It looked like it worked: the login succeeded, the shift opened, and the
+    // app then showed the OTHER venue's pool for ever while `/api/live`, the
+    // one place that does compare the principal to the host, answered 404 to
+    // every handshake. A courier waiting for orders that are being placed two
+    // streets away has no way to tell that from a quiet evening.
+    //
+    // So the host is asked FIRST, exactly as it is for an anonymous read in
+    // `Place::of_any`: a venue's own subdomain names its venue, and a session
+    // minted there is for that venue or it is refused. A body `location_id`
+    // that disagrees with the host is a contradiction, not a preference, and
+    // is refused rather than silently resolved one way -- fail closed, the
+    // same stance the socket takes. The old guess survives only where it was
+    // ever true: a host that names no venue (the apex, `*.workers.dev`), where
+    // the caller genuinely has not said, and a single membership is an answer
+    // rather than a coin toss.
+    let host_venue: Option<String> = match crate::hubstore::Place::slug_of_host(&req, &ctx) {
+        Some(slug) => {
+            let venue = crate::hubstore::Place::of_slug(&ctx, &slug).await?.venue;
+            (venue != crate::hubstore::UNNAMED_VENUE).then_some(venue)
+        }
+        None => None,
+    };
+    let want = match venue_for_courier_login(host_venue.as_deref(), body.location_id.as_deref()) {
+        Ok(v) => v,
+        Err(VenueContradiction) => {
+            return Response::error("that location is not this venue", 403)
+        }
+    };
+    let loc: Option<L> = match &want {
         Some(want) => {
             db.prepare("SELECT location_id FROM courier_locations WHERE courier_id = ?1 AND location_id = ?2")
                 .bind(&[c.id.clone().into(), want.clone().into()])?
@@ -655,4 +711,43 @@ pub async fn courier_claim(mut req: Request, ctx: RouteContext<()>) -> Result<Re
         "refreshToken": format!("{session_id}.{secret}"),
         "courier": { "id": cid, "locationId": inv.location_id }
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{venue_for_courier_login as venue, VenueContradiction};
+
+    /// THE BUG THIS ENCODES. A courier of `dubin-durres` signed in at
+    /// `sushi-durres.dowiz.org` and was given a dubin session, because the app
+    /// sends no `location_id` and the fallback was the courier's FIRST venue.
+    /// The host is the one thing that request did say.
+    #[test]
+    fn the_host_names_the_venue_when_the_body_does_not() {
+        assert_eq!(venue(Some("sushi-durres"), None).ok().flatten().as_deref(), Some("sushi-durres"));
+    }
+
+    /// A body that agrees with the host is not a conflict.
+    #[test]
+    fn agreement_is_allowed() {
+        assert_eq!(
+            venue(Some("sushi-durres"), Some("sushi-durres")).ok().flatten().as_deref(),
+            Some("sushi-durres")
+        );
+    }
+
+    /// FAIL CLOSED. Resolving a contradiction either way mints a session for a
+    /// venue the caller did not ask for on a domain that is not it.
+    #[test]
+    fn a_body_that_contradicts_the_host_is_refused() {
+        assert!(matches!(venue(Some("sushi-durres"), Some("dubin-durres")), Err(VenueContradiction)));
+    }
+
+    /// Where the host names no venue -- the apex, `*.workers.dev` -- the
+    /// caller genuinely has not said, and the old single-membership guess is
+    /// still the only answer available.
+    #[test]
+    fn a_host_that_names_no_venue_leaves_the_choice_open() {
+        assert_eq!(venue(None, None).ok().flatten(), None);
+        assert_eq!(venue(None, Some("dubin-durres")).ok().flatten().as_deref(), Some("dubin-durres"));
+    }
 }

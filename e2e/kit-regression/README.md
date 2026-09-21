@@ -97,4 +97,41 @@ them. Point it at a venue you are willing to have rows created in.
 - **The light theme.** Both run at the browser's default scheme. The kit ships
   both palettes and `settings` switches `data-theme`; a second pass with
   `colorScheme: 'dark'` would double the coverage cheaply.
-- **Anything behind a session.** Every route checked is public.
+- **Anything behind a session.** Neither `render.mjs` nor `domains.mjs` signs
+  in; every route those two check is public. `cycle-full.mjs` below is the one
+  that does.
+
+
+## The signed-in gates
+
+These four were written while chasing live defects and then kept, because each
+found something no unit test could. They are NOT part of `run.mjs`: they place
+real orders on a real venue and need credentials, so they are run deliberately.
+
+```sh
+HOST=https://sushi-durres.dowiz.org node e2e/kit-regression/cycle-full.mjs
+```
+
+| script | what it walks | what it found |
+|---|---|---|
+| `cycle-full.mjs` | a whole order through three browsers: storefront → console → courier → tracking sheet | `/api/live` answering 500; a courier signing in to the wrong venue |
+| `socket-probe.mjs` | counts the `/api/live` connections a page really opens | that a venue whose sockets all fail looks exactly like a quiet venue |
+| `landing-price.mjs` | the price is on the landing page, in each language | — |
+| `lang-scrim.mjs` | the language sheet opens and dismisses | — |
+
+`cycle-full.mjs` reads `/root/.dowiz_owner` for the owner, and takes
+`QA_COURIER_PHONE` / `QA_COURIER_PASSWORD` for the courier. **The courier must
+belong to the venue under test**, and the script checks that before it opens a
+browser: a courier of another venue signs in, opens a shift, and then shows the
+other venue's pool for ever, which reads as a broken product rather than as
+wrong credentials.
+
+### Why these are not named `_*.mjs`
+
+`.gitignore` drops `e2e/kit-regression/_*.mjs` — the one-suspect probes written
+while chasing a single defect, of which this directory holds seventy. A gate
+that has graduated out of that is committed, and loses the underscore when it
+does. Moving a `_`-named script into this directory WITHOUT renaming it does
+not commit it: git records the move as a deletion and says nothing, which is
+how three of these four were lost the first time and had to be recovered from
+`01ed323^`.
