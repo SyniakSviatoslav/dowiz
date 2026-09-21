@@ -70,7 +70,7 @@ pub struct OwnerSeed {
 }
 
 /// Constant-time-ish compare. Length is allowed to leak; the bytes are not.
-fn secret_ok(given: &str, want: &str) -> bool {
+pub(crate) fn secret_ok(given: &str, want: &str) -> bool {
     if given.len() != want.len() {
         return false;
     }
