@@ -1041,6 +1041,49 @@ pub async fn log_generation(place: &Place) -> Result<i64> {
     Ok(res.headers().get("x-generation").ok().flatten().and_then(|v| v.parse().ok()).unwrap_or(0))
 }
 
+// ── the venue's own table images ───────────────────────────────────────────
+//
+// THE IMAGE IS THE VENUE. `id_from_name(location_id)` already gives each venue
+// its own object and its own storage; a table image inside it therefore cannot
+// be read from another venue's request without naming that venue, which is what
+// turns tenancy from a column a query has to remember into a property of where
+// the bytes live. Six of this platform's defects were that column being
+// forgotten, and `content_i18n` never had one at all.
+
+/// The venue's translations: `<locale>/<entity_type>/<entity_id>/<field>`.
+pub const IMAGE_I18N: &str = "i18n";
+
+/// The record kind inside it. One kind, so `all` lists exactly the
+/// translations and nothing that shares the image later.
+pub const I18N_KIND: &str = "t";
+
+/// The key a translation is stored under. ONE FUNCTION, called by the reader
+/// and the writer both: a key composed in two places is a key that will be
+/// composed two ways, and the reader would then find nothing while reporting
+/// no error at all.
+pub fn i18n_key(locale: &str, entity_type: &str, entity_id: &str, field: &str) -> String {
+    format!("{locale}/{entity_type}/{entity_id}/{field}")
+}
+
+/// Sized for a large multilingual catalogue: 165 dishes x 3 languages x 3
+/// fields is under 2,000 entries, and each is a short string.
+pub const I18N_BYTES: usize = 2 * 1024 * 1024;
+
+/// Read one of the venue's table images.
+pub async fn load_table(place: &Place, image: &str, ceiling: usize)
+    -> Result<crate::platform_store::Loaded>
+{
+    crate::platform_store::load_at(&place.stub()?, image, ceiling).await
+}
+
+/// Read, change, write one of the venue's table images, under the guard.
+pub async fn with_table<F, T>(place: &Place, image: &str, ceiling: usize, f: F) -> Result<T>
+where
+    F: FnMut(&mut dowiz_hub::table::Table) -> Result<T>,
+{
+    crate::platform_store::with_at(&place.stub()?, image, ceiling, f).await
+}
+
 /// The venue's own record, without the catalogue it sits in.
 ///
 /// One field of it is needed on every owner poll -- the time zone, so that

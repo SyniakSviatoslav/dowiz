@@ -185,6 +185,7 @@ struct ProdRow {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)]
 struct I18nRow {
     entity_id: String,
     field: String,
@@ -324,40 +325,53 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // stored rows were served as Albanian for a day.
     let mut warnings: Vec<String> = Vec::new();
     if want_locale != loc.default_locale && !want_locale.is_empty() {
-        let mut ids: Vec<String> = products.iter().map(|(id, _)| id.clone()).collect();
-        ids.extend(cat_meta.iter().map(|(id, _, _)| id.clone()));
-        // D1 refuses a statement with more than `D1_MAX_BINDS` bound values,
-        // and a 165-dish catalogue plus its headings is 186 of them. The ids
-        // go in chunks of what one statement can carry, one bind kept back
-        // for the locale. Built from the catalogue's own ids, never from
-        // anything a caller sent.
-        for chunk in ids.chunks(D1_MAX_BINDS - 1) {
-            let marks = (2..chunk.len() + 2)
-                .map(|i| format!("?{i}"))
-                .collect::<Vec<_>>()
-                .join(",");
-            let sql = format!(
-                "SELECT entity_id, field, value FROM content_i18n \
-                 WHERE locale = ?1 AND field IN ('name','description','ingredients') \
-                 AND entity_id IN ({marks})"
-            );
-            let mut binds: Vec<worker::wasm_bindgen::JsValue> =
-                vec![want_locale.clone().into()];
-            binds.extend(chunk.iter().map(|i| i.clone().into()));
-            let rows = match db.prepare(&sql).bind(&binds) {
-                Ok(stmt) => stmt.all().await,
-                Err(e) => Err(e),
-            };
-            match rows.and_then(|r| r.results::<I18nRow>()) {
-                Ok(list) => {
-                    for r in list {
-                        i18n.insert((r.entity_id, r.field), r.value);
+        // ONE PREFIX SCAN, AND NO IDS AT ALL.
+        //
+        // This was a chunked `WHERE entity_id IN (...)` against `content_i18n`,
+        // and it carried two defects that were both the table's shape:
+        //   * D1 refuses more than 100 bound values and a 165-dish catalogue
+        //     plus its headings is 186 of them, so the ids had to be chunked --
+        //     and before that was noticed, 187 ids in one statement failed
+        //     SILENTLY and a venue served Albanian for a day.
+        //   * `content_i18n` HAD NO VENUE COLUMN. Every row of every venue
+        //     shared one table, keyed by an entity id and nothing else.
+        //
+        // In the venue's own image both stop existing. The image IS the venue,
+        // so there is no venue to filter on; and the key carries the locale, so
+        // the whole language is one sorted range. What is read is whatever the
+        // catalogue actually has, which is also why the ids are no longer built
+        // and passed at all.
+        let want = format!("{want_locale}/");
+        match crate::hubstore::load_table(
+            &place,
+            crate::hubstore::IMAGE_I18N,
+            crate::hubstore::I18N_BYTES,
+        )
+        .await
+        {
+            Ok(l) => {
+                for (key, value) in l.table.all(crate::hubstore::I18N_KIND) {
+                    // `<locale>/<entity_type>/<entity_id>/<field>`
+                    let Some(rest) = key.strip_prefix(&want) else { continue };
+                    let mut parts = rest.splitn(3, '/');
+                    let (_entity_type, id, field) =
+                        match (parts.next(), parts.next(), parts.next()) {
+                            (Some(a), Some(b), Some(c)) => (a, b, c),
+                            _ => continue,
+                        };
+                    if !matches!(field, "name" | "description" | "ingredients") {
+                        continue;
                     }
+                    i18n.insert((id.to_string(), field.to_string()), value);
                 }
-                Err(e) => {
-                    console_error!("menu i18n {want_locale}: {e}");
-                    warnings.push(format!("translations unavailable: {e}"));
-                }
+            }
+            // A failure here must not take the menu down -- the venue's own
+            // words are still a menu -- but it must not look like "no
+            // translations exist" either, which is exactly how 146 stored rows
+            // were served as Albanian for a day.
+            Err(e) => {
+                console_error!("menu i18n {want_locale}: {e}");
+                warnings.push(format!("translations unavailable: {e}"));
             }
         }
     }

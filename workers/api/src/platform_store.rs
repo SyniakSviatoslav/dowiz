@@ -89,15 +89,15 @@ fn stub(env: &Env) -> Result<Stub> {
     env.durable_object("HUB")?.id_from_name(PLATFORM)?.get_stub()
 }
 
-/// Read one platform image, creating an empty one the first time.
-///
-/// A VENUE'S FIRST READ CANNOT ADOPT ANYTHING. `hubstore::do_image` has a
-/// legacy fallback that seeds an object from the old `hub_image` table, scoped
-/// to one named venue because unscoped it served one tenant's data from
-/// another's hostname. There is no such path here: the platform images have no
-/// legacy, and an absent image is an empty one.
-pub async fn load(env: &Env, image: &str) -> Result<Loaded> {
-    let stub = stub(env)?;
+// ── the primitives, over any object ────────────────────────────────────────
+//
+// A venue's images and the platform's are the same mechanism on the same class;
+// only the object's name differs. These take the stub so `hubstore` can offer
+// the venue side without a second copy of the generation guard -- which is the
+// kind of duplication that ends with two guards behaving differently.
+
+/// Read one table image from an object, creating an empty one the first time.
+pub async fn load_at(stub: &Stub, image: &str, ceiling_bytes: usize) -> Result<Loaded> {
     let mut res = stub.fetch_with_str(&format!("https://hub/img/{image}")).await?;
     if res.status_code() == 200 {
         let generation = res
@@ -108,30 +108,24 @@ pub async fn load(env: &Env, image: &str) -> Result<Loaded> {
             .and_then(|v| v.parse().ok())
             .unwrap_or(0);
         let bytes = res.bytes().await?;
-        let table = Table::load(&bytes, ceiling(image))
+        let table = Table::load(&bytes, ceiling_bytes)
             // A CORRUPT IMAGE IS NOT AN EMPTY ONE. Reading it as empty is the
             // `.ok().flatten()` defect that would have orphaned a venue's whole
             // order log: a failure converted into an absence.
-            .map_err(|_| Error::RustError(format!("platform image {image} is unreadable")))?;
+            .map_err(|_| Error::RustError(format!("image {image} is unreadable")))?;
         return Ok(Loaded { table, generation });
     }
-    let table = Table::create(ceiling(image))
-        .map_err(|_| Error::RustError(format!("cannot create platform image {image}")))?;
+    let table = Table::create(ceiling_bytes)
+        .map_err(|_| Error::RustError(format!("cannot create image {image}")))?;
     Ok(Loaded { table, generation: 0 })
 }
 
-/// Write one platform image back, under the generation it was read at.
-///
-/// `false` means somebody else wrote first. The object serialises its own
-/// calls, so this can only happen when two Workers read the same generation
-/// before either wrote -- and the caller's answer is to re-read and re-decide,
-/// never to force. `compare_and_swap` in the sense the hub blueprint means it.
-pub async fn save(env: &Env, image: &str, loaded: &mut Loaded) -> Result<bool> {
+/// Write one table image back, under the generation it was read at.
+pub async fn save_at(stub: &Stub, image: &str, loaded: &mut Loaded) -> Result<bool> {
     let bytes = loaded
         .table
         .to_bytes()
-        .map_err(|e| Error::RustError(format!("platform image {image} will not serialise: {e:?}")))?;
-    let stub = stub(env)?;
+        .map_err(|e| Error::RustError(format!("image {image} will not serialise: {e:?}")))?;
     let mut req = Request::new_with_init(
         &format!("https://hub/img/{image}"),
         RequestInit::new().with_method(Method::Put).with_body(Some(bytes.into())),
@@ -145,22 +139,43 @@ pub async fn save(env: &Env, image: &str, loaded: &mut Loaded) -> Result<bool> {
 ///
 /// THE RETRY IS BOUNDED AND THE REFUSAL IS TYPED. An unbounded retry on a
 /// contended image is a request that never returns, and a silent give-up is a
-/// write the caller believes happened. Four attempts is enough for a
-/// serialisation point that only two Workers ever reach at once, and the fifth
-/// failure says so out loud.
-pub async fn with<F, T>(env: &Env, image: &str, mut f: F) -> Result<T>
+/// write the caller believes happened. Four attempts is enough for an object
+/// that serialises its own calls, and the fifth failure says so out loud
+/// instead of pretending the write landed.
+pub async fn with_at<F, T>(stub: &Stub, image: &str, ceiling_bytes: usize, mut f: F) -> Result<T>
 where
     F: FnMut(&mut Table) -> Result<T>,
 {
-    for attempt in 0..4 {
-        let mut loaded = load(env, image).await?;
+    for _ in 0..4 {
+        let mut loaded = load_at(stub, image, ceiling_bytes).await?;
         let out = f(&mut loaded.table)?;
-        if save(env, image, &mut loaded).await? {
+        if save_at(stub, image, &mut loaded).await? {
             return Ok(out);
         }
-        let _ = attempt;
     }
-    Err(Error::RustError(format!(
-        "platform image {image}: four writers won the guard in a row"
-    )))
+    Err(Error::RustError(format!("image {image}: four writers won the guard in a row")))
+}
+
+/// Read one platform image, creating an empty one the first time.
+///
+/// A VENUE'S FIRST READ CANNOT ADOPT ANYTHING. `hubstore::do_image` has a
+/// legacy fallback that seeds an object from the old `hub_image` table, scoped
+/// to one named venue because unscoped it served one tenant's data from
+/// another's hostname. There is no such path here: the platform images have no
+/// legacy, and an absent image is an empty one.
+pub async fn load(env: &Env, image: &str) -> Result<Loaded> {
+    load_at(&stub(env)?, image, ceiling(image)).await
+}
+
+/// Write one platform image back, under the generation it was read at.
+pub async fn save(env: &Env, image: &str, loaded: &mut Loaded) -> Result<bool> {
+    save_at(&stub(env)?, image, loaded).await
+}
+
+/// Read, change, write, on the platform object.
+pub async fn with<F, T>(env: &Env, image: &str, f: F) -> Result<T>
+where
+    F: FnMut(&mut Table) -> Result<T>,
+{
+    with_at(&stub(env)?, image, ceiling(image), f).await
 }

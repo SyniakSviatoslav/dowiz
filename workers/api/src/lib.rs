@@ -20,6 +20,7 @@ mod auth;
 mod bootstrap;
 mod platform;
 mod platform_store;
+mod migrate;
 mod courier;
 mod hubdo;
 mod hubstore;
@@ -217,6 +218,9 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         // The main hub. Platform administrators only -- see `platform`.
         .get_async("/api/platform/hubs", platform::hubs)
         .post_async("/api/platform/hubs", platform::create_hub)
+        // A ONE-SHOT, and it stays reachable on purpose: a migration you cannot
+        // run again is a migration you cannot verify. It is idempotent.
+        .post_async("/api/platform/migrate/i18n", migrate::migrate_i18n)
         .post_async("/api/webhooks/stripe", stripe::webhook)
         .post_async("/api/auth/login", accounts::owner_login)
         .post_async("/api/auth/refresh", accounts::owner_refresh)

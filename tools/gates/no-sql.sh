@@ -19,7 +19,13 @@
 set -eu
 cd "$(dirname "$0")/../.."
 BASELINE_FILE=tools/gates/no-sql.baseline
-n=$(grep -o "\.prepare(" workers/api/src/*.rs | wc -l | tr -d ' ')
+# migrate.rs is EXEMPT and is the only exemption. It exists to read the tables
+# it is emptying, it holds nothing else, and it is deleted in the same commit as
+# the D1 binding. An exemption that is one whole file is one you can see the
+# size of; an exemption that is a comment marker is one that spreads.
+n=$(grep -o "\.prepare(" $(ls workers/api/src/*.rs | grep -v '/migrate\.rs$') | wc -l | tr -d ' ')
+m=$(grep -c "\.prepare(" workers/api/src/migrate.rs 2>/dev/null || echo 0)
+echo "no-sql: $m statement(s) in the exempt migrate.rs"
 if [ ! -f "$BASELINE_FILE" ]; then
   echo "$n" > "$BASELINE_FILE"
   echo "no-sql: baseline recorded at $n prepared statements"
@@ -30,7 +36,7 @@ echo "no-sql: $n prepared statements (ratchet at $baseline)"
 if [ "$n" -gt "$baseline" ]; then
   echo "no-sql: FAILED — $((n - baseline)) statement(s) ADDED. The ratchet only goes down."
   echo "Per file now:"
-  for f in workers/api/src/*.rs; do
+  for f in $(ls workers/api/src/*.rs | grep -v '/migrate\.rs$'); do
     c=$(grep -c "\.prepare(" "$f" || true)
     [ "$c" -gt 0 ] && echo "  $c $(basename "$f")"
   done | sort -rn

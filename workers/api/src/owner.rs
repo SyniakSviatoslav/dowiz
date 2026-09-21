@@ -990,13 +990,25 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<()>) -> Result<R
     // so re-saving a dish is idempotent, and an empty string DELETES rather
     // than storing a blank the menu would then serve as the dish's name.
     if let Some(by_locale) = &translations {
+        // CHECKED FIRST, ALL OF THEM, THEN WRITTEN ONCE. A per-entry write was
+        // an image read and write each; worse, a refusal half way through left
+        // the earlier languages saved and the later ones not.
+        let mut batch = Vec::new();
         for (locale, fields) in by_locale {
             for (field, value) in fields {
-                if let Err(e) = write_i18n(&db, "product", &id, locale, field, value).await {
-                    return Response::error(e, 400);
+                match i18n_check("product", locale, field, value) {
+                    Ok(loc) => batch.push((
+                        "product".to_string(),
+                        id.clone(),
+                        loc,
+                        field.clone(),
+                        value.clone(),
+                    )),
+                    Err(e) => return Response::error(e, 400),
                 }
             }
         }
+        apply_i18n(&place, batch).await?;
     }
 
     Response::from_json(&json!({ "ok": true, "id": id }))
@@ -1019,14 +1031,19 @@ fn i18n_value_ok(field: &str, value: &str) -> std::result::Result<(), String> {
 /// One translation row: upserted on its own key, DELETED when the value is
 /// empty rather than stored as a blank the menu would serve as the dish's
 /// name. Products and categories are the two things a customer reads.
-async fn write_i18n(
-    db: &D1Database,
+/// What a translation must be, decided with no I/O at all.
+///
+/// LIFTED OUT OF THE WRITE. It used to live inside an `async fn` that needed a
+/// database handle, so none of these rules could be tested and the whole
+/// function had to be reasoned about rather than exercised. This is the shape
+/// the verification blueprint's L1 asks for: a decision as a function of its
+/// arguments.
+fn i18n_check(
     entity_type: &str,
-    entity_id: &str,
     locale: &str,
     field: &str,
     value: &str,
-) -> std::result::Result<(), String> {
+) -> std::result::Result<String, String> {
     if !matches!(entity_type, "product" | "category") {
         return Err(format!("{entity_type:?} is not translatable"));
     }
@@ -1034,25 +1051,47 @@ async fn write_i18n(
     if locale.len() != 2 || !locale.chars().all(|c| c.is_ascii_lowercase()) {
         return Err(format!("{locale:?} is not a locale"));
     }
-    let q = if value.trim().is_empty() {
-        db.prepare(
-            "DELETE FROM content_i18n WHERE entity_type=?1 \
-             AND entity_id=?2 AND locale=?3 AND field=?4",
-        )
-        .bind(&[entity_type.into(), entity_id.into(), locale.clone().into(), field.into()])
-    } else {
+    if !value.trim().is_empty() {
         i18n_value_ok(field, value)?;
-        db.prepare(
-            "INSERT INTO content_i18n (entity_type,entity_id,locale,field,value) \
-             VALUES (?1,?2,?3,?4,?5) \
-             ON CONFLICT(entity_type,entity_id,locale,field) \
-             DO UPDATE SET value = excluded.value",
-        )
-        .bind(&[entity_type.into(), entity_id.into(), locale.clone().into(), field.into(),
-                value.into()])
-    };
-    let stmt = q.map_err(|e| format!("bind: {e}"))?;
-    stmt.run().await.map(|_| ()).map_err(|e| format!("write: {e}"))
+    }
+    Ok(locale)
+}
+
+/// Apply a batch of translations to the venue's own image, in ONE write.
+///
+/// ONE IMAGE, ONE TRANSACTION. Per-entry writes would have been one image read
+/// and one image write EACH -- a bulk save of a 165-dish menu in three
+/// languages is fifteen hundred of them. They are also not atomic: a failure
+/// half way would leave a dish named in one language and not the next.
+///
+/// An empty value REMOVES the entry rather than storing a blank the menu would
+/// then serve as the dish's name -- the same rule the DELETE arm of the old
+/// upsert had, now visible in one place.
+async fn apply_i18n(
+    place: &crate::hubstore::Place,
+    entries: Vec<(String, String, String, String, String)>,
+) -> Result<()> {
+    if entries.is_empty() {
+        return Ok(());
+    }
+    crate::hubstore::with_table(
+        place,
+        crate::hubstore::IMAGE_I18N,
+        crate::hubstore::I18N_BYTES,
+        move |t| {
+            for (entity_type, id, locale, field, value) in &entries {
+                let key = crate::hubstore::i18n_key(locale, entity_type, id, field);
+                if value.trim().is_empty() {
+                    t.remove(crate::hubstore::I18N_KIND, &key);
+                } else {
+                    t.put(crate::hubstore::I18N_KIND, &key, value, &[], &[])
+                        .map_err(|e| Error::RustError(format!("i18n: {e}")))?;
+                }
+            }
+            Ok(())
+        },
+    )
+    .await
 }
 
 /// `POST /api/owner/i18n` -- the venue's other languages, in bulk.
@@ -1107,8 +1146,8 @@ pub async fn write_translations(mut req: Request, ctx: RouteContext<()>) -> Resu
         loaded.catalog.products().into_iter().map(|(id, _)| id).collect();
     let categories: std::collections::BTreeSet<String> =
         loaded.catalog.categories().into_iter().map(|(id, _)| id).collect();
-    let mut written = 0;
     let mut refused: Vec<Value> = Vec::new();
+    let mut batch = Vec::new();
     for e in &body.entries {
         let known = match e.entity.as_str() {
             "product" => products.contains(&e.id),
@@ -1119,11 +1158,22 @@ pub async fn write_translations(mut req: Request, ctx: RouteContext<()>) -> Resu
             refused.push(json!({ "id": e.id, "why": format!("unknown {}", e.entity) }));
             continue;
         }
-        match write_i18n(&db, &e.entity, &e.id, &e.locale, &e.field, &e.value).await {
-            Ok(()) => written += 1,
+        match i18n_check(&e.entity, &e.locale, &e.field, &e.value) {
+            Ok(locale) => batch.push((
+                e.entity.clone(),
+                e.id.clone(),
+                locale,
+                e.field.clone(),
+                e.value.clone(),
+            )),
             Err(why) => refused.push(json!({ "id": e.id, "field": e.field, "why": why })),
         }
     }
+    // The ids were checked against THE VENUE'S OWN catalogue above, and the
+    // image this lands in is that venue's. Two independent reasons a
+    // translation cannot reach another restaurant, where the table had none.
+    let written = batch.len();
+    apply_i18n(&place, batch).await?;
     Response::from_json(&json!({ "ok": refused.is_empty(), "written": written, "refused": refused }))
 }
 
