@@ -96,13 +96,11 @@ pub(crate) async fn admin_only(
     struct Row {
         user_id: String,
     }
-    let row: Option<Row> = db
-        .prepare("SELECT user_id FROM platform_admins WHERE user_id = ?1 LIMIT 1")
-        .bind(&[user_id.clone().into()])
-        .map_err(|e| Response::error(format!("db: {e}"), 500).unwrap())?
-        .first(None)
+    let row = crate::identity_store::identity(&ctx.env)
         .await
-        .map_err(|e| Response::error(format!("db: {e}"), 500).unwrap())?;
+        .map_err(|e| Response::error(format!("store: {e}"), 500).unwrap())?
+        .get(crate::identity_store::K_ADMIN, &user_id)
+        .map(|_| Row { user_id: user_id.clone() });
 
     match row {
         Some(r) => Ok(r.user_id),
@@ -133,14 +131,16 @@ pub async fn hubs(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         status: String,
         created_at_ms: i64,
     }
-    let rows: Vec<Row> = db
-        .prepare(
-            "SELECT id, slug, name, status, created_at_ms FROM locations \
-             ORDER BY created_at_ms DESC",
-        )
-        .all()
+    // `ORDER BY created_at_ms DESC` over a handful of venues is a sort, not an
+    // index: the platform has two of them and will not have thousands before
+    // the registry gains a key for it.
+    let mut rows: Vec<Row> = crate::identity_store::registry(&ctx.env)
         .await?
-        .results()?;
+        .all(crate::identity_store::K_LOC)
+        .into_iter()
+        .filter_map(|(_, j)| serde_json::from_str::<Row>(&j).ok())
+        .collect();
+    rows.sort_by(|a, b| b.created_at_ms.cmp(&a.created_at_ms));
 
     let out: Vec<serde_json::Value> = rows
         .into_iter()
@@ -255,91 +255,97 @@ pub async fn create_hub(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
     struct Taken {
         slug: String,
     }
-    let taken: Option<Taken> = db
-        .prepare("SELECT slug FROM locations WHERE slug = ?1 LIMIT 1")
-        .bind(&[slug.clone().into()])?
-        .first(None)
-        .await?;
-    if taken.is_some() {
+    let mut owner_email: Option<String> = None;
+    // The venue id and the slug are the same string at birth. They are separate
+    // fields because a venue may be renamed on the web without its hub, its
+    // Durable Object and everything that names it moving with it -- see `Place`.
+    let now = now_ms();
+    let id = slug.clone();
+
+    // THE SLUG CHECK AND THE WRITE ARE ONE TURN. `SELECT ... LIMIT 1` followed
+    // by an INSERT is a check that can be stale by the time it is acted on; the
+    // uniqueness is a key here, and the object runs the two in one go.
+    let (i2, s2, n2, ph2) = (id.clone(), slug.clone(), name.clone(), body.phone.trim().to_string());
+    let taken = crate::identity_store::with_registry(&ctx.env, move |t| {
+        if t.lookup(&crate::identity_store::loc_by_slug(&s2)).is_some() {
+            return Ok(true);
+        }
+        let rec = serde_json::json!({
+            "id": i2, "slug": s2, "name": n2, "phone": ph2,
+            "status": "closed", "created_at_ms": now, "updated_at_ms": now,
+        })
+        .to_string();
+        t.put(
+            crate::identity_store::K_LOC,
+            &i2,
+            &rec,
+            &[(crate::identity_store::loc_by_slug(&s2), i2.clone())],
+            &[&crate::identity_store::loc_by_slug(&s2)],
+        )
+        .map_err(|e| Error::RustError(format!("registry: {e}")))?;
+        Ok(false)
+    })
+    .await?;
+    if taken {
         return Response::error(format!("slug '{slug}' is already a hub"), 409);
     }
 
-    let now = now_ms();
-    // The venue id and the slug are the same string at birth. They are separate
-    // columns because a venue may be renamed on the web without its hub, its
-    // Durable Object and every foreign key moving with it -- see `Place`.
-    let id = slug.clone();
-
-    db.prepare(
-        "INSERT INTO locations (id,slug,name,phone,status,created_at_ms,updated_at_ms) \
-         VALUES (?1,?2,?3,?4,'closed',?5,?5)",
-    )
-    .bind(&[
-        id.clone().into(),
-        slug.clone().into(),
-        name.clone().into(),
-        body.phone.trim().into(),
-        worker::wasm_bindgen::JsValue::from_f64(now as f64),
-    ])?
-    .run()
-    .await?;
-
-    // THE HUB OPENS CLOSED. A venue created mid-afternoon with `status='open'`
-    // and no menu would take orders it cannot cook; the owner opens it when
-    // there is something to sell.
-    let mut owner_email = None;
-    if let Some(o) = body.owner {
-        let email = o.email.trim().to_ascii_lowercase();
-        if email.is_empty() || o.password.is_empty() {
-            return Response::error("an owner needs an email and a password", 400);
-        }
-        let hash = hash_password(&o.password)
+    if let Some(o) = &body.owner {
+        let email = o.email.trim().to_lowercase();
+        let hash = crate::auth::hash_password(&o.password)
             .map_err(|e| Error::RustError(format!("cannot hash password: {e:?}")))?;
         let uid = crate::edge_id().ok_or_else(|| Error::RustError("no CSPRNG".into()))?;
-
-        db.prepare(
-            "INSERT INTO users (id,email,display_name,password_hash,created_at_ms) \
-             VALUES (?1,?2,?3,?4,?5) ON CONFLICT(email) DO NOTHING",
-        )
-        .bind(&[
-            uid.into(),
-            email.clone().into(),
-            o.name.clone().unwrap_or_default().into(),
-            hash.into(),
-            worker::wasm_bindgen::JsValue::from_f64(now as f64),
-        ])?
-        .run()
-        .await?;
-
-        // Read the id back rather than assuming the insert won: the email may
-        // already belong to someone, in which case THAT user becomes the owner
-        // of this venue and no second account is made for the same person.
-        #[derive(Deserialize)]
-        struct U {
-            id: String,
-        }
-        let u: Option<U> = db
-            .prepare("SELECT id FROM users WHERE email = ?1 LIMIT 1")
-            .bind(&[email.clone().into()])?
-            .first(None)
-            .await?;
-        if let Some(u) = u {
-            let mid = crate::edge_id().ok_or_else(|| Error::RustError("no CSPRNG".into()))?;
-            db.prepare(
-                "INSERT INTO memberships (id,user_id,location_id,role,status,created_at_ms) \
-                 VALUES (?1,?2,?3,'owner','active',?4) \
-                 ON CONFLICT(user_id,location_id,role) DO NOTHING",
+        // ONE TURN AGAIN, and it replaces an `ON CONFLICT DO NOTHING` followed
+        // by a read-back whose comment explained the subtlety: the email may
+        // already belong to someone, in which case THAT person becomes the
+        // owner and no second account is made. Here the existing holder is
+        // simply looked up first.
+        let (e2, n3, h2, u2, loc2) = (email.clone(), o.name.clone().unwrap_or_default(), hash, uid, id.clone());
+        crate::identity_store::with_identity(&ctx.env, move |t| {
+            let user_id = match crate::identity_store::user_id_for_email(t, &e2) {
+                Some(existing) => existing,
+                None => {
+                    let rec = serde_json::json!({
+                        "id": u2, "email": e2, "display_name": n3,
+                        "password_hash": h2, "created_at_ms": now,
+                    })
+                    .to_string();
+                    t.put(
+                        crate::identity_store::K_USER,
+                        &u2,
+                        &rec,
+                        &[(crate::identity_store::user_by_email(&e2), u2.clone())],
+                        &[&crate::identity_store::user_by_email(&e2)],
+                    )
+                    .map_err(|e| Error::RustError(format!("user: {e}")))?;
+                    u2.clone()
+                }
+            };
+            let m = serde_json::json!({
+                "user_id": user_id, "location_id": loc2,
+                "role": "owner", "status": "active", "created_at_ms": now,
+            })
+            .to_string();
+            t.put(
+                crate::identity_store::K_MEMBER,
+                &crate::identity_store::member_id(&loc2, &user_id),
+                &m,
+                &[
+                    (
+                        crate::identity_store::member_by_venue(&loc2, &user_id),
+                        user_id.clone(),
+                    ),
+                    (
+                        crate::identity_store::member_by_user(&user_id, &loc2),
+                        loc2.clone(),
+                    ),
+                ],
+                &[],
             )
-            .bind(&[
-                mid.into(),
-                u.id.into(),
-                id.clone().into(),
-                worker::wasm_bindgen::JsValue::from_f64(now as f64),
-            ])?
-            .run()
-            .await?;
-            owner_email = Some(email);
-        }
+            .map_err(|e| Error::RustError(format!("membership: {e}")))
+        })
+        .await?;
+        owner_email = Some(email);
     }
 
     // THE CATALOGUE IMAGE IS SEEDED WITH THE VENUE, and skipping this made a

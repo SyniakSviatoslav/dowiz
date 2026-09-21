@@ -204,22 +204,38 @@ pub async fn seed(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
         let pick = |k: &str, d: &str| {
             bundle.location.get(k).and_then(|x| x.as_str()).unwrap_or(d).to_string()
         };
-        let _ = db
-            .prepare(
-                "INSERT INTO locations (id,slug,name,phone,status,created_at_ms,updated_at_ms) \
-                 VALUES (?1,?2,?3,?4,?5,?6,?6) ON CONFLICT(id) DO UPDATE SET \
-                 slug=excluded.slug, name=excluded.name, updated_at_ms=excluded.updated_at_ms",
+        let (i2, sl, nm, ph, st) = (
+            id.to_string(),
+            pick("slug", id),
+            pick("name", "Venue"),
+            pick("phone", ""),
+            pick("status", "closed"),
+        );
+        // The registry record is a POINTER, not a second copy of the truth:
+        // only what a lookup by slug and the platform's listing need.
+        // Everything the storefront reads still comes from the image.
+        crate::identity_store::with_registry(&ctx.env, move |t| {
+            // The upsert kept `created_at_ms` and replaced the rest; so does
+            // this, and for the same reason -- re-seeding a venue must not make
+            // it look newly created in the platform's list.
+            let created = crate::identity_store::rec(t, crate::identity_store::K_LOC, &i2)
+                .map(|r| crate::identity_store::i_of(&r, "created_at_ms"))
+                .unwrap_or(now);
+            let rec = serde_json::json!({
+                "id": i2, "slug": sl, "name": nm, "phone": ph, "status": st,
+                "created_at_ms": created, "updated_at_ms": now,
+            })
+            .to_string();
+            t.put(
+                crate::identity_store::K_LOC,
+                &i2,
+                &rec,
+                &[(crate::identity_store::loc_by_slug(&sl), i2.clone())],
+                &[],
             )
-            .bind(&[
-                id.into(),
-                pick("slug", id).into(),
-                pick("name", "Venue").into(),
-                pick("phone", "").into(),
-                pick("status", "closed").into(),
-                worker::wasm_bindgen::JsValue::from_f64(now as f64),
-            ])?
-            .run()
-            .await?;
+            .map_err(|e| Error::RustError(format!("registry: {e}")))
+        })
+        .await?;
     }
 
     // ── first owner, if one was supplied ──
@@ -243,48 +259,66 @@ pub async fn seed(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
 
         // Idempotent: seeding twice must not mint a second owner for the same
         // email, and must not overwrite a password already in use.
-        db.prepare(
-            "INSERT INTO users (id,email,display_name,password_hash,created_at_ms) \
-             VALUES (?1,?2,?3,?4,?5) ON CONFLICT(email) DO NOTHING",
-        )
-        .bind(&[
-            uid.clone().into(),
-            email.clone().into(),
-            o.name.clone().unwrap_or_default().into(),
-            hash.into(),
-            worker::wasm_bindgen::JsValue::from_f64(now as f64),
-        ])?
-        .run()
-        .await?;
-
-        #[derive(Deserialize)]
-        struct U {
-            id: String,
-        }
-        let u: Option<U> = db
-            .prepare("SELECT id FROM users WHERE email = ?1")
-            .bind(&[email.into()])?
-            .first(None)
-            .await?;
-        if let Some(u) = u {
-            let Some(mid) = crate::edge_id() else {
-                return Response::error("no platform CSPRNG", 500);
-            };
-            db.prepare(
-                "INSERT INTO memberships (id,user_id,location_id,role,status,created_at_ms) \
-                 VALUES (?1,?2,?3,'owner','active',?4) \
-                 ON CONFLICT(user_id,location_id,role) DO NOTHING",
-            )
-            .bind(&[
-                mid.into(),
-                u.id.clone().into(),
-                loc_id.into(),
-                worker::wasm_bindgen::JsValue::from_f64(now as f64),
-            ])?
-            .run()
-            .await?;
-            owner_id = Some(u.id);
-        }
+        // ONE TURN: mint the person if the address is free, otherwise adopt the
+        // one who holds it, and make them the owner either way. The three
+        // statements this replaces were an `ON CONFLICT DO NOTHING`, a read-back
+        // to find out which of the two had happened, and a second
+        // `ON CONFLICT DO NOTHING` -- a sequence whose correctness depended on
+        // nothing else running between them.
+        let (u2, e2, n2, h2, l2) = (
+            uid.clone(),
+            email.clone(),
+            o.name.clone().unwrap_or_default(),
+            hash,
+            loc_id.clone(),
+        );
+        owner_id = Some(
+            crate::identity_store::with_identity(&ctx.env, move |t| {
+                let user_id = match crate::identity_store::user_id_for_email(t, &e2) {
+                    Some(existing) => existing,
+                    None => {
+                        let rec = serde_json::json!({
+                            "id": u2, "email": e2, "display_name": n2,
+                            "password_hash": h2, "created_at_ms": now,
+                        })
+                        .to_string();
+                        t.put(
+                            crate::identity_store::K_USER,
+                            &u2,
+                            &rec,
+                            &[(crate::identity_store::user_by_email(&e2), u2.clone())],
+                            &[&crate::identity_store::user_by_email(&e2)],
+                        )
+                        .map_err(|e| Error::RustError(format!("user: {e}")))?;
+                        u2.clone()
+                    }
+                };
+                let m = serde_json::json!({
+                    "user_id": user_id, "location_id": l2,
+                    "role": "owner", "status": "active", "created_at_ms": now,
+                })
+                .to_string();
+                t.put(
+                    crate::identity_store::K_MEMBER,
+                    &crate::identity_store::member_id(&l2, &user_id),
+                    &m,
+                    &[
+                        (
+                            crate::identity_store::member_by_venue(&l2, &user_id),
+                            user_id.clone(),
+                        ),
+                        (
+                            crate::identity_store::member_by_user(&user_id, &l2),
+                            l2.clone(),
+                        ),
+                    ],
+                    &[],
+                )
+                .map_err(|e| Error::RustError(format!("membership: {e}")))?;
+                Ok(user_id)
+            })
+            .await?,
+        );
     }
 
     // ── couriers ──
@@ -312,45 +346,62 @@ pub async fn seed(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
             .clone()
             .unwrap_or_else(|| format!("{}@courier.invalid", phone.replace(['+', ' '], "")));
         let now = Date::now().as_millis() as i64;
-        db.prepare(
-            "INSERT INTO couriers (id,email_encrypted,email_hash,phone_encrypted,phone_hash,\
-             full_name_encrypted,password_hash,status,created_at_ms) \
-             VALUES (?1,?2,?3,?4,?5,?6,?7,'active',?8) ON CONFLICT(email_hash) DO NOTHING",
-        )
-        .bind(&[
-            cid.clone().into(),
-            email.clone().into(),
-            crate::auth::sha256_hex(&email.to_lowercase()).into(),
-            phone.clone().into(),
-            crate::auth::sha256_hex(&phone).into(),
-            c.name.clone().unwrap_or_default().into(),
-            hash.into(),
-            worker::wasm_bindgen::JsValue::from_f64(now as f64),
-        ])?
-        .run()
-        .await?;
-
-        #[derive(Deserialize)]
-        struct C {
-            id: String,
-        }
-        let row: Option<C> = db
-            .prepare("SELECT id FROM couriers WHERE phone_hash = ?1")
-            .bind(&[crate::auth::sha256_hex(&phone).into()])?
-            .first(None)
-            .await?;
-        if let Some(row) = row {
-            db.prepare(
-                "INSERT INTO courier_locations (courier_id,location_id,role,added_at_ms) \
-                 VALUES (?1,?2,'courier',?3) ON CONFLICT DO NOTHING",
+        // THE COURIER AND THEIR ROSTER ROW IN ONE TURN, and the `ON CONFLICT DO
+        // NOTHING` becomes what it always meant: seeding twice adopts the
+        // person who already holds the address rather than minting a second.
+        let (c2, e2, p2, n2, h2, l2) = (
+            cid.clone(),
+            email.clone(),
+            phone.clone(),
+            c.name.clone().unwrap_or_default(),
+            hash,
+            loc_id.clone(),
+        );
+        let added = crate::identity_store::with_couriers(&ctx.env, move |t| {
+            let email_hash = crate::auth::sha256_hex(&e2.to_lowercase());
+            let phone_hash = crate::auth::sha256_hex(&p2);
+            let id = match crate::identity_store::courier_id_for_email(t, &email_hash)
+                .or_else(|| crate::identity_store::courier_id_for_phone(t, &phone_hash))
+            {
+                Some(existing) => existing,
+                None => {
+                    let rec = serde_json::json!({
+                        "id": c2, "email_encrypted": e2, "email_hash": email_hash,
+                        "phone_encrypted": p2, "phone_hash": phone_hash,
+                        "full_name_encrypted": n2, "password_hash": h2,
+                        "status": "active", "created_at_ms": now,
+                    });
+                    let index = crate::identity_store::courier_index(&c2, &rec);
+                    t.put(
+                        crate::identity_store::K_COURIER,
+                        &c2,
+                        &rec.to_string(),
+                        &index,
+                        &[],
+                    )
+                    .map_err(|e| Error::RustError(format!("courier: {e}")))?;
+                    c2.clone()
+                }
+            };
+            let roster = serde_json::json!({
+                "courier_id": id, "location_id": l2, "role": "courier", "added_at_ms": now,
+            })
+            .to_string();
+            t.put(
+                crate::identity_store::K_ROSTER,
+                &crate::identity_store::roster_id(&l2, &id),
+                &roster,
+                &[
+                    (crate::identity_store::roster_by_venue(&l2, &id), id.clone()),
+                    (crate::identity_store::roster_by_courier(&id, &l2), l2.clone()),
+                ],
+                &[],
             )
-            .bind(&[
-                row.id.into(),
-                loc_id.clone().into(),
-                worker::wasm_bindgen::JsValue::from_f64(now as f64),
-            ])?
-            .run()
-            .await?;
+            .map_err(|e| Error::RustError(format!("roster: {e}")))?;
+            Ok(true)
+        })
+        .await?;
+        if added {
             n_courier += 1;
         }
     }
