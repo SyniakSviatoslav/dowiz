@@ -153,8 +153,8 @@ await act('ready', 'READY');
 // every one of those lines pointed at the product rather than at the
 // credentials. One line here says which it is.
 let VENUE_ID = null;
-const CPHONE = process.env.QA_COURIER_PHONE || creds.COURIER_PHONE;
-const CPASS = process.env.QA_COURIER_PASSWORD || creds.COURIER_PASSWORD;
+const CPHONE = process.env.QA_COURIER_PHONE || creds.QA_COURIER_PHONE || creds.COURIER_PHONE;
+const CPASS = process.env.QA_COURIER_PASSWORD || creds.QA_COURIER_PASSWORD || creds.COURIER_PASSWORD;
 {
   const r = await api('/api/courier/auth/login', {
     method: 'POST', headers: { 'content-type': 'application/json' },

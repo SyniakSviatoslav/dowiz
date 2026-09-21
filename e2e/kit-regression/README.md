@@ -118,6 +118,7 @@ HOST=https://sushi-durres.dowiz.org node e2e/kit-regression/cycle-full.mjs
 | `socket-probe.mjs` | counts the `/api/live` connections a page really opens | that a venue whose sockets all fail looks exactly like a quiet venue |
 | `landing-price.mjs` | the price is on the landing page, in each language | — |
 | `lang-scrim.mjs` | the language sheet opens and dismisses | — |
+| `stock-cycle.mjs` | the stock ledger: delivery → reserve → consume → release → the automatic 86 | that the whole subsystem is inert in production — no venue has modelled an ingredient |
 
 `cycle-full.mjs` reads `/root/.dowiz_owner` for the owner, and takes
 `QA_COURIER_PHONE` / `QA_COURIER_PASSWORD` for the courier. **The courier must
@@ -135,3 +136,45 @@ does. Moving a `_`-named script into this directory WITHOUT renaming it does
 not commit it: git records the move as a deletion and says nothing, which is
 how three of these four were lost the first time and had to be recovered from
 `01ed323^`.
+
+
+## stock-cycle.mjs — does an order draw the stock down?
+
+```sh
+node e2e/kit-regression/stock-cycle.mjs
+```
+
+`dowiz_hub::stock` is a full deterministic ledger and the Worker calls it from
+three places: a reservation when an order is placed, a settle when the kitchen
+starts or the order dies, and the owner's three manual movements. All of it
+works — this script proves each step against a live venue:
+
+| step | asserted |
+|---|---|
+| a delivery | `onHand` rises by exactly what was received |
+| an order | `reserved` rises, `onHand` does **not** — placing is not consuming |
+| `preparing` | `onHand` falls, `reserved` clears |
+| `cancel` | the reservation comes back, `onHand` untouched |
+| one dish too many | **409**, `"<item>: 800 wanted, 600 available"` |
+
+**It builds its own ingredient and dish and takes both away again**, so it can
+run against a real venue. Two things it had to learn the hard way:
+
+- **Retiring a supply does not delete its ledger.** That is the design — the
+  events that moved it stay folded — so re-creating the same id resurrects the
+  last run's shelf. The second run read 1600 g after delivering 1000 g and
+  blamed the reservation arithmetic. It now opens with a stocktake to zero.
+- **The public menu never carries `bom`.** Counting recipes by looking for it
+  reads zero on a venue where every dish has one. What the menu does carry is
+  what a recipe DERIVES — `weightG`, `nutritionDerived` — and the script proves
+  that instrument fires on its own dish before any coverage number is believed.
+
+### What that measurement then said
+
+165 dishes on each venue, **0 with a recipe**, **0 supplies**. Every order this
+platform has taken reserved nothing and consumed nothing, and no order could
+have been refused for stock. That is not a defect: `storefront.rs` says so out
+loud — *"a venue that has not modelled its ingredients reserves nothing and
+this is a no-op — stock control that must be complete before anything can be
+sold is stock control nobody switches on."* The 73 dishes with a weight and the
+163 with a calorie count carry hand-typed values, not derived ones.
