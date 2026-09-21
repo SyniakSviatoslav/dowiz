@@ -289,52 +289,67 @@ fn inbound_of(body: &Value) -> Vec<Inbound> {
     out
 }
 
-/// The table, guaranteed here rather than only by `migrations/0007`: the
-/// migration is the record and applies on the next `d1 migrations apply`,
-/// but a webhook must not lose a customer's message to a step nobody ran
-/// yet. `IF NOT EXISTS` makes this a no-op once either has happened.
-const SCHEMA: &[&str] = &[
-    "CREATE TABLE IF NOT EXISTS channel_messages (id TEXT PRIMARY KEY, location_id TEXT NOT NULL, \
-     channel TEXT NOT NULL CHECK (channel IN ('whatsapp','instagram')), \
-     direction TEXT NOT NULL CHECK (direction IN ('in','out')), peer TEXT NOT NULL, peer_name TEXT, \
-     text TEXT NOT NULL, external_id TEXT, at_ms INTEGER NOT NULL, read_ms INTEGER)",
-    "CREATE INDEX IF NOT EXISTS channel_messages_thread ON channel_messages (location_id, channel, peer, at_ms)",
-    "CREATE INDEX IF NOT EXISTS channel_messages_recent ON channel_messages (location_id, at_ms DESC)",
-];
+// THE TABLE AND ITS TWO INDEXES WERE HERE, created at runtime because "a
+// webhook must not lose a customer's message to a migration step nobody ran
+// yet". That whole problem belongs to SQL: an image is created by its first
+// write, and `load_log_at` returns an empty one rather than an error. There is
+// no schema to ensure.
 
-async fn ensure_schema(db: &D1Database) -> Result<()> {
-    for sql in SCHEMA {
-        db.prepare(*sql).run().await?;
-    }
-    Ok(())
+/// The venue's inbox: every message either way, newest first, plus the marks
+/// that say how far the owner has read. An append log, because that is what a
+/// conversation is.
+pub const IMAGE_INBOX: &str = "inbox";
+
+/// A message.
+const K_MSG: &str = "m";
+/// A read mark: everything in this conversation at or before `atMs` is read.
+///
+/// A MUTATION ON AN APPEND LOG IS AN APPEND. `UPDATE channel_messages SET
+/// read_ms = ...` became a record saying how far the reading got, and "unread"
+/// is a fold over the two kinds. That is the same move the order log made when
+/// an event started carrying a delta.
+const K_READ: &str = "r";
+
+/// One conversation's key: the channel and the peer, which is exactly the
+/// composite index the table carried.
+fn conv(channel: &str, peer: &str) -> String {
+    format!("{channel}/{peer}")
 }
 
-async fn store(db: &D1Database, venue: &str, direction: &str, m: &Inbound) -> Result<bool> {
+/// Store one message, ignoring a duplicate delivery.
+///
+/// `INSERT OR IGNORE` on a primary key becomes a look before the append: Meta
+/// re-delivers a webhook it thinks was not acknowledged, and a conversation
+/// showing the same question twice is what the ignore was for. The id is the
+/// external one when there is one, and the channel/peer/time when there is not.
+async fn store(place: &crate::hubstore::Place, direction: &str, m: &Inbound) -> Result<bool> {
     let id = if m.external_id.is_empty() {
         format!("{}:{}:{}", m.channel.as_str(), m.peer, m.at_ms)
     } else {
         format!("{}:{}", m.channel.as_str(), m.external_id)
     };
-    let r = db
-        .prepare(
-            "INSERT OR IGNORE INTO channel_messages \
-             (id, location_id, channel, direction, peer, peer_name, text, external_id, at_ms) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-        )
-        .bind(&[
-            id.into(),
-            venue.into(),
-            m.channel.as_str().into(),
-            direction.into(),
-            m.peer.clone().into(),
-            m.peer_name.clone().map(JsValue::from).unwrap_or(JsValue::NULL),
-            m.text.clone().into(),
-            m.external_id.clone().into(),
-            JsValue::from_f64(m.at_ms as f64),
-        ])?
-        .run()
-        .await?;
-    Ok(r.meta().ok().flatten().and_then(|m| m.changes).unwrap_or(0) > 0)
+    let subject = conv(m.channel.as_str(), &m.peer);
+    let rec = json!({
+        "id": id, "channel": m.channel.as_str(), "direction": direction,
+        "peer": m.peer, "peerName": m.peer_name, "text": m.text,
+        "externalId": m.external_id, "atMs": m.at_ms,
+    })
+    .to_string();
+    crate::hubstore::with_log(place, IMAGE_INBOX, move |log| {
+        let seen = log.about(K_MSG, Some(&subject), usize::MAX).into_iter().any(|e| {
+            serde_json::from_str::<Value>(&e.json)
+                .ok()
+                .and_then(|v| v.get("id").and_then(Value::as_str).map(|s| s == id))
+                .unwrap_or(false)
+        });
+        if seen {
+            return Ok(false);
+        }
+        log.append(K_MSG, &subject, &rec)
+            .map_err(|e| Error::RustError(format!("inbox: {e:?}")))?;
+        Ok(true)
+    })
+    .await
 }
 
 /// `POST /api/webhooks/meta` — a delivery. Stored, then the owner is told
@@ -384,10 +399,9 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Response
     }
     let body: Value = serde_json::from_slice(&raw).unwrap_or(Value::Null);
     let db = ctx.d1("DB")?;
-    ensure_schema(&db).await?;
     let mut stored = 0usize;
     for m in inbound_of(&body) {
-        match store(&db, &place.venue, "in", &m).await {
+        match store(&place, "in", &m).await {
             Ok(true) => {
                 stored += 1;
                 let chat = settings.known("notify.telegram.chat");
@@ -438,25 +452,43 @@ pub async fn inbox(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
-    ensure_schema(&db).await?;
-    let rows: Vec<Row> = db
-        .prepare(
-            "SELECT channel, direction, peer, peer_name, text, at_ms, read_ms FROM channel_messages \
-             WHERE location_id = ?1 ORDER BY at_ms DESC LIMIT ?2",
-        )
-        .bind(&[loc.clone().into(), JsValue::from_f64(RECENT_ROWS as f64)])?
-        .all()
-        .await?
-        .results()?;
+    // ONE WALK OF THE VENUE'S OWN LOG. This was `ORDER BY at_ms DESC LIMIT n`
+    // over a table shared by every venue, filtered by a `location_id` somebody
+    // had to remember to put in the WHERE clause. The log is the venue's, so
+    // there is no venue to filter on, and it is already newest first.
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
+    let entries = crate::hubstore::load_log(&place, IMAGE_INBOX).await?.log.entries();
+    // How far the owner has read each conversation. Newest first, so the first
+    // mark seen for a conversation is the furthest it ever got.
+    let mut read_to: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+    for e in entries.iter().filter(|e| e.kind == K_READ) {
+        let at = serde_json::from_str::<Value>(&e.json)
+            .ok()
+            .and_then(|v| v.get("atMs").and_then(Value::as_i64))
+            .unwrap_or(0);
+        read_to.entry(e.subject.clone()).and_modify(|v| *v = (*v).max(at)).or_insert(at);
+    }
     let mut threads: Vec<Value> = Vec::new();
-    for r in rows {
-        let key = (r.channel.clone(), r.peer.clone());
-        if let Some(t) = threads.iter_mut().find(|t| t["channel"] == key.0 && t["peer"] == key.1) {
-            if r.direction == "in" && r.read_ms.is_none() {
+    let mut seen = 0usize;
+    for e in entries.iter().filter(|e| e.kind == K_MSG) {
+        seen += 1;
+        if seen > RECENT_ROWS {
+            break;
+        }
+        let Ok(r) = serde_json::from_str::<Value>(&e.json) else { continue };
+        let f = |k: &str| r.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+        let (channel, peer, direction) = (f("channel"), f("peer"), f("direction"));
+        let at_ms = r.get("atMs").and_then(Value::as_i64).unwrap_or(0);
+        let peer_name = r.get("peerName").and_then(Value::as_str).map(str::to_string);
+        let unread = direction == "in" && at_ms > *read_to.get(&e.subject).unwrap_or(&0);
+        if let Some(t) =
+            threads.iter_mut().find(|t| t["channel"] == channel && t["peer"] == peer)
+        {
+            if unread {
                 t["unread"] = json!(t["unread"].as_u64().unwrap_or(0) + 1);
             }
             if t["name"].is_null() {
-                if let Some(n) = r.peer_name.clone() {
+                if let Some(n) = peer_name {
                     t["name"] = json!(n);
                 }
             }
@@ -466,12 +498,12 @@ pub async fn inbox(req: Request, ctx: RouteContext<()>) -> Result<Response> {
             continue;
         }
         threads.push(json!({
-            "channel": r.channel, "peer": r.peer, "name": r.peer_name, "last": r.text,
-            "atMs": r.at_ms, "fromThem": r.direction == "in",
-            "unread": if r.direction == "in" && r.read_ms.is_none() { 1 } else { 0 },
+            "channel": channel, "peer": peer, "name": peer_name, "last": f("text"),
+            "atMs": at_ms, "fromThem": direction == "in",
+            "unread": if unread { 1 } else { 0 },
         }));
     }
-    let settings = crate::hubstore::load_settings(&crate::hubstore::Place::of_any(&req, &ctx).await?).await?.settings;
+    let settings = crate::hubstore::load_settings(&place).await?.settings;
     Response::from_json(&json!({
         "threads": threads,
         "channels": { "whatsapp": whatsapp_cfg(&settings).is_some(), "instagram": instagram_cfg(&settings).is_some() },
@@ -496,27 +528,55 @@ pub async fn thread(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     if Channel::from_str(&channel).is_none() {
         return Response::error("unknown channel", 400);
     }
-    ensure_schema(&db).await?;
-    let rows: Vec<Row> = db
-        .prepare(
-            "SELECT channel, direction, peer, peer_name, text, at_ms, read_ms FROM channel_messages \
-             WHERE location_id = ?1 AND channel = ?2 AND peer = ?3 ORDER BY at_ms ASC LIMIT ?4",
-        )
-        .bind(&[loc.clone().into(), channel.clone().into(), peer.clone().into(), JsValue::from_f64(THREAD_ROWS as f64)])?
-        .all()
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
+    let subject = conv(&channel, &peer);
+    // Oldest first, which is how a conversation reads. `about` is newest first
+    // -- the order every one of these tables was indexed in -- so it is
+    // reversed here rather than stored twice.
+    let mut msgs = crate::hubstore::load_log(&place, IMAGE_INBOX)
         .await?
-        .results()?;
-    db.prepare(
-        "UPDATE channel_messages SET read_ms = ?4 WHERE location_id = ?1 AND channel = ?2 AND peer = ?3 \
-         AND direction = 'in' AND read_ms IS NULL",
-    )
-    .bind(&[loc.into(), channel.into(), peer.clone().into(), JsValue::from_f64(now_ms() as f64)])?
-    .run()
-    .await?;
-    let name = rows.iter().find_map(|r| r.peer_name.clone());
+        .log
+        .about(K_MSG, Some(&subject), THREAD_ROWS);
+    msgs.reverse();
+    let rows: Vec<Value> = msgs
+        .iter()
+        .filter_map(|e| serde_json::from_str::<Value>(&e.json).ok())
+        .collect();
+    // MARKED READ BY APPENDING, not by updating. The mark says how far the
+    // reading got; "unread" is the fold of the two kinds. One record per
+    // opening of a conversation, and the prune bounds the rest.
+    let furthest = rows.iter().filter_map(|r| r.get("atMs").and_then(Value::as_i64)).max();
+    if let Some(at) = furthest {
+        let subj = subject.clone();
+        let mark = json!({ "atMs": at }).to_string();
+        crate::hubstore::with_log(&place, IMAGE_INBOX, move |log| {
+            let already = log
+                .about(K_READ, Some(&subj), 1)
+                .first()
+                .and_then(|e| serde_json::from_str::<Value>(&e.json).ok())
+                .and_then(|v| v.get("atMs").and_then(Value::as_i64))
+                .unwrap_or(0);
+            // A conversation opened twice with nothing new in it must not add a
+            // second identical mark: an append log with a per-view record is a
+            // log that grows with viewing rather than with talking.
+            if already >= at {
+                return Ok(());
+            }
+            log.append(K_READ, &subj, &mark)
+                .map_err(|e| Error::RustError(format!("inbox: {e:?}")))
+        })
+        .await?;
+    }
+    let name = rows
+        .iter()
+        .find_map(|r| r.get("peerName").and_then(Value::as_str).map(str::to_string));
     Response::from_json(&json!({
         "peer": peer, "name": name,
-        "messages": rows.iter().map(|r| json!({ "fromThem": r.direction == "in", "text": r.text, "atMs": r.at_ms })).collect::<Vec<_>>(),
+        "messages": rows.iter().map(|r| json!({
+            "fromThem": r.get("direction").and_then(Value::as_str) == Some("in"),
+            "text": r.get("text").and_then(Value::as_str).unwrap_or(""),
+            "atMs": r.get("atMs").and_then(Value::as_i64).unwrap_or(0),
+        })).collect::<Vec<_>>(),
     }))
 }
 
@@ -563,8 +623,7 @@ pub async fn reply(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
         Err(e) => return Response::error(e, 502),
     };
     let m = Inbound { channel, peer: peer.clone(), peer_name: None, text, external_id: external_id.clone(), at_ms: now_ms() };
-    ensure_schema(&db).await?;
-    store(&db, &loc, "out", &m).await?;
+    store(&crate::hubstore::Place::of_any(&req, &ctx).await?, "out", &m).await?;
     Response::from_json(&json!({ "id": external_id, "atMs": m.at_ms }))
 }
 

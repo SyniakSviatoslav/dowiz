@@ -86,17 +86,33 @@ fn num(n: i64) -> worker::wasm_bindgen::JsValue {
 }
 
 
-async fn load(db: &D1Database, thread_id: &str, location: &str) -> Result<Vec<MessageRow>> {
-    Ok(db
-        .prepare(
-            "SELECT id, from_party, seq, kind, body, read_through, sent_at_ms \
-             FROM thread_messages WHERE thread_id = ?1 AND location_id = ?2 \
-             ORDER BY seq ASC, from_party ASC",
-        )
-        .bind(&[thread_id.into(), location.into()])?
-        .all()
+/// The venue's conversations with its customers. An append log: a message
+/// arrives and is replayed in order, which is exactly what `ORDER BY seq ASC`
+/// was asking a table to pretend to be.
+pub const IMAGE_THREADS: &str = "threads";
+const K_MSG: &str = "m";
+
+/// One thread's messages, oldest first, replayed for the kernel.
+///
+/// `location_id` is gone from the question because the image IS the venue. The
+/// old query carried it in a `WHERE` clause that somebody had to remember, and
+/// the table it read has no venue of its own — which is the shape six of this
+/// platform's defects had.
+async fn load(place: &crate::hubstore::Place, thread_id: &str) -> Result<Vec<MessageRow>> {
+    let mut rows: Vec<MessageRow> = crate::hubstore::load_log(place, IMAGE_THREADS)
         .await?
-        .results()?)
+        .log
+        .about(K_MSG, Some(thread_id), usize::MAX)
+        .into_iter()
+        .filter_map(|e| serde_json::from_str::<MessageRow>(&e.json).ok())
+        .collect();
+    // `about` is newest first; the kernel replays oldest first. The secondary
+    // sort on the party is kept because the old `ORDER BY seq ASC, from_party
+    // ASC` had it: the two sides number their own messages, so a seq alone is
+    // not a total order and an unstable one would replay differently on two
+    // reads of the same log.
+    rows.sort_by(|a, b| a.seq.cmp(&b.seq).then(a.from_party.cmp(&b.from_party)));
+    Ok(rows)
 }
 
 /// `GET /api/public/locations/:slug/threads/:id?after=<seq>`
@@ -121,7 +137,7 @@ pub async fn messages(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     {
         return Ok(r);
     }
-    let rows = load(&db, &id, &place.venue).await?;
+    let rows = load(&place, &id).await?;
 
     let t = match to_thread(&rows) {
         Ok(t) => t,
@@ -213,18 +229,30 @@ pub async fn send(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
     };
     let _ = &b.from;
 
-    // The thread must exist and belong to this venue. Creating one implicitly
-    // would let any caller open a conversation inside somebody else's hub.
-    let exists: Option<serde_json::Value> = db
-        .prepare("SELECT id FROM threads WHERE id = ?1 AND location_id = ?2")
-        .bind(&[thread_id.clone().into(), place.venue.clone().into()])?
-        .first(None)
-        .await?;
-    if exists.is_none() {
-        return Response::error("not found", 404);
+    // ── THE THREAD MUST BE ABOUT SOMETHING OF THIS VENUE'S ──
+    //
+    // This read `SELECT id FROM threads WHERE id = ?1 AND location_id = ?2` and
+    // NOTHING IN THIS CODEBASE EVER INSERTED INTO `threads`. The table is empty
+    // in production — verified, zero rows — so every send has answered 404 for
+    // as long as the route has existed. The check was not protecting the
+    // feature; it was the feature's only gate and it was shut.
+    //
+    // What the check was FOR was that a caller cannot open a conversation
+    // inside somebody else's hub. In the venue's own image that is structural:
+    // the bytes are this venue's object. What is still worth refusing is a
+    // thread id that names nothing, so a typo does not silently create a
+    // conversation nobody will ever find — so a thread is valid when it already
+    // has messages, or when its id is an ORDER in this venue's log.
+    let rows = load(&place, &thread_id).await?;
+    if rows.is_empty() {
+        let known = crate::hubstore::orders(&place)
+            .await?
+            .into_iter()
+            .any(|o| o.order_id == thread_id);
+        if !known {
+            return Response::error("not found", 404);
+        }
     }
-
-    let rows = load(&db, &thread_id, &place.venue).await?;
     let t = match to_thread(&rows) {
         Ok(t) => t,
         Err(why) => return Response::error(format!("thread unreadable: {why}"), 500),
@@ -238,12 +266,7 @@ pub async fn send(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // message under a used id. Asking the database before asking the kernel is
     // what makes a retry free. Found by a probe against production, where the
     // second send answered "already used by a different message".
-    let already: Option<serde_json::Value> = db
-        .prepare("SELECT id FROM thread_messages WHERE id = ?1")
-        .bind(&[msg_id.clone().into()])?
-        .first(None)
-        .await?;
-    if already.is_some() {
+    if rows.iter().any(|r| r.id == msg_id) {
         return Response::from_json(&json!({ "id": msg_id, "replayed": true }));
     }
 
@@ -268,29 +291,24 @@ pub async fn send(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
         Err(e) => return Response::error(e.message(), 422),
     };
 
-    db.prepare(
-        "INSERT INTO thread_messages (id, thread_id, location_id, from_party, seq, kind, body, \
-         read_through, sent_at_ms) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
-    )
-    .bind(&[
-        msg_id.clone().into(),
-        thread_id.into(),
-        place.venue.clone().into(),
-        from.as_str().into(),
-        num(candidate.seq as i64),
-        match candidate.body {
-            Body::Read { .. } => "READ",
-            _ => "TEXT",
-        }
-        .into(),
-        b.body.into(),
-        match candidate.body {
-            Body::Read { through_seq } => num(through_seq as i64),
-            _ => JsValue::NULL,
+    let stored = json!({
+        "id": msg_id,
+        "from_party": from.as_str(),
+        "seq": candidate.seq as i64,
+        "kind": match candidate.body { Body::Read { .. } => "READ", _ => "TEXT" },
+        "body": b.body,
+        "read_through": match candidate.body {
+            Body::Read { through_seq } => json!(through_seq as i64),
+            _ => serde_json::Value::Null,
         },
-        num(now),
-    ])?
-    .run()
+        "sent_at_ms": now,
+    })
+    .to_string();
+    let subject = thread_id.clone();
+    crate::hubstore::with_log(&place, IMAGE_THREADS, move |log| {
+        log.append(K_MSG, &subject, &stored)
+            .map_err(|e| Error::RustError(format!("thread: {e:?}")))
+    })
     .await?;
 
     Response::from_json(&json!({
