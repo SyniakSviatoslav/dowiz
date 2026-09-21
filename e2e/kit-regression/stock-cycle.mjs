@@ -21,6 +21,8 @@ const HOST = process.env.HOST || 'https://sushi-durres.dowiz.org';
 const creds = Object.fromEntries(fs.readFileSync('/root/.dowiz_owner', 'utf8')
   .split('\n').filter(l => l.startsWith('export ')).map(l => l.slice(7).split('=')));
 
+const CPHONE = process.env.QA_COURIER_PHONE || creds.QA_COURIER_PHONE;
+const CPASS = process.env.QA_COURIER_PASSWORD || creds.QA_COURIER_PASSWORD;
 const SUPPLY = 'qa-stock-salmon';
 const PER_DISH = 200;      // grams of the supply in one dish
 const RECEIVED = 1000;     // grams put on the shelf
@@ -171,9 +173,49 @@ step('an order for more than is on the shelf is REFUSED',
 const overId = over.body?.id || over.body?.order?.id;
 
 // ── 7. put the venue back ───────────────────────────────────────────────────
-for (const id of [ORDER1, overId].filter(Boolean)) {
-  await own(`/api/owner/orders/${id}/action`, { action: 'cancel', location_id: VENUE });
+// EVERY ORDER THIS FILE PLACED MUST REACH A TERMINAL STATE, and the cleanup
+// has to SAY whether it did. The first version fired the cancels and ignored
+// the answers: four runs left four PREPARING tickets on a live venue while
+// every step above printed `ok`. A cleanup that cannot be seen to fail is not
+// a cleanup.
+//
+// AND CANCEL IS NOT AN EXIT HERE. `allowed_next` in dowiz-core reaches
+// Cancelled and Rejected ONLY from Pending; past that the only non-forward
+// exit is Refunding, which no Worker route emits. So an order this file has
+// walked to PREPARING has exactly one terminal state left -- DELIVERED -- and
+// the only way there is a courier. That is why this script now signs one in:
+// not to test the courier, but because the product gives it no other way to
+// put down what it picked up.
+{
+  const cl = await j('/api/courier/auth/login', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ phone: CPHONE, password: CPASS }),
+  });
+  const ct = cl.body?.jwt || cl.body?.access_token;  // courier login answers `jwt`, the owner's answers `access_token`
+  const cour = (p, body) => j(p, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${ct}`, 'content-type': 'application/json' },
+    body: JSON.stringify(body ?? {}),
+  });
+  if (ct) await cour('/api/courier/shift', { open: true });
+
+  for (const id of [ORDER1, overId].filter(Boolean)) {
+    let r = await own(`/api/owner/orders/${id}/action`, { action: 'cancel', location_id: VENUE });
+    if (r.status !== 200 && ct) {
+      await own(`/api/owner/orders/${id}/action`, { action: 'ready', location_id: VENUE });
+      await cour(`/api/courier/orders/${id}/accept`);
+      await cour(`/api/courier/orders/${id}/pickup`);
+      r = await cour(`/api/courier/orders/${id}/deliver`, { cash_collected: true });
+    }
+    const after = await own('/api/owner/orders', undefined, 'GET');
+    const row = (after.body?.orders || after.body || []).find(x => x.id === id);
+    step(`the order ${id.slice(0, 8)} reached a terminal state`,
+      !row || ['DELIVERED', 'CANCELLED', 'REJECTED'].includes(row.status),
+      `status=${row?.status ?? 'gone'}${r.status >= 400 ? ` last=${r.status} ${JSON.stringify(r.body).slice(0, 70)}` : ''}`);
+  }
+  if (ct) await cour('/api/courier/shift', { open: false });
 }
+
 if (PROD) await own(`/api/owner/products/${PROD}/delete`, { location_id: VENUE });
 if (CAT) await own(`/api/owner/categories/${CAT}/delete`, { location_id: VENUE });
 await own(`/api/owner/stock/stocktake`, { item: SUPPLY, observed: 0 });
