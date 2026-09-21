@@ -480,6 +480,8 @@ async function openAssistant(){
     <div id="asOut"></div>
     <p class="eyebrow mt-3" data-t="aiSettings"></p>
     ${switchEl('ai-on', v['ai.enabled'] === '1', 'aiEnabled', 'aiEnabledHint')}
+    ${v['ai.enabled'] === '1' && !String(v['ai.endpoint'] || '').startsWith('https://')
+      ? `<p class="warn small" data-t="aiNotHttps"></p>` : ''}
     <label for="ai-endpoint" data-t="aiEndpoint"></label><input id="ai-endpoint" inputmode="url" value="${esc(v['ai.endpoint'] || '')}" placeholder="https://…/v1">
     <div class="grid2"><div><label for="ai-model" data-t="aiModel"></label><input id="ai-model" value="${esc(v['ai.model'] || '')}"></div>
       <div><label for="ai-token" data-t="aiToken"></label><input id="ai-token" autocomplete="off" placeholder="${v['ai.token'] === SECRET_SET_MARK ? esc(SECRET_SET_MARK) : ''}"></div></div>

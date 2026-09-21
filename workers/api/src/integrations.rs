@@ -59,7 +59,15 @@ pub async fn status(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         "mcp": { "url": format!("{origin}/api/mcp"), "tools": crate::mcp::tool_count() },
         "stripe": { "configured": ctx.env.secret("STRIPE_SECRET_KEY").is_ok() && ctx.env.secret("STRIPE_PUBLISHABLE_KEY").is_ok() },
         "crypto": { "wallets": wallets },
-        "ai": { "enabled": s.flag("ai.enabled"), "endpoint": s.known("ai.endpoint") },
+        // ENABLED IS NOT THE SAME AS USABLE, and reporting only the flag is
+        // what let this screen say the assistant was on while every question
+        // answered 400. A Worker can only call https, so an endpoint that is
+        // not https is a switch with nothing behind it.
+        "ai": {
+            "enabled": s.flag("ai.enabled"),
+            "endpoint": s.known("ai.endpoint"),
+            "usable": s.flag("ai.enabled") && s.known("ai.endpoint").starts_with("https://"),
+        },
     }))
 }
 

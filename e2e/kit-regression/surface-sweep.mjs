@@ -137,20 +137,39 @@ const phone = { ...devices['iPhone 14 Pro'], serviceWorkers: 'block' };
       .catch(e => step(`console/${tab}: screenshot`, false, e.message.slice(0, 80)));
   }
 
-  // ── the seven integration screens, which no run has ever opened ───────────
+  // ── EVERY SCREEN BEHIND "MORE", ENUMERATED FROM THE PAGE ─────────────────
+  //
+  // This is the biggest blind spot in the product: the `more` tab holds the
+  // inbox, the promos, the posts, the analytics, the customers and fifteen
+  // settings screens, and no run had ever opened one of them. The first
+  // version of this sweep looked for seven integration keys through a
+  // selector that does not exist on that pane — the integrations are
+  // themselves behind one of these tiles — and reported "no control found"
+  // seven times, which is a gate measuring its own mistake.
+  //
+  // The list is read off the rendered page rather than copied from the
+  // source, so a tile added tomorrow is swept tomorrow.
   await tap(p, '#nav [data-tab="more"]', 'console/more');
-  await p.waitForTimeout(2500);
-  for (const what of ['telegram', 'whatsapp', 'instagram', 'webhook', 'cloud', 'ai', 'mcp']) {
-    // The console opens an integration from its list: `data-cfg="<key>"`.
-    const btn = await p.$(`#igList [data-cfg="${what}"]`);
-    if (!btn) { step(`console/more/${what}: reachable`, false, 'no control found'); continue; }
-    await tap(p, btn, `console/more/${what}`);
-    await p.waitForTimeout(1800);
-    const sheet = await bodyOf(p, '#sheet');
-    step(`console/more/${what}: opens`, sheet.found && sheet.len > 120, `${sheet.len} chars`);
-    await p.screenshot({ path: `${OUT}/more-${what}.png` }).catch(() => {});
+  await p.waitForTimeout(3000);
+  const tiles = await p.$$eval('#app [data-open]', els => els.map(e => e.dataset.open));
+  step('console/more: its tiles are on screen', tiles.length > 0, `${tiles.length} tiles: ${tiles.join(',')}`);
+
+  for (const key of tiles) {
+    await tap(p, `#app [data-open="${key}"]`, `console/more/${key}`);
+    await p.waitForTimeout(2200);
+    const sheet = await bodyOf(p, '#sheetIn');
+    const shown = await p.evaluate(() => {
+      const el = document.getElementById('sheet');
+      return { open: !!el && !el.hidden, skeleton: /skel/.test(el?.innerHTML || '') };
+    });
+    // A sheet still showing its skeleton after two seconds never loaded.
+    step(`console/more/${key}: opens with content`,
+      shown.open && sheet.len > 150 && !shown.skeleton,
+      `open=${shown.open} ${sheet.len} chars${shown.skeleton ? ' STILL SKELETON' : ''} :: "${sheet.text.replace(/\n/g, ' ').slice(0, 60)}"`);
+    await p.screenshot({ path: `${OUT}/more-${key}.png` }).catch(() => {});
     const close = await p.$('#sheetClose');
-    if (close) { await tap(p, close, 'console/more'); await p.waitForTimeout(600); }
+    if (close) { await tap(p, close, `console/more/${key}`); await p.waitForTimeout(700); }
+    else { await p.evaluate(() => document.getElementById('scrim')?.click()); await p.waitForTimeout(700); }
   }
   await ctx.close();
 }

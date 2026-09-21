@@ -42,7 +42,10 @@ const cl = await j('/api/courier/auth/login', { method: 'POST', headers: { 'cont
 const CT = cl.body?.jwt || cl.body?.access_token;
 if (!OT || !CT) { console.log(`owner ${ol.status}, courier ${cl.status} — cannot continue`); process.exit(1); }
 
-const TERMINAL = ['DELIVERED', 'CANCELLED', 'REJECTED'];
+// PICKED_UP joined these when `collected` landed: a collection order the
+// customer has taken is finished, and a drain that does not know that tries to
+// deliver it and reports "still open" about an order that ended correctly.
+const TERMINAL = ['DELIVERED', 'CANCELLED', 'REJECTED', 'PICKED_UP'];
 const list = async () => {
   const o = await j('/api/owner/orders', { headers: { authorization: `Bearer ${OT}` } });
   return (o.body?.orders || o.body || []).filter(x => !TERMINAL.includes(x.status));

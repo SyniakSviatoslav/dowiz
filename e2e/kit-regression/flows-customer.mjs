@@ -78,6 +78,11 @@ const place = (body) => j(`/api/public/locations/${slug}/orders`, {
 /// Close an order whatever state it is in, and say whether it worked.
 const close = async (id, label) => {
   if (!id) return;
+  const already = await statusOf(id);
+  if (['DELIVERED', 'CANCELLED', 'REJECTED', 'PICKED_UP'].includes(already)) {
+    step(`${label}: the order was closed`, true, `status=${already}`);
+    return;
+  }
   let r = await own(`/api/owner/orders/${id}/action`, { action: 'cancel', location_id: VENUE });
   if (r.status !== 200) {
     for (const a of ['confirm', 'preparing', 'ready']) {
@@ -88,7 +93,7 @@ const close = async (id, label) => {
     r = await cour(`/api/courier/orders/${id}/deliver`, { cash_collected: true });
   }
   const st = await statusOf(id);
-  step(`${label}: the order was closed`, ['DELIVERED', 'CANCELLED', 'REJECTED'].includes(st),
+  step(`${label}: the order was closed`, ['DELIVERED', 'CANCELLED', 'REJECTED', 'PICKED_UP'].includes(st),
     `status=${st}${r.status >= 400 ? ` last=${r.status}` : ''}`);
 };
 
@@ -154,9 +159,13 @@ await flow('a collection order', async () => {
     const r = await own(`/api/owner/orders/${id}/action`, { action: a, location_id: VENUE });
     step(`pickup: ${a}`, r.status === 200, `${r.status}`);
   }
+  // THE STEP THAT CLOSES IT. Written first as an always-false assertion
+  // recording that no such action existed; `collected` -> PICKED_UP now does,
+  // and a test that still asserts the gap is a stale instrument.
+  const coll = await own(`/api/owner/orders/${id}/action`, { action: 'collected', location_id: VENUE });
   const st = await statusOf(id);
-  step('a collected order can be marked collected', false,
-    `status=${st} — the owner has confirm/reject/preparing/ready/cancel and none of them ends a pickup order`);
+  step('a collection order can be marked collected', coll.status === 200 && st === 'PICKED_UP',
+    `${coll.status} status=${st} ${coll.status >= 400 ? JSON.stringify(coll.body).slice(0, 80) : ''}`);
 
   // And the courier pool should not be offering it as a delivery.
   const tasks = await j('/api/courier/tasks', { headers: { authorization: `Bearer ${CT}` } });

@@ -168,9 +168,17 @@ pub const KNOWN: &[Known] = &[
     Known {
         key: "ai.endpoint",
         label: "AI endpoint",
-        hint: "An OpenAI-compatible /v1 base URL. Leave the default for a local Ollama; \
-               plain http is allowed ONLY for an address on this machine.",
-        default: "http://127.0.0.1:11434/v1",
+        // THIS DEFAULT WAS A LIE THE WORKER COULD NEVER HONOUR. It said "leave
+        // it for a local Ollama; plain http is allowed for an address on this
+        // machine" -- which was true of the old self-hosted service and is not
+        // true of a Worker, which has no machine and cannot open a plain-http
+        // socket at all. `assist.rs` refuses every non-https endpoint with 400,
+        // so a venue that took the default saw the assistant reported ON and
+        // got "ai.endpoint must be https from a Worker" from every question.
+        // Empty is the honest default: not configured, and it says so.
+        hint: "An OpenAI-compatible /v1 base URL. It must be https: a Worker \
+               cannot reach a plain-http or a loopback address.",
+        default: "",
     },
     Known {
         key: "ai.model",
