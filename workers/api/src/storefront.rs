@@ -764,7 +764,16 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     let Some(slug) = ctx.param("slug").cloned() else {
         return Response::error("missing slug", 400);
     };
-    let body: PlaceIn = match req.json().await {
+    // THE BODY IS READ AS TEXT FIRST, because the idempotency layer has to
+    // fingerprint exactly what was sent. Parsing and re-serialising would make
+    // "same key, different body" a question about serde's output rather than
+    // about what the client did.
+    let raw_body = match req.text().await {
+        Ok(t) => t,
+        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
+    };
+    let idem_key = req.headers().get("idempotency-key").ok().flatten();
+    let body: PlaceIn = match serde_json::from_str(&raw_body) {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
@@ -891,10 +900,47 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
         _ => loc.delivery_fee,
     };
 
+    // ── IS THIS A RETRY? ──
+    //
+    // ASKED HERE, after the basket has been validated against the catalogue and
+    // before the id is minted. Earlier and a malformed retry would be recorded
+    // as an answer; later and the second order already exists, which is the
+    // whole defect. The id below comes from the CSPRNG per attempt, so without
+    // this a customer on a weak connection whose response was lost gets a
+    // second order, a second reservation and a second ticket -- and Stripe's
+    // idempotency key, derived from that id, cannot protect any of them.
+    let created_at_ms = Date::now().as_millis() as i64;
+    let idem_print = crate::idempotency::fingerprint(&raw_body);
+    // The principal is the CONTACT this basket names, so one person's retry
+    // cannot replay into another's order even under a guessed key.
+    let idem_who = crate::auth::sha256_hex(phone);
+    let idem = crate::idempotency::begin(
+        &place,
+        idem_key,
+        &idem_who,
+        "storefront.place",
+        &raw_body,
+        created_at_ms,
+    )
+    .await;
+    let idem_key = match idem {
+        crate::idempotency::Decision::NoKey => None,
+        crate::idempotency::Decision::Proceed { key } => Some(key),
+        crate::idempotency::Decision::Refuse(r) => return Ok(r),
+        crate::idempotency::Decision::Replay { status, body } => {
+            // THE FIRST CALL'S WHOLE ANSWER, not a marker. It carries the order
+            // id, the customer's token and the payment intent; a 204 here would
+            // leave the client with an order it cannot open.
+            let mut res = Response::ok(body)?.with_status(status);
+            res.headers_mut().set("content-type", "application/json")?;
+            res.headers_mut().set("idempotent-replay", "true")?;
+            return Ok(res);
+        }
+    };
+
     let Some(id) = crate::edge_id() else {
         return Response::error("no platform CSPRNG for order id", 500);
     };
-    let created_at_ms = Date::now().as_millis() as i64;
 
     let order_json = match json_api::place_order_at(
         id.clone(),
@@ -1245,6 +1291,15 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
                 });
             }
         }
+    }
+
+    // RECORDED AFTER THE ANSWER IS BUILT, and it cannot fail the call: the
+    // order is already in the log and the customer already has their token.
+    // Losing the record means a retry runs again, which is exactly the
+    // behaviour without this layer -- never worse than that.
+    if let Some(key) = idem_key {
+        let body = out.to_string();
+        crate::idempotency::finish(&place, &key, 200, &body, &idem_print, created_at_ms).await;
     }
 
     let mut res = Response::from_json(&out)?;

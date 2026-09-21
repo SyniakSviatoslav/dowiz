@@ -478,6 +478,15 @@ pub async fn nightly(env: &Env) {
             Ok(l) => cfg(&l.settings).is_some(),
             Err(_) => false,
         };
+        // Idempotency keys past their window. The image is small and the sweep
+        // is what keeps it that way; without it a busy venue accumulates a key
+        // per order for ever.
+        match crate::idempotency::sweep(&place, now).await {
+            Ok(0) => {}
+            Ok(n) => console_log!("nightly sweep {}: {n} idempotency keys", r.id),
+            Err(e) => console_error!("nightly sweep {}: keys refused: {e}", r.id),
+        }
+
         // The venue's own failure log: anything older than a week, and
         // anything past the count, goes. A burst inside one day is exactly when
         // this instrument matters and exactly when an age-only rule keeps

@@ -20,6 +20,7 @@ mod auth;
 mod bootstrap;
 mod platform;
 mod platform_store;
+mod idempotency;
 mod identity_store;
 mod migrate;
 mod courier;

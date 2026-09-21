@@ -23,6 +23,21 @@ fs.mkdirSync(OUT, { recursive: true });
 const creds = Object.fromEntries(fs.readFileSync('/root/.dowiz_owner', 'utf8')
   .split('\n').filter(l => l.startsWith('export ')).map(l => l.slice(7).split('=')));
 
+// ── THE COURIER MUST BE ONE OF THIS HOST'S ──
+//
+// This test signed in with QA_COURIER_PHONE whatever host it ran against, and
+// that courier is on sushi-durres' roster. Run against dubin-sushi it was
+// refused with "not assigned to this location" -- which is the courier login
+// fix working exactly as designed, reported by this test as three failures of
+// the product. A fixture that names the wrong tenant is a gate reporting a
+// defect that is not there.
+//
+// So the credential is chosen by the host, the way a real courier's is: they
+// open their own venue's app.
+const COURIER = /sushi-durres/.test(HOST)
+  ? { phone: creds.QA_COURIER_PHONE, password: creds.QA_COURIER_PASSWORD }
+  : { phone: creds.COURIER_PHONE, password: creds.COURIER_PASSWORD };
+
 const SUPPLY = 'qa-journey-rice';
 const PER_DISH = 200;
 const RECEIVED = 2000;
@@ -301,13 +316,13 @@ const k = await kc.newPage(); watch(k, 'courier'); watchSocket(k, 'courier');
 k.on('dialog', d => d.accept());
 await k.goto(`${HOST}/courier/`, { waitUntil: 'domcontentloaded', timeout: 90000 });
 await k.waitForSelector('#em', { timeout: 40000 });
-await k.fill('#em', creds.QA_COURIER_PHONE); await k.fill('#pw', creds.QA_COURIER_PASSWORD);
+await k.fill('#em', COURIER.phone); await k.fill('#pw', COURIER.password);
 await tap(k, '#go', 'courier');
 await k.waitForTimeout(5000);
 step('courier: signs in', !(await k.$('#em')));
 const CTOK = (await j('/api/courier/auth/login', { method: 'POST',
   headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ phone: creds.QA_COURIER_PHONE, password: creds.QA_COURIER_PASSWORD }) }))
+  body: JSON.stringify(COURIER) }))
   .body?.jwt || '';
 const shift = await k.$('#openShift');
 if (shift) { await tap(k, shift, 'courier'); await k.waitForTimeout(3500); }
