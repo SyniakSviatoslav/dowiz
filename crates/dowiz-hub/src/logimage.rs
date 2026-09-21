@@ -116,6 +116,14 @@ impl LogImage {
         if EvLog::len(&store) == 0 && store.root().is_none() {
             return Err(HubError::NotAHub);
         }
+        // AND IT IS NOT THIS IMAGE EITHER IF IT LOST RECORDS ON THE WAY HERE.
+        // The superblock is fifteen cells at the front, so it survives a
+        // truncation that takes half the records with it -- this image loaded
+        // clean and then said `len() == 40` while `entries()` gave two. That
+        // is a venue quietly losing thirty-eight of its errors, messages or
+        // ledger postings, and the one place it can still be said out loud is
+        // here. See `crate::chain_is_whole`.
+        crate::chain_is_whole(&store, |r| decode(&r.payload, 0).is_some())?;
         Ok(LogImage { store })
     }
 
@@ -267,6 +275,61 @@ mod tests {
         let mut tiny = LogImage::create_sized(1).unwrap();
         tiny.append("e", "v", "{}").expect("an image with no room refused its first record");
         assert!(MIN_LOG_BYTES > bebop_store::ARENA * 8);
+    }
+
+    /// A TRUNCATED IMAGE IS NOT A SHORTER LOG, and for two days it was read as
+    /// one. The superblock is fifteen cells at the FRONT of the image, so it
+    /// survives a cut that takes half the records with it: the image loaded,
+    /// `len()` answered 40, and `entries()` handed back two. A short read on a
+    /// chunked fetch from a Durable Object is the realistic failure here, not a
+    /// theoretical one -- and a venue cannot notice thirty-eight missing
+    /// orders in a reply that looks exactly like a correct one.
+    ///
+    /// The cuts are FIXED fractions, not random ones: the property is a law
+    /// about every prefix, and a fixed set of them says so without a generator.
+    #[test]
+    fn a_truncated_image_is_refused_rather_than_read_short() {
+        let mut l = LogImage::create().unwrap();
+        for i in 0..40 {
+            l.append("e", &format!("s{}", i % 7), &format!(r#"{{"n":{i}}}"#)).unwrap();
+        }
+        let bytes = l.to_bytes();
+        let mut refused = 0;
+        for tenth in 1..10usize {
+            let keep = bytes.len() * tenth / 10;
+            match LogImage::load(&bytes[..keep]) {
+                Err(_) => refused += 1,
+                Ok(short) => assert_eq!(
+                    short.len(),
+                    short.entries().len(),
+                    "a log cut to {keep} of {} bytes loaded and then disagreed with itself",
+                    bytes.len()
+                ),
+            }
+        }
+        assert!(refused > 0, "no prefix of a 40-record log was refused");
+        // And the whole image still loads whole -- a check that refuses
+        // everything is not a check.
+        assert_eq!(LogImage::load(&bytes).unwrap().entries().len(), 40);
+    }
+
+    /// The other half: the image is all there, and one `next` ref is not.
+    #[test]
+    fn a_chain_ref_that_leaves_the_image_is_refused() {
+        let mut l = LogImage::create().unwrap();
+        for i in 0..6 {
+            l.append("e", "s", &format!(r#"{{"n":{i}}}"#)).unwrap();
+        }
+        let mut st = bebop_store::Store::from_bytes(&l.to_bytes());
+        let root = st.root().expect("root");
+        let newest = st.follow(root, 1).expect("newest");
+        // Payload cell 2 of a record is the ref to the next (older) one.
+        st.cells[newest + 2 + 2] = 1 << 40;
+        let broken = st.to_bytes();
+        assert!(
+            matches!(LogImage::load(&broken), Err(HubError::Corrupt { claimed: 6, .. })),
+            "a chain that stops early must be refused, not read short"
+        );
     }
 
     #[test]

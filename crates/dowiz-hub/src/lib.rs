@@ -133,6 +133,19 @@ pub enum HubError {
     UnknownOrder,
     /// An order id longer than the record header allows.
     OrderIdTooLong,
+    /// A LOADED IMAGE DISAGREES WITH ITSELF: the chain does not deliver the
+    /// records the root claims, or a record in it cannot be read back.
+    ///
+    /// This is the failure worth having an error for. An image cut short, or
+    /// one byte of it changed in flight, used to LOAD -- and then answer
+    /// `len() == 40` while handing back two events. A venue whose log silently
+    /// drops its thirty-eight most recent orders has no way to notice, and
+    /// every reply built on it is confidently wrong. Refusing is the only
+    /// answer a caller can act on: it can re-fetch, restore, or alert.
+    ///
+    /// `chained` is `None` when the chain never ended -- a corrupted `next` ref
+    /// can point backwards, and a reader that followed it would walk for ever.
+    Corrupt { claimed: usize, chained: Option<usize> },
 }
 
 
@@ -293,6 +306,11 @@ impl Hub {
         if store.pick().is_none() {
             return Err(HubError::NotAHub);
         }
+        // AND REFUSES ONE THAT LOST RECORDS ON THE WAY HERE. A superblock
+        // survives a truncation -- it is fifteen cells at the front of the
+        // image -- so "the superblock is valid" was never the same statement
+        // as "the log is all here". See `chain_is_whole`.
+        chain_is_whole(&store, |r| decode(r).is_some())?;
         Ok(Hub { store })
     }
 
@@ -659,6 +677,45 @@ pub(crate) fn e_is_full(e: &StoreError) -> bool {
     matches!(e, StoreError::ArenaFull { .. })
 }
 
+/// Does this image hold every record it says it holds?
+///
+/// WHY AT LOAD AND NOT AT USE. `load` is on the path of every request, and the
+/// cost was the argument against checking anything here -- but the check is a
+/// pointer walk over a chain of a few hundred records, while `load` has
+/// already decoded the whole image into cells. It is a fraction of a cost
+/// already paid, and D0's `reliability-over-latency` is not a slogan: the
+/// alternative is every reader above deciding for itself whether a short
+/// answer was the truth, which is the decision that was already got wrong.
+///
+/// WHAT IT DOES NOT DO is verify the ids -- that is `chain_check`, it hashes
+/// every record, and it belongs in the nightly job. This asserts what a caller
+/// is promised: the chain is as long as the root claims, it ends, and every
+/// record on it reads back.
+///
+/// `readable` is the caller's own decoder, passed in rather than reimplemented
+/// here, because the two must not drift: a record this accepted and `events()`
+/// then dropped would be the very hole being closed.
+fn chain_is_whole(store: &Store, readable: impl Fn(&Record) -> bool) -> Result<(), HubError> {
+    let claimed = EvLog::len(store);
+    let Some(chained) = EvLog::chain_len(store) else {
+        return Err(HubError::Corrupt { claimed, chained: None });
+    };
+    if chained != claimed {
+        return Err(HubError::Corrupt { claimed, chained: Some(chained) });
+    }
+    // The chain is the right length; now every record on it must also READ
+    // BACK. A payload whose own framing was damaged decodes to `None`, and
+    // `events()`/`entries()` filter those out -- so an image holding one would
+    // answer `len() == 40` and hand back thirty-nine. The count is the
+    // promise, and this is its other half. Only reached once the cheap check
+    // passes, so a corrupt image never pays for this walk.
+    let delivered = EvLog::walk(store).iter().filter(|r| readable(r)).count();
+    if delivered != claimed {
+        return Err(HubError::Corrupt { claimed, chained: Some(delivered) });
+    }
+    Ok(())
+}
+
 fn decode(r: &Record) -> Option<Event> {
     if r.payload.len() < 2 {
         return None;
@@ -757,6 +814,47 @@ mod tests {
     fn load_refuses_something_that_is_not_a_hub() {
         assert!(matches!(Hub::load(&[0u8; 4096]), Err(HubError::NotAHub)),
                 "a zeroed image has no superblock and must be refused, not served");
+    }
+
+    /// AND REFUSES A HUB THAT LOST ORDERS ON THE WAY HERE.
+    ///
+    /// `load` checked the superblock and stopped there -- but a superblock is
+    /// fifteen cells at the FRONT of the image, so it survives a short read
+    /// that takes half the orders with it. The hub then answered `len() == 12`
+    /// while `orders()` listed four, and every reply built from it -- the
+    /// console, the tracking sheet, the day's takings -- was confidently
+    /// missing the rest. An image that cannot deliver what it claims is
+    /// refused, so the caller can re-fetch or alert instead of serving it.
+    #[test]
+    fn load_refuses_a_hub_that_cannot_deliver_the_orders_it_claims() {
+        let mut h = Hub::create_sized(1 << 20).unwrap();
+        for i in 0..12 {
+            let id = format!("ord_{i:02}");
+            h.append(EventKind::Placed, &id, &order(&id, "PENDING"), i as u64, ACTOR).unwrap();
+        }
+        let bytes = h.to_bytes_trimmed();
+        assert_eq!(Hub::load(&bytes).unwrap().orders().len(), 12, "the whole image is whole");
+
+        for tenth in 1..10usize {
+            let keep = bytes.len() * tenth / 10;
+            if let Ok(short) = Hub::load(&bytes[..keep]) {
+                assert_eq!(
+                    short.len(),
+                    short.events().len(),
+                    "a hub cut to {keep} bytes loaded and then disagreed with itself"
+                );
+            }
+        }
+
+        // And the sharpest case: every byte is there, one `next` ref is not.
+        let mut st = Store::from_bytes(&bytes);
+        let root = st.root().unwrap();
+        let newest = st.follow(root, 1).unwrap();
+        st.cells[newest + 2 + 2] = 1 << 40;
+        assert!(
+            matches!(Hub::load(&st.to_bytes()), Err(HubError::Corrupt { claimed: 12, .. })),
+            "a chain that stops early must be refused, not served short"
+        );
     }
 
     /// The point of the log: an order's state is the FOLD, so the newest event

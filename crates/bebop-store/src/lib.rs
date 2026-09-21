@@ -259,10 +259,54 @@ impl Store {
         self.cells.get(sb.at + 12).copied().unwrap_or(0)
     }
 
+    /// Does this superblock's arithmetic fit the image it arrived in?
+    ///
+    /// THE CRC IS NOT ENOUGH. `sb_valid` checks
+    /// a crc32 over cells 0..14 — and a TRUNCATED image keeps those fifteen
+    /// cells intact, so the superblock verifies while naming a PartTab past the
+    /// end of the file. Every accessor then indexed straight into `cells` and
+    /// the process PANICKED: `index out of bounds: the len is 840 but the index
+    /// is 2146`.
+    ///
+    /// That matters because of where these bytes come from. An image is read
+    /// out of a Durable Object over a network, in 96 KiB chunks; a short read
+    /// is the realistic failure, not a theoretical one. In a Worker a panic is
+    /// a 500 with no body — the caller cannot tell a truncated image from a bug
+    /// from an outage, which is the worst of the three answers.
+    ///
+    /// So a superblock whose offsets do not fit is not a valid superblock. The
+    /// image is then refused by the loader above it, loudly, which is what a
+    /// caller can act on.
+    fn sb_fits(&self, at: usize) -> bool {
+        let n = self.cells.len() as i64;
+        let pt = self.cells[at + 3];
+        let used = self.cells[at + 4];
+        if pt < 0 || used < 0 || used > n {
+            return false;
+        }
+        // A PartTab is read at `pt + 18` (B5 step 1), so that cell must exist.
+        // `pt == 0` means "no root", which is a legitimate empty store.
+        // Checked: every one of these came out of the image, and an i64 near
+        // its maximum makes the addition itself a panic.
+        if pt != 0 && pt.checked_add(18).is_none_or(|end| end >= n) {
+            return false;
+        }
+        // And the root the PartTab names has to be inside the image too, or the
+        // first object read walks off the end instead.
+        if pt != 0 {
+            let r = self.cells[pt as usize + 18];
+            // An object's header is two cells before its payload.
+            if r < 0 || (r != 0 && r.checked_add(2).is_none_or(|end| end >= n)) {
+                return false;
+            }
+        }
+        true
+    }
+
     pub fn pick(&self) -> Option<Superblock> {
         let mut best: Option<Superblock> = None;
         for at in [SB_A, SB_B] {
-            if !self.sb_valid(at) {
+            if at + 15 > self.cells.len() || !self.sb_valid(at) || !self.sb_fits(at) {
                 continue;
             }
             let sb = Superblock {
@@ -280,31 +324,75 @@ impl Store {
         best
     }
 
+    /// One cell, or zero if the image does not reach that far.
+    ///
+    /// EVERY OFFSET BELOW CAME OUT OF THE IMAGE, and an image arrives over a
+    /// network. One flipped bit of a valid log killed this process with
+    /// `index out of bounds: the len is 8192 but the index is
+    /// 18446744073709549592` -- a negative ref, cast to `usize`. In a Worker a
+    /// panic is a 500 with no body, so the caller cannot tell a corrupt image
+    /// from a bug from an outage.
+    ///
+    /// ZERO, not a `Result`, for a specific reason: zero is already this
+    /// format's null. A ref of zero is "no object", a length of zero is "no
+    /// payload", and every reader above already handles both. Turning the
+    /// accessors into `Result` would change an API that `bebop-lang` also reads
+    /// against, to say something the format can already say. What must NOT
+    /// happen is the layer above mistaking a truncated image for a short valid
+    /// one, and that is caught where it belongs -- see `LogImage::load`.
+    #[inline]
+    fn cell(&self, at: usize) -> i64 {
+        self.cells.get(at).copied().unwrap_or(0)
+    }
+
     /// Length in cells of the object starting at `obj`.
     pub fn obj_len(&self, obj: usize) -> i64 {
-        self.cells[obj] & 0xFFFF_FFFF
+        self.cell(obj) & 0xFFFF_FFFF
+    }
+
+    /// Payload cells that ACTUALLY EXIST behind the object at `obj`.
+    ///
+    /// `obj_len` IS A CLAIM AND A CLAIM IS NOT A FACT. The header came out of
+    /// the same image as everything else, so one flipped bit in it says "this
+    /// object holds four billion cells", and every reader that believed it
+    /// tried to allocate them: `memory allocation of 8589934601 bytes failed`,
+    /// which is not an error a caller can catch -- the process ABORTS, and on a
+    /// Worker that takes the isolate with it. A single bit did exactly that.
+    ///
+    /// The fact is how much image there is behind the object's two header
+    /// cells. A reader that wants "the bytes that are really there" asks for
+    /// this; a reader that wants to know whether the claim was honest compares
+    /// the two itself and refuses the image -- which is what `Kv::load` does.
+    pub fn obj_cells(&self, obj: usize) -> usize {
+        let claim = self.obj_len(obj).max(0) as usize;
+        claim.min(self.cells.len().saturating_sub(obj.saturating_add(2)))
     }
 
     /// Layout digest (low 32 bits) of the object at `obj`.
     pub fn obj_digest(&self, obj: usize) -> i64 {
-        (self.cells[obj] >> 32) & 0xFFFF_FFFF
+        (self.cell(obj) >> 32) & 0xFFFF_FFFF
     }
 
     /// Generation the object at `obj` was written in.
     pub fn obj_generation(&self, obj: usize) -> i64 {
-        self.cells[obj + 1] & 0xFFFF_FFFF
+        self.cell(obj + 1) & 0xFFFF_FFFF
     }
 
     /// Does the object's stored CRC match its payload?
     pub fn obj_crc_ok(&self, obj: usize) -> bool {
         let len = self.obj_len(obj) as usize;
-        let want = ((self.cells[obj + 1] >> 32) & 0xFFFF_FFFF) as u32;
+        // A length that does not fit cannot have a matching CRC, and computing
+        // one over cells that are not there is the panic this guards.
+        if obj + 2 + len > self.cells.len() {
+            return false;
+        }
+        let want = ((self.cell(obj + 1) >> 32) & 0xFFFF_FFFF) as u32;
         crc32_cells(&self.cells, obj + 2, len) == want
     }
 
     /// Payload cell `i` of the object at `obj`.
     pub fn get(&self, obj: usize, i: usize) -> i64 {
-        self.cells[obj + 2 + i]
+        self.cell(obj + 2 + i)
     }
 
     /// The DATA root, resolved the way `st_root` does: the superblock's cell 3 names a
@@ -312,27 +400,43 @@ impl Store {
     /// -- i.e. PartTab payload cell 16, the first of the `[root_p, used_p, gen_p]` entry.
     pub fn root(&self) -> Option<usize> {
         let sb = self.pick()?;
-        let pt = self.cells[sb.at + 3];
-        if pt == 0 { return None; }
-        let r = self.cells[pt as usize + 18];
-        if r == 0 { None } else { Some(r as usize) }
+        let pt = self.cell(sb.at + 3);
+        if pt <= 0 { return None; }
+        let r = self.cell(pt as usize + 18);
+        if r <= 0 { None } else { Some(r as usize) }
     }
 
     /// The PartTab offset the live superblock names.
     pub fn parttab(&self) -> Option<usize> {
         let sb = self.pick()?;
-        let pt = self.cells[sb.at + 3];
-        if pt == 0 { None } else { Some(pt as usize) }
+        let pt = self.cell(sb.at + 3);
+        if pt <= 0 { None } else { Some(pt as usize) }
     }
 
-    /// Follow the object-relative ref in payload cell `i`. Returns None for a null (0) ref.
+    /// Follow the object-relative ref in payload cell `i`. Returns None for a
+    /// null (0) ref, and for one that does not land inside the image.
+    ///
+    /// `(obj as i64 + off) as usize` was the line that died: a corrupted ref
+    /// made the sum negative, and a negative i64
+    /// cast to usize is 18 quintillion. A ref that points outside the image is
+    /// not a ref -- it is the same answer as a null one, which every caller
+    /// already handles.
     pub fn follow(&self, obj: usize, i: usize) -> Option<usize> {
         let off = self.get(obj, i);
         if off == 0 {
-            None
-        } else {
-            Some((obj as i64 + off) as usize)
+            return None;
         }
+        // CHECKED, because the sum itself can overflow: `off` is a whole cell
+        // out of the image, so a corrupted one is any i64 at all, and
+        // `obj as i64 + off` PANICS in a debug build before the bounds test
+        // below ever runs. An arithmetic panic is the same outage as the
+        // out-of-bounds index this function exists to prevent.
+        let at = (obj as i64).checked_add(off)?;
+        // An object needs its two header cells to exist before it is an object.
+        if at < 0 || at as usize + 2 > self.cells.len() {
+            return None;
+        }
+        Some(at as usize)
     }
 }
 

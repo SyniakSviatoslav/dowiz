@@ -70,19 +70,57 @@ impl Kv {
     }
 
     /// Read all entries out of a store.
+    ///
+    /// EVERY NUMBER IN HERE CAME OUT OF THE IMAGE, and an image arrives over a
+    /// network from a Durable Object. The count, the four offsets and the four
+    /// lengths are all claims; none of them was checked, and one flipped bit in
+    /// a key's length -- 9 with bit 33 set is 8589934601 -- turned the collect
+    /// below into `memory allocation of 8589934601 bytes failed`. An allocation
+    /// that large does not return an error: the process ABORTS. On a Worker
+    /// that is the isolate, for every tenant sharing it, from one corrupt byte.
+    ///
+    /// So a slice that does not fit the array it names is not a slice, and an
+    /// image holding one is not a KV image. `None` here is `HubError::NotAHub`
+    /// at the caller -- a refusal it can report, which is the answer a caller
+    /// can act on. Truncating to what fits would be the other failure this
+    /// crate keeps finding: a shorter image that still looks valid.
     pub fn load(st: &Store) -> Option<Kv> {
         let root = st.root()?;
-        let n = st.get(root, 0) as usize;
+        let n = st.get(root, 0);
         let kidx = st.follow(root, 1)?;
         let kblob = st.follow(root, 2)?;
         let vidx = st.follow(root, 3)?;
         let vblob = st.follow(root, 4)?;
+        // Each entry owns two cells in each index, so the count is bounded by
+        // the index arrays that are really there -- not by the root's word.
+        let (kidx_cells, vidx_cells) = (st.obj_cells(kidx), st.obj_cells(vidx));
+        let (kblob_cells, vblob_cells) = (st.obj_cells(kblob), st.obj_cells(vblob));
+        if n < 0 {
+            return None;
+        }
+        let n = n as usize;
+        if n.checked_mul(2)? > kidx_cells.min(vidx_cells) {
+            return None;
+        }
+        let fits = |off: i64, len: i64, cells: usize| -> Option<usize> {
+            if off < 0 || len < 0 {
+                return None;
+            }
+            let end = (off as usize).checked_add(len as usize)?;
+            if end > cells {
+                return None;
+            }
+            Some(len as usize)
+        };
         let mut entries = Vec::with_capacity(n);
         for i in 0..n {
-            let ko = st.get(kidx, 2 * i) as usize;
-            let kl = st.get(kidx, 2 * i + 1) as usize;
-            let vo = st.get(vidx, 2 * i) as usize;
-            let vl = st.get(vidx, 2 * i + 1) as usize;
+            let ko = st.get(kidx, 2 * i);
+            let kl = st.get(kidx, 2 * i + 1);
+            let vo = st.get(vidx, 2 * i);
+            let vl = st.get(vidx, 2 * i + 1);
+            let kl = fits(ko, kl, kblob_cells)?;
+            let vl = fits(vo, vl, vblob_cells)?;
+            let (ko, vo) = (ko as usize, vo as usize);
             // KEYS ARE UTF-8 BYTES AND MUST BE DECODED AS UTF-8. This read
             // `(byte as char)`, which is not a decode at all -- in Rust that
             // maps a `u8` to the code point of the same value, which is exactly
@@ -312,6 +350,48 @@ mod tests {
         let twice = again.compacted_bytes_fit(256 * 1024).expect("rewrite");
         let back2 = Kv::load(&Store::from_bytes(&twice)).expect("reload twice");
         assert_eq!(back2.keys(), again.keys(), "a second round trip changed the keys");
+    }
+
+    /// ONE FLIPPED BIT USED TO ABORT THE PROCESS, and this is that bit.
+    ///
+    /// A key's length lives in a cell of the key index. Setting bit 33 of a
+    /// length of 1 asks for 8589934601 bytes, and the read of it was a
+    /// `collect` over that range: `memory allocation of 8589934601 bytes
+    /// failed`, which is an abort rather than an error -- on a Worker, the
+    /// whole isolate. The length is now measured against the blob that is
+    /// really there, so the image is REFUSED instead of believed.
+    ///
+    /// Written as a fixed corruption rather than a generated one: the bit is
+    /// the whole point, and a named bit is a test that says what it protects.
+    #[test]
+    fn a_key_length_larger_than_the_image_is_refused_not_allocated() {
+        let mut st = Store::create_bytes(64 * 1024);
+        Kv::init_bytes(&mut st).expect("init");
+        let mut kv = Kv::load(&st).expect("load");
+        kv.put("order/0001", b"pending");
+        let bytes = kv.compacted_bytes_fit(256 * 1024).expect("write");
+
+        let mut st = Store::from_bytes(&bytes);
+        let root = st.root().expect("root");
+        let kidx = st.follow(root, 1).expect("key index");
+        // Payload cell 1 of the key index is the first key's LENGTH.
+        let len_cell = kidx + 2 + 1;
+        assert!(st.cells[len_cell] > 0, "the entry's key length should be positive");
+        st.cells[len_cell] |= 1 << 33;
+        assert!(Kv::load(&st).is_none(), "a key that does not fit its blob is not a key");
+
+        // The same law for a value, and for the entry COUNT -- a root that
+        // claims a million entries over an index holding two cells.
+        let mut st = Store::from_bytes(&bytes);
+        let root = st.root().expect("root");
+        let vidx = st.follow(root, 3).expect("value index");
+        st.cells[vidx + 2 + 1] |= 1 << 33;
+        assert!(Kv::load(&st).is_none(), "a value that does not fit its blob is not a value");
+
+        let mut st = Store::from_bytes(&bytes);
+        let root = st.root().expect("root");
+        st.cells[root + 2] = 1_000_000;
+        assert!(Kv::load(&st).is_none(), "a count the index cannot hold is not a count");
     }
 
     #[test]

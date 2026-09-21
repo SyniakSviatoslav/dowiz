@@ -117,6 +117,8 @@ pub const VERSION: i64 = 2;
 const ROOT_V1: i64 = 7;
 const ROOT_V2: i64 = 8;
 
+/// v1 record header, before the payload's one-byte-per-cell tail.
+const HEAD_V1: i64 = 15;
 /// v2 record header, before the optional actor key and the packed payload.
 const HEAD_V2: i64 = 12;
 /// Bit 0 of cell 11: an `actor_pubkey` follows the header.
@@ -211,7 +213,7 @@ impl EvLog {
             let named = rec.actor_pubkey != [0u8; 32];
             HEAD_V2 + if named { 4 } else { 0 } + rec.payload.len().div_ceil(8) as i64
         } else {
-            15 + rec.payload.len() as i64
+            HEAD_V1 + rec.payload.len() as i64
         }
     }
 
@@ -230,7 +232,7 @@ impl EvLog {
             // rather than a report. The payload below has been bounded since
             // it was written; the key was not.
             let named = flags & FLAG_ACTOR != 0
-                && st.obj_len(obj) >= HEAD_V2 + 4;
+                && st.obj_cells(obj) >= (HEAD_V2 + 4) as usize;
             let at = HEAD_V2 as usize;
             let (actor, payload_at) = if named {
                 let pkc: Vec<i64> = (at..at + 4).map(|i| st.get(obj, i)).collect();
@@ -241,7 +243,11 @@ impl EvLog {
             // What the object actually holds, not what the header claims: a
             // truncated record must hand back the bytes that are there rather
             // than read past its own end.
-            let have = st.obj_len(obj).saturating_sub(payload_at as i64).max(0) as usize;
+            // `obj_cells`, NOT `obj_len`: the length is a 32-bit field, so a
+            // damaged one claims up to four billion cells and this line
+            // allocated every one of them. Bounded by the image, a corrupt
+            // record is a SHORT record -- which the layer above refuses.
+            let have = st.obj_cells(obj).saturating_sub(payload_at);
             let cells: Vec<i64> =
                 (0..have).map(|j| st.get(obj, payload_at + j)).collect();
             Record {
@@ -253,7 +259,24 @@ impl EvLog {
             }
         } else {
             let pkc: Vec<i64> = (11..15).map(|i| st.get(obj, i)).collect();
-            let payload: Vec<u8> = (0..plen).map(|j| st.get(obj, 15 + j) as u8).collect();
+            // THE HEADER'S LENGTH IS A CLAIM; THE OBJECT'S LENGTH IS THE FACT.
+            // v1 stores one payload byte per cell from HEAD_V1, so a record
+            // holds no more bytes than it has cells behind that head. Trusting
+            // the claim was not a robustness nicety: a single flipped bit in
+            // cell 1 turns a 32-byte payload into a `plen` of 0x8000_0020 and
+            // this line into a 2 GiB allocation. On this box that is the whole
+            // app killed by the platform; on a Worker it is the isolate. The
+            // v2 branch above is bounded the same way -- this is one law, and
+            // `obj_cells` is where it is stated.
+            //
+            // A record only reachable through v1 is already corrupt (a fresh
+            // log is v2 and the reader falls back to v1 only when the root's
+            // version cell is damaged), so the bytes that ARE there are handed
+            // back exactly like a truncated record's, for the caller to refuse.
+            let have = st.obj_cells(obj).saturating_sub(HEAD_V1 as usize);
+            let plen = plen.min(have);
+            let payload: Vec<u8> =
+                (0..plen).map(|j| st.get(obj, HEAD_V1 as usize + j) as u8).collect();
             Record {
                 id: cells_to_b32(&idc),
                 prev: cells_to_b32(&prevc),
@@ -264,17 +287,65 @@ impl EvLog {
         }
     }
 
+    /// The most records an image of this size could possibly hold.
+    ///
+    /// THE CHAIN IS DATA, SO IT CAN LIE, and the shape of the lie that matters
+    /// is a CYCLE: one flipped bit in a `next` ref can point a record back at
+    /// one already visited, and `while let Some(obj) = cur` then walks for
+    /// ever, pushing a record on every turn until the process is killed for
+    /// the memory it asked for. That is not a hypothetical -- it is the same
+    /// class of bug as the 8 GiB allocation, reached by a different route.
+    ///
+    /// A record occupies its two object-header cells plus at least a v2
+    /// header, so an image of `n` cells cannot hold more than `n / 14` of
+    /// them. Past that the chain is not long, it is looping.
+    fn step_cap(st: &Store) -> usize {
+        st.cells.len() / (2 + HEAD_V2 as usize) + 1
+    }
+
     /// Walk the chain newest-first. Returns records in reverse insertion order.
+    ///
+    /// A chain that does not end stops at `step_cap`; `chain_len` is how a
+    /// caller asks whether that happened, and `LogImage::load` refuses the
+    /// image when it did.
     pub fn walk(st: &Store) -> Vec<Record> {
         let mut out = Vec::new();
         let Some(root) = st.root() else { return out };
         let version = Self::version(st);
+        let cap = Self::step_cap(st);
         let mut cur = st.follow(root, 1);
         while let Some(obj) = cur {
+            if out.len() >= cap {
+                break;
+            }
             out.push(Self::read_at(st, version, obj));
             cur = st.follow(obj, 2);
         }
         out
+    }
+
+    /// How many records the chain actually holds, reading none of them.
+    ///
+    /// `len` is what the root CLAIMS; this is what the chain DELIVERS, and the
+    /// two disagreeing is the failure that has to be loud. A log that says it
+    /// holds forty records and hands back two has lost thirty-eight orders,
+    /// and nothing in a response built from it would say so.
+    ///
+    /// `None` means the chain never ended -- a cycle. It is not "very long":
+    /// no honest image can chain more records than it has room for.
+    pub fn chain_len(st: &Store) -> Option<usize> {
+        let Some(root) = st.root() else { return Some(0) };
+        let cap = Self::step_cap(st);
+        let mut n = 0usize;
+        let mut cur = st.follow(root, 1);
+        while let Some(obj) = cur {
+            n += 1;
+            if n > cap {
+                return None;
+            }
+            cur = st.follow(obj, 2);
+        }
+        Some(n)
     }
 
     /// Stage one appended record, optionally moving the chain tip in the SAME
@@ -433,6 +504,36 @@ mod tests {
     fn rec(n: u8, payload: &[u8]) -> Record {
         Record { id: [n; 32], prev: [n.wrapping_sub(1); 32], actor_pubkey: [0xAA; 32],
                  actor_seq: n as u64, payload: payload.to_vec() }
+    }
+
+    /// A CHAIN THAT POINTS BACKWARDS MUST NOT BE WALKED FOR EVER.
+    ///
+    /// `next` is one cell of the image like any other, so a flipped bit can
+    /// aim a record at one already visited. The walk was `while let Some(obj)`
+    /// with no bound: it pushed a record per turn until the process was killed
+    /// for the memory it asked for. The same failure as an over-large
+    /// allocation, reached by a different route -- and the only honest answer
+    /// is that a chain which does not end is not a length.
+    #[test]
+    fn a_chain_that_loops_is_reported_rather_than_walked_for_ever() {
+        let mut st = Store::create_bytes(64 * 1024);
+        EvLog::init_bytes(&mut st).expect("init");
+        for i in 0..5u8 {
+            EvLog::append_bytes(&mut st, &rec(i, b"payload")).expect("append");
+        }
+        assert_eq!(EvLog::chain_len(&st), Some(5), "an honest chain reports its length");
+
+        let root = st.root().expect("root");
+        let newest = st.follow(root, 1).expect("newest");
+        let older = st.follow(newest, 2).expect("second newest");
+        // Aim the second record's `next` back at the first: a two-record loop.
+        st.cells[older + 2 + 2] = newest as i64 - older as i64;
+
+        assert_eq!(EvLog::chain_len(&st), None, "a chain that never ends has no length");
+        assert!(
+            EvLog::walk(&st).len() <= EvLog::step_cap(&st),
+            "the walk must stop at the cap rather than run out of memory"
+        );
     }
 
     /// A V1 IMAGE STILL READS, and that is the whole risk of this change.
