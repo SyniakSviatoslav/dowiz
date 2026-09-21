@@ -2208,79 +2208,37 @@ pub async fn health(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     )
     .await;
 
-    fn gauge(u: dowiz_hub::Usage) -> Value {
-        json!({
-            "generation": u.generation,
-            "usedCells": u.used_cells,
-            // What the image holds now, and the most it may ever hold. These
-            // differ for the compacted images: see `dowiz_hub::Usage`. The
-            // ceiling is what `usedPerMille` measures against, because the
-            // capacity of a compacted image is re-chosen on every save and a
-            // ratio against it falls by half exactly when the image grows.
-            "capacityCells": u.capacity_cells,
-            "ceilingCells": u.ceiling_cells,
-            // Per mille rather than a fraction: the kernel keeps no floats and
-            // a percentage with one decimal is what a gauge shows anyway.
-            "usedPerMille": u.used_per_mille(),
-            // Does this image double itself instead of refusing? See
-            // `dowiz_hub::Usage`. A reading of 900 means opposite things.
-            "grows": u.grows,
-        })
-    }
-
     let mut images = serde_json::Map::new();
-    images.insert("log".into(), gauge(hub.hub.usage()));
-    images.insert("catalog".into(), gauge(cat.catalog.usage()));
+    images.insert("log".into(), crate::gauges::gauge(hub.hub.usage()));
+    images.insert("catalog".into(), crate::gauges::gauge(cat.catalog.usage()));
     if let Ok(s) = &settings {
-        images.insert("settings".into(), gauge(s.settings.usage()));
+        images.insert("settings".into(), crate::gauges::gauge(s.settings.usage()));
     }
     if let Ok(p) = &posts {
-        images.insert("posts".into(), gauge(p.posts.usage()));
+        images.insert("posts".into(), crate::gauges::gauge(p.posts.usage()));
     }
     if let Ok(st) = &stock {
-        images.insert("stock".into(), gauge(st.stock.usage()));
+        images.insert("stock".into(), crate::gauges::gauge(st.stock.usage()));
     }
 
-    // THE VERDICT COMES ONLY FROM THE IMAGES THAT CAN ACTUALLY REFUSE.
-    //
-    // Measured: a stock log grew from 7168 cells to 523264 over four thousand
-    // events and never refused once, and the order log doubles the same way.
-    // For those, a reading near full predicts a DOUBLING -- a few milliseconds
-    // of copying -- and counting it as the venue's worst problem put
-    // `dubin-durres` on "watch" for a stock image in no danger at all, while
-    // the advice attached to it, "compact", is something an append log cannot
-    // do. The compacted KV images are the ones with a real ceiling, so they are
-    // the ones the verdict is about.
-    let worst = images
-        .values()
-        .filter(|v| v.get("grows").and_then(Value::as_bool) != Some(true))
-        .filter_map(|v| v.get("usedPerMille").and_then(Value::as_i64))
-        .max()
-        .unwrap_or(0);
-    // Still reported, because an image doubling every week is worth seeing even
-    // though it is not an emergency.
-    let worst_growing = images
-        .values()
-        .filter(|v| v.get("grows").and_then(Value::as_bool) == Some(true))
-        .filter_map(|v| v.get("usedPerMille").and_then(Value::as_i64))
-        .max()
-        .unwrap_or(0);
-    let verdict = match worst {
-        0..=699 => "ok",
-        700..=899 => "watch",
-        _ => "compact",
-    };
+    // Which image the owner is being warned about, and which reading is a
+    // sawtooth rather than a warning at all. See `crate::gauges::verdict`.
+    let (worst, worst_growing, verdict) = crate::gauges::verdict(&images);
 
     // THE FAILURES THE LOGS NO LONGER CARRY. Workers Logs are sampled at one
     // request in ten and no token on this box can read them at all, so the
     // errors that matter are also rows -- and this is the screen that already
     // answers "is this venue healthy". An empty list is the good answer.
-    let errors = crate::errlog::recent(&place.ns, &place.venue, 20).await.unwrap_or_default();
+    let audit = crate::errlog::recent(&place.ns, &place.venue, 20).await.unwrap_or_default();
 
     // THE BREAKERS ARE VISIBLE OR THEY ARE NOT AN INSTRUMENT. A breaker that
     // silently protects a venue is indistinguishable from one that silently
     // does nothing, and this codebase has paid for that distinction before.
     let rails = crate::rail::snapshot(&place, now_ms()).await;
+
+    // Every record the venue's logs hold and this build cannot read. See
+    // `crate::quarantine`: a non-zero count is a failing gate, not a warning.
+    let quarantined = crate::quarantine::seen(&hub.hub, audit.quarantined);
 
     Response::from_json(&json!({
         "venue": loc,
@@ -2288,8 +2246,12 @@ pub async fn health(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         "worstUsedPerMille": worst,
         "worstGrowingPerMille": worst_growing,
         "verdict": verdict,
+        // The claim the root carries. `events` is what the log delivers, and
+        // `quarantined` is the difference: the three must add up.
         "orders": hub.hub.len(),
-        "errors": errors,
+        "events": hub.hub.events().len(),
+        "quarantined": quarantined,
+        "errors": audit.errors,
         "rails": rails,
     }))
 }

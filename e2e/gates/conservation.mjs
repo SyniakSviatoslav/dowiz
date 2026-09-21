@@ -18,6 +18,7 @@
 //   3. the money on an order is its lines plus fees minus its discount
 //   4. every delivered order's cash is accounted to a courier
 //   5. the image gauges read against their CEILING and are under it
+//   6. nothing is quarantined, and the log's claim equals served + withheld
 //
 // It takes an owner token per venue and reads only. Exit 1 on any breach, with
 // the order named -- a gate whose failure cannot be chased is a dashboard.
@@ -134,7 +135,31 @@ for (const host of HOSTS) {
     if (perMille > 800) note(venue, 'image', `${name} at ${perMille} per mille of its ceiling`);
   }
 
-  console.log(`${venue}: ${list.length} orders, ${ENDED.size} terminal states known, ${Object.keys(health?.images || {}).length} images gauged`);
+  // ── 6. nothing is quarantined ───────────────────────────────────────────
+  //
+  // A record this build cannot read is skipped by `events()` and named by
+  // `/api/owner/health`. It is a FAILING LAW rather than a warning for the
+  // reason the blueprint gives: a quarantine nobody notices is a data-loss
+  // feature with better manners. The arithmetic beside it is the other half --
+  // the root's claim must equal what the log delivers plus what it withheld,
+  // or a record went somewhere neither list admits to.
+  const q = health?.quarantined || [];
+  for (const r of q) note(venue, 'quarantine', `${r.image || 'log'} record ${r.id.slice(0, 16)}… at ${r.at} unreadable (${r.reason})`);
+  // The arithmetic below is the ORDER log's, so it counts only that log's
+  // withheld records. An entry from another image is still a breach -- it was
+  // noted above -- but adding it here would make the sum disagree for a
+  // reason that has nothing to do with the orders.
+  const qLog = q.filter((r) => (r.image || 'log') === 'log');
+  // `events` is absent on a deployment older than this field, and a gate that
+  // goes red because the Worker has not been deployed yet is a gate that gets
+  // switched off. Absent means "not measured", never "zero".
+  const claimed = health?.orders ?? 0;
+  const served = health?.events;
+  if (claimed && served != null && served + qLog.length !== claimed) {
+    note(venue, 'quarantine', `log claims ${claimed} records, serves ${served}, withholds ${qLog.length}`);
+  }
+
+  console.log(`${venue}: ${list.length} orders, ${ENDED.size} terminal states known, ${Object.keys(health?.images || {}).length} images gauged, ${q.length} quarantined`);
 }
 
 if (breaches.length === 0) {

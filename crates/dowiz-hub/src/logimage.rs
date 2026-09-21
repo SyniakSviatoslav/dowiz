@@ -79,6 +79,19 @@ fn encode(kind: &str, subject: &str, json: &str) -> Result<Vec<u8>, HubError> {
     Ok(p)
 }
 
+/// The named refusals, for the quarantine list. See `crate::decode_or_reason`:
+/// "it did not decode" is not evidence, and evidence is what a quarantined
+/// record is for.
+fn decode_or_reason(p: &[u8], seq: u64) -> Result<Entry, &'static str> {
+    decode(p, seq).ok_or_else(|| {
+        let Some(&kl) = p.first() else { return "empty" };
+        match p.get(1..1 + kl as usize) {
+            None => "kind-framing",
+            Some(_) => "subject-framing",
+        }
+    })
+}
+
 fn decode(p: &[u8], seq: u64) -> Option<Entry> {
     let kl = *p.first()? as usize;
     let k = p.get(1..1 + kl)?;
@@ -123,7 +136,7 @@ impl LogImage {
         // is a venue quietly losing thirty-eight of its errors, messages or
         // ledger postings, and the one place it can still be said out loud is
         // here. See `crate::chain_is_whole`.
-        crate::chain_is_whole(&store, |r| decode(&r.payload, 0).is_some())?;
+        crate::chain_is_whole(&store)?;
         Ok(LogImage { store })
     }
 
@@ -170,6 +183,22 @@ impl LogImage {
             .into_iter()
             .enumerate()
             .filter_map(|(i, r)| decode(&r.payload, (n - 1 - i) as u64))
+            .collect()
+    }
+
+    /// Every record this image holds and this build cannot read, newest first.
+    /// The same law as the order log's: `len() == entries().len() +
+    /// quarantined().len()`, and a non-zero count is a failing gate.
+    pub fn quarantined(&self) -> Vec<crate::Quarantined> {
+        let walked = EvLog::walk(&self.store);
+        walked
+            .iter()
+            .enumerate()
+            .filter_map(|(at, r)| {
+                decode_or_reason(&r.payload, 0)
+                    .err()
+                    .map(|reason| crate::Quarantined { id: crate::hex32(&r.id), at, reason })
+            })
             .collect()
     }
 
@@ -301,8 +330,8 @@ mod tests {
                 Err(_) => refused += 1,
                 Ok(short) => assert_eq!(
                     short.len(),
-                    short.entries().len(),
-                    "a log cut to {keep} of {} bytes loaded and then disagreed with itself",
+                    short.entries().len() + short.quarantined().len(),
+                    "a log cut to {keep} of {} bytes lost a record to neither list",
                     bytes.len()
                 ),
             }
@@ -311,6 +340,50 @@ mod tests {
         // And the whole image still loads whole -- a check that refuses
         // everything is not a check.
         assert_eq!(LogImage::load(&bytes).unwrap().entries().len(), 40);
+    }
+
+    /// L5 ON THIS SIDE OF THE HOUSE. The order log is not the only log: the
+    /// audit image holds the venue's own failures, and a record it cannot read
+    /// is the INSTRUMENT losing records. So the same law, and it is arithmetic:
+    /// `len() == entries().len() + quarantined().len()`.
+    ///
+    /// The reason is named rather than "it did not decode", because the
+    /// quarantine list is evidence for a human and "it did not decode" is not
+    /// evidence.
+    #[test]
+    fn a_record_this_build_cannot_read_is_quarantined_and_the_log_still_answers() {
+        let mut l = LogImage::create().unwrap();
+        for i in 0..6 {
+            l.append("error", "notify.telegram", &format!(r#"{{"n":{i}}}"#)).unwrap();
+        }
+        let mut st = bebop_store::Store::from_bytes(&l.to_bytes());
+        let root = st.root().expect("root");
+        let newest = st.follow(root, 1).expect("newest");
+        // v2 packs eight payload bytes per cell after a twelve-cell header,
+        // plus four more when an actor key is present (bit 0 of cell 11). This
+        // log appends without an actor, so the payload starts at twelve.
+        let at = if st.get(newest, 11) & 1 != 0 { 16 } else { 12 };
+        let cell = st.get(newest, at);
+        // Byte 0 is the kind's LENGTH, and 255 runs off the end of a payload
+        // this short -- the framing damage a truncated write would leave.
+        st.cells[newest + 2 + at] = (cell & !0xFF) | 0xFF;
+
+        let broken = LogImage::load(&st.to_bytes()).expect("one bad record must not refuse the image");
+        assert_eq!(broken.len(), 6, "the image still holds six records");
+        assert_eq!(broken.entries().len(), 5, "the unreadable one is not served");
+        let q = broken.quarantined();
+        assert_eq!(q.len(), 1, "and it is named: {q:?}");
+        assert_eq!(q[0].reason, "kind-framing");
+        assert_eq!(q[0].at, 0, "it was the newest record");
+        assert_eq!(q[0].id.len(), 64, "the id is there for a human to find");
+        assert_eq!(
+            broken.len(),
+            broken.entries().len() + broken.quarantined().len(),
+            "a record must be in exactly one of the two lists"
+        );
+        // And the filtered query -- what the console actually calls -- still
+        // answers, which is the point of not refusing the image.
+        assert_eq!(broken.about("error", Some("notify.telegram"), 10).len(), 5);
     }
 
     /// The other half: the image is all there, and one `next` ref is not.

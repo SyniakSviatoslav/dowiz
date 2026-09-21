@@ -310,7 +310,7 @@ impl Hub {
         // survives a truncation -- it is fifteen cells at the front of the
         // image -- so "the superblock is valid" was never the same statement
         // as "the log is all here". See `chain_is_whole`.
-        chain_is_whole(&store, |r| decode(r).is_some())?;
+        chain_is_whole(&store)?;
         Ok(Hub { store })
     }
 
@@ -460,7 +460,29 @@ impl Hub {
         Ok(())
     }
 
-    /// Every event, newest first.
+    /// Every record this build cannot read, newest first.
+    ///
+    /// THE COUNT IS THE POINT. `events()` has always skipped a record it could
+    /// not parse, and a silent skip is a venue losing an order with nothing to
+    /// say so — the same mistake as the storage error that was read as "no
+    /// image". The law that replaces the silence is arithmetic and is asserted
+    /// in the tests: `len() == events().len() + quarantined().len()`. Anything
+    /// else means a record went somewhere neither list admits to.
+    ///
+    /// A non-zero count is a FAILING GATE, not a warning: `/api/owner/health`
+    /// carries it, and a quarantine nobody notices is a data-loss feature.
+    pub fn quarantined(&self) -> Vec<Quarantined> {
+        EvLog::walk(&self.store)
+            .iter()
+            .enumerate()
+            .filter_map(|(at, r)| {
+                decode_or_reason(r).err().map(|reason| Quarantined { id: hex32(&r.id), at, reason })
+            })
+            .collect()
+    }
+
+    /// Every event, newest first. A record that cannot be read is left out and
+    /// appears in `quarantined()` instead — never dropped silently.
     pub fn events(&self) -> Vec<Event> {
         EvLog::walk(&self.store)
             .into_iter()
@@ -692,10 +714,12 @@ pub(crate) fn e_is_full(e: &StoreError) -> bool {
 /// is promised: the chain is as long as the root claims, it ends, and every
 /// record on it reads back.
 ///
-/// `readable` is the caller's own decoder, passed in rather than reimplemented
-/// here, because the two must not drift: a record this accepted and `events()`
-/// then dropped would be the very hole being closed.
-fn chain_is_whole(store: &Store, readable: impl Fn(&Record) -> bool) -> Result<(), HubError> {
+/// AND IT IS ABOUT THE IMAGE, NOT ABOUT ONE RECORD. An image that arrived
+/// incomplete is refused, because the caller can re-fetch it. A single record
+/// this build cannot parse is a different failure and gets the opposite
+/// answer: it is QUARANTINED, counted and served around, because one bad
+/// record must not close the restaurant. See `Hub::quarantined`.
+fn chain_is_whole(store: &Store) -> Result<(), HubError> {
     let claimed = EvLog::len(store);
     let Some(chained) = EvLog::chain_len(store) else {
         return Err(HubError::Corrupt { claimed, chained: None });
@@ -703,31 +727,57 @@ fn chain_is_whole(store: &Store, readable: impl Fn(&Record) -> bool) -> Result<(
     if chained != claimed {
         return Err(HubError::Corrupt { claimed, chained: Some(chained) });
     }
-    // The chain is the right length; now every record on it must also READ
-    // BACK. A payload whose own framing was damaged decodes to `None`, and
-    // `events()`/`entries()` filter those out -- so an image holding one would
-    // answer `len() == 40` and hand back thirty-nine. The count is the
-    // promise, and this is its other half. Only reached once the cheap check
-    // passes, so a corrupt image never pays for this walk.
-    let delivered = EvLog::walk(store).iter().filter(|r| readable(r)).count();
-    if delivered != claimed {
-        return Err(HubError::Corrupt { claimed, chained: Some(delivered) });
-    }
     Ok(())
 }
 
-fn decode(r: &Record) -> Option<Event> {
-    if r.payload.len() < 2 {
-        return None;
+/// A record the log holds and this build cannot read.
+///
+/// IT IS EVIDENCE, NOT AN ERROR MESSAGE, which is why it carries the id: the
+/// record stays in the image verbatim, and a human can find it there. Nothing
+/// here repairs anything — an automatic repair of a record nobody has looked at
+/// is how a corrupted order becomes a plausible one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Quarantined {
+    /// The record's chain id in hex, as `chain_check` and the archives name it.
+    pub id: String,
+    /// Its position in the chain, newest first — the same order `events()` uses.
+    pub at: usize,
+    /// Which of the payload's promises it broke.
+    pub reason: &'static str,
+}
+
+pub(crate) fn hex32(b: &[u8; 32]) -> String {
+    let mut s = String::with_capacity(64);
+    for x in b {
+        s.push(char::from_digit((x >> 4) as u32, 16).unwrap_or('0'));
+        s.push(char::from_digit((x & 15) as u32, 16).unwrap_or('0'));
     }
-    let kind = EventKind::from_byte(r.payload[0])?;
+    s
+}
+
+/// WHY THE FAILURE HAS A NAME. `decode` returned `None` for four different
+/// things and every caller turned that into "not an event", so a record with an
+/// unknown kind was indistinguishable from one whose payload was shredded. The
+/// quarantine list is evidence for a human, and "it did not decode" is not
+/// evidence. One decoder, four named refusals, and `decode` is this with the
+/// name thrown away.
+fn decode_or_reason(r: &Record) -> Result<Event, &'static str> {
+    if r.payload.len() < 2 {
+        return Err("short");
+    }
+    let kind = EventKind::from_byte(r.payload[0]).ok_or("kind")?;
     let id_len = r.payload[1] as usize;
     if r.payload.len() < 2 + id_len {
-        return None;
+        return Err("framing");
     }
-    let order_id = String::from_utf8(r.payload[2..2 + id_len].to_vec()).ok()?;
-    let order_json = String::from_utf8(r.payload[2 + id_len..].to_vec()).ok()?;
-    Some(Event { kind, order_id, order_json, seq: r.actor_seq })
+    let order_id = String::from_utf8(r.payload[2..2 + id_len].to_vec()).map_err(|_| "id-utf8")?;
+    let order_json =
+        String::from_utf8(r.payload[2 + id_len..].to_vec()).map_err(|_| "json-utf8")?;
+    Ok(Event { kind, order_id, order_json, seq: r.actor_seq })
+}
+
+fn decode(r: &Record) -> Option<Event> {
+    decode_or_reason(r).ok()
 }
 
 /// Content id over the PREVIOUS ID AND THE PAYLOAD — the cascade that makes
@@ -840,8 +890,8 @@ mod tests {
             if let Ok(short) = Hub::load(&bytes[..keep]) {
                 assert_eq!(
                     short.len(),
-                    short.events().len(),
-                    "a hub cut to {keep} bytes loaded and then disagreed with itself"
+                    short.events().len() + short.quarantined().len(),
+                    "a hub cut to {keep} bytes loaded and then lost a record to neither list"
                 );
             }
         }
@@ -855,6 +905,53 @@ mod tests {
             matches!(Hub::load(&st.to_bytes()), Err(HubError::Corrupt { claimed: 12, .. })),
             "a chain that stops early must be refused, not served short"
         );
+    }
+
+    /// L5 FROM THE RESILIENCE BLUEPRINT: one bad record must not close the
+    /// restaurant, and must not vanish either.
+    ///
+    /// These are the two failures of the same byte. Refusing the whole image
+    /// because one record is unreadable takes a venue off the air over a single
+    /// order; skipping it silently takes the order off the books and says
+    /// nothing. So: the hub LOADS, the record is left out of `events()`, and it
+    /// is named in `quarantined()` with the promise it broke and an id a human
+    /// can find in the image. The arithmetic is the whole guarantee —
+    /// `len() == events().len() + quarantined().len()` — because it is the one
+    /// statement that cannot be true while a record is quietly missing.
+    #[test]
+    fn a_record_this_build_cannot_read_is_quarantined_and_the_venue_still_serves() {
+        let mut h = Hub::create_sized(1 << 20).unwrap();
+        for i in 0..6 {
+            let id = format!("ord_{i:02}");
+            h.append(EventKind::Placed, &id, &order(&id, "PENDING"), i as u64, ACTOR).unwrap();
+        }
+        let bytes = h.to_bytes_trimmed();
+
+        let mut st = Store::from_bytes(&bytes);
+        let root = st.root().unwrap();
+        let newest = st.follow(root, 1).unwrap();
+        // v2 packs eight payload bytes per cell after a twelve-cell header, plus
+        // four more when an actor key is present (bit 0 of cell 11 says so).
+        let at = if st.get(newest, 11) & 1 != 0 { 16 } else { 12 };
+        let cell = st.get(newest, at);
+        // Byte 0 of the payload is the event kind, and 9 is not one of the six.
+        st.cells[newest + 2 + at] = (cell & !0xFF) | 9;
+
+        let broken = Hub::load(&st.to_bytes()).expect("one bad record must not refuse the image");
+        assert_eq!(broken.len(), 6, "the log still holds six records");
+        assert_eq!(broken.events().len(), 5, "the unreadable one is not served");
+        let q = broken.quarantined();
+        assert_eq!(q.len(), 1, "and it is named: {q:?}");
+        assert_eq!(q[0].reason, "kind");
+        assert_eq!(q[0].at, 0, "it was the newest record");
+        assert_eq!(q[0].id.len(), 64, "the id is there for a human to find");
+        assert_eq!(
+            broken.len(),
+            broken.events().len() + broken.quarantined().len(),
+            "a record must be in exactly one of the two lists"
+        );
+        // The orders that are readable are still served, which is the point.
+        assert!(broken.order("ord_00").is_ok(), "the venue keeps serving");
     }
 
     /// The point of the log: an order's state is the FOLD, so the newest event

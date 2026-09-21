@@ -100,20 +100,40 @@ macro_rules! loud {
     }};
 }
 
+/// What one read of the audit image says: the newest failures, and every
+/// record in it this build cannot read.
+///
+/// THE TWO COME FROM ONE LOAD, on purpose. The image is already fetched for
+/// the console, and a second fetch for the quarantine would put a request on
+/// the bill for bytes that are already in hand. An instrument that costs extra
+/// is an instrument that gets switched off.
+pub struct Recent {
+    pub errors: Vec<serde_json::Value>,
+    pub quarantined: Vec<dowiz_hub::Quarantined>,
+}
+
+impl Default for Recent {
+    /// WHAT AN UNREADABLE IMAGE ANSWERS. No errors and no quarantine -- which
+    /// is the same shape as a healthy venue, and is why the caller logs the
+    /// failure rather than letting this stand in for a measurement.
+    fn default() -> Self {
+        Recent { errors: Vec::new(), quarantined: Vec::new() }
+    }
+}
+
 /// The newest failures, for the console and for an operator.
-pub async fn recent(
-    ns: &ObjectNamespace,
-    venue: &str,
-    limit: usize,
-) -> Result<Vec<serde_json::Value>> {
+pub async fn recent(ns: &ObjectNamespace, venue: &str, limit: usize) -> Result<Recent> {
     let stub = ns.id_from_name(venue)?.get_stub()?;
     let loaded = crate::platform_store::load_log_at(&stub, crate::hubstore::IMAGE_AUDIT).await?;
-    Ok(loaded
-        .log
-        .about(KIND, None, limit)
-        .into_iter()
-        .filter_map(|e| serde_json::from_str::<serde_json::Value>(&e.json).ok())
-        .collect())
+    Ok(Recent {
+        errors: loaded
+            .log
+            .about(KIND, None, limit)
+            .into_iter()
+            .filter_map(|e| serde_json::from_str::<serde_json::Value>(&e.json).ok())
+            .collect(),
+        quarantined: loaded.log.quarantined(),
+    })
 }
 
 /// Drop what is older than `KEEP_MS`, and anything past `KEEP_MOST`.

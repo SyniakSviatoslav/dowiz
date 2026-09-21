@@ -43,6 +43,8 @@ mod catalog_edit;
 mod recipe;
 mod waitlist;
 mod errlog;
+mod gauges;
+mod quarantine;
 mod fold;
 mod live;
 

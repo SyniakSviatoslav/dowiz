@@ -147,7 +147,7 @@ runs in CI or a gate; *continuous* = runs in production.
 
 | # | Fitness function | Kind | Owns |
 |---|---|---|---|
-| F1 | file-size ratchet, 300 hard / 150 target, may only fall — `tools/gates/file-size.sh`, at `over=42 worst=3853` | atomic · triggered | blueprint 2 §5 |
+| F1 | file-size ratchet, 300 hard / 150 target, may only fall — `tools/gates/file-size.sh`, at `over=42 worst=3815` | atomic · triggered | blueprint 2 §5 |
 | F2 | no tenancy/pricing/permission `match` inside an `async fn` | atomic · triggered | 6 venue defects, 2 money defects |
 | F3 | line + branch coverage on money, stock, tenancy, **beside mutation score** | atomic · triggered | blueprint 2 §6 |
 | F4 | every fixed defect ships with the test that would have caught it | holistic · triggered | the Beyoncé rule |
@@ -162,7 +162,7 @@ runs in CI or a gate; *continuous* = runs in production.
 | F13 | N-way placement collision: exactly `min(N,k)` succeed | holistic · triggered | the last unit |
 | F14 | year-long timezone simulation: the day boundary moves exactly twice | atomic · triggered | the live DST defect |
 | F15 | 120 simulated nights: retention matches the stated policy | holistic · triggered | backups keeping 8 copies |
-| F16 | poison-pill injection: venue serves, record quarantined and counted, gate red | holistic · triggered | containment |
+| F16 | poison-pill injection: venue serves, record quarantined and counted, gate red | holistic · triggered | containment — **DONE 2026-09-21** |
 | F17 | breaker trip: the fallback appears **without paying the timeout** | holistic · triggered | three integration points |
 | F18 | instrument-fires: `sqlite_sequence` moves for `worker_errors` | holistic · triggered | an error table that has never received a row |
 | F19 | four budgets — requests, bytes, cells, p95 — cells and bytes hard, the rest on an error budget | holistic · triggered | blueprint 4 §2 |
@@ -220,7 +220,7 @@ the plan.
 - F8 the conservation audit, as a runnable gate after every E2E.
 - **F27 the hub crates in CI**, and F25's loaders hardened against the bytes
   they are handed. **DONE 2026-09-21** — see the registry note above.
-- **F1 the file-size ratchet. DONE 2026-09-21** at `over=42 worst=3853`
+- **F1 the file-size ratchet. DONE 2026-09-21** at `over=42 worst=3815`
   (`workers/api/src/extra.rs`). Two numbers rather than one, because a gate that
   counts only the files past 300 lines lets THE big file keep growing, and a
   gate that watches only the biggest lets every other file drift to 299. Both
@@ -239,7 +239,16 @@ gets all four.
 
 ### Phase 2 — dismantle `extra.rs` (2 weeks)
 3,666 lines into five services. **Each slice lands its characterization test in
-the commit before the move.** F16 quarantine lands here, with the health gauge.
+the commit before the move.**
+
+- **F16 quarantine and the health gauge. DONE 2026-09-21.** Both logs — the
+  order log and the venue's audit image — answer `len() == served + withheld`,
+  each withheld record naming its image, its position, its chain id and the
+  promise it broke. The conservation gate's law 6 was triggered on all three
+  of its branches before being trusted. It brought the first two slices of
+  this phase out with it, `gauges` and `quarantine`, because the ratchet
+  refused the alternative: the ratchet fell from 3,853 to 3,815 rather than
+  being raised, which is the mechanism working as designed.
 
 ### Phase 3 — `identity/` (1 week)
 The tenancy rules that produced six defects, lifted into pure functions behind
