@@ -88,9 +88,15 @@ pub fn apikey_at(location_id: &str, hash: &str) -> String {
     format!("apikey.loc/{location_id}/{hash}")
 }
 
-/// A courier is found by the phone they log in with. UNIQUE.
-pub fn courier_by_phone(phone_encrypted: &str) -> String {
-    format!("courier.phone/{phone_encrypted}")
+/// A courier is found by the phone or the email they log in with. UNIQUE, and
+/// SEPARATE: the old schema matched both against one shared hash space, where a
+/// phone could in principle resolve an email's record. Two prefixes cannot.
+pub fn courier_by_phone(phone_hash: &str) -> String {
+    format!("courier.phone/{phone_hash}")
+}
+
+pub fn courier_by_email(email_hash: &str) -> String {
+    format!("courier.email/{email_hash}")
 }
 
 /// Which venues a courier is on the roster of, and who is on a venue's roster.
@@ -172,6 +178,35 @@ pub fn s_of(v: &serde_json::Value, k: &str) -> String {
 
 pub fn i_of(v: &serde_json::Value, k: &str) -> i64 {
     v.get(k).and_then(serde_json::Value::as_i64).unwrap_or(0)
+}
+
+/// The person who holds this address, if anyone.
+pub fn user_id_for_email(t: &Table, email: &str) -> Option<String> {
+    t.lookup(&user_by_email(email))
+}
+
+/// The courier who logs in with this phone or email, if anyone.
+pub fn courier_id_for_phone(t: &Table, phone_hash: &str) -> Option<String> {
+    t.lookup(&courier_by_phone(phone_hash))
+}
+
+pub fn courier_id_for_email(t: &Table, email_hash: &str) -> Option<String> {
+    t.lookup(&courier_by_email(email_hash))
+}
+
+/// Every index key a courier record owns, from the record itself. Used by the
+/// writers and by `rebuild_index`, so the two cannot disagree.
+pub fn courier_index(id: &str, rec: &serde_json::Value) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let p = s_of(rec, "phone_hash");
+    if !p.is_empty() {
+        out.push((courier_by_phone(&p), id.to_string()));
+    }
+    let e = s_of(rec, "email_hash");
+    if !e.is_empty() {
+        out.push((courier_by_email(&e), id.to_string()));
+    }
+    out
 }
 
 /// An ACTIVE membership of this venue, or nothing.

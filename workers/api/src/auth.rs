@@ -448,7 +448,7 @@ pub async fn authenticate_token(
     // instead of that their key is wrong. `dowiz_` is also what lets a secret
     // scanner recognise one in a repository.
     if let Some(rest) = raw.strip_prefix("dowiz_") {
-        return api_key_principal(db, rest, now_ms).await;
+        return api_key_principal(env, rest, now_ms).await;
     }
 
     let claims = verify(env, &raw, now_ms)?;
@@ -469,29 +469,23 @@ pub async fn authenticate_token(
             //
             // A claim that names NO venue is a platform-admin token and is
             // handled below as it always was; it owns no restaurant by design.
-            let still: Option<String> = match active_location_id.as_deref() {
-                Some(venue) => db
-                    .prepare(
-                        "SELECT m.id FROM memberships m \
-                         WHERE m.user_id = ?1 AND m.location_id = ?2 \
-                         AND m.role = 'owner' AND m.status = 'active' LIMIT 1",
-                    )
-                    .bind(&[user_id.clone().into(), venue.into()])
-                    .map_err(|e| AuthError::Db(e.to_string()))?
-                    .first(Some("id"))
-                    .await
-                    .map_err(|e| AuthError::Db(e.to_string()))?,
-                None => db
-                    .prepare(
-                        "SELECT m.id FROM memberships m \
-                         WHERE m.user_id = ?1 AND m.role = 'owner' AND m.status = 'active' LIMIT 1",
-                    )
-                    .bind(&[user_id.clone().into()])
-                    .map_err(|e| AuthError::Db(e.to_string()))?
-                    .first(Some("id"))
-                    .await
-                    .map_err(|e| AuthError::Db(e.to_string()))?,
+            let t = crate::identity_store::identity(env)
+                .await
+                .map_err(|e| AuthError::Db(e.to_string()))?;
+            let still = match active_location_id.as_deref() {
+                Some(venue) => crate::identity_store::membership(&t, venue, &user_id)
+                    .filter(|m| crate::identity_store::s_of(m, "role") == "owner")
+                    .is_some(),
+                // A claim that names NO venue is a platform-admin token and is
+                // handled below as it always was; it owns no restaurant by
+                // design. "Owner of anything" is only asked when no venue was
+                // claimed -- asking it when one WAS claimed is the defect that
+                // kept a removed owner in venue A for the life of their token.
+                None => crate::identity_store::memberships_of(&t, &user_id)
+                    .iter()
+                    .any(|(_, role)| role == "owner"),
             };
+            let still = if still { Some(String::new()) } else { None };
             if still.is_none() {
                 return Err(AuthError::Revoked("owner membership is gone or suspended"));
             }
@@ -505,18 +499,32 @@ pub async fn authenticate_token(
                 expires_at_ms: i64,
                 has_location: i64,
             }
-            let row: Option<Row> = db
-                .prepare(
-                    "SELECT s.revoked_at_ms AS revoked_at_ms, s.expires_at_ms AS expires_at_ms, \
-                     EXISTS(SELECT 1 FROM courier_locations cl \
-                            WHERE cl.courier_id = s.courier_id AND cl.location_id = ?2) AS has_location \
-                     FROM courier_sessions s WHERE s.id = ?1 AND s.courier_id = ?3",
-                )
-                .bind(&[jti.clone().into(), active_location_id.clone().into(), sub.clone().into()])
-                .map_err(|e| AuthError::Db(e.to_string()))?
-                .first(None)
-                .await
-                .map_err(|e| AuthError::Db(e.to_string()))?;
+            // FOUR CONDITIONS, TWO READS. The session says whether it is live;
+            // the roster says whether this courier is on THIS venue's. They are
+            // in two images because they are two facts with different lifetimes
+            // -- a session turns over, a roster does not -- and the join that
+            // used to decide both at once is now two lookups by key.
+            let (sess, crew) = futures_util::future::join(
+                crate::identity_store::sessions(env),
+                crate::identity_store::couriers(env),
+            )
+            .await;
+            let sess = sess.map_err(|e| AuthError::Db(e.to_string()))?;
+            let crew = crew.map_err(|e| AuthError::Db(e.to_string()))?;
+            let row = crate::identity_store::rec(&sess, crate::identity_store::K_CSESSION, &jti)
+                .filter(|r| crate::identity_store::s_of(r, "courier_id") == sub)
+                .map(|r| Row {
+                    revoked_at_ms: r
+                        .get("revoked_at_ms")
+                        .and_then(serde_json::Value::as_i64),
+                    expires_at_ms: crate::identity_store::i_of(&r, "expires_at_ms"),
+                    has_location: crew
+                        .get(
+                            crate::identity_store::K_ROSTER,
+                            &crate::identity_store::roster_id(&active_location_id, &sub),
+                        )
+                        .is_some() as i64,
+                });
             let row = row.ok_or(AuthError::Revoked("no such courier session"))?;
             if row.revoked_at_ms.is_some() {
                 return Err(AuthError::Revoked("courier session revoked"));
@@ -542,7 +550,7 @@ pub async fn authenticate_token(
 /// carry their row id. Everything that can refuse does: an unknown id, a
 /// mismatched secret, a revoked key and an expired one all answer the same way.
 async fn api_key_principal(
-    db: &D1Database,
+    env: &Env,
     rest: &str,
     now_ms: i64,
 ) -> std::result::Result<Principal, AuthError> {
@@ -557,15 +565,16 @@ async fn api_key_principal(
         expires_at_ms: i64,
         revoked_at_ms: Option<i64>,
     }
-    let row: Option<Row> = db
-        .prepare(
-            "SELECT owner_id, location_id, key_hash, expires_at_ms, revoked_at_ms              FROM owner_api_keys WHERE id = ?1",
-        )
-        .bind(&[id.into()])
-        .map_err(|e| AuthError::Db(e.to_string()))?
-        .first(None)
+    let sess = crate::identity_store::sessions(env)
         .await
         .map_err(|e| AuthError::Db(e.to_string()))?;
+    let row = crate::identity_store::rec(&sess, crate::identity_store::K_APIKEY, id).map(|r| Row {
+        owner_id: crate::identity_store::s_of(&r, "owner_id"),
+        location_id: crate::identity_store::s_of(&r, "location_id"),
+        key_hash: crate::identity_store::s_of(&r, "key_hash"),
+        expires_at_ms: crate::identity_store::i_of(&r, "expires_at_ms"),
+        revoked_at_ms: r.get("revoked_at_ms").and_then(serde_json::Value::as_i64),
+    });
     let Some(row) = row else {
         return Err(AuthError::Revoked("no such key"));
     };
@@ -580,12 +589,33 @@ async fn api_key_principal(
     }
     // Recorded, not enforced: an owner looking at a key they no longer recognise
     // needs to know whether anything is still using it before they revoke it.
-    let _ = db
-        .prepare("UPDATE owner_api_keys SET last_used_ms = ?2 WHERE id = ?1")
-        .bind(&[id.into(), wasm_bindgen::JsValue::from_f64(now_ms as f64)])
-        .map_err(|e| AuthError::Db(e.to_string()))?
-        .run()
-        .await;
+    //
+    // AND NOT ALLOWED TO FAIL THE CALL. It was `let _ = ...` before and it
+    // stays that way: a key that works must not stop working because a
+    // bookkeeping write lost a generation guard.
+    let key_id = id.to_string();
+    let _ = crate::identity_store::with_sessions(env, move |t| {
+        if let Some(mut r) =
+            crate::identity_store::rec(t, crate::identity_store::K_APIKEY, &key_id)
+        {
+            r["last_used_ms"] = serde_json::json!(now_ms);
+            let loc = crate::identity_store::s_of(&r, "location_id");
+            let index = vec![(
+                crate::identity_store::apikey_at(&loc, &key_id),
+                key_id.clone(),
+            )];
+            t.put(
+                crate::identity_store::K_APIKEY,
+                &key_id,
+                &r.to_string(),
+                &index,
+                &[],
+            )
+            .map_err(|e| Error::RustError(format!("api key: {e}")))?;
+        }
+        Ok(())
+    })
+    .await;
     Ok(Principal::Owner {
         user_id: row.owner_id,
         active_location_id: Some(row.location_id),

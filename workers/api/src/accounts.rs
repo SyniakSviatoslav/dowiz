@@ -63,27 +63,27 @@ fn opaque_token() -> Option<String> {
     Some(format!("{}{}", crate::edge_id()?, crate::edge_id()?).replace('-', ""))
 }
 
-async fn issue_owner_refresh(
-    db: &D1Database,
-    user_id: &str,
-    family_id: &str,
-) -> Result<Option<String>> {
+async fn issue_owner_refresh(env: &Env, user_id: &str, family_id: &str) -> Result<Option<String>> {
     let Some(tok) = opaque_token() else { return Ok(None) };
-    let Some(id) = crate::edge_id() else { return Ok(None) };
     let now = now_ms();
-    db.prepare(
-        "INSERT INTO auth_refresh_tokens (id,user_id,family_id,token_hash,used,expires_at_ms,created_at_ms) \
-         VALUES (?1,?2,?3,?4,0,?5,?6)",
-    )
-    .bind(&[
-        id.into(),
-        user_id.into(),
-        family_id.into(),
-        sha256_hex(&tok).into(),
-        wasm_bindgen::JsValue::from_f64((now + REFRESH_TTL_MS) as f64),
-        wasm_bindgen::JsValue::from_f64(now as f64),
-    ])?
-    .run()
+    // THE TOKEN HASH IS THE KEY. The table had a surrogate `id` and an index on
+    // `token_hash`; the hash is what every read looks up by, so it is the
+    // record's id and the index is the record.
+    let hash = sha256_hex(&tok);
+    let (h, u, f) = (hash.clone(), user_id.to_string(), family_id.to_string());
+    crate::identity_store::with_sessions(env, move |t| {
+        let rec = serde_json::json!({
+            "user_id": u, "family_id": f, "used": false,
+            "expires_at_ms": now + REFRESH_TTL_MS, "created_at_ms": now,
+        })
+        .to_string();
+        let index = vec![(
+            crate::identity_store::refresh_family(&f, now),
+            h.clone(),
+        )];
+        t.put(crate::identity_store::K_REFRESH, &h, &rec, &index, &[])
+            .map_err(|e| Error::RustError(format!("refresh: {e}")))
+    })
     .await?;
     Ok(Some(tok))
 }
@@ -101,11 +101,13 @@ async fn issue_owner_refresh(
 /// and we try again then. Turning a successful authentication into a 500
 /// because of an optimisation would be the worse trade by a wide margin.
 ///
-/// The table name is a `&'static str` chosen at the two call sites rather than
-/// anything derived from a request, because it is interpolated into SQL.
+/// WHICH SET, chosen at the two call sites. This used to be a table name
+/// interpolated into SQL, with a comment explaining that it was a `&'static
+/// str` for exactly that reason. There is no SQL to interpolate into now, and
+/// the parameter is a record kind rather than a fragment of a statement.
 async fn upgrade_hash(
-    db: &D1Database,
-    table: &'static str,
+    env: &Env,
+    what: Who,
     id: &str,
     password: &str,
     stored: Option<&str>,
@@ -115,10 +117,46 @@ async fn upgrade_hash(
         return;
     }
     let Ok(fresh) = hash_password(password) else { return };
-    let sql = format!("UPDATE {table} SET password_hash = ?2 WHERE id = ?1");
-    if let Ok(stmt) = db.prepare(&sql).bind(&[id.into(), fresh.into()]) {
-        let _ = stmt.run().await;
-    }
+    let id = id.to_string();
+    let _ = match what {
+        Who::Owner => {
+            crate::identity_store::with_identity(env, move |t| {
+                if let Some(mut u) =
+                    crate::identity_store::rec(t, crate::identity_store::K_USER, &id)
+                {
+                    u["password_hash"] = serde_json::json!(fresh);
+                    let email = crate::identity_store::s_of(&u, "email");
+                    let index =
+                        vec![(crate::identity_store::user_by_email(&email), id.clone())];
+                    t.put(crate::identity_store::K_USER, &id, &u.to_string(), &index, &[])
+                        .map_err(|e| Error::RustError(format!("user: {e}")))?;
+                }
+                Ok(())
+            })
+            .await
+        }
+        Who::Courier => {
+            crate::identity_store::with_couriers(env, move |t| {
+                if let Some(mut c) =
+                    crate::identity_store::rec(t, crate::identity_store::K_COURIER, &id)
+                {
+                    c["password_hash"] = serde_json::json!(fresh);
+                    let index = crate::identity_store::courier_index(&id, &c);
+                    t.put(crate::identity_store::K_COURIER, &id, &c.to_string(), &index, &[])
+                        .map_err(|e| Error::RustError(format!("courier: {e}")))?;
+                }
+                Ok(())
+            })
+            .await
+        }
+    };
+}
+
+/// Whose password is being rehashed.
+#[derive(Clone, Copy)]
+enum Who {
+    Owner,
+    Courier,
 }
 
 /// `POST /api/auth/login` — owner, email + password.
@@ -136,11 +174,20 @@ pub async fn owner_login(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
         password_hash: Option<String>,
         display_name: Option<String>,
     }
-    let user: Option<U> = db
-        .prepare("SELECT id, password_hash, display_name FROM users WHERE email = ?1")
-        .bind(&[email.into()])?
-        .first(None)
-        .await?;
+    let ident = crate::identity_store::identity(&ctx.env).await?;
+    let user: Option<U> = crate::identity_store::user_id_for_email(&ident, &email)
+        .and_then(|id| crate::identity_store::rec(&ident, crate::identity_store::K_USER, &id))
+        .map(|u| U {
+        id: crate::identity_store::s_of(&u, "id"),
+        password_hash: u
+            .get("password_hash")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string),
+        display_name: u
+            .get("display_name")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string),
+        });
 
     // Same work on a miss as on a hit: "no such account" and "wrong password"
     // must not be distinguishable by how long the answer takes.
@@ -149,7 +196,8 @@ pub async fn owner_login(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
         return Response::error("invalid credentials", 401);
     }
     let user = user.expect("verified above");
-    upgrade_hash(&db, "users", &user.id, &body.password, user.password_hash.as_deref()).await;
+    upgrade_hash(&ctx.env, Who::Owner, &user.id, &body.password, user.password_hash.as_deref())
+        .await;
 
     // Authority comes from memberships, not from the request.
     #[derive(Deserialize)]
@@ -180,32 +228,31 @@ pub async fn owner_login(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
         }
     };
     let m: Option<M> = match wanted.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-        Some(l) => {
-            db.prepare(
-                "SELECT location_id FROM memberships \
-                 WHERE user_id = ?1 AND location_id = ?2 AND role = 'owner' \
-                 AND status = 'active' LIMIT 1",
-            )
-            .bind(&[user.id.clone().into(), l.into()])?
-            .first(None)
-            .await?
-        }
+        Some(l) => crate::identity_store::membership(&ident, l, &user.id)
+            .filter(|x| crate::identity_store::s_of(x, "role") == "owner")
+            .map(|_| M { location_id: l.to_string() }),
         // Reached where the host names no venue: the apex, `*.workers.dev`.
-        // For everyone who owns one venue this is still the oldest membership,
-        // which is the only one.
+        // For everyone who owns one venue this is still the only membership.
+        //
+        // IT IS NO LONGER `ORDER BY created_at_ms LIMIT 1`. That fallback was
+        // the oldest membership whichever host the login arrived on, and it is
+        // what sent an owner of two restaurants a token for the other one. Here
+        // the venue is named by the host above; when the host names none, the
+        // only defensible answer for someone with several is "say which", so
+        // the pick is the sorted-first one and is stable rather than an
+        // accident of when a row was written.
         None => {
-            db.prepare(
-                "SELECT location_id FROM memberships \
-                 WHERE user_id = ?1 AND role = 'owner' AND status = 'active' \
-                 ORDER BY created_at_ms LIMIT 1",
-            )
-            .bind(&[user.id.clone().into()])?
-            .first(None)
-            .await?
+            let mut owned: Vec<String> = crate::identity_store::memberships_of(&ident, &user.id)
+                .into_iter()
+                .filter(|(_, role)| role == "owner")
+                .map(|(loc, _)| loc)
+                .collect();
+            owned.sort();
+            owned.into_iter().next().map(|location_id| M { location_id })
         }
     };
     // A PLATFORM ADMINISTRATOR OWNS NO RESTAURANT, and that is the point of
-    // them. Authority still comes from a table and not from the request -- it
+    // them. Authority still comes from a record and not from the request -- it
     // just comes from a different one. Without this, the only way to sign in to
     // the main hub was to first make its administrator the owner of somebody's
     // venue, which would put a platform account inside a tenant's data.
@@ -215,16 +262,9 @@ pub async fn owner_login(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
     // hub: every venue route resolves its venue from the claim first. A
     // platform admin can create hubs and cannot read one.
     let admin: Option<M> = if m.is_none() {
-        #[derive(Deserialize)]
-        struct P {
-            user_id: String,
-        }
-        let p: Option<P> = db
-            .prepare("SELECT user_id FROM platform_admins WHERE user_id = ?1 LIMIT 1")
-            .bind(&[user.id.clone().into()])?
-            .first(None)
-            .await?;
-        p.map(|_| M { location_id: String::new() })
+        ident
+            .get(crate::identity_store::K_ADMIN, &user.id)
+            .map(|_| M { location_id: String::new() })
     } else {
         None
     };
@@ -248,7 +288,7 @@ pub async fn owner_login(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
     let Some(family) = crate::edge_id() else {
         return Response::error("no platform CSPRNG", 500);
     };
-    let refresh = issue_owner_refresh(&db, &user.id, &family).await?;
+    let refresh = issue_owner_refresh(&ctx.env, &user.id, &family).await?;
 
     Response::from_json(&json!({
         "access_token": access,
@@ -270,61 +310,80 @@ pub async fn owner_refresh(mut req: Request, ctx: RouteContext<()>) -> Result<Re
 
     #[derive(Deserialize)]
     struct R {
-        id: String,
         user_id: String,
         family_id: String,
-        used: i64,
-        expires_at_ms: i64,
     }
-    let row: Option<R> = db
-        .prepare("SELECT id,user_id,family_id,used,expires_at_ms FROM auth_refresh_tokens WHERE token_hash = ?1")
-        .bind(&[hash.into()])?
-        .first(None)
-        .await?;
-    let Some(row) = row else {
-        return Response::error("invalid refresh token", 401);
+    // ── THE WHOLE ROTATION IS ONE WRITE ──
+    //
+    // It was four statements: a read, a count, a conditional delete, and a
+    // conditional update whose `changes` count stood in for atomicity. Inside
+    // the object's own turn none of them can interleave, so the decision and
+    // the write are the same operation -- and "whoever flips `used` first owns
+    // the rotation" stops being a race the database happened to settle.
+    enum Verdict {
+        Ok { user_id: String, family_id: String },
+        Missing,
+        Expired,
+        Concurrent,
+        Reused,
+    }
+    let h = hash.clone();
+    let verdict = crate::identity_store::with_sessions(&ctx.env, move |t| {
+        let Some(r) = crate::identity_store::rec(t, crate::identity_store::K_REFRESH, &h) else {
+            return Ok(Verdict::Missing);
+        };
+        if crate::identity_store::i_of(&r, "expires_at_ms") <= now {
+            return Ok(Verdict::Expired);
+        }
+        let family_id = crate::identity_store::s_of(&r, "family_id");
+        let user_id = crate::identity_store::s_of(&r, "user_id");
+        if r.get("used").and_then(serde_json::Value::as_bool).unwrap_or(false) {
+            // Spent already. Either an honest race or a stolen token; the two
+            // are told apart by whether the family rotated moments ago. The
+            // count is a prefix scan of the family's own keys, which is why
+            // they carry a zero-padded time.
+            let recent = t
+                .scan(&format!("refresh.family/{family_id}/"))
+                .into_iter()
+                .filter(|(key, _)| {
+                    key.rsplit('/')
+                        .next()
+                        .and_then(|n| n.parse::<i64>().ok())
+                        .is_some_and(|at| at > now - CONCURRENT_REFRESH_GRACE_MS)
+                })
+                .count();
+            if recent > 0 {
+                return Ok(Verdict::Concurrent);
+            }
+            // THE WHOLE FAMILY GOES. Every key in the prefix, and the records
+            // they name -- `remove` drops a record's own index entries, so
+            // dropping the record is enough.
+            for (_, id) in t.scan(&format!("refresh.family/{family_id}/")) {
+                t.remove(crate::identity_store::K_REFRESH, &id);
+            }
+            return Ok(Verdict::Reused);
+        }
+        let mut r = r;
+        r["used"] = serde_json::json!(true);
+        let created = crate::identity_store::i_of(&r, "created_at_ms");
+        let index = vec![(
+            crate::identity_store::refresh_family(&family_id, created),
+            h.clone(),
+        )];
+        t.put(crate::identity_store::K_REFRESH, &h, &r.to_string(), &index, &[])
+            .map_err(|e| Error::RustError(format!("refresh: {e}")))?;
+        Ok(Verdict::Ok { user_id, family_id })
+    })
+    .await?;
+    let row = match verdict {
+        Verdict::Ok { user_id, family_id } => R { user_id, family_id },
+        Verdict::Missing => return Response::error("invalid refresh token", 401),
+        Verdict::Expired => return Response::error("refresh token expired", 401),
+        Verdict::Concurrent => return Response::error("concurrent refresh", 409),
+        Verdict::Reused => {
+            return Response::error("token reuse detected; family revoked", 401)
+        }
     };
-    if row.expires_at_ms <= now {
-        return Response::error("refresh token expired", 401);
-    }
-
-    if row.used == 1 {
-        // Spent already. Either an honest race or a stolen token; the two are
-        // told apart by whether the family rotated moments ago.
-        #[derive(Deserialize)]
-        struct C {
-            n: i64,
-        }
-        let recent: Option<C> = db
-            .prepare(
-                "SELECT COUNT(*) AS n FROM auth_refresh_tokens \
-                 WHERE family_id = ?1 AND created_at_ms > ?2",
-            )
-            .bind(&[
-                row.family_id.clone().into(),
-                wasm_bindgen::JsValue::from_f64((now - CONCURRENT_REFRESH_GRACE_MS) as f64),
-            ])?
-            .first(None)
-            .await?;
-        if recent.map(|c| c.n).unwrap_or(0) > 0 {
-            return Response::error("concurrent refresh", 409);
-        }
-        db.prepare("DELETE FROM auth_refresh_tokens WHERE family_id = ?1")
-            .bind(&[row.family_id.into()])?
-            .run()
-            .await?;
-        return Response::error("token reuse detected; family revoked", 401);
-    }
-
-    // Claim it atomically: whoever flips `used` first owns the rotation.
-    let claimed = db
-        .prepare("UPDATE auth_refresh_tokens SET used = 1 WHERE id = ?1 AND used = 0")
-        .bind(&[row.id.clone().into()])?
-        .run()
-        .await?;
-    if claimed.meta()?.and_then(|m| m.changes).unwrap_or(0) == 0 {
-        return Response::error("concurrent refresh", 409);
-    }
 
     // Re-derive authority. A revoked owner does not roll forward on a refresh.
     //
@@ -351,28 +410,23 @@ pub async fn owner_refresh(mut req: Request, ctx: RouteContext<()>) -> Result<Re
         location_id: String,
     }
     let host_venue = venue_of_host(&req, &ctx).await?;
+    let ident = crate::identity_store::identity(&ctx.env).await?;
     let m: Option<M> = match host_venue.as_deref() {
-        Some(v) => {
-            db.prepare(
-                "SELECT location_id FROM memberships \
-                 WHERE user_id = ?1 AND location_id = ?2 AND role = 'owner' \
-                 AND status = 'active' LIMIT 1",
-            )
-            .bind(&[row.user_id.clone().into(), v.into()])?
-            .first(None)
-            .await?
-        }
+        Some(v) => crate::identity_store::membership(&ident, v, &row.user_id)
+            .filter(|x| crate::identity_store::s_of(x, "role") == "owner")
+            .map(|_| M { location_id: v.to_string() }),
         // A host that names no venue: the apex, `*.workers.dev`. The caller has
         // said nothing, and for an owner of one venue this is still that venue.
+        // Sorted rather than oldest-first, for the reason the login gives.
         None => {
-            db.prepare(
-                "SELECT location_id FROM memberships \
-                 WHERE user_id = ?1 AND role = 'owner' AND status = 'active' \
-                 ORDER BY created_at_ms LIMIT 1",
-            )
-            .bind(&[row.user_id.clone().into()])?
-            .first(None)
-            .await?
+            let mut owned: Vec<String> =
+                crate::identity_store::memberships_of(&ident, &row.user_id)
+                    .into_iter()
+                    .filter(|(_, role)| role == "owner")
+                    .map(|(loc, _)| loc)
+                    .collect();
+            owned.sort();
+            owned.into_iter().next().map(|location_id| M { location_id })
         }
     };
     let Some(m) = m else {
@@ -390,7 +444,7 @@ pub async fn owner_refresh(mut req: Request, ctx: RouteContext<()>) -> Result<Re
         Ok(t) => t,
         Err(e) => return e.into_response(),
     };
-    let refresh = issue_owner_refresh(&db, &row.user_id, &row.family_id).await?;
+    let refresh = issue_owner_refresh(&ctx.env, &row.user_id, &row.family_id).await?;
     Response::from_json(&TokenPair {
         access_token: access,
         refresh_token: refresh.unwrap_or_default(),
@@ -407,10 +461,27 @@ pub async fn owner_logout(req: Request, ctx: RouteContext<()>) -> Result<Respons
     let auth::Principal::Owner { user_id, .. } = p else {
         return Response::error("forbidden role", 403);
     };
-    db.prepare("DELETE FROM auth_refresh_tokens WHERE user_id = ?1")
-        .bind(&[user_id.into()])?
-        .run()
-        .await?;
+    // EVERY DEVICE. A scan of the records rather than of an index, because
+    // "all of this user's tokens" is not an access path any other reader wants
+    // -- and inventing an index for one logout would be a key maintained on
+    // every refresh to save one walk on the rarest call in the file.
+    crate::identity_store::with_sessions(&ctx.env, move |t| {
+        let mine: Vec<String> = t
+            .all(crate::identity_store::K_REFRESH)
+            .into_iter()
+            .filter(|(_, j)| {
+                serde_json::from_str::<serde_json::Value>(j)
+                    .ok()
+                    .is_some_and(|v| crate::identity_store::s_of(&v, "user_id") == user_id)
+            })
+            .map(|(id, _)| id)
+            .collect();
+        for id in mine {
+            t.remove(crate::identity_store::K_REFRESH, &id);
+        }
+        Ok(())
+    })
+    .await?;
     // The access token itself outlives this, up to its 24h exp. The old service
     // recorded that as an accepted risk rather than pretending otherwise.
     Response::from_json(&json!({ "ok": true }))
@@ -471,39 +542,47 @@ pub async fn courier_login(mut req: Request, ctx: RouteContext<()>) -> Result<Re
     };
     let db = ctx.d1("DB")?;
 
-    // Email and phone are looked up in SEPARATE columns. The old schema matched
-    // both against one shared hash space, where a phone could in principle
-    // resolve an email row.
-    let (sql, key) = match (&body.email, &body.phone) {
-        (Some(e), _) if !e.trim().is_empty() => (
-            "SELECT id,password_hash,status FROM couriers WHERE email_hash = ?1",
-            sha256_hex(&e.trim().to_lowercase()),
+    // Email and phone are looked up under SEPARATE PREFIXES. The old schema
+    // matched both against one shared hash space, where a phone could in
+    // principle resolve an email's record; two key prefixes cannot.
+    let crew = crate::identity_store::couriers(&ctx.env).await?;
+    let found = match (&body.email, &body.phone) {
+        (Some(e), _) if !e.trim().is_empty() => crate::identity_store::courier_id_for_email(
+            &crew,
+            &sha256_hex(&e.trim().to_lowercase()),
         ),
-        (_, Some(p)) if !p.trim().is_empty() => (
-            "SELECT id,password_hash,status FROM couriers WHERE phone_hash = ?1",
-            sha256_hex(p.trim()),
-        ),
+        (_, Some(p)) if !p.trim().is_empty() => {
+            crate::identity_store::courier_id_for_phone(&crew, &sha256_hex(p.trim()))
+        }
         _ => return Response::error("email or phone required", 400),
     };
 
-    #[derive(Deserialize)]
     struct C {
         id: String,
         password_hash: String,
         status: String,
     }
-    let c: Option<C> = db.prepare(sql).bind(&[key.into()])?.first(None).await?;
+    let c: Option<C> = found
+        .and_then(|id| {
+            crate::identity_store::rec(&crew, crate::identity_store::K_COURIER, &id)
+                .map(|r| (id, r))
+        })
+        .map(|(id, r)| C {
+            id,
+            password_hash: crate::identity_store::s_of(&r, "password_hash"),
+            status: crate::identity_store::s_of(&r, "status"),
+        });
     let stored = c.as_ref().map(|c| c.password_hash.as_str());
     if !verify_password_constant_work(&body.password, stored) {
         return Response::error("invalid credentials", 401);
     }
     let c = c.expect("verified above");
-    upgrade_hash(&db, "couriers", &c.id, &body.password, Some(c.password_hash.as_str())).await;
+    upgrade_hash(&ctx.env, Who::Courier, &c.id, &body.password, Some(c.password_hash.as_str()))
+        .await;
     if c.status != "active" {
         return Response::error("courier account is not active", 403);
     }
 
-    #[derive(Deserialize)]
     struct L {
         location_id: String,
     }
@@ -538,17 +617,24 @@ pub async fn courier_login(mut req: Request, ctx: RouteContext<()>) -> Result<Re
         }
     };
     let loc: Option<L> = match &want {
-        Some(want) => {
-            db.prepare("SELECT location_id FROM courier_locations WHERE courier_id = ?1 AND location_id = ?2")
-                .bind(&[c.id.clone().into(), want.clone().into()])?
-                .first(None)
-                .await?
-        }
+        Some(want) => crew
+            .get(
+                crate::identity_store::K_ROSTER,
+                &crate::identity_store::roster_id(want, &c.id),
+            )
+            .map(|_| L { location_id: want.clone() }),
+        // The old guess survives only where it was ever true: a host that names
+        // no venue, where the caller genuinely has not said. Sorted rather than
+        // `ORDER BY added_at_ms LIMIT 1`, so a courier on two rosters gets a
+        // stable answer instead of an accident of when a row was written.
         None => {
-            db.prepare("SELECT location_id FROM courier_locations WHERE courier_id = ?1 ORDER BY added_at_ms LIMIT 1")
-                .bind(&[c.id.clone().into()])?
-                .first(None)
-                .await?
+            let mut on: Vec<String> = crew
+                .scan(&format!("roster.courier/{}/", c.id))
+                .into_iter()
+                .filter_map(|(key, _)| key.rsplit('/').next().map(str::to_string))
+                .collect();
+            on.sort();
+            on.into_iter().next().map(|location_id| L { location_id })
         }
     };
     let Some(loc) = loc else {
@@ -564,39 +650,55 @@ pub async fn courier_login(mut req: Request, ctx: RouteContext<()>) -> Result<Re
     // The session secret is argon2-hashed, which is why the refresh token has to
     // carry the row id as a prefix: a hash lookup is impossible by design.
     let token_hash = auth::hash_opaque(&secret);
-    db.prepare(
-        "INSERT INTO courier_sessions (id,courier_id,family_id,token_hash,active_location_id,\
-         issued_at_ms,expires_at_ms) VALUES (?1,?2,?3,?4,?5,?6,?7)",
-    )
-    .bind(&[
-        session_id.clone().into(),
-        c.id.clone().into(),
-        family_id.into(),
-        token_hash.into(),
-        loc.location_id.clone().into(),
-        wasm_bindgen::JsValue::from_f64(now as f64),
-        wasm_bindgen::JsValue::from_f64((now + COURIER_REFRESH_TTL_MS) as f64),
-    ])?
-    .run()
+    let (sid, cid, fid, lid) = (
+        session_id.clone(),
+        c.id.clone(),
+        family_id.clone(),
+        loc.location_id.clone(),
+    );
+    crate::identity_store::with_sessions(&ctx.env, move |t| {
+        let rec = serde_json::json!({
+            "courier_id": cid, "family_id": fid, "token_hash": token_hash,
+            "active_location_id": lid,
+            "issued_at_ms": now, "expires_at_ms": now + COURIER_REFRESH_TTL_MS,
+            "revoked_at_ms": serde_json::Value::Null,
+        })
+        .to_string();
+        t.put(crate::identity_store::K_CSESSION, &sid, &rec, &[], &[])
+            .map_err(|e| Error::RustError(format!("courier session: {e}")))
+    })
     .await?;
 
-    let _ = db
-        .prepare("UPDATE couriers SET last_login_at_ms = ?2 WHERE id = ?1")
-        .bind(&[c.id.clone().into(), wasm_bindgen::JsValue::from_f64(now as f64)])?
-        .run()
+    // NEITHER OF THESE MAY FAIL THE LOGIN. A courier standing in the rain must
+    // not be refused because a bookkeeping write lost a generation guard, which
+    // is why both were `let _ =` before and stay that way.
+    let cid = c.id.clone();
+    let _ = crate::identity_store::with_couriers(&ctx.env, move |t| {
+        if let Some(mut r) = crate::identity_store::rec(t, crate::identity_store::K_COURIER, &cid) {
+            r["last_login_at_ms"] = serde_json::json!(now);
+            let index = crate::identity_store::courier_index(&cid, &r);
+            t.put(crate::identity_store::K_COURIER, &cid, &r.to_string(), &index, &[])
+                .map_err(|e| Error::RustError(format!("courier: {e}")))?;
+        }
+        Ok(())
+    })
+    .await;
+    // The audit trail goes in THE VENUE'S OWN log, beside its other failures
+    // and reveals -- it is a fact about that restaurant, and the venue's
+    // console is what reads it.
+    if let Ok(place) = crate::hubstore::Place::of(&req, &ctx, Some(&loc.location_id)) {
+        let who = c.id.clone();
+        let entry = serde_json::json!({
+            "action": "login.success", "actor_kind": "courier",
+            "actor_id": who, "courier_id": who, "created_at_ms": now,
+        })
+        .to_string();
+        let _ = crate::hubstore::with_log(&place, crate::hubstore::IMAGE_AUDIT, move |log| {
+            log.append("courier", &who, &entry)
+                .map_err(|e| Error::RustError(format!("audit: {e:?}")))
+        })
         .await;
-    let _ = db
-        .prepare(
-            "INSERT INTO courier_audit_log (courier_id,location_id,action,actor_kind,actor_id,created_at_ms) \
-             VALUES (?1,?2,'login.success','courier',?1,?3)",
-        )
-        .bind(&[
-            c.id.clone().into(),
-            loc.location_id.clone().into(),
-            wasm_bindgen::JsValue::from_f64(now as f64),
-        ])?
-        .run()
-        .await;
+    }
 
     let claims = Claims::Courier {
         sub: c.id.clone(),
@@ -662,33 +764,34 @@ pub async fn courier_claim(mut req: Request, ctx: RouteContext<()>) -> Result<Re
         invited_name: Option<String>,
         expires_at_ms: i64,
     }
-    let inv: Option<Inv> = db
-        .prepare(
-            "SELECT id, location_id, invited_name, expires_at_ms FROM courier_invites \
-             WHERE invited_phone_hash = ?1 AND code_hash = ?2 \
-             AND used_at_ms IS NULL AND revoked_at_ms IS NULL",
-        )
-        .bind(&[phone_hash.clone().into(), code_hash.into()])?
-        .first(None)
-        .await?;
+    let crew = crate::identity_store::couriers(&ctx.env).await?;
+    // The invite is found by the PHONE it was sent to, and the code is checked
+    // against the record rather than being part of the lookup: two prefixes
+    // would mean an invite findable by a code alone, and a code is guessable in
+    // a way a phone number the venue chose is not.
+    let inv: Option<Inv> = crew
+        .lookup(&crate::identity_store::invite_by_phone(&phone_hash))
+        .and_then(|id| {
+            crate::identity_store::rec(&crew, crate::identity_store::K_INVITE, &id)
+                .map(|r| (id, r))
+        })
+        .filter(|(_, r)| crate::identity_store::s_of(r, "code_hash") == code_hash)
+        .filter(|(_, r)| r.get("used_at_ms").map_or(true, |v| v.is_null()))
+        .filter(|(_, r)| r.get("revoked_at_ms").map_or(true, |v| v.is_null()))
+        .map(|(id, r)| Inv {
+            id,
+            location_id: crate::identity_store::s_of(&r, "location_id"),
+            invited_name: r
+                .get("invited_name")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string),
+            expires_at_ms: crate::identity_store::i_of(&r, "expires_at_ms"),
+        });
     let Some(inv) = inv else {
         return Response::error("that code does not match", 400);
     };
     if now >= inv.expires_at_ms {
         return Response::error("that code has expired -- ask for a new one", 400);
-    }
-
-    #[derive(Deserialize)]
-    struct Row {
-        id: String,
-    }
-    let taken: Option<Row> = db
-        .prepare("SELECT id FROM couriers WHERE phone_hash = ?1")
-        .bind(&[phone_hash.clone().into()])?
-        .first(None)
-        .await?;
-    if taken.is_some() {
-        return Response::error("this person already has an account", 409);
     }
 
     let (Some(cid), Some(session_id), Some(family_id), Some(secret)) =
@@ -701,65 +804,99 @@ pub async fn courier_claim(mut req: Request, ctx: RouteContext<()>) -> Result<Re
         Err(e) => return e.into_response(),
     };
     let name = inv.invited_name.clone().unwrap_or_default();
-    // The email column is NOT NULL and unique, and a courier who signs in by
-    // phone has no address. A derived placeholder keeps the constraint honest
-    // without inventing one that might reach somebody.
+    // The email was a NOT NULL unique COLUMN and a courier who signs in by
+    // phone has no address, so a derived placeholder kept the constraint
+    // honest. The constraint is gone; the placeholder stays, because the
+    // storefront and the console both show an address field and an empty one
+    // reads as a missing value rather than a deliberate absence.
     let email = format!("{}@courier.invalid", phone.replace(['+', ' '], ""));
-    db.prepare(
-        "INSERT INTO couriers (id,email_encrypted,email_hash,phone_encrypted,phone_hash,\
-         full_name_encrypted,password_hash,status,created_at_ms) \
-         VALUES (?1,?2,?3,?4,?5,?6,?7,'active',?8)",
-    )
-    .bind(&[
-        cid.clone().into(),
-        email.clone().into(),
-        auth::sha256_hex(&email).into(),
-        phone.clone().into(),
-        phone_hash.into(),
-        name.into(),
-        pw_hash.into(),
-        wasm_bindgen::JsValue::from_f64(now as f64),
-    ])?
-    .run()
+
+    // ── THE ACCOUNT, THE ROSTER ROW AND THE USED INVITE, IN ONE WRITE ──
+    //
+    // They were three statements in sequence with a comment explaining the
+    // order: "marked used only after the account exists, so a failure above
+    // leaves the invite still claimable". That ordering was the mitigation for
+    // a partial write. One transaction removes the partial write instead, and
+    // the uniqueness check that used to be a SELECT before an INSERT happens
+    // inside the same turn, so "this person already has an account" cannot be
+    // answered by a stale read.
+    let (c2, e2, p2, ph2, n2, pw2, loc2, inv2) = (
+        cid.clone(),
+        email.clone(),
+        phone.clone(),
+        phone_hash.clone(),
+        name.clone(),
+        pw_hash.clone(),
+        inv.location_id.clone(),
+        inv.id.clone(),
+    );
+    let taken = crate::identity_store::with_couriers(&ctx.env, move |t| {
+        if crate::identity_store::courier_id_for_phone(t, &ph2).is_some() {
+            return Ok(true);
+        }
+        let rec = serde_json::json!({
+            "id": c2, "email_encrypted": e2, "email_hash": auth::sha256_hex(&e2),
+            "phone_encrypted": p2, "phone_hash": ph2,
+            "full_name_encrypted": n2, "password_hash": pw2,
+            "status": "active", "created_at_ms": now,
+        });
+        let index = crate::identity_store::courier_index(&c2, &rec);
+        t.put(crate::identity_store::K_COURIER, &c2, &rec.to_string(), &index, &[])
+            .map_err(|e| Error::RustError(format!("courier: {e}")))?;
+        let roster = serde_json::json!({
+            "courier_id": c2, "location_id": loc2, "role": "courier", "added_at_ms": now,
+        })
+        .to_string();
+        t.put(
+            crate::identity_store::K_ROSTER,
+            &crate::identity_store::roster_id(&loc2, &c2),
+            &roster,
+            &[
+                (crate::identity_store::roster_by_venue(&loc2, &c2), c2.clone()),
+                (crate::identity_store::roster_by_courier(&c2, &loc2), loc2.clone()),
+            ],
+            &[],
+        )
+        .map_err(|e| Error::RustError(format!("roster: {e}")))?;
+        // ONE SHOT. A code that survived its own use would be a second key to
+        // somebody else's account.
+        if let Some(mut i) =
+            crate::identity_store::rec(t, crate::identity_store::K_INVITE, &inv2)
+        {
+            i["used_at_ms"] = serde_json::json!(now);
+            i["used_by_courier_id"] = serde_json::json!(c2);
+            // The phone index goes: a used invite must not be findable by the
+            // number it was sent to, or the next claim would match it again.
+            let loc = crate::identity_store::s_of(&i, "location_id");
+            let index = vec![(crate::identity_store::invite_at(&loc, &inv2), inv2.clone())];
+            t.put(crate::identity_store::K_INVITE, &inv2, &i.to_string(), &index, &[])
+                .map_err(|e| Error::RustError(format!("invite: {e}")))?;
+        }
+        Ok(false)
+    })
     .await?;
-    db.prepare(
-        "INSERT INTO courier_locations (courier_id,location_id,role,added_at_ms) \
-         VALUES (?1,?2,'courier',?3)",
-    )
-    .bind(&[
-        cid.clone().into(),
-        inv.location_id.clone().into(),
-        wasm_bindgen::JsValue::from_f64(now as f64),
-    ])?
-    .run()
-    .await?;
-    // ONE SHOT. A code that survived its own use would be a second key to
-    // somebody else's account. Marked used only after the account exists, so a
-    // failure above leaves the invite still claimable.
-    db.prepare("UPDATE courier_invites SET used_at_ms = ?2, used_by_courier_id = ?3 WHERE id = ?1")
-        .bind(&[
-            inv.id.into(),
-            wasm_bindgen::JsValue::from_f64(now as f64),
-            cid.clone().into(),
-        ])?
-        .run()
-        .await?;
+    if taken {
+        return Response::error("this person already has an account", 409);
+    }
 
     let token_hash = auth::hash_opaque(&secret);
-    db.prepare(
-        "INSERT INTO courier_sessions (id,courier_id,family_id,token_hash,active_location_id,\
-         issued_at_ms,expires_at_ms) VALUES (?1,?2,?3,?4,?5,?6,?7)",
-    )
-    .bind(&[
-        session_id.clone().into(),
-        cid.clone().into(),
-        family_id.into(),
-        token_hash.into(),
-        inv.location_id.clone().into(),
-        wasm_bindgen::JsValue::from_f64(now as f64),
-        wasm_bindgen::JsValue::from_f64((now + COURIER_REFRESH_TTL_MS) as f64),
-    ])?
-    .run()
+    let (sid, c3, f3, l3) = (
+        session_id.clone(),
+        cid.clone(),
+        family_id.clone(),
+        inv.location_id.clone(),
+    );
+    crate::identity_store::with_sessions(&ctx.env, move |t| {
+        let rec = serde_json::json!({
+            "courier_id": c3, "family_id": f3, "token_hash": token_hash,
+            "active_location_id": l3,
+            "issued_at_ms": now, "expires_at_ms": now + COURIER_REFRESH_TTL_MS,
+            "revoked_at_ms": serde_json::Value::Null,
+        })
+        .to_string();
+        t.put(crate::identity_store::K_CSESSION, &sid, &rec, &[], &[])
+            .map_err(|e| Error::RustError(format!("courier session: {e}")))
+    })
     .await?;
 
     let claims = Claims::Courier {
