@@ -29,7 +29,16 @@ use crate::auth::{self, Principal};
 /// names the courier. Those are the three tags, and nothing else is accepted:
 /// an unauthenticated upgrade is refused before the object is reached.
 pub async fn connect(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    if req.headers().get("Upgrade").ok().flatten().as_deref() != Some("websocket") {
+    // CASE-INSENSITIVE, because the header is: a client may send "WebSocket",
+    // and over HTTP/2 there is no `Upgrade` header at all -- which is why a
+    // curl probe on h2 reads 426 while a browser on wss:// gets through.
+    let upgrading = req
+        .headers()
+        .get("Upgrade")
+        .ok()
+        .flatten()
+        .is_some_and(|v| v.eq_ignore_ascii_case("websocket"));
+    if !upgrading {
         return Response::error("this route is a websocket upgrade", 426);
     }
     let db = ctx.d1("DB")?;
@@ -95,15 +104,15 @@ pub async fn connect(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let stub = place.stub()?;
     let mut init = RequestInit::new();
     init.with_method(Method::Get).with_headers(req.headers().clone());
+    // THE CHOSEN SUBPROTOCOL TRAVELS WITH THE TAG. The object builds the 101
+    // and is the only place that can carry a header into it: a response that
+    // has already crossed a fetch has immutable headers, and setting one threw
+    // -- which is what made this handshake answer 500 in production.
     let out = Request::new_with_init(
-        &format!("https://hub/fold/socket?tag={}", crate::mcp::enc(&tag)),
+        &format!("https://hub/fold/socket?tag={}&proto=bearer", crate::mcp::enc(&tag)),
         &init,
     )?;
-    let res = stub.fetch_with_request(out).await?;
-    // ECHOED, or the browser closes the socket it just opened: a client that
-    // offers subprotocols requires the server to choose one.
-    res.headers().set("Sec-WebSocket-Protocol", "bearer")?;
-    Ok(res)
+    stub.fetch_with_request(out).await
 }
 
 #[cfg(test)]

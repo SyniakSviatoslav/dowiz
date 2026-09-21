@@ -37,8 +37,14 @@ const api = async (path, opts = {}) => {
 const b = await chromium.launch({ args: ['--no-sandbox', '--disable-dev-shm-usage'] });
 
 // ── 1. the customer places it ───────────────────────────────────────────────
+const sockets = { store: 0, console: 0, courier: 0 };
+const watchSocket = (p, who) => p.on('websocket', ws => {
+  if (!ws.url().includes('/api/live')) return;
+  sockets[who] += 1;
+  ws.on('socketerror', e => step(`${who} socket`, false, String(e).slice(0, 90)));
+});
 const cust = await b.newContext({ ...devices['iPhone 14 Pro'], serviceWorkers: 'block' });
-const c = await cust.newPage(); watch(c, 'store');
+const c = await cust.newPage(); watch(c, 'store'); watchSocket(c, 'store');
 let placed = null;
 c.on('response', async r => {
   if (/\/orders$/.test(r.url()) && r.request().method() === 'POST' && r.status() < 400) {
@@ -49,13 +55,32 @@ await c.goto(`${HOST}/`, { waitUntil: 'domcontentloaded', timeout: 90000 });
 await c.waitForSelector('.card', { timeout: 60000 });
 step('storefront loads', true, `${(await c.$$('.card')).length} cards`);
 
+// THE INSTALL OFFER OPENS OVER THE MENU on a phone's first visit (once per
+// session, after a delay). A customer taps "later"; so does this.
+const dismissSheet = async () => {
+  for (let i = 0; i < 6; i++) {
+    const name = await c.evaluate(() => document.getElementById('sheet')?.dataset.name || '');
+    if (!name) return;
+    if (name === 'install') step('the install offer is dismissible', true, 'tapped later');
+    const later = await c.$('#insLater');
+    if (later) await later.click().catch(() => {});
+    else await c.evaluate(() => document.getElementById('scrim')?.click());
+    await c.waitForTimeout(600);
+  }
+};
+await c.waitForTimeout(3500);           // let the offer arrive if it is going to
+await dismissSheet();
+
 await (await c.$('.card')).click(); await c.waitForTimeout(1200);
+await c.waitForFunction(() => document.getElementById('sheet')?.dataset.name === 'dish', null, { timeout: 15000 })
+  .catch(() => step('dish sheet opens', false, 'no dish sheet after tapping a card'));
 const add = await c.$('#dadd');
 if (add) { await add.click(); await c.waitForTimeout(700); } else step('dish add button', false);
 await c.keyboard.press('Escape'); await c.waitForTimeout(500);
 const pill = await c.$('#cartPill');
 step('cart pill after add', !!pill);
-await pill?.click(); await c.waitForTimeout(900);
+await pill?.click({ timeout: 15000 }).catch(async () => { await dismissSheet(); await pill?.click({ timeout: 15000 }).catch(() => step('cart opens', false, 'pill not clickable')); });
+await c.waitForTimeout(900);
 const toCheckout = await c.$('#toCheckout');
 step('cart opens with a checkout button', !!toCheckout);
 await toCheckout?.click(); await c.waitForTimeout(1500);
@@ -87,7 +112,7 @@ step('order reads back as PENDING', (await state()) === 'PENDING');
 
 // ── 2. the console walks it through the kitchen ─────────────────────────────
 const own = await b.newContext({ viewport: { width: 420, height: 900 }, serviceWorkers: 'block' });
-const o = await own.newPage(); watch(o, 'console');
+const o = await own.newPage(); watch(o, 'console'); watchSocket(o, 'console');
 await o.goto(`${HOST}/admin/`, { waitUntil: 'domcontentloaded', timeout: 90000 });
 await o.waitForSelector('#e', { timeout: 40000 });
 await o.fill('#e', creds.OWNER_EMAIL); await o.fill('#p', creds.OWNER_PASSWORD);
@@ -97,8 +122,10 @@ await o.waitForTimeout(2500);
 step('console signs in', !(await o.$('#e')));
 
 // THE POINT OF PHASE 6: the order should be on the screen without a poll.
-const seen = await o.waitForFunction(id => [...document.querySelectorAll('*')]
-  .some(el => el.textContent && el.textContent.includes(id.slice(-6))), ORDER, { timeout: 45000 })
+// The row carries the order's ACTION BUTTON, which names the id exactly; the
+// visible text is a shortened form (`#59ebf853`), so the button is the honest
+// thing to wait for.
+const seen = await o.waitForSelector(`[data-o="${ORDER}"]`, { timeout: 45000 })
   .then(() => true).catch(() => false);
 step('the new order reaches the console', seen);
 await o.screenshot({ path: `${OUT}/cycle-2-console.png` }).catch(() => {});
@@ -118,11 +145,12 @@ await act('ready', 'READY');
 // ── 3. the courier carries it ───────────────────────────────────────────────
 const cou = await b.newContext({ ...devices['Pixel 7'], serviceWorkers: 'block',
   permissions: ['geolocation'], geolocation: { latitude: 41.3225, longitude: 19.4450 } });
-const k = await cou.newPage(); watch(k, 'courier');
+const k = await cou.newPage(); watch(k, 'courier'); watchSocket(k, 'courier');
 k.on('dialog', d => d.accept());
 await k.goto(`${HOST}/courier/`, { waitUntil: 'domcontentloaded', timeout: 90000 });
 await k.waitForSelector('#em', { timeout: 40000 });
-await k.fill('#em', creds.COURIER_PHONE); await k.fill('#pw', creds.COURIER_PASSWORD);
+await k.fill('#em', process.env.QA_COURIER_PHONE || creds.COURIER_PHONE);
+await k.fill('#pw', process.env.QA_COURIER_PASSWORD || creds.COURIER_PASSWORD);
 await k.click('#go');
 await k.waitForTimeout(4000);
 step('courier signs in', !(await k.$('#em')));
@@ -154,12 +182,28 @@ await c.waitForTimeout(3000);
 await c.screenshot({ path: `${OUT}/cycle-4-delivered.png` }).catch(() => {});
 
 // ── what the venue is left with ─────────────────────────────────────────────
-const health = await api('/api/owner/health', { headers: { authorization: `Bearer ${await o.evaluate(() => JSON.parse(localStorage.getItem('dw_admin') || '{}').t || '')}` } });
+const ownerToken = await o.evaluate(() => {
+  for (const k of Object.keys(localStorage)) {
+    try {
+      const v = JSON.parse(localStorage.getItem(k));
+      if (v && typeof v === 'object' && typeof v.t === 'string' && v.t.split('.').length === 3) return v.t;
+    } catch { /* not json */ }
+  }
+  return '';
+});
+const health = await api('/api/owner/health', { headers: { authorization: `Bearer ${ownerToken}` } });
 if (health.status === 200) {
   const e = health.body.errors || [];
   step('no worker errors during the cycle', e.length === 0, e.slice(0, 2).map(x => `${x.place}: ${x.message}`).join(' | '));
   console.log('images:', JSON.stringify(health.body.images?.log || {}), 'orders:', health.body.orders);
 } else step('health readable', false, `${health.status}`);
+
+// THE SOCKET IS THE POINT OF PHASE 6 and it must be seen to open. Polling
+// keeps every surface working without it, which is exactly why a broken
+// handshake was invisible until a browser was pointed at it.
+step('the customer opened a live socket', sockets.store > 0, `${sockets.store}`);
+step('the console opened a live socket', sockets.console > 0, `${sockets.console}`);
+step('the courier opened a live socket', sockets.courier > 0, `${sockets.courier}`);
 
 console.log(`\n${fails.length ? 'FAILURES:\n' + fails.join('\n') : 'FULL CYCLE OK'}`);
 console.log(`order: ${ORDER}`);

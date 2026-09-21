@@ -491,7 +491,7 @@ impl HubImages {
     /// is billed only while the object is actually running. A socket held by
     /// the object itself would keep it awake and turn a free connection into a
     /// billed one.
-    fn accept(&self, tag: &str) -> Result<Response> {
+    fn accept(&self, tag: &str, protocol: Option<&str>) -> Result<Response> {
         let pair = WebSocketPair::new()?;
         // A COURIER GETS TWO TAGS: `courier`, which the queue broadcast fans
         // out to, and `courier:<id>`, which says whose socket this is. The
@@ -504,7 +504,24 @@ impl HubImages {
         } else {
             self.state.accept_websocket_with_tags(&pair.server, &[tag]);
         }
-        Response::from_websocket(pair.client)
+        // ── THE SUBPROTOCOL IS ECHOED WHERE THE RESPONSE IS BUILT ──
+        //
+        // A client that offers subprotocols requires the server to choose one,
+        // or the browser fails the handshake on its own side. The echo was
+        // being set on the Worker's side, on the response that came BACK from
+        // this object -- and a Response that already wraps a platform one has
+        // immutable headers, so that threw and the handshake answered 500.
+        // Here the response has not been built yet, so the header is part of
+        // its construction.
+        let res = Response::from_websocket(pair.client)?;
+        match protocol {
+            Some(p) => {
+                let headers = Headers::new();
+                headers.set("Sec-WebSocket-Protocol", p)?;
+                Ok(res.with_headers(headers))
+            }
+            None => Ok(res),
+        }
     }
 
     /// Append one event to the log and persist it, under the same generation
@@ -690,7 +707,11 @@ impl DurableObject for HubImages {
                     if tag.is_empty() {
                         return Response::error("a socket needs a tag", 400);
                     }
-                    self.accept(&tag)
+                    let protocol = url
+                        .query_pairs()
+                        .find(|(k, _)| k == "proto")
+                        .map(|(_, v)| v.to_string());
+                    self.accept(&tag, protocol.as_deref())
                 }
                 // Where the couriers are, as they last said over their sockets.
                 // Empty after a hibernation, which is honest: a position whose

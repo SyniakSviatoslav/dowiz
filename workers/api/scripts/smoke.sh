@@ -30,7 +30,10 @@ code=$(curl -s -o /tmp/s1 -w '%{http_code}' "$BASE/healthz")
 [ "$code" = 200 ] && note "1 health" "200 ok" || { note "1 health" "FAIL $code"; fail=1; }
 
 code=$(curl -s -o /tmp/s2 -w '%{http_code}' "$BASE/api/public/locations/$SLUG/menu")
-N=$(python3 -c 'import json;d=json.load(open("/tmp/s2"));print(len(d.get("products") or d.get("items") or []))' 2>/dev/null || echo 0)
+# The menu is CATEGORIES of products, which is the shape the storefront reads;
+# counting `products` at the top level found zero and called a working menu a
+# failure.
+N=$(python3 -c 'import json;d=json.load(open("/tmp/s2"));print(sum(len(c.get("products") or []) for c in (d.get("categories") or [])) or len(d.get("products") or []))' 2>/dev/null || echo 0)
 if [ "$code" = 200 ] && [ "${N:-0}" -gt 0 ]; then
   note "2 menu (catalogue image + D1)" "200, $N dishes"
 else

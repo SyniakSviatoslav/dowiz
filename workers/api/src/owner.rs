@@ -117,16 +117,28 @@ pub(crate) async fn owner_and_venue(
         Ok(c) => c,
         Err(e) => return Err(e.into_response().unwrap()),
     };
-    let auth::Claims::Owner { user_id, .. } = claims else {
+    let auth::Claims::Owner { user_id, active_location_id, .. } = claims else {
         return Err(Response::error("forbidden role", 403).unwrap());
     };
     #[derive(Deserialize)]
     struct Row {
         location_id: String,
     }
-    // The venue the caller named, or the only one this hub has. Joined against
-    // the membership so one query answers both "which venue" and "may they".
-    let wanted = location_of(req);
+    // ── WHICH VENUE, AND WHY IT IS NOT A GUESS ──
+    //
+    // The caller's `?location_id=` first, then the venue their TOKEN says they
+    // opened. Only if neither is given does this fall through to "the one
+    // membership they have" -- which used to be the first row of an unordered
+    // `LIMIT 1`.
+    //
+    // MEASURED, on this platform, 2026-09-21: the operator owns two venues, so
+    // an owner signed into `sushi-durres` who called an owner route WITHOUT the
+    // query parameter got `dubin-durres`. The courier invite is one such route,
+    // so a code created from one venue's console produced a courier attached to
+    // the OTHER venue -- and the courier app then showed them a queue that was
+    // not their venue's. The console always sends the parameter, which is why
+    // this survived; anything else calling the API did not.
+    let wanted = location_of(req).or(active_location_id);
     let sql = match wanted {
         Some(_) => "SELECT l.id AS location_id FROM locations l                     JOIN memberships m ON m.location_id = l.id                     WHERE m.user_id = ?1 AND l.id = ?2 AND m.role = 'owner'                     AND m.status = 'active' LIMIT 1",
         None => "SELECT l.id AS location_id FROM locations l                  JOIN memberships m ON m.location_id = l.id                  WHERE m.user_id = ?1 AND m.role = 'owner' AND m.status = 'active' LIMIT 1",
@@ -391,7 +403,9 @@ pub async fn assign_courier(mut req: Request, ctx: RouteContext<()>) -> Result<R
         return Response::error("missing order id", 400);
     };
     let db = ctx.d1("DB")?;
-    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
+    // THE VENUE THAT WAS AUTHORISED, not the one the token happens to name --
+    // see `Place::of_authorised`.
+    let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
     if let Err(r) = owner_at(&req, &ctx, &db, &body.location_id).await {
         return Ok(r);
     }
@@ -480,7 +494,9 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
         return Response::error("missing order id", 400);
     };
     let db = ctx.d1("DB")?;
-    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
+    // THE VENUE THAT WAS AUTHORISED, not the one the token happens to name --
+    // see `Place::of_authorised`.
+    let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
     if let Err(r) = owner_at(&req, &ctx, &db, &body.location_id).await {
         return Ok(r);
     }
@@ -718,7 +734,9 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<()>) -> Result<R
         return Response::error("missing product id", 400);
     };
     let db = ctx.d1("DB")?;
-    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
+    // THE VENUE THAT WAS AUTHORISED, not the one the token happens to name --
+    // see `Place::of_authorised`.
+    let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
     if let Err(r) = owner_at(&req, &ctx, &db, &body.location_id).await {
         return Ok(r);
     }
@@ -1122,7 +1140,9 @@ pub async fn update_location(mut req: Request, ctx: RouteContext<()>) -> Result<
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
-    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
+    // THE VENUE THAT WAS AUTHORISED, not the one the token happens to name --
+    // see `Place::of_authorised`.
+    let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
     if let Err(r) = owner_at(&req, &ctx, &db, &body.location_id).await {
         return Ok(r);
     }

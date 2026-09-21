@@ -181,6 +181,28 @@ impl Place {
         Ok(Place { db, ns: ctx.durable_object("HUB")?, venue, legacy_venue: legacy_venue(ctx) })
     }
 
+    /// The venue an AUTHORISED location id names.
+    ///
+    /// WHY THIS EXISTS. Several owner writers authorise against
+    /// `body.location_id` -- `owner_at` checks the membership for exactly that
+    /// venue -- and then build their `Place` with `of_any`, which resolves the
+    /// venue from the TOKEN's claim. For an owner of one venue the two agree;
+    /// for an owner of two they can differ, and then the check passes for
+    /// venue B while the write lands in venue A. Nothing announces it: both
+    /// are the owner's own venues, so no permission was crossed, and the
+    /// catalogue simply changes in the wrong restaurant.
+    ///
+    /// The id is one this code has already checked. It is not a slug and it is
+    /// not read from a URL.
+    pub fn of_authorised(ctx: &RouteContext<()>, location_id: &str) -> Result<Self> {
+        Ok(Place {
+            db: ctx.d1("DB")?,
+            ns: ctx.durable_object("HUB")?,
+            venue: location_id.to_string(),
+            legacy_venue: legacy_venue(ctx),
+        })
+    }
+
     /// The venue a request's Host header names, by slug.
     ///
     /// ONE CLIENT, ONE SUBDOMAIN: `sushi-durres.dowiz.org` is that venue's hub,

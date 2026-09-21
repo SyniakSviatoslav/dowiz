@@ -378,21 +378,22 @@ pub async fn action(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request: {e}"), 400),
     };
-    let Some(to) = ReservationStatus::from_str(&body.to) else {
-        return Response::error(format!("unknown status {:?}", body.to), 400);
-    };
-
     let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
-    // AUTHENTICATED, AND TO THIS VENUE. This route drives the reservation's
-    // state machine and writes `body.actor` into the audit trail, so an
-    // unauthenticated caller could both cancel a stranger's table and sign
-    // somebody else's name to it.
+    // AUTHENTICATED, AND TO THIS VENUE, BEFORE THE BODY IS JUDGED. This route
+    // drives the reservation's state machine and writes `body.actor` into the
+    // audit trail, so an unauthenticated caller could both cancel a stranger's
+    // table and sign somebody else's name to it. The guard is first because a
+    // caller with no token should learn nothing at all -- not even which
+    // status names this kernel knows.
     if let Err(r) =
         crate::auth::principal_at(&req, &ctx.env, &db, &place.venue, now_ms()).await
     {
         return Ok(r);
     }
+    let Some(to) = ReservationStatus::from_str(&body.to) else {
+        return Response::error(format!("unknown status {:?}", body.to), 400);
+    };
 
     let owns: Option<ReservationRow> = db
         .prepare("SELECT id, location_id, party, slot_min, occasion, contact_name, \
