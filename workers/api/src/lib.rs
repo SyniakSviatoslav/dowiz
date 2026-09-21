@@ -19,6 +19,7 @@ mod accounts;
 mod auth;
 mod bootstrap;
 mod platform;
+mod platform_store;
 mod courier;
 mod hubdo;
 mod hubstore;
@@ -79,6 +80,16 @@ pub async fn main(req: Request, env: Env, ctx: Context) -> Result<Response> {
     if let Err(e) = &out {
         trace.fail(0, &e.to_string());
     }
+    // THE ID GOES BACK TO WHOEVER ASKED. It is the join key between this
+    // request's spans, the failures it caused and -- once the log carries it --
+    // the order it placed. Set here rather than in `harden` because this is the
+    // only scope that holds the trace, and set on SUCCESS AND FAILURE alike:
+    // the response a person quotes when they report a problem is usually the
+    // one that went wrong.
+    let out = out.map(|mut r| {
+        let _ = r.headers_mut().set("x-trace-id", trace.id());
+        r
+    });
     ctx.wait_until(async move { trace.export(&env, status).await });
     out
 }

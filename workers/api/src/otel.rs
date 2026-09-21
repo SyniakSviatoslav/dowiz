@@ -117,6 +117,18 @@ impl Trace {
         format!("00-{}-{}-01", self.trace_id, self.root_id)
     }
 
+    /// The id alone, for the client and for anything that has to name this
+    /// request later.
+    ///
+    /// A TRACE NOBODY CAN NAME IS NOT AN INSTRUMENT. Until this was returned on
+    /// the response, a customer or an owner reporting "it failed at about four"
+    /// had given the only fact they had, and no query could turn it into the
+    /// request. Every response carries it now, including the errors -- a 500
+    /// with no id is an unfindable 500.
+    pub fn id(&self) -> &str {
+        &self.trace_id
+    }
+
     /// Close the root and build the OTLP payload.
     fn finish(&mut self, status: u16) -> Value {
         let now_ns = (Date::now().as_millis() as f64 * 1.0e6) as u64;

@@ -482,6 +482,43 @@ pub async fn nightly(env: &Env) {
             Ok(l) => cfg(&l.settings).is_some(),
             Err(_) => false,
         };
+        // THE CHAIN, BEFORE ANYTHING TOUCHES THE LOG.
+        //
+        // `Hub::chain_check` shipped in phase 4 and NOTHING IN PRODUCTION HAS
+        // EVER CALLED IT. An append-only log whose ids are never recomputed is
+        // append-only by assertion; this is the night the assertion is checked.
+        // It runs before the rotation so that what it reports is the log as the
+        // day left it, and before the backup so that an archive is never the
+        // first place a broken chain is noticed.
+        //
+        // WHAT IT CAN AND CANNOT SEE, stated here because a check whose reach
+        // is misunderstood is worse than none: it detects an EDITED record --
+        // an id that no longer commits to its payload, and every id after it,
+        // because the chain cascades. It cannot detect a record REMOVED from
+        // the end, because what is left is a shorter valid chain. The length
+        // and tip commitment that closes that gap is a separate item.
+        match crate::hubstore::load(&place).await {
+            Ok(l) => {
+                let c = l.hub.chain_check();
+                if c.intact() {
+                    console_log!(
+                        "nightly chain {}: {} records, {} chained, {} legacy",
+                        r.id, c.records, c.chained, c.legacy
+                    );
+                } else {
+                    // LOUD, and it must stay loud: this is the one condition in
+                    // this whole job that means somebody edited the ledger.
+                    crate::loud!(
+                        &place.db, Some(&r.id), "hub.chain",
+                        "BROKEN CHAIN: {} of {} records match neither scheme ({} chained, {} legacy)",
+                        c.broken, c.records, c.chained, c.legacy
+                    );
+                }
+            }
+            // A venue with no log yet is not a failure; an unreadable one is.
+            Err(e) => crate::loud!(&place.db, Some(&r.id), "hub.chain", "not checked: {e}"),
+        }
+
         // ROTATION BEFORE THE COPY. Finished history older than thirty days
         // leaves the hot log and becomes its own image; the backup that runs a
         // moment later carries both, so the night a venue's log is bounded is

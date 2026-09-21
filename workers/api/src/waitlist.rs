@@ -13,7 +13,7 @@
 //! abuser can do is fill a list an administrator reads by hand.
 
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{json, Value};
 use worker::*;
 
 use crate::owner::now_ms;
@@ -28,6 +28,10 @@ const EMAIL_MAX: usize = 254;
 const LANGS: &[&str] = &["uk", "en", "sq"];
 /// How many rows the console reads at once. The list is read by a person.
 const LIST_MAX: usize = 500;
+
+/// The record kind inside the platform's waitlist image. One kind, so `all`
+/// lists exactly the waitlist and nothing that shares the image later.
+const KIND: &str = "wl";
 
 #[derive(Deserialize)]
 struct Join {
@@ -115,23 +119,39 @@ pub async fn join(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
         .to_ascii_lowercase();
     let now = now_ms();
 
-    let db = ctx.d1("DB")?;
-    // One row per address. A second submit refreshes the venue name and the
-    // time rather than making a duplicate; the first submit's time survives.
-    db.prepare(
-        "INSERT INTO waitlist (email,venue,lang,source,at_ms,updated_ms) VALUES (?1,?2,?3,?4,?5,?5) \
-         ON CONFLICT(email) DO UPDATE SET venue=excluded.venue, lang=excluded.lang, \
-         source=excluded.source, updated_ms=excluded.updated_ms",
-    )
-    .bind(&[
-        email.clone().into(),
-        venue.clone().into(),
-        lang.into(),
-        source.clone().into(),
-        worker::wasm_bindgen::JsValue::from_f64(now as f64),
-    ])?
-    .run()
-    .await?;
+    // ONE RECORD PER ADDRESS, in the platform's bebop image. A second submit
+    // refreshes the venue name and the time rather than making a duplicate; the
+    // FIRST submit's `at_ms` survives, which is the half of `ON CONFLICT DO
+    // UPDATE` that had to be read carefully -- `at_ms` was excluded from the
+    // update list and nothing said why.
+    //
+    // No SQL. The upsert is a read of the existing record inside the object's
+    // own single-threaded turn, which is also what makes "keep the first
+    // `at_ms`" correct rather than racy.
+    {
+        let e = email.clone();
+        let v = venue.clone();
+        let sc = source.clone();
+        crate::platform_store::with(&ctx.env, crate::platform_store::WAITLIST, move |t| {
+            let first = t
+                .get(KIND, &e)
+                .and_then(|j| serde_json::from_str::<Value>(&j).ok())
+                .and_then(|r| r.get("at_ms").and_then(Value::as_i64))
+                .unwrap_or(now);
+            let notified = t
+                .get(KIND, &e)
+                .and_then(|j| serde_json::from_str::<Value>(&j).ok())
+                .and_then(|r| r.get("notified_ms").and_then(Value::as_i64));
+            let rec = json!({
+                "email": e, "venue": v, "lang": lang, "source": sc,
+                "at_ms": first, "updated_ms": now, "notified_ms": notified,
+            });
+            t.put(KIND, &e, &rec.to_string(), &[], &[])
+                .map_err(|x| Error::RustError(format!("waitlist: {x}")))?;
+            Ok(())
+        })
+        .await?;
+    }
 
     // THE BELL. Configured = the binding exists AND both addresses are set;
     // anything else is "store only", written to the log once per submit so an
@@ -147,10 +167,23 @@ pub async fn join(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
             };
             match sent {
                 Ok(()) => {
-                    db.prepare("UPDATE waitlist SET notified_ms = ?1 WHERE email = ?2")
-                        .bind(&[worker::wasm_bindgen::JsValue::from_f64(now as f64), email.clone().into()])?
-                        .run()
-                        .await?;
+                    let e = email.clone();
+                    crate::platform_store::with(
+                        &ctx.env,
+                        crate::platform_store::WAITLIST,
+                        move |t| {
+                            // Read-modify-write inside the object's turn, so
+                            // the mark cannot overwrite a refresh that arrived
+                            // between the store above and the mail returning.
+                            let Some(j) = t.get(KIND, &e) else { return Ok(()) };
+                            let mut rec: Value = serde_json::from_str(&j).unwrap_or(json!({}));
+                            rec["notified_ms"] = json!(now);
+                            t.put(KIND, &e, &rec.to_string(), &[], &[])
+                                .map_err(|x| Error::RustError(format!("waitlist: {x}")))?;
+                            Ok(())
+                        },
+                    )
+                    .await?;
                 }
                 Err(e) => console_error!("waitlist: row written, mail to {to} refused: {e}"),
             }
@@ -177,14 +210,20 @@ pub async fn list(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         updated_ms: i64,
         notified_ms: Option<i64>,
     }
-    let rows: Vec<Row> = db
-        .prepare(&format!(
-            "SELECT email,venue,lang,source,at_ms,updated_ms,notified_ms FROM waitlist \
-             ORDER BY updated_ms DESC LIMIT {LIST_MAX}"
-        ))
-        .all()
-        .await?
-        .results()?;
+    // `ORDER BY updated_ms DESC LIMIT n` with no index, and on purpose: a
+    // waitlist is hundreds of records, so the sort is cheaper than the index
+    // entry every write would have to maintain. An index is a key written ON
+    // PURPOSE, and this one would not have earned its keep. When it does, it is
+    // `wl.recent/<complement of updated_ms>/<email>` and a prefix scan.
+    let loaded = crate::platform_store::load(&ctx.env, crate::platform_store::WAITLIST).await?;
+    let mut rows: Vec<Row> = loaded
+        .table
+        .all(KIND)
+        .into_iter()
+        .filter_map(|(_, j)| serde_json::from_str::<Row>(&j).ok())
+        .collect();
+    rows.sort_by(|a, b| b.updated_ms.cmp(&a.updated_ms));
+    rows.truncate(LIST_MAX);
     Response::from_json(&json!({ "rows": rows }))
 }
 

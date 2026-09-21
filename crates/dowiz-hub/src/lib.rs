@@ -43,6 +43,7 @@ pub mod stock;
 pub mod subs;
 pub mod voice;
 pub mod zone;
+pub mod table;
 pub mod tz;
 pub mod token;
 
