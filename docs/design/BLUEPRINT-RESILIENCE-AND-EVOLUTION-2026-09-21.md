@@ -304,6 +304,35 @@ It is re-exported by the kernel at `kernel/src/breaker/mod.rs:10`. Its only
 callers are `autonomic.rs`, `autonomic_pmu.rs` and `temporal_tmr.rs` inside
 `dowiz-core`. **The Worker has never mentioned it.**
 
+### CORRECTION, same day: it is the wrong instrument
+
+**This section said to wire that breaker into the Worker, and reading its code
+is what showed the recommendation was wrong.** It is an admission control for an
+agent: it advances per WINDOW on a `SignalVector`, trips on an anomaly score
+against a fitted `ThresholdId`, and keeps its state and its audit chain in
+memory. Three reasons none of that fits here:
+
+- a Worker isolate does not survive between requests, so in-memory state resets
+  whenever traffic is light — which is exactly when an outage is least likely to
+  be noticed;
+- there are no windows and no rates to fit. There is "Stripe answered" and
+  "Stripe did not";
+- an anomaly score over a signal vector is a richer question than the one being
+  asked, and **a richer question answered with invented inputs is worse than the
+  simple one answered honestly**.
+
+What shipped instead is `workers/api/src/rail.rs`: the Release It! breaker, in
+the venue's own object where per-venue state already lives and already
+survives. Three consecutive failures open it (one is a bad minute; a breaker
+that trips on noise gets switched off), one success closes it, and a rail that
+is NOT CONFIGURED has not failed — counting that would open the breaker on every
+cash-only venue. Its state is on `/api/owner/health`, because a breaker that
+silently protects a venue is indistinguishable from one that silently does
+nothing.
+
+The kernel's breaker stays where it belongs. **A component being excellent is
+not an argument for calling it.**
+
 ### Where it belongs
 
 Three outbound rails can make this product look broken while it is perfectly
