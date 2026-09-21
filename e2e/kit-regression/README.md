@@ -119,6 +119,7 @@ HOST=https://sushi-durres.dowiz.org node e2e/kit-regression/cycle-full.mjs
 | `landing-price.mjs` | the price is on the landing page, in each language | — |
 | `lang-scrim.mjs` | the language sheet opens and dismisses | — |
 | `stock-cycle.mjs` | the stock ledger: delivery → reserve → consume → release → the automatic 86 | that the whole subsystem is inert in production — no venue has modelled an ingredient |
+| `drain-stuck-orders.mjs` | closes orders no operation can close | a caretaker's tool, not a gate — see below |
 
 `cycle-full.mjs` reads `/root/.dowiz_owner` for the owner, and takes
 `QA_COURIER_PHONE` / `QA_COURIER_PASSWORD` for the courier. **The courier must
@@ -178,3 +179,31 @@ loud — *"a venue that has not modelled its ingredients reserves nothing and
 this is a no-op — stock control that must be complete before anything can be
 sold is stock control nobody switches on."* The 73 dishes with a weight and the
 163 with a calorie count carry hand-typed values, not derived ones.
+
+
+## drain-stuck-orders.mjs — and the dead end that makes it necessary
+
+```sh
+node e2e/kit-regression/drain-stuck-orders.mjs          # dry run, lists them
+node e2e/kit-regression/drain-stuck-orders.mjs --apply  # closes them
+```
+
+`allowed_next` in `crates/dowiz-core/src/order_machine.rs` reaches `Cancelled`
+and `Rejected` **only from `Pending`**. Past that the single non-forward exit
+is `Refunding` — and `grep -rn refund workers/api/src/` finds nothing, so no
+route in the Worker emits it. `owner::order_action` offers exactly five
+actions: confirm, reject, preparing, ready, cancel.
+
+So an order that is confirmed and then abandoned — the customer rings off, no
+courier appears, the venue closes — **cannot be ended by anybody**. Probed on
+the live venue: `{"action":"cancel"}` on a READY order answers
+`409 Illegal transition: READY → CANCELLED`. Ten such orders were found on
+`sushi-durres`, the oldest from 2026-09-18.
+
+This script walks them forward to DELIVERED with the venue's own courier,
+which is the one terminal state still reachable. **It should be deleted the
+day a refund route lands.** Until then, the thing to understand is the stock
+consequence: a reservation is taken at placement and released only on
+REJECTED or CANCELLED, so an order abandoned at CONFIRMED holds its
+ingredients for ever, and `available = onHand - reserved` drifts down with
+every one of them.
