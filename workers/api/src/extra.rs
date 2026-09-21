@@ -1263,28 +1263,48 @@ pub async fn couriers(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
-    #[derive(Deserialize)]
+    let place = crate::hubstore::Place::of(&req, &ctx, Some(&loc))?;
     struct C {
         id: String,
         name: Option<String>,
         phone: Option<String>,
         status: String,
         on_shift: i64,
+        created_at_ms: i64,
     }
-    let rows: Vec<C> = db
-        .prepare(
-            "SELECT c.id, c.full_name_encrypted AS name, c.phone_encrypted AS phone, c.status, \
-             (SELECT COUNT(*) FROM courier_shifts s WHERE s.courier_id = c.id \
-              AND s.ended_at_ms IS NULL) AS on_shift \
-             FROM couriers c JOIN courier_locations cl ON cl.courier_id = c.id \
-             WHERE cl.location_id = ?1 ORDER BY c.created_at_ms",
-        )
-        .bind(&[loc.clone().into()])?
-        .all()
-        .await?
-        .results()?;
+    // THIS VENUE'S ROSTER, from the prefix that is the roster. The join it
+    // replaces was `couriers JOIN courier_locations WHERE cl.location_id = ?`
+    // with a correlated subquery counting open shifts -- three tables to answer
+    // "who works here and who is out right now".
+    let crew = crate::identity_store::couriers(&ctx.env).await?;
+    let shifts = crate::hubstore::load_table(
+        &place,
+        crate::hubstore::IMAGE_OPS,
+        crate::hubstore::OPS_BYTES,
+    )
+    .await?
+    .table;
+    let mut rows: Vec<C> = crew
+        .scan(&format!("roster.venue/{loc}/"))
+        .into_iter()
+        .filter_map(|(_, id)| {
+            let r = crate::identity_store::rec(&crew, crate::identity_store::K_COURIER, &id)?;
+            Some(C {
+                on_shift: shifts
+                    .get("shift", &id)
+                    .and_then(|j| serde_json::from_str::<Value>(&j).ok())
+                    .filter(|x| x.get("ended_at_ms").map_or(true, |v| v.is_null()))
+                    .is_some() as i64,
+                created_at_ms: crate::identity_store::i_of(&r, "created_at_ms"),
+                name: Some(crate::identity_store::s_of(&r, "full_name_encrypted")),
+                phone: Some(crate::identity_store::s_of(&r, "phone_encrypted")),
+                status: crate::identity_store::s_of(&r, "status"),
+                id,
+            })
+        })
+        .collect();
+    rows.sort_by_key(|c| c.created_at_ms);
 
-    #[derive(Deserialize)]
     struct I {
         id: String,
         invited_name: Option<String>,
@@ -1293,16 +1313,25 @@ pub async fn couriers(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     }
     // Used and revoked invites are gone from this list: an invite that has been
     // spent is a courier, and it appears as one two lines above.
-    let invites: Vec<I> = db
-        .prepare(
-            "SELECT id, invited_name, expires_at_ms, created_at_ms FROM courier_invites \
-             WHERE location_id = ?1 AND used_at_ms IS NULL AND revoked_at_ms IS NULL \
-             ORDER BY created_at_ms",
-        )
-        .bind(&[loc.into()])?
-        .all()
-        .await?
-        .results()?;
+    let mut invites: Vec<I> = crew
+        .scan(&format!("invite.loc/{loc}/"))
+        .into_iter()
+        .filter_map(|(_, id)| {
+            let r = crate::identity_store::rec(&crew, crate::identity_store::K_INVITE, &id)?;
+            if r.get("used_at_ms").map_or(false, |v| !v.is_null())
+                || r.get("revoked_at_ms").map_or(false, |v| !v.is_null())
+            {
+                return None;
+            }
+            Some(I {
+                invited_name: Some(crate::identity_store::s_of(&r, "invited_name")),
+                expires_at_ms: crate::identity_store::i_of(&r, "expires_at_ms"),
+                created_at_ms: crate::identity_store::i_of(&r, "created_at_ms"),
+                id,
+            })
+        })
+        .collect();
+    invites.sort_by_key(|i| i.created_at_ms);
 
     let now = now_ms();
     Response::from_json(&json!({
@@ -1353,17 +1382,48 @@ pub async fn courier_detail(req: Request, ctx: RouteContext<()>) -> Result<Respo
         status: String,
         on_shift: i64,
     }
-    let c: Option<C> = db
-        .prepare(
-            "SELECT c.id, c.full_name_encrypted AS name, c.phone_encrypted AS phone, c.status, \
-             EXISTS(SELECT 1 FROM courier_shifts s WHERE s.courier_id = c.id AND s.location_id = ?2 \
-                    AND s.ended_at_ms IS NULL) AS on_shift \
-             FROM couriers c JOIN courier_locations cl ON cl.courier_id = c.id \
-             WHERE (c.id = ?1 OR c.phone_encrypted = ?1) AND cl.location_id = ?2",
-        )
-        .bind(&[id.clone().into(), loc.clone().into()])?
-        .first(None)
-        .await?;
+    // BY ID OR BY THE PHONE THE CONSOLE DISPLAYS, and on THIS venue's roster --
+    // the roster key is what the `JOIN courier_locations WHERE location_id`
+    // was, and a courier of another restaurant simply has no key here.
+    let crew = crate::identity_store::couriers(&ctx.env).await?;
+    let found = if crew
+        .get(crate::identity_store::K_ROSTER, &crate::identity_store::roster_id(&loc, &id))
+        .is_some()
+    {
+        Some(id.clone())
+    } else {
+        crate::identity_store::courier_id_for_phone(&crew, &crate::auth::sha256_hex(&id))
+            .filter(|cid| {
+                crew.get(
+                    crate::identity_store::K_ROSTER,
+                    &crate::identity_store::roster_id(&loc, cid),
+                )
+                .is_some()
+            })
+    };
+    let shift_img = crate::hubstore::load_table(
+        &place,
+        crate::hubstore::IMAGE_OPS,
+        crate::hubstore::OPS_BYTES,
+    )
+    .await?
+    .table;
+    let c: Option<C> = found
+        .and_then(|cid| {
+            crate::identity_store::rec(&crew, crate::identity_store::K_COURIER, &cid)
+                .map(|r| (cid, r))
+        })
+        .map(|(cid, r)| C {
+            on_shift: shift_img
+                .get("shift", &cid)
+                .and_then(|j| serde_json::from_str::<Value>(&j).ok())
+                .filter(|x| x.get("ended_at_ms").map_or(true, |v| v.is_null()))
+                .is_some() as i64,
+            name: Some(crate::identity_store::s_of(&r, "full_name_encrypted")),
+            phone: Some(crate::identity_store::s_of(&r, "phone_encrypted")),
+            status: crate::identity_store::s_of(&r, "status"),
+            id: cid,
+        });
     let Some(c) = c else {
         return Response::error("not found", 404);
     };
@@ -1374,11 +1434,6 @@ pub async fn courier_detail(req: Request, ctx: RouteContext<()>) -> Result<Respo
         .await
         .into_iter()
         .find(|f| f.courier_id == c.id);
-    #[derive(Deserialize)]
-    struct Today {
-        deliveries: f64,
-        cash: f64,
-    }
     // THE VENUE'S MIDNIGHT, not UTC's. This was `now - now.rem_euclid(DAY)`,
     // which is not even the old +2 constant -- it is a UTC day, so an owner
     // looking at a courier at 01:00 local saw a "today" that had already
@@ -1386,41 +1441,46 @@ pub async fn courier_detail(req: Request, ctx: RouteContext<()>) -> Result<Respo
     // one. The record is ~1 KB and the zone is the only field read from it.
     let zone = crate::hubstore::zone_of(crate::hubstore::venue_record(&place).await?.as_ref());
     let day_start = dowiz_hub::tz::start_of_local_day_ms(zone, now);
-    let today: Option<Today> = db
-        .prepare(
-            "SELECT COUNT(*) AS deliveries, COALESCE(SUM(cash_collected),0) AS cash \
-             FROM courier_assignments WHERE courier_id = ?1 AND location_id = ?2 \
-             AND delivered_at_ms >= ?3",
-        )
-        .bind(&[c.id.clone().into(), loc.clone().into(), JsValue::from_f64(day_start as f64)])?
-        .first(None)
-        .await?;
-    // The old console's two other tiles, restored: a month of runs, and what
-    // is on the road right now (assigned, not yet delivered). Counts only --
-    // there is deliberately no average, no rank (DECISIONS D0: trust is a
-    // capability, never a score).
+    // The old console's two other tiles: a month of runs, and what is on the
+    // road right now. Counts only -- there is deliberately no average and no
+    // rank (DECISIONS D0: trust is a capability, never a score).
     const THIRTY_DAYS_MS: i64 = 30 * 24 * 60 * 60 * 1000;
-    #[derive(Deserialize)]
-    struct Span {
-        delivered30d: f64,
-        in_flight: f64,
+    // THREE AGGREGATES, ONE WALK. They were two statements of `COUNT`, `SUM`
+    // and `SUM(CASE WHEN ...)` over `courier_assignments`; the assignments are
+    // this venue's own image now, and a fold over a few hundred records is
+    // cheaper than a round trip -- let alone two.
+    let ops = crate::hubstore::load_table(
+        &place,
+        crate::hubstore::IMAGE_OPS,
+        crate::hubstore::OPS_BYTES,
+    )
+    .await?
+    .table;
+    let (mut today_n, mut today_cash, mut d30, mut in_flight) = (0i64, 0i64, 0i64, 0i64);
+    for (_, j) in ops.all("asg") {
+        let Ok(a) = serde_json::from_str::<Value>(&j) else { continue };
+        if a.get("courier_id").and_then(Value::as_str) != Some(c.id.as_str()) {
+            continue;
+        }
+        match a.get("delivered_at_ms").and_then(Value::as_i64) {
+            None => in_flight += 1,
+            Some(at) => {
+                if at >= day_start {
+                    today_n += 1;
+                    today_cash += a.get("cash_collected").and_then(Value::as_i64).unwrap_or(0);
+                }
+                if at >= now - THIRTY_DAYS_MS {
+                    d30 += 1;
+                }
+            }
+        }
     }
-    let span: Option<Span> = db
-        .prepare(
-            "SELECT COALESCE(SUM(CASE WHEN delivered_at_ms >= ?3 THEN 1 ELSE 0 END),0) AS delivered30d, \
-             COALESCE(SUM(CASE WHEN delivered_at_ms IS NULL THEN 1 ELSE 0 END),0) AS in_flight \
-             FROM courier_assignments WHERE courier_id = ?1 AND location_id = ?2",
-        )
-        .bind(&[c.id.clone().into(), loc.clone().into(), JsValue::from_f64((now - THIRTY_DAYS_MS) as f64)])?
-        .first(None)
-        .await?;
     Response::from_json(&json!({
         "id": c.id, "phone": c.phone, "name": c.name.clone().unwrap_or_default(), "active": c.status == "active", "onShift": c.on_shift > 0,
         "lastFix": fix.map(|f| json!({ "latUdeg": f.lat_udeg, "lonUdeg": f.lon_udeg, "recordedAtMs": f.recorded_at_ms })),
-        "today": { "deliveries": today.as_ref().map(|t| t.deliveries as i64).unwrap_or(0),
-                   "cashCollected": today.as_ref().map(|t| t.cash as i64).unwrap_or(0) },
-        "delivered30d": span.as_ref().map(|s| s.delivered30d as i64).unwrap_or(0),
-        "inFlight": span.as_ref().map(|s| s.in_flight as i64).unwrap_or(0),
+        "today": { "deliveries": today_n, "cashCollected": today_cash },
+        "delivered30d": d30,
+        "inFlight": in_flight,
     }))
 }
 
@@ -1457,15 +1517,6 @@ pub async fn invite_courier(mut req: Request, ctx: RouteContext<()>) -> Result<R
     struct Row {
         id: String,
     }
-    let existing: Option<Row> = db
-        .prepare("SELECT id FROM couriers WHERE phone_hash = ?1")
-        .bind(&[phone_hash.clone().into()])?
-        .first(None)
-        .await?;
-    if existing.is_some() {
-        return Response::error("that phone already has an account", 409);
-    }
-
     // THE BYTES ARE THE PLATFORM'S, the alphabet is the hub's.
     //
     // `new_invite_code` reads /dev/urandom, which a Worker does not have -- so
@@ -1492,40 +1543,72 @@ pub async fn invite_courier(mut req: Request, ctx: RouteContext<()>) -> Result<R
         return Response::error("no platform CSPRNG", 500);
     };
     let now = now_ms();
-    // Inviting the same phone twice REPLACES the pending invite rather than
-    // leaving two codes alive for one person -- the first would keep working
-    // after the owner believed they had replaced it.
-    db.prepare(
-        "UPDATE courier_invites SET revoked_at_ms = ?3 WHERE location_id = ?1 \
-         AND invited_phone_hash = ?2 AND used_at_ms IS NULL AND revoked_at_ms IS NULL",
-    )
-    .bind(&[
-        loc.clone().into(),
-        phone_hash.clone().into(),
-        JsValue::from_f64(now as f64),
-    ])?
-    .run()
-    .await?;
-    db.prepare(
-        "INSERT INTO courier_invites (id,location_id,created_by_owner_id,role,\
-         invited_email_hash,invited_phone_hash,invited_name,code_hash,expires_at_ms,created_at_ms) \
-         VALUES (?1,?2,?3,'courier',?4,?4,?5,?6,?7,?8)",
-    )
-    .bind(&[
-        id.into(),
-        loc.into(),
-        owner.into(),
-        phone_hash.into(),
-        name.into(),
+    // ── THE CHECK, THE REVOKE AND THE MINT, IN ONE TURN ──
+    //
+    // Three statements before: does this phone already have an account, revoke
+    // any pending invite for it, write the new one. Inviting the same phone
+    // twice REPLACES the pending invite rather than leaving two codes alive for
+    // one person -- the first would keep working after the owner believed they
+    // had replaced it -- and that only holds if nothing runs in between.
+    let (ph, l2, own, nm, ch) = (
+        phone_hash.clone(),
+        loc.clone(),
+        owner.clone(),
+        name.clone(),
         // Hashed with the same one-way function the phone uses. A 16-character
         // code from a 32-symbol alphabet is 80 bits, so a plain digest is not
         // brute-forceable the way a human password would be.
-        crate::auth::sha256_hex(&code).into(),
-        JsValue::from_f64((now + TTL_MS) as f64),
-        JsValue::from_f64(now as f64),
-    ])?
-    .run()
+        crate::auth::sha256_hex(&code),
+    );
+    let taken = crate::identity_store::with_couriers(&ctx.env, move |t| {
+        if crate::identity_store::courier_id_for_phone(t, &ph).is_some() {
+            return Ok(true);
+        }
+        if let Some(pending) = t.lookup(&crate::identity_store::invite_by_phone(&ph)) {
+            if let Some(mut i) =
+                crate::identity_store::rec(t, crate::identity_store::K_INVITE, &pending)
+            {
+                i["revoked_at_ms"] = serde_json::json!(now);
+                let loc = crate::identity_store::s_of(&i, "location_id");
+                // The phone index goes with the revocation: a revoked invite
+                // must stop being findable by the number it was sent to.
+                let index =
+                    vec![(crate::identity_store::invite_at(&loc, &pending), pending.clone())];
+                t.put(
+                    crate::identity_store::K_INVITE,
+                    &pending,
+                    &i.to_string(),
+                    &index,
+                    &[],
+                )
+                .map_err(|e| Error::RustError(format!("invite: {e}")))?;
+            }
+        }
+        let rec = serde_json::json!({
+            "id": id, "location_id": l2, "created_by_owner_id": own, "role": "courier",
+            "invited_email_hash": ph, "invited_phone_hash": ph, "invited_name": nm,
+            "code_hash": ch, "expires_at_ms": now + TTL_MS, "created_at_ms": now,
+            "used_at_ms": serde_json::Value::Null,
+            "revoked_at_ms": serde_json::Value::Null,
+        })
+        .to_string();
+        t.put(
+            crate::identity_store::K_INVITE,
+            &id,
+            &rec,
+            &[
+                (crate::identity_store::invite_by_phone(&ph), id.clone()),
+                (crate::identity_store::invite_at(&l2, &id), id.clone()),
+            ],
+            &[],
+        )
+        .map_err(|e| Error::RustError(format!("invite: {e}")))?;
+        Ok(false)
+    })
     .await?;
+    if taken {
+        return Response::error("that phone already has an account", 409);
+    }
 
     Response::from_json(&json!({ "code": code, "expiresMs": now + TTL_MS }))
 }
@@ -1540,15 +1623,31 @@ pub async fn uninvite_courier(req: Request, ctx: RouteContext<()>) -> Result<Res
     let Some(id) = ctx.param("id").cloned() else {
         return Response::error("missing invite", 400);
     };
-    let res = db
-        .prepare(
-            "UPDATE courier_invites SET revoked_at_ms = ?3 WHERE id = ?1 AND location_id = ?2 \
-             AND used_at_ms IS NULL AND revoked_at_ms IS NULL",
-        )
-        .bind(&[id.into(), loc.into(), JsValue::from_f64(now_ms() as f64)])?
-        .run()
-        .await?;
-    if res.meta()?.and_then(|m| m.changes).unwrap_or(0) == 0 {
+    let now = now_ms();
+    let (iid, l2) = (id.clone(), loc.clone());
+    let revoked = crate::identity_store::with_couriers(&ctx.env, move |t| {
+        // THE VENUE IS IN THE CHECK, not only in the WHERE clause: an invite of
+        // another restaurant is refused because its record does not say this
+        // venue, and the answer is the same 404 either way -- a 403 would tell
+        // the caller the invite exists.
+        let Some(mut i) = crate::identity_store::rec(t, crate::identity_store::K_INVITE, &iid)
+        else {
+            return Ok(false);
+        };
+        if crate::identity_store::s_of(&i, "location_id") != l2
+            || i.get("used_at_ms").map_or(false, |v| !v.is_null())
+            || i.get("revoked_at_ms").map_or(false, |v| !v.is_null())
+        {
+            return Ok(false);
+        }
+        i["revoked_at_ms"] = serde_json::json!(now);
+        let index = vec![(crate::identity_store::invite_at(&l2, &iid), iid.clone())];
+        t.put(crate::identity_store::K_INVITE, &iid, &i.to_string(), &index, &[])
+            .map_err(|e| Error::RustError(format!("invite: {e}")))?;
+        Ok(true)
+    })
+    .await?;
+    if !revoked {
         return Response::error("not found", 404);
     }
     Response::from_json(&json!({ "ok": true }))
@@ -1581,37 +1680,67 @@ pub async fn set_courier_active(mut req: Request, ctx: RouteContext<()>) -> Resu
     // The console addresses a courier by the phone it displays, which is the
     // only handle it has; the id is internal.
     let hash = crate::auth::sha256_hex(&ident);
-    #[derive(Deserialize)]
     struct C {
         id: String,
     }
-    let row: Option<C> = db
-        .prepare(
-            "SELECT c.id FROM couriers c JOIN courier_locations cl ON cl.courier_id = c.id \
-             WHERE cl.location_id = ?1 AND (c.id = ?2 OR c.phone_hash = ?3)",
-        )
-        .bind(&[loc.into(), ident.clone().into(), hash.into()])?
-        .first(None)
-        .await?;
+    let crew = crate::identity_store::couriers(&ctx.env).await?;
+    let row: Option<C> = if crew
+        .get(crate::identity_store::K_ROSTER, &crate::identity_store::roster_id(&loc, &ident))
+        .is_some()
+    {
+        Some(C { id: ident.clone() })
+    } else {
+        crate::identity_store::courier_id_for_phone(&crew, &hash)
+            .filter(|cid| {
+                crew.get(
+                    crate::identity_store::K_ROSTER,
+                    &crate::identity_store::roster_id(&loc, cid),
+                )
+                .is_some()
+            })
+            .map(|id| C { id })
+    };
     let Some(row) = row else {
         return Response::error("not found", 404);
     };
     let status = if body.active { "active" } else { "deactivated" };
-    db.prepare("UPDATE couriers SET status = ?2 WHERE id = ?1")
-        .bind(&[row.id.clone().into(), status.into()])?
-        .run()
-        .await?;
+    let cid = row.id.clone();
+    let st = status.to_string();
+    crate::identity_store::with_couriers(&ctx.env, move |t| {
+        if let Some(mut r) = crate::identity_store::rec(t, crate::identity_store::K_COURIER, &cid) {
+            r["status"] = serde_json::json!(st);
+            let index = crate::identity_store::courier_index(&cid, &r);
+            t.put(crate::identity_store::K_COURIER, &cid, &r.to_string(), &index, &[])
+                .map_err(|e| Error::RustError(format!("courier: {e}")))?;
+        }
+        Ok(())
+    })
+    .await?;
     let mut revoked = 0usize;
     if !body.active {
-        let res = db
-            .prepare(
-                "UPDATE courier_sessions SET revoked_at_ms = ?2 WHERE courier_id = ?1 \
-                 AND revoked_at_ms IS NULL",
-            )
-            .bind(&[row.id.into(), JsValue::from_f64(now_ms() as f64)])?
-            .run()
-            .await?;
-        revoked = res.meta()?.and_then(|m| m.changes).unwrap_or(0);
+        // EVERY SESSION THEY HOLD DIES. Somebody who has left must not keep a
+        // working app in their pocket -- and the sessions are records, so this
+        // is a walk rather than an UPDATE whose `changes` count was the answer.
+        let cid = row.id.clone();
+        let now = now_ms();
+        revoked = crate::identity_store::with_sessions(&ctx.env, move |t| {
+            let mut n = 0usize;
+            let live: Vec<(String, Value)> = t
+                .all(crate::identity_store::K_CSESSION)
+                .into_iter()
+                .filter_map(|(id, j)| serde_json::from_str::<Value>(&j).ok().map(|v| (id, v)))
+                .filter(|(_, v)| crate::identity_store::s_of(v, "courier_id") == cid)
+                .filter(|(_, v)| v.get("revoked_at_ms").map_or(true, |x| x.is_null()))
+                .collect();
+            for (id, mut v) in live {
+                v["revoked_at_ms"] = serde_json::json!(now);
+                t.put(crate::identity_store::K_CSESSION, &id, &v.to_string(), &[], &[])
+                    .map_err(|e| Error::RustError(format!("session: {e}")))?;
+                n += 1;
+            }
+            Ok(n)
+        })
+        .await?;
     }
     Response::from_json(&json!({ "ok": true, "active": body.active, "sessionsRevoked": revoked }))
 }
@@ -2465,20 +2594,24 @@ pub async fn create_api_key(mut req: Request, ctx: RouteContext<()>) -> Result<R
     // what it cost when it was used for the session secrets.
     let hash = crate::auth::hash_opaque(&secret);
     let now = now_ms();
-    db.prepare(
-        "INSERT INTO owner_api_keys (id,location_id,owner_id,label,key_hash,\
-         created_at_ms,expires_at_ms) VALUES (?1,?2,?3,?4,?5,?6,?7)",
-    )
-    .bind(&[
-        id.clone().into(),
-        loc.into(),
-        owner.into(),
-        label.clone().into(),
-        hash.into(),
-        JsValue::from_f64(now as f64),
-        JsValue::from_f64((now + YEAR_MS) as f64),
-    ])?
-    .run()
+    let (kid, l2, own, lab, h2) = (id.clone(), loc.clone(), owner.clone(), label.clone(), hash);
+    crate::identity_store::with_sessions(&ctx.env, move |t| {
+        let rec = serde_json::json!({
+            "id": kid, "location_id": l2, "owner_id": own, "label": lab, "key_hash": h2,
+            "created_at_ms": now, "expires_at_ms": now + YEAR_MS,
+            "last_used_ms": serde_json::Value::Null,
+            "revoked_at_ms": serde_json::Value::Null,
+        })
+        .to_string();
+        t.put(
+            crate::identity_store::K_APIKEY,
+            &kid,
+            &rec,
+            &[(crate::identity_store::apikey_at(&l2, &kid), kid.clone())],
+            &[],
+        )
+        .map_err(|e| Error::RustError(format!("api key: {e}")))
+    })
     .await?;
     // Shown once. The hub stores a hash and genuinely cannot show it again,
     // which the console says rather than letting the owner assume otherwise.
@@ -2495,7 +2628,6 @@ pub async fn list_api_keys(req: Request, ctx: RouteContext<()>) -> Result<Respon
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
-    #[derive(Deserialize)]
     struct K {
         id: String,
         label: String,
@@ -2503,15 +2635,29 @@ pub async fn list_api_keys(req: Request, ctx: RouteContext<()>) -> Result<Respon
         expires_at_ms: i64,
         last_used_ms: Option<i64>,
     }
-    let rows: Vec<K> = db
-        .prepare(
-            "SELECT id,label,created_at_ms,expires_at_ms,last_used_ms FROM owner_api_keys \
-             WHERE location_id = ?1 AND revoked_at_ms IS NULL ORDER BY created_at_ms DESC",
-        )
-        .bind(&[loc.into()])?
-        .all()
-        .await?
-        .results()?;
+    // THIS VENUE'S KEYS, from the prefix that is the venue's list. Sorted
+    // newest first here rather than by a second index: a venue has a handful
+    // of keys, and an index maintained on every use to save one sort of five
+    // records is a key that exists to be forgotten.
+    let sess = crate::identity_store::sessions(&ctx.env).await?;
+    let mut rows: Vec<K> = sess
+        .scan(&format!("apikey.loc/{loc}/"))
+        .into_iter()
+        .filter_map(|(_, id)| {
+            let r = crate::identity_store::rec(&sess, crate::identity_store::K_APIKEY, &id)?;
+            if r.get("revoked_at_ms").map_or(false, |v| !v.is_null()) {
+                return None;
+            }
+            Some(K {
+                label: crate::identity_store::s_of(&r, "label"),
+                created_at_ms: crate::identity_store::i_of(&r, "created_at_ms"),
+                expires_at_ms: crate::identity_store::i_of(&r, "expires_at_ms"),
+                last_used_ms: r.get("last_used_ms").and_then(Value::as_i64),
+                id,
+            })
+        })
+        .collect();
+    rows.sort_by(|a, b| b.created_at_ms.cmp(&a.created_at_ms));
     Response::from_json(&json!({
         "keys": rows.iter().map(|k| json!({
             "id": k.id, "label": k.label, "createdMs": k.created_at_ms,
@@ -2539,15 +2685,28 @@ pub async fn revoke_api_key(mut req: Request, ctx: RouteContext<()>) -> Result<R
     };
     // Revoked, not deleted: the row is the record that this key existed and
     // when it stopped, which is the question asked after an incident.
-    let res = db
-        .prepare(
-            "UPDATE owner_api_keys SET revoked_at_ms = ?3 WHERE id = ?1 AND location_id = ?2 \
-             AND revoked_at_ms IS NULL",
-        )
-        .bind(&[body.id.into(), loc.into(), JsValue::from_f64(now_ms() as f64)])?
-        .run()
-        .await?;
-    if res.meta()?.and_then(|m| m.changes).unwrap_or(0) == 0 {
+    let (kid, l2, now) = (body.id.clone(), loc.clone(), now_ms());
+    let revoked = crate::identity_store::with_sessions(&ctx.env, move |t| {
+        let Some(mut r) = crate::identity_store::rec(t, crate::identity_store::K_APIKEY, &kid)
+        else {
+            return Ok(false);
+        };
+        // The venue is checked against the RECORD, and the answer to a key of
+        // another restaurant is the same 404 as to one that does not exist: a
+        // 403 would confirm it does.
+        if crate::identity_store::s_of(&r, "location_id") != l2
+            || r.get("revoked_at_ms").map_or(false, |v| !v.is_null())
+        {
+            return Ok(false);
+        }
+        r["revoked_at_ms"] = serde_json::json!(now);
+        let index = vec![(crate::identity_store::apikey_at(&l2, &kid), kid.clone())];
+        t.put(crate::identity_store::K_APIKEY, &kid, &r.to_string(), &index, &[])
+            .map_err(|e| Error::RustError(format!("api key: {e}")))?;
+        Ok(true)
+    })
+    .await?;
+    if !revoked {
         return Response::error("not found", 404);
     }
     Response::from_json(&json!({ "ok": true }))
