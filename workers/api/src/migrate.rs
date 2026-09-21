@@ -22,6 +22,40 @@ use worker::wasm_bindgen::JsValue;
 use crate::hubstore::{from_hex, SLICE, SLICES};
 use crate::platform::admin_only;
 
+/// May this caller run a migration? `None` means yes.
+///
+/// ── THE CHICKEN AND THE EGG, AND HOW IT IS SETTLED ──
+///
+/// `admin_only` reads the identity image, and the identity image is empty
+/// until the migration has run. An administrator therefore cannot authenticate
+/// to run the migration that would let them authenticate. Discovering that
+/// after the deploy is how an outage becomes a long one.
+///
+/// So the bootstrap secret is accepted as well. It is not a weaker door: it
+/// already authorises seeding an entire venue, owner included, it exists only
+/// as a Worker secret, and without it set there is no second door at all. The
+/// answer to a wrong one is the same 404 `bootstrap` gives, because a 401
+/// confirms there is something here to guess at.
+async fn may_migrate(
+    req: &Request,
+    ctx: &RouteContext<()>,
+    db: &D1Database,
+) -> Option<Response> {
+    if let Ok(want) = ctx.env.secret("BOOTSTRAP_SECRET") {
+        let want = want.to_string();
+        let given = req
+            .headers()
+            .get("x-dowiz-bootstrap")
+            .ok()
+            .flatten()
+            .unwrap_or_default();
+        if want.len() >= 32 && crate::bootstrap::secret_ok(&given, &want) {
+            return None;
+        }
+    }
+    admin_only(req, ctx, db).await.err()
+}
+
 
 /// `POST /api/platform/migrate/i18n` — move the translations into the venues'
 /// own images. Administrators only, idempotent, and safe to run again.
@@ -44,7 +78,7 @@ use crate::platform::admin_only;
 /// see it rather than a loop should pick one.
 pub async fn migrate_i18n(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    if let Err(r) = admin_only(&req, &ctx, &db).await {
+    if let Some(r) = may_migrate(&req, &ctx, &db).await {
         return Ok(r);
     }
     #[derive(serde::Deserialize)]
@@ -367,35 +401,8 @@ pub(crate) async fn load_images_d1(
 /// image's root so two runs can be compared without trusting this sentence.
 pub async fn migrate_all(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    // ── THE CHICKEN AND THE EGG, AND HOW IT IS SETTLED ──
-    //
-    // `admin_only` reads the identity image, and the identity image is empty
-    // until THIS ROUTE has run. An administrator therefore cannot authenticate
-    // to run the migration that would let them authenticate. Waiting until
-    // after the deploy to discover that is how an outage becomes a long one.
-    //
-    // So the bootstrap secret is accepted as well. It is not a weaker door: it
-    // already authorises seeding an entire venue, owner included, and it is a
-    // 32-character secret that exists only as a Worker secret. Without it set
-    // there is no second door at all, and the answer to a wrong one is the
-    // same 404 `bootstrap` gives -- a 401 confirms there is something here.
-    let by_secret = match ctx.env.secret("BOOTSTRAP_SECRET") {
-        Ok(want) => {
-            let want = want.to_string();
-            let given = req
-                .headers()
-                .get("x-dowiz-bootstrap")
-                .ok()
-                .flatten()
-                .unwrap_or_default();
-            want.len() >= 32 && crate::bootstrap::secret_ok(&given, &want)
-        }
-        Err(_) => false,
-    };
-    if !by_secret {
-        if let Err(r) = admin_only(&req, &ctx, &db).await {
-            return Ok(r);
-        }
+    if let Some(r) = may_migrate(&req, &ctx, &db).await {
+        return Ok(r);
     }
     let mut report = serde_json::Map::new();
     let legacy = ctx.var("LEGACY_VENUE").ok().map(|v| v.to_string()).filter(|v| !v.is_empty());
