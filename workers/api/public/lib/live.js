@@ -19,16 +19,35 @@
 
 /// How long the socket may be silent before a caller polls anyway. The hub
 /// sends nothing when nothing happens, so silence is the normal state; this is
-/// the "is anyone still there" bound, not a heartbeat.
+/// the belt to the heartbeat's braces, and it is no longer the ONLY thing
+/// standing between a surface and a socket that quietly died -- see PING_MS.
 const QUIET_MS = 90_000;
 /// Reconnect backoff: immediate, then slower, never faster than this.
 const BACKOFF_MS = [1000, 2000, 5000, 15000, 30000];
+/// HOW A DEAD SOCKET IS NOTICED AT ALL.
+///
+/// `state` only ever left 'live' on `onclose`, and a half-open socket -- a
+/// phone that changed network, a laptop that slept, a middlebox that dropped
+/// the flow -- never fires one. It therefore looked 'live' for ever, and
+/// `due()` answered false, so the surface that trusted it fell back to ONE
+/// read every 90 s instead of its own cadence. Measured on the owner console
+/// with ten live orders: the first request after the network went away came
+/// 90 s later, and the screen showed an "Open" chip over green Ready buttons
+/// the whole time, because `isStale` needs fifteen minutes.
+///
+/// The hub has answered `{"t":"ping"}` with a pong since the day sockets
+/// landed and no client had ever sent one. Now one does, and a socket that
+/// does not answer two of them is closed -- which runs `onclose`, which puts
+/// the surface back on its own poll and starts the reconnect backoff.
+const PING_MS = 25_000;
+const DEAD_MS = PING_MS * 2 + 5_000;
 
 export function live({ token, onEvent, onState } = {}) {
   let ws = null;
   let attempt = 0;
   let lastHeard = 0;
   let closed = false;
+  let heart = null;
   let state = 'connecting';
 
   const set = s => { if (s !== state) { state = s; onState?.(s); } };
@@ -45,7 +64,7 @@ export function live({ token, onEvent, onState } = {}) {
       ws = new WebSocket(url, ['bearer', token]);
     } catch { set('off'); schedule(); return; }
 
-    ws.onopen = () => { attempt = 0; lastHeard = Date.now(); set('live'); };
+    ws.onopen = () => { attempt = 0; lastHeard = Date.now(); set('live'); beat(); };
     ws.onmessage = e => {
       lastHeard = Date.now();
       let m; try { m = JSON.parse(e.data); } catch { return; }
@@ -55,7 +74,22 @@ export function live({ token, onEvent, onState } = {}) {
       if (m.t === 'event' || m.t === 'moved') onEvent?.(m);
     };
     ws.onerror = () => { /* onclose follows, and that is where we recover */ };
-    ws.onclose = () => { ws = null; set('polling'); schedule(); };
+    ws.onclose = () => { ws = null; clearInterval(heart); heart = null; set('polling'); schedule(); };
+  }
+
+  /// Send a ping on a timer, and hang up on a socket that stopped answering.
+  function beat(){
+    clearInterval(heart);
+    heart = setInterval(() => {
+      if (closed || !ws) return;
+      if (Date.now() - lastHeard > DEAD_MS) {
+        // Not a graceful goodbye: this socket is already gone and only the
+        // close event will tell the rest of the module so.
+        try { ws.close(); } catch {}
+        return;
+      }
+      try { ws.send(JSON.stringify({ t: 'ping' })); } catch { try { ws.close(); } catch {} }
+    }, PING_MS);
   }
 
   function schedule(){
@@ -89,6 +123,6 @@ export function live({ token, onEvent, onState } = {}) {
       } catch { return false; }
     },
     get state(){ return state; },
-    close(){ closed = true; try { ws?.close(); } catch {} ws = null; set('off'); },
+    close(){ closed = true; clearInterval(heart); heart = null; try { ws?.close(); } catch {} ws = null; set('off'); },
   };
 }

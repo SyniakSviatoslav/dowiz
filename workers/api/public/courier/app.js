@@ -249,7 +249,7 @@ async function api(path, opts = {}){
     const r = await fetch(API + path, { ...rest,
       headers: { 'content-type':'application/json', ...(rest.headers || {}),
                  ...(store.t ? { authorization:'Bearer ' + store.t } : {}) } });
-    if (r.status === 401) { store.t = null; renderLogin(t('sessionOver')); throw new Error('unauthorised'); }
+    if (r.status === 401) { signedOut(); throw new Error('unauthorised'); }
     if (!r.ok) { let m = 'HTTP ' + r.status; try { const d = await r.json(); m = d.error || d.message || m; } catch {} throw new Error(m); }
     return r.status === 204 ? null : r.json();
   } finally {
@@ -308,6 +308,33 @@ function startTracking(){
     gps(err.code === 1 ? t('gpsDenied') : t('gpsUnavailable'), true);
   }, { enableHighAccuracy:true, maximumAge:5000, timeout:20000 });
 }
+// ── A SESSION THAT HAS ENDED MUST STOP ASKING ──
+//
+// The 401 handler used to set `store.t = null` and call `renderLogin`, and
+// nothing else stopped. Everything that calls `api()` kept calling it: the
+// task poll re-arms itself every 12 s on shift and 60 s off it, the GPS watch
+// is never cleared outside `render()`, so a moving scooter POSTs a position on
+// every accepted fix, and the socket's `onEvent` calls `load()`. Each of those
+// 401s re-rendered the login screen, replacing `#app.innerHTML` -- so the
+// courier's half-typed phone number and password were wiped every few seconds,
+// faster than anyone types one-handed.
+//
+// It is not a rare state either. `COURIER_TTL_MS` is 24 h and there is no
+// courier refresh route, so every courier session dies exactly a day after it
+// began, in the middle of whatever they were doing.
+//
+// Measured: two renders and two 401s in 66 s off-shift, with both fields
+// cleared the second time.
+function signedOut(){
+  store.t = null;
+  S.booted = false;
+  clearTimeout(boot._i);
+  stopTracking();
+  try { S.live?.close(); } catch {}
+  S.live = null;
+  renderLogin(t('sessionOver'));
+}
+
 function stopTracking(){
   if (S.watchId != null) navigator.geolocation.clearWatch(S.watchId);
   S.watchId = null; S.moving = false; $('#gpsTag').hidden = true;

@@ -10,13 +10,62 @@
 // The cache is named by the deploy's own version line below; a new deploy
 // with a new line drops the old shell on activation.
 
-const SHELL_CACHE = 'dowiz-shell-2026-09-18';
-const SHELL = ['/', '/app.js', '/store/store.css', '/lib/tokens.css', '/lib/components.css', '/lib/icons.css'];
+const SHELL_CACHE = 'dowiz-shell-2026-09-21';
+/// THE WHOLE MODULE GRAPH, not just its entry.
+///
+/// This list used to hold the document, `/app.js` and the three stylesheets,
+/// while `/app.js` statically imports fourteen more modules. Offline the graph
+/// failed at LINK time, so `app.js` never ran -- not even the line that shows
+/// the venue's phone number and the words "no connection". An installed app
+/// opened on a blank page under a header that said "...", and the install
+/// sheet that persuaded the customer to add it promises "the menu opens with
+/// one tap, even offline".
+///
+/// Derived from the graph rather than remembered: every `from '/...'` reachable
+/// from `/app.js`. The dynamic imports (checkout, track, address, live, the
+/// map, the sea) are deliberately NOT here -- each one needs the network to be
+/// useful, and the point of the shell is that the menu and the venue's own
+/// offline line come up without it.
+const SHELL_CACHE_MODULES = [
+  '/app.js',
+  '/lib/money.js',
+  '/store/cart.js',
+  '/store/dish.js',
+  '/store/eta.js',
+  '/store/i18n.js',
+  '/store/install.js',
+  '/store/menu.js',
+  '/store/motion.js',
+  '/store/nav.js',
+  '/store/sea.js',
+  '/store/state.js',
+  '/store/storage.js',
+  '/store/ui.js',
+  '/store/venue.js',
+];
+const SHELL = [
+  '/',
+  ...SHELL_CACHE_MODULES,
+  '/store/store.css',
+  '/lib/tokens.css',
+  '/lib/components.css',
+  '/lib/icons.css',
+];
 /// Paths that are never cached: the hub speaks, the media is immutable already.
 const NEVER = [/^\/api\//, /^\/media\//];
 
 self.addEventListener('install', ev => {
-  ev.waitUntil(caches.open(SHELL_CACHE).then(c => c.addAll(SHELL)).catch(() => {}));
+  // ONE MISSING FILE MUST NOT EMPTY THE WHOLE SHELL. `addAll` is
+  // all-or-nothing, and the `.catch(() => {})` around it turned any single 404
+  // into "nothing is cached at all" -- the precise state this worker exists to
+  // prevent, reached silently and indistinguishable from success.
+  ev.waitUntil(
+    caches.open(SHELL_CACHE).then(async c => {
+      const missing = [];
+      await Promise.all(SHELL.map(p => c.add(p).catch(() => missing.push(p))));
+      if (missing.length) console.error('sw: shell incomplete, could not cache', missing);
+    }).catch(e => console.error('sw: no shell cache at all', e))
+  );
   self.skipWaiting();
 });
 self.addEventListener('activate', ev => {

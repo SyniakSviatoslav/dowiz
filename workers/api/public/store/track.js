@@ -273,7 +273,9 @@ export function openTracking(order){
         if ($('#sheet').dataset.name === 'track') openTracking({ ...d, eta: d.eta || (eta && !eta.live ? eta : undefined) });
       } catch {
         openTracking._fails = (openTracking._fails || 0) + 1;
-        if (openTracking._fails === POLL_FAILS_TO_TELL) toast(t('loadFail'));
+        // The ORDER poll failed, not the menu load. `loadFail` said "the menu
+        // did not load" to a customer staring at their order.
+        if (openTracking._fails === POLL_FAILS_TO_TELL) toast(t('trackFail'));
         if ($('#sheet').dataset.name === 'track') openTracking(order);
       }
     }, st === 'IN_DELIVERY' || st === 'READY' ? POLL_MS : POLL_SLOW_MS);

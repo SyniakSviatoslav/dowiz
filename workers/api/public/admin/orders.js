@@ -63,7 +63,7 @@ function row(o){
     <span class="meta">
       <span>${icon(isPickup(o) ? 'walk' : 'bike')}<span data-t="${isPickup(o) ? 'pickup' : 'delivery'}"></span></span>
       <span>${icon(o.payment === 'cash' ? 'cash' : o.payment === 'crypto' ? 'currency-bitcoin' : 'credit-card')}${esc(payName(o.payment))}</span>
-      ${o.eta?.range ? `<span class="live">${icon('clock')}<b>${esc(o.eta.range)}</b> min</span>` : ''}
+      ${o.eta?.range ? `<span class="live">${icon('clock')}<b>${esc(o.eta.range)}</b> ${t('etaMin')}</span>` : ''}
       ${o.courier_id ? `<span>${icon('bike')}${esc(courierName(o.courier_id))}</span>` : ''}
     </span>
     <span class="age">${esc(ago(o.created_at_ms || Date.now()))}</span>
