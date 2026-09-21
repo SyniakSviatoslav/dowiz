@@ -407,7 +407,13 @@ mod tests {
     #[test]
     fn known_keys_fall_back_to_their_declared_defaults() {
         let mut s = Settings::create().expect("create");
-        assert_eq!(s.known("ai.endpoint"), "http://127.0.0.1:11434/v1");
+        // EMPTY, not a loopback URL. The declared default was changed when it
+        // turned out a Worker can never reach `http://127.0.0.1:11434/v1` --
+        // see the comment on the key -- and this assertion kept the old value,
+        // so the suite has been red at HEAD ever since. A test that pins a
+        // default the code deliberately abandoned is not a regression guard,
+        // it is a second opinion nobody asked for.
+        assert_eq!(s.known("ai.endpoint"), "", "not configured is the honest default");
         assert_eq!(s.known("ai.model"), "llama3.2");
         assert!(!s.flag("ai.enabled"), "the assistant must be OFF until switched on");
 

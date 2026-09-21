@@ -142,6 +142,11 @@ struct LocationOut {
     supported_locales: Value,
     #[serde(rename = "defaultLocale")]
     default_locale: String,
+    /// The venue's IANA zone, so a client that renders a local time renders the
+    /// venue's and not the phone's. Also what the owner console's hours sheet
+    /// shows, because a weekly schedule without its zone is a schedule in an
+    /// unstated timezone -- which is the defect this field exists to end.
+    tz: String,
 }
 
 #[derive(Deserialize)]
@@ -246,11 +251,18 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         .get("hours")
         .map(|h| dowiz_hub::hours::from_json(&h.to_string()))
         .unwrap_or_default();
-    // Durrës is UTC+2. A Worker has no timezone database and needs none: one
-    // venue sits in one place, and its offset is one configured number.
-    let tz: i64 = raw.get("tz_offset_minutes").and_then(Value::as_i64).unwrap_or(120);
+    // THE OFFSET IS NOT A CONSTANT, which is what this used to assume: the line
+    // here read "Durrës is UTC+2" and defaulted to 120 minutes all year.
+    // Europe/Tirane is UTC+1 in winter, so from 25 October 2026 a venue whose
+    // kitchen closes at 23:00 would have been reported closed from 22:00 -- and
+    // one opening at 09:00 would have taken orders from 08:00.
+    //
+    // A Worker still needs no timezone database. It needs a NAME and the EU
+    // rule, both of which are arithmetic in `dowiz_hub::tz`, and the name is
+    // already on the record this handler has in hand -- no extra read.
+    let zone = crate::hubstore::zone_of(Some(&raw));
     let now_ms = Date::now().as_millis() as i64;
-    let (weekday, minute) = dowiz_hub::hours::local_now(now_ms, tz);
+    let (weekday, minute) = dowiz_hub::tz::local_weekday_minute(zone, now_ms);
     let scheduled_open = sched.is_empty() || sched.is_open_at(weekday, minute);
     let next_open = sched.next_open(weekday, minute);
     let paused = loc.delivery_paused == 1;
@@ -468,6 +480,16 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         supported_locales: serde_json::from_str(&loc.supported_locales)
             .unwrap_or_else(|_| json!(["sq"])),
         default_locale: loc.default_locale,
+        // The name the venue is configured with, or the default this build
+        // applies when it has none -- never an empty string, because a client
+        // reading "" would have to invent a fallback and would invent a
+        // different one from the server's.
+        tz: raw
+            .get("tz")
+            .and_then(Value::as_str)
+            .filter(|n| dowiz_hub::tz::zone(n).is_some())
+            .unwrap_or(dowiz_hub::tz::DEFAULT_NAME)
+            .to_string(),
     })
     .unwrap_or(json!({}));
 

@@ -23,11 +23,14 @@ use crate::owner::{now_ms, owner_and_venue};
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
-fn start_of_day_ms(now: i64) -> i64 {
-    // Europe/Tirane. A UTC day boundary would reset an owner's takings at one or
-    // two in the morning -- during service on a Saturday.
-    let off = 2 * 60 * 60 * 1000;
-    ((now + off) / 86_400_000) * 86_400_000 - off
+/// The venue's local midnight, at or before `now`.
+///
+/// This was `let off = 2 * 60 * 60 * 1000;` under a comment about Europe/Tirane.
+/// Europe/Tirane is UTC+1 in winter: the constant was the summer offset, and a
+/// UTC day boundary is not the only way to reset an owner's takings during
+/// service. `dowiz_hub::tz` has the rule; this takes the venue's zone.
+fn start_of_day_ms(zone: dowiz_hub::tz::Zone, now: i64) -> i64 {
+    dowiz_hub::tz::start_of_local_day_ms(zone, now)
 }
 
 fn currency_of(cat: &dowiz_hub::catalog::Catalog) -> String {
@@ -215,7 +218,6 @@ pub async fn analytics(req: Request, ctx: RouteContext<()>) -> Result<Response> 
 
     let now = now_ms();
     let day_ms = 86_400_000;
-    let from = start_of_day_ms(now) - (days - 1) * day_ms;
     // The folded orders and the catalogue, fetched together: neither answer
     // depends on the other, and the analytics need a product's name.
     let (listed, cat) = futures_util::future::try_join(
@@ -224,6 +226,13 @@ pub async fn analytics(req: Request, ctx: RouteContext<()>) -> Result<Response> 
     )
     .await?;
     let cat = cat.catalog;
+    // AFTER the catalogue, because the venue's own record is in it and the day
+    // boundary needs its time zone. This used to be computed first, from a
+    // constant; reading it from bytes already in hand costs nothing.
+    let zone = crate::hubstore::zone_of(
+        cat.location().and_then(|j| serde_json::from_str::<Value>(&j).ok()).as_ref(),
+    );
+    let from = start_of_day_ms(zone, now) - (days - 1) * day_ms;
 
     let mut by_day: Vec<(i64, i64, i64)> = (0..days).map(|i| (from + i * day_ms, 0, 0)).collect();
     let mut by_hour = [0i64; 24];
@@ -260,7 +269,14 @@ pub async fn analytics(req: Request, ctx: RouteContext<()>) -> Result<Response> 
         let idx = ((at - from) / day_ms).clamp(0, days - 1) as usize;
         by_day[idx].1 += 1;
         by_day[idx].2 += took;
-        let local_h = (((at + 2 * 60 * 60 * 1000) % day_ms) / 3_600_000).clamp(0, 23) as usize;
+        // The venue's hour, not UTC's and not a constant's. Computed per order
+        // because `at` can be months old and the offset in force THEN is the
+        // one that decides which hour of the day that order belongs to -- an
+        // order taken at 20:00 local in July and one at 20:00 local in December
+        // are the same hour of the venue's day and were two different hours to
+        // the old `+2`.
+        let local_h =
+            ((dowiz_hub::tz::local_ms(zone, at).rem_euclid(day_ms)) / 3_600_000).clamp(0, 23) as usize;
         by_hour[local_h] += 1;
 
         if refused {
@@ -1363,7 +1379,13 @@ pub async fn courier_detail(req: Request, ctx: RouteContext<()>) -> Result<Respo
         deliveries: f64,
         cash: f64,
     }
-    let day_start = now - now.rem_euclid(24 * 60 * 60 * 1000);
+    // THE VENUE'S MIDNIGHT, not UTC's. This was `now - now.rem_euclid(DAY)`,
+    // which is not even the old +2 constant -- it is a UTC day, so an owner
+    // looking at a courier at 01:00 local saw a "today" that had already
+    // started, and the cash the courier is carrying counted against the wrong
+    // one. The record is ~1 KB and the zone is the only field read from it.
+    let zone = crate::hubstore::zone_of(crate::hubstore::venue_record(&place).await?.as_ref());
+    let day_start = dowiz_hub::tz::start_of_local_day_ms(zone, now);
     let today: Option<Today> = db
         .prepare(
             "SELECT COUNT(*) AS deliveries, COALESCE(SUM(cash_collected),0) AS cash \

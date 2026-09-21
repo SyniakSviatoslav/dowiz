@@ -89,7 +89,7 @@ export const T = {
     activeC:'Aktiv', deactivate:'Çaktivizo', activate:'Aktivizo', noCouriers:'Ende asnjë korrier', deliveries:'Dorëzime', lastSeen:'Parë së fundi', uninvite:'Anulo ftesën',
     // more
     marketing:'Marketing', promos:'Kodet e zbritjes', posts:'Postimet', analytics:'Analitika', customers:'Klientët', settings:'Cilësimet', health:'Gjendja e sistemit',
-    notifications:'Njoftimet', channels:'Kanalet e porosive', integrations:'Integrimet', branding:'Marka', hours:'Orari', deliveryTerms:'Dërgesa', payments:'Pagesat',
+    notifications:'Njoftimet', channels:'Kanalet e porosive', integrations:'Integrimet', branding:'Marka', hours:'Orari', timezone:'Zona kohore', timezoneHint:'Ndryshimi i orës në verë zbatohet vetë — nuk ka asgjë për të ndryshuar dy herë në vit.', deliveryTerms:'Dërgesa', payments:'Pagesat',
     features:'Funksionet', apiKeys:'Çelësat API', backup:'Rezervë', activation:'Aktivizimi', venue:'Lokali',
     // notifications
     telegram:'Telegram', whatsapp:'WhatsApp', tgHow:'Lidhni botin: shkruani /start botit nga telefoni i lokalit — porositë e reja vijnë aty.', tgChannel:'Kanali i postimeve',
@@ -186,7 +186,7 @@ export const T = {
     invite:'Invite courier', inviteHint:'The code is valid for 7 days; the courier types it in their app.', phone:'Phone', inviteCode:'Code', onShift:'On shift', offShift:'Off shift',
     activeC:'Active', deactivate:'Deactivate', activate:'Activate', noCouriers:'No couriers yet', deliveries:'Deliveries', lastSeen:'Last seen', uninvite:'Cancel invite',
     marketing:'Marketing', promos:'Promo codes', posts:'Posts', analytics:'Analytics', customers:'Customers', settings:'Settings', health:'System health',
-    notifications:'Notifications', channels:'Order channels', integrations:'Integrations', branding:'Brand', hours:'Hours', deliveryTerms:'Delivery', payments:'Payments',
+    notifications:'Notifications', channels:'Order channels', integrations:'Integrations', branding:'Brand', hours:'Hours', timezone:'Time zone', timezoneHint:'The summer change is applied automatically; there is nothing to set twice a year.', deliveryTerms:'Delivery', payments:'Payments',
     features:'Features', apiKeys:'API keys', backup:'Backup', activation:'Activation', venue:'Venue',
     telegram:'Telegram', whatsapp:'WhatsApp', tgHow:'Link the bot: send /start to the bot from the venue phone — new orders arrive there.', tgChannel:'Posting channel',
     tgNotSet:'The Telegram bot is not configured on this hub', waNotYet:'WhatsApp Business is not linked yet — it needs a WhatsApp Business API account.',
@@ -276,7 +276,7 @@ export const T = {
     invite:'Запросити кур’єра', inviteHint:'Код дійсний 7 днів; кур’єр вводить його у своєму застосунку.', phone:'Телефон', inviteCode:'Код', onShift:'На зміні', offShift:'Не на зміні',
     activeC:'Активний', deactivate:'Деактивувати', activate:'Активувати', noCouriers:'Кур’єрів ще немає', deliveries:'Доставок', lastSeen:'Востаннє', uninvite:'Скасувати запрошення',
     marketing:'Маркетинг', promos:'Промокоди', posts:'Публікації', analytics:'Аналітика', customers:'Клієнти', settings:'Налаштування', health:'Стан системи',
-    notifications:'Сповіщення', channels:'Канали замовлень', integrations:'Інтеграції', branding:'Бренд', hours:'Години роботи', deliveryTerms:'Доставка', payments:'Оплата',
+    notifications:'Сповіщення', channels:'Канали замовлень', integrations:'Інтеграції', branding:'Бренд', hours:'Години роботи', timezone:'Часовий пояс', timezoneHint:'Перехід на літній час застосовується автоматично — двічі на рік нічого міняти не треба.', deliveryTerms:'Доставка', payments:'Оплата',
     features:'Функції', apiKeys:'API-ключі', backup:'Резервна копія', activation:'Активація', venue:'Заклад',
     telegram:'Telegram', whatsapp:'WhatsApp', tgHow:'Підключіть бота: напишіть йому /start з телефону закладу — нові замовлення приходитимуть туди.', tgChannel:'Канал для публікацій',
     tgNotSet:'Telegram-бот на цьому хабі не налаштований', waNotYet:'WhatsApp Business ще не підключено — потрібен акаунт WhatsApp Business API.',

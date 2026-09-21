@@ -608,18 +608,38 @@ pub async fn dashboard(req: Request, ctx: RouteContext<()>) -> Result<Response> 
     // beside the log "because the readiness count needs it" -- and then never
     // touched it: the tally below reads only the orders. So the dashboard was
     // paying for a whole second image on every poll to satisfy a comment.
-    let (_, loc, listed) =
-        match owner_beside(&req, &ctx, &db, crate::hubstore::orders(&place)).await {
-            Ok(v) => v,
-            Err(r) => return Ok(r),
-        };
+    // The orders and the venue's own record, together. The record is ~1 KB from
+    // `/fold/venue` -- NOT the catalogue image it lives in -- so this is a
+    // second round trip in parallel rather than a second image in series. It is
+    // here because the day boundary below needs the venue's time zone and
+    // getting that wrong is what this whole change is about.
+    let (_, loc, (listed, venue)) = match owner_beside(
+        &req,
+        &ctx,
+        &db,
+        futures_util::future::try_join(
+            crate::hubstore::orders(&place),
+            crate::hubstore::venue_record(&place),
+        ),
+    )
+    .await
+    {
+        Ok(v) => v,
+        Err(r) => return Ok(r),
+    };
 
-    // "Today" starts at local midnight for the venue. Without the timezone this
-    // would silently mean UTC, and an owner in Durrës would see the day roll over
-    // two hours early.
-    let tz_offset_ms: i64 = 2 * 60 * 60 * 1000; // Europe/Tirane, standard time
+    // "Today" starts at local midnight FOR THE VENUE.
+    //
+    // This was `let tz_offset_ms: i64 = 2 * 60 * 60 * 1000; // Europe/Tirane,
+    // standard time` -- and Europe/Tirane's standard time is UTC+1. The
+    // constant was the SUMMER offset, so from 01:00 UTC on 25 October 2026 this
+    // owner's day would have begun an hour early, every day, until the last
+    // Sunday of March. `tz::start_of_local_day_ms` also handles the two days a
+    // year when the offset in force now is not the offset that was in force at
+    // midnight; see its comment for why one pass and two passes are both wrong.
+    let zone = crate::hubstore::zone_of(venue.as_ref());
     let now = now_ms();
-    let day_start = ((now + tz_offset_ms) / 86_400_000) * 86_400_000 - tz_offset_ms;
+    let day_start = dowiz_hub::tz::start_of_local_day_ms(zone, now);
 
     let (mut count, mut revenue, mut pending, mut active) = (0i64, 0i64, 0i64, 0i64);
     for e in listed {
@@ -1135,6 +1155,16 @@ pub async fn update_location(mut req: Request, ctx: RouteContext<()>) -> Result<
         free_delivery_threshold: Option<Option<i64>>,
         #[serde(default)]
         min_order: Option<i64>,
+        /// The venue's IANA time zone, e.g. `Europe/Tirane`.
+        ///
+        /// THE ONLY PLACE LOCAL TIME COMES FROM. It used to be the constant
+        /// `2 * 60 * 60 * 1000` in three separate files, one of them labelled
+        /// "standard time" while carrying the summer offset. The name is
+        /// refused here if this build does not know its rule, because a venue
+        /// quietly keeping another country's hours is exactly the failure the
+        /// constant already was.
+        #[serde(default)]
+        timezone: Option<String>,
         /// The venue's crypto wallets: `[{network, symbol, address, note?}]`.
         /// An empty list switches the rail off. Checked here so a wallet with
         /// no address never reaches a customer as a way to pay.
@@ -1200,6 +1230,18 @@ pub async fn update_location(mut req: Request, ctx: RouteContext<()>) -> Result<
             return Response::error("status must be open, closed or busy", 400);
         }
     }
+    if let Some(tz) = &body.timezone {
+        if dowiz_hub::tz::zone(tz.trim()).is_none() {
+            return Response::error(
+                format!(
+                    "unknown time zone {:?}. Known: {}",
+                    tz.trim(),
+                    dowiz_hub::tz::NAMES.join(", ")
+                ),
+                400,
+            );
+        }
+    }
     if let Some(ph) = &body.phone {
         // Empty CLEARS it -- a venue with no phone should be able to say so
         // rather than keep a number that no longer answers.
@@ -1212,6 +1254,7 @@ pub async fn update_location(mut req: Request, ctx: RouteContext<()>) -> Result<
     let phone = body.phone.clone();
     let pickup = body.pickup;
     let name = body.name.as_deref().map(str::trim).map(String::from);
+    let timezone = body.timezone.as_deref().map(str::trim).map(String::from);
     let delivery_fee = body.delivery_fee;
     let free_th = body.free_delivery_threshold;
     let min_order = body.min_order;
@@ -1256,6 +1299,9 @@ pub async fn update_location(mut req: Request, ctx: RouteContext<()>) -> Result<
         }
         if let Some(n) = &name {
             l["name"] = json!(n);
+        }
+        if let Some(tz) = &timezone {
+            l["tz"] = json!(tz);
         }
         if let Some(f) = delivery_fee {
             l["delivery_fee"] = json!(f);

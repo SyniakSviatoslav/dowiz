@@ -539,10 +539,20 @@ pub async fn earnings(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // place the same numbers lived, and the response it produced did not even
     // have the shape the courier app reads -- `d.today.cash` was undefined, so
     // the wallet showed nothing at all.
-    let listed = crate::hubstore::orders(&place).await?;
+    // The orders and the venue's own record, together: the record is ~1 KB and
+    // carries the time zone the day boundary below needs. It was the constant
+    // `2 * 60 * 60 * 1000` -- Tirane's SUMMER offset -- so from 25 October a
+    // courier's "today" would have started an hour early, and the cash they
+    // are holding is counted against it.
+    let (listed, venue) = futures_util::future::try_join(
+        crate::hubstore::orders(&place),
+        crate::hubstore::venue_record(&place),
+    )
+    .await?;
+    let zone = crate::hubstore::zone_of(venue.as_ref());
     let now = now_ms();
     let day = 86_400_000i64;
-    let today = ((now + 2 * 60 * 60 * 1000) / day) * day - 2 * 60 * 60 * 1000;
+    let today = dowiz_hub::tz::start_of_local_day_ms(zone, now);
     let (week, month) = (today - 6 * day, today - 29 * day);
 
     let (mut d_t, mut d_w, mut d_m) = (0i64, 0i64, 0i64);

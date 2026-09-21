@@ -217,15 +217,40 @@ async function openVenue(){
 }
 const hhmm = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 const toMin = s => { const [h, m] = String(s || '').split(':').map(Number); return Number.isFinite(h) ? h * 60 + (m || 0) : null; };
+/// The zones the server will accept. Kept in step with `dowiz_hub::tz::NAMES`
+/// by the list the menu payload carries -- a second list here would drift, and
+/// the one that drifts is the one the owner picks from.
+const ZONES = ['Europe/Tirane', 'Europe/Belgrade', 'Europe/Berlin', 'Europe/Podgorica',
+  'Europe/Prague', 'Europe/Rome', 'Europe/Skopje', 'Europe/Vienna', 'Europe/Warsaw',
+  'Europe/Zagreb', 'Europe/Athens', 'Europe/Bucharest', 'Europe/Chisinau', 'Europe/Kyiv',
+  'Europe/Sofia', 'Europe/London', 'Europe/Lisbon', 'UTC'];
+
 async function openHours(){
   const week = Array.isArray(S.venue?.hours) && S.venue.hours.length === 7 ? S.venue.hours : Array.from({ length: 7 }, () => []);
+  // A WEEKLY SCHEDULE WITHOUT ITS ZONE IS A SCHEDULE IN AN UNSTATED TIMEZONE.
+  // These hours used to be read against a hard-coded +2, which is Tirane's
+  // SUMMER offset: from 25 October a kitchen closing at 23:00 would have been
+  // reported closed from 22:00. The zone belongs on this sheet because it is
+  // what these numbers mean.
+  const tz = S.venue?.tz || 'Europe/Tirane';
   sheet(`${head('settings', 'hours')}
+    <label for="h-tz" data-t="timezone"></label>
+    <select id="h-tz">${ZONES.map(z => `<option value="${z}"${z === tz ? ' selected' : ''}>${z.replace('_', ' ')}</option>`).join('')}</select>
+    <p class="hint" data-t="timezoneHint"></p>
     ${week.map((w, i) => `<div class="grid3 hours-row"><label class="switch"><input type="checkbox" data-day="${i}" ${w.length ? 'checked' : ''}><span class="switch-k"></span><span class="t">${esc(t('day')[i])}</span></label>
       <input type="time" data-open="${i}" value="${w.length ? hhmm(w[0].open) : '11:00'}"><input type="time" data-close="${i}" value="${w.length ? hhmm(w[0].close) : '23:00'}"></div>`).join('')}
     <div class="btn-row"><button class="btn" id="hSave">${icon('check')}<span data-t="save"></span></button></div>`, { name: 'hours' });
   $('#hSave').onclick = async () => {
     const hours = week.map((_, i) => { const on = $(`[data-day="${i}"]`).checked; if (!on) return []; const o = toMin($(`[data-open="${i}"]`).value), c = toMin($(`[data-close="${i}"]`).value); return o !== null && c !== null ? [{ open: o, close: c }] : []; });
-    try { await busy($('#hSave'), () => post('/owner/place', { hours })); toast(t('saved')); await loadVenue(); closeSheet(); } catch (e) { fail(e); }
+    const picked = $('#h-tz').value;
+    try {
+      // Two writes, and the zone goes FIRST: if it is refused the hours are not
+      // saved against a zone the owner did not get. `/owner/location` is where
+      // the venue record lives; `/owner/place` is where the schedule does.
+      if (picked !== tz) await post('/owner/location', withLoc({ timezone: picked }));
+      await busy($('#hSave'), () => post('/owner/place', { hours }));
+      toast(t('saved')); await loadVenue(); closeSheet();
+    } catch (e) { fail(e); }
   };
 }
 async function openDelivery(){

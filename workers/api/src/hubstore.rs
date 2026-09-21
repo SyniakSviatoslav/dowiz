@@ -1041,6 +1041,34 @@ pub async fn log_generation(place: &Place) -> Result<i64> {
     Ok(res.headers().get("x-generation").ok().flatten().and_then(|v| v.parse().ok()).unwrap_or(0))
 }
 
+/// The venue's own record, without the catalogue it sits in.
+///
+/// One field of it is needed on every owner poll -- the time zone, so that
+/// "today" is the venue's day and not UTC's -- and `load_catalog` would fetch
+/// half a megabyte to read it. The object parses its own catalogue image and
+/// answers with the record. A venue that has no catalogue yet answers `null`.
+pub async fn venue_record(place: &Place) -> Result<Option<serde_json::Value>> {
+    let stub = place.stub()?;
+    let req = Request::new("https://hub/fold/venue", Method::Get)?;
+    let mut res = stub.fetch_with_request(req).await?;
+    let body = res.text().await?;
+    Ok(serde_json::from_str::<serde_json::Value>(&body).ok().filter(|v| !v.is_null()))
+}
+
+/// The venue's time zone, from its own record.
+///
+/// FALLING BACK IS NOT SILENT. A venue whose record names no zone, or names one
+/// this build does not know, gets `tz::DEFAULT` -- and the settings route
+/// refuses an unknown name on write, so the only way to reach the default is to
+/// have never set one. Every venue is in that state today, which is exactly why
+/// the constant `2 * 60 * 60 * 1000` was able to be wrong in three files at
+/// once without anyone noticing.
+pub fn zone_of(record: Option<&serde_json::Value>) -> dowiz_hub::tz::Zone {
+    let name = record.and_then(|r| r.get("tz")).and_then(|v| v.as_str());
+    let fixed = record.and_then(|r| r.get("tz_offset_minutes")).and_then(|v| v.as_i64());
+    dowiz_hub::tz::from_settings(name, fixed)
+}
+
 /// Append one event that does not depend on what the log already says.
 ///
 /// A placement, an audit record: the payload is already decided, so there is

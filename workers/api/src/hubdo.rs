@@ -49,6 +49,10 @@ const CHUNK: usize = 96 * 1024;
 /// error.
 const LOG_IMAGE: &str = "log";
 
+/// The catalogue image, which holds the venue's own record as well as its
+/// dishes. Named here because `/fold/venue` reads it and nothing else does.
+const CATALOG_IMAGE: &str = "catalog";
+
 /// How long a courier's fix is worth serving. `live_eta` reads the newest fix
 /// within twenty minutes; anything older is not a position, it is a memory.
 const POSITION_KEEP_MS: i64 = 20 * 60 * 1000;
@@ -743,6 +747,36 @@ impl DurableObject for HubImages {
                         .map(|(k, v)| (k.clone(), *v))
                         .collect();
                     Response::from_json(&fresh)
+                }
+                // THE VENUE'S OWN RECORD, and nothing else in the catalogue.
+                //
+                // The owner's dashboard needs one field from it -- the time
+                // zone, so "today" starts at the venue's midnight rather than
+                // UTC's. Reaching that through `load_catalog` would pull the
+                // whole catalogue image, which on a venue with a real menu is
+                // half a megabyte, on every poll. The object already holds
+                // those bytes; parsing them HERE and answering with the ~1 KB
+                // that was asked for is the same move phase 2 made for the log.
+                //
+                // A venue with no catalogue yet answers `null`, which is not an
+                // error: the caller falls back to the default zone and says so.
+                (Method::Get, "venue") => {
+                    let rec = match self.image(CATALOG_IMAGE).await? {
+                        Some((_, bytes)) => dowiz_hub::catalog::Catalog::load(&bytes)
+                            .ok()
+                            .and_then(|c| c.location()),
+                        None => None,
+                    };
+                    match rec {
+                        Some(json) => Response::ok(json).map(|mut r| {
+                            let _ = r.headers_mut().set("content-type", "application/json");
+                            r
+                        }),
+                        None => Response::ok("null").map(|mut r| {
+                            let _ = r.headers_mut().set("content-type", "application/json");
+                            r
+                        }),
+                    }
                 }
                 // THE GENERATION ALONE. A writer that needs nothing but the
                 // guard used to ask for the orders and throw them away, which
