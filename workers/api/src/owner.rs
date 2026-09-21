@@ -78,16 +78,13 @@ pub(crate) async fn owner_at(
     struct M {
         id: String,
     }
-    let m: std::result::Result<Option<M>, _> = async {
-        db.prepare(
-            "SELECT id FROM memberships WHERE user_id = ?1 AND location_id = ?2 \
-             AND role = 'owner' AND status = 'active' LIMIT 1",
-        )
-        .bind(&[user_id.clone().into(), location_id.into()])?
-        .first(None)
+    let m: std::result::Result<Option<M>, _> = crate::identity_store::identity(&ctx.env)
         .await
-    }
-    .await;
+        .map(|t| {
+            crate::identity_store::membership(&t, location_id, &user_id)
+                .filter(|x| crate::identity_store::s_of(x, "role") == "owner")
+                .map(|_| M { id: String::new() })
+        });
     match m {
         Ok(Some(_)) => Ok(user_id),
         // Cross-tenant is 404, never 403: a 403 confirms the location exists.
@@ -156,20 +153,31 @@ pub(crate) async fn owner_and_venue(
     // not their venue's. The console always sends the parameter, which is why
     // this survived; anything else calling the API did not.
     let wanted = location_of(req).or(active_location_id);
-    let sql = match wanted {
-        Some(_) => "SELECT l.id AS location_id FROM locations l                     JOIN memberships m ON m.location_id = l.id                     WHERE m.user_id = ?1 AND l.id = ?2 AND m.role = 'owner'                     AND m.status = 'active' LIMIT 1",
-        None => "SELECT l.id AS location_id FROM locations l                  JOIN memberships m ON m.location_id = l.id                  WHERE m.user_id = ?1 AND m.role = 'owner' AND m.status = 'active' LIMIT 1",
-    };
-    let stmt = match &wanted {
-        Some(l) => db
-            .prepare(sql)
-            .bind(&[user_id.clone().into(), l.clone().into()]),
-        None => db.prepare(sql).bind(&[user_id.clone().into()]),
-    };
-    let row: std::result::Result<Option<Row>, _> = match stmt {
-        Ok(s) => s.first(None).await,
-        Err(e) => return Err(Response::error(format!("auth backend: {e}"), 503).unwrap()),
-    };
+    // THE JOIN IS GONE AND WITH IT THE SECOND TABLE. `locations JOIN
+    // memberships` existed to prove the venue exists AND that this person owns
+    // it; the membership record only exists for a venue that does, so the
+    // membership IS both halves of that question.
+    let row: std::result::Result<Option<Row>, _> = crate::identity_store::identity(&ctx.env)
+        .await
+        .map(|t| match &wanted {
+            Some(l) => crate::identity_store::membership(&t, l, &user_id)
+                .filter(|x| crate::identity_store::s_of(x, "role") == "owner")
+                .map(|_| Row { location_id: l.clone() }),
+            // No venue named anywhere: the token carries none and the request
+            // asked for none. Sorted rather than `LIMIT 1` over a join whose
+            // order nobody specified -- an unordered LIMIT 1 is a coin toss the
+            // query planner gets to make differently on any two days.
+            None => {
+                let mut owned: Vec<String> =
+                    crate::identity_store::memberships_of(&t, &user_id)
+                        .into_iter()
+                        .filter(|(_, role)| role == "owner")
+                        .map(|(loc, _)| loc)
+                        .collect();
+                owned.sort();
+                owned.into_iter().next().map(|location_id| Row { location_id })
+            }
+        });
     match row {
         // Cross-tenant is 404, never 403: a 403 confirms the location exists.
         Ok(Some(r)) => Ok((user_id, r.location_id)),
@@ -413,14 +421,30 @@ pub async fn assign_courier(mut req: Request, ctx: RouteContext<()>) -> Result<R
     struct C {
         id: String,
     }
-    let known: Option<C> = db
-        .prepare(
-            "SELECT c.id FROM couriers c JOIN courier_locations cl ON cl.courier_id = c.id \
-             WHERE (c.id = ?1 OR c.phone_encrypted = ?1) AND cl.location_id = ?2 AND c.status = 'active'",
+    let crew = crate::identity_store::couriers(&ctx.env).await?;
+    // By id or by the phone the console displays, on THIS venue's roster, and
+    // active. The roster key is the `JOIN courier_locations` and the status is
+    // on the record.
+    let known: Option<C> = [
+        Some(body.courier_id.clone()),
+        crate::identity_store::courier_id_for_phone(
+            &crew,
+            &crate::auth::sha256_hex(&body.courier_id),
+        ),
+    ]
+    .into_iter()
+    .flatten()
+    .find(|cid| {
+        crew.get(
+            crate::identity_store::K_ROSTER,
+            &crate::identity_store::roster_id(&body.location_id, cid),
         )
-        .bind(&[body.courier_id.clone().into(), body.location_id.clone().into()])?
-        .first(None)
-        .await?;
+        .is_some()
+            && crate::identity_store::rec(&crew, crate::identity_store::K_COURIER, cid)
+                .map(|r| crate::identity_store::s_of(&r, "status") == "active")
+                .unwrap_or(false)
+    })
+    .map(|id| C { id });
     let Some(known) = known else {
         return Response::error("no such courier at this venue", 404);
     };
@@ -441,21 +465,30 @@ pub async fn assign_courier(mut req: Request, ctx: RouteContext<()>) -> Result<R
         0
     };
     let now = now_ms();
-    let inserted = db
-        .prepare(
-            "INSERT INTO courier_assignments (order_id,courier_id,location_id,assigned_at_ms,cash_due) \
-             VALUES (?1,?2,?3,?4,?5)",
-        )
-        .bind(&[
-            id.clone().into(),
-            courier_id.clone().into(),
-            body.location_id.clone().into(),
-            JsValue::from_f64(now as f64),
-            JsValue::from_f64(cash_due as f64),
-        ])?
-        .run()
-        .await;
-    if inserted.is_err() {
+    // THE OBJECT SETTLES IT, as it does when a courier takes the order
+    // themselves: the first write finds no assignment, the second finds one.
+    let (oid2, who2) = (id.clone(), courier_id.clone());
+    let taken = crate::hubstore::with_table(
+        &place,
+        crate::hubstore::IMAGE_OPS,
+        crate::hubstore::OPS_BYTES,
+        move |t| {
+            if t.get("asg", &oid2).is_some() {
+                return Ok(true);
+            }
+            let rec = json!({
+                "order_id": oid2, "courier_id": who2, "assigned_at_ms": now,
+                "cash_due": cash_due, "picked_up_at_ms": Value::Null,
+                "delivered_at_ms": Value::Null, "cash_collected": Value::Null,
+            })
+            .to_string();
+            t.put("asg", &oid2, &rec, &[], &[])
+                .map_err(|e| Error::RustError(format!("assignment: {e}")))?;
+            Ok(false)
+        },
+    )
+    .await?;
+    if taken {
         return Response::error("this order already has a courier", 409);
     }
     let who = courier_id.clone();
@@ -1319,15 +1352,35 @@ pub async fn update_location(mut req: Request, ctx: RouteContext<()>) -> Result<
             })
             .collect()
     });
-    // The `locations` row is a pointer with a name on it, and the platform
+    // The registry record is a pointer with a name on it, and the platform
     // console lists venues from it: renamed in the same request so the two
     // never disagree about what the venue is called.
     if let Some(n) = &name {
-        let _ = db
-            .prepare("UPDATE locations SET name=?1, updated_at_ms=?2 WHERE id=?3")
-            .bind(&[n.clone().into(), (Date::now().as_millis() as f64).into(), body.location_id.clone().into()])?
-            .run()
-            .await;
+        let loc_for_name = body.location_id.clone();
+        let name_for_registry = n.clone();
+        let _ = crate::identity_store::with_registry(&ctx.env, move |t| {
+            if let Some(mut r) =
+                crate::identity_store::rec(t, crate::identity_store::K_LOC, &loc_for_name)
+            {
+                r["name"] = json!(name_for_registry);
+                r["updated_at_ms"] = json!(Date::now().as_millis() as i64);
+                let slug = crate::identity_store::s_of(&r, "slug");
+                let index = vec![(
+                    crate::identity_store::loc_by_slug(&slug),
+                    loc_for_name.clone(),
+                )];
+                t.put(
+                    crate::identity_store::K_LOC,
+                    &loc_for_name,
+                    &r.to_string(),
+                    &index,
+                    &[],
+                )
+                .map_err(|e| Error::RustError(format!("registry: {e}")))?;
+            }
+            Ok(())
+        })
+        .await;
     }
     crate::hubstore::with_catalog(&place, move |cat| {
         let Some(lj) = cat.location() else {

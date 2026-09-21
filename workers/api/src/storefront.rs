@@ -1147,16 +1147,43 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     // contact envelope — so the registry simply does not gain a row.
     if !phone.is_empty() {
     let cust_id = crate::edge_id().unwrap_or_else(|| format!("cust_{created_at_ms}"));
-    let _ = db
-        .prepare(
-            "INSERT INTO customers (id,location_id,phone_hash,name,created_at_ms) VALUES (?1,?2,?3,?4,?5) \
-             ON CONFLICT(location_id,phone_hash) DO UPDATE SET name = COALESCE(excluded.name, customers.name)",
-        )
-        .bind(&[cust_id.into(), loc.id.clone().into(), phone_hash.into(),
-                body.contact.name.clone().unwrap_or_default().into(),
-                worker::wasm_bindgen::JsValue::from_f64(created_at_ms as f64)])?
-        .run()
-        .await;
+    // THE PHONE HASH IS THE KEY. The table had a surrogate id and a UNIQUE on
+    // `(location_id, phone_hash)`; the venue is the image, so what is left of
+    // that constraint is the hash, and it is the record's id. The upsert's
+    // `COALESCE(excluded.name, customers.name)` is kept: a later order with no
+    // name must not erase the name an earlier one gave.
+    let who = phone_hash.clone();
+    let given = body.contact.name.clone().unwrap_or_default();
+    let _ = crate::hubstore::with_table(
+        &place,
+        crate::hubstore::IMAGE_PEOPLE,
+        crate::hubstore::PEOPLE_BYTES,
+        move |t| {
+            let existing = t
+                .get("cust", &who)
+                .and_then(|j| serde_json::from_str::<Value>(&j).ok());
+            let name = if given.trim().is_empty() {
+                existing
+                    .as_ref()
+                    .and_then(|e| e.get("name").and_then(Value::as_str))
+                    .unwrap_or("")
+                    .to_string()
+            } else {
+                given.clone()
+            };
+            let created = existing
+                .as_ref()
+                .and_then(|e| e.get("created_at_ms").and_then(Value::as_i64))
+                .unwrap_or(created_at_ms);
+            let rec = json!({
+                "id": cust_id, "phone_hash": who, "name": name, "created_at_ms": created,
+            })
+            .to_string();
+            t.put("cust", &who, &rec, &[], &[])
+                .map_err(|e| Error::RustError(format!("customer: {e}")))
+        },
+    )
+    .await;
     }
 
     // ── THE CUSTOMER'S KEY TO THEIR OWN ORDER ──

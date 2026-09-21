@@ -139,13 +139,17 @@ impl Place {
         // more than one the request is refused, because a wrong tenant is worse
         // than no answer, and the caller is told which header would have
         // settled it.
-        #[derive(serde::Deserialize)]
         struct Row {
             id: String,
         }
         let db = ctx.d1("DB")?;
-        let rows: Vec<Row> =
-            db.prepare("SELECT id FROM locations LIMIT 2").all().await?.results()?;
+        let rows: Vec<Row> = crate::identity_store::registry(&ctx.env)
+            .await?
+            .all(crate::identity_store::K_LOC)
+            .into_iter()
+            .take(2)
+            .map(|(id, _)| Row { id })
+            .collect();
         let venue = match rows.len() {
             0 => UNNAMED_VENUE.to_string(),
             1 => rows.into_iter().next().map(|r| r.id).unwrap_or_else(|| UNNAMED_VENUE.to_string()),
@@ -162,21 +166,18 @@ impl Place {
 
     /// The venue a public URL names, by its slug.
     ///
-    /// ONE QUERY, and a bridge rather than a fixture: it reads the `locations`
-    /// table, which is the next thing to move out of SQL. It is here because a
+    /// ONE LOOKUP, by the key that IS the slug index. It is here because a
     /// customer's request carries no token and therefore no id, and guessing
     /// that the slug IS the id is exactly the drift described above.
     pub async fn of_slug(ctx: &RouteContext<()>, slug: &str) -> Result<Self> {
-        #[derive(serde::Deserialize)]
         struct Row {
             id: String,
         }
         let db = ctx.d1("DB")?;
-        let row: Option<Row> = db
-            .prepare("SELECT id FROM locations WHERE slug = ?1 LIMIT 1")
-            .bind(&[slug.into()])?
-            .first(None)
-            .await?;
+        let row: Option<Row> = crate::identity_store::registry(&ctx.env)
+            .await?
+            .lookup(&crate::identity_store::loc_by_slug(slug))
+            .map(|id| Row { id });
         let venue = row.map(|r| r.id).unwrap_or_else(|| UNNAMED_VENUE.to_string());
         Ok(Place { db, ns: ctx.durable_object("HUB")?, venue, legacy_venue: legacy_venue(ctx) })
     }
@@ -319,8 +320,8 @@ const CHUNK: usize = 900_000;
 /// the same limit `CHUNK` exists for — and `hex()` of a whole chunk would be
 /// 1.8 MB of it. `substr` on a BLOB counts BYTES, and the slicing happens
 /// inside SQLite, so the oversized value is never built in the first place.
-const SLICE: usize = 250_000;
-const SLICES: usize = 4;
+pub(crate) const SLICE: usize = 250_000;
+pub(crate) const SLICES: usize = 4;
 /// If `CHUNK` is ever raised past what the slices cover, the tail of every
 /// chunk would be silently dropped — a corrupt store that reads as a bebop
 /// parse failure a long way from here. The build stops instead.
@@ -331,7 +332,7 @@ const _: () = assert!(SLICE * SLICES >= CHUNK);
 /// Returns false rather than guessing on anything that is not hex: a store that
 /// half-decodes is worse than one that refuses, because the refusal names the
 /// image while a bad byte surfaces as an unreadable arena.
-fn from_hex(s: &str, out: &mut Vec<u8>) -> bool {
+pub(crate) fn from_hex(s: &str, out: &mut Vec<u8>) -> bool {
     fn nibble(c: u8) -> Option<u8> {
         match c {
             b'0'..=b'9' => Some(c - b'0'),
@@ -418,7 +419,7 @@ async fn do_image(place: &Place, id: &str) -> Result<Option<(Vec<u8>, i64)>> {
     if legacy != Some(place.venue.as_str()) {
         return Ok(None);
     }
-    let Some((bytes, _)) = load_images_d1(&place.db, &[id]).await?.remove(id) else {
+    let Some((bytes, _)) = crate::migrate::load_images_d1(&place.db, &[id]).await?.remove(id) else {
         return Ok(None);
     };
     let mut req = Request::new_with_init(
@@ -470,122 +471,6 @@ async fn load_images(
     Ok(out)
 }
 
-/// The D1 reader, kept for exactly one job: seeding an object that has never
-/// held this image. Nothing else calls it, and when every venue has been opened
-/// once it and the `hub_image` table can go.
-async fn load_images_d1(
-    db: &D1Database,
-    ids: &[&str],
-) -> Result<std::collections::HashMap<String, (Vec<u8>, i64)>> {
-    /// The slices are SPELLED OUT rather than collected with `#[serde(flatten)]`
-    /// into a map. Flatten needs `deserialize_any`, which serde-wasm-bindgen
-    /// supports only partially, and a deserialiser that fails here fails for
-    /// every image at once on a surface that cannot be tested from this box.
-    /// Four named fields cannot do that, and the assert below is what keeps them
-    /// honest with `SLICES`.
-    #[derive(serde::Deserialize)]
-    struct Row {
-        id: String,
-        generation: i64,
-        h0: String,
-        h1: String,
-        h2: String,
-        h3: String,
-    }
-    const _: () = assert!(SLICES == 4, "Row has exactly this many hN fields");
-    // `id = ?n OR id LIKE ?n || '#%'` per image. Built rather than fixed
-    // because the caller decides how many it needs, and a query per image is
-    // the thing being removed.
-    let mut wheres = Vec::new();
-    let mut binds: Vec<JsValue> = Vec::new();
-    for (i, id) in ids.iter().enumerate() {
-        wheres.push(format!("id = ?{n} OR id LIKE ?{n} || '#%'", n = i + 1));
-        binds.push((*id).into());
-    }
-    // `substr` on a BLOB counts BYTES and is 1-based, so slice k starts at
-    // k*SLICE+1. Past the end it yields an empty blob, and `hex` of that is the
-    // empty string -- so a short image simply has empty trailing slices and
-    // needs no length column that could disagree with the bytes.
-    let cols: String = (0..SLICES)
-        .map(|k| {
-            format!(
-                ", ifnull(hex(substr(image, {start}, {SLICE})), '') AS h{k}",
-                start = k * SLICE + 1
-            )
-        })
-        .collect();
-    let sql = format!(
-        "SELECT id, generation{cols} FROM hub_image WHERE {}",
-        wheres.join(" OR ")
-    );
-    let rows: Vec<Row> = db.prepare(&sql).bind(&binds)?.all().await?.results()?;
-
-    // DECODED AS EACH ROW IS CONSUMED, so a row's hex is freed before the next
-    // row's is touched. Holding all of them and decoding afterwards would put
-    // every image's hex -- twice the bytes of every image, by definition -- in
-    // the isolate at once, which is the cost this whole change exists to avoid
-    // paying. `into_iter` on the array moves each slice out and drops it at the
-    // end of its own iteration.
-    let mut by_base: std::collections::HashMap<String, Vec<(usize, Vec<u8>, i64)>> =
-        std::collections::HashMap::new();
-    for r in rows {
-        let Some((base, n)) = ids.iter().find_map(|base| {
-            if r.id == **base {
-                Some(((*base).to_string(), 0usize))
-            } else {
-                r.id.strip_prefix(*base)
-                    .and_then(|rest| rest.strip_prefix('#'))
-                    .and_then(|n| n.parse::<usize>().ok())
-                    .map(|n| ((*base).to_string(), n))
-            }
-        }) else {
-            continue;
-        };
-
-        let hex_len = r.h0.len() + r.h1.len() + r.h2.len() + r.h3.len();
-        let mut bytes = Vec::with_capacity(hex_len / 2);
-        // IN SLICE ORDER. Out of order the image reassembles with its bytes
-        // transposed, which reads as a corrupt arena rather than as a bug here.
-        for (k, hex) in [r.h0, r.h1, r.h2, r.h3].into_iter().enumerate() {
-            if !from_hex(&hex, &mut bytes) {
-                return Err(Error::RustError(format!(
-                    "image {base} chunk {} slice {k} is not hex",
-                    r.id
-                )));
-            }
-        }
-        by_base.entry(base).or_default().push((n, bytes, r.generation));
-    }
-
-    // SORTED IN RUST, NOT IN SQL. `ORDER BY id` is a string sort, and a string
-    // sort puts "log#10" before "log#2" -- so an image that ever reached ten
-    // chunks would be reassembled with its bytes in the wrong order, which
-    // reads as a corrupt store rather than as a sorting bug.
-    let mut out: std::collections::HashMap<String, (Vec<u8>, i64)> =
-        std::collections::HashMap::new();
-    for base in ids {
-        let Some(mut parts) = by_base.remove(*base) else { continue };
-        parts.sort_by_key(|(n, _, _)| *n);
-        // A tail with no head is not an image: chunk zero carries the
-        // generation the guard is checked against, and assembling from chunk
-        // one would silently drop the first 900 KB.
-        if parts[0].0 != 0 {
-            continue;
-        }
-        let total: usize = parts.iter().map(|(_, b, _)| b.len()).sum();
-        // The FIRST chunk's buffer becomes the image, rather than a fresh one
-        // it is copied into. Every image in this store is a single chunk today,
-        // and the copy would be the largest allocation in the request.
-        let mut it = parts.into_iter();
-        let (_, mut buf, generation) = it.next().expect("checked non-empty above");
-        buf.reserve_exact(total - buf.len());
-        for (_, bytes, _) in it {
-            buf.extend_from_slice(&bytes);
-        }
-        out.insert((*base).to_string(), (buf, generation));
-    }
-    Ok(out)
-}
 
 /// The log AND the catalogue, in one round trip.
 ///
@@ -1057,6 +942,10 @@ pub async fn log_generation(place: &Place) -> Result<i64> {
 /// one and going off shift are each one decision that touches two of them, and
 /// two images would be two generations with a window between.
 pub const IMAGE_OPS: &str = "ops";
+
+/// The venue's own people: the customer registry that `customers` was.
+pub const IMAGE_PEOPLE: &str = "people";
+pub const PEOPLE_BYTES: usize = 2 * 1024 * 1024;
 pub const OPS_BYTES: usize = 2 * 1024 * 1024;
 
 /// The venue's translations: `<locale>/<entity_type>/<entity_id>/<field>`.

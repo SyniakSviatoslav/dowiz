@@ -456,12 +456,15 @@ const POSITIONS_KEEP_MS: i64 = 24 * 60 * 60 * 1000;
 /// The nightly cron: every venue with a store set gets a copy. A venue whose
 /// store refuses is logged and skipped; the next venue is not its problem.
 pub async fn nightly(env: &Env) {
-    #[derive(serde::Deserialize)]
     struct Row { id: String }
     let Ok(db) = env.d1("DB") else { console_error!("nightly backup: no DB"); return };
-    let rows = match db.prepare("SELECT id FROM locations").all().await.and_then(|r| r.results::<Row>()) {
-        Ok(r) => r,
-        Err(e) => { console_error!("nightly backup: locations unreadable: {e}"); return }
+    let rows: Vec<Row> = match crate::identity_store::registry(env).await {
+        Ok(t) => t
+            .all(crate::identity_store::K_LOC)
+            .into_iter()
+            .map(|(id, _)| Row { id })
+            .collect(),
+        Err(e) => { console_error!("nightly backup: registry unreadable: {e}"); return }
     };
     let legacy = env.var("LEGACY_VENUE").ok().map(|v| v.to_string()).filter(|v| !v.is_empty());
     let now = crate::owner::now_ms();

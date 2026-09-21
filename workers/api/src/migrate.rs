@@ -17,6 +17,9 @@
 
 use worker::*;
 
+use worker::wasm_bindgen::JsValue;
+
+use crate::hubstore::{from_hex, SLICE, SLICES};
 use crate::platform::admin_only;
 
 
@@ -225,4 +228,127 @@ pub async fn i18n_fallback(
         out.len()
     );
     Some(out)
+}
+
+/// The D1 reader, kept for exactly one job: seeding an object that has never
+/// held this image.
+///
+/// THE LAST PREPARED STATEMENT OUTSIDE THIS FILE, moved here rather than
+/// deleted, because deleting it is a decision about whether every venue's
+/// object has been written at least once — and that is checked against the
+/// live platform, not asserted from the tree. It is called by
+/// `hubstore::do_image` for the one venue named in `LEGACY_VENUE` and by
+/// nothing else; when that variable is unset there is no caller at all.
+pub(crate) async fn load_images_d1(
+    db: &D1Database,
+    ids: &[&str],
+) -> Result<std::collections::HashMap<String, (Vec<u8>, i64)>> {
+    /// The slices are SPELLED OUT rather than collected with `#[serde(flatten)]`
+    /// into a map. Flatten needs `deserialize_any`, which serde-wasm-bindgen
+    /// supports only partially, and a deserialiser that fails here fails for
+    /// every image at once on a surface that cannot be tested from this box.
+    /// Four named fields cannot do that, and the assert below is what keeps them
+    /// honest with `SLICES`.
+    #[derive(serde::Deserialize)]
+    struct Row {
+        id: String,
+        generation: i64,
+        h0: String,
+        h1: String,
+        h2: String,
+        h3: String,
+    }
+    const _: () = assert!(SLICES == 4, "Row has exactly this many hN fields");
+    // `id = ?n OR id LIKE ?n || '#%'` per image. Built rather than fixed
+    // because the caller decides how many it needs, and a query per image is
+    // the thing being removed.
+    let mut wheres = Vec::new();
+    let mut binds: Vec<JsValue> = Vec::new();
+    for (i, id) in ids.iter().enumerate() {
+        wheres.push(format!("id = ?{n} OR id LIKE ?{n} || '#%'", n = i + 1));
+        binds.push((*id).into());
+    }
+    // `substr` on a BLOB counts BYTES and is 1-based, so slice k starts at
+    // k*SLICE+1. Past the end it yields an empty blob, and `hex` of that is the
+    // empty string -- so a short image simply has empty trailing slices and
+    // needs no length column that could disagree with the bytes.
+    let cols: String = (0..SLICES)
+        .map(|k| {
+            format!(
+                ", ifnull(hex(substr(image, {start}, {SLICE})), '') AS h{k}",
+                start = k * SLICE + 1
+            )
+        })
+        .collect();
+    let sql = format!(
+        "SELECT id, generation{cols} FROM hub_image WHERE {}",
+        wheres.join(" OR ")
+    );
+    let rows: Vec<Row> = db.prepare(&sql).bind(&binds)?.all().await?.results()?;
+
+    // DECODED AS EACH ROW IS CONSUMED, so a row's hex is freed before the next
+    // row's is touched. Holding all of them and decoding afterwards would put
+    // every image's hex -- twice the bytes of every image, by definition -- in
+    // the isolate at once, which is the cost this whole change exists to avoid
+    // paying. `into_iter` on the array moves each slice out and drops it at the
+    // end of its own iteration.
+    let mut by_base: std::collections::HashMap<String, Vec<(usize, Vec<u8>, i64)>> =
+        std::collections::HashMap::new();
+    for r in rows {
+        let Some((base, n)) = ids.iter().find_map(|base| {
+            if r.id == **base {
+                Some(((*base).to_string(), 0usize))
+            } else {
+                r.id.strip_prefix(*base)
+                    .and_then(|rest| rest.strip_prefix('#'))
+                    .and_then(|n| n.parse::<usize>().ok())
+                    .map(|n| ((*base).to_string(), n))
+            }
+        }) else {
+            continue;
+        };
+
+        let hex_len = r.h0.len() + r.h1.len() + r.h2.len() + r.h3.len();
+        let mut bytes = Vec::with_capacity(hex_len / 2);
+        // IN SLICE ORDER. Out of order the image reassembles with its bytes
+        // transposed, which reads as a corrupt arena rather than as a bug here.
+        for (k, hex) in [r.h0, r.h1, r.h2, r.h3].into_iter().enumerate() {
+            if !from_hex(&hex, &mut bytes) {
+                return Err(Error::RustError(format!(
+                    "image {base} chunk {} slice {k} is not hex",
+                    r.id
+                )));
+            }
+        }
+        by_base.entry(base).or_default().push((n, bytes, r.generation));
+    }
+
+    // SORTED IN RUST, NOT IN SQL. `ORDER BY id` is a string sort, and a string
+    // sort puts "log#10" before "log#2" -- so an image that ever reached ten
+    // chunks would be reassembled with its bytes in the wrong order, which
+    // reads as a corrupt store rather than as a sorting bug.
+    let mut out: std::collections::HashMap<String, (Vec<u8>, i64)> =
+        std::collections::HashMap::new();
+    for base in ids {
+        let Some(mut parts) = by_base.remove(*base) else { continue };
+        parts.sort_by_key(|(n, _, _)| *n);
+        // A tail with no head is not an image: chunk zero carries the
+        // generation the guard is checked against, and assembling from chunk
+        // one would silently drop the first 900 KB.
+        if parts[0].0 != 0 {
+            continue;
+        }
+        let total: usize = parts.iter().map(|(_, b, _)| b.len()).sum();
+        // The FIRST chunk's buffer becomes the image, rather than a fresh one
+        // it is copied into. Every image in this store is a single chunk today,
+        // and the copy would be the largest allocation in the request.
+        let mut it = parts.into_iter();
+        let (_, mut buf, generation) = it.next().expect("checked non-empty above");
+        buf.reserve_exact(total - buf.len());
+        for (_, bytes, _) in it {
+            buf.extend_from_slice(&bytes);
+        }
+        out.insert((*base).to_string(), (buf, generation));
+    }
+    Ok(out)
 }

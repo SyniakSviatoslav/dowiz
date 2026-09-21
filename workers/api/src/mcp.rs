@@ -301,13 +301,13 @@ pub async fn rpc(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
     struct Row {
         slug: String,
     }
-    let slug = db
-        .prepare("SELECT slug FROM locations WHERE id = ?1 LIMIT 1")
-        .bind(&[location_id.clone().into()])?
-        .first::<Row>(None)
-        .await?
-        .map(|r| r.slug)
-        .unwrap_or_default();
+    let slug = crate::identity_store::rec(
+        &crate::identity_store::registry(&ctx.env).await?,
+        crate::identity_store::K_LOC,
+        &location_id,
+    )
+    .map(|r| crate::identity_store::s_of(&r, "slug"))
+    .unwrap_or_default();
     if slug.trim().is_empty() {
         return Response::error("this key names no venue", 403);
     }
