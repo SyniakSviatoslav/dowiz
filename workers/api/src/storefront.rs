@@ -1276,8 +1276,26 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     // Apple Pay and Google Pay ARE the card rail: the Payment Element shows
     // them as tabs on the same intent, and the intent is what a wallet pays.
     if matches!(payment_kind.as_str(), "card" | "apple_pay" | "google_pay") {
+        // ── THE BREAKER, AND WHAT IT IS ACTUALLY FOR ──
+        //
+        // The fallback below already exists and already works: the order is in
+        // the log and comes back marked so the surface can offer cash. What it
+        // does not do is stop TRYING, so during a Stripe outage every customer
+        // pays the full timeout before being offered that. This is what stops
+        // the waiting, and it is the only thing it does.
+        match crate::rail::admit(&place, crate::rail::Rail::Stripe, created_at_ms).await {
+            crate::rail::Gate::Tripped { since_ms } => {
+                console_error!("stripe rail open for {since_ms} ms; offering cash immediately");
+                out["payment_error"] = json!("the card provider could not be reached");
+            }
+            crate::rail::Gate::Go => {
         match crate::stripe::create_intent(&ctx.env, &id, total, &loc.currency_code).await {
             Ok((intent_id, client_secret)) => {
+                // ONE SUCCESS CLOSES IT. Requiring several would keep a
+                // recovered provider shut out for no reason a customer would
+                // accept.
+                crate::rail::record(&place, crate::rail::Rail::Stripe, true, created_at_ms)
+                    .await;
                 out["payment_intent"] = json!(intent_id);
                 out["client_secret"] = json!(client_secret);
             }
@@ -1285,10 +1303,25 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
             // card rail is down. It comes back marked so the surface can offer
             // cash instead of pretending the order failed.
             Err(e) => {
+                // A rail that is NOT CONFIGURED has not failed -- there is
+                // nothing there to fail. Counting it would open the breaker on
+                // every venue that takes only cash and then report them as
+                // outages.
+                if !matches!(e, crate::stripe::PayError::NotConfigured) {
+                    crate::rail::record(
+                        &place,
+                        crate::rail::Rail::Stripe,
+                        false,
+                        created_at_ms,
+                    )
+                    .await;
+                }
                 out["payment_error"] = json!(match e {
                     crate::stripe::PayError::NotConfigured => "card payments are not configured",
                     _ => "the card provider could not be reached",
                 });
+            }
+        }
             }
         }
     }

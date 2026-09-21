@@ -2277,6 +2277,11 @@ pub async fn health(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // answers "is this venue healthy". An empty list is the good answer.
     let errors = crate::errlog::recent(&place.ns, &place.venue, 20).await.unwrap_or_default();
 
+    // THE BREAKERS ARE VISIBLE OR THEY ARE NOT AN INSTRUMENT. A breaker that
+    // silently protects a venue is indistinguishable from one that silently
+    // does nothing, and this codebase has paid for that distinction before.
+    let rails = crate::rail::snapshot(&place, now_ms()).await;
+
     Response::from_json(&json!({
         "venue": loc,
         "images": images,
@@ -2285,6 +2290,7 @@ pub async fn health(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         "verdict": verdict,
         "orders": hub.hub.len(),
         "errors": errors,
+        "rails": rails,
     }))
 }
 
