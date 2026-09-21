@@ -26,6 +26,7 @@
 
 use worker::*;
 
+use dowiz_hub::logimage::LogImage;
 use dowiz_hub::table::Table;
 
 /// The object every platform image lives in.
@@ -62,6 +63,10 @@ pub const SESSIONS_BYTES: usize = 4 * 1024 * 1024;
 pub const COURIERS_BYTES: usize = 1024 * 1024;
 pub const WAITLIST_BYTES: usize = 1024 * 1024;
 
+/// Platform-level failures. An append log, because that is what a failure
+/// record is: it arrives, it is read back newest first, and it is pruned.
+pub const ERRORS: &str = "errors";
+
 /// The ceiling for an image, by name. One place, so a caller cannot load an
 /// image at one ceiling and save it at another -- which would make the doubling
 /// loop refuse at a size the reader thought was fine.
@@ -83,6 +88,73 @@ pub fn ceiling(image: &str) -> usize {
 pub struct Loaded {
     pub table: Table,
     pub generation: i64,
+}
+
+/// The same, for an append-only image.
+pub struct LoadedLog {
+    pub log: LogImage,
+    pub generation: i64,
+}
+
+/// Read one append-only image from an object, creating an empty one the first
+/// time.
+pub async fn load_log_at(stub: &Stub, image: &str) -> Result<LoadedLog> {
+    let mut res = stub.fetch_with_str(&format!("https://hub/img/{image}")).await?;
+    if res.status_code() == 200 {
+        let generation = res
+            .headers()
+            .get("x-generation")
+            .ok()
+            .flatten()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
+        let bytes = res.bytes().await?;
+        let log = LogImage::load(&bytes)
+            .map_err(|_| Error::RustError(format!("log image {image} is unreadable")))?;
+        return Ok(LoadedLog { log, generation });
+    }
+    let log = LogImage::create()
+        .map_err(|_| Error::RustError(format!("cannot create log image {image}")))?;
+    Ok(LoadedLog { log, generation: 0 })
+}
+
+/// Write one append-only image back, under the generation it was read at.
+pub async fn save_log_at(stub: &Stub, image: &str, loaded: &LoadedLog) -> Result<bool> {
+    let mut req = Request::new_with_init(
+        &format!("https://hub/img/{image}"),
+        RequestInit::new().with_method(Method::Put).with_body(Some(loaded.log.to_bytes().into())),
+    )?;
+    req.headers_mut()?.set("x-generation", &loaded.generation.to_string())?;
+    let res = stub.fetch_with_request(req).await?;
+    Ok(res.status_code() != 409)
+}
+
+/// Read, append, write — with a bounded retry when the guard is lost.
+pub async fn with_log_at<F, T>(stub: &Stub, image: &str, mut f: F) -> Result<T>
+where
+    F: FnMut(&mut LogImage) -> Result<T>,
+{
+    for _ in 0..4 {
+        let mut loaded = load_log_at(stub, image).await?;
+        let out = f(&mut loaded.log)?;
+        if save_log_at(stub, image, &loaded).await? {
+            return Ok(out);
+        }
+    }
+    Err(Error::RustError(format!("log image {image}: four writers won the guard in a row")))
+}
+
+/// Read, append, write, on the platform object.
+pub async fn with_log<F, T>(env: &Env, image: &str, f: F) -> Result<T>
+where
+    F: FnMut(&mut LogImage) -> Result<T>,
+{
+    with_log_at(&stub(env)?, image, f).await
+}
+
+/// Read one append-only platform image.
+pub async fn load_log(env: &Env, image: &str) -> Result<LoadedLog> {
+    load_log_at(&stub(env)?, image).await
 }
 
 fn stub(env: &Env) -> Result<Stub> {

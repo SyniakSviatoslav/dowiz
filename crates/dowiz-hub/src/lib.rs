@@ -43,6 +43,7 @@ pub mod stock;
 pub mod subs;
 pub mod voice;
 pub mod zone;
+pub mod logimage;
 pub mod table;
 pub mod tz;
 pub mod token;
@@ -654,7 +655,7 @@ impl Hub {
 
 /// Is this "the image has no room left"? Matched through the public shape
 /// rather than a Debug string, for the reason `HubError::arena_full` gives.
-fn e_is_full(e: &StoreError) -> bool {
+pub(crate) fn e_is_full(e: &StoreError) -> bool {
     matches!(e, StoreError::ArenaFull { .. })
 }
 

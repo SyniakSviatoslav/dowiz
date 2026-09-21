@@ -80,6 +80,33 @@ pub async fn main(req: Request, env: Env, ctx: Context) -> Result<Response> {
     };
     if let Err(e) = &out {
         trace.fail(0, &e.to_string());
+        // THE INSTRUMENT FINALLY FIRES.
+        //
+        // `worker_errors` had never received a row and `sqlite_sequence` was
+        // how we knew. The reason was not that nothing failed: eight of the ten
+        // `loud!` sites are unreachable by configuration, and what ACTUALLY
+        // fails -- every `?` in a handler, which becomes a bodyless 500 and a
+        // sampled console line -- was not instrumented at all. At
+        // `head_sampling_rate = 0.1` nine out of ten of those were never
+        // written down anywhere.
+        //
+        // This is the one place every one of them passes through. It records
+        // the route and the trace id, so the response the person quotes leads
+        // to the failure, which is the join the black box needed.
+        //
+        // NO VENUE. A 500 out of `route` has already lost whatever context knew
+        // which venue it was for, and guessing one would put a failure in
+        // another restaurant's console. It lands platform-wide, which is where
+        // an unattributed failure honestly belongs.
+        if let Ok(ns) = env.durable_object("HUB") {
+            crate::errlog::record(
+                &ns,
+                None,
+                "worker.500",
+                &format!("{method} {path} [trace {}]: {e}", trace.id()),
+            )
+            .await;
+        }
     }
     // THE ID GOES BACK TO WHOEVER ASKED. It is the join key between this
     // request's spans, the failures it caused and -- once the log carries it --

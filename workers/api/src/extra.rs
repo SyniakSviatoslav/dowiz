@@ -2146,7 +2146,7 @@ pub async fn health(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // request in ten and no token on this box can read them at all, so the
     // errors that matter are also rows -- and this is the screen that already
     // answers "is this venue healthy". An empty list is the good answer.
-    let errors = crate::errlog::recent(&db, &place.venue, 20).await.unwrap_or_default();
+    let errors = crate::errlog::recent(&place.ns, &place.venue, 20).await.unwrap_or_default();
 
     Response::from_json(&json!({
         "venue": loc,
@@ -2218,7 +2218,7 @@ pub async fn rotate_now(req: Request, ctx: RouteContext<()>) -> Result<Response>
     match crate::hubstore::rotate(&place, now_ms()).await {
         Ok(v) => Response::from_json(&v),
         Err(e) => {
-            crate::loud!(&place.db, Some(&place.venue), "hub.rotate", "{e}");
+            crate::loud!(&place.ns, Some(&place.venue), "hub.rotate", "{e}");
             Response::error(e.to_string(), 500)
         }
     }

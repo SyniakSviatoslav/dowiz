@@ -1069,6 +1069,23 @@ pub fn i18n_key(locale: &str, entity_type: &str, entity_id: &str, field: &str) -
 /// fields is under 2,000 entries, and each is a short string.
 pub const I18N_BYTES: usize = 2 * 1024 * 1024;
 
+/// The venue's own failure and audit log: `worker_errors` rows that name this
+/// venue, courier audit, reveals. An append log, newest first, pruned nightly.
+pub const IMAGE_AUDIT: &str = "audit";
+
+/// Read one of the venue's append-only images.
+pub async fn load_log(place: &Place, image: &str) -> Result<crate::platform_store::LoadedLog> {
+    crate::platform_store::load_log_at(&place.stub()?, image).await
+}
+
+/// Read, append, write one of the venue's append-only images, under the guard.
+pub async fn with_log<F, T>(place: &Place, image: &str, f: F) -> Result<T>
+where
+    F: FnMut(&mut dowiz_hub::logimage::LogImage) -> Result<T>,
+{
+    crate::platform_store::with_log_at(&place.stub()?, image, f).await
+}
+
 /// Read one of the venue's table images.
 pub async fn load_table(place: &Place, image: &str, ceiling: usize)
     -> Result<crate::platform_store::Loaded>

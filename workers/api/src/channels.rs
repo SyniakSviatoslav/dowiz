@@ -395,14 +395,14 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Response
                     let who = m.peer_name.clone().unwrap_or_else(|| m.peer.clone());
                     let text = format!("💬 {} · {who}\n{}", m.channel.as_str(), m.text);
                     if let Err(e) = crate::notify::telegram(&token, chat.trim(), &text).await {
-                        crate::loud!(&db, Some(&place.venue), "channels.telegram", "inbox relay refused: {e}");
+                        crate::loud!(&place.ns, Some(&place.venue), "channels.telegram", "inbox relay refused: {e}");
                     }
                 }
             }
             Ok(false) => {}
             Err(e) => {
                 crate::loud!(
-                    &db,
+                    &place.ns,
                     Some(&place.venue),
                     "channels.inbox",
                     "could not store a {} message: {e}",

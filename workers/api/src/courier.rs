@@ -357,7 +357,7 @@ pub async fn accept(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         // LOUD. The assignment row stands, so the order is not lost -- but the
         // courier's screens will not show it, and that is worth knowing.
         crate::loud!(
-            &place.db,
+            &place.ns,
             Some(&place.venue),
             "courier.claim",
             "{courier_id} took {id} and the log did not record it: {e}"

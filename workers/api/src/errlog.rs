@@ -5,109 +5,139 @@
 //! failure. Worse, nothing on this box can read Workers Logs: no token here
 //! holds the permission, so a failure that lives only in a trace is a failure
 //! nobody will ever see. This module is the other half of that trade: the error
-//! is ALSO a row, the venue's console can show it, and it costs one D1 write on
-//! a path that has already gone wrong.
+//! is ALSO a record, the venue's console can show it, and it costs one image
+//! append on a path that has already gone wrong.
 //!
-//! WRITTEN BEST-EFFORT AND NEVER FAILING THE CALLER. A handler that is already
-//! reporting one failure must not turn into a second, different failure because
-//! the error table would not take the row. The write is awaited -- a Worker may
-//! be cut off at the end of a response and an unawaited insert would be the
-//! thing that gets dropped -- but its result is only logged.
+//! NO SQL. The rows were `worker_errors` in D1; they are now an append-only
+//! bebop image, per venue, in that venue's own object -- which is also what
+//! makes the tenant boundary a property of where the bytes are rather than a
+//! `WHERE venue = ?` somebody has to remember.
 
 use worker::*;
 
-/// How long a row is kept. The nightly cron deletes the rest.
+/// How long a record is kept. The nightly cron prunes the rest.
 pub const KEEP_MS: i64 = 7 * 24 * 60 * 60 * 1000;
+
+/// And how many, which is the bound that actually binds.
+///
+/// AN APPEND LOG NEEDS A COUNT, NOT ONLY AN AGE. A burst of failures inside one
+/// day is exactly when this instrument matters and exactly when an age-only
+/// rule keeps everything: the old `DELETE ... WHERE at_ms < ?` would have held
+/// a week of a crash loop. Five hundred short records is a few tens of KiB.
+pub const KEEP_MOST: usize = 500;
 
 /// Longer than this and it is a stack trace, not a message.
 const MAX_MESSAGE: usize = 500;
 
+/// The record kind inside the audit image.
+pub const KIND: &str = "error";
+
 /// Record one failure. `place` says WHERE in the code, in dotted form
 /// (`notify.telegram`, `cloud.nightly`), so a console can group by it.
-pub async fn record(db: &D1Database, venue: Option<&str>, place: &str, message: &str) {
+///
+/// WHERE IT LANDS. A venue's failure goes in THAT VENUE'S audit image, and a
+/// platform-level one goes in the platform object's. That is not tidiness: a
+/// venue's console reads its own errors, and an error table shared by every
+/// venue is one more place a tenant boundary has to be remembered. Here the
+/// boundary is which object the bytes are in.
+///
+/// WRITTEN BEST-EFFORT AND NEVER FAILING THE CALLER. A handler that is already
+/// reporting one failure must not become a second, different failure because
+/// the log would not take the record. The write is awaited -- a Worker may be
+/// cut off at the end of a response and an unawaited write is the thing that
+/// gets dropped -- but its result is only logged.
+pub async fn record(ns: &ObjectNamespace, venue: Option<&str>, place: &str, message: &str) {
     let short: String = message.chars().take(MAX_MESSAGE).collect();
-    let venue_js = match venue {
-        Some(v) => worker::wasm_bindgen::JsValue::from_str(v),
-        None => worker::wasm_bindgen::JsValue::NULL,
-    };
-    let stmt = db
-        .prepare("INSERT INTO worker_errors (at_ms, venue, place, message) VALUES (?1,?2,?3,?4)")
-        .bind(&[
-            worker::wasm_bindgen::JsValue::from_f64(Date::now().as_millis() as f64),
-            venue_js,
-            place.into(),
-            short.into(),
-        ]);
-    match stmt {
-        // The table may not exist yet on a deployment whose migration has not
-        // run. That is not worth a second error; the console_error! the caller
-        // already emitted stands.
-        Ok(s) => {
-            if let Err(e) = s.run().await {
-                console_log!("errlog: could not record {place}: {e}");
-            }
+    let object = venue.unwrap_or(crate::platform_store::PLATFORM);
+    let rec = serde_json::json!({
+        "atMs": Date::now().as_millis() as i64,
+        "place": place,
+        "message": short,
+    })
+    .to_string();
+    let stub = match ns.id_from_name(object).and_then(|id| id.get_stub()) {
+        Ok(s) => s,
+        Err(e) => {
+            console_log!("errlog: no object for {object}: {e}");
+            return;
         }
-        Err(e) => console_log!("errlog: bad statement for {place}: {e}"),
+    };
+    let image = if venue.is_some() {
+        crate::hubstore::IMAGE_AUDIT
+    } else {
+        crate::platform_store::ERRORS
+    };
+    let subject = place.to_string();
+    if let Err(e) = crate::platform_store::with_log_at(&stub, image, move |log| {
+        log.append(KIND, &subject, &rec)
+            .map_err(|x| Error::RustError(format!("{x:?}")))?;
+        // PRUNED ON WRITE, not only nightly. The nightly job is what keeps the
+        // age rule; this is what keeps a crash loop from filling the image
+        // between two nights.
+        if log.len() > KEEP_MOST + KEEP_MOST / 4 {
+            log.keep(KEEP_MOST).map_err(|x| Error::RustError(format!("{x:?}")))?;
+        }
+        Ok(())
+    })
+    .await
+    {
+        console_log!("errlog: could not record {place}: {e}");
     }
 }
 
 /// Log it AND record it, in the caller's own words.
 ///
-/// `loud!(db, Some(&venue), "notify.telegram", "refused: {e}")` prints exactly
-/// what `console_error!` printed before and adds the row. Only usable in an
-/// async function, on purpose: a fire-and-forget write is the one that gets
-/// dropped when the isolate goes away.
+/// `loud!(&place.ns, Some(&place.venue), "notify.telegram", "refused: {e}")`
+/// prints exactly what `console_error!` printed before and adds the record.
+/// Only usable in an async function, on purpose: a fire-and-forget write is the
+/// one that gets dropped when the isolate goes away.
 #[macro_export]
 macro_rules! loud {
-    ($db:expr, $venue:expr, $place:expr, $($arg:tt)*) => {{
+    ($ns:expr, $venue:expr, $place:expr, $($arg:tt)*) => {{
         let __msg = format!($($arg)*);
         worker::console_error!("{}: {}", $place, __msg);
-        $crate::errlog::record($db, $venue, $place, &__msg).await;
+        $crate::errlog::record($ns, $venue, $place, &__msg).await;
     }};
 }
 
-/// The newest failures, for the console and for an operator. Venue-scoped when
-/// a venue is given; a NULL-venue row is platform-wide and shown to nobody in
-/// particular.
-pub async fn recent(db: &D1Database, venue: &str, limit: u32) -> Result<Vec<serde_json::Value>> {
-    #[derive(serde::Deserialize)]
-    struct Row {
-        at_ms: i64,
-        place: String,
-        message: String,
-    }
-    let rows: Vec<Row> = db
-        .prepare(
-            "SELECT at_ms, place, message FROM worker_errors \
-             WHERE venue = ?1 ORDER BY at_ms DESC LIMIT ?2",
-        )
-        .bind(&[venue.into(), worker::wasm_bindgen::JsValue::from_f64(limit as f64)])?
-        .all()
-        .await?
-        .results()?;
-    Ok(rows
+/// The newest failures, for the console and for an operator.
+pub async fn recent(
+    ns: &ObjectNamespace,
+    venue: &str,
+    limit: usize,
+) -> Result<Vec<serde_json::Value>> {
+    let stub = ns.id_from_name(venue)?.get_stub()?;
+    let loaded = crate::platform_store::load_log_at(&stub, crate::hubstore::IMAGE_AUDIT).await?;
+    Ok(loaded
+        .log
+        .about(KIND, None, limit)
         .into_iter()
-        .map(|r| serde_json::json!({ "atMs": r.at_ms, "place": r.place, "message": r.message }))
+        .filter_map(|e| serde_json::from_str::<serde_json::Value>(&e.json).ok())
         .collect())
 }
 
-/// Delete what is older than `KEEP_MS`. Called by the nightly cron beside the
-/// GPS prune.
-pub async fn prune(db: &D1Database, now_ms: i64) {
+/// Drop what is older than `KEEP_MS`, and anything past `KEEP_MOST`.
+///
+/// Called by the nightly cron, per venue, where the object is already in hand.
+pub async fn prune_at(stub: &Stub, now_ms: i64) -> Result<usize> {
     let before = now_ms - KEEP_MS;
-    let stmt = db
-        .prepare("DELETE FROM worker_errors WHERE at_ms < ?1")
-        .bind(&[worker::wasm_bindgen::JsValue::from_f64(before as f64)]);
-    match stmt {
-        Ok(s) => match s.run().await {
-            Ok(r) => console_log!(
-                "nightly prune: worker errors older than 7 d removed ({:?})",
-                r.meta().ok().flatten().and_then(|m| m.changes)
-            ),
-            Err(e) => console_error!("nightly prune: worker_errors refused: {e}"),
-        },
-        Err(e) => console_error!("nightly prune: bad worker_errors statement: {e}"),
-    }
+    crate::platform_store::with_log_at(stub, crate::hubstore::IMAGE_AUDIT, move |log| {
+        let keep: usize = log
+            .about(KIND, None, usize::MAX)
+            .into_iter()
+            .take_while(|e| {
+                serde_json::from_str::<serde_json::Value>(&e.json)
+                    .ok()
+                    .and_then(|v| v.get("atMs").and_then(serde_json::Value::as_i64))
+                    .map_or(true, |at| at >= before)
+            })
+            .count();
+        // `about` is newest first, so `take_while` counts the run of records
+        // that are still young enough -- and the moment one is too old, every
+        // record after it is older still.
+        log.keep(keep.min(KEEP_MOST)).map_err(|x| Error::RustError(format!("{x:?}")))
+    })
+    .await
 }
 
 #[cfg(test)]

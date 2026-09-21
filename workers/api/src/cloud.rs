@@ -474,7 +474,9 @@ pub async fn nightly(env: &Env) {
     let legacy = env.var("LEGACY_VENUE").ok().map(|v| v.to_string()).filter(|v| !v.is_empty());
     let now = crate::owner::now_ms();
     prune_positions(&db, now).await;
-    crate::errlog::prune(&db, now).await;
+    // The error log is now per venue, in that venue's own object, so pruning
+    // it happens inside the per-venue loop below rather than as one statement
+    // over a shared table.
     for r in rows {
         let (Ok(db), Ok(ns)) = (env.d1("DB"), env.durable_object("HUB")) else { continue };
         let place = crate::hubstore::Place { db, ns, venue: r.id.clone(), legacy_venue: legacy.clone() };
@@ -482,6 +484,19 @@ pub async fn nightly(env: &Env) {
             Ok(l) => cfg(&l.settings).is_some(),
             Err(_) => false,
         };
+        // The venue's own failure log: anything older than a week, and
+        // anything past the count, goes. A burst inside one day is exactly when
+        // this instrument matters and exactly when an age-only rule keeps
+        // everything.
+        match place.stub() {
+            Ok(s) => match crate::errlog::prune_at(&s, now).await {
+                Ok(0) => {}
+                Ok(n) => console_log!("nightly prune {}: {n} error records", r.id),
+                Err(e) => console_error!("nightly prune {}: errors refused: {e}", r.id),
+            },
+            Err(e) => console_error!("nightly prune {}: no object: {e}", r.id),
+        }
+
         // THE CHAIN, BEFORE ANYTHING TOUCHES THE LOG.
         //
         // `Hub::chain_check` shipped in phase 4 and NOTHING IN PRODUCTION HAS
@@ -509,14 +524,14 @@ pub async fn nightly(env: &Env) {
                     // LOUD, and it must stay loud: this is the one condition in
                     // this whole job that means somebody edited the ledger.
                     crate::loud!(
-                        &place.db, Some(&r.id), "hub.chain",
+                        &place.ns, Some(&r.id), "hub.chain",
                         "BROKEN CHAIN: {} of {} records match neither scheme ({} chained, {} legacy)",
                         c.broken, c.records, c.chained, c.legacy
                     );
                 }
             }
             // A venue with no log yet is not a failure; an unreadable one is.
-            Err(e) => crate::loud!(&place.db, Some(&r.id), "hub.chain", "not checked: {e}"),
+            Err(e) => crate::loud!(&place.ns, Some(&r.id), "hub.chain", "not checked: {e}"),
         }
 
         // ROTATION BEFORE THE COPY. Finished history older than thirty days
@@ -532,13 +547,13 @@ pub async fn nightly(env: &Env) {
                     console_log!("nightly rotate {}: {}", r.id, v);
                 }
             }
-            Err(e) => crate::loud!(&place.db, Some(&r.id), "hub.rotate", "nightly: {e}"),
+            Err(e) => crate::loud!(&place.ns, Some(&r.id), "hub.rotate", "nightly: {e}"),
         }
         if !configured { continue }
         match push_place(&place, now).await {
             Ok(v) => console_log!("nightly backup {}: {}", r.id, v),
             Err(e) => {
-                crate::loud!(&place.db, Some(&r.id), "cloud.nightly", "backup refused: {e}")
+                crate::loud!(&place.ns, Some(&r.id), "cloud.nightly", "backup refused: {e}")
             }
         }
     }
