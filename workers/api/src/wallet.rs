@@ -165,25 +165,28 @@ pub async fn balance(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let Some(slug) = ctx.param("slug").cloned() else {
         return Response::error("missing slug", 400);
     };
-    let Some(user) = req
+    let named = req
         .url()?
         .query_pairs()
         .find(|(k, _)| k == "user")
-        .map(|(_, v)| v.to_string())
-    else {
-        return Response::error("missing user", 400);
-    };
+        .map(|(_, v)| v.to_string());
 
     let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
-    // AUTHENTICATED, AND TO THIS VENUE. `?user=` was a client-declared
-    // identity on a public route: anyone could read anyone's balance and
-    // their whole transaction history by naming them.
-    if let Err(r) =
-        crate::auth::principal_at(&req, &ctx.env, &db, &place.venue, now_ms()).await
-    {
-        return Ok(r);
-    }
+    // AUTHENTICATED, TO THIS VENUE, AND TO THIS WALLET. The first two were the
+    // red-team fix; the third is this one. See `wallet_who`.
+    let principal =
+        match crate::auth::principal_at(&req, &ctx.env, &db, &place.venue, now_ms()).await {
+            Ok(p) => p,
+            Err(r) => return Ok(r),
+        };
+    let is_owner = matches!(principal, crate::auth::Principal::Owner { .. });
+    let own = own_wallet_key(&principal, &place, &ctx.env).await?;
+    let user = match wallet_who(is_owner, named.as_deref(), own.as_deref()) {
+        Ok(WalletWho::Named(u)) => u,
+        Ok(WalletWho::Own) => own.unwrap_or_default(),
+        Err(why) => return Response::error(why, 403),
+    };
     let journal = match load_journal(&db, &place.venue).await? {
         Ok(j) => j,
         Err(why) => return Response::error(format!("journal unreadable: {why}"), 500),
@@ -229,6 +232,28 @@ pub async fn top_up(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
     let Some(slug) = ctx.param("slug").cloned() else {
         return Response::error("missing slug", 400);
     };
+    // ── MAY YOU, BEFORE WHAT DID YOU SEND ──
+    //
+    // THE OWNER, AND ONLY THE OWNER. This route wrote balanced ledger rows --
+    // the money this system treats as authoritative -- for any amount any
+    // caller asked for, with `providerRef` as its only "proof" and the caller
+    // writing that too. Until a payment provider's webhook signs the top-up
+    // (as `stripe::webhook` already does for orders), the venue's own console
+    // is the only thing allowed to move this ledger.
+    //
+    // ASKED FIRST, because the order of these checks is a message. A customer
+    // whose app posted here learned "missing field `user`" and then, once that
+    // was supplied, "providerRef is required" -- two invitations to try harder
+    // at a door that was never going to open. It also stops an unauthorised
+    // caller costing this Worker a body parse and a currency lookup.
+    let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
+    match crate::auth::principal_at(&req, &ctx.env, &db, &place.venue, now_ms()).await {
+        Ok(crate::auth::Principal::Owner { .. }) => {}
+        Ok(_) => return Response::error("only the venue can record a top-up", 403),
+        Err(r) => return Ok(r),
+    }
+
     let b: TopUpBody = match req.json().await {
         Ok(v) => v,
         Err(e) => return Response::error(format!("bad request: {e}"), 400),
@@ -246,20 +271,6 @@ pub async fn top_up(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
     let Some(currency) = Currency::from_code(&b.currency) else {
         return Response::error(format!("unknown currency {:?}", b.currency), 400);
     };
-
-    let db = ctx.d1("DB")?;
-    let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
-    // THE OWNER, AND ONLY THE OWNER. This route wrote balanced ledger rows --
-    // the money this system treats as authoritative -- for any amount any
-    // caller asked for, with `providerRef` as its only "proof" and the caller
-    // writing that too. Until a payment provider's webhook signs the top-up
-    // (as `stripe::webhook` already does for orders), the venue's own console
-    // is the only thing allowed to move this ledger.
-    match crate::auth::principal_at(&req, &ctx.env, &db, &place.venue, now_ms()).await {
-        Ok(crate::auth::Principal::Owner { .. }) => {}
-        Ok(_) => return Response::error("only the venue can record a top-up", 403),
-        Err(r) => return Ok(r),
-    }
 
     let tx_id = format!("tx_{:016x}", id64(&format!("{}:{}", place.venue, b.request_id)));
     let already: Option<serde_json::Value> = db
@@ -327,30 +338,126 @@ pub async fn top_up(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
     }))
 }
 
+
+
+/// The wallet key a principal owns, or `None` for one that owns no wallet.
+///
+/// A customer token names ONE ORDER, which is the only identity this product
+/// mints for a customer. The order carries the phone they gave, and
+/// `customer_key` is the venue's own non-reversible handle for it — the same
+/// one the customer list and the reveal audit use, so a wallet and a customer
+/// row are the same person.
+async fn own_wallet_key(
+    p: &crate::auth::Principal,
+    place: &crate::hubstore::Place,
+    env: &Env,
+) -> Result<Option<String>> {
+    let crate::auth::Principal::Customer { order_id, .. } = p else { return Ok(None) };
+    let Some(raw) = crate::hubstore::order(place, order_id).await? else { return Ok(None) };
+    let v: serde_json::Value = serde_json::from_str(&raw).unwrap_or(serde_json::Value::Null);
+    let phone = v.get("contact").and_then(|c| c.get("phone")).and_then(|x| x.as_str()).unwrap_or("");
+    if phone.trim().is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(crate::extra::customer_key(&crate::extra::signing_secret(env), phone)))
+}
+
+// ── WHOSE WALLET ────────────────────────────────────────────────────────────
+
+/// What a caller is allowed to read.
+#[derive(Debug, PartialEq, Eq)]
+pub enum WalletWho {
+    /// The principal's own wallet; the handler derives the key.
+    Own,
+    /// A wallet the caller named. Only an owner may.
+    Named(String),
+}
+
+/// THE IDENTITY COMES FROM THE TOKEN, NOT FROM THE QUERY.
+///
+/// The red-team pass put these routes behind `principal_at`, which asks only
+/// "does this principal belong to this venue". `?user=` stayed exactly as it
+/// was: a string the CALLER chooses. So the hole narrowed from "anyone" to
+/// "anyone with an order at this venue" — and an order token is minted for
+/// every customer who has ever bought a coffee here. One of them could read
+/// any other's balance and their whole transaction history by naming them.
+///
+/// An owner may still name a customer, because an owner's job includes looking
+/// one up and they already see the customer list. Everybody else gets their
+/// own, and a `?user=` that does not match is a contradiction rather than a
+/// preference — refused, not quietly resolved.
+pub fn wallet_who(
+    is_owner: bool,
+    named: Option<&str>,
+    own_key: Option<&str>,
+) -> std::result::Result<WalletWho, &'static str> {
+    match (is_owner, named) {
+        (true, Some(u)) => Ok(WalletWho::Named(u.to_string())),
+        (true, None) => Err("which customer?"),
+        // A principal with no wallet identity of its own — a courier — cannot
+        // be given one by asking.
+        (false, _) if own_key.is_none() => Err("this token has no wallet"),
+        (false, Some(u)) if Some(u) != own_key => Err("that is not your wallet"),
+        (false, _) => Ok(WalletWho::Own),
+    }
+}
+
+#[cfg(test)]
+mod who_tests {
+    use super::{wallet_who, WalletWho};
+
+    #[test]
+    fn an_owner_names_the_customer() {
+        assert_eq!(wallet_who(true, Some("abc"), None), Ok(WalletWho::Named("abc".into())));
+        assert!(wallet_who(true, None, None).is_err());
+    }
+
+    /// THE BUG THIS ENCODES: an authenticated customer naming somebody else.
+    #[test]
+    fn a_customer_cannot_name_another_wallet() {
+        assert!(wallet_who(false, Some("someone-else"), Some("mine")).is_err());
+    }
+
+    #[test]
+    fn a_customer_gets_their_own_with_or_without_naming_it() {
+        assert_eq!(wallet_who(false, None, Some("mine")), Ok(WalletWho::Own));
+        assert_eq!(wallet_who(false, Some("mine"), Some("mine")), Ok(WalletWho::Own));
+    }
+
+    #[test]
+    fn a_principal_with_no_wallet_is_refused_rather_than_invented() {
+        assert!(wallet_who(false, None, None).is_err());
+        assert!(wallet_who(false, Some("anything"), None).is_err());
+    }
+}
+
 /// `GET /api/public/locations/:slug/wallet/statement?user=<id>`
 pub async fn statement(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let Some(slug) = ctx.param("slug").cloned() else {
         return Response::error("missing slug", 400);
     };
-    let Some(user) = req
+    let named = req
         .url()?
         .query_pairs()
         .find(|(k, _)| k == "user")
-        .map(|(_, v)| v.to_string())
-    else {
-        return Response::error("missing user", 400);
-    };
+        .map(|(_, v)| v.to_string());
 
     let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
-    // AUTHENTICATED, AND TO THIS VENUE. `?user=` was a client-declared
-    // identity on a public route: anyone could read anyone's balance and
-    // their whole transaction history by naming them.
-    if let Err(r) =
-        crate::auth::principal_at(&req, &ctx.env, &db, &place.venue, now_ms()).await
-    {
-        return Ok(r);
-    }
+    // AUTHENTICATED, TO THIS VENUE, AND TO THIS WALLET. The first two were the
+    // red-team fix; the third is this one. See `wallet_who`.
+    let principal =
+        match crate::auth::principal_at(&req, &ctx.env, &db, &place.venue, now_ms()).await {
+            Ok(p) => p,
+            Err(r) => return Ok(r),
+        };
+    let is_owner = matches!(principal, crate::auth::Principal::Owner { .. });
+    let own = own_wallet_key(&principal, &place, &ctx.env).await?;
+    let user = match wallet_who(is_owner, named.as_deref(), own.as_deref()) {
+        Ok(WalletWho::Named(u)) => u,
+        Ok(WalletWho::Own) => own.unwrap_or_default(),
+        Err(why) => return Response::error(why, 403),
+    };
     let journal = match load_journal(&db, &place.venue).await? {
         Ok(j) => j,
         Err(why) => return Response::error(format!("journal unreadable: {why}"), 500),

@@ -41,10 +41,15 @@ const balanceCard = (withButton, shown, conserved) => `
 
 // The signed-in customer. Until the kit carries a session this is the venue's
 // demo account, and the screen says whose balance it is showing.
-const USER = 'demo-customer';
+// THERE IS NO `USER` CONSTANT ANY MORE.
+//
+// This screen used to name `demo-customer` and the hub believed it, because
+// `?user=` was whatever the caller typed. It is the token that says whose
+// wallet this is now: a customer's own order key, or a customer an owner
+// named. A screen that cannot name a wallet cannot read somebody else's.
 
 export async function render(params, routeName = 'my-wallet'){
-  const live = await api.balance(USER);
+  const live = await api.balance();
   const shown = live && !live.error && live.balanceMinor != null
     ? formatMoney(live.balanceMinor, live.currency)
     : (live && !live.error && live.balanceMinor == null ? 'ще не використовувався' : BALANCE);
@@ -135,8 +140,13 @@ async function topUp(root, value){
   const minor = Math.round(Number(value.replace(',', '.')) * 100);
   said.textContent = 'Надсилаємо…';
 
+  // A TOP-UP IS THE VENUE'S ACT, not the customer's: the ledger it writes is
+  // the money this system treats as authoritative, and until a payment
+  // provider signs one, only the console may move it. So this call is expected
+  // to be refused from here, and the screen shows the hub's own words for why
+  // rather than inventing a success.
   const answer = await api.topUp({
-    user: USER,
+    user: '',
     amountMinor: minor,
     currency: 'ALL',
     // Deliberately empty: there is no payment rail wired yet, and the server

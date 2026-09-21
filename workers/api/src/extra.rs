@@ -723,13 +723,13 @@ fn mask_name(n: &str) -> String {
 /// A stable, non-reversible handle for a phone. The audit entry must not carry
 /// the number it is about, and a URL holding a phone number puts it in every
 /// proxy log between here and the browser.
-fn customer_key(secret: &[u8], phone: &str) -> String {
+pub(crate) fn customer_key(secret: &[u8], phone: &str) -> String {
     let digits: String = phone.chars().filter(|c| c.is_ascii_digit()).collect();
     let mac = dowiz_hub::crypto::hmac_sha256(secret, digits.as_bytes());
     dowiz_hub::crypto::hex(&mac[..8])
 }
 
-fn signing_secret(env: &Env) -> Vec<u8> {
+pub(crate) fn signing_secret(env: &Env) -> Vec<u8> {
     env.secret("AUTH_SIGNING_KEY")
         .map(|v| v.to_string().into_bytes())
         // A hub with no configured key still masks consistently WITHIN itself:

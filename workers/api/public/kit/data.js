@@ -179,10 +179,30 @@ export function venue(body){
 // request fails, because the frame's own content is the fallback and a screen
 // that throws is a screen that renders nothing.
 
+// THE CUSTOMER'S OWN TOKEN TRAVELS WITH EVERY CALL THAT NEEDS ONE.
+//
+// The wallet, the reservations and the threads were public routes until the
+// red-team pass closed them behind a principal. This module kept calling them
+// bare, so `my-wallet`, `add-money` and `chat` answered 401 on a live venue and
+// nothing noticed for a day — the kit is the one surface no gate was driving.
+//
+// The token already exists on this device: `POST …/orders` mints one scoped to
+// that order and `kit/orders.js` keeps it beside the id, because that is the
+// only identity this product mints for a customer. It is read lazily rather
+// than imported, so `data.js` does not depend on the order store's shape.
+const bearer = () => {
+  try {
+    const kept = JSON.parse(localStorage.getItem('dowiz.kit.orders') || 'null');
+    const tok = Array.isArray(kept) ? kept.find(o => o && o.token)?.token : null;
+    return tok ? { authorization: `Bearer ${tok}` } : {};
+  } catch { return {}; }
+};
+
 async function call(path, init){
   if (!SLUG) return null;
   try {
-    const r = await fetch(`${API}/public/locations/${encodeURIComponent(SLUG)}${path}`, init);
+    const signed = { ...(init || {}), headers: { ...bearer(), ...((init && init.headers) || {}) } };
+    const r = await fetch(`${API}/public/locations/${encodeURIComponent(SLUG)}${path}`, signed);
     const text = await r.text();
     let body = null;
     try { body = text ? JSON.parse(text) : null; } catch { /* not json */ }
@@ -223,9 +243,12 @@ export const threads = {
   send: (id, body) => call(`/threads/${encodeURIComponent(id)}/messages`, json(body)),
 };
 
+// NO `?user=` FROM HERE ANY MORE. The hub derives whose wallet this is from
+// the token: a customer gets their own and an owner may name one, so a string
+// in the query is at best redundant and at worst somebody else's balance.
 export const wallet = {
-  balance: user => call(`/wallet?user=${encodeURIComponent(user)}`),
-  statement: user => call(`/wallet/statement?user=${encodeURIComponent(user)}`),
+  balance: () => call('/wallet'),
+  statement: () => call('/wallet/statement'),
   topUp: body => call('/wallet/topup', json(body)),
 };
 
