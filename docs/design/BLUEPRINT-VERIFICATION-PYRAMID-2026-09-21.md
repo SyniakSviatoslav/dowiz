@@ -214,3 +214,59 @@ returns a raw phone without a reveal row".
 
 Each step lands with the defects it would have caught named in its commit, so
 the pyramid keeps being argued from evidence rather than from shape.
+
+---
+
+## 7. Amendment, same day — the sixth layer
+
+Written after a review of the two blueprints above raised the classes this
+pyramid did not cover: concurrency, schema age, hardware, and time. Four of them
+turned out to be already built and dormant rather than missing; the details and
+the file references are in
+[the resilience blueprint](./BLUEPRINT-RESILIENCE-AND-EVOLUTION-2026-09-21.md).
+
+**Three defects found while checking those claims**, which is the only reason
+this amendment exists rather than being a tidy-up:
+
+| # | Defect | Layer that owns it |
+|---|---|---|
+| 31 | `place()` mints the order id from the CSPRNG (`storefront.rs:846`), so a retried placement after a lost response creates a **second order, reservation and ticket**. Stripe's idempotency key is derived from the order id and so cannot protect the order. | **L6** — idempotency replay |
+| 32 | Local time is a hard-coded `+2 h` in three files (`owner.rs:620`, `storefront.rs:249`, `extra.rs:27`), labelled "standard time". Europe/Tirane is UTC+**1** in winter. From the last Sunday of October the venue's day boundary, its schedule edges and its daily takings are an hour early. | **L1** (pure rule) + **L6** (year simulation) |
+| 33 | `Fault`-less outbound calls: Stripe, `ai.endpoint` and Meta have no breaker, so every customer during an outage pays the full timeout before the existing cash fallback appears. | **L5** — fault injection |
+
+**The counts change accordingly**: thirty-three defects, and the largest bucket
+is still "is it right", but **concurrency and time are now their own bucket of
+three** and neither had a test of any kind.
+
+### L6 — adversarial and concurrent · owns #31, #32, #33
+
+The layer whose tests are **generated rather than written**, which is exactly why
+it finds what review does not.
+
+- **Concurrency.** N simultaneous placements against stock *k*: exactly
+  `min(N,k)` succeed, the rest are typed refusals, `stranded()` is empty, no 500.
+  Both as a property over interleavings and as a live 20-way probe.
+- **Idempotency replay.** Every unsafe route, three times: same key + same body
+  → the same response; same key + different body → `409`; retry while in flight
+  → `409` with `Retry-After`, never a second execution.
+- **Fuzz.** `crates/dowiz-core/src/json.rs` (a hand-written parser on the path of
+  every request) and `Hub::load` over arbitrary bytes (a corrupted image must
+  refuse loudly, never panic, never truncate into a shorter valid-looking log).
+- **Simulation of time.** A year walked at hourly steps: the local day boundary
+  moves exactly twice, and no other day is short or long.
+- **The upcaster corpus.** Committed historical envelopes, folded through the
+  upcaster chain in CI. A schema change that cannot read them fails the build.
+
+The tools are already installed and aimed elsewhere: `proptest = "1.11"` is a
+dependency of both `dowiz-core` and `kernel`, and `kernel/fuzz` has two targets,
+both mathematical. **Not one property or fuzz target touches money, stock,
+tenancy or the order machine** — which is where all thirty-three defects lived.
+
+### L2 and L5 widen
+
+- **L2** additionally owns the upcaster totality law and the conservation
+  properties listed in the resilience blueprint §10.
+- **L5** additionally owns **poison-pill injection** (a corrupted record must
+  leave the venue serving, the record quarantined and counted, and the gate red)
+  and **breaker trips** (a tripped rail degrades to its fallback without paying
+  the timeout, and the trip writes a `worker_errors` row by construction).
