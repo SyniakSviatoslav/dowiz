@@ -1050,6 +1050,15 @@ pub async fn log_generation(place: &Place) -> Result<i64> {
 // the bytes live. Six of this platform's defects were that column being
 // forgotten, and `content_i18n` never had one at all.
 
+/// The venue's operational state for its couriers: who is holding which
+/// delivery, who is on shift, and where they last were.
+///
+/// ONE IMAGE, because all three change together: taking a delivery, finishing
+/// one and going off shift are each one decision that touches two of them, and
+/// two images would be two generations with a window between.
+pub const IMAGE_OPS: &str = "ops";
+pub const OPS_BYTES: usize = 2 * 1024 * 1024;
+
 /// The venue's translations: `<locale>/<entity_type>/<entity_id>/<field>`.
 pub const IMAGE_I18N: &str = "i18n";
 

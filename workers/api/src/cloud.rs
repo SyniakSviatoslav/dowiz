@@ -447,19 +447,11 @@ pub async fn status(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 /// hours is the retention `compliance/data-map.md` promises for courier GPS.
 const POSITIONS_KEEP_MS: i64 = 24 * 60 * 60 * 1000;
 
-async fn prune_positions(db: &D1Database, now_ms: i64) {
-    let before = now_ms - POSITIONS_KEEP_MS;
-    let stmt = db
-        .prepare("DELETE FROM courier_positions WHERE recorded_at_ms < ?1")
-        .bind(&[worker::wasm_bindgen::JsValue::from_f64(before as f64)]);
-    match stmt {
-        Ok(s) => match s.run().await {
-            Ok(r) => console_log!("nightly prune: positions older than 24 h removed ({:?})", r.meta().ok().flatten().and_then(|m| m.changes)),
-            Err(e) => console_error!("nightly prune refused: {e}"),
-        },
-        Err(e) => console_error!("nightly prune: bad statement: {e}"),
-    }
-}
+// `prune_positions` WAS HERE, deleting `courier_positions` rows older than a
+// day. There is nothing left to prune: a position is now ONE RECORD PER
+// COURIER, overwritten by the next fix and ignored by every reader once it is
+// older than the freshness window. A table that had to be swept was the cost of
+// keeping a history nobody wanted.
 
 /// The nightly cron: every venue with a store set gets a copy. A venue whose
 /// store refuses is logged and skipped; the next venue is not its problem.
@@ -473,7 +465,6 @@ pub async fn nightly(env: &Env) {
     };
     let legacy = env.var("LEGACY_VENUE").ok().map(|v| v.to_string()).filter(|v| !v.is_empty());
     let now = crate::owner::now_ms();
-    prune_positions(&db, now).await;
     // The error log is now per venue, in that venue's own object, so pruning
     // it happens inside the per-venue loop below rather than as one statement
     // over a shared table.

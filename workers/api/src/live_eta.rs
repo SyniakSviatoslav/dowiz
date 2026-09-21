@@ -90,7 +90,7 @@ pub async fn fixes_at(
         Vec::new()
     };
     let known: Vec<String> = out.iter().map(|f| f.courier_id.clone()).collect();
-    for f in fixes_from_d1(&place.db, location_id, now_ms).await {
+    for f in fixes_from_store(place, now_ms).await {
         if !known.contains(&f.courier_id) {
             out.push(f);
         }
@@ -98,33 +98,52 @@ pub async fn fixes_at(
     out
 }
 
-async fn fixes_from_d1(db: &D1Database, location_id: &str, now_ms: i64) -> Vec<CourierFix> {
+/// The last fix each courier on shift reported, from the venue's own image.
+///
+/// THE JOIN IS GONE AND SO IS THE REASON FOR IT. The table kept every fix, so
+/// finding the current one meant joining it to a `MAX(recorded_at_ms) GROUP BY
+/// courier_id` of itself, and then joining THAT to the shifts table to keep the
+/// couriers who had gone home out of it. One record per courier, overwritten,
+/// answers the first; the shift lives in the same image and answers the second.
+async fn fixes_from_store(place: &crate::hubstore::Place, now_ms: i64) -> Vec<CourierFix> {
     let since = now_ms - POSITION_FRESH_MS;
-    let stmt = db
-        .prepare(
-            "SELECT p.courier_id, p.lat_udeg, p.lon_udeg, p.recorded_at_ms \
-             FROM courier_positions p \
-             JOIN (SELECT courier_id, MAX(recorded_at_ms) AS m FROM courier_positions \
-                   WHERE recorded_at_ms > ?2 GROUP BY courier_id) l \
-               ON l.courier_id = p.courier_id AND l.m = p.recorded_at_ms \
-             JOIN courier_shifts s ON s.courier_id = p.courier_id \
-               AND s.location_id = ?1 AND s.ended_at_ms IS NULL",
-        )
-        .bind(&[location_id.into(), JsValue::from_f64(since as f64)]);
-    let Ok(stmt) = stmt else { return Vec::new() };
-    let rows = match stmt.all().await.and_then(|r| r.results::<FixRow>()) {
-        Ok(r) => r,
+    let t = match crate::hubstore::load_table(
+        place,
+        crate::hubstore::IMAGE_OPS,
+        crate::hubstore::OPS_BYTES,
+    )
+    .await
+    {
+        Ok(l) => l.table,
         Err(e) => {
             console_error!("live_eta: courier positions unreadable: {e}");
             return Vec::new();
         }
     };
-    rows.into_iter()
-        .map(|r| CourierFix {
-            courier_id: r.courier_id,
-            lat_udeg: r.lat_udeg as i32,
-            lon_udeg: r.lon_udeg as i32,
-            recorded_at_ms: r.recorded_at_ms as i64,
+    let on_shift: std::collections::HashSet<String> = t
+        .all("shift")
+        .into_iter()
+        .filter_map(|(id, j)| serde_json::from_str::<Value>(&j).ok().map(|v| (id, v)))
+        .filter(|(_, v)| v.get("ended_at_ms").map_or(true, |x| x.is_null()))
+        .map(|(id, _)| id)
+        .collect();
+    t.all("pos")
+        .into_iter()
+        .filter(|(id, _)| on_shift.contains(id))
+        .filter_map(|(id, j)| {
+            let v: Value = serde_json::from_str(&j).ok()?;
+            let at = v.get("recorded_at_ms")?.as_i64()?;
+            if at <= since {
+                // A stale fix is not a position; it is a memory. Same rule the
+                // object applies to the ones it holds in memory.
+                return None;
+            }
+            Some(CourierFix {
+                courier_id: id,
+                lat_udeg: v.get("lat_udeg")?.as_i64()? as i32,
+                lon_udeg: v.get("lon_udeg")?.as_i64()? as i32,
+                recorded_at_ms: at,
+            })
         })
         .collect()
 }

@@ -52,16 +52,21 @@ pub async fn tasks(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // seconds on shift; what it needs is the orders, not the log.
     let listed = crate::hubstore::orders(&place).await?;
 
-    #[derive(Deserialize)]
+    // THIS VENUE'S OPEN DELIVERIES. The query it replaces had no location
+    // filter, so a courier's task list was computed against every venue's
+    // assignments on the platform.
+    let t = ops(&place).await?;
     struct A {
         order_id: String,
         courier_id: String,
     }
-    let assigned = db
-        .prepare("SELECT order_id, courier_id FROM courier_assignments WHERE delivered_at_ms IS NULL")
-        .all()
-        .await?
-        .results::<A>()?;
+    let assigned: Vec<A> = t
+        .all(K_ASG)
+        .into_iter()
+        .filter_map(|(id, j)| serde_json::from_str::<Value>(&j).ok().map(|v| (id, v)))
+        .filter(|(_, v)| v.get("delivered_at_ms").map_or(true, |x| x.is_null()))
+        .map(|(id, v)| A { order_id: id, courier_id: field_str(&v, "courier_id") })
+        .collect();
 
     let mut mine = Vec::new();
     let mut open = Vec::new();
@@ -127,20 +132,7 @@ pub async fn tasks(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         }
     }
 
-    #[derive(Deserialize)]
-    struct S {
-        id: String,
-        deliveries: i64,
-        cash_collected: i64,
-    }
-    let shift: Option<S> = db
-        .prepare(
-            "SELECT id, deliveries, cash_collected FROM courier_shifts \
-             WHERE courier_id = ?1 AND ended_at_ms IS NULL ORDER BY started_at_ms DESC LIMIT 1",
-        )
-        .bind(&[courier_id.clone().into()])?
-        .first(None)
-        .await?;
+    let shift = shift_of(&t, &courier_id);
 
     Response::from_json(&json!({
         // WHO THIS IS, said by the server. The app needs its own id to put a
@@ -148,7 +140,11 @@ pub async fn tasks(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         // is how a client ends up believing something the server did not say.
         "courierId": courier_id,
         "onShift": shift.is_some(),
-        "shift": shift.map(|s| json!({ "id": s.id, "deliveries": s.deliveries, "cash": s.cash_collected })),
+        "shift": shift.map(|s| json!({
+            "id": field_str(&s, "id"),
+            "deliveries": field_i64(&s, "deliveries"),
+            "cash": field_i64(&s, "cash_collected"),
+        })),
         "mine": mine, "available": open
     }))
 }
@@ -171,44 +167,100 @@ pub async fn shift(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     };
     let now = now_ms();
 
-    if body.open {
-        // Idempotent: opening a shift twice must not create two.
-        let existing: Option<String> = db
-            .prepare("SELECT id FROM courier_shifts WHERE courier_id = ?1 AND ended_at_ms IS NULL LIMIT 1")
-            .bind(&[courier_id.clone().into()])?
-            .first(Some("id"))
-            .await?;
-        if existing.is_none() {
-            let Some(id) = crate::edge_id() else {
-                return Response::error("no platform CSPRNG", 500);
-            };
-            db.prepare(
-                "INSERT INTO courier_shifts (id,courier_id,location_id,started_at_ms) VALUES (?1,?2,?3,?4)",
-            )
-            .bind(&[id.into(), courier_id.clone().into(), loc.into(), JsValue::from_f64(now as f64)])?
-            .run()
-            .await?;
+    let cid = courier_id.clone();
+    let open = body.open;
+    let refused = with_ops(&place, move |t| {
+        if open {
+            // Idempotent: opening a shift twice must not create two. The
+            // record's id IS the courier, so "two open shifts" is not a state
+            // this layout can represent -- which is stronger than the
+            // `LIMIT 1` that used to stand in for it.
+            if shift_of(t, &cid).is_none() {
+                let rec = json!({
+                    "id": cid, "courier_id": cid, "started_at_ms": now,
+                    "ended_at_ms": Value::Null, "deliveries": 0, "cash_collected": 0,
+                })
+                .to_string();
+                t.put(K_SHIFT, &cid, &rec, &[], &[])
+                    .map_err(|e| Error::RustError(format!("shift: {e}")))?;
+            }
+            return Ok(None);
         }
-    } else {
         // Refuse to close a shift with a run still in hand: the order would be
         // stranded with nobody holding it.
-        let live: Option<String> = db
-            .prepare(
-                "SELECT order_id FROM courier_assignments \
-                 WHERE courier_id = ?1 AND delivered_at_ms IS NULL LIMIT 1",
-            )
-            .bind(&[courier_id.clone().into()])?
-            .first(Some("order_id"))
-            .await?;
-        if live.is_some() {
-            return Response::error("finish the delivery in hand before ending the shift", 409);
+        let holding = t.all(K_ASG).into_iter().any(|(_, j)| {
+            serde_json::from_str::<Value>(&j).ok().is_some_and(|v| {
+                field_str(&v, "courier_id") == cid
+                    && v.get("delivered_at_ms").map_or(true, |x| x.is_null())
+            })
+        });
+        if holding {
+            return Ok(Some("finish the delivery in hand before ending the shift"));
         }
-        db.prepare("UPDATE courier_shifts SET ended_at_ms = ?2 WHERE courier_id = ?1 AND ended_at_ms IS NULL")
-            .bind(&[courier_id.into(), JsValue::from_f64(now as f64)])?
-            .run()
-            .await?;
+        if let Some(mut s) = t
+            .get(K_SHIFT, &cid)
+            .and_then(|j| serde_json::from_str::<Value>(&j).ok())
+        {
+            s["ended_at_ms"] = json!(now);
+            t.put(K_SHIFT, &cid, &s.to_string(), &[], &[])
+                .map_err(|e| Error::RustError(format!("shift: {e}")))?;
+        }
+        Ok(None)
+    })
+    .await?;
+    if let Some(why) = refused {
+        return Response::error(why, 409);
     }
     Response::from_json(&json!({ "onShift": body.open }))
+}
+
+
+// ── the venue's courier operations, in the venue's own image ───────────────
+//
+// `courier_assignments`, `courier_shifts` and `courier_positions` were three
+// tables, and the first of them was read with `WHERE delivered_at_ms IS NULL`
+// AND NO LOCATION FILTER AT ALL -- every venue's open deliveries, on every
+// courier's task list. That is the sixth instance of this platform's defining
+// defect and the last one in this file: the image is the venue, so there is no
+// other venue's assignment in it to leak.
+
+const K_ASG: &str = "asg";
+const K_SHIFT: &str = "shift";
+const K_POS: &str = "pos";
+
+async fn ops(place: &crate::hubstore::Place) -> Result<dowiz_hub::table::Table> {
+    Ok(crate::hubstore::load_table(place, crate::hubstore::IMAGE_OPS, crate::hubstore::OPS_BYTES)
+        .await?
+        .table)
+}
+
+async fn with_ops<F, T>(place: &crate::hubstore::Place, f: F) -> Result<T>
+where
+    F: FnMut(&mut dowiz_hub::table::Table) -> Result<T>,
+{
+    crate::hubstore::with_table(place, crate::hubstore::IMAGE_OPS, crate::hubstore::OPS_BYTES, f)
+        .await
+}
+
+fn asg_of(t: &dowiz_hub::table::Table, order_id: &str) -> Option<Value> {
+    t.get(K_ASG, order_id).and_then(|j| serde_json::from_str(&j).ok())
+}
+
+/// The shift a courier is on, if any. One open shift per courier by
+/// construction: the record's id IS the courier, and the `ended_at_ms` field
+/// says whether it is still running.
+fn shift_of(t: &dowiz_hub::table::Table, courier_id: &str) -> Option<Value> {
+    t.get(K_SHIFT, courier_id)
+        .and_then(|j| serde_json::from_str::<Value>(&j).ok())
+        .filter(|s| s.get("ended_at_ms").map_or(true, |v| v.is_null()))
+}
+
+fn field_i64(v: &Value, k: &str) -> i64 {
+    v.get(k).and_then(Value::as_i64).unwrap_or(0)
+}
+
+fn field_str(v: &Value, k: &str) -> String {
+    v.get(k).and_then(Value::as_str).unwrap_or("").to_string()
 }
 
 /// Read one order out of the hub log, scoped to this hub's location.
@@ -304,23 +356,28 @@ pub async fn accept(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         0
     };
 
-    // The PRIMARY KEY on order_id is what makes this a race the database settles:
-    // two couriers tapping at once, one INSERT wins, the other is told plainly.
-    let res = db
-        .prepare(
-            "INSERT INTO courier_assignments (order_id,courier_id,location_id,assigned_at_ms,cash_due) \
-             VALUES (?1,?2,?3,?4,?5)",
-        )
-        .bind(&[
-            id.clone().into(),
-            courier_id.clone().into(),
-            loc.into(),
-            JsValue::from_f64(now_ms() as f64),
-            JsValue::from_f64(cash_due as f64),
-        ])?
-        .run()
-        .await;
-    if res.is_err() {
+    // THE RACE IS SETTLED BY THE OBJECT, not by a primary key. Two couriers
+    // tapping at once are two calls to one Durable Object, which runs them one
+    // after the other; the first finds no assignment and writes one, the second
+    // finds it and is told plainly. That is the same guarantee the UNIQUE
+    // constraint gave, arriving as a property of where the bytes live.
+    let (oid, cid) = (id.clone(), courier_id.clone());
+    let taken = with_ops(&place, move |t| {
+        if asg_of(t, &oid).is_some() {
+            return Ok(false);
+        }
+        let rec = json!({
+            "order_id": oid, "courier_id": cid, "assigned_at_ms": now_ms(),
+            "cash_due": cash_due, "picked_up_at_ms": Value::Null,
+            "delivered_at_ms": Value::Null, "cash_collected": Value::Null,
+        })
+        .to_string();
+        t.put(K_ASG, &oid, &rec, &[], &[])
+            .map_err(|e| Error::RustError(format!("assignment: {e}")))?;
+        Ok(true)
+    })
+    .await?;
+    if !taken {
         return Response::error("another courier took this order", 409);
     }
 
@@ -378,12 +435,8 @@ pub async fn pickup(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let Some(id) = ctx.param("id").cloned() else {
         return Response::error("missing order id", 400);
     };
-    let held: Option<String> = db
-        .prepare("SELECT order_id FROM courier_assignments WHERE order_id = ?1 AND courier_id = ?2")
-        .bind(&[id.clone().into(), courier_id.into()])?
-        .first(Some("order_id"))
-        .await?;
-    if held.is_none() {
+    let t = ops(&place).await?;
+    if asg_of(&t, &id).map(|a| field_str(&a, "courier_id")) != Some(courier_id.clone()) {
         return Response::error("not your delivery", 403);
     }
     if load_order(&place, &id, &loc).await?.is_none() {
@@ -393,10 +446,16 @@ pub async fn pickup(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         Ok(v) => v,
         Err(e) => return Response::error(e.to_string(), 409),
     };
-    db.prepare("UPDATE courier_assignments SET picked_up_at_ms = ?2 WHERE order_id = ?1")
-        .bind(&[id.into(), JsValue::from_f64(now_ms() as f64)])?
-        .run()
-        .await?;
+    let oid = id.clone();
+    with_ops(&place, move |t| {
+        if let Some(mut a) = asg_of(t, &oid) {
+            a["picked_up_at_ms"] = json!(now_ms());
+            t.put(K_ASG, &oid, &a.to_string(), &[], &[])
+                .map_err(|e| Error::RustError(format!("assignment: {e}")))?;
+        }
+        Ok(())
+    })
+    .await?;
     Response::from_json(&merged)
 }
 
@@ -418,25 +477,22 @@ pub async fn deliver(mut req: Request, ctx: RouteContext<()>) -> Result<Response
         return Response::error("missing order id", 400);
     };
 
-    #[derive(Deserialize)]
-    struct A {
-        cash_due: i64,
-    }
-    let a: Option<A> = db
-        .prepare("SELECT cash_due FROM courier_assignments WHERE order_id = ?1 AND courier_id = ?2 AND delivered_at_ms IS NULL")
-        .bind(&[id.clone().into(), courier_id.clone().into()])?
-        .first(None)
-        .await?;
+    let t = ops(&place).await?;
+    let a = asg_of(&t, &id).filter(|a| {
+        field_str(a, "courier_id") == courier_id
+            && a.get("delivered_at_ms").map_or(true, |x| x.is_null())
+    });
     let Some(a) = a else {
         return Response::error("not your delivery", 403);
     };
-    let collected = body.cash_collected.unwrap_or(a.cash_due);
+    let cash_due = field_i64(&a, "cash_due");
+    let collected = body.cash_collected.unwrap_or(cash_due);
     if collected < 0 {
         return Response::error("cash cannot be negative", 400);
     }
     // A short handover is RECORDED, never silently rounded. The difference is
     // what a settlement dispute is later resolved from.
-    let short = a.cash_due - collected;
+    let short = cash_due - collected;
 
     if load_order(&place, &id, &loc).await?.is_none() {
         return Response::error("not found", 404);
@@ -452,18 +508,31 @@ pub async fn deliver(mut req: Request, ctx: RouteContext<()>) -> Result<Response
         Err(e) => return Response::error(e.to_string(), 409),
     };
     let now = now_ms();
-    db.prepare("UPDATE courier_assignments SET delivered_at_ms = ?2, cash_collected = ?3 WHERE order_id = ?1")
-        .bind(&[id.into(), JsValue::from_f64(now as f64), JsValue::from_f64(collected as f64)])?
-        .run()
-        .await?;
-    db.prepare(
-        "UPDATE courier_shifts SET deliveries = deliveries + 1, cash_collected = cash_collected + ?2 \
-         WHERE courier_id = ?1 AND ended_at_ms IS NULL",
-    )
-    .bind(&[courier_id.into(), JsValue::from_f64(collected as f64)])?
-    .run()
+    // THE ASSIGNMENT AND THE SHIFT IN ONE WRITE. They were two UPDATEs, and
+    // half of that is a delivery recorded against nobody's shift -- the
+    // courier's own count and cash silently short by one run.
+    let (oid, cid) = (id.clone(), courier_id.clone());
+    with_ops(&place, move |t| {
+        if let Some(mut a) = asg_of(t, &oid) {
+            a["delivered_at_ms"] = json!(now);
+            a["cash_collected"] = json!(collected);
+            t.put(K_ASG, &oid, &a.to_string(), &[], &[])
+                .map_err(|e| Error::RustError(format!("assignment: {e}")))?;
+        }
+        if let Some(mut s) = t
+            .get(K_SHIFT, &cid)
+            .and_then(|j| serde_json::from_str::<Value>(&j).ok())
+            .filter(|s| s.get("ended_at_ms").map_or(true, |v| v.is_null()))
+        {
+            s["deliveries"] = json!(field_i64(&s, "deliveries") + 1);
+            s["cash_collected"] = json!(field_i64(&s, "cash_collected") + collected);
+            t.put(K_SHIFT, &cid, &s.to_string(), &[], &[])
+                .map_err(|e| Error::RustError(format!("shift: {e}")))?;
+        }
+        Ok(())
+    })
     .await?;
-    Response::from_json(&json!({ "order": merged, "cashDue": a.cash_due, "cashCollected": collected, "short": short }))
+    Response::from_json(&json!({ "order": merged, "cashDue": cash_due, "cashCollected": collected, "short": short }))
 }
 
 /// `POST /api/courier/position` — `{lat, lon, accuracy_m?, speed_mps?, order_id?}`
@@ -484,6 +553,7 @@ pub async fn position(mut req: Request, ctx: RouteContext<()>) -> Result<Respons
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
+    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (courier_id, _) = match courier_at(&req, &ctx, &db).await {
         Ok(v) => v,
         Err(r) => return Ok(r),
@@ -509,20 +579,23 @@ pub async fn position(mut req: Request, ctx: RouteContext<()>) -> Result<Respons
     let lat_udeg = (body.lat * 1_000_000.0).round() as i64;
     let lon_udeg = (body.lon * 1_000_000.0).round() as i64;
 
-    db.prepare(
-        "INSERT INTO courier_positions (courier_id,order_id,lat_udeg,lon_udeg,accuracy_m,speed_mps_milli,recorded_at_ms) \
-         VALUES (?1,?2,?3,?4,?5,?6,?7)",
-    )
-    .bind(&[
-        courier_id.into(),
-        body.order_id.map(JsValue::from).unwrap_or(JsValue::NULL),
-        JsValue::from_f64(lat_udeg as f64),
-        JsValue::from_f64(lon_udeg as f64),
-        acc.map(|a| JsValue::from_f64(a as f64)).unwrap_or(JsValue::NULL),
-        speed.map(|s| JsValue::from_f64(s as f64)).unwrap_or(JsValue::NULL),
-        JsValue::from_f64(now_ms() as f64),
-    ])?
-    .run()
+    // ONE RECORD PER COURIER, overwritten. The table kept every fix and a
+    // nightly job deleted the old ones; what any reader ever wanted was the
+    // LATEST, which is why `live_eta` had to join the table to a `MAX
+    // (recorded_at_ms) GROUP BY courier_id` of itself. A position that is
+    // superseded the moment the next one arrives is a value, not a history.
+    let cid = courier_id.clone();
+    let rec = json!({
+        "courier_id": cid, "order_id": body.order_id,
+        "lat_udeg": lat_udeg, "lon_udeg": lon_udeg,
+        "accuracy_m": acc, "speed_mps_milli": speed,
+        "recorded_at_ms": now_ms(),
+    })
+    .to_string();
+    with_ops(&place, move |t| {
+        t.put(K_POS, &cid, &rec, &[], &[])
+            .map_err(|e| Error::RustError(format!("position: {e}")))
+    })
     .await?;
     Response::from_json(&json!({ "ok": true }))
 }
