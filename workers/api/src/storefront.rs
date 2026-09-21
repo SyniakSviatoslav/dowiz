@@ -776,15 +776,39 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
         if price < 0 {
             return Response::error(format!("product has no price: {}", it.product_id), 409);
         }
-        subtotal += price * it.quantity;
+        // THE OPTIONS ARE PART OF THE PRICE, and here they were not part of
+        // anything. `modifier_ids` was carried through to the stored order
+        // untouched and the line was priced at the dish's base price alone, so
+        // a dish at 800 with "extra salmon +200", ordered twice, was shown as
+        // 2000 by the cart AND by the promo preview -- both of which do call
+        // this pricer -- and stored and charged at 1600. The venue paid the
+        // difference on every order with a paid option.
+        //
+        // `price` is also the only thing that VALIDATES a choice: an id that
+        // belongs to no group on this dish, or a required group left empty,
+        // was accepted silently. It is the catalogue's own rule, so a refusal
+        // here says the same thing the cart would have said.
+        let groups = dowiz_hub::modifiers::groups_of(&pj);
+        let chosen = match dowiz_hub::modifiers::price(&groups, &it.modifier_ids) {
+            Ok(c) => c,
+            Err(e) => {
+                return Response::error(
+                    format!("{}: {e}", it.product_id),
+                    400,
+                )
+            }
+        };
+        // A negative option delta must not make a line pay the customer.
+        let unit_price = (price + chosen.delta).max(0);
+        subtotal += unit_price * it.quantity;
         told.push(crate::notify::LineOut {
             name: p.get("name").and_then(Value::as_str).unwrap_or(&it.product_id).to_string(),
             quantity: it.quantity,
-            unit_price: price,
+            unit_price,
         });
         lines.push(json!({
             "product_id": it.product_id, "modifier_ids": it.modifier_ids,
-            "quantity": it.quantity, "unit_price": price   // trusted, from the catalogue
+            "quantity": it.quantity, "unit_price": unit_price   // base + options, from the catalogue
         }));
     }
     if subtotal < loc.min_order {
@@ -1000,6 +1024,24 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
             return Err(e);
         }
     };
+
+    // WHAT THE CUSTOMER IS CHARGED IS WHAT THE ORDER SAYS, and those were two
+    // different numbers. `total` above is `subtotal + fee + tip`, computed
+    // BEFORE the promo: the discount is applied to `envelope["total"]` inside
+    // the CAS closure, because redeeming a code has to happen in the same
+    // breath as the write. The outer binding never learned about it, and it is
+    // the one `create_intent` was handed -- so a card customer with a working
+    // promo code saw 2700 on the screen, had 2700 stored against their order,
+    // and was charged 3000. The webhook then recorded `amount_received` 3000
+    // and marked it paid, so nothing downstream disagreed with anything.
+    //
+    // `stored` is the envelope as it was actually written, discount and all.
+    // It is the only total with authority here, so it is the one that travels
+    // to Stripe.
+    let total = serde_json::from_str::<Value>(&stored)
+        .ok()
+        .and_then(|v| v.get("total").and_then(Value::as_i64))
+        .unwrap_or(total);
 
     // The customer row is keyed by a HASH of the phone, never the phone itself,
     // so the table can be joined without holding the number in the clear.

@@ -1446,6 +1446,20 @@ pub const HUB_OWNED: &[&str] = &[
     "fulfilment",
     "payment",
     "payment_status",
+    // THE PAYMENT'S OWN RECORD, which used to be erased by the first status
+    // change. Every transition stores `delta(old, merged)` where `merged` is
+    // the kernel's order plus exactly these keys, and `fold::delta` records a
+    // key missing from `merged` as a DELETION. `payment_status` was carried
+    // and its evidence was not: the webhook writes the intent id, the amount
+    // it actually received and the event fingerprint, and one click on
+    // "confirm" deleted all three. A crypto order likewise forgot which of the
+    // venue's wallets it was to be paid into. stripe.rs calls that difference
+    // "the thing someone will need later", and it was gone before anyone
+    // could need it.
+    "payment_intent",
+    "amount_received",
+    "stripe_event",
+    "crypto",
     "delivery_fee",
     "courier_id",
     "created_at_ms",

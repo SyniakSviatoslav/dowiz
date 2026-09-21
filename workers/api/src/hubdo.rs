@@ -361,7 +361,24 @@ impl HubImages {
             return Ok(Some(hit.clone()));
         }
         let store = self.state.storage();
-        let Some(meta) = store.get::<Meta>(&Self::meta_key(id)).await.ok().flatten() else {
+        // AN ERROR IS NOT AN ABSENCE, and `.ok().flatten()` said it was.
+        //
+        // `Storage::get` answers Ok(None) for a key that is not there and Err
+        // for a store that could not answer -- a timeout, an internal error, a
+        // `Meta` that stopped deserialising. Folding the second into the first
+        // tells every caller above that this venue has NO IMAGE, and every
+        // guard downstream is built to be helpful about that: `load` hands the
+        // handler a fresh 64 KiB hub, `put_image` reads the generation as 0,
+        // agrees with the caller's 0, and writes chunk zero plus a meta saying
+        // `chunks: 1`. The venue's entire order log is then unreachable -- the
+        // old chunks are still on disk with nothing naming them. The same
+        // conflation defeats `import`'s never-overwrite check and
+        // `seed_fresh_hub`'s emptiness test, and makes `/fold/orders` answer an
+        // empty list at generation 0 instead of failing.
+        //
+        // The chunk read two lines down has always propagated its errors with
+        // `?`. Only the meta read swallowed them.
+        let Some(meta) = store.get::<Meta>(&Self::meta_key(id)).await? else {
             return Ok(None);
         };
         // ALL CHUNKS IN ONE CALL. Asking for them one at a time would reproduce

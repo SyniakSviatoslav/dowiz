@@ -266,6 +266,29 @@ pub async fn accept(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let Some((_, v)) = load_order(&place, &id, &loc).await? else {
         return Response::error("not found", 404);
     };
+    // ── AN ORDER HAS TO BE READY TO BE TAKEN ──
+    //
+    // There was no status check at all here: `load_order` compares the venue
+    // and nothing else, and accepting is a `Noted` event, so the kernel's FSM
+    // is never consulted either. A courier could therefore claim ANY order at
+    // the venue in ANY state, and three things followed from it.
+    //
+    // Accept a PENDING order the owner then rejects, and the assignment row
+    // keeps `delivered_at_ms IS NULL` for ever -- so `shift(open: false)`
+    // refuses and that courier can never close a shift again. Accept anything,
+    // and the owner's `assign_courier` answers 409 "already has a courier", so
+    // a courier can pre-empt the dispatcher. Accept a CONFIRMED order and
+    // `pickup` is legal straight to IN_DELIVERY, walking the food past the
+    // kitchen: PREPARING is never entered, so the ingredients it reserved are
+    // never consumed and the hold is stranded for good.
+    //
+    // READY is what the pool offers and CONFIRMED is what an owner assigns
+    // ahead of the kitchen, so those two are the whole legitimate set.
+    let status = v.get("status").and_then(Value::as_str).unwrap_or("");
+    if !matches!(status, "READY" | "CONFIRMED") {
+        return Response::error(format!("this order is {status}, not ready to be taken"), 409);
+    }
+
     let cash_due = if v.get("payment").and_then(|p| p.as_str()) == Some("cash") {
         v.get("total").and_then(|t| t.as_i64()).unwrap_or(0)
     } else {
