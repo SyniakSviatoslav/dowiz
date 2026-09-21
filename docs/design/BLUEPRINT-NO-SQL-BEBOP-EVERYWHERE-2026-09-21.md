@@ -22,6 +22,40 @@ becomes structural.
 
 ---
 
+## 0. What the database actually contains — measured, 2026-09-21
+
+Written after the plan, because the plan was built from the repository's
+migrations and **the repository is not what is deployed.**
+
+**The live D1 has 35 tables. `workers/api/migrations/` describes 29.** Three
+exist in production with no DDL anywhere in the tree —
+`courier_assignments`, `courier_positions`, `courier_shifts` — plus the legacy
+`hub_image`, `_cf_KV`, `d1_migrations` and `sqlite_sequence`. **A deploy against
+a fresh D1 would be broken**, and nothing would have said so until a courier
+tried to accept an order.
+
+**The row counts, which change the size of this job entirely:**
+
+| Table | Rows | What that means |
+|---|---|---|
+| `content_i18n` | **521** | the real migration, and the one with the tenancy defect |
+| `auth_refresh_tokens` | 470 | churn; they expire. Cut over, do not backfill |
+| `courier_assignments` | 48 | no DDL in the repo |
+| `couriers` | 7 | |
+| `hub_image` | 5 | the legacy images, already superseded by the object |
+| `users` / `memberships` | 4 / 4 | |
+| `locations` | 2 | |
+| `ledger_tx` | 1 | |
+| `orders`, `products` | **0** | already in bebop images |
+| `waitlist`, `worker_errors`, `threads` | **0** | nothing to move |
+
+**So this is about 600 rows, not 29 tables of data.** Orders and the catalogue
+already live in bebop; `worker_errors` being empty is the same finding the audit
+made — it has never fired. The work is the CODE, not the data: 121 prepared
+statements at the start of this.
+
+---
+
 ## 1. What "bebop everywhere" can and cannot mean
 
 **bebop-lang compiles to raw AArch64 machine words**, loaded by a 1.5 KB assembly
@@ -105,8 +139,14 @@ is the key/value one either way.
 | `identity` | Kv | `users`, `memberships`, `platform_admins` | 3 tables + 1 index |
 | `sessions` | Kv | `auth_refresh_tokens`, `courier_sessions`, `owner_api_keys` | 3 tables + 5 indexes |
 | `couriers` | Kv | `couriers` (phone→id), `courier_invites` | 2 tables + 3 indexes |
-| `waitlist` | EvLog | `waitlist` | 1 table |
+| `waitlist` | **Kv** | `waitlist` | 1 table |
 | `errors` | EvLog | platform-level `worker_errors` | 1 table |
+
+**Correction, made while building it:** the waitlist was listed above as an
+EvLog and that was wrong. "One row per address; a second submit refreshes it" is
+an upsert, and folding an append log to find the current state of a few hundred
+addresses is work done to reach a shape a keyed set already has. The rule in §2
+decides it: a set bounded by its own size is a Kv.
 
 ### 3.3 Nothing
 
@@ -214,6 +254,27 @@ asserts the string `prepare(` and the word `SELECT` do not occur in
 `workers/api/src/**` — the file-size ratchet's mechanism, applied to SQL.
 
 ---
+
+## 6a. What was built, and what it cost — 2026-09-21
+
+- **`crates/dowiz-hub/src/table.rs`** is §4 made mechanical. 11 tests, including
+  the two that matter: a rebuild of the index from the records alone does not
+  move the fold, and it DOES move when a writer wrote a key by hand.
+- **`workers/api/src/platform_store.rs`** holds the primitives — `load_at`,
+  `save_at`, `with_at` over any object's stub — so the venue side
+  (`hubstore::with_table`) is not a second copy of the generation guard.
+- **`tools/gates/no-sql.sh`** is the ratchet. 121 → 115 so far.
+- **`workers/api/src/migrate.rs` is the ONE exempt file.** A migration route has
+  to read the table it is emptying, so it fights the ratchet for as long as the
+  migration lasts, and that fight normally ends with the baseline being raised
+  "just this once". The exemption is a whole file instead, named in the gate,
+  holding nothing else, deleted with the D1 binding. **An exemption that is one
+  file is one you can see the size of; an exemption that is a comment marker
+  spreads.**
+- **The fallback pattern, proved on i18n.** Read the new home; if it answers
+  with nothing, read the old one and **log loudly that this venue has not been
+  migrated**, naming the route that fixes it. A silent fallback works forever
+  and the migration is never finished.
 
 ## 7. The gates this adds
 
