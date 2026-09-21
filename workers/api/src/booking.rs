@@ -104,16 +104,65 @@ fn fold_status(events: &[EventRow]) -> std::result::Result<ReservationStatus, St
         .map_err(|(e, reached)| format!("{} (stopped at {})", e.message(), reached.as_str()))
 }
 
-async fn load_events(db: &D1Database, reservation_id: &str) -> Result<Vec<EventRow>> {
-    Ok(db
-        .prepare(
-            "SELECT to_status, seq, actor, reason, at_ms FROM reservation_events \
-             WHERE reservation_id = ?1 ORDER BY seq ASC",
-        )
-        .bind(&[reservation_id.into()])?
-        .all()
-        .await?
-        .results()?)
+/// The venue's bookings: the reservations and their events, in ONE image.
+///
+/// ONE AGGREGATE, ONE TRANSACTION. A reservation and its event log are the same
+/// thing changing — the status is the FOLD of the events — so putting them in
+/// two images would mean two generations and a window in which a reservation
+/// says one status and its events another. In one image a transition is one
+/// write, and the old `db.batch([...])` of two statements stops being two
+/// statements that could half-apply.
+pub const IMAGE_BOOKINGS: &str = "bookings";
+pub const BOOKINGS_BYTES: usize = 2 * 1024 * 1024;
+
+const K_RSV: &str = "rsv";
+const K_EV: &str = "ev";
+
+/// An event's key. ZERO-PADDED, because keys sort as strings and `.../10` must
+/// not come before `.../2` — that would replay a reservation's history in the
+/// wrong order and the fold would reach a different status.
+fn ev_key(reservation_id: &str, seq: i64) -> String {
+    format!("{reservation_id}/{seq:012}")
+}
+
+/// The index that answers "this user's bookings, newest slot first".
+///
+/// `ORDER BY slot_min DESC` is a sorted prefix scan over the COMPLEMENT of the
+/// slot, because keys sort ascending and the answer wants descending. The
+/// complement is taken against a number comfortably past any slot this product
+/// will mint, and it is derived here rather than written so the next person can
+/// check it: minutes in ten thousand years.
+const SLOT_MAX: i64 = 10_000 * 365 * 24 * 60;
+
+fn user_key(user_id: &str, slot_min: i64, id: &str) -> String {
+    format!("rsv.user/{user_id}/{:012}/{id}", SLOT_MAX - slot_min)
+}
+
+async fn load_bookings(place: &crate::hubstore::Place) -> Result<dowiz_hub::table::Table> {
+    Ok(crate::hubstore::load_table(place, IMAGE_BOOKINGS, BOOKINGS_BYTES).await?.table)
+}
+
+/// One reservation, or nothing.
+///
+/// `location_id` IS NOT IN THE QUESTION any more, and that is the point: the
+/// old read bound it into the WHERE clause so "a booking belonging to another
+/// venue must not be readable through this venue's host". The image is this
+/// venue's object, so there is no other venue's booking in it to exclude.
+fn reservation_of(t: &dowiz_hub::table::Table, id: &str) -> Option<ReservationRow> {
+    t.get(K_RSV, id).and_then(|j| serde_json::from_str(&j).ok())
+}
+
+/// A reservation's events, oldest first, which is the order the kernel replays.
+fn events_of(t: &dowiz_hub::table::Table, reservation_id: &str) -> Vec<EventRow> {
+    let prefix = format!("{reservation_id}/");
+    let mut rows: Vec<EventRow> = t
+        .all(K_EV)
+        .into_iter()
+        .filter(|(k, _)| k.starts_with(&prefix))
+        .filter_map(|(_, j)| serde_json::from_str(&j).ok())
+        .collect();
+    rows.sort_by_key(|e: &EventRow| e.seq);
+    rows
 }
 
 /// `GET /api/public/locations/:slug/reservations/:id`
@@ -131,21 +180,11 @@ pub async fn detail(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         return Ok(r);
     }
 
-    // The location is bound into the query, not checked afterwards: a booking
-    // belonging to another venue must not be readable through this venue's host.
-    let row: Option<ReservationRow> = db
-        .prepare(
-            "SELECT id, location_id, party, slot_min, occasion, contact_name, contact_phone, \
-             status, created_at_ms FROM reservations WHERE id = ?1 AND location_id = ?2",
-        )
-        .bind(&[id.clone().into(), place.venue.clone().into()])?
-        .first(None)
-        .await?;
-
-    let Some(row) = row else {
+    let t = load_bookings(&place).await?;
+    let Some(row) = reservation_of(&t, &id) else {
         return Response::error("not found", 404);
     };
-    let events = load_events(&db, &id).await?;
+    let events = events_of(&t, &id);
 
     let folded = fold_status(&events);
     let (status, drift) = match &folded {
@@ -197,16 +236,16 @@ pub async fn list(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     {
         return Ok(r);
     }
-    let rows: Vec<ReservationRow> = db
-        .prepare(
-            "SELECT id, location_id, party, slot_min, occasion, contact_name, contact_phone, \
-             status, created_at_ms FROM reservations \
-             WHERE location_id = ?1 AND user_id = ?2 ORDER BY slot_min DESC LIMIT 100",
-        )
-        .bind(&[place.venue.clone().into(), user.into()])?
-        .all()
-        .await?
-        .results()?;
+    let t = load_bookings(&place).await?;
+    // The index IS the `ORDER BY slot_min DESC`: the key holds the complement
+    // of the slot, so the sorted scan comes back newest first and the limit is
+    // a `take`.
+    let rows: Vec<ReservationRow> = t
+        .scan(&format!("rsv.user/{user}/"))
+        .into_iter()
+        .take(100)
+        .filter_map(|(_, id)| reservation_of(&t, &id))
+        .collect();
 
     Response::from_json(&json!({
         "reservations": rows.iter().map(|r| json!({
@@ -274,18 +313,8 @@ pub async fn create(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
     // The request id IS the reservation id, scoped to the venue. Replaying the
     // request finds the existing row and returns it.
     let id = format!("rsv_{:016x}", id64(&format!("{}:{}", place.venue, body.request_id)));
-    let existing: Option<ReservationRow> = match db
-        .prepare("SELECT id, location_id, party, slot_min, occasion, contact_name, \
-                  contact_phone, status, created_at_ms FROM reservations WHERE id = ?1")
-        .bind(&[id.clone().into()])
-    {
-        Ok(stmt) => match stmt.first(None).await {
-            Ok(r) => r,
-            Err(e) => return Response::error(format!("create/lookup: {e}"), 500),
-        },
-        Err(e) => return Response::error(format!("create/bind-lookup: {e}"), 500),
-    };
-    if let Some(r) = existing {
+    let t = load_bookings(&place).await?;
+    if let Some(r) = reservation_of(&t, &id) {
         return Response::from_json(&json!({
             "id": r.id, "status": r.status, "replayed": true
         }));
@@ -305,43 +334,50 @@ pub async fn create(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
     }
 
     let now = now_ms();
-    let event_id = format!("rev_{:016x}", id64(&format!("{id}:1")));
-    let stmts = vec![
-        db.prepare(
-            "INSERT INTO reservations (id, location_id, user_id, party, slot_min, occasion, \
-             contact_name, contact_phone, status, created_at_ms, updated_at_ms) \
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,'REQUESTED',?9,?10)",
-        )
-        .bind(&[
-            id.clone().into(),
-            place.venue.clone().into(),
-            // NULL, not "". The column references `users(id)`, and an empty
-            // string is a value that names no user — SQLite rejects it against
-            // the foreign key, which is what turned a guest booking into a 500.
-            match body.user_id.as_deref() {
-                Some(u) if !u.trim().is_empty() => u.into(),
-                _ => worker::wasm_bindgen::JsValue::NULL.into(),
-            },
-            num(body.party as i64),
-            num(body.slot_min),
-            body.occasion.into(),
-            body.contact_name.into(),
-            body.contact_phone.into(),
-            num(now),
-            num(now),
-        ])?,
-        db.prepare(
-            "INSERT INTO reservation_events (id, reservation_id, location_id, to_status, seq, \
-             actor, reason, at_ms) VALUES (?1,?2,?3,'REQUESTED',1,'CUSTOMER','',?4)",
-        )
-        .bind(&[
-            event_id.into(),
-            id.clone().into(),
-            place.venue.clone().into(),
-            num(now),
-        ])?,
-    ];
-    if let Err(e) = db.batch(stmts).await {
+    // A GUEST BOOKING HAS NO USER, and that used to be a 500: the column
+    // references `users(id)` and an empty string names no user, so SQLite
+    // rejected it against the foreign key. Here the absence is just an absence
+    // -- and it means no `rsv.user/` index entry, because nobody's list it
+    // belongs on.
+    let user_id = body
+        .user_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|u| !u.is_empty())
+        .map(str::to_string);
+    let rsv = json!({
+        "id": id, "location_id": place.venue, "party": body.party as i64,
+        "slot_min": body.slot_min, "occasion": body.occasion,
+        "contact_name": body.contact_name, "contact_phone": body.contact_phone,
+        "status": "REQUESTED", "created_at_ms": now, "user_id": user_id,
+    })
+    .to_string();
+    let ev = json!({
+        "to_status": "REQUESTED", "seq": 1, "actor": "CUSTOMER", "reason": "", "at_ms": now,
+    })
+    .to_string();
+    let (rid, slot) = (id.clone(), body.slot_min);
+    let index: Vec<(String, String)> = match &user_id {
+        Some(u) => vec![(user_key(u, slot, &rid), rid.clone())],
+        None => vec![],
+    };
+    // ONE WRITE. This was `db.batch` of two statements — the reservation and
+    // its first event — and a batch that half-applies leaves a booking with no
+    // history, which `fold_status` then reports as "reservation has no events".
+    if let Err(e) = crate::hubstore::with_table(
+        &place,
+        IMAGE_BOOKINGS,
+        BOOKINGS_BYTES,
+        move |t| {
+            t.put(K_RSV, &rid, &rsv, &index, &[])
+                .map_err(|x| Error::RustError(format!("booking: {x}")))?;
+            t.put(K_EV, &ev_key(&rid, 1), &ev, &[], &[])
+                .map_err(|x| Error::RustError(format!("booking event: {x}")))?;
+            Ok(())
+        },
+    )
+    .await
+    {
         // Named, not swallowed. A bare 500 here cost a deploy cycle to diagnose
         // because the router renders an `Err` with no body at all.
         return Response::error(format!("create/write: {e}"), 500);
@@ -395,18 +431,12 @@ pub async fn action(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
         return Response::error(format!("unknown status {:?}", body.to), 400);
     };
 
-    let owns: Option<ReservationRow> = db
-        .prepare("SELECT id, location_id, party, slot_min, occasion, contact_name, \
-                  contact_phone, status, created_at_ms FROM reservations \
-                  WHERE id = ?1 AND location_id = ?2")
-        .bind(&[id.clone().into(), place.venue.clone().into()])?
-        .first(None)
-        .await?;
-    if owns.is_none() {
+    let t = load_bookings(&place).await?;
+    if reservation_of(&t, &id).is_none() {
         return Response::error("not found", 404);
     }
 
-    let events = load_events(&db, &id).await?;
+    let events = events_of(&t, &id);
     let current = match fold_status(&events) {
         Ok(s) => s,
         Err(why) => return Response::error(format!("reservation unreadable: {why}"), 500),
@@ -420,25 +450,46 @@ pub async fn action(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
 
     let seq = events.iter().map(|e| e.seq).max().unwrap_or(0) + 1;
     let now = now_ms();
-    let event_id = format!("rev_{:016x}", id64(&format!("{id}:{seq}")));
-    db.batch(vec![
-        db.prepare(
-            "INSERT INTO reservation_events (id, reservation_id, location_id, to_status, seq, \
-             actor, reason, at_ms) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
-        )
-        .bind(&[
-            event_id.into(),
-            id.clone().into(),
-            place.venue.clone().into(),
-            to.as_str().into(),
-            num(seq),
-            body.actor.into(),
-            body.reason.into(),
-            num(now),
-        ])?,
-        db.prepare("UPDATE reservations SET status = ?1, updated_at_ms = ?2 WHERE id = ?3")
-            .bind(&[to.as_str().into(), num(now), id.clone().into()])?,
-    ])
+    let ev = json!({
+        "to_status": to.as_str(), "seq": seq,
+        "actor": body.actor, "reason": body.reason, "at_ms": now,
+    })
+    .to_string();
+    let (rid, status) = (id.clone(), to.as_str().to_string());
+    // THE EVENT AND THE STATUS IN ONE WRITE. They were two statements in a
+    // batch, and the status is the FOLD of the events — so a half-applied
+    // batch is a reservation whose stored status disagrees with its own
+    // history, which is the exact divergence the replay gate exists to catch.
+    crate::hubstore::with_table(&place, IMAGE_BOOKINGS, BOOKINGS_BYTES, move |t| {
+        t.put(K_EV, &ev_key(&rid, seq), &ev, &[], &[])
+            .map_err(|x| Error::RustError(format!("booking event: {x}")))?;
+        if let Some(mut r) = t.get(K_RSV, &rid).and_then(|j| {
+            serde_json::from_str::<serde_json::Value>(&j).ok()
+        }) {
+            r["status"] = json!(status);
+            r["updated_at_ms"] = json!(now);
+            // The index keys are recomputed from the record, so a status change
+            // cannot silently drop the entry that puts this booking on its
+            // owner's list.
+            let index: Vec<(String, String)> = r
+                .get("user_id")
+                .and_then(serde_json::Value::as_str)
+                .map(|u| {
+                    vec![(
+                        user_key(
+                            u,
+                            r.get("slot_min").and_then(serde_json::Value::as_i64).unwrap_or(0),
+                            &rid,
+                        ),
+                        rid.clone(),
+                    )]
+                })
+                .unwrap_or_default();
+            t.put(K_RSV, &rid, &r.to_string(), &index, &[])
+                .map_err(|x| Error::RustError(format!("booking: {x}")))?;
+        }
+        Ok(())
+    })
     .await?;
 
     Response::from_json(&json!({ "id": id, "status": to.as_str(), "seq": seq }))
@@ -456,15 +507,16 @@ struct KeyRow {
 /// Fetch the venue's pass key, minting one on first use.
 ///
 /// The key never leaves this Worker: a pass goes out, the key does not.
-async fn pass_key(db: &D1Database, location_id: &str) -> Result<Vec<u8>> {
-    let row: Option<KeyRow> = db
-        .prepare("SELECT key_b64 FROM venue_pass_keys WHERE location_id = ?1")
-        .bind(&[location_id.into()])?
-        .first(None)
-        .await?;
-
-    if let Some(r) = row {
-        return base64_decode(&r.key_b64)
+async fn pass_key(place: &crate::hubstore::Place) -> Result<Vec<u8>> {
+    // The venue's settings image, under a key whose LAST SEGMENT IS `key` --
+    // which is what `settings::is_secret` matches on, so it is redacted
+    // everywhere settings are read back for display. That rule is by shape
+    // rather than by a list precisely so a secret added later cannot be
+    // forgotten, and this is the first one to rely on it.
+    const KEY: &str = "venue.pass.key";
+    let loaded = crate::hubstore::load_settings(place).await?;
+    if let Some(b64) = loaded.settings.get(KEY).filter(|v| !v.is_empty()) {
+        return base64_decode(&b64)
             .ok_or_else(|| Error::RustError("venue pass key is not base64".into()));
     }
 
@@ -474,14 +526,22 @@ async fn pass_key(db: &D1Database, location_id: &str) -> Result<Vec<u8>> {
     let mut key = [0u8; 32];
     getrandom_fill(&mut key)?;
     let b64 = base64_encode(&key);
-    db.prepare(
-        "INSERT INTO venue_pass_keys (location_id, key_b64, created_at_ms) VALUES (?1,?2,?3) \
-         ON CONFLICT(location_id) DO NOTHING",
-    )
-    .bind(&[location_id.into(), b64.into(), num(now_ms())])?
-    .run()
+    // ON CONFLICT DO NOTHING, as a read inside the object's own turn: two
+    // requests minting at once must not end with two keys, because a pass
+    // signed with one would not verify against the other.
+    let mine = b64.clone();
+    let settled = crate::hubstore::with_settings(place, move |s| {
+        match s.get(KEY).filter(|v| !v.is_empty()) {
+            Some(existing) => Ok(existing),
+            None => {
+                s.set(KEY, &mine);
+                Ok(mine.clone())
+            }
+        }
+    })
     .await?;
-    Ok(key.to_vec())
+    base64_decode(&settled)
+        .ok_or_else(|| Error::RustError("venue pass key is not base64".into()))
 }
 
 fn getrandom_fill(buf: &mut [u8]) -> Result<()> {
@@ -533,18 +593,11 @@ pub async fn issue_pass(req: Request, ctx: RouteContext<()>) -> Result<Response>
         return Ok(r);
     }
 
-    let row: Option<ReservationRow> = db
-        .prepare("SELECT id, location_id, party, slot_min, occasion, contact_name, \
-                  contact_phone, status, created_at_ms FROM reservations \
-                  WHERE id = ?1 AND location_id = ?2")
-        .bind(&[id.clone().into(), place.venue.clone().into()])?
-        .first(None)
-        .await?;
-    let Some(row) = row else {
+    let t = load_bookings(&place).await?;
+    let Some(row) = reservation_of(&t, &id) else {
         return Response::error("not found", 404);
     };
-
-    let events = load_events(&db, &id).await?;
+    let events = events_of(&t, &id);
     let status = match fold_status(&events) {
         Ok(s) => s,
         Err(why) => return Response::error(format!("reservation unreadable: {why}"), 500),
@@ -559,7 +612,7 @@ pub async fn issue_pass(req: Request, ctx: RouteContext<()>) -> Result<Response>
         );
     }
 
-    let key = pass_key(&db, &place.venue).await?;
+    let key = pass_key(&place).await?;
     let claims = PassClaims {
         venue: id64(&place.venue),
         reservation: id64(&row.id),
@@ -600,7 +653,7 @@ pub async fn verify_pass(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
 
     let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
-    let key = pass_key(&db, &place.venue).await?;
+    let key = pass_key(&place).await?;
 
     let decoded = match pass::decode(&body.code) {
         Ok(p) => p,
@@ -624,5 +677,55 @@ pub async fn verify_pass(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
         // 200 with `ok:false`: the request succeeded, the pass did not. A 4xx
         // here would make a scanner treat a wrong code as a broken scanner.
         Err(e) => Response::from_json(&json!({ "ok": false, "why": e.message() })),
+    }
+}
+
+#[cfg(test)]
+mod key_tests {
+    use super::{ev_key, user_key, SLOT_MAX};
+
+    /// KEYS SORT AS STRINGS, and a reservation's history replays in key order.
+    #[test]
+    fn event_keys_sort_numerically_because_they_are_padded() {
+        let mut keys: Vec<String> = (1..=12).map(|n| ev_key("rsv_a", n)).collect();
+        keys.sort();
+        // Unpadded, "rsv_a/10" sorts before "rsv_a/2" and the fold would replay
+        // the tenth transition third — reaching a different status.
+        assert_eq!(keys[0], ev_key("rsv_a", 1));
+        assert_eq!(keys[1], ev_key("rsv_a", 2));
+        assert_eq!(keys[11], ev_key("rsv_a", 12));
+    }
+
+    #[test]
+    fn a_reservations_events_do_not_collide_with_another_reservations() {
+        assert!(ev_key("rsv_a", 1) != ev_key("rsv_b", 1));
+        assert!(ev_key("rsv_a", 1).starts_with("rsv_a/"));
+    }
+
+    /// `ORDER BY slot_min DESC` as an ASCENDING scan over the complement.
+    #[test]
+    fn a_users_bookings_scan_newest_slot_first() {
+        let mut keys: Vec<String> = [100i64, 5000, 250, 99999]
+            .iter()
+            .map(|s| user_key("u1", *s, "id"))
+            .collect();
+        keys.sort();
+        assert_eq!(keys[0], user_key("u1", 99999, "id"), "the latest slot comes first");
+        assert_eq!(keys[3], user_key("u1", 100, "id"), "the earliest comes last");
+    }
+
+    #[test]
+    fn one_users_scan_prefix_cannot_reach_another_users_bookings() {
+        assert!(user_key("u1", 10, "a").starts_with("rsv.user/u1/"));
+        assert!(!user_key("u2", 10, "a").starts_with("rsv.user/u1/"));
+    }
+
+    /// The complement stays positive for every slot this product can mint, and
+    /// the padding stays wide enough that it does not itself sort wrongly.
+    #[test]
+    fn the_complement_is_positive_and_fits_its_padding() {
+        let far = 60i64 * 24 * 365 * 100; // a century of minutes
+        assert!(SLOT_MAX - far > 0);
+        assert_eq!(format!("{:012}", SLOT_MAX).len(), 12, "SLOT_MAX overflows its own padding");
     }
 }
