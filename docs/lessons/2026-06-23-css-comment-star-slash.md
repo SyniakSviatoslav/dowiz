@@ -1,5 +1,5 @@
 ---
-TRIGGER: packages/ui/src/theme/**.css
+TRIGGER: web/src/styles/**.css
 CAUSE: >
   A CSS block comment is terminated by the FIRST `*/`. If `*/` (or `/*`) appears
   in comment PROSE — e.g. a token list like "--ink-*/--paper-*" — the comment
@@ -9,13 +9,17 @@ CAUSE: >
   minified dist — so grep / typecheck / build / lint ALL pass. The defect only
   manifests at browser parse time as a missing rule.
 ACTION: >
-  When editing CSS comments in packages/ui/src/theme/**.css (esp. tokens.css)
+  When editing CSS comments in web/src/styles/**.css (esp. tokens.css)
   → cause: a literal `*/` in comment prose closes the comment early and drops the
   next rule → do: never write `*/` or `/*` inside comment prose (rephrase token
   lists, e.g. "ink/paper/display tokens"); and verify any token/theme block
   APPLIES via a live getComputedStyle read, not a file grep — a rule can be in
-  the file yet dropped by the browser. Guardrail: e2e/tests/paper-skin-tokens.spec.ts.
-LINK: e2e/tests/paper-skin-tokens.spec.ts ; packages/ui/src/theme/tokens.css ; ledger #13
+  the file yet dropped by the browser. Guardrail: e2e/tests/paper-skin-tokens.spec.ts
+  (NOTE 2026-09-21: that spec's `TOKENS` const still points at the pre-drop path
+  `packages/ui/src/theme/tokens.css`, which no longer exists post the 2026-07-15
+  JS-stack removal — the guardrail is currently dead/erroring, not green; see
+  docs/governance/agent-health-2026-09-21.md).
+LINK: e2e/tests/paper-skin-tokens.spec.ts ; web/src/styles/tokens.css ; ledger #13
 SCOPE: CSS comment authoring (the `*/`-in-prose drop class). Not JS/TS comments.
 STATUS: active
 ---
@@ -40,3 +44,9 @@ Rules:
 2. Prove a token/theme block by its EFFECT (getComputedStyle in a real browser),
    not by its presence in the file. `e2e/tests/paper-skin-tokens.spec.ts` does
    this red→green for the paper scope.
+
+Retargeted 2026-09-21: the theme tokens this lesson protects now live at
+`web/src/styles/tokens.css` (the original `packages/ui/src/theme/` tree was
+removed in the 2026-07-15 JS-stack drop). The bug class is framework-agnostic
+CSS parsing behaviour, so it still applies at the new path — only the TRIGGER
+glob and file pointer moved.
