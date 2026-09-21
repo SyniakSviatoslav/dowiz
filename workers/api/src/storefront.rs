@@ -757,6 +757,10 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     // sent is discarded, and an unknown product fails CLOSED rather than being
     // priced at zero.
     let mut lines = Vec::with_capacity(body.items.len());
+    // The dish names, by product id, to be written back onto the kernel's
+    // items below — see where they are applied for why they cannot be put
+    // on the line here.
+    let mut names: std::collections::BTreeMap<String, String> = Default::default();
     // The same lines as the owner will read them, for the bell.
     let mut told: Vec<crate::notify::LineOut> = Vec::with_capacity(body.items.len());
     let mut subtotal: i64 = 0;
@@ -806,6 +810,24 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
             quantity: it.quantity,
             unit_price,
         });
+        // THE DISH'S NAME TRAVELS WITH THE LINE, and it never did.
+        //
+        // Every surface that shows an order line writes `i.name || i.product_id`
+        // — the console's queue, the order sheet, the CSV an owner exports —
+        // and no line has ever carried a `name`. So a kitchen has never seen a
+        // dish name on a ticket: every order since this product shipped reads
+        // `1x item-05`, and the owner exporting a month of sales gets a
+        // spreadsheet of slugs.
+        //
+        // A SNAPSHOT, deliberately, and this is the trade the cost blueprint
+        // weighed: about thirty bytes a line against a receipt that stays true.
+        // The catalogue is not versioned per order, so resolving the name later
+        // would rename a dish on orders that were placed before the rename and
+        // lose it entirely on one that has been deleted.
+        names.insert(
+            it.product_id.clone(),
+            p.get("name").and_then(Value::as_str).unwrap_or(&it.product_id).to_string(),
+        );
         lines.push(json!({
             "product_id": it.product_id, "modifier_ids": it.modifier_ids,
             "quantity": it.quantity, "unit_price": unit_price   // base + options, from the catalogue
@@ -839,8 +861,31 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
 
     // The kernel owns items and subtotal. Delivery, contact and fulfilment are
     // carried alongside until the aggregate's new fields reach this boundary.
+    //
+    // THE DISH'S NAME IS ONE OF THOSE FIELDS, and putting it on the line before
+    // the kernel sees it does nothing: `place_order_at` parses each line into
+    // the kernel's four-field `OrderItem` and re-emits it, so anything else is
+    // dropped before it is ever stored. That is why the first attempt at this
+    // wrote a `name` that never appeared anywhere.
+    //
+    // Every surface writes `i.name || i.product_id` — the console's queue, the
+    // order sheet, the CSV an owner exports — and no line has ever carried a
+    // name, so a kitchen ticket has always read `1x item-05`. It is a SNAPSHOT
+    // on purpose: the catalogue is not versioned per order, so resolving the
+    // name later would rename a dish on orders placed before the rename and
+    // lose it entirely on one that has been deleted.
     let mut envelope: Value = serde_json::from_str(&order_json)
         .map_err(|e| Error::RustError(format!("kernel order json unreadable: {e}")))?;
+    if let Some(items) = envelope.get_mut("items").and_then(Value::as_array_mut) {
+        for line in items.iter_mut() {
+            let Some(pid) = line.get("product_id").and_then(Value::as_str).map(str::to_string) else {
+                continue;
+            };
+            if let Some(n) = names.get(&pid) {
+                line["name"] = json!(n);
+            }
+        }
+    }
     // ── the tip ──
     //
     // Bounded on both sides. Zero or less is not a tip; the ceiling is the

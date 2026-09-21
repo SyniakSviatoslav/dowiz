@@ -1460,6 +1460,15 @@ pub const HUB_OWNED: &[&str] = &[
     "amount_received",
     "stripe_event",
     "crypto",
+    // THE LINES THEMSELVES, because the kernel re-emits them with four fields
+    // and `delta` deletes whatever it leaves out. A dish's NAME is written onto
+    // the line at placement so a receipt stays true after the dish is renamed
+    // or deleted; without this it would survive exactly as long as the order
+    // sat at PENDING and vanish on the first confirm. The kernel does not
+    // change `items` on a status transition — every transition it accepts is
+    // about status — so carrying the stored lines forward is the same data,
+    // with the part the hub owns still on it.
+    "items",
     "delivery_fee",
     "courier_id",
     "created_at_ms",
