@@ -668,9 +668,13 @@ pub async fn load(place: &Place) -> Result<Loaded> {
 /// checked, and still answers 409, because the caller's retry loop speaks that
 /// contract and because a guard costs one comparison.
 ///
-/// THE D1 WRITER IS GONE FROM THIS PATH. `save_image_d1` remains only so a
-/// venue whose object has never been woken can be seeded from the old store on
-/// first read; nothing writes to `hub_image` any more.
+/// THE D1 WRITER IS GONE, AND NOW SO IS ITS CODE. A previous version of this
+/// comment said `save_image_d1` was "kept so a venue whose object has never
+/// been woken can be seeded from the old store on first read" -- but nothing
+/// called it, and what actually performs that seeding is the READ path
+/// (`load_images` still falls back to `hub_image`, and `do_image` decides
+/// which venue may adopt a legacy image). A function kept for a reason it does
+/// not serve is the shape this repository has a rule about.
 async fn save_image(place: &Place, id: &str, bytes: Vec<u8>, generation: i64) -> Result<bool> {
     let stub = place.stub()?;
     let mut req = Request::new_with_init(
@@ -687,89 +691,6 @@ async fn save_image(place: &Place, id: &str, bytes: Vec<u8>, generation: i64) ->
         409 => Ok(false),
         other => Err(Error::RustError(format!("hub object refused image {id}: {other}"))),
     }
-}
-
-async fn save_image_d1(db: &D1Database, id: &str, bytes: Vec<u8>, generation: i64) -> Result<bool> {
-    let next = generation + 1;
-
-    // ── the tail chunks ──
-    //
-    // Written BEFORE the head, and the head carries the generation guard. If the
-    // write is interrupted between the two, the head still points at the old
-    // generation, so the image that loads is the old one plus some unreferenced
-    // tail bytes -- wrong-but-stale rather than half-new. The other order would
-    // publish a head whose tail had not arrived yet.
-    //
-    // Chunks the new image does not need are removed after the head lands, not
-    // before: an image that shrank must not lose its tail while the head still
-    // describes the longer one.
-    let head_len = bytes.len().min(CHUNK);
-    let mut n = 1usize;
-    let mut at = head_len;
-    while at < bytes.len() {
-        let end = (at + CHUNK).min(bytes.len());
-        let key = format!("{id}#{n}");
-        db.prepare(
-            "INSERT INTO hub_image (id, image, generation, updated_at_ms) VALUES (?1,?2,?3,?4) \
-             ON CONFLICT(id) DO UPDATE SET image = excluded.image, \
-             generation = excluded.generation, updated_at_ms = excluded.updated_at_ms",
-        )
-        .bind(&[
-            key.into(),
-            bytes_to_js(&bytes[at..end]),
-            JsValue::from_f64(next as f64),
-            JsValue::from_f64(Date::now().as_millis() as f64),
-        ])?
-        .run()
-        .await?;
-        at = end;
-        n += 1;
-    }
-    let chunks_written = n;
-    let bytes = bytes[..head_len].to_vec();
-
-    let res = if generation == 0 {
-        db.prepare(
-            "INSERT INTO hub_image (id, image, generation, updated_at_ms) VALUES (?1, ?2, ?3, ?4) \
-             ON CONFLICT(id) DO NOTHING",
-        )
-        .bind(&[
-            id.into(),
-            bytes_to_js(&bytes),
-            JsValue::from_f64(next as f64),
-            JsValue::from_f64(Date::now().as_millis() as f64),
-        ])?
-        .run()
-        .await?
-    } else {
-        db.prepare(
-            "UPDATE hub_image SET image = ?2, generation = ?3, updated_at_ms = ?4 \
-             WHERE id = ?1 AND generation = ?5",
-        )
-        .bind(&[
-            id.into(),
-            bytes_to_js(&bytes),
-            JsValue::from_f64(next as f64),
-            JsValue::from_f64(Date::now().as_millis() as f64),
-            JsValue::from_f64(generation as f64),
-        ])?
-        .run()
-        .await?
-    };
-    let landed = res.meta()?.and_then(|m| m.changes).unwrap_or(0) > 0;
-    if landed {
-        // Now that the head describes the shorter image, the chunks past its end
-        // are unreachable and can go.
-        for extra in chunks_written..chunks_written + 8 {
-            let key = format!("{id}#{extra}");
-            let _ = db
-                .prepare("DELETE FROM hub_image WHERE id = ?1")
-                .bind(&[key.into()])?
-                .run()
-                .await;
-        }
-    }
-    Ok(landed)
 }
 
 pub async fn save(place: &Place, loaded: &Loaded) -> Result<bool> {
@@ -1020,11 +941,6 @@ pub async fn seed_catalog(place: &Place, location_json: &str) -> Result<()> {
     Err(Error::RustError(
         "catalogue image is contended; five attempts lost the generation guard".into(),
     ))
-}
-
-fn bytes_to_js(b: &[u8]) -> JsValue {
-    // D1 stores a Uint8Array as a BLOB.
-    worker::js_sys::Uint8Array::from(b).into()
 }
 
 /// Read, mutate, write — retrying when the generation guard rejects the write.
@@ -1416,6 +1332,12 @@ pub async fn archive_orders(place: &Place, archive_id: &str) -> Result<Option<Ve
 }
 
 /// The folded state of one order, or `None` if this hub never saw it.
+///
+/// USED BY THE OBJECT AND BY THE TESTS. Since phase 2 the Worker asks the
+/// object for an order rather than folding one itself, so this is the
+/// definition the object's `/fold/order` is checked against rather than a
+/// path the Worker takes on a request.
+#[cfg_attr(not(test), allow(dead_code))]
 ///
 /// `Hub::order` returns the newest EVENT, which since phase 3 may be a delta.
 /// Everything that wants the ORDER asks here, and for a log written before

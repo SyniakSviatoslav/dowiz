@@ -159,8 +159,18 @@ if (shift) { await shift.click(); await k.waitForTimeout(3500); }
 step('courier is on shift', !(await k.$('#openShift')));
 await k.screenshot({ path: `${OUT}/cycle-3-courier.png` }).catch(() => {});
 
-const take = await k.waitForSelector('#takeOffer', { timeout: 40000 }).catch(() => null);
-step('the order is offered to the courier', !!take);
+// TWO WAYS AN ORDER REACHES A COURIER, and a test that knows only one of them
+// reports a working product as broken. `#takeOffer` is an order the owner
+// ASSIGNED to this courier (a five-minute exclusive window); `#take` is the
+// POOL -- a READY order nobody has been given -- with the order chosen by
+// tapping its card first. This walks the pool, which is what an unassigned
+// order does.
+const pooled = await k.waitForSelector(`[data-sel="${ORDER}"], #takeOffer`, { timeout: 45000 }).catch(() => null);
+step('the order reaches the courier', !!pooled);
+const card = await k.$(`[data-sel="${ORDER}"]`);
+if (card) { await card.click(); await k.waitForTimeout(600); }
+const take = await k.$('#take') || await k.$('#takeOffer');
+step('the courier can take it', !!take);
 if (take) { await take.click(); await k.waitForTimeout(3500); }
 const pick = await k.waitForSelector('#pick', { timeout: 30000 }).catch(() => null);
 step('courier has the order in hand', !!pick);
@@ -182,15 +192,10 @@ await c.waitForTimeout(3000);
 await c.screenshot({ path: `${OUT}/cycle-4-delivered.png` }).catch(() => {});
 
 // ── what the venue is left with ─────────────────────────────────────────────
-const ownerToken = await o.evaluate(() => {
-  for (const k of Object.keys(localStorage)) {
-    try {
-      const v = JSON.parse(localStorage.getItem(k));
-      if (v && typeof v === 'object' && typeof v.t === 'string' && v.t.split('.').length === 3) return v.t;
-    } catch { /* not json */ }
-  }
-  return '';
-});
+// The access token lives in sessionStorage under `dw_at` (the refresh token is
+// the one in localStorage): a console tab that is closed does not leave a key
+// behind it.
+const ownerToken = await o.evaluate(() => { try { return sessionStorage.getItem('dw_at') || ''; } catch { return ''; } });
 const health = await api('/api/owner/health', { headers: { authorization: `Bearer ${ownerToken}` } });
 if (health.status === 200) {
   const e = health.body.errors || [];

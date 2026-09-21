@@ -565,25 +565,12 @@ async fn api_key_principal(
     })
 }
 
-/// Cross-tenant access answers 404, not 403 — the old guard's choice, and the
-/// right one: 403 confirms the resource exists.
-pub fn require_location(p: &Principal, location_id: &str) -> std::result::Result<(), Response> {
-    let ok = match p {
-        Principal::Owner { active_location_id, .. } => {
-            // Owners are additionally checked against memberships by the caller
-            // when the route is location-scoped; this only rejects an obvious
-            // mismatch early.
-            active_location_id.as_deref().map_or(true, |l| l == location_id)
-        }
-        Principal::Courier { active_location_id, .. } => active_location_id == location_id,
-        Principal::Customer { location_id: l, .. } => l == location_id,
-    };
-    if ok {
-        Ok(())
-    } else {
-        Err(Response::error("not found", 404).unwrap())
-    }
-}
+// `require_location` WAS HERE AND IT ENCODED THE HOLE. For an owner whose
+// claim carried no location -- a platform admin -- it answered "fine, any
+// venue", because it was written when a role was the whole question. Nothing
+// called it, and `belongs_to` above is the rule that replaced it: a claim that
+// names no hub belongs to no hub. Deleted rather than left for the next
+// caller to reach for.
 
 #[cfg(test)]
 mod tenancy_tests {

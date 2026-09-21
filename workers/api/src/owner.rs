@@ -211,29 +211,11 @@ where
     Ok((user_id, location_id, out))
 }
 
-pub(crate) async fn venue_of(req: &Request, db: &D1Database) -> Option<String> {
-    if let Some(l) = location_of(req) {
-        return Some(l);
-    }
-    // ONE ROW, NOT THE WHOLE CATALOGUE. This read a 131 KB image and
-    // deserialised every eight bytes of it into an i64 -- sixteen thousand
-    // iterations -- to recover a single string, on EVERY owner request, before
-    // the handler had done anything. The `locations` row exists precisely as
-    // the pointer the foreign keys need, and it carries the id.
-    //
-    // A hub image holds exactly one venue, so `LIMIT 1` is not a guess about
-    // which; it is the only one there is.
-    #[derive(Deserialize)]
-    struct L {
-        id: String,
-    }
-    let row: Option<L> = db
-        .prepare("SELECT id FROM locations LIMIT 1")
-        .first(None)
-        .await
-        .ok()?;
-    row.map(|r| r.id)
-}
+// `venue_of` WAS HERE. It fell back to `SELECT id FROM locations LIMIT 1`
+// under a comment saying "a hub image holds exactly one venue, so LIMIT 1 is
+// not a guess about which; it is the only one there is" -- which stopped being
+// true when this platform took its second venue. Nothing called it any more;
+// `owner_and_venue` answers the same question and says which venue it means.
 
 pub(crate) fn location_of(req: &Request) -> Option<String> {
     req.url()

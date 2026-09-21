@@ -76,11 +76,7 @@ fn merge(base: &mut Map<String, Value>, delta: &Map<String, Value>) {
     }
 }
 
-/// Is this payload a delta rather than a snapshot?
-pub fn is_delta(v: &Value) -> bool {
-    v.get(DELTA_MARK).and_then(Value::as_bool) == Some(true)
-}
-
+/// Is this object a delta rather than a snapshot?
 fn object_is_delta(obj: &Map<String, Value>) -> bool {
     obj.get(DELTA_MARK).and_then(Value::as_bool) == Some(true)
 }
