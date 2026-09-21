@@ -152,6 +152,7 @@ await act('ready', 'READY');
 // reported "the order reaches the courier: FAIL" and a dozen socket 404s, and
 // every one of those lines pointed at the product rather than at the
 // credentials. One line here says which it is.
+let VENUE_ID = null;
 const CPHONE = process.env.QA_COURIER_PHONE || creds.COURIER_PHONE;
 const CPASS = process.env.QA_COURIER_PASSWORD || creds.COURIER_PASSWORD;
 {
@@ -165,6 +166,7 @@ const CPASS = process.env.QA_COURIER_PASSWORD || creds.COURIER_PASSWORD;
   const slug = new URL(HOST).hostname.split('.')[0];
   const menu = await api(`/api/public/locations/${slug}/menu`);
   const venue = menu.body?.location?.id;
+  VENUE_ID = venue;
   const at = r.body?.courier?.locationId;
   step('the courier belongs to the venue under test', r.status === 200 && !!venue && at === venue,
     r.status === 200 ? `courier is at ${at ?? '?'}, this venue is ${venue ?? '?'}`
@@ -236,6 +238,30 @@ if (health.status === 200) {
 step('the customer opened a live socket', sockets.store > 0, `${sockets.store}`);
 step('the console opened a live socket', sockets.console > 0, `${sockets.console}`);
 step('the courier opened a live socket', sockets.courier > 0, `${sockets.courier}`);
+
+// ── THE ORDER MUST NOT BE LEFT IN SOMEBODY'S KITCHEN ────────────────────────
+//
+// This file's header has always said the order is walked to a terminal state
+// "even if a UI step has to fall back to the API". It was not: there was no
+// fallback, and a run that failed anywhere after `ready` simply abandoned the
+// order. Four of them were found sitting at READY on the live venue, the
+// oldest three days old, each one a ticket the kitchen had been shown and
+// nobody ever closed.
+//
+// So a run that could not deliver CANCELS what it placed. Cancelling is the
+// honest end for a QA order -- it did not happen, and the venue's own history
+// should say so -- and it is done through the owner's authenticated route,
+// the same one the console's button uses.
+if ((await state()) !== 'DELIVERED') {
+  const r = await api(`/api/owner/orders/${ORDER}/action`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${ownerToken}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'cancel', location_id: VENUE_ID }),
+  });
+  step('the order this run placed was closed', r.status === 200,
+    r.status === 200 ? 'cancelled — it was not delivered'
+                     : `cancel ${r.status}: ${JSON.stringify(r.body).slice(0, 110)}`);
+}
 
 console.log(`\n${fails.length ? 'FAILURES:\n' + fails.join('\n') : 'FULL CYCLE OK'}`);
 console.log(`order: ${ORDER}`);
