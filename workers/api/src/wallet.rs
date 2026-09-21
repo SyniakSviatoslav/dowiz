@@ -107,25 +107,53 @@ fn num(n: i64) -> worker::wasm_bindgen::JsValue {
 ///
 /// A row the kernel refuses stops the load. Reporting a balance computed from a
 /// journal that does not replay would be reporting a number nobody can defend.
-async fn load_journal(db: &D1Database, location: &str) -> Result<std::result::Result<Journal, String>> {
-    let txs: Vec<TxRow> = db
-        .prepare(
-            "SELECT id, kind, reverses, memo, at_ms FROM ledger_tx \
-             WHERE location_id = ?1 ORDER BY at_ms ASC, id ASC",
-        )
-        .bind(&[location.into()])?
-        .all()
-        .await?
-        .results()?;
-    let postings: Vec<PostingRow> = db
-        .prepare(
-            "SELECT tx_id, account, minor, currency FROM ledger_postings \
-             WHERE location_id = ?1 ORDER BY id ASC",
-        )
-        .bind(&[location.into()])?
-        .all()
-        .await?
-        .results()?;
+/// The venue's ledger. An append log, because a journal IS one: a transaction
+/// is written once and never edited, and a correction is a REVERSING entry
+/// rather than a change to the original — which is the whole point of
+/// double-entry and was already how `money.rs` nets a refund to zero.
+pub const IMAGE_LEDGER: &str = "ledger";
+const K_TX: &str = "tx";
+
+async fn load_journal(
+    place: &crate::hubstore::Place,
+) -> Result<std::result::Result<Journal, String>> {
+    // Oldest first: a journal replays in the order it was written, and a
+    // reversal that replayed before the entry it reverses would be refused.
+    let mut entries = crate::hubstore::load_log(place, IMAGE_LEDGER).await?.log.about(
+        K_TX,
+        None,
+        usize::MAX,
+    );
+    entries.reverse();
+    let txs: Vec<TxRow> = entries
+        .iter()
+        .filter_map(|e| serde_json::from_str::<TxRow>(&e.json).ok())
+        .collect();
+    // A TRANSACTION CARRIES ITS OWN POSTINGS. They were a second table joined
+    // on `tx_id`, written in the same batch — and a batch that half-applies is
+    // a transaction with no legs, which is an UNBALANCED journal. Double-entry
+    // depends on the two never being separable, so here they are one record.
+    let postings: Vec<PostingRow> = entries
+        .iter()
+        .filter_map(|e| serde_json::from_str::<serde_json::Value>(&e.json).ok())
+        .flat_map(|v| {
+            let tx_id = v.get("id").and_then(serde_json::Value::as_str).unwrap_or("").to_string();
+            v.get("postings")
+                .and_then(serde_json::Value::as_array)
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(move |p| {
+                    Some(PostingRow {
+                        tx_id: tx_id.clone(),
+                        account: p.get("account")?.as_str()?.to_string(),
+                        minor: p.get("minor")?.as_i64()?,
+                        currency: p.get("currency")?.as_str()?.to_string(),
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect();
 
     let mut journal = Journal::new();
     for t in &txs {
@@ -187,7 +215,7 @@ pub async fn balance(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         Ok(WalletWho::Own) => own.unwrap_or_default(),
         Err(why) => return Response::error(why, 403),
     };
-    let journal = match load_journal(&db, &place.venue).await? {
+    let journal = match load_journal(&place).await? {
         Ok(j) => j,
         Err(why) => return Response::error(format!("journal unreadable: {why}"), 500),
     };
@@ -273,12 +301,13 @@ pub async fn top_up(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
     };
 
     let tx_id = format!("tx_{:016x}", id64(&format!("{}:{}", place.venue, b.request_id)));
-    let already: Option<serde_json::Value> = db
-        .prepare("SELECT id FROM ledger_tx WHERE id = ?1")
-        .bind(&[tx_id.clone().into()])?
-        .first(None)
-        .await?;
-    if already.is_some() {
+    // The request id IS the transaction id, scoped to the venue, so a retry
+    // finds the entry already made rather than making a second one.
+    let existing = crate::hubstore::load_log(&place, IMAGE_LEDGER)
+        .await?
+        .log
+        .about(K_TX, Some(&tx_id), 1);
+    if !existing.is_empty() {
         return Response::from_json(&json!({ "id": tx_id, "replayed": true }));
     }
 
@@ -301,34 +330,28 @@ pub async fn top_up(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
     }
 
     let now = now_ms();
-    let mut stmts = vec![db
-        .prepare(
-            "INSERT INTO ledger_tx (id, location_id, kind, reverses, memo, at_ms) \
-             VALUES (?1,?2,?3,NULL,?4,?5)",
-        )
-        .bind(&[
-            tx_id.clone().into(),
-            place.venue.clone().into(),
-            kind_str(tx.kind).into(),
-            b.provider_ref.clone().into(),
-            num(now),
-        ])?];
-    for p in &tx.postings {
-        stmts.push(
-            db.prepare(
-                "INSERT INTO ledger_postings (tx_id, location_id, account, minor, currency) \
-                 VALUES (?1,?2,?3,?4,?5)",
-            )
-            .bind(&[
-                tx_id.clone().into(),
-                place.venue.clone().into(),
-                p.account.as_str().into(),
-                num(p.amount.minor),
-                p.amount.currency.code().into(),
-            ])?,
-        );
-    }
-    db.batch(stmts).await?;
+    let rec = json!({
+        "id": tx_id,
+        "kind": kind_str(tx.kind),
+        "reverses": serde_json::Value::Null,
+        "memo": b.provider_ref,
+        "at_ms": now,
+        "postings": tx.postings.iter().map(|p| json!({
+            "account": p.account.as_str(),
+            "minor": p.amount.minor,
+            "currency": p.amount.currency.code(),
+        })).collect::<Vec<_>>(),
+    })
+    .to_string();
+    // ONE APPEND. This was a batch of one `ledger_tx` insert and one
+    // `ledger_postings` insert per leg; a half-applied batch is a transaction
+    // with no legs, and a journal with one of those does not balance.
+    let subject = tx_id.clone();
+    crate::hubstore::with_log(&place, IMAGE_LEDGER, move |log| {
+        log.append(K_TX, &subject, &rec)
+            .map_err(|e| Error::RustError(format!("ledger: {e:?}")))
+    })
+    .await?;
 
     Response::from_json(&json!({
         "id": tx_id,
@@ -458,7 +481,7 @@ pub async fn statement(req: Request, ctx: RouteContext<()>) -> Result<Response> 
         Ok(WalletWho::Own) => own.unwrap_or_default(),
         Err(why) => return Response::error(why, 403),
     };
-    let journal = match load_journal(&db, &place.venue).await? {
+    let journal = match load_journal(&place).await? {
         Ok(j) => j,
         Err(why) => return Response::error(format!("journal unreadable: {why}"), 500),
     };
