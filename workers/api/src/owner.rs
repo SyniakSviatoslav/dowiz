@@ -677,7 +677,13 @@ pub async fn dashboard(req: Request, ctx: RouteContext<()>) -> Result<Response> 
     let (mut count, mut revenue, mut pending, mut active) = (0i64, 0i64, 0i64, 0i64);
     for e in listed {
         let Ok(v) = serde_json::from_str::<Value>(&e.order_json) else { continue };
-        if v.get("location_id").and_then(|x| x.as_str()) != Some(loc.as_str()) {
+        // THE SAME TENANCY RULE THE ANALYTICS USE. This was `!= Some(loc)`,
+        // which drops an order whose `location_id` is absent, while
+        // `orders_of` kept it -- so the takings tile and the analytics pane on
+        // the same screen could disagree about the same order. One rule now,
+        // in `services::orders::mine`, with a test saying which way it goes
+        // and why.
+        if !crate::services::orders::mine::belongs_to(&v, &loc) {
             continue;
         }
         if (e.seq as i64) < day_start {

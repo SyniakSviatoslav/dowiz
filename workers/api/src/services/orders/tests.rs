@@ -79,3 +79,36 @@ fn active_is_accepted_and_not_yet_finished() {
         assert!(!is_active(s), "{s}");
     }
 }
+
+// ── whose orders these are ──────────────────────────────────────────────────
+
+use super::mine::belongs_to;
+use serde_json::json;
+
+/// AN ORDER WITH NO `location_id` BELONGS TO THE VENUE WHOSE LOG IT IS IN.
+/// There were two rules: `extra::orders_of` kept such an order and
+/// `owner::dashboard` dropped it, so the takings tile and the analytics pane
+/// on the same screen could disagree about the same order.
+///
+/// The permissive answer is the right one. A venue's Durable Object is
+/// addressed by venue id, so an order that reached it was placed against it,
+/// and dropping it would silently delete a venue's oldest takings -- money
+/// vanishing is not a thing an owner can see or report.
+#[test]
+fn an_order_with_no_venue_belongs_to_the_log_it_is_in() {
+    assert!(belongs_to(&json!({}), "dubin-durres"));
+    assert!(belongs_to(&json!({ "location_id": null }), "dubin-durres"));
+    assert!(belongs_to(&json!({ "location_id": "dubin-durres" }), "dubin-durres"));
+}
+
+/// AND A NEIGHBOUR'S ORDER IS STILL A NEIGHBOUR'S. The legacy venue's image
+/// predates the per-venue scoping and can hold more than one venue's orders.
+#[test]
+fn a_named_venue_that_is_not_this_one_is_refused() {
+    assert!(!belongs_to(&json!({ "location_id": "sushi-durres" }), "dubin-durres"));
+    assert!(!belongs_to(&json!({ "location_id": "" }), "dubin-durres"));
+    assert!(
+        !belongs_to(&json!({ "location_id": "DUBIN-DURRES" }), "dubin-durres"),
+        "a venue id is compared exactly, never case-folded"
+    );
+}

@@ -11,7 +11,9 @@
 //! WHY NOT ALL AT ONCE. Each slice lands its tests in the commit BEFORE the
 //! handlers move, because a test written after a move tests the move.
 
+pub mod analytics;
 pub mod courier;
 pub mod customers;
 pub mod ordering;
 pub mod orders;
+pub mod venue;
