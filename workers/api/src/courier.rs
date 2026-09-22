@@ -112,12 +112,12 @@ pub async fn tasks(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         // The deadline is sent as an INSTANT: a server-computed "seconds left"
         // is stale the moment it is sent, and a phone polling every few seconds
         // would show it jumping backwards.
-        let lapsed = crate::extra::offer_lapsed(&v, now_ms());
+        let lapsed = crate::services::courier::offer::offer_lapsed(&v, now_ms());
         match holder {
             Some(c) if c == courier_id => {
                 if v.get("accepted_at_ms").and_then(Value::as_i64).is_none() {
                     if let Some(at) = v.get("assigned_at_ms").and_then(Value::as_i64) {
-                        card["offerEndsMs"] = json!(at + crate::extra::OFFER_WINDOW_MS);
+                        card["offerEndsMs"] = json!(at + crate::services::courier::offer::OFFER_WINDOW_MS);
                     }
                 }
                 mine.push(card)

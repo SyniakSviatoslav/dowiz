@@ -285,9 +285,9 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .get_async("/api/owner/branding", extra::branding)
         .post_async("/api/owner/branding", extra::set_branding)
         .post_async("/api/owner/branding/preset", extra::set_preset)
-        .get_async("/api/owner/customers", extra::customers)
-        .post_async("/api/owner/customers/:key/reveal", extra::reveal_customer)
-        .get_async("/api/owner/customers/reveals", extra::reveals)
+        .get_async("/api/owner/customers", services::customers::handlers::customers)
+        .post_async("/api/owner/customers/:key/reveal", services::customers::handlers::reveal_customer)
+        .get_async("/api/owner/customers/reveals", services::customers::handlers::reveals)
         .get_async("/api/owner/stock", extra::stock)
         .post_async("/api/owner/stock/:kind", extra::stock_move)
         .post_async("/api/owner/supplies", extra::set_supply)
@@ -344,7 +344,7 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/courier/orders/:id/deliver", courier::deliver)
         .post_async("/api/courier/position", courier::position)
         .get_async("/api/courier/earnings", courier::earnings)
-        .get_async("/api/courier/history", extra::courier_history)
+        .get_async("/api/courier/history", services::courier::history::courier_history)
         .get_async("/api/order/:id", |req, ctx| async move {
             let Some(id) = ctx.param("id").cloned() else {
                 return Response::error("missing order id", 400);

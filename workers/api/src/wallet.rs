@@ -382,7 +382,10 @@ async fn own_wallet_key(
     if phone.trim().is_empty() {
         return Ok(None);
     }
-    Ok(Some(crate::extra::customer_key(&crate::extra::signing_secret(env), phone)))
+    Ok(Some(crate::services::customers::handlers::customer_key(
+        &crate::services::customers::handlers::signing_secret(env),
+        phone,
+    )))
 }
 
 // ── WHOSE WALLET ────────────────────────────────────────────────────────────

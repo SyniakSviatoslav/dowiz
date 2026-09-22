@@ -10,6 +10,7 @@
 // `redact` is NOT here: it lives in `dowiz_hub::redact` because the native
 // server had a character-for-character copy of it, with the same defect and
 // the same absence of tests.
+pub mod handlers;
 pub mod roll;
 
 #[cfg(test)]

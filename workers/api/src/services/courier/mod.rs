@@ -5,5 +5,7 @@
 //! positions, accepting a delivery. This is the owner's side of the same
 //! vocabulary, and it is the part that was living in `extra.rs`.
 
+pub mod history;
+pub mod offer;
 pub mod record;
 pub mod roster;
