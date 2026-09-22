@@ -46,6 +46,8 @@
   --st-PENDING:#D97706; --st-CONFIRMED:#2563EB; --st-PREPARING:#F59E0B;
   --st-READY:#0D9488; --st-IN_DELIVERY:#3B82F6; --st-DELIVERED:#059669;
   --st-REJECTED:#DC2626; --st-CANCELLED:#DC2626; --st-SCHEDULED:#7C3AED; --st-PICKED_UP:#0D9488;
+  /* A refund is neither a success nor a refusal: it is money going back. */
+  --st-REFUNDING:#7C3AED; --st-COMPENSATED_REFUND:#64748B;
 
   /* Derived inks. The immutable tokens above are the SOURCE; these are what is
      allowed to touch text, because a colour that is immutable in value cannot
