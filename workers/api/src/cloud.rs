@@ -465,10 +465,12 @@ pub async fn push_place(place: &crate::hubstore::Place, now_ms: i64) -> std::res
 /// `POST /api/owner/backup/cloud` — push now.
 pub async fn push(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-    if let Err(r) = crate::owner::owner_and_venue(&req, &ctx, &db).await {
-        return Ok(r);
-    }
+    let loc = match crate::owner::owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
+    };
+    // The venue this caller was authorised for, and no other.
+    let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
     match push_place(&place, crate::owner::now_ms()).await {
         Ok(v) => Response::from_json(&v),
         Err(e) => Response::error(e, 502),
@@ -478,10 +480,12 @@ pub async fn push(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 /// `GET /api/owner/backup/cloud` — is a store set, and when did it last take a copy.
 pub async fn status(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-    if let Err(r) = crate::owner::owner_and_venue(&req, &ctx, &db).await {
-        return Ok(r);
-    }
+    let loc = match crate::owner::owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
+    };
+    // The venue this caller was authorised for, and no other.
+    let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
     let settings = crate::hubstore::load_settings(&place).await?.settings;
     // THE WITNESS IS VISIBLE OR IT IS NOT AN INSTRUMENT. A census taken every
     // night and read by nobody is the shape of instrument this codebase has a

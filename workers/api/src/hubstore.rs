@@ -204,6 +204,32 @@ impl Place {
         })
     }
 
+    /// THE VENUE YOU ARE AUTHORISED FOR IS THE VENUE YOU ACT ON.
+    ///
+    /// For the routes that cannot use `of_authorised` because the image read
+    /// is started BESIDE the membership read and therefore before the answer
+    /// exists. `owner_and_venue` prefers `?location_id=`; this object was
+    /// chosen by the token's claim or the Host. An owner of two venues who
+    /// asks about one from the other's console names two venues in one
+    /// request, and there is no honest way to serve both.
+    ///
+    /// A REFUSAL, NOT A GUESS, and not the silent empty answer the order queue
+    /// used to give: the caller is told which two venues they named.
+    pub fn must_be(&self, authorised: &str) -> std::result::Result<(), Response> {
+        if self.venue == authorised {
+            return Ok(());
+        }
+        Err(Response::error(
+            format!(
+                "this request names two venues: it was sent to {} and authorised for {}. \
+                 Use that venue's own host, or a token that carries its id.",
+                self.venue, authorised
+            ),
+            409,
+        )
+        .unwrap())
+    }
+
     /// The venue a request's Host header names, by slug.
     ///
     /// ONE CLIENT, ONE SUBDOMAIN: `sushi-durres.dowiz.org` is that venue's hub,

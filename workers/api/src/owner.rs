@@ -213,6 +213,7 @@ pub(crate) async fn owner_beside<F, T>(
     req: &Request,
     ctx: &RouteContext<()>,
     db: &D1Database,
+    place: &crate::hubstore::Place,
     work: F,
 ) -> std::result::Result<(String, String, T), Response>
 where
@@ -232,6 +233,15 @@ where
     // fails it gets their 401 or 404 and nothing else -- that the bytes were
     // already in memory is invisible to them.
     let (user_id, location_id) = who?;
+    // AND THE VENUE THAT WAS READ IS THE VENUE THAT WAS AUTHORISED.
+    //
+    // The header above says "neither needs the other's answer", and that was
+    // the defect: `work` reads an object chosen by the token's claim or the
+    // Host, while the membership is checked against `?location_id=`. For an
+    // owner of two venues those are not always the same venue, and every
+    // handler on this path then answered -- or WROTE -- with the wrong one.
+    // The overlap is kept, because the check is free once both have landed.
+    place.must_be(&location_id)?;
     let out = done.map_err(|e| Response::error(format!("hub unavailable: {e}"), 503).unwrap())?;
     Ok((user_id, location_id, out))
 }
@@ -279,6 +289,13 @@ pub async fn orders(req: Request, ctx: RouteContext<()>) -> Result<Response> {
             Ok((_, l)) => l,
             Err(r) => return Ok(r),
         };
+        // AND THE OBJECT BEING ASKED IS THAT VENUE'S. `place` was chosen by
+        // the token's claim or the Host; a request that names one venue in its
+        // query and another in its token is refused rather than answered from
+        // whichever of the two the object happened to be.
+        if let Err(r) = place.must_be(&want_loc) {
+            return Ok(r);
+        }
         // A STATUS FILTER IS NOT EXPRESSIBLE AS A DELTA. The full list drops
         // the orders that do not match; a change set says what MOVED, and an
         // order that moved out of the filtered status has to disappear from
@@ -336,7 +353,7 @@ pub async fn orders(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // every order the venue had ever taken so that this function could keep
     // the ones from today.
     let (_, loc, (generation, listed)) =
-        match owner_beside(&req, &ctx, &db, crate::hubstore::orders_at(&place)).await {
+        match owner_beside(&req, &ctx, &db, &place, crate::hubstore::orders_at(&place)).await {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };
@@ -650,6 +667,7 @@ pub async fn dashboard(req: Request, ctx: RouteContext<()>) -> Result<Response> 
         &req,
         &ctx,
         &db,
+        &place,
         futures_util::future::try_join(
             crate::hubstore::orders(&place),
             crate::hubstore::venue_record(&place),

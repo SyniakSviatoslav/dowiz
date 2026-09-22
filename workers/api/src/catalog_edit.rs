@@ -277,10 +277,12 @@ mod tests {
 /// first dish into it.
 pub async fn list_categories(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-    if let Err(r) = crate::owner::owner_and_venue(&req, &ctx, &db).await {
-        return Ok(r);
-    }
+    let loc = match crate::owner::owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
+    };
+    // The venue this caller was authorised for, and no other.
+    let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
     let loaded = crate::hubstore::load_catalog(&place).await?;
     let products: Vec<Value> = loaded.catalog.products().iter().filter_map(|(_, j)| serde_json::from_str(j).ok()).collect();
     let mut cats: Vec<Value> = loaded

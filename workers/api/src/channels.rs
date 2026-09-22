@@ -452,11 +452,12 @@ pub async fn inbox(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
+    // The venue this caller was authorised for, and no other.
+    let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
     // ONE WALK OF THE VENUE'S OWN LOG. This was `ORDER BY at_ms DESC LIMIT n`
     // over a table shared by every venue, filtered by a `location_id` somebody
     // had to remember to put in the WHERE clause. The log is the venue's, so
     // there is no venue to filter on, and it is already newest first.
-    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let entries = crate::hubstore::load_log(&place, IMAGE_INBOX).await?.log.entries();
     // How far the owner has read each conversation. Newest first, so the first
     // mark seen for a conversation is the furthest it ever got.
@@ -522,13 +523,14 @@ pub async fn thread(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
+    // The venue this caller was authorised for, and no other.
+    let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
     let Some(peer) = ctx.param("peer").cloned() else { return Response::error("missing peer", 400) };
     let url = req.url()?;
     let channel = url.query_pairs().find(|(k, _)| k == "channel").map(|(_, v)| v.into_owned()).unwrap_or_default();
     if Channel::from_str(&channel).is_none() {
         return Response::error("unknown channel", 400);
     }
-    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let subject = conv(&channel, &peer);
     // Oldest first, which is how a conversation reads. `about` is newest first
     // -- the order every one of these tables was indexed in -- so it is
@@ -600,13 +602,14 @@ pub async fn reply(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
+    // The venue this caller was authorised for, and no other.
+    let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
     let Some(peer) = ctx.param("peer").cloned() else { return Response::error("missing peer", 400) };
     let Some(channel) = Channel::from_str(&body.channel) else { return Response::error("unknown channel", 400) };
     let text = body.text.trim().to_string();
     if text.is_empty() {
         return Response::error("empty message", 400);
     }
-    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let settings = crate::hubstore::load_settings(&place).await?.settings;
     let sent = match channel {
         Channel::WhatsApp => match whatsapp_cfg(&settings) {
@@ -623,7 +626,10 @@ pub async fn reply(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
         Err(e) => return Response::error(e, 502),
     };
     let m = Inbound { channel, peer: peer.clone(), peer_name: None, text, external_id: external_id.clone(), at_ms: now_ms() };
-    store(&crate::hubstore::Place::of_any(&req, &ctx).await?, "out", &m).await?;
+    // THE SAME PLACE THE CREDENTIALS CAME FROM. This built a second one from
+    // the token's claim or the Host, so a reply sent with one venue's
+    // WhatsApp account could be filed in another venue's inbox image.
+    store(&place, "out", &m).await?;
     Response::from_json(&json!({ "id": external_id, "atMs": m.at_ms }))
 }
 

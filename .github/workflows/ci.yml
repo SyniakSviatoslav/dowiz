@@ -29,6 +29,8 @@ jobs:
         run: sh tools/gates/no-sql.sh
       - name: the file-size ratchet (may only fall)
         run: sh tools/gates/file-size.sh
+      - name: one venue per request (may only fall)
+        run: sh tools/gates/one-venue.sh
       # The conservation audit itself needs live venues and an owner token, so
       # it cannot run here. Its PROOF can: the gate is run against a stubbed
       # platform and each law is checked for going red when it should and

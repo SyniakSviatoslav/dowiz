@@ -278,9 +278,9 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/owner/i18n", owner::write_translations)
         // ── ported from the native adapter, on the SAME dowiz-hub logic ──
         .get_async("/api/owner/analytics", services::analytics::analytics)
-        .get_async("/api/owner/promotions", extra::promotions)
-        .post_async("/api/owner/promotions", extra::set_promotion)
-        .post_async("/api/owner/promotions/:code/delete", extra::delete_promotion)
+        .get_async("/api/owner/promotions", services::ordering::promotions::promotions)
+        .post_async("/api/owner/promotions", services::ordering::promotions::set_promotion)
+        .post_async("/api/owner/promotions/:code/delete", services::ordering::promotions::delete_promotion)
         .get_async("/api/owner/activation", extra::activation)
         .get_async("/api/owner/branding", extra::branding)
         .post_async("/api/owner/branding", extra::set_branding)

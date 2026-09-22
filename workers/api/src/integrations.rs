@@ -36,7 +36,8 @@ pub async fn status(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
-    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
+    // The venue this caller was authorised for, and no other.
+    let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
     let s = crate::hubstore::load_settings(&place).await?.settings;
     let origin = req.url()?.origin().ascii_serialization();
     // The venue's raw record lives in the catalogue image, wallets included.
@@ -111,10 +112,12 @@ pub async fn check(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let db = ctx.d1("DB")?;
-    if let Err(r) = owner_and_venue(&req, &ctx, &db).await {
-        return Ok(r);
-    }
-    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
+    let loc = match owner_and_venue(&req, &ctx, &db).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
+    };
+    // The venue this caller was authorised for, and no other.
+    let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
     let s = crate::hubstore::load_settings(&place).await?.settings;
     let origin = req.url()?.origin().ascii_serialization();
     let verdict: std::result::Result<Value, (&str, String)> = match body.which.as_str() {

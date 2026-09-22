@@ -207,13 +207,14 @@ pub async fn order_placed(
 /// bell works rather than at the first missed order.
 pub async fn test(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.d1("DB")?;
-    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // `owner_and_venue` yields the venue's id; the message names the venue by
     // it, which is what the owner sees in the console's footer too.
     let venue = match owner_and_venue(&req, &ctx, &db).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
+    // The venue this caller was authorised for, and no other.
+    let place = crate::hubstore::Place::of_authorised(&ctx, &venue)?;
     let settings = crate::hubstore::load_settings(&place).await?.settings;
     let text = format!("✅ dowiz · {venue} — notifications work");
     // One verdict per channel, so the owner sees which bell rang. "unset" is
