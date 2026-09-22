@@ -11,9 +11,17 @@ import { $, $$, esc, icon, t, S, api, post, withLoc, toast, sheet, closeSheet, m
          busy, confirm, ORDER_ID_SHOWN } from '/admin/core.js';
 import { st, payName, intlLocale } from '/admin/i18n.js';
 import { liveOrders, loadOrders, rerender } from '/admin/app.js';
+// The kernel's own answer to "did this order end with the venue keeping the
+// money", generated from `OrderStatus::took_money` into `/lib/vocab.js`. It was
+// `new Set(['REJECTED', 'CANCELLED'])` here, and the same set again in the
+// storefront, the sea and the kit -- all four short by `COMPENSATED_REFUND`.
+import { REFUSED as DEAD } from '/lib/vocab.js';
 
+/// The happy path as a stepper. NOT generated: the FSM's longest path from
+/// PENDING ties between DELIVERED and COMPENSATED_REFUND, so there is nothing
+/// in the kernel that says this is the progression to draw. It is a
+/// presentation choice and it lives where it is drawn.
 const FLOW = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY', 'DELIVERED'];
-const DEAD = new Set(['REJECTED', 'CANCELLED']);
 /// The one next step for each state: the action the hub takes, its word.
 const NEXT = { PENDING: ['confirm', 'accept'], CONFIRMED: ['preparing', 'startCooking'], PREPARING: ['ready', 'markReady'] };
 /// THE NEXT STEP FOR THIS ORDER, which is not the same as for this STATUS.

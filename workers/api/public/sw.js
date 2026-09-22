@@ -29,6 +29,11 @@ const SHELL_CACHE = 'dowiz-shell-2026-09-21';
 const SHELL_CACHE_MODULES = [
   '/app.js',
   '/lib/money.js',
+  // `/store/sea.js` imports the generated vocabulary at parse time, and a
+  // static import that is not in the shell is the exact failure the list above
+  // describes: the shell caches, the module fails at link time, the page is
+  // blank offline.
+  '/lib/vocab.js',
   '/store/cart.js',
   '/store/dish.js',
   '/store/eta.js',

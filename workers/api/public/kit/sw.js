@@ -48,6 +48,9 @@ const PRECACHE = [
   // `me.js` are also what a customer carries between visits: the cart and the
   // address, which is the part of checkout that must survive a dead signal.
   '/lib/money.js',
+  // `/kit/orders.js`, below, imports the generated status vocabulary at parse
+  // time -- so by the rule stated just above, it is part of the shell.
+  '/lib/vocab.js',
   '/kit/basket.js',
   '/kit/me.js',
   '/kit/orders.js',

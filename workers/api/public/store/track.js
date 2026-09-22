@@ -21,9 +21,14 @@ import { t, lang } from '/store/i18n.js';
 import { $, $$, esc, icon, sheet, closeSheet, toast, whenSheetCloses, stars } from '/store/ui.js';
 import { openOcean, phaseOf, seaRest } from '/store/sea.js';
 import * as trackMap from '/store/track-map.js';
+// Generated from the kernel's `OrderStatus::took_money` -- see `/lib/vocab.js`.
+// The hand copy this replaces was `new Set(['REJECTED', 'CANCELLED'])`, missing
+// the state a refund ends in.
+import { REFUSED as DEAD } from '/lib/vocab.js';
 
+/// The happy path as a stepper. NOT generated -- a presentation choice; the
+/// kernel's graph has two longest paths out of PENDING and does not prefer one.
 const FLOW = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY', 'DELIVERED'];
-const DEAD = new Set(['REJECTED', 'CANCELLED']);
 /// How often the order is re-asked while it is live, and how many misses in a
 /// row before the customer is told the page has lost the hub.
 const POLL_MS = 12_000;

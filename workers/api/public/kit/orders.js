@@ -17,7 +17,11 @@
 // is an id anybody can walk.
 //
 // NOTHING HERE DECIDES A STATE. `kernel/src/order_machine.rs` folds events into
-// the status; this module carries the hub's answer to a screen.
+// the status; this module carries the hub's answer to a screen. Which statuses
+// mean the order ended without the venue keeping the money is the KERNEL's
+// question, so it is imported rather than retyped -- see `/lib/vocab.js`.
+
+import { REFUSED } from '/lib/vocab.js';
 
 const KEY = 'dowiz.kit.orders';
 
@@ -97,4 +101,8 @@ export async function refresh(id){
 /// know (`REJECTED`, `CANCELLED`) is not a step on a timeline and is drawn as
 /// what it is: an ending.
 export const FLOW = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY', 'DELIVERED'];
-export const isOver = s => s === 'REJECTED' || s === 'CANCELLED';
+/// The endings, from the kernel's own `took_money`. Spelled out here as
+/// `s === 'REJECTED' || s === 'CANCELLED'`, it was short by
+/// `COMPENSATED_REFUND` -- a refunded order would have sat under "Active" for
+/// ever, because nothing else moves it.
+export const isOver = s => REFUSED.has(s);

@@ -31,6 +31,11 @@ jobs:
       # AI assistant configuration tests had been failing on developer boxes with
       # nothing reporting it. This runs those tests so regressions are caught.
       - run: cd tools/native-spa-server && cargo test
+      # The generator for the browsers' status/currency vocabulary. It LINKS
+      # dowiz-core and calls it -- no regex over order_machine.rs -- and
+      # cross-checks its own derivation against FSM_GOLDEN_SIGNATURE, so a
+      # kernel change that moves the FSM fails here before it reaches the gate.
+      - run: cd tools/gen-vocab && cargo test
       - name: the SQL ratchet (may only fall)
         run: sh tools/gates/no-sql.sh
       - name: the file-size ratchet (may only fall)
@@ -48,6 +53,13 @@ jobs:
         run: sh tools/gates/clock.sh
       - name: the clients speak the kernel's vocabulary
         run: sh tools/gates/vocabulary.sh
+      # P4's expensive half. `vocabulary.sh` above refuses a status with no word
+      # and no colour; this one refuses a committed vocab.js that is not what
+      # the kernel emits, and a hand copy of the status set coming back. It
+      # compiles Rust, so it is the slowest gate here by two orders of
+      # magnitude -- CI only, never a pre-commit hook.
+      - name: the client vocabulary is generated, not retyped
+        run: sh tools/gates/vocab.sh
       # The conservation audit itself needs live venues and an owner token, so
       # it cannot run here. Its PROOF can: the gate is run against a stubbed
       # platform and each law is checked for going red when it should and

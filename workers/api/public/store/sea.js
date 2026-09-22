@@ -14,6 +14,11 @@
 // content, words, prices and decisions belong to the Sheet.
 
 import { on, state } from '/store/state.js';
+// Which statuses are a failure is the kernel's `took_money`, generated into
+// `/lib/vocab.js`. This file held `new Set(['REJECTED', 'CANCELLED'])` -- the
+// third copy of that set, and like the other two it did not know a refund ends
+// an order.
+import { REFUSED as FAILED } from '/lib/vocab.js';
 
 let dust = null;
 let calm = false;
@@ -36,7 +41,6 @@ const SPARKS_PER_PARTICLE = 0.25;
 const SPARKS_MAX = 14;
 /// How long a rejection's glimmer holds on the sea.
 const ANOMALY_MS = 3200;
-const FAILED = new Set(['REJECTED', 'CANCELLED']);
 
 /// The dust, on the page's own canvas. Off must mean the module is never fetched.
 export async function initSea({ colour: given, leaf: givenLeaf } = {}){
