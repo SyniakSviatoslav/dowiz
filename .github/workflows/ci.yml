@@ -88,6 +88,12 @@ jobs:
       # courier in the rain; a miss is a wrong order, not an annoyance.
       - name: a control a thumb can hit
         run: sh tools/gates/tap-size.sh
+      # money.rs:1 says zero floats, ever; this counts the ones left.
+      - name: money is not a float
+        run: sh tools/gates/float-money.sh
+      # A marketing send needs a `Consented`, which only the consent fold makes.
+      - name: nobody is messaged without consent
+        run: sh tools/gates/consent.sh
       # THE DEPENDENCY POLICY GATE THAT RAN NOWHERE. `deny.toml` bans yanked
       # crates, wildcards and disallowed licences, and `CLAUDE.md` described a
       # `.husky/pre-commit` hook that runs it -- there is no `.husky/`

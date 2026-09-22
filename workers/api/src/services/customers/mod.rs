@@ -11,6 +11,7 @@
 // server had a character-for-character copy of it, with the same defect and
 // the same absence of tests.
 pub mod handlers;
+pub mod record;
 pub mod roll;
 
 #[cfg(test)]

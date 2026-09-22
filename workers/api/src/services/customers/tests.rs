@@ -154,3 +154,162 @@ fn an_unknown_sort_falls_back_to_newest_first() {
     assert_eq!(Sort::of(Some("spent")), Sort::Spent);
     assert_eq!(Sort::of(Some("orders")), Sort::Orders);
 }
+
+// ── the record: what a fold cannot know ─────────────────────────────────────
+//
+// §3.1 of BLUEPRINT-CRM-CONSENT-LOYALTY-2026-09-22. THE RULE THE WHOLE MODULE
+// IS JUDGED BY IS `mod.rs`'s: "the venue holds exactly what it held before".
+// A CRM by definition makes it hold more, so every field has to be something
+// the venue would otherwise write on a paper card by the till — and nothing
+// that repeats a fold, because a stored copy is a second number that can
+// disagree, and the one that disagrees is always the stored one.
+
+use super::record::{merge, Card};
+
+fn card() -> Card {
+    Card::default()
+}
+
+fn field<'a>(j: &'a str, k: &str) -> Option<serde_json::Value> {
+    serde_json::from_str::<serde_json::Value>(j).ok()?.get(k).cloned()
+}
+
+/// THE ALLOW-LIST IS THE RECORD. `orders`, `spent`, `last_at`, `name` and
+/// `phone` are folds over the order log; a record that also held them would
+/// eventually disagree with the fold, and the console would show two numbers
+/// for one question.
+#[test]
+fn the_record_never_holds_what_the_fold_already_knows() {
+    let mut c = card();
+    c.note = Some("always asks for extra ginger".into());
+    let out = merge(r#"{"id":"cust_1","phone_hash":"k1","name":"Arben","created_at_ms":10}"#, &c, 99)
+        .expect("a note is allowed");
+    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+    let keys: Vec<&str> = v.as_object().unwrap().keys().map(|s| s.as_str()).collect();
+    for banned in ["orders", "spent", "last_at", "name", "phone", "balance", "stamps", "tier", "score"] {
+        assert!(!keys.contains(&banned), "{banned} is a fold or a rating, not a record: {keys:?}");
+    }
+    // The three the placement path owns survive an owner's edit.
+    assert_eq!(field(&out, "id").unwrap(), "cust_1");
+    assert_eq!(field(&out, "phone_hash").unwrap(), "k1");
+    assert_eq!(field(&out, "created_at_ms").unwrap(), 10, "not reset by an edit");
+    assert_eq!(field(&out, "updated_at_ms").unwrap(), 99, "the request's clock, not a handler's");
+}
+
+#[test]
+fn a_note_longer_than_the_paper_card_is_refused() {
+    let mut c = card();
+    c.note = Some("ë".repeat(281));
+    assert!(merge("{}", &c, 1).is_err(), "281 CHARACTERS, not bytes");
+    c.note = Some("ë".repeat(280));
+    assert!(merge("{}", &c, 1).is_ok());
+}
+
+/// A TAG IS NOT A TIER (`CLAUDE.md:102`). The closed list is the whole defence:
+/// a free-text tag field is where `vip`, `difficult` and `bad payer` arrive,
+/// and then the venue is rating a participant.
+#[test]
+fn a_tag_outside_the_closed_list_is_refused() {
+    let mut c = card();
+    for ranking in ["premium", "difficult", "gold", "bad-payer"] {
+        c.tags = Some(vec![ranking.into()]);
+        assert!(merge("{}", &c, 1).is_err(), "{ranking} would be a rating of a person");
+    }
+    c.tags = Some(vec!["regular".into(), "office_lunch".into()]);
+    let out = merge("{}", &c, 1).expect("two tags from the list");
+    assert_eq!(field(&out, "tags").unwrap(), serde_json::json!(["regular", "office_lunch"]));
+}
+
+#[test]
+fn the_same_tag_twice_is_one_tag() {
+    let mut c = card();
+    c.tags = Some(vec!["regular".into(), "regular".into()]);
+    let out = merge("{}", &c, 1).unwrap();
+    assert_eq!(field(&out, "tags").unwrap(), serde_json::json!(["regular"]));
+}
+
+/// THE ONE FIELD THAT PREVENTS HARM, and the reason it is a code list: a
+/// customer recorded as allergic to `shelfish` matches no dish filter, so the
+/// check that was supposed to protect them silently passes.
+#[test]
+fn an_allergen_outside_the_eu_fourteen_is_refused() {
+    let mut c = card();
+    c.allergens = Some(vec!["shelfish".into()]);
+    assert!(merge("{}", &c, 1).is_err());
+    c.allergens = Some(vec!["crustaceans".into(), "milk".into()]);
+    let out = merge("{}", &c, 1).expect("two of the fourteen");
+    assert_eq!(field(&out, "allergens").unwrap(), serde_json::json!(["crustaceans", "milk"]));
+}
+
+/// THE YEAR IS THE FIELD THAT MAKES THE RECORD SENSITIVE. A greeting needs the
+/// day; age needs the year, and nothing here needs age.
+#[test]
+fn a_birthday_with_a_year_is_refused_and_so_is_a_date_that_does_not_exist() {
+    let mut c = card();
+    for bad in ["1990-05-02", "05-02-1990", "13-01", "00-10", "02-30", "5-2", "tomorrow"] {
+        c.birthday_md = Some(bad.into());
+        assert!(merge("{}", &c, 1).is_err(), "{bad} is not MM-DD");
+    }
+    for good in ["05-02", "01-01", "12-31", "02-29"] {
+        c.birthday_md = Some(good.into());
+        assert!(merge("{}", &c, 1).is_ok(), "{good} is a day of the year");
+    }
+}
+
+#[test]
+fn a_language_the_venue_does_not_speak_is_refused() {
+    let mut c = card();
+    c.lang = Some("pt".into());
+    assert!(merge("{}", &c, 1).is_err());
+    for l in dowiz_hub::consent::LANGS {
+        c.lang = Some(l.into());
+        assert!(merge("{}", &c, 1).is_ok(), "{l} is one of the three the storefront speaks");
+    }
+}
+
+/// A FIELD NOT SENT IS A FIELD NOT TOUCHED, and an EMPTY one is a deletion.
+/// Without the difference, a console that renders one tab and saves it wipes
+/// the allergens entered on another.
+#[test]
+fn an_absent_field_is_untouched_and_an_empty_one_clears() {
+    let mut c = card();
+    c.note = Some("extra ginger".into());
+    c.allergens = Some(vec!["milk".into()]);
+    let one = merge("{}", &c, 1).unwrap();
+
+    let mut c2 = card();
+    c2.lang = Some("sq".into());
+    let two = merge(&one, &c2, 2).unwrap();
+    assert_eq!(field(&two, "note").unwrap(), "extra ginger", "an absent field is not a deletion");
+    assert_eq!(field(&two, "allergens").unwrap(), serde_json::json!(["milk"]));
+
+    let mut c3 = card();
+    c3.note = Some("  ".into());
+    c3.allergens = Some(vec![]);
+    let three = merge(&two, &c3, 3).unwrap();
+    assert!(field(&three, "note").is_none(), "an empty note is a deletion");
+    assert!(field(&three, "allergens").is_none(), "and so is an empty list");
+    assert_eq!(field(&three, "lang").unwrap(), "sq", "the untouched one stays");
+}
+
+/// THE BODY IS A CLOSED SHAPE. A console that posts `spent` gets a 400 rather
+/// than a silently ignored field, because a field that is accepted and dropped
+/// is how a number nobody stores ends up believed.
+#[test]
+fn a_body_that_carries_a_fold_is_refused_before_it_is_merged() {
+    assert!(serde_json::from_str::<Card>(r#"{"note":"x"}"#).is_ok());
+    for banned in [r#"{"spent":100}"#, r#"{"orders":3}"#, r#"{"name":"A"}"#, r#"{"tier":"gold"}"#] {
+        assert!(serde_json::from_str::<Card>(banned).is_err(), "{banned} is not a record field");
+    }
+}
+
+/// A TABLE NUMBER IS A SHORT LABEL. Free text here is where a second note
+/// would live, with none of the note's length rule.
+#[test]
+fn the_usual_table_is_a_label_not_a_paragraph() {
+    let mut c = card();
+    c.usual_table = Some("7".into());
+    assert!(merge("{}", &c, 1).is_ok());
+    c.usual_table = Some("x".repeat(17));
+    assert!(merge("{}", &c, 1).is_err());
+}
