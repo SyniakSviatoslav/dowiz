@@ -82,7 +82,13 @@ pub async fn tasks(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
         // READY was offered to every courier on shift as a job -- and a
         // courier who took one would carry food to an address the customer
         // never gave, while the customer waited at the counter.
-        if v.get("fulfilment").and_then(|f| f.get("kind")).and_then(Value::as_str) == Some("pickup") {
+        // ASKED AS "DOES IT LEAVE THE BUILDING", not as "is it a pickup".
+        // This was `== Some("pickup")`, which is the same answer for two kinds
+        // and the WRONG one for the third: a table order would have been
+        // offered to a courier as a job, and a courier who took it would carry
+        // food out to an address nobody gave while the customer sat at the
+        // table.
+        if !crate::services::ordering::fulfilment::leaves_the_building(crate::services::ordering::fulfilment::of(&v)) {
             continue;
         }
         let holder = assigned

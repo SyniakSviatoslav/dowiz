@@ -1,0 +1,245 @@
+<!-- THE OPERATOR'S TEMPLATE for table booking, supplied 2026-09-22.
+     A working single-file prototype: zones as tabs, an SVG floor plan per zone,
+     tables carrying {n, x, y, shape, w, h, seats, occ}, selection with keyboard
+     and ARIA, and a CTA marked "Точка інтеграції з бекендом бронювання".
+     Its DATA MODEL and its INTERACTION are the spec. Its geometry is NOT: the
+     real floor plan is the venue's and must be data an owner can edit, never
+     coordinates hard-coded in a served file. -->
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Вибір столика</title>
+<style>
+  :root{
+    --bg:#F1EFE8; --ink:#444441; --muted:#8A887F; --line:#D3D1C7;
+    --sel:#085041; --sel-soft:#E1F5EE; --occ:#D3D1C7;
+    --plant:#3E7A4A; --plant2:#5DCAA5;
+    padding-top:env(safe-area-inset-top,0px);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+    box-sizing:border-box;
+  }
+  *{box-sizing:inherit}
+  html,body{height:100%;margin:0}
+  body{background:var(--bg);color:var(--ink);font-family:Manrope,Inter,system-ui,-apple-system,sans-serif;
+       display:flex;flex-direction:column;max-width:430px;margin:0 auto}
+  header{padding:16px 20px 8px}
+  h1{font-size:20px;margin:0 0 2px}
+  header p{margin:0;font-size:13px;color:var(--muted)}
+  .tabs{display:flex;gap:6px;padding:8px 20px 4px}
+  .tabs button{flex:1;border:1.4px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;
+      padding:9px 0;font:inherit;font-size:13px;font-weight:600;cursor:pointer}
+  .tabs button[aria-selected="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
+  .tabs button:focus-visible{outline:2px solid var(--sel);outline-offset:2px}
+  main{flex:1;padding:4px 20px;overflow:auto}
+  svg{width:100%;height:auto;display:block;touch-action:manipulation}
+  .table{cursor:pointer}
+  .table.occ{cursor:not-allowed}
+  .table:focus{outline:none}
+  .table:focus-visible .top{stroke:var(--sel);stroke-width:3}
+  .legend{display:flex;gap:18px;padding:8px 20px 0;font-size:12px;color:var(--ink)}
+  .legend span{display:flex;align-items:center;gap:6px}
+  .legend i{width:14px;height:14px;border-radius:4px;border:1.4px solid var(--ink);background:#fff}
+  .legend i.s{background:var(--sel);border-color:var(--sel)}
+  .legend i.o{background:var(--occ);border-color:var(--occ)}
+  footer{padding:12px 20px 16px;background:var(--bg);border-top:1px solid var(--line)}
+  .pick{font-size:14px;min-height:20px;margin-bottom:10px}
+  .pick b{color:var(--sel)}
+  .cta{width:100%;border:0;border-radius:12px;padding:14px;font:inherit;font-size:15px;font-weight:700;
+       background:var(--sel);color:#fff;cursor:pointer}
+  .cta:disabled{background:var(--line);color:var(--muted);cursor:default}
+  @media (prefers-reduced-motion:no-preference){ .table .top{transition:fill .15s} }
+</style>
+</head>
+<body>
+<header>
+  <h1>Оберіть столик</h1>
+  <p>Торкніться вільного столика на плані</p>
+</header>
+<div class="tabs" role="tablist" id="tabs"></div>
+<main><div id="plan"></div></main>
+<div class="legend">
+  <span><i></i>Вільний</span><span><i class="s"></i>Обраний</span><span><i class="o"></i>Зайнятий</span>
+</div>
+<footer>
+  <div class="pick" id="pick">Столик не обрано</div>
+  <button class="cta" id="cta" disabled>Забронювати столик</button>
+</footer>
+
+<script>
+/* ---------- дані зон ----------
+   shape: "rect" | "circle"; w,h — розмір столу; seats — місць; occ — зайнятий */
+const ZONES = [
+  { id:"terasa", name:"Тераса", floor:"terrace",
+    plants:[[42,395,26],[44,235,16],[300,88,18],[345,400,26],[340,120,12]],
+    entrance:[175,235],
+    tables:[
+      {n:1,x:85, y:110,shape:"rect",w:44,h:44,seats:4,occ:true},
+      {n:2,x:155,y:130,shape:"rect",w:40,h:40,seats:2,occ:true},
+      {n:3,x:95, y:215,shape:"rect",w:40,h:40,seats:2},
+      {n:4,x:95, y:315,shape:"rect",w:44,h:44,seats:2},
+      {n:5,x:225,y:170,shape:"rect",w:42,h:42,seats:2,occ:true},
+      {n:6,x:290,y:245,shape:"rect",w:66,h:44,seats:4},
+      {n:7,x:290,y:340,shape:"rect",w:44,h:44,seats:2},
+    ]},
+  { id:"zala", name:"Зала", floor:"hall",
+    plants:[[352,160,14],[350,215,16],[352,275,14],[350,335,17],[352,398,14],[40,420,18],[300,428,12]],
+    entrance:[150,210],
+    tables:[
+      {n:1,x:120,y:255,shape:"rect",w:70,h:44,seats:4},
+      {n:2,x:215,y:135,shape:"rect",w:40,h:40,seats:2},
+      {n:3,x:290,y:225,shape:"rect",w:42,h:42,seats:2},
+      {n:4,x:210,y:335,shape:"rect",w:46,h:46,seats:3},
+    ]},
+  { id:"mala",  name:"Мала зала", floor:"small",
+    plants:[[105,250,15],[285,60,9]],
+    entrance:[165,225],
+    tables:[
+      {n:1,x:150,y:120,shape:"rect",w:40,h:40,seats:3},
+      {n:2,x:255,y:120,shape:"rect",w:46,h:44,seats:4,occ:true},
+      {n:3,x:140,y:330,shape:"circle",w:50,h:50,seats:2},
+      {n:4,x:255,y:300,shape:"circle",w:46,h:46,seats:2},
+    ]},
+];
+
+const INK="#444441", PLANT="#3E7A4A", PLANT2="#5DCAA5";
+
+/* ---------- підлога / стіни кожної зони ---------- */
+const FLOORS = {
+  terrace:`
+  <defs><pattern id="brick" width="16" height="8" patternUnits="userSpaceOnUse">
+    <rect width="16" height="8" fill="#E6CDBC"/><path d="M0 4H16M8 0V4M0 4V8M16 4V8" stroke="#DDBFAB" stroke-width=".8"/></pattern></defs>
+  <rect x="20" y="20" width="350" height="404" rx="4" fill="url(#brick)"/>
+  <rect x="20" y="20" width="350" height="404" rx="4" fill="none" stroke="${INK}" stroke-width="3"/>
+  <rect x="20" y="20" width="350" height="8" fill="#9E4A32"/>
+  <rect x="362" y="20" width="8" height="404" fill="#9E4A32"/>
+  <rect x="20" y="20" width="8" height="404" fill="${PLANT}" opacity=".6"/>
+  <rect x="28" y="28" width="334" height="6" fill="${PLANT}" opacity=".5"/>
+  <circle cx="130" cy="124" r="105" fill="#444441" fill-opacity=".06" stroke="${INK}" stroke-dasharray="3 5"/><circle cx="130" cy="124" r="3" fill="${INK}"/>
+  <circle cx="245" cy="224" r="110" fill="#444441" fill-opacity=".06" stroke="${INK}" stroke-dasharray="3 5"/><circle cx="245" cy="224" r="3" fill="${INK}"/>`,
+  hall:`
+  <defs><pattern id="wood" width="40" height="10" patternUnits="userSpaceOnUse">
+    <rect width="40" height="10" fill="#E8D8C2"/><path d="M0 10H40" stroke="#DCC8AC" stroke-width=".8"/><path d="M20 0V10" stroke="#DCC8AC" stroke-width=".6"/></pattern></defs>
+  <rect x="20" y="20" width="350" height="404" rx="4" fill="url(#wood)"/>
+  <rect x="20" y="20" width="350" height="404" rx="4" fill="none" stroke="${INK}" stroke-width="3"/>
+  <path d="M22 22H150V66H70V164H22Z" fill="#C9AE8A" stroke="${INK}" stroke-width="1.4"/>
+  <text x="86" y="48" text-anchor="middle" font-size="10" fill="${INK}">Бар</text>
+  <rect x="160" y="24" width="34" height="8" rx="1" fill="${INK}"/>
+  <rect x="204" y="24" width="52" height="12" rx="2" fill="#fff" stroke="${INK}" stroke-width="1.2"/>
+  <text x="230" y="33" text-anchor="middle" font-size="7.5" fill="${INK}">Полиця</text>
+  <circle cx="163" cy="52" r="7" fill="#E6F1FB" stroke="${INK}" stroke-width="1.2"/>
+  <line x1="268" y1="21" x2="312" y2="21" stroke="#fff" stroke-width="5"/>
+  <line x1="268" y1="21" x2="312" y2="21" stroke="${INK}" stroke-width="1.6" stroke-dasharray="4 4"/>
+  <text x="290" y="13" text-anchor="middle" font-size="9.5" fill="#8A887F">Мала зала</text>
+  <rect x="340" y="30" width="26" height="60" rx="2" fill="#E6F1FB" stroke="${INK}" stroke-width="1.2"/>
+  <line x1="368" y1="104" x2="368" y2="414" stroke="#7FB3D5" stroke-width="4"/>`,
+  small:`
+  <defs>
+    <pattern id="wood2" width="40" height="10" patternUnits="userSpaceOnUse">
+      <rect width="40" height="10" fill="#EDE3D2"/><path d="M0 10H40" stroke="#E1D4BE" stroke-width=".8"/><path d="M20 0V10" stroke="#E1D4BE" stroke-width=".6"/></pattern>
+    <pattern id="lace" width="22" height="22" patternUnits="userSpaceOnUse">
+      <circle cx="11" cy="11" r="7" fill="none" stroke="#fff" stroke-width="1.2"/><circle cx="11" cy="11" r="2.5" fill="none" stroke="#fff"/></pattern>
+  </defs>
+  <rect x="20" y="20" width="350" height="404" rx="4" fill="#DDE3E0"/>
+  <rect x="20" y="20" width="350" height="404" rx="4" fill="url(#lace)" opacity=".9"/>
+  <rect x="80" y="20" width="230" height="404" fill="url(#wood2)"/>
+  <rect x="80" y="20" width="230" height="404" fill="none" stroke="${INK}" stroke-width="3"/>
+  <rect x="175" y="24" width="40" height="9" rx="2" fill="#fff" stroke="${INK}" stroke-width="1.2"/>
+  <line x1="81" y1="154" x2="81" y2="202" stroke="#fff" stroke-width="5"/>
+  <line x1="81" y1="154" x2="81" y2="202" stroke="${INK}" stroke-width="1.6"/>
+  <path d="M81 202 A48 48 0 0 1 129 154" fill="none" stroke="${INK}" stroke-dasharray="3 3"/>
+  <g transform="translate(290 374)"><circle r="7" fill="none" stroke="${INK}" stroke-width="1.2"/><circle r="1.6" fill="${INK}"/><path d="M0 -7V7M-7 0H7" stroke="${INK}"/></g>`
+};
+
+/* ---------- примітиви ---------- */
+const chair=(x,y,a)=>`<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${a.toFixed(1)})">
+  <rect x="-9" y="-6" width="18" height="12" rx="3" fill="#fff" stroke="${INK}" stroke-width="1.4"/>
+  <path d="M-9 6 Q0 10 9 6" fill="none" stroke="${INK}" stroke-width="1.6" stroke-linecap="round"/></g>`;
+
+function plant(cx,cy,r){
+  let s=`<circle cx="${cx}" cy="${cy}" r="${(r*.42).toFixed(1)}" fill="${PLANT2}"/>`;
+  for(let i=0;i<6;i++){const a=Math.PI*2*i/6,x=cx+r*.45*Math.cos(a),y=cy+r*.45*Math.sin(a);
+    s+=`<ellipse cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" rx="${(r*.55).toFixed(1)}" ry="${(r*.28).toFixed(1)}" transform="rotate(${(a*180/Math.PI).toFixed(0)} ${x.toFixed(1)} ${y.toFixed(1)})" fill="${PLANT}" opacity=".85"/>`;}
+  return s;
+}
+
+function tableSvg(t, selected){
+  const st = t.occ?"occ": selected?"sel":"free";
+  const fill = st==="sel"?"#085041": st==="occ"?"#D3D1C7":"#fff";
+  const stroke = st==="free"?INK:fill;
+  const tx = st==="sel"?"#fff": st==="occ"?"#8A887F":INK;
+  const sub = st==="sel"?"#BFE6D7": st==="occ"?"#8A887F":"#8A887F";
+  let s="";
+  const {x:cx,y:cy,w,h,seats}=t;
+  if(t.shape==="circle"){
+    const r=w/2;
+    for(let i=0;i<seats;i++){const a=Math.PI*2*i/seats-Math.PI/2;
+      s+=chair(cx+(r+13)*Math.cos(a),cy+(r+13)*Math.sin(a),a*180/Math.PI+270);}
+    s+=`<circle class="top" cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="1.6"/>`;
+  }else{
+    const hw=w/2,hh=h/2; let top=[],bot=[],lef=[],rig=[];
+    if(seats<=2){top=[cx];bot=[cx];}
+    else if(seats===3){top=[cx];bot=[cx];lef=[cy];}
+    else if(seats===4){ if(w>h*1.25){top=[cx-w/4,cx+w/4];bot=top;} else {top=[cx];bot=[cx];lef=[cy];rig=[cy];} }
+    else {top=[cx-w/4,cx+w/4];bot=top;lef=[cy];rig=[cy];}
+    top.forEach(x=>s+=chair(x,cy-hh-12,180)); bot.forEach(x=>s+=chair(x,cy+hh+12,0));
+    lef.forEach(y=>s+=chair(cx-hw-12,y,90)); rig.forEach(y=>s+=chair(cx+hw+12,y,-90));
+    s+=`<rect class="top" x="${cx-hw}" y="${cy-hh}" width="${w}" height="${h}" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="1.6"/>`;
+  }
+  s+=`<text x="${cx}" y="${cy-1}" text-anchor="middle" font-size="14" font-weight="700" fill="${tx}">${t.n}</text>
+      <text x="${cx}" y="${cy+11}" text-anchor="middle" font-size="8.5" fill="${sub}">${seats} міс.</text>`;
+  const aria = `Столик ${t.n}, ${seats} місць, ${t.occ?"зайнятий":selected?"обраний":"вільний"}`;
+  return `<g class="table ${st}" data-n="${t.n}" role="button" tabindex="${t.occ?-1:0}" aria-pressed="${selected}" aria-label="${aria}" ${t.occ?'aria-disabled="true"':''}>${s}</g>`;
+}
+
+/* ---------- стан і рендер ---------- */
+let zoneIdx=0, selected=null;   // selected = {zone, n}
+
+function render(){
+  const z=ZONES[zoneIdx];
+  const [e1,e2]=z.entrance;
+  const inner = FLOORS[z.floor]
+    + z.plants.map(p=>plant(...p)).join("")
+    + z.tables.map(t=>tableSvg(t, selected && selected.zone===z.id && selected.n===t.n)).join("")
+    + `<line x1="${e1}" y1="424" x2="${e2}" y2="424" stroke="#fff" stroke-width="5"/>
+       <line x1="${e1}" y1="424" x2="${e2}" y2="424" stroke="${INK}" stroke-width="1.6" stroke-dasharray="4 4"/>
+       <text x="${(e1+e2)/2}" y="438" text-anchor="middle" font-size="10" fill="#8A887F">Вхід</text>`;
+  document.getElementById("plan").innerHTML =
+    `<svg viewBox="0 0 390 446" xmlns="http://www.w3.org/2000/svg" font-family="Manrope, Inter, system-ui, sans-serif">${inner}</svg>`;
+
+  document.querySelectorAll(".table:not(.occ)").forEach(g=>{
+    const pick=()=>{ const n=+g.dataset.n;
+      selected = (selected && selected.zone===z.id && selected.n===n) ? null : {zone:z.id,n};
+      render(); };
+    g.addEventListener("click",pick);
+    g.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();pick();} });
+  });
+
+  const pick=document.getElementById("pick"), cta=document.getElementById("cta");
+  if(selected){
+    const sz=ZONES.find(x=>x.id===selected.zone), t=sz.tables.find(x=>x.n===selected.n);
+    pick.innerHTML=`Обрано: <b>${sz.name}, столик ${t.n}</b> · ${t.seats} міс.`; cta.disabled=false;
+  }else{ pick.textContent="Столик не обрано"; cta.disabled=true; }
+}
+
+function renderTabs(){
+  const box=document.getElementById("tabs"); box.innerHTML="";
+  ZONES.forEach((z,i)=>{
+    const b=document.createElement("button");
+    b.role="tab"; b.textContent=z.name; b.setAttribute("aria-selected", i===zoneIdx);
+    b.onclick=()=>{ zoneIdx=i; renderTabs(); render(); };
+    box.appendChild(b);
+  });
+}
+
+document.getElementById("cta").onclick=()=>{
+  /* Точка інтеграції з бекендом бронювання */
+  const sz=ZONES.find(x=>x.id===selected.zone);
+  alert(`Бронюємо: ${sz.name}, столик ${selected.n}`);
+};
+
+renderTabs(); render();
+</script>
+</body>
+</html>

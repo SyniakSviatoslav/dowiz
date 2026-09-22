@@ -117,7 +117,20 @@ pub fn order_text(envelope: &Value, lines: &[LineOut], currency: &str, venue: &s
     if !name.is_empty() || !phone.is_empty() {
         out.push_str(&format!("👤 {name} {phone}\n"));
     }
-    out.push_str(if kind == "pickup" { "🥡 pickup\n" } else { "🛵 delivery\n" });
+    // THE KITCHEN'S FIRST LINE IS WHERE IT GOES, and a table order says which
+    // table: a ticket reading "🛵 delivery" for somebody sitting in the room
+    // sends a courier to look for an address that does not exist.
+    out.push_str(match kind {
+        "pickup" => "🥡 pickup\n".to_string(),
+        "dine_in" => match ful.get("table").and_then(Value::as_str) {
+            Some(t) if !t.trim().is_empty() => format!("🍽 table {}\n", t.trim()),
+            // A `dine_in` order cannot be PLACED without a table, so this is
+            // reachable only by a record older than that rule. It says so
+            // rather than printing an empty line.
+            _ => "🍽 in the venue (no table recorded)\n".to_string(),
+        },
+        _ => "🛵 delivery\n".to_string(),
+    }.as_str());
     if !addr.is_empty() {
         out.push_str(&format!("📍 {addr}\n"));
     }
@@ -228,5 +241,31 @@ mod tests {
         assert!(t.contains("2 × Sake — 1500 ALL"));
         assert!(t.contains("delivery 300 ALL"));
         assert!(t.ends_with("1800 ALL · cash"));
+    }
+
+    /// THE KITCHEN'S FIRST LINE IS WHERE IT GOES, and this is the one that
+    /// used to be wrong for a whole kind. The branch was `if kind == "pickup"
+    /// { 🥡 } else { 🛵 }`, so an order placed at a table printed "delivery"
+    /// and sent somebody looking for an address that does not exist.
+    #[test]
+    fn a_table_order_says_which_table_and_never_says_delivery() {
+        let env = json!({ "id": "abcdefghijkl", "contact": { "name": "Ana", "phone": "+355" },
+            "fulfilment": { "kind": "dine_in", "table": "7" },
+            "payment": "cash", "total": 1500 });
+        let lines = [LineOut { name: "Sake".into(), quantity: 2, unit_price: 750 }];
+        let t = order_text(&env, &lines, "ALL", "Dubin & Sushi");
+        assert!(t.contains("table 7"), "the ticket must name the table: {t}");
+        assert!(!t.contains("delivery"), "and must not call it a delivery: {t}");
+    }
+
+    /// A pickup is still a pickup. Asserted beside the above because the fix
+    /// for one kind is exactly how the other two get broken.
+    #[test]
+    fn a_pickup_is_unchanged_by_the_third_kind_arriving() {
+        let env = json!({ "id": "abcdefghijkl", "contact": { "name": "Ana", "phone": "+355" },
+            "fulfilment": { "kind": "pickup" }, "payment": "cash", "total": 1500 });
+        let t = order_text(&env, &[], "ALL", "Dubin & Sushi");
+        assert!(t.contains("pickup"), "{t}");
+        assert!(!t.contains("table"), "{t}");
     }
 }

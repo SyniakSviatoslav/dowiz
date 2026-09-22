@@ -3,6 +3,7 @@
 //! The pricer is here because BOTH the checkout and the promo preview need it
 //! and used to have one each.
 
+pub mod fulfilment;
 pub mod preview;
 pub mod promo_fields;
 pub mod promotions;

@@ -10,6 +10,10 @@
 import { $, $$, esc, icon, t, S, api, post, withLoc, toast, sheet, closeSheet, money, moneyEl, ago, clock, day,
          busy, confirm, ORDER_ID_SHOWN } from '/admin/core.js';
 import { st, payName, intlLocale } from '/admin/i18n.js';
+// ONE ANSWER TO "WHERE IS THIS GOING", shared with the storefront and matching
+// the server's. `isPickup` below was the fifth copy of a question that has
+// three answers, and it called a table order a delivery.
+import { badgeOf, destinationOf, kindOf } from '/lib/fulfilment.js';
 import { liveOrders, loadOrders, rerender } from '/admin/app.js';
 // The kernel's own answer to "did this order end with the venue keeping the
 // money", generated from `OrderStatus::took_money` into `/lib/vocab.js`. It was
@@ -57,14 +61,19 @@ function exportCsv(){
   const rows = matching();
   const cell = v => { const s = String(v ?? ''); return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const head = ['id', t('when'), t('status') === 'status' ? 'status' : t('status'), t('delivery'), t('customer'), t('phone'), t('address'), t('items'), t('total'), 'currency', t('discount'), t('promo'), t('courier')];
-  const lines = rows.map(o => [o.id, new Date(o.created_at_ms || 0).toISOString(), o.status, isPickup(o) ? 'pickup' : 'delivery', o.contact?.name, o.contact?.phone,
-    isPickup(o) ? '' : o.fulfilment?.address?.line, (o.items || []).map(i => `${i.quantity}x ${i.name || i.product_id}`).join('; '), o.total ?? 0, S.venue?.currencyCode || '', o.discount ?? 0, o.promo?.code, o.courier_id ? courierName(o.courier_id) : ''].map(cell).join(','));
+  const lines = rows.map(o => [o.id, new Date(o.created_at_ms || 0).toISOString(), o.status, kindOf(o), o.contact?.name, o.contact?.phone,
+    destinationOf(o), (o.items || []).map(i => `${i.quantity}x ${i.name || i.product_id}`).join('; '), o.total ?? 0, S.venue?.currencyCode || '', o.discount ?? 0, o.promo?.code, o.courier_id ? courierName(o.courier_id) : ''].map(cell).join(','));
   const blob = new Blob([CSV_BOM + [head.map(cell).join(','), ...lines].join('\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `dowiz-${view.mode}-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
   requestAnimationFrame(() => URL.revokeObjectURL(a.href));
 }
 const etaText = o => o.eta && o.eta.range ? `${o.eta.range} ${t('etaMin') === 'etaMin' ? 'min' : ''}`.trim() : '';
-const isPickup = o => o.fulfilment?.kind === 'pickup';
+// `isPickup` MEANS "the food does not travel", which is true of a table order
+// too — it decides whether READY offers the step that CLOSES the order rather
+// than handing it to a courier. It was `kind === 'pickup'`, so a table order
+// sat at READY for ever exactly as a pickup once did (see the header above).
+const isPickup = o => !leavesTheBuildingOf(o);
+const leavesTheBuildingOf = o => kindOf(o) === 'delivery';
 
 function row(o){
   const step = nextOf(o);
@@ -77,7 +86,7 @@ function row(o){
     <span class="amt">${moneyEl(o.total ?? 0)}</span>
     <span class="num">${o.contact?.name || o.contact?.phone ? '#' + esc(o.id.slice(0, ORDER_ID_SHOWN)) : ''}</span>
     <span class="meta">
-      <span>${icon(isPickup(o) ? 'walk' : 'bike')}<span data-t="${isPickup(o) ? 'pickup' : 'delivery'}"></span></span>
+      <span>${(b => `${icon(b.icon)}<span data-t="${b.key}"></span>${b.table ? ' ' + esc(b.table) : ''}`)(badgeOf(o))}</span>
       <span>${icon(o.payment === 'cash' ? 'cash' : o.payment === 'crypto' ? 'currency-bitcoin' : 'credit-card')}${esc(payName(o.payment))}</span>
       ${o.eta?.range ? `<span class="live">${icon('clock')}<b>${esc(o.eta.range)}</b> ${t('etaMin')}</span>` : ''}
       ${o.courier_id ? `<span>${icon('bike')}${esc(courierName(o.courier_id))}</span>` : ''}

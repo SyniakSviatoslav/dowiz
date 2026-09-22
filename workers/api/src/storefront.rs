@@ -90,6 +90,12 @@ pub struct FulfilmentIn {
     /// here. Without this field the note was accepted and silently discarded.
     #[serde(default)]
     pub note: Option<String>,
+    /// WHICH TABLE, for an order placed in the room. It is what a
+    /// `dine_in` order cannot exist without, and what the kitchen ticket and
+    /// the owner's queue are useless without -- "a sushi set, somewhere in the
+    /// building" is not something anyone can carry anywhere.
+    #[serde(default)]
+    pub table: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -766,10 +772,32 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     if !phone.is_empty() && phone.chars().filter(|c| c.is_ascii_digit()).count() < 8 {
         return Response::error("invalid phone", 400);
     }
-    if body.fulfilment.kind == "delivery"
-        && body.fulfilment.address.as_ref().map_or(true, |a| a.line.trim().is_empty())
-    {
-        return Response::error("delivery address required", 400);
+    // ── WHAT EACH KIND CANNOT BE PLACED WITHOUT ──
+    //
+    // THE SET WAS OPEN AND THAT WAS A LIVE DEFECT. `kind` arrived as a free
+    // string and only `"delivery"` was ever compared against here, so a basket
+    // sent with any other word -- a typo, an old client, anything -- was
+    // accepted, charged the full delivery fee by the rule below, and never
+    // asked for an address, because that check fires on one exact word.
+    use crate::services::ordering::fulfilment::{self, Needs};
+    if !fulfilment::known(&body.fulfilment.kind) {
+        return Response::error(
+            format!("unknown fulfilment: {}", body.fulfilment.kind),
+            400,
+        );
+    }
+    match fulfilment::needs(&body.fulfilment.kind) {
+        Needs::Address
+            if body.fulfilment.address.as_ref().map_or(true, |a| a.line.trim().is_empty()) =>
+        {
+            return Response::error("delivery address required", 400)
+        }
+        Needs::Table
+            if body.fulfilment.table.as_deref().map_or(true, |t| t.trim().is_empty()) =>
+        {
+            return Response::error("a table is required for an order in the venue", 400)
+        }
+        _ => {}
     }
 
     // The slug is not the id — see `Place::of_slug`.
@@ -854,11 +882,14 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         return Response::error("below minimum order", 409);
     }
 
-    let fee = match loc.free_delivery_threshold {
-        Some(th) if subtotal >= th => 0,
-        _ if body.fulfilment.kind == "pickup" => 0,
-        _ => loc.delivery_fee,
-    };
+    // The fee buys a courier's trip. A pickup and a table order have no trip,
+    // and this rule is `fulfilment::fee` rather than a third copy of it here.
+    let fee = fulfilment::fee(
+        &body.fulfilment.kind,
+        subtotal,
+        loc.free_delivery_threshold,
+        loc.delivery_fee,
+    );
 
     // ── IS THIS A RETRY? ──
     //
@@ -992,6 +1023,10 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         "kind": body.fulfilment.kind,
         "note": body.fulfilment.note.as_deref().map(str::trim).filter(|n| !n.is_empty())
             .map(|n| json!(n)).unwrap_or(Value::Null),
+        // TRIMMED HERE, ONCE. A table sent as "  7 " is table 7 on the ticket
+        // and a different string to every `==` downstream.
+        "table": body.fulfilment.table.as_deref().map(str::trim).filter(|t| !t.is_empty())
+            .map(|t| json!(t)).unwrap_or(Value::Null),
         "address": body.fulfilment.address.as_ref().map(|a| json!({
             "line": a.line, "note": a.note,
             "parts": a.parts.as_ref().map(clean_address_parts).unwrap_or(Value::Null),

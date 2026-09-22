@@ -178,7 +178,11 @@ pub fn estimate(
     if crate::services::orders::status::is_terminal(status) {
         return None;
     }
-    let pickup = order.pointer("/fulfilment/kind").and_then(Value::as_str) == Some("pickup");
+    // `pickup` HERE MEANS "the food does not travel", which is true of a table
+    // order too. It was a comparison against one word, so a table order would
+    // have been quoted a courier's ride across Durrës to reach a table nine
+    // metres from the kitchen.
+    let pickup = !crate::services::ordering::fulfilment::leaves_the_building(crate::services::ordering::fulfilment::of(order));
     let created = order.get("created_at_ms").and_then(Value::as_i64).unwrap_or(now_ms);
 
     // ── the kitchen ──

@@ -40,6 +40,10 @@ pub struct Report {
     pub average_order: i64,
     pub delivery: i64,
     pub pickup: i64,
+    /// Orders placed AT A TABLE. A third field rather than a third meaning for
+    /// `pickup`: an owner deciding whether to keep paying couriers needs to see
+    /// the room and the counter apart.
+    pub dine_in: i64,
     pub by_day: Vec<Day>,
     pub by_hour: [i64; 24],
     pub top_products: Vec<Dish>,
@@ -95,7 +99,7 @@ pub fn fold(orders: &[Value], zone: Zone, starts: &[i64], now: i64) -> Report {
     let mut by_hour = [0i64; 24];
     let mut products: Vec<Dish> = Vec::new();
     let (mut count, mut revenue, mut rejected) = (0i64, 0i64, 0i64);
-    let (mut delivery, mut pickup) = (0i64, 0i64);
+    let (mut delivery, mut pickup, mut dine_in) = (0i64, 0i64, 0i64);
 
     for o in orders {
         let at = o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(0);
@@ -123,12 +127,14 @@ pub fn fold(orders: &[Value], zone: Zone, starts: &[i64], now: i64) -> Report {
         // A REFUSED ORDER IS STILL A CUSTOMER WHO TRIED, so it counts towards
         // when people order and how they wanted it. Only the money and the
         // dishes are withheld.
-        if o.get("fulfilment").and_then(|f| f.get("kind")).and_then(Value::as_str)
-            == Some("pickup")
-        {
-            pickup += 1;
-        } else {
-            delivery += 1;
+        // THREE KINDS, AND THE ELSE BRANCH USED TO SWALLOW THE THIRD. Anything
+        // that was not the word "pickup" counted as a delivery, so a room full
+        // of table orders would have read as a delivery business on the
+        // owner's own analytics pane.
+        match crate::services::ordering::fulfilment::of(o) {
+            "delivery" => delivery += 1,
+            "dine_in" => dine_in += 1,
+            _ => pickup += 1,
         }
         by_day[idx].orders += 1;
         by_day[idx].revenue += took;
@@ -178,6 +184,7 @@ pub fn fold(orders: &[Value], zone: Zone, starts: &[i64], now: i64) -> Report {
         average_order: if count > rejected { revenue / (count - rejected) } else { 0 },
         delivery,
         pickup,
+        dine_in,
         by_day,
         by_hour,
         top_products: products,

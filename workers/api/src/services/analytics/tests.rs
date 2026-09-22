@@ -169,6 +169,31 @@ fn a_refusal_counts_as_a_visit_but_not_as_money_or_as_a_dish() {
     assert!(r.top_products.is_empty(), "nobody ate it");
 }
 
+/// THREE KINDS, AND THE `else` BRANCH USED TO SWALLOW THE THIRD.
+///
+/// The tally was `if kind == "pickup" { pickup } else { delivery }`, so a room
+/// full of table orders read as a delivery business on the owner's own
+/// analytics pane — the number they would use to decide whether to keep paying
+/// couriers. An unknown kind still counts as a pickup rather than vanishing:
+/// it is a customer who tried, and the bucket it lands in is the one that
+/// claims the least.
+#[test]
+fn a_table_order_is_not_a_delivery_and_not_a_pickup() {
+    let z = tirane();
+    let starts = day_starts(z, NOON, 7);
+    let os = [
+        order(NOON, 5000, 0, "DELIVERED", "delivery"),
+        order(NOON, 3000, 0, "PICKED_UP", "pickup"),
+        order(NOON, 4000, 0, "PICKED_UP", "dine_in"),
+        order(NOON, 2000, 0, "PICKED_UP", "dine_in"),
+    ];
+    let r = fold(&os, z, &starts, NOON);
+    assert_eq!(r.delivery, 1, "one, not three");
+    assert_eq!(r.pickup, 1);
+    assert_eq!(r.dine_in, 2);
+    assert_eq!(r.delivery + r.pickup + r.dine_in, os.len() as i64, "every order lands once");
+}
+
 /// A LINE WITH NO PRODUCT IS NOT A DISH. These collected under the empty id
 /// and could reach the top eight as a nameless row carrying the revenue of
 /// every damaged line in the log.

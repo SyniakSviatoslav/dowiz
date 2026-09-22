@@ -52,6 +52,7 @@ pub async fn analytics(req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         "averageOrder": r.average_order,
         "delivery": r.delivery,
         "pickup": r.pickup,
+        "dineIn": r.dine_in,
         "byDay": r.by_day.iter()
             .map(|d| json!({ "at": d.at, "orders": d.orders, "revenue": d.revenue }))
             .collect::<Vec<_>>(),
