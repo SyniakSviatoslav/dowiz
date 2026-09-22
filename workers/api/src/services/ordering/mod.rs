@@ -7,6 +7,7 @@ pub mod preview;
 pub mod promo_fields;
 pub mod promotions;
 pub mod pricing;
+pub mod rates;
 
 #[cfg(test)]
 mod tests;

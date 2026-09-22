@@ -8,6 +8,9 @@
 use serde_json::{json, Value};
 use worker::*;
 
+pub mod stock;
+pub mod supplies;
+
 use crate::owner::now_ms;
 
 /// `GET /api/owner/health` — what this venue is spending, and how close to a limit.

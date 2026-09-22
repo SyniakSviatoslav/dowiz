@@ -12,9 +12,11 @@
 //! handlers move, because a test written after a move tests the move.
 
 pub mod analytics;
+pub mod catalogue;
 pub mod courier;
 pub mod customers;
 pub mod engagement;
+pub mod identity;
 pub mod ordering;
 pub mod operations;
 pub mod orders;

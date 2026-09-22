@@ -30,7 +30,6 @@ mod hubstore;
 mod otel;
 mod owner;
 mod assist;
-mod extra;
 mod storefront;
 mod stripe;
 mod project;
@@ -238,8 +237,8 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/public/locations/:slug/eta", eta::quote)
         .post_async("/api/promo/check", services::ordering::preview::promo_check)
         .get_async("/api/public/reach", services::venue::zones::reach)
-        .get_async("/api/public/rates", extra::rates)
-        .post_async("/api/voice", extra::voice)
+        .get_async("/api/public/rates", services::ordering::rates::rates)
+        .post_async("/api/voice", services::engagement::voice::voice)
         .post_async("/api/owner/zones", services::venue::zones::set_zones)
         .post_async("/api/owner/branding/extract", services::venue::brand_extract::extract_branding)
         .post_async("/api/order/:id/feedback", services::orders::feedback::feedback)
@@ -288,10 +287,10 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .get_async("/api/owner/customers", services::customers::handlers::customers)
         .post_async("/api/owner/customers/:key/reveal", services::customers::handlers::reveal_customer)
         .get_async("/api/owner/customers/reveals", services::customers::handlers::reveals)
-        .get_async("/api/owner/stock", extra::stock)
-        .post_async("/api/owner/stock/:kind", extra::stock_move)
-        .post_async("/api/owner/supplies", extra::set_supply)
-        .post_async("/api/owner/supplies/:id/retire", extra::retire_supply)
+        .get_async("/api/owner/stock", services::operations::stock::stock)
+        .post_async("/api/owner/stock/:kind", services::operations::stock::stock_move)
+        .post_async("/api/owner/supplies", services::operations::supplies::set_supply)
+        .post_async("/api/owner/supplies/:id/retire", services::operations::supplies::retire_supply)
         .get_async("/api/owner/features", services::venue::settings::features)
         .post_async("/api/owner/features", services::venue::settings::set_feature)
         .get_async("/api/owner/settings", services::venue::settings::settings)
@@ -308,7 +307,7 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/owner/integrations/check", integrations::check)
         .get_async("/api/mcp", mcp::describe)
         .post_async("/api/mcp", mcp::rpc)
-        .post_async("/api/owner/menu/import", extra::import_menu)
+        .post_async("/api/owner/menu/import", services::catalogue::import::import_menu)
         .get_async("/api/owner/couriers", services::courier::console::couriers)
         .post_async("/api/owner/couriers/invite", services::courier::hiring::invite_courier)
         .post_async("/api/owner/couriers/:id/uninvite", services::courier::hiring::uninvite_courier)
@@ -326,16 +325,16 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/owner/restore", services::operations::restore)
         .post_async("/api/owner/assist", services::engagement::assist::owner_assist)
         .post_async("/api/courier/assist", services::engagement::assist::courier_assist)
-        .get_async("/api/owner/apikeys", extra::list_api_keys)
-        .post_async("/api/owner/apikeys", extra::create_api_key)
-        .post_async("/api/owner/apikeys/revoke", extra::revoke_api_key)
-        .post_async("/api/owner/products/:id/image", extra::set_product_image)
-        .post_async("/api/owner/products/:id/image/clear", extra::clear_product_image)
+        .get_async("/api/owner/apikeys", services::identity::keys::list_api_keys)
+        .post_async("/api/owner/apikeys", services::identity::keys::create_api_key)
+        .post_async("/api/owner/apikeys/revoke", services::identity::keys::revoke_api_key)
+        .post_async("/api/owner/products/:id/image", services::catalogue::media::set_product_image)
+        .post_async("/api/owner/products/:id/image/clear", services::catalogue::media::clear_product_image)
         // The venue's own mark, stored the way its dishes' photographs are.
-        .post_async("/api/owner/place", extra::set_place)
-        .post_async("/api/owner/logo", extra::set_venue_logo)
-        .post_async("/api/owner/logo/clear", extra::clear_venue_logo)
-        .get_async("/media/:name", extra::media)
+        .post_async("/api/owner/place", services::venue::place::set_place)
+        .post_async("/api/owner/logo", services::catalogue::media::set_venue_logo)
+        .post_async("/api/owner/logo/clear", services::catalogue::media::clear_venue_logo)
+        .get_async("/media/:name", services::catalogue::media::media)
         // ── courier ──
         .get_async("/api/courier/tasks", courier::tasks)
         .post_async("/api/courier/shift", courier::shift)

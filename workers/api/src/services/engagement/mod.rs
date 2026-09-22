@@ -4,3 +4,4 @@
 pub mod assist;
 pub mod posts;
 pub mod verdict;
+pub mod voice;
