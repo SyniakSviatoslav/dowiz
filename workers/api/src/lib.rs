@@ -242,7 +242,7 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/voice", extra::voice)
         .post_async("/api/owner/zones", extra::set_zones)
         .post_async("/api/owner/branding/extract", extra::extract_branding)
-        .post_async("/api/order/:id/feedback", extra::feedback)
+        .post_async("/api/order/:id/feedback", services::orders::feedback::feedback)
         // ── accounts ──
         .post_async("/api/bootstrap", bootstrap::seed)
         // The waiting list: the landing page's one form. Public to write,

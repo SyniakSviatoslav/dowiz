@@ -77,6 +77,34 @@ impl OrderStatus {
                 | Self::CompensatedRefund
         )
     }
+
+    /// Did the venue take this order's money?
+    ///
+    /// A REFUSED ORDER IS NOT MONEY TAKEN, and neither is a refunded one --
+    /// the venue gave it back. `Refunding` still is: the refund has not
+    /// completed, and that is the one honest answer while it is in flight.
+    ///
+    /// This question was asked by hand at nine call sites across the Worker
+    /// and the native adapter, each spelling out `REJECTED | CANCELLED` and
+    /// none of them knowing about `CompensatedRefund`, so a refunded order
+    /// counted in a venue's takings. It belongs beside `is_terminal`, where
+    /// the statuses are defined.
+    pub fn took_money(&self) -> bool {
+        !matches!(self, Self::Rejected | Self::Cancelled | Self::CompensatedRefund)
+    }
+
+    /// Is the kitchen working on this one? Accepted, not finished, and not
+    /// still waiting to be accepted -- `Pending` is a decision the venue owes
+    /// the customer, which is a different queue.
+    ///
+    /// `Scheduled` is a scaffold terminal (see `is_scaffold`) and is no more
+    /// active than it is real.
+    pub fn is_active(&self) -> bool {
+        matches!(
+            self,
+            Self::Confirmed | Self::Preparing | Self::Ready | Self::InDelivery | Self::Refunding
+        )
+    }
 }
 
 /// Transition table — identical to the oracle's `TRANSITIONS`.
@@ -673,6 +701,57 @@ pub fn cyclomatic_number() -> isize {
 mod tests {
 
     use super::*;
+
+    // ── the status vocabulary, which nine call sites used to spell out ──
+
+    /// A REFUNDED ORDER IS NOT TAKINGS. Every hand-written copy of this
+    /// question said `REJECTED | CANCELLED`, so a `CompensatedRefund` --
+    /// an order whose ledger nets to exactly zero -- counted as money the
+    /// venue kept.
+    #[test]
+    fn took_money_excludes_the_refused_and_the_refunded() {
+        use OrderStatus::*;
+        for s in [Rejected, Cancelled, CompensatedRefund] {
+            assert!(!s.took_money(), "{}", s.as_str());
+        }
+        for s in [Pending, Confirmed, Preparing, Ready, InDelivery, Delivered, PickedUp] {
+            assert!(s.took_money(), "{}", s.as_str());
+        }
+        assert!(Refunding.took_money(), "in flight: the refund has not completed");
+    }
+
+    /// EVERY TERMINAL STATUS IS INACTIVE, and `Pending` is inactive too --
+    /// it is a decision the venue owes the customer, which is a different
+    /// queue from the one the kitchen works.
+    #[test]
+    fn active_is_accepted_and_unfinished() {
+        use OrderStatus::*;
+        for s in [Confirmed, Preparing, Ready, InDelivery, Refunding] {
+            assert!(s.is_active(), "{}", s.as_str());
+            assert!(!s.is_terminal(), "{} cannot be both", s.as_str());
+        }
+        for s in [Pending, Delivered, PickedUp, Rejected, Cancelled, CompensatedRefund, Scheduled] {
+            assert!(!s.is_active(), "{}", s.as_str());
+        }
+    }
+
+    /// THE THREE PREDICATES PARTITION THE FSM: a status the table knows is
+    /// exactly one of waiting, active or finished, and adding a status to
+    /// `allowed_next` without classifying it fails here.
+    #[test]
+    fn every_status_is_waiting_active_or_finished_and_never_two_of_them() {
+        use OrderStatus::*;
+        for s in [
+            Pending, Confirmed, Preparing, Ready, InDelivery, Delivered, Rejected, Cancelled,
+            Scheduled, PickedUp, Refunding, CompensatedRefund,
+        ] {
+            let n = s.is_active() as u8 + s.is_terminal() as u8;
+            assert!(n <= 1, "{} is both active and terminal", s.as_str());
+            if s != Pending && s != Scheduled {
+                assert_eq!(n, 1, "{} is neither active nor terminal", s.as_str());
+            }
+        }
+    }
 
     // ── RED: illegal transitions must be rejected ──
     #[test]

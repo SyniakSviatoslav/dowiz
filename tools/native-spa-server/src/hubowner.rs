@@ -32,17 +32,12 @@ use crate::hub::{now_ms, HubHttpError, Shared};
 use crate::hubauth::OwnerCaller;
 
 /// Statuses an order passes through while it is still the venue's problem.
-/// Derived from the kernel's own terminal check rather than listed here.
+///
+/// This SAID it was derived from the kernel's terminal check and then listed
+/// the statuses by hand anyway -- without `CompensatedRefund`, so a refunded
+/// order stayed on the venue's screen for ever.
 fn is_live(status: &str) -> bool {
-    OrderStatus::from_str(status).is_some_and(|s| {
-        !matches!(
-            s,
-            OrderStatus::Delivered
-                | OrderStatus::PickedUp
-                | OrderStatus::Rejected
-                | OrderStatus::Cancelled
-        )
-    })
+    !crate::ostatus::is_terminal(status)
 }
 
 /// `GET /api/owner/orders` — the queue, newest first.
@@ -237,13 +232,14 @@ pub async fn dashboard_facts(st: &Shared) -> Result<Value, HubHttpError> {
             // Revenue counts orders that were not refused. A rejected order is
             // not money the venue took, and counting it would overstate the day
             // every time the kitchen turned something down.
-            if !matches!(status, "REJECTED" | "CANCELLED") {
-                // The tip is the COURIER'S. Counting it here would put money
-                // in the venue's takings that the venue never earned and will
-                // not keep.
-                revenue += o.get("total").and_then(Value::as_i64).unwrap_or(0)
-                    - o.get("tip").and_then(Value::as_i64).unwrap_or(0);
-            }
+            // The tip is the COURIER'S. Counting it here would put money in
+            // the venue's takings that the venue never earned and will not
+            // keep. `venue_took` is the one definition of both rules.
+            revenue += crate::ostatus::venue_took(
+                o.get("total").and_then(Value::as_i64).unwrap_or(0),
+                o.get("tip").and_then(Value::as_i64).unwrap_or(0),
+                status,
+            );
         }
     }
     // ── READINESS: dishes on sale that nobody has declared ──
@@ -1780,12 +1776,12 @@ pub async fn customers(
         let at = o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(0);
         // A refused order is not money the venue took, so it does not count
         // towards what this customer is worth -- the same rule the takings use.
-        let spent = match o.get("status").and_then(Value::as_str) {
-            Some("REJECTED" | "CANCELLED") => 0,
-            // What they spent WITH THE VENUE. The tip went to the courier.
-            _ => o.get("total").and_then(Value::as_i64).unwrap_or(0)
-                - o.get("tip").and_then(Value::as_i64).unwrap_or(0),
-        };
+        // What they spent WITH THE VENUE. The tip went to the courier.
+        let spent = crate::ostatus::venue_took(
+            o.get("total").and_then(Value::as_i64).unwrap_or(0),
+            o.get("tip").and_then(Value::as_i64).unwrap_or(0),
+            o.get("status").and_then(Value::as_str).unwrap_or(""),
+        );
         let key = customer_key(&st, phone);
         match rows.iter_mut().find(|r| r.0 == key) {
             Some(r) => {
@@ -2294,21 +2290,18 @@ pub async fn analytics(
             continue;
         }
         let status = o.get("status").and_then(Value::as_str).unwrap_or("");
-        let refused = matches!(status, "REJECTED" | "CANCELLED");
+        let refused = !crate::ostatus::took_money(status);
         orders += 1;
         if refused {
             rejected += 1;
         }
-        // Money the venue TOOK. A refused order is not revenue, and counting it
-        // would overstate every day the kitchen turned something down.
-        // Tips excluded, for the same reason they are excluded from the
-        // dashboard: they are the courier's money passing through.
-        let total = if refused {
-            0
-        } else {
-            o.get("total").and_then(Value::as_i64).unwrap_or(0)
-                - o.get("tip").and_then(Value::as_i64).unwrap_or(0)
-        };
+        // Money the venue TOOK: a refused or refunded order is not revenue,
+        // and the tip is the courier's money passing through.
+        let total = crate::ostatus::venue_took(
+            o.get("total").and_then(Value::as_i64).unwrap_or(0),
+            o.get("tip").and_then(Value::as_i64).unwrap_or(0),
+            status,
+        );
         revenue += total;
 
         match o.get("fulfilment").and_then(|f| f.get("kind")).and_then(Value::as_str) {

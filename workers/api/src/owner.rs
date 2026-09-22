@@ -685,10 +685,10 @@ pub async fn dashboard(req: Request, ctx: RouteContext<()>) -> Result<Response> 
         }
         count += 1;
         let status = v.get("status").and_then(|x| x.as_str()).unwrap_or("");
-        match status {
-            "PENDING" => pending += 1,
-            "CONFIRMED" | "PREPARING" | "READY" | "IN_DELIVERY" => active += 1,
-            _ => {}
+        if status == "PENDING" {
+            pending += 1;
+        } else if crate::services::orders::status::is_active(status) {
+            active += 1;
         }
         // ── ONE DEFINITION OF TODAY'S TAKINGS ──
         //
@@ -702,10 +702,11 @@ pub async fn dashboard(req: Request, ctx: RouteContext<()>) -> Result<Response> 
         //
         // The tip is subtracted wherever the venue's money is counted: it is
         // the courier's, passing through.
-        if !matches!(status, "REJECTED" | "CANCELLED") {
-            revenue += v.get("total").and_then(|t| t.as_i64()).unwrap_or(0)
-                - v.get("tip").and_then(|t| t.as_i64()).unwrap_or(0);
-        }
+        revenue += crate::services::orders::status::venue_took(
+            v.get("total").and_then(|t| t.as_i64()).unwrap_or(0),
+            v.get("tip").and_then(|t| t.as_i64()).unwrap_or(0),
+            status,
+        );
     }
     Response::from_json(&json!({
         "todayOrders": count, "todayRevenue": revenue,

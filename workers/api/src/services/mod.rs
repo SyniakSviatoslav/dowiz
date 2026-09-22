@@ -14,3 +14,4 @@
 pub mod courier;
 pub mod customers;
 pub mod ordering;
+pub mod orders;

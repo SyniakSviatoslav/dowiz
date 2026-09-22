@@ -181,7 +181,10 @@ pub fn estimate(
     now_ms: i64,
 ) -> Option<Value> {
     let status = order.get("status").and_then(Value::as_str).unwrap_or("");
-    if matches!(status, "DELIVERED" | "REJECTED" | "CANCELLED" | "PICKED_UP") {
+    // A finished order has no estimate. This list was written out by hand and
+    // was the only one of the four copies that remembered `PICKED_UP`; it
+    // still did not know about `COMPENSATED_REFUND`.
+    if crate::services::orders::status::is_terminal(status) {
         return None;
     }
     let pickup = order.pointer("/fulfilment/kind").and_then(Value::as_str) == Some("pickup");

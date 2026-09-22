@@ -44,6 +44,7 @@ pub mod hubpost;
 pub mod hubvoice;
 pub mod mcp;
 pub mod notify;
+pub mod ostatus;
 pub mod p67;
 pub mod webhook;
 

@@ -502,7 +502,8 @@ pub(crate) fn promo_uses(hub: &Hub, code: &str) -> i64 {
         .iter()
         .filter(|ev| {
             let Ok(o) = serde_json::from_str::<Value>(&ev.order_json) else { return false };
-            if matches!(o.get("status").and_then(Value::as_str), Some("REJECTED" | "CANCELLED")) {
+            // A code spent on an order the venue refused was not spent.
+            if !crate::ostatus::took_money(o.get("status").and_then(Value::as_str).unwrap_or("")) {
                 return false;
             }
             o.get("promo").and_then(|p| p.get("code")).and_then(Value::as_str) == Some(code)
@@ -1017,7 +1018,10 @@ pub async fn feedback(
         // the kitchen needs NOW, and this is not a messaging channel -- saying
         // so beats letting it arrive somewhere nobody is watching.
         let status = env.get("status").and_then(Value::as_str).unwrap_or("");
-        if !matches!(status, "DELIVERED" | "REJECTED" | "CANCELLED") {
+        // THE KERNEL'S OWN LIST. `PICKED_UP` was missing from this copy too,
+        // so a customer who collected their order was told it was still
+        // running and could never leave a note.
+        if !crate::ostatus::is_terminal(status) {
             return Err(HubHttpError::Conflict(
                 "this order is still running -- call the venue if something is wrong".into(),
             ));

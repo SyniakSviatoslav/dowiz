@@ -45,13 +45,11 @@ impl Sort {
 /// venue never had it, so a list sorted by "spent" that counted tips would
 /// rank a generous customer above a profitable one.
 fn spent_on(o: &Value) -> i64 {
-    match o.get("status").and_then(Value::as_str) {
-        Some("REJECTED" | "CANCELLED") => 0,
-        _ => {
-            o.get("total").and_then(Value::as_i64).unwrap_or(0)
-                - o.get("tip").and_then(Value::as_i64).unwrap_or(0)
-        }
-    }
+    crate::services::orders::status::venue_took(
+        o.get("total").and_then(Value::as_i64).unwrap_or(0),
+        o.get("tip").and_then(Value::as_i64).unwrap_or(0),
+        o.get("status").and_then(Value::as_str).unwrap_or(""),
+    )
 }
 
 /// Fold this venue's orders into one row per person.

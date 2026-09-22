@@ -1433,8 +1433,9 @@ pub fn promo_uses_in(listed: &[crate::hubdo::OrderView], code: &str) -> i64 {
             let Ok(o) = serde_json::from_str::<serde_json::Value>(&ev.order_json) else {
                 return false;
             };
-            let st = o.get("status").and_then(|s| s.as_str());
-            if matches!(st, Some("REJECTED" | "CANCELLED")) {
+            let st = o.get("status").and_then(|s| s.as_str()).unwrap_or("");
+            // A code spent on an order the venue refused was not spent.
+            if !crate::services::orders::status::took_money(st) {
                 return false;
             }
             o.get("promo").and_then(|p| p.get("code")).and_then(|c| c.as_str()) == Some(code)

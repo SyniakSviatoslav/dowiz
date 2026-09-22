@@ -113,7 +113,7 @@ async fn candidates(st: &Shared, caller: &Caller) -> Result<Vec<Value>, HubHttpE
         .filter_map(|e| serde_json::from_str::<Value>(&e.order_json).ok())
         .filter(|o| {
             let s = o.get("status").and_then(Value::as_str).unwrap_or("");
-            !matches!(s, "DELIVERED" | "PICKED_UP" | "REJECTED" | "CANCELLED")
+            !crate::ostatus::is_terminal(s)
         })
         .filter(|o| match caller.person.role {
             // A courier can only ever mean one of their own runs.
