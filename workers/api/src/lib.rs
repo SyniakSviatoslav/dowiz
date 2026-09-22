@@ -254,6 +254,14 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/public/locations/:slug/reservations/:id/action", booking::action)
         .get_async("/api/public/locations/:slug/reservations/:id/pass", booking::issue_pass)
         .post_async("/api/public/locations/:slug/pass/verify", booking::verify_pass)
+        // ── THE FLOOR: which tables are free FOR A SLOT ──
+        //
+        // PUBLIC, DELIBERATELY. It is the venue's own furniture and the "is
+        // there room tonight" a phone call already answers; it carries no name,
+        // no party and no reservation id. It REFUSES without `slotMin`,
+        // because a table is free or taken only for a slot and a plan drawn
+        // without one is a picture of a lie.
+        .get_async("/api/public/locations/:slug/tables", booking::availability)
         // ── threads: the transport for `dowiz_kernel::thread` ──
         .get_async("/api/public/locations/:slug/threads/:id", social::messages)
         .post_async("/api/public/locations/:slug/threads/:id/messages", social::send)
@@ -268,6 +276,10 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .get_async("/api/public/rates", services::ordering::rates::rates)
         .post_async("/api/voice", services::engagement::voice::voice)
         .post_async("/api/owner/zones", services::venue::zones::set_zones)
+        // The room as DATA an owner can edit, beside the delivery zones it
+        // sits next to in the catalogue. Refused on write when it does not
+        // parse back, naming the zone, the table and the rule.
+        .post_async("/api/owner/floorplan", booking::set_plan)
         .post_async("/api/owner/branding/extract", services::venue::brand_extract::extract_branding)
         .post_async("/api/order/:id/feedback", services::orders::feedback::feedback)
         // ── accounts ──

@@ -46,6 +46,7 @@ pub mod voice;
 pub mod zone;
 pub mod logimage;
 pub mod table;
+pub mod tables;
 pub mod tz;
 pub mod token;
 

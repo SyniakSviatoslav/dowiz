@@ -505,7 +505,9 @@ input:focus,textarea:focus,select:focus{border-color:var(--brand-primary);outlin
 
 /* ── the bottom bar ───────────────────────────────────────────────────────── */
 .nav{position:fixed;left:0;right:0;bottom:0;z-index:calc(var(--z-sticky) + 4);
-  display:grid;grid-template-columns:repeat(5,1fr);height:var(--nav-h);
+  /* SIX TABS since booking got one. `.tab-l` already ellipsises rather than
+     wrapping, which is what makes a sixth column safe at 360px. */
+  display:grid;grid-template-columns:repeat(6,1fr);height:var(--nav-h);
   padding-bottom:env(safe-area-inset-bottom,0px);
   background:var(--glass);backdrop-filter:blur(18px) saturate(1.2);-webkit-backdrop-filter:blur(18px) saturate(1.2);
   border-top:1px solid var(--glass-border);
@@ -1001,3 +1003,92 @@ a.vsrc{text-decoration:underline}
 .install-ios{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:var(--space-3);color:var(--brand-text-muted);font-size:var(--text-sm)}
 .install-never{display:inline-flex;align-items:center;gap:8px;font-size:var(--text-sm);color:var(--brand-text-muted);cursor:pointer}
 .install-never input{width:18px;height:18px;accent-color:var(--brand-primary)}
+
+/* ── the floor plan (store/booking.js) ─────────────────────────────────────
+ *
+ * EVERY COLOUR HERE IS A `--brand-*` TOKEN. `docs/design/booking-template.html`
+ * paints `#F1EFE8` bone and `#085041` green; those are the prototype's choice,
+ * and a booking screen in a palette the customer did not just see on the menu
+ * reads as a different restaurant. The venue's own set is applied to `:root`
+ * by state.js `applyTheme`, so the plan is repainted with everything else.
+ *
+ * CONTRAST: the hub's `crates/dowiz-hub/src/palette.rs` ENFORCES WCAG AA on
+ * the way in for exactly three pairs -- text/surface, muted/surface and
+ * on-primary/primary -- so those are the only pairs this file puts words on.
+ * MEASURED, for the shipped default set and for Dubin & Sushi's served set:
+ *
+ *   pair                              shipped-light  shipped-dark  dubin  dubin-dark
+ *   table number  text on surface         17.40         15.05      12.68    15.09
+ *   seat count    muted on surface         5.25          6.57       6.71     6.56
+ *   chosen table  on-primary on primary    4.65          7.61       7.98     7.98
+ *   taken table   text on the taken fill  14.47         11.92       9.83    11.95
+ *   hint, legend  muted on bg              5.03          7.30       7.95     7.29
+ *
+ * The taken fill is `--brand-text-muted` at 14% over the surface, which is why
+ * its ink is `--brand-text` and not the muted token: muted on that fill
+ * measured 4.36 on the shipped light set, under the 4.5 line.
+ *
+ * AND THE TAKEN STATE IS NOT COLOUR ALONE -- a dashed edge and faded chairs
+ * carry it too, for the same reason the legend carries a word.
+ */
+.bk{--bk-taken:color-mix(in srgb,var(--brand-text-muted) 14%,var(--brand-surface));
+  display:flex;flex-direction:column;gap:var(--space-2)}
+.bk-hint{margin:0 0 var(--space-3);color:var(--brand-text-muted);font-size:var(--text-sm)}
+.bk-lbl{margin:var(--space-3) 0 var(--space-2);font-family:var(--font-mono);font-size:11px;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--brand-text-muted)}
+.bk-row{display:flex;gap:6px;flex-wrap:wrap}
+.bk-scroll{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;
+  padding-bottom:2px}
+.bk-scroll::-webkit-scrollbar{display:none}
+.bk-chip{flex:0 0 auto;min-width:var(--tap);min-height:var(--tap);padding:0 12px;
+  border:1.4px solid var(--brand-border);border-radius:var(--radius-full);
+  background:var(--brand-surface);color:var(--brand-text);font:inherit;font-size:var(--text-sm);
+  font-weight:var(--weight-bold);font-variant-numeric:tabular-nums;cursor:pointer}
+.bk-chip.on{background:var(--brand-primary);border-color:var(--brand-primary);color:var(--brand-on-primary)}
+.bk-day{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;line-height:1.1}
+.bk-day b{font-size:10px;font-weight:var(--weight-medium);text-transform:uppercase;letter-spacing:.06em}
+.bk-day i{font-style:normal;font-size:var(--text-base)}
+.bk-tabs{display:flex;gap:6px;margin:var(--space-3) 0 var(--space-2)}
+.bk-tab{flex:1;min-height:var(--tap);border:1.4px solid var(--brand-border);border-radius:var(--radius-full);
+  background:var(--brand-surface);color:var(--brand-text);font:inherit;font-size:var(--text-sm);
+  font-weight:var(--weight-bold);cursor:pointer}
+.bk-tab[aria-selected="true"]{background:var(--brand-text);border-color:var(--brand-text);color:var(--brand-bg)}
+
+/* the plan itself */
+.bk-plan{width:100%;height:auto;display:block;touch-action:manipulation}
+.bk-floor{fill:var(--brand-surface-raised);stroke:var(--brand-border);stroke-width:2}
+.bk-door{stroke:var(--brand-primary);stroke-width:4;stroke-linecap:round}
+.bk-chair rect{fill:var(--brand-surface);stroke:var(--brand-text);stroke-width:1.4}
+.bk-chair path{stroke:var(--brand-text);stroke-width:1.6;stroke-linecap:round}
+.bk-top{fill:var(--brand-surface);stroke:var(--brand-text);stroke-width:1.6}
+.bk-num{font-size:14px;font-weight:700;fill:var(--brand-text)}
+/* 11px, not the prototype's 8.5: the seat count is a word a diner reads on a
+   phone, and at 8.5px it is decoration. */
+.bk-sub{font-size:11px;fill:var(--brand-text-muted)}
+.bk-t{cursor:pointer}
+.bk-t.sel .bk-top{fill:var(--brand-primary);stroke:var(--brand-primary)}
+.bk-t.sel .bk-num,.bk-t.sel .bk-sub{fill:var(--brand-on-primary)}
+.bk-t.occ,.bk-t.small{cursor:not-allowed}
+.bk-t.occ .bk-top,.bk-t.small .bk-top{fill:var(--bk-taken);stroke:var(--brand-text-muted);
+  stroke-dasharray:4 3}
+.bk-t.occ .bk-num,.bk-t.small .bk-num,.bk-t.occ .bk-sub,.bk-t.small .bk-sub{fill:var(--brand-text)}
+.bk-t.occ .bk-chair,.bk-t.small .bk-chair{opacity:.45}
+.bk-t:focus{outline:none}
+.bk-t:focus-visible .bk-top{stroke:var(--brand-primary);stroke-width:3.5;stroke-dasharray:none}
+
+.bk-legend{display:flex;gap:var(--space-4);flex-wrap:wrap;padding:var(--space-2) 0;
+  font-size:var(--text-sm);color:var(--brand-text-muted)}
+.bk-legend span{display:flex;align-items:center;gap:6px}
+.bk-legend i{width:14px;height:14px;border-radius:4px;border:1.4px solid var(--brand-text)}
+.bk-legend i.free{background:var(--brand-surface)}
+.bk-legend i.sel{background:var(--brand-primary);border-color:var(--brand-primary)}
+.bk-legend i.occ{background:var(--bk-taken);border-color:var(--brand-text-muted);border-style:dashed}
+
+.bk-foot{position:sticky;bottom:0;padding-top:var(--space-3);margin-top:var(--space-2);
+  background:linear-gradient(to top,var(--brand-surface) 70%,transparent)}
+.bk-pick{margin:0 0 var(--space-2);min-height:20px;font-size:var(--text-sm);color:var(--brand-text-muted)}
+.bk-pick b{color:var(--brand-text)}
+.skel-plan{height:60vh;min-height:280px}
+.bk-key{display:inline-grid;place-items:center;width:14px;height:14px;border-radius:4px;
+  border:1.4px solid var(--brand-text);background:var(--brand-surface);color:var(--brand-text-muted);
+  font-size:10px;font-weight:var(--weight-bold);font-variant-numeric:tabular-nums}

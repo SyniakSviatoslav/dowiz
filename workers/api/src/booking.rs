@@ -26,6 +26,10 @@ use dowiz_kernel::reservation::{
     self, BookingPolicy, ReservationRequest, ReservationStatus,
 };
 
+// The FLOOR. `dowiz_hub::tables` decides which tables can seat a party and
+// which are taken for a slot; nothing in this file works that out.
+use dowiz_hub::tables as floor;
+
 
 /// Minutes since the Unix epoch — the kernel's unit for a slot.
 ///
@@ -78,6 +82,13 @@ struct ReservationRow {
     contact_phone: String,
     status: String,
     created_at_ms: i64,
+    /// The table, when the guest chose one. `default` because every booking
+    /// written before the floor existed has neither field, and a read model
+    /// that refused those would make the venue's history unreadable.
+    #[serde(default)]
+    zone_id: Option<String>,
+    #[serde(default)]
+    table_n: Option<i64>,
 }
 
 /// Replay a reservation's events through the kernel.
@@ -198,6 +209,8 @@ pub async fn detail(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
         "contactName": row.contact_name,
         "contactPhone": row.contact_phone,
         "status": status,
+        "zoneId": row.zone_id,
+        "tableN": row.table_n,
         // Loud, not silent: the cache disagreeing with the log is a fact the
         // caller gets to see.
         "statusCacheDrifted": drift,
@@ -246,6 +259,7 @@ pub async fn list(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respons
         "reservations": rows.iter().map(|r| json!({
             "id": r.id, "party": r.party, "slotMin": r.slot_min,
             "occasion": r.occasion, "status": r.status,
+            "zoneId": r.zone_id, "tableN": r.table_n,
         })).collect::<Vec<_>>()
     }))
 }
@@ -267,6 +281,13 @@ struct CreateBody {
     contact_phone: String,
     #[serde(default, rename = "userId")]
     user_id: Option<String>,
+    /// The table the guest tapped on the plan. BOTH OR NEITHER: a zone with no
+    /// table number names no table, and half a choice written into a booking
+    /// is a booking the floor cannot check.
+    #[serde(default, rename = "zoneId")]
+    zone_id: Option<String>,
+    #[serde(default, rename = "tableN")]
+    table_n: Option<i64>,
     /// The caller's own key. Sending the same one twice returns the same
     /// booking rather than making a second — a retried request must not book a
     /// second table.
@@ -324,6 +345,24 @@ pub async fn create(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<R
         return Response::error(e.message(), 422);
     }
 
+    // ── AND THE FLOOR IS THE SECOND DECISION ──
+    // The kernel says whether a party and a time are a legal booking. It does
+    // not know the room is a finite number of tables, so that is asked here.
+    let table = match (body.zone_id.as_deref().map(str::trim), body.table_n) {
+        (Some(z), Some(n)) if !z.is_empty() => Some((z.to_string(), n)),
+        (None, None) | (Some(""), None) => None,
+        // Half a choice written into a booking is a booking the floor cannot
+        // check -- and it would look accepted.
+        _ => return Response::error("a table is a zoneId AND a tableN, or neither", 400),
+    };
+    let plan = floor_plan(&place).await?;
+    if table.is_some() && plan.is_empty() {
+        return Response::error(
+            "this venue has published no floor plan, so a booking here cannot name a table",
+            409,
+        );
+    }
+
     let now = ctx.data.now_ms;
     // A GUEST BOOKING HAS NO USER, and that used to be a 500: the column
     // references `users(id)` and an empty string names no user, so SQLite
@@ -341,6 +380,8 @@ pub async fn create(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<R
         "slot_min": body.slot_min, "occasion": body.occasion,
         "contact_name": body.contact_name, "contact_phone": body.contact_phone,
         "status": "REQUESTED", "created_at_ms": now, "user_id": user_id,
+        "zone_id": table.as_ref().map(|(z, _)| z.clone()),
+        "table_n": table.as_ref().map(|(_, n)| *n),
     })
     .to_string();
     let ev = json!({
@@ -348,33 +389,63 @@ pub async fn create(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<R
     })
     .to_string();
     let (rid, slot) = (id.clone(), body.slot_min);
-    let index: Vec<(String, String)> = match &user_id {
-        Some(u) => vec![(user_key(u, slot, &rid), rid.clone())],
-        None => vec![],
-    };
+    let party = body.party as i64;
+    let picked = table.clone();
     // ONE WRITE. This was `db.batch` of two statements — the reservation and
     // its first event — and a batch that half-applies leaves a booking with no
     // history, which `fold_status` then reports as "reservation has no events".
-    if let Err(e) = crate::hubstore::with_table(
+    //
+    // THE FLOOR IS CHECKED INSIDE THIS CLOSURE, against the image about to be
+    // written. A check done against the earlier read would be a window: two
+    // requests a millisecond apart would both pass it and both write, and the
+    // venue would learn about it when two parties arrived for one table.
+    // `with_table` re-runs the closure when the generation moved, so the
+    // verdict is re-taken on the state that actually wins.
+    let outcome = crate::hubstore::with_table(
         &place,
         IMAGE_BOOKINGS,
         BOOKINGS_BYTES,
         move |t| {
-            t.put(K_RSV, &rid, &rsv, &index, &[])
+            let mut index: Vec<(String, String)> = match &user_id {
+                Some(u) => vec![(user_key(u, slot, &rid), rid.clone())],
+                None => vec![],
+            };
+            let mut unique: Vec<String> = Vec::new();
+            if let Some((z, n)) = &picked {
+                if let Some(why) =
+                    table_verdict(&plan, &held_tables(t), z, *n, party, slot, &rid)
+                {
+                    return Ok(Some(why));
+                }
+                let k = table_key(z, *n, slot);
+                unique.push(k.clone());
+                index.push((k, rid.clone()));
+            }
+            let u: Vec<&str> = unique.iter().map(String::as_str).collect();
+            t.put(K_RSV, &rid, &rsv, &index, &u)
                 .map_err(|x| Error::RustError(format!("booking: {x}")))?;
             t.put(K_EV, &ev_key(&rid, 1), &ev, &[], &[])
                 .map_err(|x| Error::RustError(format!("booking event: {x}")))?;
-            Ok(())
+            Ok(None)
         },
     )
-    .await
-    {
+    .await;
+    match outcome {
+        Ok(None) => {}
+        // 409, not 400: the request is well formed and the floor is simply not
+        // free. The message names the table, because a guest told only "not
+        // available" does not know the next table over is empty.
+        Ok(Some(why)) => return Response::error(why, 409),
         // Named, not swallowed. A bare 500 here cost a deploy cycle to diagnose
         // because the router renders an `Err` with no body at all.
-        return Response::error(format!("create/write: {e}"), 500);
+        Err(e) => return Response::error(format!("create/write: {e}"), 500),
     }
 
-    Response::from_json(&json!({ "id": id, "status": "REQUESTED", "replayed": false }))
+    Response::from_json(&json!({
+        "id": id, "status": "REQUESTED", "replayed": false,
+        "zoneId": table.as_ref().map(|(z, _)| z.clone()),
+        "tableN": table.as_ref().map(|(_, n)| *n),
+    }))
 }
 
 #[derive(Deserialize)]
@@ -461,20 +532,27 @@ pub async fn action(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<R
             // The index keys are recomputed from the record, so a status change
             // cannot silently drop the entry that puts this booking on its
             // owner's list.
-            let index: Vec<(String, String)> = r
+            let slot_min =
+                r.get("slot_min").and_then(serde_json::Value::as_i64).unwrap_or(0);
+            let mut index: Vec<(String, String)> = r
                 .get("user_id")
                 .and_then(serde_json::Value::as_str)
-                .map(|u| {
-                    vec![(
-                        user_key(
-                            u,
-                            r.get("slot_min").and_then(serde_json::Value::as_i64).unwrap_or(0),
-                            &rid,
-                        ),
-                        rid.clone(),
-                    )]
-                })
+                .map(|u| vec![(user_key(u, slot_min, &rid), rid.clone())])
                 .unwrap_or_default();
+            // AND THIS IS HOW A TABLE IS RELEASED. `Table::put` replaces the
+            // keys the old record owned with exactly this list, so a booking
+            // that reaches a status which no longer holds its table simply
+            // stops writing the key -- there is no separate "free the table"
+            // step anybody can forget, and no window where the record says
+            // cancelled while the floor still says taken.
+            if floor::holds_table(&status) {
+                if let (Some(z), Some(n)) = (
+                    r.get("zone_id").and_then(serde_json::Value::as_str),
+                    r.get("table_n").and_then(serde_json::Value::as_i64),
+                ) {
+                    index.push((table_key(z, n, slot_min), rid.clone()));
+                }
+            }
             t.put(K_RSV, &rid, &r.to_string(), &index, &[])
                 .map_err(|x| Error::RustError(format!("booking: {x}")))?;
         }
@@ -483,6 +561,228 @@ pub async fn action(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<R
     .await?;
 
     Response::from_json(&json!({ "id": id, "status": to.as_str(), "seq": seq }))
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The floor
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Where the owner's floor plan lives: a field on the venue's own record, in
+/// the catalogue image, beside `delivery_zones`. The same place and the same
+/// shape as `services/venue/zones.rs` puts the delivery boundary, for the same
+/// reason -- it is a fact about the venue, not about any one booking, and an
+/// owner must be able to change it without a deploy.
+const PLAN_FIELD: &str = "floor_plan";
+
+/// The index key that holds a table for a slot.
+///
+/// ZERO-PADDED for the reason `ev_key` is: keys sort as strings, and the scan
+/// that reads these back parses the slot out of the key rather than opening
+/// every reservation. `{n:06}` keeps table 10 after table 2.
+///
+/// NO RESERVATION ID IN IT, deliberately, so the key can be declared UNIQUE to
+/// `Table::put` -- which refuses a second record claiming it inside the
+/// object's own turn. That is the backstop under the check in `create`.
+pub(crate) fn table_key(zone: &str, n: i64, slot_min: i64) -> String {
+    format!("rsv.tbl/{zone}/{n:06}/{slot_min:012}")
+}
+
+/// Every table currently held, READ BACK OUT OF THE KEYS.
+///
+/// The key carries the zone, the table and the slot, so the whole floor's
+/// occupancy is one sorted prefix scan -- no reservation record is opened at
+/// all. A key that does not parse is skipped rather than panicking: an
+/// unreadable index entry must not take the venue's booking page down.
+fn held_tables(t: &dowiz_hub::table::Table) -> Vec<floor::Held> {
+    t.scan("rsv.tbl/")
+        .into_iter()
+        .filter_map(|(k, id)| {
+            let mut p = k.split('/');
+            let (_, zone, n, slot) = (p.next()?, p.next()?, p.next()?, p.next()?);
+            Some(floor::Held {
+                zone: zone.to_string(),
+                // `"000012".parse()` is 12: the padding does not need stripping.
+                n: n.parse().ok()?,
+                slot_min: slot.parse().ok()?,
+                reservation: id,
+            })
+        })
+        .collect()
+}
+
+/// The venue's floor plan, or an empty one.
+///
+/// `venue_record` rather than `load_catalog`: the object parses its own
+/// catalogue and answers with the venue row, so reading the plan does not pull
+/// half a megabyte of menu across. A plan that will not parse is reported as
+/// EMPTY and named in the log rather than guessed at -- but it cannot get in:
+/// [`set_plan`] parses it before it is stored.
+async fn floor_plan(place: &crate::hubstore::Place) -> Result<floor::Plan> {
+    let rec = crate::hubstore::venue_record(place).await?;
+    let raw = rec
+        .as_ref()
+        .and_then(|r| r.get(PLAN_FIELD))
+        .map(|v| v.to_string())
+        .unwrap_or_default();
+    Ok(floor::from_json(&raw).unwrap_or_default())
+}
+
+/// May this party have this table at this minute? `None` is yes.
+///
+/// PURE, AND SEPARATE FROM THE HANDLER, so the refusal can be tested without a
+/// Worker runtime -- which is what `key_tests` at the foot of this file exists
+/// to do and what the double-booking RED proof exercises.
+///
+/// EVERY REFUSAL NAMES THE TABLE. "That time is not available" sends a guest
+/// away without telling them the next table over is free.
+fn table_verdict(
+    plan: &floor::Plan,
+    held: &[floor::Held],
+    zone: &str,
+    n: i64,
+    party: i64,
+    slot_min: i64,
+    me: &str,
+) -> Option<String> {
+    let Some(t) = plan.find(zone, n) else {
+        return Some(format!("there is no table {n} in zone {zone:?} on this venue's plan"));
+    };
+    if !t.seats_party(party) {
+        return Some(format!(
+            "table {n} in zone {zone:?} seats {}; a party of {party} needs a larger table",
+            t.seats
+        ));
+    }
+    match floor::holder(held, zone, n, slot_min, floor::DWELL_MIN) {
+        // A RETRIED REQUEST IS NOT A DOUBLE BOOKING. The same `requestId`
+        // produces the same reservation id, and the hold it already owns must
+        // not be read as somebody else's.
+        Some(h) if h.reservation == me => None,
+        Some(h) => Some(format!(
+            "table {n} in zone {zone:?} is already booked for minute {} and is held for \
+             {} minutes; choose another table or another time",
+            h.slot_min,
+            floor::DWELL_MIN
+        )),
+        None => None,
+    }
+}
+
+#[derive(Deserialize)]
+struct PlanIn {
+    /// The zones as the owner drew them. An EMPTY list removes the plan, which
+    /// is how a venue that does not seat by table turns the feature off.
+    zones: Vec<serde_json::Value>,
+}
+
+/// `POST /api/owner/floorplan`
+///
+/// PARSED BACK BEFORE IT IS STORED, and the refusal is the reader's own
+/// sentence. `services/venue/zones.rs` set this pattern because a zone the
+/// reader cannot understand is NO zone and silently turns the check off; a
+/// table the reader cannot understand is worse -- the table is still there,
+/// with guests at it, while the hub believes the room is smaller.
+pub async fn set_plan(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    let body: PlanIn = match req.json().await {
+        Ok(b) => b,
+        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
+    };
+    let loc = match crate::owner::owner_and_venue(&req, &ctx).await {
+        Ok((_, l)) => l,
+        Err(r) => return Ok(r),
+    };
+    // The venue this caller was authorised for, and no other.
+    let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
+    let doc = json!({ "zones": body.zones }).to_string();
+    let parsed = match floor::from_json(&doc) {
+        Ok(p) => p,
+        Err(e) => return Response::error(format!("floor plan refused: {}", e.message()), 400),
+    };
+    let (zones, tables) =
+        (parsed.zones.len(), parsed.zones.iter().map(|z| z.tables.len()).sum::<usize>());
+    let stored = body.zones.clone();
+    crate::hubstore::with_catalog(&place, move |cat| {
+        let raw = cat.location().ok_or_else(|| Error::RustError("no venue".into()))?;
+        let mut l: serde_json::Value = serde_json::from_str(&raw).unwrap_or(json!({}));
+        l[PLAN_FIELD] = json!({ "zones": stored });
+        cat.set_location(&serde_json::to_string(&l).unwrap_or(raw));
+        Ok(())
+    })
+    .await?;
+    Response::from_json(&json!({ "ok": true, "zones": zones, "tables": tables }))
+}
+
+/// `GET /api/public/locations/:slug/tables?slotMin=<n>&party=<n>`
+///
+/// THE SLOT IS REQUIRED and that is the model, not a validation preference: a
+/// table is free or taken only for a minute, so an answer without one would be
+/// a lie the surface would then draw.
+///
+/// PUBLIC, unlike the rest of this family. It is the venue's own furniture and
+/// the same "is there room tonight" a phone call answers; it carries no name,
+/// no party and no reservation id -- only how many of the venue's own tables
+/// are free. The guard stays on everything that WRITES.
+pub async fn availability(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    let Some(slug) = ctx.param("slug").cloned() else {
+        return Response::error("missing slug", 400);
+    };
+    let url = req.url()?;
+    let q = |name: &str| -> Option<i64> {
+        url.query_pairs().find(|(k, _)| k == name).and_then(|(_, v)| v.parse::<i64>().ok())
+    };
+    let Some(slot_min) = q("slotMin") else {
+        return Response::error(
+            "slotMin is required: a table is free or taken only for a slot",
+            400,
+        );
+    };
+    let party = q("party").unwrap_or(1);
+    let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
+
+    // THE SAME RULE THE WRITE USES. Asking the floor about a slot the kernel
+    // would refuse would draw a plan the guest cannot book from.
+    let request = ReservationRequest {
+        id: 0,
+        venue: place.venue.clone(),
+        party: party.clamp(0, u16::MAX as i64) as u16,
+        slot_min,
+        occasion: String::new(),
+    };
+    if let Err(e) = reservation::validate_request(
+        &request,
+        &BookingPolicy::default_policy(),
+        now_min(ctx.data.now_ms),
+    ) {
+        return Response::error(e.message(), 422);
+    }
+
+    let plan = floor_plan(&place).await?;
+    let t = load_bookings(&place).await?;
+    let held = held_tables(&t);
+    let standing = floor::availability(&plan, &held, party, slot_min, floor::DWELL_MIN);
+    let at = |zone: &str, n: i64| standing.iter().find(|s| s.zone == zone && s.n == n).cloned();
+
+    Response::from_json(&json!({
+        "slotMin": slot_min,
+        "party": party,
+        "dwellMin": floor::DWELL_MIN,
+        "planW": floor::PLAN_W,
+        "planH": floor::PLAN_H,
+        "zones": plan.zones.iter().map(|z| json!({
+            "id": z.id,
+            "name": z.name,
+            "tables": z.tables.iter().map(|t| {
+                let s = at(&z.id, t.n);
+                json!({
+                    "n": t.n, "x": t.x, "y": t.y, "w": t.w, "h": t.h,
+                    "seats": t.seats, "shape": t.shape.as_str(),
+                    "occupied": s.as_ref().is_some_and(|s| s.occupied),
+                    "tooSmall": s.as_ref().is_some_and(|s| s.too_small),
+                })
+            }).collect::<Vec<_>>(),
+        })).collect::<Vec<_>>(),
+    }))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -737,5 +1037,119 @@ mod key_tests {
         let far = 60i64 * 24 * 365 * 100; // a century of minutes
         assert!(SLOT_MAX - far > 0);
         assert_eq!(format!("{:012}", SLOT_MAX).len(), 12, "SLOT_MAX overflows its own padding");
+    }
+}
+
+#[cfg(test)]
+mod floor_tests {
+    use super::{table_key, table_verdict};
+    use dowiz_hub::tables::{from_json, Held, Plan, DWELL_MIN};
+
+    /// Two tables in one room, one of them a four-top.
+    fn plan() -> Plan {
+        from_json(
+            r#"{"zones":[{"id":"terasa","name":"Тераса","tables":[
+                 {"n":1,"x":85,"y":110,"w":44,"h":44,"seats":4},
+                 {"n":2,"x":155,"y":130,"w":40,"h":40,"seats":2}]}]}"#,
+        )
+        .expect("the fixture plan must read")
+    }
+
+    fn held(n: i64, slot_min: i64, reservation: &str) -> Held {
+        Held { zone: "terasa".into(), n, slot_min, reservation: reservation.into() }
+    }
+
+    /// THE DEFECT THIS CLOSES, as one test. Before the floor existed a
+    /// reservation was a party size and a time, so the SAME TABLE at the SAME
+    /// MINUTE was accepted twice and the venue found out when two parties
+    /// walked in. Deleting the `floor::holder` arm of `table_verdict` turns
+    /// this red; nothing else in the suite notices.
+    #[test]
+    fn the_same_table_at_the_same_minute_is_refused_the_second_time() {
+        let (p, slot) = (plan(), 29_000_000i64);
+        // The first booking meets an empty floor and is allowed.
+        assert_eq!(table_verdict(&p, &[], "terasa", 1, 2, slot, "rsv_first"), None);
+        // The second one, for the same table and slot, is not.
+        let why = table_verdict(
+            &p,
+            &[held(1, slot, "rsv_first")],
+            "terasa",
+            1,
+            2,
+            slot,
+            "rsv_second",
+        )
+        .expect("a table already held must be REFUSED, not booked twice");
+        // AND THE REFUSAL NAMES THE TABLE. "not available" sends a guest away
+        // without telling them table 2 is free.
+        assert!(why.contains("table 1"), "the refusal must name the table: {why}");
+        assert!(why.contains("terasa"), "and the zone: {why}");
+        assert!(why.contains(&slot.to_string()), "and the slot that took it: {why}");
+        // The next table over is still free at that minute.
+        assert_eq!(table_verdict(&p, &[held(1, slot, "rsv_first")], "terasa", 2, 2, slot, "x"), None);
+    }
+
+    /// OCCUPIED IS PER SLOT. The same table, two hours later, is free.
+    #[test]
+    fn a_table_held_at_one_hour_is_bookable_at_another() {
+        let (p, slot) = (plan(), 29_000_000i64);
+        let booked = [held(1, slot, "rsv_first")];
+        assert!(table_verdict(&p, &booked, "terasa", 1, 2, slot + 15, "x").is_some(),
+                "fifteen minutes later is the same sitting");
+        assert_eq!(
+            table_verdict(&p, &booked, "terasa", 1, 2, slot + DWELL_MIN, "x"),
+            None,
+            "past the dwell the table has turned over"
+        );
+    }
+
+    /// A RETRIED REQUEST IS NOT A DOUBLE BOOKING. `create` derives the
+    /// reservation id from the caller's `requestId`, so a retry arrives
+    /// holding its own table -- and must not be refused by it.
+    #[test]
+    fn a_reservation_does_not_collide_with_its_own_hold() {
+        let (p, slot) = (plan(), 29_000_000i64);
+        assert_eq!(
+            table_verdict(&p, &[held(1, slot, "rsv_me")], "terasa", 1, 2, slot, "rsv_me"),
+            None
+        );
+    }
+
+    #[test]
+    fn a_party_too_large_for_the_table_is_refused_by_name() {
+        let (p, slot) = (plan(), 29_000_000i64);
+        let why = table_verdict(&p, &[], "terasa", 2, 4, slot, "x").expect("a deuce seats two");
+        assert!(why.contains("table 2") && why.contains("seats 2"), "{why}");
+        assert_eq!(table_verdict(&p, &[], "terasa", 1, 4, slot, "x"), None, "the four-top takes it");
+    }
+
+    #[test]
+    fn a_table_that_is_not_on_the_plan_is_refused() {
+        let (p, slot) = (plan(), 29_000_000i64);
+        assert!(table_verdict(&p, &[], "terasa", 9, 2, slot, "x").unwrap().contains("no table 9"));
+        assert!(table_verdict(&p, &[], "zala", 1, 2, slot, "x").unwrap().contains("no table 1"));
+    }
+
+    /// THE KEYS THE HOLD IS MADE OF. They sort as strings and the scan in
+    /// `held_tables` parses the slot back out of them, so the padding is
+    /// load-bearing exactly as it is for `ev_key`.
+    #[test]
+    fn table_keys_sort_numerically_and_parse_back() {
+        let mut keys: Vec<String> = [2i64, 10, 1].iter().map(|n| table_key("z", *n, 100)).collect();
+        keys.sort();
+        assert_eq!(keys, vec![table_key("z", 1, 100), table_key("z", 2, 100), table_key("z", 10, 100)]);
+        let parts: Vec<&str> = keys[2].split('/').collect();
+        assert_eq!(parts[0], "rsv.tbl");
+        assert_eq!(parts[1], "z");
+        assert_eq!(parts[2].parse::<i64>().unwrap(), 10, "the padding does not need stripping");
+        assert_eq!(parts[3].parse::<i64>().unwrap(), 100);
+    }
+
+    /// ONE TABLE'S HOLDS ARE ONE PREFIX. `held_tables` scans `rsv.tbl/` whole,
+    /// but the key must still keep one zone's tables out of another's range.
+    #[test]
+    fn one_zones_tables_cannot_be_read_as_anothers() {
+        assert!(table_key("terasa", 1, 5).starts_with("rsv.tbl/terasa/"));
+        assert!(!table_key("mala", 1, 5).starts_with("rsv.tbl/terasa/"));
     }
 }

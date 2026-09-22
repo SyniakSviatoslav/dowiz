@@ -1,7 +1,7 @@
-// The bottom bar -- five tabs, the way a phone app is held -- and the two
+// The bottom bar -- six tabs, the way a phone app is held -- and the two
 // header controls.
 //
-// Menu, Search, Cart, Orders, Info. The bar is glass over the Sea, sits above
+// Menu, Search, Table, Cart, Orders, Info. The bar is glass over the Sea, sits above
 // the safe area, and steps out of the way when a sheet is open: a sheet IS the
 // screen while it is up. The cart tab carries the count; the floating pill
 // above the bar carries the total, which is a <Money> and snaps.
@@ -17,13 +17,20 @@ import { $, $$, esc, icon, sheet, closeSheet, isSheetOpen, sheetName } from '/st
 import { relabel } from '/store/motion.js';
 import { openCart } from '/store/cart.js';
 import { openVenue } from '/store/venue.js';
+import { openBooking } from '/store/booking.js';
 import { focusSearch, scrollTop } from '/store/menu.js';
 
 let changeLang = null;
 export function onChangeLang(fn){ changeLang = fn; }
 
+// SIX, NOT FIVE. Booking a table was reachable only by somebody who already
+// knew the URL, which is the defect class `tools/gates/unreached.py` exists
+// for: a capability that is built, tested, and that no live path reaches. It
+// gets a tab, beside the menu, because that is where a diner looks. The label
+// is one word in all three languages, for the reason `tabSearch` is.
 const TABS = [
   ['menu',   'bowl-chopsticks', 'menu'],
+  ['book',   'tools-kitchen-2', 'bkTab'],
   // ITS OWN KEY. `search` is the field's placeholder ("Search the menu"), and
   // a tab is 78px wide on a phone: that label wrapped to two lines in all
   // three languages. A tab gets one word.
@@ -33,7 +40,7 @@ const TABS = [
   ['info',   'lantern',      'info'],
 ];
 /// Which tab a sheet belongs to, so the bar follows what is open.
-const TAB_OF_SHEET = { cart: 'cart', checkout: 'cart', pay: 'cart', orders: 'orders', track: 'orders', info: 'info' };
+const TAB_OF_SHEET = { book: 'book', cart: 'cart', checkout: 'cart', pay: 'cart', orders: 'orders', track: 'orders', info: 'info' };
 /// A tab answers the finger with a tap of the phone's own, where it can.
 const TAB_HAPTIC_MS = 6;
 /// The order id is shown short: eight characters is enough to tell two orders
@@ -53,6 +60,7 @@ export function mountNav(){
     const id = b.dataset.tab;
     if (id === 'menu')   { closeSheet(); scrollTop(); }
     if (id === 'search') { closeSheet(); focusSearch(); }
+    if (id === 'book')   { sheetName() === 'book' ? closeSheet() : openBooking(); }
     if (id === 'cart')   { sheetName() === 'cart' ? closeSheet() : openCart(); }
     if (id === 'orders') { sheetName() === 'orders' ? closeSheet() : openHistory(); }
     if (id === 'info')   { sheetName() === 'info' ? closeSheet() : openVenue(); }

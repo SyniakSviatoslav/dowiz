@@ -25,9 +25,20 @@ cd "$(dirname "$0")/.."
 # commit, and the admin pane would have been entirely dead.
 mod_fail=0
 if command -v node >/dev/null 2>&1; then
-  for f in workers/api/public/app.js workers/api/public/admin/app.js \
-           workers/api/public/courier/app.js workers/api/public/lib/*.js; do
+  # FOUND, NOT LISTED, and that is the fix rather than a longer list. This was
+  # four hard-coded paths plus `lib/*.js`, so `public/store/*.js` was never
+  # checked at all -- an entire surface, the customer-facing one. A backtick
+  # inside an HTML comment inside a template literal made `store/booking.js`
+  # unparseable while this gate stayed GREEN, and the page a customer opens
+  # would have been blank. A list that has to be remembered is a list with a
+  # hole in it; the hole is always the directory added most recently.
+  #
+  # Only files that ARE modules: a `.js` with no import and no export is a
+  # classic script and parsing it under module rules would fail for a reason
+  # that is not a defect.
+  for f in $(find workers/api/public -name '*.js' ! -name '*.test.mjs' | sort); do
     [ -f "$f" ] || continue
+    grep -qE '^[[:space:]]*(import|export)[[:space:]]' "$f" || continue
     if ! err=$(node --input-type=module --check < "$f" 2>&1); then
       echo "  FAIL  [module] $f does not parse as an ES module"
       echo "$err" | sed -n '1,4p' | sed 's/^/          /'
@@ -41,6 +52,16 @@ fi
 # The money module's own tests. It is JavaScript a browser runs, so a Rust
 # crate passing says nothing about what a customer sees; this is the only place
 # that check can live.
+# The booking clock's own tests. A slot is minutes since the epoch and a
+# venue's day is the VENUE's, not the phone's -- two rules that were RED first
+# and where the implementation was wrong, not the test: clamping a wrapping
+# window to midnight cut an hour off every late kitchen's evening.
+node workers/api/public/lib/booking-time.test.mjs >/dev/null || {
+  echo "booking-time-gate: workers/api/public/lib/booking-time.test.mjs FAILED" >&2
+  node workers/api/public/lib/booking-time.test.mjs >&2
+  exit 1
+}
+
 node workers/api/public/lib/money.test.mjs >/dev/null || {
   echo "money-gate: workers/api/public/lib/money.test.mjs FAILED" >&2
   node workers/api/public/lib/money.test.mjs >&2

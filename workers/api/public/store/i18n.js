@@ -72,6 +72,22 @@ export const T = {
         tags:{ salmon:'Salmon', tuna:'Ton', shrimp:'Karkalec', vegetarian:'Vegjetariane', hot:'E nxehtë', popular:'Popullore',
                sets:'Sete', bowls:'Bowls', soups:'Supa', drinks:'Pije', freskuese:'Freskuese', kafeteria:'Kafe', alkool:'Alkool',
                birra:'Birra', 'lengje-frutash':'Lëngje' },
+        // ── the table-booking surface (store/booking.js) ──
+        // THE FLOOR'S THREE STATES ARE NOT THE KERNEL'S STATUSES. `bkFree`,
+        // `bkPicked` and `bkTaken` describe a chair in a room for one slot;
+        // nothing here restates the order FSM's vocabulary, which is generated
+        // into `/lib/vocab.js` and must not be copied by hand again.
+        // The ZONE NAME is the venue's own word and is never in this table,
+        // the same rule dish names follow.
+        bkTab:'Tavolina', bkTitle:'Zgjidhni tavolinën', bkHint:'Zgjidhni orën, pastaj një tavolinë të lirë',
+        bkGuests:'Sa veta', bkDate:'Data', bkTime:'Ora', bkPickTime:'Zgjidhni orën',
+        bkFree:'E lirë', bkPicked:'E zgjedhur', bkTaken:'E zënë', bkSmall:'E vogël',
+        bkNone:'Asnjë tavolinë e zgjedhur', bkChosen:'Zgjodhët', bkSeats:'vende', bkTable:'Tavolina',
+        bkCta:'Rezervoni tavolinën', bkSending:'Po dërgohet…',
+        bkSent:'Kërkesa shkoi te lokali. Do ta konfirmojnë.',
+        bkNoPlan:'Ky lokal nuk ka publikuar plan tavolinash.', bkFail:'Rezervimi nuk u krye',
+        bkPlanFail:'Plani i sallës nuk u ngarkua', bkSignIn:'Për të rezervuar duhet të hyni',
+        bkRoom:'Salla',
         st:{PENDING:'Duke pritur konfirmimin',CONFIRMED:'U konfirmua',PREPARING:'Po gatuhet',
             READY:'Gati',IN_DELIVERY:'Në rrugë',DELIVERED:'U dorëzua',
             REJECTED:'U refuzua',CANCELLED:'U anulua'} },
@@ -129,6 +145,22 @@ export const T = {
         tags:{ salmon:'Salmon', tuna:'Tuna', shrimp:'Shrimp', vegetarian:'Vegetarian', hot:'Hot', popular:'Popular',
                sets:'Sets', bowls:'Bowls', soups:'Soups', drinks:'Drinks', freskuese:'Soft drinks', kafeteria:'Coffee', alkool:'Spirits',
                birra:'Beer', 'lengje-frutash':'Juices' },
+        // ── the table-booking surface (store/booking.js) ──
+        // THE FLOOR'S THREE STATES ARE NOT THE KERNEL'S STATUSES. `bkFree`,
+        // `bkPicked` and `bkTaken` describe a chair in a room for one slot;
+        // nothing here restates the order FSM's vocabulary, which is generated
+        // into `/lib/vocab.js` and must not be copied by hand again.
+        // The ZONE NAME is the venue's own word and is never in this table,
+        // the same rule dish names follow.
+        bkTab:'Table', bkTitle:'Choose your table', bkHint:'Pick a time, then a free table',
+        bkGuests:'Guests', bkDate:'Date', bkTime:'Time', bkPickTime:'Pick a time',
+        bkFree:'Free', bkPicked:'Selected', bkTaken:'Taken', bkSmall:'Too small',
+        bkNone:'No table chosen', bkChosen:'Chosen', bkSeats:'seats', bkTable:'Table',
+        bkCta:'Book this table', bkSending:'Sending…',
+        bkSent:'Your request is with the restaurant. They will confirm it.',
+        bkNoPlan:'This venue has not published a floor plan.', bkFail:'The booking was not made',
+        bkPlanFail:'The floor plan did not load', bkSignIn:'Booking needs you to be signed in',
+        bkRoom:'Room',
         st:{PENDING:'Awaiting confirmation',CONFIRMED:'Confirmed',PREPARING:'Being prepared',
             READY:'Ready',IN_DELIVERY:'On the way',DELIVERED:'Delivered',
             REJECTED:'Rejected',CANCELLED:'Cancelled'} },
@@ -186,6 +218,22 @@ export const T = {
         tags:{ salmon:'Лосось', tuna:'Тунець', shrimp:'Креветка', vegetarian:'Вегетаріанське', hot:'Гаряче', popular:'Популярне',
                sets:'Сети', bowls:'Боули', soups:'Супи', drinks:'Напої', freskuese:'Безалкогольне', kafeteria:'Кава', alkool:'Алкоголь',
                birra:'Пиво', 'lengje-frutash':'Соки' },
+        // ── the table-booking surface (store/booking.js) ──
+        // THE FLOOR'S THREE STATES ARE NOT THE KERNEL'S STATUSES. `bkFree`,
+        // `bkPicked` and `bkTaken` describe a chair in a room for one slot;
+        // nothing here restates the order FSM's vocabulary, which is generated
+        // into `/lib/vocab.js` and must not be copied by hand again.
+        // The ZONE NAME is the venue's own word and is never in this table,
+        // the same rule dish names follow.
+        bkTab:'Столик', bkTitle:'Оберіть столик', bkHint:'Оберіть час, потім вільний столик',
+        bkGuests:'Скільки гостей', bkDate:'Дата', bkTime:'Час', bkPickTime:'Оберіть час',
+        bkFree:'Вільний', bkPicked:'Обраний', bkTaken:'Зайнятий', bkSmall:'Замалий',
+        bkNone:'Столик не обрано', bkChosen:'Обрано', bkSeats:'місць', bkTable:'Столик',
+        bkCta:'Забронювати столик', bkSending:'Надсилаємо…',
+        bkSent:'Запит пішов до ресторану. Його підтвердять.',
+        bkNoPlan:'Цей заклад не опублікував план залу.', bkFail:'Бронювання не виконано',
+        bkPlanFail:'План залу не завантажився', bkSignIn:'Щоб забронювати, треба увійти',
+        bkRoom:'Зал',
         st:{PENDING:'Очікує підтвердження',CONFIRMED:'Підтверджено',PREPARING:'Готується',
             READY:'Готове',IN_DELIVERY:'У дорозі',DELIVERED:'Доставлено',
             REJECTED:'Відхилено',CANCELLED:'Скасовано'} },
