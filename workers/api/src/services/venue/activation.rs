@@ -56,7 +56,11 @@ pub async fn activation(req: Request, ctx: RouteContext<crate::Req>) -> Result<R
     };
     let missing = dowiz_hub::activation::missing(&f);
     Response::from_json(&json!({
-        "canOpen": missing.is_empty(),
+        // `missing.is_empty()` WAS WRITTEN OUT HERE, and identically in the
+        // twin server, while `activation::can_open` -- whose whole body is
+        // that expression -- had four tests and no caller anywhere. Three
+        // copies of a one-line rule is still three rules.
+        "canOpen": dowiz_hub::activation::can_open(&f),
         "missing": missing.iter().map(|r| json!({ "key": r.key(), "why": r.as_str() }))
             .collect::<Vec<_>>(),
         "facts": {

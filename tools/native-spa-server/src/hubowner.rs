@@ -685,7 +685,10 @@ pub async fn activation(
     let f = activation_facts(&st).await?;
     let missing = dowiz_hub::activation::missing(&f);
     Ok(Json(json!({
-        "canOpen": missing.is_empty(),
+        // The SHARED rule, not a second copy of its body. Both servers wrote
+        // `missing.is_empty()` out by hand while `activation::can_open` sat
+        // tested and uncalled -- see `tools/gates/unreached.py`.
+        "canOpen": dowiz_hub::activation::can_open(&f),
         "missing": missing.iter()
             .map(|r| json!({ "key": r.key(), "why": r.as_str() }))
             .collect::<Vec<_>>(),

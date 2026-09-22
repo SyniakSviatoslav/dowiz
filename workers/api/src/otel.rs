@@ -232,10 +232,12 @@ impl Trace {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn duration_ms(&self) -> f64 {
-        Date::now().as_millis() as f64 - self.start_ms
-    }
+    // `duration_ms` WAS HERE, under `#[allow(dead_code)]`. Nothing read it:
+    // the span already carries `endTimeUnixNano`, so the duration IS exported
+    // and this was a second way to ask a question nobody asked. The attribute
+    // is what let it live -- it is the manual version of
+    // `tools/gates/unreached.py`, and a worse one, because it silences the
+    // finding instead of recording it.
 }
 
 /// `00-<32 hex trace>-<16 hex span>-<flags>`

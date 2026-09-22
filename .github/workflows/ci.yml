@@ -71,6 +71,12 @@ jobs:
       # phone can replay must name `idempotency::guard` on the server.
       - name: every route a phone can replay is idempotent
         run: sh tools/gates/idempotent.sh
+      # A capability that exists, compiles and is TESTED, and no live path
+      # reaches. `StockLedger::stranded()` was in that state from the day it
+      # was written; so was `worker_errors`, which never received a row. A
+      # green suite is not evidence that anything is switched on.
+      - name: nothing was built that nothing calls
+        run: python3 tools/gates/unreached.py
       # The conservation audit itself needs live venues and an owner token, so
       # it cannot run here. Its PROOF can: the gate is run against a stubbed
       # platform and each law is checked for going red when it should and
