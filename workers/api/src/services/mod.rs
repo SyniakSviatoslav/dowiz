@@ -14,6 +14,8 @@
 pub mod analytics;
 pub mod courier;
 pub mod customers;
+pub mod engagement;
 pub mod ordering;
+pub mod operations;
 pub mod orders;
 pub mod venue;
