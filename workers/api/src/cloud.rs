@@ -518,12 +518,6 @@ pub async fn status(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     }))
 }
 
-/// GPS fixes older than this are nobody's. The map reads the newest fix per
-/// courier within `live_eta::POSITION_FRESH_MS` (twenty minutes) and nothing
-/// else reads the table, yet every fix ever sent stayed in it: the largest
-/// D1 write source in the system, kept forever, read never. Twenty-four
-/// hours is the retention `compliance/data-map.md` promises for courier GPS.
-const POSITIONS_KEEP_MS: i64 = 24 * 60 * 60 * 1000;
 
 // `prune_positions` WAS HERE, deleting `courier_positions` rows older than a
 // day. There is nothing left to prune: a position is now ONE RECORD PER

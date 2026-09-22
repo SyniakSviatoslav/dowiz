@@ -75,6 +75,9 @@ pub(crate) async fn owner_at(
     };
     #[derive(Deserialize)]
     struct M {
+        /// ONLY ITS EXISTENCE IS THE ANSWER: this asks whether the membership
+        /// is there, not what it says.
+        #[allow(dead_code)]
         id: String,
     }
     let m: std::result::Result<Option<M>, _> = crate::identity_store::identity(&ctx.env)

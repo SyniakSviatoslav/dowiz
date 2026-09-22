@@ -99,7 +99,12 @@ pub struct PlaceIn {
     pub fulfilment: FulfilmentIn,
     #[serde(default)]
     pub payment: Option<String>,
+    /// The customer's language, ACCEPTED AND NOT YET USED. Removing it would
+    /// silently drop a field the storefront sends; using it means a receipt
+    /// and a kitchen ticket in two different languages, which is its own
+    /// change.
     #[serde(default)]
+    #[allow(dead_code)]
     pub locale: Option<String>,
     /// A promo code as the customer typed it. Normalised and re-checked here;
     /// whatever the storefront showed as a preview is advisory.
@@ -169,20 +174,6 @@ pub(crate) struct LocRow {
     delivery_paused: i64,
 }
 
-#[derive(Deserialize)]
-struct ProdRow {
-    id: String,
-    category_id: Option<String>,
-    category_name: Option<String>,
-    category_sort: Option<i64>,
-    name: String,
-    description: Option<String>,
-    price: i64,
-    available: i64,
-    unavailable_note: Option<String>,
-    image_url: Option<String>,
-    sort_order: i64,
-}
 
 #[derive(Deserialize)]
 #[allow(dead_code)]
@@ -655,9 +646,6 @@ pub(crate) fn payment_wallets(raw: &Value) -> Vec<Value> {
         .unwrap_or_default()
 }
 
-/// The most values one D1 statement may bind. Cloudflare's documented limit
-/// is 100; a statement over it is refused at prepare time.
-const D1_MAX_BINDS: usize = 100;
 
 /// Every way an order can say it will be paid. Anything else is refused at
 /// the boundary rather than stored as a word the kitchen has to interpret.

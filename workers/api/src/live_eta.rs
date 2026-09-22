@@ -24,7 +24,6 @@
 //! back. A customer waiting is better served by "about 18 min, courier
 //! position unknown" than by nothing.
 
-use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
 
@@ -53,13 +52,6 @@ pub struct CourierFix {
     pub recorded_at_ms: i64,
 }
 
-#[derive(Deserialize)]
-struct FixRow {
-    courier_id: String,
-    lat_udeg: f64,
-    lon_udeg: f64,
-    recorded_at_ms: f64,
-}
 
 /// The latest fresh position of every courier ON SHIFT at this venue. One
 /// query for a whole queue: the console asks for fifty orders at once and

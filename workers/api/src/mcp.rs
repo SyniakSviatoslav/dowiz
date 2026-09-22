@@ -297,10 +297,6 @@ pub async fn rpc(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let Some(location_id) = active_location_id else {
         return Response::error("this key names no venue", 403);
     };
-    #[derive(serde::Deserialize)]
-    struct Row {
-        slug: String,
-    }
     let slug = crate::identity_store::rec(
         &crate::identity_store::registry(&ctx.env).await?,
         crate::identity_store::K_LOC,

@@ -74,18 +74,6 @@ fn id64(s: &str) -> u64 {
     h
 }
 
-/// Bind an integer to D1.
-///
-/// NOT `i64::into()`. That produces a JavaScript **BigInt**, which the D1 driver
-/// rejects — and rejects by throwing, so the Worker returns a bare 500 with no
-/// body and nothing in the response says why. Every integer in this file goes
-/// through here, as `accounts.rs` already does. Timestamps in milliseconds and
-/// slot minutes are far below 2^53, so f64 carries them exactly.
-fn num(n: i64) -> worker::wasm_bindgen::JsValue {
-    worker::wasm_bindgen::JsValue::from_f64(n as f64)
-}
-
-
 /// The venue's conversations with its customers. An append log: a message
 /// arrives and is replayed in order, which is exactly what `ORDER BY seq ASC`
 /// was asking a table to pretend to be.

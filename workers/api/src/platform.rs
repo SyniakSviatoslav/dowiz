@@ -251,10 +251,6 @@ pub async fn create_hub(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
     // FREE BEFORE WRITTEN. The column is UNIQUE, so a race still ends in a
     // constraint error rather than a duplicate; this exists to answer the
     // ordinary case with a sentence instead of a SQL error.
-    #[derive(Deserialize)]
-    struct Taken {
-        slug: String,
-    }
     let mut owner_email: Option<String> = None;
     // The venue id and the slug are the same string at birth. They are separate
     // fields because a venue may be renamed on the web without its hub, its

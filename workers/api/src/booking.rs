@@ -33,18 +33,6 @@ fn now_min() -> i64 {
     now_ms() / 60_000
 }
 
-/// Bind an integer to D1.
-///
-/// NOT `i64::into()`. That produces a JavaScript **BigInt**, which the D1 driver
-/// rejects — and rejects by throwing, so the Worker returns a bare 500 with no
-/// body and nothing in the response says why. Every integer in this file goes
-/// through here, as `accounts.rs` already does. Timestamps in milliseconds and
-/// slot minutes are far below 2^53, so f64 carries them exactly.
-fn num(n: i64) -> worker::wasm_bindgen::JsValue {
-    worker::wasm_bindgen::JsValue::from_f64(n as f64)
-}
-
-
 /// A stable 64-bit id from a string, for the kernel types that take integers.
 /// FNV-1a: not a hash anybody's security rests on, only a way to carry a TEXT
 /// primary key into a `u64` field without inventing a second id space.
@@ -73,6 +61,10 @@ struct EventRow {
 #[derive(Deserialize)]
 struct ReservationRow {
     id: String,
+    /// Read but not used: the venue is already decided by the object this
+    /// record came out of. It stays because a read model that omits a field
+    /// stops describing the record.
+    #[allow(dead_code)]
     location_id: String,
     party: i64,
     slot_min: i64,
@@ -499,10 +491,6 @@ pub async fn action(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
 // Entry passes
 // ─────────────────────────────────────────────────────────────────────────────
 
-#[derive(Deserialize)]
-struct KeyRow {
-    key_b64: String,
-}
 
 /// Fetch the venue's pass key, minting one on first use.
 ///

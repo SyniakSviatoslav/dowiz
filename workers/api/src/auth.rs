@@ -74,18 +74,6 @@ impl Claims {
             Claims::Owner { exp, .. } | Claims::Courier { exp, .. } | Claims::Customer { exp, .. } => *exp,
         }
     }
-    pub fn subject(&self) -> &str {
-        match self {
-            Claims::Owner { sub, .. } | Claims::Courier { sub, .. } | Claims::Customer { sub, .. } => sub,
-        }
-    }
-    pub fn role_name(&self) -> &'static str {
-        match self {
-            Claims::Owner { .. } => "owner",
-            Claims::Courier { .. } => "courier",
-            Claims::Customer { .. } => "customer",
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -344,20 +332,19 @@ pub fn verify_password_constant_work(password: &str, stored: Option<&str>) -> bo
 // ── the guard ────────────────────────────────────────────────────────────────
 
 /// An authenticated principal, AFTER live state has been confirmed.
+///
+/// Two of its fields are carried and not read; each says why on itself.
+#[allow(dead_code)]
 pub enum Principal {
     Owner { user_id: String, active_location_id: Option<String> },
+    /// `session_id` is not read by any consumer: the session's revocation and
+    /// expiry are checked HERE, while the principal is being built, so a
+    /// handler holding one already knows it is live. It is carried so a route
+    /// that needs to name the session does not have to re-parse the token.
     Courier { courier_id: String, active_location_id: String, session_id: String },
+    /// `customer_id` likewise: a customer token is minted per order, so every
+    /// consumer matches on `order_id` instead.
     Customer { customer_id: String, order_id: String, location_id: String },
-}
-
-impl Principal {
-    pub fn role_name(&self) -> &'static str {
-        match self {
-            Principal::Owner { .. } => "owner",
-            Principal::Courier { .. } => "courier",
-            Principal::Customer { .. } => "customer",
-        }
-    }
 }
 
 /// Does this principal belong to this venue?

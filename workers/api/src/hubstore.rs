@@ -264,20 +264,10 @@ impl Place {
         Some(sub.to_string())
     }
 
-    /// Is this request addressed to the platform itself rather than to a venue?
-    pub fn is_platform_host(req: &Request, ctx: &RouteContext<()>) -> bool {
-        let platform = ctx
-            .var("PLATFORM_HOST")
-            .map(|v| v.to_string())
-            .unwrap_or_else(|_| "dowiz.org".to_string());
-        match req.headers().get("host").ok().flatten() {
-            Some(h) => {
-                let h = h.split(':').next().unwrap_or("").to_ascii_lowercase();
-                h == platform || h == format!("www.{platform}")
-            }
-            None => false,
-        }
-    }
+    // `is_platform_host` WAS HERE and had no caller: the platform routes reach
+    // the platform object by name (`platform_store::PLATFORM`), never by asking
+    // the Host. "The apex fallback will want it" was a hypothesis, and a dead
+    // function kept on one is how a file gets to two thousand lines.
 
     pub(crate) fn stub(&self) -> Result<Stub> {
         self.ns.id_from_name(&self.venue)?.get_stub()

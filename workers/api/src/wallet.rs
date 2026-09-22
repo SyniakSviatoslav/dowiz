@@ -36,6 +36,9 @@ struct TxRow {
     kind: String,
     reverses: Option<String>,
     memo: String,
+    /// Read but not used: the ledger orders by its own append order, not by a
+    /// timestamp a writer supplied. Kept so the model describes the record.
+    #[allow(dead_code)]
     at_ms: i64,
 }
 
@@ -90,18 +93,6 @@ fn id64(s: &str) -> u64 {
     }
     h
 }
-
-/// Bind an integer to D1.
-///
-/// NOT `i64::into()`. That produces a JavaScript **BigInt**, which the D1 driver
-/// rejects — and rejects by throwing, so the Worker returns a bare 500 with no
-/// body and nothing in the response says why. Every integer in this file goes
-/// through here, as `accounts.rs` already does. Timestamps in milliseconds and
-/// slot minutes are far below 2^53, so f64 carries them exactly.
-fn num(n: i64) -> worker::wasm_bindgen::JsValue {
-    worker::wasm_bindgen::JsValue::from_f64(n as f64)
-}
-
 
 /// Rebuild the kernel's journal from rows.
 ///
@@ -360,8 +351,6 @@ pub async fn top_up(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
         "currency": currency.code(),
     }))
 }
-
-
 
 /// The wallet key a principal owns, or `None` for one that owns no wallet.
 ///

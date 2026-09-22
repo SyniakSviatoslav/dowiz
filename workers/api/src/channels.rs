@@ -432,16 +432,6 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Response
 
 // ── the owner's inbox ───────────────────────────────────────────────────────
 
-#[derive(Deserialize, Clone)]
-struct Row {
-    channel: String,
-    direction: String,
-    peer: String,
-    peer_name: Option<String>,
-    text: String,
-    at_ms: i64,
-    read_ms: Option<i64>,
-}
 
 /// `GET /api/owner/inbox` — one line per conversation, newest first.
 pub async fn inbox(req: Request, ctx: RouteContext<()>) -> Result<Response> {

@@ -35,7 +35,6 @@ pub const K_USER: &str = "user";
 pub const K_MEMBER: &str = "member";
 pub const K_ADMIN: &str = "admin";
 pub const K_LOC: &str = "loc";
-pub const K_ORG: &str = "org";
 pub const K_REFRESH: &str = "refresh";
 pub const K_APIKEY: &str = "apikey";
 pub const K_CSESSION: &str = "csession";

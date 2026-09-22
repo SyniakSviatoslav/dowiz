@@ -1,12 +1,30 @@
 //! OpenTelemetry over OTLP/HTTP.
 //!
-//! WHAT THIS COVERS, and what it does not. This traces what the WORKER does: the
-//! request, the kernel call inside it, each store read and write. It does not
-//! yet carry the kernel's own internal spans, because `fdr::SpanObserver` hands
-//! out `(name, dur_us)` and nothing else — no trace id, no parent, no attributes
-//! — so kernel spans cannot be stitched into a trace without widening that trait.
-//! That is a change to the kernel's own instrumentation and it is named here
-//! rather than half-done: a span with a fabricated parent is worse than no span.
+//! WHAT THIS COVERS TODAY, MEASURED RATHER THAN INTENDED (2026-09-22): ONE
+//! SPAN PER REQUEST, the root. It carries the method, the path, the status and
+//! the failure if there was one. That is all.
+//!
+//! THE HEADER USED TO SAY "the request, the kernel call inside it, each store
+//! read and write". It was not true and had never been: `Trace::child` has no
+//! caller anywhere in this crate, so no store read, no kernel call and no
+//! outbound request has ever appeared in a trace. The claim is corrected here
+//! rather than deleted, because the machinery is real and the wiring is the
+//! part that is missing — `child`/`end` take an index and are ready.
+//!
+//! WHY IT IS NOT WIRED, and what it would cost: the `Trace` lives in the
+//! router's own scope and the store calls are several frames down inside the
+//! handlers, so spanning them means threading the trace through every handler
+//! signature or putting it somewhere a Worker isolate can reach from both. The
+//! first is a change to every route; the second is shared mutable state in a
+//! runtime that gives us single-threaded isolates and would be safe, and is
+//! the one to weigh. `traceparent()` is the same story on the way out: it
+//! renders correctly and nothing sends it, so an outbound call to Telegram or
+//! Stripe starts a new trace rather than continuing this one.
+//!
+//! The kernel's own internal spans are a separate gap: `fdr::SpanObserver`
+//! hands out `(name, dur_us)` and nothing else — no trace id, no parent, no
+//! attributes — so they cannot be stitched in without widening that trait. A
+//! span with a fabricated parent is worse than no span.
 //!
 //! TELEMETRY NEVER FAILS A REQUEST. Every export path swallows its own errors.
 //! An order must not be lost because a collector was unreachable, and a tracing
@@ -30,6 +48,7 @@ pub struct Span {
     error: Option<String>,
 }
 
+#[allow(dead_code)]
 pub struct Trace {
     trace_id: String,
     root_id: String,
@@ -80,6 +99,10 @@ impl Trace {
     }
 
     /// Open a child of the root. Returns its index; close it with `end`.
+    ///
+    /// NO CALLER TODAY — see the module header for what that means and what
+    /// wiring it would cost. Kept because it is the part that works.
+    #[allow(dead_code)]
     pub fn child(&mut self, name: &str) -> usize {
         let now_ns = (Date::now().as_millis() as f64 * 1.0e6) as u64;
         self.spans.push(Span {
@@ -94,6 +117,7 @@ impl Trace {
         self.spans.len() - 1
     }
 
+    #[allow(dead_code)]
     pub fn end(&mut self, idx: usize) {
         if let Some(s) = self.spans.get_mut(idx) {
             s.end_ns = (Date::now().as_millis() as f64 * 1.0e6) as u64;
@@ -113,6 +137,7 @@ impl Trace {
     }
 
     /// The header to hand downstream, so a call this Worker makes joins the trace.
+    #[allow(dead_code)]
     pub fn traceparent(&self) -> String {
         format!("00-{}-{}-01", self.trace_id, self.root_id)
     }
@@ -207,6 +232,7 @@ impl Trace {
         }
     }
 
+    #[allow(dead_code)]
     pub fn duration_ms(&self) -> f64 {
         Date::now().as_millis() as f64 - self.start_ms
     }
