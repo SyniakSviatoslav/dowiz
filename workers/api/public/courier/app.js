@@ -9,6 +9,7 @@
 // "one incoming ripple + ping" on a new task.
 import { create as vcreate, speak, supported as vsupported } from '/lib/voice.js';
 import { createGuide } from '/lib/guide.js';
+import { createOutbox, newKey } from '/lib/outbox.js';
 import { t, lang, LANGS, setLang, nextLang, retranslate, intlLocale, voiceLocale } from '/courier/i18n.js';
 
 const API = '/api';
@@ -48,6 +49,7 @@ const store = {
 // Rendering it as fact told a courier their shift was closed -- the one screen
 // state that makes them stop working -- while the request was still in flight.
 let S = { onShift:false, mine:[], available:[], shift:null, watchId:null, wake:null, booted:false,
+          queued:[],
           phase:'loading', error:null,
           loadedOnce:false, sel:null, cashFor:null, moving:false, hiddenAt:0, inflight:0 };
 
@@ -242,18 +244,115 @@ function toast(m, ic = 'info-circle'){
 // `attend` marks a request the courier is waiting on: the spectral edge sweeps
 // while it is in flight. The GPS heartbeat and the 12s poll do not attend --
 // they are background, and an edge that never rests says nothing.
+//
+// THE ERROR SAYS WHICH KIND OF FAILURE IT WAS. Every caller used to see one
+// `Error` with a message, and a message cannot be told apart: "HTTP 409" and
+// "Failed to fetch" both arrived as a toast. The outbox needs the difference,
+// because a request the network never carried is a tap to KEEP and a request
+// the server refused is a tap to report. `e.offline` is the first, `e.status`
+// is the second; the message is unchanged, so nothing that reads it broke.
 async function api(path, opts = {}){
   const { attend, ...rest } = opts;
   if (attend) { S.inflight++; $('#sheet').classList.add('attending'); }
   try {
-    const r = await fetch(API + path, { ...rest,
-      headers: { 'content-type':'application/json', ...(rest.headers || {}),
-                 ...(store.t ? { authorization:'Bearer ' + store.t } : {}) } });
+    let r;
+    try {
+      r = await fetch(API + path, { ...rest,
+        headers: { 'content-type':'application/json', ...(rest.headers || {}),
+                   ...(store.t ? { authorization:'Bearer ' + store.t } : {}) } });
+    } catch (e) {
+      const err = new Error(String(e?.message || e)); err.offline = true; throw err;
+    }
     if (r.status === 401) { signedOut(); throw new Error('unauthorised'); }
-    if (!r.ok) { let m = 'HTTP ' + r.status; try { const d = await r.json(); m = d.error || d.message || m; } catch {} throw new Error(m); }
+    if (!r.ok) {
+      let m = 'HTTP ' + r.status; try { const d = await r.json(); m = d.error || d.message || m; } catch {}
+      const err = new Error(m); err.status = r.status; throw err;
+    }
     return r.status === 204 ? null : r.json();
   } finally {
     if (attend && --S.inflight <= 0) { S.inflight = 0; $('#sheet').classList.remove('attending'); }
+  }
+}
+
+// ── the outbox: a tap that outlives the signal ──────────────────────────────
+//
+// THE DEFECT. Every action on this screen was a `fetch` and nothing else. A
+// courier in a lift, a basement or a tram taps "picked up", `fetch` rejects,
+// a toast appears for three seconds and the tap is gone -- while the kitchen
+// goes on waiting for a courier who is already on the road. The offline panel
+// with its Retry button was the whole of the offline story, and a Retry button
+// is only useful to a courier who is still looking at the screen.
+//
+// THE KEY IS MINTED BEFORE THE FIRST ATTEMPT, not when the queue drains, and
+// the direct attempt carries it too. A request whose RESPONSE was lost may
+// well have landed; queueing that tap under a fresh key would be the duplicate
+// `Idempotency-Key` exists to prevent, arriving by the back door.
+//
+// A QUEUED TAP NEVER LOOKS LIKE A LANDED ONE. The status chip on the order is
+// still the server's answer -- nothing here advances it locally -- and the HUD
+// carries a count of what this phone has not managed to send. The one thing
+// the courier is told at the moment of the tap is that it was SAVED.
+const OUT = createOutbox({
+  // At drain time, from the store: a token that was refreshed while the phone
+  // was in a pocket is the one that must go out. `null` means there is no
+  // session, which pauses the drain instead of burning the entry against a 401.
+  authorize: () => (store.t ? { authorization: 'Bearer ' + store.t } : null),
+  onChange: rows => {
+    S.queued = rows;
+    drawOutbox();
+    // THE SCREEN FOLLOWS THE QUEUE. Without this the courier taps, is told the
+    // tap was saved, and goes on looking at the same live button -- which is
+    // an invitation to tap it again. `#pback` marks an open panel (earnings,
+    // history); redrawing over one would throw a courier out of what they are
+    // reading, the same reason `load()` leaves it alone.
+    if (S.booted && S.loadedOnce && !$('#pback')) render();
+  },
+  onSent: () => { load(); },
+  onDropped: (entry, reason) => {
+    // THE ONE THING THAT MUST NOT BE A RETRY. `courier.rs` answers 409 on an
+    // illegal transition (lines 442 and 502) -- the owner cancelled, or another
+    // courier took it, while this phone was underground. It is an ANSWER, so
+    // the tap is dropped and the courier is told what happened to their order.
+    toast(t(reason === 'changed' ? 'queuedChanged' : 'queuedRefused'), 'alert-triangle');
+    load();
+  },
+});
+
+function drawOutbox(){
+  const tag = $('#outboxTag');
+  if (!tag) return;
+  const n = S.queued.length;
+  tag.hidden = n === 0;
+  if (n) $('#outboxText').textContent = t('queuedN').replace('{n}', n);
+}
+
+/// Is there a tap for this order still waiting to be sent?
+const queuedFor = id => S.queued.find(q => q.tag && q.tag.endsWith(':' + id));
+
+/// One courier action: try it now, keep it if the NETWORK was what failed.
+///
+/// A server that ANSWERED is never queued -- a 409, a 403 or a 400 is a
+/// decision, and repeating it produces the same decision. Only a request the
+/// network never carried is a tap this phone is still holding.
+async function tapped(path, { body = null, tag } = {}){
+  const key = newKey();
+  try {
+    const data = await api(path, { method:'POST', attend:true, body,
+                                   headers: { 'idempotency-key': key } });
+    return { landed: true, data };
+  } catch (e) {
+    if (!e.offline) throw e;
+    const q = await OUT.queue(API + path, { body, tag, key });
+    if (!q.ok) {
+      // REFUSED, LOUDLY, WHILE THE COURIER IS STILL LOOKING. A queue that is
+      // full or a browser that will not store one are both states where the
+      // tap is gone; saying nothing would be the original defect with a queue
+      // bolted on top of it.
+      toast(t(q.reason === 'full' ? 'queueFull' : 'queueNoStore'), 'alert-circle');
+      return { landed: false, queued: false };
+    }
+    toast(t('queuedSaved'), 'cloud-upload');
+    return { landed: false, queued: true };
   }
 }
 
@@ -328,6 +427,12 @@ function startTracking(){
 function signedOut(){
   store.t = null;
   S.booted = false;
+  // The unsent taps go with the session, for the reason `replica.js` forgets
+  // its copy: the next courier to sign in on this phone is not the person who
+  // made them, and replaying them under a new token would file one courier's
+  // delivery under another's name.
+  OUT.forget();
+  S.queued = []; drawOutbox();
   clearTimeout(boot._i);
   stopTracking();
   try { S.live?.close(); } catch {}
@@ -556,16 +661,23 @@ function render(){
       <span class="amt money">${esc(money(o.total))}</span>
       <span class="note">${esc(o.address?.line || '—')}</span>
     </button>`).join('')}
-    <button class="cta" id="take" type="button">${icon('package')}${esc(t('take'))} #${short(chosen.id)}</button>
+    <button class="cta" id="take" type="button"${queuedFor(chosen.id) ? ' disabled' : ''}>${
+      queuedFor(chosen.id)
+        ? `${icon('cloud-upload')}${esc(t('queued'))}`
+        : `${icon('package')}${esc(t('take'))}`} #${short(chosen.id)}</button>
     <button class="ghost" id="endShift" type="button">${icon('power')}${esc(t('endShift'))}</button>`;
   $('#endShift').onclick = () => setShift(false);
   document.querySelectorAll('[data-sel]').forEach(b => b.onclick = () => { S.sel = b.dataset.sel; render(); });
   $('#take').onclick = async () => {
     const b = $('#take'); b.disabled = true;
     try {
-      await api(`/courier/orders/${encodeURIComponent(chosen.id)}/accept`, { method:'POST', attend:true });
-      seaEvent('courier_assigned', 60);
-      await load();
+      const r = await tapped(`/courier/orders/${encodeURIComponent(chosen.id)}/accept`, { tag:'accept:' + chosen.id });
+      // The ripple is the sea's way of saying the hub answered. A tap that is
+      // only queued has not been answered by anything, so it does not get one
+      // -- and it does not get a re-read either: the network that just refused
+      // the tap will refuse the read, and a second failure toast on top of
+      // "saved" reads as if the save failed too.
+      if (r.landed) { seaEvent('courier_assigned', 60); await load(); }
     }
     catch (e) { toast(String(e.message || e), 'alert-circle'); seaEvent('dispatch_failed', 40); b.disabled = false; }
   };
@@ -591,7 +703,7 @@ function etaText(o){
 function bindLangChrome(){
   const b = $('#langBtn'); if (!b) return;
   b.textContent = lang.toUpperCase();
-  b.onclick = () => { setLang(nextLang()); b.textContent = lang.toUpperCase(); applyTheme(); guide = null; initGuide(); if (store.t) render(); else renderLogin(); };
+  b.onclick = () => { setLang(nextLang()); b.textContent = lang.toUpperCase(); applyTheme(); guide = null; initGuide(); drawOutbox(); if (store.t) render(); else renderLogin(); };
 }
 function orderHead(o, picked){
   const cash = o.payment === 'cash' ? o.total : 0;
@@ -834,9 +946,8 @@ function renderOffer(o){
   $('#takeOffer').onclick = async () => {
     const b = $('#takeOffer'); b.disabled = true;
     try {
-      await api(`/courier/orders/${encodeURIComponent(o.id)}/accept`, { method:'POST', attend:true });
-      seaEvent('courier_assigned', 60);
-      await load();
+      const r = await tapped(`/courier/orders/${encodeURIComponent(o.id)}/accept`, { tag:'accept:' + o.id });
+      if (r.landed) { seaEvent('courier_assigned', 60); await load(); }
     } catch (e) {
       toast(String(e.message || e), 'alert-circle');
       seaEvent('dispatch_failed', 40);
@@ -859,8 +970,16 @@ function renderActive(o){
   const picked = o.status === 'IN_DELIVERY';
   const addr = o.address?.line || '';
   const cash = o.payment === 'cash' ? o.total : 0;
+  // A TAP THIS PHONE IS STILL HOLDING REPLACES THE CONTROL, and it does not
+  // touch the status chip above it -- that chip is the hub's answer and the hub
+  // has not answered yet. Offering the same button again would invite a second
+  // tap for a job whose first tap is already saved.
+  const waiting = queuedFor(o.id);
   $('#app').innerHTML = `${orderHead(o, picked)}
-    ${picked
+    ${waiting
+      ? `<div class="empty" role="status">${icon('cloud-upload')}
+           <b>${esc(t('queued'))}</b>${esc(t('queuedHint'))}</div>`
+      : picked
       ? `<div class="slide" id="slide">
            <div class="slide-fill" id="slideFill"></div>
            <button class="cta go slide-knob" id="done" type="button"
@@ -868,7 +987,7 @@ function renderActive(o){
              ${icon('circle-check')}${esc(t('delivered'))}</button>
            <span class="slide-hint" aria-hidden="true">${esc(t('swipe'))}</span>
          </div>`
-      : `<button class="cta" id="pick" type="button">${icon('package')}${esc(t('pickedUp'))}</button>`}
+        : `<button class="cta" id="pick" type="button">${icon('package')}${esc(t('pickedUp'))}</button>`}
     <div class="row2">
       ${addr ? `<a class="ghost" target="_blank" rel="noopener"
           href="https://www.openstreetmap.org/search?query=${encodeURIComponent(addr)}">${icon('external-link')}${esc(t('inMaps'))}</a>` : ''}
@@ -894,7 +1013,7 @@ function renderActive(o){
     b.disabled = true; b.setAttribute('aria-busy', 'true');
     b.innerHTML = `${icon('loader-2')}${esc(t('saving'))}`;
     b.querySelector('.ti')?.classList.add('spin');
-    try { await api(`/courier/orders/${encodeURIComponent(o.id)}/pickup`, { method:'POST', attend:true }); await load(); }
+    try { const r = await tapped(`/courier/orders/${encodeURIComponent(o.id)}/pickup`, { tag:'pickup:' + o.id }); if (r.landed) await load(); }
     catch (e) {
       toast(String(e.message || e), 'alert-circle');
       b.disabled = false; b.removeAttribute('aria-busy'); b.innerHTML = had;
@@ -977,15 +1096,22 @@ async function deliver(o, collected){
   const btn = $('#done') || $('#confirm');
   if (btn) btn.disabled = true;
   try {
-    const d = await api(`/courier/orders/${encodeURIComponent(o.id)}/deliver`, {
-      method:'POST', attend:true, body: JSON.stringify({ cash_collected: collected }) });
+    const r = await tapped(`/courier/orders/${encodeURIComponent(o.id)}/deliver`, {
+      tag:'deliver:' + o.id, body: JSON.stringify({ cash_collected: collected }) });
     S.cashFor = null;
-    // A toast is plain text and cannot carry a class; the value is still the
-    // kernel's integer. // money:toast
-    if (d.short > 0) toast(`${t('shortfall')} ${money(d.short)} — ${t('recorded')}`, 'alert-triangle'); // money:toast
-    else toast(t('delivered'), 'circle-check');
-    seaEvent('delivered', 160);
-    await load();
+    // ONLY A DELIVERY THE HUB CONFIRMED IS ANNOUNCED AS ONE. A queued tap has
+    // no shortfall to report and no event to ripple: `tapped` has already said
+    // it was saved, and saying "Delivered" on top of that would be the client
+    // telling the courier something only the hub can know.
+    if (r.landed) {
+      const d = r.data || {};
+      // A toast is plain text and cannot carry a class; the value is still the
+      // kernel's integer. // money:toast
+      if (d.short > 0) toast(`${t('shortfall')} ${money(d.short)} — ${t('recorded')}`, 'alert-triangle'); // money:toast
+      else toast(t('delivered'), 'circle-check');
+      seaEvent('delivered', 160);
+      await load();
+    }
   } catch (e) {
     toast(String(e.message || e), 'alert-circle'); seaEvent('dispatch_failed', 40);
     if (btn) btn.disabled = false;
@@ -1034,6 +1160,10 @@ function bindVoiceChrome(){
 }
 
 async function boot(){ S.booted = true;
+  // BEFORE the first load, and not only on the `online` event: a courier who
+  // killed the app in the tunnel and reopens it above ground is already online,
+  // so no event will ever fire and the queue would sit there.
+  OUT.start();
   bindVoiceChrome(); bindLangChrome();
   initGuide();
   // NOT awaited. The task list is what this screen is for; the map is how the

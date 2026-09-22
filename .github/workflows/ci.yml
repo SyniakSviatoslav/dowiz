@@ -91,3 +91,22 @@ jobs:
       - uses: dtolnay/rust-toolchain@nightly
       - run: cargo install cargo-fuzz
       - run: cd kernel && for target in fuzz_trinary fuzz_eigen fuzz_sanitize; do timeout 60 cargo fuzz run $target -- -max_total_time=30; done
+
+  # THE ONLY `e2e/kit-regression` GATE THAT CAN RUN IN CI. Every other one in
+  # that directory points at the live venue; this one serves
+  # `workers/api/public/` from disk over loopback and answers `/api/` from a
+  # counting stub. It MUST stay that way: half of what it proves is a refusal
+  # being REPLAYED, and proving that against a real restaurant would be the bug.
+  offline-writes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # NOT `fetch-depth: 1`. The RED half serves the courier surface as it was
+      # BEFORE the outbox, out of the commit that last shipped it, and clicks
+      # the real button on it. With no history there is no RED half.
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: npm ci --ignore-scripts && npx playwright install --with-deps chromium
+      - run: node e2e/kit-regression/outbox.mjs

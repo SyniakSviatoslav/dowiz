@@ -45,6 +45,13 @@
   <span class="tag" id="shiftTag"><span class="dot" aria-hidden="true"></span><span id="shiftText" data-t="offline"></span></span>
   <span class="sp"></span>
   <span class="tag" id="gpsTag" hidden><i class="ti ti-gps i" aria-hidden="true"></i><span id="gpsText">GPS</span></span>
+  <!-- UNSENT TAPS, COUNTED, IN THE ONE PLACE THAT IS ON SCREEN IN EVERY STATE.
+       A tap that is queued must never look like a tap that landed, and the
+       courier rules forbid a second main action, so this is a tag and not a
+       button: it says how many taps the phone is still holding and it goes
+       away by itself when they land. -->
+  <span class="tag warn" id="outboxTag" role="status" aria-live="polite" hidden>
+    <i class="ti ti-cloud-upload i" aria-hidden="true"></i><span id="outboxText"></span></span>
   <!-- The microphone sits in the HUD, reachable in EVERY state including
        mid-delivery, because that is exactly when a courier's hands are busy.
        Hidden entirely where the browser has no recogniser -- a button that

@@ -476,6 +476,11 @@ h2{font-family:var(--brand-font-heading);font-weight:var(--weight-normal);font-s
 .hud .tag > span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hud .icon-btn{flex:none}
 @media (max-width:380px){ .hud #gpsText{display:none} .hud #gpsTag{padding-inline:10px} }
+/* THE COUNT SURVIVES THE NARROW SCREEN. The GPS tag drops its words at 380px
+   because "±12 m" is decoration once the icon is there; the outbox tag keeps
+   its text, because the number of taps the phone has not managed to send is
+   the whole message and an upload icon on its own does not carry it. */
+.hud #outboxTag{flex:0 0 auto}
 /* Before sign-in there is no run to watch: the sheet may take the screen, so
    a 320px phone reads the whole form without scrolling a 270px window
    (measured: the language chips sat 240px below the sheet's edge). */

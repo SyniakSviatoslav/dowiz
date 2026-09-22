@@ -8,6 +8,7 @@ import { run as domains } from './domains.mjs';
 import { run as mobile } from './mobile.mjs';
 import { run as pwa } from './pwa.mjs';
 import { run as interact } from './interact.mjs';
+import { run as outbox } from './outbox.mjs';
 
 const GATES = [
   ['render',   'render gate — real Chromium at 375x812',        () => render(null)],
@@ -15,6 +16,10 @@ const GATES = [
   ['interact', 'interaction gate — every control does something', interact],
   ['pwa',      'installability gate — manifest, worker, offline', pwa],
   ['domains',  'domain contracts — the kernel, over HTTP',       domains],
+  // The only gate here that does NOT touch HOST: it serves `public/` from disk
+  // against a counting stub, because half of what it proves is a refusal being
+  // replayed and that must never be replayed at a live venue.
+  ['outbox',   'offline writes — a tap survives a dead network',  outbox],
 ];
 
 const only = process.env.ONLY;
