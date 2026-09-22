@@ -108,7 +108,6 @@ pub struct Graph {
     nodes: Vec<Node>,
     /// `(from, rel, to)` as node indices.
     edges: Vec<(usize, Rel, usize)>,
-    by_id: HashMap<String, usize>,
     /// Adjacency both ways, built once. A graph this size rebuilt per query
     /// would spend more time on bookkeeping than on the walk.
     out: Vec<Vec<usize>>,
@@ -128,8 +127,10 @@ impl Graph {
     pub fn node(&self, i: usize) -> Option<&Node> {
         self.nodes.get(i)
     }
-    pub fn index_of(&self, id: &str) -> Option<usize> {
-        self.by_id.get(id).copied()
+    /// Test-only: production walks from a node it already holds.
+    #[cfg(test)]
+    fn index_of(&self, id: &str) -> Option<usize> {
+        self.nodes.iter().position(|n| n.id == id)
     }
     pub fn nodes(&self) -> &[Node] {
         &self.nodes
@@ -161,14 +162,13 @@ impl Graph {
     }
 
     fn build(nodes: Vec<Node>, edges: Vec<(usize, Rel, usize)>) -> Self {
-        let by_id = nodes.iter().enumerate().map(|(i, n)| (n.id.clone(), i)).collect();
         let mut out = vec![Vec::new(); nodes.len()];
         let mut inc = vec![Vec::new(); nodes.len()];
         for (e, &(a, _, b)) in edges.iter().enumerate() {
             out[a].push(e);
             inc[b].push(e);
         }
-        Graph { nodes, edges, by_id, out, inc }
+        Graph { nodes, edges, out, inc }
     }
 
     /// THE FOLD. Reads the order log and the catalogue and relates them.

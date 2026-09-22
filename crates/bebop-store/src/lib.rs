@@ -373,11 +373,6 @@ impl Store {
         (self.cell(obj) >> 32) & 0xFFFF_FFFF
     }
 
-    /// Generation the object at `obj` was written in.
-    pub fn obj_generation(&self, obj: usize) -> i64 {
-        self.cell(obj + 1) & 0xFFFF_FFFF
-    }
-
     /// Does the object's stored CRC match its payload?
     pub fn obj_crc_ok(&self, obj: usize) -> bool {
         let len = self.obj_len(obj) as usize;

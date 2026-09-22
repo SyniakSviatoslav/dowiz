@@ -35,10 +35,8 @@ struct TxRow {
     kind: String,
     reverses: Option<String>,
     memo: String,
-    /// Read but not used: the ledger orders by its own append order, not by a
-    /// timestamp a writer supplied. Kept so the model describes the record.
-    #[allow(dead_code)]
-    at_ms: i64,
+    // `at_ms` is on the record and deliberately not read: the ledger orders by
+    // its own append order, not by a timestamp a writer supplied.
 }
 
 #[derive(Deserialize)]

@@ -307,11 +307,6 @@ impl Kv {
             }
         }
     }
-
-    pub fn commit_into_bytes(&self, st: &mut Store) -> Result<i64, StoreError> {
-        let (tx, root) = self.stage_commit_into(st)?;
-        Ok(st.commit_bytes(&tx, root))
-    }
 }
 
 #[cfg(test)]

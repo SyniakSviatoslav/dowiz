@@ -144,25 +144,6 @@ where
     Err(Error::RustError(format!("log image {image}: four writers won the guard in a row")))
 }
 
-/// Read, append, write, on the platform object.
-///
-/// UNUSED TODAY, and named rather than deleted: the `_at` form below it is
-/// what the venue side calls, and this is the platform's half of the same
-/// pair. The sharding plan in the no-SQL blueprint is what will call it.
-#[allow(dead_code)]
-pub async fn with_log<F, T>(env: &Env, image: &str, f: F) -> Result<T>
-where
-    F: FnMut(&mut LogImage) -> Result<T>,
-{
-    with_log_at(&stub(env)?, image, f).await
-}
-
-/// Read one append-only platform image.
-#[allow(dead_code)]
-pub async fn load_log(env: &Env, image: &str) -> Result<LoadedLog> {
-    load_log_at(&stub(env)?, image).await
-}
-
 fn stub(env: &Env) -> Result<Stub> {
     env.durable_object("HUB")?.id_from_name(PLATFORM)?.get_stub()
 }
@@ -243,18 +224,6 @@ where
 /// legacy, and an absent image is an empty one.
 pub async fn load(env: &Env, image: &str) -> Result<Loaded> {
     load_at(&stub(env)?, image, ceiling(image)).await
-}
-
-/// Write one platform image back, under the generation it was read at.
-///
-/// UNUSED TODAY: every platform write goes through `with_at`, which reads,
-/// mutates and saves inside one turn. This is the half a caller would reach
-/// for that wanted to hold the image between the two, and that is exactly the
-/// shape the generation guard exists to refuse -- so it stays named, and
-/// unused, rather than being quietly convenient.
-#[allow(dead_code)]
-pub async fn save(env: &Env, image: &str, loaded: &mut Loaded) -> Result<bool> {
-    save_at(&stub(env)?, image, loaded).await
 }
 
 /// Read, change, write, on the platform object.

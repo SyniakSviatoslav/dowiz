@@ -70,11 +70,8 @@ struct EventRow {
 #[derive(Deserialize)]
 struct ReservationRow {
     id: String,
-    /// Read but not used: the venue is already decided by the object this
-    /// record came out of. It stays because a read model that omits a field
-    /// stops describing the record.
-    #[allow(dead_code)]
-    location_id: String,
+    // `location_id` is on the record and not read: the venue is already
+    // decided by the object this record came out of.
     party: i64,
     slot_min: i64,
     occasion: String,

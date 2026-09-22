@@ -7,9 +7,10 @@
 //! THE HEADER USED TO SAY "the request, the kernel call inside it, each store
 //! read and write". It was not true and had never been: `Trace::child` has no
 //! caller anywhere in this crate, so no store read, no kernel call and no
-//! outbound request has ever appeared in a trace. The claim is corrected here
-//! rather than deleted, because the machinery is real and the wiring is the
-//! part that is missing — `child`/`end` take an index and are ready.
+//! outbound request has ever appeared in a trace. `child`, `end` and
+//! `traceparent()` were DELETED on 2026-09-23 rather than kept under
+//! `allow(dead_code)`: an instrument that exists and is never called reads as
+//! coverage. `git log -S 'pub fn child' -- workers/api/src/otel.rs` has them.
 //!
 //! WHY IT IS NOT WIRED, and what it would cost: the `Trace` lives in the
 //! router's own scope and the store calls are several frames down inside the
@@ -17,9 +18,9 @@
 //! signature or putting it somewhere a Worker isolate can reach from both. The
 //! first is a change to every route; the second is shared mutable state in a
 //! runtime that gives us single-threaded isolates and would be safe, and is
-//! the one to weigh. `traceparent()` is the same story on the way out: it
-//! renders correctly and nothing sends it, so an outbound call to Telegram or
-//! Stripe starts a new trace rather than continuing this one.
+//! the one to weigh. Outbound propagation is the same gap on the way out: an
+//! outbound call to Telegram or Stripe starts a new trace rather than
+//! continuing this one.
 //!
 //! The kernel's own internal spans are a separate gap: `fdr::SpanObserver`
 //! hands out `(name, dur_us)` and nothing else — no trace id, no parent, no
@@ -48,12 +49,9 @@ pub struct Span {
     error: Option<String>,
 }
 
-#[allow(dead_code)]
 pub struct Trace {
     trace_id: String,
-    root_id: String,
     spans: Vec<Span>,
-    start_ms: f64,
 }
 
 fn hex(bytes: usize) -> String {
@@ -85,7 +83,7 @@ impl Trace {
         };
         let root_id = hex(8);
         let start_ms = Date::now().as_millis() as f64;
-        let mut t = Trace { trace_id, root_id: root_id.clone(), spans: Vec::new(), start_ms };
+        let mut t = Trace { trace_id, spans: Vec::new() };
         t.spans.push(Span {
             name: name.to_string(),
             span_id: root_id,
@@ -98,32 +96,6 @@ impl Trace {
         t
     }
 
-    /// Open a child of the root. Returns its index; close it with `end`.
-    ///
-    /// NO CALLER TODAY — see the module header for what that means and what
-    /// wiring it would cost. Kept because it is the part that works.
-    #[allow(dead_code)]
-    pub fn child(&mut self, name: &str) -> usize {
-        let now_ns = (Date::now().as_millis() as f64 * 1.0e6) as u64;
-        self.spans.push(Span {
-            name: name.to_string(),
-            span_id: hex(8),
-            parent_id: Some(self.root_id.clone()),
-            start_ns: now_ns,
-            end_ns: 0,
-            attrs: Vec::new(),
-            error: None,
-        });
-        self.spans.len() - 1
-    }
-
-    #[allow(dead_code)]
-    pub fn end(&mut self, idx: usize) {
-        if let Some(s) = self.spans.get_mut(idx) {
-            s.end_ns = (Date::now().as_millis() as f64 * 1.0e6) as u64;
-        }
-    }
-
     pub fn attr(&mut self, idx: usize, k: &str, v: Value) {
         if let Some(s) = self.spans.get_mut(idx) {
             s.attrs.push((k.to_string(), v));
@@ -134,12 +106,6 @@ impl Trace {
         if let Some(s) = self.spans.get_mut(idx) {
             s.error = Some(msg.to_string());
         }
-    }
-
-    /// The header to hand downstream, so a call this Worker makes joins the trace.
-    #[allow(dead_code)]
-    pub fn traceparent(&self) -> String {
-        format!("00-{}-{}-01", self.trace_id, self.root_id)
     }
 
     /// The id alone, for the client and for anything that has to name this

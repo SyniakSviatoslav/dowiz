@@ -1240,7 +1240,7 @@ pub async fn archive_orders(place: &Place, archive_id: &str) -> Result<Option<Ve
 /// object for an order rather than folding one itself, so this is the
 /// definition the object's `/fold/order` is checked against rather than a
 /// path the Worker takes on a request.
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(test)]
 ///
 /// `Hub::order` returns the newest EVENT, which since phase 3 may be a delta.
 /// Everything that wants the ORDER asks here, and for a log written before

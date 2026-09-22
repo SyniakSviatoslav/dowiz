@@ -76,19 +76,14 @@ pub(crate) async fn owner_at(
             Err(e) => return Err(e.into_response().unwrap()),
         }
     };
-    #[derive(Deserialize)]
-    struct M {
-        /// ONLY ITS EXISTENCE IS THE ANSWER: this asks whether the membership
-        /// is there, not what it says.
-        #[allow(dead_code)]
-        id: String,
-    }
-    let m: std::result::Result<Option<M>, _> = crate::identity_store::identity(&ctx.env)
+    // ONLY ITS EXISTENCE IS THE ANSWER: this asks whether the membership is
+    // there, not what it says.
+    let m: std::result::Result<Option<()>, _> = crate::identity_store::identity(&ctx.env)
         .await
         .map(|t| {
             crate::identity_store::membership(&t, location_id, &user_id)
                 .filter(|x| crate::identity_store::s_of(x, "role") == "owner")
-                .map(|_| M { id: String::new() })
+                .map(|_| ())
         });
     match m {
         Ok(Some(_)) => Ok(user_id),

@@ -500,9 +500,10 @@ impl Roster {
         dead.len()
     }
 
-    /// How many session records the roster is holding. Exposed so the arena
-    /// pressure this caused is measurable rather than inferred.
-    pub fn live_session_count(&self) -> usize {
+    /// How many session records the roster is holding, so the tests can
+    /// measure the arena pressure this caused rather than infer it.
+    #[cfg(test)]
+    fn live_session_count(&self) -> usize {
         self.kv.keys().into_iter().filter(|k| k.starts_with(P_SESSION)).count()
     }
 

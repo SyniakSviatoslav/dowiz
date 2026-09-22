@@ -122,10 +122,10 @@ pub async fn retire_supply(mut req: Request, ctx: RouteContext<crate::Req>) -> R
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
     struct In {
-        #[allow(dead_code)]
-        location_id: Option<String>,
+        #[serde(rename = "location_id")]
+        _location_id: Option<String>,
     }
-    let _body: In = req.json().await.unwrap_or(In { location_id: None });
+    let _body: In = req.json().await.unwrap_or(In { _location_id: None });
     let Some(id) = ctx.param("id").cloned() else { return Response::error("missing supply id", 400) };
     let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,

@@ -181,14 +181,6 @@ pub(crate) struct LocRow {
 }
 
 
-#[derive(Deserialize)]
-#[allow(dead_code)]
-struct I18nRow {
-    entity_id: String,
-    field: String,
-    value: String,
-}
-
 /// `GET /api/public/locations/:slug/menu`
 pub async fn menu(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let Some(slug) = ctx.param("slug").cloned() else {
