@@ -25,7 +25,7 @@ these invariants — the invariants are non-negotiable; only their *machinery de
 
 ## D2. Manifest location (ENFORCED, 2026-07-12)
 - `MANIFESTO.md` lives at repo **root** (`/root/dowiz/MANIFESTO.md`), NOT `docs/design/`.
-- The existing `docs/design/MANIFESTO.md` is copied to root and the stale copy removed, so
+- The existing `MANIFESTO.md` is copied to root and the stale copy removed, so
   blueprint citations (`MANIFESTO.md:28-30`) resolve.
 - `DECISIONS.md` (this file) also lives at root.
 - **2026-07-23 audit**: ENFORCED. `/root/dowiz/MANIFESTO.md` present at root (4818 bytes); `DECISIONS.md` at root.
@@ -73,7 +73,7 @@ these invariants — the invariants are non-negotiable; only their *machinery de
   core** (verified, not yet independently audited for production). For production node-to-node
   channels, prefer rustls+aws-lc-rs (X25519MLKEM768) + liboqs ML-DSA until our core is
   independently validated.
-- **2026-07-23 audit**: ENFORCED. HybridPolicy (Ed25519+ML-DSA-65) active in `kernel/src/pq/hybrid_signing.rs`; HybridSignPolicy wired into agent admission, MCP port, owner_surface P59 cap-chain verification; all FIPS citations corrected.
+- **2026-07-23 audit**: ENFORCED. HybridPolicy (Ed25519+ML-DSA-65) active in `crates/dowiz-core/src/pq/hybrid_signing.rs`; HybridSignPolicy wired into agent admission, MCP port, owner_surface P59 cap-chain verification; all FIPS citations corrected.
 
 ## D5. Roles + adapters (ENFORCED, MANIFESTO §5, 2026-07-12)
 - 3 autonomous node roles: owner/merchant, courier, customer. Each = local SQLite + kernel.
@@ -85,7 +85,7 @@ these invariants — the invariants are non-negotiable; only their *machinery de
 - MANIFESTO C8 gates *over-engineering*; it does NOT block the invariants. Mesh machinery is
   NOW required (operator mandate), not deferred. Seams already exist in L0; L1/L2 machinery is
   in-scope. YAGNI still applies to anything outside the 6 invariants + MVP food-vendor gaps.
-- **2026-07-23 audit**: ENFORCED. CrossBridgeRegistry (≥5 bridges) in `kernel/src/cross_bridge.rs`; SIGMOD battle-test (513 loc, 20 e2e courier tests) in `apps/courier/tests/sigmod_battle.rs`; hybrid signing gate wired across agent admission, MCP, owner_surface P59.
+- **2026-07-23 audit**: ENFORCED. CrossBridgeRegistry (≥5 bridges) in `crates/dowiz-core/src/cross_bridge.rs`; SIGMOD battle-test (513 loc, 20 e2e courier tests) in `apps/courier/tests/sigmod_battle.rs`; hybrid signing gate wired across agent admission, MCP, owner_surface P59.
 
 ## D7. Verification discipline (ENFORCED)
 - Every change ships a RED+GREEN falsifiable assertion (MANIFESTO C7).
@@ -103,7 +103,7 @@ these invariants — the invariants are non-negotiable; only their *machinery de
 - Mirrored in `bebop-repo/docs/RULES.md` (precedence setting, Anu line).
 
 ## D9. Anu QRNG wiring — native entropy is DEFAULT + FALLBACK (ENFORCED, operator, 2026-07-12)
-- **Remote quantum entropy IS wired in**: `kernel/src/pq/entropy.rs` `provider` module pulls REAL
+- **Remote quantum entropy IS wired in**: `crates/dowiz-core/src/pq/entropy.rs` `provider` module pulls REAL
   vacuum-fluctuation noise from **ANU QRNG** (`qrng.anu.edu.au`) behind the `qrng` feature, mixed via
   `SHAKE256(quantum ‖ os)` (NIST SP 800-90B: never raw quantum alone).
 - **Native (OS) entropy is the DEFAULT and the FALLBACK.** The sanctioned entry point
@@ -132,9 +132,9 @@ these invariants — the invariants are non-negotiable; only their *machinery de
   P06-independent, and it closes the Batch-7 Sybil residual (bounded per-epoch issuance). Options B and
   C remain unwired stubs and are **NOT adopted**.
 - **Mechanism already built — no code change in this ruling:** `bebop-repo` commit `e08eb07`
-  (`bebop2/proto-cap/src/node_id.rs:187-372`; `IssuanceBudget` / `IssuanceError` / `can_issue` /
+  (`bebop-repo:bebop2/proto-cap/src/node_id.rs:187-372`; `IssuanceBudget` / `IssuanceError` / `can_issue` /
   `charge_issuance` / `sign_delegation_budgeted`; 10 RED→GREEN tests; CI gate
-  `scripts/ci-budgeted-issuance.sh`). This D10 entry is a **ruling RECORD**, not a code change. Per
+  `bebop-repo:scripts/ci-budgeted-issuance.sh`). This D10 entry is a **ruling RECORD**, not a code change. Per
   `BLUEPRINT-P-D-consensus-capability.md` §11 anti-scope, B's attestation overlay and C's flow-based
   construction are explicitly NOT adopted by this ruling.
 - **Operator deployment actions still required (ops, not code):** (i) generate + Ed25519-sign the real
@@ -174,7 +174,7 @@ exists yet against them.
   Not a fixed constant — item 75's `Pending` state must carry a configurable expiry, not a compiled-in
   number.
 - **Q4 — the meta-governance boundary (item 74's registry, the AI's own safety perimeter):** the AI
-  MAY reach and edit `agent scope` (`kernel/src/ports/agent/scope.rs`) and the governance module
+  MAY reach and edit `agent scope` (`crates/dowiz-core/src/ports/agent/scope.rs`) and the governance module
   itself (items 73-76's own code) — self-evolution is allowed there, gated by the human apply-token
   per D11's Q1/Q2. The ONLY hard, non-negotiable line is **core kernel authority + the circuit
   breaker** (`kernel/src/breaker/`, item 9; the order/money/decide-fold core). Everything else is

@@ -60,6 +60,12 @@ jobs:
       # magnitude -- CI only, never a pre-commit hook.
       - name: the client vocabulary is generated, not retyped
         run: sh tools/gates/vocab.sh
+      # Prose is never executed, which is how CLAUDE.md spent an unknown length
+      # of time telling every reader the FSM was at `kernel/src/order_machine.rs`
+      # -- a file that has never existed. This executes the documents' own
+      # citations.
+      - name: the documents cite files that exist
+        run: sh tools/gates/paths.sh
       # The conservation audit itself needs live venues and an owner token, so
       # it cannot run here. Its PROOF can: the gate is run against a stubbed
       # platform and each law is checked for going red when it should and

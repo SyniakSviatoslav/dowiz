@@ -85,7 +85,13 @@ Standalone crates, wired by **path dependencies** — not a workspace:
 
 ## Kernel authority model (why edits here are load-bearing)
 
-- **Order state is a decide/fold FSM.** `kernel/src/order_machine.rs`: `decide → Event`, then
+**Three paths in this section were wrong until 2026-09-22, and `ls` is how you find out.** They
+said `kernel/src/` for `order_machine.rs`, `domain.rs` and `ports/agent/scope.rs`, which live in
+`crates/dowiz-core/`; `kernel/` is the FACADE that re-exports them, so most of what looks like it
+is there is not. Check a path before citing it — a document that names a file nobody can open
+sends every reader who trusts it to the wrong place.
+
+- **Order state is a decide/fold FSM.** `crates/dowiz-core/src/order_machine.rs`: `decide → Event`, then
   `state = fold(events)`. Forbidden transitions are **errors, not silent no-ops**. The FSM is
   self-checked by five graph lenses (cycle/cyclomatic/topo/reachability/spectral-radius) pinned to
   a golden signature — introduce a cycle and the self-check goes red.
@@ -97,8 +103,8 @@ Standalone crates, wired by **path dependencies** — not a workspace:
   Enforced two ways: a CI job (`no-courier-scoring`) fails the build if a
   `courier_score/rating/reputation` identifier appears in kernel/engine, and routing enums omit
   `Ord`/`PartialOrd` so a "quality router" is unrepresentable in the type system
-  (`kernel/src/decision/mod.rs`, `kernel/src/domain.rs`).
-- **Red-line capabilities deny by default** (`kernel/src/ports/agent/scope.rs`,
+  (`kernel/src/decision/mod.rs`, `crates/dowiz-core/src/domain.rs`).
+- **Red-line capabilities deny by default** (`crates/dowiz-core/src/ports/agent/scope.rs`,
   `RedLinePolicy::DenyByDefault`) — ledger/money, auth, migrations are denied unless explicitly granted.
 - **Generated code is parity-pinned.** `kernel/src/eqc_gen.rs` is emitted by `tools/eqc-rs`
   ("GENERATED — do not hand-edit") and a test asserts *exact integer equality* against the
@@ -153,7 +159,7 @@ Rules:
   against `bebop-lang/graphify-out/graph.json`. **There is NO `graphify query` command in this version** --
   the CLAUDE.md line that told every agent to run it was wrong from 2026-09-04 to 2026-09-09.
   The index covers `.bp` only because `bebop-lang/tools/bp_graph.py` supplies the extractor graphify lacks;
-  after editing `.bp`, refresh with `tools/bp_graph.py bebop-lang -o /tmp/bp.json && graphify merge-graphs
+  after editing `.bp`, refresh with `bebop-lang/tools/bp_graph.py bebop-lang -o /tmp/bp.json && graphify merge-graphs
   bebop-lang/graphify-out/graph.json /tmp/bp.json --out bebop-lang/graphify-out/graph.json`.
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
 - Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
@@ -186,7 +192,7 @@ against a 3B-Q4's ~2 GB, with procs at 33 against a 32-process ceiling. Send mec
 (summarise a log, extract a table, reformat); judgement and merges stay where they are.
 
 Rules: compile/test output to `/dev/null` and read `tail -1`; one deterministic run is proof;
-**re-read a file only when its hash moved: `tools/tb.py d <path> <crc>` prints nothing and exits 0 when it
+**re-read a file only when its hash moved: `bebop-lang/tools/tb.py d <path> <crc>` prints nothing and exits 0 when it
 has not (measured 2026-09-09 against reading bebop.bp whole: `tb s` 3,028x fewer bytes, `tb n` 22,709x,
 `tb h` 12,977x, `tb d` on the unchanged path infinite);**
 scratch lives in the session scratchpad, never `/tmp` root. Details: `bebop-lang/docs/TOKEN-ECONOMY.md`.
