@@ -1,5 +1,17 @@
 # dowiz — Master Roadmap (fully merged, single file)
 
+> **SUPERSEDED FOR STATUS, 2026-09-22. Read `ROADMAP-2026-09-22.md` first.**
+>
+> This file's own "current live status" section is dated **2026-07-20**, and everything it says
+> about what is built is two months old — it predates the D1 removal, the command surface in the
+> Durable Object, the clock injection, the offline write queue and the ten gates now in CI. It
+> remains the best record of the P01–P30 narrative and the landing-wave detail, and it is still
+> the place to look for WHY something was decided. It is history, not status.
+>
+> It did exactly this to the nineteen roadmap-shaped files it replaced. The short file now does it
+> to this one, for the reason this file gives in its own header: a document nobody finishes
+> reading gets contradicted by a summary of itself.
+
 **This is the one roadmap document in `docs/design/`.** Everything that used to live in 19
 separate top-level "roadmap"-shaped files (`GROUND-TRUTH-*`, `MASTER-ROADMAP-*`, `MASTER-*-PLAN`,
 `ROADMAP-*`) is now either fully inlined below (Parts II–V) or was genuinely dead weight and has

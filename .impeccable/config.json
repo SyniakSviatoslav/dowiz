@@ -11,6 +11,15 @@
         ],
         "createdAt": "2026-09-22T20:58:35.213Z",
         "reason": "fixture, not a served page: this is the operator's supplied prototype stored verbatim as the design spec. The finding is REAL for the storefront page built from it (#8A887F muted on #F1EFE8 is ~3.0:1 at 13px) and has been sent to the lane building that page as a required fix; altering the fixture would make it stop being the thing the operator handed over."
+      },
+      {
+        "rule": "cream-palette",
+        "value": "*",
+        "files": [
+          "docs/design/booking-template.html"
+        ],
+        "createdAt": "2026-09-22T21:13:28.070Z",
+        "reason": "fixture, not a served page: the operator supplied this file as the booking design spec and the #F1EFE8 background is their choice, not a default I reached for. Editing it would make it stop being the artefact they handed over. The served page is being built separately and must take the venue's own brand palette (bone/ink/hot plus venue gold), not this one — sent to the lane building it."
       }
     ]
   }
