@@ -320,6 +320,37 @@ pub async fn accept(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let Some(id) = ctx.param("id").cloned() else {
         return Response::error("missing order id", 400);
     };
+    // ONE CLOCK READ FOR THE WHOLE REQUEST. The idempotency window, the
+    // assignment stamp and the log stamp are all "when this request happened",
+    // and three separate reads of the wall clock is three answers to one
+    // question -- see `tools/gates/clock.sh`.
+    let now = now_ms();
+    // ── THE RETRY THAT MUST NOT BECOME A SECOND ANYTHING ──
+    //
+    // A courier taps in a basement, the tap is queued on the phone, and the
+    // queue replays it when the signal returns (`public/lib/outbox.js`). The
+    // FSM and the assignment row already make a replay SAFE -- a repeated
+    // transition is an illegal edge and a second `accept` finds the row taken
+    // -- but safe is not the same as truthful: without this the courier whose
+    // first call LANDED and whose response was lost is told the order changed
+    // while they were away, or that somebody else took a job that is theirs.
+    // Rule 1 gives them the first call's own answer instead.
+    //
+    // THE ORDER ID IS THE BODY, because this route has none. Without it every
+    // `accept` a courier makes under one key would look like the same call.
+    let idem = match crate::idempotency::guard(
+        &place,
+        req.headers().get("idempotency-key").ok().flatten(),
+        &courier_id,
+        "courier.accept",
+        &id,
+        now,
+    )
+    .await
+    {
+        Ok(g) => g,
+        Err(r) => return Ok(r),
+    };
     let Some((_, v)) = load_order(&place, &id, &loc).await? else {
         return Response::error("not found", 404);
     };
@@ -363,7 +394,7 @@ pub async fn accept(req: Request, ctx: RouteContext<()>) -> Result<Response> {
             return Ok(false);
         }
         let rec = json!({
-            "order_id": oid, "courier_id": cid, "assigned_at_ms": now_ms(),
+            "order_id": oid, "courier_id": cid, "assigned_at_ms": now,
             "cash_due": cash_due, "picked_up_at_ms": Value::Null,
             "delivered_at_ms": Value::Null, "cash_collected": Value::Null,
         })
@@ -388,7 +419,6 @@ pub async fn accept(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     //
     // The INSERT is the authority on who won; this write only repeats its
     // answer where the rest of the system looks.
-    let now = now_ms();
     let oid = id.clone();
     let who = courier_id.clone();
     let claimed = crate::hubstore::append_for(&place, &oid.clone(), move |current| {
@@ -417,7 +447,9 @@ pub async fn accept(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         );
     }
 
-    Response::from_json(&json!({ "ok": true, "orderId": id, "cashDue": cash_due }))
+    let out = json!({ "ok": true, "orderId": id, "cashDue": cash_due });
+    idem.done(&place, 200, &out.to_string()).await;
+    Response::from_json(&out)
 }
 
 /// `POST /api/courier/orders/:id/pickup` — READY → IN_DELIVERY
@@ -429,6 +461,25 @@ pub async fn pickup(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     };
     let Some(id) = ctx.param("id").cloned() else {
         return Response::error("missing order id", 400);
+    };
+    // One clock read for the whole request; see `accept`.
+    let now = now_ms();
+    // See `accept` for why a courier route needs this at all: the tap that is
+    // replayed out of the phone's outbox landed the first time, and without a
+    // key its replay is an illegal edge answered 409 -- a true refusal with a
+    // false meaning.
+    let idem = match crate::idempotency::guard(
+        &place,
+        req.headers().get("idempotency-key").ok().flatten(),
+        &courier_id,
+        "courier.pickup",
+        &id,
+        now,
+    )
+    .await
+    {
+        Ok(g) => g,
+        Err(r) => return Ok(r),
     };
     let t = ops(&place).await?;
     if asg_of(&t, &id).map(|a| field_str(&a, "courier_id")) != Some(courier_id.clone()) {
@@ -444,13 +495,14 @@ pub async fn pickup(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let oid = id.clone();
     with_ops(&place, move |t| {
         if let Some(mut a) = asg_of(t, &oid) {
-            a["picked_up_at_ms"] = json!(now_ms());
+            a["picked_up_at_ms"] = json!(now);
             t.put(K_ASG, &oid, &a.to_string(), &[], &[])
                 .map_err(|e| Error::RustError(format!("assignment: {e}")))?;
         }
         Ok(())
     })
     .await?;
+    idem.done(&place, 200, &merged.to_string()).await;
     Response::from_json(&merged)
 }
 
@@ -461,7 +513,11 @@ pub async fn deliver(mut req: Request, ctx: RouteContext<()>) -> Result<Response
         #[serde(default)]
         cash_collected: Option<i64>,
     }
-    let body: In = req.json().await.unwrap_or(In { cash_collected: None });
+    // THE RAW BODY IS READ ONCE, because the idempotency layer fingerprints it:
+    // rule 3 is "same key, different body is a 409", and it cannot answer that
+    // from a parsed struct that has already dropped whatever else was sent.
+    let raw_body = req.text().await.unwrap_or_default();
+    let body: In = serde_json::from_str(&raw_body).unwrap_or(In { cash_collected: None });
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (courier_id, loc) = match courier_at(&req, &ctx).await {
         Ok(v) => v,
@@ -469,6 +525,26 @@ pub async fn deliver(mut req: Request, ctx: RouteContext<()>) -> Result<Response
     };
     let Some(id) = ctx.param("id").cloned() else {
         return Response::error("missing order id", 400);
+    };
+    // One clock read for the whole request; see `accept`.
+    let now = now_ms();
+    // THE ONE WHERE A REPLAY LOSES REAL INFORMATION. This answer carries
+    // `short` -- the cash the courier came back without -- and a retry whose
+    // first response was lost would otherwise be told the order changed,
+    // taking the shortfall with it. Rule 1 hands back the first call's body,
+    // shortfall and all.
+    let idem = match crate::idempotency::guard(
+        &place,
+        req.headers().get("idempotency-key").ok().flatten(),
+        &courier_id,
+        "courier.deliver",
+        &format!("{id}:{raw_body}"),
+        now,
+    )
+    .await
+    {
+        Ok(g) => g,
+        Err(r) => return Ok(r),
     };
 
     let t = ops(&place).await?;
@@ -501,7 +577,6 @@ pub async fn deliver(mut req: Request, ctx: RouteContext<()>) -> Result<Response
         Ok(v) => v,
         Err(e) => return Response::error(e.to_string(), 409),
     };
-    let now = now_ms();
     // THE ASSIGNMENT AND THE SHIFT IN ONE WRITE. They were two UPDATEs, and
     // half of that is a delivery recorded against nobody's shift -- the
     // courier's own count and cash silently short by one run.
@@ -526,7 +601,10 @@ pub async fn deliver(mut req: Request, ctx: RouteContext<()>) -> Result<Response
         Ok(())
     })
     .await?;
-    Response::from_json(&json!({ "order": merged, "cashDue": cash_due, "cashCollected": collected, "short": short }))
+    let out =
+        json!({ "order": merged, "cashDue": cash_due, "cashCollected": collected, "short": short });
+    idem.done(&place, 200, &out.to_string()).await;
+    Response::from_json(&out)
 }
 
 /// `POST /api/courier/position` — `{lat, lon, accuracy_m?, speed_mps?, order_id?}`

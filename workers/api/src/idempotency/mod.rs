@@ -170,6 +170,62 @@ pub async fn begin(
     }
 }
 
+/// The whole middleware, as one call, for a handler that only wants the answer.
+///
+/// WHY A HELPER AND NOT A FOURTH COPY. `begin` returns four cases and every
+/// caller has to spell all four: `NoKey`, `Proceed`, `Refuse`, and a `Replay`
+/// that must rebuild the stored response with its `idempotent-replay` header.
+/// That is twenty lines of exactly-the-same, and the shape of it — a replay
+/// answering 204 instead of the first call's body, or forgetting the header —
+/// is precisely rule 1's defect. `storefront::place` was the only caller for
+/// long enough that the boilerplate was invisible; it is four callers now.
+///
+/// `Err(Response)` is EVERYTHING THE HANDLER MUST RETURN AT ONCE: a refusal, or
+/// a replay carrying the first call's whole answer. `Ok(Guard)` means proceed.
+pub struct Guard {
+    /// `None` when the client sent no key. Nothing is recorded in that case,
+    /// which is the same behaviour this layer had before it existed.
+    key: Option<String>,
+    print: String,
+    at_ms: i64,
+}
+
+pub async fn guard(
+    place: &Place,
+    header: Option<String>,
+    principal: &str,
+    route: &'static str,
+    body: &str,
+    now_ms: i64,
+) -> std::result::Result<Guard, Response> {
+    let print = fingerprint(body);
+    match begin(place, header, principal, route, body, now_ms).await {
+        Decision::NoKey => Ok(Guard { key: None, print, at_ms: now_ms }),
+        Decision::Proceed { key } => Ok(Guard { key: Some(key), print, at_ms: now_ms }),
+        Decision::Refuse(r) => Err(r),
+        Decision::Replay { status, body } => {
+            // THE FIRST CALL'S WHOLE ANSWER, not a marker. On a courier's
+            // `deliver` it carries the cash shortfall; a 204 here would lose it
+            // on exactly the retry this exists to serve.
+            let mut res = Response::ok(body)
+                .unwrap_or_else(|_| Response::empty().unwrap())
+                .with_status(status);
+            let _ = res.headers_mut().set("content-type", "application/json");
+            let _ = res.headers_mut().set("idempotent-replay", "true");
+            Err(res)
+        }
+    }
+}
+
+impl Guard {
+    /// Record what this call answered. Does nothing when there was no key.
+    pub async fn done(self, place: &Place, status: u16, body: &str) {
+        if let Some(key) = self.key {
+            finish(place, &key, status, body, &self.print, self.at_ms).await;
+        }
+    }
+}
+
 /// Record what the first call answered, so a retry can be given the same thing.
 ///
 /// NEVER FAILS THE CALLER. The answer is already correct; losing the record
@@ -217,48 +273,4 @@ pub async fn sweep(place: &Place, now_ms: i64) -> Result<usize> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// RULE 2, and it is the one that would be a tenancy defect.
-    #[test]
-    fn a_key_from_one_venue_cannot_replay_into_another() {
-        assert_ne!(
-            scope("k1", "dubin-durres", "cust", "place"),
-            scope("k1", "sushi-durres", "cust", "place")
-        );
-    }
-
-    #[test]
-    fn one_persons_key_is_not_anothers() {
-        assert_ne!(
-            scope("k1", "v", "customer:a", "place"),
-            scope("k1", "v", "customer:b", "place")
-        );
-    }
-
-    #[test]
-    fn one_routes_key_does_not_replay_into_another_route() {
-        assert_ne!(scope("k1", "v", "p", "place"), scope("k1", "v", "p", "refund"));
-    }
-
-    /// The separator is a byte no caller can send, so a key containing the
-    /// separator cannot be crafted to collide with another scope.
-    #[test]
-    fn the_scope_cannot_be_forged_by_a_key_that_contains_a_separator() {
-        let forged = scope("dubin-durres\u{1}cust\u{1}place\u{1}k1", "v", "p", "r");
-        let real = scope("k1", "dubin-durres", "cust", "place");
-        assert_ne!(forged, real);
-    }
-
-    #[test]
-    fn the_same_body_prints_the_same_and_a_changed_one_does_not() {
-        assert_eq!(fingerprint(r#"{"a":1}"#), fingerprint(r#"{"a":1}"#));
-        assert_ne!(fingerprint(r#"{"a":1}"#), fingerprint(r#"{"a":2}"#));
-        // Whitespace is NOT normalised, on purpose: two bodies that differ by
-        // it are two different requests as far as this layer is concerned, and
-        // guessing which differences are meaningful is how a replay returns the
-        // answer to a question nobody asked.
-        assert_ne!(fingerprint(r#"{"a":1}"#), fingerprint(r#"{"a": 1}"#));
-    }
-}
+mod tests;

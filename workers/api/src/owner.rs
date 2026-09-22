@@ -510,7 +510,11 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
         #[serde(default)]
         reason: Option<String>,
     }
-    let body: In = match req.json().await {
+    // READ ONCE, because the idempotency layer fingerprints the raw body: rule
+    // 3 ("same key, different body is a 409") cannot be answered from a parsed
+    // struct that has already dropped what else was sent.
+    let raw_body = req.text().await.unwrap_or_default();
+    let body: In = match serde_json::from_str(&raw_body) {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
@@ -520,9 +524,34 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
     // THE VENUE THAT WAS AUTHORISED, not the one the token happens to name --
     // see `Place::of_authorised`.
     let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
-    if let Err(r) = owner_at(&req, &ctx, &body.location_id).await {
-        return Ok(r);
-    }
+    let who = match owner_at(&req, &ctx, &body.location_id).await {
+        Ok(user_id) => user_id,
+        Err(r) => return Ok(r),
+    };
+    // ONE CLOCK READ FOR THE WHOLE REQUEST: the idempotency window and the
+    // transition's own stamp are the same instant.
+    let now = now_ms();
+    // ── THE OWNER'S TAP IS RETRIED TOO ──
+    //
+    // A console on a patchy connection repeats a "confirm"; the FSM refuses the
+    // second one as an illegal edge, which is SAFE and reads on screen as "that
+    // did not work" for something that did. The key makes the second answer the
+    // first one's. Scoped to the OWNER, so two people at one venue tapping the
+    // same order are still two calls -- and the one who loses gets the kernel's
+    // real refusal rather than a replay of somebody else's success.
+    let idem = match crate::idempotency::guard(
+        &place,
+        req.headers().get("idempotency-key").ok().flatten(),
+        &who,
+        "owner.order_action",
+        &format!("{id}:{raw_body}"),
+        now,
+    )
+    .await
+    {
+        Ok(g) => g,
+        Err(r) => return Ok(r),
+    };
 
     let next = match body.action.as_str() {
         "confirm" => "CONFIRMED",
@@ -560,7 +589,7 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
         location_id: body.location_id.clone(),
         next: next.to_string(),
         reason: body.reason.clone(),
-        now_ms: now_ms(),
+        now_ms: now,
     };
     let advanced: crate::command::advance::AdvanceOut =
         match crate::command::send(&place, "advance", &input).await {
@@ -570,6 +599,7 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
     let merged: Value = serde_json::from_str(&advanced.merged)
         .map_err(|e| Error::RustError(format!("hub answered unreadable json: {e}")))?;
 
+    idem.done(&place, 200, &merged.to_string()).await;
     Response::from_json(&merged)
 }
 

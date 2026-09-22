@@ -870,11 +870,14 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     // second order, a second reservation and a second ticket -- and Stripe's
     // idempotency key, derived from that id, cannot protect any of them.
     let created_at_ms = Date::now().as_millis() as i64;
-    let idem_print = crate::idempotency::fingerprint(&raw_body);
     // The principal is the CONTACT this basket names, so one person's retry
     // cannot replay into another's order even under a guessed key.
     let idem_who = crate::auth::sha256_hex(phone);
-    let idem = crate::idempotency::begin(
+    // THE TWENTY LINES THAT WERE HERE ARE NOW `idempotency::guard`, because
+    // there are four of these now and the one that spells the four cases wrong
+    // is the one that answers a replay with a marker instead of the first
+    // call's body -- which is rule 1's defect arriving through a copy.
+    let idem = match crate::idempotency::guard(
         &place,
         idem_key,
         &idem_who,
@@ -882,20 +885,10 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
         &raw_body,
         created_at_ms,
     )
-    .await;
-    let idem_key = match idem {
-        crate::idempotency::Decision::NoKey => None,
-        crate::idempotency::Decision::Proceed { key } => Some(key),
-        crate::idempotency::Decision::Refuse(r) => return Ok(r),
-        crate::idempotency::Decision::Replay { status, body } => {
-            // THE FIRST CALL'S WHOLE ANSWER, not a marker. It carries the order
-            // id, the customer's token and the payment intent; a 204 here would
-            // leave the client with an order it cannot open.
-            let mut res = Response::ok(body)?.with_status(status);
-            res.headers_mut().set("content-type", "application/json")?;
-            res.headers_mut().set("idempotent-replay", "true")?;
-            return Ok(res);
-        }
+    .await
+    {
+        Ok(g) => g,
+        Err(r) => return Ok(r),
     };
 
     let Some(id) = crate::edge_id() else {
@@ -1261,10 +1254,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     // order is already in the log and the customer already has their token.
     // Losing the record means a retry runs again, which is exactly the
     // behaviour without this layer -- never worse than that.
-    if let Some(key) = idem_key {
-        let body = out.to_string();
-        crate::idempotency::finish(&place, &key, 200, &body, &idem_print, created_at_ms).await;
-    }
+    idem.done(&place, 200, &out.to_string()).await;
 
     let mut res = Response::from_json(&out)?;
     res.headers_mut().set("content-type", "application/json; charset=utf-8")?;

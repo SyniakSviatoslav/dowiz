@@ -66,6 +66,11 @@ jobs:
       # citations.
       - name: the documents cite files that exist
         run: sh tools/gates/paths.sh
+      # The two halves of the offline queue are written in different languages
+      # in different files by different people. This pairs them: a route the
+      # phone can replay must name `idempotency::guard` on the server.
+      - name: every route a phone can replay is idempotent
+        run: sh tools/gates/idempotent.sh
       # The conservation audit itself needs live venues and an owner token, so
       # it cannot run here. Its PROOF can: the gate is run against a stubbed
       # platform and each law is checked for going red when it should and
