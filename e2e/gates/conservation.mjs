@@ -64,9 +64,24 @@ for (const host of HOSTS) {
       (n, i) => n + (i.total ?? ((i.price ?? 0) * (i.quantity ?? 1))), 0);
     const fee = o.delivery_fee ?? 0;
     const discount = o.discount ?? o.promo_discount ?? 0;
-    const expect = lines + fee - discount;
+    // THE TIP WAS MISSING FROM THIS LAW AND IT IS PART OF THE TOTAL.
+    //
+    // `storefront.rs:1016` is `subtotal + fee + tip`, and this expected
+    // `lines + fee - discount`. So the first order anyone leaves a tip on
+    // breaches the platform's own conservation audit — a false alarm on a
+    // correct order, which is exactly how a conservation check gets switched
+    // off. Measured 2026-09-22 before the fix: 0 of 52 live orders on
+    // sushi-durres carry a tip, so it had never fired. A law that is correct
+    // only because a feature is unused is a law waiting to be wrong.
+    //
+    // The tip is ADDED, not subtracted, and it is not the venue's money — see
+    // `services/orders/status.rs`, where the courier's tip is excluded from
+    // takings. This law is about the total a customer was charged, which does
+    // include it.
+    const tip = o.tip ?? 0;
+    const expect = lines + fee + tip - discount;
     if (o.total != null && lines > 0 && o.total !== expect) {
-      note(venue, 'money', `${o.id}: total ${o.total}, lines ${lines} + fee ${fee} - discount ${discount} = ${expect}`);
+      note(venue, 'money', `${o.id}: total ${o.total}, lines ${lines} + fee ${fee} + tip ${tip} - discount ${discount} = ${expect}`);
     }
   }
 

@@ -34,6 +34,56 @@ fn a_refused_order_is_a_visit_without_money_and_the_tip_is_never_the_venues() {
     assert_eq!(r[0].last_at, 30);
 }
 
+/// THE KEY IS WHERE THE SPELLING RULE LIVES, and the test below could not
+/// reach it: `rolled` hands `roll` a pass-through closure, so the fold joins
+/// on whatever string it is given and the real normalisation — in
+/// `customer_key` — was never exercised by anything. The test above it even
+/// says "two spellings that hash alike" and passed the SAME spelling twice.
+///
+/// One person writes their number four ways over a year. If each is a row, the
+/// venue's customer list is four strangers who all live at the same address,
+/// and the reveal audit is four trails.
+#[test]
+fn four_spellings_of_one_number_are_one_customer() {
+    let secret = b"a-test-signing-key";
+    let canonical = super::handlers::customer_key(secret, "+355691234567");
+    for spelling in ["+355 69 123 45 67", "00355691234567", "355-69-1234567", "+355 (69) 1234567"] {
+        assert_eq!(
+            super::handlers::customer_key(secret, spelling),
+            canonical,
+            "{spelling:?} is the same person"
+        );
+    }
+    // AND A DIFFERENT NUMBER IS A DIFFERENT PERSON, which is the half that
+    // stops "normalise harder" from becoming "everyone is one customer".
+    assert_ne!(super::handlers::customer_key(secret, "+355691234568"), canonical);
+
+    // THE NATIONAL FORM IS STILL A SECOND HANDLE, and this asserts the KNOWN
+    // GAP rather than hiding it: `069…` needs the venue's dialling code to
+    // become `+35569…`, and guessing one is how a Kosovan number becomes an
+    // Albanian customer. When that argument is added, this line changes to
+    // `assert_eq!` in the same commit.
+    assert_ne!(
+        super::handlers::customer_key(secret, "0691234567"),
+        canonical,
+        "the national form is a known, written-down gap, not an accident"
+    );
+}
+
+/// AND IT IS KEYED, WHICH A HASH OF A PHONE NUMBER HAS TO BE.
+///
+/// `storefront.rs` used a bare `sha256_hex(phone)` for the customer record
+/// under a comment claiming the table could be joined "without holding the
+/// number in the clear". An Albanian mobile is seven digits after a fixed
+/// prefix: the whole space is seconds of brute force, and every row's number
+/// falls out. A hash masks nothing when its inputs can be enumerated.
+#[test]
+fn the_same_number_under_two_secrets_is_two_different_handles() {
+    let a = super::handlers::customer_key(b"one-venue-secret", "+355691234567");
+    let b = super::handlers::customer_key(b"another-secret", "+355691234567");
+    assert_ne!(a, b, "without the secret the handle is guessable from the number alone");
+}
+
 /// THE ROW IS THE PERSON, not the order. The key is what joins them, so two
 /// spellings that hash alike are one row and the name shown is the one from
 /// the order the venue saw first.

@@ -1068,7 +1068,27 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         envelope["crypto"] = json!({ "wallet": chosen, "paid": false });
     }
 
-    let phone_hash = auth::sha256_hex(&body.contact.phone);
+    // ── THE CUSTOMER'S HANDLE IS KEYED, AND IT WAS NOT ──
+    //
+    // THE DEFECT, and the comment below the upsert stated a protection this
+    // line did not provide: `sha256_hex(phone)` is an UNKEYED hash. "The table
+    // can be joined without holding the number in the clear" is true of the
+    // bytes and false of the secret — an Albanian mobile number is seven
+    // digits after a fixed prefix, so the whole space is a few seconds of
+    // brute force and every row's number falls out. A hash is only a mask when
+    // an attacker cannot enumerate its inputs, and a phone number is the
+    // textbook case where they can.
+    //
+    // `customer_key` IS THE SHAPE THIS REPO ALREADY HAS: HMAC-SHA256 under
+    // `AUTH_SIGNING_KEY`, over the DIGITS, which also collapses `+355 69…` and
+    // `00355 69…` into one handle where the raw hash made two. It is what the
+    // audit, the reveal, the wallet and the customer list already use, so this
+    // record stops being a FOURTH handle for one person.
+    let secret = crate::services::customers::handlers::signing_secret(&ctx.env);
+    let phone_hash = crate::services::customers::handlers::customer_key(&secret, &body.contact.phone);
+    // The old, enumerable key, so the row written under it can be removed the
+    // next time this customer orders rather than left behind for ever.
+    let legacy_hash = auth::sha256_hex(&body.contact.phone);
     // ── THE ORDER IS PLACED BY THE OBJECT, IN ONE TURN ──
     //
     // WHAT WAS HERE, because the shape is worth remembering: a saga run from
@@ -1173,6 +1193,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     // `COALESCE(excluded.name, customers.name)` is kept: a later order with no
     // name must not erase the name an earlier one gave.
     let who = phone_hash.clone();
+    let legacy = legacy_hash.clone();
     let given = body.contact.name.clone().unwrap_or_default();
     let _ = crate::hubstore::with_table(
         &place,
@@ -1200,7 +1221,15 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
             })
             .to_string();
             t.put("cust", &who, &rec, &[], &[])
-                .map_err(|e| Error::RustError(format!("customer: {e}")))
+                .map_err(|e| Error::RustError(format!("customer: {e}")))?;
+            // AND THE ENUMERABLE ROW GOES. Rewriting the key without removing
+            // the old one leaves the number recoverable from a row nothing
+            // reads, which is the worst of both. `remove` answering false is
+            // the ordinary case — most customers have no legacy row.
+            if legacy != who {
+                t.remove("cust", &legacy);
+            }
+            Ok(())
         },
     )
     .await;

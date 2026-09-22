@@ -100,8 +100,9 @@ sends every reader who trusts it to the wrong place.
   ledger. The core decision path has no clock/RNG/network/float (MANIFESTO C2) so every node
   replays identically offline.
 - **Trust is a signed capability, never a score.** No rating/ranking/reputation of any participant.
-  Enforced two ways: a CI job (`no-courier-scoring`) fails the build if a
-  `courier_score/rating/reputation` identifier appears in kernel/engine, and routing enums omit
+  Enforced two ways: `tools/gates/no-scoring.sh` in CI refuses a participant being scored
+  (`courier_score`, `customer_rating`, `*_tier`, `reputation`, `vip`) — **this replaces a job named
+  `no-courier-scoring` that this file claimed existed and did not** — and routing enums omit
   `Ord`/`PartialOrd` so a "quality router" is unrepresentable in the type system
   (`kernel/src/decision/mod.rs`, `crates/dowiz-core/src/domain.rs`).
 - **Red-line capabilities deny by default** (`crates/dowiz-core/src/ports/agent/scope.rs`,
@@ -122,8 +123,11 @@ carry a rationale (the "DECART" convention).
 
 ## Verification & CI gates
 
-- **Pre-commit** (`.husky/pre-commit`, scope-aware): gitleaks on staged files → `cd kernel &&
-  cargo test` if `kernel/` touched → `cargo-deny check` if any `Cargo.*` staged.
+- **Pre-commit: THERE IS NO `.husky/` DIRECTORY IN THIS TREE.** This paragraph described a
+  scope-aware hook (gitleaks → kernel tests → `cargo-deny check`) that does not exist and, as far
+  as the tree shows, never did; `cargo-deny` is not installed on the box either. `deny.toml` is a
+  config, and a config is not a gate. `cargo deny check` now runs in CI instead, which is where a
+  policy that must not be bypassable belongs — a pre-commit hook is advisory by construction.
 - **CI** (`.github/workflows/ci.yml`): telemetry self-test; `eqc` math proofs; **unconditional**
   kernel+engine `cargo test --offline` (per-crate `cd`); bench-regression gate; and `v5c-reexec`,
   which independently re-executes the diff range in a clean worktree when a red-line path

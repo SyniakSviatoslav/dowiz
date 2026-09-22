@@ -17,6 +17,27 @@ use crate::services::venue::currency_of;
 /// proxy log between here and the browser.
 pub(crate) fn customer_key(secret: &[u8], phone: &str) -> String {
     let digits: String = phone.chars().filter(|c| c.is_ascii_digit()).collect();
+    // ── `00` IS NOT PART OF THE NUMBER ──
+    //
+    // FOUND BY THE TEST THAT WAS SUPPOSED TO PROVE THIS RULE and until now
+    // could not: the fold's "two spellings" test handed `roll` a pass-through
+    // closure and the same spelling twice, so the normalisation here was
+    // exercised by nothing. Keeping only the digits turns `+355691234567` into
+    // `355691234567` and `00355691234567` into `00355691234567` — one person
+    // who once dialled the international-access form is a SECOND customer,
+    // with their own row, their own totals and their own reveal audit trail.
+    //
+    // A LEADING `00` IS THE INTERNATIONAL ACCESS CODE, the written form of the
+    // `+`, and stripping it is the one normalisation that needs no country to
+    // be known.
+    //
+    // WHAT IS DELIBERATELY NOT DONE: the NATIONAL form. `069 123 4567` and
+    // `+355 69 123 4567` are the same Albanian phone and remain two handles
+    // here, because collapsing them means knowing the venue's country and
+    // guessing one is how a Kosovan number becomes an Albanian customer. It
+    // needs the venue's dialling code passed in; that is a change to every
+    // caller and it is written down rather than half-done.
+    let digits = digits.strip_prefix("00").unwrap_or(&digits).to_string();
     let mac = dowiz_hub::crypto::hmac_sha256(secret, digits.as_bytes());
     dowiz_hub::crypto::hex(&mac[..8])
 }

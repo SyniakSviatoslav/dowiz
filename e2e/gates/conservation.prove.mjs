@@ -69,6 +69,38 @@ const CASES = {
     red: false,
   },
 
+  // ── LAW 3 ──
+  //
+  // IT HAD NO PROVE CASE AT ALL: the stub answered `[]` for the order list, so
+  // the money law was never exercised in either direction. That is how it kept
+  // a missing tip term — `total` is `subtotal + fee + tip` and the law
+  // expected `lines + fee - discount`, so the first tipped order would have
+  // been reported as a breach. Measured before the fix: 0 of 52 live orders
+  // carried a tip, which is the only reason it had never fired.
+  'a tipped order adds up': {
+    health: ok,
+    backup: witnessed(),
+    orders: [{ id: 'ord_t', total: 1800, tip: 300, delivery_fee: 200,
+               items: [{ price: 650, quantity: 2 }] }],
+    red: false,
+  },
+  'a total that does not add up': {
+    health: ok,
+    backup: witnessed(),
+    orders: [{ id: 'ord_w', total: 9999, tip: 0, delivery_fee: 200,
+               items: [{ price: 650, quantity: 2 }] }],
+    red: 'total 9999',
+  },
+  // A DISCOUNT COMES OFF, A TIP GOES ON, and getting the two signs the same
+  // way round is the arithmetic this law exists to check.
+  'a discounted and tipped order adds up': {
+    health: ok,
+    backup: witnessed(),
+    orders: [{ id: 'ord_d', total: 1500, tip: 300, delivery_fee: 200, discount: 300,
+               items: [{ price: 650, quantity: 2 }] }],
+    red: false,
+  },
+
   // ── LAW 8 ──
   //
   // The two halves it can find, and the two states it must stay quiet about.
@@ -106,7 +138,7 @@ globalThis.fetch = async (url) => {
     ? { access_token: 't', user: { locationId: 'stub-venue' } }
     : url.includes('/api/owner/health') ? HEALTH
     : url.includes('/api/owner/backup/cloud') ? BACKUP
-    : url.includes('/api/owner/orders') ? []
+    : url.includes('/api/owner/orders') ? ORDERS
     : {};
   return { status: 200, text: async () => JSON.stringify(body) };
 };
@@ -117,6 +149,7 @@ let failed = 0;
 for (const [name, c] of Object.entries(CASES)) {
   const script = RUNNER
     .replace('HEALTH', JSON.stringify(c.health))
+    .replace('ORDERS', JSON.stringify(c.orders || []))
     .replace('BACKUP', JSON.stringify(c.backup))
     .replace('GATE', JSON.stringify(GATE));
   const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], {

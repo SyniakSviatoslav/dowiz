@@ -77,6 +77,21 @@ jobs:
       # green suite is not evidence that anything is switched on.
       - name: nothing was built that nothing calls
         run: python3 tools/gates/unreached.py
+      # Trust is a signed capability, never a score (DECISIONS.md OD-8).
+      # CLAUDE.md said a CI job named `no-courier-scoring` enforced this. It
+      # never existed -- the red line rested on one type-system property and a
+      # paragraph. This is that job.
+      - name: nobody is scored
+        run: sh tools/gates/no-scoring.sh
+      # THE DEPENDENCY POLICY GATE THAT RAN NOWHERE. `deny.toml` bans yanked
+      # crates, wildcards and disallowed licences, and `CLAUDE.md` described a
+      # `.husky/pre-commit` hook that runs it -- there is no `.husky/`
+      # directory in this tree and no CI step either, so the file was a policy
+      # nothing applied. A config is not a gate.
+      - name: the dependency policy actually runs
+        run: |
+          cargo install --locked cargo-deny || cargo install cargo-deny
+          cargo deny --manifest-path crates/dowiz-core/Cargo.toml check
       # The conservation audit itself needs live venues and an owner token, so
       # it cannot run here. Its PROOF can: the gate is run against a stubbed
       # platform and each law is checked for going red when it should and
