@@ -6,7 +6,6 @@
 //! vocabulary. Keeping the two in one directory is the point: a rule that
 //! changes has one place to change.
 
-use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
 

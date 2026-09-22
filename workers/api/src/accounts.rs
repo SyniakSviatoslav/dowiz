@@ -165,7 +165,6 @@ pub async fn owner_login(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let db = ctx.d1("DB")?;
     let email = body.email.trim().to_lowercase();
 
     #[derive(Deserialize)]
@@ -304,7 +303,6 @@ pub async fn owner_refresh(mut req: Request, ctx: RouteContext<()>) -> Result<Re
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let db = ctx.d1("DB")?;
     let hash = sha256_hex(&body.refresh_token);
     let now = now_ms();
 
@@ -540,7 +538,6 @@ pub async fn courier_login(mut req: Request, ctx: RouteContext<()>) -> Result<Re
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let db = ctx.d1("DB")?;
 
     // Email and phone are looked up under SEPARATE PREFIXES. The old schema
     // matched both against one shared hash space, where a phone could in
@@ -718,7 +715,6 @@ pub async fn courier_login(mut req: Request, ctx: RouteContext<()>) -> Result<Re
     }))
 }
 
-use worker::wasm_bindgen;
 
 #[derive(Deserialize)]
 pub struct ClaimIn {
@@ -751,7 +747,6 @@ pub async fn courier_claim(mut req: Request, ctx: RouteContext<()>) -> Result<Re
     if body.password.chars().count() < 8 {
         return Response::error("choose a password of at least 8 characters", 400);
     }
-    let db = ctx.d1("DB")?;
     let phone = body.phone.trim().to_string();
     let phone_hash = auth::sha256_hex(&phone);
     let code_hash = auth::sha256_hex(body.code.trim());

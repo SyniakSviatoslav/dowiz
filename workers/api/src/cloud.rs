@@ -535,7 +535,7 @@ const POSITIONS_KEEP_MS: i64 = 24 * 60 * 60 * 1000;
 /// store refuses is logged and skipped; the next venue is not its problem.
 pub async fn nightly(env: &Env) {
     struct Row { id: String }
-    let Ok(db) = env.d1("DB") else { console_error!("nightly backup: no DB"); return };
+    let Ok(_db) = env.d1("DB") else { console_error!("nightly backup: no DB"); return };
     let rows: Vec<Row> = match crate::identity_store::registry(env).await {
         Ok(t) => t
             .all(crate::identity_store::K_LOC)

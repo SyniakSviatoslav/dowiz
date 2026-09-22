@@ -164,7 +164,7 @@ pub async fn reveals(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // either is issued -- see it for why that order matters.
     // THE AUDIT TRAIL IS NOT A PROJECTION. `reveals()` reads the events the
     // fold deliberately skips, so this route still reads the image.
-    let (_, loc, loaded) =
+    let (_, _loc, loaded) =
         match crate::owner::owner_beside(&req, &ctx, &db, &place, crate::hubstore::load(&place)).await {
             Ok(v) => v,
             Err(r) => return Ok(r),

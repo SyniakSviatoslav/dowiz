@@ -24,7 +24,7 @@ use serde::Deserialize;
 use serde_json::json;
 use worker::*;
 
-use crate::auth::{self, hash_password};
+use crate::auth::{self};
 use crate::owner::now_ms;
 
 /// Names a venue may never take, because the platform answers to them.
@@ -83,7 +83,7 @@ pub fn slug_problem(slug: &str) -> Option<&'static str> {
 pub(crate) async fn admin_only(
     req: &Request,
     ctx: &RouteContext<()>,
-    db: &D1Database,
+    _db: &D1Database,
 ) -> std::result::Result<String, Response> {
     let bearer = auth::bearer(req).map_err(|e| e.into_response().unwrap())?;
     let user_id = match auth::verify(&ctx.env, &bearer, now_ms()) {

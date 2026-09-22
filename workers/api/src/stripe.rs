@@ -72,7 +72,7 @@ pub async fn create_intent(
         urlencode(order_id)
     );
 
-    let mut headers = Headers::new();
+    let headers = Headers::new();
     headers
         .set("authorization", &format!("Bearer {sk}"))
         .map_err(|e| PayError::Upstream(e.to_string()))?;
@@ -257,7 +257,6 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Response
         .to_string();
     let fingerprint = event_fingerprint(&ev.id);
 
-    let db = ctx.d1("DB")?;
     // THE SAME RULE AS THE META WEBHOOK: a URL that names no venue is answered
     // once, not retried for days. Stripe stops on a 2xx.
     let place = match crate::hubstore::Place::of_any(&req, &ctx).await {

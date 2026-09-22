@@ -793,7 +793,6 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
         return Response::error("delivery address required", 400);
     }
 
-    let db = ctx.d1("DB")?;
     // The slug is not the id — see `Place::of_slug`.
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
     let loaded = crate::hubstore::load_catalog(&place).await?;

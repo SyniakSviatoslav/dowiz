@@ -22,7 +22,6 @@ use hmac::{Hmac, Mac};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sha2::Sha256;
-use worker::wasm_bindgen::JsValue;
 use worker::*;
 
 use crate::owner::{now_ms, owner_and_venue};
@@ -398,7 +397,6 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Response
         return Response::error("bad signature", 401);
     }
     let body: Value = serde_json::from_slice(&raw).unwrap_or(Value::Null);
-    let db = ctx.d1("DB")?;
     let mut stored = 0usize;
     for m in inbound_of(&body) {
         match store(&place, "in", &m).await {

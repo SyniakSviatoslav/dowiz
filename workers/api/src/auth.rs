@@ -435,7 +435,7 @@ pub async fn authenticate(
 pub async fn authenticate_token(
     raw: &str,
     env: &Env,
-    db: &D1Database,
+    _db: &D1Database,
     now_ms: i64,
 ) -> std::result::Result<Principal, AuthError> {
     let raw = raw.to_string();

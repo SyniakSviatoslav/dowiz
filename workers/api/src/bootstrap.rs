@@ -106,7 +106,6 @@ pub async fn seed(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad bundle: {e}"), 400),
     };
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
 
     // ── catalogue ──

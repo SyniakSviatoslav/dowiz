@@ -9,7 +9,6 @@
 
 use serde::Deserialize;
 use serde_json::{json, Value};
-use worker::wasm_bindgen::JsValue;
 use worker::*;
 
 use crate::auth::{self, Principal};
@@ -161,7 +160,7 @@ pub async fn shift(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     };
     let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-    let (courier_id, loc) = match courier_at(&req, &ctx, &db).await {
+    let (courier_id, _loc) = match courier_at(&req, &ctx, &db).await {
         Ok(v) => v,
         Err(r) => return Ok(r),
     };

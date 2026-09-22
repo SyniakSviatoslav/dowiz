@@ -1,6 +1,12 @@
 //! The venue's own record: what it is called, what it charges in, when it is
 //! open.
 
+pub mod activation;
+pub mod brand;
+pub mod brand_extract;
+pub mod settings;
+pub mod zones;
+
 use serde_json::Value;
 
 /// The currency the venue's prices are in.

@@ -8,7 +8,6 @@
 
 use serde::Deserialize;
 use serde_json::{json, Value};
-use worker::wasm_bindgen::JsValue;
 use worker::*;
 
 use crate::auth::{self, Principal};
@@ -114,7 +113,7 @@ pub(crate) async fn owner_at(
 pub(crate) async fn owner_and_venue(
     req: &Request,
     ctx: &RouteContext<()>,
-    db: &D1Database,
+    _db: &D1Database,
 ) -> std::result::Result<(String, String), Response> {
     // THE TOKEN IS VERIFIED WITHOUT TOUCHING THE DATABASE, and the membership
     // is checked by the JOIN below. `authenticate` would have run its own

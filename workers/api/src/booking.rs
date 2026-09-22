@@ -651,7 +651,6 @@ pub async fn verify_pass(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
         Err(e) => return Response::error(format!("bad request: {e}"), 400),
     };
 
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
     let key = pass_key(&place).await?;
 

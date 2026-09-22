@@ -319,4 +319,3 @@ pub async fn send(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
     }))
 }
 
-use worker::wasm_bindgen::JsValue;

@@ -186,7 +186,7 @@ impl Trace {
         };
         let url = format!("{}/v1/traces", endpoint.to_string().trim_end_matches('/'));
 
-        let mut headers = Headers::new();
+        let headers = Headers::new();
         let _ = headers.set("content-type", "application/json");
         if let Ok(h) = env.secret("OTEL_EXPORTER_OTLP_HEADERS") {
             // `key=value,key=value`, the OTLP convention.

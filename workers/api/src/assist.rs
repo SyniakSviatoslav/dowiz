@@ -109,7 +109,7 @@ pub async fn ask(
         "max_tokens": 400,
         "stream": false,
     });
-    let mut headers = Headers::new();
+    let headers = Headers::new();
     headers.set("content-type", "application/json")?;
     if let Some(tok) = s.get("ai.token").filter(|t| !t.trim().is_empty()) {
         headers.set("authorization", &format!("Bearer {}", tok.trim()))?;

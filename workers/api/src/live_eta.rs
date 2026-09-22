@@ -26,7 +26,6 @@
 
 use serde::Deserialize;
 use serde_json::{json, Value};
-use worker::wasm_bindgen::JsValue;
 use worker::*;
 
 use dowiz_kernel::eta::{self, BasketItem, KitchenProfile};
@@ -74,7 +73,7 @@ struct FixRow {
 /// construction.
 pub async fn fixes_at(
     place: &crate::hubstore::Place,
-    location_id: &str,
+    _location_id: &str,
     now_ms: i64,
     anyone_carrying: bool,
 ) -> Vec<CourierFix> {
@@ -314,7 +313,7 @@ pub fn estimate(
 /// Attach a live estimate to every order in `orders`, in place, with one
 /// read of the map. Orders that are over get none.
 pub async fn attach_all(
-    db: &D1Database,
+    _db: &D1Database,
     place: &crate::hubstore::Place,
     loaded: &crate::hubstore::LoadedCatalog,
     orders: &mut [Value],
@@ -344,7 +343,7 @@ pub async fn attach_all(
 
 /// The estimate for ONE order, for the customer's own read of it.
 pub async fn attach_one(
-    db: &D1Database,
+    _db: &D1Database,
     place: &crate::hubstore::Place,
     order: &mut Value,
     now_ms: i64,
