@@ -71,6 +71,26 @@ pub async fn health(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
     // does nothing, and this codebase has paid for that distinction before.
     let rails = crate::rail::snapshot(&place, ctx.data.now_ms).await;
 
+    // ── LAW 8: THE PROJECTIONS ARE REBUILT AND DIFFED ──
+    //
+    // The storage is event-sourced and nothing ever CHECKED it. Every reader
+    // in the platform asks the same memoised fold, so nothing else is in a
+    // position to disagree with it; this refolds from the bytes and compares,
+    // and crosses the log against the stock ledger — the pair that can drift
+    // apart with no screen showing it.
+    //
+    // REPORTED, NEVER REPAIRED. A gate that fixes what it finds is a gate
+    // whose findings nobody ever sees. A rebuild that cannot run is said out
+    // loud rather than answered as "intact", which would be the shape of a
+    // healthy venue.
+    let rebuilt = match crate::rebuild::ask(&place).await {
+        Ok(r) => json!({
+            "intact": r.intact(), "orders": r.orders, "stale": r.stale,
+            "stranded": r.stranded, "unheld": r.unheld, "modelled": r.modelled,
+        }),
+        Err(e) => json!({ "intact": false, "error": e.to_string() }),
+    };
+
     // Every record the venue's logs hold and this build cannot read. See
     // `crate::quarantine`: a non-zero count is a failing gate, not a warning.
     let quarantined = crate::quarantine::seen(&hub.hub, audit.quarantined);
@@ -88,6 +108,7 @@ pub async fn health(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
         "quarantined": quarantined,
         "errors": audit.errors,
         "rails": rails,
+        "rebuild": rebuilt,
     }))
 }
 

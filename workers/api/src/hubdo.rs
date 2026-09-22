@@ -832,6 +832,63 @@ impl HubImages {
         Ok(Ok(crate::command::assign::AssignOut { generation: next }))
     }
 
+    /// REFOLD FROM THE BYTES AND DIFF AGAINST WHAT IS BEING SERVED.
+    ///
+    /// IT DELIBERATELY IGNORES THE MEMO IT IS CHECKING. `orders_view` answers
+    /// from `self.folded` when the generation has not moved, and that memo is
+    /// what every reader in the platform gets — so nothing else in the system
+    /// is in a position to disagree with it. This folds the image again, from
+    /// the stored bytes, and compares.
+    ///
+    /// AND IT CROSSES THE TWO IMAGES, which is the check nothing did. The log
+    /// can say an order is over while the stock ledger is still holding its
+    /// ingredients; `StockLedger::stranded()` has been able to report that
+    /// since it was written and nothing in production ever called it.
+    ///
+    /// READ-ONLY. It writes nothing, takes no generation and cannot repair
+    /// anything — a gate that fixes what it finds is a gate whose findings
+    /// nobody ever sees.
+    async fn rebuild(&self) -> Result<crate::rebuild::Report> {
+        let memo: Vec<(String, String)> = self
+            .folded
+            .borrow()
+            .as_ref()
+            .map(|(_, v)| v.iter().map(|o| (o.order_id.clone(), o.order_json.clone())).collect())
+            .unwrap_or_default();
+        let Some((_, bytes)) = self.image(LOG_IMAGE).await? else {
+            return Ok(crate::rebuild::Report::default());
+        };
+        // FRESH, from the bytes. `Hub::load` parses the arena and
+        // `orders_state` replays the chain; neither consults the memo.
+        let hub = dowiz_hub::Hub::load(&bytes)
+            .map_err(|_| Error::RustError("hub image is unreadable".into()))?;
+        let fresh: Vec<(String, String)> = crate::hubstore::orders_state(&hub)
+            .into_iter()
+            .map(OrderView::of)
+            .map(|o| (o.order_id, o.order_json))
+            .collect();
+
+        // WHEN THE MEMO IS COLD there is nothing to compare it against, and
+        // saying "everything agrees" would be a measurement of nothing. The
+        // fresh fold is used for both sides, so `stale` is empty BECAUSE
+        // nothing was being served, not because it was right.
+        let memo = if memo.is_empty() { fresh.clone() } else { memo };
+
+        let (held, modelled) = match self.image(crate::hubstore::IMAGE_STOCK).await? {
+            Some((_, b)) => {
+                let log = dowiz_hub::stock::StockLog::load(&b)
+                    .map_err(|_| Error::RustError("stock image is unreadable".into()))?;
+                let modelled = log.len() > 0;
+                let led = log
+                    .ledger()
+                    .map_err(|e| Error::RustError(format!("stock ledger: {e}")))?;
+                (led.stranded(), modelled)
+            }
+            None => (Vec::new(), false),
+        };
+        Ok(crate::rebuild::compare(&fresh, &memo, &held, modelled))
+    }
+
     /// Write, with the SAME generation guard the D1 version used.
     ///
     /// A Durable Object serialises its own requests, so two writers cannot
@@ -1108,6 +1165,8 @@ impl DurableObject for HubImages {
                         Err(r) => Response::error(r.message().to_string(), r.status()),
                     }
                 }
+                // THE REBUILD, read-only, for the conservation audit's law 8.
+                (Method::Get, "rebuild") => Response::from_json(&self.rebuild().await?),
                 (Method::Post, "advance") => {
                     let mut req = req;
                     let input: crate::command::advance::AdvanceIn = req.json().await?;

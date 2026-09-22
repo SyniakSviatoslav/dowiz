@@ -12,7 +12,7 @@
 // `StockLedger::stranded()` is a conservation report. What was missing was
 // anything that ran them as a gate.
 //
-// FIVE LAWS, each over the live platform:
+// EIGHT LAWS, each over the live platform:
 //   1. every order's folded status equals the status it is served with
 //   2. no order is stranded: nothing is held by an order that has ended
 //   3. the money on an order is its lines plus fees minus its discount
@@ -20,6 +20,8 @@
 //   5. the image gauges read against their CEILING and are under it
 //   6. nothing is quarantined, and the log's claim equals served + withheld
 //   7. the nightly witness is not contradicted, and it is still being taken
+//   8. every projection rebuilds from the log to what is being served, and the
+//      stock ledger holds nothing for an order the log says has ended
 //
 // It takes an owner token per venue and reads only. Exit 1 on any breach, with
 // the order named -- a gate whose failure cannot be chased is a dashboard.
@@ -179,6 +181,39 @@ for (const host of HOSTS) {
     for (const what of w.found || []) note(venue, 'witness', what);
     const ageH = Math.round((Date.now() - w.atMs) / 3600e3);
     if (ageH > 48) note(venue, 'witness', `the last census is ${ageH}h old: the nightly has stopped`);
+  }
+
+  // ── 8. the projections rebuild to what is being served ──────────────────
+  //
+  // THE ONE THAT MAKES EVENT-SOURCING A PROPERTY RATHER THAN A STORAGE
+  // CHOICE. The log is append-only and chained, `fold` is state, and every
+  // projection is memoised per generation — and none of that was ever
+  // CHECKED, because every reader in the platform asks the SAME memo and so
+  // nothing is in a position to disagree with it. `/api/owner/health` now
+  // refolds from the stored bytes and compares.
+  //
+  // AND IT CROSSES THE TWO IMAGES. The class `253e1ece` closed for bookings —
+  // an aggregate whose status disagreed with its own history — is still open
+  // between the ORDER log and the STOCK ledger: the log can say an order is
+  // over while the ledger holds its ingredients, and no screen shows it.
+  // `StockLedger::stranded()` could report that since it was written and
+  // nothing in production ever called it.
+  //
+  // ABSENT IS NOT INTACT, for the same reason as laws 6 and 7: a deployment
+  // older than this field has not been measured, and silence must not read as
+  // health. A rebuild that FAILED reports `intact:false` with its error.
+  const rb = health?.rebuild;
+  if (rb) {
+    for (const id of rb.stale || []) {
+      note(venue, 'rebuild', `${id}: the served projection differs from a fresh fold of the log`);
+    }
+    for (const id of rb.stranded || []) {
+      note(venue, 'rebuild', `${id}: the ledger still holds ingredients for an order the log says has ended`);
+    }
+    if (rb.error) note(venue, 'rebuild', `the rebuild could not run: ${rb.error}`);
+    // `unheld` is NOT a breach. A venue that models no recipes reserves
+    // nothing, which is both live venues today; reporting it would make the
+    // gate red for the normal state of the product.
   }
 
   console.log(`${venue}: ${list.length} orders, ${ENDED.size} terminal states known, ${Object.keys(health?.images || {}).length} images gauged, ${q.length} quarantined, witness ${w ? (w.found?.length ? 'CONTRADICTED' : `${w.total} records`) : 'not taken yet'}`);

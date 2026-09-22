@@ -39,6 +39,7 @@ mod cloud;
 mod mcp;
 mod integrations;
 mod catalog_edit;
+mod rebuild;
 mod recipe;
 mod services;
 mod waitlist;

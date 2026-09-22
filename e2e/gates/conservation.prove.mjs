@@ -68,6 +68,36 @@ const CASES = {
     backup: { configured: true },
     red: false,
   },
+
+  // ── LAW 8 ──
+  //
+  // The two halves it can find, and the two states it must stay quiet about.
+  'a projection that differs from the log': {
+    health: { ...ok, rebuild: { intact: false, orders: 6, stale: ['ord_7'], stranded: [], unheld: [], modelled: true } },
+    backup: witnessed(),
+    red: 'differs from a fresh fold',
+  },
+  'stock held for an order that has ended': {
+    health: { ...ok, rebuild: { intact: false, orders: 6, stale: [], stranded: ['ord_9'], unheld: [], modelled: true } },
+    backup: witnessed(),
+    red: 'an order the log says has ended',
+  },
+  'the rebuild could not run': {
+    health: { ...ok, rebuild: { intact: false, error: 'hub refused a rebuild: 503' } },
+    backup: witnessed(),
+    red: 'the rebuild could not run',
+  },
+  // A VENUE THAT MODELS NO RECIPES IS THE NORMAL STATE OF THIS PRODUCT -- both
+  // live venues are in it -- and `unheld` must never be a breach, or the gate
+  // is red for every venue that has not switched stock control on.
+  'a venue with no recipes owes no reservations': {
+    health: { ...ok, rebuild: { intact: true, orders: 6, stale: [], stranded: [], unheld: ['ord_1', 'ord_2'], modelled: false } },
+    backup: witnessed(),
+    red: false,
+  },
+  // ABSENT IS NOT INTACT, but it is not a breach either: a deployment older
+  // than this field has not been measured. Same rule as `events` above.
+  'a worker without the rebuild field': { health: ok, backup: witnessed(), red: false },
 };
 
 const RUNNER = `
