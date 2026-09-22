@@ -11,12 +11,13 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
 
+// `now_ms` WAS DEFINED HERE, and identically in `accounts.rs` and `owner.rs` --
+// three copies of `Date::now().as_millis() as i64`. Three identical clock
+// functions is how an injection gets done twice and missed once, which is what
+// `tools/gates/clock.sh` counts. `owner::now_ms` is the one.
+use crate::owner::now_ms;
 use crate::auth::{self, Principal};
 use dowiz_kernel::json_api;
-
-fn now_ms() -> i64 {
-    Date::now().as_millis() as i64
-}
 
 /// GPS sanity, from the old platform's courier UX rules: reject a fix worse than
 /// 100 m or a speed above 150 km/h. Both are wrong-by-construction for someone

@@ -11,6 +11,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use worker::*;
 
+// `now_ms` WAS DEFINED HERE, and identically in `courier.rs` and `owner.rs` --
+// three copies of `Date::now().as_millis() as i64`. Three identical clock
+// functions is how an injection gets done twice and missed once, which is what
+// `tools/gates/clock.sh` counts. `owner::now_ms` is the one.
+use crate::owner::now_ms;
 use crate::auth::{
     self, hash_password, sha256_hex, verify_password_constant_work, Claims, COURIER_TTL_MS,
     OWNER_TTL_MS,
@@ -51,10 +56,6 @@ pub struct RefreshIn {
 struct TokenPair {
     access_token: String,
     refresh_token: String,
-}
-
-fn now_ms() -> i64 {
-    Date::now().as_millis() as i64
 }
 
 fn opaque_token() -> Option<String> {

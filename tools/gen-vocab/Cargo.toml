@@ -1,0 +1,29 @@
+# gen-vocab — blueprint P4, the expensive half.
+#
+# `tools/gates/vocabulary.sh` is the cheap half: it refuses a commit where the
+# kernel's `OrderStatus` has a member no browser surface has a word or a colour
+# for. It cannot stop the NEXT hand copy from being written, because there is
+# nothing to copy FROM. This crate is the thing to copy from.
+#
+# IT LINKS THE KERNEL, it does not read its source. `dowiz-core` is a path
+# dependency and the emitted vocabulary comes out of `OrderStatus::as_str`,
+# `is_terminal`, `took_money`, `is_active`, `assert_transition` and
+# `Currency::from_code` being CALLED. A regex over `order_machine.rs` would be a
+# fifteenth copy of the list with extra steps.
+[package]
+name = "gen-vocab"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "Emits workers/api/public/lib/vocab.js from the dowiz kernel's own order/money types."
+publish = false
+
+[[bin]]
+name = "gen-vocab"
+path = "src/main.rs"
+
+[dependencies]
+# The authority. Zero further dependencies: dowiz-core's own deps are an
+# optional serde (off) and dev-only test crates, so `cargo build --offline`
+# needs nothing from the network.
+dowiz-core = { path = "../../crates/dowiz-core" }

@@ -37,6 +37,17 @@ jobs:
         run: sh tools/gates/file-size.sh
       - name: one venue per request (may only fall)
         run: sh tools/gates/one-venue.sh
+      # THREE GATES EXISTED AND NONE OF THEM RAN. `one-image.sh` and
+      # `vocabulary.sh` were written, proved to fire, committed -- and never
+      # added here, so each was an instrument reporting to nobody. That is the
+      # failure this repo keeps a catalogue of, and it had happened twice in the
+      # same week. `clock.sh` joins them in the same commit rather than later.
+      - name: one image per transaction (may only fall)
+        run: sh tools/gates/one-image.sh
+      - name: the clock is read in one place (may only fall)
+        run: sh tools/gates/clock.sh
+      - name: the clients speak the kernel's vocabulary
+        run: sh tools/gates/vocabulary.sh
       # The conservation audit itself needs live venues and an owner token, so
       # it cannot run here. Its PROOF can: the gate is run against a stubbed
       # platform and each law is checked for going red when it should and
