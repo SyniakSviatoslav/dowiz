@@ -647,33 +647,6 @@ pub async fn set_preset(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
 // lives where it can still do work: redacted by default, un-redacting is
 // deliberate, and the act is written into the append-only log.
 
-/// Enough to recognise a number you already know; not enough to dial one you do
-/// not.
-fn mask_phone(p: &str) -> String {
-    let d: Vec<char> = p.chars().filter(|c| c.is_ascii_digit()).collect();
-    if d.len() < 4 {
-        return "•".repeat(d.len().max(1));
-    }
-    format!(
-        "+{}•••••{}",
-        d[..3].iter().collect::<String>(),
-        d[d.len() - 2..].iter().collect::<String>()
-    )
-}
-
-fn mask_name(n: &str) -> String {
-    let parts: Vec<String> = n
-        .split_whitespace()
-        .filter_map(|w| w.chars().next())
-        .map(|c| format!("{}.", c.to_uppercase()))
-        .collect();
-    if parts.is_empty() {
-        "—".into()
-    } else {
-        parts.join(" ")
-    }
-}
-
 /// A stable, non-reversible handle for a phone. The audit entry must not carry
 /// the number it is about, and a URL holding a phone number puts it in every
 /// proxy log between here and the browser.
@@ -720,45 +693,22 @@ pub async fn customers(req: Request, ctx: RouteContext<()>) -> Result<Response> 
         .and_then(|u| u.query_pairs().find(|(k, _)| k == "sort").map(|(_, v)| v.to_string()));
     let secret = signing_secret(&ctx.env);
 
-    let mut rows: Vec<(String, String, String, i64, i64, i64)> = Vec::new();
-    for o in orders_of(listed, &loc) {
-        let Some(phone) = o.get("contact").and_then(|c| c.get("phone")).and_then(Value::as_str)
-        else {
-            continue;
-        };
-        let name = o.get("contact").and_then(|c| c.get("name")).and_then(Value::as_str).unwrap_or("");
-        let at = o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(0);
-        // What they spent WITH THE VENUE: a refused order is not money taken,
-        // and the tip went to the courier.
-        let spent = match o.get("status").and_then(Value::as_str) {
-            Some("REJECTED" | "CANCELLED") => 0,
-            _ => {
-                o.get("total").and_then(Value::as_i64).unwrap_or(0)
-                    - o.get("tip").and_then(Value::as_i64).unwrap_or(0)
-            }
-        };
-        let key = customer_key(&secret, phone);
-        match rows.iter_mut().find(|r| r.0 == key) {
-            Some(r) => {
-                r.3 += 1;
-                r.4 += spent;
-                r.5 = r.5.max(at);
-            }
-            None => rows.push((key, mask_name(name), mask_phone(phone), 1, spent, at)),
-        }
-    }
-    match sort.as_deref() {
-        Some("spent") => rows.sort_by(|a, b| b.4.cmp(&a.4).then(b.5.cmp(&a.5))),
-        Some("orders") => rows.sort_by(|a, b| b.3.cmp(&a.3).then(b.5.cmp(&a.5))),
-        // Newest first: the question at the end of a shift is who has just been
-        // in, not who is worth the most.
-        _ => rows.sort_by(|a, b| b.5.cmp(&a.5)),
-    }
+    // The fold and both masks are `services::customers`, where they have tests:
+    // the mask is the WHOLE protection on this screen, and it had none.
+    use crate::services::customers::roll;
+    use dowiz_hub::redact;
+    let rows = roll::roll(
+        &orders_of(listed, &loc),
+        |phone| customer_key(&secret, phone),
+        redact::name,
+        redact::phone,
+        roll::Sort::of(sort.as_deref()),
+    );
     let cat = loaded_cat.catalog;
     Response::from_json(&json!({
         "customers": rows.iter().map(|r| json!({
-            "key": r.0, "name": r.1, "phone": r.2,
-            "orders": r.3, "spent": r.4, "lastAt": r.5 })).collect::<Vec<_>>(),
+            "key": r.key, "name": r.name, "phone": r.phone,
+            "orders": r.orders, "spent": r.spent, "lastAt": r.last_at })).collect::<Vec<_>>(),
         "currency": currency_of(&cat),
     }))
 }

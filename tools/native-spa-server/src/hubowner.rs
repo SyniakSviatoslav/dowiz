@@ -1733,29 +1733,12 @@ pub async fn clear_product_image(
 // The key is the PHONE, because it is the one field a person reliably repeats.
 // Names are typed differently every time and addresses change.
 
-/// Show enough to recognise a number you already know, and not enough to dial
-/// one you do not. The last two digits plus the country prefix is what a venue
-/// needs to match a caller against the list.
-fn mask_phone(p: &str) -> String {
-    let digits: Vec<char> = p.chars().filter(|c| c.is_ascii_digit()).collect();
-    if digits.len() < 4 {
-        return "•".repeat(digits.len().max(1));
-    }
-    let head: String = digits[..3].iter().collect();
-    let tail: String = digits[digits.len() - 2..].iter().collect();
-    format!("+{head}•••••{tail}")
-}
-
-/// A name as an initial. "A. H." recognises somebody you know and identifies
-/// nobody you do not.
-fn mask_name(n: &str) -> String {
-    let parts: Vec<String> = n
-        .split_whitespace()
-        .filter_map(|w| w.chars().next())
-        .map(|c| format!("{}.", c.to_uppercase()))
-        .collect();
-    if parts.is_empty() { "—".into() } else { parts.join(" ") }
-}
+// THE MASK IS `dowiz_hub::redact`, AND IT USED TO BE HERE TOO. This file and
+// `workers/api` each held a copy, character for character: the same rule, the
+// same defect (a number of six digits or fewer came back with every digit
+// visible behind a row of dots) and the same absence of tests. A rule with two
+// implementations is a rule that gets fixed once.
+use dowiz_hub::redact::{name as mask_name, phone as mask_phone};
 
 /// A stable, non-reversible handle for a phone, used as the id in URLs and in
 /// the audit log. The audit entry must not carry the number it is about, and a
