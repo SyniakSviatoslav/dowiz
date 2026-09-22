@@ -35,7 +35,7 @@ struct PresetIn {
 /// The presets and the type pairs come from the HUB rather than being written
 /// into the pane, so the console and the storefront cannot disagree about which
 /// pairs exist -- and a pair not on this list is not one the storefront renders.
-pub async fn branding(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn branding(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     use dowiz_hub::brand::{Brand, PRESETS, RADIUS_MAX, TYPE_PAIRS};
     // The membership query and this read do not depend on each other, so
@@ -105,7 +105,7 @@ async fn store_brand(place: &crate::hubstore::Place, b: dowiz_hub::brand::Brand)
 }
 
 /// `POST /api/owner/branding?location_id=`
-pub async fn set_branding(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn set_branding(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: BrandIn = match req.json().await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
@@ -160,7 +160,7 @@ pub async fn set_branding(mut req: Request, ctx: RouteContext<()>) -> Result<Res
 }
 
 /// `POST /api/owner/branding/preset?location_id=` — a whole look at once.
-pub async fn set_preset(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn set_preset(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: PresetIn = match req.json().await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),

@@ -64,7 +64,7 @@ struct ProductNew {
 
 /// `POST /api/owner/products` — a new dish, minimal; the editor fills the rest
 /// through `POST /api/owner/products/:id`.
-pub async fn create_product(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn create_product(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: ProductNew = match req.json().await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
@@ -127,7 +127,7 @@ struct LocOnly {
 
 /// `POST /api/owner/products/:id/delete` — gone from the menu. Past orders
 /// keep their own copy of the name and price, so nothing they show changes.
-pub async fn delete_product(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn delete_product(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: LocOnly = match req.json().await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
@@ -166,7 +166,7 @@ struct CategoryIn {
 }
 
 /// `POST /api/owner/categories` — make one, or rename / reorder one by id.
-pub async fn set_category(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn set_category(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: CategoryIn = match req.json().await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
@@ -213,7 +213,7 @@ pub async fn set_category(mut req: Request, ctx: RouteContext<()>) -> Result<Res
 /// `POST /api/owner/categories/:id/delete` — only an EMPTY category goes;
 /// dishes are moved or deleted first, on purpose, so nothing vanishes by
 /// accident with its heading.
-pub async fn delete_category(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn delete_category(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: LocOnly = match req.json().await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
@@ -271,7 +271,7 @@ mod tests {
 /// its dish count. The public menu drops a category with nothing to sell,
 /// which is right for a customer and wrong for the owner about to put the
 /// first dish into it.
-pub async fn list_categories(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn list_categories(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let loc = match crate::owner::owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),

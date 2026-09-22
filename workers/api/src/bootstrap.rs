@@ -82,7 +82,7 @@ pub(crate) fn secret_ok(given: &str, want: &str) -> bool {
 }
 
 /// `POST /api/bootstrap` — seed the catalogue, and optionally the first owner.
-pub async fn seed(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn seed(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     // No secret configured => the route does not exist. 404, not 401: a 401
     // confirms there is something here to guess at.
     let Ok(want) = ctx.env.secret("BOOTSTRAP_SECRET") else {
@@ -199,7 +199,7 @@ pub async fn seed(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // the constraint and the identity queries need. Everything the storefront
     // reads still comes from the image.
     if let Some(id) = bundle.location.get("id").and_then(|x| x.as_str()) {
-        let now = Date::now().as_millis() as i64;
+        let now = ctx.data.now_ms;
         let pick = |k: &str, d: &str| {
             bundle.location.get(k).and_then(|x| x.as_str()).unwrap_or(d).to_string()
         };
@@ -247,7 +247,7 @@ pub async fn seed(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
             Ok(h) => h,
             Err(e) => return e.into_response(),
         };
-        let now = Date::now().as_millis() as i64;
+        let now = ctx.data.now_ms;
         let email = o.email.trim().to_lowercase();
         let loc_id = bundle
             .location
@@ -344,7 +344,7 @@ pub async fn seed(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
             .email
             .clone()
             .unwrap_or_else(|| format!("{}@courier.invalid", phone.replace(['+', ' '], "")));
-        let now = Date::now().as_millis() as i64;
+        let now = ctx.data.now_ms;
         // THE COURIER AND THEIR ROSTER ROW IN ONE TURN, and the `ON CONFLICT DO
         // NOTHING` becomes what it always meant: seeding twice adopts the
         // person who already holds the address rather than minting a second.

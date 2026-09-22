@@ -173,7 +173,7 @@ pub async fn instagram_publish(ig: &Instagram, image_url: &str, caption: &str) -
 // ── the webhook ─────────────────────────────────────────────────────────────
 
 /// `GET /api/webhooks/meta` — Meta's subscription handshake.
-pub async fn webhook_verify(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn webhook_verify(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let url = req.url()?;
     let q = |k: &str| url.query_pairs().find(|(key, _)| key == k).map(|(_, v)| v.into_owned());
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
@@ -354,7 +354,7 @@ async fn store(place: &crate::hubstore::Place, direction: &str, m: &Inbound) -> 
 /// `POST /api/webhooks/meta` — a delivery. Stored, then the owner is told
 /// on Telegram when that bell is set, so a WhatsApp question does not wait for
 /// the next glance at the console.
-pub async fn webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn webhook(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     // ── WHAT AN UNSIGNED REQUEST IS ALLOWED TO COST ──
     //
     // This URL is public and takes no credential, so its cost per request is
@@ -425,7 +425,7 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Response
     }
     // The moment of the last delivery, for the integrations screen: "Meta
     // reached this hub at …" is the fact an owner wants when nothing arrives.
-    let stamp = now_ms().to_string();
+    let stamp = ctx.data.now_ms.to_string();
     let _ = crate::hubstore::with_settings(&place, move |s| { s.set(crate::integrations::WEBHOOK_LAST_KEY, &stamp); Ok(()) }).await;
     Response::from_json(&json!({ "stored": stored }))
 }
@@ -434,7 +434,7 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Response
 
 
 /// `GET /api/owner/inbox` — one line per conversation, newest first.
-pub async fn inbox(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn inbox(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -504,7 +504,7 @@ fn origin_of(req: &Request) -> String {
 }
 
 /// `GET /api/owner/inbox/:peer?channel=` — the thread, and it is marked read.
-pub async fn thread(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn thread(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -578,7 +578,7 @@ struct ReplyIn {
 }
 
 /// `POST /api/owner/inbox/:peer` — answer, through the channel the customer used.
-pub async fn reply(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn reply(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: ReplyIn = match req.json().await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
@@ -610,7 +610,7 @@ pub async fn reply(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
         Ok(id) => id,
         Err(e) => return Response::error(e, 502),
     };
-    let m = Inbound { channel, peer: peer.clone(), peer_name: None, text, external_id: external_id.clone(), at_ms: now_ms() };
+    let m = Inbound { channel, peer: peer.clone(), peer_name: None, text, external_id: external_id.clone(), at_ms: ctx.data.now_ms };
     // THE SAME PLACE THE CREDENTIALS CAME FROM. This built a second one from
     // the token's claim or the Host, so a reply sent with one venue's
     // WhatsApp account could be filed in another venue's inbox image.

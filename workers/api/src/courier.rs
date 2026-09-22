@@ -15,7 +15,6 @@ use worker::*;
 // three copies of `Date::now().as_millis() as i64`. Three identical clock
 // functions is how an injection gets done twice and missed once, which is what
 // `tools/gates/clock.sh` counts. `owner::now_ms` is the one.
-use crate::owner::now_ms;
 use crate::auth::{self, Principal};
 use dowiz_kernel::json_api;
 
@@ -27,9 +26,9 @@ const MAX_SPEED_MPS_MILLI: i64 = 41_667; // 150 km/h
 
 async fn courier_at(
     req: &Request,
-    ctx: &RouteContext<()>,
+    ctx: &RouteContext<crate::Req>,
 ) -> std::result::Result<(String, String), Response> {
-    match auth::authenticate(req, &ctx.env, now_ms()).await {
+    match auth::authenticate(req, &ctx.env, ctx.data.now_ms).await {
         Ok(Principal::Courier { courier_id, active_location_id, .. }) => {
             Ok((courier_id, active_location_id))
         }
@@ -39,7 +38,7 @@ async fn courier_at(
 }
 
 /// `GET /api/courier/tasks` — what is mine, and what is up for grabs.
-pub async fn tasks(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn tasks(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (courier_id, loc) = match courier_at(&req, &ctx).await {
         Ok(v) => v,
@@ -110,7 +109,7 @@ pub async fn tasks(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         // The deadline is sent as an INSTANT: a server-computed "seconds left"
         // is stale the moment it is sent, and a phone polling every few seconds
         // would show it jumping backwards.
-        let lapsed = crate::services::courier::offer::offer_lapsed(&v, now_ms());
+        let lapsed = crate::services::courier::offer::offer_lapsed(&v, ctx.data.now_ms);
         match holder {
             Some(c) if c == courier_id => {
                 if v.get("accepted_at_ms").and_then(Value::as_i64).is_none() {
@@ -148,7 +147,7 @@ pub async fn tasks(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 }
 
 /// `POST /api/courier/shift` — `{open: bool}`
-pub async fn shift(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn shift(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     #[derive(Deserialize)]
     struct In {
         open: bool,
@@ -162,7 +161,7 @@ pub async fn shift(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
         Ok(v) => v,
         Err(r) => return Ok(r),
     };
-    let now = now_ms();
+    let now = ctx.data.now_ms;
 
     let cid = courier_id.clone();
     let open = body.open;
@@ -277,8 +276,9 @@ async fn write_status(
     place: &crate::hubstore::Place,
     id: &str,
     next: &'static str,
+    now_ms: i64,
 ) -> Result<Value> {
-    write_status_with(place, id, next, -1).await
+    write_status_with(place, id, next, -1, now_ms).await
 }
 
 /// `cash` of -1 means "not a cash-collecting transition"; anything else is
@@ -288,16 +288,17 @@ async fn write_status_with(
     id: &str,
     next: &'static str,
     cash: i64,
+    now_ms: i64,
 ) -> Result<Value> {
     let id_s = id.to_string();
-    crate::hubstore::append_for(&place, &id_s.clone(), move |current| {
+    crate::hubstore::append_for(&place, &id_s.clone(), now_ms, move |current| {
         let current = current.ok_or_else(|| Error::RustError("order not found".into()))?;
         let updated = json_api::apply_event_logic(&current, next).map_err(Error::RustError)?;
         let mut merged: Value = serde_json::from_str(&updated)
             .map_err(|e| Error::RustError(format!("kernel order json unreadable: {e}")))?;
         let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
         crate::hubstore::carry_over(&old, &mut merged);
-        crate::live_eta::stamp(&mut merged, next, now_ms());
+        crate::live_eta::stamp(&mut merged, next, now_ms);
         if cash >= 0 {
             merged["cash_collected"] = json!(cash);
         }
@@ -311,7 +312,7 @@ async fn write_status_with(
 }
 
 /// `POST /api/courier/orders/:id/accept`
-pub async fn accept(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn accept(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (courier_id, loc) = match courier_at(&req, &ctx).await {
         Ok(v) => v,
@@ -324,7 +325,7 @@ pub async fn accept(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // assignment stamp and the log stamp are all "when this request happened",
     // and three separate reads of the wall clock is three answers to one
     // question -- see `tools/gates/clock.sh`.
-    let now = now_ms();
+    let now = ctx.data.now_ms;
     // ── THE RETRY THAT MUST NOT BECOME A SECOND ANYTHING ──
     //
     // A courier taps in a basement, the tap is queued on the phone, and the
@@ -421,7 +422,7 @@ pub async fn accept(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // answer where the rest of the system looks.
     let oid = id.clone();
     let who = courier_id.clone();
-    let claimed = crate::hubstore::append_for(&place, &oid.clone(), move |current| {
+    let claimed = crate::hubstore::append_for(&place, &oid.clone(), now, move |current| {
         let current = current.ok_or_else(|| Error::RustError("order not found".into()))?;
         let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
         let mut o = old.clone();
@@ -453,7 +454,7 @@ pub async fn accept(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 }
 
 /// `POST /api/courier/orders/:id/pickup` — READY → IN_DELIVERY
-pub async fn pickup(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn pickup(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (courier_id, loc) = match courier_at(&req, &ctx).await {
         Ok(v) => v,
@@ -463,7 +464,7 @@ pub async fn pickup(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         return Response::error("missing order id", 400);
     };
     // One clock read for the whole request; see `accept`.
-    let now = now_ms();
+    let now = ctx.data.now_ms;
     // See `accept` for why a courier route needs this at all: the tap that is
     // replayed out of the phone's outbox landed the first time, and without a
     // key its replay is an illegal edge answered 409 -- a true refusal with a
@@ -488,7 +489,7 @@ pub async fn pickup(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     if load_order(&place, &id, &loc).await?.is_none() {
         return Response::error("not found", 404);
     }
-    let merged = match write_status(&place, &id, "IN_DELIVERY").await {
+    let merged = match write_status(&place, &id, "IN_DELIVERY", now).await {
         Ok(v) => v,
         Err(e) => return Response::error(e.to_string(), 409),
     };
@@ -507,7 +508,7 @@ pub async fn pickup(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 }
 
 /// `POST /api/courier/orders/:id/deliver` — `{cash_collected?}`
-pub async fn deliver(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn deliver(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     #[derive(Deserialize)]
     struct In {
         #[serde(default)]
@@ -527,7 +528,7 @@ pub async fn deliver(mut req: Request, ctx: RouteContext<()>) -> Result<Response
         return Response::error("missing order id", 400);
     };
     // One clock read for the whole request; see `accept`.
-    let now = now_ms();
+    let now = ctx.data.now_ms;
     // THE ONE WHERE A REPLAY LOSES REAL INFORMATION. This answer carries
     // `short` -- the cash the courier came back without -- and a retry whose
     // first response was lost would otherwise be told the order changed,
@@ -572,8 +573,7 @@ pub async fn deliver(mut req: Request, ctx: RouteContext<()>) -> Result<Response
     // reason the takings and the promo count do -- so a number kept only in a
     // side table is a number that screen will never show. It read zero for
     // every delivery until now.
-    let merged = match write_status_with(
-        &place, &id, "DELIVERED", collected).await {
+    let merged = match write_status_with(&place, &id, "DELIVERED", collected, now).await {
         Ok(v) => v,
         Err(e) => return Response::error(e.to_string(), 409),
     };
@@ -608,7 +608,7 @@ pub async fn deliver(mut req: Request, ctx: RouteContext<()>) -> Result<Response
 }
 
 /// `POST /api/courier/position` — `{lat, lon, accuracy_m?, speed_mps?, order_id?}`
-pub async fn position(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn position(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     #[derive(Deserialize)]
     struct In {
         lat: f64,
@@ -660,7 +660,7 @@ pub async fn position(mut req: Request, ctx: RouteContext<()>) -> Result<Respons
         "courier_id": cid, "order_id": body.order_id,
         "lat_udeg": lat_udeg, "lon_udeg": lon_udeg,
         "accuracy_m": acc, "speed_mps_milli": speed,
-        "recorded_at_ms": now_ms(),
+        "recorded_at_ms": ctx.data.now_ms,
     })
     .to_string();
     with_ops(&place, move |t| {
@@ -672,7 +672,7 @@ pub async fn position(mut req: Request, ctx: RouteContext<()>) -> Result<Respons
 }
 
 /// `GET /api/courier/earnings` — folded from the shift log, not a running total.
-pub async fn earnings(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn earnings(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (courier_id, loc) = match courier_at(&req, &ctx).await {
         Ok(v) => v,
@@ -693,7 +693,7 @@ pub async fn earnings(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     )
     .await?;
     let zone = crate::hubstore::zone_of(venue.as_ref());
-    let now = now_ms();
+    let now = ctx.data.now_ms;
     let day = 86_400_000i64;
     let today = dowiz_hub::tz::start_of_local_day_ms(zone, now);
     let (week, month) = (today - 6 * day, today - 29 * day);

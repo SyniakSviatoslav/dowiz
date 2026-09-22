@@ -206,6 +206,30 @@ async fn serve_root(req: &Request, env: &Env) -> Result<Response> {
     env.assets("ASSETS")?.fetch(url.to_string(), None).await
 }
 
+/// WHAT THE REQUEST KNOWS BEFORE ANY HANDLER RUNS.
+///
+/// THE CLOCK IS READ ONCE, HERE, AND TRAVELS AS DATA. Ninety-two places in this
+/// crate used to ask the wall clock what time it was, and two shipped defects
+/// came straight out of that: `486a5c38`, where analytics days were 24 hours
+/// apart and a venue's are not, and the summer time-zone constant in
+/// `dowiz-venue-timezone`. A handler that reads the clock itself cannot be TOLD
+/// what time it is, so the only way to test a day boundary, a promo window or
+/// an expiry was to wait for one -- which is why none of them had a test until
+/// the pure part was lifted out.
+///
+/// IT RIDES ON `Router::with_data` rather than in a new argument, because the
+/// handler signature belongs to `workers-rs` and every one of the 119 routes
+/// would otherwise have to change shape rather than change a type parameter.
+/// `ctx.data.now_ms` is the whole of the injection.
+///
+/// ONE INSTANT FOR THE WHOLE REQUEST is the property, not just the saving.
+/// Three reads inside one handler are three answers to one question, and the
+/// two that disagree are the ones that put an order in the wrong day.
+#[derive(Clone, Copy)]
+pub struct Req {
+    pub now_ms: i64,
+}
+
 pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
     // Before the router, because this is about the HOST and not the path.
     if let Ok(u) = req.url() {
@@ -213,7 +237,9 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
             return serve_root(&req, &env).await;
         }
     }
-    Router::new()
+    // THE ONE CLOCK READ ON THE REQUEST PATH. `tools/gates/clock.sh` allows
+    // this line by name; everything below is handed the answer.
+    Router::with_data(Req { now_ms: Date::now().as_millis() as i64 })
         .get("/healthz", |_, _| Response::ok("ok"))
         // ── public storefront ──
         .get_async("/api/public/locations/:slug/menu", storefront::menu)
@@ -364,7 +390,7 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
             let envelope: serde_json::Value =
                 serde_json::from_str(&order_json).unwrap_or(serde_json::json!({}));
 
-            let allowed = match auth::authenticate(&req, &ctx.env, Date::now().as_millis() as i64).await {
+            let allowed = match auth::authenticate(&req, &ctx.env, ctx.data.now_ms).await {
                 Ok(auth::Principal::Customer { order_id, .. }) => order_id == id,
                 // AN OWNER OF THIS VENUE, not an owner of any venue.
                 //
@@ -389,7 +415,7 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
             }
             // The order as it stands NOW: the time that is left rides with it.
             let mut live = envelope.clone();
-            live_eta::attach_one(&place, &mut live, Date::now().as_millis() as i64).await;
+            live_eta::attach_one(&place, &mut live, ctx.data.now_ms).await;
             let mut res = Response::ok(serde_json::to_string(&live).unwrap_or(order_json))?;
             res.headers_mut().set("content-type", "application/json; charset=utf-8")?;
             // Never cached by anything between here and the browser: it holds

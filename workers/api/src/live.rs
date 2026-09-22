@@ -28,7 +28,7 @@ use crate::auth::{self, Principal};
 /// A customer's token names ONE order; an owner's names the venue; a courier's
 /// names the courier. Those are the three tags, and nothing else is accepted:
 /// an unauthenticated upgrade is refused before the object is reached.
-pub async fn connect(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn connect(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     // CASE-INSENSITIVE, because the header is: a client may send "WebSocket",
     // and over HTTP/2 there is no `Upgrade` header at all -- which is why a
     // curl probe on h2 reads 426 while a browser on wss:// gets through.
@@ -42,7 +42,7 @@ pub async fn connect(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         return Response::error("this route is a websocket upgrade", 426);
     }
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-    let now = Date::now().as_millis() as i64;
+    let now = ctx.data.now_ms;
     // THE TOKEN ARRIVES AS A SUBPROTOCOL, because a browser cannot set a header
     // on a WebSocket and a token in the URL is a token in every log and every
     // history. `Sec-WebSocket-Protocol: bearer, <token>` is the standard way

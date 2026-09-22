@@ -271,7 +271,7 @@ async fn handle_one(caller: &Caller<'_>, msg: &Value) -> Option<Value> {
 }
 
 /// `GET /api/mcp` — how to connect, for a person who opened the URL.
-pub async fn describe(req: Request, _ctx: RouteContext<()>) -> Result<Response> {
+pub async fn describe(req: Request, _ctx: RouteContext<crate::Req>) -> Result<Response> {
     let origin = req.url().map(|u| u.origin().ascii_serialization()).unwrap_or_default();
     Response::from_json(&json!({
         "name": SERVER_NAME,
@@ -284,8 +284,8 @@ pub async fn describe(req: Request, _ctx: RouteContext<()>) -> Result<Response> 
 }
 
 /// `POST /api/mcp`
-pub async fn rpc(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let now = crate::owner::now_ms();
+pub async fn rpc(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    let now = ctx.data.now_ms;
     let principal = match auth::authenticate(&req, &ctx.env, now).await {
         Ok(p) => p,
         Err(e) => return e.into_response(),

@@ -196,7 +196,7 @@ fn urlencode(s: &str) -> String {
 /// days, so an un-deduplicated handler applies the same event over and over --
 /// this one returns 200 for an already-applied event, because 200 is what stops
 /// the retries.
-pub async fn webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn webhook(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let sig = req
         .headers()
         .get("stripe-signature")
@@ -204,7 +204,7 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Response
         .flatten()
         .unwrap_or_default();
     let raw = req.text().await?;
-    let now_s = (Date::now().as_millis() / 1000) as i64;
+    let now_s = (ctx.data.now_ms / 1000) as i64;
 
     if let Err(e) = verify_webhook(&ctx.env, &raw, &sig, now_s) {
         return e.into_response();
@@ -269,7 +269,7 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Response
         }
     };
     let oid = order_id.clone();
-    let applied = crate::hubstore::append_for(&place, &oid.clone(), move |current| {
+    let applied = crate::hubstore::append_for(&place, &oid.clone(), ctx.data.now_ms, move |current| {
         let current = current.ok_or_else(|| Error::RustError("order not found".into()))?;
         let old: serde_json::Value = serde_json::from_str(&current).unwrap_or_default();
         // ALREADY PAID? Then this is a retry of a delivery already handled.

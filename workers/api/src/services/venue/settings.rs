@@ -15,7 +15,7 @@ use crate::owner::owner_and_venue;
 /// The KEY SPACE IS CLOSED. An open one would make this a place to stash
 /// arbitrary data that nothing ever reads back, and the console renders the
 /// list the hub declares rather than a list of its own.
-pub async fn settings(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn settings(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -43,7 +43,7 @@ struct SettingIn {
 }
 
 /// `POST /api/owner/settings`
-pub async fn set_setting(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn set_setting(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: SettingIn = match req.json().await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
@@ -84,7 +84,7 @@ pub async fn set_setting(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
 ///
 /// The list comes from the HUB. A console that held its own copy would show a
 /// switch for something that no longer exists, or miss one that does.
-pub async fn features(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn features(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -108,7 +108,7 @@ struct FeatureIn {
 }
 
 /// `POST /api/owner/features`
-pub async fn set_feature(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn set_feature(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: FeatureIn = match req.json().await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),

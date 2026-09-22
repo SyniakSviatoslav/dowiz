@@ -3,15 +3,14 @@
 use serde_json::{json, Value};
 use worker::*;
 
-use crate::owner::now_ms;
 
 /// `GET /api/courier/history` — what this courier has finished.
 ///
 /// A fold over the orders, like everything else that counts. No history table:
 /// a second list of the same deliveries is a second thing that can disagree.
-pub async fn courier_history(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn courier_history(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-    let me = match crate::auth::authenticate(&req, &ctx.env, now_ms()).await {
+    let me = match crate::auth::authenticate(&req, &ctx.env, ctx.data.now_ms).await {
         Ok(crate::auth::Principal::Courier { courier_id, .. }) => courier_id,
         Ok(_) => return Response::error("forbidden role", 403),
         Err(e) => return e.into_response(),

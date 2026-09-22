@@ -30,7 +30,7 @@ use crate::owner::owner_and_venue;
 /// THE GOOGLE BLOCK IS SOMEBODY ELSE'S MATERIAL and is stored as such: the
 /// listing's URL travels with it so every surface that shows a rating can say
 /// where it came from and link back to it.
-pub async fn set_place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn set_place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     #[derive(Deserialize)]
     struct Win {
         open: i64,

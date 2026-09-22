@@ -11,7 +11,6 @@ use worker::*;
 pub mod stock;
 pub mod supplies;
 
-use crate::owner::now_ms;
 
 /// `GET /api/owner/health` — what this venue is spending, and how close to a limit.
 ///
@@ -28,7 +27,7 @@ use crate::owner::now_ms;
 /// THERE IS NO `dead` FIGURE. The superblock has a `superseded_cells` column
 /// and nothing on this write path ever writes it, so a ratio built on it would
 /// read 0 forever while looking like a measurement. See `dowiz_hub::Usage`.
-pub async fn health(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn health(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (_, loc, (hub, cat)) =
         match crate::owner::owner_beside(&req, &ctx, &place, crate::hubstore::load_both(&place)).await
@@ -70,7 +69,7 @@ pub async fn health(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // THE BREAKERS ARE VISIBLE OR THEY ARE NOT AN INSTRUMENT. A breaker that
     // silently protects a venue is indistinguishable from one that silently
     // does nothing, and this codebase has paid for that distinction before.
-    let rails = crate::rail::snapshot(&place, now_ms()).await;
+    let rails = crate::rail::snapshot(&place, ctx.data.now_ms).await;
 
     // Every record the venue's logs hold and this build cannot read. See
     // `crate::quarantine`: a non-zero count is a failing gate, not a warning.
@@ -98,7 +97,7 @@ pub async fn health(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 /// the archives, rotation would be deletion with extra steps: the bytes would
 /// exist and nothing could reach them. `?archive=log@<n>` returns that
 /// archive's orders, folded exactly as the live ones are.
-pub async fn history(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn history(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (_, _loc, settings) = match crate::owner::owner_beside(
         &req,
@@ -141,14 +140,14 @@ pub async fn history(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 /// The nightly cron does this for every venue; this is the same call for an
 /// owner who wants it done before then, and for a test that wants to see it
 /// happen.
-pub async fn rotate_now(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn rotate_now(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let loc = match crate::owner::owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
     // The venue this caller was authorised for, and no other.
     let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
-    match crate::hubstore::rotate(&place, now_ms()).await {
+    match crate::hubstore::rotate(&place, ctx.data.now_ms).await {
         Ok(v) => Response::from_json(&v),
         Err(e) => {
             crate::loud!(&place.ns, Some(&place.venue), "hub.rotate", "{e}");
@@ -162,15 +161,15 @@ pub async fn rotate_now(req: Request, ctx: RouteContext<()>) -> Result<Response>
 /// A DOWNLOAD, NOT A DASHBOARD. The point is that the file leaves this platform
 /// and lands where the venue keeps things. Cloudflare's thirty-day time travel
 /// is a fine safety net and is not theirs.
-pub async fn backup(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn backup(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (_, _loc, bundle) =
-        match crate::owner::owner_beside(&req, &ctx, &place, crate::hubstore::export(&place)).await {
+        match crate::owner::owner_beside(&req, &ctx, &place, crate::hubstore::export(&place, ctx.data.now_ms)).await {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };
     let mut res = Response::from_json(&bundle)?;
-    let stamp = Date::now().as_millis();
+    let stamp = ctx.data.now_ms;
     let h = res.headers_mut();
     h.set("content-disposition", &format!("attachment; filename=\"dowiz-backup-{stamp}.json\""))?;
     // A backup holds every order this venue has ever taken. Nothing between
@@ -184,7 +183,7 @@ pub async fn backup(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 /// See `hubstore::import` for why the refusal is the feature: a restore that
 /// overwrites a live hub is a one-click way to erase a venue's history, and it
 /// would be reachable by anything that could reach an owner's token.
-pub async fn restore(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn restore(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let bundle: Value = match req.json().await {
         Ok(v) => v,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),

@@ -25,7 +25,7 @@ struct PromoCheckIn {
 /// It is a PREVIEW and says so: the order re-checks under the write, so a code
 /// on its last use can be quoted here and refused at checkout. That is the right
 /// way round -- the alternative gives the same last use away twice.
-pub async fn promo_check(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn promo_check(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: PromoCheckIn = match req.json().await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
@@ -68,8 +68,8 @@ pub async fn promo_check(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
     };
     let subtotal = basket.subtotal;
 
-    let used = crate::hubstore::promo_uses_in(&listed, &code);
-    match p.redeem(subtotal, crate::owner::now_ms(), used) {
+    let used = crate::services::ordering::promo_fields::promo_uses_in(&listed, &code);
+    match p.redeem(subtotal, ctx.data.now_ms, used) {
         Ok(cut) => Response::from_json(&json!({
             "code": p.code, "discount": cut, "subtotal": subtotal, "total": subtotal - cut
         })),

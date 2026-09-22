@@ -7,7 +7,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
 
-use crate::owner::{now_ms, owner_and_venue};
+use crate::owner::{owner_and_venue};
 use crate::services::orders::mine::of_venue as orders_of;
 use crate::services::venue::currency_of;
 
@@ -31,7 +31,7 @@ pub(crate) fn signing_secret(env: &Env) -> Vec<u8> {
 }
 
 /// `GET /api/owner/customers?location_id=&sort=spent|orders`
-pub async fn customers(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn customers(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // The membership query and the image read do not depend on each other, so
     // `owner_beside` runs them together. Measured against this very handler
@@ -88,7 +88,7 @@ struct RevealIn {
 /// The audit entry is appended BEFORE the answer is returned. An un-auditable
 /// reveal is the one thing this route must not do, and answering first would
 /// make the log best-effort.
-pub async fn reveal_customer(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn reveal_customer(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: RevealIn = match req.json().await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
@@ -141,19 +141,25 @@ pub async fn reveal_customer(mut req: Request, ctx: RouteContext<()>) -> Result<
         return Response::error("not found", 404);
     };
 
-    let at = now_ms();
+    let at = ctx.data.now_ms;
     let entry = json!({ "by": who, "at": at, "reason": reason }).to_string();
     let subject = format!("cust:{key}");
     // AN AUDIT RECORD DEPENDS ON NOTHING THE LOG ALREADY SAYS, so it is
     // written without reading anything first.
-    crate::hubstore::append_blind(&place, dowiz_hub::EventKind::Revealed, &subject, &entry)
+    crate::hubstore::append_blind(
+        &place,
+        dowiz_hub::EventKind::Revealed,
+        &subject,
+        &entry,
+        ctx.data.now_ms,
+    )
         .await?;
 
     Response::from_json(&json!({ "name": name, "phone": phone, "orders": orders }))
 }
 
 /// `GET /api/owner/customers/reveals?location_id=` — who has been looking.
-pub async fn reveals(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn reveals(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // The membership query and this read do not depend on each other, so
     // `owner_beside` runs them together. The token is still verified before

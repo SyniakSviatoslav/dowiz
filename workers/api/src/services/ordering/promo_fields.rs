@@ -9,6 +9,7 @@
 use serde::Deserialize;
 
 use dowiz_hub::promo::{normalise, valid_code, valid_value, Kind, Promo};
+use dowiz_hub::Hub;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -75,6 +76,36 @@ pub fn to_promo(body: &PromoIn) -> Result<Promo, &'static str> {
         // meant to make a discount; the switch is there to turn one off later.
         active: body.active.unwrap_or(true),
     })
+}
+
+/// How many times a promo code has been redeemed, folded from the orders.
+///
+/// No counter is stored, for the reason the analytics give: a tally kept beside
+/// the orders is a second number that can disagree with them, and when they
+/// disagree it is always the tally that is wrong. A rejected or cancelled order
+/// gives its use back -- the venue never took the money, so holding a use
+/// against the customer would charge them for a refusal.
+pub fn promo_uses(hub: &Hub, code: &str) -> i64 {
+    promo_uses_in(&crate::hubstore::orders_state(hub).into_iter().map(crate::hubdo::OrderView::of_event).collect::<Vec<_>>(), code)
+}
+
+/// The same count over a PROJECTION, for a caller that already has one and
+/// must not fetch the whole log to answer a discount.
+pub fn promo_uses_in(listed: &[crate::hubdo::OrderView], code: &str) -> i64 {
+    listed
+        .iter()
+        .filter(|ev| {
+            let Ok(o) = serde_json::from_str::<serde_json::Value>(&ev.order_json) else {
+                return false;
+            };
+            let st = o.get("status").and_then(|s| s.as_str()).unwrap_or("");
+            // A code spent on an order the venue refused was not spent.
+            if !crate::services::orders::status::took_money(st) {
+                return false;
+            }
+            o.get("promo").and_then(|p| p.get("code")).and_then(|c| c.as_str()) == Some(code)
+        })
+        .count() as i64
 }
 
 #[cfg(test)]

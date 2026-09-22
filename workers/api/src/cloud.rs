@@ -381,7 +381,7 @@ fn witness_key(s3: &S3, venue: &str, now_ms: i64) -> String {
 pub async fn push_place(place: &crate::hubstore::Place, now_ms: i64) -> std::result::Result<Value, String> {
     let settings = crate::hubstore::load_settings(place).await.map_err(|e| e.to_string())?.settings;
     let Some(s3) = cfg(&settings) else { return Err("no cloud storage is set".into()) };
-    let bundle = crate::hubstore::export(place).await.map_err(|e| e.to_string())?;
+    let bundle = crate::hubstore::export(place, now_ms).await.map_err(|e| e.to_string())?;
     let raw = serde_json::to_vec(&bundle).map_err(|e| e.to_string())?;
     let plain = raw.len();
     // Base64 of an image compresses well even now that the images are trimmed:
@@ -463,21 +463,21 @@ pub async fn push_place(place: &crate::hubstore::Place, now_ms: i64) -> std::res
 }
 
 /// `POST /api/owner/backup/cloud` — push now.
-pub async fn push(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn push(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let loc = match crate::owner::owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
     // The venue this caller was authorised for, and no other.
     let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
-    match push_place(&place, crate::owner::now_ms()).await {
+    match push_place(&place, ctx.data.now_ms).await {
         Ok(v) => Response::from_json(&v),
         Err(e) => Response::error(e, 502),
     }
 }
 
 /// `GET /api/owner/backup/cloud` — is a store set, and when did it last take a copy.
-pub async fn status(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn status(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let loc = match crate::owner::owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),

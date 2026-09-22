@@ -20,7 +20,7 @@ use crate::owner::owner_and_venue;
 // no version of it that could later be different.
 
 /// `POST /api/owner/products/:id/image` — body is the image.
-pub async fn set_product_image(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn set_product_image(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -103,7 +103,7 @@ pub async fn set_product_image(mut req: Request, ctx: RouteContext<()>) -> Resul
 /// completeness, content-addressed, written to MEDIA with its media type beside
 /// it. The same rules apply for the same reasons -- a truncated logo is a
 /// broken logo on every screen at once.
-pub async fn set_venue_logo(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn set_venue_logo(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -144,7 +144,7 @@ pub async fn set_venue_logo(mut req: Request, ctx: RouteContext<()>) -> Result<R
 }
 
 /// `POST /api/owner/logo/clear`
-pub async fn clear_venue_logo(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn clear_venue_logo(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -163,7 +163,7 @@ pub async fn clear_venue_logo(req: Request, ctx: RouteContext<()>) -> Result<Res
 }
 
 /// `POST /api/owner/products/:id/image/clear`
-pub async fn clear_product_image(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn clear_product_image(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -200,7 +200,7 @@ pub async fn clear_product_image(req: Request, ctx: RouteContext<()>) -> Result<
 /// never change and the cache can hold them for a year. That is the whole
 /// benefit of content addressing and it is why the header is written here
 /// rather than left to a default.
-pub async fn media(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn media(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let Some(name) = ctx.param("name").cloned() else {
         return Response::error("not found", 404);
     };

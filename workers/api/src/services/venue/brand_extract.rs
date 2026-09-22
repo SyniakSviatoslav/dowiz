@@ -20,7 +20,7 @@ struct PixelsIn {
 /// SUGGESTS ONLY. Nothing is applied: the owner picks a swatch and posts it
 /// back. An upload that silently repainted the storefront would be a change
 /// nobody approved, made from a photograph.
-pub async fn extract_branding(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn extract_branding(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: PixelsIn = match req.json().await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),

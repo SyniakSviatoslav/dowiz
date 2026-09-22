@@ -33,7 +33,7 @@ pub(crate) fn now_ms() -> i64 {
 /// them cheap here would have meant making them wrong.
 pub(crate) async fn owner_at(
     req: &Request,
-    ctx: &RouteContext<()>,
+    ctx: &RouteContext<crate::Req>,
     location_id: &str,
 ) -> std::result::Result<String, Response> {
     let raw = match auth::bearer(req) {
@@ -41,7 +41,7 @@ pub(crate) async fn owner_at(
         Err(e) => return Err(e.into_response().unwrap()),
     };
     let user_id = if raw.starts_with("dowiz_") {
-        match auth::authenticate(req, &ctx.env, now_ms()).await {
+        match auth::authenticate(req, &ctx.env, ctx.data.now_ms).await {
             // A KEY IS SCOPED TO THE VENUE IT WAS MINTED FOR, and that scope
             // used to be dropped on the floor here -- `active_location_id`
             // carries the key's own `location_id` (see `api_key_principal`)
@@ -65,7 +65,7 @@ pub(crate) async fn owner_at(
         }
     } else {
         // Pure HMAC, no I/O: a forged or expired token never reaches D1.
-        match auth::verify(&ctx.env, &raw, now_ms()) {
+        match auth::verify(&ctx.env, &raw, ctx.data.now_ms) {
             Ok(auth::Claims::Owner { user_id, .. }) => user_id,
             Ok(_) => return Err(Response::error("forbidden role", 403).unwrap()),
             Err(e) => return Err(e.into_response().unwrap()),
@@ -113,7 +113,7 @@ pub(crate) async fn owner_at(
 /// moment ago is refused here even holding a valid one.
 pub(crate) async fn owner_and_venue(
     req: &Request,
-    ctx: &RouteContext<()>,
+    ctx: &RouteContext<crate::Req>,
 ) -> std::result::Result<(String, String), Response> {
     // THE TOKEN IS VERIFIED WITHOUT TOUCHING THE DATABASE, and the membership
     // is checked by the JOIN below. `authenticate` would have run its own
@@ -126,7 +126,7 @@ pub(crate) async fn owner_and_venue(
     // here even holding a valid token. It is derived once instead of twice.
     let claims = match auth::verify(&ctx.env, &auth::bearer(req).map_err(|e| {
         e.into_response().unwrap()
-    })?, now_ms()) {
+    })?, ctx.data.now_ms) {
         Ok(c) => c,
         Err(e) => return Err(e.into_response().unwrap()),
     };
@@ -210,7 +210,7 @@ pub(crate) async fn owner_and_venue(
 /// kept in step with this reasoning; a helper that takes a future is one.
 pub(crate) async fn owner_beside<F, T>(
     req: &Request,
-    ctx: &RouteContext<()>,
+    ctx: &RouteContext<crate::Req>,
     place: &crate::hubstore::Place,
     work: F,
 ) -> std::result::Result<(String, String, T), Response>
@@ -219,7 +219,7 @@ where
 {
     // Pure, no I/O. A bad token stops here, before either query is issued.
     let bearer = auth::bearer(req).map_err(|e| e.into_response().unwrap())?;
-    match auth::verify(&ctx.env, &bearer, now_ms()) {
+    match auth::verify(&ctx.env, &bearer, ctx.data.now_ms) {
         Ok(auth::Claims::Owner { .. }) => {}
         Ok(_) => return Err(Response::error("forbidden role", 403).unwrap()),
         Err(e) => return Err(e.into_response().unwrap()),
@@ -259,7 +259,7 @@ pub(crate) fn location_of(req: &Request) -> Option<String> {
 }
 
 /// `GET /api/owner/orders?location_id=&status=`
-pub async fn orders(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn orders(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // ── A CONSOLE THAT ALREADY HAS A COPY ──
     //
@@ -396,7 +396,7 @@ pub async fn orders(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // The time that is left on each live order, from where it is and where
     // the courier is, with one read of the map for the whole queue.
     if let Ok(loaded) = crate::hubstore::load_catalog(&place).await {
-        crate::live_eta::attach_all(&place, &loaded, &mut out, now_ms()).await;
+        crate::live_eta::attach_all(&place, &loaded, &mut out, ctx.data.now_ms).await;
     }
     // The generation travels with the list so a client can ask for changes
     // after it next time -- and it is the generation THIS list was folded
@@ -410,7 +410,7 @@ pub async fn orders(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 /// hand-off from the counter and a claim from the phone are one fact in one
 /// place; the courier app shows it as theirs on its next read. An order that
 /// already has a courier is refused rather than quietly reassigned.
-pub async fn assign_courier(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn assign_courier(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     #[derive(Deserialize)]
     struct In {
         location_id: String,
@@ -488,7 +488,7 @@ pub async fn assign_courier(mut req: Request, ctx: RouteContext<()>) -> Result<R
         order_id: id.clone(),
         location_id: body.location_id.clone(),
         courier_id: courier_id.clone(),
-        now_ms: now_ms(),
+        now_ms: ctx.data.now_ms,
     };
     let _: crate::command::assign::AssignOut =
         match crate::command::send(&place, "assign", &input).await {
@@ -502,7 +502,7 @@ pub async fn assign_courier(mut req: Request, ctx: RouteContext<()>) -> Result<R
 ///
 /// `action` names an intent, never a target status. The mapping from intent to
 /// status lives in one place and the FSM decides whether the edge is legal.
-pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn order_action(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     #[derive(Deserialize)]
     struct In {
         location_id: String,
@@ -530,7 +530,7 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
     };
     // ONE CLOCK READ FOR THE WHOLE REQUEST: the idempotency window and the
     // transition's own stamp are the same instant.
-    let now = now_ms();
+    let now = ctx.data.now_ms;
     // ── THE OWNER'S TAP IS RETRIED TOO ──
     //
     // A console on a patchy connection repeats a "confirm"; the FSM refuses the
@@ -606,7 +606,7 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
 /// `GET /api/owner/dashboard?location_id=` — the numbers an owner looks at
 /// between orders, computed from the log rather than kept as a running total
 /// that can drift.
-pub async fn dashboard(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn dashboard(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // The membership query and the image read do not depend on each other, so
     // `owner_beside` runs them together. The token is still verified before
@@ -645,7 +645,7 @@ pub async fn dashboard(req: Request, ctx: RouteContext<()>) -> Result<Response> 
     // year when the offset in force now is not the offset that was in force at
     // midnight; see its comment for why one pass and two passes are both wrong.
     let zone = crate::hubstore::zone_of(venue.as_ref());
-    let now = now_ms();
+    let now = ctx.data.now_ms;
     let day_start = dowiz_hub::tz::start_of_local_day_ms(zone, now);
 
     let (mut count, mut revenue, mut pending, mut active) = (0i64, 0i64, 0i64, 0i64);
@@ -695,7 +695,7 @@ pub async fn dashboard(req: Request, ctx: RouteContext<()>) -> Result<Response> 
 }
 
 /// `PATCH /api/owner/products/:id` — the stop-list and the price.
-pub async fn update_product(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn update_product(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     #[derive(Deserialize)]
     struct In {
         location_id: String,
@@ -1117,7 +1117,7 @@ async fn apply_i18n(
 /// language whatever the customer chose. This is the one place both are
 /// written, up to five hundred rows a call, each checked on its own so a bad
 /// row is named rather than the whole batch silently half-applied.
-pub async fn write_translations(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn write_translations(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     #[derive(Deserialize)]
     struct Entry {
         entity: String,
@@ -1190,7 +1190,7 @@ pub async fn write_translations(mut req: Request, ctx: RouteContext<()>) -> Resu
 }
 
 /// `PATCH /api/owner/location` — open, close, go busy, pause delivery.
-pub async fn update_location(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn update_location(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     #[derive(Deserialize)]
     struct In {
         location_id: String,
@@ -1341,7 +1341,7 @@ pub async fn update_location(mut req: Request, ctx: RouteContext<()>) -> Result<
                 crate::identity_store::rec(t, crate::identity_store::K_LOC, &loc_for_name)
             {
                 r["name"] = json!(name_for_registry);
-                r["updated_at_ms"] = json!(Date::now().as_millis() as i64);
+                r["updated_at_ms"] = json!(ctx.data.now_ms);
                 let slug = crate::identity_store::s_of(&r, "slug");
                 let index = vec![(
                     crate::identity_store::loc_by_slug(&slug),

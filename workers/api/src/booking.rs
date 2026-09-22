@@ -26,11 +26,16 @@ use dowiz_kernel::reservation::{
     self, BookingPolicy, ReservationRequest, ReservationStatus,
 };
 
-use crate::owner::now_ms;
 
 /// Minutes since the Unix epoch — the kernel's unit for a slot.
-fn now_min() -> i64 {
-    now_ms() / 60_000
+///
+/// TAKES THE INSTANT RATHER THAN READING ONE. Every caller is a handler that
+/// already has the request's own `now`, and a slot computed from a SECOND read
+/// of the clock can land a minute away from the one the rest of the handler
+/// used — which for a booking window is the difference between accepted and
+/// refused.
+fn now_min(now_ms: i64) -> i64 {
+    now_ms / 60_000
 }
 
 /// A stable 64-bit id from a string, for the kernel types that take integers.
@@ -158,7 +163,7 @@ fn events_of(t: &dowiz_hub::table::Table, reservation_id: &str) -> Vec<EventRow>
 }
 
 /// `GET /api/public/locations/:slug/reservations/:id`
-pub async fn detail(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn detail(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let (Some(slug), Some(id)) = (ctx.param("slug").cloned(), ctx.param("id").cloned()) else {
         return Response::error("missing slug or id", 400);
     };
@@ -166,7 +171,7 @@ pub async fn detail(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // AUTHENTICATED, AND TO THIS VENUE. See `auth::principal_at`: this family
     // was mounted under `/api/public/` with no guard at all.
     if let Err(r) =
-        crate::auth::principal_at(&req, &ctx.env, &place.venue, now_ms()).await
+        crate::auth::principal_at(&req, &ctx.env, &place.venue, ctx.data.now_ms).await
     {
         return Ok(r);
     }
@@ -205,7 +210,7 @@ pub async fn detail(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 }
 
 /// `GET /api/public/locations/:slug/reservations?user=<id>`
-pub async fn list(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn list(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let Some(slug) = ctx.param("slug").cloned() else {
         return Response::error("missing slug", 400);
     };
@@ -222,7 +227,7 @@ pub async fn list(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // AUTHENTICATED, AND TO THIS VENUE. `?user=` was a client-declared
     // identity: anyone could list anyone's reservations by naming them.
     if let Err(r) =
-        crate::auth::principal_at(&req, &ctx.env, &place.venue, now_ms()).await
+        crate::auth::principal_at(&req, &ctx.env, &place.venue, ctx.data.now_ms).await
     {
         return Ok(r);
     }
@@ -270,7 +275,7 @@ struct CreateBody {
 }
 
 /// `POST /api/public/locations/:slug/reservations`
-pub async fn create(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn create(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let Some(slug) = ctx.param("slug").cloned() else {
         return Response::error("missing slug", 400);
     };
@@ -291,7 +296,7 @@ pub async fn create(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
     // nobody chose; when a public one exists it will mint a token the way the
     // storefront does for an order.
     if let Err(r) =
-        crate::auth::principal_at(&req, &ctx.env, &place.venue, now_ms()).await
+        crate::auth::principal_at(&req, &ctx.env, &place.venue, ctx.data.now_ms).await
     {
         return Ok(r);
     }
@@ -315,11 +320,11 @@ pub async fn create(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
         occasion: body.occasion.clone(),
     };
     let policy = BookingPolicy::default_policy();
-    if let Err(e) = reservation::validate_request(&request, &policy, now_min()) {
+    if let Err(e) = reservation::validate_request(&request, &policy, now_min(ctx.data.now_ms)) {
         return Response::error(e.message(), 422);
     }
 
-    let now = now_ms();
+    let now = ctx.data.now_ms;
     // A GUEST BOOKING HAS NO USER, and that used to be a 500: the column
     // references `users(id)` and an empty string names no user, so SQLite
     // rejected it against the foreign key. Here the absence is just an absence
@@ -392,7 +397,7 @@ fn default_actor() -> String {
 /// The transition is checked by the kernel against the FOLDED state, never
 /// against the cached column — otherwise a stale cache would authorise a move
 /// the history forbids.
-pub async fn action(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn action(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let (Some(slug), Some(id)) = (ctx.param("slug").cloned(), ctx.param("id").cloned()) else {
         return Response::error("missing slug or id", 400);
     };
@@ -408,7 +413,7 @@ pub async fn action(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
     // caller with no token should learn nothing at all -- not even which
     // status names this kernel knows.
     if let Err(r) =
-        crate::auth::principal_at(&req, &ctx.env, &place.venue, now_ms()).await
+        crate::auth::principal_at(&req, &ctx.env, &place.venue, ctx.data.now_ms).await
     {
         return Ok(r);
     }
@@ -434,7 +439,7 @@ pub async fn action(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
     }
 
     let seq = events.iter().map(|e| e.seq).max().unwrap_or(0) + 1;
-    let now = now_ms();
+    let now = ctx.data.now_ms;
     let ev = json!({
         "to_status": to.as_str(), "seq": seq,
         "actor": body.actor, "reason": body.reason, "at_ms": now,
@@ -560,7 +565,7 @@ fn base64_decode(s: &str) -> Option<Vec<u8>> {
 ///
 /// Only a CONFIRMED booking gets a pass. Minting one for a request the venue has
 /// not answered would put a code on a phone that the door will refuse.
-pub async fn issue_pass(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn issue_pass(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let (Some(slug), Some(id)) = (ctx.param("slug").cloned(), ctx.param("id").cloned()) else {
         return Response::error("missing slug or id", 400);
     };
@@ -568,7 +573,7 @@ pub async fn issue_pass(req: Request, ctx: RouteContext<()>) -> Result<Response>
     // AUTHENTICATED, AND TO THIS VENUE. See `auth::principal_at`: this family
     // was mounted under `/api/public/` with no guard at all.
     if let Err(r) =
-        crate::auth::principal_at(&req, &ctx.env, &place.venue, now_ms()).await
+        crate::auth::principal_at(&req, &ctx.env, &place.venue, ctx.data.now_ms).await
     {
         return Ok(r);
     }
@@ -622,7 +627,7 @@ struct VerifyBody {
 ///
 /// The venue's scanner. Every refusal is named: a scanner that can only say
 /// "invalid" sends people away without telling them they are simply early.
-pub async fn verify_pass(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn verify_pass(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let Some(slug) = ctx.param("slug").cloned() else {
         return Response::error("missing slug", 400);
     };
@@ -645,7 +650,7 @@ pub async fn verify_pass(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
         &decoded,
         id64(&place.venue),
         &PassWindow::default_window(),
-        now_min(),
+        now_min(ctx.data.now_ms),
     ) {
         Ok(()) => Response::from_json(&json!({
             "ok": true,
@@ -661,7 +666,33 @@ pub async fn verify_pass(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
 
 #[cfg(test)]
 mod key_tests {
-    use super::{ev_key, user_key, SLOT_MAX};
+    use super::{ev_key, now_min, user_key, SLOT_MAX};
+
+    /// WHAT P3 ACTUALLY BUYS, stated as a test. `now_min` read the wall clock
+    /// until 2026-09-22, so a booking window could only be exercised at the
+    /// real time — which is why the rule that decides whether a slot is in the
+    /// past had no test at all. It takes the instant now, so the boundary can
+    /// be put wherever the test wants it.
+    #[test]
+    fn a_slot_boundary_can_be_examined_at_a_chosen_instant() {
+        // The minute the epoch's first hour ends, and the millisecond before.
+        assert_eq!(now_min(3_600_000), 60);
+        assert_eq!(now_min(3_599_999), 59, "the last millisecond is still the previous minute");
+        // A second read of a real clock could land either side of that line;
+        // one instant handed down cannot.
+        assert_eq!(now_min(3_599_999), now_min(3_599_999));
+    }
+
+    /// AND IT IS NOT A DIVISION THAT ROUNDS TOWARDS ZERO BY ACCIDENT. Every
+    /// instant this sees is after 1970, so the behaviour below the epoch is
+    /// not a rule anyone relies on — it is pinned so that a future change to
+    /// signed arithmetic is a decision rather than a surprise.
+    #[test]
+    fn the_epoch_itself_is_minute_zero() {
+        assert_eq!(now_min(0), 0);
+        assert_eq!(now_min(59_999), 0);
+        assert_eq!(now_min(60_000), 1);
+    }
 
     /// KEYS SORT AS STRINGS, and a reservation's history replays in key order.
     #[test]

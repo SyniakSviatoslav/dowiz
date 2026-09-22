@@ -20,7 +20,7 @@ struct ZonesIn {
 /// treated as NO zone at all -- and no zones means every address is accepted --
 /// so a configuration that silently means nothing would quietly turn the check
 /// off while the owner believed they had drawn a boundary.
-pub async fn set_zones(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn set_zones(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: ZonesIn = match req.json().await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
@@ -64,7 +64,7 @@ pub async fn set_zones(mut req: Request, ctx: RouteContext<()>) -> Result<Respon
 /// sent forty minutes out of town and every order behind it late. Micro-degrees
 /// because the whole system holds coordinates as integers: a float crossing
 /// into this path is what MANIFESTO C2 forbids.
-pub async fn reach(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn reach(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let q = |name: &str| -> Option<i64> {
         req.url()
             .ok()?

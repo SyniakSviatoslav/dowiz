@@ -8,7 +8,7 @@
 use serde_json::{json, Value};
 use worker::*;
 
-use crate::owner::{now_ms, owner_and_venue};
+use crate::owner::{owner_and_venue};
 use crate::services::orders::mine::of_venue as orders_of;
 
 //
@@ -17,7 +17,7 @@ use crate::services::orders::mine::of_venue as orders_of;
 // are stored at all rather than posted as they are written.
 
 /// `GET /api/owner/posts`
-pub async fn posts(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn posts(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -50,7 +50,7 @@ pub async fn posts(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 /// true. A draft the checker finds unusable -- an invented discount, a
 /// manufactured urgency -- is dropped and its subject is NOT marked seen, so it
 /// can be tried again.
-pub async fn draft_post(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn draft_post(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     use dowiz_hub::post::{self, Post, State as PostState};
 
     let loc = match owner_and_venue(&req, &ctx).await {
@@ -86,7 +86,7 @@ pub async fn draft_post(req: Request, ctx: RouteContext<()>) -> Result<Response>
     // The week's most-ordered dish, COUNTED HERE. The model never counts; it is
     // handed the number.
     let listed = crate::hubstore::orders(&place).await?;
-    let week_ago = now_ms() - 7 * 24 * 60 * 60 * 1000;
+    let week_ago = ctx.data.now_ms - 7 * 24 * 60 * 60 * 1000;
     let mut tally: Vec<(String, i64)> = Vec::new();
     for o in orders_of(listed, &loc) {
         if o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(0) < week_ago {
@@ -163,7 +163,7 @@ pub async fn draft_post(req: Request, ctx: RouteContext<()>) -> Result<Response>
             subject_key: subject.key(),
             state: PostState::Draft,
             channel: dowiz_hub::post::Channel::Telegram,
-            created_ms: now_ms(),
+            created_ms: ctx.data.now_ms,
             decided_ms: 0,
             error: String::new(),
         };

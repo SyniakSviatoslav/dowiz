@@ -13,7 +13,7 @@ use worker::*;
 /// sell, somebody who hears the order land, and a way to get it there. The leg
 /// that catches real venues is the second -- nobody notices nothing is bound to
 /// the bot until an order has sat unanswered for forty minutes.
-pub async fn activation(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn activation(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // The membership query and this read do not depend on each other, so
     // `owner_beside` runs them together. The token is still verified before

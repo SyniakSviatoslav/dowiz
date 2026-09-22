@@ -5,7 +5,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
 
-use crate::owner::{now_ms, owner_and_venue};
+use crate::owner::{owner_and_venue};
 
 #[derive(Deserialize)]
 #[serde(default)]
@@ -22,7 +22,7 @@ impl Default for ApproveIn {
 }
 
 /// `POST /api/owner/posts/:id/approve` — publish it, in the owner's words.
-pub async fn approve_post(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn approve_post(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     use dowiz_hub::post::State as PostState;
 
     let body: ApproveIn = req.json().await.unwrap_or_default();
@@ -113,7 +113,7 @@ pub async fn approve_post(mut req: Request, ctx: RouteContext<()>) -> Result<Res
     };
     p.state = state;
     p.error = error.clone().unwrap_or_default();
-    p.decided_ms = now_ms();
+    p.decided_ms = ctx.data.now_ms;
     let stored = p.clone();
     crate::hubstore::with_posts(&place, move |ps| {
         ps.put(&stored);
@@ -127,7 +127,7 @@ pub async fn approve_post(mut req: Request, ctx: RouteContext<()>) -> Result<Res
 }
 
 /// `POST /api/owner/posts/:id/reject` — not this one.
-pub async fn reject_post(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn reject_post(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     use dowiz_hub::post::State as PostState;
 
     let loc = match owner_and_venue(&req, &ctx).await {

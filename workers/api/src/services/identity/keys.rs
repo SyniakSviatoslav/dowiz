@@ -7,7 +7,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
 
-use crate::owner::{now_ms, owner_and_venue};
+use crate::owner::{owner_and_venue};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -21,7 +21,7 @@ struct KeyIn {
 /// credential that expires in an hour is one that gets replaced by a password
 /// in a config file. Revocable individually: an owner who suspects one key
 /// should not have to invalidate the rest.
-pub async fn create_api_key(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn create_api_key(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     const YEAR_MS: i64 = 365 * 24 * 60 * 60 * 1000;
 
     let body: KeyIn = match req.json().await {
@@ -46,7 +46,7 @@ pub async fn create_api_key(mut req: Request, ctx: RouteContext<()>) -> Result<R
     // `auth::hash_opaque` for why argon2 would be the wrong primitive here and
     // what it cost when it was used for the session secrets.
     let hash = crate::auth::hash_opaque(&secret);
-    let now = now_ms();
+    let now = ctx.data.now_ms;
     let (kid, l2, own, lab, h2) = (id.clone(), loc.clone(), owner.clone(), label.clone(), hash);
     crate::identity_store::with_sessions(&ctx.env, move |t| {
         let rec = serde_json::json!({
@@ -75,7 +75,7 @@ pub async fn create_api_key(mut req: Request, ctx: RouteContext<()>) -> Result<R
 }
 
 /// `GET /api/owner/apikeys` — which keys exist, and whether anything uses them.
-pub async fn list_api_keys(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn list_api_keys(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -125,7 +125,7 @@ struct RevokeIn {
 }
 
 /// `POST /api/owner/apikeys/revoke`
-pub async fn revoke_api_key(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn revoke_api_key(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: RevokeIn = match req.json().await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
@@ -136,7 +136,7 @@ pub async fn revoke_api_key(mut req: Request, ctx: RouteContext<()>) -> Result<R
     };
     // Revoked, not deleted: the row is the record that this key existed and
     // when it stopped, which is the question asked after an incident.
-    let (kid, l2, now) = (body.id.clone(), loc.clone(), now_ms());
+    let (kid, l2, now) = (body.id.clone(), loc.clone(), ctx.data.now_ms);
     let revoked = crate::identity_store::with_sessions(&ctx.env, move |t| {
         let Some(mut r) = crate::identity_store::rec(t, crate::identity_store::K_APIKEY, &kid)
         else {

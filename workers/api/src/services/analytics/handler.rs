@@ -8,9 +8,9 @@ use serde_json::{json, Value};
 use worker::*;
 
 use super::fold;
-use crate::owner::{now_ms, owner_and_venue};
+use crate::owner::{owner_and_venue};
 
-pub async fn analytics(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn analytics(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -40,7 +40,7 @@ pub async fn analytics(req: Request, ctx: RouteContext<()>) -> Result<Response> 
     let zone = crate::hubstore::zone_of(
         cat.location().and_then(|j| serde_json::from_str::<Value>(&j).ok()).as_ref(),
     );
-    let now = now_ms();
+    let now = ctx.data.now_ms;
     let starts = fold::day_starts(zone, now, days);
     let r = fold::fold(&crate::services::orders::mine::of_venue(listed, &loc), zone, &starts, now);
 

@@ -128,7 +128,7 @@ pub fn decide(
             return Err(Refused::Promo(dowiz_hub::promo::Refusal::Unknown.as_str().to_string()));
         };
         let code = input.promo_code.as_deref().unwrap_or(&p.code);
-        let used = crate::hubstore::promo_uses_in(listed, code);
+        let used = crate::services::ordering::promo_fields::promo_uses_in(listed, code);
         let cut = p
             .redeem(input.subtotal, input.now_ms, used)
             .map_err(|r| Refused::Promo(r.as_str().to_string()))?;

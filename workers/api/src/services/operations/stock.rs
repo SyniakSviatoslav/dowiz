@@ -8,7 +8,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
 
-use crate::owner::{now_ms, owner_and_venue};
+use crate::owner::{owner_and_venue};
 
 //
 // §4's deterministic ledger, reachable at last. A stock level is a FOLD over
@@ -23,7 +23,7 @@ use crate::owner::{now_ms, owner_and_venue};
 // be complete before anything can be sold is stock control nobody switches on.
 
 /// `GET /api/owner/stock` — what is on the shelf, and what is running out.
-pub async fn stock(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn stock(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // The membership query and this read do not depend on each other, so
     // `owner_beside` runs them together. The token is still verified before
@@ -109,7 +109,7 @@ struct StockMoveIn {
 /// THE THREE A HUMAN CAUSES. Reserved, Consumed and Released are emitted by the
 /// order lifecycle and are deliberately unreachable here: a hand-written
 /// reservation has no order to settle it and would strand immediately.
-pub async fn stock_move(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn stock_move(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     use dowiz_hub::stock::{StockEvent, WasteReason};
 
     let body: StockMoveIn = match req.json().await {
@@ -153,7 +153,7 @@ pub async fn stock_move(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
             Some(observed) => StockEvent::Stocktake {
                 item,
                 observed,
-                stocktake_id: format!("st_{}", now_ms()),
+                stocktake_id: format!("st_{}", ctx.data.now_ms),
             },
             None => return Response::error("what was counted?", 400),
         },

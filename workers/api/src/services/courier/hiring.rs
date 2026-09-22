@@ -9,7 +9,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
 
-use crate::owner::{now_ms, owner_and_venue};
+use crate::owner::{owner_and_venue};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -23,7 +23,7 @@ struct InviteIn {
 /// The code is stored HASHED, exactly like a password, because that is what it
 /// is: until it is claimed, whoever holds it can become this courier. A copied
 /// database would otherwise hand over every pending account.
-pub async fn invite_courier(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn invite_courier(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     use crate::services::courier::roster;
 
     /// A week. Long enough for a courier who starts next Monday, short enough
@@ -60,7 +60,7 @@ pub async fn invite_courier(mut req: Request, ctx: RouteContext<()>) -> Result<R
     let Some(id) = crate::edge_id() else {
         return Response::error("no platform CSPRNG", 500);
     };
-    let now = now_ms();
+    let now = ctx.data.now_ms;
     // ── THE CHECK, THE REVOKE AND THE MINT, IN ONE TURN ──
     //
     // Three statements before: does this phone already have an account, revoke
@@ -132,7 +132,7 @@ pub async fn invite_courier(mut req: Request, ctx: RouteContext<()>) -> Result<R
 }
 
 /// `POST /api/owner/couriers/:id/uninvite` — withdraw a pending code.
-pub async fn uninvite_courier(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn uninvite_courier(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -140,7 +140,7 @@ pub async fn uninvite_courier(req: Request, ctx: RouteContext<()>) -> Result<Res
     let Some(id) = ctx.param("id").cloned() else {
         return Response::error("missing invite", 400);
     };
-    let now = now_ms();
+    let now = ctx.data.now_ms;
     let (iid, l2) = (id.clone(), loc.clone());
     let revoked = crate::identity_store::with_couriers(&ctx.env, move |t| {
         // THE VENUE IS IN THE CHECK, not only in the WHERE clause: an invite of
@@ -181,7 +181,7 @@ struct ActiveIn {
 /// Their record STAYS -- an order they delivered still names them -- and every
 /// session they hold dies, because somebody who has left must not keep a working
 /// app in their pocket.
-pub async fn set_courier_active(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn set_courier_active(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: ActiveIn = match req.json().await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
@@ -238,7 +238,7 @@ pub async fn set_courier_active(mut req: Request, ctx: RouteContext<()>) -> Resu
         // working app in their pocket -- and the sessions are records, so this
         // is a walk rather than an UPDATE whose `changes` count was the answer.
         let cid = row.id.clone();
-        let now = now_ms();
+        let now = ctx.data.now_ms;
         revoked = crate::identity_store::with_sessions(&ctx.env, move |t| {
             let mut n = 0usize;
             let live: Vec<(String, Value)> = t

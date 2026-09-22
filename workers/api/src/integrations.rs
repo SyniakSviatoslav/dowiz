@@ -12,7 +12,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
 
-use crate::owner::{now_ms, owner_and_venue};
+use crate::owner::{owner_and_venue};
 
 /// The Graph API version, the same one `channels.rs` pins.
 const GRAPH: &str = "https://graph.facebook.com/v21.0";
@@ -30,7 +30,7 @@ fn settings_flag(s: &dowiz_hub::settings::Settings, key: &str) -> bool {
 }
 
 /// `GET /api/owner/integrations`
-pub async fn status(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn status(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
@@ -105,7 +105,7 @@ struct CheckIn {
 }
 
 /// `POST /api/owner/integrations/check` — one proof, the provider's words.
-pub async fn check(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn check(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: CheckIn = match req.json().await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
@@ -173,7 +173,7 @@ pub async fn check(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
         "cloud" => match crate::cloud::cfg(&s) {
             None => Err(("no_bucket", "endpoint, bucket, key or secret missing".to_string())),
             Some(s3) => {
-                let now = now_ms();
+                let now = ctx.data.now_ms;
                 let key = if s3.prefix.is_empty() { format!("{}/probe-{now}.txt", place.venue) } else { format!("{}/{}/probe-{now}.txt", s3.prefix, place.venue) };
                 crate::cloud::put(&s3, &key, PROBE_BODY.as_bytes().to_vec(), "text/plain", now)
                     .await

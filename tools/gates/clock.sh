@@ -22,15 +22,34 @@
 # the gap is worth knowing before anyone budgets P3 from the blueprint's
 # estimate.
 #
-# THREE PLACES ARE ALLOWED, each for a stated reason rather than because it was
-# inconvenient to move:
-#   * the definition of `owner::now_ms` -- the one canonical read.
-#   * `otel.rs` -- the tracer. It measures ELAPSED WALL TIME; a span handed a
+# FIVE PLACES ARE ALLOWED. Each is allowed for a stated reason, and the reason
+# is the test: does anything DECIDE from this clock read, or does it only
+# RECORD when something was observed?
+#
+#   * `lib.rs`'s `Router::with_data` -- THE request read. One instant per
+#     request, handed to every handler as `ctx.data.now_ms`.
+#   * `cloud.rs`'s `nightly` -- the CRON's read. `scheduled` is a second entry
+#     point with no request behind it, so it has no instant to be handed; it
+#     reads once and passes that down exactly as the router does.
+#   * `owner::now_ms`'s BODY AND SIGNATURE -- the one function those two call.
+#   * `otel.rs` -- the tracer. It measures ELAPSED wall time; a span handed a
 #     fixed clock would report every request as taking zero ms. An instrument
 #     that reads the real clock is not a decision that reads the real clock.
+#   * `errlog::record`'s `atMs` -- the same category. It records WHEN a failure
+#     was observed, on a path that has already gone wrong, and nothing branches
+#     on it. The one thing that reads it back is the nightly prune's "older
+#     than a week", where a millisecond cannot change the answer.
 #   * `hubdo.rs` -- inside the Durable Object, which is where an append is
-#     stamped and a courier fix is timed. That read happens after the request
+#     stamped and a courier's fix is timed. That read happens after the request
 #     has crossed the boundary and is the object's own.
+#
+# EVERYTHING ELSE IS COUNTED, and the count is zero. It was 93 on the morning
+# this was written: `Router::with_data(Req { now_ms })` made the request's
+# instant a value every handler already has, and 75 sites became
+# `ctx.data.now_ms` in one pass. The rest were helpers that now take the
+# instant as an argument -- `append_for`, `append_blind`, `export`,
+# `write_status`, `issue_owner_refresh`, `now_min` -- which is the half that
+# makes a day boundary testable at a chosen time rather than at the real one.
 #
 # COMMENTS ARE STRIPPED BEFORE ANYTHING IS COUNTED, and this gate needed the
 # lesson immediately: the commit that deleted two of the three copies of
@@ -55,10 +74,14 @@ hits() {
   done \
     | grep -v '^workers/api/src/otel\.rs:' \
     | grep -v '^workers/api/src/hubdo\.rs:' \
+    | grep -v 'Router::with_data(Req { now_ms:' \
+    | grep -v '^workers/api/src/cloud\.rs:[0-9]*: *let now = crate::owner::now_ms();$' \
+    | grep -v '^workers/api/src/errlog\.rs:[0-9]*: *"atMs": Date::now()\.as_millis() as i64,$' \
+    | grep -v '^workers/api/src/owner\.rs:[0-9]*: *pub(crate) fn now_ms() -> i64 {$' \
     | grep -v '^workers/api/src/owner\.rs:[0-9]*: *Date::now()\.as_millis() as i64 *$'
 }
 n=$(hits | wc -l | tr -d ' ')
-echo "clock: $n site(s) decide the time for themselves, outside the three allowed places"
+echo "clock: $n site(s) decide the time for themselves, outside the five allowed places"
 if [ ! -f "$BASELINE_FILE" ]; then
   echo "$n" > "$BASELINE_FILE"
   echo "clock: baseline recorded at $n"

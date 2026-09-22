@@ -82,7 +82,7 @@ impl Place {
     /// storefront one object and the owner console another, and the two would
     /// have drifted apart one order at a time with nothing reporting it. The
     /// slug routes resolve theirs with `of_slug` instead.
-    pub fn of(req: &Request, ctx: &RouteContext<()>, venue: Option<&str>) -> Result<Self> {
+    pub fn of(req: &Request, ctx: &RouteContext<crate::Req>, venue: Option<&str>) -> Result<Self> {
         let venue = venue
             .map(|v| v.to_string())
             .or_else(|| claimed_venue(req, ctx))
@@ -113,7 +113,7 @@ impl Place {
     /// venue -- in the Host header -- so it is asked before the guess, and the
     /// guess survives only for the single-venue workers.dev deployment where it
     /// was true to begin with.
-    pub async fn of_any(req: &Request, ctx: &RouteContext<()>) -> Result<Self> {
+    pub async fn of_any(req: &Request, ctx: &RouteContext<crate::Req>) -> Result<Self> {
         if let Some(venue) = claimed_venue(req, ctx) {
             return Ok(Place { ns: ctx.durable_object("HUB")?, venue });
         }
@@ -164,7 +164,7 @@ impl Place {
     /// ONE LOOKUP, by the key that IS the slug index. It is here because a
     /// customer's request carries no token and therefore no id, and guessing
     /// that the slug IS the id is exactly the drift described above.
-    pub async fn of_slug(ctx: &RouteContext<()>, slug: &str) -> Result<Self> {
+    pub async fn of_slug(ctx: &RouteContext<crate::Req>, slug: &str) -> Result<Self> {
         struct Row {
             id: String,
         }
@@ -189,7 +189,7 @@ impl Place {
     ///
     /// The id is one this code has already checked. It is not a slug and it is
     /// not read from a URL.
-    pub fn of_authorised(ctx: &RouteContext<()>, location_id: &str) -> Result<Self> {
+    pub fn of_authorised(ctx: &RouteContext<crate::Req>, location_id: &str) -> Result<Self> {
         Ok(Place {
             ns: ctx.durable_object("HUB")?,
             venue: location_id.to_string(),
@@ -238,7 +238,7 @@ impl Place {
     /// part in front of it must be a single label.
     ///
     /// `www` and the apex are the platform itself, never a venue.
-    pub fn slug_of_host(req: &Request, ctx: &RouteContext<()>) -> Option<String> {
+    pub fn slug_of_host(req: &Request, ctx: &RouteContext<crate::Req>) -> Option<String> {
         let platform = ctx
             .var("PLATFORM_HOST")
             .map(|v| v.to_string())
@@ -270,9 +270,9 @@ impl Place {
 ///
 /// The signature IS checked here, because an unverified claim would let anyone
 /// choose which venue's object this Worker wakes up and reads.
-fn claimed_venue(req: &Request, ctx: &RouteContext<()>) -> Option<String> {
+fn claimed_venue(req: &Request, ctx: &RouteContext<crate::Req>) -> Option<String> {
     let token = crate::auth::bearer(req).ok()?;
-    match crate::auth::verify(&ctx.env, &token, Date::now().as_millis() as i64).ok()? {
+    match crate::auth::verify(&ctx.env, &token, ctx.data.now_ms).ok()? {
         crate::auth::Claims::Owner { active_location_id, .. } => active_location_id,
         crate::auth::Claims::Courier { active_location_id, .. } => Some(active_location_id),
         crate::auth::Claims::Customer { location_id, .. } => Some(location_id),
@@ -923,6 +923,7 @@ pub async fn append_blind(
     kind: dowiz_hub::EventKind,
     subject: &str,
     payload: &str,
+    now_ms: i64,
 ) -> Result<i64> {
     for _ in 0..5 {
         let generation = log_generation(place).await?;
@@ -930,7 +931,7 @@ pub async fn append_blind(
             "kind": kind as u8,
             "order_id": subject,
             "payload": payload,
-            "clock": Date::now().as_millis(),
+            "clock": now_ms,
         });
         let stub = place.stub()?;
         let mut write = Request::new_with_init(
@@ -971,6 +972,7 @@ pub async fn append_blind(
 pub async fn append_for<F>(
     place: &Place,
     order_id: &str,
+    now_ms: i64,
     mut decide: F,
 ) -> Result<Option<serde_json::Value>>
 where
@@ -997,7 +999,7 @@ where
             "kind": kind as u8,
             "order_id": order_id,
             "payload": payload,
-            "clock": Date::now().as_millis(),
+            "clock": now_ms,
         });
         let mut write = Request::new_with_init(
             "https://hub/fold/append",
@@ -1298,35 +1300,10 @@ pub fn orders_state(hub: &Hub) -> Vec<dowiz_hub::Event> {
         .collect()
 }
 
-/// How many times a promo code has been redeemed, folded from the orders.
-///
-/// No counter is stored, for the reason the analytics give: a tally kept beside
-/// the orders is a second number that can disagree with them, and when they
-/// disagree it is always the tally that is wrong. A rejected or cancelled order
-/// gives its use back -- the venue never took the money, so holding a use
-/// against the customer would charge them for a refusal.
-pub fn promo_uses(hub: &Hub, code: &str) -> i64 {
-    promo_uses_in(&orders_state(hub).into_iter().map(crate::hubdo::OrderView::of_event).collect::<Vec<_>>(), code)
-}
-
-/// The same count over a PROJECTION, for a caller that already has one and
-/// must not fetch the whole log to answer a discount.
-pub fn promo_uses_in(listed: &[crate::hubdo::OrderView], code: &str) -> i64 {
-    listed
-        .iter()
-        .filter(|ev| {
-            let Ok(o) = serde_json::from_str::<serde_json::Value>(&ev.order_json) else {
-                return false;
-            };
-            let st = o.get("status").and_then(|s| s.as_str()).unwrap_or("");
-            // A code spent on an order the venue refused was not spent.
-            if !crate::services::orders::status::took_money(st) {
-                return false;
-            }
-            o.get("promo").and_then(|p| p.get("code")).and_then(|c| c.as_str()) == Some(code)
-        })
-        .count() as i64
-}
+// `promo_uses` AND `promo_uses_in` MOVED to `services::ordering::promo_fields`.
+// They are pure folds over a projection and belong beside the pricing rules
+// that use them, not in the storage module -- which is also how this file gave
+// back the two lines the clock injection added to its signatures.
 
 /// Every field the HUB owns, carried across a kernel transition.
 ///
@@ -1633,7 +1610,7 @@ pub async fn archives_marked(place: &Place, ids: &[String]) -> Result<()> {
     .await
 }
 
-pub async fn export(place: &Place) -> Result<serde_json::Value> {
+pub async fn export(place: &Place, now_ms: i64) -> Result<serde_json::Value> {
     use sha2::{Digest, Sha256};
     let got = load_images(place, IMAGES).await?;
     let mut images = serde_json::Map::new();
@@ -1687,7 +1664,7 @@ pub async fn export(place: &Place) -> Result<serde_json::Value> {
     Ok(serde_json::json!({
         "format": "dowiz-hub-backup/1",
         "venue": place.venue,
-        "taken_at_ms": Date::now().as_millis() as i64,
+        "taken_at_ms": now_ms,
         "images": images,
         "archives": archives,
     }))

@@ -16,7 +16,6 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
 
-use crate::owner::now_ms;
 use crate::platform::admin_only;
 
 /// The longest venue name kept; anything past it is cut, not refused.
@@ -96,7 +95,7 @@ fn b64(bytes: &[u8]) -> String {
 
 /// `POST /api/waitlist` — `{email, venue?, lang?}`. 204 once the row is
 /// written; the mail is best-effort and reported only in the row.
-pub async fn join(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn join(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: Join = match req.json().await {
         Ok(b) => b,
         Err(_) => return Response::error("expected {email, venue?, lang?}", 400),
@@ -117,7 +116,7 @@ pub async fn join(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
         .next()
         .unwrap_or("")
         .to_ascii_lowercase();
-    let now = now_ms();
+    let now = ctx.data.now_ms;
 
     // ONE RECORD PER ADDRESS, in the platform's bebop image. A second submit
     // refreshes the venue name and the time rather than making a duplicate; the
@@ -195,7 +194,7 @@ pub async fn join(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
 }
 
 /// `GET /api/platform/waitlist` — every row, newest first. Administrators only.
-pub async fn list(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn list(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     if let Err(r) = admin_only(&req, &ctx).await {
         return Ok(r);
     }

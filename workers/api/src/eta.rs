@@ -78,7 +78,7 @@ pub(crate) fn profile_of(loc: &Value) -> KitchenProfile {
 }
 
 /// `POST /api/public/locations/:slug/eta`
-pub async fn quote(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn quote(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let Some(slug) = ctx.param("slug").cloned() else {
         return Response::error("missing slug", 400);
     };

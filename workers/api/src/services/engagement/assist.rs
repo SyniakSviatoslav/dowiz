@@ -11,7 +11,6 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
 
-use crate::owner::now_ms;
 use crate::services::orders::mine::of_venue as orders_of;
 
 
@@ -130,7 +129,7 @@ fn graph_facts(
 ///
 /// With no `q` it reports the shape — how many nodes and relations — which is
 /// the cheapest way to see that the fold is working at all.
-pub async fn graph(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn graph(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (_, _loc, (loaded, loaded_cat)) =
         match crate::owner::owner_beside(&req, &ctx, &place, crate::hubstore::load_both(&place)).await
@@ -154,7 +153,7 @@ pub async fn graph(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     Response::from_json(&graph_facts(&loaded.hub, &loaded_cat.catalog, &labels, &q, limit))
 }
 
-pub async fn owner_assist(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn owner_assist(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: AskIn = match req.json().await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
@@ -172,7 +171,7 @@ pub async fn owner_assist(mut req: Request, ctx: RouteContext<()>) -> Result<Res
             Ok(v) => v,
             Err(r) => return Ok(r),
         };
-    let now = now_ms();
+    let now = ctx.data.now_ms;
     // THE FACTS ARE COMPUTED HERE and handed over. The model is told plainly
     // that they are the truth and it is not; a model that invented a number
     // would have an owner phoning a customer about an order that does not exist.
@@ -228,18 +227,18 @@ pub async fn owner_assist(mut req: Request, ctx: RouteContext<()>) -> Result<Res
 }
 
 /// `POST /api/courier/assist` — a question about this courier's own run.
-pub async fn courier_assist(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn courier_assist(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: AskIn = match req.json().await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-    let me = match crate::auth::authenticate(&req, &ctx.env, now_ms()).await {
+    let me = match crate::auth::authenticate(&req, &ctx.env, ctx.data.now_ms).await {
         Ok(crate::auth::Principal::Courier { courier_id, .. }) => courier_id,
         Ok(_) => return Response::error("forbidden role", 403),
         Err(e) => return e.into_response(),
     };
-    let now = now_ms();
+    let now = ctx.data.now_ms;
     // THEIR OWN RUN AND NOTHING ELSE. A courier asking the assistant must not
     // be able to reach a neighbour's address through it.
     let mine: Vec<Value> = crate::hubstore::orders(&place)

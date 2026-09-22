@@ -10,7 +10,6 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
 
-use crate::owner::now_ms;
 
 #[derive(Deserialize)]
 struct FeedbackIn {
@@ -23,7 +22,7 @@ struct FeedbackIn {
 /// number attached to whoever carried it the moment anybody joins the two, and
 /// dowiz does not rank the people who work through it. A kitchen can act on "the
 /// rice was cold"; it can do nothing with a three.
-pub async fn feedback(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn feedback(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let Some(id) = ctx.param("id").cloned() else {
         return Response::error("missing order", 400);
     };
@@ -41,15 +40,15 @@ pub async fn feedback(mut req: Request, ctx: RouteContext<()>) -> Result<Respons
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // The customer's own token for THIS order and nothing else. The owner's is
     // refused too: this is the customer's voice and not the venue's.
-    match crate::auth::authenticate(&req, &ctx.env, now_ms()).await {
+    match crate::auth::authenticate(&req, &ctx.env, ctx.data.now_ms).await {
         Ok(crate::auth::Principal::Customer { order_id, .. }) if order_id == id => {}
         Ok(_) => return Response::error("that link is not for this order", 401),
         Err(_) => return Response::error("this order needs the link you were given", 401),
     }
 
-    let at = now_ms();
+    let at = ctx.data.now_ms;
     let oid = id.clone();
-    let outcome = crate::hubstore::append_for(&place, &oid, move |current| {
+    let outcome = crate::hubstore::append_for(&place, &oid, ctx.data.now_ms, move |current| {
         let current = current.ok_or_else(|| Error::RustError("no such order".into()))?;
         let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
         if old.get("feedback").is_some() {

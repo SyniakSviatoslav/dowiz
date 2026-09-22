@@ -48,7 +48,7 @@ struct SupplyIn {
 }
 
 /// `POST /api/owner/supplies` — add or edit an ingredient.
-pub async fn set_supply(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn set_supply(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: SupplyIn = match req.json().await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
@@ -118,7 +118,7 @@ pub async fn set_supply(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
 /// `POST /api/owner/supplies/:id/retire` — off the list, ledger kept. A dish
 /// whose recipe still names it keeps reserving it, which is the honest
 /// outcome: the kitchen still uses it, the owner just stopped tracking it.
-pub async fn retire_supply(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn retire_supply(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
     struct In {

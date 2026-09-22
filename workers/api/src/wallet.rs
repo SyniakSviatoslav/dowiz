@@ -28,7 +28,6 @@ use worker::*;
 use dowiz_kernel::ledger_account::{self, Account, Journal, Posting, Transaction, TxKind};
 use dowiz_kernel::money::{Currency, Money};
 
-use crate::owner::now_ms;
 
 #[derive(Deserialize)]
 struct TxRow {
@@ -180,7 +179,7 @@ async fn load_journal(
 }
 
 /// `GET /api/public/locations/:slug/wallet?user=<id>`
-pub async fn balance(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn balance(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let Some(slug) = ctx.param("slug").cloned() else {
         return Response::error("missing slug", 400);
     };
@@ -194,7 +193,7 @@ pub async fn balance(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // AUTHENTICATED, TO THIS VENUE, AND TO THIS WALLET. The first two were the
     // red-team fix; the third is this one. See `wallet_who`.
     let principal =
-        match crate::auth::principal_at(&req, &ctx.env, &place.venue, now_ms()).await {
+        match crate::auth::principal_at(&req, &ctx.env, &place.venue, ctx.data.now_ms).await {
             Ok(p) => p,
             Err(r) => return Ok(r),
         };
@@ -246,7 +245,7 @@ struct TopUpBody {
 }
 
 /// `POST /api/public/locations/:slug/wallet/topup`
-pub async fn top_up(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn top_up(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let Some(slug) = ctx.param("slug").cloned() else {
         return Response::error("missing slug", 400);
     };
@@ -265,7 +264,7 @@ pub async fn top_up(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
     // at a door that was never going to open. It also stops an unauthorised
     // caller costing this Worker a body parse and a currency lookup.
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
-    match crate::auth::principal_at(&req, &ctx.env, &place.venue, now_ms()).await {
+    match crate::auth::principal_at(&req, &ctx.env, &place.venue, ctx.data.now_ms).await {
         Ok(crate::auth::Principal::Owner { .. }) => {}
         Ok(_) => return Response::error("only the venue can record a top-up", 403),
         Err(r) => return Ok(r),
@@ -318,7 +317,7 @@ pub async fn top_up(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
         return Response::error(e, 500);
     }
 
-    let now = now_ms();
+    let now = ctx.data.now_ms;
     let rec = json!({
         "id": tx_id,
         "kind": kind_str(tx.kind),
@@ -445,7 +444,7 @@ mod who_tests {
 }
 
 /// `GET /api/public/locations/:slug/wallet/statement?user=<id>`
-pub async fn statement(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn statement(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let Some(slug) = ctx.param("slug").cloned() else {
         return Response::error("missing slug", 400);
     };
@@ -459,7 +458,7 @@ pub async fn statement(req: Request, ctx: RouteContext<()>) -> Result<Response> 
     // AUTHENTICATED, TO THIS VENUE, AND TO THIS WALLET. The first two were the
     // red-team fix; the third is this one. See `wallet_who`.
     let principal =
-        match crate::auth::principal_at(&req, &ctx.env, &place.venue, now_ms()).await {
+        match crate::auth::principal_at(&req, &ctx.env, &place.venue, ctx.data.now_ms).await {
             Ok(p) => p,
             Err(r) => return Ok(r),
         };

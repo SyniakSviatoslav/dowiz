@@ -31,7 +31,7 @@ use worker::*;
 /// IT NEVER FAILS THE PAGE. If the upstream is unreachable the answer is the
 /// identity rate and `stale: true`, because a storefront that cannot render a
 /// price because a currency API is down is worse than one that shows lek.
-pub async fn rates(req: Request, _ctx: RouteContext<()>) -> Result<Response> {
+pub async fn rates(req: Request, _ctx: RouteContext<crate::Req>) -> Result<Response> {
     let base = req
         .url()
         .ok()

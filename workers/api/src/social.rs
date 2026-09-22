@@ -23,7 +23,6 @@ use worker::*;
 
 use dowiz_kernel::thread::{self, Body, Message, Party, Thread};
 
-use crate::owner::now_ms;
 
 #[derive(Deserialize)]
 struct MessageRow {
@@ -104,7 +103,7 @@ async fn load(place: &crate::hubstore::Place, thread_id: &str) -> Result<Vec<Mes
 }
 
 /// `GET /api/public/locations/:slug/threads/:id?after=<seq>`
-pub async fn messages(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn messages(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let (Some(slug), Some(id)) = (ctx.param("slug").cloned(), ctx.param("id").cloned()) else {
         return Response::error("missing slug or id", 400);
     };
@@ -120,7 +119,7 @@ pub async fn messages(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // venue said to each other; the id was the only thing standing in front
     // of it.
     if let Err(r) =
-        crate::auth::principal_at(&req, &ctx.env, &place.venue, crate::owner::now_ms()).await
+        crate::auth::principal_at(&req, &ctx.env, &place.venue, ctx.data.now_ms).await
     {
         return Ok(r);
     }
@@ -186,7 +185,7 @@ fn default_kind() -> String {
 }
 
 /// `POST /api/public/locations/:slug/threads/:id/messages`
-pub async fn send(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn send(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let (Some(slug), Some(thread_id)) =
         (ctx.param("slug").cloned(), ctx.param("id").cloned())
     else {
@@ -205,7 +204,7 @@ pub async fn send(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // string the caller chose, so anyone with a thread id could post as the
     // venue -- or as the customer -- and the message would look exactly like
     // the real one. The body's `from` is now ignored; a role decides.
-    let from = match crate::auth::principal_at(&req, &ctx.env, &place.venue, crate::owner::now_ms()).await {
+    let from = match crate::auth::principal_at(&req, &ctx.env, &place.venue, ctx.data.now_ms).await {
         Ok(crate::auth::Principal::Owner { .. }) => Party::Venue,
         Ok(crate::auth::Principal::Customer { .. }) => Party::Customer,
         Ok(crate::auth::Principal::Courier { .. }) => {
@@ -256,7 +255,7 @@ pub async fn send(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
         return Response::from_json(&json!({ "id": msg_id, "replayed": true }));
     }
 
-    let now = now_ms();
+    let now = ctx.data.now_ms;
     let candidate = Message {
         id: id64(&msg_id),
         from,

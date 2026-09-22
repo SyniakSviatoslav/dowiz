@@ -15,7 +15,6 @@ use worker::*;
 // three copies of `Date::now().as_millis() as i64`. Three identical clock
 // functions is how an injection gets done twice and missed once, which is what
 // `tools/gates/clock.sh` counts. `owner::now_ms` is the one.
-use crate::owner::now_ms;
 use crate::auth::{
     self, hash_password, sha256_hex, verify_password_constant_work, Claims, COURIER_TTL_MS,
     OWNER_TTL_MS,
@@ -64,9 +63,13 @@ fn opaque_token() -> Option<String> {
     Some(format!("{}{}", crate::edge_id()?, crate::edge_id()?).replace('-', ""))
 }
 
-async fn issue_owner_refresh(env: &Env, user_id: &str, family_id: &str) -> Result<Option<String>> {
+async fn issue_owner_refresh(
+    env: &Env,
+    user_id: &str,
+    family_id: &str,
+    now: i64,
+) -> Result<Option<String>> {
     let Some(tok) = opaque_token() else { return Ok(None) };
-    let now = now_ms();
     // THE TOKEN HASH IS THE KEY. The table had a surrogate `id` and an index on
     // `token_hash`; the hash is what every read looks up by, so it is the
     // record's id and the index is the record.
@@ -161,7 +164,7 @@ enum Who {
 }
 
 /// `POST /api/auth/login` — owner, email + password.
-pub async fn owner_login(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn owner_login(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: LoginIn = match req.json().await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
@@ -273,7 +276,7 @@ pub async fn owner_login(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
     }
     let venue = m.as_ref().map(|m| m.location_id.clone());
 
-    let now = now_ms();
+    let now = ctx.data.now_ms;
     let claims = Claims::Owner {
         sub: user.id.clone(),
         user_id: user.id.clone(),
@@ -288,7 +291,7 @@ pub async fn owner_login(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
     let Some(family) = crate::edge_id() else {
         return Response::error("no platform CSPRNG", 500);
     };
-    let refresh = issue_owner_refresh(&ctx.env, &user.id, &family).await?;
+    let refresh = issue_owner_refresh(&ctx.env, &user.id, &family, ctx.data.now_ms).await?;
 
     Response::from_json(&json!({
         "access_token": access,
@@ -299,13 +302,13 @@ pub async fn owner_login(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
 }
 
 /// `POST /api/auth/refresh` — rotate within the family, detect reuse.
-pub async fn owner_refresh(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn owner_refresh(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: RefreshIn = match req.json().await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let hash = sha256_hex(&body.refresh_token);
-    let now = now_ms();
+    let now = ctx.data.now_ms;
 
     #[derive(Deserialize)]
     struct R {
@@ -443,7 +446,8 @@ pub async fn owner_refresh(mut req: Request, ctx: RouteContext<()>) -> Result<Re
         Ok(t) => t,
         Err(e) => return e.into_response(),
     };
-    let refresh = issue_owner_refresh(&ctx.env, &row.user_id, &row.family_id).await?;
+    let refresh =
+        issue_owner_refresh(&ctx.env, &row.user_id, &row.family_id, ctx.data.now_ms).await?;
     Response::from_json(&TokenPair {
         access_token: access,
         refresh_token: refresh.unwrap_or_default(),
@@ -451,8 +455,8 @@ pub async fn owner_refresh(mut req: Request, ctx: RouteContext<()>) -> Result<Re
 }
 
 /// `POST /api/auth/logout` — every device, like the old service.
-pub async fn owner_logout(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let p = match auth::authenticate(&req, &ctx.env, now_ms()).await {
+pub async fn owner_logout(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    let p = match auth::authenticate(&req, &ctx.env, ctx.data.now_ms).await {
         Ok(p) => p,
         Err(e) => return e.into_response(),
     };
@@ -491,7 +495,7 @@ pub async fn owner_logout(req: Request, ctx: RouteContext<()>) -> Result<Respons
 /// `None` on the apex, on `www.`, and on `*.workers.dev` -- the hosts that
 /// belong to the platform rather than to a venue -- and on a subdomain that
 /// matches no venue's slug.
-async fn venue_of_host(req: &Request, ctx: &RouteContext<()>) -> Result<Option<String>> {
+async fn venue_of_host(req: &Request, ctx: &RouteContext<crate::Req>) -> Result<Option<String>> {
     let Some(slug) = crate::hubstore::Place::slug_of_host(req, ctx) else {
         return Ok(None);
     };
@@ -523,7 +527,7 @@ pub fn venue_for_login(
     }
 }
 
-pub async fn courier_login(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn courier_login(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     #[derive(Deserialize)]
     struct In {
         #[serde(default)]
@@ -638,7 +642,7 @@ pub async fn courier_login(mut req: Request, ctx: RouteContext<()>) -> Result<Re
         return Response::error("not assigned to this location", 403);
     };
 
-    let now = now_ms();
+    let now = ctx.data.now_ms;
     let (Some(session_id), Some(family_id), Some(secret)) =
         (crate::edge_id(), crate::edge_id(), opaque_token())
     else {
@@ -736,7 +740,7 @@ pub struct ClaimIn {
 ///
 /// The courier chooses their own password. An owner who set it for them would
 /// know it.
-pub async fn courier_claim(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn courier_claim(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: ClaimIn = match req.json().await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
@@ -750,7 +754,7 @@ pub async fn courier_claim(mut req: Request, ctx: RouteContext<()>) -> Result<Re
     let phone = body.phone.trim().to_string();
     let phone_hash = auth::sha256_hex(&phone);
     let code_hash = auth::sha256_hex(body.code.trim());
-    let now = now_ms();
+    let now = ctx.data.now_ms;
 
     #[derive(Deserialize)]
     struct Inv {

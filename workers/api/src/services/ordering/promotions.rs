@@ -9,13 +9,13 @@
 use serde_json::{json, Value};
 use worker::*;
 
-use crate::owner::{now_ms, owner_and_venue};
+use crate::owner::{owner_and_venue};
 use crate::services::venue::currency_of;
 use super::promo_fields::PromoIn;
 
 
 /// `GET /api/owner/promotions?location_id=`
-pub async fn promotions(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn promotions(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // The membership query and the image read do not depend on each other;
     // `owner_with_hub` runs them together. See it for why the token is still
@@ -26,7 +26,7 @@ pub async fn promotions(req: Request, ctx: RouteContext<()>) -> Result<Response>
             Err(r) => return Ok(r),
         };
     let cat = cat.catalog;
-    let now = now_ms();
+    let now = ctx.data.now_ms;
     let mut rows: Vec<Value> = cat
         .promos()
         .into_iter()
@@ -35,7 +35,7 @@ pub async fn promotions(req: Request, ctx: RouteContext<()>) -> Result<Response>
             // Status is DERIVED, never stored: a stored one goes stale the
             // moment the clock passes the window, and the owner would be
             // reading a label that no longer describes the code.
-            let used = crate::hubstore::promo_uses(&loaded.hub, &p.code);
+            let used = crate::services::ordering::promo_fields::promo_uses(&loaded.hub, &p.code);
             json!({
                 "code": p.code, "kind": p.kind.as_str(), "value": p.value,
                 "minOrder": p.min_order, "fromMs": p.from_ms, "untilMs": p.until_ms,
@@ -57,7 +57,7 @@ pub async fn promotions(req: Request, ctx: RouteContext<()>) -> Result<Response>
 /// instead of `untilMs` gets a code with no expiry, silently, for ever.
 /// Deserialised by hand so the refusal names the field instead of arriving as a
 /// bare 422 with an empty body.
-pub async fn set_promotion(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn set_promotion(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let raw: Value = match req.json().await {
         Ok(v) => v,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
@@ -92,7 +92,7 @@ pub async fn set_promotion(mut req: Request, ctx: RouteContext<()>) -> Result<Re
 ///
 /// Distinct from the active switch: switching off is reversible and keeps the
 /// dates, deleting frees the word.
-pub async fn delete_promotion(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn delete_promotion(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),

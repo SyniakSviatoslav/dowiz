@@ -11,7 +11,7 @@
 use serde_json::{json, Value};
 use worker::*;
 
-use crate::owner::{now_ms, owner_and_venue};
+use crate::owner::{owner_and_venue};
 
 
 /// `GET /api/owner/couriers` — the roster, and the invites still outstanding.
@@ -19,7 +19,7 @@ use crate::owner::{now_ms, owner_and_venue};
 /// PENDING INVITES SIT IN THE SAME LIST as the people. An owner asking who
 /// delivers for them counts the person they invited yesterday among the answer,
 /// and a separate panel for invites is a panel nobody opens.
-pub async fn couriers(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn couriers(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     use crate::services::courier::roster;
 
     let loc = match owner_and_venue(&req, &ctx).await {
@@ -52,7 +52,7 @@ pub async fn couriers(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         .collect();
     crew_rows.sort_by_key(|(at, _)| *at);
 
-    let now = now_ms();
+    let now = ctx.data.now_ms;
     let mut invite_rows: Vec<(i64, Value)> = crew
         .scan(&format!("invite.loc/{loc}/"))
         .into_iter()
@@ -73,7 +73,7 @@ pub async fn couriers(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 
 /// `GET /api/owner/couriers/:id` -- one courier: who, whether on shift, where
 /// they were last seen, what they did today.
-pub async fn courier_detail(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn courier_detail(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let Some(id) = ctx.param("id").cloned() else {
         return Response::error("missing courier id", 400);
     };
@@ -124,7 +124,7 @@ pub async fn courier_detail(req: Request, ctx: RouteContext<()>) -> Result<Respo
     else {
         return Response::error("not found", 404);
     };
-    let now = now_ms();
+    let now = ctx.data.now_ms;
     // THE OBJECT FIRST HERE TOO: this screen is an owner looking at one
     // courier, so the fresher answer is the one worth a request.
     let fix = crate::live_eta::fixes_at(&place, &loc, now, true)

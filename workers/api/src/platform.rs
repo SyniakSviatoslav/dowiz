@@ -25,7 +25,6 @@ use serde_json::json;
 use worker::*;
 
 use crate::auth::{self};
-use crate::owner::now_ms;
 
 /// Names a venue may never take, because the platform answers to them.
 ///
@@ -82,10 +81,10 @@ pub fn slug_problem(slug: &str) -> Option<&'static str> {
 /// mint hubs on the platform's domain.
 pub(crate) async fn admin_only(
     req: &Request,
-    ctx: &RouteContext<()>,
+    ctx: &RouteContext<crate::Req>,
 ) -> std::result::Result<String, Response> {
     let bearer = auth::bearer(req).map_err(|e| e.into_response().unwrap())?;
-    let user_id = match auth::verify(&ctx.env, &bearer, now_ms()) {
+    let user_id = match auth::verify(&ctx.env, &bearer, ctx.data.now_ms) {
         Ok(auth::Claims::Owner { user_id, .. }) => user_id,
         Ok(_) => return Err(Response::error("forbidden role", 403).unwrap()),
         Err(e) => return Err(e.into_response().unwrap()),
@@ -129,7 +128,7 @@ pub(crate) async fn admin_only(
 ///
 /// ADMIN ONLY. These are platform-wide failures carrying route paths and trace
 /// ids across every tenant; they are not a venue's to see.
-pub async fn errors(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn errors(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     if let Err(r) = admin_only(&req, &ctx).await {
         return Ok(r);
     }
@@ -158,7 +157,7 @@ pub async fn errors(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 }
 
 /// `GET /api/platform/hubs` — every client hub, newest first.
-pub async fn hubs(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn hubs(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     if let Err(r) = admin_only(&req, &ctx).await {
         return Ok(r);
     }
@@ -272,7 +271,7 @@ pub struct NewOwner {
 /// the slug is free, then write the venue, then the owner, then the membership.
 /// The last two are `ON CONFLICT DO NOTHING` so a retry of a partly-applied
 /// call converges instead of failing.
-pub async fn create_hub(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn create_hub(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let admin = match admin_only(&req, &ctx).await {
         Ok(a) => a,
         Err(r) => return Ok(r),
@@ -298,7 +297,7 @@ pub async fn create_hub(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
     // The venue id and the slug are the same string at birth. They are separate
     // fields because a venue may be renamed on the web without its hub, its
     // Durable Object and everything that names it moving with it -- see `Place`.
-    let now = now_ms();
+    let now = ctx.data.now_ms;
     let id = slug.clone();
 
     // THE SLUG CHECK AND THE WRITE ARE ONE TURN. `SELECT ... LIMIT 1` followed

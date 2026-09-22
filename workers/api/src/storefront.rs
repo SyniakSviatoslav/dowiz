@@ -184,7 +184,7 @@ struct I18nRow {
 }
 
 /// `GET /api/public/locations/:slug/menu`
-pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn menu(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let Some(slug) = ctx.param("slug").cloned() else {
         return Response::error("missing slug", 400);
     };
@@ -252,7 +252,7 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // rule, both of which are arithmetic in `dowiz_hub::tz`, and the name is
     // already on the record this handler has in hand -- no extra read.
     let zone = crate::hubstore::zone_of(Some(&raw));
-    let now_ms = Date::now().as_millis() as i64;
+    let now_ms = ctx.data.now_ms;
     let (weekday, minute) = dowiz_hub::tz::local_weekday_minute(zone, now_ms);
     let scheduled_open = sched.is_empty() || sched.is_open_at(weekday, minute);
     let next_open = sched.next_open(weekday, minute);
@@ -650,7 +650,7 @@ const PAYMENT_KINDS: [&str; 5] = ["cash", "card", "apple_pay", "google_pay", "cr
 /// manifest declares what the file is, which is what a browser checks before
 /// it offers to install. A venue with no mark gets no icon and the browser
 /// says so; a placeholder would install a nameless square.
-pub async fn manifest(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn manifest(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let slug = req
         .url()?
         .query_pairs()
@@ -739,7 +739,7 @@ fn png_size(bytes: &[u8]) -> Option<(u32, u32)> {
 }
 
 /// `POST /api/public/locations/:slug/orders`
-pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let Some(slug) = ctx.param("slug").cloned() else {
         return Response::error("missing slug", 400);
     };
@@ -869,7 +869,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     // this a customer on a weak connection whose response was lost gets a
     // second order, a second reservation and a second ticket -- and Stripe's
     // idempotency key, derived from that id, cannot protect any of them.
-    let created_at_ms = Date::now().as_millis() as i64;
+    let created_at_ms = ctx.data.now_ms;
     // The principal is the CONTACT this basket names, so one person's retry
     // cannot replay into another's order even under a guessed key.
     let idem_who = crate::auth::sha256_hex(phone);
@@ -1075,7 +1075,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
         subtotal,
         fee,
         tip,
-        now_ms: crate::owner::now_ms(),
+        now_ms: ctx.data.now_ms,
     };
     let placed: crate::command::place::PlaceOut =
         match crate::command::send(&place, "place", &input).await {
@@ -1168,7 +1168,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     //
     // Seven days, because that is how long somebody might reasonably come back
     // and ask what they ordered.
-    let now = Date::now().as_millis() as i64;
+    let now = ctx.data.now_ms;
     let customer_token = auth::sign(
         &ctx.env,
         &auth::Claims::Customer {

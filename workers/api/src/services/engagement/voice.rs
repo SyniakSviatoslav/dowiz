@@ -8,7 +8,6 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use worker::*;
 
-use crate::owner::now_ms;
 
 //
 // THE CLASSIFIER IS DETERMINISTIC AND THE SERVICE SURVIVES IT BEING OFF.
@@ -52,7 +51,7 @@ impl Default for VoiceIn {
 const PROPOSAL_TTL_MS: i64 = 90_000;
 
 /// `POST /api/voice`
-pub async fn voice(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+pub async fn voice(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     use dowiz_hub::voice::{classify, Command, Speaker, Target};
 
     let body: VoiceIn = req.json().await.unwrap_or_default();
@@ -62,7 +61,7 @@ pub async fn voice(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     // caller says they are: a courier claiming to be an owner would otherwise
     // reach the owner's commands by typing a word.
     let (speaker, who, loc) =
-        match crate::auth::authenticate(&req, &ctx.env, now_ms()).await {
+        match crate::auth::authenticate(&req, &ctx.env, ctx.data.now_ms).await {
             Ok(crate::auth::Principal::Owner { user_id, active_location_id }) => (
                 Speaker::Owner,
                 user_id,
@@ -81,7 +80,7 @@ pub async fn voice(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
         let claims = match dowiz_hub::token::verify(
             crate::auth::signing_key(&ctx.env).as_slice(),
             tok,
-            now_ms(),
+            ctx.data.now_ms,
         ) {
             Ok(c) => c,
             Err(_) => {
@@ -174,7 +173,7 @@ pub async fn voice(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     let propose = |verb: &str, order: &str| -> Option<String> {
         // `mint` returns the token itself here, not a Result: the signing key
         // is already in hand and there is nothing left to fail at.
-        let now = now_ms();
+        let now = ctx.data.now_ms;
         dowiz_hub::token::mint(
             crate::auth::signing_key(&ctx.env).as_slice(),
             &dowiz_hub::token::Claims {
