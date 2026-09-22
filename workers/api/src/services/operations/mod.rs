@@ -65,7 +65,7 @@ pub async fn health(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // request in ten and no token on this box can read them at all, so the
     // errors that matter are also rows -- and this is the screen that already
     // answers "is this venue healthy". An empty list is the good answer.
-    let audit = crate::errlog::recent(&place.ns, &place.venue, 20).await.unwrap_or_default();
+    let audit = crate::errlog::recent(&place.ns, Some(&place.venue), 20).await.unwrap_or_default();
 
     // THE BREAKERS ARE VISIBLE OR THEY ARE NOT AN INSTRUMENT. A breaker that
     // silently protects a venue is indistinguishable from one that silently

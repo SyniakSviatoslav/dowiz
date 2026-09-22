@@ -32,6 +32,33 @@ const MAX_MESSAGE: usize = 500;
 /// The record kind inside the audit image.
 pub const KIND: &str = "error";
 
+/// WHERE A FAILURE'S RECORDS LIVE — decided ONCE, for the writer, the reader
+/// and the prune.
+///
+/// THE DEFECT THAT PUT THIS HERE, and it made the whole instrument write-only.
+/// `record` chose `platform_store::ERRORS` for a platform failure and
+/// `hubstore::IMAGE_AUDIT` for a venue's. `recent` and `prune_at` read and
+/// pruned `IMAGE_AUDIT` unconditionally. So EVERY 500 in the Worker -- which is
+/// the one thing `lib.rs` instruments, and the reason this module exists -- was
+/// appended to an image with no reader anywhere in the crate, and `worker.500`
+/// records could not appear in any console. The predecessor of this module was
+/// a D1 table that never received a row; its replacement received them and put
+/// them where nobody could look.
+///
+/// Two callers agreeing by hand is how that happens. One function, called by
+/// all three, is the only fix that cannot drift back.
+pub fn image_of(venue: Option<&str>) -> &'static str {
+    match venue {
+        Some(_) => crate::hubstore::IMAGE_AUDIT,
+        None => crate::platform_store::ERRORS,
+    }
+}
+
+/// And which object holds it: the venue's own, or the platform's.
+pub fn object_of(venue: Option<&str>) -> &str {
+    venue.unwrap_or(crate::platform_store::PLATFORM)
+}
+
 /// Record one failure. `place` says WHERE in the code, in dotted form
 /// (`notify.telegram`, `cloud.nightly`), so a console can group by it.
 ///
@@ -48,7 +75,7 @@ pub const KIND: &str = "error";
 /// gets dropped -- but its result is only logged.
 pub async fn record(ns: &ObjectNamespace, venue: Option<&str>, place: &str, message: &str) {
     let short: String = message.chars().take(MAX_MESSAGE).collect();
-    let object = venue.unwrap_or(crate::platform_store::PLATFORM);
+    let object = object_of(venue);
     let rec = serde_json::json!({
         "atMs": Date::now().as_millis() as i64,
         "place": place,
@@ -62,11 +89,7 @@ pub async fn record(ns: &ObjectNamespace, venue: Option<&str>, place: &str, mess
             return;
         }
     };
-    let image = if venue.is_some() {
-        crate::hubstore::IMAGE_AUDIT
-    } else {
-        crate::platform_store::ERRORS
-    };
+    let image = image_of(venue);
     let subject = place.to_string();
     if let Err(e) = crate::platform_store::with_log_at(&stub, image, move |log| {
         log.append(KIND, &subject, &rec)
@@ -122,9 +145,9 @@ impl Default for Recent {
 }
 
 /// The newest failures, for the console and for an operator.
-pub async fn recent(ns: &ObjectNamespace, venue: &str, limit: usize) -> Result<Recent> {
-    let stub = ns.id_from_name(venue)?.get_stub()?;
-    let loaded = crate::platform_store::load_log_at(&stub, crate::hubstore::IMAGE_AUDIT).await?;
+pub async fn recent(ns: &ObjectNamespace, venue: Option<&str>, limit: usize) -> Result<Recent> {
+    let stub = ns.id_from_name(object_of(venue))?.get_stub()?;
+    let loaded = crate::platform_store::load_log_at(&stub, image_of(venue)).await?;
     Ok(Recent {
         errors: loaded
             .log
@@ -138,10 +161,12 @@ pub async fn recent(ns: &ObjectNamespace, venue: &str, limit: usize) -> Result<R
 
 /// Drop what is older than `KEEP_MS`, and anything past `KEEP_MOST`.
 ///
-/// Called by the nightly cron, per venue, where the object is already in hand.
-pub async fn prune_at(stub: &Stub, now_ms: i64) -> Result<usize> {
+/// Called by the nightly cron, per venue AND once for the platform, where the
+/// object is already in hand. `venue` picks the image the same way the write
+/// did -- see `image_of`, and why guessing it twice was the defect.
+pub async fn prune_at(stub: &Stub, venue: Option<&str>, now_ms: i64) -> Result<usize> {
     let before = now_ms - KEEP_MS;
-    crate::platform_store::with_log_at(stub, crate::hubstore::IMAGE_AUDIT, move |log| {
+    crate::platform_store::with_log_at(stub, image_of(venue), move |log| {
         let keep: usize = log
             .about(KIND, None, usize::MAX)
             .into_iter()
@@ -162,6 +187,37 @@ pub async fn prune_at(stub: &Stub, now_ms: i64) -> Result<usize> {
 
 #[cfg(test)]
 mod tests {
+    /// THE ONE THAT WOULD HAVE CAUGHT IT. `record` chose the image from the
+    /// venue; `recent` and `prune_at` used `IMAGE_AUDIT` whatever they were
+    /// given. A platform failure was therefore written to `errors` and read
+    /// from `audit`, so the entire `worker.500` class -- every 500 this crate
+    /// instruments -- went into an image with no reader.
+    ///
+    /// The assertion is not "the two constants differ". It is that a PLATFORM
+    /// failure does not land in a VENUE's image, which is the sentence the old
+    /// code got wrong.
+    #[test]
+    fn a_platform_failure_is_not_written_to_a_venues_image() {
+        assert_ne!(
+            super::image_of(None),
+            crate::hubstore::IMAGE_AUDIT,
+            "a platform failure must not be filed under a venue's audit image"
+        );
+        assert_eq!(super::image_of(None), crate::platform_store::ERRORS);
+        assert_eq!(super::image_of(Some("sushi-durres")), crate::hubstore::IMAGE_AUDIT);
+    }
+
+    /// And the object follows the image. Reading the platform's errors out of
+    /// a venue's object would answer an empty list from a healthy venue --
+    /// which is the same shape as "no failures" and is why this is asserted
+    /// rather than assumed.
+    #[test]
+    fn the_object_follows_the_venue_and_the_platform_has_its_own() {
+        assert_eq!(super::object_of(None), crate::platform_store::PLATFORM);
+        assert_eq!(super::object_of(Some("sushi-durres")), "sushi-durres");
+        assert_ne!(super::object_of(None), super::object_of(Some("sushi-durres")));
+    }
+
     /// The truncation is the only pure thing here and it is the one that can
     /// silently cost money: an unbounded message is a D1 row as large as
     /// whatever the failure printed.

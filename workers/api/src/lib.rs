@@ -248,6 +248,7 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/waitlist", waitlist::join)
         .get_async("/api/platform/waitlist", waitlist::list)
         // The main hub. Platform administrators only -- see `platform`.
+        .get_async("/api/platform/errors", platform::errors)
         .get_async("/api/platform/hubs", platform::hubs)
         .post_async("/api/platform/hubs", platform::create_hub)
         .post_async("/api/webhooks/stripe", stripe::webhook)

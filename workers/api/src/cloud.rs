@@ -563,7 +563,7 @@ pub async fn nightly(env: &Env) {
         // this instrument matters and exactly when an age-only rule keeps
         // everything.
         match place.stub() {
-            Ok(s) => match crate::errlog::prune_at(&s, now).await {
+            Ok(s) => match crate::errlog::prune_at(&s, Some(&r.id), now).await {
                 Ok(0) => {}
                 Ok(n) => console_log!("nightly prune {}: {n} error records", r.id),
                 Err(e) => console_error!("nightly prune {}: errors refused: {e}", r.id),
@@ -659,6 +659,26 @@ pub async fn nightly(env: &Env) {
             Err(e) => {
                 crate::loud!(&place.ns, Some(&r.id), "cloud.nightly", "backup refused: {e}")
             }
+        }
+    }
+
+    // THE PLATFORM'S OWN FAILURE LOG, which the loop above cannot reach.
+    //
+    // Every 500 out of `route` lands platform-wide, because a request that
+    // failed has already lost whatever knew which venue it was for
+    // (`lib.rs`, "NO VENUE"). That image is not any venue's, so a sweep that
+    // only walks the registry never touches it -- and `worker.500` is the
+    // highest-volume record this instrument writes. The write-time
+    // `KEEP_MOST` guard bounds it, but only by COUNT: without this, a week-old
+    // failure is kept for ever as long as the burst never reaches 625.
+    if let Ok(ns) = env.durable_object("HUB") {
+        match ns.id_from_name(crate::platform_store::PLATFORM).and_then(|id| id.get_stub()) {
+            Ok(s) => match crate::errlog::prune_at(&s, None, now).await {
+                Ok(0) => {}
+                Ok(n) => console_log!("nightly prune platform: {n} error records"),
+                Err(e) => console_error!("nightly prune platform: errors refused: {e}"),
+            },
+            Err(e) => console_error!("nightly prune platform: no object: {e}"),
         }
     }
 }

@@ -111,6 +111,52 @@ pub(crate) async fn admin_only(
     }
 }
 
+/// `GET /api/platform/errors` — the failures nobody could read.
+///
+/// THE INSTRUMENT WAS WRITE-ONLY, and this route is the missing half of it.
+/// `lib.rs` records every 500 out of `route` into the PLATFORM object, because
+/// a request that failed has already lost whatever knew which venue it was for.
+/// `errlog::recent` existed, was called from exactly one place -- a VENUE's
+/// `/api/owner/health` -- and read a venue image unconditionally. So the one
+/// failure class this crate instruments end to end was appended to an image
+/// with no reader anywhere in the tree.
+///
+/// Its predecessor, the `worker_errors` table, never received a row in its
+/// whole life and `sqlite_sequence` was how that was discovered. Its
+/// replacement received them and put them where nobody could look. Naming both
+/// here because the shape repeats: an instrument is not finished when it
+/// WRITES, it is finished when somebody has READ what it wrote.
+///
+/// ADMIN ONLY. These are platform-wide failures carrying route paths and trace
+/// ids across every tenant; they are not a venue's to see.
+pub async fn errors(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    if let Err(r) = admin_only(&req, &ctx).await {
+        return Ok(r);
+    }
+    let limit = req
+        .url()
+        .ok()
+        .and_then(|u| {
+            u.query_pairs().find(|(k, _)| k == "limit").and_then(|(_, v)| v.parse::<usize>().ok())
+        })
+        .unwrap_or(100)
+        .clamp(1, crate::errlog::KEEP_MOST);
+    let ns = ctx.durable_object("HUB")?;
+    // `None` is the venue, and it picks BOTH the object and the image through
+    // `errlog::image_of` -- the same call the write made. That is the whole
+    // point of the change this route arrived with.
+    let recent = crate::errlog::recent(&ns, None, limit).await?;
+    Response::from_json(&json!({
+        "errors": recent.errors,
+        // A record this build cannot parse is COUNTED, not dropped: see
+        // `Quarantined`. An error log that silently loses its own unreadable
+        // records is the failure this module is named after.
+        "quarantined": recent.quarantined.len(),
+        "keepMs": crate::errlog::KEEP_MS,
+        "keepMost": crate::errlog::KEEP_MOST,
+    }))
+}
+
 /// `GET /api/platform/hubs` — every client hub, newest first.
 pub async fn hubs(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     if let Err(r) = admin_only(&req, &ctx).await {
