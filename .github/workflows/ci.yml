@@ -83,6 +83,11 @@ jobs:
       # paragraph. This is that job.
       - name: nobody is scored
         run: sh tools/gates/no-scoring.sh
+      # `--tap: 44px` is declared in `lib/tokens.css` and ignored by eight
+      # controls. The person tapping them is a waiter holding plates or a
+      # courier in the rain; a miss is a wrong order, not an annoyance.
+      - name: a control a thumb can hit
+        run: sh tools/gates/tap-size.sh
       # THE DEPENDENCY POLICY GATE THAT RAN NOWHERE. `deny.toml` bans yanked
       # crates, wildcards and disallowed licences, and `CLAUDE.md` described a
       # `.husky/pre-commit` hook that runs it -- there is no `.husky/`
