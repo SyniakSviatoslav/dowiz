@@ -2222,6 +2222,143 @@ async fn opening_hours_decide_and_the_owner_can_only_close_early() {
                     json!({ "hours": always })).0, 403);
 }
 
+/// TWO LEGACY WRITE ROUTES THAT TOOK NO AUTHENTICATION OF ANY KIND.
+///
+/// `POST /api/order/{id}/advance` walked an order through the FSM for anybody
+/// who had its id -- and an order id is in a URL, a browser history and a
+/// shared tracking link. A stranger could take an order to CANCELLED, or to
+/// DELIVERED past the courier's cash handover, and the hub would then MESSAGE
+/// the customer to say so. `POST /api/order/{id}/subscribe` bound a Telegram
+/// chat to an order, so the same stranger could route another customer's
+/// address and phone to their own chat.
+///
+/// The Worker deleted both on 2026-09-21 after a red-team pass (`lib.rs`, "TWO
+/// LEGACY WRITE ROUTES, DELETED"). This server kept them, because it was
+/// outside CI. Nothing in `workers/api/public/` ever called either, and the
+/// bot's own binding goes through `handle_inbound_text` in-process.
+///
+/// WHAT REPLACES THEM, AND ALWAYS DID: transitions are
+/// `POST /api/owner/orders/{id}/action` (owner token) and the courier routes
+/// (an assignment the courier must own). A duplicate write path with weaker
+/// authentication is not a convenience, it is the hole.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_stranger_holding_an_order_id_cannot_move_it_or_listen_to_it() {
+    let s = boot("noauth").await;
+    let (_, ord) = post(&s.base, "/api/public/locations/dubin/orders", None, json!({
+        "items": [{ "product_id": "p1", "modifier_ids": [], "quantity": 1 }],
+        "contact": { "name": "C", "phone": "+355690000000" },
+        "fulfilment": { "kind": "pickup" }
+    }));
+    let id = ord["id"].as_str().expect("an order was placed").to_string();
+    let cust = ord["access_token"].as_str().expect("the order carries its own key").to_string();
+
+    // NO CREDENTIAL AT ALL, and three statuses that each cost the venue
+    // something different.
+    for next in ["CONFIRMED", "CANCELLED", "DELIVERED"] {
+        let (code, v) = post(&s.base, &format!("/api/order/{id}/advance"), None,
+                             json!({ "next_status": next }));
+        assert!(
+            code == 401 || code == 403 || code == 404 || code == 405,
+            "an anonymous caller moved the order to {next}: {code} {v}"
+        );
+    }
+    // A STOLEN CUSTOMER LINK IS NOT AN OPERATOR CREDENTIAL either: it is
+    // handed to whoever the customer forwards the tracking page to.
+    let (code, v) = post(&s.base, &format!("/api/order/{id}/advance"), Some(&cust),
+                         json!({ "next_status": "DELIVERED" }));
+    assert!(code >= 400, "the customer's own link moved the order: {code} {v}");
+
+    // And the order really has not moved, which is the assertion that matters:
+    // a refusal that still wrote would be worse than no refusal at all.
+    let (code, o) = get(&s.base, &format!("/api/order/{id}"), Some(&cust));
+    assert_eq!(code, 200, "{o}");
+    assert_eq!(o["status"], "PENDING", "the order moved anyway: {o}");
+
+    // BINDING A CHAT TO SOMEBODY ELSE'S ORDER routes their address and phone
+    // to a chat they never named.
+    let (code, v) = post(&s.base, &format!("/api/order/{id}/subscribe"), None,
+                         json!({ "chat_id": "99999" }));
+    assert!(code >= 400, "a stranger subscribed to the order: {code} {v}");
+
+    // AND UNBINDING A STAFF CHAT BY ID ALONE silences the kitchen's order bell.
+    // `/stop` in the bot does the same thing with a chat id the MESSENGER
+    // supplies rather than one the body asserts.
+    let (code, v) = post(&s.base, "/api/hub/staff/unsubscribe", None,
+                         json!({ "chat_id": "99999" }));
+    assert!(code >= 400, "a stranger unsubscribed a staff chat: {code} {v}");
+
+    // Enrolment keeps its route, because the enrolment word IS the credential
+    // and the bot has no session to present. A wrong word is still refused.
+    let (code, v) = post(&s.base, "/api/hub/staff/subscribe", None,
+                         json!({ "chat_id": "99999", "code": "not-the-word" }));
+    assert!(code >= 400, "the enrolment word was not checked: {code} {v}");
+
+    // The authenticated path still works, or this test has only proved that
+    // the feature is gone.
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+    let (code, v) = post(&s.base, &format!("/api/owner/orders/{id}/action"), Some(&owner),
+                         json!({ "action": "confirm" }));
+    assert_eq!(code, 200, "the owner can still move their own order: {v}");
+}
+
+/// THE VENUE'S TIME ZONE, which there was no way to set.
+///
+/// The whole server read one env var, `TZ_OFFSET_MINUTES`, defaulting to 120 --
+/// Europe/Tirane's SUMMER offset -- in four places: the schedule's open/closed
+/// decision, the owner's takings boundary, the courier's day and the analytics
+/// window. From 01:00 UTC on 25 October 2026 every one of them is an hour early
+/// until the last Sunday of March. An offset is not a zone: it cannot say when
+/// it changes, so no value of that variable is right all year.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_venue_names_its_own_time_zone_and_an_unknown_one_is_refused() {
+    let s = boot("tz").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+
+    // A NAME NOBODY SUPPORTS IS REFUSED ON WRITE, and the refusal says what is
+    // known. A silent fallback is how a venue in Kyiv would keep Albanian hours.
+    let (code, v) = post(&s.base, "/api/owner/location", Some(&owner),
+                         json!({ "tz": "Mars/Olympus" }));
+    assert_eq!(code, 400, "{v}");
+    let msg = v["error"].as_str().unwrap_or_default();
+    assert!(msg.contains("Mars/Olympus"), "the refusal names the value: {msg}");
+    assert!(msg.contains("Europe/Tirane"), "and says what IS known: {msg}");
+
+    // A supported one is stored on the venue's own record.
+    let (code, v) = post(&s.base, "/api/owner/location", Some(&owner),
+                         json!({ "tz": "Europe/Kyiv" }));
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["tz"], "Europe/Kyiv");
+    // And it survives an unrelated write, rather than being dropped by the
+    // next handler that rebuilds the record.
+    let (_, v) = post(&s.base, "/api/owner/location", Some(&owner),
+                      json!({ "delivery_paused": false }));
+    assert_eq!(v["tz"], "Europe/Kyiv", "an unrelated write lost the zone: {v}");
+
+    // Empty CLEARS it, back to the default zone rather than to no zone at all.
+    let (_, v) = post(&s.base, "/api/owner/location", Some(&owner), json!({ "tz": "" }));
+    assert_eq!(v["tz"], Value::Null);
+
+    // A WEEK HAS SEVEN DAYS. Six arrays meant for Tuesday-to-Sunday were read
+    // as Monday-to-Saturday: every day of the schedule landed on the wrong
+    // weekday, and the window count agreed either way so nothing said so.
+    for wrong in [json!([[], [], [], [], [], []]), json!([[], [], [], [], [], [], [], []]), json!([])] {
+        let (code, v) = post(&s.base, "/api/owner/location", Some(&owner),
+                             json!({ "hours": wrong }));
+        assert_eq!(code, 400, "a {}-day week was accepted: {v}",
+                   wrong.as_array().map(Vec::len).unwrap_or(0));
+        assert!(v["error"].as_str().unwrap_or_default().contains("seven days"),
+                "refused for the wrong reason: {v}");
+    }
+
+    // Only the owner names the zone.
+    let (_, c) = post(&s.base, "/api/courier/auth/login", None,
+                      json!({ "phone": "+355691112233", "password": "courier-pw" }));
+    assert_eq!(post(&s.base, "/api/owner/location", Some(c["jwt"].as_str().unwrap()),
+                    json!({ "tz": "Europe/Rome" })).0, 403);
+}
+
 /// The owner's numbers, folded from the log rather than kept in a second place
 /// that can disagree with it.
 #[tokio::test(flavor = "multi_thread")]

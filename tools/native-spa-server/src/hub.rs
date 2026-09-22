@@ -417,11 +417,12 @@ pub async fn menu(State(st): State<Shared>, _slug: Option<AxPath<String>>) -> Re
         .get("hours")
         .map(|h| dowiz_hub::hours::from_json(&h.to_string()))
         .unwrap_or_default();
-    let tz: i64 = std::env::var("TZ_OFFSET_MINUTES")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(120);
-    let (weekday, minute) = dowiz_hub::hours::local_now(now_ms(), tz);
+    // THE VENUE'S OWN ZONE, not a constant. This read `TZ_OFFSET_MINUTES` with
+    // a default of 120 -- Europe/Tirane's SUMMER offset -- so from 01:00 UTC on
+    // 25 October 2026 the schedule's open/closed decision was an hour early all
+    // winter, and a kitchen would be reported shut while it was still serving.
+    let zone = crate::vrules::venue_zone(Some(&loc));
+    let (weekday, minute) = dowiz_hub::tz::local_weekday_minute(zone, now_ms());
     let scheduled_open = sched.is_empty() || sched.is_open_at(weekday, minute);
     let next_open = sched.next_open(weekday, minute);
 
@@ -1762,46 +1763,6 @@ fn new_order_id() -> String {
 }
 
 #[derive(Deserialize)]
-pub struct AdvanceIn {
-    pub next_status: String,
-}
-
-/// Advance an order. The KERNEL decides whether the edge is legal; this handler
-/// records its answer and nothing else. There is no ordered list of statuses in
-/// this file, which is the whole point: a second list would be a second
-/// authority, and the two would eventually disagree.
-pub async fn advance(
-    State(st): State<Shared>,
-    AxPath(id): AxPath<String>,
-    Json(body): Json<AdvanceIn>,
-) -> Result<Json<Value>, HubHttpError> {
-    let next = body.next_status;
-    let id_for_notify = id.clone();
-    let out = st
-        .with_log(move |hub| {
-            let current = hub.order(&id).map_err(|_| HubHttpError::NotFound("order"))?;
-            let updated =
-                json_api::apply_event_logic(&current, &next).map_err(HubHttpError::Refused)?;
-
-            // The kernel owns items, status, subtotal and the ledger. Delivery,
-            // contact and payment ride alongside and MUST survive the
-            // transition: an address lost on a status change is a failure that
-            // only surfaces at the customer's door.
-            let mut merged: Value = serde_json::from_str(&updated)
-                .map_err(|_| HubHttpError::Corrupt("kernel order"))?;
-            let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
-            carry_over(&old, &mut merged);
-            let body = serde_json::to_string(&merged).unwrap_or(updated);
-            hub.append(EventKind::Advanced, &id, &body, now_ms() as u64, [0u8; 32])
-                .map_err(|e| HubHttpError::Io(format!("{e:?}")))?;
-            Ok(merged)
-        })
-        .await?;
-    st.notify_advanced(&id_for_notify, &out);
-    Ok(Json(out))
-}
-
-#[derive(Deserialize)]
 pub struct SubscribeIn {
     pub chat_id: String,
 }
@@ -1812,32 +1773,12 @@ pub struct StaffSubscribeIn {
     pub code: String,
 }
 
-/// Bind a chat to one order. Called by the messenger webhook after a customer
-/// taps the tracking link, never by the storefront -- the browser does not know
-/// a chat id and must not be able to assert one.
-pub async fn subscribe_order(
-    State(st): State<Shared>,
-    AxPath(id): AxPath<String>,
-    Json(body): Json<SubscribeIn>,
-) -> Result<Json<Value>, HubHttpError> {
-    st.bind_order_chat(&id, &body.chat_id).await?;
-    Ok(Json(json!({ "subscribed": true, "order_id": id })))
-}
-
 pub async fn subscribe_staff(
     State(st): State<Shared>,
     Json(body): Json<StaffSubscribeIn>,
 ) -> Result<Json<Value>, HubHttpError> {
     st.bind_staff_chat(&body.chat_id, &body.code).await?;
     Ok(Json(json!({ "subscribed": true })))
-}
-
-pub async fn unsubscribe_staff(
-    State(st): State<Shared>,
-    Json(body): Json<SubscribeIn>,
-) -> Result<Json<Value>, HubHttpError> {
-    st.unbind_staff_chat(&body.chat_id).await?;
-    Ok(Json(json!({ "subscribed": false })))
 }
 
 pub fn routes(state: Shared) -> Router {
@@ -1851,11 +1792,41 @@ pub fn routes(state: Shared) -> Router {
         .route("/api/menu", get(menu))
         .route("/api/promo/check", post(promo_check))
         .route("/api/order/{id}", get(order))
-        .route("/api/order/{id}/advance", post(advance))
-        .route("/api/order/{id}/subscribe", post(subscribe_order))
         .route("/api/order/{id}/feedback", post(feedback))
+        // The enrolment word IS the credential here, compared in constant time
+        // by `bind_staff_chat`, so this one route stays open on purpose: the
+        // bot is how a kitchen enrols, and it has no session to present.
         .route("/api/hub/staff/subscribe", post(subscribe_staff))
-        .route("/api/hub/staff/unsubscribe", post(unsubscribe_staff))
+        // ── THREE LEGACY WRITE ROUTES, DELETED ──
+        //
+        // `POST /api/order/{id}/advance`, `POST /api/order/{id}/subscribe` and
+        // `POST /api/hub/staff/unsubscribe` took NO authentication of any kind.
+        //
+        //  * `advance` walked an order through the FSM for anybody holding its
+        //    id -- and an id is in a URL, a browser history and a forwarded
+        //    tracking link. A stranger could take an order to CANCELLED, or to
+        //    DELIVERED past the courier's cash handover, and the hub would then
+        //    message the customer to say it had happened.
+        //  * `subscribe` bound a chat to an order. `subscribe_order`'s own
+        //    comment said the browser "must not be able to assert" a chat id,
+        //    and the router handed it the route that does exactly that: another
+        //    customer's address and phone, delivered to a stranger's chat.
+        //  * `unsubscribe` unbound a staff chat by id alone, which silences a
+        //    kitchen's order bell.
+        //
+        // The WORKER deleted its two on 2026-09-21 after a red-team pass
+        // (`workers/api/src/lib.rs`, "TWO LEGACY WRITE ROUTES, DELETED"); this
+        // server kept all three because it was outside CI until today. Nothing
+        // in `workers/api/public/` ever called any of them, and the bot's own
+        // binding and unbinding go through `handle_inbound_text` in-process --
+        // `/start <order>`, `/staff <code>`, `/stop` -- where the chat id comes
+        // from the messenger rather than from the body.
+        //
+        // WHAT REPLACES THEM, AND ALWAYS DID: transitions are
+        // `POST /api/owner/orders/{id}/action` (owner token, a whitelist of
+        // actions) and the courier routes (an assignment the courier must own).
+        // A duplicate write path with weaker authentication is not a
+        // convenience, it is the hole.
         .route("/media/{name}", get(media))
         .with_state(state)
 }

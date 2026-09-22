@@ -203,7 +203,10 @@ pub async fn dashboard_facts(st: &Shared) -> Result<Value, HubHttpError> {
     let hub = st.read_log()?;
     let orders = hub.orders();
 
-    let day_start = start_of_day_ms(now_ms());
+    // The venue's zone decides where today begins. The takings tile is the one
+    // number an owner checks hourly, and a constant summer offset moved it an
+    // hour every winter.
+    let day_start = start_of_day_ms(zone_of(&st.read_catalog()?), now_ms());
     let (mut today, mut pending, mut active, mut revenue) = (0i64, 0i64, 0i64, 0i64);
     let mut scheduled = 0i64;
     for ev in &orders {
@@ -278,17 +281,28 @@ pub async fn dashboard_facts(st: &Shared) -> Result<Value, HubHttpError> {
 
 /// Midnight, local to the venue.
 ///
-/// `TZ_OFFSET_MINUTES` because "today" is the venue's day, not UTC's. Durrës is
-/// UTC+1/+2, so a UTC day boundary would reset the owner's takings at one or two
-/// in the morning — during service on a Saturday.
-fn start_of_day_ms(now: i64) -> i64 {
-    let offset_min: i64 = std::env::var("TZ_OFFSET_MINUTES")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(120);
-    let day = 24 * 60 * 60 * 1000;
-    let local = now + offset_min * 60 * 1000;
-    local - local.rem_euclid(day) - offset_min * 60 * 1000
+/// "Today" is the venue's day, not UTC's: Durrës is UTC+1/+2, so a UTC day
+/// boundary would reset the owner's takings at one or two in the morning —
+/// during service on a Saturday.
+///
+/// AND IT IS +1 IN WINTER. This was `TZ_OFFSET_MINUTES` with a default of 120,
+/// which is the SUMMER offset — the comment above said "UTC+1/+2" while the
+/// code said +2 all year. From 01:00 UTC on 25 October 2026 the takings tile
+/// would have rolled over an hour early, and the first hour of every day would
+/// have been counted against the day before.
+fn start_of_day_ms(zone: dowiz_hub::tz::Zone, now: i64) -> i64 {
+    dowiz_hub::tz::start_of_local_day_ms(zone, now)
+}
+
+/// The venue's zone, from its own record, for a handler that has the catalogue.
+///
+/// A catalogue that will not read falls back to `tz::DEFAULT` rather than
+/// refusing: the caller is already about to fail on the same read, and a zone
+/// is not the thing that should decide how.
+fn zone_of(cat: &dowiz_hub::catalog::Catalog) -> dowiz_hub::tz::Zone {
+    crate::vrules::venue_zone(
+        cat.location().and_then(|j| serde_json::from_str::<Value>(&j).ok()).as_ref(),
+    )
 }
 
 #[derive(Deserialize)]
@@ -483,6 +497,16 @@ pub struct LocationIn {
     pub hours: Option<Value>,
     #[serde(default)]
     pub delivery_paused: Option<bool>,
+    /// The venue's IANA time zone, e.g. `Europe/Tirane`.
+    ///
+    /// THERE WAS NO WAY TO SET THIS. The whole server read one env var,
+    /// `TZ_OFFSET_MINUTES`, defaulting to 120 -- which is Tirane's SUMMER
+    /// offset, so every venue kept summer hours all winter. An offset is not a
+    /// zone: it cannot say when it changes.
+    ///
+    /// Empty CLEARS it and returns the venue to `tz::DEFAULT`.
+    #[serde(default)]
+    pub tz: Option<String>,
     #[serde(default, rename = "location_id")]
     pub _location_id: Option<String>,
 }
@@ -517,17 +541,22 @@ pub async fn update_location(
         // schedule the reader cannot see would leave the venue on its manual
         // flag while the owner believed it was automatic -- and they would find
         // out by staying open all night.
-        let declared: usize = h
-            .as_array()
-            .map(|days| days.iter().filter_map(|d| d.as_array()).map(|d| d.len()).sum())
-            .unwrap_or(0);
-        let sched = dowiz_hub::hours::from_json(&h.to_string());
-        let readable: usize = sched.days.iter().map(|d| d.len()).sum();
-        if declared != readable {
+        //
+        // AND A WEEK HAS SEVEN DAYS, which this did not check: six arrays meant
+        // for Tuesday-to-Sunday were read as Monday-to-Saturday and the venue
+        // opened a day early all week, with the count agreeing either way.
+        crate::vrules::week_ok(h).map_err(HubHttpError::Invalid)?;
+    }
+    if let Some(tz) = &body.tz {
+        // REFUSED ON WRITE, because a name nobody supports must not fall back
+        // to another country's hours in silence. This is the same refusal the
+        // Worker's settings route makes, and it is why `tz::zone` returns an
+        // option instead of guessing.
+        if !tz.trim().is_empty() && dowiz_hub::tz::zone(tz.trim()).is_none() {
             return Err(HubHttpError::Invalid(format!(
-                "{} of {declared} time windows could not be read; each needs `open` and \
-                 `close` as minutes since midnight, 0-1440, and they must differ",
-                declared - readable
+                "unknown time zone {:?}. Known: {}",
+                tz.trim(),
+                dowiz_hub::tz::NAMES.join(", ")
             )));
         }
     }
@@ -558,6 +587,10 @@ pub async fn update_location(
         }
         if let Some(h) = body.hours {
             loc["hours"] = h;
+        }
+        if let Some(tz) = body.tz {
+            loc["tz"] =
+                if tz.trim().is_empty() { Value::Null } else { json!(tz.trim()) };
         }
         cat.set_location(&serde_json::to_string(&loc).unwrap_or(raw));
         Ok(Json(loc))
@@ -774,7 +807,10 @@ pub async fn courier_detail(
     let hub = st.read_log()?;
     let now = now_ms();
     let day = 24 * 60 * 60 * 1000;
-    let month = start_of_day_ms(now) - 29 * day;
+    // Nominal days back from the venue's own midnight. A HORIZON, not a bucket
+    // index: nothing is filed by it, so an hour of slack at the far end moves
+    // no money between two figures.
+    let month = start_of_day_ms(zone_of(&st.read_catalog()?), now) - 29 * day;
 
     let (mut delivered, mut in_flight, mut cash_held) = (0i64, 0i64, 0i64);
     let mut recent: Vec<Value> = Vec::new();
@@ -2264,31 +2300,33 @@ pub async fn analytics(
     // than an arbitrary number that invites a query nobody can interpret.
     let days = if q.days.unwrap_or(7) >= 30 { 30 } else { 7 };
     let now = now_ms();
-    let day_ms = 24 * 60 * 60 * 1000;
-    let from = start_of_day_ms(now) - (days as i64 - 1) * day_ms;
 
     let hub = st.read_log()?;
     let cat = st.read_catalog()?;
 
-    let mut by_day: Vec<(i64, i64, i64)> = (0..days as i64)
-        .map(|i| (from + i * day_ms, 0i64, 0i64))
-        .collect();
+    // EACH BOUNDARY IS ASKED OF THE ZONE, not counted back in nominal days.
+    // The window was `start_of_day(today) - k * 86_400_000`, and a local day is
+    // not always 24 hours: Europe/Tirane's last Sunday of October is 25. Every
+    // boundary before today was an hour off local midnight from 25 October
+    // 2026, and an order placed at 00:30 the next morning fell into the day
+    // before -- on the pane an owner makes decisions with.
+    let zone = zone_of(&cat);
+    let starts = crate::vrules::day_starts(zone, now, days as usize);
+
+    let mut by_day: Vec<(i64, i64, i64)> =
+        starts.iter().map(|at| (*at, 0i64, 0i64)).collect();
     let mut by_hour = [0i64; 24];
     let mut products: Vec<(String, i64, i64)> = Vec::new();
     let (mut orders, mut revenue, mut rejected) = (0i64, 0i64, 0i64);
     let (mut delivery, mut pickup) = (0i64, 0i64);
 
-    let tz: i64 = std::env::var("TZ_OFFSET_MINUTES")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(120);
-
     for ev in hub.orders() {
         let Ok(o) = serde_json::from_str::<Value>(&ev.order_json) else { continue };
         let at = o.get("created_at_ms").and_then(Value::as_i64).unwrap_or(0);
-        if at < from {
-            continue;
-        }
+        // AN ORDER DATED IN THE FUTURE IS NOT TODAY'S. The index used to be
+        // clamped into the last bucket, so one envelope with a skewed clock
+        // added itself to today's takings with no number anywhere to disagree.
+        let Some(idx) = crate::vrules::bucket(&starts, at, now) else { continue };
         let status = o.get("status").and_then(Value::as_str).unwrap_or("");
         let refused = !crate::ostatus::took_money(status);
         orders += 1;
@@ -2309,18 +2347,24 @@ pub async fn analytics(
             _ => delivery += 1,
         }
 
-        let idx = ((at - from) / day_ms).clamp(0, days as i64 - 1) as usize;
         by_day[idx].1 += 1;
         by_day[idx].2 += total;
 
-        let (_, minute) = dowiz_hub::hours::local_now(at, tz);
-        by_hour[(minute / 60).clamp(0, 23) as usize] += 1;
+        // The venue's hour, computed per order: `at` can be months old, and
+        // the offset in force THEN is the one that says which hour of the
+        // venue's day it belongs to. 20:00 local in July and 20:00 local in
+        // December are the same hour and were two different ones to the
+        // constant, which smeared the evening rush across two bars.
+        by_hour[crate::vrules::local_hour(zone, at)] += 1;
 
         if refused {
             continue;
         }
         for item in o.get("items").and_then(Value::as_array).into_iter().flatten() {
-            let Some(pid) = item.get("product_id").and_then(Value::as_str) else { continue };
+            // A LINE WITH NO PRODUCT IS NOT A DISH. An empty id collected under
+            // the empty string and could reach the top products as a nameless
+            // row carrying the revenue of every damaged line in the log.
+            let Some(pid) = crate::vrules::dish_id(item) else { continue };
             let qty = item.get("quantity").and_then(Value::as_i64).unwrap_or(1);
             let line = item.get("unit_price").and_then(Value::as_i64).unwrap_or(0) * qty;
             match products.iter_mut().find(|(p, _, _)| p == pid) {

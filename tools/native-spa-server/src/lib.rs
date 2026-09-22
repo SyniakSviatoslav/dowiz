@@ -46,6 +46,7 @@ pub mod mcp;
 pub mod notify;
 pub mod ostatus;
 pub mod p67;
+pub mod vrules;
 pub mod webhook;
 
 /// DEFAULT_ROOT mirrors the legacy nginx web root.

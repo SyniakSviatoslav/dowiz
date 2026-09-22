@@ -443,14 +443,18 @@ pub async fn courier_assist(
 // ── what a courier did, and what they are holding ────────────────────────────
 
 /// Midnight in the venue's timezone, and the two windows before it.
-fn day_start(now: i64) -> i64 {
-    let offset_min: i64 = std::env::var("TZ_OFFSET_MINUTES")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(120);
-    let day = 24 * 60 * 60 * 1000;
-    let local = now + offset_min * 60 * 1000;
-    local - local.rem_euclid(day) - offset_min * 60 * 1000
+///
+/// THE ZONE, NOT A CONSTANT. This was `TZ_OFFSET_MINUTES` defaulting to 120 --
+/// Europe/Tirane's SUMMER offset -- so all winter a courier's "today" began an
+/// hour early and the first hour's cash sat under yesterday. That number is
+/// what a courier hands over at the end of a shift.
+///
+/// The `week` and `month` windows are still nominal days back from today's
+/// midnight. They are a HORIZON rather than a bucket index -- nothing is
+/// indexed by them, so an hour of slack at the far end moves no money between
+/// two figures the way the analytics buckets did.
+fn day_start(zone: dowiz_hub::tz::Zone, now: i64) -> i64 {
+    dowiz_hub::tz::start_of_local_day_ms(zone, now)
 }
 
 /// `GET /api/courier/earnings`
@@ -470,7 +474,17 @@ pub async fn earnings(
 ) -> Result<Json<Value>, HubHttpError> {
     let me = who.0.person.id.clone();
     let now = now_ms();
-    let today = day_start(now);
+    // The venue's record carries the zone. A hub whose catalogue will not read
+    // falls back to `tz::DEFAULT` rather than refusing the wallet -- a courier
+    // who cannot see the cash they are holding reconciles from memory.
+    let zone = crate::vrules::venue_zone(
+        st.read_catalog()
+            .ok()
+            .and_then(|c| c.location())
+            .and_then(|j| serde_json::from_str::<Value>(&j).ok())
+            .as_ref(),
+    );
+    let today = day_start(zone, now);
     let week = today - 6 * 24 * 60 * 60 * 1000;
     let month = today - 29 * 24 * 60 * 60 * 1000;
 
