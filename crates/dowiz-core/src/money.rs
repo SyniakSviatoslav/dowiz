@@ -18,6 +18,14 @@ use alloc::vec::Vec;
 // Single scale authority (promoted from private `SCALE`, BLUEPRINT-P-A §2/A3).
 pub const MONEY_SCALE_MICRO: i128 = 1_000_000;
 
+/// THE RATE, and the tax law it feeds. The implementation lives in
+/// [`crate::tax`] so this file stays under the 300-line cap; it is re-exported
+/// here because `money::tax_of` / `money::summarise` is where the blueprint
+/// (§3.1, §3.2) and every caller look for it, and because `kernel/src/money.rs`
+/// is `pub use dowiz_core::money::*;` — one re-export carries the whole law
+/// into the kernel's namespace unchanged.
+pub use crate::tax::{summarise, tax_of, RatePpm, TaxGroup, TaxInput, TaxLine, TaxSummary};
+
 /// M5 — currency identity. Money is integer minor units *in a specific currency*.
 /// Two amounts in different currencies may NEVER be added/compared as raw ints —
 /// the type carries the currency so a cross-currency operation is a caught error,
@@ -259,41 +267,46 @@ pub fn reverse_transfer(
     ledger_append(ledger, rev)
 }
 
-/// Server-authoritative `applyTax` (money.ts:23). `subtotal` is integer minor units.
-/// `tax_rate` is a config input (e.g. 0.20) parsed once to micro-units.
+/// THE `f64` ADAPTER, and nothing more. The law is [`crate::tax::tax_of`].
 ///
-/// BP-17: `i128 → i64` cast is range-checked (`i64::try_from`) — an overflowing tax
-/// (pathological rate × huge subtotal) returns `Err` instead of silently truncating.
+/// **The authority flip (blueprint §3.1; `eqc_gen.rs:18-20` recorded it as "NOT
+/// done").** This function used to BE the tax law: it held the two half-up
+/// divisions, in `i128`, reached through an `f64` multiply, inside the file
+/// whose first line reads "RED LINE: zero float arithmetic on monetary values".
+/// The generated organs (`eqc_gen::apply_tax_{exclusive,inclusive}_int`) were
+/// its shadow, pinned to it by `apply_tax_generated_parity_exact_integers`.
+/// The organ is now the law and this is the shadow: the arithmetic has moved
+/// out, and what is left is the ONE job an adapter has — turn the `f64` its two
+/// remaining callers still pass (`temporal_tmr.rs:243`, `json_bridge.rs:243`)
+/// into the integer basis, or refuse. **The parity test is unchanged**; it now
+/// pins adapter == organ, which is trivially true and stays as the regression
+/// table for the fixture grid.
+///
+/// **No expected value moved.** `money.rs:284,294` and the organs' bodies are
+/// the same two expressions; the parity grid is what proves it, and
+/// `green_apply_tax_is_an_adapter_over_tax_of_for_every_representable_rate`
+/// re-proves it through the typed front door.
+///
+/// **One refusal changed, and it got more honest.** A rate whose micro basis
+/// does not fit `i64` used to come back as "tax overflow: subtotal * rate
+/// exceeds i64" — a report that blames the basket for a bad RATE. It is now
+/// named for what it is.
+///
+/// New code takes [`crate::tax::RatePpm`] and calls `tax_of`. This signature
+/// exists to be deleted (blueprint §6 item 8).
 pub fn apply_tax(subtotal: i64, tax_rate: f64, price_includes_tax: bool) -> Result<i64, String> {
     if subtotal == 0 || tax_rate == 0.0 {
         return Ok(0);
     }
-    // OLD (dead guard, removed): `if subtotal % 1 != 0` — i64 % 1 is always 0.
+    // The last float on the money path in this file, and the only thing an
+    // adapter is for. `math::round` is the same conversion this function has
+    // always used (money.rs:272) — measured lossless for every basis-point and
+    // per-mille rate, which is why the flip moves no number.
     let rate_micro = crate::math::round(tax_rate * 1_000_000.0) as i128;
-    let sub = subtotal as i128;
-
-    let tax = if price_includes_tax {
-        // net = round(sub * MONEY_SCALE_MICRO / (MONEY_SCALE_MICRO + rate)); tax = sub - net
-        // V3 1.4 (ROUND-2 GAP-AUDIT): a negative effective rate makes
-        // `MONEY_SCALE_MICRO + rate_micro <= 0`, turning the half-up division
-        // below into a div-by-zero panic. Refuse non-positive denominators.
-        let denom = MONEY_SCALE_MICRO + rate_micro;
-        if denom <= 0 {
-            return Err("apply_tax: negative effective tax rate (denominator <= 0)".into());
-        }
-        let net = (sub * MONEY_SCALE_MICRO + denom / 2) / denom; // half-up
-        sub - net
-    } else {
-        // tax = round(sub * rate / MONEY_SCALE_MICRO)
-        // V3 1.6 (ROUND-2 GAP-AUDIT): `sub * rate_micro` can overflow i128 when
-        // `tax_rate` is pathologically large (rate_micro saturates toward i128::MAX).
-        // Use checked arithmetic so it returns Err instead of panicking.
-        let prod = sub
-            .checked_mul(rate_micro)
-            .ok_or("apply_tax: subtotal * rate overflows i128")?;
-        (prod + MONEY_SCALE_MICRO / 2) / MONEY_SCALE_MICRO // half-up
-    };
-    i64::try_from(tax).map_err(|_| "tax overflow: subtotal * rate exceeds i64".into())
+    let rate_micro = i64::try_from(rate_micro)
+        .map_err(|_| "apply_tax: tax_rate out of range (tax_rate * 1e6 exceeds i64)".to_string())?;
+    crate::tax::tax_micro(subtotal, rate_micro, price_includes_tax)
+        .map_err(|e| format!("apply_tax: {e}"))
 }
 
 /// `computeLineTotal`: sum of unit price + modifiers, times quantity.
@@ -554,6 +567,47 @@ mod tests {
         // pre-fix `sub * rate_micro` overflowed i128 (panicked in release). Now Err.
         let r = apply_tax(1_000_000_000_000, 1e15, false);
         assert!(r.is_err(), "i128 overflow must be Err, got {:?}", r);
+    }
+
+    // ── THE AUTHORITY FLIP (blueprint §3.1) ──────────────────────────────
+    // `apply_tax` no longer carries the money arithmetic: it converts the f64
+    // its two remaining callers still pass (`temporal_tmr.rs:243`,
+    // `json_bridge.rs:243`) into the integer basis and hands the sum to the
+    // GENERATED organ, through `tax::tax_micro`. These two tests are what makes
+    // that visible from outside.
+
+    #[test]
+    fn red_an_unrepresentable_rate_is_named_as_a_RATE_problem_not_a_subtotal_one() {
+        // Before the flip this came back as "tax overflow: subtotal * rate
+        // exceeds i64" — a report that blames the basket for a rate that does
+        // not fit the integer basis at all. A refusal that names the wrong
+        // quantity sends the reader to the wrong field.
+        let e = apply_tax(1_000_000_000_000, 1e15, false).unwrap_err();
+        assert!(
+            e.contains("tax_rate out of range"),
+            "the refusal must name the RATE; got: {e}"
+        );
+    }
+
+    #[test]
+    fn green_apply_tax_is_an_adapter_over_tax_of_for_every_representable_rate() {
+        use crate::tax::{tax_of, RatePpm};
+        for sub in [0i64, 1, 3, 9, 250, 675, 750, 1_000_000, i64::MAX / 4] {
+            for ppm in [0u32, 1, 60_000, 88_750, 200_000, 999_999, 1_000_000] {
+                for incl in [false, true] {
+                    let via_f64 = apply_tax(sub, f64::from(ppm) / 1_000_000.0, incl);
+                    let via_int = tax_of(sub, RatePpm(ppm), incl);
+                    assert_eq!(
+                        via_f64.is_ok(),
+                        via_int.is_ok(),
+                        "sub={sub} ppm={ppm} incl={incl}"
+                    );
+                    if let (Ok(a), Ok(b)) = (&via_f64, &via_int) {
+                        assert_eq!(a, b, "sub={sub} ppm={ppm} incl={incl}");
+                    }
+                }
+            }
+        }
     }
 
     // ── A3: money-law SHADOW organ exact-integer parity pin (BLUEPRINT-P-A §3.3) ──

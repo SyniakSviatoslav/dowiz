@@ -67,6 +67,7 @@ pub mod spool;
 pub mod squash;
 pub mod stem;
 pub mod swarm;
+pub mod tax;
 pub mod tri_state;
 pub mod trig;
 pub mod trigram;
