@@ -813,83 +813,65 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     // The rule does not change with the store: whatever unit_price the browser
     // sent is discarded, and an unknown product fails CLOSED rather than being
     // priced at zero.
-    let mut lines = Vec::with_capacity(body.items.len());
+    // ONE PRICER, in `services::ordering::pricing`, where each of these rules
+    // has a test. It is the same call the promo preview makes, so the number a
+    // customer is quoted and the number they are charged are computed once.
+    //
+    // WHAT IT DEFENDS, and each of these was a real defect: the options are
+    // part of the price (a dish at 800 with "extra salmon +200", ordered twice,
+    // was shown as 2000 and charged at 1600 — the venue paid the difference on
+    // every order with a paid option); an option id belonging to no group on
+    // the dish, or a required group left empty, was accepted silently; a
+    // negative delta must not make a line pay the customer; and an unknown,
+    // unavailable or unpriced dish fails CLOSED rather than at zero.
+    let basket = match crate::services::ordering::pricing::price_basket(
+        |id| loaded.catalog.product(id),
+        body.items.iter().map(|it| crate::services::ordering::pricing::Want {
+            product_id: &it.product_id,
+            modifier_ids: &it.modifier_ids,
+            quantity: it.quantity,
+        }),
+    ) {
+        Ok(b) => b,
+        Err(r) => return Response::error(r.text(), r.status()),
+    };
+    let subtotal = basket.subtotal;
     // The dish names, by product id, to be written back onto the kernel's
     // items below — see where they are applied for why they cannot be put
     // on the line here.
-    let mut names: std::collections::BTreeMap<String, String> = Default::default();
+    //
+    // THE DISH'S NAME TRAVELS WITH THE LINE, and it never did. Every surface
+    // that shows an order line writes `i.name || i.product_id` — the console's
+    // queue, the order sheet, the CSV an owner exports — and no line carried a
+    // `name`, so a kitchen read `1x item-05` on every ticket this product ever
+    // printed. A SNAPSHOT, deliberately: the catalogue is not versioned per
+    // order, so resolving the name later would rename a dish on orders placed
+    // before the rename and lose it entirely on one that has been deleted.
+    let names: std::collections::BTreeMap<String, String> = basket
+        .lines
+        .iter()
+        .map(|l| (l.product_id.clone(), l.name.clone()))
+        .collect();
     // The same lines as the owner will read them, for the bell.
-    let mut told: Vec<crate::notify::LineOut> = Vec::with_capacity(body.items.len());
-    let mut subtotal: i64 = 0;
-    for it in &body.items {
-        if it.quantity < 1 || it.quantity > 99 {
-            return Response::error("invalid quantity", 400);
-        }
-        let Some(pj) = loaded.catalog.product(&it.product_id) else {
-            return Response::error(format!("unknown product: {}", it.product_id), 400);
-        };
-        let p: Value = serde_json::from_str(&pj)
-            .map_err(|e| Error::RustError(format!("catalogue product unreadable: {e}")))?;
-        if !p.get("available").and_then(|x| x.as_bool()).unwrap_or(false) {
-            return Response::error(format!("unavailable: {}", it.product_id), 409);
-        }
-        let price = p.get("price").and_then(|x| x.as_i64()).unwrap_or(-1);
-        if price < 0 {
-            return Response::error(format!("product has no price: {}", it.product_id), 409);
-        }
-        // THE OPTIONS ARE PART OF THE PRICE, and here they were not part of
-        // anything. `modifier_ids` was carried through to the stored order
-        // untouched and the line was priced at the dish's base price alone, so
-        // a dish at 800 with "extra salmon +200", ordered twice, was shown as
-        // 2000 by the cart AND by the promo preview -- both of which do call
-        // this pricer -- and stored and charged at 1600. The venue paid the
-        // difference on every order with a paid option.
-        //
-        // `price` is also the only thing that VALIDATES a choice: an id that
-        // belongs to no group on this dish, or a required group left empty,
-        // was accepted silently. It is the catalogue's own rule, so a refusal
-        // here says the same thing the cart would have said.
-        let groups = dowiz_hub::modifiers::groups_of(&pj);
-        let chosen = match dowiz_hub::modifiers::price(&groups, &it.modifier_ids) {
-            Ok(c) => c,
-            Err(e) => {
-                return Response::error(
-                    format!("{}: {e}", it.product_id),
-                    400,
-                )
-            }
-        };
-        // A negative option delta must not make a line pay the customer.
-        let unit_price = (price + chosen.delta).max(0);
-        subtotal += unit_price * it.quantity;
-        told.push(crate::notify::LineOut {
-            name: p.get("name").and_then(Value::as_str).unwrap_or(&it.product_id).to_string(),
-            quantity: it.quantity,
-            unit_price,
-        });
-        // THE DISH'S NAME TRAVELS WITH THE LINE, and it never did.
-        //
-        // Every surface that shows an order line writes `i.name || i.product_id`
-        // — the console's queue, the order sheet, the CSV an owner exports —
-        // and no line has ever carried a `name`. So a kitchen has never seen a
-        // dish name on a ticket: every order since this product shipped reads
-        // `1x item-05`, and the owner exporting a month of sales gets a
-        // spreadsheet of slugs.
-        //
-        // A SNAPSHOT, deliberately, and this is the trade the cost blueprint
-        // weighed: about thirty bytes a line against a receipt that stays true.
-        // The catalogue is not versioned per order, so resolving the name later
-        // would rename a dish on orders that were placed before the rename and
-        // lose it entirely on one that has been deleted.
-        names.insert(
-            it.product_id.clone(),
-            p.get("name").and_then(Value::as_str).unwrap_or(&it.product_id).to_string(),
-        );
-        lines.push(json!({
-            "product_id": it.product_id, "modifier_ids": it.modifier_ids,
-            "quantity": it.quantity, "unit_price": unit_price   // base + options, from the catalogue
-        }));
-    }
+    let told: Vec<crate::notify::LineOut> = basket
+        .lines
+        .iter()
+        .map(|l| crate::notify::LineOut {
+            name: l.name.clone(),
+            quantity: l.quantity,
+            unit_price: l.unit_price,
+        })
+        .collect();
+    let lines: Vec<Value> = basket
+        .lines
+        .iter()
+        .map(|l| {
+            json!({
+                "product_id": l.product_id, "modifier_ids": l.modifier_ids,
+                "quantity": l.quantity, "unit_price": l.unit_price   // base + options, from the catalogue
+            })
+        })
+        .collect();
     if subtotal < loc.min_order {
         return Response::error("below minimum order", 409);
     }

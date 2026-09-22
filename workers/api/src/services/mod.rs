@@ -12,3 +12,4 @@
 //! handlers move, because a test written after a move tests the move.
 
 pub mod courier;
+pub mod ordering;

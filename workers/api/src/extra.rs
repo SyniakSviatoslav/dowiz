@@ -58,68 +58,6 @@ fn orders_of(listed: Vec<crate::hubdo::OrderView>, loc: &str) -> Vec<Value> {
         .collect()
 }
 
-// ── public: what a code would take off this basket ──────────────────────────
-
-#[derive(Deserialize)]
-struct PromoCheckIn {
-    code: String,
-    items: Vec<crate::storefront::LineIn>,
-}
-
-/// `POST /api/promo/check`
-///
-/// The basket arrives as product ids, never as a subtotal: the hub prices it
-/// with the catalogue, which is the same source the order uses. A preview that
-/// trusted a number from the browser would quote whatever the browser asked for.
-///
-/// It is a PREVIEW and says so: the order re-checks under the write, so a code
-/// on its last use can be quoted here and refused at checkout. That is the right
-/// way round -- the alternative gives the same last use away twice.
-pub async fn promo_check(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let body: PromoCheckIn = match req.json().await {
-        Ok(b) => b,
-        Err(e) => return Response::error(format!("bad request body: {e}"), 400),
-    };
-    let db = ctx.d1("DB")?;
-    let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-    // TWO IMAGES, one hub: the log and the catalogue have different roots and
-    // cannot share one, so a route that reads both loads both.
-    // ONE ROUND TRIP for both images: see `load_both`.
-    let (listed, cat) = futures_util::future::try_join(
-        crate::hubstore::orders(&place),
-        crate::hubstore::load_catalog(&place),
-    )
-    .await?;
-    let cat = cat.catalog;
-    let code = dowiz_hub::promo::normalise(&body.code);
-    let Some(p) = cat.promo(&code).as_deref().and_then(dowiz_hub::promo::Promo::parse)
-    else {
-        return Response::error(dowiz_hub::promo::Refusal::Unknown.as_str(), 400);
-    };
-
-    let mut subtotal = 0i64;
-    for it in &body.items {
-        let Some(pj) = cat.product(&it.product_id) else {
-            return Response::error(format!("unknown product: {}", it.product_id), 400);
-        };
-        let v: Value = serde_json::from_str(&pj).unwrap_or(json!({}));
-        let base = v.get("price").and_then(Value::as_i64).unwrap_or(0);
-        let groups = dowiz_hub::modifiers::groups_of(&pj);
-        let delta = dowiz_hub::modifiers::price(&groups, &it.modifier_ids)
-            .map(|c| c.delta)
-            .unwrap_or(0);
-        subtotal += (base + delta).max(0) * it.quantity.clamp(1, 99);
-    }
-
-    let used = crate::hubstore::promo_uses_in(&listed, &code);
-    match p.redeem(subtotal, now_ms(), used) {
-        Ok(cut) => Response::from_json(&json!({
-            "code": p.code, "discount": cut, "subtotal": subtotal, "total": subtotal - cut
-        })),
-        Err(r) => Response::error(r.as_str(), 409),
-    }
-}
-
 // ── public: what the customer thought ───────────────────────────────────────
 
 #[derive(Deserialize)]

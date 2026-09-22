@@ -236,7 +236,7 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/public/locations/:slug/wallet/topup", wallet::top_up)
         // ── the delivery estimate: `dowiz_kernel::eta` ──
         .post_async("/api/public/locations/:slug/eta", eta::quote)
-        .post_async("/api/promo/check", extra::promo_check)
+        .post_async("/api/promo/check", services::ordering::preview::promo_check)
         .get_async("/api/public/reach", extra::reach)
         .get_async("/api/public/rates", extra::rates)
         .post_async("/api/voice", extra::voice)

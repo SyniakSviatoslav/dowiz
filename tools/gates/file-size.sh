@@ -24,8 +24,13 @@ cd "$(dirname "$0")/../.."
 BASELINE=tools/gates/file-size.baseline
 HARD=300
 
+# TESTS DO NOT COUNT, which blueprint 2 §5 says in one line and which matters
+# more than it sounds: a gate that counts `tests.rs` refuses the commit that
+# adds the tests a split was done FOR, and the way out of that is always to
+# write fewer tests. Free to adopt today -- the longest `tests.rs` in scope is
+# 200 lines -- and it stays free forever, which is the point.
 sizes=$(find workers/api/src crates/dowiz-hub/src crates/bebop-store/src -name '*.rs' \
-  -exec wc -l {} + | grep -v ' total$')
+  ! -name 'tests.rs' -exec wc -l {} + | grep -v ' total$')
 over=$(printf '%s\n' "$sizes" | awk -v h="$HARD" '$1>h' | wc -l | tr -d ' ')
 worst=$(printf '%s\n' "$sizes" | awk '{print $1}' | sort -rn | head -1)
 worst_file=$(printf '%s\n' "$sizes" | sort -rn | head -1 | awk '{print $2}')
