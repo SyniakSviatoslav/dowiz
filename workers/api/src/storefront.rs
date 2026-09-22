@@ -966,15 +966,23 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     // costs the customer a refusal and nothing else. Whether it still APPLIES is
     // decided in the append below, where the use-count cannot move underneath
     // the answer.
-    let promo = match body.promo.as_deref().map(dowiz_hub::promo::normalise) {
-        None => None,
-        Some(code) if code.is_empty() => None,
-        Some(code) => {
-            match loaded.catalog.promo(&code).as_deref().and_then(dowiz_hub::promo::Promo::parse) {
-                Some(p) => Some(p),
-                None => return Response::error(dowiz_hub::promo::Refusal::Unknown.as_str(), 400),
+    // THE RAW RECORD TRAVELS, NOT THE PARSED ONE. `Promo` is parsed HERE only to
+    // refuse a code that does not exist -- that is a 400 about what the customer
+    // typed, and answering it needs the catalogue, which this handler is already
+    // holding. Whether the code can still be SPENT is a different question with
+    // a different answer every second, and it is settled inside the object, in
+    // the same turn as the append. So the object is handed the catalogue's own
+    // bytes and parses them again; a `Promo` crossing the boundary would be a
+    // decision that had already been made on the wrong side of it.
+    let (promo_code, promo_raw) = match body.promo.as_deref().map(dowiz_hub::promo::normalise) {
+        None => (None, None),
+        Some(code) if code.is_empty() => (None, None),
+        Some(code) => match loaded.catalog.promo(&code) {
+            Some(raw) if dowiz_hub::promo::Promo::parse(&raw).is_some() => {
+                (Some(code), Some(raw))
             }
-        }
+            _ => return Response::error(dowiz_hub::promo::Refusal::Unknown.as_str(), 400),
+        },
     };
 
     // The fee was decided BEFORE the discount and on the undiscounted subtotal:
@@ -1033,96 +1041,58 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     }
 
     let phone_hash = auth::sha256_hex(&body.contact.phone);
-    // ── INGREDIENTS ARE RESERVED BEFORE THE ORDER EXISTS ──
+    // ── THE ORDER IS PLACED BY THE OBJECT, IN ONE TURN ──
     //
-    // §4's fail-closed gate: if the kitchen cannot make it, the customer is
-    // told now rather than phoned in twenty minutes. The reservation is all or
-    // nothing across the whole basket, so a third line that is short does not
-    // leave the first two held by an order that was never placed.
+    // WHAT WAS HERE, because the shape is worth remembering: a saga run from
+    // this handler, one network hop from the images it changed. `with_stock`
+    // to reserve the ingredients; `with_hub` to read the WHOLE log, count the
+    // promo's uses, redeem it and append `Placed`; and if that second write
+    // failed, `with_stock` AGAIN to release what the first had held -- with a
+    // `console_error!` and nothing else if the release failed too. A stranded
+    // reservation makes a kitchen believe it is out of something it has, and a
+    // sampled trace was the only thing that knew.
     //
-    // A venue that has not modelled its ingredients reserves nothing and this
-    // is a no-op -- stock control that must be complete before anything can be
-    // sold is stock control nobody switches on.
+    // THE COMPENSATION IS NOT IMPROVED, IT IS GONE. The object holds both
+    // images; `place_command::decide` does every fallible thing against copies
+    // in memory and the object writes only once all of it has succeeded. There
+    // is nothing to undo because nothing was written.
+    //
+    // AND THE PRICE STAYS HERE. `subtotal`, `fee` and `tip` come from
+    // `services::ordering::pricing`, which is pure and tested; the object is
+    // told them rather than recomputing them, because a second pricer is
+    // exactly what `a18886d4` was. What the object decides is what only it can:
+    // whether the ingredients are there, and whether the code has a use left.
+    // THE PRODUCTS' OWN RECORDS, not a supply list: the object expands each
+    // recipe itself, so a basket with two different rolls that both use salmon
+    // is checked against the total it actually needs. Resolving them here is
+    // this handler's job because the catalogue is already loaded; expanding
+    // them is the object's, because that is where the ledger is.
     let bom_lines: Vec<(String, i64)> = body
         .items
         .iter()
         .filter_map(|it| Some((loaded.catalog.product(&it.product_id)?, it.quantity)))
         .collect();
-    let reservations = dowiz_hub::stock::reservations_for(&id, &bom_lines);
-    if !reservations.is_empty() {
-        let evs = reservations.clone();
-        let held = crate::hubstore::with_stock(&place, move |log| {
-            log.append_all(&evs).map_err(|e| Error::RustError(e.to_string()))
-        })
-        .await;
-        if let Err(e) = held {
-            // The customer is told WHICH ingredient: "something is unavailable"
-            // sends them hunting through a basket.
-            return Response::error(format!("{e}"), 409);
-        }
-    }
-
-    // THE DISCOUNT IS DECIDED BESIDE THE APPEND THAT MAKES IT REAL. Counting the
-    // uses first and appending after would let two customers spend the last use
-    // of the same code at once -- rare at one restaurant, and exactly the kind
-    // of rare that only ever shows up as an unexplained loss.
-    let seq = created_at_ms as u64;
-    let ev_id = id.clone();
-    let now_for_promo = Date::now().as_millis() as i64;
-    // THE ONE WRITER THAT STILL TAKES THE WHOLE IMAGE, and it is not an
-    // oversight. Every other path appends through the object -- the Worker
-    // sends an event and the object holds the log -- but a promotion's LAST
-    // USE has to be counted and spent in the same breath as the append, or two
-    // customers redeem it at once. `with_hub` is that breath: one read, one
-    // decision, one write, guarded by the generation. A placement is once per
-    // order, not once per poll, so what it costs is paid rarely; moving the
-    // redemption into the object is phase 6's business, where the object gains
-    // a command surface of its own.
-    let stored = crate::hubstore::with_hub(&place, move |hub| {
-        // CLONED per attempt, not moved: `with_hub` retries when it loses the
-        // generation guard, so the closure runs more than once and must not
-        // consume what it patches.
-        let mut envelope = envelope.clone();
-        if let Some(p) = &promo {
-            let used = crate::hubstore::promo_uses(hub, &p.code);
-            let cut = p
-                .redeem(subtotal, now_for_promo, used)
-                .map_err(|r| Error::RustError(format!("promo: {}", r.as_str())))?;
-            envelope["discount"] = json!(cut);
-            envelope["promo"] = json!({ "code": p.code, "discount": cut });
-            envelope["total"] = json!(subtotal - cut + fee + tip);
-        }
-        let stored = serde_json::to_string(&envelope).unwrap_or_else(|_| order_json.clone());
-        hub.append(dowiz_hub::EventKind::Placed, &ev_id, &stored, seq, [0u8; 32])
-            .map_err(|e| Error::RustError(format!("hub append failed: {e:?}")))?;
-        Ok(stored)
-    })
-    .await;
-
-    // THE ORDER DID NOT SURVIVE; ITS INGREDIENTS MUST NOT STAY HELD. A stranded
-    // reservation makes a kitchen believe it is out of something it has, and
-    // the failure is loud rather than silent because nothing else will notice.
-    let stored = match stored {
-        Ok(v) => v,
-        Err(e) => {
-            if !reservations.is_empty() {
-                let oid = id.clone();
-                let released = crate::hubstore::with_stock(&place, move |log| {
-                    let led = log.ledger().map_err(|e| Error::RustError(e.to_string()))?;
-                    let rel = dowiz_hub::stock::settle(&led, &oid, false);
-                    if rel.is_empty() {
-                        return Ok(());
-                    }
-                    log.append_all(&rel).map_err(|e| Error::RustError(e.to_string()))
-                })
-                .await;
-                if let Err(re) = released {
-                    console_error!("stock: could NOT release {id} after a failed placement: {re}");
-                }
-            }
-            return Err(e);
-        }
+    let input = crate::place_command::PlaceIn {
+        order_id: id.clone(),
+        envelope: serde_json::to_string(&envelope).unwrap_or_else(|_| order_json.clone()),
+        seq: created_at_ms as u64,
+        bom_lines,
+        promo: promo_raw,
+        promo_code,
+        subtotal,
+        fee,
+        tip,
+        now_ms: crate::owner::now_ms(),
     };
+    let placed = match crate::place_command::send(&place, &input).await {
+        Ok(v) => v,
+        // THE OBJECT'S OWN WORDS REACH THE CUSTOMER. A 409 names the short
+        // ingredient so they can change one line; a 400 says what is wrong with
+        // the code. Collapsing both into "something went wrong" sends them
+        // hunting through a basket.
+        Err((status, said)) => return Response::error(said, status),
+    };
+    let stored = placed.stored;
 
     // WHAT THE CUSTOMER IS CHARGED IS WHAT THE ORDER SAYS, and those were two
     // different numbers. `total` above is `subtotal + fee + tip`, computed

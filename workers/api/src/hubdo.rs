@@ -588,6 +588,105 @@ impl HubImages {
         }
     }
 
+    /// PLACE AN ORDER: the reservation, the redemption and the append, in ONE
+    /// object turn.
+    ///
+    /// WHAT THIS REPLACED, and it is worth stating where the code is rather
+    /// than only in `place_command`'s header: the Worker used to run this as a
+    /// saga over the network -- write the stock image, write the log image, and
+    /// if the second failed, write the stock image again to release what the
+    /// first had held. If THAT failed it printed a line and gave up, so a
+    /// stranded reservation made a kitchen believe it was out of something it
+    /// had, and nothing but a sampled trace knew.
+    ///
+    /// THE COMPENSATION IS GONE BECAUSE THERE IS NOTHING TO COMPENSATE.
+    /// `place_command::decide` does every fallible thing against images held in
+    /// memory; this function writes only after it has returned `Ok`. A refusal
+    /// drops both copies and the venue's stored state was never touched.
+    ///
+    /// THE LOG IS WRITTEN FIRST, AND THE ORDER IS DELIBERATE. Both writes
+    /// happen in one turn, so the runtime will normally commit them together --
+    /// but "normally" is not a guarantee this code is entitled to make, so the
+    /// order is chosen for what happens if the second one is lost:
+    ///   * log then stock (this) leaves an order whose ingredients are not
+    ///     held. The kitchen can see the order, the conservation audit can see
+    ///     the disagreement, and a human can fix it.
+    ///   * stock then log leaves ingredients held for an order that does not
+    ///     exist. Nothing shows it to anyone. That is the failure this whole
+    ///     change exists to remove, so it is not the one to re-introduce at a
+    ///     smaller size.
+    async fn place(
+        &self,
+        input: crate::place_command::PlaceIn,
+    ) -> Result<std::result::Result<crate::place_command::PlaceOut, crate::place_command::Refused>>
+    {
+        // The projection is what the promo count is taken from -- the same one
+        // every reader uses, memoised against this generation, so counting a
+        // code's uses does not fold the log a second time.
+        let (log_generation, listed) = self.orders_view().await?;
+        let mut hub = match self.image(LOG_IMAGE).await? {
+            Some((_, bytes)) => dowiz_hub::Hub::load(&bytes)
+                .map_err(|_| Error::RustError("hub image is unreadable".into()))?,
+            // BORN SMALL, as `append` does it: a hub created at 4 MiB made the
+            // third order of the day exceed the isolate's limit.
+            None => dowiz_hub::Hub::create_sized(64 * 1024)
+                .map_err(|_| Error::RustError("cannot create hub image".into()))?,
+        };
+        let stock_image = crate::hubstore::IMAGE_STOCK;
+        let (stock_generation, mut stock) = match self.image(stock_image).await? {
+            Some((meta, bytes)) => (
+                meta.generation,
+                dowiz_hub::stock::StockLog::load(&bytes)
+                    .map_err(|_| Error::RustError("stock image is unreadable".into()))?,
+            ),
+            None => (
+                0,
+                dowiz_hub::stock::StockLog::create_sized(64 * 1024)
+                    .map_err(|_| Error::RustError("cannot create stock image".into()))?,
+            ),
+        };
+        let reserved_before = stock.len();
+
+        let stored = match crate::place_command::decide(&mut hub, &mut stock, &listed, &input) {
+            Ok(v) => v,
+            // NOTHING HAS BEEN WRITTEN. Both images go out of scope here.
+            Err(r) => return Ok(Err(r)),
+        };
+
+        let events = hub.len();
+        let Some(next) = self.put_image(LOG_IMAGE, log_generation, &hub.to_bytes_trimmed()).await?
+        else {
+            // Cannot happen inside a serialised object -- the generation was
+            // read above and nothing else runs between -- but the caller's
+            // contract already says what a moved generation means.
+            return Ok(Err(crate::place_command::Refused::Append(
+                "the log generation moved during a placement".into(),
+            )));
+        };
+
+        // A venue that models no ingredients reserved none, and writing the
+        // stock image to say so would cost a request per order for no change.
+        if stock.len() != reserved_before {
+            if self
+                .put_image(stock_image, stock_generation, &stock.to_bytes_trimmed())
+                .await?
+                .is_none()
+            {
+                // LOUD, AND THE ORDER IS NAMED. The order exists and its
+                // ingredients are not held; that is the recoverable direction
+                // (see the header) but it is not a silent one.
+                console_error!(
+                    "stock: order {} was placed and its reservations were NOT written",
+                    input.order_id
+                );
+            }
+        }
+
+        // AFTER THE WRITE LANDED, never before.
+        self.broadcast(dowiz_hub::EventKind::Placed as u8, &input.order_id, &stored, next);
+        Ok(Ok(crate::place_command::PlaceOut { stored, generation: next, events }))
+    }
+
     /// Write, with the SAME generation guard the D1 version used.
     ///
     /// A Durable Object serialises its own requests, so two writers cannot
@@ -843,6 +942,26 @@ impl DurableObject for HubImages {
                     };
                     res.headers_mut().set("x-generation", &generation.to_string())?;
                     Ok(res)
+                }
+                // ── THE COMMAND SURFACE ──
+                //
+                // `append` above is the Worker's decision being recorded;
+                // `place` is the object making one. That is the difference
+                // `BLUEPRINT-ARCHITECTURE-EVOLUTION` P1 is about, and it is why
+                // this route takes no `x-generation`: there is no read-modify-
+                // write over a hop to guard, because the read and the write are
+                // two statements inside the same turn.
+                (Method::Post, "place") => {
+                    let mut req = req;
+                    let input: crate::place_command::PlaceIn = req.json().await?;
+                    match self.place(input).await? {
+                        Ok(out) => {
+                            let mut res = Response::from_json(&out)?;
+                            res.headers_mut().set("x-generation", &out.generation.to_string())?;
+                            Ok(res)
+                        }
+                        Err(r) => Response::error(r.message().to_string(), r.status()),
+                    }
                 }
                 (Method::Post, "append") => {
                     let expected: i64 = req

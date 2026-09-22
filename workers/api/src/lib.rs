@@ -25,6 +25,7 @@ mod idempotency;
 mod identity_store;
 mod courier;
 mod hubdo;
+mod place_command;
 mod hubstore;
 mod otel;
 mod owner;

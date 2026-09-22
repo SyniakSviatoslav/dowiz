@@ -44,7 +44,7 @@ const IMAGE_POSTS: &str = "posts";
 /// number somebody edits. The refusal when a basket cannot be made is computed
 /// from this, so a second mutable count would be a second answer to "can the
 /// kitchen make it".
-const IMAGE_STOCK: &str = "stock";
+pub(crate) const IMAGE_STOCK: &str = "stock";
 
 /// WHERE a hub's images live, decided WITHOUT TOUCHING ANYTHING.
 ///
@@ -466,13 +466,10 @@ async fn save_image(place: &Place, id: &str, bytes: Vec<u8>, generation: i64) ->
     }
 }
 
-pub async fn save(place: &Place, loaded: &Loaded) -> Result<bool> {
-    // TRIMMED. The object stores the cells the arena actually uses; the tail of
-    // zeros is re-created on load from the capacity in the superblock. A hub is
-    // created at 64 KiB and doubles, so most of what a full image carries is
-    // nothing, and it crossed the Worker-to-object hop on every single write.
-    save_image(place, IMAGE_LOG, loaded.hub.to_bytes_trimmed(), loaded.generation).await
-}
+// `save` WAS HERE. It wrote the whole trimmed log image and existed for
+// `with_hub` alone; it went with it. Appends go through `append_for`, which
+// sends the event rather than the log, and placements through
+// `place_command::send`, which sends the command.
 
 /// Read the catalogue image, creating an empty one the first time.
 pub async fn load_catalog(place: &Place) -> Result<LoadedCatalog> {
@@ -1401,32 +1398,20 @@ pub fn carry_over(old: &serde_json::Value, updated: &mut serde_json::Value) {
     }
 }
 
-pub async fn with_hub<F, T>(place: &Place, mut f: F) -> Result<T>
-where
-    F: FnMut(&mut Hub) -> Result<T>,
-{
-    for _ in 0..5 {
-        let mut loaded = load(place).await?;
-        let before = loaded.hub.len();
-        let out = f(&mut loaded.hub)?;
-        // NOTHING APPENDED, NOTHING WRITTEN. A read-check-then-maybe-append
-        // (the Stripe webhook replaying an order already paid) used to rewrite
-        // and re-chunk the whole image and bump the object's generation for
-        // an image that had not changed. The EVENT COUNT is the signal, not
-        // the store generation: `grow()` rebuilds the store from scratch and
-        // its generation restarts, so two generations can be equal across a
-        // real append while the count never is.
-        if loaded.hub.len() == before {
-            return Ok(out);
-        }
-        if save(place, &loaded).await? {
-            return Ok(out);
-        }
-    }
-    Err(Error::RustError(
-        "hub image is contended; five attempts lost the generation guard".into(),
-    ))
-}
+// `with_hub` WAS HERE, AND ITS ONE REMAINING CALLER WAS PLACEMENT.
+//
+// It read the WHOLE log image across the hop, ran a closure over it, wrote the
+// whole thing back, and retried five times when the generation moved. Its own
+// header at the call site called it "THE ONE WRITER THAT STILL TAKES THE WHOLE
+// IMAGE", and said moving the promo redemption into the object was a later
+// phase's business. That phase is `place_command`: the object now counts and
+// spends the code in the same turn as the append, so nothing needs the whole
+// image in the Worker any more.
+//
+// The function going unused is the PROOF, not a side effect. `cargo check`
+// named it dead the moment `storefront::place` stopped calling it, and a
+// read-modify-write over a network that no code can reach is the outcome P1
+// was asking for.
 
 #[cfg(test)]
 mod tests {
