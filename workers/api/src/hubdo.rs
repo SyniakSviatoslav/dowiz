@@ -682,6 +682,28 @@ impl HubImages {
             }
         }
 
+        // ── THE BELL IS OWED THE MOMENT THE ORDER EXISTS ──
+        //
+        // Written HERE, in the turn that wrote the order, rather than awaited
+        // by the Worker afterwards. `storefront::place` used to `await
+        // notify::order_placed` once, with no memory of it: Telegram refuses,
+        // or the isolate is cut off at the end of the response, and the kitchen
+        // is never told about an order that exists and is paid for.
+        //
+        // THE TEXT CROSSES AND THE RECIPIENTS DO NOT. Rendering needs the
+        // basket lines, which the Worker is holding; WHO it goes to is in the
+        // settings image, which this object is holding. So neither side reads
+        // an image it did not already have.
+        //
+        // A FAILURE TO ENQUEUE DOES NOT FAIL THE ORDER. The order is in the log
+        // and the customer has been charged; refusing now would lose a placed
+        // order to protect a message about it. It is loud instead.
+        if let Some(text) = input.notify_text.as_deref() {
+            if let Err(e) = self.enqueue_bell(&input.order_id, text, input.now_ms).await {
+                console_error!("outbox: order {} was placed and the bell was NOT queued: {e}", input.order_id);
+            }
+        }
+
         // AFTER THE WRITE LANDED, never before.
         self.broadcast(dowiz_hub::EventKind::Placed as u8, &input.order_id, &stored, next);
         Ok(Ok(crate::command::place::PlaceOut { stored, generation: next, events }))
@@ -887,6 +909,86 @@ impl HubImages {
             None => (Vec::new(), false),
         };
         Ok(crate::rebuild::compare(&fresh, &memo, &held, modelled))
+    }
+
+    /// Queue the kitchen's message for every channel this venue has configured.
+    ///
+    /// THE RECIPIENTS COME FROM THE SETTINGS IMAGE THIS OBJECT ALREADY HOLDS,
+    /// which is the only reason this costs nothing: the Worker would have had
+    /// to fetch it.
+    ///
+    /// ONE ENTRY PER CHANNEL, keyed by order AND channel, so a command replayed
+    /// by the idempotency layer writes over its own entry rather than adding a
+    /// second message to a kitchen. Idempotency at the queue as well as at the
+    /// route.
+    ///
+    /// A VENUE THAT HAS CONFIGURED NOTHING QUEUES NOTHING, and that is not a
+    /// failure: it is most venues, and writing an entry with nowhere to send it
+    /// would fill an image with messages that can only ever be abandoned.
+    async fn enqueue_bell(&self, order_id: &str, text: &str, now_ms: i64) -> Result<()> {
+        let settings = match self.image(crate::hubstore::IMAGE_SETTINGS).await? {
+            Some((_, bytes)) => dowiz_hub::settings::Settings::load(&bytes)
+                .map_err(|_| Error::RustError("settings image is unreadable".into()))?,
+            None => return Ok(()),
+        };
+        let mut queued: Vec<crate::outbox::Entry> = Vec::new();
+        let chat = settings.known("notify.telegram.chat").trim().to_string();
+        if !chat.is_empty() {
+            queued.push(crate::outbox::Entry::new(
+                format!("{order_id}/telegram"),
+                "telegram",
+                chat,
+                text.to_string(),
+                now_ms,
+            ));
+        }
+        // ASKED FOR, NOT ASSUMED, exactly as the inline version had it: Meta
+        // bills every one of these and Telegram carries the same text for
+        // nothing, so a venue that has not set `notify.whatsapp.status = on` is
+        // not billed for announcements it never asked for.
+        if settings.flag("notify.whatsapp.status") {
+            if let Some(wa) = crate::channels::whatsapp_cfg(&settings) {
+                if !wa.to.is_empty() {
+                    queued.push(crate::outbox::Entry::new(
+                        format!("{order_id}/whatsapp"),
+                        "whatsapp",
+                        wa.to.clone(),
+                        text.to_string(),
+                        now_ms,
+                    ));
+                }
+            }
+        }
+        if queued.is_empty() {
+            return Ok(());
+        }
+
+        let image = crate::outbox::IMAGE_OUTBOX;
+        let (generation, mut table) = match self.image(image).await? {
+            Some((meta, bytes)) => (
+                meta.generation,
+                dowiz_hub::table::Table::load(&bytes, crate::outbox::OUTBOX_BYTES)
+                    .map_err(|_| Error::RustError("outbox image is unreadable".into()))?,
+            ),
+            None => (
+                0,
+                dowiz_hub::table::Table::create(crate::outbox::OUTBOX_BYTES)
+                    .map_err(|_| Error::RustError("cannot create outbox image".into()))?,
+            ),
+        };
+        for e in &queued {
+            let rec = serde_json::to_string(e).unwrap_or_default();
+            table
+                .put(crate::outbox::KIND, &e.id, &rec, &[], &[])
+                .map_err(|e| Error::RustError(format!("outbox: {e:?}")))?;
+        }
+        let bytes = table
+            .to_bytes()
+            .map_err(|e| Error::RustError(format!("outbox will not serialise: {e:?}")))?;
+        if self.put_image(image, generation, &bytes).await?.is_none() {
+            return Err(Error::RustError("the outbox generation moved".into()));
+        }
+        Ok(())
     }
 
     /// Write, with the SAME generation guard the D1 version used.

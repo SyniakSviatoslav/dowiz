@@ -12,9 +12,14 @@ use worker::*;
 
 use crate::auth::{self, Principal};
 
-pub(crate) fn now_ms() -> i64 {
-    Date::now().as_millis() as i64
-}
+// `now_ms()` WAS HERE, and nothing calls it any more.
+//
+// It was the canonical wall-clock read, and three files kept private copies of
+// it. Now the request's instant arrives as `ctx.data.now_ms` and a cron's as an
+// argument, so THE WORKER READS THE CLOCK IN EXACTLY TWO PLACES, both in
+// `lib.rs`: once per request, once per cron invocation. `cargo check` naming
+// this dead is the proof, not a claim -- see `tools/gates/clock.sh`, which is
+// at zero.
 
 /// Authenticate, require the owner role, and confirm the membership covers this
 /// location. The membership is read LIVE — an owner removed a moment ago is

@@ -1076,6 +1076,21 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
         fee,
         tip,
         now_ms: ctx.data.now_ms,
+        // THE BELL IS ENQUEUED IN THE SAME TURN AS THE ORDER, not awaited
+        // after it. See `outbox`: an inline await put a third party on the
+        // customer's path AND lost the message when that third party was down.
+        //
+        // Rendered from the envelope as it stands BEFORE the object patches a
+        // discount into it -- `order_text` reads the LINES, which no command
+        // changes -- and rendered NOW rather than at send time, because the
+        // drain runs minutes later and must not re-read a catalogue that has
+        // moved.
+        notify_text: Some(crate::notify::order_text(
+            &envelope,
+            &told,
+            &loc.currency_code,
+            &loc.name,
+        )),
     };
     let placed: crate::command::place::PlaceOut =
         match crate::command::send(&place, "place", &input).await {
@@ -1188,9 +1203,13 @@ pub async fn place(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     // tap, a replay after a lost generation guard -- returns the SAME intent
     // rather than charging twice.
     let mut out: Value = serde_json::from_str(&stored).unwrap_or(json!({}));
-    // The owner's phone, AFTER the log and BEFORE the card rail: a bell that
-    // waits on Stripe is a bell that stays silent when Stripe is down.
-    crate::notify::order_placed(&ctx.env, &place, &out, &told, &loc.currency_code, &loc.name).await;
+    // `notify::order_placed` WAS AWAITED HERE, after the order was already in
+    // the log. Telegram refuses, or the isolate is cut off at the end of the
+    // response, and the kitchen is never told about an order that exists and is
+    // paid for -- with nothing retrying and nothing recording that anything was
+    // missed. The effect is now WRITTEN by the same object turn that wrote the
+    // order (`command::place::PlaceIn::notify_text`), so "the order landed" and
+    // "the message is owed" are one fact, and the cron delivers it.
     // Returned once and never again: the hub keeps no copy, so a customer who
     // loses the link has lost it, which is the same guarantee the native
     // adapter gives.

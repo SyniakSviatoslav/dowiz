@@ -73,6 +73,18 @@ pub struct PlaceIn {
     pub fee: i64,
     pub tip: i64,
     pub now_ms: i64,
+    /// The kitchen's message, ALREADY RENDERED.
+    ///
+    /// RENDERED HERE AND ENQUEUED THERE. `notify::order_text` needs the basket
+    /// lines and the currency, which the Worker is holding; WHO it goes to is
+    /// in the settings image, which the object is holding. So the text crosses
+    /// and the recipients do not, and neither side reads an image it did not
+    /// already have.
+    ///
+    /// RENDERED NOW rather than at send time, deliberately: the drain runs
+    /// minutes later and must not re-read a catalogue that has changed, or a
+    /// kitchen is told about a dish at the wrong price.
+    pub notify_text: Option<String>,
 }
 
 /// What the object answers with.

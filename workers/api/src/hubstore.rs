@@ -37,7 +37,7 @@ const IMAGE_CATALOG: &str = "catalog";
 /// and must stay small, while settings are read only by the owner and posts
 /// grow with every draft. Sharing one image would make every menu read carry
 /// both.
-const IMAGE_SETTINGS: &str = "settings";
+pub(crate) const IMAGE_SETTINGS: &str = "settings";
 const IMAGE_POSTS: &str = "posts";
 /// The ingredient ledger. Append-only like the order log and for the same
 /// reason: a stock level is a FOLD over what happened to the shelf, not a

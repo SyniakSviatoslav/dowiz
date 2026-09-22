@@ -91,6 +91,22 @@ pub async fn health(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
         Err(e) => json!({ "intact": false, "error": e.to_string() }),
     };
 
+    // ── WHAT THE KITCHEN IS STILL OWED ──
+    //
+    // DEPTH AND AGE, because the same count means two different things: two
+    // entries two seconds old is a busy lunchtime, two entries an hour old is
+    // a broken integration. A queue nobody can see the depth of is a queue
+    // that fills up silently, which is the failure this whole pane exists for.
+    let outbox = match crate::outbox::waiting(&place).await {
+        Ok(es) => {
+            let d = crate::outbox::depth(&es, ctx.data.now_ms);
+            json!({ "waiting": d.waiting, "oldestMs": d.oldest_ms, "failing": d.failing })
+        }
+        // An unreadable queue is NOT an empty one -- that is the
+        // `.ok().flatten()` shape this repo keeps a catalogue of.
+        Err(e) => json!({ "error": e.to_string() }),
+    };
+
     // Every record the venue's logs hold and this build cannot read. See
     // `crate::quarantine`: a non-zero count is a failing gate, not a warning.
     let quarantined = crate::quarantine::seen(&hub.hub, audit.quarantined);
@@ -109,6 +125,7 @@ pub async fn health(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
         "errors": audit.errors,
         "rails": rails,
         "rebuild": rebuilt,
+        "outbox": outbox,
     }))
 }
 

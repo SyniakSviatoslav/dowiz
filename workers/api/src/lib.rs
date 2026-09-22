@@ -28,6 +28,7 @@ mod hubdo;
 mod command;
 mod hubstore;
 mod otel;
+mod outbox;
 mod owner;
 mod assist;
 mod storefront;
@@ -451,6 +452,18 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
 /// The cron in wrangler.toml (`cloud::NIGHTLY_CRON`): every venue with a
 /// bucket gets its nightly copy.
 #[event(scheduled)]
-pub async fn scheduled(_event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
-    cloud::nightly(&env).await;
+pub async fn scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
+    // TWO CRONS, AND THE EXPRESSION SAYS WHICH. The nightly is a long job over
+    // every venue; the minute one exists to deliver a message a kitchen is
+    // waiting for, and running the nightly every minute would be absurd.
+    // ONE CLOCK READ PER INVOCATION, for the reason `Req` gives on the fetch
+    // path: a job whose parts each ask the wall clock has as many answers as it
+    // has parts. `tools/gates/clock.sh` allows this line and the router's, and
+    // nothing else on either entry point.
+    let now_ms = Date::now().as_millis() as i64;
+    if event.cron().starts_with("17 3") {
+        cloud::nightly(&env, now_ms).await;
+    } else {
+        outbox::sweep(&env, now_ms).await;
+    }
 }

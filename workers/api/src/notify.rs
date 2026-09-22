@@ -150,57 +150,19 @@ pub fn order_text(envelope: &Value, lines: &[LineOut], currency: &str, venue: &s
     out
 }
 
-/// Tell the owner. Never fails the caller: the order is already placed.
-pub async fn order_placed(
-    env: &Env,
-    place: &crate::hubstore::Place,
-    envelope: &Value,
-    lines: &[LineOut],
-    currency: &str,
-    venue: &str,
-) {
-    let settings = match crate::hubstore::load_settings(place).await {
-        Ok(l) => l.settings,
-        Err(e) => {
-            crate::loud!(&place.ns, Some(&place.venue), "notify.settings", "unreadable: {e}");
-            return;
-        }
-    };
-    let text = order_text(envelope, lines, currency, venue);
-    let chat = settings.known("notify.telegram.chat");
-    let chat = chat.trim();
-    if !chat.is_empty() {
-        match bot_token(env, &settings) {
-            Some(token) => {
-                if let Err(e) = telegram(&token, chat, &text).await {
-                    crate::loud!(&place.ns, Some(&place.venue), "notify.telegram", "refused: {e}");
-                }
-            }
-            None => {
-                crate::loud!(
-                    &place.ns,
-                    Some(&place.venue),
-                    "notify.telegram",
-                    "a chat is set but this venue has no bot token"
-                )
-            }
-        }
-    }
-    // ASKED FOR, NOT ASSUMED. Meta bills every one of these from 2026-10-01
-    // and Telegram carries the same text for nothing, so a venue that has not
-    // set `notify.whatsapp.status = on` is not billed for announcements it
-    // never asked for. Replies to a customer who wrote first are a different
-    // path (`channels.rs`) inside Meta's free window and are unaffected.
-    if settings.flag("notify.whatsapp.status") {
-        if let Some(wa) = crate::channels::whatsapp_cfg(&settings) {
-            if !wa.to.is_empty() {
-                if let Err(e) = crate::channels::whatsapp_text(&wa, &wa.to, &text).await {
-                    crate::loud!(&place.ns, Some(&place.venue), "notify.whatsapp", "refused: {e}");
-                }
-            }
-        }
-    }
-}
+// `order_placed` WAS HERE, and its going unused is the proof rather than a
+// side effect.
+//
+// It loaded the settings, rendered the text and AWAITED Telegram and WhatsApp
+// inline, after the order was already in the log. One attempt, no memory of it:
+// a refusal, or an isolate cut off at the end of the response, and the kitchen
+// was never told about an order that exists and is paid for. Nothing retried
+// and nothing recorded that anything was missed.
+//
+// The effect is now WRITTEN by the object turn that writes the order
+// (`hubdo::enqueue_bell`), so "the order landed" and "the message is owed" are
+// one fact, and `outbox::sweep` delivers it with a backoff. `order_text` below
+// is what survived: the Worker renders, the object queues, the cron sends.
 
 /// `POST /api/owner/notify/test` — send one line to the configured chat and
 /// report Telegram's verdict, so the owner learns on the spot whether the

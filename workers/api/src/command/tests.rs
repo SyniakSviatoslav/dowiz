@@ -30,6 +30,9 @@ fn input(promo: Option<&str>) -> PlaceIn {
         fee: 500,
         tip: 0,
         now_ms: 1_700_000_000_000,
+        // `decide` never looks at it: the bell is queued by the OBJECT after
+        // the log write, not by the rule. Asserted below rather than assumed.
+        notify_text: None,
     }
 }
 
@@ -150,6 +153,25 @@ fn a_short_ingredient_refuses_every_line_of_the_basket() {
     assert!(msg.to_lowercase().contains("salmon"), "the refusal must name it: {msg}");
     assert_eq!(hub.len(), 0, "and no order may be logged");
     assert_eq!(stock.len(), staged, "nor any line of the basket reserved");
+}
+
+/// THE MESSAGE CANNOT CHANGE THE ORDER. `notify_text` rides in the same
+/// command as the placement so that the bell is owed by the turn that writes
+/// the order — but it is the OBJECT that queues it, after the log write, and
+/// the rule below must be blind to it. If it were not, a venue with a bot
+/// connected would price a basket differently from one without.
+#[test]
+fn what_the_kitchen_is_told_does_not_change_what_is_stored() {
+    let (mut hub_a, mut stock_a) = images();
+    let quiet = decide(&mut hub_a, &mut stock_a, &[], &input(None)).expect("no promo");
+
+    let (mut hub_b, mut stock_b) = images();
+    let mut with_bell = input(None);
+    with_bell.notify_text = Some("New order: 1x Futomaki, 3000".into());
+    let loud = decide(&mut hub_b, &mut stock_b, &[], &with_bell).expect("no promo");
+
+    assert_eq!(quiet, loud, "the stored envelope must not depend on the message");
+    assert_eq!(hub_a.len(), hub_b.len());
 }
 
 // ── ADVANCE ─────────────────────────────────────────────────────────────────

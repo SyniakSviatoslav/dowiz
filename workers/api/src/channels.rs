@@ -24,7 +24,7 @@ use serde_json::{json, Value};
 use sha2::Sha256;
 use worker::*;
 
-use crate::owner::{now_ms, owner_and_venue};
+use crate::owner::owner_and_venue;
 
 /// The Graph API version every call pins. Meta retires a version two years on.
 const GRAPH: &str = "https://graph.facebook.com/v21.0";
@@ -224,7 +224,11 @@ struct Inbound {
 }
 
 /// Every message in one delivery, whatever object it came from.
-fn inbound_of(body: &Value) -> Vec<Inbound> {
+/// `now_ms` IS TAKEN, NOT READ. A message Meta delivers carries its own
+/// timestamp; this is only the fallback for one that does not, and a fallback
+/// that reads the wall clock is a rule that cannot be tested at a chosen
+/// instant — see `tools/gates/clock.sh`.
+fn inbound_of(body: &Value, now_ms: i64) -> Vec<Inbound> {
     let mut out = Vec::new();
     for entry in body["entry"].as_array().into_iter().flatten() {
         // WhatsApp Business Account: entry.changes[].value.messages[]
@@ -257,7 +261,7 @@ fn inbound_of(body: &Value) -> Vec<Inbound> {
                     ),
                     other => format!("[{other}]"),
                 };
-                let at_ms = m["timestamp"].as_str().and_then(|t| t.parse::<i64>().ok()).map(|s| s * 1000).unwrap_or_else(now_ms);
+                let at_ms = m["timestamp"].as_str().and_then(|t| t.parse::<i64>().ok()).map(|s| s * 1000).unwrap_or(now_ms);
                 out.push(Inbound {
                     channel: Channel::WhatsApp,
                     peer: from.to_string(),
@@ -281,7 +285,7 @@ fn inbound_of(body: &Value) -> Vec<Inbound> {
                 peer_name: None,
                 text: text.to_string(),
                 external_id: m["message"]["mid"].as_str().unwrap_or("").to_string(),
-                at_ms: m["timestamp"].as_i64().unwrap_or_else(now_ms),
+                at_ms: m["timestamp"].as_i64().unwrap_or(now_ms),
             });
         }
     }
@@ -398,7 +402,7 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<
     }
     let body: Value = serde_json::from_slice(&raw).unwrap_or(Value::Null);
     let mut stored = 0usize;
-    for m in inbound_of(&body) {
+    for m in inbound_of(&body, ctx.data.now_ms) {
         match store(&place, "in", &m).await {
             Ok(true) => {
                 stored += 1;
@@ -629,7 +633,7 @@ mod tests {
             "contacts": [{ "wa_id": "355691234567", "profile": { "name": "Ana" } }],
             "messages": [{ "from": "355691234567", "id": "wamid.1", "timestamp": "1700000000", "type": "text", "text": { "body": "hi" } }]
         } }] }] });
-        let got = inbound_of(&body);
+        let got = inbound_of(&body, 1_700_000_000_000);
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].channel, Channel::WhatsApp);
         assert_eq!(got[0].peer_name.as_deref(), Some("Ana"));
@@ -643,7 +647,7 @@ mod tests {
             { "sender": { "id": "1" }, "timestamp": 5, "message": { "mid": "m1", "text": "hello" } },
             { "sender": { "id": "2" }, "timestamp": 6, "message": { "mid": "m2", "text": "echo", "is_echo": true } }
         ] }] });
-        let got = inbound_of(&body);
+        let got = inbound_of(&body, 1_700_000_000_000);
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].channel, Channel::Instagram);
         assert_eq!(got[0].external_id, "m1");

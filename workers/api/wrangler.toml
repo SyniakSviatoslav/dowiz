@@ -131,4 +131,8 @@ new_sqlite_classes = ["HubImages"]
 
 # Nightly off-site copy for every venue that set a bucket (src/cloud.rs, NIGHTLY_CRON).
 [triggers]
-crons = ["17 3 * * *"]
+# TWO CRONS. The nightly is the off-site copy, the rotation, the prune and the
+# witness -- a long job over every venue. The minute one drains the outbox: a
+# kitchen waiting to be told about an order cannot wait until 03:17, and the
+# sweep costs one platform read plus a 204 from each venue with nothing queued.
+crons = ["17 3 * * *", "* * * * *"]

@@ -525,7 +525,7 @@ pub async fn status(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
 
 /// The nightly cron: every venue with a store set gets a copy. A venue whose
 /// store refuses is logged and skipped; the next venue is not its problem.
-pub async fn nightly(env: &Env) {
+pub async fn nightly(env: &Env, now: i64) {
     struct Row { id: String }
     // THE VENUE LIST COMES FROM THE PLATFORM REGISTRY, not from a table. It was
     // `SELECT id FROM locations` beside an `env.d1("DB")` guard; the guard went
@@ -538,7 +538,6 @@ pub async fn nightly(env: &Env) {
             .collect(),
         Err(e) => { console_error!("nightly backup: registry unreadable: {e}"); return }
     };
-    let now = crate::owner::now_ms();
     // The error log is now per venue, in that venue's own object, so pruning
     // it happens inside the per-venue loop below rather than as one statement
     // over a shared table.

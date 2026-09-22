@@ -22,16 +22,17 @@
 # the gap is worth knowing before anyone budgets P3 from the blueprint's
 # estimate.
 #
-# FIVE PLACES ARE ALLOWED. Each is allowed for a stated reason, and the reason
+# FOUR PLACES ARE ALLOWED. Each is allowed for a stated reason, and the reason
 # is the test: does anything DECIDE from this clock read, or does it only
 # RECORD when something was observed?
 #
 #   * `lib.rs`'s `Router::with_data` -- THE request read. One instant per
 #     request, handed to every handler as `ctx.data.now_ms`.
-#   * `cloud.rs`'s `nightly` -- the CRON's read. `scheduled` is a second entry
+#   * `lib.rs`'s `scheduled` -- the CRON's read. `scheduled` is a second entry
 #     point with no request behind it, so it has no instant to be handed; it
-#     reads once and passes that down exactly as the router does.
-#   * `owner::now_ms`'s BODY AND SIGNATURE -- the one function those two call.
+#     reads once and passes that to both jobs, exactly as the router does.
+#     THOSE TWO LINES ARE THE WHOLE OF IT: `owner::now_ms` was deleted when
+#     nothing was left calling it, which is what `cargo check` said.
 #   * `otel.rs` -- the tracer. It measures ELAPSED wall time; a span handed a
 #     fixed clock would report every request as taking zero ms. An instrument
 #     that reads the real clock is not a decision that reads the real clock.
@@ -75,13 +76,12 @@ hits() {
     | grep -v '^workers/api/src/otel\.rs:' \
     | grep -v '^workers/api/src/hubdo\.rs:' \
     | grep -v 'Router::with_data(Req { now_ms:' \
-    | grep -v '^workers/api/src/cloud\.rs:[0-9]*: *let now = crate::owner::now_ms();$' \
+    | grep -v '^workers/api/src/lib\.rs:[0-9]*: *let now_ms = Date::now()\.as_millis() as i64;$' \
     | grep -v '^workers/api/src/errlog\.rs:[0-9]*: *"atMs": Date::now()\.as_millis() as i64,$' \
-    | grep -v '^workers/api/src/owner\.rs:[0-9]*: *pub(crate) fn now_ms() -> i64 {$' \
-    | grep -v '^workers/api/src/owner\.rs:[0-9]*: *Date::now()\.as_millis() as i64 *$'
+    | grep -v '^workers/api/src/errlog\.rs:[0-9]*: *"atMs": Date::now()\.as_millis() as i64,$'
 }
 n=$(hits | wc -l | tr -d ' ')
-echo "clock: $n site(s) decide the time for themselves, outside the five allowed places"
+echo "clock: $n site(s) decide the time for themselves, outside the four allowed places"
 if [ ! -f "$BASELINE_FILE" ]; then
   echo "$n" > "$BASELINE_FILE"
   echo "clock: baseline recorded at $n"
