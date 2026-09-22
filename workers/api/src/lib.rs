@@ -41,6 +41,7 @@ mod mcp;
 mod integrations;
 mod catalog_edit;
 mod recipe;
+mod services;
 mod waitlist;
 mod witness;
 mod errlog;

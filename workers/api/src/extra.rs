@@ -1258,20 +1258,14 @@ pub async fn import_menu(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
 /// delivers for them counts the person they invited yesterday among the answer,
 /// and a separate panel for invites is a panel nobody opens.
 pub async fn couriers(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    use crate::services::courier::roster;
+
     let db = ctx.d1("DB")?;
     let loc = match owner_and_venue(&req, &ctx, &db).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
     let place = crate::hubstore::Place::of(&req, &ctx, Some(&loc))?;
-    struct C {
-        id: String,
-        name: Option<String>,
-        phone: Option<String>,
-        status: String,
-        on_shift: i64,
-        created_at_ms: i64,
-    }
     // THIS VENUE'S ROSTER, from the prefix that is the roster. The join it
     // replaces was `couriers JOIN courier_locations WHERE cl.location_id = ?`
     // with a correlated subquery counting open shifts -- three tables to answer
@@ -1284,74 +1278,34 @@ pub async fn couriers(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     )
     .await?
     .table;
-    let mut rows: Vec<C> = crew
+    // Sorted by when they joined, which is the order an owner remembers them
+    // in; the row itself is `roster::roster_row`, tested beside its defects.
+    let mut crew_rows: Vec<(i64, Value)> = crew
         .scan(&format!("roster.venue/{loc}/"))
         .into_iter()
         .filter_map(|(_, id)| {
             let r = crate::identity_store::rec(&crew, crate::identity_store::K_COURIER, &id)?;
-            Some(C {
-                on_shift: shifts
-                    .get("shift", &id)
-                    .and_then(|j| serde_json::from_str::<Value>(&j).ok())
-                    .filter(|x| x.get("ended_at_ms").map_or(true, |v| v.is_null()))
-                    .is_some() as i64,
-                created_at_ms: crate::identity_store::i_of(&r, "created_at_ms"),
-                name: Some(crate::identity_store::s_of(&r, "full_name_encrypted")),
-                phone: Some(crate::identity_store::s_of(&r, "phone_encrypted")),
-                status: crate::identity_store::s_of(&r, "status"),
-                id,
-            })
+            let on = roster::shift_is_open(shifts.get("shift", &id).as_deref());
+            Some((crate::identity_store::i_of(&r, "created_at_ms"), roster::roster_row(&id, &r, on)))
         })
         .collect();
-    rows.sort_by_key(|c| c.created_at_ms);
+    crew_rows.sort_by_key(|(at, _)| *at);
 
-    struct I {
-        id: String,
-        invited_name: Option<String>,
-        expires_at_ms: i64,
-        created_at_ms: i64,
-    }
-    // Used and revoked invites are gone from this list: an invite that has been
-    // spent is a courier, and it appears as one two lines above.
-    let mut invites: Vec<I> = crew
+    let now = now_ms();
+    let mut invite_rows: Vec<(i64, Value)> = crew
         .scan(&format!("invite.loc/{loc}/"))
         .into_iter()
         .filter_map(|(_, id)| {
             let r = crate::identity_store::rec(&crew, crate::identity_store::K_INVITE, &id)?;
-            if r.get("used_at_ms").map_or(false, |v| !v.is_null())
-                || r.get("revoked_at_ms").map_or(false, |v| !v.is_null())
-            {
-                return None;
-            }
-            Some(I {
-                invited_name: Some(crate::identity_store::s_of(&r, "invited_name")),
-                expires_at_ms: crate::identity_store::i_of(&r, "expires_at_ms"),
-                created_at_ms: crate::identity_store::i_of(&r, "created_at_ms"),
-                id,
-            })
+            let row = roster::invite_row(&id, &r, now)?;
+            Some((crate::identity_store::i_of(&r, "created_at_ms"), row))
         })
         .collect();
-    invites.sort_by_key(|i| i.created_at_ms);
+    invite_rows.sort_by_key(|(at, _)| *at);
 
-    let now = now_ms();
     Response::from_json(&json!({
-        "couriers": rows.iter().map(|c| json!({
-            // THE REAL ID, and the phone beside it. This sent the phone AS the id,
-            // and an assignment by that "id" found no courier.
-            "id": c.id,
-            "phone": c.phone.clone().unwrap_or_default(),
-            "name": c.name.clone().unwrap_or_default(),
-            "active": c.status == "active",
-            "onShift": c.on_shift > 0,
-        })).collect::<Vec<_>>(),
-        "invites": invites.iter().map(|i| json!({
-            "id": i.id, "name": i.invited_name.clone().unwrap_or_default(),
-            "madeMs": i.created_at_ms, "untilMs": i.expires_at_ms,
-            // An expired invite is still LISTED: the owner needs to see that the
-            // code they sent has run out, which is the answer to "they say it
-            // does not work".
-            "expired": now >= i.expires_at_ms,
-        })).collect::<Vec<_>>(),
+        "couriers": crew_rows.into_iter().map(|(_, r)| r).collect::<Vec<_>>(),
+        "invites": invite_rows.into_iter().map(|(_, r)| r).collect::<Vec<_>>(),
     }))
 }
 
@@ -1368,20 +1322,14 @@ pub async fn courier_detail(req: Request, ctx: RouteContext<()>) -> Result<Respo
     let Some(id) = ctx.param("id").cloned() else {
         return Response::error("missing courier id", 400);
     };
+    use crate::services::courier::{record, roster};
+
     let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (_, loc) = match owner_and_venue(&req, &ctx, &db).await {
         Ok(v) => v,
         Err(r) => return Ok(r),
     };
-    #[derive(Deserialize)]
-    struct C {
-        id: String,
-        name: Option<String>,
-        phone: Option<String>,
-        status: String,
-        on_shift: i64,
-    }
     // BY ID OR BY THE PHONE THE CONSOLE DISPLAYS, and on THIS venue's roster --
     // the roster key is what the `JOIN courier_locations WHERE location_id`
     // was, and a courier of another restaurant simply has no key here.
@@ -1408,23 +1356,17 @@ pub async fn courier_detail(req: Request, ctx: RouteContext<()>) -> Result<Respo
     )
     .await?
     .table;
-    let c: Option<C> = found
+    let Some((cid, row)) = found
         .and_then(|cid| {
             crate::identity_store::rec(&crew, crate::identity_store::K_COURIER, &cid)
                 .map(|r| (cid, r))
         })
-        .map(|(cid, r)| C {
-            on_shift: shift_img
-                .get("shift", &cid)
-                .and_then(|j| serde_json::from_str::<Value>(&j).ok())
-                .filter(|x| x.get("ended_at_ms").map_or(true, |v| v.is_null()))
-                .is_some() as i64,
-            name: Some(crate::identity_store::s_of(&r, "full_name_encrypted")),
-            phone: Some(crate::identity_store::s_of(&r, "phone_encrypted")),
-            status: crate::identity_store::s_of(&r, "status"),
-            id: cid,
-        });
-    let Some(c) = c else {
+        .map(|(cid, r)| {
+            let on = roster::shift_is_open(shift_img.get("shift", &cid).as_deref());
+            let row = roster::roster_row(&cid, &r, on);
+            (cid, row)
+        })
+    else {
         return Response::error("not found", 404);
     };
     let now = now_ms();
@@ -1433,7 +1375,7 @@ pub async fn courier_detail(req: Request, ctx: RouteContext<()>) -> Result<Respo
     let fix = crate::live_eta::fixes_at(&place, &loc, now, true)
         .await
         .into_iter()
-        .find(|f| f.courier_id == c.id);
+        .find(|f| f.courier_id == cid);
     // THE VENUE'S MIDNIGHT, not UTC's. This was `now - now.rem_euclid(DAY)`,
     // which is not even the old +2 constant -- it is a UTC day, so an owner
     // looking at a courier at 01:00 local saw a "today" that had already
@@ -1441,14 +1383,9 @@ pub async fn courier_detail(req: Request, ctx: RouteContext<()>) -> Result<Respo
     // one. The record is ~1 KB and the zone is the only field read from it.
     let zone = crate::hubstore::zone_of(crate::hubstore::venue_record(&place).await?.as_ref());
     let day_start = dowiz_hub::tz::start_of_local_day_ms(zone, now);
-    // The old console's two other tiles: a month of runs, and what is on the
-    // road right now. Counts only -- there is deliberately no average and no
-    // rank (DECISIONS D0: trust is a capability, never a score).
-    const THIRTY_DAYS_MS: i64 = 30 * 24 * 60 * 60 * 1000;
-    // THREE AGGREGATES, ONE WALK. They were two statements of `COUNT`, `SUM`
-    // and `SUM(CASE WHEN ...)` over `courier_assignments`; the assignments are
-    // this venue's own image now, and a fold over a few hundred records is
-    // cheaper than a round trip -- let alone two.
+    // The tiles: today, a month of runs, and what is on the road right now.
+    // The arithmetic is `record::tally`, where it can be tested at the day
+    // boundary that decides which day a courier's cash belongs to.
     let ops = crate::hubstore::load_table(
         &place,
         crate::hubstore::IMAGE_OPS,
@@ -1456,32 +1393,20 @@ pub async fn courier_detail(req: Request, ctx: RouteContext<()>) -> Result<Respo
     )
     .await?
     .table;
-    let (mut today_n, mut today_cash, mut d30, mut in_flight) = (0i64, 0i64, 0i64, 0i64);
-    for (_, j) in ops.all("asg") {
-        let Ok(a) = serde_json::from_str::<Value>(&j) else { continue };
-        if a.get("courier_id").and_then(Value::as_str) != Some(c.id.as_str()) {
-            continue;
-        }
-        match a.get("delivered_at_ms").and_then(Value::as_i64) {
-            None => in_flight += 1,
-            Some(at) => {
-                if at >= day_start {
-                    today_n += 1;
-                    today_cash += a.get("cash_collected").and_then(Value::as_i64).unwrap_or(0);
-                }
-                if at >= now - THIRTY_DAYS_MS {
-                    d30 += 1;
-                }
-            }
-        }
-    }
-    Response::from_json(&json!({
-        "id": c.id, "phone": c.phone, "name": c.name.clone().unwrap_or_default(), "active": c.status == "active", "onShift": c.on_shift > 0,
-        "lastFix": fix.map(|f| json!({ "latUdeg": f.lat_udeg, "lonUdeg": f.lon_udeg, "recordedAtMs": f.recorded_at_ms })),
-        "today": { "deliveries": today_n, "cashCollected": today_cash },
-        "delivered30d": d30,
-        "inFlight": in_flight,
-    }))
+    let rows: Vec<Value> = ops
+        .all("asg")
+        .into_iter()
+        .filter_map(|(_, j)| serde_json::from_str::<Value>(&j).ok())
+        .collect();
+    let t = record::tally(&rows, &cid, day_start, now);
+    let mut out = row;
+    out["lastFix"] = fix
+        .map(|f| json!({ "latUdeg": f.lat_udeg, "lonUdeg": f.lon_udeg, "recordedAtMs": f.recorded_at_ms }))
+        .unwrap_or(Value::Null);
+    out["today"] = json!({ "deliveries": t.today_deliveries, "cashCollected": t.today_cash });
+    out["delivered30d"] = json!(t.delivered_30d);
+    out["inFlight"] = json!(t.in_flight);
+    Response::from_json(&out)
 }
 
 /// `POST /api/owner/couriers/invite` — mint a code, shown ONCE.
@@ -1490,6 +1415,8 @@ pub async fn courier_detail(req: Request, ctx: RouteContext<()>) -> Result<Respo
 /// is: until it is claimed, whoever holds it can become this courier. A copied
 /// database would otherwise hand over every pending account.
 pub async fn invite_courier(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    use crate::services::courier::roster;
+
     /// A week. Long enough for a courier who starts next Monday, short enough
     /// that a code found in an old message no longer opens anything.
     const TTL_MS: i64 = 7 * 24 * 60 * 60 * 1000;
@@ -1503,42 +1430,25 @@ pub async fn invite_courier(mut req: Request, ctx: RouteContext<()>) -> Result<R
         Ok(v) => v,
         Err(r) => return Ok(r),
     };
-    let phone = body.phone.trim().to_string();
-    if phone.chars().filter(char::is_ascii_digit).count() < 8 {
-        return Response::error("that does not look like a phone number", 400);
-    }
-    let name = body.name.trim().to_string();
-    if name.is_empty() {
-        return Response::error("who is this code for?", 400);
-    }
+    // The owner's words back to the owner: `invite_fields` carries the refusal
+    // text, so the rule and the sentence it produces are tested together.
+    let (phone, name) = match roster::invite_fields(&body.phone, &body.name) {
+        Ok(v) => v,
+        Err(why) => return Response::error(why, 400),
+    };
     let phone_hash = crate::auth::sha256_hex(&phone);
 
-    #[derive(Deserialize)]
-    struct Row {
-        id: String,
-    }
-    // THE BYTES ARE THE PLATFORM'S, the alphabet is the hub's.
-    //
-    // `new_invite_code` reads /dev/urandom, which a Worker does not have -- so
-    // it failed here with "no randomness available" while an owner was trying
-    // to hire somebody. Two UUIDs from the platform CSPRNG give 32 bytes; the
-    // hub renders 16 of them through the one alphabet both implementations
-    // share, so a code minted here is indistinguishable from one minted
-    // natively.
-    let Some(entropy) = crate::edge_id()
+    // THE BYTES ARE THE PLATFORM'S, the alphabet is the hub's. Two UUIDs from
+    // the platform CSPRNG are 32 hex-encoded bytes; `code_from_entropy` renders
+    // sixteen of them and hands back the digest that is all we keep.
+    let Some(minted) = crate::edge_id()
         .zip(crate::edge_id())
         .map(|(a, b)| format!("{a}{b}").replace('-', ""))
+        .and_then(|hex| roster::code_from_entropy(&hex, crate::auth::sha256_hex))
     else {
         return Response::error("no platform CSPRNG", 500);
     };
-    let raw: Vec<u8> = entropy
-        .as_bytes()
-        .chunks(2)
-        .filter_map(|c| u8::from_str_radix(std::str::from_utf8(c).ok()?, 16).ok())
-        .collect();
-    let Some(code) = dowiz_hub::roster::invite_code_from(&raw) else {
-        return Response::error("no platform CSPRNG", 500);
-    };
+    let code = minted.code;
     let Some(id) = crate::edge_id() else {
         return Response::error("no platform CSPRNG", 500);
     };
@@ -1558,7 +1468,7 @@ pub async fn invite_courier(mut req: Request, ctx: RouteContext<()>) -> Result<R
         // Hashed with the same one-way function the phone uses. A 16-character
         // code from a 32-symbol alphabet is 80 bits, so a plain digest is not
         // brute-forceable the way a human password would be.
-        crate::auth::sha256_hex(&code),
+        minted.hash,
     );
     let taken = crate::identity_store::with_couriers(&ctx.env, move |t| {
         if crate::identity_store::courier_id_for_phone(t, &ph).is_some() {
