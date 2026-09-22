@@ -592,7 +592,7 @@ impl HubImages {
     /// object turn.
     ///
     /// WHAT THIS REPLACED, and it is worth stating where the code is rather
-    /// than only in `place_command`'s header: the Worker used to run this as a
+    /// than only in `command::place`'s header: the Worker used to run this as a
     /// saga over the network -- write the stock image, write the log image, and
     /// if the second failed, write the stock image again to release what the
     /// first had held. If THAT failed it printed a line and gave up, so a
@@ -600,7 +600,7 @@ impl HubImages {
     /// had, and nothing but a sampled trace knew.
     ///
     /// THE COMPENSATION IS GONE BECAUSE THERE IS NOTHING TO COMPENSATE.
-    /// `place_command::decide` does every fallible thing against images held in
+    /// `command::place::decide` does every fallible thing against images held in
     /// memory; this function writes only after it has returned `Ok`. A refusal
     /// drops both copies and the venue's stored state was never touched.
     ///
@@ -617,8 +617,8 @@ impl HubImages {
     ///     smaller size.
     async fn place(
         &self,
-        input: crate::place_command::PlaceIn,
-    ) -> Result<std::result::Result<crate::place_command::PlaceOut, crate::place_command::Refused>>
+        input: crate::command::place::PlaceIn,
+    ) -> Result<std::result::Result<crate::command::place::PlaceOut, crate::command::Refused>>
     {
         // The projection is what the promo count is taken from -- the same one
         // every reader uses, memoised against this generation, so counting a
@@ -647,7 +647,7 @@ impl HubImages {
         };
         let reserved_before = stock.len();
 
-        let stored = match crate::place_command::decide(&mut hub, &mut stock, &listed, &input) {
+        let stored = match crate::command::place::decide(&mut hub, &mut stock, &listed, &input) {
             Ok(v) => v,
             // NOTHING HAS BEEN WRITTEN. Both images go out of scope here.
             Err(r) => return Ok(Err(r)),
@@ -659,7 +659,7 @@ impl HubImages {
             // Cannot happen inside a serialised object -- the generation was
             // read above and nothing else runs between -- but the caller's
             // contract already says what a moved generation means.
-            return Ok(Err(crate::place_command::Refused::Append(
+            return Ok(Err(crate::command::Refused::Append(
                 "the log generation moved during a placement".into(),
             )));
         };
@@ -684,7 +684,152 @@ impl HubImages {
 
         // AFTER THE WRITE LANDED, never before.
         self.broadcast(dowiz_hub::EventKind::Placed as u8, &input.order_id, &stored, next);
-        Ok(Ok(crate::place_command::PlaceOut { stored, generation: next, events }))
+        Ok(Ok(crate::command::place::PlaceOut { stored, generation: next, events }))
+    }
+
+    /// ADVANCE AN ORDER AND SETTLE THE SHELF, in one turn.
+    ///
+    /// The Worker used to append through `/fold/append` and then settle the
+    /// stock ledger in a SECOND round trip whose failure it could only log --
+    /// deliberately, because failing the transition afterwards would have left
+    /// the order and the ledger disagreeing the other way round. Both are now
+    /// decided against copies in memory and written once both have succeeded,
+    /// so neither direction is reachable from a failure in the other.
+    async fn advance(
+        &self,
+        input: crate::command::advance::AdvanceIn,
+    ) -> Result<std::result::Result<crate::command::advance::AdvanceOut, crate::command::Refused>>
+    {
+        let (log_generation, listed) = self.orders_view().await?;
+        let current = listed.iter().find(|o| o.order_id == input.order_id).map(|o| o.order_json.clone());
+        let Some((_, log_bytes)) = self.image(LOG_IMAGE).await? else {
+            return Ok(Err(crate::command::Refused::NotFound));
+        };
+        let mut hub = dowiz_hub::Hub::load(&log_bytes)
+            .map_err(|_| Error::RustError("hub image is unreadable".into()))?;
+        let stock_image = crate::hubstore::IMAGE_STOCK;
+        let (stock_generation, mut stock) = match self.image(stock_image).await? {
+            Some((meta, bytes)) => (
+                meta.generation,
+                dowiz_hub::stock::StockLog::load(&bytes)
+                    .map_err(|_| Error::RustError("stock image is unreadable".into()))?,
+            ),
+            None => (
+                0,
+                dowiz_hub::stock::StockLog::create_sized(64 * 1024)
+                    .map_err(|_| Error::RustError("cannot create stock image".into()))?,
+            ),
+        };
+        let settled_before = stock.len();
+
+        let merged = match crate::command::advance::decide(
+            &mut hub,
+            &mut stock,
+            current.as_deref(),
+            &input,
+        ) {
+            Ok(v) => v,
+            // NOTHING HAS BEEN WRITTEN.
+            Err(r) => return Ok(Err(r)),
+        };
+
+        let Some(next) = self.put_image(LOG_IMAGE, log_generation, &hub.to_bytes_trimmed()).await?
+        else {
+            return Ok(Err(crate::command::Refused::Append(
+                "the log generation moved during a transition".into(),
+            )));
+        };
+        if stock.len() != settled_before
+            && self
+                .put_image(stock_image, stock_generation, &stock.to_bytes_trimmed())
+                .await?
+                .is_none()
+        {
+            console_error!(
+                "stock: order {} advanced to {} and the settlement was NOT written",
+                input.order_id,
+                input.next
+            );
+        }
+        let body = crate::fold::delta(
+            &serde_json::from_str(current.as_deref().unwrap_or("{}")).unwrap_or_default(),
+            &merged,
+        )
+        .to_string();
+        self.broadcast(dowiz_hub::EventKind::Advanced as u8, &input.order_id, &body, next);
+        Ok(Ok(crate::command::advance::AdvanceOut {
+            merged: merged.to_string(),
+            generation: next,
+        }))
+    }
+
+    /// HAND AN ORDER TO A COURIER: the assignment record and the event that
+    /// makes it visible, in one turn.
+    ///
+    /// THE LOG IS WRITTEN FIRST, and for this command the reasoning is the
+    /// mirror of the old bug. The assignment record is also the LOCK -- the
+    /// refusal of a second courier is `ops.get("asg", id).is_some()` -- so it
+    /// used to land BEFORE the event that shows it, and a lost append left an
+    /// invisible lock that the console could neither see nor clear. Writing the
+    /// log first means a lost ops write leaves an order that names its courier
+    /// and no record behind it: visible, and re-assignable.
+    async fn assign(
+        &self,
+        input: crate::command::assign::AssignIn,
+    ) -> Result<std::result::Result<crate::command::assign::AssignOut, crate::command::Refused>>
+    {
+        let (log_generation, listed) = self.orders_view().await?;
+        let current = listed.iter().find(|o| o.order_id == input.order_id).map(|o| o.order_json.clone());
+        let Some((_, log_bytes)) = self.image(LOG_IMAGE).await? else {
+            return Ok(Err(crate::command::Refused::NotFound));
+        };
+        let mut hub = dowiz_hub::Hub::load(&log_bytes)
+            .map_err(|_| Error::RustError("hub image is unreadable".into()))?;
+        let ops_image = crate::hubstore::IMAGE_OPS;
+        let ceiling = crate::hubstore::OPS_BYTES;
+        let (ops_generation, mut ops) = match self.image(ops_image).await? {
+            Some((meta, bytes)) => (
+                meta.generation,
+                // A CORRUPT IMAGE IS NOT AN EMPTY ONE: reading it as empty here
+                // would hand out an order that already has a courier.
+                dowiz_hub::table::Table::load(&bytes, ceiling)
+                    .map_err(|_| Error::RustError("ops image is unreadable".into()))?,
+            ),
+            None => (
+                0,
+                dowiz_hub::table::Table::create(ceiling)
+                    .map_err(|_| Error::RustError("cannot create ops image".into()))?,
+            ),
+        };
+
+        if let Err(r) =
+            crate::command::assign::decide(&mut hub, &mut ops, current.as_deref(), &input)
+        {
+            return Ok(Err(r));
+        }
+
+        let Some(next) = self.put_image(LOG_IMAGE, log_generation, &hub.to_bytes_trimmed()).await?
+        else {
+            return Ok(Err(crate::command::Refused::Append(
+                "the log generation moved during an assignment".into(),
+            )));
+        };
+        let ops_bytes = ops
+            .to_bytes()
+            .map_err(|e| Error::RustError(format!("ops image will not serialise: {e:?}")))?;
+        if self.put_image(ops_image, ops_generation, &ops_bytes).await?.is_none() {
+            console_error!(
+                "ops: order {} names courier {} and the assignment was NOT written",
+                input.order_id,
+                input.courier_id
+            );
+        }
+        let body = serde_json::json!({
+            "_d": { "courier_id": input.courier_id, "assigned_at_ms": input.now_ms }
+        })
+        .to_string();
+        self.broadcast(dowiz_hub::EventKind::Noted as u8, &input.order_id, &body, next);
+        Ok(Ok(crate::command::assign::AssignOut { generation: next }))
     }
 
     /// Write, with the SAME generation guard the D1 version used.
@@ -953,13 +1098,29 @@ impl DurableObject for HubImages {
                 // two statements inside the same turn.
                 (Method::Post, "place") => {
                     let mut req = req;
-                    let input: crate::place_command::PlaceIn = req.json().await?;
+                    let input: crate::command::place::PlaceIn = req.json().await?;
                     match self.place(input).await? {
                         Ok(out) => {
                             let mut res = Response::from_json(&out)?;
                             res.headers_mut().set("x-generation", &out.generation.to_string())?;
                             Ok(res)
                         }
+                        Err(r) => Response::error(r.message().to_string(), r.status()),
+                    }
+                }
+                (Method::Post, "advance") => {
+                    let mut req = req;
+                    let input: crate::command::advance::AdvanceIn = req.json().await?;
+                    match self.advance(input).await? {
+                        Ok(out) => Response::from_json(&out),
+                        Err(r) => Response::error(r.message().to_string(), r.status()),
+                    }
+                }
+                (Method::Post, "assign") => {
+                    let mut req = req;
+                    let input: crate::command::assign::AssignIn = req.json().await?;
+                    match self.assign(input).await? {
+                        Ok(out) => Response::from_json(&out),
                         Err(r) => Response::error(r.message().to_string(), r.status()),
                     }
                 }

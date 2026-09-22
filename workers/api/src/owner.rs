@@ -11,7 +11,6 @@ use serde_json::{json, Value};
 use worker::*;
 
 use crate::auth::{self, Principal};
-use dowiz_kernel::json_api;
 
 pub(crate) fn now_ms() -> i64 {
     Date::now().as_millis() as i64
@@ -463,60 +462,39 @@ pub async fn assign_courier(mut req: Request, ctx: RouteContext<()>) -> Result<R
         return Response::error("no such courier at this venue", 404);
     };
     let courier_id = known.id;
-    let Some(current) = crate::hubstore::order(&place, &id).await? else {
-        return Response::error("order not found", 404);
+    // THE ORDER IS NOT FETCHED HERE ANY MORE. This handler used to read it
+    // across the hop to check the venue, the status and whether the payment was
+    // cash -- three questions about a record the object is holding, asked from
+    // the far side of a network, and then asked AGAIN by the writes that
+    // followed. `command::assign` answers all three from the copy in its own
+    // memory, so the round trip is gone with them.
+    // ── THE ASSIGNMENT AND THE EVENT, IN ONE OBJECT TURN ──
+    //
+    // WHAT WAS HERE, and it had NO compensation at all: `with_table` wrote the
+    // assignment record into the `ops` image, and then a SECOND round trip
+    // appended the `Noted` event that puts `courier_id` on the order. The
+    // assignment record is also the LOCK -- the refusal of a second courier is
+    // `t.get("asg", id).is_some()` -- so it had to land first, and a lost
+    // append left an invisible lock: the console showed an unassigned order,
+    // the courier's list showed the job, and the next attempt answered "this
+    // order already has a courier" naming nobody the owner could see.
+    //
+    // WHO THE COURIER IS STAYS HERE, deliberately. The roster lives in the
+    // PLATFORM object, which the venue's object cannot read, so it is resolved
+    // above -- the same division as pricing on a placement. The object decides
+    // only what it alone can see: whose order this is, whether it is in a state
+    // that can be handed out, and whether somebody already has it.
+    let input = crate::command::assign::AssignIn {
+        order_id: id.clone(),
+        location_id: body.location_id.clone(),
+        courier_id: courier_id.clone(),
+        now_ms: now_ms(),
     };
-    let v: Value = serde_json::from_str(&current).unwrap_or(json!({}));
-    if v.get("location_id").and_then(Value::as_str) != Some(body.location_id.as_str()) {
-        return Response::error("order not found", 404);
-    }
-    if !matches!(v.get("status").and_then(Value::as_str), Some("CONFIRMED" | "PREPARING" | "READY")) {
-        return Response::error("only an accepted order can be handed to a courier", 409);
-    }
-    let cash_due = if v.get("payment").and_then(Value::as_str) == Some("cash") {
-        v.get("total").and_then(Value::as_i64).unwrap_or(0)
-    } else {
-        0
-    };
-    let now = now_ms();
-    // THE OBJECT SETTLES IT, as it does when a courier takes the order
-    // themselves: the first write finds no assignment, the second finds one.
-    let (oid2, who2) = (id.clone(), courier_id.clone());
-    let taken = crate::hubstore::with_table(
-        &place,
-        crate::hubstore::IMAGE_OPS,
-        crate::hubstore::OPS_BYTES,
-        move |t| {
-            if t.get("asg", &oid2).is_some() {
-                return Ok(true);
-            }
-            let rec = json!({
-                "order_id": oid2, "courier_id": who2, "assigned_at_ms": now,
-                "cash_due": cash_due, "picked_up_at_ms": Value::Null,
-                "delivered_at_ms": Value::Null, "cash_collected": Value::Null,
-            })
-            .to_string();
-            t.put("asg", &oid2, &rec, &[], &[])
-                .map_err(|e| Error::RustError(format!("assignment: {e}")))?;
-            Ok(false)
-        },
-    )
-    .await?;
-    if taken {
-        return Response::error("this order already has a courier", 409);
-    }
-    let who = courier_id.clone();
-    let oid = id.clone();
-    crate::hubstore::append_for(&place, &oid, move |current| {
-        let current = current.ok_or_else(|| Error::RustError("order not found".into()))?;
-        let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
-        let mut o = old.clone();
-        o["courier_id"] = json!(who);
-        o["assigned_at_ms"] = json!(now);
-        let body = crate::fold::delta(&old, &o).to_string();
-        Ok(Some((dowiz_hub::EventKind::Noted, body, json!(true))))
-    })
-    .await?;
+    let _: crate::command::assign::AssignOut =
+        match crate::command::send(&place, "assign", &input).await {
+            Ok(v) => v,
+            Err((status, said)) => return Response::error(said, status),
+        };
     Response::from_json(&json!({ "ok": true, "orderId": id, "courierId": courier_id }))
 }
 
@@ -562,81 +540,35 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
         other => return Response::error(format!("unknown action: {other}"), 400),
     };
 
-    let want_loc = body.location_id.clone();
-    let reason = body.reason.clone();
-    // Kept for the stock settlement below, which runs after the closure has
-    // taken ownership of its own copy.
-    let order_id = id.clone();
-    let out = crate::hubstore::append_for(&place, &id, move |current| {
-        let current = current.ok_or_else(|| Error::RustError("order not found".into()))?;
-        {
-            let v: Value = serde_json::from_str(&current).unwrap_or(json!({}));
-            if v.get("location_id").and_then(|x| x.as_str()) != Some(want_loc.as_str()) {
-                return Err(Error::RustError("order not found".into()));
-            }
-        }
-        // The kernel decides. An illegal edge is its refusal, not ours.
-        let updated = json_api::apply_event_logic(&current, next).map_err(Error::RustError)?;
-        let mut merged: Value = serde_json::from_str(&updated)
-            .map_err(|e| Error::RustError(format!("kernel order json unreadable: {e}")))?;
-        let old: Value = serde_json::from_str(&current).unwrap_or(json!({}));
-        crate::hubstore::carry_over(&old, &mut merged);
-        crate::live_eta::stamp(&mut merged, next, now_ms());
-        // A rejection carries WHY, recorded with the event so the customer can be
-        // told something true rather than "rejected".
-        if next == "REJECTED" {
-            merged["rejection_reason"] = json!(reason);
-        }
-        // The delta against the state this transition started from.
-        let body_s = crate::fold::delta(&old, &merged).to_string();
-        Ok(Some((dowiz_hub::EventKind::Advanced, body_s, merged)))
-    })
-    .await;
-
-    let merged = match out {
-        Ok(Some(m)) => m,
-        // `append_for` only answers `None` when the closure declines to write,
-        // and this one always writes or fails.
-        Ok(None) => return Response::error("order not found", 404),
-        Err(e) => {
-            let msg = e.to_string();
-            let code = if msg.contains("not found") { 404 } else { 409 };
-            return Response::error(msg, code);
-        }
-    };
-
-    // ── THE SHELF FOLLOWS THE ORDER ──
+    // ── THE TRANSITION AND THE SHELF, IN ONE OBJECT TURN ──
     //
-    // Preparing CONSUMES what was held: the food is being made and those
-    // ingredients are gone. Rejecting or cancelling RELEASES them: nothing was
-    // cooked, and holding them would strand the difference for ever.
+    // WHAT WAS HERE: `append_for` to move the order, then a SECOND round trip
+    // through `with_stock` to settle the ledger -- PREPARING consumes what was
+    // held, REJECTED and CANCELLED release it. The settlement's failure was
+    // logged and deliberately did not fail the transition, because the order
+    // had already moved and the customer had already been told. That reasoning
+    // was right and the situation it reasoned about should not exist: both
+    // outcomes are an order and a ledger that disagree, and the code only got
+    // to choose which way. `command::advance` decides both against copies in
+    // memory and writes them once both have succeeded.
     //
-    // Settled AFTER the order moved, never before -- the kernel owns whether
-    // the transition is legal at all, and taking ingredients off the shelf for
-    // a transition it then refuses is a loss with no order behind it.
-    let settle = match next {
-        "PREPARING" => Some(true),
-        "REJECTED" | "CANCELLED" => Some(false),
-        _ => None,
+    // THE KERNEL STILL DECIDES, and it decides inside the object now. An
+    // illegal edge is still its refusal and still reaches the owner as a 409
+    // carrying its own words.
+    let input = crate::command::advance::AdvanceIn {
+        order_id: id.clone(),
+        location_id: body.location_id.clone(),
+        next: next.to_string(),
+        reason: body.reason.clone(),
+        now_ms: now_ms(),
     };
-    if let Some(consume) = settle {
-        let oid = order_id.clone();
-        let done = crate::hubstore::with_stock(&place, move |log| {
-            let led = log.ledger().map_err(|e| Error::RustError(e.to_string()))?;
-            let evs = dowiz_hub::stock::settle(&led, &oid, consume);
-            if evs.is_empty() {
-                return Ok(());
-            }
-            log.append_all(&evs).map_err(|e| Error::RustError(e.to_string()))
-        })
-        .await;
-        // LOUD, and it does NOT fail the transition. The order has already
-        // moved and the customer has been told; refusing now would leave the
-        // order and the ledger disagreeing in the other direction.
-        if let Err(e) = done {
-            console_error!("stock: could not settle {order_id}: {e}");
-        }
-    }
+    let advanced: crate::command::advance::AdvanceOut =
+        match crate::command::send(&place, "advance", &input).await {
+            Ok(v) => v,
+            Err((status, said)) => return Response::error(said, status),
+        };
+    let merged: Value = serde_json::from_str(&advanced.merged)
+        .map_err(|e| Error::RustError(format!("hub answered unreadable json: {e}")))?;
 
     Response::from_json(&merged)
 }

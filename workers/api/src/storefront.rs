@@ -1053,7 +1053,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     // sampled trace was the only thing that knew.
     //
     // THE COMPENSATION IS NOT IMPROVED, IT IS GONE. The object holds both
-    // images; `place_command::decide` does every fallible thing against copies
+    // images; `command::place::decide` does every fallible thing against copies
     // in memory and the object writes only once all of it has succeeded. There
     // is nothing to undo because nothing was written.
     //
@@ -1072,7 +1072,7 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
         .iter()
         .filter_map(|it| Some((loaded.catalog.product(&it.product_id)?, it.quantity)))
         .collect();
-    let input = crate::place_command::PlaceIn {
+    let input = crate::command::place::PlaceIn {
         order_id: id.clone(),
         envelope: serde_json::to_string(&envelope).unwrap_or_else(|_| order_json.clone()),
         seq: created_at_ms as u64,
@@ -1084,7 +1084,8 @@ pub async fn place(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
         tip,
         now_ms: crate::owner::now_ms(),
     };
-    let placed = match crate::place_command::send(&place, &input).await {
+    let placed: crate::command::place::PlaceOut =
+        match crate::command::send(&place, "place", &input).await {
         Ok(v) => v,
         // THE OBJECT'S OWN WORDS REACH THE CUSTOMER. A 409 names the short
         // ingredient so they can change one line; a 400 says what is wrong with

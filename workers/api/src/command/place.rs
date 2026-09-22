@@ -37,9 +37,8 @@
 //! `cargo test` with no Durable Object anywhere near it. Until now not one line
 //! of it had a native test, because reaching it meant standing up an object.
 
+use super::Refused;
 use serde::{Deserialize, Serialize};
-use worker::wasm_bindgen::JsValue;
-use worker::*;
 
 /// Everything the object needs to place an order, and nothing it can look up
 /// itself.
@@ -85,40 +84,6 @@ pub struct PlaceOut {
     pub stored: String,
     pub generation: i64,
     pub events: usize,
-}
-
-/// Why a placement was refused, and with what status.
-///
-/// THE STATUS IS PART OF THE REFUSAL because the two reasons are not the same
-/// conversation. A short ingredient is a 409 that names the ingredient, so the
-/// customer can change one line; a refused promo code is a 400 about what they
-/// typed. Answering both as 500 was never on the table, but answering both as
-/// 409 would have been, and it would have told a customer their basket was the
-/// problem when their coupon was.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Refused {
-    /// An ingredient is short. Carries the ledger's own words, which name it.
-    Stock(String),
-    /// The code exists and cannot be redeemed: expired, spent, under the floor.
-    Promo(String),
-    /// The log would not take the event.
-    Append(String),
-}
-
-impl Refused {
-    pub fn status(&self) -> u16 {
-        match self {
-            Refused::Stock(_) => 409,
-            Refused::Promo(_) => 400,
-            Refused::Append(_) => 500,
-        }
-    }
-
-    pub fn message(&self) -> &str {
-        match self {
-            Refused::Stock(m) | Refused::Promo(m) | Refused::Append(m) => m,
-        }
-    }
 }
 
 /// THE WHOLE PLACEMENT RULE, over two images already in memory.
@@ -177,47 +142,3 @@ pub fn decide(
         .map_err(|e| Refused::Append(format!("hub append failed: {e:?}")))?;
     Ok(stored)
 }
-
-/// PLACE AN ORDER, as ONE command the object executes.
-///
-/// NO GENERATION, NO RETRY LOOP, AND NOTHING TO COMPENSATE. Every other write
-/// on this path is a read-modify-write over a network hop: read the image, ask
-/// the kernel, write it back, and retry five times when the generation moved
-/// underneath. Placement was that TWICE -- once for the stock image and once
-/// for the log -- with a hand-written undo between them for the case where the
-/// second failed. Here the Worker sends what it decided (the price, which is
-/// pure) and the object decides the rest (the ingredients and the code) against
-/// images it is already holding, in one turn. See `place_command`.
-///
-/// THE REFUSALS COME BACK AS THEMSELVES. A 409 names the short ingredient and a
-/// 400 names what is wrong with the code; both are the object's own words, and
-/// the caller passes them to the customer rather than translating them into
-/// "something went wrong".
-pub async fn send(
-    place: &crate::hubstore::Place,
-    input: &PlaceIn,
-) -> std::result::Result<PlaceOut, (u16, String)> {
-    let stub = place.stub().map_err(|e| (503, format!("hub unavailable: {e}")))?;
-    let body = serde_json::to_string(input).map_err(|e| (500, format!("place: {e}")))?;
-    let mut req = Request::new_with_init(
-        "https://hub/fold/place",
-        RequestInit::new()
-            .with_method(Method::Post)
-            .with_body(Some(JsValue::from_str(&body))),
-    )
-    .map_err(|e| (500, format!("place: {e}")))?;
-    req.headers_mut()
-        .and_then(|h| h.set("content-type", "application/json"))
-        .map_err(|e| (500, format!("place: {e}")))?;
-    let mut res =
-        stub.fetch_with_request(req).await.map_err(|e| (503, format!("hub unavailable: {e}")))?;
-    let status = res.status_code();
-    if status == 200 {
-        return res.json().await.map_err(|e| (500, format!("place: unreadable answer: {e}")));
-    }
-    let said = res.text().await.unwrap_or_default();
-    Err((status, said))
-}
-
-#[cfg(test)]
-mod tests;
