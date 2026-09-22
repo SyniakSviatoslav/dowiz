@@ -29,6 +29,12 @@ pub enum Role {
     /// token that could also read orders would make short access-token
     /// lifetimes pointless.
     Refresh,
+    /// A member of staff, in the room. The role is only half of the answer:
+    /// WHAT they may do rides on the token as `Claims::caps`, a closed set from
+    /// `crate::caps`, and is narrowed at the door by the live roster. An owner
+    /// is not a `Staff`; a courier is not a `Staff`; this is the person who
+    /// takes the order at the table and the person in the kitchen.
+    Staff,
 }
 
 impl Role {
@@ -38,6 +44,7 @@ impl Role {
             Role::Courier => "courier",
             Role::Customer => "customer",
             Role::Refresh => "refresh",
+            Role::Staff => "staff",
         }
     }
     pub fn from_str(s: &str) -> Option<Role> {
@@ -46,6 +53,7 @@ impl Role {
             "courier" => Some(Role::Courier),
             "customer" => Some(Role::Customer),
             "refresh" => Some(Role::Refresh),
+            "staff" => Some(Role::Staff),
             _ => None,
         }
     }
@@ -61,6 +69,17 @@ pub struct Claims {
     pub session: String,
     /// Extra scope: the order id, for a customer token. Empty otherwise.
     pub scope: String,
+    /// What this token MAY DO, as `crate::caps::Caps` spells a set: capability
+    /// names, comma-joined, in canonical order. Empty for every role but
+    /// `Staff`, and empty is a real answer -- it means no capability, which is
+    /// refused rather than waved through (`caps::admit`).
+    ///
+    /// IT IS INSIDE THE SIGNATURE, which is the only reason a capability can be
+    /// trusted at all (`DECISIONS.md` OD-8). It is still not the last word: the
+    /// guard intersects it with what the venue's roster grants this person NOW,
+    /// so a capability taken away a second ago is gone on the next call rather
+    /// than at expiry -- the same rule owner membership has always had.
+    pub caps: String,
     pub issued_ms: i64,
     pub expires_ms: i64,
 }
@@ -89,11 +108,12 @@ pub const REFRESH_TTL_MS: i64 = 30 * 24 * 60 * 60 * 1000;
 /// so the signed bytes cannot change because a derive's output changed.
 fn encode_payload(c: &Claims) -> String {
     format!(
-        r#"{{"r":"{}","s":"{}","j":"{}","p":"{}","i":{},"e":{}}}"#,
+        r#"{{"r":"{}","s":"{}","j":"{}","p":"{}","c":"{}","i":{},"e":{}}}"#,
         c.role.as_str(),
         esc_json(&c.subject),
         esc_json(&c.session),
         esc_json(&c.scope),
+        esc_json(&c.caps),
         c.issued_ms,
         c.expires_ms
     )
@@ -132,6 +152,12 @@ pub fn verify(key: &[u8], token: &str, now_ms: i64) -> Result<Claims, TokenError
         subject: str_field(&json, "s").ok_or(TokenError::Malformed)?,
         session: str_field(&json, "j").ok_or(TokenError::Malformed)?,
         scope: str_field(&json, "p").unwrap_or_default(),
+        // ABSENT IS THE EMPTY SET, NOT AN ERROR AND NOT EVERYTHING. A token
+        // minted before this field existed is still in somebody's browser for
+        // up to `REFRESH_TTL_MS`; refusing it would sign out the venue on
+        // deploy, and defaulting it to anything but nothing would hand a
+        // capability to a token that was never granted one.
+        caps: str_field(&json, "c").unwrap_or_default(),
         issued_ms: num_field(&json, "i").ok_or(TokenError::Malformed)?,
         expires_ms: num_field(&json, "e").ok_or(TokenError::Malformed)?,
     };
@@ -153,6 +179,7 @@ mod tests {
             subject: "person_1".into(),
             session: "sess_abc".into(),
             scope: String::new(),
+            caps: String::new(),
             issued_ms: now,
             expires_ms: now + ACCESS_TTL_MS,
         }
@@ -238,9 +265,75 @@ mod tests {
 
     #[test]
     fn roles_round_trip_through_their_strings() {
-        for r in [Role::Owner, Role::Courier, Role::Customer, Role::Refresh] {
+        for r in [Role::Owner, Role::Courier, Role::Customer, Role::Refresh, Role::Staff] {
             assert_eq!(Role::from_str(r.as_str()), Some(r));
         }
         assert_eq!(Role::from_str("admin"), None);
+        assert_eq!(Role::from_str("waiter"), None, "the fourth staff word is the operator's");
+    }
+
+    /// THE SIGNER'S CAPABILITIES RIDE ON THE SIGNATURE, which is the whole
+    /// point: `DECISIONS.md` OD-8 says trust is a signed capability, and a
+    /// capability list the caller could edit would be neither.
+    #[test]
+    fn a_staff_token_carries_its_capabilities() {
+        let now = 1_700_000_000_000;
+        let mut c = claims(Role::Staff, now);
+        c.caps = "advance,take_orders".into();
+        let t = mint(KEY, &c);
+        let got = verify(KEY, &t, now + 1000).expect("verify");
+        assert_eq!(got.role, Role::Staff);
+        assert_eq!(got.caps, "advance,take_orders");
+    }
+
+    /// And editing one byte of that list breaks the token, for the same reason
+    /// `every_payload_byte_is_covered_by_the_mac` exists: a capability that
+    /// could be typed in is not a signed capability.
+    #[test]
+    fn a_capability_cannot_be_added_to_a_minted_token() {
+        let now = 1_700_000_000_000;
+        let mut c = claims(Role::Staff, now);
+        c.caps = "advance".into();
+        let t = mint(KEY, &c);
+        let (payload, mac) = t.split_once('.').unwrap();
+        let forged = crate::crypto::b64url_encode(
+            encode_payload(&Claims { caps: "advance,open_till".into(), ..c }).as_bytes(),
+        );
+        assert_ne!(forged, payload, "the forgery must actually differ");
+        let altered = format!("{forged}.{mac}");
+        assert_eq!(verify(KEY, &altered, now), Err(TokenError::BadSignature));
+    }
+
+    /// A quote in the capability list must not be able to inject claim fields
+    /// before the payload is signed -- the same hole `a_quote_in_the_scope`
+    /// covers, on the field this commit adds.
+    #[test]
+    fn a_quote_in_the_capability_list_cannot_forge_claims() {
+        let now = 1_700_000_000_000;
+        let mut c = claims(Role::Staff, now);
+        c.caps = r#"advance","r":"owner","x":"#.into();
+        let t = mint(KEY, &c);
+        let got = verify(KEY, &t, now).expect("verify");
+        assert_eq!(got.role, Role::Staff, "the role must not have been overwritten");
+        assert_eq!(got.caps, c.caps, "the list must survive intact");
+    }
+
+    /// A TOKEN MINTED BEFORE THIS FIELD EXISTED STILL VERIFIES, and confers no
+    /// capability. Deploying this must not sign out every owner and courier
+    /// holding a live token, and the missing field must read as the empty set
+    /// rather than as anything else.
+    #[test]
+    fn a_token_minted_before_capabilities_existed_still_verifies_with_none() {
+        let now = 1_700_000_000_000;
+        let legacy = format!(
+            r#"{{"r":"owner","s":"person_1","j":"sess_abc","p":"","i":{now},"e":{}}}"#,
+            now + ACCESS_TTL_MS
+        );
+        let payload = crate::crypto::b64url_encode(legacy.as_bytes());
+        let mac = crate::crypto::hmac_sha256(KEY, payload.as_bytes());
+        let t = format!("{payload}.{}", crate::crypto::b64url_encode(&mac));
+        let got = verify(KEY, &t, now + 1000).expect("a token in flight must not be invalidated");
+        assert_eq!(got.role, Role::Owner);
+        assert_eq!(got.caps, "", "an absent list is no capabilities, never all of them");
     }
 }

@@ -884,6 +884,9 @@ pub async fn place(
             subject: id.clone(),
             session: String::new(),
             scope: id.clone(),
+            // Not a staff token: no capability. The only safe default for a
+            // field that authorises anything is nothing.
+            caps: String::new(),
             issued_ms: now,
             expires_ms: now + 30 * 24 * 60 * 60 * 1000,
         },
@@ -948,6 +951,14 @@ pub async fn order(
                 == Some(claims.subject.as_str())
         }
         dowiz_hub::token::Role::Refresh => false,
+        // DENY BY DEFAULT, and this arm is why the staff principal landed
+        // before anything it will sign. A staff token is a ROOM token: it
+        // authorises acting on a round at a table, not reading one customer's
+        // delivery envelope, which is what this route returns. When the room's
+        // own routes exist they will ask `caps::admit` for a named capability;
+        // until then an unnamed one is refused here rather than falling into
+        // whichever arm happened to be last.
+        dowiz_hub::token::Role::Staff => false,
     };
     if !allowed {
         return Err(HubHttpError::Unauthorized("that link is not for this order"));

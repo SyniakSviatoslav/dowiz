@@ -94,6 +94,17 @@ pub async fn connect(req: Request, ctx: RouteContext<crate::Req>) -> Result<Resp
             }
             crate::hubdo::tag_order(&order_id)
         }
+        // The console tag carries every live order of the venue, so staff get
+        // it only with a capability that works those orders.
+        Ok(Principal::Staff { active_location_id, caps, .. }) => {
+            if active_location_id != place.venue {
+                return Response::error("not found", 404);
+            }
+            if !(caps.allows(auth::Cap::Advance) || caps.allows(auth::Cap::TakeOrders)) {
+                return Response::error("no capability for the live console", 403);
+            }
+            crate::hubdo::TAG_CONSOLE.to_string()
+        }
         Err(e) => return e.into_response(),
     };
 

@@ -22,7 +22,9 @@
 
 #![forbid(unsafe_code)]
 
+pub mod caps;
 pub mod catalog;
+pub mod consent;
 pub mod crypto;
 pub mod hours;
 pub mod import;

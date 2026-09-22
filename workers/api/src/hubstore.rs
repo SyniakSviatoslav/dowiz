@@ -274,7 +274,7 @@ fn claimed_venue(req: &Request, ctx: &RouteContext<crate::Req>) -> Option<String
     let token = crate::auth::bearer(req).ok()?;
     match crate::auth::verify(&ctx.env, &token, ctx.data.now_ms).ok()? {
         crate::auth::Claims::Owner { active_location_id, .. } => active_location_id,
-        crate::auth::Claims::Courier { active_location_id, .. } => Some(active_location_id),
+        crate::auth::Claims::Courier { active_location_id: v, .. } | crate::auth::Claims::Staff { active_location_id: v, .. } => Some(v),
         crate::auth::Claims::Customer { location_id, .. } => Some(location_id),
     }
 }

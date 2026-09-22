@@ -78,6 +78,9 @@ fn propose(st: &Shared, caller: &Caller, verb: &str, order_id: &str) -> String {
             subject: caller.person.id.clone(),
             session: caller.session.clone(),
             scope: format!("voice:{verb}:{order_id}"),
+            // Not a staff token: no capability. The only safe default for a
+            // field that authorises anything is nothing.
+            caps: String::new(),
             issued_ms: now,
             expires_ms: now + PROPOSAL_TTL_MS,
         },

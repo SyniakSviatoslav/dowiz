@@ -181,6 +181,9 @@ fn issue(state: &Shared, person: &Person, session: &str) -> (String, String) {
             subject: person.id.clone(),
             session: session.to_string(),
             scope: String::new(),
+            // Not a staff token: no capability. The only safe default for a
+            // field that authorises anything is nothing.
+            caps: String::new(),
             issued_ms: now,
             expires_ms: now + ACCESS_TTL_MS,
         },
@@ -192,6 +195,9 @@ fn issue(state: &Shared, person: &Person, session: &str) -> (String, String) {
             subject: person.id.clone(),
             session: session.to_string(),
             scope: String::new(),
+            // Not a staff token: no capability. The only safe default for a
+            // field that authorises anything is nothing.
+            caps: String::new(),
             issued_ms: now,
             expires_ms: now + REFRESH_TTL_MS,
         },
@@ -485,6 +491,9 @@ pub async fn create_api_key(
             subject: pid,
             session: session.clone(),
             scope: String::new(),
+            // Not a staff token: no capability. The only safe default for a
+            // field that authorises anything is nothing.
+            caps: String::new(),
             issued_ms: now,
             expires_ms: now + API_KEY_TTL_MS,
         },

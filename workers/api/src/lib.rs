@@ -422,6 +422,11 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
                 Ok(auth::Principal::Courier { courier_id, .. }) => {
                     envelope.get("courier_id").and_then(|c| c.as_str()) == Some(courier_id.as_str())
                 }
+                // Staff of THIS venue who may move or take orders read them.
+                Ok(auth::Principal::Staff { active_location_id, caps, .. }) => {
+                    active_location_id == place.venue
+                        && (caps.allows(auth::Cap::Advance) || caps.allows(auth::Cap::TakeOrders))
+                }
                 Err(_) => false,
             };
             if !allowed {

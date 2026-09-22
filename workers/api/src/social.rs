@@ -210,6 +210,10 @@ pub async fn send(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Res
         Ok(crate::auth::Principal::Courier { .. }) => {
             return Response::error("a courier does not speak in this thread", 403)
         }
+        // Deny by default: no staff capability names speaking for the venue.
+        Ok(crate::auth::Principal::Staff { .. }) => {
+            return Response::error("staff do not speak in this thread", 403)
+        }
         Err(r) => return Ok(r),
     };
     let _ = &b.from;

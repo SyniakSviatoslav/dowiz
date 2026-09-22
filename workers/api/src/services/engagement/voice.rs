@@ -184,6 +184,7 @@ pub async fn voice(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
                 subject: who.clone(),
                 session: String::new(),
                 scope: format!("voice:{verb}:{order}"),
+                caps: String::new(),
                 issued_ms: now,
                 expires_ms: now + PROPOSAL_TTL_MS,
             },

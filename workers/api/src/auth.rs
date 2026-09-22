@@ -27,6 +27,7 @@ use subtle::ConstantTimeEq;
 use worker::*;
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
+pub use dowiz_hub::caps::{Cap, Caps};
 use base64::Engine as _;
 
 type HmacSha256 = Hmac<Sha256>;
@@ -66,12 +67,27 @@ pub enum Claims {
         iat: i64,
         exp: i64,
     },
+    /// A member of staff in the room. `caps` is the SIGNED capability list in
+    /// `dowiz_hub::caps` spelling; the guard narrows it to what the venue's
+    /// live roster grants before a principal exists (`staff_caps`).
+    Staff {
+        sub: String,
+        active_location_id: String,
+        jti: String,
+        #[serde(default)]
+        caps: String,
+        iat: i64,
+        exp: i64,
+    },
 }
 
 impl Claims {
     pub fn exp(&self) -> i64 {
         match self {
-            Claims::Owner { exp, .. } | Claims::Courier { exp, .. } | Claims::Customer { exp, .. } => *exp,
+            Claims::Owner { exp, .. }
+            | Claims::Courier { exp, .. }
+            | Claims::Customer { exp, .. }
+            | Claims::Staff { exp, .. } => *exp,
         }
     }
 }
@@ -345,6 +361,17 @@ pub enum Principal {
     /// `customer_id` likewise: a customer token is minted per order, so every
     /// consumer matches on `order_id` instead.
     Customer { customer_id: String, order_id: String, location_id: String },
+    /// A member of staff, with the capabilities that survived the roster.
+    /// `session_id` is carried for the same reason as the courier's.
+    Staff { person_id: String, active_location_id: String, session_id: String, caps: Caps },
+}
+
+/// The capability law at the Worker's door: the signed list, narrowed to the
+/// live roster word. Every refusal is `Revoked` with a reason, never a silent
+/// empty principal -- see `dowiz_hub::caps::admit` for the three ways it denies.
+pub fn staff_caps(minted: &str, roster_role: &str) -> std::result::Result<Caps, AuthError> {
+    dowiz_hub::caps::admit(minted, roster_role)
+        .ok_or(AuthError::Revoked("staff token grants no capability the roster still holds"))
 }
 
 /// Does this principal belong to this venue?
@@ -362,6 +389,7 @@ pub fn belongs_to(p: &Principal, venue: &str) -> bool {
         }
         Principal::Courier { active_location_id, .. } => active_location_id == venue,
         Principal::Customer { location_id, .. } => location_id == venue,
+        Principal::Staff { active_location_id, .. } => active_location_id == venue,
     }
 }
 
@@ -524,6 +552,17 @@ pub async fn authenticate_token(
         Claims::Customer { sub, order_id, location_id, .. } => {
             Ok(Principal::Customer { customer_id: sub, order_id, location_id })
         }
+        Claims::Staff { sub, active_location_id, jti, caps, .. } => {
+            // Authority re-derived, as for an owner: the membership row at THIS
+            // venue, read now, names the preset; the token can only lose rights.
+            let t = crate::identity_store::identity(env)
+                .await
+                .map_err(|e| AuthError::Db(e.to_string()))?;
+            let m = crate::identity_store::membership(&t, &active_location_id, &sub)
+                .ok_or(AuthError::Revoked("staff membership is gone or suspended"))?;
+            let caps = staff_caps(&caps, &crate::identity_store::s_of(&m, "role"))?;
+            Ok(Principal::Staff { person_id: sub, active_location_id, session_id: jti, caps })
+        }
     }
 }
 
@@ -651,6 +690,96 @@ mod tenancy_tests {
         };
         assert!(belongs_to(&customer, "sushi-durres"));
         assert!(!belongs_to(&customer, "dubin-durres"));
+    }
+
+    /// THE SIGNER IS A TENANT LIKE EVERYONE ELSE. A waiter with a live session
+    /// at one venue is nobody at the venue next door, and the URL is what
+    /// decides which venue is being asked about.
+    #[test]
+    fn a_staff_principal_belongs_only_to_the_venue_its_claim_names() {
+        let staff = Principal::Staff {
+            person_id: "p1".into(),
+            active_location_id: "sushi-durres".into(),
+            session_id: "s1".into(),
+            caps: Caps::of(&[Cap::TakeOrders]),
+        };
+        assert!(belongs_to(&staff, "sushi-durres"));
+        assert!(!belongs_to(&staff, "dubin-durres"));
+        assert!(!belongs_to(&staff, ""));
+    }
+
+    /// Every claim answers `exp`, including the new one -- an arm that returned
+    /// 0 or panicked would be a token that never expires or a 500 at the door.
+    #[test]
+    fn a_staff_claim_carries_its_expiry() {
+        let c = Claims::Staff {
+            sub: "p1".into(),
+            active_location_id: "sushi-durres".into(),
+            jti: "s1".into(),
+            caps: "take_orders".into(),
+            iat: 1_700_000_000_000,
+            exp: 1_700_000_001_000,
+        };
+        assert_eq!(c.exp(), 1_700_000_001_000);
+    }
+}
+
+/// The capability rule at the Worker's door, proved without an `Env`.
+#[cfg(test)]
+mod staff_capability_tests {
+    use super::*;
+
+    /// THE REFUSAL THE WHOLE ITEM EXISTS FOR. A staff token that is signed, in
+    /// date, bound to a live session and on this venue's roster, but which
+    /// names no capability, is REFUSED. Deny by default: a principal that can
+    /// do nothing must not be built, because a principal that exists is one
+    /// some later route will find a use for.
+    ///
+    /// Delete the `admit` call -- or its emptiness check -- and this fails.
+    #[test]
+    fn a_staff_token_without_a_capability_is_refused() {
+        for role in ["kitchen", "counter-manager", "owner"] {
+            let got = staff_caps("", role);
+            assert!(
+                matches!(got, Err(AuthError::Revoked(_))),
+                "an empty capability list at {role} was admitted"
+            );
+        }
+    }
+
+    /// And the roster is the ceiling. A token minted with the till for somebody
+    /// the roster now lists as kitchen keeps nothing, so it is not a principal
+    /// at all -- the same shape as an owner removed from `memberships`.
+    #[test]
+    fn a_staff_token_is_narrowed_to_what_the_roster_still_grants() {
+        assert_eq!(staff_caps("advance", "kitchen").expect("kitchen keeps advance"),
+                   Caps::of(&[Cap::Advance]));
+        assert_eq!(
+            staff_caps("advance,open_till", "kitchen").expect("advance survives"),
+            Caps::of(&[Cap::Advance]),
+            "the token must not widen itself past the roster"
+        );
+        assert!(matches!(staff_caps("open_till", "kitchen"), Err(AuthError::Revoked(_))));
+    }
+
+    /// A roster word the operator has not ruled -- including the fourth staff
+    /// word this commit deliberately does not invent -- grants nothing.
+    #[test]
+    fn an_unruled_roster_word_is_refused() {
+        for role in ["waiter", "courier", "", "Kitchen"] {
+            assert!(
+                matches!(staff_caps("take_orders", role), Err(AuthError::Revoked(_))),
+                "{role:?} was treated as a staff preset"
+            );
+        }
+    }
+
+    /// A capability name outside the closed set refuses the whole token rather
+    /// than being dropped.
+    #[test]
+    fn an_unknown_capability_name_is_refused() {
+        assert!(matches!(staff_caps("teleport", "owner"), Err(AuthError::Revoked(_))));
+        assert!(matches!(staff_caps("take_orders,teleport", "owner"), Err(AuthError::Revoked(_))));
     }
 }
 
