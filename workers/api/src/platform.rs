@@ -83,7 +83,6 @@ pub fn slug_problem(slug: &str) -> Option<&'static str> {
 pub(crate) async fn admin_only(
     req: &Request,
     ctx: &RouteContext<()>,
-    _db: &D1Database,
 ) -> std::result::Result<String, Response> {
     let bearer = auth::bearer(req).map_err(|e| e.into_response().unwrap())?;
     let user_id = match auth::verify(&ctx.env, &bearer, now_ms()) {
@@ -114,8 +113,7 @@ pub(crate) async fn admin_only(
 
 /// `GET /api/platform/hubs` — every client hub, newest first.
 pub async fn hubs(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
-    if let Err(r) = admin_only(&req, &ctx, &db).await {
+    if let Err(r) = admin_only(&req, &ctx).await {
         return Ok(r);
     }
     let platform = ctx
@@ -229,8 +227,7 @@ pub struct NewOwner {
 /// The last two are `ON CONFLICT DO NOTHING` so a retry of a partly-applied
 /// call converges instead of failing.
 pub async fn create_hub(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
-    let admin = match admin_only(&req, &ctx, &db).await {
+    let admin = match admin_only(&req, &ctx).await {
         Ok(a) => a,
         Err(r) => return Ok(r),
     };

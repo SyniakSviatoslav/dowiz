@@ -213,7 +213,6 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
             return Ok(hit);
         }
     }
-    let db = ctx.d1("DB")?;
     // The slug is not the id — see `Place::of_slug`.
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
     let loaded = crate::hubstore::load_catalog(&place).await?;
@@ -365,18 +364,10 @@ pub async fn menu(req: Request, ctx: RouteContext<()>) -> Result<Response> {
                 warnings.push(format!("translations unavailable: {e}"));
             }
         }
-        // NOT MIGRATED YET? An empty image is indistinguishable from a venue
-        // with no translations, and only one of those is worth a fallback. The
-        // old table answers while it still has rows, and says so loudly every
-        // time -- a silent fallback would work forever and the migration would
-        // never be finished. Deleted with `migrate.rs`.
-        if i18n.is_empty() {
-            let mut ids: Vec<String> = products.iter().map(|(id, _)| id.clone()).collect();
-            ids.extend(cat_meta.iter().map(|(id, _, _)| id.clone()));
-            if let Some(old) = crate::migrate::i18n_fallback(&db, &want_locale, &ids).await {
-                i18n = old;
-            }
-        }
+        // THE MIGRATION FALLBACK HAS BEEN DELETED. The old D1 migration table
+        // is no longer accessible. Empty translations mean the storefront uses
+        // the default locale for all dishes. The migration to the new system
+        // should be complete; if not, the venue must re-enter translations.
     }
     let translated = |id: &str, field: &str, fallback: Value| -> Value {
         match i18n.get(&(id.to_string(), field.to_string())) {

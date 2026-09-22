@@ -56,14 +56,13 @@ pub async fn voice(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
     use dowiz_hub::voice::{classify, Command, Speaker, Target};
 
     let body: VoiceIn = req.json().await.unwrap_or_default();
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
 
     // WHICH VOCABULARY APPLIES IS DECIDED BY THE TOKEN, never by what the
     // caller says they are: a courier claiming to be an owner would otherwise
     // reach the owner's commands by typing a word.
     let (speaker, who, loc) =
-        match crate::auth::authenticate(&req, &ctx.env, &db, now_ms()).await {
+        match crate::auth::authenticate(&req, &ctx.env, now_ms()).await {
             Ok(crate::auth::Principal::Owner { user_id, active_location_id }) => (
                 Speaker::Owner,
                 user_id,

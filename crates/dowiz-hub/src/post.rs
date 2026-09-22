@@ -68,14 +68,10 @@ impl Subject {
         }
     }
 
-    fn tag(&self) -> &'static str {
-        match self {
-            Subject::BackOnTheMenu { .. } => "back",
-            Subject::MostOrdered { .. } => "top",
-            Subject::NewDish { .. } => "new",
-            Subject::Reopened => "reopened",
-        }
-    }
+    // `tag()` WAS HERE, returning "back"/"top"/"new"/"reopened", and nothing
+    // ever called it. It was for a categorisation that never shipped, and
+    // leaving it beside `fact()` invited exactly one mistake: `subject_tag` is
+    // NAMED like the tag and HOLDS the fact, on purpose -- see the field.
 }
 
 /// Where a post goes.
@@ -138,6 +134,11 @@ pub struct Post {
     pub id: String,
     /// The subject key, so a fact is drafted once.
     pub subject_key: String,
+    /// THE FACT, IN PLAIN WORDS, despite the name. Both surfaces set this from
+    /// `Subject::fact()` and both consoles render it as the line UNDER the
+    /// draft ("Sake Futomaki has been added to the menu") -- it is what tells
+    /// an owner what a draft is about before they read it. A short tag there
+    /// would say nothing. The name is the leftover; the content is deliberate.
     pub subject_tag: String,
     pub text: String,
     pub channel: Channel,

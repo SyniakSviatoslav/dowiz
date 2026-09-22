@@ -16,8 +16,7 @@ use crate::owner::owner_and_venue;
 /// arbitrary data that nothing ever reads back, and the console renders the
 /// list the hub declares rather than a list of its own.
 pub async fn settings(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
@@ -49,8 +48,7 @@ pub async fn set_setting(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
@@ -87,8 +85,7 @@ pub async fn set_setting(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
 /// The list comes from the HUB. A console that held its own copy would show a
 /// switch for something that no longer exists, or miss one that does.
 pub async fn features(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
@@ -116,8 +113,7 @@ pub async fn set_feature(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };

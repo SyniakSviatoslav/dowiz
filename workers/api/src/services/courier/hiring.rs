@@ -34,8 +34,7 @@ pub async fn invite_courier(mut req: Request, ctx: RouteContext<()>) -> Result<R
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let db = ctx.d1("DB")?;
-    let (owner, loc) = match owner_and_venue(&req, &ctx, &db).await {
+    let (owner, loc) = match owner_and_venue(&req, &ctx).await {
         Ok(v) => v,
         Err(r) => return Ok(r),
     };
@@ -134,8 +133,7 @@ pub async fn invite_courier(mut req: Request, ctx: RouteContext<()>) -> Result<R
 
 /// `POST /api/owner/couriers/:id/uninvite` — withdraw a pending code.
 pub async fn uninvite_courier(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
@@ -188,8 +186,7 @@ pub async fn set_courier_active(mut req: Request, ctx: RouteContext<()>) -> Resu
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };

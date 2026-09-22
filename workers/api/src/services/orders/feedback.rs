@@ -38,11 +38,10 @@ pub async fn feedback(mut req: Request, ctx: RouteContext<()>) -> Result<Respons
     if text.chars().count() > 600 {
         return Response::error("that is longer than a note about an order", 400);
     }
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // The customer's own token for THIS order and nothing else. The owner's is
     // refused too: this is the customer's voice and not the venue's.
-    match crate::auth::authenticate(&req, &ctx.env, &db, now_ms()).await {
+    match crate::auth::authenticate(&req, &ctx.env, now_ms()).await {
         Ok(crate::auth::Principal::Customer { order_id, .. }) if order_id == id => {}
         Ok(_) => return Response::error("that link is not for this order", 401),
         Err(_) => return Response::error("this order needs the link you were given", 401),

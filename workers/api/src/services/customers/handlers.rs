@@ -32,7 +32,6 @@ pub(crate) fn signing_secret(env: &Env) -> Vec<u8> {
 
 /// `GET /api/owner/customers?location_id=&sort=spent|orders`
 pub async fn customers(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // The membership query and the image read do not depend on each other, so
     // `owner_beside` runs them together. Measured against this very handler
@@ -41,7 +40,6 @@ pub async fn customers(req: Request, ctx: RouteContext<()>) -> Result<Response> 
     let (_, loc, (listed, loaded_cat)) = match crate::owner::owner_beside(
         &req,
         &ctx,
-        &db,
         &place,
         futures_util::future::try_join(
             crate::hubstore::orders(&place),
@@ -95,8 +93,7 @@ pub async fn reveal_customer(mut req: Request, ctx: RouteContext<()>) -> Result<
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let db = ctx.d1("DB")?;
-    let (who, loc) = match owner_and_venue(&req, &ctx, &db).await {
+    let (who, loc) = match owner_and_venue(&req, &ctx).await {
         Ok(v) => v,
         Err(r) => return Ok(r),
     };
@@ -157,7 +154,6 @@ pub async fn reveal_customer(mut req: Request, ctx: RouteContext<()>) -> Result<
 
 /// `GET /api/owner/customers/reveals?location_id=` — who has been looking.
 pub async fn reveals(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // The membership query and this read do not depend on each other, so
     // `owner_beside` runs them together. The token is still verified before
@@ -165,7 +161,7 @@ pub async fn reveals(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // THE AUDIT TRAIL IS NOT A PROJECTION. `reveals()` reads the events the
     // fold deliberately skips, so this route still reads the image.
     let (_, _loc, loaded) =
-        match crate::owner::owner_beside(&req, &ctx, &db, &place, crate::hubstore::load(&place)).await {
+        match crate::owner::owner_beside(&req, &ctx, &place, crate::hubstore::load(&place)).await {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };

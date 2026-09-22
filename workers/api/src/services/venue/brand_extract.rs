@@ -25,12 +25,11 @@ pub async fn extract_branding(mut req: Request, ctx: RouteContext<()>) -> Result
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let db = ctx.d1("DB")?;
     // AUTHORISED, BUT NO VENUE IS NEEDED: this route reads pixels the caller
     // sent and touches no image, so there is no place to build and nothing a
     // wrong venue could reach. The check is here because the answer is still
     // the venue's business, not the internet's.
-    if let Err(r) = owner_and_venue(&req, &ctx, &db).await {
+    if let Err(r) = owner_and_venue(&req, &ctx).await {
         return Ok(r);
     }
     let hex = body.pixels.trim();

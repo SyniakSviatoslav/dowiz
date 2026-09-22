@@ -64,10 +64,6 @@ const IMAGE_STOCK: &str = "stock";
 /// and since `owner_beside` verifies the token's signature before it starts,
 /// even that needs this Worker's signing key.
 pub struct Place {
-    /// The one venue whose images may still be seeded from the legacy
-    /// `hub_image` table. `None` means no venue may. See `do_image`.
-    pub legacy_venue: Option<String>,
-    pub db: D1Database,
     pub ns: ObjectNamespace,
     pub venue: String,
 }
@@ -91,7 +87,7 @@ impl Place {
             .map(|v| v.to_string())
             .or_else(|| claimed_venue(req, ctx))
             .unwrap_or_else(|| UNNAMED_VENUE.to_string());
-        Ok(Place { db: ctx.d1("DB")?, ns: ctx.durable_object("HUB")?, venue, legacy_venue: legacy_venue(ctx) })
+        Ok(Place { ns: ctx.durable_object("HUB")?, venue })
     }
 
     /// For a caller who can name no venue at all.
@@ -119,7 +115,7 @@ impl Place {
     /// was true to begin with.
     pub async fn of_any(req: &Request, ctx: &RouteContext<()>) -> Result<Self> {
         if let Some(venue) = claimed_venue(req, ctx) {
-            return Ok(Place { db: ctx.d1("DB")?, ns: ctx.durable_object("HUB")?, venue, legacy_venue: legacy_venue(ctx) });
+            return Ok(Place { ns: ctx.durable_object("HUB")?, venue });
         }
         if let Some(slug) = Self::slug_of_host(req, ctx) {
             return Self::of_slug(ctx, &slug).await;
@@ -142,7 +138,6 @@ impl Place {
         struct Row {
             id: String,
         }
-        let db = ctx.d1("DB")?;
         let rows: Vec<Row> = crate::identity_store::registry(&ctx.env)
             .await?
             .all(crate::identity_store::K_LOC)
@@ -161,7 +156,7 @@ impl Place {
                 ))
             }
         };
-        Ok(Place { db, ns: ctx.durable_object("HUB")?, venue, legacy_venue: legacy_venue(ctx) })
+        Ok(Place { ns: ctx.durable_object("HUB")?, venue })
     }
 
     /// The venue a public URL names, by its slug.
@@ -173,13 +168,12 @@ impl Place {
         struct Row {
             id: String,
         }
-        let db = ctx.d1("DB")?;
         let row: Option<Row> = crate::identity_store::registry(&ctx.env)
             .await?
             .lookup(&crate::identity_store::loc_by_slug(slug))
             .map(|id| Row { id });
         let venue = row.map(|r| r.id).unwrap_or_else(|| UNNAMED_VENUE.to_string());
-        Ok(Place { db, ns: ctx.durable_object("HUB")?, venue, legacy_venue: legacy_venue(ctx) })
+        Ok(Place { ns: ctx.durable_object("HUB")?, venue })
     }
 
     /// The venue an AUTHORISED location id names.
@@ -197,10 +191,8 @@ impl Place {
     /// not read from a URL.
     pub fn of_authorised(ctx: &RouteContext<()>, location_id: &str) -> Result<Self> {
         Ok(Place {
-            db: ctx.d1("DB")?,
             ns: ctx.durable_object("HUB")?,
             venue: location_id.to_string(),
-            legacy_venue: legacy_venue(ctx),
         })
     }
 
@@ -274,14 +266,6 @@ impl Place {
     }
 }
 
-/// The one venue allowed to adopt an image from the legacy `hub_image` table.
-///
-/// Absent by default, and absent means nobody. See `do_image` for why the safe
-/// direction is "no venue" rather than "the first row".
-fn legacy_venue(ctx: &RouteContext<()>) -> Option<String> {
-    ctx.var("LEGACY_VENUE").ok().map(|v| v.to_string()).filter(|v| !v.is_empty())
-}
-
 /// The venue named by the caller's own token, if the token is genuine.
 ///
 /// The signature IS checked here, because an unverified claim would let anyone
@@ -306,99 +290,36 @@ pub struct LoadedCatalog {
     pub generation: i64,
 }
 
-/// D1 refuses any single value over one million bytes.
-///
-/// THE LIMIT IS NOT NEGOTIABLE AND THE IMAGES ARE BIGGER. A fresh order log is
-/// 4 MiB of arena, so `save` failed on the FIRST order ever placed through this
-/// Worker -- as a bare 500, with the order lost. The catalogue was the same
-/// story at 1 MiB, which is how a 52-dish menu could not be seeded.
-///
-/// So an image is stored in CHUNKS, in the same table, under `<id>#<n>`. 900_000
-/// leaves room for the row's other columns without arithmetic nobody will
-/// re-check. Chunk zero keeps the original id, so an image small enough to fit
-/// in one row is stored exactly as it was before this change.
-const CHUNK: usize = 900_000;
+// `CHUNK`, `SLICE`, `SLICES` AND `from_hex` WERE HERE, and all four were D1's.
+//
+// They existed because D1 refused any single value over a million bytes (so an
+// image was stored in 900 KB chunks) and because D1 handed a BLOB to JavaScript
+// as ONE JS VALUE PER BYTE -- which is what produced `503 error 1102` on every
+// route that read the half-megabyte order log while `/healthz` kept answering
+// 200. `hex()` made it one string per column and `substr` sliced it below the
+// value limit. A Durable Object hands a response body over as bytes, so there
+// is nothing to hexify, nothing to slice, and no limit to chunk under.
+//
+// `hubdo.rs` HAS ITS OWN `CHUNK` AND IT IS NOT THIS ONE: 96 KiB, the unit the
+// object writes storage keys in. Deleting this constant does not touch it.
 
-/// D1 HANDS A BLOB TO JAVASCRIPT AS AN ARRAY OF NUMBERS — one JS value per byte.
+/// One image, from the venue's Durable Object.
 ///
-/// THIS WAS THE 503. The hub log had grown to 524,288 bytes, so every request
-/// that read it asked wasm-bindgen to walk half a million JsValues across the
-/// JS/WASM boundary and allocate a handle for each. Cloudflare answered `503
-/// error 1102`, "Worker exceeded resource limits", for every route that touches
-/// an image, while `/healthz`, which touches none, kept answering 200 in 200 ms
-/// — which is what made it look like an outage rather than a cost.
+/// THE D1 SEED IS GONE, and this is what is left of it. Until the SQL binding
+/// was removed, a 204 from the object meant "ask `hub_image`" and the bytes
+/// found there were written back at generation zero. That path existed to
+/// migrate a pilot whose log lived in D1; the table, the migration module and
+/// the binding have all been deleted, so a 204 now means exactly what it says.
 ///
-/// `hex()` makes it ONE string per column. SQLite has no base64 and hex doubles
-/// the wire bytes; that trade is not close, because the expensive thing here is
-/// the crossing, not the byte.
-///
-/// READ IN SLICES because a single D1 value may not exceed one million bytes —
-/// the same limit `CHUNK` exists for — and `hex()` of a whole chunk would be
-/// 1.8 MB of it. `substr` on a BLOB counts BYTES, and the slicing happens
-/// inside SQLite, so the oversized value is never built in the first place.
-pub(crate) const SLICE: usize = 250_000;
-pub(crate) const SLICES: usize = 4;
-/// If `CHUNK` is ever raised past what the slices cover, the tail of every
-/// chunk would be silently dropped — a corrupt store that reads as a bebop
-/// parse failure a long way from here. The build stops instead.
-const _: () = assert!(SLICE * SLICES >= CHUNK);
-
-/// Hex back to bytes, appended to `out`.
-///
-/// Returns false rather than guessing on anything that is not hex: a store that
-/// half-decodes is worse than one that refuses, because the refusal names the
-/// image while a bad byte surfaces as an unreadable arena.
-pub(crate) fn from_hex(s: &str, out: &mut Vec<u8>) -> bool {
-    fn nibble(c: u8) -> Option<u8> {
-        match c {
-            b'0'..=b'9' => Some(c - b'0'),
-            b'a'..=b'f' => Some(c - b'a' + 10),
-            b'A'..=b'F' => Some(c - b'A' + 10),
-            _ => None,
-        }
-    }
-    let b = s.as_bytes();
-    if b.len() % 2 != 0 {
-        return false;
-    }
-    out.reserve(b.len() / 2);
-    for pair in b.chunks_exact(2) {
-        match (nibble(pair[0]), nibble(pair[1])) {
-            (Some(hi), Some(lo)) => out.push((hi << 4) | lo),
-            _ => return false,
-        }
-    }
-    true
-}
-
-/// Read one or more images, WHOLE, IN ONE QUERY.
-///
-/// MEASURED, AND IT WAS THE WHOLE COST. The previous version fetched chunk
-/// zero, then probed for chunk one, then chunk two, until a query came back
-/// empty -- so a single-chunk image took TWO round trips and the second was
-/// always a miss. A handler needing both the log and the catalogue therefore
-/// paid four. At D1's ~150 ms from this Worker that is 600 ms of waiting, which
-/// matched the measurements almost exactly: dashboard 580 ms of server time,
-/// analytics 680, against a 180 ms network baseline.
-///
-/// One query now, whatever the chunk count. The rows still decide the truth --
-/// there is no stored count that could disagree with them -- but they are all
-/// asked for at once.
-/// One image, from the venue's Durable Object — SEEDING IT FROM D1 the first
-/// time and only the first time.
-///
-/// THE MIGRATION IS A READ, NOT A SCRIPT. A one-shot job that moved every image
-/// would have a window in which the old store had been read and the new one not
-/// yet written, and would need to be run exactly once against exactly the right
-/// rows. Doing it on the first miss instead means the copy happens under the
-/// object's own serialisation, for the venue being asked about, and a venue
-/// nobody has opened yet is simply not migrated until somebody does.
-///
-/// D1 STAYS AUTHORITATIVE UNTIL IT IS EMPTY OF MEANING, which is what makes
-/// this safe to deploy against a pilot's live order log: if this path is
-/// reverted, every byte is still in `hub_image` where it was. The seed writes
-/// at generation zero, so the object's first write lands at one and the guard
-/// behaves from there exactly as the D1 guard did.
+/// AND IT IS THE FAIL-CLOSED ANSWER. `hub_image` was keyed by IMAGE ID ALONE --
+/// `catalog`, `log`, `settings`, `stock` -- because it was written when there
+/// was one venue and the venue therefore needed no name. That is why the seed
+/// had to be scoped to a single named venue: unscoped, every venue created
+/// afterwards adopted the first venue's catalogue on its first read, and it
+/// happened -- the second venue on this platform came up serving the first's 52
+/// dishes to the public. With no fallback at all there is nothing left to
+/// scope, and an empty venue is a menu its owner enters rather than a
+/// neighbour's data served from their hostname.
 async fn do_image(place: &Place, id: &str) -> Result<Option<(Vec<u8>, i64)>> {
     let stub = place.stub()?;
     let mut res = stub.fetch_with_str(&format!("https://hub/img/{id}")).await?;
@@ -412,60 +333,11 @@ async fn do_image(place: &Place, id: &str) -> Result<Option<(Vec<u8>, i64)>> {
             .unwrap_or(0);
         // ONE BULK COPY. A response body crosses the boundary as bytes, which is
         // the whole difference from D1 handing a BLOB over as one JS value per
-        // byte -- see `SLICE` for what that cost.
+        // byte -- see the note above `do_image` for what that cost.
         return Ok(Some((res.bytes().await?, generation)));
     }
-    // 204: the object has never seen this image.
-    //
-    // ONLY THE LEGACY VENUE MAY ADOPT THE D1 IMAGE, and this scoping is the
-    // difference between a migration and a data leak. `hub_image` is keyed by
-    // IMAGE ID ALONE -- `catalog`, `log`, `settings`, `stock` -- because it was
-    // written when there was one venue and the venue therefore needed no name.
-    // Unscoped, the rule "an object that has never held this image seeds itself
-    // from D1" means EVERY VENUE CREATED FROM NOW ON adopts the first venue's
-    // catalogue, order log and settings on its first read. It is not a
-    // hypothetical: the second venue on this platform came up serving the
-    // first's 52 dishes, and its storefront showed them to the public.
-    //
-    // So the fallback applies to exactly one venue, named in `LEGACY_VENUE`, and
-    // when that is unset there is NO fallback at all. Fail-closed: a venue that
-    // wrongly starts empty is a menu an owner re-enters, and a venue that
-    // wrongly starts full is one tenant's data served from another's hostname.
-    let legacy = place.legacy_venue.as_deref();
-    if legacy != Some(place.venue.as_str()) {
-        return Ok(None);
-    }
-    let Some((bytes, _)) = crate::migrate::load_images_d1(&place.db, &[id]).await?.remove(id) else {
-        return Ok(None);
-    };
-    let mut req = Request::new_with_init(
-        &format!("https://hub/img/{id}"),
-        RequestInit::new().with_method(Method::Put).with_body(Some(bytes.clone().into())),
-    )?;
-    req.headers_mut()?.set("x-generation", "0")?;
-    let seeded = stub.fetch_with_request(req).await?;
-    if seeded.status_code() == 409 {
-        // Another request seeded it between our read and our write. Theirs is
-        // the same bytes; take what the object now holds rather than fight.
-        // A LOOP AND NOT A RECURSIVE CALL: an async fn that awaits itself needs
-        // boxing, and a boxed future here would allocate on the path this whole
-        // change exists to make cheap.
-        let mut again = stub.fetch_with_str(&format!("https://hub/img/{id}")).await?;
-        if again.status_code() == 200 {
-            let generation = again
-                .headers()
-                .get("x-generation")
-                .ok()
-                .flatten()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(0);
-            return Ok(Some((again.bytes().await?, generation)));
-        }
-        return Err(Error::RustError(format!(
-            "image {id} was seeded by another request and is now unreadable"
-        )));
-    }
-    Ok(Some((bytes, 1)))
+    // 204: the object has never seen this image, and nothing else holds it.
+    Ok(None)
 }
 
 /// Several images, each from the object. Kept as a map so the callers above are
@@ -1711,82 +1583,10 @@ mod tests {
         assert!(orders_state(&hub).is_empty());
     }
 
-    /// SQLite's `hex()` emits UPPERCASE. Getting that wrong would decode every
-    /// image to garbage while still returning `true`, which is the shape of
-    /// failure this whole change exists to avoid.
-    #[test]
-    fn every_byte_survives_the_hex_round_trip() {
-        let original: Vec<u8> = (0..=255u8).collect();
-        let upper: String = original.iter().map(|b| format!("{b:02X}")).collect();
-        let lower: String = original.iter().map(|b| format!("{b:02x}")).collect();
 
-        for encoded in [&upper, &lower] {
-            let mut out = Vec::new();
-            assert!(from_hex(encoded, &mut out), "well-formed hex must decode");
-            assert_eq!(out, original, "bytes must come back exactly");
-        }
-    }
 
-    /// The reason `from_hex` returns a bool rather than skipping what it cannot
-    /// read: a half-decoded image is a corrupt arena reported far from here.
-    #[test]
-    fn nothing_that_is_not_hex_is_guessed_at() {
-        for bad in ["abc", "zz", "00ff0g", " 00", "00 ff"] {
-            let mut out = Vec::new();
-            assert!(!from_hex(bad, &mut out), "{bad:?} must be refused, not decoded");
-        }
-    }
 
-    /// An image shorter than the slices has empty trailing ones, and an empty
-    /// slice must contribute nothing -- not a zero byte, which would append
-    /// padding to every image in the store.
-    #[test]
-    fn an_empty_slice_appends_nothing() {
-        let mut out = vec![7u8, 8, 9];
-        assert!(from_hex("", &mut out));
-        assert_eq!(out, vec![7, 8, 9]);
-    }
 
-    /// THE ONE THAT MATTERS. Reassembles an image the way `load_images` does --
-    /// slice by slice, in slice order -- from what SQLite's `substr`/`hex` pair
-    /// would return for each, and checks the result against the original bytes.
-    ///
-    /// Sized to straddle a slice boundary AND end part-way through the next, so
-    /// an off-by-one in the 1-based `substr` start or in the final short slice
-    /// shows up as a difference rather than as a still-plausible image.
-    #[test]
-    fn a_multi_slice_image_reassembles_byte_for_byte() {
-        let original: Vec<u8> = (0..SLICE + SLICE / 2).map(|i| (i % 251) as u8).collect();
-
-        // What the query asks SQLite for, computed the same way the SQL is built.
-        let slices: Vec<String> = (0..SLICES)
-            .map(|k| {
-                let start = k * SLICE;
-                let end = (start + SLICE).min(original.len()).max(start.min(original.len()));
-                original[start.min(original.len())..end]
-                    .iter()
-                    .map(|b| format!("{b:02X}"))
-                    .collect()
-            })
-            .collect();
-        assert_eq!(slices[0].len(), SLICE * 2, "slice 0 is full");
-        assert_eq!(slices[1].len(), SLICE, "slice 1 is the remaining half");
-        assert_eq!(slices[2], "", "nothing past the end");
-
-        let mut rebuilt = Vec::new();
-        for s in &slices {
-            assert!(from_hex(s, &mut rebuilt));
-        }
-        assert_eq!(rebuilt, original, "the image must survive slicing");
-    }
-
-    /// The slices must cover a whole chunk. If `CHUNK` outgrows them the tail of
-    /// every chunked image is silently dropped -- a `const` assert already stops
-    /// the build, and this says out loud what it is protecting.
-    #[test]
-    fn the_slices_cover_a_whole_chunk() {
-        assert!(SLICE * SLICES >= CHUNK, "{SLICE} x {SLICES} must cover {CHUNK}");
-    }
 }
 
 /// Every image this venue has, for the venue to keep.

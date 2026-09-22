@@ -206,10 +206,9 @@ pub async fn order_placed(
 /// report Telegram's verdict, so the owner learns on the spot whether the
 /// bell works rather than at the first missed order.
 pub async fn test(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
     // `owner_and_venue` yields the venue's id; the message names the venue by
     // it, which is what the owner sees in the console's footer too.
-    let venue = match owner_and_venue(&req, &ctx, &db).await {
+    let venue = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };

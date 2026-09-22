@@ -14,13 +14,12 @@ use worker::*;
 /// that catches real venues is the second -- nobody notices nothing is bound to
 /// the bot until an order has sat unanswered for forty minutes.
 pub async fn activation(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // The membership query and this read do not depend on each other, so
     // `owner_beside` runs them together. The token is still verified before
     // either is issued -- see it for why that order matters.
     let (_, _loc, loaded) =
-        match crate::owner::owner_beside(&req, &ctx, &db, &place, crate::hubstore::load_catalog(&place)).await {
+        match crate::owner::owner_beside(&req, &ctx, &place, crate::hubstore::load_catalog(&place)).await {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };

@@ -47,13 +47,10 @@ compatibility_date = "2026-09-15"
 # apex serves the storefront, and nothing below changes.
 [vars]
 PLATFORM_HOST = "dowiz.org"
-# THE ONE VENUE THAT PREDATES THE DURABLE OBJECTS. `hub_image` in D1 is keyed by
-# image id with no venue column, because it was written when there was one venue.
-# `do_image` will seed an empty object from it for THIS venue and no other --
-# unset the var and no venue may. Without the scoping the second venue created
-# on this platform came up serving the first's catalogue. Remove both when the
-# legacy rows are gone.
-LEGACY_VENUE = "dubin-durres"
+# `LEGACY_VENUE` WAS HERE, and it is gone with the rows it named. It scoped the
+# `hub_image` seed to the one venue that predated the Durable Objects; the D1
+# binding, the migrations and `do_image`'s fallback have all been deleted, so
+# there is no seed left to scope.
 # THE WAITING LIST'S MAILBOX. A venue that leaves its address on dowiz.org is
 # written to D1 (`waitlist`) and, when the `WAITLIST_MAIL` binding below is
 # live, mailed to this address from the platform's own. The row is the record;
@@ -89,13 +86,6 @@ binding = "ASSETS"
 # behind it. Every other path is still served straight from assets -- the
 # storefront's own JS and CSS never touch the Worker.
 run_worker_first = ["/"]
-
-# D1 holds the order log. This replaces the native adapter's Mutex<HashMap>,
-# which died with the process -- the reason no order ever survived a restart.
-[[d1_databases]]
-binding = "DB"
-database_name = "dowiz"
-database_id = "5467a3b0-5fb8-47d0-9680-4101666598d0"
 
 # Workers Logs. The OpenTelemetry export rides on top of this later, through the
 # kernel's own fdr::SpanObserver seam rather than a `tracing` dependency.

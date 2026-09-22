@@ -69,12 +69,11 @@ pub async fn create_product(mut req: Request, ctx: RouteContext<()>) -> Result<R
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let db = ctx.d1("DB")?;
     // THE PLACE IS THE VENUE THAT WAS AUTHORISED, not the one in the token.
     // See `Place::of_authorised`: these differ for an owner of two venues, and
     // the write used to land in the other one.
     let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
-    if let Err(r) = owner_at(&req, &ctx, &db, &body.location_id).await {
+    if let Err(r) = owner_at(&req, &ctx, &body.location_id).await {
         return Ok(r);
     }
     let name = body.name.trim().to_string();
@@ -134,12 +133,11 @@ pub async fn delete_product(mut req: Request, ctx: RouteContext<()>) -> Result<R
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let Some(id) = ctx.param("id").cloned() else { return Response::error("missing product id", 400) };
-    let db = ctx.d1("DB")?;
     // THE PLACE IS THE VENUE THAT WAS AUTHORISED, not the one in the token.
     // See `Place::of_authorised`: these differ for an owner of two venues, and
     // the write used to land in the other one.
     let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
-    if let Err(r) = owner_at(&req, &ctx, &db, &body.location_id).await {
+    if let Err(r) = owner_at(&req, &ctx, &body.location_id).await {
         return Ok(r);
     }
     let removed = crate::hubstore::with_catalog(&place, move |cat| {
@@ -173,12 +171,11 @@ pub async fn set_category(mut req: Request, ctx: RouteContext<()>) -> Result<Res
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let db = ctx.d1("DB")?;
     // THE PLACE IS THE VENUE THAT WAS AUTHORISED, not the one in the token.
     // See `Place::of_authorised`: these differ for an owner of two venues, and
     // the write used to land in the other one.
     let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
-    if let Err(r) = owner_at(&req, &ctx, &db, &body.location_id).await {
+    if let Err(r) = owner_at(&req, &ctx, &body.location_id).await {
         return Ok(r);
     }
     let name = body.name.trim().to_string();
@@ -222,12 +219,11 @@ pub async fn delete_category(mut req: Request, ctx: RouteContext<()>) -> Result<
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
     let Some(id) = ctx.param("id").cloned() else { return Response::error("missing category id", 400) };
-    let db = ctx.d1("DB")?;
     // THE PLACE IS THE VENUE THAT WAS AUTHORISED, not the one in the token.
     // See `Place::of_authorised`: these differ for an owner of two venues, and
     // the write used to land in the other one.
     let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
-    if let Err(r) = owner_at(&req, &ctx, &db, &body.location_id).await {
+    if let Err(r) = owner_at(&req, &ctx, &body.location_id).await {
         return Ok(r);
     }
     let out = crate::hubstore::with_catalog(&place, move |cat| {
@@ -276,8 +272,7 @@ mod tests {
 /// which is right for a customer and wrong for the owner about to put the
 /// first dish into it.
 pub async fn list_categories(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
-    let loc = match crate::owner::owner_and_venue(&req, &ctx, &db).await {
+    let loc = match crate::owner::owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };

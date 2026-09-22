@@ -16,13 +16,12 @@ use super::promo_fields::PromoIn;
 
 /// `GET /api/owner/promotions?location_id=`
 pub async fn promotions(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // The membership query and the image read do not depend on each other;
     // `owner_with_hub` runs them together. See it for why the token is still
     // verified before either is issued.
     let (_, _loc, (loaded, cat)) =
-        match crate::owner::owner_beside(&req, &ctx, &db, &place, crate::hubstore::load_both(&place)).await {
+        match crate::owner::owner_beside(&req, &ctx, &place, crate::hubstore::load_both(&place)).await {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };
@@ -63,8 +62,7 @@ pub async fn set_promotion(mut req: Request, ctx: RouteContext<()>) -> Result<Re
         Ok(v) => v,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
@@ -95,8 +93,7 @@ pub async fn set_promotion(mut req: Request, ctx: RouteContext<()>) -> Result<Re
 /// Distinct from the active switch: switching off is reversible and keeps the
 /// dates, deleting frees the word.
 pub async fn delete_promotion(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };

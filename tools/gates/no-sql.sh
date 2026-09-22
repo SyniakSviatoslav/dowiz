@@ -1,50 +1,59 @@
 #!/bin/sh
-# F26 — THE SQL RATCHET.
+# F26 — THE SQL RATCHET, NOW A ZERO ASSERTION.
 #
-# The operator's directive is "no SQL: bebop, Rust, wasm and nothing else", and
-# 118 prepared statements do not leave the tree in one commit. So this counts
-# them and refuses any commit that ADDS one. The number may only fall, which is
-# the same mechanism `bebop-lang/tools/arch_check.py` uses for file size and the
-# same reason: a target nobody can reach in one step still has to be monotone,
-# or it is a wish.
+# The operator's directive is "no SQL: bebop, Rust, wasm and nothing else". The
+# D1 binding is out of wrangler.toml, workers/api/migrations/ is deleted,
+# migrate.rs is deleted, and no handle remains in the code. So the ratchet that
+# counted 118 prepared statements down to zero is now an assertion that both
+# stay there.
 #
-# WHAT IT COUNTS, and why it is `.prepare(` rather than the word SELECT: the
-# D1 API has exactly one entry point, so a statement that exists has been
-# prepared. Counting SQL keywords would match every comment that explains why a
-# query was deleted, which is the opposite of what this gate wants to encourage.
+# WHAT IT COUNTS, AND WHY COMMENTS ARE STRIPPED FIRST. The ratchet this replaced
+# carried a warning in its own header: "Counting SQL keywords would match every
+# comment that explains why a query was deleted, which is the opposite of what
+# this gate wants to encourage." Its replacement counted `d1(` over raw files
+# and immediately failed on
 #
-# When the count reaches zero, the LAST commit removes `[[d1_databases]]` from
-# wrangler.toml, deletes workers/api/migrations/, and this gate becomes an
-# assertion that the count is 0 rather than a ratchet.
+#     // NO `ctx.d1("DB")` here: this route held a D1 handle it never used
+#
+# -- a comment recording a REMOVAL, refused as though it were an addition. A
+# gate that punishes the note explaining a deletion teaches people to delete the
+# note. So `//` line comments go before anything is counted, and what is left is
+# code: `.prepare(` for a statement, `.d1(` for a handle.
+#
+# The method is the coarse one on purpose: a `//` inside a string literal would
+# truncate that line early and could hide a call written after it on the same
+# line. That is not a hole worth closing with a Rust parser here -- `cargo
+# check` fails the moment a `.d1(` call exists, because the `d1` feature is off
+# in Cargo.toml and `RouteContext::d1` no longer resolves. This gate's job is to
+# make the intent legible and to catch the binding coming back in a config, not
+# to be the only thing standing between the tree and SQL.
 set -eu
 cd "$(dirname "$0")/../.."
 BASELINE_FILE=tools/gates/no-sql.baseline
-# migrate.rs is EXEMPT and is the only exemption. It exists to read the tables
-# it is emptying, it holds nothing else, and it is deleted in the same commit as
-# the D1 binding. An exemption that is one whole file is one you can see the
-# size of; an exemption that is a comment marker is one that spreads.
-n=$(grep -o "\.prepare(" $(ls workers/api/src/*.rs | grep -v '/migrate\.rs$') | wc -l | tr -d ' ')
-m=$(grep -c "\.prepare(" workers/api/src/migrate.rs 2>/dev/null || echo 0)
-echo "no-sql: $m statement(s) in the exempt migrate.rs"
+code() { sed 's,//.*,,' $(find workers/api/src -name '*.rs'); }
+prepared=$(code | grep -o "\.prepare(" | wc -l | tr -d ' ')
+handles=$(code | grep -o "\.d1(" | wc -l | tr -d ' ')
+# THE BINDING ITSELF, because the code can be clean while the deployment still
+# attaches a database -- which is how it looked for the whole migration.
+binding=$(grep -c '^\[\[d1_databases\]\]' workers/api/wrangler.toml || true)
+migrations=$(ls workers/api/migrations 2>/dev/null | wc -l | tr -d ' ')
+n=$((prepared + handles + binding + migrations))
+echo "no-sql: $prepared .prepare( + $handles .d1( + $binding binding(s) + $migrations migration file(s)"
 if [ ! -f "$BASELINE_FILE" ]; then
   echo "$n" > "$BASELINE_FILE"
-  echo "no-sql: baseline recorded at $n prepared statements"
+  echo "no-sql: baseline recorded at $n"
   exit 0
 fi
 baseline=$(cat "$BASELINE_FILE")
-echo "no-sql: $n prepared statements (ratchet at $baseline)"
 if [ "$n" -gt "$baseline" ]; then
-  echo "no-sql: FAILED — $((n - baseline)) statement(s) ADDED. The ratchet only goes down."
-  echo "Per file now:"
-  for f in $(ls workers/api/src/*.rs | grep -v '/migrate\.rs$'); do
-    c=$(grep -c "\.prepare(" "$f" || true)
-    [ "$c" -gt 0 ] && echo "  $c $(basename "$f")"
-  done | sort -rn
+  echo "no-sql: FAILED — $baseline -> $n. SQL or a D1 binding came back."
+  code | grep -n "\.prepare(\|\.d1(" || true
+  grep -n '^\[\[d1_databases\]\]' workers/api/wrangler.toml || true
   exit 1
 fi
 if [ "$n" -lt "$baseline" ]; then
   echo "$n" > "$BASELINE_FILE"
   echo "no-sql: ratchet lowered $baseline -> $n. Commit the baseline with the change."
 fi
-[ "$n" -eq 0 ] && echo "no-sql: ZERO. Remove the D1 binding and the migrations directory."
+[ "$n" -eq 0 ] && echo "no-sql: ZERO. No statements, no handles, no binding, no migrations."
 exit 0

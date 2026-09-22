@@ -35,7 +35,6 @@ pub(crate) fn now_ms() -> i64 {
 pub(crate) async fn owner_at(
     req: &Request,
     ctx: &RouteContext<()>,
-    db: &D1Database,
     location_id: &str,
 ) -> std::result::Result<String, Response> {
     let raw = match auth::bearer(req) {
@@ -43,7 +42,7 @@ pub(crate) async fn owner_at(
         Err(e) => return Err(e.into_response().unwrap()),
     };
     let user_id = if raw.starts_with("dowiz_") {
-        match auth::authenticate(req, &ctx.env, db, now_ms()).await {
+        match auth::authenticate(req, &ctx.env, now_ms()).await {
             // A KEY IS SCOPED TO THE VENUE IT WAS MINTED FOR, and that scope
             // used to be dropped on the floor here -- `active_location_id`
             // carries the key's own `location_id` (see `api_key_principal`)
@@ -116,7 +115,6 @@ pub(crate) async fn owner_at(
 pub(crate) async fn owner_and_venue(
     req: &Request,
     ctx: &RouteContext<()>,
-    _db: &D1Database,
 ) -> std::result::Result<(String, String), Response> {
     // THE TOKEN IS VERIFIED WITHOUT TOUCHING THE DATABASE, and the membership
     // is checked by the JOIN below. `authenticate` would have run its own
@@ -214,7 +212,6 @@ pub(crate) async fn owner_and_venue(
 pub(crate) async fn owner_beside<F, T>(
     req: &Request,
     ctx: &RouteContext<()>,
-    db: &D1Database,
     place: &crate::hubstore::Place,
     work: F,
 ) -> std::result::Result<(String, String, T), Response>
@@ -229,7 +226,7 @@ where
         Err(e) => return Err(e.into_response().unwrap()),
     }
 
-    let (who, done) = futures_util::future::join(owner_and_venue(req, ctx, db), work).await;
+    let (who, done) = futures_util::future::join(owner_and_venue(req, ctx), work).await;
 
     // AUTHORISATION IS RESOLVED BEFORE THE WORK IS HANDED BACK, so a caller who
     // fails it gets their 401 or 404 and nothing else -- that the bytes were
@@ -264,7 +261,6 @@ pub(crate) fn location_of(req: &Request) -> Option<String> {
 
 /// `GET /api/owner/orders?location_id=&status=`
 pub async fn orders(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // ── A CONSOLE THAT ALREADY HAS A COPY ──
     //
@@ -287,7 +283,7 @@ pub async fn orders(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         // asked anything. The VENUE it answers with is kept: the delta path
         // has to filter by the same location the full path does, or a console
         // could be handed orders the full list would never have shown it.
-        let want_loc = match owner_and_venue(&req, &ctx, &db).await {
+        let want_loc = match owner_and_venue(&req, &ctx).await {
             Ok((_, l)) => l,
             Err(r) => return Ok(r),
         };
@@ -355,7 +351,7 @@ pub async fn orders(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // every order the venue had ever taken so that this function could keep
     // the ones from today.
     let (_, loc, (generation, listed)) =
-        match owner_beside(&req, &ctx, &db, &place, crate::hubstore::orders_at(&place)).await {
+        match owner_beside(&req, &ctx, &place, crate::hubstore::orders_at(&place)).await {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };
@@ -401,7 +397,7 @@ pub async fn orders(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // The time that is left on each live order, from where it is and where
     // the courier is, with one read of the map for the whole queue.
     if let Ok(loaded) = crate::hubstore::load_catalog(&place).await {
-        crate::live_eta::attach_all(&db, &place, &loaded, &mut out, now_ms()).await;
+        crate::live_eta::attach_all(&place, &loaded, &mut out, now_ms()).await;
     }
     // The generation travels with the list so a client can ask for changes
     // after it next time -- and it is the generation THIS list was folded
@@ -428,11 +424,10 @@ pub async fn assign_courier(mut req: Request, ctx: RouteContext<()>) -> Result<R
     let Some(id) = ctx.param("id").cloned() else {
         return Response::error("missing order id", 400);
     };
-    let db = ctx.d1("DB")?;
     // THE VENUE THAT WAS AUTHORISED, not the one the token happens to name --
     // see `Place::of_authorised`.
     let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
-    if let Err(r) = owner_at(&req, &ctx, &db, &body.location_id).await {
+    if let Err(r) = owner_at(&req, &ctx, &body.location_id).await {
         return Ok(r);
     }
     // The courier must be this venue's and active.
@@ -544,11 +539,10 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
     let Some(id) = ctx.param("id").cloned() else {
         return Response::error("missing order id", 400);
     };
-    let db = ctx.d1("DB")?;
     // THE VENUE THAT WAS AUTHORISED, not the one the token happens to name --
     // see `Place::of_authorised`.
     let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
-    if let Err(r) = owner_at(&req, &ctx, &db, &body.location_id).await {
+    if let Err(r) = owner_at(&req, &ctx, &body.location_id).await {
         return Ok(r);
     }
 
@@ -651,7 +645,6 @@ pub async fn order_action(mut req: Request, ctx: RouteContext<()>) -> Result<Res
 /// between orders, computed from the log rather than kept as a running total
 /// that can drift.
 pub async fn dashboard(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // The membership query and the image read do not depend on each other, so
     // `owner_beside` runs them together. The token is still verified before
@@ -668,7 +661,6 @@ pub async fn dashboard(req: Request, ctx: RouteContext<()>) -> Result<Response> 
     let (_, loc, (listed, venue)) = match owner_beside(
         &req,
         &ctx,
-        &db,
         &place,
         futures_util::future::try_join(
             crate::hubstore::orders(&place),
@@ -819,11 +811,10 @@ pub async fn update_product(mut req: Request, ctx: RouteContext<()>) -> Result<R
     let Some(id) = ctx.param("id").cloned() else {
         return Response::error("missing product id", 400);
     };
-    let db = ctx.d1("DB")?;
     // THE VENUE THAT WAS AUTHORISED, not the one the token happens to name --
     // see `Place::of_authorised`.
     let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
-    if let Err(r) = owner_at(&req, &ctx, &db, &body.location_id).await {
+    if let Err(r) = owner_at(&req, &ctx, &body.location_id).await {
         return Ok(r);
     }
     if let Some(p) = body.price {
@@ -1186,8 +1177,7 @@ pub async fn write_translations(mut req: Request, ctx: RouteContext<()>) -> Resu
     if body.entries.len() > 500 {
         return Response::error("at most 500 entries per call", 400);
     }
-    let db = ctx.d1("DB")?;
-    if let Err(r) = owner_at(&req, &ctx, &db, &body.location_id).await {
+    if let Err(r) = owner_at(&req, &ctx, &body.location_id).await {
         return Ok(r);
     }
     // Only ids the catalogue actually has: a translation of a dish that does
@@ -1293,11 +1283,10 @@ pub async fn update_location(mut req: Request, ctx: RouteContext<()>) -> Result<
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let db = ctx.d1("DB")?;
     // THE VENUE THAT WAS AUTHORISED, not the one the token happens to name --
     // see `Place::of_authorised`.
     let place = crate::hubstore::Place::of_authorised(&ctx, &body.location_id)?;
-    if let Err(r) = owner_at(&req, &ctx, &db, &body.location_id).await {
+    if let Err(r) = owner_at(&req, &ctx, &body.location_id).await {
         return Ok(r);
     }
     let stage = match &body.stage {

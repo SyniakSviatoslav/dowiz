@@ -276,6 +276,46 @@ asserts the string `prepare(` and the word `SELECT` do not occur in
   migrated**, naming the route that fixes it. A silent fallback works forever
   and the migration is never finished.
 
+## 6b. Step C landed — 2026-09-22
+
+The last commit of §6 is in. `[[d1_databases]]` is out of `wrangler.toml`,
+`workers/api/migrations/` (nine `.sql` files) and `workers/api/src/migrate.rs`
+are deleted, `worker`'s `d1` feature is off in `Cargo.toml`, and the ratchet
+`121 -> 115 -> ... -> 0` is now an assertion: **0 `.prepare(`, 0 `.d1(`,
+0 bindings, 0 migration files.** 64 files, +298/-2322.
+
+**THREE THINGS THE CONTRACT STEP TOOK WITH IT, and all three were D1's alone:**
+* `hubstore::CHUNK` (900 KB) — D1 refused any single value over a million bytes,
+  so an image was stored in chunks. A Durable Object has no such limit.
+  `hubdo::CHUNK` (96 KiB) is a different constant and stays.
+* `hubstore::SLICE`/`SLICES`/`from_hex` and their four tests — D1 handed a BLOB
+  to JavaScript as one JS value per byte, which is what produced `503 error
+  1102`; `hex()` plus `substr` was the fix. A response body crosses as bytes.
+* `LEGACY_VENUE` and `Place::legacy_venue` — they scoped the `hub_image` seed to
+  the one venue that predated the objects. With no seed there is nothing left to
+  scope.
+
+**THE SEED WAS PROVED SPENT BEFORE IT WAS DELETED.** `hub_image` still holds the
+legacy venue's five rows — `catalog` gen 95, `log` gen 144 over two chunks,
+`settings`, `stock` — every one last written **2026-09-16 15:39–15:40 UTC**,
+inside one minute, and never since. That venue's storefront answered `200` on
+2026-09-22 at `dubin-sushi.dowiz.org` with 21 categories, 165 dishes and
+`menuVersion: 246`. 246 is past 95: the object has been the authority for six
+days and D1's copy is a frozen snapshot. The fallback fired on a 204 and only on
+a 204, so after six days of reads it could not fire again for this venue.
+**The D1 database itself is untouched — the rows are still there if the snapshot
+is ever wanted.**
+
+**AND THE GATE HAD TO BE REWRITTEN TO STOP REFUSING ITS OWN EPITAPH.** The first
+zero-assertion counted `d1(` over raw file bytes and immediately failed on
+`// NO `ctx.d1("DB")` here: this route held a D1 handle it never used` — a
+comment recording a REMOVAL, refused as an addition, which is precisely what the
+ratchet's own header had warned about one version earlier. It strips `//`
+comments before counting now, and counts the binding and the migrations
+directory as well, because the code can be clean while the deployment still
+attaches a database. Both halves are proved: a real `.d1(` call and a restored
+`[[d1_databases]]` block each refuse; the comment does not.
+
 ## 7. The gates this adds
 
 | # | Fitness function | Kind |

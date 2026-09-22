@@ -31,8 +31,7 @@ fn settings_flag(s: &dowiz_hub::settings::Settings, key: &str) -> bool {
 
 /// `GET /api/owner/integrations`
 pub async fn status(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
@@ -111,8 +110,7 @@ pub async fn check(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };

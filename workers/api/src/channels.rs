@@ -435,8 +435,7 @@ pub async fn webhook(mut req: Request, ctx: RouteContext<()>) -> Result<Response
 
 /// `GET /api/owner/inbox` — one line per conversation, newest first.
 pub async fn inbox(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
@@ -506,8 +505,7 @@ fn origin_of(req: &Request) -> String {
 
 /// `GET /api/owner/inbox/:peer?channel=` — the thread, and it is marked read.
 pub async fn thread(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
@@ -585,8 +583,7 @@ pub async fn reply(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };

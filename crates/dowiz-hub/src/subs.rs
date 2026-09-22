@@ -31,7 +31,12 @@ const P_ORDER: &str = "order:";
 const P_STAFF: &str = "staff:";
 
 pub struct Subs {
-    store: Store,
+    // `store: Store` WAS HERE and was never read: `Kv::load` COPIES the
+    // entries out (`Kv { entries: Vec<(String, Vec<u8>)>}`), so the arena it
+    // was read from is dead the moment the load returns, and the bytes written
+    // back come from `kv.compacted_bytes_fit`. Holding it kept a whole
+    // 512 KiB image alive for the lifetime of every one of these, inside
+    // a Durable Object that holds one per venue.
     kv: Kv,
 }
 
@@ -40,7 +45,7 @@ impl Subs {
         let mut store = Store::create_bytes(DEFAULT_SUBS_BYTES);
         Kv::init_bytes(&mut store)?;
         let kv = Kv::load(&store).ok_or(HubError::NotAHub)?;
-        Ok(Subs { store, kv })
+        Ok(Subs { kv })
     }
 
     pub fn load(bytes: &[u8]) -> Result<Self, HubError> {
@@ -49,7 +54,7 @@ impl Subs {
             return Err(HubError::NotAHub);
         }
         let kv = Kv::load(&store).ok_or(HubError::NotAHub)?;
-        Ok(Subs { store, kv })
+        Ok(Subs { kv })
     }
 
     /// THE IMAGE IS REWRITTEN WHOLE, not appended to.

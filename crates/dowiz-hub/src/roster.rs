@@ -118,7 +118,12 @@ impl ClaimError {
 }
 
 pub struct Roster {
-    store: Store,
+    // `store: Store` WAS HERE and was never read: `Kv::load` COPIES the
+    // entries out (`Kv { entries: Vec<(String, Vec<u8>)>}`), so the arena it
+    // was read from is dead the moment the load returns, and the bytes written
+    // back come from `kv.compacted_bytes_fit`. Holding it kept a whole
+    // 512 KiB image alive for the lifetime of every one of these, inside
+    // a Durable Object that holds one per venue.
     kv: Kv,
     /// The cost new passwords are hashed at, AND the cost a failed lookup burns.
     ///
@@ -136,7 +141,7 @@ impl Roster {
         let mut store = Store::create_bytes(DEFAULT_ROSTER_BYTES);
         Kv::init_bytes(&mut store)?;
         let kv = Kv::load(&store).ok_or(HubError::NotAHub)?;
-        Ok(Roster { store, kv, iterations: PBKDF2_ITERATIONS })
+        Ok(Roster { kv, iterations: PBKDF2_ITERATIONS })
     }
 
     /// Lower the hashing cost. For TESTS ONLY -- a suite that spends half a
@@ -151,7 +156,7 @@ impl Roster {
             return Err(HubError::NotAHub);
         }
         let kv = Kv::load(&store).ok_or(HubError::NotAHub)?;
-        Ok(Roster { store, kv, iterations: PBKDF2_ITERATIONS })
+        Ok(Roster { kv, iterations: PBKDF2_ITERATIONS })
     }
 
     /// THE IMAGE IS REWRITTEN WHOLE, not appended to.

@@ -41,7 +41,6 @@ pub async fn connect(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     if !upgrading {
         return Response::error("this route is a websocket upgrade", 426);
     }
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let now = Date::now().as_millis() as i64;
     // THE TOKEN ARRIVES AS A SUBPROTOCOL, because a browser cannot set a header
@@ -71,7 +70,7 @@ pub async fn connect(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     // resolves the venue from. A principal whose location is not this hub is
     // refused with 404, the same answer a cross-tenant read gets everywhere
     // else -- a 403 would confirm the venue exists.
-    let tag = match auth::authenticate_token(&token, &ctx.env, &db, now).await {
+    let tag = match auth::authenticate_token(&token, &ctx.env, now).await {
         Ok(Principal::Owner { active_location_id, .. }) => {
             if active_location_id.as_deref() != Some(place.venue.as_str()) {
                 return Response::error("not found", 404);

@@ -11,8 +11,7 @@ use super::fold;
 use crate::owner::{now_ms, owner_and_venue};
 
 pub async fn analytics(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };

@@ -18,8 +18,7 @@ use crate::services::orders::mine::of_venue as orders_of;
 
 /// `GET /api/owner/posts`
 pub async fn posts(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
@@ -54,8 +53,7 @@ pub async fn posts(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 pub async fn draft_post(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     use dowiz_hub::post::{self, Post, State as PostState};
 
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };

@@ -14,8 +14,7 @@ use crate::owner::owner_and_venue;
 /// PREVIEW BY DEFAULT. An import that applies on the first click is one the
 /// owner cannot inspect first, and a menu is the thing customers buy from.
 pub async fn import_menu(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };

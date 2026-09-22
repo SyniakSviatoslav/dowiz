@@ -25,6 +25,12 @@ jobs:
       - run: cd crates/dowiz-core && cargo test
       - run: cd crates/dowiz-hub && cargo test
       - run: cd workers/api && cargo test
+      # A second implementation of the same owner/courier/storefront routes as the
+      # Worker, native-spa-server re-implements the surfaces in Rust for venues that
+      # want to run on their own machine. It was never tested by CI, so two of its
+      # AI assistant configuration tests had been failing on developer boxes with
+      # nothing reporting it. This runs those tests so regressions are caught.
+      - run: cd tools/native-spa-server && cargo test
       - name: the SQL ratchet (may only fall)
         run: sh tools/gates/no-sql.sh
       - name: the file-size ratchet (may only fall)

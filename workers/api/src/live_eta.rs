@@ -305,7 +305,6 @@ pub fn estimate(
 /// Attach a live estimate to every order in `orders`, in place, with one
 /// read of the map. Orders that are over get none.
 pub async fn attach_all(
-    _db: &D1Database,
     place: &crate::hubstore::Place,
     loaded: &crate::hubstore::LoadedCatalog,
     orders: &mut [Value],
@@ -335,7 +334,6 @@ pub async fn attach_all(
 
 /// The estimate for ONE order, for the customer's own read of it.
 pub async fn attach_one(
-    _db: &D1Database,
     place: &crate::hubstore::Place,
     order: &mut Value,
     now_ms: i64,

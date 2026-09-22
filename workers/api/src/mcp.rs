@@ -285,9 +285,8 @@ pub async fn describe(req: Request, _ctx: RouteContext<()>) -> Result<Response> 
 
 /// `POST /api/mcp`
 pub async fn rpc(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
     let now = crate::owner::now_ms();
-    let principal = match auth::authenticate(&req, &ctx.env, &db, now).await {
+    let principal = match auth::authenticate(&req, &ctx.env, now).await {
         Ok(p) => p,
         Err(e) => return e.into_response(),
     };

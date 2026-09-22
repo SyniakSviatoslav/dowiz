@@ -196,8 +196,7 @@ pub async fn join(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
 
 /// `GET /api/platform/waitlist` — every row, newest first. Administrators only.
 pub async fn list(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
-    if let Err(r) = admin_only(&req, &ctx, &db).await {
+    if let Err(r) = admin_only(&req, &ctx).await {
         return Ok(r);
     }
     #[derive(Deserialize, serde::Serialize)]

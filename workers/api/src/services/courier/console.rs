@@ -22,8 +22,7 @@ use crate::owner::{now_ms, owner_and_venue};
 pub async fn couriers(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     use crate::services::courier::roster;
 
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
@@ -80,8 +79,7 @@ pub async fn courier_detail(req: Request, ctx: RouteContext<()>) -> Result<Respo
     };
     use crate::services::courier::{record, roster};
 
-    let db = ctx.d1("DB")?;
-    let (_, loc) = match owner_and_venue(&req, &ctx, &db).await {
+    let (_, loc) = match owner_and_venue(&req, &ctx).await {
         Ok(v) => v,
         Err(r) => return Ok(r),
     };

@@ -36,14 +36,13 @@ struct PresetIn {
 /// into the pane, so the console and the storefront cannot disagree about which
 /// pairs exist -- and a pair not on this list is not one the storefront renders.
 pub async fn branding(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     use dowiz_hub::brand::{Brand, PRESETS, RADIUS_MAX, TYPE_PAIRS};
     // The membership query and this read do not depend on each other, so
     // `owner_beside` runs them together. The token is still verified before
     // either is issued -- see it for why that order matters.
     let (_, _loc, loaded) =
-        match crate::owner::owner_beside(&req, &ctx, &db, &place, crate::hubstore::load_catalog(&place)).await {
+        match crate::owner::owner_beside(&req, &ctx, &place, crate::hubstore::load_catalog(&place)).await {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };
@@ -111,8 +110,7 @@ pub async fn set_branding(mut req: Request, ctx: RouteContext<()>) -> Result<Res
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
@@ -167,8 +165,7 @@ pub async fn set_preset(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };

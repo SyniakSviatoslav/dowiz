@@ -190,12 +190,11 @@ pub async fn balance(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         .find(|(k, _)| k == "user")
         .map(|(_, v)| v.to_string());
 
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
     // AUTHENTICATED, TO THIS VENUE, AND TO THIS WALLET. The first two were the
     // red-team fix; the third is this one. See `wallet_who`.
     let principal =
-        match crate::auth::principal_at(&req, &ctx.env, &db, &place.venue, now_ms()).await {
+        match crate::auth::principal_at(&req, &ctx.env, &place.venue, now_ms()).await {
             Ok(p) => p,
             Err(r) => return Ok(r),
         };
@@ -265,9 +264,8 @@ pub async fn top_up(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
     // was supplied, "providerRef is required" -- two invitations to try harder
     // at a door that was never going to open. It also stops an unauthorised
     // caller costing this Worker a body parse and a currency lookup.
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
-    match crate::auth::principal_at(&req, &ctx.env, &db, &place.venue, now_ms()).await {
+    match crate::auth::principal_at(&req, &ctx.env, &place.venue, now_ms()).await {
         Ok(crate::auth::Principal::Owner { .. }) => {}
         Ok(_) => return Response::error("only the venue can record a top-up", 403),
         Err(r) => return Ok(r),
@@ -457,12 +455,11 @@ pub async fn statement(req: Request, ctx: RouteContext<()>) -> Result<Response> 
         .find(|(k, _)| k == "user")
         .map(|(_, v)| v.to_string());
 
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
     // AUTHENTICATED, TO THIS VENUE, AND TO THIS WALLET. The first two were the
     // red-team fix; the third is this one. See `wallet_who`.
     let principal =
-        match crate::auth::principal_at(&req, &ctx.env, &db, &place.venue, now_ms()).await {
+        match crate::auth::principal_at(&req, &ctx.env, &place.venue, now_ms()).await {
             Ok(p) => p,
             Err(r) => return Ok(r),
         };

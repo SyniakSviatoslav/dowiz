@@ -10,9 +10,8 @@ use crate::owner::now_ms;
 /// A fold over the orders, like everything else that counts. No history table:
 /// a second list of the same deliveries is a second thing that can disagree.
 pub async fn courier_history(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-    let me = match crate::auth::authenticate(&req, &ctx.env, &db, now_ms()).await {
+    let me = match crate::auth::authenticate(&req, &ctx.env, now_ms()).await {
         Ok(crate::auth::Principal::Courier { courier_id, .. }) => courier_id,
         Ok(_) => return Response::error("forbidden role", 403),
         Err(e) => return e.into_response(),

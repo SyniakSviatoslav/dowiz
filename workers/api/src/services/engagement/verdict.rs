@@ -26,8 +26,7 @@ pub async fn approve_post(mut req: Request, ctx: RouteContext<()>) -> Result<Res
     use dowiz_hub::post::State as PostState;
 
     let body: ApproveIn = req.json().await.unwrap_or_default();
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
@@ -131,8 +130,7 @@ pub async fn approve_post(mut req: Request, ctx: RouteContext<()>) -> Result<Res
 pub async fn reject_post(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     use dowiz_hub::post::State as PostState;
 
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };

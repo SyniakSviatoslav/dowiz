@@ -385,11 +385,10 @@ pub fn belongs_to(p: &Principal, venue: &str) -> bool {
 pub async fn principal_at(
     req: &Request,
     env: &Env,
-    db: &D1Database,
     venue: &str,
     now_ms: i64,
 ) -> std::result::Result<Principal, Response> {
-    let p = match authenticate(req, env, db, now_ms).await {
+    let p = match authenticate(req, env, now_ms).await {
         Ok(p) => p,
         Err(e) => return Err(e.into_response().unwrap()),
     };
@@ -404,11 +403,10 @@ pub async fn principal_at(
 pub async fn authenticate(
     req: &Request,
     env: &Env,
-    db: &D1Database,
     now_ms: i64,
 ) -> std::result::Result<Principal, AuthError> {
     let raw = bearer(req)?;
-    authenticate_token(&raw, env, db, now_ms).await
+    authenticate_token(&raw, env, now_ms).await
 }
 
 /// The same, for a caller that holds the token rather than the request.
@@ -422,7 +420,6 @@ pub async fn authenticate(
 pub async fn authenticate_token(
     raw: &str,
     env: &Env,
-    _db: &D1Database,
     now_ms: i64,
 ) -> std::result::Result<Principal, AuthError> {
     let raw = raw.to_string();

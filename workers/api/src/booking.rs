@@ -162,12 +162,11 @@ pub async fn detail(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let (Some(slug), Some(id)) = (ctx.param("slug").cloned(), ctx.param("id").cloned()) else {
         return Response::error("missing slug or id", 400);
     };
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
     // AUTHENTICATED, AND TO THIS VENUE. See `auth::principal_at`: this family
     // was mounted under `/api/public/` with no guard at all.
     if let Err(r) =
-        crate::auth::principal_at(&req, &ctx.env, &db, &place.venue, now_ms()).await
+        crate::auth::principal_at(&req, &ctx.env, &place.venue, now_ms()).await
     {
         return Ok(r);
     }
@@ -219,12 +218,11 @@ pub async fn list(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         return Response::error("missing user", 400);
     };
 
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
     // AUTHENTICATED, AND TO THIS VENUE. `?user=` was a client-declared
     // identity: anyone could list anyone's reservations by naming them.
     if let Err(r) =
-        crate::auth::principal_at(&req, &ctx.env, &db, &place.venue, now_ms()).await
+        crate::auth::principal_at(&req, &ctx.env, &place.venue, now_ms()).await
     {
         return Ok(r);
     }
@@ -284,10 +282,6 @@ pub async fn create(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
         return Response::error("requestId is required", 400);
     }
 
-    let db = match ctx.d1("DB") {
-        Ok(d) => d,
-        Err(e) => return Response::error(format!("create/db: {e}"), 500),
-    };
     let place = match crate::hubstore::Place::of_slug(&ctx, &slug).await {
         Ok(p) => p,
         Err(e) => return Response::error(format!("create/place: {e}"), 500),
@@ -297,7 +291,7 @@ pub async fn create(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
     // nobody chose; when a public one exists it will mint a token the way the
     // storefront does for an order.
     if let Err(r) =
-        crate::auth::principal_at(&req, &ctx.env, &db, &place.venue, now_ms()).await
+        crate::auth::principal_at(&req, &ctx.env, &place.venue, now_ms()).await
     {
         return Ok(r);
     }
@@ -406,7 +400,6 @@ pub async fn action(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request: {e}"), 400),
     };
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
     // AUTHENTICATED, AND TO THIS VENUE, BEFORE THE BODY IS JUDGED. This route
     // drives the reservation's state machine and writes `body.actor` into the
@@ -415,7 +408,7 @@ pub async fn action(mut req: Request, ctx: RouteContext<()>) -> Result<Response>
     // caller with no token should learn nothing at all -- not even which
     // status names this kernel knows.
     if let Err(r) =
-        crate::auth::principal_at(&req, &ctx.env, &db, &place.venue, now_ms()).await
+        crate::auth::principal_at(&req, &ctx.env, &place.venue, now_ms()).await
     {
         return Ok(r);
     }
@@ -571,12 +564,11 @@ pub async fn issue_pass(req: Request, ctx: RouteContext<()>) -> Result<Response>
     let (Some(slug), Some(id)) = (ctx.param("slug").cloned(), ctx.param("id").cloned()) else {
         return Response::error("missing slug or id", 400);
     };
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
     // AUTHENTICATED, AND TO THIS VENUE. See `auth::principal_at`: this family
     // was mounted under `/api/public/` with no guard at all.
     if let Err(r) =
-        crate::auth::principal_at(&req, &ctx.env, &db, &place.venue, now_ms()).await
+        crate::auth::principal_at(&req, &ctx.env, &place.venue, now_ms()).await
     {
         return Ok(r);
     }

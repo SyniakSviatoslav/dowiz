@@ -464,8 +464,7 @@ pub async fn push_place(place: &crate::hubstore::Place, now_ms: i64) -> std::res
 
 /// `POST /api/owner/backup/cloud` — push now.
 pub async fn push(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
-    let loc = match crate::owner::owner_and_venue(&req, &ctx, &db).await {
+    let loc = match crate::owner::owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
@@ -479,8 +478,7 @@ pub async fn push(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 
 /// `GET /api/owner/backup/cloud` — is a store set, and when did it last take a copy.
 pub async fn status(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
-    let loc = match crate::owner::owner_and_venue(&req, &ctx, &db).await {
+    let loc = match crate::owner::owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
@@ -529,7 +527,9 @@ pub async fn status(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 /// store refuses is logged and skipped; the next venue is not its problem.
 pub async fn nightly(env: &Env) {
     struct Row { id: String }
-    let Ok(_db) = env.d1("DB") else { console_error!("nightly backup: no DB"); return };
+    // THE VENUE LIST COMES FROM THE PLATFORM REGISTRY, not from a table. It was
+    // `SELECT id FROM locations` beside an `env.d1("DB")` guard; the guard went
+    // with the binding and the registry read is what is left.
     let rows: Vec<Row> = match crate::identity_store::registry(env).await {
         Ok(t) => t
             .all(crate::identity_store::K_LOC)
@@ -538,14 +538,13 @@ pub async fn nightly(env: &Env) {
             .collect(),
         Err(e) => { console_error!("nightly backup: registry unreadable: {e}"); return }
     };
-    let legacy = env.var("LEGACY_VENUE").ok().map(|v| v.to_string()).filter(|v| !v.is_empty());
     let now = crate::owner::now_ms();
     // The error log is now per venue, in that venue's own object, so pruning
     // it happens inside the per-venue loop below rather than as one statement
     // over a shared table.
     for r in rows {
-        let (Ok(db), Ok(ns)) = (env.d1("DB"), env.durable_object("HUB")) else { continue };
-        let place = crate::hubstore::Place { db, ns, venue: r.id.clone(), legacy_venue: legacy.clone() };
+        let Ok(ns) = env.durable_object("HUB") else { continue };
+        let place = crate::hubstore::Place { ns, venue: r.id.clone() };
         let configured = match crate::hubstore::load_settings(&place).await {
             Ok(l) => cfg(&l.settings).is_some(),
             Err(_) => false,

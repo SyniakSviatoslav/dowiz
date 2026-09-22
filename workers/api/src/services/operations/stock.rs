@@ -24,7 +24,6 @@ use crate::owner::{now_ms, owner_and_venue};
 
 /// `GET /api/owner/stock` — what is on the shelf, and what is running out.
 pub async fn stock(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // The membership query and this read do not depend on each other, so
     // `owner_beside` runs them together. The token is still verified before
@@ -33,7 +32,6 @@ pub async fn stock(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let (_, _loc, (cat, log)) = match crate::owner::owner_beside(
         &req,
         &ctx,
-        &db,
         &place,
         async {
             let (c, s) = futures_util::future::join(
@@ -118,8 +116,7 @@ pub async fn stock_move(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };

@@ -11,11 +11,21 @@
 //! module has no path to any of those. The kernel remains the only thing that
 //! decides anything, exactly as it does for every other surface.
 //!
-//! LOCAL BY DEFAULT, and the default is the point. `ai.endpoint` starts at
-//! `http://127.0.0.1:11434/v1`, an Ollama on the venue's own machine: the
-//! questions and the data never leave their hardware. That is the arrangement
-//! D0's "decentralized, local-first" asks for, and it is why plain HTTP to
-//! loopback is permitted while plain HTTP to anywhere else is refused.
+//! LOCAL BY DEFAULT, and THIS SURFACE SUPPLIES THE DEFAULT. An unset
+//! `ai.endpoint` falls back here to `http://127.0.0.1:11434/v1`, an Ollama on
+//! the venue's own machine: the questions and the data never leave their
+//! hardware. That is the arrangement D0's "decentralized, local-first" asks
+//! for, and it is why plain HTTP to loopback is permitted here while plain
+//! HTTP to anywhere else is refused.
+//!
+//! THE FALLBACK IS THIS FILE'S AND NOT THE SETTINGS'. `dowiz_hub::settings`
+//! declares `ai.endpoint` with an EMPTY default on purpose -- see the comment
+//! there: a local default "was a lie the Worker could never honour", because a
+//! Worker has no machine and cannot open a plain-http socket at all. This
+//! header claimed the settings default was the loopback URL, which stopped
+//! being true when that default was emptied, and the two tests below went red
+//! and stayed red -- on a developer box, with this crate outside CI and
+//! nothing reporting it. It is in CI now.
 //!
 //! WHAT GOES OUT DEPENDS ON WHERE IT GOES. A hosted endpoint gets a REDACTED
 //! context: no customer name, no phone, no address. A local endpoint gets the
@@ -78,7 +88,14 @@ impl Assistant {
         if !s.flag("ai.enabled") {
             return Err(AiError::Disabled);
         }
-        let endpoint = s.known("ai.endpoint").trim_end_matches('/').to_string();
+        let mut endpoint = s.known("ai.endpoint").trim_end_matches('/').to_string();
+        // The settings default is empty because the Worker cannot use plain HTTP to
+        // localhost. But native-spa-server runs on the venue's own machine, so it can.
+        // When no endpoint is configured, fall back to a local Ollama as documented in
+        // the module comment: the shipped default is LOCAL, and that is the point.
+        if endpoint.is_empty() {
+            endpoint = "http://127.0.0.1:11434/v1".to_string();
+        }
         let url = httpc::parse_url(&endpoint)
             .map_err(|e| AiError::Misconfigured(format!("ai.endpoint: {e}")))?;
         let local = httpc::is_local(&url.host);

@@ -451,8 +451,7 @@ pub async fn owner_refresh(mut req: Request, ctx: RouteContext<()>) -> Result<Re
 
 /// `POST /api/auth/logout` — every device, like the old service.
 pub async fn owner_logout(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
-    let p = match auth::authenticate(&req, &ctx.env, &db, now_ms()).await {
+    let p = match auth::authenticate(&req, &ctx.env, now_ms()).await {
         Ok(p) => p,
         Err(e) => return e.into_response(),
     };

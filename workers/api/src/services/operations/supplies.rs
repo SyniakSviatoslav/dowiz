@@ -53,8 +53,7 @@ pub async fn set_supply(mut req: Request, ctx: RouteContext<()>) -> Result<Respo
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
@@ -128,8 +127,7 @@ pub async fn retire_supply(mut req: Request, ctx: RouteContext<()>) -> Result<Re
     }
     let _body: In = req.json().await.unwrap_or(In { location_id: None });
     let Some(id) = ctx.param("id").cloned() else { return Response::error("missing supply id", 400) };
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };

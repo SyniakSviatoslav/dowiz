@@ -1,10 +1,11 @@
 //! PURE. Which orders are THIS venue's.
 //!
 //! THE WORKER IS MULTI-TENANT EVEN THOUGH A HUB IS NOT. A venue's Durable
-//! Object holds that venue's log, but the legacy venue's image predates the
-//! scoping (`LEGACY_VENUE`, see `hubstore::do_image`) and can hold more than
-//! one venue's orders, so every fold filters. An unfiltered one shows a
-//! neighbouring venue's takings.
+//! Object holds that venue's log, but the venue that predates the objects was
+//! seeded from a `hub_image` row keyed by image id with no venue column, so its
+//! image can still hold more than one venue's orders. Every fold therefore
+//! filters. An unfiltered one shows a neighbouring venue's takings, and the
+//! seed being gone does not un-write the records it already left behind.
 //!
 //! THERE WERE TWO RULES. `extra::orders_of` kept an order whose `location_id`
 //! is absent; `owner::dashboard` dropped it. Same log, same screen, two

@@ -201,6 +201,26 @@ fn raw_get(base: &str, path: &str) -> (u16, String, Vec<u8>) {
     (code, headers, body)
 }
 
+/// A JPEG the upload validator accepts, with a FILLER byte that varies.
+///
+/// FOUR MARKERS, NOT ONE. `dowiz_hub::media::complete` asks a JPEG for a frame
+/// header (SOF), a scan (SOS) and the end-of-image marker, because those three
+/// together are what distinguishes a photograph from the first kilobyte of one
+/// -- and a truncated upload that is stored looks fine until a customer opens
+/// the menu. A fixture carrying only `FFD8 FFE0` is refused, correctly, and the
+/// two tests that built one by hand were red for exactly that reason while this
+/// crate sat outside CI.
+fn a_valid_jpeg(filler: u8) -> Vec<u8> {
+    let mut b = vec![0xFFu8, 0xD8]; // SOI
+    b.extend_from_slice(&[0xFF, 0xE0]); // APP0
+    b.extend_from_slice(b"\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00");
+    b.extend_from_slice(&[0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00, 0x01, 0x00, 0x01, 0x01, 0x01, 0x11, 0x00]); // SOF0
+    b.extend_from_slice(&[0xFF, 0xDA, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3F, 0x00]); // SOS
+    b.extend(std::iter::repeat_n(filler, 512));
+    b.extend_from_slice(&[0xFF, 0xD9]); // EOI
+    b
+}
+
 fn login(base: &str, id: &str, pw: &str) -> (u16, Value) {
     post(base, "/api/auth/login", None, json!({ "email": id, "password": pw }))
 }
@@ -1526,10 +1546,7 @@ async fn a_dish_photograph_is_stored_by_its_content() {
     let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
     let owner = o["access_token"].as_str().unwrap().to_string();
 
-    // A minimal but real JPEG header, which is what the sniffer decides on.
-    let mut jpeg = vec![0xFFu8, 0xD8, 0xFF, 0xE0];
-    jpeg.extend_from_slice(b"\x00\x10JFIF\x00\x01");
-    jpeg.extend(std::iter::repeat_n(0x42u8, 512));
+    let jpeg = a_valid_jpeg(0x42);
 
     let up = |id: &str, body: &[u8], tok: Option<&str>| {
         request_bytes(&s.base, "POST", &format!("/api/owner/products/{id}/image"), tok, "image/jpeg", body)
@@ -1594,6 +1611,33 @@ async fn a_dish_photograph_is_stored_by_its_content() {
     let (_, menu) = get(&s.base, "/api/menu", None);
     assert_eq!(menu["categories"][0]["products"][0]["imageUrl"], Value::Null);
     assert_eq!(raw_get(&s.base, &url).0, 200, "the file itself must survive a reference being cleared");
+}
+
+/// A JPEG without the FFD9 end marker (EOI) is truncated and will not display.
+/// This test validates that the media handler rejects such files at upload time
+/// rather than storing a broken image. See dowiz_hub::media for the validation.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_truncated_jpeg_without_end_marker_is_refused() {
+    let s = boot("truncated_jpeg").await;
+    let (_, o) = login(&s.base, "ana@dubin.al", "owner-pw");
+    let owner = o["access_token"].as_str().unwrap().to_string();
+
+    // THE SAME FIXTURE WITH ITS LAST TWO BYTES GONE, so what this test refuses
+    // differs from what the test above accepts by exactly the end marker.
+    let mut incomplete_jpeg = a_valid_jpeg(0x42);
+    incomplete_jpeg.truncate(incomplete_jpeg.len() - 2);
+
+    let upload = |body: &[u8]| {
+        request_bytes(&s.base, "POST", "/api/owner/products/p1/image", Some(&owner), "image/jpeg", body)
+    };
+
+    let (code, resp) = upload(&incomplete_jpeg);
+    assert_eq!(code, 400, "incomplete JPEG must be refused");
+    let error = resp.get("error").and_then(|e| e.as_str()).unwrap_or("");
+    assert!(
+        error.contains("incomplete") && error.contains("end marker"),
+        "error must explain why: {error}"
+    );
 }
 
 /// An order carries a name, a phone and a home address. Reading one is now a
@@ -3172,9 +3216,7 @@ async fn an_import_keeps_what_the_file_does_not_carry() {
     let (code, _) = post(&s.base, &format!("/api/owner/products/{id}"), Some(&owner),
                          json!({ "allergens": ["fish"], "size_cm": 20 }));
     assert_eq!(code, 200);
-    let mut jpeg = vec![0xFFu8, 0xD8, 0xFF, 0xE0];
-    jpeg.extend_from_slice(b"\x00\x10JFIF\x00\x01");
-    jpeg.extend(std::iter::repeat_n(0x42u8, 512));
+    let jpeg = a_valid_jpeg(0x42);
     request_bytes(&s.base, "POST", &format!("/api/owner/products/{id}/image"),
                   Some(&owner), "image/jpeg", &jpeg);
 

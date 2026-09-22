@@ -115,13 +115,12 @@ pub async fn messages(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         .and_then(|(_, v)| v.parse().ok())
         .unwrap_or(0);
 
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
     // AUTHENTICATED, AND TO THIS VENUE. A thread holds what a customer and a
     // venue said to each other; the id was the only thing standing in front
     // of it.
     if let Err(r) =
-        crate::auth::principal_at(&req, &ctx.env, &db, &place.venue, crate::owner::now_ms()).await
+        crate::auth::principal_at(&req, &ctx.env, &place.venue, crate::owner::now_ms()).await
     {
         return Ok(r);
     }
@@ -201,13 +200,12 @@ pub async fn send(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
         return Response::error("clientId is required", 400);
     }
 
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_slug(&ctx, &slug).await?;
     // WHO IS SPEAKING COMES FROM THE TOKEN, not from the body. `from` was a
     // string the caller chose, so anyone with a thread id could post as the
     // venue -- or as the customer -- and the message would look exactly like
     // the real one. The body's `from` is now ignored; a role decides.
-    let from = match crate::auth::principal_at(&req, &ctx.env, &db, &place.venue, crate::owner::now_ms()).await {
+    let from = match crate::auth::principal_at(&req, &ctx.env, &place.venue, crate::owner::now_ms()).await {
         Ok(crate::auth::Principal::Owner { .. }) => Party::Venue,
         Ok(crate::auth::Principal::Customer { .. }) => Party::Customer,
         Ok(crate::auth::Principal::Courier { .. }) => {

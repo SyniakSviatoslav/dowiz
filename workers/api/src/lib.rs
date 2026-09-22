@@ -23,7 +23,6 @@ mod platform_store;
 mod rail;
 mod idempotency;
 mod identity_store;
-mod migrate;
 mod courier;
 mod hubdo;
 mod hubstore;
@@ -251,10 +250,6 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         // The main hub. Platform administrators only -- see `platform`.
         .get_async("/api/platform/hubs", platform::hubs)
         .post_async("/api/platform/hubs", platform::create_hub)
-        // A ONE-SHOT, and it stays reachable on purpose: a migration you cannot
-        // run again is a migration you cannot verify. It is idempotent.
-        .post_async("/api/platform/migrate/i18n", migrate::migrate_i18n)
-        .post_async("/api/platform/migrate/all", migrate::migrate_all)
         .post_async("/api/webhooks/stripe", stripe::webhook)
         .post_async("/api/auth/login", accounts::owner_login)
         .post_async("/api/auth/refresh", accounts::owner_refresh)
@@ -360,7 +355,6 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
             // key minted with it, the venue's owner, and the courier whose run
             // it actually is. A courier is not entitled to every customer's
             // address in the venue.
-            let db = ctx.d1("DB")?;
             let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
             let Some(order_json) = hubstore::order(&place, &id).await? else {
                 return Response::error("order not found", 404);
@@ -368,7 +362,7 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
             let envelope: serde_json::Value =
                 serde_json::from_str(&order_json).unwrap_or(serde_json::json!({}));
 
-            let allowed = match auth::authenticate(&req, &ctx.env, &db, Date::now().as_millis() as i64).await {
+            let allowed = match auth::authenticate(&req, &ctx.env, Date::now().as_millis() as i64).await {
                 Ok(auth::Principal::Customer { order_id, .. }) => order_id == id,
                 // AN OWNER OF THIS VENUE, not an owner of any venue.
                 //
@@ -393,7 +387,7 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
             }
             // The order as it stands NOW: the time that is left rides with it.
             let mut live = envelope.clone();
-            live_eta::attach_one(&db, &place, &mut live, Date::now().as_millis() as i64).await;
+            live_eta::attach_one(&place, &mut live, Date::now().as_millis() as i64).await;
             let mut res = Response::ok(serde_json::to_string(&live).unwrap_or(order_json))?;
             res.headers_mut().set("content-type", "application/json; charset=utf-8")?;
             // Never cached by anything between here and the browser: it holds

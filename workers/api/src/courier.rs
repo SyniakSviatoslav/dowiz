@@ -27,9 +27,8 @@ const MAX_SPEED_MPS_MILLI: i64 = 41_667; // 150 km/h
 async fn courier_at(
     req: &Request,
     ctx: &RouteContext<()>,
-    db: &D1Database,
 ) -> std::result::Result<(String, String), Response> {
-    match auth::authenticate(req, &ctx.env, db, now_ms()).await {
+    match auth::authenticate(req, &ctx.env, now_ms()).await {
         Ok(Principal::Courier { courier_id, active_location_id, .. }) => {
             Ok((courier_id, active_location_id))
         }
@@ -40,9 +39,8 @@ async fn courier_at(
 
 /// `GET /api/courier/tasks` — what is mine, and what is up for grabs.
 pub async fn tasks(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-    let (courier_id, loc) = match courier_at(&req, &ctx, &db).await {
+    let (courier_id, loc) = match courier_at(&req, &ctx).await {
         Ok(v) => v,
         Err(r) => return Ok(r),
     };
@@ -158,9 +156,8 @@ pub async fn shift(mut req: Request, ctx: RouteContext<()>) -> Result<Response> 
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-    let (courier_id, _loc) = match courier_at(&req, &ctx, &db).await {
+    let (courier_id, _loc) = match courier_at(&req, &ctx).await {
         Ok(v) => v,
         Err(r) => return Ok(r),
     };
@@ -314,9 +311,8 @@ async fn write_status_with(
 
 /// `POST /api/courier/orders/:id/accept`
 pub async fn accept(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-    let (courier_id, loc) = match courier_at(&req, &ctx, &db).await {
+    let (courier_id, loc) = match courier_at(&req, &ctx).await {
         Ok(v) => v,
         Err(r) => return Ok(r),
     };
@@ -425,9 +421,8 @@ pub async fn accept(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 
 /// `POST /api/courier/orders/:id/pickup` — READY → IN_DELIVERY
 pub async fn pickup(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-    let (courier_id, loc) = match courier_at(&req, &ctx, &db).await {
+    let (courier_id, loc) = match courier_at(&req, &ctx).await {
         Ok(v) => v,
         Err(r) => return Ok(r),
     };
@@ -466,9 +461,8 @@ pub async fn deliver(mut req: Request, ctx: RouteContext<()>) -> Result<Response
         cash_collected: Option<i64>,
     }
     let body: In = req.json().await.unwrap_or(In { cash_collected: None });
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-    let (courier_id, loc) = match courier_at(&req, &ctx, &db).await {
+    let (courier_id, loc) = match courier_at(&req, &ctx).await {
         Ok(v) => v,
         Err(r) => return Ok(r),
     };
@@ -551,9 +545,8 @@ pub async fn position(mut req: Request, ctx: RouteContext<()>) -> Result<Respons
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-    let (courier_id, _) = match courier_at(&req, &ctx, &db).await {
+    let (courier_id, _) = match courier_at(&req, &ctx).await {
         Ok(v) => v,
         Err(r) => return Ok(r),
     };
@@ -601,9 +594,8 @@ pub async fn position(mut req: Request, ctx: RouteContext<()>) -> Result<Respons
 
 /// `GET /api/courier/earnings` — folded from the shift log, not a running total.
 pub async fn earnings(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-    let (courier_id, loc) = match courier_at(&req, &ctx, &db).await {
+    let (courier_id, loc) = match courier_at(&req, &ctx).await {
         Ok(v) => v,
         Err(r) => return Ok(r),
     };

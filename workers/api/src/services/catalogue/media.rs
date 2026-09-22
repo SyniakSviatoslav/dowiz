@@ -21,8 +21,7 @@ use crate::owner::owner_and_venue;
 
 /// `POST /api/owner/products/:id/image` — body is the image.
 pub async fn set_product_image(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
@@ -105,8 +104,7 @@ pub async fn set_product_image(mut req: Request, ctx: RouteContext<()>) -> Resul
 /// it. The same rules apply for the same reasons -- a truncated logo is a
 /// broken logo on every screen at once.
 pub async fn set_venue_logo(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
@@ -147,8 +145,7 @@ pub async fn set_venue_logo(mut req: Request, ctx: RouteContext<()>) -> Result<R
 
 /// `POST /api/owner/logo/clear`
 pub async fn clear_venue_logo(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };
@@ -167,8 +164,7 @@ pub async fn clear_venue_logo(req: Request, ctx: RouteContext<()>) -> Result<Res
 
 /// `POST /api/owner/products/:id/image/clear`
 pub async fn clear_product_image(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
-    let loc = match owner_and_venue(&req, &ctx, &db).await {
+    let loc = match owner_and_venue(&req, &ctx).await {
         Ok((_, l)) => l,
         Err(r) => return Ok(r),
     };

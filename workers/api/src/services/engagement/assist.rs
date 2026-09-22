@@ -131,10 +131,9 @@ fn graph_facts(
 /// With no `q` it reports the shape — how many nodes and relations — which is
 /// the cheapest way to see that the fold is working at all.
 pub async fn graph(req: Request, ctx: RouteContext<()>) -> Result<Response> {
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     let (_, _loc, (loaded, loaded_cat)) =
-        match crate::owner::owner_beside(&req, &ctx, &db, &place, crate::hubstore::load_both(&place)).await
+        match crate::owner::owner_beside(&req, &ctx, &place, crate::hubstore::load_both(&place)).await
         {
             Ok(v) => v,
             Err(r) => return Ok(r),
@@ -160,7 +159,6 @@ pub async fn owner_assist(mut req: Request, ctx: RouteContext<()>) -> Result<Res
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
     // The membership query and this read do not depend on each other, so
     // `owner_beside` runs them together. The token is still verified before
@@ -170,7 +168,7 @@ pub async fn owner_assist(mut req: Request, ctx: RouteContext<()>) -> Result<Res
     // a question in words. The orders are folded out of the same image rather
     // than asked for a second time.
     let (_, loc, loaded) =
-        match crate::owner::owner_beside(&req, &ctx, &db, &place, crate::hubstore::load(&place)).await {
+        match crate::owner::owner_beside(&req, &ctx, &place, crate::hubstore::load(&place)).await {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };
@@ -235,9 +233,8 @@ pub async fn courier_assist(mut req: Request, ctx: RouteContext<()>) -> Result<R
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
     };
-    let db = ctx.d1("DB")?;
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-    let me = match crate::auth::authenticate(&req, &ctx.env, &db, now_ms()).await {
+    let me = match crate::auth::authenticate(&req, &ctx.env, now_ms()).await {
         Ok(crate::auth::Principal::Courier { courier_id, .. }) => courier_id,
         Ok(_) => return Response::error("forbidden role", 403),
         Err(e) => return e.into_response(),
