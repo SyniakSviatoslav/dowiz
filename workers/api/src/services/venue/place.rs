@@ -61,42 +61,24 @@ pub async fn set_place(mut req: Request, ctx: RouteContext<()>) -> Result<Respon
     // The venue this caller was authorised for, and no other.
     let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
 
-    // A COORDINATE IS REFUSED, NOT CLAMPED. A latitude of 91 is a bug in
-    // whatever sent it, and clamping it to 90 puts the venue at the North Pole
-    // with no error anybody will see.
-    if let Some(v) = body.lat {
-        if !(-90.0..=90.0).contains(&v) {
-            return Response::error("a latitude is between -90 and 90", 400);
-        }
-    }
-    if let Some(v) = body.lng {
-        if !(-180.0..=180.0).contains(&v) {
-            return Response::error("a longitude is between -180 and 180", 400);
-        }
-    }
-    if body.lat.is_some() != body.lng.is_some() {
-        return Response::error("a latitude without a longitude is not a place", 400);
+    // Both rules are `where_when`, where they are tested -- including the one
+    // that looks like a bug and is not: a window that closes before it opens
+    // wraps past midnight, and refusing it would close every late kitchen.
+    if let Err(why) = super::where_when::coords_ok(body.lat, body.lng) {
+        return Response::error(why, 400);
     }
 
     let hours_json = match &body.hours {
         None => None,
         Some(days) => {
-            if days.len() != 7 {
-                return Response::error("a week has seven days", 400);
+            let week: Vec<Vec<(i64, i64)>> =
+                days.iter().map(|d| d.iter().map(|w| (w.open, w.close)).collect()).collect();
+            if let Err(why) = super::where_when::week_ok(&week) {
+                return Response::error(why, 400);
             }
-            for d in days {
-                for w in d {
-                    if !(0..1440).contains(&w.open) || !(0..=1440).contains(&w.close) {
-                        return Response::error("a window is minutes from 0 to 1440", 400);
-                    }
-                    if w.open == w.close {
-                        return Response::error("a window of zero length is not a window", 400);
-                    }
-                }
-            }
-            Some(json!(days
+            Some(json!(week
                 .iter()
-                .map(|d| d.iter().map(|w| json!({"open": w.open, "close": w.close})).collect::<Vec<_>>())
+                .map(|d| d.iter().map(|(o, c)| json!({"open": o, "close": c})).collect::<Vec<_>>())
                 .collect::<Vec<_>>()))
         }
     };

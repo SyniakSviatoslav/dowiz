@@ -6,6 +6,7 @@ pub mod brand;
 pub mod brand_extract;
 pub mod place;
 pub mod settings;
+pub mod where_when;
 pub mod zones;
 
 use serde_json::Value;
