@@ -303,25 +303,35 @@ impl Store {
         true
     }
 
+    /// The live superblock: the valid one with the higher generation.
+    ///
+    /// A NEWER SUPERBLOCK THAT DOES NOT FIT IS A TRUNCATION, NOT A REASON TO
+    /// READ THE OLDER ONE. Every commit leaves the previous generation's
+    /// superblock intact, so an image cut one cell short used to read as that
+    /// previous generation -- valid-looking, and missing every write since.
+    /// `crates/bebop-wasm`'s second reader (Python) refused the same bytes;
+    /// the disagreement is how this was found. So the fallback happens only
+    /// between superblocks whose checksum is bad, never past one whose
+    /// checksum is good and whose arena is not all here.
     pub fn pick(&self) -> Option<Superblock> {
-        let mut best: Option<Superblock> = None;
-        for at in [SB_A, SB_B] {
-            if at + 15 > self.cells.len() || !self.sb_valid(at) || !self.sb_fits(at) {
-                continue;
-            }
-            let sb = Superblock {
-                at,
-                generation: self.cells[at + 2],
-                root: self.cells[at + 3],
-                arena_used: self.cells[at + 4],
-                live_cells: self.cells[at + 7],
-                superseded_cells: self.cells[at + 8],
-            };
-            if best.map_or(true, |b| sb.generation > b.generation) {
-                best = Some(sb);
-            }
+        let ok = |at: usize| at + 15 <= self.cells.len() && self.sb_valid(at);
+        let at = match (ok(SB_A), ok(SB_B)) {
+            (true, true) if self.cells[SB_B + 2] > self.cells[SB_A + 2] => SB_B,
+            (true, _) => SB_A,
+            (false, true) => SB_B,
+            (false, false) => return None,
+        };
+        if !self.sb_fits(at) {
+            return None;
         }
-        best
+        Some(Superblock {
+            at,
+            generation: self.cells[at + 2],
+            root: self.cells[at + 3],
+            arena_used: self.cells[at + 4],
+            live_cells: self.cells[at + 7],
+            superseded_cells: self.cells[at + 8],
+        })
     }
 
     /// One cell, or zero if the image does not reach that far.
@@ -655,6 +665,25 @@ mod bytes_tests {
         let back = Store::from_bytes(&b);
         assert_eq!(back.cells.len(), st.cells.len(), "a partial cell is dropped, not padded");
         assert_eq!(back.cells, st.cells);
+    }
+
+    /// A TRUNCATION IS NOT AN OLDER IMAGE. Two commits leave two valid
+    /// superblocks; cutting the image one cell short of the newer one's arena
+    /// used to hand back the OLDER generation, missing every write since.
+    #[test]
+    fn a_cut_one_cell_short_is_refused_not_read_as_the_previous_generation() {
+        let mut st = Store::create_bytes(1 << 16);
+        for v in [0x1111, 0x2222] {
+            let mut tx = st.begin().unwrap();
+            let root = st.alloc(&mut tx, 3, v).unwrap();
+            st.seal(root);
+            st.commit_bytes(&tx, root);
+        }
+        let used = st.pick().unwrap().arena_used as usize;
+        let whole = st.to_bytes_trimmed();
+        assert!(Store::from_bytes(&whole).pick().is_some(), "the whole image reads");
+        let cut = Store::from_bytes(&whole[..(used - 1) * 8]);
+        assert!(cut.pick().is_none(), "one cell short is refused, not generation n-1");
     }
 
     /// The cut lands exactly where the superblock says the arena ends: one cell

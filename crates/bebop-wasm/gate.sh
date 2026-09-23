@@ -105,6 +105,16 @@ case "$out" in
   *) say "python: DISAGREES with kv.expected"; fail=1 ;;
 esac
 
+# 3b. THE CUT IMAGE: one cell short of the arena. Every reader must REFUSE
+# it; the Rust reader used to answer the previous generation (n=0), which is
+# the disagreement this crate's second reader found.
+head -c $(( $(wc -c < "$FIX") - 8 )) "$FIX" > "$SCRATCH/cut.store"
+wout=$(node harness.mjs "$WASM" "$SCRATCH/cut.store" 2>&1)
+pout=$(python3 oracle.py "$SCRATCH/cut.store" 2>&1)
+say "cut: wasm32 -> '$wout'; python -> '$pout'"
+case "$wout" in "kv status=0"*) say "cut: wasm32 READ a truncated image"; fail=1 ;; esac
+case "$pout" in "kv status=0"*) say "cut: python READ a truncated image"; fail=1 ;; esac
+
 # 4. bebop.bin ------------------------------------------------------------
 SEED=../../bebop-lang/seed/build/seed
 BIN=../../bebop-lang/bebop.bin

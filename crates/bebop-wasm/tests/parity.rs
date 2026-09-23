@@ -60,12 +60,13 @@ fn a_flipped_length_bit_is_a_refusal_not_a_panic() {
 /// records the divergence; this test pins what Rust does today so a change
 /// is a red line and not a surprise.
 #[test]
-fn a_cut_below_the_arena_falls_back_to_the_previous_generation() {
+fn a_cut_below_the_arena_is_refused_not_read_as_the_previous_generation() {
     let bytes = fixture();
     let cut = &bytes[..bytes.len() - 8];
-    let v = kv_view(cut).expect("generation 1 is still a valid KV");
-    assert_eq!(v.n, 0, "generation 1 is the empty schema");
-    assert_eq!(v.root, bebop_store::kv::FNV_OFFSET as i64, "the empty fold");
+    // It read as generation 1 -- the empty schema, n=0 -- until the newest
+    // valid superblock became the only candidate (`Store::pick`). The Python
+    // reader refused these bytes all along; now both readers agree.
+    assert_eq!(kv_view(cut), Err(Refusal::NoSuperblock), "a truncation is not an older image");
     // Cut below superblock B and its PartTab page (cells 512..548): nothing
     // valid remains and the reader says so.
     assert_eq!(kv_view(&bytes[..520 * 8]), Err(Refusal::NoSuperblock));

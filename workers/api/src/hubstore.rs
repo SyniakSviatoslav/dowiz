@@ -1246,7 +1246,7 @@ pub async fn archive_orders(place: &Place, archive_id: &str) -> Result<Option<Ve
 /// Everything that wants the ORDER asks here, and for a log written before
 /// deltas the two answers are identical -- a snapshot replaces the state, so
 /// folding a history of snapshots yields the newest one.
-pub fn order_state(hub: &Hub, order_id: &str) -> Option<String> {
+fn order_state(hub: &Hub, order_id: &str) -> Option<String> {
     let history = hub.history(order_id);
     if history.is_empty() {
         return None;
