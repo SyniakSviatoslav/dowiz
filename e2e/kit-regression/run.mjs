@@ -9,6 +9,7 @@ import { run as mobile } from './mobile.mjs';
 import { run as pwa } from './pwa.mjs';
 import { run as interact } from './interact.mjs';
 import { run as outbox } from './outbox.mjs';
+import { run as courierCold } from './courier-cold.mjs';
 
 const GATES = [
   ['render',   'render gate — real Chromium at 375x812',        () => render(null)],
@@ -20,6 +21,8 @@ const GATES = [
   // against a counting stub, because half of what it proves is a refusal being
   // replayed and that must never be replayed at a live venue.
   ['outbox',   'offline writes — a tap survives a dead network',  outbox],
+  // Also from disk, with the server really closed for the reopen.
+  ['courier-cold', 'cold start — the app reopens underground',   courierCold],
 ];
 
 const only = process.env.ONLY;

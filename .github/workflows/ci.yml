@@ -147,3 +147,5 @@ jobs:
         with: { node-version: '22' }
       - run: npm ci --ignore-scripts && npx playwright install --with-deps chromium
       - run: node e2e/kit-regression/outbox.mjs
+      # Same shape, the other half of D2: the courier reopens the app underground.
+      - run: node e2e/kit-regression/courier-cold.mjs

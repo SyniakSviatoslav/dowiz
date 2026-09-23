@@ -38,6 +38,22 @@ async function setCurrency(base, display) {
 const short = id => esc(String(id).slice(0, 8));
 const icon = (name, cls = '') => `<i class="ti ti-${name} i ${cls}" aria-hidden="true"></i>`;
 
+// THE LAST ANSWER THE HUB GAVE, for the phone that reopens underground. It
+// holds the courier's own run (an address and a phone number), so it lives
+// only as long as the session: `signedOut` clears it, and it is never shown
+// once it is older than a shift.
+const LAST_KEY = 'dw_c_last';
+const LAST_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+const last = {
+  save(d){ try { localStorage.setItem(LAST_KEY, JSON.stringify({ at: Date.now(), d })); } catch {} },
+  read(){
+    try {
+      const v = JSON.parse(localStorage.getItem(LAST_KEY) || 'null');
+      return v && v.d && Date.now() - v.at < LAST_MAX_AGE_MS ? v : null;
+    } catch { return null; }
+  },
+  clear(){ try { localStorage.removeItem(LAST_KEY); } catch {} },
+};
 const store = {
   get t(){ try { return localStorage.getItem('dw_c_jwt'); } catch { return null; } },
   set t(v){ try { v ? localStorage.setItem('dw_c_jwt', v) : localStorage.removeItem('dw_c_jwt'); } catch {} },
@@ -426,6 +442,7 @@ function startTracking(){
 // cleared the second time.
 function signedOut(){
   store.t = null;
+  last.clear();
   S.booted = false;
   // The unsent taps go with the session, for the reason `replica.js` forgets
   // its copy: the next courier to sign in on this phone is not the person who
@@ -544,6 +561,7 @@ async function load(){
     const wasOn = S.onShift, hadActive = S.mine.length > 0;
     const before = new Set(S.available.map(o => o.id));
     const d = await api('/courier/tasks');
+    last.save(d); S.staleAt = 0;
     S.onShift = d.onShift; S.mine = d.mine || []; S.available = d.available || []; S.shift = d.shift;
     S.courierId = d.courierId || S.courierId;
     // "task_assigned = one incoming ripple + ping": a task that was not on the
@@ -562,6 +580,18 @@ async function load(){
     render();
   } catch (e) {
     if (String(e.message) === 'unauthorised') return;
+    // REOPENED WITH NO NETWORK: the run the courier was on is still the run
+    // they are on. Show the last answer, SAID to be the last answer, rather
+    // than an error panel over the address they need.
+    const was = e.offline && !S.loadedOnce ? last.read() : null;
+    if (was) {
+      const d = was.d;
+      S.onShift = d.onShift; S.mine = d.mine || []; S.available = d.available || []; S.shift = d.shift;
+      S.courierId = d.courierId || S.courierId;
+      S.staleAt = was.at; S.phase = 'ready'; S.error = null;
+      render();
+      return;
+    }
     // FIRST load failing is a state; a later one is a toast. After the first
     // success the screen holds real work -- an address, a phone number, a
     // button that says delivered -- and replacing that with an error panel
@@ -577,6 +607,10 @@ function setShiftTag(){
   $('#shiftText').innerHTML = S.onShift
     ? `${esc(t('onShift'))} · ${esc(S.shift?.deliveries ?? 0)} · <span class="money">${esc(money(S.shift?.cash ?? 0))}</span>`
     : esc(t('offline'));
+  if (S.staleAt) {
+    const at = new Date(S.staleAt).toLocaleTimeString(intlLocale(), { hour:'2-digit', minute:'2-digit' });
+    $('#shiftText').innerHTML += ` · ${esc(t('staleAsOf', { t: at }))}`;
+  }
 }
 
 function render(){
@@ -1204,3 +1238,9 @@ function openSocket(){
 document.documentElement.lang = lang; document.title = t('appTitle'); retranslate(document);
 applyTheme(); bindLangChrome();
 store.t ? boot() : renderLogin();
+
+// The shell that lets this page open with no network (`/courier/sw.js`).
+if ('serviceWorker' in navigator) {
+  addEventListener('load', () => navigator.serviceWorker.register('/courier/sw.js', { scope: '/courier/' })
+    .catch(e => console.error('courier: service worker not registered', e)));
+}
