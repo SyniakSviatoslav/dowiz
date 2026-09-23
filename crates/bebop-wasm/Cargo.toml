@@ -1,0 +1,46 @@
+[package]
+name = "bebop-wasm"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "The bebop image FORMAT inside wasm32: bebop-store's reader as a standalone module with a C ABI, and the parity gate that makes four readers of one image answer one number."
+
+# WHAT THIS IS, AND WHAT IT IS NOT (BLUEPRINT-BEBOP-IN-WASM-2026-09-23, order of work item 1).
+#
+# It is NOT the bebop language running in a Worker. `bebop.bp` emits AArch64
+# words from 595 `em(` sites with no intermediate form, so wasm32 would be a
+# second emitter, not a target flag; the blueprint recommends AGAINST that and
+# names the re-entry condition. What CAN run inside wasm32 today is the thing
+# the product actually shares with bebop: the pointer-free image format, read
+# by `crates/bebop-store` (zero dependencies).
+#
+# So this crate is the seam made measurable. `src/lib.rs` reads a KV image and
+# a log image to one integer each -- the same FNV-1a root `kv.bp` folds and the
+# same count -- and refuses a damaged image instead of panicking. `src/abi.rs`
+# is the C surface a host with no wasm-bindgen can call: node in `gate.sh`, a
+# Worker if the main session wires it. `gate.sh` then makes FOUR readers of
+# `fixtures/kv.store` print their number: bebop.bin (AArch64, box only), this
+# crate natively, this crate as wasm32 under node, and `oracle.py`. That is the
+# four-way fold check F28 that the no-SQL blueprint names and nothing ran.
+#
+# ZERO dependencies beyond bebop-store, which has none. No wasm-bindgen: the
+# module exports its own `memory`, an allocator pair and four functions, so the
+# host is any WebAssembly runtime and the bytes are what the reader costs and
+# nothing else (`bytes.baseline`, a ratchet that may only fall).
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+bebop-store = { path = "../bebop-store" }
+
+# The Worker's own profile (workers/api/Cargo.toml) minus `strip = false`,
+# which only wasm-bindgen's catch wrappers need. `panic = "abort"` because a
+# refusal is a status code here, never an unwind, and an unwinder is ~20 KB of
+# wasm nobody would call.
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

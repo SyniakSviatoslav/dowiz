@@ -1,0 +1,7 @@
+# What every reader of fixtures/kv.store must answer. RE-DERIVED, not copied:
+#   bebop.bin  : selfhost/std/kv.bp compiled by bebop.bin, `kv.bin n` -> 5, `kv.bin h` -> -211109995167561145
+#   Rust native: crates/bebop-store `kvdemo` snapshot_root_i64 -> -211109995167561145
+# The image: kv.bp `i` (bebop created the schema, 64 MiB), kvdemo wrote five entries
+# (generation 2), trimmed at arena_used (cell 4 of the live superblock) = 1170 cells = 9360 bytes.
+n=5
+root=-211109995167561145
