@@ -1,0 +1,14 @@
+[package]
+name = "seal-open"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "Opener for sealed nightly backups (dwzseal v1: X25519 + ML-KEM-768 / AES-256-GCM) and generator of the platform backup keypair. Native only; the secret key never goes near the Worker."
+
+[dependencies]
+# The format and every primitive: dowiz_core::pq::backup_seal. No other crate.
+dowiz-core = { path = "../../crates/dowiz-core" }
+
+[dev-dependencies]
+# A REAL hub image for the round-trip fixture.
+dowiz-hub = { path = "../../crates/dowiz-hub" }

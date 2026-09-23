@@ -28,6 +28,7 @@ pub mod codesign;
 pub mod aes_gcm;
 pub mod envelope;
 pub mod hybrid;
+pub mod backup_seal;
 pub mod hybrid_signing;
 pub mod volume;
 pub mod x25519;

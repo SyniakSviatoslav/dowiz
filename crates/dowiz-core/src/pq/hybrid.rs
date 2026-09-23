@@ -10,7 +10,7 @@
 //! ladder over `p = 2^255 - 19`, KAT-gated vs RFC 7748 §6.1 and differential-tested
 //! vs `curve25519-dalek` in `kernel/src/pq/x25519.rs`). The combine KDF is
 //! SHAKE256(mlkem_ss || x_ss).
-//! ML-KEM correctness is KAT-gated in kem.rs.
+//! ML-KEM-768 is gated byte-exact against 80 NIST ACVP vectors in kem/acvp_tests.rs (P91.2).
 
 use alloc::vec::Vec;
 
@@ -73,26 +73,51 @@ pub fn hybrid_encaps(
     m: &[u8; 32],
     eph_seed: &[u8; 32],
 ) -> (HybridCiphertext, [u8; 32]) {
+    encaps_legs(&peer.x_pk, &peer.kem_pk, m, eph_seed).0
+}
+
+/// Encapsulate toward a PUBLIC key only (the sender never holds the secret),
+/// refusing a recipient that would degrade either leg:
+///   * the ML-KEM key must pass the FIPS 203 §7.2 check (`kem::ek_check`);
+///   * the X25519 shared secret must not be all-zero (a low-order `x_pk`
+///     would make the classical leg a constant — no silent classical-only or
+///     PQ-only fallback, in either direction).
+pub fn hybrid_encaps_to(
+    x_pk: &[u8; 32],
+    kem_pk: &[u8],
+    m: &[u8; 32],
+    eph_seed: &[u8; 32],
+) -> Result<(HybridCiphertext, [u8; 32]), &'static str> {
+    if !kem::ek_check(kem_pk) {
+        return Err("kem-public-key-malformed");
+    }
+    let (out, x_ss) = encaps_legs(x_pk, kem_pk, m, eph_seed);
+    if x_ss == [0u8; 32] {
+        return Err("x25519-public-key-low-order");
+    }
+    Ok(out)
+}
+
+/// Both legs, unchecked. Returns ((ct, ss), x25519 shared secret).
+fn encaps_legs(
+    x_pk: &[u8; 32],
+    kem_pk: &[u8],
+    m: &[u8; 32],
+    eph_seed: &[u8; 32],
+) -> ((HybridCiphertext, [u8; 32]), [u8; 32]) {
     // PQ leg
-    let (kem_ct, mlkem_ss) = kem::encaps_internal(&peer.kem_pk, m);
+    let (kem_ct, mlkem_ss) = kem::encaps_internal(kem_pk, m);
     // Classical leg: ephemeral X25519, shared = DH(eph_sk, peer.x_pk)
     let mut eph = *eph_seed;
     eph[0] &= 248;
     eph[31] &= 127;
     eph[31] |= 64;
     let x_ephemeral = x25519(&eph, &[9u8; 32]);
-    let x_ss = x25519(&eph, &peer.x_pk);
+    let x_ss = x25519(&eph, x_pk);
     // Combine: both secrets required; order-independent (sorted concat) so sender/recv
     // agree regardless of which leg was computed first.
     let (ss, tag) = combine(&mlkem_ss, &x_ss);
-    (
-        HybridCiphertext {
-            kem_ct,
-            x_ephemeral,
-            confirm: tag,
-        },
-        ss,
-    )
+    ((HybridCiphertext { kem_ct, x_ephemeral, confirm: tag }, ss), x_ss)
 }
 
 #[cfg(any(test, feature = "ct-gate"))]
@@ -108,12 +133,16 @@ fn tag_eq(a: &[u8; 32], b: &[u8; 32]) -> bool {
 }
 
 /// Decapsulate. RED gate: BOTH legs must succeed AND the key-confirmation tag must
-/// match. ML-KEM uses implicit rejection — on a tampered ct it returns H(sk||ct), a
+/// match. ML-KEM uses implicit rejection — on a tampered ct it returns J(z||ct), a
 /// value the sender never produced, so `confirm` WILL NOT MATCH. The tag therefore
 /// catches tamper / wrong-peer / degraded-leg without leaking the secret. No classical-
 /// only fallback (D4).
+///
+/// A malformed KEM ciphertext or secret key (wrong length, dk failing its hash
+/// check) is refused as `kem-input-malformed` — never a panic.
 pub fn hybrid_decaps(own: &HybridKeypair, ct: &HybridCiphertext) -> Result<[u8; 32], &'static str> {
-    let mlkem_ss = kem::decaps_internal(&own.kem_sk, &ct.kem_ct);
+    let mlkem_ss =
+        kem::decaps_internal(&own.kem_sk, &ct.kem_ct).map_err(|_| "kem-input-malformed")?;
     let x_ss = x25519(&own.x_sk, &ct.x_ephemeral);
     let (ss, tag) = combine(&mlkem_ss, &x_ss);
     if !tag_eq(&tag, &ct.confirm) {
@@ -193,5 +222,31 @@ mod tests {
             hybrid_decaps(&kb, &ct).is_err(),
             "degenerate classical leg rejected"
         );
+    }
+
+    #[test]
+    fn encaps_to_public_key_roundtrips_and_refuses_degraded_keys() {
+        let kb = hybrid_keygen(&[3u8; 32], &[4u8; 32]);
+        let (ct, ss) = hybrid_encaps_to(&kb.x_pk, &kb.kem_pk, &[5u8; 32], &[6u8; 32]).unwrap();
+        assert_eq!(hybrid_decaps(&kb, &ct), Ok(ss), "positive twin");
+        let mut bad_kem = kb.kem_pk.clone();
+        bad_kem[0] = 0xff;
+        bad_kem[1] |= 0x0f; // coefficient 4095 >= q
+        assert_eq!(
+            hybrid_encaps_to(&kb.x_pk, &bad_kem, &[5u8; 32], &[6u8; 32]).err(),
+            Some("kem-public-key-malformed")
+        );
+        assert_eq!(
+            hybrid_encaps_to(&[0u8; 32], &kb.kem_pk, &[5u8; 32], &[6u8; 32]).err(),
+            Some("x25519-public-key-low-order")
+        );
+    }
+
+    #[test]
+    fn decaps_refuses_malformed_kem_input_without_panicking() {
+        let kb = hybrid_keygen(&[3u8; 32], &[4u8; 32]);
+        let (mut ct, _) = hybrid_encaps(&kb, &[5u8; 32], &[6u8; 32]);
+        ct.kem_ct.truncate(10);
+        assert_eq!(hybrid_decaps(&kb, &ct), Err("kem-input-malformed"));
     }
 }

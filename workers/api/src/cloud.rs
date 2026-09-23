@@ -15,6 +15,8 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use worker::*;
 
+pub mod seal;
+
 /// The SigV4 algorithm name, verbatim.
 const ALGORITHM: &str = "AWS4-HMAC-SHA256";
 /// The service the credential scope names.
@@ -240,6 +242,9 @@ fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
 /// with something else must survive the rotation untouched.
 pub fn stamp_of_key(key: &str) -> Option<i64> {
     let name = key.rsplit('/').next()?;
+    // A sealed copy is the same name plus `.sealed` (see `object_key`), so it
+    // ages and rotates exactly like the plain copy it replaces.
+    let name = name.strip_suffix(seal::SUFFIX).unwrap_or(name);
     let stem = name.strip_suffix(".json.gz").or_else(|| name.strip_suffix(".json"))?;
     // YYYYMMDDTHHMMSSZ
     if stem.len() != 16 || stem.as_bytes()[8] != b'T' || !stem.ends_with('Z') {
@@ -342,12 +347,18 @@ async fn gzip(body: &[u8]) -> Option<Vec<u8>> {
     Some(Uint8Array::new(&buf).to_vec())
 }
 
-/// Where the bundle lands: `<prefix>/<venue>/<YYYYMMDD>T<HHMMSS>Z.json[.gz]`.
+/// Where the bundle lands: `<prefix>/<venue>/<YYYYMMDD>T<HHMMSS>Z.json[.gz][.sealed]`.
 /// The extension says what is actually in the object, because a `.json` that
-/// is gzip is a file nobody can open by double-clicking it.
-fn object_key(s3: &S3, venue: &str, now_ms: i64, gzipped: bool) -> String {
+/// is gzip is a file nobody can open by double-clicking it — and a `.sealed`
+/// one opens only with `tools/seal-open` and the platform's secret key.
+fn object_key(s3: &S3, venue: &str, now_ms: i64, gzipped: bool, sealed: bool) -> String {
     let (stamp, _) = amz_dates(now_ms);
-    let ext = if gzipped { "json.gz" } else { "json" };
+    let ext = match (gzipped, sealed) {
+        (true, false) => "json.gz",
+        (false, false) => "json",
+        (true, true) => "json.gz.sealed",
+        (false, true) => "json.sealed",
+    };
     if s3.prefix.is_empty() {
         format!("{venue}/{stamp}.{ext}")
     } else {
@@ -378,7 +389,19 @@ fn witness_key(s3: &S3, venue: &str, now_ms: i64) -> String {
 }
 
 /// Export the venue and put it in its bucket. Returns what was written.
-pub async fn push_place(place: &crate::hubstore::Place, now_ms: i64) -> std::result::Result<Value, String> {
+///
+/// `seal` is read from `BACKUP_SEAL_PK` by the caller (`seal::state`): sealed
+/// when set, plain gzip AND SAID SO when absent, refused when malformed.
+pub async fn push_place(
+    place: &crate::hubstore::Place,
+    now_ms: i64,
+    seal: &seal::SealState,
+) -> std::result::Result<Value, String> {
+    // Refused BEFORE the export: a malformed key is a configuration fault, and
+    // no bytes of the venue should be read for a copy that will not be taken.
+    if let seal::SealState::Refused(e) = seal {
+        return Err(e.clone());
+    }
     let settings = crate::hubstore::load_settings(place).await.map_err(|e| e.to_string())?.settings;
     let Some(s3) = cfg(&settings) else { return Err("no cloud storage is set".into()) };
     let bundle = crate::hubstore::export(place, now_ms).await.map_err(|e| e.to_string())?;
@@ -391,10 +414,18 @@ pub async fn push_place(place: &crate::hubstore::Place, now_ms: i64) -> std::res
         Some(z) if z.len() < raw.len() => (z, true),
         _ => (raw, false),
     };
-    let key = object_key(&s3, &place.venue, now_ms, gzipped);
+    let (body, sealed) = seal::apply(seal, gzipped, body)?;
+    if !sealed {
+        crate::loud!(&place.ns, Some(&place.venue), "cloud.seal", "{} is not set: this copy is NOT sealed", seal::PK_VAR);
+    }
+    let key = object_key(&s3, &place.venue, now_ms, gzipped, sealed);
     let bytes = body.len();
-    let etag = put(&s3, &key, body, if gzipped { "application/gzip" } else { "application/json" }, now_ms)
-        .await?;
+    let content_type = match (sealed, gzipped) {
+        (true, _) => "application/octet-stream",
+        (false, true) => "application/gzip",
+        (false, false) => "application/json",
+    };
+    let etag = put(&s3, &key, body, content_type, now_ms).await?;
     // ── THE OFF-SITE WITNESS, WHICH IS NEARLY FREE ──
     //
     // The census the nightly wrote to the platform object goes up beside the
@@ -454,6 +485,8 @@ pub async fn push_place(place: &crate::hubstore::Place, now_ms: i64) -> std::res
         "bytes": bytes,
         "plainBytes": plain,
         "gzip": gzipped,
+        "sealed": sealed,
+        "seal": seal::describe(seal),
         "etag": etag,
         "atMs": now_ms,
         "rotated": removed,
@@ -470,7 +503,7 @@ pub async fn push(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respons
     };
     // The venue this caller was authorised for, and no other.
     let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
-    match push_place(&place, ctx.data.now_ms).await {
+    match push_place(&place, ctx.data.now_ms, &seal::state(&ctx.env)).await {
         Ok(v) => Response::from_json(&v),
         Err(e) => Response::error(e, 502),
     }
@@ -508,6 +541,7 @@ pub async fn status(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
     let bytes = it.next().and_then(|s| s.parse::<usize>().ok());
     Response::from_json(&json!({
         "configured": cfg(&settings).is_some(),
+        "seal": seal::describe(&seal::state(&ctx.env)),
         "bucket": settings.known("cloud.s3.bucket"),
         "endpoint": settings.known("cloud.s3.endpoint"),
         "nightly": NIGHTLY_CRON,
@@ -527,6 +561,8 @@ pub async fn status(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
 /// store refuses is logged and skipped; the next venue is not its problem.
 pub async fn nightly(env: &Env, now: i64) {
     struct Row { id: String }
+    // Read once a night: every venue's copy is sealed to the same platform key.
+    let seal_state = seal::state(env);
     // THE VENUE LIST COMES FROM THE PLATFORM REGISTRY, not from a table. It was
     // `SELECT id FROM locations` beside an `env.d1("DB")` guard; the guard went
     // with the binding and the registry read is what is left.
@@ -653,7 +689,7 @@ pub async fn nightly(env: &Env, now: i64) {
             Err(e) => crate::loud!(&place.ns, Some(&r.id), "hub.rotate", "nightly: {e}"),
         }
         if !configured { continue }
-        match push_place(&place, now).await {
+        match push_place(&place, now, &seal_state).await {
             Ok(v) => console_log!("nightly backup {}: {}", r.id, v),
             Err(e) => {
                 crate::loud!(&place.ns, Some(&r.id), "cloud.nightly", "backup refused: {e}")
@@ -723,8 +759,10 @@ mod tests {
             // second, not on the millisecond it was given.
             let whole_second = at - at.rem_euclid(1000);
             for gz in [false, true] {
-                let key = object_key(&s3, "sushi-durres", at, gz);
-                assert_eq!(stamp_of_key(&key), Some(whole_second), "{key}");
+                for sealed in [false, true] {
+                    let key = object_key(&s3, "sushi-durres", at, gz, sealed);
+                    assert_eq!(stamp_of_key(&key), Some(whole_second), "{key}");
+                }
             }
         }
     }
@@ -772,7 +810,7 @@ mod tests {
         let mut keys = Vec::new();
         for days in [0i64, 8, 40, 400] {
             let at = now - days * DAY;
-            keys.push(object_key(&s3, "sushi-durres", at, true));
+            keys.push(object_key(&s3, "sushi-durres", at, true, false));
             keys.push(witness_key(&s3, "sushi-durres", at));
         }
         // The bundle from 400 days ago goes; no witness does, at any age.
@@ -782,7 +820,7 @@ mod tests {
             assert!(!k.contains(".witness."), "a witness was rotated away: {k}");
         }
         // And the two land beside each other, under the same stamp.
-        let bundle = object_key(&s3, "sushi-durres", now, true);
+        let bundle = object_key(&s3, "sushi-durres", now, true, false);
         let w = witness_key(&s3, "sushi-durres", now);
         assert_eq!(
             bundle.rsplit('/').next().unwrap().split('.').next(),
@@ -808,21 +846,21 @@ mod tests {
         };
         // A year of nightly copies, newest at `now`.
         let keys: Vec<String> =
-            (0..365).map(|d| object_key(&s3, "v", now - d * DAY, true)).collect();
+            (0..365).map(|d| object_key(&s3, "v", now - d * DAY, true, false)).collect();
         let dropped = keys_to_drop(&keys, now);
         let kept: Vec<&String> = keys.iter().filter(|k| !dropped.contains(k)).collect();
 
         // Seven daily (days 0..6) + one for each of weeks 1, 2, 3 and 4.
         assert_eq!(kept.len(), 11, "kept {:?}", kept);
         for d in 0..7 {
-            assert!(kept.contains(&&object_key(&s3, "v", now - d * DAY, true)), "day {d} must stay");
+            assert!(kept.contains(&&object_key(&s3, "v", now - d * DAY, true, false)), "day {d} must stay");
         }
         // The newest copy of the week is the one kept: day 7, not day 13.
-        assert!(kept.contains(&&object_key(&s3, "v", now - 7 * DAY, true)));
-        assert!(dropped.contains(&object_key(&s3, "v", now - 13 * DAY, true)));
+        assert!(kept.contains(&&object_key(&s3, "v", now - 7 * DAY, true, false)));
+        assert!(dropped.contains(&object_key(&s3, "v", now - 13 * DAY, true, false)));
         // Nothing older than five weeks survives.
-        assert!(dropped.contains(&object_key(&s3, "v", now - 36 * DAY, true)));
-        assert!(dropped.contains(&object_key(&s3, "v", now - 364 * DAY, true)));
+        assert!(dropped.contains(&object_key(&s3, "v", now - 36 * DAY, true, false)));
+        assert!(dropped.contains(&object_key(&s3, "v", now - 364 * DAY, true, false)));
     }
 
     /// A bucket with one copy in it loses nothing -- the case that runs on the
@@ -838,7 +876,7 @@ mod tests {
             prefix: String::new(),
         };
         let now = 1_800_000_000_000;
-        let keys = vec![object_key(&s3, "v", now, true)];
+        let keys = vec![object_key(&s3, "v", now, true, false)];
         assert!(keys_to_drop(&keys, now).is_empty());
     }
 

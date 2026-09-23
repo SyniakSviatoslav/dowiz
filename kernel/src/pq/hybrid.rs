@@ -10,7 +10,7 @@
 //! ladder over `p = 2^255 - 19`, KAT-gated vs RFC 7748 §6.1 and differential-tested
 //! vs `curve25519-dalek` in `kernel/src/pq/x25519.rs`). The combine KDF is
 //! SHAKE256(mlkem_ss || x_ss).
-//! ML-KEM correctness is KAT-gated in kem.rs.
+//! ML-KEM-768 is gated byte-exact against 80 NIST ACVP vectors in dowiz_core pq/kem/acvp_tests.rs (P91.2).
 
 use crate::pq::keccak::shake256;
 use crate::pq::kem;
@@ -105,7 +105,7 @@ fn tag_eq(a: &[u8; 32], b: &[u8; 32]) -> bool {
 }
 
 /// Decapsulate. RED gate: BOTH legs must succeed AND the key-confirmation tag must
-/// match. ML-KEM uses implicit rejection — on a tampered ct it returns H(sk||ct), a
+/// match. ML-KEM uses implicit rejection — on a tampered ct it returns J(z||ct), a
 /// value the sender never produced, so `confirm` WILL NOT MATCH. The tag therefore
 /// catches tamper / wrong-peer / degraded-leg without leaking the secret. No classical-
 /// only fallback (D4).
