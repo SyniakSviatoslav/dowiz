@@ -28,6 +28,7 @@
 //! did not say yes -- not "should not", cannot. The grep half, for the send
 //! sites that take a bare string, is `tools/gates/consent.sh`.
 
+pub mod log;
 pub mod wordings;
 pub use wordings::{wording_id, wording_json, wording_of, LANGS, WORDINGS};
 
@@ -83,6 +84,8 @@ pub enum Method {
     WhatsappKeyword,
     /// Paper or verbal, typed in by the owner. Needs `evidence`.
     OwnerEntered,
+    /// The person was forgotten (§3.3 step 2): a withdrawal, never a grant.
+    Erasure,
 }
 
 impl Method {
@@ -91,6 +94,7 @@ impl Method {
             Method::CheckoutBox => "checkout_box",
             Method::WhatsappKeyword => "whatsapp_keyword",
             Method::OwnerEntered => "owner_entered",
+            Method::Erasure => "erasure",
         }
     }
     pub fn of(s: &str) -> Option<Method> {
@@ -98,6 +102,7 @@ impl Method {
             "checkout_box" => Some(Method::CheckoutBox),
             "whatsapp_keyword" => Some(Method::WhatsappKeyword),
             "owner_entered" => Some(Method::OwnerEntered),
+            "erasure" => Some(Method::Erasure),
             _ => None,
         }
     }
@@ -224,6 +229,9 @@ pub fn check(act: &Act) -> Result<(), String> {
         // sentence, or name evidence, would be harder than the box that
         // started it -- so nothing below applies to one.
         return Ok(());
+    }
+    if act.method == Method::Erasure {
+        return Err("an erasure withdraws; it never grants".into());
     }
     if act.wording_id.trim().is_empty() {
         return Err("a grant must name the wording the person read".into());

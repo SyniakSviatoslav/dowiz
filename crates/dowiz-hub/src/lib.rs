@@ -51,6 +51,7 @@ pub mod table;
 pub mod tables;
 pub mod tz;
 pub mod token;
+pub mod forget;
 
 use bebop_store::evlog::{EvLog, Record};
 use bebop_store::{Store, StoreError};
@@ -97,6 +98,21 @@ pub enum EventKind {
     /// reader can tell the difference between "this venue has never taken an
     /// order" and "the older ones are somewhere else, and here is where".
     Checkpoint = 6,
+    /// THE MONEY ON A ROUND CHANGED, and the kitchen had not taken it yet — or
+    /// a person holding `void` took a line off after it had.
+    ///
+    /// NOT `Noted`, which promises that no money moved: every reader that asks
+    /// "did this order's total change?" would otherwise have to open every
+    /// note and look. A delta that may change `items`, `subtotal`, `discount`,
+    /// `total`, `fulfilment.table`, `adjustments` and `amended`, and nothing
+    /// else; written only by the object's `amend` and `transfer` commands, and
+    /// signed by the person who made it. Not a status: the order FSM is never
+    /// asked, and its golden signature does not move.
+    /// (docs/design/BLUEPRINT-POS-THE-ROOM-2026-09-22.md §3.)
+    Amended = 7,
+    /// A PERSON WAS FORGOTTEN: the declaration that names how many records
+    /// were redacted in place (`forget.rs`). Not an order; no contact details.
+    Forgotten = 8,
 }
 
 impl EventKind {
@@ -105,7 +121,11 @@ impl EventKind {
     pub fn is_order(self) -> bool {
         matches!(
             self,
-            EventKind::Placed | EventKind::Advanced | EventKind::Paid | EventKind::Noted
+            EventKind::Placed
+                | EventKind::Advanced
+                | EventKind::Paid
+                | EventKind::Noted
+                | EventKind::Amended
         )
     }
 
@@ -123,6 +143,8 @@ impl EventKind {
             4 => Some(EventKind::Revealed),
             5 => Some(EventKind::Noted),
             6 => Some(EventKind::Checkpoint),
+            7 => Some(EventKind::Amended),
+            8 => Some(EventKind::Forgotten),
             _ => None,
         }
     }
@@ -678,12 +700,16 @@ impl Hub {
     /// and not delivered by any code.
     pub fn chain_check(&self) -> ChainCheck {
         let mut out = ChainCheck::default();
-        for r in EvLog::walk(&self.store) {
+        let walked = EvLog::walk(&self.store);
+        let tip = EvLog::tip(&self.store);
+        for (at, r) in walked.iter().enumerate() {
             out.records += 1;
             if r.id == content_id_chained(&r.prev, &r.payload) {
                 out.chained += 1;
             } else if r.id == content_id(&r.payload) {
                 out.legacy += 1;
+            } else if forget::tombstone_holds(&walked, at, tip) {
+                out.redacted += 1;
             } else {
                 out.broken += 1;
             }
@@ -792,7 +818,9 @@ fn decode_or_reason(r: &Record) -> Result<Event, &'static str> {
     if r.payload.len() < 2 {
         return Err("short");
     }
-    let kind = EventKind::from_byte(r.payload[0]).ok_or("kind")?;
+    // The high bit marks a record redacted in place (`forget.rs`); the kind
+    // is the low seven.
+    let kind = EventKind::from_byte(r.payload[0] & !forget::REDACTED_BIT).ok_or("kind")?;
     let id_len = r.payload[1] as usize;
     if r.payload.len() < 2 + id_len {
         return Err("framing");
@@ -842,6 +870,9 @@ pub struct ChainCheck {
     pub legacy: usize,
     /// Matched neither. An edited event, or a damaged one.
     pub broken: usize,
+    /// Redacted in place by `Hub::forget`: verified by LINK, not content.
+    /// Must equal what the `Forgotten` declarations name (conservation law 9).
+    pub redacted: usize,
 }
 
 impl ChainCheck {
@@ -877,6 +908,26 @@ mod tests {
     const ACTOR: [u8; 32] = [0xA1; 32];
     fn order(id: &str, status: &str) -> String {
         format!(r#"{{"id":"{id}","status":"{status}","subtotal":1800}}"#)
+    }
+
+    /// `Amended` IS AN ORDER EVENT: it folds into the order it names, travels
+    /// on the socket, and survives a reload under its own byte. An unassigned byte is still
+    /// nobody's, so the reader that predates a kind keeps quarantining it —
+    /// which is the deploy-order rule: readers before writers.
+    #[test]
+    fn an_amendment_is_an_order_event_under_its_own_byte() {
+        assert_eq!(EventKind::from_u8(7), Some(EventKind::Amended));
+        assert!(EventKind::Amended.is_order());
+        assert_eq!(EventKind::from_u8(0x7f), None);
+        let mut h = Hub::create_sized(1 << 20).unwrap();
+        h.append(EventKind::Placed, "ord_a", &order("ord_a", "PENDING"), 1, ACTOR).unwrap();
+        h.append(EventKind::Amended, "ord_a", r#"{"_d":true,"total":900}"#, 2, ACTOR).unwrap();
+        let back = Hub::load(&h.to_bytes_trimmed()).unwrap();
+        assert!(back.quarantined().is_empty(), "a kind-7 record is readable by this build");
+        let hist = back.history("ord_a");
+        assert_eq!(hist.len(), 2);
+        assert_eq!(hist[1].kind, EventKind::Amended, "oldest first: the amendment is second");
+        assert_eq!(back.orders().len(), 1, "one order, not an order and an amendment");
     }
 
     #[test]

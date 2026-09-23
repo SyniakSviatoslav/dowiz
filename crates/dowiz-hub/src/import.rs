@@ -18,6 +18,8 @@
 
 use crate::minijson::esc;
 
+pub mod recipes;
+
 /// One dish, as read out of a file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DraftProduct {

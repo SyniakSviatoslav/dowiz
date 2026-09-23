@@ -278,3 +278,83 @@ fn a_consented_exists_only_where_a_person_said_yes() {
         assert_eq!(c.is_some(), *want);
     }
 }
+
+// ── the `consent` image: what a placement and a withdrawal write ────────────
+
+use crate::logimage::LogImage;
+
+/// ONE ACT, ONE `c` RECORD, AND THE SENTENCE ONCE. The CHECK of §6 item 2 is
+/// `about("c", key) = 1` with the right `wording_id` for the language shown;
+/// the `w` record is what lets that id be shown back as words.
+#[test]
+fn a_grant_writes_one_act_and_its_wording_once() {
+    let mut log = LogImage::create().unwrap();
+    let mut a = act(State::Given, 1_000);
+    a.wording_id = wording_id("sq");
+    log::write(&mut log, &a).expect("a grant with a known wording");
+    assert_eq!(log.about(KIND_ACT, Some(&subject_of(KEY)), 10).len(), 1);
+    let w = log.about(KIND_WORDING, Some(&wording_id("sq")), 10);
+    assert_eq!(w.len(), 1, "the sentence is filed under its own id");
+    assert!(w[0].json.contains("STOP"));
+
+    // A SECOND PERSON READING THE SAME SENTENCE does not file it twice.
+    let mut b = a.clone();
+    b.key = OTHER.to_string();
+    log::write(&mut log, &b).unwrap();
+    assert_eq!(log.about(KIND_WORDING, None, 10).len(), 1, "one wording, two acts");
+    assert_eq!(log.about(KIND_ACT, None, 10).len(), 2);
+    // AND THE FOLD READS WHAT WAS WRITTEN.
+    let c = state(&log.entries(), KEY, PURPOSE_MARKETING, CHANNEL_WHATSAPP).expect("given");
+    assert_eq!(c.wording_id(), wording_id("sq"));
+}
+
+/// THE WRITER REFUSES WHAT THE FOLD WOULD IGNORE, and says why, before a byte
+/// lands: an append-only log cannot take a bad record back.
+#[test]
+fn the_writer_refuses_a_grant_it_cannot_prove_and_writes_nothing() {
+    let mut log = LogImage::create().unwrap();
+    let mut a = act(State::Given, 1_000);
+    a.wording_id = "0000000000000000".into();
+    let why = log::write(&mut log, &a).expect_err("a sentence nobody can show");
+    assert!(why.contains("wording"), "{why}");
+    a.wording_id = String::new();
+    assert!(log::write(&mut log, &a).is_err());
+    assert_eq!(log.len(), 0, "nothing was written");
+}
+
+/// A WITHDRAWAL IS A NEW RECORD, AND IT ENDS THE CONSENT. The grant stays in
+/// the log -- it is the proof of what the venue was allowed to do before.
+#[test]
+fn a_withdrawal_is_appended_and_the_fold_stops() {
+    let mut log = LogImage::create().unwrap();
+    log::write(&mut log, &act(State::Given, 1_000)).unwrap();
+    let mut w = act(State::Withdrawn, 2_000);
+    w.wording_id = String::new();
+    log::write(&mut log, &w).expect("a withdrawal needs no wording");
+    assert_eq!(log.about(KIND_ACT, Some(&subject_of(KEY)), 10).len(), 2, "both acts are kept");
+    assert!(state(&log.entries(), KEY, PURPOSE_MARKETING, CHANNEL_WHATSAPP).is_none());
+}
+
+#[test]
+fn every_wording_id_names_its_language_back() {
+    for l in LANGS {
+        assert_eq!(log::lang_of_wording(&wording_id(l)), Some(l));
+    }
+    assert_eq!(log::lang_of_wording("nope"), None);
+}
+
+/// §3.3 STEP 2: FORGETTING A PERSON WITHDRAWS, and the withdrawal outlives
+/// them. An "erasure" that granted would be a consent nobody gave.
+#[test]
+fn an_erasure_withdraws_and_can_never_grant() {
+    let mut w = act(State::Withdrawn, 5_000);
+    w.method = Method::Erasure;
+    w.wording_id = String::new();
+    assert!(check(&w).is_ok());
+    assert_eq!(Act::parse(&w.to_json()).unwrap().method, Method::Erasure);
+    let mut g = act(State::Given, 5_000);
+    g.method = Method::Erasure;
+    assert!(check(&g).is_err());
+    let l = log(&[act(State::Given, 1_000), w]);
+    assert!(state(&l, KEY, PURPOSE_MARKETING, CHANNEL_WHATSAPP).is_none());
+}
