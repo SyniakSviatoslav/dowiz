@@ -29,11 +29,11 @@
 //! No `f64` appears in this file, and `tools/gates/float-money.sh` counts it.
 
 use alloc::string::String;
-use alloc::vec::Vec;
-use alloc::{format, vec};
+use alloc::{format, vec, vec::Vec};
+pub mod schedule; // item 2: the rate in force at `now_ms`
+pub use schedule::in_force;
 
-/// One million. The ppm basis, as `i64` (`money::MONEY_SCALE_MICRO` is the
-/// `i128` spelling of the same constant).
+/// One million: the ppm basis (`money::MONEY_SCALE_MICRO`'s `i64` twin).
 pub const PPM: i64 = 1_000_000;
 
 /// A tax rate in parts per million. 20 % = `RatePpm(200_000)`. Never a float,

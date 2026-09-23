@@ -327,3 +327,61 @@ fn red_overflow_is_refused_never_wrapped() {
         .unwrap_err()
         .contains("overflow"));
 }
+
+// ── Item 2: the rate in force at `now_ms` (no clock; `now_ms` is passed in) ──
+
+const LAW_DAY_MS: i64 = 1_767_225_600_000; // 2026-01-01T00:00:00Z
+
+#[test]
+fn green_in_force_is_the_default_one_ms_before_and_the_scheduled_rate_after() {
+    let sched = schedule::parse(r#"[{"since_ms":1767225600000,"ppm":70000}]"#).unwrap();
+    assert_eq!(in_force(&sched, Some(VAT20), LAW_DAY_MS - 1), Some(VAT20));
+    assert_eq!(in_force(&sched, Some(VAT20), LAW_DAY_MS), Some(RatePpm(70_000)));
+    assert_eq!(in_force(&sched, Some(VAT20), LAW_DAY_MS + 1), Some(RatePpm(70_000)));
+}
+
+#[test]
+fn green_in_force_takes_the_latest_change_that_has_happened() {
+    // Out of order on purpose: the owner's list is not trusted to be sorted.
+    let sched = schedule::parse(
+        r#"[{"since_ms":300,"ppm":60000},{"since_ms":100,"ppm":100000},{"since_ms":200,"ppm":0}]"#,
+    )
+    .unwrap();
+    assert_eq!(in_force(&sched, None, 99), None, "no default and nothing in force yet");
+    assert_eq!(in_force(&sched, None, 150), Some(RatePpm(100_000)));
+    assert_eq!(in_force(&sched, None, 250), Some(RatePpm(0)), "a zero rate is a rate");
+    assert_eq!(in_force(&sched, None, 301), Some(VAT6));
+}
+
+#[test]
+fn green_an_empty_schedule_is_the_default() {
+    assert_eq!(schedule::parse("").unwrap(), alloc::vec![]);
+    assert_eq!(schedule::parse("[]").unwrap(), alloc::vec![]);
+    assert_eq!(in_force(&[], Some(VAT6), 0), Some(VAT6));
+    assert_eq!(in_force(&[], None, 0), None);
+}
+
+#[test]
+fn red_a_schedule_with_a_float_or_a_bad_shape_is_refused_with_a_reason() {
+    for bad in [
+        r#"[{"since_ms":1,"ppm":0.2}]"#,
+        r#"[{"since_ms":1,"ppm":"200000"}]"#,
+        r#"[{"since_ms":1.5,"ppm":200000}]"#,
+        r#"[{"since_ms":1}]"#,
+        r#"[{"ppm":200000}]"#,
+        r#"[{"since_ms":1,"ppm":2000000}]"#,
+        r#"[{"since_ms":1,"ppm":-1}]"#,
+        r#"[{"since_ms":1,"ppm":1,"extra":2}]"#,
+        r#"{"since_ms":1,"ppm":1}"#,
+        "[1]",
+        "not json",
+    ] {
+        let e = schedule::parse(bad).expect_err(bad);
+        assert!(e.starts_with("tax.schedule"), "{bad}: {e}");
+    }
+    // At most a handful: the future only (blueprint §2.6), never a history.
+    let many: alloc::vec::Vec<alloc::string::String> =
+        (0..9).map(|i| alloc::format!(r#"{{"since_ms":{i},"ppm":1}}"#)).collect();
+    let s = alloc::format!("[{}]", many.join(","));
+    assert!(schedule::parse(&s).is_err(), "nine entries is a history, not a schedule");
+}
