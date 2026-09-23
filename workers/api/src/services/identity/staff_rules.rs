@@ -65,9 +65,8 @@ pub fn sinvite_at(location_id: &str, id: &str) -> String {
 /// NOT `owner`. Making somebody an owner is a different act with a different
 /// blast radius — they could then remove the person who invited them — and it
 /// is not something a staff invite should be able to do by a typo in a select.
-/// The fourth word the room needs (the waiter who is not a Counter-Manager) is
-/// the operator's; until they name it, `Preset::from_str` refuses it and so
-/// does this.
+/// The four presets are Kitchen, Waiter, Counter-Manager and Owner
+/// (BLUEPRINT-POS-THE-ROOM §2.8). This function refuses Owner and accepts the rest.
 pub fn invitable(word: &str) -> Result<Preset, &'static str> {
     match Preset::from_str(word.trim()) {
         Some(Preset::Owner) => Err("an owner is not invited as staff"),
@@ -144,7 +143,7 @@ pub fn member_record(user_id: &str, venue: &str, preset: Preset, now_ms: i64) ->
 /// owner's own row is never on it, so the console cannot demote or suspend the
 /// person using it.
 pub fn is_staff_member(member: &Value) -> bool {
-    matches!(Preset::from_str(&s_of(member, "role")), Some(Preset::Kitchen | Preset::CounterManager))
+    matches!(Preset::from_str(&s_of(member, "role")), Some(Preset::Kitchen | Preset::Waiter | Preset::CounterManager))
 }
 
 /// One member of staff as the console lists them.

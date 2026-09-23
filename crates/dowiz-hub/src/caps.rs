@@ -17,16 +17,10 @@
 //! dropped — a dropped name is a silent downgrade, and a silent downgrade of an
 //! authority check is the defect this repo has paid for more than once.
 //!
-//! THE FOURTH WORD IS THE OPERATOR'S AND IT IS NOT HERE. `DECISIONS.md:297-298`
-//! rules three staff words — **Owner / Kitchen / Counter-Manager** — and those
-//! three are `Preset` below. The room also needs the person who takes an order
-//! at a table and is not a Counter-Manager
-//! (`docs/design/BLUEPRINT-POS-THE-ROOM-2026-09-22.md` §2.8, §8 row 5), and
-//! naming them is the operator's call. It is left as a GAP rather than guessed:
-//! `Preset::from_str` answers `None` for every word that is not one of the
-//! three, and `admit` turns that `None` into a refusal. So the gap is a locked
-//! door, not an open one, and the day the operator says the word it is one
-//! variant plus one row in the table.
+//! FOUR STAFF WORDS. `DECISIONS.md:297-298` rules three — **Owner / Kitchen / Counter-Manager** —
+//! and the operator named the fourth (2026-09-23): **Waiter** / Офіціант / Kamarier.
+//! All four are `Preset` below. The day the operator rules a fifth, it is one variant plus one
+//! row in the `caps()` table (BLUEPRINT-POS-THE-ROOM §2.8).
 //!
 //! WHERE THIS LIVES AND WHY. In `dowiz-hub`, not in the Worker, because there
 //! are TWO token implementations that must mean the same thing by the same
@@ -165,12 +159,14 @@ impl fmt::Display for Caps {
 
 /// A staff word the operator has ruled, and the capabilities behind it.
 ///
-/// These are `DECISIONS.md:297-298`'s three and nothing else. See the module
-/// header for the fourth, which is a gap and not a variant.
+/// These are `DECISIONS.md:297-298`'s three plus the operator's fourth word (2026-09-23).
+/// The capabilities table is in BLUEPRINT-POS-THE-ROOM §2.8.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Preset {
     /// Moves rounds through the kitchen. Takes no money.
     Kitchen,
+    /// Takes orders and payments before the kitchen, voids before kitchen, no till access.
+    Waiter,
     /// The counter: orders, payments, voids after the kitchen, and the drawer.
     CounterManager,
     /// Everything. An owner who also works the floor signs with the same set.
@@ -181,16 +177,17 @@ impl Preset {
     pub fn as_str(self) -> &'static str {
         match self {
             Preset::Kitchen => "kitchen",
+            Preset::Waiter => "waiter",
             Preset::CounterManager => "counter-manager",
             Preset::Owner => "owner",
         }
     }
 
     /// The roster row's `role` word, as `bootstrap.rs:386` already writes one
-    /// (`"role": "courier"`). Unknown — including the unnamed fourth word, and
-    /// including `"courier"` — is `None`, and `admit` refuses on `None`.
+    /// (`"role": "courier"`). Unknown — including `"courier"` — is `None`, and
+    /// `admit` refuses on `None`.
     pub fn from_str(s: &str) -> Option<Preset> {
-        [Preset::Kitchen, Preset::CounterManager, Preset::Owner]
+        [Preset::Kitchen, Preset::Waiter, Preset::CounterManager, Preset::Owner]
             .into_iter()
             .find(|p| p.as_str() == s)
     }
@@ -198,6 +195,7 @@ impl Preset {
     pub fn caps(self) -> Caps {
         match self {
             Preset::Kitchen => Caps::of(&[Cap::Advance]),
+            Preset::Waiter => Caps::of(&[Cap::TakeOrders, Cap::TakePayment]),
             Preset::CounterManager => {
                 Caps::of(&[Cap::TakeOrders, Cap::TakePayment, Cap::Void, Cap::OpenTill])
             }

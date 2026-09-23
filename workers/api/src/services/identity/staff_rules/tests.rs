@@ -36,14 +36,13 @@ fn a_session_of_another_person_or_venue_is_no_session() {
     assert_eq!(session_verdict(None, "p1", "sushi-durres", NOW), Err("no such staff session"));
 }
 
-/// An owner is not made by a staff invite, and the unnamed fourth word is
-/// refused rather than guessed.
+/// An owner is not made by a staff invite; the four staff words are invitable.
 #[test]
 fn only_the_ruled_staff_words_can_be_invited() {
     assert_eq!(invitable("kitchen"), Ok(Preset::Kitchen));
     assert_eq!(invitable(" counter-manager "), Ok(Preset::CounterManager));
+    assert_eq!(invitable("waiter"), Ok(Preset::Waiter));
     assert_eq!(invitable("owner"), Err("an owner is not invited as staff"));
-    assert_eq!(invitable("waiter"), Err("unknown staff role"));
     assert_eq!(invitable("courier"), Err("unknown staff role"));
 }
 
@@ -55,14 +54,18 @@ fn an_invite_needs_an_address_and_a_name() {
 }
 
 /// The console lists staff, never owners: an owner cannot demote or suspend
-/// themselves from a list they are not on.
+/// themselves from a list they are not on. Staff members are kitchen, waiter, and counter-manager.
 #[test]
 fn an_owner_membership_is_not_a_staff_row() {
     let owner = json!({"role": "owner", "status": "active"});
     let kitchen = json!({"role": "kitchen", "status": "active"});
+    let waiter = json!({"role": "waiter", "status": "active"});
+    let counter = json!({"role": "counter-manager", "status": "active"});
     let courier = json!({"role": "courier", "status": "active"});
     assert!(!is_staff_member(&owner));
     assert!(is_staff_member(&kitchen));
+    assert!(is_staff_member(&waiter));
+    assert!(is_staff_member(&counter));
     assert!(!is_staff_member(&courier));
 }
 

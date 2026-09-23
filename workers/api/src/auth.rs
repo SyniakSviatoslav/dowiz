@@ -802,16 +802,26 @@ mod staff_capability_tests {
         assert!(matches!(staff_caps("open_till", "kitchen"), Err(AuthError::Revoked(_))));
     }
 
-    /// A roster word the operator has not ruled -- including the fourth staff
-    /// word this commit deliberately does not invent -- grants nothing.
+    /// A roster word the operator has not ruled grants nothing. ("waiter" was
+    /// here until the operator named the fourth word on 2026-09-23; it is now a
+    /// preset, and the twin below proves it grants exactly its two caps.)
     #[test]
     fn an_unruled_roster_word_is_refused() {
-        for role in ["waiter", "courier", "", "Kitchen"] {
+        for role in ["bartender", "courier", "", "Kitchen", "Waiter"] {
             assert!(
                 matches!(staff_caps("take_orders", role), Err(AuthError::Revoked(_))),
                 "{role:?} was treated as a staff preset"
             );
         }
+    }
+
+    /// THE TWIN: the waiter is ruled now, and holds orders and payments only —
+    /// a token minted with `void` is narrowed to what the roster word allows.
+    #[test]
+    fn a_waiter_holds_orders_and_payments_and_nothing_more() {
+        let caps = staff_caps("take_orders,take_payment,void", "waiter").expect("a waiter is staff");
+        assert!(caps.allows(Cap::TakeOrders) && caps.allows(Cap::TakePayment));
+        assert!(!caps.allows(Cap::Void) && !caps.allows(Cap::OpenTill) && !caps.allows(Cap::Advance));
     }
 
     /// A capability name outside the closed set refuses the whole token rather

@@ -15,16 +15,20 @@ fn a_capability_not_granted_is_refused() {
     assert_eq!(Caps::default(), Caps::none(), "the default must be the empty set, not a full one");
 }
 
-/// `DECISIONS.md:297-298` rules three staff words and this is what each one
-/// may do. A fourth — the person who takes an order at a table — is a GAP the
-/// operator has to name; it is deliberately absent, and `from_str` answering
-/// `None` is what makes its absence a refusal rather than a silent grant.
+/// The four ruled staff words and their capability sets (BLUEPRINT-POS-THE-ROOM §2.8).
 #[test]
-fn the_three_ruled_presets_are_exactly_their_cap_sets() {
+fn the_four_ruled_presets_are_exactly_their_cap_sets() {
     let kitchen = Preset::Kitchen.caps();
     assert!(kitchen.allows(Cap::Advance));
     for c in [Cap::TakeOrders, Cap::TakePayment, Cap::Void, Cap::OpenTill] {
         assert!(!kitchen.allows(c), "kitchen must not hold {}", c.as_str());
+    }
+
+    let waiter = Preset::Waiter.caps();
+    assert!(waiter.allows(Cap::TakeOrders));
+    assert!(waiter.allows(Cap::TakePayment));
+    for c in [Cap::Advance, Cap::Void, Cap::OpenTill] {
+        assert!(!waiter.allows(c), "waiter must not hold {}", c.as_str());
     }
 
     let counter = Preset::CounterManager.caps();
@@ -41,16 +45,17 @@ fn the_three_ruled_presets_are_exactly_their_cap_sets() {
     }
 }
 
-/// THE FOURTH WORD IS NOT INVENTED HERE. A roster row spelling a word the
-/// operator has not ruled grants nothing at all — including `courier`, which
-/// is a word the roster already writes and which is not a staff preset.
+/// UNKNOWN WORDS ARE REFUSED. A roster row spelling a word the operator has
+/// not ruled grants nothing at all — including `courier`, which is a word the
+/// roster already writes and which is not a staff preset.
 #[test]
 fn a_roster_word_the_operator_has_not_ruled_grants_nothing() {
-    for word in ["waiter", "server", "courier", "counter", "kitchen-manager", "", "OWNER"] {
+    for word in ["server", "courier", "counter", "kitchen-manager", "", "OWNER"] {
         assert_eq!(Preset::from_str(word), None, "{word:?} is not a ruled preset");
     }
     assert_eq!(Preset::from_str("owner"), Some(Preset::Owner));
     assert_eq!(Preset::from_str("kitchen"), Some(Preset::Kitchen));
+    assert_eq!(Preset::from_str("waiter"), Some(Preset::Waiter));
     assert_eq!(Preset::from_str("counter-manager"), Some(Preset::CounterManager));
 }
 
@@ -155,6 +160,21 @@ fn a_token_without_a_capability_is_refused() {
     assert_eq!(admit("", "owner"), None);
     assert_eq!(admit("", "kitchen"), None);
     assert_eq!(admit("", ""), None);
-    // And a real capability against an unruled word is the same answer.
-    assert_eq!(admit("take_orders", "waiter"), None);
+    // A real capability against an unruled word is still a refusal.
+    assert_eq!(admit("take_orders", "server"), None);
+}
+
+/// A waiter's capabilities are take_orders and take_payment, exactly.
+/// A token minted with void for a waiter role narrows to nothing (intersection).
+#[test]
+fn admit_with_a_token_minted_with_void_for_a_roster_role_waiter_narrows_it_away() {
+    // Waiter is a valid preset that grants take_orders and take_payment.
+    assert_eq!(
+        admit("take_orders,take_payment", "waiter"),
+        Some(Preset::Waiter.caps())
+    );
+    // A token minted with void (which a waiter does not have) narrows to nothing.
+    assert_eq!(admit("void", "waiter"), None);
+    // A token minted with Advance (which a waiter does not have) narrows to nothing.
+    assert_eq!(admit("advance", "waiter"), None);
 }
