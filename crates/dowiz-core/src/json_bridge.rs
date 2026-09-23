@@ -23,6 +23,7 @@ use crate::analytics::{reduce_anomalies, ChannelEvent, ChannelLedger};
 use crate::harmonic::harmonic_centrality;
 use crate::json::{parse, Value};
 use crate::money::{estimate_order_total, FeeConfig, OrderTotalConfig};
+use crate::tax::RatePpm;
 use crate::order_machine::{fsm_graph_report, OrderStatus};
 use crate::spectral::{
     algebraic_connectivity, classify_drift, eigenvalues, spectral_gap, spectral_radius, DriftClass,
@@ -51,6 +52,29 @@ fn field_f64(v: &Value, key: &str) -> Result<f64, String> {
     v.get(key)
         .and_then(Value::as_f64)
         .ok_or_else(|| format!("missing or non-number field `{}`", key))
+}
+
+/// THE PARSE EDGE for a decimal tax rate (`"tax_rate": 0.20`, the shape the
+/// UI's `money.ts` mirror sends). This is the only place a rate is a float: it
+/// becomes [`RatePpm`] here, half-up, or is refused — non-finite, negative, and
+/// above 1.0 (100 %) all name the rate. Nothing past this line sees an `f64`.
+fn field_rate_ppm(v: &Value, key: &str) -> Result<RatePpm, String> {
+    let r = field_f64(v, key)?;
+    if !r.is_finite() {
+        return Err(format!("field `{}`: tax rate is not a finite number", key));
+    }
+    if r < 0.0 {
+        return Err(format!("field `{}`: a negative tax rate is refused", key));
+    }
+    if r > 1.0 {
+        return Err(format!(
+            "field `{}`: tax rate above 1.0 (100%) is refused; the rate is a fraction (20% = 0.20)",
+            key
+        ));
+    }
+    // r ∈ [0, 1] ⇒ r·10⁶ ∈ [0, 10⁶]; `math::round` is half-away-from-zero,
+    // which is half-up on this non-negative range.
+    Ok(RatePpm(crate::math::round(r * 1_000_000.0) as u32))
 }
 
 fn field_bool(v: &Value, key: &str) -> Result<bool, String> {
@@ -236,7 +260,7 @@ pub fn estimate_order_total_logic(subtotal: i64, cfg_json: &str) -> Result<Strin
             delivery_fee_flat: field_opt_i64(&v, "delivery_fee_flat"),
             has_distance_tiers: field_bool_default(&v, "has_distance_tiers"),
         },
-        tax_rate: field_f64(&v, "tax_rate")?,
+        tax_rate: field_rate_ppm(&v, "tax_rate")?,
         price_includes_tax: field_bool(&v, "price_includes_tax")?,
         min_order_value: field_opt_i64(&v, "min_order_value"),
     };
@@ -578,6 +602,39 @@ mod tests {
         let v = est(400, CFG_MIN);
         assert_eq!(v.get("min_not_met").and_then(Value::as_bool), Some(true));
         assert_eq!(v.get("total").and_then(Value::as_i64), Some(400 + 200 + 80));
+    }
+
+    // ── The rate parse edge (blueprint §6 item 8). Every refusal has a twin. ──
+    fn cfg_rate(rate: &str) -> String {
+        CFG_FLAT_EXCL.replace("\"tax_rate\":0.20", &format!("\"tax_rate\":{rate}"))
+    }
+    #[test]
+    fn rate_edge_refuses_a_negative_rate() {
+        // The f64 era returned a NEGATIVE tax here: apply_tax(1000, -2.0) = -1999.
+        let e = estimate_order_total_logic(1000, &cfg_rate("-2.0")).unwrap_err();
+        assert!(e.contains("negative tax rate"), "{e}");
+    }
+    #[test]
+    fn rate_edge_refuses_a_rate_above_one_and_names_the_rate() {
+        // The f64 era: 1e17 and 1e15 came back as "tax_rate out of range";
+        // 2.0 overflowed only on a huge subtotal. All are typos, not taxes.
+        for r in ["2.0", "1e15", "1e17", "20"] {
+            let e = estimate_order_total_logic(1000, &cfg_rate(r)).unwrap_err();
+            assert!(e.contains("above 1.0"), "rate {r}: {e}");
+        }
+    }
+    #[test]
+    fn rate_edge_accepts_the_bounds_and_rounds_half_up() {
+        let t = |r: &str| est(1000, &cfg_rate(r)).get("tax_total").and_then(Value::as_i64);
+        assert_eq!(t("0"), Some(0));
+        assert_eq!(t("0.0"), Some(0));
+        assert_eq!(t("1.0"), Some(1000));
+        assert_eq!(t("0.20"), Some(200));
+        // Sub-ppm rates round to the nearest ppm: 0.4 ppm → 0, 0.6 ppm → 1.
+        // On 10⁹ minor units 1 ppm is 1000, so the ppm reached is visible.
+        let big = |r: &str| est(1_000_000_000, &cfg_rate(r)).get("tax_total").and_then(Value::as_i64);
+        assert_eq!(big("0.0000004"), Some(0));
+        assert_eq!(big("0.0000006"), Some(1000));
     }
 
     #[test]

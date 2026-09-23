@@ -18,7 +18,8 @@
 //! `crate::eqc_gen::apply_tax_{exclusive,inclusive}_int`, the integer-exact
 //! artifacts emitted by `tools/eqc-rs` from the equation of truth. That is the
 //! authority flip `eqc_gen.rs:18-20` recorded as "NOT done": the organ is now
-//! the law and `money::apply_tax(_, f64, _)` is a thin adapter over it.
+//! the law. The `f64` adapter `money::apply_tax` is deleted (blueprint §6
+//! item 8); a decimal rate becomes ppm only at a parse edge.
 //!
 //! **Rounding, with the rounded quantity NAMED** (blueprint §3.2 equation 4):
 //! inclusive rounds the NET, exclusive rounds the TAX, both half-up. Three
@@ -89,18 +90,13 @@ impl RatePpm {
 /// flip. `inclusive` selects which quantity is rounded: the NET (gross given)
 /// or the TAX (net given).
 pub fn tax_of(base: i64, rate: RatePpm, inclusive: bool) -> Result<i64, String> {
-    tax_micro(base, i64::from(rate.0), inclusive).map_err(|e| format!("tax_of: {e}"))
-}
-
-/// The organ, addressed by a raw `rate_micro` so the `f64` adapter
-/// (`money::apply_tax`) can reach rates outside `RatePpm`'s domain that its two
-/// remaining callers still pass. Crate-private: `tax_of` is the front door.
-pub(crate) fn tax_micro(base: i64, rate_micro: i64, inclusive: bool) -> Result<i64, &'static str> {
+    let rate_micro = i64::from(rate.0);
     if inclusive {
         crate::eqc_gen::apply_tax_inclusive_int(base, rate_micro)
     } else {
         crate::eqc_gen::apply_tax_exclusive_int(base, rate_micro)
     }
+    .map_err(|e| format!("tax_of: {e}"))
 }
 
 /// One priced amount and the rate it carries. `amount` is as PRICED: gross when

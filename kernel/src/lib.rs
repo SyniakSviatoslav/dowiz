@@ -881,9 +881,7 @@ pub use evals::{
     aurc, brier, ece, EmaTracker, EvalCheck, EvalRow, MetamorphicGenerator, MintLog, MrItem,
     RegressionGate, SelfAdaptator,
 };
-pub use money::{
-    apply_tax, assert_non_negative, compute_line_total, convert_all_to_eur_cents,
-};
+pub use money::{assert_non_negative, compute_line_total, convert_all_to_eur_cents};
 pub use order_machine::{
     assert_transition, cyclomatic_number, fold_transitions, fsm_graph_report, has_cycle, reachable,
     spectral_radius, topological_order, verify_fsm_signature, verify_fsm_signature_against,

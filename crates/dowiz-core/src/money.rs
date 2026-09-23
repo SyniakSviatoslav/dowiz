@@ -282,47 +282,11 @@ pub fn reverse_transfer(
     ledger_append(ledger, rev)
 }
 
-/// THE `f64` ADAPTER, and nothing more. The law is [`crate::tax::tax_of`].
-///
-/// **The authority flip (blueprint §3.1; `eqc_gen.rs:18-20` recorded it as "NOT
-/// done").** This function used to BE the tax law: it held the two half-up
-/// divisions, in `i128`, reached through an `f64` multiply, inside the file
-/// whose first line reads "RED LINE: zero float arithmetic on monetary values".
-/// The generated organs (`eqc_gen::apply_tax_{exclusive,inclusive}_int`) were
-/// its shadow, pinned to it by `apply_tax_generated_parity_exact_integers`.
-/// The organ is now the law and this is the shadow: the arithmetic has moved
-/// out, and what is left is the ONE job an adapter has — turn the `f64` its two
-/// remaining callers still pass (`temporal_tmr.rs:243`, `json_bridge.rs:243`)
-/// into the integer basis, or refuse. **The parity test is unchanged**; it now
-/// pins adapter == organ, which is trivially true and stays as the regression
-/// table for the fixture grid.
-///
-/// **No expected value moved.** `money.rs:284,294` and the organs' bodies are
-/// the same two expressions; the parity grid is what proves it, and
-/// `green_apply_tax_is_an_adapter_over_tax_of_for_every_representable_rate`
-/// re-proves it through the typed front door.
-///
-/// **One refusal changed, and it got more honest.** A rate whose micro basis
-/// does not fit `i64` used to come back as "tax overflow: subtotal * rate
-/// exceeds i64" — a report that blames the basket for a bad RATE. It is now
-/// named for what it is.
-///
-/// New code takes [`crate::tax::RatePpm`] and calls `tax_of`. This signature
-/// exists to be deleted (blueprint §6 item 8).
-pub fn apply_tax(subtotal: i64, tax_rate: f64, price_includes_tax: bool) -> Result<i64, String> {
-    if subtotal == 0 || tax_rate == 0.0 {
-        return Ok(0);
-    }
-    // The last float on the money path in this file, and the only thing an
-    // adapter is for. `math::round` is the same conversion this function has
-    // always used (money.rs:272) — measured lossless for every basis-point and
-    // per-mille rate, which is why the flip moves no number.
-    let rate_micro = crate::math::round(tax_rate * 1_000_000.0) as i128;
-    let rate_micro = i64::try_from(rate_micro)
-        .map_err(|_| "apply_tax: tax_rate out of range (tax_rate * 1e6 exceeds i64)".to_string())?;
-    crate::tax::tax_micro(subtotal, rate_micro, price_includes_tax)
-        .map_err(|e| format!("apply_tax: {e}"))
-}
+// `apply_tax(subtotal, f64, incl)` — the f64 adapter over the tax law — is
+// DELETED (blueprint §6 item 8). The law is [`crate::tax::tax_of`], taking a
+// [`crate::tax::RatePpm`]; a decimal rate off the wire becomes ppm only at a
+// parse edge (`json_bridge::field_rate_ppm`), which refuses non-finite,
+// negative and above-100 % rates.
 
 /// `computeLineTotal`: sum of unit price + modifiers, times quantity.
 ///
@@ -352,20 +316,25 @@ pub fn assert_non_negative(total: i64) -> Result<(), String> {
     Ok(())
 }
 
-/// ALL→EUR display conversion (shared-types utils.ts `formatMoney`). Scaled integer arithmetic.
-/// `rate` is ALL-per-EUR (or whatever the configured rate is). Returns EUR cents.
+/// ALL→EUR display conversion (shared-types utils.ts `formatMoney`). Integer only.
+/// `rate_ppm` is the EUR-per-ALL rate in parts per million (0.01 = `10_000`);
+/// returns EUR cents. `rate_ppm <= 0` is refused.
 ///
-/// BP-17: `i128 → i64` cast is range-checked (`i64::try_from`) — a huge conversion result
-/// returns `Err` instead of silently truncating.
-pub fn convert_all_to_eur_cents(amount_all: i64, rate: f64) -> Result<i64, String> {
-    if rate <= 0.0 {
+/// The rounding is `eqc_gen::apply_tax_exclusive_int`'s DivHalfUp, copied:
+/// `(amount · rate_ppm · 100 + 10⁶/2) / 10⁶` in `i128`, every product checked,
+/// the `i128 → i64` narrowing range-checked (BP-17). It used to take an `f64`
+/// rate scaled to 10⁹; the integer basis is the one `services/ordering/rates.rs`
+/// already ships.
+pub fn convert_all_to_eur_cents(amount_all: i64, rate_ppm: i64) -> Result<i64, String> {
+    if rate_ppm <= 0 {
         return Err("rate must be > 0".into());
     }
-    let rate_scaled = crate::math::round(rate * 1_000_000_000.0) as i128;
-    let eur_cents = (amount_all as i128) * rate_scaled * 100i128;
-    let scale = 10i128.pow(9);
-    let rounded = (eur_cents + scale / 2) / scale;
-    i64::try_from(rounded).map_err(|_| "EUR conversion overflow".into())
+    let b = 1_000_000i128;
+    let prod = (amount_all as i128)
+        .checked_mul(rate_ppm as i128)
+        .and_then(|v| v.checked_mul(100))
+        .ok_or("EUR conversion overflow")?;
+    i64::try_from((prod + b / 2) / b).map_err(|_| "EUR conversion overflow".into())
 }
 
 // ── Order-total mirror (RW-03 authority surface) ──────────────────────────────
@@ -388,7 +357,7 @@ pub struct FeeConfig {
 #[derive(Clone, Copy)]
 pub struct OrderTotalConfig {
     pub fee: FeeConfig,
-    pub tax_rate: f64,
+    pub tax_rate: crate::tax::RatePpm,
     pub price_includes_tax: bool,
     pub min_order_value: Option<i64>,
 }
@@ -399,7 +368,7 @@ pub struct OrderTotalEstimate {
     pub fee_known: bool,
     pub delivery_fee: Option<i64>,
     /// Tax on the subtotal in minor units, or `None` when it can't be computed (a
-    /// pathological `subtotal × rate` overflows i64 in `apply_tax`). Fail-closed like
+    /// pathological `subtotal × rate` overflows i64 in `tax_of`). Fail-closed like
     /// `delivery_fee`: the caller must degrade, never show a fabricated zero-tax total.
     pub tax_total: Option<i64>,
     /// Authoritative-by-construction total, or `None` when the fee OR the tax is unknown.
@@ -434,7 +403,7 @@ pub fn estimate_order_total(subtotal: i64, cfg: &OrderTotalConfig) -> OrderTotal
     // Fail-closed: a tax-computation failure (overflow) is `None`, NOT a silent zero.
     // `.ok()` mirrors the fee-unknown degrade — the estimate cannot back a number it
     // couldn't compute, so both `tax_total` and `total` degrade to `None`.
-    let tax_total = apply_tax(subtotal, cfg.tax_rate, cfg.price_includes_tax).ok();
+    let tax_total = crate::tax::tax_of(subtotal, cfg.tax_rate, cfg.price_includes_tax).ok();
     let min_not_met = match cfg.min_order_value {
         Some(min) => subtotal < min,
         None => false,
@@ -460,6 +429,7 @@ pub fn estimate_order_total(subtotal: i64, cfg: &OrderTotalConfig) -> OrderTotal
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tax::{tax_of, RatePpm};
 
     // ── M5: currency guard — cross-currency add is fail-closed ──
     #[test]
@@ -492,20 +462,21 @@ mod tests {
     }
 
     // ── GREEN: tax on subtotal (not subtotal+fee), matches oracle ──
+    // Expected values recorded from the deleted f64 `apply_tax` before it went.
     #[test]
     fn green_tax_added_exclusive() {
         // 1000 minor units, 20% tax → 200
-        assert_eq!(apply_tax(1000, 0.20, false).unwrap(), 200);
+        assert_eq!(tax_of(1000, RatePpm(200_000), false).unwrap(), 200);
     }
     #[test]
     fn green_tax_inclusive_net() {
         // 1200 inclusive at 20% → tax = 1200 - net(1000) = 200
-        assert_eq!(apply_tax(1200, 0.20, true).unwrap(), 200);
+        assert_eq!(tax_of(1200, RatePpm(200_000), true).unwrap(), 200);
     }
     #[test]
     fn green_zero_subtotal_or_rate() {
-        assert_eq!(apply_tax(0, 0.20, false).unwrap(), 0);
-        assert_eq!(apply_tax(1000, 0.0, false).unwrap(), 0);
+        assert_eq!(tax_of(0, RatePpm(200_000), false).unwrap(), 0);
+        assert_eq!(tax_of(1000, RatePpm(0), false).unwrap(), 0);
     }
     #[test]
     fn green_line_total_with_modifiers() {
@@ -526,7 +497,7 @@ mod tests {
     #[test]
     fn red_estimate_order_total_overflow_degrades_to_none() {
         let cfg = OrderTotalConfig {
-            tax_rate: 0.20,
+            tax_rate: RatePpm(200_000),
             price_includes_tax: false,
             fee: FeeConfig {
                 is_pickup: false,
@@ -558,176 +529,60 @@ mod tests {
 
     #[test]
     fn red_tax_overflow_is_err() {
-        // pathological: huge subtotal × rate=2.0 → tax ≈ i64::MAX*2 exceeds i64.
-        let r = apply_tax(i64::MAX, 2.0, false);
+        // pathological: huge subtotal × 200 % → tax ≈ i64::MAX*2 exceeds i64.
+        // 2_000_000 ppm is above `RatePpm::MAX` — unreachable from the parse
+        // edge, reachable through the pub field, and the law still refuses it.
+        let r = tax_of(i64::MAX, RatePpm(2_000_000), false);
         assert!(r.is_err(), "tax overflow must be Err, got {:?}", r);
     }
-
-    // ── M1 (ROUND-2 GAP-AUDIT V3 1.4 / 1.6): apply_tax must not panic. ──
     #[test]
-    fn red_tax_negative_rate_is_err_not_divzero() {
+    fn green_tax_at_the_same_rate_on_a_sane_subtotal_is_ok() {
+        assert_eq!(tax_of(1000, RatePpm(2_000_000), false).unwrap(), 2000);
+    }
+
+    // A NEGATIVE rate is no longer expressible (`RatePpm` is unsigned, and the
+    // parse edge refuses it); the organ's own denominator guard is still pinned.
+    #[test]
+    fn red_organ_negative_rate_is_err_not_divzero() {
         // V3 1.4: rate_micro <= -MONEY_SCALE_MICRO makes the inclusive denominator
         // <= 0 → pre-fix this was a div-by-zero panic. Now refused as Err.
-        let r = apply_tax(1000, -2.0, true);
-        assert!(
-            r.is_err(),
-            "negative effective rate must be Err, got {:?}",
-            r
-        );
+        let r = crate::eqc_gen::apply_tax_inclusive_int(1000, -2_000_000);
+        assert!(r.is_err(), "negative effective rate must be Err, got {:?}", r);
     }
 
+    // ── The values the deleted f64 `apply_tax` produced, recorded before the
+    //    deletion (lane F64, 2026-09-23) and pinned against `tax_of` / the organ.
+    //    The f64 rate is shown beside each ppm it became. ──
     #[test]
-    fn red_tax_i128_overflow_is_err_not_panic() {
-        // V3 1.6: a pathologically large rate saturates rate_micro toward i128::MAX;
-        // pre-fix `sub * rate_micro` overflowed i128 (panicked in release). Now Err.
-        let r = apply_tax(1_000_000_000_000, 1e15, false);
-        assert!(r.is_err(), "i128 overflow must be Err, got {:?}", r);
-    }
-
-    // ── THE AUTHORITY FLIP (blueprint §3.1) ──────────────────────────────
-    // `apply_tax` no longer carries the money arithmetic: it converts the f64
-    // its two remaining callers still pass (`temporal_tmr.rs:243`,
-    // `json_bridge.rs:243`) into the integer basis and hands the sum to the
-    // GENERATED organ, through `tax::tax_micro`. These two tests are what makes
-    // that visible from outside.
-
-    #[test]
-    fn red_an_unrepresentable_rate_is_named_as_a_RATE_problem_not_a_subtotal_one() {
-        // Before the flip this came back as "tax overflow: subtotal * rate
-        // exceeds i64" — a report that blames the basket for a rate that does
-        // not fit the integer basis at all. A refusal that names the wrong
-        // quantity sends the reader to the wrong field.
-        let e = apply_tax(1_000_000_000_000, 1e15, false).unwrap_err();
-        assert!(
-            e.contains("tax_rate out of range"),
-            "the refusal must name the RATE; got: {e}"
-        );
-    }
-
-    #[test]
-    fn green_apply_tax_is_an_adapter_over_tax_of_for_every_representable_rate() {
-        use crate::tax::{tax_of, RatePpm};
-        for sub in [0i64, 1, 3, 9, 250, 675, 750, 1_000_000, i64::MAX / 4] {
-            for ppm in [0u32, 1, 60_000, 88_750, 200_000, 999_999, 1_000_000] {
-                for incl in [false, true] {
-                    let via_f64 = apply_tax(sub, f64::from(ppm) / 1_000_000.0, incl);
-                    let via_int = tax_of(sub, RatePpm(ppm), incl);
-                    assert_eq!(
-                        via_f64.is_ok(),
-                        via_int.is_ok(),
-                        "sub={sub} ppm={ppm} incl={incl}"
-                    );
-                    if let (Ok(a), Ok(b)) = (&via_f64, &via_int) {
-                        assert_eq!(a, b, "sub={sub} ppm={ppm} incl={incl}");
-                    }
-                }
-            }
-        }
-    }
-
-    // ── A3: money-law SHADOW organ exact-integer parity pin (BLUEPRINT-P-A §3.3) ──
-    // The generated organs (crate::eqc_gen::apply_tax_{exclusive,inclusive}_int) are a
-    // verbatim transcription of the equations of truth; this test pins them against the
-    // hand-written `apply_tax` (the still-authoritative law — the authority flip is
-    // R-4-gated, NOT done here). Exact-integer equality, no tolerance. Any mismatch is RED.
-    #[test]
-    fn apply_tax_generated_parity_exact_integers() {
-        // Every existing apply_tax corpus case from money.rs:454-495, reused as fixtures.
-        const MONEY_TAX_FIXTURES: &[(i64, f64, bool)] = &[
-            (1000, 0.20, false),    // green_tax_added_exclusive → 200
-            (1200, 0.20, true),     // green_tax_inclusive_net → 200
-            (0, 0.20, false),       // green_zero_subtotal_or_rate → 0
-            (1000, 0.0, false),     // green_zero_subtotal_or_rate → 0
-            (i64::MAX, 2.0, false), // red_tax_overflow_is_err → Err
-            // FEYNMAN-10: the negative-rate edge the parity suite used to skip.
-            // The law (apply_tax) refuses denom ≤ 0; the generated organs must
-            // refuse the same — both directions, so a future authority flip to
-            // the generated organ cannot silently change red-line behavior.
-            (1000, -2.0, false), // red negative effective rate ⇒ Err
-            (1000, -2.0, true),  // red negative effective rate (inclusive) ⇒ Err
+    fn tax_of_reproduces_every_recorded_f64_era_value() {
+        const RECORDED: &[(i64, u32, bool, Option<i64>)] = &[
+            (1000, 200_000, false, Some(200)),  // 0.20
+            (1200, 200_000, true, Some(200)),   // 0.20 inclusive
+            (0, 200_000, false, Some(0)),       // 0.20
+            (1000, 0, false, Some(0)),          // 0.0
+            (1000, 100_000, false, Some(100)),  // 0.10
+            (1300, 200_000, false, Some(260)),  // 0.20
+            (2000, 100_000, false, Some(200)),  // 0.10
+            (1500, 200_000, false, Some(300)),  // 0.20
+            (400, 200_000, false, Some(80)),    // 0.20
+            (i64::MAX - 1, 200_000, false, Some(1_844_674_407_370_955_161)),
+            (i64::MAX, 2_000_000, false, None), // 2.0 → Err (overflow)
+            (i64::MAX, 2_000_000, true, Some(6_148_914_691_236_517_205)), // 2.0 inclusive
         ];
-        for &(sub, rate, incl) in MONEY_TAX_FIXTURES {
-            // Same boundary conversion as apply_tax (money.rs:275).
-            let rate_micro = crate::math::round(rate * 1_000_000.0) as i64;
-            let want = apply_tax(sub, rate, incl);
-            let got = if incl {
-                crate::eqc_gen::apply_tax_inclusive_int(sub, rate_micro)
-            } else {
-                crate::eqc_gen::apply_tax_exclusive_int(sub, rate_micro)
-            };
-            match want {
-                Ok(v) => assert_eq!(
-                    got.unwrap(),
-                    v,
-                    "parity mismatch at (sub={sub}, rate={rate}, incl={incl})"
-                ),
-                Err(_) => assert!(
-                    got.is_err(),
-                    "both must refuse at (sub={sub}, rate={rate}, incl={incl}); got {got:?}"
-                ),
-            }
+        for &(sub, ppm, incl, want) in RECORDED {
+            let got = tax_of(sub, RatePpm(ppm), incl);
+            assert_eq!(got.ok(), want, "sub={sub} ppm={ppm} incl={incl}");
         }
-
-        // Adversarial overflow sweep: the EXCLUSIVE organ at sub=i64::MAX,
-        // rate_micro=2_000_000 MUST return Err (the half-up product overflows i64) —
-        // never wrap. The INCLUSIVE organ can never overflow the final i64 narrowing
-        // (tax = sub - net ≤ sub ≤ i64::MAX for non-negative rate, and sub*s fits i128),
-        // so it returns Ok there and must equal the law exactly. Both paths are
-        // fail-closed: whatever they return is the true, in-range value (no silent wrap).
-        let got_excl = crate::eqc_gen::apply_tax_exclusive_int(i64::MAX, 2_000_000);
-        let got_incl = crate::eqc_gen::apply_tax_inclusive_int(i64::MAX, 2_000_000);
-        assert!(
-            got_excl.is_err(),
-            "exclusive organ must refuse overflow, got {got_excl:?}"
-        );
-        let want_incl = apply_tax(i64::MAX, 2.0, true);
-        assert_eq!(
-            got_incl,
-            want_incl.map_err(|_| "tax overflow: subtotal * rate exceeds i64"),
-            "inclusive organ must match the law at the i64::MAX boundary (no wrap)"
-        );
-
-        // Property grid: divergence-hunting sweep over the integer basis. Any single
-        // mismatch is RED — this is the test *designed to break* the transcription.
-        let subs = [0i64, 1, 999, 1_000_000, i64::MAX / 2];
-        let rates = [0i64, 1, 200_000, 999_999, -2_000_000];
-        for &sub in subs.iter() {
-            for &rate_micro in rates.iter() {
-                // f64 rate round-trips the micro basis for the hand-written law.
-                let rate_f = rate_micro as f64 / 1_000_000.0;
-                let want_excl = apply_tax(sub, rate_f, false);
-                let want_incl = apply_tax(sub, rate_f, true);
-                let got_excl = crate::eqc_gen::apply_tax_exclusive_int(sub, rate_micro);
-                let got_incl = crate::eqc_gen::apply_tax_inclusive_int(sub, rate_micro);
-                match want_excl {
-                    Ok(v) => assert_eq!(
-                        got_excl.unwrap(),
-                        v,
-                        "excl grid mismatch at sub={sub} rate_micro={rate_micro}"
-                    ),
-                    Err(_) => assert!(
-                        got_excl.is_err(),
-                        "excl grid both-refuse at sub={sub} rate_micro={rate_micro}; got {got_excl:?}"
-                    ),
-                }
-                match want_incl {
-                    Ok(v) => assert_eq!(
-                        got_incl.unwrap(),
-                        v,
-                        "incl grid mismatch at sub={sub} rate_micro={rate_micro}"
-                    ),
-                    Err(_) => assert!(
-                        got_incl.is_err(),
-                        "incl grid both-refuse at sub={sub} rate_micro={rate_micro}; got {got_incl:?}"
-                    ),
-                }
-            }
-        }
+        // Negative rates: recorded through the organ, which still accepts a raw
+        // micro rate. -2.0 exclusive was Ok(-1999) — a NEGATIVE tax the f64
+        // adapter used to hand back; the parse edge now refuses that rate.
+        assert_eq!(crate::eqc_gen::apply_tax_exclusive_int(1000, -2_000_000), Ok(-1999));
+        assert!(crate::eqc_gen::apply_tax_inclusive_int(1000, -2_000_000).is_err());
     }
 
     #[test]
     fn red_eur_conversion_overflow_is_err() {
-        let r = convert_all_to_eur_cents(i64::MAX, 1.0);
+        let r = convert_all_to_eur_cents(i64::MAX, 1_000_000);
         assert!(r.is_err(), "EUR overflow must be Err, got {:?}", r);
     }
 
@@ -735,7 +590,20 @@ mod tests {
     #[test]
     fn green_all_to_eur() {
         // 1000 ALL at rate 0.01 (100 ALL = 1 EUR) → 10 EUR => 1000 cents
-        assert_eq!(convert_all_to_eur_cents(1000, 0.01).unwrap(), 1000);
+        assert_eq!(convert_all_to_eur_cents(1000, 10_000).unwrap(), 1000);
+        // Recorded from the f64 path (rate 0.0075): half-up, truncating toward
+        // zero on the negative side exactly as before.
+        assert_eq!(convert_all_to_eur_cents(100_000, 7_500).unwrap(), 75_000);
+        assert_eq!(convert_all_to_eur_cents(-100_000, 7_500).unwrap(), -74_999);
+    }
+
+    #[test]
+    fn red_eur_conversion_zero_or_negative_rate_is_refused() {
+        assert_eq!(
+            convert_all_to_eur_cents(100_000, 0).unwrap_err(),
+            "rate must be > 0"
+        );
+        assert!(convert_all_to_eur_cents(100_000, -1).is_err());
     }
 
     // ── RW-03 parity: kernel estimate_order_total == packages/ui/src/lib/money.ts ──
@@ -747,7 +615,7 @@ mod tests {
         free_thr: Option<i64>,
         flat: Option<i64>,
         distance: bool,
-        tax_rate: f64,
+        tax_rate: RatePpm,
         incl: bool,
         min: Option<i64>,
     ) -> OrderTotalConfig {
@@ -767,7 +635,7 @@ mod tests {
     // Flat fee + 20% tax exclusive: 1000 + 200 fee + 200 tax = 1400
     #[test]
     fn green_parity_flat_fee_exclusive() {
-        let r = estimate_order_total(1000, &cfg(false, None, Some(200), false, 0.20, false, None));
+        let r = estimate_order_total(1000, &cfg(false, None, Some(200), false, RatePpm(200_000), false, None));
         assert!(r.fee_known);
         assert_eq!(r.delivery_fee, Some(200));
         assert_eq!(r.tax_total, Some(200));
@@ -780,7 +648,7 @@ mod tests {
     fn green_parity_free_threshold_boundary() {
         let r = estimate_order_total(
             2000,
-            &cfg(false, Some(2000), Some(200), false, 0.10, false, None),
+            &cfg(false, Some(2000), Some(200), false, RatePpm(100_000), false, None),
         );
         assert_eq!(r.delivery_fee, Some(0));
         assert_eq!(r.tax_total, Some(200));
@@ -790,7 +658,7 @@ mod tests {
     // Pickup → fee 0, tax still applies
     #[test]
     fn green_parity_pickup() {
-        let r = estimate_order_total(1500, &cfg(true, None, Some(200), false, 0.20, false, None));
+        let r = estimate_order_total(1500, &cfg(true, None, Some(200), false, RatePpm(200_000), false, None));
         assert_eq!(r.delivery_fee, Some(0));
         assert_eq!(r.total, Some(1500 + 300));
     }
@@ -798,7 +666,7 @@ mod tests {
     // Distance-tiered → fee unknown → total None (caller must degrade)
     #[test]
     fn green_parity_distance_unknown() {
-        let r = estimate_order_total(1000, &cfg(false, None, Some(200), true, 0.20, false, None));
+        let r = estimate_order_total(1000, &cfg(false, None, Some(200), true, RatePpm(200_000), false, None));
         assert!(!r.fee_known);
         assert_eq!(r.delivery_fee, None);
         assert_eq!(r.total, None);
@@ -809,7 +677,7 @@ mod tests {
     fn green_parity_min_not_met() {
         let r = estimate_order_total(
             400,
-            &cfg(false, None, Some(200), false, 0.20, false, Some(500)),
+            &cfg(false, None, Some(200), false, RatePpm(200_000), false, Some(500)),
         );
         assert!(r.min_not_met);
         assert_eq!(r.total, Some(400 + 200 + 80));
@@ -820,20 +688,26 @@ mod tests {
     fn green_parity_inclusive_tax() {
         let r = estimate_order_total(
             1200,
-            &cfg(false, Some(9999), Some(0), false, 0.20, true, None),
+            &cfg(false, Some(9999), Some(0), false, RatePpm(200_000), true, None),
         );
         assert_eq!(r.tax_total, Some(200));
         assert_eq!(r.total, Some(1400)); // money.ts always adds tax_total to subtotal+fee
     }
 
     // ── RED→GREEN (Phase 7 §6, BLUEPRINT-P07): tax overflow must FAIL CLOSED ──
-    // `apply_tax` overflows i64 here (subtotal 1000 × rate 1e17 far exceeds i64::MAX).
+    // The f64 era used subtotal 1000 × rate 1e17; a rate that size is refused at
+    // the parse edge now (`json_bridge`), so the overflow is reached with the
+    // largest `RatePpm` on a large subtotal. Recorded expectation unchanged:
+    // fee Some(200), tax None, total None.
     // Pre-fix `.unwrap_or(0)`: tax_total=0, total=Some(1200) — a fabricated zero-tax total
     // the estimator cannot back. Post-fix: the estimate degrades exactly as it does for an
     // unknown (distance-tiered) fee — tax_total=None, total=None. Never a wrong number.
     #[test]
     fn red_tax_overflow_degrades_estimate_to_none() {
-        let r = estimate_order_total(1000, &cfg(false, None, Some(200), false, 1e17, false, None));
+        let r = estimate_order_total(
+            i64::MAX / 2,
+            &cfg(false, None, Some(200), false, RatePpm(u32::MAX), false, None),
+        );
         assert!(
             r.fee_known,
             "flat 200 fee is computable — the fee side is known"

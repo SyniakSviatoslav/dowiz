@@ -3,6 +3,7 @@
 //! prints the same fold. Only the harness (case generation, tag/reason codes,
 //! mix) lives here; every monetary result comes from money.rs.
 use dowiz_core::money::*;
+use dowiz_core::tax::RatePpm;
 
 const M62: i64 = (1 << 62) - 1;
 fn lcg(s: i64) -> i64 { (s.wrapping_mul(1103515245).wrapping_add(12345)) & 2147483647 }
@@ -34,15 +35,17 @@ fn case(st: &mut St, op: i64, a: i64, b: i64, ca: i64, cb: i64, rm: i64, m1: i64
     let q = (s6 % 20) - 2;
     let flags = s6 >> 8;
     let thr = b.abs();
-    let rate = rm as f64 / 1_000_000.0;
     match op {
         1 => st.emit(Money::new(a, cur(ca)).checked_add(Money::new(b, cur(cb))).map(|m| m.minor)),
         2 => st.emit(Money::new(a, cur(ca)).checked_sub(Money::new(b, cur(cb))).map(|m| m.minor)),
         3 => st.emit(Money::new(a, cur(ca)).checked_neg().map(|m| m.minor)),
         4 => st.emit(compute_line_total(a, &[m1, m2], q)),
-        5 => st.emit(apply_tax(a, rate, false)),
-        6 => st.emit(apply_tax(a, rate, true)),
-        7 => st.emit(convert_all_to_eur_cents(a, nano as f64 / 1_000_000_000.0)),
+        // The f64 adapter is gone (TAX item 8); its zero short-circuit is kept so the fold is unchanged.
+        5 => st.emit(if a == 0 || rm == 0 { Ok(0) } else { dowiz_core::eqc_gen::apply_tax_exclusive_int(a, rm).map_err(|e| e.to_string()) }),
+        6 => st.emit(if a == 0 || rm == 0 { Ok(0) } else { dowiz_core::eqc_gen::apply_tax_inclusive_int(a, rm).map_err(|e| e.to_string()) }),
+        // Op 7 draws nano-scale (ppb) rates that ppm cannot hold, so the oracle keeps the old
+        // arithmetic inline: round(rate*1e9) == nano exactly for nano <= 2e7.
+        7 => st.emit(if nano <= 0 { Err("rate must be > 0".to_string()) } else { i64::try_from(((a as i128) * (nano as i128) * 100 + 500_000_000) / 1_000_000_000).map_err(|_| "EUR conversion overflow".to_string()) }),
         9 => st.emit(assert_non_negative(a).map(|_| 0)),
         8 => {
             let cfg = OrderTotalConfig {
@@ -52,7 +55,7 @@ fn case(st: &mut St, op: i64, a: i64, b: i64, ca: i64, cb: i64, rm: i64, m1: i64
                     delivery_fee_flat: if (flags >> 4) & 1 == 1 { Some(flat) } else { None },
                     has_distance_tiers: (flags >> 1) & 1 == 1,
                 },
-                tax_rate: rate,
+                tax_rate: RatePpm(rm as u32),
                 price_includes_tax: (flags >> 2) & 1 == 1,
                 min_order_value: if (flags >> 5) & 1 == 1 { Some(mn) } else { None },
             };

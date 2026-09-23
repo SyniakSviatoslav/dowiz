@@ -6,7 +6,7 @@
 //!
 //! - `Order` / `OrderItem` mirror the oracle shapes (legacy.ts `OrderResponse`,
 //!   `OrderItemResponse`, `CreateOrderInput`). Integer money only (`i64` minor units).
-//! - `compute_order_total` reuses `money::apply_tax` (tax on the subtotal only, exactly
+//! - `compute_order_total` reuses `tax::tax_of` (tax on the subtotal only, exactly
 //!   as the oracle computes `taxTotal = applyTax(subtotal, ...)` at orders.ts:563) and adds
 //!   an optional flat `fee` (the delivery fee slot). No discounts in this scope.
 //! - The Decider creates an aggregate in `Pending` (`place_order`) and advances it one step
@@ -22,9 +22,10 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
 use crate::money::{
-    apply_tax, assert_non_negative, ledger_append, ledger_sum, reverse_transfer, Currency,
+    assert_non_negative, ledger_append, ledger_sum, reverse_transfer, Currency,
     EntryKind, LedgerEntry, Money,
 };
+use crate::tax::{tax_of, RatePpm};
 use crate::order_machine::{assert_transition, verify_fsm_signature, OrderStatus, TransitionError};
 use crate::vendor::VendorId;
 
@@ -186,7 +187,7 @@ impl Order {
     /// `fee` is the flat (delivery) fee slot; pass `None` when there is none.
     pub fn recompute_total(
         &mut self,
-        tax_rate: f64,
+        tax_rate: RatePpm,
         price_includes_tax: bool,
         fee: Option<i64>,
     ) -> Result<(), String> {
@@ -205,11 +206,11 @@ impl Order {
 /// Overflow-safe (BP-17): every addition uses `checked_add`.
 pub fn compute_order_total(
     subtotal: i64,
-    tax_rate: f64,
+    tax_rate: RatePpm,
     price_includes_tax: bool,
     fee: Option<i64>,
 ) -> Result<i64, String> {
-    let tax = apply_tax(subtotal, tax_rate, price_includes_tax)?;
+    let tax = tax_of(subtotal, tax_rate, price_includes_tax)?;
     let fee = fee.unwrap_or(0);
     let with_tax = subtotal
         .checked_add(tax)
@@ -736,7 +737,7 @@ mod tests {
     fn green_total_exclusive_tax_plus_fee() {
         // subtotal 1000, 20% tax => 200, fee 50 => total 1250
         assert_eq!(
-            compute_order_total(1000, 0.20, false, Some(50)).unwrap(),
+            compute_order_total(1000, RatePpm(200_000), false, Some(50)).unwrap(),
             1250
         );
     }
@@ -744,20 +745,20 @@ mod tests {
     #[test]
     fn green_total_inclusive_tax_no_fee() {
         // subtotal 1200 inclusive 20% => tax 200, fee 0 => total 1400
-        assert_eq!(compute_order_total(1200, 0.20, true, None).unwrap(), 1400);
+        assert_eq!(compute_order_total(1200, RatePpm(200_000), true, None).unwrap(), 1400);
     }
 
     #[test]
     fn green_total_no_fee_defaults_to_zero() {
         // subtotal 1000, 10% tax => 100, no fee => total 1100
-        assert_eq!(compute_order_total(1000, 0.10, false, None).unwrap(), 1100);
+        assert_eq!(compute_order_total(1000, RatePpm(100_000), false, None).unwrap(), 1100);
     }
 
     #[test]
     fn green_order_recompute_total_ties_subtotal_and_tax() {
         let mut o = place_order("o6".into(), None, sample_items(), 0, None, None).unwrap();
         // subtotal = 1300; 20% exclusive tax => 260; no fee => total 1560
-        o.recompute_total(0.20, false, None).unwrap();
+        o.recompute_total(RatePpm(200_000), false, None).unwrap();
         assert_eq!(o.subtotal, 1300);
         assert_eq!(o.total, 1300 + 260);
     }

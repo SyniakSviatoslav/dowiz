@@ -36,7 +36,7 @@
 //!   `SingleDissent` still trips even though a majority exists: on non-ECC hardware a
 //!   dissent is evidence of a live fault, not a recoverable outvote.
 //! * Applied ONLY to 2–3 named µs-scale pure functions (`event_log::MeshEvent::event_id`,
-//!   `money::apply_tax`) — NOT a kernel-wide wrapper.
+//!   `tax::tax_of`) — NOT a kernel-wide wrapper.
 
 use crate::breaker::{Breaker, SignalVector, TripCause};
 use crate::fdr;
@@ -228,7 +228,7 @@ pub fn event_id_tmr(
 
 /// **Applied wrapper #2 — money tax gate.**
 ///
-/// Re-runs `money::apply_tax` `n` times and votes. Returns the unanimous tax amount,
+/// Re-runs `tax::tax_of` `n` times and votes. Returns the unanimous tax amount,
 /// or trips the breaker + writes an FDR Alarm on any non-unanimous outcome. On a trip
 /// the caller must NOT proceed (fail-closed): a corrupt tax integer on a money path is
 /// exactly the red-line hazard TMR exists to catch here.
@@ -236,14 +236,14 @@ pub fn apply_tax_tmr(
     breaker: &mut Breaker,
     n: u8,
     subtotal: i64,
-    tax_rate: f64,
+    tax_rate: crate::tax::RatePpm,
     price_includes_tax: bool,
 ) -> Result<i64, ()> {
     let outcome = tmr(
-        || crate::money::apply_tax(subtotal, tax_rate, price_includes_tax),
+        || crate::tax::tax_of(subtotal, tax_rate, price_includes_tax),
         n,
     );
-    if wire_vote_mismatch("money::apply_tax", &outcome, breaker) {
+    if wire_vote_mismatch("tax::tax_of", &outcome, breaker) {
         return Err(());
     }
     match outcome {
@@ -474,7 +474,7 @@ mod tests {
         assert_eq!(shipped, independent, "debug-differential tally must match");
     }
 
-    // ── Real pure-function integration: deterministic event_id + apply_tax ──
+    // ── Real pure-function integration: deterministic event_id + tax_of ──
     #[test]
     fn applied_wrappers_pass_on_clean_deterministic_input() {
         let mut b = breaker();
@@ -484,8 +484,10 @@ mod tests {
 
         let mut b2 = breaker();
         let tax =
-            apply_tax_tmr(&mut b2, 3, 1000, 0.20, false).expect("clean tax must be Unanimous");
-        assert_eq!(tax, crate::money::apply_tax(1000, 0.20, false).unwrap());
+            apply_tax_tmr(&mut b2, 3, 1000, crate::tax::RatePpm(200_000), false)
+                .expect("clean tax must be Unanimous");
+        // 200: the value the deleted f64 `apply_tax(1000, 0.20, false)` returned.
+        assert_eq!(tax, 200);
         // Breaker stayed closed (no trip on clean input).
         assert_eq!(b.current_state(), BreakerState::Closed);
         assert_eq!(b2.current_state(), BreakerState::Closed);
