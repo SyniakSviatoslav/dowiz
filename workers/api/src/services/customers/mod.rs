@@ -14,6 +14,7 @@ pub mod allergy;
 pub mod at_placement;
 pub mod consent_log;
 pub mod consent_routes;
+pub mod forget;
 pub mod handlers;
 pub mod record;
 pub mod record_routes;

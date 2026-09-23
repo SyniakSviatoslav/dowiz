@@ -28,6 +28,7 @@
 //! did not say yes -- not "should not", cannot. The grep half, for the send
 //! sites that take a bare string, is `tools/gates/consent.sh`.
 
+pub mod forget;
 pub mod log;
 pub mod wordings;
 pub use wordings::{wording_id, wording_json, wording_of, LANGS, WORDINGS};

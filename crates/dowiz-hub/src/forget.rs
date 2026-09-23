@@ -105,17 +105,43 @@ impl Hub {
     /// How many redactions the `Forgotten` declarations in THIS image name,
     /// summed over their `records` field. The other side of law 9.
     pub fn declared(&self) -> usize {
+        self.declared_where(|_| true)
+    }
+
+    /// The same sum, over the declarations filed under one subject
+    /// (`cust:<key>`). What a retried erasure compares its tombstones with, so
+    /// it declares only what no earlier run of the same erasure declared.
+    pub fn declared_for(&self, subject: &str) -> usize {
+        self.declared_where(|s| s == subject)
+    }
+
+    fn declared_where(&self, subject: impl Fn(&str) -> bool) -> usize {
         self.events()
             .iter()
-            .filter(|e| e.kind == EventKind::Forgotten)
+            .filter(|e| e.kind == EventKind::Forgotten && subject(&e.order_id))
             .filter_map(|e| crate::minijson::int_field(&e.order_json, "records"))
             .map(|n| n.max(0) as usize)
             .sum()
     }
+
+    /// How many records whose order id `of` accepts are tombstones -- redacted
+    /// in place, by this run or an earlier one. Counted by the BIT, the same
+    /// mark `chain_check` starts from; a tombstone whose link fails is still
+    /// counted here and still `broken` there, so the two cannot agree by
+    /// accident.
+    pub fn tombstones_where(&self, of: impl Fn(&str) -> bool) -> usize {
+        EvLog::walk(&self.store)
+            .iter()
+            .filter(|r| r.payload.first().is_some_and(|k| k & REDACTED_BIT != 0))
+            .filter_map(decode)
+            .filter(|e| of(&e.order_id))
+            .count()
+    }
 }
 
-/// The same chain, oldest first, in a fresh store of `size` bytes.
-fn rebuilt(records: &[Record], tip: Option<[u8; 32]>, size: usize) -> Result<Store, HubError> {
+/// The same chain, oldest first, in a fresh store of `size` bytes. The ids and
+/// `prev` links are copied, never recomputed: that is what "in place" means.
+pub(crate) fn rebuilt(records: &[Record], tip: Option<[u8; 32]>, size: usize) -> Result<Store, HubError> {
     let mut fresh = Store::create_bytes(size);
     EvLog::init_bytes(&mut fresh)?;
     for r in records {
