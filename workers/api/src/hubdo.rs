@@ -55,6 +55,16 @@ mod room;
 /// The forget command: redact a customer and append a declaration, in one turn.
 pub mod forget;
 
+/// The refund command: move an order to REFUNDING and settle the shelf.
+pub mod refund;
+
+
+/// The kitchen's "seen" ack: one `Noted`, the broadcast (A13, §2.6).
+mod kitchen_ack;
+
+/// The kitchen print rail: poll, job, ack (LAST-MILE §3.1).
+mod print;
+
 /// The catalogue image, which holds the venue's own record as well as its
 /// dishes. Named here because `/fold/venue` reads it and nothing else does.
 const CATALOG_IMAGE: &str = "catalog";
@@ -974,6 +984,8 @@ impl HubImages {
                 }
             }
         }
+        // THE KITCHEN'S TICKET, when the venue has a printer (`print_rail.rs`).
+        queued.extend(crate::print_rail::entry_for(&settings.known(crate::print_rail::SETTING), order_id, text, now_ms));
         if queued.is_empty() {
             return Ok(());
         }
@@ -1271,6 +1283,8 @@ impl DurableObject for HubImages {
                 // write over a hop to guard, because the read and the write are
                 // two statements inside the same turn.
                 // THE ROOM (`hubdo/room.rs`): `/fold/room/<command>`.
+                // THE PRINT RAIL (`hubdo/print.rs`): `/fold/print/<what>`.
+                (Method::Post, "print") => self.print(seg.next().unwrap_or(""), req).await,
                 (Method::Post, "room") => {
                     let cmd = seg.next().unwrap_or("").to_string();
                     self.room(&cmd, req).await
@@ -1280,6 +1294,33 @@ impl DurableObject for HubImages {
                     let mut req = req;
                     let input: forget::ForgetIn = req.json().await?;
                     match self.forget(input).await? {
+                        Ok(out) => Response::from_json(&out),
+                        Err(r) => Response::error(r.message().to_string(), r.status()),
+                    }
+                }
+                // REFUND AN ORDER: `/fold/refund`
+                (Method::Post, "refund") => {
+                    let mut req = req;
+                    let input: crate::command::refund::RefundIn = req.json().await?;
+                    match self.refund(input).await? {
+                        Ok(out) => Response::from_json(&out),
+                        Err(r) => Response::error(r.message().to_string(), r.status()),
+                    }
+                }
+                // THE FOOD A REFUSED DELIVERY BROUGHT BACK: `/fold/returned`
+                (Method::Post, "returned") => {
+                    let mut req = req;
+                    let input: crate::command::refund::returned::ReturnedIn = req.json().await?;
+                    match self.returned(input).await? {
+                        Ok(out) => Response::from_json(&out),
+                        Err(r) => Response::error(r.message().to_string(), r.status()),
+                    }
+                }
+                // THE KITCHEN SAW THE TICKET: `/fold/kitchen_ack`
+                (Method::Post, "kitchen_ack") => {
+                    let mut req = req;
+                    let input: crate::command::kitchen_ack::KitchenAckIn = req.json().await?;
+                    match self.kitchen_ack(input).await? {
                         Ok(out) => Response::from_json(&out),
                         Err(r) => Response::error(r.message().to_string(), r.status()),
                     }

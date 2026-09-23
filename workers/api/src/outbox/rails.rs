@@ -49,6 +49,10 @@ pub async fn drain(
     let mut verdicts: Vec<(String, Verdict)> = Vec::new();
     for e in due(&entries, now_ms) {
         let ok = match e.kind.as_str() {
+            // THE PRINTER PULLS ITS OWN (`print_rail.rs`, LAST-MILE §3.1):
+            // the cron never sends a ticket and never abandons one -- the
+            // printer's DELETE is the delivery and its failures the retries.
+            crate::print_rail::KIND => continue,
             "telegram" => match token.as_deref() {
                 Some(t) => crate::notify::telegram(t, &e.to, &e.text).await.is_ok(),
                 // A RAIL THAT IS NOT CONFIGURED HAS NOT FAILED. A venue whose

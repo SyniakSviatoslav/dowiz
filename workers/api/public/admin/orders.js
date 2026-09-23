@@ -45,6 +45,18 @@ const ITEMS_SHOWN = 3;
 
 const view = { mode: 'live', q: '', pages: 1 };
 
+/// THE KITCHEN'S "SEEN" (A13, OPERATIONAL-BLIND-SPOTS §2.6). "Sent to the
+/// kitchen" is not "seen": a printer out of paper looks the same from the
+/// tablet. One tap per ticket writes one fact (`kitchen.seen`); the hub
+/// answers a second one with the first, so a double tap is harmless, and
+/// `acked` keeps the button from being offered twice while the answer is in
+/// flight. Owed only while nobody has acted on the order yet -- PREPARING and
+/// after, the kitchen has it in its hands (`command::kitchen_ack::OWED`).
+const OWED_SEEN = new Set(['PENDING', 'CONFIRMED']);
+const acked = new Set();
+const seenAt = o => o.kitchen?.seen?.at;
+const needsSeen = o => OWED_SEEN.has(o.status) && !seenAt(o) && !acked.has(o.id);
+
 const norm = s => String(s ?? '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
 function matching(){
   const all = view.mode === 'history' ? S.orders.filter(o => !liveOrders().includes(o)) : liveOrders();
@@ -90,10 +102,12 @@ function row(o){
       <span>${icon(o.payment === 'cash' ? 'cash' : o.payment === 'crypto' ? 'currency-bitcoin' : 'credit-card')}${esc(payName(o.payment))}</span>
       ${o.eta?.range ? `<span class="live">${icon('clock')}<b>${esc(o.eta.range)}</b> ${t('etaMin')}</span>` : ''}
       ${o.courier_id ? `<span>${icon('bike')}${esc(courierName(o.courier_id))}</span>` : ''}
+      ${seenAt(o) ? `<span>${icon('eye')}<span data-t="seenAt"></span> ${esc(clock(seenAt(o)))}</span>` : ''}
     </span>
     <span class="age">${esc(ago(o.created_at_ms || Date.now()))}</span>
     <span class="items">${line}</span>
     ${step && !DEAD.has(o.status) ? `<span class="go"><button type="button" class="act pri" data-act="${step[0]}" data-o="${esc(o.id)}">${icon('check')}<span data-t="${step[1]}"></span></button>
+      ${needsSeen(o) ? `<button type="button" class="act" data-seen="${esc(o.id)}">${icon('eye')}<span data-t="markSeen"></span></button>` : ''}
       ${o.status === 'PENDING' ? `<button type="button" class="act danger" data-act="reject" data-o="${esc(o.id)}">${icon('x')}</button>` : ''}
       ${o.status !== 'PENDING' && !isPickup(o) && !o.courier_id ? `<button type="button" class="act" data-assign="${esc(o.id)}">${icon('bike')}<span data-t="assign"></span></button>` : ''}</span>` : ''}
   </article>`;
@@ -129,6 +143,7 @@ export async function render(host){
     const mode = e.target.closest('[data-mode]'); if (mode) { view.mode = mode.dataset.mode; view.pages = 1; return rerender(); }
     if (e.target.closest('#oMore')) { view.pages += 1; return rerender(); }
     if (e.target.closest('#oCsv')) return exportCsv();
+    const seen = e.target.closest('[data-seen]'); if (seen) { e.stopPropagation(); return markSeen(seen.dataset.seen, seen); }
     const act = e.target.closest('[data-act]'); if (act) { e.stopPropagation(); return doAction(act.dataset.o, act.dataset.act, act); }
     const asg = e.target.closest('[data-assign]'); if (asg) { e.stopPropagation(); return openAssign(asg.dataset.assign); }
     const r = e.target.closest('.orow'); if (r) return openOrder(r.dataset.o);
@@ -148,6 +163,40 @@ async function doAction(id, action, el){
     navigator.vibrate?.(12);
     await loadOrders(); await rerender();
     if ($('#sheet').dataset.name === 'order') openOrder(id);
+  } catch (e) { toast(String(e.message || e)); }
+}
+
+/// `POST /api/staff/orders/:id/kitchen-ack`, once. The key is minted at the
+/// tap, so a retried request is the same fact at the route as well.
+async function markSeen(id, el){
+  if (acked.has(id)) return;
+  acked.add(id);
+  const key = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${id}`;
+  try {
+    const d = await busy(el, () => api(`/staff/orders/${encodeURIComponent(id)}/kitchen-ack`, { method: 'POST', body: withLoc({}), headers: { 'idempotency-key': key } }));
+    const o = S.orders.find(x => x.id === id);
+    if (o && d?.order?.kitchen) o.kitchen = d.order.kitchen;
+    navigator.vibrate?.(12);
+    await rerender();
+  } catch (e) {
+    acked.delete(id);
+    toast(`${t('seenFail')}: ${String(e.message || e)}`);
+  }
+}
+
+/// FOOD BACK FROM A DOOR (§2.4): shown on an order refunded as refused at the
+/// door. The choice is made once; the hub refuses a second one and says so,
+/// because only its stock log knows whether it was made.
+function foodBack(o){
+  return (o.status === 'REFUNDING' || o.status === 'COMPENSATED_REFUND') && o.refund?.reason === 'refused_at_door';
+}
+
+async function chooseFoodBack(id, choice, el){
+  const c = await confirm(t('foodBack'), t(choice === 'resell' ? 'resell' : 'wasteIt'), { danger: choice === 'waste' });
+  if (!c) return;
+  try {
+    await busy(el, () => post(`/staff/orders/${encodeURIComponent(id)}/returned`, withLoc({ choice })));
+    toast(t('foodBackDone'));
   } catch (e) { toast(String(e.message || e)); }
 }
 
@@ -195,6 +244,12 @@ export function openOrder(id){
     <div class="line total"><span class="n" data-t="total"></span>${moneyEl(o.total ?? 0)}</div>
     ${o.rejection_reason ? `<p class="err">${esc(o.rejection_reason)}</p>` : ''}
     ${o.feedback?.text ? `<div class="fact">${icon('message-2')}<span class="v">${esc(o.feedback.text)}</span></div>` : ''}
+    ${o.refund?.note ? `<div class="fact">${icon('note')}<span class="v"><span class="k" data-t="refusedNote"></span>${esc(o.refund.note)}</span></div>` : ''}
+    ${foodBack(o) ? `<p class="eyebrow mt-3" data-t="foodBack"></p><p class="muted" data-t="foodBackHint"></p>
+    <div class="btn-row">
+      <button class="btn" data-ret="resell" data-o="${esc(o.id)}">${icon('refresh')}<span data-t="resell"></span></button>
+      <button class="btn danger" data-ret="waste" data-o="${esc(o.id)}">${icon('trash')}<span data-t="wasteIt"></span></button>
+    </div>` : ''}
     <div class="btn-row">
       ${step && !dead ? `<button class="btn" data-act="${step[0]}" data-o="${esc(o.id)}">${icon('check')}<span data-t="${step[1]}"></span></button>` : ''}
       ${!dead && o.status !== 'PENDING' && !isPickup(o) && !o.courier_id ? `<button class="btn ghost" data-assign="${esc(o.id)}">${icon('bike')}<span data-t="assign"></span></button>` : ''}
@@ -208,6 +263,7 @@ export function openOrder(id){
   $('#sheetIn').onclick = e => {
     const act = e.target.closest('[data-act]'); if (act) return doAction(act.dataset.o, act.dataset.act, act);
     const asg = e.target.closest('[data-assign]'); if (asg) return openAssign(asg.dataset.assign);
+    const ret = e.target.closest('[data-ret]'); if (ret) return chooseFoodBack(ret.dataset.o, ret.dataset.ret, ret);
   };
   $('#oCopy').onclick = async () => { try { await navigator.clipboard.writeText(orderText(o)); toast(t('copied')); } catch { toast(orderText(o)); } };
 }

@@ -215,13 +215,16 @@ green rule. No new status, no new FSM edge, no CRDT.
   `Refunding`, and `compensated` → `CompensatedRefund`; `took_money` already excludes both (`status.rs`), so no fold
   changes (memory: "when the refund route lands, no fold needs changing"). The stock consequence is decided in the same
   command: a round refunded before `PREPARING` `Release`s; after it, the ingredients were consumed, and the courier's
-  "returned to kitchen" is a `Wasted{reason: Returned, by: courier}` per BOM line — or, if the owner marks it
-  resellable, a `Received` — chosen by the owner, never inferred.
+  "returned to kitchen" is one `Returned{order_id, resell, by: courier, chosen_by}` per line the order `Consumed` —
+  `resell: true` puts it back on the shelf, `resell: false` records waste WITHOUT moving the shelf — chosen by the
+  owner, never inferred (built 2026-09-23: `stock.rs`, `command/refund/returned.rs`). CORRECTED from `Wasted{reason:
+  Returned}` per BOM line: those ingredients already left the shelf at `Consumed`, so a `Wasted` subtracts them a
+  second time (and is refused when the rest of the shelf is promised).
 - The courier gets one more tap, `refused_at_door { note }`, which is the same `refund` intent under the courier's
   principal with `cash_collected: 0` and the shortfall rule (`courier.rs:602-604`) unchanged; per-courier cash audit
   (law 4) then sees a refused run as zero cash owed rather than as a run that never ended.
-- **CHECK.** Native: `READY → refund` lands, `stranded()` empty after it; `IN_DELIVERY → refund` with `Returned` writes
-  N `Wasted` and `available` falls by the BOM; law 2 ("no order is stranded") goes GREEN on a synthetic log that was
+- **CHECK.** Native: `READY → refund` lands, `stranded()` empty after it; `IN_DELIVERY → refund` then the owner's `waste` choice writes
+  N `Returned` and `available` stays where `Consumed` put it; law 2 ("no order is stranded") goes GREEN on a synthetic log that was
   RED before. Live: the ten stuck orders on sushi-durres can be ended through the route, and
   `e2e/kit-regression/drain-stuck-orders.mjs` is deleted the same day (the memo's own instruction).
 

@@ -10,6 +10,7 @@ use worker::*;
 
 pub mod stock;
 pub mod supplies;
+pub mod waste;
 
 
 /// `GET /api/owner/health` — what this venue is spending, and how close to a limit.
@@ -118,6 +119,20 @@ pub async fn health(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
         Err(e) => json!({ "error": e.to_string() }),
     };
 
+    // ── TICKETS NOBODY SAID THEY SAW (A13, §2.6) ──
+    //
+    // "Sent to the kitchen" is not "seen": a printer out of paper and a
+    // kitchen that read the ticket look the same from the tablet. These are
+    // the live orders older than `UNSEEN_AFTER_MS` with no `kitchen.seen` on
+    // them, folded from the ORDER LOG (the outbox drops an entry once it is
+    // delivered, so it cannot say what was never seen). Empty is the good
+    // answer. See `command::kitchen_ack`.
+    let unseen = crate::command::kitchen_ack::unconfirmed_in(&hub.hub, ctx.data.now_ms);
+    let kitchen = json!({
+        "unseenAfterMs": crate::command::kitchen_ack::UNSEEN_AFTER_MS,
+        "unseen": unseen,
+    });
+
     // Every record the venue's logs hold and this build cannot read. See
     // `crate::quarantine`: a non-zero count is a failing gate, not a warning.
     let quarantined = crate::quarantine::seen(&hub.hub, audit.quarantined);
@@ -149,6 +164,8 @@ pub async fn health(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
         "rebuild": rebuilt,
         "till": till,
         "outbox": outbox,
+        "backupSeal": crate::cloud::seal::describe(&crate::cloud::seal::state(&ctx.env)),
+        "kitchen": kitchen,
     }))
 }
 

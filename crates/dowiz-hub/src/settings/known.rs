@@ -221,4 +221,10 @@ pub const KNOWN: &[Known] = &[
         hint: "Future changes only, as [{\"since_ms\":1767225600000,\"ppm\":70000}], at most 8.",
         default: "",
     },
+    Known {
+        key: "print.kitchen",
+        label: "Kitchen printer",
+        hint: "A name for the kitchen's printer (e.g. kitchen). When set, every order is also queued as a ticket the printer fetches: set the printer's server URL to /api/print/poll and its user name or password to a venue API key made for it.",
+        default: "",
+    },
 ];

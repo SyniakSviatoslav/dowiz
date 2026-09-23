@@ -11,6 +11,8 @@ fn entry(id: &str, queued: i64, tries: u32, next: i64) -> Entry {
         queued_at_ms: queued,
         tries,
         next_at_ms: next,
+        handed_ms: None,
+        code: None,
     }
 }
 

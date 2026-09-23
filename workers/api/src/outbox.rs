@@ -78,6 +78,14 @@ pub struct Entry {
     pub queued_at_ms: i64,
     pub tries: u32,
     pub next_at_ms: i64,
+    /// PRINT RAIL ONLY (`print_rail.rs`): when a polling printer was handed
+    /// this job's token -- the "printing" state -- and the result code of its
+    /// last failed attempt. Absent on every other kind, and skipped when absent
+    /// so an entry written before the rail existed is byte-identical.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handed_ms: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
 }
 
 impl Entry {
@@ -90,6 +98,8 @@ impl Entry {
             queued_at_ms: now_ms,
             tries: 0,
             next_at_ms: now_ms,
+            handed_ms: None,
+            code: None,
         }
     }
 }

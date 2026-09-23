@@ -29,6 +29,7 @@ mod command;
 mod hubstore;
 mod otel;
 mod outbox;
+mod print_rail;
 mod owner;
 mod assist;
 mod storefront;
@@ -307,6 +308,14 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .get_async("/api/staff/room", services::orders::room::handlers::room_view)
         .post_async("/api/staff/orders/:id/amend", services::orders::room::handlers::amend)
         .post_async("/api/staff/orders/:id/pay", services::orders::room::pay::pay)
+        .post_async("/api/staff/orders/:id/kitchen-ack", services::orders::kitchen_ack::kitchen_ack)
+        .post_async("/api/print/poll", services::orders::print::poll)
+        .get_async("/api/print/job/:token", services::orders::print::job)
+        .delete_async("/api/print/job/:token", services::orders::print::ack)
+        .post_async("/api/staff/orders/:id/refund", services::orders::refund::refund)
+        .post_async("/api/staff/orders/:id/returned", services::orders::refund::returned)
+        .post_async("/api/staff/orders/:id/transfer", services::orders::room::transfer::transfer)
+        .post_async("/api/staff/sittings/:id/move", services::orders::room::transfer::move_sitting)
         .post_async("/api/staff/till/open", services::orders::room::till::open)
         .post_async("/api/staff/till/count", services::orders::room::till::count)
         .post_async("/api/staff/till/close", services::orders::room::till::close)
@@ -345,6 +354,7 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .get_async("/api/public/consent/wordings", services::customers::consent_routes::wordings)
         .get_async("/api/owner/stock", services::operations::stock::stock)
         .post_async("/api/owner/stock/:kind", services::operations::stock::stock_move)
+        .get_async("/api/owner/stock/waste", services::operations::waste::waste_report)
         .post_async("/api/owner/supplies", services::operations::supplies::set_supply)
         .post_async("/api/owner/supplies/:id/retire", services::operations::supplies::retire_supply)
         .get_async("/api/owner/features", services::venue::settings::features)
@@ -397,6 +407,7 @@ pub(crate) async fn route(req: Request, env: Env) -> Result<Response> {
         .post_async("/api/courier/orders/:id/accept", courier::accept)
         .post_async("/api/courier/orders/:id/pickup", courier::pickup)
         .post_async("/api/courier/orders/:id/deliver", courier::deliver)
+        .post_async("/api/courier/orders/:id/refused", courier::refused)
         .post_async("/api/courier/position", courier::position)
         .get_async("/api/courier/earnings", courier::earnings)
         .get_async("/api/courier/history", services::courier::history::courier_history)
