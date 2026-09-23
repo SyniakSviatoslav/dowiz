@@ -29,7 +29,10 @@
 set -eu
 cd "$(dirname "$0")/../.."
 APP=workers/api/public/courier/app.js
-SRV=workers/api/src/courier.rs
+# The courier's handlers: `courier.rs` AND its child modules. `courier/door.rs`
+# (the refused-at-door tap) is a route `courier.rs` re-exports, and a gate
+# reading one file refused it for a guard that is there.
+SRV="workers/api/src/courier.rs workers/api/src/courier"
 
 [ -f "$APP" ] || { echo "idempotent: $APP is gone; this gate no longer knows what it guards"; exit 1; }
 
@@ -40,7 +43,7 @@ queued=$(grep -o "tapped(\`[^\`]*\`" "$APP" | sed 's|.*/||; s|`$||' | sort -u)
 # The verbs the server guards. READ FROM INSIDE THE `guard(` CALL, not from
 # anywhere the string appears: `courier.claim` is a `loud!` place name, and
 # counting it would have this gate report a guard that does not exist.
-guarded=$(grep -A9 'idempotency::guard(' "$SRV" \
+guarded=$(grep -rh -A9 --include='*.rs' 'idempotency::guard(' $SRV \
   | grep -o '"courier\.[a-z_]*"' | tr -d '"' | sed 's/^courier\.//' | sort -u)
 
 missing=""

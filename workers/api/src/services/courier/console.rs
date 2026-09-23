@@ -148,11 +148,16 @@ pub async fn courier_detail(req: Request, ctx: RouteContext<crate::Req>) -> Resu
     )
     .await?
     .table;
-    let rows: Vec<Value> = ops
-        .all("asg")
-        .into_iter()
-        .filter_map(|(_, j)| serde_json::from_str::<Value>(&j).ok())
-        .collect();
+    // A REFUNDED RUN IS NOT IN FLIGHT. The refund leaves the assignment open
+    // (the ops image is not its to write), so the order's own status decides;
+    // an order that cannot be read stays in flight (`courier::run`).
+    let all = ops.all("asg");
+    let mut read = Vec::new();
+    for id in crate::courier::run::open_runs(&all, &cid) {
+        let raw = crate::hubstore::order(&place, &id).await?;
+        read.push((id, raw));
+    }
+    let rows = crate::courier::run::still_carried(&all, &crate::courier::run::ended(&read));
     let t = record::tally(&rows, &cid, day_start, now);
     let mut out = row;
     out["lastFix"] = fix

@@ -18,6 +18,10 @@ use worker::*;
 use crate::auth::{self, Principal};
 use dowiz_kernel::json_api;
 
+pub(crate) mod run;
+mod door;
+pub use door::refused;
+
 /// GPS sanity, from the old platform's courier UX rules: reject a fix worse than
 /// 100 m or a speed above 150 km/h. Both are wrong-by-construction for someone
 /// on a scooter in Durrës, and a bad fix poisons every ETA computed from it.
@@ -201,6 +205,17 @@ pub async fn shift(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     };
     let now = ctx.data.now_ms;
 
+    // WHICH OPEN RUNS HAVE ENDED, read from the log before the ops write: a
+    // refunded order leaves its assignment open (see `run`), and only the
+    // order's own status says it is no longer a delivery.
+    let mut read = Vec::new();
+    if !body.open {
+        for id in run::open_runs(&ops(&place).await?.all(K_ASG), &courier_id) {
+            let raw = crate::hubstore::order(&place, &id).await?;
+            read.push((id, raw));
+        }
+    }
+    let over = run::ended(&read);
     let cid = courier_id.clone();
     let open = body.open;
     let refused = with_ops(&place, move |t| {
@@ -221,14 +236,9 @@ pub async fn shift(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
             return Ok(None);
         }
         // Refuse to close a shift with a run still in hand: the order would be
-        // stranded with nobody holding it.
-        let holding = t.all(K_ASG).into_iter().any(|(_, j)| {
-            serde_json::from_str::<Value>(&j).ok().is_some_and(|v| {
-                field_str(&v, "courier_id") == cid
-                    && v.get("delivered_at_ms").map_or(true, |x| x.is_null())
-            })
-        });
-        if holding {
+        // stranded with nobody holding it. A run whose order was refunded is
+        // not in hand; one assigned since the read above is (not in `over`).
+        if !run::in_hand(&t.all(K_ASG), &cid, &over).is_empty() {
             return Ok(Some("finish the delivery in hand before ending the shift"));
         }
         if let Some(mut s) = t
@@ -761,7 +771,7 @@ pub async fn earnings(req: Request, ctx: RouteContext<crate::Req>) -> Result<Res
             if at >= month { d_m += 1; c_m += cash; t_m += tip; }
             if at >= week { d_w += 1; c_w += cash; t_w += tip; }
             if at >= today { d_t += 1; c_t += cash; t_t += tip; in_hand += cash; }
-        } else if !matches!(status, "CANCELLED" | "REJECTED")
+        } else if !run::run_over(status)
             && v.get("payment").and_then(Value::as_str) == Some("cash")
         {
             // Still out and payable in cash: what they are ABOUT to hold, shown

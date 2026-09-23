@@ -1026,7 +1026,8 @@ function renderActive(o){
       ${addr ? `<a class="ghost" target="_blank" rel="noopener"
           href="https://www.openstreetmap.org/search?query=${encodeURIComponent(addr)}">${icon('external-link')}${esc(t('inMaps'))}</a>` : ''}
       ${o.contact?.phone ? `<a class="ghost" href="tel:${esc(o.contact.phone)}">${icon('phone')}${esc(t('call'))}</a>` : ''}
-    </div>`;
+    </div>
+    ${picked && !waiting ? `<button class="ghost" id="refused" type="button">${icon('x')}${esc(t('refusedAtDoor'))}</button>` : ''}`;
 
   // THE DESTINATION ON THE MAP. Micro-degrees back to degrees here and nowhere
   // else: the wire and the store hold integers, and this is the single boundary
@@ -1053,6 +1054,10 @@ function renderActive(o){
       b.disabled = false; b.removeAttribute('aria-busy'); b.innerHTML = had;
     }
   };
+  // REFUSED AT THE DOOR (§2.4): the refund under this courier, with nothing
+  // collected. Asked on its own screen -- it ends the run -- with an optional
+  // note of what happened at the door.
+  if ($('#refused')) $('#refused').onclick = () => renderRefused(o);
   // ── swipe to complete ──
   //
   // "Delivered" is irreversible and sits under a thumb that has been holding a
@@ -1124,6 +1129,35 @@ function renderCash(o){
   };
   $('#confirm').onclick = go;
   inp.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); go(); } };
+}
+
+/// The refused-at-door screen: a confirm, and a short optional note (the
+/// server keeps at most 280 characters; the field stops there too). Sent
+/// through the outbox like every other tap.
+const NOTE_MAX = 280;
+function renderRefused(o){
+  $('#app').innerHTML = `${orderHead(o, true)}
+    <p>${esc(t('confirmRefused'))}</p>
+    <label for="rnote">${esc(t('refusedNoteLabel'))}</label>
+    <textarea id="rnote" maxlength="${NOTE_MAX}" rows="3" autocomplete="off" placeholder="${esc(t('refusedNoteHint'))}"></textarea>
+    <button class="cta" id="rgo" type="button">${icon('x')}${esc(t('refusedAtDoor'))}</button>
+    <button class="ghost" id="back" type="button">${icon('arrow-left')}${esc(t('back'))}</button>`;
+  $('#back').onclick = () => renderActive(o);
+  $('#rgo').onclick = async () => {
+    const b = $('#rgo');
+    b.disabled = true; b.setAttribute('aria-busy', 'true');
+    const note = $('#rnote').value.trim().slice(0, NOTE_MAX);
+    try {
+      const r = await tapped(`/courier/orders/${encodeURIComponent(o.id)}/refused`, { tag:'refused:' + o.id, body: JSON.stringify(note ? { note } : {}) });
+      // A queued tap is shown as queued on the run's own screen; only the
+      // hub's answer reloads.
+      if (r.landed) { toast(t('refusedDone'), 'circle-check'); await load(); }
+      else renderActive(o);
+    } catch (e) {
+      toast(String(e.message || e), 'alert-circle');
+      b.disabled = false; b.removeAttribute('aria-busy');
+    }
+  };
 }
 
 async function deliver(o, collected){
